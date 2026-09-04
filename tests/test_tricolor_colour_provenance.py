@@ -933,10 +933,24 @@ def test_r3_the_failopen_shape_is_actually_caught():
 #       `correlation.py`（影子基金偵測）與 `risk.py`（-2σ 深度超跌），
 #       兩者都落在 `business_alert()` docstring 自己列的用途（「淘汰候選」）裡；
 #     · **3 處根本不是警示**，把規則開到全域就會誤傷：
-#       `app.py` 的**全域 CSS 區塊**（`.signal-buy` class 用 `TRAFFIC_GREEN`）、
+#       `app.py` 的**全域 CSS 區塊**（`.signal-sell` 這個 class 的 `TRAFFIC_RED`
+#       —— 那是**樣式表定義**，不是任何一次警示的呈現）、
 #       `tab3_t7_ledger.py` 的**賣方區段標題**（紅是「賣方」的版面語彙，不是警示）、
-#       `tab2_single_fund.py:1070` 的 **σ 位階色**（`_hc` 隨檔位變綠／黃／紅，是資料驅動的
-#       色階，不是固定警示）；
+#       `tab2_single_fund.py` 的 **HWM σ 帶圖例標籤**（`MATERIAL_RED` 標的是
+#       **`HWM-3σ` 這個圖例文字**，與 1σ 綠、2σ 橘同一組**色階圖例**，不是警示）；
+#       ⚠️ **2026-09-04 兩處事實更正（稽核 N1-a／N1-b 指出；有意識的更正，不是漏刪）**：
+#         (a) 本行原寫 ~~「`.signal-buy` class 用 `TRAFFIC_GREEN`」~~ —— **不可能為真**：
+#             `TRAFFIC_GREEN` **根本不在 `GENERIC_RED_TOKENS`**（該集合只有
+#             `MATERIAL_RED` / `TRAFFIC_RED`），它連觸發本規則的資格都沒有。
+#             實測 `app.py` 該呼叫的觸發 token 是 **`TRAFFIC_RED`**（`.signal-sell`）。
+#         (b) 本行原寫 ~~「`_hc` 隨檔位變綠／黃／紅」~~ —— **`_hc` 不是觸發源**：
+#             它是 guard 解析不到來源的 `Name`。實測觸發源是**同一個 `st.markdown`
+#             呼叫內、`HWM-3σ` 圖例那一段的 `MATERIAL_RED`**（固定字串，不隨檔位變）。
+#         ⚠️ **兩處的分類結論都沒有被推翻**（樣式表定義、色階圖例，兩者確實都不是警示），
+#         **被推翻的是我用來支撐它的那兩個事實** —— 而一個「理由是假的」的分類，
+#         下一個人沒辦法複驗，也就沒辦法信任。**故結論保留、理由重寫。**
+#         ⚠️ **不寫行號**（沿用姊妹 repo `§8.2.A.0` 規則 1）：原句寫死 `:1070`，
+#         而真正的觸發源在 `:1091` —— **行號寫法本身就是這個錯的一部分。**
 #     · **3 處介於兩者之間**（`tab1_macro_ai.py` 的「總經完整率 < 50% 阻斷」、
 #       `tab2_single_fund.py` 兩處「混期示警」）—— 它們比較像「資料不可信」，
 #       該走灰或紅要先有業務判斷，**不是本 lane 能單方認定的**。

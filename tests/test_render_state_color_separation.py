@@ -52,7 +52,31 @@
 3. **顏色來源規則見姊妹檔 `test_tricolor_colour_provenance.py` 的 R4 節**
    （具名泛用紅手繪；R4-a 全域零豁免，R4-b 射程只到 `HEALTH_SCOPE`，理由寫在該處）。
 
-⚠️ **本輪三項由單組（Lane D）實作與自驗，未經第二組獨立複驗**（`CLAUDE.md §-2` 規則 6）。
+⚠️ **本輪三項由單組（Lane D）實作與自驗；2026-09-04 已由獨立稽核組複驗，零 Blocker**
+（稽核加碼跑 4 層／6 層 wrapper、12 節點環、`*args`+`**kwargs` 環，均未推翻；
+ 另抓出下列 N2／N3／O1 三項，N2 已修，N3／O1 登記待後批）。
+
+⚠️ **2026-09-04 稽核後補登的已知缺口（本批**不修**，據實登記）**
+- **N3｜「兩把尺」只收斂了一半。** `UI_SOURCES` 已收成單一真相源，
+  **但 taint seeding 的 callee 解析仍然分岔**（實測，2026-09-04）：
+    · 本檔 `_exception_tainted_functions._absorb()`：
+      `call.func.id if isinstance(call.func, ast.Name) else None` —— **只認 `Name`**；
+    · 姊妹檔 `_call_name()`：`Name → id`，**且 `Attribute → attr`** —— 兩種都認。
+  → **同一份探針，姊妹檔抓得到、本檔抓不到。** 收斂它是另一件事（要決定
+  `Attribute → attr` 這種「只比對方法名」的解析算不算過寬），**不在本批射程**。
+- **O1｜第七個盲點：`Attribute` callee 的 wrapper**（method 或 module-qualified 呼叫，
+  例如 `self._paint(t, e)` / `helpers._paint(t, e)`）。本檔 `_absorb()` 只認 `Name`，
+  這類呼叫拿不到 seed。
+  ⚠️ **它是「未來的繞道」，不是「現在的漏報」**：2026-09-04 實測 `ui/**` 內
+  24 處同形狀命中**沒有一個**對映到本檔的 `FunctionDef`
+  （全是 `.append` / `.lower` / `traceback.extract_tb` 之類，屬已揭露的「值進容器」）。
+  **登記是為了讓下一個人知道這條路是通的，不是宣稱今天漏了什麼。**
+
+⚠️ **本檔的下游（2026-09-04 以 AST 普查，非 grep）**：**6 個** importer、**6 個**符號
+（`ROOT` / `UI_SOURCES` / `_receiver_root` / `_st_container_names` / `_callee` / `HEALTH_SCOPE`）。
+改動任一個的名稱、簽名或回傳形狀之前，先跑一次那份普查 ——
+**用 regex 掃 import 區塊會被 `# noqa` 註解吃掉符號**（本組 2026-09-04 就這樣少數了一個，
+改用 AST 才對）。
 """
 from __future__ import annotations
 
@@ -102,8 +126,18 @@ BATCH2A_SCOPE_A = [ROOT / p for p in (
 # 各 0 處，且沒有任何一處落在 except handler 的失敗路徑上 —— 故**不需要任何豁免**。
 # ⚠️ **本集合仍然不是窮舉，不要讀成「已經補齊」**：Streamlit 的 render API 會長，
 # 任何一個新 API 在被加進來之前，用它印例外都還是隱形的。
-# 目前**已知未納入**者（本組實測 `ui/**` 現無使用，故不列入本批）：
-# `st.write_stream` / `st.status` 的訊息參數 / `st.toast` 以外的通知類 API。
+# 目前**已知未納入**者：`st.write_stream`（實測 `ui/**` + `app.py` **0 命中**）、
+# `st.status` 的訊息參數、`st.toast` 以外的通知類 API。
+# ⚠️ **2026-09-04 更正（稽核 N1-c 指出；有意識的更正，不是漏刪）**：本行原寫
+# ~~「本組實測 `ui/**` 現無使用」~~ 並把 `write_stream` 與 `status` 一起蓋在這句底下 ——
+# **對 `st.status` 為假**。實測 `ui/sidebar.py` 有一處
+# `with st.sidebar.status("檢查版本…", expanded=False):`（**不寫行號**，行號會漂）。
+# **舊表述對 `write_stream` 仍然成立**（那半句是對的），錯的是把兩者綁在同一句普查裡。
+# ✅ **納不納入的結論不變**：該處是**固定字串的進度標籤**、不在任何失敗路徑上，
+# 收進 `_ST_RENDER_ATTRS` 也不會產生違規、不需要任何豁免 —— 也就是說，
+# **這個錯誤沒有讓任何規則放行任何東西，錯的純粹是那句普查敘述。**
+# ⚠️ 但它仍然必須改：一份主題是「守衛不該說謊」的檔案，自己的普查句必須為真
+# （對照本檔既有教訓：**能被一條 grep 推翻的全稱句，就不該寫進守衛**）。
 # 判準是「它會不會把字印到畫面上」，不是「它叫什麼名字」。
 _ST_RENDER_ATTRS = {"caption", "info", "warning", "error", "success", "markdown",
                     "write", "text", "code", "toast", "exception",
@@ -397,12 +431,16 @@ def _seed_params_from_call(call: ast.Call, fn: ast.AST, tainted: set[str]) -> se
     for kw in call.keywords:
         if not (_visible_names(kw.value) & tainted):
             continue
-        if kw.arg is None:                    # `**payload`
-            if kwarg:
-                seeds.add(kwarg)
-        elif kw.arg in named:
+        # ⚠️ 2026-09-04：原本這裡有一條獨立的 `if kw.arg is None:`（`**payload` splat）
+        # 分支，**經突變驗證證明它是死碼** —— splat 與「具名但對不上宣告參數」兩種情形
+        # 都會落到下面的 `elif kwarg`，行為完全相同，拿掉那條分支測試全綠。
+        # 一條**無法被任何測試殺死**的分支，就是一條沒有人在守的分支：留著只會讓
+        # 下一個人以為它有作用。故合併成一條，並在這裡寫明兩種情形都由它涵蓋。
+        if kw.arg is not None and kw.arg in named:
             seeds.add(kw.arg)
         elif kwarg:
+            # `**payload` splat（kw.arg is None）與具名但對不上的關鍵字，
+            # 兩者都是被 `**kwargs` 收走的。
             seeds.add(kwarg)
     return seeds
 
@@ -744,6 +782,108 @@ def test_a_taint_propagates_to_a_fixed_point_not_just_one_hop():
     assert "detail" in tainted["_paint"], (
         "`_paint` 被標記了，但它自己的參數 `detail` 沒被認出帶著例外內容 —— "
         "只標記函式而不傳參數名，等於標了不會用。")
+
+
+def test_a_a_varargs_wrapper_is_not_a_blind_spot():
+    """`def _paint(*bits)` 也要抓得到 —— `_seed_params_from_call()` 的 vararg 分支哨兵。
+
+    ⚠️ **2026-09-04 補（稽核 N2 指出，本組已自行重現）。** 姊妹檔
+    `test_tricolor_colour_provenance.py` 早就有這條（`test_r3_a_varargs_wrapper_is_not_a_blind_spot`），
+    **hub 這邊漏了** —— 實測拿掉本檔 `_seed_params_from_call()` 的
+    `elif vararg: seeds.add(vararg)`，整個 hub **450 passed 全綠**（surviving mutant）。
+    **那個分支在行為上是活的，只是沒有東西守著它。**
+
+    機制：位置引數吃不完時是被 `*args` 收走的。`def _paint(*bits)` 之下宣告的位置參數
+    數量是 **0**，於是 `_paint("NAV 失敗", e)` 的 `e`（index 1）會因 `i >= len(pos)`
+    被**靜默跳過** → taint 遺失 → `_paint` 從未被判為失敗渲染 → 用灰字也不報。
+
+    ⛔ **突變驗證**：拿掉那個 `elif vararg` 分支，本條**必須轉紅**（2026-09-04 已實測）。
+    """
+    probe = (
+        "import streamlit as st\n"
+        "def _paint(*bits):\n"
+        "    st.caption(f'{bits}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    tainted = _exception_tainted_functions(tree)
+    assert "_paint" in tainted, (
+        "`*args` wrapper 沒有被固定點認出來 —— 位置引數 index 超過宣告參數數量時，"
+        "taint 被靜默跳過。這是算術 bug，不是刻意留的鬆度。")
+    assert "bits" in tainted["_paint"], (
+        f"`_paint` 被標記了，但 vararg 名 `bits` 沒被污染（實得 {sorted(tainted['_paint'])}）"
+        " —— 標了不會用，等於沒標。")
+
+
+def test_a_a_kwargs_wrapper_is_not_a_blind_spot():
+    """`def _paint(**kw)` 也要抓得到 —— `_seed_params_from_call()` 的 `**kwargs` 分支哨兵。
+
+    ⚠️ **2026-09-04 補（稽核 N2 指出，本組已自行重現）**：拿掉本檔
+    `_seed_params_from_call()` 的兩條 `**kwargs` 分支，hub **450 passed 全綠**
+    （第二個 surviving mutant）。
+
+    守的是兩條子路徑，**分開斷言**，否則其中一條壞掉會被另一條蓋過去：
+      (1) `_paint(detail=e)` —— 關鍵字名**對不上任何宣告參數**時，是被 `**kw` 收走的；
+      (2) `_paint(**payload)` —— **splat**（`kw.arg is None`），整包收進 `**kw`。
+    """
+    # (1) 對不上宣告參數名 → 落進 **kw
+    probe1 = (
+        "import streamlit as st\n"
+        "def _paint(**kw):\n"
+        "    st.caption(f'{kw}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint(title='NAV 抓取失敗', detail=e)\n"
+    )
+    t1 = _exception_tainted_functions(ast.parse(probe1))
+    assert "_paint" in t1 and "kw" in t1["_paint"], (
+        f"關鍵字引數對不上宣告參數時沒有污染 `**kw`（實得 {sorted(t1.get('_paint', []))}）"
+        " —— 那個例外就從呼叫圖上消失了。")
+
+    # (2) `**payload` splat（kw.arg is None）
+    probe2 = (
+        "import streamlit as st\n"
+        "def _paint(**kw):\n"
+        "    st.caption(f'{kw}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _bag = {'detail': e}\n"
+        "        _paint(**_bag)\n"
+    )
+    t2 = _exception_tainted_functions(ast.parse(probe2))
+    assert "_paint" in t2 and "kw" in t2["_paint"], (
+        f"`**splat` 沒有污染 `**kw`（實得 {sorted(t2.get('_paint', []))}）—— "
+        "把例外裝進 dict 再 splat 進去，是繞過本規則最短的一條路。")
+
+    # (3) 具名關鍵字**對得上宣告參數**、且該函式**沒有** `**kwargs`
+    #     ⚠️ 2026-09-04 補：這一格是突變電池自己逼出來的 —— 上面兩格都用
+    #     `def _paint(**kw)`，於是把「具名參數」那條分支整條換成 `if kwarg:`
+    #     仍然全綠（surviving mutant）。**沒有 `**kwargs` 兜底的函式才驗得到它。**
+    probe3 = (
+        "import streamlit as st\n"
+        "def _paint(title, detail):\n"
+        "    st.caption(f'{title}{detail}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint(title='NAV 抓取失敗', detail=e)\n"
+    )
+    t3 = _exception_tainted_functions(ast.parse(probe3))
+    assert "_paint" in t3 and "detail" in t3["_paint"], (
+        f"以關鍵字傳給**具名參數**時沒有污染該參數（實得 {sorted(t3.get('_paint', []))}）"
+        " —— 這種函式沒有 `**kwargs` 可以兜底，漏了就是整條呼叫鏈斷掉。")
+    assert "title" not in t3["_paint"], (
+        "只有帶例外的那個關鍵字該被污染，`title`（純字串）不該被連坐 —— "
+        "連坐會製造假紅燈，把規則的可信度耗掉。")
 
 
 def test_a_the_fixed_point_terminates_on_recursive_call_graphs():
