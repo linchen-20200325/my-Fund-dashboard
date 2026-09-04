@@ -423,7 +423,14 @@ def test_ia_modules_do_not_redefine_the_tricolor_entrypoints(path: pathlib.Path)
 #: 分頁名（由 `story_nav._TAB_LABELS` 管）與分頁內容（本表）是兩件事，
 #: 既有的三道鎖只守前者。
 _SLOT_RENDER: dict[str, str] = {
-    "tab_macro":     "render_macro_tab",             # ① 只做總體環境判讀
+    # 2026-09-04 五分頁動線重構（WF-IA-1）：① 改掛全新撰寫的 View
+    # `ui/views/page_01_macro.py::render_market_overview`。
+    # ⚠️ **這是「意圖」變更，不是把規則放寬** —— 本條的作用（分頁內容不准跟著
+    #    改名一起漂走）一字未減：它仍然斷言 `with tab_macro:` 只呼叫這一個
+    #    render 函式，把別頁的 render 搬進來照樣紅。改的只是**該叫哪一個**。
+    # ⚠️ 舊 `ui/tab1_macro.py::render_macro_tab` **一個字都沒有動**（客戶方針第 3 條
+    #    「舊版 tab 檔案暫留作為參考」），只是不再被 `app.py` 掛上 ①。
+    "tab_macro":     "render_market_overview",       # ① 只做總體環境判讀
     "tab_health":    "render_fund_grp_health_tab",   # ② 只診斷，不給建議動作
     "tab_research":  "render_fund_research_tab",     # ③ 找標的、研究單檔
     "tab_portfolio": "render_portfolio_tab",         # ④ 要執行的動作都在這裡

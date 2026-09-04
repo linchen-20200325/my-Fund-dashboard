@@ -11,8 +11,9 @@ Tab 內的四時域 section 原本是**裸呼叫**,任一 section 失敗會連�
      **非**靜默 `pass`)。
   2. 5 個 section renderer + 即時決策矩陣 **一律經 `_safe_section` 包裹**,
      不得再有任何裸呼叫。
-  3. `app.py` 的 `with tab_macro:` 有外層 try/except 分頁隔離,try 包住
-     `render_macro_tab`、except 走 `friendly_error`。
+  3. `app.py` 的 `with tab_macro:` 有外層 try/except 分頁隔離,try 包住 ① 的 render
+     函式(2026-09-04 起為 `render_market_overview`,WF-IA-1 新 View)、
+     except 走 `friendly_error`。
   4. `ui/tab1_macro_longterm.py` 的 `news_items` 取值改 `or []`(修 `get(k,
      default)` 對「值為 None」失效的洞),不再以兩參 `get("news_items", …)` 為唯一防線。
 """
@@ -153,7 +154,13 @@ def test_app_macro_tab_isolation_guard():
         _call_name(c)
         for t in tries for c in ast.walk(t) if isinstance(c, ast.Call)
     }
-    assert "render_macro_tab" in body_calls, "分頁隔離 try 未包住 render_macro_tab"
+    # 2026-09-04 五分頁動線重構（WF-IA-1）：① 的 render 函式換成
+    # `ui/views/page_01_macro.py::render_market_overview`。
+    # ⚠️ **本條守的東西一字未減**：`with tab_macro:` 仍然必須有 try/except 分頁隔離、
+    #    try 仍然必須包住那個 render 呼叫、except 仍然必須走 `friendly_error`。
+    #    改的只是**被包住的那個函式叫什麼名字**；拆掉 try 照樣紅。
+    assert "render_market_overview" in body_calls, \
+        "分頁隔離 try 未包住 render_market_overview"
 
     fe_aliases = _import_aliases(tree, "friendly_error") or {"friendly_error"}
     assert body_calls & fe_aliases, "分頁隔離 except 未呼叫 friendly_error(Fail-Loud)"
