@@ -286,12 +286,17 @@ def _card_hot_money() -> dict:
     #
     # 「億」與數字之間留一個空格，是照客戶已拍板的線框逐字寫法：
     # `docs/wireframes/ia-wireframe.html` 該格為 `<span class="big">外資 +182 億</span>`。
+    #
+    # ⚠️ **`note` 刻意只寫「單位為億元新臺幣」，不把 L1 的函式名／欄名寫進畫面**：
+    #    `note` 經 `ia.state_card` 走 `st.caption(note)` → **會被當 markdown 算繪**，
+    #    反引號會變成 code span。**實測（AST 數，2026-09-04）：本檔 13 個 `note` 值裡
+    #    含反引號的是 0 個** —— 全部是使用者語言、沒有任何內部符號名；
+    #    線框那格的註腳也只有「近 5 日累計；USDTWD 同軸對照。」。
+    #    **出處留在這段註解裡就夠了，不必端到使用者面前。**
     return {
         "title": "熱錢動向",
         "value": f"外資 {_flow_sum:+,.0f} 億",
-        "note": (f"近 {_HOT_MONEY_WINDOW_DAYS} 天累計（單位為億元新臺幣，"
-                 f"由 L1 `fetch_foreign_flow_series` 的 `foreign_net_yi` 欄直接沿用，"
-                 f"本層不再換算）；{_fx_txt}。"),
+        "note": f"近 {_HOT_MONEY_WINDOW_DAYS} 天累計，單位為億元新臺幣；{_fx_txt}。",
         "state": STATE_OK,
     }
 
