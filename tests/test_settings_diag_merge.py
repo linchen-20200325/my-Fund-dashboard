@@ -152,7 +152,58 @@ def _fake_streamlit(monkeypatch, *, checkbox: bool = False):
         return checkbox
 
     monkeypatch.setattr(st, "checkbox", _checkbox, raising=False)
-    yield rec
+    try:
+        yield rec
+    finally:
+        # ⚠️ 這個 `finally` **不是防禦性程式碼，是修一個實測到的行程污染**
+        # （2026-09-04 抓到，streamlit 1.59.2 實測）。
+        #
+        # 本檔的 bare 渲染會走進一個 `st.form(...)`。實測呼叫鏈（不是推論，
+        # 是在 `st.form` 上掛 traceback 印出來的）：
+        #     tests/test_settings_diag_merge.py（`with _fake_streamlit(...)` 內）
+        #       → ui/tab_settings_diag.py::render_settings_diag_tab
+        #       → ui/helpers/render_state.py::safe_section
+        #       → ui/tab_settings_diag.py::_render_maintain_section
+        #       → ui/helpers/settings_diag/nav_history_section.py::render_nav_manual_section
+        #       → ui/tab_manage.py::render_nav_csv_manage_section
+        #       → ui/helpers/ia/gated_form.py::applied_form("_nh_upload_csv_form", ...)
+        # ⚠️ `stub_sections` 擋不住它 —— 那個 fixture 換掉的是 `render_manage_tab`，
+        # 而這條路徑走的是同檔**另一個**符號 `render_nav_csv_manage_section`。
+        #
+        # bare 模式（無 ScriptRunContext）離開 `with st.form(...)` 之後，根
+        # DeltaGenerator（`st._main`，**模組級單例**）會被就地留下 `_form_data`，
+        # 而它**活過整個 pytest 行程** → 之後任何用 AppTest 且畫面上有 `st.button`
+        # 的測試，都會被 streamlit 判成「按鈕長在 form 裡」而丟
+        # `StreamlitAPIException: st.button() can't be used in an st.form().`
+        #
+        # 實測受害者（2026-09-04）：`tests/test_app_apptest.py` **13 條**，
+        # 爆點是 `ui/sidebar.py::render_sidebar()` 的「🔍 測試 Proxy 連線」按鈕。
+        #     python3 -m pytest tests/test_settings_diag_merge.py \
+        #                       tests/test_app_apptest.py -q -p no:randomly
+        #     修復前：13 failed, 28 passed ／ 修復後：42 passed
+        # 本檔**單跑照樣全綠**，所以它在本檔內沒有任何症狀 —— 這正是它難被發現的原因。
+        # 同一個源另外實測到的受害者：`tests/test_render_smoke.py` **3 條**
+        # （拿掉本收尾後，本檔 + 該檔併跑會轉紅）。
+        # ⚠️ 這兩檔是**已量到的**受害者，**不是**受害者清單的全部 —— 本輪沒有、
+        # 也不宣稱掃過全部用 AppTest 的測試檔。
+        #
+        # 為什麼清在這裡，而不是逐條測試後面加：本檔所有 bare 渲染都經過本
+        # contextmanager；放這裡連**例外路徑**（渲染中途爆掉、`with` 沒走完 →
+        # 殘留最嚴重）以及日後新增的測試一併涵蓋。實測 25 條裡真正會污染的只有 4 條
+        # （會走完整個 `render_settings_diag_tab()` 的那幾條），但把清理綁在
+        # 「哪幾條會污染」上，等於要求下一個人先知道答案才不會踩。
+        #
+        # 修法沿用本 repo 既有先例：`tests/test_app_smoke.py`（v19.176）、
+        # `tests/test_rotation_components_ui_20260831.py`、
+        # `tests/test_rotation_form_rerun_20260831.py`。
+        # ⚠️ 只清 `_form_data`，**不要**連 `_active_dg = _main` 一起抄 ——
+        # streamlit 1.59.2 上 `_active_dg` 是**無 setter 的 property**，寫它會拋
+        # `AttributeError`（完整機制見
+        # `tests/test_rotation_form_rerun_20260831.py::_render_bare` 的 docstring）。
+        # ⚠️ 這是**版本相依行為**，不是永恆事實；請現場重驗，不要引用本段當永久事實。
+        _main = getattr(st, "_main", None)
+        if _main is not None:
+            _main._form_data = None
 
 
 @pytest.fixture()
@@ -191,6 +242,57 @@ def stub_sections(monkeypatch):
     monkeypatch.setattr(_dr, "_update_data_registry", _mk("registry", None))
     monkeypatch.setattr(_pas, "render_policy_admin_section", _mk("policy", None))
     return hits
+
+
+# ══════════════════════════════════════════════════════════════════
+# 0) 跨檔守衛：本檔渲染完，不准在根 DeltaGenerator 上留下 form 殘留
+# ══════════════════════════════════════════════════════════════════
+def test_bare_render_here_leaves_no_form_state_on_the_root_dg(
+        monkeypatch, stub_sections):
+    """本檔 bare 渲染 ⑤ 之後，`st._main._form_data` 必須回到 None。
+
+    ⚠️ **這條守的是別的檔案，不是本檔** —— 而那正是它非有不可的理由：
+    `st._main` 是**模組級單例**，bare 模式（無 ScriptRunContext）下
+    `with st.form(...)` 的殘留會**活過整個 pytest 行程**，讓**之後**任何用 AppTest
+    且畫面上有 `st.button` 的測試被誤判成「按鈕在 form 裡」而丟
+    `StreamlitAPIException: st.button() can't be used in an st.form().`
+
+    實測受害者（2026-09-04，streamlit 1.59.2）：`tests/test_app_apptest.py` **13 條**，
+    爆點 `ui/sidebar.py::render_sidebar()` 的「🔍 測試 Proxy 連線」按鈕。
+    重現：`pytest tests/test_settings_diag_merge.py tests/test_app_apptest.py -q
+    -p no:randomly` → 修復前 `13 failed, 28 passed`。
+
+    ⚠️ `_fake_streamlit` 的 `finally` 收尾若被刪掉，**本檔自己照樣全綠**，
+    CI 也可能因為檔名順序或 marker 分流剛好而全綠 ——
+    **沒有這條，那段 `finally` 就是一段沒有守衛的修復，
+    下一個整理程式碼的人可以無聲刪掉。**
+    （靠檔名字母序、隨機種子或 marker 分流當隔離，都是假的隔離。）
+
+    突變實驗（2026-09-04 實跑）：把 `_fake_streamlit` 的 `finally` 收尾整段拿掉 →
+    **本條轉紅**，且上述兩檔併跑回到 `13 failed`。
+
+    完整機制與「為什麼**不能**連 `_active_dg` 一起抄」見
+    `tests/test_rotation_form_rerun_20260831.py::_render_bare` 的 docstring。
+    """
+    import streamlit as st
+
+    from ui.tab_settings_diag import render_settings_diag_tab
+
+    _main = getattr(st, "_main", None)
+    assert _main is not None, (
+        "streamlit 沒有 `_main` —— 本守衛的前提不成立，請現場重新確認版本行為，"
+        "不要直接刪掉這條")
+    # 先歸零，免得被同行程更早的測試影響、驗到假綠。
+    _main._form_data = None
+
+    with _fake_streamlit(monkeypatch):
+        render_settings_diag_tab()
+
+    assert getattr(_main, "_form_data", None) is None, (
+        f"bare 渲染後根 DG 仍殘留 form 狀態：{_main._form_data!r} —— "
+        "同一個 pytest 行程內，後續任何 AppTest 畫面上的 `st.button` 都會被誤判成"
+        "「在 form 內」而丟 StreamlitAPIException"
+        "（實證受害者：tests/test_app_apptest.py 13 條）。")
 
 
 # ══════════════════════════════════════════════════════════════════
