@@ -538,7 +538,7 @@ def test_gate_anchor_still_detectable():
 #   (a) **有一個輸入元件的回傳值被綁進一個區域變數**
 #       （`x = st.slider(...)`；`_INPUT_WIDGETS` 全員）。
 #   (b) **同一個函式裡**，那個變數被當成引數傳進某個呼叫。
-##       ⚠️ 綁定與消費**都以函式為作用域**，不是整個檔案 —— 初稿用檔案作用域，
+#       ⚠️ 綁定與消費**都以函式為作用域**，不是整個檔案 —— 初稿用檔案作用域，
 #       結果 `_render_pairs_ui` 的 `_sell` 洩漏到 `render_complementary_explorer_from_df`
 #       （後者其實是從 `st.session_state` 讀值、而且已經包了 form）。
 #       ⚠️ **2026-09-04 更正數字（依據：稽核指出＋本組實測重跑）**：原寫
@@ -735,6 +735,21 @@ def _ungated_widget_io_keys(path: pathlib.Path) -> list[str]:
     - **值不經過變數**：`fetch(st.slider(...))` 直接內嵌。實測本 repo 目前 0 處，
       但規則確實看不到 —— 綁定表只收 `ast.Assign`。
     - **動態呼叫**：`getattr(mod, name)(...)`、存進 dict 再叫出來。
+    - ⭐ **「有沒有被快取擋住」——本規則完全不判**（2026-09-04 稽核新發現，就地補記）。
+      `_io_reaching_names()` 只回答一件事：**這個呼叫會不會（傳遞地）走到 I/O**。
+      它對「下游有 `@st.cache_data(ttl=…)` 擋著的 fetcher」與「**完全沒有快取**的
+      重算入口」**一視同仁**（實測：`fetch_hot_money_frames` 與 `fetch_usdtwd_frame`
+      下游都有 `@st.cache_data`，仍雙雙被判為昂貴；白名單是一個裸函式名的 frozenset，
+      **結構上沒有任何欄位承載快取資訊**）。
+      → **後果：`UNGATED_WIDGET_IO_SITES` 上兩列的實際代價可能相差數量級，
+      而本規則排不出這個序 —— 排序必須人工判讀。**
+      ⚠️ **這正是本檔 2026-09-04 那次排序寫反的根因**：那一輪修好的是**兩列的敘述**，
+      **規則本身的這個盲點沒有被修掉**，日後仍會產出同樣需要人工重排的表。
+      ⚠️ 本節開頭把成本模型講成「**每動一下就多一次對外往返**」——
+      作為**設計動機**它成立（規則要抓的就是這個形狀），但**別把它讀成
+      「表上每一列都真的每動必打」**：快取擋掉的那些不會。
+      ⛔ **本批刻意不把快取判斷併進「昂貴」的推導** —— 那會動到規則邏輯，
+      屬下一批（Lane B）的範圍，已另行登記。
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     containers = _st_container_names(tree)
