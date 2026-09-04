@@ -263,11 +263,35 @@ def _card_hot_money() -> dict:
         if not _fxn.empty:
             _fx_last = float(_fxn.iloc[-1, 0])
     _fx_txt = f"USDTWD {_fx_last:.3f}" if _fx_last is not None else "USDTWD —"
+    # ⚠️ **2026-09-04 回修（有意識的更正，不是漏刪 · 決策者：回修組 WF01-F）**
+    #
+    # 舊表述：`"value": f"外資 {_flow_sum:+,.0f}"`（**頭條數字不帶單位**）
+    #         ＋ note 括號寫「沿用來源單位，**不代為換算成「億」**」。
+    #
+    # **為什麼非改不可**：畫面會印出「外資 +340」，讀者無從分辨那是 340 億還是 340 元
+    # —— `CLAUDE.md §4.1` 點名的「元 vs 百萬元 vs 億」單位陷阱，也是 §1
+    # 「錯誤的數字比沒有數字更危險」。**同一個教訓舊 ① 自己就寫過**：
+    # `ui/tab1_macro.py::_render_top_card_grid` 該卡就地註明「**頭條數字不標單位期間 ＝
+    # 另一種誤導**」，並印 `f"外資 {_hm_net:+.0f}億"`。
+    #
+    # **舊 note 的括號在讀者視角是假的 —— 換算早就發生了，只是不在本檔**（實測）：
+    #     repositories/hot_money_repository.py::_fetch_foreign_flow_series_uncached
+    #         .assign(foreign_net_yi=lambda d: d["net"] / 1e8)      ← 元 → 億元
+    #     同檔 fetch_foreign_flow_series docstring
+    #         Returns: (df[date, foreign_net_yi 億元], error_msg or "")
+    # 也就是說 `_flow_sum` 加總的那一欄（df 唯一的數值欄）**單位就是億元**。
+    # ⚠️ **公平地說，舊句有一種讀法是真的**：從「**本函式**做了什麼」看，本檔確實
+    #    沒有再換算一次。但**兩種讀法下缺陷都成立** —— 值本身連單位都沒有，
+    #    而那句括號只會讓讀者以為「這個數字不是億」。故改為**陳述來源單位**。
+    #
+    # 「億」與數字之間留一個空格，是照客戶已拍板的線框逐字寫法：
+    # `docs/wireframes/ia-wireframe.html` 該格為 `<span class="big">外資 +182 億</span>`。
     return {
         "title": "熱錢動向",
-        "value": f"外資 {_flow_sum:+,.0f}",
-        "note": (f"近 {_HOT_MONEY_WINDOW_DAYS} 天累計（沿用來源單位，不代為換算成「億」）；"
-                 f"{_fx_txt}。"),
+        "value": f"外資 {_flow_sum:+,.0f} 億",
+        "note": (f"近 {_HOT_MONEY_WINDOW_DAYS} 天累計（單位為億元新臺幣，"
+                 f"由 L1 `fetch_foreign_flow_series` 的 `foreign_net_yi` 欄直接沿用，"
+                 f"本層不再換算）；{_fx_txt}。"),
         "state": STATE_OK,
     }
 

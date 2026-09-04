@@ -44,10 +44,30 @@ def test_app_py_only_has_render_calls_for_all_5_tabs():
     for fn in (
         # 2026-09-04 五分頁動線重構（WF-IA-1）：① 的 render 函式換成
         # `ui/views/page_01_macro.py::render_market_overview`。
-        # ⚠️ **本條守的東西一字未減**：app.py 仍然必須為每個分頁各有一個 render 呼叫、
-        #    仍然不准有 inline tab block、仍然不准回頭引用 `render_backtest_tab`。
-        #    改的只是 ① 那一個名字。舊 `ui/tab1_macro.py::render_macro_tab` 一個字都沒動
-        #    （客戶方針第 3 條「舊版 tab 檔案暫留作為參考」），只是不再被 app.py 掛上 ①。
+        # 改的只是 ① 那一個名字。舊 `ui/tab1_macro.py::render_macro_tab` 一個字都沒動
+        # （客戶方針第 3 條「舊版 tab 檔案暫留作為參考」），只是不再被 app.py 掛上 ①。
+        #
+        # ⚠️ **2026-09-04 回修（有意識的更正，不是漏刪 · 決策者：回修組 WF01-F）**：
+        # 上一版這裡寫 ~~「本條守的東西一字未減：app.py 仍然必須為每個分頁**各有一個
+        # render 呼叫**、**仍然不准有 inline tab block**、仍然不准回頭引用
+        # `render_backtest_tab`」~~ —— **前兩項這條測試守不住**，據實改寫。
+        #
+        # **本條實際做的三件事（讀 assert 即可自驗）**：
+        #   1) `"from ui.tab" in src`         —— 至少有一個 `ui.tab` import
+        #   2) `<每個名字> in src`             —— **子字串存在**檢查，不是呼叫檢查
+        #   3) `"render_backtest_tab" not in src`
+        #
+        # **突變實測（2026-09-04，在記憶體裡對 app.py 原始碼字串突變，未寫回磁碟）**：
+        #   A 在 `with tab_macro:` 內塞 `st.markdown` ＋ `st.metric`  → **仍綠**
+        #   B 把 `render_market_overview(` 整句註解掉（名字仍在檔內）→ **仍綠**
+        #   C 把名字整個換掉                                        → 轉紅 ✅
+        #   D 讓 `render_backtest_tab` 重新出現                     → 轉紅 ✅
+        # → A 證明它**不守** inline tab block；B 證明它守的是**名字出現過**、
+        #   不是「各有一個呼叫」。守得住的只有 C、D 兩個方向。
+        #
+        # ⚠️ **這是既有射程缺口，不是本 PR 弄壞的** —— 同樣的突變在 base
+        #    （`c892830`）上跑也是綠的。本輪**只改敘述、不動測試邏輯**：擴射程屬另立批次。
+        #    （本函式 docstring 那句「沒有 inline tab block」同屬既有表述，本輪未動。）
         "render_market_overview",
         "render_single_fund_tab",
         "render_portfolio_tab",
