@@ -150,7 +150,10 @@ from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, INFO_BLUE, STREA
 from services.macro import (
     ENGINE_VERSION,
 )
-from ui.tab1_macro import render_macro_tab
+# 2026-09-04 五分頁動線重構（WF-IA-1）：① 改掛全新撰寫的 View。
+# 舊 `ui/tab1_macro.py` 依客戶方針第 3 條**暫留作為參考、一個字都沒動**，
+# 待新版 5 頁驗收完成後整批拔除。這裡只換接線，不動舊檔。
+from ui.views.page_01_macro import render_market_overview
 from ui.tab3_portfolio import render_portfolio_tab
 # v19.314:危機回測室(tab_crisis_backtest + crisis_strategy_grid + crisis_ai_advisor)
 # 自 v19.31 起即註解停用、進不去;user 確認不用 → 整功能拔除(2798 LOC)。
@@ -517,7 +520,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
         # 🧭 總經指南針:整條鏈已於 2026-08-05 移除(見本檔上方沿革區塊)。此處不再有
         # 任何指南針呼叫,元件模組本身也已退役 —— 在此還原呼叫會直接 ImportError。
         try:
-            render_macro_tab()
+            render_market_overview()
         except Exception as _macro_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
             from ui.helpers.session import friendly_error as _fe_macro
             _fe_macro(f"「{_tab_label('macro')}」分頁渲染失敗", _macro_tab_e,

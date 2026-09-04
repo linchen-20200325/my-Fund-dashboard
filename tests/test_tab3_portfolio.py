@@ -42,7 +42,13 @@ def test_app_py_only_has_render_calls_for_all_5_tabs():
     from pathlib import Path
     src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
     for fn in (
-        "render_macro_tab",
+        # 2026-09-04 五分頁動線重構（WF-IA-1）：① 的 render 函式換成
+        # `ui/views/page_01_macro.py::render_market_overview`。
+        # ⚠️ **本條守的東西一字未減**：app.py 仍然必須為每個分頁各有一個 render 呼叫、
+        #    仍然不准有 inline tab block、仍然不准回頭引用 `render_backtest_tab`。
+        #    改的只是 ① 那一個名字。舊 `ui/tab1_macro.py::render_macro_tab` 一個字都沒動
+        #    （客戶方針第 3 條「舊版 tab 檔案暫留作為參考」），只是不再被 app.py 掛上 ①。
+        "render_market_overview",
         "render_single_fund_tab",
         "render_portfolio_tab",
         "render_data_guard_tab",
