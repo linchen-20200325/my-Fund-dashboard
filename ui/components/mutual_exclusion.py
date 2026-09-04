@@ -90,6 +90,11 @@ def render_mutual_exclusion_section(funds: list) -> None:
     健診未跑時本函式根本不會被呼叫(② 既有 gating),故無「未跑」占位。
     """
     from shared.signal_thresholds import HOMOGENEITY_MIN_PAIRS
+    # ⚠️ 分頁／分區名一律走 SSOT。本函式原本兩處手寫「⑤ 資料診斷」——
+    #    **站號與名字都是手寫的**,而 ⑤ 的分區實際叫「🔭 資料診斷」、
+    #    分頁叫「⚙️ 設定與診斷」,兩個都對不上;站號更是分頁一增刪就過期
+    #    (`story_nav._tab_ordinal` 存在的唯一理由)。
+    from ui.helpers.story_nav import where_to_find as _where_to_find
 
     st.divider()
     st.markdown("#### 🛡️ 持倉互斥避險")
@@ -98,7 +103,17 @@ def render_mutual_exclusion_section(funds: list) -> None:
                "不合併成單一分數。")
 
     if len(funds or []) < 2:
-        not_ready("至少需 2 檔基金才能比對互斥性")
+        # 「去哪補」原本整個缺席（Lane E）。線框 Rule 04 的三要素裡它最常被省掉,
+        # 而省掉之後空狀態只是把「消失」換成「灰色的消失」—— 使用者知道少了東西,
+        # 但不知道下一步。指名的兩個字串**與同頁 `backtest_section` 那條同源**
+        # (本頁同一個 form 的輸入框與送出鈕),不是另外想一個講法。
+        # ⚠️ 刻意**不寫「上方」** —— `backtest_section` 那條寫了,本條沒跟著抄:
+        #    方位是版面順序的函數,寫進文案等於保證下一次重排就說謊
+        #    (`tests/test_ia_tab13_batch3.py::test_new_user_facing_copy_has_no_positional_words`
+        #     的理由,那條規則的射程只到 ③ 的四個檔,但**理由對本檔一樣成立**)。
+        #    「哪個欄位」已經由 `「基金代號」` 這個名字唯一指定了,方位詞不增加資訊。
+        not_ready("至少需 2 檔基金才能比對互斥性",
+                  where="本頁的「基金代號」欄位（多貼幾檔後重按「🩺 開始健診」）")
         return
 
     try:
@@ -128,7 +143,7 @@ def render_mutual_exclusion_section(funds: list) -> None:
     if not dims["holdings"]["computed"] and not dims["nav"]["computed"]:
         _miss = "、".join(f"{x['name']}（{x['code']}）" for x in summary["excluded"]) or "全部"
         not_ready(f"缺持股與淨值資料,無法比對互斥性 —— 缺資料檔:{_miss}",
-                  where="⑤ 資料診斷")
+                  where=_where_to_find("diag"))
         return
 
     # ── 區塊 1:同質化診斷帶(3 欄 stat tile;#726 元件,不另創視覺)──
@@ -167,7 +182,7 @@ def render_mutual_exclusion_section(funds: list) -> None:
             f"{x['name']}（{x['code']}）:{'、'.join(x['reasons'])}"
             for x in summary["excluded"])
         st.caption(f"⬜ 未納入比對（資料不足）:{_lines} —— 明確標名,不靜默剔除。"
-                   f"可到「⑤ 資料診斷」查來源狀態。")
+                   f"可到 {_where_to_find('diag')} 查來源狀態。")
 
     # ── 區塊 2:高相關警示對卡片(🔴 業務紅卡,非錯誤框)──
     if summary["alerts"]:

@@ -152,7 +152,21 @@ def render_allocation_donut_card(
         not_ready(
             f"{n} 檔都沒填投入本金 → 無法算金額比例；**這不代表真的沒有核心資產**"
             if n else "尚無持倉可統計核心／衛星比例",
-            where="Google Sheet 的 `invest_twd` 欄，或「編輯初始持倉」")
+            # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管 ·
+            # 依據：實測 `git grep 編輯初始持倉` + 全 `ui/**` 的 `st.expander` 掃描）：
+            # 舊文案指名 ~~「編輯初始持倉」~~ —— **全 repo 沒有任何控制項叫這個名字**。
+            # 實際的收合區是 `ui/tab3_t7_ledger.py` 的
+            # `st.expander("✏️ 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）")`。
+            # ⚠️ 這比派工單轉述的「只是掉了 emoji」嚴重：「初始」二字在畫面上根本
+            # 不存在，加不加 📝 都找不到。同一個死字串在 repo 內另有 **8 處活字串**
+            # （`ui/tab3_t7_ledger.py` ×5、`ui/tab3_portfolio.py` ×1、
+            # `ui/helpers/portfolio/allocation.py` ×1、
+            # `services/policy_advisor_service.py` ×1；量測日 2026-09-04，
+            # 以 AST 只數活字串、排除註解與 docstring），**全部不在本批檔案邊界內** ——
+            # 已登記進 `tests/test_batch2_top_card_grid.py::WHERE_NAME_EXEMPT` 的
+            # 待修欄與 PR 描述，本批只修本檔這一處（§8.4 step 4：不擴大範圍）。
+            where="Google Sheet 的 `invest_twd` 欄，或 T7 帳本的"
+                  "「✏️ 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）」")
     else:
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
