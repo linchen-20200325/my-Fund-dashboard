@@ -389,7 +389,15 @@ def render_complementary_explorer_from_df(df) -> None:
             return
 
         if len(rows) < 2:
-            not_ready("配對需至少 2 檔;目前批次結果不足 2 檔,還不能比對互補性")
+            # 「去哪補」原本整個缺席（Lane E）。本元件只讀已算好的批次大表 df,
+            # 補足的動作全部落在**批次掃描面板**的那兩個 widget 上 ——
+            # 指名的字串逐字取自 `ui/tab_batch_analysis.py` 的實際 label,
+            # 由 `tests/test_batch2_top_card_grid.py` 的「去哪補指名的控制項要真的
+            # 存在」那條守著漂移(改了 label 而沒改這裡 → 轉紅)。
+            not_ready(
+                "配對需至少 2 檔;目前批次結果不足 2 檔,還不能比對互補性",
+                where="批次掃描面板的「② 或直接貼上(每行一檔,逗號/換行皆可)」"
+                      "補到 2 檔以上,再按「▶️ 開始 / 繼續分析」")
             return
 
         # ── 區塊 2:最佳互補配對卡(3 欄自適應網格;Q4 每張只顯示最佳一檔買方)──

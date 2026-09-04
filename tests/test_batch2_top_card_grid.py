@@ -3353,3 +3353,552 @@ def test_the_calm_fixture_no_longer_puts_the_same_score_on_every_indicator():
     # 但合成分數要與舊 fixture 一致（偏移和為 0）—— 既有斷言零變更
     assert _real_calc_macro_phase(_ind)["score"] == 6.5, (
         "偏移沒有互相抵銷，合成分數變了 —— 既有測試的前提會跟著飄")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Lane E · 「去哪補」全域射程 —— 從 3 個字面值擴到全 `ui/**` 的 `where=`
+# ══════════════════════════════════════════════════════════════════════════
+# 為什麼要有這一段（讀之前先看，否則會以為只是把舊規則抄大一號）
+# ------------------------------------------------------------------
+# 本檔既有的 `test_every_remedy_names_a_control_that_actually_exists_on_screen`
+# 只檢查 `ui/tab1_macro.py` 裡的**三個模組級常數**，對上一個 4 個常數的 SSOT 集合。
+# 而全 `ui/**` 實測有 **47 個** `not_ready()` / `empty_state()` 呼叫點
+# （量測日 2026-09-04：`not_ready` 44 + `empty_state` 3），**其餘 44 個一條規則都沒有**。
+#
+# 那 44 個裡實測有 3 個指名了畫面上不存在的東西、3 個連 `where=` 都沒有：
+#
+# | 位置 | 文案指名的 | 畫面上實際是什麼 |
+# |---|---|---|
+# | `ui/tab2_single_fund.py` 空狀態 | 「🔍 找代號」 | `st.button("🔍 搜尋基金代號")`；「🔍 找代號」只在 `safe_section` 的區塊名裡，**那個字只有在該區塊炸掉時才會被印出來** |
+# | `ui/helpers/portfolio/policy_admin_section.py` | 「OAuth 設定」expander | 該檔**只有一個** expander（保單管理），OAuth 那塊是 `st.markdown("##### 🧙 OAuth Client 設定引導（5 分鐘完成）")` —— **型態與名字都不同** |
+# | `ui/components/allocation_donut_card.py` | 「編輯初始持倉」 | 真正的收合區叫「✏️ 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）」，**全 repo 沒有任何控制項叫「編輯初始持倉」** |
+#
+# ⚠️ **這三個都不是「SSOT 常數被抄成第二份」**，所以既有規則的做法（比對 4 個常數）
+#    結構上抓不到它們 —— 它們指名的控制項**從來就沒有進過 SSOT**，而且也不該全部進去
+#    （`shared/ui_control_labels.py` 自己寫著「本模組不是全站按鈕字典」）。
+#    本段換一個方向：**不要求文案指名 SSOT 常數，而是要求它指名的東西
+#    真的被某個 widget 渲染出來** —— 對照組直接從原始碼 AST 抽。
+#
+# ⚠️ **本段刻意不驗「那句話通不通順、使用者照做有沒有用」** —— 那是人要看的。
+#    機器能守的只有「它指名的那個字串，畫面上找不找得到」。據實寫在這裡，
+#    不要把它讀成「文案已經被驗過了」。
+
+from shared.ui_control_labels import (  # noqa: E402
+    DATA_GUARD_HOT_MONEY_BTN as _LBL_D5_HOT_MONEY_BTN,
+    DATA_GUARD_RELOAD_MACRO_BTN as _LBL_D5_RELOAD_MACRO_BTN,
+)
+
+#: `where=` 裡「指名一個控制項」的寫法：用 `「」` 括起來。
+#: 選 `「」` 而不是「整句比對」的理由：`where=` 是一整句話
+#: （「本頁上方「基金代號」欄位（多貼幾檔後重按「🩺 開始健診」）」），
+#: 整句永遠不會等於任何 widget label；真正需要對得上畫面的是**被括起來的那一段**。
+import re  # noqa: E402
+
+_WHERE_QUOTED = re.compile(r"「([^「」]+)」")
+
+#: 被視為「畫面上的控制項」的 streamlit 呼叫。
+#: 只收**真的會把 label 印在畫面上**的；`st.caption` / `st.info` / `st.write` /
+#: 一般 `st.markdown` 散文**刻意不收** —— 收了就退化成「這幾個字有沒有出現在
+#: 某段文字裡」，而那正是 `shared/ui_control_labels.py` docstring 點名的、
+#: 在兩邊都改壞時照樣綠燈的那種斷言。
+#: ⚠️ **這句理由 2026-09-04 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管 ·
+#:    依據：獨立稽核指出後本組重跑）。** 原文寫
+#:    ~~「（實測：把 `caption`/`info`/`write` 收進來，「編輯初始持倉」這個死指路
+#:    會因為別處一句散文提到它而被判成合格。）」~~ —— **那句在現行版本下不可重現。**
+#:    本組照做實測：對照組由 **716 → 3475**（加寬確實生效），但
+#:    `編輯初始持倉` 的 **exact-equality = False、bracket-prefix = False、
+#:    僅「包含」它的字串 6 個** → **在現行比對器下仍然轉紅**。
+#:    **原因**：最終比對器只認「等於」與「止於括號的前綴」，**明文不認子字串**，
+#:    所以散文只會「包含」、永遠不會「等於」—— 加寬 widget 集合改變不了這一點。
+#:    **那句話描述的是本規則的【初版原型】**（當時用子字串比對），
+#:    被寫成了現行版本的實測 —— 30 行後的另一句「曾……**在初版原型裡**被判成合格」
+#:    才是對的。**同一個檔裡兩個互相矛盾的說法，而被當成事實的那個不成立。**
+#: ✅ **設計決定本身沒有被推翻，不收散文仍然正確** —— 理由改為下面這一條
+#:    （它不依賴那個不成立的實測，而且本身可重跑）：
+#:    加寬會讓對照組從 **716 暴增到 3475**（含大量散文），
+#:    於是「畫面上找不找得到」這個問題會退化成「這幾個字有沒有在某段文字裡出現過」。
+#:    ⚠️ 稽核已用突變證明那個方向**真的能造出假綠**：加寬 `_SCREEN_WIDGETS`
+#:    ＋ 把某個 `where=` 指向一段純散文 caption → **全綠**（見 `test_where_rules_are_not_scanning_air`
+#:    的「本錨點守不到的方向」段）。
+_SCREEN_WIDGETS = frozenset({
+    "button", "checkbox", "expander", "form_submit_button", "radio", "selectbox",
+    "toggle", "text_input", "file_uploader", "number_input", "date_input",
+    "multiselect", "slider", "text_area", "link_button", "download_button",
+    "metric", "applied_form", "tabs", "popover", "status", "segmented_control",
+    "pills", "color_picker", "time_input", "camera_input", "chat_input",
+})
+#: 標題型呼叫（`st.markdown` 只在字串以 `#` 開頭時才算標題，見 `_screen_strings`）。
+_SCREEN_HEADINGS = frozenset({"subheader", "header", "title"})
+#: 哪些參數位置會成為畫面上的字：第一個位置引數，或這幾個具名參數。
+_SCREEN_LABEL_KW = frozenset({"label", "submit_label"})
+#: 允許「只寫到括號為止」的括號字元 —— 見 `test_every_where_names_something_that_exists_on_screen`
+#: 的「前綴匹配」段。**只有這幾個**，不含空白、冒號、破折號。
+_BRACKETS = ("（", "(", "[", "【", "〔", "{")
+
+
+def _lane_e_ui_sources() -> list:
+    return sorted(pathlib.Path("ui").rglob("*.py"))
+
+
+def _str_consts(node) -> set:
+    """`node` 底下所有字串字面值（含 f-string 的字面片段）。"""
+    return {_x.value for _x in ast.walk(node)
+            if isinstance(_x, ast.Constant) and isinstance(_x.value, str)}
+
+
+def _call_name(node: ast.Call, alias: dict) -> str:
+    """呼叫點的**正規化**名字（穿過 `import X as _y` 的別名）。
+
+    ⚠️ 不能只看呼叫點寫什麼：`ui/tab_fund_grp_health.py` 寫的是
+    `from ui.helpers.ia import applied_form as _applied_form` 之後
+    `with _applied_form(..., submit_label="🩺 開始健診")` ——
+    只比對字面名字會漏掉它（本規則初版就漏了，是突變探針抓出來的）。
+    """
+    _f = node.func
+    _n = _f.attr if isinstance(_f, ast.Attribute) else (
+        _f.id if isinstance(_f, ast.Name) else "")
+    return alias.get(_n, _n)
+
+
+def _import_alias(tree: ast.AST) -> dict:
+    _a: dict = {}
+    for _n in ast.walk(tree):
+        if isinstance(_n, (ast.Import, ast.ImportFrom)):
+            for _nm in _n.names:
+                if _nm.asname:
+                    _a[_nm.asname] = _nm.name.rsplit(".", 1)[-1]
+    return _a
+
+
+def _name_bindings(tree: ast.AST) -> dict:
+    """`{識別字: [被指派過的運算式, ...]}`（含 `from M import N as A` 的來源）。
+
+    存在的理由：widget 的 label 常常是先組好再傳
+    （`_btn_label = f"📡 載入所有未載入基金（{n} 條…）"` → `st.button(_btn_label)`），
+    也常常是 SSOT 常數的別名（`st.button(_LBL_D5_RELOAD_MACRO)`）。
+    只看直接傳進去的字面值會漏掉這兩種，而那正是**做對了的**寫法。
+    """
+    _b: dict = {}
+    for _n in ast.walk(tree):
+        if isinstance(_n, ast.Assign):
+            for _t in _n.targets:
+                if isinstance(_t, ast.Name):
+                    _b.setdefault(_t.id, []).append(_n.value)
+        elif isinstance(_n, ast.AnnAssign) and isinstance(_n.target, ast.Name) \
+                and _n.value is not None:
+            _b.setdefault(_n.target.id, []).append(_n.value)
+        elif isinstance(_n, ast.ImportFrom) and _n.module:
+            for _nm in _n.names:
+                _b.setdefault(_nm.asname or _nm.name, []).append(
+                    ("__import__", _n.module, _nm.name))
+    return _b
+
+
+def _resolve_strings(node, bindings: dict, depth: int = 0) -> set:
+    """把一個 label 運算式攤成「它可能印出來的字串片段」集合。"""
+    _out = set(_str_consts(node)) if not isinstance(node, tuple) else set()
+    if isinstance(node, tuple) and node[0] == "__import__":
+        try:
+            _m = __import__(node[1], fromlist=[node[2]])
+            _v = getattr(_m, node[2], None)
+            if isinstance(_v, str):
+                _out.add(_v)
+        except Exception:                                    # noqa: BLE001
+            pass
+        return _out
+    if depth < 3:
+        for _x in ast.walk(node):
+            if isinstance(_x, ast.Name):
+                for _v in bindings.get(_x.id, []):
+                    _out |= _resolve_strings(_v, bindings, depth + 1)
+    return _out
+
+
+def _screen_strings() -> set:
+    """全 `ui/**` **真的會被印在畫面上當標籤／標題**的字串集合。
+
+    三個來源，缺一不可：
+      1. widget 的 label（含穿過區域變數與 SSOT 常數別名，見 `_name_bindings`）；
+      2. `st.subheader` / `header` / `title`，以及 `st.markdown("### …")` 這種標題；
+      3. `story_nav` 與 `shared/ui_control_labels` 這兩份 **SSOT** ——
+         它們是「指路文案該指的名字」的權威來源，即使某個值當下沒有 widget
+         直接用字面值渲染（例如 `where_to_find()` 是執行期組出來的）。
+    """
+    from ui.helpers import story_nav as _sn
+    import shared.ui_control_labels as _ucl
+
+    _out: set = {_v for _k, _v in vars(_ucl).items()
+                 if isinstance(_v, str) and not _k.startswith("__")}
+    _out |= set(_sn._TAB_LABELS.values()) | set(_sn._SECTION_LABELS.values())
+    _out |= {_sn.where_to_find(_k)
+             for _k in list(_sn._TAB_LABELS) + list(_sn._SECTION_LABELS)}
+
+    for _p in _lane_e_ui_sources():
+        _tree = ast.parse(_p.read_text(encoding="utf-8"))
+        _alias, _bind = _import_alias(_tree), _name_bindings(_tree)
+        for _n in ast.walk(_tree):
+            if not isinstance(_n, ast.Call):
+                continue
+            _nm = _call_name(_n, _alias)
+            if _nm in _SCREEN_WIDGETS:
+                _targets = list(_n.args)[:1] + [
+                    _k.value for _k in _n.keywords if _k.arg in _SCREEN_LABEL_KW]
+                for _a in _targets:
+                    _out |= _resolve_strings(_a, _bind)
+            elif _nm in _SCREEN_HEADINGS:
+                for _a in list(_n.args)[:1]:
+                    _out |= _resolve_strings(_a, _bind)
+            elif _nm == "markdown":
+                for _a in list(_n.args)[:1]:
+                    for _s in _str_consts(_a):
+                        if _s.strip().startswith("#"):
+                            _out.add(_s.strip().lstrip("#").strip())
+    return {_s.strip() for _s in _out if _s and _s.strip()}
+
+
+def _where_sites() -> list:
+    """全 `ui/**` 的 `not_ready()` / `empty_state()` 呼叫點。
+
+    ⚠️ **`system_error()` 刻意不收** —— 它**根本沒有 `where=` 這個參數**
+    （簽章是 `system_error(what, exc, *, hint="", degraded=False)`，見
+    `ui/helpers/render_state.py`）。把它列進「必須帶 where=」的規則，
+    等於發明一條永遠不可能被滿足的要求。**這一點是實測，不是推論。**
+    """
+    _sites = []
+    for _p in _lane_e_ui_sources():
+        _tree = ast.parse(_p.read_text(encoding="utf-8"))
+        _alias = _import_alias(_tree)
+        for _n in ast.walk(_tree):
+            if not isinstance(_n, ast.Call):
+                continue
+            if _call_name(_n, _alias) not in ("not_ready", "empty_state"):
+                continue
+            _kw = {_k.arg: _k.value for _k in _n.keywords if _k.arg}
+            _sites.append((str(_p).replace("\\", "/"), _n.lineno,
+                           _call_name(_n, _alias), _kw.get("where")))
+    return _sites
+
+
+# ── 豁免表（形狀抄本 repo 慣例：站點集合 ＋ 反向斷言，見 `tests/test_ui_grid_contract.py`）
+#: `where=` 可以缺席的呼叫點。**目前是空的，而且應該保持空的。**
+#: 三個原本缺席的（`mutual_exclusion` / `rotation` / `tab6_manual`）已在本批修好。
+#: ⚠️ 空表**不是**裝飾：`test_where_is_mandatory` 的第二條斷言會在有人「修好一個卻
+#:    忘了把它從表裡拿掉」時轉紅，所以表一旦被加東西進去，就必須真的降回來。
+WHERE_MISSING_EXEMPT: frozenset = frozenset()
+
+#: `where=` 裡 `「」` 指名了一個**畫面上找不到**的字串，但暫時不修的站點。
+#: 格式：`"檔案::行為描述::「被指名的字串」"`（**不寫行號** —— 行號在任何一次
+#: 重構後就失效，而重構不會觸發本表更新，`CLAUDE.md §8.2.A.0 規則 1`）。
+#: ⚠️ 理由欄必須寫「**為什麼這個位置是對的**」（`§8.2.A.0 規則 5`）；
+#:    如果理由其實是「還沒修」，就照實寫「**待修**」，不要包裝成設計決定。
+WHERE_NAME_EXEMPT: dict = {
+    # —— 量測日 2026-09-04：本表**目前是空的**。 ——
+    # 本批把實測到的 3 處全部修掉了（`tab2_single_fund` / `policy_admin_section` /
+    # `allocation_donut_card`），所以這裡沒有東西可登記。
+    #
+    # ⚠️ **但「本規則掃到 0 個違規」不等於「全站指路都對了」** —— 據實登記兩批
+    #    本規則**結構上看不到**的既有債，它們不在這裡是因為**規則射不到**，
+    #    不是因為它們是對的：
+    #
+    #    (1) **死字串「編輯初始持倉」另有 8 處活字串**（量測日 2026-09-04，以 AST
+    #        只數活字串、排除註解與 docstring）：`ui/tab3_t7_ledger.py` ×5、
+    #        `ui/tab3_portfolio.py` ×1、`ui/helpers/portfolio/allocation.py` ×1，
+    #        另 `services/policy_advisor_service.py` ×1 在 L2 不在 `ui/` ——
+    #        ⚠️ 本組初稿曾把它寫成「6 處（`tab3_t7_ledger` ×4）」，**那是沒數過就寫的**；
+    #        AST 重數後為 8 / ×5。就地更正並留痕 —— 一節在講「文件不該說謊」的規則，
+    #        自己的計數必須先為真（`CLAUDE.md §-2` 規則 6）。
+    #        它們全部是 `st.caption` / `st.info` / 一般散文，**不是 `where=`**，
+    #        本規則射不到。三檔皆不在本批的檔案邊界內（`CLAUDE.md §8.4 step 4`：
+    #        不擴大範圍），已在 PR 描述登記。
+    #    (2) 既有指路債另有兩批（一批 7 條、一批 15 檔 65 筆）由前組登記，
+    #        本組**未複驗**其數字，不在此複述（`CLAUDE.md §-2` 規則 6）。
+    #
+    #    (3) **「已 import SSOT 卻仍手抄一份」的既有債**（2026-09-04 獨立稽核指出後
+    #        本組以 AST 逐一實測；`test_tab5_does_not_hand_copy_the_labels_it_already_imports`
+    #        **只守 `ui/tab5_data_guard.py` 一個檔**，射不到下列任何一處）：
+    #        - `ui/tab1_macro.py` —— 已 import 五個常數，仍有 **3 處**手抄變體：
+    #          `:1811` 「🔄 更新總經資料」（與 SSOT 逐字相同，屬**尚未**漂移的第二份真相源）、
+    #          `:2165` 「更新總經資料」（**已漂移**：掉了 🔄）、
+    #          `:2710` 「載入總經資料」（**已漂移**：掉了 📡）。
+    #        - `ui/tab3_t7_ledger.py:3268` —— `→ 📡 載入總經資料` 逐字手抄
+    #          `MACRO_LOAD_BTN_FIRST`，而**該檔連 `ui_control_labels` 都沒 import**；
+    #          它同時是 `test_every_where_names_something_that_exists_on_screen`
+    #          docstring 甲類 5 處中的一處（沒有 `「」` → 那條也看不到）。
+    #        ⛔ **兩檔皆不在本批的檔案邊界內，登記不修**（`CLAUDE.md §8.4 step 4`）。
+    #        ⚠️ 本組實測數與稽核轉述的「`tab1_macro` 2 處」不同（本組數到 3 處）——
+    #           差在 `:1811`，它**目前與 SSOT 逐字相同**、還沒漂移，稽核只列已漂移的兩處。
+    #           以「**有沒有第二份字面值**」為準則應計 3 處，故本表記 3。
+}
+
+#: 量測日 2026-09-04 的 `not_ready()` / `empty_state()` 呼叫點總數。
+#: 錨點用：掉到下限以下代表這兩個 helper 被換成別的寫法，本段規則正在對空氣生效。
+WHERE_ANCHOR_MIN_SITES = 40
+#: 同上，`「」` 指名段落的總數下限（規則真的有東西可比對）。
+WHERE_ANCHOR_MIN_QUOTED = 12
+
+
+def test_where_is_mandatory():
+    """`not_ready()` / `empty_state()` **一律要帶 `where=`**，除非具名登記。
+
+    線框 Rule 04 的三要素是「標題 / 缺什麼 / **去哪補**」，而
+    `ui/helpers/render_state.py` 的 docstring 自己寫著：
+    **「沒有它，占位只是把『消失』換成『灰色的消失』。」**
+    ——「去哪補」是最容易省掉、也最有價值的一項，所以它需要一條規則，
+    不能靠每個作者自己記得。
+
+    ⚠️ 本條**不驗** `system_error()`：它沒有 `where=` 這個參數（見 `_where_sites`）。
+    """
+    _missing = sorted(
+        f"{_f}::{_fn}" for _f, _ln, _fn, _w in _where_sites() if _w is None)
+    _new = [_m for _m in _missing if _m not in WHERE_MISSING_EXEMPT]
+    assert not _new, (
+        "以下 `not_ready()` / `empty_state()` 沒有「去哪補」（`where=`）：\n  "
+        + "\n  ".join(_new)
+        + "\n請補上一個**使用者照著做真的能解決**的指路；"
+          "真的無處可指請加進 `WHERE_MISSING_EXEMPT` 並在 PR 描述寫理由。")
+    _fixed = sorted(set(WHERE_MISSING_EXEMPT) - set(_missing))
+    assert not _fixed, (
+        "以下站點已經補上 `where=`（或改名／被刪），但 `WHERE_MISSING_EXEMPT` 還留著它 ——\n"
+        "請把表一起降下來。**這條紅燈是提醒不是責備。**\n  " + "\n  ".join(_fixed))
+
+
+def test_every_where_names_something_that_exists_on_screen():
+    """`where=` 用 `「」` 指名的每一個控制項／區塊，畫面上都要真的找得到。
+
+    ## 判準（一段話講完）
+
+    對每一個 `not_ready()` / `empty_state()` 的 `where=`（含 f-string 的字面片段），
+    抓出所有 `「…」` 括起來的段落；每一段都必須**等於**「全 `ui/**` 某個 widget 的
+    label / 某個標題 / `story_nav` 或 `ui_control_labels` 的某個 SSOT 值」，
+    或者是其中某一個的**止於括號的前綴**（見下）。都不是 → 紅。
+
+    ## 前綴匹配：允許，但只允許「止於括號」的那一種（本條最需要說清楚的決定）
+
+    Streamlit 的 label 常常在名字後面掛一段括號說明
+    （`📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；…）` 有 60 幾個字）。
+    要求文案逐字抄整串，只會逼作者去改 label 或乾脆不寫 `where=` —— 規則會把
+    「寫得好」變成成本。所以**允許只寫到括號為止**：
+    `「📥 上傳 NAV CSV」` 對上 `📥 上傳 NAV CSV（格式:…）` → **綠**。
+
+    ⚠️ **為什麼這不會讓「🔍 找代號 vs 🔍 搜尋基金代號」那種真錯溜過去**，兩層：
+      1. **它根本不是前綴** —— `🔍 找代號` 不是 `🔍 搜尋基金代號` 的前綴，
+         連寬鬆的前綴匹配都判它紅。這一層與括號規則無關。
+      2. **就算是前綴也不一定放行** —— 剩下的那一截必須以 `（([【〔{` 之一開頭。
+         `「🔍 搜尋」` 對上 `🔍 搜尋基金代號` 的剩餘是 `基金代號`，**不是括號**
+         → **紅**。也就是「把名字砍一半」不會被當成合法縮寫。
+         （這正是本批突變探針 3 驗的那一條，實測轉紅。）
+    ⚠️ 反過來說，**子字串比對一律不算**：`「編輯初始持倉」` 曾因為別處一句散文提到
+       它而在初版原型裡被判成合格 —— 那就是 `CLAUDE.md` 記載的
+       「只驗關鍵詞在不在、不驗那句話是不是真的」失效模式。本條只認「等於」與
+       「止於括號的前綴」，**不認子字串**。
+
+    ## 本條**守不到**的（據實寫明，不要讀成「指路已經全對」）
+
+    - ⭐ **最重要的一條：本規則是「以 `「」` opt-in」的 —— 不寫 `「」` 就自動豁免。**
+      實測（量測日 2026-09-04）：47 個呼叫點裡 **只有 14 個帶 `「」`、本條看得到**，
+      **其餘 33 個本條完全掃不到**。
+      ⚠️ **2026-09-04 就地更正（有意識的更正，不是漏刪 · 依據：獨立稽核 + 本組重跑）**：
+      本段原本寫 ~~「那些指的是 App 外部的東西，畫面上本來就沒有對應 widget」~~ ——
+      **那是假的**。本組把 33 個逐一分類後：
+
+      | 類別 | 數 | 說明 |
+      |---|---|---|
+      | 甲 · **整段裡就含著一個真實 widget/SSOT 標籤** | **5** | **會漂移，而且本條看不到** |
+      | 乙 · Secrets／GCP console／sidebar 等 App 外部 | 11 | 畫面上確實沒有對應 widget |
+      | 丙 · 兩者皆非（相對位置、泛指某個面板…） | 17 | 無從機器判定 |
+
+      甲的 5 處（實測，逐一列名，**全部不在本批檔案邊界內**）：
+      `ui/helpers/portfolio/policy_admin_section.py` ×3 → `🔐 用 Google 登入`、
+      `ui/helpers/settings_diag/fetch_diag_section.py` → `🚀 分析`、
+      `ui/tab3_t7_ledger.py` → **`📡 載入總經資料`（逐字手抄 `MACRO_LOAD_BTN_FIRST`，
+      而該檔連 `ui_control_labels` 都沒 import）**。
+      ⚠️ **最後那一筆與本批在 `ui/tab6_manual.py` 修掉的是同一個缺陷，它還活著，
+      而五條新規則沒有一條看得到它**（沒有 `「」` → 本條跳過；不是 `tab5` → 那條跳過）。
+      ⛔ **刻意不把本條擴大到非 `「」` 的情形** —— 那要改成「整段掃所有已知標籤」，
+      誤判率會暴增（實測：分區名「批次掃描」「資料診斷」都是合法按鈕字的子字串），
+      且屬擴大範圍（`CLAUDE.md §8.4 step 4`）。**登記，不動。**
+    - **乙類那 11 個**（`Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`` 等）
+      —— 指的是 App 外部的東西，畫面上本來就沒有對應 widget。
+    - **`where=` 以外的指路**（`st.caption` / `st.info` 裡的「請到 X」）—— 那是
+      另一批既有債，見 `WHERE_NAME_EXEMPT` 的登記。
+    - **`where=` 整段由 SSOT 組出來時**（`f"{where_to_find('macro')} → …"`）
+      —— 內插進來的部分不是字面值，本條看不到，但它也**不可能漂移**（那正是走 SSOT 的用意）。
+    - **文案通不通順、使用者照做有沒有用** —— 那要人看。
+    """
+    _screen = _screen_strings()
+    #: 目前**真的解析不出來**的站點（先不看豁免表）—— 形狀抄
+    #: `tests/test_ui_grid_contract.py`：先算 `found`，再與豁免表做**雙向**差集。
+    #: ⚠️ 刻意不在迴圈裡 `continue` 掉豁免項：那樣 `_fixed` 就只能回答
+    #:    「這個字串還在不在」，回答不了「它是不是已經不再違規了」——
+    #:    有人把 **widget 改名成配合文案**時，豁免表會靜靜留著一筆假債。
+    _failing: dict = {}
+    _quoted_n = 0
+    for _f, _ln, _fn, _w in _where_sites():
+        if _w is None:
+            continue
+        for _s in _str_consts(_w):
+            for _seg in _WHERE_QUOTED.findall(_s):
+                _quoted_n += 1
+                if _seg in _screen:
+                    continue
+                if any(_lab.startswith(_seg)
+                       and _lab[len(_seg):][:1] in _BRACKETS for _lab in _screen):
+                    continue
+                _near = sorted((_l for _l in _screen if _seg[:3] and _seg[:3] in _l),
+                               key=len)[:2]
+                _failing[f"{_f}::{_fn}::「{_seg}」"] = (
+                    f"{_f}:{_ln} 「{_seg}」（畫面上最接近的：{_near or '無'}）")
+    assert _quoted_n >= WHERE_ANCHOR_MIN_QUOTED, (
+        f"只抓到 {_quoted_n} 個 `「」` 指名段落（量測日 2026-09-04 為 19，"
+        f"錨點下限 {WHERE_ANCHOR_MIN_QUOTED}）—— 本條可能正在對空氣生效。")
+    _bad = sorted(_v for _k, _v in _failing.items() if _k not in WHERE_NAME_EXEMPT)
+    assert not _bad, (
+        "以下「去哪補」指名了**畫面上不存在**的控制項／區塊 —— 使用者照著找會找不到：\n  "
+        + "\n  ".join(_bad)
+        + "\n請改成畫面上真正的那個字（或改吃 `ui/helpers/story_nav` /"
+          " `shared/ui_control_labels` 的 SSOT）。"
+          "\n真的不修請加進 `WHERE_NAME_EXEMPT` 並寫**為什麼這個位置是對的**；"
+          "理由若其實是「還沒修」，就照實寫「待修」。")
+    _fixed = sorted(set(WHERE_NAME_EXEMPT) - set(_failing))
+    assert not _fixed, (
+        "以下站點已經不再違規（文案改對了、widget 改名了，或整段被刪），"
+        "`WHERE_NAME_EXEMPT` 還留著它 ——\n"
+        "請把表一起降下來。**這條紅燈是提醒不是責備。**\n  " + "\n  ".join(_fixed))
+
+
+def test_where_does_not_hardcode_a_tab_ordinal():
+    """`where=` 裡不准出現手寫的分頁站號（①②③④⑤…）。
+
+    站號是 `_TAB_LABELS` **順序**的函數，`story_nav._tab_ordinal()` 存在的唯一理由
+    就是不要有人手寫它（該檔原文：「線框點名的『Tab2＝個基深掘（實際第 4）』正是
+    寫死站號在分頁增刪後留下的地雷」）。
+
+    實測命中並在本批修掉的：`ui/components/mutual_exclusion.py` 的
+    `where="⑤ 資料診斷"` —— **站號與名字都是手寫的**，而 ⑤ 的分區其實叫
+    「🔭 資料診斷」、分頁叫「⚙️ 設定與診斷」，兩個都對不上。
+
+    ⚠️ **與 `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+    不重疊**：那條比對的是**完整分頁標籤**（含 emoji），而「⑤ 資料診斷」裡的
+    「資料診斷」是**分區**名不是分頁名，站號又是它字表裡沒有的東西 ——
+    所以那條結構上抓不到它。本條補的是那個縫，不是它的複本。
+    ⚠️ 本條**不擋**「分區名寫成字面值」：實測那樣會誤傷兩個合法的按鈕
+    （「📦 載入批次掃描面板」/「🔭 載入資料診斷」都含分區名當子字串），
+    誤判率高於它抓到的東西。那一半留給上面那條的「畫面上找不找得到」去守。
+
+    ## ⚠️ 只看 `「」` **之外**的圈號（本規則初版的誤判，就地記錄）
+
+    初版對整串比對，結果**當場誤傷本批自己寫的一則合法文案**：
+    `ui/helpers/fund_grp_health/rotation.py` 的
+    `where="…「② 或直接貼上(每行一檔,逗號/換行皆可)」…"` ——
+    那個 `②` 是 `ui/tab_batch_analysis.py` 那個 `st.text_area` **label 自己的字**
+    （面板內的步驟編號），不是分頁站號。
+
+    修法不是加豁免，是**把判準寫對**：`「」` 裡面的東西**已經由上一條驗過
+    「畫面上真的有這個標籤」**，圈號是那個標籤的一部分，不可能因為分頁增刪而過期；
+    真正會過期的是**散在句子裡、沒有任何 widget 撐著**的那種站號（`"⑤ 資料診斷"`）。
+    故本條先把所有 `「…」` 段落挖掉，再看剩下的句子裡有沒有圈號。
+    ⚠️ 代價據實寫明：有人把站號塞進 `「」` 就能繞過本條 —— 多數情況它會落到
+    上一條手上（`「⑤ 資料診斷」` 不等於任何 widget label / SSOT 值 → 紅）。
+    ⚠️ **但「兩條合起來就封閉」是過強的說法，2026-09-04 就地放寬（依據：獨立稽核）**：
+    把 `where_to_find()` 的**當前輸出逐字硬抄**進 `「」`
+    （`「⑤ ⚙️ 設定與診斷 → 🔭 資料診斷」`）—— **本條與上一條都會過**
+    （它確實「等於」一個 SSOT 值），可是它一樣會在分頁改名時過期。
+    抓到它的是**既有的** `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`。
+    → **系統整體有守住，但守住的不是這兩條。** 據實寫明，不要把功勞算到本條頭上。
+    """
+    _ord = "①②③④⑤⑥⑦⑧⑨⑩"
+    _bad = [f"{_f}:{_ln} {_s!r}"
+            for _f, _ln, _fn, _w in _where_sites() if _w is not None
+            for _s in _str_consts(_w)
+            if any(_o in _WHERE_QUOTED.sub("", _s) for _o in _ord)]
+    assert not _bad, (
+        "以下「去哪補」手寫了分頁站號 —— 分頁一增刪／改順序就會指錯：\n  "
+        + "\n  ".join(_bad)
+        + "\n請改用 `ui.helpers.story_nav.where_to_find(<key>)`，站號由它推導。")
+
+
+def test_where_rules_are_not_scanning_air():
+    """錨點：上面三條規則還看得見東西嗎？
+
+    少了這條，只要有人把 `not_ready` 包進一層看不見的 helper、或把
+    widget 換成自訂元件，前三條就會在**掃到 0 個站點**的情況下天天全綠 ——
+    一條對空氣生效的規則比沒有規則更危險，因為它看起來有在守。
+    （形狀抄 `tests/test_ui_grid_contract.py::test_grid_anchor_streamlit_columns_still_detectable`。）
+
+    ✅ **這條真的擋過一次**（2026-09-04 獨立稽核實測）：稽核從錯的 CWD 跑，
+    `test_where_is_mandatory` 掃到 0 個站點而**靜靜通過** —— 是本條把它抓紅的。
+
+    ## ⛔ 本錨點**守不到**的方向：**過度收集**（2026-09-04 登記，本批不修）
+
+    三個下限（站點數 / `「」` 段落數 / 對照組大小）擋的都是「**縮到看不見**」；
+    **沒有任何一條擋「對照組膨脹到什麼都對得上」**。
+    稽核用突變證明這個方向**真的能造出假綠**：加寬 `_SCREEN_WIDGETS`（把
+    `caption`/`info`/`write` 收進來）＋ 把某個 `where=` 指向一段純散文 caption
+    → **203 passed 全綠、四個錨點也全綠**。
+    ⚠️ **本檔自己的 docstring 早就寫出這個風險**（下面那句「或（**若同時放寬**）
+    全部誤判成綠」），**但程式沒有守它** —— 寫出來卻沒守，比沒寫更容易讓人以為守過了。
+    → **本批只登記、不加上限**：加一條「對照組不得超過 N」屬新規則設計，
+    要先量清楚 `ui/**` 正常成長會不會自然撞上限，那是下一批的事。
+
+    ## ⚠️ `_screen_strings()` 的一個安全方向偏差（O-2，登記即可）
+
+    `_resolve_strings()` 為了解析 `from M import X as _y` 會**真的 import M** ——
+    測試期會載入 `infra.oauth` / `infra.llm` / `repositories.policy.*` /
+    `services.ai_service` 等。那裡包著 `except Exception: pass`，
+    **某個環境 import 失敗 → 對照組會靜默縮小**。
+    **方向是安全的**（縮小 ⇒ 誤判成**紅**，不會假綠），且上限錨點會先叫；
+    本組與稽核各重跑兩次、數字完全相同（716）。**登記，不修。**
+    """
+    _n = len(_where_sites())
+    assert _n >= WHERE_ANCHOR_MIN_SITES, (
+        f"只掃到 {_n} 個 `not_ready()`/`empty_state()` 呼叫點"
+        f"（量測日 2026-09-04 為 47：`not_ready` 44 ＋ `empty_state` 3，"
+        f"錨點下限 {WHERE_ANCHOR_MIN_SITES}）—— "
+        "規則可能正在對空氣生效。")
+    _screen = _screen_strings()
+    assert len(_screen) >= 300, (
+        f"畫面字串集合只有 {len(_screen)} 個（量測日 2026-09-04 為 716）—— "
+        "widget 抽取可能壞了，那會讓「指名的東西存不存在」那條**全部誤判成紅**"
+        "或（若同時放寬）全部誤判成綠。")
+    # 抽取器真的看得懂「穿過別名／區域變數」的那兩種寫法（各一個實例，取自現行樹）
+    assert "🩺 開始健診" in _screen, (
+        "`applied_form as _applied_form` 的 `submit_label=` 沒被抽到 —— "
+        "別名解析壞了（本規則初版就是漏了它，由突變探針抓出來）。")
+    assert any(_s.startswith("📡 載入所有未載入基金") for _s in _screen), (
+        "先組成區域變數再傳給 `st.button()` 的 label 沒被抽到 —— 區域變數解析壞了。")
+
+
+def test_tab5_does_not_hand_copy_the_labels_it_already_imports():
+    """`ui/tab5_data_guard.py` 已經 import 了控制項標籤 SSOT，就不准再抄一份。
+
+    形狀與本檔既有
+    `test_every_remedy_names_a_control_that_actually_exists_on_screen`
+    末段的「不得再有第二份字面值」相同，只是換一個檔案。
+
+    實測（修掉之前）：該檔 import 了 `DATA_GUARD_RELOAD_MACRO_BTN`
+    並拿它渲染那顆鈕，但 ⓪ 診斷總表第一列的「排查」欄卻手抄了
+    `"若 < 85% → 按上方「重新載入總經"` —— **而且抄漏了 🔄**，
+    兩份當時已經不一樣了。這正是 `shared/ui_control_labels.py` 整篇要防的形狀。
+
+    ⚠️ 只掃**活字串**（AST 的 `ast.Constant`），註解與 docstring 天然不在其中 ——
+    本 repo 的慣例是「舊條文保留不刪 + 註明理由」，把註解算進來等於禁止記錄歷史。
+    """
+    _p = pathlib.Path("ui/tab5_data_guard.py")
+    _tree = ast.parse(_p.read_text(encoding="utf-8"))
+    _docs = {id(_b[0].value) for _n in ast.walk(_tree)
+             if isinstance(_n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                                ast.ClassDef))
+             and (_b := getattr(_n, "body", None))
+             and isinstance(_b[0], ast.Expr)
+             and isinstance(_b[0].value, ast.Constant)
+             and isinstance(_b[0].value.value, str)}
+    _live = [_n.value for _n in ast.walk(_tree)
+             if isinstance(_n, ast.Constant) and isinstance(_n.value, str)
+             and id(_n) not in _docs]
+    for _lbl in (_LBL_D5_HOT_MONEY_BTN, _LBL_D5_RELOAD_MACRO_BTN):
+        # 去 emoji 的變體也要擋 —— 上面那個實測案例抄漏的正是 emoji。
+        _bare = _lbl.split(" ", 1)[-1]
+        _hit = [_s for _s in _live if _bare in _s and _s != _lbl]
+        assert not _hit, (
+            f"標籤 {_lbl!r} 被抄成第二份字面值（含去 emoji 變體）：{_hit}\n"
+            "本檔已經 import 了它的 SSOT 常數，請直接內插那個常數。")

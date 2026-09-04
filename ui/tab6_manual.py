@@ -35,6 +35,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from shared.ui_control_labels import (
+    MACRO_FORCE_REFETCH_CHECKBOX as _LBL_FORCE_REFETCH,
+    MACRO_LOAD_BTN_AGAIN as _LBL_MACRO_LOAD_AGAIN,
+    MACRO_LOAD_BTN_FIRST as _LBL_MACRO_LOAD_FIRST,
+)
 from ui.helpers.render_state import not_ready, system_error
 # 指路文案的分頁 / 分區名 SSOT —— 不得在本檔另寫一份字面值（理由見下方兩處註記）。
 from ui.helpers.story_nav import (
@@ -695,8 +700,16 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
     # 「📊 總經」這個分頁（① 現行叫「🌐 市場定調」），寫死的名字不經 `story_nav`
     # 求值 → 不會 raise，只會安靜地把使用者送到一個找不到的地方。
     # 改吃 SSOT：`where_to_find('macro')` 回「① 🌐 市場定調」。
+    # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管 ·
+    # 依據：獨立稽核指出後本組 AST 實測 `line 704 live=True`）：
+    # 本行原本**手抄**「📡 載入總經資料」，而本檔在同一批**才剛 import**
+    # `MACRO_LOAD_BTN_FIRST`、並在下方 `_no_data_where` 寫下「按鈕字**不再手抄**」。
+    # ⛔ 也就是說：本組**創造了** `test_tab5_does_not_hand_copy_the_labels_it_already_imports`
+    #    那條規則要抓的形狀（「已經 import 了卻還手抄一份」），
+    #    卻**沒有把同一把尺套到自己身上** —— 同檔、同函式、同缺陷類別。
+    # 這與 `CLAUDE.md §8.2.A.1` 記載的失效模式同型：**條件只往外用、不往內用。**
     st.caption(
-        f"💡 以下面板需先在 {_where_to_find('macro')} 按「📡 載入總經資料」"
+        f"💡 以下面板需先在 {_where_to_find('macro')} 按「{_LBL_MACRO_LOAD_FIRST}」"
         "後方可顯示即時數據。未載入時各區塊顯示提示訊息。"
     )
 
@@ -713,7 +726,13 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
     # ⚠️ `not_ready()` 自己會加 ⬜ 前綴與「（請先到：…）」尾綴 → 訊息本體**不再自帶**
     #    「📡」與指路句，否則會變成兩份（重複的指路是漂移的起點）。
     _no_data_msg = "尚未載入總經資料，本頁的即時指標教學需要它"
-    _no_data_where = f"{_where_to_find('macro')} → 📡 載入總經資料"
+    # ⚠️ 按鈕字**不再手抄**（Lane E）：`shared/ui_control_labels.py` 是它的 SSOT，
+    #    渲染端（`ui/tab1_macro.py`）與這裡的指路讀同一份常數。手抄的那一份不會在
+    #    對方改字時跟著改 —— 那正是該模組 docstring 記載的、已經發作過三次的形狀。
+    # ⚠️ 這一句用的是 `..._FIRST`（「📡 載入總經資料」）而**不是** `..._AGAIN`：
+    #    本區塊只在 `_edu_ind` 為空（＝從未載入成功）時顯示，那一刻按鈕上的字
+    #    正是 FIRST 版。反例見下方「明細表算不出東西」那條，它要的是 AGAIN。
+    _no_data_where = f"{_where_to_find('macro')} → 「{_LBL_MACRO_LOAD_FIRST}」"
 
     # ── § C. 📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）──────────────────────
     with st.expander("📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=False):
@@ -915,7 +934,15 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                     # **舊寫法的理由仍然成立**：作者已經正確判斷這是「⬜ 這一族」，
                     # 只是拿 `st.info` 當容器。**被權衡掉的只有容器**，語意未變。
                     # ⚠️ `not_ready()` 自己會加 ⬜ → 訊息本體**不再自帶** ⬜（否則兩個）。
-                    not_ready("沒有可用的指標資料")
+                    # 「去哪補」原本整個缺席（Lane E）。這一條與上方那條**處境不同**，
+                    # 不可共用 `_no_data_where`：走到這裡代表 `_edu_ind` 有東西
+                    # （總經**載入過**），只是沒有任何一項算得出加扣分。此時 ① 那顆
+                    # 送出鈕上的字是「更新」而不是「載入」，指名 FIRST 版等於指一個
+                    # 當下畫面上不存在的按鈕（`shared/ui_control_labels.py` 記載的 R4-F9）。
+                    not_ready(
+                        "沒有可用的指標資料 —— 總經雖已載入，但沒有任何一項算得出加扣分",
+                        where=f"{_where_to_find('macro')} → 勾「{_LBL_FORCE_REFETCH}」"
+                              f"再按「{_LBL_MACRO_LOAD_AGAIN}」重抓一次")
             except Exception as _e_d:
                 # 整張加扣分明細表（指標 / 數值 / 信號 / 貢獻分 / 權重）消失。
                 system_error("加扣分明細載入失敗", _e_d)
