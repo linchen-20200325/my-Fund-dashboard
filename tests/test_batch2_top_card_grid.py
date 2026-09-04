@@ -3401,8 +3401,25 @@ _WHERE_QUOTED = re.compile(r"「([^「」]+)」")
 #: 一般 `st.markdown` 散文**刻意不收** —— 收了就退化成「這幾個字有沒有出現在
 #: 某段文字裡」，而那正是 `shared/ui_control_labels.py` docstring 點名的、
 #: 在兩邊都改壞時照樣綠燈的那種斷言。
-#: （實測：把 `caption`/`info`/`write` 收進來，「編輯初始持倉」這個**死指路**
-#:   會因為別處一句散文提到它而被判成合格。）
+#: ⚠️ **這句理由 2026-09-04 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管 ·
+#:    依據：獨立稽核指出後本組重跑）。** 原文寫
+#:    ~~「（實測：把 `caption`/`info`/`write` 收進來，「編輯初始持倉」這個死指路
+#:    會因為別處一句散文提到它而被判成合格。）」~~ —— **那句在現行版本下不可重現。**
+#:    本組照做實測：對照組由 **716 → 3475**（加寬確實生效），但
+#:    `編輯初始持倉` 的 **exact-equality = False、bracket-prefix = False、
+#:    僅「包含」它的字串 6 個** → **在現行比對器下仍然轉紅**。
+#:    **原因**：最終比對器只認「等於」與「止於括號的前綴」，**明文不認子字串**，
+#:    所以散文只會「包含」、永遠不會「等於」—— 加寬 widget 集合改變不了這一點。
+#:    **那句話描述的是本規則的【初版原型】**（當時用子字串比對），
+#:    被寫成了現行版本的實測 —— 30 行後的另一句「曾……**在初版原型裡**被判成合格」
+#:    才是對的。**同一個檔裡兩個互相矛盾的說法，而被當成事實的那個不成立。**
+#: ✅ **設計決定本身沒有被推翻，不收散文仍然正確** —— 理由改為下面這一條
+#:    （它不依賴那個不成立的實測，而且本身可重跑）：
+#:    加寬會讓對照組從 **716 暴增到 3475**（含大量散文），
+#:    於是「畫面上找不找得到」這個問題會退化成「這幾個字有沒有在某段文字裡出現過」。
+#:    ⚠️ 稽核已用突變證明那個方向**真的能造出假綠**：加寬 `_SCREEN_WIDGETS`
+#:    ＋ 把某個 `where=` 指向一段純散文 caption → **全綠**（見 `test_where_rules_are_not_scanning_air`
+#:    的「本錨點守不到的方向」段）。
 _SCREEN_WIDGETS = frozenset({
     "button", "checkbox", "expander", "form_submit_button", "radio", "selectbox",
     "toggle", "text_input", "file_uploader", "number_input", "date_input",
@@ -3595,6 +3612,22 @@ WHERE_NAME_EXEMPT: dict = {
     #        不擴大範圍），已在 PR 描述登記。
     #    (2) 既有指路債另有兩批（一批 7 條、一批 15 檔 65 筆）由前組登記，
     #        本組**未複驗**其數字，不在此複述（`CLAUDE.md §-2` 規則 6）。
+    #
+    #    (3) **「已 import SSOT 卻仍手抄一份」的既有債**（2026-09-04 獨立稽核指出後
+    #        本組以 AST 逐一實測；`test_tab5_does_not_hand_copy_the_labels_it_already_imports`
+    #        **只守 `ui/tab5_data_guard.py` 一個檔**，射不到下列任何一處）：
+    #        - `ui/tab1_macro.py` —— 已 import 五個常數，仍有 **3 處**手抄變體：
+    #          `:1811` 「🔄 更新總經資料」（與 SSOT 逐字相同，屬**尚未**漂移的第二份真相源）、
+    #          `:2165` 「更新總經資料」（**已漂移**：掉了 🔄）、
+    #          `:2710` 「載入總經資料」（**已漂移**：掉了 📡）。
+    #        - `ui/tab3_t7_ledger.py:3268` —— `→ 📡 載入總經資料` 逐字手抄
+    #          `MACRO_LOAD_BTN_FIRST`，而**該檔連 `ui_control_labels` 都沒 import**；
+    #          它同時是 `test_every_where_names_something_that_exists_on_screen`
+    #          docstring 甲類 5 處中的一處（沒有 `「」` → 那條也看不到）。
+    #        ⛔ **兩檔皆不在本批的檔案邊界內，登記不修**（`CLAUDE.md §8.4 step 4`）。
+    #        ⚠️ 本組實測數與稽核轉述的「`tab1_macro` 2 處」不同（本組數到 3 處）——
+    #           差在 `:1811`，它**目前與 SSOT 逐字相同**、還沒漂移，稽核只列已漂移的兩處。
+    #           以「**有沒有第二份字面值**」為準則應計 3 處，故本表記 3。
 }
 
 #: 量測日 2026-09-04 的 `not_ready()` / `empty_state()` 呼叫點總數。
@@ -3661,8 +3694,31 @@ def test_every_where_names_something_that_exists_on_screen():
 
     ## 本條**守不到**的（據實寫明，不要讀成「指路已經全對」）
 
-    - **沒有用 `「」` 的 `where=`**（例：`Streamlit Cloud → Settings → Secrets 的
-      `FRED_API_KEY``）—— 那些指的是 App 外部的東西，畫面上本來就沒有對應 widget。
+    - ⭐ **最重要的一條：本規則是「以 `「」` opt-in」的 —— 不寫 `「」` 就自動豁免。**
+      實測（量測日 2026-09-04）：47 個呼叫點裡 **只有 14 個帶 `「」`、本條看得到**，
+      **其餘 33 個本條完全掃不到**。
+      ⚠️ **2026-09-04 就地更正（有意識的更正，不是漏刪 · 依據：獨立稽核 + 本組重跑）**：
+      本段原本寫 ~~「那些指的是 App 外部的東西，畫面上本來就沒有對應 widget」~~ ——
+      **那是假的**。本組把 33 個逐一分類後：
+
+      | 類別 | 數 | 說明 |
+      |---|---|---|
+      | 甲 · **整段裡就含著一個真實 widget/SSOT 標籤** | **5** | **會漂移，而且本條看不到** |
+      | 乙 · Secrets／GCP console／sidebar 等 App 外部 | 11 | 畫面上確實沒有對應 widget |
+      | 丙 · 兩者皆非（相對位置、泛指某個面板…） | 17 | 無從機器判定 |
+
+      甲的 5 處（實測，逐一列名，**全部不在本批檔案邊界內**）：
+      `ui/helpers/portfolio/policy_admin_section.py` ×3 → `🔐 用 Google 登入`、
+      `ui/helpers/settings_diag/fetch_diag_section.py` → `🚀 分析`、
+      `ui/tab3_t7_ledger.py` → **`📡 載入總經資料`（逐字手抄 `MACRO_LOAD_BTN_FIRST`，
+      而該檔連 `ui_control_labels` 都沒 import）**。
+      ⚠️ **最後那一筆與本批在 `ui/tab6_manual.py` 修掉的是同一個缺陷，它還活著，
+      而五條新規則沒有一條看得到它**（沒有 `「」` → 本條跳過；不是 `tab5` → 那條跳過）。
+      ⛔ **刻意不把本條擴大到非 `「」` 的情形** —— 那要改成「整段掃所有已知標籤」，
+      誤判率會暴增（實測：分區名「批次掃描」「資料診斷」都是合法按鈕字的子字串），
+      且屬擴大範圍（`CLAUDE.md §8.4 step 4`）。**登記，不動。**
+    - **乙類那 11 個**（`Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`` 等）
+      —— 指的是 App 外部的東西，畫面上本來就沒有對應 widget。
     - **`where=` 以外的指路**（`st.caption` / `st.info` 裡的「請到 X」）—— 那是
       另一批既有債，見 `WHERE_NAME_EXEMPT` 的登記。
     - **`where=` 整段由 SSOT 組出來時**（`f"{where_to_find('macro')} → …"`）
@@ -3693,7 +3749,7 @@ def test_every_where_names_something_that_exists_on_screen():
                 _failing[f"{_f}::{_fn}::「{_seg}」"] = (
                     f"{_f}:{_ln} 「{_seg}」（畫面上最接近的：{_near or '無'}）")
     assert _quoted_n >= WHERE_ANCHOR_MIN_QUOTED, (
-        f"只抓到 {_quoted_n} 個 `「」` 指名段落（量測日 2026-09-04 為 18，"
+        f"只抓到 {_quoted_n} 個 `「」` 指名段落（量測日 2026-09-04 為 19，"
         f"錨點下限 {WHERE_ANCHOR_MIN_QUOTED}）—— 本條可能正在對空氣生效。")
     _bad = sorted(_v for _k, _v in _failing.items() if _k not in WHERE_NAME_EXEMPT)
     assert not _bad, (
@@ -3741,9 +3797,14 @@ def test_where_does_not_hardcode_a_tab_ordinal():
     「畫面上真的有這個標籤」**，圈號是那個標籤的一部分，不可能因為分頁增刪而過期；
     真正會過期的是**散在句子裡、沒有任何 widget 撐著**的那種站號（`"⑤ 資料診斷"`）。
     故本條先把所有 `「…」` 段落挖掉，再看剩下的句子裡有沒有圈號。
-    ⚠️ 代價據實寫明：有人把站號塞進 `「」` 就能繞過本條 —— 但那樣它會落到
+    ⚠️ 代價據實寫明：有人把站號塞進 `「」` 就能繞過本條 —— 多數情況它會落到
     上一條手上（`「⑤ 資料診斷」` 不等於任何 widget label / SSOT 值 → 紅）。
-    **兩條合起來才是封閉的，任一條單獨都有縫。**
+    ⚠️ **但「兩條合起來就封閉」是過強的說法，2026-09-04 就地放寬（依據：獨立稽核）**：
+    把 `where_to_find()` 的**當前輸出逐字硬抄**進 `「」`
+    （`「⑤ ⚙️ 設定與診斷 → 🔭 資料診斷」`）—— **本條與上一條都會過**
+    （它確實「等於」一個 SSOT 值），可是它一樣會在分頁改名時過期。
+    抓到它的是**既有的** `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`。
+    → **系統整體有守住，但守住的不是這兩條。** 據實寫明，不要把功勞算到本條頭上。
     """
     _ord = "①②③④⑤⑥⑦⑧⑨⑩"
     _bad = [f"{_f}:{_ln} {_s!r}"
@@ -3763,15 +3824,40 @@ def test_where_rules_are_not_scanning_air():
     widget 換成自訂元件，前三條就會在**掃到 0 個站點**的情況下天天全綠 ——
     一條對空氣生效的規則比沒有規則更危險，因為它看起來有在守。
     （形狀抄 `tests/test_ui_grid_contract.py::test_grid_anchor_streamlit_columns_still_detectable`。）
+
+    ✅ **這條真的擋過一次**（2026-09-04 獨立稽核實測）：稽核從錯的 CWD 跑，
+    `test_where_is_mandatory` 掃到 0 個站點而**靜靜通過** —— 是本條把它抓紅的。
+
+    ## ⛔ 本錨點**守不到**的方向：**過度收集**（2026-09-04 登記，本批不修）
+
+    三個下限（站點數 / `「」` 段落數 / 對照組大小）擋的都是「**縮到看不見**」；
+    **沒有任何一條擋「對照組膨脹到什麼都對得上」**。
+    稽核用突變證明這個方向**真的能造出假綠**：加寬 `_SCREEN_WIDGETS`（把
+    `caption`/`info`/`write` 收進來）＋ 把某個 `where=` 指向一段純散文 caption
+    → **203 passed 全綠、四個錨點也全綠**。
+    ⚠️ **本檔自己的 docstring 早就寫出這個風險**（下面那句「或（**若同時放寬**）
+    全部誤判成綠」），**但程式沒有守它** —— 寫出來卻沒守，比沒寫更容易讓人以為守過了。
+    → **本批只登記、不加上限**：加一條「對照組不得超過 N」屬新規則設計，
+    要先量清楚 `ui/**` 正常成長會不會自然撞上限，那是下一批的事。
+
+    ## ⚠️ `_screen_strings()` 的一個安全方向偏差（O-2，登記即可）
+
+    `_resolve_strings()` 為了解析 `from M import X as _y` 會**真的 import M** ——
+    測試期會載入 `infra.oauth` / `infra.llm` / `repositories.policy.*` /
+    `services.ai_service` 等。那裡包著 `except Exception: pass`，
+    **某個環境 import 失敗 → 對照組會靜默縮小**。
+    **方向是安全的**（縮小 ⇒ 誤判成**紅**，不會假綠），且上限錨點會先叫；
+    本組與稽核各重跑兩次、數字完全相同（716）。**登記，不修。**
     """
     _n = len(_where_sites())
     assert _n >= WHERE_ANCHOR_MIN_SITES, (
         f"只掃到 {_n} 個 `not_ready()`/`empty_state()` 呼叫點"
-        f"（量測日 2026-09-04 為 47，錨點下限 {WHERE_ANCHOR_MIN_SITES}）—— "
+        f"（量測日 2026-09-04 為 47：`not_ready` 44 ＋ `empty_state` 3，"
+        f"錨點下限 {WHERE_ANCHOR_MIN_SITES}）—— "
         "規則可能正在對空氣生效。")
     _screen = _screen_strings()
     assert len(_screen) >= 300, (
-        f"畫面字串集合只有 {len(_screen)} 個（量測日 2026-09-04 為 713）—— "
+        f"畫面字串集合只有 {len(_screen)} 個（量測日 2026-09-04 為 716）—— "
         "widget 抽取可能壞了，那會讓「指名的東西存不存在」那條**全部誤判成紅**"
         "或（若同時放寬）全部誤判成綠。")
     # 抽取器真的看得懂「穿過別名／區域變數」的那兩種寫法（各一個實例，取自現行樹）

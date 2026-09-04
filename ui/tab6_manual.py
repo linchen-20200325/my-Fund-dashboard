@@ -700,8 +700,16 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
     # 「📊 總經」這個分頁（① 現行叫「🌐 市場定調」），寫死的名字不經 `story_nav`
     # 求值 → 不會 raise，只會安靜地把使用者送到一個找不到的地方。
     # 改吃 SSOT：`where_to_find('macro')` 回「① 🌐 市場定調」。
+    # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管 ·
+    # 依據：獨立稽核指出後本組 AST 實測 `line 704 live=True`）：
+    # 本行原本**手抄**「📡 載入總經資料」，而本檔在同一批**才剛 import**
+    # `MACRO_LOAD_BTN_FIRST`、並在下方 `_no_data_where` 寫下「按鈕字**不再手抄**」。
+    # ⛔ 也就是說：本組**創造了** `test_tab5_does_not_hand_copy_the_labels_it_already_imports`
+    #    那條規則要抓的形狀（「已經 import 了卻還手抄一份」），
+    #    卻**沒有把同一把尺套到自己身上** —— 同檔、同函式、同缺陷類別。
+    # 這與 `CLAUDE.md §8.2.A.1` 記載的失效模式同型：**條件只往外用、不往內用。**
     st.caption(
-        f"💡 以下面板需先在 {_where_to_find('macro')} 按「📡 載入總經資料」"
+        f"💡 以下面板需先在 {_where_to_find('macro')} 按「{_LBL_MACRO_LOAD_FIRST}」"
         "後方可顯示即時數據。未載入時各區塊顯示提示訊息。"
     )
 
