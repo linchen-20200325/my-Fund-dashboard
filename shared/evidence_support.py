@@ -90,6 +90,22 @@ class EvidenceSupport:
             raise ValueError(f"sufficient=False 卻沒有 reason(claim={self.claim!r})")
 
 
+def is_sufficient(support) -> bool:
+    """證據支撐夠不夠 —— **全站唯一被允許的判斷式**(L0 SSOT)。
+
+    2026-09-04 第四輪稽核把它收成一個函式(當時住在 `ui/tab1_macro.py`),
+    第五輪把它搬到 L0:當時的 AST 守衛**只掃 `ui/tab1_macro.py` 一個檔**,
+    於是 `ui/helpers/macro/beginner_view.py` 自己讀 `.sufficient` 那一處
+    (它還刻意在 `support is None` 上與 SSOT 走相反的分支)整個在守衛的射程外。
+    判斷式住在 L0,守衛才掃得到所有消費端。
+
+    ⚠️ **只讀 `.sufficient`**:消費端不得自己去看 `obtained` / `missing` 的
+    長度再下判斷 —— 那就是把規則搬回消費端,也就是前四輪要根除的那個類。
+    ⚠️ **`support is None` → False(不足)**:沒有支撐可讀時不下定論(§1)。
+    """
+    return bool(support is not None and getattr(support, "sufficient", False))
+
+
 def _sorted(names) -> tuple[str, ...]:
     return tuple(sorted(str(n) for n in (names or ())))
 
@@ -193,7 +209,9 @@ def weighted_verdict(claim: str, *, score: float,
                      obtained_weight: float, missing_weight: float,
                      family_weights: Mapping[str, float],
                      band_of: Callable[[float], str],
-                     scale: float, weight_per_band: float) -> EvidenceSupport:
+                     scale: float, weight_per_band: float,
+                     round_to: "int | None" = None,
+                     score_tolerance: float = 0.0) -> EvidenceSupport:
     """`norm = (earned + T) / (2T) * scale` 這種**分母只由取到的指標構成**的分數。
 
     兩個獨立的必要條件,**都要過**:
@@ -217,14 +235,48 @@ def weighted_verdict(claim: str, *, score: float,
     (舊的寫「單一指標最大權重是 2」):`YIELD_10Y2Y` 與 `YIELD_10Y3M` 是**同一條
     殖利率曲線的兩個讀數**,權重 2+2 = **4**;`DXY` 與三條美元交叉匯率同理也是 4。
     族表是 `services/macro/evidence.py::MACRO_CORRELATED_FAMILIES`。
+
+    **(C) 顯示端的四捨五入 —— 兩個獨立的誤差源,兩個都要吃掉**
+    (2026-09-04 第五輪稽核 F1;不補這一段,(A) 就只是「近似不變」,而模組
+    docstring 把契約寫成絕對的、消費端又只讀 `.sufficient`,看不出它是近似)。
+
+      · **輸入本身已經被 round 過** —— 生產端傳進來的 `score` 是
+        `round(norm, k)` 的**顯示值**,真值落在 `[score-tol, score+tol]`
+        (`tol = 0.5 · 10^-k`)。拿顯示值當真值去推區間,區間本身就偏掉半格。
+        ⇒ `score_tolerance=` 把它加寬回去(下界用 `score-tol`、上界用 `score+tol`,
+        兩者對 `norm` 都單調遞增)。
+      · **每一種實現也會再被 round 一次** —— 使用者看到的是
+        `round(norm_real, k)`,不是 `norm_real`。落在同一條帶裡的
+        `norm_real` 有可能 round 到帶外(反之亦然)。
+        ⇒ `round_to=` 讓兩個界**用生產端同一個方式 round 之後**才去問 `band_of`。
+        (`round` 單調不遞減 ⇒ 最小/最大顯示值 = 最小/最大真值各自 round 的結果,
+         所以只要 round 兩個端點就夠,不必掃中間。)
+
+    兩個誤差各 ±0.5·10^-k,**在帶邊界上會疊起來**。實證(相位帶邊界 3/5/8):
+    28 項只缺 `UNEMPLOYMENT`(權重 0.5)一項,顯示 `4.9 復甦`、
+    `reachable_high` 算出 4.99 判「充足」,而那一項若取到 +0.5 → `5.0 擴張`,
+    一句「復甦期:最高勝率買點!逐步加碼」直接翻成「股優於債」。
+    兩項都預設關閉(`round_to=None` / `score_tolerance=0.0`)——
+    **不 round 的生產端不該被迫宣告一個它沒有的誤差**;有 round 的生產端
+    (`services/macro/evidence.py::_scored_verdict_support`)必須兩個都傳。
     """
     _got, _miss = _sorted(obtained), _sorted(missing)
     _T, _M = float(obtained_weight), float(missing_weight)
+    _tol = abs(float(score_tolerance))
     if _T <= 0:
         _lo, _hi = 0.0, float(scale)
     else:
-        _lo = score * _T / (_T + _M)
-        _hi = (score * _T + scale * _M) / (_T + _M)
+        # `score` 是**已經四捨五入過的顯示值**,真值落在 [score-tol, score+tol]。
+        # 兩個界都對 `norm` 單調遞增 ⇒ 下界取 `score-tol`、上界取 `score+tol`。
+        _lo = (score - _tol) * _T / (_T + _M)
+        _hi = ((score + _tol) * _T + scale * _M) / (_T + _M)
+    # 生產端在四捨五入前先 clamp,這裡照做(順序必須一致)。
+    _lo = min(max(_lo, 0.0), float(scale))
+    _hi = min(max(_hi, 0.0), float(scale))
+    if round_to is not None:
+        # `round` 單調不遞減 ⇒ 最小/最大**顯示值** = 最小/最大真值各自 round 後的值。
+        _lo = round(_lo, round_to)
+        _hi = round(_hi, round_to)
     _band = band_of(score)
     _invariant = (band_of(_lo) == _band == band_of(_hi))
     _max_fam = max(family_weights.values()) if family_weights else 0.0
@@ -252,6 +304,7 @@ def weighted_verdict(claim: str, *, score: float,
         reason="；".join(_reasons),
         detail={"obtained_weight": _T, "missing_weight": _M,
                 "reachable_low": round(_lo, 2), "reachable_high": round(_hi, 2),
+                "score_tolerance": _tol, "round_to": round_to,
                 "band": _band, "max_family_weight": _max_fam,
                 "required_weight": _required},
     )

@@ -27,6 +27,7 @@ import streamlit as st
 from ui.helpers.ia import applied_form
 from ui.helpers.render_state import business_alert, not_ready, system_error
 
+from shared.evidence_support import is_sufficient as _is_sufficient
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     GH_BG_CARD,
@@ -82,7 +83,6 @@ from shared.session_keys import HM_CARD_TRIED_KEY as _HM_CARD_TRIED_KEY
 # 產生那句話的模組,不在卡片端(見該常數旁的說明與 AST 漂移鎖)。
 from services.macro.action_light import OVERRIDE_INPUT_KEYS as _AL_OVERRIDE_KEYS
 from services.macro.evidence import phase_support as _producer_phase_support
-from services.macro.evidence import scoring_weight as _scoring_weight
 from shared.ui_control_labels import (
     DATA_GUARD_HOT_MONEY_BTN as _LBL_D5_HOT_MONEY,
     MACRO_FORCE_REFETCH_CHECKBOX as _LBL_FORCE_REFETCH,
@@ -415,17 +415,14 @@ _MACRO_RELOAD_REMEDY = (
 #                        本輪只換「去哪補」(A5),判讀邏輯未動。
 #   卡 5 ⚠️ 極端風險   — 兼具 (1) 與 (2):綠燈同時宣稱「位階 X/10」與「四項均未
 #                        觸發」。**本輪新增**兩道閘門,並依 (3) 保留已觸發的紅燈。
-def _phase_scoring_weight(ind) -> float:
-    """算出 `calc_macro_phase` 這一次**實際用到的權重分母**(`total_w`)。
-
-    ⚠️ **2026-09-04 第四輪稽核:本函式改為 L2 SSOT 的薄委派,不再自己算一遍。**
-    舊版在卡片層**重算一次**同一個分母 —— 那正是本輪要根除的形態(每個消費端
-    各自手推一份會漂移的副本)。唯一實作在
-    `services/macro/evidence.py::scoring_weight`,產出端與消費端讀同一份。
-    ~~舊版逐行對齊 `calc_macro_phase` 的迴圈~~(**有意識的收斂,不是漏刪** ——
-    「逐行對齊」本身就是「兩份程式碼靠人維持一致」,而人不會維持)。
-    """
-    return _scoring_weight(ind)
+# ── ~~`_phase_scoring_weight(ind)`~~ 已於 2026-09-04 第五輪稽核**實體刪除** ──
+# (**有意識的政策變更,不是漏刪**;決策者:客戶授權的第五輪收尾。)
+# 第四輪把它從「自己重算一遍分母」改成「薄委派到 L2 SSOT」之後,它就只是
+# `services/macro/evidence.py::scoring_weight` 的另一個名字 —— production caller
+# 歸零(只剩測試在引用)。依 §-1.5.1c 判定 3(4),**因本次改動才變成孤兒的東西
+# 是本次的收尾義務**,故刪除;要那個分母請直接呼叫 L2 那一支。
+# ⚠️ 它的教訓沒有跟著消失:「消費端不得自己重算分母」由
+# `test_the_five_cards_read_the_producer_support_instead_of_recomputing` 守著。
 
 
 def _phase_score_support(ind, phase=None):
@@ -1095,7 +1092,12 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         # 2026-09-04 第四輪稽核:兩道閘門合成一個 —— 讀 `macro_action_light`
         # 回報的 support(它是「已觸發 ⇒ 存在性、未觸發 ⇒ 四項全在 ＋ 位階站得住」
         # 的組合)。`_missing5` 只留著寫說明文字用,**不再參與判定**。
-        _sup5 = _al5.get("support")
+        # ⚠️ 2026-09-04 第五輪稽核 F2 的連帶:本卡問的是「**四項都檢查過、
+        # 都沒觸發**」,**不是**「①結論那盞燈撐不撐得住」—— 位階偏弱的 🔴 依
+        # 政策豁免會讓 `support.sufficient = True`,若本卡讀它,VIX 沒抓到時
+        # 就會落到「🟢 未觸發 / 0 項觸發」(＝第三輪 A1 那個缺陷本身)。
+        # 產出端因此回報兩份;本卡讀 `no_trigger_support`。
+        _sup5 = _al5.get("no_trigger_support") or _al5.get("support")
         _missing5 = list(_sup5.missing) if _sup5 is not None else [
             _k for _k in _AL_OVERRIDE_KEYS
             if not isinstance((ind or {}).get(_k), dict)
@@ -1233,18 +1235,12 @@ def _action_light_renderer(light: str):
     return st.warning
 
 
-def _support_is_sufficient(support) -> bool:
-    """證據支撐夠不夠 —— **消費端唯一被允許的判斷**。
-
-    2026-09-04 第四輪稽核：這一行原本被四個消費端各抄一次
-    （`sup is not None and sup.sufficient`）。抄四次不是重複的問題，是
-    **四個各自可以獨立寫錯**的問題 —— 前三輪的實證正是「每一份手刻的閘門
-    都錯了或不完整」。收成一個函式之後，守衛才能斷言「沒有人自己重寫」。
-
-    ⚠️ 判斷式**只讀 `.sufficient`**：消費端不得自己去看 `obtained` / `missing`
-    的長度再下判斷 —— 那就是把規則搬回消費端，也就是本輪要根除的那個類。
-    """
-    return bool(support is not None and getattr(support, "sufficient", False))
+#: 證據支撐夠不夠 —— SSOT 於 2026-09-04 第五輪稽核搬到 L0
+#: (`shared/evidence_support.py::is_sufficient`)。原因:當時的 AST 守衛只掃
+#: 本檔一個檔,而 `ui/helpers/macro/beginner_view.py` 也有一個消費端在自己讀
+#: `.sufficient` —— 判斷式住在 L0,守衛才掃得到所有消費端。本名保留為別名,
+#: 既有呼叫點與守衛的字面值都不必動。
+_support_is_sufficient = _is_sufficient
 
 
 def _conclusion_line_state(al: dict) -> tuple:
@@ -1262,6 +1258,15 @@ def _conclusion_line_state(al: dict) -> tuple:
       **不印 `reasons`** —— 綠燈那一支的 `reasons` 逐字寫「殖利率曲線、Sahm、
       VIX 均未觸發」，而完全斷線時那四項一項都沒取到，照抄就是說謊。
     - 撐得住 → 一字不改照舊（含 `override` 的安全層優先那句）。
+
+    ⚠️ **2026-09-04 第五輪稽核 F2：這裡的順序是承重的。**
+    「撐不撐得住」現在是**產出端**依它實際發出的那盞燈算的（override 走存在性、
+    位階偏弱的 🔴 走買賣燈自己的帶、🟢/🟡 才要求四項全在）。本函式**不得**再自己
+    加一道「先看 support 再看是不是警報」的順序 —— 舊版就是那樣，於是 27/28 全空頭
+    只缺 VIX 時，產出端認證過的 `0 衰退 → 🔴 減碼` 被整句灰掉，而灰態印的那句
+    「半套證據可以升警，不可以解除警報」正好在做相反的事。
+    那句「均未觸發」的支撐**另外**掛在 `al["all_clear_support"]`，由產出端在組
+    `reasons` 時就扣掉，所以這裡只要照印 `reasons` 就不會印到沒有支撐的話。
     """
     _sup = al.get("support")
     if not _support_is_sufficient(_sup):

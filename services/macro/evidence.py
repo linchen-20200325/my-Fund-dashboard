@@ -142,10 +142,36 @@ PHASE_NARROWEST_BAND: float = min(
     PHASE_SCALE - PHASE_BAND_EDGES[2],
 )
 
+#: 生產端把分數 round 到幾位小數才顯示 —— `calc_macro_phase` 的
+#: `score = round(max(0, min(10, norm)), 1)`。**顯示端會 round,證據會計就必須
+#: 知道它會 round**,否則帶邊界上的判定是近似的(2026-09-04 第五輪稽核 F1)。
+#: 漂移鎖:`test_the_phase_rounding_matches_the_producer`(AST 讀那一行的字面值)。
+PHASE_SCORE_DECIMALS: int = 1
+
+#: 「傳進來的 `score` 本身已經被 round 過」帶進的誤差半徑(0.5 個最小顯示格)。
+#: **由 `PHASE_SCORE_DECIMALS` 導出,不寫死。**
+PHASE_SCORE_ROUNDING_TOLERANCE: float = 0.5 * (10.0 ** -PHASE_SCORE_DECIMALS)
+
 #: 「一個相關族要能被容忍,需要多少倍於它的總權重」。
 #: 推導:一族(權重 W)由全負翻全正 → 分數移動 `PHASE_SCALE * W / total_w`;
 #: 要求它推不過最窄帶 ⇒ `total_w > (PHASE_SCALE / PHASE_NARROWEST_BAND) * W`。
 PHASE_WEIGHT_PER_BAND: float = PHASE_SCALE / PHASE_NARROWEST_BAND
+
+
+# ⚠️ **這道閘門管「權重」,管不到「組成」—— 已更正的實例(2026-09-04 第五輪 F 註)**
+# 舊表述舉的例子是「**7 個市場面指標湊到門檻,一樣算不出實體經濟的位階**」。
+# **那個例子在算術上不可能**(實測):任意 7 顆指標的權重上限是 **12.0**,
+# 而整個市場面(ADL/DXY/VIX/COPPER/三條交叉匯率 6.5 ＋ HY_SPREAD/兩條殖利率 6.0)
+# 合計 **12.5**,兩者都遠低於本閘門要求的 20.0 —— 舊例子根本過不了閘門。
+#
+# **真的存在的實例(實測,2026-09-04)**:把**勞動與領先**那 8 顆全部拿掉
+# (`PMI` / `LEI` / `NFP` / `SAHM` / `UNEMPLOYMENT` / `JOBLESS` / `CONT_CLAIMS` /
+# `CONSUMER_CONF`,合計權重 7.5),剩下的 **20.5** 過得了閘門;其餘全部最負向 →
+#     score 0.0「衰退」,`support.sufficient = True`
+# —— 一個**沒有任何勞動市場資料**的衰退判讀,被認證為「證據充足」。
+# **本閘門看的是權重總量與不變性,看不到「缺的是哪一類」。** 這個限制沒有被修,
+# 據實登記於此(要修得靠「每一類至少要有 N 顆」這種組成面條件,那是新規格,
+# 需要客戶拍板,§8.4 步驟 4)。
 
 
 def phase_band(score: float) -> str:
@@ -186,7 +212,7 @@ def scoring_weight(indicators) -> float:
     """本次取到的指標權重合計 —— **與 `calc_macro_phase` 的 `total_w` 同一個算法**。
 
     ⚠️ 這是**唯一**一份實作:`ui/tab1_macro.py` 原本有一份逐行等價的副本
-    (`_phase_scoring_weight`),那正是「每個消費端各自手推一次」的形態。
+    (`_phase_scoring_weight`,已於第五輪隨孤兒清理刪除),那正是「每個消費端各自手推一次」的形態。
     """
     _total = 0.0
     for _k in indicator_keys(indicators):
@@ -225,8 +251,20 @@ def _present_family_weights(indicators) -> dict:
 # ══════════════════════════════════════════════════════════════════════
 # 6. 四支 builder
 # ══════════════════════════════════════════════════════════════════════
-def phase_support(indicators, score) -> EvidenceSupport:
-    """景氣位階(0~10 加權正規化分數)的證據支撐。規則 2-b。"""
+def _scored_verdict_support(indicators, score, *, claim: str,
+                            band_of, narrowest_band: float,
+                            missing_score: str) -> EvidenceSupport:
+    """**同一顆 0~10 分數**、但結論帶不同的判讀,共用這一支。
+
+    `calc_macro_phase` 的分數被兩個消費端各自切成不同的帶:
+      · 相位帶 3 / 5 / 8(衰退／復甦／擴張／高峰)—— `phase_support`
+      · 買賣燈帶 4.0 / 6.5(🔴／🟡／🟢)—— `action_light_score_support`
+    **「證據撐不撐得起這個判讀」要對著它自己那組帶問**;拿相位帶去替買賣燈背書,
+    在 4.0 這條線上(它落在「復甦」帶的**內部**)會放行一個會翻燈的狀態
+    —— 2026-09-04 第五輪稽核 F2 的同型缺陷,故在此把帶做成參數。
+
+    `narrowest_band` 供支配性條件(規則 (B))用:一族翻向推不過最窄的一條帶。
+    """
     _got = tuple(indicator_keys(indicators))
     _miss = tuple(k for k in MACRO_INDICATOR_SCORING_WEIGHTS if k not in set(_got))
     _mw = sum(MACRO_INDICATOR_SCORING_WEIGHTS[k] for k in _miss)
@@ -236,20 +274,49 @@ def phase_support(indicators, score) -> EvidenceSupport:
         # 分數本身沒拿到 → 沒有任何定論可以宣告。**不得**在這裡補一個預設值
         # 再去跑不變性檢查 —— 那會拿一個捏造的分數去背書(§1)。
         return EvidenceSupport(
-            claim="景氣位階（0~10 加權合成）", rule="weighted_verdict",
+            claim=claim, rule="weighted_verdict",
             obtained=tuple(sorted(_got)), missing=tuple(sorted(_miss)),
-            sufficient=False, reason="景氣位階分數未取得，無從判讀",
+            sufficient=False, reason=missing_score,
             detail={"obtained_weight": scoring_weight(indicators),
                     "missing_weight": _mw},
         )
     return weighted_verdict(
-        "景氣位階（0~10 加權合成）",
+        claim,
         score=_score, obtained=_got, missing=_miss,
         obtained_weight=scoring_weight(indicators), missing_weight=_mw,
         family_weights=_present_family_weights(indicators),
-        band_of=phase_band, scale=PHASE_SCALE,
-        weight_per_band=PHASE_WEIGHT_PER_BAND,
+        band_of=band_of, scale=PHASE_SCALE,
+        weight_per_band=PHASE_SCALE / float(narrowest_band),
+        # ── 2026-09-04 第五輪稽核 F1 ─────────────────────────────────
+        # 生產端傳進來的是 `round(norm, 1)`,而每一種實現也會再被 round 一次。
+        # 兩個誤差在帶邊界上會疊起來,不吃掉就會宣告一個「缺一項就翻掉」的定論
+        # 為「充足」(實測:只缺 UNEMPLOYMENT 一項 → 4.9 復甦 / 5.0 擴張)。
+        round_to=PHASE_SCORE_DECIMALS,
+        score_tolerance=PHASE_SCORE_ROUNDING_TOLERANCE,
     )
+
+
+def phase_support(indicators, score) -> EvidenceSupport:
+    """景氣位階(0~10 加權正規化分數)的證據支撐。規則 2-b。"""
+    return _scored_verdict_support(
+        indicators, score, claim="景氣位階（0~10 加權合成）",
+        band_of=phase_band, narrowest_band=PHASE_NARROWEST_BAND,
+        missing_score="景氣位階分數未取得，無從判讀")
+
+
+def action_light_score_support(indicators, score, *, band_of,
+                               narrowest_band: float) -> EvidenceSupport:
+    """買賣燈(🔴/🟡/🟢)那一段的證據支撐 —— 帶邊界由 `action_light` 供給。
+
+    ⚠️ 帶邊界的 SSOT 在 `services/macro/action_light.py`(`_HOLD_SCORE_10` /
+    `_BUY_SCORE_10`),**不在本檔**:本檔 import 它會與 `action_light` 成環
+    (`action_light` → `evidence`)。故由呼叫端把 `band_of` 與最窄帶傳進來,
+    真相源只有一份。
+    """
+    return _scored_verdict_support(
+        indicators, score, claim="買賣燈（景氣位階切點）",
+        band_of=band_of, narrowest_band=narrowest_band,
+        missing_score="景氣位階分數未取得，無從定燈")
 
 
 def _axis_signals(indicators, keys: Sequence[str],
@@ -293,11 +360,33 @@ def axis_supports(indicators, growth_signals: Sequence[float],
 
 def composite_support(indicators, total: float, band_of, *,
                       alarm_bands: Sequence[str] = ()) -> EvidenceSupport:
-    """綜合健康度(未正規化的 `Σ score×weight`)的證據支撐。規則 2-c ＋ 規則 3。
+    """綜合健康度(未正規化的 `Σ score×weight`)的證據支撐。規則 2-c ＋ **政策豁免**。
 
-    `alarm_bands` 裡的結論帶走**存在性**規則(規則 3:半套證據可以升警) ——
-    這一條不能省:把一個「悲觀」警訊灰掉,才是更糟的失效
-    (第四輪稽核逐字確認卡 2 / 卡 5 的不對稱性「不可反轉」,不得在此回歸)。
+    `alarm_bands` 裡的結論帶不上不變性閘門 —— 把一個「悲觀」警訊灰掉,是更糟的
+    失效(第四輪稽核逐字確認卡 2 / 卡 5 的不對稱性「不可反轉」,不得在此回歸)。
+
+    ⚠️ **2026-09-04 第五輪稽核 F3:這一支的理由原本寫錯了,就地更正。**
+    舊表述寫「走**存在性**規則(規則 3)」,並因此把它讀成「不對稱是後設規則的
+    **推論**」。**那是假的**,兩個地方對不上:
+      · `witnessed(claim, witnesses=_got)` 收到的是**全部取到的 key**,
+        **不是**「越線的那幾個」—— 它從來沒有在作證任何一件事越了線。
+      · 這裡的宣稱是「**加總跨過一個切點**」,那是**聚合量**,對證據**不單調**:
+        沒取到的那些指標若全部強勢,總分會被推回去。
+    **實測(2026-09-04,本組自己量的)**:28 項只取到 2 項、總分 −8.0 →
+    「🔴 悲觀 風險正在集結…」、`sufficient=True`;若 28 項全部取到且每顆都給
+    生產端宣告的上界(`score = weight`),總分是 **+35.0 極度樂觀**。
+    也就是說,這面紅旗**確實**可能被沒取到的資料翻掉。
+    (⚠️ 稽核報告寫的是 +19.0,本組未能重現該數字 —— 應是另一種「最大正向」的
+     定義;**結論不變**,兩者都遠在警訊帶之外。據實標明,不假裝對上了。)
+
+    **它仍然照放,但理由是政策不是推導**:方向上,聚合型警報**多報一次**的代價是
+    使用者多留一點現金,**少報一次**的代價是他在崩盤裡滿倉。本 repo 對這一類
+    一律選前者(over-warning),`services/macro/action_light.py` 的「位階偏弱 ⇒ 🔴」
+    是同一個選擇。
+    ⛔ **不得**再把這裡讀成「不對稱會從後設規則自己掉出來」——
+    日後若有人據此把 `alarm_bands` 這個參數「化簡掉」(因為「反正規則 3 會涵蓋」),
+    那個化簡是**不安全**的:規則 3 只涵蓋存在性宣稱,涵蓋不到聚合跨切點。
+    ⛔ 這個豁免**只給警報**:非警報的結論照走 `summed_verdict` 的區間不變性。
     """
     _got = tuple(indicator_keys(indicators))
     _miss = tuple(k for k in MACRO_INDICATOR_SCORING_WEIGHTS if k not in set(_got))
@@ -306,6 +395,16 @@ def composite_support(indicators, total: float, band_of, *,
         return witnessed(f"綜合健康度：{_band}", witnesses=_got, obtained=_got)
     # 沒取到的第 k 顆,其貢獻為 `score×weight`;`|score| ≤ MAX_ABS_SCORE`
     # (生產端最大的 |score| 字面值是 2,見 `YIELD_10Y*` 的 `±2`;漂移鎖見測試)。
+    # ⚠️ **已知偏窄,據實登記(2026-09-04 第五輪稽核,本輪未修)**:這裡用的是
+    # **靜態**權重表,而 `calculate_composite_score` 會先跑 `apply_weight_overrides`
+    # (`active.json` 有 weight 就蓋)。overrides 只會動到**已經在 `ind` 裡**的 key,
+    # 所以一個「沒取到」的 key 被調高的權重**永遠反映不到這裡** → swing 被低估
+    # → 閘門偏鬆。**條件式的**:只有在 overrides 後端非空、且真的調高了某個
+    # 當次沒取到的 key 的權重時才會發生。
+    # 不在本輪修的理由:要修得正確就得在 L2 讀 overrides 後端(那是 I/O,違 §8.2
+    # 「L2 不得 I/O」),或把 overrides 後的權重表由呼叫端傳進來(改 4 個生產端的
+    # 介面)——兩者都超出「修這一批稽核發現」的範圍。
+    # ⚠️ `calc_macro_phase` **不跑** overrides,故 `phase_support` 不受此影響。
     _swing = sum(MACRO_INDICATOR_SCORING_WEIGHTS[k] * MACRO_INDICATOR_MAX_ABS_SCORE
                  for k in _miss)
     return summed_verdict(f"綜合健康度：{_band}", total=total,
@@ -313,20 +412,65 @@ def composite_support(indicators, total: float, band_of, *,
                           missing_swing=_swing, band_of=band_of)
 
 
+def action_light_present_override_keys(indicators,
+                                       override_keys: Sequence[str]) -> list:
+    """override 這一層**真的取到值**的那幾個 key(其餘 = 未檢查)。"""
+    return [k for k in override_keys
+            if isinstance((indicators or {}).get(k), dict)
+            and (indicators or {}).get(k, {}).get("value") is not None]
+
+
+def action_light_all_clear_support(indicators, *,
+                                   override_keys: Sequence[str]) -> EvidenceSupport:
+    """**只替那一句**「殖利率曲線、Sahm、VIX 均未觸發」背書 —— 規則 1(`all_of`)。
+
+    2026-09-04 第五輪稽核 F2:這句話的支撐**必須跟燈號的支撐分開**。
+    舊版把它 `combine` 進燈號的 support,於是四項裡缺任何一項,
+    **連同生產端已經認證過的那半邊(景氣位階偏弱 ⇒ 🔴)一起被灰掉**。
+    分開之後,消費端可以「留下警報、只扣掉這一句沒有支撐的話」。
+    """
+    return all_of("殖利率曲線、Sahm、VIX 均未觸發",
+                  expected=override_keys,
+                  obtained=action_light_present_override_keys(
+                      indicators, override_keys))
+
+
 def action_light_support(indicators, *, override_keys: Sequence[str],
                          triggered: Sequence[str],
-                         phase_score) -> EvidenceSupport:
+                         phase_score, band_of, narrowest_band: float,
+                         alarm: bool = False) -> EvidenceSupport:
     """①結論 / 卡 5 的「現在能不能買」燈的證據支撐。
 
-    兩種宣稱,**兩種規則**,不是同一件事:
-      · **已觸發**(紅燈)→ 「這幾項裡至少有一項越線」= 存在性 → `witnessed`
+    **三種宣稱,三種規則** —— 不是同一件事(2026-09-04 第五輪稽核 F2 補上第二種):
+
+      · **override 已觸發**(🔴)→ 「這幾項裡至少有一項越線」= 存在性 → `witnessed`
         (規則 3:半套證據可以升警。那些 reason 逐項印著實際觀測值,自帶佐證。)
-      · **未觸發**(綠/黃燈)→ 「殖利率曲線、Sahm、VIX **均未觸發**」+「景氣位階 N/10」
-        = 兩個全稱宣稱的聯合 → `all_of` ＋ 景氣位階的 `phase_support`。
+      · **位階偏弱造成的 🔴**(`alarm=True`,**無** override)→ 一樣是**警報**,
+        依本 repo 對聚合型警報的既定政策**不受不變性閘門拘束**(見下方 ⚠️)。
+      · **未觸發**(🟢/🟡)→ 「均未觸發」+「景氣位階 N/10 落在這一格」
+        = 兩個全稱宣稱的聯合 → `all_of` ＋ 相位帶 ＋ **買賣燈帶**三者皆須成立。
+        (相位帶那一項**刻意保留**:本輪只加條件、不放寬任何既有條件;
+         買賣燈帶是本輪**新增**的條件 —— `_HOLD_SCORE_10 = 4.0` 落在相位帶
+         「復甦」(3~5)的**內部**,拿相位帶去替燈號背書,在 4.0 上會放行一個
+         會翻燈的狀態。)
+
+    ⚠️ **`alarm=True` 這一支是刻意的政策豁免(over-warning),不是通則的推論
+    —— 據實寫明,不得再被讀成「不對稱是後設規則自動掉出來的」**
+    (2026-09-04 第五輪稽核 F3 對 `composite_support` 提出的同一個指正,
+    這裡一併適用,因為兩者是**同一種**宣稱):
+      · `witnessed` 之所以恆充足,靠的是**存在性宣稱對證據單調** ——
+        「至少有一項越線」不會因為多取到資料而變假。
+      · 但「加權分數低於 4.0」**是一個聚合量跨過切點**,對證據**不單調**:
+        缺的那幾項若全部強勢,分數會升上去,燈會由 🔴 變 🟡。
+      · 之所以仍然放行,是因為**方向** —— 這裡多報一次警的代價是使用者多留一點
+        現金,少報一次的代價是他在衰退裡滿倉。本 repo 對聚合型警報一律選前者
+        (`composite_support` 的 `alarm_bands` 是同一個選擇),**而且第五輪稽核
+        明白要求「留下警報、只扣掉沒有支撐的那一句話」**。
+      · 這個豁免**只給警報**:🟢/🟡 走上面的三重全稱檢查,一項都沒鬆。
+      · 不變性沒有被忽略,只是換了出口:分數旁邊的相位判讀(卡 1、②依據 🌳 長期)
+        仍然吃 `phase_support` 的區間不變性,那裡缺資料照樣灰。
     """
-    _present_all = [k for k in override_keys
-                    if isinstance((indicators or {}).get(k), dict)
-                    and (indicators or {}).get(k, {}).get("value") is not None]
+    _present_all = action_light_present_override_keys(indicators, override_keys)
     if triggered:
         # ⚠️ `missing` 照樣填:紅燈**成立**(規則 3),但「其餘都沒事」**不成立** ——
         # 消費端要能據此補一句「另有 N 項未取得，未檢查」。
@@ -339,9 +483,18 @@ def action_light_support(indicators, *, override_keys: Sequence[str],
             sufficient=True, reason="",
             detail={"witnesses": tuple(sorted(triggered))},
         )
+    if alarm:
+        # 政策豁免(見上方 ⚠️):警報由**已取到的那些負向觀測**作證,不上不變性閘門。
+        # `witnesses` 用實際取到的 key —— 它們就是把分數壓到切點以下的那些觀測。
+        # (`_got` 必非空:一個指標都沒取到時 `calc_macro_phase` 回 5.0,燈是 🟡 不是 🔴。)
+        _got = tuple(indicator_keys(indicators))
+        return witnessed("景氣位階偏弱（警報，政策豁免不變性閘門）",
+                         witnesses=_got, obtained=_got)
+    _light_band = action_light_score_support(
+        indicators, phase_score, band_of=band_of, narrowest_band=narrowest_band)
     return combine(
         "無硬衰退／恐慌訊號 ＋ 景氣位階",
-        all_of("殖利率曲線、Sahm、VIX 均未觸發",
-               expected=override_keys, obtained=_present_all),
+        action_light_all_clear_support(indicators, override_keys=override_keys),
         phase_support(indicators, phase_score),
+        _light_band,
     )

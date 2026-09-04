@@ -181,7 +181,17 @@ def calculate_composite_score(ind: dict, *,
             provenance_out["support"] = _composite_support(
                 ind, total, lambda _t: composite_verdict(_t)[1],
                 alarm_bands=COMPOSITE_ALARM_LEVELS)
-        except ImportError:      # 契約模組缺件 → 不擋主路徑(§1:缺就說缺)
+        except ImportError as _e:      # 契約模組缺件 → 不擋主路徑(§1:缺就說缺)
+            # ⚠️ **已知缺陷,據實登記(2026-09-04 第五輪稽核,本輪未修)**:
+            # 這個 `None` 會讓 `_composite_verdict_cells` 把一個**真的**
+            # 悲觀/極度悲觀警訊灰掉 —— 也就是在**警報那一側** fail-closed 到了
+            # 錯的方向(規則 3:半套證據可以升警、不可以解除警報)。
+            # 不在本輪修的理由:要在這裡保住警報,就得**在這裡再寫一次**
+            # 「哪些帶算警報、警報怎麼作證」—— 那是第二份真相,正是本批在根除的
+            # 東西。正解是讓 `evidence` 不可能 import 失敗(它已經是 L2 同層、
+            # 零外部相依),而那要動的是 import 結構,不是這一行。
+            # 至少**不再靜默**(§1):缺件時印出來,不要只留一個 None 讓人猜。
+            print(f"[composite_score] evidence 契約模組缺件,support 無法產生:{_e}")
             provenance_out["support"] = None
     return total
 

@@ -17,7 +17,10 @@ v19.316 功能盤點改進 #4-①:總經頁子視圖多(即時/中期/短線/長
 """
 from __future__ import annotations
 
+from services.macro.evidence import PHASE_SCALE as _SCALE
+from services.macro.evidence import action_light_all_clear_support as _all_clear_support
 from services.macro.evidence import action_light_support as _action_light_support
+from shared.evidence_support import is_sufficient as _is_sufficient
 from shared.signal_thresholds import SAHM_RECESSION_THRESHOLD
 
 # ── 門檻(self-contained mini-SSOT;provenance 註明來源)──────────────
@@ -25,6 +28,31 @@ _YIELD_INVERT_PCT: float = 0.0    # 殖利率利差 < 0 = 倒掛(古典衰退領
 _VIX_PANIC: float = 30.0          # C2 v19.160 全站 universal panic = 30(對稱 tests/test_cross_site_cutoffs)
 _BUY_SCORE_10: float = 6.5        # 景氣位階 ≥ 此 → 🟢 可加碼(0-10 scale;可調)
 _HOLD_SCORE_10: float = 4.0       # 景氣位階 ≥ 此 → 🟡 持有;< 此 → 🔴 減碼
+
+#: 買賣燈自己的結論帶(0~10 分數上的 🔴 / 🟡 / 🟢 三格),**由上面兩個門檻導出**。
+#: 2026-09-04 第五輪稽核 F2:證據會計原本拿**相位帶**(3/5/8)去替買賣燈背書,
+#: 但 `_HOLD_SCORE_10 = 4.0` 這條線落在相位帶「復甦」(3~5)的**內部** ——
+#: 一個相位帶內不變的狀態,燈號照樣可以在 4.0 上翻。要問對問題就得用對的帶。
+ACTION_LIGHT_BAND_EDGES: tuple[float, float] = (_HOLD_SCORE_10, _BUY_SCORE_10)
+
+#: 最窄的一格(給支配性條件用)。0~4.0 減碼(4.0)/ 4.0~6.5 持有(**2.5**)/
+#: 6.5~10 加碼(3.5)→ 最窄 = 2.5。**由邊界導出,不寫死。**
+ACTION_LIGHT_NARROWEST_BAND: float = min(
+    ACTION_LIGHT_BAND_EDGES[0],
+    ACTION_LIGHT_BAND_EDGES[1] - ACTION_LIGHT_BAND_EDGES[0],
+    _SCALE - ACTION_LIGHT_BAND_EDGES[1],
+)
+
+
+def action_light_band(score_10: float) -> str:
+    """0~10 景氣位階 → 這盞燈的顏色。**與下方 if-chain 等價**(有漂移鎖)。"""
+    _s = float(score_10)
+    if _s >= _BUY_SCORE_10:
+        return "🟢"
+    if _s >= _HOLD_SCORE_10:
+        return "🟡"
+    return "🔴"
+
 
 # ── override 這一層**實際會去讀**的 indicator key(2026-09-04 第三輪稽核 A1)──
 #
@@ -92,16 +120,42 @@ def macro_action_light(indicators: dict,
         reasons_red.append(f"VIX {vix:.0f} ≥ {_VIX_PANIC:.0f}（市場恐慌 / 高波動）")
         triggered.append("VIX")
 
-    # ── 證據支撐(2026-09-04 第四輪稽核)—— 與燈號一起回報,消費端不再自己推 ──
+    # ── 證據支撐(2026-09-04 第四輪稽核;第五輪 F2 重排順序)────────────
     # ⚠️ **本欄不改本函式任何一個燈的判斷邏輯**,它回答的是另一個問題:
     # 「這一句話,手上的資料撐不撐得起來?」
-    #   · 已觸發 → 存在性宣稱,由實際觀測作證 → **恆充足**(半套證據可以升警)
-    #   · 未觸發 → 「四項**均未**觸發」+「景氣位階 N/10」兩個全稱宣稱的聯合
-    #             → 四項要全在、且位階分數站得住
+    #   · override 已觸發 → 存在性宣稱,由實際觀測作證 → **恆充足**
+    #   · 位階偏弱造成的 🔴 → **一樣是警報**,由分數作證 → 走買賣燈自己的帶
+    #   · 🟢 / 🟡        → 「四項均未觸發」+ 位階兩個全稱宣稱的聯合
     # 完全斷線實測:四項一個都沒取到,舊版照樣印「均未觸發」並放綠燈。
-    _support = _action_light_support(
-        indicators, override_keys=OVERRIDE_INPUT_KEYS,
-        triggered=triggered, phase_score=phase_score_10)
+    #
+    # ⚠️ **順序改了:先決定燈,再算 support。** 第五輪稽核 F2 實測,舊順序
+    # (先算一份 support 給所有分支共用)會把「位階偏弱 ⇒ 🔴」這種**已經站得住
+    # 的警報**,因為那句「四項均未觸發」缺一項而整句灰掉 —— 27/28 全空頭、只缺
+    # VIX 的狀態,產出端認證了 `0 衰退`,畫面卻印「這次的資料撐不起任何結論」。
+    # 那是把規則 3 的不對稱**反過來用**(半套證據解除了警報)。
+
+    # 那句「殖利率曲線、Sahm、VIX 均未觸發」自己的支撐 —— **與燈號分開**,
+    # 消費端才能「留下警報、只扣掉這一句沒有支撐的話」(卡 5 早就是這個形狀)。
+    _all_clear = _all_clear_support(indicators, override_keys=OVERRIDE_INPUT_KEYS)
+
+    def _support_for(*, alarm: bool):
+        return _action_light_support(
+            indicators, override_keys=OVERRIDE_INPUT_KEYS,
+            triggered=triggered, phase_score=phase_score_10,
+            band_of=action_light_band,
+            narrowest_band=ACTION_LIGHT_NARROWEST_BAND,
+            alarm=alarm)
+
+    # ⚠️ **兩個消費端問的不是同一句話,所以要有兩份 support**(第五輪 F2 的連帶):
+    #   · `support`            = **我正在印的這盞燈**撐不撐得住(①結論讀它)。
+    #     警報那一支走政策豁免 ⇒ 位階偏弱的 🔴 是「充足」的。
+    #   · `no_trigger_support` = 「**四項都檢查過、都沒觸發**」撐不撐得住
+    #     (卡 5「⚠️ 極端風險警語」的 🟢 讀它)。
+    # 若卡 5 也讀 `support`,警報豁免會**溢出**到它身上:位階偏弱的 🔴 讓
+    # `support.sufficient = True`,而卡 5 的 `override=False` 分支就落到
+    # 「🟢 未觸發 / 0 項觸發」—— 在 VIX 根本沒抓到的情況下宣告四項都沒事,
+    # 正是第三輪 A1 那個缺陷本身。(本輪實測重現過,故拆成兩份。)
+    _no_trigger = _support_for(alarm=False)
 
     if reasons_red:
         return {
@@ -109,7 +163,9 @@ def macro_action_light(indicators: dict,
             "action": "減碼 / 保守 —— 拉高現金、核心轉防守，等企穩再進",
             "reasons": reasons_red,
             "override": True,
-            "support": _support,
+            "support": _support_for(alarm=True),
+            "all_clear_support": _all_clear,
+            "no_trigger_support": _no_trigger,
         }
 
     # ── 2. 無 override → 依景氣位階 ─────────────────────────────
@@ -119,23 +175,31 @@ def macro_action_light(indicators: dict,
             "action": "資料不足 —— 景氣位階缺,先持有觀望",
             "reasons": ["景氣位階(0-10)未取得,無法定位階"],
             "override": False,
-            "support": _support,
+            "support": _no_trigger,
+            "all_clear_support": _all_clear,
+            "no_trigger_support": _no_trigger,
         }
 
-    if phase_score_10 >= _BUY_SCORE_10:
-        light, action = "🟢", "可加碼 —— 核心持有不動 + 衛星積極佈局，定期收息再投"
-    elif phase_score_10 >= _HOLD_SCORE_10:
-        light, action = "🟡", "持有 —— 分批進場、避免重押單一題材"
-    else:
-        light, action = "🔴", "減碼 —— 景氣位階偏弱,拉高現金水位"
+    light = action_light_band(phase_score_10)
+    action = {
+        "🟢": "可加碼 —— 核心持有不動 + 衛星積極佈局，定期收息再投",
+        "🟡": "持有 —— 分批進場、避免重押單一題材",
+        "🔴": "減碼 —— 景氣位階偏弱,拉高現金水位",
+    }[light]
+
+    # 「均未觸發」是一句**點名了四個輸入**的全稱話。缺任何一項時**不得照印** ——
+    # 那正是第三/四輪抓到的假話。改印它自己的 reason(產出端寫的,不會與判定分岔)。
+    _reasons = [f"景氣位階 {phase_score_10:.1f}/10"]
+    _reasons.append("無硬衰退/恐慌訊號（殖利率曲線、Sahm、VIX 均未觸發）"
+                    if _is_sufficient(_all_clear) else f"⬜ {_all_clear.reason}")
 
     return {
         "light": light,
         "action": action,
-        "reasons": [
-            f"景氣位階 {phase_score_10:.1f}/10",
-            "無硬衰退/恐慌訊號（殖利率曲線、Sahm、VIX 均未觸發）",
-        ],
+        "reasons": _reasons,
         "override": False,
-        "support": _support,
+        # 🔴 是警報 → 由分數作證即可;🟢/🟡 是「解除警報」→ 四項要全在。
+        "support": _support_for(alarm=(light == "🔴")),
+        "all_clear_support": _all_clear,
+        "no_trigger_support": _no_trigger,
     }

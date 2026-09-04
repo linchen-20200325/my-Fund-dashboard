@@ -25,56 +25,27 @@ TRADING_DAYS_PER_YEAR: int = 252
 SAHM_RECESSION_THRESHOLD: float = 0.5
 # 失業率 3MA - 過去 12M 最低 ≥ 0.5pp → 衰退中(Fed Sahm rule 原始定義)
 
-# ── 景氣位階「資料充足性」門檻(2026-09-04 第三輪稽核 A1;第四輪 R4-F5/F6/F7 重推)──
-# ⚠️ **本常數自第四輪起不再是生產路徑的閘門。** 實際判定住在
-# `services/macro/evidence.py::phase_support`(產出端,與分數一起回報),
-# 因為門檻其實**不是一個定值**:它取決於「這一次在場的最大**相關族**有多重」。
-# 本常數保留為**全部到齊時的最壞情況**,供人閱讀與被漂移鎖比對。
+# ── ~~`MACRO_PHASE_MIN_TOTAL_WEIGHT`~~ 已於 2026-09-04 第五輪稽核**實體刪除** ──
+# (**有意識的政策變更,不是漏刪**;決策者:客戶授權的第五輪收尾。)
 #
-# ── 舊推導與它為什麼錯(舊表述加刪除線保留;有意識的更正,不是漏刪)──────────
-# ~~單一權重 w 的指標翻向 → 分數移動 Δ = 10w / total_w;本檔案家族裡**單一指標
-# 的最大權重是 2**,故 Δ_max = 20 / total_w;最窄相位帶 2 分 ⇒ total_w > 10。~~
-# ~~健康抓取時權重總和 ~19,本門檻約當其 53%,正常運作不會觸發。~~
+# **它是被上一批改動製造出來的孤兒**:第四輪把判定搬進產出端
+# (`services/macro/evidence.py::phase_support` → `shared/evidence_support.py::
+# weighted_verdict`)之後,這個常數的 production caller 歸零,只剩測試在引用它。
+# 依 `CLAUDE.md` §-1.5.1c 判定 3(4)——「因本次改動才變成 0 caller 的孤兒,
+# 是**本次的收尾義務**」——刪除,不留 Archive、不留註解式停用。
 #
-# **前提是假的(2026-09-04 第四輪 R4-F6,實測)**:`YIELD_10Y2Y` 與 `YIELD_10Y3M`
-# 是**同一條殖利率曲線的兩個讀數**(都是 10Y 減一個短端),同向移動是常態;
-# `DXY` 與三條美元交叉匯率同理。有效的單一因子權重是 **4 不是 2**。實測邊界:
-#     total_w = 10.0(舊閘門說「充足」)
-#       殖利率曲線同向為負 → 4.0「復甦」#64b5f6「最高勝率買點！逐步加碼…」
-#       殖利率曲線同向為正 → 6.0「擴張」#00c853「股優於債…」
-#     ——曲線一族單獨就把分數移動 2 分,**橫跨一整條相位邊界**。
-# **另兩處錯**:
-#   · 推導寫 `total_w > 10`,`ui/tab1_macro.py` 實作寫 `>= 10.0`;而 `10.0`
-#     剛好可達(2+2+2+2+1+1)—— 邊界上比較符號的方向剛好相反(R4-F5)。
-#     現行:比較符號只寫在 `weighted_verdict` 一處,`>` 逐字對應推導。
-#   · ~~舊註警告「7 個 Yahoo 指標湊到 total_w>10」~~ —— **數字錯了**(R4-F7):
-#     Yahoo 側實際是 ADL 1 + DXY 1 + VIX 1 + COPPER 0.5 + 三條交叉匯率各 1
-#     = **6.5**,連舊門檻 10 都到不了。真正的大宗在 FRED 側(其餘約 18.5)
-#     加上殖利率那一族。⚠️ 稽核報告給的是 3.5(漏掉三條 Yahoo 交叉匯率),
-#     本檔以實測的 6.5 為準;**結論方向不變**(單靠 Yahoo 過不了門檻)。
+# **它的推導沒有跟著消失,只是搬到唯一該住的地方**(那裡是活的、有 caller、
+# 而且被實際判定讀到,不會像這裡一樣悄悄過期):
+#   · 每一族要多重才容忍得住 → `services/macro/evidence.py::PHASE_WEIGHT_PER_BAND`
+#     (由 `PHASE_SCALE / PHASE_NARROWEST_BAND` **導出**,不寫死)
+#   · 最大相關族                → 同檔 `MAX_CORRELATED_FAMILY_WEIGHT`(由權重表導出)
+#   · 比較符號(`>` 不是 `>=`)   → `shared/evidence_support.py::weighted_verdict` 一處
+# 舊值 20.0 現在是 `PHASE_WEIGHT_PER_BAND * MAX_CORRELATED_FAMILY_WEIGHT` 的
+# **計算結果**(5 × 4),不再是一個要靠人維持同步的第二份真相。
 #
-# ── 現行推導(每一步都可對照 code)────────────────────────────────────────
-#   1. 正規化式:`norm = (earned_w + total_w) / (2*total_w) * 10`
-#      (`services/macro/us_indicators.py::calc_macro_phase`)
-#   2. 一個**相關族**(權重合計 W)由全負翻全正 → `earned_w` 變動 2W
-#      → `norm` 移動 `10W / total_w`
-#   3. 相位帶邊界 3 / 5 / 8(同檔 `if score >= 8 / elif >= 5 / elif >= 3`)
-#      → 最窄帶 = 2 分(復甦 3~5、高峰 8~10)
-#   4. 要求「一族翻向推不過最窄帶」:`10W / total_w < 2` ⟺ `total_w > 5W`
-#   5. 全部到齊時最大的族是 4.0(殖利率曲線 2+2、美元 1+1+1+1)
-#      → **最壞情況門檻 = 5 × 4 = 20.0**
-#   族表與權重表:`services/macro/evidence.py`
-#   (`MACRO_CORRELATED_FAMILIES` / `MACRO_INDICATOR_SCORING_WEIGHTS`,兩者皆有
-#    AST 漂移鎖對照生產端字面值)。
-#   全部到齊的權重合計實測 **27.0**(表列 28.0,月頻 M2 命中時 M2_WEEKLY 降為 0)
-#   → 本門檻約當其 74%。**比舊門檻嚴,而且是可以照著算出來的。**
-#
-# ⚠️ 這仍是**工程判斷的推導值**,不是對歷史資料做過的校準,也**沒有**客戶拍板。
-#    它管的是「筆數/權重」,管不到「組成」(7 個市場面指標湊到門檻,一樣算不出
-#    實體經濟的位階)。組成面的疑慮仍登記於 `BACKLOG.md`。
-#    ⚠️ 產出端另有第二條、與本條正交的規則(**沒取到的權重不得足以翻掉判讀**),
-#    見 `shared/evidence_support.py::weighted_verdict`;兩條都要過。
-MACRO_PHASE_MIN_TOTAL_WEIGHT: float = 20.0
+# ⚠️ 那一整段「舊推導為什麼錯」(R4-F5/F6/F7 的實測)**不是**在這裡消失的 ——
+# 它逐字保留在 `services/macro/evidence.py::MACRO_CORRELATED_FAMILIES` 的
+# 區塊註解裡,那裡才是族表真正的家。
 CFNAI_RECESSION_THRESHOLD: float = -0.7
 # ⚠️ 適用對象是 **CFNAI-MA3**(三月移動平均),**不是**月度 CFNAI —— 月度序列波動度約為
 # MA3 的 √3 ≈ 1.7 倍,拿 -0.7 去砍月度值會製造大量假衰退訊號。caller 務必先算 3M MA。

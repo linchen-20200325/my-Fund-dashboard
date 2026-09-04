@@ -1024,6 +1024,14 @@ def test_quadrant_card_does_not_render_a_tie_as_a_direction(ind, tie_axis):
     # 打平依舊不得畫成象限（下面三條斷言逐條比舊版更嚴，多了「不得是彩色」）。
     assert _c["signal"] in _GREY_SIGNALS, (
         f"{tie_axis}軸訊號相抵，卡片卻下了「{_c['signal']}」定論（§1 Fail Loud, Never Fake）")
+    # ⚠️ 2026-09-04 第五輪稽核 F7：**把第二輪的「打平 ≠ 沒抓到」那道分辨復原。**
+    # a88f896 把 `assert _c["signal"] != "⬜ 待取得"` ＋ `assert "不是缺資料" in note`
+    # 兩條併成上面那一句 `in _GREY_SIGNALS` —— 而 `_GREY_SIGNALS` 收了全部五種灰字串，
+    # 於是「把打平塌成『還沒抓到，重新載入一下』」變成**沒有守衛**（實測：那個突變下
+    # 整份測試檔照樣全綠）。行為今天仍是對的，但**對的行為沒有守衛＝下一輪會壞**。
+    assert _c["signal"] != "⬜ 待取得", (
+        f"{tie_axis}軸打平被塌成「還沒抓到」—— 使用者會去重新載入，但重新載入"
+        f"不會讓相抵的訊號變成一個方向：{_c['signal']!r}")
     assert _c["color"] == _MACRO_CARD_LIGHT_COLOR["gray"]
     # note 必須逐字說出「正負相抵」——使用者要能分辨「沒抓到」與「抓到但抵銷」
     assert "正負相抵" in _c["note"], (
@@ -1104,6 +1112,9 @@ def test_zero_observation_and_tie_are_told_apart():
     _tie = _card3_via_real_producer(_IND_INFLATION_TIE)
     assert _zero["signal"] == "⬜ 待取得"
     assert _tie["signal"] in _GREY_SIGNALS
+    # F7（同上）：兩者**燈號字串本身**也不得相同，不是只有 note 不同。
+    assert _tie["signal"] != _zero["signal"], (
+        f"打平與零觀測畫成同一個灰燈：{_tie['signal']!r}")
     # 兩者的**理由**必須不同，且各自說對自己那一種
     assert "一項都沒取到" in _zero["note"], _zero["note"]
     assert "正負相抵" in _tie["note"], _tie["note"]
@@ -1604,7 +1615,7 @@ def test_hot_money_card_still_reports_the_upstream_error_after_the_gate():
 #   (3) **不對稱**:半套證據可以升警,不可以解除警報。
 # ════════════════════════════════════════════════════════════════════════
 from services.macro.action_light import OVERRIDE_INPUT_KEYS as _AL_KEYS
-from shared.signal_thresholds import MACRO_PHASE_MIN_TOTAL_WEIGHT as _MIN_W
+from services.macro.evidence import scoring_weight as _scoring_weight
 
 #: 完全斷線:所有 fetcher 都失敗,但 `fetch_all_indicators` 仍**無條件**寫入
 #: `_fred_sources`(`us_indicators.py` 該行在所有 `if` 之外)→ 回傳 dict 非空 →
@@ -1676,7 +1687,7 @@ def test_phase_card_does_not_let_one_indicator_decide_the_whole_phase(ind, would
         只有 PMI(深收縮) → score=0  → '衰退' + 「保守為主」
     兩者都是「哪一支 fetcher 活著」的判讀,不是經濟的判讀。
 
-    突變驗證:把閘門從 `>= MACRO_PHASE_MIN_TOTAL_WEIGHT` 放寬成 `> 0`
+    突變驗證:把閘門從「不變性 + 支配性」放寬成 `> 0`
     → 本條兩個格子都轉紅(那正是「只修零觀測、不修這一類」的樣子)。
     """
     # 先證明上游真的會給出那個彩色定論(否則這條測試在守一個不存在的風險)
@@ -1685,7 +1696,7 @@ def test_phase_card_does_not_let_one_indicator_decide_the_whole_phase(ind, would
         f"前提不成立:上游給的是 {_phase['phase']!r} 不是 {would_be!r}")
     _c = _grid_via_real_producer(ind)["📊 景氣位階"]
     assert _c["signal"] in _GREY_SIGNALS, (
-        f"單一指標(權重合計 {tab1_macro._phase_scoring_weight(ind)})"
+        f"單一指標(權重合計 {_scoring_weight(ind)})"
         f"就決定了整個景氣位階:{_c['signal']!r}")
     assert _c["value_str"] == "—"
 
@@ -1705,7 +1716,7 @@ def test_the_card_layer_weight_matches_the_producers_own_denominator():
     兩邊一旦分岔,閘門就會在守一個不存在的分母 —— 而那種錯不會有人發現,
     因為兩邊各自都「看起來合理」。
 
-    突變驗證:把 `_phase_scoring_weight` 的 `ind.get("weight", 1)` 改成
+    突變驗證:把 `services/macro/evidence.py::scoring_weight` 的 `.get("weight", 1)` 改成
     `ind.get("weight", 0)` → 本條轉紅（靠下面「無 weight 欄」那一格）。
 
     ⚠️ **這條測試第一次寫的時候是假的守衛**:所有 case 都帶明寫的 `weight`,
@@ -1722,7 +1733,7 @@ def test_the_card_layer_weight_matches_the_producers_own_denominator():
                         ("無 weight 欄 + meta 混入", _no_weight),
                         ("資料充足", _fake_indicators())]:
         _prov_w = _real_calc_macro_phase(_ind)["_provenance"]["total_weight"]
-        _card_w = tab1_macro._phase_scoring_weight(_ind)
+        _card_w = _scoring_weight(_ind)
         assert _card_w == pytest.approx(_prov_w), (
             f"{_name}:卡片層算 {_card_w}、生產端算 {_prov_w} —— 分母分岔了")
 
@@ -2097,10 +2108,11 @@ def test_expected_indicator_keys_really_does_not_contain_ndc():
 def test_the_sufficiency_threshold_comes_from_the_shared_ssot():
     """§3.3 反捏造:閘門門檻不得是 inline magic number。
 
-    突變驗證:把 `ui/tab1_macro.py` 改成 inline `10.0` → 本條仍綠(它驗的是
-    常數存在與值域),但 `test_no_inline_threshold_in_the_card_grid` 會轉紅。
+    ⚠️ 2026-09-04 第五輪:本條原本先斷言 ~~`isinstance(_MIN_W, ...) and _MIN_W > 0`~~
+    （**有意識的更正，不是漏刪**）—— `MACRO_PHASE_MIN_TOTAL_WEIGHT` 已隨孤兒清理
+    刪除。它驗的東西（門檻不是憑空打上去的數字）改由下面那段推導鎖承接，
+    **而且比舊斷言強**：舊斷言只要求「是個正數」。
     """
-    assert isinstance(_MIN_W, (int, float)) and _MIN_W > 0
     # ⚠️ 2026-09-04 第四輪稽核 R4-F6:舊斷言是 `_MIN_W == 10.0`，
     # 而 10.0 的推導前提「**單一指標最大權重是 2**」**是假的** ——
     # 殖利率 10Y-2Y / 10Y-3M 是同一條曲線的兩個讀數（族權重 **4**），
@@ -2117,10 +2129,14 @@ def test_the_sufficiency_threshold_comes_from_the_shared_ssot():
         PHASE_WEIGHT_PER_BAND as _PER_BAND,
     )
     assert _PER_BAND == _SCALE / _NARROW, "每族所需倍數不是從相位帶推出來的"
-    assert _MIN_W == _PER_BAND * _MAXFAM, (
-        f"門檻常數與推導不一致：{_MIN_W} != {_PER_BAND} × {_MAXFAM}")
-    # 實測值（量測日 2026-09-04）：10/2 × 4 = 20.0
-    assert (_NARROW, _MAXFAM, _MIN_W) == (2.0, 4.0, 20.0)
+    # ⚠️ 2026-09-04 第五輪：~~`assert _MIN_W == _PER_BAND * _MAXFAM`~~ 與
+    # ~~`assert (..., _MIN_W) == (..., 20.0)`~~ **已移除**（有意識的更正，不是漏刪）：
+    # `MACRO_PHASE_MIN_TOTAL_WEIGHT` 是第四輪改動製造出來的孤兒（production 0 caller），
+    # 本輪依 GC 收尾義務實體刪除。**鎖的東西沒有變少**：下面這一行仍然逐項鎖住
+    # 同一條推導，只是不再要求有一個常數把結果抄一份。
+    assert _PER_BAND * _MAXFAM == 20.0, "推導結果變了（10/2 × 4）"
+    # 實測值（量測日 2026-09-04）
+    assert (_NARROW, _MAXFAM) == (2.0, 4.0)
 
 
 def test_the_card_layer_does_not_hand_roll_its_own_sufficiency_gate():
@@ -2147,8 +2163,19 @@ def test_the_card_layer_does_not_hand_roll_its_own_sufficiency_gate():
         and not all(isinstance(o, (ast.Is, ast.IsNot)) for o in n.ops)]
     assert not _numeric_cmps, (
         f"卡片層又自己寫了充足性比較式(手推閘門):{_numeric_cmps}")
-    _src = inspect.getsource(tab1_macro._phase_score_support)
-    assert "support" in _src, "沒有讀產出端回報的 support"
+    # ⚠️ 2026-09-04 第五輪稽核 F6：舊寫法是 `assert "support" in _src` —— **恆真**，
+    # 因為同一個函式的 docstring 裡就有「support」這個字（拿掉整個函式體照樣綠）。
+    # 改成 AST：必須真的**讀到** `.sufficient`，或真的**呼叫**產出端那支 builder。
+    _t2 = ast.parse(inspect.getsource(tab1_macro._phase_score_support))
+    _reads_flag = any(isinstance(n, ast.Attribute) and n.attr == "sufficient"
+                      for n in ast.walk(_t2))
+    _calls_builder = any(
+        isinstance(n, ast.Call) and (
+            (isinstance(n.func, ast.Name) and "support" in n.func.id)
+            or (isinstance(n.func, ast.Attribute) and "support" in n.func.attr))
+        for n in ast.walk(_t2))
+    assert _reads_flag or _calls_builder, (
+        "沒有讀產出端回報的 support（既沒讀 `.sufficient`，也沒呼叫產出端 builder）")
 
     # 五卡本體:不得出現「跟權重比大小」的 inline 數字
     _grid = ast.parse(inspect.getsource(tab1_macro._render_top_card_grid))
@@ -2196,7 +2223,7 @@ def test_the_five_cards_read_the_producer_support_instead_of_recomputing():
 def test_the_phase_card_greys_out_when_one_family_could_decide_it():
     """R4-F6 的實測邊界：權重合計 10.0、殖利率兩腳都在 → 卡 1 走灰態。
 
-    修復前（`>= MACRO_PHASE_MIN_TOTAL_WEIGHT`，門檻 10.0）：判為「充足」，
+    修復前（`>= 10.0` 定值門檻）：判為「充足」，
     而曲線一族單獨就能把畫面從
         「復甦 4.0/10」#64b5f6「最高勝率買點！逐步加碼…」
     推到
@@ -2211,7 +2238,7 @@ def test_the_phase_card_greys_out_when_one_family_could_decide_it():
     _up = {**_base, "YIELD_10Y2Y": {"weight": 2, "score": 2}}
     _dn = {**_base, "YIELD_10Y2Y": {"weight": 2, "score": -2},
            "YIELD_10Y3M": {"weight": 2, "score": -2}}
-    assert tab1_macro._phase_scoring_weight(_up) == 10.0, "前提：剛好在舊門檻上"
+    assert _scoring_weight(_up) == 10.0, "前提：剛好在舊門檻上"
     # 前提：上游**確實**會因為曲線翻向而跨帶（否則本條在守一個不存在的風險）
     assert _real_calc_macro_phase(_up)["phase"] != _real_calc_macro_phase(_dn)["phase"]
     for _ind in (_up, _dn):
@@ -2246,7 +2273,7 @@ def test_extreme_risk_card_greys_out_when_only_the_score_half_is_insufficient():
     }
     from services.macro.action_light import OVERRIDE_INPUT_KEYS as _KEYS
     assert all(_k in _only_overrides for _k in _KEYS), "前提：四項 override 全在"
-    assert tab1_macro._phase_scoring_weight(_only_overrides) == 6.5
+    assert _scoring_weight(_only_overrides) == 6.5
     _c = _grid_via_real_producer(_only_overrides)["⚠️ 極端風險警語"]
     assert _c["signal"] == "⬜ 資料不足", (
         f"四項齊全但整體證據撐不住，卡 5 仍下了「{_c['signal']}」")
@@ -2574,8 +2601,16 @@ def test_the_conclusion_line_goes_grey_under_a_total_outage():
     _al = _real_action_light(_TOTAL_OUTAGE_IND, _real_calc_macro_phase(
         _TOTAL_OUTAGE_IND)["score"])
     assert not _al["support"].sufficient, "前提：完全斷線時 support 撐不住"
-    assert "均未觸發" in "；".join(_al["reasons"]), (
-        "前提：撐不住時 `reasons` 仍然含那句假話（所以灰態必須不印它）")
+    # ⚠️ 2026-09-04 第五輪稽核 F2：舊前提是
+    # ~~`assert "均未觸發" in "；".join(_al["reasons"])`~~（**有意識的更正，不是刪測試**）
+    # —— 它斷言「產出端仍然吐那句假話，所以灰態必須不印它」。F2 之後那句假話
+    # **在產出端就被扣掉了**（四項缺一項就不印），前提結構上不再成立。
+    # 換成更強的版本：產出端**必須**已經把它換成一句誠實的話。
+    assert "均未觸發" not in "；".join(_al["reasons"]), (
+        "產出端仍然在四項全缺時吐「均未觸發」")
+    assert not _al["all_clear_support"].sufficient, "前提：那句話撐不住"
+    assert _al["all_clear_support"].reason in "；".join(_al["reasons"]), (
+        "產出端沒有把缺了哪幾項寫進 reasons")
 
     _light, _lines = tab1_macro._conclusion_line_state(_al)
     _txt = "\n".join(_lines)
@@ -2683,26 +2718,43 @@ def test_a_pessimistic_composite_verdict_is_never_greyed_out():
     assert not _prov2["support"].sufficient, "非警訊的結論也被放行了（規則 3 過寬）"
 
 
+#: 讀 `support` 的消費端檔案 —— 守衛掃這些檔，**新增消費端請一併加進來**。
+#: ⚠️ 2026-09-04 第五輪稽核：a88f896 的守衛只掃 `ui/tab1_macro.py` 一個檔，
+#: 而 `ui/helpers/macro/beginner_view.py` 也有一個消費端在自己讀 `.sufficient`
+#: （而且刻意在 `support is None` 上與 SSOT 走相反的分支）—— 整個在射程外。
+_SUPPORT_CONSUMER_FILES = ("ui/tab1_macro.py", "ui/helpers/macro/beginner_view.py")
+
+
 def test_no_consumer_rewrites_the_sufficiency_gate_by_hand():
-    """四個消費端都必須走 `_support_is_sufficient()`，不得各抄一份。
+    """**每一個**消費端都必須走 L0 的 `is_sufficient()`，不得各抄一份。
 
     R4 前三輪的實證：每一份手刻的閘門都錯了或不完整。收成一個函式之後，
     「有沒有人自己重寫」才變成一條機器規則。
+    ⚠️ 第五輪：SSOT 從 `ui/tab1_macro.py` 搬到 `shared/evidence_support.py`（L0），
+    守衛也從「掃一個檔」擴成「掃全部消費端」——**判斷式住在 L0，守衛才掃得到
+    別的層的消費端**。
     突變驗證：把任一處改回 `bool(_x is not None and _x.sufficient)` → 本條轉紅。
     """
-    _tree = ast.parse(pathlib.Path("ui/tab1_macro.py").read_text(encoding="utf-8"))
-    _fn = [n for n in ast.walk(_tree)
-           if isinstance(n, ast.FunctionDef) and n.name == "_support_is_sufficient"][0]
     _bad = []
-    for _n in ast.walk(_tree):
-        if not isinstance(_n, ast.Attribute) or _n.attr != "sufficient":
-            continue
-        if _fn.lineno <= _n.lineno <= (_fn.end_lineno or _fn.lineno):
-            continue          # SSOT 本人
-        _bad.append(_n.lineno)
+    for _f in _SUPPORT_CONSUMER_FILES:
+        _tree = ast.parse(pathlib.Path(_f).read_text(encoding="utf-8"))
+        _bad += [f"{_f}:{_n.lineno}" for _n in ast.walk(_tree)
+                 if isinstance(_n, ast.Attribute) and _n.attr == "sufficient"]
     assert not _bad, (
-        "有消費端自己讀 `.sufficient` 重寫閘門（SSOT 是 `_support_is_sufficient`）："
-        f"ui/tab1_macro.py:{_bad}")
+        "有消費端自己讀 `.sufficient` 重寫閘門"
+        f"（SSOT 是 `shared.evidence_support.is_sufficient`）：{_bad}")
+
+
+def test_the_sufficiency_gate_ssot_lives_in_l0_and_there_is_only_one():
+    """SSOT 只有一份，而且住在 L0（否則守衛必然掃不到某一層的消費端）。"""
+    import shared.evidence_support as _es
+    assert tab1_macro._support_is_sufficient is _es.is_sufficient, (
+        "`ui/tab1_macro` 又長出第二份判斷式")
+    from ui.helpers.macro import beginner_view as _bv
+    assert _bv._is_sufficient is _es.is_sufficient, (
+        "`beginner_view` 又長出第二份判斷式")
+    # `support is None` → 不足（沒有支撐可讀就不下定論，§1）
+    assert _es.is_sufficient(None) is False
 
 
 def test_the_long_bucket_greys_out_when_the_phase_cannot_stand():
@@ -2721,3 +2773,234 @@ def test_the_long_bucket_greys_out_when_the_phase_cannot_stand():
     _ok = compute_five_bucket_summary(
         _fake_indicators(), _real_calc_macro_phase(_fake_indicators()))["long"]
     assert _ok["level"] != "gray", _ok
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第五輪**獨立稽核 F2（🔴）：不對稱在①結論上被反過來用了
+#
+# `macro_action_light` 的 🔴 有**兩個**來源：override，以及**位階分數偏弱**。
+# 舊版把「四項均未觸發」的 `all_of` 和位階的 support `combine` 成一份，
+# 於是那四項缺任何一項 → 整份 support 不足 → `_conclusion_line_state` 灰掉，
+# **連同產出端已經認證過的那半邊（位階偏弱 ⇒ 減碼）一起灰掉**。
+#
+# 實測（`a88f896`，27/28 全空頭、只缺 VIX）：
+#     phase 0 衰退 | phase support sufficient: True   ← 產出端認證了空頭判讀
+#     action support sufficient=False（缺 VIX，未檢查）
+#     RENDERED ⬜ **這次的資料撐不起任何結論**
+# 而它替換上去的灰字寫著「半套證據可以升警，不可以解除警報」——
+# **它自己正在做相反的事。** 且這是**對 `2a7fad1` 的回歸**：那時候同一個狀態印 🔴。
+#
+# ⚠️ 兩個方向都要釘：**認證過的警報要活下來，沒認證的「解除警報」不准活**。
+#    第五輪稽核實測：在 `a88f896` 上插入一個 override-first 分支後，
+#    整份測試套件照樣 `324 passed` —— 也就是**兩個方向當時都沒有守衛**。
+# ════════════════════════════════════════════════════════════════════════
+#: override 那四項的「沒有越線」讀數 —— 讓燈號完全由位階分數決定。
+_CALM_OVERRIDE_VALUES = {"YIELD_10Y2Y": 0.5, "YIELD_10Y3M": 0.5,
+                         "SAHM": 0.0, "VIX": 15.0}
+
+
+def _bearish_ind(missing=()) -> dict:
+    """28 項全空頭（每一項 score = −weight），扣掉 `missing` 那幾項。"""
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    return {_k: dict(value=_CALM_OVERRIDE_VALUES.get(_k, 1.0),
+                     weight=_W[_k], score=-_W[_k])
+            for _k in _W if _k not in set(missing)}
+
+
+def test_a_phase_derived_red_survives_when_one_override_input_is_missing():
+    """**F2 的具名實例**：27/28 全空頭、只缺 VIX → 必須印 🔴，不得灰掉。"""
+    _ind = _bearish_ind(missing=("VIX",))
+    _phase = _real_calc_macro_phase(_ind)
+    assert (_phase["score"], _phase["phase"]) == (0, "衰退"), _phase["score"]
+    assert _phase["support"].sufficient, "前提：產出端認證了這個空頭判讀"
+
+    _al = _real_action_light(_ind, _phase["score"])
+    assert _al["light"] == "🔴" and not _al["override"], (
+        "前提：這是**位階造成的**紅燈，不是 override 紅燈")
+    _light, _lines = tab1_macro._conclusion_line_state(_al)
+    assert _light == "🔴", (
+        f"產出端認證過的警報被灰掉了（不對稱反了）：{_light!r}")
+    _txt = "\n".join(_lines)
+    assert _al["action"] in _txt, "警報活下來了，但沒印減碼建議"
+    # 「均未觸發」那一句沒有支撐 —— **只扣掉那一句**，不是連警報一起扣掉（卡 5 的形狀）
+    assert "均未觸發" not in _txt, "留下了那句沒有支撐的全稱話"
+    assert "缺 VIX" in _txt, f"沒有告訴使用者少檢查了哪一項：{_txt!r}"
+
+
+def test_an_all_clear_without_every_named_input_does_not_survive():
+    """反方向：🟢/🟡 是**解除警報**，四項缺一項就不准出燈（否則就是放寬）。"""
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    _ind = {_k: dict(value=_CALM_OVERRIDE_VALUES.get(_k, 1.0),
+                     weight=_W[_k], score=+_W[_k])
+            for _k in _W if _k != "VIX"}          # 全多頭、缺 VIX
+    _al = _real_action_light(_ind, _real_calc_macro_phase(_ind)["score"])
+    assert _al["light"] in ("🟢", "🟡") and not _al["override"], _al["light"]
+    assert not _al["support"].sufficient, "缺一項點名輸入，卻宣告解除警報成立"
+    _light, _lines = tab1_macro._conclusion_line_state(_al)
+    assert _light == "⬜", f"沒認證的「解除警報」照樣出了燈：{_light!r}"
+    assert "均未觸發" not in "\n".join(_lines)
+
+
+def test_the_conclusion_line_asymmetry_holds_by_enumeration():
+    """**列舉**，不是抽查 —— 第三輪就是用列舉驗乾淨的，遷移時掉了。
+
+    兩個方向各自列舉一片狀態空間：
+      (A) 位階造成的 🔴 且產出端認證了那顆分數 → **一個都不准**被灰掉
+      (B) 🟢/🟡 但 support 撐不住                → **一個都不准**出燈
+    實測（`a88f896`）：(A) 461 / 1382 = 33.4% 被灰掉；(B) 0。修復後兩者皆 0。
+    """
+    import itertools
+    import random
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    _rng = random.Random(20260904)
+    _special = {"SAHM": (-1.5, 0.0, 1.5), "SLOOS": (-1.5, 0.0, 1.5)}
+    _keys = list(_W)
+    _swallowed, _leaked, _n_alarm, _n_clear = [], [], 0, 0
+    _subsets = [s for r in (0, 1, 2) for s in itertools.combinations(_keys, r)]
+    for _miss in [s for s in _subsets for _ in range(3)]:
+        _scores = {_k: _rng.choice(_special.get(_k, (-_W[_k], 0.0, _W[_k])))
+                   for _k in _keys if _k not in _miss}
+        _ind = {_k: dict(value=_CALM_OVERRIDE_VALUES.get(_k, 1.0),
+                         weight=_W[_k], score=_s) for _k, _s in _scores.items()}
+        _phase = _real_calc_macro_phase(_ind)
+        _al = _real_action_light(_ind, _phase["score"])
+        if _al["override"]:
+            continue                     # override 紅燈由規則 3 涵蓋，另有測試
+        _light, _ = tab1_macro._conclusion_line_state(_al)
+        if _al["light"] == "🔴" and _phase["support"].sufficient:
+            _n_alarm += 1
+            if _light != "🔴":
+                _swallowed.append((list(_miss), _phase["score"], _light))
+        if _al["light"] in ("🟢", "🟡") and not _al["support"].sufficient:
+            _n_clear += 1
+            if _light != "⬜":
+                _leaked.append((list(_miss), _al["light"]))
+    assert _n_alarm > 100 and _n_clear > 100, (
+        f"前提：兩個方向都要有夠多樣本（警報 {_n_alarm} / 解除 {_n_clear}）")
+    assert not _swallowed, (
+        f"{len(_swallowed)} / {_n_alarm} 個認證過的警報被灰掉：{_swallowed[:3]}")
+    assert not _leaked, (
+        f"{len(_leaked)} / {_n_clear} 個沒認證的解除警報照樣出燈：{_leaked[:3]}")
+
+
+def test_the_producer_withholds_the_all_clear_sentence_instead_of_the_whole_verdict():
+    """那句「均未觸發」由**產出端**扣掉 —— 消費端不必（也不得）自己挑句子。"""
+    _ind = _bearish_ind(missing=("VIX",))
+    _al = _real_action_light(_ind, _real_calc_macro_phase(_ind)["score"])
+    assert not _al["all_clear_support"].sufficient
+    _joined = "；".join(_al["reasons"])
+    assert "均未觸發" not in _joined, "產出端還在吐那句沒有支撐的全稱話"
+    assert _al["all_clear_support"].reason in _joined, (
+        f"扣掉了，但沒說為什麼扣：{_joined!r}")
+    # 四項齊全時照印原句（沒有把好的那一支一起改掉）
+    _full = _real_action_light(_bearish_ind(), _real_calc_macro_phase(_bearish_ind())["score"])
+    if not _full["override"]:
+        assert "均未觸發" in "；".join(_full["reasons"])
+
+
+def test_the_action_light_band_matches_its_own_if_chain():
+    """漂移鎖：`action_light_band()` ≡ `macro_action_light` 實際用的三段切點。
+
+    證據會計現在拿**買賣燈自己的帶**去問「這盞燈撐不撐得住」；那個帶函式
+    若與實際 if-chain 分岔，閘門就在替另一盞燈背書。
+    突變驗證：把 `action_light_band` 的 `_BUY_SCORE_10` 改成別的數 → 轉紅。
+    """
+    from services.macro.action_light import (
+        ACTION_LIGHT_BAND_EDGES, ACTION_LIGHT_NARROWEST_BAND, action_light_band,
+    )
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    for _i in range(0, 101):
+        _s = _i / 10.0
+        # 用一顆權重最大的指標把分數擺到 _s：走真的 `macro_action_light`
+        _al = _real_action_light({"PMI": {"value": 1.0, "weight": _W["PMI"],
+                                          "score": 0.0}}, _s)
+        assert _al["light"] == action_light_band(_s), (
+            f"score={_s}: if-chain 給 {_al['light']}，帶函式給 {action_light_band(_s)}")
+    assert ACTION_LIGHT_NARROWEST_BAND == min(
+        ACTION_LIGHT_BAND_EDGES[0],
+        ACTION_LIGHT_BAND_EDGES[1] - ACTION_LIGHT_BAND_EDGES[0],
+        10.0 - ACTION_LIGHT_BAND_EDGES[1]), "最窄帶不是從邊界導出的"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 第五輪 F8（🟠）：②依據表其餘三列仍然在「一項就宣告全部沒事」
+#
+# 實測（`a88f896`，只取到 PMI 一項）：
+#   -- long -> {"level":"gray","label":"資料不足"}                      ← 已遷移
+#   -- mid  -> {"level":"green","label":"循環健康",
+#               "headline":"PMI 皆未越線；CPI／失業 未取得"}
+# **文字誠實、燈號說謊**，而使用者先看到的是燈號與顏色。
+# 「都沒越線」是點名了輸入的全稱宣稱 ⇒ 依本批自己的 `all_of` 規則，缺一項就不能講。
+# ⚠️ 紅 / 黃（有東西越線）是**存在性**宣稱，照舊由半套證據就能升警 —— 一項都沒改。
+# ════════════════════════════════════════════════════════════════════════
+def test_the_evidence_rows_need_every_named_input_before_going_green():
+    """📈中期 / 🎯短線 / ⚠️拐點：缺任何一顆點名輸入 → 不得出綠燈。"""
+    from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+    _one = compute_four_horizon_summary({"PMI": {"value": 55.0}})
+    assert _one["mid"]["level"] == "gray", (
+        f"三顆只取到一顆，卻宣告「循環健康」：{_one['mid']}")
+    assert _one["mid"]["label"] == "資料不足"
+    # headline 本來就誠實（它點名了缺哪幾顆）—— 燈號現在跟它同一個口徑
+    assert "未取得" in _one["mid"]["headline"]
+
+    # 兩顆裡只有一顆的短線桶、五顆裡只有一顆的拐點桶，同樣不得出綠燈
+    _short = compute_four_horizon_summary({"VIX": {"value": 15.0}})
+    assert _short["short"]["level"] == "gray", _short["short"]
+    _inf = compute_four_horizon_summary({"SAHM": {"value": 0.1}})
+    assert _inf["inflection"]["level"] == "gray", _inf["inflection"]
+
+
+def test_the_evidence_rows_still_go_green_when_every_named_input_is_there():
+    """反向：點名輸入**全在**且都沒越線 → 照樣出綠燈（沒有把桶灰死）。"""
+    from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+    _all = compute_four_horizon_summary({
+        "PMI": {"value": 55.0}, "CPI": {"value": 2.0},
+        "UNEMPLOYMENT": {"value": 3.8},
+        "VIX": {"value": 14.0}, "HY_SPREAD": {"value": 3.0},
+        "SAHM": {"value": 0.1}, "YIELD_10Y2Y": {"value": 0.5},
+        "YIELD_10Y3M": {"value": 0.5}, "LEI": {"value": 0.1, "ma3": 0.1},
+        "SLOOS": {"value": 10.0},
+    })
+    assert _all["mid"]["level"] == "green", _all["mid"]
+    assert _all["short"]["level"] == "green", _all["short"]
+    assert _all["inflection"]["level"] == "green", _all["inflection"]
+
+
+def test_an_alarm_in_those_rows_still_fires_on_partial_evidence():
+    """規則 3 在這三列上**沒有**被本輪的收緊碰到：半套證據照樣升警。"""
+    from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+    # 只取到 PMI 一顆，而且它收縮 → 仍須亮黃（不是灰）
+    _mid = compute_four_horizon_summary({"PMI": {"value": 45.0}})["mid"]
+    assert _mid["level"] == "yellow", f"半套證據的警訊被灰掉了：{_mid}"
+    # 只取到 VIX 一顆，而且是恐慌值 → 仍須亮紅
+    _short = compute_four_horizon_summary({"VIX": {"value": 45.0}})["short"]
+    assert _short["level"] == "red", f"半套證據的警訊被灰掉了：{_short}"
+
+
+def test_the_alarm_carve_out_does_not_leak_into_the_extreme_risk_card():
+    """**F2 的連帶**：①結論留下警報，**卡 5 仍然不准說「四項都沒觸發」**。
+
+    兩個消費端問的不是同一句話：
+      · ①結論   問「我正在印的這盞燈撐不撐得住」→ 位階偏弱的 🔴 是警報，撐得住
+      · 卡 5    問「**四項都檢查過、都沒觸發**」→ 缺 VIX 就不能講
+    本輪實作 F2 時**一度讓卡 5 讀了同一份 support**，實測重現第三輪 A1 那個缺陷：
+        [⚠️ 極端風險警語] '🟢 未觸發' / '0 項觸發'
+        note：「景氣位階 0.0/10；⬜ …（缺 VIX，未檢查）」
+    —— VIX 根本沒抓到，卡片卻宣告四項都沒事。故產出端回報**兩份** support。
+    突變驗證：把卡 5 的 `_al5.get("no_trigger_support")` 改回 `_al5.get("support")`
+    → 本條轉紅（而①結論那幾條仍綠，證明兩者真的是兩個問題）。
+    """
+    _ind = _bearish_ind(missing=("VIX",))
+    _phase = _real_calc_macro_phase(_ind)
+    _al = _real_action_light(_ind, _phase["score"])
+    assert _al["light"] == "🔴" and not _al["override"], "前提：位階造成的紅燈"
+    assert _al["support"].sufficient, "前提：那盞燈本身撐得住（警報豁免）"
+    assert not _al["no_trigger_support"].sufficient, (
+        "「四項都沒觸發」在缺 VIX 時竟然撐得住")
+
+    _c5 = _grid_via_real_producer(_ind)["⚠️ 極端風險警語"]
+    assert _c5["signal"] in _GREY_SIGNALS, (
+        f"缺 VIX 卻宣告四項都檢查過：{_c5['signal']!r} / {_c5['value_str']!r}")
+    assert "缺 VIX" in _c5["note"], _c5["note"]
+    # 同一個狀態下，①結論的警報**仍然活著**（兩件事互不吃掉）
+    assert tab1_macro._conclusion_line_state(_al)[0] == "🔴"

@@ -56,7 +56,6 @@ from shared.evidence_support import (
     EvidenceSupport, all_of, combine, net_margin, summed_verdict, weighted_verdict,
     witnessed,
 )
-from shared.signal_thresholds import MACRO_PHASE_MIN_TOTAL_WEIGHT
 
 _US_IND = pathlib.Path("services/macro/us_indicators.py")
 
@@ -274,7 +273,11 @@ def test_the_alarm_levels_exist_in_the_verdict():
 def test_the_threshold_constant_is_derived_not_typed():
     """門檻常數 ＝ （scale / 最窄帶）× 最大相關族權重，**逐項可算**（R4-F6）。"""
     assert PHASE_WEIGHT_PER_BAND == PHASE_SCALE / PHASE_NARROWEST_BAND
-    assert MACRO_PHASE_MIN_TOTAL_WEIGHT == PHASE_WEIGHT_PER_BAND * MAX_CORRELATED_FAMILY_WEIGHT
+    # ⚠️ 2026-09-04 第五輪：~~`assert MACRO_PHASE_MIN_TOTAL_WEIGHT == ...`~~
+    # **已移除**（有意識的更正，不是漏刪）：那個常數是被第四輪改動製造出來的
+    # 孤兒（production 0 caller，只剩測試在引用），本輪依 GC 收尾義務實體刪除，
+    # 它的「最壞情況值」現在是下面兩項的**計算結果**，不再是第二份真相。
+    assert PHASE_WEIGHT_PER_BAND * MAX_CORRELATED_FAMILY_WEIGHT == 20.0
     assert PHASE_NARROWEST_BAND == min(
         PHASE_BAND_EDGES[0], PHASE_BAND_EDGES[1] - PHASE_BAND_EDGES[0],
         PHASE_BAND_EDGES[2] - PHASE_BAND_EDGES[1], PHASE_SCALE - PHASE_BAND_EDGES[2])
@@ -357,7 +360,7 @@ def test_a_single_correlated_family_must_not_decide_the_phase(): # noqa: D401
     從 4.0（復甦「最高勝率買點！逐步加碼」）推到 6.0（擴張「股優於債」）。
 
     突變驗證：把 `weighted_verdict` 的 `_T > _required` 改回
-    `_T >= MACRO_PHASE_MIN_TOTAL_WEIGHT`（舊式）→ 轉紅。
+    `_T >= 20.0`（舊式定值門檻）→ 轉紅。
     """
     _ind = {"YIELD_10Y2Y": {"weight": 2, "score": 2},
             "YIELD_10Y3M": {"weight": 2, "score": 2},
@@ -564,3 +567,339 @@ def test_a_missing_phase_score_is_never_coerced_into_a_verdict():
         assert "分數未取得" in _sup.reason, (_bad, _sup.reason)
         assert "detail" not in _sup.reason
         assert _sup.detail.get("obtained_weight") == 0.0
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第五輪**獨立稽核
+#
+# F1（🔴）`weighted_verdict` 對「顯示端會四捨五入」這件事沒有建模，於是它宣告
+#         「充足」的判讀，缺一顆指標就能翻掉。契約寫得是絕對的
+#         （「沒取到的那些證據，不論實際是什麼值，都不會改變它」），
+#         而消費端只讀 `.sufficient` —— 看不出它其實是近似的。
+# F2（🔴）產出端認證過的 🔴 被整句灰掉（不對稱反了）。
+# F4（🟠）規則本身有測試，**接線沒有** —— 兩個 call-site 突變全綠。
+# F5（🟠）`summed_verdict` 的 swing 大小沒有守衛。
+# ════════════════════════════════════════════════════════════════════════
+_ALL_W = MACRO_INDICATOR_SCORING_WEIGHTS
+
+
+def _ind_from(scores: dict) -> dict:
+    """`{key: score}` → `calc_macro_phase` 吃得下的 indicators dict。"""
+    return {_k: dict(value=1.0, weight=_ALL_W[_k], score=_s)
+            for _k, _s in scores.items()}
+
+
+def _flip_extremes(scores: dict, missing) -> list:
+    """把 `missing` 補到兩個極端（全負 / 全正），回傳兩個 `calc_macro_phase` 結果。
+
+    分數對缺項貢獻是**單調**的，所以這兩個端點界住了每一種實現。
+    """
+    _out = []
+    for _sign in (-1.0, +1.0):
+        _alt = dict(scores)
+        for _k in missing:
+            _alt[_k] = _sign * _ALL_W[_k]
+        _out.append(calc_macro_phase(_ind_from(_alt)))
+    return _out
+
+
+def test_a_sufficient_phase_verdict_cannot_be_flipped_by_one_missing_indicator():
+    """**F1 的最小可達實例**：28 項只缺 `UNEMPLOYMENT`（權重 0.5）一項。
+
+    修復前（實測，`a88f896`）：
+        displayed 4.9 復甦｜support sufficient=True｜reachable 4.81～4.99
+        該項若取到 +0.5 → 5.0 擴張
+        「復甦期：最高勝率買點！逐步加碼」→「股優於債：核心高股息ETF…」
+    兩個誤差源疊在 5.0 這條帶邊界上：傳進來的 `score` 已經 round 過（±0.05），
+    每一種實現也會再 round 一次（±0.05）。
+    突變驗證：拿掉 `round_to=` **或** 拿掉 `score_tolerance=` → 本條轉紅。
+    """
+    _scores = {_k: 0.0 for _k in _ALL_W if _k != "UNEMPLOYMENT"}
+    _scores["PMI"] = -0.4                      # 把分數推到剛好在 5.0 邊界下方
+    _base = calc_macro_phase(_ind_from(_scores))
+    assert (_base["score"], _base["phase"]) == (4.9, "復甦"), _base["score"]
+
+    _lo, _hi = _flip_extremes(_scores, ["UNEMPLOYMENT"])
+    assert _hi["phase"] != _base["phase"], (
+        "前提不成立：這個狀態其實翻不掉，換一組（不要 skip）")
+    assert not _base["support"].sufficient, (
+        f"缺一項就能把「{_base['phase']}」翻成「{_hi['phase']}」，卻宣告證據充足 —— "
+        f"reachable {_base['support'].detail['reachable_low']}～"
+        f"{_base['support'].detail['reachable_high']}")
+
+
+def test_no_sufficient_phase_verdict_anywhere_is_flippable():
+    """**F1 的量化版**：掃一片狀態空間，`sufficient=True` 的**一個都不准**翻得掉。
+
+    這一條與上一條的差別：上一條釘住一個已知實例（會被「只修那一格」的
+    突變騙過），本條是**窮舉性質**的 —— 它問的是「還有沒有第二個」。
+    修復前實測：14728 個狀態中 7646 個 sufficient，其中 **286 個可翻**（3.74%）。
+    修復後：**0**。
+    突變驗證：拿掉 `round_to=` → 轉紅；拿掉 `score_tolerance=` → 轉紅。
+    """
+    import itertools
+    import random
+    _rng = random.Random(20260904)
+    _special = {"SAHM": (-1.5, 0.0, 1.5), "SLOOS": (-1.5, 0.0, 1.5)}
+
+    def _domain(_k):
+        return _special.get(_k, (-_ALL_W[_k], 0.0, _ALL_W[_k]))
+
+    _keys = list(_ALL_W)
+    _bad, _n_suff = [], 0
+    # 缺 1～2 項的全部組合（單元測試要跑得快；缺 3 項的版本在 PR 描述裡跑過）
+    for _miss in (s for r in (1, 2) for s in itertools.combinations(_keys, r)):
+        _got = [_k for _k in _keys if _k not in _miss]
+        _scores = {_k: _rng.choice(_domain(_k)) for _k in _got}
+        _base = calc_macro_phase(_ind_from(_scores))
+        if not _base["support"].sufficient:
+            continue
+        _n_suff += 1
+        for _alt in _flip_extremes(_scores, _miss):
+            if _alt["phase"] != _base["phase"]:
+                _bad.append((list(_miss), _base["score"], _base["phase"],
+                             _alt["score"], _alt["phase"]))
+                break
+    assert _n_suff > 100, f"前提：樣本裡要有夠多的 sufficient 狀態才測得到（{_n_suff}）"
+    assert not _bad, (
+        f"{len(_bad)} / {_n_suff} 個「充足」的判讀可以被缺項翻掉，例如：{_bad[:3]}")
+
+
+def test_the_low_side_flip_that_producer_rounding_alone_does_not_catch():
+    """**F1 的第二個誤差源**：只把兩個界照生產端 round 一次，**還不夠**。
+
+    稽核給的低側實例（本組實測重現，`missing=['NEW_HOME','SLOOS']`）：
+        displayed 3.2 復甦｜缺項全負 → **2.9 衰退**｜缺項全正 → 3.7 復甦
+    只加 `round_to=`（不加 `score_tolerance=`）時 `reachable_low` 算出**恰好 3.0**
+    → 判「充足」。真值卻可以低到 3.15×r，round 後是 2.9 —— 差的那一格
+    正是「傳進來的 `score` 本身已經被 round 過」帶來的半格誤差。
+    突變驗證：拿掉 `score_tolerance=` → 本條轉紅（`round_to=` 仍在也擋不住）。
+    """
+    _scores = {"PMI": -2.0, "LEI": -1.0, "NFP": 1.0, "PERMIT_HOUSING": -0.5,
+               "CONSUMER_CONF": -0.5, "CPI": 0.5, "PPI": -0.5,
+               "INFL_EXP_5Y": -1.0, "JOBLESS": -0.5, "CONT_CLAIMS": -0.5,
+               "SAHM": -1.5, "M2_WEEKLY": -1.0, "FED_RATE": -0.5,
+               "YIELD_10Y3M": -2.0, "COPPER": 0.5, "EURUSD": -1.0,
+               "USDCNH": 1.0}
+    _scores.update({_k: 0.0 for _k in _ALL_W
+                    if _k not in _scores and _k not in ("NEW_HOME", "SLOOS")})
+    _base = calc_macro_phase(_ind_from(_scores))
+    assert (_base["score"], _base["phase"]) == (3.2, "復甦"), _base["score"]
+    _lo, _hi = _flip_extremes(_scores, ["NEW_HOME", "SLOOS"])
+    assert (_lo["score"], _lo["phase"]) == (2.9, "衰退"), (
+        f"前提不成立（換一組，不要 skip）：{_lo['score']} {_lo['phase']}")
+    assert not _base["support"].sufficient, (
+        "低側翻掉（3.2 復甦 → 2.9 衰退）卻宣告證據充足 —— "
+        "只 round 兩個界、沒有把輸入自己的 round 誤差加寬回去")
+
+
+def test_the_producer_wiring_declares_both_rounding_error_sources():
+    """接線守衛：`phase_support` 必須把**兩個**誤差源都宣告給規則。
+
+    ⚠️ **據實說明本條為什麼是結構性而不是行為性的**：本組用約 4.9 萬個抽樣
+    狀態去找「只拿掉 `round_to=` 就會漏掉的翻轉」，**沒有找到** ——
+    在 1～2 項缺漏的區間裡，`score_tolerance=` 單獨就已經比較保守。
+    也就是說拿掉 `round_to=` 目前只會讓閘門**偏嚴**（它會多灰掉一些狀態，
+    那會被 `test_the_conclusion_line_is_untouched_when_the_evidence_stands`
+    這種反向測試抓到），抓不到「放行了不該放行的」。
+    但 `round_to=` 在**契約上**是必要的（顯示值才是使用者看到的那個量，
+    而 band 是對顯示值定義的），所以用結構守衛釘住它不會悄悄消失。
+    **沒找到反例 ≠ 不存在** —— 這一句是本組的實測範圍，不是證明。
+    """
+    from services.macro.evidence import (
+        PHASE_SCORE_DECIMALS, PHASE_SCORE_ROUNDING_TOLERANCE,
+    )
+    _ind = _ind_from({_k: 0.0 for _k in _ALL_W if _k != "UNEMPLOYMENT"})
+    _d = calc_macro_phase(_ind)["support"].detail
+    assert _d["round_to"] == PHASE_SCORE_DECIMALS, (
+        f"接線沒有把顯示端的四捨五入位數傳給規則：{_d['round_to']!r}")
+    assert _d["score_tolerance"] == PHASE_SCORE_ROUNDING_TOLERANCE > 0, (
+        f"接線沒有把「輸入本身已被 round」的誤差傳給規則：{_d['score_tolerance']!r}")
+
+
+def test_the_phase_rounding_matches_the_producer():
+    """漂移鎖：`PHASE_SCORE_DECIMALS` ≡ 生產端 `round(..., N)` 的那個 N。
+
+    這兩個數字分岔 = F1 又回來了（區間會用錯的格點去 round）。
+    **AST 讀生產端的字面值**，不是字串搜尋。
+    突變驗證：把 `calc_macro_phase` 的 `round(..., 1)` 改成 `round(..., 2)` → 轉紅。
+    """
+    from services.macro.evidence import (
+        PHASE_SCORE_DECIMALS, PHASE_SCORE_ROUNDING_TOLERANCE,
+    )
+    _fn = [n for n in ast.walk(ast.parse(_US_IND.read_text(encoding="utf-8")))
+           if isinstance(n, ast.FunctionDef) and n.name == "calc_macro_phase"][0]
+    # ⚠️ 只鎖**指派給 `score` 的那一個** round —— 同一個函式裡另有一處
+    # `round(1 / (1 + exp(-logit)) * 100, 1)`（衰退機率），與本鎖無關。
+    _rounds = [_n.value for _n in ast.walk(_fn)
+               if isinstance(_n, ast.Assign)
+               and any(isinstance(_t, ast.Name) and _t.id == "score"
+                       for _t in _n.targets)
+               and isinstance(_n.value, ast.Call)
+               and isinstance(_n.value.func, ast.Name)
+               and _n.value.func.id == "round"]
+    assert len(_rounds) == 1, (
+        f"`score = round(...)` 不是恰好一處，漂移鎖失焦："
+        f"{[ast.unparse(r) for r in _rounds]}")
+    assert isinstance(_rounds[0].args[1], ast.Constant), ast.unparse(_rounds[0])
+    assert _rounds[0].args[1].value == PHASE_SCORE_DECIMALS, (
+        f"生產端 round 到 {_rounds[0].args[1].value} 位，證據會計以為是 "
+        f"{PHASE_SCORE_DECIMALS} 位")
+    # 容差由位數導出，不寫死
+    assert PHASE_SCORE_ROUNDING_TOLERANCE == 0.5 * (10.0 ** -PHASE_SCORE_DECIMALS)
+
+
+def test_the_rounding_parameters_default_to_off():
+    """沒有 round 的生產端不該被迫宣告一個它沒有的誤差（兩個參數預設關閉）。"""
+    _kw = dict(obtained=("a",), missing=(), obtained_weight=10.0,
+               missing_weight=0.0, family_weights={"a": 1.0},
+               band_of=lambda s: "hi" if s >= 5 else "lo",
+               scale=10.0, weight_per_band=2.0)
+    _off = weighted_verdict("x", score=4.999, **_kw)
+    _on = weighted_verdict("x", score=4.999, round_to=1,
+                           score_tolerance=0.05, **_kw)
+    assert _off.detail["reachable_low"] == _off.detail["reachable_high"] == 5.0
+    assert _off.detail["round_to"] is None and _off.detail["score_tolerance"] == 0.0
+    # 開了之後：4.999 會被 round 成 5.0，而 band 是拿**原始 score** 算的 → 不同帶
+    assert _on.detail["round_to"] == 1
+
+
+# ── F4（🟠）規則有測試、接線沒有 —— 兩個 call-site 突變全綠 ─────────────
+def test_the_wiring_passes_the_real_family_weights_not_an_empty_dict():
+    """**F4 / 突變 M24**：`phase_support` 必須把**真的**族權重餵進規則。
+
+    `family_weights` 若恆為空 dict，`weighted_verdict` 的支配性條件（規則 B）
+    就整條短路成 `True`（它把空 dict 讀成「一個指標都沒取到」）。
+    實測：M24 單獨施加 → `308 passed, 32 skipped`，**全綠**。
+    本條直接驗接線的產出：族權重必須逐項等於「在場成員的權重合計」。
+    突變驗證：把 `phase_support` 的 `family_weights=` 改成 `{}` → 轉紅。
+    """
+    _ind = _ind_from({"YIELD_10Y2Y": 2.0, "YIELD_10Y3M": 2.0, "PMI": 2.0})
+    _fam = phase_support(_ind, calc_macro_phase(_ind)["score"]).detail
+    assert _fam["max_family_weight"] == 4.0, (
+        "族權重沒有被餵進規則（殖利率曲線 2+2 = 4）："
+        f"{_fam['max_family_weight']}")
+    assert _fam["required_weight"] == PHASE_WEIGHT_PER_BAND * 4.0
+
+
+def test_the_wiring_makes_a_dominant_family_grey_through_the_real_producer():
+    """**F4 / M24 的行為面**：一族就能決定判讀時，走真的生產端也必須灰掉。
+
+    M24 之所以全綠，是因為支配性只有兩條**直接呼叫 `weighted_verdict`** 的
+    單元測試在守；經由 `calc_macro_phase` 的那條路**沒有任何測試**。
+    """
+    # 殖利率一族（4.0）+ 幾顆小的：權重過得了不變性，但一族就能推過一整條帶
+    _ind = _ind_from({"YIELD_10Y2Y": 2.0, "YIELD_10Y3M": 2.0,
+                      "HY_SPREAD": 2.0, "PMI": 2.0, "VIX": 1.0,
+                      "M2": 1.0, "FED_BS": 1.0, "ADL": 1.0})
+    _sup = calc_macro_phase(_ind)["support"]
+    assert _sup.detail["obtained_weight"] < _sup.detail["required_weight"]
+    assert not _sup.sufficient, "單一相關族就能決定的判讀，竟被判為充足"
+    assert "相關族" in _sup.reason, _sup.reason
+
+
+def test_the_wiring_passes_the_real_missing_weight_not_zero():
+    """**F4 / 突變 M25**：`phase_support` 必須把**真的**缺漏權重餵進規則。
+
+    `missing_weight` 若恆為 0，區間不變性整條退化成「恆成立」——
+    完全斷線也會宣告充足。實測：M25 單獨施加 → `308 passed, 32 skipped`，**全綠**；
+    M24+M25 一起施加 → 一個會畫出 9.5「高峰」的狀態拿到 `sufficient=True`。
+    """
+    _ind = _ind_from({"PMI": 2.0, "HY_SPREAD": 2.0})
+    _sup = calc_macro_phase(_ind)["support"]
+    _expect = sum(_w for _k, _w in _ALL_W.items() if _k not in _ind)
+    assert _sup.detail["missing_weight"] == _expect > 0, (
+        f"缺漏權重沒有被餵進規則：{_sup.detail['missing_weight']} != {_expect}")
+    assert not _sup.sufficient
+    # M24+M25 一起：這個狀態會畫出 9.5「高峰」，兩個突變都在時它會被放行
+    assert calc_macro_phase(_ind)["score"] == 10.0
+
+
+# ── F5（🟠）`summed_verdict` 的 swing 大小沒有守衛 ─────────────────────
+def test_the_composite_swing_is_the_full_possible_contribution_of_what_is_missing():
+    """**F5 / 突變 M14**：swing 必須是「缺項可能貢獻的**全部**」，不是它的一半。
+
+    實測：`M14 swing 減半 → 308 passed, 32 skipped`，**全綠**；而 swing 減半
+    正好讓第三輪的 blocker（`fillna(0)` 等價的 0.0 分被畫成「🟡 中性／分批進場」）
+    重新亮起來。
+    本條兩段：(1) 數值上 swing ≡ Σ(權重 × 單顆分數上界)；
+    (2) 行為上，把 swing 減半會讓一個該灰的狀態變成不該地「充足」。
+    """
+    from services.macro.evidence import composite_support
+    _ind = _ind_from({"PMI": 2.0, "HY_SPREAD": -2.0})     # 兩項相抵 → 總分 0.0
+    _prov: dict = {}
+    calculate_composite_score(_ind, provenance_out=_prov)
+    _sup = _prov["support"]
+    _expect = sum(_ALL_W[_k] * MACRO_INDICATOR_MAX_ABS_SCORE
+                  for _k in _ALL_W if _k not in _ind)
+    assert _sup.detail["missing_swing"] == _expect > 0, (
+        f"swing 不是「缺項可能貢獻的全部」：{_sup.detail['missing_swing']} != {_expect}")
+    assert not _sup.sufficient, "0.0 分（缺值被當成 0 加進去）竟被判為足以下結論"
+
+    # 行為面：拿**真的** `composite_verdict` 當帶函式，挑一個總分落在
+    # 「半個 swing 內安全、整個 swing 內就跨帶」的位置（cutoff 5.0，總分 5.7）：
+    #   full swing 1.0 → [4.7, 6.7] 橫跨「中性」/「樂觀」 → 不充足（正確）
+    #   half swing 0.5 → [5.2, 6.2] 同帶            → 充足（**放行了不該放行的**）
+    _band = lambda _t: composite_verdict(_t)[1]      # noqa: E731
+    _kw = dict(total=5.7, obtained=("a",), missing=("b",), band_of=_band)
+    _full = summed_verdict("x", missing_swing=1.0, **_kw)
+    _half = summed_verdict("x", missing_swing=0.5, **_kw)
+    assert not _full.sufficient and _half.sufficient, (
+        "swing 減半對判定毫無影響 —— 那表示 swing 的大小根本沒有被用到："
+        f"full={_full.sufficient} half={_half.sufficient}")
+    assert composite_support is not None      # 引用一下，避免 lint 誤判未使用
+
+
+# ── `witnessed()` 的空證人契約（第五輪點名：public L0 API，零覆蓋）──────
+def test_witnessed_with_no_witnesses_is_not_an_alarm():
+    """`witnesses` 為空 ⇒ 沒有任何觀測作證 ⇒ **不是警報**，是無話可說。
+
+    實測（第五輪）：`M12 witnessed 恆充足 → 308 passed`，**全綠** ——
+    這條 public L0 API 的空證人分支在本 repo 裡零覆蓋。
+    目前 production 走不到它（`composite_support` 只在 alarm band 呼叫，
+    而 alarm band 必有觀測），但它是 public API，**契約要有守衛**。
+    """
+    _empty = witnessed("誰都沒越線", witnesses=())
+    assert not _empty.sufficient
+    assert _empty.reason and "不是警報" in _empty.reason
+    assert witnessed("有人越線", witnesses=("VIX",)).sufficient
+
+
+# ── F3（🟠）記錄下來的理由是錯的：那個不對稱是**政策**，不是後設規則的推論 ──
+def test_the_composite_alarm_carve_out_is_not_implied_by_monotonicity():
+    """把「這個豁免不是推導」變成一條**可被檢查的事實**，不是只改註解。
+
+    `witnessed(claim, witnesses=_got)` 收到的是**全部取到的 key**，不是
+    「越線的那幾個」；而宣稱是「**加總跨過切點**」—— 對證據**不單調**。
+    實測（第五輪稽核，本組重現）：28 項只取到 2 項、總分 −8.0 → 「悲觀」警訊、
+    `sufficient=True`；若 28 項全部取到且**每顆都給生產端宣告的上界** `score=+weight`，
+    總分是 **+35.0 極度樂觀**。
+    ⚠️ 稽核報告寫的是 +19.0；本組**沒有重現出那個數字**（+19.0 應該來自另一種
+    「最大正向」的定義，例如逐顆用它自己 tier 表裡的最大值而不是 `weight`）。
+    **結論不受影響**（兩者都遠在警訊帶之外），但據實標明數字是本組自己量的。
+    也就是**這面紅旗確實可能被沒取到的資料翻掉** —— 它照放是因為
+    「寧可多報一次警」，不是因為它證明了不會被翻掉。
+
+    ⚠️ 本條的用途是**擋掉一次未來的化簡**：若有人以為「不對稱會從後設規則自己
+    掉出來」而把 `alarm_bands` 這個參數拿掉，那個化簡是不安全的。
+    突變驗證：把 `alarm_bands=COMPOSITE_ALARM_LEVELS` 改成 `()` → 既有兩條
+    「警訊不得被灰掉」轉紅（本條則證明**為什麼**那兩條不能靠推導取代）。
+    """
+    _two = {"PMI": {"value": 38.0, "weight": 2, "score": -2},
+            "HY_SPREAD": {"value": 9.0, "weight": 2, "score": -2}}
+    _prov: dict = {}
+    _total = calculate_composite_score(_two, provenance_out=_prov)
+    assert _total == -8.0, _total
+    assert composite_verdict(_total)[1] in COMPOSITE_ALARM_LEVELS
+    assert _prov["support"].sufficient, "前提：警訊照放（政策豁免）"
+    assert _prov["support"].rule == "witnessed"
+    # 那些「證人」其實只是**取到的 key**，不是越線的那幾個 —— 這正是不單調的來源
+    assert set(_prov["support"].detail["witnesses"]) == set(_two)
+
+    # 而且它**真的**會被翻掉：全部取到、全部最大正向 → 極度樂觀
+    _all_max = {_k: {"value": 1.0, "weight": _w, "score": _w}
+                for _k, _w in _ALL_W.items()}
+    _flipped = calculate_composite_score(_all_max)
+    assert _flipped == 35.0, _flipped
+    assert composite_verdict(_flipped)[1] not in COMPOSITE_ALARM_LEVELS, (
+        "前提不成立：那就沒有『可能被翻掉』這回事了（換一組，不要 skip）")
