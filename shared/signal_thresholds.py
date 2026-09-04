@@ -24,6 +24,28 @@ TRADING_DAYS_PER_YEAR: int = 252
 # ── 衰退判讀(§3.2 + §3.3)─────────────────────────────────
 SAHM_RECESSION_THRESHOLD: float = 0.5
 # 失業率 3MA - 過去 12M 最低 ≥ 0.5pp → 衰退中(Fed Sahm rule 原始定義)
+
+# ── ~~`MACRO_PHASE_MIN_TOTAL_WEIGHT`~~ 已於 2026-09-04 第五輪稽核**實體刪除** ──
+# (**有意識的政策變更,不是漏刪**;決策者:客戶授權的第五輪收尾。)
+#
+# **它是被上一批改動製造出來的孤兒**:第四輪把判定搬進產出端
+# (`services/macro/evidence.py::phase_support` → `shared/evidence_support.py::
+# weighted_verdict`)之後,這個常數的 production caller 歸零,只剩測試在引用它。
+# 依 `CLAUDE.md` §-1.5.1c 判定 3(4)——「因本次改動才變成 0 caller 的孤兒,
+# 是**本次的收尾義務**」——刪除,不留 Archive、不留註解式停用。
+#
+# **它的推導沒有跟著消失,只是搬到唯一該住的地方**(那裡是活的、有 caller、
+# 而且被實際判定讀到,不會像這裡一樣悄悄過期):
+#   · 每一族要多重才容忍得住 → `services/macro/evidence.py::PHASE_WEIGHT_PER_BAND`
+#     (由 `PHASE_SCALE / PHASE_NARROWEST_BAND` **導出**,不寫死)
+#   · 最大相關族                → 同檔 `MAX_CORRELATED_FAMILY_WEIGHT`(由權重表導出)
+#   · 比較符號(`>` 不是 `>=`)   → `shared/evidence_support.py::weighted_verdict` 一處
+# 舊值 20.0 現在是 `PHASE_WEIGHT_PER_BAND * MAX_CORRELATED_FAMILY_WEIGHT` 的
+# **計算結果**(5 × 4),不再是一個要靠人維持同步的第二份真相。
+#
+# ⚠️ 那一整段「舊推導為什麼錯」(R4-F5/F6/F7 的實測)**不是**在這裡消失的 ——
+# 它逐字保留在 `services/macro/evidence.py::MACRO_CORRELATED_FAMILIES` 的
+# 區塊註解裡,那裡才是族表真正的家。
 CFNAI_RECESSION_THRESHOLD: float = -0.7
 # ⚠️ 適用對象是 **CFNAI-MA3**(三月移動平均),**不是**月度 CFNAI —— 月度序列波動度約為
 # MA3 的 √3 ≈ 1.7 倍,拿 -0.7 去砍月度值會製造大量假衰退訊號。caller 務必先算 3M MA。

@@ -123,7 +123,12 @@ class TestMissingReadingsAreNotPaintedGreen:
         """只有 HY 有值 → 仍報真實讀數(不是退回「未取得」),spec 指向 HY。
         **修正前必紅(行為衝突)**:修正前恆報 `VIX 0.0 正常` / spec 恆為 vix。"""
         _s = _summary({"HY_SPREAD": {"value": 3.21}})
-        assert _s["short"]["level"] == "green"
+        # ⚠️ 2026-09-04 第五輪稽核 F8：舊斷言是 ~~`level == "green"`~~
+        # （**有意識的更正，不是漏刪**）。兩顆只取到一顆，而「兩顆都沒越線」是
+        # 一句**點名輸入的全稱話** —— 缺 VIX 就不能講，燈號改灰。
+        # **本測試要測的東西沒有變**（真實讀數要報出來、spec 指向 HY），
+        # 那兩條原封保留；變的只是「一顆就宣告全清」這個舊判定。
+        assert _s["short"]["level"] == "gray"
         assert "3.21" in _s["short"]["headline"]
         assert _s["short"]["spec_key"] == "hy_spread"
 
@@ -142,7 +147,17 @@ class TestMissingReadingsAreNotPaintedGreen:
         缺的那幾顆有出現在同一句裡。"""
         _s = _summary({"PMI": {"value": 55.0}})
         _h = _s["mid"]["headline"]
-        assert _s["mid"]["level"] == "green", "PMI 有值且未越線 → 這一桶確實是綠"
+        # ⚠️ 2026-09-04 第五輪稽核 F8：舊斷言是
+        # ~~`assert _s["mid"]["level"] == "green", "PMI 有值且未越線 → 這一桶確實是綠"`~~
+        # （**有意識的更正，不是漏刪**）。**這一條正是稽核逐字點名的那個狀態**：
+        #     只取到 PMI → {"level":"green","label":"循環健康",
+        #                   "headline":"PMI 皆未越線；CPI／失業 未取得"}
+        # headline 誠實、燈號說謊，而使用者先看到的是燈號與顏色。
+        # 「三項都沒越線」是點名輸入的全稱話 ⇒ 缺一項就不能出綠燈。
+        # **本測試原本要測的東西一字未動**（下面兩條：有值的被點名、缺的被標出來），
+        # 而且下一條 `test_full_house_still_reports_plain_green` 仍然釘住
+        # 「三顆全在就要出綠燈」—— 沒有把這一桶灰死。
+        assert _s["mid"]["level"] == "gray", "三顆只取到一顆，不得宣告『循環健康』"
         assert "PMI" in _h
         for _absent in ("CPI", "失業"):
             assert _absent in _h, f"缺的 {_absent} 沒被標出來:{_h!r}"

@@ -46,6 +46,8 @@ import streamlit as st
 # GRAY_BB 於 2026-08-05 F1 隨兩個 summary bar 一起移除(當時唯一用處是 bar 的
 # headline 字色);② 依據表走 st.dataframe,字色由 theme 決定,不再需要色票。
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.evidence_support import all_of as _all_of
+from shared.evidence_support import is_sufficient as _is_sufficient
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
@@ -214,6 +216,25 @@ def _participation(probe) -> tuple[list, list]:
             [_n for _n, _val in probe if _val is None])
 
 
+def _all_clear_support(claim: str, probe):
+    """「這一桶**都沒有**越線」的證據支撐 —— 規則 1(`all_of`)。
+
+    2026-09-04 第五輪稽核 F8:②依據表的 📈中期 / 🎯短線 / ⚠️拐點 三列,
+    綠燈(「循環健康」/「短線平靜」/「拐點未現」)原本只要求
+    `_participation(probe)[0]` 非空 —— **三項裡取到一項就宣告全部沒事**。
+    實測:只取到 PMI 一項 → `{"level":"green","label":"循環健康"}`,
+    而 headline 同一行就寫著「CPI／失業 未取得」——
+    **文字誠實、燈號說謊**,而使用者先看到的是燈號。
+
+    「都沒越線」是一句**點名了輸入的全稱宣稱**,依本批自己的 `all_of` 規則
+    缺一項就不能講。這一支把那條規則接上,不再各桶自己數個數。
+    ⚠️ **只管綠燈(解除警報)那一邊**:紅 / 黃(有東西越線)是**存在性**宣稱,
+    照舊由半套證據就能升警(規則 3),一項都沒改。
+    """
+    return _all_of(claim, expected=[_n for _n, _ in probe],
+                   obtained=_participation(probe)[0])
+
+
 def _all_clear_headline(probe) -> str:
     """沒有任何一項越線時的 headline —— 點名算過的、標出沒取到的(§1)。
 
@@ -288,7 +309,26 @@ def compute_four_horizon_summary(
     _score_raw = phase_info.get("score")
     _macro_score = 5.0 if _score_raw is None else float(_score_raw)
     _phase_name = phase_info.get("phase") or "未定"
-    if _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
+    # ── 2026-09-04 第四輪稽核:🌳 長期桶與卡 1 是**同一顆分數**,同一個閘門 ──
+    # 完全斷線實測:`score` 恆為 5.0(分母為零時的預設值)→ 本桶落在 `yellow`
+    # 「轉折中」,而 ② 依據表把它當成一個**判讀結果**印出來。那是缺資料造出來的,
+    # 不是市場的判讀。`calc_macro_phase` 現在回報 `support`,本桶讀 `.sufficient`;
+    # 缺 `support` 的舊 payload → 照舊(向後相容),因為本檔也可能被別的 caller
+    # 餵手捏的 phase dict —— 那種 dict 沒有 support 可讀,不宜一律灰掉。
+    # ⚠️ 2026-09-04 第五輪稽核：這裡原本自己讀 `.sufficient`，而當時的 AST 守衛
+    # **只掃 `ui/tab1_macro.py`**，所以這一處整個在守衛的射程外。判斷式已搬到 L0
+    # (`shared/evidence_support.is_sufficient`)，本處改走它，守衛也改成兩個檔都掃。
+    # ⚠️ **`support is None` 這一格刻意與 SSOT 不同，據實寫明**：SSOT 把 None 當
+    # 「不足」（沒有支撐可讀就不下定論）；本處 None → **照舊出等級**。理由是
+    # 本函式也會被餵**手捏的 phase dict**（別的 caller、舊 cache、測試 fixture），
+    # 那種 dict 根本沒有 `support` 欄可讀 —— 一律灰掉會把「這個 caller 還沒接線」
+    # 誤畫成「市場資料不足」。差別只在 None 這一格；有 support 時兩者逐格相同。
+    _long_sup = phase_info.get("support")
+    _long_headline = None
+    if _long_sup is not None and not _is_sufficient(_long_sup):
+        _long_level, _long_label = "gray", "資料不足"
+        _long_headline = "—"
+    elif _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
         _long_level, _long_label = "green", "擴張 / 復甦"
     elif _macro_score < _MACRO_SCORE_DANGER_MAX:
         _long_level, _long_label = "red", "高峰 / 衰退"
@@ -302,8 +342,9 @@ def compute_four_horizon_summary(
     # lazy import:`ui.helpers.macro.helpers` 會連帶拉進 `services.macro` 整包,
     # 本檔既有慣例(:351 的 calc_macro_phase)就是延後到用時才 import。
     from ui.helpers.macro.helpers import format_phase_score  # noqa: PLC0415
-    _long_headline = (format_phase_score(phase_info)
-                      or f"{_phase_name} {_macro_score:.1f}/10")
+    if _long_headline is None:
+        _long_headline = (format_phase_score(phase_info)
+                          or f"{_phase_name} {_macro_score:.1f}/10")
 
     # ═══ 📈 中期:景氣循環 ═══
     # 2026-08-05 稽核 🔴 必修 2:每個 headline 同時帶出**它是哪一個指標**
@@ -333,8 +374,11 @@ def compute_four_horizon_summary(
         _mid_level, _mid_label = "red", "循環惡化"
     elif _mid_hits:
         _mid_level, _mid_label = "yellow", "局部走弱"
-    elif _participation(_mid_probe)[0]:
+    elif _is_sufficient(_all_clear_support("PMI／CPI／失業 皆未越線", _mid_probe)):
         _mid_level, _mid_label = "green", "循環健康"
+    elif _participation(_mid_probe)[0]:
+        # 取到一部分、而且沒有任何一項越線 —— 但「都沒越線」是全稱話(F8)。
+        _mid_level, _mid_label = "gray", "資料不足"
     else:
         # §1:三顆全沒取到 ≠ 健康。綠燈的語意是「問過了沒事」,這裡是「沒問到」。
         _mid_level, _mid_label = "gray", "資料未取得"
@@ -375,8 +419,10 @@ def compute_four_horizon_summary(
         _short_level, _short_label = "red", "極度恐慌"
     elif _short_hits:
         _short_level, _short_label = "yellow", "短線警戒"
-    elif _participation(_short_probe)[0]:
+    elif _is_sufficient(_all_clear_support("VIX／HY 利差 皆未越線", _short_probe)):
         _short_level, _short_label = "green", "短線平靜"
+    elif _participation(_short_probe)[0]:
+        _short_level, _short_label = "gray", "資料不足"      # 同中期桶(F8)
     else:
         _short_level, _short_label = "gray", "資料未取得"
     # 本桶沒觸發時 headline 仍優先報**真實讀數**(VIX 有值就報 VIX,只有 HY 有值
@@ -424,8 +470,11 @@ def compute_four_horizon_summary(
         _inf_level, _inf_label = "red", "多重警訊"
     elif _inf_warnings:
         _inf_level, _inf_label = "yellow", "拐點臨近"
-    elif _participation(_inf_probe)[0]:
+    elif _is_sufficient(_all_clear_support(
+            "薩姆／10Y-2Y／10Y-3M／CFNAI／SLOOS 皆未越線", _inf_probe)):
         _inf_level, _inf_label = "green", "拐點未現"
+    elif _participation(_inf_probe)[0]:
+        _inf_level, _inf_label = "gray", "資料不足"          # 同中期桶(F8)
     else:
         _inf_level, _inf_label = "gray", "資料未取得"
     _inf_msgs_all = _inf_triggers + _inf_warnings
@@ -514,9 +563,43 @@ def compute_five_bucket_summary(
         }
         return _summary
 
+    # ── 2026-09-04 第六輪稽核 F-A5 ───────────────────────────────────
+    # **`fetch_market_news` 在完全抓不到時回的不是空 list,是一則佔位訊息**
+    # (`source="system"`、`is_systemic=False`)。舊版把它當成一則新聞數進去:
+    #     news bucket -> {'level':'green','label':'無系統風險',
+    #                     'headline':'1 則新聞掃描,無系統性風險'}
+    # —— **零觀測換來一盞綠燈,外加一個捏造的則數**,正是本批要根除的那一類。
+    # (`news_items=[]` 也是同一個形狀:0 則觀測 → 綠燈「掃描完成,無命中」。)
+    #
+    # 「無系統風險」是一句**對新聞來源的全稱宣稱**,依本批已經套在
+    # 📈中期／🎯短線／⚠️拐點 三列上的同一條 `all_of` 規則,**沒有任何實際觀測
+    # 就不能講**。⚠️ 紅／黃是**存在性**宣稱(至少一則越線),照舊由半套證據升警
+    # —— 一個字都沒改(佔位訊息本來就 `is_systemic=False`,不影響那兩支)。
+    #
+    # 判別方式用 `source == "system"`:真的新聞一律帶 feed 名(MarketWatch /
+    # BBC World …),佔位訊息才是 `system`。**刻意不解析標題的表情符號** ——
+    # 那是會漂移的呈現細節,而 `source` 是結構欄位。
+    # ⚠️ 本輪**不動 L1**(`repositories/news_repository.py`):它自己的檔頭已登記
+    # 「UI 端遷移屬 L3、不在該輪所有權內」,而本列正是那個 L3 遷移。
+    _real_items = [n for n in (news_items or [])
+                   if isinstance(n, dict) and n.get("source") != "system"]
+    if not _real_items:
+        # 一則真的新聞都沒有 → 不下綠燈,也不報一個不存在的則數。
+        # headline 用佔位訊息**自己寫的**理由(它才分得出「來源無回應」與
+        # 「來源正常但未命中關鍵字」),消費端不自己編一句。
+        _ph = next((n for n in (news_items or []) if isinstance(n, dict)), None)
+        _summary["news"] = {
+            "level": "gray", "label": "資料不足",
+            "headline": (str((_ph or {}).get("title") or "").strip()
+                         or "0 則新聞可掃描") + " —— 未觀測到任何新聞，故不宣告無系統風險",
+            "color": _level_to_color["gray"], "emoji": _level_to_emoji["gray"],
+            "spec_key": "news_systemic",
+        }
+        return _summary
+
     # 數 is_systemic 命中(對齊 news_repository.SYSTEMIC_RISK_KEYWORDS 標記)
     try:
-        _sys_count = sum(1 for n in news_items
+        _sys_count = sum(1 for n in _real_items
                          if isinstance(n, dict) and n.get("is_systemic"))
     except Exception:
         _sys_count = 0
@@ -537,9 +620,8 @@ def compute_five_bucket_summary(
         _n_headline = f"🚨 {_sys_count} 則系統性風險新聞,留意"
     else:
         _n_level, _n_label = "green", "無系統風險"
-        _n_total = len(news_items)
-        _n_headline = (f"{_n_total} 則新聞掃描,無系統性風險" if _n_total > 0
-                       else "新聞掃描完成,無命中")
+        # 則數只數**真的新聞**(佔位訊息已在上面攔掉,這裡必 > 0)。
+        _n_headline = f"{len(_real_items)} 則新聞掃描,無系統性風險"
 
     _summary["news"] = {
         "level": _n_level, "label": _n_label, "headline": _n_headline,

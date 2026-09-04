@@ -44,8 +44,8 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
                    window: int, flow_thr: float, fx_thr: float) -> pd.DataFrame:
     """合併籌碼與匯率、計算滾動訊號並分類狀態（向量化）。"""
     cols = ["date", "foreign_net_yi", "usdtwd", "twd_apprec", "roll_flow",
-            "roll_apprec", "flow_sig", "fx_sig", "state", "is_divergence",
-            "interpretation"]
+            "roll_apprec", "roll_n", "flow_sig", "fx_sig", "state",
+            "is_divergence", "interpretation"]
     if flow_df.empty or fx_df.empty:
         return pd.DataFrame(columns=cols)
     df = pd.merge(flow_df, fx_df, on="date", how="inner").sort_values("date").reset_index(drop=True)
@@ -54,6 +54,13 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
     df["twd_apprec"] = -df["usdtwd"].pct_change(fill_method=None) * 100.0  # USDTWD 跌=台幣升=正;§1 不補值
     df["roll_flow"] = df["foreign_net_yi"].rolling(window, min_periods=1).sum()
     df["roll_apprec"] = df["twd_apprec"].rolling(window, min_periods=1).sum()
+    # ── 2026-09-04 第四輪稽核 R4-F11:把「這筆累計背後有幾天」一起回報 ────────
+    # `min_periods=1` 讓序列前緣(或重疊交易日 < window 時)也算得出 `roll_flow`,
+    # **面板要畫出爬升段確實需要它**,所以不動它。但消費端(Tab ① 快覽卡)的頭條
+    # 逐字寫「外資為近 5 日累計」—— 那是一句**點名了 5 天**的宣稱,底下卻可能只有
+    # 1 天。依通則規則 1(點名輸入的宣稱要輸入全在),消費端必須看得到分母。
+    # **本欄是 schema-additive:既有 caller 完全不受影響**(欄多一個,值沒變)。
+    df["roll_n"] = df["foreign_net_yi"].rolling(window, min_periods=1).count()
 
     df["flow_sig"] = np.select(
         [df["roll_flow"] >= flow_thr, df["roll_flow"] <= -flow_thr],

@@ -64,6 +64,9 @@ from services.macro._helpers import (  # noqa: F401
 # composite_score.py 只 import shared.colors(L0),同層 L2 互 import 無循環。
 from services.macro.composite_score import is_meta_key as _is_meta_key
 from services.macro.composite_score import is_superseded as _is_superseded
+# 2026-09-04 第四輪稽核:產出端「證據支撐」契約(L2,純函式,不反向 import 本檔)。
+from services.macro.evidence import axis_supports as _axis_supports
+from services.macro.evidence import phase_support as _phase_support
 
 # ════════════════════════════════════════════════════════════════════════
 # `fetch_all_indicators` 的**產出契約** —— 診斷頁靠它辨認「缺席」
@@ -1321,6 +1324,40 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
     growth_up    = growth_score > 0
     inflation_up = inflation_score > 0
 
+    # ── 2026-09-04 稽核 F2:方向三分(schema-additive,既有 key 逐字不動)──────
+    # `growth_up = growth_score > 0` 是一個**二分**運算,但底下的量有**三種**狀態:
+    #   · 有觀測且淨偏正  → 方向向上
+    #   · 有觀測且淨偏負  → 方向向下
+    #   · 有觀測但**正負筆數相抵**(score 恰為 0.0)→ **方向不明,不是向下**
+    #   ·(外加)零觀測 → 分母被 `max(len, 1)` 墊成 1,score 也是 0.0
+    # 二分運算把後兩種一起塞進「向下」,於是「CPI +1、PPI −1」這種**打平**會被
+    # 講成「通膨↓ 受控」,與「真的兩個都低」在畫面上**逐字相同**。
+    # 實測可達性:通膨軸 6/26、成長軸 392/2186 種「有無×正負」組合恰為 0.00。
+    #
+    # **本次只做 schema-additive 的新增,不動 `growth_up` / `inflation_up` /
+    # `quadrant` / `quad_*` 任何一個既有 key** —— 理由是那四象限是一個**封閉
+    # 四值列舉**,要表達「方向不明」得長出第五象限(連帶 `quad_color` /
+    # `quad_icon` / `quad_alloc` 都要有第五組值),那是設計變更、不是 bug 修復。
+    # ⚠️ **據實揭露:既有 key 在打平時仍然把方向講成「向下」。** 現行 production
+    # 唯一消費者是 `ui/tab1_macro.py` 的快覽卡 3(已改吃下面的 `*_dir`);
+    # 其餘 `quad_*` 目前 0 production caller。⚠️ 該句取決於「有沒有漏看」,
+    # 係本組單組 grep(`quadrant\|quad_\|growth_up\|inflation_up`,2026-09-04),
+    # **未經第二組獨立驗證**(§-2 規則 6)——只能當待驗事項,不得當已查證的事實。
+    # 日後新增消費者**必須**讀 `*_dir`,不得用 `*_up` 判方向 —— 追蹤見
+    # `BACKLOG.md`「⏸ 待審查 — 成長/通膨雙軸的第五象限『方向不明』」。
+    def _axis_dir(signals: list, score: float) -> str:
+        """'none'(零觀測)/ 'tie'(有觀測但正負相抵)/ 'up' / 'down'。"""
+        if not signals:
+            return "none"
+        if score > 0:
+            return "up"
+        if score < 0:
+            return "down"
+        return "tie"
+
+    growth_dir    = _axis_dir(growth_signals,    growth_score)
+    inflation_dir = _axis_dir(inflation_signals, inflation_score)
+
     # ── 四象限映射
     if growth_up and not inflation_up:
         quadrant    = "復甦/擴張"; quadrant_en = "Goldilocks"
@@ -1348,6 +1385,10 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
         "inflation_score":  round(inflation_score, 2),
         "growth_up":        growth_up,
         "inflation_up":     inflation_up,
+        # 方向三分(2026-09-04 F2):'none' / 'tie' / 'up' / 'down'。
+        # **判方向請用這兩個,不要用上面的 `*_up`** —— 後者把 tie 併進 down。
+        "growth_dir":       growth_dir,
+        "inflation_dir":    inflation_dir,
         "quadrant":         quadrant,
         "quadrant_en":      quadrant_en,
         "quad_color":       quad_color,
@@ -1356,6 +1397,15 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
         "quad_alloc":       quad_alloc,
         "n_growth":         len(growth_signals),
         "n_inflation":      len(inflation_signals),
+        # ── 2026-09-04 第四輪稽核 R4-F1:證據支撐與數字一起回報 ────────────────
+        # 前三輪每一輪都在消費端手推一道閘門,每一道都漏掉這個「類」的一種形態
+        # (零觀測 → 打平 → **n=1**)。R4-F1 實測:通膨軸只剩 FED_RATE 一筆時
+        # `inflation_score = -1.00`(**最大強度**),與「三項一致」在畫面上
+        # 逐位元組相同 —— 舊閘門只看「方向明不明確」,一筆觀測照樣過關,
+        # 而那一筆還是**政策利率**,不是通膨讀數。
+        # 現在由**產出端**回報 support,消費端只讀 `.sufficient`,不再自己推。
+        # 規則與推導見 `shared/evidence_support.py` + `services/macro/evidence.py`。
+        **_axis_supports(indicators, growth_signals, inflation_signals),
     }
 
 
@@ -1554,6 +1604,12 @@ def calc_macro_phase(indicators: dict) -> dict:
         # F-PROV-1 phase 21 v19.107 — 12 指標融合處 provenance(schema-additive)
         # 把每個參與融合的指標來源串起來,讓 caller 能追溯 single composite score 的血緣
         _provenance=_build_phase_provenance(indicators, total_w, earned_w),
+        # ── 2026-09-04 第四輪稽核:分數旁邊附上「這個分數有多少證據撐著」──────
+        # `score` 的分母只由**當次抓到的**指標構成,所以極值可以由「哪一支
+        # fetcher 剛好活著」決定(完全斷線 → 5.0「擴張」;18 取 1 → 0.0 或 10.0)。
+        # **本欄不改 `score` 一個位元** —— 它只是把「證據夠不夠」這件事從
+        # 「每個消費端各自手推」變成「產出端回報一次」。消費端讀 `.sufficient`。
+        support=_phase_support(indicators, score),
     )
 
 

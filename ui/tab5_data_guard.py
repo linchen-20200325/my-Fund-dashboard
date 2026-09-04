@@ -23,6 +23,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_K3
+from shared.ui_control_labels import (
+    DATA_GUARD_HOT_MONEY_BTN as _LBL_D5_HOT_MONEY,
+    DATA_GUARD_RELOAD_MACRO_BTN as _LBL_D5_RELOAD_MACRO,
+)
 
 from ui.helpers.ia import applied_form
 from ui.helpers.render_state import not_ready, system_error
@@ -223,7 +228,17 @@ def render_data_guard_tab() -> None:
         )
     with _d5_btn:
         st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
-        if st.button("🔄 重新載入總經", key="btn_d5_refresh"):
+        if st.button(_LBL_D5_RELOAD_MACRO, key="btn_d5_refresh"):
+            # ── 2026-09-04 第四輪稽核 R4-F4:這是**第五個**總經刷新入口 ──────────
+            # A5 那一輪盤點出「三個入口」並宣稱都接上了,實測漏了這一顆:它把
+            # `macro_done` 設回 False 讓整頁重載,**卻什麼快取／閘門都沒清** ——
+            # 使用者按了「重新載入總經」,Tab ① 那張熱錢卡照樣抱著上一輪的失敗結果。
+            # 它就在 A5 修好的那顆按鈕**上方 250 行、同一個檔案裡**。
+            # ⚠️ 舊守衛是一份**列舉兩個入口的** parametrize —— 結構上不可能發現
+            # 第三個入口;現在改成**結構性列舉**(掃所有把 `macro_done` 設 False
+            # 的地方),見 `tests/test_batch2_top_card_grid.py`。
+            for _hm_k3 in _HM_K3:
+                st.session_state.pop(_hm_k3, None)
             st.session_state.macro_done = False
             st.rerun()
 
@@ -430,7 +445,7 @@ def render_data_guard_tab() -> None:
     _bc1, _bc2 = st.columns([2, 5])
     with _bc1:
         _refetch_btn = st.button(
-            "📥 立即更新外資 / USDTWD",
+            _LBL_D5_HOT_MONEY,
             key="btn_refetch_hot_money_v19152",
             help="直接觸發 hot_money fetch + 寫 session_state._macro_hot_money。"
                  "不必點開 📦 ARCHIVED 台股熱錢監測 expander。",
@@ -445,9 +460,24 @@ def render_data_guard_tab() -> None:
         try:
             # v19.342:fetch+stash 邏輯抽至 ui.hot_money.refresh_hot_money_data
             # (與 tab1 長期桶 >30 天自動補抓共用同一條資料路),本按鈕只留 UI 殼。
+            # 2026-09-04 稽核 F3:token 讀取改走 `infra.config.get_secret`(§2.1 SSOT)。
+            # 舊寫法 `st.secrets.get(...) if hasattr(st, "secrets") else ""` 有**兩個**
+            # 分岔,而本按鈕最終打到的是與 Tab ① 熱錢卡**同一顆** L1 fetcher
+            # (`refresh_hot_money_data` → `fetch_hot_money_frames(180, token)` →
+            #  `fetch_foreign_flow_series(180, token)`,cache key = `(days, token)`):
+            #   (a) **token 只存在於環境變數**時,裸讀回 `''`、`get_secret` 回
+            #       `'TOK_ENV'` → 兩把不同 cache key → 同一個視窗被抓兩次,
+            #       一次帶授權一次沒帶,同一頁上同一個量可能出現兩個值;
+            #   (b) **完全沒有 `secrets.toml`** 時,`hasattr(st, "secrets")` 仍為 True,
+            #       但 `.get()` 內部 `_parse()` 會 `raise StreamlitSecretNotFoundError`
+            #       → 被下面的 `except` 吞成「refetch 失敗:[StreamlitSecretNotFoundError]」,
+            #       而走 SSOT 的那一邊照常運作。
+            # ⚠️ 前一輪把這裡漏掉的理由是「摺疊區、使用者不會點到」—— **不成立**:
+            # 本按鈕不在 expander 裡,它存在的理由(見上方 v19.152 註解)正是
+            # 「不必點開 ARCHIVED expander」。
+            from infra.config import get_secret as _d5_get_secret
             from ui.hot_money import refresh_hot_money_data
-            _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
-                            if hasattr(st, "secrets") else "") or ""
+            _finmind_tok = str(_d5_get_secret("FINMIND_TOKEN", "") or "")
             with st.spinner("📡 抓 FinMind 外資 + Yahoo USDTWD..."):
                 _hm_ok, _hm_msg = refresh_hot_money_data(token=_finmind_tok)
             if _hm_ok:
@@ -457,6 +487,27 @@ def render_data_guard_tab() -> None:
                 st.error(f"更新失敗:{_hm_msg}")
         except Exception as _e_rf:
             st.error(f"refetch 失敗:[{type(_e_rf).__name__}] {_e_rf}")
+        finally:
+            # Tab ① 熱錢快覽卡每 session 只抓一次(F6 守衛),手動更新必須把它的
+            # session stash 一起作廢,否則使用者按了「立即更新」、切回 ① 卻沒動。
+            #
+            # ⚠️ 2026-09-04 第三輪稽核 A5:這兩個 pop 原本在 `try` **裡面**、
+            # 而且排在 `refresh_hot_money_data(...)` **之後** —— 那一行拋例外時
+            # (例如 F3 記載的 `StreamlitSecretNotFoundError`,或任何上游 5xx),
+            # 閘門**整個 session 都清不掉**,使用者在這一輪沒有任何復原路徑:
+            # 按鈕看起來按了、錯誤訊息也出來了,但卡片會一直停在舊狀態。
+            # 移進 `finally`:**不管成敗都作廢** —— 使用者按過「立即更新」這件事
+            # 本身就足以構成「請重新嘗試」的意思表示。
+            #
+            # 鍵名走 L0 SSOT,不再逐字重寫(B2:原本這裡是三份字面值中的一份,
+            # 而那條守衛比對的是 tab5 的字面值與**測試自己的**字面值,
+            # 從頭到尾沒碰過生產端常數)。
+            try:
+                from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_K2
+                for _hm_k in _HM_K2:
+                    st.session_state.pop(_hm_k, None)
+            except Exception:  # noqa: BLE001 — 作廢失敗不得再蓋掉上面的錯誤訊息
+                pass
     st.divider()
 
     # ── Section 0: 全域資料健康總表 ──（caller 端 app.py 已先 call _update_data_registry()）

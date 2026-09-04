@@ -126,11 +126,21 @@ class TestActionLightWiredBackToTab1:
             "結論燈不得插在 ② 依據表與決策矩陣之間(會撞既有順序鎖)")
 
     def test_renderer_maps_light_to_native_alert_widget(self):
-        """燈色 → streamlit 原生元件,不手刻 HTML、不新造色票(§3.3)。"""
+        """燈色 → streamlit 原生元件 / 業務警訊卡,不手刻 HTML、不新造色票(§3.3)。
+
+        ⚠️ 2026-09-03 就地更正(有意識的更正,不是漏刪 · 決策者:客戶批次二拍板):
+        🔴 原斷言 `is st.error`——已由客戶拍板改為 `business_alert()`(業務警訊卡,
+        `ui/helpers/render_state.py`),理由見 `_action_light_renderer` 現行
+        docstring:①結論的 🔴 是「業務判斷」(硬衰退/恐慌 override 或景氣位階偏弱)
+        不是「系統真出錯」,兩者不得共用 `st.error` 紅框
+        (`ui/helpers/render_state.py` 檔頭三態分離規則)。
+        🟢/🟡 兩支未動,原斷言保留。
+        """
         import streamlit as st
-        from ui.tab1_macro import _action_light_renderer
+        from ui.tab1_macro import _action_light_renderer, _business_alert_action_light
         assert _action_light_renderer("🟢") is st.success
-        assert _action_light_renderer("🔴") is st.error
+        assert _action_light_renderer("🔴") is _business_alert_action_light
+        assert _action_light_renderer("🔴") is not st.error
         assert _action_light_renderer("🟡") is st.warning
 
     def test_unknown_light_falls_back_to_warning_never_success(self):
@@ -142,10 +152,11 @@ class TestActionLightWiredBackToTab1:
 
     def test_every_real_service_light_has_a_renderer(self):
         """端到端:服務層三條分支(override 紅 / 位階三級 / 缺位階 🟡)
-        實際吐出的燈色,都要能被 renderer 對應到 3 個原生元件之一。"""
+        實際吐出的燈色,都要能被 renderer 對應到一個合格的呈現入口
+        (🟢/🟡 走原生元件,🔴 走業務警訊卡——見 2026-09-03 更正)。"""
         import streamlit as st
         from services.macro import macro_action_light
-        from ui.tab1_macro import _action_light_renderer
+        from ui.tab1_macro import _action_light_renderer, _business_alert_action_light
 
         def _ind(**kw):
             return {k: {"value": v} for k, v in kw.items()}
@@ -157,7 +168,9 @@ class TestActionLightWiredBackToTab1:
             macro_action_light(_ind(VIX=15.0, YIELD_10Y2Y=0.8), 2.0),      # 位階紅
             macro_action_light(_ind(VIX=15.0, YIELD_10Y2Y=0.8), None),     # 缺位階
         ]
-        _widgets = {st.success, st.warning, st.error}
+        # ⚠️ 2026-09-03 就地更正:紅燈的合格入口自 `st.error` 改為
+        # `_business_alert_action_light`(見上一條測試的更正說明)。
+        _widgets = {st.success, st.warning, _business_alert_action_light}
         for _r in _cases:
             assert _action_light_renderer(_r["light"]) in _widgets, \
                 f"服務層燈色 {_r['light']!r} 沒有對應的原生元件"

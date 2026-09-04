@@ -105,10 +105,19 @@ _TAB1_TTL_CACHE_NAMES = frozenset({
 })
 
 # v19.57 C1：Tab1 自有 session_state cache 鍵（強制重抓時連帶 pop）
+# 2026-09-04 第三輪稽核 A5：補上 Tab ① 熱錢快覽卡的「每 session 只抓一次」旗標
+# 與其 stash。F6 那一輪建了這道閘門，卻只把清除接到**三個刷新入口裡的一個**
+# （⑤ 設定與診斷的「📥 立即更新」）：實測「Tab ① 強制重抓」與「側欄全域刷新」
+# 都清不掉它 —— 使用者把所有總經資料重載一遍之後，唯獨這張卡還抱著上一輪的
+# 失敗結果，而那正是 F6 修正當初要消滅的症狀。
+# 鍵名走 L0 SSOT（`shared/session_keys.py`）而非在此逐字重寫，理由見該模組。
+from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_CARD_SESSION_KEYS
+
 _TAB1_SESSION_KEYS = (
     "_radar_v1921_top", "_tp_v1948_top", "indicators",
     "phase_info", "news_items", "systemic_risk_data",
     "_fred_sources",
+    *_HM_CARD_SESSION_KEYS,
 )
 
 

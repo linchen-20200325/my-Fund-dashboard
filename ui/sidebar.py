@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import streamlit as st
+from shared.ui_control_labels import SIDEBAR_GLOBAL_REFRESH_BTN as _LBL_GLOBAL_REFRESH
 
 from ui.helpers.render_state import NOT_READY_MARK, not_ready
 
@@ -176,7 +177,9 @@ def render_sidebar(*,
             value=False,
         )
         if st.button(
-            "🧹 全域刷新（清所有快取 + 落地檔）",
+            # 標籤 SSOT:`shared/ui_control_labels.py` —— Tab ① 卡片的「去哪補」
+            # 文案指名這顆鈕,兩邊讀同一份,改字時不會分岔(2026-09-04 R4-F9)。
+            _LBL_GLOBAL_REFRESH,
             key="btn_global_refresh",
             use_container_width=True,
             disabled=not _confirm_refresh,
