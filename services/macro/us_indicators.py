@@ -64,6 +64,9 @@ from services.macro._helpers import (  # noqa: F401
 # composite_score.py 只 import shared.colors(L0),同層 L2 互 import 無循環。
 from services.macro.composite_score import is_meta_key as _is_meta_key
 from services.macro.composite_score import is_superseded as _is_superseded
+# 2026-09-04 第四輪稽核:產出端「證據支撐」契約(L2,純函式,不反向 import 本檔)。
+from services.macro.evidence import axis_supports as _axis_supports
+from services.macro.evidence import phase_support as _phase_support
 
 # ════════════════════════════════════════════════════════════════════════
 # `fetch_all_indicators` 的**產出契約** —— 診斷頁靠它辨認「缺席」
@@ -1394,6 +1397,15 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
         "quad_alloc":       quad_alloc,
         "n_growth":         len(growth_signals),
         "n_inflation":      len(inflation_signals),
+        # ── 2026-09-04 第四輪稽核 R4-F1:證據支撐與數字一起回報 ────────────────
+        # 前三輪每一輪都在消費端手推一道閘門,每一道都漏掉這個「類」的一種形態
+        # (零觀測 → 打平 → **n=1**)。R4-F1 實測:通膨軸只剩 FED_RATE 一筆時
+        # `inflation_score = -1.00`(**最大強度**),與「三項一致」在畫面上
+        # 逐位元組相同 —— 舊閘門只看「方向明不明確」,一筆觀測照樣過關,
+        # 而那一筆還是**政策利率**,不是通膨讀數。
+        # 現在由**產出端**回報 support,消費端只讀 `.sufficient`,不再自己推。
+        # 規則與推導見 `shared/evidence_support.py` + `services/macro/evidence.py`。
+        **_axis_supports(indicators, growth_signals, inflation_signals),
     }
 
 
@@ -1592,6 +1604,12 @@ def calc_macro_phase(indicators: dict) -> dict:
         # F-PROV-1 phase 21 v19.107 — 12 指標融合處 provenance(schema-additive)
         # 把每個參與融合的指標來源串起來,讓 caller 能追溯 single composite score 的血緣
         _provenance=_build_phase_provenance(indicators, total_w, earned_w),
+        # ── 2026-09-04 第四輪稽核:分數旁邊附上「這個分數有多少證據撐著」──────
+        # `score` 的分母只由**當次抓到的**指標構成,所以極值可以由「哪一支
+        # fetcher 剛好活著」決定(完全斷線 → 5.0「擴張」;18 取 1 → 0.0 或 10.0)。
+        # **本欄不改 `score` 一個位元** —— 它只是把「證據夠不夠」這件事從
+        # 「每個消費端各自手推」變成「產出端回報一次」。消費端讀 `.sufficient`。
+        support=_phase_support(indicators, score),
     )
 
 

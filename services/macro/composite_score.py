@@ -50,6 +50,16 @@ from shared.colors import (
 #    `test_all_aggregators_share_the_meta_predicate`)。
 
 
+# ── 綜合健康度的「警訊側」結論帶(2026-09-04 第四輪稽核)────────────────────
+# 這兩級是**警訊**:它們只可能由**實際取到的負向證據**把總分壓過悲觀切點而成立
+# (缺值在本演算法貢獻 0,不會把總分往任一極端推)。依通則規則 3(不對稱:
+# 半套證據可以升警、不可以解除警報),它們**不受充足性閘門拘束** ——
+# 把一個真的悲觀訊號灰掉,才是更糟的失效。
+# ⚠️ 字串必須與 `composite_verdict` 回傳的 `level` 逐字相同;
+# 漂移鎖:`tests/test_evidence_support.py::test_the_alarm_levels_exist_in_the_verdict`。
+COMPOSITE_ALARM_LEVELS: tuple[str, ...] = ("悲觀", "極度悲觀")
+
+
 def is_meta_key(key) -> bool:
     """`_` 前綴 = provenance meta 容器(如 `_fred_sources`),不得參與任何聚合。"""
     return str(key).startswith("_")
@@ -150,12 +160,30 @@ def calculate_composite_score(ind: dict, *,
                 "score": sf, "weight": wf,
                 "weighted": round(contrib, 4),
             }
+    total = round(total, 2)
     if provenance_out is not None:
         provenance_out["sources"] = sorted(set(_sources))
         provenance_out["fetched_at_latest"] = _fetched_at_max
         provenance_out["contributions"] = _contribs
         provenance_out["n_indicators"] = _n
-    return round(total, 2)
+        # ── 2026-09-04 第四輪稽核:血緣側車一併回報「證據支撐」──────────────
+        # 本函式的 docstring 自陳「缺值/NaN/型別錯誤一律以 0 處理(**fillna(0)
+        # 等價**)」—— 也就是「沒取到」被靜默當成「中性」,而 §1 明文禁止 fillna(0)。
+        # 後果:零指標時 `total = 0.0` → `composite_verdict` 給「🟡 中性」＋
+        # 一句可據以行動的「分批進場，避免重押單一題材」。
+        # **本欄不改 `total` 一個位元**,只回報「這個 verdict 是不是缺資料造出來的」。
+        # ⚠️ 規則 3(不對稱)在此**必須**保留:悲觀側是**警訊**,由實際取到的
+        # 負向證據作證,半套證據可以升警 —— 把它灰掉才是更糟的失效。
+        try:
+            from services.macro.evidence import (  # noqa: PLC0415 — 避免模組級循環
+                composite_support as _composite_support,
+            )
+            provenance_out["support"] = _composite_support(
+                ind, total, lambda _t: composite_verdict(_t)[1],
+                alarm_bands=COMPOSITE_ALARM_LEVELS)
+        except ImportError:      # 契約模組缺件 → 不擋主路徑(§1:缺就說缺)
+            provenance_out["support"] = None
+    return total
 
 
 def reconcile_composite_score(ind: dict) -> dict:

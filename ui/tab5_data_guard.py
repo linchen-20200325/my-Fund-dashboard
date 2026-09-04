@@ -23,6 +23,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_K3
+from shared.ui_control_labels import (
+    DATA_GUARD_HOT_MONEY_BTN as _LBL_D5_HOT_MONEY,
+    DATA_GUARD_RELOAD_MACRO_BTN as _LBL_D5_RELOAD_MACRO,
+)
 
 from ui.helpers.ia import applied_form
 from ui.helpers.render_state import not_ready, system_error
@@ -223,7 +228,17 @@ def render_data_guard_tab() -> None:
         )
     with _d5_btn:
         st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
-        if st.button("🔄 重新載入總經", key="btn_d5_refresh"):
+        if st.button(_LBL_D5_RELOAD_MACRO, key="btn_d5_refresh"):
+            # ── 2026-09-04 第四輪稽核 R4-F4:這是**第五個**總經刷新入口 ──────────
+            # A5 那一輪盤點出「三個入口」並宣稱都接上了,實測漏了這一顆:它把
+            # `macro_done` 設回 False 讓整頁重載,**卻什麼快取／閘門都沒清** ——
+            # 使用者按了「重新載入總經」,Tab ① 那張熱錢卡照樣抱著上一輪的失敗結果。
+            # 它就在 A5 修好的那顆按鈕**上方 250 行、同一個檔案裡**。
+            # ⚠️ 舊守衛是一份**列舉兩個入口的** parametrize —— 結構上不可能發現
+            # 第三個入口;現在改成**結構性列舉**(掃所有把 `macro_done` 設 False
+            # 的地方),見 `tests/test_batch2_top_card_grid.py`。
+            for _hm_k3 in _HM_K3:
+                st.session_state.pop(_hm_k3, None)
             st.session_state.macro_done = False
             st.rerun()
 
@@ -430,7 +445,7 @@ def render_data_guard_tab() -> None:
     _bc1, _bc2 = st.columns([2, 5])
     with _bc1:
         _refetch_btn = st.button(
-            "📥 立即更新外資 / USDTWD",
+            _LBL_D5_HOT_MONEY,
             key="btn_refetch_hot_money_v19152",
             help="直接觸發 hot_money fetch + 寫 session_state._macro_hot_money。"
                  "不必點開 📦 ARCHIVED 台股熱錢監測 expander。",

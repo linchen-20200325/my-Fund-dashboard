@@ -288,7 +288,18 @@ def compute_four_horizon_summary(
     _score_raw = phase_info.get("score")
     _macro_score = 5.0 if _score_raw is None else float(_score_raw)
     _phase_name = phase_info.get("phase") or "未定"
-    if _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
+    # ── 2026-09-04 第四輪稽核:🌳 長期桶與卡 1 是**同一顆分數**,同一個閘門 ──
+    # 完全斷線實測:`score` 恆為 5.0(分母為零時的預設值)→ 本桶落在 `yellow`
+    # 「轉折中」,而 ② 依據表把它當成一個**判讀結果**印出來。那是缺資料造出來的,
+    # 不是市場的判讀。`calc_macro_phase` 現在回報 `support`,本桶讀 `.sufficient`;
+    # 缺 `support` 的舊 payload → 照舊(向後相容),因為本檔也可能被別的 caller
+    # 餵手捏的 phase dict —— 那種 dict 沒有 support 可讀,不宜一律灰掉。
+    _long_sup = phase_info.get("support")
+    _long_headline = None
+    if _long_sup is not None and not _long_sup.sufficient:
+        _long_level, _long_label = "gray", "資料不足"
+        _long_headline = "—"
+    elif _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
         _long_level, _long_label = "green", "擴張 / 復甦"
     elif _macro_score < _MACRO_SCORE_DANGER_MAX:
         _long_level, _long_label = "red", "高峰 / 衰退"
@@ -302,8 +313,9 @@ def compute_four_horizon_summary(
     # lazy import:`ui.helpers.macro.helpers` 會連帶拉進 `services.macro` 整包,
     # 本檔既有慣例(:351 的 calc_macro_phase)就是延後到用時才 import。
     from ui.helpers.macro.helpers import format_phase_score  # noqa: PLC0415
-    _long_headline = (format_phase_score(phase_info)
-                      or f"{_phase_name} {_macro_score:.1f}/10")
+    if _long_headline is None:
+        _long_headline = (format_phase_score(phase_info)
+                          or f"{_phase_name} {_macro_score:.1f}/10")
 
     # ═══ 📈 中期:景氣循環 ═══
     # 2026-08-05 稽核 🔴 必修 2:每個 headline 同時帶出**它是哪一個指標**

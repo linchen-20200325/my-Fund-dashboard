@@ -17,6 +17,7 @@ v19.316 功能盤點改進 #4-①:總經頁子視圖多(即時/中期/短線/長
 """
 from __future__ import annotations
 
+from services.macro.evidence import action_light_support as _action_light_support
 from shared.signal_thresholds import SAHM_RECESSION_THRESHOLD
 
 # ── 門檻(self-contained mini-SSOT;provenance 註明來源)──────────────
@@ -72,6 +73,7 @@ def macro_action_light(indicators: dict,
     """
     # ── 1. 硬衰退 / 恐慌 override → 🔴 ───────────────────────────
     reasons_red: list[str] = []
+    triggered: list[str] = []          # 哪幾個 key 真的越線(給 support 當人證)
     y22 = _val(indicators, "YIELD_10Y2Y")
     y3m = _val(indicators, "YIELD_10Y3M")
     vix = _val(indicators, "VIX")
@@ -79,12 +81,27 @@ def macro_action_light(indicators: dict,
 
     if y22 is not None and y22 < _YIELD_INVERT_PCT:
         reasons_red.append(f"殖利率曲線倒掛（10Y-2Y {y22:+.2f}%）— 衰退領先訊號")
+        triggered.append("YIELD_10Y2Y")
     if y3m is not None and y3m < _YIELD_INVERT_PCT:
         reasons_red.append(f"殖利率曲線倒掛（10Y-3M {y3m:+.2f}%）— 衰退領先訊號")
+        triggered.append("YIELD_10Y3M")
     if sahm is not None and sahm >= SAHM_RECESSION_THRESHOLD:
         reasons_red.append(f"Sahm 規則 {sahm:.2f} ≥ {SAHM_RECESSION_THRESHOLD}（衰退警報中）")
+        triggered.append("SAHM")
     if vix is not None and vix >= _VIX_PANIC:
         reasons_red.append(f"VIX {vix:.0f} ≥ {_VIX_PANIC:.0f}（市場恐慌 / 高波動）")
+        triggered.append("VIX")
+
+    # ── 證據支撐(2026-09-04 第四輪稽核)—— 與燈號一起回報,消費端不再自己推 ──
+    # ⚠️ **本欄不改本函式任何一個燈的判斷邏輯**,它回答的是另一個問題:
+    # 「這一句話,手上的資料撐不撐得起來?」
+    #   · 已觸發 → 存在性宣稱,由實際觀測作證 → **恆充足**(半套證據可以升警)
+    #   · 未觸發 → 「四項**均未**觸發」+「景氣位階 N/10」兩個全稱宣稱的聯合
+    #             → 四項要全在、且位階分數站得住
+    # 完全斷線實測:四項一個都沒取到,舊版照樣印「均未觸發」並放綠燈。
+    _support = _action_light_support(
+        indicators, override_keys=OVERRIDE_INPUT_KEYS,
+        triggered=triggered, phase_score=phase_score_10)
 
     if reasons_red:
         return {
@@ -92,6 +109,7 @@ def macro_action_light(indicators: dict,
             "action": "減碼 / 保守 —— 拉高現金、核心轉防守，等企穩再進",
             "reasons": reasons_red,
             "override": True,
+            "support": _support,
         }
 
     # ── 2. 無 override → 依景氣位階 ─────────────────────────────
@@ -101,6 +119,7 @@ def macro_action_light(indicators: dict,
             "action": "資料不足 —— 景氣位階缺,先持有觀望",
             "reasons": ["景氣位階(0-10)未取得,無法定位階"],
             "override": False,
+            "support": _support,
         }
 
     if phase_score_10 >= _BUY_SCORE_10:
@@ -118,4 +137,5 @@ def macro_action_light(indicators: dict,
             "無硬衰退/恐慌訊號（殖利率曲線、Sahm、VIX 均未觸發）",
         ],
         "override": False,
+        "support": _support,
     }
