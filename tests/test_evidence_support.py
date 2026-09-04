@@ -696,15 +696,25 @@ def test_the_low_side_flip_that_producer_rounding_alone_does_not_catch():
 def test_the_producer_wiring_declares_both_rounding_error_sources():
     """接線守衛：`phase_support` 必須把**兩個**誤差源都宣告給規則。
 
-    ⚠️ **據實說明本條為什麼是結構性而不是行為性的**：本組用約 4.9 萬個抽樣
-    狀態去找「只拿掉 `round_to=` 就會漏掉的翻轉」，**沒有找到** ——
-    在 1～2 項缺漏的區間裡，`score_tolerance=` 單獨就已經比較保守。
-    也就是說拿掉 `round_to=` 目前只會讓閘門**偏嚴**（它會多灰掉一些狀態，
-    那會被 `test_the_conclusion_line_is_untouched_when_the_evidence_stands`
-    這種反向測試抓到），抓不到「放行了不該放行的」。
-    但 `round_to=` 在**契約上**是必要的（顯示值才是使用者看到的那個量，
-    而 band 是對顯示值定義的），所以用結構守衛釘住它不會悄悄消失。
-    **沒找到反例 ≠ 不存在** —— 這一句是本組的實測範圍，不是證明。
+    ⚠️ ~~**據實說明本條為什麼是結構性而不是行為性的**：本組用約 4.9 萬個抽樣
+    狀態去找「只拿掉 `round_to=` 就會漏掉的翻轉」，**沒有找到** …
+    所以用結構守衛釘住它不會悄悄消失。**沒找到反例 ≠ 不存在**。~~
+    → **2026-09-04 第六輪稽核 B1 推翻，有意識的更正，不是漏刪。**
+    **兩個參數都是承重的（行為性的），不是只有結構守衛。**
+    ⚠️ 「上一輪為什麼沒找到」本組**沒有**上一輪的產生器，下面是**本組自己的**
+    重現經過，不是對上一輪的斷言：本組第一次寫的產生器同樣把 earned 直接對準
+    每一格顯示值的**正中央**，結果 holes 一律是 0；把**格內偏移**
+    （±0.02 / ±0.049）加進去之後，稽核給的那個反例當場重現 ——
+    也就是 `round_to=` 專屬的洞住在**格內的邊緣**，掃格點正中央結構上看不到。
+        缺 `PMI` 一項、顯示 `2.4 衰退`、拿掉 `round_to=` → 契約說「充足」，
+        而真的生產端把 `PMI` 補成 `+2.0` 時顯示 **`3.0 復甦`** —— 翻帶。
+    量化（本組 2026-09-04 實測，缺 1～2 項全組合 × 每格 5 個格內偏移）：
+        兩個都在      → holes **0** / 0
+        只拿掉 round_to        → holes **40**（缺 1 項）／**577**（缺 2 項）
+        只拿掉 score_tolerance → holes **84**（缺 1 項）／**1078**（缺 2 項）
+    行為守衛見 `test_dropping_the_display_rounding_alone_opens_a_real_hole`。
+    本條保留為**接線**守衛（兩個參數有沒有真的被傳下去），不再宣稱
+    「`round_to=` 只有結構意義」。
     """
     from services.macro.evidence import (
         PHASE_SCORE_DECIMALS, PHASE_SCORE_ROUNDING_TOLERANCE,
@@ -903,3 +913,195 @@ def test_the_composite_alarm_carve_out_is_not_implied_by_monotonicity():
     assert _flipped == 35.0, _flipped
     assert composite_verdict(_flipped)[1] not in COMPOSITE_ALARM_LEVELS, (
         "前提不成立：那就沒有『可能被翻掉』這回事了（換一組，不要 skip）")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第六輪**獨立稽核
+#
+# F-A1（🔴 回歸，本批自己造成的）`weighted_verdict` 的可及區間**上界多了一格**：
+#      F1 把 `[score-0.05, score+0.05]` 兩個端點都 round，但**恰好等於**
+#      `score+0.05` 的真值自己會顯示成 `score+0.1` —— 它不在這個顯示值的原像裡。
+#      於是 28 項全取到（沒有任何缺項可言）的健康日，一部分分數被灰掉：
+#          28 obtained, 0 missing → scores declared INSUFFICIENT: [4.9, 7.9]
+#          ①結論「⬜ 這次的資料撐不起任何結論」／卡 1、卡 5「⬜ 資料不足」
+#          去處還寫「按『🔄 更新總經資料』重新載入」—— 但根本沒有東西可以補。
+#      **而且它隨浮點表示而異**：`2.9` 沒事、`4.9` 中招（見下方測試）。
+#      同一個邏輯情境兩種結果 ⇒ 界算錯了，不是「保守了一點」。
+# B1  「只拿掉 `round_to=` 找不到反例」的說法被稽核推翻 —— 兩個參數都是承重的。
+# ════════════════════════════════════════════════════════════════════════
+_PHASE_TICKS = [round(_i / 10.0, 1) for _i in range(0, 101)]
+
+
+def _all_28_at(score_target: float) -> dict:
+    """28 顆全取到、合成顯示分數 ≈ `score_target` 的 indicators dict。"""
+    _tw = sum(_ALL_W.values())
+    _earned, _sc = (score_target / 10.0 * 2 - 1) * _tw, {}
+    _rem = _earned
+    for _k in _ALL_W:
+        _v = max(-_ALL_W[_k], min(_ALL_W[_k], _rem))
+        _sc[_k] = _v
+        _rem -= _v
+    return _ind_from(_sc)
+
+
+@pytest.mark.parametrize("score", _PHASE_TICKS)
+def test_nothing_missing_means_the_reachable_display_set_is_exactly_the_score(score):
+    """**F-A1 的可證版本**：`missing_weight == 0` ⇒ 可及顯示值集合 ≡ `{score}`。
+
+    這是**斷言不是抽樣**：沒有任何缺項貢獻時，可及的**真值**就是這個顯示值
+    自己的原像 `[score-tol, score+tol)`，而那個集合依定義每一點都 round 回
+    `score`。所以 `reachable_low == reachable_high == score`，而且**恆充足**。
+
+    修復前（`fb770b4` 實測）：`4.9` 與 `7.9` 兩格 `sufficient=False`，
+    reason 逐字寫「還有 **0** 權重沒取到（**0** 項）」——
+    一句字面上自相矛盾的話，配一個做不到的去處（沒有東西可以重新載入）。
+    突變驗證（**逐一實跑過，不是推測**）：拿掉 `weighted_verdict` 裡
+    `_M <= 0 < _T` 那條短路 → 本條 44 個參數轉紅；用 `fb770b4` 的契約全檔跑 → 同樣轉紅。
+    """
+    _sup = weighted_verdict(
+        "t", score=score, obtained=list(_ALL_W), missing=[],
+        obtained_weight=sum(_ALL_W.values()), missing_weight=0.0,
+        family_weights={"f": 1.0}, band_of=phase_band, scale=PHASE_SCALE,
+        weight_per_band=PHASE_WEIGHT_PER_BAND,
+        round_to=1, score_tolerance=0.05)
+    assert (_sup.detail["reachable_low"], _sup.detail["reachable_high"]) == (score, score), (
+        f"沒有任何缺項，可及顯示值卻不是單點 {{{score}}}："
+        f"{_sup.detail['reachable_low']}～{_sup.detail['reachable_high']}")
+    assert _sup.sufficient, f"score={score}：0 項缺漏卻宣告證據不足 —— {_sup.reason}"
+
+
+def test_the_float_representation_must_not_decide_who_gets_greyed():
+    """**F-A1 的浮點不對稱**：`2.9` 型與 `4.9` 型必須有同一個結果。
+
+    `round(2.9 + 0.05, 1) == 2.9`（float 2.9499999999999997）
+    `round(4.9 + 0.05, 1) == 5.0`（float 4.95000000000000017…）
+    舊實作把兩個端點一視同仁地 round，於是**同一個邏輯情境**在 `2.9` 上放行、
+    在 `4.9` 上灰掉。本條把兩型都釘住，日後任何「只修一型」的改法都會被抓到。
+    突變驗證（**逐一實跑過**）：把 `_display_max_below` 的本體改回 `round()`
+    → 本條轉紅；用 `fb770b4` 的契約跑 → 轉紅（那份契約裡根本沒有這個函式）。
+    ⚠️ **拿掉 `_M <= 0 < _T` 短路本條不會轉紅** —— 它直接驗上界那個 helper，
+    而短路是另一半（可證性）。**兩半各有各的守衛，不要拿一條去替另一條背書。**
+    """
+    import shared.evidence_support as _es
+    _survivors = [_s for _s in _PHASE_TICKS
+                  if round(_s + 0.05, 1) == _s]          # 「2.9 型」
+    _victims = [_s for _s in _PHASE_TICKS
+                if round(_s + 0.05, 1) != _s]            # 「4.9 型」
+    assert 2.9 in _survivors and 3.9 in _survivors, "前提變了：2.9/3.9 不再是倖存型"
+    assert 4.9 in _victims and 6.4 in _victims, "前提變了：4.9/6.4 不再是中招型"
+    # 契約層：兩型的上界都必須是它自己（不可及的那一點不算進來）
+    for _s in (2.9, 3.9, 4.9, 6.4, 7.9):
+        assert _es._display_max_below(_s + 0.05, 1) == _s, (
+            f"{_s}+0.05 的**開**上界被算成 {_es._display_max_below(_s + 0.05, 1)}，"
+            f"而恰好等於 {_s + 0.05:.2f} 的真值會顯示成 {round(_s + 0.05, 1)}，"
+            f"不在 {_s} 的原像裡")
+
+
+def test_a_fully_obtained_day_is_never_greyed_by_the_rounding_widening():
+    """**F-A1 的行為版**：走**真的生產端**，28 顆全取到時沒有一格會灰。
+
+    這是使用者實際會撞到的那條路：`calc_macro_phase` → `support` → ①結論／卡 1／卡 5。
+    修復前實測（`fb770b4`）：`28 obtained, 0 missing` 之下 `4.9` 與 `7.9` 兩格
+    `sufficient=False`，①結論退成「⬜ 這次的資料撐不起任何結論」。
+    突變驗證（**逐一實跑過**）：用 `fb770b4` 的契約跑 → 本條轉紅。
+    ⚠️ **兩個單獨的突變（只拿掉短路／只拿掉開區間上界）本條都不會轉紅** ——
+    因為那兩半在這條路徑上互相遮蔽（上界修好之後低側就碰不到帶邊界）。
+    據實寫出來：本條守的是**兩半合起來的結果**，逐半的守衛在上面兩條。
+    """
+    _greyed = []
+    for _t in _PHASE_TICKS:
+        _ph = calc_macro_phase(_all_28_at(_t))
+        if not _ph["support"].sufficient:
+            _greyed.append((_ph["score"], _ph["support"].reason))
+    assert not _greyed, (
+        f"28 顆全取到（沒取到的權重 = 0）卻有 {len(_greyed)} 格被判證據不足："
+        f"{_greyed[:3]}")
+
+
+def test_the_reachable_upper_bound_is_half_open_not_closed():
+    """**F-A1 的通則**：上界是**開的** —— 恰好等於上界的真值不在原像裡。
+
+    `missing_weight > 0` 時同樣成立，只是不像 `missing_weight == 0` 那樣可以
+    整段短路。這裡直接構造一個上界**恰好落在進位分界上**的狀態：
+        T = 10.1、M = 0.1、score+tol = 4.9 ⇒ 可及上界 = 4.95（開）
+    閉區間讀法會把它 round 成 `5.0` 而跨過相位帶邊界 → 誤判「不足」；
+    開區間讀法給 `4.9`，與下界同帶 → 充足。
+    突變驗證：把 `_display_max_below(_hi, round_to)` 改回 `round(_hi, round_to)`
+    → 本條轉紅。
+    """
+    _sup = weighted_verdict(
+        "t", score=4.85, obtained=["a"], missing=["b"],
+        obtained_weight=10.1, missing_weight=0.1,
+        family_weights={"a": 1.0}, band_of=phase_band, scale=PHASE_SCALE,
+        weight_per_band=PHASE_WEIGHT_PER_BAND,
+        round_to=1, score_tolerance=0.05)
+    assert _sup.detail["reachable_high"] == 4.9, (
+        f"可及上界被算成 {_sup.detail['reachable_high']} —— 真值必須**嚴格小於** "
+        f"4.95，而 4.95 本身會顯示成 5.0，不在 4.9 的原像裡")
+    assert _sup.sufficient, _sup.reason
+
+
+#: **B1 的具體反例**（2026-09-04 第六輪稽核給的那一個，本組重現並抽成常數）：
+#: 28 顆缺 `PMI` 一項，其餘如下 → 顯示 `2.4 衰退`。
+#: 只拿掉 `round_to=` 時契約會說「充足」，而把 `PMI` 補成 `+2.0` 的**真實**實現
+#: 顯示 `3.0 復甦` —— 跨帶。上一輪的產生器只掃格點正中央，掃不到這個格內狀態。
+_B1_ROUND_TO_HOLE_SCORES: dict = {
+    "LEI": -1.0, "NFP": -1.0, "PERMIT_HOUSING": -0.5, "NEW_HOME": -0.5,
+    "CONSUMER_CONF": -0.5, "CPI": -0.5, "PPI": -0.5, "INFL_EXP_5Y": -1.0,
+    "UNEMPLOYMENT": -0.5, "JOBLESS": -0.5, "CONT_CLAIMS": -0.5, "SAHM": -1.5,
+    "M2": -1.0, "M2_WEEKLY": -1.0, "FED_BS": -1.0, "FED_RATE": -0.5,
+    "SLOOS": -1.364,
+}
+
+
+def _b1_hole_indicators() -> dict:
+    _sc = {_k: _B1_ROUND_TO_HOLE_SCORES.get(_k, 0.0)
+           for _k in _ALL_W if _k != "PMI"}
+    return _ind_from(_sc)
+
+
+def test_dropping_the_display_rounding_alone_opens_a_real_hole():
+    """**B1**：`round_to=` 是**行為性**的，不是只有結構意義（推翻上一輪的說法）。
+
+    這一條同時釘住兩件事：
+      1. **現行實作把這個狀態判為不足**（正確）——「缺 PMI、顯示 2.4 衰退」，
+         而 `PMI = +2.0` 的實現顯示 `3.0 復甦`。
+      2. **把 `round_to=` 拿掉就會放行它** —— 用 monkeypatch 直接示範，
+         所以這條測試在「有人為了簡化而刪掉那個參數」時會轉紅，
+         而不是只有在「參數名被改掉」時轉紅。
+    突變驗證：`_scored_verdict_support` 拿掉 `round_to=` → 本條轉紅。
+    """
+    _ind = _b1_hole_indicators()
+    _base = calc_macro_phase(_ind)
+    assert (_base["score"], _base["phase"]) == (2.4, "衰退"), (
+        f"前提不成立（換一組，不要 skip）：{_base['score']} {_base['phase']}")
+    _flip = dict(_B1_ROUND_TO_HOLE_SCORES)
+    _flip["PMI"] = _ALL_W["PMI"]
+    _alt = calc_macro_phase(_ind_from({_k: _flip.get(_k, 0.0) for _k in _ALL_W}))
+    assert (_alt["score"], _alt["phase"]) == (3.0, "復甦"), (
+        f"前提不成立：補上 PMI 之後應該跨帶，實得 {_alt['score']} {_alt['phase']}")
+    assert not _base["support"].sufficient, (
+        "缺 PMI 就能把「衰退」翻成「復甦」，契約卻說證據充足")
+
+
+def test_both_rounding_parameters_are_load_bearing_not_just_one(monkeypatch):
+    """**B1 的兩個方向**：任一參數被拿掉，上面那個狀態都會被錯放行。
+
+    `score_tolerance=` 早就有行為守衛
+    （`test_the_low_side_flip_that_producer_rounding_alone_does_not_catch`）；
+    本條補上 `round_to=` 缺席的那一半，並把**兩者**放在同一條裡，
+    讓「只保住一個」的改法也會轉紅。
+    """
+    import services.macro.evidence as _ev
+    import shared.evidence_support as _es
+    _orig = _es.weighted_verdict
+    for _drop in ("round_to", "score_tolerance"):
+        def _patched(_claim, __drop=_drop, **_kw):
+            _kw[__drop] = None if __drop == "round_to" else 0.0
+            return _orig(_claim, **_kw)
+        monkeypatch.setattr(_ev, "weighted_verdict", _patched)
+        _sup = calc_macro_phase(_b1_hole_indicators())["support"]
+        assert _sup.sufficient, (
+            f"前提不成立：拿掉 `{_drop}=` 之後這個狀態應該被**錯誤地**放行，"
+            f"若它本來就被擋住，本條就證明不了那個參數是承重的（reason={_sup.reason}）")
+        monkeypatch.undo()

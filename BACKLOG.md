@@ -68,6 +68,54 @@
 
 ---
 
+## ⏸ 已登記未做 — `mcp_server/tools_macro.py` 沒有證據支撐閘門（2026-09-04 第六輪稽核 B6）
+
+> **狀態：登記，不動工**（§-1：無 user 指派、無實際 bug 觸發）。
+> **不構成動工授權**，也**不得**被引用來發動一輪「把 support 接到所有消費端」的巡邏。
+
+`mcp_server/tools_macro.py::macro_snapshot` 直接回傳 `phase` / `verdict` / `action_light`
+三個判讀，**完全沒有經過 `support` 閘門** —— 也就是說：Tab① 從第三輪到第六輪
+連續修掉的那一整類（完全斷線畫成「擴張 5.0／股優於債」、零觀測宣告安全），
+**在 MCP 這條出口上原封不動還在**。
+
+- **實測事實（本輪唯讀查證，未改任何一行）**：該檔呼叫
+  `calc_macro_phase(ind)` / `composite_verdict(total)` / `macro_action_light(ind, phase_score)`，
+  取 `phase.get("score")` / `phase.get("phase")` 等欄位直接放進回傳 dict；
+  `calc_macro_phase` 回的 `support` 物件**沒有被讀**。
+- **為什麼本輪不修**：它在 Tab① 的所有權之外（第六輪稽核明列為 out of scope），
+  而且它的消費端是 MCP client 不是畫面 —— 「證據不足時要回什麼」是**介面契約**問題
+  （回 `null`？回帶 `insufficient` 旗標的欄位？）**需要客戶拍板**，屬 §8.4 步驟 4。
+- **總管推薦方案**：`support` 是 schema-additive 的側車，最小改法是在回傳 dict 裡
+  多一個 `evidence: {sufficient, reason}`，**不動任何既有欄位**（既有 client 零感）。
+  但這仍是介面變更，等客戶點名。
+- **⚠️ 在此之前，任何人引用 MCP 的總經輸出時，請知道它沒有這道閘門。**
+
+---
+
+## ⏸ 已登記 — F8 的可用性代價：一顆缺輸入會灰掉整列（2026-09-04 第六輪稽核 B7）
+
+> **狀態：登記存查，本輪不改**（第六輪稽核判定「fail-closed 且依規則正確」）。
+
+第五輪 F8 把②依據表的 📈中期 / 🎯短線 / ⚠️拐點 三列接上 `all_of` 規則
+（「都沒越線」是點名輸入的全稱話 ⇒ 缺一項就不能講），第六輪再把 📰新聞 一併遷移
+（F-A5）。**代價是可用性**：⚠️拐點那一列要 `SAHM` ＋ `10Y-2Y` ＋ `10Y-3M`
+＋ `LEI.ma3` ＋ `SLOOS` 五顆齊全，**任何一顆沒抓到整列就灰**。
+
+- **為什麼判定為可接受**：方向是 fail-closed，而被換掉的是「一顆就宣告全部沒事」——
+  後者是本批存在的理由那一類。
+- **不會有永久灰的列（本組查證方式：逐行讀生產端，**沒有跑線上資料**）**：
+  `services/macro/us_indicators.py` 算 `ma3` 那一行是
+  `v_ma3 = float(_ma3_valid.iloc[-1]) if len(_ma3_valid) >= 1 else v` ——
+  **序列短到算不出 MA3 時退回月度值 `v`**，所以 `LEI` 有值時 `ma3` 必有值。
+  ⚠️ 同一段的 `ma3_prev` **會**是 `None`（`len(_ma3_valid) >= 2` 才給），
+  但拐點桶讀的是 `ma3`（`beginner_view.py` 的 `_v("LEI", "ma3")`），不是 `ma3_prev`。
+  故不存在「某顆結構上永遠拿不到」而讓那一列恆灰的情形。
+- **⚠️ 沒有量過線上實際資料的缺漏分布** —— 也就是「實務上多久會灰一次」本輪不知道。
+  若客戶回報「這一列常常是灰的」，那是**規格層**的取捨（要不要退回逐項揭露
+  而非整列灰），須客戶拍板，不是 bug。
+
+---
+
 ## ⏸ 待審查 — 成長/通膨雙軸的第五象限「方向不明」（2026-09-04 稽核 F2 衍生）
 
 > **狀態：已登記，本輪不做。** F2 已在**卡片端**修好（打平不再被畫成方向），
@@ -143,8 +191,17 @@
 >   完全斷線現在由 support 攔下（①結論走灰態、②依據不給等級、五卡走灰態）。
 > - **第 3 段（正規化分母只算取到的指標）**：**算法一個字未動**，改的是
 >   「**這個分數撐不撐得起一個判讀**」現在有人回答了。門檻由實際權重表與位階分界
->   重新推導（`shared/signal_thresholds.py::MACRO_PHASE_MIN_TOTAL_WEIGHT`，
->   舊值 10.0 建立在一個**假前提**上，見該常數旁的推導）。
+>   重新推導（~~`shared/signal_thresholds.py::MACRO_PHASE_MIN_TOTAL_WEIGHT`，
+>   舊值 10.0 建立在一個**假前提**上，見該常數旁的推導~~
+>   → **2026-09-04 第六輪稽核 B3 就地更正：那個常數已於第五輪實體刪除，
+>   本行的指路自那一刻起是死的**（有意識的更正，不是漏刪）。
+>   **現行出處**：門檻由 `services/macro/evidence.py::PHASE_WEIGHT_PER_BAND`
+>   （＝ `PHASE_SCALE / PHASE_NARROWEST_BAND`，**導出不寫死**）與
+>   `MAX_CORRELATED_FAMILY_WEIGHT` 共同決定，判定實作在
+>   `shared/evidence_support.py::weighted_verdict` 的規則 (B)。
+>   舊值 10.0 為什麼是假前提，`shared/signal_thresholds.py` 的退役註解仍逐字保留。
+>   ⚠️ **這一筆的教訓比它本身重要**：刪一個常數的那一輪，**沒有回頭掃誰在指它** ——
+>   而 `.md` 裡的指路不會被 CI 或 pyflakes 抓到，只會靜靜地騙下一個讀者）。
 
 ### 缺陷（三段連鎖，缺一不可）
 

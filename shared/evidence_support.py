@@ -110,6 +110,27 @@ def _sorted(names) -> tuple[str, ...]:
     return tuple(sorted(str(n) for n in (names or ())))
 
 
+def _display_max_below(value: float, ndigits: int) -> float:
+    """真值**嚴格小於** `value` 時,`round(·, ndigits)` 可及的**最大顯示值**。
+
+    2026-09-04 第六輪稽核 F-A1。`weighted_verdict` 的可及真值區間上界是**開的**:
+    它是「顯示值 `score` 的原像」的上界,而**恰好等於**該上界的真值會被顯示成
+    `score + 一格`,所以它**不在**這個顯示值的原像裡。舊版把兩個端點一視同仁
+    地 `round()`,等於把那個不可及的點也算進來 —— 上界因此多了整整一格。
+
+    顯示值 `d` 的原像是 `[d - step/2, d + step/2)`。若 `value` 就落在 `d` 的原像
+    **下緣**(`value ≤ d - step/2`),那麼所有嚴格小於 `value` 的真值都只顯示得到
+    `d` 的前一格;否則答案就是 `d` 本身。
+    ⚠️ 比較用**相對容差**吸收浮點誤差:`value` 由除法算出,`d - value` 在分界點上
+    只會是 `step/2 ± 1e-16` 等級,而分界點附近本來就該從嚴退一格(fail-closed)。
+    """
+    _step = 10.0 ** -int(ndigits)
+    _d = round(float(value), int(ndigits))
+    if _d - float(value) >= _step / 2.0 * (1.0 - 1e-9):
+        return round(_d - _step, int(ndigits))
+    return _d
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 規則 1 —— 點名了特定輸入的宣稱
 # ══════════════════════════════════════════════════════════════════════
@@ -251,6 +272,11 @@ def weighted_verdict(claim: str, *, score: float,
         ⇒ `round_to=` 讓兩個界**用生產端同一個方式 round 之後**才去問 `band_of`。
         (`round` 單調不遞減 ⇒ 最小/最大顯示值 = 最小/最大真值各自 round 的結果,
          所以只要 round 兩個端點就夠,不必掃中間。)
+        ⚠️ **上界是開的**(2026-09-04 第六輪稽核 F-A1):`score + tol` 這個真值
+        自己會顯示成 `score + 一格`,**不在 `score` 的原像裡** ⇒ 用
+        `_display_max_below` 取「嚴格小於上界」能達到的最大顯示值。
+        而 `missing_weight == 0` 時可及真值就是 `score` 自己的原像,
+        **可及顯示值可證恆為 `{score}`**,直接短路(見下方 `if round_to`)。
 
     兩個誤差各 ±0.5·10^-k,**在帶邊界上會疊起來**。實證(相位帶邊界 3/5/8):
     28 項只缺 `UNEMPLOYMENT`(權重 0.5)一項,顯示 `4.9 復甦`、
@@ -274,9 +300,26 @@ def weighted_verdict(claim: str, *, score: float,
     _lo = min(max(_lo, 0.0), float(scale))
     _hi = min(max(_hi, 0.0), float(scale))
     if round_to is not None:
-        # `round` 單調不遞減 ⇒ 最小/最大**顯示值** = 最小/最大真值各自 round 後的值。
-        _lo = round(_lo, round_to)
-        _hi = round(_hi, round_to)
+        if _M <= 0 < _T:
+            # ── 2026-09-04 第六輪稽核 F-A1(🔴 回歸)──────────────────────
+            # **沒取到的權重是 0 ⇒ 可及的顯示值集合恆等於 `{score}`,不必也不可
+            # 再 round 一次。** 這是可證的,不是抽樣結論:此時沒有任何缺項貢獻,
+            # 可及的**真值**就是 `score` 自己的原像 `[score-tol, score+tol)`,
+            # 而那個集合依定義每一點都 round 回 `score`。
+            # 舊版照走下面那條「兩個端點各自 round」的路,於是把原像的兩個端點
+            # 誤判成鄰格 —— 而且**結果隨浮點表示而異**:`round(2.9+0.05,1)==2.9`
+            # (float 2.9499999…)但 `round(4.9+0.05,1)==5.0`(float 4.95000…),
+            # 於是 28 項全取到的健康日,4.9 與 7.9 被灰掉、2.9 與 3.9 沒事。
+            # 同一個邏輯情境兩種結果,本身就是「界算錯了」而不是「保守了一點」。
+            _lo = _hi = round(float(score), round_to)
+        else:
+            # `round` 單調不遞減 ⇒ 最小/最大**顯示值** = 最小/最大真值各自
+            # round 後的值。**但上界是開區間**:恰好等於 `_hi` 的真值會顯示成
+            # 「再高一格」,不在 `score` 的原像裡 ⇒ 走 `_display_max_below`。
+            # 下界**刻意維持閉區間**(從嚴):`score - tol` 在四捨五入的
+            # 慣例(half-up)下確實顯示成 `score`,把它算進來是 fail-closed。
+            _lo = round(_lo, round_to)
+            _hi = _display_max_below(_hi, round_to)
     _band = band_of(score)
     _invariant = (band_of(_lo) == _band == band_of(_hi))
     _max_fam = max(family_weights.values()) if family_weights else 0.0

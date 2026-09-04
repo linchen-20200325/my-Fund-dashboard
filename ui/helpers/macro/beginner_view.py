@@ -563,9 +563,43 @@ def compute_five_bucket_summary(
         }
         return _summary
 
+    # ── 2026-09-04 第六輪稽核 F-A5 ───────────────────────────────────
+    # **`fetch_market_news` 在完全抓不到時回的不是空 list,是一則佔位訊息**
+    # (`source="system"`、`is_systemic=False`)。舊版把它當成一則新聞數進去:
+    #     news bucket -> {'level':'green','label':'無系統風險',
+    #                     'headline':'1 則新聞掃描,無系統性風險'}
+    # —— **零觀測換來一盞綠燈,外加一個捏造的則數**,正是本批要根除的那一類。
+    # (`news_items=[]` 也是同一個形狀:0 則觀測 → 綠燈「掃描完成,無命中」。)
+    #
+    # 「無系統風險」是一句**對新聞來源的全稱宣稱**,依本批已經套在
+    # 📈中期／🎯短線／⚠️拐點 三列上的同一條 `all_of` 規則,**沒有任何實際觀測
+    # 就不能講**。⚠️ 紅／黃是**存在性**宣稱(至少一則越線),照舊由半套證據升警
+    # —— 一個字都沒改(佔位訊息本來就 `is_systemic=False`,不影響那兩支)。
+    #
+    # 判別方式用 `source == "system"`:真的新聞一律帶 feed 名(MarketWatch /
+    # BBC World …),佔位訊息才是 `system`。**刻意不解析標題的表情符號** ——
+    # 那是會漂移的呈現細節,而 `source` 是結構欄位。
+    # ⚠️ 本輪**不動 L1**(`repositories/news_repository.py`):它自己的檔頭已登記
+    # 「UI 端遷移屬 L3、不在該輪所有權內」,而本列正是那個 L3 遷移。
+    _real_items = [n for n in (news_items or [])
+                   if isinstance(n, dict) and n.get("source") != "system"]
+    if not _real_items:
+        # 一則真的新聞都沒有 → 不下綠燈,也不報一個不存在的則數。
+        # headline 用佔位訊息**自己寫的**理由(它才分得出「來源無回應」與
+        # 「來源正常但未命中關鍵字」),消費端不自己編一句。
+        _ph = next((n for n in (news_items or []) if isinstance(n, dict)), None)
+        _summary["news"] = {
+            "level": "gray", "label": "資料不足",
+            "headline": (str((_ph or {}).get("title") or "").strip()
+                         or "0 則新聞可掃描") + " —— 未觀測到任何新聞，故不宣告無系統風險",
+            "color": _level_to_color["gray"], "emoji": _level_to_emoji["gray"],
+            "spec_key": "news_systemic",
+        }
+        return _summary
+
     # 數 is_systemic 命中(對齊 news_repository.SYSTEMIC_RISK_KEYWORDS 標記)
     try:
-        _sys_count = sum(1 for n in news_items
+        _sys_count = sum(1 for n in _real_items
                          if isinstance(n, dict) and n.get("is_systemic"))
     except Exception:
         _sys_count = 0
@@ -586,9 +620,8 @@ def compute_five_bucket_summary(
         _n_headline = f"🚨 {_sys_count} 則系統性風險新聞,留意"
     else:
         _n_level, _n_label = "green", "無系統風險"
-        _n_total = len(news_items)
-        _n_headline = (f"{_n_total} 則新聞掃描,無系統性風險" if _n_total > 0
-                       else "新聞掃描完成,無命中")
+        # 則數只數**真的新聞**(佔位訊息已在上面攔掉,這裡必 > 0)。
+        _n_headline = f"{len(_real_items)} 則新聞掃描,無系統性風險"
 
     _summary["news"] = {
         "level": _n_level, "label": _n_label, "headline": _n_headline,

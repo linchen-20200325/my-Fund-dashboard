@@ -150,12 +150,34 @@ class TestExceptionLayerOnlyListsRealExceptions:
         assert len(_lines) == 1
 
     def test_missing_or_broken_inputs_do_not_fabricate_an_exception(self):
-        """§1 邊界:沒資料 ≠ 有例外。None / 空 dict / 型別不對都回空 list,
-        不得憑空生出一條警示。"""
-        from ui.tab1_macro import _exception_lines
+        """§1 邊界:沒資料 ≠ 有例外 —— **不得憑空生出一條警示**。
+
+        ⚠️ **2026-09-04 第六輪稽核 B5 就地更新斷言(有意識的更正,不是漏刪)**:
+        原本三種輸入一律 `== []`:
+            ~~for _sum in (None, {}, "boom"): assert _exception_lines(...) == []~~
+        `None` 與非 dict 兩支**一字未改**(仍必須是空 list)。
+        改的只有 `{}` 那一支:空 dict 代表「② 出來了、但兩個桶都沒有讀數」,
+        B5 之後那會產出**一條誠實揭露**(「這幾列這次判不出來」)——
+        它不是警示,它存在的理由正好相反:防止 ③ 印出
+        「拐點桶與新聞桶也都不在警戒狀態」這句**從未檢查的輸入宣告安全**的話。
+        **本測試原本的意圖(不得憑空生出警示)照舊守著**,而且守得更死 ——
+        下面改成逐字檢查「**警示**那一條不得出現」,而不是只看 list 長度。
+        """
+        from ui.tab1_macro import (
+            _BUCKET_ALERT_POINTER_HEAD, _BUCKET_UNJUDGED_POINTER_HEAD,
+            _exception_lines,
+        )
         for _srd in (None, {}, "boom", []):
-            for _sum in (None, {}, "boom"):
-                assert _exception_lines(_srd, _sum) == []
+            for _sum in (None, "boom"):
+                assert _exception_lines(_srd, _sum) == [], (_srd, _sum)
+            _empty = _exception_lines(_srd, {})
+            _joined = "".join(_empty)
+            assert _BUCKET_ALERT_POINTER_HEAD not in _joined, (
+                f"憑空生出一條警示：{_empty!r}")
+            assert "新聞系統性風險" not in _joined, _empty
+            # 而且**必須**說出「判不出來」——不得沉默地讓 ③ 印那句 ✅
+            assert _BUCKET_UNJUDGED_POINTER_HEAD in _joined, (
+                f"兩個桶都沒有讀數，③ 卻一句話都不說：{_empty!r}")
 
     def test_hint_text_is_not_retyped_in_this_layer(self, monkeypatch):
         """§3.3:指路字串必須走 `section_hint`(桶→區段名的鏡像表),
@@ -274,3 +296,40 @@ class TestCompassRemoved:
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 第六輪稽核 B5：③ 例外層對「灰桶」的處理
+#
+# 實測（`fb770b4`，拐點桶 `gray / 資料不足`）：`_exception_lines(...) == []`
+# → ③ 照樣印「✅ 新聞系統性風險未達警戒等級，**拐點桶與新聞桶也都不在警戒狀態**」
+# —— 一句**從未檢查的輸入宣告安全**的話（§1），與本批其餘七處是同一類。
+# 舊條件只看 `level in ("yellow","red")`，而**灰既不是黃也不是紅**。
+# ⚠️ 本輪的 F-A5（新聞桶零觀測改灰）會增加餵進這裡的灰狀態 → 一併修，不只登記。
+# ════════════════════════════════════════════════════════════════════════
+class TestGreyBucketsAreNotSweptIntoTheAllClear:
+    """灰桶不得被「都不在警戒狀態」那句吸收掉。"""
+
+    def test_a_grey_bucket_stops_the_all_clear_sentence(self):
+        """突變驗證：把 `_unjudged_keys` 的條件改成恆空 → 本條轉紅。"""
+        from ui.tab1_macro import _BUCKET_UNJUDGED_POINTER_HEAD, _exception_lines
+        _b = {"inflection": {"level": "gray", "label": "資料不足"},
+              "news": {"level": "green", "label": "無系統風險"}}
+        _lines = _exception_lines(_CALM_RISK, _b)
+        assert _lines, "拐點桶是灰的，③ 卻一句話都不說 —— ✅ 那句會照印"
+        _joined = "".join(_lines)
+        assert _BUCKET_UNJUDGED_POINTER_HEAD in _joined, _lines
+        assert "拐點" in _joined, _lines
+        assert "新聞" not in _joined, f"綠燈那一桶不該被列進去：{_lines!r}"
+
+    def test_two_green_buckets_still_produce_no_lines(self):
+        """反方向：兩桶都真的綠 → 照舊回空 list，✅ 那句才印得出來。"""
+        from ui.tab1_macro import _exception_lines
+        assert _exception_lines(_CALM_RISK, _CALM_BUCKETS) == []
+
+    def test_an_unknown_future_level_falls_to_the_unjudged_branch(self):
+        """fail-closed：多一種燈號時要落到「判不出來」，不得悄悄變成 all-clear。"""
+        from ui.tab1_macro import _BUCKET_UNJUDGED_POINTER_HEAD, _exception_lines
+        _b = {"inflection": {"level": "chartreuse"}, "news": {"level": "green"}}
+        assert _BUCKET_UNJUDGED_POINTER_HEAD in "".join(
+            _exception_lines(_CALM_RISK, _b))

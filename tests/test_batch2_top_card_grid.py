@@ -115,8 +115,8 @@ _CALM_VALUES: dict = {
     "CPI": 2.5, "PPI": 2.0, "FED_RATE": 2.0,
     "ADL": 1.0, "CONSUMER_CONF": 85.0, "JOBLESS": 22.0, "COPPER": 3.0,
 }
-#: 各 key 的 score —— **刻意全部用同一個溫和正值**，讓合成分數落在
-#: 「擴張」帶(5~8)的**中央**(實測 6.5)而不是邊緣。
+#: 各 key 的 score 圍繞的**中心值** —— 讓合成分數落在「擴張」帶(5~8)的
+#: **中央**(實測 6.5)而不是邊緣。
 #: ⚠️ 這一點是**測試設計**，不是隨手填的：新的充足性規則之一是
 #: 「沒取到的權重的任何一種實現都必須落在同一條相位帶」——
 #: 分數若貼著 8.0 邊界(舊 fixture 給出 8.4)，**拿掉任何一顆指標都會跨帶**，
@@ -124,9 +124,26 @@ _CALM_VALUES: dict = {
 #: 測不到它真正要測的「點名輸入缺一個」。
 _CALM_SCORE: float = 0.3
 
+#: ⚠️ **2026-09-04 第六輪稽核 B4：`score` 不再是「全部同一個值」。**
+#: 舊版 28 顆全給 `_CALM_SCORE`，於是整批「充足」fixture 只落在**一個**合成
+#: 分數上(6.5)——**而 6.5 正好是「會被灰掉的 6.4」的上面一格**，
+#: F-A1 那一整類缺陷因此完全躲在 fixture 後面。
+#: 現在改成繞著中心值的一組**互相抵銷**的偏移(和為 0 ⇒ 合成分數仍是 6.5，
+#: 既有斷言零變更)，加上 `_fake_indicators(score_target=...)` 可以指定別的分數，
+#: 並由 `test_the_card_grid_holds_across_the_whole_score_range` 掃過整條 0~10。
+#: **偏移幅度刻意 ≤ 0.15**：最小權重是 0.5，`0.3 ± 0.15` 不會被生產端 clamp，
+#: 否則「和為 0」會被 clamp 破壞、合成分數就不再是 6.5 了。
+_CALM_SCORE_OFFSETS: tuple[float, ...] = (+0.15, -0.15, +0.05, -0.05)
 
-def _fake_indicators() -> dict:
+
+def _fake_indicators(score_target: "float | None" = None) -> dict:
     """一組「資料充足」的指標 —— **28 個 key 全到齊**，由權重 SSOT 生成。
+
+    `score_target`：想讓 `calc_macro_phase` 合成出哪個 0~10 分數。
+    `None` ＝ 沿用預設(實測 6.5，落在「擴張」帶中央)。
+    ⚠️ **近似,不是精確命中**:每顆的 score 會被 clamp 在 `[-w, w]`,
+    所以靠近 0 / 10 兩端時實得分數會被拉回來(實測 `target=0.0 → 1.0`)。
+    要用它的測試請斷言**實得**分數，不要斷言 target。
 
     ⚠️ 2026-09-04 **第四輪**稽核 R4-F1/F6：本 fixture 原本只有 **10 個指標、
     權重合計 12.5**，並自稱「資料充足」。在**重新推導過的**門檻下它撐不住：
@@ -140,16 +157,35 @@ def _fake_indicators() -> dict:
     邊界上」這種事，也不必再有人手動維護筆數。
 
     性質（測試依賴這幾點，改動前請先讀）：
-      · **28 個 key 全在** → 沒取到的權重 = 0 → 任何充足性規則都過；
+      · **28 個 key 全在** → 沒取到的權重 = 0 → 相位帶與買賣燈帶的不變性都成立；
+        ⚠️ **2026-09-04 第六輪稽核 B4：這一句在 `fb770b4` 上是假的。**
+        F1 的加寬把可及區間的**上界**多算了一格，於是「28 顆全在、0 顆缺漏」
+        的狀態照樣會被判不足(實測:合成分數 4.9 與 7.9 兩格)。
+        本句今天成立，靠的是 F-A1 的修法
+        (`shared/evidence_support.weighted_verdict` 裡 `_M <= 0 < _T` 那條短路，
+        它把「沒取到的權重為 0 ⇒ 可及顯示值恆為 `{score}`」寫成**可證**的短路，
+        而不是靠兩個端點各自 round 碰運氣)。
+        ⚠️ 也**不要**把它讀成「任何充足性規則都過」——
+        那是一句對**未來規則**的全稱話，本 fixture 擔保不起。
+        支配性條件(單一相關族不得說了算)就與缺漏無關，是靠 28 顆的權重總量過的。
       · 四個 override 輸入（`YIELD_10Y2Y` / `YIELD_10Y3M` / `SAHM` / `VIX`）
         **全部有值且遠離門檻** → 卡 5 的綠燈有資格宣稱「均未觸發」；
       · 兩軸訊號同向 → 象限定得出方向（不是打平）。
     """
-    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    _centre = _CALM_SCORE
+    if score_target is not None:
+        # `norm = (earned + T) / (2T) * 10` ⇒ earned = (target/10*2-1)*T，
+        # 平均分攤到 28 顆(再疊上偏移)。
+        _tw = sum(_W.values())
+        _centre = (float(score_target) / 10.0 * 2 - 1) * _tw / len(_W)
     _ind: dict = {}
-    for _k, _w in MACRO_INDICATOR_SCORING_WEIGHTS.items():
-        _node = {"value": _CALM_VALUES.get(_k, 1.0), "weight": _w,
-                 "score": _CALM_SCORE}
+    for _i, (_k, _w) in enumerate(_W.items()):
+        # B4：偏移繞著中心值，**和為 0** ⇒ 合成分數不變，但每顆的 score 不同，
+        # 「所有 fixture 都落在同一個魔術數字上」那個盲區沒有了。
+        _sc = _centre + _CALM_SCORE_OFFSETS[_i % len(_CALM_SCORE_OFFSETS)]
+        _sc = max(-_w, min(_w, _sc))          # 與生產端同樣先 clamp
+        _node = {"value": _CALM_VALUES.get(_k, 1.0), "weight": _w, "score": _sc}
         if _k == "ADL":       # 雙軸讀的是 `prev`（月變動 %），不是 `value`
             _node["prev"] = 1.0
         _ind[_k] = _node
@@ -2898,28 +2934,62 @@ def test_the_producer_withholds_the_all_clear_sentence_instead_of_the_whole_verd
         assert "均未觸發" in "；".join(_full["reasons"])
 
 
-def test_the_action_light_band_matches_its_own_if_chain():
-    """漂移鎖：`action_light_band()` ≡ `macro_action_light` 實際用的三段切點。
+#: 買賣燈三段切點的**獨立**字面值 —— 出處是 `services/macro/action_light.py`
+#: 的模組 docstring（「≥ 6.5 → 🟢 可加碼；4.0~6.5 → 🟡 持有；< 4.0 → 🔴 減碼」，
+#: user 2026-07-05 批准的草案）。**刻意不 import `_BUY_SCORE_10` / `_HOLD_SCORE_10`**：
+#: 漂移鎖的兩邊必須是兩個真相源，否則它鎖不住任何東西（見下方測試的更正註）。
+#: 要改切點 ⇒ 常數、docstring、本 tuple 三者一起改，改一個就轉紅。
+_DECLARED_LIGHT_CUTS: tuple[float, float] = (4.0, 6.5)
 
-    證據會計現在拿**買賣燈自己的帶**去問「這盞燈撐不撐得住」；那個帶函式
-    若與實際 if-chain 分岔，閘門就在替另一盞燈背書。
-    突變驗證：把 `action_light_band` 的 `_BUY_SCORE_10` 改成別的數 → 轉紅。
+
+def test_the_action_light_band_matches_its_own_if_chain():
+    """漂移鎖：`action_light_band()` ≡ **獨立宣告的**三段切點 ≡ 產出端實際發的燈。
+
+    ⚠️ **2026-09-04 第六輪稽核 F-A4：本條原本是套套邏輯，已就地改寫**
+    （有意識的更正，不是漏刪）。舊版寫
+        ~~`assert _al["light"] == action_light_band(_s)`~~
+    而 `macro_action_light` 產生 `_al["light"]` 的方式**就是呼叫 `action_light_band`**
+    —— 迴圈在拿函式跟它自己比。舊版最後那句 `ACTION_LIGHT_NARROWEST_BAND == min(...)`
+    同樣是把生產端的推導式在測試裡**再算一次**，兩邊永遠相等。
+    舊 docstring 宣稱「把 `_BUY_SCORE_10` 改成別的數 → 轉紅」，**實測不會**
+    （稽核 M13：四個批次測試檔 372 passed 全綠）。
+    ⚠️ 那個常數**本來就有**守衛（`tests/test_macro_action_light.py` 用 7.2 / 5.0 / 2.0
+    三個獨立字面值釘住三段），所以本條的問題是**假守衛**，不是漏了守衛。
+
+    現行：兩邊各自獨立 ——
+      · `_DECLARED_LIGHT_CUTS` 是從模組 docstring / 客戶拍板草案抄下來的字面值；
+      · `action_light_band` 與 `macro_action_light` 是實作。
+    突變驗證：把 `_BUY_SCORE_10` 或 `_HOLD_SCORE_10` 改成別的數 → 本條轉紅。
     """
     from services.macro.action_light import (
         ACTION_LIGHT_BAND_EDGES, ACTION_LIGHT_NARROWEST_BAND, action_light_band,
     )
     from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    _hold, _buy = _DECLARED_LIGHT_CUTS
+
+    def _declared(_s: float) -> str:
+        """獨立參考實作 —— 只吃 `_DECLARED_LIGHT_CUTS`，不碰生產端常數。"""
+        return "🟢" if _s >= _buy else ("🟡" if _s >= _hold else "🔴")
+
+    assert tuple(ACTION_LIGHT_BAND_EDGES) == _DECLARED_LIGHT_CUTS, (
+        f"生產端切點 {tuple(ACTION_LIGHT_BAND_EDGES)} 與宣告的 "
+        f"{_DECLARED_LIGHT_CUTS} 分岔 —— 若這是有意的改動，"
+        f"請同步改 `action_light.py` 的模組 docstring 與本測試的 tuple")
+    # 邊界本身（含切點上那一格）逐點釘死，不只掃 0.1 格
+    for _s in (0.0, 3.9, 3.99, _hold, 4.01, 5.0, 6.49, _buy, 6.51, 10.0):
+        assert action_light_band(_s) == _declared(_s), (
+            f"score={_s}: 帶函式給 {action_light_band(_s)}，"
+            f"宣告的切點給 {_declared(_s)}")
     for _i in range(0, 101):
         _s = _i / 10.0
-        # 用一顆權重最大的指標把分數擺到 _s：走真的 `macro_action_light`
+        # 走真的 `macro_action_light`（override 四項全部遠離門檻 → 燈完全由位階決定）
         _al = _real_action_light({"PMI": {"value": 1.0, "weight": _W["PMI"],
                                           "score": 0.0}}, _s)
-        assert _al["light"] == action_light_band(_s), (
-            f"score={_s}: if-chain 給 {_al['light']}，帶函式給 {action_light_band(_s)}")
+        assert _al["light"] == _declared(_s), (
+            f"score={_s}: if-chain 給 {_al['light']}，宣告的切點給 {_declared(_s)}")
     assert ACTION_LIGHT_NARROWEST_BAND == min(
-        ACTION_LIGHT_BAND_EDGES[0],
-        ACTION_LIGHT_BAND_EDGES[1] - ACTION_LIGHT_BAND_EDGES[0],
-        10.0 - ACTION_LIGHT_BAND_EDGES[1]), "最窄帶不是從邊界導出的"
+        _hold, _buy - _hold, 10.0 - _buy), (
+        f"最窄帶 {ACTION_LIGHT_NARROWEST_BAND} 與宣告切點導出的不符")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -3004,3 +3074,282 @@ def test_the_alarm_carve_out_does_not_leak_into_the_extreme_risk_card():
     assert "缺 VIX" in _c5["note"], _c5["note"]
     # 同一個狀態下，①結論的警報**仍然活著**（兩件事互不吃掉）
     assert tab1_macro._conclusion_line_state(_al)[0] == "🔴"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第六輪**稽核 F-A3（🟠）：這一批的招牌新機制**零行為守衛**
+#
+# 把 `action_light_support` 的 `combine(...)` 裡的 `_light_band` 整條刪掉 ——
+# 也就是**移除本批新增的買賣燈帶條件** —— 四個批次測試檔 372 passed、
+# fast lane 6975 passed，與乾淨版**逐字相同**。而那個突變在行為上是活的。
+#
+# 前五輪每一個缺陷都是在**這個條件**下走到稽核手上的：一個活的機制，
+# 整套測試感覺不到它。故補一條真的會被它翻掉的行為守衛。
+#
+# ⚠️ 判別狀態要挑對：`_light_band`（切點 4.0 / 6.5）與 `phase_support`
+#    （相位帶 3 / 5 / 8）**只有在一個帶內、另一個帶外**時才分得出來。
+#    `_HOLD_SCORE_10 = 4.0` 落在相位帶「復甦」(3~5) 的**內部**，
+#    所以「可及區間 3.9～4.4」正好：相位帶全在「復甦」，燈卻從 🔴 橫跨到 🟡。
+# ⚠️ 第五輪 F1 的例子（顯示 6.4）在第六輪 F-A1 修好之後**不再是判別狀態**
+#    （28 顆全到齊時可及顯示值恆為 `{6.4}`，兩條帶都不變）—— 本檔改用下面
+#    這個「缺一顆 LEI」的狀態，它在 F-A1 修好之後依然活著。
+# ════════════════════════════════════════════════════════════════════════
+#: 缺 `LEI` 一項、其餘 27 項如下 → 顯示 `4.1 復甦`、燈 🟡。
+#: 可及區間 3.9～4.4：**相位帶不變**（全在「復甦」）、**買賣燈帶會翻**（🔴↔🟡）。
+_LIGHT_BAND_ONLY_SCORES: dict = {
+    "PMI": -2.0, "NFP": -1.0, "PERMIT_HOUSING": -0.5, "NEW_HOME": -0.5,
+    "CONSUMER_CONF": -0.5, "CPI": -0.36,
+}
+
+
+def _light_band_only_ind() -> dict:
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    return {_k: dict(value=_CALM_OVERRIDE_VALUES.get(_k, 1.0), weight=_W[_k],
+                     score=_LIGHT_BAND_ONLY_SCORES.get(_k, 0.0))
+            for _k in _W if _k != "LEI"}
+
+
+def test_the_action_light_band_condition_is_the_only_thing_holding_this_state():
+    """**F-A3**：買賣燈帶那條新條件被刪掉 → 本條轉紅。
+
+    這個狀態裡另外兩半**都成立**（四項點名輸入全在、相位帶不變），
+    唯一擋住它的就是買賣燈自己的帶。所以它是那條件的**充分必要**見證：
+      · 條件在 → ①結論 ⬜、卡 5 讀的 `no_trigger_support` 不足；
+      · 條件刪掉 → 兩者都變成「撐得住」，畫面照出 🟡 持有。
+    突變驗證：`services/macro/evidence.py::action_light_support` 的
+    `combine(...)` 拿掉 `_light_band` → 本條轉紅。
+    """
+    from services.macro.action_light import (
+        ACTION_LIGHT_NARROWEST_BAND, action_light_band,
+    )
+    from services.macro.evidence import (
+        action_light_score_support, phase_support as _phase_support,
+    )
+    _ind = _light_band_only_ind()
+    _phase = _real_calc_macro_phase(_ind)
+    assert (_phase["score"], _phase["phase"]) == (4.1, "復甦"), (
+        f"前提不成立（換一組，不要 skip）：{_phase['score']} {_phase['phase']}")
+
+    _al = _real_action_light(_ind, _phase["score"])
+    assert _al["light"] == "🟡" and not _al["override"], (
+        f"前提：這要是一盞由位階決定的 🟡（實得 {_al['light']}，"
+        f"override={_al['override']}）")
+    # ── 另外兩半都成立，所以擋住它的只可能是買賣燈帶那一條 ──
+    assert _al["all_clear_support"].sufficient, "前提：四項點名輸入全在"
+    assert _phase_support(_ind, _phase["score"]).sufficient, (
+        "前提：相位帶（3/5/8）在這個狀態下不變 —— 它擋不住這一格")
+    _lb = action_light_score_support(
+        _ind, _phase["score"], band_of=action_light_band,
+        narrowest_band=ACTION_LIGHT_NARROWEST_BAND)
+    assert not _lb.sufficient, (
+        f"前提：買賣燈帶（4.0/6.5）在這個狀態下會翻 —— 實得 {_lb.detail}")
+
+    # ── 真正的斷言：兩個消費端都必須因此收手 ──
+    assert not _al["support"].sufficient, (
+        "缺一顆 LEI 就能把這盞燈從 🟡 打成 🔴（可及 "
+        f"{_lb.detail['reachable_low']}～{_lb.detail['reachable_high']}），"
+        "①結論卻宣告證據充足 —— 買賣燈帶那條件沒有接上")
+    assert not _al["no_trigger_support"].sufficient, (
+        "卡 5 讀的那份 support 也必須收手（同一個帶）")
+    _light, _lines = tab1_macro._conclusion_line_state(_al)
+    assert _light == "⬜", (
+        f"①結論照樣出了 {_light}，而那盞燈缺一顆指標就會翻色")
+    # ⚠️ 不能用「文字裡有沒有 🟡」判斷：灰態的理由句**本來就會**寫
+    # 「橫跨「🔴」到「🟡」」—— 那是在解釋為什麼撐不住，不是在下判讀。
+    # 要驗的是**沒有把那盞燈當成結論端出去**：不給行動建議。
+    _txt = "\n".join(_lines)
+    assert _al["action"] not in _txt, f"灰態卻照樣印了加減碼建議：{_txt!r}"
+    assert "撐不起任何結論" in _txt, _txt
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第六輪**稽核 F-A2（🟠）：政策豁免的 🔴 印了一句沒有支撐的分數
+#
+# 實測（`fb770b4`，只取到 PMI = −2.0 一項）：
+#     displayed score 0 衰退 | phase support sufficient: False
+#     ①結論: 🔴 減碼 —— 景氣位階偏弱,拉高現金水位
+#            - 景氣位階 0.0/10                 ← 沒有支撐，照印
+#            - ⬜ 這句話點名了 4 項輸入，實際只取到 0 項（缺 …）
+#     卡 1  : ⬜ 資料不足                       ← 同一顆分數，就在正下方拒絕印
+# **同一個畫面上兩個標準。**
+# 🔴 本身是對的（政策豁免，第五輪 F2 明白要求留下警報）——
+# 要扣掉的只有引用了那顆分數的**那一句**，正是本批自己寫的原則。
+# ════════════════════════════════════════════════════════════════════════
+def test_a_carved_out_red_does_not_print_a_phase_score_it_cannot_support():
+    """**F-A2**：警報留著，但沒有支撐的「景氣位階 N/10」不准印。
+
+    突變驗證：把 `macro_action_light` 的 `_reasons[0]` 改回無條件
+    `f"景氣位階 {phase_score_10:.1f}/10"` → 本條轉紅。
+    """
+    from services.macro.evidence import (
+        MACRO_INDICATOR_SCORING_WEIGHTS as _W, phase_support as _phase_support,
+    )
+    _ind = {"PMI": dict(value=1.0, weight=_W["PMI"], score=-2.0)}
+    _phase = _real_calc_macro_phase(_ind)
+    assert (_phase["score"], _phase["phase"]) == (0, "衰退"), _phase["score"]
+    _sup = _phase_support(_ind, _phase["score"])
+    assert not _sup.sufficient, "前提：這顆分數撐不住（28 取 1）"
+
+    _al = _real_action_light(_ind, _phase["score"])
+    assert _al["light"] == "🔴" and not _al["override"], (
+        f"前提：位階偏弱造成的 🔴（實得 {_al['light']}）")
+    # (1) 警報要活下來 —— 第五輪 F2 的方向不得被本修正逆轉
+    _light, _lines = tab1_macro._conclusion_line_state(_al)
+    assert _light == "🔴", f"把警報一起扣掉了（F2 回歸）：{_light!r}"
+    _txt = "\n".join(_lines)
+    assert _al["action"] in _txt, "警報活下來了，但沒印減碼建議"
+    # (2) 那一句沒有支撐的分數不准印
+    assert "景氣位階 0.0/10" not in _txt, (
+        f"印了一個卡 1 就在正下方拒絕印的分數：{_txt!r}")
+    assert not any(_r.startswith("景氣位階 ") and "/10" in _r
+                   for _r in _al["reasons"]), _al["reasons"]
+    # (3) 要說得出為什麼扣掉，而且用的是**產出端同一份 reason**（不得自己編一句）
+    assert _sup.reason in _txt, f"扣掉了，但沒說為什麼：{_txt!r}"
+
+
+def test_a_supported_phase_score_is_still_printed():
+    """反方向：撐得住的時候照印 —— 本修正不得把好的那一支一起關掉。"""
+    _ind = _bearish_ind()                      # 28 項全在、全空頭
+    _phase = _real_calc_macro_phase(_ind)
+    from services.macro.evidence import phase_support as _phase_support
+    assert _phase_support(_ind, _phase["score"]).sufficient, "前提：28 項全在"
+    _al = _real_action_light(_ind, _phase["score"])
+    assert _al["light"] == "🔴" and not _al["override"], _al["light"]
+    assert any(_r == f"景氣位階 {_phase['score']:.1f}/10" for _r in _al["reasons"]), (
+        f"撐得住卻不印分數了：{_al['reasons']}")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第六輪**稽核 F-A5（🟠）：F8 的「三列一起遷移，不留第二個標準」
+#                                        漏掉了②依據表的第 4 列（📰 新聞）
+#
+# 實測（`fb770b4`，RSS 全斷）：`fetch_market_news` 回的**不是空 list**，
+# 是一則 `source="system"` 的佔位訊息，而新聞桶把它當成一則新聞數進去：
+#     news bucket -> {'level':'green','label':'無系統風險',
+#                     'headline':'1 則新聞掃描,無系統性風險'}
+#     ②依據 news row -> ['📰 新聞', '🟢 無系統風險', '1 則新聞掃描,無系統性風險']
+# **零觀測換來一盞綠燈，外加一個捏造的則數。**
+#
+# 機制早於本批，但「不留第二個標準」是本批的宣稱，而這是那張表上唯一沒遷移的一列。
+# **處置：遷移**（不是修正宣稱）—— 同一張表、同一條 `all_of` 規則、同一份客戶授權，
+# 而且它正是本批存在的理由那一類（從零觀測宣告安全）。
+# ════════════════════════════════════════════════════════════════════════
+#: `fetch_market_news` 全斷時回的那一則佔位訊息（逐字對齊 L1 的字面值）。
+_NEWS_OUTAGE_PLACEHOLDER: list = [{
+    "title": "⚠️ 暫時無法取得財經新聞",
+    "summary": "已嘗試 5 個來源、5 個無回應（可能 NAS Proxy 斷線或來源暫時不可用），稍後重試。",
+    "source": "system", "published": "", "url": "", "is_systemic": False,
+}]
+
+
+def test_the_news_row_does_not_go_green_on_zero_observations():
+    """**F-A5**：RSS 全斷 → 不得出綠燈，也不得報「1 則新聞掃描」。
+
+    突變驗證：把 `compute_five_bucket_summary` 的 `_real_items` 過濾條件
+    改成恆真（`n.get("source") != "__never__"`）→ 本條轉紅。
+    """
+    from ui.helpers.macro.beginner_view import compute_five_bucket_summary
+    _n = compute_five_bucket_summary({}, None, news_items=_NEWS_OUTAGE_PLACEHOLDER)["news"]
+    assert _n["level"] == "gray", f"零觀測卻出了 {_n['level']} 燈：{_n}"
+    assert "無系統風險" not in _n["label"], _n
+    assert "1 則" not in _n["headline"], f"捏造了則數：{_n['headline']!r}"
+    # 使用者要看得到**為什麼**沒得掃（用 L1 佔位訊息自己寫的理由，不自己編）
+    assert "暫時無法取得財經新聞" in _n["headline"], _n["headline"]
+
+
+def test_the_news_row_is_also_grey_on_an_empty_list():
+    """同一個形狀的另一半：`news_items=[]`（0 則）舊版也是綠燈。"""
+    from ui.helpers.macro.beginner_view import compute_five_bucket_summary
+    _n = compute_five_bucket_summary({}, None, news_items=[])["news"]
+    assert _n["level"] == "gray", f"0 則觀測卻出了 {_n['level']} 燈：{_n}"
+
+
+def test_the_news_row_still_goes_green_and_still_raises_alarms_on_real_items():
+    """反方向 ×2：真的有新聞時綠燈照出；存在性警報一個字都沒改。"""
+    from ui.helpers.macro.beginner_view import compute_five_bucket_summary
+    _real = [{"title": "Fed holds rates", "source": "MarketWatch", "is_systemic": False},
+             {"title": "Yields drift", "source": "CNBC Economy", "is_systemic": False}]
+    _g = compute_five_bucket_summary({}, None, news_items=_real)["news"]
+    assert _g["level"] == "green" and "2 則新聞掃描" in _g["headline"], _g
+    # 警報：半套證據照舊升警（規則 3），且**佔位訊息不會稀釋則數**
+    _mixed = _NEWS_OUTAGE_PLACEHOLDER + [
+        {"title": "bank run spreads", "source": "BBC World", "is_systemic": True}]
+    _y = compute_five_bucket_summary({}, None, news_items=_mixed)["news"]
+    assert _y["level"] == "yellow" and "1 則系統性風險新聞" in _y["headline"], _y
+    _r = compute_five_bucket_summary({}, None, news_items=_NEWS_OUTAGE_PLACEHOLDER + [
+        {"title": "bank run", "source": "BBC World", "is_systemic": True},
+        {"title": "contagion", "source": "CNBC Finance", "is_systemic": True}])["news"]
+    assert _r["level"] == "red", _r
+
+
+def test_the_outage_placeholder_still_looks_like_this_upstream():
+    """漂移鎖：L1 的佔位訊息**仍然**用 `source="system"` 標記自己。
+
+    本列的遷移靠這個結構欄位判別（**刻意不解析標題的表情符號**）。
+    L1 哪天改用別的標記，本條就要轉紅，而不是讓綠燈悄悄回來。
+    """
+    _src = pathlib.Path("repositories/news_repository.py").read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+    _fn = next(_n for _n in ast.walk(_tree)
+               if isinstance(_n, ast.FunctionDef) and _n.name == "fetch_market_news")
+    def _literal_pairs(_d: ast.Dict) -> dict:
+        return {_k.value: _v.value
+                for _k, _v in zip(_d.keys, _d.values)
+                if isinstance(_k, ast.Constant) and isinstance(_v, ast.Constant)}
+
+    # 佔位訊息 ＝ `is_systemic` 寫死成 `False` 的那幾個 dict；
+    # 真的新聞那一個寫的是變數 `_is_sys`，所以不會被選中（**不是**靠 source 篩選，
+    # 否則這條測試就變成套套邏輯 —— 只挑出符合的再宣稱它符合）。
+    _placeholders = [_d for _d in ast.walk(_fn)
+                     if isinstance(_d, ast.Dict)
+                     and _literal_pairs(_d).get("is_systemic") is False]
+    assert len(_placeholders) >= 2, (
+        f"找不到 L1 的佔位訊息 dict（找到 {len(_placeholders)} 個）—— "
+        f"結構變了，請重新確認本列的判別方式")
+    for _d in _placeholders:
+        _pairs = _literal_pairs(_d)
+        assert _pairs.get("source") == "system", (
+            f"佔位訊息不再用 source='system' 標記自己：{_pairs}")
+
+
+def test_the_card_grid_holds_across_the_whole_score_range():
+    """**B4**：整批 fixture 不得只落在**一個**合成分數上。
+
+    `fb770b4` 的每一個「充足」fixture 都給出 6.5 —— 而 6.5 正好是
+    「會被灰掉的 6.4」的上面一格，F-A1 那一整類因此完全躲在 fixture 後面。
+    本條把整條 0~10 掃一遍：28 顆全在時，**每一格**都必須撐得住，
+    而且卡 1 要照出位階、①結論不得退成 ⬜。
+    突變驗證（**逐一實跑過**）：用 `fb770b4` 的 `shared/evidence_support.py` 跑
+    → 本條轉紅。⚠️ **拿掉 F-A1 修法的任一半本條都不會轉紅**（兩半互相遮蔽）——
+    逐半的守衛在 `tests/test_evidence_support.py` 的
+    `test_nothing_missing_means_the_reachable_display_set_is_exactly_the_score`
+    與 `test_the_reachable_upper_bound_is_half_open_not_closed`。
+    """
+    from services.macro.evidence import phase_support as _phase_support
+    _seen_scores, _bad = set(), []
+    for _t in [round(_i / 10.0, 1) for _i in range(0, 101)]:
+        _ind = _fake_indicators(score_target=_t)
+        _phase = _real_calc_macro_phase(_ind)
+        _seen_scores.add(_phase["score"])
+        if not _phase_support(_ind, _phase["score"]).sufficient:
+            _bad.append((_t, _phase["score"], _phase["support"].reason))
+            continue
+        _al = _real_action_light(_ind, _phase["score"])
+        _light, _ = tab1_macro._conclusion_line_state(_al)
+        if _light == "⬜":
+            _bad.append((_t, _phase["score"], "①結論退成 ⬜"))
+    assert len(_seen_scores) >= 20, (
+        f"fixture 只產得出 {len(_seen_scores)} 個不同分數 —— 掃不到什麼")
+    assert not _bad, (
+        f"28 顆全到齊卻有 {len(_bad)} 格撐不住（fixture 只驗一個魔術數字時看不到）："
+        f"{_bad[:3]}")
+
+
+def test_the_calm_fixture_no_longer_puts_the_same_score_on_every_indicator():
+    """**B4 的結構面**：一個魔術數字不得再蓋住一整類。"""
+    _ind = _fake_indicators()
+    _scores = {round(float(_v["score"]), 6) for _v in _ind.values()}
+    assert len(_scores) >= 3, f"28 顆只有 {len(_scores)} 種 score：{_scores}"
+    # 但合成分數要與舊 fixture 一致（偏移和為 0）—— 既有斷言零變更
+    assert _real_calc_macro_phase(_ind)["score"] == 6.5, (
+        "偏移沒有互相抵銷，合成分數變了 —— 既有測試的前提會跟著飄")

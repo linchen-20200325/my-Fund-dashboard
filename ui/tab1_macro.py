@@ -1360,6 +1360,20 @@ _BUCKET_ALERT_POINTER_HEAD = "- 🔺 **今日例外落在上表這幾列**："
 _BUCKET_ALERT_POINTER_TAIL = (
     " — 讀數、判讀與門檻已完整列在上方 ② 依據表的同名列，此處不重印。")
 
+# ── 2026-09-04 第六輪稽核 B5 ──────────────────────────────────────────
+# 「拐點桶與新聞桶也都不在警戒狀態」是一句**點名了兩個桶的全稱話**,而舊條件
+# 只看 `level in ("yellow","red")` —— **灰(算不出來)既不是黃也不是紅**,
+# 於是「沒算出來」被講成「算過了沒事」。實測(`fb770b4`):拐點桶 `gray / 資料不足`
+# 時 `_exception_lines(...) == []`,③ 照樣印那句 ✅。
+# 這與 `_BUCKET_STATUS_UNKNOWN_LINE`(② 整段沒產出)是**同一個病的逐桶版**:
+# 那一條擋的是「② 全滅」,擋不到「② 出來了、但某一桶是灰的」。
+# ⚠️ 本輪的 F-A5(新聞桶零觀測改灰)會**增加**餵進這裡的灰狀態,不修等於把
+# 一個既有缺陷放大 —— 故一併修,不只登記。
+_BUCKET_UNJUDGED_POINTER_HEAD = "- ⬜ **這幾列這次判不出來**："
+_BUCKET_UNJUDGED_POINTER_TAIL = (
+    " — 該桶沒有取到足夠的讀數，**未檢查不等於沒事**，"
+    "故本層不把它算進「都不在警戒狀態」那句話裡（§1）。")
+
 
 def _exception_lines(systemic_risk, bucket_summary) -> list[str]:
     """③ 例外層要條列的項目(純函式、零 streamlit、零 I/O)。
@@ -1393,6 +1407,19 @@ def _exception_lines(systemic_risk, bucket_summary) -> list[str]:
         _faces = [_t for _k, _t, _s in _cells_ssot(_alert_keys)]
         _lines.append(_BUCKET_ALERT_POINTER_HEAD + "、".join(_faces)
                       + _BUCKET_ALERT_POINTER_TAIL)
+    # B5:**算不出來的桶要另外講**,不得被「都不在警戒狀態」那句吸收掉。
+    # 判別方式刻意是「**不是綠燈也不是警戒**」而不是「level == 'gray'」——
+    # 日後多一種燈號時,它會落到這一支(fail-closed),不會悄悄變成 all-clear。
+    _unjudged_keys = [
+        _bk for _bk in ("inflection", "news")
+        if str((_sum.get(_bk) or {}).get("level") or "")
+        not in (("green",) + _BUCKET_ALERT_LEVELS)]
+    # ⚠️ ② 整段沒產出時(哨兵 `None`)交給 `_bucket_status_unavailable_line`,
+    # 它說得更精確;本支只管「② 出來了、但某一桶算不出來」,兩者不重複印。
+    if _unjudged_keys and isinstance(bucket_summary, dict):
+        _faces_u = [_t for _k, _t, _s in _cells_ssot(_unjudged_keys)]
+        _lines.append(_BUCKET_UNJUDGED_POINTER_HEAD + "、".join(_faces_u)
+                      + _BUCKET_UNJUDGED_POINTER_TAIL)
     return _lines
 
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 from services.macro.evidence import PHASE_SCALE as _SCALE
 from services.macro.evidence import action_light_all_clear_support as _all_clear_support
 from services.macro.evidence import action_light_support as _action_light_support
+from services.macro.evidence import phase_support as _phase_support
 from shared.evidence_support import is_sufficient as _is_sufficient
 from shared.signal_thresholds import SAHM_RECESSION_THRESHOLD
 
@@ -189,7 +190,28 @@ def macro_action_light(indicators: dict,
 
     # 「均未觸發」是一句**點名了四個輸入**的全稱話。缺任何一項時**不得照印** ——
     # 那正是第三/四輪抓到的假話。改印它自己的 reason(產出端寫的,不會與判定分岔)。
-    _reasons = [f"景氣位階 {phase_score_10:.1f}/10"]
+    #
+    # ── 2026-09-04 第六輪稽核 F-A2 ────────────────────────────────────
+    # 「景氣位階 N/10」**也是一句引用了那顆分數的話**,同樣要有支撐才能印。
+    # 舊版無條件印它,於是位階偏弱的 🔴(走政策豁免、燈號本身站得住)會印出
+    # 一個**卡 1 就在正下方拒絕印**的數字:
+    #     ①結論: 🔴 減碼 —— 景氣位階偏弱,拉高現金水位
+    #            - 景氣位階 0.0/10          ← 沒有支撐,照印
+    #            - ⬜ 這句話點名了 4 項輸入,實際只取到 0 項…
+    #     卡 1  : ⬜ 資料不足                ← 同一顆分數,拒絕印
+    # 同一個畫面上兩個標準。**量化(兩份,分開標明誰量的)**:
+    #   · 第六輪稽核報的是 4657 個非 override 🔴 狀態裡 4095 個(**87.9%**)——
+    #     **本組未複現該分布**(對方的狀態產生器不在手上),照錄不假裝驗過。
+    #   · **本組自己量的**(缺 0~3 項、固定種子 20260904):943 個非 override 🔴
+    #     裡 **256 個(27.1%)** 印了這句沒有支撐的話;修好之後 **0**。
+    #   兩個數字差在取樣分布(本組的樣本偏向缺項少、`phase_support` 本來就充足的狀態),
+    #   **結論一致**:這條路徑會印出一句它撐不起來的話。
+    # **處置照本批自己寫的原則**:「留下警報、只扣掉沒有支撐的那一句」——
+    # 🔴 一字不動(它由已取到的負向觀測作證),被扣掉的只有這一句,
+    # 且**換成產出端自己的 reason**(與卡 1 同一份,不會分岔)。
+    _phase_sup = _phase_support(indicators, phase_score_10)
+    _reasons = [f"景氣位階 {phase_score_10:.1f}/10" if _is_sufficient(_phase_sup)
+                else f"⬜ 景氣位階：{_phase_sup.reason} —— 故不引用這個分數"]
     _reasons.append("無硬衰退/恐慌訊號（殖利率曲線、Sahm、VIX 均未觸發）"
                     if _is_sufficient(_all_clear) else f"⬜ {_all_clear.reason}")
 
