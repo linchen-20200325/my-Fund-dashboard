@@ -445,11 +445,30 @@ def render_data_guard_tab() -> None:
         try:
             # v19.342:fetch+stash 邏輯抽至 ui.hot_money.refresh_hot_money_data
             # (與 tab1 長期桶 >30 天自動補抓共用同一條資料路),本按鈕只留 UI 殼。
+            # 2026-09-04 稽核 F3:token 讀取改走 `infra.config.get_secret`(§2.1 SSOT)。
+            # 舊寫法 `st.secrets.get(...) if hasattr(st, "secrets") else ""` 有**兩個**
+            # 分岔,而本按鈕最終打到的是與 Tab ① 熱錢卡**同一顆** L1 fetcher
+            # (`refresh_hot_money_data` → `fetch_hot_money_frames(180, token)` →
+            #  `fetch_foreign_flow_series(180, token)`,cache key = `(days, token)`):
+            #   (a) **token 只存在於環境變數**時,裸讀回 `''`、`get_secret` 回
+            #       `'TOK_ENV'` → 兩把不同 cache key → 同一個視窗被抓兩次,
+            #       一次帶授權一次沒帶,同一頁上同一個量可能出現兩個值;
+            #   (b) **完全沒有 `secrets.toml`** 時,`hasattr(st, "secrets")` 仍為 True,
+            #       但 `.get()` 內部 `_parse()` 會 `raise StreamlitSecretNotFoundError`
+            #       → 被下面的 `except` 吞成「refetch 失敗:[StreamlitSecretNotFoundError]」,
+            #       而走 SSOT 的那一邊照常運作。
+            # ⚠️ 前一輪把這裡漏掉的理由是「摺疊區、使用者不會點到」—— **不成立**:
+            # 本按鈕不在 expander 裡,它存在的理由(見上方 v19.152 註解)正是
+            # 「不必點開 ARCHIVED expander」。
+            from infra.config import get_secret as _d5_get_secret
             from ui.hot_money import refresh_hot_money_data
-            _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
-                            if hasattr(st, "secrets") else "") or ""
+            _finmind_tok = str(_d5_get_secret("FINMIND_TOKEN", "") or "")
             with st.spinner("📡 抓 FinMind 外資 + Yahoo USDTWD..."):
                 _hm_ok, _hm_msg = refresh_hot_money_data(token=_finmind_tok)
+            # Tab ① 熱錢快覽卡每 session 只抓一次(F6 守衛),手動更新必須把它的
+            # session stash 一起作廢,否則使用者按了「立即更新」、切回 ① 卻沒動。
+            st.session_state.pop("_hm_card_fetch_tried", None)
+            st.session_state.pop("_hm_card_frames", None)
             if _hm_ok:
                 st.success(f"✅ 外資/USDTWD {_hm_msg}")
                 st.rerun()

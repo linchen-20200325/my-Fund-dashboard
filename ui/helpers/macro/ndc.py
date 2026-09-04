@@ -46,14 +46,23 @@ def get_ndc_score() -> Optional[int]:
 
 def _fetch_ndc_score() -> Optional[int]:
     """實際抓取(未快取):讀 FINMIND_TOKEN → fetch_ndc_signal_history → score_latest。"""
-    import streamlit as st  # noqa: PLC0415
-
     from repositories.macro_tw_local_repository import fetch_ndc_signal_history  # noqa: PLC0415
-    _tok = ""
-    try:
-        _tok = st.secrets.get("FINMIND_TOKEN", "")           # 空 → FinMind 匿名額度
-    except Exception:  # noqa: BLE001 — 無 secrets(本地/測試)→ 匿名
-        _tok = ""
+
+    # 2026-09-04 稽核 F3:改走 `infra.config.get_secret`(§2.1 SSOT)。
+    # 本呼叫點餵的是**另一顆** fetcher(`fetch_ndc_signal_history`,自己的 cache key
+    # 家族),所以它**不會**與熱錢卡的 `(days, token)` 撞在一起 —— 也就是說,
+    # 這一處**不是** F3 所指的那個 cache key 分岔。仍然一併收進來的理由有三:
+    #   (a) 它有 F3 的**另一半**病:token 只存在於 `os.environ` 時,裸 `st.secrets`
+    #       讀不到 → 靜默退成 FinMind 匿名額度(有授權卻不用),是真的行為差異;
+    #   (b) `get_secret` 內部已含同一組 try/except + `os.environ` fallback,
+    #       換過來之後這裡的 try/except 是純粹重複,行為嚴格不劣;
+    #   (c) 更要緊的是**守衛的完整性**:F3 的守衛掃的是「全 repo 還有沒有裸讀
+    #       FINMIND_TOKEN」。若在這裡留一個「因為它接的是別顆 fetcher 所以豁免」
+    #       的洞,那個豁免條件本身就得靠人記住、且會被下一輪拿來論證第三個站點 ——
+    #       本 repo 已經因為「這個站點沒關係」連錯兩輪(P2 漏 tab5、F3 才補)。
+    #       **不留但書,守衛才守得住。**
+    from infra.config import get_secret as _ndc_get_secret  # noqa: PLC0415
+    _tok = str(_ndc_get_secret("FINMIND_TOKEN", "") or "")   # 空 → FinMind 匿名額度
     return ndc_score_from_result(fetch_ndc_signal_history(token=_tok))
 
 

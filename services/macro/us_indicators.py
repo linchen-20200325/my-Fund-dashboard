@@ -1321,6 +1321,40 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
     growth_up    = growth_score > 0
     inflation_up = inflation_score > 0
 
+    # ── 2026-09-04 稽核 F2:方向三分(schema-additive,既有 key 逐字不動)──────
+    # `growth_up = growth_score > 0` 是一個**二分**運算,但底下的量有**三種**狀態:
+    #   · 有觀測且淨偏正  → 方向向上
+    #   · 有觀測且淨偏負  → 方向向下
+    #   · 有觀測但**正負筆數相抵**(score 恰為 0.0)→ **方向不明,不是向下**
+    #   ·(外加)零觀測 → 分母被 `max(len, 1)` 墊成 1,score 也是 0.0
+    # 二分運算把後兩種一起塞進「向下」,於是「CPI +1、PPI −1」這種**打平**會被
+    # 講成「通膨↓ 受控」,與「真的兩個都低」在畫面上**逐字相同**。
+    # 實測可達性:通膨軸 6/26、成長軸 392/2186 種「有無×正負」組合恰為 0.00。
+    #
+    # **本次只做 schema-additive 的新增,不動 `growth_up` / `inflation_up` /
+    # `quadrant` / `quad_*` 任何一個既有 key** —— 理由是那四象限是一個**封閉
+    # 四值列舉**,要表達「方向不明」得長出第五象限(連帶 `quad_color` /
+    # `quad_icon` / `quad_alloc` 都要有第五組值),那是設計變更、不是 bug 修復。
+    # ⚠️ **據實揭露:既有 key 在打平時仍然把方向講成「向下」。** 現行 production
+    # 唯一消費者是 `ui/tab1_macro.py` 的快覽卡 3(已改吃下面的 `*_dir`);
+    # 其餘 `quad_*` 目前 0 production caller。⚠️ 該句取決於「有沒有漏看」,
+    # 係本組單組 grep(`quadrant\|quad_\|growth_up\|inflation_up`,2026-09-04),
+    # **未經第二組獨立驗證**(§-2 規則 6)——只能當待驗事項,不得當已查證的事實。
+    # 日後新增消費者**必須**讀 `*_dir`,不得用 `*_up` 判方向 —— 追蹤見
+    # `BACKLOG.md`「⏸ 待審查 — 成長/通膨雙軸的第五象限『方向不明』」。
+    def _axis_dir(signals: list, score: float) -> str:
+        """'none'(零觀測)/ 'tie'(有觀測但正負相抵)/ 'up' / 'down'。"""
+        if not signals:
+            return "none"
+        if score > 0:
+            return "up"
+        if score < 0:
+            return "down"
+        return "tie"
+
+    growth_dir    = _axis_dir(growth_signals,    growth_score)
+    inflation_dir = _axis_dir(inflation_signals, inflation_score)
+
     # ── 四象限映射
     if growth_up and not inflation_up:
         quadrant    = "復甦/擴張"; quadrant_en = "Goldilocks"
@@ -1348,6 +1382,10 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
         "inflation_score":  round(inflation_score, 2),
         "growth_up":        growth_up,
         "inflation_up":     inflation_up,
+        # 方向三分(2026-09-04 F2):'none' / 'tie' / 'up' / 'down'。
+        # **判方向請用這兩個,不要用上面的 `*_up`** —— 後者把 tie 併進 down。
+        "growth_dir":       growth_dir,
+        "inflation_dir":    inflation_dir,
         "quadrant":         quadrant,
         "quadrant_en":      quadrant_en,
         "quad_color":       quad_color,
