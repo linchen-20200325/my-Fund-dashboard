@@ -538,9 +538,13 @@ def test_gate_anchor_still_detectable():
 #   (a) **有一個輸入元件的回傳值被綁進一個區域變數**
 #       （`x = st.slider(...)`；`_INPUT_WIDGETS` 全員）。
 #   (b) **同一個函式裡**，那個變數被當成引數傳進某個呼叫。
-#       ⚠️ 綁定與消費**都以函式為作用域**，不是整個檔案 —— 初稿用檔案作用域，
+##       ⚠️ 綁定與消費**都以函式為作用域**，不是整個檔案 —— 初稿用檔案作用域，
 #       結果 `_render_pairs_ui` 的 `_sell` 洩漏到 `render_complementary_explorer_from_df`
-#       （後者其實是從 `st.session_state` 讀值、而且已經包了 form），**憑空多一筆假違規**。
+#       （後者其實是從 `st.session_state` 讀值、而且已經包了 form）。
+#       ⚠️ **2026-09-04 更正數字（依據：稽核指出＋本組實測重跑）**：原寫
+#       ~~「憑空多**一**筆假違規」~~，實測是 **三筆** —— 把兩處 `scope` 同時改回
+#       檔案作用域，命中數 2 → 5，多出來的是 `render_complementary_explorer_from_df`、
+#       `code_finder.py::_search`、`hot_money.py::refresh_hot_money_data`。
 #   (c) **那個呼叫是「昂貴」的**（定義見下）。
 #   (d) **這條路徑上沒有任何保護**：輸入與呼叫都不在 `st.form` / `applied_form` 區塊內，
 #       且該呼叫不在任何**動作型閘門**（`_ACTION_WIDGETS`）的 `if` **正分支**裡。
@@ -690,14 +694,44 @@ def _ungated_widget_io_keys(path: pathlib.Path) -> list[str]:
     ## 只看 `if` 的 body，不看 `orelse`
     `elif` 在 AST 裡是掛在 `orelse` 的巢狀 `If`。若整棵 `ast.walk(if節點)` 都算「受保護」，
     `else:` 分支——**按鈕沒被按時才跑的那一段**——會被誤判成受保護。故只收 `node.body`。
+    ⚠️ **據實補註（2026-09-04，稽核指出本檔對同類決定兩種寫法不一致）**：
+    這個排除**在本 repo 現況下一次都沒有被觸發**（含 `orelse` 與不含，命中數同樣是 2）——
+    也就是說它與下面 checkbox/toggle 那條一樣，**是照語意選的嚴格側，未經實測驗證**。
+    上一版把 checkbox/toggle 標了「未經實測驗證」、卻把本項寫成已定論，**那是雙標**。
 
     ## 這條規則**看不到**什麼（不要讀成「已經涵蓋」）
     - **經由 `st.session_state` 中轉的值**：`st.session_state.x = st.slider(...)`，
-      別處再 `st.session_state.get("x")` 讀回來。目標是 `Attribute` 不是 `Name`，
-      本規則的綁定表收不到。實測 `ui/tab3_portfolio.py` 的 `slider_core_pct` 正是這一種
-      （不過它的下游 `_core_tgt_fp` 只做百分比偏差顯示，走不到 I/O，**本來也不該紅**）。
+      別處再 `st.session_state.get("x")` 讀回來。**綁定目標是 `Attribute` 不是 `Name`，
+      而本規則的綁定表只收 `ast.Assign` 到 `ast.Name` 的情形 —— 所以規則看不到它。**
+      實測 `ui/tab3_portfolio.py` 的 `slider_core_pct` 正是這一種。
+      ⚠️ **它之所以不進豁免表，理由是「規則射程外」，不是「它沒問題」** ——
+      硬把它塞進表裡就得手寫一列，違背本規則「AST 推導、不手抄清單」的設計。
+
+      ~~（不過它的下游 `_core_tgt_fp` 只做百分比偏差顯示，走不到 I/O，**本來也不該紅**）。~~
+      ⛔ **2026-09-04 就地更正（有意識的更正，不是漏刪 · 決策者 AI 總管 · 依據：獨立稽核實測）**
+      —— **上面那句刪除線的話，兩半都是假的**：
+      **(a)** `_core_tgt_fp` 不是「顯示百分比」，它進的是 **AI 快照的 cache key**
+      （`_ai_fp = … + f"#core={_core_tgt_fp}#v2={_v2_digest}"`），拖滑桿會讓該快取失效；
+      **(b)** cache miss 之後那段**確實會走到 I/O** ——
+      `ui/tab3_portfolio.py` 的 `fetch_usdtwd_frame(BACKTEST_FX_FETCH_DAYS)`
+      外層**只有 `try:`，無按鈕、無 form**，而它就在本規則自己推導出的 I/O 名單裡；
+      同檔既有註解逐字寫著 `fetch_usdtwd_frame（**網路**）`。
+      **也就是說 `slider_core_pct` 是一條真的、未受保護的 widget → I/O 路徑**
+      （緩解：下游 `_cached_usdtwd_series` 有 `@st.cache_data(ttl=TTL_10MIN)`
+      且 key 只有 `days`＝常數，多數時候 cache hit；**但超過 TTL 就是真的打外網**）。
+      ⚠️ **這句錯話是怎麼寫出來的，記在這裡**：原作者當時把它標成「未查證」就送出，
+      而「未查證」**只是待驗事項，不是免死金牌** —— 稽核一查就是假的。
+      對照 `CLAUDE.md`：**已被查證為假、卻沒被撤下的宣稱，比沒查證的更危險，
+      因為它看起來已經有出處。**
     - **跨函式的資料流**：`_search(keyword)` 把值當參數傳進另一個函式再打 TDCC，
       本規則只在同一個函式內配對。
+    - **否定形式的閘門判斷**：`if not <button>:` 與 `if <button> or True:`
+      **會被誤判成「受保護」**（本規則的 `gated` 只檢查 `if` 的 test 裡**有沒有出現**
+      動作鈕，**不看它是被肯定還是否定**）。2026-09-04 稽核探針實跑證實兩種都逃得掉。
+      ⚠️ 諷刺的是本函式為了完全相同的錯誤特地排除了 `orelse`，
+      **而 `if not …:` 用 body 就達成同一件事**。
+      📌 **今天不影響帳**：現有被 `gated` 排除掉的站點經逐一檢查**全部是正向
+      `if <button>:`** —— 但這是**現況**，不是規則守得住。
     - **值不經過變數**：`fetch(st.slider(...))` 直接內嵌。實測本 repo 目前 0 處，
       但規則確實看不到 —— 綁定表只收 `ast.Assign`。
     - **動態呼叫**：`getattr(mod, name)(...)`、存進 dict 再叫出來。
@@ -804,11 +838,25 @@ UNGATED_WIDGET_IO_SITES = frozenset({
     "ui/helpers/fund_grp_health/rotation.py::_render_pairs_ui() → suggest_rotation_pairs()×1",
     # 待修（Lane B 承接）。4 支滑桿（回看天數 / 觀察窗格 / 外資門檻 / 台幣門檻）
     # → `fetch_hot_money_frames(days, token)`，中間無鈕。
-    # ⚠️ 這是本表**代價最高**的一列：該 facade 會打 **FinMind ＋ Yahoo** 兩個外部來源
+    #    該 facade 會打 **FinMind ＋ Yahoo** 兩個外部來源
     #    （`services/hot_money_service.py` → `repositories/hot_money_repository.py`）。
-    #    也就是**每拖一格滑桿就是一次對外往返**，而其中三支滑桿
-    #    （`window` / `flow_thr` / `fx_thr`）**根本沒有被傳進取數**，純粹是畫面門檻 ——
-    #    動它們不需要重抓，現在卻照抓。
+    # ⚠️ **2026-09-04 就地更正（有意識的更正，不是漏刪 · 決策者 AI 總管 · 依據：獨立稽核複驗）**
+    #    —— 本列原本寫 ~~「這是本表**代價最高**的一列」~~、
+    #    ~~「也就是**每拖一格滑桿就是一次對外往返**」~~、
+    #    ~~「動它們不需要重抓，現在卻照抓」~~：**後兩句是假的，第一句的排序可能是反的。**
+    #    **仍然成立的部分**：四支滑桿裡**只有 `days` 被傳進取數**，另三支
+    #    （`window` / `flow_thr` / `fx_thr`）只進純函式 `build_signals`，是畫面門檻。
+    #    **被推翻的部分**：兩條取數鏈都被 `@st.cache_data` 擋著 ——
+    #    `_cached_foreign_flow_series(days, token)`（`ttl=TTL_30MIN`）與
+    #    `_cached_usdtwd_series(days)`（`ttl=TTL_10MIN`）。
+    #    **那三支滑桿不在任何 cache key 裡 → 拖它們是 cache hit，不會有對外往返。**
+    #    只有拖 `days` 才可能真的取數，而且仍受 TTL 保護。
+    #    ⚠️ **排序更正（會影響 Lane B 的優先序，所以寫在這裡）**：
+    #    `services/rotation.py` 實測 **0 處快取**（`grep -c cache` → 0），
+    #    `suggest_rotation_pairs` **每拖一次滑桿就真的重算一次** O(賣方×買方)。
+    #    → **「代價最高」比較可能是上面 rotation 那一列，不是本列。**
+    #    ⚠️ **本更正的依據是靜態的**（decorator 存不存在、cache key 由哪些參數組成），
+    #    **沒有跑真的 Streamlit session 去量實際往返次數** —— 不要讀成量過的。
     "ui/hot_money.py::render_hot_money_section() → fetch_hot_money_frames()×1",
 })
 #: 違規**呼叫數**（不是鍵數）。與上表一起降 —— 修好一處就要把兩個都改小。
@@ -890,6 +938,25 @@ def test_expensive_callee_whitelist_still_derivable():
             f"`{probe}` 不再被判定為會走到 I/O —— 推導路徑斷了，"
             "規則 5 在那個方向上已經瞎掉。")
     # 反向：純算術不該被誤判成昂貴，否則整張表會被噪音淹掉（§8.2.A.0 規則 5 理由倒置）。
+    # ⚠️ **先驗它們還存在**（2026-09-04 稽核指出）：`not in` 斷言對一個**已經被改名或
+    # 刪掉**的函式**永遠會過** —— 那就是本 repo 已登記過的「斷言變空操作」失效模式。
+    # 本檔對 `_DECLARED_RECOMPUTE` 寫了存在性守衛、對這裡卻沒寫，**同一把尺沒往內用**。
+    _defined: set[str] = set()
+    for _pkg in _IO_SOURCE_PACKAGES:
+        _dir = ROOT / _pkg
+        if not _dir.is_dir():
+            continue
+        for _path in _dir.rglob("*.py"):
+            try:
+                _tree = ast.parse(_path.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            _defined |= {n.name for n in ast.walk(_tree)
+                         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for pure in ("compute_units", "estimate_dividend_split"):
+        assert pure in _defined, (
+            f"反向探針 `{pure}` 已不存在（改名或刪除）—— 下面那條 `not in` 斷言"
+            "會變成永遠會過的空操作。請換一個仍然存在的純算術函式當探針。")
     for pure in ("compute_units", "estimate_dividend_split"):
         assert pure not in names, (
             f"`{pure}` 被誤判成會走到 I/O —— 它是純算術（`repositories/policy/v2.py`）。"
