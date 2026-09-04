@@ -72,7 +72,14 @@
   **根因**：`_system_failure_renderers()` 的判準 (c) 只從 **except handler 的直接 callee**
   取 seed，**taint 不傳第二跳**；而 `_outer` 自己沒有任何 render 呼叫，於是
   「被標記的函式不畫圖、畫圖的函式沒被標記」，兩邊都不報。
-  **要補需要把同檔呼叫圖做到不動點**（把 callee 的 taint 再往下傳），屬**範圍擴大**，本批不做。
+  ✅ **2026-09-04 已修**（**有意識的狀態變更，不是漏刪**）：判準 (c) 改為
+  **迭代到不動點** —— 只要某函式收到被污染的引數，它的對應參數就被污染，
+  再往下傳給它呼叫的函式，反覆直到污染集合不再變大，**同檔內任意層數都追得到**。
+  ~~舊表述「屬範圍擴大，本批不做」~~ 在它寫下的當天成立（那一批的授權範圍確實不含它）；
+  被推翻的是它的**前提**，不是當時的判斷。
+  哨兵：`test_r3_c_taint_reaches_a_fixed_point_not_just_one_hop`（**三層** wrapper，
+  拿掉固定點迴圈會轉紅，已突變驗證）。
+  ⛔ **仍然只做同檔（intra-file）—— 跨檔未涵蓋，見上一條，那條缺口原封不動。**
 - ⚠️ **X3｜module-level 間接呼叫（如 `functools.partial`）**（2026-08-31 補）。
   `_emit = functools.partial(_show)` 之後 `except ...: _emit(str(e))` ——
   handler 的 callee 是 `_emit`（module-level **`Name`**，不是 `FunctionDef`），
@@ -106,7 +113,8 @@
   兩者都**通過** 1.5 門檻，但沒有人會說它們不是「系統紅家族」。
   ⚠️ 且**現行餘裕很薄**：`BUSINESS_ALERT_ON_DARK` vs `MATERIAL_RED` 實測 **1.6986:1**，
   距離門檻只有 **0.199**。**動任一個值之前先重算這個數字。**
-- ⚠️ **殘餘破口：用 `MATERIAL_RED` 手繪一個系統錯誤框，新舊守衛都綠**（2026-08-31 實測）。
+- ✅ **曾經的殘餘破口：用 `MATERIAL_RED` 手繪一個系統錯誤框 —— 2026-09-04 已由 R4-a 關掉。**
+  下段是它當初的紀錄，**保留不刪**（它說明了為什麼 R3 三條腿還不夠）。
 
       from shared.colors import MATERIAL_RED
       def _fail_card(what, exc):
@@ -118,9 +126,13 @@
   **定性要看清楚**：它畫的是**系統紅**去報**系統錯誤**，**語意方向沒有錯** ——
   屬「**形狀違規**」（沒走 `system_error()`，少了 widget 一致性），
   **不是**本檔要抓的「**顏色違規**」（拿業務色報系統錯）。
-  ⛔ **刻意不為它加白名單，也刻意不擴大守衛範圍**：前者違反本檔「零白名單」的設計，
-  後者會把「UI 不准出現 `MATERIAL_RED`」變成新規則，掃到 34 個無關檔案（§8.4 步驟 4）。
-  **這是有意識的留白，不是漏掉。**
+  ✅ **2026-09-04 更新：已由 `R4-a` 關掉，且代價是 0** —— 見本檔 R4 節。
+  ~~舊表述「擴大守衛範圍會掃到 34 個無關檔案，故刻意留白」~~ 的**顧慮仍然成立**
+  （那正是 R4-**b** 射程只到 `HEALTH_SCOPE` 的理由），
+  **但它把兩件事混成了一件**：R4-a 只在「R3 已經認定是系統失敗渲染」的路徑上生效，
+  分母僅 **13 個 render 呼叫**、既有命中 **0 處** —— **零白名單、零豁免、不掃任何無關檔案。**
+  「34 檔」那個數字算的是 `MATERIAL_RED` 的**所有**出現處，不是失敗路徑上的出現處；
+  **拿一個較寬口徑的計數去否決一條較窄的規則，是本次更正的那個錯。**
 - 顏色值若經由變數多次轉手（`c = 業務色; d = c; ...`）本檔做的是**同 scope 傳遞閉包**，
   跨函式傳參不追。
 - ⚠️ 本檔規則由**單組**（前端 UI 組）設計與實作，**未經第二組獨立驗證**（`CLAUDE.md §-2` 規則 6）。
@@ -133,8 +145,18 @@ import re
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-UI_SOURCES = sorted((ROOT / "ui").rglob("*.py")) + [ROOT / "app.py"]
+# ⚠️ **2026-09-04：`ROOT` / `UI_SOURCES` 改為從 hub 匯入，不再自己重寫一次 glob。**
+# 在此之前本檔自己寫了 `sorted((ROOT / "ui").rglob("*.py")) + [ROOT / "app.py"]` ——
+# 與 `test_render_state_color_separation.py` 那一行**逐字相同**，是同一個事實的第二份
+# 真相源（`CLAUDE.md §2.1` SSOT）。兩份各自漂移的後果不是抽象風險：一邊加了掃描範圍
+# 而另一邊沒加，會讓「兩個守衛都綠」看起來像雙重保險，實際上其中一個根本沒掃到那些檔。
+# hub 同時是 5 個其他測試檔的共用來源，本檔沿用它即可。
+# ⛔ 只**取用**既有符號，**不改**它們的名稱／簽名／回傳形狀（hub 是共用 API）。
+from test_render_state_color_separation import (  # noqa: E402
+    HEALTH_SCOPE,
+    ROOT,
+    UI_SOURCES,
+)
 
 # ── 角色常數名（值住在 shared/colors.py，本檔只認名字，避免第二個真相源）──────────
 BUSINESS_TOKEN_NAMES = frozenset({"BUSINESS_ALERT_ON_LIGHT", "BUSINESS_ALERT_ON_DARK"})
@@ -658,39 +680,68 @@ def _system_failure_renderers(tree: ast.AST) -> dict[str, tuple[str, set[str], b
         byname.setdefault(fn.name, fn)
 
     # (c)：呼叫點的 tainted 引數 → 對映到 callee 的**參數名**（用位置/關鍵字，不猜名字）
+    #
+    # ⚠️⚠️ **2026-09-04：這裡由「只傳一跳」改為「迭代到不動點」—— X1 破口的修正。**
+    # 本檔模組 docstring 原本就登記了 X1（同檔兩層 wrapper）並寫著「本批不做」：
+    # seed 只從 **except handler 的直接 callee** 取，於是
+    #     `except ... as e: _outer(t, e)` → `_outer` 被標記但自己不畫
+    #                                     → `_inner` 畫了卻從未被 seed
+    # **兩邊都不報。** 現在改成：只要某函式收到被污染的引數，它的對應參數就被污染，
+    # 再由它往下傳給它呼叫的函式，反覆直到污染集合不再變大。
+    # 2026-09-04 以**三層** wrapper 的探針實測確認是固定點，不是「補到兩跳」。
+    # ⛔ **只做同檔。跨檔仍未涵蓋**（`byname` 只收本檔的 FunctionDef）——
+    #    模組 docstring 既有的「wrapper 搬到另一個檔」那條缺口**原封不動仍然成立**。
     c_seeds: dict[str, set[str]] = {}
-    for handler in [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]:
-        tainted = _tainted_names(handler)
-        if not tainted:
-            continue
-        for call in [n for n in ast.walk(handler) if isinstance(n, ast.Call)]:
+
+    def _seed_from_call(call: ast.Call, fn: ast.AST, tainted: set[str]) -> set[str]:
+        params = [p.arg for p in _fn_params(fn)]
+        # `_fn_params` 的順序是 posonly → args → kwonly → vararg → kwarg，
+        # 故 params[:n_pos] 正好是「能用位置傳進去」的那些參數。
+        n_pos = len(fn.args.posonlyargs) + len(fn.args.args)
+        vararg = fn.args.vararg.arg if fn.args.vararg else None
+        seeds: set[str] = set()
+        for i, arg in enumerate(call.args):
+            if not ({n.id for n in ast.walk(arg) if isinstance(n, ast.Name)} & tainted):
+                continue
+            if i < n_pos:
+                seeds.add(params[i])
+            elif vararg:
+                # ⚠️ 2026-08-31 修正（探針 X2）：`def _paint(*bits)` 之下 n_pos == 0，
+                # 於是 `_paint("NAV 失敗", e)` 的 e（index 1）過去會因 index 超界被
+                # **靜默跳過** → taint 遺失 → 整個函式沒被判為系統失敗渲染。
+                # 位置引數吃不完時是被 vararg 收走的，故污染 vararg 名。
+                seeds.add(vararg)
+        for kw in call.keywords:
+            if kw.arg and {n.id for n in ast.walk(kw.value)
+                           if isinstance(n, ast.Name)} & tainted:
+                seeds.add(kw.arg)
+        return seeds
+
+    def _absorb(scope: ast.AST, tainted: set[str]) -> bool:
+        grew = False
+        for call in [n for n in ast.walk(scope) if isinstance(n, ast.Call)]:
             name = _call_name(call)
             fn = byname.get(name) if name else None
             if fn is None:
                 continue
-            params = [p.arg for p in _fn_params(fn)]
-            # `_fn_params` 的順序是 posonly → args → kwonly → vararg → kwarg，
-            # 故 params[:n_pos] 正好是「能用位置傳進去」的那些參數。
-            n_pos = len(fn.args.posonlyargs) + len(fn.args.args)
-            vararg = fn.args.vararg.arg if fn.args.vararg else None
-            seeds: set[str] = set()
-            for i, arg in enumerate(call.args):
-                if not ({n.id for n in ast.walk(arg) if isinstance(n, ast.Name)} & tainted):
-                    continue
-                if i < n_pos:
-                    seeds.add(params[i])
-                elif vararg:
-                    # ⚠️ 2026-08-31 修正（探針 X2）：`def _paint(*bits)` 之下 n_pos == 0，
-                    # 於是 `_paint("NAV 失敗", e)` 的 e（index 1）過去會因 index 超界被
-                    # **靜默跳過** → taint 遺失 → 整個函式沒被判為系統失敗渲染。
-                    # 位置引數吃不完時是被 vararg 收走的，故污染 vararg 名。
-                    seeds.add(vararg)
-            for kw in call.keywords:
-                if kw.arg and {n.id for n in ast.walk(kw.value)
-                               if isinstance(n, ast.Name)} & tainted:
-                    seeds.add(kw.arg)
-            if seeds:
-                c_seeds.setdefault(name, set()).update(seeds)
+            new = _seed_from_call(call, fn, tainted) - c_seeds.get(name, set())
+            if new:
+                c_seeds.setdefault(name, set()).update(new)
+                grew = True
+        return grew
+
+    for handler in [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]:
+        tainted = _tainted_names(handler)
+        if tainted:
+            _absorb(handler, tainted)
+
+    # 固定點：c_seeds[fn] 的上界是該 fn 的參數名集合（有限）且只增不減 → 必定終止。
+    changed = True
+    while changed:
+        changed = False
+        for name in list(c_seeds):
+            if _absorb(byname[name], _taint_closure(byname[name], c_seeds[name])):
+                changed = True
 
     for fn in funcs:
         seeds = _exc_params(fn)
@@ -856,3 +907,341 @@ def test_r3_the_failopen_shape_is_actually_caught():
                if fn.name == "_render_failure_card"
                and any(_mentions_business(a, business) for a in args)]
     assert painted, "偵測到是系統失敗渲染，卻沒認出它畫的是業務色 —— 規則只做了一半。"
+
+
+# ══════════════════════════════════════════════════════════════════
+# R4 — 泛用失敗紅（`MATERIAL_RED` / `TRAFFIC_RED`）不得手繪在三態路徑上
+#
+# 2026-09-04 補。**這一節分成兩條，射程不同，理由也不同 —— 不要當成同一條讀。**
+#
+# 背景：R3 的兩條分別看「業務色」與「**寫死的 hex**」，於是用**具名 SSOT 常數**
+# 手繪的那一種，兩條都不響。本檔模組 docstring 早就把它登記成「殘餘破口」。
+#
+#   R4-a（下方 `test_r4_...system_failure...`）：**系統失敗路徑**上出現具名泛用紅。
+#       射程 = 全 `ui/**` + `app.py`。**既有站點實測 0 處 → 零豁免、零登記。**
+#       它補的正是 R3 的第三條腿：R3 已經認定「這個函式在報系統失敗」，
+#       那它畫的顏色就必須追得到角色 SSOT —— 業務色不行、inline hex 不行，
+#       **具名的泛用紅同樣不行**（走 `system_error()`，顏色由 `st.error` 給）。
+#
+#   R4-b（下方 `test_r4_...business...`）：**業務警示**被手繪成泛用失敗紅。
+#       射程 = **僅 `HEALTH_SCOPE`**，這是本節唯一需要解釋的取捨，寫在下面。
+#
+# ⚠️⚠️ **R4-b 的射程為什麼只到 HEALTH_SCOPE（實測數字 + 理由，不要只讀結論）**
+#   2026-09-04 實測全 `ui/**` + `app.py`：「render 呼叫的引數提到泛用失敗紅」共
+#   **8 處 / 6 檔**（其中 8 處全部帶 `unsafe_allow_html=True`）。逐處判讀後：
+#     · **2 處是真的三態違規**（業務分析成果被畫成系統紅家族）——
+#       `correlation.py`（影子基金偵測）與 `risk.py`（-2σ 深度超跌），
+#       兩者都落在 `business_alert()` docstring 自己列的用途（「淘汰候選」）裡；
+#     · **3 處根本不是警示**，把規則開到全域就會誤傷：
+#       `app.py` 的**全域 CSS 區塊**（`.signal-sell` 這個 class 的 `TRAFFIC_RED`
+#       —— 那是**樣式表定義**，不是任何一次警示的呈現）、
+#       `tab3_t7_ledger.py` 的**賣方區段標題**（紅是「賣方」的版面語彙，不是警示）、
+#       `tab2_single_fund.py` 的 **HWM σ 帶圖例標籤**（`MATERIAL_RED` 標的是
+#       **`HWM-3σ` 這個圖例文字**，與 1σ 綠、2σ 橘同一組**色階圖例**，不是警示）；
+#       ⚠️ **2026-09-04 兩處事實更正（稽核 N1-a／N1-b 指出；有意識的更正，不是漏刪）**：
+#         (a) 本行原寫 ~~「`.signal-buy` class 用 `TRAFFIC_GREEN`」~~ —— **不可能為真**：
+#             `TRAFFIC_GREEN` **根本不在 `GENERIC_RED_TOKENS`**（該集合只有
+#             `MATERIAL_RED` / `TRAFFIC_RED`），它連觸發本規則的資格都沒有。
+#             實測 `app.py` 該呼叫的觸發 token 是 **`TRAFFIC_RED`**（`.signal-sell`）。
+#         (b) 本行原寫 ~~「`_hc` 隨檔位變綠／黃／紅」~~ —— **`_hc` 不是觸發源**：
+#             它是 guard 解析不到來源的 `Name`。實測觸發源是**同一個 `st.markdown`
+#             呼叫內、`HWM-3σ` 圖例那一段的 `MATERIAL_RED`**（固定字串，不隨檔位變）。
+#         ⚠️ **兩處的分類結論都沒有被推翻**（樣式表定義、色階圖例，兩者確實都不是警示），
+#         **被推翻的是我用來支撐它的那兩個事實** —— 而一個「理由是假的」的分類，
+#         下一個人沒辦法複驗，也就沒辦法信任。**故結論保留、理由重寫。**
+#         ⚠️ **不寫行號**（沿用姊妹 repo `§8.2.A.0` 規則 1）：原句寫死 `:1070`，
+#         而真正的觸發源在 `:1091` —— **行號寫法本身就是這個錯的一部分。**
+#     · **3 處介於兩者之間**（`tab1_macro_ai.py` 的「總經完整率 < 50% 阻斷」、
+#       `tab2_single_fund.py` 兩處「混期示警」）—— 它們比較像「資料不可信」，
+#       該走灰或紅要先有業務判斷，**不是本 lane 能單方認定的**。
+#   → 開到全域 = **8 列裡有 3 列的理由只能寫「這不是警示」**，
+#     那是 `CLAUDE.md §8.2.A.0 規則 5` 明禁的「理由倒置」，
+#     也正是「**一條被整片豁免掉的規則等於沒有規則**」的形狀 ——
+#     它比不做還糟，因為後人會以為這裡有守衛。
+#   → 另外，`shared/colors.py` 就地記載 2026-08-31 那一批**刻意未動**
+#     `MATERIAL_RED` 的其餘用途（吃本金／z-score／sparkline，34 檔）。
+#     把射程開到那些檔 = 重新打開一個已經被決定過的範圍問題（`§8.4 步驟 4`）。
+#   → 故本批**只守 `HEALTH_SCOPE`**（客戶拍板的批次一範圍，三態規則真正落地的地方）。
+#
+# ⛔ **本組不裁決那 6 處（4 檔）該不該一起收**，已具名上報總管。
+#    **不得**引用本節主張它們合規，也**不得**引用本節主張它們違規 —— 那是還沒判定。
+# ══════════════════════════════════════════════════════════════════
+GENERIC_RED_TOKENS = frozenset(GENERIC_FAILURE_REDS)
+
+
+def _generic_red_values() -> frozenset[str]:
+    import shared.colors as C
+    return frozenset(getattr(C, n).lower() for n in GENERIC_RED_TOKENS if hasattr(C, n))
+
+
+def _mentions_generic_red(node: ast.AST, docstrings: set[int]) -> bool:
+    """這個節點有沒有引用泛用失敗紅？（具名常數 **或** 它的 hex 值）
+
+    ⚠️ 兩種都要看：只看具名會被 inline hex 繞過，只看 hex 會被具名常數繞過 ——
+    後者正是 R3 既有的破口（R3 只檢查 inline hex）。
+    ⚠️ docstring 內的 hex 一律不算（同 `_docstring_nodes()`：在文件裡講一個顏色叫什麼，
+    跟把它畫出來是兩件事）。
+    """
+    values = _generic_red_values()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and n.id in GENERIC_RED_TOKENS:
+            return True
+        if isinstance(n, ast.Attribute) and n.attr in GENERIC_RED_TOKENS:
+            return True
+        if (isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and id(n) not in docstrings):
+            if any(h.lower() in values for h in _HEX_RE.findall(n.value)):
+                return True
+    return False
+
+
+def _is_hand_drawn_html(call: ast.Call) -> bool:
+    """`unsafe_allow_html=True` ＝ 這段顏色是自己畫的，不是 widget 內建色。"""
+    return any(k.arg == "unsafe_allow_html" and isinstance(k.value, ast.Constant)
+               and k.value.value is True for k in call.keywords)
+
+
+@pytest.mark.parametrize("path", UI_SOURCES, ids=_rel)
+def test_r4_a_system_failure_renderer_never_paints_a_generic_red_constant(
+        path: pathlib.Path):
+    """R3 的第三條腿：系統失敗路徑不得用**具名**泛用紅手繪。
+
+    R3 已有的兩條看的是「業務色」與「**寫死的 hex**」；
+    `st.markdown(f"…border:2px solid {MATERIAL_RED}…")` 兩條都躲得過 ——
+    它用的是具名 SSOT 常數，不是 inline hex。本檔模組 docstring 把這個形狀
+    登記為「殘餘破口」，本條把它關掉。
+
+    **定性**：這種寫法畫的是系統紅去報系統錯誤，**語意方向沒有錯**，
+    錯的是它繞過了 `system_error()` —— 於是「系統紅長什麼樣」在 SSOT 之外
+    多了一個沒人管的副本，改 SSOT 改不到它，而且少了紅框該有的可展開技術細節。
+
+    ⚠️ **既有站點實測 0 處**（2026-09-04，全 `ui/**` + `app.py`，
+    分母是 13 個落在失敗路徑上的 render 呼叫）→ **本條零豁免、零登記。**
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    docstrings = _docstring_nodes(tree)
+    bad = []
+    for fn, call, args, why in _failure_path_renders(tree, aliases, containers):
+        if any(_mentions_generic_red(a, docstrings) for a in args):
+            bad.append(f"line {call.lineno}: {fn.name}() {why} —— 卻自己畫了泛用失敗紅")
+    assert not bad, (
+        f"{_rel(path)}：系統失敗路徑用**具名泛用紅**手繪，繞過了角色入口。\n"
+        "系統紅請走 render_state.system_error()（顏色由 st.error 給，並附可展開技術細節）；"
+        "若這其實是業務警訊，請走 business_alert()。\n  "
+        + "\n  ".join(bad)
+    )
+
+
+# ⚠️ **這是「待修」登記，不是「這樣寫是對的」豁免**
+# （`CLAUDE.md §8.2.A.0 規則 5`：理由要寫「為什麼這個位置是對的」；
+#   **理由若其實是「還沒修」，就照實寫「待修」，不要包裝成豁免**）。
+# 兩處都是**業務分析成果**被畫成系統紅家族 —— 正是客戶鐵則 03 要拆開的那一點。
+# 正解都是改走 `render_state.business_alert()`（莓紅 + 6px 左軌），屬 **production 改動**，
+# 不在本 lane（只改測試檔）的邊界內，故**只登記不修**。
+R4B_PENDING = {
+    "ui/helpers/fund_grp_health/correlation.py::_render_one_matrix()":
+        "待修。影子基金偵測（相關係數 ≥ 門檻）是**分析成功了**的業務結論，"
+        "落在 business_alert() docstring 自列的「淘汰候選」用途，卻用 MATERIAL_RED 手繪卡片。"
+        "正解：改走 business_alert(title, lines)。",
+    "ui/helpers/fund_grp_health/risk.py::_render_oversold_badges()":
+        "待修。-2σ 深度超跌同樣是業務結論（數字可信，而且很難看），"
+        "卻用 MATERIAL_RED 手繪 badge。正解：改走 business_alert(title, lines)。",
+}
+
+
+def _r4b_sites(path: pathlib.Path) -> list[tuple[str, int, str]]:
+    """HEALTH_SCOPE 內「手繪泛用失敗紅、且不在系統失敗路徑上」的 render 呼叫。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    docstrings = _docstring_nodes(tree)
+    # 落在系統失敗路徑上的歸 R4-a 管，這裡排除，避免同一處被兩條規則各報一次。
+    on_failure = {id(c) for _fn, c, _a, _w in
+                  _failure_path_renders(tree, aliases, containers)}
+    parent = {}
+    for n in ast.walk(tree):
+        for c in ast.iter_child_nodes(n):
+            parent[c] = n
+    out = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and _is_render_call(node, aliases, containers)):
+            continue
+        if id(node) in on_failure or not _is_hand_drawn_html(node):
+            continue
+        args = [*node.args, *(k.value for k in node.keywords)]
+        if not any(_mentions_generic_red(a, docstrings) for a in args):
+            continue
+        cur, fname = node, "<module>"
+        while cur in parent:
+            cur = parent[cur]
+            if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                fname = cur.name
+                break
+        out.append((f"{_rel(path)}::{fname}()", node.lineno, fname))
+    return out
+
+
+@pytest.mark.parametrize("path", HEALTH_SCOPE, ids=_rel)
+def test_r4_b_business_alert_is_not_hand_drawn_in_the_system_red_family(
+        path: pathlib.Path):
+    """業務警示不得手繪成泛用失敗紅（射程：`HEALTH_SCOPE`，理由見本節開頭）。
+
+    客戶鐵則 03：業務上的壞消息 ＝ 業務色；系統真出錯 ＝ 紅色警示。
+    把「這幾檔該換」畫成系統紅家族，等於告訴使用者「這個數字不可信」——
+    **要他做的事剛好相反**（業務色要他採信並行動，系統紅要他別採信、去修）。
+
+    ⚠️ 既有 **2 處**登記在 `R4B_PENDING`（**待修**，不是豁免）。
+    新增的一律當場轉紅 —— 2026-09-04 已用探針實測：在 `HEALTH_SCOPE` 放一個
+    `st.markdown(f"<div style='border:2px solid {MATERIAL_RED};…'>…吃本金…</div>",
+    unsafe_allow_html=True)`，本條轉紅（舊守衛全綠）。
+    """
+    bad = [f"line {ln}: {fn}() —— 業務警示卻手繪泛用失敗紅"
+           for key, ln, fn in _r4b_sites(path) if key not in R4B_PENDING]
+    assert not bad, (
+        f"{_rel(path)}：**業務警示被畫成系統紅家族**（MATERIAL_RED / TRAFFIC_RED）。\n"
+        "業務色的意思是「這個數字可信，而且它很難看」；系統紅的意思是「這個數字不可信」。"
+        "請改走 render_state.business_alert()（莓紅 + 6px 左軌）。\n  "
+        + "\n  ".join(bad)
+    )
+
+
+def test_r4_b_pending_list_only_shrinks_and_every_row_has_a_reason():
+    """`R4B_PENDING` 的**反向斷言**：修好一列就轉紅，逼這張表變小。
+
+    ⚠️ 沒有這條，`R4B_PENDING` 會退化成「加進去就沒事」的白名單 ——
+    那正是本 repo 反覆記載的失效模式（清單自己違反自己的禁令）。
+    **紅燈在這裡是提醒不是責備**：修好了就把那一列刪掉。
+    """
+    live = {key for p in HEALTH_SCOPE for key, _ln, _fn in _r4b_sites(p)}
+    fixed = sorted(set(R4B_PENDING) - live)
+    assert not fixed, (
+        f"下列站點已經不再手繪泛用失敗紅（修好了？）：{fixed}\n"
+        "請把它們從 `R4B_PENDING` 刪掉 —— 待修清單只准變短。")
+    thin = sorted(k for k, v in R4B_PENDING.items() if len(v) < 20)
+    assert not thin, f"下列待修理由太短，看不出「正解是什麼」：{thin}"
+
+
+def test_r3_c_taint_reaches_a_fixed_point_not_just_one_hop():
+    """X1 破口的突變哨兵（2026-09-04）—— **任意層數**的同檔 wrapper 都要抓得到。
+
+    ⚠️ 本檔模組 docstring 原本把 X1 登記為「要補需要把同檔呼叫圖做到不動點，
+    屬**範圍擴大**，本批不做」。**2026-09-04 已做，該段登記已就地更新。**
+
+    ⚠️ 這條刻意用**三層**（比 X1 原本登記的兩層多一跳）：兩層只能證明
+    「補到了第二跳」，證不了「這是一個固定點」。**三層過了才排除掉
+    『把 one-hop 改成 two-hop』這種假修法。**
+
+    ⛔ **突變驗證**：把 `_system_failure_renderers()` 裡那段
+    `while changed:` 的固定點迴圈拿掉（退回只從 handler 種一次），
+    本條**必須轉紅**。2026-09-04 已實測。**沒有這條，那個修正沒有東西守著。**
+    """
+    probe = (
+        "import streamlit as st\n"
+        "from shared.colors import BUSINESS_ALERT_ON_DARK\n"
+        "def _inner(what, detail):\n"
+        "    st.markdown(f\"<div style='color:{BUSINESS_ALERT_ON_DARK}'>{what}{detail}</div>\","
+        " unsafe_allow_html=True)\n"
+        "def _mid(what, detail):\n"
+        "    _inner(what, detail)\n"
+        "def _outer(what, detail):\n"
+        "    _mid(what, detail)\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _outer('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    suspects = _system_failure_renderers(tree)
+    for hop, fn in ((1, "_outer"), (2, "_mid"), (3, "_inner")):
+        assert fn in suspects, (
+            f"第 {hop} 跳的 wrapper `{fn}` 沒有被判準 (c) 認出來 —— "
+            "taint 沒有傳到不動點，『被標記的函式不畫圖、畫圖的函式沒被標記』，"
+            "兩邊都不報（X1 破口）。")
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    business = _business_names(tree)
+    painted = [c for fn, c, args, _w in
+               _failure_path_renders(tree, aliases, containers)
+               if fn.name == "_inner" and any(_mentions_business(a, business) for a in args)]
+    assert painted, (
+        "最內層被判為系統失敗渲染，卻沒認出它畫的是業務色 —— 規則只做了一半。")
+
+
+def test_r4_a_named_generic_red_on_a_failure_path_is_actually_caught():
+    """R4-a 的突變哨兵：把 R3 的第三條腿拿掉，本條必須轉紅。
+
+    ⛔ 突變驗證：刪掉 `_mentions_generic_red()` 裡的具名分支
+    （只留 hex 比對），本條**必須轉紅** —— 2026-09-04 已實測。
+    這正是本檔模組 docstring 登記的「殘餘破口」：具名 SSOT 常數躲過了 R3 的兩條腿。
+    """
+    probe = (
+        "import streamlit as st\n"
+        "from shared.colors import MATERIAL_RED\n"
+        "def _fail_card(what, exc):\n"
+        "    st.markdown(f\"<div style='border:2px solid {MATERIAL_RED};"
+        "color:{MATERIAL_RED}'>{what}: {exc}</div>\", unsafe_allow_html=True)\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _fail_card('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    docstrings = _docstring_nodes(tree)
+    hit = [c for fn, c, args, _w in _failure_path_renders(tree, aliases, containers)
+           if fn.name == "_fail_card"
+           and any(_mentions_generic_red(a, docstrings) for a in args)]
+    assert hit, (
+        "用**具名** MATERIAL_RED 手繪的系統錯誤框沒有被 R4-a 抓到 —— "
+        "R3 的兩條腿（業務色／inline hex）本來就看不見它，這是本條存在的唯一理由。")
+
+
+def test_r4_b_a_hand_drawn_business_alert_is_actually_caught():
+    """R4-b 的突變哨兵（探針 A 的形狀）：業務警示手繪成系統紅家族要轉紅。
+
+    ⛔ 突變驗證：把 `_is_hand_drawn_html()` 改成恆 False（或刪掉 R4-b 的
+    `_mentions_generic_red` 判斷），本條**必須轉紅** —— 2026-09-04 已實測。
+    """
+    probe = (
+        "import streamlit as st\n"
+        "from shared.colors import MATERIAL_RED\n"
+        "def render_principal_erosion(fund_name, pct):\n"
+        "    st.markdown(f\"<div style='border:2px solid {MATERIAL_RED};"
+        "color:{MATERIAL_RED}'>{fund_name} 配息吃本金 {pct}%</div>\","
+        " unsafe_allow_html=True)\n"
+    )
+    tree = ast.parse(probe)
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    docstrings = _docstring_nodes(tree)
+    on_failure = {id(c) for _f, c, _a, _w in
+                  _failure_path_renders(tree, aliases, containers)}
+    hit = [n for n in ast.walk(tree)
+           if isinstance(n, ast.Call) and _is_render_call(n, aliases, containers)
+           and id(n) not in on_failure and _is_hand_drawn_html(n)
+           and any(_mentions_generic_red(a, docstrings)
+                   for a in [*n.args, *(k.value for k in n.keywords)])]
+    assert hit, (
+        "業務警示（吃本金）手繪成 MATERIAL_RED 沒有被 R4-b 抓到 —— "
+        "這正是 2026-09-04 探針 A 溜過舊守衛的形狀。")
+
+
+def test_the_two_guards_scan_exactly_the_same_files():
+    """SSOT 反向斷言：本檔與 hub 掃的是**同一份**檔案清單。
+
+    ⚠️ 2026-09-04 之前本檔自己重寫了一次 glob，是 `UI_SOURCES` 的第二份副本。
+    現在改成 import；本條確保它**真的**是 import 來的，而不是有人哪天又貼回一份
+    「看起來一樣」的 glob（兩份各自漂移時，「兩個守衛都綠」會像雙重保險，
+    實際上其中一個沒掃到那些檔）。
+    """
+    import test_render_state_color_separation as _hub
+    assert UI_SOURCES is _hub.UI_SOURCES, (
+        "`UI_SOURCES` 不是 hub 的那一個物件 —— 有人又複製了一份 glob。"
+        "同一個事實只准有一個真相源（CLAUDE.md §2.1 SSOT）。")
+    assert ROOT is _hub.ROOT, "`ROOT` 不是 hub 的那一個物件。"

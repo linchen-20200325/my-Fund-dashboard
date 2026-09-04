@@ -40,6 +40,43 @@
 ⚠️ **另外兩個仍然看不見的方向**：跨函式傳進來的容器、存進 dict / list 的容器
 （`_st_container_names` 只認同一檔內由 `<streamlit 名>.<factory>(...)` 直接綁出的名字）。
 本批對 (b)(c)(d) 各跑了**負控制 / 突變**，確認是靠加寬才抓得到的，不是別的規則順手抓到。
+
+⚠️ **2026-09-04（Lane D）補了三個洞，各自附突變哨兵 —— 但沒有一個是「補完了」**
+1. **taint 由「只傳一跳」改為同檔呼叫圖的固定點**（`_exception_tainted_functions()`）。
+   在此之前，`except ... as e: _relay(t, e)` → `_relay` → `_show_soft` → `st.caption(...)`
+   這種**兩層 wrapper** 對每一條規則都是隱形的（實測：探針 8 條 case 全綠）。
+   **⛔ 只做同檔。跨檔 wrapper 仍然看不見**（見規則 1 docstring 盲點 6）。
+2. **`_ST_RENDER_ATTRS` 補進 `subheader` / `title` / `header` / `badge`**。
+   在此之前用這四個印例外完全隱形；補進來的代價實測為 **0**（無既有站點轉紅）。
+   **集合仍非窮舉** —— 判準是「它會不會把字印到畫面上」，不是「它叫什麼名字」。
+3. **顏色來源規則見姊妹檔 `test_tricolor_colour_provenance.py` 的 R4 節**
+   （具名泛用紅手繪；R4-a 全域零豁免，R4-b 射程只到 `HEALTH_SCOPE`，理由寫在該處）。
+
+⚠️ **本輪三項由單組（Lane D）實作與自驗；2026-09-04 已由獨立稽核組複驗，零 Blocker**
+（稽核加碼跑 4 層／6 層 wrapper、12 節點環、`*args`+`**kwargs` 環，均未推翻；
+ 另抓出下列 N2／N3／O1 三項，N2 已修，N3／O1 登記待後批）。
+
+⚠️ **2026-09-04 稽核後補登的已知缺口（本批**不修**，據實登記）**
+- **N3｜「兩把尺」只收斂了一半。** `UI_SOURCES` 已收成單一真相源，
+  **但 taint seeding 的 callee 解析仍然分岔**（實測，2026-09-04）：
+    · 本檔 `_exception_tainted_functions._absorb()`：
+      `call.func.id if isinstance(call.func, ast.Name) else None` —— **只認 `Name`**；
+    · 姊妹檔 `_call_name()`：`Name → id`，**且 `Attribute → attr`** —— 兩種都認。
+  → **同一份探針，姊妹檔抓得到、本檔抓不到。** 收斂它是另一件事（要決定
+  `Attribute → attr` 這種「只比對方法名」的解析算不算過寬），**不在本批射程**。
+- **O1｜第七個盲點：`Attribute` callee 的 wrapper**（method 或 module-qualified 呼叫，
+  例如 `self._paint(t, e)` / `helpers._paint(t, e)`）。本檔 `_absorb()` 只認 `Name`，
+  這類呼叫拿不到 seed。
+  ⚠️ **它是「未來的繞道」，不是「現在的漏報」**：2026-09-04 實測 `ui/**` 內
+  24 處同形狀命中**沒有一個**對映到本檔的 `FunctionDef`
+  （全是 `.append` / `.lower` / `traceback.extract_tb` 之類，屬已揭露的「值進容器」）。
+  **登記是為了讓下一個人知道這條路是通的，不是宣稱今天漏了什麼。**
+
+⚠️ **本檔的下游（2026-09-04 以 AST 普查，非 grep）**：**6 個** importer、**6 個**符號
+（`ROOT` / `UI_SOURCES` / `_receiver_root` / `_st_container_names` / `_callee` / `HEALTH_SCOPE`）。
+改動任一個的名稱、簽名或回傳形狀之前，先跑一次那份普查 ——
+**用 regex 掃 import 區塊會被 `# noqa` 註解吃掉符號**（本組 2026-09-04 就這樣少數了一個，
+改用 AST 才對）。
 """
 from __future__ import annotations
 
@@ -82,13 +119,30 @@ BATCH2A_SCOPE_A = [ROOT / p for p in (
 # 「會把東西印到畫面上」的 st API。⚠️ 2026-08-28 第二輪稽核 A3：上一版漏了
 # `metric` / `dataframe` / `table` / `json` / `latex` —— 用它們印例外一樣看得到，
 # 卻不會被規則 1 抓到。集合漏一個，規則就在那個方向上是瞎的。
-# ⚠️ **本集合現在仍然不完整（第三輪稽核 P6 實測放行）**：至少還漏
-# `subheader` / `title` / `header`；`st.badge` 等新 API 也未納入。
-# 上一輪只寫了「漏一個就瞎」這句話，卻沒把「它現在仍然漏著」列出來 ——
-# 補在這裡，**不要讀成「已經補齊」**。補齊需要逐一對 Streamlit API 表，列第二批。
+# ⚠️ **2026-09-04：`subheader` / `title` / `header` / `badge` 已補進來**（本批）。
+# 在此之前用這四個印例外對本檔每一條規則都是隱形的（實測：探針 `_probe_hdr.py`
+# 在 handler 裡用這四個印 `e`，舊規則 **8 條 case 全綠**）。
+# **補進來的代價實測為 0**：全 `ui/**` 只有 8 處 `st.subheader`、`title`/`header`/`badge`
+# 各 0 處，且沒有任何一處落在 except handler 的失敗路徑上 —— 故**不需要任何豁免**。
+# ⚠️ **本集合仍然不是窮舉，不要讀成「已經補齊」**：Streamlit 的 render API 會長，
+# 任何一個新 API 在被加進來之前，用它印例外都還是隱形的。
+# 目前**已知未納入**者：`st.write_stream`（實測 `ui/**` + `app.py` **0 命中**）、
+# `st.status` 的訊息參數、`st.toast` 以外的通知類 API。
+# ⚠️ **2026-09-04 更正（稽核 N1-c 指出；有意識的更正，不是漏刪）**：本行原寫
+# ~~「本組實測 `ui/**` 現無使用」~~ 並把 `write_stream` 與 `status` 一起蓋在這句底下 ——
+# **對 `st.status` 為假**。實測 `ui/sidebar.py` 有一處
+# `with st.sidebar.status("檢查版本…", expanded=False):`（**不寫行號**，行號會漂）。
+# **舊表述對 `write_stream` 仍然成立**（那半句是對的），錯的是把兩者綁在同一句普查裡。
+# ✅ **納不納入的結論不變**：該處是**固定字串的進度標籤**、不在任何失敗路徑上，
+# 收進 `_ST_RENDER_ATTRS` 也不會產生違規、不需要任何豁免 —— 也就是說，
+# **這個錯誤沒有讓任何規則放行任何東西，錯的純粹是那句普查敘述。**
+# ⚠️ 但它仍然必須改：一份主題是「守衛不該說謊」的檔案，自己的普查句必須為真
+# （對照本檔既有教訓：**能被一條 grep 推翻的全稱句，就不該寫進守衛**）。
+# 判準是「它會不會把字印到畫面上」，不是「它叫什麼名字」。
 _ST_RENDER_ATTRS = {"caption", "info", "warning", "error", "success", "markdown",
                     "write", "text", "code", "toast", "exception",
-                    "metric", "dataframe", "table", "json", "latex"}
+                    "metric", "dataframe", "table", "json", "latex",
+                    "subheader", "title", "header", "badge"}
 # ⚠️ 2026-09-01：把 IA kit 的兩個**組合層**入口一併登記進來。
 #    它們自己不畫顏色（內部委派回 `not_ready` / `business_alert` / `system_error`），
 #    但**呼叫端看到的是它們** —— 不登記的話，本檔對「經由 helper 畫出來的顏色」
@@ -304,19 +358,18 @@ def _assign_pairs(node):
                 yield item.optional_vars, item.context_expr
 
 
-def _exception_tainted_names(handler: ast.ExceptHandler) -> set[str]:
-    """這個 handler 裡，哪些名字「帶著例外的內容」？
+def _taint_closure_in(scope: ast.AST, seeds: set[str]) -> set[str]:
+    """scope 內從 `seeds` 出發的賦值傳遞閉包（＋ traceback / exc_info 這類間接來源）。
 
-    盲點 (a)（稽核組 2026-08-28 實測可繞過）：
-        `except Exception as e:  _m = f"{type(e).__name__}: {e}";  st.caption(_m)`
-    —— 印出去的是 `_m` 不是 `e`，只比對 `handler.name` 會放行。
-    這裡做一次**傳遞閉包**：凡是賦值右邊碰到已污染的名字，左邊也污染，直到不動點。
+    2026-09-04 抽出：原本這段邏輯只長在 `_exception_tainted_names()` 裡，
+    而**跨函式**的固定點傳播需要用同一套規則從「參數」出發做閉包。
+    兩份各寫一次就是本檔第二輪稽核記載的那種「兩把尺量同一件事」的來源，故抽成一個。
     """
-    tainted = {handler.name} if handler.name else set()
+    tainted = set(seeds)
     changed = True
     while changed:
         changed = False
-        for node in ast.walk(handler):
+        for node in ast.walk(scope):
             for tgt, value in _assign_pairs(node):
                 # 不綁 `as e` 但直接抓 traceback / exc_info 的，也算拿到例外內容
                 derived = bool(_visible_names(value) & tainted) or any(
@@ -330,6 +383,129 @@ def _exception_tainted_names(handler: ast.ExceptHandler) -> set[str]:
                         tainted.add(n.id)
                         changed = True
     return tainted
+
+
+def _exception_tainted_names(handler: ast.ExceptHandler) -> set[str]:
+    """這個 handler 裡，哪些名字「帶著例外的內容」？
+
+    盲點 (a)（稽核組 2026-08-28 實測可繞過）：
+        `except Exception as e:  _m = f"{type(e).__name__}: {e}";  st.caption(_m)`
+    —— 印出去的是 `_m` 不是 `e`，只比對 `handler.name` 會放行。
+    這裡做一次**傳遞閉包**：凡是賦值右邊碰到已污染的名字，左邊也污染，直到不動點。
+    """
+    return _taint_closure_in(handler, {handler.name} if handler.name else set())
+
+
+def _local_functions(tree: ast.AST) -> dict[str, ast.AST]:
+    """同檔內的函式定義表（同名取先走訪到的那一個）。
+
+    ⚠️ 同名函式（例如巢狀 def 與模組層 def 撞名）只留一個 —— 這是**已知的近似**，
+    不是「已經處理好了」。要精確需要 scope-aware 的名稱解析，不在本批範圍。
+    """
+    by: dict[str, ast.AST] = {}
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            by.setdefault(n.name, n)
+    return by
+
+
+def _seed_params_from_call(call: ast.Call, fn: ast.AST, tainted: set[str]) -> set[str]:
+    """呼叫點上帶著例外的引數 → 對映到 callee 的**參數名**（用位置／關鍵字，不猜名字）。
+
+    ⚠️ 位置引數吃不完時是被 `*args` 收走的，關鍵字對不上時是被 `**kwargs` 收走的
+    —— 兩者都要污染，否則 `def _paint(*bits)` 這種 wrapper 會靜默漏掉
+    （姊妹守衛 `test_tricolor_colour_provenance.py` 的探針 X2 就是這個 bug）。
+    """
+    pos = [p.arg for p in (*fn.args.posonlyargs, *fn.args.args)]
+    vararg = fn.args.vararg.arg if fn.args.vararg else None
+    kwarg = fn.args.kwarg.arg if fn.args.kwarg else None
+    named = set(pos) | {p.arg for p in fn.args.kwonlyargs}
+    seeds: set[str] = set()
+    for i, arg in enumerate(call.args):
+        if not (_visible_names(arg) & tainted):
+            continue
+        if i < len(pos):
+            seeds.add(pos[i])
+        elif vararg:
+            seeds.add(vararg)
+    for kw in call.keywords:
+        if not (_visible_names(kw.value) & tainted):
+            continue
+        # ⚠️ 2026-09-04：原本這裡有一條獨立的 `if kw.arg is None:`（`**payload` splat）
+        # 分支，**經突變驗證證明它是死碼** —— splat 與「具名但對不上宣告參數」兩種情形
+        # 都會落到下面的 `elif kwarg`，行為完全相同，拿掉那條分支測試全綠。
+        # 一條**無法被任何測試殺死**的分支，就是一條沒有人在守的分支：留著只會讓
+        # 下一個人以為它有作用。故合併成一條，並在這裡寫明兩種情形都由它涵蓋。
+        if kw.arg is not None and kw.arg in named:
+            seeds.add(kw.arg)
+        elif kwarg:
+            # `**payload` splat（kw.arg is None）與具名但對不上的關鍵字，
+            # 兩者都是被 `**kwargs` 收走的。
+            seeds.add(kwarg)
+    return seeds
+
+
+def _exception_tainted_functions(tree: ast.AST) -> dict[str, set[str]]:
+    """同檔呼叫圖上的**固定點**：哪些函式收到了例外內容，以及其中哪些名字被污染。
+
+    ⚠️ **本函式是 2026-09-04 補的 X1 破口**（原登記於
+    `tests/test_tricolor_colour_provenance.py` 模組 docstring「X1｜同檔兩層 wrapper」）。
+    在此之前，taint **只傳一跳** —— 從 except handler 直接看得到的 `st.*` 呼叫。
+    於是下面這個形狀對本檔每一條規則都是隱形的（2026-09-04 實測，探針 B）::
+
+        def _show_soft(title, detail):    # ← 灰字畫在這裡，但它從未被標記
+            st.caption(f"{title}：{detail}")
+        def _relay(title, detail):        # ← 被標記了，但它自己不畫
+            _show_soft(title, detail)
+        try: ...
+        except Exception as e:
+            _relay("NAV 抓取失敗", e)      # ← handler 裡只有一個普通呼叫
+
+    **「被標記的函式不畫圖、畫圖的函式沒被標記」，兩邊都不報。**
+    現在改成迭代到不動點：只要某函式接收到被污染的引數，它的對應參數就被污染，
+    再由它往下傳給它呼叫的函式，反覆直到污染集合不再變大 —— **任意層數都追得到**
+    （2026-09-04 以三層 wrapper 的探針 C 實測確認，不是「補到兩跳」）。
+
+    ⛔ **只做同檔（intra-file）。跨檔仍未涵蓋 —— 這是已知缺口，不要讀成補完了。**
+    把 wrapper 搬到另一個模組、由 `from x import _relay` 引進來呼叫，本函式看不見它
+    （`_local_functions()` 只收本檔的 `FunctionDef`）。要補需要跨檔呼叫圖 ＋
+    模組解析，屬範圍擴大（`CLAUDE.md §8.4 步驟 4`），本批不做。
+    ⚠️ 另兩個**同檔內**仍然看不見的方向（與上面的跨檔缺口是不同的三件事）：
+      - 間接呼叫（`_emit = functools.partial(_show)` 之後呼叫 `_emit`）——
+        callee 是一個 `Name` 但不是 `FunctionDef`，`_local_functions()` 查不到；
+      - 值先進了容器再取出（`bag.append(e)` → 別處 `for x in bag`）——
+        本檔只追蹤**名字之間**的傳遞（同模組 docstring 既有盲點 3）。
+    """
+    byname = _local_functions(tree)
+    seeds_by_fn: dict[str, set[str]] = {}
+
+    def _absorb(scope: ast.AST, tainted: set[str]) -> bool:
+        """scope 內對本檔函式的呼叫 → 把帶污染的引數種進 callee 的參數。"""
+        grew = False
+        for call in [n for n in ast.walk(scope) if isinstance(n, ast.Call)]:
+            name = call.func.id if isinstance(call.func, ast.Name) else None
+            fn = byname.get(name) if name else None
+            if fn is None:
+                continue
+            new = _seed_params_from_call(call, fn, tainted) - seeds_by_fn.get(name, set())
+            if new:
+                seeds_by_fn.setdefault(name, set()).update(new)
+                grew = True
+        return grew
+
+    for handler in [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]:
+        seeded = _exception_tainted_names(handler)
+        if seeded:
+            _absorb(handler, seeded)
+
+    # 固定點：污染集合單調成長且以「參數名」為上界，必定終止（含相互遞迴）。
+    changed = True
+    while changed:
+        changed = False
+        for name in list(seeds_by_fn):
+            if _absorb(byname[name], _taint_closure_in(byname[name], seeds_by_fn[name])):
+                changed = True
+    return {n: _taint_closure_in(byname[n], s) for n, s in seeds_by_fn.items()}
 
 
 def _call_shows_exception(call: ast.Call, tainted: set[str]) -> bool:
@@ -387,25 +563,38 @@ def _direction_a_violations(path: pathlib.Path) -> list[str]:
     for n in ast.walk(tree):
         for c in ast.iter_child_nodes(n):
             parent[c] = n
-    bad = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ExceptHandler):
-            continue
-        tainted = _exception_tainted_names(node)
-        for call in _rendering_calls(node, containers):
+    # 兩種「手上有例外」的 scope，走同一套判定（不要兩把尺）：
+    #   ① except handler 自己；
+    #   ② 被 handler（或被另一個已污染的函式）以帶例外的引數呼叫的**本檔函式** ——
+    #      這是 2026-09-04 補上的固定點傳播，見 `_exception_tainted_functions()`。
+    scopes: list[tuple[ast.AST, set[str]]] = [
+        (n, _exception_tainted_names(n))
+        for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)
+    ]
+    byname = _local_functions(tree)
+    scopes += [(byname[n], t) for n, t in _exception_tainted_functions(tree).items()]
+
+    bad, seen = [], set()
+    for scope, tainted in scopes:
+        for call in _rendering_calls(scope, containers):
+            if id(call) in seen:
+                continue                      # 同一個呼叫可能落在兩個 scope 裡，只報一次
             if not _call_shows_exception(call, tainted):
                 continue                      # 沒把例外拿給使用者看 → 不歸本檔管
             if _is_red_entrypoint(call, containers):
                 continue                      # 已經是系統紅燈
+            seen.add(id(call))
             cur, fname = call, "<module>"
             while cur in parent:
                 cur = parent[cur]
                 if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     fname = cur.name
                     break
-            bad.append(f"{path.relative_to(ROOT)}::{fname}()"
-                       f"  (line {call.lineno} {_callee_src(call)})")
-    return bad
+            bad.append((call.lineno,
+                        f"{path.relative_to(ROOT)}::{fname}()"
+                        f"  (line {call.lineno} {_callee_src(call)})"))
+    # 依行號排序：兩個 scope 來源的走訪順序不同，不排序的話訊息順序會漂。
+    return [msg for _ln, msg in sorted(bad)]
 
 
 def _direction_a_site_keys(path: pathlib.Path) -> list[str]:
@@ -448,16 +637,31 @@ def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
          （那一組是安全的：容器最後交給 `system_error`），但**規則沒有在守它**；
       4. 例外被轉成一個不含任何原名的字面字串（`st.caption("抓取失敗")`）——
          結構上與「這格沒資料」無法區分，只能靠 review；
-      5. ⭐ **`except Exception:`（未綁 `as`）＋ 印出「函式參數裡的那個例外」**
-         （2026-08-28 稽核 A2 揭露，本批**未修**）。實例：`ui/tab_manage.py`
-         的 `_friendly(title, e, level=...)` —— 內層 `except Exception:` 沒有綁定，
-         而 `st.caption(...)` 印的 `e` 是**外層函式的參數**。本檔的 taint 只從
-         `handler.name` 出發，看不到「參數本身就是一個例外物件」這件事。
-         ⚠️ **這正是兩把獨立的尺量出 47 vs 48 的唯一差額** —— 據實記在這裡，
-         不要把 47 讀成「全部」。要補需要型別/命名推斷（哪個參數是 Exception），
-         不在「只做顏色」這一批的範圍內。
+      5. ✅ **`except Exception:`（未綁 `as`）＋ 印出「函式參數裡的那個例外」——
+         2026-09-04 已由固定點傳播涵蓋**（**有意識的狀態變更，不是漏刪**）。
+         實例仍是 `ui/tab_manage.py` 的 `_friendly(title, e, level=...)`：
+         內層 `except Exception:` 沒有綁定，`st.caption(...)` 印的 `e` 是**外層函式的參數**。
+         ~~舊表述「要補需要型別/命名推斷（哪個參數是 Exception），不在本批範圍」~~ ——
+         **那個判斷在當時成立，但走錯了方向，故被權衡掉**：不必推斷「哪個參數是例外」，
+         只要從**呼叫端**看「誰把一個被污染的值傳了進來」就夠了
+         （`_exception_tainted_functions()`）。**舊方向要的是型別推斷，新方向要的是呼叫圖。**
+         ⚠️ **這正是當初兩把獨立的尺量出 47 vs 48 的那個唯一差額** ——
+         現已收進 `DIRECTION_A_SITES` 成為會轉紅的登記債（ratchet 4 → 5，理由見該處）。
+         ⛔ **只涵蓋同檔**：若 `_friendly` 住在另一個模組、由 import 進來呼叫，仍然看不見。
+      6. ⭐ **跨檔 wrapper（本批未修，據實登記）**：把 wrapper 搬到另一個檔案，
+         `_local_functions()` 只收本檔的 `FunctionDef` → 固定點傳不過去。
+         要補需要跨檔呼叫圖 ＋ 模組解析，屬範圍擴大（`CLAUDE.md §8.4 步驟 4`）。
+      7. ⭐ **同檔的間接呼叫（本批未修）**：`_emit = functools.partial(_show)` 之後
+         `except ...: _emit(str(e))` —— callee 是一個 `Name` 但查不到 `FunctionDef`。
     """
-    bad = _direction_a_violations(path)
+    # ⚠️ 扣掉 `DIRECTION_A_SITES` 登記的**待修**站點 —— 那是一份「還沒還完的債」，
+    # 不是豁免（每一列的理由都寫著「正解是什麼、為什麼不在本 lane 做」）。
+    # 用同一份登記表驅動逐檔規則與全域 ratchet，是刻意的：本檔第二輪稽核 A7 記載過
+    # 「兩把尺量同一件事卻各寫一份」的失效模式。
+    # ⚠️ 這**不會**變成「該函式從此免疫」：ratchet 的 `total == DIRECTION_A_RATCHET`
+    # 用的是**違規數**不是站點數，同一個函式裡再多一處灰字，總數就會從 5 變 6 而轉紅。
+    bad = [v for v in _direction_a_violations(path)
+           if v.split("  (line ")[0] not in DIRECTION_A_SITES]
     assert not bad, (
         "以下位置把「抓到的例外」用非紅燈 widget 印出去，使用者會誤以為只是還沒載入、"
         "以為按一下就好；請改走 ui.helpers.render_state.system_error()：\n  "
@@ -475,18 +679,269 @@ def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
 # 這四處的正解都是**結構改動**（收集→彙總 / 跨 rerun 保存），不是換顏色。
 # ⚠️ 這不是豁免清單，是**待辦的可見化**：數字只准往下走。
 # ⚠️ 量測方法：`_direction_a_violations()`，與逐檔規則同一把尺（不要換尺再比大小）。
-DIRECTION_A_RATCHET = 4
+#
+# ⚠️⚠️ **2026-09-04：4 → 5。這一次的 +1 不是「借」，是「尺變準了」——**
+#    **據實寫明，因為 ratchet 只准往下走，任何往上走都必須交代清楚。**
+#    本輪補上 `_exception_tainted_functions()` 的**固定點傳播**（X1 破口）之後，
+#    多看見了 `ui/tab_manage.py::_friendly()` —— 它**在本輪之前就已經是這個樣子**，
+#    只是舊的 taint 只傳一跳、看不到它。
+#    ⚠️ 這一處**正是本檔 `test_caught_exception_is_reported_as_a_system_failure`
+#    的 docstring 早就登記過的盲點 5**（「`except Exception:`（未綁 `as`）＋
+#    印出函式參數裡的那個例外」，實例逐字寫著 `ui/tab_manage.py` 的 `_friendly`），
+#    也就是該處自陳「兩把獨立的尺量出 **47 vs 48** 的唯一差額」的那 **1**。
+#    **本輪把那個差額關掉了：登記的盲點變成了會轉紅的登記債。**
+#    ⛔ **不得**把這次的 +1 當成「ratchet 可以往上調」的先例：
+#    只有「**規則變嚴而看見既有債**」可以往上，「**新寫了一處違規**」一律不行。
+#    兩者的分辨方法：往上調的同一個 commit 裡，**必須**有一個讓規則變嚴的 diff。
+DIRECTION_A_RATCHET = 5
 
 # ⚠️ **不只記「幾處」，還要記「是哪幾處」**（2026-08-28 稽核 X-4b 否證後補）：
 # 只斷言數量時，「還一筆再借一筆」的**淨零置換**永遠不紅 —— 實測：正確修掉
 # checkup.py 那處、同時在 tab_manage.py 新增一處全新灰字（總數仍 4）→ 1 passed。
 # 鍵刻意用 `路徑::函式()` 而不是行號：行號每次重構都漂，函式名不會。
+# ⚠️ **這是「待修」登記，不是「這樣寫是對的」豁免。** 逐列理由見下方 `DIRECTION_A_WHY`。
 DIRECTION_A_SITES = frozenset({
     "ui/helpers/fund/checkup.py::render_fund_checkup()",
     "ui/helpers/portfolio/fee_deduction.py::render_fee_deduction_section()",
     "ui/helpers/portfolio/load.py::batch_load_unloaded_funds()",
     "ui/sidebar.py::render_sidebar()",
+    "ui/tab_manage.py::_friendly()",
 })
+
+# 逐列理由。**格式要求：寫「這一列現在是什麼狀態、正解是什麼」，不要寫「它長得像什麼」**
+# （`CLAUDE.md §8.2.A.0 規則 5`：豁免理由必須是「為什麼這個位置是對的」；
+#  **若理由其實是「還沒修」，就照實寫「待修」，不要包裝成豁免**）。
+DIRECTION_A_WHY = {
+    "ui/helpers/fund/checkup.py::render_fund_checkup()":
+        "待修。逐檔迴圈裡的失敗，改紅會犯 M1「N 檔 N 個紅框」。"
+        "正解是收集後彙總成一個 system_error()，屬結構改動不是換顏色。",
+    "ui/helpers/portfolio/fee_deduction.py::render_fee_deduction_section()":
+        "待修。同上，逐保單迴圈。正解同樣是收集→彙總。",
+    "ui/helpers/portfolio/load.py::batch_load_unloaded_funds()":
+        "待修。逐檔進度 log，且失敗已由下方彙總上報；正解是把這行降成非 render 的 log。",
+    "ui/sidebar.py::render_sidebar()":
+        "待修。下一行就是 st.rerun()，目前只有 toast 活得過 rerun。"
+        "正解是把失敗訊息存進 session_state 跨 rerun 保存後再以紅燈畫出。",
+    "ui/tab_manage.py::_friendly()":
+        "待修（2026-09-04 因固定點傳播才首度可見；**不是本輪新增的違規**）。"
+        "`_friendly` 的主路徑走 friendly_error()（紅燈，合規）；"
+        "只有在 `from ui.helpers.session import friendly_error` 這個 import 自己失敗時，"
+        "才退成 st.caption 灰字 —— 而那一刻使用者看到的仍是「系統壞了卻長得像還沒載入」。"
+        "正解是把最後那道退路換成不需要 import 的 st.error()，一行 production 改動；"
+        "**本輪只改測試檔，故只登記不修**（`CLAUDE.md §8.4 步驟 4`：不擴大範圍）。",
+}
+
+
+def test_a_every_registered_debt_carries_a_reason():
+    """登記表的**反向斷言**：每一列都要有理由，而且理由表不得長出多餘的列。
+
+    ⚠️ 沒有這條，`DIRECTION_A_SITES` 會慢慢退化成一份「加進去就沒事」的白名單 ——
+    那正是 `CLAUDE.md §8.2.A.0 規則 5` 點名的失效模式（理由倒置：把違憲寫成合憲）。
+    **理由的格式要求寫在 `DIRECTION_A_WHY` 上方：是「待修」就寫「待修」。**
+    """
+    missing = sorted(DIRECTION_A_SITES - set(DIRECTION_A_WHY))
+    assert not missing, f"下列站點登記在 DIRECTION_A_SITES 卻沒有理由：{missing}"
+    stale = sorted(set(DIRECTION_A_WHY) - DIRECTION_A_SITES)
+    assert not stale, (
+        f"下列理由對應的站點已不在登記表裡（修好了？）：{stale} —— 請一併刪掉理由。")
+    thin = sorted(k for k, v in DIRECTION_A_WHY.items() if len(v) < 20)
+    assert not thin, f"下列理由太短，看不出「正解是什麼」：{thin}"
+
+
+def test_a_taint_propagates_to_a_fixed_point_not_just_one_hop():
+    """X1 破口的突變哨兵：**任意層數**的同檔 wrapper 都要追得到。
+
+    ⚠️ 這條刻意用**三層**（比當初登記的 X1 兩層多一跳）：兩層只能證明
+    「補到了第二跳」，證不了「這是一個固定點」。三層過了才排除掉
+    「把 one-hop 改成 two-hop」這種假修法。
+
+    ⛔ **突變驗證**：把 `_exception_tainted_functions()` 的 `while changed:` 迴圈
+    整段拿掉（＝退回只從 handler 種一次、不再往下傳），本條**必須轉紅**。
+    2026-09-04 已實測。**沒有這條，那個固定點沒有任何東西守著。**
+    """
+    probe = (
+        "import streamlit as st\n"
+        "def _paint(title, detail):\n"
+        "    st.caption(f'{title}：{detail}')\n"
+        "def _mid(title, detail):\n"
+        "    _paint(title, detail)\n"
+        "def _relay(title, detail):\n"
+        "    _mid(title, detail)\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _relay('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    tainted = _exception_tainted_functions(tree)
+    for hop, fn in ((1, "_relay"), (2, "_mid"), (3, "_paint")):
+        assert fn in tainted, (
+            f"第 {hop} 跳的 wrapper `{fn}` 沒有被污染 —— taint 沒有傳到不動點，"
+            "真的系統故障會被畫成灰色而沒有任何規則會響（X1 破口）。")
+    assert "detail" in tainted["_paint"], (
+        "`_paint` 被標記了，但它自己的參數 `detail` 沒被認出帶著例外內容 —— "
+        "只標記函式而不傳參數名，等於標了不會用。")
+
+
+def test_a_a_varargs_wrapper_is_not_a_blind_spot():
+    """`def _paint(*bits)` 也要抓得到 —— `_seed_params_from_call()` 的 vararg 分支哨兵。
+
+    ⚠️ **2026-09-04 補（稽核 N2 指出，本組已自行重現）。** 姊妹檔
+    `test_tricolor_colour_provenance.py` 早就有這條（`test_r3_a_varargs_wrapper_is_not_a_blind_spot`），
+    **hub 這邊漏了** —— 實測拿掉本檔 `_seed_params_from_call()` 的
+    `elif vararg: seeds.add(vararg)`，整個 hub **450 passed 全綠**（surviving mutant）。
+    **那個分支在行為上是活的，只是沒有東西守著它。**
+
+    機制：位置引數吃不完時是被 `*args` 收走的。`def _paint(*bits)` 之下宣告的位置參數
+    數量是 **0**，於是 `_paint("NAV 失敗", e)` 的 `e`（index 1）會因 `i >= len(pos)`
+    被**靜默跳過** → taint 遺失 → `_paint` 從未被判為失敗渲染 → 用灰字也不報。
+
+    ⛔ **突變驗證**：拿掉那個 `elif vararg` 分支，本條**必須轉紅**（2026-09-04 已實測）。
+    """
+    probe = (
+        "import streamlit as st\n"
+        "def _paint(*bits):\n"
+        "    st.caption(f'{bits}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    tainted = _exception_tainted_functions(tree)
+    assert "_paint" in tainted, (
+        "`*args` wrapper 沒有被固定點認出來 —— 位置引數 index 超過宣告參數數量時，"
+        "taint 被靜默跳過。這是算術 bug，不是刻意留的鬆度。")
+    assert "bits" in tainted["_paint"], (
+        f"`_paint` 被標記了，但 vararg 名 `bits` 沒被污染（實得 {sorted(tainted['_paint'])}）"
+        " —— 標了不會用，等於沒標。")
+
+
+def test_a_a_kwargs_wrapper_is_not_a_blind_spot():
+    """`def _paint(**kw)` 也要抓得到 —— `_seed_params_from_call()` 的 `**kwargs` 分支哨兵。
+
+    ⚠️ **2026-09-04 補（稽核 N2 指出，本組已自行重現）**：拿掉本檔
+    `_seed_params_from_call()` 的兩條 `**kwargs` 分支，hub **450 passed 全綠**
+    （第二個 surviving mutant）。
+
+    守的是兩條子路徑，**分開斷言**，否則其中一條壞掉會被另一條蓋過去：
+      (1) `_paint(detail=e)` —— 關鍵字名**對不上任何宣告參數**時，是被 `**kw` 收走的；
+      (2) `_paint(**payload)` —— **splat**（`kw.arg is None`），整包收進 `**kw`。
+    """
+    # (1) 對不上宣告參數名 → 落進 **kw
+    probe1 = (
+        "import streamlit as st\n"
+        "def _paint(**kw):\n"
+        "    st.caption(f'{kw}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint(title='NAV 抓取失敗', detail=e)\n"
+    )
+    t1 = _exception_tainted_functions(ast.parse(probe1))
+    assert "_paint" in t1 and "kw" in t1["_paint"], (
+        f"關鍵字引數對不上宣告參數時沒有污染 `**kw`（實得 {sorted(t1.get('_paint', []))}）"
+        " —— 那個例外就從呼叫圖上消失了。")
+
+    # (2) `**payload` splat（kw.arg is None）
+    probe2 = (
+        "import streamlit as st\n"
+        "def _paint(**kw):\n"
+        "    st.caption(f'{kw}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _bag = {'detail': e}\n"
+        "        _paint(**_bag)\n"
+    )
+    t2 = _exception_tainted_functions(ast.parse(probe2))
+    assert "_paint" in t2 and "kw" in t2["_paint"], (
+        f"`**splat` 沒有污染 `**kw`（實得 {sorted(t2.get('_paint', []))}）—— "
+        "把例外裝進 dict 再 splat 進去，是繞過本規則最短的一條路。")
+
+    # (3) 具名關鍵字**對得上宣告參數**、且該函式**沒有** `**kwargs`
+    #     ⚠️ 2026-09-04 補：這一格是突變電池自己逼出來的 —— 上面兩格都用
+    #     `def _paint(**kw)`，於是把「具名參數」那條分支整條換成 `if kwarg:`
+    #     仍然全綠（surviving mutant）。**沒有 `**kwargs` 兜底的函式才驗得到它。**
+    probe3 = (
+        "import streamlit as st\n"
+        "def _paint(title, detail):\n"
+        "    st.caption(f'{title}{detail}')\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint(title='NAV 抓取失敗', detail=e)\n"
+    )
+    t3 = _exception_tainted_functions(ast.parse(probe3))
+    assert "_paint" in t3 and "detail" in t3["_paint"], (
+        f"以關鍵字傳給**具名參數**時沒有污染該參數（實得 {sorted(t3.get('_paint', []))}）"
+        " —— 這種函式沒有 `**kwargs` 可以兜底，漏了就是整條呼叫鏈斷掉。")
+    assert "title" not in t3["_paint"], (
+        "只有帶例外的那個關鍵字該被污染，`title`（純字串）不該被連坐 —— "
+        "連坐會製造假紅燈，把規則的可信度耗掉。")
+
+
+def test_a_the_fixed_point_terminates_on_recursive_call_graphs():
+    """固定點必須在**遞迴／相互遞迴**的呼叫圖上收斂，不能轉不出來。
+
+    ⚠️ 這條守的是一個**壞掉的方式很難看**的失效模式：迴圈不收斂時 CI 不是紅燈，
+    是**掛住**，然後整條 lane 被一個看不出原因的 timeout 卡死。
+    終止性的論證是「污染集合單調成長、且以該函式的參數名集合為上界（有限）」——
+    論證成立不代表下一個人改完之後還成立，所以釘一條會跑的測試。
+
+    ⚠️ 若本條**掛住**（不是失敗）→ 就是終止性被破壞了，去看
+    `_exception_tainted_functions()` 的 `while changed:` 有沒有被改成會反覆翻轉的東西。
+    """
+    probe = (
+        "import streamlit as st\n"
+        "def a(x, y):\n"
+        "    b(x, y)\n"
+        "    a(y, x)\n"          # 自遞迴
+        "def b(x, y):\n"
+        "    c(y, x)\n"          # 參數順序刻意對調
+        "def c(x, y):\n"
+        "    a(x, y)\n"          # 繞回 a → 形成環
+        "    st.caption(f'{x}{y}')\n"
+        "def r(p):\n"
+        "    try:\n"
+        "        _ = p['n']\n"
+        "    except Exception as e:\n"
+        "        a('t', e)\n"
+    )
+    tainted = _exception_tainted_functions(ast.parse(probe))
+    assert set(tainted) == {"a", "b", "c"}, (
+        f"環狀呼叫圖上的固定點收斂到 {sorted(tainted)}，預期 ['a', 'b', 'c']。")
+    # 參數在環上被對調過，兩個位置最終都該被污染（否則就不是不動點）。
+    assert sorted(tainted["c"]) == ["x", "y"], (
+        f"`c` 的污染參數是 {sorted(tainted['c'])} —— 環上對調過的位置沒有全部收斂。")
+
+
+def test_a_a_render_attr_added_this_batch_is_actually_watched():
+    """`subheader` / `title` / `header` / `badge` 的突變哨兵。
+
+    ⛔ 把這四個從 `_ST_RENDER_ATTRS` 拿掉，本條**必須轉紅**（2026-09-04 已實測）。
+    在本批之前，用它們印例外對本檔每一條規則都是隱形的。
+    """
+    for attr in ("subheader", "title", "header", "badge"):
+        assert attr in _ST_RENDER_ATTRS, (
+            f"`st.{attr}` 不在 `_ST_RENDER_ATTRS` 裡 —— 用它印例外會完全隱形。")
+        probe = (
+            "import streamlit as st\n"
+            "def render_block(payload):\n"
+            "    try:\n"
+            "        _ = payload['nav']\n"
+            "    except Exception as e:\n"
+            f"        st.{attr}(f'NAV 抓取失敗：{{e}}')\n"
+        )
+        tree = ast.parse(probe)
+        handler = next(n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler))
+        calls = list(_rendering_calls(handler, _st_container_names(tree)))
+        assert calls, f"`st.{attr}(…例外…)` 沒有被認成 render 呼叫。"
 
 
 def test_a_caught_exception_backlog_only_shrinks():
