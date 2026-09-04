@@ -860,6 +860,75 @@ def test_the_composite_swing_is_the_full_possible_contribution_of_what_is_missin
     assert composite_support is not None      # 引用一下，避免 lint 誤判未使用
 
 
+# ── 第七輪稽核：`summed_verdict` 三點同帶的**上端**那一半沒有行為守衛 ──────
+def test_only_the_high_end_of_the_composite_interval_can_flip_this_verdict():
+    """**第七輪稽核**：`summed_verdict` 三點同帶裡的**上端**那一半，全套零守衛。
+
+    實測（第七輪，`84ebc2f`）：把
+        `_ok = (band_of(_lo) == _band == band_of(_hi))`
+    砍成 `_ok = (band_of(_lo) == _band)` → **7114 passed, 45 skipped**，全綠。
+
+    那個突變**不是惰性的**：走真正的入口 `calculate_composite_score(...,
+    provenance_out=…)` 掃三萬多個綜合健康度狀態，有 **1121** 個**只在上端**翻帶
+    —— 砍掉上端那一半，就會讓這 1121 個狀態重新宣告一個「沒取到的那幾項若真的
+    取到，就會被推到另一條帶」的定論（第 2 輪起每一輪都是同一類缺陷）。
+
+    本條是那一類的**最小可達實例**，而且**走生產端**、不手搭 `EvidenceSupport`
+    —— 本批的歷史正是「手搭 fixture 剛好蓋住這一類」，前幾輪的缺陷因此活到稽核。
+
+    **構造全部從真實 cutoff 推出來，不寫死任何一個數字**：28 項只缺
+    `UNEMPLOYMENT`（權重 0.5 ⇒ swing = 0.5 × 2 = 1.0），總分放在 `c2 − swing/2`：
+        · 低端 `c2 − 1.5×swing` → 仍在「中性」⇒ **低端那一半放行**
+        · 高端 `c2 + 0.5×swing` → 「樂觀」   ⇒ **只有上端那一半攔得下來**
+
+    ⚠️ **對稱的那一半（低端）已經有守衛**，是同檔的
+    `test_the_composite_swing_is_the_full_possible_contribution_of_what_is_missing`
+    —— 它的 `_full` 是 total=5.7 / swing=1.0（低端 4.7 落回「中性」、高端 6.7
+    仍是「樂觀」），剛好只有低端攔得住。⚠️ 但那一條是**手搭的直呼**
+    （直接叫 `summed_verdict(...)`、自己指定 total），**沒有走生產端** ——
+    據實記在這裡，不在本輪擴充。
+    兩條互為鏡像，缺任一邊就有半個可及區間沒人看。
+    突變驗證：砍上端 → **本條**轉紅；砍低端 → **那一條**轉紅。
+    """
+    from services.macro.weights_store import get_verdict_cutoffs
+
+    _band = lambda _t: composite_verdict(_t)[1]      # noqa: E731
+    _omit = "UNEMPLOYMENT"
+    _swing = _ALL_W[_omit] * MACRO_INDICATOR_MAX_ABS_SCORE
+    _c2 = get_verdict_cutoffs()[1]                   # 「樂觀」切點
+    # 目標總分：距「樂觀」切點不到一個 swing（上端跨得過去），
+    # 但距「中性」下緣還有一個 swing 以上（下端跨不過去）。
+    _target = _c2 - _swing / 2.0
+
+    _scores = {_k: 0.0 for _k in _ALL_W if _k != _omit}
+    _scores["PMI"] = MACRO_INDICATOR_MAX_ABS_SCORE           # 頂到宣告的 |score| 上界
+    _scores["CPI"] = ((_target - MACRO_INDICATOR_MAX_ABS_SCORE * _ALL_W["PMI"])
+                      / _ALL_W["CPI"])                       # 其餘補到 `_target`
+    assert abs(_scores["CPI"]) <= MACRO_INDICATOR_MAX_ABS_SCORE, (
+        "構造超出生產端宣告的 |score| 上界 —— 這個狀態生產端到不了，換一組")
+
+    _prov: dict = {}
+    _total = calculate_composite_score(_ind_from(_scores), provenance_out=_prov)
+    _sup = _prov["support"]
+
+    # ── 前提：不成立就大聲失敗，不要靜默地為了錯的理由而通過 ──────────────
+    assert _total == pytest.approx(_target), (_total, _target)
+    assert _sup.rule == "summed_verdict", (
+        f"這個狀態走的不是規則 2-c（rule={_sup.rule}）—— 若落進警報帶就會走"
+        " `witnessed` 豁免，那就測不到本條要測的東西")
+    assert _sup.detail["missing_swing"] == _swing, _sup.detail
+    assert _band(_total - _swing) == _band(_total), (
+        "前提不成立：低端已經翻帶了，那低端那一半也攔得住 —— 換一組（不要 skip）")
+    assert _band(_total + _swing) != _band(_total), (
+        "前提不成立：高端沒翻帶，這個狀態本來就充足 —— 換一組（不要 skip）")
+
+    # ── 本體：這個狀態**只有**上端那一半攔得住 ────────────────────────────
+    assert not _sup.sufficient, (
+        f"總分 {_total:+.2f}「{_band(_total)}」被判為足以下結論，但沒取到的"
+        f" {_omit} 若真的取到，總分可及 {_total + _swing:+.2f}"
+        f"「{_band(_total + _swing)}」—— 三點同帶的**上端**那一半失效了")
+
+
 # ── `witnessed()` 的空證人契約（第五輪點名：public L0 API，零覆蓋）──────
 def test_witnessed_with_no_witnesses_is_not_an_alarm():
     """`witnesses` 為空 ⇒ 沒有任何觀測作證 ⇒ **不是警報**，是無話可說。
