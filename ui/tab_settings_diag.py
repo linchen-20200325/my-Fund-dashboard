@@ -113,11 +113,37 @@ widget key 與寫入路徑要收斂），留給接線後的收斂批次；**本�
 **舊表述在它寫下的當天是對的**（WP-E 確實刻意不合併，理由「屬行為變更」也沒錯）；
 **被權衡掉的只是它的狀態**。
 **現況**：兩個舊入口都由 `merge_context.NAV_HISTORY` 旗標守住（⑤ 持有 → 兩邊都不畫），
-唯一一份由 `ui/helpers/settings_diag/nav_history_section.py::render_nav_history_section()`
-在 B 分區畫出來，標題為「🗄️ NAV 歷史」，**兩個舊標題都不留**。
+**兩個舊標題都不留**。
+~~唯一一份由 `ui/helpers/settings_diag/nav_history_section.py::render_nav_history_section()`~~
+~~在 B 分區畫出來，標題為「🗄️ NAV 歷史」，**兩個舊標題都不留**。~~
+⚠️ **2026-09-04 就地更正：上面那句指向一個不存在的符號，而且標題也不對了**
+（**有意識的更正，不是漏刪** · 日期 **2026-09-04** · 決策者：**AI 總管** ·
+依據：實測 `grep -n "^def " ui/helpers/settings_diag/nav_history_section.py`
+→ 只有 `render_nav_status_section` 與 `render_nav_manual_section`，
+**沒有 `render_nav_history_section`**）。
+**舊表述在它寫下的當天是對的** —— 收斂批次確實先做成「一塊、一個標題」；
+**被權衡掉的是它的切法**：隔天（2026-09-02 總管裁決，commit `a56994e`）改依
+`docs/wireframes/ia-wireframe.html` Tab 05 把 NAV 拆成**兩塊**，
+`render_nav_history_section()` 隨之被換掉，那個符號自此不存在。
+**現行**：由**兩個**函式畫出，都在
+`ui/helpers/settings_diag/nav_history_section.py`：
+- `render_nav_status_section()` —— **唯讀**，標題吃 `story_nav.section_label('nav_status')`；
+- `render_nav_manual_section()` —— **寫入類、全部 Form 封裝**，
+  標題吃 `story_nav.section_label('nav_manual')`。
+
+⚠️ **標題請去 `story_nav.section_label()` 讀，本段刻意不抄字串** ——
+兩個標題常數是 `NAV_STATUS_HEADING` / `NAV_MANUAL_HEADING`，
+定義處自己就寫著「**吃 `story_nav` SSOT，不手抄** —— 手抄的那一刻它就開始漂移」。
+**本段被更正的那句「標題為『🗄️ NAV 歷史』」，正是手抄字串漂移的實例。**
+漂移鎖：`tests/test_story_nav.py::test_section_labels_match_merged_pages`。
+📌 兩塊的**相對順序**是「狀態在前、寫入在後」；線框 Tab 05 的最終順序在兩者之間
+還夾著「連線與金鑰」，**屬 T18 批次**，本檔下方 `_render_maintain_section()` 已就地登記。
 ⚠️ **合的是入口，不是實作** —— 三條寫入路徑實測**行為不等價**
 （多檔/單檔、代號來源、寫本機/只寫雲端、CSV 要不要代號欄），
-**一條都沒有刪**，只是收到同一個標題底下。逐項對照見該 helper 的模組 docstring。
+**一條都沒有刪**，只是收到 ~~同一個標題~~ **同一塊「手動補資料」** 底下
+（⚠️ **2026-09-04 一併更正**：拆成兩塊之後**不再是一個標題**，
+三條寫入路徑全部落在「手動補資料」那一塊；理由同上一段）。
+逐項對照見該 helper 的模組 docstring。
 ⚠️ 舊表述那句「D 又在 gate 之後 → 不會同屏出現兩份」**當時就只是緩解，不是解法**：
 使用者只要勾了診斷 gate 就會同屏看到兩份。守衛：
 `tests/test_ia_tab5_nav_history_merge.py`（gate 開著也只有一份）。
