@@ -25,6 +25,24 @@ _VIX_PANIC: float = 30.0          # C2 v19.160 全站 universal panic = 30(對�
 _BUY_SCORE_10: float = 6.5        # 景氣位階 ≥ 此 → 🟢 可加碼(0-10 scale;可調)
 _HOLD_SCORE_10: float = 4.0       # 景氣位階 ≥ 此 → 🟡 持有;< 此 → 🔴 減碼
 
+# ── override 這一層**實際會去讀**的 indicator key(2026-09-04 第三輪稽核 A1)──
+#
+# 為什麼要把它匯出成常數:非 override 分支回傳的 reason 逐字寫
+# 「無硬衰退/恐慌訊號(**殖利率曲線、Sahm、VIX 均未觸發**)」—— 那是一句
+# **點名了特定輸入**的宣稱。當那些輸入根本沒抓到時,這句話字面上是假的
+# (完全斷線實測:四項全缺,畫面照樣寫「均未觸發」並放綠燈)。
+#
+# 呼叫端要判斷「這句話能不能講」,就必須知道**是哪幾個 key**。讓呼叫端自己
+# 抄一份 key 清單 = 第二個真相源,本函式日後多讀一個指標(例如加上 HY_SPREAD)
+# 時不會有人發現呼叫端的閘門漏了它。故在此匯出,並由
+# `tests/test_batch2_top_card_grid.py` 的 AST 漂移鎖釘住「常數 ≡ 函式實際讀的 key」。
+#
+# ⚠️ 本常數**不改變本函式的行為** —— 它只是把既有的四個 `_val(...)` 讀取
+# 顯性化;`macro_action_light` 的判斷邏輯一字未動。
+OVERRIDE_INPUT_KEYS: tuple[str, ...] = (
+    "YIELD_10Y2Y", "YIELD_10Y3M", "SAHM", "VIX",
+)
+
 
 def _val(indicators: dict, key: str) -> "float | None":
     """從 indicators dict 取某指標的 value(缺 / 型別錯 → None)。"""

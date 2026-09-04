@@ -711,11 +711,19 @@ def get_all_cache_info() -> list[dict]:
 # ════════════════════════════════════════════════════════════
 
 # 跨 Tab session_state 殘留 keys（保留 OAuth/sheet 核心，避免用戶被踢出）
+# 2026-09-04 第三輪稽核 A5：Tab ① 熱錢快覽卡的 session 閘門也要被全域刷新清掉
+# （F6 那一輪只接了 ⑤ 那一個入口，側欄「全域刷新」清不到它 —— 使用者按下全域
+# 刷新之後那張卡不動，與按鈕承諾的語意直接相反）。
+# 鍵名走 L0 SSOT `shared/session_keys.py`（本檔亦為 L0，同層 import 無方向問題；
+# 理由見該模組 docstring：L0/L2/L3 三層都要讀到這兩個字串）。
+from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_CARD_SESSION_KEYS
+
 _GLOBAL_REFRESH_SESSION_KEYS = (
     # Tab1 總經
     "_radar_v1921_top", "_tp_v1948_top", "indicators",
     "phase_info", "news_items", "systemic_risk_data",
     "_fred_sources", "macro_done", "macro_last_update",
+    *_HM_CARD_SESSION_KEYS,
     # Tab2 / Tab3 基金 / 組合
     "_t3_cur_sheet_title", "_t3_groups_cache",
     # Tab5 健診

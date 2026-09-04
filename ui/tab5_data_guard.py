@@ -465,10 +465,6 @@ def render_data_guard_tab() -> None:
             _finmind_tok = str(_d5_get_secret("FINMIND_TOKEN", "") or "")
             with st.spinner("📡 抓 FinMind 外資 + Yahoo USDTWD..."):
                 _hm_ok, _hm_msg = refresh_hot_money_data(token=_finmind_tok)
-            # Tab ① 熱錢快覽卡每 session 只抓一次(F6 守衛),手動更新必須把它的
-            # session stash 一起作廢,否則使用者按了「立即更新」、切回 ① 卻沒動。
-            st.session_state.pop("_hm_card_fetch_tried", None)
-            st.session_state.pop("_hm_card_frames", None)
             if _hm_ok:
                 st.success(f"✅ 外資/USDTWD {_hm_msg}")
                 st.rerun()
@@ -476,6 +472,27 @@ def render_data_guard_tab() -> None:
                 st.error(f"更新失敗:{_hm_msg}")
         except Exception as _e_rf:
             st.error(f"refetch 失敗:[{type(_e_rf).__name__}] {_e_rf}")
+        finally:
+            # Tab ① 熱錢快覽卡每 session 只抓一次(F6 守衛),手動更新必須把它的
+            # session stash 一起作廢,否則使用者按了「立即更新」、切回 ① 卻沒動。
+            #
+            # ⚠️ 2026-09-04 第三輪稽核 A5:這兩個 pop 原本在 `try` **裡面**、
+            # 而且排在 `refresh_hot_money_data(...)` **之後** —— 那一行拋例外時
+            # (例如 F3 記載的 `StreamlitSecretNotFoundError`,或任何上游 5xx),
+            # 閘門**整個 session 都清不掉**,使用者在這一輪沒有任何復原路徑:
+            # 按鈕看起來按了、錯誤訊息也出來了,但卡片會一直停在舊狀態。
+            # 移進 `finally`:**不管成敗都作廢** —— 使用者按過「立即更新」這件事
+            # 本身就足以構成「請重新嘗試」的意思表示。
+            #
+            # 鍵名走 L0 SSOT,不再逐字重寫(B2:原本這裡是三份字面值中的一份,
+            # 而那條守衛比對的是 tab5 的字面值與**測試自己的**字面值,
+            # 從頭到尾沒碰過生產端常數)。
+            try:
+                from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_K2
+                for _hm_k in _HM_K2:
+                    st.session_state.pop(_hm_k, None)
+            except Exception:  # noqa: BLE001 — 作廢失敗不得再蓋掉上面的錯誤訊息
+                pass
     st.divider()
 
     # ── Section 0: 全域資料健康總表 ──（caller 端 app.py 已先 call _update_data_registry()）

@@ -68,8 +68,20 @@ from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI
 _PMI_SITUATION_BELOW = _PMI_THR["alert_generation"]["contraction_below"]  # 50.0(L3 situation card 用)
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
+    MACRO_PHASE_MIN_TOTAL_WEIGHT,
     SAHM_RECESSION_THRESHOLD,
 )
+# 2026-09-04 第三輪稽核 B2:熱錢卡 session 鍵名的 SSOT(理由見該模組 docstring ——
+# A5 要求 L0/L2 的刷新入口也要清這兩個鍵,而它們不得上行 import `ui/`)。
+from shared.session_keys import HM_CARD_STASH_KEY as _HM_CARD_STASH_KEY
+from shared.session_keys import HM_CARD_TRIED_KEY as _HM_CARD_TRIED_KEY
+# meta 鍵述詞 SSOT —— 與 `calc_macro_phase` / `_build_phase_provenance` 同一顆,
+# 卡片層的權重分母重算必須用同一個述詞,否則閘門守的是另一個分母(見
+# `_phase_scoring_weight`)。
+from services.macro.composite_score import is_meta_key as _is_meta_key
+# 卡 5 綠燈那句「殖利率曲線、Sahm、VIX 均未觸發」點名的四個輸入 —— SSOT 在
+# 產生那句話的模組,不在卡片端(見該常數旁的說明與 AST 漂移鎖)。
+from services.macro.action_light import OVERRIDE_INPUT_KEYS as _AL_OVERRIDE_KEYS
 
 _TW_TZ = ZoneInfo("Asia/Taipei")
 
@@ -319,8 +331,78 @@ _HM_CARD_DAYS = 180
 _HM_CARD_WINDOW = 5
 _HM_CARD_FLOW_THR_YI = 50.0
 _HM_CARD_FX_THR_PCT = 0.5
-_HM_CARD_TRIED_KEY = "_hm_card_fetch_tried"   # 每 session 最多嘗試一次
-_HM_CARD_STASH_KEY = "_hm_card_frames"        # (flow_df, fx_df, ferr, xerr)
+# ── 熱錢卡失敗態的「去哪補」(2026-09-04 第三輪稽核 A5)────────────────────
+# 舊文案寫「展開下方「📦 台股熱錢監測」查看完整判讀」—— 那個 expander **清不掉
+# 本卡的 session 閘門**,展開一百次卡片都不會動。而真正能清閘門的那句話當時只
+# 寫在 `⬜ 取數失敗` 分支,那條分支要**拋出來的例外**才走得到;偏偏 L1
+# `repositories/hot_money_repository.py` 的「內拋外譯」設計把**最常見**的失敗
+# (FinMind 402 quota)翻譯成 `(空 df, err)` —— 於是最常發生的那種失敗,拿到的
+# 正好是唯一沒有用的那句指引。
+# 本輪 A5 讓三個刷新入口**全部**會作廢閘門,文案改為指向它們。
+_HM_CARD_REMEDY = (
+    "去哪補 → 按上方「🔄 強制重抓」、側欄「🔄 全域刷新」，"
+    "或 ⑤ 設定與診斷的「📥 立即更新外資 / USDTWD」（三者都會讓本卡重新抓一次）"
+)
+
+# ⚠️ `_HM_CARD_TRIED_KEY` / `_HM_CARD_STASH_KEY` 的字串值自 2026-09-04(第三輪稽核
+# B2)起**不在本檔定義** —— SSOT 在 L0 `shared/session_keys.py`,於本檔頂部 import
+# 區以同名別名引入,既有引用一字未改。原因見該模組 docstring。
+
+
+# ── 快覽卡的「資料充足性」通則(2026-09-04 第三輪稽核 A1)────────────────────
+#
+# **這一條是一個「類」的規則,不是某一張卡的補丁。** 前兩輪各修掉這個類的一個
+# 面孔(第一輪:卡 3 零觀測;第二輪:卡 3 打平),下一次稽核就在卡 1、卡 5 上找到
+# 同一個類的第三個面孔。故本輪把規則寫成通則,再逐張卡對照:
+#
+#   **一張卡只能宣稱它真的取到的那些輸入。**
+#     (1) 宣稱裡**點名了特定輸入**的(卡 2「兩者較嚴者」、卡 5「殖利率曲線、
+#         Sahm、VIX 均未觸發」)—— 那些輸入**全部**要在,少一個就不能這樣講。
+#     (2) 建立在**正規化聚合**上的(卡 1 的 `score`、卡 3 的象限)—— 聚合自己的
+#         分母要夠大,大到這個定論不是「缺資料」本身造出來的假象。
+#     (3) **不對稱(fail-safe)**:半套證據可以**升警**,不可以**解除警報**。
+#         少一個輸入,永遠不等於那個輸入是好的。
+#
+# 五張卡逐一對照(本輪實地核對,不是只看被點名的那張):
+#   卡 1 📊 景氣位階   — 聚合(score)。**本輪新增**閘門 `_phase_score_support`。
+#   卡 2 🌊 波動與信用 — 點名兩盞燈。**本輪新增**缺燈閘門(A2),且套用不對稱規則。
+#   卡 3 🌡️ 通膨與利率 — 聚合(雙軸象限)。閘門第一/二輪已有;本輪把向後相容的
+#                        fallback 改成 fail-closed(A3)。
+#   卡 4 💰 熱錢動向   — 點名兩份 frame。既有閘門(`empty` / 無重疊日)已符合通則,
+#                        本輪只換「去哪補」(A5),判讀邏輯未動。
+#   卡 5 ⚠️ 極端風險   — 兼具 (1) 與 (2):綠燈同時宣稱「位階 X/10」與「四項均未
+#                        觸發」。**本輪新增**兩道閘門,並依 (3) 保留已觸發的紅燈。
+def _phase_scoring_weight(ind) -> float:
+    """算出 `calc_macro_phase` 這一次**實際用到的權重分母**(`total_w`)。
+
+    刻意逐行對齊 `services/macro/us_indicators.py::calc_macro_phase` 的迴圈
+    (同一個 meta 述詞 SSOT `is_meta_key`、同一個 `ind.get("weight", 1)` 預設),
+    因為這個數字的用途就是「判斷那顆 score 站不站得住」—— 算法一旦分岔,閘門
+    就會在守衛一個不存在的分母。`tests/test_batch2_top_card_grid.py` 有一條
+    等價守衛,拿**真的** `calc_macro_phase` 的 `_provenance["total_weight"]`
+    對帳(而不是再手捏一份 fixture)。
+
+    ⚠️ **不改上游**:本函式只是在卡片層**重算一次**同一個分母,
+    `calc_macro_phase` 的正規化與 `fetch_all_indicators` 的 `_fred_sources`
+    行為一個字都沒動(那是既有的上游缺陷,射程超出本批,已登記 BACKLOG)。
+    """
+    _total = 0.0
+    for _k, _node in (ind or {}).items():
+        if _is_meta_key(_k) or not isinstance(_node, dict):
+            continue        # meta(如 `_fred_sources`)不是指標,不得進分母
+        _total += float(_node.get("weight", 1))
+    return _total
+
+
+def _phase_score_support(ind) -> tuple[bool, float]:
+    """景氣位階分數**站不站得住**?回傳 `(是否足夠, 權重合計)`。
+
+    門檻 SSOT:`shared.signal_thresholds.MACRO_PHASE_MIN_TOTAL_WEIGHT`
+    (值的推導寫在該常數旁邊,一句話:單一指標翻向不得足以把相位推過最窄的
+    那道邊界)。
+    """
+    _w = _phase_scoring_weight(ind)
+    return (_w >= MACRO_PHASE_MIN_TOTAL_WEIGHT), _w
 
 
 def _radar_light_rank(signal) -> int:
@@ -425,20 +507,69 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
     _cards: list[dict] = []
 
     # 卡 1 ── 📊 景氣位階
+    #
+    # 2026-09-04 第三輪稽核 A1(🔴 blocker):**零觀測捏造綠燈與買進建議。**
+    # `fetch_all_indicators` 在**每一支 fetcher 都失敗**時仍會**無條件**寫入
+    # `R["_fred_sources"]`(該行在所有 `if` 之外),於是回傳 dict **非空** ——
+    # 呼叫端那道 `elif not ind: st.error("❌ 沒有抓到任何總經指標（0 個…）")`
+    # 永遠不會觸發,`calc_macro_phase` 拿著「只有 meta、零個指標」的 dict 跑進
+    # `total_w == 0 → norm = 5` 那條路。實測(真的網格,所有 fetcher 皆失敗):
+    #     [📊 景氣位階] '擴張（5.0/10）' #00c853
+    #                  「股優於債:核心高股息ETF + 衛星AI/半導體,設嚴格停利點」
+    # —— 同一個畫面上另外三張卡**正確地**顯示 ⬜ 待取得,只有這張在放行加碼。
+    #
+    # 偏斷(partial)更糟,因為分母只由**抓到的**指標構成:
+    #     18 取 1(只有 VIX,平靜)   → score=10 → '高峰' + 「適度獲利了結」
+    #     18 取 1(只有 PMI,深度收縮) → score=0  → '衰退' + 「保守為主」
+    # 兩者都是「哪一支 fetcher 活著」的判讀,不是經濟的判讀。
+    #
+    # ⚠️ **本輪刻意不動上游**(`calc_macro_phase` 的正規化、`_fred_sources` 的
+    # 無條件寫入):那是**既有**缺陷,同時影響①結論與②依據(它們現在就這樣出貨),
+    # 動它屬 §8.4 步驟 4 的範圍擴大。上游缺陷連同上面的實測證據已登記於
+    # `BACKLOG.md`「⏸ 待客戶裁示 — `calc_macro_phase` 零/低權重正規化」。
+    # 本輪只在**卡片層**擋住:不夠就不給顏色、不給分數、不給建議。
     try:
         _score = phase.get("score")
+        _score_ok, _score_w = _phase_score_support(ind)
         _score_str = f"{_score:.1f}/10" if isinstance(_score, (int, float)) else "—"
         _trend_txt = f"{phase.get('trend_arrow', '')} {phase.get('trend_label', '')}".strip()
-        _cards.append(dict(
-            title="📊 景氣位階",
-            signal=f"{phase.get('phase', '—')}（{_score_str}）",
-            color=phase.get("phase_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
-            value_str=_score_str,
-            note=phase.get("advice") or "尚未算出景氣位階",
-            label=_trend_txt or "—",
-            trend=None,
-            spark_key="top_phase",
-        ))
+        if not _score_ok:
+            # 灰態沿用②③④⑤同一組表現,不另發明第六種;**不印分數**——
+            # 那個分數正是缺資料造出來的,印出來就是把假象當量測(§1)。
+            _n_scoring = sum(1 for _k, _v in (ind or {}).items()
+                             if not _is_meta_key(_k) and isinstance(_v, dict))
+            _cards.append(dict(
+                title="📊 景氣位階",
+                signal="⬜ 資料不足",
+                color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str="—",
+                note=(f"只取到 {_n_scoring} 個計分指標（權重合計 {_score_w:g}，"
+                      f"需 ≥ {MACRO_PHASE_MIN_TOTAL_WEIGHT:g}）—— 指標太少時分數"
+                      f"是缺資料造出來的，不是景氣的判讀，故不給位階與建議"),
+                label="去哪補 → 點上方「📡 載入總經資料」重新載入（§1 不從零觀測捏造定論）",
+                trend=None,
+                spark_key="top_phase",
+            ))
+        else:
+            _cards.append(dict(
+                title="📊 景氣位階",
+                signal=f"{phase.get('phase', '—')}（{_score_str}）",
+                color=phase.get("phase_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str=_score_str,
+                note=phase.get("advice") or "尚未算出景氣位階",
+                # 2026-09-04 第三輪稽核 B4:**這張卡不揭露自己是什麼算出來的。**
+                # 客戶拍板的線框 `ia-wireframe.html` Tab 01「景氣位階」寫的是
+                # 「NDC 燈號 ＋ PMI ＋ 殖利率差合成」,但實際跑的是
+                # `calc_macro_phase` 的**美國**加權評分,而 NDC **不在**
+                # `EXPECTED_INDICATOR_KEYS` 裡(它由 `ui/helpers/macro/ndc.py`
+                # 另外抓,只有②依據用)。**本輪不改它算什麼**(那是規格變更,
+                # 要客戶裁示,見 BACKLOG),但畫面必須說清楚它到底是什麼 ——
+                # 讓使用者以為這裡有台股 NDC,是另一種形態的誤導。
+                label=(f"{_trend_txt or '—'}｜美國指標加權合成"
+                       f"（權重合計 {_score_w:g}；未含台灣 NDC 燈號）"),
+                trend=None,
+                spark_key="top_phase",
+            ))
     except Exception as _c1e:  # noqa: BLE001 — 一張卡失敗不得擋掉其餘卡片
         system_error("快覽卡「景氣位階」渲染失敗", _c1e)
 
@@ -469,19 +600,73 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
             _driver_str, _other_str = ((_hy_str, _vix_str) if _worse_is_hy
                                        else (_vix_str, _hy_str))
             _driver_name = "HY OAS" if _worse_is_hy else "VIX"
-            _cards.append(dict(
-                title="🌊 波動與信用",
-                signal=_worse.get("signal") or "⬜ 無資料",
-                color=_worse.get("color") or _MACRO_CARD_LIGHT_COLOR["gray"],
-                value_str=f"{_driver_str} ｜ {_other_str}",
-                note=_worse.get("note") or "—",
-                label=(f"燈號取兩者較嚴者：目前為 {_driver_name}"
-                       "（Yahoo ^VIX ＋ FRED HY OAS，風險雷達 10 燈之 2）"),
-                trend=_worse.get("trend"),
-                # sparkline 畫的是驅動源那一條序列,key 必須跟著換 —— 否則
-                # streamlit 會拿同一個 element key 去對兩條不同量綱的序列。
-                spark_key=("top_vix_hy_hy" if _worse_is_hy else "top_vix_hy_vix"),
-            ))
+            # ── 2026-09-04 第三輪稽核 A2:**缺燈不是最輕的燈。** ────────────────
+            # `_radar_light_rank` 把 `⬜ 無資料` 排成 **0,比 🟢(1) 還低** ——
+            # 一盞從來沒量到的燈於是被當成「最溫和的狀態」。實測 4×4 全網格:
+            #     VIX 綠 + HY 缺 → 🟢 平靜「VIX 15.0 ｜ HY —」
+            #     VIX 缺 + HY 綠 → 🟢 平靜「HY 15.00% ｜ VIX —」
+            # FRED 掛掉、Yahoo 還活著是**routine 的偏斷**,而信用那半正是這張卡
+            # 存在的理由(F1 commit 自陳:信用先於股市轉壞的背離)。
+            # 而 label 那句「燈號取兩者較嚴者」在**7 種含 ⬜ 的組合**裡都在宣稱
+            # 一個沒發生過的比較,連 ⬜×⬜ 都還指名「目前為 VIX」。
+            #
+            # 依通則 (1)+(3):點名兩盞燈的宣稱要兩盞都在;半套證據可升警不可解除。
+            #   · 兩盞都在 → 照舊 worse-of,label 照舊講比較。
+            #   · 只有一盞 且 那盞是 🟡/🔴 → **照實升警**(真的警訊不得被藏起來),
+            #     但 label 改講「只量到一盞」,不得宣稱比較。
+            #   · 只有一盞 且 那盞是 🟢 → **不給綠燈**:一盞平靜不足以說「波動與
+            #     信用都平靜」。走灰態,把量到的那半誠實寫進 note。
+            #   · 兩盞都缺 → 灰態,label 也不再宣稱比較。
+            _vix_has, _hy_has = _vix_rank > 0, _hy_rank > 0
+            _both = _vix_has and _hy_has
+            _missing_name = "FRED HY OAS" if not _hy_has else "Yahoo ^VIX"
+            if _both:
+                _cards.append(dict(
+                    title="🌊 波動與信用",
+                    signal=_worse.get("signal") or "⬜ 無資料",
+                    color=_worse.get("color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+                    value_str=f"{_driver_str} ｜ {_other_str}",
+                    note=_worse.get("note") or "—",
+                    label=(f"燈號取兩者較嚴者：目前為 {_driver_name}"
+                           "（Yahoo ^VIX ＋ FRED HY OAS，風險雷達 10 燈之 2）"),
+                    trend=_worse.get("trend"),
+                    # sparkline 畫的是驅動源那一條序列,key 必須跟著換 —— 否則
+                    # streamlit 會拿同一個 element key 去對兩條不同量綱的序列。
+                    spark_key=("top_vix_hy_hy" if _worse_is_hy else "top_vix_hy_vix"),
+                ))
+            elif _vix_has or _hy_has:
+                # 只量到一盞。`_worse` 此時必為**有燈的那一盞**(缺的那盞 rank=0)。
+                _only_is_hy = _hy_has
+                _only_name = "HY OAS" if _only_is_hy else "VIX"
+                _alarm = (_hy_rank if _only_is_hy else _vix_rank) >= 2   # 🟡 或 🔴
+                _cards.append(dict(
+                    title="🌊 波動與信用",
+                    # 升警可以只憑一盞(它是真的量測);解除警報不行。
+                    signal=(_worse.get("signal") or "⬜ 無資料") if _alarm else "⬜ 資料不足",
+                    color=((_worse.get("color") or _MACRO_CARD_LIGHT_COLOR["gray"])
+                           if _alarm else _MACRO_CARD_LIGHT_COLOR["gray"]),
+                    value_str=f"{_driver_str} ｜ {_other_str}",
+                    note=((f"{_worse.get('note') or '—'}"
+                           f"（僅 {_only_name} 一盞，{_missing_name} 未取得）") if _alarm
+                          else (f"只量到 {_only_name} 一盞且為平靜；{_missing_name} 未取得 —— "
+                                f"半盞平靜不足以說「波動與信用都平靜」，故不下綠燈")),
+                    label=(f"只取到 {_only_name} 一盞，未與另一盞比較"
+                           "（Yahoo ^VIX ＋ FRED HY OAS，風險雷達 10 燈之 2）"),
+                    trend=_worse.get("trend") if _alarm else None,
+                    spark_key=("top_vix_hy_hy" if _only_is_hy else "top_vix_hy_vix"),
+                ))
+            else:
+                _cards.append(dict(
+                    title="🌊 波動與信用",
+                    signal="⬜ 資料不足",
+                    color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                    value_str="—",
+                    note="Yahoo ^VIX 與 FRED HY OAS 兩盞都沒取到，無從判讀",
+                    label=("兩盞燈都未取得，沒有做任何比較"
+                           "（Yahoo ^VIX ＋ FRED HY OAS，風險雷達 10 燈之 2）"),
+                    trend=None,
+                    spark_key="top_vix_hy",
+                ))
         else:
             _cards.append(dict(
                 title="🌊 波動與信用",
@@ -507,8 +692,25 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
     #     的偏斷情境實測輸出:`🌱 復甦/擴張` **綠燈**、`成長 +1.00 ｜ 通膨 +0.00`、
     #     `0 個通膨訊號` —— 一個「零筆通膨觀測」被畫成「通膨受控」的全綠放行。
     #     全部指標皆缺時退成 `🌧️ 衰退` 橘燈,一樣是憑空定論。
-    #     這是五張卡裡**唯一**沒有資料充足性閘門的一張(①`isinstance`、
-    #     ②`if _radar_dict else ⬜`、④`if empty → ⬜`、⑤`score is None → ⬜`)。
+    #     ~~這是五張卡裡**唯一**沒有資料充足性閘門的一張(①`isinstance`、
+    #     ②`if _radar_dict else ⬜`、④`if empty → ⬜`、⑤`score is None → ⬜`)。~~
+    #     ⚠️ **2026-09-04 第三輪稽核 A1 就地更正:上面那句話是錯的,而且錯得很貴**
+    #     (有意識的更正,不是漏刪)。它把三個**不是閘門的東西**當成閘門引用,於是
+    #     兩輪稽核都以為卡 1/5 已經有防護:
+    #       · ① 的 `isinstance(_score, (int, float))` 是**格式化**保護(決定印
+    #         `"6.8/10"` 還是 `"—"`),它擋不掉「分數存在但沒有觀測支撐」——
+    #         而那正是 A1 的形態。
+    #       · ⑤ 的 `score is None` 分支是**生產路徑不可達的死碼**:
+    #         `calc_macro_phase` 的最後一行是
+    #         `score = round(max(0, min(10, norm)), 1)` —— **無條件**,而
+    #         `norm` 在 `total_w == 0` 時被賦值 5,永遠不會是 None。
+    #         當時「守著」它的兩條測試手捏 `{"score": None, "phase": "—"}`,
+    #         那是**生產端吐不出來的形狀** —— 一個對死碼的修復,由一個跑在死碼上
+    #         的測試背書,正是 `CLAUDE.md §-2` 逐字點名的 `db4c139` 形態。
+    #       · ② 的 `if _radar_dict else ⬜` 只擋「整包雷達沒載入」,擋不掉
+    #         「載入了但其中一盞燈沒量到」—— 見本函式卡 2 的 A2 段落。
+    #     真正符合通則的閘門只有 ③(本段)與 ④。①②⑤ 的閘門於本輪補上,
+    #     ⑤ 那條死分支同時改成**真的可達**的充足性判斷(見卡 5)。
     #
     #     **判定:任一軸零觀測 → 整張卡走灰態。** 理由是這張卡的頭條(象限名)、
     #     顏色、與 note 三者**都是兩軸的聯合函數** —— 只有一軸有資料時,象限
@@ -542,10 +744,30 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         # 故閘門改吃生產端新增的 `growth_dir` / `inflation_dir`(三分:
         # none / tie / up / down),**筆數不再是判準**(筆數只用來寫說明文字)。
         # 缺 `*_dir` 的舊 payload 退回筆數判定,保持向後相容。
-        _g_dir = str(_gi.get("growth_dir") or ("none" if _n_growth == 0 else ""))
-        _i_dir = str(_gi.get("inflation_dir") or ("none" if _n_infl == 0 else ""))
+        #
+        # ⚠️ 2026-09-04 **第三輪**稽核 A3:上面那個「缺 `*_dir` 的舊 payload 退回
+        # 筆數判定」的向後相容 fallback **fail-open** —— 舊寫法在 `*_dir` 缺席且
+        # `n > 0` 時退成空字串 `""`,而 `""` 既不是 `"none"` 也不是 `"tie"`,於是
+        # 直接落進 `else` 分支,把打平併進來的 `quad_*` 原封送上畫面:
+        #     payload 無 growth_dir/inflation_dir、inflation_score=0.0、n_inflation=2
+        #     → '🌱 復甦/擴張' #00c853「成長 +1.00 ｜ 通膨 +0.00」
+        #       「成長↑ 通膨↓ — 黃金期,積極持有風險資產」
+        # 與 F2 修復**前**的輸出逐位元組相同 —— 這是一條**設計出來的、通回
+        # blocker 的路**。可達性低(要 session 撐過改版,或未來出現第二個生產端),
+        # 但「低機率」不是「不會」,而它的代價是那個 blocker 整個回來。
+        #
+        # 改成 **fail-closed**:方向只認 `"up"` / `"down"` 兩個**明確**值;
+        # 其餘一律當「方向不明」走灰態 —— 包含 `""`(缺 `*_dir`)、`"tie"`、
+        # 以及**任何未來新增的、本卡還不認得的值**。缺資料/打平/不認得的值三者
+        # 在 note 上分得開,但都不給彩色定論。
+        _g_dir = str(_gi.get("growth_dir") or ("none" if _n_growth == 0 else "unknown"))
+        _i_dir = str(_gi.get("inflation_dir") or ("none" if _n_infl == 0 else "unknown"))
         _no_obs = (not _gi) or _g_dir == "none" or _i_dir == "none"
-        _is_tie = (not _no_obs) and (_g_dir == "tie" or _i_dir == "tie")
+        _dir_ok = {"up", "down"}
+        # `_is_tie` 現在涵蓋「打平」與「講不出方向」兩種 —— 對使用者而言後果相同
+        # (資料在、但定不出象限),差別寫在 note 裡。
+        _is_tie = (not _no_obs) and not (_g_dir in _dir_ok and _i_dir in _dir_ok)
+        _dir_unknown = (not _no_obs) and ("unknown" in (_g_dir, _i_dir))
         if _no_obs:
             # 缺哪一半就說哪一半;有的那半用文字誠實交代,不當頭條數字。
             if not _gi:
@@ -582,13 +804,25 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
             #   · 也不另發明一個第五種顏色:顏色只有三態(§ 線框 Rule 03)。
             _tie_axes = [_n for _n, _d in (("成長", _g_dir), ("通膨", _i_dir))
                          if _d == "tie"]
+            _unknown_axes = [_n for _n, _d in (("成長", _g_dir), ("通膨", _i_dir))
+                             if _d not in _dir_ok and _d != "tie"]
+            if _dir_unknown:
+                # A3:呼叫端給的 payload 沒帶(或帶了本卡不認得的)方向欄位。
+                # 這是**契約問題**,不是市場狀態 —— 據實講,不猜、不回退成筆數。
+                _tie_note = (
+                    f"{'／'.join(_unknown_axes)}軸沒有帶方向欄位（`*_dir`），"
+                    f"本卡不從分數正負反推方向 — 反推會把「正負相抵」講成「向下」，"
+                    f"那正是 2026-09-04 F2 修掉的那個缺陷")
+            else:
+                _tie_note = (
+                    f"{'／'.join(_tie_axes)}軸的訊號正負相抵（分數恰為 0.00），"
+                    f"方向不明，無法定象限 — 不是缺資料，重新載入不會改變")
             _cards.append(dict(
                 title="🌡️ 通膨與利率",
                 signal="⬜ 方向不明",
                 color=_MACRO_CARD_LIGHT_COLOR["gray"],
                 value_str="—",
-                note=(f"{'／'.join(_tie_axes)}軸的訊號正負相抵（分數恰為 0.00），"
-                      f"方向不明，無法定象限 — 不是缺資料，重新載入不會改變"),
+                note=_tie_note,
                 label=(f"成長軸 {_n_growth} 個訊號、通膨軸 {_n_infl} 個訊號；"
                        "逐項明細見下方四時域詳細區"),
                 trend=None,
@@ -665,7 +899,7 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
                 color=_MACRO_CARD_LIGHT_COLOR["gray"],
                 value_str="—",
                 note="本 session 已嘗試抓取外資買賣超／USDTWD 並失敗，未自動重試",
-                label="去哪補 → ⑤ 設定與診斷的「📥 立即更新外資 / USDTWD」",
+                label=_HM_CARD_REMEDY,
                 trend=None,
                 spark_key="top_hot_money",
             ))
@@ -681,7 +915,7 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
                 color=_MACRO_CARD_LIGHT_COLOR["gray"],
                 value_str="—",
                 note=(_hm_ferr or _hm_xerr or "外資買賣超／USDTWD 資料不足"),
-                label="展開下方「📦 台股熱錢監測」查看完整判讀",
+                label=_HM_CARD_REMEDY,
                 trend=None,
                 spark_key="top_hot_money",
             ))
@@ -697,7 +931,7 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
                     color=_MACRO_CARD_LIGHT_COLOR["gray"],
                     value_str="—",
                     note="外資與匯率資料沒有重疊的交易日",
-                    label="展開下方「📦 台股熱錢監測」查看完整判讀",
+                    label=_HM_CARD_REMEDY,
                     trend=None,
                     spark_key="top_hot_money",
                 ))
@@ -772,22 +1006,61 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         # 於是**平靜與恐慌印出一模一樣的頭條數字**(實測皆為「2 項訊號」),
         # 而資料不足態印「⬜ 資料不足 / 1 項訊號」—— 一邊說沒資料、一邊報一項訊號。
         # 修法:數字只數**真的觸發**的訊號,標籤與數字語意對齊。
-        _n_trig5 = len(_reasons5) if _al5.get("override") else 0
         # 2026-09-04 稽核 F8:灰態的 label 也要給「去哪補」(線框 Rule 04 三要素)。
-        # 本卡的灰態成因**只有一個**且明確 —— `phase["score"] is None`,即景氣位階
-        # 沒算出來,而它來自總經指標;補法與卡 2/3 完全一樣(去點載入按鈕),故
-        # 「去哪補」在此無歧義,一併補上,不留到下一輪。
         # 非灰態沿用原本那句規則說明(那時使用者要知道的是「紅燈依什麼判」,
         # 不是「去哪補」—— 三要素是**空狀態**的規格,不是所有狀態的規格)。
         _lab5 = "殖利率倒掛／Sahm≥0.5／VIX≥30 三者任一觸發即轉紅"
+        # ── 2026-09-04 第三輪稽核 A1 / B1:兩個獨立的問題,一起修 ─────────────
+        #
+        # **A1(🔴):綠燈的 note 是一句字面上的假話。** 非 override 分支的
+        # `reasons` 逐字為「景氣位階 X/10」+「無硬衰退/恐慌訊號(殖利率曲線、
+        # Sahm、VIX **均未觸發**)」。完全斷線實測:
+        #     [⚠️ 極端風險警語] '🟢 未觸發' #22c55e
+        #         「景氣位階 5.0/10;無硬衰退/恐慌訊號(殖利率曲線、Sahm、VIX 均未觸發)」
+        # —— 那四項輸入**一個都沒取到**,而卡片宣稱四項都檢查過且都沒事。
+        #
+        # 依通則:
+        #   (1) 點名輸入的宣稱要輸入全在 → 綠燈要求 `OVERRIDE_INPUT_KEYS` **全部**
+        #       有值(SSOT 由 `services/macro/action_light.py` 匯出,並有 AST 漂移鎖
+        #       釘住它與函式實際讀的 key 一致)。
+        #   (2) 引用 `score` 的宣稱要 score 站得住 → 套用與卡 1 **同一個**閘門。
+        #   (3) **不對稱**:override **已觸發**時照樣出 🔴 —— 那是真的量到某個值
+        #       跨過門檻,是本卡最重要的輸出,不得被充足性閘門吃掉(把真警報變灰
+        #       才是更糟的失效)。
+        #
+        # **B1(🟡):`_n_trig5` 的條件式是死的。** 舊寫法
+        # `_n_trig5 = len(_reasons5) if _al5.get("override") else 0` 只在
+        # `if _al5.get("override"):` 分支裡被讀,`else 0` 永遠取不到;平靜卡的
+        # 「0 項觸發」實際來自另一個分支的字面值。把它拿掉,計數與它的守衛才是真的。
+        _sig5 = _col5 = _val5 = None
+        _note5 = "；".join(_reasons5) or "—"
+        _missing5 = [_k for _k in _AL_OVERRIDE_KEYS
+                     if not isinstance((ind or {}).get(_k), dict)
+                     or (ind or {}).get(_k, {}).get("value") is None]
+        _score_ok5, _score_w5 = _phase_score_support(ind)
         if _al5.get("override"):
+            # (3) 真的觸發了 → 紅燈照出。`reasons` 此時就是**觸發**清單,
+            # 逐項都印著實際觀測值,自帶佐證,不需要充足性閘門背書。
             _sig5, _col5 = "🔴 已觸發", _MACRO_CARD_LIGHT_COLOR["red"]
-            _val5 = f"{_n_trig5} 項觸發"
-        elif phase.get("score") is None:
+            _val5 = f"{len(_reasons5)} 項觸發"
+            if _missing5:
+                # 有觸發、但另外幾項沒量到 —— 紅燈成立,「其餘都沒事」不成立。
+                _note5 = (f"{_note5}（另有 {len(_missing5)} 項未取得："
+                          f"{'／'.join(_missing5)}，未檢查）")
+        elif _missing5 or not _score_ok5:
             _sig5, _col5 = "⬜ 資料不足", _MACRO_CARD_LIGHT_COLOR["gray"]
-            # 灰態沿用①②③④同一組表現(`—`),不報一個不存在的訊號數。
-            _val5 = "—"
-            _lab5 = "去哪補 → 點上方「📡 載入總經資料」重新載入（缺景氣位階即不判斷）"
+            _val5 = "—"          # 不報一個不存在的訊號數
+            _why5 = []
+            if _missing5:
+                _why5.append(f"{len(_AL_OVERRIDE_KEYS) - len(_missing5)}/"
+                             f"{len(_AL_OVERRIDE_KEYS)} 項風險輸入有值，"
+                             f"缺 {'／'.join(_missing5)} 未檢查")
+            if not _score_ok5:
+                _why5.append(f"景氣位階分數的權重合計 {_score_w5:g} < "
+                             f"{MACRO_PHASE_MIN_TOTAL_WEIGHT:g}，不足以引用")
+            # **不沿用 action_light 的 reasons** —— 那句「均未觸發」正是假話本身。
+            _note5 = "；".join(_why5) + " —— 未檢查不等於未觸發，故不下綠燈"
+            _lab5 = "去哪補 → 點上方「📡 載入總經資料」重新載入（§1 不從未檢查的輸入宣告安全）"
         else:
             _sig5, _col5 = "🟢 未觸發", _MACRO_CARD_LIGHT_COLOR["green"]
             _val5 = "0 項觸發"
@@ -796,7 +1069,7 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
             signal=_sig5,
             color=_col5,
             value_str=_val5,
-            note="；".join(_reasons5) or "—",
+            note=_note5,
             label=_lab5,
             trend=None,
             spark_key="top_extreme_risk",
@@ -2117,7 +2390,6 @@ def render_macro_tab() -> None:
 
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
-
 
 
             # v19.134 物理重排:60/40 col layout 已移除,sections 按四時域分組連續

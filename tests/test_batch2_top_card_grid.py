@@ -80,10 +80,31 @@ def _fake_phase() -> dict:
 
 
 def _fake_indicators() -> dict:
+    """一組「資料充足」的指標（權重合計 12.5 ≥ `MACRO_PHASE_MIN_TOTAL_WEIGHT`）。
+
+    ⚠️ 2026-09-04 第三輪稽核 A1：本 fixture 原本只有 **3 個指標、權重合計 5**。
+    那個數量在**現實裡代表「18 支 fetcher 掛了 15 支」**，而所有既有測試都拿它
+    當「正常情境」—— 於是「指標太少時卡 1／卡 5 在說什麼」這一整類，
+    **在測試裡從來沒有被看見過**（正如 F2 那一輪的 tie：所有測試都手捏 `n_*`）。
+
+    現在補齊成 producer 形狀：
+      · **權重合計 12.5**，過得了卡 1／卡 5 的充足性閘門；
+      · **四個 override 輸入（`YIELD_10Y2Y` / `YIELD_10Y3M` / `SAHM` / `VIX`）全部有值**，
+        卡 5 的綠燈才有資格宣稱「均未觸發」；
+      · 每一個值都**遠離**各自的觸發門檻（曲線正、Sahm 0.1、VIX 15），
+        所以這組是**乾淨的平靜態**，不是碰巧沒觸發。
+    """
     return {
         "VIX": {"value": 15.0, "weight": 1, "score": 1},
         "YIELD_10Y2Y": {"value": 0.8, "weight": 2, "score": 2},
+        "YIELD_10Y3M": {"value": 0.6, "weight": 2, "score": 2},
         "PMI": {"value": 55.0, "weight": 2, "score": 2},
+        "HY_SPREAD": {"value": 3.2, "weight": 2, "score": 1},
+        "M2": {"value": 4.0, "weight": 1, "score": 1},
+        "DXY": {"value": 100.0, "weight": 1, "score": 0},
+        "SAHM": {"value": 0.1, "weight": 0.5, "score": 0.5},
+        "CPI": {"value": 2.5, "weight": 0.5, "score": 0.5},
+        "FED_RATE": {"value": 4.5, "weight": 0.5, "score": 0},
     }
 
 
@@ -116,7 +137,10 @@ class _FakeSecrets(dict):
 #: 熱錢卡自 2026-09-04（稽核 F6）起「每 session 最多抓一次」，成敗都寫旗標。
 #: 測試之間共用同一個 `st.session_state`，不清就會讓**第二個以後**的測試
 #: 讀到前一個測試的 stash（於是 `fetch_hot_money_frames` 的 mock 一次都沒被叫到）。
-_HM_SESSION_KEYS = ("_hm_card_fetch_tried", "_hm_card_frames")
+#: ⚠️ 2026-09-04 第三輪稽核 B2：本行原本是**第三份字面值**，而那條「手動更新會作廢
+#: stash」的守衛比對的正是「tab5 的字面值 vs 本行」—— 兩份副本互比，
+#: **從頭到尾沒有碰過生產端的常數**。改為直接引用 L0 SSOT。
+from shared.session_keys import HM_CARD_SESSION_KEYS as _HM_SESSION_KEYS
 
 
 @pytest.fixture(autouse=True)
@@ -451,9 +475,14 @@ def _card5(ind: dict, score) -> dict:
     return next(c for c in _recorded if c["title"] == "⚠️ 極端風險警語")
 
 
-_CALM_IND = {"VIX": {"value": 15.0}, "YIELD_10Y2Y": {"value": 0.8}}
-#: 兩個真觸發：VIX ≥ 30（恐慌）＋ 10Y-2Y < 0（倒掛）
-_PANIC_IND = {"VIX": {"value": 42.0}, "YIELD_10Y2Y": {"value": -0.5}}
+#: 乾淨的平靜態：四個 override 輸入齊全且都遠離門檻，權重合計 12.5 過閘門。
+#: ⚠️ 2026-09-04 A1 起**不能**再用 `{"VIX":…, "YIELD_10Y2Y":…}` 兩個 key 當「平靜」——
+#: 那是「四項只檢查到兩項」，卡 5 依通則不得下綠燈（見 `_fake_indicators` docstring）。
+_CALM_IND = _fake_indicators()
+#: 兩個真觸發：VIX ≥ 30（恐慌）＋ 10Y-2Y < 0（倒掛）；其餘輸入照樣齊全。
+_PANIC_IND = {**_fake_indicators(),
+              "VIX": {"value": 42.0, "weight": 1, "score": -1},
+              "YIELD_10Y2Y": {"value": -0.5, "weight": 2, "score": -2}}
 
 
 def test_extreme_risk_card_headline_differs_between_calm_and_panic():
@@ -473,8 +502,18 @@ def test_extreme_risk_card_counts_triggered_signals_not_explanation_lines():
 
 
 def test_extreme_risk_card_claims_no_signal_while_declaring_insufficient_data():
-    """`score is None` 的灰態不得同時報「N 項訊號」（自相矛盾）。"""
-    _c = _card5({}, None)
+    """資料不足的灰態不得同時報「N 項訊號」（自相矛盾）。
+
+    ⚠️ 2026-09-04 第三輪稽核 A1 就地更正：本條原本寫
+    ~~「`score is None` 的灰態」~~ 並以 `_card5({}, None)` 手捏一個
+    `{"score": None, "phase": "—"}` —— **那是生產端吐不出來的形狀**
+    （`calc_macro_phase` 最後一行 `score = round(max(0, min(10, norm)), 1)` 無條件執行，
+    見 `test_the_producer_can_never_emit_a_none_score`），而卡 5 當時那條
+    `elif phase.get("score") is None:` 分支因此是**生產路徑不可達的死碼**。
+    改走**真的** `calc_macro_phase({})`：零指標是真的會發生的狀態，
+    灰態由**真的可達**的充足性閘門觸發。
+    """
+    _c = _grid_via_real_producer({})["⚠️ 極端風險警語"]
     assert _c["signal"] == "⬜ 資料不足"
     assert _c["value_str"] == "—", (
         f"資料不足卻報 {_c['value_str']!r} —— 一邊說沒資料一邊報訊號數")
@@ -785,11 +824,18 @@ def test_radar_light_rank_maps_every_real_producer_string(sig, rank):
 @pytest.mark.parametrize("hy_sig", _ALL_RADAR_SIGNALS)
 @pytest.mark.parametrize("vix_sig", _ALL_RADAR_SIGNALS)
 def test_volatility_credit_card_reports_the_worse_of_the_two_lights(vix_sig, hy_sig):
-    """5×5 嚴重度網格：卡 2 的燈號必須是兩盞裡**較嚴**的那一盞。
+    """5×5 嚴重度網格：**兩盞燈都在**時，卡 2 的燈號必須是較嚴的那一盞。
 
     突變驗證：把 `_radar_light_rank(...)` 改回 `_rank.get(str(...)[:2], 0)`
     → 所有 HY 較嚴的格子（含 🟢×🔴 那格）轉紅。
+
+    ⚠️ 2026-09-04 第三輪稽核 A2：本條的射程**收窄成「兩盞都在」**。
+    含 ⬜／空字串的 7 種組合改由 `test_a_missing_light_is_never_treated_as_benign`
+    與 `test_a_single_light_can_still_raise_an_alarm` 兩條把關 —— 舊寫法把它們
+    也納進來，等於**要求**「⬜ × 🟢 → 🟢 平靜」，那正是 A2 的缺陷本身。
     """
+    if _SEVERITY[vix_sig] == 0 or _SEVERITY[hy_sig] == 0:
+        pytest.skip("缺燈組合改由 A2 的專屬測試把關（見本條 docstring）")
     _c = _card2(vix_sig, hy_sig)
     _expect = hy_sig if _SEVERITY[hy_sig] > _SEVERITY[vix_sig] else vix_sig
     assert _c["signal"] == (_expect or "⬜ 無資料"), (
@@ -823,6 +869,8 @@ def test_volatility_credit_card_note_trend_and_value_follow_the_reported_light(
     突變驗證：把 `trend=_worse.get("trend")` 改回 `_vix.get("trend")`
     → HY 較嚴的格子轉紅；把 `_driver_str/_other_str` 換回固定 VIX 在前 → 同樣轉紅。
     """
+    if _SEVERITY[vix_sig] == 0 or _SEVERITY[hy_sig] == 0:
+        pytest.skip("缺燈組合改由 A2 的專屬測試把關（同上一條的射程收窄）")
     _c = _card2(vix_sig, hy_sig)
     _hy_drives = _SEVERITY[hy_sig] > _SEVERITY[vix_sig]
     _src = "HY" if _hy_drives else "VIX"
@@ -833,7 +881,19 @@ def test_volatility_credit_card_note_trend_and_value_follow_the_reported_light(
     # 頭條數字：驅動源排在最前面，且 label 明說燈號依誰（兩個值都留著，都是真量測）
     assert _c["value_str"].startswith("HY " if _hy_drives else "VIX "), (
         f"驅動源沒有排在頭條最前面：{_c['value_str']!r}（燈號依 {_src}）")
-    assert ("HY OAS" if _hy_drives else "VIX") in _c["label"]
+    # ── 2026-09-04 第三輪稽核 A4：本行原為 `("HY OAS" if … else "VIX") in label` ──
+    # **那是一句恆真的斷言。** label 尾端固定帶著來源說明
+    # 「（Yahoo ^VIX ＋ FRED HY OAS，風險雷達 10 燈之 2）」—— **兩個 needle 都是
+    # 這串固定文字的子字串**，於是 25 個 parametrize 格子裡兩個分支**無條件都成立**。
+    # 實測突變：把 label 改成寫死「目前為 VIX」（HY 驅動時就是一句謊），
+    # 全 suite 仍 `122 passed` —— 這條守衛什麼都沒守到。
+    # 改成釘住**驅動源那一段**：`目前為 HY OAS` vs `目前為 VIX` 互不為子字串。
+    _driver_phrase = f"目前為 {'HY OAS' if _hy_drives else 'VIX'}"
+    assert _driver_phrase in _c["label"], (
+        f"label 沒有指名驅動源：{_c['label']!r}（燈號依 {_src}）")
+    _wrong_phrase = f"目前為 {'VIX' if _hy_drives else 'HY OAS'}"
+    assert _wrong_phrase not in _c["label"], (
+        f"label 指名了錯的驅動源：{_c['label']!r}（燈號依 {_src}）")
     assert "燈號取兩者較嚴者" in _c["label"]
     # sparkline 的 element key 必須跟著驅動源換 —— 否則同一個 key 會被拿去對
     # 兩條不同量綱的序列（VIX ~15 vs HY OAS ~3.2%）
@@ -1156,17 +1216,58 @@ def test_the_manual_refresh_button_invalidates_the_card_session_stash():
     import ui.tab5_data_guard as _d5
     _src = pathlib.Path(_d5.__file__).read_text(encoding="utf-8")
     _tree = ast.parse(_src)
-    _popped = {
+    # tab5 現在展開 L0 SSOT 的 `HM_CARD_SESSION_KEYS` 逐一 pop，不再逐字寫兩個字面值
+    # （B2）。這裡驗的是「它 import 了那個 SSOT，而且真的拿它去 pop」。
+    assert "HM_CARD_SESSION_KEYS" in _src, (
+        "tab5 沒有引用 `shared.session_keys.HM_CARD_SESSION_KEYS` —— "
+        "鍵名又寫成第二份字面值，B2 的 SSOT 收斂被改回去了")
+    _pop_targets = {
         ast.unparse(n.args[0])
         for n in ast.walk(_tree)
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
         and n.func.attr == "pop"
-        and ast.unparse(n.func.value).endswith("session_state")
-        and n.args and isinstance(n.args[0], ast.Constant)
+        and ast.unparse(n.func.value).endswith("session_state") and n.args
     }
-    for _k in _HM_SESSION_KEYS:
-        assert repr(_k) in {p.replace('"', "'") for p in _popped}, (
-            f"tab5 的手動更新沒有清掉 `{_k}` —— 使用者按了更新，Tab ① 的卡片不會動")
+    assert any("_hm_k" in t for t in _pop_targets), (
+        f"tab5 的手動更新沒有把 SSOT 鍵名拿去 pop：實際 pop 的是 {_pop_targets}")
+
+
+def test_the_hot_money_session_keys_have_exactly_one_definition():
+    """B2：兩個 session 鍵名只准有**一份**定義（L0 `shared/session_keys.py`）。
+
+    ⚠️ 舊守衛比對的是 **tab5 的字面值** 與 **測試自己的字面值** —— 兩份**副本**互比，
+    從頭到尾沒有碰過 `ui/tab1_macro.py` 的常數。把生產端常數改成別的字串，
+    舊守衛照樣全綠。
+
+    突變驗證：把 `ui/tab1_macro.py` 改回自己寫死 `_HM_CARD_TRIED_KEY = "..."`
+    → 本條轉紅。
+
+    ⚠️ **這條測試的第一版是假的守衛**：它用 `tab1_macro._HM_CARD_TRIED_KEY is
+    _sk.HM_CARD_TRIED_KEY` 比對物件同一性，而 `"_hm_card_fetch_tried"` 是
+    **identifier 形狀的字串字面值 → CPython 會 intern**，兩份獨立寫死的字面值
+    `is` 比較**照樣為真**。實測突變 B2 當場抓到（改回寫死仍全綠）。
+    **同一性比對在字串上不是 SSOT 守衛** —— 改為**結構性**檢查：
+    生產端不得出現這兩個字串的字面值，只能 import。
+    """
+    from shared import session_keys as _sk
+    assert _sk.HM_CARD_SESSION_KEYS == (_sk.HM_CARD_TRIED_KEY, _sk.HM_CARD_STASH_KEY)
+    # 本測試檔自己也不再持有第三份字面值（B2 點名的那第三處）
+    assert _HM_SESSION_KEYS is _sk.HM_CARD_SESSION_KEYS
+
+    _literals = set(_sk.HM_CARD_SESSION_KEYS)
+    for _mod_path in ("ui/tab1_macro.py", "ui/tab5_data_guard.py"):
+        _src = pathlib.Path(_mod_path).read_text(encoding="utf-8")
+        _tree = ast.parse(_src)
+        _found = {
+            n.value for n in ast.walk(_tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and n.value in _literals
+        }
+        assert not _found, (
+            f"{_mod_path} 又把 session 鍵名寫成字面值 {_found} —— "
+            f"SSOT 在 `shared/session_keys.py`，這裡只能 import")
+        assert "session_keys" in _src, (
+            f"{_mod_path} 沒有引用 `shared.session_keys` 這個 SSOT")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1257,18 +1358,15 @@ def test_quadrant_card_empty_state_tells_the_user_where_to_get_the_data():
 
 
 def test_extreme_risk_card_empty_state_tells_the_user_where_to_get_the_data():
-    """卡 5 灰態（景氣位階未取得）同樣要給「去哪補」。
+    """卡 5 灰態同樣要給「去哪補」。
 
     突變驗證：把灰態分支的 `_lab5 = "去哪補 → …"` 那一行刪掉（退回共用的規則說明）
     → 本條轉紅。
+
+    ⚠️ 2026-09-04 A1 就地更正：同上一條，原本手捏 `{"score": None, "phase": "—"}`
+    這個**生產端吐不出來的形狀**，改走真的 `calc_macro_phase({})`。
     """
-    _recorded = []
-    with patch.object(tab1_macro, "_render_macro_indicator_card",
-                      side_effect=lambda **kw: _recorded.append(kw)), \
-         patch("services.hot_money_service.fetch_hot_money_frames",
-               return_value=(pd.DataFrame(), pd.DataFrame(), "", "")):
-        _render_top_card_grid({}, {"score": None, "phase": "—"})
-    _c = next(c for c in _recorded if c["title"] == "⚠️ 極端風險警語")
+    _c = _grid_via_real_producer({})["⚠️ 極端風險警語"]
     assert _c["signal"] == "⬜ 資料不足"
     assert _LOAD_BUTTON_LABEL in _c["label"], (
         f"空狀態缺「去哪補」（線框 Rule 04）：label={_c['label']!r}")
@@ -1384,3 +1482,541 @@ def test_hot_money_card_still_reports_the_upstream_error_after_the_gate():
     assert _c["signal"] == "⬜ 待取得"
     assert _c["note"] == "FinMind 402 quota", (
         f"閘門把上游錯誤訊息吃掉了：{_c['note']!r}")
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 2026-09-04 **第三輪**稽核 — A1 / A2 / A3 / A5 / B1
+#
+# ⚠️ 這一整段的存在理由,比任何一條斷言重要:**前兩輪都只修了「被指出的那一個
+# 案例」,沒有修「那一類」。**
+#   · 第一輪(P1)修了卡 3 的**零觀測**;
+#   · 第二輪(F2)在同一張卡上發現同一類的**打平**;
+#   · 第三輪在**卡 1 與卡 5** 上發現同一類的第三張臉。
+#
+# 故本段一律**先寫出通則,再對五張卡逐一驗**,而不是只針對被點名的卡。
+# 通則(見 `ui/tab1_macro.py::_phase_score_support` 上方的長註):
+#   **一張卡只能宣稱它真的取到的那些輸入。**
+#   (1) 點名了特定輸入的宣稱 → 那些輸入要全在;
+#   (2) 建立在正規化聚合上的宣稱 → 聚合的分母要夠大;
+#   (3) **不對稱**:半套證據可以升警,不可以解除警報。
+# ════════════════════════════════════════════════════════════════════════
+from services.macro.action_light import OVERRIDE_INPUT_KEYS as _AL_KEYS
+from shared.signal_thresholds import MACRO_PHASE_MIN_TOTAL_WEIGHT as _MIN_W
+
+#: 完全斷線:所有 fetcher 都失敗,但 `fetch_all_indicators` 仍**無條件**寫入
+#: `_fred_sources`(`us_indicators.py` 該行在所有 `if` 之外)→ 回傳 dict 非空 →
+#: 呼叫端 `elif not ind: st.error(...)` 那道守衛**永遠不會觸發**。
+_TOTAL_OUTAGE_IND = {"_fred_sources": {
+    _sid: {"success": False, "last_date": "", "realtime_start": "",
+           "publish_lag_days": None, "rows": 0}
+    for _sid in ("DGS10", "DGS2", "DGS3MO", "T10Y2Y", "T10Y3M")}}
+
+#: 18 取 1:只有 VIX 且平靜 → 真實 `calc_macro_phase` 給 **10.0 分「高峰」**
+_ONE_OF_18_CALM_VIX = {**_TOTAL_OUTAGE_IND,
+                       "VIX": {"value": 12.0, "weight": 1, "score": 1}}
+#: 18 取 1:只有 PMI 且深度收縮 → 真實 `calc_macro_phase` 給 **0.0 分「衰退」**
+_ONE_OF_18_DEEP_PMI = {**_TOTAL_OUTAGE_IND,
+                       "PMI": {"value": 41.0, "weight": 2, "score": -2}}
+
+
+def _grid_via_real_producer(ind: dict) -> dict:
+    """走**真的** `calc_macro_phase(ind)`,回 `{title: card}`。
+
+    ⚠️ 刻意不手捏 phase —— F2 那一輪的教訓逐字適用:所有既有測試都手捏
+    `_fake_growth_inflation()`,於是「生產端真的會吐出什麼」從來沒被看見過。
+    """
+    _recorded = []
+    with patch.object(tab1_macro, "_render_macro_indicator_card",
+                      side_effect=lambda **kw: _recorded.append(kw)), \
+         patch("services.hot_money_service.fetch_hot_money_frames",
+               return_value=(pd.DataFrame(), pd.DataFrame(), "上游全掛", "上游全掛")):
+        _render_top_card_grid(ind, _real_calc_macro_phase(ind))
+    return {c["title"]: c for c in _recorded}
+
+
+#: 五張卡的灰態燈號(本 repo 現有的全部;新增第六種前請先想清楚為什麼)
+_GREY_SIGNALS = {"⬜ 待取得", "⬜ 資料不足", "⬜ 方向不明", "⬜ 取數失敗", "⬜ 無資料"}
+_GREY_COLOR = _MACRO_CARD_LIGHT_COLOR["gray"]
+
+
+# ── A1(🔴):卡 1 / 卡 5 不得從零觀測捏造綠燈與買進建議 ────────────────────
+def test_phase_card_does_not_fabricate_a_verdict_from_zero_observations():
+    """完全斷線 → 卡 1 必須灰,**不得**出現分數、顏色或建議。
+
+    修復前實測(真實網格,所有 fetcher 皆失敗):
+        signal='擴張（5.0/10）' color='#00c853'
+        note='股優於債：核心高股息ETF + 衛星AI/半導體，設嚴格停利點'
+    —— 同一畫面另外三張卡正確顯示 ⬜ 待取得,只有這張在放行加碼。
+
+    突變驗證:把 `if not _score_ok:` 那個分支拿掉 → 本條轉紅。
+    """
+    _c = _grid_via_real_producer(_TOTAL_OUTAGE_IND)["📊 景氣位階"]
+    assert _c["signal"] in _GREY_SIGNALS, f"零觀測卻給了燈號:{_c['signal']!r}"
+    assert _c["color"] == _GREY_COLOR, f"零觀測卻上色:{_c['color']}"
+    assert _c["value_str"] == "—", f"零觀測卻印出分數:{_c['value_str']!r}"
+    # 不得出現任何一句可據以行動的建議
+    for _forbidden in ("股優於債", "獲利了結", "加碼", "保守為主", "買點"):
+        assert _forbidden not in _c["note"], (
+            f"零觀測卻給了投資建議(命中 {_forbidden!r}):{_c['note']!r}")
+
+
+@pytest.mark.parametrize("ind,would_be", [
+    (_ONE_OF_18_CALM_VIX, "高峰"),
+    (_ONE_OF_18_DEEP_PMI, "衰退"),
+])
+def test_phase_card_does_not_let_one_indicator_decide_the_whole_phase(ind, would_be):
+    """18 取 1 → 卡 1 必須灰。**這一半才是本輪真正的加嚴。**
+
+    `calc_macro_phase` 的正規化分母只由**當次抓到的**指標構成,所以單一指標
+    可以把分數掃過整個 0~10:
+        只有 VIX(平靜)  → score=10 → '高峰' + 「適度獲利了結」
+        只有 PMI(深收縮) → score=0  → '衰退' + 「保守為主」
+    兩者都是「哪一支 fetcher 活著」的判讀,不是經濟的判讀。
+
+    突變驗證:把閘門從 `>= MACRO_PHASE_MIN_TOTAL_WEIGHT` 放寬成 `> 0`
+    → 本條兩個格子都轉紅(那正是「只修零觀測、不修這一類」的樣子)。
+    """
+    # 先證明上游真的會給出那個彩色定論(否則這條測試在守一個不存在的風險)
+    _phase = _real_calc_macro_phase(ind)
+    assert _phase["phase"] == would_be, (
+        f"前提不成立:上游給的是 {_phase['phase']!r} 不是 {would_be!r}")
+    _c = _grid_via_real_producer(ind)["📊 景氣位階"]
+    assert _c["signal"] in _GREY_SIGNALS, (
+        f"單一指標(權重合計 {tab1_macro._phase_scoring_weight(ind)})"
+        f"就決定了整個景氣位階:{_c['signal']!r}")
+    assert _c["value_str"] == "—"
+
+
+def test_phase_card_still_shows_the_verdict_when_the_data_supports_it():
+    """反向:資料夠時照樣出彩色位階 —— 閘門不得把正常情境一起擋掉。"""
+    _c = _grid_via_real_producer(_fake_indicators())["📊 景氣位階"]
+    assert _c["signal"] not in _GREY_SIGNALS, f"資料夠卻灰掉:{_c['signal']!r}"
+    assert _c["color"] != _GREY_COLOR
+    assert "/10" in _c["value_str"]
+
+
+def test_the_card_layer_weight_matches_the_producers_own_denominator():
+    """SSOT 等價:卡片層重算的權重分母,必須**逐一等於** `calc_macro_phase`
+    自己用的那一個(`_provenance["total_weight"]`)。
+
+    兩邊一旦分岔,閘門就會在守一個不存在的分母 —— 而那種錯不會有人發現,
+    因為兩邊各自都「看起來合理」。
+
+    突變驗證:把 `_phase_scoring_weight` 的 `ind.get("weight", 1)` 改成
+    `ind.get("weight", 0)` → 本條轉紅（靠下面「無 weight 欄」那一格）。
+
+    ⚠️ **這條測試第一次寫的時候是假的守衛**:所有 case 都帶明寫的 `weight`,
+    於是**預設值那一支永遠沒被走到** —— 把預設從 1 改成 0,測試照樣全綠。
+    實測突變 `A1-e` 當場抓到,故補上「**無 `weight` 欄**」與「**meta 混入**」兩格。
+    這正是本輪 A4 在講的同一個病:**斷言看起來在守,實際上兩邊都恆真。**
+    """
+    _no_weight = {"PMI": {"value": 55.0, "score": 2},          # 刻意不帶 weight
+                  "VIX": {"value": 15.0, "score": 1},
+                  "_fred_sources": {"DGS10": {"success": False}}}   # meta 不得進分母
+    for _name, _ind in [("完全斷線", _TOTAL_OUTAGE_IND),
+                        ("18取1-VIX", _ONE_OF_18_CALM_VIX),
+                        ("18取1-PMI", _ONE_OF_18_DEEP_PMI),
+                        ("無 weight 欄 + meta 混入", _no_weight),
+                        ("資料充足", _fake_indicators())]:
+        _prov_w = _real_calc_macro_phase(_ind)["_provenance"]["total_weight"]
+        _card_w = tab1_macro._phase_scoring_weight(_ind)
+        assert _card_w == pytest.approx(_prov_w), (
+            f"{_name}:卡片層算 {_card_w}、生產端算 {_prov_w} —— 分母分岔了")
+
+
+def test_the_producer_can_never_emit_a_none_score():
+    """釘死 A1 後半段:`calc_macro_phase` 的 `score` **不可能是 None**。
+
+    卡 5 舊有的 `elif phase.get("score") is None:` 分支因此是**生產路徑不可達的
+    死碼**,而當時「守著」它的兩條測試手捏 `{"score": None, "phase": "—"}` ——
+    一個對死碼的修復,由一個跑在死碼上的測試背書(`CLAUDE.md §-2` 的 `db4c139` 形態)。
+
+    本條把「不可能」變成可被機器檢查的事實:含**零指標**在內,
+    `score` 永遠是 `round(max(0, min(10, norm)), 1)` 的數字。
+    """
+    for _ind in (_TOTAL_OUTAGE_IND, {}, _ONE_OF_18_CALM_VIX, _fake_indicators()):
+        _s = _real_calc_macro_phase(_ind)["score"]
+        assert isinstance(_s, (int, float)) and _s is not None, (
+            f"score={_s!r} —— 若生產端真的能吐 None,本輪對卡 5 的判定要重來")
+
+
+def test_extreme_risk_card_does_not_claim_checks_it_never_made():
+    """卡 5 綠燈那句「殖利率曲線、Sahm、VIX **均未觸發**」是一句**點名輸入**的宣稱。
+
+    完全斷線實測(修復前):
+        signal='🟢 未觸發' color='#22c55e'
+        note='景氣位階 5.0/10；無硬衰退/恐慌訊號（殖利率曲線、Sahm、VIX 均未觸發）'
+    —— 那四項輸入**一項都沒取到**,卡片卻宣稱四項都檢查過且都沒事。
+
+    突變驗證:把 `elif _missing5 or not _score_ok5:` 改回
+    `elif phase.get("score") is None:` → 本條轉紅。
+    """
+    _c = _grid_via_real_producer(_TOTAL_OUTAGE_IND)["⚠️ 極端風險警語"]
+    assert _c["signal"] in _GREY_SIGNALS, f"零觀測卻下了燈號:{_c['signal']!r}"
+    assert _c["color"] == _GREY_COLOR
+    assert "均未觸發" not in _c["note"], (
+        f"宣稱檢查過四項,但一項都沒取到:{_c['note']!r}")
+    # 要說清楚缺了哪些(§1:誠實揭露,不是只說「沒資料」)
+    for _k in _AL_KEYS:
+        assert _k in _c["note"], f"沒說明缺了 {_k}:{_c['note']!r}"
+
+
+@pytest.mark.parametrize("missing", sorted(_AL_KEYS))
+def test_extreme_risk_card_greys_out_when_any_single_risk_input_is_missing(missing):
+    """**逐一**拔掉四個 override 輸入的任一個 → 綠燈不得成立。
+
+    這條是「類」的驗證:不是只測「全缺」,而是測**每一個**輸入缺席時都擋得住。
+    **權重仍然充足**(四個 key 拿掉任一個,合計仍 ≥ 10),所以擋住它的**只能**是
+    點名輸入那道閘門,不是權重閘門。
+
+    ⚠️ 「缺席」在此**整個 key 刪掉**,不是把 `value` 設成 `None` ——
+    `fetch_all_indicators` 是「抓到才寫 key」,`{"VIX": {"value": None}}` 這種形狀
+    **生產端吐不出來**(而且會在 `calc_macro_phase` 的 alerts 段直接 TypeError,
+    屬本輪射程外的既有上游問題)。用生產端吐得出來的形狀測,才測得到真的東西。
+
+    突變驗證:把 `_missing5` 的計算改成 `[]`(等於拿掉這道閘門)→ 四個格子全紅。
+    """
+    _ind = {k: dict(v) for k, v in _fake_indicators().items() if k != missing}
+    assert tab1_macro._phase_score_support(_ind)[0], "前提:權重仍然充足"
+    _c = _grid_via_real_producer(_ind)["⚠️ 極端風險警語"]
+    assert _c["signal"] in _GREY_SIGNALS, (
+        f"缺 {missing} 卻仍宣告安全:{_c['signal']!r}")
+    assert missing in _c["note"], f"沒指出缺的是 {missing}:{_c['note']!r}"
+
+
+def test_a_real_override_still_fires_even_when_the_data_is_thin():
+    """**不對稱規則(3):半套證據可以升警,不可以解除警報。**
+
+    只有 VIX=42(遠低於權重門檻)—— 位階算不出來,但「VIX ≥ 30 恐慌」是**真的
+    量到的觀測跨過門檻**。閘門若把它一起吃掉,就是把真警報變灰,那比假綠燈更糟。
+
+    突變驗證:把 `if _al5.get("override"):` 那個分支移到充足性閘門**之後**
+    → 本條轉紅。
+    """
+    _ind = {**_TOTAL_OUTAGE_IND, "VIX": {"value": 42.0, "weight": 1, "score": -1}}
+    assert not tab1_macro._phase_score_support(_ind)[0], "前提:權重不足"
+    _c = _grid_via_real_producer(_ind)["⚠️ 極端風險警語"]
+    assert _c["signal"] == "🔴 已觸發", f"真警報被閘門吃掉了:{_c['signal']!r}"
+    assert _c["color"] == _MACRO_CARD_LIGHT_COLOR["red"]
+    assert "1 項觸發" == _c["value_str"]
+    # 紅燈成立,但「其餘都沒事」不成立 —— 要據實說還有幾項沒檢查
+    assert "未檢查" in _c["note"], f"沒揭露其餘三項未檢查:{_c['note']!r}"
+
+
+def test_no_card_paints_a_verdict_under_a_total_outage():
+    """**通則的全卡驗證** —— 這一條才是「修的是類、不是案例」的證明。
+
+    完全斷線時,**五張卡沒有任何一張**可以出現非灰的燈號或顏色。
+    前兩輪的測試都只問「被點名的那一張」,所以同一類的第三張臉才會長出來。
+
+    突變驗證:把卡 1 或卡 5 任一個閘門拿掉 → 本條轉紅。
+    """
+    _cards = _grid_via_real_producer(_TOTAL_OUTAGE_IND)
+    assert len(_cards) == 5, f"完全斷線時掉了卡片:{sorted(_cards)}"
+    _bad = {t: (c["signal"], c["color"]) for t, c in _cards.items()
+            if c["signal"] not in _GREY_SIGNALS or c["color"] != _GREY_COLOR}
+    assert not _bad, f"完全斷線,但這些卡仍給了彩色定論:{_bad}"
+
+
+def test_the_override_input_keys_constant_matches_what_the_function_reads():
+    """漂移鎖:`OVERRIDE_INPUT_KEYS` 必須**恰好等於** `macro_action_light`
+    的 override 段實際讀的那些 key。
+
+    沒有這條,常數就是「第二個真相源」—— 函式日後多讀一個指標(例如 HY_SPREAD),
+    卡 5 的閘門會漏掉它而不會有人發現。
+
+    以 AST 取 `_val(indicators, "...")` 的字串引數,**不用 grep**
+    (docstring 裡也寫著那幾個字,grep 會被騙)。
+    突變驗證:從常數裡拿掉 `"SAHM"` → 本條轉紅。
+    """
+    import services.macro.action_light as _al
+    _tree = ast.parse(inspect.getsource(_al.macro_action_light))
+    _read = {
+        n.args[1].value
+        for n in ast.walk(_tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        and n.func.id == "_val" and len(n.args) == 2
+        and isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str)
+    }
+    assert _read == set(_AL_KEYS), (
+        f"常數與函式實際讀的 key 分岔了:常數 {set(_AL_KEYS)}、實際 {_read}")
+
+
+# ── A2(🟠):卡 2 缺一盞燈不得被當成「最溫和的狀態」───────────────────────
+@pytest.mark.parametrize("present_light", ["🟢 平靜"])
+@pytest.mark.parametrize("missing_side", ["vix", "hy"])
+def test_a_missing_light_is_never_treated_as_benign(missing_side, present_light):
+    """`_radar_light_rank` 把 `⬜ 無資料` 排成 **0,比 🟢(1) 還低** ——
+    一盞從來沒量到的燈於是變成「最溫和」。
+
+    修復前實測(4×4 全網格):
+        VIX 綠 + HY 缺 → 🟢 平靜「VIX 15.0 ｜ HY —」
+        VIX 缺 + HY 綠 → 🟢 平靜「HY 15.00% ｜ VIX —」
+    FRED 掛掉、Yahoo 還活著是 routine 的偏斷,而信用那半正是這張卡存在的理由。
+
+    突變驗證:把 `elif _vix_has or _hy_has:` 分支刪掉(退回無條件 worse-of)
+    → 本條兩個格子都轉紅。
+    """
+    _vix = "⬜ 無資料" if missing_side == "vix" else present_light
+    _hy = "⬜ 無資料" if missing_side == "hy" else present_light
+    _c = _card2(_vix, _hy)
+    assert _c["signal"] in _GREY_SIGNALS, (
+        f"只量到一盞(另一盞 ⬜)卻下了綠燈:{_c['signal']!r}")
+    assert _c["color"] == _GREY_COLOR
+    assert "未與另一盞比較" in _c["label"], (
+        f"label 仍在宣稱一個沒發生過的比較:{_c['label']!r}")
+    assert "燈號取兩者較嚴者" not in _c["label"]
+
+
+@pytest.mark.parametrize("alarm", ["🟡 警戒", "🔴 警報"])
+@pytest.mark.parametrize("missing_side", ["vix", "hy"])
+def test_a_single_light_can_still_raise_an_alarm(missing_side, alarm):
+    """不對稱規則的另一半:**只量到一盞、而它在警戒/警報 → 照實升警。**
+
+    把真警報藏起來,比畫假綠燈更糟。這條擋的是「為了修 A2 而一律灰掉」的過度修正。
+
+    突變驗證:把 `_alarm` 判斷改成 `False`(缺燈一律灰)→ 四個格子全紅。
+    """
+    _vix = "⬜ 無資料" if missing_side == "vix" else alarm
+    _hy = "⬜ 無資料" if missing_side == "hy" else alarm
+    _c = _card2(_vix, _hy)
+    assert _c["signal"] == alarm, f"單盞警報被藏起來了:{_c['signal']!r}"
+    assert _c["color"] == _LIGHT_COLOR[alarm]
+    assert "未與另一盞比較" in _c["label"]
+    assert "未取得" in _c["note"], f"沒揭露另一盞沒量到:{_c['note']!r}"
+
+
+def test_both_lights_missing_claims_no_comparison_at_all():
+    """⬜×⬜ 時 label 原本仍寫「燈號取兩者較嚴者:目前為 **VIX**」——
+    兩盞都沒量到,卻指名了一個驅動源。
+
+    突變驗證:把 `else:` 那個雙缺分支刪掉 → 本條轉紅。
+    """
+    _c = _card2("⬜ 無資料", "⬜ 無資料")
+    assert _c["signal"] in _GREY_SIGNALS
+    assert _c["color"] == _GREY_COLOR
+    assert _c["value_str"] == "—"
+    assert "燈號取兩者較嚴者" not in _c["label"]
+    assert "目前為 VIX" not in _c["label"] and "目前為 HY OAS" not in _c["label"]
+    assert "沒有做任何比較" in _c["label"]
+
+
+@pytest.mark.parametrize("hy_sig", _ALL_RADAR_SIGNALS)
+@pytest.mark.parametrize("vix_sig", _ALL_RADAR_SIGNALS)
+def test_the_comparison_claim_appears_only_when_both_lights_exist(vix_sig, hy_sig):
+    """全 5×5 網格的**單一不變量**:label 只有在兩盞都在時才准講「較嚴者」。
+
+    這條刻意涵蓋整個網格(含被上面兩條 skip 掉的缺燈格),
+    確保射程收窄之後沒有留下沒人看的格子。
+    """
+    _c = _card2(vix_sig, hy_sig)
+    _both = _SEVERITY[vix_sig] > 0 and _SEVERITY[hy_sig] > 0
+    assert ("燈號取兩者較嚴者" in _c["label"]) is _both, (
+        f"VIX={vix_sig!r} × HY={hy_sig!r}:兩盞都在={_both},"
+        f"但 label={_c['label']!r}")
+
+
+# ── A3(🟠):缺 `*_dir` 的向後相容 fallback 必須 fail-closed ─────────────────
+def test_a_payload_without_direction_fields_fails_closed():
+    """舊 payload(沒有 `growth_dir` / `inflation_dir`)且 `n > 0` 時,
+    舊寫法退成空字串 `""` —— 既不是 `"none"` 也不是 `"tie"`,於是直接落進
+    `else` 分支,把**打平併進來的** `quad_*` 原封送上畫面。
+
+    修復前實測(inflation_score=0.0、n_inflation=2、無 `*_dir`):
+        '🌱 復甦/擴張' #00c853「成長 +1.00 ｜ 通膨 +0.00」
+        「成長↑ 通膨↓ — 黃金期,積極持有風險資產」
+    —— 與 F2 修復**前**的輸出逐位元組相同,是一條設計出來的、通回 blocker 的路。
+
+    突變驗證:把 `"unknown"` 改回 `""` → 本條轉紅。
+    """
+    _gi = {
+        "growth_score": 1.0, "inflation_score": 0.0,
+        "growth_up": True, "inflation_up": False,
+        "quadrant": "復甦/擴張", "quad_color": "#00c853", "quad_icon": "🌱",
+        "quad_desc": "成長↑ 通膨↓ — 黃金期，積極持有風險資產",
+        "n_growth": 2, "n_inflation": 2,
+    }   # 刻意**不含** growth_dir / inflation_dir
+    _c = _card3(_fake_indicators(), {**_fake_phase(), "growth_inflation": _gi})
+    assert _c["signal"] in _GREY_SIGNALS, f"缺方向欄位卻定了象限:{_c['signal']!r}"
+    assert _c["color"] == _GREY_COLOR
+    assert _c["value_str"] == "—"
+    assert "復甦/擴張" not in _c["signal"] and "黃金期" not in _c["note"]
+    assert "沒有帶方向欄位" in _c["note"], (
+        f"沒說清楚是契約問題而不是市場狀態:{_c['note']!r}")
+
+
+@pytest.mark.parametrize("bogus", ["", "sideways", "UP", "unknown", "0"])
+def test_any_direction_value_the_card_does_not_recognise_fails_closed(bogus):
+    """**這一條才是「修類」的部分**:不只是「缺欄位」,任何本卡**不認得**的方向值
+    都必須 fail-closed —— 包含未來生產端新增的第五種狀態。
+
+    突變驗證:把 `_dir_ok = {"up", "down"}` 改成 `_g_dir != "tie"` 這種黑名單寫法
+    → `""` / `"sideways"` / `"UP"` / `"0"` 全部轉紅。
+    """
+    _gi = {
+        "growth_score": 1.0, "inflation_score": 0.0,
+        "growth_dir": "up", "inflation_dir": bogus,
+        "quadrant": "復甦/擴張", "quad_color": "#00c853", "quad_icon": "🌱",
+        "quad_desc": "成長↑ 通膨↓ — 黃金期，積極持有風險資產",
+        "n_growth": 2, "n_inflation": 2,
+    }
+    _c = _card3(_fake_indicators(), {**_fake_phase(), "growth_inflation": _gi})
+    assert _c["signal"] in _GREY_SIGNALS, (
+        f"不認得的方向值 {bogus!r} 仍被畫成象限:{_c['signal']!r}")
+    assert _c["color"] == _GREY_COLOR
+
+
+def test_the_real_producer_still_reaches_the_coloured_quadrant():
+    """反向:真的有方向時照樣出彩色象限 —— fail-closed 不得把正常路擋掉。"""
+    _ind = {"PMI": {"value": 55.0}, "YIELD_10Y2Y": {"value": 0.8},
+            "CPI": {"value": 1.0}, "PPI": {"value": 1.0}}
+    _c = _card3(_ind, _real_calc_macro_phase(_ind))
+    assert _c["signal"] not in _GREY_SIGNALS, f"真有方向卻灰掉:{_c['signal']!r}"
+    assert _c["color"] != _GREY_COLOR
+
+
+# ── A5(🟠):F6 的 session 閘門必須被**每一個**刷新入口清掉 ──────────────────
+@pytest.mark.parametrize("entry_point", ["tab1_force_refetch", "sidebar_global"])
+def test_every_refresh_entry_point_clears_the_hot_money_card_gate(entry_point):
+    """F6 那一輪建了閘門,卻只把清除接到**三個入口裡的一個**(⑤ 立即更新)。
+
+    修復前實測:
+        Tab① 強制重抓 (clear_tab1_macro_caches) -> clears card gate? False
+        Sidebar 全域刷新 (global_refresh_all)    -> clears card gate? False
+        Tab5 立即更新                            -> clears (the only one)
+    使用者把所有總經資料重載一遍之後,唯獨這張卡還抱著上一輪的失敗結果 ——
+    正是 F6 當初要消滅的症狀。
+
+    突變驗證:把 `shared/session_keys.py` 的 `HM_CARD_SESSION_KEYS` 從
+    `_TAB1_SESSION_KEYS` / `_GLOBAL_REFRESH_SESSION_KEYS` 任一處拿掉 → 對應格子轉紅。
+    """
+    if entry_point == "tab1_force_refetch":
+        from services.macro import clear_tab1_macro_caches as _fn
+    else:
+        from infra.cache import global_refresh_all as _fn
+    _ss = {k: "stale" for k in _HM_SESSION_KEYS}
+    _fn(_ss)
+    _left = [k for k in _HM_SESSION_KEYS if k in _ss]
+    assert not _left, (
+        f"{entry_point} 沒有清掉熱錢卡閘門 {_left} —— "
+        "使用者按了刷新,Tab ① 那張卡不會動")
+
+
+def test_tab5_clears_the_gate_even_when_the_refresh_itself_raises():
+    """⑤ 的兩個 `pop` 原本在 `try` **裡面**、且排在 `refresh_hot_money_data(...)`
+    **之後** —— 那一行拋例外時(例如 F3 記載的 `StreamlitSecretNotFoundError`),
+    閘門**整個 session 都清不掉**,使用者在這一輪沒有任何復原路徑。
+
+    以 AST 驗證:那些 `pop` 必須落在 `Try.finalbody`(`finally`)裡。
+    突變驗證:把 `finally:` 改回 `try:` 內的一般語句 → 本條轉紅。
+    """
+    import ui.tab5_data_guard as _d5
+    _tree = ast.parse(pathlib.Path(_d5.__file__).read_text(encoding="utf-8"))
+    _in_finally = False
+    for _node in ast.walk(_tree):
+        if not isinstance(_node, ast.Try) or not _node.finalbody:
+            continue
+        _src = "\n".join(ast.unparse(s) for s in _node.finalbody)
+        if "HM_CARD_SESSION_KEYS" in _src and ".pop(" in _src:
+            _in_finally = True
+    assert _in_finally, (
+        "tab5 的閘門作廢不在 `finally` 裡 —— refresh 拋例外時使用者無法復原")
+
+
+def test_the_common_hot_money_failure_offers_a_remedy_that_actually_works():
+    """`(空 df, err)` 是 L1「內拋外譯」設計下**最常見**的失敗形狀
+    (FinMind 402 quota),而它原本拿到的 label 是「展開下方 expander」——
+    那個 expander **清不掉本卡的閘門**,展開一百次卡片都不會動。
+
+    修復後:三個灰態分支一律指向真的會作廢閘門的入口。
+    突變驗證:把 `_HM_CARD_REMEDY` 改回「展開下方「📦 台股熱錢監測」查看完整判讀」
+    → 本條轉紅。
+    """
+    _empty = pd.DataFrame()
+    _recorded = []
+    with patch("services.hot_money_service.fetch_hot_money_frames",
+               return_value=(_empty, _empty, "FinMind 402 quota", "")), \
+         patch.object(tab1_macro, "_render_macro_indicator_card",
+                      side_effect=lambda **kw: _recorded.append(kw)):
+        _render_top_card_grid(_fake_indicators(), _fake_phase())
+    _c = next(c for c in _recorded if c["title"] == "💰 熱錢動向")
+    assert _c["signal"] in _GREY_SIGNALS
+    # 指的三個入口,必須是本輪實測「真的會清掉閘門」的那三個
+    for _needle in ("強制重抓", "全域刷新", "立即更新"):
+        assert _needle in _c["label"], (
+            f"失敗態沒給可用的去處(缺 {_needle}):{_c['label']!r}")
+    assert "展開下方" not in _c["label"], (
+        f"仍在指向清不掉閘門的 expander:{_c['label']!r}")
+
+
+# ── B1(🟡):`_n_trig5` 的條件式是死的 ──────────────────────────────────────
+def test_the_calm_headline_count_comes_from_a_real_count_not_a_literal():
+    """`_n_trig5 = len(_reasons5) if _al5.get("override") else 0` 的 `else 0`
+    **不可達** —— 該變數只在 `if _al5.get("override"):` 分支裡被讀,
+    平靜卡的「0 項觸發」其實來自另一個分支的字面值。
+
+    本條把「觸發數」釘成一個**真的隨資料變動**的量:平靜 0、單觸發 1、雙觸發 2。
+    突變驗證:把紅燈分支的 `len(_reasons5)` 改成字面值 `2` → 單觸發那格轉紅。
+    """
+    _one = {**_fake_indicators(), "VIX": {"value": 42.0, "weight": 1, "score": -1}}
+    _two = {**_one, "YIELD_10Y2Y": {"value": -0.5, "weight": 2, "score": -2}}
+    assert _card5(_CALM_IND, 6.8)["value_str"] == "0 項觸發"
+    assert _card5(_one, 6.8)["value_str"] == "1 項觸發"
+    assert _card5(_two, 6.8)["value_str"] == "2 項觸發"
+
+
+# ── B4(🟡):卡 1 必須揭露自己到底是什麼算出來的 ───────────────────────────
+def test_phase_card_discloses_that_it_is_the_us_composite_not_ndc():
+    """客戶拍板的線框寫「NDC 燈號 ＋ PMI ＋ 殖利率差合成」,實際跑的是
+    `calc_macro_phase` 的**美國**加權評分,而 NDC **不在** `EXPECTED_INDICATOR_KEYS`
+    裡(由 `ui/helpers/macro/ndc.py` 另外抓,只有 ② 依據用)。
+
+    **本輪不改它算什麼**(那是規格變更,要客戶裁示,已登記 BACKLOG),
+    但畫面必須說清楚它是什麼 —— 讓使用者以為這裡有台股 NDC 是另一種誤導。
+
+    突變驗證:把 label 的「未含台灣 NDC 燈號」拿掉 → 本條轉紅。
+    """
+    _c = _grid_via_real_producer(_fake_indicators())["📊 景氣位階"]
+    assert "美國" in _c["label"], f"沒揭露它是美國指標:{_c['label']!r}"
+    assert "NDC" in _c["label"], f"沒揭露 NDC 不在裡面:{_c['label']!r}"
+
+
+def test_expected_indicator_keys_really_does_not_contain_ndc():
+    """B4 的事實前提本身也要釘住 —— 否則哪天 NDC 真的被加進去,
+    卡 1 的免責聲明會變成一句新的假話。"""
+    from services.macro.us_indicators import EXPECTED_INDICATOR_KEYS
+    assert not any("NDC" in k.upper() for k in EXPECTED_INDICATOR_KEYS), (
+        f"NDC 已進入 EXPECTED_INDICATOR_KEYS,卡 1 的 label 必須同步改:"
+        f"{EXPECTED_INDICATOR_KEYS}")
+
+
+def test_the_sufficiency_threshold_comes_from_the_shared_ssot():
+    """§3.3 反捏造:閘門門檻不得是 inline magic number。
+
+    突變驗證:把 `ui/tab1_macro.py` 改成 inline `10.0` → 本條仍綠(它驗的是
+    常數存在與值域),但 `test_no_inline_threshold_in_the_card_grid` 會轉紅。
+    """
+    assert isinstance(_MIN_W, (int, float)) and _MIN_W > 0
+    # 推導自 `calc_macro_phase`:單一指標最大權重 2、最窄相位間隔 2 分
+    # ⇒ 20 / total_w < 2 ⇒ total_w > 10
+    assert _MIN_W == 10.0
+
+
+def test_no_inline_threshold_in_the_card_grid():
+    """漂移鎖:卡片層必須**引用** SSOT 常數,不得自己寫死數字(§3.3)。
+
+    ⚠️ **本條的第一版是假的守衛**:它 grep `inspect.getsource(...)` 找常數名,
+    但那個名字**也出現在同一個函式的 docstring 裡** —— 把比較式改成 inline `10.0`,
+    測試照樣全綠(實測突變當場抓到)。這與本 repo 憲法自己記載的教訓同型:
+    **「grep 會被 docstring 騙」**。改用 AST:比較式右運算元必須是 `Name`,不是常數。
+
+    突變驗證:把 `>= MACRO_PHASE_MIN_TOTAL_WEIGHT` 改成 `>= 10.0` → 本條轉紅。
+    """
+    _tree = ast.parse(inspect.getsource(tab1_macro._phase_score_support))
+    _cmps = [n for n in ast.walk(_tree) if isinstance(n, ast.Compare)]
+    assert _cmps, "閘門裡找不到比較式"
+    _operands = {ast.unparse(c) for n in _cmps for c in n.comparators}
+    assert "MACRO_PHASE_MIN_TOTAL_WEIGHT" in _operands, (
+        f"閘門沒有引用 SSOT 常數、而是寫死了數字(§3.3):比較對象為 {_operands}")
+    _inline = {o for o in _operands if o.replace(".", "").isdigit()}
+    assert not _inline, f"閘門出現 inline magic number:{_inline}"
