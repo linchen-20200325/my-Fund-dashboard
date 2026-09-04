@@ -353,7 +353,13 @@ def render_data_guard_tab() -> None:
          f"FRED {len(_FRED_REQUIRED)} / Yahoo {len(_YF_REQUIRED)} ｜ 缺值:"
          + (', '.join(_macro_zh(k) for k in _all_macro
                       if not (_src_ind.get(k) or {}).get('value')) or '無'),
-         "若 < 85% → 按上方「重新載入總經」"),
+         # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：
+         # 本檔**早就 import 了** `DATA_GUARD_RELOAD_MACRO_BTN as _LBL_D5_RELOAD_MACRO`
+         # 並拿它去渲染那顆鈕，這一行卻手抄了一份 —— 而且抄漏了 🔄，
+         # 兩份已經不一樣了。這正是 `shared/ui_control_labels.py` 整篇要防的形狀。
+         # ⚠️ 只換字串、不動這張表的結構（其餘三列仍是 `_KNOWN_DEBT` 登記的既有債，
+         #    整張表重寫屬 scope 決定）。
+         f"若 < 85% → 按上方「{_LBL_D5_RELOAD_MACRO}」"),
         ("🔍 Tab 2 單一基金", _t2_emoji, _t2_color,
          f"{_single_have}/{_single_total} 欄位" if _src_cf else "未查",
          (f"NAV {'✓' if _cf_have_nav else '✗'} ｜ Meta {'✓' if _cf_have_meta else '✗'} ｜ "

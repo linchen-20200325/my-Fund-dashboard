@@ -411,8 +411,19 @@ def render_policy_admin_section(
                 # 「從 Drive 挑」已移到「📥 雲端讀取」面板（user 截圖反饋）
                 st.markdown("**✨ 新增帳本（建立全新 Google Sheet）**")
                 if not _oauth_configured:
+                    # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** ·
+                    # 決策者：AI 總管 · 依據：實測）：舊文案寫
+                    # ~~「本面板下方的『OAuth 設定』expander」~~ —— **兩個字都錯**：
+                    # (a) 本檔**只有一個** `st.expander`（「📋 保單管理（Google Sheets）
+                    #     — Sheet 設定 / 保單清單」），OAuth 那塊根本不是 expander，
+                    #     使用者會去找一個收合區、找不到；
+                    # (b) 它實際叫「🧙 OAuth Client 設定引導（5 分鐘完成）」
+                    #     （`st.markdown("##### …")`），名字也對不上。
+                    # 與 `shared/ui_control_labels.py` 記載的「🔄 強制重抓其實是
+                    # checkbox」完全同型 —— **控制項的「型態」跟名字一樣會指錯**。
                     not_ready("還沒設定 OAuth Client,無法建立 Google Sheet",
-                              where="本面板下方的「OAuth 設定」expander")
+                              where="本面板同一個收合區裡的"
+                                    "「🧙 OAuth Client 設定引導（5 分鐘完成）」段落")
                 elif not _logged_in_q:
                     not_ready("還沒用 Google 登入,無法建立帳本",
                               where="左側 sidebar → 🔐 用 Google 登入")

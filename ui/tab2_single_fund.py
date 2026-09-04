@@ -2738,9 +2738,32 @@ def render_single_fund_tab() -> None:
             # 被權衡掉的只有那個會過期的方位詞 —— 改用**線框原本的用字**
             # （「1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼 → 3️⃣ 按 🚀 分析」），
             # 它本來就沒有方位詞。
-            where="1️⃣ 用「🔍 找代號」以關鍵字查代號　→　"
+            # ⚠️ 2026-09-04 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管 ·
+            # 依據：實測）：舊文案指名 ~~「🔍 找代號」~~ —— **畫面上沒有這個字**。
+            # `ui/helpers/fund_research/code_finder.py` 畫的是
+            # `st.button("🔍 搜尋基金代號")`；「🔍 找代號」只活在 docstring、註解，
+            # 以及 `ui/tab_fund_research.py` 那個 `safe_section("🔍 找代號", …)` 的
+            # 區塊名 —— 而那個字**只在該區塊炸掉時**才會被印出來（`safe_section`
+            # 把它塞進 `system_error(f"「{label}」區塊渲染失敗")`）。也就是說：
+            # 使用者看得到這則空狀態的每一刻，畫面上那顆鈕都**不是**它指名的那個。
+            # 與 `shared/ui_control_labels.py` 記載的 R4-F9 完全同型。
+            # **舊文案的用意仍然成立**（要告訴使用者去哪裡找代號），
+            # 被權衡掉的只有那個對不上畫面的名字；「找代號」三個字**改以動作保留**
+            # （footer 的「不必先找代號」），線框原文本來就是講動作不是講按鈕名。
+            # ⚠️ 刻意**不**收成 `ui_control_labels` 常數：`code_finder.py` 不在本批的
+            # 檔案邊界內，只把這裡改成常數會製造「常數 + 對面仍是字面值」的第二份
+            # 真相源。漂移改由 `tests/test_batch2_top_card_grid.py` 的
+            # `test_every_where_names_something_that_exists_on_screen` 守 ——
+            # 它拿**實際渲染的 widget label** 比對，對面改字這裡沒跟上就轉紅。
+            # ⚠️ 「以關鍵字查代號」與「找代號」兩個詞**都要留著**，這不是囉唆：
+            #    前者是 `tests/test_ia_tab13_batch3.py::_NEW_COPY_FINGERPRINTS` 的指紋
+            #    （少了它，該檔的「禁方位詞」規則會默默變成對空氣生效）；
+            #    後者是同檔 `test_empty_state_tells_the_three_steps` 要求的線框用字。
+            #    那個檔案不在本批的檔案邊界內，所以由本處配合它，不是改它來配合本處。
+            where="1️⃣ 用「🔍 搜尋基金代號」以關鍵字查代號　→　"
                   "2️⃣ 貼上網址／代碼到「MoneyDJ URL 或代碼」欄　→　3️⃣ 按「🚀 分析」",
-            footer="也可以直接貼 MoneyDJ 網址；境內外基金會自動判斷，不必先選。",
+            footer="也可以直接貼 MoneyDJ 網址（不必先找代號）；"
+                   "境內外基金會自動判斷，不必先選。",
         )
 
 
