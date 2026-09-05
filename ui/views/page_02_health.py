@@ -337,8 +337,14 @@ def render_holdings_health() -> None:
     st.markdown(f"## {tab_label('health')}")
     render_story_nav("health")
     # 線框 Tab 02 的職責宣告，逐字。**只診斷不決策**這半句是邊界，不是文案。
+    # ⚠️ **指 `portfolio`（整個 ④），不是 `pf_add`。**
+    #    這句同時涵蓋「換什麼」與「怎麼配」兩件事：`switch`（🎯 換股顧問）只接得住前者，
+    #    `pf_add`（➕ 加入與管理基金）**兩者都不是** —— 那裡是去新增標的，不是去換或去配。
+    #    線框原文寫的就是「在 **04**」（整個分頁），指整個 ④ 最忠於它。
+    # ⚠️ 本檔另一處 `where_to_find('pf_add')`（空狀態）**是對的、不要一起改**：
+    #    那裡確實是要使用者去加基金。**同一個 key 用在兩處，語意不同。**
     st.caption("回答一個問題：**我手上這些，哪一檔出問題了？** "
-               f"只診斷、不決策 —— 要換什麼、怎麼配，在 {where_to_find('pf_add')}。")
+               f"只診斷、不決策 —— 要換什麼、怎麼配，在 {where_to_find('portfolio')}。")
 
     safe_section("診斷條件", _render_filter_form)
 

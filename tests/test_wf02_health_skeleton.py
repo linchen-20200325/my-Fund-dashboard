@@ -20,6 +20,32 @@
    `tests/test_wpf_five_tab_wiring.py`（分頁名不得手抄）。
    **在這裡再抄一份等於製造第二把尺**（`CLAUDE.md §2.1`）。
 
+⚠️ 獨立紅隊 2026-09-05 打穿的 fail-open（**逐項實跑，每一項都 18 passed**）
+------------------------------------------------------------------------
+**本批刻意不補**（總管排程裁決：下一批填真內容時這些守衛本來就要重寫，
+補完再拆一次是白做兩次）。**寫在這裡是揭露義務**（`CLAUDE.md §-2` 規則 6）——
+**讀本檔的人請據此打折信任它，不要把「18 passed」讀成「這一頁守住了」。**
+
+- **語意維（4/4 全穿）**：灰態文案句尾加「目前一切正常，無異常」／三張卡的理由互換／
+  指路改成假承諾「去 ④ 新增後這塊就會出現」／空狀態改成「若已新增代表系統判定無效」。
+  ⚠️ 第三項尤其諷刺：`test_no_holdings_does_not_also_print_the_batch_pending_excuse`
+  擋的是兩句**混在一起**，把假承諾**直接寫進灰態文案本身**完全不擋。
+- **繞道維**：:func:`_segments` 回傳 dict，**同名單位後者覆蓋前者** ——
+  掏空真區塊、畫捏造的 72、再造一個同名誘餌帶灰態 → 全綠。
+  **「粒度降到一張卡」這個成果可以被一行繞過。**
+  另：手刻 `st.markdown("⬜ …")` 不走 `not_ready()` 也照樣被認成灰態。
+- **情境維**：`_holdings()` 的 `loaded` / `load_error` 過濾**零守衛**
+  （整條拿掉 → 全綠），而那是本檔**唯一一條 §1 邏輯**；
+  session 形狀只渲染過 `FAKE_HOLDINGS` 與 `[]` **兩種**。
+- **`test_there_is_no_fund_code_input_box` 只擋兩個字面 attribute 名**：
+  `from streamlit import text_input`／`getattr(st, "text_input")`／`st.chat_input`／
+  `st.selectbox(accept_new_options=True)` **四種都穿過去**。
+- **`test_downstream_reads_the_applied_filters_not_the_widget_values` 分不出真假閘門**：
+  `if True:` 與 `if not _gate:`（語意完全相反、功能整個壞掉）都全綠。
+  ⚠️ 且「下游只讀 `_SK_APPLIED`」**目前是一句空話** —— 唯一呼叫點是
+  `_render_filter_form()` 自己拿來當 widget 預設值，**本批沒有任何下游**。
+  它是**寫給下一批的結構**，不是現在就在保護什麼。
+
 錄製法：為什麼不用 AppTest
 --------------------------
 本頁尚未接進 `app.py`（客戶明令舊 ② 不動、不接線），AppTest 走不到它。
@@ -44,6 +70,7 @@ from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
     HEALTH_TABLE_COLUMNS,
+    _PENDING_NOTE,
     render_holdings_health,
 )
 
@@ -330,7 +357,10 @@ def test_no_holdings_does_not_also_print_the_batch_pending_excuse():
     因為內容根本還沒接上。**一次只給一個下一步。**
     """
     _all = _text(_render(portfolio=[]))
-    assert "本頁分批上線" not in _all, (
+    # ⚠️ 比對 `_PENDING_NOTE` 本體，**不硬抄字面值**。
+    #    硬抄的話，常數一改措辭這條就永遠是 True —— 它守的 bug 照樣存在、而它不再看得見。
+    #    （獨立紅隊實證：改措辭 ＋ 同時重犯這個 bug → 本條 passed，fail-open。）
+    assert _PENDING_NOTE not in _all, (
         "沒有持倉時不應同時印出「內容還沒接上」的灰字 —— 兩個下一步會互相抵消。\n"
         + _all)
 
@@ -366,18 +396,44 @@ def test_every_block_is_grey_until_its_content_lands(block: str):
     assert NOT_READY_MARK in _body, (
         f"區塊「{block}」沒有灰態記號 {NOT_READY_MARK!r} —— "
         "內容還沒接上就要誠實留灰，不得空著也不得填示意值（§1）。\n" + _body)
-    assert "本頁分批上線" in _body, (
+    assert _PENDING_NOTE in _body, (
         f"區塊「{block}」的灰態沒說「為什麼沒有」。\n" + _body)
 
 
-def test_the_grey_blocks_never_print_the_illustrative_numbers_from_the_wireframe():
-    """⛔ 線框裡的 72／2 檔／1 檔／0.78 是**示意值**，一個都不准出現在畫面上。
+#: 本條**實際釘住**的字面值。列成常數，是為了讓「它到底守了什麼」可以被讀出來，
+#: 而不是藏在 docstring 的形容詞裡。
+_PINNED_FAKE_VALUES: tuple[str, ...] = (
+    "72 ／ 100", "72／100", "72/100", "0.78", "相似度 0.78",
+)
 
-    這是本檔最要緊的一條：填一個看起來合理的分數，使用者**完全看不出它是假的**，
+
+def test_the_grey_blocks_never_print_the_illustrative_numbers_from_the_wireframe():
+    """⛔ 線框那幾個**示意值**不准出現在畫面上（**只涵蓋下列字面寫法**）。
+
+    為什麼要有這條：填一個看起來合理的分數，使用者**完全看不出它是假的**，
     而且會拿它去做決定（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
+
+    ## ⚠️ 這條**實際**守得到什麼（照實寫，不要照抄上一版的形容詞）
+
+    **只釘 `_PINNED_FAKE_VALUES` 這 5 個字面寫法**：`72 ／ 100`／`72／100`／`72/100`／
+    `0.78`／`相似度 0.78`。
+
+    **明確守不到（獨立紅隊 2026-09-05 逐項實跑，每一項都 18 passed）**：
+      - **裸 `72`** —— `st.caption("參考：72 分")`、`st.metric("總分", 72)` 都穿過去；
+      - **「2 檔」「1 檔」** —— 線框另外兩個示意值，**本條從來沒有釘過它們**；
+      - **全形數字**（`０.７８`）。
+
+    ⛔ **上一版的 docstring 寫「72／2 檔／1 檔／0.78 一個都不准出現」——那句是假的。**
+    「2 檔／1 檔」在**整個測試檔只出現過一次，就是那句 docstring 自己**；
+    斷言清單裡從來沒有它們。**一條自稱守 §1 的規則，自己的描述必須先為真**
+    （`CLAUDE.md §-2`：沒查證的宣稱比沒有宣稱更危險）。
+
+    📌 **本批刻意不補**（總管 2026-09-05 排程裁決）：下一批填真內容時，
+    「哪些數字算捏造」的判準會整個改寫（屆時 72 分**可能是真的算出來的**），
+    現在補完、下一批再拆一次是白做兩次。**已登記為下一批的入口條件。**
     """
     _all = _text(_render(portfolio=FAKE_HOLDINGS))
-    for _fake in ("72 ／ 100", "72／100", "72/100", "0.78", "相似度 0.78"):
+    for _fake in _PINNED_FAKE_VALUES:
         assert _fake not in _all, (
             f"畫面上出現了線框的示意值 {_fake!r} —— 那不是資料，是線框用來示範版面的假數字。")
 
