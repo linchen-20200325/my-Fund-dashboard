@@ -79,7 +79,8 @@ SRC = ROOT / "ui" / "views" / "page_02_health.py"
 #: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
 #:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _ast_bindings import gate_guarded_ids, gate_ifs, session_writes  # noqa: E402
+from _ast_bindings import (const_str_values, gate_guarded_ids,  # noqa: E402
+                           gate_ifs, session_writes)
 
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
@@ -483,6 +484,12 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
 
     session 寫入有**四條管道**，本條靠 `tests/_ast_bindings.py::session_writes`
     四條全收：下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+    ⚠️ **2026-09-05 第二輪：管道 4 已收窄，這不是放水，是修一條無解的偽陽性。**
+    widget 一定建在 `with applied_form(...)` 內、閘門 `if` 一定在 `with` 外
+    ⇒ 帶 `key=` 的 widget **結構上永遠不可能**落在閘門 body 裡；不收窄的話這條
+    **沒有任何合法擺法能轉綠**（本 repo `ui/**` 有 231 處 `key=`，那是家風）。
+    現行判準：`key=` **指到守衛在乎的那個 session key** 才算違規（常數名與字面值都認），
+    widget 寫自己的鍵不是。**此判準不依賴任何未經實測的 streamlit runtime 語意。**
     ⚠️ 重寫前它**只認第一條**（`ast.Assign` ＋ target 是 `ast.Subscript`）——
     本組 2026-09-05 的基線實測：三頁 × 另外三條管道，注入裸寫入後**全部 18/18 綠**。
     其中**屬性賦值**是本 repo `ui/**` 跨 6 檔 27 處的主流寫法，
@@ -508,7 +515,12 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
         "找不到 `_applied_filters()` —— 「已套用值」這一層被拿掉了，"
         "下游就會直接讀 widget 值，等於沒有 form。")
     _form_fn = _fns["_render_filter_form"]
-    _writes = session_writes(_form_fn)
+        # ⚠️ 管道 4（widget `key=`）**必須**收窄成「只認守衛在乎的那個 session key」：
+    #    widget 一定建在 `with applied_form(...)` 內，而閘門 `if` 一定在 `with` 外
+    #    ⇒ 帶 `key=` 的 widget 結構上永遠不可能落在閘門 body 裡，不收窄就是一條
+    #    **永遠無法滿足**的守衛（本 repo `ui/**` 有 231 處 `key=`，量測日 2026-09-05）。
+    _applied_keys = const_str_values(_tree, "_SK_APPLIED")
+    _writes = session_writes(_form_fn, widget_key_names=_applied_keys)
     assert _writes, "`_render_filter_form()` 沒有把套用結果寫回 session。"
     _gate_ifs = gate_ifs(_form_fn)
     assert _gate_ifs, (

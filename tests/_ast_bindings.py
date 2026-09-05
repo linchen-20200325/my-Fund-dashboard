@@ -100,7 +100,36 @@ def bound_names(tree: ast.AST, *, include_imports: bool = True) -> set[str]:
 
 
 # ── 2. session 寫入的四條管道 ────────────────────────────────────────────
-def session_writes(fn_node: ast.AST, receiver: str = "st.session_state") -> list[ast.AST]:
+def const_str_values(tree: ast.AST, *names: str) -> set[str]:
+    """把模組層 ``NAME = "字面值"`` 解析成 ``{"NAME", "字面值"}``。
+
+    給 :func:`session_writes` 的 ``widget_key_names`` 用：守衛關心的 session key
+    在原始碼裡可能寫成 **常數名**（``key=_SK_APPLIED``）也可能寫成 **字面值**
+    （``key="health_applied_filters"``），**兩種都要認得**。
+
+    解析不到字面值時**只回常數名**（不猜、不編一個假的值出來）。
+    """
+    out: set[str] = set(names)
+    for node in ast.walk(tree):
+        # ⚠️ `AnnAssign` 一定要在列：本 repo 三頁的寫法就是
+        #    `_SK_APPLIED: str = "v02_health_applied_filters"`（帶型別註記）。
+        #    只認 `ast.Assign` 會靜靜地只回常數名、拿不到字面值。
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+            continue
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id in names:
+                out.add(value.value)
+    return out
+
+
+def session_writes(fn_node: ast.AST, receiver: str = "st.session_state",
+                   *, widget_key_names: set[str] | None = None) -> list[ast.AST]:
     """`fn_node` 本體內所有**寫進 session** 的節點，依行號排序、去重。
 
     回傳的是**可定位的節點**（`.lineno` / `ast.unparse()` 都能用）：
@@ -124,26 +153,76 @@ def session_writes(fn_node: ast.AST, receiver: str = "st.session_state") -> list
     是合法 Python）、`AugAssign`、`for` target、`with ... as` target 全部涵蓋，
     且對 target 再 walk 一次，所以 tuple 解包（``st.session_state["a"], x = ...``）也算。
 
+    ## ⭐ `widget_key_names` —— 管道 4 **必須**收窄，否則它是一條無解的偽陽性
+
+    ``applied_form`` 的結構是**寫死的**（見 `ui/helpers/ia/gated_form.py`）::
+
+        with applied_form(KEY) as _gate:
+            ...widget 一定建在這裡（送出鈕在 yield 之後才建立）...
+        if _gate:                      # ← 閘門一定在 with **之外**
+            st.session_state[K] = ...
+
+    ⇒ **帶 `key=` 的 widget 在結構上永遠不可能落在閘門 `if` 的 body 裡**，
+    ``None``（預設，任何 `key=` 都算命中）會讓三頁**沒有任何合法擺法可以轉綠**。
+    ⚠️ **一條永遠無法滿足的守衛比沒有守衛更糟** —— 下一個人只會做兩件事之一：
+    把自己合法的 `key=` 刪掉（損失功能），或加一條豁免（守衛開始被侵蝕）。
+    **`git grep -oE '\bkey=' -- 'ui/**' | wc -l` ＝ 231（量測日 2026-09-05）**，
+    帶 `key=` 是本 repo 的家風，不是例外。
+
+    傳入 ``widget_key_names`` 後，管道 4 **只在 `key=` 指到守衛真正在乎的那個
+    session key 時才算命中** —— ``st.checkbox(..., key=_SK_APPLIED)`` 才是真違規
+    （streamlit 會拿 widget 值蓋掉已套用值）；widget 寫**自己的**鍵不是違規。
+    比對同時吃**常數名**與**字面值**（見 :func:`const_str_values`）。
+
+    ⚠️ **這個判準刻意不依賴任何 streamlit runtime 語意** ——
+    「form 內互動不觸發 rerun」那句**本組沒有實跑驗證過**，
+    **不拿未驗的語意去支撐守衛**（那等於把一個未驗宣稱寫進規則）。
+    本判準只用「這個 key 是不是守衛在乎的那個」這件**純靜態、可自驗**的事實。
+
     ## 明確**不**涵蓋（照實列，不要讀成「守死了」）
 
     * **不遞迴進被呼叫的函式** —— 只看 `fn_node` 這一個函式本體。
       把 `st.session_state` 傳給別的函式、由那邊寫，本函式看不到。
     * ``setattr(st.session_state, name, v)`` / ``globals()`` / ``exec`` 等動態寫法。
-    * ``del st.session_state["k"]``（那是刪不是寫）。
-    * `key=` 這條的 alias 判定靠「這個函式裡 `session_state` 用的是哪個模組名」推導
-      （見 `_aliases`）；若某函式**完全沒碰 session_state**、又用非 `st` 的 alias
-      呼叫 widget，`key=` 那條會漏。
+    * ``del st.session_state["k"]``（那是刪不是寫）、以及
+      ``st.session_state |= {...}``（`AugAssign` 的 target 是 receiver 本身而非下標）、
+      ``.pop()`` / ``.clear()``（它們改動 session 但不是「寫入一個值」）。
+      **全 repo 目前 0 命中**（量測日 2026-09-05），登記待日後出現再評估。
+    * `key=` 這條的 alias 判定靠「這個函式裡 `session_state` 用的是哪個模組名」推導；
+      若某函式**完全沒碰 session_state**、又用非 `st` 的 alias 呼叫 widget，`key=` 那條會漏。
 
     :param receiver:
         session 容器的路徑。比對方式**對模組 alias 不敏感** ——
         只要 dotted 路徑的**最後一段**是 ``session_state``（取自本參數的最後一段），
         ``import streamlit as _s`` 之後的 ``_s.session_state`` 一樣抓得到。
+        **另外**：函式內 ``_ss = st.session_state`` 這種**把容器接到本地名字**的寫法，
+        其後的 ``_ss["k"] = v`` / ``_ss.update(...)`` 也算 —— 見下方 ``recv_aliases``。
     """
     attr = receiver.rsplit(".", 1)[-1]           # "session_state"
     root = receiver.split(".", 1)[0]             # "st"
 
+    # 本地別名：`_ss = st.session_state` 之後，`_ss` 就是同一個容器。
+    # ⚠️ 這一格是 2026-09-05 稽核挖出來的 before/after **覆蓋率倒退**：
+    #    舊實作（「任何 target 含 Subscript 的 Assign」）會紅掉它，但那是**意外撿到的** ——
+    #    同一條舊規則也會紅掉 `_cur["zzz"] = 1` 這種完全無關的本地 dict（實測 main 為 RED，
+    #    是**偽陽性**）。把 receiver 收緊成真的 `*.session_state` 修掉了那個偽陽性，
+    #    代價是連帶失去這一格；本函式在此把它**精準地**補回來，兩邊都要。
+    recv_aliases: set[str] = set()
+
+    def _dotted_is_receiver(node: ast.AST) -> bool:
+        d = dotted(node)
+        return bool(d) and d.rsplit(".", 1)[-1] == attr
+
+    for node in ast.walk(fn_node):
+        if isinstance(node, ast.Assign) and _dotted_is_receiver(node.value):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    recv_aliases.add(t.id)
+
     def _is_receiver(node: ast.AST) -> bool:
-        return dotted(node).rsplit(".", 1)[-1] == attr if dotted(node) else False
+        if isinstance(node, ast.Name) and node.id in recv_aliases:
+            return True
+        return _dotted_is_receiver(node)
 
     # widget `key=` 那條要知道「streamlit 在這個函式裡叫什麼」。
     aliases = {root}
@@ -151,6 +230,18 @@ def session_writes(fn_node: ast.AST, receiver: str = "st.session_state") -> list
         d = dotted(n)
         if d.endswith(f".{attr}"):
             aliases.add(d.split(".", 1)[0])
+
+    def _key_is_guarded(kw: ast.keyword) -> bool:
+        """`key=` 指到的東西，是不是守衛在乎的那個 session key。"""
+        if widget_key_names is None:
+            return True                      # 舊行為：任何 key= 都算（見 docstring 警告）
+        try:
+            if ast.unparse(kw.value) in widget_key_names:
+                return True
+        except Exception:                    # 極少見的節點形狀，寧可認不得
+            pass
+        return (isinstance(kw.value, ast.Constant)
+                and kw.value.value in widget_key_names)
 
     found: dict[int, ast.AST] = {}
 
@@ -185,7 +276,8 @@ def session_writes(fn_node: ast.AST, receiver: str = "st.session_state") -> list
             # `st.text_input(...)` 與 `st.sidebar.text_input(...)` 都算。
             if (d.count(".") >= 1 and d.split(".", 1)[0] in aliases
                     and not _is_receiver(node.func)
-                    and any(kw.arg == "key" for kw in node.keywords)):
+                    and any(kw.arg == "key" and _key_is_guarded(kw)
+                            for kw in node.keywords)):
                 _hit(node)
 
     return sorted(found.values(),
@@ -210,8 +302,21 @@ def gate_ifs(fn_node: ast.AST, opener: str = "applied_form") -> list[ast.If]:
 
     ## 擋不掉什麼（照實列）
 
-    * **語意反轉**：``if not _gate:`` 的 test 一樣提到 `_gate` → 本函式照樣認它是閘門。
-      「閘門真假」要靠 AppTest 行為測試（③④ 各有兩條）去驗，靜態規則分不出來。
+    * ⭐ **判準是「test 裡出現 gate 名字就一律認它是閘門」，不是「test 的語意等於 gate」。**
+      所以**任何**把 gate 名字包進一個更大運算式的寫法都分不出來，
+      **不是只有 `if not _gate:` 一個例子**（2026-09-05 稽核實測，逐一跑過）::
+
+          if _gate or True:      if _gate is False:     if _gate == False:
+          if not not _gate:      if _gate and True:     if _gate is not None:
+
+      **唯一的例外是純粹的 `not` 鏈**（``not _gate`` / ``not not _gate``）——
+      :func:`gate_guarded_ids` 會數 `not` 的層數並據以決定該收 `body` 還是 `orelse`，
+      那一種**是真的判對了**，不在本清單內。其餘一律「認得出是閘門、認不出語意」，
+      要靠 AppTest 行為測試（③④ 各有兩條）去驗。
+    * **閘門一旦轉手給中間變數就認不到**：``_ok = _gate`` 之後 ``if _ok:`` ——
+      `_ok` 不是 `with ... as` 綁出來的名字 ⇒ 不算閘門 ⇒ 底下的寫入判為裸寫入。
+      **這個方向是 fail-closed（誤紅、不是漏放）**，且斷言訊息已就地指名
+      「請同步 `gate_ifs()` 的判準」，故**登記不修**。
     * ``if True:`` 之類與閘門無關、卻把寫入包起來的 `if` —— 本函式**不**認它是閘門，
       所以底下的寫入會被判成裸寫入（**這個方向是 fail-closed，安全**）。
     * `<opener>` 換名字、或 gate 不是用 `with ... as` 取得（例如 `g = form(...)`）→ 認不到，
@@ -250,12 +355,43 @@ def gate_guarded_ids(fn_node: ast.AST, opener: str = "applied_form") -> set[int]
     （「任何 `ast.If` 底下的 `ast.Assign` 都算 guarded」）同樣看不見它，
     實測 before/after 兩邊皆綠。本輪是**沒有把它一起修掉，也沒有寫下來**，故補上。
 
-    仍然擋不掉 :func:`gate_ifs` 文件列的那些（語意反轉 `if not _gate:` 等）——
-    **本函式只修「分支方向」，不修「語意方向」。**
+    ⭐ **2026-09-05 第二輪：`not` 鏈現在判得對了。**
+    ``if not _gate: pass / else: <寫入>`` 與 ``if _gate: <寫入>`` **語意完全等價**，
+    但前者原本三頁皆誤紅（稽核 FP-2），而斷言訊息還說「每次 rerun 都會覆寫已套用值」——
+    **那句話對那段程式碼是假的**。本函式改為**數 `not` 的層數**來決定收 `body` 還是
+    `orelse`，順帶也讓 ``if not _gate: <寫入>``（真正的違規）**從綠變紅**。
+
+    ⚠️ **只處理純粹的 `not` 鏈。** 剝完 `not` 之後若不是 gate 名字本身
+    （``_gate and _ok`` / ``_gate or True`` / ``_gate is False`` …）**一律退回 `body`** ——
+    那些仍然分不出語意，見 :func:`gate_ifs` 的「擋不掉什麼」。
     """
+    gate_names: set[str] = set()
+    for node in ast.walk(fn_node):
+        if isinstance(node, ast.withitem) and node.optional_vars is not None:
+            call = node.context_expr
+            if isinstance(call, ast.Call) and dotted(call.func).rsplit(".", 1)[-1] == opener:
+                for sub in ast.walk(node.optional_vars):
+                    if isinstance(sub, ast.Name):
+                        gate_names.add(sub.id)
+
+    def _branch(gate: ast.If) -> list[ast.stmt]:
+        """這個 `if` 的哪一半才是「閘門為真」那一半。
+
+        數 `not` 的層數：``if _gate:`` → body；``if not _gate:`` → **orelse**；
+        ``if not not _gate:`` → body。剝完之後**必須剛好是 gate 名字本身**，
+        否則（``_gate and _ok`` / ``_gate or True`` / ``_gate is False`` …）
+        一律退回 `body` —— 認不出語意時**不要自作聰明反轉**。
+        """
+        node, negations = gate.test, 0
+        while isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            node, negations = node.operand, negations + 1
+        if isinstance(node, ast.Name) and node.id in gate_names and negations % 2 == 1:
+            return gate.orelse
+        return gate.body
+
     ids: set[int] = set()
     for gate in gate_ifs(fn_node, opener):
-        for stmt in gate.body:
+        for stmt in _branch(gate):
             for node in ast.walk(stmt):
                 ids.add(id(node))
     return ids

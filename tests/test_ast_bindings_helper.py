@@ -25,8 +25,8 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _ast_bindings import (bound_names, dotted, gate_guarded_ids,
-                           gate_ifs, session_writes)  # noqa: E402
+from _ast_bindings import (bound_names, const_str_values, dotted,
+                           gate_guarded_ids, gate_ifs, session_writes)  # noqa: E402
 
 
 def _fn(body: str) -> ast.FunctionDef:
@@ -171,6 +171,117 @@ def test_the_true_branch_is_still_guarded() -> None:
     guarded = gate_guarded_ids(fn)
     writes = session_writes(fn)
     assert any(id(w) in guarded for w in writes), "真分支的寫入被誤判成裸寫入。"
+
+
+_NOT_GATE_ELSE = (
+    'with applied_form("k") as _gate:\n'
+    '    pass\n'
+    'if not _gate:\n'
+    '    pass\n'
+    'else:\n'
+    '    st.session_state["ok"] = 1'
+)
+_NOT_GATE_BODY = (
+    'with applied_form("k") as _gate:\n'
+    '    pass\n'
+    'if not _gate:\n'
+    '    st.session_state["bad"] = 1'
+)
+_NOT_NOT_GATE = (
+    'with applied_form("k") as _gate:\n'
+    '    pass\n'
+    'if not not _gate:\n'
+    '    st.session_state["ok"] = 1'
+)
+
+
+def test_a_negated_gate_guards_its_else_branch() -> None:
+    """`if not _gate: pass / else: <寫入>` 與 `if _gate: <寫入>` **語意等價**。
+
+    ⚠️ 稽核 FP-2：這個形狀原本三頁皆**誤紅**，而斷言訊息還說
+    「每次 rerun 都會覆寫已套用值」——**那句話對這段程式碼是假的**。
+    誤紅的代價不是「多跑一次 CI」，是**下一個人會照著錯的訊息去改一段本來就對的程式**。
+    """
+    fn = _fn(_NOT_GATE_ELSE)
+    naked = [w for w in session_writes(fn) if id(w) not in gate_guarded_ids(fn)]
+    assert naked == [], "`if not _gate:` 的 else 分支就是閘門為真那一半，不該算裸寫入。"
+
+
+def test_a_negated_gate_does_not_guard_its_own_body() -> None:
+    """反向：``if not _gate: <寫入>`` 才是**真違規**（沒送出卻寫）。
+
+    ⚠️ 這一格在 2026-09-05 第一輪還是**綠**的（當時列為「語意反轉分不出來」的已知洞）；
+    數 `not` 層數之後**變紅**，也就是那個洞在純 `not` 這一支上被關掉了。
+    """
+    fn = _fn(_NOT_GATE_BODY)
+    naked = [w for w in session_writes(fn) if id(w) not in gate_guarded_ids(fn)]
+    assert [n.lineno for n in naked] == [5], "`if not _gate:` 底下的寫入必須算裸寫入。"
+
+
+def test_double_negation_is_not_treated_as_inverted() -> None:
+    """``not not _gate`` ≡ ``_gate`` —— 數層數，不是「看到 not 就反轉」。"""
+    fn = _fn(_NOT_NOT_GATE)
+    naked = [w for w in session_writes(fn) if id(w) not in gate_guarded_ids(fn)]
+    assert naked == [], "偶數個 `not` 應該回到 body，不該反轉去收 orelse。"
+
+
+# ── 管道 4：widget `key=` 必須收窄，否則是無解的偽陽性 ──────────────────
+_WIDGET_OWN_KEY = 'st.checkbox("x", key="my_widget")'
+_WIDGET_APPLIED_KEY_NAME = 'st.checkbox("x", key=_SK_APPLIED)'
+_WIDGET_APPLIED_KEY_LIT = 'st.checkbox("x", key="v02_applied")'
+_KEYS = {"_SK_APPLIED", "v02_applied"}
+
+
+@pytest.mark.parametrize("case", [_WIDGET_APPLIED_KEY_NAME, _WIDGET_APPLIED_KEY_LIT])
+def test_a_widget_writing_the_guarded_key_is_a_write(case: str) -> None:
+    """widget 的 `key=` **指到守衛在乎的那個 session key** ＝ 真違規。
+
+    streamlit 會拿 widget 值蓋掉已套用值，**常數名與字面值兩種寫法都要認得**。
+    """
+    assert session_writes(_fn(case), widget_key_names=_KEYS), (
+        "`key=` 指到被守護的 session key 時必須算 session 寫入。")
+
+
+def test_a_widget_writing_its_own_key_is_not_a_write() -> None:
+    """widget 寫**自己的**鍵不是違規 —— 這條是本 repo 的家風（231 處 `key=`）。
+
+    ⚠️ 不收窄的話，管道 4 會變成一條**永遠無法滿足**的守衛：
+    widget 一定建在 `with applied_form(...)` 內，而閘門 `if` 一定在 `with` 外
+    ⇒ 帶 `key=` 的 widget **結構上不可能**落在閘門 body 裡。
+    **一條永遠無法滿足的守衛比沒有守衛更糟**（下一個人只會刪功能或加豁免）。
+    """
+    assert session_writes(_fn(_WIDGET_OWN_KEY), widget_key_names=_KEYS) == []
+
+
+def test_const_str_values_resolves_annotated_assignments() -> None:
+    """三頁的寫法是 ``_SK_APPLIED: str = "…"``（**AnnAssign**），不是純 `Assign`。
+
+    只認 `ast.Assign` 會靜靜地只回常數名、拿不到字面值 ⇒ `key="字面值"` 那一種漏掉。
+    """
+    tree = ast.parse('_SK_APPLIED: str = "v02_applied"\n_OTHER = "zzz"')
+    assert const_str_values(tree, "_SK_APPLIED") == {"_SK_APPLIED", "v02_applied"}
+
+
+# ── receiver 的本地別名 ────────────────────────────────────────────────
+def test_a_local_alias_of_session_state_still_counts() -> None:
+    """``_ss = st.session_state`` 之後的 ``_ss["k"] = v`` 也是 session 寫入。
+
+    ⚠️ 這一格是稽核挖出來的 before/after **覆蓋率倒退**：舊實作會紅掉它，
+    但那是**意外撿到的** —— 同一條舊規則也會紅掉完全無關的本地 dict（偽陽性）。
+    本函式把它**精準地**補回來，而不是靠那個偽陽性。
+    """
+    fn = _fn('_ss = st.session_state\n_ss["k"] = 1')
+    assert len(session_writes(fn)) == 1
+
+
+def test_an_unrelated_local_dict_is_not_a_session_write() -> None:
+    """反向：`_cur["zzz"] = 1` 這種本地 dict **不是** session 寫入。
+
+    舊實作（「任何 target 含 Subscript 的 Assign」）在 `origin/main` 上對這一格是紅的，
+    **那是偽陽性**；本函式必須維持綠，否則上面那條是靠誤殺換來的。
+    """
+    fn = _fn('_cur = _applied_filters()\n_cur["zzz"] = 1')
+    assert session_writes(fn) == []
 
 
 def test_no_gate_means_everything_counts_as_naked() -> None:
