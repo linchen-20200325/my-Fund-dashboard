@@ -354,12 +354,29 @@ def _attr_calls(tree: ast.AST, names: tuple[str, ...]) -> list[str]:
 
 
 def _imported_modules(tree: ast.AST) -> list[str]:
+    """檔內 import 到的模組路徑。
+
+    ⛔ **`ImportFrom` 一定要把「被 import 的名字」也接回模組路徑上（本組的實測教訓）**：
+    `from ui import tab6_manual` 的 `node.module` 只有 **`"ui"`** ——
+    只收 `node.module` 的話，**最自然的那種同層 import 完全看不到**。
+    本組第一版就是這樣寫的，突變 **M13（委派舊分頁）在三種順序下全數存活**，
+    是**跑突變才發現的，不是讀出來的**。
+
+    ⚠️ 因此這裡對 `ImportFrom` **同時**吐兩種：
+    `"ui"`（模組本身）與 `"ui.tab6_manual"`（模組 ＋ 被 import 的名字）——
+    後者才擋得到 `from X import Y` 這條路。
+    ⚠️ 代價：`from ui.helpers.ia import STATE_NOT_READY` 會多吐一個
+    `"ui.helpers.ia.STATE_NOT_READY"` 這種**不是模組的字串**。
+    本檔的兩個消費者都是 `startswith` / 取第一段的比對，多吐無害；
+    **但它不是一份「真的 import 到的模組」清單，別拿去做別的用途。**
+    """
     _mods: list[str] = []
     for _n in ast.walk(tree):
         if isinstance(_n, ast.Import):
             _mods.extend(_a.name for _a in _n.names)
         elif isinstance(_n, ast.ImportFrom) and _n.module:
             _mods.append(_n.module)
+            _mods.extend(f"{_n.module}.{_a.name}" for _a in _n.names)
     return _mods
 
 
