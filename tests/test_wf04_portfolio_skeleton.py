@@ -920,6 +920,37 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     的 AppTest 那半**會**抓到它造成的行為（沒按也寫進去），縱深沒破。
     ⚠️ **但「這裡只可能是 subscript assign、所以不受影響」是不成立的**，
     不要引用那個說法把本項當成已結案。
+
+    ⭐ **上面只寫了「subscript 的 `AnnAssign`」，那還不是最該擔心的一種**
+    （2026-09-05 總管指定補上，理由如下）：
+    **`st.session_state.<name> = …`（target 是 `ast.Attribute`，不是 `ast.Subscript`）
+    同樣落在射程外**，而它是本 repo **跨 6 檔 27 處的主流寫法**
+    （本組實測，`ui/**` production：`ui/tab1_macro.py` 10、`ui/tab3_t7_ledger.py` 9、
+    `ui/tab1_macro_radar.py` 4、`ui/tab3_portfolio.py` 2、`ui/tab2_single_fund.py` 1、
+    `ui/tab5_data_guard.py` 1）——
+    **比 `AnnAssign` 更可能被真的踩到**：下一個人照 `ui/tab1_macro.py` 的家風往這裡寫一行，
+    這條守衛不會出聲。
+    ✅ **前半的 fail-closed 對 attribute 形態同樣成立**（本組實測：把**唯一**那個寫入
+    改成 `st.session_state.v04_portfolio_applied_plan = …` → `_writes` 由 1 變 0 →
+    ``assert _writes`` 轉紅）。**破的仍然只有後半那一種組合。**
+    ⚠️ **`st.session_state.update(` 這條路不現實** —— 出自另一組稽核（「全 repo 0 處」），
+    **本組沒有複驗它的窮舉性**；本組只驗到一件較弱的事：以 AST 掃全 repo，
+    **真正的 `st.session_state.update(...)` 呼叫點是 0**，
+    `grep` 的 3 個命中全部是 `tests/test_wpg_portfolio_health_link_20260831.py`
+    **docstring 裡的散文**，不是呼叫。
+
+    📌 **要修這個洞的人請先看這兩份既有實作，不要再寫第四份**
+    （本批不動它們 —— 跨檔重構，超出邊界；總管另排）：
+    - `tests/test_settings_diag_merge.py::_reassigned_names` —— **綁定形態**最完整的一份
+      （`Assign`／`AnnAssign`／`AugAssign`／`NamedExpr`／`For`／`withitem`，
+      且對 target 再跑一次 `ast.walk` 找 `ast.Name`，所以 tuple／starred 解包自動涵蓋）。
+    - ⭐ `tests/test_wpg_portfolio_health_link_20260831.py`（同檔 session 寫入偵測段）——
+      **針對「session 寫入」這個題目，它比上面那份更貼題**，且經 4 次突變實跑驗證：
+      下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+      ⚠️ **第四種（`key=`）是上面兩份都沒有、而本頁的討論也一直漏掉的** ——
+      streamlit 會**代呼叫端**把 widget 值寫進 `session_state`，
+      它看起來完全不像賦值。**本頁的 form 三個 widget 目前都沒帶 `key=`**（本組實測），
+      所以現在不是問題；**但真要補這個洞時，這一種不能漏。**
     """
     _t = _tree()
     _fns = {_n.name: _n for _n in ast.walk(_t) if isinstance(_n, ast.FunctionDef)}
