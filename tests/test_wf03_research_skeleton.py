@@ -34,13 +34,20 @@
 - **繞道維（本檔已解）**：② 的 `_segments()` 回傳 dict，**同名單位後者覆蓋前者**，
   於是「掏空真區塊 ＋ 另造一個同名誘餌帶灰態」可以全綠。
   本檔補了 :func:`test_unit_names_are_unique`，同名誘餌**當場轉紅**（突變 M11 實測）。
-- **繞道維（本檔已解另一半）**：② 的「手刻 `st.markdown("⬜ …")` 不走 `not_ready()`
-  也照樣被認成灰態」。本檔補了
-  :func:`test_the_page_never_hand_rolls_the_grey_mark`（AST，活字串不得含 ⬜）。
-- ⛔ **語意維（本檔**沒有**解）**：所有灰態斷言驗的是**符號**（⬜）與**常數**
-  （`_PENDING_NOTE`），**不驗那句話的意思**。把灰態文案改成
-  「⬜ 本頁分批上線，這一塊的內容還沒接上。目前一切正常，無異常。」——
-  **本檔全綠**。同理，八個單位的灰態理由**互換**（把配息的理由掛到持股上）也全綠。
+- **繞道維（本檔只解掉「字面」那一半，2026-09-05 紅隊更正）**：② 的「手刻
+  `st.markdown("⬜ …")` 不走 `not_ready()` 也照樣被認成灰態」——
+  :func:`test_the_page_never_hand_rolls_the_grey_mark` 只擋得住**字面** `⬜`。
+  ⛔ **兩種寫法照樣全綠**：(a) 從 SSOT `from ui.helpers.render_state import
+  NOT_READY_MARK` 再自己拼成一句 caption；(b) `chr(0x2B1C)`。
+  ⚠️ **(a) 特別值得記著：那正是本檔自己在教的寫法**（本檔頂部就寫著
+  「從那個模組 import，不在這裡抄一份字面值」）——
+  **一個照著檔案自己的教誨寫的人，會剛好落在守衛的盲區裡。**
+  （總管 2026-09-05 排程裁決：登記，本批不修。）
+- ⛔ **語意維（本檔**沒有**解，而且比本檔原本自陳的更寬）**：所有灰態斷言驗的是
+  **符號**（⬜）與**常數**（`_PENDING_NOTE`），**不驗那句話的意思**。
+  紅隊實測全綠的三種：句尾接「目前一切正常，無異常」／八個單位的灰態理由**互換**／
+  **在灰態裡塞一句投資承諾「目前查無風險，此檔可安心買進。」**
+  ⚠️ 第三種是本檔原本沒有想到的等級 —— **一句會讓人賠錢的話，本檔一條都不會響。**
 - ⛔ **情境維（本檔只覆蓋到一半）**：頁面只被渲染過 **兩種** session 形狀
   （`None` 與一份 `{"term","source"}`）。`_applied_query()` 對**非 dict 髒值**
   （字串／list／舊版 payload）的行為**沒有任何斷言**。
@@ -50,9 +57,13 @@
   換成任何一個**別的合法 key**，:func:`test_every_grey_says_where_to_look` 才會紅；
   但職責宣告那一句裡的 `health` / `portfolio` 兩個 key **換成別的合法 key 不會有任何東西轉紅**。
   **這是「走 SSOT」擋不到的那一類**：SSOT 保證名字不過期，**不保證你挑對了 key**。
-- ⛔ **`test_the_two_fields_and_the_submit_verb_come_from_the_wireframe` 只驗標籤字**，
-  不驗 widget 型別 —— 把 `text_input` 換成 `chat_input`、把 `selectbox` 換成 `radio`，
-  只要標籤沒變就全綠。
+- ⛔ **其餘已登記、本批不修**（總管 2026-09-05 排程裁決）：
+  示意值黑名單只有 10 個字面寫法；**指路挑錯 key 沒有任何守衛**；
+  `_applied_query()` 對非 dict 髒值零斷言；`BLOCK_RESULTS` 可以被改成空字串；
+  `getattr(st, "columns")(2)` 與 `from streamlit import columns as _c` 繞得過
+  :func:`test_the_page_draws_no_grid_or_form_of_its_own`
+  —— **但全域 `tests/test_ui_grid_contract.py` 對 alias 同樣失明，
+  那是 repo 既有性質，不是本頁造成的。**
 
 ⚠️ 兩個**全域守衛的實測盲點**（本檔的突變順便量到的，登記給後人，不是本檔的功勞）
 ------------------------------------------------------------------------------
@@ -97,6 +108,8 @@ SRC = ROOT / "ui" / "views" / "page_03_research.py"
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_03_research import (  # noqa: E402
+    _LABEL_SOURCE,
+    _LABEL_TERM,
     BLOCK_BATCH,
     BLOCK_DEEP,
     BLOCK_FORM,
@@ -108,6 +121,7 @@ from ui.views.page_03_research import (  # noqa: E402
     SUBMIT_LABEL,
     _PENDING_NOTE,
     _normalise_query,
+    _pending_where,
     render_fund_research,
 )
 
@@ -353,9 +367,25 @@ def test_the_two_fields_and_the_submit_verb_come_from_the_wireframe():
     （型別本檔不驗，見模組 docstring 的已知缺口）。
     """
     _all = _text(_render(applied=FAKE_QUERY))
-    for _label in ("代碼或名稱", "來源"):
-        assert _label in _all, (
-            f"搜尋條件少了「{_label}」—— 線框 Tab 03 的 Form 逐字列了兩個欄位。")
+    # ⚠️ **驗 recorder 的精確前綴，不是 substring**（2026-09-05 紅隊實測）：
+    #    上一版寫的是 `assert "來源" in _all`，而畫面上**永遠**有一句
+    #    `##### 資料來源與抓取時間` —— 「來源」兩個字被那個**完全無關的段落標題**滿足了。
+    #    紅隊把整個 `st.selectbox(_LABEL_SOURCE, …)` 刪掉 → **零紅燈**；
+    #    對照組刪 `text_input` → 1 failed。**也就是兩個欄位只守住了一個。**
+    #    現在比對 `[selectbox] 來源` / `[text_input] 代碼或名稱`，順帶把型別釘住。
+    # ⚠️ **釘線框的字面值，不是釘模組常數**（2026-09-05 第二輪突變 M02 抓到）：
+    #    上一版寫的是 `f"[{_api}] {_label}"`，而 `_label` 是**從被測模組 import 進來的
+    #    同一個常數** —— 於是把 `_LABEL_TERM` 從「代碼或名稱」改成「關鍵字」，
+    #    斷言跟著一起變，**35 passed 全綠**。那是一條**自我參照的恆真式**，
+    #    它守的是「渲染有沒有用到那個常數」，**不是**「那個常數是不是線框寫的字」。
+    #    現在兩件事分開驗：字面值對線框（下方 `==`），渲染有沒有用到它（`in _all`）。
+    assert (_LABEL_TERM, _LABEL_SOURCE) == ("代碼或名稱", "來源"), (
+        f"欄位標籤被改成 {(_LABEL_TERM, _LABEL_SOURCE)!r} —— "
+        "線框 Tab 03 的 Form 逐字寫的是「代碼或名稱」與「來源」。")
+    for _api, _label in (("text_input", "代碼或名稱"), ("selectbox", "來源")):
+        assert f"[{_api}] {_label}" in _all, (
+            f"搜尋條件少了「{_label}」這個 `st.{_api}` —— "
+            "線框 Tab 03 的 Form 逐字列了兩個欄位。\n" + _all)
     assert f"[form_submit_button] {SUBMIT_LABEL}" in _all, (
         f"送出鈕不是「{SUBMIT_LABEL}」—— 線框 Tab 03 畫的是這兩個字。\n" + _all)
     assert SUBMIT_LABEL == "搜尋", (
@@ -436,47 +466,43 @@ def test_unit_names_are_unique():
             "等於在灰態斷言上開一道後門。請把段落名改成唯一。")
 
 
-def test_the_two_contested_block_names_go_through_story_nav():
-    """⛔ 「單檔」與「多檔」兩塊的名字**必須走 `section_label()`**，不得寫死字面值。
+def test_the_two_block_names_are_the_wireframe_wording_verbatim():
+    """這兩塊的名字**逐字對 `ia-wireframe.html` Tab 03**：單一基金深度／批次分析。
 
-    ## 這條守的是一個**未裁決的衝突**，不是一個已定案的規則
+    ## 沿革（這條前後被推翻過一次，寫下來免得後人以為它一直長這樣）
 
-    兩份**都已客戶拍板**的線框對同樣這兩塊給了不同的名字：
+    本檔上一版把這兩個名字**釘成必須走 `story_nav.section_label()`**
+    （畫面上是「🔍 單檔深掘」「📦 批次掃描」），理由是當時
+    `wireframe-fund-research.html`（2026-08-31）與 `ia-wireframe.html`（2026-09-01）
+    **兩份都已客戶拍板、對這一頁的說法不同**，而 `docs/wireframes/README.md`
+    的「版本關係」段沒有登記後者覆蓋前者 —— **在裁決之前不自行拍板，那個處置是對的。**
 
-    | 線框 | 日期 | 這兩塊叫什麼 |
-    |---|---|---|
-    | `docs/wireframes/wireframe-fund-research.html` | 2026-08-31 | 🔍 單檔深掘 ／ 📦 批次掃描 |
-    | `docs/wireframes/ia-wireframe.html` | 2026-09-01 | 單一基金深度 ／ 批次分析 |
+    **2026-09-05 客戶已裁決：③ 以 `ia-wireframe.html` Tab 03 為準。**
+    裁決一下來，走 SSOT 就從「保守」變成**開放偏離**，故本條**反過來**釘線框字面。
 
-    而 `docs/wireframes/README.md` 的「版本關係」段**沒有登記**後者覆蓋前者
-    （它只登記了 ia-wireframe 覆蓋 `fund-wireframe-final.html` 的兩處：分頁命名與 ⑤ 的區塊切分）。
+    ## ⚠️ 「批次分析」帶著一個真的代價，不要以為它是免費的
 
-    **本批取 SSOT（＝前者，已登記進 `story_nav._SECTION_LABELS` 的 `fund` / `batch`），
-    但那是暫行，不是裁決** —— 完整理由寫在被測檔 `BLOCK_DEEP` 上方。
-    其中最硬的一條是可自驗的：**「📦 批次分析」是已退役的頂層分頁名**
-    （`story_nav.RETIRED_TAB_LABELS`），寫成活字串會讓
-    `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name` 轉紅。
+    「📦 批次分析」是**已退役的頂層分頁名**（`story_nav.RETIRED_TAB_LABELS`），
+    而 `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+    的黑名單**含去 emoji 變體** → 直接寫會**當場轉紅**（紅隊與本組都實測過）。
+    故依總管裁決在該守衛的 `_LEGIT_EXEMPT` **具名加了一條**，理由逐字寫在那裡：
+    它在這裡是 **③ 頁內的區塊標題**，而批次分析**正是被合併進 ③ 的那個功能**，
+    所以不會讓使用者去分頁列上找一個不存在的分頁。
+    ⛔ **`RETIRED_TAB_LABELS` 本身與 `_KNOWN_DEBT` 一個字都沒動。**
 
-    ⚠️ **總管若裁決以 ia-wireframe 的字面為準，這條會轉紅 —— 那是預期的。**
-    屆時要一起處理的是那條全域守衛（「批次分析」還在退役字表裡），
-    **不是**把這條刪掉了事。
+    ⚠️ 本條與那條豁免是**一組的**：有人把這裡改回 `section_label()`，
+    那條豁免就會變成**指不到東西的殭屍條目**（`test_exemption_tables_do_not_rot` 會抓）。
     """
+    assert BLOCK_DEEP == "單一基金深度", (
+        f"`BLOCK_DEEP` 是 {BLOCK_DEEP!r} —— 客戶 2026-09-05 裁決以 "
+        "`ia-wireframe.html` Tab 03 為準，該線框那張卡逐字寫的是「單一基金深度」。")
+    assert BLOCK_BATCH == "批次分析", (
+        f"`BLOCK_BATCH` 是 {BLOCK_BATCH!r} —— 同上，線框逐字是「批次分析」。")
     _t = _tree()
-    _assigned = {
-        _n.target.id: _n.value for _n in ast.walk(_t)
-        if isinstance(_n, ast.AnnAssign) and isinstance(_n.target, ast.Name)
-        and _n.value is not None
-    }
-    for _const in ("BLOCK_DEEP", "BLOCK_BATCH"):
-        _v = _assigned.get(_const)
-        assert _v is not None, f"找不到模組層的 `{_const}` 定義。"
-        _fns = {getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
-                for _c in ast.walk(_v) if isinstance(_c, ast.Call)}
-        assert "section_label" in _fns, (
-            f"`{_const}` 被寫成字面值（{ast.unparse(_v)}）—— "
-            "這兩塊的名字目前卡在兩份已核准線框的衝突上，"
-            "在總管裁決之前一律走 `story_nav.section_label()`，理由見被測檔。")
-    assert BLOCK_DEEP and BLOCK_BATCH and BLOCK_DEEP != BLOCK_BATCH
+    _lits = {_n.value for _n in _live_strings(_t)}
+    assert {"單一基金深度", "批次分析"} <= _lits, (
+        "這兩個名字不是本檔的活字串 —— 裁決後它們必須逐字寫在這裡，"
+        "不得再委派給 `section_label()`（那會偏離客戶已裁決的線框）。")
 
 
 def test_the_wide_tables_go_through_wide_table_not_st_dataframe():
@@ -496,10 +522,19 @@ def test_the_wide_tables_go_through_wide_table_not_st_dataframe():
 def test_the_page_draws_no_grid_or_form_of_its_own():
     """鐵則 01 / 02 一律走共用元件：本檔不得有 `st.columns` 或 `st.form`。
 
-    ⚠️ 這條不是為了好看：自己寫 `st.columns` 會讓
-    `tests/test_ui_grid_contract.py::GRID_EXEMPT_CALL_TOTAL`（精確 `==`）轉紅；
-    自己寫 `st.form` 會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL` 轉紅。
-    **在這裡先擋一次，是為了讓錯誤訊息指向本頁，而不是指向一個全域計數器。**
+    ⚠️ **這裡曾寫「自己寫 `st.columns` 會讓 `GRID_EXEMPT_CALL_TOTAL` 轉紅」——
+    那是假的，2026-09-05 由獨立紅隊實測推翻**：加 `st.columns(3)`（＝鐵則 01 叫你開的
+    那個）→ **全綠**；`st.columns(2)` → 2 failed。那個計數器抓的是「**欄數不是 3**」
+    的呼叫，**合規的 3 欄它一動也不動**。
+    ⛔ **所以「本頁不得自己開網格」這條，全域沒有任何一道網子，只有本條在守。**
+    （`st.form` 那半仍然成立：`FORM_SITE_TOTAL` 是精確 `==`，多一個站點就紅。）
+    ⚠️ 同一份 PR 的模組 docstring（本檔開頭「兩個全域守衛的實測盲點」段）**當時就寫對了**，
+    是這裡把假話又抄了一遍 —— **一份在講「文件不該說謊」的守衛，自己的描述必須先為真。**
+
+    ⛔ **本條擋得住的只有 `st.columns` / `st.form` 這兩個 attribute 名。**
+    `getattr(st, "columns")(2)` 與 `from streamlit import columns as _c` 都繞得過
+    —— **但全域 `tests/test_ui_grid_contract.py` 對 alias 同樣失明，
+    那是 repo 既有性質，不是本頁造成的**（總管 2026-09-05 排程裁決：登記，本批不修）。
     """
     _bad = _attr_calls(_tree(), ("columns", "form"))
     assert not _bad, (
@@ -627,19 +662,76 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
         f"單位「{unit}」的灰態沒說「為什麼沒有」。\n" + _body)
 
 
-def test_every_grey_says_where_to_look():
-    """每一塊灰態都要有「去哪補」，而且**不得手抄分頁名**。
+def test_the_pending_pointer_is_a_place_not_a_status_sentence():
+    """`_pending_where()` 回傳的必須是一個**地方**，不是一句狀態陳述。
 
-    ⚠️ 這一頁的灰態有一個先天問題：內容還沒接上時，使用者**沒有地方可以去**。
-    能給的最誠實的指路是「現在哪一塊是完整的」（＝搜尋條件）——
-    所以本條驗的是 `where_to_find('research')` 有出現，而不是隨便一句話。
+    ## 這條是本輪突變 **R5** 逼出來的（不是設計出來的）
+
+    2026-09-05 修好 `_pending_where()` 之後，本組把它**退回舊寫法**
+    （``f"{where_to_find('research')} → 目前只有「{block}」是完整的"``）再跑一次 ——
+    **1014 passed，一條都沒紅。** 也就是說：**修好了渲染，卻沒有任何東西在防它退回去。**
+    依「沒突變過的守衛不要宣稱它守得住」，補上本條。
+
+    ## 判準用**結構相等**，不用關鍵字黑名單
+
+    黑名單（「不准出現『完整』兩個字」之類）只擋得住上一次那個寫法，換個措辭就繞過。
+    本條直接釘住組成：**分頁路徑 ＋ `→` ＋ 區塊名**，中間不得夾任何述語。
+    任何「狀態陳述」都會因為多出述語而不相等。
+
+    ⚠️ 本條驗的是「**它是不是一個地方**」，**不驗「去了有沒有用」** ——
+    後者做不到（這一塊沒接上，去任何地方都不會讓它出現），
+    已就地寫在被測檔 `_pending_where()` 的 docstring 裡，不在這裡假裝有守。
     """
-    _all = _text(_render(applied=FAKE_QUERY))
-    assert where_to_find("research") in _all, (
-        "灰態的指路沒有走 `where_to_find('research')` —— "
-        "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。")
-    assert BLOCK_FORM in _all, (
-        f"指路提到的「{BLOCK_FORM}」在畫面上找不到 —— "
+    for _block in (BLOCK_FORM, "任意區塊名"):
+        assert _pending_where(_block) == (
+            f"{where_to_find('research')} → {_block}"), (
+            f"`_pending_where({_block!r})` ＝ {_pending_where(_block)!r}\n"
+            "它會被 `render_state.not_ready()` 包成「（請先到：…）」——"
+            "所以它必須是一個**地方**（分頁路徑 → 區塊名），不能是一句狀態陳述。\n"
+            "舊寫法「…→ 目前只有「X」是完整的」被包起來之後是一句**不可執行的指令**："
+            "使用者照著回到搜尋條件再送一次，8 條灰態逐字完全相同（紅隊實跑）。")
+    # 組成之後真的長成祈使句該有的樣子（不是只驗回傳值，也驗它進到畫面上的形狀）。
+    _seg = _segments(_render(applied=FAKE_QUERY))
+    _body = "\n".join(_seg.get(BLOCK_RESULTS, []))
+    assert f"（請先到：{where_to_find('research')} → {BLOCK_FORM}）" in _body, (
+        "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
+
+
+@pytest.mark.parametrize("unit", GREY_UNITS)
+def test_every_grey_unit_says_where_to_look(unit: str):
+    """每一個灰態單位**各自**要有「去哪補」，而且不得手抄分頁名。
+
+    ## ⚠️ 這條原本是**整頁一次性檢查**，2026-09-05 被紅隊打穿
+
+    舊寫法是 ``assert where_to_find("research") in _all`` —— **整頁 containment**，
+    任何**一條**帶著指路就過。紅隊拿掉三處 `wide_table(empty_where=)` →
+    **本檔 27 passed、全域 1007 passed，一條都沒紅**，而畫面上那三塊
+    **真的失去了「（請先到：…）」**。
+
+    兩個原因疊在一起，缺一都不會出事：
+      1. 全域網子（`tests/test_batch2_top_card_grid.py::_where_sites`）
+         **不收 `wide_table(empty_where=)` 這個形狀** —— 它只收
+         `not_ready` / `empty_state` / `state_card` / 卡片 dict 四種；
+      2. 本條當時的粒度是整頁。
+
+    → **現在粒度降到與 :func:`test_every_grey_unit_is_grey_until_its_content_lands`
+       一致（一段或一張卡）**，拿掉任一個單位的指路都會**單獨**轉紅。
+
+    ⚠️ **這條驗的是「有沒有指路」，不驗「照著做有沒有用」。**
+    這一族的指路**有效性有限**，理由就地寫在被測檔的 `_pending_where()` 上：
+    這一塊沒接上，去任何地方都不會讓它出現。
+    ✅ 真的有效的是**空狀態**那一則（另由
+    :func:`test_nothing_below_the_form_renders_before_a_search` 驗）。
+    """
+    _seg = _segments(_render(applied=FAKE_QUERY))
+    _body = "\n".join(_seg.get(unit, []))
+    assert _body.strip(), f"單位「{unit}」不見了。"
+    assert where_to_find("research") in _body, (
+        f"單位「{unit}」的灰態沒有「去哪補」—— 指路要走 `where_to_find('research')`，"
+        "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。\n"
+        + _body)
+    assert BLOCK_FORM in _body, (
+        f"單位「{unit}」指路提到的「{BLOCK_FORM}」在畫面上找不到 —— "
         "指到一個使用者看不到的名字，等於沒有指路。")
 
 
