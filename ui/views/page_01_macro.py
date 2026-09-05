@@ -431,9 +431,24 @@ def _radar_lit(summary: dict) -> int:
     那條鎖**初版按裸名字計數**，`from … import summarize_radar as _sr2` 的別名寫法
     **整個隱形**（稽核實跑：`3 / 3`、`225 passed` 零紅燈，而「平靜」照樣進 prompt）。
     別名解析已於同輪修好（復用 `tests/test_batch2_top_card_grid.py::_call_name`）。
-    **現行能力，據實寫**：它擋得住**直接呼叫與別名呼叫**的漏配對；
-    **擋不住**「配對了但沒用回傳值」（那一半由兩條行為鎖守）、
-    以及**動態取名**（`getattr(risk_radar, "summarize_radar")` 這類，AST 看不到）。
+
+    ⚠️ **下面刻意寫成「已知擋得住／已知擋不住」，不是能力清單** ——
+    **清單讀起來像窮舉**，而這正是本註解已經錯過兩次的形狀
+    （2026-09-05 第三輪稽核：上一版寫成「擋得住 A、B；擋不住 C、D」，
+    它當場又打穿兩種沒列到的）。**非窮舉，請照這樣讀。**
+
+    **已知擋得住（各實測過一次突變）**
+      - `summarize_radar(...)` 直接呼叫漏配對；
+      - `from services.risk_radar import summarize_radar as _sr2` 的 **import 別名**。
+
+    **已知擋不住（四種，皆 2026-09-05 實測 `21 passed` 零紅燈；非窮舉）**
+      - **本地變數別名**：`_sum_fn = summarize_radar` 之後 `_sum_fn(_r4)`
+        —— AST 看到的呼叫名是 `_sum_fn`，`_import_alias()` 只解析 import 別名；
+      - **動態取名**：`getattr(_rr, "summarize_radar")(_r4)`；
+      - **配對了但沒用回傳值**（那一半由兩條行為鎖守，不由本鎖守）；
+      - **跨檔**：本鎖只讀 `ui/views/page_01_macro.py` 一個檔，
+        第四個消費端若寫在別的檔，它看不到。
+
     ⛔ **所以它是「少一道人為疏漏」，不是「不可能再漏」。**
     """
     return (int(summary.get("red") or 0) + int(summary.get("yellow") or 0)

@@ -816,6 +816,15 @@ def _grey_units(block: str, seg: str) -> list:
     本輪把它換成實測結果（見呼叫端 docstring）。
     """
     _units: list = []
+    # ⚠️ **小節與卡片分開記，不要從 `_cur_label` 續接**（2026-09-05 稽核第 2 項）。
+    #    上一版做 `_cur_label.split("的小節", 1)` 去撈「目前在哪個小節」，
+    #    但那時的 `_cur_label` **已經含上一張卡的後綴** → 標籤逐張累積：
+    #      第 2 張 → …的卡片「薩姆規則…」的卡片「SLOOS…」
+    #      第 3 張 → …的卡片「薩姆規則…」的卡片「SLOOS…」的卡片「市場廣度…」
+    #    也就是第 N 張會**宣稱它巢狀在前 N−1 張裡面** —— 那是假的。
+    #    （最後一個名字仍是對的，所以斷言訊息還指得動；但它與本函式自己寫的意圖
+    #      「訊息才指得出哪一小節的哪一張卡」不符。）
+    _sec_label = ""                      # 目前所在小節（不含卡片）
     _cur_label, _cur = f"「{block}」", []
 
     def _flush() -> None:
@@ -826,8 +835,8 @@ def _grey_units(block: str, seg: str) -> list:
         _m_sub = _SUB_OPEN_RE.match(_ln)
         if _m_sub:
             _flush()
-            _cur_label = f"「{block}」的小節「{_m_sub.group(1).strip()}」"
-            _cur = []
+            _sec_label = f"的小節「{_m_sub.group(1).strip()}」"
+            _cur_label, _cur = f"「{block}」{_sec_label}", []
             continue
         _m_card = _CARD_OPEN_RE.match(_ln)
         if _ln.startswith(_METRIC_MARK):
@@ -835,10 +844,9 @@ def _grey_units(block: str, seg: str) -> list:
             _m_card = re.match(r"(.+)$", _ln[len(_METRIC_MARK):])
         if _m_card:
             _flush()
-            # 卡片標籤保留它所在的小節，訊息才指得出「哪一小節的哪一張卡」。
-            _sec = _cur_label.split("的小節", 1)
-            _where = f"的小節{_sec[1]}" if len(_sec) > 1 else ""
-            _cur_label = f"「{block}」{_where}的卡片「{_m_card.group(1).strip()}」"
+            # 卡片標籤 ＝ 塊 ＋ **當下所屬小節** ＋ 這一張卡；不從上一張卡續接。
+            _cur_label = (f"「{block}」{_sec_label}"
+                          f"的卡片「{_m_card.group(1).strip()}」")
             _cur = []
             continue
         _cur.append(_ln)
@@ -1040,6 +1048,10 @@ def test_every_summarize_radar_consumer_goes_through_the_lit_guard():
 
     ⚠️ **本條守的是「有沒有配對」，不是「配對得對不對」** —— 有人寫
     `_radar_lit(_s)` 卻不用它的結果，本條照樣綠。**那一半由上面兩條行為鎖守。**
+
+    ⚠️ **能擋什麼／擋不到什麼，寫在 `page_01_macro.py::_radar_lit()` 的 docstring**
+    （**已知擋得住 2 種、已知擋不住 4 種，非窮舉**；不在這裡抄第二份）。
+    重點只有一句：**它是「少一道人為疏漏」，不是「不可能再漏」。**
 
     ⛔ **2026-09-05 稽核 R1：本條初版按「裸名字」計數，別名 import 可整個繞過。**
     ~~`_names.count("summarize_radar")`（直接讀 `func.id` / `func.attr`）~~ ——
