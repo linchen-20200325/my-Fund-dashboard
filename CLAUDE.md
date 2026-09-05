@@ -1310,7 +1310,7 @@ L3↛L1 直呼／跨層上行 import。**禁止引用 v3 的「三層」去主�
   - **`fund_fetcher.py` 保留根目錄（§8.3 F-GRAY-1，理由：純 cosmetic + 需動 57 caller）** ——
     **判定：v3 不推翻，該結案維持。** v3 `01`-1 要搬的是「**散落在 UI 檔案中的**私有取數」，
     而 `fund_fetcher.py` 是**根目錄的向後相容 re-export shim**，**本身不在 UI 層、也不是私有取數實作**。
-    且依判定 1，v3 的路徑是概念不是字面 → 「它該不該叫 `repositories/fund_fetcher.py`」**不是 v3 的射程**。
+    且依判定 1，v3 的路徑是概念不是字面 → 「它該不該從根目錄搬進 `repositories/`」**不是 v3 的射程**(~~原寫「它該不該叫 `repositories/fund_fetcher.py`」~~;那個路徑不存在也不該存在,現行為根目錄的 `fund_fetcher.py`(見 §2.1 表下「2026-09-05 批次路徑更正」註))。
     ⚠️ 但 **`01`-2「用不到即清理」對它有一句話**：那 18 條 `noqa: F401` re-export shim
     **若哪天 57 個 caller 都遷完、shim 變成 0 caller**，屆時**應實體刪除**，不得以「向後相容」永久留存。
   - **§8.3 各條「無 bug 觸發，§-1 不主動動工」的註記** —— **全部維持，v3 未推翻**（同上，GC 有前提）。
@@ -1327,7 +1327,7 @@ L3↛L1 直呼／跨層上行 import。**禁止引用 v3 的「三層」去主�
   ⚠️ **「已自稱 Archive」不是免驗證的通行證**：v3 說的是「已自稱 Archive 的**過期檔案**」——
   **「自稱」只是候選條件，實際過期與否要靠 caller 實測**（§-2 規則 5：
   「這個檔**還有** caller 嗎」是取決於「有沒有漏看」的問題 → **一律派工，且不可自己查自己**）。
-  **本 repo 前例可引為佐證**：v19.212 P0-3-#4 整檔拔除 `services/allocation_simulator.py`（866 LOC），
+  **本 repo 前例可引為佐證**：v19.212 P0-3-#4 整檔拔除 ~~`services/allocation_simulator.py`~~（866 LOC），
   **前提是先實測 production 0 caller**（連 2 個測試孤兒一起清），不是看到它像死碼就砍。
 
 #### 判定 4｜`02` 資料真實性：**兩項屬姊妹 repo 場景（取原則）、一項已符合、一項是新增待辦**
@@ -1816,7 +1816,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 
 ### 2.1 SSOT — 單一權威來源
 
-**來源註冊清單 SSOT**:`shared/fred_series.py`(v19.70, 34 FRED series IDs)+ `ui/helpers/data_registry.py`(L62-120, freshness lag table)+ `repositories/fund/sources.py::get_page_types_to_try` + 同檔 `_PAGE_TYPE_*` / 平台碼對照表(MoneyDJ 多 page_type fallback chain)。⚠️ 本行原寫 `repositories/moneydj_fetcher.py:36-108`,**該檔不存在**(v19.200 P1-5 拆檔後實作住在 `repositories/fund/` 子套件);(2026-08-28 路徑更正,量測日同日),**只更正路徑,條文語意未改**。
+**來源註冊清單 SSOT**:`shared/fred_series.py`(v19.70, 34 FRED series IDs)+ `ui/helpers/data_registry.py`(L62-120, freshness lag table)+ `repositories/fund/sources.py::get_page_types_to_try` + 同檔 `_PAGE_TYPE_*` / 平台碼對照表(MoneyDJ 多 page_type fallback chain)。⚠️ 本行原寫 ~~`repositories/moneydj_fetcher.py:36-108`~~,**該檔不存在**(v19.200 P1-5 拆檔後實作住在 `repositories/fund/` 子套件);(2026-08-28 路徑更正,量測日同日),**只更正路徑,條文語意未改**。
 
 **5-Tier 權威分級**(衝突時上層贏,**禁止平均**):
 
@@ -1826,17 +1826,17 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | **T2** | 商用聚合 API(帶 token 或 stable IP) | FinMind, Yahoo Finance query1, Gemini API | ~~repositories/tw_macro_repository.py:40~~, ~~repositories/hot_money_repository.py:38~~ → **同檔 `fetch_foreign_flow_series`**(實測 `:38` 是 `_yf_series_to_df` 內的空值檢查,不是 FinMind 取數;真正打 FinMind 的是該函式內的 `fetch_url_with_retry(_FINMIND_BASE, ...)`), ~~macro_repository.py:311-344~~ → **`repositories/macro/yf.py::fetch_yf_close`** 與 **`repositories/macro/alternate.py`**(見下方路徑更正註**第 2 段**)(v19.224 D 步驟更新路徑;2026-08-28 Phase 1.4 該檔已刪 —— **FinMind 的 T2 分級不因此改變**,現行實作見 `repositories/macro_tw_local_repository.py` / `repositories/hot_money_repository.py`)|
 | **T3** | 第三方網站(HTML 抓) | MoneyDJ(主 + TCB + Chubb 子網域), SITCA, Allianz 官網, Morningstar, Insurance subdomains(TL/FL/CT/JF/NN etc) | fund_fetcher.py:79-106, ~~fund_repository.py:1061-1306,1467+,1926-2043,196-265,713-1060~~ → **`repositories/fund/sources.py`**(各 `_src_*` HTML 抓取實作)(見 §2.1 表下「`fund_repository.py` 路徑事實更正」註) |
 | **T4** | News RSS(非數值,僅文本) | MarketWatch, Yahoo Finance, CNBC Economy, CNBC Finance, BBC World | news_repository.py:15-55 |
-| **T5** | User config / AI | Google Sheets(policy/portfolio), Gemini API(synthesis only) | ~~services/auto_search_store_gs.py~~, services/ai_service.py (**2026-08-31 evidence 更正,有意識的政策變更,不是漏刪**;決策者:**客戶 2026-08-31 授權死碼清理**。`services/auto_search_store_gs.py` 已隨 auto_search 封閉死簇整檔刪除 —— production 0 caller。**T5 這一列的權威分級一字未改**,改的只是指向的 evidence 檔:Google Sheets 作為 T5 來源的現行實作見 `repositories/policy/`、`repositories/pool_repository.py`、`repositories/portfolio_perf_repository.py`、`services/nav_history_gs.py`、`services/macro/weights_store.py`。**兩邊理由並陳**:舊 evidence 在寫下時是對的 —— `auto_search_store_gs.py` 當時確實是本 repo 最完整的一份 Google Sheets 讀寫實作,拿它當 T5 的示範樣本合理;**被權衡掉的原因**是它的唯一消費者(auto_search 搜尋工單)本身 production 0 caller,整簇留著只會讓讀者以為那條資料鏈還活著。⚠️ 依 §-1.5.1c 判定 3,**刪的是程式碼(git 保有完整歷史 ＝ 可逆),不是生產資料**;使用者在 Google Sheets 上的任何資料**未被觸及**。) |
+| **T5** | User config / AI | Google Sheets(policy/portfolio), Gemini API(synthesis only) | ~~services/auto_search_store_gs.py~~, services/ai_service.py (**2026-08-31 evidence 更正,有意識的政策變更,不是漏刪**;決策者:**客戶 2026-08-31 授權死碼清理**。~~`services/auto_search_store_gs.py`~~ 已隨 auto_search 封閉死簇整檔刪除 —— production 0 caller。**T5 這一列的權威分級一字未改**,改的只是指向的 evidence 檔:Google Sheets 作為 T5 來源的現行實作見 `repositories/policy/`、`repositories/pool_repository.py`、`repositories/portfolio_perf_repository.py`、`services/nav_history_gs.py`、`services/macro/weights_store.py`。**兩邊理由並陳**:舊 evidence 在寫下時是對的 —— `auto_search_store_gs.py` 當時確實是本 repo 最完整的一份 Google Sheets 讀寫實作,拿它當 T5 的示範樣本合理;**被權衡掉的原因**是它的唯一消費者(auto_search 搜尋工單)本身 production 0 caller,整簇留著只會讓讀者以為那條資料鏈還活著。⚠️ 依 §-1.5.1c 判定 3,**刪的是程式碼(git 保有完整歷史 ＝ 可逆),不是生產資料**;使用者在 Google Sheets 上的任何資料**未被觸及**。) |
 
 > ⚠️ **2026-09-01 `fund_repository.py` 路徑事實更正(有意識的更正,不是漏刪 · 日期 **2026-09-01** · 決策者:**AI 總管**)**
 > **本節(及 §2.2 血緣、§3.1 schema、§-1.5.1c 判定 1 的對映表)多處 evidence 寫 `fund_repository.py` —— 該檔不存在。**
-> **實測**:`ls repositories/fund_repository.py` → No such file;實作於 **v19.200 P1-5 拆檔**後住在
+> **實測**:`ls ~~repositories/fund_repository.py~~` → No such file;實作於 **v19.200 P1-5 拆檔**後住在
 > **`repositories/fund/` 子套件**(`sources.py` 取數來源與 fallback、`fund_orchestration.py` 編排、
 > `nav_metrics.py` NAV/指標、`fx_and_main.py` FX 與主入口),另有 `repositories/fundclear_offshore.py`。
 > **舊路徑在寫下當時是對的**(§0 步驟 2 填寫日該檔確實存在);**被權衡掉的是它的前提** —— 拆檔那一輪沒有回頭改本節。
 > ⛔ **只更正指錯的路徑。本節任何條文語意、任何 Tier 權威分級、任何衝突裁決結論一字未改。**
-> ⚠️ **同一個事實 §8.2 的 L1 那一列早在 2026-08-28 就更正過**(該處已寫明「本欄原寫 `repositories/fund_repository.py`、
-> `repositories/moneydj_fetcher.py`,**兩檔皆不存在**」),**但那一輪只改了那一列,沒有把同一把尺套到 §2.1 / §2.2 / §3.1** ——
+> ⚠️ **同一個事實 §8.2 的 L1 那一列早在 2026-08-28 就更正過**(該處已寫明「本欄原寫 ~~`repositories/fund_repository.py`~~、
+> ~~`repositories/moneydj_fetcher.py`~~,**兩檔皆不存在**」),**但那一輪只改了那一列,沒有把同一把尺套到 §2.1 / §2.2 / §3.1** ——
 > 這正是 §8.2.A.1 驗證段 ④ 記載的失效模式(**更正一個被點名的項目時,必須把同一把尺對全部同類項目重跑**),
 > 本次補齊。**同一節裡 `moneydj_fetcher.py` 的更正註只在 §2.1 開頭那一段,也是只修了被點名的那一處。**
 > ⚠️ **本次刻意不寫新行號**(沿用本檔既有處置與姊妹 repo `my-stock-dashboard` §8.2.A.0 規則 1):
@@ -1869,6 +1869,43 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 > 早已不長那樣)。**照抄該片段會寫出 import 不到的程式碼。** 本組**不在射程內處置,登記回報總管**。
 > ⚠️ **本段所有 `SPEC.md` 敘述為本組單組判讀,未經第二組驗證**(§-2 規則 6);「**只有這 8 處**」
 > 取決於「有沒有漏看」,**不宣稱窮舉**。
+
+> ⚠️ **2026-09-05 批次路徑更正（有意識的更正，不是漏刪 · 日期 **2026-09-05** · 決策者：**AI 總管**）**
+> **本註是同一批 22 處更正的共同出處**，被 §2.1／§3.2／§3.3／§4.1／§8.2／§8.3 多處以
+> 「見 §2.1 表下「2026-09-05 批次路徑更正」註」回指 —— 寫成一處而非 22 篇，是為了控制本檔體積
+> （§-2.A 容量登記：本檔已約佔 `check-added-large-files` 上限的六成，且「約 8~9 輪就會撞上限」）。
+>
+> **怎麼被抓到的（這一段比清單本身重要）**：本輪新增了 `tests/test_constitution_file_refs.py` ——
+> 本檔的**第一道機器守衛**。在它之前，全 repo 只有 `tests/test_retired_exception_ids.py` 會打開本檔，
+> 而那支只解析表格第一格的 `EX-` ID。於是本檔可以**無聲地過期**：一次重構把檔案搬走，
+> 本檔不會有任何反應。這 22 處**不是靠人回頭讀發現的，是 CI 紅燈逼出來的**。
+>
+> **改了什麼（三種修法，逐處就地可辨）**：
+> - **(a) 更正成現行路徑** —— 例：`MACRO_THRESHOLDS` → `repositories/macro/fred.py`、
+>   `SCORE_RULES` → `services/macro/validation.py`、σ 慣例 → `services/macro/explain.py`、
+>   `score_function` → `services/calibration/macro_score.py`、CPI zone → `shared/signal_thresholds.py`。
+> - **(b) 劃掉舊表述保留 ＋ 就地註明** —— 例：§8.2 L2 的 ~~`services/fund_batch.py`~~
+>   （已於 Phase 1.4 `149d1dd`／#730 因 production 0 caller 實體刪除）。
+> - **(c) 只把路徑劃掉、句子照留** —— 用在「句子還活著、只有路徑死了」的情形
+>   （§8.3 `tw_macro_repository.py`「已實體刪除」、§8.2.A.1 `fetch_nav_cache.yml`「已不存在」、
+>   以及本節上方那三行自陳「該檔不存在」的更正註）。**劃掉的是「這個路徑現在指得到東西」這個宣稱，
+>   不是那句話的內容** —— 敘述仍然為真、仍然看得到。
+>
+> **兩邊理由並陳**：這 22 處**在寫下的當天全部為真**，不是當初寫錯 —— 被推翻的是它們的**前提**
+> （v19.200 P1-5 拆 `repositories/fund/`、v19.202 P2-2 拆 `services/macro/`、v19.205 B1 拆
+> `repositories/macro/`、v19.212 拔 `allocation_simulator`、Phase 1.4 一次刪 11 個 0-caller 模組）。
+> **被權衡掉的是「行號式 evidence」這個寫法本身**：行號在任何一次重構後就失效，而**重構不會觸發本表更新**。
+> 故本輪一律不寫新行號，改用 §8.2.A.0 規則 1 的「**檔案路徑 ＋ 符號名 ＋ 模式描述**」。
+>
+> ⚠️ **一筆守衛抓不到、靠人工實測補上的**：§3.2／§4.1 的 `services/portfolio_service.py:424`
+> **檔案存在、行號也在界內**（該檔 933 行），所以守衛**不會**紅燈 —— 但 `sed -n '424p'` 實測那一行是
+> 一句 `# ── 最大回撤 ──` 註解，**不是**它自稱的 jaccard/cosine 實作（真正的 SSOT 是同檔
+> `calc_holdings_overlap`）。**這正是該守衛自己登記的射程外缺口：它只驗「檔案在不在、行號界不界內」，
+> 不驗「那一行是不是它自稱的東西」。** 兩處已一併更正為符號式引用。
+>
+> ⚠️ **本註與這 22 處更正由品管與 CI 守衛組單組產出，未經第二組獨立複驗**（§-2 規則 6）。
+> 可查證的部分是機器驗的（守衛由紅轉綠＝每一條路徑都存在、每一個行號都在界內）；
+> **「新指的那個符號就是原本要指的那個東西」這一層是人工判讀，沒有第二雙眼睛。**
 
 **關鍵衝突裁決**:
 - **基金 NAV**:FundClear(境外)主、TDCC(境內)主、MoneyDJ 補強(績效/風險/持股),Cnyes / Morningstar 為最末 fallback(~~evidence: fund_repository.py:2352+~~ → **`repositories/fund/sources.py::get_page_types_to_try` 與同檔各 `_src_*` fallback 序**(見 §2.1 表下「`fund_repository.py` 路徑事實更正」註))
@@ -2079,9 +2116,9 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | 指標 | 合理範圍 | Evidence |
 |---|---|---|
 | PMI(採購經理指數) | [30, 70] | services/macro_validation.py SCORE_RULES |
-| VIX | [5, 100] | services/macro_validation.py:35-84(crisis=30, warning=18) |
-| CPI YoY (%) | [-5, 20] | services/macro_tw_local.py:150-157 SSOT (CPI_YOY_*_MAX_PCT) |
-| US10Y (%) | [0, 20] | repositories/macro_repository.py:180-195 MACRO_THRESHOLDS |
+| VIX | [5, 100] | ~~services/macro_validation.py:35-84~~ → **`services/macro/validation.py::SCORE_RULES`**(crisis=30, warning=18)(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
+| CPI YoY (%) | [-5, 20] | ~~services/macro_tw_local.py:150-157~~ → SSOT **`shared/signal_thresholds.py`** 的 `CPI_YOY_*_MAX_PCT`;consumer **`services/macro/tw_local.py`**(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
+| US10Y (%) | [0, 20] | ~~repositories/macro_repository.py:180-195~~ → **`repositories/macro/fred.py::MACRO_THRESHOLDS`**(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | DXY(美元指數) | [70, 130] | MACRO_THRESHOLDS |
 | HY OAS (%) | [1, 25] | MACRO_THRESHOLDS |
 | 殖利率差 10Y-2Y / 10Y-3M (%) | [-3, 5] | MACRO_THRESHOLDS |
@@ -2091,7 +2128,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | ~~GDP Trend (%)~~ | ~~μ=2.3, σ=1.5~~ | ~~services/valuation.py:33-38~~(v19.251 退役;production 0 caller) |
 | NAV(基金) | > 0 | (停售/清算時應為 NaN 而非 0) |
 | Weight(權重) | [0, 1] ratio,非 0~100 | services/portfolio_service.py |
-| Shadow fund 相似度 | > 0.70 警示 | services/portfolio_service.py:424(jaccard×0.6+cosine×0.4) |
+| Shadow fund 相似度 | > 0.70 警示 | ~~services/portfolio_service.py:424~~ → **`services/portfolio_service.py::calc_holdings_overlap`**(jaccard×`SHADOW_FUND_JACCARD_WEIGHT_RATIO` + cosine×`SHADOW_FUND_COSINE_WEIGHT_RATIO`,SSOT 於 `shared/signal_thresholds.py`)(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | NEAR_PCT(接近警戒) | 2.0 % | services/fund_service.py:279, fund_dividend_calculator.py:23 |
 | Holdings YoY sanity | NAV 比 [0.3x, 3.0x] | services/fund_service.py:239-240 |
 
@@ -2110,8 +2147,8 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | `TTL_*`(6 個語意常數) | 60/300/600/900/1800/3600 s | shared/ttls.py v19.69 | ✅ SSOT(9 production 檔已遷移) |
 | `FRED_*`(34 個 series ID) | FRED API key 字串 | shared/fred_series.py v19.70 | ✅ SSOT(8 production 檔已遷移) |
 | `MATERIAL_*`(色票) | hex 字串 | shared/colors.py v19.71 | ✅ SSOT(18 production 檔已遷移) |
-| `MACRO_THRESHOLDS`(26 entries) | 各 indicator zone 邊界 | repositories/macro_repository.py:180 v19.72 | ⚠️ **僅文件參考**(F-GRAY-4 v19.80 audit:dict 與 inline 條件**語意不同源**,inline 服務多用途有不同閾值,不可機械式 swap;詳見 macro_repository.py:199-212 註解) |
-| `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
+| `MACRO_THRESHOLDS`(26 entries) | 各 indicator zone 邊界 | ~~repositories/macro_repository.py:180~~ → **`repositories/macro/fred.py::MACRO_THRESHOLDS`** v19.72(見 §2.1 表下「2026-09-05 批次路徑更正」註) | ⚠️ **僅文件參考**(F-GRAY-4 v19.80 audit:dict 與 inline 條件**語意不同源**,inline 服務多用途有不同閾值,不可機械式 swap;詳見 ~~macro_repository.py:199-212~~ → **同檔 `MACRO_THRESHOLDS` 定義下方的「語意不同源」註解**) |
+| `SCORE_RULES`(macro evaluation) | weights + lambdas | ~~services/macro_validation.py:35-84~~ → **`services/macro/validation.py::SCORE_RULES`**(見 §2.1 表下「2026-09-05 批次路徑更正」註) | ✅ SSOT + JSON override(macro_thresholds_global.json) |
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | `services/macro/weights_store.py::_DEFAULT_VERDICT_CUTOFFS` / `_DEFAULT_PHASE_THRESHOLDS` | ✅ SSOT + active.json override |
 | ~~Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD`~~ | ~~16.5/3.0/2.3/1.5~~ | ~~services/valuation.py:33-38~~ | **v19.251 退役**(0 production caller,Forward P/E 改 shared/macro_buckets.py:150-153 inline literal) |
 | `signal_thresholds.*`(36 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones / capture min_months+score base / rotation σ 切點+健康門檻 等 | shared/signal_thresholds.py v19.75(v19.416 +5) | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones;v19.416 +2:capture_ratio / rotation) |
@@ -2138,10 +2175,10 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 
 | 陷阱 | 描述 | Evidence |
 |---|---|---|
-| **百分比 vs 小數** | weights 用小數(0.6=60%)vs allocation_simulator `drip_pct=80`(整數%),呼叫端混用 = 100× 誤差 | services/portfolio_service.py:424 vs services/allocation_simulator.py:180,188-190 |
-| **TWD vs USD vs 原幣** | 基金 NAV 為**原幣**,績效報表 TWD 換匯,FX series `rate_twd_per_usd`;**禁止**跨幣別直接平均 | services/currency.py, services/allocation_simulator.py:267-269 |
+| **百分比 vs 小數** | weights 用小數(0.6=60%)vs allocation_simulator `drip_pct=80`(整數%),呼叫端混用 = 100× 誤差 | **`services/portfolio_service.py::calc_holdings_overlap`**(權重走小數)vs ~~services/allocation_simulator.py:180,188-190~~ —— 該檔已於 v19.212 P0-3-#4 整檔拔除;**單位陷阱本身仍成立**(小數 vs 整數 % 混用 = 100× 誤差),只是舊的對照實例不在了(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
+| **TWD vs USD vs 原幣** | 基金 NAV 為**原幣**,績效報表 TWD 換匯,FX series `rate_twd_per_usd`;**禁止**跨幣別直接平均 | `services/currency.py`, ~~services/allocation_simulator.py:267-269~~ —— 同上,該檔已拔除;**跨幣別禁止直接平均這條規則一字未改**(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | **YoY vs MoM vs MTD** | CPI 用 YoY;NAV 報酬可日/週/月;Sharpe 用 252 日年化 | services/fund_service.py:180-345 |
-| **σ sign convention** | -1.5σ/-1.0σ/+0.3σ/+1.5σ/+2.0σ 散落,正/負必須意義一致(下檔=負,上檔=正) | services/macro_explain.py:66-75 |
+| **σ sign convention** | -1.5σ/-1.0σ/+0.3σ/+1.5σ/+2.0σ 散落,正/負必須意義一致(下檔=負,上檔=正) | ~~services/macro_explain.py:66-75~~ → **`services/macro/explain.py`**(`SIGMA_*_CUTOFF` 系列)(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | **交易日 vs 日曆日** | `252` 為交易日年化,非 365;windows(1Y=252 交易日 ≈ 365 日曆日) | services/fund_service.py 散落 8+ 處 |
 | **TW 時區 vs UTC** | FundClear / TDCC / MoneyDJ 為 TW 時間(UTC+8);Yahoo Finance EOD 為 UTC;Streamlit Cloud 預設 UTC | infra/proxy.py, services/fund_service.py |
 
@@ -2367,8 +2404,8 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|---|
 | **L0 Infra** | (跨層基底) | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
 | **L0 Shared** | (跨層基底) | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
-| **L1 Repository** | **DataFetcher** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund/`(子套件:`sources` / `fund_orchestration` / `nav_metrics` / `fx_and_main`;⚠️ 本欄原寫 `repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`,**兩檔皆不存在** —— v19.200 P1-5 拆檔後的實際位置就是本子套件,(2026-08-28 路徑更正,量測日同日))、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、~~`repositories/tw_macro_repository.py`(P0-4-B 搬入)~~(2026-08-28 Phase 1.4:production 0 caller,已實體刪除)|
-| **L2 Service** | **CalcEngine** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro/` (11 子模組)、`services/health/` (5 子模組)、`services/calibration/` (4 子模組)、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/macro_validation.py`、`services/fund_batch.py`(v19.406 批次攤平器;v19.413 RETAINED-LEGACY)、`services/fund_row.py`(v19.413 `process_one_fund` 下沉;健診+批次共用單檔 worker)、`services/capture_ratio.py`(v19.414 上/下檔捕捉率 + 操盤評分,純數學)、`services/rotation.py`(v19.415 輪動配對純邏輯)等 ~25 檔(v19.212 退 allocation_simulator,v19.251 退 valuation) |
+| **L1 Repository** | **DataFetcher** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund/`(子套件:`sources` / `fund_orchestration` / `nav_metrics` / `fx_and_main`;⚠️ 本欄原寫 ~~`repositories/fund_repository.py`~~、~~`repositories/moneydj_fetcher.py`~~,**兩檔皆不存在** —— v19.200 P1-5 拆檔後的實際位置就是本子套件,(2026-08-28 路徑更正,量測日同日))、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、~~`repositories/tw_macro_repository.py`(P0-4-B 搬入)~~(2026-08-28 Phase 1.4:production 0 caller,已實體刪除)|
+| **L2 Service** | **CalcEngine** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro/` (11 子模組)、`services/health/` (5 子模組)、`services/calibration/` (4 子模組)、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/macro_validation.py`、~~`services/fund_batch.py`(v19.406 批次攤平器;v19.413 RETAINED-LEGACY)~~(**2026-09-05 路徑事實更正,有意識的更正,不是漏刪**;決策者:**AI 總管**。實測該檔不存在 ——已於 Phase 1.4 `149d1dd`(#730)因 production 0 caller 實體刪除。**L2 的分層歸屬與本列其餘成員一字未改**)、`services/fund_row.py`(v19.413 `process_one_fund` 下沉;健診+批次共用單檔 worker)、`services/capture_ratio.py`(v19.414 上/下檔捕捉率 + 操盤評分,純數學)、`services/rotation.py`(v19.415 輪動配對純邏輯)等 ~25 檔(v19.212 退 allocation_simulator,v19.251 退 valuation) |
 | **L3 UI** | **ComponentUI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
 
 **硬規則(violation = 違憲)**:
@@ -2386,7 +2423,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|---|
 | **EX-CACHE-1** | L1 全層(實際適用 v19.244 R12 audit:1 fetcher `repositories/hot_money_repository.py` `@st.cache_data(ttl=TTL_30MIN)` ×2;`news_repository.py` docstring 明說「不在這層 cache」,純 fetcher) | `@st.cache_data` / `@_ttl_cache` 條件 import | Streamlit Cloud cache 是部署架構核心,提供跨 session 共享 + TTL 自動失效,functools.lru_cache 不等價。**允許**在 L1 模組頂部寫 `try: import streamlit as st / except ImportError: 定義 no-op fallback decorator`,前提:**完全不用** `st.session_state` / `st.error()` / `st.markdown()` 等真 UI 呼叫。Fund 端 `@_ttl_cache(ttl_sec=N)` 為 custom 實作不依賴 streamlit,本例外主要適用 `@st.cache_data` 直接用法。 |
 | **EX-AI-1** | `services/ai_service.py` 全檔 public 函式 | LLM 輸出回 **str** 而非 dataclass | 既有 multiple caller 全部以 st.markdown 渲染字串,改 dataclass 需大規模 migration。**緩解措施**:所有 AI 字串強制帶視覺旗標(`### 🧬 AI ... **使用模型**: <model>`),caller 可用 string prefix 偵測;module docstring 強制宣告「禁止從 LLM 字串萃取數字當 data input」。違反此 caller 規則 = §2.2 反捏造違憲,須立刻修。 |
-| ~~**EX-POLICY-1**~~(v19.212 P0-3-#4 退役) | ~~`services/allocation_simulator.py:34-97`~~ | ~~`DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline~~ | **退役原因**:`ui/tab_allocation_simulator.py` consumer 已在 P0-2 v18.x 刪除,`services/allocation_simulator.py` 6/6 fn 全 dead(production 0 caller),v19.212 整檔 866 LOC 拔毒(含 2 test 孤兒)。EX-POLICY-1 例外對象消失,退役。 |
+| ~~**EX-POLICY-1**~~(v19.212 P0-3-#4 退役) | ~~`services/allocation_simulator.py:34-97`~~ | ~~`DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline~~ | **退役原因**:~~`ui/tab_allocation_simulator.py`~~ consumer 已在 P0-2 v18.x 刪除,~~`services/allocation_simulator.py`~~ 6/6 fn 全 dead(production 0 caller),v19.212 整檔 866 LOC 拔毒(含 2 test 孤兒)。EX-POLICY-1 例外對象消失,退役。 |
 | **EX-CRUD-1** | UI 直呼以下 L1 repository:`policy_repository` / `snapshot_repository` / `ledger_repository` / `batch_checkpoint` / `pool_repository` / `portfolio_perf_repository`(v19.407 補登前四;v19.428 補登 pool;v19.430 補登 portfolio_perf;Google Sheets / 本地 JSON 持久化) | L3 UI 可直接 import L1 CRUD repository | §8.2 規則「L3 不得直呼 L1 — cache 才能集中」的核心理由是**外部 HTTP fetcher 的 TTL cache 須集中管理**。本組 repository 為**本地持久化**(read+write 同檔),**無 `@_ttl_cache` / `@st.cache_data` 裝飾**,亦無外部 HTTP I/O — 不存在「cache 分散」問題。為純 CRUD 加 L2 pass-through wrapper = §8.1 step 6「用不到的抽象」反例。`ui/helpers/cloud_io.py` / `v2_editor.py` / `oauth_state.py` + `ui/tab3_portfolio.py` / `tab3_t7_ledger.py` 直接 import 為允許用法;`ui/tab_batch_analysis.py` 直呼 `repositories/batch_checkpoint.py`(批次分析磁碟續存,v19.407)為同精神新增。**v19.428**:`repositories/pool_repository.py`(換股顧問選股池,GS worksheet + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由 `ui/helpers/fund_grp_health/switch_advisor_section.py` 直呼,同精神新增(檔頭已註解指回本表)。**v19.430**:`repositories/portfolio_perf_repository.py`(組合績效永久快照,GS worksheet `_portfolio_perf_history` + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由同一 `switch_advisor_section.py` 直呼,同精神新增。F-H6 v19.79 決策。 |
 | **EX-PASSTHRU-1**(v19.251 補登 3 + v19.273 補登 1 + v19.377 B2c 補登 2 entry + **v19.531 Phase 1.2 補登 1**) | UI 直呼以下 L1 facade fetcher(~~共 8 組~~ → **共 9 組**;2026-08-28 新增 `fetch_benchmark_close`)⚠️ **「9 組」是含已退役成員的累計數,不是現行有效數** —— 其中 `get_latest_fx`(v19.247 R16 升級)與 `fetch_fund_by_key`/`fetch_nav_history_long`(v19.314 退役)都已加刪除線,**現行有效只有 7 組**。8→9 的增量與本表既有計數慣例一致(退役成員保留在列、計數不回頭扣),**故刻意不改數字**(改了反而與慣例不一致);此註為 2026-08-28 稽核點名後補,防讀者誤判。:<br>- **`repositories.fund.tdcc_search_fund`**(~~`ui/tab2_single_fund.py:147`~~ → **`ui/helpers/fund_research/code_finder.py::_search`** lazy import,單一 caller / 單一 call site)— 多 endpoint(TDCC 3-2 + 3-4)整合 + dedup + nav merge + keyword match。**2026-08-31 WP-F 路徑更正**(**有意識的更正,不是漏刪** · 日期 **2026-08-31** · 決策者:**AI 總管**)。⚠️ **舊登記在寫下的當天是對的,不是當初寫錯** —— `ui/tab2_single_fund.py` 當時確實是`tdcc_search_fund` 的唯一 UI 呼叫點,登記它完全正確。**被權衡掉的是它的前提**:七→五接線(#744)移除了 `render_single_fund_tab` 的舊入口,該函式內那份摺疊搜尋框因此成為 production 恆不觸發的死碼(唯一 caller `ui/tab_fund_research.py::_render_single_mode()` 永遠持有 `SHARED_SEARCH` 旗標),已於同批**整段實體刪除** —— **舊登記路徑自那一刻起指向一個不存在的呼叫點**,而真正活著的 `code_finder.py` **從未登錄**(＝本節末句明禁的「未經登錄的軟例外」)。故本次補正。⚠️ **不寫行號**:沿用姊妹 repo `my-stock-dashboard` §8.2.A.0 規則 1(**本檔無 §8.2.A.0 一節**,該規則出自姊妹 repo;同 `EX-UICACHE-1` 該列的既有註記)——「檔案路徑 + 符號名 + 模式描述」登記,行號在任何一次重構後就失效,而重構**不會**觸發本清單更新。**本次被更正的舊登記正是行號寫法的實例。**⚠️ **本批把 UI 呼叫點由 2 個收回 1 個(2 → 1),不是新增一個** —— 故本列末段的升級觸發條件「**本 fetcher 出現第二個 UI caller**」**目前未命中**(方向相反:fan-out 變小,不是變大),EX-PASSTHRU-1 對本成員繼續成立。**守衛**:`tests/test_fund_research_merge.py::test_code_finder_is_the_only_search_entry`(AST 數 `ui/**` 內的 `tdcc_search_fund` 呼叫點必須恰好 1;刻意**不用字串 grep** —— `code_finder.py` 的 docstring 自己就提到這個符號名,grep 會被騙)。⚠️ 該守衛守的是**呼叫點數量**,**不守**本登記路徑本身的正確性 —— 本 repo 目前沒有任何機器規則在守「例外表寫的路徑存不存在」,讀者請據此打折信任本欄路徑。<br>- ~~`repositories.fund.get_latest_fx`~~ **(v19.247 R16 升級)**:9 caller files / 18 call sites 全 migrate 至 L2 `services.fund_service.get_latest_fx`(thin facade 呼 L1 實作,L1 業務 0 改動)<br>- `repositories.news_repository.fetch_market_news`(`ui/tab1_macro.py:1188` / `ui/tab3_t7_ledger.py:2710`)— 5 RSS feeds 並聯 + keyword filtering + systemic risk classify + dedup + sort<br>- ~~**`repositories.fund.fetch_fund_by_key` / `fetch_nav_history_long`**(`ui/tab_crisis_backtest.py`)~~ **(v19.314 退役)**:危機回測 UI 整功能拔除,此 2 條 UI 直呼例外一併退役<br>- **`repositories.fund.diagnose_fx_sources`**(`ui/tab5_data_guard.py:832` lazy)— Tab5 資料看板 diagnostic,L1 內部用 + UI 直呼合理<br>- ~~**`repositories.macro_tw_local_repository.{fetch_ndc_signal_history,fetch_tw_pmi_local,fetch_tw_export_yoy,fetch_foreign_consecutive_days}`**(`ui/tab1_macro.py:821` lazy,4 fn 一組)— TW 本地總經 self-contained L1 fetcher(FinMind 單源),v19.197 P1-4 從 `macro_tw_local_fetch.py` 下沉 repositories,UI 直呼取數後在 L3 端 regime 判讀。**v19.268 D8 #7 後**:UI 端 `_safe_tw()` wrapper 已加 schema 驗證(`validate_ndc_signal_dict` 等),取數即驗,純 fetch facade 無 L2 業務需上提。~~<br>　→ **2026-09-01 登記事實更正**(**有意識的更正,不是漏刪** · 日期 **2026-09-01** · 決策者:**AI 總管**)。**上段登記的四項具體事實中,有三項今日為假**,逐一列出(全部本組實測):<br>　**① 呼叫點路徑是假的。** `ui/tab1_macro.py` **完全沒有** import `macro_tw_local_repository`(實測 `git grep -n "macro_tw_local" -- 'ui/**'`:命中僅 `ui/helpers/io/data_registry.py` 的**註解與 session_state 讀取**、以及 `ui/helpers/macro/ndc.py`)。~~**`ui/tab1_macro.py:821` 那一行今日是 `if not FRED_KEY:`,與 TW-local 取數無關。**~~→ ⛔ **2026-09-01 同日更正:上句的行號斷言為假**(決策者:**AI 總管**)。實測 `:821` 是一行**註解**,`if not FRED_KEY:` 在 **`:826`**,差 5 行。**「`:821` 沒有那個 import」這個結論不變**,錯的是我為了佐證它、順手又報了一個**沒核對過的行號**。⛔ **而這句話就寫在一段大談「行號會失效」的文字裡** —— **本節在講的那個病,在講它的那句話裡當場發作。**故本次改為**不寫行號**:`ui/tab1_macro.py` **全檔**未 import `macro_tw_local_repository`(驗證指令見下,不依賴任何行號)。<br>　**② 「4 fn 一組」是假的,現行有效只有 1 個。** 實測 production 呼叫點:**只有 `fetch_ndc_signal_history` 還活著**,唯一 UI 呼叫點是 **`ui/helpers/macro/ndc.py::_fetch_ndc_score`**(函式內 lazy import,單一 caller / 單一 call site);另三個(`fetch_tw_pmi_local` / `fetch_tw_export_yoy` / `fetch_foreign_consecutive_days`)**除定義處外無任何 import 或呼叫**,唯二命中為 `services/macro/_helpers.py::_TAB1_TTL_CACHE_NAMES` 的**字串名**(快取清除清單,不是 import)與 `shared/schemas.py` 的註解。<br>　**③ `_safe_tw()` schema 驗證那句是假的。** 實測 `git grep -n "_safe_tw" -- '*.py'` **0 命中**;`validate_ndc_signal_dict` 除 `shared/schemas.py` 的定義與 `tests/` 外**無 production consumer**。→ **「取數即驗」現況不成立**,該句**不得再被引用為「本組成員已有出口驗證」的理由**。<br>　**④ 唯一仍然成立的是分層判定本身**:`ndc.py` 對 L1 的呼叫是**純取數委派**(取回 dict → 同檔純函式 `ndc_score_from_result` 取 `score_latest`,無多源 fallback、無跨 fetcher TTL 統一、無結果加工),**EX-PASSTHRU-1 對 `fetch_ndc_signal_history` 繼續成立**。且**檔案端回指註解是有的** ——`ui/helpers/macro/ndc.py` 檔頭 docstring 自陳「EX-PASSTHRU-1:UI 可直呼此自足 TW-local fetcher」。<br>　⚠️ **這是同一個坑的第二次,不是新病**:本列 `tdcc_search_fund` 那一項已於 **2026-08-31** 因**完全相同的失效模式**被更正過 —— **登記寫死行號 → 重構後路徑指向一個不存在的呼叫點,而真正活著的那個從未登錄(＝本節末句明禁的「未經登錄的軟例外」)**。當時該項已就地寫下「**行號在任何一次重構後就失效,而重構不會觸發本清單更新**」這個教訓,**卻沒有把同一把尺套到同一列的其他成員** —— 若當時套了,本項會在那一輪就被抓到。**這正是 §8.2.A.1 驗證段 ④ 記載的「條件只往外用、不往內用」,在同一個表、同一列上第二次發生。**⚠️ 且該項當時已自陳「**本 repo 目前沒有任何機器規則在守『例外表寫的路徑存不存在』**」—— **本次即為該缺口的第二個實例**。<br>　**本次登記(不寫行號,沿用姊妹 repo `my-stock-dashboard` §8.2.A.0 規則 1:檔案路徑 + 符號名 + 模式描述)**:**`repositories.macro_tw_local_repository.fetch_ndc_signal_history`**(**`ui/helpers/macro/ndc.py::_fetch_ndc_score`** lazy import,單一 caller / 單一 call site)— TW 本地總經 self-contained L1 fetcher(FinMind `TaiwanBusinessIndicator` 單源),v19.197 P1-4 從 `macro_tw_local_fetch.py` 下沉 repositories;UI 取回後在同檔純函式取 `score_latest`(9~45),供深度強化模組動態門檻用(v19.459)。純 fetch facade,無 L2 業務需上提。<br>　⛔ **另三個成員的去留:待客戶裁決,本組不作處置建議,亦不得被引用為刪除或復活的依據。**依派工說明,它們的存廢卡在一組**互相牴觸的客戶決定**(總經面板退役 vs. 9 源 PMI 賽跑核准),屬 §-1.5.1c `03`-2 ② **業務需求衝突**,已送客戶、**尚未答覆**。⚠️ **本組未查證到那兩個客戶決定的原始出處**(全 repo `.md` 搜不到「2026-06-09」或「總經 Tab 充滿矛盾」字樣),依 §-2 規則 6 **只轉述派工說明、不宣稱為已查證事實**;唯一本組實測到的是`CLAUDE.md §2.1` 記載的「**user 2026-07-12 核准 9 源賽跑**」。**在客戶答覆之前:本列不刪除該三個成員的登記、也不宣稱它們合憲** —— 它們現況是「**無 UI 呼叫點,故本例外對其空轉**」。⚠️ 依 **§-1** 本次**不動任何 `.py`**;本更正**不構成動工授權**。<br>　📌 **本更正不觸碰、也不解決 §8.3.P `P-NDCCACHE-1`**:那一列問的是`ui/helpers/macro/ndc.py::_cached_ndc_score` 在 **UI 層 `@st.cache_data` 快取外部 HTTP**、且與 L1 既有 `@_ttl_cache(TTL_15MIN)` **兩層同 TTL 疊加**該怎麼辦 —— **那是快取歸屬問題**;本列處理的是 **UI 直呼 L1 的分層問題**。**兩者是同一個檔案上的兩個獨立問題,`P-NDCCACHE-1` 維持未判定。**⚠️ **不得**引用本更正主張 `P-NDCCACHE-1` 已結案。<br>　⚠️ **本更正全部為單組實測,未經第二組獨立驗證**(§-2 規則 6);其中「另三個 0 caller」與「`_safe_tw` 0 命中」是**取決於有沒有漏看**的全稱句,**只能當待驗事項**。**驗證指令(repo 根執行)**:`git grep -n "macro_tw_local" -- 'ui/**'`、`git grep -n "fetch_tw_pmi_local\|fetch_tw_export_yoy\|fetch_foreign_consecutive_days" -- '*.py'`、`git grep -n "_safe_tw\|validate_ndc_signal_dict" -- '*.py'`(命中須**人工逐一判讀**是 import、字串名還是註解)。<br>- **`repositories.macro_repository.fred_get_next_release_date`**(`ui/helpers/io/data_registry.py:139` lazy / `ui/tab5_data_guard.py:1237` lazy)— thin FRED 揭露日 helper(動態 TTL 計算 / Tab5 診斷用),無 L2 業務邏輯,UI 直呼取數。**v19.377 B2c 補登**(全域排毒 Wave B2 架構越權查緝點名;user 核准混合案:thin pass-through 登例外而非建 facade,避 §8.1 step 6「用不到的抽象」)。<br>- **`repositories.news_repository.fetch_stock_news`**(`ui/helpers/fund_grp_health/ai.py:232` / `ui/tab2_single_fund.py:1300`)— self-contained 個股新聞 fetcher(feedparser Google News 逐股搜尋),與**已登錄兄弟** `fetch_market_news` 同精神(self-contained news fetcher,UI 直呼);為兩兄弟一致處理故一併登錄。**v19.377 B2c 補登**。<br>- **`repositories.macro.yf.fetch_benchmark_close`**(`ui/components/mk_dashboard.py::_get_benchmark_series` lazy import,單一 caller / 單一 call site)— 投資組合衛星對比基準(SPY / QQQ)近 9 個月日線收盤。**v19.531 Phase 1.2 補登**,起因是憲法 §8.3.P **`P-UIHTTP-1`** 登記的違憲:原 `_get_benchmark_series` 在 **UI 層** `import yfinance` 直抓 + `st.session_state["mk_bench_cache"]` 自建快取,同時命中 §-1.5.1c v3 §01 三層圖 UI 框的兩個動詞「私自**存放**或**抓取**」,且與 `repositories/macro/yf.py::fetch_yf_close` 重複實作同一個來源(Yahoo 日線收盤)。⚠️ **但本次搬遷做到的是「不再新增一套」,不是「全站收斂成一套」** —— 2026-08-28 稽核實測本 repo **至少另有兩套獨立的 Yahoo v8 chart 實作**(`repositories/fund/sources.py::_src_yahoo_finance_nav`,urlopen 直打 query2、不走 `infra.proxy`;`scripts/fetch_nav_cache.py::fetch_yahoo_finance_history`),外加 `repositories/financial_repository.py` 真的 `import yfinance`(季財報)。repo 自己早有紀錄:`shared/api_endpoints.py` 檔頭「✅ YF query2 Morningstar URL 真 dupe」。**v3 §01-2 在本 repo 尚未達成,不得宣稱已達成。**取數與快取已下沉 L1(TTL 吃上游 `@_ttl_cache(TTL_10MIN)`,走 `shared/ttls.py` SSOT,**本層不疊第二層**)。 | L3 UI 直接 import L1 facade(~~共 8 組~~ → **共 9 組**);v19.247 R16 後 `get_latest_fx` 已上提 L2 wrapper | **v19.273 Phase 2 TOP 3 補登原因**:`tab1_macro.py:821` 4 個 TW macro local fetcher UI 直呼為 v19.197 P1-4 下沉後的既有 pattern,屬「self-contained L1 fetcher + UI 直呼取數」(F-GRAY-2 同精神),原僅有 v19.197 commit 紀錄未在例外表登錄,PHASE1_AUDIT_DELTA.md TOP 3 點名補登避免讀例外表者誤判為違憲。**v19.251 補登原因**:R8 EX-L1ORCH-1 退役註腳口頭認可 `tab_crisis_backtest.fetch_fund_by_key`,但未在例外表正式登錄;另 `fetch_nav_history_long` / `diagnose_fx_sources` 同屬 lazy import + 單一 caller pattern,一併補登。**v19.247 R16 部分升級記錄**:9 UI caller 全 migrate `from services.fund_service import get_latest_fx`,L2 thin facade 呼 L1 實作(允許 L2→L1 方向)。L1 業務 0 改動。**v19.531 Phase 1.2 補登原因(`fetch_benchmark_close`)**:此列**不是**把既有違憲就地合法化 —— 取數實作已**實體搬離** UI 檔、UI 端只剩一行委派。選「登例外」而非「建 L2 facade」的理由(⚠️ **以下是本組對本例外既有精神的解讀,不是逐條引用** —— 本列**沒有**編號條件,2026-08-28 稽核指出前一版寫的「判定條件 ①/②」在憲法裡查無此物、是**懸空引用**,已撤;有 `①②③④` 編號條件的是**另外兩列** `EX-UICACHE-1` / `EX-CISCRIPT-1`):(a) **1 caller / 1 call site**,`get_latest_fx` 當年觸發 R16 升級的 9 檔 / 18 處 fan-out 在此不存在;(b) caller 端**零後處理**(無多源 fallback、無跨 fetcher TTL 統一、無結果加工),對應本列既有成員反覆用過的措辭「**純 fetch facade 無 L2 業務需上提**」;(c) L1 已自帶 `@_ttl_cache`,cache 已集中,不存在分散問題;(d) 為純 pass-through 加一層 L2 wrapper 正是 §8.1 step 6「用不到的抽象」的反例 —— 與本列 `fred_get_next_release_date`(v19.377 B2c)**user 核准的混合案**同一個處理「thin pass-through 登例外而非建 facade,避 §8.1 step 6『用不到的抽象』」。**守衛**:`tests/test_benchmark_fetch_migration_v19531.py`(18 條)。⚠️ **不得宣稱其中有「四條 fail-closed 斷言」——那是高估,2026-08-28 稽核實測推翻**:「UI 不得 import yfinance」與「不得再持有 `mk_bench_cache`」兩條屬**形態偵測**,用 `importlib.import_module('yfinance')` + 把快取 key 改名 `mk_bench_cache_v2` 即可完全繞過(實測復辟違憲後那兩條仍綠燈)。**真正 fail-closed 的是 sentinel 那條**(`test_ui_benchmark_path_delegates_to_l1`,patch L1 驗往返),它擋下了該繞道 —— 縱深防禦沒破,但描述必須誠實。兩條形態偵測的 docstring 已就地寫明此繞道。<br>**升級觸發條件**:user 明確要求集中 cache、新增 source、後處理 bug、**或本 fetcher 出現第二個 UI caller**(fan-out 一旦出現,(a) 的理由即失效,應比照 R16 上提 L2)。F-H6 v19.79 原決策 + R15/R16 對齊。 |
 | ~~**EX-L1ORCH-1**~~(v19.240 R8 升級退役) | ~~L1 fund orchestrator import L2 `calc_metrics`~~ | ~~抓 + 打包 facade~~ | **退役原因**:v19.240 深挖發現實際違憲 3 個 L2 symbol(`calc_metrics` + `reconcile_fund_annual_return` + `reconcile_dividend_yield`)+ 大量 L2 業務判斷(perf 注入決策 / window 閾值 / % vs decimal 換算 / 對帳)push 回 L1,**升級觸發條件 (a)+(b) 均達標**。R8 採方案 (b) 拆 return + L2 wrapper:`services.fund_service.finalize_fund_metrics()` + `fetch_fund_by_key_enriched` / `fetch_fund_from_moneydj_url_enriched` 兩 wrapper 上提 L1 業務邏輯,L1 純化為 raw fetch + packaging。L1→L2 violation 從 3 → 0。Migrate 4 個 caller site(`ui/helpers/v2_editor.py` / `services/moneydj_fetcher.py` x3),其餘 `tab_crisis_backtest.py` 用 raw `fetch_fund_by_key`(只取 series 不需 metrics)。 |
@@ -2434,7 +2471,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 > **把 `nav_history` 的寫入端誤算成「`cache/nav` 的第二個產出者」，就會得出「理由 ③ 不成立」的錯誤結論。**
 >
 > ⚠️ **一項與本列理由有關、必須據實揭露的現況（不改變本列判定，但改變它的急迫性）**：
-> **`.github/workflows/fetch_nav_cache.yml` 在本次量測時已不存在**（實測 `ls .github/workflows/` 無此檔），
+> **~~`.github/workflows/fetch_nav_cache.yml`~~ 在本次量測時已不存在**（實測 `ls .github/workflows/` 無此檔），
 > `STATE.md` 記載該 workflow 的 `schedule` cron 已被拔除、**script 保留供手動觸發**。
 > → **因此「它是一條每日在跑的生產鏈」這句話，以 2026-08-28 的實況而言並不成立，本表不得如此宣稱**；
 > 本列成立靠的是**理由 ①（依賴隔離）與理由 ③（產出物仍被活的降級鏈讀取）**，**不靠**「每日在跑」。
@@ -2558,7 +2595,7 @@ except ImportError:
 
 - ✅ **F-GRAY-1 v19.81 audit 結案**:`fund_fetcher.py`(根目錄,459 LOC)**保留根目錄**。檔內 18 條 `noqa: F401` re-export shim(infra.cache / infra.proxy 等)+ 57 個 caller import 線。內容已是「向後相容 shim 容器」,搬至 `repositories/` 為純 cosmetic 改動且需動 57 個 caller 介面,違反 §8.1 step 6「用不到的抽象先不做」。
 - ✅ **F-GRAY-2 v19.81 audit 結案 → P0-4 完成搬遷**:原 `hot_money.py`(344 LOC,5 callers)/ `tw_macro.py`(334 LOC,2 callers)F-GRAY-2 結論為「self-contained L1 fetcher,根目錄 vs `repositories/` 為純 cosmetic 不視為違憲」。**後續第二階段 P0-4-A/B v19.x 已完成搬遷**:`repositories/hot_money_repository.py`(P0-4-A 拆 2 檔 + UI 上層)+ ~~`repositories/tw_macro_repository.py`(P0-4-B 整檔搬)~~。
-  📌 **2026-08-28 Phase 1.4 狀態更新（有意識的政策變更,不是漏刪;決策者 user）**:`repositories/tw_macro_repository.py` 已因 **production 0 caller** 實體刪除(v3 §01-2)。**F-GRAY-2「根目錄 vs `repositories/` 屬純 cosmetic」這個結案理由仍然成立**,只是它的對象之一不再存在;`repositories/hot_money_repository.py` **未動**,該結案的其餘部分不受影響。
+  📌 **2026-08-28 Phase 1.4 狀態更新（有意識的政策變更,不是漏刪;決策者 user）**:~~`repositories/tw_macro_repository.py`~~ 已因 **production 0 caller** 實體刪除(v3 §01-2)。**F-GRAY-2「根目錄 vs `repositories/` 屬純 cosmetic」這個結案理由仍然成立**,只是它的對象之一不再存在;`repositories/hot_money_repository.py` **未動**,該結案的其餘部分不受影響。
 - ✅ **F-GRAY-3 v19.81 audit 結案**:`app.py`(568 LOC)— 已是 orchestrator,主要功能為 `_now_tw`/`_load_keys`/`_check_secrets`/`_calc_data_health`(thin session-aware wrapper)/`render_macro_compass`(UI)。無顯著業務邏輯需下沉。同步刪除 1 處 dead code `_unused_old_calculate_composite_score`(deprecated placeholder, 0 callers)。
 - ⚠️ **F-GRAY-4 v19.80 audit 部份結案,VIX 子題 C2 v19.160 完全收斂**:
   - **VIX(已收)**:user 2026-06-26 撤銷 v19.147 multi-cutoff,接受 trade-off。
@@ -2572,7 +2609,7 @@ except ImportError:
   - **HY_SPREAD(已收 90%)**:`shared/macro_thresholds_v2.py:HY_SPREAD_THRESHOLDS` schema 落地,
     5 個 multi-purpose section(stoplight / score_function / portfolio_advisor / beginner_panic /
     inflection_detection)各自 SSOT;`ui/helpers/macro/beginner_view.py` 用 `_HY_THR` import;
-    `services/macro_score_calibration.py` 用 `score_function`;v19.245 R13 inflection 收口。
+    ~~`services/macro_score_calibration.py`~~ → **`services/calibration/macro_score.py`** 用 `score_function`(見 §2.1 表下「2026-09-05 批次路徑更正」註);v19.245 R13 inflection 收口。
     **剩 `ui/components/macro_card_edu.py:300-304` 教學文(<4% 樂觀 / 4-6% 中性 / >6% 走擴 /
     >10% 崩潰)**:**by-design 不收**,屬「threshold story 文檔」而非「inline 邏輯」,
     若 threshold 改 narrative 也需重寫,SSOT 化反而綁死敘事(§8.1 step 6 反例)。
@@ -2585,7 +2622,7 @@ except ImportError:
     schema 落地(5 section);`services/macro_validation.py` SCORE_RULES 已對齊 score_function。
     原記載「剩 2 處 logic inline」為**過時**:(1) score lambda 現於
     `services/calibration/macro_score.py:75 _s_cpi`,已吃 SSOT 常數(:58-60,v19.202 P2-2);
-    (2) `ui/helpers/macro/helpers.py:187` 已用 `_CPI_BULL_HIGH`(:28 從 `_CPI_THR` 讀)。
+    (2) **`ui/helpers/macro/helpers.py`** 已用 `_CPI_BULL_HIGH`(同檔頂部從 `_CPI_THR` 讀)—— ~~原寫「`ui/helpers/macro/helpers.py:187` 已用 `_CPI_BULL_HIGH`(:28 從 `_CPI_THR` 讀)」~~,該檔實測僅 **184** 行、`_CPI_BULL_HIGH` 實際定義於檔頂、使用於同檔下半(見 §2.1 表下「2026-09-05 批次路徑更正」註)。
     兩處皆 SSOT,無 caller migrate 待辦。
   - **PMI(WONTFIX 二段澄清,v19.271 C 深挖確認)**:user 2026-06-26 撤銷的是**「harmonize 統一值」**
     (50.0 / 52.0 / 45.0 不同源 trade-off),**不是「SSOT 化(下沉但不統一值)」**。後者已 v19.179 PR-1~3
