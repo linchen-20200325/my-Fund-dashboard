@@ -139,7 +139,12 @@ from ui.helpers.macro.beginner_view import (
     render_evidence_table,
     split_evidence_footnotes,
 )
-from ui.helpers.render_state import business_alert, not_ready, system_error
+from ui.helpers.render_state import (
+    business_alert,
+    not_ready,
+    safe_section,
+    system_error,
+)
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
@@ -855,13 +860,31 @@ def _render_detail_zone() -> None:
     """
     st.divider()
     st.markdown(f"### {_DETAIL_HEADING}")
-    for _key, _title, _render in _DETAIL_ZONE:   # noqa: B007 — key/title 供守衛讀
-        _render()
+    for _key, _title, _render in _DETAIL_ZONE:   # noqa: B007 — key 供守衛讀
+        # ⚠️ **每一塊各自包一層區塊級隔離** —— 走既有共用 helper
+        # `ui/helpers/render_state.py::safe_section`（**不是** `ui/tab*.py` 裡那份私有的，
+        # 方針第 1 條不准動舊檔；這一支是 SSOT 側的公開版，它的 docstring 講的正是這件事）。
+        #
+        # ⛔ **2026-09-05 稽核實測，這不是預防性加固，是修一個已經會發生的斷頭**：
+        # 讓 `render_mid_cycle_section` 拋一個例外（模擬上游 `ind` 形狀變動），
+        # 前一版的結果是 —— 例外一路逃出 `render_market_overview`，
+        # **🎯 短線雷達 / ⚠️ 拐點警報 / 🤖 AI 總結三塊全部消失，
+        # 連 `_render_matrix_signpost()` 那句指路也一起沒了**，
+        # 最近的網子只剩 `app.py` 的**分頁級** try（整頁換成一個紅框）。
+        # 而那句指路是整批搬移裡**唯一留給使用者的線索** ——
+        # 為它單獨寫一條守衛、卻讓一個上游變動就能把它帶走，是自相矛盾的。
+        #
+        # ⚠️ `safe_section` **不吞例外**（§1）：它走 `system_error()` 顯式紅框 ＋
+        # log ＋ 可展開 traceback，只是把爆炸範圍收斂到那一塊。
+        safe_section(_title, _render)
     _render_matrix_signpost()
 
 
 def _render_matrix_signpost() -> None:
-    """線框 section 05 點名要留的那一句指路：逐檔加減碼建議搬去 ② 了。
+    """線框 section 05 點名要留的那一句指路：逐檔加減碼建議要去 ② 找。
+
+    ⚠️ **時態是中性的，這是刻意的** —— 見本函式末段與 `st.caption` 上方的註解：
+    決策矩陣**目前還沒有真的落到 ②**，所以不能寫「已經搬到 ② 了」。
 
     **線框原文（section 05「據實揭露」）**：
     「① 頁會變短、變得『只講市場』。習慣在 ① 頁底看逐檔加減碼建議的人，會找不到它
@@ -889,8 +912,16 @@ def _render_matrix_signpost() -> None:
     **未經第二組獨立驗證**（§-2 規則 6）—— 它是可以被推翻的版面決定，
     不是查證出來的事實。
     """
+    # ⚠️ **時態刻意是中性的（「請到」，不是「已搬到」）—— 總管 2026-09-05 裁決。**
+    # 「已經搬到 ② 了」在**本 commit 尚未為真**：逐檔決策矩陣整組目前只存在於
+    # `ui/tab1_macro.py`，而該檔已不接線到任何分頁 —— 它現在**哪裡都到不了**，
+    # ② 底下也還沒有線框說的那一區。寫「已搬到」會讓使用者跑去 ② 找一組
+    # **還不存在的東西**，那就是一句會改變行為的假敘述（客戶 2026-09-05 標準：
+    # 不接受假資料／缺資料）。
+    # ✅ 等矩陣真的落到 ② 之後，再把這句改成過去式。
+    # ⚠️ 分頁名仍走 `where_to_find()` SSOT，本次只改時態，不改指向。
     st.caption(
-        f"📋 **逐檔加減碼建議已搬到 {where_to_find('health')}。**"
+        f"📋 **逐檔的加減碼建議請到 {where_to_find('health')}。**"
         f"　這一頁只講市場（大盤與總經），不出現任何一檔你持有的基金；"
         f"「我手上這幾檔該加該減」是 {where_to_find('health')} 的題目。"
     )

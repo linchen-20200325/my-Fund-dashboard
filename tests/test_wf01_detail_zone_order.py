@@ -18,38 +18,103 @@
   - **本檔** → 守 `ui/views/page_01_macro.py`。舊那條在新頁上結構性失效
     （錨全在舊檔），新頁在本檔出現之前**沒有任何順序保護**。
 
-三條規則，各守一個不同的失效模式
---------------------------------
-- :func:`test_detail_zone_keys_are_derived_from_bucket_order`
-  —— **結構鎖**。順序的唯一出處是 `BUCKET_ORDER`，本檔與產品碼都不手抄第二份。
-- :func:`test_detail_zone_renders_its_five_sections_in_order_and_contiguous`
-  —— **行為鎖**。錄下**真的渲染出來的**一級標題序列。
-  這條才抓得到「序列長得很正確、但根本沒有人呼叫它」與「中間插了別的一級區塊」。
-- :func:`test_the_mid_cycle_block_really_delegates_to_the_shared_renderer`
-  —— **接線鎖**。防「真區塊被悄悄換回灰態佔位卡」而前兩條照樣綠。
+五種鎖，各守一個不同的失效模式（每一種都有實測過的突變）
+--------------------------------------------------------
+- **結構鎖** :func:`test_detail_zone_keys_are_derived_from_bucket_order`
+  —— 順序的唯一出處是 `BUCKET_ORDER`，本檔與產品碼都不手抄第二份。
+- **行為鎖** :func:`test_detail_zone_renders_its_five_sections_in_order_and_contiguous`
+  —— 錄下**真的渲染出來的**一級標題序列。抓得到「序列長得很正確、
+  但根本沒有人呼叫它」與「中間插了別的一級區塊」。
+- **接線鎖** :func:`test_the_mid_cycle_block_really_delegates_to_the_shared_renderer`
+  —— 防「真區塊被悄悄換回灰態佔位卡」而其他鎖照樣綠。
+- **字面值錨** :func:`test_detail_section_titles_match_the_wireframe_literals`
+  —— 五塊的名字對線框字面值，防「期望值與畫面同源、一起改名」。
+- **故障隔離鎖** :func:`test_one_failing_block_does_not_take_down_the_rest_of_the_zone`
+  —— 一塊爆炸不得帶走其餘四塊與那句指路。
 
 ⚠️ **為什麼行為鎖不可省（結構鎖擋不住的那一半）**：
    `_DETAIL_ZONE` 是一個 module-level tuple。**一個沒有被呼叫的序列，
    同樣可以長得完全正確** —— 把 `_render_detail_zone()` 整句從
    `_render_deferred_blocks()` 刪掉，結構鎖仍然全綠。
+
+⚠️ **為什麼字面值錨不可省（其餘各鎖擋不住的那一半）**：
+   其餘各鎖刻意**從產品碼推導期望值**（不抄第二份順序），代價是
+   **全部同源 ＝ 一起漂移**。2026-09-05 稽核實測：改掉一個灰態區塊的名字
+   → 當時全部 8 條**照樣綠**。名字這一項因此必須有一根不動的樁。
+
+⚠️ **本檔守得到什麼、守不到什麼**：詳見 :func:`_render_and_record` 的
+   「本錄影機看不到的東西」。**本檔不宣稱「所有插入一級區塊的寫法都擋得住」** ——
+   只宣稱下列五種實測擋得住：`st.markdown` / `st.subheader` / `st.header` /
+   `st.write` / 容器控制代碼（`col.markdown`）。
 """
 from __future__ import annotations
 
 import re
+from contextlib import ExitStack as _ExitStack
 from unittest.mock import patch
 
 import pytest
 import streamlit as st
+from streamlit.delta_generator import DeltaGenerator
 
 from shared.macro_buckets import BUCKET_ORDER
 
 import ui.views.page_01_macro as _page
 
-#: 一級區塊標題 = markdown 的 H2~H4。
+#: markdown 形式的一級區塊標題 = H2~H4。
 #: ⚠️ **刻意不含 H5** —— `ui/tab1_macro_midcycle.py` 的
 #: `##### 🧭 L3 情境判斷` 是**中期循環自己的子標題**，不是一個平行的一級區塊；
 #: 把它算進來會讓「連續」永遠不成立。
 _OPENER_RE = re.compile(r"^#{2,4}\s")
+
+#: 要側錄的渲染 API。**在 `DeltaGenerator` 類別上攔截，不是在 `streamlit` 模組上。**
+#:
+#: ⚠️ **這一行是 2026-09-05 稽核打穿本檔之後改的，理由必須留著**：
+#: 本檔前一版用 `patch.object(st, "markdown")`，只攔得到 **module-level** 的
+#: `st.markdown`。獨立稽核拿**同一個**「在五塊中間插一個外來一級區塊」的突變，
+#: 只換拼法就全部繞過（每一種都實測過）：
+#:
+#:   | 寫法 | 前一版 | 現在 |
+#:   |---|---|---|
+#:   | `st.markdown("### …")`   | 2 failed ✅ | 紅 ✅ |
+#:   | `st.subheader("…")`      | **8 passed ⛔** | 紅 ✅ |
+#:   | `st.header("…")`         | **8 passed ⛔** | 紅 ✅ |
+#:   | `st.write("### …")`      | **8 passed ⛔** | 紅 ✅ |
+#:   | `col.markdown("### …")`  | **8 passed ⛔** | 紅 ✅ |
+#:
+#: **後三種不是刁鑽寫法**：`subheader`/`header` 是 Streamlit 標準 API；
+#: **欄位控制代碼（`col.markdown`）在本 repo `ui/` 底下已有多處在用**，
+#: 而 📈 中期循環那些指標卡自己就是走這條路 —— 也就是說，
+#: **前一版對這個 repo 的主流寫法是盲的。**
+#:
+#: **兩層都要攔，只攔一層會漏掉一半 —— 這一點是本輪實測出來的，不是推論：**
+#:
+#:   ```
+#:   with patch.object(DeltaGenerator, "markdown", rec):
+#:       st.markdown("via-st-module")          # ← 錄不到
+#:       st.columns(1)[0].markdown("via-col")  # ← 錄得到
+#:   # 實際輸出：[('CLASS', 'via-column-handle')]
+#:   ```
+#:
+#: 原因：`st.markdown` 是 **import 時就綁好的 bound method**
+#: （`type(st.markdown).__name__ == "method"`、有 `__self__`）——
+#: 那個 method 物件抓住的是**當時**的函式，事後換掉類別屬性影響不到它；
+#: 反過來，容器控制代碼是**呼叫當下**才做屬性查找，所以只吃類別那一層。
+#: → 故本檔 `patch.object(DeltaGenerator, api, …)` **與**
+#:   `patch.object(st, api, …)` **兩個都下**。
+_RECORDED_APIS: tuple[str, ...] = ("markdown", "write", "subheader", "header", "title")
+
+#: 這幾個 API 只要被呼叫就是一級區塊標題（它們本身就是標題元件，沒有 `#` 前綴可比對）。
+_ALWAYS_OPENER: frozenset = frozenset({"subheader", "header", "title"})
+
+#: 認出「指向 ② 的那句指路」用的關鍵詞。
+#:
+#: ⚠️ **刻意是測試檔裡的字面值，不是從產品碼 import 過來的** —— 同 `_WIREFRAME_TITLES`
+#: 的理由：兩邊同源就一起漂移。文案若真的改寫到不含這幾個字，本條**應該**紅一次，
+#: 讓人回來確認「那句指路還在不在」，而不是靜靜地跟著改。
+#: （2026-09-05 實測：把「已搬到」改成中性時態「請到」時，本標記就擋下來過一次。）
+_SIGNPOST_MARK: str = "加減碼建議"
+
 
 
 class _FakeSessionState(dict):
@@ -69,21 +134,50 @@ def _render_and_record(*, loaded: bool) -> list[str]:
     本檔守的是「哪五塊、什麼順序」，**不是**「標題用第幾級」。
     標題級數在批次三把其餘四塊搬過來時本來就會被統一，
     鎖住它只會製造一條與版面演進作對的假紅。
+
+    ⚠️ **攔截點是 `DeltaGenerator` 類別方法**（見 `_RECORDED_APIS` 的說明）——
+    這樣 `st.markdown(...)`、`st.subheader(...)`、`col.markdown(...)`
+    走的都是同一個被攔下來的函式。
+
+    ⚠️ **本錄影機看不到的東西（誠實列出，不要讀成「已經全包」）**：
+      - `st.expander("…")` **刻意不算**一級區塊 —— 📈 中期循環自己就有一個
+        （Z-Score 完整矩陣），算進去會讓「連續」永遠不成立。
+      - 以 HTML（`unsafe_allow_html=True`）畫出來的假標題：本錄影機收得到那段字串，
+        但它不長得像 `## `，所以**不會**被認成區塊開頭。
+      - 完全不經 `DeltaGenerator` 的渲染路徑（若日後出現）。
     """
     _ss = _FakeSessionState({_page._SK_IND: {}} if loaded else {})
-    _seen: list[str] = []
+    _seen: list[tuple[str, str]] = []
 
-    def _rec(*a, **_kw):
-        if a and isinstance(a[0], str):
-            _seen.append(a[0])
+    def _make(_api: str):
+        """類別方法版：第一個參數是 `self`（容器控制代碼）。"""
+        def _rec(_self, *a, **_kw):
+            _txt = a[0] if a and isinstance(a[0], str) else ""
+            _seen.append((_api, _txt))
+        return _rec
+
+    def _bind(_fn):
+        """模組層版：`st.markdown(...)` 不帶 `self`，包一層把它補掉。"""
+        return lambda *a, **k: _fn(None, *a, **k)
 
     with patch.dict("os.environ", {"FRED_API_KEY": "test-key"}), \
-            patch.object(st, "session_state", _ss), \
-            patch.object(st, "markdown", side_effect=_rec):
-        _page.render_market_overview()
+            patch.object(st, "session_state", _ss):
+        with _ExitStack() as _stack:
+            for _api in _RECORDED_APIS:
+                # 兩層都要攔，缺一漏一半（理由見 `_RECORDED_APIS` 下方的「兩層」段）。
+                _stack.enter_context(
+                    patch.object(DeltaGenerator, _api, _make(_api)))
+                _stack.enter_context(
+                    patch.object(st, _api, _bind(_make(_api))))
+            _page.render_market_overview()
 
-    return [_OPENER_RE.sub("", _t).strip()
-            for _t in _seen if _OPENER_RE.match(_t)]
+    _out: list[str] = []
+    for _api, _txt in _seen:
+        if _api in _ALWAYS_OPENER:
+            _out.append(_txt.strip())
+        elif _OPENER_RE.match(_txt):
+            _out.append(_OPENER_RE.sub("", _txt).strip())
+    return _out
 
 
 def _zone_openers(openers: list[str]) -> list[str]:
@@ -212,7 +306,11 @@ def test_the_other_four_sections_are_still_honest_placeholders():
     }
     assert _pending == _expected_pending, (
         f"詳細區的灰態塊變了；期望 {sorted(_expected_pending)}、實際 {sorted(_pending)}。\n"
-        "若這是因為又搬真了一塊：請同步改本條，並在 `_DETAIL_ZONE` 補上它的 renderer。")
+        "⛔ **先確認這一塊是不是線框 section 03 那五塊之一**"
+        "（`_WIREFRAME_TITLES`）——\n"
+        "   是：把它從本條的 `_expected_pending` 移除即可（它被搬真了，正常）。\n"
+        "   否：**不要改本條的期望值** —— 那會讓一個未經客戶拍板的新區塊直接上畫面。\n"
+        "       線框沒有的區塊要先走 UI 草稿先行，拍板後才動 `_DETAIL_ZONE`。")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -244,10 +342,107 @@ def test_the_decision_matrix_signpost_survives_and_uses_the_ssot():
                          side_effect=lambda *a, **k: _caps.append(str(a[0]) if a else "")):
         _page.render_market_overview()
 
-    _hits = [_c for _c in _caps if "逐檔加減碼" in _c]
+    _hits = [_c for _c in _caps if _SIGNPOST_MARK in _c]
     assert len(_hits) == 1, (
         f"指向 ② 的那句指路應恰好一句，實際 {len(_hits)} 句。"
         "（0 句 ＝ 被刪掉了；2 句以上 ＝ 有人抄了第二份）")
     assert where_to_find("health") in _hits[0], (
         f"指路沒有走 `where_to_find('health')` SSOT（期望含 "
         f"{where_to_find('health')!r}）：{_hits[0]!r}")
+
+
+# ══════════════════════════════════════════════════════════════
+# 5) 字面值錨 —— 五塊的名字不得同源漂移
+# ══════════════════════════════════════════════════════════════
+#: 五塊標題的**字面值**，逐字取自已拍板線框
+#: `docs/wireframes/wireframe-macro-health.html` **section 03「重組後版面」**的
+#: 「🔎 詳細資料與說明〈保留 · 順序不動〉」那一行，
+#: 且與**舊頁各子模組實際渲染的 `## ` 標題逐字相同**
+#: （`ui/tab1_macro_longterm.py` / `_midcycle.py` / `_radar.py` /
+#:  `_inflection.py` / `_ai.py`）。
+#:
+#: ⚠️ **為什麼一定要有這份字面值（2026-09-05 稽核指出，本檔實測確認）**：
+#: 本檔前一版的期望值是 `_DETAIL_TITLES`，而畫面上的字**也是** `_DETAIL_TITLES`
+#: —— **兩邊同源，一起動就一起錯**。實測：把 `_DETAIL_TITLES["long"]` 改成
+#: 任意名字 → **8 passed，一條都沒響**。
+#:
+#: ⛔ **這正是本 PR 自己在修的那一類錯**：區塊名一度被改成自創的「詳細五時域」，
+#: 而九份線框對它 0 命中。**沒有字面值錨，那個錯可以在這四塊上原封再犯一次。**
+
+_WIREFRAME_TITLES: tuple[str, ...] = (
+    "🌳 長期座標",
+    "📈 中期循環",
+    "🎯 短線雷達",
+    "⚠️ 拐點警報",
+    "🤖 AI 景氣判斷總結",
+)
+
+
+def test_detail_section_titles_match_the_wireframe_literals():
+    """五塊標題必須逐字等於線框 section 03 的名字。
+
+    **突變會紅**：把 `_DETAIL_TITLES` 任一個值改名 → 本條紅
+    （前一版的守衛對這個突變 8 passed 全綠）。
+
+    ⚠️ 本條是**唯一**不從產品碼推導期望值的一條 —— 它就是那根樁。
+    其餘各條刻意從 `_DETAIL_ZONE` / `BUCKET_ORDER` 推導（不抄第二份順序），
+    但**全部推導 ＝ 全部同源 ＝ 一起漂移**，所以名字這一項必須有字面值。
+    """
+    _got = tuple(_t for _k, _t, _r in _page._DETAIL_ZONE)
+    assert _got == _WIREFRAME_TITLES, (
+        "詳細區的區塊名與線框 section 03 對不上。\n"
+        f"  線框：{list(_WIREFRAME_TITLES)}\n  實際：{list(_got)}\n"
+        "若這是客戶重新拍板改名：請連同線框一起改，並在此更新字面值。")
+
+
+# ══════════════════════════════════════════════════════════════
+# 6) 故障隔離鎖 —— 一塊爆炸不得帶走其餘四塊與那句指路
+# ══════════════════════════════════════════════════════════════
+def test_one_failing_block_does_not_take_down_the_rest_of_the_zone():
+    """任一塊拋例外時：**例外不外逃、其餘各塊照畫、指路仍在**。
+
+    ⛔ **2026-09-05 稽核實測，前一版是真的會斷頭**（不是假想情境）：
+    `_detail_mid()` 當時是裸呼叫、一路無 try/except，最近的網子是 `app.py`
+    的**分頁級** try。讓 `render_mid_cycle_section` 拋例外的結果是 ——
+    例外逃出 `render_market_overview`，**🎯 短線雷達 / ⚠️ 拐點警報 /
+    🤖 AI 總結三塊全部消失，連那句指路也一起沒了**。
+
+    ⚠️ 上游 `ind` 形狀變動是**會真的發生**的事（本頁不擁有 `fetch_all_indicators`
+    的回傳形狀），所以這條走的是「已知會發生」而不是「防禦性加固」。
+
+    ⚠️ 本條**同時**是那句指路的第二道保險：它自己那條守衛
+    （:func:`test_the_decision_matrix_signpost_survives_and_uses_the_ssot`）
+    只驗「正常路徑上它在」，**驗不到「有人爆炸時它還在不在」**。
+    """
+    _ss = _FakeSessionState({_page._SK_IND: {}})
+    _seen: list[str] = []
+    _caps: list[str] = []
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError("模擬上游 ind 形狀變動")
+
+    _escaped = None
+    with patch.dict("os.environ", {"FRED_API_KEY": "test-key"}), \
+            patch.object(st, "session_state", _ss), \
+            patch.object(st, "markdown",
+                         side_effect=lambda *a, **k: _seen.append(str(a[0]) if a else "")), \
+            patch.object(st, "caption",
+                         side_effect=lambda *a, **k: _caps.append(str(a[0]) if a else "")), \
+            patch("ui.tab1_macro_midcycle.render_mid_cycle_section", side_effect=_boom):
+        try:
+            _page.render_market_overview()
+        except Exception as _e:            # noqa: BLE001 — 這裡就是要抓「有沒有逃出來」
+            _escaped = _e
+
+    assert _escaped is None, (
+        f"某一塊的例外逃出了 `render_market_overview()`：{_escaped!r} —— "
+        "區塊級隔離沒了，整頁會被 app.py 的分頁級 try 換成一個紅框")
+
+    _blob = "\n".join(_seen)
+    for _title in ("🎯 短線雷達", "⚠️ 拐點警報", "🤖 AI 景氣判斷總結"):
+        assert _title in _blob, (
+            f"📈 中期循環爆炸後，排在它後面的「{_title}」沒有畫出來 —— 斷頭了")
+
+    assert any(_SIGNPOST_MARK in _c for _c in _caps), (
+        "📈 中期循環爆炸後，指向 ② 的那句指路消失了 —— "
+        "它是整批搬移裡唯一留給使用者的線索，不得被別的區塊的故障帶走")
