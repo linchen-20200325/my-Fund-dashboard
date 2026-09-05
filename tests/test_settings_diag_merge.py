@@ -21,8 +21,19 @@ from __future__ import annotations
 import ast
 import contextlib
 import pathlib
+import sys
 
 import pytest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+#: AST 綁定偵測的**唯一一份**實作（`tests/_ast_bindings.py`）。
+#: ⚠️ 上面那行 `sys.path` 不是多餘的：pytest 預設（prepend import mode ＋ `tests/`
+#:    沒有 `__init__.py`）會自動把 `tests/` 放進 `sys.path`，但那是**預設值的副作用**，
+#:    換成 `--import-mode=importlib` 就沒了。寫死一行，讓它不依賴 pytest 的設定。
+#: ⚠️ 2026-09-05 之前這裡自己有一份 `_reassigned_names`，②③④ 三頁另有一份更弱的 ——
+#:    抄第二份就是第二把尺（`CLAUDE.md §2.1`）。
+from _ast_bindings import bound_names
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -813,36 +824,28 @@ def _import_bindings(tree: ast.AST) -> dict:
 
 
 def _reassigned_names(tree: ast.AST) -> set:
-    """整檔被指派過的名字（`X = ...` / `X: T = ...` / walrus / for-target / with-as …）。
+    """整檔被**重新指派**過的名字 —— 薄封裝，實作在 `tests/_ast_bindings.py`。
 
     guard 引數若同時是 import 綁定**又**被重新指派過，靜態上就無法信任
     import 那條線（`_SD_MANAGE_HEADER = DATA_GUARD_HEADER` 這種遮蔽會讓
     純 import 解析誤判為綁對）→ 一律 fail-closed 當成綁錯。
+
+    ⚠️ **`include_imports=False` 不是可有可無的參數，是本函式語意的一半**：
+    這裡問的是「import 綁定**有沒有被遮蔽**」，所以 import 綁定本身**不算**重新指派。
+    收了它，下面 :func:`_resolved_guard_flags` 的
+    ``assert arg.id not in reassigned`` 會對**每一個** guard 引數成立
+    → 本檔 26 條裡的 **5 條當場轉紅**（2026-09-05 實測，不是推論：
+    `test_guard_argument_is_bound_to_the_expected_flag` 四個參數 ＋
+    `test_settings_page_own_sections_bind_the_expected_flags`）。
 
     ⚠️ walrus（`ast.NamedExpr`）**必須**在列 —— 2026-08-31 稽核第三個對抗性
     變體實證本函式初版漏了它：guard 前一行插
     `(_SD_MANAGE_HEADER := "data_guard_header")` → 當時 25 條**照綠**。
     walrus 是運算式不是陳述式，藏得進 if 條件、引數、f-string 裡 ——
     漏掉它等於留一條不經 Assign 節點的重綁後門。
+    **2026-09-05 搬進共用 helper 時，這顆突變重跑過一次，仍然轉紅。**
     """
-    names: set = set()
-    for node in ast.walk(tree):
-        targets = []
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
-            targets = [node.target]
-        elif isinstance(node, ast.NamedExpr):
-            targets = [node.target]
-        elif isinstance(node, ast.For):
-            targets = [node.target]
-        elif isinstance(node, ast.withitem) and node.optional_vars is not None:
-            targets = [node.optional_vars]
-        for t in targets:
-            for sub in ast.walk(t):
-                if isinstance(sub, ast.Name):
-                    names.add(sub.id)
-    return names
+    return bound_names(tree, include_imports=False)
 
 
 def _resolved_guard_flags(relpath: str, *, guard_name: str,

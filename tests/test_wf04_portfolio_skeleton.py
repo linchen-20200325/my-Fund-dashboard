@@ -166,6 +166,7 @@ from __future__ import annotations
 import ast
 import functools
 import pathlib
+import sys
 import re
 from typing import Any
 
@@ -180,6 +181,14 @@ SRC = ROOT / "ui" / "views" / "page_04_portfolio.py"
 
 #: 灰態的視覺記號（`ui/helpers/render_state.py::NOT_READY_MARK`）。
 #: ⚠️ **從那個模組 import，不在這裡抄一份字面值** —— 抄了就是第二份真相源。
+#: form 閘門守衛共用的 AST 偵測（`tests/_ast_bindings.py`）——
+#: ⚠️ 這裡**不要**再抄一份掃描邏輯：②③④ 三頁曾各自抄一份較弱的版本，
+#:    三份同時漏掉屬性賦值／`update()`／widget `key=` 三條管道（`CLAUDE.md §2.1`）。
+#: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
+#:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _ast_bindings import gate_ifs, session_writes  # noqa: E402
+
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
 from ui.views.page_04_portfolio import (  # noqa: E402
@@ -902,13 +911,20 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     **沒有擋住重運算** —— 每次 rerun 照樣把下游跑一遍，畫面看起來沒問題、成本一分沒省
     （`ui/helpers/ia/gated_form.py` 模組 docstring 把這個陷阱寫得很清楚）。
 
-    ⚠️ **這條分不出真假閘門**（② 的紅隊實測：`if True:` 與 `if not _gate:` 都全綠）——
-    它只驗「session 寫入有沒有被某個 `if` 包住」。**登記，本批不補。**
+    ⚠️ ~~**這條分不出真假閘門**（② 的紅隊實測：`if True:` 與 `if not _gate:` 都全綠）——
+    它只驗「session 寫入有沒有被某個 `if` 包住」。**登記，本批不補。**~~
+    → **2026-09-05 狀態更新，不是漏刪**：**`if True:` 那一種已修**（見下方重寫說明）；
+    **`if not _gate:` 那一種仍然分不出來**。
     ✅ 但 :func:`test_a_zero_budget_never_counts_as_applied` 的 AppTest 那半
     **會**抓到「閘門恆真」那一種（沒按也寫進去）。兩條互補。
 
-    📌 **2026-09-05 順帶查了 `ast.Assign` 的同型盲點（總管指定，查完照實寫）——
-    結論不是「這裡不受影響」，是「一半受影響、一半 fail-closed」，故本輪不改，只登記**：
+    📌 ~~**2026-09-05 順帶查了 `ast.Assign` 的同型盲點（總管指定，查完照實寫）——
+    結論不是「這裡不受影響」，是「一半受影響、一半 fail-closed」，故本輪不改，只登記**~~
+    → ✅ **2026-09-05 同日已修，登記在此保留當病史（狀態變更，不是漏刪）**：
+    下面整段描述的洞（`AnnAssign` / **屬性賦值** / `update()` / **`key=`**）
+    已由 `tests/_ast_bindings.py::session_writes` 四條管道全收，
+    三頁 × 四管道 × 修前修後 × 三種測試順序的突變矩陣實跑於本輪 PR 描述。
+    **以下原文一字未改**，因為它記的是「當時為什麼判斷可以不修」，那個判斷過程仍值得讀：
     Python 允許 ``st.session_state[k]: dict = v`` 這種 **subscript 的 `AnnAssign`**，
     本條的兩段掃描都只收 `ast.Assign`，所以：
     - **前半 fail-closed（安全）**：若把**唯一**那個寫入改成 `AnnAssign`，
@@ -939,8 +955,11 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     `grep` 的 3 個命中全部是 `tests/test_wpg_portfolio_health_link_20260831.py`
     **docstring 裡的散文**，不是呼叫。
 
-    📌 **要修這個洞的人請先看這兩份既有實作，不要再寫第四份**
-    （本批不動它們 —— 跨檔重構，超出邊界；總管另排）：
+    📌 ~~**要修這個洞的人請先看這兩份既有實作，不要再寫第四份**
+    （本批不動它們 —— 跨檔重構，超出邊界；總管另排）：~~
+    → ✅ **2026-09-05 已照辦**：兩份的長處合併進 `tests/_ast_bindings.py`
+    （綁定形態取前者、session 四管道取後者），`test_settings_diag_merge.py` 已改成
+    import 它、**不留第二份**；本條與 ②③ 同樣改用它。下面兩行保留當出處：
     - `tests/test_settings_diag_merge.py::_reassigned_names` —— **綁定形態**最完整的一份
       （`Assign`／`AnnAssign`／`AugAssign`／`NamedExpr`／`For`／`withitem`，
       且對 target 再跑一次 `ast.walk` 找 `ast.Name`，所以 tuple／starred 解包自動涵蓋）。
@@ -951,6 +970,27 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
       streamlit 會**代呼叫端**把 widget 值寫進 `session_state`，
       它看起來完全不像賦值。**本頁的 form 三個 widget 目前都沒帶 `key=`**（本組實測），
       所以現在不是問題；**但真要補這個洞時，這一種不能漏。**
+        ## 這條看得見／看不見什麼（2026-09-05 重寫，**先讀這段再信它**）
+
+    session 寫入有**四條管道**，本條靠 `tests/_ast_bindings.py::session_writes`
+    四條全收：下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+    ⚠️ 重寫前它**只認第一條**（`ast.Assign` ＋ target 是 `ast.Subscript`）——
+    本組 2026-09-05 的基線實測：三頁 × 另外三條管道，注入裸寫入後**全部 18/18 綠**。
+    其中**屬性賦值**是本 repo `ui/**` 跨 6 檔 27 處的主流寫法，
+    **最可能被下一個人照家風真的踩到**；`key=` 那條最陰 —— streamlit **代呼叫端**
+    把 widget 值寫進 session，AST 上是普通 `ast.Call`，任何「找賦值節點」的手段都收不到。
+
+    「被閘門包住」的判準也換了：從「在**任何**一個 `ast.If` 底下」改成
+    **「在 `with applied_form(...) as X` 綁出來的那個 `X` 所控制的 `if` 底下」**
+    （`gate_ifs()`）。舊判準的洞：只要有人往這個函式加第二個 `if`
+    （例如 `if not _funds: return`），藏在它底下的裸寫入就會被算成「已被閘門包住」。
+    **實測**：重寫前本函式只有 `_gate` 一個 `if`，所以那個洞**尚未發作** ——
+    修的是「下一個人加第二個 `if` 就會中」。
+
+    ⛔ **仍然分不出真假閘門**：`if not _gate:` 的 test 一樣提到 `_gate`，
+    本條照樣認它是閘門（`gate_ifs()` 的 docstring 就地寫明）。
+    那一種要靠 AppTest 行為測試去驗，靜態規則做不到。
+    ⛔ **不遞迴進被呼叫的函式**：把 `st.session_state` 傳出去、由別處寫，本條看不到。
     """
     _t = _tree()
     _fns = {_n.name: _n for _n in ast.walk(_t) if isinstance(_n, ast.FunctionDef)}
@@ -959,20 +999,18 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
             f"找不到 `{_need}()` —— 「已送出值」這一層被拿掉了，"
             "下游就會直接讀 widget 值，等於沒有 form。")
     _form_fn = _fns["_render_rebalance_form"]
-    _writes = [_n for _n in ast.walk(_form_fn)
-               if isinstance(_n, ast.Assign)
-               and any(isinstance(_t2, ast.Subscript) for _t2 in _n.targets)]
+    _writes = session_writes(_form_fn)
     assert _writes, "`_render_rebalance_form()` 沒有把送出結果寫回 session。"
-    _guarded: list[int] = []
-    for _if in ast.walk(_form_fn):
-        if isinstance(_if, ast.If):
-            _guarded.extend(id(_n) for _n in ast.walk(_if)
-                            if isinstance(_n, ast.Assign))
+    _gate_ifs = gate_ifs(_form_fn)
+    assert _gate_ifs, (
+        "`_render_rebalance_form()` 裡找不到 `with applied_form(...) as <gate>:` 綁出來的那個閘門 `if` —— "
+        "form 沒有 gate 住任何東西（或閘門換了寫法，請同步 `gate_ifs()` 的判準）。")
+    _guarded = {id(_n) for _g in _gate_ifs for _n in ast.walk(_g)}
     _naked = [_w for _w in _writes if id(_w) not in _guarded]
     assert not _naked, (
         "有 session 寫入**沒有**被送出閘門包住 —— 那代表每次 rerun 都會覆寫已送出值，\n"
         "使用者拖滑桿的當下就會觸發下游重算，form 等於白包。\n  "
-        + "\n  ".join(f"第 {_w.lineno} 行" for _w in _naked))
+        + "\n  ".join(f"第 {_w.lineno} 行：{ast.unparse(_w)[:70]}" for _w in _naked))
 
 
 # ══════════════════════════════════════════════════════════════════

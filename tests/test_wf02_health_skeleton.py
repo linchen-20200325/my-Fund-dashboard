@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import sys
 import re
 from typing import Any
 
@@ -72,6 +73,14 @@ SRC = ROOT / "ui" / "views" / "page_02_health.py"
 
 #: 灰態的視覺記號（`ui/helpers/render_state.py::NOT_READY_MARK`）。
 #: ⚠️ **從那個模組 import，不在這裡抄一份字面值** —— 抄了就是第二份真相源。
+#: form 閘門守衛共用的 AST 偵測（`tests/_ast_bindings.py`）——
+#: ⚠️ 這裡**不要**再抄一份掃描邏輯：②③④ 三頁曾各自抄一份較弱的版本，
+#:    三份同時漏掉屬性賦值／`update()`／widget `key=` 三條管道（`CLAUDE.md §2.1`）。
+#: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
+#:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _ast_bindings import gate_ifs, session_writes  # noqa: E402
+
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
@@ -470,6 +479,27 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
 
     做法：以 AST 確認 `_applied_filters()` 讀的是 session 的已套用鍵，
     且 widget 的回傳值**只**在 `if <gate>:` 底下才被寫進 session。
+        ## 這條看得見／看不見什麼（2026-09-05 重寫，**先讀這段再信它**）
+
+    session 寫入有**四條管道**，本條靠 `tests/_ast_bindings.py::session_writes`
+    四條全收：下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+    ⚠️ 重寫前它**只認第一條**（`ast.Assign` ＋ target 是 `ast.Subscript`）——
+    本組 2026-09-05 的基線實測：三頁 × 另外三條管道，注入裸寫入後**全部 18/18 綠**。
+    其中**屬性賦值**是本 repo `ui/**` 跨 6 檔 27 處的主流寫法，
+    **最可能被下一個人照家風真的踩到**；`key=` 那條最陰 —— streamlit **代呼叫端**
+    把 widget 值寫進 session，AST 上是普通 `ast.Call`，任何「找賦值節點」的手段都收不到。
+
+    「被閘門包住」的判準也換了：從「在**任何**一個 `ast.If` 底下」改成
+    **「在 `with applied_form(...) as X` 綁出來的那個 `X` 所控制的 `if` 底下」**
+    （`gate_ifs()`）。舊判準的洞：只要有人往這個函式加第二個 `if`
+    （例如 `if not _funds: return`），藏在它底下的裸寫入就會被算成「已被閘門包住」。
+    **實測**：重寫前本函式只有 `_gate` 一個 `if`，所以那個洞**尚未發作** ——
+    修的是「下一個人加第二個 `if` 就會中」。
+
+    ⛔ **仍然分不出真假閘門**：`if not _gate:` 的 test 一樣提到 `_gate`，
+    本條照樣認它是閘門（`gate_ifs()` 的 docstring 就地寫明）。
+    那一種要靠 AppTest 行為測試去驗，靜態規則做不到。
+    ⛔ **不遞迴進被呼叫的函式**：把 `st.session_state` 傳出去、由別處寫，本條看不到。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
     _fns = {_n.name: _n for _n in ast.walk(_tree)
@@ -478,19 +508,18 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
         "找不到 `_applied_filters()` —— 「已套用值」這一層被拿掉了，"
         "下游就會直接讀 widget 值，等於沒有 form。")
     _form_fn = _fns["_render_filter_form"]
-    _writes = [_n for _n in ast.walk(_form_fn)
-               if isinstance(_n, ast.Assign)
-               and any(isinstance(_t, ast.Subscript) for _t in _n.targets)]
+    _writes = session_writes(_form_fn)
     assert _writes, "`_render_filter_form()` 沒有把套用結果寫回 session。"
-    _guarded = []
-    for _if in ast.walk(_form_fn):
-        if isinstance(_if, ast.If):
-            _guarded.extend(id(_n) for _n in ast.walk(_if) if isinstance(_n, ast.Assign))
+    _gate_ifs = gate_ifs(_form_fn)
+    assert _gate_ifs, (
+        "`_render_filter_form()` 裡找不到 `with applied_form(...) as <gate>:` 綁出來的那個閘門 `if` —— "
+        "form 沒有 gate 住任何東西（或閘門換了寫法，請同步 `gate_ifs()` 的判準）。")
+    _guarded = {id(_n) for _g in _gate_ifs for _n in ast.walk(_g)}
     _naked = [_w for _w in _writes if id(_w) not in _guarded]
     assert not _naked, (
         "有 session 寫入**沒有**被送出閘門包住 —— 那代表每次 rerun 都會覆寫已套用值，\n"
         "使用者拖滑桿的當下就會觸發下游重算，form 等於白包。\n  "
-        + "\n  ".join(f"第 {_w.lineno} 行" for _w in _naked))
+        + "\n  ".join(f"第 {_w.lineno} 行：{ast.unparse(_w)[:70]}" for _w in _naked))
 
 
 def test_the_page_never_reaches_into_the_data_layer():
