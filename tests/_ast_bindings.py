@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import ast
 
-__all__ = ["bound_names", "session_writes", "gate_ifs", "gate_guarded_ids", "dotted"]
+__all__ = ["bound_names", "const_str_values", "dotted",
+           "gate_guarded_ids", "gate_ifs", "session_writes"]
 
 
 def dotted(node: ast.AST) -> str:

@@ -314,6 +314,23 @@ def test_include_imports_false_is_not_a_cosmetic_flag() -> None:
     assert "A" in bound_names(tree, include_imports=False)
 
 
+def test_all_matches_the_public_surface() -> None:
+    """`__all__` 必須**剛好等於**本模組的公開函式集合。
+
+    ⚠️ 這條不是形式主義：2026-09-05 第二輪新增 `const_str_values()` 時**忘了加進
+    `__all__`**（本組自己犯的），而三頁是具名 import ⇒ **測試全綠、沒有任何人會發現**。
+    一份會漏項的 `__all__` 之後會讓 `from _ast_bindings import *` 的人拿不到東西，
+    也讓讀者以為公開面就是那幾個。**靠自律記得同步是不夠的，用測試釘住。**
+    """
+    import _ast_bindings as _m
+    public = {n for n in vars(_m)
+              if not n.startswith("_") and callable(getattr(_m, n))
+              and getattr(getattr(_m, n), "__module__", "") == "_ast_bindings"}
+    assert set(_m.__all__) == public, (
+        "`__all__` 與實際公開函式不一致，差集："
+        + ", ".join(sorted(public ^ set(_m.__all__))))
+
+
 def test_dotted_refuses_to_guess() -> None:
     """認不得的形狀要回空字串，**不要拼出一個看起來像真的路徑**。"""
     assert dotted(ast.parse("a.b.c", mode="eval").body) == "a.b.c"
