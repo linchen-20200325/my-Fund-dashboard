@@ -43,9 +43,11 @@
    → 當時全部 8 條**照樣綠**。名字這一項因此必須有一根不動的樁。
 
 ⚠️ **本檔守得到什麼、守不到什麼**：詳見 :func:`_render_and_record` 的
-   「本錄影機看不到的東西」。**本檔不宣稱「所有插入一級區塊的寫法都擋得住」** ——
-   只宣稱下列五種實測擋得住：`st.markdown` / `st.subheader` / `st.header` /
-   `st.write` / 容器控制代碼（`col.markdown`）。
+   那兩份 bullet。**本檔不宣稱「所有插入一級區塊的寫法都擋得住」** ——
+   ~~只宣稱下列五種實測擋得住~~ → **2026-09-05 A779-b：清單已由 5 種擴為 13 種**
+   （新增 `st.title` 是原本**低估**自己；`info`/`success`/`warning`/`error`/
+   `caption`/`html` 六種是原本**漏掉**、當時各 10 passed 全綠，同輪補進字表）。
+   **真正的界線是 `_RECORDED_APIS` 那份字表**，不是「有沒有經過 DeltaGenerator」。
 """
 from __future__ import annotations
 
@@ -102,10 +104,27 @@ _OPENER_RE = re.compile(r"^#{2,4}\s")
 #: 反過來，容器控制代碼是**呼叫當下**才做屬性查找，所以只吃類別那一層。
 #: → 故本檔 `patch.object(DeltaGenerator, api, …)` **與**
 #:   `patch.object(st, api, …)` **兩個都下**。
-_RECORDED_APIS: tuple[str, ...] = ("markdown", "write", "subheader", "header", "title")
+_RECORDED_APIS: tuple[str, ...] = (
+    "markdown", "write", "subheader", "header", "title",
+    # 2026-09-05 A779-b 擴充：這六個原本整組漏掉（各 10 passed 全綠）。
+    "info", "success", "warning", "error", "caption", "html",
+)
 
 #: 這幾個 API 只要被呼叫就是一級區塊標題（它們本身就是標題元件，沒有 `#` 前綴可比對）。
+#: ⚠️ **`_RECORDED_APIS` 與本集合是兩件事，不要混為一談**：
+#: 進 `_RECORDED_APIS` 只代表「這個 API 會被錄下來」；**只有**進本集合的才會
+#: 「一被呼叫就算成區塊開頭」。其餘被錄下來的（`markdown` / `write` / `info` /
+#: `caption` …）**還要文字本身長得像標題**才算 —— 所以
+#: `st.caption("資料源　FRED ＋ FinMind。")` 這種**不會**被誤認成一級區塊。
 _ALWAYS_OPENER: frozenset = frozenset({"subheader", "header", "title"})
+
+#: HTML 形式的一級標題（`st.html("<h2>…</h2>")`、或 `unsafe_allow_html` 的 `<h2>`）。
+#: ⚠️ **2026-09-05 A779-b：這一條是實測逼出來的，不是預先設計的。**
+#: 把 `html` 加進 `_RECORDED_APIS` **之後它仍然逃掉**（`10 passed`）——
+#: 因為它的內容是 `<h2>…`，**不長得像 `## `**，`_OPENER_RE` 對它無效。
+#: 「加進字表就擋得住」這個推論**對 `st.html` 不成立**，故另立一條樣式。
+#: 誤紅風險已實測：整頁跑完（兩種載入狀態）符合本樣式的呼叫 **各 0 次**。
+_HTML_OPENER_RE = re.compile(r"^\s*<h[1-6][^>]*>(.*?)</h[1-6]\s*>", re.IGNORECASE | re.DOTALL)
 
 #: 認出「指向 ② 的那句指路」用的關鍵詞。
 #:
@@ -114,7 +133,6 @@ _ALWAYS_OPENER: frozenset = frozenset({"subheader", "header", "title"})
 #: 讓人回來確認「那句指路還在不在」，而不是靜靜地跟著改。
 #: （2026-09-05 實測：把「已搬到」改成中性時態「請到」時，本標記就擋下來過一次。）
 _SIGNPOST_MARK: str = "加減碼建議"
-
 
 
 class _FakeSessionState(dict):
@@ -139,12 +157,30 @@ def _render_and_record(*, loaded: bool) -> list[str]:
     這樣 `st.markdown(...)`、`st.subheader(...)`、`col.markdown(...)`
     走的都是同一個被攔下來的函式。
 
-    ⚠️ **本錄影機看不到的東西（誠實列出，不要讀成「已經全包」）**：
+    ⚠️ **界線在哪：`_RECORDED_APIS` 那份字表，不是 patch 的層數。**
+
+    ~~舊表述第三條寫「完全不經 `DeltaGenerator` 的渲染路徑（若日後出現）」~~
+    → **2026-09-05 A779-b 就地更正（有意識的更正，不是漏刪）：那個心智模型是錯的。**
+    **實測**：`st.info` / `st.success` / `st.warning` / `st.error` / `st.caption` /
+    `st.html` **六個全都是 `DeltaGenerator` 方法**（`hasattr(DeltaGenerator, n)` 逐一為 True），
+    卻在補進字表之前**六種各 10 passed 全綠**。
+    → 也就是說：**漏掉它們與「經不經過 DeltaGenerator」無關，純粹是字表沒列。**
+    舊表述會讓後人以為「只要它走 DeltaGenerator 就被蓋到了」——**那是假的安全感。**
+
+    **實測擋得住（每一項都各自跑過一次突變，各 2 failed）**：
+      `st.markdown` / `st.write` / `st.subheader` / `st.header` / `st.title` /
+      `st.info` / `st.success` / `st.warning` / `st.error` / `st.caption` /
+      `st.html`（`<h2>…</h2>`）/ `st.markdown(..., unsafe_allow_html=True)` 的 `<h2>`，
+      以及**容器控制代碼**形式（`col.markdown("### …")`）。
+
+    ⚠️ **仍然看不到的（誠實列出，不要讀成「已經全包」）**：
+      - **任何不在 `_RECORDED_APIS` 裡的渲染 API** —— 這是本錄影機唯一的真界線。
+        新增一個沒列進去的 API，本鎖就對它是盲的。
       - `st.expander("…")` **刻意不算**一級區塊 —— 📈 中期循環自己就有一個
-        （Z-Score 完整矩陣），算進去會讓「連續」永遠不成立。
-      - 以 HTML（`unsafe_allow_html=True`）畫出來的假標題：本錄影機收得到那段字串，
-        但它不長得像 `## `，所以**不會**被認成區塊開頭。
-      - 完全不經 `DeltaGenerator` 的渲染路徑（若日後出現）。
+        （Z-Score 完整矩陣），算進去會讓「連續」永遠不成立。**這是取捨，不是疏漏。**
+      - 被錄下來、但**文字既不像 `## ` 也不像 `<h2>`** 的假標題
+        （例如用 `<div style="font-size:32px">` 假裝標題）——
+        錄得到那段字串，但不會被認成區塊開頭。
     """
     _ss = _FakeSessionState({_page._SK_IND: {}} if loaded else {})
     _seen: list[tuple[str, str]] = []
@@ -177,6 +213,10 @@ def _render_and_record(*, loaded: bool) -> list[str]:
             _out.append(_txt.strip())
         elif _OPENER_RE.match(_txt):
             _out.append(_OPENER_RE.sub("", _txt).strip())
+        else:
+            _m = _HTML_OPENER_RE.match(_txt)
+            if _m:
+                _out.append(re.sub(r"<[^>]+>", "", _m.group(1)).strip())
     return _out
 
 
@@ -232,7 +272,16 @@ def test_detail_zone_renders_its_five_sections_in_order_and_contiguous(loaded):
 
     **這是本檔最重要的一條。** 它守三件結構鎖守不到的事：
       (a) `_render_detail_zone()` **真的被呼叫**（序列存在 ≠ 有人用它）；
-      (b) 五塊之間**沒有夾別的一級區塊**；
+      (b) 五塊之間**沒有夾別的一級區塊** —— ⚠️ **這句要照「受限版本」讀**：
+          本條只擋得住 :data:`_RECORDED_APIS` 字表涵蓋的那些渲染 API
+          （逐一實測過的清單見 :func:`_render_and_record` 的兩份 bullet）。
+          ~~不是「任何寫法都擋得住」~~ —— **2026-09-05 A779-b 就地更正
+          （有意識的更正，不是漏刪）**：稽核用 `st.info` / `st.success` /
+          `st.warning` / `st.error` / `st.caption` / `st.html` 六種寫法，
+          當時**各 10 passed 全綠**。六種已於同輪補進字表（`st.html` 另需
+          `_HTML_OPENER_RE`，見該處），但**字表以外的寫法本條依然看不到**。
+          ⚠️ 這句話在 PR 描述裡撤回過、**在這裡沒有撤** —— 而這裡是那條行為鎖
+          **自己的 docstring**，是後人最會拿來當前提的地方。本輪補上；
       (c) 兩種狀態下**都**畫（「還沒載入」不是骨架消失的理由，鐵則 04）。
 
     ⚠️ 「連續」的判定一路取到**畫面結尾**，不只取到第五塊 ——
