@@ -187,7 +187,7 @@ SRC = ROOT / "ui" / "views" / "page_04_portfolio.py"
 #: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
 #:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _ast_bindings import gate_ifs, session_writes  # noqa: E402
+from _ast_bindings import gate_guarded_ids, gate_ifs, session_writes  # noqa: E402
 
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
@@ -1005,7 +1005,9 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     assert _gate_ifs, (
         "`_render_rebalance_form()` 裡找不到 `with applied_form(...) as <gate>:` 綁出來的那個閘門 `if` —— "
         "form 沒有 gate 住任何東西（或閘門換了寫法，請同步 `gate_ifs()` 的判準）。")
-    _guarded = {id(_n) for _g in _gate_ifs for _n in ast.walk(_g)}
+    # ⚠️ 只算閘門 `if` 的 **body** —— `else:` / `elif` 是閘門為假才跑的路徑，
+    #    整棵 `ast.walk(_g)` 會把它們一起算成 guarded（2026-09-05 實測的洞）。
+    _guarded = gate_guarded_ids(_form_fn)
     _naked = [_w for _w in _writes if id(_w) not in _guarded]
     assert not _naked, (
         "有 session 寫入**沒有**被送出閘門包住 —— 那代表每次 rerun 都會覆寫已送出值，\n"

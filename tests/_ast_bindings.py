@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import ast
 
-__all__ = ["bound_names", "session_writes", "gate_ifs", "dotted"]
+__all__ = ["bound_names", "session_writes", "gate_ifs", "gate_guarded_ids", "dotted"]
 
 
 def dotted(node: ast.AST) -> str:
@@ -234,3 +234,28 @@ def gate_ifs(fn_node: ast.AST, opener: str = "applied_form") -> list[ast.If]:
         ):
             out.append(node)
     return out
+
+
+def gate_guarded_ids(fn_node: ast.AST, opener: str = "applied_form") -> set[int]:
+    """真正**被閘門擋住**的節點 id —— 只算閘門 `if` 的 **body（真分支）**。
+
+    ⚠️ **為什麼不是 `ast.walk(gate_if)`**（2026-09-05 品管組實測補的洞）：
+    `ast.If` 節點底下**同時掛著 `body` 與 `orelse`**，整棵 walk 下去會把
+    ``else:`` / ``elif`` 分支一起算成「被閘門包住」—— 而那兩個分支**正好是
+    閘門為假時才跑的路徑**，也就是「沒按送出鈕卻寫進 session」的那個 bug 本身。
+
+    **實測（三頁 × `else:`／`elif` × 三種測試順序，共 18 格）**：
+    改用本函式之前，六格全部 **GREEN（守衛看不見）**；改用之後六格全部 **RED**。
+    ⚠️ 這個洞**不是本輪重寫造成的** —— `origin/main` 的舊寫法
+    （「任何 `ast.If` 底下的 `ast.Assign` 都算 guarded」）同樣看不見它，
+    實測 before/after 兩邊皆綠。本輪是**沒有把它一起修掉，也沒有寫下來**，故補上。
+
+    仍然擋不掉 :func:`gate_ifs` 文件列的那些（語意反轉 `if not _gate:` 等）——
+    **本函式只修「分支方向」，不修「語意方向」。**
+    """
+    ids: set[int] = set()
+    for gate in gate_ifs(fn_node, opener):
+        for stmt in gate.body:
+            for node in ast.walk(stmt):
+                ids.add(id(node))
+    return ids

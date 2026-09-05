@@ -25,7 +25,8 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _ast_bindings import bound_names, dotted, gate_ifs, session_writes  # noqa: E402
+from _ast_bindings import (bound_names, dotted, gate_guarded_ids,
+                           gate_ifs, session_writes)  # noqa: E402
 
 
 def _fn(body: str) -> ast.FunctionDef:
@@ -125,6 +126,51 @@ def test_an_unrelated_if_is_not_treated_as_the_gate() -> None:
     naked = [w for w in session_writes(fn) if id(w) not in guarded]
     assert len(naked) == 1 and naked[0].lineno == 5, (
         "藏在與閘門無關的 `if` 底下的裸寫入必須仍算裸寫入。")
+
+
+_ELSE_BRANCH = (
+    'with applied_form("k") as _gate:\n'
+    '    pass\n'
+    'if _gate:\n'
+    '    st.session_state["ok"] = 1\n'
+    'else:\n'
+    '    st.session_state["bad"] = 1'
+)
+_ELIF_BRANCH = (
+    'with applied_form("k") as _gate:\n'
+    '    pass\n'
+    'if _gate:\n'
+    '    st.session_state["ok"] = 1\n'
+    'elif True:\n'
+    '    st.session_state["bad"] = 1'
+)
+
+
+@pytest.mark.parametrize("case", [_ELSE_BRANCH, _ELIF_BRANCH])
+def test_the_else_branch_of_the_gate_is_not_guarded(case: str) -> None:
+    """`else:` / `elif` 是**閘門為假**才跑的路徑 —— 寫在那裡就是 bug 本身。
+
+    ⚠️ 這條守的是一個**真的踩過的洞**（2026-09-05 品管組實測）：
+    `ast.walk(gate_if)` 會連 `orelse` 一起收，導致「沒按送出鈕卻寫 session」
+    被算成「已被閘門包住」。三頁 × 兩種分支 × 三種測試順序，六格全綠 → 修後全紅。
+    ⚠️ 洞**不是** 2026-09-05 重寫造成的，`origin/main` 的舊寫法同樣看不見它。
+
+    **突變驗證**：把 :func:`gate_guarded_ids` 換回 `ast.walk(gate)`，本條必須轉紅。
+    """
+    fn = _fn(case)
+    naked = [w for w in session_writes(fn) if id(w) not in gate_guarded_ids(fn)]
+    # `_fn()` 會補一行 `def f():`，故片段第 6 行 → 第 7 行（同檔既有測試的慣例）。
+    assert [n.lineno for n in naked] == [7], (
+        "閘門 `if` 的 else／elif 分支底下的寫入必須算裸寫入 —— "
+        "那正是『沒送出卻覆寫已套用值』的形狀。")
+
+
+def test_the_true_branch_is_still_guarded() -> None:
+    """反向：真分支必須仍算 guarded，否則上面那條是靠誤殺換來的。"""
+    fn = _fn(_ELSE_BRANCH)
+    guarded = gate_guarded_ids(fn)
+    writes = session_writes(fn)
+    assert any(id(w) in guarded for w in writes), "真分支的寫入被誤判成裸寫入。"
 
 
 def test_no_gate_means_everything_counts_as_naked() -> None:
