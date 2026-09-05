@@ -228,6 +228,24 @@ _SK_EV: str = "v01_macro_evidence"
 #: 🤖 AI 總結的載入閘門 key 與生成結果快取 key。
 _AI_FORM_KEY: str = "v01_macro_ai_form"
 _SK_AI: str = "v01_macro_ai_text"
+
+#: 🤖 AI 總結送出鈕的兩種字。
+#:
+#: ⚠️ **2026-09-05 稽核 F5：具名之前，這兩個字串在本檔出現三次** ——
+#: `applied_form(submit_label=…)` 的條件式兩個，加上灰態指路裡**手抄的第三個**
+#: （`where=f"… → 上方「▶️ 生成 AI 總結」"`）。那正是本檔別處反覆寫著
+#: 「**不手抄**」要防的形狀，而它就長在同一份 diff 裡。
+#: 現在 `_detail_ai()` 先把這一輪要用的字**算成一個變數**，再同時交給送出鈕與指路
+#: —— **兩邊因此不可能分岔**，做法與本檔既有的 `_SK_BTN` / `_where_to_load()` 完全一致。
+#: ⚠️ **代價要講清楚**：跨檔規則
+#: `tests/test_batch2_top_card_grid.py::test_every_where_names_something_that_exists_on_screen`
+#: 是**以 `「」` 內的字面值 opt-in** 的；改成變數之後它**看不到這一站了**。
+#: 那不是把覆蓋面弄丟 —— 漂移在這裡已經**結構上不可能**，沒有東西可以驗；
+#: 但為了不讓它變成一個沒人看的角落，本檔另有一條**更強**的守衛盯著這個配對：
+#: `tests/test_wf01_detail_zone_order.py::test_the_ai_remedy_names_the_button_that_is_actually_rendered`
+#: （它比對的是**執行期真的印出來的**送出鈕字，不是原始碼裡的字面值）。
+_AI_BTN_FIRST: str = "▶️ 生成 AI 總結"
+_AI_BTN_AGAIN: str = "🔄 重新生成 AI 總結"
 #: 這一輪**實際交給送出鈕的那個字**。指路文案一律讀它，不自己再判一次載入狀態。
 #: ⚠️ 存的是「畫面上印了什麼」，不是「資料載入了沒」—— 兩者在**剛按下按鈕的那一輪
 #: 並不一致**（見 `_where_to_load()` 的說明），而使用者看的是前者。
@@ -386,6 +404,33 @@ def _worst_state(ind: dict, keys: tuple[str, ...]) -> str:
     return STATE_BUSINESS if "🔴" in _signals else STATE_OK
 
 
+def _radar_lit(summary: dict) -> int:
+    """10 燈裡**真的有讀數**的盞數（🔴 ＋ 🟡 ＋ 🟢；⬜ 不算）。
+
+    ⛔ **這個函式存在的唯一理由，是讓「全 ⬜ 不得說平靜」只有一個定義。**
+
+    `services.risk_radar.summarize_radar()` 的分級**只看 `red` / `yellow` 兩個計數**：
+    10 燈全部抓不到時 `{red:0, yellow:0, green:0, gray:10}` → 它照樣回
+    `level="平靜"`、`color` 是綠的（本組 2026-09-05 在無網路環境實跑確認）。
+    照搬那個結果就是把「什麼都沒抓到」講成「市場很平靜」——
+    也就是本檔 `_worst_state()` 已經寫過的那句：**沒有資料不等於一切正常**（§1）。
+    服務層**不改**（客戶方針第 2 條：不反向修底層），一律在**消費端**擋。
+
+    ⚠️ **2026-09-05 稽核 F1：本函式是被一次真實漏網逼出來的，不是一開始就有的。**
+    前一版把那道防線**各自 inline 寫在消費端**，於是第三個消費端
+    （`_ai_snapshot()`，把摘要寫進交給 LLM 的 prompt）**整個漏掉** ——
+    而它比畫面更嚴重：prompt 開頭寫著「**只能根據下面的資料快照來講**」，
+    等於直接告訴模型「市場平靜」。當時的守衛只側錄 `st.*` 渲染 API，
+    **prompt 字串不經過任何 `st.*`**，所以一條都不會紅。
+    → 現在三個消費端**共用這一支**，並由
+    `tests/test_wf01_detail_zone_order.py::test_every_summarize_radar_consumer_goes_through_the_lit_guard`
+    以 AST 鎖住「`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個」——
+    **第四個消費端漏掉這道防線會直接轉紅**，不必再靠下一個人記得。
+    """
+    return (int(summary.get("red") or 0) + int(summary.get("yellow") or 0)
+            + int(summary.get("green") or 0))
+
+
 # ══════════════════════════════════════════════════════════════════
 # 卡片
 # ══════════════════════════════════════════════════════════════════
@@ -509,16 +554,8 @@ def _card_risk_radar() -> dict:
     #    `summarize_radar()` 是純函式（無 I/O），所以「一份資料兩個消費端」
     #    只是同一份 dict 被彙總兩次，不是第二個取數點。
     _sum = summarize_radar(_stash)
-    _lit = (int(_sum.get("red") or 0) + int(_sum.get("yellow") or 0)
-            + int(_sum.get("green") or 0))
-    # ⛔ **這一段是 §1 的必要防線，不是防禦性加固（實測，不是推測）。**
-    #    `summarize_radar()` 的分級只看 `red` / `yellow` 兩個計數：10 燈**全部
-    #    抓不到**時 `{red:0, yellow:0, green:0, gray:10}` → 它照樣回
-    #    `level="平靜"`、`color` 是綠的（本組 2026-09-05 在無網路環境實跑確認）。
-    #    也就是說「什麼都沒抓到」會被畫成「市場很平靜」——
-    #    那正是本檔 `_worst_state()` 已經寫過的那句：**沒有資料不等於一切正常**。
-    #    ⚠️ 服務層不改（客戶方針第 2 條：不反向修底層），在消費端擋。
-    if not _lit:
+    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 1／3）
+    if not _radar_lit(_sum):
         return {
             "title": "極端風險警語",
             "state": STATE_NOT_READY,
@@ -1240,11 +1277,8 @@ def _detail_short() -> None:
         not_ready("尚未計算短線風險雷達。", where=_where_to_load())
     else:
         _sum = summarize_radar(_radar)
-        _lit = (int(_sum.get("red") or 0) + int(_sum.get("yellow") or 0)
-                + int(_sum.get("green") or 0))
-        if not _lit:
-            # ⛔ 同 `_card_risk_radar()`：全滅時 `summarize_radar()` 仍回「平靜」，
-            #    在消費端擋掉（§1：沒有資料不等於一切正常）。
+        # ⛔ 同 `_card_risk_radar()`，理由見 `_radar_lit()`。（消費端 2／3）
+        if not _radar_lit(_sum):
             not_ready("10 盞燈這一輪一盞都沒有取到讀數，沒有可以下的風險結論。",
                       where=_where_to_load())
         else:
@@ -1547,9 +1581,26 @@ def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
     _radar = st.session_state.get(_SK_RADAR)
     if isinstance(_radar, dict):
         _s = summarize_radar(_radar)
-        _lines.append(f"[短線雷達] 整體 {_s.get('level')}｜"
-                      f"🔴{_s.get('red')} 🟡{_s.get('yellow')} "
-                      f"🟢{_s.get('green')} ⬜{_s.get('gray')}（⬜＝沒抓到）")
+        # ⛔ **消費端 3／3 —— 這一份是 2026-09-05 稽核 F1 補的，前一版漏掉。**
+        #    它比另外兩個更嚴重：這一行會進 prompt，而 prompt 開頭寫著
+        #    「**只能根據下面的『資料快照』來講**」——
+        #    餵 `整體 平靜` 進去，等於**直接告訴模型市場平靜**，
+        #    而實際上 10 盞燈一盞都沒抓到。理由與唯一定義見 `_radar_lit()`。
+        if not _radar_lit(_s):
+            # ⚠️ **這一行刻意連「平靜」兩個字都不出現。**
+            #    守衛 `test_the_ai_snapshot_never_calls_the_market_calm_when_nothing_was_fetched`
+            #    用的是最鈍的斷言（整份快照不得含那兩個字），而它第一次就抓到
+            #    **本行原本的警語自己帶著那兩個字** —— 對 LLM 而言，
+            #    「不得推論市場平靜」與「市場平靜」在 token 層級高度重疊，
+            #    寫進 prompt 本身就是一種提示。**警語要用不會被誤讀的措辭。**
+            _lines.append(
+                "[短線雷達] 無法研判：10 盞燈這一輪一盞都沒有取到讀數"
+                "（⬜×10）。這是「沒抓到」，不是「沒有風險」；"
+                "**不得**據此對短線風險下任何結論。")
+        else:
+            _lines.append(f"[短線雷達] 整體 {_s.get('level')}｜"
+                          f"🔴{_s.get('red')} 🟡{_s.get('yellow')} "
+                          f"🟢{_s.get('green')} ⬜{_s.get('gray')}（⬜＝沒抓到）")
     _tp = st.session_state.get(_SK_TP)
     if isinstance(_tp, dict):
         for _k, _v in _tp.items():
@@ -1625,10 +1676,11 @@ def _detail_ai() -> None:
     # ── 鐵則 02：生成也走 form，不放裸按鈕 ──────────────────────────
     # ⚠️ 走 `applied_form()` 而不是自己寫 `st.form(` —— 後者會讓
     #    `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==` 7）變 8 而轉紅。
-    with applied_form(_AI_FORM_KEY,
-                      submit_label=("🔄 重新生成 AI 總結"
-                                    if st.session_state.get(_SK_AI)
-                                    else "▶️ 生成 AI 總結")) as _gate:
+    # 這一輪送出鈕上要印的字。**先算成一個變數，再同時交給送出鈕與下方的指路**
+    # —— 兩邊因此不可能分岔（同 `_SK_BTN` / `_where_to_load()` 的做法）。
+    _ai_label = (_AI_BTN_AGAIN if st.session_state.get(_SK_AI)
+                 else _AI_BTN_FIRST)
+    with applied_form(_AI_FORM_KEY, submit_label=_ai_label) as _gate:
         st.caption(
             f"把這一頁已經取到的讀數（{len(_snapshot.splitlines())} 行快照）交給 AI，"
             "逐段用白話講「現在是好是壞、下一步怎麼做」。"
@@ -1652,8 +1704,9 @@ def _detail_ai() -> None:
 
     _text = st.session_state.get(_SK_AI)
     if not _text:
+        # ⚠️ 指路吃的是**上面那顆鈕實際用的那個變數**，不是抄一份字面值（F5）。
         not_ready("還沒有生成過 AI 總結。",
-                  where=f"{where_to_find('macro')} → 上方「▶️ 生成 AI 總結」")
+                  where=f"{where_to_find('macro')} → 上方「{_ai_label}」")
         return
     st.markdown(_text)
     st.caption("⚠️ AI 生成內容僅供參考，數字一律以上方各區塊的讀數為準。"
@@ -1672,8 +1725,15 @@ def _detail_ai() -> None:
 #: 在此之前這裡是
 #: `_detail_mid if _k == "mid" else partial(_detail_pending, …)` ——
 #: 也就是「一塊真的、四塊灰的」。現在五塊各有自己的渲染函式。
-#: `_detail_pending` **保留不刪**：它仍是四塊各自的「還沒載入」出口
-#: （經 `_detail_not_loaded()`），而且下一個新增區塊還會用到它。
+#: `_detail_pending` **保留不刪**，但**它的射程只剩兩處**（2026-09-05 稽核 F4 更正）：
+#: ~~它仍是**四塊各自**的「還沒載入」出口（經 `_detail_not_loaded()`）~~ ——
+#: **那句不成立**。實測（AST，本檔全檔）`_detail_pending` 的呼叫點只有兩個：
+#:   (1) `_detail_mid()` 的「沒有 ind」分支（**一塊**，不是四塊）；
+#:   (2) 下方 `_DETAIL_ZONE` 生成式裡的 `partial(...)` fallback（沒登記的 key）。
+#: **四塊走的是 `_detail_not_loaded()`，而那一支自己呼叫 `not_ready()`，
+#: 並不經過 `_detail_pending`。** 兩者只是印出來的東西很像，不是同一條路。
+#: ⚠️ 這一筆記在這裡，是因為「它還被四個地方用著」會讓下一個人不敢動它 ——
+#: 實際上動它只影響 📈 中期循環與 fallback 這兩處。
 #: ⚠️ **對照表在這裡，不在 `_DETAIL_ZONE` 的生成式裡** —— 生成式裡塞
 #: `if/else` 鏈在第五塊之後就沒人看得懂哪個 key 配哪支函式了。
 _DETAIL_RENDERERS: dict[str, Callable[[], None]] = {
