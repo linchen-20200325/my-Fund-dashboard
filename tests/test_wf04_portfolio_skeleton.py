@@ -227,19 +227,36 @@ def _reset_streamlit_container_stack() -> None:
 
     1. `DeltaGenerator._block()` 開頭有一句
        ``if dg._root_container is None or dg._cursor is None: return dg`` ——
-       **bare 模式下 `st._main` 兩者皆為 None，所以 `_block()` 直接把 `st._main`
+       **bare 模式下 `st._main._cursor is None`，所以 `_block()` 直接把 `st._main`
        自己回傳**，不會產生新的子容器。
+       ⚠️ **2026-09-05 就地更正（獨立稽核指出，本組已重跑確認）**：本句原寫
+       ~~「`st._main` **兩者皆為 None**」~~ —— **假的**。實測 bare 模式下
+       ``st._main._root_container == 0``（**不是 None**）、``st._main._cursor is None``。
+       **早退確實會發生，但成立的理由是 `_cursor` 那一半，不是 `_root_container`。**
+       ⛔ 這一句當初是用「我量過」的語氣寫的，實際上沒量 —— 記在這裡，不美化。
     2. 於是 `st.form()` 緊接著的
        ``block_dg._form_data = FormData(form_id)``
        **把 form 標記蓋在了行程層級的 `st._main` 這個單例物件上**。
     3. 那個標記**離開 `with` 也不會被清掉**（`__exit__` 只 pop 容器堆疊，
-       不還原 `_form_data`）。從此 `is_in_form(st._main)` 恆為 True。
+       不還原 `_form_data`）。
+       ⚠️ **2026-09-05 同輪更正**：本句原接著寫 ~~「從此 `is_in_form(st._main)` 恆為 True」~~
+       —— **也是假的**，實測 bare 模式下它**仍然回 False**。
+    4. **⭐ 真正的引爆點在這裡（本輪補上；上面兩句更正之後才看得完整）**：
+       `streamlit/elements/lib/form_utils.py::_current_form()` 第一行是
+       ``if not runtime.exists(): return None``。
+       → **bare 模式沒有 runtime，所以髒標記在 bare 模式下「看不見」，什麼都不會炸；
+       但 `AppTest` 底下有 runtime**，`_current_form()` 於是回傳那個殘留的
+       `st._main._form_data`，`is_in_form()` 變成 True，下一個 `st.form(` 當場拋。
+       **也就是說：污染在 bare 模式無聲寫入，到 AppTest 才引爆** ——
+       這正是它能安靜跨檔存活、又只打到有 AppTest 的那些檔的原因。
 
-    複跑（本組實跑，非推論）::
+    複跑（本組實跑，非推論；bare 模式）::
 
         with applied_form("probe_a"):
             st.slider("s", 0, 10, 5)
-        # 離開 with 之後：st._main._form_data.form_id == "probe_a"
+        # 離開 with 之後：
+        #   st._main._form_data == FormData(form_id="probe_a")   ← 髒了
+        #   is_in_form(st._main) == False                        ← 但這裡看不見
 
     後果：**同一個 pytest 行程裡，之後每一次 `AppTest` 都會看到這個標記**，
     於是任何 `st.form(` 都會撞上 `StreamlitAPIException: Forms cannot be nested
@@ -258,6 +275,26 @@ def _reset_streamlit_container_stack() -> None:
     ⛔ **本函式只是把本檔隔離起來，沒有修掉那個病。** 真正的修法要動
     `ui/helpers/ia/gated_form.py` 或加一支共用 `conftest.py` 的 autouse fixture，
     **兩者都不在本批的檔案邊界內**，已具名回報總管。
+
+    ⚠️ **這道隔離是「活的」，但它的證據本身是順序相依的 —— 據實寫（2026-09-05 獨立稽核指出）**：
+    把 ``_main._form_data = None`` 那一行拿掉（保留其餘重設），跑
+    ``pytest tests/test_wf01_detail_zone_order.py tests/test_wf04_portfolio_skeleton.py``：
+
+    ===============================  ==================
+    順序                              結果
+    ===============================  ==================
+    ``-p no:randomly``（字母序）       **6 failed, 52 passed**
+    ``--randomly-seed=1``             **6 failed, 52 passed**
+    ``--randomly-seed=3``             **58 passed**（不轉紅）
+    ===============================  ==================
+
+    **seed 3 為什麼不紅（實測，不是推測）**：``--collect-only`` 顯示 seed 3 把
+    **`test_wf04` 排在 `test_wf01` 之前** —— 污染還沒發生，本檔就跑完了。
+    → **這顆突變不是死的，是順序相依的：3 種順序中 2 種轉紅。**
+    ⛔ **本組原本用「單跑一次 → 6 failed」來宣稱它是活的 —— 那不是證據，是抽到一次。**
+    這個 repo 裝著 `pytest-randomly` 且預設開啟（`pytest.ini` 的 `addopts` 只有
+    `--strict-markers`），**一次綠 / 一次紅都只是一次抽樣**。
+    ⚠️ **這正是本檔在講的那種脆弱性，而本組用它來證明自己** —— 記在這裡，不美化。
 
     ⚠️ **刻意用 fail-loud 的寫法**（§1）：這裡碰的是 Streamlit 的私有名稱，
     哪天改名就會直接 `ImportError` / `AttributeError` 炸開，**不會**靜默跳過。
@@ -869,6 +906,20 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     它只驗「session 寫入有沒有被某個 `if` 包住」。**登記，本批不補。**
     ✅ 但 :func:`test_a_zero_budget_never_counts_as_applied` 的 AppTest 那半
     **會**抓到「閘門恆真」那一種（沒按也寫進去）。兩條互補。
+
+    📌 **2026-09-05 順帶查了 `ast.Assign` 的同型盲點（總管指定，查完照實寫）——
+    結論不是「這裡不受影響」，是「一半受影響、一半 fail-closed」，故本輪不改，只登記**：
+    Python 允許 ``st.session_state[k]: dict = v`` 這種 **subscript 的 `AnnAssign`**，
+    本條的兩段掃描都只收 `ast.Assign`，所以：
+    - **前半 fail-closed（安全）**：若把**唯一**那個寫入改成 `AnnAssign`，
+      `_writes` 會變空 → ``assert _writes`` **當場轉紅**。這一半擋得住。
+    - **後半有洞（不安全）**：若**保留**一個被閘門包住的 `Assign` 寫入、
+      **再加**一個裸的 `AnnAssign` 寫入 → `_writes` 非空、`_naked` 空 →
+      **本條全綠，而裸寫入確實存在**。
+    ⛔ **本輪刻意不修**（總管指示「不要順手也改」）；且 :func:`test_a_zero_budget_never_counts_as_applied`
+    的 AppTest 那半**會**抓到它造成的行為（沒按也寫進去），縱深沒破。
+    ⚠️ **但「這裡只可能是 subscript assign、所以不受影響」是不成立的**，
+    不要引用那個說法把本項當成已結案。
     """
     _t = _tree()
     _fns = {_n.name: _n for _n in ast.walk(_t) if isinstance(_n, ast.FunctionDef)}
@@ -945,10 +996,23 @@ def test_the_ledger_invents_no_column_list():
 
     ⚠️ 判準是「模組層有沒有一個看起來像欄位表的常數」，不是「畫面上有沒有欄位名」——
     後者在骨架階段恆為真（表是空的），驗不到任何東西。
+
+    ⛔ **2026-09-05 修（獨立稽核抓到；本條原本形同虛設）**：舊寫法只走 `ast.Assign`，
+    而**被測檔 20 個模組層常數全部是 `ast.AnnAssign`**（`BLOCK_LEDGER: str = ...` 這種），
+    也就是照本檔既有風格寫一行 `LEDGER_COLUMNS: tuple[str, ...] = (...)`，
+    這條守衛**一個字都看不到**。⚠️ **這不是假想的攻擊** —— 姊妹頁
+    `ui/views/page_02_health.py::HEALTH_TABLE_COLUMNS` 用的就是 `AnnAssign`，
+    **repo 的既有寫法正好落在舊射程之外**。
+    現在兩種都收（`Assign` 走 `targets` 清單、`AnnAssign` 走單一 `target`，型別不同要分開處理）。
     """
-    _bad = [_t.id for _n in ast.walk(_tree()) if isinstance(_n, ast.Assign)
-            for _t in _n.targets
-            if isinstance(_t, ast.Name) and "COLUMN" in _t.id.upper()]
+    _names: list[ast.Name] = []
+    for _n in ast.walk(_tree()):
+        if isinstance(_n, ast.Assign):
+            _names.extend(_t for _t in _n.targets if isinstance(_t, ast.Name))
+        elif isinstance(_n, ast.AnnAssign) and isinstance(_n.target, ast.Name):
+            # `AnnAssign` 只有單一 `target`，不是 `targets` —— 不能跟上面共用一行。
+            _names.append(_n.target)
+    _bad = [_t.id for _t in _names if "COLUMN" in _t.id.upper()]
     assert not _bad, (
         f"被測檔多了看起來像欄位清單的常數：{_bad}\n"
         "線框對交易帳本沒有列欄位 —— 補一份等於自己發明規格。")
