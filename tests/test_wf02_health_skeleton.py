@@ -40,6 +40,12 @@
 - **`test_there_is_no_fund_code_input_box` 只擋兩個字面 attribute 名**：
   `from streamlit import text_input`／`getattr(st, "text_input")`／`st.chat_input`／
   `st.selectbox(accept_new_options=True)` **四種都穿過去**。
+- **指路挑錯 key 沒有任何守衛**（本組修完 2026-09-05 那個 present bug 後自己掃出來的）：
+  職責宣告那句改成 `where_to_find('portfolio')` 之後，**沒有任何測試在驗它** ——
+  本檔沒有；全域的 `test_navigation_hints_go_through_story_nav` 只驗
+  「同一語句子樹裡有沒有 story_nav 呼叫」，**換成任何一個 key 它都綠**。
+  ⚠️ 也就是說：**改回 `pf_add`（那個已知是錯的 key）不會有任何東西轉紅。**
+  **這是「走 SSOT」擋不到的那一類**：SSOT 保證名字不過期，**不保證你挑對了 key**。
 - **`test_downstream_reads_the_applied_filters_not_the_widget_values` 分不出真假閘門**：
   `if True:` 與 `if not _gate:`（語意完全相反、功能整個壞掉）都全綠。
   ⚠️ 且「下游只讀 `_SK_APPLIED`」**目前是一句空話** —— 唯一呼叫點是
