@@ -559,19 +559,36 @@ def _card_exceptions(ev: dict) -> dict:
     _radar = st.session_state.get(_SK_RADAR)
     _red = int(_radar.get("red", 0)) if isinstance(_radar, dict) else 0
     _yellow = int(_radar.get("yellow", 0)) if isinstance(_radar, dict) else 0
-    _alarm = str(_infl.get("level", "")) == "red" or _red > 0
+    _lvl = str(_infl.get("level", ""))
+    _alarm = _lvl == "red" or _red > 0
     # 新聞桶恆為 ⬜「未掃描」（客戶拍板第 2 條）—— 把它**說出來**，
     # 否則「沒有系統性風險」與「沒有掃描系統性風險」在畫面上長得一模一樣。
     _note = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}。"
              f"系統性風險（新聞面）{_news.get('emoji', '⬜')} "
              f"{_news.get('label', '未掃描')} —— 本頁尚未接上新聞取數，"
              "所以這一項不是「沒有風險」，是「沒有查」。")
-    return {
+    if _alarm:
+        # 有已知的例外 —— 莓紅左軌（業務警示），不是系統紅框（鐵則 03）。
+        _state = STATE_BUSINESS
+    elif _lvl == "gray":
+        # ⚠️ **拐點沒取到 ⇒ 灰態，不是綠燈。** 「沒有資料」不等於「一切正常」——
+        #    這一條與 `_worst_state()` 的同名規則同源；把 ⬜「資料未取得」畫成
+        #    STATE_OK（綠色 metric），使用者會讀成「今天沒有該警覺的事」，
+        #    而實際上我們根本沒查（§1）。
+        _state = STATE_NOT_READY
+    else:
+        _state = STATE_OK
+    _card: dict = {
         "title": "⚡ ③ 例外",
         "value": f"拐點 {_infl.get('emoji', '⬜')} {_infl.get('label', '—')}",
         "note": _note,
-        "state": STATE_BUSINESS if _alarm else STATE_OK,
+        "state": _state,
     }
+    if _state == STATE_NOT_READY:
+        # 灰態的空狀態三要素：`state_card` 的灰分支不印 value，故把讀數併進 note。
+        _card["note"] = f"拐點 {_infl.get('emoji', '⬜')} {_infl.get('label', '—')}。{_note}"
+        _card["where"] = _where_to_load()
+    return _card
 
 
 def _card_credibility(ind: dict, ev: dict) -> dict:
