@@ -424,8 +424,17 @@ def _radar_lit(summary: dict) -> int:
     **prompt 字串不經過任何 `st.*`**，所以一條都不會紅。
     → 現在三個消費端**共用這一支**，並由
     `tests/test_wf01_detail_zone_order.py::test_every_summarize_radar_consumer_goes_through_the_lit_guard`
-    以 AST 鎖住「`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個」——
-    **第四個消費端漏掉這道防線會直接轉紅**，不必再靠下一個人記得。
+    以 AST 鎖住「`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個」。
+
+    ⚠️ **這句話原本寫太滿，2026-09-05 稽核 R1 就地更正（有意識的更正，不是漏刪）**：
+    ~~**第四個消費端漏掉這道防線會直接轉紅**，不必再靠下一個人記得。~~
+    那條鎖**初版按裸名字計數**，`from … import summarize_radar as _sr2` 的別名寫法
+    **整個隱形**（稽核實跑：`3 / 3`、`225 passed` 零紅燈，而「平靜」照樣進 prompt）。
+    別名解析已於同輪修好（復用 `tests/test_batch2_top_card_grid.py::_call_name`）。
+    **現行能力，據實寫**：它擋得住**直接呼叫與別名呼叫**的漏配對；
+    **擋不住**「配對了但沒用回傳值」（那一半由兩條行為鎖守）、
+    以及**動態取名**（`getattr(risk_radar, "summarize_radar")` 這類，AST 看不到）。
+    ⛔ **所以它是「少一道人為疏漏」，不是「不可能再漏」。**
     """
     return (int(summary.get("red") or 0) + int(summary.get("yellow") or 0)
             + int(summary.get("green") or 0))
@@ -1732,6 +1741,13 @@ def _detail_ai() -> None:
 #:   (2) 下方 `_DETAIL_ZONE` 生成式裡的 `partial(...)` fallback（沒登記的 key）。
 #: **四塊走的是 `_detail_not_loaded()`，而那一支自己呼叫 `not_ready()`，
 #: 並不經過 `_detail_pending`。** 兩者只是印出來的東西很像，不是同一條路。
+#: ⚠️ **上面那個「兩個」還要再精確兩點（2026-09-05 稽核 F4 殘留，就地補）**：
+#:   (a) 第 (2) 個**在嚴格 AST 意義下不是呼叫點** —— `partial(_detail_pending, …)`
+#:       裡的 `_detail_pending` 是傳給 `partial()` 的 **`Name` 引數**，不是 `Call.func`；
+#:   (b) 它**今天執行期不可達** —— `_DETAIL_RENDERERS` 五個 key 全部登記，
+#:       `.get(_k) or partial(...)` 的 `or` 會短路，**`partial(...)` 連建構都不會發生**。
+#: → **今天真正跑得到 `_detail_pending` 的只有 `_detail_mid()` 那一處。**
+#:   第 (2) 個是**留給「有人新增區塊卻忘了登記」的安全網**，不是現行路徑。
 #: ⚠️ 這一筆記在這裡，是因為「它還被四個地方用著」會讓下一個人不敢動它 ——
 #: 實際上動它只影響 📈 中期循環與 fallback 這兩處。
 #: ⚠️ **對照表在這裡，不在 `_DETAIL_ZONE` 的生成式裡** —— 生成式裡塞

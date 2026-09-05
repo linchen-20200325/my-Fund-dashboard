@@ -586,6 +586,15 @@ def _render_parts(session: dict, *, gemini_keys: tuple = ("fake-key",)) -> list:
 
     def _make(_api: str):
         def _rec(_self, *a, **kw):
+            if _api == "metric" and a and isinstance(a[0], str):
+                # ⛔ **合格態的卡片走 `st.metric`，畫面上沒有任何可切段的標記。**
+                #    灰態卡走 `st.markdown(f"**{title}**")`（有標記），
+                #    於是「三張卡裡把**中間那張**換成捏造的合格態」時，
+                #    那張卡的字會併進**前一張**的單位 —— 而前一張還有 ⬜ → 不紅。
+                #    實測（2026-09-05，補這行之前）：捏造第 1 張 `1 failed`、
+                #    **捏造第 2 張 `21 passed`**。
+                #    這裡補一個側錄專用的分段標記，讓每一張 metric 卡自成一個單位。
+                _blob.append(f"{_METRIC_MARK}{a[0]}")
             for _x in (*a, *kw.values()):
                 if isinstance(_x, str):
                     _blob.append(_x)
@@ -774,27 +783,66 @@ def test_each_block_renders_real_content_not_just_a_heading(block):
 #: 收到它們會讓「塊」和「小節」變成同一層。
 _SUB_OPEN_RE = re.compile(r"^#{5}\s+(.*)$")
 
+#: **卡片**的標題。`ui/helpers/ia/cards.py::state_card()` 的灰態分支印的就是
+#: `st.markdown(f"**{title}**")`，所以整行剛好是一個粗體標題。
+#: ⚠️ 這一層是 2026-09-05 稽核 R3 逼出來的，見 :func:`_grey_units` 的 ⛔。
+_CARD_OPEN_RE = re.compile(r"^\*\*(.+)\*\*$")
+
+#: 側錄器替 `st.metric` 補的分段標記（**只存在於側錄結果，不是畫面上的字**）。
+#: 理由見 `_render_parts()` 內 `_api == "metric"` 那段 ⛔：
+#: 合格態的卡片沒有任何可切段的標記，不補的話「中間那張被捏造」抓不到。
+_METRIC_MARK: str = "\u27e6metric\u27e7"
+
 
 def _grey_units(block: str, seg: str) -> list:
-    """把一塊切成「要各自驗灰態的最小單位」：塊前言 ＋ 每一個 `#####` 小節。
+    """把一塊切成「要各自驗灰態的**最小**單位」：小節（`#####`）**再切到卡片**（`**標題**`）。
 
     回傳 `[(給人看的標籤, 那一段的字), ...]`；**空白段落自動略過**
     （例如 🌳 長期座標在無資料時根本還沒印到 `#####`，那就只有一段）。
 
-    ⚠️ 為什麼需要它，見呼叫端的 ⚠️：一塊裡有兩個小節時，只驗塊會漏掉其中一個。
+    ⛔ **2026-09-05 稽核 R3：只切到「小節」是不夠的，而且今天就能被觸發。**
+    ~~上一版只切到 `#####`，並在呼叫端 docstring 寫「同一個小節裡有兩份以上灰態
+    …**今天沒有這種小節**」~~ —— **那句話是假的**。
+    ⚠️ 拐點警報的 `##### ① 🎯 全域導航塔` **一個小節裡就有三張卡**
+    （薩姆／SLOOS／市場廣度）。稽核實跑：把薩姆那張換成捏造的
+    `0.00 / ✅ 未觸發衰退門檻，勞動市場正常。`、另兩張維持誠實 ⬜
+    → **683 passed，零紅燈**。也就是在**完全沒有資料**的情況下畫出
+    「衰退機率 0.00、勞動市場正常」，而守衛全綠 —— 那是客戶明示的紅線。
+    **它不是「下一個人可能寫出來」，是現在的形狀。**
+    → 故本函式再往下切一層到**每一張卡**。
+
+    ⚠️ **一個已被證偽卻留在永久記錄裡的限定詞，比沒有那句話更危險** ——
+    「今天沒有這種小節」正是總管用來判斷「要不要現在補」的那句話。
+    本輪把它換成實測結果（見呼叫端 docstring）。
     """
     _units: list = []
     _cur_label, _cur = f"「{block}」", []
+
+    def _flush() -> None:
+        if any(_x.strip() for _x in _cur):
+            _units.append((_cur_label, "\n".join(_cur)))
+
     for _ln in seg.split("\n"):
-        _m = _SUB_OPEN_RE.match(_ln)
-        if _m:
-            if any(_x.strip() for _x in _cur):
-                _units.append((_cur_label, "\n".join(_cur)))
-            _cur_label, _cur = f"「{block}」的小節「{_m.group(1).strip()}」", []
-        else:
-            _cur.append(_ln)
-    if any(_x.strip() for _x in _cur):
-        _units.append((_cur_label, "\n".join(_cur)))
+        _m_sub = _SUB_OPEN_RE.match(_ln)
+        if _m_sub:
+            _flush()
+            _cur_label = f"「{block}」的小節「{_m_sub.group(1).strip()}」"
+            _cur = []
+            continue
+        _m_card = _CARD_OPEN_RE.match(_ln)
+        if _ln.startswith(_METRIC_MARK):
+            # 合格態卡片：用側錄器補的標記切段（見 `_METRIC_MARK`）。
+            _m_card = re.match(r"(.+)$", _ln[len(_METRIC_MARK):])
+        if _m_card:
+            _flush()
+            # 卡片標籤保留它所在的小節，訊息才指得出「哪一小節的哪一張卡」。
+            _sec = _cur_label.split("的小節", 1)
+            _where = f"的小節{_sec[1]}" if len(_sec) > 1 else ""
+            _cur_label = f"「{block}」{_where}的卡片「{_m_card.group(1).strip()}」"
+            _cur = []
+            continue
+        _cur.append(_ln)
+    _flush()
     return _units
 
 
@@ -849,13 +897,36 @@ def test_a_block_with_nothing_to_show_goes_grey_and_says_where():
     後面「總經燈號全表」空狀態的 ⬜ → 拔掉它自己的灰態也不紅（見 :func:`_render_segments`）。
 
     ⛔ **仍然守不到的（誠實列出，不要讀成「已經全包」）**：
-      - **同一個小節裡有兩份以上灰態時，拔掉其中一份**仍不會紅
-        （單位是小節，不是每一個 `not_ready()` 呼叫點）。
-        今天沒有這種小節，但沒有任何東西阻止下一個人寫出來。
+      - ~~**同一個小節裡有兩份以上灰態時，拔掉其中一份**仍不會紅……
+        今天沒有這種小節，但沒有任何東西阻止下一個人寫出來。~~
+        → **2026-09-05 稽核 R3：那句話是假的，而且今天就能觸發。**
+        `##### ① 🎯 全域導航塔` **一個小節裡就有三張卡**；稽核只捏造其中一張
+        （薩姆 `0.00 / ✅ 未觸發衰退門檻，勞動市場正常。`，另兩張維持誠實 ⬜）
+        → **683 passed 零紅燈**。**現已把單位下沉到「每一張卡」**
+        （:func:`_grey_units` 再切 `**標題**` 一層），該突變現在會紅。
+
+        ⚠️ **修 R3 的時候本組又抓到一個它沒點名、但同型的洞，一併修掉**：
+        只切 `**標題**` 時，**只擋得住三張卡裡的第一張** ——
+        合格態的卡片走 `st.metric()`，**畫面上沒有任何可切段的標記**，
+        於是被捏造的第 2／3 張會併進**前一張**的單位，而前一張還有 ⬜。
+        實測（補救之前）：捏造第 1 張 `1 failed`、**捏造第 2 張 `21 passed`**。
+        → 側錄器改為替每個 `st.metric` 補一個分段標記（:data:`_METRIC_MARK`），
+        現在**三張各捏造一次都是 `1 failed`**。
+        ⚠️ **這一筆值得記**：R3 的原始形狀「只驗到上一層」在被修一次之後，
+        **在下一層原封重現**。修分層的斷言時，要問的不是「這一層夠不夠細」，
+        而是「**這一層的每一個成員都有自己的邊界嗎**」。
+
+        ⚠️ **殘留的是更窄的一條**：同一張卡／同一個沒有任何邊界標記的段落裡
+        有兩份灰態時，拔掉其中一份仍不會紅。**本輪實測今天沒有這種段落**
+        （每個葉單位最多一個 `not_ready()`），但這句話**與上面那句是同一種形狀** ——
+        **請把它當成待驗，不要當成保證**；上面那次就是這樣被證偽的。
       - **📈 中期循環不在斷言範圍內**（見 :data:`_GREY_BLOCKS` 的說明）。
       - 本條只驗「有沒有 ⬜ 與指路」，**不驗那句話講得對不對** ——
         灰態文案寫錯內容（例如指到別頁）本條看不到；
         指路內容的既有缺口見 `CLAUDE.md §8.3.P` 的 `P-WHERECONTENT-1`。
+      - **側錄器沒攔的渲染 API 一律隱形**（真界線是 :data:`_TEXT_APIS`）。
+        `assert _units` 擋得住「整段因此空掉」，**擋不住**「同一單位裡另有 ⬜、
+        但那段假話是用沒列進字表的 API 印的」。
     """
     from ui.helpers.render_state import NOT_READY_MARK
 
@@ -883,7 +954,26 @@ def test_a_block_with_nothing_to_show_goes_grey_and_says_where():
         #    另一個還在 → 照樣綠。**本組自驗突變實測過這個洞**：
         #    只驗塊時，那兩塊各自被改成 `st.success("✅ 一切正常")` 都是 `21 passed`。
         #    切到小節之後兩者都會紅（見 PR 描述的逐塊表）。
-        for _label, _seg in _grey_units(_t, _segs[_t]):
+        _units = _grey_units(_t, _segs[_t])
+        # ⛔ **2026-09-05 稽核 R2：沒有這一行，下面那個 `for` 可以一次都不跑。**
+        #    `_grey_units()` 會略過空白段落，所以「一塊只剩標題」或「內容用了
+        #    側錄器沒攔的 API」時它回 `[]` → 迴圈空轉 → **綠**。
+        #    那正是本檔自己警告過的形狀（「一條什麼都沒斷言的測試會一直是綠的」）。
+        #    稽核實跑兩種繞法，補這行之前**都是 21 passed**：
+        #      (a) 灰態換成假的綠色小節標題 `st.markdown("##### ✅ …一切正常")`
+        #          → 該塊 grey units ＝ `[]`；
+        #      (b) 灰態改用未側錄的 API `st.text("✅ …一切正常")`
+        #          → 該塊 segment 完全空白。
+        #    ⚠️ (b) 也順帶說明本檔的真界線仍是 `_TEXT_APIS` 那份字表：
+        #       本行擋得住「整段消失」，**擋不住**「用沒列進字表的 API 印出一段假話
+        #       但同一單位裡另外還有 ⬜」。那一半沒有便宜的解，據實留在下方 ⛔ 清單。
+        assert _units, (
+            f"「{_t}」在沒有資料時切不出任何內容單位 —— "
+            "整塊只剩標題（或內容走了側錄器沒攔的 API）。\n"
+            "⛔ 沒有內容 ＝ 使用者看不出「這裡缺什麼、去哪補」，"
+            "與畫一句「一切正常」一樣違反鐵則 04。\n"
+            f"該塊 segment 原文：{_segs[_t][:400]!r}")
+        for _label, _seg in _units:
             assert NOT_READY_MARK in _seg, (
                 f"{_label} 沒有資料，卻沒有印出任何 ⬜ 灰態 —— "
                 "留白／`—`／「一切正常」都是把『沒抓到』說成別的東西（§1）。\n"
@@ -946,19 +1036,42 @@ def test_every_summarize_radar_consumer_goes_through_the_lit_guard():
     本條擋得住：數量對不上就紅。
 
     **突變會紅**：在本檔任一處新增一個 `summarize_radar(...)` 而不配一個
-    `_radar_lit(...)` → 本條紅。
+    `_radar_lit(...)` → 本條紅。**含 `import … as` 的別名寫法**（R1 修好之後）。
 
     ⚠️ **本條守的是「有沒有配對」，不是「配對得對不對」** —— 有人寫
     `_radar_lit(_s)` 卻不用它的結果，本條照樣綠。**那一半由上面兩條行為鎖守。**
+
+    ⛔ **2026-09-05 稽核 R1：本條初版按「裸名字」計數，別名 import 可整個繞過。**
+    ~~`_names.count("summarize_radar")`（直接讀 `func.id` / `func.attr`）~~ ——
+    稽核實跑，在 `_detail_ai()` 內加：
+
+    ```python
+    from services.risk_radar import summarize_radar as _sr2
+    _stale += f"（附註：短線雷達整體研判為 {_sr2(_r4).get('level')}。）"
+    ```
+
+    → 本條數到 `summarize_radar: 3 / _radar_lit: 3`（**別名隱形**）→ **225 passed
+    零紅燈**，而「平靜」照樣進 prompt。
+    ⚠️ **本 repo 已經踩過並寫下來了**：同一個測試套組的
+    `tests/test_batch2_top_card_grid.py::_call_name()` 註解逐字寫著
+    「只比對字面名字會漏掉它（**本規則初版就漏了，是突變探針抓出來的**）」。
+    **新的結構鎖重蹈同一個坑**，本輪照那支的做法修好。
+
+    ⚠️ **`_call_name` / `_import_alias` 直接 import 既有實作，不另寫一份** ——
+    另寫一份就會變成第二個 SSOT，而那正是 `CLAUDE.md §2.1` 明文禁止、
+    且被引用的那個檔自己也寫過的事。
     """
     import ast as _ast
     import pathlib as _pl
 
+    # 穿過 `import X as _y` 的別名解析：復用既有實作（§2.1 SSOT，不另寫一份）。
+    from test_batch2_top_card_grid import _call_name, _import_alias
+
     _src = (_pl.Path(_page.__file__)).read_text(encoding="utf-8")
-    _names = [
-        (getattr(_n.func, "id", None) or getattr(_n.func, "attr", None))
-        for _n in _ast.walk(_ast.parse(_src)) if isinstance(_n, _ast.Call)
-    ]
+    _tree = _ast.parse(_src)
+    _alias = _import_alias(_tree)
+    _names = [_call_name(_n, _alias)
+              for _n in _ast.walk(_tree) if isinstance(_n, _ast.Call)]
     _n_sum = _names.count("summarize_radar")
     _n_lit = _names.count("_radar_lit")
 
