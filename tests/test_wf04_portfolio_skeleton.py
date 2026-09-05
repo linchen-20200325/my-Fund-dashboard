@@ -205,16 +205,92 @@ FAKE_HOLDINGS: list[dict[str, Any]] = [
 ]
 
 
+def _reset_streamlit_container_stack() -> None:
+    """把 Streamlit 的「目前開著哪個容器」重設回乾淨狀態。
+
+    **為什麼需要這個 —— 這不是儀式，是實測出來的跨檔污染（2026-09-05）。**
+
+    **機制（逐行讀 streamlit 原始碼 + 實跑確認，不是推論）**：
+
+    1. `DeltaGenerator._block()` 開頭有一句
+       ``if dg._root_container is None or dg._cursor is None: return dg`` ——
+       **bare 模式下 `st._main` 兩者皆為 None，所以 `_block()` 直接把 `st._main`
+       自己回傳**，不會產生新的子容器。
+    2. 於是 `st.form()` 緊接著的
+       ``block_dg._form_data = FormData(form_id)``
+       **把 form 標記蓋在了行程層級的 `st._main` 這個單例物件上**。
+    3. 那個標記**離開 `with` 也不會被清掉**（`__exit__` 只 pop 容器堆疊，
+       不還原 `_form_data`）。從此 `is_in_form(st._main)` 恆為 True。
+
+    複跑（本組實跑，非推論）::
+
+        with applied_form("probe_a"):
+            st.slider("s", 0, 10, 5)
+        # 離開 with 之後：st._main._form_data.form_id == "probe_a"
+
+    後果：**同一個 pytest 行程裡，之後每一次 `AppTest` 都會看到這個標記**，
+    於是任何 `st.form(` 都會撞上 `StreamlitAPIException: Forms cannot be nested
+    in other forms.`
+
+    ⚠️ **走過一次的彎路，寫下來免得下一個人重走**：本組第一版只重設
+    `context_dg_stack`，**完全無效** —— 因為髒的不是堆疊的「內容」，
+    而是堆疊裡那個唯一元素（`st._main`）**自己**。堆疊長度從頭到尾都是 1。
+
+    ⚠️ **這不是本頁獨有的病，也不是本頁用錯 `applied_form`。** 實測：先跑
+    `tests/test_wf01_detail_zone_order.py`（它以 bare 模式渲染 ①，①裡有
+    `v01_macro_load_form`），再用 `AppTest` 跑 **②③④ 任何一頁**，
+    三頁的 form 區塊**都**會掉進同一個紅框。②③ 的測試檔目前不紅，
+    只是因為它們沒有一條「不准有紅框」的守衛去看它。
+
+    ⛔ **本函式只是把本檔隔離起來，沒有修掉那個病。** 真正的修法要動
+    `ui/helpers/ia/gated_form.py` 或加一支共用 `conftest.py` 的 autouse fixture，
+    **兩者都不在本批的檔案邊界內**，已具名回報總管。
+
+    ⚠️ **刻意用 fail-loud 的寫法**（§1）：這裡碰的是 Streamlit 的私有名稱，
+    哪天改名就會直接 `ImportError` / `AttributeError` 炸開，**不會**靜默跳過。
+    靜默跳過等於這道隔離悄悄失效，而失效的樣子跟「本來就沒事」一模一樣。
+    """
+    from streamlit.delta_generator import context_dg_stack
+    from streamlit.delta_generator_singletons import get_dg_singleton_instance
+
+    _main = get_dg_singleton_instance().main_dg
+    # 這一行才是關鍵：清掉蓋在單例上的 form 標記（見上面的機制 2/3）。
+    _main._form_data = None
+    # 堆疊順帶回到乾淨狀態；正常情況它本來就是 `(main_dg,)`。
+    context_dg_stack.set((_main,))
+
+
 def _app(funds: list[dict[str, Any]] | None) -> Any:
     """跑一次整頁，回傳 `AppTest`。`funds=None` 代表 session 裡根本沒有那個鍵。"""
+    # 進場先洗乾淨：別人留下的 form 容器會讓本頁的 `applied_form` 當場炸掉。
+    _reset_streamlit_container_stack()
     _at = AppTest.from_string(_SCRIPT, default_timeout=120)
     if funds is not None:
         _at.session_state["portfolio_funds"] = funds
-    _at.run()
+    try:
+        _at.run()
+    finally:
+        # 出場也洗乾淨：本檔不把髒堆疊留給後面跑的測試檔（同一個行程）。
+        _reset_streamlit_container_stack()
     assert not _at.exception, (
         "整頁渲染時拋了未捕捉例外 —— 骨架連跑都跑不起來：\n"
         + "\n".join(str(_e.value) for _e in _at.exception))
     return _at
+
+
+def _rerun(at: Any) -> Any:
+    """重跑一次已存在的 `AppTest`（例如按下按鈕之後），同樣先後洗乾淨堆疊。
+
+    ⚠️ **不要直接寫 `_at.run()`** —— 那會繞過 :func:`_reset_streamlit_container_stack`，
+    於是「上一次 run 留下的 form 容器」會讓這一次 run 的 `applied_form` 炸掉。
+    這一條是本檔唯一允許呼叫 `AppTest.run()` 的地方（連同 :func:`_app`）。
+    """
+    _reset_streamlit_container_stack()
+    try:
+        at.run()
+    finally:
+        _reset_streamlit_container_stack()
+    return at
 
 
 def _flat(node: Any) -> list[str]:
@@ -511,7 +587,7 @@ def test_the_empty_state_pointer_actually_works():
     assert any("尚未設定持倉" in _p for _p in _flat(_at.main)), "起手式應該是空狀態。"
     # 照著指路做：那個區塊做的事 ＝ 把已載入的基金寫進 `portfolio_funds`。
     _at.session_state["portfolio_funds"] = FAKE_HOLDINGS
-    _at.run()
+    _rerun(_at)
     _after = _flat(_at.main)
     assert not any("尚未設定持倉" in _p for _p in _after), (
         "照著空狀態的指路做完之後，空狀態**還在** —— 那句指路是無效的。\n"
@@ -638,7 +714,7 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     # 照著指路做：回到「再平衡試算」，填金額、按「試算」。
     _at.number_input[0].set_value(150_000)
     _at.button[0].click()
-    _at.run()
+    _rerun(_at)
     assert not _at.exception, "按下「試算」之後整頁炸了。"
     _after = [_p for _p in _flat(_at.main) if NOT_READY_MARK in _p]
     assert _after == _before, (
@@ -752,14 +828,14 @@ def test_a_zero_budget_never_counts_as_applied():
     # 實跑：預設 0，直接按「試算」→ 不得寫進任何已送出條件。
     _at = _app(FAKE_HOLDINGS)
     _at.button[0].click()
-    _at.run()
+    _rerun(_at)
     assert _at.session_state["v04_portfolio_applied_plan"] is None, (
         "金額 0 的送出被當成一次有效試算了。")
     # 對照組：填了金額才算數。
     _at2 = _app(FAKE_HOLDINGS)
     _at2.number_input[0].set_value(150_000)
     _at2.button[0].click()
-    _at2.run()
+    _rerun(_at2)
     assert _at2.session_state["v04_portfolio_applied_plan"] == {
         "core_pct": _DEFAULT_CORE_PCT, "budget_twd": 150_000,
         "satellite_only": _DEFAULT_SATELLITE_ONLY}, (
