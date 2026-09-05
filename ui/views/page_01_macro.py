@@ -14,7 +14,7 @@
 –      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
 2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
 3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
-4      🔎 詳細資料與說明（五塊，順序不動）  骨架就位；只有 📈 中期循環是真的
+4      🔎 詳細資料與說明（五塊，順序不動）  五塊皆為真內容（2026-09-05 批次三-B）
 ===== ============================== ==========================================
 
 拍板同時解掉的三件事（**不要再當成待裁決**）
@@ -27,6 +27,38 @@
   ⚠️「services 裡沒有」取決於有沒有漏看，本組**不作全稱宣稱**；
   **處置不繫於它** —— 灰態是客戶拍板的結果，不是這句話推出來的。
 - **建議資產水位不出核心／衛星**。⚠️ 這一條最容易做錯，展開寫在下面。
+
+🔎 詳細區五塊：**2026-09-05 批次三-B 起全部是真內容**
+------------------------------------------------
+在此之前只有 📈 中期循環是真的，其餘四塊是灰態佔位。現況與取數來源：
+
+===== ================== ==================================================
+塊     取數（**全部走 `services/**`**）  本檔內的渲染函式
+===== ================== ==================================================
+🌳 長期座標   `us_liquidity_engine.fetch_us_liquidity_snapshot`  :func:`_detail_long`
+📈 中期循環   （委派 `ui/tab1_macro_midcycle.py`，見 :func:`_detail_mid`）  :func:`_detail_mid`
+🎯 短線雷達   `risk_radar.detect_risk_radar` ＋ `liquidity_engine.*`  :func:`_detail_short`
+⚠️ 拐點警報   `ind`（SAHM/SLOOS/ADL）＋ `macro.detect_turning_points`  :func:`_detail_inflection`
+🤖 AI 總結    `ai_prompts` ＋ `ai_service`（Gemini）  :func:`_detail_ai`
+===== ================== ==================================================
+
+⛔ **四塊一律在本檔內寫完，不新增任何對 `ui/tab1_macro*.py` 的委派。**
+   📈 中期循環那一條委派是**既有**的技術債（它自己的 docstring 已登記
+   「有效期到舊 tab 整批拔除為止」）；客戶方針第 3 條要在五頁驗收完成後把舊 tab
+   **整批拔除**，每多一條委派，那一刻就多一處會斷頭。**本批一條都沒加。**
+
+⛔ **這四塊沒有各自的「載入」按鈕。** 已拍板線框
+   `docs/wireframes/fund-wireframe-final.html` 明文把「『載入流動性引擎』這顆按鈕的
+   按鈕」列為要拿掉的東西（原文：「主載入鈕按完後，短線雷達裡**還要再按一次**……
+   → **併入主載入**」）。四塊的取數因此全部掛在 :func:`_load_everything` 底下。
+   唯一的例外是 🤖 AI 總結的「生成」—— 那是**送出一次外部 LLM 請求**、不是取數，
+   而且它走 `applied_form()`（鐵則 02），不是裸按鈕。
+
+⚠️ **本批判定「資料給不出來」而走灰態的項目**，逐條寫在各自的渲染函式 docstring：
+   💰 資本防線 ／ 🚦 持倉紅綠燈 ／ 📋 逐檔決策矩陣（線框判「搬去 ②」，本頁不畫）、
+   📦 ARCHIVED 台股熱錢（線框判「不裁決」，未拍板不進新畫面）、
+   拐點的歷史回測與變數重要性（`backtest_turning_points` 是第二次對外取數，
+   兩種掛法都與鐵則 02 衝突 → 登記待客戶裁決）。
 
 ⛔ 「建議資產水位」為什麼是**股／債／現金**，不是核心／衛星
 ----------------------------------------------------------
@@ -111,15 +143,28 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from services.ai_prompts import build_structured_summary_prompt
+from services.ai_service import gemini_generate, get_gemini_keys
 from services.allocation_ladder import allocation_from_composite
 from services.hot_money_service import fetch_hot_money_frames
-from services.macro import calc_macro_phase, fetch_all_indicators, macro_action_light
+from services.liquidity_engine import (
+    compute_liquidity_score,
+    fetch_liquidity_factors,
+    liquidity_verdict,
+)
+from services.macro import (
+    calc_macro_phase,
+    detect_turning_points,
+    fetch_all_indicators,
+    macro_action_light,
+)
 from services.macro.composite_score import (
     calculate_composite_score,
     composite_verdict,
     is_meta_key,
 )
 from services.risk_radar import detect_risk_radar, summarize_radar
+from services.us_liquidity_engine import fetch_us_liquidity_snapshot
 from shared.evidence_support import is_sufficient
 from shared.macro_buckets import BUCKET_ORDER
 from shared.ui_control_labels import MACRO_LOAD_BTN_AGAIN, MACRO_LOAD_BTN_FIRST
@@ -130,6 +175,7 @@ from ui.helpers.ia import (
     STATE_OK,
     applied_form,
     render_cards,
+    wide_table,
 )
 from ui.helpers.ia.empty_state import empty_state
 from ui.helpers.macro.beginner_view import (
@@ -156,8 +202,32 @@ from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 _SK_IND: str = "v01_macro_indicators"
 _SK_ERR: str = "v01_macro_load_error"
 _SK_HOT: str = "v01_macro_hot_money"
+#: 🎯 短線雷達的**原始 10 燈**（`detect_risk_radar` 的回傳，未彙總）。
+#: ⚠️ **2026-09-05 起存的是原始 dict，不再是 `summarize_radar()` 的摘要。**
+#:    理由：層 1 的「極端風險警語」卡只要摘要，但層 4 的 🎯 短線雷達要逐燈列出。
+#:    存摘要 → 詳細區只能**再抓一次**，同一份資料就會有兩個取數點（§2.1）。
+#:    現在存原始、由各消費端各自呼叫 `summarize_radar()` 彙總（那是純函式，無 I/O）。
 _SK_RADAR: str = "v01_macro_risk_radar"
 _FORM_KEY: str = "v01_macro_load_form"
+
+# ── 層 4「🔎 詳細資料與說明」四塊各自的取數結果 ─────────────────────────
+# ⚠️ **一塊一個鍵，刻意不合併成一個大 dict**：合併之後任一塊的取數失敗會讓
+#    整包變成 Exception，四塊一起變紅 —— 而它們的上游其實互不相干
+#    （FRED 流動性 / FRED+Yahoo 雷達 / FRED 拐點）。分開存，一塊壞不連坐。
+#: 🌳 長期座標：`fetch_us_liquidity_snapshot` 的 7 個子指標。
+_SK_USLIQ: str = "v01_macro_us_liquidity"
+#: 🎯 短線雷達 ⑤：`(factors, score)` —— 深水區 4 因子與其加權合成分數。
+_SK_LIQ: str = "v01_macro_liquidity_stress"
+#: ⚠️ 拐點警報 ②：`detect_turning_points` 的 5 組月級結構訊號。
+_SK_TP: str = "v01_macro_turning_points"
+#: 層 1／層 2 算好的 `calc_macro_phase()` 結果，供 🤖 AI 總結**複用而不重算**。
+#: ⚠️ 重算會讓同一個位階分數有兩個計算點（見 `render_market_overview()` 的同一則警語）。
+_SK_PHASE: str = "v01_macro_phase"
+#: 層 2 `_render_layer_evidence()` 的回傳，供 🤖 AI 總結複用（同上，不重算）。
+_SK_EV: str = "v01_macro_evidence"
+#: 🤖 AI 總結的載入閘門 key 與生成結果快取 key。
+_AI_FORM_KEY: str = "v01_macro_ai_form"
+_SK_AI: str = "v01_macro_ai_text"
 #: 這一輪**實際交給送出鈕的那個字**。指路文案一律讀它，不自己再判一次載入狀態。
 #: ⚠️ 存的是「畫面上印了什麼」，不是「資料載入了沒」—— 兩者在**剛按下按鈕的那一輪
 #: 並不一致**（見 `_where_to_load()` 的說明），而使用者看的是前者。
@@ -222,8 +292,9 @@ def _load_everything(fred_key: str) -> None:
     st.session_state[_SK_ERR] = None
 
     # ── 風險雷達（同一把 FRED 金鑰，額外一次取數）──────────────────────
+    # ⚠️ 存**原始 10 燈**，不是摘要 —— 見 `_SK_RADAR` 的說明。
     try:
-        st.session_state[_SK_RADAR] = summarize_radar(detect_risk_radar(fred_key))
+        st.session_state[_SK_RADAR] = detect_risk_radar(fred_key)
     except Exception as _exc_radar:                 # noqa: BLE001 — 見下方 ⚠️
         # ⚠️ **這不是靜默吞（§1）**：例外物件原樣存進 session，由
         #    `_card_risk_radar()` 走 `state_card(state=STATE_ERROR, exc=...)` 渲染
@@ -242,6 +313,39 @@ def _load_everything(fred_key: str) -> None:
     except Exception as _exc_hm:                    # noqa: BLE001 — 同上，見 `_SK_RADAR` 的 ⚠️
         # 例外原樣存進 session，由 `_card_hot_money()` 渲染成唯一那個紅框。
         st.session_state[_SK_HOT] = _exc_hm
+
+    # ══════════════════════════════════════════════════════════════
+    # 層 4「🔎 詳細資料與說明」四塊的取數 —— **一律掛在這一顆送出鈕底下**
+    # ══════════════════════════════════════════════════════════════
+    # ⚠️ **為什麼不各給一顆「載入」鈕**：已拍板線框
+    #    `docs/wireframes/fund-wireframe-final.html` 明文把
+    #    「『載入流動性引擎』這顆按鈕的按鈕」列為**要拿掉的東西** ——
+    #    原文：「主載入鈕按完後，短線雷達裡**還要再按一次**才看得到流動性引擎，
+    #    之後又有第三顆重抓鈕……→ **併入主載入**」。本檔照它做。
+    # ⚠️ 三塊各自 try：它們的上游互不相干，一塊失敗不得讓另外兩塊也變紅。
+    #    例外**原樣存進 session**（不是靜默吞，§1）—— 由各自的區塊渲染成紅框。
+
+    # 🌳 長期座標：美股流動性 × 信用 × 情緒（7 個子指標，服務層自己並行）
+    try:
+        st.session_state[_SK_USLIQ] = fetch_us_liquidity_snapshot(fred_key)
+    except Exception as _exc_usliq:                 # noqa: BLE001 — 同上
+        st.session_state[_SK_USLIQ] = _exc_usliq
+
+    # 🎯 短線雷達 ⑤：深水區流動性壓力（4 因子 → 加權合成分數）
+    # ⚠️ `compute_liquidity_score` 是**純函式**（吃上一行的輸出），
+    #    放在同一個 try 裡是因為它的輸入來自同一次取數 —— 不是額外的 I/O。
+    try:
+        _liq_factors = fetch_liquidity_factors(fred_key)
+        st.session_state[_SK_LIQ] = (
+            _liq_factors, compute_liquidity_score(_liq_factors))
+    except Exception as _exc_liq:                   # noqa: BLE001 — 同上
+        st.session_state[_SK_LIQ] = _exc_liq
+
+    # ⚠️ 拐點警報 ②：拐點偵測中心（5 組月級結構訊號）
+    try:
+        st.session_state[_SK_TP] = detect_turning_points(fred_key)
+    except Exception as _exc_tp:                    # noqa: BLE001 — 同上
+        st.session_state[_SK_TP] = _exc_tp
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -401,12 +505,32 @@ def _card_risk_radar() -> dict:
     if not isinstance(_stash, dict):
         return {"title": "極端風險警語", "state": STATE_NOT_READY,
                 "note": "尚未計算短線風險雷達。", "where": _where_to_load()}
-    _level = str(_stash.get("level") or "")
+    # ⚠️ **2026-09-05：本卡改吃原始 10 燈，摘要在這裡當場算。**
+    #    `summarize_radar()` 是純函式（無 I/O），所以「一份資料兩個消費端」
+    #    只是同一份 dict 被彙總兩次，不是第二個取數點。
+    _sum = summarize_radar(_stash)
+    _lit = (int(_sum.get("red") or 0) + int(_sum.get("yellow") or 0)
+            + int(_sum.get("green") or 0))
+    # ⛔ **這一段是 §1 的必要防線，不是防禦性加固（實測，不是推測）。**
+    #    `summarize_radar()` 的分級只看 `red` / `yellow` 兩個計數：10 燈**全部
+    #    抓不到**時 `{red:0, yellow:0, green:0, gray:10}` → 它照樣回
+    #    `level="平靜"`、`color` 是綠的（本組 2026-09-05 在無網路環境實跑確認）。
+    #    也就是說「什麼都沒抓到」會被畫成「市場很平靜」——
+    #    那正是本檔 `_worst_state()` 已經寫過的那句：**沒有資料不等於一切正常**。
+    #    ⚠️ 服務層不改（客戶方針第 2 條：不反向修底層），在消費端擋。
+    if not _lit:
+        return {
+            "title": "極端風險警語",
+            "state": STATE_NOT_READY,
+            "note": "10 燈這一輪一盞都沒有取到讀數，沒有可以下的風險結論。",
+            "where": _where_to_load(),
+        }
+    _level = str(_sum.get("level") or "")
     return {
         "title": "極端風險警語",
         "value": _level or "—",
-        "note": (f"🔴 {_stash.get('red', 0)} ／ 🟡 {_stash.get('yellow', 0)} ／ "
-                 f"🟢 {_stash.get('green', 0)} ／ ⬜ {_stash.get('gray', 0)}（共 10 燈）。"),
+        "note": (f"🔴 {_sum.get('red', 0)} ／ 🟡 {_sum.get('yellow', 0)} ／ "
+                 f"🟢 {_sum.get('green', 0)} ／ ⬜ {_sum.get('gray', 0)}（共 10 燈）。"),
         "state": STATE_BUSINESS if _level and _level != "平靜" else STATE_OK,
     }
 
@@ -863,21 +987,712 @@ def _detail_mid() -> None:
     render_mid_cycle_section(_ind)
 
 
+# ══════════════════════════════════════════════════════════════════
+# 詳細區共用小工具（四塊都在本檔內自己畫，**不 delegate 回 `ui/tab1_macro*.py`**）
+# ══════════════════════════════════════════════════════════════════
+# ⛔ **為什麼四塊不比照 📈 中期循環走委派**：`_detail_mid()` 的 docstring 已登記
+#    那條委派是「**有效期到舊 tab 整批拔除為止的過渡**」，而且它還把
+#    `ui/tab1_macro.py` 的兩個私有符號拖成執行期相依。客戶方針第 3 條要在五頁
+#    驗收完成後把舊 tab **整批拔除** —— 每多一條委派，那一刻就多一處會斷頭。
+#    本批四塊因此**一律在本檔內寫完**，一條新的委派都不加。
+
+
+def _detail_title(title: str) -> None:
+    """印一塊詳細區的一級標題。
+
+    ⚠️ **`####`（H4）是刻意的，而且是唯一允許的一級開頭。**
+    `tests/test_wf01_detail_zone_order.py` 的行為鎖把 H2~H4 一律認成「一級區塊」，
+    並要求詳細區的一級序列**恰好**是「區頭 ＋ 五塊」。所以：
+      - 塊**標題**用 `####`；
+      - 塊**內部**的分節一律用 `#####`（H5）—— 守衛刻意不收 H5，
+        正是為了讓一塊裡面可以有自己的子標題而不破壞「連續」。
+    改成 `st.subheader()` / `###` 會讓那條鎖轉紅，那是**對的**：
+    它在告訴你「你多畫了一個與那五塊平起平坐的區塊」。
+    """
+    st.markdown(f"#### {title}")
+
+
+def _detail_not_loaded(title: str) -> bool:
+    """四塊共用的最前置檢查：總經指標還沒載入 → 標題照印、內容誠實留灰。
+
+    Returns
+    -------
+    bool : `True` 代表已經印過灰態，呼叫端應該直接 `return`。
+
+    ⚠️ **骨架照畫、內容留灰**（鐵則 04）：整塊消失會讓「還沒載入」與「這頁壞了」
+    長得一模一樣 —— 這與 `render_market_overview()` 未載入分支的處置一致。
+    """
+    if isinstance(st.session_state.get(_SK_IND), dict):
+        return False
+    _detail_title(title)
+    not_ready("尚未載入總經資料。", where=_where_to_load())
+    return True
+
+
+def _entry_card(title: str, entry: Any, *, note_prefix: str = "",
+                value_digits: int = 2) -> dict:
+    """把「服務層的一個子指標 dict」翻成一張卡片規格。
+
+    本 repo 的服務層對「這一項這次沒拿到」有一個**共同慣例**：回一個帶 `_err`
+    的 dict（`us_liquidity_engine` / `liquidity_engine` 都是），成功時帶
+    `value` / `unit` / `label` / `date` / `source`。本函式只做那個翻譯。
+
+    三態對映（鐵則 03）：
+      - `_err`          → **系統紅框**。上游取數失敗＝「這個數字不可信」。
+                          錯誤字串**原文**裝進 `RuntimeError`，一個字沒改寫（§1）——
+                          與 `_card_hot_money()` 對 L1「內拋外譯」的處理同一套做法。
+      - `value is None` → **灰態**。抓回來了但這一項是空的，不是故障。
+      - `label` 以 🔴 開頭 → **業務警示（莓紅）**。信用利差衝高是市場壞消息，
+                          資料本身完全可信 —— 那不是紅框（同 `_worst_state()` 的理由）。
+      - 其餘            → 正常。
+    """
+    if not isinstance(entry, dict):
+        return {"title": title, "state": STATE_NOT_READY,
+                "note": f"{note_prefix}這一輪沒有回傳這個指標。",
+                "where": _where_to_load()}
+    _err = entry.get("_err")
+    if _err:
+        return {"title": title, "state": STATE_ERROR,
+                "exc": RuntimeError(str(_err)),
+                "note": f"{note_prefix}上游取數失敗，這個數字這一輪不可信。"}
+    _val = entry.get("value")
+    if _val is None:
+        return {"title": title, "state": STATE_NOT_READY,
+                "note": f"{note_prefix}來源回來了，但這一項是空的。",
+                "where": _where_to_load()}
+    _unit = str(entry.get("unit") or "")
+    _txt = (f"{_val:,.{value_digits}f}{_unit}"
+            if isinstance(_val, (int, float)) else f"{_val}{_unit}")
+    _label = str(entry.get("label") or "")
+    _date = str(entry.get("date") or "")
+    _note = note_prefix + _label + (f"　資料日 {_date}" if _date else "")
+    return {"title": title, "value": _txt, "note": _note.strip() or "—",
+            "state": STATE_BUSINESS if _label.startswith("🔴") else STATE_OK}
+
+
+def _err_of(entry: Any) -> str:
+    """子指標 dict 的 `_err` 字串；沒有就回空字串。"""
+    return str(entry.get("_err") or "") if isinstance(entry, dict) else ""
+
+
+# ══════════════════════════════════════════════════════════════════
+# 🌳 長期座標
+# ══════════════════════════════════════════════════════════════════
+#: 7 個子指標的**顯示名與分組**。
+#:
+#: ⚠️ **為什麼這份對照表寫在本檔**：服務層 `us_liquidity_engine` 的子 dict
+#: **沒有「指標名」這個欄位** —— 它的 `label` 是**判讀句**（「🔴 信用緊縮 / 熱錢撤離」），
+#: 不是名字。也就是說服務層根本沒有一份可以引用的顯示名 SSOT，
+#: 這裡不是抄第二份，是**唯一一份**。
+#: ⚠️ **順序即畫面順序**，並照線框 section 01 對本塊的描述分成
+#: 「流動性 × 信用 × 情緒」三組（`docs/wireframes/wireframe-macro-health.html`：
+#: 「💵 美股流動性 × 熱錢 — 流動性 M2/WALCL/RRP × 信用 HY OAS/HYG-LQD × 情緒 AAII」）。
+#: ⚠️ **服務層新增子指標時不會被靜默丟掉**：`_detail_long()` 會把本表沒列到的 key
+#: 用原始 key 當標題補在最後（見該處），所以漏登記的後果是「畫面上多一張名字很醜的卡」
+#: 而不是「一項指標無聲消失」。
+_US_LIQ_ROWS: tuple[tuple[str, str, str], ...] = (
+    ("m2_yoy",  "M2 年增率",        "流動性"),
+    ("walcl",   "Fed 資產負債表",   "流動性"),
+    ("rrp",     "隔夜逆回購 RRP",   "流動性"),
+    ("net_liq", "淨流動性",         "流動性"),
+    ("hy_oas",  "HY 信用利差 OAS",  "信用"),
+    ("hyg_lqd", "HYG ÷ LQD",        "信用"),
+    ("aaii",    "AAII 散戶情緒",    "情緒"),
+)
+
+
+def _detail_long() -> None:
+    """🌳 長期座標 —— 美股流動性 × 信用 × 情緒（`services.us_liquidity_engine`）。
+
+    **線框依據**：`docs/wireframes/wireframe-macro-health.html`
+    section 03「重組後版面」把本塊列為〈保留 · 順序不動〉的第一塊；
+    section 04「搬移對照表」把 **💰 資本防線（含息 vs 配息）搬去 ②**
+    （理由逐字：「逐檔吃本金，不是市場位階」），所以**本塊不畫任何一檔基金**
+    —— 這也正是 `ia-wireframe.html` Tab 01「這裡不放什麼」的第一條。
+
+    **📦 ARCHIVED 台股熱錢本塊不畫**：線框 section 04 對它的處置逐字是
+    「**不裁決**」（「看起來像廢棄，但『還有沒有人用』取決於有沒有漏看，
+    本組未做 caller 實測，不提刪除」）。**沒有拍板的東西不進新畫面** ——
+    把一個未裁決的區塊重寫進來，等於用實作替客戶做了那個決定。
+    """
+    if _detail_not_loaded(_DETAIL_TITLES["long"]):
+        return
+    _detail_title(_DETAIL_TITLES["long"])
+
+    _snap = st.session_state.get(_SK_USLIQ)
+    if isinstance(_snap, BaseException):
+        system_error("美股流動性 × 信用 × 情緒這一輪沒算出來", _snap,
+                     hint="本塊的 7 個子指標全部來自同一次取數，故只印一個紅框。")
+        return
+    if not isinstance(_snap, dict):
+        not_ready("尚未取得美股流動性、信用與情緒指標。", where=_where_to_load())
+        return
+
+    # 服務層自己塞的 meta，不是指標（同 `_card_credibility` 濾 `_fred_sources` 的理由）。
+    _entries = {_k: _v for _k, _v in _snap.items() if _k != "_provenance"}
+    # 本表沒列到的 key 用原始 key 當標題補在最後 —— **寧可醜，不可無聲消失**。
+    _known = {_k for _k, _t, _g in _US_LIQ_ROWS}
+    _extra = tuple((_k, _k, "未登記") for _k in _entries if _k not in _known)
+
+    # ⛔ **全滅時只印一個紅框，不是 7 個。** 7 個子指標同一把 FRED 金鑰、同一條網路，
+    #    全滅幾乎必然是**同一個根因**；印 7 個紅框會讓使用者找不到真正的那一個
+    #    （同本檔 `_load_everything()` 那句「一個失敗只准有一個紅框」）。
+    #    **部分失敗則逐項紅** —— 那時候它們真的是不同的問題。
+    _errs = [_err_of(_entries.get(_k)) for _k, _t, _g in (*_US_LIQ_ROWS, *_extra)]
+    if _entries and all(_errs):
+        system_error(
+            "美股流動性 × 信用 × 情緒：7 個子指標全部取數失敗",
+            RuntimeError("；".join(_e for _e in _errs if _e)),
+            hint="全部失敗通常是同一個根因（FRED 金鑰或對外連線），"
+                 "故只印一個紅框而不是逐項印。")
+        return
+
+    st.markdown("##### 💵 美股流動性 × 熱錢 — 流動性 × 信用 × 情緒")
+    # 鐵則 01：3 欄自適應網格（7 張卡 → 3 列）。
+    render_cards([
+        _entry_card(_t, _entries.get(_k), note_prefix=f"{_g}｜")
+        for _k, _t, _g in (*_US_LIQ_ROWS, *_extra)
+    ])
+
+    # ── 線框 section 01 對本塊點名的「Raw data expander」──────────────
+    # ⚠️ 原始讀數表**帶來源與資料日**：這一頁其餘地方拿不出血緣
+    #    （見 `_card_credibility`：`fetch_all_indicators` 只有 1 項帶 `source`），
+    #    而 `us_liquidity_engine` 的每個子指標**都帶** `source` —— 有就要印出來（§2.2）。
+    with st.expander("📋 原始讀數與來源", expanded=False):
+        _rows = []
+        for _k, _t, _g in (*_US_LIQ_ROWS, *_extra):
+            _e = _entries.get(_k)
+            if not isinstance(_e, dict):
+                continue
+            _rows.append({
+                "分組": _g,
+                "指標": _t,
+                "讀數": ("—" if _e.get("value") is None
+                         else f"{_e.get('value')}{_e.get('unit') or ''}"),
+                "判讀": str(_e.get("label") or _e.get("_err") or "—"),
+                "資料日": str(_e.get("date") or "—"),
+                "來源": str(_e.get("source") or "—"),
+            })
+        wide_table(
+            pd.DataFrame(_rows) if _rows else None,
+            empty_title="這一輪沒有任何子指標可以列出來源",
+            empty_missing="7 個子指標都沒有回傳可用的 dict。",
+            empty_where=_where_to_load(),
+            hide_index=True,
+        )
+
+
+# ══════════════════════════════════════════════════════════════════
+# 🎯 短線雷達
+# ══════════════════════════════════════════════════════════════════
+#: 10 燈的顯示名。
+#:
+#: ⚠️ **同 `_US_LIQ_ROWS`：服務層沒有可引用的顯示名。** `detect_risk_radar()`
+#: 每一燈的 `label` 是**來源說明**（「Yahoo ^VIX 日線」），不是指標名 ——
+#: 本表是唯一一份，不是第二份 SSOT。
+#: ⚠️ 漏登記的 key 同樣**不會被丟掉**（見 `_detail_short()`）。
+_RADAR_ROWS: tuple[tuple[str, str], ...] = (
+    ("vix_level",       "VIX 絕對值 ＋ 日變化"),
+    ("vix_term_struct", "VIX 期限結構"),
+    ("hy_oas_delta",    "HY 利差變動"),
+    ("yield_10y_shock", "10Y 殖利率急變"),
+    ("move_level",      "MOVE 債市波動"),
+    ("spx_trend_break", "SPX 趨勢破線"),
+    ("sox_drop",        "費半急跌"),
+    ("sector_rotation", "類股輪動落差"),
+    ("put_call_ratio",  "Put／Call 比"),
+    ("asia_overnight",  "亞洲隔夜盤"),
+)
+
+#: 深水區 4 因子的顯示名（同上，服務層無顯示名可引用）。
+_LIQ_FACTOR_ROWS: tuple[tuple[str, str], ...] = (
+    ("XCCY_PROXY",   "美元荒代理（跨幣別基差）"),
+    ("CARRY_UNWIND", "套利交易平倉壓力"),
+    ("MOVE_VIX",     "債市／股市波動背離"),
+    ("SSR",          "鏈上子彈水位 SSR"),
+)
+
+
+def _detail_short() -> None:
+    """🎯 短線雷達 —— ④ 10 燈短線風險雷達 ＋ ⑤ 深水區流動性壓力。
+
+    **線框依據**：`wireframe-macro-health.html` section 01 對本塊的描述逐字是
+    「④ ⚡ 短線風險雷達（`services.risk_radar.detect_risk_radar`…含 `vix_level`／
+    `yield_10y_shock`／`spx_trend_break`）／⑤ 🌊 流動性壓力預警引擎（深水區 4 因子）」，
+    section 03 把整塊列為〈保留 · 順序不動〉。
+
+    ⚠️ **10 燈用全寬表而不是 10 張卡**：`ia-wireframe.html` Rule 01 自己就寫著
+    「卡片與指標排 3 欄；**多欄位大表維持全寬橫向捲動**」。10 燈 × 5 欄
+    （燈／讀數／前值／說明／來源）是大表，塞進 3 欄會被壓成兩個字。
+    ⑤ 的 4 因子是少數幾個讀數，才走 3 欄卡。
+    """
+    if _detail_not_loaded(_DETAIL_TITLES["short"]):
+        return
+    _detail_title(_DETAIL_TITLES["short"])
+
+    # ── ④ 10 燈短線風險雷達 ────────────────────────────────────────
+    st.markdown("##### ④ ⚡ 短線風險雷達（24H 避險轉向速度）")
+    _radar = st.session_state.get(_SK_RADAR)
+    if isinstance(_radar, BaseException):
+        system_error("10 燈短線風險雷達這一輪沒算出來", _radar,
+                     hint="10 盞燈由同一次呼叫產出，故只印一個紅框。")
+    elif not isinstance(_radar, dict):
+        not_ready("尚未計算短線風險雷達。", where=_where_to_load())
+    else:
+        _sum = summarize_radar(_radar)
+        _lit = (int(_sum.get("red") or 0) + int(_sum.get("yellow") or 0)
+                + int(_sum.get("green") or 0))
+        if not _lit:
+            # ⛔ 同 `_card_risk_radar()`：全滅時 `summarize_radar()` 仍回「平靜」，
+            #    在消費端擋掉（§1：沒有資料不等於一切正常）。
+            not_ready("10 盞燈這一輪一盞都沒有取到讀數，沒有可以下的風險結論。",
+                      where=_where_to_load())
+        else:
+            st.caption(
+                f"整體：**{_sum.get('level') or '—'}**　"
+                f"🔴 {_sum.get('red', 0)} ／ 🟡 {_sum.get('yellow', 0)} ／ "
+                f"🟢 {_sum.get('green', 0)} ／ ⬜ {_sum.get('gray', 0)}（共 10 燈）。"
+                "　⬜ 代表這一輪沒抓到，不是「沒事」。")
+        _known = {_k for _k, _t in _RADAR_ROWS}
+        _extra = tuple((_k, _k) for _k in _radar if _k not in _known)
+        _rows = []
+        for _k, _t in (*_RADAR_ROWS, *_extra):
+            _e = _radar.get(_k)
+            if not isinstance(_e, dict):
+                continue
+            _rows.append({
+                "訊號": _t,
+                "燈": str(_e.get("signal") or "—"),
+                "讀數": "—" if _e.get("value") is None else _e.get("value"),
+                "前值": "—" if _e.get("prev") is None else _e.get("prev"),
+                "說明": str(_e.get("note") or "—"),
+                "來源": str(_e.get("label") or "—"),
+            })
+        wide_table(
+            pd.DataFrame(_rows) if _rows else None,
+            empty_title="這一輪一盞燈都沒有回傳",
+            empty_missing="10 盞燈全部沒有可用的內容。",
+            empty_where=_where_to_load(),
+            hide_index=True,
+        )
+
+    # ── ⑤ 🌊 深水區流動性壓力 ──────────────────────────────────────
+    st.markdown("##### ⑤ 🌊 流動性壓力預警引擎（深水區 4 因子）")
+    _liq = st.session_state.get(_SK_LIQ)
+    if isinstance(_liq, BaseException):
+        system_error("深水區流動性因子這一輪沒算出來", _liq,
+                     hint="4 個因子由同一次呼叫產出，故只印一個紅框。")
+        return
+    if not isinstance(_liq, tuple) or len(_liq) != 2:
+        not_ready("尚未計算深水區流動性壓力。", where=_where_to_load())
+        return
+
+    _factors, _score = _liq
+    _factors = _factors if isinstance(_factors, dict) else {}
+    _known_f = {_k for _k, _t in _LIQ_FACTOR_ROWS}
+    _extra_f = tuple((_k, _k) for _k in _factors
+                     if _k != "_provenance" and _k not in _known_f)
+    # 鐵則 01：4~5 張卡 → 3 欄網格。
+    render_cards([
+        _entry_card(_t, _factors.get(_k))
+        for _k, _t in (*_LIQ_FACTOR_ROWS, *_extra_f)
+    ])
+    if isinstance(_score, dict):
+        _tier = str(_score.get("tier") or "")
+        _val = _score.get("value")
+        st.caption(
+            f"壓力分數 **{_val if _val is not None else '—'}**"
+            f"（{_tier or '—'}）：{liquidity_verdict(_score, _factors)}")
+    else:
+        # `compute_liquidity_score()` 的契約：三個壓力因子**全缺**時回 `None`。
+        # 那不是故障，是「這一輪沒有足夠因子可以合成」→ 灰態（鐵則 03）。
+        not_ready(
+            "壓力分數合不出來：三個壓力因子（美元荒／套利平倉／波動背離）"
+            "這一輪一個都沒取到。",
+            where=_where_to_load())
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⚠️ 拐點警報
+# ══════════════════════════════════════════════════════════════════
+def _detail_inflection() -> None:
+    """⚠️ 拐點警報 —— ① 全域導航塔（3 儀表）＋ ② 拐點偵測中心（5 組結構訊號）。
+
+    **線框依據**：`wireframe-macro-health.html` section 01 對本塊的描述逐字是
+    「① 🎯 全域導航塔（薩姆／SLOOS／廣度，3 欄）／🚦 持倉紅綠燈（讀 portfolio_funds）／
+    ② 🎯 拐點偵測中心（`detect_turning_points`：新訂單−庫存、10Y-2Y、HY、薩姆、
+    CFNAI、歷史回測、變數重要性）」。
+
+    ⛔ **🚦 持倉紅綠燈本塊不畫** —— section 04「搬移對照表」把它標「**搬 → ② 行動摘要**」，
+    理由逐字：「逐檔燈號…同時是 DUP-2 三個矛盾答案之一」。它已經有一句指路
+    （`_render_matrix_signpost()`），這裡**不再畫第二次**，也不畫一個灰色空殼
+    —— 線框把它標「搬」不是「待補」，畫灰殼會讓它看起來像沒做完（鐵則 04）。
+
+    ⛔ **歷史回測與變數重要性本塊不畫。** `backtest_turning_points()` 是**另一次
+    對外取數**（它自己再抓一次 FRED 與 SPX），而本頁的鐵則 02 是「一顆送出鈕之後
+    不再有第二顆載入鈕」。把它掛進主載入會讓每次載入多一條長往返；
+    掛一顆自己的鈕又正好是線框點名要拿掉的那種「按鈕的按鈕」。
+    **兩條路都不對 → 本批不做，據實登記，留給客戶裁決要不要為它開一次載入。**
+    """
+    if _detail_not_loaded(_DETAIL_TITLES["inflection"]):
+        return
+    _detail_title(_DETAIL_TITLES["inflection"])
+    _ind = st.session_state.get(_SK_IND) or {}
+
+    # ── ① 全域導航塔：薩姆 ／ SLOOS ／ 市場廣度 ─────────────────────
+    # 三個讀數**全部來自 `ind`**（`fetch_all_indicators` 的 SAHM / SLOOS / ADL），
+    # 沒有額外取數。鐵則 01：正好 3 張 → 一列 3 欄。
+    st.markdown("##### ① 🎯 全域導航塔（薩姆 ＋ SLOOS ＋ 市場廣度）")
+    render_cards([
+        _nav_tower_card(_ind, "SAHM", "薩姆規則 · 衰退機率",
+                        _sahm_band, "失業率 3 個月均較過去 12 個月低點高出的百分點；"
+                                    "≥0.5 判定衰退已經開始。"),
+        _nav_tower_card(_ind, "SLOOS", "SLOOS · 銀行信貸標準",
+                        _sloos_band, "聯準會季度調查；正值＝銀行在收緊放貸。"),
+        _breadth_card(_ind),
+    ])
+
+    # ── ② 拐點偵測中心 ─────────────────────────────────────────────
+    st.markdown("##### ② 🎯 拐點偵測中心（月級結構訊號）")
+    _tp = st.session_state.get(_SK_TP)
+    if isinstance(_tp, BaseException):
+        system_error("拐點偵測這一輪沒算出來", _tp,
+                     hint="5 組訊號由同一次呼叫產出，故只印一個紅框。")
+        return
+    if not isinstance(_tp, dict) or not _tp:
+        not_ready("尚未計算拐點偵測。", where=_where_to_load())
+        return
+
+    render_cards([_tp_card(_k, _v) for _k, _v in _tp.items()])
+    if not any(isinstance(_v, dict) and _v.get("source_ok") for _v in _tp.values()):
+        # 全部 `source_ok=False` ＝ 5 組訊號都沒有真的算出來。
+        # ⚠️ 各卡自己已經是灰態，這一行是**整塊的結論**：不得讓使用者以為
+        #    「5 個都沒亮紅燈 ＝ 沒有拐點風險」（§1）。
+        not_ready("5 組拐點訊號這一輪全部沒有取到資料，"
+                  "上面的 ⬜ 是「沒算出來」，不是「沒有拐點」。",
+                  where=_where_to_load())
+
+
+def _sahm_band(v: float) -> tuple[bool, str]:
+    """薩姆規則讀數 → （**是不是業務警示**, 一句話）。
+
+    ⚠️ **回 `bool` 而不是回 `STATE_*` 字串，是刻意的。**
+    `tests/test_batch2_top_card_grid.py::test_not_ready_cards_carry_a_remedy_too`
+    以 AST 檢查卡片 dict：`state` 若是一個**變數**（靜態看不出是哪一態），
+    它會保守地當成「可能是灰態」而要求帶 `where=`。
+    把分級結果留成 `bool`、由呼叫端寫成
+    `STATE_BUSINESS if _alert else STATE_OK` 這種**兩個字面值的條件式**，
+    那條規則就能靜態判定「這裡不可能是灰態」——
+    **不是為了繞過規則，是讓規則看得懂**（繞過的做法是硬加一個用不到的 `where`）。
+
+    ⚠️ 門檻 0.5 不是本檔發明的：`shared/signal_thresholds.py` 的
+    `SAHM_RECESSION_THRESHOLD` 就是它，`services/macro/turning_points.py` 也用它。
+    這裡刻意**只用它做文案分級**、不參與任何計算 —— 需要判定時看 ② 拐點偵測中心
+    的 `sahm_rule` 那一張，那才是走 SSOT 算出來的。
+    """
+    if v >= 0.5:
+        return True, "🔴 已達衰退判定門檻（≥0.5）"
+    if v >= 0.3:
+        return False, "🟡 進入警戒區（≥0.3）"
+    return False, "🟢 低於警戒區（<0.3）"
+
+
+def _sloos_band(v: float) -> tuple[bool, str]:
+    """SLOOS 讀數 → （是不是業務警示, 一句話）。回傳形狀的理由見 `_sahm_band`。"""
+    if v > 20:
+        return True, "🔴 銀行明顯收緊放貸（>20%）"
+    if v > 0:
+        return False, "🟡 中性偏緊（>0%）"
+    return False, "🟢 信貸寬鬆（<0%）"
+
+
+def _nav_tower_card(ind: dict, key: str, title: str,
+                    band: Callable[[float], tuple[bool, str]],
+                    what: str) -> dict:
+    """全域導航塔的一張卡：從 `ind[key]["value"]` 取讀數 → 分級 → 卡片規格。"""
+    _d = ind.get(key)
+    _v = _d.get("value") if isinstance(_d, dict) else None
+    if not isinstance(_v, (int, float)):
+        # ⚠️ **缺值不畫 0**：舊頁 v19.387 就是在修這個 —— `or 0` 會把「沒資料」
+        #    畫成 0.00 的綠燈，也就是偽裝健康（§1）。
+        return {"title": title, "state": STATE_NOT_READY,
+                "note": f"這一輪沒有取到讀數。{what}",
+                "where": _where_to_load()}
+    _alert, _verdict = band(float(_v))
+    _unit = str(_d.get("unit") or "")
+    return {"title": title, "value": f"{float(_v):.2f}{_unit}",
+            "note": f"{_verdict}　{what}",
+            # 🔴 ＝市場壞消息、數字可信 → 業務警示；不是系統紅框（鐵則 03）。
+            "state": STATE_BUSINESS if _alert else STATE_OK}
+
+
+def _breadth_card(ind: dict) -> dict:
+    """市場廣度（RSP／SPY）那一張。**量綱陷阱寫在這裡，不要照搬 `value`。**
+
+    ⚠️ `ind["ADL"]` 的 `value` 是 **RSP÷SPY 的比值**（無因次、量級 ~0.29、恆為正），
+    而**月變動百分比**由服務層放在 `prev` 欄（同 dict 的 `unit` 也是空字串）。
+    舊頁 `ui/tab1_macro_inflection.py` 已就地記過這個坑：整組刻度是為「月變動 %」
+    設計的，餵比值進去會讓指針恆黏在 0.29、燈恆亮中性 —— **不論真實廣度如何**。
+    依 `CLAUDE.md §4.1` 命名規範，本函式的變數名帶單位，避免下一個人再接錯。
+    """
+    _d = ind.get("ADL")
+    _mom_pct = _d.get("prev") if isinstance(_d, dict) else None
+    if not isinstance(_mom_pct, (int, float)):
+        return {"title": "市場廣度 · RSP／SPY", "state": STATE_NOT_READY,
+                "note": "這一輪沒有取到廣度的月變動。"
+                        "等權重／市值加權比值上升＝中小型股也在漲（健康）。",
+                "where": _where_to_load()}
+    _pct = float(_mom_pct)
+    # 分級結果留成 `bool` + 文案，`state` 由兩個字面值組出來 —— 理由見 `_sahm_band`。
+    _alert = _pct < -2
+    if _alert:
+        _verdict = "🔴 廣度收窄，只有大型股撐盤"
+    elif _pct > 2:
+        _verdict = "🟢 廣度健康"
+    else:
+        _verdict = "🟡 廣度持平"
+    return {"title": "市場廣度 · RSP／SPY", "value": f"{_pct:+.2f}%",
+            "note": f"{_verdict}　RSP÷SPY 的**月變動**（不是比值本身）。",
+            "state": STATE_BUSINESS if _alert else STATE_OK}
+
+
+def _tp_card(key: str, entry: Any) -> dict:
+    """拐點偵測中心的一張卡。
+
+    ⚠️ **標題吃服務層自己的 `label`**（例：「新訂單 YoY − 庫存 YoY (M3 製造業)」）——
+    那一欄就是指標名，本檔**不另抄一份**（§2.1）。抄不到時退回 key，
+    寧可醜也不要無聲消失。
+    ⚠️ `source_ok=False` ＝ 這一組這一輪沒算出來 → **灰態**，不是綠燈也不是紅框。
+    """
+    if not isinstance(entry, dict):
+        return {"title": key, "state": STATE_NOT_READY,
+                "note": "這一輪沒有回傳這一組拐點。", "where": _where_to_load()}
+    _title = str(entry.get("label") or key)
+    _note = str(entry.get("note") or "—")
+    if not entry.get("source_ok"):
+        return {"title": _title, "state": STATE_NOT_READY,
+                "note": _note, "where": _where_to_load()}
+    _sig = str(entry.get("signal") or "")
+    _val = entry.get("value")
+    return {
+        "title": _title,
+        "value": f"{_val}" if _val is not None else "—",
+        "note": f"{_sig}　{_note}",
+        # 🔴 開頭＝景氣壞消息，資料本身可信 → 業務警示，不是系統紅框（鐵則 03）。
+        "state": STATE_BUSINESS if _sig.startswith("🔴") else STATE_OK,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# 🤖 AI 景氣判斷總結
+# ══════════════════════════════════════════════════════════════════
+#: AI 逐章節結論要涵蓋的章節名 —— **就是本頁詳細區的四塊 ＋ 兩層總表**。
+#: 不手抄第二份區塊名：四時域直接吃 `_DETAIL_TITLES`（見 `_ai_sections()`）。
+_AI_TAB_LABEL: str = "總經位階"
+
+#: 資料完整率低於這個百分比就**不讓 AI 跑**（阻斷），介於兩者之間則降可信度。
+#: ⚠️ 兩個門檻沿用舊頁 `ui/tab1_macro_ai.py` 已經在用的 50 / 80 ——
+#: 這不是本檔發明的政策，是把既有行為原樣帶過來。
+_AI_BLOCK_PCT: int = 50
+_AI_WARN_PCT: int = 80
+
+
+def _ai_sections() -> list[str]:
+    """AI 要逐節下結論的章節清單（順序即畫面順序）。"""
+    return ["① 結論與依據（五桶證據表）",
+            *[_DETAIL_TITLES[_k] for _k in _DETAIL_HORIZON_KEYS]]
+
+
+def _ai_completeness_pct(ind: dict) -> int:
+    """這一輪的資料完整率 %。
+
+    ⚠️ **分母不寫死**（同 `_card_credibility` 的理由：`fetch_all_indicators` 沒有
+    一個乾淨的總數，寫死會過期也會失真）。這裡用的是**執行期實際數**：
+    非 meta 的 dict 條目裡，`value` 真的不是 `None` 的比例。
+    """
+    _real = {_k: _v for _k, _v in (ind or {}).items()
+             if isinstance(_v, dict) and not is_meta_key(_k)}
+    if not _real:
+        return 0
+    _have = len([_v for _v in _real.values() if _v.get("value") is not None])
+    return round(_have * 100 / len(_real))
+
+
+def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
+    """交給 AI 的資料快照。**只把已經算好的讀數排版成字串，不新增任何計算。**
+
+    ⚠️ 每一行都標明「這一項有沒有取到」——`—` 就是 `—`，
+    **不補值、不四捨五入成 0**（§1）。AI 讀到 `—` 才會知道那一項是缺的；
+    餵 0 進去它會當成一個真的觀測值去推論。
+    """
+    _lines: list[str] = []
+    _lines.append(f"[總經位階] {phase.get('phase') or '—'}"
+                  f"（分數 {phase.get('score')}/10）")
+    _score = ev.get("score")
+    _lines.append(f"[綜合健康度] 加權淨分 "
+                  f"{_score if _score is not None else '—'}"
+                  f"｜等級 {ev.get('level') or '（證據不足，未給等級）'}")
+
+    _real = {_k: _v for _k, _v in (ind or {}).items()
+             if isinstance(_v, dict) and not is_meta_key(_k)}
+    _lines.append(f"[指標完整率] {_ai_completeness_pct(ind)}%"
+                  f"（{len(_real)} 項中有讀數者）")
+    for _k, _v in sorted(_real.items()):
+        _val = _v.get("value")
+        _lines.append(
+            f"  - {_v.get('name') or _k}："
+            f"{'—' if _val is None else _val}{_v.get('unit') or ''}"
+            f"｜{_v.get('signal') or ''} {_v.get('desc') or ''}".rstrip())
+
+    _radar = st.session_state.get(_SK_RADAR)
+    if isinstance(_radar, dict):
+        _s = summarize_radar(_radar)
+        _lines.append(f"[短線雷達] 整體 {_s.get('level')}｜"
+                      f"🔴{_s.get('red')} 🟡{_s.get('yellow')} "
+                      f"🟢{_s.get('green')} ⬜{_s.get('gray')}（⬜＝沒抓到）")
+    _tp = st.session_state.get(_SK_TP)
+    if isinstance(_tp, dict):
+        for _k, _v in _tp.items():
+            if isinstance(_v, dict):
+                _lines.append(
+                    f"[拐點] {_v.get('label') or _k}："
+                    f"{_v.get('signal')}"
+                    f"{'' if _v.get('source_ok') else '（未取到資料）'}")
+    _usl = st.session_state.get(_SK_USLIQ)
+    if isinstance(_usl, dict):
+        for _k, _t, _g in _US_LIQ_ROWS:
+            _e = _usl.get(_k)
+            if isinstance(_e, dict) and not _e.get("_err"):
+                _lines.append(f"[{_g}] {_t}：{_e.get('value')}"
+                              f"{_e.get('unit') or ''}｜{_e.get('label') or ''}")
+    return "\n".join(_lines)
+
+
+def _detail_ai() -> None:
+    """🤖 AI 景氣判斷總結 —— 逐章節白話結論。
+
+    **線框依據**：`wireframe-macro-health.html` section 03 把
+    「🤖 AI 景氣判斷總結」列為詳細區〈保留 · 順序不動〉的**第五塊**，
+    section 04 另有一列寫「四時域詳細 ＋ 🤖 AI 景氣總結 → **留 · ① 原位**」。
+
+    ⛔ **不委派 `ui/helpers/ai_summary.py::render_ai_summary_widget`**，兩個理由：
+    1. **它會多印一個 H4 標題**（`#### 🤖 AI 白話總體檢（…）`），而詳細區的一級
+       序列被 `tests/test_wf01_detail_zone_order.py` 鎖成「區頭 ＋ 恰好五塊」——
+       委派過去會憑空多出第六個一級區塊。**那條鎖是對的，該讓的是本塊。**
+    2. 它自帶一顆裸 `st.button`；本頁的鐵則 02 落點是
+       `ui.helpers.ia.applied_form`（送出鈕之外不放第二顆載入鈕）。
+    本塊因此直接呼叫**服務層**的 `build_structured_summary_prompt` ／
+    `gemini_generate` ／ `get_gemini_keys` —— 那比委派 UI helper 更貼近客戶方針
+    第 2 條（「新 UI 僅呼叫既有 Service 函式」）。
+
+    ⚠️ **生成結果只放 session，不落地磁碟。** 舊 widget 有一層
+    `repositories.ai_cache` 磁碟續存；那是 L1，本頁依方針第 2 條不碰資料層。
+    代價據實寫在畫面上：reboot 之後要重按一次。
+    """
+    if _detail_not_loaded(_DETAIL_TITLES[_DETAIL_AI_KEY]):
+        return
+    _detail_title(_DETAIL_TITLES[_DETAIL_AI_KEY])
+    _ind = st.session_state.get(_SK_IND) or {}
+
+    _keys = get_gemini_keys()
+    if not _keys:
+        not_ready("未設定 Gemini 金鑰，AI 總結無法生成",
+                  where="Streamlit Cloud → Settings → Secrets 的 `GEMINI_API_KEY`")
+        return
+
+    _pct = _ai_completeness_pct(_ind)
+    if _pct < _AI_BLOCK_PCT:
+        # ⚠️ **這是「前提不足」不是「系統故障」→ 灰態，不是紅框**（鐵則 03）。
+        #    舊頁這裡畫的是紅色阻斷框；紅色在新版專屬「系統真出錯」，
+        #    而這裡什麼都沒壞 —— 只是資料還不夠讓 AI 講話。
+        not_ready(f"總經資料完整率只有 {_pct}%（低於 {_AI_BLOCK_PCT}%），"
+                  "這種輸入下 AI 的結論會建立在一堆缺值上，故不生成。",
+                  where=_where_to_load())
+        return
+
+    _phase = st.session_state.get(_SK_PHASE) or {}
+    _ev = st.session_state.get(_SK_EV) or {}
+    _snapshot = _ai_snapshot(_ind, _phase, _ev)
+    _stale = ""
+    if _pct < _AI_WARN_PCT:
+        # 不擋，但**把折扣寫進交給 AI 的輸入本身**，不是只印在畫面上 ——
+        # 只印畫面的話，AI 仍然會用一句斬釘截鐵的話講一份殘缺的資料。
+        _stale = (f"⚠️ 這一輪的總經資料完整率只有 {_pct}%，"
+                  "缺值的指標一律以「—」呈現，請在結論裡明說哪幾項沒有資料。")
+        st.caption(f"🟡 資料完整率 **{_pct}%**（低於 {_AI_WARN_PCT}%），"
+                   "AI 結論的參考性下降；缺的項目在快照裡是「—」，不是 0。")
+
+    # ── 鐵則 02：生成也走 form，不放裸按鈕 ──────────────────────────
+    # ⚠️ 走 `applied_form()` 而不是自己寫 `st.form(` —— 後者會讓
+    #    `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==` 7）變 8 而轉紅。
+    with applied_form(_AI_FORM_KEY,
+                      submit_label=("🔄 重新生成 AI 總結"
+                                    if st.session_state.get(_SK_AI)
+                                    else "▶️ 生成 AI 總結")) as _gate:
+        st.caption(
+            f"把這一頁已經取到的讀數（{len(_snapshot.splitlines())} 行快照）交給 AI，"
+            "逐段用白話講「現在是好是壞、下一步怎麼做」。"
+            "　⚠️ AI 只會看到上面那些數字，缺的項目是「—」。")
+
+    if _gate:
+        _prompt = build_structured_summary_prompt(
+            tab_label=_AI_TAB_LABEL, snapshot=_snapshot,
+            sections=_ai_sections(), headlines=[], stale_note=_stale,
+        )
+        try:
+            with st.spinner("🤖 AI 正在逐段判讀（約 10-20 秒）…"):
+                st.session_state[_SK_AI] = gemini_generate(
+                    _prompt, max_tokens=3500, keys=_keys)
+        except Exception as _exc_ai:                # noqa: BLE001 — §1：下一行就印
+            st.session_state[_SK_AI] = None
+            system_error("AI 總結生成失敗", _exc_ai,
+                         hint="上游 Gemini 可能暫時不可用或額度用盡；"
+                              "稍後再按一次送出鈕。")
+            return
+
+    _text = st.session_state.get(_SK_AI)
+    if not _text:
+        not_ready("還沒有生成過 AI 總結。",
+                  where=f"{where_to_find('macro')} → 上方「▶️ 生成 AI 總結」")
+        return
+    st.markdown(_text)
+    st.caption("⚠️ AI 生成內容僅供參考，數字一律以上方各區塊的讀數為準。"
+               "　本頁的 AI 結果只存在這個 session，重新啟動後要再按一次。")
+
+
 #: 詳細區的**渲染序列** —— `(key, 標題, render callable)`，**順序即畫面順序**。
 #:
 #: ⚠️ **前四項的 key 由 `BUCKET_ORDER` 導出**（見 `_DETAIL_HORIZON_KEYS`）：
 #: 「長期 → 中期 → 短線 → 拐點」這個順序在本 repo 只有一個出處，本檔**不抄第二份**。
 #: 第五項是 🤖 AI 總結 —— 它**不是時域桶**，`BUCKET_ORDER` 裡沒有它，故另給哨兵 key。
 #: 守衛：`tests/test_wf01_detail_zone_order.py`（結構鎖 ＋ 行為鎖，見該檔）。
+#: 每一塊自己的 render 函式。**一塊一支，不共用**。
+#:
+#: ⚠️ **2026-09-05 批次三-B：四塊灰態佔位全部換成真內容。**
+#: 在此之前這裡是
+#: `_detail_mid if _k == "mid" else partial(_detail_pending, …)` ——
+#: 也就是「一塊真的、四塊灰的」。現在五塊各有自己的渲染函式。
+#: `_detail_pending` **保留不刪**：它仍是四塊各自的「還沒載入」出口
+#: （經 `_detail_not_loaded()`），而且下一個新增區塊還會用到它。
+#: ⚠️ **對照表在這裡，不在 `_DETAIL_ZONE` 的生成式裡** —— 生成式裡塞
+#: `if/else` 鏈在第五塊之後就沒人看得懂哪個 key 配哪支函式了。
+_DETAIL_RENDERERS: dict[str, Callable[[], None]] = {
+    "long":         _detail_long,
+    "mid":          _detail_mid,
+    "short":        _detail_short,
+    "inflection":   _detail_inflection,
+    _DETAIL_AI_KEY: _detail_ai,
+}
+
 _DETAIL_ZONE: tuple[tuple[str, str, Callable[[], None]], ...] = tuple(
     (
         _k,
         _DETAIL_TITLES[_k],
-        # 📈 中期循環是本批唯一真的搬過來的；其餘四塊走同一支灰態建構器。
-        # `partial` 而不是 lambda：lambda 在生成式裡會**共用同一個 `_k`**
-        # （late binding），四塊會全部印成最後一個標題 —— 那是靜默的錯，
-        # 畫面看起來還是四塊，只是名字全一樣。
-        _detail_mid if _k == "mid" else partial(_detail_pending, _DETAIL_TITLES[_k]),
+        # ⚠️ 沒登記的 key **退回灰態佔位，不是 KeyError** —— 那樣整頁會被
+        #    `app.py` 的分頁級 try 換成一個紅框，而使用者其實只是少了一塊。
+        #    `partial` 而不是 lambda：lambda 在生成式裡會**共用同一個 `_k`**
+        #    （late binding），沒登記的幾塊會全部印成最後一個標題。
+        _DETAIL_RENDERERS.get(_k) or partial(_detail_pending, _DETAIL_TITLES[_k]),
     )
     for _k in (*_DETAIL_HORIZON_KEYS, _DETAIL_AI_KEY)
 )
@@ -1080,6 +1895,9 @@ def render_market_overview() -> None:
     #    兩層各自呼叫一次不會出錯，但那會讓同一個位階分數有兩個計算點 ——
     #    日後任一邊換了輸入，畫面上「① 的燈」與「② 的長期桶」會無聲分岔（§2.1）。
     _phase = calc_macro_phase(_ind)
+    # 🤖 AI 總結（層 4）要用同一份 phase，**存起來給它讀，不讓它自己再算一次**
+    # —— 理由同上一段：兩個計算點會讓「① 的燈」與「AI 講的位階」無聲分岔。
+    st.session_state[_SK_PHASE] = _phase
 
     # ── 層 1：🧾 ① 結論（全寬）───────────────────────────────
     _render_layer_conclusion(_ind, _phase)
@@ -1107,6 +1925,10 @@ def render_market_overview() -> None:
                           "下方三欄會因此少掉水位與可信度。")
         _ev = {"summary": None, "score": None, "prov": {},
                "sufficient": False, "level": ""}
+    # 同 `_SK_PHASE`：層 4 的 🤖 AI 總結讀這一份，**不重算綜合分數**。
+    # ⚠️ 上面那條 except 走過時存的是**哨兵**（score=None、sufficient=False），
+    #    AI 快照會照實印「—」與「證據不足，未給等級」，不會拿一個算失敗的數字去講話。
+    st.session_state[_SK_EV] = _ev
 
     # ── 層 3：📐 建議資產水位 ／ ⚡ ③ 例外 ／ 🔍 ④ 可信度（三欄）──
     # 鐵則 01：正好 3 張 → 一列 3 欄。**三張都吃層 2 算好的結果，不重算。**
