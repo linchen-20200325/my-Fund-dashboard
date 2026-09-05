@@ -14,31 +14,41 @@
 –      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
 2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
 3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
-4      🔎 詳細五時域                    尚未實作（批次三），誠實灰態
+4      🔎 詳細區（四時域＋決策矩陣＋AI）  尚未實作（批次三），誠實灰態
 ===== ============================== ==========================================
 
 拍板同時解掉的三件事（**不要再當成待裁決**）
 ------------------------------------------
 - **主要大表 ＝ ② 依據五桶證據表**；「總經燈號全表」**不做**（理由見
   :func:`_render_deferred_blocks`，那是資料層限制，不是版面偏好）。
-- **新聞情緒與系統性風險 ＝ 灰態**：`services/**` 沒有任何新聞取數函式，
-  依方針第 2 條不反向修底層 → 維持誠實灰態（見 :func:`_card_news`）。
+- **新聞情緒與系統性風險 ＝ 灰態**（客戶已拍板）。本組**沒有找到** `services/**` 的
+  新聞取數入口（實測取數住在 `repositories/news_repository.py`），依方針第 2 條
+  不反向修底層 → 維持誠實灰態（見 :func:`_card_news`）。
+  ⚠️「services 裡沒有」取決於有沒有漏看，本組**不作全稱宣稱**；
+  **處置不繫於它** —— 灰態是客戶拍板的結果，不是這句話推出來的。
 - **建議資產水位不出核心／衛星**。⚠️ 這一條最容易做錯，展開寫在下面。
 
 ⛔ 「建議資產水位」為什麼是**股／債／現金**，不是核心／衛星
 ----------------------------------------------------------
 `services.allocation_ladder.allocation_from_composite()` 回的是
-`allocation = {equity, bond, cash}` —— **資產類別**（錢放在哪一種資產）。
-而「核心／衛星」是**角色配置**（這筆錢在組合裡扮演什麼角色），
-兩者是不同的分類軸，**全 repo 沒有任何由總經分數導出核心／衛星的服務**。
-把 `equity` 改標成「核心」＝ 拿 A 的數字冒充 B 的答案，就是 §1 的造假。
+`allocation = {equity, bond, cash}` —— **它的回傳欄位就是股／債／現金**。
+把 `equity` 改標成「核心」，就是拿 A 欄位的數字冒充 B 的答案（§1 造假）。
+**這個理由是可自驗的：打開那個函式看它回什麼欄位就結案，不必相信任何人的清單。**
 
-⚠️ **兩份線框在這張卡上寫的不是同一件事**（實測，2026-09-05）：
-`ia-wireframe.html` 該卡寫「核心 70 ／ 衛星 30」；
-而本檔採用的骨架來源 `wireframe-macro-health.html` 該卡寫
-「**股／債／現金 % ＋ 停利、加碼 Z 門檻**」—— **與服務回傳的欄位完全一致**。
-也就是說：照拍板的骨架做，線框與服務**沒有衝突**；會衝突的是另一份線框。
-客戶拍板第 3 條（核心／衛星不出這張卡）與骨架來源**同向**。
+⚠️ **2026-09-05 撤回一句假宣稱（獨立稽核 A776 指出；commit `541a7ec` 的訊息與本檔
+   前一版都帶著它，commit message 無法重寫，故在此撤回）**：
+   原文寫「**全 repo 沒有任何由總經分數導出核心／衛星的服務**」—— **那句是假的。**
+   本組實測到的反例（每一條都自己重跑過）：
+   - `services/macro/composite_score.py::composite_verdict()` —— **唯一輸入就是總經綜合分數**，
+     回傳的 `action_text` 逐字寫「衛星部位積極佈局成長題材」「核心持有不動」「核心轉防守型」。
+     ⚠️ **本檔的 `_render_layer_evidence()` 正在呼叫它** —— 一邊呼叫、一邊宣稱它不存在。
+   - `services/macro/explain.py` —— 同樣那四句。
+   - `services/macro/us_indicators.py::identify_regime()` 的 `alloc_by_regime` 是
+     **帶數字**的 dict，鍵含「核心債券」「衛星主題」。
+   ⛔ **不要把它換成一句更小心的全稱句**（例如「沒有導出核心／衛星**比例**的服務」）——
+   那一樣取決於「我有沒有漏看」，而上面第三條就正好站在那條線上。**直接不要全稱句。**
+   **拿掉它不影響任何結論**：不改標的理由是上一段那句可自驗的欄位事實，
+   全稱句對結論沒有貢獻，只是純負債（§-2 規則 6）。
 
 ⚠️ **Z 門檻目前是固定的預設值，畫面必須說出來。**
 `allocation_from_composite(score, ndc_score)` 的第二個參數要台灣景氣對策信號分數，
@@ -140,6 +150,10 @@ _SK_ERR: str = "v01_macro_load_error"
 _SK_HOT: str = "v01_macro_hot_money"
 _SK_RADAR: str = "v01_macro_risk_radar"
 _FORM_KEY: str = "v01_macro_load_form"
+#: 這一輪**實際交給送出鈕的那個字**。指路文案一律讀它，不自己再判一次載入狀態。
+#: ⚠️ 存的是「畫面上印了什麼」，不是「資料載入了沒」—— 兩者在**剛按下按鈕的那一輪
+#: 並不一致**（見 `_where_to_load()` 的說明），而使用者看的是前者。
+_SK_BTN: str = "v01_macro_submit_label"
 
 #: 熱錢／匯率序列的回看天數。
 #: ⚠️ **刻意用具名常數而不是畫面上的控制項**：兩份線框的 Form 欄位集互相衝突
@@ -152,14 +166,34 @@ _HOT_MONEY_WINDOW_DAYS: int = 180
 def _where_to_load() -> str:
     """「去哪補」：指到本頁載入閘門裡的那顆送出鈕。
 
-    ⚠️ 送出鈕的字是**動態**的（未載入 `📡 載入總經資料` ／ 已載入 `🔄 更新總經資料`），
-       而灰態卡**只在未載入時出現**，故此處指名 :data:`MACRO_LOAD_BTN_FIRST`
-       —— 指 `AGAIN` 版本等於指一個當下不存在的按鈕
-       （這正是 `shared/ui_control_labels.py` docstring 記載的第一則實測錯誤）。
-    ⚠️ 分頁名走 `where_to_find()`、按鈕名**內插 SSOT 常數**：兩者都不手抄，
-       故本字串不可能因為改名而漂成死指路。
+    **一律回「畫面上這一輪實際印出來的那個字」** —— 讀 :data:`_SK_BTN`，
+    那是 :func:`render_market_overview` 交給 `applied_form(submit_label=...)`
+    的**同一個變數**，所以指路的字與按鈕的字**不可能分岔**。
+
+    ⚠️ **2026-09-05 修正：本函式原本寫死 `MACRO_LOAD_BTN_FIRST`，那是錯的。**
+    舊 docstring 的理由是「灰態卡只在未載入時出現，故指名 FIRST」——
+    **那句話是假的**。全檔 17 個 `where=_where_to_load()` 站點裡，只有 4 個
+    （`render_market_overview` 的未載入早退區塊）在 FIRST 狀態渲染；
+    其餘 13 個住在六張卡片建構器、三欄卡片建構器與 `_render_deferred_blocks`，
+    **只在載入之後才被呼叫**，而那時按鈕已經變成 `MACRO_LOAD_BTN_AGAIN`。
+    `_render_deferred_blocks` 每次成功載入都會渲染 → **不是邊角情形，是必中**。
+
+    AppTest 實測（修正前）：載入後畫面上的按鈕是「🔄 更新總經資料」，
+    而灰態說明寫「請先到：… → 「📡 載入總經資料」」—— 指一顆當下不存在的按鈕。
+
+    ⚠️ **為什麼不在這裡重判一次載入狀態**（例如 `isinstance(...get(_SK_IND), dict)`）：
+    在**使用者剛按下送出鈕的那一輪**，兩者會分岔 —— 表單是用「按之前」的狀態決定
+    標籤（印 FIRST），但 `_load_everything()` 隨後就把 `_SK_IND` 寫進去了，
+    此時重判會得到 AGAIN，於是又指錯一次，只是方向相反。
+    **存下實際用過的那個字，是唯一不會分岔的做法。**
+
+    ⚠️ 分頁名走 `where_to_find()`、按鈕名走 SSOT 常數（經 `_SK_BTN` 轉手）：
+    兩者都不手抄，故本字串不可能因為改名而漂成死指路。
+    ⚠️ 預設值 `MACRO_LOAD_BTN_FIRST` 只在「表單都還沒渲染就有人呼叫本函式」時生效
+    —— 現行流程不會發生（所有呼叫點都在表單之後），留著是為了不回傳空字串。
     """
-    return f"{where_to_find('macro')} → 「{MACRO_LOAD_BTN_FIRST}」"
+    _label = st.session_state.get(_SK_BTN) or MACRO_LOAD_BTN_FIRST
+    return f"{where_to_find('macro')} → 「{_label}」"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -449,7 +483,8 @@ def _render_layer_evidence(ind: dict, phase: dict) -> dict:
     欄位以該檔的 `EVIDENCE_COLUMNS`（5 欄）為準，**不照線框那張 6 欄示意表**。
 
     ⚠️ **`news_items` 一律傳 `None`（客戶 2026-09-04 拍板第 2 條）**：
-    `services/**` 沒有任何新聞取數函式，本頁不反向修底層。`None` 是
+    本組沒有找到 `services/**` 的新聞取數入口，本頁不反向修底層（**不作全稱宣稱**；
+    灰態是客戶拍板的結果）。`None` 是
     `compute_five_bucket_summary` 明文支援的輸入 —— 它會把新聞桶標成
     ⬜「未掃描」，**而不是綠燈**。傳 `[]`（空清單）會被讀成「掃過了、0 則系統性風險」，
     那才是造假。
@@ -529,7 +564,14 @@ def _card_allocation(ev: dict) -> dict:
     _a = _al["allocation"]
     # ⚠️ 「股票 / 債券 / 現金」是**資產類別**。刻意逐字寫出這三個字，
     #    不用「核心 / 衛星」那組詞 —— 它們是不同的分類軸（模組 docstring）。
-    _gate = (f"停利 Z ≥ {_al['stop_gain_z']:+.2f}、加碼 Z ≤ {_al['add_z']:+.2f}")
+    # ⚠️ **「Z」對使用者是黑話，必須就地解釋，而且要說清楚它量的是哪一個數字。**
+    #    實測出處 `shared/signal_thresholds.py`「模組②:Z-Score 位階窗」：
+    #    `ZSCORE_WINDOW_DAYS = 756`（3 年交易日）、`ZSCORE_MIN_OBS = 252  # 有效 NAV 點` ——
+    #    也就是 Z 量的是**單一基金的淨值**離它自己近三年平均有多遠（以標準差為單位），
+    #    **不是**總經分數的 Z。免責句本身合格不代表被免責的那兩個數字可以是黑話。
+    _gate = (f"停利 Z ≥ {_al['stop_gain_z']:+.2f}、加碼 Z ≤ {_al['add_z']:+.2f}"
+             "（Z 是「一檔基金現在的淨值，離它自己近三年的平均有多遠」，"
+             "0 就是剛好在平均、正的偏貴、負的偏便宜）")
     _gate_src = (f"這兩個門檻已依台灣景氣{_al['light']}燈調整。"
                  if _al.get("light")
                  else "這兩個門檻是固定的預設值，不會跟著台灣景氣燈號變動。")
@@ -595,9 +637,14 @@ def _card_exceptions(ev: dict) -> dict:
 def _card_credibility(ind: dict, ev: dict) -> dict:
     """🔍 ④ 可信度 —— 這一輪的數字**能信到什麼程度**。
 
-    ⚠️ 這張卡刻意報「**有幾項附得出來源**」：實測（2026-09-05）
-    `services/macro/us_indicators.py::fetch_all_indicators` 的 28 個指標裡，
-    只有 **1 個**（PMI）帶回 `source=`、**0 個**帶回 `fetched_at=`。
+    ⚠️ 這張卡刻意報「**有幾項附得出來源**」：實測（2026-09-05，AST 數
+    `fetch_all_indicators` 內各 `dict(...)` 呼叫的具名引數）——
+    帶 `source=` 的只有 **1 個**（PMI），帶 `fetched_at=` 的 **0 個**。
+    ⚠️ **這裡刻意不寫「共幾項指標」的總數**：AST 實測 `R` 有 27 個下標賦值、
+    其中 26 個是字面 key，而那 26 個裡還混著一個 `_fred_sources`（meta，不是指標），
+    另有非字面 key 的動態賦值 —— **它沒有一個乾淨的單一總數**，
+    寫死一個會過期也會失真（§8.2.A.0 規則 4：會漂移的量測值不寫死）。
+    本卡的分母改由執行期實際數（已用 `is_meta_key()` 濾掉 meta）。
     血緣在 L1 是有寫的（`repositories/macro/fred.py` 會寫 `source` / `fetched_at`），
     **但 L2 沒有把它接下來**。這正是「總經燈號全表」做不出「來源」欄的原因
     （見 :func:`_render_deferred_blocks`）—— 同一個限制，在這裡誠實講一次。
@@ -642,17 +689,35 @@ def _render_deferred_blocks() -> None:
     """把「本批沒做」與「已拍板不做」的區塊畫成灰態 —— **兩者理由不同，分開寫**。
 
     ⚠️ 這些**不是**失敗，也不是抓取失敗 → 一律灰態（`not_ready` 系），不上紅（鐵則 03）。
+
+    ⚠️ **2026-09-05 更正：本區塊原本叫「🔎 詳細五時域」，那個名字是本專案自己造的，
+       而且是假的**（獨立稽核 A776 指出，本組已自驗）。實測：
+       `git grep -ln "五時域" origin/main` **只命中我們自己這一個檔**；
+       九份線框逐檔 `grep -c 五時域` **全部 0**。
+       已拍板骨架 `docs/wireframes/wireframe-macro-health.html` 寫的是
+       「**🔎 詳細區 — 四時域 ＋ 決策矩陣 ＋ AI**」，標「**6 塊**」並逐塊列出：
+       🌳 長期座標／📈 中期循環／🎯 短線雷達／⚠️ 拐點警報／
+       **📋 即時訊號 ＋ 決策矩陣**／🤖 AI 景氣判斷總結。
+       ⛔ **那個假名字錯兩次**：(a) 時域是 **4** 不是 5 —— 第 5 個 render 函式是
+       **AI 總結**，不是時域；(b) 它把**決策矩陣**（詳細區最大的一塊：verdict 大卡
+       ＋ 逐檔決策矩陣表 ＋ 4 格 stat_tile ＋ 動作對照表）整塊吃掉了。
+       **留著它，批次三會照它派工，然後在一次「打掉重練」裡讓決策矩陣無聲消失** ——
+       而客戶方針第 3 條（舊 tab 暫留、待新版驗收完成後整批拔除）防的正是這件事。
+       ⚠️ **詳細區是否還有第 7 塊，本組不宣稱**：`ui/helpers/macro/beginner_view.py`
+       的 docstring 提到一個「**唯讀副盤**」一級區塊，而線框那 6 塊沒列它。
+       **本組未查證，故不寫進畫面文案，也不斷言它不存在** —— 留給批次三。
     """
     st.divider()
     empty_state(
-        "🔎 詳細五時域：長期 → 中期 → 短線雷達 → 拐點 → AI 總結",
-        "這五段要從舊版總經頁逐段重寫，份量大，已另立**批次三**處理",
+        "🔎 詳細區：🌳 長期座標 → 📈 中期循環 → 🎯 短線雷達 → ⚠️ 拐點警報"
+        " → 📋 即時訊號＋決策矩陣 → 🤖 AI 景氣判斷總結",
+        "這 6 塊要從舊版總經頁逐塊重寫，份量大，已另立**批次三**處理",
         where=_where_to_load(),
-        footer="批次三完成後，這五段會接在同一個載入閘門底下，取數機制現在就已經就位。",
+        footer="批次三完成後，這幾塊會接在同一個載入閘門底下，取數機制現在就已經就位。",
     )
     empty_state(
         "總經燈號全表（值／位階／資料日期／來源）—— 已拍板不做",
-        "「來源」欄目前 28 項指標裡只有 1 項帶得回來源標記（其餘會是「—」），"
+        "「來源」欄目前**只有 1 項指標**帶得回來源標記，其餘全部會是「—」；"
         "而「位階」欄兩份線框都沒有定義過它的意思",
         where=where_to_find("diag"),
         footer="這不是壞掉：資料層有記來源，是計算層沒有把它一起帶下來；"
@@ -676,6 +741,10 @@ def render_market_overview() -> None:
 
     _fred_key = os.environ.get("FRED_API_KEY", "")
     _loaded = isinstance(st.session_state.get(_SK_IND), dict)
+    # 這一輪要印在送出鈕上的字。**先算出來、存起來、再交給表單** ——
+    # 指路文案（`_where_to_load()`）讀的就是這個變數，兩邊因此不可能分岔。
+    _submit_label = MACRO_LOAD_BTN_AGAIN if _loaded else MACRO_LOAD_BTN_FIRST
+    st.session_state[_SK_BTN] = _submit_label
 
     # ── 鐵則 02：載入閘門（按送出鈕才取數）──────────────────────────
     # ⚠️ 走 `applied_form()` 而不是自己寫 `st.form(` —— 後者會讓
@@ -684,7 +753,7 @@ def render_market_overview() -> None:
     #    區塊內判斷恆為 False（`ui/helpers/ia/gated_form.py` 的模組 docstring）。
     with applied_form(
             _FORM_KEY,
-            submit_label=MACRO_LOAD_BTN_AGAIN if _loaded else MACRO_LOAD_BTN_FIRST,
+            submit_label=_submit_label,
     ) as _gate:
         st.caption("資料源　FRED ＋ FinMind。"
                    "⬜ 表單欄位待客戶裁決：兩份線框一份是「觀察區間 ＋ 資料源」，"
@@ -784,5 +853,5 @@ def render_market_overview() -> None:
         _card_credibility(_ind, _ev),
     ])
 
-    # ── 層 4：🔎 詳細五時域（批次三）＋ 已拍板不做的燈號全表 ──
+    # ── 層 4：🔎 詳細區（批次三）＋ 已拍板不做的燈號全表 ──
     _render_deferred_blocks()
