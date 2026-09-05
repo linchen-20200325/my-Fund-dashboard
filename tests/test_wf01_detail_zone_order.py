@@ -341,25 +341,70 @@ def test_the_mid_cycle_block_really_delegates_to_the_shared_renderer():
         "同一頁對同一份資料出現第二個取數點")
 
 
-def test_the_other_four_sections_are_still_honest_placeholders():
-    """另外四塊目前是**誠實灰態**，不是空白、也不是假裝有內容。
+#: 五塊各自**該由哪一支函式渲染**。
+#:
+#: ⚠️ **2026-09-05 批次三-B：本條由「灰態清單」改成「接線清單」。**
+#: ~~舊版是 `_expected_pending = {"long", "short", "inflection", "ai"}`，
+#: 斷言那四塊**還是** `_detail_pending`（灰態佔位）。~~
+#: 四塊搬真之後那份期望值只剩下 `set()`，而舊版 docstring 自己就寫過
+#: 「**一條『什麼都沒斷言』的測試會一直是綠的**」—— 空集合正是那個形狀。
+#: **有意識的改寫，不是漏刪**：斷言方向從「它們還是灰的」改成
+#: 「**它們各自接到了自己那一支渲染器**」，強度是**上升**的：
+#: 舊版只擋得住「灰態被換成別的東西」，新版連「A 塊被接到 B 塊的渲染器」
+#: （畫面上兩塊長一樣、順序鎖照樣全綠）都擋得住。
+#: ⚠️ **`_detail_pending` 本身沒有被刪**：它仍是每一塊「總經還沒載入」時的出口
+#: （`_page._detail_not_loaded()` 會呼叫它那條路徑的等價灰態）。
+_EXPECTED_RENDERERS: dict = {
+    "long":                "_detail_long",
+    "mid":                 "_detail_mid",
+    "short":               "_detail_short",
+    "inflection":          "_detail_inflection",
+    _page._DETAIL_AI_KEY:  "_detail_ai",
+}
 
-    ⚠️ **本條會隨批次三失效，那是刻意的** —— 每搬真一塊，就要來這裡把它移出
-    `_expected_pending`。**強迫搬遷的人回頭改這一行**，比讓守衛悄悄變成空集合好：
-    一條「什麼都沒斷言」的測試會一直是綠的。
+
+def test_each_section_is_wired_to_its_own_renderer():
+    """五塊各自接到自己那一支渲染器，**沒有任何一塊還是灰態佔位**。
+
+    **突變會紅（每一種都實測過）**：
+      - 把任一塊換回 `partial(_detail_pending, …)` → 本條紅（「退回佔位」）；
+      - 把 `long` 接到 `_detail_short` → 本條紅（「兩塊共用一支」）；
+      - 把某一支渲染器改名而忘了更新 `_DETAIL_RENDERERS` → 那一塊會 fall back 成
+        `_detail_pending` → 本條紅。
+
+    ⚠️ **期望值是函式名的字面值，不是從 `_DETAIL_RENDERERS` 取的** —— 同
+    `_WIREFRAME_TITLES` 的理由：兩邊同源就會一起漂移。本檔前一版實測過那個坑
+    （期望值與畫面同源 → 改名 8 passed 全綠）。
     """
-    _expected_pending = {"long", "short", "inflection", _page._DETAIL_AI_KEY}
-    _pending = {
-        _k for _k, _t, _r in _page._DETAIL_ZONE
-        if getattr(_r, "func", _r) is _page._detail_pending
-    }
-    assert _pending == _expected_pending, (
-        f"詳細區的灰態塊變了；期望 {sorted(_expected_pending)}、實際 {sorted(_pending)}。\n"
-        "⛔ **先確認這一塊是不是線框 section 03 那五塊之一**"
-        "（`_WIREFRAME_TITLES`）——\n"
-        "   是：把它從本條的 `_expected_pending` 移除即可（它被搬真了，正常）。\n"
-        "   否：**不要改本條的期望值** —— 那會讓一個未經客戶拍板的新區塊直接上畫面。\n"
-        "       線框沒有的區塊要先走 UI 草稿先行，拍板後才動 `_DETAIL_ZONE`。")
+    _got = {}
+    for _k, _t, _r in _page._DETAIL_ZONE:
+        _fn = getattr(_r, "func", _r)      # `partial` 剝殼
+        _got[_k] = getattr(_fn, "__name__", repr(_fn))
+
+    assert _got == _EXPECTED_RENDERERS, (
+        "詳細區的接線變了。\n"
+        f"  期望：{_EXPECTED_RENDERERS}\n  實際：{_got}\n"
+        "⛔ **`_detail_pending` 出現在這裡 ＝ 那一塊退回灰態佔位了。**\n"
+        "   若這是刻意的（例如某塊的服務層被下架），請連同本表一起改，"
+        "並在 PR 描述寫明為什麼一塊已經上線的內容要退回去。")
+
+    assert len(set(_got.values())) == len(_got), (
+        f"有兩塊共用同一支渲染器：{_got} —— "
+        "畫面上會出現兩塊一模一樣的內容，而順序鎖對此是全綠的。")
+
+
+def test_no_section_falls_back_to_the_placeholder_renderer():
+    """`_DETAIL_RENDERERS` 必須覆蓋 `_DETAIL_ZONE` 的每一個 key。
+
+    ⚠️ 產品碼那邊刻意寫成 `_DETAIL_RENDERERS.get(_k) or partial(_detail_pending, …)`
+    —— **沒登記的 key 退回灰態而不是 `KeyError`**，否則整頁會被 `app.py` 的
+    分頁級 try 換成一個紅框。那個 fallback 是對的，但它會**靜默**吞掉一次漏登記，
+    所以需要本條把它變成紅燈。
+    """
+    _zone_keys = [_k for _k, _t, _r in _page._DETAIL_ZONE]
+    _missing = [_k for _k in _zone_keys if _k not in _page._DETAIL_RENDERERS]
+    assert not _missing, (
+        f"這幾塊沒有登記渲染器，會靜默退回灰態佔位：{_missing}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -495,3 +540,675 @@ def test_one_failing_block_does_not_take_down_the_rest_of_the_zone():
     assert any(_SIGNPOST_MARK in _c for _c in _caps), (
         "📈 中期循環爆炸後，指向 ② 的那句指路消失了 —— "
         "它是整批搬移裡唯一留給使用者的線索，不得被別的區塊的故障帶走")
+
+
+# ══════════════════════════════════════════════════════════════
+# 7) 內容鎖 —— 四塊「搬真」之後，各自真的畫得出東西
+# ══════════════════════════════════════════════════════════════
+# ⚠️ **為什麼接線鎖不夠**：接線鎖只驗「`_DETAIL_ZONE` 指到 `_detail_long`」。
+#    把 `_detail_long()` 的**函式體掏空**（只留標題）之後，接線鎖、順序鎖、
+#    字面值錨、故障隔離鎖**全部照樣綠** —— 畫面上那一塊會變成一個孤零零的標題。
+#    本節就是為了讓「掏空」轉紅。
+#
+# ⚠️ **本節的斷言對象是「畫面上出現的字」，不是「呼叫了哪個函式」。**
+#    斷言函式呼叫會讓實作換一個等價寫法就紅（假紅）；斷言畫面上的字才對得上
+#    使用者真正會看到的東西。代價是**字被改寫時本節會紅** —— 那是刻意的：
+#    這幾個字是線框點名的區塊名與服務層自己的欄位，改動應該被看見一次。
+#
+# ⚠️ **本節直接把 payload 塞進 session，不跑取數。** 理由：blocks 的契約就是
+#    「從 session 讀 `_load_everything()` 放好的東西」。取數那一半由
+#    :func:`test_the_loader_fills_every_detail_zone_payload` 單獨守 ——
+#    **兩條缺一不可**：只有前者，刪掉 loader 那三段照樣綠（畫面永遠灰）；
+#    只有後者，掏空 render 照樣綠（畫面永遠只剩標題）。
+
+#: 側錄「畫面上出現的字」用的 API —— 比 `_RECORDED_APIS` 更寬（多了 `metric`
+#: 與 `dataframe`），因為卡片的正常態走 `st.metric`、大表走 `st.dataframe`。
+_TEXT_APIS: tuple[str, ...] = (
+    *_RECORDED_APIS, "metric", "dataframe", "form_submit_button",
+)
+
+
+def _render_parts(session: dict, *, gemini_keys: tuple = ("fake-key",)) -> list:
+    """跑真的 `render_market_overview()`，回傳畫面上出現過的字（**有序**）。
+
+    `st.dataframe(df)` 的內容以 `df.to_string()` 併入 —— 否則大表裡的每一列
+    （雷達 10 燈、原始讀數表）對本節是隱形的。
+
+    ⚠️ **2026-09-05 稽核 F2：回傳「有序清單」而不是一坨字串，是被迫改的。**
+    前一版回傳 `"\n".join(...)`，於是所有斷言都變成**整頁全域存在性檢查**
+    （「畫面上某處有 ⬜」），而**單一塊的誠實度完全沒被守到** ——
+    只要任何一塊還有 ⬜，其餘四塊被改成 `st.caption("—")`
+    甚至 `st.success("✅ …一切正常")` 都照樣全綠（稽核實跑證明）。
+    有序清單才切得出「哪一段字是哪一塊印的」，見 :func:`_render_segments`。
+    """
+    _ss = _FakeSessionState(session)
+    _blob: list[str] = []
+
+    def _make(_api: str):
+        def _rec(_self, *a, **kw):
+            if _api == "metric" and a and isinstance(a[0], str):
+                # ⛔ **合格態的卡片走 `st.metric`，畫面上沒有任何可切段的標記。**
+                #    灰態卡走 `st.markdown(f"**{title}**")`（有標記），
+                #    於是「三張卡裡把**中間那張**換成捏造的合格態」時，
+                #    那張卡的字會併進**前一張**的單位 —— 而前一張還有 ⬜ → 不紅。
+                #    實測（2026-09-05，補這行之前）：捏造第 1 張 `1 failed`、
+                #    **捏造第 2 張 `21 passed`**。
+                #    這裡補一個側錄專用的分段標記，讓每一張 metric 卡自成一個單位。
+                _blob.append(f"{_METRIC_MARK}{a[0]}")
+            for _x in (*a, *kw.values()):
+                if isinstance(_x, str):
+                    _blob.append(_x)
+                elif hasattr(_x, "to_string"):
+                    # ⚠️ **不是 `except: pass`**（§1）：側錄失敗會留下一個看得見的
+                    #    標記，斷言因此會少掉那張表的指紋而轉紅 —— 側錄壞掉不得
+                    #    偽裝成「那張表沒畫出來」以外的任何結果。
+                    try:
+                        _blob.append(_x.to_string())
+                    except Exception as _rec_exc:   # noqa: BLE001 — 見上
+                        _blob.append(f"<<側錄失敗 {type(_rec_exc).__name__}>>")
+            return False                          # form_submit_button → 未送出
+        return _rec
+
+    def _bind(_fn):
+        return lambda *a, **k: _fn(None, *a, **k)
+
+    # 🤖 AI 總結的前置是「有沒有 Gemini 金鑰」。**在這裡給一把假的**，
+    # 否則本節永遠只驗得到「沒金鑰 → 灰態」那一條路，AI 那一塊的內容鎖就是空的。
+    with patch.dict("os.environ", {"FRED_API_KEY": "test-key"}), \
+            patch.object(st, "session_state", _ss), \
+            patch("ui.views.page_01_macro.get_gemini_keys",
+                  return_value=list(gemini_keys)):
+        with _ExitStack() as _stack:
+            for _api in _TEXT_APIS:
+                if hasattr(DeltaGenerator, _api):
+                    _stack.enter_context(
+                        patch.object(DeltaGenerator, _api, _make(_api)))
+                if hasattr(st, _api):
+                    _stack.enter_context(
+                        patch.object(st, _api, _bind(_make(_api))))
+            _page.render_market_overview()
+    return _blob
+
+
+def _render_all_text(session: dict, **kw) -> str:
+    """:func:`_render_parts` 的整頁串接版（給「整頁至少要有某某」那類斷言用）。
+
+    ⚠️ **不要拿它做「某一塊有沒有 ⬜」的斷言** —— 那正是稽核 F2 打穿的形狀。
+    逐塊的斷言一律走 :func:`_render_segments`。
+    """
+    return "\n".join(_render_parts(session, **kw))
+
+
+#: 一級標題的樣式（H2~H5 都收）—— 切段用，不是本檔別處那個 `_OPENER_RE`。
+#: ⚠️ **這裡要收 H2**：📈 中期循環的標題是由 `ui/tab1_macro_midcycle.py` 自己印的
+#: `## 📈 中期循環`（比其餘四塊高兩級）。不收 H2 的話，中期循環那一整段內容
+#: 會被算進**它前面那一塊**（🌳 長期座標）的段落裡，讓 F2 的逐塊斷言失真。
+_SEG_OPEN_RE = re.compile(r"^#{2,5}\s+(.*)$")
+
+
+def _render_segments(session: dict, **kw) -> dict:
+    """把畫面切成「**每一塊各自印了哪些字**」。
+
+    切點是五塊的標題本身（不論它用第幾級標題，見 :data:`_SEG_OPEN_RE`）。
+    區頭 `### 🔎 詳細資料與說明` 之前的東西不屬於任何一塊，直接丟掉。
+
+    ⛔ **最後一塊的段落必須有下界，否則本函式會說謊。**
+    🤖 AI 總結是詳細區的最後一塊，它後面緊接著 `_render_matrix_signpost()`
+    與 `_render_deferred_blocks()` 的「總經燈號全表」空狀態 —— 而**那個空狀態
+    自己就帶著 ⬜ 與「（請先到：」**。沒有下界的話，AI 那一塊會**無條件繼承**
+    它們，於是「AI 塊有沒有自己的灰態」這個問題永遠答 True。
+    ⚠️ **這不是假想** —— 本組把 AI 的灰態換成 `st.success("✅ 資料狀況良好…")`
+    做自驗突變，**第一版切段器回報 21 passed**（應該紅）。下界是那一次抓出來的。
+    收尾用 `_SIGNPOST_MARK`：`_render_detail_zone()` 的迴圈跑完，
+    **下一句就是那條指路**，所以它正好是詳細區的結束標記。
+    """
+    _segs: dict = {}
+    _cur = None
+    for _p in _render_parts(session, **kw):
+        if not isinstance(_p, str):
+            continue
+        if _cur is not None and _SIGNPOST_MARK in _p:
+            _cur = None                      # 詳細區到此為止（見上方 ⛔）
+            continue
+        _m = _SEG_OPEN_RE.match(_p)
+        _title = _m.group(1).strip() if _m else None
+        if _title in _WIREFRAME_TITLES:
+            _cur = _title
+            _segs[_cur] = []
+        elif _cur is not None:
+            _segs[_cur].append(_p)
+    return {_k: "\n".join(_v) for _k, _v in _segs.items()}
+
+
+#: 一份「四塊都有料」的 session。**刻意用服務層真正的欄位名與形狀**
+#: （逐一對照過 `services/us_liquidity_engine.py::fetch_us_liquidity_snapshot`、
+#:  `services/risk_radar.py::_build`、`services/liquidity_engine.py`、
+#:  `services/macro/turning_points.py::detect_turning_points` 的回傳），
+#: 這樣「服務層改欄位名」也會在這裡轉紅，而不是在使用者面前變成一片灰。
+def _loaded_session() -> dict:
+    return {
+        _page._SK_IND: {
+            "SAHM":  {"name": "薩姆規則", "value": 0.63, "unit": "pp"},
+            "SLOOS": {"name": "SLOOS 放貸標準", "value": 25.0, "unit": "%"},
+            "ADL":   {"name": "市場廣度 RSP/SPY", "value": 0.2931,
+                      "prev": -3.14, "unit": ""},
+            "VIX":   {"name": "VIX 恐慌指數", "value": 24.1, "unit": ""},
+        },
+        _page._SK_USLIQ: {
+            "hy_oas": {"value": 5.9, "unit": "%", "label": "🔴 信用緊縮 / 熱錢撤離",
+                       "date": "2026-09-04", "source": "FRED:BAMLH0A0HYM2"},
+            "m2_yoy": {"value": 3.2, "unit": "%", "label": "✅ 貨幣寬鬆",
+                       "date": "2026-08-31", "source": "FRED:M2SL"},
+            "aaii":   {"value": -24.5, "unit": "%", "label": "✅ 散戶過度悲觀（反指標：買訊號）",
+                       "date": "2026-09-03", "source": "AAII:scrape:sentiment_spread"},
+            "_provenance": {"sources": {}, "fetched_at": "", "orchestrator": "x"},
+        },
+        _page._SK_RADAR: {
+            "vix_level": {"signal": "🔴 警報", "color": "#f00", "value": 31.2,
+                          "prev": 24.1, "note": "VIX=31.2（單日 +29.5%）",
+                          "label": "Yahoo ^VIX 日線", "trend": [22, 31]},
+            "move_level": {"signal": "🟢 正常", "color": "#0f0", "value": 88.0,
+                           "prev": 90.0, "note": "MOVE=88", "label": "CBOE MOVE",
+                           "trend": [90, 88]},
+        },
+        _page._SK_LIQ: (
+            {"XCCY_PROXY": {"value": 1.8, "unit": "σ", "label": "🔴 美元荒升溫",
+                            "date": "2026-09-04", "source": "FRED:DTWEXBGS"}},
+            {"value": 1.4, "tier": "警戒", "signal": "🟠", "color": "#ff6d00",
+             "desc": "壓力升溫", "breakdown": {}},
+        ),
+        _page._SK_TP: {
+            "yield_curve": {"signal": "⚠️ 衰退末期反彈", "value": 0.31, "prev": -0.05,
+                            "label": "10Y − 2Y 利差 (T10Y2Y)",
+                            "note": "近 60 日曾倒掛且已翻正", "source_ok": True},
+            "sahm_rule": {"signal": "🔴 衰退觸發", "value": 0.63, "prev": 0.52,
+                          "label": "薩姆規則 (SAHMREALTIME)",
+                          "note": "0.63 ≥ 0.5", "source_ok": True},
+        },
+        _page._SK_AI: "### AI 逐段判讀\n這是一段已經生成好的 AI 總結內容。",
+        _page._SK_PHASE: {"phase": "擴張中段", "score": 6},
+        _page._SK_EV: {"summary": None, "score": 6.5, "prov": {},
+                       "sufficient": True, "level": "樂觀"},
+    }
+
+
+#: 每一塊「真的畫出來了」的指紋。
+#: 每一組都必須是**只有那一塊會印**的字 —— 否則掏空 A 塊時 B 塊會替它頂罪。
+_BLOCK_FINGERPRINTS: dict = {
+    "🌳 長期座標": (
+        "💵 美股流動性",              # 塊內 H5 分節（線框 section 01 逐字）
+        "M2 年增率",                  # `_US_LIQ_ROWS` 的卡片標題
+        "HY 信用利差 OAS",
+        "🔴 信用緊縮 / 熱錢撤離",     # 服務層自己的判讀句，原文印出
+        "FRED:BAMLH0A0HYM2",          # 原始讀數表的來源欄（§2.2 血緣）
+    ),
+    "🎯 短線雷達": (
+        "④ ⚡ 短線風險雷達",
+        "⑤ 🌊 流動性壓力預警引擎",
+        "VIX 絕對值 ＋ 日變化",        # `_RADAR_ROWS` 的顯示名
+        "Yahoo ^VIX 日線",             # 10 燈表的「來源」欄
+        "美元荒代理（跨幣別基差）",     # `_LIQ_FACTOR_ROWS` 的顯示名
+        "警戒",                        # 壓力分數的 tier
+    ),
+    "⚠️ 拐點警報": (
+        "① 🎯 全域導航塔",
+        "薩姆規則 · 衰退機率",
+        "市場廣度 · RSP／SPY",
+        "② 🎯 拐點偵測中心",
+        "10Y − 2Y 利差 (T10Y2Y)",      # 服務層自己的 `label`，本檔不另抄一份
+    ),
+    "🤖 AI 景氣判斷總結": (
+        "這是一段已經生成好的 AI 總結內容。",
+        "生成 AI 總結",                # 送出鈕（鐵則 02：生成也走 form）
+    ),
+}
+
+
+@pytest.mark.parametrize("block", sorted(_BLOCK_FINGERPRINTS))
+def test_each_block_renders_real_content_not_just_a_heading(block):
+    """四塊各自畫得出**內容**，不是只有一個標題。
+
+    **突變會紅（本輪逐塊實測，見 PR 描述的突變表）**：把任一塊的函式體掏空
+    （只留 `_detail_title(...)`）→ **只有那一塊**的參數化案例紅，其餘三塊仍綠。
+    """
+    _blob = _render_all_text(_loaded_session())
+    _missing = [_m for _m in _BLOCK_FINGERPRINTS[block] if _m not in _blob]
+    assert not _missing, (
+        f"「{block}」這一塊少了它應該畫出來的東西：{_missing}\n"
+        "⛔ 若這是刻意改寫文案：請連同本表一起改，並確認畫面上真的還有等價的內容；\n"
+        "   若這一塊被掏空／退回灰態：**那是回歸，不要改本表**。")
+
+
+#: 塊內小節（`#####`）的樣式。**刻意只收 H5** —— 塊標題是 H4（📈 中期循環是 H2），
+#: 收到它們會讓「塊」和「小節」變成同一層。
+_SUB_OPEN_RE = re.compile(r"^#{5}\s+(.*)$")
+
+#: **卡片**的標題。`ui/helpers/ia/cards.py::state_card()` 的灰態分支印的就是
+#: `st.markdown(f"**{title}**")`，所以整行剛好是一個粗體標題。
+#: ⚠️ 這一層是 2026-09-05 稽核 R3 逼出來的，見 :func:`_grey_units` 的 ⛔。
+_CARD_OPEN_RE = re.compile(r"^\*\*(.+)\*\*$")
+
+#: 側錄器替 `st.metric` 補的分段標記（**只存在於側錄結果，不是畫面上的字**）。
+#: 理由見 `_render_parts()` 內 `_api == "metric"` 那段 ⛔：
+#: 合格態的卡片沒有任何可切段的標記，不補的話「中間那張被捏造」抓不到。
+_METRIC_MARK: str = "\u27e6metric\u27e7"
+
+
+def _grey_units(block: str, seg: str) -> list:
+    """把一塊切成「要各自驗灰態的**最小**單位」：小節（`#####`）**再切到卡片**（`**標題**`）。
+
+    回傳 `[(給人看的標籤, 那一段的字), ...]`；**空白段落自動略過**
+    （例如 🌳 長期座標在無資料時根本還沒印到 `#####`，那就只有一段）。
+
+    ⛔ **2026-09-05 稽核 R3：只切到「小節」是不夠的，而且今天就能被觸發。**
+    ~~上一版只切到 `#####`，並在呼叫端 docstring 寫「同一個小節裡有兩份以上灰態
+    …**今天沒有這種小節**」~~ —— **那句話是假的**。
+    ⚠️ 拐點警報的 `##### ① 🎯 全域導航塔` **一個小節裡就有三張卡**
+    （薩姆／SLOOS／市場廣度）。稽核實跑：把薩姆那張換成捏造的
+    `0.00 / ✅ 未觸發衰退門檻，勞動市場正常。`、另兩張維持誠實 ⬜
+    → **683 passed，零紅燈**。也就是在**完全沒有資料**的情況下畫出
+    「衰退機率 0.00、勞動市場正常」，而守衛全綠 —— 那是客戶明示的紅線。
+    **它不是「下一個人可能寫出來」，是現在的形狀。**
+    → 故本函式再往下切一層到**每一張卡**。
+
+    ⚠️ **一個已被證偽卻留在永久記錄裡的限定詞，比沒有那句話更危險** ——
+    「今天沒有這種小節」正是總管用來判斷「要不要現在補」的那句話。
+    本輪把它換成實測結果（見呼叫端 docstring）。
+    """
+    _units: list = []
+    # ⚠️ **小節與卡片分開記，不要從 `_cur_label` 續接**（2026-09-05 稽核第 2 項）。
+    #    上一版做 `_cur_label.split("的小節", 1)` 去撈「目前在哪個小節」，
+    #    但那時的 `_cur_label` **已經含上一張卡的後綴** → 標籤逐張累積：
+    #      第 2 張 → …的卡片「薩姆規則…」的卡片「SLOOS…」
+    #      第 3 張 → …的卡片「薩姆規則…」的卡片「SLOOS…」的卡片「市場廣度…」
+    #    也就是第 N 張會**宣稱它巢狀在前 N−1 張裡面** —— 那是假的。
+    #    （最後一個名字仍是對的，所以斷言訊息還指得動；但它與本函式自己寫的意圖
+    #      「訊息才指得出哪一小節的哪一張卡」不符。）
+    _sec_label = ""                      # 目前所在小節（不含卡片）
+    _cur_label, _cur = f"「{block}」", []
+
+    def _flush() -> None:
+        if any(_x.strip() for _x in _cur):
+            _units.append((_cur_label, "\n".join(_cur)))
+
+    for _ln in seg.split("\n"):
+        _m_sub = _SUB_OPEN_RE.match(_ln)
+        if _m_sub:
+            _flush()
+            _sec_label = f"的小節「{_m_sub.group(1).strip()}」"
+            _cur_label, _cur = f"「{block}」{_sec_label}", []
+            continue
+        _m_card = _CARD_OPEN_RE.match(_ln)
+        if _ln.startswith(_METRIC_MARK):
+            # 合格態卡片：用側錄器補的標記切段（見 `_METRIC_MARK`）。
+            _m_card = re.match(r"(.+)$", _ln[len(_METRIC_MARK):])
+        if _m_card:
+            _flush()
+            # 卡片標籤 ＝ 塊 ＋ **當下所屬小節** ＋ 這一張卡；不從上一張卡續接。
+            _cur_label = (f"「{block}」{_sec_label}"
+                          f"的卡片「{_m_card.group(1).strip()}」")
+            _cur = []
+            continue
+        _cur.append(_ln)
+    _flush()
+    return _units
+
+
+#: 逐塊灰態斷言的對象。
+#:
+#: ⚠️ **📈 中期循環刻意不在內** —— 它是**委派**給 `ui/tab1_macro_midcycle.py`
+#: 的既有實作，那個檔不在本批的檔案邊界內（客戶方針第 1 條：不在舊 tab 上修補）。
+#: 對一個本批管不到的模組斷言它的灰態文案，只會產生一條**改不動的紅燈**。
+#: 它的骨架仍由下方 `_WIREFRAME_TITLES` 那一圈斷言守著（標題不得消失）。
+_GREY_BLOCKS: tuple = ("🌳 長期座標", "🎯 短線雷達", "⚠️ 拐點警報",
+                       "🤖 AI 景氣判斷總結")
+
+
+def test_a_block_with_nothing_to_show_goes_grey_and_says_where():
+    """反面：**每一塊各自**在服務層什麼都沒回來時，都要灰態 ＋ 帶「去哪補」。
+
+    ⚠️ 這一條守的是客戶 2026-09-05 明示的「不接受假資料、不接受會影響判斷的
+    缺資料」：沒有讀數時必須看得出「沒抓到」，**不得**留白、不得畫 0、
+    也不得因為「沒有紅燈」就顯示成一切正常。
+
+    ⚠️ **2026-09-05 稽核 F2：本條前一版的斷言是假的，而且它的 docstring
+    保證了一個實測不成立的突變結果。** ~~舊版寫「**突變會紅**：把任一塊的空值分支
+    改成 `st.caption("—")` → 本條紅」~~ —— **實跑是 18 passed，不紅。**
+    原因：舊版兩條斷言都是**整頁全域存在性檢查**
+    （`assert NOT_READY_MARK in _blob` / `assert where_to_find("macro") in _blob`），
+    而 `_blob` 是整頁的字。**只要任何一塊還有 ⬜，其餘四塊被改掉都照樣綠。**
+    稽核用兩個突變打穿它，兩次都全綠：
+      - 🌳 長期座標的灰態換成 `st.caption("—")` → `18 passed`
+      - 換成 `st.success("✅ 美股流動性、信用與情緒均在正常區間，無異常。")`
+        → 本檔 18 passed、`test_batch2` ＋ `test_render_state_color_separation`
+        合計 **662 passed** —— **把「沒抓到」畫成「一切正常」，零紅燈。**
+
+    **現行做法**：走 :func:`_render_segments` 逐塊切段、再走 :func:`_grey_units`
+    切到**塊內每一個 `#####` 小節**，逐單位斷言。
+
+    **突變會紅（本輪逐項實跑，輸出照抄自 PR 描述）**：
+
+    ====================== ================================================
+    突變                     結果
+    ====================== ================================================
+    🌳 長期座標 → `st.caption("—")`   `1 failed`（舊版：`18 passed`）
+    🌳 長期座標 → `st.success(…)`     `1 failed`（舊版：`682 passed` 全綠）
+    🎯 短線雷達 ④ → `st.success(…)`   `1 failed`，指名小節「④ ⚡ 短線風險雷達」
+    ⚠️ 拐點警報 ② → `st.success(…)`   `1 failed`，指名小節「② 🎯 拐點偵測中心」
+    🤖 AI 總結 → `st.success(…)`      `1 failed`
+    ====================== ================================================
+
+    ⚠️ **切到小節這一層，是本組自驗時被自己的突變逼出來的，不是一開始就有的。**
+    只驗到「塊」的那一版：🎯 短線雷達與 ⚠️ 拐點警報**各自有兩個小節、兩份灰態**，
+    拔掉其中一個另一個還在 → **兩者都是 `21 passed`**。
+    ⚠️ 同一輪還抓到切段器自己的洞：🤖 AI 是最後一塊，沒有下界時它會**繼承**
+    後面「總經燈號全表」空狀態的 ⬜ → 拔掉它自己的灰態也不紅（見 :func:`_render_segments`）。
+
+    ⛔ **仍然守不到的（誠實列出，不要讀成「已經全包」）**：
+      - ~~**同一個小節裡有兩份以上灰態時，拔掉其中一份**仍不會紅……
+        今天沒有這種小節，但沒有任何東西阻止下一個人寫出來。~~
+        → **2026-09-05 稽核 R3：那句話是假的，而且今天就能觸發。**
+        `##### ① 🎯 全域導航塔` **一個小節裡就有三張卡**；稽核只捏造其中一張
+        （薩姆 `0.00 / ✅ 未觸發衰退門檻，勞動市場正常。`，另兩張維持誠實 ⬜）
+        → **683 passed 零紅燈**。**現已把單位下沉到「每一張卡」**
+        （:func:`_grey_units` 再切 `**標題**` 一層），該突變現在會紅。
+
+        ⚠️ **修 R3 的時候本組又抓到一個它沒點名、但同型的洞，一併修掉**：
+        只切 `**標題**` 時，**只擋得住三張卡裡的第一張** ——
+        合格態的卡片走 `st.metric()`，**畫面上沒有任何可切段的標記**，
+        於是被捏造的第 2／3 張會併進**前一張**的單位，而前一張還有 ⬜。
+        實測（補救之前）：捏造第 1 張 `1 failed`、**捏造第 2 張 `21 passed`**。
+        → 側錄器改為替每個 `st.metric` 補一個分段標記（:data:`_METRIC_MARK`），
+        現在**三張各捏造一次都是 `1 failed`**。
+        ⚠️ **這一筆值得記**：R3 的原始形狀「只驗到上一層」在被修一次之後，
+        **在下一層原封重現**。修分層的斷言時，要問的不是「這一層夠不夠細」，
+        而是「**這一層的每一個成員都有自己的邊界嗎**」。
+
+        ⚠️ **殘留的是更窄的一條**：同一張卡／同一個沒有任何邊界標記的段落裡
+        有兩份灰態時，拔掉其中一份仍不會紅。**本輪實測今天沒有這種段落**
+        （每個葉單位最多一個 `not_ready()`），但這句話**與上面那句是同一種形狀** ——
+        **請把它當成待驗，不要當成保證**；上面那次就是這樣被證偽的。
+      - **📈 中期循環不在斷言範圍內**（見 :data:`_GREY_BLOCKS` 的說明）。
+      - 本條只驗「有沒有 ⬜ 與指路」，**不驗那句話講得對不對** ——
+        灰態文案寫錯內容（例如指到別頁）本條看不到；
+        指路內容的既有缺口見 `CLAUDE.md §8.3.P` 的 `P-WHERECONTENT-1`。
+      - **側錄器沒攔的渲染 API 一律隱形**（真界線是 :data:`_TEXT_APIS`）。
+        `assert _units` 擋得住「整段因此空掉」，**擋不住**「同一單位裡另有 ⬜、
+        但那段假話是用沒列進字表的 API 印的」。
+    """
+    from ui.helpers.render_state import NOT_READY_MARK
+
+    # ⚠️ **`ind` 用空 dict，不是 `{"VIX": {"value": None}}`。**
+    #    後者會在**服務層**炸掉（實測 2026-09-05：
+    #    `services/macro/us_indicators.py::calc_macro_phase` 內的
+    #    `indicators.get("VIX", {}).get("value", 18) > _MB_VIX_YELLOW`
+    #    —— key 在、值是 `None` 時 `.get(..., 18)` 的預設值救不到，直接 `TypeError`）。
+    #    ⚠️ **2026-09-05 稽核 F3 更正函式名**：~~`detect_systemic_risk`~~ 是錯的，
+    #    那一支吃的是 `news_items: list`、根本碰不到 `indicators`。**機制對，名字錯。**
+    #    那是**既有的服務層脆弱點**，依客戶方針第 2 條本批不反向修底層；
+    #    此處據實登記並改用不會踩到它的輸入。**本條要驗的是 UI 的灰態，不是它。**
+    _segs = _render_segments({_page._SK_IND: {}})
+
+    # 骨架不因為沒資料而消失（鐵則 04）—— 五塊都要在，含委派的那一塊。
+    for _t in _WIREFRAME_TITLES:
+        assert _t in _segs, (
+            f"沒有資料時「{_t}」整塊消失了 —— 骨架不得跟著不見。"
+            f"\n實際切到的塊：{list(_segs)}")
+
+    for _t in _GREY_BLOCKS:
+        # ⚠️ **粒度是「塊 ＋ 塊內每一個 `#####` 小節」，不是只有塊。**
+        #    🎯 短線雷達（④／⑤）與 ⚠️ 拐點警報（①／②）**一塊裡有兩個小節、
+        #    各自有自己的灰態**；只驗到塊的話，拔掉其中一個小節的灰態，
+        #    另一個還在 → 照樣綠。**本組自驗突變實測過這個洞**：
+        #    只驗塊時，那兩塊各自被改成 `st.success("✅ 一切正常")` 都是 `21 passed`。
+        #    切到小節之後兩者都會紅（見 PR 描述的逐塊表）。
+        _units = _grey_units(_t, _segs[_t])
+        # ⛔ **2026-09-05 稽核 R2：沒有這一行，下面那個 `for` 可以一次都不跑。**
+        #    `_grey_units()` 會略過空白段落，所以「一塊只剩標題」或「內容用了
+        #    側錄器沒攔的 API」時它回 `[]` → 迴圈空轉 → **綠**。
+        #    那正是本檔自己警告過的形狀（「一條什麼都沒斷言的測試會一直是綠的」）。
+        #    稽核實跑兩種繞法，補這行之前**都是 21 passed**：
+        #      (a) 灰態換成假的綠色小節標題 `st.markdown("##### ✅ …一切正常")`
+        #          → 該塊 grey units ＝ `[]`；
+        #      (b) 灰態改用未側錄的 API `st.text("✅ …一切正常")`
+        #          → 該塊 segment 完全空白。
+        #    ⚠️ (b) 也順帶說明本檔的真界線仍是 `_TEXT_APIS` 那份字表：
+        #       本行擋得住「整段消失」，**擋不住**「用沒列進字表的 API 印出一段假話
+        #       但同一單位裡另外還有 ⬜」。那一半沒有便宜的解，據實留在下方 ⛔ 清單。
+        assert _units, (
+            f"「{_t}」在沒有資料時切不出任何內容單位 —— "
+            "整塊只剩標題（或內容走了側錄器沒攔的 API）。\n"
+            "⛔ 沒有內容 ＝ 使用者看不出「這裡缺什麼、去哪補」，"
+            "與畫一句「一切正常」一樣違反鐵則 04。\n"
+            f"該塊 segment 原文：{_segs[_t][:400]!r}")
+        for _label, _seg in _units:
+            assert NOT_READY_MARK in _seg, (
+                f"{_label} 沒有資料，卻沒有印出任何 ⬜ 灰態 —— "
+                "留白／`—`／「一切正常」都是把『沒抓到』說成別的東西（§1）。\n"
+                f"該段實際印出的內容：{_seg[:400]!r}")
+            # `not_ready()` 的輸出格式是 `⬜ {訊息}（請先到：{where}）`，
+            # 所以「有沒有指路」看得到這個前綴就成立 —— 不比對指到哪裡
+            # （🤖 AI 那一塊在沒金鑰時指的是 Secrets，不是本頁的載入鈕）。
+            assert "（請先到：" in _seg, (
+                f"{_label} 的灰態沒有帶「去哪補」—— "
+                "線框 Rule 04 的三要素少了最有價值的那一項。\n"
+                f"該段實際印出的內容：{_seg[:400]!r}")
+
+
+# ══════════════════════════════════════════════════════════════
+# 8) prompt 鎖 —— 餵給 LLM 的那一份也不得說「平靜」
+# ══════════════════════════════════════════════════════════════
+# ⚠️ **本節是 2026-09-05 稽核 F1 逼出來的，理由必須留著。**
+#    第 7 節的側錄器只攔 `st.*` 渲染 API，而**交給 LLM 的 prompt 字串
+#    完全不經過任何 `st.*`** —— 於是 `_ai_snapshot()` 這個消費端
+#    對整份守衛是**結構性隱形**的。前一版因此漏掉它：
+#    10 燈全滅時它把「整體 平靜」寫進 prompt，而 prompt 開頭就寫著
+#    「【嚴格規則】**只能根據下面的『資料快照』來講**」。
+#    → **畫面誠實、AI 卻被告知市場平靜。** 這比畫面說謊更難發現。
+
+def test_the_ai_snapshot_never_calls_the_market_calm_when_nothing_was_fetched():
+    """10 燈全滅時，**交給 LLM 的快照**不得出現「平靜」。
+
+    **突變會紅**：拿掉 `_ai_snapshot()` 裡的 `if not _radar_lit(_s):` → 本條紅。
+
+    ⚠️ 本條**不看畫面**，直接呼叫 `_ai_snapshot()` 取那一份字串 ——
+    因為它就是不經過畫面的那條路。
+    """
+    _all_grey = {f"sig{_i}": {"signal": "⬜ 無資料", "value": None, "prev": None,
+                              "note": "來源暫時無法取得", "label": "—", "trend": []}
+                 for _i in range(10)}
+    _ind = {"VIX": {"name": "VIX 恐慌指數", "value": 24.1, "unit": ""}}
+    _ss = _FakeSessionState({_page._SK_IND: _ind, _page._SK_RADAR: _all_grey})
+
+    with patch.object(st, "session_state", _ss):
+        _snap = _page._ai_snapshot(_ind, {"phase": "擴張中段", "score": 6},
+                                   {"score": 6.5, "level": "樂觀"})
+
+    assert "[短線雷達]" in _snap, (
+        "雷達那一行整個從快照消失了 —— 應該是**改口**，不是**消音**："
+        "AI 需要知道「這一項沒抓到」，而不是完全不提它")
+    assert "平靜" not in _snap, (
+        "10 盞燈一盞都沒抓到，交給 LLM 的快照卻寫著「平靜」。\n"
+        "prompt 開頭是「只能根據下面的資料快照來講」——"
+        "這等於直接告訴模型市場平靜（§1）。\n"
+        f"實際快照：\n{_snap}")
+
+
+def test_every_summarize_radar_consumer_goes_through_the_lit_guard():
+    """`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個。
+
+    ⚠️ **這是本檔唯一一條「結構完整性」鎖，存在的理由是 F1 那次漏網。**
+    前一版把那道防線各自 inline 寫在消費端，於是**第三個消費端整個漏掉**，
+    而且**沒有任何一條守衛看得到它**（它不印在畫面上）。
+    逐一為每個消費端寫行為斷言是好的，但**擋不住「有人新增第四個消費端」** ——
+    本條擋得住：數量對不上就紅。
+
+    **突變會紅**：在本檔任一處新增一個 `summarize_radar(...)` 而不配一個
+    `_radar_lit(...)` → 本條紅。**含 `import … as` 的別名寫法**（R1 修好之後）。
+
+    ⚠️ **本條守的是「有沒有配對」，不是「配對得對不對」** —— 有人寫
+    `_radar_lit(_s)` 卻不用它的結果，本條照樣綠。**那一半由上面兩條行為鎖守。**
+
+    ⚠️ **能擋什麼／擋不到什麼，寫在 `page_01_macro.py::_radar_lit()` 的 docstring**
+    （**已知擋得住 2 種、已知擋不住 4 種，非窮舉**；不在這裡抄第二份）。
+    重點只有一句：**它是「少一道人為疏漏」，不是「不可能再漏」。**
+
+    ⛔ **2026-09-05 稽核 R1：本條初版按「裸名字」計數，別名 import 可整個繞過。**
+    ~~`_names.count("summarize_radar")`（直接讀 `func.id` / `func.attr`）~~ ——
+    稽核實跑，在 `_detail_ai()` 內加：
+
+    ```python
+    from services.risk_radar import summarize_radar as _sr2
+    _stale += f"（附註：短線雷達整體研判為 {_sr2(_r4).get('level')}。）"
+    ```
+
+    → 本條數到 `summarize_radar: 3 / _radar_lit: 3`（**別名隱形**）→ **225 passed
+    零紅燈**，而「平靜」照樣進 prompt。
+    ⚠️ **本 repo 已經踩過並寫下來了**：同一個測試套組的
+    `tests/test_batch2_top_card_grid.py::_call_name()` 註解逐字寫著
+    「只比對字面名字會漏掉它（**本規則初版就漏了，是突變探針抓出來的**）」。
+    **新的結構鎖重蹈同一個坑**，本輪照那支的做法修好。
+
+    ⚠️ **`_call_name` / `_import_alias` 直接 import 既有實作，不另寫一份** ——
+    另寫一份就會變成第二個 SSOT，而那正是 `CLAUDE.md §2.1` 明文禁止、
+    且被引用的那個檔自己也寫過的事。
+    """
+    import ast as _ast
+    import pathlib as _pl
+
+    # 穿過 `import X as _y` 的別名解析：復用既有實作（§2.1 SSOT，不另寫一份）。
+    from test_batch2_top_card_grid import _call_name, _import_alias
+
+    _src = (_pl.Path(_page.__file__)).read_text(encoding="utf-8")
+    _tree = _ast.parse(_src)
+    _alias = _import_alias(_tree)
+    _names = [_call_name(_n, _alias)
+              for _n in _ast.walk(_tree) if isinstance(_n, _ast.Call)]
+    _n_sum = _names.count("summarize_radar")
+    _n_lit = _names.count("_radar_lit")
+
+    assert _n_sum >= 3, (
+        f"前提變了：`summarize_radar()` 的呼叫點只剩 {_n_sum} 個（原本 3 個）。"
+        "少了消費端不是壞事，但請確認本條還守得到東西。")
+    assert _n_sum == _n_lit, (
+        f"`summarize_radar()` 有 {_n_sum} 個呼叫點，但 `_radar_lit()` 只有 {_n_lit} 個"
+        " —— 有消費端沒有過「全 ⬜ 不得說平靜」那道防線。\n"
+        "⛔ 特別注意**不印在畫面上的消費端**（例如寫進 AI prompt 的那個）："
+        "它們對本檔第 7 節的側錄器是結構性隱形的，只有本條看得到。")
+
+
+def test_the_loader_fills_every_detail_zone_payload():
+    """`_load_everything()` 必須把四塊要用的 payload 都放進 session。
+
+    ⚠️ **這是內容鎖的另一半。** 內容鎖直接把 payload 塞進 session，所以
+    **把 loader 那三段刪掉，內容鎖照樣全綠**（實測）——
+    畫面會永遠停在灰態，而沒有任何一條測試會響。本條補那個洞。
+
+    ⚠️ 同時鎖住「**四塊掛在同一顆送出鈕底下**」：已拍板線框
+    `fund-wireframe-final.html` 明文要把「載入流動性引擎」那顆
+    「按鈕的按鈕」**併入主載入**。四個 payload 由同一次 `_load_everything()`
+    產出，就是那句話的機器版本。
+    """
+    _ss = _FakeSessionState({})
+    with patch.object(st, "session_state", _ss), \
+            patch("ui.views.page_01_macro.fetch_all_indicators",
+                  return_value={"VIX": {"value": 1}}), \
+            patch("ui.views.page_01_macro.detect_risk_radar",
+                  return_value={"vix_level": {"signal": "🟢"}}), \
+            patch("ui.views.page_01_macro.fetch_hot_money_frames",
+                  return_value=(None, None, "", "")), \
+            patch("ui.views.page_01_macro.fetch_us_liquidity_snapshot",
+                  return_value={"hy_oas": {"value": 5.0}}) as _usl, \
+            patch("ui.views.page_01_macro.fetch_liquidity_factors",
+                  return_value={"XCCY_PROXY": {"value": 1.0}}) as _lf, \
+            patch("ui.views.page_01_macro.compute_liquidity_score",
+                  return_value={"value": 1.0, "tier": "警戒"}), \
+            patch("ui.views.page_01_macro.detect_turning_points",
+                  return_value={"sahm_rule": {"source_ok": True}}) as _tp:
+        _page._load_everything("test-key")
+
+    assert _usl.called, "🌳 長期座標的取數沒有掛在主載入底下"
+    assert _lf.called, "🎯 短線雷達 ⑤ 的取數沒有掛在主載入底下"
+    assert _tp.called, "⚠️ 拐點警報 ② 的取數沒有掛在主載入底下"
+    for _k, _what in ((_page._SK_USLIQ, "🌳 長期座標"),
+                      (_page._SK_LIQ, "🎯 短線雷達 ⑤"),
+                      (_page._SK_TP, "⚠️ 拐點警報 ②"),
+                      (_page._SK_RADAR, "🎯 短線雷達 ④")):
+        assert _k in _ss, f"{_what} 的 payload 沒有被寫進 session（鍵 {_k}）"
+
+    # ⚠️ 10 燈存的必須是**原始 dict**，不是 `summarize_radar()` 的摘要 ——
+    #    存摘要的話詳細區就得再抓一次（同一份資料兩個取數點，§2.1）。
+    assert "vix_level" in _ss[_page._SK_RADAR], (
+        "`_SK_RADAR` 又變回摘要了 —— 詳細區需要原始 10 燈")
+
+
+def test_an_all_grey_radar_is_never_reported_as_calm():
+    """10 燈全部抓不到時，**不得**顯示成「平靜」。
+
+    ⚠️ **這是實測出來的服務層行為，不是假想**（2026-09-05 於無網路環境實跑）：
+    `summarize_radar({10 盞全 ⬜})` 回的是 `level="平靜"`、`color` 是綠的 ——
+    因為它的分級只看 `red` / `yellow` 兩個計數。
+    照搬那個結果會把「什麼都沒抓到」畫成「市場很平靜」，
+    也就是 `_worst_state()` 已經寫過的那句：**沒有資料不等於一切正常**（§1）。
+
+    服務層**不改**（客戶方針第 2 條：不反向修底層），在消費端擋。
+    本條同時守卡片（層 1）與詳細區（層 4）兩個消費端。
+
+    **突變會紅**：把 `_card_risk_radar()` 或 `_detail_short()` 的
+    `if not _lit:` 那段拿掉 → 本條紅。
+    """
+    from services.risk_radar import summarize_radar as _sr
+
+    _all_grey = {f"sig{_i}": {"signal": "⬜ 無資料", "value": None,
+                              "prev": None, "note": "來源暫時無法取得",
+                              "label": "—", "trend": []} for _i in range(10)}
+    # 前提複驗：服務層今天真的還會說「平靜」。前提沒了本條就該重寫，不是靜靜變綠。
+    assert _sr(_all_grey).get("level") == "平靜", (
+        "前提變了：`summarize_radar()` 對全 ⬜ 已經不回「平靜」了 —— "
+        "本條的理由消失，請重新確認消費端那道防線還需不需要")
+
+    _sess = _loaded_session()
+    _sess[_page._SK_RADAR] = _all_grey
+    _blob = _render_all_text(_sess)
+    assert "平靜" not in _blob, (
+        "10 燈全部沒抓到，畫面上卻出現「平靜」—— "
+        "那是把『沒有資料』畫成『一切正常』（§1）")
+
+
+def test_the_ai_remedy_names_the_button_that_is_actually_rendered():
+    """🤖 AI 那一站的「去哪補」必須指到**當下真的印出來的那顆送出鈕**。
+
+    ⚠️ **本條是 2026-09-05 稽核 F5 的替代覆蓋，不是額外裝飾。**
+    F5 之前那句指路是**手抄的字面值**（`… → 上方「▶️ 生成 AI 總結」`），
+    靠跨檔規則 `test_every_where_names_something_that_exists_on_screen`
+    以 `「」` 內的字面值去比對。把手抄改成共用變數之後，**那條規則看不到這一站了**
+    （它是字面值 opt-in）。本條把那份覆蓋補回來，而且**更強**：
+    它比對的是**執行期側錄到的送出鈕字**，不是原始碼裡的字面值 ——
+    有人把 `submit_label` 換成別的變數、或讓兩邊指向不同常數，本條都會紅。
+
+    **突變會紅**：把 `where=` 裡的 `{_ai_label}` 換回任何一個寫死的字面值
+    （即使今天剛好一樣），只要它與送出鈕當下的字不同就紅；
+    把送出鈕的 `submit_label` 換成另一個常數而指路不動 → 也紅。
+    """
+    # 沒有生成過 → 送出鈕應該是「第一次」那個字，指路也該指同一個字。
+    _segs = _render_segments({_page._SK_IND: {"VIX": {"value": 24.1}}})
+    _ai = _segs["🤖 AI 景氣判斷總結"]
+
+    assert _page._AI_BTN_FIRST in _ai, (
+        f"沒生成過時，AI 那一塊應該印出送出鈕「{_page._AI_BTN_FIRST}」，"
+        f"實際印出的內容：{_ai[:400]!r}")
+    assert f"上方「{_page._AI_BTN_FIRST}」" in _ai, (
+        "AI 的灰態指路沒有指到當下這一輪實際印出來的那顆鈕 —— "
+        "指路與按鈕分岔了（本 repo 同型 bug 已發作三次，"
+        "見 `ui/helpers/story_nav.py` 的 `RETIRED_TAB_LABELS`）。\n"
+        f"該塊實際印出的內容：{_ai[:400]!r}")
+
+    # 反向：已經生成過 → 兩邊要一起變成「重新生成」那個字。
+    _segs2 = _render_segments({_page._SK_IND: {"VIX": {"value": 24.1}},
+                               _page._SK_AI: "（已生成過的內容）"})
+    _ai2 = _segs2["🤖 AI 景氣判斷總結"]
+    assert _page._AI_BTN_AGAIN in _ai2, (
+        f"已生成過時，送出鈕應該變成「{_page._AI_BTN_AGAIN}」，"
+        f"實際：{_ai2[:400]!r}")
+    assert _page._AI_BTN_FIRST not in _ai2, (
+        "已生成過，畫面上卻還留著「第一次」那個字 —— 兩個字同時出現會讓使用者不知道按哪顆")
