@@ -28,10 +28,18 @@ NAV 那一塊在沒有基金時走**空狀態**而其餘四塊照樣渲染（D-2
 - ⛔ **示意值黑名單只有 `_PINNED_FAKE_VALUES` 那幾個字面寫法。**
   裸數字（`18` / `42` 不帶單位字）、全形數字、換算成別的寫法、以及
   **任何線框以外的捏造值**都抓不到 —— 黑名單結構上抓不到名單外的第 N+1 個。
-  ⚠️ 「正常」兩個字**刻意不進黑名單**：它是極常見的一般用詞，
-  釘它會把往後任何一句合法說明打紅。**那一格改由「連線與金鑰必須是灰態」反向守**
-  （:func:`test_every_grey_unit_is_grey_until_its_content_lands`）——
-  一張灰卡不可能同時印一個「正常」的結論。
+  ⚠️ 「正常」兩個字**刻意不進**示意值黑名單（它是極常見的一般用詞，
+  釘它會把往後任何一句合法說明打紅）。
+  ⛔ **2026-09-05 撤回一句假的補償控制**：本段原寫
+  ~~「那一格改由『連線與金鑰必須是灰態』**反向守** —— 一張灰卡不可能同時印一個
+  「正常」的結論」~~ —— **那句是假的，而且比單純沒守到更危險，因為它讓後人以為
+  那一格有人看著**。實測四顆突變**全部存活、三序一致**：把 `_PENDING_NOTE` 換成
+  「你的資料全部正常，沒有任何異常」→ **47 passed**；在灰卡旁印
+  「全部來源都正常，你的資料可信。」→ **47 passed**。
+  **根因**：`state_card(state=STATE_NOT_READY)` 無條件前綴 ⬜，而守衛只查
+  `NOT_READY_MARK in _body` —— **⬜ 之後接什麼都行。**
+  → **現行**：見 :func:`test_no_grey_unit_states_a_conclusion`
+  （2026-09-05 新增的**黑名單**，同樣抓不到名單外的第 N+1 個）。
 - ⛔ **指路挑錯 key 沒有守衛**：職責宣告那一句裡的 `macro` / `portfolio` 兩個 key
   換成別的**合法** key，本檔不會有任何東西轉紅。
   **這是「走 SSOT」擋不到的那一類**：SSOT 保證名字不過期，**不保證你挑對了 key**。
@@ -369,8 +377,21 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     後者才擋得到 `from X import Y` 這條路。
     ⚠️ 代價：`from ui.helpers.ia import STATE_NOT_READY` 會多吐一個
     `"ui.helpers.ia.STATE_NOT_READY"` 這種**不是模組的字串**。
-    本檔的兩個消費者都是 `startswith` / 取第一段的比對，多吐無害；
-    **但它不是一份「真的 import 到的模組」清單，別拿去做別的用途。**
+    ⛔ **2026-09-05 獨立稽核更正 —— 本段原本的自我背書有兩個錯，都不要留**：
+    原寫 ~~「本檔的**兩個**消費者都是 `startswith` / 取第一段的比對，**多吐無害**」~~。
+    **(1) 實際是三個消費者**（取第一段的 `..._never_reaches_into_the_data_layer`、
+    `startswith` 的 `..._does_not_delegate_to_the_old_tabs`、以及
+    `..._does_not_render_cache_or_backoff_state` —— **第三個是 `in` 子字串比對
+    ＋ `endswith`，既不是 `startswith` 也不是取第一段**）。
+    **(2)「多吐無害」是假的**：稽核逐案實測，多吐**確實會產生偽陽性** ——
+    `from ui import tab_manage_v2` / `from ui import tab6_manual_helpers`
+    （`startswith` **沒有點邊界**）、
+    `from ui.helpers.render_state import backoff_free_note`（子字串命中 `backoff`）
+    —— **三者在新版都會誤紅，舊版不會**。
+    ⚠️ **今天沒有一處真的誤紅**（本檔實際 import 只有 `__future__` / `typing` /
+    `streamlit` / `ui.helpers.*`），所以這不是 bug；**但那句自陳必須改成誠實版**：
+    **三個消費者；多吐會產生偽陽性，只是目前沒有觸發。**
+    （`startswith` 那一處已於同輪補上點邊界，子字串那一處**沒有**修 —— 見該條註記。）
     """
     _mods: list[str] = []
     for _n in ast.walk(tree):
@@ -549,16 +570,144 @@ def test_the_manual_is_static_text_not_a_grey_placeholder():
             "把現在就能出的靜態文字畫成「未載入」是說謊（§1）。")
 
 
+#: 線框 Tab 05 使用手冊那張卡逐字列的三項。**目錄就是全部內容，多一項都不行。**
+_MANUAL_ITEMS: frozenset = frozenset({"指標定義", "門檻由來", "常見誤讀"})
+#: 抓 markdown 目錄項 `- **X**`。
+#: ⚠️ **`\[Markdown\] ` 這個可選前綴不能省**：`_flat()` 把整個 `st.markdown` 區塊
+#:    記成**一行** `[Markdown] - **指標定義**\n- **門檻由來**\n…`，
+#:    所以**第一項**的行首是 `[Markdown] `、不是 `-`。少了這個前綴，
+#:    第一項會被漏掉 —— 本組第一版就是這樣，被自己的集合相等當場抓出來
+#:    （`少了：['指標定義']`）。**這正是「只驗有沒有」看不到、「集合相等」才看得到的那種錯。**
+_MANUAL_ITEM_RE = re.compile(r"^(?:\[Markdown\] )?-\s+\*\*(.+?)\*\*\s*$", re.M)
+
+
 def test_the_manual_lists_exactly_the_wireframe_three():
-    """使用手冊只列線框逐字的三項目錄 —— **不准編一段內文充數**。
+    """使用手冊只列線框逐字的三項目錄 —— **不准編一段內文充數，也不准多列**。
 
     線框逐字：「指標定義、門檻由來、常見誤讀。純文字，不佔首屏。」
     ⛔ 在一份**專門用來解釋門檻由來**的文件裡編內容，是最壞的一種造假（§1）。
+
+    ⛔ **2026-09-05 獨立稽核必修 —— 本條名字裡的 `exactly` 原本是假的。**
+    舊版只做 `for _item in (三個): assert _item in _body`，**只驗有沒有，不驗有沒有多**。
+    兩顆突變因此全數存活（三序一致）：
+    把 caption 換成編造的「指標定義：**Sharpe 大於 1 就是好基金**；門檻由來：**業界共識**。」
+    → **47 passed**；目錄多列「**投資建議**」「**保證報酬**」→ **47 passed**。
+    **一條 docstring 明寫「不准編一段內文充數」的守衛，放行了一段編出來的內文。**
+    現行改**集合相等**，兩顆一起擋掉。
+
+    ⚠️ **仍然守不到**：目錄項以外的地方（例如 caption）寫了什麼，本條看不到 ——
+    那由 :func:`test_no_grey_unit_states_a_conclusion` 的字表**部分**涵蓋，
+    而那同樣是黑名單。
     """
     _body = _text(_segments(_stream("loaded")).get(BLOCK_MANUAL, []))
-    for _item in ("指標定義", "門檻由來", "常見誤讀"):
-        assert _item in _body, (
-            f"使用手冊少了線框逐字列的「{_item}」：\n{_body}")
+    _got = set(_MANUAL_ITEM_RE.findall(_body))
+    assert _got == _MANUAL_ITEMS, (
+        f"使用手冊的目錄項與線框不符。\n線框：{sorted(_MANUAL_ITEMS)}\n"
+        f"實際：{sorted(_got)}\n"
+        f"少了：{sorted(_MANUAL_ITEMS - _got)}／多了：{sorted(_got - _MANUAL_ITEMS)}\n"
+        "⛔ 多列一項就是自己發明規格；在一份專門解釋門檻由來的文件裡編內容，"
+        "是最壞的一種造假（§1）。")
+
+
+#: 灰態單位內**不准出現的結論性字眼**。⚠️ **這是黑名單，抓不到名單外的第 N+1 個。**
+#: 存在的理由：`state_card(state=STATE_NOT_READY)` 無條件前綴 ⬜，而
+#: :func:`test_every_grey_unit_is_grey_until_its_content_lands` 只查「有沒有 ⬜」——
+#: **⬜ 之後接什麼都行**。2026-09-05 稽核用四顆突變證明了這個縫
+#: （「你的資料全部正常，沒有任何異常」等，全部存活）。
+_CONCLUSION_WORDS: tuple[str, ...] = (
+    "全部正常", "沒有任何異常", "沒有異常", "資料可信", "都正常", "一切正常",
+    "全部來源都正常", "無異常",
+)
+
+
+def test_no_grey_unit_states_a_conclusion():
+    """⛔ 灰態單位內**不准下結論** —— 一塊還沒接線的東西，說不出「你的資料正常」。
+
+    ⚠️ **本條是 2026-09-05 才補上的，補的是一個我自己宣稱「已經有人守」的缺口。**
+    PR 描述與模組 docstring 原本寫著「『正常』那一格改由**『連線與金鑰必須是灰態』
+    反向守** —— 一張灰卡不可能同時印一個『正常』的結論」。
+    **那句是假的**：稽核四顆突變全數存活、三序一致 ——
+    把 `_PENDING_NOTE` 換成「你的資料全部正常，沒有任何異常」→ **47 passed**；
+    在金鑰灰卡的**同一個單位內**印「全部來源都正常，你的資料可信。」→ **47 passed**。
+    **根因**：`STATE_NOT_READY` 無條件前綴 ⬜，而那條守衛只查 `⬜ in _body`。
+    ⛔ **一句自稱有替代保護、實際沒有的宣稱，比單純「沒守到」更危險** ——
+    它讓後人以為那一格有人看著。**那句已撤回**，本條是它的替代品。
+
+    ⚠️ **本條同樣是黑名單，抓不到 `_CONCLUSION_WORDS` 以外的第 N+1 種說法**
+    （例如「你的資料沒問題」）。**不要把它讀成「灰態不可能說謊了」。**
+    """
+    for _kind in ("empty", "missing", "loaded"):
+        for _unit, _body in _units(_stream(_kind)):
+            _joined = _text(_body)
+            if NOT_READY_MARK not in _joined:
+                continue
+            for _w in _CONCLUSION_WORDS:
+                assert _w not in _joined, (
+                    f"（{_kind}）灰態單位「{_unit}」裡出現了結論性字眼 {_w!r}：\n"
+                    f"{_joined}\n"
+                    "⛔ 這一塊還沒接線，我們沒有查過任何來源 —— "
+                    "說「正常」是憑空捏造一個系統健康狀態的結論（§1）。")
+
+
+def test_the_empty_state_never_claims_the_user_has_no_funds():
+    """⭐ 空狀態只准說「**這個 session 還沒載入**」，**不准說「你沒有基金」**。
+
+    ⛔ **2026-09-05 獨立稽核必修（客戶紅線 §1）。** 舊文案是
+    ~~「還沒有任何基金可以談涵蓋度」／「**一檔都還沒列入**」／「**列入之後**…」~~ ——
+    **那是對每一位使用者說的一句假話，包含雲端有 42 檔的人。**
+
+    **實測依據**：`git grep -c portfolio_funds origin/main -- app.py` → **0 命中**，
+    開站**沒有任何自動載入**；所有寫入點都在使用者按鈕內
+    （`ui/helpers/cloud_io.py`「📥 立即全部讀回」、`linkage.py`「➕ 加入組合」、
+    `json_backup.py` 還原）。→ **每一位使用者的每一次新 session，這個鍵都不存在。**
+    我們知道的只有「這個 session 還沒載入」，說出口的卻是「你沒有基金」。
+
+    ✅ **④ `page_04_portfolio.py` 做對了**（「還沒有任何**已載入的**保單或扣款標的」／
+    footer「**載入**之後」）—— ⑤ 第一版把那個限定詞拿掉了。
+    **同一個 repo 裡，對的版本就在隔壁檔案。**
+
+    ⚠️ **本條守的是「有沒有那個限定詞」，不守文案好不好讀。**
+    """
+    _parts = _stream("missing")
+    _empty = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
+    assert len(_empty) == 1, f"空狀態單位應恰好 1 個：{_empty}"
+    _body = _text(_segments(_parts).get(_empty[0], []))
+    _all = f"{_empty[0]}\n{_body}"
+    # 必須帶「這個 session / 工作階段 / 已載入」這一類**限定詞**。
+    assert any(_q in _all for _q in ("這個 session", "工作階段", "已載入", "還沒載入")), (
+        f"空狀態沒有任何「這個 session」的限定詞：\n{_all}\n"
+        "⛔ 開站不會自動載入（app.py 對 `portfolio_funds` 0 命中）—— "
+        "沒有限定詞就是在對一個雲端有 42 檔的人說「你沒有基金」（§1）。")
+    # 不准出現「一檔都還沒列入」這種**斷言使用者資產**的說法。
+    for _lie in ("一檔都還沒列入", "還沒有任何基金", "你沒有基金", "一檔都沒有"):
+        assert _lie not in _all, (
+            f"空狀態出現了斷言使用者資產的說法 {_lie!r}：\n{_all}\n"
+            "我們只知道「這個 session 沒載入」，不知道他雲端有沒有基金。")
+
+
+def test_pressing_submit_says_the_backfill_is_not_wired_yet():
+    """⭐ 按下「開始補抓」之後，畫面**必須說出**「實際補抓還沒接上」。
+
+    ⛔ **2026-09-05 獨立稽核應修。** 在補上之前：勾選 → 按鈕 → rerun，
+    **整頁一個字都沒變**，只有 session 靜靜寫入；而畫面上寫著
+    「勾選的當下不會發生任何事，按『開始補抓』**才算**」，
+    另外三塊都誠實掛著 ⬜「這一塊的內容還沒接上」，**唯獨這一塊沒有** ——
+    而它是唯一一個帶**動作動詞**、看起來會寫資料的。
+
+    ⚠️ 「不接真寫入」這個取捨本身是對的（一個按了會真的寫的鈕，接在還沒驗過的骨架上
+    更危險）；**錯的是不說**。「看起來會寫、其實不寫、而且不說」在一個職責是
+    「資料可不可信」的頁面上，比多一句話糟得多（§1）。
+    """
+    _at = _app(FAKE_HOLDINGS)
+    _at.checkbox[0].check()
+    _at.button[0].click()
+    _rerun(_at)
+    _all = _text(_flat(_at.main))
+    assert "尚未接上" in _all or "還沒接上" in _all, (
+        "按下送出之後，畫面上沒有任何一句說明「實際補抓還沒接上」：\n" + _all)
+    assert "已記下" in _all, (
+        "按下送出之後，畫面上沒有告訴使用者「選擇已被記下」——\n"
+        "一個按了完全沒有回饋的鈕，使用者只會再按一次。\n" + _all)
 
 
 def test_the_page_never_hand_rolls_the_grey_mark():
@@ -602,9 +751,11 @@ def test_the_page_never_prints_the_illustrative_values_from_the_wireframe():
     ## ⚠️ 「正常」為什麼不在名單裡
 
     它是極常見的一般用詞，釘它會把往後任何一句合法說明打紅。
-    那一格改由「連線與金鑰必須是灰態」反向守
-    （:func:`test_every_grey_unit_is_grey_until_its_content_lands`）——
-    **一張灰卡不可能同時印一個「正常」的結論。**
+    ⛔ **2026-09-05 撤回**：本段原接著寫 ~~「那一格改由『連線與金鑰必須是灰態』
+    **反向守** —— 一張灰卡不可能同時印一個「正常」的結論」~~ —— **實測為假**
+    （四顆突變全存活，理由與根因見模組 docstring）。
+    **那一格現在由 :func:`test_no_grey_unit_states_a_conclusion` 用另一份黑名單守，
+    不是由「必須是灰態」那條反向守。**
     """
     for _kind in ("empty", "missing", "loaded"):
         _all = _text(_stream(_kind))
@@ -640,18 +791,83 @@ def test_the_page_invents_no_source_list_or_column_list():
 # 鐵則 02：寫入類動作全部 Form 封裝
 # ══════════════════════════════════════════════════════════════════
 
-def test_the_write_block_is_form_wrapped():
-    """線框用**粗體**寫的硬要求：「寫入類動作，**全部 Form 封裝**」。
+#: 會產生使用者輸入的 widget —— 線框那句「寫入類動作，**全部 Form 封裝**」管的就是這些。
+#: ⚠️ 這是**白名單，不是窮舉**：Streamlit 新增的輸入元件不會自動進來。
+_INPUT_WIDGETS: frozenset = frozenset({
+    "checkbox", "toggle", "slider", "select_slider", "number_input",
+    "text_input", "text_area", "selectbox", "multiselect", "radio",
+    "date_input", "time_input", "file_uploader", "color_picker", "camera_input",
+})
 
-    ⚠️ 這條驗的是**畫面上真的有一個 form 送出鈕**，不是「原始碼裡有 `applied_form` 這個字」——
-    後者被註解掉一半也照樣通過。
+
+def _applied_form_with() -> ast.With | None:
+    """回傳包住 `applied_form(...)` 的那個 `ast.With`；沒有就回 `None`。"""
+    for _n in ast.walk(_tree()):
+        if isinstance(_n, ast.With):
+            for _it in _n.items:
+                _c = _it.context_expr
+                if (isinstance(_c, ast.Call)
+                        and _dotted(_c.func).endswith("applied_form")):
+                    return _n
+    return None
+
+
+def _input_widget_calls(tree: ast.AST) -> list[ast.Call]:
+    """檔內所有 `st.<輸入元件>(...)` 呼叫。"""
+    return [_n for _n in ast.walk(tree)
+            if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute)
+            and _n.func.attr in _INPUT_WIDGETS]
+
+
+def test_the_write_block_is_form_wrapped():
+    """⭐ 線框**唯一**用粗體寫的硬要求：「寫入類動作，**全部 Form 封裝**」。
+
+    ⛔ **2026-09-05 獨立稽核必修 —— 本條原本形同虛設，這段病史請留著。**
+    舊版斷言是 `len(_at.button) >= 1` ＋ `SUBMIT_LABEL in _labels`，
+    docstring 還宣稱「驗的是**畫面上真的有一個 form 送出鈕**」。
+    **那句宣稱做不到**：`AppTest` **沒有 `.form` 屬性**（實測 `hasattr(AppTest, "form")` → `False`），
+    form 的送出鈕在元素樹裡就是一顆普通 `Button`、form 本體是一個無標記 `Block` ——
+    **`at.button` 兩者皆收**，所以那兩條斷言**對一顆裸 `st.button` 恆真**。
+    稽核把 `with applied_form(...) as _gate:` 換成 `if True: _gate = st.button(SUBMIT_LABEL)`，
+    **本地 47 passed、六支全域守衛 467 passed —— 一條都沒紅。**
+
+    ⛔ **全域也補不到這個洞**：`tests/test_ui_rerun_contract.py` 的 `FORM_SITE_TOTAL`
+    數的是 **raw `st.form(` 站點**，而 ⑤ 走共用 `applied_form()`，**本身不貢獻任何 form 站點**；
+    `git grep applied_form -- tests/` 顯示**沒有任何守衛在數 `applied_form()` 的呼叫點**。
+    （repo 自己在 `FORM_SITES` 的註解裡預言過這件事，但沒補。**五分頁族全部走
+    `applied_form`，所以這個洞不只是 ⑤ 的** —— 全域版須另批處理，見 PR 描述的登記。）
+
+    **現行做法：AST，不看渲染結果。**
+    (1) 頁面**必須**有一個包住 `applied_form(...)` 的 `with`；
+    (2) 檔內**每一個**輸入元件呼叫都必須落在那個 `with` 的 body 行區間內。
+    → 把 `applied_form` 換成裸 `st.button`，(1) 當場失敗。
+    → 把某個 checkbox 搬到 form 外面，(2) 當場失敗。
+
+    ⚠️ **本條守不到的**：`_INPUT_WIDGETS` 是白名單，Streamlit 新增的輸入元件不會自動進來；
+    以及 `getattr(st, "checkbox")(...)` 這種非字面呼叫（同本檔其他 AST 條的既有限制）。
     """
+    _with = _applied_form_with()
+    assert _with is not None, (
+        "頁面沒有任何包住 `applied_form(...)` 的 `with` —— "
+        "線框粗體要求「寫入類動作，全部 Form 封裝」。\n"
+        "⚠️ 換成裸 `st.button` 是渲染層看不出來的（AppTest 沒有 `.form`），"
+        "所以這條必須走 AST。")
+    _lo = min(_st.lineno for _st in _with.body)
+    _hi = max(getattr(_st, "end_lineno", _st.lineno) for _st in _with.body)
+    _outside = [f"L{_c.lineno} st.{_c.func.attr}(…)"
+                for _c in _input_widget_calls(_tree())
+                if not (_lo <= _c.lineno <= _hi)]
+    assert not _outside, (
+        f"有輸入元件落在 `applied_form(...)` 的 `with` 之外：{_outside}\n"
+        f"（form body 行區間 = {_lo}~{_hi}）\n"
+        "線框粗體：「寫入類動作，**全部 Form 封裝**」—— form 外的 widget "
+        "每動一下就觸發一次 rerun，那正是鐵則 02 要買掉的成本。")
+    # 送出鈕的字仍然要對得上（這一條**恆真**，見 PR 描述的登記 10：
+    # 測試 import 的就是頁面同一個常數，改字不可能紅；它的價值只有
+    # 「鈕沒用到那個常數」這一種死法）。
     _at = _app(FAKE_HOLDINGS)
-    assert len(_at.button) >= 1, (
-        "畫面上沒有任何送出鈕 —— 手動補資料是寫入類動作，線框要求全部 Form 封裝。")
-    _labels = [_b.label for _b in _at.button]
-    assert SUBMIT_LABEL in _labels, (
-        f"送出鈕的字不是 {SUBMIT_LABEL!r}：{_labels}")
+    assert SUBMIT_LABEL in [_b.label for _b in _at.button], (
+        f"畫面上找不到字為 {SUBMIT_LABEL!r} 的送出鈕：{[_b.label for _b in _at.button]}")
 
 
 def test_the_three_fields_are_present_and_default_to_doing_nothing():
@@ -766,8 +982,11 @@ def test_the_page_does_not_delegate_to_the_old_tabs():
     """
     _old = ("ui.tab5_data_guard", "ui.tab_manage", "ui.tab_settings_diag",
             "ui.tab6_manual")
+    # ⚠️ `_m == _o or _m.startswith(_o + ".")` —— **點邊界不能省**（2026-09-05 稽核）：
+    #    裸 `startswith` 會把 `ui.tab_manage_v2` / `ui.tab6_manual_helpers`
+    #    這種**不同的模組**一起誤判成舊分頁。
     _bad = [_m for _m in _imported_modules(_tree())
-            if any(_m.startswith(_o) for _o in _old)]
+            if any(_m == _o or _m.startswith(_o + ".") for _o in _old)]
     assert not _bad, (
         f"被測檔委派給了舊分頁：{_bad}\n線框「從哪裡搬來」的四個檔是**參考**，不是依賴。")
 
@@ -781,6 +1000,12 @@ def test_the_page_does_not_render_cache_or_backoff_state():
     _names = [_t.id.upper() for _t in _module_level_names(_tree())]
     _bad_names = [_n for _n in _names
                   if any(_k in _n for _k in ("BACKOFF", "CACHE", "TTL"))]
+    # ⚠️ **這一處刻意保留寬鬆的子字串比對**（2026-09-05 稽核點名）：
+    #    `"backoff" in _m` 會把 `from ui.helpers.render_state import backoff_free_note`
+    #    這種名字誤判成「碰了退避」。**本批不收窄，理由是這一條要防的東西
+    #    （偷偷把退避狀態做成畫面）值得寧可誤紅、不可漏放** ——
+    #    真的誤紅時，改的人會來讀這一行並就地決定；漏放則沒有人會發現。
+    #    **登記在此，不是沒看到。**
     _bad_imports = [_m for _m in _imported_modules(_tree())
                     if "backoff" in _m or "source_backoff" in _m or _m.endswith("ttls")]
     assert not _bad_names and not _bad_imports, (
@@ -940,6 +1165,13 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     _at = _app(FAKE_HOLDINGS)
     _at.checkbox[0].check()
     _at.button[0].click()
+    # ⚠️ **一定要跑兩次，這不是保險是必需**（2026-09-05 獨立稽核應修）：
+    #    `render_settings_and_diagnostics()` 裡 `_render_grid()` 在**最前面**、
+    #    Form 的送出處理（寫 `_SK_APPLIED`）在**最後面** ——
+    #    也就是說，**任何吃 `_SK_APPLIED` 的內容都要到「下一次 run」才顯形**。
+    #    只跑一次 `_rerun` 的話，本條承諾的「哪天真的變有效了會轉紅」**做不到**：
+    #    稽核用一顆「讓灰卡吃 `_SK_APPLIED`」的突變實測，三種順序**全數存活**。
+    _rerun(_at)
     _rerun(_at)
     _after_seg = _segments(_flat(_at.main))
     for _u in _grey_units():
