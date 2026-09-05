@@ -408,7 +408,16 @@ def _render_backfill_form() -> None:
             st.session_state[_SK_APPLIED] = _normalise_request(
                 _csv, _refetch, _only_missing)
         else:
-            not_ready("還沒選要補什麼 —— 請至少勾一種來源。")
+            # ⚠️ **`where=` 不是為了過測試才加的**（`tests/test_batch2_top_card_grid.py::`
+            #    `test_where_is_mandatory` 抓到本處漏了它，2026-09-05）——
+            #    這一則的指路**真的有效**：使用者要做的就是回到這一塊、勾一個來源再按一次。
+            #    ⚠️ 它指的地方**就是使用者現在所在的那一塊**，讀起來有點繞；
+            #    但「有效」比「不繞」重要，而且本頁只有這一塊能解決它。
+            #    ⛔ **不要**因為繞就改指別的地方 —— 那會變成一句指錯路的話。
+            #    ⛔ **也不要**把它加進 `WHERE_MISSING_EXEMPT`：那個豁免是給
+            #    「真的無處可指」的，這裡有處可指。
+            not_ready("還沒選要補什麼 —— 請至少勾一種來源再按一次。",
+                      where=_pending_where(nav_manual_label()))
 
 
 def _render_manual() -> None:
