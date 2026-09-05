@@ -1414,7 +1414,29 @@ def _rel(path: pathlib.Path) -> str:
 #   - 淨值：23（浮出後）− 1（修掉 Proxy 那處）= **22**。差額 22 − 21 = +1，
 #     **是原本隱形的既有站點，不是有人新借了額度。**
 # ⛔ 不得為了讓 CI 綠而把新浮出的站點加進豁免清單、或把 receiver 判定改回去。
-BARE_ERROR_RATCHET = 22
+#
+# ⭐ **2026-09-05：22 → 21。這是「把已經還掉的債收回來」，不是修正量測誤差。**
+# 上面那段 21 → 22 的沿革**沒有留下任何殘留**，這一點是實測不是推論：
+#   - 在**宣告 22 的那個 commit**（`461f811`）用**本規則自己的尺**重量 → **actual 22**，
+#     declared 與 actual 當時**完全相等**，「+1 量測誤差修正」已經被 22 吃乾淨。
+#   - 那個 +1 的依據（`ui/sidebar.py` 的 `st.sidebar.error("❌ 407：帳密錯誤")`）
+#     **今天仍然存在、仍然被計入**，它就在現在這 21 裡面。
+# 現在的 22 − 21 = 1 是**後來**才出現的，來源已定位到單一 commit：
+#   `a56994e`（T23：⑤ NAV 拆兩塊）把 `ui/tab5_data_guard.py` 的
+#   `st.error("\n\n".join(_lines))` 改成 `not_ready(...)`（該檔 4 → 3）——
+#   **那是真的把債還掉了**（過度示警的紅框改成灰色空狀態三要素），
+#   不是站點變成規則看不見。**還了債卻沒把 ratchet 降下來，額度就留在那裡。**
+# ⚠️ 留著這 1 格的實際後果（實測，不是假設）：任何檔案都可以**無聲**加進第 1 個
+#   裸 `st.error`，要第 2 個才會紅。2026-09-05 實測：在 `ui/views/page_01_macro.py`
+#   加一個 `st.error("…")` → 本條 **1 passed**（綠）。降為 21 後同一個突變 → **紅**。
+# ⚠️ 而且這格 slack **已經讓本檔另一處的文件宣稱變成假的**：
+#   `test_q4_unreachable_partial_view_stays_a_guard_and_never_fakes_a_card` 的
+#   docstring 寫「改用 `st.error` 會撞上 `BARE_ERROR_RATCHET`（22 → 23）→ 轉紅」——
+#   在 actual 21 之下，那個突變其實只會走到 22，**不紅**。降回 21 才讓那句話重新為真。
+#   （該處括號內的數字已同步改為 21 → 22。）
+# ⛔ 同樣不得反向操作：**還沒還債就先把數字調小**會讓 CI 紅著擋所有人，
+#   那不是收債，是把帳挪給別人。降數字的前提永遠是「actual 已經先降下來」。
+BARE_ERROR_RATCHET = 21
 
 
 def _bare_error_calls(path: pathlib.Path):
@@ -1449,7 +1471,8 @@ def test_c_system_red_box_is_reserved_for_actual_failures(path: pathlib.Path):
 def test_c_bare_error_backlog_only_shrinks():
     """範圍外的既有 bare `st.error` 是 ratchet：可以慢慢還，不可以再借。
 
-    本批只做顏色，逐條判定那 22 處的業務語意不在範圍內（§8.4 step 4）；
+    本批只做顏色，逐條判定那 21 處（原 22，2026-09-05 收回 1 格已還的額度）
+    的業務語意不在範圍內（§8.4 step 4）；
     但新寫的 code 不准再往這個數字上加。
 
     ⚠️ **22 是「本規則自己這把尺」量出來的**（`UI_SOURCES` 再扣掉 `BATCH_SCOPE_C`
@@ -2182,7 +2205,10 @@ def test_q4_unreachable_partial_view_stays_a_guard_and_never_fakes_a_card():
         (i) 這條路徑上**手上沒有 exception** —— `system_error()` 的簽名要求一個
         `BaseException`，硬造一個只為滿足簽名，traceback 會是假的；
         (ii) 改用 `st.error` 會多一個「拿不到失敗證據的紅框」，撞上
-        `BARE_ERROR_RATCHET`（22 → 23）→ `test_c_bare_error_backlog_only_shrinks` 轉紅。
+        `BARE_ERROR_RATCHET`（21 → 22）→ `test_c_bare_error_backlog_only_shrinks` 轉紅。
+        ⚠️ **2026-09-05 更正：本行原寫「22 → 23」，那在當時就已經不成立** ——
+        ratchet 宣告 22、實際只有 21，留著 1 格 slack，這個突變只會走到 22 而**不紅**。
+        ratchet 已收回 21（見 `BARE_ERROR_RATCHET` 上方沿革），本句自此重新為真。
         ⚠️ 上一版寫的「也沒有任何數字壞掉，畫面只是空的」**與事實牴觸**：
         這條分支真被走到，代表 `status` 回報 complete 卻缺 series/metrics，
         **整個主畫面的數字會一次全部消失**，那不是「只是空的」。
