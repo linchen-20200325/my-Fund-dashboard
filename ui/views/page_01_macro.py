@@ -14,7 +14,7 @@
 –      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
 2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
 3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
-4      🔎 詳細區（四時域＋決策矩陣＋AI）  尚未實作（批次三），誠實灰態
+4      🔎 詳細資料與說明（五塊，順序不動）  骨架就位；只有 📈 中期循環是真的
 ===== ============================== ==========================================
 
 拍板同時解掉的三件事（**不要再當成待裁決**）
@@ -104,6 +104,8 @@ from __future__ import annotations
 
 import html
 import os
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pandas as pd
@@ -119,6 +121,7 @@ from services.macro.composite_score import (
 )
 from services.risk_radar import detect_risk_radar, summarize_radar
 from shared.evidence_support import is_sufficient
+from shared.macro_buckets import BUCKET_ORDER
 from shared.ui_control_labels import MACRO_LOAD_BTN_AGAIN, MACRO_LOAD_BTN_FIRST
 from ui.helpers.ia import (
     STATE_BUSINESS,
@@ -136,7 +139,12 @@ from ui.helpers.macro.beginner_view import (
     render_evidence_table,
     split_evidence_footnotes,
 )
-from ui.helpers.render_state import business_alert, not_ready, system_error
+from ui.helpers.render_state import (
+    business_alert,
+    not_ready,
+    safe_section,
+    system_error,
+)
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
@@ -683,38 +691,293 @@ def _card_credibility(ind: dict, ev: dict) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════
-# 層 4 與已裁決不做的區塊：誠實灰態（鐵則 04：未完成不留白，也不畫空表格外框）
+# 層 4：🔎 詳細資料與說明（五塊，順序不動）
 # ══════════════════════════════════════════════════════════════════
-def _render_deferred_blocks() -> None:
-    """把「本批沒做」與「已拍板不做」的區塊畫成灰態 —— **兩者理由不同，分開寫**。
+# ⚠️ **2026-09-05 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管）——
+#    本區塊前一版寫「6 塊」，那也是錯的。**
+#
+#    ~~「🔎 詳細區 — 四時域 ＋ 決策矩陣 ＋ AI」，**6 塊**：🌳 長期座標／📈 中期循環／
+#    🎯 短線雷達／⚠️ 拐點警報／**📋 即時訊號 ＋ 決策矩陣**／🤖 AI 景氣判斷總結~~
+#
+#    **舊表述在寫下當天，逐字抄對了它引用的那一段** —— 它確實照著
+#    `docs/wireframes/wireframe-macro-health.html` 寫，字也沒抄錯。
+#    **被推翻的是它的前提：抄錯了「哪一段」。** 那句「6 塊」住在
+#    **section 01「現況盤點 — 兩頁目前實際渲染了什麼」**，也就是
+#    **「現在長什麼樣」**；**拍板的目標版面在 section 03「重組後版面」**。
+#    拿現況當目標，等於把這次重構要搬走的東西照著搬回來。
+#
+#    **本組實測（可自驗，指令與輸出如下）**：
+#      `git show origin/main:docs/wireframes/wireframe-macro-health.html | grep -n 'sec-num'`
+#        → 01=364、02=508、**03=633**、04=901、05=933
+#      同檔 `grep -n '詳細區'` → **只有一處，line 403** ⇒ 403 落在 [364, 508) ＝ **section 01**。
+#
+#    **section 03 的 ①（＝目標）**：
+#      「🔎 詳細資料與說明」〈保留 · **順序不動**〉：
+#      🌳 長期座標 ▸ 📈 中期循環 ▸ 🎯 短線雷達 ▸ ⚠️ 拐點警報 ▸ 🤖 AI 景氣判斷總結
+#    緊接著三項標「**→ 移去 ②**」：💰 資本防線／🚦 持倉紅綠燈／📋 逐檔決策矩陣，
+#    且 verdict 大卡標「**刪除**」（DUP-5）。**section 04「搬移對照表」三列獨立佐證**，
+#    去處都是「② 行動摘要」；同表另有一列寫「四時域詳細 ＋ 🤖 AI 景氣總結 → 留 · ① 原位」。
+#
+#    ⛔ **所以「📋 即時訊號 ＋ 決策矩陣」不屬於本頁的詳細區** —— 它要搬去 ②。
+#    前一版把它列進來，會讓批次三照著把一塊**已拍板要搬走的東西**重寫回 ①。
+#
+# 📌 **前一版那則「五時域是假標籤」的更正註記，其結論仍然成立，不撤回**
+#    （「時域是 4 個不是 5 個，第 5 個 render 函式是 AI 總結」——本更正未推翻它）；
+#    它只是**在修掉一個錯的同時，從錯的那一段抄了另一個數字**。兩則更正併讀。
+#
+# ⚠️ **標題文字不是本組發明的**：五個標題與**舊頁各子模組實際渲染的 `## ` 標題逐字相同**
+#    （`ui/tab1_macro_longterm.py` 🌳 長期座標／`ui/tab1_macro_midcycle.py` 📈 中期循環／
+#     `ui/tab1_macro_radar.py` 🎯 短線雷達／`ui/tab1_macro_inflection.py` ⚠️ 拐點警報／
+#     `ui/tab1_macro_ai.py` 🤖 AI 景氣判斷總結），且與線框 section 03 逐字相同。
+#    **線框與現行實作在這五個名字上一致，本組沒有在兩者之間做取捨。**
 
-    ⚠️ 這些**不是**失敗，也不是抓取失敗 → 一律灰態（`not_ready` 系），不上紅（鐵則 03）。
+#: 詳細區的區塊標題（**不是**分頁名，故不走 `story_nav`；那支管的是分頁與分區導覽）。
+#: 對映 key → 標題。四時域的 key 直接是 `BUCKET_ORDER` 的桶名，AI 總結另給哨兵 key。
+_DETAIL_AI_KEY: str = "ai"
 
-    ⚠️ **2026-09-05 更正：本區塊原本叫「🔎 詳細五時域」，那個名字是本專案自己造的，
-       而且是假的**（獨立稽核 A776 指出，本組已自驗）。實測：
-       `git grep -ln "五時域" origin/main` **只命中我們自己這一個檔**；
-       九份線框逐檔 `grep -c 五時域` **全部 0**。
-       已拍板骨架 `docs/wireframes/wireframe-macro-health.html` 寫的是
-       「**🔎 詳細區 — 四時域 ＋ 決策矩陣 ＋ AI**」，標「**6 塊**」並逐塊列出：
-       🌳 長期座標／📈 中期循環／🎯 短線雷達／⚠️ 拐點警報／
-       **📋 即時訊號 ＋ 決策矩陣**／🤖 AI 景氣判斷總結。
-       ⛔ **那個假名字錯兩次**：(a) 時域是 **4** 不是 5 —— 第 5 個 render 函式是
-       **AI 總結**，不是時域；(b) 它把**決策矩陣**（詳細區最大的一塊：verdict 大卡
-       ＋ 逐檔決策矩陣表 ＋ 4 格 stat_tile ＋ 動作對照表）整塊吃掉了。
-       **留著它，批次三會照它派工，然後在一次「打掉重練」裡讓決策矩陣無聲消失** ——
-       而客戶方針第 3 條（舊 tab 暫留、待新版驗收完成後整批拔除）防的正是這件事。
-       ⚠️ **詳細區是否還有第 7 塊，本組不宣稱**：`ui/helpers/macro/beginner_view.py`
-       的 docstring 提到一個「**唯讀副盤**」一級區塊，而線框那 6 塊沒列它。
-       **本組未查證，故不寫進畫面文案，也不斷言它不存在** —— 留給批次三。
+#: 四時域的 key —— **從 `shared.macro_buckets.BUCKET_ORDER` 推導，不手抄第二份順序。**
+#: ⚠️ 用「濾掉新聞桶」而不是 `BUCKET_ORDER[:4]`：後者在有人於中間插一個新桶時
+#: ~~會**靜默**把 `inflection` 擠掉~~，而濾法只會讓新桶出現（看得見，會被守衛擋下）。
+#: → **2026-09-05 A779-b 就地更正（有意識的更正，不是漏刪）**：**「靜默」二字不成立。**
+#:
+#:   ⚠️ **本更正自己也被實測修正過一次，兩個數字都照實留著**：
+#:   本更正的**第一版**寫「把上式改成 `BUCKET_ORDER[:4]` → 結構鎖 **2 failed**」——
+#:   **那個數字是編的，實跑是 `10 passed`。** 原因很簡單、也是本註解真正該講的事：
+#:   **今天 `news` 就排在第 5 位，所以 `[:4]` 與「濾掉 news」的結果一模一樣**
+#:   （實測：`BUCKET_ORDER[:4] == [k for k in BUCKET_ORDER if k != "news"]` → `True`）。
+#:   兩者今天**沒有任何差別**，換過去當然不會有守衛響。
+#:
+#:   **兩者的差別只在「有人於中間插一個新桶」時才會現形**，實測（在測試行程內
+#:   把 `BUCKET_ORDER` 換成 `[long, mid, short, credit, inflection, news]` 模擬，
+#:   **未改動 `shared/`**）：
+#:     - **濾法（現行）** → `2 failed`：新桶 `credit` **出現在畫面上**，
+#:       守衛說「多了一塊沒登記的」，人會回去看線框。
+#:     - **切片 `[:4]`** → `4 failed`：`inflection` 被擠掉，
+#:       **⚠️ 拐點警報從畫面消失**，壞的東西比較多。
+#:   → **兩種都會響**，所以「靜默」在任何一邊都不成立；
+#:     **濾法仍然較好**（失效模式是「多一塊看得見的」而不是「少一塊該在的」），
+#:     **選擇沒有被推翻，被推翻的是那個形容詞與那個編出來的數字。**
+#:
+#: ⚠️ **這一筆的教訓比它本身重要，兩層都要記**：
+#:   (1) 同一句「靜默」我在 PR 描述裡撤回過、**卻沒有在這裡撤** ——
+#:       PR 描述是會被關掉、後人不會回頭讀的地方；**程式碼註解才是後人一定會讀的地方**。
+#:       撤回只做在前者 ＝ 沒有撤。
+#:   (2) 而我**在修這一筆的時候，又把一個沒跑過的數字寫進了註解**。
+#:       **這正是本 PR 自己在修的那一類病，在修它的那一次改動裡又犯了一遍。**
+#:       規則：**註解裡的每一個數字，送出前都要真的跑一次**；跑不了就不要寫數字。
+#: 📰 新聞桶不在詳細區：線框 section 03 的五塊沒有它，它在本頁是上方的「新聞情緒」卡。
+_DETAIL_HORIZON_KEYS: tuple[str, ...] = tuple(
+    _k for _k in BUCKET_ORDER if _k != "news"
+)
+
+_DETAIL_TITLES: dict[str, str] = {
+    "long":            "🌳 長期座標",
+    "mid":             "📈 中期循環",
+    "short":           "🎯 短線雷達",
+    "inflection":      "⚠️ 拐點警報",
+    _DETAIL_AI_KEY:    "🤖 AI 景氣判斷總結",
+}
+
+_DETAIL_HEADING: str = "🔎 詳細資料與說明"
+
+
+def _detail_pending(title: str) -> None:
+    """尚未搬遷的詳細區塊：畫出**標題**，內容誠實留灰（鐵則 04 三要素）。
+
+    ⚠️ **為什麼標題用 `st.markdown("#### …")` 而不是 `empty_state()` 的標題**：
+    這五塊是**頁面的一級區塊**，標題必須與同層的真區塊看齊（📈 中期循環由
+    `ui/tab1_macro_midcycle.py` 自己印 `## `）；`empty_state()` 的標題是刻意壓小的
+    inline 灰字，用在這裡會讓四塊看起來像「中期循環的子項」。
+    **三要素一項不少**：標題（本行）＋ 缺什麼＋去哪補（下一行的 `not_ready()`）——
+    而 `not_ready()` 正是 `empty_state()` 內部委派的**同一支 SSOT**，
+    所以這裡**沒有**另起一套灰態（`ui/helpers/ia/empty_state.py` 的模組 docstring 禁的是那件事）。
+
+    ⚠️ **兩種灰的理由不同，文案必須分開**：`ind` 還沒載入 → 「你還沒按載入」；
+    已載入 → 「這一塊還沒搬過來」。混成一句會讓使用者以為按了載入就會出現。
+    """
+    st.markdown(f"#### {title}")
+    if isinstance(st.session_state.get(_SK_IND), dict):
+        not_ready(
+            "這一塊還沒從舊版總經頁搬過來（UI 打掉重練的其餘批次處理）",
+            # 區塊名吃 `_DETAIL_TITLES`，不手抄 —— 手抄的指路在本 repo 已死過三次
+            # （`ui/helpers/story_nav.py` 的 `RETIRED_TAB_LABELS`）。
+            where=(f"{where_to_find('macro')} → "
+                   f"目前只有「{_DETAIL_TITLES['mid']}」是完整的"),
+        )
+    else:
+        not_ready("尚未載入總經資料。", where=_where_to_load())
+
+
+def _detail_mid() -> None:
+    """📈 中期循環 —— 本批**唯一**真的搬過來的一塊。
+
+    直接委派 `ui/tab1_macro_midcycle.py::render_mid_cycle_section(ind)`，
+    **本檔不重寫一份**（§2.1 SSOT）。它自己會印 `## 📈 中期循環` 標題，
+    所以這裡**刻意不印標題** —— 印了會變兩個。
+
+    ⚠️ **它為什麼是第一塊被搬的（本組逐條實測，2026-09-05）**：
+    `ui/tab1_macro_midcycle.py` 不寫 `st.session_state`（`grep -c` 得 1，但那一處是
+    **檔頭 docstring 裡的一句話**「純渲染 + ind 讀取(不寫 session_state)」，不是程式）、module-level import 只有
+    `shared/**` ＋ `ui/components/**` ＋ streamlit（**零** `repositories` / `infra` /
+    `requests` / `yfinance` / `gspread` / `urlopen`）、`st.form(` `st.error(`
+    `st.warning(` `st.button(` **各 0 處**、`st.columns(` 只有一處 `(5)` 且已登記於
+    `tests/test_ui_grid_contract.py::GRID_EXEMPT_SITES`。
+    它只吃 `ind`，而 `ind` 就是本頁 `_load_everything()` 放進 session 的那一份
+    （同一支 `services.macro.fetch_all_indicators`）。
+
+    ⛔ **技術債（本批刻意不還，登記在此）**：`render_mid_cycle_section` 內部
+    lazy import 了兩個**舊頁的私有符號** ——
+    `ui.tab1_macro._render_macro_indicator_card` 與 `ui.tab1_macro._zs_danger_spec_key`。
+    也就是說 **① 頁的新 View 目前仍在執行期相依 `ui/tab1_macro.py`**，
+    而客戶方針第 3 條要在五頁驗收完成後把舊 tab **整批拔除** ——
+    **這條相依會擋住那一步，必須另批處理。**
+    **本批不搬它們的理由（實測，不是推測）**：`_render_macro_indicator_card` 同時被
+    `ui/tab1_macro_longterm.py`（🌳 長期座標）與本模組使用，
+    `_zs_danger_spec_key` 另有多個 `tests/**` 以 `patch.object(tab1_macro, …)` 綁在
+    `ui.tab1_macro` 這個模組物件上。現在搬＝在還不知道另外三塊要什麼的情況下搬第一次，
+    之後很可能再搬第二次，並且會同時動到一批測試的 patch 目標。
+    → **等 🌳 長期座標 那一塊也搬過來時，兩個消費者到齊，一次搬完。**
+
+    ⛔ **2026-09-05 追記：客戶架構方針讓這筆債的性質變了（不是新增理由，是加上死線）。**
+    客戶 2026-09-05 頒布：(1) UI 層禁止在舊 tab 檔上修補，一律開新檔重寫；
+    (2) **新 UI 只呼叫既有 Service 函式**，欄位缺失／取數異常一律落實灰態三要素、
+    **絕不反向要求修改底層**；(3) **舊版 tab 檔暫留作參考，待新版 5 頁驗收完成後整批拔除**。
+      - **死線（方針 3）**：這條相依**必須在「舊 tab 整批拔除」之前拆完**，
+        否則那一刻 ① 頁**會直接壞掉**（lazy import 找不到模組）。
+        它因此**不是**「早晚要還」，而是「**在一個已知時點前必須還完**」。
+      - **定性（方針 2）**：`render_mid_cycle_section` 住在 `ui/tab1_macro_midcycle.py`，
+        **那是 UI renderer，不是 Service** —— 所以這條委派**本來就不符合方針 2 的形狀**。
+        它是一個**有效期到「整批拔除」為止的過渡**，不是可以長期存在的設計。
+    ⚠️ **上面「本批不搬的理由」一字未刪，因為它仍然成立** —— 那是**當時**不搬的正確理由
+    （兩個消費者未到齊、會動到一批測試的 patch 目標）。
+    **被權衡掉的只是它隱含的那個前提：「可以無限期留著」。** 兩邊理由並陳。
+    ⚠️ 這是**登記**，不是動工授權（§-1）；**本輪刻意不拆**，拆它會動到 `ui/tab*.py`，
+    正是方針 1 明禁的「在舊檔上修補」。**X5 只把記錄改成不說謊。**
+    """
+    _ind = st.session_state.get(_SK_IND)
+    if not isinstance(_ind, dict):
+        # 沒有 ind 就沒有東西可畫 —— 標題照印（骨架不消失），內容誠實留灰。
+        _detail_pending(_DETAIL_TITLES["mid"])
+        return
+    from ui.tab1_macro_midcycle import render_mid_cycle_section  # noqa: PLC0415
+    render_mid_cycle_section(_ind)
+
+
+#: 詳細區的**渲染序列** —— `(key, 標題, render callable)`，**順序即畫面順序**。
+#:
+#: ⚠️ **前四項的 key 由 `BUCKET_ORDER` 導出**（見 `_DETAIL_HORIZON_KEYS`）：
+#: 「長期 → 中期 → 短線 → 拐點」這個順序在本 repo 只有一個出處，本檔**不抄第二份**。
+#: 第五項是 🤖 AI 總結 —— 它**不是時域桶**，`BUCKET_ORDER` 裡沒有它，故另給哨兵 key。
+#: 守衛：`tests/test_wf01_detail_zone_order.py`（結構鎖 ＋ 行為鎖，見該檔）。
+_DETAIL_ZONE: tuple[tuple[str, str, Callable[[], None]], ...] = tuple(
+    (
+        _k,
+        _DETAIL_TITLES[_k],
+        # 📈 中期循環是本批唯一真的搬過來的；其餘四塊走同一支灰態建構器。
+        # `partial` 而不是 lambda：lambda 在生成式裡會**共用同一個 `_k`**
+        # （late binding），四塊會全部印成最後一個標題 —— 那是靜默的錯，
+        # 畫面看起來還是四塊，只是名字全一樣。
+        _detail_mid if _k == "mid" else partial(_detail_pending, _DETAIL_TITLES[_k]),
+    )
+    for _k in (*_DETAIL_HORIZON_KEYS, _DETAIL_AI_KEY)
+)
+
+
+def _render_detail_zone() -> None:
+    """層 4：🔎 詳細資料與說明 —— 依 :data:`_DETAIL_ZONE` **逐塊按順序**渲染。
+
+    ⚠️ **順序不動是線框明寫的**（section 03「保留 · **順序不動**」），
+    而 ② 依據表的「詳細在下方哪一段」那一欄**直接指向這幾塊** ——
+    順序一亂，那一欄就開始說謊。故本區塊有專屬守衛，見
+    `tests/test_wf01_detail_zone_order.py`。
+
+    ⚠️ **一個本批沒有修、也修不了的視覺不一致（據實揭露，不要當成沒看到）**：
+    本頁的層級是「`##` 頁標題 → `###` 層 → `####` 詳細區塊」，四塊灰態照這個層級走；
+    但 📈 中期循環是由 `ui/tab1_macro_midcycle.py` **自己印 `## 📈 中期循環`**，
+    比它上面的區頭 `### 🔎 詳細資料與說明` **還大一級**。
+    **修它要動 `ui/tab*.py`，那是客戶方針第 1 條明禁的**（不在舊檔上修改），
+    所以本批不動。等其餘四塊也重寫過來、五塊都由本檔控制標題時，一併統一。
+    ⚠️ 守衛（`tests/test_wf01_detail_zone_order.py`）**刻意只鎖標題文字、不鎖級數**，
+    就是為了不讓這個過渡狀態變成一條與版面演進作對的假紅。
     """
     st.divider()
-    empty_state(
-        "🔎 詳細區：🌳 長期座標 → 📈 中期循環 → 🎯 短線雷達 → ⚠️ 拐點警報"
-        " → 📋 即時訊號＋決策矩陣 → 🤖 AI 景氣判斷總結",
-        "這 6 塊要從舊版總經頁逐塊重寫，份量大，已另立**批次三**處理",
-        where=_where_to_load(),
-        footer="批次三完成後，這幾塊會接在同一個載入閘門底下，取數機制現在就已經就位。",
+    st.markdown(f"### {_DETAIL_HEADING}")
+    for _key, _title, _render in _DETAIL_ZONE:   # noqa: B007 — key 供守衛讀
+        # ⚠️ **每一塊各自包一層區塊級隔離** —— 走既有共用 helper
+        # `ui/helpers/render_state.py::safe_section`（**不是** `ui/tab*.py` 裡那份私有的，
+        # 方針第 1 條不准動舊檔；這一支是 SSOT 側的公開版，它的 docstring 講的正是這件事）。
+        #
+        # ⛔ **2026-09-05 稽核實測，這不是預防性加固，是修一個已經會發生的斷頭**：
+        # 讓 `render_mid_cycle_section` 拋一個例外（模擬上游 `ind` 形狀變動），
+        # 前一版的結果是 —— 例外一路逃出 `render_market_overview`，
+        # **🎯 短線雷達 / ⚠️ 拐點警報 / 🤖 AI 總結三塊全部消失，
+        # 連 `_render_matrix_signpost()` 那句指路也一起沒了**，
+        # 最近的網子只剩 `app.py` 的**分頁級** try（整頁換成一個紅框）。
+        # 而那句指路是整批搬移裡**唯一留給使用者的線索** ——
+        # 為它單獨寫一條守衛、卻讓一個上游變動就能把它帶走，是自相矛盾的。
+        #
+        # ⚠️ `safe_section` **不吞例外**（§1）：它走 `system_error()` 顯式紅框 ＋
+        # log ＋ 可展開 traceback，只是把爆炸範圍收斂到那一塊。
+        safe_section(_title, _render)
+    _render_matrix_signpost()
+
+
+def _render_matrix_signpost() -> None:
+    """線框 section 05 點名要留的那一句指路：逐檔加減碼建議要去 ② 找。
+
+    ⚠️ **時態是中性的，這是刻意的** —— 見本函式末段與 `st.caption` 上方的註解：
+    決策矩陣**目前還沒有真的落到 ②**，所以不能寫「已經搬到 ② 了」。
+
+    **線框原文（section 05「據實揭露」）**：
+    「① 頁會變短、變得『只講市場』。習慣在 ① 頁底看逐檔加減碼建議的人，會找不到它
+    —— 需要在 ① 的決策矩陣原位留一句指路到 ②。」
+
+    **放在詳細區最後一塊之後**，理由三條：
+    1. **那就是「原位」**。舊頁的 📋 即時訊號 ＋ 決策矩陣**渲染在四時域之後**
+       （`ui/tab1_macro.py` 的 `## 📋 即時訊號 + 決策矩陣`，且
+       `tests/test_audit_20260805_tab1_ui.py`
+       ::test_decision_matrix_sits_after_the_horizons_and_before_the_ai_summary
+       就是守它「在時域之後」的那條）。使用者往下捲到底找它，指路就該在那裡等他。
+    2. **不做一個空的「決策矩陣」區塊**。線框把它整組標「搬」、verdict 大卡標「刪除」，
+       畫一個灰色的空殼會讓它看起來像「還沒做完」而不是「已經搬走了」——
+       那正是鐵則 04 要避免的「把消失換成灰色的消失」。
+    3. **它不是灰態**。灰態說的是「缺東西、補了就有」；這裡東西沒有缺，只是**換了地方**
+       ——所以走 `st.caption` 指路，不走 `not_ready()`。
+
+    ⚠️ **分頁名走 `where_to_find()`，不手抄** —— 線框 section 05 同段明寫
+    「本次搬移會新增一批需要指路的位置（① 決策矩陣原位 → ②…），
+    **那些新指路屬本次範圍，一律走同一支 SSOT，不得手抄**」。
+    本 repo 的「指路指到一個不存在的分頁名」已發作三次
+    （見 `ui/helpers/story_nav.py` 的 `RETIRED_TAB_LABELS` / `MISWRITTEN_TAB_NAMES`）。
+
+    ⚠️ **本段位置由本組判斷**（線框只寫「原位」，沒有指定新頁的哪一行），
+    **未經第二組獨立驗證**（§-2 規則 6）—— 它是可以被推翻的版面決定，
+    不是查證出來的事實。
+    """
+    # ⚠️ **時態刻意是中性的（「請到」，不是「已搬到」）—— 總管 2026-09-05 裁決。**
+    # 「已經搬到 ② 了」在**本 commit 尚未為真**：逐檔決策矩陣整組目前只存在於
+    # `ui/tab1_macro.py`，而該檔已不接線到任何分頁 —— 它現在**哪裡都到不了**，
+    # ② 底下也還沒有線框說的那一區。寫「已搬到」會讓使用者跑去 ② 找一組
+    # **還不存在的東西**，那就是一句會改變行為的假敘述（客戶 2026-09-05 標準：
+    # 不接受假資料／缺資料）。
+    # ✅ 等矩陣真的落到 ② 之後，再把這句改成過去式。
+    # ⚠️ 分頁名仍走 `where_to_find()` SSOT，本次只改時態，不改指向。
+    st.caption(
+        f"📋 **逐檔的加減碼建議請到 {where_to_find('health')}。**"
+        f"　這一頁只講市場（大盤與總經），不出現任何一檔你持有的基金；"
+        f"「我手上這幾檔該加該減」是 {where_to_find('health')} 的題目。"
     )
+
+
+# ══════════════════════════════════════════════════════════════════
+# 已裁決不做的區塊：誠實灰態（鐵則 04：未完成不留白，也不畫空表格外框）
+# ══════════════════════════════════════════════════════════════════
+def _render_deferred_blocks() -> None:
+    """層 4（詳細區）＋「已拍板不做」的區塊。
+
+    ⚠️ 這些**不是**失敗，也不是抓取失敗 → 一律灰態（`not_ready` 系），不上紅（鐵則 03）。
+    """
+    _render_detail_zone()
     empty_state(
         "總經燈號全表（值／位階／資料日期／來源）—— 已拍板不做",
         "「來源」欄目前**只有 1 項指標**帶得回來源標記，其餘全部會是「—」；"
