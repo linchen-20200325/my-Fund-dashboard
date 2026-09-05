@@ -27,6 +27,7 @@ import streamlit as st
 
 import ui.tab1_macro as tab1_macro
 from services.macro import macro_action_light as _real_action_light
+from ui.helpers.ia.cards import state_card as _state_card
 from ui.tab1_macro import (
     _action_light_renderer,
     _business_alert_action_light,
@@ -3556,26 +3557,108 @@ def _screen_strings() -> set:
     return {_s.strip() for _s in _out if _s and _s.strip()}
 
 
+#: `state_card()` 的參數名 —— **從真簽章推導，不手抄**。
+#: 手抄就會多一份真相源，而本檔自己就有一條規則在罵那件事
+#: （`test_tab5_does_not_hand_copy_the_labels_it_already_imports`）。
+_STATE_CARD_PARAMS: frozenset = frozenset(
+    inspect.signature(_state_card).parameters)
+
+
+def _is_card_spec_dict(node: ast.Dict) -> bool:
+    """這個 dict 字面值是不是一份「等著被 `state_card(**card)` 展開」的卡片規格？
+
+    判準：**所有 key 都是字串字面值，且全部落在 `state_card()` 的參數名集合裡**。
+    這是 `ui/helpers/ia/cards.py::render_cards()` 對它做的事所隱含的契約 ——
+    只要有一個 key 不是 `state_card()` 的參數，那個 dict 一旦被展開就會
+    `TypeError`，也就不可能是卡片規格。
+
+    ⚠️ 刻意**不**用「有沒有 `title` 欄位」這種形狀猜測當判準：那是猜。
+    跟著**被呼叫的那個函式的簽章**走，`state_card()` 改簽章時本判準自動跟上。
+    ⚠️ 帶 `**other` 的 dict（`node.keys` 會有 `None`）**不算**：那種寫法下
+    key 集合是執行期才知道的，靜態判不了。**登記為本判準看不到的形狀。**
+    """
+    _keys = [_k.value for _k in node.keys
+             if isinstance(_k, ast.Constant) and isinstance(_k.value, str)]
+    return (len(_keys) == len(node.keys)
+            and bool(_keys)
+            and set(_keys) <= _STATE_CARD_PARAMS)
+
+
 def _where_sites() -> list:
-    """全 `ui/**` 的 `not_ready()` / `empty_state()` 呼叫點。
+    """全 `ui/**` 帶「去哪補」的站點 —— **直接呼叫與卡片 dict 兩條路都收**。
+
+    四種形狀：
+      1. `not_ready(...)`   —— 連**沒帶** `where=` 的也收（`test_where_is_mandatory` 要看）；
+      2. `empty_state(...)` —— 同上；
+      3. `state_card(..., where=...)`；
+      4. **卡片 dict 字面值 `{"where": …}`** 與事後補的 `card["where"] = …`
+         —— 它們最後都會被 `render_cards()` 展開成 `state_card(**card)`。
+
+    ## ⚠️ 3 與 4 是 2026-09-05 補上的射程；補之前那兩條路**完全隱形**
+
+    突變實測（對象：新架構 `ui/views/page_01_macro.py`，**補之前**的樹）：
+
+    | 突變 | 結果 |
+    |---|---|
+    | 把一個畫面上**不存在**的按鈕字（還故意帶分頁站號 `①`）手抄進某張卡的 `{"where": …}` | `-k "where or remedy"` **13 passed 全綠** |
+    | 把該頁 **14 處** dict 帶的 `where` **整個刪光** | 本檔 ＋ `test_render_state_color_separation` ＋ `test_ia_kit` ＋ `test_macro_tab_section_isolation` 合計 **705 passed**，一條都沒響 |
+    | **對照組**：同一個字串改放進 `not_ready(..., where=…)` | **2 failed** |
+
+    —— 規則本身有牙（對照組證明），只是**咬不到新架構的正規寫法**
+    （dict → `render_cards()`）。同一個字串放 A 處被抓、放 B 處放行。
+
+    修法選**擴大射程**而不是要求產品碼改回直接呼叫：dict → `render_cards()`
+    是新架構的正規寫法，為了遷就守衛去改產品碼是本末倒置。
 
     ⚠️ **`system_error()` 刻意不收** —— 它**根本沒有 `where=` 這個參數**
     （簽章是 `system_error(what, exc, *, hint="", degraded=False)`，見
     `ui/helpers/render_state.py`）。把它列進「必須帶 where=」的規則，
     等於發明一條永遠不可能被滿足的要求。**這一點是實測，不是推論。**
+
+    ⚠️ **3 與 4 只在「真的帶了 `where`」時才登記**，故它們對
+    `test_where_is_mandatory` 是中性的 —— 那條問的是「`not_ready`/`empty_state`
+    有沒有漏寫 `where=`」，而 `state_card()` 的 `where` **只有
+    `state=STATE_NOT_READY` 時才用得到**，對一張 `STATE_OK` 的卡要求 `where=`
+    會製造整片假紅。「NOT_READY 卻沒帶 where」那一半由
+    :func:`test_not_ready_cards_carry_a_remedy_too` 單獨守。
+
+    ⚠️ **本函式看不到的形狀（誠實列出，不要讀成「dict 路徑已經全守住」）**：
+      - `where` 的值是**執行期算出來的**（`_where_to_load()` 這種函式呼叫）——
+        登記得到站點，但 `「」` 那條規則抓不到字面值，等於只驗了「有沒有帶」。
+        **這正是 `ui/views/page_01_macro.py` 目前 14 處 dict 的實況**
+        （量測日 2026-09-05），也是它們**擴大射程後仍然全綠**的原因 ——
+        **全綠不等於守到了，只等於它們沒有手抄字面值可供比對。**
+      - 卡片清單先組成變數再傳（`_cards = [...]` → `render_cards(_cards)`）
+        且 dict 是在別的函式裡建的 —— 跨函式的資料流本函式不追。
+      - `card["where"] = …` 這一支**沒有**先確認那個 `card` 真的是卡片規格
+        （靜態判不了）；方向上是**多收**，多收會誤判成紅、不會假綠。
     """
     _sites = []
     for _p in _lane_e_ui_sources():
+        _rel_p = str(_p).replace("\\", "/")
         _tree = ast.parse(_p.read_text(encoding="utf-8"))
         _alias = _import_alias(_tree)
         for _n in ast.walk(_tree):
-            if not isinstance(_n, ast.Call):
-                continue
-            if _call_name(_n, _alias) not in ("not_ready", "empty_state"):
-                continue
-            _kw = {_k.arg: _k.value for _k in _n.keywords if _k.arg}
-            _sites.append((str(_p).replace("\\", "/"), _n.lineno,
-                           _call_name(_n, _alias), _kw.get("where")))
+            if isinstance(_n, ast.Call):
+                _nm = _call_name(_n, _alias)
+                if _nm in ("not_ready", "empty_state"):
+                    _kw = {_k.arg: _k.value for _k in _n.keywords if _k.arg}
+                    _sites.append((_rel_p, _n.lineno, _nm, _kw.get("where")))
+                elif _nm == "state_card":
+                    _kw = {_k.arg: _k.value for _k in _n.keywords if _k.arg}
+                    if _kw.get("where") is not None:
+                        _sites.append((_rel_p, _n.lineno, _nm, _kw["where"]))
+            elif isinstance(_n, ast.Dict) and _is_card_spec_dict(_n):
+                for _k, _v in zip(_n.keys, _n.values):
+                    if isinstance(_k, ast.Constant) and _k.value == "where":
+                        _sites.append((_rel_p, _v.lineno, "card-dict", _v))
+            elif isinstance(_n, ast.Assign):
+                for _t in _n.targets:
+                    if (isinstance(_t, ast.Subscript)
+                            and isinstance(_t.slice, ast.Constant)
+                            and _t.slice.value == "where"):
+                        _sites.append(
+                            (_rel_p, _n.lineno, "card-dict-item", _n.value))
     return _sites
 
 
@@ -3630,11 +3713,49 @@ WHERE_NAME_EXEMPT: dict = {
     #           以「**有沒有第二份字面值**」為準則應計 3 處，故本表記 3。
 }
 
-#: 量測日 2026-09-04 的 `not_ready()` / `empty_state()` 呼叫點總數。
-#: 錨點用：掉到下限以下代表這兩個 helper 被換成別的寫法，本段規則正在對空氣生效。
-WHERE_ANCHOR_MIN_SITES = 40
+#: `_where_sites()` 收得到的站點數下限。錨點用：掉到下限以下代表那些 helper
+#: 被換成別的寫法，本段規則正在對空氣生效。
+#: ⚠️ 量測日 2026-09-05：**67**（`not_ready` 48 ＋ `empty_state` 5
+#: ＋ `card-dict` 13 ＋ `card-dict-item` 1）。
+#: ⚠️ **上一版這裡記的「47」在寫下之後就漂掉了**：2026-09-05 以**擴大射程前**的
+#: 舊 `_where_sites()` 重量，實際是 **53**（`not_ready` 48 ＋ `empty_state` 5）——
+#: 檔案一直在長，而**這個數字不會自己跟上**。留著錯的量測值比不留更糟
+#: （`CLAUDE.md §8.2.A.0 規則 4`：會漂移的量測值一律標日期）。
+#: 故下限刻意留寬，**真正防「射程退回去」的是下面那條 `card-dict` 形狀斷言**，
+#: 不是這個數字。
+WHERE_ANCHOR_MIN_SITES = 50
 #: 同上，`「」` 指名段落的總數下限（規則真的有東西可比對）。
 WHERE_ANCHOR_MIN_QUOTED = 12
+
+
+# ══════════════════════════════════════════════════════════════════
+# 📌 待判定登記（形狀抄 `CLAUDE.md §8.3.P`：**待答問題／由誰查／觸發點**）
+#
+# ⚠️ **為什麼登記在這裡而不是 `CLAUDE.md §8.3.P`**：本批的檔案邊界只到
+#    `tests/**`（＋必要時 `ui/views/page_01_macro.py`），**動不了 `CLAUDE.md`**。
+#    依本專案自己的話：**待查證沒有出口 ＝ 實質永久豁免** —— 所以寧可先登記在
+#    規則旁邊，也不要讓它只以「誠實揭露」的形式留在 PR 描述裡然後消失。
+#    **請總管把本列搬進 `CLAUDE.md §8.3.P`**（那裡才是它的正式住所）。
+#
+# ── `P-WHERECONTENT-1` ─────────────────────────────────────────────
+# **待答問題**：`where=` 的**內容對不對**，目前只驗得到**字面值**。
+#   `ui/views/page_01_macro.py` 的 20 個站點裡，14 個 dict-carried 與 4 個直接呼叫
+#   用的是 `_where_to_load()` / `where_to_find("diag")` 這種**執行期組出來的值**
+#   （量測日 2026-09-05），`test_every_where_names_something_that_exists_on_screen`
+#   對它們**只驗到「有帶」，沒驗到「指得對」**。
+#   → 該不該補一條「執行期指路」的驗法（例如在 AppTest 下渲染後比對畫面上真有那顆鈕），
+#     還是就承認靜態規則到此為止、改用別的手段？
+#   ⚠️ **本批擴大射程後那 14 處全綠，但那不是「守住了」** —— 只是「那裡沒有手抄字串」。
+# **由誰查**：**獨立一組**（`CLAUDE.md §-2` 規則 4）；
+#   **不得**由 2026-09-05 補這條射程的同一組（＝ GUARD-W1）承接。
+# **觸發點**（任一命中即應派工）：
+#   (1) 有任務碰到 `_where_to_load()` 或 `ui/helpers/story_nav.py` 的指路產生邏輯；
+#   (2) 出現「灰卡指到一顆當下不存在的按鈕」的實際回報
+#       （`_where_to_load()` 的 docstring 記載 2026-09-05 修過**一次**同型 bug，
+#        當時是靠 AppTest 實測抓到的，不是靠本檔任何一條規則）；
+#   (3) 有人要把 `where=` 從執行期組值改回字面值（那會讓本條規則突然「看得到」）；
+#   (4) user 直接點名。
+# ══════════════════════════════════════════════════════════════════
 
 
 def test_where_is_mandatory():
@@ -3659,6 +3780,199 @@ def test_where_is_mandatory():
     _fixed = sorted(set(WHERE_MISSING_EXEMPT) - set(_missing))
     assert not _fixed, (
         "以下站點已經補上 `where=`（或改名／被刪），但 `WHERE_MISSING_EXEMPT` 還留著它 ——\n"
+        "請把表一起降下來。**這條紅燈是提醒不是責備。**\n  " + "\n  ".join(_fixed))
+
+
+#: 卡片規格「`STATE_NOT_READY` 卻不帶 `where`」的具名豁免。
+#: **目前是空的，而且應該保持空的**（形狀與 `WHERE_MISSING_EXEMPT` 一致，含反向斷言）。
+NOT_READY_CARD_MISSING_EXEMPT: frozenset = frozenset()
+
+#: 量測日 2026-09-05：`ui/**` 掃得到的卡片規格站點數為 **22**
+#: （卡片 dict 21 ＋ 直接 `state_card()` 呼叫 1）。錨點用：掉到下限以下代表
+#: 卡片改用別種寫法組出來，本條正在對空氣生效。
+NOT_READY_CARD_ANCHOR_MIN = 15
+
+
+def _mentions_not_ready(node, bindings: dict, funcs: dict, depth: int = 0) -> bool:
+    """這個 `state=` 運算式**有沒有可能**是 `STATE_NOT_READY`？
+
+    刻意做成「**提到就算**」而不是「求值等於」：實際寫法多半是
+    `STATE_OK if _phase.get("phase") else STATE_NOT_READY` 這種三元式，
+    靜態求不出值，但**只要它可能變灰，就該有「去哪補」**。
+
+    三種穿透，缺一就有繞道：
+      1. **區域變數** —— `_state = STATE_NOT_READY` → `{"state": _state}`；
+      2. **本檔函式的回傳值** —— `{"state": _worst_state(ind, (...))}`，
+         而 `_worst_state()` 內有 `return STATE_NOT_READY`；
+      3. 常數別名（`from … import STATE_NOT_READY as X` 由 `bindings` 帶進來）。
+
+    ⚠️ **第 2 種是 2026-09-05 獨立稽核打穿本規則的那一條，不是假想**：
+    初版只走 `Assign`/`AnnAssign`/`ImportFrom` 綁定，**不追函式回傳值**，
+    於是 `ui/views/page_01_macro.py::_card_vol_credit` 這種
+    「一般 dict 字面值 ＋ 走正規 `render_cards()` ＋ `state` 委派給 helper」
+    的**主力寫法**整個隱形 —— 稽核把它的 `"where"` 刪掉，
+    四個測試檔 **706 passed 全綠**。
+    量化（量測日 2026-09-05）：22 個卡片站點裡初版看得見 12、看不見 9；
+    那 9 個有 7 個本來就不可能變灰（`STATE_OK`／`STATE_ERROR`）→ 正確排除，
+    **剩下 2 個是真的會變灰的 `_worst_state`** —— 它們當時有 `where`，
+    但**不是這條規則在保護它們**。本次補上第 2 種穿透後 14/14 全部看得到。
+
+    ⚠️ `depth` 上限同時擋掉遞迴函式（`f()` 的 return 又呼叫 `f()`）。
+    """
+    if node is None:
+        return False
+    for _x in ast.walk(node):
+        if isinstance(_x, ast.Name) and _x.id == "STATE_NOT_READY":
+            return True
+        if isinstance(_x, ast.Attribute) and _x.attr == "STATE_NOT_READY":
+            return True
+        if isinstance(_x, ast.Constant) and _x.value == "not_ready":
+            return True
+        if isinstance(_x, ast.Name) and depth < 3:
+            for _v in bindings.get(_x.id, []):
+                if not isinstance(_v, tuple) and \
+                        _mentions_not_ready(_v, bindings, funcs, depth + 1):
+                    return True
+            # ⭐ 名字綁的是**本檔的函式** → 掃它的每一個 `return`。
+            _fn = funcs.get(_x.id)
+            if _fn is not None:
+                for _r in ast.walk(_fn):
+                    if isinstance(_r, ast.Return) and _r.value is not None \
+                            and _mentions_not_ready(_r.value, bindings, funcs,
+                                                    depth + 1):
+                        return True
+    return False
+
+
+def _card_spec_sites() -> list:
+    """全 `ui/**` 的卡片規格站點 `(檔案, 行號, 形狀, 可能變灰嗎, 帶不帶 where)`。
+
+    第 4 欄是**已經判好的布林**（不是 AST 節點）——「這張卡的 `state=`
+    有沒有可能是 `STATE_NOT_READY`」，判法見 :func:`_mentions_not_ready`。
+
+    ⚠️ **「帶不帶 where」把事後補的那一支也算進來**：
+    `ui/views/page_01_macro.py::_card_exception` 的寫法是先建 dict、
+    再 `if _state == STATE_NOT_READY: _card["where"] = _where_to_load()` ——
+    只看 dict 字面值會**誤判它漏寫**，而它其實是對的。
+    判定粒度取**函式**：該函式內只要出現任一 `…["where"] = …`，
+    該函式內的卡片 dict 就算已覆蓋。
+    ⚠️ 這是**刻意放寬**的方向（少報，不多報）：同一個函式裡如果有兩張卡、
+    只有一張補了 `where`，本條看不到漏掉的那張。**登記，不修** ——
+    多報會讓作者為了消紅去加假的 `where=`，那比漏報更糟。
+
+    ## ⚠️ 本函式**看不到的形狀**（誠實列出，不要讀成「卡片路徑已全守住」）
+
+    - **`dict(...)` 建構式** —— `dict(title=…, state=STATE_NOT_READY)` 是
+      `ast.Call` 不是 `ast.Dict`，`_is_card_spec_dict()` 與本函式**都看不到**。
+      2026-09-05 稽核實測：改成這種寫法 → **706 passed 全綠**，
+      而它產生的正是一張 `where=""` 的灰卡。
+      **登記，本批不支援** —— 現行樹沒有任何一處這樣寫（量測日 2026-09-05），
+      加了等於為一個不存在的寫法擴大規則；但**它是一條真的繞道**，
+      哪天有人這樣寫，本規則不會出聲。
+    - **帶 `**other` 的 dict**（`node.keys` 會有 `None`）—— key 集合執行期才知道，
+      靜態判不了，見 `_is_card_spec_dict()`。
+    - **卡片 dict 在別的函式建好再傳進來** —— 跨函式資料流本函式不追。
+    """
+    _out = []
+    for _p in _lane_e_ui_sources():
+        _rel_p = str(_p).replace("\\", "/")
+        _tree = ast.parse(_p.read_text(encoding="utf-8"))
+        _alias, _bind = _import_alias(_tree), _name_bindings(_tree)
+        #: 本檔的函式定義 —— 給 `_mentions_not_ready()` 追 `return` 用（F1）。
+        _funcs = {_f.name: _f for _f in ast.walk(_tree)
+                  if isinstance(_f, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        _deferred: set = set()
+        for _fn in ast.walk(_tree):
+            if not isinstance(_fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if any(isinstance(_x, ast.Assign)
+                   and any(isinstance(_tg, ast.Subscript)
+                           and isinstance(_tg.slice, ast.Constant)
+                           and _tg.slice.value == "where" for _tg in _x.targets)
+                   for _x in ast.walk(_fn)):
+                _deferred |= {id(_d) for _d in ast.walk(_fn)
+                              if isinstance(_d, ast.Dict)}
+        for _n in ast.walk(_tree):
+            if isinstance(_n, ast.Dict) and _is_card_spec_dict(_n):
+                _kv = {_k.value: _v for _k, _v in zip(_n.keys, _n.values)
+                       if isinstance(_k, ast.Constant)}
+                _out.append((
+                    _rel_p, _n.lineno, "card-dict",
+                    _mentions_not_ready(_kv.get("state"), _bind, _funcs),
+                    "where" in _kv or id(_n) in _deferred))
+            elif isinstance(_n, ast.Call) and _call_name(_n, _alias) == "state_card":
+                _kw = {_k.arg: _k.value for _k in _n.keywords if _k.arg}
+                _out.append((
+                    _rel_p, _n.lineno, "state_card",
+                    _mentions_not_ready(_kw.get("state"), _bind, _funcs),
+                    "where" in _kw))
+    return _out
+
+
+def test_not_ready_cards_carry_a_remedy_too():
+    """一張**會變灰的卡**也要說「去哪補」，不是只有 `not_ready()` 直接呼叫要。
+
+    ## 為什麼要有這條（`test_where_is_mandatory` 補不到的那一半）
+
+    `test_where_is_mandatory` 只看 `not_ready()` / `empty_state()` 的呼叫點。
+    但新架構的正規寫法是**卡片 dict → `render_cards()` → `state_card(**card)`**，
+    而 `state_card()` 的灰分支就是 `not_ready(note or "尚未載入", where=where)` ——
+    dict 裡漏掉 `"where"` 的後果**與直接呼叫漏掉 `where=` 一模一樣**：
+    使用者拿到一張灰卡，卻沒有任何一句話告訴他去哪裡把它變回來。
+    線框 Rule 04 的三要素是「標題 / 缺什麼 / **去哪補**」，
+    `ui/helpers/render_state.py` 的 docstring 也自己寫著
+    **「沒有它，占位只是把『消失』換成『灰色的消失』。」**
+
+    ⚠️ **這條規則是 2026-09-05 的突變實測逼出來的**：把
+    `ui/views/page_01_macro.py` **14 處** dict 帶的 `where` 整個刪光，
+    四個測試檔合計 **705 passed**，**沒有一條出聲**。
+
+    ## 判準與它的兩個方向
+
+    - **只對「可能變灰」的卡要求**（`state=` 提到 `STATE_NOT_READY`）。
+      對一張 `STATE_OK` 的卡要求 `where=` 會製造整片假紅 ——
+      `state_card()` 的 `where` 在非灰分支根本用不到。
+    - **少報優於多報**：事後補的 `card["where"] = …` 算數（見 `_card_spec_sites`）。
+      多報會讓作者為了消紅去加一個假的 `where=`，那比漏報更糟。
+
+    ## 本條**守不到**的（誠實列出）
+
+    - `where` 的**內容對不對** —— 那是
+      `test_every_where_names_something_that_exists_on_screen` 的事，
+      而**那條只看得到字面值**：`where=_where_to_load()` 這種執行期組出來的
+      指路，兩條規則都只驗到「有帶」，沒驗到「指得對」。
+      **這一半有登記出口**：`P-WHERECONTENT-1`（見本檔末尾的待判定登記）。
+    - **`dict(...)` 建構式寫成的卡片**、**帶 `**other` 的 dict**、
+      以及**在別的函式建好再傳進來的 dict** —— 三種形狀本條都看不到，
+      逐一列在 `_card_spec_sites()` 的 docstring 裡。
+    - ⚠️ **`state` 委派給本檔函式**（`_worst_state(...)`）**初版看不到，
+      2026-09-05 已補**（見 `_mentions_not_ready` 第 2 種穿透）——
+      那是獨立稽核用 706 passed 打穿本規則的那一條。
+    """
+    _sites = _card_spec_sites()
+    assert len(_sites) >= NOT_READY_CARD_ANCHOR_MIN, (
+        f"只掃到 {len(_sites)} 個卡片規格站點（量測日 2026-09-05 為 22："
+        f"`card-dict` 21 ＋ `state_card` 1，錨點下限 {NOT_READY_CARD_ANCHOR_MIN}）"
+        "—— 本條可能正在對空氣生效。")
+    # ⭐ 形狀鎖：`_card_spec_sites()` 的**兩個**收集分支都要還看得見。
+    #    純數字下限擋不住「只關掉其中一支」—— `state_card` 分支現行樹只有 1 個站點，
+    #    關掉它數量只掉 1，下限完全不會響。
+    _shapes = {_s for _, _, _s, _, _ in _sites}
+    assert {"card-dict", "state_card"} <= _shapes, (
+        f"`_card_spec_sites()` 少收了分支：現有 {sorted(_shapes)}，"
+        "應含 `card-dict` 與 `state_card` —— 收集器退化了，本條會對半瞎。")
+    _missing = sorted(
+        f"{_f}::{_s}::line {_l}" for _f, _l, _s, _nr, _w in _sites
+        if _nr and not _w)
+    _new = [_m for _m in _missing if _m not in NOT_READY_CARD_MISSING_EXEMPT]
+    assert not _new, (
+        "以下卡片可能渲染成 `STATE_NOT_READY`（灰態），卻沒有「去哪補」：\n  "
+        + "\n  ".join(_new)
+        + "\n灰卡沒有指路，只是把『消失』換成『灰色的消失』。"
+          "請補 `\"where\"`（走 `story_nav.where_to_find()`，不要手抄分頁名）。")
+    _fixed = sorted(set(NOT_READY_CARD_MISSING_EXEMPT) - set(_missing))
+    assert not _fixed, (
+        "以下站點已經補上 `where`，但 `NOT_READY_CARD_MISSING_EXEMPT` 還留著它 ——\n"
         "請把表一起降下來。**這條紅燈是提醒不是責備。**\n  " + "\n  ".join(_fixed))
 
 
@@ -3851,10 +4165,33 @@ def test_where_rules_are_not_scanning_air():
     """
     _n = len(_where_sites())
     assert _n >= WHERE_ANCHOR_MIN_SITES, (
-        f"只掃到 {_n} 個 `not_ready()`/`empty_state()` 呼叫點"
-        f"（量測日 2026-09-04 為 47：`not_ready` 44 ＋ `empty_state` 3，"
-        f"錨點下限 {WHERE_ANCHOR_MIN_SITES}）—— "
+        f"只掃到 {_n} 個帶「去哪補」的站點"
+        f"（量測日 2026-09-05 為 67：`not_ready` 48 ＋ `empty_state` 5 ＋ "
+        f"`card-dict` 13 ＋ `card-dict-item` 1，錨點下限 {WHERE_ANCHOR_MIN_SITES}）—— "
         "規則可能正在對空氣生效。")
+    # ⭐ 形狀斷言：**比上面那個數字重要**。純數字下限擋不住「射程退回去」——
+    #    把 `_where_sites()` 改回只收 `not_ready`/`empty_state`，站點從 67 掉到 53，
+    #    **仍然在下限之上**，數字錨點不會響。而 dict → `render_cards()` 這條路
+    #    正是新架構的正規寫法，它一旦重新隱形，本檔 2026-09-05 補的射程就白補了。
+    #
+    # ⚠️ **用集合包含、不要只釘一個**（2026-09-05 獨立稽核指出）：初版只寫
+    #    `"card-dict" in _kinds`，於是**只關掉 `card-dict-item`（`Assign`）那一支
+    #    → 204 passed 全綠**。射程可以「退一半」而無聲，而這條鎖存在的唯一理由
+    #    就是防這件事。**一條只鎖住三分之一的鎖，會讓人以為三個都鎖了。**
+    _kinds = {_fn for _, _, _fn, _ in _where_sites()}
+    assert {"card-dict", "card-dict-item"} <= _kinds, (
+        f"`_where_sites()` 少收了分支：現有 {sorted(_kinds)}，"
+        "應含 `card-dict`（dict 字面值）與 `card-dict-item`（`card[\"where\"] = …`）。\n"
+        "dict → `render_cards()` → `state_card(**card)` 是新架構的正規寫法；"
+        "它隱形的時候，手抄一個過期按鈕字進去是**全綠**的"
+        "（2026-09-05 突變實測：13 passed）。")
+    # ⚠️ **`_where_sites()` 的第三支 `state_card(where=…)` 在這裡釘不住** ——
+    #    現行樹 `ui/**` 唯一那個直接 `state_card(...)` 呼叫**沒有帶 `where=`**
+    #    （量測日 2026-09-05），所以它在 `_kinds` 裡根本不會出現，
+    #    寫進上面的集合會**當場紅**、變成一條假規則。
+    #    那一支改由 `test_not_ready_cards_carry_a_remedy_too` 的形狀鎖看著
+    #    （`_card_spec_sites()` 不論帶不帶 `where` 都收 `state_card`，故釘得住）。
+    #    **據實寫在這裡，是為了不讓後人以為三支都被這一條鎖住了。**
     _screen = _screen_strings()
     assert len(_screen) >= 300, (
         f"畫面字串集合只有 {len(_screen)} 個（量測日 2026-09-04 為 716）—— "
