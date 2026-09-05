@@ -420,13 +420,19 @@ def _render_layer_conclusion(ind: dict, phase: dict) -> None:
             where=_where_to_load())
         return
 
-    _reasons = [html.escape(str(_r)) for _r in (_light.get("reasons") or [])]
+    _reasons = [str(_r) for _r in (_light.get("reasons") or [])]
     if _light.get("light") == "🔴":
         # 莓紅左軌：市場是壞消息，但**資料完全可信** —— 不是系統紅框（鐵則 03）。
-        business_alert(f"{_light['light']} {_light.get('action', '')}", _reasons)
+        # ⚠️ **只有這一條路徑要 `html.escape`**：`business_alert()` 走
+        #    `unsafe_allow_html`，服務層字串若含 `<` / `>` 會被當標籤吃掉
+        #    （同 `ui/tab1_macro.py` ② 對帳 chip、`tab1_macro_midcycle._card_note`）。
+        business_alert(f"{_light['light']} {_light.get('action', '')}",
+                       [html.escape(_r) for _r in _reasons])
         return
     st.markdown(f"**{_light.get('light', '')} {_light.get('action', '')}**")
     for _r in _reasons:
+        # ⚠️ **這裡刻意不 escape**：`st.caption()` 走 markdown，Streamlit 自己會把
+        #    HTML 擋掉。先 escape 再交給它 ＝ 雙重跳脫，`<` 會原樣印成 `&lt;`。
         st.caption(f"・{_r}")
 
 
