@@ -275,8 +275,10 @@ def _expected_units() -> tuple[str, ...]:
     """線框 Tab 05 由上而下的單位（**有基金時**）。
 
     **`NAV 累積狀態` 與 `手動補資料` 走 SSOT，不在這裡抄字面。**
-    ⚠️ `手動補資料` 出現**兩次**（`#### 標題` ＋ Form 內的 caption 不算單位）——
-    見 :func:`test_unit_names_are_unique` 的說明，那條會抓到它。
+    ⚠️ 「手動補資料」這幾個字在渲染流裡**出現兩次**（`#### 區塊標題` ＋ Form 內的
+    `st.caption` 開頭），但**只有前者會被切成單位** —— `st.caption` 不符合
+    :func:`_units` 的任何一條開頭樣式。故本 tuple 裡它仍是**一個**單位，
+    且 :func:`test_unit_names_are_unique` 會在哪天真的變成兩個單位時轉紅。
     """
     return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS,
             nav_manual_label(), BLOCK_MANUAL)
@@ -718,13 +720,13 @@ def test_normalise_request_coerces_to_bool():
 def test_applied_request_ignores_a_corrupted_session_value():
     """session 裡被塞了非 dict → `_applied_request()` 回 `None`，不當成請求。"""
     import streamlit as _st
-    _orig = dict(_st.session_state) if hasattr(_st, "session_state") else {}
     try:
         _st.session_state[_SK_APPLIED] = "不是 dict"
         assert _applied_request() is None
     finally:
+        # ⚠️ 一定要清掉：bare 模式的 session_state 是**行程層級**的，
+        #    留著會污染同一個行程裡後面跑的測試（本檔與別檔皆然）。
         _st.session_state.pop(_SK_APPLIED, None)
-        del _orig
 
 
 # ══════════════════════════════════════════════════════════════════
