@@ -304,6 +304,12 @@ def _render_health_table() -> None:
 
     ⚠️ **這張表不得放進 `render_cards()` 的欄位裡**（9 欄在 1/3 寬會被壓成無法閱讀），
     所以它是頁面層級的直接呼叫，不在任何網格內。
+
+    📌 **那一行欄位名的 caption 是本批的過渡，下一批請刪掉**（登記，免得它留成永久的贅字）：
+    它現在的作用是「先告訴使用者這張表會有什麼」，因為表本身還是空的；
+    **真資料接上之後，表頭會講同一件事** —— 屆時它就變成鐵則 04 要禁的冗餘占位。
+    ⚠️ 連帶：`test_the_per_fund_table_keeps_the_nine_columns_from_the_wireframe`
+    的「畫面上看得到每一欄」那半會轉紅，**正解是改成驗真表頭，不是刪掉那個斷言**。
     """
     st.markdown("#### 逐檔體檢表")
     st.caption("　/　".join(HEALTH_TABLE_COLUMNS))
