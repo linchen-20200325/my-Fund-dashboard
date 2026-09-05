@@ -1475,10 +1475,24 @@ def test_c_bare_error_backlog_only_shrinks():
     的業務語意不在範圍內（§8.4 step 4）；
     但新寫的 code 不准再往這個數字上加。
 
-    ⚠️ **22 是「本規則自己這把尺」量出來的**（`UI_SOURCES` 再扣掉 `BATCH_SCOPE_C`
-    與 `_RED_BOX_IMPLEMENTATIONS`）。換一把尺就是別的數字：`ui/**` 不含 `app.py` ＝ 25、
-    含 `app.py` ＝ 26。**不要拿不同 scope 的數字互相加減。**
-    數字沿革（21 → 22 是**修正量測誤差**，不是放寬門檻）見 `BARE_ERROR_RATCHET` 上方註解。
+    ⚠️ **21 是「本規則自己這把尺」量出來的**（`UI_SOURCES` 再扣掉 `BATCH_SCOPE_C`
+    與 `_RED_BOX_IMPLEMENTATIONS`）。**不要拿不同 scope 的數字互相加減。**
+    ⚠️ **2026-09-05 更正：本行原寫「22」，在 ratchet 收回 21 之後就是壞的** ——
+    它明說用的是「本規則自己這把尺」，而那把尺已經是 21。
+    （同一輪還更正了另外兩個漂移數字，見 `BARE_ERROR_RATCHET` 上方沿革與
+    `test_q4_…` 的括號。**三個都在同一段文字裡，一起漂、要一起收。**）
+
+    ⚠️ **「換一把尺」那兩個數字（`ui/**` 不含 `app.py` ＝ 25、含 ＝ 26）本輪
+    刻意不動，但必須標明它們現在是「未定」**：2026-09-05 獨立稽核用**最接近的
+    重建**去量，得到的是 **22 / 22**，且 `app.py` 現行裸 `st.error` ＝ **0**
+    （與原文「含 `app.py` 就 +1」對不起來）。
+    **但沒有人能確定原作者當時用的是哪一把尺**（`UI_SOURCES` 的定義、
+    `inside_except` 的排除、receiver 判定都可能不同），
+    所以**不改成 22 / 22** —— 那會是拿「我的重建」去覆蓋「他的量測」，
+    等於用一個同樣沒有出處的數字換掉另一個。
+    **現況：原數字保留、標為「重建未定」，要用請現場重量。**
+    數字沿革（21 → 22 是修正量測誤差；22 → 21 是收回已還的額度）
+    見 `BARE_ERROR_RATCHET` 上方註解。
     """
     total = sum(len(_bare_error_calls(p)) for p in UI_SOURCES
                 if _rel(p) not in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS)
