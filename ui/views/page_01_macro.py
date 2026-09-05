@@ -2,51 +2,90 @@
 
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 
-⚠️ **本批刻意只做「兩份線框讀法一致」的部分 —— 整頁骨架未定，不選邊。**
-`docs/wireframes/` 底下有**兩份都經客戶拍板、而且對 ① 的骨架互相衝突**的線框：
+整頁骨架 —— **客戶 2026-09-04 已拍板，本檔照它排**
+--------------------------------------------------
+骨架取 `docs/wireframes/wireframe-macro-health.html` 的**四層閱讀順序**，
+並把 `ia-wireframe.html` 的**卡片網格插在「① 結論」與「② 依據」之間**：
 
-============================ ================================= =================================
-項目                          `ia-wireframe.html` Tab 01        `wireframe-macro-health.html` ①重組後
-============================ ================================= =================================
-Form 欄位                     觀察區間 ＋ 資料源                 ☑ 總經/新聞/雷達/拐點 ＋ ☐ 強制重抓
-首屏第一個結論區塊              資產水位建議（**全寬**卡）          ① 結論（`macro_action_light` 行動燈，全寬）
-建議資產水位的位置              首屏、**全寬**                     在「② 依據」之後、**三欄之一**
-主要大表                      總經燈號全表（17 項 × 值/位階/日期/來源）  ② 依據（五桶證據表）
-卡片集合                      景氣位階/波動與信用/通膨與利率/熱錢/極端風險/新聞情緒  建議資產水位/③ 例外/④ 可信度
-詳細區                        無                                🔎 詳細五時域（長期→中期→短線→拐點→AI）
-============================ ================================= =================================
+===== ============================== ==========================================
+層     區塊                            版面
+===== ============================== ==========================================
+1      🧾 ① 結論 — 現在該加碼還是防禦   **全寬**（一句行動 ＋ 理由條列）
+–      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
+2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
+3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
+4      🔎 詳細區（四時域＋決策矩陣＋AI）  尚未實作（批次三），誠實灰態
+===== ============================== ==========================================
 
-**這是真衝突，不是措辭差異**，已送客戶裁決。在答覆之前本檔只實作三件兩種讀法都成立的事：
+拍板同時解掉的三件事（**不要再當成待裁決**）
+------------------------------------------
+- **主要大表 ＝ ② 依據五桶證據表**；「總經燈號全表」**不做**（理由見
+  :func:`_render_deferred_blocks`，那是資料層限制，不是版面偏好）。
+- **新聞情緒與系統性風險 ＝ 灰態**（客戶已拍板）。本組**沒有找到** `services/**` 的
+  新聞取數入口（實測取數住在 `repositories/news_repository.py`），依方針第 2 條
+  不反向修底層 → 維持誠實灰態（見 :func:`_card_news`）。
+  ⚠️「services 裡沒有」取決於有沒有漏看，本組**不作全稱宣稱**；
+  **處置不繫於它** —— 灰態是客戶拍板的結果，不是這句話推出來的。
+- **建議資產水位不出核心／衛星**。⚠️ 這一條最容易做錯，展開寫在下面。
 
-1. **載入閘門 Form**（兩份都有；**欄位集在衝突清單裡 → 本批只做骨架與送出鈕**）；
-2. **三欄自適應卡片網格本身**（兩份都有卡片網格，差別在它是不是整頁骨架）；
-3. **三態顏色 / 空狀態三要素 / 指路 / 顏色來源**這些鐵律機制（與骨架無關）。
+⛔ 「建議資產水位」為什麼是**股／債／現金**，不是核心／衛星
+----------------------------------------------------------
+`services.allocation_ladder.allocation_from_composite()` 回的是
+`allocation = {equity, bond, cash}` —— **它的回傳欄位就是股／債／現金**。
+把 `equity` 改標成「核心」，就是拿 A 欄位的數字冒充 B 的答案（§1 造假）。
+**這個理由是可自驗的：打開那個函式看它回什麼欄位就結案，不必相信任何人的清單。**
 
-骨架相關的區塊**不畫、也不假裝完成**，改以畫面上可見的灰態佔位逐項列出（見
-:func:`_render_deferred_blocks`）—— 依鐵則 04，未完成不得留白，也不得畫空表格外框。
+⚠️ **2026-09-05 撤回一句假宣稱（獨立稽核 A776 指出；commit `541a7ec` 的訊息與本檔
+   前一版都帶著它，commit message 無法重寫，故在此撤回）**：
+   原文寫「**全 repo 沒有任何由總經分數導出核心／衛星的服務**」—— **那句是假的。**
+   本組實測到的反例（每一條都自己重跑過）：
+   - `services/macro/composite_score.py::composite_verdict()` —— **唯一輸入就是總經綜合分數**，
+     回傳的 `action_text` 逐字寫「衛星部位積極佈局成長題材」「核心持有不動」「核心轉防守型」。
+     ⚠️ **本檔的 `_render_layer_evidence()` 正在呼叫它** —— 一邊呼叫、一邊宣稱它不存在。
+   - `services/macro/explain.py` —— 同樣那四句。
+   - `services/macro/us_indicators.py::identify_regime()` 的 `alloc_by_regime` 是
+     **帶數字**的 dict，鍵含「核心債券」「衛星主題」。
+   ⛔ **不要把它換成一句更小心的全稱句**（例如「沒有導出核心／衛星**比例**的服務」）——
+   那一樣取決於「我有沒有漏看」，而上面第三條就正好站在那條線上。**直接不要全稱句。**
+   **拿掉它不影響任何結論**：不改標的理由是上一段那句可自驗的欄位事實，
+   全稱句對結論沒有貢獻，只是純負債（§-2 規則 6）。
 
-線框的「**這裡不放什麼**」段落是**禁令**，本檔逐條遵守：
-持有部位表現 → ②；單一基金深度研究 → ③；資料源健康度／快取狀態 → ⑤。
-
-⛔ **不復活「總經羅盤」。** `ia-wireframe.html` 的「從哪裡搬來」寫了
-   `app.py ─ 總經羅盤（目前內嵌在 app.py）`，但整條鏈已於 **2026-08-05 移除**
-   （早於線框日期），且有反向守衛
-   `tests/test_audit_20260805_tab1_summary.py::test_compass_modules_are_not_importable_at_all`。
-   **線框那一行是錯的，照做會直接讓 CI 紅。** 三個羅盤讀數已併入 🎯 短線雷達。
+⚠️ **Z 門檻目前是固定的預設值，畫面必須說出來。**
+`allocation_from_composite(score, ndc_score)` 的第二個參數要台灣景氣對策信號分數，
+而它**唯一的入口是直呼 L1 的 UI helper**（`ui/helpers/macro/ndc.py`，屬憲法
+§8.2.A.1 EX-PASSTHRU-1），**不是 Service 函式** → 依方針第 2 條本頁不接，
+一律傳 `None`。服務端收到 `None` 會退回預設門檻並在回傳裡把 `light` 設成 `None`
+（`source="default"`）—— 本檔**讀那個旗標**再決定文案，不寫死「預設」兩個字，
+這樣日後真的接上景氣燈號時，畫面會自己改口而不是繼續說謊。
 
 四大鐵律的落點（本檔不自己實作任何一條，一律走既有共用元件）
 ------------------------------------------------------------
 - **鐵則 01 三欄網格** → `ui.helpers.ia.render_cards`（內部走 `card_grid`，已登記於
-  `tests/test_ui_grid_contract.py::GRID_EXEMPT_SITES`）。**本檔沒有任何 `st.columns` 呼叫**。
+  `tests/test_ui_grid_contract.py::GRID_EXEMPT_SITES`）。**本檔沒有任何 `st.columns` 呼叫**
+  —— 自己寫會讓 `GRID_EXEMPT_CALL_TOTAL`（精確 `==` 90）變 91 而轉紅。
 - **鐵則 02 Form 防重繪** → `ui.helpers.ia.applied_form`。**本檔沒有任何 `st.form(` 站點**
-  —— 自己寫 `st.form` 會讓 `FORM_SITE_TOTAL`（精確 `==` 7）變 8 而轉紅。
+  —— 自己寫會讓 `FORM_SITE_TOTAL`（精確 `==` 7）變 8 而轉紅。
 - **鐵則 03 三態顏色** → `ui.helpers.render_state`（經 `ia.state_card` 的 `state=`）。
 - **鐵則 04 空狀態三要素** → `ui.helpers.ia.empty_state`（住在 `ui/helpers/ia/empty_state.py`，
   **不是** `render_state.py`）。
 
-⚠️ **本檔只呼叫 `services/**` 的 public 函式**（方針第 2 條「UI 與底層嚴格只讀對接」）。
+⚠️ **資料一律只走 `services/**` 的 public 函式**（方針第 2 條）。
    **不 import** `repositories/**`、`infra/**`、`requests`、`yfinance`、`gspread`。
    取不到的東西**一律做成灰態並誠實說明**，**不反向要求修改底層**。
+
+⚠️ **`ui/helpers/**` 照用，那不是資料層。** 四大鐵律本身就要求走 `ui/helpers/ia/`、
+   `ui/helpers/render_state.py`、`ui/helpers/story_nav.py`。② 依據表同理走既有實作
+   `ui/helpers/macro/beginner_view.py`（`compute_five_bucket_summary` /
+   `build_evidence_rows` / `render_evidence_table`）—— **不重寫一份**（§2.1 SSOT）。
+   ✅ **實測（2026-09-05）**：`beginner_view.py` 的 import 清單裡
+   **沒有任何 `repositories` / `infra`**；它往下只碰 `shared/**`、`services/**`、
+   `ui/components/**`、`ui/helpers/**`。其 `ui/**` 相依（`ui/components/status.py`、
+   `ui/components/tables.py`、`ui/helpers/macro/helpers.py`）同樣 0 命中。
+
+⚠️ **② 依據表的欄位以程式碼的 `EVIDENCE_COLUMNS` 為準，不照線框那張示意表。**
+   實測：線框畫 6 欄，實作是 **5 欄**
+   （面向／判讀／讀數／說明（這個數字怎麼讀）／詳細在下方哪一段）。
+   照線框硬湊第 6 欄＝憑空生一欄沒有來源的資料。
 
 ⚠️ **金鑰讀 `os.environ`，不讀 `infra.config`。** `app.py::_load_keys()` 已把
    `FRED_API_KEY` 從 secrets 鏡射進 `os.environ`；舊頁用的也正是
@@ -54,18 +93,32 @@ Form 欄位                     觀察區間 ＋ 資料源                 ☑ �
    ⚠️ **`FINMIND_TOKEN` 沒有被鏡射**（`_load_keys()` 只鏡射 FRED / GEMINI / ANTHROPIC / OPENAI），
    故本頁只在環境變數真的有值時才帶 token，否則帶空字串走 FinMind 匿名額度
    —— **真實的降級，不是造假**，並在卡片註腳寫明。
+
+⛔ **不復活「總經羅盤」。** `ia-wireframe.html` 的「從哪裡搬來」寫了
+   `app.py ─ 總經羅盤（目前內嵌在 app.py）`，但整條鏈已於 **2026-08-05 移除**
+   （早於線框日期），且有反向守衛
+   `tests/test_audit_20260805_tab1_summary.py::test_compass_modules_are_not_importable_at_all`。
+   **線框那一行是錯的，照做會直接讓 CI 紅。** 三個羅盤讀數已併入 🎯 短線雷達。
 """
 from __future__ import annotations
 
+import html
 import os
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
+from services.allocation_ladder import allocation_from_composite
 from services.hot_money_service import fetch_hot_money_frames
-from services.macro import calc_macro_phase, fetch_all_indicators
+from services.macro import calc_macro_phase, fetch_all_indicators, macro_action_light
+from services.macro.composite_score import (
+    calculate_composite_score,
+    composite_verdict,
+    is_meta_key,
+)
 from services.risk_radar import detect_risk_radar, summarize_radar
+from shared.evidence_support import is_sufficient
 from shared.ui_control_labels import MACRO_LOAD_BTN_AGAIN, MACRO_LOAD_BTN_FIRST
 from ui.helpers.ia import (
     STATE_BUSINESS,
@@ -76,7 +129,14 @@ from ui.helpers.ia import (
     render_cards,
 )
 from ui.helpers.ia.empty_state import empty_state
-from ui.helpers.render_state import not_ready, system_error
+from ui.helpers.macro.beginner_view import (
+    build_evidence_footnotes,
+    build_evidence_rows,
+    compute_five_bucket_summary,
+    render_evidence_table,
+    split_evidence_footnotes,
+)
+from ui.helpers.render_state import business_alert, not_ready, system_error
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
@@ -90,6 +150,10 @@ _SK_ERR: str = "v01_macro_load_error"
 _SK_HOT: str = "v01_macro_hot_money"
 _SK_RADAR: str = "v01_macro_risk_radar"
 _FORM_KEY: str = "v01_macro_load_form"
+#: 這一輪**實際交給送出鈕的那個字**。指路文案一律讀它，不自己再判一次載入狀態。
+#: ⚠️ 存的是「畫面上印了什麼」，不是「資料載入了沒」—— 兩者在**剛按下按鈕的那一輪
+#: 並不一致**（見 `_where_to_load()` 的說明），而使用者看的是前者。
+_SK_BTN: str = "v01_macro_submit_label"
 
 #: 熱錢／匯率序列的回看天數。
 #: ⚠️ **刻意用具名常數而不是畫面上的控制項**：兩份線框的 Form 欄位集互相衝突
@@ -102,14 +166,34 @@ _HOT_MONEY_WINDOW_DAYS: int = 180
 def _where_to_load() -> str:
     """「去哪補」：指到本頁載入閘門裡的那顆送出鈕。
 
-    ⚠️ 送出鈕的字是**動態**的（未載入 `📡 載入總經資料` ／ 已載入 `🔄 更新總經資料`），
-       而灰態卡**只在未載入時出現**，故此處指名 :data:`MACRO_LOAD_BTN_FIRST`
-       —— 指 `AGAIN` 版本等於指一個當下不存在的按鈕
-       （這正是 `shared/ui_control_labels.py` docstring 記載的第一則實測錯誤）。
-    ⚠️ 分頁名走 `where_to_find()`、按鈕名**內插 SSOT 常數**：兩者都不手抄，
-       故本字串不可能因為改名而漂成死指路。
+    **一律回「畫面上這一輪實際印出來的那個字」** —— 讀 :data:`_SK_BTN`，
+    那是 :func:`render_market_overview` 交給 `applied_form(submit_label=...)`
+    的**同一個變數**，所以指路的字與按鈕的字**不可能分岔**。
+
+    ⚠️ **2026-09-05 修正：本函式原本寫死 `MACRO_LOAD_BTN_FIRST`，那是錯的。**
+    舊 docstring 的理由是「灰態卡只在未載入時出現，故指名 FIRST」——
+    **那句話是假的**。全檔 17 個 `where=_where_to_load()` 站點裡，只有 4 個
+    （`render_market_overview` 的未載入早退區塊）在 FIRST 狀態渲染；
+    其餘 13 個住在六張卡片建構器、三欄卡片建構器與 `_render_deferred_blocks`，
+    **只在載入之後才被呼叫**，而那時按鈕已經變成 `MACRO_LOAD_BTN_AGAIN`。
+    `_render_deferred_blocks` 每次成功載入都會渲染 → **不是邊角情形，是必中**。
+
+    AppTest 實測（修正前）：載入後畫面上的按鈕是「🔄 更新總經資料」，
+    而灰態說明寫「請先到：… → 「📡 載入總經資料」」—— 指一顆當下不存在的按鈕。
+
+    ⚠️ **為什麼不在這裡重判一次載入狀態**（例如 `isinstance(...get(_SK_IND), dict)`）：
+    在**使用者剛按下送出鈕的那一輪**，兩者會分岔 —— 表單是用「按之前」的狀態決定
+    標籤（印 FIRST），但 `_load_everything()` 隨後就把 `_SK_IND` 寫進去了，
+    此時重判會得到 AGAIN，於是又指錯一次，只是方向相反。
+    **存下實際用過的那個字，是唯一不會分岔的做法。**
+
+    ⚠️ 分頁名走 `where_to_find()`、按鈕名走 SSOT 常數（經 `_SK_BTN` 轉手）：
+    兩者都不手抄，故本字串不可能因為改名而漂成死指路。
+    ⚠️ 預設值 `MACRO_LOAD_BTN_FIRST` 只在「表單都還沒渲染就有人呼叫本函式」時生效
+    —— 現行流程不會發生（所有呼叫點都在表單之後），留著是為了不回傳空字串。
     """
-    return f"{where_to_find('macro')} → 「{MACRO_LOAD_BTN_FIRST}」"
+    _label = st.session_state.get(_SK_BTN) or MACRO_LOAD_BTN_FIRST
+    return f"{where_to_find('macro')} → 「{_label}」"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -341,35 +425,305 @@ def _card_news() -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════
-# 待裁決區塊的誠實佔位（鐵則 04：未完成不留白，也不畫空表格外框）
+# 層 1：🧾 ① 結論（全寬）
+# ══════════════════════════════════════════════════════════════════
+def _render_layer_conclusion(ind: dict, phase: dict) -> None:
+    """🧾 ① 結論 —— 全頁最上面唯一的結論，**全寬、不進三欄**（線框逐字要求）。
+
+    走 Service 的 `macro_action_light()`；它除了燈號本身，還回一個
+    `support`（這盞燈**撐不撐得住**）。本檔**只讀 `is_sufficient()`**
+    —— 那是全站唯一被允許的判斷式（`shared/evidence_support.py` 的 L0 SSOT，
+    docstring 明令消費端不得自己去看 `obtained` / `missing` 的長度再下判斷）。
+
+    ⚠️ **撐不住時不印燈、只印原因。** 完全斷線時 `macro_action_light` 仍會回一盞
+    🟡「資料不足」，但它附帶的理由句會點名幾個**根本沒抓到**的輸入 ——
+    照印就是拿空氣當證據（§1）。`support.reason` 是產出端寫給使用者看的中文，
+    直接印它，不在本層另編一句。
+
+    ⚠️ **理由逐條 `html.escape`**：`business_alert()` 走 `unsafe_allow_html`，
+    服務層字串若含 `<` / `>` 會被當標籤吃掉（同 `ui/tab1_macro.py` 的 ② 對帳 chip
+    與 `tab1_macro_midcycle._card_note` 的既有處置）。
+    """
+    st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+    _light = macro_action_light(ind, phase.get("score"))
+    _support = _light.get("support")
+    if not is_sufficient(_support):
+        # 灰，不是紅 —— 這不是故障，是「這一輪的證據撐不起一句結論」。
+        not_ready(
+            "這一輪的資料撐不起一個結論："
+            f"{getattr(_support, 'reason', '') or '證據不足'}",
+            where=_where_to_load())
+        return
+
+    _reasons = [str(_r) for _r in (_light.get("reasons") or [])]
+    if _light.get("light") == "🔴":
+        # 莓紅左軌：市場是壞消息，但**資料完全可信** —— 不是系統紅框（鐵則 03）。
+        # ⚠️ **只有這一條路徑要 `html.escape`**：`business_alert()` 走
+        #    `unsafe_allow_html`，服務層字串若含 `<` / `>` 會被當標籤吃掉
+        #    （同 `ui/tab1_macro.py` ② 對帳 chip、`tab1_macro_midcycle._card_note`）。
+        business_alert(f"{_light['light']} {_light.get('action', '')}",
+                       [html.escape(_r) for _r in _reasons])
+        return
+    st.markdown(f"**{_light.get('light', '')} {_light.get('action', '')}**")
+    for _r in _reasons:
+        # ⚠️ **這裡刻意不 escape**：`st.caption()` 走 markdown，Streamlit 自己會把
+        #    HTML 擋掉。先 escape 再交給它 ＝ 雙重跳脫，`<` 會原樣印成 `&lt;`。
+        st.caption(f"・{_r}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 層 2：🧾 ② 依據（全寬表）
+# ══════════════════════════════════════════════════════════════════
+def _render_layer_evidence(ind: dict, phase: dict) -> dict:
+    """🧾 ② 依據 —— 五桶證據表，**全寬**（多欄位表塞進三欄會被壓成兩個字）。
+
+    **不重寫一份表**：`compute_five_bucket_summary` / `build_evidence_rows` /
+    `build_evidence_footnotes` / `split_evidence_footnotes` / `render_evidence_table`
+    都是 `ui/helpers/macro/beginner_view.py` 既有且正在被舊頁使用的實作（§2.1 SSOT）。
+    欄位以該檔的 `EVIDENCE_COLUMNS`（5 欄）為準，**不照線框那張 6 欄示意表**。
+
+    ⚠️ **`news_items` 一律傳 `None`（客戶 2026-09-04 拍板第 2 條）**：
+    本組沒有找到 `services/**` 的新聞取數入口，本頁不反向修底層（**不作全稱宣稱**；
+    灰態是客戶拍板的結果）。`None` 是
+    `compute_five_bucket_summary` 明文支援的輸入 —— 它會把新聞桶標成
+    ⬜「未掃描」，**而不是綠燈**。傳 `[]`（空清單）會被讀成「掃過了、0 則系統性風險」，
+    那才是造假。
+
+    ⚠️ **綜合健康度那一列的 §1 陷阱，本函式擋在這裡。**
+    `calculate_composite_score` 的 docstring 自陳「缺值 / NaN / 型別錯誤
+    **一律以 0 處理（`fillna(0)` 等價）**」→ 完全斷線時總分是 `0.0`，
+    而 `composite_verdict(0.0)` 會回「🟡 中性」**外加一句可以照做的投資建議**。
+    那是 `fillna(0)` 直接長成一個行動指示。故：撐不住時**分數照印**
+    （它是真的加總，不是捏造的），但**不給等級、不給行動**，並把原因寫進表下註記。
+
+    Returns
+    -------
+    dict : `{"summary", "score", "prov", "sufficient", "level"}`，供層 3 三欄複用
+           —— **層 3 不重算**，否則同一個數字會有第二個真相源。
+    """
+    st.markdown("### 🧾 ② 依據 — 憑什麼這樣說")
+    _prov: dict = {}
+    _score = calculate_composite_score(ind, provenance_out=_prov)
+    _icon, _level, _color, _action = composite_verdict(_score)
+    _ok = is_sufficient(_prov.get("support"))
+    if not _ok:
+        # 分數留著（真的加總過），等級與行動清空 —— 見上方 ⚠️。
+        _icon, _level, _action = "⬜", "", ""
+
+    _5b = compute_five_bucket_summary(ind, phase, news_items=None)
+    _rows = build_evidence_rows(
+        _5b,
+        composite_score=_score,
+        composite_icon=_icon,
+        composite_level=_level,
+        composite_action=_action,
+        n_indicators=int(_prov.get("n_indicators") or 0),
+    )
+    _notes = list(build_evidence_footnotes(_5b, composite_action=_action))
+    if not _ok:
+        _reason = getattr(_prov.get("support"), "reason", "")
+        _notes.append(
+            "⬜ 綜合健康度這一列只印分數、不給等級與行動："
+            f"{_reason or '這一輪取到的指標撐不起一個等級判定'}。")
+    # 兩份的聯集逐則等於 `build_evidence_footnotes()`；分類只決定印在哪一層。
+    _, _collapse = split_evidence_footnotes(_5b, composite_action=_action)
+    render_evidence_table(_rows, footnotes=_notes, collapsed_footnotes=_collapse)
+    return {"summary": _5b, "score": _score, "prov": _prov,
+            "sufficient": _ok, "level": _level}
+
+
+# ══════════════════════════════════════════════════════════════════
+# 層 3：📐 建議資產水位 ／ ⚡ ③ 例外 ／ 🔍 ④ 可信度（三欄）
+# ══════════════════════════════════════════════════════════════════
+def _card_allocation(ev: dict) -> dict:
+    """📐 建議資產水位 —— **股／債／現金**，不是核心／衛星（理由見模組 docstring）。
+
+    ⚠️ **`ndc_score` 一律傳 `None`**：台灣景氣對策信號分數唯一的入口是直呼 L1 的
+    UI helper，不是 Service 函式（模組 docstring 已展開）。服務端收到 `None` 會
+    退回預設 Z 門檻，並把回傳的 `light` 設成 `None`。
+
+    ⚠️ **文案讀 `light` 旗標，不寫死「預設」兩個字**：日後真的接上景氣燈號時，
+    這張卡會自己改口；寫死的話它會繼續說「沒有跟著景氣變動」而那時已是假話。
+    """
+    if not ev.get("sufficient"):
+        # 總分撐不住 → **不給水位**。給了就是拿 `fillna(0)` 的 0.0 分去配資產。
+        return {
+            "title": "📐 建議資產水位",
+            "state": STATE_NOT_READY,
+            "note": "這一輪取到的總經指標還撐不起一個總分，先不給配置建議。",
+            "where": _where_to_load(),
+        }
+    _al = allocation_from_composite(ev.get("score"), None)
+    if _al.get("status") != "ok":
+        return {
+            "title": "📐 建議資產水位",
+            "state": STATE_NOT_READY,
+            "note": str(_al.get("reason") or "這一輪算不出配置水位。"),
+            "where": _where_to_load(),
+        }
+    _a = _al["allocation"]
+    # ⚠️ 「股票 / 債券 / 現金」是**資產類別**。刻意逐字寫出這三個字，
+    #    不用「核心 / 衛星」那組詞 —— 它們是不同的分類軸（模組 docstring）。
+    # ⚠️ **「Z」對使用者是黑話，必須就地解釋，而且要說清楚它量的是哪一個數字。**
+    #    實測出處 `shared/signal_thresholds.py`「模組②:Z-Score 位階窗」：
+    #    `ZSCORE_WINDOW_DAYS = 756`（3 年交易日）、`ZSCORE_MIN_OBS = 252  # 有效 NAV 點` ——
+    #    也就是 Z 量的是**單一基金的淨值**離它自己近三年平均有多遠（以標準差為單位），
+    #    **不是**總經分數的 Z。免責句本身合格不代表被免責的那兩個數字可以是黑話。
+    _gate = (f"停利 Z ≥ {_al['stop_gain_z']:+.2f}、加碼 Z ≤ {_al['add_z']:+.2f}"
+             "（Z 是「一檔基金現在的淨值，離它自己近三年的平均有多遠」，"
+             "0 就是剛好在平均、正的偏貴、負的偏便宜）")
+    _gate_src = (f"這兩個門檻已依台灣景氣{_al['light']}燈調整。"
+                 if _al.get("light")
+                 else "這兩個門檻是固定的預設值，不會跟著台灣景氣燈號變動。")
+    return {
+        "title": "📐 建議資產水位",
+        "value": (f"股票 {_a['equity']}％ ・債券 {_a['bond']}％ "
+                  f"・現金 {_a['cash']}％"),
+        "note": ("錢該放在哪一類資產的建議（不是「核心／衛星」那種角色分配）。"
+                 f"{_gate}；{_gate_src}"),
+        "state": STATE_OK,
+    }
+
+
+def _card_exceptions(ev: dict) -> dict:
+    """⚡ ③ 例外 —— 只講「該警覺的」；沒有例外時誠實說沒有，不硬擠內容（§1）。
+
+    讀的是層 2 已經算好的五桶 summary（拐點桶 ＋ 新聞桶）與已在 session 裡的
+    風險雷達 —— **零新取數**，也不重算任何一個數字。
+    """
+    _sm = ev.get("summary") or {}
+    _infl = _sm.get("inflection") or {}
+    _news = _sm.get("news") or {}
+    if not _infl:
+        return {"title": "⚡ ③ 例外", "state": STATE_NOT_READY,
+                "note": "五桶證據還沒算出來，這裡先不下判斷。",
+                "where": _where_to_load()}
+
+    _radar = st.session_state.get(_SK_RADAR)
+    _red = int(_radar.get("red", 0)) if isinstance(_radar, dict) else 0
+    _yellow = int(_radar.get("yellow", 0)) if isinstance(_radar, dict) else 0
+    _lvl = str(_infl.get("level", ""))
+    _alarm = _lvl == "red" or _red > 0
+    # 新聞桶恆為 ⬜「未掃描」（客戶拍板第 2 條）—— 把它**說出來**，
+    # 否則「沒有系統性風險」與「沒有掃描系統性風險」在畫面上長得一模一樣。
+    _note = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}。"
+             f"系統性風險（新聞面）{_news.get('emoji', '⬜')} "
+             f"{_news.get('label', '未掃描')} —— 本頁尚未接上新聞取數，"
+             "所以這一項不是「沒有風險」，是「沒有查」。")
+    if _alarm:
+        # 有已知的例外 —— 莓紅左軌（業務警示），不是系統紅框（鐵則 03）。
+        _state = STATE_BUSINESS
+    elif _lvl == "gray":
+        # ⚠️ **拐點沒取到 ⇒ 灰態，不是綠燈。** 「沒有資料」不等於「一切正常」——
+        #    這一條與 `_worst_state()` 的同名規則同源；把 ⬜「資料未取得」畫成
+        #    STATE_OK（綠色 metric），使用者會讀成「今天沒有該警覺的事」，
+        #    而實際上我們根本沒查（§1）。
+        _state = STATE_NOT_READY
+    else:
+        _state = STATE_OK
+    _card: dict = {
+        "title": "⚡ ③ 例外",
+        "value": f"拐點 {_infl.get('emoji', '⬜')} {_infl.get('label', '—')}",
+        "note": _note,
+        "state": _state,
+    }
+    if _state == STATE_NOT_READY:
+        # 灰態的空狀態三要素：`state_card` 的灰分支不印 value，故把讀數併進 note。
+        _card["note"] = f"拐點 {_infl.get('emoji', '⬜')} {_infl.get('label', '—')}。{_note}"
+        _card["where"] = _where_to_load()
+    return _card
+
+
+def _card_credibility(ind: dict, ev: dict) -> dict:
+    """🔍 ④ 可信度 —— 這一輪的數字**能信到什麼程度**。
+
+    ⚠️ 這張卡刻意報「**有幾項附得出來源**」：實測（2026-09-05，AST 數
+    `fetch_all_indicators` 內各 `dict(...)` 呼叫的具名引數）——
+    帶 `source=` 的只有 **1 個**（PMI），帶 `fetched_at=` 的 **0 個**。
+    ⚠️ **這裡刻意不寫「共幾項指標」的總數**：AST 實測 `R` 有 27 個下標賦值、
+    其中 26 個是字面 key，而那 26 個裡還混著一個 `_fred_sources`（meta，不是指標），
+    另有非字面 key 的動態賦值 —— **它沒有一個乾淨的單一總數**，
+    寫死一個會過期也會失真（§8.2.A.0 規則 4：會漂移的量測值不寫死）。
+    本卡的分母改由執行期實際數（已用 `is_meta_key()` 濾掉 meta）。
+    血緣在 L1 是有寫的（`repositories/macro/fred.py` 會寫 `source` / `fetched_at`），
+    **但 L2 沒有把它接下來**。這正是「總經燈號全表」做不出「來源」欄的原因
+    （見 :func:`_render_deferred_blocks`）—— 同一個限制，在這裡誠實講一次。
+    """
+    _prov = ev.get("prov") or {}
+    # ⚠️ **`_` 開頭的 key 不是指標**（例如 `_fred_sources`）—— 走 Service 自己的
+    #    `is_meta_key()`，不在本層重寫一份判斷（§2.1）。少了這一道，分母會被
+    #    meta 條目灌水，而那正是產出端 v19.425 修過的同一個坑。
+    _real = {_k: _v for _k, _v in (ind or {}).items()
+             if isinstance(_v, dict) and not is_meta_key(_k)}
+    _total = len(_real)
+    _proxy = len([_k for _k, _v in _real.items() if _v.get("is_proxy")])
+    _srcs = len(_prov.get("sources") or [])
+    if not _total:
+        return {"title": "🔍 ④ 可信度", "state": STATE_NOT_READY,
+                "note": "這一輪一項指標都沒取到。", "where": _where_to_load()}
+    _note = [f"其中 {_srcs} 項附得出資料來源，其餘沒有。"]
+    if _proxy:
+        _note.append(f"另有 {_proxy} 項是用替代來源估出來的，不是原始指標。")
+    if not ev.get("sufficient"):
+        _note.append("證據不足，上方沒有給等級與行動。")
+    # ⚠️ **刻意不印「N / M 項參與計算」那種比例。** 實測 `n_indicators` 的遞增條件
+    #    是「非 meta 的 dict 條目且 score/weight 可解析」—— 缺 score 會被當 0 一起算，
+    #    所以它幾乎恆等於分母，比例永遠是 N/N。印出來會讓使用者以為「全部都取到了」，
+    #    而真相恰恰相反（缺的那些是被當 0 加進去的）。那個真相由 ② 表下的
+    #    `support.reason` 負責講，這裡只報一個不會說謊的數字。
+    return {
+        "title": "🔍 ④ 可信度",
+        "value": f"{_total} 項指標",
+        "note": "".join(_note),
+        # 附不出來源、或證據撐不住 → 這是「這個數字要打折看」的**業務警示**，
+        # 不是系統故障（資料本身抓回來了）。鐵則 03。
+        "state": (STATE_BUSINESS
+                  if (not ev.get("sufficient") or _proxy) else STATE_OK),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# 層 4 與已裁決不做的區塊：誠實灰態（鐵則 04：未完成不留白，也不畫空表格外框）
 # ══════════════════════════════════════════════════════════════════
 def _render_deferred_blocks() -> None:
-    """把「本批刻意沒做的區塊」逐項畫成灰態，不留白、不假裝完成。
+    """把「本批沒做」與「已拍板不做」的區塊畫成灰態 —— **兩者理由不同，分開寫**。
 
-    ⚠️ 這些**不是**失敗，也不是還沒抓到資料 —— 是**整頁骨架尚未裁決**，
-       所以一律走灰態（`not_ready`），不上紅（鐵則 03）。
+    ⚠️ 這些**不是**失敗，也不是抓取失敗 → 一律灰態（`not_ready` 系），不上紅（鐵則 03）。
+
+    ⚠️ **2026-09-05 更正：本區塊原本叫「🔎 詳細五時域」，那個名字是本專案自己造的，
+       而且是假的**（獨立稽核 A776 指出，本組已自驗）。實測：
+       `git grep -ln "五時域" origin/main` **只命中我們自己這一個檔**；
+       九份線框逐檔 `grep -c 五時域` **全部 0**。
+       已拍板骨架 `docs/wireframes/wireframe-macro-health.html` 寫的是
+       「**🔎 詳細區 — 四時域 ＋ 決策矩陣 ＋ AI**」，標「**6 塊**」並逐塊列出：
+       🌳 長期座標／📈 中期循環／🎯 短線雷達／⚠️ 拐點警報／
+       **📋 即時訊號 ＋ 決策矩陣**／🤖 AI 景氣判斷總結。
+       ⛔ **那個假名字錯兩次**：(a) 時域是 **4** 不是 5 —— 第 5 個 render 函式是
+       **AI 總結**，不是時域；(b) 它把**決策矩陣**（詳細區最大的一塊：verdict 大卡
+       ＋ 逐檔決策矩陣表 ＋ 4 格 stat_tile ＋ 動作對照表）整塊吃掉了。
+       **留著它，批次三會照它派工，然後在一次「打掉重練」裡讓決策矩陣無聲消失** ——
+       而客戶方針第 3 條（舊 tab 暫留、待新版驗收完成後整批拔除）防的正是這件事。
+       ⚠️ **詳細區是否還有第 7 塊，本組不宣稱**：`ui/helpers/macro/beginner_view.py`
+       的 docstring 提到一個「**唯讀副盤**」一級區塊，而線框那 6 塊沒列它。
+       **本組未查證，故不寫進畫面文案，也不斷言它不存在** —— 留給批次三。
     """
     st.divider()
-    st.markdown("#### 待客戶裁決後才動工的區塊")
     empty_state(
-        "整頁骨架待裁決，以下區塊本批刻意未實作",
-        "兩份客戶已拍板的線框對 ① 的骨架互相衝突（Form 欄位集、建議資產水位是全寬還是"
-        "三欄之一、主要大表是「總經燈號全表」還是「② 依據五桶證據表」、卡片集合、"
-        "以及是否保留「🔎 詳細五時域」）",
+        "🔎 詳細區：🌳 長期座標 → 📈 中期循環 → 🎯 短線雷達 → ⚠️ 拐點警報"
+        " → 📋 即時訊號＋決策矩陣 → 🤖 AI 景氣判斷總結",
+        "這 6 塊要從舊版總經頁逐塊重寫，份量大，已另立**批次三**處理",
         where=_where_to_load(),
-        footer="裁決後這幾塊會接在同一個載入閘門下，取數與三態機制本批已經就位。",
+        footer="批次三完成後，這幾塊會接在同一個載入閘門底下，取數機制現在就已經就位。",
     )
-    for _title, _why in (
-        ("建議資產水位",
-         "服務端已可用；**卡住的只有版面** —— 一份線框要全寬首屏，另一份要三欄之一。"
-         "另有一處未裁決：線框寫「核心 70／衛星 30」，但服務回的是股／債／現金三分，"
-         "全 repo 沒有由總經分數導出核心／衛星的服務。"),
-        ("主要大表",
-         "「總經燈號全表」與「② 依據五桶證據表」是兩份線框各自的主表，二選一未定。"),
-        ("🔎 詳細五時域",
-         "只有一份線框有（長期→中期→短線雷達→拐點→AI），是否保留未定。"),
-    ):
-        st.caption(f"⬜ {_title} — {_why}")
+    empty_state(
+        "總經燈號全表（值／位階／資料日期／來源）—— 已拍板不做",
+        "「來源」欄目前**只有 1 項指標**帶得回來源標記，其餘全部會是「—」；"
+        "而「位階」欄兩份線框都沒有定義過它的意思",
+        where=where_to_find("diag"),
+        footer="這不是壞掉：資料層有記來源，是計算層沒有把它一起帶下來；"
+               "補齊要動到底層，不在本頁的範圍內。"
+               "本頁的主要大表是上面那張「② 依據」五桶證據表。",
+    )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -387,6 +741,10 @@ def render_market_overview() -> None:
 
     _fred_key = os.environ.get("FRED_API_KEY", "")
     _loaded = isinstance(st.session_state.get(_SK_IND), dict)
+    # 這一輪要印在送出鈕上的字。**先算出來、存起來、再交給表單** ——
+    # 指路文案（`_where_to_load()`）讀的就是這個變數，兩邊因此不可能分岔。
+    _submit_label = MACRO_LOAD_BTN_AGAIN if _loaded else MACRO_LOAD_BTN_FIRST
+    st.session_state[_SK_BTN] = _submit_label
 
     # ── 鐵則 02：載入閘門（按送出鈕才取數）──────────────────────────
     # ⚠️ 走 `applied_form()` 而不是自己寫 `st.form(` —— 後者會讓
@@ -395,7 +753,7 @@ def render_market_overview() -> None:
     #    區塊內判斷恆為 False（`ui/helpers/ia/gated_form.py` 的模組 docstring）。
     with applied_form(
             _FORM_KEY,
-            submit_label=MACRO_LOAD_BTN_AGAIN if _loaded else MACRO_LOAD_BTN_FIRST,
+            submit_label=_submit_label,
     ) as _gate:
         st.caption("資料源　FRED ＋ FinMind。"
                    "⬜ 表單欄位待客戶裁決：兩份線框一份是「觀察區間 ＋ 資料源」，"
@@ -431,19 +789,40 @@ def render_market_overview() -> None:
 
     _ind = st.session_state.get(_SK_IND)
     if not isinstance(_ind, dict):
-        # 尚未載入：卡片仍然畫出來，但一律灰態 ——「還沒點」不是故障。
+        # 尚未載入：四層的骨架仍然畫出來，但一律灰態 ——「還沒點」不是故障。
+        # ⚠️ 骨架照畫、內容留灰，使用者才看得出「這一頁有哪幾層、我還缺什麼」；
+        #    整頁空白會讓「還沒載入」與「這頁壞了」長得一模一樣（鐵則 04）。
+        st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+        not_ready("尚未載入總經資料，還沒有結論可以下。", where=_where_to_load())
         render_cards([
             {"title": _t, "state": STATE_NOT_READY,
              "note": "尚未載入總經資料。", "where": _where_to_load()}
             for _t in ("景氣位階", "波動與信用", "通膨與利率",
                        "熱錢動向", "極端風險警語", "新聞情緒")
         ])
+        st.markdown("### 🧾 ② 依據 — 憑什麼這樣說")
+        not_ready("尚未載入總經資料，五桶證據表還沒有內容。", where=_where_to_load())
+        render_cards([
+            {"title": _t, "state": STATE_NOT_READY,
+             "note": "尚未載入總經資料。", "where": _where_to_load()}
+            for _t in ("📐 建議資產水位", "⚡ ③ 例外", "🔍 ④ 可信度")
+        ])
         _render_deferred_blocks()
         return
 
-    # ── 鐵則 01：3 欄自適應網格（6 張卡 → 2 列 × 3 欄）────────────────
-    # ⚠️ 卡片**集合**在兩份線框之間並不一致（見模組 docstring 的對照表），
-    #    這裡先用市場層、與持倉無關的那一組；最終集合待裁決。
+    # ══════════════════════════════════════════════════════════
+    # 四層骨架（客戶 2026-09-04 拍板）—— 順序即閱讀順序，不要調換
+    # ══════════════════════════════════════════════════════════
+    # ⚠️ `calc_macro_phase(_ind)` 在這裡**算一次**，往下傳給層 1 與層 2。
+    #    兩層各自呼叫一次不會出錯，但那會讓同一個位階分數有兩個計算點 ——
+    #    日後任一邊換了輸入，畫面上「① 的燈」與「② 的長期桶」會無聲分岔（§2.1）。
+    _phase = calc_macro_phase(_ind)
+
+    # ── 層 1：🧾 ① 結論（全寬）───────────────────────────────
+    _render_layer_conclusion(_ind, _phase)
+
+    # ── 卡片網格：`ia` 線框那六張，插在 ① 與 ② 之間（拍板第 1 條）──
+    # 鐵則 01：3 欄自適應網格（6 張卡 → 2 列 × 3 欄）
     render_cards([
         _card_phase(_ind),
         _card_vol_credit(_ind),
@@ -452,4 +831,27 @@ def render_market_overview() -> None:
         _card_risk_radar(),
         _card_news(),
     ])
+
+    # ── 層 2：🧾 ② 依據（全寬表）─────────────────────────────
+    # ⚠️ 表格渲染失敗**不得擋掉整頁**，但也不得靜默 —— 走系統紅框，
+    #    並讓層 3 收到一個「② 沒跑完」的哨兵，它才不會宣稱
+    #    「讀數完整列在上方 ② 依據表」（那張表根本不在畫面上）。
+    try:
+        _ev = _render_layer_evidence(_ind, _phase)
+    except Exception as _ev_e:              # noqa: BLE001 — §1：不靜默吞，下一行就印
+        system_error("② 依據表渲染失敗", _ev_e,
+                     hint="這一頁數字最密集的一塊沒畫出來；"
+                          "下方三欄會因此少掉水位與可信度。")
+        _ev = {"summary": None, "score": None, "prov": {},
+               "sufficient": False, "level": ""}
+
+    # ── 層 3：📐 建議資產水位 ／ ⚡ ③ 例外 ／ 🔍 ④ 可信度（三欄）──
+    # 鐵則 01：正好 3 張 → 一列 3 欄。**三張都吃層 2 算好的結果，不重算。**
+    render_cards([
+        _card_allocation(_ev),
+        _card_exceptions(_ev),
+        _card_credibility(_ind, _ev),
+    ])
+
+    # ── 層 4：🔎 詳細區（批次三）＋ 已拍板不做的燈號全表 ──
     _render_deferred_blocks()
