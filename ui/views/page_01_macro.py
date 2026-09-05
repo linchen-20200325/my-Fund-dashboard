@@ -105,6 +105,7 @@ from services.macro import calc_macro_phase, fetch_all_indicators, macro_action_
 from services.macro.composite_score import (
     calculate_composite_score,
     composite_verdict,
+    is_meta_key,
 )
 from services.risk_radar import detect_risk_radar, summarize_radar
 from shared.evidence_support import is_sufficient
@@ -602,22 +603,30 @@ def _card_credibility(ind: dict, ev: dict) -> dict:
     （見 :func:`_render_deferred_blocks`）—— 同一個限制，在這裡誠實講一次。
     """
     _prov = ev.get("prov") or {}
-    _n = int(_prov.get("n_indicators") or 0)
-    _total = len([_k for _k, _v in (ind or {}).items() if isinstance(_v, dict)])
-    _proxy = len([_k for _k, _v in (ind or {}).items()
-                  if isinstance(_v, dict) and _v.get("is_proxy")])
+    # ⚠️ **`_` 開頭的 key 不是指標**（例如 `_fred_sources`）—— 走 Service 自己的
+    #    `is_meta_key()`，不在本層重寫一份判斷（§2.1）。少了這一道，分母會被
+    #    meta 條目灌水，而那正是產出端 v19.425 修過的同一個坑。
+    _real = {_k: _v for _k, _v in (ind or {}).items()
+             if isinstance(_v, dict) and not is_meta_key(_k)}
+    _total = len(_real)
+    _proxy = len([_k for _k, _v in _real.items() if _v.get("is_proxy")])
     _srcs = len(_prov.get("sources") or [])
     if not _total:
         return {"title": "🔍 ④ 可信度", "state": STATE_NOT_READY,
                 "note": "這一輪一項指標都沒取到。", "where": _where_to_load()}
-    _note = [f"{_total} 項裡有 {_srcs} 項附得出資料來源，其餘沒有。"]
+    _note = [f"其中 {_srcs} 項附得出資料來源，其餘沒有。"]
     if _proxy:
         _note.append(f"另有 {_proxy} 項是用替代來源估出來的，不是原始指標。")
     if not ev.get("sufficient"):
         _note.append("證據不足，上方沒有給等級與行動。")
+    # ⚠️ **刻意不印「N / M 項參與計算」那種比例。** 實測 `n_indicators` 的遞增條件
+    #    是「非 meta 的 dict 條目且 score/weight 可解析」—— 缺 score 會被當 0 一起算，
+    #    所以它幾乎恆等於分母，比例永遠是 N/N。印出來會讓使用者以為「全部都取到了」，
+    #    而真相恰恰相反（缺的那些是被當 0 加進去的）。那個真相由 ② 表下的
+    #    `support.reason` 負責講，這裡只報一個不會說謊的數字。
     return {
         "title": "🔍 ④ 可信度",
-        "value": f"{_n} / {_total} 項參與計算",
+        "value": f"{_total} 項指標",
         "note": "".join(_note),
         # 附不出來源、或證據撐不住 → 這是「這個數字要打折看」的**業務警示**，
         # 不是系統故障（資料本身抓回來了）。鐵則 03。
