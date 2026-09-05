@@ -1830,7 +1830,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 
 > ⚠️ **2026-09-01 `fund_repository.py` 路徑事實更正(有意識的更正,不是漏刪 · 日期 **2026-09-01** · 決策者:**AI 總管**)**
 > **本節(及 §2.2 血緣、§3.1 schema、§-1.5.1c 判定 1 的對映表)多處 evidence 寫 `fund_repository.py` —— 該檔不存在。**
-> **實測**:`ls ~~repositories/fund_repository.py~~` → No such file;實作於 **v19.200 P1-5 拆檔**後住在
+> **實測**:~~`ls repositories/fund_repository.py`~~ → No such file;實作於 **v19.200 P1-5 拆檔**後住在
 > **`repositories/fund/` 子套件**(`sources.py` 取數來源與 fallback、`fund_orchestration.py` 編排、
 > `nav_metrics.py` NAV/指標、`fx_and_main.py` FX 與主入口),另有 `repositories/fundclear_offshore.py`。
 > **舊路徑在寫下當時是對的**(§0 步驟 2 填寫日該檔確實存在);**被權衡掉的是它的前提** —— 拆檔那一輪沒有回頭改本節。
@@ -1902,6 +1902,26 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 > 一句 `# ── 最大回撤 ──` 註解，**不是**它自稱的 jaccard/cosine 實作（真正的 SSOT 是同檔
 > `calc_holdings_overlap`）。**這正是該守衛自己登記的射程外缺口：它只驗「檔案在不在、行號界不界內」，
 > 不驗「那一行是不是它自稱的東西」。** 兩處已一併更正為符號式引用。
+>
+> ⚠️ **2026-09-05 補一筆：§3.2 VIX 那一列的 `warning=18` 是假的，已就地改為 `warning=22`**
+> （**有意識的更正，不是漏刪** · 日期 **2026-09-05** · 決策者：**AI 總管** · 由獨立稽核 A780 指出）。
+> **依據（runtime 實測，非轉述）**：`services/macro/validation.py::DEFAULT_VIX_WARNING`
+> ＝ `shared/macro_buckets._VIX_YELLOW` ＝ **22.0**（`DEFAULT_VIX_CRISIS` ＝ 30.0，故 `crisis=30` 原本就對）。
+> **兩邊理由並陳**：**`18` 在寫下當時為真** —— 那是 v19.147 multi-cutoff 時代的 VIX 警戒值；
+> **被推翻的是它的前提** —— v19.159 C2-C 撤銷該版並對齊 SSOT（同檔沿革註解自陳
+> 「DEFAULT_VIX_WARNING 18.0 → 22.0(對齊 macro_buckets._VIX_YELLOW SSOT)」），
+> **`18` 現在只是校準 JSON 的下界**（`warning ∈ [18, 26]`），**不是現行門檻**。
+>
+> ⛔ **這一筆要記的教訓比數字本身重要，因為它正好是本輪守衛守不到的那個病**：
+> 上一輪更正這一列時，**只換了路徑、原封帶走了括號裡的常數**，於是那一格變成
+> 「**路徑是新的、數字是舊的**」，而且掛著一個 `2026-09-05` 的日期戳 ——
+> **看起來像已經被查過了**。這正是 §2.1 上一段自己記載過的**遮蔽效應**：
+> 在一行尾端加更正註，會讓整行看起來已經被查過。
+> **守衛結構上看不見它**（它只驗「檔案在不在、行號界不界內」，不驗括號裡的常數值）。
+> ⚠️ 且憲法**在別處早就寫著正解** —— §8.3 F-GRAY-4「全站 yellow **統一 SSOT 22** / panic 30」，
+> 也就是本檔**曾經對同一個門檻給出兩個數字**。**同一個事實只准有一個真相源**（§2.1 SSOT）。
+> → **可操作規則（寫死）**：**更正一格 evidence 時，那一格裡的「常數值」與「路徑」要一起實測**；
+> 只換路徑不驗數字，等於把一個假數字重新蓋章背書。
 >
 > ⚠️ **本註與這 22 處更正由品管與 CI 守衛組單組產出，未經第二組獨立複驗**（§-2 規則 6）。
 > 可查證的部分是機器驗的（守衛由紅轉綠＝每一條路徑都存在、每一個行號都在界內）；
@@ -2116,7 +2136,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | 指標 | 合理範圍 | Evidence |
 |---|---|---|
 | PMI(採購經理指數) | [30, 70] | services/macro_validation.py SCORE_RULES |
-| VIX | [5, 100] | ~~services/macro_validation.py:35-84~~ → **`services/macro/validation.py::SCORE_RULES`**(crisis=30, warning=18)(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
+| VIX | [5, 100] | ~~services/macro_validation.py:35-84~~ → **`services/macro/validation.py::SCORE_RULES`**(crisis=30, ~~warning=18~~ → **warning=22**)(見 §2.1 表下「2026-09-05 批次路徑更正」註,含本次 `warning` 值更正的完整理由) |
 | CPI YoY (%) | [-5, 20] | ~~services/macro_tw_local.py:150-157~~ → SSOT **`shared/signal_thresholds.py`** 的 `CPI_YOY_*_MAX_PCT`;consumer **`services/macro/tw_local.py`**(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | US10Y (%) | [0, 20] | ~~repositories/macro_repository.py:180-195~~ → **`repositories/macro/fred.py::MACRO_THRESHOLDS`**(見 §2.1 表下「2026-09-05 批次路徑更正」註) |
 | DXY(美元指數) | [70, 130] | MACRO_THRESHOLDS |
