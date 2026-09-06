@@ -1707,10 +1707,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     #     (下次直接用、UI 表格自動顯示)。名稱既有則不覆蓋(set_secid 內部處理)。
     if not sec_id:
         try:
+            # ⛔ 2026-09-06:`set_secid as _cache_secid` **已移除,不是漏刪**。
+            #    只留讀取(`resolve_*`);回存 secId 的那一行見下方切除註。
             from repositories.pool_repository import (  # noqa: PLC0415
                 resolve_currency as _resolve_user_ccy,
                 resolve_isin as _resolve_user_isin,
-                set_secid as _cache_secid,
             )
             _isin = _resolve_user_isin(_code)
             if _isin:
@@ -1725,13 +1726,70 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
                 _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
                 if _auto_ccy:
                     currency_id = _auto_ccy
-                if sec_id:
-                    try:
-                        # 回存 secId + 自動判到的幣別(空則不動既有)+ 晨星名稱(既有不覆蓋)
-                        _cache_secid(_code, sec_id, currency=_auto_ccy,
-                                     name=_ms_name_cache.get(_isin, ""))
-                    except Exception:  # noqa: BLE001 — 回存失敗不影響本次抓取
-                        pass
+                # ── 2026-09-06:查一檔基金**不再**把 secId 回寫進使用者的 Google Sheet ──
+                # ~~if sec_id:~~
+                # ~~    try:~~
+                # ~~        # 回存 secId + 自動判到的幣別(空則不動既有)+ 晨星名稱(既有不覆蓋)~~
+                # ~~        _cache_secid(_code, sec_id, currency=_auto_ccy,~~
+                # ~~                     name=_ms_name_cache.get(_isin, ""))~~
+                # ~~    except Exception:  # noqa: BLE001 — 回存失敗不影響本次抓取~~
+                # ~~        pass~~
+                #
+                # **有意識的政策變更,不是漏刪**(日期 **2026-09-06** · 決策者:**客戶**)。
+                # 客戶 2026-09-06 永久授權,逐字:「凡是『查詢/搜尋』功能,一律強制走
+                # 『純讀取(唯讀)』,絕對禁止反向寫入我的 Google Sheet。不用問我,直接切斷寫入!」
+                #
+                # ## 可達性:兩組稽核結論相反 → 第三組仲裁,判定**走得到**(2026-09-06)
+                # 仲裁組用離線寫入哨兵從 `fetch_fund_from_moneydj_url` 往下實跑,
+                # `ws.update('A2:J2')` **當場觸發,而且函式正常回傳、不拋例外**
+                # —— 也就是說這個寫入在 production 是**靜默**的。
+                # 判「走不到」那組的呼叫圖從 `render_single_fund_tab` 只算出 15 個可達函式
+                # (正確約 487、24 支 `_src_*` NAV adapter)—— 圖在三個別名處斷掉:
+                #   ① `services/moneydj_fetcher.py` 的
+                #      `... import fetch_fund_from_moneydj_url_enriched as fetch_fund_from_moneydj_url`
+                #   ② `repositories/fund/__init__.py` 的 `globals()[_name] = getattr(_mod, _name)` 動態 re-export
+                #   ③ `fund_orchestration` 的 `from ...sources import *` 產生的第二份 binding
+                #
+                # ## 觸發條件:**不是每次查詢都寫**(這是嚴重性的關鍵,不要讀成「每查必寫」)
+                # 該檔在選股池那一列**有 ISIN、secId 還空著**,
+                # 且本次先前的 NAV 來源沒給滿 ≥10 筆(閘門 2g)或序列跨度 <300 天(span-extend 閘門),
+                # 且晨星 screener／Yahoo search 這次查得到 secId → **首次查該檔就寫**。
+                # 三個放大點:
+                #   (a) `_pool_secid_or_isin`(v19.505)已把閘門從「保單前綴」放寬到
+                #       **任何池內有 ISIN 的檔**,境內 ACDD/ACCP 一樣中;
+                #   (b) `_fetch_fund_single` / `fetch_fund_from_moneydj_url` / `fetch_fund_multi_source`
+                #       **都沒有快取 decorator**,每按一次「🚀 分析」重跑一次;
+                #   (c) 寫入外面包著 `except Exception: pass`,成功失敗**都不出現在畫面上**。
+                #
+                # **舊條文的理由仍然成立**:v19.473 要解的是「使用者只填代號 + ISIN,
+                # 其餘自動」—— 第一次搜到 secId 就存回去,下次不必再搜一趟,又順便讓
+                # ⑤ 設定頁的表格顯示得出晨星 ID 與幣別。省一趟往返、少一格要手填,
+                # 那個設計目的一個字都沒有錯。
+                # **被權衡掉的是它的形狀**:這段寫入**綁在「查詢成功」上,不綁在使用者的意圖上**
+                # —— 沒有按鈕、沒有勾選框、沒有任何確認,使用者「只是查一下淨值」
+                # 就會被改動他自己的試算表那一列;而且失敗還被 `except Exception: pass`
+                # 整個吞掉,連 log 都沒有。
+                #
+                # ⚠️ **本次切除的是「寫」,不是「用」**:同一輪搜到的 `sec_id` / `currency_id`
+                #    **照舊在本次抓取中使用**(見下方 `sec_id` 的後續消費),
+                #    功能沒有消失,消失的只有「順手改你的表」。
+                #    代價據實寫明:**下次查同一檔會再搜一次 secId**(多一趟外部往返),
+                #    且 ⑤ 設定頁不會再自動長出晨星 ID —— 要永久存,請在 ⑤ 設定頁
+                #    的選股池編輯器按存檔(`_render_pool_editor` 的 `set_secid`,
+                #    那是使用者**明確按下**的動作,不在本次切除範圍內)。
+                #
+                # 📌 **登記(只登記,不動手)**:若客戶要保留「自動回填」這個便利,
+                #    **正解是把它改成使用者明示動作**(勾選框／按鈕/表單送出才寫),
+                #    而不是復活這一段。那會**新增視覺元件**,依 §-1.5.1c `03`-2 ①
+                #    必須**先送客戶線框草稿**,**不在本批授權內**。
+                #
+                # ⛔ **本次刻意不動任何閘門邏輯**(`_pool_secid_or_isin` / 2g / 2g2 /
+                #    span-extend 的觸發條件)—— 那是**取數行為**,不在本次授權射程內。
+                #    切的只有「寫」這一個動作。
+                #
+                # ⛔ **不得**以「這只是補一格空欄、又不刪東西」為由復活它 ——
+                #    客戶禁的是**查詢的副作用寫入**這個形狀本身,不是寫入的大小。
+                # 守衛:`tests/test_readonly_query_paths.py`(第 7 節,tripwire + 別名感知 AST)。
         except Exception:  # noqa: BLE001 — 對照表/搜尋不可用不阻斷(退名稱搜尋)
             pass
 
@@ -1906,18 +1964,28 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
     #   → 回填選股池(下次即時 + UI 顯示)。這讓「代號+ISIN → 自動補 5 年」免手填 secId。
     if not sec_id:
         try:
+            # ⛔ 2026-09-06:`set_secid as _wb_secid` **已移除,不是漏刪**(理由同下)。
             from repositories.pool_repository import (
-                resolve_isin as _ru_isin, set_secid as _wb_secid,
+                resolve_isin as _ru_isin,
             )
             _isin = _ru_isin(_code)
             if _isin:
                 _found = _yahoo_search_secid_by_isin(_isin)
                 if _found:
                     sec_id = _found
-                    try:
-                        _wb_secid(_code, _found)   # 回填:下次直接用、UI 表格顯示
-                    except Exception as _wbe:  # noqa: BLE001 — 回填失敗不阻斷本次抓取
-                        print(f"[src_yahoo] {_code} 回填 secId 失敗(非致命):{_wbe}")
+                    # ── 2026-09-06:同 `_src_morningstar_nav`,查詢不再回寫 Google Sheet ──
+                    # ~~try:~~
+                    # ~~    _wb_secid(_code, _found)   # 回填:下次直接用、UI 表格顯示~~
+                    # ~~except Exception as _wbe:  # noqa: BLE001 — 回填失敗不阻斷本次抓取~~
+                    # ~~    print(f"[src_yahoo] {_code} 回填 secId 失敗(非致命):{_wbe}")~~
+                    #
+                    # **有意識的政策變更,不是漏刪**(2026-09-06 · 決策者:**客戶**)。
+                    # 完整理由見上方 `_src_morningstar_nav` 的同型切除註 ——
+                    # **兩處是同一個終點**(`pool_repository.set_secid` → `upsert`
+                    # → `Worksheet.update`),只是入口不同(晨星 / Yahoo),
+                    # 故理由只寫一次、不重複貼。
+                    # ⚠️ `_found` **照舊被本次抓取使用**(上一行已 `sec_id = _found`),
+                    #    切掉的只有「順手改你的表」。
         except Exception as _re:  # noqa: BLE001 — 選股池/解析不可用不阻斷
             print(f"[src_yahoo] {_code} ISIN→Yahoo secId 解析失敗:{_re}")
     if not sec_id:

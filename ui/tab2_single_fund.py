@@ -398,13 +398,30 @@ def render_single_fund_tab() -> None:
                 _c_fn = fd_raw.get("fund_name","") or fd_raw.get("full_key","")
                 _c_n  = len(fd_raw.get("series")) if fd_raw.get("series") is not None else 0
                 st.success(f"✅ **{_c_fn}** ｜ 淨值 {_c_n} 筆 資料已載入")
-                # v19.359 Track 2:App 抓成功 → 把當日最新 NAV append 進 Google Sheet
-                # nav_history 分頁(從現在累積,解 CI 端抓不到歷史的困境)。冪等 + 非致命。
-                try:
-                    from ui.helpers.nav_history_hook import record_fund_nav_point
-                    record_fund_nav_point(fd_raw, source="Tab2")
-                except Exception:
-                    pass  # 記錄失敗不影響主流程(helper 內已顯示提示)
+                # ── 2026-09-06:查一檔基金**不再**回寫 Google Sheet ────────────────
+                # ~~v19.359 Track 2:App 抓成功 → 把當日最新 NAV append 進 Google Sheet~~
+                # ~~nav_history 分頁(從現在累積,解 CI 端抓不到歷史的困境)。冪等 + 非致命。~~
+                # ~~try:~~
+                # ~~    from ui.helpers.nav_history_hook import record_fund_nav_point~~
+                # ~~    record_fund_nav_point(fd_raw, source="Tab2")~~
+                # ~~except Exception:~~
+                # ~~    pass  # 記錄失敗不影響主流程(helper 內已顯示提示)~~
+                #
+                # **有意識的政策變更,不是漏刪**(日期 **2026-09-06** · 決策者:**客戶**)。
+                # 客戶 2026-09-06 永久授權,逐字:「凡是『查詢/搜尋』功能,一律強制走
+                # 『純讀取(唯讀)』,絕對禁止反向寫入我的 Google Sheet。」
+                #
+                # **舊條文的理由仍然成立**:v19.359 要解的是「CI 端抓不到歷史 → 序列永遠
+                # 太短 → Sharpe/σ/MaxDD 一直留白」,而「使用者查過的檔剛好就是他在乎的檔」
+                # 這個直覺是對的,用看盤流量順便累積歷史,成本近乎零。
+                # **被權衡掉的是它的形狀,不是它的目的**:這段寫入**綁在「查詢成功」上,
+                # 不綁在使用者的意圖上** —— 沒有勾選框、沒有按鈕、沒有任何確認,
+                # 使用者「只是查一下」就會被改動他自己的試算表。客戶要的是查詢即唯讀,
+                # 累積歷史改由**排程**與**使用者明確按下的匯入/補全**負責(見 PR 描述)。
+                #
+                # ⛔ **不得**以「這只是 append、又不刪東西」為由復活它 ——
+                #    客戶禁的是**查詢的副作用寫入**這個形狀本身,不是寫入的大小。
+                # 守衛:`tests/test_readonly_query_paths.py`。
 
                 # ── 2026-08-11:累積「有沒有真的讓序列變長」──────────────────
                 # 上面那行只說「本次新存 N 筆」（寫入成功），但寫入成功 ≠ 序列變長。
