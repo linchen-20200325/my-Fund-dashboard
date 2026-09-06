@@ -748,8 +748,46 @@ def test_the_new_page_delegates_the_same_set_as_the_old_one_minus_the_lying_bloc
 
     ⚠️ **雙向**：
     - 新頁少了什麼（`舊 - 新`）→ 只准是 `render_nav_status_section`（裁決 2）；
-    - 新頁多了什麼（`新 - 舊`）→ 一律紅，那代表新頁自己長出了舊 ⑤ 沒有的依賴，
+    - 新頁多了什麼（`新 - 舊`）→ 紅，那代表新頁自己長出了舊 ⑤ 沒有的**委派**，
       **應該先問「那一塊是不是該進 (A) 路線的委派清單」**。
+
+    ⛔ **2026-09-06 就地更正：「一律紅」不成立（有意識的更正，不是漏刪）。**
+    舊表述：~~「新頁多了什麼（`新 - 舊`）→ **一律紅**」~~ —— **本組已重現，不是轉述**。
+    :func:`_entries` 的過濾器**只認三種前綴**（`ui.tab*` / `ui.helpers.settings_diag*` /
+    `ui.helpers.data_registry`，且排除 `merge_context`），**其餘一個字都看不到**。
+
+    **突變實測（本組自己跑，AST，非字面 grep；附正對照）**：
+    在新頁加上三支 Google Sheets 寫入入口 ——
+    `repositories.pool_repository.PoolRepo` / `services.macro.weights_store.save_weights` /
+    `repositories.snapshot_repository.save_holdings_overview` ——
+    `_gained` 仍是 **`[]`**，本條 **GREEN、突變存活**。
+    （**正對照**：改加一支 `from ui.tab_manage import _AUDIT_PROBE`，`_gained` 立刻非空 ——
+    證明過濾器不是壞掉，是**射程本來就窄**。）
+
+    ✅ **整體沒有破口，破的只有這一條的自我描述**：那三支會被
+    :func:`test_the_page_never_reaches_into_the_data_layer` 接住（`repositories` 是
+    banned root、`services.macro.*` 不在白名單）。
+    ⛔ **但「一律」這兩個字必須拿掉** —— 本條被 commit `7e5677a` 當賣點寫進訊息，
+    ②③④ 照抄就是四份假記錄。**本條真正的承諾是：新頁不得長出舊 ⑤ 沒有的
+    「委派類」依賴**（那三種前綴之內），不是「任何新依賴」。
+
+    ⚠️ **同一件事的另一個面向：「`新 − 舊` ＝ 空」也只在這個窄過濾器下為真。**
+    **本組實測（量測日 2026-09-06，改用「全部 import 符號、不過濾」重算）**：
+    `新 − 舊` ＝ **7**（`datetime` / `typing.Any` 兩個 stdlib ＋ 下列 5 個）——
+
+    - `services.nav_history_gs.coverage_status`
+    - `services.nav_history_gs.status`
+    - `ui.helpers.ia.empty_state.empty_state`
+    - `ui.helpers.story_nav.section_label`
+    - `ui.helpers.story_nav.where_to_find`
+
+    `舊 − 新` ＝ **1**（就是 `render_nav_status_section`）。
+    → **扣掉 stdlib 就是 5 個，其中 `services.nav_history_gs` 佔 2 個** ——
+    那 2 個正是總管裁決 2「NAV 那一塊自己實作」必然帶進來的取數入口，
+    **不是偷加的依賴**（它們另有 :func:`test_the_page_never_reaches_into_the_data_layer`
+    的白名單 ＋ 2026-09-06 新增的寫入面黑名單在守）。
+    ⛔ **引用「`新 − 舊` ＝ 空」時務必附上射程限定**，否則那句話會被讀成
+    「新頁沒有任何新依賴」—— **那是假的**。
 
     ⚠️ **本條刻意拿舊 ⑤ 當基準，而不是拿一份手抄的清單** ——
     手抄的清單會漂移；舊 ⑤ 是**今天真的在線上跑的那一份**，它就是規格。
@@ -2256,6 +2294,39 @@ def test_the_page_draws_no_grid_form_or_tabs_of_its_own():
 #:    不需要任何憲法例外；本 repo 既有的 `ui/tab5_data_guard.py` 也是這樣呼叫它。
 _ALLOWED_SERVICE_MODULES: frozenset = frozenset({"services.nav_history_gs"})
 
+#: ⛔ **2026-09-06 新增：白名單降到【符號粒度】，寫入面明文排除。**
+#:
+#: **為什麼要有這一層（本組已重現，不是轉述）**：上面那份白名單是**模組粒度**，
+#: 而 `services.nav_history_gs` **同時裝著讀取面與寫入面**
+#: （`__all__` 實測：`append_point` / `append_points` / `import_csv_text` 是寫入，
+#: `load_points` / `load_series` / `coverage_status` / `status` / `is_enabled` 是讀取）。
+#: **突變實測**：在被測檔加 `from services.nav_history_gs import append_points`
+#: （以及 `append_point` / `import_csv_text`）→ 上面那條 **三顆全部 GREEN、存活**。
+#: **正對照**：同一條規則對 `import gspread` 立刻轉紅 —— 規則沒壞，是粒度不夠細。
+#:
+#: ⚠️ **讀取面刻意保留放行，理由是實測出來的、不是推定的**：
+#: `load_points()` 走 **`sh.worksheet(...)` 直取**，**不經**那支會
+#: `add_worksheet(...)` ＋ `ws.update("A1", …)` 補 header 的 `_get_worksheet()`
+#: （AST 實測：`load_points` 的呼叫集合裡沒有 `_get_worksheet` / `add_worksheet` /
+#: `update` / `append_rows`；`append_points` 則兩者都有）。
+#: → **本頁的兩個入口（`coverage_status` / `status`）在唯讀原則下成立。**
+#:
+#: ⛔ **這是黑名單，不是白名單，所以它抓不到第 N+1 支新的寫入函式** ——
+#: 上游哪天在 `services/nav_history_gs.py` 加一支新的寫入入口，本表**不會自己長大**。
+#: 登記在此，**不是沒看到**。
+_FORBIDDEN_SERVICE_SYMBOLS: frozenset = frozenset({
+    "services.nav_history_gs.append_point",
+    "services.nav_history_gs.append_points",
+    "services.nav_history_gs.import_csv_text",
+})
+
+#: 上面那些符號的**裸名字**（給 call-site 比對用）。
+#: ⚠️ 只驗 import 會漏掉 `import services.nav_history_gs` ＋
+#: `services.nav_history_gs.append_points(...)` 這條路 —— 那條路的 import 是模組本身，
+#: **在白名單上**。故 import 與呼叫**兩邊都看**。
+_FORBIDDEN_SERVICE_LEAVES: frozenset = frozenset(
+    _s.rsplit(".", 1)[-1] for _s in _FORBIDDEN_SERVICE_SYMBOLS)
+
 
 def test_the_page_never_reaches_into_the_data_layer():
     """View 不得直接碰 L1／L0／HTTP；L2 只准 :data:`_ALLOWED_SERVICE_MODULES` 那一個。
@@ -2288,6 +2359,21 @@ def test_the_page_never_reaches_into_the_data_layer():
         f"被測檔 import 了不准碰的資料／計算層：{_bad}\n"
         f"L2 只准 {sorted(_ALLOWED_SERVICE_MODULES)}；L1（`repositories`）與 L0（`infra`）"
         "以及任何 HTTP client 一律不得直呼。")
+
+    # ⛔ **2026-09-06 新增的第二層：白名單模組【內部】的寫入面一律不准碰。**
+    #    理由與實測見 :data:`_FORBIDDEN_SERVICE_SYMBOLS` 上方的登記。
+    _writes = sorted(set(_imported_modules(_tree())) & _FORBIDDEN_SERVICE_SYMBOLS)
+    for _n in ast.walk(_tree()):
+        if (isinstance(_n, ast.Call)
+                and _dotted(_n.func).rsplit(".", 1)[-1] in _FORBIDDEN_SERVICE_LEAVES):
+            _writes.append(f"L{_n.lineno} {_dotted(_n.func)}(…)")
+    assert not _writes, (
+        f"被測檔碰了 nav_history 的**寫入面**：{sorted(set(_writes))}\n"
+        "⛔ 本頁的 NAV 區塊是**唯讀**的（`_render_nav_status` 拿的是唯讀閘門豁免，"
+        "見 `test_the_read_only_gate_really_is_read_only`）；三條真的寫入路徑一律"
+        "委派給 `render_nav_manual_section()`，不由本頁自己呼叫。\n"
+        f"讀取面（{sorted(set(_s.rsplit('.', 1)[-1] for _s in _FORBIDDEN_SERVICE_SYMBOLS))} "
+        "以外的）照舊放行。")
 
 
 def test_the_service_allowlist_is_not_a_dead_letter():
