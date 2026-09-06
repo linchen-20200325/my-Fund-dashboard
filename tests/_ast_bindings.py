@@ -151,6 +151,30 @@ def guarded_key_names(tree: ast.AST, prefix: str = "_SK_") -> set[str]:
 
     ⚠️ **刻意不收 `_FORM_KEY`**（它不帶 `_SK_` 前綴）：那是 form 自己的 widget 鍵，
     由 `applied_form()` 內部使用，**不是**這一頁的 session 資料鍵。
+
+    ## ⭐ 這條命名契約必須被遵守，否則本函式的射程是假的
+
+    **`_SK_*` ＝ 這一頁的 session 資料鍵；widget 自己的鍵不得用這個前綴。**
+    ⚠️ **這推翻了 `eac2568` 當初立的分界**（「widget 寫自己的鍵不是違規」）——
+    前綴一掃，「資料鍵」與「widget 自己的鍵」就**不再由用途區分，而是由命名區分**。
+    下一個人若把 widget 的私有鍵取名 `_SK_MY_SLIDER`，它會被當成資料鍵、**誤紅**；
+    反之若把真正的資料鍵取名 `_PORTFOLIO_KEY`（不帶前綴），它**不會被守到**。
+
+    ## 明確**不涵蓋**（照實列，2026-09-06 稽核逐一實測，不要讀成「守死了」）
+
+    * **模組層 `if:` / `try:` 區塊內**宣告的常數 —— 本函式只掃 `tree.body` 的
+      直接子節點，不進 `body` 以外的巢狀區塊。
+    * **walrus**（``_ = (_SK_X := "x")``）—— 不在 `Assign` / `AnnAssign` 兩種形態內。
+    * **tuple 解包的字面值**：``_SK_A, _SK_B = "x", "y"`` 的**名字收得到**
+      （上面那次修正），但 :func:`const_str_values` 不做 target↔value 配對
+      ⇒ **`"x"` / `"y"` 這兩個字面值解析不到**。也就是 ``key=_SK_B`` 抓得到、
+      ``key="y"`` 抓不到。
+    * **`key=` 不是單純的名字或字面值**：``key=f"{_SK_X}"`` 與 ``key=_SK_X + ""``
+      實測皆**漏放**（`session_writes` 的比對只吃 `ast.unparse` 全等或 `Constant` 值）。
+    * **不帶 `_SK_` 前綴、卻指到同一個 session 鍵的常數** ——
+      ``_PORTFOLIO_KEY = "portfolio_funds"`` 實測**漏放**。這正是上面那條命名契約
+      存在的理由：**契約一破，本函式就守不到。**
+    * **函式內宣告的常數**（刻意，見上）。
     """
     names: set[str] = set()
     for node in getattr(tree, "body", []):          # ← 模組層，不 walk
@@ -161,8 +185,16 @@ def guarded_key_names(tree: ast.AST, prefix: str = "_SK_") -> set[str]:
         else:
             continue
         for t in targets:
-            if isinstance(t, ast.Name) and t.id.startswith(prefix):
-                names.add(t.id)
+            # ⚠️ **對 target 再 walk 一次** —— 本檔檔頭「設計原則」第 2 條，
+            #    `bound_names()` 從一開始就這樣做，而本函式第一版**漏了**：
+            #    只寫 `isinstance(t, ast.Name)` ⇒ `_SK_A, _SK_B = ...` 這種
+            #    **tuple／list／starred 解包完全收不到**（2026-09-06 稽核實測：
+            #    `_SK_A, _SK_B = "x", "portfolio_funds"` ＋ `key=_SK_B` → 三序全綠）。
+            #    而本函式的 docstring 當時寫著「自動收齊」「fail-closed」——
+            #    **一個會被下一個人當前提用的全稱句，被一行程式碼推翻。**
+            for sub in ast.walk(t):
+                if isinstance(sub, ast.Name) and sub.id.startswith(prefix):
+                    names.add(sub.id)
     return const_str_values(tree, *names) if names else set()
 
 

@@ -317,8 +317,10 @@ def test_include_imports_false_is_not_a_cosmetic_flag() -> None:
 
 _PAGE_LIKE = (
     '_FORM_KEY: str = "v02_form"\n'
-    '_SK_APPLIED: str = "v02_applied"\n'
+    '_SK_APPLIED: str = "v02_applied"\n'          # AnnAssign（三頁的寫法）
     '_SK_PORTFOLIO: str = "portfolio_funds"\n'
+    '_SK_PLAIN = "plain"\n'                        # 純 Assign ← 見下方 ⚠️
+    '_SK_TUP_A, _SK_TUP_B = "ta", "tb"\n'          # tuple 解包 ← 見下方 ⚠️
     'def _f():\n'
     '    _SK_LOCAL: str = "should_not_be_collected"\n'
 )
@@ -331,11 +333,21 @@ def test_guarded_key_names_sweeps_every_sk_constant() -> None:
     上一版三頁都寫死 `const_str_values(_t, "_SK_APPLIED")`，於是
     `key=_SK_PORTFOLIO`（**使用者的 live 持股**）那顆突變
     **從 R/R/R 掉成 G/G/G**（三頁 × 三序實測）。
+
+    ⚠️ **fixture 必須涵蓋每一種模組層形態，否則這條測試的名字（*every*）是假的**
+    （2026-09-06 稽核 M6）：原本 fixture 只有 `AnnAssign`，於是
+    **整段刪掉 `guarded_key_names` 的 `ast.Assign` 分支 → 160 passed、零轉紅** ——
+    一條活的分支零突變覆蓋，任何人可以刪掉而 CI 全綠。現已補上
+    **純 `Assign`** 與 **tuple 解包**兩種。
     """
     got = guarded_key_names(ast.parse(_PAGE_LIKE))
     assert got == {"_SK_APPLIED", "v02_applied",
-                   "_SK_PORTFOLIO", "portfolio_funds"}, (
-        "模組層每一個 `_SK_*` 的**名字與字面值**都要收齊。")
+                   "_SK_PORTFOLIO", "portfolio_funds",
+                   "_SK_PLAIN", "plain",          # ← 守 `ast.Assign` 分支
+                   "_SK_TUP_A", "_SK_TUP_B"}, (   # ← 守 target 的 ast.walk
+        "模組層每一種形態的 `_SK_*` 都要收齊（AnnAssign／Assign／tuple 解包）。\n"
+        "⚠️ tuple 解包只收得到**名字**，字面值 `ta`/`tb` 解析不到 —— "
+        "那是 `const_str_values` 不做 target↔value 配對，已在其 docstring 登記。")
 
 
 def test_guarded_key_names_ignores_form_key_and_locals() -> None:
