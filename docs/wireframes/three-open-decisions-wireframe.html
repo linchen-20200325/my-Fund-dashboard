@@ -715,7 +715,9 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
         <div class="panel-head">
           <span class="kicker">題三 · 大部分不必你決定</span>
           <h2>舊 ④ 那些區塊，各自去哪</h2>
-          <p class="job">派工單說「新線框沒有逐一交代去處」。<b>查完之後結論不同：多數其實早就有明文去處</b>，只是不在 <code>ia</code> 那一份。下表共十塊，<b>九塊有明文依據；真正沒有任何線框提過、需要你拍板的只有第 10 塊</b>。</p>
+          <p class="job">派工單說「新線框沒有逐一交代去處」。<b>查完之後結論不同：多數其實早就有明文去處</b>，只是不在 <code>ia</code> 那一份。
+          <b>舊 ④ 的 8 個頂層區塊（下表 1～8 列）全部有明文依據</b>；此外還有<b>四個子區塊</b>（9～12 列），
+          其中<b>只有第 9 列有明文去處，第 10／11／12 三塊從頭到尾沒有任何線框提過 ── 那三塊要你點頭。</b></p>
         </div>
 
         <h3 class="sec"><span class="n">01</span>先更正清單本身</h3>
@@ -733,6 +735,16 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
             <span class="ft"><span class="ev m">實測</span>一條先講清楚的硬規則：<b>線框沒列，不等於該退役</b></span>
             2026-09-05 總管裁決 (A)（就地寫在 <code>ui/views/page_04_portfolio.py</code>）：「<b>線框是版面規範，不是功能清單</b>」，任何一頁都不得因為「線框沒列」就推論「那個功能不該存在」。<br>
             所以 <code>ia</code> 沒提到某一塊，<b>不構成砍掉它的理由</b> ── 下表的「保留」多半是這條規則的直接結果。
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 本輪就地更正（2026-09-06）── 沒有明文依據的是<b>三塊</b>，不是一塊<br><span style="font-weight:400;font-size:12.5px;color:var(--muted)">這是有意識的更正，不是漏刪。下表 1～10 列一列未刪、一字未改，本輪只補上 11／12 兩列並改寫計數句。</span></span>
+            <b>舊表述錯在哪</b>：本檔上一版寫「下表十塊裡九塊已有明文依據，<b>只有</b>『組合績效／效率前緣』需要你點頭」。
+            <b>那句話在它自己的射程內是對的</b>（射程＝舊 ④ 的<b>頂層</b>區塊），
+            <b>但射程寫在表頭、沒有寫在那句話裡</b> ── 於是它讀起來像「整個 ④ 只有一件事要你決定」，而那不成立。<br><br>
+            <b>實際上還有兩塊同樣「9 份線框從頭到尾沒提過」</b>，它們和第 10 塊一樣是<b>子區塊</b>，所以上一版的頂層清單掃不到：
+            <b>穿透式持股／產業集中度</b>與<b>總經曝險聯動</b>（見下表 11、12 列）。<br><br>
+            <b>⭐ 方法教訓（寫在這裡讓後人看得到）：凡是「只有 N 個」這種計數句，射程必須寫在同一句話裡。</b>
+            把射程放在表頭、把結論放在句子裡，讀者只會讀到結論 ── <b>一句射程受限的真話，被當成全稱句讀，效果和假話一樣。</b>
           </div>
           <div class="fact correct">
             <span class="ft">⚠️ 更正派工單 ──「持股重疊度診斷 → ②」這句不精確</span>
@@ -827,18 +839,77 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
           </details>
 
           <details open>
-            <summary><span class="bn">10 ─ 📊 組合績效 ／ 🎯 效率前緣</span><span class="go ask">⭐ 只有這一塊真的要你決定</span></summary>
+            <summary><span class="bn">10 ─ 📊 組合績效 ／ 🎯 效率前緣</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
             <div class="db">
               <p><span class="ev m">實測</span><b>全部 9 份線框，0 次提到它們。</b>驗證指令（repo 根目錄，可自跑）：<br>
                 <code>git grep -c "組合績效\|效率前緣" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，代表 0 命中）</b>。</p>
               <p><span class="ev m">實測</span>但它們<b>是活的</b>：<code>ui/helpers/portfolio_perf.py</code> 的 <code>render_portfolio_performance</code> 與 <code>render_efficient_frontier</code>，現在 render 在舊 ④「加入與管理基金」那一塊的<b>持倉健診段末尾</b>。產出四個 KPI：年化報酬／σ／Sharpe／最大回撤，加上各檔貢獻表。</p>
-              <p><b>這是本題唯一真正的缺口</b> ── 依上面那條硬規則（線框沒列 ≠ 該退役），它<b>不會</b>因為沒被線框提到就被砍；但也就沒有人講過它該放哪。</p>
+              <p><b>這是三個缺口之一</b>（另兩個見第 11、12 列）── 依上面那條硬規則（線框沒列 ≠ 該退役），它<b>不會</b>因為沒被線框提到就被砍；但也就沒有人講過它該放哪。</p>
               <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
                 <b>總管推薦：留在 ④，但<u>升成頂層區塊</u>、四個 KPI 走 3 欄網格、各檔貢獻表走全寬。</b><br><br>
                 <b>理由 1</b>：它回答的是「<b>我整個組合表現如何</b>」，那是 ④ 的職責（配置），不是 ② 的「哪一檔出問題」。<span class="ev w">線框原文</span><code>ia</code> Tab 02「這裡不放什麼」逐字寫「換股建議與再平衡試算 → 04（那是決策，不是診斷）」── 組合層級的績效同屬「看整體、做配置決定」那一側。<br>
                 <b>理由 2</b>：<span class="ev m">實測</span>它現在埋在「加入與管理基金」區塊的深處，<b>你得先捲過整個加入表單與健診大表才看得到</b>一組本該顯眼的組合 KPI。這不是設計，是搬遷過程留下的位置。<br>
                 <b>理由 3</b>：四個 KPI 是卡片型內容，<b>正好合鐵則 01 的 3 欄網格</b>；貢獻表欄位多，走全寬，與題一同一條理由。<br><br>
                 <b>不推薦搬去 ②</b>：② 全篇只診斷不決策，而「年化報酬／Sharpe」是拿來決定要不要調整配置的，放進 ② 會讓 ② 的職責不純 ── 那正是換股顧問被移出 ② 的同一個理由。
+              </p>
+            </div>
+          </details>
+
+          <details open>
+            <summary><span class="bn">11 ─ 🔬 穿透式持股集中度 ／ 產業集中度</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
+            <div class="db">
+              <p><b>它在做什麼（先講白話，因為線框從沒描述過它）</b>：你買的是<b>基金</b>，基金底下持有的是<b>股票</b>。
+                這一塊把你所有基金<b>穿透合併計算</b>，告訴你「<b>你以為分散了，其實 X% 壓在同一批股票／同一個產業</b>」。<b>這是風險示警，不是統計花絮。</b></p>
+              <p><span class="ev m">實測</span><b>9 份線框 0 次提到它。</b>驗證指令（repo 根目錄，可自跑）：<br>
+                <code>git grep -c "集中度" origin/main -- 'docs/wireframes/'</code> → <b>全部 0</b>（本檔自己除外）。<br>
+                <b>正對照（證明掃描有效）</b>：同樣掃法下「保單」命中 4 份、「配息」8 份、「核心」8 份。<br>
+                ⚠️ <b>本組另做了別名掃描防漏</b>（<code>集中</code>／<code>分散</code>／<code>個股</code>／<code>穿透</code>）：
+                「集中」的命中<b>全是動詞</b>（「本次改動集中在這頁」「設定類集中到一頁」）；
+                「穿透」在 3 份線框命中 6 次，<b>逐條讀過全部是「三率穿透」</b>（單一個股的財務三率），<b>沒有一個是持股集中度</b>。</p>
+              <p><span class="ev m">實測</span><b>但它是活的，而且是刻意被救回來的</b>：<code>ui/tab3_portfolio.py</code> 就地註解逐字寫著 ──
+                「以下 4 個都是『風險揭露』元件（總經曝險 / 資料新鮮度 / 持股集中度 / 產業集中度）。原本 4 個 <code>except: pass</code> 讓它們失敗時<b>畫面完全沒有痕跡</b>
+                ──『<b>沒出現</b>』與『<b>沒風險</b>』長得一模一樣，是 §1 反造假的鏡像違規。」<br>
+                <b>這句話正好說明它為什麼不能就這樣消失在版面裡</b>：一個風險揭露元件被排版排到沒人看見，效果等同於它失敗時被吞掉。</p>
+              <p><span class="ev m">實測</span><b>它現在在哪</b>：住在<b>「配置總覽」的 <code>_ov_core</code> 子容器</b>裡（<code>with _ov_core:</code> 涵蓋該段），
+                也就是<b>下表第 3 列那一塊的深處</b> ── 所以上一版的頂層清單掃不到它。實作為 <code>ui/helpers/concentration.py</code> 的
+                <code>render_concentration_summary</code>（持股）與 <code>render_sector_concentration_summary</code>（產業）。</p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
+                <b>總管推薦：留在 ④，升成看得見的具名區塊，緊接在配置比例之後。</b><br><br>
+                <b>理由 1</b>：它回答的是「<b>我這個配置真的分散嗎</b>」── 那正是看完核心／衛星比例之後的下一個問題，<b>接在後面才讀得順</b>。<br>
+                <b>理由 2</b>：它是<b>風險揭露</b>。上面那段就地註解已經為「失敗時無痕跡」修過一次；<b>「排版上看不見」是同一個失效模式的另一種寫法</b>。<br>
+                <b>理由 3</b>：持股與產業兩塊<b>合成一個區塊</b>（同一個檔、同一件事的兩個切面），不要各占一格。<br><br>
+                ⚠️ <b>但「升成看得見的區塊」這件事本身就是版面變更，所以才要問你</b> ── 見下方第 12 列末段對這條規則射程的說明。
+              </p>
+            </div>
+          </details>
+
+          <details open>
+            <summary><span class="bn">12 ─ 🧭 總經曝險聯動</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
+            <div class="db">
+              <p><b>它在做什麼</b>：把 <b>① 市場總覽</b>判出來的景氣位階，接到<b>你的組合</b>上，提示目前配置在這個環境下偏積極還是偏保守。
+                <b>這是「大盤」與「我的配置」之間唯一一條連線</b> ── 沒有它，① 判完的結論就停在 ①。</p>
+              <p><span class="ev m">實測</span><b>9 份線框 0 次提到它。</b><code>git grep -c "總經曝險" origin/main -- 'docs/wireframes/'</code> → <b>全部 0</b>（本檔除外）。
+                <b>別名掃描防漏</b>：「曝險」另在 <code>fund-wireframe-final</code> 命中 2 次，<b>逐條讀過都是「FX 曝險」</b>（匯率），<b>不是總經曝險</b>；「景氣」的命中全在 ① 總經頁自己的版面，<b>沒有一句把它接到組合上</b>。</p>
+              <p><span class="ev m">實測</span><b>它已經在配置比例旁邊了，不必搬</b>：呼叫處逐字是
+                <code>render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)</code> ──
+                <b>它吃的參數就是核心比例本身</b>，而那個 KPI 就在它上方幾行 render。<b>「它在解釋那個比例該不該動」不是推論，是它的函式簽章。</b></p>
+              <p><span class="ev m">實測</span><b>它已經先把一個誠實問題處理掉了</b>：<code>ui/helpers/macro/linkage.py</code> 檔頭逐字寫著
+                「phase_info.alloc 是『股/債/現金』資產類別配置……<b>與組合的『核心/衛星』軸不同 → banner 分開呈現，不硬湊等號</b>」，
+                且只在<b>防禦 regime ＋ 高系統性風險 ＋ 核心比例偏低</b>三個條件同時成立時才給輕量提示。<b>它不會天天對你喊話。</b><br>
+                同檔另註明「Tab3 render 時 Tab1 可能尚未載入 → 容錯」，<b>未載入時是灰字說明，不是紅字錯誤</b>（合鐵則 03 三態分離）。</p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
+                <b>總管推薦：留在 ④、維持現在的位置（緊貼核心／衛星比例），但在線框上<u>具名</u>成一個區塊。</b><br><br>
+                <b>理由</b>：這一塊<b>不需要搬</b>，它的位置本來就對（見上面的函式簽章）。要你點頭的是<b>「把它寫進線框、讓它有名字」</b> ──
+                因為線框沒列到它，而下一批照線框施工的人<b>不會知道它存在</b>。<span class="ev g">推測</span>本組認為這正是它至今沒被任何線框提過的原因：它是 v19.64 之後才長出來的，而線框沒回頭補。<b>本組沒有查證這個時序，只是判斷。</b>
+              </p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--gold);border-left:3px solid var(--gold);border-radius:2px;background:var(--gold-soft)">
+                <b>⚠️ 這三塊為什麼非問你不可 ── 一條規則的兩半，只引用一半會出錯</b><br>
+                上面第二格引的那條硬規則（<b>2026-09-05 總管裁決 (A)</b>，<span class="ev m">實測</span>就地寫在 <code>ui/views/page_04_portfolio.py</code>）是
+                「<b>線框是版面規範，不是功能清單</b>」。<b>但它自己緊接著寫了反面</b>，逐字：<br>
+                「⚠️ <b>反過來也不成立</b>：<b>不得</b>把本條讀成『線框沒列的都可以自己加』。它解除的是『<b>沒列 ⇒ 不該存在</b>』這個推論，<b>不是</b>授權在線框之外新增版面（那仍是客戶 gate）。」<br>
+                <b>→ 所以裁決 (A) 只保住了「這三塊不會被砍」，它<u>沒有</u>授權我們把它們升成看得見的區塊。</b>
+                <b>升版面這件事仍然要你拍板 ── 這就是本題存在的理由。</b><br>
+                ⚠️ <b>據實標明出處</b>：這條規則<b>是 2026-09-05 的總管裁決，不是你說過的話</b>，就地寫在程式裡；<b>你隨時可以推翻它</b>。
               </p>
             </div>
           </details>
