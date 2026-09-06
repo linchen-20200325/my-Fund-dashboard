@@ -79,16 +79,38 @@
   `tests/test_wf03_research_skeleton.py` 的順序斷言會轉紅 ——
   **正解是把它改成「選定後才展開」的 gate 驗證，不是把斷言放寬。**
 
-資料從哪裡來（下一批的入口，以及一個**現在就要知道的缺口**）
+資料從哪裡來（**深度區已接上**；其餘兩塊仍是缺口）
 ------------------------------------------------------------
-⚠️ **本批沒有任何 `services/**` 呼叫** —— 骨架階段沒有東西要算。
-下一批填內容時，取數一律走 `services/**` 的 public 函式；本組**實地確認存在**的有：
-`services.fund_service.fetch_fund_by_key_enriched` /
-`services.fund_service.fetch_fund_from_moneydj_url_enriched`（單檔深度）、
-`services.fund_row.process_one_fund`（批次單檔 worker）。
-⚠️ 這串是**看到的**，**不是**「這些就夠了」的宣稱 —— 夠不夠要等真的去接才知道。
+**單一基金深度的六格全部由同一次呼叫供給**：
+:func:`services.moneydj_fetcher.auto_fetch_moneydj`（**L2**，一次往返、六格共用）。
+⚠️ **刻意不走** `fetch_fund_by_key_enriched` —— 本組實測它的回傳**沒有
+`holdings` / `perf` / `currency`**，那會讓六格少三格，而且畫面上看不出為什麼。
 
-⛔ **缺口，先寫在這裡免得下一批當場自己發明**：**「搜尋」在 L2 沒有入口。**
+⚠️ **本組對該入口的四處實測更正，寫在這裡免得下一個人照舊描述做**
+（`CLAUDE.md §-2` 規則 6：以下是**本組單組實測**，未經第二組驗證）：
+
+1. **它會拋例外。** 「純代碼」分支有 `try/except` 把例外收成 `{"error": …}`，
+   但 **URL 直傳分支（`raw_input` 含 `yp010000` / `yp010001`）沒有** ——
+   實測 patch 掉下游使其拋 `RuntimeError`：URL 分支**原封拋出**、代碼分支回 `{'error': …}`。
+   → 本檔**刻意不 try/except**：讓它拋到 :func:`~ui.helpers.render_state.safe_section`，
+   由那裡走 `system_error()` 畫**真的**紅框（帶真的 traceback）。
+   ⛔ **不得**為了塗紅而自己 `raise Exception(result["error"])` —— 那是捏造的例外（§1）。
+2. **`status` 不保證存在。** URL 直傳分支**不經** `normalize_result_state`；
+   而代碼分支全敗時回的可能是 `{'error': …}` **只有一個鍵**（實測）。
+   → 本檔的判定一律**看內容**（:func:`_deep_facts`），`status` 只當佐證。
+3. **配息的血緣不在每一筆裡。** 三個產生點（`_src_fundclear_div` / `_src_cnyes_div` /
+   `_src_tcb_div` ＋ orchestrator 的 wb05 解析）吐的欄位都是
+   `date / ex_date / pay_date / amount / yield_pct / **currency**` ——
+   **沒有 `source`、沒有 `fetched_at`**，而**幣別是逐筆帶的**（不是只在 `result["currency"]`）。
+   → 本檔逐筆顯示幣別，並用 `shared.data_quality.reconcile_row_currencies`
+   判斷「這一組配息能不能誠實宣告單一幣別」。
+4. **`risk_metric_meta` 只涵蓋四個指標**（`sharpe` / `sortino` / `calmar` / `max_drawdown`），
+   **`std_1y` 沒有 meta**（它的來源在 `metrics["std_source"]`）；
+   且 `sharpe` 那一格的缺值原因鍵是 **`self_calc_reason`**，不是 `reason`
+   （只有稀疏降級路徑會補寫 `reason`）。**逐格缺因要照這個實況取，不能假設一致。**
+
+⛔ **仍然是缺口，本批沒有動**：**「搜尋」在 L2 沒有入口。**
+
    本組實測 `services/**` 沒有任何 fund 搜尋函式；現行搜尋實作住在 **L1**
    （`repositories.fund.tdcc_search_fund`），UI 直呼它走的是憲法 §8.2.A.1
    **已登記的 `EX-PASSTHRU-1` 例外**（該列現行登記的呼叫點是
@@ -147,6 +169,14 @@ from ui.helpers.ia import (
 from ui.helpers.ia.empty_state import empty_state
 from ui.helpers.render_state import not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
+
+# ⚠️ **L2 服務層（客戶方針第 2 條的唯一取數入口）**。
+#    `services.moneydj_fetcher` 是 L2；它自己往下走 `services.fund_service` 的
+#    enriched wrapper → L1。本檔**不碰** `repositories` / `infra` / 任何網路函式庫，
+#    由 `tests/test_wf03_research_skeleton.py::test_the_page_never_reaches_into_the_data_layer` 釘住。
+from services.moneydj_fetcher import auto_fetch_moneydj
+# 幣別一致性判定（純函式、零 I/O）。**不自己寫一份** —— §1 的失效模式就寫在它的 docstring 裡。
+from shared.data_quality import reconcile_row_currencies
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
 # ⚠️ 刻意**不**沿用舊三頁的鍵：舊頁依方針第 3 條仍在磁碟上、且仍接在 `app.py`，
@@ -227,6 +257,41 @@ DEEP_DIVE_PROVENANCE: str = "資料來源與抓取時間"
 #: 本批共用的灰態理由。**只有一句話**，因為它會出現在八個地方，
 #: 八個地方各寫一句就是八份會各自漂移的真相源（§2.1）。
 _PENDING_NOTE: str = "本頁分批上線，這一塊的內容還沒接上"
+
+#: ⚠️ **`_PENDING_NOTE` 自 2026-09-06 起只剩兩個消費者**（:data:`BLOCK_RESULTS` 與
+#: :data:`BLOCK_BATCH`）。深度區的六格已接上真取數，它們的灰態理由**一律來自資料本身**
+#: （缺哪一個就說那一個為什麼缺），**不再共用這一句** ——
+#: 共用一句話會讓「查無此檔」「來源當下不可用」「樣本數不足」三種完全不同的處境
+#: 長得一模一樣，那正是 §1 要防的事。
+
+# ── 單一基金深度：欄位對照表（**畫面順序即這裡的順序**）────────────────────
+#: 績效分期：`(result["perf"] 的鍵, 畫面標籤)`。
+#: ⚠️ **不含 `2Y`**：`fetch_performance_wb01` 的對照表確實吐得出 `2Y`，但線框
+#:    沒有列它，本檔**不自行加欄**（多一欄是版面異動 ＝ 客戶 gate，§-1.5 v3 §03-2 ①）。
+#:    **它不是漏掉，是刻意不畫** —— 下一個人看到 `perf["2Y"]` 有值卻沒顯示時請讀這一行。
+PERF_PERIODS: tuple[tuple[str, str], ...] = (
+    ("1M", "近 1 月"), ("3M", "近 3 月"), ("6M", "近 6 月"),
+    ("1Y", "近 1 年"), ("3Y", "近 3 年"), ("5Y", "近 5 年"),
+)
+
+#: 風險指標：`(metrics 的鍵, 畫面標籤, 單位後綴)`。
+#: ⚠️ **`std_1y` 刻意排在最後且沒有 meta**：`risk_metric_meta` 只有前四個
+#:    （實測 `services/fund_service.py::calc_metrics` 的 `_risk_metric_meta`），
+#:    `std_1y` 的來源住在 `metrics["std_source"]`。:func:`_risk_reason` 因此分兩條路。
+RISK_METRICS: tuple[tuple[str, str, str], ...] = (
+    ("sharpe", "Sharpe", ""),
+    ("sortino", "Sortino", ""),
+    ("calmar", "Calmar", ""),
+    ("max_drawdown", "最大回撤", "%"),
+    ("std_1y", "年化波動", "%"),
+)
+
+#: 幣別無法誠實宣告時的標記。**線框第三張示意卡就是在示範這個處境**
+#: （「幣別未知／此來源未提供計價幣別，換算後績效不予顯示」＋ chip「不猜值」）。
+#: ⚠️ 本檔**不做任何換算**，所以「不予顯示」在這裡的落點是：
+#:    金額照樣顯示（那是原幣的真值），但**旁邊一定標明幣別未知**，
+#:    絕不挑一個幣別填上去（`reconcile_row_currencies` 的 docstring 講的就是這件事）。
+CCY_UNKNOWN: str = "幣別未知"
 
 
 def _pending_where(block: str) -> str:
@@ -343,41 +408,478 @@ def _render_results() -> None:
               where=_pending_where(BLOCK_FORM))
 
 
-def _render_deep_dive() -> None:
-    """區塊 3｜單一基金深度。**五個區塊 ＋ 一則來源標註**，本批全灰。
+# ══════════════════════════════════════════════════════════════════════════
+# 單一基金深度：把**一次**取數的回傳攤成六格各自的事實（純函式、零 I/O、零渲染）
+# ══════════════════════════════════════════════════════════════════════════
+# ⚠️ **為什麼要把它們拆成純函式**：這一區的規則全部是「**沒有值的時候不准生一個出來**」，
+#    而那種規則在渲染函式裡幾乎驗不動（要先組畫面、再對字串猜哪個數字屬於誰）。
+#    拆成純函式之後，守衛可以逐格餵 `None` 再看回傳 —— 突變拿掉任何一條 `is None`
+#    判斷都會**單獨**轉紅。
 
-    版面依線框：前三塊走 3 欄網格，持股與配息走**大表全寬**
-    （9 欄以上的表塞進 1/3 寬會被壓到無法閱讀 —— `ui/helpers/ia/layout.py` 的
-    `wide_table()` 存在的理由就是這個）。
+#: 前十大持股表的欄名（`wide_table` 直接吃 list[dict]，鍵即欄名）。
+HOLDING_COLS: tuple[str, ...] = ("排名", "持股名稱", "產業", "權重 %")
+#: 配息表的欄名。⚠️ **幣別是逐筆欄位**，不是表外的一句話 —— 理由見模組 docstring 第 3 點。
+DIVIDEND_COLS: tuple[str, ...] = ("配息基準日", "除息日", "發放日", "每單位配息", "幣別", "年化配息率 %")
+#: 來源軌跡表的欄名。
+TRACE_COLS: tuple[str, ...] = ("來源", "結果", "說明")
+#: 來源軌跡的兩種結果字面值（具名而不 inline —— 守衛要拿它比對）。
+TRACE_OK: str = "成功"
+TRACE_FAIL: str = "失敗"
+#: 上游**沒有**給缺值原因時的誠實佔位。⛔ 不得換成一句猜出來的理由。
+NO_REASON: str = "上游沒有附缺值原因"
 
-    ⚠️ **本函式沒有為「還沒選定基金」另立一種灰**：骨架階段就算真的選了一檔，
-       這裡照樣畫不出東西 —— 那時說「請先選一檔」是**假的下一步**。
-       誠實的理由只有一個：這一塊還沒接上（見模組 docstring「選定後展開」那段）。
+
+def _fmt(value: object, unit: str = "") -> str | None:
+    """數值 → 顯示字串；**不是數字就回 `None`（呼叫端據此判定「這一格沒有值」）**。
+
+    ⚠️ **`None` 進來就 `None` 出去，絕不回 `0` 或 `"—"`** —— 回一個佔位字元會讓
+    「算不出來」與「算出來剛好是 0」長得一模一樣（§1）。
+    ⚠️ `bool` 明確排除：`isinstance(True, int)` 為真，不擋的話 `True` 會被印成 `1`。
     """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value:                      # NaN（不 import numpy/pandas 的判法）
+        return None
+    return f"{value:,.2f}{unit}"
+
+
+def _series_of(result: dict) -> object | None:
+    """`result["series"]`，且**確定它有長度**；否則 `None`。"""
+    _s = result.get("series")
+    if _s is None or not hasattr(_s, "__len__") or len(_s) == 0:
+        return None
+    return _s
+
+
+def _attrs_of(series: object) -> dict:
+    """`Series.attrs`，型別異常一律當空。
+
+    ⚠️ **attrs 會掉。** `repositories/fund/fund_orchestration.py` 就地寫著
+    「`attrs` 在 concat/copy 中可能掉」—— 所以本檔**不得**把「有 series 就有血緣」
+    當成前提；掉了就誠實顯示沒有，不要回填一個來源名。
+    """
+    _a = getattr(series, "attrs", None)
+    return _a if isinstance(_a, dict) else {}
+
+
+def _nav_facts(result: dict) -> dict | None:
+    """格 1｜NAV 走勢的事實；序列不存在或為空 → `None`。
+
+    ⚠️ **本格刻意不畫折線圖，這是決定不是遺漏。** 線框把前三塊釘死為 3 欄卡片，
+    而 `ia.state_card()`（鐵則 01／03 的組合入口）**沒有圖表槽位**；
+    另開一張全寬圖 ＝ **版面異動**，屬 §-1.5 v3 §03-2 ① 的**客戶 gate**，
+    不是實作細節。**已登記待客戶裁決**，在那之前本格給的是序列本身的事實
+    （最新值／幣別／筆數／跨度／首末日／來源），**不是一句「走勢向上」的形容詞**。
+    """
+    _s = _series_of(result)
+    if _s is None:
+        return None
+    _attrs = _attrs_of(_s)
+    try:
+        _first, _last = str(_s.index.min())[:10], str(_s.index.max())[:10]
+        _latest = _fmt(float(_s.iloc[-1]), "")
+    except Exception:                       # noqa: BLE001 —— 見下方 ⚠️
+        # ⚠️ **這個 except 不吞任何東西**：它只把「這條序列的索引不是時間軸」
+        #    收斂成「本格沒有可顯示的事實」→ 呼叫端照樣走灰態並說出理由。
+        #    ⛔ 它**不**捕捉取數本身的失敗（那條路徑刻意讓例外一路拋到
+        #    `safe_section()` 去畫紅框），也**不**在這裡印任何東西
+        #    —— 在 handler 裡印例外會踩 `tests/test_render_state_color_separation.py`
+        #    的方向 A ratchet，而且那本來就是錯的顏色。
+        return None
+    if _latest is None:
+        return None
+    return {
+        "name": str(result.get("fund_name") or "").strip(),
+        "latest": _latest,
+        "currency": str(result.get("currency") or "").strip(),
+        "n": len(_s),
+        "first": _first,
+        "last": _last,
+        "span_days": result.get("nav_span_days"),
+        "source": str(_attrs.get("source") or result.get("source") or "").strip(),
+        "fetched_at": str(_attrs.get("fetched_at") or "").strip(),
+        "merged": str(_attrs.get("nav_history_merged") or "").strip(),
+    }
+
+
+def _perf_lines(result: dict) -> tuple[list[str], list[str]]:
+    """格 2｜績效分期 → `(有值的行, 缺值的標籤)`。
+
+    ⚠️ **缺的期別列出名字、不列數字** —— 少一個期別跟「那個期別是 0%」是兩回事。
+    """
+    _perf = result.get("perf")
+    _perf = _perf if isinstance(_perf, dict) else {}
+    _shown: list[str] = []
+    _missing: list[str] = []
+    for _key, _label in PERF_PERIODS:
+        _txt = _fmt(_perf.get(_key), "%")
+        (_shown.append(f"{_label} {_txt}") if _txt is not None
+         else _missing.append(_label))
+    return _shown, _missing
+
+
+def _perf_source(result: dict) -> str:
+    """績效的來源標記：`wb01`（MoneyDJ 官方含息總報酬）或 `local_calc`（本地補算）。"""
+    return str(result.get("perf_source") or "").strip()
+
+
+def _risk_reason(metrics: dict, key: str) -> str:
+    """某個風險指標**為什麼**沒有值。**取該指標自己的原因，不共用一句。**
+
+    取用順序與其實測依據（模組 docstring 第 4 點）：
+    1. `risk_metric_meta[key]["reason"]` —— `sortino` / `calmar` / `max_drawdown` 走這條；
+    2. `risk_metric_meta[key]["self_calc_reason"]` —— **`sharpe` 只有這一個鍵**；
+    3. `metrics["sparse_reason"]` —— 稀疏降級路徑（也是 `std_1y` 唯一可能的來源，
+       因為 **`std_1y` 在 `risk_metric_meta` 裡根本沒有條目**）；
+    4. 都沒有 → :data:`NO_REASON`。⛔ **不編一個聽起來合理的理由。**
+    """
+    _meta = metrics.get("risk_metric_meta")
+    _entry = _meta.get(key) if isinstance(_meta, dict) else None
+    if isinstance(_entry, dict):
+        for _k in ("reason", "self_calc_reason"):
+            _v = _entry.get(_k)
+            if isinstance(_v, str) and _v.strip():
+                return _v.strip()
+    _sparse = metrics.get("sparse_reason")
+    if isinstance(_sparse, str) and _sparse.strip():
+        return _sparse.strip()
+    return NO_REASON
+
+
+def _risk_lines(result: dict) -> tuple[list[str], list[str]]:
+    """格 3｜風險指標 → `(有值的行, 缺值的行＋各自的原因)`。
+
+    ⛔ **`None` 一律進第二個 list，不補 0、不沿用別的指標、不留空字串。**
+    `finalize_fund_metrics` 在序列稀疏時會**主動**把 `sortino` / `calmar` /
+    自算 `sharpe` / 自算 `std_*` 設成 `None` 並寫好 `sparse_reason` ——
+    那句話**已經是寫好的誠實理由**，本檔照抄，不自己再想一句。
+    """
+    _m = result.get("metrics")
+    _m = _m if isinstance(_m, dict) else {}
+    _shown: list[str] = []
+    _missing: list[str] = []
+    for _key, _label, _unit in RISK_METRICS:
+        _txt = _fmt(_m.get(_key), _unit)
+        if _txt is not None:
+            _shown.append(f"{_label} {_txt}")
+        else:
+            _missing.append(f"{_label}：{_risk_reason(_m, _key)}")
+    return _shown, _missing
+
+
+def _holdings_rows(result: dict) -> list[dict]:
+    """格 4｜前十大持股的表格列。缺 `name` 或缺權重的列**照樣列出**，權重留空。
+
+    ⚠️ **不過濾掉沒有權重的持股** —— 那會讓「前十大」變成「我算得出權重的那幾大」，
+    使用者看到的排名就不再是上游給的排名（§1）。
+    """
+    _h = result.get("holdings")
+    _h = _h if isinstance(_h, dict) else {}
+    _top = _h.get("top_holdings")
+    if not isinstance(_top, list):
+        return []
+    _rows: list[dict] = []
+    for _i, _item in enumerate(_top, start=1):
+        if not isinstance(_item, dict):
+            continue
+        _name = str(_item.get("name") or "").strip()
+        if not _name:
+            continue
+        _rows.append({
+            HOLDING_COLS[0]: _i,
+            HOLDING_COLS[1]: _name,
+            HOLDING_COLS[2]: str(_item.get("sector") or "").strip(),
+            HOLDING_COLS[3]: _fmt(_item.get("pct")) or "",
+        })
+    return _rows
+
+
+def _holdings_reason(result: dict) -> str:
+    """持股抓不到時，**上游自己給的診斷**（`holdings["diag"]`）。
+
+    `fetch_holdings` 全失敗時會回 `{"source": "MoneyDJ:all_failed", "diag": [...]}`
+    —— 那份 diag 逐一列出哪個 host 回了什麼，比任何我們自己寫的一句話都有用。
+    """
+    _h = result.get("holdings")
+    _h = _h if isinstance(_h, dict) else {}
+    _diag = _h.get("diag")
+    if isinstance(_diag, list) and _diag:
+        return " ".join(str(_d).strip() for _d in _diag if str(_d).strip())[:300]
+    _src = str(_h.get("source") or "").strip()
+    return f"上游回報來源：{_src}" if _src else NO_REASON
+
+
+def _dividend_rows(result: dict) -> list[dict]:
+    """格 5｜配息紀錄的表格列。**幣別逐筆帶**（實測欄位，見模組 docstring 第 3 點）。
+
+    ⚠️ 逐筆的 `currency` 在上游可能是**死預設**（`_src_fundclear_div` 缺欄時填 `"USD"`）。
+    `reconcile_row_currencies` 的 docstring 已就地寫明它證明不了這一種
+    （「上游若整批死預設成同一個錯幣別，這裡照樣回那個錯的值」）——
+    **本檔不假裝看得出來**，只保證「列與列之間不一致時不挑一個」。
+    """
+    _divs = result.get("dividends")
+    if not isinstance(_divs, list):
+        return []
+    _rows: list[dict] = []
+    for _d in _divs:
+        if not isinstance(_d, dict):
+            continue
+        _amt = _fmt(_d.get("amount"))
+        if _amt is None:
+            continue                        # 沒有金額的配息列不是資料，是雜訊
+        _rows.append({
+            DIVIDEND_COLS[0]: str(_d.get("date") or "").strip(),
+            DIVIDEND_COLS[1]: str(_d.get("ex_date") or "").strip(),
+            DIVIDEND_COLS[2]: str(_d.get("pay_date") or "").strip(),
+            DIVIDEND_COLS[3]: _amt,
+            DIVIDEND_COLS[4]: str(_d.get("currency") or "").strip() or CCY_UNKNOWN,
+            DIVIDEND_COLS[5]: _fmt(_d.get("yield_pct")) or "",
+        })
+    return _rows
+
+
+def _declared_currency(rows: list[dict]) -> str:
+    """這一組配息能不能**誠實宣告**單一幣別；任何分歧或未知 → `""`。
+
+    直接委派 `shared.data_quality.reconcile_row_currencies`（**不自己寫一份**）：
+    本組實測 `['TWD','USD'] → ''`、`['USD','USD'] → 'USD'`、`[] → ''`、`['USD',''] → ''`。
+    """
+    return reconcile_row_currencies([_r.get(DIVIDEND_COLS[4], "") for _r in rows])
+
+
+def _trace_rows(result: dict) -> list[dict]:
+    """格 6｜逐源軌跡。**成功與失敗都列** —— 只列失敗會看不出「試過哪些」。"""
+    _tr = result.get("source_trace")
+    if not isinstance(_tr, list):
+        return []
+    _rows: list[dict] = []
+    for _t in _tr:
+        if not isinstance(_t, dict):
+            continue
+        _ok = bool(_t.get("success"))
+        _detail = _t.get("error") or _t.get("note")
+        if _detail is None and _t.get("nav_count") is not None:
+            _detail = f"取得 {_t['nav_count']} 筆淨值"
+        _rows.append({
+            TRACE_COLS[0]: str(_t.get("source") or "").strip(),
+            TRACE_COLS[1]: TRACE_OK if _ok else TRACE_FAIL,
+            TRACE_COLS[2]: str(_detail or "").strip(),
+        })
+    return _rows
+
+
+def _has_anything(result: dict) -> bool:
+    """這次取數**到底有沒有帶回任何一格能用的東西**。
+
+    ⚠️ **這個旗標存在的唯一理由，是不要讓一句話跑到不屬於它的格子裡。**
+    本組初稿把 :func:`_fetch_failed_note`（「這個代碼在 N 個來源都沒有取到淨值」）
+    當成**所有**空格子的共用文案 —— 於是一檔**淨值抓到了、只是沒有配息**的基金，
+    配息那一格會印出「沒有取到淨值」。**那是一句對著使用者說的假話**，
+    而且它看起來完全合理，正是 §1 最難發現的那一種。
+    → 全敗才用共用文案；只要有任何一格有料，其餘空格一律講**自己**的原因。
+    """
+    return bool(_series_of(result) is not None
+                or _perf_lines(result)[0]
+                or _risk_lines(result)[0]
+                or _holdings_rows(result)
+                or _dividend_rows(result))
+
+
+def _nav_reason(result: dict) -> str:
+    """淨值序列缺席的原因 —— **優先用上游 `source_trace` 裡自己寫的那一句**。
+
+    `finalize_fund_metrics` 會就地追加 `{"source": "nav_series", "success": False,
+    "error": "無淨值序列"}`，序列太短時則是 `"只有 N 筆(需≥10)"`。
+    那兩句分別對應完全不同的下一步（換代碼／等資料補齊），**不能合併**。
+    """
+    for _r in _trace_rows(result):
+        if _r[TRACE_COLS[0]] == "nav_series" and _r[TRACE_COLS[1]] == TRACE_FAIL:
+            return _r[TRACE_COLS[2]] or NO_REASON
+    return "這次沒有帶回淨值序列，上游也沒有說明原因。"
+
+
+def _fetch_failed_note(result: dict) -> str:
+    """全敗時的**共用處境描述** —— 刻意寫成「兩種可能」，因為 L2 分不出來。
+
+    ⛔ **總管裁決（2026-09-06，內部自決）：不畫紅、也不寫「查無此檔」。**
+    `auto_fetch_moneydj` 對「代碼打錯」與「來源全掛」**回傳完全一樣的 failed**，
+    `source_trace` 的 error 是「查無資料」「所有平台均無回應」這種泛稱。
+    - 塗紅 → 對打錯代碼的人謊稱系統故障；
+    - 寫「查無此檔」→ 對來源掛掉的人謊稱這檔不存在。
+    **兩種都是編出來的**，而 L2 沒有給我們分辨所需的資訊。
+    → 誠實的做法是說出兩種可能，並把逐源軌跡攤開讓使用者自己判斷（格 6）。
+    """
+    _n = sum(1 for _r in _trace_rows(result) if _r[TRACE_COLS[1]] == TRACE_FAIL)
+    _where = f"（逐一嘗試的結果列在下方的「{DEEP_DIVE_PROVENANCE}」）"
+    if _n:
+        return (f"這個代碼在 {_n} 個來源都沒有取到淨值 —— "
+                f"可能是代碼打錯，也可能是來源當下不可用。{_where}")
+    return ("這次取數沒有帶回任何淨值，上游也沒有留下逐源紀錄 —— "
+            "可能是代碼打錯，也可能是來源當下不可用。")
+
+
+def _render_deep_dive() -> None:
+    """區塊 3｜單一基金深度。**六格全部由同一次 L2 呼叫供給。**
+
+    ⛔ **一次呼叫，不是六次。** 六格各自呼叫一次 ＝ 六次網路往返（L1 有 TTL cache，
+    但 `finalize_fund_metrics` 每次都會重跑），而且六格可能拿到**不同時間點**的
+    快照 —— 畫面上會出現「NAV 是今天的、持股是一小時前的」而沒有任何跡象。
+    守衛：`tests/test_wf03_research_skeleton.py::test_the_deep_dive_fetches_exactly_once`。
+
+    ⛔ **本函式沒有 try/except，這是刻意的。** `auto_fetch_moneydj` 的 URL 直傳分支
+    會原封拋出下游例外（本組實測）—— 那條路徑一路拋到
+    `safe_section(BLOCK_DEEP, …)`，由它用**真的**例外物件畫紅框 ＋ traceback。
+    自己接下來再包一個假例外去塗紅，是 §1 明禁的造假。
+
+    ⚠️ **「選定後展開」仍未恢復**（模組 docstring 已登記）：結果卡還沒接上，
+    沒有東西可以被「選定」，所以本批直接拿**已送出的查詢字串**當基金鍵。
+    下一批接上結果卡時，這裡要改吃使用者選中的那一檔。
+    """
+    _query = _applied_query() or {}
+    _result = auto_fetch_moneydj(str(_query.get("term") or ""))
+    if not isinstance(_result, dict):
+        # `return_page_type=False` 的契約就是回 dict；型別不對代表上游換了契約。
+        # ⛔ 不猜、不降級 —— 交給 `safe_section()` 畫紅框（§1）。
+        raise TypeError(
+            f"auto_fetch_moneydj() 應回 dict（return_page_type=False），"
+            f"實際得到 {type(_result).__name__} —— 上游契約變了，畫面不得自行降級。")
+
     _where = _pending_where(BLOCK_FORM)
+    # ⚠️ **共用文案只在「一格都沒有」時才准用**（理由見 :func:`_has_anything`）。
+    _blank = _fetch_failed_note(_result) if not _has_anything(_result) else ""
+
+    _nav = _nav_facts(_result)
+    _perf_shown, _perf_missing = _perf_lines(_result)
+    _risk_shown, _risk_missing = _risk_lines(_result)
+
     render_cards([
-        {"title": DEEP_DIVE_CARDS[0], "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（淨值時間序列）。", "where": _where},
-        {"title": DEEP_DIVE_CARDS[1], "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（近 1 月／3 月／1 年／成立以來的分期報酬）。",
-         "where": _where},
-        {"title": DEEP_DIVE_CARDS[2], "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（波動度、最大回撤、Sharpe）。", "where": _where},
+        _nav_card(_nav, _blank or _nav_reason(_result), _where),
+        _perf_card(_perf_shown, _perf_missing, _perf_source(_result),
+                   _blank or "上游沒有給任何期別的報酬。", _where),
+        _risk_card(_risk_shown, _risk_missing,
+                   _blank or "上游沒有給任何風險指標。", _where),
     ])
 
-    for _name, _missing in zip(
-            DEEP_DIVE_TABLES,
-            (f"{_PENDING_NOTE}（持股名稱、權重與截止日）。",
-             f"{_PENDING_NOTE}（除息日、每單位配息與幣別）。")):
-        st.markdown(f"##### {_name}")
-        wide_table([], empty_title=f"{_name}還沒有可顯示的列",
-                   empty_missing=_missing, empty_where=_where)
+    # ── 持股與配息：大表全寬（線框：「持股與配息為大表全寬」）───────────────
+    # ⛔ `wide_table` **不得**放進 `card_row()` 的欄位裡（layout.py 就地寫明理由）。
+    _hold_rows = _holdings_rows(_result)
+    st.markdown(f"##### {DEEP_DIVE_TABLES[0]}")
+    if wide_table(_hold_rows,
+                  empty_title=f"{DEEP_DIVE_TABLES[0]}還沒有可顯示的列",
+                  empty_missing=(_holdings_reason(_result) if _result.get("holdings")
+                                 else _blank or "上游這次沒有回傳持股資料。"),
+                  empty_where=_where):
+        st.caption(_holdings_caption(_result, len(_hold_rows)))
 
-    # 來源標註 —— 讀法 A 下它不是第六個內容區塊，但**照樣要有自己的段落與灰態**，
-    # 否則突變把它拿掉不會轉紅（見模組 docstring 的「內部歧義」段）。
+    _div_rows = _dividend_rows(_result)
+    st.markdown(f"##### {DEEP_DIVE_TABLES[1]}")
+    if wide_table(_div_rows,
+                  empty_title=f"{DEEP_DIVE_TABLES[1]}還沒有可顯示的列",
+                  empty_missing=(_blank or
+                                 "這一檔在上游沒有配息紀錄 —— "
+                                 "可能是它不配息，也可能是配息頁當下取不到。"),
+                  empty_where=_where):
+        st.caption(_dividend_caption(_div_rows))
+
+    # ── 來源標註（讀法 A：標註，不是第六個內容區塊；理由見模組 docstring）──────
+    _trace = _trace_rows(_result)
     st.markdown(f"##### {DEEP_DIVE_PROVENANCE}")
-    not_ready(f"{_PENDING_NOTE}（每一個數字各自來自哪個來源、什麼時候抓的）。",
-              where=_where)
+    st.caption(_provenance_caption(_result, _nav))
+    wide_table(_trace,
+               empty_title=f"{DEEP_DIVE_PROVENANCE}還沒有可顯示的列",
+               empty_missing="這次取數沒有留下逐源紀錄（上游未提供 source_trace）。",
+               empty_where=_where)
+
+
+def _nav_card(nav: dict | None, blank_note: str, where: str) -> dict:
+    """格 1 的卡片定義。`nav is None` → 灰態，**不填任何數字**。"""
+    if nav is None:
+        return {"title": DEEP_DIVE_CARDS[0], "state": STATE_NOT_READY,
+                "note": blank_note, "where": where}
+    _ccy = nav["currency"] or CCY_UNKNOWN
+    _bits = [f"{nav['n']} 筆", f"{nav['first']} ~ {nav['last']}"]
+    if isinstance(nav["span_days"], int):
+        _bits.append(f"跨度 {nav['span_days']} 天")
+    if nav["name"]:
+        _bits.insert(0, nav["name"])
+    if nav["merged"]:
+        _bits.append(nav["merged"])
+    return {"title": DEEP_DIVE_CARDS[0],
+            "value": f"{nav['latest']} {_ccy}",
+            "note": " · ".join(_bits)}
+
+
+def _perf_card(shown: list[str], missing: list[str], source: str,
+               blank_note: str, where: str) -> dict:
+    """格 2 的卡片定義。**一個期別都沒有 → 灰態**；有幾個就畫幾個。"""
+    if not shown:
+        return {"title": DEEP_DIVE_CARDS[1], "state": STATE_NOT_READY,
+                "note": blank_note, "where": where}
+    _note = [" · ".join(shown)]
+    if source:
+        _note.append(f"來源：{source}")
+    if missing:
+        _note.append(f"未提供：{'、'.join(missing)}")
+    return {"title": DEEP_DIVE_CARDS[1], "value": shown[-1], "note": "　".join(_note)}
+
+
+def _risk_card(shown: list[str], missing: list[str],
+               blank_note: str, where: str) -> dict:
+    """格 3 的卡片定義。
+
+    ⛔ **缺的指標連同它自己的原因一起印，不合併成一句。**
+    `sortino` 缺（樣本不足）與 `std_1y` 缺（序列稀疏）是兩件事，
+    合併成「部分指標無法計算」就把兩個不同的下一步抹成同一個。
+    """
+    if not shown:
+        # ⚠️ 五個指標全缺時，`missing` 裡可能**每一條都是** :data:`NO_REASON`
+        #    （上游根本沒跑到計算那一步）。那種「原因」沒有資訊量，
+        #    此時改用區塊層級那句誠實的處境描述，**不要印五行「上游沒有附缺值原因」**。
+        _real = [_m for _m in missing if not _m.endswith(NO_REASON)]
+        return {"title": DEEP_DIVE_CARDS[2], "state": STATE_NOT_READY,
+                "note": "；".join(_real) if _real else blank_note, "where": where}
+    _note = [" · ".join(shown)]
+    if missing:
+        _note.append("未計算 —— " + "；".join(missing))
+    return {"title": DEEP_DIVE_CARDS[2], "value": shown[0], "note": "　".join(_note)}
+
+
+def _holdings_caption(result: dict, n_rows: int) -> str:
+    """持股表底下的血緣一行：截止日 ＋ 來源 ＋ 抓取時間。缺哪一項就不寫哪一項。"""
+    _h = result.get("holdings")
+    _h = _h if isinstance(_h, dict) else {}
+    _bits = [f"{n_rows} 檔"]
+    for _key, _label in (("data_date", "截止"), ("source", "來源"),
+                         ("fetched_at", "抓取於")):
+        _v = str(_h.get(_key) or "").strip()
+        if _v:
+            _bits.append(f"{_label} {_v}")
+    return " · ".join(_bits)
+
+
+def _dividend_caption(rows: list[dict]) -> str:
+    """配息表底下的一行：能誠實宣告單一幣別就講，**不能就明說不能**。"""
+    _ccy = _declared_currency(rows)
+    if _ccy:
+        return f"{len(rows)} 筆 · 全部以 {_ccy} 計價 · 金額為原幣，未做任何換算"
+    return (f"{len(rows)} 筆 · {CCY_UNKNOWN}或逐筆幣別不一致 —— "
+            "金額照原幣顯示，**不合計、不換算**（不猜值）")
+
+
+def _provenance_caption(result: dict, nav: dict | None) -> str:
+    """來源標註的摘要行：這一份資料是什麼時候抓的、淨值那條線來自哪裡。"""
+    _bits: list[str] = []
+    _at = str(result.get("_moneydj_fetched_at") or "").strip()
+    if _at:
+        _bits.append(f"本次抓取於 {_at}")
+    if nav is not None and nav["source"]:
+        _bits.append(f"淨值序列來源 {nav['source']}")
+    if nav is not None and nav["fetched_at"]:
+        _bits.append(f"序列抓取於 {nav['fetched_at']}")
+    if not _bits:
+        # ⚠️ **不留空**：血緣掉了本身就是要告訴使用者的事（`attrs` 會在 concat 中掉）。
+        return "上游這次沒有帶回抓取時間與序列來源標記。"
+    return " · ".join(_bits)
 
 
 def _render_batch() -> None:
