@@ -317,6 +317,7 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
         <button class="tab-btn" role="tab" id="t1" aria-controls="p1" aria-selected="true"><span class="idx">題一</span><span class="nm">④ 保單版面</span></button>
         <button class="tab-btn" role="tab" id="t2" aria-controls="p2" aria-selected="false"><span class="idx">題二</span><span class="nm">② 總分那一格</span></button>
         <button class="tab-btn" role="tab" id="t3" aria-controls="p3" aria-selected="false"><span class="idx">題三</span><span class="nm">舊 ④ 區塊去留</span></button>
+        <button class="tab-btn" role="tab" id="t4" aria-controls="p4" aria-selected="false"><span class="idx">題四</span><span class="nm">選股池住哪頁</span></button>
       </div>
       <p class="rail-note">三題互不相干，可以分開回答。<b>題三</b>其實只有一塊真的需要你決定，其餘都已經有明文去處 ── 那一塊也標出來了。</p>
     </nav>
@@ -914,6 +915,116 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
             </div>
           </details>
 
+        </div>
+      </section>
+
+      <!-- ═══════════════ 題四 ═══════════════ -->
+      <section class="panel" id="p4" role="tabpanel" aria-labelledby="t4" hidden>
+        <div class="panel-head">
+          <span class="kicker">題四 · 需要你拍板（線框自己標的 Q7）</span>
+          <h2>📁 選股池與除息行事曆 ── 要住哪一頁？</h2>
+          <p class="job"><code>fund-wireframe-final.html</code> 自己把這題標成「<b>需你拍板（Q7）</b>」，但它<b>沒有被答過，也沒有被追蹤</b>。
+          <b>本組查完之後，這題的前提變了</b> ── 它問的已經不是原本那個問題了。</p>
+        </div>
+
+        <h3 class="sec"><span class="n">01</span>線框當初怎麼問</h3>
+        <div class="facts">
+          <div class="fact">
+            <span class="ft"><span class="ev w">線框原文</span><code>fund-wireframe-final.html</code>（2026-08-27）Q7，逐字</span>
+            「<b>Q7 · 我方追加</b>　選股池與除息行事曆，搬到「組合健診」還是留在「設定與診斷」？」<br>
+            「同一份選股池<b>現在有兩個入口</b>（管理室、以及組合健診裡的換股池顧問），<b>標題只差一個層級</b>，操作的是同一份資料。<b>除息行事曆的資料來源就是選股池。</b>」<br>
+            該份的建議：「<b>兩者都搬到 ② 組合健診</b>，管理室那個入口收掉。選股池是<b>決策資產</b>（下一檔要買什麼）不是設定」，
+            並補一句反向選項：「（若你習慣在「維護」的心情下整理選股池，也可以反過來 —— 全部留在 ⑤，② 只讀不改。<b>但不能維持現在兩個都能改的狀態。</b>）」
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (1) ── 「兩個都能改」這個前提<b>今天已經不成立</b>，而且早在線框寫下之前就被修掉了</span>
+            <span class="ev m">實測</span><code>_render_pool_editor()</code> 全 repo <b>只有一個呼叫點</b>：<code>ui/tab_manage.py</code>。
+            驗證指令：<code>git grep -n "_render_pool_editor" origin/main -- '*.py'</code>（命中須人工判讀「定義」與「呼叫」）。<br>
+            <span class="ev m">實測</span>而且<b>有守衛測試擋著它復辟</b>：<code>tests/test_tab_manage.py</code> 逐字寫
+            「換股顧問區<b>不得再直接呼叫</b> <code>_render_pool_editor()</code>(已移到管理室;避免同 run 雙渲染崩)」，斷言 <code>assert "_render_pool_editor()" not in _fn</code>。<br>
+            <span class="ev m">實測</span><code>switch_advisor_section.py</code> 就地註解逐字：「兩處都渲染 <code>_render_pool_editor</code> → <b>DuplicateWidgetID</b>)。<b>本區仍讀選股池做配對</b>(下方按鈕)。」<br>
+            <span class="ev m">實測</span>修掉的時間點：<code>STATE.md</code> <b>2026-08-12</b> 存檔（v19.433・PR #625）逐字「📁 選股池:重用 <code>_render_pool_editor</code>…<b>同步從 換股顧問移除該編輯器呼叫</b>」。<br><br>
+            <b>→ 而線框日期是 2026-08-27</b>（<code>docs/wireframes/README.md</code>）。<b>也就是說：Q7 被寫下的當天，它描述的那個狀態已經被修好 15 天了。</b>
+            <b>那個「編輯器」的標題還留在 <code>switch_advisor_section.py</code> 裡，是因為函式<u>定義</u>住在那，但<u>呼叫</u>只在管理室</b> ── 讀 code 很容易看成兩個入口。<br>
+            ⚠️ <b>所以「不能維持現在兩個都能改的狀態」這句話已經沒有對象了。它不是還沒做，是已經做完了。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (2) ── 線框寫的目的地「② 組合健診」，<b>今天會把它送到錯的地方</b></span>
+            線框推薦「搬到 ②」的理由是<b>「跟著換股顧問走，留在決策動線內」</b>。<b>那個理由今天仍然成立，但換股顧問已經不在 ② 了。</b><br>
+            <span class="ev m">實測</span><code>ui/helpers/story_nav.py</code> 就地註解逐字：<code>render_switch_advisor_section</code> 的分區標題（<b>渲染於 ④ 資產配置</b>）；
+            實際呼叫在 <code>ui/tab3_portfolio.py</code> 的 <code>_sec_switch</code> 區塊內（<b>④ 就是這一支</b>）。<br>
+            <span class="ev m">實測</span>② 那邊的舊呼叫已被劃掉：<code>ui/tab_fund_grp_health.py</code> 內是
+            <code>~~render_switch_advisor_section(_funds_extra)~~</code>。<br>
+            <span class="ev w">線框原文</span>這次搬遷是 <code>ia-wireframe.html</code>（<b>2026-09-01，比 Q7 晚 5 天</b>）Tab 02 定的：「換股建議與再平衡試算 → <b>04</b>（那是決策，不是診斷）」。<br><br>
+            <b>→ 依線框自己的理由（跟著換股顧問、待在決策動線內），今天的答案是 ④ 資產配置，不是 ②。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (3) ── 這題不只選股池，<b>還綁著除息行事曆</b></span>
+            Q7 的標題逐字就是「<b>選股池<u>與除息行事曆</u></b>」。<span class="ev w">線框原文</span>理由：「它的資料來源就是選股池（按鈕字面是『<b>抓選股池標的 → 產生本月除息月曆</b>』），<b>兩者分開會再造出一次跨頁跳轉</b>」。<br>
+            <span class="ev m">實測</span>它現在也在管理室：<code>scripts/dividend_calendar_notify.py</code> 檔頭逐字指路「視覺完整月曆看 App「<b>我的管理室 → 除息行事曆</b>」」。<br>
+            <b>→ 兩者要一起決定，分開決定會再製造一次跨頁跳轉。</b>
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>這題為什麼會沒人管 ── 它<b>不是被否決，是被順手掃掉的</b></span>
+            repo 內唯一追蹤過 Q7 的地方是 <code>ui/tab_settings_diag.py</code> 裡的一句<b>括號附註</b>：「（另建議選股池／除息行事曆搬去 ②，<b>Q7 待客戶拍板</b>）」。<br>
+            <span class="ev m">實測</span><b>那整段已經被劃掉了</b>（<code>~~…~~</code>），
+            但劃掉它的理由<b>與 Q7 無關</b> ── 就地更正寫的是「B／C 未拆」這個框架不成立（分區拆分那件事 T24 已於 2026-09-02 撤銷）。<br>
+            <b>→ Q7 是<u>夾在別人句子裡的括號</u>，那句話因為別的原因被劃掉，它就跟著消失了。</b>這不是有人決定不做，是<b>沒有人再看得到它</b>。<br>
+            ⚠️ <b>順帶一個會害人的命名碰撞</b>：<span class="ev m">實測</span><code>PHASE1_FINAL_ISSUE_LIST.md</code> 裡另有一個<b>完全不同的 Q7</b>（「sidebar 開發者功能收 expander 還是搬 Tab5？」）。
+            <b>在本 repo 講「Q7」必須指明是哪一份文件的 Q7</b>，否則搜尋會撈到另一題。<br>
+            <span class="ev g">推測</span>本組<b>只證明了 repo 內查不到答覆紀錄</b>，<b>不證明你沒答過</b>（口頭答覆不會進 repo）。
+            <b>正對照</b>：同一份線框的 Q1~Q4 是<b>查得到</b>答覆的 ── <code>docs/wireframes/README.md</code> 逐字「客戶已拍板（<b>Q1~Q4 全數照推薦</b>）」，可見答覆確實會被記進 repo。<b>所以「Q7 查不到」是有意義的空白，不是掃描失效。</b>
+          </div>
+        </div>
+
+        <h3 class="sec"><span class="n">02</span>所以現在真正要問的是什麼</h3>
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>選股池 · 現況與三個去處</div>
+          <div class="screen-body">
+            <div class="block">
+              <h4>現況（不是線框描述的那個現況）　<span class="chip">實測</span></h4>
+              <div class="strip">
+                <div class="st"><span class="k">可編輯入口</span><span class="v">1 個</span></div>
+                <div class="st"><span class="k">位置</span><span class="v">⑤ 設定與診斷</span></div>
+                <div class="st"><span class="k">換股顧問在哪</span><span class="v">④ 資產配置</span></div>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.6">
+                <span class="ev m">實測</span>「管理室」已於 2026-08-31 七→五併入 ⑤（<code>app.py</code> 逐字：「⑤ = 舊「我的管理室」+「參考 / 診斷」內的資料診斷與說明書」）。
+                <b>所以選股池現在住 ⑤，而它要服務的換股顧問住 ④ ── 中間隔一頁。</b>
+              </p>
+              <div class="chips" style="margin-top:8px"><span class="chip mock">「1 個」是實測，不是示意值</span></div>
+            </div>
+            <div class="grid3">
+              <div class="card"><h4>去處 A ─ 留在 ⑤</h4><p>維持現狀。整理選股池屬「維護心情」，和連線設定放一起。<b>④ 只讀不改。</b></p><div class="chips"><span class="chip">零改動</span></div></div>
+              <div class="card warn"><h4>去處 B ─ 搬到 ④<span class="chip tri" style="margin-left:6px">推薦</span></h4><p>緊鄰換股顧問。你在看「這檔該換掉」的當下，候選名單就在旁邊。</p><div class="chips"><span class="chip">跟著決策動線</span></div></div>
+              <div class="card dim"><h4>去處 C ─ 搬到 ②</h4><p>線框當初寫的字面。<b>但換股顧問已經不在 ② 了</b>，搬過去會離它服務的對象更遠。</p><div class="chips"><span class="chip">字面照做</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rec">
+          <span class="rh">總管推薦</span>
+          <h4>選去處 B ── 選股池與除息行事曆一起搬到 ④ 資產配置，緊鄰換股顧問；⑤ 不再保留編輯入口</h4>
+          <ol>
+            <li><b>這是線框自己的理由，只是把目的地更新到今天。</b>線框說「選股池是<b>決策資產</b>（下一檔要買什麼）不是設定，該待在決策動線內」。
+              <span class="ev m">實測</span>那條決策動線今天在 ④（換股顧問已於 <code>ia</code> 2026-09-01 搬入 ④ 並已落地）。<b>照舊字面搬 ② 會違背它自己的理由。</b></li>
+            <li><b>它解掉一次跨頁跳轉，而不是製造一次。</b><span class="ev m">實測</span>換股顧問區<b>本來就在讀選股池</b>（<code>switch_advisor_section.py</code> 就地註解：「本區仍讀選股池做配對(下方按鈕)」）──
+              <b>資料已經在 ④ 被用了，只有「編輯它」這件事還留在 ⑤。</b>你現在要加一檔候選，得跳去 ⑤、改完再跳回 ④ 看配對結果。</li>
+            <li><b>除息行事曆跟著走，因為它吃的就是選股池。</b>按鈕字面是「抓選股池標的 → 產生本月除息月曆」，兩者分家會再造出第二次跳轉。</li>
+          </ol>
+          <div class="why-not">
+            <b>為什麼不選 A（留 ⑤）</b>：它<b>不是錯的</b> ── 線框自己就寫了這個反向選項（「若你習慣在『維護』的心情下整理選股池」）。
+            <b>本組不推薦只是因為第 2 點</b>：資料已經在 ④ 被消費了，編輯卻在 ⑤。<b>如果你確實是在「整理資料」的心情下維護這份名單，A 才是對的 ── 這一點只有你知道，本組不代決。</b><br>
+            <b>為什麼不選 C（搬 ②）</b>：它是線框的字面，但那個字面寫於 2026-08-27，而 <code>ia</code> 在 <b>5 天後</b>把換股顧問移出了 ②。<b>照字面做等於執行一個已經被覆蓋的前提。</b>
+          </div>
+          <div class="cost">
+            <b>本題的代價與風險，據實講</b><br>
+            <b>(a)</b> 這題<b>不急</b>。原本讓它顯得緊急的那句「不能維持兩個都能改」已經沒有對象（見更正 1）。<b>現在它是一個純粹的動線偏好問題，不修也不會壞。</b><br>
+            <b>(b)</b> <span class="ev m">實測</span>搬動會碰到<b>四個守衛測試</b>（<code>test_tab_manage.py</code> / <code>test_ui_grid_contract.py</code> / <code>test_ui_rerun_contract.py</code> / <code>test_render_state_color_separation.py</code> 都對 <code>_render_pool_editor</code> 有斷言），
+            其中 <code>test_tab_manage.py</code> 那條<b>正是在擋「換股顧問區呼叫它」</b> ── <b>搬到 ④ 必須連同那條守衛一起改，否則 CI 紅燈。</b>
+            <span class="ev g">推測</span>本組認為那條守衛擋的是「<b>同一次 run 渲染兩份</b>」而非「④ 不准有它」，所以改寫守衛而非刪除即可；<b>但本組沒有實作驗證過，這是判斷。</b><br>
+            <b>(c)</b> ⚠️ <b>搬動選股池＝分頁動線異動，本身就要走本頁這道 gate</b>（<code>ia</code> 鐵則）。<b>所以這題問完才能動工，不能先做再說。</b>
+          </div>
         </div>
       </section>
 
