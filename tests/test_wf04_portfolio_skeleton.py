@@ -257,6 +257,9 @@ FAKE_HOLDINGS_PRICED: list[dict[str, Any]] = [
 #: 把核心／衛星互換後兩個字串都還在 ⇒ 綠燈（2026-09-06 稽核存活突變 F1-b，實測 49 passed）。
 #: 具名之後，:func:`test_the_mix_block_pairs_each_label_with_its_own_number`
 #: 才能寫成「``核心`` 要貼 :data:`_CORE_PCT_TEXT`」這種**配對**斷言。
+#: ⚠️ **本檔各處寫的「49 passed」一律指「本檔當時的全部條數」**（本輪新增 2 條前是 49）——
+#: **不是**「51 條裡有 49 條過」。那些數字描述的是**加固之前**的狀態，不會隨本檔變長而失效；
+#: 現況是 **51 passed**。（會漂移的量測值標清楚口徑，`CLAUDE.md §8.2.A.0` 規則 4。）
 _CORE_PCT_TEXT: str = "62.0%"
 _SAT_PCT_TEXT: str = "38.0%"
 
