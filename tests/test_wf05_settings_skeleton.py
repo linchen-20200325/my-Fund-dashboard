@@ -1,121 +1,93 @@
-"""⑤ 設定與診斷新頁的骨架守衛 —— 線框 Tab 05 的五塊，一塊都不准少。
+"""⑤ 設定與診斷的守衛 —— **(A) 路線委派殼**：五塊照線框順序、功能委派舊模組。
 
 錄製法：**用真的 Streamlit 跑（AppTest），不用假的 recorder** —— 同 ④
 （`tests/test_wf04_portfolio_skeleton.py` 的同名段落逐條寫了理由，這裡不重述）。
 
+⚠️ **2026-09-06：本檔隨被測檔一起從「骨架 + 灰態」改寫成「委派殼」**
+=====================================================================
+⑤ 是五頁裡唯一一頁在 (A) 路線拍板**之前**就寫成獨立重寫的。改寫之後：
+
+- 「資料來源健康度」「連線與金鑰」「使用手冊」**不再是灰態佔位** —— 它們委派給
+  `render_data_guard_tab()` / `render_policy_admin_bridge()` ＋
+  `render_fetch_diag_from_session()` / `render_manual_tab()`，**現在有真內容**。
+- 「手動補資料」**不再是一個按了不會寫的假 Form** —— 委派給
+  `render_nav_manual_section()`，三條真的寫入路徑。
+- 「NAV 累積狀態」**維持本檔實作**（總管裁決 2），因為委派回去會把一個
+  **已知的假數字**放回線上（見 :func:`test_the_old_status_block_really_does_print_a_bare_zero_span`）。
+
+⛔ **本輪移除的守衛，逐條列出理由（不要以為是漏刪）**
+-----------------------------------------------------
+
+== ============================================================ =========================================
+#  被移除的 test                                                 為什麼它不再有對象
+== ============================================================ =========================================
+1  `test_the_page_does_not_delegate_to_the_old_tabs`             **它禁止的正是 (A) 路線要求的事。**
+                                                                 取代品是**正向**的
+                                                                 :func:`test_the_page_delegates_to_exactly_the_documented_public_entries`
+                                                                 —— 從「不准委派」換成「**只准委派這幾支**」，
+                                                                 封閉集合、fail-closed，**保護沒有變弱**。
+2  `test_every_grey_unit_is_grey_until_its_content_lands`        它自己的 docstring 就寫著
+   `test_every_grey_unit_says_where_to_look`                     「真內容接上時這條會轉紅 ——
+                                                                 **那是預期的**」。真內容接上了。
+                                                                 剩下的兩個 gate 灰態由
+                                                                 :func:`test_both_gates_are_grey_and_point_at_themselves` 守。
+3  `test_the_form_block_is_not_grey`                             那一塊已委派，不再由本檔畫。
+   `test_the_manual_is_static_text_not_a_grey_placeholder`       改由
+   `test_the_manual_lists_exactly_the_wireframe_three`           :func:`test_the_delegated_blocks_have_real_content_not_a_grey_placeholder`
+                                                                 一次守四塊（**比原本三條各守一塊強**）。
+4  Form 那一整節（`_render_backfill_form` 的 7 條）                被測檔已無自寫 Form。
+                                                                 「三條寫入路徑一條不少」改由既有的
+                                                                 `tests/test_ia_tab5_nav_history_merge.py::`
+                                                                 `test_manual_block_renders_all_three_write_paths` 守
+                                                                 （**那一條本來就在，而且驗得比本檔深**）。
+5  `test_pressing_submit_says_the_backfill_is_not_wired_yet`     「按了不會寫」這件事**消失了** ——
+                                                                 委派之後它真的會寫。
+6  `test_the_pending_pointer_is_*`（2 條）                        `_pending_where()` 已改名為 `_where()`
+                                                                 且不再有「分批上線」那種指路。
+                                                                 形狀由 :func:`test_the_pointer_is_a_place_not_a_status_sentence` 續守。
+== ============================================================ =========================================
+
+⚠️ **1、3、4 三項是「換成更強的」，2、5、6 是「對象真的消失了」。兩種不要混為一談。**
+
 守什麼、不守什麼（先講清楚，避免下一個人以為這裡已經守死了）
 ------------------------------------------------------------
-本檔守的是**骨架的形狀**：五個單位都在、順序對、三個灰態單位**各自**誠實灰、
-Form 那一塊**不灰**（本批唯一做完的）、使用手冊**不是灰態**（D-1）、
-NAV 那一塊在沒有基金時走**空狀態**而其餘四塊照樣渲染（D-2）、
-以及線框的示意值一個都沒有畫出來（D-3）。
+本檔守的是**委派殼的形狀**：六個區塊都在、順序照線框、**每個區塊標題只畫一次**、
+兩個 gate 沒勾就不做任何 I/O、NAV 那一塊四種狀態各自誠實、
+`NAV_HISTORY` 旗標在兩處委派都被持有（否則畫面上會有兩份 NAV）、
+`POLICY_ADMIN` 一格未開、以及線框的示意值一個都沒有畫出來。
 
-⛔ **本檔不守內容對不對** —— 本批的內容**本來就還沒填**。下一批把真內容接上時，
-   :func:`test_every_grey_unit_is_grey_until_its_content_lands` 會**轉紅** ——
-   **那是預期的**，屆時請把它改成「真內容放行」，**不要把它放寬**。
-
-⛔ **本檔不驗瀏覽器裡的真實版面**：欄寬、窄螢幕折行、`expander` 收合後的實際高度 ——
-   AppTest 沒有瀏覽器，那些看不到。
-
-⛔ **本檔不重複既有的全域規則**（`ui/**` 全掃的那幾條會自動涵蓋這個新檔）：
-   `tests/test_ui_grid_contract.py`（欄數）、`tests/test_ui_rerun_contract.py`（form 站點）、
-   `tests/test_batch2_top_card_grid.py`（`where=` 必填、灰卡要有 remedy）、
-   `tests/test_wpf_five_tab_wiring.py`（分頁名不得手抄）。
+⛔ **本檔不守被委派模組的內容** —— (A) 路線明令舊模組原封不動，它們的正確性由
+   它們自己的守衛負責（`tests/test_settings_diag_merge.py`、
+   `tests/test_ia_tab5_nav_history_merge.py`、`tests/test_manual_anchor_toc.py` …）。
    **在這裡再抄一份等於製造第二把尺**（`CLAUDE.md §2.1`）。
+⛔ **本檔不驗瀏覽器裡的真實版面**：欄寬、窄螢幕折行、`expander` 收合後的實際高度。
+⛔ **本檔不重複既有的全域規則**（`ui/**` 全掃的那幾條會自動涵蓋這個檔）。
 
-⚠️ **突變覆蓋率：38/38 個 test 函式各有至少一顆會殺死它的突變（2026-09-05 實測）**
--------------------------------------------------------------------------------
-⛔ **這一行是被稽核打出來的，寫下它的來歷比寫下數字重要。**
-本檔第一版的 PR 描述寫「**18/18 KILLED**」—— **字面為真，但那是「18 顆突變全被殺」，
-不是「守衛都是活的」**：當時檔內有 35 個 test 函式，也就是有一大半**從頭到尾
-沒有被任何突變測試過**，而 2026-09-05 獨立稽核抓到的**四項必修裡有兩項就長在那裡面**
-（`test_the_write_block_is_form_wrapped` 完全沒被測過、
-「灰卡不可能印『正常』」那句補償控制根本不存在）。
-**「N/N 全殺」是分母自己挑的，它衡量的是突變寫得準不準，不是守衛有沒有洞。**
-
-**現行做法**：用 35 顆突變逐一記錄「它打紅了哪幾條」，再取**相異** test 函式的聯集 ——
-實測 **38/38，且 35 顆每一顆都至少殺到一條**（沒有白寫的突變）。
-⚠️ **仍然不等於「守衛都是對的」**：突變只證明「這條測試看得到這種改法」，
-**看不到的改法它一樣看不到** —— 本檔下面那串「守不到什麼」才是那一半。
-
-⚠️ **本檔明確守不到的（照實列，不要用形容詞）**
------------------------------------------------
-- ⛔ **示意值黑名單只有 `_PINNED_FAKE_VALUES` 那幾個字面寫法。**
-  裸數字（`18` / `42` 不帶單位字）、全形數字、換算成別的寫法、以及
-  **任何線框以外的捏造值**都抓不到 —— 黑名單結構上抓不到名單外的第 N+1 個。
-  ⚠️ 「正常」兩個字**刻意不進**示意值黑名單（它是極常見的一般用詞，
-  釘它會把往後任何一句合法說明打紅）。
-  ⚠️ **這句只管這一份【全頁】名單** —— 灰態單位那份**窄**名單
-  （:data:`_CONCLUSION_WORDS`）**2026-09-06 起有收**裸「正常」，見下。
-  **兩份名單政策不同，不要讀成同一件事。**
-  ⛔ **2026-09-05 撤回一句假的補償控制**：本段原寫
-  ~~「那一格改由『連線與金鑰必須是灰態』**反向守** —— 一張灰卡不可能同時印一個
-  「正常」的結論」~~ —— **那句是假的，而且比單純沒守到更危險，因為它讓後人以為
-  那一格有人看著**。實測四顆突變**全部存活、三序一致**：把 `_PENDING_NOTE` 換成
-  「你的資料全部正常，沒有任何異常」→ **47 passed**；在灰卡旁印
-  「全部來源都正常，你的資料可信。」→ **47 passed**。
-  **根因**：`state_card(state=STATE_NOT_READY)` 無條件前綴 ⬜，而守衛只查
-  `NOT_READY_MARK in _body` —— **⬜ 之後接什麼都行。**
-  → **現行**：見 :func:`test_no_grey_unit_states_a_conclusion`
-  （2026-09-05 新增的**黑名單**，同樣抓不到名單外的第 N+1 個）。
-  ⛔ **2026-09-06 再修一次，因為上面那句在寫下的當天仍然是假的**：該黑名單
-  當時**八個都是片語、沒有裸「正常」**，所以在灰卡同一單位內印
-  「18 個來源目前狀態：**正常**」→ **50 passed 三序，那一格還是沒有人守**。
-  **前一輪撤回了一句假的補償控制，然後換上另一句假的。** 現已把裸「正常」補進字表
-  （三序驗證：未突變 50 passed、該突變 1 failed）。
-  ⚠️ **但它只掃「帶 ⬜ 的灰態單位」** —— 印在第一個單位之前（頁首 caption）
-  或印在**刻意不灰**的單位（使用手冊）裡，本條**結構上看不到**，見該函式的登記。
-- ⛔ **指路挑錯 key 沒有守衛**：職責宣告那一句裡的 `macro` / `portfolio` 兩個 key
-  換成別的**合法** key，本檔不會有任何東西轉紅。
-  **這是「走 SSOT」擋不到的那一類**：SSOT 保證名字不過期，**不保證你挑對了 key**。
+⚠️ **明確守不到的（照實列，不要用形容詞）**
+-------------------------------------------
+- ⛔ **示意值黑名單只有 `_PINNED_FAKE_VALUES` 那幾個字面寫法。** 裸數字、全形數字、
+  換算成別的寫法、以及任何線框以外的捏造值都抓不到。
+  ⚠️ 「正常」**刻意不進**這份全頁名單（它是極常見的一般用詞，而且**被委派模組會用它**）；
+  收得起裸「正常」的是那份**只掃帶 ⬜ 的灰態單位**的窄名單 :data:`_CONCLUSION_WORDS`。
+- ⛔ **委派之後，「畫面上出現的字」有一大半不是本檔寫的** —— 任何「全頁掃字串」的
+  規則（示意值、結論字表）**現在同時掃到被委派模組的輸出**。
+  ⚠️ **這是本輪新增的偽陽性來源，據實登記**：哪天 `render_manage_tab()` 裡出現
+  「42 檔」這種字，本檔會紅，而**錯不在本檔**。屆時正解是把該規則收窄成
+  「只掃本頁自己畫的區間」，**不是把黑名單放寬**。
 - ⛔ **`getattr(st, "columns")(3)` / `from streamlit import columns as _c` 繞得過**
   :func:`test_the_page_draws_no_grid_form_or_tabs_of_its_own` —— repo 既有性質（③ 已登記）。
 - ⛔ **`_holdings()` 只測到 `None` / 非 list / 非 dict 元素三種**；舊版 payload 形狀沒測。
-- ⛔ **「使用手冊不是灰態」守的是「它沒有 ⬜、也沒走 empty_state」**，
-  **不守**「它的內容是對的」—— 那三行目錄的正確性靠線框逐字比對（:func:`test_the_manual_lists_exactly_the_wireframe_three`）。
+- ⛔ **頁首（`## 標題` ＋ `st.caption`）落在所有 unit-scoped 守衛的射程之外** ——
+  :func:`_units` 會丟掉第一個區塊標題之前的全部文字。**既有登記，本輪未修。**
 
-⚠️ **頁首落在所有 unit-scoped 守衛的射程之外（2026-09-06 獨立稽核，本組自行複量）**
------------------------------------------------------------------------------
-`_units()` 只認 `####`（`_L4_OPEN` 是 `#{4}`），而本頁頁首是 `## ` ＋ `st.caption`
-—— :func:`_units` 會**丟掉第一個 opener 之前的全部文字**。
-稽核組的突變（在頁首 caption 寫「目前 18 個資料來源全部正常」）**存活 ×3 序、畫面可見**。
-
-⚠️ **本組複量的數字與稽核組不同，兩個讀法並陳，不挑一個講**：
-稽核組說「落在 `_units()` 外的只有 **4 個 part**」；本組實跑 `loaded` 狀態實得
-**23 個 part、其中落在單位外的是 2 個**（`[Markdown] ## ⚙️ 設定與診斷` 與頁面層 `[Caption]`）。
-**差在算不算結構元素**：`[Block]` / `[Column]` 這種**不帶文字**的節點也在單位外，
-把它們算進去就是 4。→ **「4」與「2」都對，但承重的是 2** ——
-**只有帶文字的節點會說謊**，結構節點不會。
-
-✅ **另一組回報的「整個 `st.form` 也在單位之外」對本頁不成立** —— 本組實測：
-`手動補資料` 那個單位內**確實**含三個欄位標籤（`_LABEL_SOURCE_CSV` / `_LABEL_SOURCE_REFETCH`
-/ `_LABEL_ONLY_MISSING`），form 沒有溢出。**別頁的結論不要直接搬過來。**
-
-⚠️ **本輪只補了一半**：:func:`test_no_rendered_line_shows_a_duration_without_its_point_count`
-是**整頁**規則（掃 `_flat()` 全部元素，**含頁首**），所以「在頁首印一個裸跨度」現在會紅；
-但「在頁首寫一句**結論**」（例：「全部正常」）**仍然沒有人守** ——
-那要把 :data:`_CONCLUSION_WORDS` 從 unit-scoped 擴成全頁，而那會與
-:data:`_PINNED_FAKE_VALUES` 的「不收『正常』」正面打架（既有登記）。**本批不動，登記。**
-
-⚠️ **`_units` 這套機制到底有幾個檔在用（2026-09-06 更正，本組實測 `grep -c '^def _units'`）**：
-`wf01`＝**0**（那一檔根本沒有這套機制）、`wf02`／`wf03`／`wf04`／`wf05`＝各 **1**
-→ **是四個檔 `wf02`~`wf05`**。
-⛔ 本組 PR 描述原本寫「`wf02`／`wf03`／`wf04` **三頁**」—— **漏了本檔自己**；
-派工單原本寫「**四頁**」但指的是 `wf01`~`wf04` —— **成員也錯**。
-**兩邊錯的方向相反，數字碰巧接近，這正是「數字對了不代表清單對了」的實例。**
-
-⚠️ **本檔對 `_SECTION_LABELS` 的依賴，據實寫**
----------------------------------------------
-被測檔的五個區塊名裡**只有兩個**走 SSOT（`nav_status` / `nav_manual`），
-另外三個是線框字面常數（`BLOCK_HEALTH` / `BLOCK_KEYS` / `BLOCK_MANUAL`）——
-理由（SSOT 沒有那三個 key、本批不得新增 key）寫在被測檔的模組 docstring。
-:func:`test_the_two_ssot_block_names_are_not_hand_copies` 只釘住**那兩個確實有 key 的**
-不准被改成手抄字面；**其餘三個本檔只比對線框字面**，沒有 SSOT 可比。
-
-⚠️ **`BLOCK_MANUAL`（「使用手冊」）與 `section_label("manual")`（「📖 說明書」）
-並存，是一個尚未裁決的第二份真相源** —— 被測檔已就地登記並回報總管。
-本檔:func:`test_the_manual_name_collision_is_still_registered` **把這個狀態釘住**：
-哪天 SSOT 那一格被改成線框字面（＝正解落地），那條會轉紅，提醒人回來收掉這份登記。
+⚠️ **`_units()` 的切法本輪換過，理由要記住**
+--------------------------------------------
+舊版依 `#### ` ＋ `**粗體**` ＋ 空狀態 ＋ 展開器切段。委派之後**被委派模組自己會畫
+一堆 `### ` 與 `**粗體**`**，照舊切法會把它們也切成「單位」，於是
+「哪一塊該灰」這類斷言的邊界會隨舊模組的內容漂移。
+→ **現行只認本頁自己那六個區塊標題**（:data:`_BLOCK_ORDER`，逐一具名比對）。
+⛔ **代價據實寫**：區塊**內部**不再有更細的邊界，所以「同一塊裡 A 卡的灰字替 B 卡過關」
+   這種繞道**本檔抓不到了** —— 但那個粒度在委派之下本來就不屬於本頁的責任範圍。
 """
 from __future__ import annotations
 
@@ -143,28 +115,21 @@ from ui.views.page_05_settings import (  # noqa: E402
     BLOCK_HEALTH,
     BLOCK_KEYS,
     BLOCK_MANUAL,
+    DIAG_GATE_LABEL,
     NAV_DETAIL_LABEL,
     NAV_GATE_LABEL,
     POINTS_UNIT,
     SPAN_PHRASE,
-    SUBMIT_LABEL,
-    _DEFAULT_ONLY_MISSING,
-    _DEFAULT_SOURCE_CSV,
-    _DEFAULT_SOURCE_REFETCH,
+    _DIAG_NOT_LOADED_NOTE,
     _EMPTY_TITLE,
-    _LABEL_ONLY_MISSING,
-    _LABEL_SOURCE_CSV,
-    _LABEL_SOURCE_REFETCH,
     _NOT_LOADED_NOTE,
-    _PENDING_NOTE,
-    _SK_APPLIED,
-    _applied_request,
+    _SK_DIAG_GATE,
     _holdings,
-    _normalise_request,
-    _pending_where,
+    _where,
     coverage_headline,
     coverage_line,
     coverage_lines,
+    maintain_label,
     nav_manual_label,
     nav_status_label,
     span_days_or_unknown,
@@ -182,7 +147,6 @@ _SCRIPT = (
 #: 一份持倉。形狀就是 `ui/helpers/portfolio/load.py` 寫進 session 的那個。
 #: ⚠️ **刻意混一個 `loaded=False`**：被測檔的 `_holdings()` 對 ⑤ **不做 `loaded` 過濾**
 #:    （理由見該函式 docstring：這一頁就是要看「哪幾檔還沒補齊」）。
-#:    這份 fixture 把那個差異變成一條會轉紅的斷言，而不是一句註解。
 FAKE_HOLDINGS: list[dict[str, Any]] = [
     {"code": "TESTCODE1", "name": "測試標的一", "loaded": True},
     {"code": "TESTCODE2", "name": "測試標的二", "loaded": False},
@@ -194,26 +158,16 @@ def _reset_streamlit_container_stack() -> None:
 
     **為什麼需要這個 —— 這不是儀式，是實測出來的跨檔污染（2026-09-05）。**
     完整機制（逐行讀 streamlit 原始碼 + 實跑確認）逐字寫在
-    `tests/test_wf04_portfolio_skeleton.py::_reset_streamlit_container_stack`，
-    **這裡不重抄一份**（抄了就是第二份會各自漂移的說明）。一句話版本：
-
-    `st.form()` 會把 form 標記蓋在**行程層級的單例** `st._main` 上、離開 `with` 不還原；
-    bare 模式下 `form_utils._current_form()` 第一行是 ``if not runtime.exists(): return None``
-    所以**看不見**、什麼都不會炸；**到 `AppTest` 底下有 runtime 才引爆** ——
+    `tests/test_wf04_portfolio_skeleton.py::_reset_streamlit_container_stack`。
+    一句話版本：`st.form()` 會把 form 標記蓋在**行程層級的單例** `st._main` 上、
+    離開 `with` 不還原；bare 模式下看不見，**到 `AppTest` 底下有 runtime 才引爆** ——
     下一個 `st.form(` 當場拋 `Forms cannot be nested in other forms.`
 
-    ⚠️ **本頁有 Form，所以一定會踩到這個。** 被測檔的
-    `_render_backfill_form()` 走 `applied_form`，只要同一個 pytest 行程裡先跑過
-    任何一個以 bare 模式渲染 form 的測試檔（例：`tests/test_wf01_detail_zone_order.py`），
-    本檔的每一次 `AppTest` 都會掉進紅框。
-
-    ⛔ **本函式只是把本檔隔離起來，沒有修掉那個病。** 真正的修法要動
-    `ui/helpers/ia/gated_form.py` 或加一支共用 `conftest.py` 的 autouse fixture，
-    **兩者都不在本批的檔案邊界內**（且 `ia/gated_form.py` 另有一批正在動），已具名回報總管。
+    ⚠️ **委派之後本頁仍然一定會踩到它** —— 被委派的
+    `render_nav_manual_section()` 內部有三個 `st.form`。
 
     ⚠️ **刻意用 fail-loud 的寫法**（§1）：這裡碰的是 Streamlit 的私有名稱，
     哪天改名就會直接 `ImportError` / `AttributeError` 炸開，**不會**靜默跳過。
-    靜默跳過等於這道隔離悄悄失效，而失效的樣子跟「本來就沒事」一模一樣。
     """
     from streamlit.delta_generator import context_dg_stack
     from streamlit.delta_generator_singletons import get_dg_singleton_instance
@@ -227,7 +181,7 @@ def _reset_streamlit_container_stack() -> None:
 
 def _app(funds: list[dict[str, Any]] | None) -> Any:
     """跑一次整頁，回傳 `AppTest`。`funds=None` 代表 session 裡根本沒有那個鍵。"""
-    # 進場先洗乾淨：別人留下的 form 容器會讓本頁的 `applied_form` 當場炸掉。
+    # 進場先洗乾淨：別人留下的 form 容器會讓被委派的 form 當場炸掉。
     _reset_streamlit_container_stack()
     _at = AppTest.from_string(_SCRIPT, default_timeout=120)
     if funds is not None:
@@ -238,13 +192,13 @@ def _app(funds: list[dict[str, Any]] | None) -> Any:
         # 出場也洗乾淨：本檔不把髒堆疊留給後面跑的測試檔（同一個行程）。
         _reset_streamlit_container_stack()
     assert not _at.exception, (
-        "整頁渲染時拋了未捕捉例外 —— 骨架連跑都跑不起來：\n"
+        "整頁渲染時拋了未捕捉例外 —— 委派殼連跑都跑不起來：\n"
         + "\n".join(str(_e.value) for _e in _at.exception))
     return _at
 
 
 def _rerun(at: Any) -> Any:
-    """把一個已經跑過的 `AppTest` 再跑一次（用於「按下去之後會怎樣」）。"""
+    """把一個已經跑過的 `AppTest` 再跑一次（用於「勾起來之後會怎樣」）。"""
     _reset_streamlit_container_stack()
     try:
         at.run()
@@ -259,6 +213,9 @@ def _flat(node: Any) -> list[str]:
     ⚠️ 回傳 list 而不是一整塊字串 —— 順序本身是本檔要驗的東西之一。
     ⚠️ **走 `children` 這個 dict 並依 key 排序**：直接 `for c in block` 會無限遞迴
     （Block 的 `__iter__` 會把自己也走進去）。
+    ⚠️ **widget 的 `.value` 要包 try**：被委派模組裡有些 widget（例如 `st.data_editor`）
+    在沒有 session 值時取 `.value` 會 `KeyError`。**本檔記標籤不記值**，
+    所以取不到值不是問題 —— 但不包起來會讓整條測試在一個與規格無關的地方炸掉。
     """
     _out: list[str] = []
     _ch = getattr(node, "children", None)
@@ -266,7 +223,10 @@ def _flat(node: Any) -> list[str]:
         return _out
     for _, _c in sorted(_ch.items()):
         _t = type(_c).__name__
-        _v = getattr(_c, "value", None)
+        try:
+            _v = getattr(_c, "value", None)
+        except Exception:                                   # pragma: no cover
+            _v = None
         _lbl = getattr(_c, "label", None)
         if _t in ("Markdown", "Caption", "Text", "Header", "Subheader",
                   "Title", "Code", "Info", "Warning", "Error", "Success"):
@@ -384,100 +344,6 @@ def _run_gated(backend: Any, coverage: Any, *,
         return _flat(_at.main), dict(_calls)
 
 
-#: 一級區塊標題（`st.markdown("#### …")`）。
-_L4_OPEN = re.compile(r"^\[Markdown\] #{4}\s+(.*)$")
-#: 一張卡的標題 —— `ia.state_card()` 在灰態時畫的 `st.markdown(f"**{title}**")`。
-_CARD_OPEN = re.compile(r"^\[Markdown\] \*\*(.+)\*\*$")
-#: **空狀態**的標題 —— `ia.empty_state()` 畫的是**裸 HTML div**，不是 `**粗體**`。
-#: ⚠️ **這一條是 ④ 沒有的**：④ 的空狀態在頁面層級（整頁只剩它），
-#:    ⑤ 的空狀態在**單一區塊內**（D-2），所以它必須能被切成一個「單位」，
-#:    否則它底下的字會被算進**前一個**單位，讓「每塊各自誠實」這條斷言失去邊界。
-#: ⚠️ **一定要釘 `font-weight:600`**：`empty_state()` 的 **footer** 也是一個
-#: `<div style='…'>`，不區分的話 footer 會被切成一個**假單位**，
-#: 於是「空狀態恰好 1 個」那條會數到 2、且它底下的字會離開真正的空狀態單位。
-#: （本組第一版就是這樣紅的，記在這裡不美化。）
-_EMPTY_OPEN = re.compile(
-    r"^\[Markdown\] <div style='[^']*font-weight:600[^']*'>(.+?)</div>$")
-#: `st.expander` 的標題（使用手冊那一塊）。
-#: ⚠️ 型別名是 `Expander`（實測 AppTest 的元素樹），**不是** `Expandable`。
-_EXPANDER_OPEN = re.compile(r"^\[Expander\] (.+)$")
-
-
-def _units(parts: tuple[str, ...] | list[str]) -> list[tuple[str, list[str]]]:
-    """把渲染流切成**有序**的最小單位：一級段落／一張卡／一個空狀態／一個展開器。
-
-    ⚠️ **粒度是「一張卡」，這是被 ② 的一次突變逼出來的，不是設計出來的。**
-    `tests/test_wf02_health_skeleton.py::_units` 記著：初版只依 `#### 區塊名` 切段，
-    突變「只拿掉其中一塊的灰態」**沒有轉紅** —— 因為同一段裡別張卡的 ⬜ 替它過關了。
-
-    ⛔ **不要為了讓斷言好寫而把邊界往上收。** 邊界一寬，鄰居的字就會替你通過。
-    """
-    _out: list[tuple[str, list[str]]] = []
-    for _p in parts:
-        _m = (_L4_OPEN.match(_p) or _CARD_OPEN.match(_p)
-              or _EMPTY_OPEN.match(_p) or _EXPANDER_OPEN.match(_p))
-        if _m:
-            _out.append((_m.group(1).strip(), []))
-            continue
-        if _out:
-            _out[-1][1].append(_p)
-    return _out
-
-
-def _segments(parts: tuple[str, ...] | list[str]) -> dict[str, list[str]]:
-    """`單位名 -> 該單位內的渲染紀錄`（:func:`_units` 的 dict 檢視）。
-
-    ⚠️ **dict 會讓同名單位後者覆蓋前者** —— 那正是 ② 被紅隊打穿的繞道。
-    本檔用 :func:`test_unit_names_are_unique` 把「不會有同名單位」變成一條**斷言**。
-    """
-    return {_k: _v for _k, _v in _units(parts)}
-
-
-def _expected_units() -> tuple[str, ...]:
-    """線框 Tab 05 由上而下的單位（**有基金時**）。
-
-    **`NAV 累積狀態` 與 `手動補資料` 走 SSOT，不在這裡抄字面。**
-    ⚠️ 「手動補資料」這幾個字在渲染流裡**出現兩次**（`#### 區塊標題` ＋ Form 內的
-    `st.caption` 開頭），但**只有前者會被切成單位** —— `st.caption` 不符合
-    :func:`_units` 的任何一條開頭樣式。故本 tuple 裡它仍是**一個**單位，
-    且 :func:`test_unit_names_are_unique` 會在哪天真的變成兩個單位時轉紅。
-    """
-    return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS,
-            nav_manual_label(), BLOCK_MANUAL)
-
-
-def _grey_units() -> tuple[str, ...]:
-    """**每一個都要各自帶灰態**的三個單位（有基金時、gate 未勾）。
-
-    ⚠️ `nav_manual_label()`（Form）不在這裡：它是本批**唯一真的做完**的一塊，
-    由 :func:`test_the_form_block_is_not_grey` 反向守著。
-    ⚠️ `BLOCK_MANUAL`（使用手冊）**也不在這裡**：D-1 判定它是**靜態文字不是灰態**，
-    由 :func:`test_the_manual_is_static_text_not_a_grey_placeholder` 反向守著。
-
-    ⚠️ **2026-09-06 起 `nav_status_label()` 的灰態意思變了**（P05-1 接上取數）：
-    它**不再**是「這一塊的內容還沒接上」，而是「**gate 沒勾，所以還沒去讀**」——
-    兩者的**指路不同**（前者指手動補資料、後者指 gate 自己就在旁邊），
-    所以 :data:`_GREY_POINTER` 把「哪一塊該指哪裡」寫成表，不再假設三塊共用一句。
-    ⛔ 這一塊**只在 gate 未勾時**是灰的；勾起來之後它有四種狀態，
-    由 :func:`test_the_nav_block_has_exactly_one_state_at_a_time` 等條守。
-    """
-    return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS)
-
-
-def _GREY_POINTER() -> dict[str, str]:
-    """`灰態單位 -> 它應該帶的那一句指路`。
-
-    ⛔ **不要退回「三塊共用一句」** —— 那正是把 NAV 那一塊的指路指錯的方法：
-    它的下一步是**勾旁邊那個 gate**，不是去手動補資料。
-    """
-    return {
-        BLOCK_HEALTH: _pending_where(nav_manual_label()),
-        BLOCK_KEYS: _pending_where(nav_manual_label()),
-        # gate 未勾 → 下一步就在同一張卡上（勾它）。指到自己這一塊是**有效**的指路。
-        nav_status_label(): _pending_where(nav_status_label()),
-    }
-
-
 def _live_strings(tree: ast.AST) -> list[ast.Constant]:
     """檔內**活字串**（排除 module / class / function 的 docstring）。
 
@@ -578,52 +444,781 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     return _mods
 
 
+
 # ══════════════════════════════════════════════════════════════════
-# 骨架：五個單位都在、順序對、名字唯一
+# 區塊切法：**只認本頁自己那六個標題**（理由見模組 docstring）
 # ══════════════════════════════════════════════════════════════════
 
-def test_all_units_are_present_and_in_wireframe_order():
-    """線框 Tab 05 由上而下：健康度 → NAV → 金鑰 → 手動補資料 → 使用手冊。
+def _block_order() -> tuple[str, ...]:
+    """本頁由上而下的六個區塊，**兩個走 SSOT、三個線框字面、一個是登記在案的偏離**。
 
-    ⚠️ 用 `loaded` 這個形狀跑 —— 沒有基金時 NAV 那一塊會換成空狀態
-    （標題不同，D-2），那條由 :func:`test_the_nav_block_is_the_only_one_that_can_be_empty` 守。
+    ⚠️ 做成函式而不是 module 常數：`section_label()` 在 import 期炸掉會讓整個
+    測試檔收集失敗，而那個錯誤訊息會指向 import 行，不是指向真正的原因。
+    """
+    return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS,
+            nav_manual_label(), maintain_label(), BLOCK_MANUAL)
+
+
+#: 一級區塊標題（`st.markdown("### …")`）。
+#: ⚠️ `#{3}(?!#)` —— **不能吃到 `#### `**：被委派模組內部有 `#### ` 小標。
+_H3_OPEN = re.compile(r"^\[Markdown\] #{3}(?!#)\s+(.*)$")
+#: **空狀態**的標題 —— `ia.empty_state()` 畫的是**裸 HTML div**，不是 `**粗體**`。
+#: ⚠️ **一定要釘 `font-weight:600`**：`empty_state()` 的 **footer** 也是一個
+#: `<div style='…'>`，不區分的話 footer 會被當成另一個空狀態。
+_EMPTY_OPEN = re.compile(
+    r"^\[Markdown\] <div style='[^']*font-weight:600[^']*'>(.+?)</div>$")
+
+
+def _units(parts: tuple[str, ...] | list[str]) -> list[tuple[str, list[str]]]:
+    """把渲染流切成**有序**的區塊：`(區塊名, 該區塊內的全部渲染紀錄)`。
+
+    ⛔ **只認 :func:`_block_order` 裡那六個名字**（逐一具名比對），
+    **不是**「所有 `### 開頭的行」——被委派模組自己會畫一堆 `### `
+    （`### 📁 選股池(候選基金)`、`### 🔔 換股通報(LINE)` …），
+    把它們當成區塊會讓所有 unit-scoped 斷言的邊界隨舊模組的內容漂移。
+
+    ⚠️ **代價據實寫**：區塊**內部**不再有更細的邊界。
+       「同一塊裡 A 的灰字替 B 過關」這種繞道本函式抓不到 ——
+       但在 (A) 路線之下，區塊內部的內容是**被委派模組的責任**，不是本頁的。
+    """
+    _known = set(_block_order())
+    _out: list[tuple[str, list[str]]] = []
+    for _p in parts:
+        _m = _H3_OPEN.match(_p)
+        if _m and _m.group(1).strip() in _known:
+            _out.append((_m.group(1).strip(), []))
+            continue
+        if _out:
+            _out[-1][1].append(_p)
+    return _out
+
+
+def _segments(parts: tuple[str, ...] | list[str]) -> dict[str, list[str]]:
+    """`區塊名 -> 該區塊內的渲染紀錄`（:func:`_units` 的 dict 檢視）。"""
+    return {_k: _v for _k, _v in _units(parts)}
+
+
+#: `st.expander` 的標題。⚠️ 型別名是 `Expander`（實測 AppTest 的元素樹）。
+_EXPANDER_OPEN = re.compile(r"^\[Expander\] (.+)$")
+
+
+def _nav_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
+    """**只**回「NAV 累積狀態」那一塊的渲染紀錄。
+
+    ⭐ **這是本輪最重要的一個 helper，理由請讀完再改**：委派之後，畫面上的字
+    有一大半**不是被測檔寫的**。任何「掃全頁字串」的內容規則
+    （帶時間長度的字、結論字表、空狀態計數、展開器計數）**現在同時掃到
+    被委派模組的輸出** —— 而那些輸出的正確性**不是本頁的責任**（(A) 路線）。
+
+    **實測**：本輪第一版把那些規則留在全頁，結果 `📖 使用手冊`（`tab6_manual.py`）
+    裡的教學文（「✅ 配置正常，無需再平衡」「約 5.5 年」）**當場打紅 5 條**，
+    而被測檔一個字都沒錯。
+
+    → **內容規則一律縮到本頁自己畫內容的那一塊**，也就是 NAV 累積狀態。
+    ⚠️ **代價據實寫**：本頁在別的區塊裡若真的印了一個裸跨度或一句結論，
+       這些規則**看不到**。那個缺口由「被測檔幾乎不自己畫內容」這個**結構**擋著，
+       而不是由規則擋著 —— 哪天本頁又開始自己畫東西，這裡要一起放大。
+    """
+    return _segments(parts).get(nav_status_label(), [])
+
+
+def _page_authored_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
+    """被測檔**自己畫**的那些渲染紀錄（NAV 區塊 ＋ 兩個 gate 沒勾時的健康度區塊）。
+
+    ⚠️ **只在兩個 gate 都沒勾時成立** —— gate 一勾，健康度區塊裡就全是
+    `render_data_guard_tab()` 的輸出。本檔的 :func:`_stream` 三種形狀
+    **gate 都沒勾**（`value=False` / 預設不勾），所以對它們成立。
+    ⛔ 拿它去看 `_run_gated(..., open_gate=True)` 的結果是錯的。
+    """
+    _seg = _segments(parts)
+    return list(_seg.get(BLOCK_HEALTH, [])) + list(_seg.get(nav_status_label(), []))
+
+
+def _nav_expanders(parts: tuple[str, ...] | list[str]) -> list[str]:
+    """NAV 區塊內的展開器標題。**不含**被委派模組的展開器（它們多得是）。"""
+    return [_m.group(1).strip() for _p in _nav_parts(parts)
+            if (_m := _EXPANDER_OPEN.match(_p))]
+
+
+def _nav_expander_body(parts: tuple[str, ...] | list[str], label: str) -> list[str]:
+    """NAV 區塊內某個展開器底下的內容（到下一個展開器為止）。"""
+    _out: list[str] = []
+    _in = False
+    for _p in _nav_parts(parts):
+        _m = _EXPANDER_OPEN.match(_p)
+        if _m:
+            _in = _m.group(1).strip() == label
+            continue
+        if _in:
+            _out.append(_p)
+    return _out
+
+
+# ══════════════════════════════════════════════════════════════════
+# 骨架：六個區塊都在、順序照線框、每個標題只畫一次
+# ══════════════════════════════════════════════════════════════════
+
+def test_all_blocks_are_present_and_in_wireframe_order():
+    """線框 Tab 05 由上而下：健康度 → NAV → 金鑰 → 手動補資料 →（維護）→ 使用手冊。
+
+    ⚠️ 「🗄️ 資料維護與通報」**不是線框的區塊** —— 線框只在「從哪裡搬來」列了
+    `ui/tab_manage.py`，五個 `<h4>` 裡沒有它。被測檔就地登記為 (D-5) 的偏離，
+    本條把那個**現況**釘住：哪天客戶／總管裁決它該搬走或該併進別塊，這條會轉紅。
     """
     _got = [_n for _n, _ in _units(_stream("loaded"))]
-    _want = list(_expected_units())
-    _idx = [_got.index(_u) for _u in _want if _u in _got]
+    _want = list(_block_order())
     _missing = [_u for _u in _want if _u not in _got]
     assert not _missing, (
-        f"線框 Tab 05 的單位少了：{_missing}\n實際渲染順序：{_got}")
+        f"⑤ 的區塊少了：{_missing}\n實際渲染順序：{_got}")
+    _idx = [_got.index(_u) for _u in _want]
     assert _idx == sorted(_idx), (
-        f"單位順序與線框不符。\n線框：{_want}\n實際：{_got}")
+        f"區塊順序與線框不符。\n線框：{_want}\n實際：{_got}")
 
 
-def test_unit_names_are_unique():
-    """單位名不得重複 —— 否則 :func:`_segments` 會讓後者悄悄覆蓋前者。
+@pytest.mark.parametrize("block", _block_order())
+def test_each_block_heading_is_drawn_exactly_once(block: str):
+    """⭐ 每個區塊標題在整頁**恰好出現一次**。
 
-    ⚠️ 這條是 ② 被紅隊打穿之後才加的：`_segments` 是 dict，同名單位會互相蓋掉，
-    於是「每一塊都要各自誠實」那條斷言就少驗了一塊，**而且不會有任何人發現**。
+    ⛔ **這條抓的是一個真的發生過的 bug**：改寫的第一版讓本檔畫
+    `### 手動補資料`，而被委派的 `render_nav_manual_section()` **自己也會畫同一行**
+    （`nav_history_section.NAV_MANUAL_HEADING`，同一份 SSOT、同一級、逐字相同）——
+    畫面上連著出現兩個一模一樣的標題。
+    → 現行：區塊 4 的標題**刻意不由被測檔畫**，由被委派函式畫（見被測檔的註記）。
+
+    ⚠️ **兩個方向都要**：出現 0 次代表那一塊消失了；出現 2 次代表畫重複了。
     """
-    _names = [_n for _n, _ in _units(_stream("loaded"))]
-    _dupes = sorted({_n for _n in _names if _names.count(_n) > 1})
-    assert not _dupes, (
-        f"有同名單位 {_dupes} —— `_segments()` 會讓後者覆蓋前者，"
-        "使「每一塊各自誠實」這條斷言少驗掉一塊。")
+    _lines = [_m.group(1).strip() for _p in _stream("loaded")
+              if (_m := _H3_OPEN.match(_p))]
+    _n = _lines.count(block)
+    assert _n == 1, (
+        f"區塊標題「{block}」在整頁出現 {_n} 次（應為 1 次）。\n"
+        "0 次 ＝ 那一塊不見了；2 次 ＝ 被測檔與被委派模組各畫了一次"
+        "（畫面上會連著出現兩個一樣的標題）。\n"
+        f"實際的全部 `### ` 標題：{_lines}")
 
 
 @pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
 def test_the_page_renders_in_every_session_shape(kind: str):
-    """三種 session 形狀都要能跑完，而且**四個非 NAV 單位一個都不少**。
+    """三種 session 形狀都要能跑完，而且**六個區塊一個都不少**。
 
     ⚠️ 這條釘的是 **D-2 的另一半**：⑤ **沒有**頁面層級空狀態 ——
-    沒有基金時，健康度／金鑰／手動補資料／使用手冊**照樣要在**。
+    沒有基金時，其餘五塊**照樣要在**。
     ⛔ 若哪天有人照抄 ④ 的做法在 ⑤ 加一個「沒持倉就整頁只剩空狀態」，這條會轉紅。
     """
     _names = [_n for _n, _ in _units(_stream(kind))]
-    for _u in (BLOCK_HEALTH, BLOCK_KEYS, nav_manual_label(), BLOCK_MANUAL):
+    for _u in _block_order():
         assert _u in _names, (
-            f"（{kind}）單位「{_u}」不見了 —— ⑤ 沒有頁面層級空狀態（D-2）：\n"
-            f"沒有基金時，除了 NAV 那一塊以外都該照常渲染。\n實際：{_names}")
+            f"（{kind}）區塊「{_u}」不見了 —— ⑤ 沒有頁面層級空狀態（D-2）。\n"
+            f"實際：{_names}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# (A) 路線：委派給誰、不委派給誰、以及旗標有沒有持對
+# ══════════════════════════════════════════════════════════════════
+
+#: 本頁**唯一**准許委派過去的舊模組 public 入口。
+#: 形狀是 `(模組, 符號)`，**封閉集合、fail-closed** ——
+#: 多委派一支沒登記的，:func:`test_the_page_delegates_to_exactly_the_documented_public_entries`
+#: 會紅；登記了卻沒有真的委派，同一條的**反向**斷言也會紅。
+#:
+#: ⛔ **這張表取代了舊的 `test_the_page_does_not_delegate_to_the_old_tabs`。**
+#:    保護方向從「不准委派」翻成「**只准委派這幾支**」——
+#:    (A) 路線之下前者禁止的正是規格要求的事，後者才是還有牙的那一版。
+_DELEGATION_ALLOWLIST: frozenset = frozenset({
+    ("ui.tab5_data_guard", "render_data_guard_tab"),
+    ("ui.tab_manage", "render_manage_tab"),
+    ("ui.tab6_manual", "render_manual_tab"),
+    ("ui.helpers.settings_diag.nav_history_section", "render_nav_manual_section"),
+    ("ui.helpers.settings_diag.policy_admin_bridge", "render_policy_admin_bridge"),
+    ("ui.helpers.settings_diag.fetch_diag_section", "render_fetch_diag_from_session"),
+    # 資料診斷的 caller 契約：呼叫 `render_data_guard_tab()` 前必須先更新註冊表。
+    ("ui.helpers.data_registry", "_update_data_registry"),
+})
+
+#: ⛔ **刻意不在名單裡的那一支，理由寫在這裡（這是總管裁決 2 的機器版）**：
+#: `ui.helpers.settings_diag.nav_history_section.render_nav_status_section` ——
+#: 委派過去會把「涵蓋天數 0 · ≈0.0 年」這個**已知的假數字**放回線上。
+_FORBIDDEN_DELEGATION: frozenset = frozenset({
+    ("ui.helpers.settings_diag.nav_history_section", "render_nav_status_section"),
+    ("ui.tab5_data_guard", "render_nav_accumulation_status"),
+})
+
+
+def _import_pairs() -> list[tuple[str, str]]:
+    """被測檔內每一個 `from <module> import <name>`（含函式內 lazy import）。
+
+    ⚠️ **一定要走 `ImportFrom` 的 `names`，不能只看 `node.module`** ——
+    `from ui import tab6_manual` 的 `node.module` 只有 `"ui"`。
+    本檔的委派全部寫成 `from ui.tab6_manual import render_manual_tab`，
+    所以 `(module, name)` 這個 pair 就是「委派了誰」的完整資訊。
+    """
+    _tree_ = ast.parse(SRC.read_text(encoding="utf-8"))
+    return [(_n.module, _a.name)
+            for _n in ast.walk(_tree_)
+            if isinstance(_n, ast.ImportFrom) and _n.module
+            for _a in _n.names]
+
+
+def test_the_page_delegates_to_exactly_the_documented_public_entries():
+    """⭐ (A) 路線：委派的對象**必須恰好是**登記在案的那幾支 public 入口。
+
+    ⛔ **這是封閉集合、雙向 fail-closed**：
+    - **多**委派一支沒登記的 → 紅（新增依賴必須經過一次 diff 上看得見的登記）；
+    - 登記了卻**沒有**真的委派 → 也紅（表變成只增不減的紙，等於沒有規則）。
+
+    ⚠️ **它取代的是 `test_the_page_does_not_delegate_to_the_old_tabs`**：
+    那一條禁止的正是 (A) 路線要求的事。**移除它不是放寬** ——
+    本條把「不准委派」翻成「只准委派這幾支」，抓得到的違規反而更多
+    （舊條只認四個舊 `tab*.py`；本條連 `ui/helpers/**` 的委派也管）。
+    """
+    _pairs = set(_import_pairs())
+    _ui = {_p for _p in _pairs if _p[0].startswith("ui.tab")
+           or _p[0].startswith("ui.helpers.settings_diag")
+           or _p[0] == "ui.helpers.data_registry"}
+    # `merge_context` 是**旗標**不是委派對象，另有 `test_..._flags` 守它。
+    _ui = {_p for _p in _ui if not _p[0].endswith("merge_context")}
+    _extra = sorted(_ui - _DELEGATION_ALLOWLIST)
+    assert not _extra, (
+        f"被測檔委派給了沒有登記的入口：{_extra}\n"
+        "(A) 路線只准呼叫登記在案的 public 入口 —— 新增一支請先加進 "
+        "`_DELEGATION_ALLOWLIST` 並在 PR 描述寫理由（登記本身就是那份紀錄）。")
+    _missing = sorted(_DELEGATION_ALLOWLIST - _ui)
+    assert not _missing, (
+        f"登記在案、但被測檔根本沒有委派的入口：{_missing}\n"
+        "⚠️ 這代表某一塊的功能**悄悄消失了**（或那個登記已經沒有用途）。\n"
+        "**這條紅燈是提醒不是責備**：如果是刻意拿掉的，請同時把表降下來。")
+
+
+def test_the_page_never_delegates_the_lying_nav_status_block():
+    """⭐⭐ **總管裁決 2 的機器版**：不准委派回會印假數字的那兩支。
+
+    `render_nav_status_section()` → `render_nav_accumulation_status()` 把
+    `coverage_status()` 的 `span_days` 原封放進 DataFrame 的「涵蓋天數」「≈年」兩欄，
+    而上游在日期 parse 失敗時把「未知」編成 `0`
+    —— 於是「算不出來」與「真的 0 天」在畫面上一模一樣。
+    實證見 :func:`test_the_old_status_block_really_does_print_a_bare_zero_span`。
+
+    ⛔ **這是全頁唯一一塊不走 (A) 路線的**，所以它需要一條**自己的**守衛：
+    上面那條白名單只擋「多委派沒登記的」，而**把 NAV 狀態委派回去**
+    在語意上恰恰是「回到 (A) 路線」—— 不特別禁，它會被當成修正而放行。
+    """
+    _pairs = set(_import_pairs())
+    _bad = sorted(_pairs & _FORBIDDEN_DELEGATION)
+    assert not _bad, (
+        f"被測檔委派回了會印假數字的舊 NAV 狀態塊：{_bad}\n"
+        "那一塊會把「跨度未知」印成「涵蓋天數 0 · ≈0.0 年」，"
+        "與「真的 0 天」在畫面上完全分不出來（`CLAUDE.md §1`：\n"
+        "錯誤的數字比沒有數字更危險）。\n"
+        "⚠️ 若那個假數字**在上游被修好了**（`coverage_status` 不再把未知編成 0，"
+        "或舊塊不再裸印跨度），本條就該連同被測檔的 (D-4) 一起收掉 —— "
+        "**但要先實測，不是先刪守衛。**")
+
+
+def test_the_old_status_block_really_does_print_a_bare_zero_span():
+    """⭐ **裁決 2 的前提是不是真的**：舊塊的資料來源真的會把「未知」編成 0 嗎？
+
+    ⛔ **這一條驗的是【別人的行為】，而且是刻意的**：
+    上面那條禁令（不准委派回去）的**全部理由**就是這個事實。
+    沒有這條，那個禁令會變成一句**沒有人查證過的傳說** ——
+    而本 repo 一再記過：**沒查證的宣稱比沒有宣稱更危險**。
+    哪天上游修好了，這條會轉紅，那正是要人回來重新評估裁決 2 的時候。
+
+    ⚠️ **走真的 `coverage_status()`，注入假 worksheet** —— 不是重寫一份它的邏輯。
+    """
+    import services.nav_history_gs as _gs
+
+    class _WS:
+        def __init__(self, rows: list) -> None:
+            self._rows = rows
+
+        def get_all_values(self) -> list:
+            return self._rows
+
+    class _SH:
+        def __init__(self, ws: Any) -> None:
+            self._ws = ws
+
+        def worksheet(self, _n: str) -> Any:
+            return self._ws
+
+    _rows = [
+        ["code", "date", "nav", "name", "src", "at", "ccy"],
+        # 壞日期（民國年）＋ 好日期 → 真實跨度約 1.4 年，但 parse 會失敗
+        ["BBB", "113/01/02", "10.0", "", "", "", ""],
+        ["BBB", "2025-06-01", "12.0", "", "", "", ""],
+        # 同一天一筆 → **真的** 0 天
+        ["DDD", "2024-05-05", "9.0", "", "", "", ""],
+    ]
+    _cov = _gs.coverage_status(_sheet=_SH(_WS(_rows)))
+
+    assert _cov["BBB"]["span_days"] == 0, (
+        "上游不再把「跨度未知」編成 0 了 —— 裁決 2 的前提可能已經消失。\n"
+        f"實際：{_cov['BBB']}\n"
+        "請重新評估：NAV 累積狀態那一塊還需不需要維持本頁自己的實作？")
+    assert _cov["DDD"]["span_days"] == 0, _cov["DDD"]
+    # ⭐ 這一行才是重點：**兩者的 `span_days` 完全相同**，
+    #    所以舊塊那張「涵蓋天數 / ≈年」的表把它們畫成同一個東西。
+    assert _cov["BBB"]["span_days"] == _cov["DDD"]["span_days"], (
+        "「算不出來」與「真的 0 天」在上游已經分得開了 —— 請重新評估裁決 2。")
+
+    # 對照組：被測檔的純函式**把兩者分開**（這是不委派換來的東西）。
+    assert span_days_or_unknown("113/01/02", "2025-06-01", 0) is None, (
+        "被測檔的 `span_days_or_unknown()` 沒有把「算不出來」判成未知 —— "
+        "那是裁決 2 唯一的產出。")
+    assert span_days_or_unknown("2024-05-05", "2024-05-05", 0) == 0, (
+        "被測檔把「真的 0 天」也判成未知了 —— 那會把一個誠實的 0 藏起來。")
+
+
+def _guard_flags(fn_name: str) -> list[str]:
+    """被測檔某個函式裡 `settings_page_owns(...)` 的引數（原始名稱）。
+
+    **fail-closed**：引數不是單純名稱、或追不到 `merge_context` 的 import，一律 assert 失敗。
+    形狀照抄 `tests/test_settings_diag_merge.py::_resolved_guard_flags`
+    （**刻意不 import 它** —— 那一支綁死在四個舊子頁的表上，射程不同）。
+    """
+    _tree_ = ast.parse(SRC.read_text(encoding="utf-8"))
+    _bind: dict[str, tuple[str, str]] = {}
+    for _n in ast.walk(_tree_):
+        if isinstance(_n, ast.ImportFrom) and _n.module:
+            for _a in _n.names:
+                _bind[_a.asname or _a.name] = (_n.module, _a.name)
+    _fn = next((_n for _n in ast.walk(_tree_)
+                if isinstance(_n, ast.FunctionDef) and _n.name == fn_name), None)
+    assert _fn is not None, f"被測檔裡找不到函式 {fn_name!r} —— 斷言失去對象。"
+    _flags: list[str] = []
+    for _n in ast.walk(_fn):
+        if not (isinstance(_n, ast.Call)
+                and getattr(_n.func, "id", "") == "settings_page_owns"):
+            continue
+        assert _n.args and not _n.keywords, (
+            f"{fn_name} 的 settings_page_owns(...) 形狀本守衛認不得："
+            f"{ast.unparse(_n)}（fail-closed 視為綁錯）")
+        for _a in _n.args:
+            assert isinstance(_a, ast.Name), (
+                f"{fn_name} 的旗標引數不是單純名稱：{ast.unparse(_a)}（fail-closed）")
+            assert _a.id in _bind, (
+                f"{fn_name} 的旗標引數 {_a.id} 追不到 import 來源（fail-closed）")
+            _mod, _orig = _bind[_a.id]
+            assert _mod == "ui.helpers.settings_diag.merge_context", (
+                f"{fn_name} 的旗標 {_a.id} 綁到 {_mod}.{_orig}，不是 merge_context 的旗標")
+            _flags.append(_orig)
+    return _flags
+
+
+#: `委派函式 -> 它必須持有的旗標集合`。**用 `==` 比集合，不是「至少包含」。**
+_EXPECTED_FLAGS: dict = {
+    "_render_source_health": {"DATA_GUARD_HEADER", "NAV_HISTORY"},
+    "_render_maintain": {"MANAGE_HEADER", "NAV_HISTORY"},
+    "_render_manual": {"MANUAL_HEADER"},
+}
+
+
+@pytest.mark.parametrize("fn_name", sorted(_EXPECTED_FLAGS))
+def test_each_delegation_holds_exactly_the_flags_it_must(fn_name: str):
+    """⭐ **旗標漏掉不會報錯，只會讓畫面上多一塊 —— 所以要靜態釘住。**
+
+    - `*_HEADER` 三支 → 被委派的舊子頁不再畫**它自己的 `##` 頁面大標**
+      （⑤ 已經畫了區塊標題）。
+    - **`NAV_HISTORY`** → `render_manage_tab()` 跳過 `_sec_nav_backfill()`、
+      `render_data_guard_tab()` 跳過 `render_nav_accumulation_status()` ＋
+      `render_nav_statement_csv_import()`。
+      ⛔ **漏掉它的後果是同一頁出現兩份 NAV，而且沒有任何東西會叫。**
+      ⚠️ 它必須在**兩處**都持有：所有權是 thread-local ＋ context manager 作用域，
+      一離開 `with` 就還原了。
+    """
+    _got = _guard_flags(fn_name)
+    assert set(_got) == _EXPECTED_FLAGS[fn_name], (
+        f"{fn_name} 持有的旗標是 {sorted(set(_got))}，應為 "
+        f"{sorted(_EXPECTED_FLAGS[fn_name])}。")
+    assert len(_got) == len(set(_got)), f"{fn_name} 重複持有同一支旗標：{_got}"
+
+
+def test_the_page_renders_exactly_one_nav_status_block():
+    """⭐ **整頁只有一份 NAV** —— 旗標粒度的**行為面**佐證。
+
+    上一條驗「靜態綁定就是那幾支」，本條驗「跑起來真的只有一份」。
+    ⚠️ 兩者互補，**不是重複**：靜態綁對了但 `with` 的範圍包錯（例如包在
+    `render_manage_tab()` 呼叫的**外面**而不是**裡面**）靜態看不出來。
+
+    ⛔ **判準不能用 `NAV_STATUS_HEADING`**（本組第一版就是這樣寫的，當場自己打自己）：
+    那個常數是 ``f"### {section_label('nav_status')}"``，而**被測檔自己畫的區塊標題
+    逐字就是它** —— 兩份 NAV 與一份 NAV 在那個判準下完全一樣。
+    → 改用**兩個舊入口各自獨有的字**：
+    - `補歷史淨值` —— `ui/tab_manage.py::render_manage_tab()` 的 NAV 區塊；
+    - `NAV 歷史匯入與累積狀態` —— `ui/tab5_data_guard.py` 的 NAV 區塊。
+    兩者都由 `NAV_HISTORY` 旗標守著，⑤ 持有時**一個字都不該出現**。
+
+    ⚠️ **本條只驗得到 `render_manage_tab()` 那一邊**（它在預設渲染流裡真的跑了）；
+       資料診斷那一邊 gate 預設不勾、跑不到 ——
+       那一半由 :func:`test_the_delegation_really_holds_the_nav_flag_at_call_time`
+       用 sentinel 驗（**不必真的去跑那個會對外取數的模組**）。
+    """
+    _all = _text(_stream("loaded"))
+    for _marker, _who in (("補歷史淨值", "ui/tab_manage.py 的 NAV 區塊"),
+                          ("NAV 歷史匯入與累積狀態", "ui/tab5_data_guard.py 的 NAV 區塊")):
+        assert _marker not in _all, (
+            f"畫面上出現了 {_who}（命中 {_marker!r}）——\n"
+            "代表某個委派沒有持住 `NAV_HISTORY`，同一頁會有兩份 NAV。")
+
+
+def test_the_delegation_really_holds_the_nav_flag_at_call_time():
+    """⭐ **sentinel**：呼叫舊模組的那一刻，`NAV_HISTORY` 真的在手上嗎？
+
+    ⛔ **靜態綁定驗不到這件事**：`with settings_page_owns(NAV_HISTORY):` 綁對了，
+    但如果 `render_manage_tab()` 的呼叫寫在 `with` **外面**，靜態守衛照樣全綠，
+    而畫面上會多一塊。**所有權是 context manager 的作用域，錯在範圍不在名字。**
+
+    做法：把被委派的入口換成一個**只做一件事**的探針 —— 記下「被呼叫的當下，
+    `owned_by_settings_page(NAV_HISTORY)` 是什麼」。這樣**不必真的跑那些會對外
+    取數的模組**，也驗得到範圍。
+    """
+    import sys
+
+    import ui.views.page_05_settings as _mod
+    from ui.helpers.settings_diag.merge_context import (
+        NAV_HISTORY as _NAV,
+        owned_by_settings_page as _owned,
+    )
+
+    _seen: dict[str, bool] = {}
+
+    class _FakeManage:
+        @staticmethod
+        def render_manage_tab(*_a: Any, **_k: Any) -> None:
+            _seen["manage"] = _owned(_NAV)
+
+    class _FakeRegistry:
+        @staticmethod
+        def _update_data_registry(*_a: Any, **_k: Any) -> None:
+            _seen["registry"] = _owned(_NAV)
+
+    class _FakeGuard:
+        @staticmethod
+        def render_data_guard_tab(*_a: Any, **_k: Any) -> None:
+            _seen["guard"] = _owned(_NAV)
+
+    _fakes = {"ui.tab_manage": _FakeManage,
+              "ui.helpers.data_registry": _FakeRegistry,
+              "ui.tab5_data_guard": _FakeGuard}
+    _orig = {_n: sys.modules.get(_n) for _n in _fakes}
+    for _n, _f in _fakes.items():
+        sys.modules[_n] = _f                                    # type: ignore[assignment]
+    import streamlit as _st
+    _orig_cb = _st.checkbox
+    try:
+        _st.session_state.clear()
+        _mod._render_maintain()
+        # ⚠️ **把 gate 直接換成「回 True」，不是塞 session_state** —— bare 模式下
+        #    `st.checkbox(..., key=…)` 不讀 session 的既有值，一律回預設 `False`
+        #    （同 :func:`test_the_diag_gate_really_gates_the_registry_update` 的登記）。
+        #    本條驗的是**旗標的作用域**，不是 gate 本身，所以直接跳過 gate 是對的切法。
+        _st.checkbox = lambda *_a, **_k: True                # type: ignore[assignment]
+        _mod._render_source_health()
+    finally:
+        _st.checkbox = _orig_cb                             # type: ignore[assignment]
+        for _n, _m in _orig.items():
+            if _m is None:
+                sys.modules.pop(_n, None)
+            else:
+                sys.modules[_n] = _m
+        _st.session_state.clear()
+
+    assert _seen.get("manage") is True, (
+        "`render_manage_tab()` 被呼叫時 `NAV_HISTORY` **不在手上** —— "
+        "管理室會把它自己那份「🗄️ 補歷史淨值」再畫一次。\n"
+        f"實際：{_seen}")
+    assert _seen.get("guard") is True, (
+        "`render_data_guard_tab()` 被呼叫時 `NAV_HISTORY` **不在手上** —— "
+        "資料診斷會把「🗂️ NAV 歷史匯入與累積狀態」再畫一次。\n"
+        f"實際：{_seen}")
+
+
+def test_the_page_never_opens_the_policy_admin_flag():
+    """⛔ **`POLICY_ADMIN` 一格未開**（總管指示 ＋ 三條未處置的硬前置）。
+
+    今天 `app.py` 一次都沒有持有它 → `render_policy_admin_bridge()` 只畫一句灰色指路，
+    它掛的那一整支 Google Sheets 寫入是**死碼**。順手打開它會讓一整批寫入路徑活過來，
+    而 `policy_admin_bridge` 的 docstring 明列了三條尚未處置的硬前置
+    （session_state 先寫後讀耦合 / `sheet_client` 無 SSOT / oauth snapshot 紀律）。
+
+    ⚠️ **兩個方向都擋**：不准把 `POLICY_ADMIN` 放進任何 `settings_page_owns(...)`，
+    也不准傳一個非 None 的 `sheet_client`（那是旗標開啟後才用得到的東西，
+    先傳進去等於替下一個人把前置條件的最後一道擋板拆掉）。
+    """
+    _all_flags = [_f for _fn in _EXPECTED_FLAGS for _f in _guard_flags(_fn)]
+    assert "POLICY_ADMIN" not in _all_flags, (
+        "被測檔持有了 `POLICY_ADMIN` —— 那會讓一整批 Google Sheets 寫入路徑活過來，"
+        "而它有三條尚未處置的硬前置（見 `policy_admin_bridge` 的 docstring）。")
+    _tree_ = ast.parse(SRC.read_text(encoding="utf-8"))
+    for _n in ast.walk(_tree_):
+        if (isinstance(_n, ast.Call)
+                and getattr(_n.func, "id", "") == "render_policy_admin_bridge"):
+            for _k in _n.keywords:
+                if _k.arg == "sheet_client":
+                    assert (isinstance(_k.value, ast.Constant)
+                            and _k.value.value is None), (
+                        f"L{_n.lineno} 傳了非 None 的 `sheet_client`："
+                        f"{ast.unparse(_k.value)} —— 本批一律傳 None。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 兩個 gate：沒勾就不做任何 I/O（總管裁決 3）
+# ══════════════════════════════════════════════════════════════════
+
+def test_both_gates_are_grey_and_point_at_themselves():
+    """⭐ 兩個 gate 沒勾時**各自**掛灰態，而且指路指向**那個 checkbox 本身**。
+
+    ⚠️ 這一則指路是本頁少數「**去了真的有用**」的：勾起來就會載入。
+       字面吃 :data:`DIAG_GATE_LABEL` / :data:`NAV_GATE_LABEL`，**不手抄** ——
+       手抄的那一刻它就開始漂移，而本 repo 的「指路指到不存在的東西」已發作三次。
+    ⚠️ 順帶驗「那個 checkbox 真的在畫面上」—— 指到一個不存在的按鈕比沒有指路更糟。
+    """
+    _parts = _stream("loaded")
+    _seg = _segments(_parts)
+    for _block, _label, _note in (
+            (BLOCK_HEALTH, DIAG_GATE_LABEL, _DIAG_NOT_LOADED_NOTE),
+            (nav_status_label(), NAV_GATE_LABEL, _NOT_LOADED_NOTE)):
+        _body = _text(_seg.get(_block, []))
+        assert _body, f"區塊「{_block}」是空的。"
+        assert NOT_READY_MARK in _body, (
+            f"gate 沒勾時，「{_block}」沒有灰態記號 {NOT_READY_MARK!r}：\n{_body}")
+        assert _note in _body, (
+            f"「{_block}」的灰態沒有帶它該帶的那句說明：\n{_body}")
+        assert f"上方「{_label}」" in _body, (
+            f"「{_block}」的灰態沒有指向那個 gate（`上方「{_label}」`）：\n{_body}")
+        assert f"[Checkbox] {_label}" in _parts, (
+            f"指路指向的 checkbox {_label!r} 不在畫面上 —— 指到了不存在的地方。")
+
+
+def test_the_diag_gate_is_off_by_default_and_uses_its_own_key():
+    """⭐ 資料診斷 gate **預設不勾**，而且**不共用舊 ⑤ 的 key**。
+
+    - **預設不勾**（總管裁決 3）：`render_data_guard_tab()` 開頭有一次**無條件的
+      匯率抓取** ＋ caller 契約要求先跑 `_update_data_registry()`。
+      **拿掉這個 gate ＝ 打開 ⑤ 就對外取數。**
+    - **不共用 key**：舊 ⑤（`ui/tab_settings_diag.py`）用的是 `"sd_diag_gate"`，
+      而它**仍然接在 `app.py`**。兩頁共用同一個 widget key，在「兩頁同時被渲染」
+      的那一刻會直接拋 `StreamlitDuplicateElementKey`。
+    """
+    assert _SK_DIAG_GATE != "sd_diag_gate", (
+        "新頁與舊 ⑤ 共用了同一個 widget key —— 兩頁同時渲染時會直接炸。")
+    assert _SK_DIAG_GATE.startswith("v05_"), (
+        f"gate 的 key {_SK_DIAG_GATE!r} 不在本頁的命名空間裡。")
+    _at = _app(FAKE_HOLDINGS)
+    _gate = next(_c for _c in _at.checkbox if _c.label == DIAG_GATE_LABEL)
+    assert _gate.value is False, "資料診斷 gate 預設是勾起來的 —— 打開 ⑤ 就會對外取數。"
+
+
+def test_the_diag_gate_really_gates_the_registry_update():
+    """⭐ **gate 沒勾 → `_update_data_registry()` 與 `render_data_guard_tab()`
+    一次都不會被呼叫；勾起來才會，而且順序是「先更新註冊表、再畫診斷」。**
+
+    ⛔ **看畫面驗不到這件事**（「沒跑」與「跑了但沒東西可畫」長得一樣），
+       所以本條數**呼叫次數與順序**。這正是總管裁決 3 要保住的東西：
+       **拿掉這個 gate ＝ 打開 ⑤ 就對外取數。**
+    ⚠️ 順序是 `ui/tab5_data_guard.py` 的 **caller 契約**，不是風格 ——
+       註冊表沒先更新，診斷頁讀到的是上一輪的狀態。
+
+    ⛔ **一定要走 `AppTest`，不能在 bare 模式下塞 `session_state` 再直接呼叫**：
+       bare 模式（沒有 runtime）下 `st.checkbox(..., key=…)` **不會**去讀
+       session_state 的既有值，一律回預設 `False` —— 本組第一版就是這樣寫的，
+       於是「勾起來之後」那一半**永遠測不到**（`_calls` 恆為空）。
+       **一條在兩種情況下都回同一個答案的斷言，等於沒有斷言。**
+    """
+    import sys
+
+    _calls: list[str] = []
+
+    class _FakeRegistry:
+        @staticmethod
+        def _update_data_registry(*_a: Any, **_k: Any) -> None:
+            _calls.append("registry")
+
+    class _FakeGuard:
+        @staticmethod
+        def render_data_guard_tab(*_a: Any, **_k: Any) -> None:
+            _calls.append("guard")
+
+    _fakes = {"ui.helpers.data_registry": _FakeRegistry,
+              "ui.tab5_data_guard": _FakeGuard}
+    _orig = {_n: sys.modules.get(_n) for _n in _fakes}
+    for _n, _f in _fakes.items():
+        sys.modules[_n] = _f                                    # type: ignore[assignment]
+    try:
+        _at = _app(FAKE_HOLDINGS)
+        assert _calls == [], (
+            f"gate 還沒勾就跑了對外取數的前置：{_calls}\n"
+            "⛔ 打開 ⑤ 就更新註冊表 ＋ 抓匯率，正是這個 gate 存在的理由。")
+        next(_c for _c in _at.checkbox if _c.label == DIAG_GATE_LABEL).check()
+        _rerun(_at)
+        assert _calls == ["registry", "guard"], (
+            f"勾起來之後的呼叫順序不對或漏跑：{_calls}\n"
+            "caller 契約是**先更新註冊表、再畫診斷**"
+            "（`ui/tab5_data_guard.py` 的模組 docstring）。")
+    finally:
+        for _n, _m in _orig.items():
+            if _m is None:
+                sys.modules.pop(_n, None)
+            else:
+                sys.modules[_n] = _m
+
+
+def test_the_delegated_blocks_have_real_content_not_a_grey_placeholder():
+    """⭐ **四個委派區塊不准只是一句灰字。**
+
+    ⛔ 這一條取代了三條舊守衛（`test_the_form_block_is_not_grey` /
+    `test_the_manual_is_static_text_not_a_grey_placeholder` /
+    `test_the_manual_lists_exactly_the_wireframe_three`），而且**比它們強** ——
+    舊的三條各守一塊、而且只驗「有沒有 ⬜」；本條驗**每一塊都有真的東西**。
+
+    ⚠️ **判準是「這一塊裡有沒有 widget 或多於一行的內容」**，不是比對特定字串 ——
+    比對字串等於把被委派模組的文案抄一份進來（第二份真相源，且必然漂移）。
+    ⚠️ **「連線與金鑰」與「使用手冊」不在本條射程內**，理由不同、逐一寫明：
+    - **連線與金鑰**：兩個承接對象在測試環境**本來就會是灰態**
+      （沒有 OAuth token → 保單橋接灰；沒有抓取紀錄 → 抓取診斷灰）。
+      那是**真實狀態**，不是佔位。
+    - **使用手冊**：它收在 `st.expander` 裡，AppTest 仍會渲染其內容，
+      故它**在**射程內（見下方 `_want`）。
+    """
+    _seg = _segments(_stream("loaded"))
+    _want = (nav_manual_label(), maintain_label(), BLOCK_MANUAL)
+    for _b in _want:
+        _body = _seg.get(_b, [])
+        assert _body, f"區塊「{_b}」什麼都沒畫 —— 委派沒有生效。"
+        _widgets = [_p for _p in _body
+                    if _p.startswith(("[Button]", "[TextInput]", "[Checkbox]",
+                                      "[FileUploader]", "[Expander]", "[Selectbox]",
+                                      "[NumberInput]", "[DateInput]", "[Radio]"))]
+        _rich = [_p for _p in _body if _p.startswith(("[Markdown]", "[Caption]"))]
+        assert _widgets or len(_rich) >= 2, (
+            f"區塊「{_b}」看起來仍是佔位（widget {len(_widgets)} 個、"
+            f"文字 {len(_rich)} 行）：\n{_text(_body)}")
+        assert not (len(_body) == 1 and NOT_READY_MARK in _body[0]), (
+            f"區塊「{_b}」只有一句灰字 —— 委派應該帶來真內容。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 唯讀閘門：NAV gate 一個 session 都不准寫、一次寫入都不准做
+# ══════════════════════════════════════════════════════════════════
+
+#: 會產生使用者輸入的 widget —— 線框那句「寫入類動作，**全部 Form 封裝**」管的就是這些。
+#: ⚠️ 這是**白名單，不是窮舉**：Streamlit 新增的輸入元件不會自動進來。
+_INPUT_WIDGETS: frozenset = frozenset({
+    "checkbox", "toggle", "slider", "select_slider", "number_input",
+    "text_input", "text_area", "selectbox", "multiselect", "radio",
+    "date_input", "time_input", "file_uploader", "color_picker", "camera_input",
+})
+
+
+def _input_widget_calls(tree: ast.AST) -> list[ast.Call]:
+    """檔內所有 `st.<輸入元件>(...)` 呼叫。"""
+    return [_n for _n in ast.walk(tree)
+            if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute)
+            and _n.func.attr in _INPUT_WIDGETS]
+
+
+#: 而且**只放得下 checkbox / toggle 這種布林閘門**。
+#: 任何人想把一個 form 欄位搬出去，只要它會寫東西，那條證明就會紅。
+READ_ONLY_GATE_FUNCS: frozenset = frozenset({"_render_nav_status"})
+
+#: 會寫入 nav_history 的 L2 入口（`services/nav_history_gs.py::__all__` 的寫入側）。
+#: 唯讀閘門函式裡出現任何一個 → 它就不是唯讀的。
+_WRITE_CALL_NAMES: frozenset = frozenset({
+    "append_point", "append_points", "import_csv_text",
+})
+#: 唯讀閘門裡**唯一**允許的輸入元件形態（布林開關）。
+_GATE_ONLY_WIDGETS: frozenset = frozenset({"checkbox", "toggle"})
+
+
+def _func_defs(tree: ast.AST) -> dict[str, ast.FunctionDef]:
+    return {_n.name: _n for _n in ast.walk(tree)
+            if isinstance(_n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+def _read_only_gate_ranges(tree: ast.AST) -> list[tuple[int, int]]:
+    """:data:`READ_ONLY_GATE_FUNCS` 各函式的行區間。"""
+    _defs = _func_defs(tree)
+    return [(_d.lineno, getattr(_d, "end_lineno", _d.lineno))
+            for _n, _d in _defs.items() if _n in READ_ONLY_GATE_FUNCS]
+
+
+def test_the_read_only_gate_really_is_read_only():
+    """⭐ 唯讀閘門的**豁免證明** —— 沒有這條，上面那條豁免就是一個洞。
+
+    四項全部要過（任一不過 ＝ 那個函式不配拿豁免）：
+
+    1. **名單上的函式真的存在** —— 打錯字會讓豁免對一個不存在的名字生效，
+       而豁免區間變成空集合的話上面那條會**照常綠**（因為 form 外本來就沒東西）。
+       ⛔ 這一項擋的是「豁免悄悄失效」與「豁免悄悄擴大」兩個方向裡的**後者的入口**。
+    2. **函式內一個 session 都不寫**（下標／屬性／`update` / `setdefault` /
+       widget `key=` 四條管道全看，形狀沿用 :func:`test_the_page_writes_only_its_own_session_key`）。
+    3. **函式內不呼叫任何寫入類 L2 入口**（:data:`_WRITE_CALL_NAMES`）。
+    4. **函式內 form 外的輸入元件只能是 checkbox / toggle** —— 布林閘門。
+       ⛔ 這一項擋的是「把一個 `text_input` 搬進閘門函式來躲 form」。
+
+    ⚠️ **本條守不到的（照實列）**：
+    - 豁免是**以函式為單位**的，所以在 `_render_nav_status` 裡多放**第二個** checkbox
+      不會紅（第 4 項只管型別，不管數量）。目前那個函式只有一個 gate；
+      要不要連數量一起釘，本組判斷**不值得**（會把「多一個唯讀開關」也打紅）。**登記。**
+    - 第 3 項是**裸函式名**比對，`getattr(mod, "append_points")(...)` 這種非字面呼叫抓不到
+      （同本檔其他 AST 條的既有限制）。
+    - 「唯讀」只驗到**寫入的四條管道 ＋ 寫入類 L2 入口**；一個會寫檔案的新 helper
+      （例如 `pathlib.Path.write_text`）**不在射程內**。
+    """
+    _tree_ = _tree()
+    _defs = _func_defs(_tree_)
+    _missing = sorted(READ_ONLY_GATE_FUNCS - set(_defs))
+    assert not _missing, (
+        f"唯讀閘門名單上的 {_missing} 在被測檔裡不存在 —— "
+        "豁免正指著一個不存在的名字（改名之後這個豁免會靜靜留在檔案裡）。")
+
+    for _name in sorted(READ_ONLY_GATE_FUNCS):
+        _fn = _defs[_name]
+        _bad: list[str] = []
+        for _n in ast.walk(_fn):
+            _targets: list[ast.AST] = []
+            if isinstance(_n, ast.Assign):
+                _targets = list(_n.targets)
+            elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
+                _targets = [_n.target]
+            for _t in _targets:
+                if (isinstance(_t, (ast.Subscript, ast.Attribute))
+                        and "session_state" in _dotted(getattr(_t, "value", _t))):
+                    _bad.append(f"L{_n.lineno} 寫 session {_dotted(_t)}")
+            if isinstance(_n, ast.Call):
+                _d = _dotted(_n.func)
+                _leaf = _d.rsplit(".", 1)[-1]
+                if "session_state" in _d and _leaf in ("update", "setdefault"):
+                    _bad.append(f"L{_n.lineno} {_d}(...)")
+                if _d.startswith("st.") and any(_k.arg == "key" for _k in _n.keywords):
+                    _bad.append(f"L{_n.lineno} widget key= → {_d}")
+                if _leaf in _WRITE_CALL_NAMES:
+                    _bad.append(f"L{_n.lineno} 寫入類呼叫 {_d}(...)")
+        assert not _bad, (
+            f"「{_name}」拿了唯讀閘門豁免，但它會寫東西：{_bad}\n"
+            "⛔ 豁免只給**唯讀**閘門 —— 會寫的東西一律回到 `applied_form(...)` 裡面。")
+
+        _widgets = [_c for _c in _input_widget_calls(_fn)]
+        _wrong = sorted({_c.func.attr for _c in _widgets} - _GATE_ONLY_WIDGETS)
+        assert not _wrong, (
+            f"「{_name}」裡的輸入元件 {_wrong} 不是布林閘門 —— "
+            f"唯讀閘門只放得下 {sorted(_GATE_ONLY_WIDGETS)}；"
+            "其他輸入元件請回到 `applied_form(...)` 裡面。")
+        assert _widgets, (
+            f"「{_name}」在唯讀閘門名單上，卻一個輸入元件都沒有 —— "
+            "這個豁免已經沒有用途，請把它降回來（雙向 ratchet）。")
+
+
+def test_the_pointer_is_a_place_not_a_status_sentence():
+    """`_where()` 回傳的必須是一個**地方**（`分頁 → 區塊`）。
+
+    `not_ready()` 會把它包成「（請先到：…）」—— 塞一句狀態陳述進去
+    會產生一句**不可執行的指令**（③ 2026-09-05 被獨立紅隊實測抓到的錯）。
+    """
+    _got = _where(nav_manual_label())
+    assert _got == f"{where_to_find('settings')} → {nav_manual_label()}", _got
+    assert "目前" not in _got and "只有" not in _got, (
+        f"指路變成狀態陳述了：{_got!r}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -645,7 +1240,7 @@ def test_no_block_is_empty_before_the_gate_is_opened(kind: str):
     gate 沒勾 ＝ 我們**什麼都還沒讀**，那時唯一誠實的畫面是**灰態**，不是空狀態。
     → 由 :func:`test_the_empty_state_only_appears_after_a_successful_read` 從另一邊守。
     """
-    _empty = [_m.group(1).strip() for _p in _stream(kind) if (_m := _EMPTY_OPEN.match(_p))]
+    _empty = [_m.group(1).strip() for _p in _nav_parts(_stream(kind)) if (_m := _EMPTY_OPEN.match(_p))]
     assert _empty == [], (
         f"（{kind}）gate 還沒勾就出現了空狀態 {_empty} —— "
         "我們一次都還沒讀雲端，說不出「沒有」（§1：不知道 ≠ 沒有）。")
@@ -782,7 +1377,7 @@ def test_the_nav_block_has_exactly_one_state_at_a_time(state: str):
         "有資料": SPAN_PHRASE in _text(_parts),
     }
     # 空狀態自己是一個獨立單位（`_EMPTY_OPEN`），故在整份渲染流裡數。
-    _seen["是空的"] = bool([_p for _p in _parts if _EMPTY_OPEN.match(_p)])
+    _seen["是空的"] = bool([_p for _p in _nav_parts(_parts) if _EMPTY_OPEN.match(_p)])
     _on = sorted(_k for _k, _v in _seen.items() if _v)
     _want = {"gate 未勾": ["還沒讀"], "後端未啟用": ["讀不到"],
              "讀到空": ["是空的"], "讀到有資料": ["有資料"]}[state]
@@ -931,7 +1526,10 @@ def test_no_rendered_line_shows_a_duration_without_its_point_count(state: str):
     """
     _backend, _cov, _open = _NAV_STATES[state]
     _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)
-    for _p in _duration_bearing_parts(_parts):
+    # ⛔ **縮到 NAV 區塊**（2026-09-06 委派化）：全頁掃會掃到被委派模組的教學文
+    #    （`ui/tab6_manual.py` 裡就有「約 5.5 年」這種字），而那不是本頁寫的。
+    #    完整理由與代價見 :func:`_nav_parts`。
+    for _p in _duration_bearing_parts(_nav_parts(_parts)):
         assert POINTS_UNIT in _p, (
             f"（{state}）畫面上有一則帶時間長度的字，卻沒有點數：\n{_p}\n"
             "⛔ 一段沒有點數的「N 年 / N 天」會被讀成「我有這麼長的完整歷史」，"
@@ -1086,10 +1684,9 @@ def test_a_wholly_unreadable_payload_never_draws_an_empty_expander():
     """
     _parts, _ = _run_gated(BACKEND_ON, {"AAA": None, "BBB": "x"},
                            funds=FAKE_HOLDINGS)
-    _names = [_n for _n, _ in _units(_parts)]
-    assert NAV_DETAIL_LABEL in _names, (
+    assert NAV_DETAIL_LABEL in _nav_expanders(_parts), (
         "有讀不懂的條目要列出來，展開器不該消失。")
-    _body = _text(_segments(_parts).get(NAV_DETAIL_LABEL, []))
+    _body = _text(_nav_expander_body(_parts, NAV_DETAIL_LABEL))
     assert "讀不出來" in _body, f"展開器是空的：{_body!r}"
 
 
@@ -1182,7 +1779,7 @@ def test_the_detail_expander_exists_only_when_there_is_data():
     **本條仍然有價值**（它守的是另外三種狀態不准畫展開器），故保留、不合併。
     """
     _with_data, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
-    assert NAV_DETAIL_LABEL in [_n for _n, _ in _units(_with_data)], (
+    assert NAV_DETAIL_LABEL in _nav_expanders(_with_data), (
         f"有資料卻沒有「{NAV_DETAIL_LABEL}」展開器。")
     for _label, _backend, _cov in (
             ("gate 未勾", BACKEND_ON, FAKE_COVERAGE),
@@ -1190,7 +1787,7 @@ def test_the_detail_expander_exists_only_when_there_is_data():
             ("讀到空", BACKEND_ON, {})):
         _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS,
                                open_gate=_label != "gate 未勾")
-        assert NAV_DETAIL_LABEL not in [_n for _n, _ in _units(_parts)], (
+        assert NAV_DETAIL_LABEL not in _nav_expanders(_parts), (
             f"（{_label}）沒有任何逐檔資料，卻先畫了一個空的「{NAV_DETAIL_LABEL}」展開器。")
 
 
@@ -1263,16 +1860,17 @@ def test_the_empty_state_only_appears_after_a_successful_read():
     ⛔ 三種路徑各驗一次：未啟用 → 灰態（0 個空狀態）；讀到空 → 恰好 1 個；讀到有資料 → 0 個。
     """
     _off, _ = _run_gated(BACKEND_OFF, {}, funds=FAKE_HOLDINGS)
-    assert not [_p for _p in _off if _EMPTY_OPEN.match(_p)], (
+    assert not [_p for _p in _nav_parts(_off) if _EMPTY_OPEN.match(_p)], (
         "後端未啟用卻走了空狀態 —— 「看不到」被講成「看到了、是空的」。")
 
     _on_empty, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
-    _titles = [_m.group(1).strip() for _p in _on_empty if (_m := _EMPTY_OPEN.match(_p))]
+    _titles = [_m.group(1).strip() for _p in _nav_parts(_on_empty)
+               if (_m := _EMPTY_OPEN.match(_p))]
     assert _titles == [_EMPTY_TITLE], (
         f"讀成功且一筆都沒有時，空狀態應恰好 1 個且是那一句：{_titles}")
 
     _on_data, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
-    assert not [_p for _p in _on_data if _EMPTY_OPEN.match(_p)], (
+    assert not [_p for _p in _nav_parts(_on_data) if _EMPTY_OPEN.match(_p)], (
         "已經讀到資料了還畫空狀態。")
 
 
@@ -1290,9 +1888,12 @@ def test_the_empty_state_asserts_nothing_about_the_users_funds():
     （2026-09-06 稽核必修的形狀，原封沿用）。
     """
     _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
-    _titles = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
+    _titles = [_m.group(1).strip() for _p in _nav_parts(_parts)
+               if (_m := _EMPTY_OPEN.match(_p))]
     assert len(_titles) == 1, f"空狀態單位應恰好 1 個：{_titles}"
-    _body = _text(_segments(_parts).get(_titles[0], []))
+    # ⚠️ 委派化之後 `_units()` 只認六個區塊標題，空狀態**不再自成一個單位** ——
+    #    改取整個 NAV 區塊當本文（走到空狀態時那一塊裡就只有它，見被測檔的四態分流）。
+    _body = _text(_nav_parts(_parts))
     for _where, _txt in (("標題", _titles[0]), ("內文", _body)):
         for _lie in ("一檔都還沒列入", "還沒有任何基金", "你沒有基金", "一檔都沒有",
                      "你的基金", "你沒有累積"):
@@ -1314,9 +1915,12 @@ def test_the_empty_state_pointer_actually_works():
     :func:`test_pressing_submit_says_the_backfill_is_not_wired_yet` 誠實說出來。
     """
     _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
-    _titles = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
-    _body = _text(_segments(_parts).get(_titles[0], []))
-    assert _pending_where(nav_manual_label()) in _body, (
+    _titles = [_m.group(1).strip() for _p in _nav_parts(_parts)
+               if (_m := _EMPTY_OPEN.match(_p))]
+    # ⚠️ 委派化之後 `_units()` 只認六個區塊標題，空狀態**不再自成一個單位** ——
+    #    改取整個 NAV 區塊當本文（走到空狀態時那一塊裡就只有它，見被測檔的四態分流）。
+    _body = _text(_nav_parts(_parts))
+    assert _where(nav_manual_label()) in _body, (
         f"空狀態沒有帶指路：\n{_body}")
     assert nav_manual_label() in [_n for _n, _ in _units(_parts)], (
         "空狀態指向「手動補資料」，但那一塊不在畫面上 —— 指路指到了不存在的地方。")
@@ -1330,154 +1934,19 @@ def test_the_empty_state_does_not_also_print_the_pending_excuse():
     ⛔ 疊在一起會讓使用者以為補資料也沒用 —— 一次只給一個。
     """
     _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
-    _empty_names = {_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))}
+    _empty_names = {_m.group(1).strip() for _p in _nav_parts(_parts)
+                    if (_m := _EMPTY_OPEN.match(_p))}
     assert _empty_names, "讀成功且沒有資料時應該要有空狀態。"
-    _seg = _segments(_parts)
+    # 空狀態是 NAV 區塊**內**的一個東西，切段也要在那一塊裡做。
+    _seg = {_t: _nav_parts(_parts) for _t in _empty_names}
     for _name in _empty_names:
-        assert _PENDING_NOTE not in _text(_seg.get(_name, [])), (
-            f"空狀態單位「{_name}」裡混進了「還沒接上」那句 —— "
-            "兩種灰的下一步不同，一次只給一個。")
+        # ⚠️ 2026-09-06 委派化：「本頁分批上線」那句灰態**已經不存在**（那一塊接上了），
+        #    本條的對象換成**還存在的**那一種灰 —— gate 沒勾的「尚未讀取」。
+        #    **性質一字未變**：兩種灰的下一步不同（去補資料 vs 勾 gate），一次只給一個。
+        assert _NOT_LOADED_NOTE not in _text(_seg.get(_name, [])), (
+            f"空狀態單位「{_name}」裡混進了「尚未讀取」那句 —— "
+            "我們已經讀到了（否則畫不出空狀態），一次只給一個。")
 
-
-# ══════════════════════════════════════════════════════════════════
-# 灰態：三塊各自誠實灰；Form 不灰；使用手冊不是灰態（D-1）
-# ══════════════════════════════════════════════════════════════════
-
-@pytest.mark.parametrize("unit", _grey_units())
-def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
-    """三個灰態單位**各自**要有 ⬜ —— 不准靠鄰居的灰字過關。
-
-    ⚠️ 粒度是「一張卡」（見 :func:`_units`）。若哪天真內容接上了，這條會轉紅 ——
-    **那是預期的**，屆時請把它改成「真內容放行」，不要把它放寬。
-    """
-    _body = _segments(_stream("loaded")).get(unit)
-    assert _body is not None, f"單位「{unit}」根本沒出現在渲染流裡。"
-    assert any(NOT_READY_MARK in _p for _p in _body), (
-        f"單位「{unit}」沒有自己的灰態記號 {NOT_READY_MARK!r} —— "
-        "本批這一塊還沒接線，就必須誠實說出來（§1），不得留白也不得靠鄰居的灰字。")
-
-
-@pytest.mark.parametrize("unit", _grey_units())
-def test_every_grey_unit_says_where_to_look(unit: str):
-    """每個灰態單位都要帶「去哪補」—— 沒有它，占位只是把「消失」換成「灰色的消失」。"""
-    _body = _text(_segments(_stream("loaded")).get(unit, []))
-    _want = _GREY_POINTER()[unit]
-    assert _want in _body, (
-        f"單位「{unit}」的灰態沒有帶它該帶的那一句指路 {_want!r}。\n"
-        "線框 §02：這是最容易省掉、也最有價值的一項。\n"
-        "⚠️ 三塊的指路**不一樣**（見 `_GREY_POINTER`）—— "
-        "NAV 那一塊的下一步是勾同一張卡上的 gate，不是去手動補資料。\n"
-        f"{_body}")
-
-
-def test_the_form_block_is_not_grey():
-    """手動補資料是本批**唯一做完**的一塊 —— 它不准是灰態。
-
-    ⚠️ 這條是 :func:`test_every_grey_unit_is_grey_until_its_content_lands` 的反向守衛：
-    把 Form 那一塊做壞成灰態（或整塊拿掉換成灰字），這條會轉紅。
-    """
-    _body = _text(_segments(_stream("loaded")).get(nav_manual_label(), []))
-    assert _body, f"「{nav_manual_label()}」單位是空的 —— Form 沒有渲染出來。"
-    assert NOT_READY_MARK not in _body, (
-        f"「{nav_manual_label()}」被畫成灰態了 —— 它是本批唯一真的做完的一塊。")
-
-
-def test_the_manual_is_static_text_not_a_grey_placeholder():
-    """⭐ **D-1**：使用手冊那張卡的 `dim` **不是灰態**，不准畫成未載入佔位。
-
-    **依據**（`grep -n 'dim' docs/wireframes/ia-wireframe.html`，全檔僅 5 個命中）：
-    `:193/:198` 是 CSS；`:379` 與 `:552` 兩張 `card dim` **都帶 `灰態` chip**；
-    **`:706` 使用手冊那張沒有 `灰態` chip**，內文寫「**純文字**」。
-    → `dim` 在這份線框裡承擔**兩種**意思；使用手冊那張是**視覺降權**，
-    **不是「還沒接上」**。
-
-    ⛔ 它是**現在就能出的靜態文字**，畫成「未載入」是對使用者說一句**假話**（§1）——
-    而且是在這一頁上：本頁的職責就是回答「資料可不可信」。
-
-    ⚠️ **這條守的是「它沒有 ⬜」，不守「它的內容是對的」**（後者見
-    :func:`test_the_manual_lists_exactly_the_wireframe_three`）。
-    """
-    for _kind in ("empty", "missing", "loaded"):
-        _body = _text(_segments(_stream(_kind)).get(BLOCK_MANUAL, []))
-        assert _body, f"（{_kind}）「{BLOCK_MANUAL}」單位是空的。"
-        assert NOT_READY_MARK not in _body, (
-            f"（{_kind}）「{BLOCK_MANUAL}」被畫成灰態了 —— D-1：線框那張卡的 `dim` "
-            "**沒有** `灰態` chip，它是視覺降權不是「還沒接上」。"
-            "把現在就能出的靜態文字畫成「未載入」是說謊（§1）。")
-
-
-#: 線框 Tab 05 使用手冊那張卡逐字列的三項。**目錄就是全部內容，多一項都不行。**
-_MANUAL_ITEMS: frozenset = frozenset({"指標定義", "門檻由來", "常見誤讀"})
-#: 抓 markdown 目錄項 `- **X**`。
-#: ⚠️ **`\[Markdown\] ` 這個可選前綴不能省**：`_flat()` 把整個 `st.markdown` 區塊
-#:    記成**一行** `[Markdown] - **指標定義**\n- **門檻由來**\n…`，
-#:    所以**第一項**的行首是 `[Markdown] `、不是 `-`。少了這個前綴，
-#:    第一項會被漏掉 —— 本組第一版就是這樣，被自己的集合相等當場抓出來
-#:    （`少了：['指標定義']`）。**這正是「只驗有沒有」看不到、「集合相等」才看得到的那種錯。**
-#: ⛔ **項目符號要吃 `-` / `*` / `+` / `1.` / `1)` 五種**（2026-09-06 補）：
-#: 原本只認 `-`，於是多列一項寫成 `1. **投資建議**` → **50 passed 三序**，
-#: **集合相等整個看不見它**。那正是本條要擋的「多列一項＝自己發明規格」。
-#: ⚠️ **仍守不到**：`<li>` 之類的裸 HTML、以及不帶 `**粗體**` 的寫法。
-_MANUAL_ITEM_RE = re.compile(
-    r"^(?:\[Markdown\] )?(?:[-*+]|\d+[.)])\s+\*\*(.+?)\*\*\s*$", re.M)
-
-
-def test_the_manual_lists_exactly_the_wireframe_three():
-    """使用手冊只列線框逐字的三項目錄 —— **不准編一段內文充數，也不准多列**。
-
-    線框逐字：「指標定義、門檻由來、常見誤讀。純文字，不佔首屏。」
-    ⛔ 在一份**專門用來解釋門檻由來**的文件裡編內容，是最壞的一種造假（§1）。
-
-    ⛔ **2026-09-05 獨立稽核必修 —— 本條名字裡的 `exactly` 原本是假的。**
-    舊版只做 `for _item in (三個): assert _item in _body`，**只驗有沒有，不驗有沒有多**。
-    兩顆突變因此全數存活（三序一致）：
-    把 caption 換成編造的「指標定義：**Sharpe 大於 1 就是好基金**；門檻由來：**業界共識**。」
-    → **47 passed**；目錄多列「**投資建議**」「**保證報酬**」→ **47 passed**。
-    **一條 docstring 明寫「不准編一段內文充數」的守衛，放行了一段編出來的內文。**
-    現行改**集合相等**。
-
-    ⛔ **2026-09-06 更正：上一行原寫「集合相等，**兩顆一起擋掉**」—— 那句是假的，
-    而且它自己三行後就寫著「caption 本條看不到」，前後自相矛盾。**
-    集合相等做在 :data:`_MANUAL_ITEM_RE` 撈出來的**目錄項集合**上，
-    **結構上看不見 caption**。三序重測（`-p no:randomly` ＋ seed 101 ＋ seed 20260906）：
-    - 目錄多列「投資建議」「保證報酬」→ **1 failed**（✅ 這一顆確實擋掉了）；
-    - caption 換成編造的「指標定義：Sharpe 大於 1 就是好基金；門檻由來：業界共識。」
-      → **50 passed**（❌ **這一顆沒擋到，從頭到現在都沒有**）。
-    **實際是擋掉一顆、放行一顆。**
-
-    ⚠️ **仍然守不到**：目錄項以外的地方（例如 caption）寫了什麼，本條看不到。
-    ⛔ **2026-09-06 更正：原寫「那由 `test_no_grey_unit_states_a_conclusion` 的字表
-    「部分」涵蓋」—— 那也是假的，實際是【完全不涵蓋】。**
-    根因：那條守衛的迴圈開頭是 `if NOT_READY_MARK not in _joined: continue`，
-    而**使用手冊這一塊刻意不畫成灰態**（D-1：`dim` 是視覺降權、不是灰態）→
-    **沒有 ⬜ → 整個單位直接被跳過**。三序實測：把該字表的四個詞全塞進手冊的 caption
-    → **50 passed**。**覆蓋率是 0，不是「部分」。**
-    → 也就是說：**使用手冊的 caption 目前沒有任何守衛在看**，
-    而這是一份**專門用來解釋門檻由來**的文件。**登記在此，不是沒看到。**
-    """
-    _body = _text(_segments(_stream("loaded")).get(BLOCK_MANUAL, []))
-    _got = set(_MANUAL_ITEM_RE.findall(_body))
-    assert _got == _MANUAL_ITEMS, (
-        f"使用手冊的目錄項與線框不符。\n線框：{sorted(_MANUAL_ITEMS)}\n"
-        f"實際：{sorted(_got)}\n"
-        f"少了：{sorted(_MANUAL_ITEMS - _got)}／多了：{sorted(_got - _MANUAL_ITEMS)}\n"
-        "⛔ 多列一項就是自己發明規格；在一份專門解釋門檻由來的文件裡編內容，"
-        "是最壞的一種造假（§1）。")
-
-
-#: 灰態單位內**不准出現的結論性字眼**。⚠️ **這是黑名單，抓不到名單外的第 N+1 個。**
-#: 存在的理由：`state_card(state=STATE_NOT_READY)` 無條件前綴 ⬜，而
-#: :func:`test_every_grey_unit_is_grey_until_its_content_lands` 只查「有沒有 ⬜」——
-#: **⬜ 之後接什麼都行**。2026-09-05 稽核用四顆突變證明了這個縫
-#: （「你的資料全部正常，沒有任何異常」等，全部存活）。
-#: ⚠️ **2026-09-06：裸「正常」補進來了** —— 在此之前這個字表**八個都是片語**，
-#: 於是在灰卡的同一單位內印 `st.caption("18 個來源目前狀態：正常")` → **50 passed 三序**。
-#: **那一格當時沒有任何人守著**，而模組 docstring 與 D-3 那條都寫著「由本條守」。
-#: ⚠️ **本 repo 對「正常」有兩份不同的政策，不要混為一談**：
-#:   - :data:`_PINNED_FAKE_VALUES` 是**全頁**黑名單 → 「正常」**仍然不收**（釘它會把
-#:     任何一句合法說明打紅，那個理由今天依然成立）；
-#:   - 本字表只掃**帶 ⬜ 的灰態單位** → 射程窄得多，收得起。
-#: ⛔ **代價是真的，實測記在這裡**：灰卡若要寫一句合法說明如
 #:   「接上後這裡會逐源顯示**正常**或異常」，本條會**誤紅**（三序實測 1 failed）。
 #:   下一批接真取數時第一個會撞到這個 —— **那時請改文案或就地收窄本條，不要靜靜刪掉它。**
 #: ⚠️ 下面四個 `正常` 系片語已被裸「正常」涵蓋，**刻意保留**當作稽核抓到的原始紀錄。
@@ -1519,7 +1988,11 @@ def test_no_grey_unit_states_a_conclusion():
     **登記在此，不是沒看到。**
     """
     for _kind in ("empty", "missing", "loaded"):
-        for _unit, _body in _units(_stream(_kind)):
+        # ⛔ **只掃被測檔自己畫的那兩塊**（2026-09-06 委派化，見 :func:`_page_authored_parts`）：
+        #    委派之後，別的區塊裡的字是**被委派模組**寫的 —— 例如 `📖 使用手冊`
+        #    的教學文就有「✅ 配置正常，無需再平衡」，全頁掃會被它打紅，而本頁沒錯。
+        for _unit, _body in ((_n, _b) for _n, _b in _units(_stream(_kind))
+                             if _n in (BLOCK_HEALTH, nav_status_label())):
             _joined = _text(_body)
             if NOT_READY_MARK not in _joined:
                 continue
@@ -1529,57 +2002,6 @@ def test_no_grey_unit_states_a_conclusion():
                     f"{_joined}\n"
                     "⛔ 這一塊還沒接線，我們沒有查過任何來源 —— "
                     "說「正常」是憑空捏造一個系統健康狀態的結論（§1）。")
-
-
-# ⛔ **`test_the_empty_state_never_claims_the_user_has_no_funds` 與其 helper
-#    `_check_empty_state_is_honest` 已於 2026-09-06（P05-1）整段移除，取代品是
-#    :func:`test_the_empty_state_only_appears_after_a_successful_read` ＋
-#    :func:`test_the_empty_state_asserts_nothing_about_the_users_funds`。**
-#
-#    **這是有意識的替換，不是把一條客戶紅線的守衛刪掉，理由請讀完再動它：**
-#    舊條有兩半 —— (a) 說謊黑名單、(b) 「文案必須帶『這個 session / 已載入』這種限定詞」。
-#    - **(a) 原封保留**（黑名單搬進 `..._asserts_nothing_about_the_users_funds`，
-#      而且**多收了兩個**：「你的基金」「你沒有累積」）。
-#    - **(b) 必須拿掉，因為它在新行為下會強迫產生一句假話**：那個限定詞存在的唯一理由是
-#      「**我們那時根本沒讀過雲端**，只知道這個 session 沒載入」。P05-1 之後空狀態
-#      **只在真的讀成功之後**才出現 —— 這時再寫「這個 session 還沒載入」是錯的，
-#      事實是「**那張表真的是空的**」。
-#    - **承重的保護不是搬走而是換成更強的**：`..._only_appears_after_a_successful_read`
-#      是**結構性**的（未啟用 → 0 個空狀態；讀到空 → 恰好 1 個；讀到有資料 → 0 個），
-#      它管的是「這句話有沒有資格被說出口」，比「這句話裡有沒有某個詞」上游。
-#    ⚠️ **據實登記代價**：舊條會擋下「空狀態文案裡出現名單外的第 N+1 種說法」的機率
-#      **沒有變好也沒有變差**（黑名單本來就抓不到）；真正變掉的是
-#      **舊條那半條結構性要求（兩半各自都要帶限定詞）不再存在**。
-#      新條的結構性要求換成了「只有讀成功才到得了空狀態」——**不是同一件事**，
-#      只是本組判斷它在新行為下更貼題。**這是判斷，不是量出來的。**
-
-
-def test_pressing_submit_says_the_backfill_is_not_wired_yet():
-    """⭐ 按下「開始補抓」之後，畫面**必須說出**「實際補抓還沒接上」。
-
-    ⛔ **2026-09-05 獨立稽核應修。** 在補上之前：勾選 → 按鈕 → rerun，
-    **整頁一個字都沒變**，只有 session 靜靜寫入；而畫面上寫著
-    「勾選的當下不會發生任何事，按『開始補抓』**才算**」，
-    另外三塊都誠實掛著 ⬜「這一塊的內容還沒接上」，**唯獨這一塊沒有** ——
-    而它是唯一一個帶**動作動詞**、看起來會寫資料的。
-
-    ⚠️ 「不接真寫入」這個取捨本身是對的（一個按了會真的寫的鈕，接在還沒驗過的骨架上
-    更危險）；**錯的是不說**。「看起來會寫、其實不寫、而且不說」在一個職責是
-    「資料可不可信」的頁面上，比多一句話糟得多（§1）。
-    """
-    _at = _app(FAKE_HOLDINGS)
-    # ⚠️ **依標籤取，不用索引**（2026-09-06）：接上 NAV gate 之後 `checkbox[0]` 是 gate，
-    #    照舊寫法會勾錯框、然後測出一個假的結論。見 :func:`_cb`。
-    _cb(_at, _LABEL_SOURCE_CSV).check()
-    _at.button[0].click()
-    _rerun(_at)
-    _all = _text(_flat(_at.main))
-    assert "尚未接上" in _all or "還沒接上" in _all, (
-        "按下送出之後，畫面上沒有任何一句說明「實際補抓還沒接上」：\n" + _all)
-    assert "已記下" in _all, (
-        "按下送出之後，畫面上沒有告訴使用者「選擇已被記下」——\n"
-        "一個按了完全沒有回饋的鈕，使用者只會再按一次。\n" + _all)
-
 
 def test_the_page_never_hand_rolls_the_grey_mark():
     """⬜ 一律由 `render_state` 產生 —— 被測檔不准自己拼那個字元。
@@ -1591,7 +2013,6 @@ def test_the_page_never_hand_rolls_the_grey_mark():
     assert not _bad, (
         f"被測檔自己拼了灰態記號 {NOT_READY_MARK!r}：{_bad}\n"
         "請走 `render_state.not_ready()` / `ia.state_card(state=STATE_NOT_READY)`。")
-
 
 # ══════════════════════════════════════════════════════════════════
 # D-3：線框示意值一個都不准畫
@@ -1667,299 +2088,6 @@ def test_the_page_invents_no_source_list_or_column_list():
         f"被測檔多了看起來像清單的常數：{_bad}\n"
         "線框沒有列出來源清單／欄位清單 —— 補一份等於自己發明規格。")
 
-
-# ══════════════════════════════════════════════════════════════════
-# 鐵則 02：寫入類動作全部 Form 封裝
-# ══════════════════════════════════════════════════════════════════
-
-#: 會產生使用者輸入的 widget —— 線框那句「寫入類動作，**全部 Form 封裝**」管的就是這些。
-#: ⚠️ 這是**白名單，不是窮舉**：Streamlit 新增的輸入元件不會自動進來。
-_INPUT_WIDGETS: frozenset = frozenset({
-    "checkbox", "toggle", "slider", "select_slider", "number_input",
-    "text_input", "text_area", "selectbox", "multiselect", "radio",
-    "date_input", "time_input", "file_uploader", "color_picker", "camera_input",
-})
-
-
-def _applied_form_with() -> ast.With | None:
-    """回傳包住 `applied_form(...)` 的那個 `ast.With`；沒有就回 `None`。"""
-    for _n in ast.walk(_tree()):
-        if isinstance(_n, ast.With):
-            for _it in _n.items:
-                _c = _it.context_expr
-                if (isinstance(_c, ast.Call)
-                        and _dotted(_c.func).endswith("applied_form")):
-                    return _n
-    return None
-
-
-def _input_widget_calls(tree: ast.AST) -> list[ast.Call]:
-    """檔內所有 `st.<輸入元件>(...)` 呼叫。"""
-    return [_n for _n in ast.walk(tree)
-            if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute)
-            and _n.func.attr in _INPUT_WIDGETS]
-
-
-#: **唯讀閘門**：可以把輸入元件放在 `applied_form(...)` 之外的函式。
-#:
-#: ⚠️ **2026-09-06（P05-1）新增的豁免，理由與它的證明一起寫在這裡。**
-#: 線框那句粗體管的是「**寫入類**動作，全部 Form 封裝」。
-#: NAV 累積狀態的 Checkbox Gate **不是寫入類** —— 它是一個
-#: 「**要不要去讀一次**」的唯讀開關，作用**恰好相反**：把一次 Google Sheets 往返
-#: 擋在點擊之後。把它塞進補資料的 form 裡，使用者就得**按下「開始補抓」才能看涵蓋度**，
-#: 那是把一個唯讀動作綁在一個寫入鈕上。
-#:
-#: ⛔ **豁免不是憑一句話成立的，它有機器證明**（見
-#: :func:`test_the_read_only_gate_really_is_read_only`）：名單上的函式必須
-#: **真的存在**、**一個 session 都不寫**、**不呼叫任何寫入類 L2 入口**、
-#: 而且**只放得下 checkbox / toggle 這種布林閘門**。
-#: 任何人想把一個 form 欄位搬出去，只要它會寫東西，那條證明就會紅。
-READ_ONLY_GATE_FUNCS: frozenset = frozenset({"_render_nav_status"})
-
-#: 會寫入 nav_history 的 L2 入口（`services/nav_history_gs.py::__all__` 的寫入側）。
-#: 唯讀閘門函式裡出現任何一個 → 它就不是唯讀的。
-_WRITE_CALL_NAMES: frozenset = frozenset({
-    "append_point", "append_points", "import_csv_text",
-})
-#: 唯讀閘門裡**唯一**允許的輸入元件形態（布林開關）。
-_GATE_ONLY_WIDGETS: frozenset = frozenset({"checkbox", "toggle"})
-
-
-def _func_defs(tree: ast.AST) -> dict[str, ast.FunctionDef]:
-    return {_n.name: _n for _n in ast.walk(tree)
-            if isinstance(_n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-
-
-def _read_only_gate_ranges(tree: ast.AST) -> list[tuple[int, int]]:
-    """:data:`READ_ONLY_GATE_FUNCS` 各函式的行區間。"""
-    _defs = _func_defs(tree)
-    return [(_d.lineno, getattr(_d, "end_lineno", _d.lineno))
-            for _n, _d in _defs.items() if _n in READ_ONLY_GATE_FUNCS]
-
-
-def test_the_read_only_gate_really_is_read_only():
-    """⭐ 唯讀閘門的**豁免證明** —— 沒有這條，上面那條豁免就是一個洞。
-
-    四項全部要過（任一不過 ＝ 那個函式不配拿豁免）：
-
-    1. **名單上的函式真的存在** —— 打錯字會讓豁免對一個不存在的名字生效，
-       而豁免區間變成空集合的話上面那條會**照常綠**（因為 form 外本來就沒東西）。
-       ⛔ 這一項擋的是「豁免悄悄失效」與「豁免悄悄擴大」兩個方向裡的**後者的入口**。
-    2. **函式內一個 session 都不寫**（下標／屬性／`update` / `setdefault` /
-       widget `key=` 四條管道全看，形狀沿用 :func:`test_the_page_writes_only_its_own_session_key`）。
-    3. **函式內不呼叫任何寫入類 L2 入口**（:data:`_WRITE_CALL_NAMES`）。
-    4. **函式內 form 外的輸入元件只能是 checkbox / toggle** —— 布林閘門。
-       ⛔ 這一項擋的是「把一個 `text_input` 搬進閘門函式來躲 form」。
-
-    ⚠️ **本條守不到的（照實列）**：
-    - 豁免是**以函式為單位**的，所以在 `_render_nav_status` 裡多放**第二個** checkbox
-      不會紅（第 4 項只管型別，不管數量）。目前那個函式只有一個 gate；
-      要不要連數量一起釘，本組判斷**不值得**（會把「多一個唯讀開關」也打紅）。**登記。**
-    - 第 3 項是**裸函式名**比對，`getattr(mod, "append_points")(...)` 這種非字面呼叫抓不到
-      （同本檔其他 AST 條的既有限制）。
-    - 「唯讀」只驗到**寫入的四條管道 ＋ 寫入類 L2 入口**；一個會寫檔案的新 helper
-      （例如 `pathlib.Path.write_text`）**不在射程內**。
-    """
-    _tree_ = _tree()
-    _defs = _func_defs(_tree_)
-    _missing = sorted(READ_ONLY_GATE_FUNCS - set(_defs))
-    assert not _missing, (
-        f"唯讀閘門名單上的 {_missing} 在被測檔裡不存在 —— "
-        "豁免正指著一個不存在的名字（改名之後這個豁免會靜靜留在檔案裡）。")
-
-    for _name in sorted(READ_ONLY_GATE_FUNCS):
-        _fn = _defs[_name]
-        _bad: list[str] = []
-        for _n in ast.walk(_fn):
-            _targets: list[ast.AST] = []
-            if isinstance(_n, ast.Assign):
-                _targets = list(_n.targets)
-            elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
-                _targets = [_n.target]
-            for _t in _targets:
-                if (isinstance(_t, (ast.Subscript, ast.Attribute))
-                        and "session_state" in _dotted(getattr(_t, "value", _t))):
-                    _bad.append(f"L{_n.lineno} 寫 session {_dotted(_t)}")
-            if isinstance(_n, ast.Call):
-                _d = _dotted(_n.func)
-                _leaf = _d.rsplit(".", 1)[-1]
-                if "session_state" in _d and _leaf in ("update", "setdefault"):
-                    _bad.append(f"L{_n.lineno} {_d}(...)")
-                if _d.startswith("st.") and any(_k.arg == "key" for _k in _n.keywords):
-                    _bad.append(f"L{_n.lineno} widget key= → {_d}")
-                if _leaf in _WRITE_CALL_NAMES:
-                    _bad.append(f"L{_n.lineno} 寫入類呼叫 {_d}(...)")
-        assert not _bad, (
-            f"「{_name}」拿了唯讀閘門豁免，但它會寫東西：{_bad}\n"
-            "⛔ 豁免只給**唯讀**閘門 —— 會寫的東西一律回到 `applied_form(...)` 裡面。")
-
-        _widgets = [_c for _c in _input_widget_calls(_fn)]
-        _wrong = sorted({_c.func.attr for _c in _widgets} - _GATE_ONLY_WIDGETS)
-        assert not _wrong, (
-            f"「{_name}」裡的輸入元件 {_wrong} 不是布林閘門 —— "
-            f"唯讀閘門只放得下 {sorted(_GATE_ONLY_WIDGETS)}；"
-            "其他輸入元件請回到 `applied_form(...)` 裡面。")
-        assert _widgets, (
-            f"「{_name}」在唯讀閘門名單上，卻一個輸入元件都沒有 —— "
-            "這個豁免已經沒有用途，請把它降回來（雙向 ratchet）。")
-
-
-def test_the_write_block_is_form_wrapped():
-    """⭐ 線框**唯一**用粗體寫的硬要求：「寫入類動作，**全部 Form 封裝**」。
-
-    ⛔ **2026-09-05 獨立稽核必修 —— 本條原本形同虛設，這段病史請留著。**
-    舊版斷言是 `len(_at.button) >= 1` ＋ `SUBMIT_LABEL in _labels`，
-    docstring 還宣稱「驗的是**畫面上真的有一個 form 送出鈕**」。
-    **那句宣稱做不到**：`AppTest` **沒有 `.form` 屬性**（實測 `hasattr(AppTest, "form")` → `False`），
-    form 的送出鈕在元素樹裡就是一顆普通 `Button`、form 本體是一個無標記 `Block` ——
-    **`at.button` 兩者皆收**，所以那兩條斷言**對一顆裸 `st.button` 恆真**。
-    稽核把 `with applied_form(...) as _gate:` 換成 `if True: _gate = st.button(SUBMIT_LABEL)`，
-    **本地 47 passed、六支全域守衛 467 passed —— 一條都沒紅。**
-
-    ⛔ **全域也補不到這個洞**：`tests/test_ui_rerun_contract.py` 的 `FORM_SITE_TOTAL`
-    數的是 **raw `st.form(` 站點**，而 ⑤ 走共用 `applied_form()`，**本身不貢獻任何 form 站點**；
-    `git grep applied_form -- tests/` 顯示**沒有任何守衛在數 `applied_form()` 的呼叫點**。
-    （repo 自己在 `FORM_SITES` 的註解裡預言過這件事，但沒補。**五分頁族全部走
-    `applied_form`，所以這個洞不只是 ⑤ 的** —— 全域版須另批處理，見 PR 描述的登記。）
-
-    **現行做法：AST，不看渲染結果。**
-    (1) 頁面**必須**有一個包住 `applied_form(...)` 的 `with`；
-    (2) 檔內**每一個**輸入元件呼叫都必須落在那個 `with` 的 body 行區間內。
-    → 把 `applied_form` 換成裸 `st.button`，(1) 當場失敗。
-    → 把某個 checkbox 搬到 form 外面，(2) 當場失敗。
-
-    ⚠️ **本條守不到的**：`_INPUT_WIDGETS` 是白名單，Streamlit 新增的輸入元件不會自動進來；
-    以及 `getattr(st, "checkbox")(...)` 這種非字面呼叫（同本檔其他 AST 條的既有限制）。
-
-    ⛔ **2026-09-06 補登記：本條會把一個【合法且自然】的重構打紅。**
-    :func:`_input_widget_calls` **全檔**掃 `st.<widget>` 並用 `lineno` 判斷落不落在
-    那個 `with` 的行區間內 —— **它不看呼叫關係**。所以把 CSV 那顆 checkbox 抽成
-    module 層 helper `_csv_box()`、再於 form 內呼叫（**行為完全相同、widget 仍在
-    form 裡渲染**）→ **1 failed 三序一致**，因為 helper 的 `def` 在 `with` 之外。
-    ⚠️ **下一批接真內容時，把 widget 抽成 helper 是最自然的一步** ——
-    屆時錯誤訊息會寫「**有輸入元件落在 form 之外**」，而**那句話是錯的**；
-    而且**消紅最省事的做法是把 helper 內聯回去** —— 也就是
-    **這條守衛會把人推向比較差的寫法**。碰到時請改守衛（例如改判「呼叫點是否在
-    form body 內」而不是「def 在哪一行」），**不要為了消紅而放棄抽 helper**。
-    ✅ **對「行號位移」本身不脆弱**：`_lo` / `_hi` 是從 AST 現算的，
-    在 form 之前或之後插入任意行數都不會誤紅（本輪另兩顆突變已證）。
-
-    ⚠️ **另一個誤紅來源（2026-09-06 補登記，機率低但真的）**：
-    :func:`_input_widget_calls` 只比對 `ast.Attribute` 的 **`.attr` 名字**，
-    **不看那個物件是不是 `st`** —— 所以任何**非 streamlit** 物件呼叫同名方法
-    （`_cfg.checkbox(...)` / `_form.radio(...)`）落在 form 外，也會被判成
-    「輸入元件在 form 之外」。三序實測：在 form 外加一行 `_CFG.checkbox("x")`
-    → **1 failed**。**登記，不是沒看到。**
-    """
-    _with = _applied_form_with()
-    assert _with is not None, (
-        "頁面沒有任何包住 `applied_form(...)` 的 `with` —— "
-        "線框粗體要求「寫入類動作，全部 Form 封裝」。\n"
-        "⚠️ 換成裸 `st.button` 是渲染層看不出來的（AppTest 沒有 `.form`），"
-        "所以這條必須走 AST。")
-    _tree_ = _tree()
-    _lo = min(_st.lineno for _st in _with.body)
-    _hi = max(getattr(_st, "end_lineno", _st.lineno) for _st in _with.body)
-    _gate_ranges = _read_only_gate_ranges(_tree_)
-    _outside = [
-        f"L{_c.lineno} st.{_c.func.attr}(…)"
-        for _c in _input_widget_calls(_tree_)
-        if not (_lo <= _c.lineno <= _hi)
-        and not any(_a <= _c.lineno <= _b for _a, _b in _gate_ranges)]
-    assert not _outside, (
-        f"有輸入元件落在 `applied_form(...)` 的 `with` 之外：{_outside}\n"
-        f"（form body 行區間 = {_lo}~{_hi}；唯讀閘門豁免區間 = {_gate_ranges}）\n"
-        "線框粗體：「寫入類動作，**全部 Form 封裝**」—— form 外的 widget "
-        "每動一下就觸發一次 rerun，那正是鐵則 02 要買掉的成本。\n"
-        f"⚠️ 唯讀閘門的豁免名單是 {sorted(READ_ONLY_GATE_FUNCS)}，"
-        "而且**要通過 `test_the_read_only_gate_really_is_read_only` 的證明**才算數。")
-    # 送出鈕的字仍然要對得上（這一條**恆真**，見 PR 描述的登記 10：
-    # 測試 import 的就是頁面同一個常數，改字不可能紅；它的價值只有
-    # 「鈕沒用到那個常數」這一種死法）。
-    _at = _app(FAKE_HOLDINGS)
-    assert SUBMIT_LABEL in [_b.label for _b in _at.button], (
-        f"畫面上找不到字為 {SUBMIT_LABEL!r} 的送出鈕：{[_b.label for _b in _at.button]}")
-
-
-def test_the_three_fields_are_present_and_default_to_doing_nothing():
-    """三個欄位都在，而且**兩個來源預設都不勾**。
-
-    ⛔ **這是寫入類動作**：預設勾好等於使用者一按鈕就寫了他沒想寫的東西。
-    ⚠️ 「只補有缺口的檔」預設**勾選**是同一個原則的另一面 ——
-       它是**縮小**寫入範圍的開關，預設縮小同樣是「不做事的那一邊」。
-    """
-    _all = _text(_stream("loaded"))
-    for _lbl in (_LABEL_SOURCE_CSV, _LABEL_SOURCE_REFETCH, _LABEL_ONLY_MISSING):
-        assert _lbl in _all, f"Form 少了欄位「{_lbl}」。"
-    assert _DEFAULT_SOURCE_CSV is False and _DEFAULT_SOURCE_REFETCH is False, (
-        "兩個**來源**欄位的預設值必須是「不勾」—— 這是寫入類動作，"
-        "預設勾好等於使用者一按鈕就寫了他沒想寫的東西。")
-    assert _DEFAULT_ONLY_MISSING is True, (
-        "「只補有缺口的檔」預設應為勾選 —— 它是縮小寫入範圍的開關，"
-        "預設縮小同樣是「不做事的那一邊」。")
-
-
-def test_pressing_submit_with_no_source_never_counts_as_a_request():
-    """兩個來源都沒勾就按送出 → **不算一次已送出的請求**。
-
-    「按了鈕」不等於「有事要做」（同 ④「可動用金額 0 不算試算」）。
-    ⛔ 若這裡放行，下一批接上真寫入時，一次誤觸就會跑一輪全站補抓。
-    """
-    _at = _app(FAKE_HOLDINGS)
-    _at.button[0].click()
-    _rerun(_at)
-    # ⚠️ `AppTest.session_state` 是 `SafeSessionState`，**沒有 `.get()`**
-    #    （`__getattr__` 會把 `get` 當成一個 key 去查，然後 `AttributeError`）。
-    #    用 `in` + `[]`，不要照抄一般 dict 的寫法。
-    assert _SK_APPLIED not in _at.session_state, (
-        "兩個來源都沒勾卻記下了一次補資料請求 —— "
-        f"session[{_SK_APPLIED!r}] = {_at.session_state[_SK_APPLIED]!r}")
-
-
-def test_pressing_submit_with_a_source_records_the_applied_request():
-    """勾了來源再送出 → 請求**被記下來**，而且形狀是 `_normalise_request` 那個。
-
-    ⚠️ 這條與上一條是一對：上一條防「按了就寫」，這條防「按了不寫」——
-    只留其中一條，另一個方向就沒人守。
-    """
-    _at = _app(FAKE_HOLDINGS)
-    # 勾一個來源、按送出，**同一次 run** —— 這才是使用者真的做的事
-    #（form 內的 widget 值本來就要等送出才提交，中間不該多跑一輪）。
-    _cb(_at, _LABEL_SOURCE_CSV).check()      # 依標籤，不用索引（見 `_cb`）
-    _at.button[0].click()
-    _rerun(_at)
-    assert _SK_APPLIED in _at.session_state, (
-        f"勾了來源並送出，卻沒有記下請求：session 裡沒有 {_SK_APPLIED!r}")
-    _got = _at.session_state[_SK_APPLIED]
-    assert isinstance(_got, dict), (
-        f"已送出請求不是 dict：{_got!r}")
-    assert set(_got) == set(_normalise_request(True, False, True)), (
-        f"已送出請求的形狀與 `_normalise_request()` 不一致：{_got!r}")
-
-
-def test_normalise_request_coerces_to_bool():
-    """`_normalise_request()` 一律吐 `bool` —— 不把 widget 的原始值直接存進 session。"""
-    _got = _normalise_request("yes", 0, None)
-    assert _got == {"csv_import": True, "refetch": False, "only_missing": False}, _got
-    assert all(isinstance(_v, bool) for _v in _got.values()), _got
-
-
-def test_applied_request_ignores_a_corrupted_session_value():
-    """session 裡被塞了非 dict → `_applied_request()` 回 `None`，不當成請求。"""
-    import streamlit as _st
-    try:
-        _st.session_state[_SK_APPLIED] = "不是 dict"
-        assert _applied_request() is None
-    finally:
-        # ⚠️ 一定要清掉：bare 模式的 session_state 是**行程層級**的，
-        #    留著會污染同一個行程裡後面跑的測試（本檔與別檔皆然）。
-        _st.session_state.pop(_SK_APPLIED, None)
-
-
-# ══════════════════════════════════════════════════════════════════
-# 邊界：走共用元件、不碰底層、不委派舊頁、不自己寫別人的 session
-# ══════════════════════════════════════════════════════════════════
-
 def test_the_page_draws_no_grid_form_or_tabs_of_its_own():
     """鐵則 01 / 02 一律走共用元件；巢狀 `st.tabs` 一個都不准有。
 
@@ -1974,8 +2102,6 @@ def test_the_page_draws_no_grid_form_or_tabs_of_its_own():
         "鐵則 01/02 一律走 `ui.helpers.ia`（`card_row` / `applied_form` / `wide_table`）；"
         "巢狀 `st.tabs` 線框明文禁止。")
 
-
-#: 本頁**唯一**准許 import 的 L2 service。
 #: ⚠️ **2026-09-06（P05-1）從「一個都不准」放寬成「只准這一個」，理由寫在這裡。**
 #:    舊版寫「本批連取數都還沒有，更不該有」—— 那句話在**骨架批**是對的，
 #:    它的前提是「這一頁還沒有任何真內容」。P05-1 把 NAV 累積狀態接上了真取數，
@@ -2032,24 +2158,6 @@ def test_the_service_allowlist_is_not_a_dead_letter():
         f"白名單上的 {_unused} 本頁根本沒有 import —— "
         "放寬條文已經沒有用途，請把它降回來（`CLAUDE.md §8.2.A.0` 規則 2 的雙向 ratchet）。")
 
-
-def test_the_page_does_not_delegate_to_the_old_tabs():
-    """⛔ 不准 import 或委派線框「從哪裡搬來」列的四個舊檔。
-
-    客戶方針：**打掉重練，不改舊 `tab*.py`** —— 委派過去等於把舊頁的行為
-    原封搬進新頁，那不是重刻，是包一層。
-    """
-    _old = ("ui.tab5_data_guard", "ui.tab_manage", "ui.tab_settings_diag",
-            "ui.tab6_manual")
-    # ⚠️ `_m == _o or _m.startswith(_o + ".")` —— **點邊界不能省**（2026-09-05 稽核）：
-    #    裸 `startswith` 會把 `ui.tab_manage_v2` / `ui.tab6_manual_helpers`
-    #    這種**不同的模組**一起誤判成舊分頁。
-    _bad = [_m for _m in _imported_modules(_tree())
-            if any(_m == _o or _m.startswith(_o + ".") for _o in _old)]
-    assert not _bad, (
-        f"被測檔委派給了舊分頁：{_bad}\n線框「從哪裡搬來」的四個檔是**參考**，不是依賴。")
-
-
 def test_the_page_does_not_render_cache_or_backoff_state():
     """⛔ 線框「這裡不放什麼」逐字：「**快取與退避狀態不做成畫面**」。
 
@@ -2081,69 +2189,6 @@ def test_the_page_does_not_render_cache_or_backoff_state():
         f"被測檔碰了快取／退避：常數 {_bad_names}、import {_bad_imports}\n"
         "線框明文：那批不必改任何畫面，本次不推翻。")
 
-
-def test_the_page_writes_only_its_own_session_key():
-    """本頁只准寫**自己命名空間**的 session 鍵，不准動別人的。
-
-    ⚠️ **session 寫入有四條管道，四條都要看**（本 repo 既有的失效模式）：
-
-    == ======================== ==============================================
-    #  管道                      長相
-    == ======================== ==============================================
-    1  下標賦值                  `st.session_state["k"] = v`
-    2  **屬性賦值**              `st.session_state.k = v`（本 repo 的主流寫法）
-    3  `.update()` / `.setdefault()`
-    4  ⭐ **widget 的 `key=`**   streamlit **代呼叫端寫入**；AST 上是普通 `ast.Call`，
-                                **任何「找賦值節點」的手段都收不到它**
-    == ======================== ==============================================
-
-    📌 ~~**另一組正在把這段共用實作收進 `tests/_ast_bindings.py`**
-    （分支 `claude/fund-guard-ast-sn42bh`，本批**不得碰、也不得 import** —— 它還沒合併）。~~
-    → ⚠️ **2026-09-06 狀態更新（不是漏刪）：它已經合併了**（#785，`f22a7b3`）——
-    `tests/_ast_bindings.py` 與 `tests/test_ast_bindings_helper.py` 現在都在 main 上，
-    `wf02` / `wf03` / `wf04` / `settings_diag_merge` 四檔已改為 import 它。
-    **上面那句「它還沒合併」在寫下的當天為真，今天不再為真** —— 留著會讓下一個人
-    以為那個 helper 還不能用。
-
-    ⛔ **本檔【還沒】改成 import 它，而且是刻意的**：那是一次會動到本條斷言邏輯的
-    重構，**不在 P05-1 的射程內**（本批的任務是 NAV 累積狀態接線）。
-    **共用 helper 已經在了，本條應改為 import 它、不要留兩份**（`CLAUDE.md §2.1`）——
-    **登記為待辦，交給碰到本檔的下一批**；本組沒有做，不假裝做了。
-    本檔目前的寫法比照 `tests/test_wpg_portfolio_health_link_20260831.py`。
-    """
-    _tree_ = _tree()
-    _allowed = {_SK_APPLIED}
-    _writes: list[str] = []
-    for _n in ast.walk(_tree_):
-        _targets: list[ast.AST] = []
-        if isinstance(_n, ast.Assign):
-            _targets = list(_n.targets)
-        elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
-            _targets = [_n.target]
-        for _t in _targets:
-            # `x = st.session_state.get(...)` 是**讀**，target 是 Name，不會命中。
-            if isinstance(_t, ast.Subscript) and "session_state" in _dotted(_t.value):
-                _key = _dotted(_t.slice)
-                if _key not in {"_SK_APPLIED"} | {repr(_k) for _k in _allowed}:
-                    _writes.append(f"L{_n.lineno} 下標賦值 {_dotted(_t)}")
-            elif isinstance(_t, ast.Attribute) and "session_state" in _dotted(_t.value):
-                _writes.append(f"L{_n.lineno} 屬性賦值 {_dotted(_t)}")
-        if isinstance(_n, ast.Call):
-            _d = _dotted(_n.func)
-            if ("session_state" in _d
-                    and _d.rsplit(".", 1)[-1] in ("update", "setdefault")):
-                _writes.append(f"L{_n.lineno} {_d}(...)")
-            # 形態 4：widget 帶 `key=` —— streamlit 會代為寫入 session_state。
-            # ⚠️ `applied_form(_FORM_KEY, ...)` 不是 `st.` 開頭，不會命中（那是共用元件，
-            #    它自己的 key 由 `ia/gated_form.py` 負責），這是刻意的射程。
-            if _d.startswith("st.") and any(_k.arg == "key" for _k in _n.keywords):
-                _writes.append(f"L{_n.lineno} widget key= → {_d}")
-    assert _writes == [], (
-        f"被測檔寫了自己命名空間以外的 session：{_writes}\n"
-        f"本頁只准寫 {_SK_APPLIED!r}（`portfolio_funds` 是**別人定義**的鍵，只讀不寫）。\n"
-        "（widget `key=` 也算：streamlit 會代你把 widget 值寫進 session_state。）")
-
-
 def test_the_page_does_not_call_a_no_op_story_nav():
     """⛔ 不准照抄 `render_story_nav("settings")` —— 它會**靜默什麼都不畫**。
 
@@ -2160,7 +2205,6 @@ def test_the_page_does_not_call_a_no_op_story_nav():
         f"被測檔呼叫了 `render_story_nav()`：{_bad}\n"
         "⑤ 不在決策動線四站內，那個呼叫會靜默 no-op —— "
         "一個看起來有做、實際沒生效的呼叫，比不寫更糟。")
-
 
 # ══════════════════════════════════════════════════════════════════
 # 區塊名：兩個走 SSOT、三個線框字面；以及那個尚未裁決的撞名
@@ -2213,52 +2257,6 @@ def test_the_manual_name_collision_is_still_registered():
         "請把被測檔模組 docstring 裡那段「尚未裁決的張力」收掉，"
         "並把 `BLOCK_MANUAL` 改成走 `section_label('manual')`，然後刪掉本條。")
 
-
-# ══════════════════════════════════════════════════════════════════
-# 指路：兩種灰，一種有效一種無效 —— 兩個方向都釘住
-# ══════════════════════════════════════════════════════════════════
-
-def test_the_pending_pointer_is_a_place_not_a_status_sentence():
-    """`_pending_where()` 回傳的必須是一個**地方**（`分頁 → 區塊`）。
-
-    `not_ready()` 會把它包成「（請先到：…）」—— 塞一句狀態陳述進去
-    會產生一句**不可執行的指令**（③ 2026-09-05 被獨立紅隊實測抓到的錯）。
-    """
-    _got = _pending_where(nav_manual_label())
-    assert _got == f"{where_to_find('settings')} → {nav_manual_label()}", _got
-    assert "目前" not in _got and "只有" not in _got, (
-        f"指路變成狀態陳述了：{_got!r}")
-
-
-def test_the_pending_pointer_is_honest_about_being_ineffective():
-    """❌ 「內容還沒接上」那種灰，指路**照著做也沒有用** —— 把它釘成斷言，不是形容詞。
-
-    照著做（回到手動補資料、勾一個來源、按送出）→ **三條灰態逐字完全相同**。
-    ⛔ **這不是 bug，是本批的實況**：這一塊沒接上，去任何地方都不會讓它出現。
-    ✅ 哪天它真的變有效了（內容接上了），這條會**轉紅** ——
-       而那正是要人回來改文案的時候。
-    """
-    _before = {_u: _text(_segments(_stream("loaded")).get(_u, []))
-               for _u in _grey_units()}
-    _at = _app(FAKE_HOLDINGS)
-    _cb(_at, _LABEL_SOURCE_CSV).check()      # 依標籤，不用索引（見 `_cb`）
-    _at.button[0].click()
-    # ⚠️ **一定要跑兩次，這不是保險是必需**（2026-09-05 獨立稽核應修）：
-    #    `render_settings_and_diagnostics()` 裡 `_render_grid()` 在**最前面**、
-    #    Form 的送出處理（寫 `_SK_APPLIED`）在**最後面** ——
-    #    也就是說，**任何吃 `_SK_APPLIED` 的內容都要到「下一次 run」才顯形**。
-    #    只跑一次 `_rerun` 的話，本條承諾的「哪天真的變有效了會轉紅」**做不到**：
-    #    稽核用一顆「讓灰卡吃 `_SK_APPLIED`」的突變實測，三種順序**全數存活**。
-    _rerun(_at)
-    _rerun(_at)
-    _after_seg = _segments(_flat(_at.main))
-    for _u in _grey_units():
-        assert _text(_after_seg.get(_u, [])) == _before[_u], (
-            f"照著指路做完之後，「{_u}」的灰態變了 —— "
-            "本批這一塊沒接線，照理不該有任何變化。"
-            "若是內容真的接上了，請改這條測試的預期（不要放寬它）。")
-
-
 # ══════════════════════════════════════════════════════════════════
 # `_holdings()`：⑤ 刻意不做 loaded 過濾
 # ══════════════════════════════════════════════════════════════════
@@ -2300,7 +2298,6 @@ def test_holdings_drops_non_dict_entries():
         assert _holdings() == [{"code": "A"}]
     finally:
         _st.session_state.pop("portfolio_funds", None)
-
 
 # ══════════════════════════════════════════════════════════════════
 # 沒有任何一塊悄悄變成紅框
