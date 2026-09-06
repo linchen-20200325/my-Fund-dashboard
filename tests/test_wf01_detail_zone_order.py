@@ -1126,19 +1126,45 @@ def test_every_radar_session_read_is_summarized_in_the_same_function():
       - 新增一個讀 `_SK_RADAR` 的函式，卻沒在同一個函式裡彙總（＝本次這個 bug 的形狀）；
       - `import … as` 的別名呼叫 —— 復用 `_call_name` / `_import_alias`（同上一條）。
 
-    **已知擋不住（非窮舉；前四種與 `_radar_lit()` docstring 記載的同源）**
-      - **本地變數別名**：`_sum_fn = summarize_radar` 之後 `_sum_fn(_r)`
-        —— `_import_alias()` 只解析 import 別名，AST 看到的呼叫名是 `_sum_fn`；
-      - **動態取名**：`getattr(_rr, "summarize_radar")(_r)`；
+    ⚠️ **2026-09-06 獨立稽核擋下：本清單原本有三格分類反了，已就地更正。**
+    「本地變數別名」「`getattr` 動態取名」「讀取搬到別的函式」原本列在
+    「擋不住」，**實測是會轉紅的** —— 但那是**誤報**（把對的寫法判成違規），
+    不是漏放。**一份主題是「誠實寫明擋不擋得住」的清單，自己填錯三格。**
+    故本清單改成三欄，不再只分兩類。
+
+    **已知擋得住（正確地紅）**
+      - 新增一個讀 `_SK_RADAR` 的函式，卻沒在同一個函式裡彙總（＝本次這個 bug 的形狀）；
+      - `import … as` 的別名呼叫 —— 復用 `_call_name` / `_import_alias`。
+
+    **已知會誤報（也會紅，但紅得沒道理 —— 寫法其實是對的；各實測一次突變）**
+      - **本地變數別名**：`_sfn = summarize_radar` 之後 `_sfn(_radar)`
+        → 實測 **2 failed**（`_call_name` 看到的是 `_sfn`，`_import_alias()`
+        只解析 import 別名）；
+      - **動態取名**：`getattr(_rr, "summarize_radar")(_radar)`
+        → 實測 **2 failed**（func 是 Call，`_call_name` 回 None）；
+      - **把 session 讀取搬到別的函式再傳進來** —— 本條看的是**讀取點**那個函式，
+        所以那個只負責取值的 helper 會被判違規，即使消費端彙總得好好的。
+      **→ 這三種若真的要用，請一併調整本條，不要靠 `# noqa` 蓋掉。**
+
+    **已知擋不住（非窮舉 —— 真的會漏放，全綠）**
+      - 🆕 **字面值 key**：`st.session_state.get("v01_macro_risk_radar")`
+        （不寫 `_SK_RADAR`）。`_reads_radar()` 只認 `ast.Name` 的 `_SK_RADAR`，
+        字面值對它是隱形的。**這是最可能被寫出來的一種，故逐字具名。**
+        ⚠️ **但要分兩種情況講，稽核的宣稱只對了一半（本組實測推翻另一半）**：
+          · **把既有消費端改成字面值** → **會紅**，由本條的**前提鎖**
+            （`len(_checked) >= 4`）抓到，訊息逐字點名少了哪一個
+            （實測：`assert 3 >= 4`，`['_card_risk_radar', '_detail_short', '_ai_snapshot']`）；
+          · **新增一個用字面值的消費端**（既有四個原封不動）→ **真的全綠**
+            —— 實測 `746 passed, 32 skipped` 零紅燈，而那個新消費端把
+            原 bug 原封重現。**前提鎖看的是數量，補上來的那個它看不到。**
+      - **`_k = _SK_RADAR` 之後 `st.session_state.get(_k)`** 的間接取值 —— 同上。
       - **跨檔**：本條只讀 `ui/views/page_01_macro.py` 一個檔；
-      - **彙總了但沒用它的結果**（例如彙總完仍舊去讀原始 dict 的 `red`）——
-        本條只看「同一個函式裡有沒有這個呼叫」，不看資料怎麼流；
-      - **把 session 讀取搬到別的函式再傳進來**（`_r = _get_radar()` 之後
-        在另一個函式用）—— 讀取點與消費點分家時，本條看的是讀取點那個函式。
+      - **彙總了但沒用它的結果**（彙總完仍舊去讀原始 dict 的 `red`）——
+        本條只看「同一個函式裡有沒有這個呼叫」，不看資料怎麼流。
+        ⚠️ 這一種現在**另有行為測試**守著（見
+        `test_the_exceptions_card_reports_the_real_radar_counts`），
+        但**本條自己仍然擋不住**，故留在這一欄。
       - **模組層級的讀取**（不在任何 `def` 內）—— 本條只走函式節點。
-      - **上面兩種以外的讀法**：本條只認得 `….get(_SK_RADAR)` 與
-        `…[_SK_RADAR]`（Load）。改用 `getattr` 組 key、或把 `_SK_RADAR`
-        先賦給另一個變數再拿去索引，本條看不到。
 
     ⚠️ **寫入端刻意不算讀取端。** `_load_everything()` 做的是
     `st.session_state[_SK_RADAR] = detect_risk_radar(...)`，**存進去的那一端
@@ -1439,6 +1465,135 @@ def test_the_liquidity_caption_says_how_many_factors_it_actually_used():
     assert "這個分數只用了" not in _blob2, (
         "三個因子全在線，卻還掛著「只用了 N 個壓力因子」的警語 —— "
         f"揭露過頭會稀釋它在真的缺因子時的份量：{_blob2[:600]!r}")
+
+
+def test_a_partial_liquidity_reading_never_claims_multi_track_stress():
+    """因子不全時，畫面**不得**出現那句宣稱三軌共振的研判。
+
+    ⛔ **2026-09-06 獨立稽核擋下 + 總管裁決：加註解不等於修好。**
+    前一版只在**下一段** caption 補一句更正，使用者讀到的**第一句**仍然是
+    「⚠️ 美元/避險/波動率**多軌同時緊繃**……**宜降槓桿、備現金**」——
+    **假前提與行動建議同在一句**，而更正在下面。
+
+    **機制（實測）**：`compute_liquidity_score()` 對缺席因子**重正規化權重**，
+    單因子在線時該因子權重被放大成 `1.0` → 分數照樣衝到 `2.5` →
+    觸發 `liquidity_verdict()` 的 `val >= 2.0` 分支（服務層唯一會講「多軌同時」
+    的那一支）。**一軌的讀數，講出三軌的話。**
+
+    ⚠️ **前一版的第二段更正沒有任何守衛單獨鎖住** —— 稽核實測：把那段
+    caption 拿掉 → `228 passed` 零紅燈。也就是那句唯一的反駁**可以被無聲刪掉**。
+    **不印它，就沒有東西需要被反駁 —— 那個缺口一併消失。**
+
+    **突變會紅**：把 `_partial` 那個三元運算子拿掉、改回無條件
+    `liquidity_verdict(_score, _factors)` → 本條紅（實測，見 PR）。
+
+    ⚠️ **擋不到**：`_n_on == _n_all` 時研判文的內容對不對（那是服務層的事，
+    本條刻意不碰）、以及「多軌同時緊繃」以外的其他措辭若日後新增。
+    """
+    from services.liquidity_engine import (
+        STRESS_FACTORS as _SF,
+        compute_liquidity_score as _cls,
+        liquidity_verdict as _lv,
+    )
+    _MULTI = "多軌同時緊繃"
+
+    # ── 前提鎖：服務層今天真的還會對「單因子 z=2.5」講出那句多軌宣稱。
+    _one = _cls({"XCCY_PROXY": {"zscore": 2.5}})
+    assert _one and _MULTI in _lv(_one, None), (
+        "前提變了：服務層對單因子高分已經不再講「多軌同時緊繃」了 —— "
+        f"本條要擋的那句話可能已經在上游解掉，請重看：{_lv(_one, None)!r}")
+
+    # ── 正向：只有 1 軌在線 → 整頁不得出現那句話。
+    _sess = _loaded_session()
+    _sess[_page._SK_LIQ] = ({"XCCY_PROXY": {"zscore": 2.5, "value": 2.5}}, _one)
+    _blob = _render_all_text(_sess)
+    assert _MULTI not in _blob, (
+        f"只有 1/{len(_SF)} 軌量到，畫面卻印出「{_MULTI}」——\n"
+        "⛔ 那句話**逐一點名美元／避險／波動率三軌**，而這一輪只量到一軌；"
+        "它還與行動建議「宜降槓桿、備現金」同在一句。\n"
+        "→ 因子不全時整句研判不要印（`_partial` 分支），"
+        "不要只在下一段補一句更正 —— 使用者讀到的第一句就是假的。\n"
+        f"整頁實際印出（節錄）：{_blob[:600]!r}")
+    # 抑制之後仍須誠實說明「為什麼這裡沒有研判」，不能只是空白。
+    assert f"1/{len(_SF)} 軌真的量到" in _blob, (
+        f"抑制了研判卻沒說明原因，變成無聲省略：{_blob[:600]!r}")
+
+    # ── 反方向：三軌全在線 → 研判照印，**一個字都不該少**。
+    #    沒有這一半，「永遠不印研判」也會全綠。
+    _three = _cls({_k: {"zscore": 2.5} for _k in _SF})
+    _sess2 = _loaded_session()
+    _sess2[_page._SK_LIQ] = ({_k: {"zscore": 2.5, "value": 2.5} for _k in _SF},
+                             _three)
+    _blob2 = _render_all_text(_sess2)
+    assert _MULTI in _blob2, (
+        f"三軌全在線時研判被連坐擋掉了 —— 抑制過頭：{_blob2[:600]!r}")
+
+
+def test_the_exceptions_card_reports_the_real_radar_counts():
+    """「⚡ ③ 例外」卡印出來的 🔴／🟡 必須是**真的計數**，不是恆 0。
+
+    ⛔ **2026-09-06 獨立稽核指出：修 1 是三個修復裡唯一沒有行為測試的。**
+    它的保護當時**全是 AST 計數**（「讀了 `_SK_RADAR` 就要在同一個函式裡
+    呼叫 `summarize_radar`」），而那條規則自己的 docstring 就寫著它擋不住
+    「**彙總了但沒用它的結果**」—— 那正是一條**可以直接走回原 bug** 的路。
+
+    **稽核的突變（實測）**：保留 `_radar_lit(_sum)` 這個呼叫但丟掉結果、
+    把 `_lit` 寫死成 10 →
+
+        MUT 全⬜ → 短線雷達 🔴 0 ／ 🟡 0（10/10 盞有讀數）。
+        228 passed, 32 skipped   ← 零紅燈
+
+    **原 bug 的輸出（🔴 0）＋ 一個全新的假數字（全 ⬜ 卻說 10/10 盞有讀數），
+    全套一條都不紅。** 既有的 `test_an_all_grey_radar_is_never_reported_as_calm`
+    只斷言 `"平靜" not in _blob`，看不到這個。
+
+    **突變會紅**：把 `_card_exceptions()` 的 `summarize_radar()` 拿掉、
+    改回直接讀原始 dict 的 `red` → 本條紅（正向那半）；
+    把 `_lit` 寫死成非零讓全 ⬜ 也報數字 → 本條紅（反方向那半）。
+
+    ⚠️ **擋不到**：`_card_exceptions()` 以外的消費端（本條只驗這一張卡的輸出）、
+    以及 `summarize_radar()` 自己數錯的情形（那是服務層的事）。
+    """
+    from services.risk_radar import summarize_radar as _sr
+
+    # ── 正向：4 紅 3 黃 3 綠 → 卡片必須印出真的計數。
+    def _lamp(sig):
+        return {"signal": sig, "value": None, "prev": None,
+                "note": "", "label": "—", "trend": []}
+    _mixed = {}
+    for _i in range(4):
+        _mixed[f"r{_i}"] = _lamp("🔴 危險")
+    for _i in range(3):
+        _mixed[f"y{_i}"] = _lamp("🟡 注意")
+    for _i in range(3):
+        _mixed[f"g{_i}"] = _lamp("🟢 正常")
+    # 前提鎖：服務層今天真的算得出 4／3。前提沒了本條就該重寫，不是靜靜變綠。
+    _sum = _sr(_mixed)
+    assert (_sum["red"], _sum["yellow"]) == (4, 3), (
+        f"前提變了：`summarize_radar()` 對 4 紅 3 黃已不回 (4, 3)：{_sum}")
+
+    _sess = _loaded_session()
+    _sess[_page._SK_RADAR] = _mixed
+    _blob = _render_all_text(_sess)
+    assert "🔴 4" in _blob and "🟡 3" in _blob, (
+        "「⚡ ③ 例外」卡沒有印出真的雷達計數。\n"
+        "⛔ `_SK_RADAR` 存的是**原始 10 燈**（key 是 `vix_level` / `hy_oas_delta` / …），"
+        "直接對它 `.get('red', 0)` 不會報錯，只會**恆得 0** —— "
+        "10 燈全紅的極端警報，畫面照樣印「🔴 0」。\n"
+        f"整頁實際印出（節錄）：{_blob[:800]!r}")
+
+    # ── 反方向：全 ⬜ → **不得**印出「🔴 0」這種看起來像讀數的數字。
+    #    沒有這一半，「永遠報 0」與「永遠報一個寫死的數」都會全綠。
+    _all_grey = {f"s{_i}": _lamp("⬜ 無資料") for _i in range(10)}
+    _sess2 = _loaded_session()
+    _sess2[_page._SK_RADAR] = _all_grey
+    _blob2 = _render_all_text(_sess2)
+    assert "🔴 0" not in _blob2, (
+        "10 燈一盞都沒取到，畫面卻印「🔴 0」—— "
+        "那是把「沒有量到」講成「量到 0 個」（§1）。\n"
+        f"整頁實際印出（節錄）：{_blob2[:800]!r}")
+    assert "一盞都沒有取到讀數" in _blob2, (
+        f"全 ⬜ 時沒有誠實說明「沒取到」：{_blob2[:800]!r}")
 
 
 def test_the_ai_remedy_names_the_button_that_is_actually_rendered():
