@@ -56,6 +56,10 @@
   （HTTP 那一面目前守到 `requests.Session.request` / `httpx.Client` 與 `AsyncClient.request` /
   `urllib.request.urlopen` 三條；`urlopen` 是 2026-09-06 補的 ——
   本 repo 有真實的 urlopen 直連家風，只守前兩條會整條漏掉。）
+* **哨兵一律「記名」不「拋例外」** —— 這不是風格偏好：本頁每一塊都包在
+  `ui/helpers/render_state.py::safe_section` 裡，它**捕捉例外、印紅框、不外拋**。
+  **實測**：換一個會 `raise` 的假函式進去，`render_holdings_health()` **正常返回**。
+  ⇒ **會 raise 的哨兵在這一頁上等於沒有哨兵。** 詳見 :func:`_make_recorder`。
 * **`builtins.open` 這一路是「觀察」不是「攔截」**：它會**放行**真正的呼叫
   （不放行會把渲染期間所有合法讀檔一起打死 —— 實測 patch 全域 `open` 會波及
   pytest／streamlit／importlib）。只在 mode 含 `w` / `x` / `a` / `+` 時記一筆。
@@ -98,6 +102,7 @@ import builtins
 import contextlib
 import copy
 import importlib
+import io
 import os
 import pathlib
 import sys
@@ -205,6 +210,26 @@ _ALWAYS_SENTINEL: tuple[tuple[str, str], ...] = (
     ("repositories.pool_repository", "add_or_update"),
     ("repositories.pool_repository", "remove_from_pool"),
     ("repositories.pool_repository", "set_type_override"),
+    # ↓ 2026-09-06 複驗補：這兩個模組**不在** `page_02_health` 的 import 閉包裡
+    #   （實測 `_closure()` 皆為 False），原本只靠 primitive 那層兜底。
+    #   「靠 primitive 兜得到」在 AST 上成立，但那是**推論**；列名是便宜又確定的那一半。
+    ("repositories.ledger_repository", "append_ledger_row"),
+    ("repositories.ledger_repository", "replace_ledgers_for_policy"),
+    ("repositories.ledger_repository", "ensure_ledger_worksheet"),
+    ("repositories.portfolio_perf_repository", "append_snapshot"),
+)
+
+#: **別人擁有的 session 契約鍵**（本頁一律只讀不寫）。
+#: ⚠️ 這一份是**實測掃出來的**，不是想到什麼寫什麼：
+#: ``git grep -ohE 'session_state\[...\]|session_state\.(get|setdefault|pop)\(...'``
+#: 掃 `ui/**` `services/**` `repositories/**` 後人工判讀（量測日 2026-09-06）。
+#: ⚠️ **仍不是窮舉**：`_nav_hist_*` 這類**前綴**族只列到實際出現過的兩個，
+#: 動態組出來的鍵一律看不到。射程限制同步寫在模組 docstring 的 ⛔ 那一格。
+_KNOWN_FOREIGN_KEYS: tuple[str, ...] = (
+    "portfolio_funds", "portfolio_core_pct",
+    "policy_sheet_id", "policy_tabs", "v2_new_policy_name",
+    "_nav_hist_written", "_nav_hist_disabled_warned",
+    "_perf_snapshot_done", "t7_ledgers",
 )
 
 _PKG_ROOTS = ("ui", "services", "repositories", "shared", "infra")
@@ -372,12 +397,52 @@ def _foreign_key_names() -> set[str]:
     _own = _own_key_literals()
     _foreign = {_v for _v in _all if _v not in _own}
     _foreign.add(FOREIGN_CONTRACT_KEY)
+    # ⚠️ **只靠「本頁的 `_SK_*` 扣掉自有」是不夠的**（2026-09-06 複驗抓到）：
+    #    那樣算出來只有 `{_SK_PORTFOLIO, portfolio_funds}` 兩個，於是
+    #    `key="policy_v2_cache"` / `key="_nav_hist_written"` 這種**指向別人契約鍵的 widget
+    #    完全掃不到** —— 而模組 docstring 的 ⛔ 格明列了 policy 與 `_nav_hist_*`。
+    #    宣稱與射程對不上，就是本輪要修的那種病。
+    _foreign.update(_KNOWN_FOREIGN_KEYS)
     return _foreign
 
 
 # ══════════════════════════════════════════════════════════════════════
 # 0.5｜哨兵機器 —— 這一節是本輪回修的核心，改它之前先讀 `_install_named_sentinels`
 # ══════════════════════════════════════════════════════════════════════
+class _SessionDict(dict):
+    """`dict`，但**同時吃屬性存取** —— 因為真 streamlit 就是這樣。
+
+    ⚠️ **這不是為了方便，是 2026-09-06 複驗抓到的一個真盲點。**
+    真 streamlit 的 ``SessionStateProxy.__setattr__`` 逐字是 ``self[key] = value``
+    （實測 `inspect.getsource`）⇒ ``st.session_state.portfolio_funds = []`` 與
+    ``setattr(st.session_state, "portfolio_funds", [])`` 在 **production 會真的寫下去**。
+    而骨架守衛的 `_Rec.session_state` 是 **plain `dict`** ⇒ 同樣兩行在測試裡只會丟
+    `AttributeError`，然後**被 `safe_section` 吃掉** ⇒ 快照比對前後一致 ⇒ **全綠放行**。
+
+    ⚠️ `_ast_bindings.session_writes` 自己寫著：**屬性賦值是「本 repo `ui/**` production
+    跨 6 檔 27 處的主流寫法」** —— 也就是漏的正好是最常見的那一種。
+
+    ⛔ **不要把它改回 plain dict**，也不要以為「`_Rec` 是共用 fixture 所以不能動」：
+    本檔沒有動 `_Rec`（那是骨架守衛的檔案，不在本批邊界內），只是在
+    :func:`_render_with_sentinels` 裡把它的 `session_state` **換成本類的實例**。
+    """
+
+    def __getattr__(self, _k: str) -> Any:
+        try:
+            return self[_k]
+        except KeyError:
+            raise AttributeError(_k) from None
+
+    def __setattr__(self, _k: str, _v: Any) -> None:
+        self[_k] = _v
+
+    def __delattr__(self, _k: str) -> None:
+        try:
+            del self[_k]
+        except KeyError:
+            raise AttributeError(_k) from None
+
+
 class _Run(NamedTuple):
     """一次「裝哨兵 → 渲染 → 收工」的完整紀錄。
 
@@ -394,6 +459,18 @@ class _Run(NamedTuple):
 
 
 def _make_recorder(trips: list[str], tag: str) -> Callable[..., None]:
+    """一個**記名、不拋例外**的哨兵。
+
+    ⛔ **不要把它改成 `raise`。** 這不是風格偏好，是一個實測出來的必要條件：
+    :func:`ui.views.page_02_health.render_holdings_health` 的每一塊都包在
+    `ui/helpers/render_state.py::safe_section` 裡，而那個函式**捕捉例外、印紅框、不外拋**
+    （區塊級隔離，它的 docstring 自己寫明「不吞例外 —— 走 `system_error()` 顯式紅燈」，
+    意思是**對使用者可見**，但**對呼叫端不外拋**）。
+
+    **實測（2026-09-06）**：把 `_render_health_table` 換成一個 `raise AssertionError(...)`
+    的假函式再跑 `render_holdings_health()` → **render 正常返回，例外被 `safe_section` 吃掉**。
+    ⇒ **一個會 raise 的哨兵在這一頁上等於沒有哨兵。** 記名 + 事後斷言才擋得住。
+    """
     def _sentinel(*_a: Any, **_kw: Any) -> None:
         trips.append(tag)
     _sentinel._wf02_sentinel = tag           # type: ignore[attr-defined]
@@ -721,7 +798,16 @@ def _primitive_sentinels(trips: list[str]) -> Iterator[list[str]]:
             _installed.append(f"{_mod_name}.{_cls_name}.{_attr}")
 
     # ⑥ 最後才是 open —— 只觀察、不攔截（理由見 docstring 取捨 1）
+    #    ⚠️ **`io.open` 必須單獨列一格。** `io.open is builtins.open` 是 `True`
+    #    （同一個函式物件），但 **`io` 模組自己持有一份 `open` 屬性**
+    #    （實測 `"open" in vars(io)` 為 `True`）—— 只 rebind `builtins.open`
+    #    **完全碰不到 `io.open`**，於是 `io.open(path, "w")` 整條漏掉。
+    #    2026-09-06 複驗實測：補之前 → 全綠**而且檔案真的被寫出來**。
+    #    它也**不在**本檔「看不見」那份例外清單裡（那裡列的是 `sqlite3` / `subprocess` /
+    #    原始 socket / fd 級 `os.write` / C 擴充）—— `io.open` 是標準庫最正規的別名，
+    #    **不屬於上述任何一類，所以它是漏掉、不是取捨。**
     _watch_open(builtins, "open", "builtins.open", 1)
+    _watch_open(io, "open", "io.open", 1)
     _watch_open(pathlib.Path, "open", "pathlib.Path.open", 1)
 
     try:
@@ -755,6 +841,8 @@ def _render_with_sentinels(portfolio: list, monkeypatch, *,
     #    後面的快照測試再 deepcopy 時拿到的已經是**被改過的**版本 → 前後一致 → **突變存活**。
     #    單獨跑那條會紅、整檔一起跑就綠 —— **最難發現的那一種假綠燈。**
     _rec = _Rec()
+    # ⚠️ 換成 :class:`_SessionDict`（吃屬性存取）—— 理由見該類的 docstring。
+    _rec.session_state = _SessionDict()
     _rec.session_state[FOREIGN_CONTRACT_KEY] = copy.deepcopy(portfolio)
     for _k, _v in (extra_session or {}).items():
         _rec.session_state[_k] = copy.deepcopy(_v)
@@ -765,6 +853,18 @@ def _render_with_sentinels(portfolio: list, monkeypatch, *,
     assert _targets, "一個帶 module 層 `st` 的 ui 模組都沒掃到 —— 錄影機沒接上"
     for _m in _targets:
         monkeypatch.setattr(_m, "st", _rec, raising=False)
+
+    # ⚠️ **再補一道：直接換掉 `streamlit.session_state` 本身。**
+    #    上面那圈只換得掉「module 層有 `st`」的模組；渲染路徑上**確實有**沒有的
+    #    （實測：`ui.helpers.story_nav` 是函式內 `import streamlit as st`）。
+    #    那種模組寫進去的東西會流向**真的** session state，前後快照都看不到 ⇒ 全綠放行。
+    #    `streamlit.session_state` 是 module 層屬性（實測 `"session_state" in vars(streamlit)`
+    #    為 `True`），所以換得掉。
+    try:
+        import streamlit as _real_st                          # noqa: PLC0415
+        monkeypatch.setattr(_real_st, "session_state", _rec.session_state, raising=False)
+    except Exception:                                        # pragma: no cover
+        pass
 
     with _primitive_sentinels(_tripped) as _prims:
         render_holdings_health()
@@ -919,6 +1019,8 @@ def test_rendering_the_page_touches_no_write_sink(branch, portfolio, monkeypatch
     M12  ``urllib.request.urlopen(url, data=...)``         **primitive** **全綠**  轉紅
     M13  ``urlopen(Request(..., method="DELETE"))``        **primitive** **全綠**  轉紅
     M14  同 M12，但打**本機 200 伺服器**（見下）             **primitive** **全綠**  轉紅
+    M15  寫入放在 **`safe_section` 包住的區塊**裡           別名掃描      **全綠**  轉紅
+         （見下方 ⛨ —— 這一顆是「記名 vs 拋例外」的對照組）
     ==== =============================================== ============= ========= =========
 
     ※ **M3／M5 是被「名字掃描」接住的，不是 primitive** —— 它們把一個**列名** primitive
@@ -936,7 +1038,13 @@ def test_rendering_the_page_touches_no_write_sink(branch, portfolio, monkeypatch
     ⚠️ 本 repo 有真實的 `urlopen` 直連家風（`repositories/fund/sources.py` 的 Yahoo v8 chart），
     **只守 requests／httpx 會整條漏掉**。
 
-    **初版全綠的那十一顆（M1／M3／M4／M6～M10／M12～M14）就是本輪賺回來的保證。**
+    ⛨ **M15 證明「哨兵必須記名、不准 raise」不是風格偏好**（見 :func:`_make_recorder`）：
+    同一顆突變（寫入放在 `safe_section` 包住的區塊裡），
+    **記名版 → 紅**（訊息指名 `record_batch_nav_points`）、
+    **改成 `raise` 版 → 2 passed 全綠**（例外被 `safe_section` 吃掉）。
+    ⇒ **在這一頁上，一個會 raise 的哨兵等於沒有哨兵。**
+
+    **初版全綠的那十二顆（M1／M3／M4／M6～M10／M12～M15）就是本輪賺回來的保證。**
     """
     _run = _render_with_sentinels(
         RICH_HOLDINGS if portfolio == "RICH" else [], monkeypatch)
