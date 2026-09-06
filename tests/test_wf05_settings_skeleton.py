@@ -603,7 +603,12 @@ _MANUAL_ITEMS: frozenset = frozenset({"指標定義", "門檻由來", "常見誤
 #:    所以**第一項**的行首是 `[Markdown] `、不是 `-`。少了這個前綴，
 #:    第一項會被漏掉 —— 本組第一版就是這樣，被自己的集合相等當場抓出來
 #:    （`少了：['指標定義']`）。**這正是「只驗有沒有」看不到、「集合相等」才看得到的那種錯。**
-_MANUAL_ITEM_RE = re.compile(r"^(?:\[Markdown\] )?-\s+\*\*(.+?)\*\*\s*$", re.M)
+#: ⛔ **項目符號要吃 `-` / `*` / `+` / `1.` / `1)` 五種**（2026-09-06 補）：
+#: 原本只認 `-`，於是多列一項寫成 `1. **投資建議**` → **50 passed 三序**，
+#: **集合相等整個看不見它**。那正是本條要擋的「多列一項＝自己發明規格」。
+#: ⚠️ **仍守不到**：`<li>` 之類的裸 HTML、以及不帶 `**粗體**` 的寫法。
+_MANUAL_ITEM_RE = re.compile(
+    r"^(?:\[Markdown\] )?(?:[-*+]|\d+[.)])\s+\*\*(.+?)\*\*\s*$", re.M)
 
 
 def test_the_manual_lists_exactly_the_wireframe_three():
@@ -977,6 +982,13 @@ def test_the_write_block_is_form_wrapped():
     form body 內」而不是「def 在哪一行」），**不要為了消紅而放棄抽 helper**。
     ✅ **對「行號位移」本身不脆弱**：`_lo` / `_hi` 是從 AST 現算的，
     在 form 之前或之後插入任意行數都不會誤紅（本輪另兩顆突變已證）。
+
+    ⚠️ **另一個誤紅來源（2026-09-06 補登記，機率低但真的）**：
+    :func:`_input_widget_calls` 只比對 `ast.Attribute` 的 **`.attr` 名字**，
+    **不看那個物件是不是 `st`** —— 所以任何**非 streamlit** 物件呼叫同名方法
+    （`_cfg.checkbox(...)` / `_form.radio(...)`）落在 form 外，也會被判成
+    「輸入元件在 form 之外」。三序實測：在 form 外加一行 `_CFG.checkbox("x")`
+    → **1 failed**。**登記，不是沒看到。**
     """
     _with = _applied_form_with()
     assert _with is not None, (
