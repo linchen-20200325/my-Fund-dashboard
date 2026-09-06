@@ -105,7 +105,10 @@ gate 預設與 key 命名空間、gate 的呼叫次數與順序、每個標題�
 舊版依 `#### ` ＋ `**粗體**` ＋ 空狀態 ＋ 展開器切段。委派之後**被委派模組自己會畫
 一堆 `### ` 與 `**粗體**`**，照舊切法會把它們也切成「單位」，於是
 「哪一塊該灰」這類斷言的邊界會隨舊模組的內容漂移。
-→ **現行只認本頁自己那六個區塊標題**（:data:`_BLOCK_ORDER`，逐一具名比對）。
+→ **現行只認本頁自己那六個區塊標題**（:func:`_block_order`，逐一具名比對）。
+   ⚠️ **2026-09-06 就地更正**（有意識的更正，不是漏刪）：本行原寫
+   ~~`:data:`_BLOCK_ORDER``~~ —— **本檔沒有這個名字**（實測 0 個定義），
+   它是一個**函式** `_block_order()`。同型錯誤本輪共修 5 處，逐處就地標註。
 ⛔ **代價據實寫**：區塊**內部**不再有更細的邊界，所以「同一塊裡 A 卡的灰字替 B 卡過關」
    這種繞道**本檔抓不到了** —— 但那個粒度在委派之下本來就不屬於本頁的責任範圍。
 """
@@ -440,10 +443,33 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     `"ui.helpers.ia.STATE_NOT_READY"` 這種**不是模組的字串**。
     ⛔ **2026-09-05 獨立稽核更正 —— 本段原本的自我背書有兩個錯，都不要留**：
     原寫 ~~「本檔的**兩個**消費者都是 `startswith` / 取第一段的比對，**多吐無害**」~~。
-    **(1) 實際是三個消費者**（取第一段的 `..._never_reaches_into_the_data_layer`、
+    **(1) 實際是三個消費者**（~~取第一段的 `..._never_reaches_into_the_data_layer`、
     `startswith` 的 `..._does_not_delegate_to_the_old_tabs`、以及
-    `..._does_not_render_cache_or_backoff_state` —— **第三個是 `in` 子字串比對
-    ＋ `endswith`，既不是 `startswith` 也不是取第一段**）。
+    `..._does_not_render_cache_or_backoff_state`~~）。
+
+    ⚠️ **2026-09-06 就地更正：上面那份【名單】已經過期（有意識的更正，不是漏刪）。**
+    `test_the_page_does_not_delegate_to_the_old_tabs` **在本 PR 內被移除了**
+    （commit `7e5677a`，見模組 docstring 的移除表 B 類），
+    所以它**不再是本函式的消費者**。
+    ⚠️ **講精確一點，不要講過頭**：那個名字**不是全 repo 消失** ——
+    `tests/test_wf03_research_skeleton.py` 與 `tests/test_wf04_portfolio_skeleton.py`
+    **各自還有一條同名守衛**（③④ 的，射程不同、也不呼叫本函式）。
+    **消失的是「本檔的那一條」** —— 而本段講的正是「**本檔**的消費者」，
+    所以照著它在本檔裡找的人會找不到。
+    ⛔ **注意「三個」這個數字碰巧仍然對，但成員錯了一格** ——
+    那正是 `CLAUDE.md §-2.A` 記過的「**數字對了不代表清單對了**」。
+    **實測（AST 數 `_imported_modules(` 的呼叫點，非 grep）**：
+    `origin/main` **4 處**、本分支 **3 處**，現行三個消費者是：
+
+    ===================================================  =========================
+    消費者                                                 它怎麼比對
+    ===================================================  =========================
+    `test_the_page_never_reaches_into_the_data_layer`      取第一段 ＋ **帶點邊界**的 `startswith`
+    `test_the_service_allowlist_is_not_a_dead_letter`      **精確 `in` 集合成員**（多吐在這裡是承重的）
+    `test_the_page_does_not_render_cache_or_backoff_state`  `in` 子字串 ＋ `endswith`
+    ===================================================  =========================
+
+    ⚠️ **「帶點邊界的 `startswith`」現在住在第一個消費者裡**，不是住在那支被刪掉的。
     **(2)「多吐無害」是假的**：稽核逐案實測，多吐**確實會產生偽陽性** ——
     `from ui import tab_manage_v2` / `from ui import tab6_manual_helpers`
     （`startswith` **沒有點邊界**）、
@@ -452,7 +478,10 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     ⚠️ **今天沒有一處真的誤紅**（本檔實際 import 只有 `__future__` / `typing` /
     `streamlit` / `ui.helpers.*`），所以這不是 bug；**但那句自陳必須改成誠實版**：
     **三個消費者；多吐會產生偽陽性，只是目前沒有觸發。**
-    （`startswith` 那一處已於同輪補上點邊界，子字串那一處**沒有**修 —— 見該條註記。）
+    （~~`startswith` 那一處已於同輪補上點邊界~~ → **2026-09-06 更正**：那一處指的是
+    已被刪除的 `..._does_not_delegate_to_the_old_tabs`；**點邊界今天在
+    `test_the_page_never_reaches_into_the_data_layer` 裡**，見上表。
+    子字串那一處**仍然沒有**修 —— 見該條註記。）
     """
     _mods: list[str] = []
     for _n in ast.walk(tree):
@@ -1128,7 +1157,7 @@ def test_the_diag_gate_really_gates_the_registry_update():
 
 
 def test_the_delegated_blocks_have_real_content_not_a_grey_placeholder():
-    """⭐ **四個委派區塊不准只是一句灰字。**
+    """⭐ **委派區塊不准只是一句灰字。**（實際斷言 **3 塊**，逐塊具名於 `_want`）
 
     ⛔ 這一條取代了三條舊守衛（`test_the_form_block_is_not_grey` /
     `test_the_manual_is_static_text_not_a_grey_placeholder` /
@@ -1137,7 +1166,15 @@ def test_the_delegated_blocks_have_real_content_not_a_grey_placeholder():
 
     ⚠️ **判準是「這一塊裡有沒有 widget 或多於一行的內容」**，不是比對特定字串 ——
     比對字串等於把被委派模組的文案抄一份進來（第二份真相源，且必然漂移）。
-    ⚠️ **「連線與金鑰」與「使用手冊」不在本條射程內**，理由不同、逐一寫明：
+    ⚠️ **2026-09-06 就地更正：本段的兩句話原本自相矛盾（有意識的更正，不是漏刪）。**
+    舊標題寫 ~~「**四個**委派區塊」~~，舊引言寫 ~~「「連線與金鑰」與「使用手冊」
+    **不在**本條射程內」~~ —— 而它**自己的下一個 bullet** 就寫著使用手冊「**在**射程內」，
+    程式碼 `_want` 也把 `BLOCK_MANUAL` 收了進去。**三者互相打架，以程式碼為準。**
+    **據實的版本**：委派區塊共 **5** 塊（健康度／金鑰／手動補資料／維護／使用手冊），
+    **本條斷言其中 3 塊**，**2 塊在射程外**，理由逐一寫明：
+    - **資料來源健康度**：它整塊在 Checkbox Gate 之後，而 :func:`_stream` 三種形狀
+      **gate 都沒勾** —— 這時它**本來就該是灰態**（那正是
+      :func:`test_both_gates_are_grey_and_point_at_themselves` 在守的事）。
     - **連線與金鑰**：兩個承接對象在測試環境**本來就會是灰態**
       （沒有 OAuth token → 保單橋接灰；沒有抓取紀錄 → 抓取診斷灰）。
       那是**真實狀態**，不是佔位。
@@ -1332,16 +1369,31 @@ def test_the_nav_block_is_grey_and_reads_nothing_before_the_gate(kind: str):
 
 
 def test_a_read_failure_takes_down_only_the_nav_card():
-    """⭐ `coverage_status()` 拋例外 → **只有 NAV 那一張卡變紅框**，另外兩張照常。
+    """⭐ `coverage_status()` 拋例外 → **只有 NAV 那一塊變紅框**，其餘照常。
+
+    ⚠️ **2026-09-06 就地更正（有意識的更正，不是漏刪）**：標題原寫
+    ~~「另外**兩張**照常」~~ —— 本條實際逐一斷言 **4 個區塊**還在
+    （資料來源健康度／連線與金鑰／手動補資料／使用手冊，見下方 for 迴圈），
+    整頁則有 **6** 個區塊。「兩張」是骨架時代「狀態三卡」留下的字，**與程式碼不符**。
+    ⚠️ 順帶登記本條**沒有**斷言的那一塊：**🗄️ 資料維護與通報**
+    （它不在那個迴圈裡）。**登記，不是沒看到。**
 
     ⚠️ **這不是假想的失敗路徑**：`services/nav_history_gs.py::load_points` 在
     **來源冷卻期內**（前一次失敗登記了 cooldown）與**真 I/O 失敗**時
     都會拋 `NavHistoryError` —— 那是 L2 刻意的 §1 行為（回 `[]` 會與
     「這檔真的還沒累積」同義），**不是 bug，是這一塊的正常路徑之一**。
 
-    ⛔ **少了 `_render_grid()` 裡那一層 `safe_section()`，外層那個
-    `safe_section("狀態三卡", _render_grid)` 會把三張卡一起換成一個紅框** ——
+    ⛔ **少了每一塊各自那一層 `safe_section()`，整頁會被一個紅框吃掉一片** ——
     「資料來源健康度」與「連線與金鑰」明明沒壞，卻跟著消失。
+
+    ⚠️ **2026-09-06 就地更正（有意識的更正，不是漏刪）**：上句原寫
+    ~~「少了 `_render_grid()` 裡那一層 `safe_section()`，外層那個
+    `safe_section("狀態三卡", _render_grid)` 會把三張卡一起換成一個紅框」~~ ——
+    **`_render_grid` 與 `"狀態三卡"` 在本 PR 的被測檔裡都已經不存在**
+    （實測：`origin/main` 的 `ui/views/page_05_settings.py` 各有命中，本分支 **0 命中**；
+    `_render_grid` 這個名字**全 repo 也已經沒有任何定義**，AST 掃 649 個 `.py` 檔為 0）。委派殼改成
+    **六個區塊各自一次 `safe_section(區塊名, 區塊函式)`**，不再有那層外殼。
+    **這條守衛要守的性質完全沒變**（區塊之間互相隔離），變的只是它引用的實作長相。
     `render_state.safe_section` 的 docstring 逐字寫著這句：
     **「把診斷跟故障綁在同一條命上，是最糟的順序。」**
 
@@ -1390,8 +1442,15 @@ def test_the_nav_block_keeps_its_unit_boundary_in_every_state(state: str):
 
     ⛔ **這一條是實測逼出來的，不是風格潔癖。** `ia.state_card(state=STATE_OK)` 走的是
     `st.metric(title, value)`，而 `st.metric` 在 AppTest 的元素樹裡是
-    `[Metric] 標籤`、**不是** `[Markdown] **標題**` —— :func:`_units` 的 `_CARD_OPEN`
-    認不出它。若這一塊照抄別頁用 `state_card` 畫「有資料」的狀態，
+    `[Metric] 標籤`、**不是** `[Markdown] ### 標題` —— :func:`_units` 的開頭判準
+    認不出它。
+    ⚠️ **2026-09-06 就地更正（有意識的更正，不是漏刪）**：本行原寫
+    ~~「`[Markdown] **標題**` —— :func:`_units` 的 `_CARD_OPEN`」~~ ——
+    **`_CARD_OPEN` 在本檔已經不存在**（本檔：`origin/main` 3 處命中 → 現在 0 處定義）。
+    ⚠️ **它不是全 repo 消失** —— `tests/test_wf03_research_skeleton.py` /
+    `tests/test_wf04_portfolio_skeleton.py` **各自有一份同名的**（③④ 的，與本檔無關）。
+    委派化之後 :func:`_units` 改認 :data:`_H3_OPEN`（`### ` 開頭 ＋ 六個具名區塊）。
+    **本條要守的性質一字未變**（那一塊在四種狀態下都必須是一個單位）。若這一塊照抄別頁用 `state_card` 畫「有資料」的狀態，
     **它會在終於有內容的那一刻停止成為一個單位**：
     灰態、結論字表、指路那幾條 unit-scoped 守衛會**全部靜靜停止覆蓋它**，
     而且**沒有任何一條測試會紅**（它們只會去看「這個單位」有沒有問題，
@@ -1555,7 +1614,8 @@ def _duration_bearing_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
 
 @pytest.mark.parametrize("state", sorted(_NAV_STATES))
 def test_no_rendered_line_shows_a_duration_without_its_point_count(state: str):
-    """⭐⭐ **整頁**任何一則「有數字＋有時間單位」的字，都必須同行帶點數。
+    """⭐⭐ 任何一則「有數字＋有時間單位」的字，都必須同行帶點數。
+    **射程：NAV 累積狀態那一塊**（不是整頁 —— 理由與更正見下）。
 
     ⛔ **2026-09-06 獨立稽核必修：本檔原本那三層「跨度不得單獨出現」的防禦，
     實際只有一層有效。** 稽核組加了一段**從 `first`/`last` 自己算年數**的程式
@@ -1578,13 +1638,25 @@ def test_no_rendered_line_shows_a_duration_without_its_point_count(state: str):
     只要一個渲染元素同時有數字與時間單位，就必須同行帶 :data:`POINTS_UNIT`。
     **繞不過去** —— 因為要說謊就一定得把那個數字印出來。
 
-    ⚠️ **本條是【整頁】的，不是 unit-scoped** —— 這是刻意的：
-    本檔既有的 unit-scoped 守衛**全部看不見頁首**（`_units()` 只認 `####`，
-    而頁首是 `## ` ＋ `st.caption`）。本條掃 `_flat()` 的全部元素，**含頁首**。
+    ⛔ **2026-09-06 就地更正：本段與程式碼相反（有意識的更正，不是漏刪）。**
+    舊表述：~~「本條是【整頁】的，不是 unit-scoped …… 本條掃 `_flat()` 的全部元素，
+    **含頁首**。」~~ —— **實際的迴圈是 `_duration_bearing_parts(_nav_parts(_parts))`**，
+    也就是**只掃 NAV 累積狀態那一塊**，下面第二行的 ⛔ 註解自己就寫著「**縮到 NAV 區塊**」。
+    **兩句話在同一個 docstring 裡互相打架，而下面那一句才是真的。**
+    ⚠️ **這句一旦被當真，後果不是小事**：它會讓人以為頁首與其他五塊也被守著，
+    於是**在那些地方印一個裸跨度不會有人擋** —— 本節整篇正是在防這種「以為有人看著」。
+    **縮小射程是委派化的刻意取捨**（全頁掃會掃到 `ui/tab6_manual.py` 的教學文「約 5.5 年」，
+    那不是本頁寫的），**代價就地寫明**：頁首與其他五塊的裸跨度，本條看不到。
+    ⚠️ 順帶更正舊表述裡的另一個過期事實：~~`_units()` 只認 `####`~~ ——
+    委派化之後它認的是 **`### ` ＋ 六個具名區塊**（:data:`_H3_OPEN`）。
+    「頁首落在 unit-scoped 守衛射程外」這個結論**不變**（:func:`_units` 仍會丟掉
+    第一個區塊標題之前的全部文字），變的只是那個判準的長相。
 
     ⚠️ **本條守不到的（照實列）**：
-    - :data:`_DURATION_UNITS` 是白名單 —— 「個月」以外的寫法、英文 `years`、
-      全形數字，都抓不到。
+    - :data:`_DURATION_RE` 的單位字是白名單 —— 「個月」以外的寫法、英文 `years`，
+      都抓不到。（⚠️ **2026-09-06 就地更正**：本行原寫 ~~`:data:`_DURATION_UNITS``~~，
+      **本檔沒有這個名字**；另原寫 ~~「全形數字」抓不到~~ 也是假的 ——
+      該 regex 的字元類寫著 `[0-9０-９]`，**全形數字是抓得到的**。）
     - 它要求的是「**同一個渲染元素**內有點數」；把點數印在**上一行**、跨度印在下一行，
       本條看不到（那是 `_flat()` 以元素為單位的既有性質）。
     """
@@ -2041,8 +2113,14 @@ def test_no_grey_unit_states_a_conclusion():
     「抓不到第 N+1 個詞」是機率問題；下面兩個是**確定性**的 —— 只要不印在
     「有 ⬜ 的單位」裡面，**整份字表完全不生效**：
     - ⛔ **印在第一個單位之前**（頁首那兩行 `## 標題` ＋ `st.caption(...)`）→
-      **綠**。`## ` 不是 `_L4_OPEN`（它只認 `####`），所以第一個 opener 是
-      「**資料來源健康度**」那張卡；:func:`_units` 會**丟掉第一個 opener 之前的所有文字**。
+      **綠**。`## ` 不是區塊開頭（:data:`_H3_OPEN` 只認 `### ` ＋ 六個具名區塊），
+      所以第一個 opener 是「**資料來源健康度**」那一塊；
+      :func:`_units` 會**丟掉第一個 opener 之前的所有文字**。
+      ⚠️ **2026-09-06 就地更正（有意識的更正，不是漏刪）**：本行原寫
+      ~~「`## ` 不是 `_L4_OPEN`（它只認 `####`）」~~ —— **`_L4_OPEN` 在本檔
+      已經不存在**（本檔：`origin/main` 4 處命中 → 現在 0 處定義；
+      **③④ 的守衛檔裡各有一份同名的，那不是本檔的**），委派化之後換成
+      :data:`_H3_OPEN`。**結論一字未變**（頁首確實在射程外），變的只是判準的名字。
       → **本頁自己的頁首 caption 落在每一條 unit-scoped 守衛的射程之外。**
     - ⛔ **印在刻意不灰的單位裡**（例如「使用手冊」）→ **綠**，因為
       `if NOT_READY_MARK not in _joined: continue` 直接跳過沒有 ⬜ 的單位。
@@ -2186,8 +2264,15 @@ def test_the_page_never_reaches_into_the_data_layer():
     （見該函式 docstring），所以判定要**兩種形狀都認**：
     `services.nav_history_gs` 本身、以及 `services.nav_history_gs.<符號>`。
     ⛔ **點邊界不能省**：裸 `startswith` 會讓 `services.nav_history_gs_v2`
-    這種**不同的模組**跟著被放行（同本檔 `..._does_not_delegate_to_the_old_tabs`
-    2026-09-05 修過的那個洞）。
+    這種**不同的模組**跟著被放行（~~同本檔 `..._does_not_delegate_to_the_old_tabs`
+    2026-09-05 修過的那個洞~~ → **2026-09-06 就地更正，有意識的更正，不是漏刪**：
+    那條守衛**已於本 PR 從本檔移除**（commit `7e5677a`），所以「同**本檔**……」
+    這句指向一個**本檔已經沒有的東西**。
+    ⚠️ 同名守衛在 `tests/test_wf03_research_skeleton.py` /
+    `tests/test_wf04_portfolio_skeleton.py` **仍然存在**（③④ 的），
+    **不要**把本更正讀成「那條守衛被全 repo 刪掉了」。
+    **那個洞本身是真的、也真的修過**，只是它今天**就在本函式裡**
+    —— 這一行原本在指的那個「別處」，現在是「這裡」）。
     """
     _banned_roots = ("repositories", "infra", "requests", "httpx",
                      "pandas", "yfinance", "gspread")
