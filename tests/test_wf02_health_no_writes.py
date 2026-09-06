@@ -50,6 +50,16 @@
 
 **看不見（照實列，不要讀成「守死了」）**
 
+* **在裝哨兵之前就把函式物件複製進容器**（list／dict／類別屬性）再從那裡取用 ——
+  別名掃描只走 `vars(module)`，**看不到容器裡的東西**。
+  ⚠️ **但這個洞比它聽起來小，照實寫**：2026-09-06 原稽核組用 6 顆突變實測 ——
+  **module 層常數**綁 named sink → 🔴（`vars(module)` 掃得到常數）；
+  **容器**捕獲且 payload 為空 → 🟢（**但那一顆什麼都沒寫**）；
+  **容器捕獲 ＋ 真 payload → 🔴，由「行為·快照」那一層接住**；
+  常數／容器捕獲 `Path.mkdir` → 🔴🔴 且**目錄未被建立**。
+  ⇒ **經實測：此洞在「真的產生寫入」時會被 primitive／快照兩層之一接住。**
+  ⛔ **這不等於「已完全涵蓋」** —— 一個既逃過別名掃描、又不碰任何 primitive、
+  又不留下 session 痕跡的寫入（例如寫進本檔沒守的第三方 client），仍然看不見。
 * **本檔 primitive 字表以外的寫法** —— `sqlite3` / `subprocess` / 原始 `socket` /
   `os.write(fd, ...)` 這類 fd 級寫入、`http.client` 直接組請求、
   `httpx.AsyncClient` 以外的非同步 client、以及任何 C 擴充直接落盤。
@@ -235,10 +245,25 @@ _ALWAYS_SENTINEL: tuple[tuple[str, str], ...] = (
 #: `_nav_hist_*` 這類**前綴族**因此只列到實際出現過的兩個。
 #: 射程限制同步寫在模組 docstring 的 ⛔ 那一格。
 _KNOWN_FOREIGN_KEYS: tuple[str, ...] = (
+    # ── (a) production 實測掃出來的（上面那條指令的輸出，人工判讀後留下）──────
     "portfolio_funds", "portfolio_core_pct",
     "policy_sheet_id", "policy_tabs", "v2_new_policy_name",
     "_nav_hist_written", "_nav_hist_disabled_warned",
     "_perf_snapshot_done", "t7_ledgers",
+    # ── (b) **本檔自己的 fixture 拿來當「別人的鍵」的替身**，不在 production ────
+    #    ⚠️ **分成兩段是為了讓上面那句「實測掃出來的」保持為真** ——
+    #    `policy_v2_cache` 實測**不存在於 production**
+    #    （`git grep -n policy_v2_cache -- '*.py' ':!tests/'` → 0 命中；
+    #     正對照：同一條指令查 `portfolio_funds` → `models/policy.py` 等多檔命中）。
+    #    把它混進 (a) 會讓那句出處變成假的；不收它又會讓本檔自相矛盾（見下）。
+    #    ⛔ **它必須收進來**：:func:`test_rendering_the_page_leaves_every_foreign_session_key_alone`
+    #    **就是拿它當外來鍵種子**（同檔兩處）。不收 ＝
+    #    **同一個 key，行為層當它是「別人的」，靜態層當它不存在** ——
+    #    而 :func:`_foreign_key_names` 的註解正好拿它當「宣稱與射程對不上」的病例。
+    #    **一段自陳「宣稱與射程對不上就是本輪要修的病」的註解，自己舉的兩個病例
+    #    只修好一個** —— 2026-09-06 原稽核組複驗抓到，實測
+    #    `key="_nav_hist_written"` → 🔴（治好了）、`key="policy_v2_cache"` → 🟢（沒治好）。
+    "policy_v2_cache",
 )
 
 _PKG_ROOTS = ("ui", "services", "repositories", "shared", "infra")
@@ -1037,7 +1062,40 @@ def test_rendering_the_page_touches_no_write_sink(branch, portfolio, monkeypatch
     M14  同 M12，但打**本機 200 伺服器**（見下）             **primitive** **全綠**  轉紅
     M15  寫入放在 **`safe_section` 包住的區塊**裡           別名掃描      **全綠**  轉紅
          （見下方 ⛨ —— 這一顆是「記名 vs 拋例外」的對照組）
+    C1a  `setattr(st.session_state, "portfolio_funds", [])` 行為·快照    **全綠**  轉紅
+         （放在 `safe_section` 包住的區塊裡）
+    C1b  屬性式 session 寫入 —— **兩種形狀，結果不同**       見下方 ✜     見下方 ✜  轉紅
+    C1c  在**沒有 module 層 `st` 的模組**裡寫入              行為·快照    **全綠**  轉紅
+         （實測改 `ui/helpers/story_nav.py`，測完還原並比對 md5）
+    C2   `io.open(path, "w")`                              **primitive** **全綠** ✜✜ 轉紅
+    C3   `st.checkbox(..., key="_nav_hist_written")`        靜態          **全綠**  轉紅
+    C3b  `st.checkbox(..., key="policy_v2_cache")`          靜態          **全綠**  轉紅 ✜✜✜
+    C4   `repositories.ledger_repository.append_ledger_row` 別名掃描      意外紅 ✱  轉紅
     ==== =============================================== ============= ========= =========
+
+    ✜ **C1b 是兩種不同的形狀，兩邊的實測都對，不要合併成一句**
+    （2026-09-06 原稽核組指出，本組據此改寫）：
+
+    ==================================== ==================== =========================
+    形狀                                  `bf5d229` 實測        誰看得到
+    ==================================== ==================== =========================
+    **經 helper 模組**做屬性式寫入          **GREEN**（7 passed） 補丁前**沒有人**
+                                                               （原稽核組報的是這一顆）
+    **頁內字面** `st.session_state.k = v`  **RED**（1 failed）   `session_writes` 管道 2
+                                                               （本組另測的是這一顆）
+    ==================================== ==================== =========================
+
+    ⛔ **這不是「原稽核組當時搞錯了」** —— 它的原文寫的就是「經同一模組做屬性式寫入」，
+    那一顆確實全綠。本組上一版把它寫成「據實更正複驗」，**更正的是一句對方沒說過的話**；
+    在一份主題為「宣稱要賺到」的 PR 裡，那正是 `CLAUDE.md §-2` 執行條款第 7 款要防的形狀
+    （**指控要查證，兩個方向都要，包括「說別人錯了」的方向**）。已改為並列兩種形狀。
+    兩者現在都紅：頁內字面走靜態，經 helper 走行為·快照（`_SessionDict` ＋ 換掉
+    `streamlit.session_state`）。
+    ✜✜✜ **C3b 是原稽核組複驗擋下來的那一顆**：`_foreign_key_names` 的註解拿
+    `policy_v2_cache` 與 `_nav_hist_written` 當「掃不到」的**兩個病例**，但
+    :data:`_KNOWN_FOREIGN_KEYS` 只收了後者 ⇒ **自己舉的兩個病例只修好一個**。
+    而 `policy_v2_cache` 正是本檔快照測試自己拿來當外來鍵種子的那個 key ⇒
+    **同一個 key，行為層當它是「別人的」，靜態層當它不存在。** 已收進去（見該常數的 (b) 段）。
 
     ※ **M3／M5 是被「名字掃描」接住的，不是 primitive** —— 它們把一個**列名** primitive
     直接寫進被測頁，於是 :func:`_sink_targets` 掃到 ``render_holdings_health`` 自己、
