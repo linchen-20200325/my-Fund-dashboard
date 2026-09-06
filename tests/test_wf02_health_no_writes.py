@@ -146,9 +146,9 @@ from ui.views.page_02_health import render_holdings_health  # noqa: E402
 #:    `_sink_targets` 只走頂層 ``FunctionDef`` ⇒ class 方法寫入全部隱形；
 #:    primitive 字表缺 ``add_worksheet`` / ``to_csv`` 等），實測 **14 個哨兵裡只有 2 個是掃出來的**。
 #:    → 現行：三個缺陷都修了（相對 import／``ast.walk``／補字表），
-#:      **掃描器貢獻的候選 2 → 20**（`_sink_targets()` 總數 14 → 32，其中 12 個一直是
-#:      :data:`_ALWAYS_SENTINEL` 明列的；import 閉包 58 → 65 個模組。量測日 2026-09-06，
-#:      複驗指令見 :func:`_sink_targets`）。
+#:      **掃描器貢獻的候選 2 → 20**（`_sink_targets()` 總數 14 → 36；
+#:      :data:`_ALWAYS_SENTINEL` 明列項 12 → 16（複驗條件 4 補了 ledger／perf 兩個模組）；
+#:      import 閉包 58 → 65 個模組。量測日 2026-09-06，複驗指令見 :func:`_sink_targets`）。
 #:      **但仍不宣稱窮舉** —— 名字清單永遠不會窮舉，這正是 primitive 哨兵存在的理由。
 _WHAT_THE_FIRST_CUT_CLAIMED = (
     "接上去就會轉紅（假：patch 來源模組抓不到 `from m import f`）",
@@ -328,11 +328,18 @@ def _sink_targets() -> list[tuple[str, str]]:
     ============================== ========== ==========
     項目                            `bf5d229`  本輪
     ============================== ========== ==========
-    `_sink_targets()` 總數          14         **32**
-    其中 :data:`_ALWAYS_SENTINEL`   12         12
+    `_sink_targets()` 總數          14         **36**
+    其中 :data:`_ALWAYS_SENTINEL`   12         16 ✜
     **掃描器貢獻**                  **2**      **20**
     import 閉包模組數               58         **65**
     ============================== ========== ==========
+
+    ✜ **明列項 12 → 16 是 2026-09-06 複驗條件 4 補的**（`repositories.ledger_repository`
+    的三個 ＋ `repositories.portfolio_perf_repository.append_snapshot`）——
+    那兩個模組**不在**閉包裡（實測 `_closure()` 皆為 False），原本只靠 primitive 兜底。
+    ⚠️ **這一格自己就示範過一次本檔要防的病**：補完那四個之後，本表一度還寫著舊的
+    `32 / 12`，也就是**一份主題為「不要寫過強宣稱」的檔案，自己留了一個過期數字**。
+    落筆前請重跑下面那條指令，**不要抄上一輪的數字**。
 
     新增看得到的東西包括 ``repositories.policy.v1`` / ``v2`` 的 5 個寫入函式
     （初版**從未掃過**，因為 `repositories/policy/__init__.py` 走的是相對 import）
