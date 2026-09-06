@@ -423,7 +423,7 @@ def _radar_lit(summary: dict) -> int:
     而它比畫面更嚴重：prompt 開頭寫著「**只能根據下面的資料快照來講**」，
     等於直接告訴模型「市場平靜」。當時的守衛只側錄 `st.*` 渲染 API，
     **prompt 字串不經過任何 `st.*`**，所以一條都不會紅。
-    → 現在三個消費端**共用這一支**，並由
+    → 現在四個消費端**共用這一支**（2026-09-06 加入第四個 `_card_exceptions()`），並由
     `tests/test_wf01_detail_zone_order.py::test_every_summarize_radar_consumer_goes_through_the_lit_guard`
     以 AST 鎖住「`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個」。
 
@@ -449,6 +449,15 @@ def _radar_lit(summary: dict) -> int:
       - **配對了但沒用回傳值**（那一半由兩條行為鎖守，不由本鎖守）；
       - **跨檔**：本鎖只讀 `ui/views/page_01_macro.py` 一個檔，
         第四個消費端若寫在別的檔，它看不到。
+      - 🆕 **兩邊都不呼叫**（2026-09-06 實測補上，**這一種真的發生過**）——
+        一個消費端從 session 拿到原始 10 燈之後，**既不叫 `summarize_radar()`
+        也不叫 `_radar_lit()`**，直接對原始 dict 讀 `.get("red", 0)`。
+        兩邊的計數**一起少一**、依然相等，**本鎖全綠**。
+        實測（`_card_exceptions()` 的真實 bug）：`3 / 3`、744 passed 零紅燈，
+        而那張卡把 5 盞紅燈印成「🔴 0」。
+        → 由 `test_every_radar_session_read_is_summarized_in_the_same_function`
+        補上：它改**逐函式**配對「讀 `_SK_RADAR`」與「呼叫 `summarize_radar`」，
+        不比對總數。**一條「數量對得上」的鎖，擋不住「兩邊都是 0」。**
 
     ⛔ **所以它是「少一道人為疏漏」，不是「不可能再漏」。**
     """
@@ -602,7 +611,7 @@ def _card_risk_radar() -> dict:
     #    `summarize_radar()` 是純函式（無 I/O），所以「一份資料兩個消費端」
     #    只是同一份 dict 被彙總兩次，不是第二個取數點。
     _sum = summarize_radar(_stash)
-    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 1／3）
+    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 1／4）
     if not _radar_lit(_sum):
         return {
             "title": "極端風險警語",
@@ -1342,7 +1351,7 @@ def _detail_short() -> None:
         not_ready("尚未計算短線風險雷達。", where=_where_to_load())
     else:
         _sum = summarize_radar(_radar)
-        # ⛔ 同 `_card_risk_radar()`，理由見 `_radar_lit()`。（消費端 2／3）
+        # ⛔ 同 `_card_risk_radar()`，理由見 `_radar_lit()`。（消費端 2／4）
         if not _radar_lit(_sum):
             not_ready("10 盞燈這一輪一盞都沒有取到讀數，沒有可以下的風險結論。",
                       where=_where_to_load())
@@ -1667,7 +1676,7 @@ def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
     _radar = st.session_state.get(_SK_RADAR)
     if isinstance(_radar, dict):
         _s = summarize_radar(_radar)
-        # ⛔ **消費端 3／3 —— 這一份是 2026-09-05 稽核 F1 補的，前一版漏掉。**
+        # ⛔ **消費端 3／4 —— 這一份是 2026-09-05 稽核 F1 補的，前一版漏掉。**
         #    它比另外兩個更嚴重：這一行會進 prompt，而 prompt 開頭寫著
         #    「**只能根據下面的『資料快照』來講**」——
         #    餵 `整體 平靜` 進去，等於**直接告訴模型市場平靜**，
