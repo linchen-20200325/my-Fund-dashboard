@@ -140,7 +140,8 @@ from ui.views.page_03_research import (  # noqa: E402
     DEEP_DIVE_TABLES,
     SOURCE_OPTIONS,
     SUBMIT_LABEL,
-    _PENDING_NOTE,
+    _BATCH_PENDING_NOTE,
+    _RESULTS_PENDING_NOTE,
     _declared_currency,
     _dividend_rows,
     _holdings_rows,
@@ -580,10 +581,22 @@ GREY_UNITS: tuple[str, ...] = (
     + (DEEP_DIVE_PROVENANCE, BLOCK_BATCH)
 )
 
-#: 仍然吃 :data:`_PENDING_NOTE`（「本頁分批上線」）的單位 —— **本批只剩這兩個**。
-#: ⚠️ 深度區的六格自 2026-09-06 起**不再**吃那一句：它們的灰態理由來自資料本身。
-#:    共用一句話會讓「查無此檔」「來源當下不可用」「樣本數不足」長得一模一樣。
-PENDING_UNITS: tuple[str, ...] = (BLOCK_RESULTS, BLOCK_BATCH)
+#: 內容還沒接上的單位 → **它自己那一句**灰態理由。
+#: ⚠️ ~~舊版是 `PENDING_UNITS: tuple = (BLOCK_RESULTS, BLOCK_BATCH)`，兩個單位共用~~
+#:    ~~一個 `_PENDING_NOTE`。~~ → **2026-09-06 改成 dict（狀態變更，不是漏刪）**：
+#:    兩塊「為什麼還沒有」的原因**完全不同**（一個缺搜尋、一個缺輸入欄位），
+#:    共用一句就等於對使用者說謊。改成 dict 之後，
+#:    :func:`test_every_grey_unit_is_grey_until_its_content_lands` 驗的是
+#:    「**這個單位有沒有印它自己那一句**」，而不是「頁面上有沒有出現那句共用的話」。
+#: ⚠️ **這個粒度差別是有實據的**：舊寫法只要頁面上任一處印了共用那句就通過，
+#:    把兩塊的理由對調**不會轉紅**；改 dict 之後對調就轉紅（突變 P2，見該函式）。
+PENDING_NOTES: dict[str, str] = {
+    BLOCK_RESULTS: _RESULTS_PENDING_NOTE,
+    BLOCK_BATCH: _BATCH_PENDING_NOTE,
+}
+#: 仍然吃「內容還沒接上」灰態的單位 —— **本批只剩這兩個**。
+#: ⚠️ 深度區的六格自 2026-09-06 起**不再**吃那一族：它們的灰態理由來自資料本身。
+PENDING_UNITS: tuple[str, ...] = tuple(PENDING_NOTES)
 
 #: 深度區的六個單位（三張卡 ＋ 兩張大表 ＋ 來源標註）。
 DEEP_UNITS: tuple[str, ...] = (
@@ -876,13 +889,16 @@ def test_the_empty_state_does_not_also_print_the_batch_pending_excuse():
     「本頁分批上線」的灰字。使用者會以為「輸入代碼按下去就會看到績效」—— 不會，
     因為內容根本還沒接上。**一次只給一個下一步。**
 
-    ⚠️ 比對 `_PENDING_NOTE` 本體，**不硬抄字面值**。硬抄的話，常數一改措辭
+    ⚠️ 比對常數本體，**不硬抄字面值**。硬抄的話，常數一改措辭
     這條就永遠是 True —— 它守的 bug 照樣存在、而它不再看得見。
+    ⚠️ **2026-09-06：兩塊的理由拆成兩句之後，兩句都要檢查。**
+    只檢查其中一句的話，另一塊漏印進空狀態就看不見了。
     """
     _all = _text(_render(applied=None))
-    assert _PENDING_NOTE not in _all, (
-        "還沒搜尋時不應同時印出「內容還沒接上」的灰字 —— 兩個下一步會互相抵消。\n"
-        + _all)
+    for _unit, _note in PENDING_NOTES.items():
+        assert _note not in _all, (
+            f"還沒搜尋時不應同時印出「{_unit}」的「內容還沒接上」灰字 —— "
+            "兩個下一步會互相抵消。\n" + _all)
 
 
 def test_a_blank_search_never_counts_as_applied():
@@ -1009,8 +1025,45 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
     assert NOT_READY_MARK in _body, (
         f"單位「{unit}」沒有灰態記號 {NOT_READY_MARK!r} —— "
         "內容還沒接上就要誠實留灰，不得空著也不得填示意值（§1）。\n" + _body)
-    assert _PENDING_NOTE in _body, (
-        f"單位「{unit}」的灰態沒說「為什麼沒有」。\n" + _body)
+    # ⚠️ 驗的是**這個單位自己那一句**，不是「頁面上有出現某句共用的話」。
+    #    後者在兩塊理由對調時不會轉紅（突變 P2 實測）。
+    assert PENDING_NOTES[unit] in _body, (
+        f"單位「{unit}」的灰態沒說**它自己**「為什麼沒有」。\n" + _body)
+    _others = [_n for _u, _n in PENDING_NOTES.items() if _u != unit]
+    for _other in _others:
+        assert _other not in _body, (
+            f"單位「{unit}」印的是**別一塊**的理由 —— 兩塊卡住的原因不同，"
+            "串到一起會讓使用者以為它們等的是同一件事。\n" + _body)
+
+
+def test_the_two_pending_reasons_are_not_the_same_sentence():
+    """兩塊灰態的理由**必須不一樣** —— 它們卡住的原因根本不同。
+
+    · 「{results}」卡在**沒有可以列出候選的搜尋**（資料面）；
+    · 「{batch}」卡在**沒有可以收多個代碼的輸入欄位**（版面決定，不是資料問題）。
+
+    共用一句「本頁分批上線」會把兩件事說成同一件，使用者無從判斷哪一個跟他有關、
+    也無從知道哪一個是他等得到的 —— 那是 §1 的失效模式（**看起來有解釋、實際沒有**）。
+
+    ⚠️ **本條不驗那兩句話的「意思」**（測試沒有判讀語意的能力），只驗三件可驗的事：
+    (1) 兩句不相等、(2) 兩句都不是空的、(3) 兩句都沒有退回舊的共用措辭。
+
+    ## 突變實驗（2026-09-06 實跑）
+
+    - **P1** 把 `_BATCH_PENDING_NOTE` 改成 `_RESULTS_PENDING_NOTE`（退回共用一句）
+      → **本條轉紅**。
+    - **P2** 把兩句**對調**（各自都還在，只是掛錯塊）→ 本條**不會**紅（兩句仍不相等），
+      但 :func:`test_every_grey_unit_is_grey_until_its_content_lands` **轉紅** ——
+      那條驗的是「這個單位有沒有印**它自己**那一句」。**兩條分工，缺一不可。**
+    """
+    assert _RESULTS_PENDING_NOTE != _BATCH_PENDING_NOTE, (
+        "兩塊灰態共用同一句理由 —— 它們卡住的原因不同（一個缺搜尋、一個缺輸入欄位），"
+        "共用一句等於對使用者說謊。")
+    for _unit, _note in PENDING_NOTES.items():
+        assert _note.strip(), f"單位「{_unit}」的灰態理由是空的。"
+        assert "本頁分批上線" not in _note, (
+            f"單位「{_unit}」退回了舊的共用措辭「本頁分批上線」—— "
+            "那句話講的是**這一頁的進度**，不是**這一塊缺什麼**。")
 
 
 def test_the_pending_pointer_is_a_place_not_a_status_sentence():
