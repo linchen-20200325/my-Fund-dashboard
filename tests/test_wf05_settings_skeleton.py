@@ -1838,9 +1838,18 @@ def test_the_page_writes_only_its_own_session_key():
                                 **任何「找賦值節點」的手段都收不到它**
     == ======================== ==============================================
 
-    📌 **另一組正在把這段共用實作收進 `tests/_ast_bindings.py`**
-    （分支 `claude/fund-guard-ast-sn42bh`，本批**不得碰、也不得 import** —— 它還沒合併）。
-    **共用 helper 合併後，本條應改為 import 它，不要留兩份**（`CLAUDE.md §2.1`）。
+    📌 ~~**另一組正在把這段共用實作收進 `tests/_ast_bindings.py`**
+    （分支 `claude/fund-guard-ast-sn42bh`，本批**不得碰、也不得 import** —— 它還沒合併）。~~
+    → ⚠️ **2026-09-06 狀態更新（不是漏刪）：它已經合併了**（#785，`f22a7b3`）——
+    `tests/_ast_bindings.py` 與 `tests/test_ast_bindings_helper.py` 現在都在 main 上，
+    `wf02` / `wf03` / `wf04` / `settings_diag_merge` 四檔已改為 import 它。
+    **上面那句「它還沒合併」在寫下的當天為真，今天不再為真** —— 留著會讓下一個人
+    以為那個 helper 還不能用。
+
+    ⛔ **本檔【還沒】改成 import 它，而且是刻意的**：那是一次會動到本條斷言邏輯的
+    重構，**不在 P05-1 的射程內**（本批的任務是 NAV 累積狀態接線）。
+    **共用 helper 已經在了，本條應改為 import 它、不要留兩份**（`CLAUDE.md §2.1`）——
+    **登記為待辦，交給碰到本檔的下一批**；本組沒有做，不假裝做了。
     本檔目前的寫法比照 `tests/test_wpg_portfolio_health_link_20260831.py`。
     """
     _tree_ = _tree()
