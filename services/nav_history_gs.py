@@ -415,6 +415,13 @@ def _get_worksheet(sh):
       之前就把網格補寬,兩邊都不會再撞到邊界。
     - **放行的是相對追加(`ws.add_cols(n)`),不是放行 `resize` 本身**;理由見
       `_ensure_grid_width`。
+    - 📌 **那句誤解為什麼看起來很有道理(值得記一筆)**:`values.append` **確實會自動擴「列」**
+      —— 本分頁自建立起 `add_worksheet(..., rows=1000)`(第一版就是 1000,查過全部歷史),
+      而 2026-09-06 量到的是 `rowCount: 22254`,**全 repo 沒有任何一處呼叫 `add_rows` /
+      `resize(rows=)`**(AST 掃過,唯一命中是測試假件)。列會自己長,是看得到的事實。
+      **問題在於它被外推到「欄」** —— 而兩個維度的行為不必然相同,本批也沒有能力實測欄
+      (SA 只有 `spreadsheets` + `drive.readonly`,連建一張自己的暫存表都做不到)。
+      **「看到列會長 → 推論欄也會長」就是這條註解當初的成因。**
     """
     try:
         ws = sh.worksheet(_WS_NAV)
