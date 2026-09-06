@@ -717,7 +717,8 @@ def render_settings_and_diagnostics() -> None:
     #    ⛔ **另一條路（改成直接呼叫底下三個 helper）本檔不走**：那會把「這一塊裝哪三條
     #       寫入路徑」複製成第二份真相源（§2.1），而它正是 `nav_history_section`
     #       模組 docstring 花了一整張表在守的東西。
-    #    → 守衛：`test_the_backfill_block_heading_is_drawn_exactly_once`。
+    #    → 守衛：`test_each_block_heading_is_drawn_exactly_once`（六個區塊逐一驗，
+    #       0 次 ＝ 那一塊不見了、2 次 ＝ 畫重複了，**兩個方向都紅**）。
     safe_section(nav_manual_label(), _render_backfill)
 
     # ⚠️ 線框沒有給這一塊位置，見模組 docstring 的 (D-5)。**登記在案的偏離。**
