@@ -502,9 +502,20 @@ HOLDING_COLS: tuple[str, ...] = ("排名", "持股名稱", "產業", "權重 %")
 DIVIDEND_COLS: tuple[str, ...] = ("配息基準日", "除息日", "發放日", "每單位配息", "幣別", "年化配息率 %")
 #: 來源軌跡表的欄名。
 TRACE_COLS: tuple[str, ...] = ("來源", "結果", "說明")
-#: 來源軌跡的兩種結果字面值（具名而不 inline —— 守衛要拿它比對）。
+#: 來源軌跡的結果字面值（具名而不 inline —— 守衛要拿它比對）。
 TRACE_OK: str = "成功"
 TRACE_FAIL: str = "失敗"
+#: **第三態，2026-09-06 加**：上游那一則**根本沒有 `success` 這個鍵**。
+#: ⛔ **為什麼不是二選一** —— 這是 §1「不可造假」在這張表上的落點：
+#:    「沒有說」和「說了失敗」是兩件事，把前者畫成後者是**我方替上游編了一個結論**。
+#:    實例（`services/fund_service.py:1131`）：`nav_history_merge` 在
+#:    「累積序列讀成功、只是目前還沒產生淨增益」時回的 dict **沒有 `success` 鍵**，
+#:    它的 `note` 逐字是「…目前全部落在本次 live 序列的日期範圍內 → 尚未產生淨增益」——
+#:    **一切正常**。舊寫法 `bool(_t.get("success"))` 把它畫成「失敗」，
+#:    於是同一張表上出現「說明＝一切正常」配「結果＝失敗」。
+#: ⚠️ **刻意不採「缺鍵就當成功」**（那是本檔突變實驗 M5 的做法，它也能讓症狀消失）：
+#:    我方**沒有觀察到**它成功，寫「成功」同樣是編的。**不知道就說不知道。**
+TRACE_UNKNOWN: str = "上游沒說"
 
 #: `source_trace` 裡「**沒有淨值序列**」那一則合成標記的名字。
 #: :func:`_nav_reason` 靠它挑出缺值原因，:data:`SYNTHETIC_TRACE_SOURCES` 靠它排除計數。
@@ -526,8 +537,12 @@ TRACE_NAV_SERIES: str = "nav_series"
 #: ---------------------------------------------------------------------------
 #: **它不是「黑名單日後腐化」，是這份黑名單寫下的那一天就不完整。**
 #: 加這份黑名單的 commit 是 `b83c29f`（2026-09-06 稽核回修）；**在那個 commit 當下**，
-#: `services/fund_service.py` 裡的 ``nav_history_merge`` 字樣已經有 **4** 處
-#: （`git grep -c "nav_history_merge" b83c29f -- services/fund_service.py` → 4）。
+#: `services/fund_service.py` 裡**真正的 `nav_history_merge` 標記**已經有 **3** 處
+#: （`:1098` / `:1132` / `:1164`）。
+#: ⚠️ `git grep -c "nav_history_merge" b83c29f -- services/fund_service.py` **回的是 4** ——
+#:    多出來的 `:1161` 是 ``merged.attrs["nav_history_merged"]``（**多一個 d**），
+#:    那是序列的 attrs 註記，不是 trace 標記。**本行刻意寫 3 不寫 4**：
+#:    拿一個沒有逐行判讀過的 `grep -c` 當證據，正是本節在講的那種錯。
 #: 也就是說：漏掉它靠的不是時間，是**當時沒有把上游的標記逐一列出來對過**。
 #:
 #: **它是什麼**：`services/fund_service.py::_merge_nav_history_series` 的回傳，
@@ -551,7 +566,13 @@ TRACE_NAV_SERIES: str = "nav_series"
 #: ⛔ **順手掃同時推翻了本組自己先前報告裡的一句話，據實更正**：先前說
 #:    ``tdcc_meta`` 這類 `*_meta` 與 ``fetch_holdings:exception`` 也會灌水 —— **那是假的**。
 #:    AST 逐一列出所有 append 進 `source_trace` 的 dict 與其 `success` 字面值後：
-#:    六個 `*_meta` **一律只在 `success: True` 時 append**（都包在 `if meta.get("fund_name")` 裡），
+#:    六個 `*_meta` **一律只在 `success: True` 時 append** —— 但**守門條件不是同一個**：
+#:    四個（`allianzgi_meta` / `tcb_meta` / `fundclear_meta` / `sitca_meta`）包在
+#:    `if meta.get("fund_name"):` 裡；另外**兩個**（`tdcc_meta_early` / `tdcc_meta`）用的是
+#:    **不同的變數、而且多一個 `or`**：`if _tdcc_early.get("fund_name") or
+#:    _tdcc_early.get("nav_latest"):`（`tdcc_meta` 同形，變數為 `_tdcc_m`）。
+#:    ⚠️ **結論不受影響**（六個都只在成功時 append），**被更正的是本組對守門條件的描述** ——
+#:    「都包在同一個 if 裡」是掃過去的印象，不是逐行讀出來的。
 #:    而 ``fetch_holdings:exception`` **根本不在 `source_trace`**，它是 `result["holdings"]["source"]`。
 #:    **那句話是拿一個手寫的 dict 當成程式會產生的情境，重現腳本跑得出來、production 跑不出來。**
 #: ---------------------------------------------------------------------------
@@ -560,10 +581,13 @@ TRACE_NAV_SERIES: str = "nav_series"
 #:    但**虛報一個來源數**比**漏排除一個**危險（前者是編造的證據），故採黑名單而非白名單。
 #:    ⛔ **不要改成「只數已知的真來源名」** —— 那是白名單，新來源會被靜靜漏掉，
 #:    使用者會看到一個比實際更小的數字，同樣是假的。
-#:    ✅ **腐化這件事現在有守衛了**：`tests/test_wf03_research_skeleton.py::`
-#:    `test_every_upstream_failure_marker_has_been_triaged` 會把上游**所有**可能以
-#:    falsy `success` 出現的標記逐一比對本黑名單與一份具名的「已裁決要計入」清單，
-#:    **上游新增一個沒被 triage 過的標記就轉紅**。它不會替你決定，但它不會讓你不知道。
+#:    ⚠️ **腐化這件事有守衛，但它的射程有限，據實寫明**：
+#:    `tests/test_wf03_research_skeleton.py::test_every_upstream_failure_marker_has_been_triaged`
+#:    會把上游標記比對本黑名單與一份具名的「已裁決要計入」清單。
+#:    **守得到**：那兩個 producer 檔裡、**字面字串**當 source 名、**字面 dict** 的新標記。
+#:    **守不到**（2026-09-06 獨立稽核構造、實測全綠）：動態 source 名（f-string）、
+#:    `dict(...)` 建構式、逐鍵組出來的 dict、以及**第三個檔**只用 `.extend`／`+=`／`insert`。
+#:    ⛔ **不要讀成「上游新增任何標記都會轉紅」** —— 逐條射程見該測試的 docstring 表格。
 SYNTHETIC_TRACE_SOURCES: frozenset = frozenset({
     TRACE_NAV_SERIES, "nav_all", "calc_metrics", "nav_history_rescue",
     # 2026-09-06 補（理由見上方 ⛔）。⚠️ 缺 `success` 鍵的那一種形狀同樣被這行擋掉 ——
@@ -572,6 +596,10 @@ SYNTHETIC_TRACE_SOURCES: frozenset = frozenset({
 })
 #: 上游**沒有**給缺值原因時的誠實佔位。⛔ 不得換成一句猜出來的理由。
 NO_REASON: str = "上游沒有附缺值原因"
+
+#: 「這個鍵根本不存在」的哨兵。⛔ **不得用 `None` 代替** —— 上游是有可能寫
+#: `{"success": None}` 的，那是「說了、但值是空」，與「沒說」不是同一件事。
+_MISSING: object = object()
 
 
 def _fmt(value: object, unit: str = "") -> str | None:
@@ -812,13 +840,22 @@ def _trace_rows(result: dict) -> list[dict]:
     for _t in _tr:
         if not isinstance(_t, dict):
             continue
-        _ok = bool(_t.get("success"))
+        # ⚠️ **三態，不是二態**：`success` 缺鍵 ≠ 失敗（見 :data:`TRACE_UNKNOWN`）。
+        #    `_failed_source_count()` 只數 `TRACE_FAIL`，所以「上游沒說」不會被計入 ——
+        #    這與 :data:`SYNTHETIC_TRACE_SOURCES` 那條排除是**兩道各自獨立**的防線：
+        #    前者按**名字**排除（就算上游哪天補上 `success: False` 也擋得住），
+        #    後者按**有沒有說**排除（就算名字沒被登記也不會被誣賴成失敗）。
+        _succ = _t.get("success", _MISSING)
+        if _succ is _MISSING:
+            _result = TRACE_UNKNOWN
+        else:
+            _result = TRACE_OK if bool(_succ) else TRACE_FAIL
         _detail = _t.get("error") or _t.get("note")
         if _detail is None and _t.get("nav_count") is not None:
             _detail = f"取得 {_t['nav_count']} 筆淨值"
         _rows.append({
             TRACE_COLS[0]: str(_t.get("source") or "").strip(),
-            TRACE_COLS[1]: TRACE_OK if _ok else TRACE_FAIL,
+            TRACE_COLS[1]: _result,
             TRACE_COLS[2]: str(_detail or "").strip(),
         })
     return _rows

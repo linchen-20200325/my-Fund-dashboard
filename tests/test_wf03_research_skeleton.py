@@ -131,6 +131,7 @@ from ui.views.page_03_research import (  # noqa: E402
     TRACE_COLS,
     TRACE_FAIL,
     TRACE_OK,
+    TRACE_UNKNOWN,
     BLOCK_BATCH,
     BLOCK_DEEP,
     BLOCK_FORM,
@@ -1059,6 +1060,18 @@ def test_the_two_pending_reasons_are_not_the_same_sentence():
     assert _RESULTS_PENDING_NOTE != _BATCH_PENDING_NOTE, (
         "兩塊灰態共用同一句理由 —— 它們卡住的原因不同（一個缺搜尋、一個缺輸入欄位），"
         "共用一句等於對使用者說謊。")
+    # ⛔ **內容錨定**（2026-09-06 獨立稽核 應修 2）：只驗「兩者不相等」擋不住
+    #    **把兩個常數的字串內容互換**（突變 B1）—— 因為 `PENDING_NOTES` 是按**常數名字**
+    #    綁期望值，內容一起換、期望值就跟著換，畫面輸出與突變 P2 一模一樣卻全綠。
+    #    ⚠️ 而那兩個常數在檔案裡**相鄰**、呼叫點卻隔 600 行 ——
+    #    **本組守住了難發現的那一種（P2 對調呼叫點），漏掉了容易寫錯的那一種。**
+    #    下面兩條各挑一個**真的只屬於那一塊**的詞釘住。
+    assert "多代碼" in _BATCH_PENDING_NOTE, (
+        "批次那一句沒有講到「多代碼」—— 它卡住的原因就是缺一個能收多個代碼的欄位。")
+    assert "候選" in _RESULTS_PENDING_NOTE, (
+        "搜尋結果那一句沒有講到「候選」—— 它卡住的原因就是列不出候選清單。")
+    assert "多代碼" not in _RESULTS_PENDING_NOTE and "候選" not in _BATCH_PENDING_NOTE, (
+        "兩句的內容被互換了（或串在一起）—— 錨定詞跑到另一塊去了。")
     for _unit, _note in PENDING_NOTES.items():
         assert _note.strip(), f"單位「{_unit}」的灰態理由是空的。"
         assert "本頁分批上線" not in _note, (
@@ -2063,19 +2076,40 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
     - **M1**：把 `"nav_history_merge"` 從 :data:`SYNTHETIC_TRACE_SOURCES` 拿掉 →
       **本條兩個 case 都轉紅**（來源數 2 → 3，畫面字串跟著變）。✅
 
-    ⚠️ **一個「沒有轉紅」的突變，據實記下來，不要讓後人以為本條守得比實際多**：
+    ## 本條到底釘住什麼（**2026-09-06 重寫；舊版兩句自述一句高估一句低估**）
 
-    - **M5**：把 :func:`~ui.views.page_03_research._trace_rows` 的
-      ``_ok = bool(_t.get("success"))`` 改成 ``_ok = _t.get("success") is not False``
-      → **本條仍然全綠**。
+    ⚠️ **舊版寫過兩句話，兩句都不準，一起更正**：
 
-      **為什麼綠得有道理**：那個改動讓「缺 `success` 鍵」被判成**成功**，
-      症狀（虛報）一樣消失了 —— 本條驗的是**結果**（不得計入），不是**手段**。
-      **為什麼仍要寫下來**：本條因此**不釘住**「排除是靠 source 名字做的」這件事。
-      若日後有人動 `_trace_rows` 的 falsy 判定，本條**不會**知道
-      —— 那時要看的是 `test_a_total_failure_shows_the_source_trace_and_never_paints_red`。
-      ⛔ 不要把 M5 讀成「這條測試很弱」，也不要讀成「怎麼改都行」：
-      M5 同時把**所有**缺鍵的 trace 條目都改判成成功，那是另一個範圍大得多的行為變更。
+    ~~「本條**不釘住**『排除是靠 source 名字做的』」~~ → **低估了自己。**
+    本條**第一行**就是 ``assert "nav_history_merge" in SYNTHETIC_TRACE_SOURCES`` ——
+    那是一條**釘手段**的斷言：**任何把它從那個集合裡拿掉的改動，一律轉紅**，
+    不管症狀有沒有被別的方式壓下去（獨立稽核用三種「換手段」突變撞過，全紅在這一行）。
+
+    ~~「那時要看的是 `test_a_total_failure_shows_the_source_trace_and_never_paints_red`」~~
+    → **那條根本不驗這件事。** 實測：M5 之下它 **1 passed**。逐行讀也對得上 ——
+    它的 fixture 每一筆都帶顯式 ``success: False``，斷言只驗
+    「``[error]`` 不在／``[dataframe]`` 在／幾個字串在不在」，**一個字都沒碰成功失敗欄**。
+    **那句指路會讓下一個人以為有人接住，其實沒有。**
+
+    **精確版（本組實測，逐條可自驗）**：
+
+    ===== ================================================== ==========
+    突變   內容                                                 本條
+    ===== ================================================== ==========
+    M1     把 `"nav_history_merge"` 從黑名單拿掉                 **紅**
+    B-b    拿掉黑名單 ＋ 改成「名字含 merge 就不算」              **紅**
+    M5     改 `_trace_rows` 的 falsy 判定（缺鍵→成功）           綠
+    B-a    **保留**黑名單，但把來源數硬夾 ``min(2, …)``          綠
+    ===== ================================================== ==========
+
+    → **釘住的是「這個名字必須在那個集合裡」**；
+      **沒釘住的是集合下游怎麼用**（怎麼數、`_trace_rows` 怎麼判 falsy）。
+    ⚠️ **B-a 這一列是本組自己撞出來的，稽核給的三個突變沒有涵蓋它** ——
+      也就是說「三種換手段全紅」這個說法本身也稍微強了一點：
+      **保留集合、只改下游算法**的那一種不會紅。**兩邊都據實記下。**
+    ⛔ 不要把 M5／B-a 讀成「這條測試很弱」：它們都是**症狀被另一條路壓掉**，
+      而 M5 同時把**所有**缺鍵條目改判成成功 —— 那是範圍大得多的行為變更
+      （本輪已改用第三態 :data:`~ui.views.page_03_research.TRACE_UNKNOWN` 處理，見下）。
     """
     assert "nav_history_merge" in SYNTHETIC_TRACE_SOURCES, (
         "`nav_history_merge` 不在合成標記清單裡 —— 它會被算成一個「取不到淨值的來源」。")
@@ -2100,6 +2134,64 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
             f"{_why}：畫面上的來源數被撐大了。")
 
 
+def test_a_trace_entry_that_never_said_it_failed_is_not_drawn_as_failed():
+    """上游**沒說**成功失敗的那一則，不得被畫成「失敗」——**沒說 ≠ 說了失敗**。
+
+    ## 這條補的是一個「只修一半」的洞（2026-09-06 獨立稽核 應修 1）
+
+    `nav_history_merge` 的**第二種形狀**（`services/fund_service.py:1131`）
+    **完全沒有 `success` 鍵**，語意是「累積序列讀成功了，只是目前還沒產生淨增益」
+    ＝ **一切正常**。上一輪把它從**來源數**排掉了（✅），
+    **但同一張逐源軌跡表仍然把它畫成「失敗」** —— 於是同一頁上出現：
+
+        {'來源': 'nav_history_merge', '結果': '失敗',
+         '說明': '累積 56 點目前全部落在本次 live 序列的日期範圍內 → 尚未產生淨增益。'}
+
+    「說明」說一切正常、「結果」說失敗，而下面那句話又說「在 **2** 個來源都沒有取到淨值」
+    —— **三個地方互相打架，而且那個「失敗」是我方替上游編的結論**（§1）。
+
+    ## 為什麼是第三態，不是「缺鍵當成功」
+
+    「缺鍵當成功」（＝突變 M5）也能讓症狀消失，但我方**沒有觀察到**它成功 ——
+    寫「成功」同樣是編的。**不知道就說不知道**，故用
+    :data:`~ui.views.page_03_research.TRACE_UNKNOWN`。
+
+    ## 突變實驗（2026-09-06 實跑）
+
+    - 把 `_trace_rows()` 的三態判定改回 ``bool(_t.get("success"))`` → **轉紅**。
+    - 把 `TRACE_UNKNOWN` 的值改成和 `TRACE_FAIL` 一樣 → **轉紅**。
+    """
+    assert TRACE_UNKNOWN not in (TRACE_OK, TRACE_FAIL), (
+        "第三態的字面值和成功／失敗撞在一起 —— 那等於沒有第三態。")
+
+    _r = _BLANK_RESULT()
+    _r["source_trace"].append({
+        "source": "nav_history_merge", "merged": False, "hist_points": 56,
+        "added": 0,
+        "note": "累積 56 點目前全部落在本次 live 序列的日期範圍內 → 尚未產生淨增益。",
+    })
+    _rows = _trace_rows(_r)
+    _hit = [_x for _x in _rows if _x[TRACE_COLS[0]] == "nav_history_merge"]
+    assert len(_hit) == 1, f"逐源軌跡表裡找不到那一則：{_rows}"
+    assert _hit[0][TRACE_COLS[1]] == TRACE_UNKNOWN, (
+        "上游沒有說成功或失敗，卻被畫成 "
+        f"{_hit[0][TRACE_COLS[1]]!r} —— 那是我方替上游編了一個結論（§1）。\n"
+        f"該則的說明逐字是：{_hit[0][TRACE_COLS[2]]!r}")
+
+    # ⚠️ 顯式 False 仍然要是「失敗」—— 不得把三態做成「什麼都不確定」。
+    _r2 = _BLANK_RESULT()
+    _r2["source_trace"].append(
+        {"source": "nav_history_merge", "success": False, "error": "開不了 NAV sheet"})
+    _hit2 = [_x for _x in _trace_rows(_r2) if _x[TRACE_COLS[0]] == "nav_history_merge"]
+    assert _hit2[0][TRACE_COLS[1]] == TRACE_FAIL, (
+        "上游**明說**失敗的那一則被畫成別的東西 —— 第三態只准接住「沒說」的。")
+    # 顯式 True 照舊
+    _r3 = _BLANK_RESULT()
+    _r3["source_trace"].append({"source": "moneydj_menu", "success": True, "nav_count": 120})
+    _hit3 = [_x for _x in _trace_rows(_r3) if _x[TRACE_COLS[0]] == "moneydj_menu"]
+    assert _hit3[0][TRACE_COLS[1]] == TRACE_OK
+
+
 def test_every_upstream_failure_marker_has_been_triaged():
     """上游**每一個**會以 falsy `success` 出現的標記，都必須被裁決過 —— 沒有漏網。
 
@@ -2110,11 +2202,34 @@ def test_every_upstream_failure_marker_has_been_triaged():
     —— `nav_history_merge` 在加黑名單的那個 commit（`b83c29f`）當下，
     `services/fund_service.py` 裡已經有 4 處。
 
-    → **靠人記得去對是不會發生的。** 本條把「對一遍」變成機器做的事：
-    上游每一個可能被畫成「失敗」的 `source` 名字，**要嘛在黑名單裡（不計入）、
-    要嘛在 :data:`COUNTED_REAL_SOURCES` 裡（已裁決要計入）**，兩邊都不在就轉紅。
+    → **靠人記得去對是不會發生的。** 本條把「對一遍」變成機器做的事。
 
-    ⚠️ **它不會替你決定**新標記該歸哪一邊 —— 它只保證你**知道有這件事**。
+    ## ⛔ 它守得到什麼、守不到什麼（**逐條寫死，不要讀成「沒有漏網」**）
+
+    **守得到**：在 :data:`TRACE_PRODUCERS` 那兩個檔裡、以**字面字串**當 `source` 名、
+    且該 dict 是**字面 dict** 的標記 —— 兩邊清單都沒有就轉紅。
+
+    **守不到（2026-09-06 獨立稽核構造，四種形狀實測全綠）**：
+
+    ===== ========================================= ==========================================
+    代號   形狀                                       為什麼掃不到
+    ===== ========================================= ==========================================
+    G1     ``{"source": f"{x}_retry", "success": …}``  非 `ast.Constant` → 本檔填 `None` 後被
+                                                       `isinstance(_src, str)` 濾掉
+    G3     ``dict(source=…, success=False)``           那是 `ast.Call` 不是 `ast.Dict`
+    G4     逐鍵組出來（`t = {}` / `t["source"] = …`）   沒有帶 `source` 鍵的字面 dict
+    F3     **第三個檔**只用 `.extend` / `+=` / `insert`  ① 的檔案集合只比對 `.append`，
+                                                       該檔不會被認成 producer，也就不會被掃
+    ===== ========================================= ==========================================
+
+    ⚠️ **現在沒踩到 G1 是運氣不是設計**：上游目前有 3 個動態 source 名
+    （`_intl_src` / `f"{_best_src}(best-of-waterfall)"` / `nav_source`），
+    **碰巧全部是 `success: True`** —— 只要有一天其中一個改成失敗路徑，本條不會知道。
+
+    ⛔ **因此不得把本條讀成「上游新增任何標記都會轉紅」。** 它的射程就是上面那一格。
+    （`CLAUDE.md §-1.5.1c` 判定 2 的方法教訓：**能被一條構造推翻的全稱句，就不該寫進去。**）
+
+    ⚠️ **它也不會替你決定**新標記該歸哪一邊 —— 它只保證**在射程內**你會知道有這件事。
     ⛔ 轉紅時**不要**為了消紅隨手往某一邊加：加進 `COUNTED_REAL_SOURCES` 等於
     宣告「它是一次真的取數嘗試」，那是會被印在使用者眼前的數字。
 
@@ -2124,6 +2239,8 @@ def test_every_upstream_failure_marker_has_been_triaged():
     - 把 `"multi_source"` 從 `COUNTED_REAL_SOURCES` 拿掉 → **轉紅**。
     - 在 `TRACE_PRODUCERS` 裡刪掉 `fund_service.py`（模擬掃描範圍縮水）→ **轉紅**
       （第一個斷言：實際 append 的檔不只清單裡那些）。
+    - ⚠️ **G1 / G3 / G4 / F3 四種構造 → 全綠**（見上表）。**這是已知射程外，不是 bug**，
+      但**必須寫在這裡**，否則下一個人會以為它守得比實際多。
     """
     # ① 掃描範圍本身要正確：只有這兩個檔會 append 進 source_trace。
     _appenders: set[str] = set()

@@ -73,7 +73,12 @@
 <p>
   <b>但它只畫了頁面頂端那一個 Form，而那個 Form 收的是「代碼或名稱」單一欄位</b> ——
   餵不了「一次丟多個代碼」。缺的是<b>一個輸入欄位</b>，不是後端：
-  L2 的 worker <code>services/fund_row.py::process_one_fund</code> 已經存在、已有 4 個 production caller。
+  L2 的 worker <code>services/fund_row.py::process_one_fund</code> 已經存在、
+  已有 <b>5 個非測試呼叫點</b>（4 個在 <code>ui/</code>：<code>tab_fund_grp_health.py</code>、
+  <code>tab3_portfolio.py</code>〔以 <code>_proc_health</code> 別名 import〕、
+  <code>helpers/fund_grp_health/switch_advisor_section.py</code>、
+  <code>helpers/fund_grp_health/unified.py</code>；1 個在 <code>scripts/weekly_switch_notify.py</code>）。
+  ⚠️ 初版寫「4 個」是漏了 <code>tab3_portfolio.py</code> 那個**別名 import** —— 用 AST 數才看得到。
 </p>
 <div class="q">
   <b>新增輸入欄位＝欄位增減＝版面異動</b>，依 <code>CLAUDE.md §-1.5</code> v3 <code>03</code>-2 ①
