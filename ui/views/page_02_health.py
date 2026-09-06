@@ -3,6 +3,29 @@
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；三張卡與逐檔表的真內容**分批填**。
 
+⚠️ **2026-09-06 本批（接真資料）改了哪些、以及哪些刻意沒改**
+------------------------------------------------------------
+接上真資料的三塊：**吃本金警示**、**影子基金重疊**、**逐檔體檢表**。
+維持灰態的兩塊，**理由各自具名寫在該處，不是「還沒排到」**：
+
+- **組合健康總分** —— 線框寫「五桶評等加權」，而本站的「五桶」是**總經**概念
+  （`shared/macro_buckets.py`），**沒有逐檔基金版本**；逐檔真正存在的是
+  `services/health/grade.py::compute_4d_health` 的 4D/5D Grade（A～F）。
+  該用哪一個屬**業務規格**，已送客戶、尚未答覆 → 不自行拍板（§-1.5 v3 `03`-2 ②）。
+  **逐檔體檢表的「五桶評等」欄同一個原因，整欄誠實留白。**
+- **衛星連續落後** —— 語意相符的實作是 `ui/components/mk_dashboard.py::tag_benchmark_lag`，
+  但 (a) 客戶已裁決波段觀測站的搬遷是**本頁上線之後的獨立批次**、
+  (b) 它要的基準序列來自 L1 `repositories/**`（本檔禁 import）。
+  **`services/**` 底下沒有同語意替代品**（`benchmark_compare.excess_return` 是「近 1 年」
+  超額報酬，不是「連兩季」）。
+
+⛔ **本批最大的一個坑，寫在最前面**：`ui/components/mk_dashboard.py` 有一個叫
+   **`Principal_Erosion`（直譯就是「吃本金」）** 的訊號，**它不是吃本金**。
+   它自己的 docstring 逐字寫著「v19.402 正名：本訊號實為『淨值連續下跌動能』，
+   **非配息覆蓋/吃本金** … **勿混用**」。真正的吃本金 SSOT 是
+   `services/health/dividend.py::check_eating_principal_1y_mk`（含息總報酬 vs 年化配息率）。
+   詳見 :func:`_eating_verdict` 的長註 —— **那一段是本批最重要的一段，改這裡之前先讀它。**
+
 整頁骨架 —— 逐字取自已核准線框 `docs/wireframes/ia-wireframe.html` 的 **Tab 02**
 ------------------------------------------------------------------------------
 
@@ -64,14 +87,19 @@ widget 的**當下值**與**已套用值**是兩個不同的東西，本檔只�
 （`ui/helpers/cloud_io.py`）寫入的既有 session 契約。
 **讀 session 不是資料層呼叫**，不違反「資料只走 `services/**`」。
 
-⚠️ **本批沒有任何 `services/**` 呼叫** —— 骨架階段沒有東西要算。
-   下一批填內容時，取數一律走 `services/**` 的 public 函式
-   （已實地確認存在的入口：`services.health` 的 `compute_4d_health` /
-   `classify_eating_principal`、`services.portfolio_service.calc_holdings_overlap`），
-   **不 import** `repositories/**`、`infra/**`、`requests`、`yfinance`、`gspread`。
+⚠️ **2026-09-06 起本檔有 `services/**` 呼叫了**（骨架批那句「本批沒有任何 `services/**`
+   呼叫」已不再成立，據實更新）。實際接上的四個入口，**全部是 public、全部零 I/O**：
+
+   - `services.health.dividend.check_eating_principal_1y_mk` —— 吃本金（含息 vs 配息率）
+   - `services.portfolio_service.calc_holdings_overlap` —— 影子基金相似度（v19.176 SSOT WRITER）
+   - `services.fund_total_return.compute_1y_total_return` —— 近 1 年含息報酬 + 來源標籤
+   - `services.fund_row.nav_freshness_label` —— 淨值日期 → 新鮮度標籤
+
+   **不 import** `repositories/**`、`infra/**`、`requests`、`yfinance`、`gspread`
+   （`tests/test_wf02_health_skeleton.py::test_the_page_never_reaches_into_the_data_layer` 守）。
    取不到的東西**一律做成灰態並誠實說明**，**不反向要求修改底層**。
-   ⚠️ 上面那串入口是本組**實測看到的**，**不是**「這些就夠了」的宣稱 ——
-   夠不夠要等真的去接才知道，本檔不預先斷言。
+   ⚠️ 上面那串入口是本組**實測接起來跑過的**，**不是**「這些就夠了」的宣稱 ——
+   「五桶評等」就是一個**接不到**的例子，它維持誠實留白。
 
 三態與空狀態：兩種灰的理由不同，文案必須分開
 ------------------------------------------
@@ -98,13 +126,15 @@ from typing import Any
 import streamlit as st
 
 from ui.helpers.ia import (
+    STATE_BUSINESS,
     STATE_NOT_READY,
+    STATE_OK,
     applied_form,
     render_cards,
     wide_table,
 )
 from ui.helpers.ia.empty_state import empty_state
-from ui.helpers.render_state import not_ready, safe_section
+from ui.helpers.render_state import NOT_READY_MARK, not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
@@ -145,9 +175,23 @@ HEALTH_TABLE_COLUMNS: tuple[str, ...] = (
     "最大回撤", "配息覆蓋", "五桶評等", "資料日期",
 )
 
-#: 本批共用的灰態理由。**只有一句話**，因為它會出現在四個地方，
-#: 四個地方各寫一句就是四份會各自漂移的真相源（§2.1）。
-_PENDING_NOTE: str = "本頁分批上線，這一塊的內容還沒接上"
+#: ⛔ **骨架批的共用灰態理由「本頁分批上線…」已於 2026-09-06 刪除，這是有意識的移除、不是漏刪。**
+#: 它在骨架批是對的（那時四塊真的都只是還沒排到）。本批之後**只剩兩塊是灰的，而且
+#: 它們灰的理由各自不同、也都不是「還沒排到」**——一個是評等定義未定（等客戶），
+#: 一個是來源住在下一個批次才會搬的檔案裡。
+#: **留著一句「還沒接上」給它們共用，等於用一句含糊的話蓋掉兩個具體、可行動的原因**
+#: （而且下一個人會照著它繼續產生新的含糊灰態）。兩個理由因此各自具名如下。
+#:
+#: 組合健康總分為什麼還是灰的（見 :func:`_render_health_score`）。
+_SCORE_PENDING_NOTE: str = (
+    "「五桶評等加權」的評等定義未定（本站的「五桶」是總經概念，逐檔評等是另一套 4D Grade），"
+    "已送客戶確認，**不先湊一個分數出來**。")
+
+#: 衛星連續落後為什麼還是灰的（見 :func:`_render_alert_cards`）。
+_LAG_PENDING_NOTE: str = (
+    "「連兩季落後基準」目前只實作在波段觀測站裡，"
+    "它的搬遷是客戶指定的**下一個獨立批次**；"
+    "本站服務層沒有同語意的替代算法（現有的是「近 1 年」超額報酬，期間對不上）。")
 
 
 def _pending_where(block: str) -> str:
@@ -159,8 +203,15 @@ def _pending_where(block: str) -> str:
 
     ⚠️ 分頁名走 `where_to_find()`，**不手抄**；區塊名由呼叫端傳進來，
     不在這裡再抄一份（手抄的指路在本 repo 已經指錯三次）。
+
+    ⚠️ **2026-09-06 就地更正：舊版寫死「目前只有『診斷條件』是完整的」，本批之後那句話變成假的。**
+    骨架批只有 Form 是完整的，所以那句在**當時為真**；本批把「吃本金警示」「影子基金重疊」
+    「逐檔體檢表」三塊接上真資料之後，它就成了一句**會誤導使用者的過期承諾** ——
+    使用者照它走到「診斷條件」，會發現那裡什麼診斷結果都沒有。
+    **一句在寫下當天為真的指路，不會自己過期；它只會安靜地變成假的。**
+    現行做法：由呼叫端傳入**那一塊自己的**下一步，本函式只負責把分頁名接上（仍不手抄）。
     """
-    return f"{where_to_find('health')} → 目前只有「{block}」是完整的"
+    return f"{where_to_find('health')} → {block}"
 
 
 def _holdings() -> list[dict[str, Any]]:
@@ -256,20 +307,408 @@ def _render_no_holdings() -> None:
     )
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 取數層 —— 一律走 `services/**` 的 public 入口
+# ══════════════════════════════════════════════════════════════════════
+# ⚠️ 下面每一個 `services.*` 都是**函式內 lazy import**，兩個理由：
+#   (a) module load 不把計算層整包拖進來；
+#   (b) 測試要 patch 得到**真正的定義處** —— module 層 `from X import f` 會把
+#       函式綁進本檔的命名空間，之後 patch `X.f` 對本檔完全無效。
+# 這也是本 repo 的家風（`services/fund_row.py`、`ui/helpers/fund_grp_health/rotation.py`
+# 等既有 caller 都這樣寫）。
+
+
+def _mj(fund: dict) -> dict:
+    """該檔的 MoneyDJ 原始 payload（`portfolio_funds[i].moneydj_raw`）。
+
+    ⚠️ 這是**讀既有 session 契約的欄位**，不是資料層呼叫（同 :func:`_holdings`）。
+    鍵名由 `ui/helpers/portfolio/load.py::_FUND_INFO_KEYS` 定義，本檔只讀不寫。
+    """
+    _v = fund.get("moneydj_raw")
+    return _v if isinstance(_v, dict) else {}
+
+
+def _metrics(fund: dict) -> dict:
+    """該檔的本地計算指標（`portfolio_funds[i].metrics`）。同 :func:`_mj`，只讀。"""
+    _v = fund.get("metrics")
+    return _v if isinstance(_v, dict) else {}
+
+
+def _uniq_by_code(funds: list[dict]) -> list[dict]:
+    """同一檔基金跨多張保單只算一次。
+
+    ⚠️ **這不是可有可無的整理**：`portfolio_funds` 的主鍵是 `(policy_id, code)`
+    （見 `ui/helpers/portfolio/load.py::reconcile_funds_with_ledgers`），
+    同一檔基金買在兩張保單就會有兩筆。不去重的話「2 檔吃本金」可能其實只有 1 檔，
+    而使用者無從得知 —— 那是一個**看不出來的錯誤數字**（§1）。
+    既有實作（`ui/helpers/portfolio/health.py::compute_health_kpis`、
+    `ui/components/mk_dashboard.py::render_mk_war_room`）都先去重，本檔對齊。
+    """
+    _seen: set[str] = set()
+    _out: list[dict] = []
+    for _f in funds:
+        _c = str(_f.get("code", "") or "").strip().upper()
+        if not _c or _c in _seen:
+            continue
+        _seen.add(_c)
+        _out.append(_f)
+    return _out
+
+
+# ── 吃本金 ────────────────────────────────────────────────────────────
+#: 四種落點。**直接對映 SSOT 回傳的 `alert_level`，本檔不自己定義任何門檻**
+#: —— 門檻住在 `shared/signal_thresholds.py::NEAR_DIVIDEND_WARNING_PCT`（§3.3）。
+_EAT_EATING: str = "eating"      # SSOT `alert_level == "red"`
+_EAT_NEAR: str = "near"          # SSOT `alert_level == "yellow"`
+_EAT_HEALTHY: str = "healthy"    # SSOT `alert_level == "green"`
+_EAT_UNKNOWN: str = "unknown"    # SSOT 回 None / `"grey"` / 判定拋例外
+
+_EAT_BY_ALERT_LEVEL: dict[str, str] = {
+    "red": _EAT_EATING, "yellow": _EAT_NEAR, "green": _EAT_HEALTHY,
+}
+
+
+def _eating_verdict(fund: dict) -> "tuple[str, dict | None]":
+    """單檔吃本金判定 → `(落點, SSOT 原始 dict | None)`。
+
+    ⛔⛔ **這一段是本批最重要的一個決定，動它之前請先讀完。**
+
+    走的是 `services.health.dividend.check_eating_principal_1y_mk` ——
+    「**近一年含息總報酬率 vs 年化配息率**」，也就是線框那句「配息覆蓋率」講的東西。
+
+    ⛔ **不要**改接 `ui/components/mk_dashboard.py::tag_principal_erosion`。
+       它的名字（`Principal_Erosion`，直譯就是「吃本金」）看起來正是這張卡要的東西，
+       **但它算的是另一件事**。該函式自己的 docstring 逐字寫著：
+
+           ⚠️ v19.402 正名：本訊號實為「淨值連續下跌動能」，**非配息覆蓋/吃本金**。
+           …與「吃本金」（含息總報酬 vs 配息率，見 tag_health_check B /
+           dividend_safety）是**不同訊號**，**勿混用**。
+
+       它實際做的是「近 3 個 22 日滾動**純 NAV** 報酬三段皆為負」——
+       一檔**完全不配息**的基金淨值連跌三個月就會被它標成 `Eroding`，
+       而那跟「配息有沒有在吃本金」毫無關係。
+       **接錯的後果不是畫面壞掉，是一張標題正確、數字正確、意思完全錯的卡**，
+       而使用者**看不出來**（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
+       那句「勿混用」會存在，代表以前有人混用過。
+
+    **為什麼只把 `red` 算成「吃本金」，而不是「覆蓋率 < 1.0」**
+    ------------------------------------------------------------
+    SSOT 的 `eating_principal` 欄位確實就是「覆蓋率 < 1.0」，字面上更貼線框那句話。
+    本檔仍取 `alert_level == "red"`，理由是**跨頁一致性**（§2.1）：
+    `red` 是本 repo **既有的、production 正在用的**「這檔在吃本金」判準 ——
+    `ui/tab_fund_grp_health.py::_eats_principal_flag` 逐字寫
+    「red→吃本金；green/**yellow**→不吃（黃＝margin 薄但未吃）」，
+    而 `services/switch_advisor.py` 一線、NAS 週報一線也都吃同一個 `status` 字串。
+    若本頁改用「覆蓋率 < 1.0」，同一個組合在 ② 會顯示「3 檔吃本金」、
+    在 ④ 換股顧問卻顯示「1 檔」—— **兩個都對，但使用者只會覺得系統壞了**。
+    ⚠️ 黃燈那一段**沒有被丟掉**，它以「另有 N 檔接近警戒」出現在卡片說明裡
+    （見 :func:`_eating_note`），不是靜默併進綠燈。
+
+    ⚠️ **單檔判定失敗不拖垮整組**（與 `switch_advisor_section._underperf_by_code`
+    同一處理）：例外收成 `_EAT_UNKNOWN` 並印到 stderr，**且會被計入卡片說明的
+    「N 檔資料不足」**—— 不是靜默吞掉（§1）。
+    **守衛**：`test_the_eating_card_accounts_for_every_fund_it_looked_at`
+    （這句承重宣稱原本沒有守衛，2026-09-06 獨立稽核抓到後補上）。
+
+    📌 **已登記的上游缺口：無配息基金會被說成「資料不足」，但它其實是「不適用」**
+    （2026-09-06 稽核發現，**根因在 `services/**`，不在本檔邊界內，本批不修**）：
+    `check_eating_principal_1y_mk` 在 `adr <= 0` 時直接 `return None`，於是累積型
+    （不配息）基金落進 :data:`_EAT_UNKNOWN`，卡片說「N 檔**資料不足**」。
+    **本組實測確認**（同日）::
+
+        check_eating_principal_1y_mk(累積型 div=0)     → None          → unknown
+        classify_eating_principal(6.0, 0.0)            → is_no_dividend=True,
+                                                         is_data_missing=False
+
+    —— **SSOT 內部分得出來**（`is_no_dividend`），只是在 `check_eating_principal_1y_mk`
+    回傳前被折疊成 `None` 了，本檔拿不到那個區別。
+    ⚠️ **不造成假綠也不造成假紅**（它不會被算成「沒吃本金」），
+    **只是低估了我們的認知** —— 我們其實知道「這檔不配息，所以吃本金這個概念不適用」，
+    畫面上卻說「不知道」。**要修得動 `services/**`，屬另案。**
+    """
+    from services.health.dividend import check_eating_principal_1y_mk
+    try:
+        _v = check_eating_principal_1y_mk(fund)
+    except Exception as _exc:  # noqa: BLE001 — 單檔失敗不拖垮整組；但要留痕
+        import sys as _sys
+        print(f"[page_02_health] check_eating_principal_1y_mk 失敗 "
+              f"({fund.get('code')}): {type(_exc).__name__}: {_exc}", file=_sys.stderr)
+        return _EAT_UNKNOWN, None
+    if not isinstance(_v, dict):
+        # SSOT 回 None ＝「adr 缺 / tr1y 缺」→ 資料不足，**不是**「不吃本金」。
+        return _EAT_UNKNOWN, None
+    return _EAT_BY_ALERT_LEVEL.get(str(_v.get("alert_level")), _EAT_UNKNOWN), _v
+
+
+def _eating_tally(funds: list[dict]) -> dict[str, int]:
+    """四種落點各幾檔。key 為 :data:`_EAT_EATING` 等四個常數。"""
+    _out = {_k: 0 for _k in (_EAT_EATING, _EAT_NEAR, _EAT_HEALTHY, _EAT_UNKNOWN)}
+    for _f in funds:
+        _bucket, _ = _eating_verdict(_f)
+        _out[_bucket] += 1
+    return _out
+
+
+def _eating_note(tally: dict[str, int]) -> str:
+    """吃本金卡的說明句。**把判準與所有沒進主數字的檔數都講出來。**
+
+    ⚠️ 卡片上的主數字只有一個，但它背後有四種落點。**沒講出來的那三種，
+    使用者會自己補一個（多半補成「其餘都健康」）** —— 那正是 §1 要防的事。
+
+    ⚠️ 門檻**現場從 SSOT 讀**（`shared/signal_thresholds.py::NEAR_DIVIDEND_WARNING_PCT`），
+    不在本檔抄一個數字（§3.3 反捏造）—— 抄了之後 SSOT 一改，畫面上的說明就開始說謊，
+    而且**畫面與判定會各說各話**（判定走 SSOT、說明走抄本）。
+    """
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _gap
+
+    _bits = [f"判準：近一年含息報酬低於年化配息率超過 {_gap:.0f} 個百分點"]
+    if tally[_EAT_NEAR]:
+        _bits.append(f"另有 {tally[_EAT_NEAR]} 檔接近警戒（缺口在 {_gap:.0f}pp 內）")
+    if tally[_EAT_HEALTHY]:
+        _bits.append(f"{tally[_EAT_HEALTHY]} 檔覆蓋充足")
+    if tally[_EAT_UNKNOWN]:
+        _bits.append(f"{tally[_EAT_UNKNOWN]} 檔資料不足、未列入判定")
+    return "；".join(_bits) + "。"
+
+
+# ── 影子基金重疊 ──────────────────────────────────────────────────────
+def _clean_holdings(raw: Any) -> list[dict]:
+    """把一檔的 `top_holdings` 洗成「名稱 strip 後真的非空」的那些。
+
+    ⛔⛔ **這不是防禦性程式碼潔癖，它擋的是一個已實測存在的假警示。**
+
+    SSOT `services/portfolio_service.py::calc_holdings_overlap` 收集持股名時寫的是
+    ``{(h.get("name") or "").strip().upper() for h in tops if h.get("name")}`` ——
+    過濾條件 ``if h.get("name")`` 取的是 **strip 之前**的 truthy。於是名稱為
+    **純空白**（`"  "`、`"\\t"`）時：該筆通過過濾 → 正規化成 `""` → 集合變成 `{""}`
+    → **兩檔基金共享 `{""}` ⇒ Jaccard = 1.0 ⇒ 一對「相似度 1.00」的影子警示**。
+
+    **本組 2026-09-06 於 `origin/main` 實跑確認這個缺陷還在**（指令與輸出見 PR 描述）::
+
+        calc_holdings_overlap([
+            {"code": "AAA", "top_holdings": [{"name": "   ", "pct": 10.0}]},
+            {"code": "BBB", "top_holdings": [{"name": "\\t",  "pct": 10.0}]},
+        ])["shadow_pairs"]                      # → [('AAA', 'BBB', 1.0)]
+
+    `services/homogeneity.py::_has_dims` 早就把這件事就地寫下來了（「根因在 SSOT 端把
+    純空白名當資料（既有行為，本批無權改）；修法屬另案裁決」），並在**它自己**的
+    鏡像判定裡改用「strip **後**非空」。**本檔採同一條判準，套在自己的輸入上。**
+
+    ⚠️ **修的是「我餵進去的東西」，不是 SSOT** —— 本批的檔案邊界只有兩個檔，
+    `services/**` 一行都不准動（也不該由 UI 端去改一個多處共用的計算 SSOT：實測
+    `origin/main` 上有 **4 個 production 呼叫點** —— `ui/components/mutual_exclusion.py`、
+    `ui/helpers/fund_grp_health/ai.py`、`ui/helpers/fund_grp_health/correlation.py`、
+    `ui/tab3_portfolio.py`，量測日 2026-09-06）。
+    ⛔ **那 4 處都沒有這道防線** —— 本檔擋住的只有本頁自己，**不是全站**。
+
+    📌 **這個數字本身有一段病史，留在這裡是因為它比數字有用**（2026-09-06 就地更正）：
+    本段初稿寫的是「**8 個** caller 共用」，**那是沒查證就寫下的**。
+    8 的來源是把稍早一次寬掃的**命中行數**當成呼叫點數 —— 那份輸出裡混著
+    `services/homogeneity.py` 的 docstring 提及、函式定義本身、以及註解。
+    實跑 `git grep -n 'calc_holdings_overlap(' origin/main -- '*.py'`
+    再濾掉 `tests/` 與定義行，**只有 4 個**。
+    ⚠️ **結論不受影響**（「不該由 UI 端去改共用 SSOT」在 4 或 8 都成立），
+    **錯的是那個數字本身** —— 而這正是本節在指控上游的同一種病：
+    **把「掃到幾行」當成「有幾個」。**
+    一段在講「不要寫沒查過的數字」的程式碼，自己的數字必須先為真。
+    餵一份「名稱其實是空白」的持股進去本來就是 garbage-in；把它擋在自己門口
+    既不改別人的行為，也不需要別人先修好。
+    ⚠️ **被剔掉的檔會被算進「N 檔缺持股資料」並顯示出來**，不是靜默縮小比對範圍
+    （§1；`homogeneity.py` 模組 docstring 點名的正是「靜默縮小」這個病）。
+    ⛔ **這不代表這張卡從此不會有假陽性**：本函式只擋掉「純空白名」這**一個**已知成因。
+       持股清單被上游截斷成 1～2 筆時，兩檔共享那一筆一樣會算出 1.0 ——
+       **那是這個指標本身的稀疏樣本問題，本檔沒有解，也不假裝有解。**
+    """
+    if not isinstance(raw, list):
+        return []
+    return [_h for _h in raw
+            if isinstance(_h, dict) and str(_h.get("name") or "").strip()]
+
+
+def _overlap_input(funds: list[dict]) -> "tuple[list[dict], list[str]]":
+    """→ (`calc_holdings_overlap` 的輸入, **一維證據都沒有**的基金代碼)。
+
+    持股／產業住在 `moneydj_raw.holdings`（既有 session 契約）。
+    """
+    _rows: list[dict] = []
+    _blind: list[str] = []
+    for _f in funds:
+        _code = str(_f.get("code", "") or "?")
+        _h = _mj(_f).get("holdings") or {}
+        _tops = _clean_holdings(_h.get("top_holdings"))
+        _sects = _h.get("sector_alloc") or []
+        if not _tops and not _sects:
+            _blind.append(_code)
+        _rows.append({
+            "code": _code,
+            "name": _f.get("name") or _code,
+            "top_holdings": _tops,
+            "sector_alloc": _sects,
+        })
+    return _rows, _blind
+
+
+def _overlap_result(funds: list[dict]) -> "tuple[dict | None, list[str]]":
+    """影子基金重疊 → (SSOT 回傳值 | None, 缺持股/產業資料的代碼)。"""
+    from services.portfolio_service import calc_holdings_overlap
+    _rows, _blind = _overlap_input(funds)
+    try:
+        return calc_holdings_overlap(_rows), _blind
+    except Exception as _exc:  # noqa: BLE001 — 留痕，不靜默
+        import sys as _sys
+        print(f"[page_02_health] calc_holdings_overlap 失敗："
+              f"{type(_exc).__name__}: {_exc}", file=_sys.stderr)
+        return None, _blind
+
+
+def _shadow_formula() -> str:
+    """影子基金的門檻與加權公式，**整句從 SSOT 組出來**（§3.3 反捏造）。
+
+    ⚠️ 門檻 `0.70` 與加權 `0.6 / 0.4` 三個數字**一個都不准在本檔寫死**：
+    它們是 `services/portfolio_service.py::calc_holdings_overlap` 真正在用的參數，
+    抄一份到 UI 之後，SSOT 一改，**判定會跟著改、而畫面上的說明不會** ——
+    使用者看到的門檻就和實際判定用的門檻不同，卻沒有任何東西會報錯。
+    """
+    from shared.signal_thresholds import (
+        SHADOW_FUND_COSINE_WEIGHT_RATIO,
+        SHADOW_FUND_JACCARD_WEIGHT_RATIO,
+        SHADOW_FUND_THRESHOLD_RATIO,
+    )
+    return (f"門檻：相似度 ≥ {float(SHADOW_FUND_THRESHOLD_RATIO):.2f}"
+            f"（持股 Jaccard × {float(SHADOW_FUND_JACCARD_WEIGHT_RATIO)}"
+            f" ＋ 產業 cosine × {float(SHADOW_FUND_COSINE_WEIGHT_RATIO)}）")
+
+
+def _pct(value: Any, digits: int = 1) -> str:
+    """百分比欄位。**算不出來就是 `⬜`，不是 `0`、不是 `—`**（§1）。
+
+    ⚠️ `0` 與「不知道」在一張表裡長得一模一樣，而它們的意思完全相反：
+    「最大回撤 0%」是「這檔從沒跌過」，「最大回撤不知道」是「我們沒有它的淨值歷史」。
+    """
+    _v = _safe_num(value)
+    return NOT_READY_MARK if _v is None else f"{_v:.{digits}f}%"
+
+
+def _num(value: Any, digits: int = 2) -> str:
+    """純數字欄位（Sharpe／覆蓋率）。同 :func:`_pct`，未知一律 `⬜`。"""
+    _v = _safe_num(value)
+    return NOT_READY_MARK if _v is None else f"{_v:.{digits}f}"
+
+
+def _safe_num(value: Any) -> "float | None":
+    """→ float 或 None。**NaN 也算 None**（NaN 會被 f-string 印成 `nan` 混進表裡）。"""
+    try:
+        _v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if _v != _v else _v
+
+
+def _table_rows(funds: list[dict]) -> list[dict]:
+    """逐檔體檢表的列。**key 就是 :data:`HEALTH_TABLE_COLUMNS`，順序一致。**
+
+    每一欄的來源（**全部走 `services/**` 的 public 入口或既有 session 契約**）::
+
+        代碼      portfolio_funds[i].code                     （session 契約）
+        名稱      portfolio_funds[i].name                     （session 契約）
+        幣別      .currency ／ .moneydj_raw.currency          （session 契約）
+        近 1 年   services.fund_total_return.compute_1y_total_return()
+        Sharpe    .metrics.sharpe                             （session 契約）
+        最大回撤  .metrics.max_drawdown                       （session 契約）
+        配息覆蓋  services.health.dividend.check_eating_principal_1y_mk() → coverage
+        五桶評等  **無來源** —— 見下
+        資料日期  services.fund_row.nav_freshness_label(.moneydj_raw.nav_date)
+
+    ⛔ **「五桶評等」整欄恆為 `⬜`，這是刻意的，不是還沒接。**
+       線框寫的「五桶評等」在本 repo 是**總經**概念（`shared/macro_buckets.py`：
+       長期／中期／短線／拐點／新聞），**沒有逐檔基金版本**。逐檔真正存在的是
+       `services/health/grade.py::compute_4d_health` 的 **4D/5D Grade（A～F）**——
+       維度不同、級距不同、名字不同。**把 4D Grade 印在「五桶評等」欄底下，
+       就是本頁 `_eating_verdict` docstring 講的那種錯**（名字對得上、語意不同、
+       使用者看不出來）。欄位本身**不刪**（線框是客戶拍板的，增刪欄位屬客戶 gate），
+       改由表下方一句 caption 說明為什麼是空的。
+       → 該用哪個評等**已送客戶、尚未答覆**；在那之前這一欄誠實留白。
+
+    ⚠️ **`check_eating_principal_1y_mk` 在本頁被呼叫兩次**（一次給警示卡、一次給本表）。
+       它是純函式、同輸入同輸出，所以**不會不一致**；沒有收成一份共用結果，是因為
+       兩塊各自包在 `safe_section()` 裡刻意隔離 —— 共用一份中間結果會讓其中一塊的
+       失敗連坐另一塊，那正是區塊級隔離要防的事。持股數量級是「使用者手上的基金」，
+       這個取捨划算；**若日後真的變慢，正解是在 `services/**` 那一層加快取，不是拆掉隔離。**
+    """
+    from services.fund_row import nav_freshness_label
+    from services.fund_total_return import SRC_NONE, compute_1y_total_return
+
+    _rows: list[dict] = []
+    for _f in funds:
+        _m = _metrics(_f)
+        _raw = _mj(_f)
+
+        # 近 1 年：算不出來時**印 SSOT 自己給的理由**（例如「僅 45 天資料，不足以推算一年」），
+        # 那比一個 `⬜` 更有用，而且那句話是 SSOT 產的、不是本檔編的（§2.2）。
+        try:
+            _tr1y, _tr1y_src = compute_1y_total_return(_f)
+        except Exception as _exc:  # noqa: BLE001 — 單檔失敗不拖垮整張表；留痕
+            import sys as _sys
+            print(f"[page_02_health] compute_1y_total_return 失敗 "
+                  f"({_f.get('code')}): {type(_exc).__name__}: {_exc}", file=_sys.stderr)
+            _tr1y, _tr1y_src = None, ""
+        # 算不出來時印 SSOT 自己給的**理由**（例如「（僅 45 天資料，不足以推算一年）」），
+        # 那比一個 ⬜ 有用得多，而且那句話是 SSOT 產的、不是本檔編的（§2.2 provenance）。
+        # ⚠️ 但 `SRC_NONE`（就是一個「—」）**不帶任何資訊**，印它只會讓這一格
+        #    和同一列其他「不知道」的格子長得不一樣，卻是同一個意思 → 統一回 ⬜。
+        #    比對走 SSOT 常數，**不在本檔寫死那個破折號**（§3.3）。
+        _src_txt = str(_tr1y_src or "").strip()
+        _tr1y_cell = _pct(_tr1y) if _safe_num(_tr1y) is not None else (
+            NOT_READY_MARK if not _src_txt or _src_txt == SRC_NONE else _src_txt)
+
+        _, _eat = _eating_verdict(_f)
+        _nav_label, _ = nav_freshness_label(
+            _raw.get("nav_date") or _f.get("nav_date"))
+
+        _rows.append({
+            "代碼": str(_f.get("code", "") or NOT_READY_MARK),
+            "名稱": str(_f.get("name") or _f.get("code") or NOT_READY_MARK),
+            "幣別": str(_f.get("currency") or _raw.get("currency")
+                        or NOT_READY_MARK).strip() or NOT_READY_MARK,
+            "近 1 年": _tr1y_cell,
+            "Sharpe": _num(_m.get("sharpe")),
+            "最大回撤": _pct(_m.get("max_drawdown")),
+            "配息覆蓋": _num((_eat or {}).get("coverage")),
+            # ⛔ 恆為 ⬜ —— 理由見本函式 docstring。**不要拿 4D Grade 填進來。**
+            "五桶評等": NOT_READY_MARK,
+            "資料日期": str(_nav_label),
+        })
+    return _rows
+
+
 def _render_health_score() -> None:
-    """區塊 2｜組合健康總分（**全寬**）。本批灰態。
+    """區塊 2｜組合健康總分（**全寬**）。**本批仍為灰態，這是刻意的。**
 
     線框：「72 ／ 100　五桶評等加權。下方三張卡是扣分最重的三項，點進去看逐檔。」
 
     ⛔ **不畫那個 72。** 線框裡的數字是**示意**，不是資料。填一個看起來合理的分數
     正是 §1 點名最危險的那種造假 —— 它會被使用者拿去做決定，而且完全看不出是假的。
+
+    ⛔ **本批刻意不接，原因不是「還沒排到」，是「來源本身未定」：**
+    線框把總分定義成「**五桶評等**加權」，而本 repo 的「五桶」是**總經**概念
+    （`shared/macro_buckets.py`：長期／中期／短線／拐點／新聞），**不是逐檔基金評等**。
+    逐檔真正存在的評等是 `services/health/grade.py::compute_4d_health` 的
+    **4D/5D Grade（A～F）**—— 名字、維度、級距全都不同。
+    **拿 4D Grade 加權出一個數字，再掛在「五桶評等加權」底下，就是 `Principal_Erosion`
+    那一類錯誤的翻版**（名字對得上、語意不同、使用者看不出來）。
+    → 該用哪個定義**屬業務規格，已送客戶、尚未答覆**（§-1.5 v3 `03`-2 ②），本批不自行拍板。
+
+    ⚠️ **指路已於 2026-09-06 就地更正**：舊版指向「診斷條件」，那在骨架批為真
+    （當時只有 Form 是完整的）；本批之後同一頁已有三塊接上真資料，
+    那句話會把使用者送去一個什麼結論都沒有的地方。現行指路指向**同一頁下方真的能看的東西**。
     """
     st.markdown("#### 組合健康總分")
-    not_ready(f"{_PENDING_NOTE}（五桶評等加權總分）。", where=_pending_where("診斷條件"))
+    not_ready(_SCORE_PENDING_NOTE,
+              where=_pending_where("下方「逐檔體檢表」可先逐檔看"))
 
 
 def _render_alert_cards() -> None:
-    """區塊 3｜三張卡（3 欄自適應網格）。本批三張全灰。
+    """區塊 3｜三張卡（3 欄自適應網格）。**本批接上兩張，第三張維持灰態。**
 
     線框 Tab 02 三張卡逐字：
       「吃本金警示／2 檔／配息覆蓋率低於 1.0，實際在配回本金。」（業務警示）
@@ -280,45 +719,126 @@ def _render_alert_cards() -> None:
     真接上之後，**沒有壞消息就該是 `STATE_OK`**，不是永遠紅著 ——
     三態的選擇由**資料**決定，不是由線框的示意圖決定（鐵則 03：`state` 決定視覺，不是文案）。
 
-    ⛔ **本批不畫「2 檔」「1 檔」「0.78」** —— 同 :func:`_render_health_score`，那些是示意值。
+    ⛔ **本批不畫「2 檔」「1 檔」「0.78」那三個示意值** —— 卡片上的數字**一律由 SSOT 算出**，
+       算不出來就走灰態。線框的數字是版面示意，不是資料。
+
+    **「衛星連續落後」為什麼還是灰的（這一段是本批的裁決，不是漏做）**
+    ----------------------------------------------------------------
+    「連兩季落後基準」在本 repo **有**一份語意完全相符的實作 ——
+    `ui/components/mk_dashboard.py::tag_benchmark_lag`（衛星 q1、q2 兩季季報酬皆低於
+    基準同期 → `Lag`）。**但它接不進來，兩道各自獨立的閘門都擋著**：
+
+    1. **客戶裁決**：波段觀測站（`mk_dashboard.py`）的搬遷是**本頁上線之後的獨立批次**
+       （見本檔模組 docstring），本批不碰；`tests/test_wf02_health_skeleton.py::
+       test_the_page_does_not_delegate_to_the_old_tab` 也明文擋 `mk_dashboard` 的 import。
+    2. **層級**：它是 L3 UI，而它要的基準序列來自 L1
+       `repositories/macro/yf.py::fetch_benchmark_close`（本檔禁 import `repositories/**`）。
+
+    ⛔ **而 `services/**` 底下沒有語意相符的替代品，這一點本組實測過**：
+       `services/benchmark_compare.py::excess_return` 算的是「**近 1 年**純價格超額報酬」，
+       **不是**「連續兩季」；`services/capture_ratio.py` 算的是上／下檔捕捉率。
+       **把 1 年超額報酬接到一張寫著「連兩季落後」的卡上，就是 `Principal_Erosion`
+       那個錯誤換一個方向再犯一次** —— 名字對、數字真、意思錯。
+       ⚠️ 實測：`fetch_benchmark_close` 在 `origin/main` 上的**唯一** production caller
+       就是 `ui/components/mk_dashboard.py` 本身。
+    → **維持灰態，並在灰態文案裡誠實說明「現在要看這件事該去哪」**（那個地方現在真的看得到：
+      `app.py` 的 ④ 分頁呼叫 `render_portfolio_tab()` → `render_mk_war_room()`，本組實測過接線）。
     """
-    _where = _pending_where("診斷條件")
-    render_cards([
-        {"title": "吃本金警示", "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（配息覆蓋率是否低於 1.0）。", "where": _where},
-        {"title": "衛星連續落後", "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（是否連兩季落後對比基準）。", "where": _where},
-        {"title": "影子基金重疊", "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（持股重疊度）。", "where": _where},
-    ])
+    _funds = _uniq_by_code(_holdings())
+
+    # ── 卡 1：吃本金 ──────────────────────────────────────────────
+    _tally = _eating_tally(_funds)
+    _n_eat = _tally[_EAT_EATING]
+    _judged = _n_eat + _tally[_EAT_NEAR] + _tally[_EAT_HEALTHY]
+    if _judged == 0:
+        # 一檔都判不動 ＝ 沒有結論，**不是**「0 檔吃本金」。
+        # 印「0 檔」會讓使用者以為已經檢查過而且沒事 —— 那是最貴的一種假綠燈（§1）。
+        _eat_card: dict[str, Any] = {
+            "title": "吃本金警示", "state": STATE_NOT_READY,
+            "note": (f"{len(_funds)} 檔都算不出「近一年含息報酬」或「年化配息率」，"
+                     "**無法判定**（不是判定為沒有吃本金）。"),
+            "where": where_to_find("diag"),
+        }
+    else:
+        _eat_card = {
+            "title": "吃本金警示", "value": f"{_n_eat} 檔",
+            "state": STATE_BUSINESS if _n_eat else STATE_OK,
+            "note": _eating_note(_tally),
+        }
+
+    # ── 卡 2：衛星連續落後（維持灰態，理由見本函式 docstring）────────
+    _lag_card = {
+        "title": "衛星連續落後", "state": STATE_NOT_READY,
+        "note": _LAG_PENDING_NOTE,
+        "where": where_to_find("portfolio"),
+    }
+
+    # ── 卡 3：影子基金重疊 ────────────────────────────────────────
+    _ov, _blind = _overlap_result(_funds)
+    _pairs = list((_ov or {}).get("shadow_pairs") or [])
+    if _ov is None or (_ov.get("matrix") is None and not _pairs):
+        # 少於 2 檔、或全部缺持股與產業資料 → 沒得比，誠實說「沒得比」。
+        _shadow_card: dict[str, Any] = {
+            "title": "影子基金重疊", "state": STATE_NOT_READY,
+            "note": ("需要至少兩檔、且有持股或產業資料才比得出重疊度；"
+                     + (f"目前 {len(_blind)} 檔缺這兩種資料。" if _blind
+                        else f"目前只有 {len(_funds)} 檔可比。")),
+            "where": where_to_find("diag"),
+        }
+    else:
+        _top = _pairs[0] if _pairs else None
+        _note_bits = [_shadow_formula()]
+        if _top:
+            _note_bits.append(f"最高一對 {_top[0]}／{_top[1]}：{float(_top[2]):.2f}")
+        if _blind:
+            # §1：被排除的檔要具名帶出來，不得靜默縮小比對範圍
+            # （`services/homogeneity.py` 模組 docstring 點名的正是這個病）。
+            _note_bits.append(f"{len(_blind)} 檔缺持股／產業資料未列入比對"
+                              f"（{'、'.join(_blind[:3])}{'…' if len(_blind) > 3 else ''}）")
+        _shadow_card = {
+            "title": "影子基金重疊",
+            "value": f"{len(_pairs)} 對",
+            "state": STATE_BUSINESS if _pairs else STATE_OK,
+            "note": "；".join(_note_bits) + "。",
+        }
+
+    render_cards([_eat_card, _lag_card, _shadow_card])
 
 
 def _render_health_table() -> None:
-    """區塊 4｜逐檔體檢表（**全寬 + 橫向捲動**）。本批無列資料 → 走空狀態。
+    """區塊 4｜逐檔體檢表（**全寬 + 橫向捲動**）。**本批接上真資料。**
 
     線框：「欄位多，全寬橫向捲動」「不畫空表格外框」。
 
     ⚠️ **走 `wide_table()` 而不是 `st.dataframe()`**：空資料不畫空框這件事，
     只有收在唯一的大表入口才有機械上的著力點（`ui/helpers/ia/layout.py` 的 docstring）。
-    本批傳空 list，它會走 `empty_state()` 分支 —— **這不是繞過，這就是它設計的用法。**
 
     ⚠️ **這張表不得放進 `render_cards()` 的欄位裡**（9 欄在 1/3 寬會被壓成無法閱讀），
-    所以它是頁面層級的直接呼叫，不在任何網格內。
+    所以它是頁面層級的直接呼叫，不在任何網格內 ——
+    `wide_table` 自己的 docstring 就地寫著「不要把本函式放進 `card_row()` 的欄位裡」。
 
-    📌 **那一行欄位名的 caption 是本批的過渡，下一批請刪掉**（登記，免得它留成永久的贅字）：
-    它現在的作用是「先告訴使用者這張表會有什麼」，因為表本身還是空的；
-    **真資料接上之後，表頭會講同一件事** —— 屆時它就變成鐵則 04 要禁的冗餘占位。
-    ⚠️ 連帶：`test_the_per_fund_table_keeps_the_nine_columns_from_the_wireframe`
-    的「畫面上看得到每一欄」那半會轉紅，**正解是改成驗真表頭，不是刪掉那個斷言**。
+    ✅ **骨架批那行「欄位名 caption」已依登記刪除**：它當時的作用是「先告訴使用者
+    這張表會有什麼」（因為表是空的）；真資料接上後表頭會講同一件事，
+    留著就變成鐵則 04 要禁的冗餘占位。
+    連帶 `test_the_per_fund_table_keeps_the_nine_columns_from_the_wireframe`
+    的「畫面上看得到每一欄」那半**已改成驗真表頭**，不是把斷言刪掉。
     """
     st.markdown("#### 逐檔體檢表")
-    st.caption("　/　".join(HEALTH_TABLE_COLUMNS))
-    wide_table(
-        [],
+    _rows = _table_rows(_uniq_by_code(_holdings()))
+    _drawn = wide_table(
+        _rows,
         empty_title="逐檔體檢還沒有可顯示的列",
-        empty_missing=f"{_PENDING_NOTE}（每一檔的績效、風險與配息覆蓋）。",
-        empty_where=_pending_where("診斷條件"),
+        empty_missing="目前的持股都還沒有可用的淨值或指標資料。",
+        empty_where=where_to_find("diag"),
+        hide_index=True,
     )
+    if _drawn:
+        # ⚠️ 這一句**不是**骨架批那行冗餘 caption 的復活：它講的是表頭講不出來的事
+        # —— 「五桶評等」整欄為何恆為 ⬜（§1：不解釋的空欄會被讀成「這檔沒評等」）。
+        st.caption(
+            f"「五桶評等」整欄顯示 {NOT_READY_MARK} —— 線框這一欄的評等定義未定"
+            "（本站「五桶」是總經概念，逐檔評等是另一套 4D Grade），"
+            "已送客戶確認；**不拿別的評等填進來充數**。")
 
 
 def render_holdings_health() -> None:
