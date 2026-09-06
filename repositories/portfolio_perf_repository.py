@@ -9,6 +9,23 @@
 §8.2 EX-CRUD-1:本地持久化 CRUD(讀+寫同檔、無 TTL cache、無外部 HTTP fetcher),UI 可直接 import。
 §1:啟用 GS 後寫入失敗 → 例外往上拋(不靜默吞、不偷偷降級,避免資料默默遺失)。
 
+⛔ **讀寫分離(2026-09-06,客戶永久授權「查詢一律唯讀」)**
+--------------------------------------------------------
+**讀路徑保證零寫入**,一格都不動:
+
+- :meth:`GoogleSheetsPerfStore._ws` — 唯讀開啟,分頁不存在 / 表頭不符 → raise
+  :class:`SheetNotProvisioned`(**前提不足**,由 UI 畫成灰態,不是紅色故障)。
+- :meth:`GoogleSheetsPerfStore._ws_for_write` — 補建分頁 / 補表頭,**只准從
+  :meth:`~GoogleSheetsPerfStore.append_snapshot` 進來**,而它只在使用者按下快照按鈕時被呼叫。
+- :class:`LocalJsonPerfStore` 的 `mkdir` 同樣搬到 `_write()`,讀路徑不碰磁碟。
+
+**修這件事的起因(2026-09-06 離線實測,fake worksheet,零真連線)**:
+`load_snapshots()` —— 一個名字是讀的函式 —— 在遠端分頁不存在時會送出
+`add_worksheet` + `update("A1", ...)` **兩筆寫入**;分頁在、表頭不符時送出 `update("A1", ...)` **一筆**。
+寫入藏在 `load_snapshots → _ws → add_worksheet` **兩層底下**,而且**只在遠端狀態不符預期時觸發**
+—— 也就是本機測試最不容易踩到、最像「它不會寫」的那一種。
+守衛:`tests/test_portfolio_perf_render_no_writes.py`。
+
 Row schema:**以 date 為唯一鍵**(upsert;同日覆蓋最新,讓當日最終權重勝出)。
 數值欄缺值一律存空字串、讀回為 None(§1 不以 0 偽裝缺值)。
 """
@@ -126,7 +143,10 @@ class LocalJsonPerfStore:
 
     def __init__(self, base_dir: "Path | None" = None) -> None:
         self._dir = base_dir or _CACHE_DIR
-        self._dir.mkdir(parents=True, exist_ok=True)
+        # ⛔ **不在這裡 mkdir。** 建目錄是**寫入**,而本類別會被 `load_snapshots()`
+        #    這條純讀路徑建構(`get_perf_store()` 每次都 new 一個)—— 光是渲染就會在
+        #    使用者磁碟上長出一個目錄,與 GS 後端「讀路徑偷偷建分頁」是同一個病的本地版。
+        #    改在 `_write()` 內就地建(見該方法)。
         self._path = self._dir / _LOCAL_FILE
 
     def is_available(self) -> bool:
@@ -150,6 +170,7 @@ class LocalJsonPerfStore:
         return _data
 
     def _write(self, rows: list) -> None:
+        self._dir.mkdir(parents=True, exist_ok=True)   # ← 唯一會建目錄的地方(寫入時才建)
         self._path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load_snapshots(self) -> list:
@@ -201,6 +222,32 @@ def _col(n: int) -> str:
     return out
 
 
+class SheetNotProvisioned(RuntimeError):
+    """遠端快照分頁還沒建好(不存在 / 表頭不符)—— **前提不足,不是系統故障**。
+
+    為什麼要有一個專屬型別(而不是回 `[]` 或丟通用 Exception)
+    ------------------------------------------------------
+    這兩件事在 UI 上是**不同顏色**(客戶四大鐵律第 3 條):
+
+    - **前提不足**(分頁還沒建、表頭還沒寫)→ 灰態 `not_ready()`,講清楚缺什麼、去哪補;
+    - **系統真出錯**(憑證壞掉、Google API 500、網路斷)→ 紅色 `system_error()`。
+
+    用通用 `Exception` 兩者就分不開,呼叫端只能猜;回 `[]` 則是**靜默吞掉**
+    (`CLAUDE.md §1` 明禁)—— 使用者會看到一片空白,而且以為「本來就沒資料」。
+
+    ⛔ **本例外不得在讀路徑內被就地「修好」**(建分頁 / 補表頭)。
+    那正是本型別誕生的原因:2026-09-06 實測,`load_snapshots()` 這個**名字是讀**的函式,
+    在分頁不存在時會 `add_worksheet` + `update("A1", ...)` —— **兩筆寫入藏在兩層底下,
+    只在遠端狀態不符預期時才觸發**,也就是最不會被測到、最像「它不會寫」的那一種。
+    補建分頁是**寫入**,只能從使用者明示的寫入動作進來(見 :meth:`GoogleSheetsPerfStore._ws_for_write`)。
+    """
+
+    def __init__(self, message: str, *, where: str = "") -> None:
+        super().__init__(message)
+        #: 「去哪補」—— 灰態三要素之一,由 UI 端取用(不在這層決定文案的呈現方式)。
+        self.where = where
+
+
 class GoogleSheetsPerfStore:
     backend_name = "google-sheets"
 
@@ -211,16 +258,47 @@ class GoogleSheetsPerfStore:
         return _gs_enabled()
 
     def _ws(self):
+        """**唯讀**開啟快照分頁。分頁不存在 / 表頭不符 → raise :class:`SheetNotProvisioned`。
+
+        ⛔ **本方法保證零寫入。** 不 `add_worksheet`、不 `update`、不改任何一格。
+        2026-09-06 之前這裡會就地建分頁 + 補表頭,於是**光是渲染 ④ 的績效追蹤區塊
+        就會動到客戶的 Google Sheet** —— 而函式名字叫 `_ws`、呼叫端叫 `load_snapshots`,
+        沒有任何一層看得出來它會寫。補建的動作已搬到 :meth:`_ws_for_write`。
+        """
         if self._sh is None:
+            self._sh = _get_sheet()
+        try:
+            ws = self._sh.worksheet(_WS_PERF)
+        except Exception as _e:                                # 分頁不存在 → 前提不足,不就地建
+            raise SheetNotProvisioned(
+                f"雲端還沒有「{_WS_PERF}」這個快照分頁",
+                where="本區的「💾 存一筆今天的績效快照」按鈕(按一次就會幫你建好)",
+            ) from _e
+        if ws.row_values(1)[: len(_HEADERS)] != _HEADERS:      # 表頭不符 → 同上,不就地補
+            raise SheetNotProvisioned(
+                f"雲端「{_WS_PERF}」分頁的表頭與目前欄位定義不符",
+                where="本區的「💾 存一筆今天的績效快照」按鈕(按一次會補好表頭再寫)",
+            )
+        return ws
+
+    def _ws_for_write(self):
+        """**寫入前**開啟:分頁不存在就建、表頭不符就補,然後回傳。
+
+        ⛔ **只准從使用者明示的寫入動作進來**(目前唯一入口是 :meth:`append_snapshot`,
+        而它唯一的 production 呼叫端是 ④ 那顆快照按鈕的 `if` 正分支)。
+        任何「順路確保一下分頁存在」的用法都是把寫入偷渡回讀路徑,禁止。
+        """
+        try:
+            return self._ws()                                  # 已備妥 → 零寫入直接用
+        except SheetNotProvisioned:
+            pass
+        if self._sh is None:                                   # pragma: no cover — _ws() 已建過
             self._sh = _get_sheet()
         try:
             ws = self._sh.worksheet(_WS_PERF)
         except Exception:
             ws = self._sh.add_worksheet(title=_WS_PERF, rows=400, cols=len(_HEADERS))
-            ws.update("A1", [_HEADERS])
-            return ws
-        if ws.row_values(1)[: len(_HEADERS)] != _HEADERS:      # 補 header(欄位缺失時)
-            ws.update("A1", [_HEADERS])
+        ws.update("A1", [_HEADERS])
         return ws
 
     def load_snapshots(self) -> list:
@@ -236,7 +314,7 @@ class GoogleSheetsPerfStore:
     def append_snapshot(self, snap: PerfSnapshot) -> None:
         if not snap.date:
             raise ValueError("績效快照 upsert 需要 date(§1 不接受空鍵)")
-        ws = self._ws()
+        ws = self._ws_for_write()          # ← 明示寫入動作才走得到這裡(見該方法 docstring)
         rows = ws.get_all_values()
         for idx, row in enumerate(rows[1:], start=2):
             if row and str(row[0]).strip() == snap.date:       # 同日覆蓋最新
@@ -259,6 +337,11 @@ def get_perf_store():
 
 
 def load_snapshots() -> list:
+    """讀快照歷史。**零寫入**(§1:不就地補建、不靜默回空)。
+
+    :raises SheetNotProvisioned: 雲端分頁還沒建好 / 表頭不符 —— **前提不足,不是故障**。
+        呼叫端應畫成**灰態**(`not_ready`),不要畫成紅色錯誤,也不要吞掉當成「沒資料」。
+    """
     return get_perf_store().load_snapshots()
 
 
@@ -272,7 +355,7 @@ def is_enabled() -> bool:
 
 
 __all__ = [
-    "PerfSnapshot", "LocalJsonPerfStore", "GoogleSheetsPerfStore",
+    "PerfSnapshot", "SheetNotProvisioned", "LocalJsonPerfStore", "GoogleSheetsPerfStore",
     "get_perf_store", "load_snapshots", "append_snapshot", "is_enabled",
 ]
 
