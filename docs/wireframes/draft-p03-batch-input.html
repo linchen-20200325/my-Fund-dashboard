@@ -1,0 +1,254 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>草稿 · ③ 標的探索 — 批次分析的輸入欄位</title>
+<style>
+  :root{
+    --ink:#1a1c1f; --ink-2:#5b6068; --ink-3:#8b9198;
+    --bg:#fbfbfa; --surface:#fff; --rule:#e6e5e2; --rule-strong:#cfcdc8;
+    --grey:#9aa0a6; --warn:#b26a00;
+    --accent:#2f5fd0; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ink:#e8e8e6; --ink-2:#a8adb4; --ink-3:#787e86;
+    --bg:#16181b; --surface:#1e2125; --rule:#2c3036; --rule-strong:#3b4148;
+    --accent:#7aa2f7;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  h2{font-size:16px;margin:34px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+  h3{font-size:14px;margin:20px 0 8px}
+  p,li{color:var(--ink-2)}
+  code,.mono{font-family:var(--mono);font-size:12.5px}
+  .banner{border:2px solid var(--warn);border-radius:8px;padding:14px 16px;margin:18px 0 26px;
+          background:color-mix(in srgb,var(--warn) 8%,transparent)}
+  .banner b{color:var(--warn)}
+  .card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:16px;margin:14px 0}
+  .screen{background:var(--surface);border:1px solid var(--rule-strong);border-radius:8px;overflow:hidden;margin:14px 0}
+  .screen-bar{background:color-mix(in srgb,var(--ink) 6%,transparent);
+              padding:7px 12px;font-size:12px;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+  .screen-body{padding:16px}
+  .field{border:1px dashed var(--rule-strong);border-radius:6px;padding:10px 12px;margin:8px 0;background:var(--bg)}
+  .field .lab{font-size:12px;color:var(--ink-3);display:block;margin-bottom:4px}
+  .ph{color:var(--ink-3)}
+  .btn{display:inline-block;border:1px solid var(--accent);color:var(--accent);
+       border-radius:6px;padding:6px 16px;font-size:13px;background:transparent}
+  .btn.primary{background:var(--accent);color:#fff}
+  .chip{display:inline-block;font-size:11px;border:1px solid var(--rule-strong);
+        border-radius:999px;padding:1px 9px;margin:0 4px 4px 0;color:var(--ink-2)}
+  .chip.new{border-color:var(--accent);color:var(--accent)}
+  .chip.gate{border-color:var(--warn);color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+  th,td{border:1px solid var(--rule);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:color-mix(in srgb,var(--ink) 5%,transparent);color:var(--ink);font-weight:600}
+  .grey{color:var(--grey)}
+  .scroll{overflow-x:auto}
+  .q{border-left:3px solid var(--accent);padding:8px 0 8px 14px;margin:12px 0}
+  .q b{color:var(--ink)}
+  ul{margin:8px 0;padding-left:22px}
+  .small{font-size:12.5px}
+</style>
+<div class="wrap">
+
+<h1>草稿 · ③ 標的探索 — 批次分析的輸入欄位</h1>
+<p class="small">實作組 R ／ 2026-09-06 ／ 對應 <code>ui/views/page_03_research.py</code> 的「批次分析」那一塊</p>
+
+<div class="banner">
+  <b>⚠️ 這是提案草稿，客戶尚未拍板 —— 不是已核准線框。</b>
+  <p style="margin:8px 0 0">
+    本目錄其餘 <code>*.html</code> 都是<b>客戶已拍板</b>的原件（<code>README.md</code> 開頭：舊檔是拍板紀錄、不覆蓋）。
+    本檔<b>刻意不進</b> <code>README.md</code> 的線框目錄表，就是為了不讓它被誤讀成已核准。
+    拍板之後再依 README 的規矩正式進表。
+  </p>
+</div>
+
+<h2>為什麼要出這張草稿（而不是直接做）</h2>
+<p>
+  已核准線框 <code>ia-wireframe.html</code> <b>Tab 03</b> 給批次分析的字是：
+  「一次丟多個代碼跑同一組指標，結果落地可續跑。<b>長時間運算，必須在 Form 之後才啟動。</b>」
+  chip 是「Form 後才跑」「大表全寬」。
+</p>
+<p>
+  <b>但它只畫了頁面頂端那一個 Form，而那個 Form 收的是「代碼或名稱」單一欄位</b> ——
+  餵不了「一次丟多個代碼」。缺的是<b>一個輸入欄位</b>，不是後端：
+  L2 的 worker <code>services/fund_row.py::process_one_fund</code> 已經存在、
+  已有 <b>5 個非測試呼叫點</b>（4 個在 <code>ui/</code>：<code>tab_fund_grp_health.py</code>、
+  <code>tab3_portfolio.py</code>〔以 <code>_proc_health</code> 別名 import〕、
+  <code>helpers/fund_grp_health/switch_advisor_section.py</code>、
+  <code>helpers/fund_grp_health/unified.py</code>；1 個在 <code>scripts/weekly_switch_notify.py</code>）。
+  ⚠️ 初版寫「4 個」是漏了 <code>tab3_portfolio.py</code> 那個**別名 import** —— 用 AST 數才看得到。
+</p>
+<div class="q">
+  <b>新增輸入欄位＝欄位增減＝版面異動</b>，依 <code>CLAUDE.md §-1.5</code> v3 <code>03</code>-2 ①
+  「任何版面佈局、<b>欄位增減</b>或分頁動線異動前，必須先提文字線框草稿供客戶拍板」——
+  所以實作組不自己加，先出這張。<b>在拍板之前，那一塊維持灰態。</b>
+</div>
+
+<h2>提案版面（最小可用）</h2>
+
+<div class="screen">
+  <div class="screen-bar">③ 🔍 標的探索 › 批次分析</div>
+  <div class="screen-body">
+
+    <p class="small" style="margin-top:0"><span class="chip new">新增</span>
+      <span class="chip gate">Form 後才跑</span><span class="chip">大表全寬</span></p>
+
+    <div class="field">
+      <span class="lab">批次代碼清單（每行一檔，逗號／換行皆可）</span>
+      <span class="ph mono">ACCP138<br>B07<br>0050<br>…</span>
+    </div>
+
+    <p style="margin:10px 0"><span class="btn primary">▶️ 開始 / 繼續分析</span>
+      <span class="small" style="margin-left:10px">— 按下去才開始跑；打字的當下不會觸發任何取數。</span></p>
+
+    <h3 style="margin-top:22px">續跑進度</h3>
+    <p class="small mono">已完成 12 / 40　·　目前：<span class="grey">ACCP138</span>　·　每檔即時存磁碟</p>
+
+    <h3 style="margin-top:22px">結果（全寬大表）</h3>
+    <div class="scroll">
+      <table>
+        <tr><th>code</th><th>基金名</th><th>狀態</th><th>4D Grade</th><th>Sharpe 1Y</th><th>…</th></tr>
+        <tr><td colspan="6" class="grey">⬜ 還沒有可顯示的列 —— 貼上代碼清單並按「開始 / 繼續分析」。</td></tr>
+      </table>
+    </div>
+    <p class="small"><span class="btn">⬇️ 下載 CSV</span></p>
+  </div>
+</div>
+
+<h2>三個要請你拍板的問題</h2>
+
+<h3>Q1 · 輸入方式要幾種？</h3>
+<p>舊批次頁有<b>兩個</b>入口：檔案上傳（CSV／TXT）＋貼上文字框。本草稿<b>只畫了貼上框一個</b>。</p>
+<p><b>總管推薦：先只做貼上框。</b>理由：貼上框能涵蓋上傳的絕大多數用法，
+  而少一個元件就少一組失敗路徑（解碼失敗、編碼判斷、檔案型別）。
+  真的需要上傳再另外加，屬純新增、不會推翻這張草稿。</p>
+
+<h3>Q2 · 大表要幾欄？</h3>
+<p>
+  舊批次表是 <b>79 欄</b>（<code>BATCH_UNIFIED_COLUMNS</code>，實測；code／基金名／狀態／4D Grade／
+  Sharpe／Sortino／Calmar／Max DD／配息／σ 位階／買賣點／捕捉率…）。
+  <b>79 欄要橫向捲很久</b>，而 ③ 的問題是「有沒有更好的標的」，不是「把所有數字都看一遍」。
+</p>
+<p><b>總管推薦：先照搬 79 欄不動。</b>理由：這一批的方針是「版面呈現與互動排版，
+  計算邏輯原封不動呼叫既有模組」；<b>挑哪幾欄是新的業務決定</b>，會讓這一批從「搬版面」變成「改規格」。
+  照搬 → 上線後你實際用過，再決定要收成哪幾欄，那時的判斷會比現在準。</p>
+
+<h3>Q3 · 這一塊放在 ③，會不會和 ② 做同一件事？</h3>
+
+<div class="banner" style="margin:10px 0 16px">
+  <b>⚠️ 這一節在 2026-09-06 被獨立稽核推翻過一次，整節重寫。</b>
+  <p style="margin:8px 0 0">
+    初版寫「② / ④ 那側走<b>各檔實際 <code>invest_twd</code></b>，所以兩者母體不同、不打架」——
+    <b>那句話是假的</b>，而且我引來當依據的那句 docstring<b>正好否證它</b>。
+    重寫後的結論與初版<b>相反</b>：<b>重疊是真的，而且比初版說的大。</b>
+    留這段是為了讓你知道這一節被翻過，不要照初版的印象讀。
+  </p>
+</div>
+
+<p><b>先講實測到的事實（三條，都可自驗）：</b></p>
+<ul class="small">
+  <li><code>services/fund_row.py</code> 的 <code>process_one_fund</code> docstring 逐字：
+      「<code>principal_twd: 本金 TWD(<b>健診 Tab / 批次統一 100 萬</b>;Tab3 用各檔實際 invest_twd)</code>」
+      —— <b>健診 Tab 在「統一 100 萬」那一側</b>，走實際持倉金額的是 <b>Tab3</b>（＝④ 資產配置）。</li>
+  <li>② 的本金輸入框 <code>ui/tab_fund_grp_health.py</code>：<code>value=1_000_000.0</code>，
+      <code>help</code> 逐字「<b>所有基金都假設投入這個金額</b>，才能把『每月配息』『累積配息』
+      放在同一個尺度上比較」。（可調範圍逐字為 <code>min_value=10_000.0, max_value=10_000_000.0</code> ＝ <b>1 萬～1000 萬</b>，
+      但<b>對所有基金是同一個值</b>。）</li>
+  <li>② 自己的程式註解逐字：「<b>本 Tab 輸入僅「代號 + 單一本金」，同 code ＝ 完全相同計算</b>」。</li>
+</ul>
+
+<p><b>所以真實關係是這樣，不要美化：</b></p>
+<div class="scroll">
+<table>
+  <tr><th></th><th>② 持倉體檢</th><th>③ 批次分析（本草稿）</th></tr>
+  <tr><td>輸入</td><td>代碼清單（text_area）<br><b>＋「🔗 從我的組合帶入」一鍵灌入持倉代碼</b></td><td>代碼清單（貼上框）</td></tr>
+  <tr><td>本金</td><td><b>統一一個值</b>（預設 100 萬，可調）</td><td><b>統一 100 萬</b></td></tr>
+  <tr><td>底層 worker</td><td colspan="2" style="text-align:center"><b>同一個 <code>services/fund_row.py::process_one_fund</code></b></td></tr>
+  <tr><td>大表怎麼組</td>
+      <td><code>build_unified_health_df</code><br>欄序 ＝ <code>code / 基金名</code> ＋ <code>_UNIFIED_FRONT</code> ＋ 其餘 base 欄，<b>動態決定</b></td>
+      <td><code>build_batch_unified_row</code><br>欄序 ＝ <code>BATCH_UNIFIED_COLUMNS</code>，<b>固定</b>（checkpoint 相容）</td></tr>
+</table>
+</div>
+
+<div class="banner" style="margin:12px 0">
+  <b>⚠️ 上面那一列在 2026-09-06 第二輪複驗又被抓到一次，這裡寫清楚免得第三次。</b>
+  <p style="margin:8px 0 0">
+    第二版曾寫「<b>同一張 <code>BATCH_UNIFIED_COLUMNS</code> 大表</b>」——<b>也是假的</b>。
+    實測：AST 掃 <code>ui/tab_fund_grp_health.py</code>（含別名 import／<code>Name</code>／<code>Attribute</code> 三種形態）
+    → <code>BATCH_UNIFIED_COLUMNS</code> <b>0 命中</b>；
+    而 ② 自己的檔頭逐字寫著「<b>也不動批次大表 <code>BATCH_UNIFIED_COLUMNS</code>(固定欄序 → checkpoint 相容)</b>」。
+    <b>② 的原始碼明說它不碰那張表。</b>
+  </p>
+  <p style="margin:8px 0 0">
+    <b>初版把重疊講成零、第二版把重疊講到滿格 —— 同一個病，方向相反。</b>
+    而你要判的就是「重疊到底多大」，兩版各給了你一個朝反方向誇大的答案。
+  </p>
+</div>
+
+<p>
+  → <b>真實關係：兩邊共用同一個底層 worker 與同一套欄位家族，但欄位清單不是同一份。</b>
+  ② 的欄序由 <code>_UNIFIED_FRONT</code> ＋ base 欄<b>動態組出</b>；批次走
+  <b>固定欄序</b>的 <code>BATCH_UNIFIED_COLUMNS</code>（為了 checkpoint 相容）。
+  佐證：<code>ui/helpers/fund_grp_health/unified.py</code> 逐字
+  「<b>兩條大表 build 路徑共用(健診 <code>build_unified_health_df</code> ＋ 批次 <code>build_batch_unified_row</code>)</b>」。
+</p>
+<p>
+  ⛔ <b>兩張表實際重疊幾欄，本組沒有逐欄比對過，因此這份草稿不給那個數字。</b>
+  沒量過就不寫數字 —— 這一節已經因為寫了沒量過的東西被翻兩次。
+</p>
+<p>
+  能確定的是：<b>差別不在「用哪個 worker 算」（同一個），而在「餵哪些代碼進去」與「表怎麼組」。</b>
+  ② 多一顆把持倉代碼灌進來的鈕；③ 預期餵的是你還沒買的候選。
+  <b>「不預設我有持有」在 ③ 成立</b>（沒有那顆鈕、本金是假設值），
+  <b>但它不足以說明兩塊為什麼要各存在一份</b>。
+</p>
+
+<div class="q">
+  <b>所以這一題要你拍板的是：這個重疊要不要留？</b> 三條路：
+  <ul class="small" style="margin-top:6px">
+    <li><b>(i) 留，兩邊都在</b> —— 差別只在入口與預期用途（②「我手上這些」／③「我在看的這些」）。</li>
+    <li><b>(ii) 留，但 ③ 收欄位</b> —— ③ 只留挑標的用得到的欄，配息累積那類留給 ②。
+        ⚠️ 這與 <b>Q2 的推薦（先照搬 79 欄）衝突</b>，兩題要一起決定。</li>
+    <li><b>(iii) 不放 ③</b> —— 批次留在 ②，③ 只做單檔深掘。
+        ⚠️ 這會<b>牴觸已核准線框</b> <code>ia-wireframe.html</code> Tab 03
+        （它明列「批次分析」是 ③ 的一塊，「從哪裡搬來」也列了 <code>ui/tab_batch_analysis.py</code>）——
+        要走這條等於改那張線框，<b>不是實作組能決定的</b>。</li>
+  </ul>
+</div>
+
+<p class="small">
+  <b>推薦：(i)</b>。理由：已核准線框已經把批次放進 ③，(iii) 要改線框；
+  而 (ii) 的「該收哪幾欄」是新的業務決定，等你實際用過再收會比現在準（同 Q2 的理由）。
+  <b>但這是「先照現況搬過去」的推薦，不是「重疊沒問題」的背書</b> ——
+  重疊是真的，上線後你如果覺得兩塊在打架，收欄位或改動線都還來得及。
+  ⚠️ 本推薦由實作組提出，<b>尚未經總管背書</b>。
+</p>
+
+<h2>據實揭露（不要當成已查證）</h2>
+<ul class="small">
+  <li><b>本草稿沒有任何實作</b>。沒有起 Streamlit、沒有真的跑過一次批次
+      （沙箱擋外部連線，抓不到任何一檔基金）。上面的進度列與表格是<b>版面示意</b>。</li>
+  <li><b>表格裡的欄名是真的</b>（讀自 <code>BATCH_UNIFIED_COLUMNS</code>），
+      但<b>格子裡沒有填任何數字</b> —— 填一個看起來合理的 Sharpe，你完全看不出它是假的（<code>CLAUDE.md §1</code>）。</li>
+  <li><b>「79 欄」是本組單組實測，未經第二組驗證。</b></li>
+  <li><b>「本金統一 100 萬」已由獨立稽核複驗過</b>（2026-09-06）——
+      它就是推翻本節初版的那條證據，<b>不再是單組宣稱</b>。</li>
+  <li><b>Q3 的結論被獨立稽核推翻過一次</b>（見該節頂端的橘框）。
+      本節現行版本由實作組重寫、<b>尚未經第二組複驗</b>。</li>
+  <li><b>沒有查</b>舊批次那 603 行裡有多少是版面、多少是業務邏輯 —— Q2 的「照搬」若拍板，
+      屆時要另外盤點。</li>
+  <li><code>倉位</code> 這一欄的來源本組<b>沒有查</b>，不確定它在統一 100 萬本金下代表什麼。</li>
+</ul>
+
+<h2>拍板之後會發生什麼</h2>
+<ul class="small">
+  <li>批次那一塊的灰態換成：貼上框 ＋ 一顆鈕 ＋ 全寬大表 ＋ 續跑進度。</li>
+  <li>取數與計算<b>一行都不新寫</b>，呼叫既有 L2 <code>process_one_fund</code>。</li>
+  <li>續跑落地沿用既有 <code>repositories/batch_checkpoint</code>（<b>寫磁碟，不是 Google Sheet</b>）。</li>
+  <li><b>不會新增任何 Google Sheets 寫入路徑</b>：<code>process_one_fund</code> 的寫入可達性實測與
+      ③ 現有的深度區<b>完全相同</b>（同一條 secId 回寫，沒有多出來的）。</li>
+</ul>
+
+</div>
