@@ -154,7 +154,8 @@
       —— <b>健診 Tab 在「統一 100 萬」那一側</b>，走實際持倉金額的是 <b>Tab3</b>（＝④ 資產配置）。</li>
   <li>② 的本金輸入框 <code>ui/tab_fund_grp_health.py</code>：<code>value=1_000_000.0</code>，
       <code>help</code> 逐字「<b>所有基金都假設投入這個金額</b>，才能把『每月配息』『累積配息』
-      放在同一個尺度上比較」。（可調，10 萬～1000 萬，但<b>對所有基金是同一個值</b>。）</li>
+      放在同一個尺度上比較」。（可調範圍逐字為 <code>min_value=10_000.0, max_value=10_000_000.0</code> ＝ <b>1 萬～1000 萬</b>，
+      但<b>對所有基金是同一個值</b>。）</li>
   <li>② 自己的程式註解逐字：「<b>本 Tab 輸入僅「代號 + 單一本金」，同 code ＝ 完全相同計算</b>」。</li>
 </ul>
 
@@ -164,15 +165,44 @@
   <tr><th></th><th>② 持倉體檢</th><th>③ 批次分析（本草稿）</th></tr>
   <tr><td>輸入</td><td>代碼清單（text_area）<br><b>＋「🔗 從我的組合帶入」一鍵灌入持倉代碼</b></td><td>代碼清單（貼上框）</td></tr>
   <tr><td>本金</td><td><b>統一一個值</b>（預設 100 萬，可調）</td><td><b>統一 100 萬</b></td></tr>
-  <tr><td>算什麼</td><td colspan="2" style="text-align:center"><b>同一個 <code>process_one_fund</code>、同一張 <code>BATCH_UNIFIED_COLUMNS</code> 大表</b></td></tr>
+  <tr><td>底層 worker</td><td colspan="2" style="text-align:center"><b>同一個 <code>services/fund_row.py::process_one_fund</code></b></td></tr>
+  <tr><td>大表怎麼組</td>
+      <td><code>build_unified_health_df</code><br>欄序 ＝ <code>code / 基金名</code> ＋ <code>_UNIFIED_FRONT</code> ＋ 其餘 base 欄，<b>動態決定</b></td>
+      <td><code>build_batch_unified_row</code><br>欄序 ＝ <code>BATCH_UNIFIED_COLUMNS</code>，<b>固定</b>（checkpoint 相容）</td></tr>
 </table>
 </div>
 
+<div class="banner" style="margin:12px 0">
+  <b>⚠️ 上面那一列在 2026-09-06 第二輪複驗又被抓到一次，這裡寫清楚免得第三次。</b>
+  <p style="margin:8px 0 0">
+    第二版曾寫「<b>同一張 <code>BATCH_UNIFIED_COLUMNS</code> 大表</b>」——<b>也是假的</b>。
+    實測：AST 掃 <code>ui/tab_fund_grp_health.py</code>（含別名 import／<code>Name</code>／<code>Attribute</code> 三種形態）
+    → <code>BATCH_UNIFIED_COLUMNS</code> <b>0 命中</b>；
+    而 ② 自己的檔頭逐字寫著「<b>也不動批次大表 <code>BATCH_UNIFIED_COLUMNS</code>(固定欄序 → checkpoint 相容)</b>」。
+    <b>② 的原始碼明說它不碰那張表。</b>
+  </p>
+  <p style="margin:8px 0 0">
+    <b>初版把重疊講成零、第二版把重疊講到滿格 —— 同一個病，方向相反。</b>
+    而你要判的就是「重疊到底多大」，兩版各給了你一個朝反方向誇大的答案。
+  </p>
+</div>
+
 <p>
-  → <b>兩者的差別不在「算什麼」，只在「餵哪些代碼進去」</b>，而那是使用者當下的選擇，
-  不是程式上的分野。② 多一顆把持倉代碼灌進來的鈕；③ 預期餵的是你還沒買的候選。
+  → <b>真實關係：兩邊共用同一個底層 worker 與同一套欄位家族，但欄位清單不是同一份。</b>
+  ② 的欄序由 <code>_UNIFIED_FRONT</code> ＋ base 欄<b>動態組出</b>；批次走
+  <b>固定欄序</b>的 <code>BATCH_UNIFIED_COLUMNS</code>（為了 checkpoint 相容）。
+  佐證：<code>ui/helpers/fund_grp_health/unified.py</code> 逐字
+  「<b>兩條大表 build 路徑共用(健診 <code>build_unified_health_df</code> ＋ 批次 <code>build_batch_unified_row</code>)</b>」。
+</p>
+<p>
+  ⛔ <b>兩張表實際重疊幾欄，本組沒有逐欄比對過，因此這份草稿不給那個數字。</b>
+  沒量過就不寫數字 —— 這一節已經因為寫了沒量過的東西被翻兩次。
+</p>
+<p>
+  能確定的是：<b>差別不在「用哪個 worker 算」（同一個），而在「餵哪些代碼進去」與「表怎麼組」。</b>
+  ② 多一顆把持倉代碼灌進來的鈕；③ 預期餵的是你還沒買的候選。
   <b>「不預設我有持有」在 ③ 成立</b>（沒有那顆鈕、本金是假設值），
-  <b>但它不足以說明兩塊為什麼要各存在一份</b> —— 初版就是在這裡把話講過頭了。
+  <b>但它不足以說明兩塊為什麼要各存在一份</b>。
 </p>
 
 <div class="q">

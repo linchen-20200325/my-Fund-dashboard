@@ -2093,20 +2093,27 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
 
     **精確版（本組實測，逐條可自驗）**：
 
-    ===== ================================================== ==========
-    突變   內容                                                 本條
-    ===== ================================================== ==========
-    M1     把 `"nav_history_merge"` 從黑名單拿掉                 **紅**
-    B-b    拿掉黑名單 ＋ 改成「名字含 merge 就不算」              **紅**
-    M5     改 `_trace_rows` 的 falsy 判定（缺鍵→成功）           綠
-    B-a    **保留**黑名單，但把來源數硬夾 ``min(2, …)``          綠
-    ===== ================================================== ==========
+    ===== ================================================== ============ ============
+    突變   內容                                                 上一輪        **現在**
+    ===== ================================================== ============ ============
+    M1     把 `"nav_history_merge"` 從黑名單拿掉                 紅            紅
+    B-b    拿掉黑名單 ＋ 改成「名字含 merge 就不算」              紅            紅
+    B-a    **保留**黑名單，但把來源數硬夾 ``min(2, …)``          **綠**       **紅**
+    R1     `_failed_source_count` 直接 ``return 2``            **綠**       **紅**
+    M5     改 `_trace_rows` 的 falsy 判定（缺鍵→成功）           綠            綠
+    ===== ================================================== ============ ============
 
-    → **釘住的是「這個名字必須在那個集合裡」**；
-      **沒釘住的是集合下游怎麼用**（怎麼數、`_trace_rows` 怎麼判 falsy）。
-    ⚠️ **B-a 這一列是本組自己撞出來的，稽核給的三個突變沒有涵蓋它** ——
-      也就是說「三種換手段全紅」這個說法本身也稍微強了一點：
-      **保留集合、只改下游算法**的那一種不會紅。**兩邊都據實記下。**
+    ⚠️ **B-a／R1 這兩列在 2026-09-06 第二輪由綠轉紅** —— 補的不是斷言，是**一組期望值
+    不是 2 的 fixture**（見本函式下半）。在那之前全檔對 `_failed_source_count()` 的期望值
+    **全部是 2**，所以「完全不看輸入、直接回 2」也能全綠。
+    **一條只驗得出一個固定數字的測試，驗的不是「有沒有數對」，是「有沒有回那個數」。**
+
+    → **現在釘住的是**：這個名字必須在集合裡（M1／B-b）**＋** 來源數必須真的隨輸入變（B-a／R1）。
+    → **仍然沒釘住的是** `_trace_rows` 怎麼判 falsy（M5 照樣綠）——
+      那一段改由 :func:`test_a_trace_entry_that_never_said_it_failed_is_not_drawn_as_failed` 接住。
+    ⚠️ **上一輪這裡寫「沒釘住集合下游怎麼用」，那句話已經被本輪的 fixture 推翻，故改寫。**
+      **同一把尺要對全部同類項目重跑** —— 補完 fixture 就得回頭改這張表，
+      否則補強的動作本身會留下一句新的假話。
     ⛔ 不要把 M5／B-a 讀成「這條測試很弱」：它們都是**症狀被另一條路壓掉**，
       而 M5 同時把**所有**缺鍵條目改判成成功 —— 那是範圍大得多的行為變更
       （本輪已改用第三態 :data:`~ui.views.page_03_research.TRACE_UNKNOWN` 處理，見下）。
@@ -2132,6 +2139,25 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
             f"實得 {_failed_source_count(_r)}。")
         assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, result=_r)), (
             f"{_why}：畫面上的來源數被撐大了。")
+
+    # ⭐ **期望值不是 2 的那一組**（2026-09-06 第二輪複驗建議，實測值得做）
+    # ---------------------------------------------------------------------
+    # 在這組之前，全檔對 `_failed_source_count()` 的斷言**期望值全部是 2**，
+    # 畫面字串也全部是「在 2 個來源」—— 於是 `def _failed_source_count(...): return 2`
+    # 這種**完全不看輸入**的實作可以讓 **74 條全綠**（實測）。
+    # 一條只驗得出一個固定數字的測試，驗的不是「有沒有數對」，是「有沒有回那個數」。
+    # ⛔ 這比再加一條「釘手段」的斷言划算：它同時殺掉 `return 2` 與 `min(2, …)` 兩顆。
+    _three = _BLANK_RESULT()
+    _three["source_trace"].append(
+        {"source": "yahoo_finance", "success": False, "error": "查無此代碼"})
+    _three["source_trace"].append(
+        {"source": "nav_history_merge", "success": False, "error": "開不了 NAV sheet"})
+    assert _failed_source_count(_three) == 3, (
+        "三個真來源（bank_platform／morningstar／yahoo_finance）全敗、外加一個合成標記 —— "
+        f"應為 3，實得 {_failed_source_count(_three)}。\n"
+        "⚠️ 若這裡回 2，多半是來源數被寫死或被夾住了，而不是合成標記被排除。")
+    assert "在 3 個來源" in _text(_render(applied=FAKE_QUERY, result=_three)), (
+        "畫面上的來源數與 `_failed_source_count()` 不一致（期望「在 3 個來源」）。")
 
 
 def test_a_trace_entry_that_never_said_it_failed_is_not_drawn_as_failed():
@@ -2193,14 +2219,19 @@ def test_a_trace_entry_that_never_said_it_failed_is_not_drawn_as_failed():
 
 
 def test_every_upstream_failure_marker_has_been_triaged():
-    """上游**每一個**會以 falsy `success` 出現的標記，都必須被裁決過 —— 沒有漏網。
+    """**字面** `source` 名 ＋ **字面 dict** 的上游失敗標記，都必須被裁決過（射程見下表）。
 
     ## 這條在守什麼（它不是在守某一個名字）
 
     `SYNTHETIC_TRACE_SOURCES` 是**黑名單**，被測檔自己就寫著「會腐化」。
     但 2026-09-06 查出來的事實比「腐化」更難堪：**它寫下的那一天就不完整**
     —— `nav_history_merge` 在加黑名單的那個 commit（`b83c29f`）當下，
-    `services/fund_service.py` 裡已經有 4 處。
+    `services/fund_service.py` 裡**真正的標記**已經有 **3** 處（`:1098` / `:1132` / `:1164`）。
+    ⚠️ `git grep -c` 回的是 **4** —— 多出來的 `:1161` 是 ``merged.attrs["nav_history_merged"]``
+    （**多一個 d**）。**這裡刻意寫 3 不寫 4。**
+    ⚠️ 這一行在 2026-09-06 第二輪複驗前寫的是「4 處」，而同一份 PR 裡
+    `ui/views/page_03_research.py` 已經改成 3 —— **同一把尺只套到了被點名的那個檔**
+    （`CLAUDE.md §8.2.A.1` 驗證段 ④ 記載的正是這個失效模式）。
 
     → **靠人記得去對是不會發生的。** 本條把「對一遍」變成機器做的事。
 
