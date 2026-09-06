@@ -357,8 +357,16 @@ class TestLocalPoolStoreReadIsSideEffectFree:
 # 4. ①② 查詢頁面：連**到得了寫入的那條路**都不准有
 # ══════════════════════════════════════════════════════════════════════
 
-#: 兩個查詢／搜尋介面。① 查一檔基金；② 持倉體檢（輸入一串代號 → 看報表）。
-_QUERY_SURFACES = ("ui/tab2_single_fund.py", "ui/tab_fund_grp_health.py")
+#: 查詢／搜尋介面。① 查一檔基金;② 持倉體檢(輸入一串代號 → 看報表);
+#: ③ 批次分析(貼一串代號 → 看大表)。
+#:
+#: ⚠️ **2026-09-06 補入 `ui/tab_batch_analysis.py`(第三個)** —— 它一直不在守衛射程內,
+#:    卻和 ②**走同一條路**:`_run_batch` → `services/fund_row.py::process_one_fund`
+#:    → `repositories/fund/sources.py` 的取數鏈。少列一個入口,規則就有一個天生的破口。
+#:    (實測:補入當下該檔對本節既有兩條規則**本來就是乾淨的**,
+#:     所以這是**純擴大射程**,沒有連帶改動任何 production 檔。)
+_QUERY_SURFACES = ("ui/tab2_single_fund.py", "ui/tab_fund_grp_health.py",
+                   "ui/tab_batch_analysis.py")
 
 #: 只要 import 得到，就有可能被呼叫 —— 所以連 import 都不准有。
 _NAV_WRITE_MODULES = (
@@ -859,3 +867,343 @@ class TestTheUiStillHasSomewhereToShowIt:
                 "選股池讀取失敗被畫成灰態(not_ready)—— 那會叫使用者去『補資料』,"
                 "但他什麼都沒少做,是系統讀不到。")
 
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 7. ⭐ 守衛翻成 fail-closed：不再靠「函式名 ＋ import 來源白名單」
+# ══════════════════════════════════════════════════════════════════════
+#
+# ⚠️ **本節與「查詢頁走不走得到選股池回寫」那個爭議無關,兩件事分開讀。**
+#    本節修的是**守衛自己的缺陷**:第 4、5 節那兩條規則是
+#    「**函式名(`_RECORD_NAMES`)＋ import 來源白名單(`_NAV_WRITE_MODULES`)**」,
+#    而那種形狀有四個**已知**繞道(下面 `TestTheRuleSeesTheKnownBypasses` 逐一釘住):
+#
+#      (1) `from m import f as _g` 之後呼叫 `_g(...)`      ← 只比對 `Name.id == "f"` 看不到
+#      (2) `importlib.import_module("a." + "b")`           ← 字串拼接,靜態看不到模組名
+#      (3) `g = m.f` 之後呼叫 `g(...)`                      ← 賦值別名,不是 import 別名
+#      (4) `getattr(m, "set_" + "secid")`                   ← 動態取名
+#
+#    **這四個缺陷成立與否,不取決於今天有沒有人真的在用它們** ——
+#    一條「換個寫法就繞過去」的規則,它報的「0 命中」本來就不該被當成證據。
+#
+# **本節的做法**:不再擴充任何名字白名單,改成
+#   **「這個檔案裡,有沒有任何名字最後綁到了 pool 的寫入符號、而且被呼叫了」**,
+#   別名(import / 賦值)、模組屬性、動態取名**四種形狀一起認**;
+#   認不出來的形狀(字串拼接)則**整個形狀禁掉**。
+#
+# ⛔ 本節**不主張**任何一條查詢路徑「已經切乾淨」——
+#    `repositories/fund/sources.py` 目前**登記在待仲裁豁免表內**(見 `_PENDING_ARBITRATION`),
+#    本節只保證「**它不會無聲地變多**」。
+
+#: pool_repository 的**寫入面**。寧可多列、不可漏列 —— 漏一個就是一個繞道。
+_POOL_WRITE_SYMBOLS = frozenset({
+    "set_secid", "add_or_update", "remove_from_pool", "set_type_override",
+    "upsert", "remove",
+})
+
+#: pool_repository 的**讀取面**。只用在**正對照**(證明掃描器沒瞎),不參與禁令。
+_POOL_READ_SYMBOLS = frozenset({
+    "list_pool", "resolve_secid", "resolve_isin", "resolve_currency",
+    "pool_backend_status", "get_pool_store",
+})
+
+#: 受本節規則管的檔案 = 三個查詢面 ＋ 它們共用的取數鏈。
+_NO_POOL_WRITE_FILES = ("repositories/fund/sources.py",
+                        "repositories/fund/fund_orchestration.py",
+                        "repositories/fund/nav_metrics.py",
+                        "repositories/fund/fx_and_main.py",
+                        "services/fund_row.py",
+                        "services/fund_service.py") + _QUERY_SURFACES
+
+#: ⚠️ **已知未修,附理由**(沿用 `tests/test_st_cache_failure_not_cached.py::_WHITELIST` 的體例)。
+#:
+#: 登記在這裡的**不是**「已判定合憲」,是「**還沒判定**」——
+#: 規則對它們**不轉紅**,但它們的存在是**明寫在檔案裡**的,不會無聲消失。
+#: ⛔ 要新增一筆,必須寫清楚:**誰在爭什麼**、**誰來裁**、**裁完之後怎麼移除**。
+_PENDING_ARBITRATION: "dict[str, str]" = {
+    "repositories/fund/sources.py": (
+        "2026-09-06:`_src_morningstar_nav` 內 `set_secid as _cache_secid`、"
+        "`_src_yahoo_finance_nav` 內 `set_secid as _wb_secid` 兩處回寫,"
+        "**兩組獨立稽核結論相反**,已送第三組仲裁,爭點只有一個:"
+        "**單基金查詢頁走不走得到那兩支**。\n"
+        "本組(F3)實測到的:(a) 那兩個呼叫是活的、不是註解(別名感知 AST);"
+        "(b) `set_secid` → `store.upsert` → `Worksheet.update` 是真寫入"
+        "(離線 tripwire 實跑,見第 6 節同組假件);"
+        "(c) 靜態呼叫鏈逐跳讀 code 確認得通,gate 是 "
+        "`0 < span < 300 and (is_insurance_code or _pool_secid_or_isin(code))`。\n"
+        "本組**沒有**實測到的:端對端**執行期**重現 —— "
+        "`repositories.fund.sources` module-load 需要 pandas/bs4/requests,"
+        "本組環境沒有,且**刻意不造假件替代**(假的 pandas 會讓結論變成假的)。\n"
+        "⛔ 依派工指示「重現不出來就不要切」,本組**未切除**這兩處。\n"
+        "**移除條件**:仲裁判定可達 → 切除兩處回寫、刪掉本筆登記(規則自動接管);"
+        "判定不可達 → 仍應刪掉本筆並改為在此註明「不可達,故無須切除」,"
+        "**不要讓一筆待仲裁豁免無限期留著**(§8.3.P 前言:待查證沒有出口 ＝ 實質永久豁免)。"
+    ),
+}
+
+
+def _pool_symbol_bindings(tree: ast.Module, want) -> "tuple[dict, set]":
+    """哪些名字在這個檔案裡**最後**綁到了 pool 的 `want` 那組符號。
+
+    認四種形狀(前三種可解析,第四種另由 `_dynamic_backdoors` 整個禁掉):
+      ① `from …pool_repository import set_secid`            → {"set_secid": "set_secid"}
+      ② `from …pool_repository import set_secid as _g`      → {"_g": "set_secid"}
+      ③ `import …pool_repository as P` → `P.set_secid(…)`   → modaliases={"P"}
+      ④ `g = _g` / `g = P.set_secid` → `g(…)`               → 賦值別名,做到不動點
+
+    回 (`{本檔名字: 原始符號}`, `{pool 模組別名}`)。
+    """
+    direct, modaliases = {}, set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("pool_repository"):
+            for a in node.names:
+                if a.name in want:
+                    direct[a.asname or a.name] = a.name
+                elif a.name == "*":
+                    direct.update({w: w for w in want})
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name.endswith("pool_repository"):
+                    modaliases.add(a.asname or a.name.split(".")[0])
+
+    # ④ 賦值別名 —— 反覆掃到不再長大為止(`g = _g; h = g` 這種鏈也要跟上)
+    for _ in range(8):                       # 8 圈護欄,防病態輸入
+        grew = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            tgt, val = node.targets[0], node.value
+            if not isinstance(tgt, ast.Name):
+                continue
+            orig = None
+            if isinstance(val, ast.Name) and val.id in direct:
+                orig = direct[val.id]
+            elif (isinstance(val, ast.Attribute) and val.attr in want
+                  and isinstance(val.value, ast.Name) and val.value.id in modaliases):
+                orig = val.attr
+            if orig and direct.get(tgt.id) != orig:
+                direct[tgt.id] = orig
+                grew = True
+        if not grew:
+            break
+    return direct, modaliases
+
+
+def _pool_symbol_calls(rel: str, want):
+    """該檔內對 `want` 那組 pool 符號的**呼叫點**。回 [(原始符號, 實際寫法, 行號)]。"""
+    tree = _parse(rel)
+    direct, modaliases = _pool_symbol_bindings(tree, want)
+    hits = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if isinstance(f, ast.Name) and f.id in direct:
+            hits.append((direct[f.id], f.id, node.lineno))
+        elif isinstance(f, ast.Attribute) and f.attr in want:
+            base = f.value
+            if isinstance(base, ast.Name) and base.id in modaliases:
+                hits.append((f.attr, f"{base.id}.{f.attr}", node.lineno))
+    return hits
+
+
+def _dynamic_backdoors(rel: str):
+    """靜態解析**看不穿**的兩種形狀 —— 不解析,整個形狀禁掉。
+
+      (a) `getattr(<名字裡有 pool 的東西>, …)` —— 對象就是 pool 模組。
+      (a2) `getattr(<任何東西>, <非字面字串>)` —— **屬性名在靜態期不存在**,
+           `getattr(m, "set_" + "secid")` 正是這一種:對象叫 `m`,名字是拼出來的,
+           兩邊都看不出 pool,只有「名字不是字面值」這件事看得出來。
+           ⚠️ 實測(量測日 2026-09-06):9 個受管檔案目前**一處都沒有**這種寫法,
+           所以這條禁令**不會**讓任何既有程式碼轉紅 —— 它擋的是未來的繞道。
+      (b) `importlib.import_module(<非字面字串>)` 或 `import_module("…pool_repository")`
+          —— 字串拼接讓模組名在靜態期不存在,任何名字白名單都掃不到。
+    """
+    tree = _parse(rel)
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+        if name == "getattr" and node.args:
+            a0 = node.args[0]
+            nm = getattr(a0, "id", "") or getattr(a0, "attr", "")
+            if "pool" in nm.lower():
+                out.append(("getattr(pool…)", node.lineno))
+            elif len(node.args) >= 2:
+                a1 = node.args[1]
+                if not (isinstance(a1, ast.Constant) and isinstance(a1.value, str)):
+                    out.append(("getattr(…, <非字面屬性名>)", node.lineno))
+        elif name in ("import_module", "__import__") and node.args:
+            a0 = node.args[0]
+            if isinstance(a0, ast.Constant) and isinstance(a0.value, str):
+                if a0.value.endswith("pool_repository"):
+                    out.append((f'import_module("{a0.value}")', node.lineno))
+            else:
+                # 非字面字串(拼接 / 變數)→ 靜態不可解析 → 一律禁
+                out.append(("import_module(<非字面字串>)", node.lineno))
+    return out
+
+
+class TestQueryPathNeverWritesBackToThePool:
+    """規則本體。⚠️ **綠燈的意思是「沒有**新增**」,不是「已經切乾淨」** ——
+    `_PENDING_ARBITRATION` 內的檔案被排除在禁令之外(但被下面兩條盯著不准變多)。
+
+    突變驗證:在任一受管檔案裡加一行 pool 寫入(不論用哪種別名寫法)→ 本組轉紅。
+    """
+
+    @pytest.mark.parametrize("rel", _NO_POOL_WRITE_FILES)
+    def test_no_pool_write_symbol_is_callable_on_a_query_path(self, rel):
+        hits = _pool_symbol_calls(rel, _POOL_WRITE_SYMBOLS)
+        if rel in _PENDING_ARBITRATION:
+            pytest.skip(f"{rel} 待仲裁(見 _PENDING_ARBITRATION):"
+                        f"目前 {len(hits)} 處,由 test_pending_arbitration_* 兩條盯著")
+        assert not hits, (
+            f"{rel} 在查詢鏈上回寫選股池:\n  "
+            + "\n  ".join(f"{rel}:{ln} → {orig}()（寫成 {shown}）" for orig, shown, ln in hits)
+            + "\n客戶 2026-09-06:查詢一律唯讀,絕對禁止反向寫入 Google Sheet。\n"
+              "⚠️ 若這真的是使用者**明確按下**的動作,它就不該住在取數鏈上 —— "
+              "請把它移到有按鈕的那一層（例:⑤ 設定頁的 `_render_pool_editor`）。")
+
+    @pytest.mark.parametrize("rel", _NO_POOL_WRITE_FILES)
+    def test_no_dynamic_backdoor(self, rel):
+        """動態繞道**不分待仲裁與否,一律禁** —— 待仲裁的是「那兩處回寫」,不是「可以亂寫」。"""
+        bad = _dynamic_backdoors(rel)
+        assert not bad, (
+            f"{rel} 出現靜態解析不了的取名形狀:{bad}\n"
+            f"這是名字白名單天生看不穿的洞,所以整個形狀禁掉。")
+
+    # ── 待仲裁豁免:盯著它不准變多、不准沒理由 ──────────────────────
+
+    def test_pending_arbitration_entries_carry_a_reason(self):
+        """豁免必須寫明「誰在爭什麼、誰來裁、怎麼移除」—— 沒理由的豁免就是永久豁免。"""
+        for rel, why in _PENDING_ARBITRATION.items():
+            assert (_REPO / rel).exists(), f"{rel} 已不存在 → 這筆豁免過期了,請刪掉"
+            assert "仲裁" in why and "移除條件" in why, (
+                f"{rel} 的豁免理由不完整(要有爭點與移除條件):{why[:80]}…")
+
+    def test_the_pending_write_sites_do_not_multiply(self):
+        """⭐ 待仲裁 ≠ 放行:**處數不准增加**。
+
+        2026-09-06 量測:`repositories/fund/sources.py` 有 **2** 處
+        (`_src_morningstar_nav::_cache_secid`、`_src_yahoo_finance_nav::_wb_secid`)。
+        再多一處 → 本條轉紅。
+        ⚠️ 這個數字**會漂移**:仲裁判定可達並切除後,它會變成 0,屆時請一併刪掉本條與豁免登記。
+        """
+        hits = _pool_symbol_calls("repositories/fund/sources.py", _POOL_WRITE_SYMBOLS)
+        assert len(hits) <= 2, (
+            f"待仲裁期間又新增了 pool 寫入(2026-09-06 量測為 2 處,現在 {len(hits)} 處):"
+            f"{[(o, s, l) for o, s, l in hits]}")
+
+    # ── 正對照:先證明這條規則看得見東西 ──────────────────────────────
+
+    def test_the_rule_can_actually_see_a_pool_write(self):
+        """⭐ 正對照:在一個**已知有** pool 寫入的檔案裡必須看得到,否則所有「0 命中」都不可信。
+
+        `ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor`
+        是使用者**按存檔鈕**才走到的合法寫入 —— 它不受本節禁令管,只當「規則沒瞎」的證據。
+        """
+        hits = _pool_symbol_calls(
+            "ui/helpers/fund_grp_health/switch_advisor_section.py", _POOL_WRITE_SYMBOLS)
+        assert hits, "正對照失效:在一個已知有 pool 寫入的檔案裡什麼都沒看到"
+
+    def test_reads_are_deliberately_left_alone(self):
+        """⭐ 反向護欄:本節管的是「寫」,不是「用」。
+
+        `repositories/fund/sources.py` 必須繼續讀得到選股池
+        (`resolve_secid` / `resolve_isin` / `resolve_currency`)——
+        沒有它們,使用者填的 ISIN 就串不起來,那是把功能砍掉而不是把副作用切掉。
+        """
+        reads = _pool_symbol_calls("repositories/fund/sources.py", _POOL_READ_SYMBOLS)
+        assert {orig for orig, _s, _l in reads} >= {"resolve_isin", "resolve_secid"}, (
+            f"ISIN→secId 的查表讀取不見了:目前只剩 {sorted({o for o, _s, _l in reads})}")
+
+
+class TestTheRuleSeesTheKnownBypasses:
+    """⭐ **本節最重要的一組**:逐一釘住第 4、5 節那種寫法**擋不住**的四個繞道。
+
+    每一條都拿一段**合成的違規程式碼**餵給規則,規則必須看得見。
+    ⚠️ 這四條與「查詢頁可達性」那個爭議**完全無關** ——
+       不論仲裁怎麼裁,一條換個寫法就繞過去的規則都該修。
+    """
+
+    def test_bypass_1_import_alias(self):
+        """`from m import set_secid as _g` → `_g(...)`(＝本次兩處回寫實際用的寫法)。"""
+        tree = ast.parse("from repositories.pool_repository import set_secid as _cache_secid\n"
+                         "def f(c, s):\n    _cache_secid(c, s, currency='USD')\n")
+        direct, _ = _pool_symbol_bindings(tree, _POOL_WRITE_SYMBOLS)
+        assert direct == {"_cache_secid": "set_secid"}, (
+            "import 別名解析壞了 → 字面 grep `set_secid` 只掃得到 import 那一行,規則等於沒有")
+
+    def test_bypass_2_module_attribute(self):
+        """`import m as P` → `P.set_secid(...)`。"""
+        tree = ast.parse("import repositories.pool_repository as P\n"
+                         "def f(c, s):\n    P.set_secid(c, s)\n")
+        _d, mods = _pool_symbol_bindings(tree, _POOL_WRITE_SYMBOLS)
+        assert mods == {"P"}
+        hits = [n.func.attr for n in ast.walk(tree)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr in _POOL_WRITE_SYMBOLS]
+        assert hits == ["set_secid"]
+
+    def test_bypass_3_assignment_alias(self):
+        """`g = _cache_secid` → `g(...)` —— **賦值**別名,不是 import 別名。"""
+        tree = ast.parse("from repositories.pool_repository import set_secid as _cache_secid\n"
+                         "_g = _cache_secid\n"
+                         "def f(c, s):\n    _g(c, s)\n")
+        direct, _ = _pool_symbol_bindings(tree, _POOL_WRITE_SYMBOLS)
+        assert direct.get("_g") == "set_secid", (
+            f"賦值別名沒被解析到:{direct} —— 這是派工單點名的第三種繞道")
+
+    def test_bypass_3b_assignment_from_module_attribute(self):
+        """`g = P.set_secid` → `g(...)`。"""
+        tree = ast.parse("import repositories.pool_repository as P\n"
+                         "_g = P.set_secid\n"
+                         "def f(c, s):\n    _g(c, s)\n")
+        direct, _ = _pool_symbol_bindings(tree, _POOL_WRITE_SYMBOLS)
+        assert direct.get("_g") == "set_secid", f"模組屬性賦值別名沒被解析到:{direct}"
+
+    def test_bypass_4_dynamic_import_and_getattr_are_banned_outright(self, tmp_path):
+        """`importlib.import_module("a"+"b")` / `getattr(pool_mod, …)` —— 靜態看不穿 → 整個形狀禁。
+
+        ⚠️ 這一條刻意**在真的檔案上**驗規則(而不是只驗 helper),
+        因為 `_dynamic_backdoors` 是走 `_parse(rel)` 讀 repo 內檔案的。
+        """
+        import pathlib as _pl
+        rel = "tests/_f3_bypass_fixture_tmp.py"
+        f = _REPO / rel
+        f.write_text(
+            "import importlib\n"
+            "def a():\n"
+            "    m = importlib.import_module('repositories.pool' + '_repository')\n"
+            "    getattr(m, 'set_' + 'secid')('X', 'Y')\n"
+            "def b():\n"
+            "    importlib.import_module('repositories.pool_repository')\n",
+            encoding="utf-8")
+        try:
+            kinds = {k for k, _ln in _dynamic_backdoors(rel)}
+        finally:
+            f.unlink()
+        assert "import_module(<非字面字串>)" in kinds, "字串拼接的動態 import 沒被抓到"
+        assert 'import_module("repositories.pool_repository")' in kinds, "字面動態 import 沒被抓到"
+        assert "getattr(…, <非字面屬性名>)" in kinds, (
+            f"getattr 動態取名沒被抓到:{kinds} —— "
+            f"`getattr(m, 'set_' + 'secid')` 的對象叫 `m`、屬性名是拼出來的,"
+            f"兩邊都看不出 pool,只能靠「屬性名不是字面值」抓")
+        assert isinstance(_pl.Path(str(f)), _pl.Path)      # 純為讓 lint 看得見 import
+
+    def test_the_old_name_whitelist_rules_would_have_missed_all_four(self):
+        """⭐ 把「舊規則為什麼不夠」變成機器可驗的事實,而不是一句抱怨。
+
+        第 5 節的 `_record_call_sites` 只認 `_RECORD_NAMES` 那兩個名字 ——
+        對上面四種繞道**一律 0 命中**(因為它們碰的根本是另一個模組、另一個名字)。
+        """
+        src = ("from repositories.pool_repository import set_secid as _g\n"
+               "def f(c, s):\n    _g(c, s)\n")
+        tree = ast.parse(src)
+        direct_old, _ = _bound_write_aliases(tree)          # 第 5 節那條規則的解析器
+        assert direct_old == set(), (
+            "舊規則竟然看得到 pool 寫入 —— 那本節的前提就錯了,請重寫本節說明")
+        direct_new, _ = _pool_symbol_bindings(tree, _POOL_WRITE_SYMBOLS)
+        assert direct_new == {"_g": "set_secid"}, "新規則反而看不到 → 本節白做了"
