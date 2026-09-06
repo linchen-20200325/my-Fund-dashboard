@@ -99,7 +99,15 @@ class LocalJsonPoolStore:
 
     def __init__(self, base_dir: "Path | None" = None) -> None:
         self._dir = base_dir or _CACHE_DIR
-        self._dir.mkdir(parents=True, exist_ok=True)
+        # ⚠️ 2026-09-06:~~`self._dir.mkdir(parents=True, exist_ok=True)`~~ 由建構子移到
+        #    `_write()`(**有意識的更正,不是漏刪** · 決策者:AI 執行組,依客戶
+        #    2026-09-06「查詢一律唯讀」的同一把尺)。
+        #    **舊寫法的理由仍然成立**:建構子先把目錄準備好,`_write` 就永遠不必操心。
+        #    **被權衡掉的是**:`get_pool_store()` 在**唯讀**路徑上也會 new 一個本地後端,
+        #    於是「只是列出選股池」會在磁碟上長出一個目錄 —— 同一個形狀的病,
+        #    只是落點從 Google Sheet 換成本機檔案系統。
+        #    ⛔ 這**不在**客戶那句授權的字面射程內(他講的是 Google Sheet),
+        #       本項為執行組主動收斂,若客戶認為多餘,單獨撤銷本項即可,不影響三處主切除。
         self._path = self._dir / _LOCAL_FILE
 
     def is_available(self) -> bool:
@@ -123,6 +131,7 @@ class LocalJsonPoolStore:
         return _data
 
     def _write(self, rows: list) -> None:
+        self._dir.mkdir(parents=True, exist_ok=True)   # 2026-09-06:由建構子移來(只在真寫時建目錄)
         self._path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def list_pool(self) -> list:
