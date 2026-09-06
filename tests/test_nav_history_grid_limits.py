@@ -17,6 +17,21 @@
 `_get_worksheet` 對 `G1` 發 `values.update` → Sheets 回 400
 `Range (nav_history!G1) exceeds grid limits. Max rows: 22254, Max columns: 6`。
 
+⚠️ **過期的是「兩樣」東西,守衛必須兩半都釘住(2026-09-06 總管複驗指出)**
+------------------------------------------------------------------------
+證據裡有兩個 6,不是同一個:
+
+  (a) **網格寬度** `columnCount: 6`  —— 實體上只有 A..F 欄,寫 G 欄直接 400;
+  (b) **表頭列內容** `header_len: 6` —— 第 1 列只有 6 個欄名,沒有 `currency`。
+
+只補 (a) 會「寫得進去、但第 7 欄沒有欄名」。本 repo 現行的 `nav_history` 讀取端
+(`load_points` 的 `ws.get_all_values()[1:]`)是**逐位置**取值、跳過第 1 列,
+所以那不會立刻壞掉 —— 但 (1) 這張表使用者會**用眼睛看、用手維護**,一欄無名的
+USD/TWD 沒有人看得懂;(2) 任何一天有人改用 header 當 key 的讀法,
+`gspread.utils.to_records` 對空欄名**不會拋例外,而是產生一個 `''` key**(本機實測),
+那正是 §1 最怕的**靜默**失敗。
+→ 故 (a)(b) 兩半各有自己的測試,見 `test_the_header_row_ends_up_seven_wide_...`。
+
 ⛔ 為什麼既有的 `tests/test_nav_history_currency_column.py` 抓不到(這才是重點)
 ------------------------------------------------------------------------------
 該檔的假件 `_WS` **沒有 `col_count` / `row_count` 的概念** —— 它的 `update` 會自己
@@ -215,6 +230,42 @@ def test_three_col_min_schema_is_widened_and_patched():
     assert ws.add_cols_calls == [4]
     assert ws.col_count == 7
     assert ws.updates and ws.updates[0][0] == "D1"
+
+
+# ─────────────────────────── 另一半:表頭列也必須被補好 ───────────────────────────
+
+def test_the_header_row_ends_up_seven_wide_with_currency_named():
+    """(b) 半:網格補寬**之後**,第 1 列必須真的多出 `currency` 這個欄名。
+
+    只補網格不補表頭 → 寫得進去,但第 7 欄無名。拿掉 `_get_worksheet` 的表頭補格
+    那一支,本條會轉紅(補寬那幾條不會)——兩半各自有守衛,就是這個意思。
+    """
+    ws = _GridWS([list(_HDR6_LEGACY)], col_count=6, row_count=22254)
+    GS.append_points([_pt()], _sheet=_Sheet(ws))
+
+    hdr = ws.row_values(1)
+    assert len(hdr) == 7, f"表頭沒有補到 7 格,實際 {hdr}"
+    assert hdr[:6] == _HDR6_LEGACY, "既有的 6 個欄名被動到了"
+    assert hdr[6] == "currency"
+
+
+def test_user_authored_header_names_survive_the_widening():
+    """使用者把表頭改成中文 → 補寬與補格都**不能**碰他取的名字,只補尾巴那一格。"""
+    mine = ["代碼", "日期", "淨值", "基金名稱", "來源", "寫入時間"]
+    ws = _GridWS([list(mine)], col_count=6)
+    GS.append_points([_pt()], _sheet=_Sheet(ws))
+
+    hdr = ws.row_values(1)
+    assert hdr[:6] == mine, "使用者自己取的欄名被覆寫了"
+    assert hdr[6] == "currency"
+    assert [u[0] for u in ws.updates] == ["G1"], f"動到了多餘的格:{ws.updates}"
+
+
+def test_min_schema_header_gets_all_four_missing_names():
+    ws = _GridWS([list(_HDR3_MIN)], col_count=3)
+    GS.append_points([_pt()], _sheet=_Sheet(ws))
+    hdr = ws.row_values(1)
+    assert hdr == ["code", "date", "nav", "fund_name", "source", "recorded_at", "currency"]
 
 
 # ─────────────────────────── 不得越補越糟 ───────────────────────────
