@@ -678,6 +678,16 @@ def test_the_nav_block_keeps_its_unit_boundary_in_every_state(state: str):
     → 故 `_render_nav_status()` **四種狀態一律先手寫同一個標題**。
 
     ⚠️ 順帶釘住邊界：這一塊的內容**不准溢出到隔壁那張卡**（資料來源健康度）。
+
+    ⚠️ **這一條的突變驗證第一次寫錯了，記在這裡不美化**（2026-09-06）：
+    第一顆突變（M6）把 `state_card` 放在一個 `if st.session_state.get("__mut6"):`
+    分支底下，而那個鍵**從來沒有被設過** —— 也就是那顆突變**根本沒有改到行為**，
+    於是它「存活」了（三序 **89 passed**）。
+    ⛔ **一顆存活的突變有兩種意思：守衛有洞、或突變沒生效。**
+    分不清就寫「守衛有洞」是把自己的錯記到守衛頭上；分不清就寫「守衛沒問題」
+    更糟 —— 那正是本 repo 記載過的「假的補償控制」。
+    **改寫成真的把手寫標題拿掉、整組走 `state_card` 的版本（M6b）之後：三序皆
+    6 failed，其中 4 條是本函式的四個參數化。**
     """
     _backend, _cov, _open = _NAV_STATES[state]
     _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)

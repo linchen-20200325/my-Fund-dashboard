@@ -525,7 +525,16 @@ def _render_nav_status() -> None:
         _missing = ", ".join(str(_m) for _m in (_backend.get("missing") or [])) or "（未回報）"
         not_ready(
             f"{_BACKEND_UNAVAILABLE_NOTE}{_missing}。"
-            "這兩把是部署環境的 secret，畫面上改不了。",
+            # ⚠️ **刻意不寫「這兩把」** —— `status()` 的 `missing` 可能只有一項
+            #    （`NAV_SHEET_ID` 有 baked 預設 → 多數情況只缺 SA 那一把）。
+            #    在一個職責是「資料可不可信」的頁面上，連數量詞都不該猜。
+            "這些是部署環境的 secret，畫面上改不了。",
+            # ⚠️ **這一則指路是「一個地方」，但它不保證有效** —— 「連線與金鑰」那一塊
+            #    本批仍是灰態，去了也不能在畫面上設 secret。
+            #    照 `_pending_where` 已登記的分界：**指的是「誰負責這件事」，
+            #    不是「按這裡就會好」**；本文那句「畫面上改不了」已經先講清楚了。
+            #    ⛔ 不要因此改指別的地方 —— 本頁沒有更接近的地方，
+            #    指到手動補資料反而會讓人以為「補一下就好」（補不了，是設定缺）。
             where=_pending_where(BLOCK_KEYS))
         return
 
