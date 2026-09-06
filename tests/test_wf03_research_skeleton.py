@@ -1668,3 +1668,34 @@ def test_an_unknown_currency_is_declared_unknown_not_filled_in(unit: str, ccy_fi
             f"「{unit}」的幣別取不到，畫面上卻出現了 {_iso!r} —— "
             "那是憑空填上去的計價幣別。數字是真的、單位是編的，"
             "使用者看不出任何異狀（§4.1 量綱陷阱）。\n" + _body)
+
+
+def test_holdings_keep_the_upstream_ranking_and_do_not_drop_weightless_rows():
+    """持股表：**沒有權重照樣列、沒有名稱才跳過，而且排名用上游的原始位置**。
+
+    ## 三個失效模式，一條各守一個
+
+    1. **過濾掉沒有權重的持股** → 「前十大」悄悄變成「我算得出權重的那幾大」，
+       使用者看到的排名不再是上游給的排名。
+    2. **跳過之後重新編號** → 「上游第 2 檔沒有名字」這件事被抹掉，
+       畫面上是一份看起來完整、實際上少一檔的前 N 大（§1：比缺資料更危險）。
+    3. **權重缺值補 0** → 「沒揭露權重」與「權重是 0%」長得一樣。
+    """
+    _res = _RICH_RESULT()
+    _res["holdings"]["top_holdings"] = [
+        {"name": "哨兵持股甲", "sector": "科技", "pct": 91.11},
+        {"name": "", "sector": "金融", "pct": 92.22},          # 無名 → 應跳過
+        {"name": "哨兵持股丙", "sector": "能源", "pct": None},  # 無權重 → 應保留
+    ]
+    _rows = _holdings_rows(_res)
+    _names = [_r[HOLDING_COLS[1]] for _r in _rows]
+    assert _names == ["哨兵持股甲", "哨兵持股丙"], (
+        f"無名列沒被跳過，或有權重的列被丟掉了：{_names}")
+    assert [_r[HOLDING_COLS[0]] for _r in _rows] == [1, 3], (
+        "排名被重新編號了 —— 上游第 2 檔沒有名字這件事因此被抹掉，"
+        "畫面上會是一份看起來完整、實際上少一檔的前 N 大。"
+        f"實際排名：{[_r[HOLDING_COLS[0]] for _r in _rows]}")
+    _weightless = [_r for _r in _rows if _r[HOLDING_COLS[1]] == "哨兵持股丙"][0]
+    assert _weightless[HOLDING_COLS[3]] == "", (
+        f"沒有權重的持股被補了一個值 {_weightless[HOLDING_COLS[3]]!r} —— "
+        "「沒揭露」與「是 0%」不是同一件事（§1）。")
