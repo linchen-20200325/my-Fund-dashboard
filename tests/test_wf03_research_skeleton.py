@@ -856,10 +856,31 @@ def _imported_modules(tree: ast.AST) -> list[str]:
             #    `from ui import tab3_portfolio`                -> "ui"  🔴 舊寫法靜靜通過
             #    而下面的判準是 `startswith("ui.tab")` ⇒ 第三種完全不會被擋。
             #    「不得委派舊分頁」是客戶方針的唯一機械保證，漏掉這條等於沒守。
-            # ⚠️ **代價照實寫**：`from ui.helpers.ia import STATE_NOT_READY` 會多吐
-            #    "ui.helpers.ia.STATE_NOT_READY" 這種**不是模組**的字串。消費端都是
-            #    `startswith` 比對，多吐無害；**但本函式的回傳值自此不再是一份
-            #    「真的 import 到的模組」清單，不要拿去做別的用途。**
+            # ⚠️ **代價照實寫（2026-09-06 更正：原本這裡寫「多吐無害」，那是假的）**：
+            #    `from services.fund_service import single_fund_metrics` 會多吐
+            #    "services.fund_service.single_fund_metrics" 這種**不是模組**的字串。
+            #
+            #    ~~消費端都是 `startswith` 比對，多吐無害~~
+            #    → **四個消費端沒有一個是純 `startswith`**（實測，不是推論）：
+            #      兩個是 `_m.split(".")[0] in (...)`（多吐的字串首段與模組相同 ⇒ 無影響），
+            #      **另外兩個是 `startswith(...) or <子字串> in _m`** ⇒ **會被符號名誤觸發**。
+            #
+            #    **已量到的誤紅形狀（本頁與 ③ 各三/二例，三序一致；`180fb93` 上皆為綠，
+            #    也就是這些偽陽性是「同時吐兩個」這個改動新引入的）**：
+            #      `from services.fund_service import single_fund_metrics`  → 命中 "single_fund"
+            #      `from services.batch import batch_analysis_runner`       → 命中 "batch_analysis"
+            #      `from services.research import fund_research_helper`     → 命中 "fund_research"
+            #      `from services.perf import portfolio_perf_summary`       → 命中 "portfolio_perf"
+            #      `from services.health import fund_grp_health_score`      → 命中 "fund_grp_health"
+            #    這些 import **本來就合法**（同檔另一條測試只禁 repositories/infra/網路函式庫，
+            #    `services/**` 是允許的），現況只是**還沒有人這樣寫**，屬**潛伏**的誤紅。
+            #
+            #    ⛔ **不要為了消掉誤紅而把這裡收窄** —— 「兩個都要吐」的理由仍然成立
+            #    （`from ui import tab3_portfolio` 是同層 import 最自然的寫法，只吐
+            #    `_n.module` 會得到 "ui"、被 `startswith("ui.tab")` 靜靜放過）。
+            #    **真要修，該動的是那兩個子字串消費端**（讓它們只看模組清單），
+            #    那超出本批邊界，**已登記待裁決**。
+            #    **本函式的回傳值自此不是一份「真的 import 到的模組」清單，不要拿去做別的用途。**
             _mods.append(_n.module)
             _mods.extend(f"{_n.module}.{_a.name}" for _a in _n.names)
     return _mods
