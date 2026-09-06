@@ -1,4 +1,4 @@
-<title>三題待拍板</title>
+<title>四題待拍板</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -259,8 +259,8 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
 .decide{margin-top:30px;border-top:2px solid var(--ink);padding-top:16px}
 .decide h3{margin:0 0 4px;font-size:17px;font-weight:600}
 .decide > p{margin:0 0 12px;color:var(--muted);font-size:13.5px;max-width:72ch}
-.qa{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
-@media (max-width:760px){.qa{grid-template-columns:1fr}}
+.qa{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
+@media (max-width:560px){.qa{grid-template-columns:1fr}}
 .q{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;
   padding:11px 12px;background:var(--card)}
 .q .ql{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--accent);
@@ -282,12 +282,12 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
 
   <header class="mast">
     <div>
-      <h1>三題待拍板</h1>
-      <p class="sub">三件卡在「需要你看版面」的事，一次看完。每題都有<b>總管推薦與理由</b> ── 你只要說「照推薦」，或指出哪一項要改。</p>
+      <h1>四題待拍板</h1>
+      <p class="sub">四件卡在「需要你看版面」的事，一次看完。每題都有<b>總管推薦與理由</b> ── 你只要說「照推薦」，或指出哪一項要改。</p>
     </div>
     <div class="stamp">
       狀態 <b>待審</b><br>
-      版次 <b>WF-DECIDE-1</b><br>
+      版次 <b>WF-DECIDE-2</b><br>
       日期 <b>2026-09-06</b><br>
       依據 <b>main 1ad0821</b>
     </div>
@@ -297,7 +297,11 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
     <span class="dh">⛔ 先講三件事，再看畫面</span>
     <p><b>1 ─ 本線框裡每一個數字都是示意值，一個都不是真實資料。</b>凡是數字，旁邊都掛著 <span class="chip mock">示意值</span>。</p>
     <p><b>2 ─ 只示意「查證過真的有來源」的東西。</b>沒有來源的指標，這裡一律畫成灰態，不會替它編一個好看的數字 ── 否則你會核准一個我們交不出來的畫面。</p>
-    <p><b>3 ─ 本線框推翻了總管派工單裡的 6 句話。</b>逐句列在各題的「⚠️ 更正派工單」欄位，並附推翻它的實測指令。</p>
+    <p><b>3 ─ 本線框推翻了一些寫下來的宣稱，逐句列在各題的「⚠️ 更正」欄位並附實測指令。</b>
+    <b>射程寫清楚（不寫成「只有 N 句」）</b>：第一版更正了<b>派工單的 6 句</b>；<b>本輪（2026-09-06）再更正 5 處</b>，
+    對象<b>不只派工單</b> ── 還包含<b>程式裡的既有登記</b>（<code>page_04_portfolio.py</code> 的「相反的規定」）、
+    <b>你拍板過的線框</b>（<code>-final</code> Q7 的兩個前提），以及<b>本檔自己的上一版</b>（題三那句「只有一塊」）。
+    <b>這不是窮舉</b>：只代表本組查到這些，不代表沒有第 12 處。</p>
   </section>
 
   <section class="legend" aria-label="證據標記圖例">
@@ -319,7 +323,7 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
         <button class="tab-btn" role="tab" id="t3" aria-controls="p3" aria-selected="false"><span class="idx">題三</span><span class="nm">舊 ④ 區塊去留</span></button>
         <button class="tab-btn" role="tab" id="t4" aria-controls="p4" aria-selected="false"><span class="idx">題四</span><span class="nm">選股池住哪頁</span></button>
       </div>
-      <p class="rail-note">三題互不相干，可以分開回答。<b>題三</b>其實只有一塊真的需要你決定，其餘都已經有明文去處 ── 那一塊也標出來了。</p>
+      <p class="rail-note">四題互不相干，可以分開回答。<b>題三</b>有<b>三塊</b>需要你決定（舊版寫「只有一塊」，本輪已更正），其餘都已經有明文去處。<b>題四</b>是線框自己標的 Q7，一直沒人追蹤。</p>
     </nav>
 
     <div>
@@ -1032,8 +1036,8 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
   </div>
 
   <section class="decide">
-    <h3>所以你只需要回答三件事（外加一個小的）</h3>
-    <p>其餘全部已經有明文依據，不佔用你的時間。下面每一格都已經有推薦 ── 你可以直接說「三題都照推薦」。</p>
+    <h3>所以你只需要回答四件事（外加一個小的）</h3>
+    <p>其餘全部已經有明文依據，不佔用你的時間。下面每一格都已經有推薦 ── 你可以直接說「四題都照推薦」。</p>
     <div class="qa">
       <div class="q">
         <span class="ql">題一 · ④ 保單版面</span>
@@ -1048,7 +1052,14 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
       <div class="q">
         <span class="ql">題三 · 舊 ④ 區塊</span>
         <p>那些區塊各自去哪？</p>
-        <p class="rr">下表十塊裡<b>九塊已有明文依據</b>，<b>只有「組合績效／效率前緣」沒有任何線框提過、需要你點頭</b>。推薦 <b>留在 ④、升成頂層區塊</b>。（第 4 塊另附一個職責分工的順帶建議，不影響它的去處。）</p>
+        <p class="rr"><b>8 個頂層區塊全部有明文依據</b>；另有四個<b>子區塊</b>，其中<b>三塊從沒被任何線框提過</b>：
+        <b>組合績效／效率前緣</b>、<b>穿透式持股／產業集中度</b>、<b>總經曝險聯動</b>。三塊都推薦<b>留在 ④、升成看得見的具名區塊</b>。
+        （舊版寫「只有一塊」，射程是頂層區塊、沒寫在句子裡，本輪已就地更正。）</p>
+      </div>
+      <div class="q">
+        <span class="ql">題四 · 選股池住哪頁</span>
+        <p>選股池與除息行事曆，留 ⑤ 還是搬到決策動線裡？</p>
+        <p class="rr">推薦 <b>搬到 ④、緊鄰換股顧問</b>。線框當初寫「搬 ②」，但換股顧問已於 5 天後搬進 ④ ── 照它自己的理由，今天的答案是 ④。<b>另：線框說的「兩個入口」早在 2026-08-12 就修掉了，這題因此不急。</b></p>
       </div>
     </div>
     <p style="margin:14px 0 0;padding:11px 13px;border:1px solid var(--gold);border-left:3px solid var(--gold);border-radius:2px;background:var(--gold-soft);font-size:13px;color:var(--ink-2);max-width:none">
@@ -1066,8 +1077,28 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
       <li><b>本線框全部由單一線框組產出，未經第二組獨立複驗。</b>凡標 <span class="ev m">實測</span> 者為本組實跑指令所得，凡標 <span class="ev g">推測</span> 者本組沒有查證 ── 後者只能當待驗事項，不得當前提用。</li>
       <li><b>沒讀完的</b>：<code>policy-split-wireframe.html</code> 只讀了 masthead、§02 的 ④ 版面、§04 六項決定、§05 揭露；其餘段落未讀。<code>ia-wireframe.html</code> 讀了全部五個 panel 與收尾，但 Tab 01／03／05 只掃過、未逐字比對。</li>
       <li><b>「舊 ④ 頂層區塊恰好 8 個」是取決於有沒有漏看的全稱句。</b>本組是讀 <code>st.container()</code> 宣告段＋掃 <code>with _sec_</code> 得到的，<b>單組未複驗</b>。</li>
-      <li><b>「全部 9 份線框 0 次提到組合績效／效率前緣」同樣是單組 grep 的窮舉句。</b>指令已寫在該列供自驗；但它只掃 <code>組合績效</code>／<code>效率前緣</code> 兩個字面，<b>若線框用別的名字講同一件事，這條指令掃不到</b>。</li>
-      <li><b>本批沒有跑任何測試、沒有改任何 <code>.py</code>。</b>產出只有這一個 HTML 檔。所有關於程式現況的敘述都是唯讀查證，不是執行驗證。</li>
+      <li><b>「全部 9 份線框 0 次提到組合績效／效率前緣」同樣是單組 grep 的窮舉句。</b>指令已寫在該列供自驗；但它只掃 <code>組合績效</code>／<code>效率前緣</code> 兩個字面，<b>若線框用別的名字講同一件事，這條指令掃不到</b>。
+      <br>→ <b>2026-09-06 本輪就地補救（這一條是上一版自己標出來的缺口，本輪把它補上）</b>：本輪把 9 份線框<b>全部 strip 掉 HTML 標籤後再掃</b>（防標籤把字切斷），
+      並對三塊各跑一輪<b>別名掃描</b>：<code>績效／Sharpe／回撤／年化／波動／前緣</code>（組合績效）、<code>集中／分散／穿透／個股／持股／產業</code>（集中度）、<code>曝險／景氣</code>（總經曝險）。
+      <b>命中全部逐條讀過</b>，結論是<b>「有命中、但講的都是別的東西」</b>：<code>Sharpe</code>／<code>最大回撤</code> 在 <code>ia</code> 是<b>逐檔體檢表的欄位</b>（每一檔一個數字），<b>不是整個組合的一個數字</b>；
+      <code>穿透</code> 全是<b>三率穿透</b>（單一個股財務三率）；<code>集中</code> 全是<b>動詞</b>；<code>曝險</code> 全是 <b>FX 曝險</b>。
+      <b>→ 原本那句「別名掃不到」的擔憂本輪已經實際掃過了，結論不變。</b>
+      ⚠️ 但它<b>仍然是單組窮舉句</b>：本組只想得到這些別名，<b>想不到的別名一樣掃不到</b>。</li>
+      <li><b>本輪的正對照（證明掃描沒有壞掉，不是「什麼都掃不到」）</b>：同一套 strip + grep 之下，<code>保單</code> 命中 4 份、<code>配息</code> 8 份、<code>核心</code> 8 份、<code>新鮮度</code> 2 份。
+      <b>特別記一筆</b>：<code>ui/tab3_portfolio.py</code> 那段註解列的<b>風險揭露元件是 4 個</b>（總經曝險／<b>資料新鮮度</b>／持股集中度／產業集中度），
+      而本輪只把其中 <b>3 個</b>列進題三 ── 因為<b>第 4 個「資料新鮮度」查得到明文</b>（<code>wireframe-macro-health.html</code> 逐字寫著 <code>MoneyDJ 資料新鮮度 banner _render_mj_freshness_banner</code>）。
+      <b>本組是逐個查過才排除它的，不是漏列。</b></li>
+      <li><b>題四（Q7）本組沒有查證的事，明講</b>：(a) <b>只證明 repo 內查不到 Q7 的答覆紀錄，不證明你沒答過</b>（口頭答覆不會進 repo）；
+      (b) 搬動選股池會碰到的四個守衛測試，本組<b>只讀了斷言文字、沒有實跑</b>，「改寫守衛即可、不必刪除」是<b>判斷不是驗證</b>；
+      (c) 本組<b>沒有查證「總經曝險是 v19.64 之後才長出來、線框沒回頭補」這個時序</b>，那一句已就地標為推測。</li>
+      <li><b>本批沒有跑任何測試、沒有改任何 <code>.py</code>。</b>產出只有這一個 HTML 檔。所有關於程式現況的敘述都是唯讀查證，不是執行驗證。
+      <b>本輪所有 <code>git grep</code> 都跑在 <code>origin/main</code> 上</b>（量測日 2026-09-06），<b>不是本分支</b> ── 分支只多了這一個 HTML 檔。</li>
+      <li><b>⭐ 本輪自己犯過、就地修掉的一個錯，記下來（因為它正是本檔在講的那個病）</b>：
+      本組原本要照派工單把題一改寫成「兩份線框給了相反規定 → 二選一」。
+      <b>逐字讀完兩份線框後發現不成立</b>：決定 E 治理的是<b>表格</b>、<code>ia</code> 那一塊是<b>卡片</b>，
+      而決定 E 自己的理由就寫著「<b>規則本來就不涵蓋表格</b>」── <b>它從來沒有否定過那張卡</b>。
+      <b>「相反的規定」這個框架是從 <code>page_04_portfolio.py</code> 的登記照抄下來的，沒有人回頭讀過線框原文。</b>
+      這與題四的 Q7 是<b>同一種病</b>：<b>一句登記寫下之後，後面每個人都引用它，沒有人再回去看它引的東西。</b></li>
       <li><b>本組沒有查證的兩件事，明講</b>：(a) ② 與 ④ 兩處重疊度計算是否同源；(b) 3 欄網格塌成 2 欄的實際視覺效果（題一案 A 的代價那一段）。</li>
     </ul>
   </section>
