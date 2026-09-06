@@ -205,10 +205,16 @@ from ui.views.page_04_portfolio import (  # noqa: E402
     _LABEL_BUDGET,
     _LABEL_CORE_PCT,
     _LABEL_SATELLITE_ONLY,
+    MIX_CURRENT_LABEL,
+    MIX_GAP_LABEL,
+    MIX_TARGET_LABEL,
+    MIX_TARGET_PROVENANCE,
+    REASON_POLICY,
     _PENDING_NOTE,
     _holdings,
     _normalise_plan,
     _pending_where,
+    grey_why,
     switch_block_label,
 )
 
@@ -225,6 +231,24 @@ _SCRIPT = (
 FAKE_HOLDINGS: list[dict[str, Any]] = [
     {"code": "TESTCODE1", "name": "測試標的一", "loaded": True},
     {"code": "TESTCODE2", "name": "測試標的二", "loaded": True},
+]
+
+#: **有投入本金**的兩檔 —— 核心／衛星那一格唯一能算出比例的形狀。
+#:
+#: ⭐ **金額刻意挑成 620000 ／ 380000，這不是隨手填的**：它算出來剛好是
+#: **62.0 ／ 38.0**，也就是線框拿來示範版面的那一組示意值
+#: （`_PINNED_FAKE_VALUES` 裡的 `"62 ／ 38"`）。
+#: 用它當 fixture，是為了讓 :func:`test_a_real_ratio_that_collides_with_the_mock_up_still_passes`
+#: 能證明一件事：**真數字剛好長得跟假數字一樣時，示意值黑名單不會誤殺** ——
+#: 而那條性質完全繫於 :func:`ui.views.page_04_portfolio._pct_text` 的格式
+#: （數字之間夾著 `%` 與抬頭），改掉格式就會當場破功。
+#: ⚠️ `policy_tier` 明示 core／satellite，走的是 SSOT 的第一順位分類依據
+#: （`resolve_core_flag`：`policy_tier` 優先，缺才退 `is_core` 關鍵字啟發式）。
+FAKE_HOLDINGS_PRICED: list[dict[str, Any]] = [
+    {"code": "TESTCODE1", "name": "測試標的一", "loaded": True,
+     "invest_twd": 620000, "policy_tier": "core"},
+    {"code": "TESTCODE2", "name": "測試標的二", "loaded": True,
+     "invest_twd": 380000, "policy_tier": "satellite"},
 ]
 
 
@@ -320,11 +344,19 @@ def _reset_streamlit_container_stack() -> None:
     context_dg_stack.set((_main,))
 
 
-def _app(funds: list[dict[str, Any]] | None) -> Any:
-    """跑一次整頁，回傳 `AppTest`。`funds=None` 代表 session 裡根本沒有那個鍵。"""
+def _app(funds: list[dict[str, Any]] | None,
+         session: dict[str, Any] | None = None) -> Any:
+    """跑一次整頁，回傳 `AppTest`。`funds=None` 代表 session 裡根本沒有那個鍵。
+
+    `session`：額外要塞進 `session_state` 的鍵值（例如 `portfolio_core_pct`）。
+    ⚠️ **刻意做成參數而不是在測試裡直接寫 `_at.session_state[...]`** ——
+    那樣寫的話 `_app()` 已經 `run()` 過了，設定會**晚一步**、對這一次渲染無效。
+    """
     # 進場先洗乾淨：別人留下的 form 容器會讓本頁的 `applied_form` 當場炸掉。
     _reset_streamlit_container_stack()
     _at = AppTest.from_string(_SCRIPT, default_timeout=120)
+    for _k, _v in (session or {}).items():
+        _at.session_state[_k] = _v
     if funds is not None:
         _at.session_state["portfolio_funds"] = funds
     try:
@@ -387,9 +419,11 @@ def _stream(kind: str) -> tuple[str, ...]:
 
     - `"empty"`   —— `portfolio_funds` 是空 list
     - `"missing"` —— 根本沒有那個鍵（第一次進站）
-    - `"loaded"`  —— 兩檔已載入
+    - `"loaded"`  —— 兩檔已載入（**都沒填投入本金**）
+    - `"priced"`  —— 兩檔已載入**且填了本金**（核心／衛星算得出比例的唯一形狀）
     """
-    _funds = {"empty": [], "missing": None, "loaded": FAKE_HOLDINGS}[kind]
+    _funds = {"empty": [], "missing": None,
+              "loaded": FAKE_HOLDINGS, "priced": FAKE_HOLDINGS_PRICED}[kind]
     return tuple(_flat(_app(_funds).main))
 
 
@@ -441,13 +475,22 @@ def _expected_units() -> tuple[str, ...]:
             BLOCK_POLICY, BLOCK_DIVIDEND_CAL, BLOCK_LEDGER)
 
 
-def _grey_units() -> tuple[str, ...]:
-    """**每一個都要各自帶灰態**的五個單位。
+#: **已經接上真資料、因此不該再有「本頁分批上線」那句話**的單位。
+#: ⚠️ 每從這裡多一個名字，就要有一條**正向**守衛接手它
+#: （`BLOCK_FORM` → :func:`test_the_form_block_is_not_grey`；
+#:  `BLOCK_MIX` → :func:`test_the_mix_block_shows_the_real_ratio` 等四條）。
+#: ⛔ **不准只把名字加進來、不補正向守衛** —— 那等於把一塊的守衛整個拿掉。
+_WIRED_UNITS: tuple[str, ...] = (BLOCK_FORM, BLOCK_MIX)
 
-    ⚠️ `BLOCK_FORM` 不在這裡：它是本批**唯一真的做完**的一塊，
-    由 :func:`test_the_form_block_is_not_grey` 反向守著（它一旦變灰，那條就紅）。
+
+def _grey_units() -> tuple[str, ...]:
+    """**每一個都要各自帶灰態**的四個單位。
+
+    ⚠️ `BLOCK_FORM` 與 `BLOCK_MIX` 不在這裡（見 :data:`_WIRED_UNITS`）：
+    前者是骨架批唯一做完的一塊，後者於 2026-09-06 接上核心／衛星 SSOT。
+    兩者都由**正向**守衛反向釘著 —— 一旦變回灰態，那些條就轉紅。
     """
-    return tuple(_u for _u in _expected_units() if _u != BLOCK_FORM)
+    return tuple(_u for _u in _expected_units() if _u not in _WIRED_UNITS)
 
 
 def _live_strings(tree: ast.AST) -> list[ast.Constant]:
@@ -734,6 +777,70 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
 
 
 @pytest.mark.parametrize("unit", _grey_units())
+def test_every_grey_unit_states_its_own_reason(unit: str):
+    """⭐ 每一塊灰態要說**自己的**原因，不准四塊共用一句藉口。
+
+    ## 這條是本批新增的，理由比條文本身重要
+
+    接線批真正危險的不是「少接一塊」，是**用一句放諸四海皆準的藉口蓋住四個
+    完全不同的原因**。本頁四塊的原因實際上互不相同：
+
+    - 換股顧問 → **撞到既有的唯一渲染點**（＋ 缺雲端選股池與逐檔基準線）
+    - 保單與扣款標的 → **兩份已拍板線框對同一塊版面規定相反**，已送客戶
+    - 配息月曆 → **算得出來但很貴**，要接得先多一道開關（版面異動）
+    - 交易帳本 → **線框根本沒給欄位規格**
+
+    四句寫成同一句「資料還沒接」，對使用者說了三次謊（只有配息月曆勉強沾邊）。
+
+    ⚠️ 本條驗的是「**這一塊的原因子句有沒有出現在這一塊底下**」，
+    粒度是單位、不是整頁 —— 整頁 containment 會被鄰居的字替它通過
+    （同 :func:`test_every_grey_unit_says_where_to_look` 的長註）。
+    """
+    _body = "\n".join(_segments(_stream("loaded")).get(unit, []))
+    assert _body.strip(), f"單位「{unit}」不見了。"
+    _why = grey_why()
+    assert unit in _why, (
+        f"單位「{unit}」在 `grey_why()` 裡沒有對應的原因 —— "
+        "灰態不得沒有理由（新增區塊時請一起補）。")
+    assert _why[unit] in _body, (
+        f"單位「{unit}」的灰態沒有說出它自己的原因。\n"
+        f"預期包含：{_why[unit]!r}\n實際：\n{_body}")
+
+
+def test_the_four_grey_reasons_are_actually_different():
+    """⛔ 四個原因**兩兩相異** —— 防止「各寫一句」退化回「複製同一句四次」。
+
+    ⚠️ 這條與上一條**不重複**：上一條驗「每塊有帶自己的字串」，
+    但如果有人把 `grey_why()` 的四個值填成同一句，上一條**照樣全綠**
+    （每塊都含有那一句）。本條才擋得住那個退化。
+    """
+    _vals = list(grey_why().values())
+    assert len(set(_vals)) == len(_vals), (
+        "四塊灰態的原因出現重複 —— 那就是「一句藉口蓋四個原因」的退化形狀：\n"
+        + "\n".join(_vals))
+
+
+def test_the_policy_block_does_not_blame_the_data():
+    """⭐ **保單那一區的灰態不准把原因說成「資料還沒接」**（總管裁決 2）。
+
+    真正卡住它的是**版面**：`docs/wireframes/ia-wireframe.html` 把它畫成三欄網格
+    裡的一張卡，而 `docs/wireframes/policy-split-wireframe.html` 的**決定 E**
+    逐字寫「保單明細表**維持全寬**，不塞進三欄」—— 兩份都是客戶拍板過的線框，
+    對同一塊版面給了相反的規定。已另派線框組送客戶裁決。
+
+    ⚠️ 說成「資料還沒接」不只是不精確，是**假的原因**：它會讓下一個人以為
+    「去把資料接上就好」，然後一頭撞進那個還沒裁決的版面衝突。
+    """
+    assert "版面" in REASON_POLICY, (
+        "保單那一區的灰態沒有指出真正的原因（版面尚未裁決）：\n" + REASON_POLICY)
+    _body = "\n".join(_segments(_stream("loaded")).get(BLOCK_POLICY, []))
+    assert "版面" in _body, f"畫面上沒說原因是版面：\n{_body}"
+    assert "已送客戶裁決" in _body, (
+        f"畫面上沒說這件事已經有出口（送客戶裁決）—— "
+        f"沒有出口的「待確認」會變成實質的永久擱置：\n{_body}")
+
+
+@pytest.mark.parametrize("unit", _grey_units())
 def test_every_grey_unit_says_where_to_look(unit: str):
     """每一個灰態單位**各自**要有「去哪補」，而且不得手抄分頁名。
 
@@ -790,8 +897,14 @@ def test_the_pending_pointer_is_a_place_not_a_status_sentence():
             "它會被 `render_state.not_ready()` 包成「（請先到：…）」——"
             "所以它必須是一個**地方**（分頁路徑 → 區塊名），不能是一句狀態陳述。")
     # 也驗它進到畫面上之後的形狀，不是只驗回傳值。
+    # ⚠️ **2026-09-06 改指 `BLOCK_POLICY`**：本條原本取 `BLOCK_MIX`，而那一塊已經
+    #    接上真資料、不再走 `_pending_where()`（它的指路改成「去哪填本金」那條
+    #    **真的有效**的 `pf_add`）。留著會變成一條驗不到 `_pending_where()` 的測試。
+    #    ⛔ 這不是把斷言放寬 —— 換的是**取樣的單位**，斷言的字串一字未改，
+    #    而且 `BLOCK_POLICY` 是四個灰態單位中**最不可能被下一批接走**的那一個
+    #    （它卡在客戶裁決上，見 `REASON_POLICY`）。
     _seg = _segments(_stream("loaded"))
-    _body = "\n".join(_seg.get(BLOCK_MIX, []))
+    _body = "\n".join(_seg.get(BLOCK_POLICY, []))
     assert f"（請先到：{where_to_find('portfolio')} → {BLOCK_FORM}）" in _body, (
         "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
 
@@ -816,11 +929,20 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     - **有人把指路改成一個「照著做真的有用」的地方** → 它也會紅。那是好事，
       同樣是刪本條 ＋ 改文案，不是繞過。
     """
-    _at = _app(FAKE_HOLDINGS)
+    # ⚠️ **2026-09-06 改用 `FAKE_HOLDINGS_PRICED`，理由不是「讓數字對上」** ——
+    #    是因為這一頁自本批起有**兩種灰**，混在一起數就數不出東西：
+    #      (a) **「還沒接上」的灰**（四個 `_grey_units()`）—— 本條要驗的那一種；
+    #      (b) **「接上了，但你沒填本金」的灰**（`BLOCK_MIX`）—— 那是**真資料的誠實缺料**，
+    #          而且它的指路（去填本金）**照著做是真的有用的**，與 (a) 恰好相反。
+    #    用沒填本金的 fixture 會讓 (b) 也算進來，本條就變成在數兩種語意相反的東西。
+    #    改用有本金的 fixture → `BLOCK_MIX` 畫出真比例、不留灰，剩下的**恰好**是 (a)。
+    # ⛔ 這不是放寬：全頁 `⬜` 總數的斷言**原封保留**（它擋得住「多長出第五條灰」），
+    #    換掉的只有 fixture。
+    _at = _app(FAKE_HOLDINGS_PRICED)
     _before = [_p for _p in _flat(_at.main) if NOT_READY_MARK in _p]
     assert len(_before) == len(_grey_units()), (
-        f"有持倉時應該剛好 {len(_grey_units())} 條灰態，實際 {len(_before)} 條：\n"
-        + _text(_before))
+        f"有持倉（且已填本金）時應該剛好 {len(_grey_units())} 條灰態，"
+        f"實際 {len(_before)} 條：\n" + _text(_before))
     # 照著指路做：回到「再平衡試算」，填金額、按「試算」。
     _at.number_input[0].set_value(150_000)
     _at.button[0].click()
@@ -831,6 +953,146 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
         "照著灰態的指路做完之後，灰態**變了** —— 那麼被測檔 `_pending_where()` 的 "
         "docstring（「這一族的指路去了也沒用」）就是假話，要一起改。\n"
         f"之前：{_before}\n之後：{_after}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 核心 ／ 衛星：本批接上的那一格（`_WIRED_UNITS` 少一個名字，這裡就要多一組守衛）
+# ══════════════════════════════════════════════════════════════════
+
+def _mix_body(kind: str = "priced") -> str:
+    """`BLOCK_MIX` 那一個單位的渲染內容（字串）。"""
+    return "\n".join(_segments(_stream(kind)).get(BLOCK_MIX, []))
+
+
+def test_the_mix_block_shows_the_real_ratio():
+    """有本金 → 這一格畫出**真的**核心／衛星比例，而且不再是灰態。
+
+    fixture 是 620000 ／ 380000（`policy_tier` 明示 core ／ satellite）
+    → SSOT `summarize_core_satellite` 實測回 `core_pct == 62.0` / `sat_pct == 38.0`。
+    """
+    _body = _mix_body("priced")
+    assert _body.strip(), f"單位「{BLOCK_MIX}」不見了。"
+    assert NOT_READY_MARK not in _body, (
+        f"「{BLOCK_MIX}」已經接上真資料，不該還是灰態：\n{_body}")
+    assert MIX_CURRENT_LABEL in _body and "62.0%" in _body and "38.0%" in _body, (
+        f"「{BLOCK_MIX}」沒有畫出現況比例（預期核心 62.0% ／ 衛星 38.0%）：\n{_body}")
+
+
+def test_the_mix_block_never_prints_a_zero_when_it_cannot_compute():
+    """⭐ **一檔本金都沒填 → 誠實留灰，`絕不`畫成 0%。**
+
+    ## 這條擋的是本批最貴的那個錯
+
+    派工單點名的坑之一：② 那批第一版把讀不出來的值畫成 `0`，
+    「最大回撤 0.0%」讀起來是「這檔從沒跌過」。
+    同一個形狀在這裡會變成「**核心 0.0% ／ 衛星 0.0%**」——
+    使用者會讀成「我的錢全都不在核心也不在衛星」，然後照著它調部位。
+
+    ## 為什麼這條擋得住（而不是只是碰巧綠）
+
+    上游 SSOT `summarize_core_satellite` 在 `total_twd == 0` 時把 `core_pct`
+    回成 **`None`**（其 docstring 逐字：「缺資料時誠實回 None，不捏造 0」）。
+    本頁據此走 `not_ready()` 直接 return。
+    **突變驗證（實跑，兩顆；⚠️ 第一顆的死法與本組原本寫的不一樣，據實更正）**：
+
+    - **M1**：`if _core is None:` → `if False:`（把 `None` 當數字往下畫）→ 本條**轉紅**，
+      **但死因不是畫出 `0.0%`** —— 是 `TypeError: unsupported format string passed to
+      NoneType.__format__`，被 `safe_section()` 接成紅框。
+      ⚠️ 本組原本在這裡寫的是「畫面出現 `0.0%`」，**那是沒跑就寫下的推測，實測推翻**。
+      連帶：`test_no_block_silently_renders_a_system_error[loaded]` 也一起轉紅。
+    - **M1b**（補跑，這顆才真的在測本條的字面斷言）：把 `None` **補成 `0.0` 再往下畫**
+      → 畫面真的出現 `0.0%`，本條**單獨轉紅**（49 條裡只有它紅）。
+
+    **兩顆都要記**：M1 證明「`None` 流下去會炸」，M1b 才證明
+    「**就算有人特地把它補成 0，這條也擋得住**」—— 而後者才是真正會發生的那種寫法
+    （沒有人會故意讓它炸，但很多人會「順手補個預設值讓它不要炸」）。
+    """
+    _body = _mix_body("loaded")          # 兩檔已載入，但都沒填 invest_twd
+    assert _body.strip(), f"單位「{BLOCK_MIX}」不見了。"
+    assert NOT_READY_MARK in _body, (
+        f"沒有本金就算不出比例，這一格必須誠實留灰：\n{_body}")
+    assert "0.0%" not in _body and "0%" not in _body, (
+        f"「{BLOCK_MIX}」在算不出比例時畫了 0% —— 「不知道」被畫成了「是零」（§1）：\n{_body}")
+    # 指路必須是**真的有效**的那一條（去填本金），不是四塊灰態那種「去了也沒用」。
+    assert where_to_find("pf_add") in _body, (
+        f"算不出比例時要指到「去哪填本金」（`pf_add`），而不是指回本頁的試算：\n{_body}")
+
+
+def test_the_target_number_comes_from_the_user_setting_not_a_constant():
+    """⭐ 目標值必須**真的**從 session `portfolio_core_pct` 流過來（總管裁決 1）。
+
+    ## 這條是本組**唯一**能證明「裁決 1 真的落地」的那一條
+
+    只驗「畫面上有一個目標數字」是驗不到東西的 —— 寫死一個 75 也會過。
+    本條把 session 設成一個**不可能碰巧出現**的值（41），
+    再確認畫面上出現 `41.0%`，而且**預設值 75 不在畫面上**。
+
+    **突變驗證（實跑）**：把被測檔的 `get_core_target_pct(st.session_state)` 換成
+    常數 `75.0` → 本條**轉紅**（畫面上沒有 41.0%）。
+    ⚠️ 這正是派工單點名的第 3 個坑（卡片文案宣告的門檻與 SSOT 脫鉤）在本頁的形狀：
+    差別只在這裡脫鉤的不是文案裡的門檻，是**那個數字本身**。
+    """
+    _at = _app(FAKE_HOLDINGS_PRICED, session={"portfolio_core_pct": 41})
+    _body = "\n".join(_segments(tuple(_flat(_at.main))).get(BLOCK_MIX, []))
+    assert MIX_TARGET_LABEL in _body, f"目標那一段不見了：\n{_body}"
+    assert "41.0%" in _body, (
+        "目標值沒有跟著 session `portfolio_core_pct` 走 —— "
+        f"把它設成 41 之後畫面上找不到 41.0%：\n{_body}")
+    assert "75.0%" not in _body, (
+        f"使用者把目標改成 41 了，畫面上卻還留著預設的 75：\n{_body}")
+    # 差距要跟著一起動：現況 62.0 − 目標 41.0 = +21.0
+    assert MIX_GAP_LABEL in _body and "21.0%" in _body, (
+        f"差距沒有跟著目標一起重算（預期核心比目標多 21.0%）：\n{_body}")
+
+
+def test_the_target_says_out_loud_that_it_is_the_users_own_setting():
+    """⭐ **總管裁決 1 逐字要求的那句話，必須真的在畫面上。**
+
+    線框把這一格畫成「現況 → **建議**」＋ chip「與 01 同源」，
+    但 ①（`ui/views/page_01_macro.py`）整條鏈只給**股／債／現金**，
+    給不出核心／衛星（該檔模組 docstring 逐字寫著這件事）。
+    → 這一格改用**使用者自己設的目標**，而**改用之後就必須說出來** ——
+    否則使用者會把自己填的數字讀成系統的建議，那是系統冒名替他背書（§1）。
+
+    ⚠️ 本條驗的是「那句話在不在」，**不驗它寫得好不好**。
+    """
+    _body = _mix_body("priced")
+    assert MIX_TARGET_PROVENANCE in _body, (
+        "畫面上沒有說明那個目標值的出身 —— 使用者無從分辨它是自己設的還是系統算的：\n"
+        + _body)
+    assert "建議" not in _body.split(BLOCK_MIX)[-1] or MIX_TARGET_LABEL in _body, (
+        "這一格把數字標成了「建議」—— 那是系統宣稱的事實，"
+        "而它其實是使用者自己設定的目標。")
+
+
+def test_a_real_ratio_that_collides_with_the_mock_up_still_passes():
+    """⭐ **真數字剛好長得跟線框示意值一樣時，示意值黑名單不得誤殺。**
+
+    ## 這條在防的東西很反直覺，值得讀完
+
+    `_PINNED_FAKE_VALUES` 釘著線框的示意值 `"62 ／ 38"`。
+    而 `summarize_core_satellite` 的分子分母都是**使用者填的金額** ——
+    一個 620000 ／ 380000 的**真實**組合算出來就是 **62.0 ／ 38.0**。
+    也就是說：**真數字有可能剛好等於假數字。**
+
+    如果本頁把比例畫成 `f"{核心} ／ {衛星}"`，那個真實組合會讓
+    :func:`test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe`
+    **轉紅**，而「修法」會變成**放寬示意值黑名單** —— 那才是真正的災難：
+    為了讓一個真數字過關，把擋假數字的網子剪開。
+
+    本頁的做法是讓格式本身避開那個形狀（`_pct_text()`：數字後面緊跟 `%`，
+    中間夾抬頭），於是兩者可以並存。**本條把這個性質釘死。**
+
+    **突變驗證（實跑）**：把被測檔 `_render_mix()` 那一行改成
+    `f"核心 {_core:.0f} ／ 衛星 {_sat:.0f}"` → 示意值黑名單那條**轉紅**，
+    本條也**轉紅**。
+    """
+    _all = _text(_stream("priced"))
+    for _fake in _PINNED_FAKE_VALUES:
+        assert _fake not in _all, (
+            f"（priced）畫面上出現了線框示意值的字面寫法 {_fake!r}。\n"
+            "⚠️ 注意：這一組 fixture 算出來的 62.0 ／ 38.0 是**真數字**，"
+            "所以正解**不是**把它從黑名單拿掉，而是把格式改回「數字後面緊跟 %」。")
 
 
 def test_the_form_block_is_not_grey():
@@ -1211,6 +1473,98 @@ def test_the_page_never_reaches_into_the_data_layer():
         + "\n客戶方針第 2 條：UI 只讀對接既有 Service，取不到就誠實灰態，**不反向修底層**。")
 
 
+#: ⭐ **`ui.helpers.portfolio` 底下唯一具名豁免的模組**（2026-09-06 接線批新增）。
+#:
+#: ## 為什麼要開這個洞（三條**實測**依據，不是「我覺得它應該算純函式」）
+#:
+#: 1. **它是純函式，不是 UI。** 全檔 import 只有 `typing.Optional` 與一行
+#:    **函式內** `from ui.helpers.session import INITIAL_SESSION_STATE`（取預設值）——
+#:    **零 `streamlit`、零 IO、零 `repositories`**。由
+#:    :func:`test_the_named_exemption_is_still_a_pure_ssot` **每次跑都重新查證**。
+#: 2. **它是核心／衛星的全站唯一真相。** 該檔 docstring 自陳存在理由是收掉
+#:    「同一頁 4 處各算各的、3 種定義、2 種目標值」；`services/health/asset_class.py`
+#:    就地註解也指著它。它有兩個專屬測試檔（`test_portfolio_allocation.py` /
+#:    `test_core_satellite_single_verdict.py`）。
+#: 3. **`services/**` 沒有替代品。** 實測 `git grep -n "portfolio_core_pct|
+#:    summarize_core_satellite|get_core_target_pct" origin/main -- 'services/'`
+#:    只命中 `services/health/asset_class.py` 的**註解**（它自己也是指回這一支）。
+#:    唯一名字相近的 `services/policy_advisor_service.py::recommend_policy` 是
+#:    **另一把尺**（單一保單級／不看 `policy_tier`／target 寫死 75），
+#:    接了會得到「名字對、意思錯」的比例 —— 由
+#:    :func:`test_the_page_does_not_use_the_look_alike_advisor` 明文擋住。
+#:
+#: ## ⚠️ 這個豁免的**射程與未驗狀態**，據實寫明（`CLAUDE.md §-2` 規則 6）
+#:
+#: 本守衛原本的判準是子字串 `"ui.helpers.portfolio" in _m`，它**同時**罩住
+#: 兩種東西：真正的舊 ④ UI 區塊（`policy_admin_section.py` 會渲染畫面）與
+#: 這一支純函式 SSOT。本次**只把後者具名放行，前者一個字都沒放寬**。
+#: ⛔ **「`allocation.py` 到底會不會跟著舊 ④ 一起被拔除」本組沒有查證、也不宣稱** ——
+#:    那取決於一個還沒發生的 scope 決定（`CLAUDE.md §8.4` step 4：範圍屬客戶／總管）。
+#:    本組的判斷是「不會，因為拔了它核心／衛星就沒有真相源了」，
+#:    但那是**論證不是事實**，已在 PR 描述具名回報請總管覆核。
+#:    若總管認定它確實在拔除名單內，**請推翻本豁免並把核心／衛星那一格退回灰態** ——
+#:    退回的成本只有一格，遠低於留一條會斷頭的委派。
+_ALLOC_SSOT: str = "ui.helpers.portfolio.allocation"
+
+
+def test_the_named_exemption_is_still_a_pure_ssot():
+    """⭐ 具名豁免的**自我巡邏**：`allocation.py` 一旦不再是純函式，本條當場轉紅。
+
+    ## 這條存在的理由（比它擋的東西更重要）
+
+    :data:`_ALLOC_SSOT` 是本檔在一條既有守衛上開的**唯一一個洞**。
+    一個「開了就沒人再看」的豁免，就是 `CLAUDE.md §8.2.A.0` 規則 5 點名的那種
+    **把違憲寫成合憲**：豁免當下的理由成立，之後那個檔案變成什麼樣沒有人知道。
+    → 所以豁免的**前提**（它是純函式 SSOT）本身要被釘成斷言，而不是寫在註解裡自律。
+
+    ⚠️ **本條讀的是被豁免那個檔案的原始碼，不是本頁的。** 它會因為**別人**改壞
+    `allocation.py` 而轉紅 —— 那正是預期行為：那一刻本頁的豁免就不再成立。
+
+    ⛔ **守不到什麼**：它只看 import。`allocation.py` 若改成用 `__import__("streamlit")`
+    或在函式內組字串動態載入，本條看不到（同本檔其餘 AST 守衛的既有射程）。
+    """
+    _src = (ROOT / "ui" / "helpers" / "portfolio" / "allocation.py")
+    assert _src.exists(), f"具名豁免指向一個不存在的檔案：{_src}"
+    _mods = _imported_modules(ast.parse(_src.read_text(encoding="utf-8")))
+    _dirty = [_m for _m in _mods
+              if _m.split(".")[0] in ("streamlit", "repositories", "infra",
+                                      "requests", "httpx", "yfinance", "gspread",
+                                      "urllib", "bs4", "feedparser", "pandas")]
+    assert not _dirty, (
+        f"{_ALLOC_SSOT} 不再是純函式 SSOT，它現在 import 了：{_dirty}\n"
+        "本頁對它的具名豁免（`_ALLOC_SSOT`）建立在「它是零 IO、零 streamlit 的純函式」"
+        "這個前提上 —— 前提沒了，豁免就該收回，核心／衛星那一格退回灰態。")
+
+
+def test_the_page_does_not_use_the_look_alike_advisor():
+    """⛔ **名字對、意思錯的那一個**：`policy_advisor_service` 不准出現在本頁。
+
+    `services/policy_advisor_service.py::recommend_policy` 也吐一個叫 `core_pct`
+    的數字，接起來畫面上**看不出任何異狀** —— 但它是用另一把尺量的（三處都實測過）：
+
+    ====================== ================================ ==============================
+    項目                    `recommend_policy`               本頁用的 SSOT
+    ====================== ================================ ==============================
+    範圍                    **單一保單**內的基金              **整個組合**
+    核心／衛星怎麼分         只看 `is_core`（名稱關鍵字啟發）  **`policy_tier` 優先**，缺才退
+    目標值哪來              參數預設**寫死 75.0**             session `portfolio_core_pct`
+    ====================== ================================ ==============================
+
+    ⚠️ 第三欄那個「碰巧一致」特別陰險：session 的預設值**也是 75**
+    （`ui/helpers/session.py`），所以**在預設情況下兩者算出來一模一樣** ——
+    使用者一旦把滑桿拉到別的值，這一格就會安靜地繼續用 75。
+    `PHASE1_UX_AUDIT_PROPOSAL.md` 就地記著這一條：「`portfolio_core_pct` 75%
+    （**碰巧一致，無機制保證**）」。
+
+    ⛔ 這正是派工單點名的那個坑：**接一個名字對、語意錯的來源，比留白更糟。**
+    """
+    _bad = [_m for _m in _imported_modules(_tree()) if "policy_advisor" in _m]
+    assert not _bad, (
+        "本頁 import 了 `policy_advisor_service`：" + ", ".join(_bad)
+        + "\n它的 `core_pct` 是保單級、不看 `policy_tier`、目標寫死 75 —— "
+        "與本頁「整個組合 vs 使用者自己設的目標」不是同一件事。")
+
+
 def test_the_page_does_not_delegate_to_the_old_tabs():
     """⛔ 不 import 線框「從哪裡搬來」列的那幾個舊檔，也不 import 已經住在 ④ 的換股顧問。
 
@@ -1219,13 +1573,15 @@ def test_the_page_does_not_delegate_to_the_old_tabs():
     「有效期到舊 tab 整批拔除為止」—— **本頁一條都沒有，而且要維持這樣。**
     """
     _bad = [_m for _m in _imported_modules(_tree())
-            if _m.startswith("ui.tab")
-            or "fund_grp_health" in _m
-            or "ui.helpers.portfolio" in _m
-            or "portfolio_perf" in _m]
+            if (_m.startswith("ui.tab")
+                or "fund_grp_health" in _m
+                or "portfolio_perf" in _m
+                or ("ui.helpers.portfolio" in _m
+                    and not _m.startswith(_ALLOC_SSOT)))]
     assert not _bad, (
         "本頁委派了舊 ④ 的來源檔：" + ", ".join(_bad)
-        + "\n舊實作會被整批拔除；本頁一律自己畫完。")
+        + "\n舊實作會被整批拔除；本頁一律自己畫完。"
+        + f"\n（唯一具名豁免：{_ALLOC_SSOT} —— 見 `_ALLOC_SSOT` 的長註）")
 
 
 def test_the_page_never_renders_the_switch_advisor_section():
@@ -1286,9 +1642,13 @@ def test_holdings_filters_out_the_not_yet_loaded_and_the_failed():
             _st.session_state.pop("portfolio_funds", None)
 
 
-@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded", "priced"])
 def test_no_block_silently_renders_a_system_error(kind: str):
-    """⛔ 三種 session 形狀下，**都不得**有任何區塊掉進 `safe_section()` 的紅框。
+    """⛔ **四**種 session 形狀下，都不得有任何區塊掉進 `safe_section()` 的紅框。
+
+    ⚠️ **2026-09-06 增列 `"priced"`**：核心／衛星那一格接上真資料之後，
+    「有本金」是**唯一會真的走進計算分支**的形狀 —— 只跑前三種的話，
+    那條新路徑上任何例外都不會被本條看到。
 
     ## 這條擋的是一種「測起來會綠、實際壞掉」的形狀
 

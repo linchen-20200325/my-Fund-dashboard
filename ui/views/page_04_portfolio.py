@@ -3,6 +3,48 @@
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；每一塊的真內容**分批填**。
 
+2026-09-06 接線批：**六塊裡接上一塊，另外四塊的「為什麼還沒接」全部查清楚並就地寫死**
+--------------------------------------------------------------------------------
+本批的產出**不是**「接了幾塊」，是「**每一塊的狀態都變成可查證的**」。逐塊如下：
+
+===================================== ==========================================
+區塊                                    本批狀態
+===================================== ==========================================
+核心 ／ 衛星現況 vs 建議                 ✅ **接上真資料**（:func:`_render_mix`）
+再平衡試算 Form                         ✅ 骨架批就已完成，本批未動
+換股顧問                                ⬜ 灰 —— :data:`REASON_SWITCH`
+保單與扣款標的                          ⬜ 灰 —— :data:`REASON_POLICY`（**版面待客戶裁決**）
+配息月曆                                ⬜ 灰 —— :data:`REASON_DIVIDEND_CAL`（**成本，已量測**）
+交易帳本                                ⬜ 灰 —— :data:`REASON_LEDGER`
+===================================== ==========================================
+
+⭐ **四塊灰態的原因互不相同，這是本批最重要的一件事。**
+在此之前六塊共用一句「本頁分批上線，這一塊的內容還沒接上」——
+那句話對其中**三塊是假的**：換股顧問是**撞到既有的唯一渲染點**、
+保單是**兩份已拍板線框互相矛盾**、交易帳本是**線框根本沒給欄位規格**。
+只有配息月曆勉強沾得上「還沒做」，而它真正的理由是**成本**（見該常數的量測值）。
+**用一句藉口蓋住四個不同的原因，等於對使用者說了三次謊**，而且會讓下一個人
+一頭撞進那些其實卡在別處的東西。守衛：`test_every_grey_unit_states_its_own_reason`
+＋ `test_the_four_grey_reasons_are_actually_different`。
+
+⚠️ **本批查了、但決定「不接」的東西，一併登記（不寫下來就等於沒查）**：
+
+- **配息月曆的資料其實拿得到，而且不必連網** —— 已載入持倉的 `dividends` 就在
+  session 裡（`ui/helpers/portfolio/load.py` 寫入），`services.dividend_calendar.
+  build_month_calendar` 是零 IO 純函式。**卡住它的是成本不是來源**，數字見
+  :data:`REASON_DIVIDEND_CAL`。
+- **交易帳本的資料也拿得到** —— `st.session_state["t7_ledgers"]`（舊 ④ 的 T7
+  進場時由雲端還原）。**卡住它的是「要顯示哪幾欄」**，那是客戶 gate。
+- ⛔ **兩者都不是「沒有來源」。** 下一批不要再從頭找一次來源。
+
+⚠️ **一個本批做出來、但總管有權推翻的判斷**（`CLAUDE.md §-2` 規則 6）：
+核心／衛星的唯一真相 `ui/helpers/portfolio/allocation.py` 落在本頁既有守衛
+「不得委派舊 ④ 來源檔」的**子字串**射程內（`"ui.helpers.portfolio" in _m`）。
+本批**把它具名放行、其餘一個字都沒放寬**，並補了一條會自己巡邏的守衛
+（`test_the_named_exemption_is_still_a_pure_ssot`：那支一旦 import streamlit／IO
+就轉紅）。**「它到底會不會跟舊 ④ 一起被拔除」本組沒有查證、也不宣稱** ——
+若總管認定它在拔除名單內，請推翻本豁免並把這一格退回灰態（成本只有一格）。
+
 整頁骨架 —— 取自已核准線框 `docs/wireframes/ia-wireframe.html` 的 **Tab 04**
 ------------------------------------------------------------------------------
 
@@ -318,9 +360,99 @@ def switch_block_label() -> str:
     return section_label("switch")
 
 
-#: 本批共用的灰態理由。**只有一句話**，因為它會出現在五個地方，
-#: 五個地方各寫一句就是五份會各自漂移的真相源（§2.1）。
+#: 灰態的**共用前綴** —— 只描述「狀態」，不描述「原因」。
+#: ⚠️ **2026-09-06 語意變更（接線批）**：它原本是「本批共用的灰態理由」，五塊共用一句。
+#: 現在每一塊的**原因各不相同而且都已經查清楚了**（見 :data:`_GREY_WHY`），
+#: 於是它降格成前綴：**狀態共用一句、原因各寫各的**。
+#: ⛔ **為什麼不乾脆讓每塊各寫一整句**：這一句是「本頁分批上線」這個事實的唯一真相源，
+#:    五處各寫一次就是五份會各自漂移的文案（§2.1）。**共用的是不會變的那一半。**
 _PENDING_NOTE: str = "本頁分批上線，這一塊的內容還沒接上"
+
+#: 每一塊灰態的**真實原因**，接在 :data:`_PENDING_NOTE` 後面。
+#:
+#: ⭐ **這張表是本批最重要的產出之一，理由寫在這裡**：接線批真正危險的不是「少接一塊」，
+#: 是**用一句放諸四海皆準的藉口蓋住四個完全不同的原因**。四塊之中只有一塊
+#: （:data:`BLOCK_DIVIDEND_CAL`）的原因勉強算「還沒做」；另外三塊分別是
+#: **撞到既有的唯一渲染點**、**線框自己打架**、**線框根本沒給規格** ——
+#: 全都不是「資料還沒接」。寫成同一句，等於對使用者說了三次謊。
+#:
+#: ⚠️ **鍵是「單位名」**（`_units()` 切出來的那個名字），值是接在前綴後的原因子句。
+#: `switch` 那一塊的鍵走 SSOT（:func:`switch_block_label`），不抄字面。
+#: 換股顧問：**不是沒做，是不能在這裡做第二次。**
+#: `tests/test_ia_switch_advisor_moved_to_portfolio.py::`
+#: `test_switch_advisor_renders_only_from_the_portfolio_tab` 釘住它的渲染點**恰好一個**
+#: （實測 `EXPECTED_RENDER_SITE == "ui/tab3_portfolio.py::render_portfolio_tab"`），
+#: 本頁再畫一次會讓那條全域守衛當場轉紅，線上還會撞 widget key `switch_advise_btn`。
+#: ⚠️ 它同時還缺兩份本頁拿不到的輸入（實測 `services/switch_advisor.py::advise_switches`
+#: 的兩個必要參數）：**選股池**（`repositories.pool_repository.list_pool`，要 OAuth 往返
+#: Google Sheets，本頁禁 import `repositories/**`）與**逐檔基準線**
+#: （`underperformance_by_code`，要 L3 逐檔算 benchmark）。
+#: ⛔ 兩個理由**各自獨立成立**，不要只記其中一個 —— 就算哪天渲染點的限制解除了，
+#:    取數那一半仍然擋著。
+REASON_SWITCH: str = (
+    "（把 02 診斷出的問題檔配對到 03 的候選標的）。"
+    "原因不是資料：這一塊在目前線上的 ④ 已經有唯一的渲染點，本頁再畫一次會撞同一個按鈕；"
+    "它另外還需要雲端選股池與逐檔基準線，兩者本頁都拿不到")
+
+#: 保單與扣款標的：**原因是版面，不是資料。**（總管 2026-09-06 裁決 2）
+#: ⛔ **這一句刻意不說「資料還沒接」** —— 那是假的原因。真正卡住的是
+#: `docs/wireframes/ia-wireframe.html`（畫成三欄網格裡的一張卡）與
+#: `docs/wireframes/policy-split-wireframe.html`**決定 E**（「保單明細表**維持全寬**，
+#: 不塞進三欄」）**對同一塊版面給了相反的規定**，而兩份都是客戶拍板過的線框。
+#: 已另派線框組產出草稿送客戶；**在客戶拍板之前，這一區不動工**
+#: （`CLAUDE.md §-1.5.1c` v3 §03-2 ①：版面異動一律客戶 gate）。
+#: 📌 這正是模組 docstring **未決事項 (B)** 所說的那個觸發點，現在踩到了。
+REASON_POLICY: str = (
+    "（每張保單下的基金與投入金額）。"
+    "原因不是資料，是版面：兩份都已拍板的線框對這一區給了相反的規定"
+    "（三欄網格裡的一張卡 vs 維持全寬的明細表），已送客戶裁決，拍板前不動工")
+
+#: 配息月曆：**推得出來，但貴到必須先有一道開關。**
+#: 本組實測 `services.dividend_calendar.build_month_calendar`（純 CPU、零 IO，
+#: 持倉的 `dividends` 已經在 session 裡，不必連網）：成本隨**配息史長度**超線性成長 ——
+#: 6 筆 2.5 ms／12 筆 37 ms／24 筆 156 ms／36 筆 275 ms（單檔，量測日 2026-09-06）。
+#: 一個持有 20 檔月配、各三年史的組合 ≈ **3 秒**，而 Streamlit **每次互動都會重跑整頁**。
+#: ⚠️ 早期量到的「約 5 ms／檔」是**短路路徑**（無配息 / 陳舊 → 直接落 excluded），
+#:    **資料越完整反而越慢**：會出事的正好是資料最好的那個使用者。
+#: → 要接上必須先加一道 Checkbox Gate（同 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的
+#:   總管裁決：在 `ui/**` 自建 `@st.cache_data` 會替 `CLAUDE.md` 的 `EX-UICACHE-1`
+#:   新增一個成員，而那個例外的成立**繫於尚未裁決的** `P-UIGSPREAD-1`）。
+#: ⛔ **本批不加那道開關**：gate 是新的視覺元件，而線框畫的是一張**沒有開關**的卡。
+#:    「要不要為它多一個開關」是版面問題 → 客戶 gate，與 :data:`REASON_POLICY` 同一道。
+#: ⚠️ **UI 文案刻意不寫那幾個毫秒數**（`CLAUDE.md §8.2.A.0` 規則 4：會漂移的量測值
+#:    不寫死）；數字留在這裡並標了量測日，要用請現場重量。
+REASON_DIVIDEND_CAL: str = (
+    "（預估除息日與誤差天數）。"
+    "原因不是沒有來源：推估算得出來，但它很花時間，而這一頁每次互動都會整頁重跑；"
+    "要接上得先多一道「按了才算」的開關，那是版面異動，得先過客戶那一關")
+
+#: 交易帳本：**線框沒有給欄位規格。**
+#: 線框對它只寫了**內容類型**（買賣紀錄／成本／已實現損益／對帳），沒有像 Tab 02
+#: 那樣逐欄列舉；憑印象補一份欄位表就是自己發明規格，而**欄位增減是客戶 gate**
+#: （`CLAUDE.md §-1.5.1c` v3 §03-2 ①）。
+#: ⚠️ **資料本身其實搆得到**（`st.session_state["t7_ledgers"]`，舊 ④ 的 T7 進場時
+#: 由雲端還原），所以「沒有資料」**不是**這一塊的原因 —— 卡住的是「要顯示哪幾欄」。
+#: ⛔ 這一條由 `test_the_ledger_invents_no_column_list` 機械釘住（禁止出現名字帶
+#:    `COLUMN` 的模組層常數），本說明只是把**為什麼**寫下來。
+REASON_LEDGER: str = (
+    "（買賣紀錄、成本、已實現損益與對帳）。"
+    "原因不是沒有資料：線框沒有給這張表的欄位規格，補一份等於自己發明，"
+    "而欄位要列哪幾個是客戶要拍板的事")
+
+
+def grey_why() -> dict[str, str]:
+    """單位名 → 該塊灰態的**真實原因**子句。
+
+    做成函式而不是 module 層 dict，理由與 :func:`switch_block_label` 相同：
+    `switch` 那個鍵要走 SSOT（`section_label("switch")`），而 SSOT 的
+    §1 Fail Loud 必須發生在**渲染當下**，不是 import 期。
+    """
+    return {
+        switch_block_label(): REASON_SWITCH,
+        BLOCK_POLICY: REASON_POLICY,
+        BLOCK_DIVIDEND_CAL: REASON_DIVIDEND_CAL,
+        BLOCK_LEDGER: REASON_LEDGER,
+    }
 
 
 def _pending_where(block: str) -> str:
@@ -429,20 +561,116 @@ def _render_no_holdings() -> None:
     )
 
 
+#: 「現況」那一組數字的抬頭。
+MIX_CURRENT_LABEL: str = "現況"
+#: 「目標」那一組數字的抬頭。
+#: ⛔ **刻意是「目標」不是「建議」**（總管 2026-09-06 裁決 1）。區塊名
+#: :data:`BLOCK_MIX` 照線框逐字寫著「vs **建議**」，但這個數字**不是系統算出來的建議** ——
+#: 它是使用者自己在 ④ ⚙️ 組合設定裡拉的那根滑桿（`portfolio_core_pct`）。
+#: 把使用者自己設的值標成「建議」，等於系統冒名替他背書一個他自己填的數字（§1）。
+#: **抬頭說真話、區塊名照線框**，兩者的落差由 :data:`MIX_TARGET_PROVENANCE` 就地講明。
+MIX_TARGET_LABEL: str = "你設定的目標"
+#: 「差距」那一行的抬頭（線框：「這裡只呈現差距與所需動作」）。
+MIX_GAP_LABEL: str = "差距"
+
+#: ⭐ **裁決 1 要求逐字出現在畫面上的那句話。**
+#: 線框把這一格畫成「現況 → **建議**」，並在 chip 上寫「**與 01 同源**」——
+#: 也就是原本設想「建議值來自 ① 的資產水位」。
+#: ⛔ **① 給不出這個數字，這是實測不是推論**：`ui/views/page_01_macro.py` 的模組
+#: docstring 第 63~66 行逐字寫著「『建議資產水位』為什麼是**股／債／現金**，
+#: 不是核心／衛星」，其資料源 `services.allocation_ladder.allocation_from_composite`
+#: 的回傳欄位就是 `{equity, bond, cash}` —— **整條鏈上沒有核心／衛星這個維度**。
+#: → 於是這一格改用**使用者自己設定的目標**，並且**在畫面上說出它的出身**。
+#: ⛔ **絕對不准自己算一個「建議核心比例」** —— 那會是一個長得像系統建議、
+#:    實際上憑空生出來的數字，而使用者會拿它去調真的部位。
+MIX_TARGET_PROVENANCE: str = (
+    f"「{MIX_TARGET_LABEL}」是你自己在組合設定裡設定的值，不是系統算出來的建議 —— "
+    "本頁只把它跟現況擺在一起看差距。")
+
+
+def _pct_text(value: float) -> str:
+    """把 0~100 的百分比畫成字。**一位小數 ＋ 緊接著的 `%`。**
+
+    ⚠️ **格式本身是一條 §1 防線，不是排版偏好。** `summarize_core_satellite` 的
+    分子分母都是使用者填的金額，所以**真實組合完全可能剛好算出 62.0 ／ 38.0** ——
+    那正是線框拿來示範版面的那一組示意值（實測：`invest_twd` 620000 ／ 380000
+    → `core_pct == 62.0`）。
+    只要中間夾著 `%` 與抬頭，畫面上就不會出現 `tests/…::_PINNED_FAKE_VALUES`
+    釘的那個「數字 ／ 數字」形狀，**真數字不會被誤判成假數字，假數字也不會偷渡成真的**。
+    ⛔ 不要「順手」改成 `f"{a} ／ {b}"` —— 那一改，一個**真實**的 62/38 組合會讓
+       示意值黑名單轉紅，而修法會變成放寬黑名單。
+    """
+    return f"{value:.1f}%"
+
+
 def _render_mix() -> None:
-    """區塊 1｜核心 ／ 衛星現況 vs 建議（**全寬**）。本批灰態。
+    """區塊 1｜核心 ／ 衛星現況 vs 建議（**全寬**）。**2026-09-06 接上真資料。**
 
     線框：「現況 62 ／ 38　→　建議 70 ／ 30／建議值來自 01 的資產水位，
     這裡只呈現差距與所需動作。」chip：「全寬」「與 01 同源」。
 
-    ⛔ **不畫那組比例。** 線框裡的數字是**示意**，不是資料。
-       填一個看起來合理的核心／衛星比例正是 §1 點名最危險的那種造假 ——
-       它會被使用者拿去調整真的部位，而且完全看不出是假的。
-    ⚠️ 「與 01 同源」這個 chip 講的是**下一批的取數約束**（建議值必須來自 ① 的資產水位，
-       不得在本頁另算一份），本批沒有取數，故只登記不實作。
+    來源（三個問題逐一回答，`CLAUDE.md §1`）
+    ----------------------------------------
+    1. **數字從哪來** —— `ui/helpers/portfolio/allocation.py`：
+       `summarize_core_satellite()`（現況）＋ `get_core_target_pct()`（目標）。
+       該模組的 docstring 自陳是「核心 / 衛星配置的**唯一真相**」，
+       而且是為了收掉「同一頁 4 處各算各的、3 種定義、2 種目標值」才存在的。
+    2. **它算的是不是這一格講的那件事** —— 是。分母是 **Σ 投入本金**（金額加權，
+       不是檔數）、分類**`policy_tier` 優先**（使用者在 Sheet 明示的級別），
+       目標**一律讀 `portfolio_core_pct`**。這正是「核心／衛星現況 vs 目標」。
+       ⛔ **對照組（差一點就接錯的那個）**：`services/policy_advisor_service.py::`
+       `recommend_policy` 也吐一個叫 `core_pct` 的數字 —— **名字對，意思錯**：
+       它是**單一保單**級（不是整個組合）、只看 `is_core` **不看 `policy_tier`**、
+       而且 `target_core_pct` **寫死預設 75.0** 不讀 session
+       （`PHASE1_UX_AUDIT_PROPOSAL.md` 就地記著這一條「碰巧一致，無機制保證」）。
+       接了它會得到一個「看起來合理、但用另一把尺量出來」的比例。
+    3. **算不出來時它回什麼** —— 回 `None`，**不是 0**。該函式的 docstring 逐字寫著
+       「缺資料時誠實回 None，不捏造 0；CLAUDE.md §1」，並另外吐一個
+       `is_amount_weighted` 旗標。→ 本函式據此走 :func:`not_ready`，**不畫 0%**。
+
+    ⚠️ **「與 01 同源」這個 chip 沒有落地，而且是刻意的** —— 見
+    :data:`MIX_TARGET_PROVENANCE`：① 整條鏈只給股／債／現金，給不出核心／衛星。
+    這一格因此改用**使用者自己的目標**並在畫面上說明出身。**登記，不假裝已達成。**
     """
-    not_ready(f"{_PENDING_NOTE}（目前的核心／衛星比例，以及它與建議值的差距）。",
-              where=_pending_where(BLOCK_FORM))
+    # 唯一真相：核心／衛星的分類、分母與目標值全部走這一支（理由見本函式 docstring）。
+    from ui.helpers.portfolio.allocation import (
+        format_core_satellite_caption,
+        get_core_target_pct,
+        summarize_core_satellite,
+    )
+
+    _target = get_core_target_pct(st.session_state)
+    _summary = summarize_core_satellite(_holdings(), target_pct=_target)
+    _core = _summary.get("core_pct")
+
+    if _core is None:
+        # 一檔本金都沒填 → **沒有比例可言**。⛔ 這裡不畫 0%／不畫甜甜圈／不猜 ——
+        # 「0% 核心」與「不知道核心佔多少」在畫面上長得一樣，但意思差到相反（§1）。
+        # 缺什麼由 SSOT 的 `format_core_satellite_caption()` 講（它知道幾檔沒填、
+        # 級別是 Sheet 給的還是關鍵字猜的），本檔不另寫一份會漂移的說明。
+        # 去哪補 = 「➕ 加入與管理基金」——**這一條指路是真的有效的**
+        # （同空狀態那一則，由 AppTest 實跑釘住），與四塊灰態那種「指了也沒用」不同。
+        not_ready(format_core_satellite_caption(_summary),
+                  where=where_to_find("pf_add"))
+        return
+
+    _sat = _summary.get("sat_pct")
+    _diff = _summary.get("diff_pct")
+    st.markdown(
+        f"**{MIX_CURRENT_LABEL}**　核心 {_pct_text(_core)}　"
+        f"衛星 {_pct_text(_sat)}　→　"
+        f"**{MIX_TARGET_LABEL}**　核心 {_pct_text(_target)}")
+    if _diff is not None:
+        # 「差距與所需動作」的**差距**那一半（線框逐字）。
+        # ⛔ **所需動作那一半本批不畫** —— 要算「該搬多少錢」得先知道可動用金額，
+        #    而那是 Form 的輸入；把它寫死或猜一個，就是替使用者決定他的錢。
+        _gap = "剛好落在目標上" if abs(_diff) < 0.05 else (
+            f"核心比目標多 {_pct_text(abs(_diff))}" if _diff > 0
+            else f"核心比目標少 {_pct_text(abs(_diff))}")
+        st.markdown(f"**{MIX_GAP_LABEL}**　{_gap}")
+    # 出身 ＋ 分母／級別來源／幾檔沒填本金：兩句都不是本檔自己寫的結論。
+    st.caption(MIX_TARGET_PROVENANCE)
+    st.caption(format_core_satellite_caption(_summary))
 
 
 def _render_rebalance_form() -> None:
@@ -497,14 +725,11 @@ def _render_action_cards() -> None:
        不得從清單裡消失 —— 消失會被讀成「這檔本月不配息」。**登記，本批不實作。**
     """
     _where = _pending_where(BLOCK_FORM)
+    _why = grey_why()
     render_cards([
-        {"title": switch_block_label(), "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（把 02 診斷出的問題檔配對到 03 的候選標的）。",
-         "where": _where},
-        {"title": BLOCK_POLICY, "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（每張保單下的基金與投入金額）。", "where": _where},
-        {"title": BLOCK_DIVIDEND_CAL, "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}（預估除息日與誤差天數）。", "where": _where},
+        {"title": _t, "state": STATE_NOT_READY,
+         "note": f"{_PENDING_NOTE}{_why[_t]}。", "where": _where}
+        for _t in (switch_block_label(), BLOCK_POLICY, BLOCK_DIVIDEND_CAL)
     ])
 
 
@@ -532,7 +757,7 @@ def _render_ledger() -> None:
     #    `empty_missing`（「本頁分批上線，這一塊的內容還沒接上」）**互相矛盾**。
     #    使用者讀完舊標題會以為系統查過他的帳本、結論是空的 —— 那是造假。
     wide_table([], empty_title="交易帳本這一塊還沒接上",
-               empty_missing=f"{_PENDING_NOTE}（買賣紀錄、成本、已實現損益與對帳）。",
+               empty_missing=f"{_PENDING_NOTE}{grey_why()[BLOCK_LEDGER]}。",
                empty_where=_pending_where(BLOCK_FORM))
 
 
