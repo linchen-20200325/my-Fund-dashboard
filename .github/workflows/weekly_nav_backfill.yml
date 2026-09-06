@@ -45,3 +45,21 @@ jobs:
         run: >
           python scripts/weekly_nav_backfill.py
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      # ── 失敗推播（2026-09-06 P0）───────────────────────────────────────────
+      # 事故：這條排程 09-03/04/05 連三天紅燈掛在 Actions 頁上四天沒人發現，
+      # 使用者是自己打開 Google Sheet、看到淨值停在 09-01 才知道的。
+      # 本 repo 在此之前 8 個 workflow **沒有任何一個**帶 `if: failure()`。
+      # ⚠️ `if: failure()` 只在本 job 前面的步驟失敗時才跑；它**不改變**
+      #    上面任何一步的行為，也不會把失敗吃掉（job 仍然是紅的）。
+      # ⚠️ 它涵蓋不到的：run 整個沒被排到、runner 掛掉、workflow 被 cancel。
+      #    那幾種要靠外部心跳監控，不在本批範圍。
+      - name: 失敗時推 LINE 通知（排程紅燈不再沒人知道）
+        if: failure()
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: >
+          python scripts/notify_workflow_failure.py
+          --title "每日 NAV 自動補齊 (nav_history)"
