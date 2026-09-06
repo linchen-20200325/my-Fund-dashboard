@@ -477,7 +477,11 @@ def _clean_holdings(raw: Any) -> list[dict]:
     鏡像判定裡改用「strip **後**非空」。**本檔採同一條判準，套在自己的輸入上。**
 
     ⚠️ **修的是「我餵進去的東西」，不是 SSOT** —— 本批的檔案邊界只有兩個檔，
-    `services/**` 一行都不准動（也不該由 UI 端去改一個 8 個 caller 共用的計算 SSOT）。
+    `services/**` 一行都不准動（也不該由 UI 端去改一個多處共用的計算 SSOT：實測
+    `origin/main` 上有 **4 個 production 呼叫點** —— `ui/components/mutual_exclusion.py`、
+    `ui/helpers/fund_grp_health/ai.py`、`ui/helpers/fund_grp_health/correlation.py`、
+    `ui/tab3_portfolio.py`，量測日 2026-09-06）。
+    ⛔ **那 4 處都沒有這道防線** —— 本檔擋住的只有本頁自己，**不是全站**。
     餵一份「名稱其實是空白」的持股進去本來就是 garbage-in；把它擋在自己門口
     既不改別人的行為，也不需要別人先修好。
     ⚠️ **被剔掉的檔會被算進「N 檔缺持股資料」並顯示出來**，不是靜默縮小比對範圍
