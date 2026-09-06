@@ -921,24 +921,18 @@ _NO_POOL_WRITE_FILES = ("repositories/fund/sources.py",
 #: 規則對它們**不轉紅**,但它們的存在是**明寫在檔案裡**的,不會無聲消失。
 #: ⛔ 要新增一筆,必須寫清楚:**誰在爭什麼**、**誰來裁**、**裁完之後怎麼移除**。
 _PENDING_ARBITRATION: "dict[str, str]" = {
-    "repositories/fund/sources.py": (
-        "2026-09-06:`_src_morningstar_nav` 內 `set_secid as _cache_secid`、"
-        "`_src_yahoo_finance_nav` 內 `set_secid as _wb_secid` 兩處回寫,"
-        "**兩組獨立稽核結論相反**,已送第三組仲裁,爭點只有一個:"
-        "**單基金查詢頁走不走得到那兩支**。\n"
-        "本組(F3)實測到的:(a) 那兩個呼叫是活的、不是註解(別名感知 AST);"
-        "(b) `set_secid` → `store.upsert` → `Worksheet.update` 是真寫入"
-        "(離線 tripwire 實跑,見第 6 節同組假件);"
-        "(c) 靜態呼叫鏈逐跳讀 code 確認得通,gate 是 "
-        "`0 < span < 300 and (is_insurance_code or _pool_secid_or_isin(code))`。\n"
-        "本組**沒有**實測到的:端對端**執行期**重現 —— "
-        "`repositories.fund.sources` module-load 需要 pandas/bs4/requests,"
-        "本組環境沒有,且**刻意不造假件替代**(假的 pandas 會讓結論變成假的)。\n"
-        "⛔ 依派工指示「重現不出來就不要切」,本組**未切除**這兩處。\n"
-        "**移除條件**:仲裁判定可達 → 切除兩處回寫、刪掉本筆登記(規則自動接管);"
-        "判定不可達 → 仍應刪掉本筆並改為在此註明「不可達,故無須切除」,"
-        "**不要讓一筆待仲裁豁免無限期留著**(§8.3.P 前言:待查證沒有出口 ＝ 實質永久豁免)。"
-    ),
+    # ── 空的。**機制刻意留著**,下一次出現「兩組結論相反」時直接用,不必重寫。──
+    #
+    # ⚠️ 2026-09-06 曾有一筆:`repositories/fund/sources.py`
+    #    (`_src_morningstar_nav::_cache_secid` / `_src_yahoo_finance_nav::_wb_secid` 兩處回寫)。
+    #    **已依該筆自己寫的移除條件移除**(「判定可達 → 切除兩處回寫、刪掉本筆登記,
+    #    規則自動接管」)—— 第三組仲裁判定**走得到**,兩處已切除,
+    #    `sources.py` 自此受 `test_no_pool_write_symbol_is_callable_on_a_query_path` **正式管轄**。
+    #    仲裁依據:離線寫入哨兵從 `fetch_fund_from_moneydj_url` 往下實跑,
+    #    `ws.update('A2:J2')` 當場觸發**且函式正常回傳、不拋例外**(production 靜默)。
+    #
+    # ⛔ 要新增一筆,必須寫清楚:**誰在爭什麼**、**誰來裁**、**裁完之後怎麼移除** ——
+    #    沒有移除條件的豁免就是永久豁免(§8.3.P 前言)。
 }
 
 
@@ -1056,9 +1050,9 @@ class TestQueryPathNeverWritesBackToThePool:
     @pytest.mark.parametrize("rel", _NO_POOL_WRITE_FILES)
     def test_no_pool_write_symbol_is_callable_on_a_query_path(self, rel):
         hits = _pool_symbol_calls(rel, _POOL_WRITE_SYMBOLS)
-        if rel in _PENDING_ARBITRATION:
+        if rel in _PENDING_ARBITRATION:      # 2026-09-06 起這張表是空的(見該處註)
             pytest.skip(f"{rel} 待仲裁(見 _PENDING_ARBITRATION):"
-                        f"目前 {len(hits)} 處,由 test_pending_arbitration_* 兩條盯著")
+                        f"目前 {len(hits)} 處,由 test_pending_arbitration_* 盯著")
         assert not hits, (
             f"{rel} 在查詢鏈上回寫選股池:\n  "
             + "\n  ".join(f"{rel}:{ln} → {orig}()（寫成 {shown}）" for orig, shown, ln in hits)
@@ -1083,18 +1077,25 @@ class TestQueryPathNeverWritesBackToThePool:
             assert "仲裁" in why and "移除條件" in why, (
                 f"{rel} 的豁免理由不完整(要有爭點與移除條件):{why[:80]}…")
 
-    def test_the_pending_write_sites_do_not_multiply(self):
-        """⭐ 待仲裁 ≠ 放行:**處數不准增加**。
+    def test_the_arbitrated_write_sites_are_gone(self):
+        """⭐ 2026-09-06 仲裁後:`repositories/fund/sources.py` 的回寫必須是 **0 處**。
 
-        2026-09-06 量測:`repositories/fund/sources.py` 有 **2** 處
-        (`_src_morningstar_nav::_cache_secid`、`_src_yahoo_finance_nav::_wb_secid`)。
-        再多一處 → 本條轉紅。
-        ⚠️ 這個數字**會漂移**:仲裁判定可達並切除後,它會變成 0,屆時請一併刪掉本條與豁免登記。
+        ~~本條原為 `test_the_pending_write_sites_do_not_multiply`,量測 2 處、只驗「不准變多」。~~
+        **有意識的政策變更,不是漏刪**(日期 **2026-09-06** · 決策者:**客戶**,經第三組仲裁)。
+        **舊條的理由仍然成立**:在爭議未決時,「不准變多」是唯一能誠實下的斷言 ——
+        當時本組沒有端對端執行期證據,把它寫成「必須是 0」等於用一個沒驗過的前提去逼人改 code。
+        **被權衡掉的是它的強度**:仲裁已判定可達,兩處已切除,再守「≤2」就是替一個
+        已經被撤銷的政策留門。
+
+        ⚠️ 本條與上面 `test_no_pool_write_symbol_is_callable_on_a_query_path` **不重複**:
+           那條是**全體受管檔案**的通則(參數化),本條是**這兩處**的具名回歸釘 ——
+           通則若哪天被人加了豁免,本條仍然會響。
         """
         hits = _pool_symbol_calls("repositories/fund/sources.py", _POOL_WRITE_SYMBOLS)
-        assert len(hits) <= 2, (
-            f"待仲裁期間又新增了 pool 寫入(2026-09-06 量測為 2 處,現在 {len(hits)} 處):"
-            f"{[(o, s, l) for o, s, l in hits]}")
+        assert hits == [], (
+            f"`repositories/fund/sources.py` 又出現選股池回寫:{hits}\n"
+            f"2026-09-06 仲裁:查詢路徑確實走得到這裡,且寫入是**靜默**的"
+            f"(`except Exception: pass`,成功失敗都不上畫面)。客戶授權:查詢一律唯讀。")
 
     # ── 正對照:先證明這條規則看得見東西 ──────────────────────────────
 
