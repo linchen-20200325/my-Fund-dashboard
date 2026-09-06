@@ -245,6 +245,8 @@ class SheetNotProvisioned(RuntimeError):
     def __init__(self, message: str, *, where: str = "") -> None:
         super().__init__(message)
         #: 「去哪補」—— 灰態三要素之一,由 UI 端取用(不在這層決定文案的呈現方式)。
+        #: ⚠️ **刻意寫得一般化,不手抄 UI 的按鈕字** —— L1 不能 import `ui/`(§8.2),
+        #: 抄過來就是一份會各自漂移的第二真相源;精確指路由 UI 端用它自己的 SSOT 組。
         self.where = where
 
 
@@ -272,12 +274,12 @@ class GoogleSheetsPerfStore:
         except Exception as _e:                                # 分頁不存在 → 前提不足,不就地建
             raise SheetNotProvisioned(
                 f"雲端還沒有「{_WS_PERF}」這個快照分頁",
-                where="本區的「💾 存一筆今天的績效快照」按鈕(按一次就會幫你建好)",
+                where="這個區塊的存快照動作(第一次存會自動建好分頁與表頭)",
             ) from _e
         if ws.row_values(1)[: len(_HEADERS)] != _HEADERS:      # 表頭不符 → 同上,不就地補
             raise SheetNotProvisioned(
                 f"雲端「{_WS_PERF}」分頁的表頭與目前欄位定義不符",
-                where="本區的「💾 存一筆今天的績效快照」按鈕(按一次會補好表頭再寫)",
+                where="這個區塊的存快照動作(第一次存會補好表頭再寫)",
             )
         return ws
 

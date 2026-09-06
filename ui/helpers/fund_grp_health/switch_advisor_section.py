@@ -330,8 +330,14 @@ def _snapshot_control(nav_by_code: dict, weights: dict, is_equal: bool, funds: l
                                   is_equal_weight=is_equal, ccy_by_code=_ccy, fx_series=_fx)
         if _row is None:
             # ⬜ 資料不足以重建走勢 → 沒有東西可存。**不寫、不假裝寫成功**(§1)。
+            # ⚠️ 指路吃 `story_nav` SSOT,**不得手抄**:本行初版手抄了「載入 / 補抓淨值」,
+            #    而畫面上根本沒有那個字 —— CI 的
+            #    `tests/test_batch2_top_card_grid.py::test_every_where_names_something_that_exists_on_screen`
+            #    當場擋下(`（畫面上最接近的：無）`)。同檔上方的空狀態早就走 `_sl('pf_add')` 了,
+            #    本行沒跟上就是新增一條死指路。
+            from ui.helpers.story_nav import section_label as _sl_add  # noqa: PLC0415
             not_ready("目前的資料還不足以算出一筆完整的績效快照,所以沒有寫入任何東西",
-                      where=f"本頁的「載入 / 補抓淨值」,補齊各檔的每日淨值之後"
+                      where=f"本頁的「{_sl_add('pf_add')}」,補齊各檔的每日淨值之後"
                             f"再按一次「{_SNAPSHOT_BTN_LABEL}」")
             return
         append_snapshot(PerfSnapshot(**_row))

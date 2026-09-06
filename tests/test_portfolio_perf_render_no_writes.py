@@ -405,10 +405,39 @@ def _collaborators(monkeypatch) -> None:
     monkeypatch.setattr(hm, "fetch_usdtwd_frame", lambda *a, **k: (None, "test"), raising=False)
 
 
+#: 渲染路徑上所有**函式內 lazy import** 的模組。裝哨兵之前要先全部載入。
+#:
+#: ⚠️ **這不是保險起見，是一個會在 CI 上偶發、在本機永遠看不到的假紅燈。**
+#: `_disk_sentinels` 會在渲染那一小段監看 `builtins.open`（寫入模式）與 `os.replace`。
+#: 而 Python **第一次** import 一個模組時會寫 `__pycache__` —— 如果那次 import
+#: 剛好發生在哨兵窗內（渲染路徑上的 lazy import 就是這種），哨兵會記到一筆
+#: **與 Google Sheet 完全無關的磁碟寫入**，測試轉紅。
+#: 本機看不到是因為這些模組早就被別的東西載過了；CI 上有 `pytest-randomly`，
+#: 本檔可能是整個 session 第一個碰到它們的人 —— **順序一換就紅一次**。
+#: ⇒ 先載完再裝哨兵：窗內就不會有 import，也就沒有 `__pycache__` 可寫。
+_LAZY_ON_RENDER_PATH = (
+    "repositories.portfolio_perf_repository",
+    "services.portfolio_tracking",
+    "ui.helpers.portfolio_perf",
+    "ui.helpers.story_nav",
+    "ui.helpers.render_state",
+    "shared.signal_thresholds",
+    "pandas",
+)
+
+
+def _prewarm() -> None:
+    """把渲染路徑上的 lazy import 先載完（理由見 :data:`_LAZY_ON_RENDER_PATH`）。"""
+    for _name in _LAZY_ON_RENDER_PATH:
+        with contextlib.suppress(Exception):     # 本機缺 pandas/numpy → 略過，不影響斷言
+            importlib.import_module(_name)
+
+
 def _render(monkeypatch, *, rows: "list[list[str]] | None", pressed: "set[str] | None" = None
             ) -> "tuple[list[str], _Rec]":
     """裝好兩層哨兵 → 真的渲染一輪 → 回傳 (寫入紀錄, 錄影機)。"""
     trips: list[str] = []
+    _prewarm()                                   # ← 必須在裝哨兵之前，理由見該函式
     _collaborators(monkeypatch)
     store = _gs_store(rows, trips)
     monkeypatch.setattr(PR, "get_perf_store", lambda: store, raising=False)
@@ -451,6 +480,24 @@ def test_the_fake_sheet_denies_by_default():
     assert ws.get_all_values() == [list(_HEADERS)], "純讀方法應照常回值，不得被記成寫入"
     assert trips == ["worksheet.some_method_nobody_listed", "worksheet.batch_update"], (
         f"純讀方法被誤記成寫入（偽陽性）：{trips}")
+
+
+def test_prewarm_leaves_no_lazy_import_inside_the_sentinel_window():
+    """渲染路徑上的 lazy import 必須在裝哨兵**之前**就載完。
+
+    這條在守 :func:`_prewarm` 真的有效 —— 否則首次 import 寫 `__pycache__`
+    會在哨兵窗內被記成「磁碟寫入」，變成一個**與 Google Sheet 無關的假紅燈**
+    （本機永遠看不到，CI 隨機順序下才會偶發）。
+
+    突變驗證：把 `_render()` 裡的 `_prewarm()` 拿掉並清掉 `sys.modules` 中那幾個模組
+    → 本條轉紅（`sys.modules` 出現渲染前不存在的新模組）。
+    """
+    _prewarm()
+    missing = [n for n in _LAZY_ON_RENDER_PATH
+               if n not in sys.modules
+               and importlib.machinery.PathFinder.find_spec(n, sys.path) is not None]
+    assert not missing, (
+        f"`_prewarm()` 跑完後這些模組仍未載入，會在哨兵窗內首次 import：{missing}")
 
 
 def test_the_disk_sentinels_really_install_themselves():
