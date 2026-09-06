@@ -5,11 +5,27 @@
 本檔守的是**骨架的形狀**：五個區塊都在、順序對、Form 真的 gate 住下游、
 沒有持倉時走空狀態、有持倉時四塊各自誠實灰、逐檔表 9 欄逐字。
 
-⛔ **本檔不守內容對不對** —— 本批的內容**本來就還沒填**（客戶 2026-09-05：
-   骨架先上線、CI 綠、再分批填）。下一批把真內容接上時，
-   `test_every_block_is_grey_until_its_content_lands` 會**轉紅** ——
-   **那是預期的**，屆時請把它改成「真內容放行」，**不要把它放寬**
-   （① 的同型守衛就是這樣從灰態放行轉成真內容放行的）。
+⭐ **2026-09-06：真內容接上了，本檔的守法跟著換了一次方向。**
+骨架批的 `test_every_block_is_grey_until_its_content_lands` 自己就寫著
+「下一批把真內容接上時，這條會**轉紅** —— 那是預期的，屆時請把它改成
+『真內容放行』，**不要把它放寬成「有東西就好」**」。**本次照辦，並且拆成三條**：
+
+- :func:`test_deferred_blocks_stay_grey_and_say_exactly_why` —— **還沒接**的兩塊
+  （組合健康總分／衛星連續落後）必須灰，而且理由必須是**那一塊自己的**
+  （前身只驗「有沒有灰」，於是紅隊把三張卡的理由互換照樣全綠）；
+- :func:`test_wired_blocks_show_real_content_when_the_data_is_there` —— **已接上**的
+  三塊在資料齊全時**不得再是灰的**（反方向釘死，不是放寬）；
+- :func:`test_wired_blocks_go_grey_again_when_the_data_is_missing` —— 反過來，資料不齊
+  時必須誠實退回灰態，**不得把「算不出來」印成 `0 檔`**（那會被讀成「檢查過了，沒事」）。
+
+⚠️ 兩張清單（`_DEFERRED` / `_WIRED`）由
+:func:`test_the_two_tables_together_cover_every_block_exactly_once` 釘住**不重不漏** ——
+否則新增一塊卻兩張都忘了登記時，上面三條**都不會轉紅**。
+
+⛔ **本檔仍不守「數字算得對不對」**（那是 `services/**` 各自的測試在守）。
+   本檔守的是「**這個數字是不是 SSOT 算的**」——
+   :func:`test_the_numbers_on_the_cards_come_from_the_ssot` 把 SSOT 的回答換掉，
+   畫面若不跟著動就轉紅。**那比列舉「哪些字面值算捏造」強得多**（後者擋不掉裸 `72`）。
 
 ⛔ **本檔不驗瀏覽器裡的真實版面**：欄寬、窄螢幕折行、`st.form` 送出後真正的
    rerun 次數 —— 那些是 Streamlit 的執行期行為，靜態規則與 recorder 都看不到。
@@ -52,6 +68,16 @@
   `_render_filter_form()` 自己拿來當 widget 預設值，**本批沒有任何下游**。
   它是**寫給下一批的結構**，不是現在就在保護什麼。
 
+⚠️ **本批新增的三個守衛，各自守不到什麼（誠實揭露，`CLAUDE.md §-2` 規則 6）**：
+- `test_the_eating_principal_card_never_uses_the_momentum_signal` 掃的是**符號名**，
+  有人把那段滾動報酬邏輯**照抄並改名**就掃不到；
+- `test_blank_holding_names_never_become_a_perfect_match` 只擋「純空白名」這**一個**
+  已知成因。持股清單被上游截斷成 1～2 筆時，兩檔共享那一筆一樣會算出 1.0 ——
+  **那是這個指標本身的稀疏樣本問題，本批沒有解，也不假裝有解**；
+- `test_the_numbers_on_the_cards_come_from_the_ssot` 證明「畫面跟著 SSOT 走」，
+  **不證明 SSOT 算得對**，也不證明**挑對了 SSOT**（挑錯 SSOT 由上面那條專門守，
+  而它只守得住已知的那一個）。
+
 錄製法：為什麼不用 AppTest
 --------------------------
 本頁尚未接進 `app.py`（客戶明令舊 ② 不動、不接線），AppTest 走不到它。
@@ -82,11 +108,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
                            guarded_key_names, session_writes)
 
-from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
+from ui.helpers.render_state import (  # noqa: E402
+    BUSINESS_ALERT_ON_DARK, BUSINESS_ALERT_RAIL_PX, NOT_READY_MARK)
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
     HEALTH_TABLE_COLUMNS,
-    _PENDING_NOTE,
+    _uniq_by_code,
+    _LAG_PENDING_NOTE,
+    _SCORE_PENDING_NOTE,
+    _table_rows,
     render_holdings_health,
 )
 
@@ -114,6 +144,33 @@ class _Rec:
 
     def __getattr__(self, name: str):
         def _fn(*args: Any, **kwargs: Any):
+            # ⭐ `metric` 與 `dataframe` 各自拆成兩筆，**這不是美化，是為了讓
+            #    `_units()` 看得見它們**（理由見 `_units()` 的「三種卡開頭」長註）：
+            #    通用分支會把 label 與 value 併成一行（`[metric] 影子基金重疊 0 對`），
+            #    於是「卡片標題」再也切不出來；`dataframe` 更慘 —— 它的引數是
+            #    list[dict]，不是 str/int/float，通用分支**一個字都錄不到**，
+            #    於是「畫面上看得到每一欄」會對著一片空白做斷言。
+            if name == "metric":
+                _label = str(args[0]) if args else str(kwargs.get("label", ""))
+                _value = (str(args[1]) if len(args) > 1
+                          else str(kwargs.get("value", "")))
+                self.parts.append(f"[metric] {_label}")
+                self.parts.append(f"[metric_value] {_value}")
+                return None
+            if name == "dataframe":
+                _data = args[0] if args else kwargs.get("data")
+                _cols = (list(_data[0].keys())
+                         if isinstance(_data, list) and _data
+                         and isinstance(_data[0], dict) else [])
+                _n = len(_data) if isinstance(_data, list) else -1
+                self.parts.append("[dataframe] " + "　".join(map(str, _cols)))
+                for _r in (_data if isinstance(_data, list) else []):
+                    if isinstance(_r, dict):
+                        self.parts.append(
+                            "[dataframe_row] "
+                            + "　".join(str(_v) for _v in _r.values()))
+                self.parts.append(f"[dataframe_rows] {_n}")
+                return None
             if name in _TEXT_APIS:
                 _bits = [str(a) for a in args if isinstance(a, (str, int, float))]
                 # widget 的 label 是第一個位置引數；`metric` 的值是第二個。
@@ -208,11 +265,38 @@ def _text(parts: list[str]) -> str:
     return "\n".join(parts)
 
 
+def _holdings_of(portfolio: list) -> list:
+    """用給定的 session 內容跑一次 `_holdings()`（那個過濾是本頁唯一一條 §1 邏輯）。
+
+    ⚠️ `_holdings()` 直接讀 `st.session_state`，所以要驗它就得把模組的 `st` 換掉 ——
+    與 :func:`_render` 同一套手法，只是不渲染。
+    """
+    from ui.views import page_02_health as _mod
+    _rec = _Rec()
+    _rec.session_state["portfolio_funds"] = portfolio
+    _saved = _mod.st
+    try:
+        _mod.st = _rec
+        return _mod._holdings()
+    finally:
+        _mod.st = _saved
+
+
+
 #: 一級區塊的標題（`st.markdown("#### …")`）。
 _BLOCK_OPEN = re.compile(r"^\[markdown\] #{4}\s+(.*)$")
-#: 一張卡的標題 —— `ia.state_card()` 在灰態時畫的 `st.markdown(f"**{title}**")`。
-#: ⚠️ **這一條是本檔的最小單位，不是裝飾**（理由見 `_units()`）。
-_CARD_OPEN = re.compile(r"^\[markdown\] \*\*(.+)\*\*$")
+#: 一張**灰態**卡的標題 —— `ia.state_card()` 灰態時畫的 `st.markdown(f"**{title}**")`。
+_CARD_NOT_READY = re.compile(r"^\[markdown\] \*\*(.+)\*\*$")
+#: 一張 **`STATE_OK`** 卡的標題 —— `state_card()` 走 `st.metric(title, value)`。
+_CARD_OK = re.compile(r"^\[metric\] (.+)$")
+#: 一張 **`STATE_BUSINESS`** 卡的標題 —— `render_state.business_alert()` 把
+#: 標題、數值、說明**全部塞進同一個 `st.markdown` 的 HTML 裡**。
+#: ⚠️ 左軌那段特徵值**從 `render_state` import，不在這裡抄 hex**（§3.3；
+#:    `tests/test_ia_kit.py` 也禁 IA 套件內出現 hex 字面值，同一個理由）。
+_CARD_BUSINESS = re.compile(
+    r"^\[markdown\] <div style='background:[^']*;border-left:"
+    + re.escape(f"{BUSINESS_ALERT_RAIL_PX}px solid {BUSINESS_ALERT_ON_DARK}")
+    + r"[^>]*>\s*<div style='[^']*'>(.*?)</div>")
 
 
 def _units(parts: list[str]) -> list[tuple[str, list[str]]]:
@@ -231,12 +315,39 @@ def _units(parts: list[str]) -> list[tuple[str, list[str]]]:
     本檔一次降到底 —— **最小單位是一張卡**。
 
     ⛔ **不要為了讓斷言好寫而把邊界往上收。** 邊界一寬，鄰居的字就會替你通過。
+
+    ⭐ **2026-09-06：三種卡開頭都要認，否則這個機制在本批當場失效。**
+    骨架批三張卡**全是灰的**，而灰態卡的開頭是 `st.markdown("**標題**")` ——
+    所以初版只認那一種就夠了。本批把兩張卡接上真資料之後：
+
+    ========== ============================================ ==================
+    卡片狀態    `state_card()` 實際畫出來的東西                 開頭長什麼樣
+    ========== ============================================ ==================
+    NOT_READY  `st.markdown("**標題**")` ＋ 灰字              `[markdown] **標題**`
+    OK         `st.metric(標題, 值)` ＋ `st.caption(說明)`    `[metric] 標題`
+    BUSINESS   `business_alert()` —— 標題／值／說明**全在
+               同一個 `st.markdown` 的 HTML 裡**              `[markdown] <div …>`
+    ========== ============================================ ==================
+
+    **只認第一種的後果不是報錯，是那兩張卡從 `_segments()` 裡整個消失** ——
+    於是任何「這張卡有沒有畫東西」的斷言都變成**對著不存在的 key 做檢查**，
+    fail-open。**也就是說：這個好不容易降下來的粒度，會在卡片一接上真資料的那一刻
+    自己失效，而且沒有任何東西會轉紅。** 本次連同另外兩種開頭一起認。
+
+    ⚠️ **OK／BUSINESS 兩種的 opener 自己就帶著內容**（`st.metric` 的值在下一筆
+    `[metric_value]`；`business_alert` 的值與說明就在同一筆），所以它們的 body
+    **包含 opener 自己那一筆**；`####` 區塊與灰態卡的 opener 只是標題，body 不含它。
     """
     _out: list[tuple[str, list[str]]] = []
     for _p in parts:
-        _m = _BLOCK_OPEN.match(_p) or _CARD_OPEN.match(_p)
+        _m = _BLOCK_OPEN.match(_p) or _CARD_NOT_READY.match(_p)
         if _m:
             _out.append((_m.group(1).strip(), []))
+            continue
+        _m2 = _CARD_OK.match(_p) or _CARD_BUSINESS.match(_p)
+        if _m2:
+            # opener 自帶內容 → 自己也算進 body（理由見上）。
+            _out.append((_m2.group(1).strip(), [_p]))
             continue
         if _out:
             _out[-1][1].append(_p)
@@ -257,9 +368,76 @@ EXPECTED_BLOCKS: tuple[str, ...] = ("組合健康總分", "逐檔體檢表")
 EXPECTED_CARDS: tuple[str, ...] = ("吃本金警示", "衛星連續落後", "影子基金重疊")
 
 #: 一份「已載入」的假持股。欄位形狀取自 `ui/helpers/portfolio/load.py` 寫入的契約。
+#: ⚠️ **它刻意沒有 `moneydj_raw` / `metrics`** —— 也就是「已載入、但一個指標都算不出來」。
+#: 本批之後它代表的是**資料不足**那條路徑，不是「一切正常」那條。
 FAKE_HOLDINGS = [
     {"code": "ACDD19", "policy_id": "P1", "currency": "TWD",
      "loaded": True, "load_error": None},
+]
+
+#: 持股名清單。`_H_A` 與 `_H_A2` 的 Jaccard ＝ 3/4 ＝ 0.75（> 門檻 0.70 → 影子基金）；
+#: `_H_B` 與前兩者交集為空 → 0.0。
+#: ⚠️ **刻意不讓兩檔「完全相同」**：完全相同會算出 1.0，而 1.0 是一個
+#:    「就算計算壞掉也很容易剛好出現」的值（本批修的那個空白名缺陷產出的正是 1.0）。
+#:    用 0.75 這種**只有算對才會出現**的數字，突變才殺得死。
+_H_A = [{"name": "AAPL", "pct": 10.0}, {"name": "MSFT", "pct": 9.0},
+        {"name": "NVDA", "pct": 8.0}]
+_H_A2 = _H_A + [{"name": "GOOG", "pct": 7.0}]
+_H_B = [{"name": "TSM", "pct": 8.0}, {"name": "2330", "pct": 7.0}]
+
+
+def _fund(code: str, *, div: float | None = 8.0, ret: float | None = 2.0,
+          holdings: list | None = None, sharpe: float | None = 0.4,
+          max_dd: float | None = -12.5, nav_date: str = "2026-09-01",
+          ccy: str = "USD") -> dict:
+    """一檔**指標算得出來**的持股。
+
+    形狀是 `check_eating_principal_1y_mk` 文件裡的 **Nested**
+    （`{moneydj_raw: {...}, metrics: {...}}`），也就是 `portfolio_funds` 的真實形狀
+    （`ui/helpers/portfolio/load.py::_FUND_INFO_KEYS` 明列 `moneydj_raw` / `metrics`）。
+
+    ⚠️ **`div=8.0, ret=2.0` 會被判成 🔴 吃本金**（含息 2% 低於配息 8%，缺口 6pp
+    > `NEAR_DIVIDEND_WARNING_PCT`）—— 這不是隨手挑的數字，是本檔「有壞消息」情境的來源。
+    """
+    return {
+        "code": code, "name": f"{code} 基金", "currency": ccy,
+        "loaded": True, "load_error": None,
+        "moneydj_raw": {
+            "moneydj_div_yield": div, "perf": {"1Y": ret},
+            "nav_date": nav_date, "currency": ccy,
+            "holdings": {"top_holdings": holdings if holdings is not None else _H_A,
+                         "sector_alloc": []},
+        },
+        "metrics": {"sharpe": sharpe, "max_drawdown": max_dd},
+    }
+
+
+#: 兩檔**吃本金且持股高度重疊**（→ 兩張卡都該亮業務警示）＋ 一檔健康且不重疊。
+RICH_HOLDINGS = [
+    _fund("AAA", holdings=_H_A),
+    _fund("BBB", holdings=_H_A2),
+    _fund("CCC", div=3.0, ret=9.0, holdings=_H_B),
+]
+
+#: 一檔落在**黃燈**（接近警戒）的持股：缺口 1pp，小於
+#: `shared.signal_thresholds.NEAR_DIVIDEND_WARNING_PCT`（2pp）。
+#: ⚠️ **這份 fixture 是被一顆存活的突變逼出來的**：`RICH_HOLDINGS` 裡一檔黃燈都沒有，
+#:    於是「黃燈算不算吃本金」那條分支**根本沒被走到**，把它改成「黃燈也算吃本金」
+#:    照樣全綠。**沒有走到的分支等於沒有守衛。**
+NEAR_HOLDINGS = [_fund("NNN", div=8.0, ret=7.0, holdings=_H_B)]
+
+#: 「已列入但還沒載入成功」的兩種持股 —— `_holdings()` 的過濾對象。
+#: ⚠️ 同樣是被突變逼出來的（拿掉整條過濾照樣全綠）。**而它是本頁唯一一條 §1 邏輯。**
+UNLOADED_HOLDINGS = [
+    _fund("AAA", holdings=_H_A),
+    {**_fund("BAD1", holdings=_H_A), "loaded": False},
+    {**_fund("BAD2", holdings=_H_A), "load_error": "NAV 抓不到"},
+]
+
+#: 同一檔基金買在兩張保單 —— `portfolio_funds` 的主鍵是 `(policy_id, code)`。
+DUPLICATE_HOLDINGS = [
+    {**_fund("AAA", holdings=_H_A), "policy_id": "P1"},
+    {**_fund("AAA", holdings=_H_A), "policy_id": "P2"},
 ]
 
 
@@ -336,19 +514,73 @@ def test_all_four_content_blocks_are_present_and_in_wireframe_order():
 
 
 def test_the_per_fund_table_keeps_the_nine_columns_from_the_wireframe():
-    """逐檔體檢表 9 欄，逐字對線框。
+    """逐檔體檢表 9 欄，逐字對線框 —— 而且**是真表頭，不是一行 caption**。
 
     ⚠️ 欄位少一欄不會讓畫面壞掉，只會讓使用者少看到一個判斷依據 ——
     那正是「無聲退化」，所以要釘住。
+
+    ⭐ **2026-09-06 依骨架批的登記改寫（那是登記說好的正解，不是把斷言放寬）。**
+    骨架批表是空的，於是用一行 `st.caption("代碼／名稱／…")` 先告訴使用者這張表會有什麼；
+    `_render_health_table` 的 docstring 就地登記了「**下一批請刪掉**，真資料接上之後
+    表頭會講同一件事 —— 屆時它就變成鐵則 04 要禁的冗餘占位」，並指定
+    「**正解是改成驗真表頭，不是刪掉那個斷言**」。本次照辦：
+
+    - `_table_rows()` 產出的 **key 順序**必須逐字等於 `HEALTH_TABLE_COLUMNS`
+      （這一半是結構的，看的是程式真的會拿什麼當表頭）；
+    - 畫面紀錄裡的 `[dataframe]` 那一筆必須列出九欄
+      （這一半是畫面的，看的是使用者真的看得到）。
+
+    ⛔ **兩半都要**：只驗結構的話，`wide_table()` 被拿掉都不會紅；
+       只驗畫面的話，欄序被打亂（例如改用 `dict` 重組）不會紅。
     """
     assert HEALTH_TABLE_COLUMNS == (
         "代碼", "名稱", "幣別", "近 1 年", "Sharpe",
         "最大回撤", "配息覆蓋", "五桶評等", "資料日期"), (
         f"逐檔體檢表的欄位與線框 Tab 02 不符：{HEALTH_TABLE_COLUMNS}")
     assert len(HEALTH_TABLE_COLUMNS) == 9
-    _all = _text(_render(portfolio=FAKE_HOLDINGS))
+
+    # ── 一半：真表頭（欄名**與順序**都要對）────────────────────────
+    _rows = _table_rows(RICH_HOLDINGS)
+    assert _rows, "`_table_rows()` 對有持股的輸入回了空清單。"
+    for _r in _rows:
+        assert tuple(_r) == HEALTH_TABLE_COLUMNS, (
+            "逐檔體檢表的欄名／欄序與線框不符。\n"
+            f"  實際：{tuple(_r)}\n  線框：{HEALTH_TABLE_COLUMNS}")
+
+    # ── 另一半：畫面上真的看得到那九欄 ─────────────────────────────
+    _parts = _render(portfolio=RICH_HOLDINGS)
+    _header = [_p for _p in _parts if _p.startswith("[dataframe] ")]
+    assert _header, (
+        "畫面上沒有任何表格 —— 有持股時逐檔體檢表應該畫得出來。\n"
+        + "\n".join(_parts))
     for _col in HEALTH_TABLE_COLUMNS:
-        assert _col in _all, f"畫面上看不到欄位「{_col}」。"
+        assert _col in _header[0], f"表頭上看不到欄位「{_col}」：{_header[0]}"
+
+
+def test_the_table_never_shows_a_bucket_grade_because_there_is_no_such_thing():
+    """⛔「五桶評等」整欄必須是 `⬜`，而且畫面上要說明為什麼。
+
+    **這是本批唯一一個「明明有東西可以填、但刻意不填」的欄位**，所以要釘住。
+
+    線框寫的「五桶評等」在本 repo 是**總經**概念（`shared/macro_buckets.py`：
+    長期／中期／短線／拐點／新聞），**沒有逐檔基金版本**。逐檔真正存在的是
+    `services/health/grade.py::compute_4d_health` 的 **4D/5D Grade（A～F）**——
+    維度不同、級距不同、名字不同。**把 4D Grade 印在「五桶評等」欄底下，
+    使用者完全看不出那是另一套評等**（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險），
+    而這正是本批在 `Principal_Erosion` 上避開的同一個坑。
+
+    ⚠️ 空欄若不說明，會被讀成「這幾檔沒有評等」而不是「這個系統沒有這個評等」——
+    所以除了留白，畫面上還要有一句話。
+    """
+    _rows = _table_rows(RICH_HOLDINGS)
+    _bad = [_r["代碼"] for _r in _rows if _r["五桶評等"] != NOT_READY_MARK]
+    assert not _bad, (
+        f"「五桶評等」欄被填了東西（{_bad}）—— 本站沒有逐檔的五桶評等。\n"
+        "若要改用 4D Grade，那是**換一個評等定義**，屬客戶 gate，不是實作細節。")
+    _all = _text(_render(portfolio=RICH_HOLDINGS))
+    assert "五桶" in _all and "4D" in _all, (
+        "「五桶評等」整欄留白，但畫面上沒有解釋為什麼 —— "
+        "沒解釋的空欄會被讀成「這幾檔沒有評等」。")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -365,20 +597,27 @@ def test_no_holdings_shows_the_wireframe_empty_state_and_points_at_tab_four():
         f"應含 `where_to_find('pf_add')` ＝ {where_to_find('pf_add')!r}。")
 
 
-def test_no_holdings_does_not_also_print_the_batch_pending_excuse():
+def test_no_holdings_does_not_also_print_the_deferred_block_excuses():
     """兩種灰不得混在一起。
 
     ⚠️ 這條擋的是一個很容易犯、而且看起來無害的錯：沒有持倉時**同時**印出
-    「本頁分批上線」的灰字。使用者會以為「去 ④ 加了基金這裡就會出現」—— 不會，
-    因為內容根本還沒接上。**一次只給一個下一步。**
+    那兩塊「還沒接上」的灰字。使用者會以為「去 ④ 加了基金這裡就會出現」——
+    其中一塊不會（評等定義未定），另一塊也不會（要等下一個批次）。**一次只給一個下一步。**
+
+    ⚠️ **比對模組常數本體，不硬抄字面值。** 硬抄的話，常數一改措辭這條就永遠是 True ——
+    它守的 bug 照樣存在、而它不再看得見（獨立紅隊實證過這個 fail-open）。
+
+    📌 **2026-09-06 改名＋換受測對象**：舊版比對的是骨架批的共用常數 `_PENDING_NOTE`
+    （「本頁分批上線，這一塊的內容還沒接上」）。本批把三塊接上真資料後，
+    那個共用常數已**整個刪除**（見 `page_02_health.py` 該處的長註：留一句含糊的話
+    給兩個具體原因共用，等於把可行動的原因蓋掉）。**本條守的東西沒有變**，
+    換的只是它現在要盯住的那兩句具名理由。
     """
     _all = _text(_render(portfolio=[]))
-    # ⚠️ 比對 `_PENDING_NOTE` 本體，**不硬抄字面值**。
-    #    硬抄的話，常數一改措辭這條就永遠是 True —— 它守的 bug 照樣存在、而它不再看得見。
-    #    （獨立紅隊實證：改措辭 ＋ 同時重犯這個 bug → 本條 passed，fail-open。）
-    assert _PENDING_NOTE not in _all, (
-        "沒有持倉時不應同時印出「內容還沒接上」的灰字 —— 兩個下一步會互相抵消。\n"
-        + _all)
+    for _note in (_SCORE_PENDING_NOTE, _LAG_PENDING_NOTE):
+        assert _note not in _all, (
+            "沒有持倉時不應同時印出「這一塊還沒接上」的灰字 —— 兩個下一步會互相抵消。\n"
+            f"洩漏的是：{_note}\n\n" + _all)
 
 
 def test_no_holdings_hides_the_diagnosis_blocks_entirely():
@@ -393,65 +632,144 @@ def test_no_holdings_hides_the_diagnosis_blocks_entirely():
         f"沒有持倉時仍畫出了診斷區塊 {_leaked} —— 空狀態應**取代**它們。")
 
 
-@pytest.mark.parametrize("block", EXPECTED_BLOCKS + EXPECTED_CARDS)
-def test_every_block_is_grey_until_its_content_lands(block: str):
-    """有持倉、但內容還沒接上 → 每一塊**各自**要有灰態記號與理由。
+#: 本批**刻意維持灰態**的兩塊，以及各自的具名理由。
+#: ⚠️ **這張表是「還沒接上的清單」，不是「可以一直灰下去的清單」。**
+#:    每一項都必須有一個**具體、可被推翻的**理由；接上了就從這裡移走，
+#:    移走的同時 `_DEFERRED` 會少一項，下面那條 `test_wired_blocks_show_real_content`
+#:    的參數就多一項 —— 兩張表是互補的，不會有東西掉在中間。
+_DEFERRED: dict[str, str] = {
+    "組合健康總分": _SCORE_PENDING_NOTE,
+    "衛星連續落後": _LAG_PENDING_NOTE,
+}
 
-    ⚠️ **斷言的單位是「一級區塊」或「一張卡」，不是整頁，也不是整段。**
-    本檔初版以「一級區塊」為單位，突變「只拿掉組合健康總分那一塊的灰態」
-    **沒有轉紅**（三張卡的 ⬜ 落在同一段裡替它通過了）—— 粒度因此下降到一張卡。
-    詳見 :func:`_units` 的長註。
+#: 本批**已接上真資料**的三塊。
+_WIRED: tuple[str, ...] = ("吃本金警示", "影子基金重疊", "逐檔體檢表")
 
-    ⚠️ **下一批把真內容接上時，這條會轉紅 —— 那是預期的。**
-    屆時請把它改成「真內容放行」（例如驗總分是數字、驗表格有列），
-    **不要把它放寬成「有東西就好」**。① 就是這樣從灰態放行轉成真內容放行的。
+
+def test_the_two_tables_together_cover_every_block_exactly_once():
+    """`_DEFERRED` ∪ `_WIRED` 必須**恰好**等於畫面上的五塊，不重不漏。
+
+    ⚠️ 沒有這一條的話，新增一塊卻兩張表都忘了登記，**下面兩條測試都不會轉紅**
+    —— 那一塊就變成完全沒有人在看的區域（本檔前身正是靠 parametrize 的清單
+    在守，而清單漏一項是無聲的）。
     """
-    _seg = _segments(_render(portfolio=FAKE_HOLDINGS))
-    _body = "\n".join(_seg.get(block, []))
-    assert _body.strip(), f"區塊「{block}」有標題但沒有任何內容 —— 那是空占位。"
+    assert set(_DEFERRED) | set(_WIRED) == set(EXPECTED_BLOCKS) | set(EXPECTED_CARDS)
+    assert not (set(_DEFERRED) & set(_WIRED)), "同一塊不能同時算「還沒接」與「已接上」。"
+
+
+@pytest.mark.parametrize("block", sorted(_DEFERRED))
+def test_deferred_blocks_stay_grey_and_say_exactly_why(block: str):
+    """**刻意還沒接**的那兩塊：要有灰態記號，而且理由必須是**那一塊自己的**。
+
+    ⚠️ **重點在後半句。** 前身版本只驗「有沒有灰、有沒有共用的那句理由」，
+    於是**三張卡的理由互換**照樣全綠（獨立紅隊 2026-09-05 打穿的四項之一）。
+    本條改成比對**該塊自己的具名常數**：理由互換 ⇒ 兩塊都轉紅。
+
+    ⛔ **這條不是「允許一直灰下去」的許可證。** 它釘的是「灰的時候必須說清楚為什麼」；
+       兩個理由都是**可被推翻的具體事實**（一個等客戶回覆評等定義，
+       一個等波段觀測站搬遷），推翻了就把它從 `_DEFERRED` 移到 `_WIRED`。
+    """
+    _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    assert block in _seg, (
+        f"區塊「{block}」在畫面上不見了。現有單位：{list(_seg)}")
+    _body = "\n".join(_seg[block])
     assert NOT_READY_MARK in _body, (
         f"區塊「{block}」沒有灰態記號 {NOT_READY_MARK!r} —— "
         "內容還沒接上就要誠實留灰，不得空著也不得填示意值（§1）。\n" + _body)
-    assert _PENDING_NOTE in _body, (
-        f"區塊「{block}」的灰態沒說「為什麼沒有」。\n" + _body)
+    assert _DEFERRED[block] in _body, (
+        f"區塊「{block}」的灰態理由不是它自己的那一句 —— "
+        "理由互換會讓使用者拿到一個對別的區塊才成立的解釋。\n"
+        f"應含：{_DEFERRED[block]}\n實際：{_body}")
+
+
+@pytest.mark.parametrize("block", _WIRED)
+def test_wired_blocks_show_real_content_when_the_data_is_there(block: str):
+    """**已接上**的三塊：資料齊全時必須畫出真內容，**不得再是灰的**。
+
+    ⚠️ 這條是前身 `test_every_block_is_grey_until_its_content_lands` 的**反面**，
+    也是它自己的 docstring 指定的下場：「下一批把真內容接上時，這條會轉紅 ——
+    **那是預期的**，屆時請把它改成『真內容放行』，**不要把它放寬成「有東西就好」**」。
+    本次照辦：不是放寬，是**換一個方向釘死** —— 資料齊全卻仍是灰的，就是退化。
+    """
+    _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    assert block in _seg, (
+        f"區塊「{block}」在畫面上不見了。現有單位：{list(_seg)}")
+    _body = _seg[block]
+    assert "\n".join(_body).strip(), f"區塊「{block}」有標題但沒有任何內容 —— 那是空占位。"
+    # ⚠️ 判準是「**有沒有一個灰態 widget**」，不是「內文有沒有出現 ⬜ 這個字」。
+    #    `render_state.not_ready()` 畫的是 `st.caption(f"{NOT_READY_MARK} …")`
+    #    ⇒ 灰態 ＝ **開頭就是 ⬜ 的 caption**。
+    #    用「內文含 ⬜」會誤判：逐檔體檢表的「五桶評等」欄每一格都是 ⬜（整欄沒有來源，
+    #    見該欄自己的測試），那是**表格內容**，不是「這一塊沒接上」。
+    _grey = [_p for _p in _body
+             if _p.startswith(f"[caption] {NOT_READY_MARK}")]
+    assert not _grey, (
+        f"區塊「{block}」在資料齊全時仍是灰態 —— 那是退化。\n"
+        + "\n".join(_grey))
+
+
+def test_wired_blocks_go_grey_again_when_the_data_is_missing():
+    """反過來：資料**不齊**時，那三塊必須誠實退回灰態，**不得印 0**。
+
+    ⛔ **這條擋的是本批最危險的一種退化**：把「算不出來」顯示成「0 檔吃本金」。
+       兩者在畫面上長得一模一樣，但意思相反 —— 一個是「檢查過了，沒事」，
+       另一個是「根本沒檢查成」。使用者只會看到綠色的 0（`CLAUDE.md §1`）。
+
+    `FAKE_HOLDINGS` 是「已載入、但沒有任何指標」的那種持股（真的會發生：
+    NAV 抓回來了但 MoneyDJ 的配息／績效沒抓到）。
+    """
+    _seg = _segments(_render(portfolio=FAKE_HOLDINGS))
+    for _b in ("吃本金警示", "影子基金重疊"):
+        assert _b in _seg, f"區塊「{_b}」不見了。現有單位：{list(_seg)}"
+        _body = "\n".join(_seg[_b])
+        assert NOT_READY_MARK in _body, (
+            f"「{_b}」在算不出來時沒有退回灰態。\n" + _body)
+        assert "0 檔" not in _body and "0 對" not in _body, (
+            f"「{_b}」把「算不出來」印成了 0 —— 那會被讀成「檢查過了，沒事」。\n" + _body)
 
 
 #: 本條**實際釘住**的字面值。列成常數，是為了讓「它到底守了什麼」可以被讀出來，
 #: 而不是藏在 docstring 的形容詞裡。
+#:
+#: ⚠️ **2026-09-06 縮小射程，理由必須看懂，否則下一個人會以為這是放水。**
+#: 骨架批四塊全灰，所以「線框的示意值一個都不准出現在**整頁**」是對的。
+#: 本批把三塊接上真資料之後，那個寫法**會開始誤判**：
+#: `0.78` 是一個**合法的相似度**，真的算出 0.78 的那一天，這條會把**正確的畫面**判成造假。
+#: 一條把真資料判成假資料的規則，下一個人只會把它刪掉 —— **那才是真正的損失。**
+#: 現行射程：**只釘還沒接上的那兩塊**（見 `_DEFERRED`），它們印出任何數字都是捏造。
+#: 已接上的那三塊改由 `test_the_numbers_on_the_cards_come_from_the_ssot` 守
+#: —— 那條問的是「**這個數字是不是 SSOT 算的**」，比列舉字面值強得多。
 _PINNED_FAKE_VALUES: tuple[str, ...] = (
-    "72 ／ 100", "72／100", "72/100", "0.78", "相似度 0.78",
+    "72 ／ 100", "72／100", "72/100", "0.78", "相似度 0.78", "1 檔", "2 檔",
 )
 
 
-def test_the_grey_blocks_never_print_the_illustrative_numbers_from_the_wireframe():
-    """⛔ 線框那幾個**示意值**不准出現在畫面上（**只涵蓋下列字面寫法**）。
+def test_the_deferred_blocks_never_print_the_illustrative_numbers_from_the_wireframe():
+    """⛔ 線框那幾個**示意值**不准出現在**還沒接上的那兩塊**裡。
 
     為什麼要有這條：填一個看起來合理的分數，使用者**完全看不出它是假的**，
     而且會拿它去做決定（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
 
     ## ⚠️ 這條**實際**守得到什麼（照實寫，不要照抄上一版的形容詞）
 
-    **只釘 `_PINNED_FAKE_VALUES` 這 5 個字面寫法**：`72 ／ 100`／`72／100`／`72/100`／
-    `0.78`／`相似度 0.78`。
+    **只在 `_DEFERRED` 那兩塊的範圍內、只釘 `_PINNED_FAKE_VALUES` 這幾個字面寫法。**
 
-    **明確守不到（獨立紅隊 2026-09-05 逐項實跑，每一項都 18 passed）**：
+    **明確守不到（獨立紅隊 2026-09-05 逐項實跑，每一項都 18 passed；本批未改善）**：
       - **裸 `72`** —— `st.caption("參考：72 分")`、`st.metric("總分", 72)` 都穿過去；
-      - **「2 檔」「1 檔」** —— 線框另外兩個示意值，**本條從來沒有釘過它們**；
       - **全形數字**（`０.７８`）。
 
-    ⛔ **上一版的 docstring 寫「72／2 檔／1 檔／0.78 一個都不准出現」——那句是假的。**
-    「2 檔／1 檔」在**整個測試檔只出現過一次，就是那句 docstring 自己**；
-    斷言清單裡從來沒有它們。**一條自稱守 §1 的規則，自己的描述必須先為真**
-    （`CLAUDE.md §-2`：沒查證的宣稱比沒有宣稱更危險）。
-
-    📌 **本批刻意不補**（總管 2026-09-05 排程裁決）：下一批填真內容時，
-    「哪些數字算捏造」的判準會整個改寫（屆時 72 分**可能是真的算出來的**），
-    現在補完、下一批再拆一次是白做兩次。**已登記為下一批的入口條件。**
+    ⚠️ **上一版的射程是整頁，本批縮到只剩兩塊** —— 理由寫在 `_PINNED_FAKE_VALUES`
+    上面（整頁射程會在真資料算出 0.78 的那天把正確畫面判成造假）。
+    **已接上的三塊不是沒人守，是換人守**：`test_the_numbers_on_the_cards_come_from_the_ssot`
+    直接驗「畫面上的數字跟著 SSOT 走」，那是列舉字面值做不到的事。
     """
-    _all = _text(_render(portfolio=FAKE_HOLDINGS))
-    for _fake in _PINNED_FAKE_VALUES:
-        assert _fake not in _all, (
-            f"畫面上出現了線框的示意值 {_fake!r} —— 那不是資料，是線框用來示範版面的假數字。")
+    _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    for _block in _DEFERRED:
+        _body = "\n".join(_seg.get(_block, []))
+        for _fake in _PINNED_FAKE_VALUES:
+            assert _fake not in _body, (
+                f"還沒接上的區塊「{_block}」印出了線框的示意值 {_fake!r} —— "
+                "那不是資料，是線框用來示範版面的假數字。\n" + _body)
 
 
 def test_every_grey_block_says_where_to_look_instead():
@@ -465,6 +783,226 @@ def test_every_grey_block_says_where_to_look_instead():
     assert where_to_find("health") in _all, (
         "灰態的指路沒有走 `where_to_find('health')` —— "
         "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 真資料：數字必須是 SSOT 算的，而且必須是**對的那個** SSOT
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_numbers_on_the_cards_come_from_the_ssot():
+    """卡片上的數字**跟著 SSOT 走**。換掉 SSOT 的答案，畫面必須跟著換。
+
+    ⭐ **這條取代了「列舉哪些字面值算捏造」那種守法，而且強得多。**
+    列舉法只能擋「線框裡那幾個示意數字」，擋不掉**任何**其他捏造值
+    （紅隊實測：裸 `72`、`st.metric("總分", 72)` 全部穿過去）。
+    本條問的是另一個問題：**這個數字到底是不是算出來的？**
+    —— 把 SSOT 的回答換掉，畫面若不動，就代表它根本沒在讀 SSOT。
+
+    ⚠️ patch 的是**定義處的模組屬性**（`services.health.dividend.…`），
+    這是本頁刻意用**函式內 lazy import** 的原因之一：
+    module 層 `from X import f` 會把函式綁進本頁的命名空間，之後 patch `X.f` 完全無效。
+    """
+    from unittest import mock
+
+    # ── 吃本金：SSOT 說三檔全紅 → 卡片必須說 3 檔 ──────────────────
+    with mock.patch("services.health.dividend.check_eating_principal_1y_mk",
+                    return_value={"alert_level": "red", "coverage": 0.25}):
+        _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    _body = "\n".join(_seg.get("吃本金警示", []))
+    assert "3 檔" in _body, (
+        "SSOT 說三檔都在吃本金，卡片卻沒有顯示 3 檔 —— 這個數字不是算出來的。\n" + _body)
+
+    # ── 同一份持股，SSOT 改口說全綠 → 卡片必須跟著變 0 檔 ──────────
+    with mock.patch("services.health.dividend.check_eating_principal_1y_mk",
+                    return_value={"alert_level": "green", "coverage": 1.5}):
+        _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    _body = "\n".join(_seg.get("吃本金警示", []))
+    assert "0 檔" in _body, (
+        "SSOT 改口說沒有人吃本金，卡片卻沒有跟著變 —— 數字被寫死了。\n" + _body)
+
+    # ── 影子基金：SSOT 給幾對就是幾對 ─────────────────────────────
+    # ⚠️ **這裡刻意給「兩對」而不是一對。** 真實 fixture 本來就只算得出一對，
+    #    所以若用一對來驗，把對數**寫死成 `"1 對"`** 的突變會存活（實測過）——
+    #    斷言值必須是「只有真的讀了 SSOT 才會出現」的那個數。
+    with mock.patch("services.portfolio_service.calc_holdings_overlap",
+                    return_value={"matrix": object(), "method": "holdings",
+                                  "notes": "", "shadow_pairs": [("AAA", "BBB", 0.91),
+                                                                ("AAA", "CCC", 0.83)]}):
+        _seg = _segments(_render(portfolio=RICH_HOLDINGS))
+    _body = "\n".join(_seg.get("影子基金重疊", []))
+    assert "2 對" in _body and "0.91" in _body, (
+        "影子基金卡沒有反映 SSOT 給的那兩對（2 對 / 最高 0.91）。\n" + _body)
+
+
+def test_the_eating_principal_card_never_uses_the_momentum_signal():
+    """⛔ 吃本金**只准**走含息 vs 配息率的 SSOT，**不准**改接淨值動能訊號。
+
+    **這是本批最貴的一個坑，所以用一條測試把它焊死。**
+
+    `ui/components/mk_dashboard.py::tag_principal_erosion` 產出的欄位叫
+    **`Principal_Erosion`（直譯就是「吃本金」）**，名字和這張卡完全對得上 ——
+    但它自己的 docstring 逐字寫著：
+
+        ⚠️ v19.402 正名：本訊號實為「淨值連續下跌動能」，**非配息覆蓋/吃本金**。
+        …與「吃本金」（含息總報酬 vs 配息率）是**不同訊號**，**勿混用**。
+
+    接錯的後果**不是畫面壞掉，是一張標題正確、數字正確、意思完全錯的卡**：
+    一檔**完全不配息**的基金淨值連跌三個月就會被標成「吃本金」。
+    使用者看不出來 —— 那正是 `CLAUDE.md §1` 說的「錯誤的數字比沒有數字更危險」。
+
+    ⚠️ **本條與 `test_the_page_does_not_delegate_to_the_old_tab` 不重複。**
+       那條擋的是 `import`；本條擋的是**符號名出現在本檔任何地方**
+       （含有人把那段邏輯**照抄**進來 —— 抄過來就沒有 import 可以擋了）。
+    ⛔ **本條看不到的**：有人把同樣的滾動報酬邏輯抄進來**並改名**。
+       靜態規則到此為止；那一種要靠 code review。
+    """
+    _src = SRC.read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+    # 呼叫與屬性存取都掃 —— 只掃 import 會漏掉「照抄過來」那條路。
+    _bad = [f"第 {_n.lineno} 行 {ast.unparse(_n)[:60]}"
+            for _n in ast.walk(_tree)
+            if (isinstance(_n, ast.Name) and _n.id in
+                ("tag_principal_erosion", "Principal_Erosion"))
+            or (isinstance(_n, ast.Attribute) and _n.attr == "tag_principal_erosion")]
+    assert not _bad, (
+        "吃本金卡接到了「淨值連續下跌動能」訊號（`Principal_Erosion`）——\n  "
+        + "\n  ".join(_bad)
+        + "\n那是**不同的訊號**（該函式的 docstring 自己寫著「勿混用」）。"
+        "\n正解是 `services.health.dividend.check_eating_principal_1y_mk`。")
+    # 而且真正該用的那一個必須在場（否則上面那條可以靠「什麼都不接」通過）。
+    assert "check_eating_principal_1y_mk" in _src, (
+        "本頁沒有呼叫吃本金的 SSOT `check_eating_principal_1y_mk` —— "
+        "那張卡的數字不可能是對的。")
+
+
+def test_blank_holding_names_never_become_a_perfect_match():
+    """⛔ 持股名稱是**純空白**時，不得產生「相似度 1.00」的假影子警示。
+
+    **這條擋的是一個實際存在的上游缺陷，不是假想的。**
+    SSOT `services/portfolio_service.py::calc_holdings_overlap` 收集持股名時寫的是
+    ``{… for h in tops if h.get("name")}`` —— 過濾取的是 **strip 之前**的 truthy。
+    名稱為 `"  "` 時：通過過濾 → 正規化成 `""` → 集合變成 `{""}` →
+    **兩檔共享 `{""}` ⇒ Jaccard = 1.0 ⇒ 一對「相似度 1.00」的影子基金**。
+
+    **本組 2026-09-06 於 `origin/main` 實跑確認缺陷仍在**（見 PR 描述的指令與輸出）；
+    `services/homogeneity.py::_has_dims` 也早就就地記著這件事
+    （「根因在 SSOT 端把純空白名當資料（既有行為，本批無權改）」）。
+
+    本頁的處置是**把它擋在自己的輸入邊界**（`_clean_holdings`，判準與 `homogeneity`
+    的鏡像版一致：strip **後**非空），**不改 SSOT** —— 那是 8 個 caller 共用的計算入口，
+    且本批的檔案邊界只有兩個檔。
+
+    ⚠️ **本條在上游被修好之後也不會誤紅**：它斷言的是「畫面上不出現假警示」，
+       上游修好了照樣成立。但**移除 `_clean_holdings` 會讓它立刻轉紅** —— fail-closed。
+    """
+    _blank = [_fund("AAA", holdings=[{"name": "   ", "pct": 10.0}]),
+              _fund("BBB", holdings=[{"name": "\t", "pct": 10.0}])]
+    _seg = _segments(_render(portfolio=_blank))
+    _body = "\n".join(_seg.get("影子基金重疊", []))
+    assert "1.00" not in _body and "1 對" not in _body, (
+        "兩檔基金的持股名稱其實都是空白，卻被判成「完全重疊」——\n"
+        "那是一個**最高信心的假警示**（Jaccard=1.0），使用者完全看不出來。\n" + _body)
+    assert NOT_READY_MARK in _body, (
+        "持股名稱全為空白 ＝ 沒有可比對的持股資料，應誠實走灰態。\n" + _body)
+
+
+def test_the_shadow_card_owns_up_to_the_funds_it_could_not_compare():
+    """被排除在比對之外的檔**要具名說出來**，不得靜默縮小比對範圍。
+
+    `services/homogeneity.py` 的模組 docstring 點名的正是這個病：
+    「現況兩個計算入口對缺資料檔**靜默縮小比對範圍**…本檔把被跳過的檔**具名帶出**，
+    供 UI ⬜ 誠實揭露（§1）」。一張說「0 對影子基金」的卡，若其中兩檔根本沒被比到，
+    那個 0 是**誤導**。
+    """
+    _mixed = [_fund("AAA", holdings=_H_A), _fund("BBB", holdings=_H_B),
+              _fund("CCC", holdings=[])]
+    _seg = _segments(_render(portfolio=_mixed))
+    _body = "\n".join(_seg.get("影子基金重疊", []))
+    assert "CCC" in _body, (
+        "有一檔沒有持股／產業資料、根本沒被比對到，卡片卻沒說 —— "
+        "那會讓「沒有影子基金」這個結論看起來比實際上更有把握。\n" + _body)
+
+
+def test_a_thin_margin_is_not_reported_as_eating_principal():
+    """黃燈（缺口在警戒線內）**不算**吃本金 —— 跨頁數字必須一致。
+
+    ⚠️ **這條是被一顆存活的突變逼出來的**：`RICH_HOLDINGS` 裡一檔黃燈都沒有，
+    所以把「黃燈也算吃本金」寫進去照樣全綠。**沒有被走到的分支等於沒有守衛。**
+
+    為什麼是「不算」：`red` 是本 repo **既有的、production 正在用的**判準 ——
+    `ui/tab_fund_grp_health.py::_eats_principal_flag` 逐字寫
+    「red→吃本金；green/**yellow**→不吃（黃＝margin 薄但未吃）」，
+    `services/switch_advisor.py` 與 NAS 週報也吃同一個 `status`。
+    本頁若改用「覆蓋率 < 1.0」，同一個組合在 ② 會顯示「3 檔」、在 ④ 換股顧問顯示「1 檔」
+    —— **兩個都對，但使用者只會覺得系統壞了**（`CLAUDE.md §2.1`）。
+
+    ⚠️ **黃燈沒有被丟掉**：它必須以「接近警戒」出現在說明裡，不得靜默併進綠燈。
+    """
+    _seg = _segments(_render(portfolio=NEAR_HOLDINGS))
+    _body = "\n".join(_seg.get("吃本金警示", []))
+    assert "0 檔" in _body, (
+        "缺口在警戒線內（黃燈）被算成了吃本金 —— 那會和 ④ 換股顧問的數字打架。\n" + _body)
+    assert "接近警戒" in _body, (
+        "黃燈被靜默併進「健康」了 —— 使用者看不到「這檔margin 已經很薄」。\n" + _body)
+
+
+def test_funds_that_never_loaded_are_left_out_of_every_conclusion():
+    """⛔「已列入但沒載入成功」的持股**不得**進入任何診斷結論。
+
+    ⚠️ **這條是被一顆存活的突變逼出來的，而且它守的是本頁唯一一條 §1 邏輯**
+    ——`_holdings()` 的 `loaded` / `load_error` 過濾。骨架批的守衛清單就地登記過
+    「整條拿掉 → 全綠」；本批之前那還只是「少過濾幾筆」，**本批之後它會直接餵髒資料
+    進 SSOT**：一檔 NAV 沒抓回來的基金，`compute_1y_total_return` 會回 None，
+    於是它被算成「資料不足」而稀釋掉分母 —— 使用者看到的「N 檔資料不足」裡，
+    混進了根本還沒開始載入的檔。
+
+    `UNLOADED_HOLDINGS` = 1 檔正常（吃本金）＋ 1 檔 `loaded=False` ＋ 1 檔有 `load_error`。
+    正確行為：三塊都只看得到那 1 檔。
+    """
+    _rows = _table_rows(_uniq_by_code(_holdings_of(UNLOADED_HOLDINGS)))
+    _codes = [_r["代碼"] for _r in _rows]
+    assert _codes == ["AAA"], (
+        "沒載入成功的基金進了逐檔體檢表 —— 拿不完整的資料生一個看起來完整的結論（§1）。\n"
+        f"實際列出：{_codes}")
+    _all = _text(_render(portfolio=UNLOADED_HOLDINGS))
+    for _bad in ("BAD1", "BAD2"):
+        assert _bad not in _all, f"沒載入成功的「{_bad}」出現在畫面上。\n{_all}"
+
+
+def test_the_same_fund_across_two_policies_is_counted_once():
+    """同一檔基金買在兩張保單，**只能算一次**。
+
+    ⚠️ 同樣是被一顆存活的突變逼出來的（拿掉去重照樣全綠，因為 fixture 裡沒有重複 code）。
+
+    `portfolio_funds` 的主鍵是 `(policy_id, code)`，所以同一檔基金買在兩張保單就有兩筆。
+    不去重的話「2 檔吃本金」可能其實只有 1 檔 —— 而使用者**無從得知**。
+    更糟的是影子基金那張卡：同一檔基金會和**它自己**比對出 1.00 的完美重疊。
+    """
+    _rows = _table_rows(_uniq_by_code(_holdings_of(DUPLICATE_HOLDINGS)))
+    assert [_r["代碼"] for _r in _rows] == ["AAA"], (
+        f"同一檔基金跨兩張保單被算了兩次：{[_r['代碼'] for _r in _rows]}")
+    _seg = _segments(_render(portfolio=DUPLICATE_HOLDINGS))
+    _eat = "\n".join(_seg.get("吃本金警示", []))
+    assert "1 檔" in _eat, f"吃本金檔數把同一檔算了兩次。\n{_eat}"
+    _shadow = "\n".join(_seg.get("影子基金重疊", []))
+    assert "1.00" not in _shadow and "1 對" not in _shadow, (
+        "同一檔基金和它自己比出了「完美重疊」的影子警示。\n" + _shadow)
+
+
+def test_the_table_falls_back_to_the_empty_state_when_no_row_survives():
+    """一列都湊不出來時，走**空狀態**，不畫空表格外框（鐵則 04）。
+
+    ⚠️ 這條看起來像永遠走不到 —— 沒有持倉時 `render_holdings_health()` 就提早
+    走空狀態了。但**有一條窄路**：持股存在、卻全部沒有可用的 `code`
+    （`_uniq_by_code()` 以 code 為鍵，空 code 會被丟掉）。
+    突變「空表時塞一列 `—`」原本存活，正是因為沒有任何情境走到這條路。
+    """
+    _blank_code = [{**_fund("AAA", holdings=_H_A), "code": "  "}]
+    _parts = _render(portfolio=_blank_code)
+    assert not [_p for _p in _parts if _p.startswith("[dataframe] ")], (
+        "一列都沒有卻還是畫了表格 —— 鐵則 04：不畫空表格外框。\n" + "\n".join(_parts))
+    assert "逐檔體檢還沒有可顯示的列" in _text(_parts), (
+        "一列都沒有時沒有走空狀態三要素。\n" + "\n".join(_parts))
 
 
 # ══════════════════════════════════════════════════════════════════
