@@ -667,7 +667,13 @@ def test_downstream_reads_the_applied_query_not_the_widget_values():
     #    **永遠無法滿足**的守衛（本 repo `ui/**` 有 231 處 `key=`，量測日 2026-09-05）。
     # ⚠️ **自動收齊模組層所有 `_SK_*`，不要列舉** —— 列舉一定會漏下一個新加的鍵。
     #    上一版只餵 `_SK_APPLIED`，於是 `key=_SK_PORTFOLIO`（使用者的 live 持股）
-    #    那顆突變從紅掉成綠（2026-09-06 稽核 M-1，三頁 × 三序實測）。
+    #    那顆突變從紅掉成綠（2026-09-06 稽核 M-1，②④ × 三序實測）。
+    # ⚠️ **本頁（③）沒有 `_SK_PORTFOLIO`，所以這個改動在本 SHA 是字面上的 no-op**
+    #    —— 實測新舊回傳**完全相同的集合** `{_SK_APPLIED, 字面值}`。
+    #    本頁的線框明訂「不預設我有持有」，另有一條守衛專門禁 `"portfolio_funds"`
+    #    出現在本頁，所以那個常數本來就不該在這裡。
+    #    **改成掃前綴的價值在本頁是前瞻的**：日後本頁新增任何 `_SK_*`（實測以
+    #    `_SK_DRAFT` 驗過）會自動被守到，不必記得回來改這一行。
     _applied_keys = guarded_key_names(_t)
     _writes = session_writes(_form_fn, widget_key_names=_applied_keys)
     assert _writes, "`_render_search_form()` 沒有把送出結果寫回 session。"
@@ -865,8 +871,16 @@ def _imported_modules(tree: ast.AST) -> list[str]:
             #      兩個是 `_m.split(".")[0] in (...)`（多吐的字串首段與模組相同 ⇒ 無影響），
             #      **另外兩個是 `startswith(...) or <子字串> in _m`** ⇒ **會被符號名誤觸發**。
             #
-            #    **已量到的誤紅形狀（本頁與 ③ 各三/二例，三序一致；`180fb93` 上皆為綠，
-            #    也就是這些偽陽性是「同時吐兩個」這個改動新引入的）**：
+            #    **已量到的誤紅形狀（三序一致；`180fb93` 上皆為綠 ⇒ 這些偽陽性是
+            #    「同時吐兩個」這個改動新引入的）**。
+            #    ⚠️ **量測形態要講清楚，否則照抄會得到相反的結論**：下列 import
+            #    **是放在一個「函式內、永不被呼叫」的 lazy import 裡量的**
+            #    （`def _qa_never_called(): from services.batch import ...`）——
+            #    這樣模組載入時不會真的去 import，pytest 回 **rc=1（測試真的紅）**。
+            #    **若照抄成模組頂層 import，會得到 rc=4（collection error）**，
+            #    那是**壞掉的突變、不是守衛的結果**（2026-09-06 兩種形態各實測一次）。
+            #    這五個模組多數**並不存在**（`services/batch.py` 等），
+            #    lazy import 不需要它們存在 —— **AST 掃描看的是原始碼，不是能不能 import**。
             #      `from services.fund_service import single_fund_metrics`  → 命中 "single_fund"
             #      `from services.batch import batch_analysis_runner`       → 命中 "batch_analysis"
             #      `from services.research import fund_research_helper`     → 命中 "fund_research"
@@ -878,8 +892,15 @@ def _imported_modules(tree: ast.AST) -> list[str]:
             #    ⛔ **不要為了消掉誤紅而把這裡收窄** —— 「兩個都要吐」的理由仍然成立
             #    （`from ui import tab3_portfolio` 是同層 import 最自然的寫法，只吐
             #    `_n.module` 會得到 "ui"、被 `startswith("ui.tab")` 靜靜放過）。
-            #    **真要修，該動的是那兩個子字串消費端**（讓它們只看模組清單），
-            #    那超出本批邊界，**已登記待裁決**。
+            #    ⚠️ ~~**真要修，該動的是那兩個子字串消費端**（讓它們只看模組清單）~~
+            #    → **2026-09-06 更正：這個方向被實測推翻，不要照做**（有意識的更正，不是漏刪）。
+            #    「只看模組清單」會**重開剛關掉的洞**：`ui/helpers/fund_research/` 是
+            #    **真實存在的套件**，`from ui.helpers import fund_research` 在
+            #    只看模組清單時是 `["ui.helpers"]` → **綠（漏放）**；
+            #    同時吐兩個才是 `["ui.helpers", "ui.helpers.fund_research"]` → **紅**。
+            #    **正確方向：讓 `_imported_modules` 回傳結構化的 `(module, symbol)`，
+            #    由消費端各自選比對哪一半** —— 兩邊的分辨能力都保住，也不必碰檔案系統。
+            #    超出本批邊界，**已登記待裁決**。
             #    **本函式的回傳值自此不是一份「真的 import 到的模組」清單，不要拿去做別的用途。**
             _mods.append(_n.module)
             _mods.extend(f"{_n.module}.{_a.name}" for _a in _n.names)

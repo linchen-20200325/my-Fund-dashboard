@@ -565,6 +565,24 @@ def test_the_page_does_not_delegate_to_the_old_tab():
 
     ⚠️ ① 留了一條對 `ui/tab1_macro_midcycle.py` 的委派並就地登記
     「有效期到舊 tab 整批拔除為止」—— **本頁一條都沒有，而且要維持這樣。**
+
+    ⚠️ **已知漏洞，本批刻意不修（登記後果，不只登記決定）—— 2026-09-06 稽核**：
+    本函式的 `_mods` 是**就地寫的**，`ImportFrom` **只吐 `_n.module`**
+    （`extend(_a.name …)` 那一支是給 `ast.Import` 用的，`ImportFrom` 走不到）。
+    ③④ 已改成「`module` 與 `module.name` 兩個都吐」，**本函式沒有跟上**。
+    **實測後果（rc=0，也就是放行）**：
+
+        from ui import tab3_portfolio        → `_mods = ["ui"]`
+                                               `"ui".startswith("ui.tab")` 為 False ⇒ **綠**
+        from ui.helpers import fund_grp_health → `_mods = ["ui.helpers"]`
+                                               `"fund_grp_health" in "ui.helpers"` 為 False ⇒ **綠**
+
+    也就是說**本頁對「同層 import 舊 ②／`fund_grp_health`」是不設防的**。
+    ③④ 的 PR 描述寫過「② 沒有 `_imported_modules`，刻意不為此新增」——
+    那句只講了**決定**，沒講**後果**；後果就是上面這兩行。
+    ⛔ 要修請一併看 ③④ 的 `_imported_modules` 註解裡登記的「回傳 `(module, symbol)`
+    讓消費端各自選」那個方向，**不要**只把 `module.name` 加進來就算
+    （那會把 ③④ 已量到的 5 個子字串誤紅一起帶進本頁）。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
     _mods: list[str] = []
