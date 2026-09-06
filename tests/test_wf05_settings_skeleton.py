@@ -689,6 +689,50 @@ def test_the_page_delegates_to_exactly_the_documented_public_entries():
         "**這條紅燈是提醒不是責備**：如果是刻意拿掉的，請同時把表降下來。")
 
 
+def test_the_new_page_delegates_the_same_set_as_the_old_one_minus_the_lying_block():
+    """⭐⭐ **功能沒有在改寫途中掉東西** —— 用「委派給誰」這個集合直接對帳。
+
+    ⛔ **這是本檔最便宜、也最抓得到「悄悄少一塊」的一條**：
+    (A) 路線之下，「使用者做得到什麼」幾乎完全等於「委派了哪些入口」。
+    把新頁與**仍然接在 `app.py` 的舊 ⑤**（`ui/tab_settings_diag.py`）逐一對帳，
+    差集必須**恰好是那一支**刻意不委派的：`render_nav_status_section`。
+
+    ⚠️ **雙向**：
+    - 新頁少了什麼（`舊 - 新`）→ 只准是 `render_nav_status_section`（裁決 2）；
+    - 新頁多了什麼（`新 - 舊`）→ 一律紅，那代表新頁自己長出了舊 ⑤ 沒有的依賴，
+      **應該先問「那一塊是不是該進 (A) 路線的委派清單」**。
+
+    ⚠️ **本條刻意拿舊 ⑤ 當基準，而不是拿一份手抄的清單** ——
+    手抄的清單會漂移；舊 ⑤ 是**今天真的在線上跑的那一份**，它就是規格。
+    ⛔ **代價據實寫**：舊 ⑤ 哪天被下架（接線批次會做），本條就失去基準、必須改寫。
+       屆時正解是把基準換成 `_DELEGATION_ALLOWLIST`，**不是刪掉本條**。
+    """
+    def _entries(rel: str) -> set:
+        _t = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+        return {(_n.module, _a.name) for _n in ast.walk(_t)
+                if isinstance(_n, ast.ImportFrom) and _n.module
+                and (_n.module.startswith("ui.tab")
+                     or _n.module.startswith("ui.helpers.settings_diag")
+                     or _n.module == "ui.helpers.data_registry")
+                and not _n.module.endswith("merge_context")
+                for _a in _n.names}
+
+    _old = _entries("ui/tab_settings_diag.py")
+    _new = _entries("ui/views/page_05_settings.py")
+    assert _old, "舊 ⑤ 掃不到任何委派 —— 基準沒了，本條失去對象。"
+
+    _lost = sorted(_old - _new)
+    assert _lost == [("ui.helpers.settings_diag.nav_history_section",
+                      "render_nav_status_section")], (
+        f"新 ⑤ 少委派了舊 ⑤ 有的入口：{_lost}\n"
+        "⛔ (A) 路線之下，少一支委派幾乎就等於**少一塊使用者做得到的事**。\n"
+        "唯一准許缺席的是 `render_nav_status_section`（總管裁決 2：它會印假數字）。")
+    _gained = sorted(_new - _old)
+    assert not _gained, (
+        f"新 ⑤ 多了舊 ⑤ 沒有的依賴：{_gained}\n"
+        "先問：那一塊是不是該正式進 (A) 路線的委派清單、由誰裁決？")
+
+
 def test_the_page_never_delegates_the_lying_nav_status_block():
     """⭐⭐ **總管裁決 2 的機器版**：不准委派回會印假數字的那兩支。
 
