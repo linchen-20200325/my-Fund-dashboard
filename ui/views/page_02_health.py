@@ -407,6 +407,24 @@ def _eating_verdict(fund: dict) -> "tuple[str, dict | None]":
     ⚠️ **單檔判定失敗不拖垮整組**（與 `switch_advisor_section._underperf_by_code`
     同一處理）：例外收成 `_EAT_UNKNOWN` 並印到 stderr，**且會被計入卡片說明的
     「N 檔資料不足」**—— 不是靜默吞掉（§1）。
+    **守衛**：`test_the_eating_card_accounts_for_every_fund_it_looked_at`
+    （這句承重宣稱原本沒有守衛，2026-09-06 獨立稽核抓到後補上）。
+
+    📌 **已登記的上游缺口：無配息基金會被說成「資料不足」，但它其實是「不適用」**
+    （2026-09-06 稽核發現，**根因在 `services/**`，不在本檔邊界內，本批不修**）：
+    `check_eating_principal_1y_mk` 在 `adr <= 0` 時直接 `return None`，於是累積型
+    （不配息）基金落進 :data:`_EAT_UNKNOWN`，卡片說「N 檔**資料不足**」。
+    **本組實測確認**（同日）::
+
+        check_eating_principal_1y_mk(累積型 div=0)     → None          → unknown
+        classify_eating_principal(6.0, 0.0)            → is_no_dividend=True,
+                                                         is_data_missing=False
+
+    —— **SSOT 內部分得出來**（`is_no_dividend`），只是在 `check_eating_principal_1y_mk`
+    回傳前被折疊成 `None` 了，本檔拿不到那個區別。
+    ⚠️ **不造成假綠也不造成假紅**（它不會被算成「沒吃本金」），
+    **只是低估了我們的認知** —— 我們其實知道「這檔不配息，所以吃本金這個概念不適用」，
+    畫面上卻說「不知道」。**要修得動 `services/**`，屬另案。**
     """
     from services.health.dividend import check_eating_principal_1y_mk
     try:

@@ -113,6 +113,8 @@ from ui.helpers.render_state import (  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
     HEALTH_TABLE_COLUMNS,
+    _num,
+    _pct,
     _uniq_by_code,
     _LAG_PENDING_NOTE,
     _SCORE_PENDING_NOTE,
@@ -334,6 +336,19 @@ def _units(parts: list[str]) -> list[tuple[str, list[str]]]:
     fail-open。**也就是說：這個好不容易降下來的粒度，會在卡片一接上真資料的那一刻
     自己失效，而且沒有任何東西會轉紅。** 本次連同另外兩種開頭一起認。
 
+    ⚠️ **兩個容易被搞混的數字，據實分開寫**（量測日 2026-09-06，本組逐 fixture 實測）：
+
+    - **落在所有單位之外的筆數 ＝ 7，而且對每一個「有持倉」的 fixture 都一樣。**
+      成分固定：頁面 `## 標題` ＋ 職責 caption ＋ **整個 form**（caption ＋ 3 個 widget
+      ＋ 送出鈕 ＝ 5 筆）。**也就是 unit-scoped 的斷言看不到 form 裡的任何東西。**
+    - **整頁總筆數才是會漂移的那個**：`UNLOADED`／`DUPLICATE` = 19、`RICH`／`FAKE` = 20、
+      `NEAR` = 21、`MIXED` = 23 —— 它跟著卡片狀態與表格列數走，**不要把它釘成一個數字**。
+    - **空持倉是另一種形狀**：`units = 0`、**10 筆全部在單位外**（空狀態取代了所有區塊）。
+
+    ⚠️ **本組第一次量這個時把兩者搞混了**：用「總筆數 − 單位內筆數」去算 outside，
+    而 OK／BUSINESS 卡的 opener **自己就在 body 裡**（見下），於是每有一張這種卡就
+    多扣一筆 —— `RICH` 因此被算成 5 而不是 7。**正確的量法是「第一個 opener 的索引」。**
+
     ⚠️ **OK／BUSINESS 兩種的 opener 自己就帶著內容**（`st.metric` 的值在下一筆
     `[metric_value]`；`business_alert` 的值與說明就在同一筆），所以它們的 body
     **包含 opener 自己那一筆**；`####` 區塊與灰態卡的 opener 只是標題，body 不含它。
@@ -432,6 +447,24 @@ UNLOADED_HOLDINGS = [
     _fund("AAA", holdings=_H_A),
     {**_fund("BAD1", holdings=_H_A), "loaded": False},
     {**_fund("BAD2", holdings=_H_A), "load_error": "NAV 抓不到"},
+]
+
+#: **判得動的與判不動的混在一起** —— 1 檔吃本金 ＋ 1 檔覆蓋充足 ＋ 2 檔資料不足。
+#: ⚠️ **這份 fixture 是被兩顆存活的突變逼出來的，而根因是覆蓋率、不是邏輯錯。**
+#:    獨立稽核用探針量到 `_eating_note()` 在整個測試檔被呼叫 16 次，
+#:    **`unknown` 每一次都是 0** —— 也就是「已判定 ＋ 資料不足」的混合情境
+#:    **從來沒有任何 fixture 走到過**。於是說明句裡「N 檔覆蓋充足」與
+#:    「N 檔資料不足、未列入判定」兩段可以整段砍掉而測試全綠。
+#:    **程式本來就是對的；缺的是走到那條路的輸入。**
+#: ⚠️ 「資料不足」那兩檔用的是「已載入、但沒有任何指標」的形狀（同 `FAKE_HOLDINGS`）——
+#:    那是真的會發生的情況：NAV 抓回來了，但 MoneyDJ 的配息／績效沒抓到。
+MIXED_HOLDINGS = [
+    _fund("EAT", div=8.0, ret=2.0, holdings=_H_A),      # 🔴 吃本金
+    _fund("OK1", div=3.0, ret=9.0, holdings=_H_B),      # 🟢 覆蓋充足
+    {"code": "NA1", "name": "NA1 基金", "currency": "TWD",
+     "loaded": True, "load_error": None},               # ⬜ 資料不足
+    {"code": "NA2", "name": "NA2 基金", "currency": "TWD",
+     "loaded": True, "load_error": None},               # ⬜ 資料不足
 ]
 
 #: 同一檔基金買在兩張保單 —— `portfolio_funds` 的主鍵是 `(policy_id, code)`。
@@ -577,10 +610,20 @@ def test_the_table_never_shows_a_bucket_grade_because_there_is_no_such_thing():
     assert not _bad, (
         f"「五桶評等」欄被填了東西（{_bad}）—— 本站沒有逐檔的五桶評等。\n"
         "若要改用 4D Grade，那是**換一個評等定義**，屬客戶 gate，不是實作細節。")
-    _all = _text(_render(portfolio=RICH_HOLDINGS))
-    assert "五桶" in _all and "4D" in _all, (
-        "「五桶評等」整欄留白，但畫面上沒有解釋為什麼 —— "
-        "沒解釋的空欄會被讀成「這幾檔沒有評等」。")
+    # ⭐ **斷言範圍限定在逐檔體檢表這個單位內**（2026-09-06 獨立稽核第四項）。
+    #    原本這裡用的是 `_text(...)`（**整頁**），於是刪掉逐檔表底下那句說明照樣全綠 ——
+    #    因為「組合健康總分」那一塊的灰字**同時含有「五桶」與「4D Grade」**，
+    #    **鄰居的字替它通過了**（實測：刪掉 caption → 29 passed）。
+    #    這正是 `_units()` docstring 自己寫的那句：「**邊界一寬，鄰居的字就會替你通過**」——
+    #    只是本條當初用的是 `_text()` 而不是 `_segments()`，所以沒享受到那個粒度。
+    _table_body = "\n".join(
+        _segments(_render(portfolio=RICH_HOLDINGS)).get("逐檔體檢表", []))
+    assert _table_body, "逐檔體檢表這個單位不見了。"
+    assert "五桶" in _table_body and "4D" in _table_body, (
+        "「五桶評等」整欄留白，但**這張表底下**沒有解釋為什麼 —— "
+        "沒解釋的空欄會被讀成「這幾檔沒有評等」。\n"
+        "⚠️ 別把別的區塊的說明算進來：使用者看表的時候不會滑上去讀總分那一塊。\n"
+        + _table_body)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1003,6 +1046,129 @@ def test_the_table_falls_back_to_the_empty_state_when_no_row_survives():
         "一列都沒有卻還是畫了表格 —— 鐵則 04：不畫空表格外框。\n" + "\n".join(_parts))
     assert "逐檔體檢還沒有可顯示的列" in _text(_parts), (
         "一列都沒有時沒有走空狀態三要素。\n" + "\n".join(_parts))
+
+
+# ══════════════════════════════════════════════════════════════════
+# §1 的核心不變量：「算不出來」與「真的是 0」不得長得一樣
+# ══════════════════════════════════════════════════════════════════
+
+def test_a_value_we_could_not_compute_never_renders_as_zero():
+    """⛔ 算不出來 → `⬜`；真的是 0 → `0`。**兩者不得相同。**
+
+    **這條是 2026-09-06 獨立稽核抓到的第一項：本頁最核心的 §1 不變量原本零守衛。**
+    把 `_pct` / `_num` 的 `NOT_READY_MARK` 換成 `"0"`，**29 顆測試全綠**：
+
+        {'代碼':'ACDD19', 'Sharpe':'0.00', '最大回撤':'0.0%', '配息覆蓋':'0.00'}  → 29 passed
+
+    ⚠️ `_pct` 自己的 docstring 早就寫著「`0` 與『不知道』在一張表裡長得一模一樣，
+    而它們的意思完全相反」——**話寫了，但沒有任何東西守著它。**
+
+    為什麼特別貴：
+    - `最大回撤 0.0%` 讀起來是「這檔從沒跌過」，真相是「我們沒有它的淨值歷史」；
+    - `配息覆蓋 0.00` 更糟 —— 那是**憑空生出來的最壞值**，等於對一檔我們一無所知的
+      基金**報一個假警**（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
+
+    ⚠️ **這一項的嚴重度被一件事放大**：本頁**目前沒有任何 production caller**
+    （`git grep -c 'page_02_health' origin/main -- app.py` → 0）——
+    沒有人在畫面上看得到它，**守衛就是唯一的防線**。
+    """
+    assert _pct(None) == NOT_READY_MARK, "`_pct(None)` 應為灰態記號。"
+    assert _num(None) == NOT_READY_MARK, "`_num(None)` 應為灰態記號。"
+    # ⭐ 關鍵的一半：**真的是 0 的時候要照印 0**。
+    #    只驗「None → ⬜」不夠 —— 把兩者都回 ⬜ 也會通過，那是另一個方向的說謊。
+    assert _pct(0.0) == "0.0%", "真的是 0% 的時候不可以被藏成灰態。"
+    assert _num(0.0) == "0.00", "真的是 0 的時候不可以被藏成灰態。"
+    assert _pct(None) != _pct(0.0) and _num(None) != _num(0.0), (
+        "「算不出來」與「真的是 0」在畫面上長得一模一樣 —— 那兩件事意思相反。")
+
+
+def test_a_row_we_know_nothing_about_is_blank_in_every_computed_column():
+    """一檔「已載入、但一個指標都算不出來」的基金：**每一個計算欄都必須是 `⬜`。**
+
+    這是上一條的端到端版本 —— 上一條驗格式化函式，這一條驗**真的走完整條路之後**
+    沒有人在中途塞一個 0 進來。`FAKE_HOLDINGS` 就是那條路（已載入，但無
+    `moneydj_raw` / `metrics`，真的會發生：NAV 抓回來了但配息／績效沒抓到）。
+
+    ⚠️ **代碼／名稱／幣別不在受檢範圍** —— 那三欄是 session 契約直接帶來的真值，
+    本來就該有東西。受檢的是**要靠計算才有的那些**。
+    """
+    _rows = _table_rows(_uniq_by_code(_holdings_of(FAKE_HOLDINGS)))
+    assert _rows, "`FAKE_HOLDINGS` 應該產出一列。"
+    _computed = ("近 1 年", "Sharpe", "最大回撤", "配息覆蓋", "五桶評等")
+    for _r in _rows:
+        for _col in _computed:
+            assert _r[_col] == NOT_READY_MARK, (
+                f"「{_col}」算不出來卻印了 {_r[_col]!r} —— "
+                "那會被讀成一個真實的觀測值（§1）。\n" + str(_r))
+        assert _r["資料日期"].startswith(NOT_READY_MARK), (
+            f"沒有淨值日期卻印了 {_r['資料日期']!r}。")
+
+
+def test_the_thresholds_printed_on_the_cards_come_from_the_ssot():
+    """卡片**說明句裡的門檻數字**也必須跟著 SSOT 走，不只是主數值。
+
+    **這是 2026-09-06 獨立稽核抓到的第二項。** 原本有
+    `test_the_numbers_on_the_cards_come_from_the_ssot`，名字看起來涵蓋這件事，
+    但它 patch 的是**產出結果的函式**（`check_eating_principal_1y_mk` /
+    `calc_holdings_overlap`），**沒有 patch 門檻常數** —— **值有守、門檻文案沒守**。
+    實測兩顆突變都存活：
+
+        `_eating_note` 門檻寫死 1     → 畫面印「超過 **1** 個百分點」（真實判定仍是 2）→ 29 passed
+        `_shadow_formula` 寫死 0.99   → 畫面印「相似度 ≥ **0.99**」（真實判定仍是 0.70）→ 29 passed
+
+    ⚠️ **`_shadow_formula` 自己的 docstring 逐字預言了這件事**：「SSOT 一改，
+    判定會跟著改、而畫面上的說明不會 … **卻沒有任何東西會報錯**。」**實測：那句話是真的。**
+
+    ⚠️ 為什麼這比看起來嚴重：畫面上的門檻**是使用者用來理解那個數字的唯一線索**。
+    門檻說 0.99、實際用 0.70，使用者會以為「沒被標示的那幾對都很不像」——
+    但其實 0.70~0.99 之間那些**已經被判為影子基金了**。**數字沒錯，解釋錯了。**
+    """
+    from unittest import mock
+
+    _base = _text(_render(portfolio=RICH_HOLDINGS))
+    assert "超過 2 個百分點" in _base and "≥ 0.70" in _base, (
+        "基線與 SSOT 現值對不上，本條的前提不成立。\n" + _base)
+
+    # ⚠️ patch 的是**常數的定義處**。本頁的兩個函式都是**呼叫當下**才 import 它們，
+    #    所以 patch 得到；換成 module 層 import 就會 patch 不到（那也正是本頁
+    #    刻意用函式內 lazy import 的理由之一）。
+    with mock.patch("shared.signal_thresholds.NEAR_DIVIDEND_WARNING_PCT", 5.0), \
+         mock.patch("shared.signal_thresholds.SHADOW_FUND_THRESHOLD_RATIO", 0.55):
+        _patched = _text(_render(portfolio=RICH_HOLDINGS))
+    assert "超過 5 個百分點" in _patched, (
+        "吃本金卡的門檻文案沒有跟著 SSOT 走 —— 它被寫死在畫面上了。\n" + _patched)
+    assert "≥ 0.55" in _patched, (
+        "影子基金卡的門檻文案沒有跟著 SSOT 走 —— 它被寫死在畫面上了。\n" + _patched)
+
+
+def test_the_eating_card_accounts_for_every_fund_it_looked_at():
+    """吃本金說明句**四個成分一個都不能少** —— 沒講出來的，使用者會自己補。
+
+    **這是 2026-09-06 獨立稽核抓到的第三項。** 原本只有「另有 N 檔接近警戒」有守衛
+    （`test_a_thin_margin_is_not_reported_as_eating_principal`），另外兩段砍掉都全綠。
+
+    ⚠️ **根因是覆蓋率不是邏輯錯** —— 稽核組用探針量到 `_eating_note()` 被呼叫 16 次、
+    **`unknown` 每一次都是 0**：「已判定 ＋ 資料不足」的混合情境**沒有任何 fixture 走到**。
+    `MIXED_HOLDINGS` 就是補上那條路的（它自己的註記寫著來歷）。
+
+    ⚠️ 「資料不足」那一段特別要緊：`_eating_verdict` 的 docstring 有一句**承重宣稱** ——
+    「例外收成 `_EAT_UNKNOWN` … **且會被計入卡片說明的「N 檔資料不足」**——
+    不是靜默吞掉（§1）」。**那句話原本沒有守衛**；本條就是它的守衛。
+
+    ⛔ 卡片上的主數字只有一個（幾檔吃本金），但它背後有四種落點。
+       **沒被講出來的那幾種，使用者多半會補成「其餘都健康」** —— 而那正好是最危險的誤讀：
+       「資料不足」被讀成「檢查過了，沒事」。
+    """
+    _seg = _segments(_render(portfolio=MIXED_HOLDINGS))
+    _body = "\n".join(_seg.get("吃本金警示", []))
+    assert _body, f"吃本金卡不見了。現有單位：{list(_seg)}"
+    # 1 檔 eating / 1 檔 healthy / 2 檔 unknown（見 MIXED_HOLDINGS）
+    assert "1 檔" in _body, f"主數字（吃本金檔數）不對。\n{_body}"
+    assert "1 檔覆蓋充足" in _body, (
+        "說明句沒有交代「幾檔是健康的」—— 那一段砍掉不會有任何東西轉紅（實測）。\n" + _body)
+    assert "2 檔資料不足" in _body and "未列入判定" in _body, (
+        "說明句沒有交代「幾檔根本判不動」——\n"
+        "而 `_eating_verdict` 的 docstring 承諾了它會被計入（§1 不得靜默吞掉）。\n" + _body)
 
 
 # ══════════════════════════════════════════════════════════════════
