@@ -1214,6 +1214,79 @@ def test_every_radar_session_read_is_summarized_in_the_same_function():
         "擋掉「全 ⬜ 卻說平靜」。")
 
 
+#: 全站斷線的 indicators —— 五個 FRED 來源全部 `success: False`，一個計分指標都沒有。
+#: 形狀照抄 `tests/test_batch2_top_card_grid.py::_TOTAL_OUTAGE_IND`（同一個生產端、
+#: 同一種斷線情境）。**刻意在本檔另存一份而不是 import**：那份是 batch2 的模組私有常數，
+#: 跨檔 import 會讓兩個檔的守衛在對方改動時一起倒，反而看不出是誰壞了。
+_P01_TOTAL_OUTAGE_IND = {"_fred_sources": {
+    _sid: {"success": False, "last_date": "", "realtime_start": "",
+           "publish_lag_days": None, "rows": 0}
+    for _sid in ("DGS10", "DGS2", "DGS3MO", "T10Y2Y", "T10Y3M")}}
+
+
+def _p01_full_ind() -> dict:
+    """28 項計分指標全部在線 —— 用來驗**反方向**（資料夠時照樣出位階）。"""
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    return {_k: dict(value=1.0, weight=_W[_k], score=_W[_k]) for _k in _W}
+
+
+def test_the_phase_card_greys_out_when_the_score_is_a_divide_by_zero_default():
+    """「景氣位階」卡在**零資料**時不得印出那顆分母為零的預設分數。
+
+    ⛔ **2026-09-06 由一個真實 bug 逼出來 —— 這張卡以前完全沒讀 `support`。**
+    `calc_macro_phase(<全站斷線>)` 實跑回 `score=5`、`phase='擴張'`，
+    而 `support.sufficient=False`、`reason='一個計分指標都沒取到，分數 5.0 是
+    分母為零時的預設值，不是量測'`。舊版只看 `_phase.get("phase")` 是否為真
+    （'擴張' 是真的）→ 印出綠色的「擴張（5/10）」。
+    **那個 5 不是量到的東西，是分母為零時的預設值。**
+
+    ⚠️ **生產端早就把判斷交過來了**：`calc_macro_phase` 內
+    `support=_phase_support(indicators, score)` 上方的註解逐字寫「消費端讀
+    `.sufficient`」—— 缺的從來不是資訊，是**有人去接**。
+
+    ⚠️ **同頁當時是自相矛盾的**：① 結論與 ② 依據都已經在讀 `support`
+    （`is_sufficient()`，L0 SSOT），只有本卡沒讀 —— 於是同一個畫面上
+    「這次的資料撐不起任何結論」與綠色的「擴張（5/10）」並排。
+
+    **突變會紅**：把 `_card_phase()` 的 `is_sufficient(_support)` 守門整段拿掉
+    → 本條紅（實測；見 PR 描述的突變測試段）。⚠️ 拿掉守門後**全 744 條只有本條會紅**
+    —— 也就是說在本條寫出來之前，這個 bug 在測試套件裡是**完全隱形**的。
+
+    ⚠️ **本條是行為測試，不是形式測試** —— 它問「這張卡吐出什麼」，
+    不問「有沒有呼叫某個函式」。所以改寫成別的等價寫法不會誤紅；
+    但也因此**擋不到**：卡片以外的地方（本條只叫 `_card_phase` 一個函式）、
+    以及 `support` 充足但數字本身算錯的情形（那是生產端的事）。
+    """
+    # ── 前提鎖：生產端仍然吐那顆假分數。它哪天改了，本條要說話，不要默默變成空測試。
+    _phase = _page.calc_macro_phase(_P01_TOTAL_OUTAGE_IND)
+    assert _phase["score"] == 5 and _phase["phase"] == "擴張", (
+        f"前提變了：生產端不再吐『擴張 5/10』（現為 {_phase['phase']} "
+        f"{_phase['score']}/10）。本條守的那個具體情境可能已不存在，請重看。")
+    assert not _phase["support"].sufficient, (
+        "前提變了：生產端現在認為零資料也撐得住位階判讀 —— 那是更大的問題，先查生產端。")
+
+    # ── 正向：零資料 → 灰態，且**不得**把那顆假分數印出來。
+    _card = _page._card_phase(_P01_TOTAL_OUTAGE_IND)
+    assert _card["state"] == _page.STATE_NOT_READY, (
+        f"零資料時「景氣位階」卡的狀態是 {_card['state']!r}，不是灰態。\n"
+        "⛔ `calc_macro_phase({})` 的 5.0 是**分母為零時的預設值**，不是量測；"
+        "把它畫成一張有顏色的卡，就是把「什麼都沒抓到」講成「擴張」（§1）。\n"
+        "→ 請走 `is_sufficient(_phase.get('support'))`（L0 SSOT，"
+        "與同頁 ① 結論、② 依據同一支），不要在這裡發明第三套判斷式。")
+    _shown = f"{_card.get('value', '')}{_card.get('note', '')}"
+    assert "5/10" not in _shown and "擴張" not in _shown, (
+        f"灰態卡仍然把那顆假分數／假位階印出來了：{_shown!r}")
+    # 灰態三要素之一：要告訴使用者去哪裡補資料（本檔第 4 節的既有規則）。
+    assert _card.get("where"), "灰態卡沒有告訴使用者去哪裡補資料"
+
+    # ── 反方向：資料夠的時候照樣出位階。**沒有這一半，「永遠回灰態」也會全綠。**
+    _ok = _page._card_phase(_p01_full_ind())
+    assert _ok["state"] != _page.STATE_NOT_READY, (
+        f"28 項指標全部在線卻還是灰態 —— 守門過嚴，把好資料也擋掉了：{_ok!r}")
+    assert "/10" in str(_ok.get("value", "")), (
+        f"資料充足時卻沒印出位階分數：{_ok!r}")
+
+
 def test_the_loader_fills_every_detail_zone_payload():
     """`_load_everything()` 必須把四塊要用的 payload 都放進 session。
 
