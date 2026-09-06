@@ -9,6 +9,9 @@ name: "每日 NAV 自動補齊 (nav_history)"
 # ⚠️ cron 是 UTC。台灣 = UTC+8。
 #   0 12 * * * = 每天 12:00 UTC = 每天 20:00 台灣(NAV T+1 傍晚已確定;排在健康週報之後)。
 on:
+  # ⛔ TEMP（P0 取證用）：本分支 push 即觸發，取證後移除。
+  push:
+    branches: ["claude/fund-navfix-sn42bh"]
   schedule:
     - cron: "0 12 * * *"
   workflow_dispatch:
@@ -59,6 +62,8 @@ jobs:
           PY
 
       - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
+        # ⛔ TEMP（P0 取證用）：push 觸發時完全不跑這一步，確保零寫入。取證後移除。
+        if: github.event_name != 'push'
         # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
         env:
           google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
