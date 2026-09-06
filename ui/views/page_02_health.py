@@ -49,12 +49,35 @@
    下一批填內容時，看到 `services/switch_advisor.py` / `services/rotation.py`
    這類**建議**類服務要停手 —— 它們的落點是 ④，不是這裡。
 
-⛔ **不修補舊 ②，也不委派它。** 舊實作（`ui/tab_fund_grp_health.py` 1,441 行
-   ＋ `ui/helpers/fund_grp_health/` 一整包）依方針第 3 條會在五頁驗收完成後**整批拔除**。
-   本檔**一行都不 import 它們** —— 每多一條委派，那一刻就多一處會斷頭。
-   ⚠️ 這一點是 ① 的既有教訓：`ui/views/page_01_macro.py` 留了一條對
-   `ui/tab1_macro_midcycle.py` 的委派，它自己的 docstring 就登記著
-   「有效期到舊 tab 整批拔除為止」。**本檔一條都沒有。**
+~~⛔ **不修補舊 ②，也不委派它。** 舊實作（`ui/tab_fund_grp_health.py` 1,441 行~~
+   ~~＋ `ui/helpers/fund_grp_health/` 一整包）依方針第 3 條會在五頁驗收完成後**整批拔除**。~~
+   ~~本檔**一行都不 import 它們** —— 每多一條委派，那一刻就多一處會斷頭。~~
+   ~~⚠️ 這一點是 ① 的既有教訓：`ui/views/page_01_macro.py` 留了一條對~~
+   ~~`ui/tab1_macro_midcycle.py` 的委派，它自己的 docstring 就登記著~~
+   ~~「有效期到舊 tab 整批拔除為止」。**本檔一條都沒有。**~~
+
+⚠️ **2026-09-06 路線 (A)：上段已被客戶推翻。有意識的政策變更，不是漏刪。**
+   **決策者：客戶**。日期 **2026-09-06**。原文加刪除線保留，**不刪除**。
+
+   客戶原話：「新頁只做**版面呈現與互動排版**，寫入邏輯**原封不動呼叫既有舊模組**，
+   資料路徑不動，**Google Sheet 零風險**。」→ **版面留新版的，功能接回既有 public 入口。**
+
+   **兩邊理由並陳（舊條的理由仍然成立，只是被權衡掉，不是「當初寫錯」）**：
+   - **舊條為什麼是對的** —— 「每多一條委派，那一刻就多一處會斷頭」今天依然成立；
+     舊實作確實排定要整批拔除。這個顧慮**沒有消失**，它被轉成了**登記**
+     （見 :data:`DELEGATED_ENTRIES` 的「舊 tab 拔除時要回來改這裡」註）。
+   - **新條為什麼勝出** —— 從零重寫那些子區塊要重新實作一整包計算與取數，
+     那既違反客戶「資料路徑不動」的要求，也把 Google Sheet 的風險面重新打開一次；
+     **呼叫既有 public 入口，寫入面完全不變**（本批實測：委派後仍是零寫入）。
+
+⛔ **委派黑名單 —— 這兩支不准接，理由不是風格，是它們會寫客戶的 Google Sheet：**
+   - `ui/helpers/fund_grp_health/switch_advisor_section.py::render_switch_advisor_section`
+   - 同檔 `::render_portfolio_tracking`
+   **打開就寫一列進客戶 Google Sheet，沒有按鈕、沒有勾選**（該區塊 caption 自陳
+   「每次開啟本區自動存一筆」）。它們現在住在 ④，另有一組正在修。
+   ⚠️ **它們的程式碼就放在 `ui/helpers/fund_grp_health/` 這個「舊 ② 的資料夾」裡** ——
+   **照資料夾委派的人會把它們搬回 ②**。機器規則見
+   `tests/test_wf02_health_skeleton.py::test_the_page_never_delegates_to_the_write_blacklist`。
 
 ⛔ **波段觀測站（`ui/components/mk_dashboard.py`）本批完全不碰。**
    線框「從哪裡搬來」把它列進 ②，但客戶 2026-09-05 裁決：**搬，排在本頁上線之後的獨立批次**。
@@ -192,6 +215,71 @@ _LAG_PENDING_NOTE: str = (
     "「連兩季落後基準」目前只實作在波段觀測站裡，"
     "它的搬遷是客戶指定的**下一個獨立批次**；"
     "本站服務層沒有同語意的替代算法（現有的是「近 1 年」超額報酬，期間對不上）。")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 路線 (A) 委派名單 —— 客戶 2026-09-06 拍板「功能接回既有 public 入口」
+# ══════════════════════════════════════════════════════════════════════════
+#: **第一階段已接回**的舊模組 public 入口，`(module, symbol)`。
+#:
+#: ⚠️ **這份名單是機器規則的 SSOT**：`tests/test_wf02_health_skeleton.py` 拿它跟
+#: 本檔**實際 import 到的符號**做 `==` 比對（**精確集合相等，不是白名單過濾**）。
+#: 於是三個方向都會轉紅：**多接一支**、**少接一支**、**接了黑名單那兩支**。
+#: ⛔ **改這份常數不等於改守衛** —— 兩邊都要動，這是刻意的摩擦。
+#:
+#: ⚠️ **舊 tab 整批拔除時要回來改這裡**（這就是被劃掉的舊條文所擔心的那個斷頭點，
+#: 現在把它變成一個**看得見、機器守得住的登記**，而不是一句「本檔一條都沒有」）。
+#:
+#: **為什麼是 `ui.helpers.fund.checkup` 而不是 `ui.helpers.fund_checkup`**：
+#: 後者是 v19.204 P2-7 的**向後相容 shim**（整檔只有 `import *` ＋ `dir()` 迴圈），
+#: 兩者 re-export 的是**同一個函式物件**，行為完全一致；直接指 canonical 位置，
+#: shim 哪天依 `CLAUDE.md` §-1.5.1c `01`-2「用不到即清理」被刪時本檔不會斷。
+DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund.checkup", "render_fund_checkup"),
+    ("ui.components.mutual_exclusion", "render_mutual_exclusion_section"),
+)
+
+#: ⛔ **黑名單：接了就是把 P0 寫入面搬回 ②。**
+#: 這兩支**打開就寫一列進客戶的 Google Sheet**，沒有按鈕、沒有勾選。
+#: 它們住在 `ui/helpers/fund_grp_health/`，也就是**舊 ② 的資料夾** ——
+#: 任何「照資料夾整包委派」的作法都會把它們一起帶回來，所以要具名擋。
+DELEGATION_BLACKLIST: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health.switch_advisor_section",
+     "render_switch_advisor_section"),
+    ("ui.helpers.fund_grp_health.switch_advisor_section",
+     "render_portfolio_tracking"),
+)
+
+#: **第一階段刻意沒接**的入口，以及**具名**理由。
+#:
+#: ⚠️ 寫成常數而不是散在註解裡，是為了讓「為什麼沒接」跟「接了什麼」一樣可稽核 ——
+#: 一個沒有理由的缺口，下一輪就會被當成「還沒排到」隨手補上（本檔上方
+#: `_SCORE_PENDING_NOTE` 那段講的就是這件事）。
+#:
+#: ⛔ **這三條的前兩條是「業務規則衝突」，不是技術問題** ——
+#: 依 `CLAUDE.md` §-1.5 v3 `03`-2 ② **須由客戶拍板**，本檔不自行決定。
+DEFERRED_ENTRIES: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health::render_fund_grp_health_extras",
+     "① 它需要 `principal_twd`（一個**使用者選的比較基準本金**）。舊 ② 從一個 "
+     "`st.number_input`（預設 1,000,000）拿這個值；**本頁沒有那個 widget，"
+     "而新增 widget 屬版面異動，要先送客戶線框草稿**。實測全 repo 除了舊 ② 那個 "
+     "widget 之外**沒有第二個來源**。用 `sum(invest_twd)` 會把「每檔各投入 N」"
+     "悄悄換成「每檔各投入全部身家」，畫面數字全變、使用者看不出來 —— "
+     "那正是 §1 禁止的那種造假。② 它還會轉呼叫 `services/rotation.py` 的"
+     "**輪動配對建議**，那是本頁 docstring 逐字點名要停手的「建議類服務」。"),
+    ("ui.helpers.fund_grp_health.backtest_section::render_allocation_backtest_section",
+     "它輸出「📋 勝出策略建議」「🔄 賣→買 配對建議」「⚖️ 建議配置權重／目標權重%」—— "
+     "那就是**再平衡試算與換股建議**，而客戶核准的線框在 Tab 02 的「這裡不放什麼」"
+     "逐字寫著「換股建議與再平衡試算 → 04（那是決策，不是診斷）」。"
+     "**技術上可以接（只吃 `funds`、實測零寫入），是範圍邊界擋著，不是做不到。**"),
+    ("ui.helpers.fund_grp_health.{switch_section,regime_section}"
+     "::{render_switch_section,render_regime_fit_section}",
+     "兩支都吃**健診大表列** `df.to_dict('records')`，不是本頁的 9 欄列。"
+     "實測 key 交集 **0/8** 與 **0/4**（連 `code` 都沒有：本頁的鍵是「代碼」）；"
+     "且本頁的值是**格式化後的顯示字串**（`_pct()` 產「12.34%”），"
+     "而 `replacement_candidate` 要對 `Sharpe 1Y`／`Sortino` 做加權**算術**。"
+     "→ 需要一個 rows adapter，規格見本輪回報；**不硬湊一份假的 rows**（§1）。"),
+)
 
 
 def _pending_where(block: str) -> str:
@@ -841,6 +929,70 @@ def _render_health_table() -> None:
             "已送客戶確認；**不拿別的評等填進來充數**。")
 
 
+def _render_delegated_sections() -> None:
+    """區塊 5｜**路線 (A) 委派區** —— 原封不動呼叫既有舊模組的 public 入口。
+
+    客戶 2026-09-06：「新頁只做版面呈現與互動排版，**寫入邏輯原封不動呼叫既有舊模組**。」
+    本函式**不重新實作任何計算**，只負責：拿到持股 → 傳給既有 public 入口 → 隔離失敗。
+
+    接了哪兩支、為什麼是這兩支，見 :data:`DELEGATED_ENTRIES`；
+    **沒接的三組與具名理由**見 :data:`DEFERRED_ENTRIES`；
+    **不准接的兩支**見 :data:`DELEGATION_BLACKLIST`。
+
+    **傳什麼進去 —— 這一段是本函式唯一的實質判斷，寫清楚**
+    ------------------------------------------------------
+    兩支都吃「rich fund dict list」。舊 ② 傳的是
+    `_build_fund_dict(r["_fund_raw"], r["code"], principal_twd)` 的產物，
+    而那個 helper 的 docstring **逐字自陳**：「把 `_auto_fetch_moneydj` 回傳的 raw dict
+    **包成 portfolio_funds 標準結構**」。
+
+    也就是說 —— **舊 ② 是把它的資料轉成本頁 `portfolio_funds` 的形狀，才餵進去的。**
+    本頁的 `_holdings()` **已經就是那個形狀**，所以**直接傳，不需要 adapter**：
+
+        `_build_fund_dict` 產出  code / name / series / dividends / metrics /
+                                 moneydj_raw / risk_metrics / currency / loaded / invest_twd
+        `portfolio_funds` 契約   name / series / dividends / metrics / moneydj_raw /
+                                 risk_metrics / is_core / currency（`ui/helpers/portfolio/load.py::
+                                 _FUND_INFO_KEYS`）＋ code / loaded / invest_twd（同檔 sync）
+
+    ⚠️ **唯一的實質差異，據實寫明、不掩蓋**：`_build_fund_dict` 把每檔的 `invest_twd`
+    **統一覆寫成同一個 `principal_twd`**（那是「假設每檔都投入相同金額才能比較」的
+    刻意設計）；而 `portfolio_funds` 帶的是**使用者每檔真正投入的金額**。
+    → 對本批接的這兩支**沒有影響**（實測兩支都不讀 `invest_twd`：
+      `render_fund_checkup` 走 `metrics`／`moneydj_raw`／`series`，
+      `render_mutual_exclusion_section` 走持股與相關性）。
+    ⛔ **但下一批接 `render_fund_grp_health_extras` 時這個差異會變成真的**
+      —— 它底下的 `_render_investment_calc` 就是吃那個本金算「可申購單位／月配 TWD」。
+      **那正是 :data:`DEFERRED_ENTRIES` 第一條擋著它的原因，不要以為那只是缺個 widget。**
+
+    ⚠️ **`_uniq_by_code` 一定要先跑**：`portfolio_funds` 的主鍵是 `(policy_id, code)`，
+    同一檔基金跨兩張保單會出現兩次；不去重的話「互斥避險」會拿同一檔跟自己比相關性，
+    必然算出 1.0 的假警訊。
+    """
+    _funds = _uniq_by_code(_holdings())
+    if not _funds:
+        return
+
+    # ⛔ **lazy import，且逐支具名** —— 不是 `from ui.helpers import fund_grp_health`
+    #    那種整包委派。整包委派會把黑名單那兩支（同一個資料夾裡的
+    #    `switch_advisor_section`）一起帶進射程，而它們打開就寫 Google Sheet。
+    #    守衛拿 `DELEGATED_ENTRIES` 對本檔實際 import 到的符號做**精確集合相等**比對。
+    from ui.components.mutual_exclusion import render_mutual_exclusion_section
+    from ui.helpers.fund.checkup import render_fund_checkup
+
+    st.divider()
+    st.markdown("#### 🔬 逐檔健診與互斥分析")
+    # ⚠️ 這句 caption 是**誠實揭露**，不是行銷詞：本區塊的內容與舊 ② 同源同碼，
+    #    使用者若發現這裡跟舊 ② 長得一樣，那是對的、是刻意的。
+    st.caption("本區直接沿用既有的健診模組（**與舊分頁同一份程式碼、同一條資料路徑**），"
+               "版面走新版動線。")
+
+    # 每一支各自包 `safe_section` —— 一支失敗不連坐另一支，也不連坐本頁其他區塊。
+    # ⚠️ `safe_section` **不吞例外**（§1）：走 `system_error()` 顯式紅框 ＋ traceback。
+    safe_section("基金體檢", lambda: render_fund_checkup(_funds, expanded=True))
+    safe_section("持倉互斥避險", lambda: render_mutual_exclusion_section(_funds))
+
+
 def render_holdings_health() -> None:
     """渲染「② 持倉體檢」整頁。
 
@@ -877,3 +1029,8 @@ def render_holdings_health() -> None:
     safe_section("組合健康總分", _render_health_score)
     safe_section("警示卡片", _render_alert_cards)
     safe_section("逐檔體檢表", _render_health_table)
+    # 路線 (A) 委派區 —— 放在**最後**，理由不是隨手排的：
+    # 線框 Tab 02 釘死的順序是「總分 → 三張卡 → 逐檔表」，那三塊是本頁自己的版面，
+    # 委派進來的是**既有模組自帶的版面**（它們自己會 `st.divider()` + 下標題）。
+    # 夾在中間會把線框指定的動線切斷；接在後面則是「線框的四塊 ＋ 沿用的深度分析」。
+    _render_delegated_sections()
