@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import sys
 import re
 from typing import Any
 
@@ -72,6 +73,15 @@ SRC = ROOT / "ui" / "views" / "page_02_health.py"
 
 #: 灰態的視覺記號（`ui/helpers/render_state.py::NOT_READY_MARK`）。
 #: ⚠️ **從那個模組 import，不在這裡抄一份字面值** —— 抄了就是第二份真相源。
+#: form 閘門守衛共用的 AST 偵測（`tests/_ast_bindings.py`）——
+#: ⚠️ 這裡**不要**再抄一份掃描邏輯：②③④ 三頁曾各自抄一份較弱的版本，
+#:    三份同時漏掉屬性賦值／`update()`／widget `key=` 三條管道（`CLAUDE.md §2.1`）。
+#: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
+#:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
+                           guarded_key_names, session_writes)
+
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
@@ -470,6 +480,33 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
 
     做法：以 AST 確認 `_applied_filters()` 讀的是 session 的已套用鍵，
     且 widget 的回傳值**只**在 `if <gate>:` 底下才被寫進 session。
+        ## 這條看得見／看不見什麼（2026-09-05 重寫，**先讀這段再信它**）
+
+    session 寫入有**四條管道**，本條靠 `tests/_ast_bindings.py::session_writes`
+    四條全收：下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+    ⚠️ **2026-09-05 第二輪：管道 4 已收窄，這不是放水，是修一條無解的偽陽性。**
+    widget 一定建在 `with applied_form(...)` 內、閘門 `if` 一定在 `with` 外
+    ⇒ 帶 `key=` 的 widget **結構上永遠不可能**落在閘門 body 裡；不收窄的話這條
+    **沒有任何合法擺法能轉綠**（本 repo `ui/**` 有 231 處 `key=`，那是家風）。
+    現行判準：`key=` **指到守衛在乎的那個 session key** 才算違規（常數名與字面值都認），
+    widget 寫自己的鍵不是。**此判準不依賴任何未經實測的 streamlit runtime 語意。**
+    ⚠️ 重寫前它**只認第一條**（`ast.Assign` ＋ target 是 `ast.Subscript`）——
+    本組 2026-09-05 的基線實測：三頁 × 另外三條管道，注入裸寫入後**全部 18/18 綠**。
+    其中**屬性賦值**是本 repo `ui/**` 跨 6 檔 27 處的主流寫法，
+    **最可能被下一個人照家風真的踩到**；`key=` 那條最陰 —— streamlit **代呼叫端**
+    把 widget 值寫進 session，AST 上是普通 `ast.Call`，任何「找賦值節點」的手段都收不到。
+
+    「被閘門包住」的判準也換了：從「在**任何**一個 `ast.If` 底下」改成
+    **「在 `with applied_form(...) as X` 綁出來的那個 `X` 所控制的 `if` 底下」**
+    （`gate_ifs()`）。舊判準的洞：只要有人往這個函式加第二個 `if`
+    （例如 `if not _funds: return`），藏在它底下的裸寫入就會被算成「已被閘門包住」。
+    **實測**：重寫前本函式只有 `_gate` 一個 `if`，所以那個洞**尚未發作** ——
+    修的是「下一個人加第二個 `if` 就會中」。
+
+    ⛔ **仍然分不出真假閘門**：`if not _gate:` 的 test 一樣提到 `_gate`，
+    本條照樣認它是閘門（`gate_ifs()` 的 docstring 就地寫明）。
+    那一種要靠 AppTest 行為測試去驗，靜態規則做不到。
+    ⛔ **不遞迴進被呼叫的函式**：把 `st.session_state` 傳出去、由別處寫，本條看不到。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
     _fns = {_n.name: _n for _n in ast.walk(_tree)
@@ -478,19 +515,28 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
         "找不到 `_applied_filters()` —— 「已套用值」這一層被拿掉了，"
         "下游就會直接讀 widget 值，等於沒有 form。")
     _form_fn = _fns["_render_filter_form"]
-    _writes = [_n for _n in ast.walk(_form_fn)
-               if isinstance(_n, ast.Assign)
-               and any(isinstance(_t, ast.Subscript) for _t in _n.targets)]
+        # ⚠️ 管道 4（widget `key=`）**必須**收窄成「只認守衛在乎的那個 session key」：
+    #    widget 一定建在 `with applied_form(...)` 內，而閘門 `if` 一定在 `with` 外
+    #    ⇒ 帶 `key=` 的 widget 結構上永遠不可能落在閘門 body 裡，不收窄就是一條
+    #    **永遠無法滿足**的守衛（本 repo `ui/**` 有 231 處 `key=`，量測日 2026-09-05）。
+    # ⚠️ **自動收齊模組層所有 `_SK_*`，不要列舉** —— 列舉一定會漏下一個新加的鍵。
+    #    上一版只餵 `_SK_APPLIED`，於是 `key=_SK_PORTFOLIO`（使用者的 live 持股）
+    #    那顆突變從紅掉成綠（2026-09-06 稽核 M-1，三頁 × 三序實測）。
+    _applied_keys = guarded_key_names(_tree)
+    _writes = session_writes(_form_fn, widget_key_names=_applied_keys)
     assert _writes, "`_render_filter_form()` 沒有把套用結果寫回 session。"
-    _guarded = []
-    for _if in ast.walk(_form_fn):
-        if isinstance(_if, ast.If):
-            _guarded.extend(id(_n) for _n in ast.walk(_if) if isinstance(_n, ast.Assign))
+    _gate_ifs = gate_ifs(_form_fn)
+    assert _gate_ifs, (
+        "`_render_filter_form()` 裡找不到 `with applied_form(...) as <gate>:` 綁出來的那個閘門 `if` —— "
+        "form 沒有 gate 住任何東西（或閘門換了寫法，請同步 `gate_ifs()` 的判準）。")
+    # ⚠️ 只算閘門 `if` 的 **body** —— `else:` / `elif` 是閘門為假才跑的路徑，
+    #    整棵 `ast.walk(_g)` 會把它們一起算成 guarded（2026-09-05 實測的洞）。
+    _guarded = gate_guarded_ids(_form_fn)
     _naked = [_w for _w in _writes if id(_w) not in _guarded]
     assert not _naked, (
         "有 session 寫入**沒有**被送出閘門包住 —— 那代表每次 rerun 都會覆寫已套用值，\n"
         "使用者拖滑桿的當下就會觸發下游重算，form 等於白包。\n  "
-        + "\n  ".join(f"第 {_w.lineno} 行" for _w in _naked))
+        + "\n  ".join(f"第 {_w.lineno} 行：{ast.unparse(_w)[:70]}" for _w in _naked))
 
 
 def test_the_page_never_reaches_into_the_data_layer():
@@ -519,6 +565,24 @@ def test_the_page_does_not_delegate_to_the_old_tab():
 
     ⚠️ ① 留了一條對 `ui/tab1_macro_midcycle.py` 的委派並就地登記
     「有效期到舊 tab 整批拔除為止」—— **本頁一條都沒有，而且要維持這樣。**
+
+    ⚠️ **已知漏洞，本批刻意不修（登記後果，不只登記決定）—— 2026-09-06 稽核**：
+    本函式的 `_mods` 是**就地寫的**，`ImportFrom` **只吐 `_n.module`**
+    （`extend(_a.name …)` 那一支是給 `ast.Import` 用的，`ImportFrom` 走不到）。
+    ③④ 已改成「`module` 與 `module.name` 兩個都吐」，**本函式沒有跟上**。
+    **實測後果（rc=0，也就是放行）**：
+
+        from ui import tab3_portfolio        → `_mods = ["ui"]`
+                                               `"ui".startswith("ui.tab")` 為 False ⇒ **綠**
+        from ui.helpers import fund_grp_health → `_mods = ["ui.helpers"]`
+                                               `"fund_grp_health" in "ui.helpers"` 為 False ⇒ **綠**
+
+    也就是說**本頁對「同層 import 舊 ②／`fund_grp_health`」是不設防的**。
+    ③④ 的 PR 描述寫過「② 沒有 `_imported_modules`，刻意不為此新增」——
+    那句只講了**決定**，沒講**後果**；後果就是上面這兩行。
+    ⛔ 要修請一併看 ③④ 的 `_imported_modules` 註解裡登記的「回傳 `(module, symbol)`
+    讓消費端各自選」那個方向，**不要**只把 `module.name` 加進來就算
+    （那會把 ③④ 已量到的 5 個子字串誤紅一起帶進本頁）。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
     _mods: list[str] = []
