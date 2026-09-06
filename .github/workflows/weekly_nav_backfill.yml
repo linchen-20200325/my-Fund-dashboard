@@ -9,9 +9,6 @@ name: "每日 NAV 自動補齊 (nav_history)"
 # ⚠️ cron 是 UTC。台灣 = UTC+8。
 #   0 12 * * * = 每天 12:00 UTC = 每天 20:00 台灣(NAV T+1 傍晚已確定;排在健康週報之後)。
 on:
-  # TEMP-PROBE(唯讀取證用,取證後移除):讓本分支 push 時觸發,只跑 diag。
-  push:
-    branches: ["claude/pool-grid-probe"]
   schedule:
     - cron: "0 12 * * *"
   workflow_dispatch:
@@ -35,8 +32,6 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
       - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
-        # TEMP-PROBE(取證後移除):push 觸發時**整步跳過**,對客戶試算表零寫入。
-        if: github.event_name != 'push'
         # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
         env:
           google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
@@ -50,82 +45,3 @@ jobs:
         run: >
           python scripts/weekly_nav_backfill.py
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
-
-      # ══════════════ TEMP-PROBE(唯讀取證,取證後整步移除)══════════════
-      # 只讀不寫:open_by_key / fetch_sheet_metadata / row_values。
-      # ⛔ 刻意不呼叫 pool_repository 的 _ws()/list_pool()/get_pool_store() ——
-      #    main 版的 _ws() 在**讀取路徑**上會 add_worksheet + update("A1") 反寫客戶的表。
-      - name: TEMP-PROBE read-only grid diagnostics
-        if: github.event_name == 'push'
-        env:
-          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
-          POOL_SHEET_ID: ${{ secrets.POOL_SHEET_ID }}
-          POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
-          macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
-          NAV_SHEET_ID: ${{ secrets.NAV_SHEET_ID }}
-        run: |
-          python - <<'PY'
-          import os, sys
-          from repositories.pool_repository import _HEADERS, _WS_POOL, _POOL_SHEET_ID_DEFAULT
-          from services.nav_history_gs import _NAV_HEADERS
-          from repositories.policy_repository import get_gspread_client
-
-          print(f"[code] len(_HEADERS)={len(_HEADERS)} {_HEADERS}")
-          print(f"[code] _WS_POOL={_WS_POOL!r}")
-          print(f"[code] len(_NAV_HEADERS)={len(_NAV_HEADERS)} {_NAV_HEADERS}")
-
-          pool_secret = (os.environ.get("POOL_SHEET_ID") or "").strip()
-          print(f"[env ] POOL_SHEET_ID set? {bool(pool_secret)}; "
-                f"equals baked default? {pool_secret == _POOL_SHEET_ID_DEFAULT}")
-          for k in ("POLICY_SHEET_ID", "macro_weights_sheet_id", "NAV_SHEET_ID"):
-              v = (os.environ.get(k) or "").strip()
-              print(f"[env ] {k} set? {bool(v)}")
-
-          books = {
-              "POOL(effective = secret or baked)": pool_secret or _POOL_SHEET_ID_DEFAULT,
-              "POOL(baked default)":               _POOL_SHEET_ID_DEFAULT,
-              "POLICY_SHEET_ID":                   (os.environ.get("POLICY_SHEET_ID") or "").strip(),
-              "macro_weights_sheet_id":            (os.environ.get("macro_weights_sheet_id") or "").strip(),
-              "NAV_SHEET_ID":                      (os.environ.get("NAV_SHEET_ID") or "").strip(),
-          }
-          client = get_gspread_client(os.environ["google_service_account"])
-          seen = {}
-          for label, sid in books.items():
-              print("=" * 72)
-              print(f"### {label}")
-              if not sid:
-                  print("    (empty -> skip)"); continue
-              if sid in seen:
-                  print(f"    (same spreadsheet as: {seen[sid]}) -- still dumping"); 
-              seen.setdefault(sid, label)
-              try:
-                  sh = client.open_by_key(sid)
-              except Exception as e:
-                  print(f"    !! OPEN FAILED: {type(e).__name__}: {str(e)[:300]}")
-                  continue
-              print(f"    opened OK. title={sh.title!r}")
-              try:
-                  meta = sh.fetch_sheet_metadata()
-              except Exception as e:
-                  print(f"    !! metadata failed: {type(e).__name__}: {e}"); continue
-              for s in meta.get("sheets", []):
-                  p = s.get("properties", {})
-                  gp = p.get("gridProperties", {})
-                  print(f"    - ws title={p.get('title')!r} "
-                        f"gridProperties={{rowCount:{gp.get('rowCount')}, columnCount:{gp.get('columnCount')}}}")
-              for target, hdrs in ((_WS_POOL, _HEADERS), ("nav_history", _NAV_HEADERS)):
-                  try:
-                      ws = sh.worksheet(target)
-                  except Exception:
-                      print(f"    [{target}] worksheet ABSENT in this book")
-                      continue
-                  hdr = ws.row_values(1)
-                  need = len(hdrs)
-                  print(f"    [{target}] col_count={ws.col_count} row_count={ws.row_count}")
-                  print(f"    [{target}] row_values(1) len={len(hdr)} -> {hdr}")
-                  print(f"    [{target}] code needs {need} cols; "
-                        f"MINE={'YES (grid narrower than headers)' if ws.col_count < need else 'no'}")
-                  print(f"    [{target}] header row matches code headers? {hdr[:need] == list(hdrs)}")
-          print("=" * 72)
-          print("DIAG DONE (read-only; no writes issued)")
-          PY
