@@ -1495,13 +1495,16 @@ def test_the_page_has_no_exception_handler_of_its_own():
     或**用錯顏色重印一次**（踩 `tests/test_render_state_color_separation.py`
     的方向 A ratchet —— 那條規則掃 `ui/**` 全部，本檔在射程內）。
 
-    現行唯一的 `except` 在 `_nav_facts()`：它只把「索引不是時間軸」收斂成
-    「本格沒有事實可顯示」→ 回 `None` → 呼叫端照樣走灰態並說出理由。
-    **它不印任何東西**，所以兩種結果都不會發生。
+    ⚠️ **本條的門檻 2026-09-06 由「≤1」收成「0」**（本組自己拆掉了那一個）：
+    初稿在 `_nav_facts()` 有一個 `except`，把「序列的索引讀不出來」收斂成
+    `return None` → 呼叫端走灰態、文案是「這次沒有帶回淨值序列」——
+    **但序列帶回來了，只是讀不出來，那句話是假的。**
+    索引不是時間軸 ＝ 上游契約被破壞（`CLAUDE.md §3.1`），§1 要求炸掉。
+    **一個 `except` 都沒有，這條規則才不必再判斷「這個 handler 乖不乖」。**
     """
     _handlers = [_n for _n in ast.walk(_tree()) if isinstance(_n, ast.ExceptHandler)]
-    assert len(_handlers) <= 1, (
-        f"本頁有 {len(_handlers)} 個 except —— 區塊級隔離已由 `safe_section()` 提供，"
+    assert not _handlers, (
+        f"本頁有 {len(_handlers)} 個 except（應為 0） —— 區塊級隔離已由 `safe_section()` 提供，"
         "自己再接一層不是吞掉就是用錯顏色重印一次。\n  "
         + "\n  ".join(f"第 {_h.lineno} 行" for _h in _handlers))
     for _h in _handlers:
@@ -1626,3 +1629,42 @@ def test_missing_upstream_reason_is_admitted_not_invented():
     for _key, _label, _unit in RISK_METRICS:
         assert re.search(re.escape(_label) + r"\s*[-+]?\d", _body) is None, (
             f"「{_label}」沒有值，畫面上卻出現了數字：\n{_body}")
+
+
+@pytest.mark.parametrize("unit,ccy_field", [
+    (DEEP_DIVE_CARDS[0], "currency"),        # NAV 卡：`result["currency"]`
+    (DEEP_DIVE_TABLES[1], "dividends"),      # 配息表：逐列 `currency`
+])
+def test_an_unknown_currency_is_declared_unknown_not_filled_in(unit: str, ccy_field: str):
+    """幣別取不到 → **明說不知道**，不得填一個 ISO 三碼上去。
+
+    ## 這條是突變 **M18** 逼出來的，不是設計出來的
+
+    上一輪把 `nav["currency"] or CCY_UNKNOWN` 改成 `nav["currency"] or "USD"`
+    → **全套 55 條一條都沒紅**。也就是說：本檔當時**只守了配息那一格的幣別**
+    （`test_the_dividend_currency_is_reconciled_not_guessed`），
+    NAV 卡那一格的幣別**完全沒有守**，而它就印在最顯眼的位置（`st.metric` 的值旁邊）。
+
+    ⚠️ **`"USD"` 是本 repo 反覆出現的死預設**（`repositories/fund/` 至少三處
+    `.get("計價幣別", "USD")` / `result.get("currency", "USD")`，L1 自己的註解就寫著
+    「v19.505:不矇 USD」是為了修這個病）。所以這不是假想的突變 ——
+    **它是這份 codebase 已經犯過的那一種錯**，只是換到 UI 層再犯一次。
+
+    ⚠️ 一個台幣基金被標成 USD，使用者看到的是「淨值 59.99 美元」——
+    數字是真的、單位是編的，而畫面上沒有任何跡象（`CLAUDE.md §4.1` 量綱陷阱）。
+    """
+    _res = _RICH_RESULT()
+    if ccy_field == "currency":
+        _res["currency"] = ""                      # 上游沒給計價幣別
+    else:
+        for _d in _res["dividends"]:
+            _d["currency"] = ""
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY, result=_res)).get(unit, []))
+    assert _body.strip(), f"「{unit}」這一格不見了。"
+    assert CCY_UNKNOWN in _body, (
+        f"「{unit}」的幣別取不到，畫面卻沒有標示 {CCY_UNKNOWN!r}：\n{_body}")
+    for _iso in ("USD", "TWD", "EUR", "JPY", "AUD"):
+        assert _iso not in _body, (
+            f"「{unit}」的幣別取不到，畫面上卻出現了 {_iso!r} —— "
+            "那是憑空填上去的計價幣別。數字是真的、單位是編的，"
+            "使用者看不出任何異狀（§4.1 量綱陷阱）。\n" + _body)

@@ -360,6 +360,28 @@ def _render_search_form() -> None:
     ⚠️ **這裡有自由文字輸入框，而 ② 持倉體檢明令沒有 —— 兩者不衝突，是職責不同**：
        ② 的持股一律從組合帶入（那是「我手上這些」）；③ 的基金**不預設我有持有**，
        沒有輸入框就沒有入口。**不要拿 ② 的規則來刪這個框。**
+
+    ⛔ **一個本批查出來、但刻意沒有自行修掉的問題：`help` 裡的「Morningstar secId」**
+
+    骨架時期這句話不承擔任何後果（沒有東西會去用它）；**2026-09-06 深度區接上
+    取數之後它就變成一句對使用者的承諾**，而本組**靜態追蹤顯示這條路走不通**：
+
+    - `services.moneydj_fetcher.build_moneydj_url("0P0000ABCD", "yp010000")`
+      實測回 `https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=0P0000ABCD`
+      —— **secId 被原封當成 MoneyDJ 的基金代碼送出去**；
+    - 走 Morningstar 的那條備援有閘門
+      `if len(nav_s) < 10 and (_is_insurance_code or _pool_secid_or_isin(_code))`，
+      而 `_pool_secid_or_isin("0P0000ABCD")` 實測為 **False**
+      （它是拿**基金代碼**去選股池反查 secId，不是拿 secId 反查基金）。
+
+    ⚠️ **這是靜態追蹤，不是端到端實證** —— 沙箱的 egress proxy 擋掉了上游
+    （實測 `fund.api.cnyes.com:443` 被拒），本組**無法**真的送一次 secId 去看回什麼。
+    依 `CLAUDE.md §-2` 規則 6，上面只能當**待驗事項**，不得當成已查證的事實。
+
+    ⛔ **本組不自行改這句話，理由是它牽動客戶 gate**：`_CODE_PLACEHOLDER`
+    （`0P0000ABCD`）是**線框逐字**，而 help 這句是在解釋那個 placeholder ——
+    只改其中一句會讓兩者互相矛盾，兩句一起改則是動客戶拍板過的文案
+    （§-1.5 v3 §03-2 ①）。**已具名回報總管，待裁決。**
     """
     with applied_form(_FORM_KEY, submit_label=SUBMIT_LABEL) as _gate:
         st.caption(f"{BLOCK_FORM}：輸入完按「{SUBMIT_LABEL}」才查 —— "
@@ -475,17 +497,16 @@ def _nav_facts(result: dict) -> dict | None:
     if _s is None:
         return None
     _attrs = _attrs_of(_s)
-    try:
-        _first, _last = str(_s.index.min())[:10], str(_s.index.max())[:10]
-        _latest = _fmt(float(_s.iloc[-1]), "")
-    except Exception:                       # noqa: BLE001 —— 見下方 ⚠️
-        # ⚠️ **這個 except 不吞任何東西**：它只把「這條序列的索引不是時間軸」
-        #    收斂成「本格沒有可顯示的事實」→ 呼叫端照樣走灰態並說出理由。
-        #    ⛔ 它**不**捕捉取數本身的失敗（那條路徑刻意讓例外一路拋到
-        #    `safe_section()` 去畫紅框），也**不**在這裡印任何東西
-        #    —— 在 handler 裡印例外會踩 `tests/test_render_state_color_separation.py`
-        #    的方向 A ratchet，而且那本來就是錯的顏色。
-        return None
+    # ⛔ **這裡刻意沒有 try/except，本組初稿有、自己拆掉的，理由記在這裡**：
+    #    初稿把「索引讀不出來」收斂成 `return None` → 呼叫端走灰態、
+    #    而灰態的文案是 :func:`_nav_reason`（「這次沒有帶回淨值序列」）——
+    #    **但序列明明帶回來了，只是讀不出來。那句話是假的。**
+    #    序列的索引不是時間軸 ＝ 上游契約被破壞（`CLAUDE.md §3.1` 明訂
+    #    `nav_df.date` 是遞增且唯一的 DatetimeIndex），那是**系統真出錯**，
+    #    §1 要求炸掉：讓它一路拋到 `safe_section()` 去畫**紅框 ＋ 真 traceback**，
+    #    而不是安靜地變成一句與事實不符的灰字。
+    _first, _last = str(_s.index.min())[:10], str(_s.index.max())[:10]
+    _latest = _fmt(float(_s.iloc[-1]), "")
     if _latest is None:
         return None
     return {
