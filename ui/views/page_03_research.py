@@ -491,12 +491,55 @@ TRACE_NAV_SERIES: str = "nav_series"
 #:   - ``nav_all``           —— 同上，error 是「所有來源均不足10筆（最多:N）」＝ **彙總判詞**。
 #:   - ``calc_metrics``      —— 指標**計算**成功/失敗，根本不涉及取數。
 #:   - ``nav_history_rescue`` —— 「live 全敗，改用累積序列」的**註記**。
+#:   - ``nav_history_merge``  —— **2026-09-06 補**，見下方 ⛔。
+#:
+#: ⛔ **`nav_history_merge` 的補登，以及一句要講清楚的話** ⛔
+#: ---------------------------------------------------------------------------
+#: **它不是「黑名單日後腐化」，是這份黑名單寫下的那一天就不完整。**
+#: 加這份黑名單的 commit 是 `b83c29f`（2026-09-06 稽核回修）；**在那個 commit 當下**，
+#: `services/fund_service.py` 裡的 ``nav_history_merge`` 字樣已經有 **4** 處
+#: （`git grep -c "nav_history_merge" b83c29f -- services/fund_service.py` → 4）。
+#: 也就是說：漏掉它靠的不是時間，是**當時沒有把上游的標記逐一列出來對過**。
+#:
+#: **它是什麼**：`services/fund_service.py::_merge_nav_history_series` 的回傳，
+#: 由同檔 `finalize_fund_metrics` 直接 `result["source_trace"].append(...)`。
+#: 它講的是「**我方要不要／能不能把累積序列併進來**」，**不是一次對外取數**。
+#:
+#: **它有兩種形狀會被算成失敗（兩種都實測過，不是推論）**：
+#:   1. ``{"source": "nav_history_merge", "success": False, "error": …}``
+#:      —— 讀 Google Sheet `nav_history` **失敗**時（`fund_service.py:1098`）。
+#:   2. ``{"source": "nav_history_merge", "merged": False, "hist_points": …}``
+#:      —— **完全沒有 `success` 這個鍵**（`fund_service.py:1131`）。這一則的語意是
+#:      「讀成功了，但累積點目前全部落在 live 的日期範圍內、還沒產生淨增益」——
+#:      **一切正常**。而 :func:`_trace_rows` 用 ``bool(_t.get("success"))`` 判定，
+#:      缺鍵 → `False` → 被畫成「失敗」並計入來源數。
+#:      ⚠️ **第 2 種比第 1 種更值得記**：它在**什麼都沒出錯**的時候虛報。
+#:
+#: ✅ **順手掃過、但刻意沒有一起改的（只登記，不擴大修）**：
+#:   - ``multi_source``（`fund_orchestration.py:1013`，`success: False`）——
+#:     它是「多來源流程本身拋例外」的紀錄。**算不算一次「試過的來源」有兩種讀法**，
+#:     本組**不裁決**，維持現況（會被計入）。留在這裡等有人裁決。
+#: ⛔ **順手掃同時推翻了本組自己先前報告裡的一句話，據實更正**：先前說
+#:    ``tdcc_meta`` 這類 `*_meta` 與 ``fetch_holdings:exception`` 也會灌水 —— **那是假的**。
+#:    AST 逐一列出所有 append 進 `source_trace` 的 dict 與其 `success` 字面值後：
+#:    六個 `*_meta` **一律只在 `success: True` 時 append**（都包在 `if meta.get("fund_name")` 裡），
+#:    而 ``fetch_holdings:exception`` **根本不在 `source_trace`**，它是 `result["holdings"]["source"]`。
+#:    **那句話是拿一個手寫的 dict 當成程式會產生的情境，重現腳本跑得出來、production 跑不出來。**
+#: ---------------------------------------------------------------------------
+#:
 #: ⚠️ **這是黑名單，會腐化**：上游日後新增別的合成標記，這裡不會自動知道。
 #:    但**虛報一個來源數**比**漏排除一個**危險（前者是編造的證據），故採黑名單而非白名單。
 #:    ⛔ **不要改成「只數已知的真來源名」** —— 那是白名單，新來源會被靜靜漏掉，
 #:    使用者會看到一個比實際更小的數字，同樣是假的。
+#:    ✅ **腐化這件事現在有守衛了**：`tests/test_wf03_research_skeleton.py::`
+#:    `test_every_upstream_failure_marker_has_been_triaged` 會把上游**所有**可能以
+#:    falsy `success` 出現的標記逐一比對本黑名單與一份具名的「已裁決要計入」清單，
+#:    **上游新增一個沒被 triage 過的標記就轉紅**。它不會替你決定，但它不會讓你不知道。
 SYNTHETIC_TRACE_SOURCES: frozenset = frozenset({
     TRACE_NAV_SERIES, "nav_all", "calc_metrics", "nav_history_rescue",
+    # 2026-09-06 補（理由見上方 ⛔）。⚠️ 缺 `success` 鍵的那一種形狀同樣被這行擋掉 ——
+    # 排除是按 **source 名字**做的，不是按 success 值做的。
+    "nav_history_merge",
 })
 #: 上游**沒有**給缺值原因時的誠實佔位。⛔ 不得換成一句猜出來的理由。
 NO_REASON: str = "上游沒有附缺值原因"
