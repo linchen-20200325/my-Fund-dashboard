@@ -1097,6 +1097,123 @@ def test_every_summarize_radar_consumer_goes_through_the_lit_guard():
         "它們對本檔第 7 節的側錄器是結構性隱形的，只有本條看得到。")
 
 
+def test_every_radar_session_read_is_summarized_in_the_same_function():
+    """讀 `_SK_RADAR` 的每個函式，都要在**同一個函式裡**呼叫一次 `summarize_radar()`。
+
+    ⛔ **這條補的是上一條結構上看不見的那個洞，2026-09-06 由一個真實 bug 逼出來。**
+    上一條比對的是「`summarize_radar` 呼叫數 vs `_radar_lit` 呼叫數」——
+    `_card_exceptions()` 當時**兩個都沒呼叫**，它直接對原始 dict 讀 `red` / `yellow`：
+
+    ```python
+    _radar = st.session_state.get(_SK_RADAR)
+    _red = int(_radar.get("red", 0)) if isinstance(_radar, dict) else 0
+    ```
+
+    → 兩邊都是 3，**上一條全綠**；而 `_SK_RADAR` 存的是原始 10 燈
+    （key 是 `vix_level` / `hy_oas_delta` / …），**沒有 `red` / `yellow`** ——
+    那兩個數字**恆為 0**。實測：5 盞紅燈（`summarize_radar` 回 `level='極端警報'`、
+    `red=5`）時，那張卡照樣印「🔴 0 ／ 🟡 0」，且 `_alarm` 的 `_red > 0` 那半是死碼。
+    **一條「數量對得上」的鎖，擋不住「兩邊都是 0」。**
+
+    **突變會紅**：把 `_card_exceptions()` 的 `summarize_radar(_radar)` 拿掉、
+    改回直接讀 `_radar.get("red")` → 本條紅（實測，見 PR 描述的突變測試段）。
+
+    ⚠️ **能擋什麼／擋不到什麼 —— 照 `_radar_lit()` docstring 的體例寫成
+    「已知擋得住／已知擋不住」，不是能力清單。** 那份 docstring 記著本 repo 已經
+    在同一個位置**把清單寫成窮舉而錯過兩次**；本條不重蹈。
+
+    **已知擋得住**
+      - 新增一個讀 `_SK_RADAR` 的函式，卻沒在同一個函式裡彙總（＝本次這個 bug 的形狀）；
+      - `import … as` 的別名呼叫 —— 復用 `_call_name` / `_import_alias`（同上一條）。
+
+    **已知擋不住（非窮舉；前四種與 `_radar_lit()` docstring 記載的同源）**
+      - **本地變數別名**：`_sum_fn = summarize_radar` 之後 `_sum_fn(_r)`
+        —— `_import_alias()` 只解析 import 別名，AST 看到的呼叫名是 `_sum_fn`；
+      - **動態取名**：`getattr(_rr, "summarize_radar")(_r)`；
+      - **跨檔**：本條只讀 `ui/views/page_01_macro.py` 一個檔；
+      - **彙總了但沒用它的結果**（例如彙總完仍舊去讀原始 dict 的 `red`）——
+        本條只看「同一個函式裡有沒有這個呼叫」，不看資料怎麼流；
+      - **把 session 讀取搬到別的函式再傳進來**（`_r = _get_radar()` 之後
+        在另一個函式用）—— 讀取點與消費點分家時，本條看的是讀取點那個函式。
+      - **模組層級的讀取**（不在任何 `def` 內）—— 本條只走函式節點。
+      - **上面兩種以外的讀法**：本條只認得 `….get(_SK_RADAR)` 與
+        `…[_SK_RADAR]`（Load）。改用 `getattr` 組 key、或把 `_SK_RADAR`
+        先賦給另一個變數再拿去索引，本條看不到。
+
+    ⚠️ **寫入端刻意不算讀取端。** `_load_everything()` 做的是
+    `st.session_state[_SK_RADAR] = detect_risk_radar(...)`，**存進去的那一端
+    本來就不該彙總**（彙總是消費端的事）。初版沒分讀寫，當場誤判它違規 ——
+    見 `_reads_radar()` 內的註解。
+
+    ⛔ **所以它跟上一條一樣是「少一道人為疏漏」，不是「不可能再漏」。**
+    """
+    import ast as _ast
+    import pathlib as _pl
+
+    # 復用既有實作（§2.1 SSOT，不另寫一份）—— 同上一條。
+    from test_batch2_top_card_grid import _call_name, _import_alias
+
+    _src = (_pl.Path(_page.__file__)).read_text(encoding="utf-8")
+    _tree = _ast.parse(_src)
+    _alias = _import_alias(_tree)
+
+    def _reads_radar(fn: _ast.AST) -> bool:
+        """函式體內**讀取**（不是寫入）`_SK_RADAR`。
+
+        ⚠️ **必須區分讀寫，否則會誤傷寫入端。** 初版只找裸名 `_SK_RADAR`，
+        當場把 `_load_everything()` 判成違規 —— 它做的是
+        `st.session_state[_SK_RADAR] = detect_risk_radar(...)`，
+        **存進去的那一端本來就不該彙總**（彙總是消費端的事）。
+        認得兩種讀法：`st.session_state.get(_SK_RADAR)`
+        與 `st.session_state[_SK_RADAR]`（Load 情境，非指派目標）。
+        """
+        for _n in _ast.walk(fn):
+            # a) `….get(_SK_RADAR)` / `….get(_SK_RADAR, 預設值)`
+            if (isinstance(_n, _ast.Call)
+                    and isinstance(_n.func, _ast.Attribute)
+                    and _n.func.attr == "get"
+                    and any(isinstance(_a, _ast.Name) and _a.id == "_SK_RADAR"
+                            for _a in _n.args)):
+                return True
+            # b) `…[_SK_RADAR]` 且是取值（`ctx` 為 Load）而不是指派目標
+            if (isinstance(_n, _ast.Subscript)
+                    and isinstance(_n.ctx, _ast.Load)
+                    and isinstance(_n.slice, _ast.Name)
+                    and _n.slice.id == "_SK_RADAR"):
+                return True
+        return False
+
+    def _summarizes(fn: _ast.AST) -> bool:
+        return any(_call_name(_n, _alias) == "summarize_radar"
+                   for _n in _ast.walk(fn) if isinstance(_n, _ast.Call))
+
+    _offenders: list[str] = []
+    _checked: list[str] = []
+    for _fn in _ast.walk(_tree):
+        if not isinstance(_fn, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            continue
+        if not _reads_radar(_fn):
+            continue
+        _checked.append(_fn.name)
+        if not _summarizes(_fn):
+            _offenders.append(f"{_fn.name}（第 {_fn.lineno} 行）")
+
+    # 前提鎖：讀取點若歸零，本條就守不到東西了，要讓人知道。
+    assert len(_checked) >= 4, (
+        f"前提變了：讀 `_SK_RADAR` 的函式只剩 {len(_checked)} 個"
+        f"（原本 4 個：{_checked}）。少了消費端不是壞事，"
+        "但請確認本條還守得到東西。")
+
+    assert not _offenders, (
+        "下列函式從 session 讀了 `_SK_RADAR`（＝ `detect_risk_radar()` 的**原始 10 燈**），"
+        f"卻沒有在同一個函式裡呼叫 `summarize_radar()`：{_offenders}\n"
+        "⛔ 原始 dict 的 key 是 `vix_level` / `hy_oas_delta` / … —— "
+        "**沒有 `red` / `yellow` / `level`**。直接對它 `.get('red', 0)` 不會報錯，"
+        "只會**恆得 0**：10 燈全紅的極端警報，畫面照樣印「🔴 0」。\n"
+        "→ 要數字請先 `summarize_radar(_radar)`，並照 `_radar_lit()` 的規則"
+        "擋掉「全 ⬜ 卻說平靜」。")
+
+
 def test_the_loader_fills_every_detail_zone_payload():
     """`_load_everything()` 必須把四塊要用的 payload 都放進 session。
 

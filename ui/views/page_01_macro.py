@@ -148,6 +148,7 @@ from services.ai_service import gemini_generate, get_gemini_keys
 from services.allocation_ladder import allocation_from_composite
 from services.hot_money_service import fetch_hot_money_frames
 from services.liquidity_engine import (
+    STRESS_FACTORS,
     compute_liquidity_score,
     fetch_liquidity_factors,
     liquidity_verdict,
@@ -460,6 +461,29 @@ def _radar_lit(summary: dict) -> int:
 # ══════════════════════════════════════════════════════════════════
 def _card_phase(ind: dict) -> dict:
     _phase = calc_macro_phase(ind)
+    # ⚠️ **2026-09-06：本卡以前完全沒讀 `support`，於是零資料時印綠色的「擴張（5/10）」。**
+    #    `calc_macro_phase({})` 實跑回 `score=5`、`phase='擴張'`、
+    #    `support.sufficient=False`、`support.reason='一個計分指標都沒取到，
+    #    分數 5.0 是分母為零時的預設值，不是量測'` —— 那個 5 是**分母為零的預設值**，
+    #    不是量到的東西。照印就是把「什麼都沒抓到」畫成一張綠色的擴張燈（§1）。
+    #    生產端早就把判斷交過來了（該函式 `support=_phase_support(...)` 上方註解
+    #    逐字寫「消費端讀 `.sufficient`」），只是本卡沒接。
+    # ⚠️ **`support` 是 `EvidenceSupport` 物件、不是 dict** —— 沒有 `.get()`。
+    #    判斷一律走 `is_sufficient()`（`shared/evidence_support.py` 的 L0 SSOT，
+    #    全站唯一被允許的判斷式）；本頁 ① 結論與 ② 依據用的就是同一支，
+    #    **不在這裡發明第三套**。以前的矛盾正是這樣來的：① 說「撐不起結論」，
+    #    同一畫面的本卡卻印綠色「擴張」。
+    _support = _phase.get("support")
+    if not is_sufficient(_support) or not _phase.get("phase"):
+        return {
+            "title": "景氣位階",
+            "state": STATE_NOT_READY,
+            # 灰態不印 value（`state_card` 的灰分支只印 note）→ 原因併進 note。
+            # `support.reason` 是產出端寫給使用者看的中文，直接印，不另編一句。
+            "note": ("這一輪的資料撐不起一個位階判讀："
+                     f"{getattr(_support, 'reason', '') or '證據不足'}"),
+            "where": _where_to_load(),
+        }
     return {
         "title": "景氣位階",
         "value": f"{_phase.get('phase') or '—'}（{_phase.get('score')}/10）",
@@ -793,13 +817,30 @@ def _card_exceptions(ev: dict) -> dict:
                 "where": _where_to_load()}
 
     _radar = st.session_state.get(_SK_RADAR)
-    _red = int(_radar.get("red", 0)) if isinstance(_radar, dict) else 0
-    _yellow = int(_radar.get("yellow", 0)) if isinstance(_radar, dict) else 0
+    # ⚠️ **2026-09-06：本卡以前直接對原始 dict 讀 `red` / `yellow`，那兩個 key 不存在。**
+    #    `_SK_RADAR` 存的是 `detect_risk_radar()` 的**原始 10 燈**，key 是
+    #    `vix_level` / `vix_term_struct` / `hy_oas_delta` / … —— 見 `_SK_RADAR` 的說明。
+    #    產生 `red` / `yellow` 計數的是 `summarize_radar()`；漏掉它的後果不是「少一個
+    #    數字」，是**兩個數字恆為 0** —— 10 燈全紅的極端警報，這張卡照樣印
+    #    「🔴 0 ／ 🟡 0」，而且 `_alarm` 的 `_red > 0` 那半是死的（本組實測：
+    #    5 盞紅燈 → `summarize_radar` 回 `level='極端警報'`、`red=5`，本卡卻讀到 0）。
+    #    本卡是第 4 個消費端，與另外三個一樣**當場彙總**（純函式，非新取數點）。
+    _sum = summarize_radar(_radar) if isinstance(_radar, dict) else {}
+    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 4／4）
+    #    全 ⬜ 時 `red`/`yellow` 也是 0，但那是「沒抓到」不是「沒有風險」——
+    #    兩者若印成同一句，就是把空氣講成平靜。
+    _lit = _radar_lit(_sum) if _sum else 0
+    _red = int(_sum.get("red") or 0) if _lit else 0
+    _yellow = int(_sum.get("yellow") or 0) if _lit else 0
     _lvl = str(_infl.get("level", ""))
     _alarm = _lvl == "red" or _red > 0
+    # 短線雷達：**有讀數才報數字**；沒有讀數就說「沒取到」，不報 0（§1）。
+    _radar_txt = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}（{_lit}/10 盞有讀數）。"
+                  if _lit else
+                  "短線雷達這一輪一盞都沒有取到讀數 —— 不是「沒有風險」，是「沒有量到」。")
     # 新聞桶恆為 ⬜「未掃描」（客戶拍板第 2 條）—— 把它**說出來**，
     # 否則「沒有系統性風險」與「沒有掃描系統性風險」在畫面上長得一模一樣。
-    _note = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}。"
+    _note = (f"{_radar_txt}"
              f"系統性風險（新聞面）{_news.get('emoji', '⬜')} "
              f"{_news.get('label', '未掃描')} —— 本頁尚未接上新聞取數，"
              "所以這一項不是「沒有風險」，是「沒有查」。")
@@ -1358,9 +1399,30 @@ def _detail_short() -> None:
     if isinstance(_score, dict):
         _tier = str(_score.get("tier") or "")
         _val = _score.get("value")
+        # ⚠️ **2026-09-06：分數幾個因子算出來的，以前看不出來。**
+        #    `compute_liquidity_score()` 對缺席因子**自動重正規化權重**，所以
+        #    只有 1 個因子在線時該因子權重被放大成 `1.0` ——
+        #    本組實測：`{'XCCY_PROXY': {'zscore': 2.5}}` 與三個因子都給 2.5，
+        #    `value` 同為 `2.5`、`tier` 同為「流動性危機」，**完全分不出來**；
+        #    而 `liquidity_verdict()` 那段照樣寫「⚠️ 美元/避險/波動率**多軌同時緊繃**」
+        #    並給出「宜降槓桿、備現金」。一個因子的讀數，不該長成三軌共振的樣子。
+        # ⚠️ **本次只補「幾分之幾」這個事實，不改行動建議的文案語氣** ——
+        #    那是使用者會照著做的東西，改它要另外拍板（見 PR 描述的待裁決項）。
+        #    數字取自 `breakdown`（逐因子貢獻，長度＝實際在線數），分母取服務層的
+        #    `STRESS_FACTORS`，**不用本檔的 `_LIQ_FACTOR_ROWS`** —— 後者含 SSR，
+        #    而 SSR 依契約**不計入**壓力分數，拿它當分母會多算一個。
+        _n_on = len(_score.get("breakdown") or [])
+        _n_all = len(STRESS_FACTORS)
         st.caption(
             f"壓力分數 **{_val if _val is not None else '—'}**"
-            f"（{_tier or '—'}）：{liquidity_verdict(_score, _factors)}")
+            f"（{_tier or '—'}；{_n_on}/{_n_all} 壓力因子在線）："
+            f"{liquidity_verdict(_score, _factors)}")
+        if 0 < _n_on < _n_all:
+            st.caption(
+                f"⚠️ 這個分數只用了 {_n_on}/{_n_all} 個壓力因子 —— 缺席因子的權重"
+                f"被重新分配給在線因子，所以它**不能**跟 {_n_all}/{_n_all} 的讀數"
+                "直接比大小；上面那句研判裡關於「多軌同時」的描述，"
+                f"這一輪只有 {_n_on} 軌真的量到。")
     else:
         # `compute_liquidity_score()` 的契約：三個壓力因子**全缺**時回 `None`。
         # 那不是故障，是「這一輪沒有足夠因子可以合成」→ 灰態（鐵則 03）。
