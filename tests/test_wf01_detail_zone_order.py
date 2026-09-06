@@ -1365,6 +1365,82 @@ def test_an_all_grey_radar_is_never_reported_as_calm():
         "那是把『沒有資料』畫成『一切正常』（§1）")
 
 
+def test_the_liquidity_caption_says_how_many_factors_it_actually_used():
+    """流動性壓力分數必須說出**它是用幾個因子算的**。
+
+    ⛔ **2026-09-06 實測**：`compute_liquidity_score()` 對缺席因子
+    **自動重正規化權重**，於是
+
+        compute_liquidity_score({"XCCY_PROXY": {"zscore": 2.5}})
+        → value=2.5, tier='流動性危機', breakdown 1 筆（weight 被放大成 1.0）
+
+        三個因子都給 2.5
+        → value=2.5, tier='流動性危機', breakdown 3 筆（0.4/0.3/0.3）
+
+    **兩者的 `value` 與 `tier` 完全相同**，而 `liquidity_verdict()` 對兩者
+    印出的是**同一句**「⚠️ 美元/避險/波動率**多軌同時緊繃**……宜降槓桿、備現金」。
+    一個因子的讀數，長成三軌共振的樣子 —— 使用者無從分辨，而這是他會照著做的建議。
+
+    本條只鎖**最低限度的誠實**：畫面要看得出「N/3」。
+    ⚠️ **刻意不鎖那句研判的文案語氣** —— 改它會改變使用者的行動，屬待客戶拍板事項
+    （見 PR 描述）。本條不預設答案，只確保「幾分之幾」這個事實不會再消失。
+
+    **突變實測（兩顆，結果不一樣，照實寫）**
+      - 拿掉主 caption 的 `{_n_on}/{_n_all} 壓力因子在線` → **紅**
+        （由反方向那半抓到：三因子全在線時整頁找不到「3/3」）。
+      - **只**拿掉第二段「⚠️ 這個分數只用了 N 個」的警語 → **綠，不紅。**
+        ⚠️ **這不是漏掉，是本條刻意的射程**：那時主 caption 仍印著「1/3」，
+        「幾分之幾」這個事實還在畫面上，本條要鎖的東西沒有消失。
+        **要連那句警語一起鎖，得先由客戶拍板它是不是最終呈現**
+        —— 在那之前把它寫死，等於用測試替客戶做決定。
+
+    ⚠️ **分母是 `STRESS_FACTORS`（3），不是 `_LIQ_FACTOR_ROWS`（4）** ——
+    後者含 SSR，而 `services/liquidity_engine.py` 就地註明
+    「SSR 依設計為獨立『鏈上子彈水位』對沖指標，**不計入壓力分數**」。
+    拿 4 當分母會多算一個，反而變成新的假數字。
+
+    ⚠️ **擋不到**：分數本身算得對不對（那是服務層的事）、
+    以及研判文裡「多軌同時」與實際軌數是否一致（刻意留給客戶拍板）。
+    """
+    from services.liquidity_engine import (
+        STRESS_FACTORS as _SF,
+        compute_liquidity_score as _cls,
+    )
+
+    # ── 前提鎖：服務層今天真的還會把 1 因子與 3 因子算成同一個分數。
+    #    這個前提沒了（例如服務層改成因子不足就回 None），本條的理由就變了，
+    #    要讓人知道，不要靜靜變成一條永遠成立的空測試。
+    _one = _cls({"XCCY_PROXY": {"zscore": 2.5}})
+    _three = _cls({_k: {"zscore": 2.5} for _k in _SF})
+    assert _one and _three and _one["value"] == _three["value"], (
+        "前提變了：1 因子與 3 因子已經算不出同一個分數了 —— "
+        f"（{_one and _one.get('value')} vs {_three and _three.get('value')}）。"
+        "本條守的那個混淆可能已經在服務層解掉了，請重看。")
+    assert len(_one.get("breakdown") or []) == 1, "前提：1 因子時 breakdown 只有 1 筆"
+
+    # ── 正向：只有 1 個因子在線時，畫面要說出「1/3」。
+    _sess = _loaded_session()
+    _sess[_page._SK_LIQ] = ({"XCCY_PROXY": {"zscore": 2.5, "value": 2.5}}, _one)
+    _blob = _render_all_text(_sess)
+    assert f"1/{len(_SF)}" in _blob, (
+        "流動性壓力只用了 1 個因子，畫面卻沒說出「1/3」——\n"
+        "⛔ 缺席因子的權重被重新分配給在線因子，所以這個分數**不能**跟滿額讀數"
+        "直接比大小；不揭露就等於讓一軌的讀數冒充三軌共振（§1）。\n"
+        f"整頁實際印出的內容（節錄）：{_blob[:600]!r}")
+
+    # ── 反方向：三個因子都在線時，不該再掛那句「只用了 N 個」的警語。
+    #    沒有這一半，「永遠印警語」也會全綠。
+    _sess2 = _loaded_session()
+    _sess2[_page._SK_LIQ] = ({_k: {"zscore": 2.5, "value": 2.5} for _k in _SF},
+                             _three)
+    _blob2 = _render_all_text(_sess2)
+    assert f"{len(_SF)}/{len(_SF)}" in _blob2, (
+        f"三個因子全在線時應該印「3/3」：{_blob2[:600]!r}")
+    assert "這個分數只用了" not in _blob2, (
+        "三個因子全在線，卻還掛著「只用了 N 個壓力因子」的警語 —— "
+        f"揭露過頭會稀釋它在真的缺因子時的份量：{_blob2[:600]!r}")
+
+
 def test_the_ai_remedy_names_the_button_that_is_actually_rendered():
     """🤖 AI 那一站的「去哪補」必須指到**當下真的印出來的那顆送出鈕**。
 
