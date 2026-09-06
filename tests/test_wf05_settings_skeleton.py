@@ -641,6 +641,37 @@ def test_the_nav_block_is_grey_and_reads_nothing_before_the_gate(kind: str):
         f"（{kind}）gate 未勾時，NAV 那一塊沒有誠實說「還沒讀」：\n{_body}")
 
 
+def test_a_read_failure_takes_down_only_the_nav_card():
+    """⭐ `coverage_status()` 拋例外 → **只有 NAV 那一張卡變紅框**，另外兩張照常。
+
+    ⚠️ **這不是假想的失敗路徑**：`services/nav_history_gs.py::load_points` 在
+    **來源冷卻期內**（前一次失敗登記了 cooldown）與**真 I/O 失敗**時
+    都會拋 `NavHistoryError` —— 那是 L2 刻意的 §1 行為（回 `[]` 會與
+    「這檔真的還沒累積」同義），**不是 bug，是這一塊的正常路徑之一**。
+
+    ⛔ **少了 `_render_grid()` 裡那一層 `safe_section()`，外層那個
+    `safe_section("狀態三卡", _render_grid)` 會把三張卡一起換成一個紅框** ——
+    「資料來源健康度」與「連線與金鑰」明明沒壞，卻跟著消失。
+    `render_state.safe_section` 的 docstring 逐字寫著這句：
+    **「把診斷跟故障綁在同一條命上，是最糟的順序。」**
+
+    ⚠️ **本條驗的是「隔離」，不驗紅框長什麼樣**（那是 `system_error()` 的事）。
+    """
+    class _Boom(RuntimeError):
+        pass
+
+    _parts, _calls = _run_gated(BACKEND_ON, _Boom("nav_history load 失敗（模擬冷卻期）"),
+                                funds=FAKE_HOLDINGS)
+    assert _calls["coverage"] == 1, f"沒有真的走到取數：{_calls}"
+    _reds = [_p for _p in _parts if _p.startswith("[Error]")]
+    assert len(_reds) == 1, (
+        f"讀取失敗時的紅框有 {len(_reds)} 個，應該恰好 1 個（只有 NAV 那一張）：{_reds}")
+    _names = [_n for _n, _ in _units(_parts)]
+    for _u in (BLOCK_HEALTH, BLOCK_KEYS, nav_manual_label(), BLOCK_MANUAL):
+        assert _u in _names, (
+            f"NAV 讀取失敗把「{_u}」一起帶走了 —— 區塊隔離沒有生效。\n實際單位：{_names}")
+
+
 def test_opening_the_gate_reads_exactly_once():
     """勾了 gate → 兩個 L2 入口**各被呼叫一次**（不是 0 次，也不是每塊各一次）。
 
