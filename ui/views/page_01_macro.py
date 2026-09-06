@@ -1699,8 +1699,31 @@ def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
     餵 0 進去它會當成一個真的觀測值去推論。
     """
     _lines: list[str] = []
-    _lines.append(f"[總經位階] {phase.get('phase') or '—'}"
-                  f"（分數 {phase.get('score')}/10）")
+    # ⛔ **2026-09-06 M-1：這一行以前直接把位階分數餵給 AI，沒有閘門。**
+    #    同一個 `calc_macro_phase()` 的 `score`，卡片會誠實印灰態
+    #    「這一輪的資料撐不起一個位階判讀」，而**這裡同時把那個
+    #    分母為零的預設分數（5.0／「擴張」）餵進 prompt** ——
+    #    prompt 路徑比卡片更嚴重：**AI 會拿它去推論，而使用者看不到它從哪來。**
+    #    這一行等於違反上面那段 docstring 自己寫的「`—` 就是 `—`，不補值」。
+    # ⚠️ 走**同一支** `is_sufficient()`（L0 SSOT，與 `_card_phase()`、
+    #    ① 結論、② 依據同一支）—— **不在這裡發明第四套判斷式。**
+    _ph_ok = is_sufficient(phase.get("support"))
+    if _ph_ok:
+        _lines.append(f"[總經位階] {phase.get('phase') or '—'}"
+                      f"（分數 {phase.get('score')}/10）")
+    else:
+        # `—` 就是 `—`：不給分數、不給位階名，並把**原因**一起交代給 AI，
+        # 否則它只會看到一個沒有值的欄位，不知道那是「沒取到」還是「中性」。
+        _lines.append(
+            "[總經位階] —（證據不足，未給位階）："
+            f"{getattr(phase.get('support'), 'reason', '') or '證據不足'}")
+    # 📌 **順帶查證（M-1 的延伸問題）：`ev.get("score")` 不是同一個病，不改。**
+    #    實測全站斷線時：位階 `score=5`／`phase='擴張'`（**分母為零的中點預設值**，
+    #    讀起來像一個正面判讀）；綜合健康度 `score=0.0`（**真的加總**，Σ score×weight，
+    #    沒有指標就是 0，不是中點）。且 `_render_layer_evidence()` 的 docstring 已明訂
+    #    政策：「撐不住時**分數照印**（它是真的加總，不是捏造的），但**不給等級、
+    #    不給行動**」—— 下一行的 `level` **已經照這條閘住**（印「證據不足，未給等級」）。
+    #    → 兩者的差別是「**捏造的中點** vs **真實的加總**」，不是同一個病。
     _score = ev.get("score")
     _lines.append(f"[綜合健康度] 加權淨分 "
                   f"{_score if _score is not None else '—'}"

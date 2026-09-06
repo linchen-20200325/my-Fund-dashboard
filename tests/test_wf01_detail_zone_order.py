@@ -1523,6 +1523,29 @@ def test_a_partial_liquidity_reading_never_claims_multi_track_stress():
     assert f"1/{len(_SF)} 軌真的量到" in _blob, (
         f"抑制了研判卻沒說明原因，變成無聲省略：{_blob[:600]!r}")
 
+    # ── ⭐ **2/3 在線 —— 這一格是 2026-09-06 第二輪稽核補的，原本是空的。**
+    #    實測：把 `_partial` 從 `0 < N < 3` 改成 `(N == 1)` → **全套 27 passed 全綠**。
+    #    也就是「只擋單軌、放行 2/3」這個實作當時沒有任何東西擋得住。
+    # ⛔ **而我們自己就是用 2/3 這個案例否決方案 (b) 的**（見
+    #    `ui/views/page_01_macro.py` 內 `_partial` 上方的註解：「2/3 在線時
+    #    仍然對那個沒量到的軌下了斷言」）——**否決了那個實作，卻沒有寫測試把它釘住。**
+    _two = _cls({"XCCY_PROXY": {"zscore": 2.5}, "CARRY_UNWIND": {"zscore": 2.5}})
+    assert _two and _MULTI in _lv(_two, None), (
+        "前提變了：服務層對 2 因子高分已不再講「多軌同時緊繃」"
+        f"：{_lv(_two, None)!r}")
+    _sess_two = _loaded_session()
+    _sess_two[_page._SK_LIQ] = (
+        {"XCCY_PROXY": {"zscore": 2.5, "value": 2.5},
+         "CARRY_UNWIND": {"zscore": 2.5, "value": 2.5}}, _two)
+    _blob_two = _render_all_text(_sess_two)
+    assert _MULTI not in _blob_two, (
+        f"只有 2/{len(_SF)} 軌量到，畫面卻印出「{_MULTI}」——\n"
+        "⛔ 那句話**逐一點名美元／避險／波動率三軌**，2/3 在線時仍然對"
+        "**那個沒量到的軌**下了斷言。「多軌」字面上為真，不代表那句話為真。\n"
+        f"整頁實際印出（節錄）：{_blob_two[:600]!r}")
+    assert f"2/{len(_SF)} 軌真的量到" in _blob_two, (
+        f"2/3 時抑制了研判卻沒說明原因：{_blob_two[:600]!r}")
+
     # ── 反方向：三軌全在線 → 研判照印，**一個字都不該少**。
     #    沒有這一半，「永遠不印研判」也會全綠。
     _three = _cls({_k: {"zscore": 2.5} for _k in _SF})
@@ -1609,36 +1632,53 @@ def test_no_sentence_points_back_at_something_the_page_no_longer_prints():
 
 
 def test_the_exceptions_card_reports_the_real_radar_counts():
-    """「⚡ ③ 例外」卡印出來的 🔴／🟡 必須是**真的計數**，不是恆 0。
+    """「⚡ ③ 例外」**這張卡自己**印出來的 🔴／🟡 必須是真的計數，不是恆 0。
 
     ⛔ **2026-09-06 獨立稽核指出：修 1 是三個修復裡唯一沒有行為測試的。**
-    它的保護當時**全是 AST 計數**（「讀了 `_SK_RADAR` 就要在同一個函式裡
-    呼叫 `summarize_radar`」），而那條規則自己的 docstring 就寫著它擋不住
+    它的保護當時**全是 AST 計數**，而那條規則自己的 docstring 就寫著它擋不住
     「**彙總了但沒用它的結果**」—— 那正是一條**可以直接走回原 bug** 的路。
 
-    **稽核的突變（實測）**：保留 `_radar_lit(_sum)` 這個呼叫但丟掉結果、
-    把 `_lit` 寫死成 10 →
+    ⛔⛔ **本條的第一版是假綠，2026-09-06 第二輪稽核擋下 —— 記在這裡當教訓。**
+    第一版斷言寫在 `_render_all_text()`（**整頁**）上：
 
-        MUT 全⬜ → 短線雷達 🔴 0 ／ 🟡 0（10/10 盞有讀數）。
-        228 passed, 32 skipped   ← 零紅燈
+        _blob = _render_all_text(_sess)
+        assert "🔴 4" in _blob and "🟡 3" in _blob      # ← 假綠
 
-    **原 bug 的輸出（🔴 0）＋ 一個全新的假數字（全 ⬜ 卻說 10/10 盞有讀數），
-    全套一條都不紅。** 既有的 `test_an_all_grey_radar_is_never_reported_as_calm`
-    只斷言 `"平靜" not in _blob`，看不到這個。
+    而**這一頁不只一處會印 `🔴 N ／ 🟡 N`**。本組以 AST 掃字串常數
+    （不是 `grep | head`）實測，同時含 🔴 與 🟡 的**live 印出點有四處**：
+    「極端風險警語」卡、**本卡**、🎯 短線雷達詳細區、以及 **AI prompt**。
+    → 本卡整個壞回原 bug，其他三處照樣把 `🔴 4` 放進整頁字串，**斷言照樣成立**。
 
-    **突變會紅**：把 `_card_exceptions()` 的 `summarize_radar()` 拿掉、
-    改回直接讀原始 dict 的 `red` → 本條紅（正向那半）；
-    把 `_lit` 寫死成非零讓全 ⬜ 也報數字 → 本條紅（反方向那半）。
+    ⚠️ **而同一個檔案早就警告過不要這樣寫**：`_render_all_text()` 的 docstring
+    逐字寫著「**不要拿它做「某一塊有沒有 ⬜」的斷言 —— 那正是稽核 F2 打穿的形狀。
+    逐塊的斷言一律走 `_render_segments`。**」**第一版用的正是它被警告不要用的那個。**
 
-    ⚠️ **擋不到**：`_card_exceptions()` 以外的消費端（本條只驗這一張卡的輸出）、
+    ⚠️ **為什麼不用 `_render_segments()`**：那支切的是**詳細區的五塊**
+    （🌳 長期／📈 中期／🎯 短線／⚠️ 拐點／🤖 AI），而本卡屬**層 3 三欄**，
+    不在那五塊裡（實測 `_render_segments()` 回傳的 key 只有那五個）。
+    故本條**直接呼叫 `_card_exceptions()` 並斷言它的回傳值** ——
+    比整頁字串更窄，也比切段器更直接。
+
+    **突變會紅（實測）**：
+      - 把 `summarize_radar()` 拿掉、改回直接讀原始 dict 的 `red` → **本條紅**；
+      - **保留** `_radar_lit()` 呼叫但**丟掉結果**、`_lit` 寫死 10 → **本條紅**
+        （AST 計數仍是 `4 / 4`，**兩條 AST 鎖全綠** —— 只有本條看得到）。
+
+    ⚠️ **擋不到**：`_card_exceptions()` 以外的消費端（本條只驗這一張卡的回傳值）、
     以及 `summarize_radar()` 自己數錯的情形（那是服務層的事）。
     """
     from services.risk_radar import summarize_radar as _sr
 
-    # ── 正向：4 紅 3 黃 3 綠 → 卡片必須印出真的計數。
     def _lamp(sig):
         return {"signal": sig, "value": None, "prev": None,
                 "note": "", "label": "—", "trend": []}
+
+    #: `_card_exceptions()` 需要五桶證據裡的拐點桶才會往下走到雷達那一段。
+    _EV = {"summary": {"inflection": {"level": "green", "emoji": "🟢",
+                                      "label": "無明顯拐點"},
+                       "news": {"emoji": "⬜", "label": "未掃描"}}}
+
+    # ── 正向：4 紅 3 黃 3 綠 → **這張卡自己**要印出真的計數。
     _mixed = {}
     for _i in range(4):
         _mixed[f"r{_i}"] = _lamp("🔴 危險")
@@ -1651,28 +1691,30 @@ def test_the_exceptions_card_reports_the_real_radar_counts():
     assert (_sum["red"], _sum["yellow"]) == (4, 3), (
         f"前提變了：`summarize_radar()` 對 4 紅 3 黃已不回 (4, 3)：{_sum}")
 
-    _sess = _loaded_session()
-    _sess[_page._SK_RADAR] = _mixed
-    _blob = _render_all_text(_sess)
-    assert "🔴 4" in _blob and "🟡 3" in _blob, (
-        "「⚡ ③ 例外」卡沒有印出真的雷達計數。\n"
+    _ss = _FakeSessionState({_page._SK_RADAR: _mixed})
+    with patch.object(st, "session_state", _ss):
+        _card = _page._card_exceptions(_EV)
+    _txt = f"{_card.get('value', '')}{_card.get('note', '')}"
+    assert "🔴 4" in _txt and "🟡 3" in _txt, (
+        "「⚡ ③ 例外」**這張卡**沒有印出真的雷達計數。\n"
         "⛔ `_SK_RADAR` 存的是**原始 10 燈**（key 是 `vix_level` / `hy_oas_delta` / …），"
         "直接對它 `.get('red', 0)` 不會報錯，只會**恆得 0** —— "
-        "10 燈全紅的極端警報，畫面照樣印「🔴 0」。\n"
-        f"整頁實際印出（節錄）：{_blob[:800]!r}")
+        "10 燈全紅的極端警報，這張卡照樣印「🔴 0」。\n"
+        f"本卡實際回傳：{_card!r}")
 
     # ── 反方向：全 ⬜ → **不得**印出「🔴 0」這種看起來像讀數的數字。
     #    沒有這一半，「永遠報 0」與「永遠報一個寫死的數」都會全綠。
     _all_grey = {f"s{_i}": _lamp("⬜ 無資料") for _i in range(10)}
-    _sess2 = _loaded_session()
-    _sess2[_page._SK_RADAR] = _all_grey
-    _blob2 = _render_all_text(_sess2)
-    assert "🔴 0" not in _blob2, (
-        "10 燈一盞都沒取到，畫面卻印「🔴 0」—— "
+    _ss2 = _FakeSessionState({_page._SK_RADAR: _all_grey})
+    with patch.object(st, "session_state", _ss2):
+        _card2 = _page._card_exceptions(_EV)
+    _txt2 = f"{_card2.get('value', '')}{_card2.get('note', '')}"
+    assert "🔴 0" not in _txt2, (
+        "10 燈一盞都沒取到，這張卡卻印「🔴 0」—— "
         "那是把「沒有量到」講成「量到 0 個」（§1）。\n"
-        f"整頁實際印出（節錄）：{_blob2[:800]!r}")
-    assert "一盞都沒有取到讀數" in _blob2, (
-        f"全 ⬜ 時沒有誠實說明「沒取到」：{_blob2[:800]!r}")
+        f"本卡實際回傳：{_card2!r}")
+    assert "一盞都沒有取到讀數" in _txt2, (
+        f"全 ⬜ 時這張卡沒有誠實說明「沒取到」：{_card2!r}")
 
 
 def test_the_ai_remedy_names_the_button_that_is_actually_rendered():
