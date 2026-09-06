@@ -9,9 +9,6 @@ name: "每日 NAV 自動補齊 (nav_history)"
 # ⚠️ cron 是 UTC。台灣 = UTC+8。
 #   0 12 * * * = 每天 12:00 UTC = 每天 20:00 台灣(NAV T+1 傍晚已確定;排在健康週報之後)。
 on:
-  # ⛔ TEMP（P0 取證用）：本分支 push 即觸發，取證後移除。
-  push:
-    branches: ["claude/fund-navfix-sn42bh"]
   schedule:
     - cron: "0 12 * * *"
   workflow_dispatch:
@@ -34,36 +31,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      # ⛔ 暫時性診斷步驟（事故 P0 一手證據用，唯讀，取證後即以另一個 commit 移除）。
-      # 只讀 gridProperties / 表頭，**不寫入任何一格**。
-      - name: "TEMP DIAG (read-only) nav_history gridProperties"
-        env:
-          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
-          NAV_SHEET_ID: ${{ secrets.NAV_SHEET_ID }}
-        run: |
-          python - <<'PY'
-          import json
-          from infra.config import get_secret
-          from repositories.policy_repository import get_gspread_client
-          from services.nav_history_gs import _nav_sheet_id, _WS_NAV, _NAV_HEADERS
-          cl = get_gspread_client(get_secret("google_service_account"))
-          sh = cl.open_by_key(_nav_sheet_id())
-          print("DIAG expected_headers_len:", len(_NAV_HEADERS))
-          for w in sh.worksheets():
-              print("DIAG worksheet:", json.dumps(
-                  {"title": w.title, "rowCount": w.row_count, "colCount": w.col_count},
-                  ensure_ascii=False))
-          ws = sh.worksheet(_WS_NAV)
-          print("DIAG gridProperties:", json.dumps(
-              ws._properties.get("gridProperties"), ensure_ascii=False))
-          hdr = ws.row_values(1)
-          print("DIAG header_len:", len(hdr))
-          print("DIAG header:", json.dumps(hdr, ensure_ascii=False))
-          PY
-
       - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
-        # ⛔ TEMP（P0 取證用）：push 觸發時完全不跑這一步，確保零寫入。取證後移除。
-        if: github.event_name != 'push'
         # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
         env:
           google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
@@ -77,3 +45,21 @@ jobs:
         run: >
           python scripts/weekly_nav_backfill.py
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      # ── 失敗推播（2026-09-06 P0）───────────────────────────────────────────
+      # 事故：這條排程 09-03/04/05 連三天紅燈掛在 Actions 頁上四天沒人發現，
+      # 使用者是自己打開 Google Sheet、看到淨值停在 09-01 才知道的。
+      # 本 repo 在此之前 8 個 workflow **沒有任何一個**帶 `if: failure()`。
+      # ⚠️ `if: failure()` 只在本 job 前面的步驟失敗時才跑；它**不改變**
+      #    上面任何一步的行為，也不會把失敗吃掉（job 仍然是紅的）。
+      # ⚠️ 它涵蓋不到的：run 整個沒被排到、runner 掛掉、workflow 被 cancel。
+      #    那幾種要靠外部心跳監控，不在本批範圍。
+      - name: 失敗時推 LINE 通知（排程紅燈不再沒人知道）
+        if: failure()
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: >
+          python scripts/notify_workflow_failure.py
+          --title "每日 NAV 自動補齊 (nav_history)"

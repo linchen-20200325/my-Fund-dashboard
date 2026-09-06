@@ -257,7 +257,11 @@ def main(argv=None) -> int:
     _ccy_refused = [r for r in res["results"] if r.get("ccy_refused")]
     for r in res["results"]:
         if r["error"] is None and r["fetched"]:
-            _log(f"  ✅ {r['code']}: {r['fetched']} 筆 ({r['date_min']}~{r['date_max']}) "
+            # ⚠️ 2026-09-06 P0:這一行是 **fetch 語意**,講的是「抓到幾筆」,**不是**「寫進去幾筆」。
+            # 事故當天 log 裡整片 `✅ ACDD19: 1621 筆`,而最後兩行才是「新增 0 筆」+
+            # 「⚠️ 雲端寫入失敗」—— 掃一眼會以為一切正常。字面加上「抓到」,讓這一行
+            # 自己就講清楚它在講什麼,不必讀到最後兩行才知道(§5 可觀測)。
+            _log(f"  ✅ {r['code']}: 抓到 {r['fetched']} 筆 ({r['date_min']}~{r['date_max']}) "
                  f"src={r.get('source')}")
         elif r.get("blocked"):
             # 🔴 不是「抓不到」—— 抓得好好的,是**資料完整性偵測**把它擋下來的。
@@ -284,7 +288,11 @@ def main(argv=None) -> int:
          f" gate_mode={res.get('gate_mode', '?')}")
     _step_summary(res, _blocked, _ccy_refused)
     if res.get("gs_error"):
-        _log(f"⚠️ 雲端寫入失敗:{res['gs_error']}(§1 exit 1)")
+        # ⚠️ 把「上面那些 ✅ 不等於有寫入」講死在同一行 —— 事故當天正是因為這件事
+        # 只能靠讀者自己把最後兩行拼起來才看得出來。
+        _log(f"⚠️ 雲端寫入失敗:{res['gs_error']}"
+             f" —— 上面每一行 ✅ 都只代表「抓到」,本次雲端實際新增 "
+             f"{res.get('gs_written', 0)} 筆(§1 exit 1)")
         return 1
     if res["n_ok"] == 0:
         _log("全數抓不到(§1 exit 1)")

@@ -33,6 +33,14 @@ import pandas as pd
 
 _CACHE_DIR = Path("cache") / "nav_history"
 
+# 2026-09-06 P0:錯誤訊息保留長度。**原本是寫死的 `[:60]`,而 Google 的
+# `Range (nav_history!G1) exceeds grid limits. Max rows: 22254, Max columns: 6`
+# 剛好被切在 `Range (nav_his`** —— 也就是那句話真正要告訴我們的東西
+# (超出的是哪一個上限、上限是多少)整段被丟掉,全 repo 沒有第二處保存完整例外,
+# 連續失敗四天沒有人能從 log 判斷根因。§5 可觀測:診斷資訊不該被美觀理由截掉。
+# 仍然保留上限(不是拿掉截斷):避免某些第三方例外把整個 HTML 回應塞進 log。
+_ERR_KEEP = 500
+
 
 def _path(code: str) -> Path:
     """code → cache file path（自動 normalize）。"""
@@ -712,7 +720,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
             _gate_by_code = None
             _gate_error = (f"寫入前讀不到既有 nav_history,本次**不寫雲端**"
                            f"(fail-closed,§1 不盲寫無法重建的表):"
-                           f"{type(e).__name__}: {str(e)[:60]}")
+                           f"{type(e).__name__}: {str(e)[:_ERR_KEEP]}")
             print(f"[backfill_to_gs] {_gate_error}", file=_sys.stderr)
 
     # ⚠️ 「**沒讀**」與「**讀失敗**」要分開:`off` 模式是刻意不讀(閘門停用),
@@ -933,7 +941,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
             _res = nav_history_gs.append_points(all_points, oauth_client=oauth_client)
             gs_written = int(_res.get("written", 0))
         except Exception as e:  # noqa: BLE001
-            gs_error = f"雲端寫入失敗:{type(e).__name__}: {str(e)[:60]}"
+            gs_error = f"雲端寫入失敗:{type(e).__name__}: {str(e)[:_ERR_KEEP]}"
 
     if progress_cb is not None:
         try:

@@ -313,6 +313,57 @@ def _a1_col(idx0: int) -> str:
     return _s
 
 
+def _ensure_grid_width(ws) -> int:
+    """把既有分頁的**網格寬度**補到至少 `len(_NAV_HEADERS)` 欄。回傳實際補了幾欄(0=不用補)。
+
+    ⚠️ **這不是「補表頭文字」,是補「這張表實體上有幾欄」** —— 兩件事,`_get_worksheet`
+    的表頭修補是前者。分頁的 `gridProperties.columnCount` 是**建立當下**釘死的
+    (`add_worksheet(..., cols=len(_NAV_HEADERS))`),**不會**因為後來 `_NAV_HEADERS` 變長
+    而自己長寬;寫到網格外的任何一格,Sheets 一律回 400
+    `Range (…) exceeds grid limits. Max rows: …, Max columns: …`。
+
+    2026-09-06 P0 事故(本函式存在的唯一理由)
+    ----------------------------------------
+    `currency` 第 7 欄併入後,`weekly_nav_backfill` 連續多天寫入失敗、使用者的
+    `nav_history` 停止累積。**一手證據**(2026-09-06 於 GitHub Actions 以唯讀方式讀
+    該分頁的 gridProperties,原樣照錄):
+
+        DIAG expected_headers_len: 7
+        DIAG worksheet: {"title": "nav_history", "rowCount": 22254, "colCount": 6}
+        DIAG gridProperties: {"rowCount": 22254, "columnCount": 6}
+        DIAG header_len: 6
+        DIAG header: ["code", "date", "nav", "fund_name", "source", "recorded_at"]
+
+    → 分頁是 **6 欄**建的,表頭也是 6 格,`_NAV_HEADERS` 是 7 →
+    `_get_worksheet` 走「補尾巴缺的那幾格」那一支、對 **`G1`** 發 `values.update` →
+    **G 欄不存在** → 400,而且**每天都會一模一樣地失敗**(表頭補不上去 → 下次還是 6 格)。
+
+    為什麼是 `add_cols` 而不是 `resize`(這是本函式最容易被改壞的一行)
+    ----------------------------------------------------------------
+    `Worksheet.add_cols(n)` 在 gspread 內部就是 `self.resize(cols=self.col_count + n)`
+    (gspread 6.2.1 實測原始碼),也就是說它送的**也是** `updateSheetProperties` 的絕對值 ——
+    差別在那個絕對值是**從這張表當下的實際欄數算出來的**,所以它**只會變寬,不可能變窄**。
+    ⛔ 危險的是**寫死**的絕對值(`ws.resize(cols=7)`):在使用者自己維護到 26 欄的表上
+    等於刪掉 H..Z 欄連同內容。`_get_worksheet` 的 docstring 原本禁的就是這個,**該禁令維持**;
+    這裡放行的是**相對追加**這一種寫法,不是放行 `resize` 本身。
+    ⚠️ 相對地,`ws.col_count` 必須是**這一次**從 `sh.worksheet()` 拿回來的新鮮值
+    —— gspread 的 `col_count` 讀的是該物件 `_properties["gridProperties"]["columnCount"]`,
+    而 `_get_worksheet` 每次都重新 `sh.worksheet(_WS_NAV)`,故成立。
+
+    §1:補欄失敗**不吞** —— 讓它往上冒進 `append_points` 的 `NavHistoryError`,
+    呼叫端才看得見(靜默略過的話會退化成原本那個「每天紅、沒人知道為什麼」)。
+    """
+    try:
+        _have = int(ws.col_count)
+    except Exception:  # noqa: BLE001 — 假件/舊版沒有這個屬性 → 不補(行為與修復前相同)
+        return 0
+    _need = len(_NAV_HEADERS) - _have
+    if _need <= 0:
+        return 0
+    ws.add_cols(_need)          # 相對追加:col_count + _need,**永不縮減**
+    return _need
+
+
 def _get_worksheet(sh):
     """取得 nav_history worksheet,不存在則建立 + 寫 header;**既有分頁只補「缺的那幾格」**。
 
@@ -346,9 +397,24 @@ def _get_worksheet(sh):
     (`if ws.row_values(1)[: len(_HEADERS)] != _HEADERS: ws.update("A1", [_HEADERS])`)。
     那兩處的取捨與這裡不同,不能照抄;差別見本 PR 描述的登記。
 
-    ⛔ **絕對不要改用 `ws.resize(cols=...)`**:gspread 送出的是**絕對值**
+    ⛔ **絕對不要寫死絕對值的 `ws.resize(cols=7)`**:gspread 送出的是**絕對值**
     (`{"gridProperties": {"columnCount": 7}}`),在使用者自己維護到 26 欄的表上等於
-    **刪掉 H..Z 欄連同內容**。`values.append` 本來就會視需要擴欄,不需要也不該先 resize。
+    **刪掉 H..Z 欄連同內容**。**這半句今天依然成立,一個字都沒有被推翻。**
+
+    ⚠️ **2026-09-06 就地更正(有意識的更正,不是漏刪)——「~~`values.append` 本來就會視需要
+    擴欄,不需要也不該先 resize`~~」這後半句的射程不夠,而缺口正好就是這次 P0 事故**:
+    - **它講的是 `values.append`,但本函式先動手的那一行是 `ws.update(...)`(`values.update`)**
+      —— 補表頭那一格。`values.update` **不會**擴欄:寫到網格外會直接回 400
+      `Range (nav_history!G1) exceeds grid limits`。這不是推論,是 production 連日的實測結果
+      (一手證據見 `_ensure_grid_width` docstring 內照錄的 gridProperties)。
+    - ⚠️ **`values.append` 到底會不會自動擴欄,本次沒有查證**(gspread 的 `append_rows`
+      docstring 自稱「Widens the worksheet if there are more values than columns」,
+      但它的實作對此**沒有做任何事**,等於是在轉述 Sheets API 的行為;要實測必須真的
+      往某張表寫,故本次刻意不做)。**現行修復不依賴這個答案** ——
+      `_ensure_grid_width` 在兩條寫入路徑(表頭 `values.update`、資料 `values.append`)
+      之前就把網格補寬,兩邊都不會再撞到邊界。
+    - **放行的是相對追加(`ws.add_cols(n)`),不是放行 `resize` 本身**;理由見
+      `_ensure_grid_width`。
     """
     try:
         ws = sh.worksheet(_WS_NAV)
@@ -357,6 +423,7 @@ def _get_worksheet(sh):
         ws = sh.add_worksheet(title=_WS_NAV, rows=1000, cols=len(_NAV_HEADERS))
         ws.update("A1", [_NAV_HEADERS])
         return ws
+    _ensure_grid_width(ws)
     _hdr = ws.row_values(1)
     if not any(str(_c).strip() for _c in _hdr):
         # 第 1 列整列空白(全新 / 空白工作表)→ 同樣沒有東西會被覆寫,照寫整排。
