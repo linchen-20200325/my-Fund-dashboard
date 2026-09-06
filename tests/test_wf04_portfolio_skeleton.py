@@ -1507,6 +1507,45 @@ def test_the_page_never_reaches_into_the_data_layer():
 _ALLOC_SSOT: str = "ui.helpers.portfolio.allocation"
 
 
+def _exempted_by_name(mod: str) -> bool:
+    """具名豁免的判準：**恰好是** :data:`_ALLOC_SSOT`，或它底下用點接的名字。
+
+    ## 為什麼不是 ``mod.startswith(_ALLOC_SSOT)``（2026-09-06 稽核擋下，實測後更正）
+
+    舊判準是裸的 ``startswith``，那是**前綴**豁免、不是**具名**豁免 ——
+    而同一條守衛的失敗訊息與 PR 描述都寫「唯一**具名**豁免」。
+    **判準與記錄不一致，且鬆的那一邊是判準。**
+
+    純字串實測（`_ALLOC_SSOT` = ``ui.helpers.portfolio.allocation``）::
+
+        模組名                                              舊 startswith   本函式
+        ui.helpers.portfolio.allocation                     True            True
+        ui.helpers.portfolio.allocation.summarize_...       True            True
+        ui.helpers.portfolio.allocation_evil                True    🔴      False  ✅
+        ui.helpers.portfolio.allocation_anything            True    🔴      False  ✅
+        ui.helpers.portfolio.allocationX                    True    🔴      False  ✅
+        ui.helpers.portfolio.health                         False           False
+        ui.helpers.portfolio.policy_admin_section           False           False
+
+    也就是說：**任何叫 ``allocation*`` 的新檔都會自動獲得豁免**，
+    包含一支 import 了 streamlit／requests 的檔。
+    ⚠️ 這**不是假想**：本次回修在 clone 內建了 `allocation_evil.py`
+    （內含 ``import streamlit`` / ``import requests``）讓本頁 import 它，
+    **舊判準下全檔 49 passed、兩道守衛都沒響**；換成本函式後當場轉紅（實測，見 PR 描述）。
+
+    ## 為什麼點號那一支要留
+
+    :func:`_imported_modules` 對 ``from X import Y`` 會**同時吐** ``X`` 與 ``X.Y``
+    （見該函式的長註）。所以 ``ui.helpers.portfolio.allocation.summarize_core_satellite``
+    這種「不是模組的字串」一定會出現，必須放行，否則本頁自己的 import 會被誤殺。
+    ⚠️ **今天 `allocation` 是一支 .py 檔、不是套件**（實測 ``ui/helpers/portfolio/allocation.py``
+    存在、同名目錄不存在），所以點號後面只可能是**符號名**，不可能是真的子模組；
+    若日後它被改成套件，:func:`test_the_named_exemption_is_still_a_pure_ssot`
+    會因為解析到的檔案清單改變而重新涵蓋它（該條已改為讀「本頁實際 import 的東西」）。
+    """
+    return mod == _ALLOC_SSOT or mod.startswith(_ALLOC_SSOT + ".")
+
+
 def test_the_named_exemption_is_still_a_pure_ssot():
     """⭐ 具名豁免的**自我巡邏**：`allocation.py` 一旦不再是純函式，本條當場轉紅。
 
@@ -1520,19 +1559,59 @@ def test_the_named_exemption_is_still_a_pure_ssot():
     ⚠️ **本條讀的是被豁免那個檔案的原始碼，不是本頁的。** 它會因為**別人**改壞
     `allocation.py` 而轉紅 —— 那正是預期行為：那一刻本頁的豁免就不再成立。
 
-    ⛔ **守不到什麼**：它只看 import。`allocation.py` 若改成用 `__import__("streamlit")`
+    ⛔ **守不到什麼**：它只看 import。被豁免的檔案若改成用 `__import__("streamlit")`
     或在函式內組字串動態載入，本條看不到（同本檔其餘 AST 守衛的既有射程）。
+
+    ## ⚠️ 2026-09-06 更正：本條原本**寫死去讀 `allocation.py`**，從不看本頁實際 import 了什麼
+
+    稽核實測抓到的形狀：在 `ui/helpers/portfolio/` 底下新建一支
+    `allocation_evil.py`（內含 ``import streamlit`` / ``import requests``）
+    並讓本頁 import 它 —— **兩道守衛都沒響，全檔 49 passed**。
+    原因是兩道各瞎一半：
+
+    * :func:`test_the_page_does_not_delegate_to_the_old_tabs` 當時用**前綴**比對
+      （``startswith``），``allocation_evil`` 前綴命中 ⇒ 被當成豁免放行；
+    * **本條**寫死讀 `allocation.py`，那支檔案本身乾淨 ⇒ 綠燈。
+
+    也就是說：**豁免的「誰能過」與「過了的要乾淨」中間有一道縫。**
+    前者已改為具名比對（:func:`_exempted_by_name`）；**本條同步改為
+    「本頁實際 import 到什麼、就去讀什麼」**，兩條因此接成一個閉環 ——
+    日後若有人再把 :func:`_exempted_by_name` 放寬，本條會**自動**跟著涵蓋新放行的檔案，
+    不必有人記得回來改這裡。這正是 `CLAUDE.md §8.2.A.0` 規則 3 的精神
+    （清單由測試強制，不靠人工同步）。
+
+    ⚠️ **仍然保留「宣告的那支一定要在、一定要乾淨」**：若本頁哪天完全不 import 它，
+    只驗「實際 import 到的」會**空集合通過**（vacuous pass），豁免的自我巡邏就沒了。
     """
-    _src = (ROOT / "ui" / "helpers" / "portfolio" / "allocation.py")
-    assert _src.exists(), f"具名豁免指向一個不存在的檔案：{_src}"
-    _mods = _imported_modules(ast.parse(_src.read_text(encoding="utf-8")))
-    _dirty = [_m for _m in _mods
-              if _m.split(".")[0] in ("streamlit", "repositories", "infra",
-                                      "requests", "httpx", "yfinance", "gspread",
-                                      "urllib", "bs4", "feedparser", "pandas")]
+    # 要police 的檔案 = 宣告的那支（永遠驗）∪ 本頁實際在豁免名下 import 到的每一支。
+    _names = {_ALLOC_SSOT} | {_m for _m in _imported_modules(_tree())
+                              if _exempted_by_name(_m)}
+    _srcs: dict[str, pathlib.Path] = {}
+    for _name in sorted(_names):
+        _base = ROOT.joinpath(*_name.split("."))
+        if (_base / "__init__.py").exists():      # 它是套件
+            _srcs[_name] = _base / "__init__.py"
+        elif _base.with_suffix(".py").exists():   # 它是模組
+            _srcs[_name] = _base.with_suffix(".py")
+        elif _name == _ALLOC_SSOT:
+            # 宣告的豁免指向一個不存在的東西 ⇒ 一定是錯的，立刻炸。
+            raise AssertionError(f"具名豁免指向一個不存在的模組：{_name}")
+        # 其餘解析不到的，是 `_imported_modules` 對 `from X import Y` 多吐的**符號名**
+        # （見該函式長註），不是模組 ⇒ 跳過。它的模組本體 `X` 一定也在 `_names` 裡。
+
+    _dirty: dict[str, list[str]] = {}
+    for _name, _src in _srcs.items():
+        _mods = _imported_modules(ast.parse(_src.read_text(encoding="utf-8")))
+        _bad = [_m for _m in _mods
+                if _m.split(".")[0] in ("streamlit", "repositories", "infra",
+                                        "requests", "httpx", "yfinance", "gspread",
+                                        "urllib", "bs4", "feedparser", "pandas")]
+        if _bad:
+            _dirty[_name] = _bad
     assert not _dirty, (
-        f"{_ALLOC_SSOT} 不再是純函式 SSOT，它現在 import 了：{_dirty}\n"
-        "本頁對它的具名豁免（`_ALLOC_SSOT`）建立在「它是零 IO、零 streamlit 的純函式」"
+        "在具名豁免底下被放行的模組不再是純函式 SSOT：\n  "
+        + "\n  ".join(f"{_k} import 了 {_v}" for _k, _v in _dirty.items())
+        + "\n本頁對它的具名豁免（`_ALLOC_SSOT`）建立在「它是零 IO、零 streamlit 的純函式」"
         "這個前提上 —— 前提沒了，豁免就該收回，核心／衛星那一格退回灰態。")
 
 
@@ -1577,7 +1656,7 @@ def test_the_page_does_not_delegate_to_the_old_tabs():
                 or "fund_grp_health" in _m
                 or "portfolio_perf" in _m
                 or ("ui.helpers.portfolio" in _m
-                    and not _m.startswith(_ALLOC_SSOT)))]
+                    and not _exempted_by_name(_m)))]
     assert not _bad, (
         "本頁委派了舊 ④ 的來源檔：" + ", ".join(_bad)
         + "\n舊實作會被整批拔除；本頁一律自己畫完。"
