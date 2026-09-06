@@ -1021,6 +1021,12 @@ def test_the_ai_snapshot_never_calls_the_market_calm_when_nothing_was_fetched():
     _ss = _FakeSessionState({_page._SK_IND: _ind, _page._SK_RADAR: _all_grey})
 
     with patch.object(st, "session_state", _ss):
+        # 📌 **登記（2026-09-06 第三組複驗，總管裁決：不修）**：這個 phase fixture
+        #    **沒有 `support`**，而 `_ai_snapshot()` 自 M-1 起以 `is_sufficient()`
+        #    閘門判讀 → `is_sufficient(None) is False` → 它自此走的是
+        #    **「證據不足」分支**（fail-closed、安全，本條的斷言與雷達那一行無關，仍綠）。
+        #    ⚠️ **代價是本條自此不再演練「充足」分支。**
+        #    生產路徑無虞：`calc_macro_phase()` 回傳恆含 `support`（第三組實測）。
         _snap = _page._ai_snapshot(_ind, {"phase": "擴張中段", "score": 6},
                                    {"score": 6.5, "level": "樂觀"})
 
@@ -1174,11 +1180,39 @@ def test_every_radar_session_read_is_summarized_in_the_same_function():
             它把那一行換成 `detect_risk_radar(fred_key)`（**原始 10 燈**），
             **沒有回頭改 5 小時 47 分前就寫好的既有消費端。**
 
-            ⛔ **所以真正的失效形狀是另一個，而本批一條守衛都沒有在擋它**：
+            ⛔ **所以真正的失效形狀是另一個**：
             **「上游改了 session 值的語意，既有消費端沒跟著改」。**
             它比「新增一個壞的」難擋得多 —— 出錯的那一行**沒有被任何人碰過**，
-            **diff 上完全看不到它**，本條與那兩條 AST 鎖看的都是「這個函式自己
-            長什麼樣」，沒有任何一條在看「上游存進去的東西還是不是同一種東西」。
+            **diff 上完全看不到它**。
+
+            ⚠️⚠️ **本段原本寫「而本批一條守衛都沒有在擋它」—— 那句過強，
+            2026-09-06 第三組複驗推翻，本組重跑確認，就地更正。**
+            實測（**只改生產端存進去的 dict 形狀，不動任何消費端、
+            不增減 `summarize_radar` 呼叫**）：
+
+                st.session_state[_SK_RADAR] = {"lamps": detect_risk_radar(fred_key)}
+                → FAILED test_the_loader_fills_every_detail_zone_payload
+                  （AST 計數仍 `4 / 4`，兩條 AST 鎖照樣全綠）
+
+            那條斷言是本檔 `test_the_loader_fills_every_detail_zone_payload` 裡的
+            `assert "vix_level" in _ss[_page._SK_RADAR]`，訊息逐字寫著
+            「`_SK_RADAR` 又變回摘要了」。
+
+            ⛔ **精確版（比原本那句更尖銳，也更值得記）**：
+            **`0b33e18` 換掉 session 值的語意時，並不是沒有加守衛 —— 它加了**
+            （`git log -S'又變回摘要了' --reverse` 實測：那條斷言的**出生地
+            就是 `0b33e18` 本身**，且 merge-base `1ad0821` 上已存在，不是本批加的）。
+            **但它只釘住「生產端存進去的還是不是同一種東西」，
+            沒有任何東西把「消費端有沒有跟著改」綁在一起。**
+            → 後來的人再改生產端會被擋（形狀變了就紅）；
+            **而當初那一次改動本身沒被擋 —— 因為它同時改了生產端和那條斷言，
+            而四個消費端一個都沒動、也沒有人在看它們。**
+
+            📌 **這一筆本身就是一個失效模式，記在原地**：
+            **一份主題是「記錄不得說一件沒發生的事」的更正，
+            在撤回假話的同一段裡放進了同型的過強宣稱。**
+            「標成未查證」不等於可以寫得比事實強（§-2 規則 6 末句：
+            **留但書等於留引用點**）。
       - **`_k = _SK_RADAR` 之後 `st.session_state.get(_k)`** 的間接取值 —— 同上。
       - **跨檔**：本條只讀 `ui/views/page_01_macro.py` 一個檔；
       - **彙總了但沒用它的結果**（彙總完仍舊去讀原始 dict 的 `red`）——
@@ -1604,6 +1638,13 @@ def test_no_sentence_points_back_at_something_the_page_no_longer_prints():
     **突變會紅**：把第二段警語的後半兩行加回去
     （`…直接比大小；上面那句研判裡關於「多軌同時」的描述，…`）→ 本條紅（實測，見 PR）。
 
+    📌 **方法規則（2026-09-06 寫死，同一個病今天犯了三次）：
+    數「有幾處」一律用 AST，不要用字面 pattern。**
+    三次都是**pattern 假設了唯一一種寫法**：`'🔴 {'`（假設 emoji 後有空格）、
+    `.get("desc")`（假設只有 `.get()` 一種存取形式，漏掉 `["desc"]` 下標）、
+    以及當初掃 `ui/**` 那次的字表。
+    **非用 grep 不可時，pattern 必須涵蓋所有存取／排版形式，並附陽性對照。**
+
     ⚠️ **射程量測（2026-09-06 第二輪稽核指出，本組實跑確認）——
     這個數字比任何形容詞都說明射程**：
     本頁兩種狀態下，回指句各 **2 句**、**實際被檢查的引號字串各只有 2 個**，
@@ -1709,8 +1750,16 @@ def test_the_exceptions_card_reports_the_real_radar_counts():
       - **保留** `_radar_lit()` 呼叫但**丟掉結果**、`_lit` 寫死 10 → **本條紅**
         （AST 計數仍是 `4 / 4`，**兩條 AST 鎖全綠** —— 只有本條看得到）。
 
-    ⚠️ **擋不到**：`_card_exceptions()` 以外的消費端（本條只驗這一張卡的回傳值）、
-    以及 `summarize_radar()` 自己數錯的情形（那是服務層的事）。
+    ⚠️ **擋不到**
+      - `_card_exceptions()` 以外的消費端（本條只驗這一張卡的回傳值）；
+      - `summarize_radar()` 自己數錯的情形（那是服務層的事）；
+      - ⭐ **`state` 完全沒有被斷言**（2026-09-06 第三組複驗指出）——
+        本條只看 `value` 與 `note`。實測突變 `_alarm = False`
+        （4 盞紅燈時卡片**永遠不升業務警示色**）→ 在本 PR 與其前一版
+        **兩邊都是 27 passed 全綠**。
+        ⛔ **這一格特別要記**：PR 的「會改變什麼」表把「**會變成業務警示色**」
+        列為本批**刻意的行為變更**，而**那條變更沒有任何測試釘住**。
+        （既有缺口、非本批引入 —— 兩邊皆綠已證實；依總管裁決**登記不補**，射程外。）
     """
     from services.risk_radar import summarize_radar as _sr
 
