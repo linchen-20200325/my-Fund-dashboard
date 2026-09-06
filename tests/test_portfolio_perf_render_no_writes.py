@@ -422,6 +422,7 @@ _LAZY_ON_RENDER_PATH = (
     "ui.helpers.story_nav",
     "ui.helpers.render_state",
     "shared.signal_thresholds",
+    "services.hot_money_service",
     "pandas",
 )
 
@@ -482,22 +483,41 @@ def test_the_fake_sheet_denies_by_default():
         f"純讀方法被誤記成寫入（偽陽性）：{trips}")
 
 
-def test_prewarm_leaves_no_lazy_import_inside_the_sentinel_window():
-    """渲染路徑上的 lazy import 必須在裝哨兵**之前**就載完。
+#: 渲染會走到的 production 函式（它們的函式內 import 就是「哨兵窗內的 import」）。
+_RENDER_PATH_FUNCS = ("render_portfolio_tracking", "_snapshot_control", "_ccy_fx_for")
 
-    這條在守 :func:`_prewarm` 真的有效 —— 否則首次 import 寫 `__pycache__`
-    會在哨兵窗內被記成「磁碟寫入」，變成一個**與 Google Sheet 無關的假紅燈**
-    （本機永遠看不到，CI 隨機順序下才會偶發）。
 
-    突變驗證：把 `_render()` 裡的 `_prewarm()` 拿掉並清掉 `sys.modules` 中那幾個模組
-    → 本條轉紅（`sys.modules` 出現渲染前不存在的新模組）。
+def test_prewarm_covers_every_lazy_import_on_the_render_path():
+    """:data:`_LAZY_ON_RENDER_PATH` 必須**涵蓋**渲染路徑上每一個函式內 import。
+
+    ⚠️ **本條刻意用 AST 比對「產品程式碼實際寫了哪些 lazy import」，
+    而不是去問 `sys.modules` 有沒有載到** —— 後者是**循環的**：
+    `_prewarm()` 自己就是用 `import_module` 載的，載完再問「載到了嗎」必然為真，
+    那種斷言殺不掉任何突變（本條初版就是那樣寫的，寫完當場作廢）。
+
+    這條真正要擋的漂移是：**有人在渲染路徑上新增一個 lazy import，卻沒加進
+    :data:`_LAZY_ON_RENDER_PATH`** —— 那個模組會在哨兵窗內首次 import、寫 `__pycache__`，
+    於是磁碟哨兵記到一筆與 Google Sheet 無關的寫入，測試變成**偶發假紅燈**
+    （本機永遠重現不了，CI 隨機順序下才會發作）。
+
+    突變驗證：從 `_LAZY_ON_RENDER_PATH` 拿掉任一項 → 本條轉紅。
     """
-    _prewarm()
-    missing = [n for n in _LAZY_ON_RENDER_PATH
-               if n not in sys.modules
-               and importlib.machinery.PathFinder.find_spec(n, sys.path) is not None]
-    assert not missing, (
-        f"`_prewarm()` 跑完後這些模組仍未載入，會在哨兵窗內首次 import：{missing}")
+    tree = _tree(SECTION_REL)
+    found: set[str] = set()
+    for name in _RENDER_PATH_FUNCS:
+        for node in ast.walk(_func(tree, name)):
+            if isinstance(node, ast.Import):
+                found |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                found.add(node.module)
+    assert found, (
+        f"在 {_RENDER_PATH_FUNCS} 裡一個函式內 import 都沒掃到 —— "
+        "本條正在對空氣生效（產品程式碼改寫過？）")
+    uncovered = sorted(found - set(_LAZY_ON_RENDER_PATH))
+    assert not uncovered, (
+        "渲染路徑上有 lazy import 沒被 `_prewarm()` 涵蓋，會在哨兵窗內首次 import、"
+        f"寫 `__pycache__` → 偶發假紅燈：\n  {uncovered}\n"
+        "請加進 `_LAZY_ON_RENDER_PATH`。")
 
 
 def test_the_disk_sentinels_really_install_themselves():
