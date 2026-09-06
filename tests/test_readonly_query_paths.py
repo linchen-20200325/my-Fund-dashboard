@@ -12,6 +12,15 @@ Google Sheet。不用問我，直接切斷寫入！」
                                    一個叫 `list_pool` 的**讀取**函式，會經由
                                    `_ws()` 建表 / 補表頭 → 改到使用者的試算表
 
+⚠️ **2026-09-06 必修追加（第 6 節）：唯讀 ≠ 沉默。**
+切除 ③ 的寫入時，`_ws()` 的唯讀分支寫成了裸 `except Exception → return None`，
+於是 **403 未分享 / 429 配額 / 5xx / 連線中斷** 全被壓成 `list_pool() == []` ——
+使用者看到的是「**你的選股池是空的**」，而不是「**這次讀不到**」。
+那是憲法 §1「Fail Loud, Never Fake」直接點名的「空有兩義」，
+也是客戶 2026-09-05 明示不接受的「假資料／缺資料」。
+第 6 節守這一半，並且**同時**驗「失敗的路上寫入嘗試數 = 0」——
+⛔ 修 §1 **不准**靠把寫入放回去來換。
+
 ────────────────────────────────────────────────────────────────────────
 ⚠️ 這個 repo 剛學到一課，本檔刻意避開兩種**擋不住的**寫法
 ────────────────────────────────────────────────────────────────────────
@@ -45,7 +54,14 @@ Google Sheet。不用問我，直接切斷寫入！」
 2. tripwire 只覆蓋 ③ 的選股池路徑。①② 沒有等價的 tripwire ——
    要跑到那兩處的真實寫入，得把整個 Streamlit 頁面渲染起來。
    ①② 因此靠「**模組根本到不了**」（不 import → 不可能呼叫）＋ 別名感知的呼叫掃描。
-3. 「查詢路徑上還有沒有第五處寫入」**本檔不宣稱**，那取決於「有沒有漏看」。
+3. **第 6 節只覆蓋選股池（③）這一條讀取鏈。** ①② 的讀取失敗（MoneyDJ / FundClear
+   取數）**不在本檔射程內** —— 那是另一套 fetcher，有它自己的守衛。
+4. **本檔不宣稱「pool_repository 已經沒有別的吞讀失敗處」。** 已知仍在的至少有：
+   `LocalJsonPoolStore._read()`（壞 JSON / OSError → `[]` + stderr）與
+   `_pool_map_or_empty()`（讀失敗 → `{}`，**那是刻意的「外譯」**，
+   由 `test_the_nav_supplement_chain_is_still_not_blocked` 釘住不准弄壞）。
+   兩者都**不是**本次 PR 造成的，也都不在本次授權的射程內。
+5. 「查詢路徑上還有沒有第五處寫入」**本檔不宣稱**，那取決於「有沒有漏看」。
    已登記的第四處見 PR 描述（`services/fund_history.record_fund`，
    寫的是本機 `cache/fund_history.json`，**不是** Google Sheet，故不在客戶授權的
    字面射程內 → 只登記、不修）。
@@ -85,6 +101,20 @@ class FakeWorksheetNotFound(Exception):
     `pool_repository._ws` 接的是裸 `except Exception`,對型別不敏感;
     用假的可以讓本檔完全不依賴 gspread 是否安裝。
     """
+
+
+class FakeGspreadApiError(Exception):
+    """模擬 gspread `APIError` 的**行為形狀**(403 / 429 / 5xx),刻意不 import gspread。
+
+    ⚠️ 本 repo 的 CI 精簡環境**沒有裝 gspread**,`infra.gspread_retry.http_status_of`
+    在那裡恆回 `None` —— 所以「這是不是 API 錯誤」的判定不能只靠狀態碼,
+    必須靠**訊息形狀**。本假件因此把狀態碼寫進訊息裡,與真實 gspread 的
+    `APIError: {'code': 403, ...}` 字串形狀一致。
+    """
+
+
+def _api_error(status: int, msg: str = "") -> FakeGspreadApiError:
+    return FakeGspreadApiError(f"APIError {status} {msg}".strip())
 
 
 def _tripwire(name):
@@ -513,3 +543,319 @@ class TestNoRecordNavCallers:
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                 and n.func.attr in _RECORD_NAMES]
         assert hits == ["record_batch_nav_points"]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 6. ⭐ 唯讀 ≠ 沉默：讀失敗**不准**被講成「你的選股池是空的」
+# ══════════════════════════════════════════════════════════════════════
+#
+# 本節是 2026-09-06 的**必修**。上面第 1 節把 `_ws()` 的建表/補表頭切掉了,
+# 那一半是對的;但切的時候順手把**讀取失敗**也一起收進了同一個
+# `except Exception → return None`,於是:
+#
+#   403 未分享 / 429 配額 / 5xx / 連線中斷
+#        → `_ws()` 回 None → `list_pool()` 回 `[]`
+#        → 使用者看到「**你的選股池是空的**」,而不是「**這次讀不到**」
+#
+# 那是 §1「Fail Loud, Never Fake」直接點名的「空有兩義」,而且它**不只是難看** ——
+# 它會連鎖打壞兩個已經修好的東西(下面 `TestPoolReadFailureIsNotAnEmptyPool`
+# 與 `TestReadFailureStillFeedsTheBackoffAndTheCache` 各驗一個):
+#
+#   (1) `_load_pool_map()` 的 `except → record_gspread_failure → raise` 進不去
+#       → `record_gspread_success()` 對一次 403 蓋上「成功」
+#       → **跨呼叫冷卻永遠學不到這次失敗**(v3 §02「失敗時退避,不連續轟炸來源」)。
+#   (2) `_cached_pool_map` 是 `@st.cache_data` —— **例外不入快取、空值會**。
+#       一次瞬斷把假的空池**鎖滿 TTL_30MIN**。
+#       (`tests/test_st_cache_failure_not_cached.py` 把本站點登記在 `_RAISES`,
+#        理由逐字寫著「_load_pool_map 失敗即 raise」—— 被吞掉之後那張表在說謊,
+#        而它是 **AST 規則**、只檢查 `_load_pool_map` 裡有沒有 `raise` 節點,
+#        **結構上看不到上游把訊號吞掉了**,所以它不會轉紅。)
+#
+# ⛔ **修法不是把寫入放回去。** 唯讀就是唯讀 ——
+#    第 1、2、3 節(不建表 / 不補表頭 / 不建目錄 / 寫入路徑仍然可用)一條都沒有放寬,
+#    本節每一條都額外驗「失敗的同時,寫入嘗試數 = 0」。
+
+
+class _FailingSpreadsheet:
+    """`worksheet()` 一律拋指定的例外;**所有寫入方法照樣是哨兵**。
+
+    用途:同時驗兩件事 —— (a) 失敗有沒有浮出來、(b) 失敗的路上有沒有偷寫東西。
+    """
+
+    def __init__(self, exc: BaseException):
+        self._exc = exc
+        self.worksheet_calls = 0
+
+    def worksheet(self, title):
+        self.worksheet_calls += 1
+        raise self._exc
+
+    def add_worksheet(self, *a, **k):
+        raise WriteAttempted(f"唯讀路徑在讀失敗之後還去建分頁:add_worksheet(*{a!r}, **{k!r})")
+
+    def __getattr__(self, item):
+        if item in _GSPREAD_WRITE_METHODS:
+            return _tripwire(f"Spreadsheet.{item}")
+        raise AttributeError(item)
+
+
+#: 「這次讀不到」的各種樣子。**每一個都必須往上拋。**
+_READ_FAILURES = [
+    pytest.param(_api_error(403, "PERMISSION_DENIED: The caller does not have permission"),
+                 id="403-未分享給這把憑證"),
+    pytest.param(_api_error(429, "Quota exceeded for quota metric 'Read requests'"),
+                 id="429-配額用盡"),
+    pytest.param(_api_error(500, "Internal error encountered"), id="500-Google 自己壞了"),
+    pytest.param(_api_error(503, "The service is currently unavailable"), id="503-暫時不可用"),
+    pytest.param(ConnectionError("Connection aborted, RemoteDisconnected"), id="連線中斷"),
+    pytest.param(TimeoutError("read timed out"), id="逾時"),
+]
+
+
+class TestMissingWorksheetClassifier:
+    """⭐ 正對照/負對照:先證明「分頁沒建」與「讀不到」真的分得開。
+
+    這一組如果壞了,下面所有測試都只是在自我安慰 —— 一個永遠回 True 的分類器
+    會讓每一次失敗都被當成空池,而測試看起來還是綠的。
+    """
+
+    def test_a_real_missing_worksheet_is_recognised(self, pool_mod):
+        """正對照:三種「分頁不存在」的寫法都要認得(否則整條規則等於恆 raise)。"""
+        real_shape = type("WorksheetNotFound", (Exception,), {})("_fund_pool")
+        assert pool_mod._is_missing_worksheet(real_shape) is True
+        assert pool_mod._is_missing_worksheet(FakeWorksheetNotFound("_fund_pool")) is True
+        # 本 repo `tests/test_policy_store.py` 既有的模擬慣例
+        assert pool_mod._is_missing_worksheet(Exception("WorksheetNotFound")) is True
+
+    @pytest.mark.parametrize("exc", _READ_FAILURES)
+    def test_a_read_failure_is_never_mistaken_for_a_missing_worksheet(self, pool_mod, exc):
+        """負對照:讀失敗一個都不准被歸類成「分頁不存在」。"""
+        assert pool_mod._is_missing_worksheet(exc) is False, (
+            f"{type(exc).__name__}: {exc} 被歸類成「分頁還沒建」→ "
+            f"使用者會看到假的空池(§1 空有兩義)")
+
+    def test_an_api_error_that_merely_mentions_the_words_still_raises(self, pool_mod):
+        """訊息裡剛好出現 `WorksheetNotFound` 字樣的 **API 錯誤**,仍然算讀失敗。
+
+        這就是分類器「先否定、再肯定」的順序在防的東西 ——
+        只做字串比對會被一句錯誤訊息騙過去。
+        """
+        assert pool_mod._is_missing_worksheet(
+            _api_error(429, "Quota exceeded while resolving WorksheetNotFound")) is False
+
+
+class TestPoolReadFailureIsNotAnEmptyPool:
+    """⭐ 本節主力:讀失敗必須往上拋,**不准**變成 `[]`。
+
+    突變驗證(逐字):把 `repositories/pool_repository.py::_ws` 唯讀分支裡的
+        if not _is_missing_worksheet(_e_ws):
+            raise
+    這兩行刪掉 → 本組每一條都轉紅(`Failed: DID NOT RAISE`)。
+    """
+
+    @pytest.mark.parametrize("exc", _READ_FAILURES)
+    def test_store_list_pool_raises_instead_of_returning_empty(self, pool_mod, exc):
+        sh = _FailingSpreadsheet(exc)
+        store = _store(pool_mod, sh)
+        with pytest.raises(type(exc)):
+            store.list_pool()
+        assert sh.worksheet_calls == 1, "輸入非空斷言:根本沒去讀,那這條測試什麼都沒驗到"
+
+    @pytest.mark.parametrize("exc", _READ_FAILURES)
+    def test_module_level_list_pool_raises_too(self, pool_mod, monkeypatch, exc):
+        """UI 實際呼叫的是**模組級** `list_pool(oauth_client=...)`,那一層也要拋。
+
+        `ui/helpers/fund_grp_health/switch_advisor_section.py` 已經寫好了
+        `except → system_error("選股池讀取失敗", hint="選股池顯示為空不代表它是空的,
+        可能只是這次讀不到。")` —— 這條測試保證那段紅燈**真的會被執行到**。
+        """
+        sh = _FailingSpreadsheet(exc)
+        monkeypatch.setattr(pool_mod, "get_pool_store",
+                            lambda oauth_client=None: _store(pool_mod, sh), raising=True)
+        with pytest.raises(type(exc)):
+            pool_mod.list_pool(oauth_client=object())
+
+    @pytest.mark.parametrize("exc", _READ_FAILURES)
+    def test_failing_read_still_writes_absolutely_nothing(self, pool_mod, exc):
+        """⛔ 修 §1 **不准**把寫入放回去:失敗的路上一格都不能寫。
+
+        `_FailingSpreadsheet` 的每個寫入方法都是哨兵 —— 若有人「順手補建分頁」
+        當作 fallback,這裡會炸成 `WriteAttempted` 而不是原本的例外。
+        """
+        sh = _FailingSpreadsheet(exc)
+        with pytest.raises(type(exc)) as ei:
+            _store(pool_mod, sh).list_pool()
+        assert not isinstance(ei.value, WriteAttempted), "唯讀路徑送出了寫入"
+
+    def test_a_missing_worksheet_is_still_an_honest_empty_pool(self, pool_mod):
+        """⭐ 反向護欄:別修過頭。
+
+        「這本表上還沒有 `_fund_pool` 分頁」是**合法狀態**(使用者還沒建過選股池),
+        它必須繼續回 `[]`、不准拋 —— 否則第一次用的人會吃到一個紅燈。
+        (與第 1 節 `test_list_pool_does_not_create_the_worksheet_when_it_is_missing`
+         同一個情境,這裡再驗一次「而且**沒有**被改成 raise」。)
+        """
+        sh = _TripwireSpreadsheet({})          # worksheet() 拋 FakeWorksheetNotFound
+        assert _store(pool_mod, sh).list_pool() == []
+
+    def test_a_normal_read_is_untouched(self, pool_mod):
+        """正對照:正常讀取沒有被本次修正弄壞(否則「不拋」只是因為根本沒跑到)。"""
+        ws = _TripwireWorksheet([
+            list(pool_mod._HEADERS),
+            ["AAA", "甲", "", "", "", "2026-01-01", "", "", "TWD", ""],
+        ])
+        assert len(ws.get_all_values()) == 2, "輸入非空斷言:假資料是空的"
+        sh = _TripwireSpreadsheet({pool_mod._WS_POOL: ws})
+        assert [e.code for e in _store(pool_mod, sh).list_pool()] == ["AAA"]
+
+
+class TestReadFailureStillFeedsTheBackoffAndTheCache:
+    """⭐ 這一組驗的是**連鎖後果**,不是 `_ws()` 本身。
+
+    `_load_pool_map()` 的 2026-09-01 長註寫死了一個不變式:
+    「失敗即 raise → 例外穿過 `@st.cache_data` 不入快取 → 假的空池不會被鎖滿 TTL」。
+    上游一旦把失敗吞成 `[]`,那個 `except` **永遠進不去**,不變式當場作廢,
+    而且 `record_gspread_success()` 會替一次 403 蓋上「成功」的章。
+
+    突變驗證:同上(拿掉 `_ws` 的那兩行 raise)→ 本組轉紅,
+    且 `test_..._never_says_success` 會印出「一次 403 被登記成成功」。
+    """
+
+    @pytest.fixture()
+    def gs_backend(self, pool_mod, monkeypatch):
+        """讓 `get_pool_store()` 一定選到 Google Sheets 後端(而不是本地 JSON)。"""
+        monkeypatch.setattr(pool_mod, "_sa_present", lambda: True, raising=True)
+        monkeypatch.setattr(pool_mod, "_pool_sheet_id", lambda: "FAKE_SHEET_ID", raising=True)
+        return pool_mod
+
+    @pytest.fixture()
+    def backoff_spy(self, monkeypatch):
+        """攔截跨呼叫冷卻的兩把鑰匙。**不碰真的 backoff 狀態**(不污染其他測試)。"""
+        import infra.gspread_retry as GR
+        seen = {"fail": [], "success": []}
+        monkeypatch.setattr(GR, "record_gspread_failure",
+                            lambda a, s, e: (seen["fail"].append((a, s, e)), ("k", 900.0))[1],
+                            raising=True)
+        monkeypatch.setattr(GR, "record_gspread_success",
+                            lambda a, s: seen["success"].append((a, s)), raising=True)
+        monkeypatch.setattr(GR, "should_skip_gspread",
+                            lambda a, s: (False, 0.0, ""), raising=True)
+        return seen
+
+    def test_load_pool_map_reraises_so_the_failure_never_enters_the_cache(
+            self, gs_backend, monkeypatch, backoff_spy):
+        exc = _api_error(403, "PERMISSION_DENIED")
+        sh = _FailingSpreadsheet(exc)
+        monkeypatch.setattr(gs_backend, "_get_sheet", lambda oc=None: sh, raising=True)
+        with pytest.raises(FakeGspreadApiError):
+            gs_backend._load_pool_map()
+        assert sh.worksheet_calls == 1, "輸入非空斷言:沒有真的去讀"
+
+    def test_a_read_failure_registers_the_cooldown(
+            self, gs_backend, monkeypatch, backoff_spy):
+        sh = _FailingSpreadsheet(_api_error(429, "Quota exceeded"))
+        monkeypatch.setattr(gs_backend, "_get_sheet", lambda oc=None: sh, raising=True)
+        with pytest.raises(FakeGspreadApiError):
+            gs_backend._load_pool_map()
+        assert backoff_spy["fail"], (
+            "讀失敗沒有登記跨呼叫冷卻 → 下一次 rerun 會再轟炸來源一次"
+            "(v3 憲法 §02「失敗時退避,不連續轟炸來源」)")
+
+    def test_a_read_failure_never_says_success(
+            self, gs_backend, monkeypatch, backoff_spy):
+        """**這條是本次必修的核心證據。**
+
+        吞掉的版本會走完 `_load_pool_map` 的 happy path,
+        於是一次 403 被 `record_gspread_success()` 蓋上「成功」的章 ——
+        冷卻機制從此對這個來源永遠是瞎的。
+        """
+        sh = _FailingSpreadsheet(_api_error(403, "PERMISSION_DENIED"))
+        monkeypatch.setattr(gs_backend, "_get_sheet", lambda oc=None: sh, raising=True)
+        with pytest.raises(FakeGspreadApiError):
+            gs_backend._load_pool_map()
+        assert not backoff_spy["success"], (
+            f"一次讀取失敗被登記成「成功」:{backoff_spy['success']} → "
+            f"跨呼叫冷卻永遠學不到它")
+
+    def test_a_successful_read_still_says_success(
+            self, gs_backend, monkeypatch, backoff_spy):
+        """正對照:成功時**仍然**會蓋成功章 —— 否則上一條的「沒有成功」毫無意義。"""
+        ws = _TripwireWorksheet([list(gs_backend._HEADERS),
+                                 ["AAA", "甲", "", "", "", "", "", "", "", ""]])
+        sh = _TripwireSpreadsheet({gs_backend._WS_POOL: ws})
+        monkeypatch.setattr(gs_backend, "_get_sheet", lambda oc=None: sh, raising=True)
+        assert set(gs_backend._load_pool_map()) == {"AAA"}
+        assert backoff_spy["success"], "成功也沒蓋章 → 這組 spy 根本沒接上"
+
+    def test_the_nav_supplement_chain_is_still_not_blocked(
+            self, gs_backend, monkeypatch, backoff_spy):
+        """⚠️ 反向護欄:`_pool_map_or_empty()` 的「**外譯**」契約不准被本次修正弄壞。
+
+        補淨值查表(`resolve_secid` / `resolve_isin` / `resolve_currency`)對
+        `repositories/fund/sources.py` 的既有契約是「查不到 → None → 退硬編表/名稱搜尋」。
+        §1 要的是「**在快取之內拋、在快取之外譯**」——
+        `_load_pool_map` 拋(所以不入快取)、`_pool_map_or_empty` 譯成 `{}`(所以不斷鏈)。
+        **兩者缺一不可**,本條守後半。
+        """
+        sh = _FailingSpreadsheet(_api_error(403, "PERMISSION_DENIED"))
+        monkeypatch.setattr(gs_backend, "_get_sheet", lambda oc=None: sh, raising=True)
+        assert gs_backend._pool_map_or_empty() == {}
+        assert gs_backend.resolve_secid("AAA") is None
+        assert backoff_spy["fail"], "外譯了,但沒有登記冷卻 → 等於默默吞掉"
+
+
+class TestTheUiStillHasSomewhereToShowIt:
+    """使用者**看得到**這件事,靠的是界外那一段既有程式碼 —— 用 AST 釘住它。
+
+    `ui/helpers/fund_grp_health/switch_advisor_section.py` 是選股池的主要顯示面,
+    它早就寫好了紅燈處理;本次修正的價值,就是讓那段程式碼**重新變得會被執行到**。
+    ⛔ 本檔**不修改**該檔(它在別組的檔案邊界內),只斷言它還在。
+
+    ⚠️ 三態顏色分離(客戶四大鐵律第 3 條):讀取失敗是「**系統真出錯**」→ 🔴 `system_error`;
+    **不是**「前提不足」→ ⬜ `not_ready`。這裡順便釘住它沒有被降級成灰態。
+    """
+
+    _REL = "ui/helpers/fund_grp_health/switch_advisor_section.py"
+
+    def _pool_read_handlers(self):
+        """找出「try 內呼叫 list_pool」的那些 try,回傳其 handler 內呼叫到的函式名。"""
+        tree = _parse(self._REL)
+        out = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
+                continue
+            calls_list_pool = any(
+                isinstance(c, ast.Call)
+                and ((isinstance(c.func, ast.Name) and c.func.id == "list_pool")
+                     or (isinstance(c.func, ast.Attribute) and c.func.attr == "list_pool"))
+                for stmt in node.body for c in ast.walk(stmt))
+            if not calls_list_pool:
+                continue
+            names = set()
+            for h in node.handlers:
+                for c in ast.walk(h):
+                    if isinstance(c, ast.Call):
+                        f = c.func
+                        names.add(f.attr if isinstance(f, ast.Attribute)
+                                  else getattr(f, "id", ""))
+            out.append(names)
+        return out
+
+    def test_the_pool_read_is_wrapped_in_a_red_system_error(self):
+        handlers = self._pool_read_handlers()
+        assert handlers, (
+            f"正對照失效:在 {self._REL} 裡找不到任何「try 內讀 list_pool」的區塊 —— "
+            f"要嘛檔案改了,要嘛這條規則壞了")
+        assert all("system_error" in names for names in handlers), (
+            f"{self._REL} 的選股池讀取有 try 但沒有 system_error:{handlers}\n"
+            f"讀失敗必須讓使用者看見(§1);靜靜吞掉等於回到 2026-09-06 之前。")
+
+    def test_the_pool_read_failure_is_red_not_grey(self):
+        """讀失敗**不准**被畫成 ⬜ 灰態 —— 灰態的語意是「前提不足,你去補」,
+        而這裡是「系統真出錯,不是你少做了什麼」。兩者混用即違反三態分離。
+        """
+        for names in self._pool_read_handlers():
+            assert "not_ready" not in names, (
+                "選股池讀取失敗被畫成灰態(not_ready)—— 那會叫使用者去『補資料』,"
+                "但他什麼都沒少做,是系統讀不到。")
+

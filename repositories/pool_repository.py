@@ -247,6 +247,49 @@ def _get_sheet(oauth_client=None):
         "選股池 GS 無可用憑證:未設 Service Account,也未注入使用者 OAuth client。")
 
 
+def _is_missing_worksheet(exc: BaseException) -> bool:
+    """「這本試算表上**還沒有** `_fund_pool` 分頁」→ True;**其餘一律 False**。
+
+    False 的意思是「**這次讀不到**」——403 未分享、429 配額、5xx、連線中斷、
+    憑證壞掉……全部落在這一邊,呼叫端必須讓它往上拋(§1 Fail Loud:
+    「空的」與「讀不到」不可以壓成同一個回傳值)。
+
+    **判定順序刻意是「先否定、再肯定」**:
+      1. **帶 HTTP 狀態碼、或是配額錯誤 → 直接 False**(委派 `infra.gspread_retry`,
+         那是本 repo 這兩件事的 SSOT,不在這裡重寫一份)。
+         這一道擋的是「訊息裡剛好出現 WorksheetNotFound 字樣的 APIError」。
+      2. 其餘才看名字/訊息裡有沒有 `WorksheetNotFound`(duck-typed)。
+
+    ⚠️ **為什麼要 duck-type,不 import `gspread.exceptions`**:沿用本 repo 既有做法
+    (`repositories/policy/_helpers.py::_is_worksheet_not_found`,v18.253)——
+    容 gspread 版本差異,且 **CI 精簡環境根本沒裝 gspread**
+    (那個環境裡 `http_status_of` 恆回 None,所以第 2 道的**肯定判定**才是主力,
+    第 1 道只是加強;若把主力放在第 1 道,無 gspread 環境會把 403 誤判成「沒有分頁」)。
+
+    ⚠️ **與 `services/nav_history_gs.py::load_points` 的先例有一處刻意不同,不是漏抄**:
+    那裡寫的是「**沒有 HTTP 狀態碼且非配額** → 視為分頁不存在」(純否定式)。
+    純否定式會把 **`requests.ConnectionError` 這種連線中斷**也放行成「分頁不存在」
+    —— 那仍然是一次「讀不到」被講成「沒有」。本函式**多要一個肯定證據**
+    (名字/訊息真的說 WorksheetNotFound),因此嚴格更緊。
+    **兩邊理由並陳**:先例的寫法在 gspread 有裝的環境下涵蓋了絕大多數真實案例,
+    而且不必猜例外名字;**被權衡掉的是它在「沒有狀態碼的非 404 失敗」上的沉默**。
+    取嚴的方向與 §1 一致 —— 誤判時寧可**多拋一次**(使用者看到紅燈),
+    不要**少拋一次**(使用者看到假的空池)。
+
+    ⚠️ `.endswith` 而非 `==`:讓測試替身(如 `FakeWorksheetNotFound`)不必 import
+    gspread 就能重現「分頁不存在」這個形狀 —— 本 repo `tests/test_policy_store.py`
+    早有 `Exception("WorksheetNotFound")` 的同型慣例。
+    """
+    try:
+        from infra.gspread_retry import http_status_of, is_quota_error
+        if http_status_of(exc) is not None or is_quota_error(exc):
+            return False
+    except Exception:  # noqa: BLE001 — 偵測工具本身壞掉 → 不敢說「只是沒有分頁」
+        return False   # §1:分不清就當作讀失敗(往上拋),不當作空池
+    return (type(exc).__name__.endswith("WorksheetNotFound")
+            or "WorksheetNotFound" in str(exc))
+
+
 def _col(n: int) -> str:
     out = ""
     while n > 0:
@@ -301,20 +344,55 @@ class GoogleSheetsPoolStore:
         (同精神已見於 `services/nav_history_gs.py::_get_worksheet` 的長註:
         「表頭文字對程式完全沒有作用,它只是給人看的,因此它屬於使用者。」)
 
-        回傳:worksheet;或 `None`(唯讀路徑且分頁尚不存在)。
+        回傳:worksheet;或 `None`(唯讀路徑**且**分頁尚不存在)。
+
+        ⚠️ **`None` 只有一個意思:分頁真的還沒建。**
+        讀取失敗(403 未分享 / 429 配額 / 5xx / 連線中斷)**一律往上拋**,
+        由 `ui/helpers/fund_grp_health/switch_advisor_section.py` 的
+        `system_error("選股池讀取失敗", …)` 顯示紅燈,並由 `_load_pool_map`
+        登記跨呼叫冷卻。**不得**把它們併回 `None` —— 那會讓「讀不到」
+        長得跟「你的池是空的」一模一樣(§1「空有兩義」)。
+        判定見 `_is_missing_worksheet`。
         """
         if self._sh is None:
             self._sh = _get_sheet(self._oauth_client)
         try:
             ws = self._sh.worksheet(_WS_POOL)
-        except Exception:
+        except Exception as _e_ws:
             if not for_write:
-                # 唯讀路徑:分頁還沒建 → 這本試算表上就是**沒有選股池**,
-                # 誠實回報「沒有」,不代替使用者建一個(§1:不猜、也不偷偷寫)。
+                # ── 唯讀路徑 ────────────────────────────────────────────────
+                # ⚠️ **2026-09-06 就地修正:這裡原本是裸 `except Exception: return None`**
+                #    (**有意識的更正,不是漏刪** · 決策者:AI 執行組 · 依 §1 Fail Loud)。
+                #    **舊寫法的用意仍然成立**:「分頁還沒建 = 這本表上沒有選股池」,
+                #    誠實回空、不代替使用者建表 —— 那半句一個字都沒錯,也一個字都沒改。
+                #    **被權衡掉的是它的射程**:裸 `except Exception` 把
+                #    **403 未分享 / 429 配額 / 5xx / 連線中斷** 一起收進來,
+                #    全部壓成同一個回傳值 → `list_pool()` 回 `[]` →
+                #    使用者看到的是「**你的選股池是空的**」,而不是「**這次讀不到**」。
+                #    那正是 §1 點名的「空有兩義」,也是本檔 `_load_pool_map` 的
+                #    2026-09-01 長註逐字寫過的那個病。
+                #
+                # ⛔ **它會造成的三件事,都是實測可重現的,不是推論**:
+                #    (1) `_load_pool_map` 的 `except → record_gspread_failure → raise`
+                #        **永遠進不去**(因為下游根本沒拋),於是 `record_gspread_success`
+                #        會對一次 403 蓋上「成功」——**跨呼叫冷卻學不到這次失敗**。
+                #    (2) `_cached_pool_map` 是 `@st.cache_data`:例外不入快取、**空值會**。
+                #        於是一次瞬斷把假的空池**鎖滿 TTL_30MIN**。
+                #    (3) `ui/helpers/fund_grp_health/switch_advisor_section.py` 早就寫好了
+                #        `except → system_error("選股池讀取失敗", hint="選股池顯示為空
+                #        不代表它是空的,可能只是這次讀不到。")` 這個紅燈 ——
+                #        被這一層吞掉之後,**那段程式碼再也不會被執行到**。
+                #
+                # **現行**:只有「分頁真的還沒建」才視為空池;其餘一律往上拋。
+                if not _is_missing_worksheet(_e_ws):
+                    raise
                 import sys
                 print(f"[pool_repository] 唯讀路徑:`{_WS_POOL}` 分頁尚不存在 → 視為空選股池"
                       f"(不建表;新增標的時才會建)", file=sys.stderr)
                 return None
+            # 寫入路徑:行為與 2026-09-06 之前逐字相同(分頁不在就建 + 寫表頭)。
+            # ⚠️ 這裡**刻意不加**上面那道分流:真的是 403/429 時 `add_worksheet` 自己就會拋,
+            #    失敗照樣浮出來;在寫入路徑上多一道判斷只會改動一段沒有壞掉的行為。
             ws = self._sh.add_worksheet(title=_WS_POOL, rows=200, cols=len(_HEADERS))
             ws.update("A1", [_HEADERS])
             return ws
@@ -325,7 +403,10 @@ class GoogleSheetsPoolStore:
     def list_pool(self) -> list:
         # 唯讀:`_ws()` 不帶 for_write → 不建表、不補表頭(2026-09-06 客戶授權)。
         ws = self._ws()
-        if ws is None:                      # 分頁尚不存在 = 空選股池(不是失敗,不拋)
+        # ⚠️ `None` **只**代表「分頁真的還沒建」= 空選股池(合法狀態)。
+        #    讀失敗不會走到這裡 —— `_ws()` 已經把它拋出去了(§1,見該函式 docstring)。
+        #    ⛔ 不得在這裡補一層 `try/except → []`:那會把上面那道分流整個作廢。
+        if ws is None:
             return []
         rows = ws.get_all_values()[1:]
         out = []
