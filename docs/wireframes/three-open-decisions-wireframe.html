@@ -882,9 +882,13 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
             <div class="db">
               <p><b>它在做什麼（先講白話，因為線框從沒描述過它）</b>：你買的是<b>基金</b>，基金底下持有的是<b>股票</b>。
                 這一塊把你所有基金<b>穿透合併計算</b>，告訴你「<b>你以為分散了，其實 X% 壓在同一批股票／同一個產業</b>」。<b>這是風險示警，不是統計花絮。</b></p>
-              <p><span class="ev m">實測</span><b>9 份線框 0 次提到它。</b>驗證指令（repo 根目錄，可自跑）：<br>
-                <code>git grep -c "集中度" origin/main -- 'docs/wireframes/'</code> → <b>全部 0</b>（本檔自己除外）。<br>
-                <b>正對照（證明掃描有效）</b>：同樣掃法下「保單」命中 4 份、「配息」8 份、「核心」8 份。<br>
+              <p><span class="ev m">實測</span><b>0 次提到它。</b>驗證指令（repo 根目錄，可自跑）：<br>
+                <code>git grep -c "集中度" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，即 0 命中）</b>。<br>
+                <b>正對照（證明掃描有效，同一條指令換個字）</b>：「保單」<b>4</b> 份、「配息」<b>7</b> 份、「核心」<b>7</b> 份。<br>
+                ⚠️ <b>射程（本輪自己踩到，就地更正）</b>：<code>origin/main</code> 上只有 <b>8 份</b>線框 ──<b>本檔不在 main 上</b>。
+                本組另做的<b>「strip 掉 HTML 標籤後再掃」是在本分支工作樹上跑的，涵蓋 9 份</b>（含本檔），那一輪的正對照是「配息 8／核心 8」。
+                <b>兩組數字都對，差的就是本檔自己</b> ── 本輪初稿把 9 份的數字寫在 8 份的指令旁邊，<b>指令與輸出對不起來</b>，已改成以上面那條指令為準。
+                <b>記這一筆是因為它正是本檔在講的那個病：一條沒有跟著自己輸出對過的指令，看起來卻像證據。</b><br>
                 ⚠️ <b>本組另做了別名掃描防漏</b>（<code>集中</code>／<code>分散</code>／<code>個股</code>／<code>穿透</code>）：
                 「集中」的命中<b>全是動詞</b>（「本次改動集中在這頁」「設定類集中到一頁」）；
                 「穿透」在 3 份線框命中 6 次，<b>逐條讀過全部是「三率穿透」</b>（單一個股的財務三率），<b>沒有一個是持股集中度</b>。</p>
@@ -910,7 +914,7 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
             <div class="db">
               <p><b>它在做什麼</b>：把 <b>① 市場總覽</b>判出來的景氣位階，接到<b>你的組合</b>上，提示目前配置在這個環境下偏積極還是偏保守。
                 <b>這是「大盤」與「我的配置」之間唯一一條連線</b> ── 沒有它，① 判完的結論就停在 ①。</p>
-              <p><span class="ev m">實測</span><b>9 份線框 0 次提到它。</b><code>git grep -c "總經曝險" origin/main -- 'docs/wireframes/'</code> → <b>全部 0</b>（本檔除外）。
+              <p><span class="ev m">實測</span><b>0 次提到它。</b><code>git grep -c "總經曝險" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1）</b>。<b>射程與正對照同第 11 列</b>（main 上 8 份、strip 掃描 9 份）。
                 <b>別名掃描防漏</b>：「曝險」另在 <code>fund-wireframe-final</code> 命中 2 次，<b>逐條讀過都是「FX 曝險」</b>（匯率），<b>不是總經曝險</b>；「景氣」的命中全在 ① 總經頁自己的版面，<b>沒有一句把它接到組合上</b>。</p>
               <p><span class="ev m">實測</span><b>它已經在配置比例旁邊了，不必搬</b>：呼叫處逐字是
                 <code>render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)</code> ──
@@ -1101,7 +1105,10 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
       <code>穿透</code> 全是<b>三率穿透</b>（單一個股財務三率）；<code>集中</code> 全是<b>動詞</b>；<code>曝險</code> 全是 <b>FX 曝險</b>。
       <b>→ 原本那句「別名掃不到」的擔憂本輪已經實際掃過了，結論不變。</b>
       ⚠️ 但它<b>仍然是單組窮舉句</b>：本組只想得到這些別名，<b>想不到的別名一樣掃不到</b>。</li>
-      <li><b>本輪的正對照（證明掃描沒有壞掉，不是「什麼都掃不到」）</b>：同一套 strip + grep 之下，<code>保單</code> 命中 4 份、<code>配息</code> 8 份、<code>核心</code> 8 份、<code>新鮮度</code> 2 份。
+      <li><b>本輪的正對照（證明掃描沒有壞掉，不是「什麼都掃不到」）</b>：<b>strip + grep（本分支工作樹，9 份含本檔）</b>之下，<code>保單</code> 4 份、<code>配息</code> 8 份、<code>核心</code> 8 份、<code>新鮮度</code> 2 份。
+      ⚠️ <b>換成線框內寫的那條 <code>git grep … origin/main</code>（只有 8 份，本檔不在 main 上）則是：保單 4／配息 7／核心 7。</b>
+      <b>兩組都對，差的就是本檔自己</b> —— 本輪初稿把 9 份的數字寫在 8 份的指令旁邊，已就地更正（見第 11 列）。
+      <b>這是本輪第二次犯「引用一個沒跟自己輸出對過的指令」，兩次都是自己抓到並留痕。</b>
       <b>特別記一筆</b>：<code>ui/tab3_portfolio.py</code> 那段註解列的<b>風險揭露元件是 4 個</b>（總經曝險／<b>資料新鮮度</b>／持股集中度／產業集中度），
       而本輪只把其中 <b>3 個</b>列進題三 ── 因為<b>第 4 個「資料新鮮度」查得到明文</b>（<code>wireframe-macro-health.html</code> 逐字寫著 <code>MoneyDJ 資料新鮮度 banner _render_mj_freshness_banner</code>）。
       <b>本組是逐個查過才排除它的，不是漏列。</b></li>
