@@ -983,22 +983,62 @@ def _pool_symbol_bindings(tree: ast.Module, want) -> "tuple[dict, set]":
     return direct, modaliases
 
 
-def _pool_symbol_calls(rel: str, want):
-    """該檔內對 `want` 那組 pool 符號的**呼叫點**。回 [(原始符號, 實際寫法, 行號)]。"""
+def _pool_symbol_refs(rel: str, want):
+    """該檔內對 `want` 那組 pool 符號的**任何參照** —— 不只是呼叫。
+
+    回 `[(原始符號, 實際寫法, 行號, 形態)]`,形態為 `"call"` 或 `"ref"`。
+
+    ⚠️ **2026-09-06 由「只看呼叫」擴為「呼叫 ＋ 裸參照」**
+    (**有意識的更正,不是漏刪** · 決策者:**AI 執行組**,依獨立稽核 **M5c**)。
+
+    **舊寫法(原名 `_pool_symbol_calls`)的理由仍然成立**:「有沒有被呼叫」是最直接的問法,
+    訊息也最好讀。**被權衡掉的是它的射程**:它只看 `ast.Call` 節點,於是
+    **把寫入函式當引數傳給包裝器**這一種形態整個看不見 ——
+
+        run(PR.set_secid, code, secid)      # ← 舊規則 GREEN(存活)
+
+    那個 `PR.set_secid` 在 AST 上是**引數位置的 `ast.Attribute`,不是 `ast.Call`**。
+    稽核種突變時,七種繞道裡**只有這一種活了下來**。
+
+    ⚠️ **這正是本 repo 反覆吃虧的那個形狀,不是假想敵**:
+    `repositories/snapshot_repository.py` 有 **12** 處 `_with_quota_retry(ws.append_row, …)`、
+    `repositories/policy/v2.py` 有 **3** 處(量測日 **2026-09-06**;⛔ 那兩檔是既有寫入面、
+    有它們自己的正當用途,**不在本規則射程內、本批未動**)。
+    **一個只掃 `Call` 的掃描器,在那些檔上會回報 0。**
+
+    **現行命中條件**:只要一個名字**最後綁到 pool 寫入符號**,
+    **不論它是被呼叫、還是被當成值傳出去/存起來**,一律命中。
+    別名解析(import 別名 / 模組屬性 / 賦值別名做到不動點)**沿用不變**,放寬的只有命中條件。
+
+    ⚠️ **為什麼放寬不會誤紅**:`direct` 只由 `…pool_repository` 的 import 填;
+    `ast.Attribute` 那一支還要求 base 是 pool 模組別名 —— 所以 `upsert` / `remove`
+    這種**通用方法名**在別人身上(`store.upsert(...)`)**不會**被算進來。
+    受管 9 檔實測 **0 誤紅**(量測日 **2026-09-06**)。
+    ⚠️ `Store` context 刻意排除:`_g = PR.set_secid` 這一行,命中的是**右側**那個
+    `PR.set_secid`(ref),不是左側被賦值的 `_g` —— 否則同一處會被算兩次。
+    """
     tree = _parse(rel)
     direct, modaliases = _pool_symbol_bindings(tree, want)
+
+    # 先記住哪些節點站在「呼叫的 func 位置」,好把 call 與 ref 分開標(不重複計數)
+    call_funcs = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+
     hits = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        f = node.func
-        if isinstance(f, ast.Name) and f.id in direct:
-            hits.append((direct[f.id], f.id, node.lineno))
-        elif isinstance(f, ast.Attribute) and f.attr in want:
-            base = f.value
-            if isinstance(base, ast.Name) and base.id in modaliases:
-                hits.append((f.attr, f"{base.id}.{f.attr}", node.lineno))
-    return hits
+        if isinstance(node, ast.Name):
+            if node.id not in direct or isinstance(node.ctx, ast.Store):
+                continue
+            hits.append((direct[node.id], node.id, node.lineno,
+                         "call" if id(node) in call_funcs else "ref"))
+        elif isinstance(node, ast.Attribute):
+            if node.attr not in want or isinstance(node.ctx, ast.Store):
+                continue
+            base = node.value
+            if not (isinstance(base, ast.Name) and base.id in modaliases):
+                continue
+            hits.append((node.attr, f"{base.id}.{node.attr}", node.lineno,
+                         "call" if id(node) in call_funcs else "ref"))
+    return sorted(hits, key=lambda h: (h[2], h[1]))
 
 
 def _dynamic_backdoors(rel: str):
@@ -1049,13 +1089,17 @@ class TestQueryPathNeverWritesBackToThePool:
 
     @pytest.mark.parametrize("rel", _NO_POOL_WRITE_FILES)
     def test_no_pool_write_symbol_is_callable_on_a_query_path(self, rel):
-        hits = _pool_symbol_calls(rel, _POOL_WRITE_SYMBOLS)
+        hits = _pool_symbol_refs(rel, _POOL_WRITE_SYMBOLS)
         if rel in _PENDING_ARBITRATION:      # 2026-09-06 起這張表是空的(見該處註)
             pytest.skip(f"{rel} 待仲裁(見 _PENDING_ARBITRATION):"
                         f"目前 {len(hits)} 處,由 test_pending_arbitration_* 盯著")
         assert not hits, (
             f"{rel} 在查詢鏈上回寫選股池:\n  "
-            + "\n  ".join(f"{rel}:{ln} → {orig}()（寫成 {shown}）" for orig, shown, ln in hits)
+            + "\n  ".join(
+                f"{rel}:{ln} → {orig}（寫成 {shown}，形態 {kind}）"
+                + ("" if kind == "call"
+                   else " ← 沒有呼叫它，是把它當值傳出去/存起來（M5c 形態）")
+                for orig, shown, ln, kind in hits)
             + "\n客戶 2026-09-06:查詢一律唯讀,絕對禁止反向寫入 Google Sheet。\n"
               "⚠️ 若這真的是使用者**明確按下**的動作,它就不該住在取數鏈上 —— "
               "請把它移到有按鈕的那一層（例:⑤ 設定頁的 `_render_pool_editor`）。")
@@ -1091,9 +1135,9 @@ class TestQueryPathNeverWritesBackToThePool:
            那條是**全體受管檔案**的通則(參數化),本條是**這兩處**的具名回歸釘 ——
            通則若哪天被人加了豁免,本條仍然會響。
         """
-        hits = _pool_symbol_calls("repositories/fund/sources.py", _POOL_WRITE_SYMBOLS)
+        hits = _pool_symbol_refs("repositories/fund/sources.py", _POOL_WRITE_SYMBOLS)
         assert hits == [], (
-            f"`repositories/fund/sources.py` 又出現選股池回寫:{hits}\n"
+            f"`repositories/fund/sources.py` 又出現選股池寫入面參照(含把它當值傳出去):{hits}\n"
             f"2026-09-06 仲裁:查詢路徑確實走得到這裡,且寫入是**靜默**的"
             f"(`except Exception: pass`,成功失敗都不上畫面)。客戶授權:查詢一律唯讀。")
 
@@ -1105,7 +1149,7 @@ class TestQueryPathNeverWritesBackToThePool:
         `ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor`
         是使用者**按存檔鈕**才走到的合法寫入 —— 它不受本節禁令管,只當「規則沒瞎」的證據。
         """
-        hits = _pool_symbol_calls(
+        hits = _pool_symbol_refs(
             "ui/helpers/fund_grp_health/switch_advisor_section.py", _POOL_WRITE_SYMBOLS)
         assert hits, "正對照失效:在一個已知有 pool 寫入的檔案裡什麼都沒看到"
 
@@ -1116,9 +1160,9 @@ class TestQueryPathNeverWritesBackToThePool:
         (`resolve_secid` / `resolve_isin` / `resolve_currency`)——
         沒有它們,使用者填的 ISIN 就串不起來,那是把功能砍掉而不是把副作用切掉。
         """
-        reads = _pool_symbol_calls("repositories/fund/sources.py", _POOL_READ_SYMBOLS)
-        assert {orig for orig, _s, _l in reads} >= {"resolve_isin", "resolve_secid"}, (
-            f"ISIN→secId 的查表讀取不見了:目前只剩 {sorted({o for o, _s, _l in reads})}")
+        reads = _pool_symbol_refs("repositories/fund/sources.py", _POOL_READ_SYMBOLS)
+        assert {orig for orig, _s, _l, _k in reads} >= {"resolve_isin", "resolve_secid"}, (
+            f"ISIN→secId 的查表讀取不見了:目前只剩 {sorted({o for o, _s, _l, _k in reads})}")
 
 
 class TestTheRuleSeesTheKnownBypasses:
@@ -1193,6 +1237,75 @@ class TestTheRuleSeesTheKnownBypasses:
             f"`getattr(m, 'set_' + 'secid')` 的對象叫 `m`、屬性名是拼出來的,"
             f"兩邊都看不出 pool,只能靠「屬性名不是字面值」抓")
         assert isinstance(_pl.Path(str(f)), _pl.Path)      # 純為讓 lint 看得見 import
+
+    def test_bypass_5_passed_as_an_argument_to_a_wrapper(self):
+        """⭐ **M5c** —— 稽核種突變時,七種繞道裡**唯一活下來**的那一個。
+
+            run(PR.set_secid, code, secid)          # 舊規則 GREEN(存活)
+
+        根因:那個 `PR.set_secid` 在 AST 上是**引數位置的 `ast.Attribute`,不是 `ast.Call`**,
+        而舊規則只走 `ast.Call` 節點。
+
+        ⚠️ **這不是假想敵**:`repositories/snapshot_repository.py` 有 12 處
+        `_with_quota_retry(ws.append_row, …)`、`repositories/policy/v2.py` 有 3 處
+        (量測日 2026-09-06)—— **只掃 Call 的掃描器在那些檔上會回報 0**。
+        ⛔ 那兩檔是既有寫入面、有它們自己的正當用途,**不在本規則射程內、本批未動**。
+        """
+        import pathlib as _pl2
+        rel = "tests/_f3_m5c_fixture_tmp.py"
+        f = _REPO / rel
+        f.write_text(
+            "import repositories.pool_repository as PR\n"
+            "from repositories.pool_repository import set_secid as _g\n"
+            "def run(fn, *a):\n"
+            "    return fn(*a)\n"
+            "def a(code, secid):\n"
+            "    return run(PR.set_secid, code, secid)      # 模組屬性當引數\n"
+            "def b(code, secid):\n"
+            "    return run(_g, code, secid)                # import 別名當引數\n"
+            "def c():\n"
+            "    return {'writer': PR.set_secid}            # 塞進 dict\n",
+            encoding="utf-8")
+        try:
+            hits = _pool_symbol_refs(rel, _POOL_WRITE_SYMBOLS)
+        finally:
+            f.unlink()
+        assert isinstance(_pl2.Path(str(f)), _pl2.Path)
+        kinds = {k for _o, _s, _l, k in hits}
+        assert "ref" in kinds, (
+            f"M5c 形態沒被抓到:{hits} —— 把寫入函式**當值傳出去**仍然逃得掉")
+        # 三處都要看到(引數位置 ×2、dict 值 ×1);`fn(*a)` 那一行不算(fn 沒綁到 pool)
+        assert len([h for h in hits if h[3] == "ref"]) >= 3, (
+            f"只抓到部分裸參照:{hits}")
+
+    def test_a_call_is_still_reported_as_a_call(self):
+        """⭐ 反向護欄:放寬之後,**呼叫**仍然被標成 `call`(訊息可讀性不能退化)。"""
+        rel = "tests/_f3_m5c_call_fixture_tmp.py"
+        f = _REPO / rel
+        f.write_text(
+            "from repositories.pool_repository import set_secid as _g\n"
+            "def a(c, s):\n    _g(c, s)\n",
+            encoding="utf-8")
+        try:
+            hits = _pool_symbol_refs(rel, _POOL_WRITE_SYMBOLS)
+        finally:
+            f.unlink()
+        assert [h[3] for h in hits] == ["call"], f"呼叫被誤標成 ref:{hits}"
+
+    def test_no_false_positive_on_any_managed_file(self):
+        """⭐ **放寬規則最該擔心的事**:會不會掃到「只是把函式當值引用、根本沒要寫」的既有寫法。
+
+        受管 9 檔**逐檔實跑**,必須 0 命中(量測日 2026-09-06)。
+        ⚠️ 真出現誤紅時,**正解是收窄規則,不是加豁免** ——
+        一張為了讓規則變綠而長出來的豁免表,等於把規則關掉。
+        """
+        assert len(_NO_POOL_WRITE_FILES) == 9, (
+            f"受管檔數變了({len(_NO_POOL_WRITE_FILES)}),請一併更新本條的量測宣稱")
+        bad = {rel: _pool_symbol_refs(rel, _POOL_WRITE_SYMBOLS)
+               for rel in _NO_POOL_WRITE_FILES}
+        assert all((_REPO / rel).exists() for rel in _NO_POOL_WRITE_FILES), (
+            "輸入非空斷言:受管清單裡有檔案不存在 → 這條測試在空掃")
+        assert not any(bad.values()), f"放寬規則後出現命中(可能是誤紅,先看規則寫太寬):{bad}"
 
     def test_the_old_name_whitelist_rules_would_have_missed_all_four(self):
         """⭐ 把「舊規則為什麼不夠」變成機器可驗的事實,而不是一句抱怨。

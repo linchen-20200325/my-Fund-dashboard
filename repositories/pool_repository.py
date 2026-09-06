@@ -279,6 +279,18 @@ def _is_missing_worksheet(exc: BaseException) -> bool:
     ⚠️ `.endswith` 而非 `==`:讓測試替身(如 `FakeWorksheetNotFound`)不必 import
     gspread 就能重現「分頁不存在」這個形狀 —— 本 repo `tests/test_policy_store.py`
     早有 `Exception("WorksheetNotFound")` 的同型慣例。
+
+    ⚠️ **一個已知的邊角,判定非必修,據實記在這裡(2026-09-06 獨立稽核指出)**:
+    若某個例外**同時**滿足「訊息裡剛好含 `WorksheetNotFound` 字樣」**且**
+    「`http_status_of` 認不出它、`is_quota_error` 也不認」——例如一個 403,
+    但它不是 `gspread.exceptions.APIError` 的實例——本函式會回 `True`,
+    於是那次讀失敗**仍會被吞成空池**。
+    **為什麼判非必修**:第 1 道(`http_status_of`)只在**裝了 gspread**時才認得出
+    `APIError`,而 **production 有裝**;真正會命中這個邊角的是**沒有 gspread 的環境**
+    (CI 精簡環境、離線測試),那裡本來就打不到 Google Sheets。
+    **⛔ 刻意不改行為**:要修它只能再收窄(例如要求例外型別必須是 gspread 的),
+    而那會讓**沒有 gspread 的測試環境完全無法重現「分頁不存在」**,
+    等於用一個真實的損失去換一個構造不出來的情境。
     """
     try:
         from infra.gspread_retry import http_status_of, is_quota_error
