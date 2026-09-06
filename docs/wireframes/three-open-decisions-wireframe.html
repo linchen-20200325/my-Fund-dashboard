@@ -315,8 +315,8 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
 
   <div class="shell">
 
-    <nav class="rail" aria-label="三題">
-      <p class="rail-h">待拍板的三題</p>
+    <nav class="rail" aria-label="四題">
+      <p class="rail-h">待拍板的四題</p>
       <div class="rail-list" role="tablist" aria-orientation="vertical">
         <button class="tab-btn" role="tab" id="t1" aria-controls="p1" aria-selected="true"><span class="idx">題一</span><span class="nm">④ 保單版面</span></button>
         <button class="tab-btn" role="tab" id="t2" aria-controls="p2" aria-selected="false"><span class="idx">題二</span><span class="nm">② 總分那一格</span></button>
@@ -836,7 +836,9 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
           <details>
             <summary><span class="bn">9 ─ 🌊 波段觀測站</span><span class="go move">搬去 ②</span><span class="go">不必你決定</span></summary>
             <div class="db">
-              <p><span class="ev m">實測</span>「波段觀測站」在<b>全部 9 份線框裡只出現一次</b>，就在 <code>ia-wireframe.html</code> 的 <b>Tab 02「從哪裡搬來」</b>，逐字列著 <code>ui/components/mk_dashboard.py ─ 波段觀測站</code>。</p>
+              <p><span class="ev m">實測</span>「波段觀測站」在 <code>origin/main</code> 的<b>全部 8 份線框裡只出現一次</b>，就在 <code>ia-wireframe.html</code> 的 <b>Tab 02「從哪裡搬來」</b>，逐字列著 <code>ui/components/mk_dashboard.py ─ 波段觀測站</code>。<br>
+                驗證指令：<code>git grep -c "波段觀測站" origin/main -- 'docs/wireframes/'</code> → <b>只有 <code>ia-wireframe.html:1</code> 一行</b>。
+                ⚠️ <b>射程（2026-09-06 補）</b>：<b>本檔不在 <code>origin/main</code> 上</b>，所以不列入這 8 份；本檔自己提到它是<b>在討論它</b>，不是規範它。</p>
               <p><b>所以它的去處已經定了：② 持倉體檢。</b>這是本題唯一一塊有<b>明文搬遷指令</b>的區塊 ── 派工單原本以為是「持股重疊度診斷」，查下來是這一塊。</p>
               <p><span class="ev m">實測</span>但<b>施工是獨立批次</b>：<code>page_02_health.py</code> 就地寫著「客戶已裁決波段觀測站的搬遷是本頁上線之後的獨立批次」，且有守衛測試擋住 ② 提前 import 它。</p>
               <p><b>推薦：維持現狀，等那一批。</b>不必你現在決定 ── 但它同時是<b>題二案 B 的前置</b>，兩題相關。</p>
@@ -846,8 +848,11 @@ h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spac
           <details open>
             <summary><span class="bn">10 ─ 📊 組合績效 ／ 🎯 效率前緣</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
             <div class="db">
-              <p><span class="ev m">實測</span><b>全部 9 份線框，0 次提到它們。</b>驗證指令（repo 根目錄，可自跑）：<br>
-                <code>git grep -c "組合績效\|效率前緣" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，代表 0 命中）</b>。</p>
+              <p><span class="ev m">實測</span><b>0 次提到它們。</b>驗證指令（repo 根目錄，可自跑）：<br>
+                <code>git grep -c "組合績效\|效率前緣" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，代表 0 命中）</b>。<br>
+                ⚠️ <b>射程（2026-09-06 就地更正，本列原寫「全部 9 份線框」）</b>：這條指令掃的是 <code>origin/main</code>，上面只有 <b>8 份</b>線框 ──<b>本檔不在 main 上</b>。
+                <b>這與第 11／12 列是同一個射程問題</b>，本輪修那兩列時<b>把同一把尺也對本列重跑了一次</b>，故一併更正。
+                <b>結論（0 命中）不變</b>，改的是那句話的射程。</p>
               <p><span class="ev m">實測</span>但它們<b>是活的</b>：<code>ui/helpers/portfolio_perf.py</code> 的 <code>render_portfolio_performance</code> 與 <code>render_efficient_frontier</code>，現在 render 在舊 ④「加入與管理基金」那一塊的<b>持倉健診段末尾</b>。產出四個 KPI：年化報酬／σ／Sharpe／最大回撤，加上各檔貢獻表。</p>
               <p><b>這是三個缺口之一</b>（另兩個見第 11、12 列）── 依上面那條硬規則（線框沒列 ≠ 該退役），它<b>不會</b>因為沒被線框提到就被砍；但也就沒有人講過它該放哪。</p>
               <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
