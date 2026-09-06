@@ -748,10 +748,28 @@ def test_the_empty_state_never_claims_the_user_has_no_funds():
     - ⛔ **`footer` 併在 `_body` 裡一起查**（`_EMPTY_OPEN` 只認 `font-weight:600` 的標題 div）。
       也就是 footer **自己**沒有限定詞不會紅，只要內文別處有 —— 這是刻意的
       （footer 是尾註不是主張），但**不得**被讀成「footer 怎麼寫都行」。
+    - ⛔ **限定詞只要在那一半的【任何地方】出現就算數，包含括號裡的附註。**
+      實測（三序 **50 passed**）：標題寫
+      「你的雲端沒有任何基金（**這個 session** 已載入 0 檔）」——
+      前半在對使用者的雲端下斷言、後半塞一個限定詞就過關，而黑名單四個字面寫法
+      也抓不到「沒有任何基金」（名單裡是「**還**沒有任何基金」）。
+      ⛔ **這是本條最短的一條繞道，而且不需要繞開任何結構** —— 補它要能判「這句話
+      在講 session 還是在講雲端」，那是語意問題，字面比對做不到。**登記，不是沒看到。**
     """
-    _parts = _stream("missing")
+    # ⛔ **兩條路都要跑**（2026-09-06 補）：`missing`（鍵不存在，第一次進站）與
+    #    `empty`（鍵在但是空 list）**在頁面端目前共用同一段 `if not _holdings():`**，
+    #    但守衛原本只跑 `missing` —— 也就是**「空 list」那條路可以自由說謊**。
+    #    實測：只在 `portfolio_funds` 存在時改印「你的雲端一檔基金都沒有」
+    #    → **50 passed 三序**。現在兩條都跑，那顆突變當場紅。
+    for _kind in ("missing", "empty"):
+        _check_empty_state_is_honest(_kind)
+
+
+def _check_empty_state_is_honest(kind: str) -> None:
+    """:func:`test_the_empty_state_never_claims_the_user_has_no_funds` 的單一形狀檢查。"""
+    _parts = _stream(kind)
     _empty = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
-    assert len(_empty) == 1, f"空狀態單位應恰好 1 個：{_empty}"
+    assert len(_empty) == 1, f"（{kind}）空狀態單位應恰好 1 個：{_empty}"
     _body = _text(_segments(_parts).get(_empty[0], []))
     # ⛔ **標題與內文分開查，不查聯集**（2026-09-06 獨立稽核必修）。
     #    舊版把兩者接成 `_all` 再查一次 —— 於是**誰有限定詞誰就替對方過關**：
@@ -762,14 +780,14 @@ def test_the_empty_state_never_claims_the_user_has_no_funds():
     for _where, _txt in (("標題", _empty[0]), ("內文", _body)):
         # 必須帶「這個 session / 工作階段 / 已載入」這一類**限定詞**。
         assert any(_q in _txt for _q in ("這個 session", "工作階段", "已載入", "還沒載入")), (
-            f"空狀態的{_where}沒有任何「這個 session」的限定詞：\n{_txt}\n"
+            f"（{kind}）空狀態的{_where}沒有任何「這個 session」的限定詞：\n{_txt}\n"
             "⛔ 開站不會自動載入（app.py 對 `portfolio_funds` 0 命中）—— "
             "沒有限定詞就是在對一個雲端有 42 檔的人說「你沒有基金」（§1）。\n"
             "⚠️ 標題與內文**各自**都要帶，不能靠對方 —— 使用者可能只讀到其中一半。")
         # 不准出現「一檔都還沒列入」這種**斷言使用者資產**的說法。
         for _lie in ("一檔都還沒列入", "還沒有任何基金", "你沒有基金", "一檔都沒有"):
             assert _lie not in _txt, (
-                f"空狀態的{_where}出現了斷言使用者資產的說法 {_lie!r}：\n{_txt}\n"
+                f"（{kind}）空狀態的{_where}出現了斷言使用者資產的說法 {_lie!r}：\n{_txt}\n"
                 "我們只知道「這個 session 沒載入」，不知道他雲端有沒有基金。")
 
 
