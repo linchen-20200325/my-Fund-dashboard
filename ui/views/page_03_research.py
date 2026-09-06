@@ -293,6 +293,17 @@ RISK_METRICS: tuple[tuple[str, str, str], ...] = (
 #:    絕不挑一個幣別填上去（`reconcile_row_currencies` 的 docstring 講的就是這件事）。
 CCY_UNKNOWN: str = "幣別未知"
 
+#: 取數全敗時的**兩種可能**。⛔ **刻意不寫「代碼打錯」**（2026-09-06 獨立稽核 應修 1）。
+#: 舊文案寫「可能是代碼打錯」——**那是把責任推給使用者，而不能用的是本頁自己宣告的輸入格式**：
+#: 搜尋框的 `help` 當時承諾「基金代碼、Morningstar secId，或名稱的一部分」，
+#: 但**後兩種靜默失敗**（`services/**` 沒有搜尋入口，term 直接被拼成 `?a=<原字串>`）。
+#: 一個打對了 secId 的使用者，會被告知他「打錯了」。
+#: **現在改成據實說明本頁只查得到代碼**，並保留「來源當下不可用」這第二種可能
+#: —— L2 分不出這兩者，挑一種講就是編的。
+_BLAME_FREE: str = (
+    "可能是這串輸入不是本頁查得到的基金代碼（本頁目前只查得到代碼，"
+    "secId 與名稱查不到），也可能是這幾個來源當下不可用。")
+
 
 def _pending_where(block: str) -> str:
     """「內容還沒填」這種灰態的指路。**回傳的必須是一個「地方」。**
@@ -378,17 +389,35 @@ def _render_search_form() -> None:
     （實測 `fund.api.cnyes.com:443` 被拒），本組**無法**真的送一次 secId 去看回什麼。
     依 `CLAUDE.md §-2` 規則 6，上面只能當**待驗事項**，不得當成已查證的事實。
 
-    ⛔ **本組不自行改這句話，理由是它牽動客戶 gate**：`_CODE_PLACEHOLDER`
-    （`0P0000ABCD`）是**線框逐字**，而 help 這句是在解釋那個 placeholder ——
-    只改其中一句會讓兩者互相矛盾，兩句一起改則是動客戶拍板過的文案
-    （§-1.5 v3 §03-2 ①）。**已具名回報總管，待裁決。**
+    ✅ **2026-09-06 已改，總管裁決分兩半**（獨立稽核 應修 1）：
+
+    ⚠️ **本組原本說「兩句一起改屬客戶 gate」——那是個假兩難，被實測推翻。**
+    `git grep -c <pat> origin/main -- 'docs/wireframes/*'`：
+    ``secId`` **0 命中**、``Morningstar`` **0 命中**、``0P0000ABCD`` **1 命中**。
+    → **help 那句是我方自己寫的，不是線框逐字**，所以存在第三條路，
+    而本組當時的選項描述裡**少了它** —— 兩個選項都不對，就會得出「只能不動」的結論。
+
+    - **(a) `help`（本行上方）：已改，內部自決。** 把一句不實的承諾改成真話屬
+      「修正錯誤」不屬「改變設計」（§-1.5.1a 接合 A2）。
+      連帶把失敗文案的「可能是代碼打錯」也改掉（見 :data:`_BLAME_FREE`）。
+    - **(b) `_CODE_PLACEHOLDER`（`0P0000ABCD`）：一個字都沒動。** 那是線框逐字；
+      **線框指定了一個程式服務不了的輸入格式** —— 那不是實作缺陷，
+      是規格與實作對不上，**總管帶去問客戶**，不在本批。
+
+    ⚠️ **獨立稽核用比本組更強的方法確認了這件事**，據實記下來：本組的驗法是
+    「拿真實池查 `0P0000ABCD` → False」，**那有可能走的是 `except → False` 的
+    吞例外路徑（右答案、錯理由）**。稽核組改成植入「池裡確實有這個 secId」的 fixture：
+    ``_pool_secid_or_isin('ACDD19') -> True``（用**代碼**查，通）／
+    ``_pool_secid_or_isin('0P0000ABCD') -> False``（用 **secId** 查，即使池裡就有它也不通）。
+    **它還多找到一件本組沒說的：連「名稱」也不通**，理由同上（`services/**` 沒有搜尋入口）。
     """
     with applied_form(_FORM_KEY, submit_label=SUBMIT_LABEL) as _gate:
         st.caption(f"{BLOCK_FORM}：輸入完按「{SUBMIT_LABEL}」才查 —— "
                    "打字的當下不會觸發任何取數。")
         _term = st.text_input(
             _LABEL_TERM, value="", placeholder=_CODE_PLACEHOLDER,
-            help="基金代碼、Morningstar secId，或名稱的一部分。",
+            help="目前只查得到**基金代碼**。Morningstar secId 與基金名稱查不到 —— "
+                 "本頁沒有搜尋入口，輸入會被原封當成代碼送去查。",
         )
         _source = st.selectbox(
             _LABEL_SOURCE, options=SOURCE_OPTIONS, index=0,
@@ -447,6 +476,28 @@ TRACE_COLS: tuple[str, ...] = ("來源", "結果", "說明")
 #: 來源軌跡的兩種結果字面值（具名而不 inline —— 守衛要拿它比對）。
 TRACE_OK: str = "成功"
 TRACE_FAIL: str = "失敗"
+
+#: `source_trace` 裡「**沒有淨值序列**」那一則合成標記的名字。
+#: :func:`_nav_reason` 靠它挑出缺值原因，:data:`SYNTHETIC_TRACE_SOURCES` 靠它排除計數。
+TRACE_NAV_SERIES: str = "nav_series"
+
+#: ⛔ **`source_trace` 裡**不是來源**的那幾則。**
+#: 它們是我方 pipeline **對 pipeline 自己**下的結論，被 `.append()` 進同一個 list，
+#: 但把它們算進「試過幾個來源」會**虛報**（2026-09-06 獨立稽核 應修 2）。
+#: 逐則的出處與語意（**本組實測，逐行讀過**）：
+#:   - ``nav_series``        —— `services/fund_service.py::finalize_fund_metrics`
+#:     與 `repositories/fund/fund_orchestration.py` 兩處都會追加，
+#:     error 是「無淨值序列」/「只有 N 筆(需≥10)」＝ **對結果的判定**，不是一次抓取。
+#:   - ``nav_all``           —— 同上，error 是「所有來源均不足10筆（最多:N）」＝ **彙總判詞**。
+#:   - ``calc_metrics``      —— 指標**計算**成功/失敗，根本不涉及取數。
+#:   - ``nav_history_rescue`` —— 「live 全敗，改用累積序列」的**註記**。
+#: ⚠️ **這是黑名單，會腐化**：上游日後新增別的合成標記，這裡不會自動知道。
+#:    但**虛報一個來源數**比**漏排除一個**危險（前者是編造的證據），故採黑名單而非白名單。
+#:    ⛔ **不要改成「只數已知的真來源名」** —— 那是白名單，新來源會被靜靜漏掉，
+#:    使用者會看到一個比實際更小的數字，同樣是假的。
+SYNTHETIC_TRACE_SOURCES: frozenset = frozenset({
+    TRACE_NAV_SERIES, "nav_all", "calc_metrics", "nav_history_rescue",
+})
 #: 上游**沒有**給缺值原因時的誠實佔位。⛔ 不得換成一句猜出來的理由。
 NO_REASON: str = "上游沒有附缺值原因"
 
@@ -640,8 +691,15 @@ def _dividend_rows(result: dict) -> list[dict]:
 
     ⚠️ 逐筆的 `currency` 在上游可能是**死預設**（`_src_fundclear_div` 缺欄時填 `"USD"`）。
     `reconcile_row_currencies` 的 docstring 已就地寫明它證明不了這一種
-    （「上游若整批死預設成同一個錯幣別，這裡照樣回那個錯的值」）——
-    **本檔不假裝看得出來**，只保證「列與列之間不一致時不挑一個」。
+    （「上游若整批死預設成同一個錯幣別，這裡照樣回那個錯的值」）。
+
+    ⚠️ **但本頁看得出來的比那句多，這裡據實更正**（2026-09-06 獨立稽核 必修 2）：
+    ~~「本檔不假裝看得出來」~~ —— 那句話**低估了本頁手上的東西**。
+    本頁另外拿得到 `result["currency"]`（它經過 `_ensure_currency` 修正過，
+    正是為了修同一個 USD 死預設）。**兩邊不一致時，本頁看得出來，而且必須說。**
+    比對在 :func:`_dividend_caption`。
+    **仍然看不出來的只有一種**：逐列與 `result` **整批**被死預設成同一個錯幣別
+    —— 那一種本頁確實沒有第三個獨立證據可以推翻，照實承認。
     """
     _divs = result.get("dividends")
     if not isinstance(_divs, list):
@@ -719,7 +777,7 @@ def _nav_reason(result: dict) -> str:
     那兩句分別對應完全不同的下一步（換代碼／等資料補齊），**不能合併**。
     """
     for _r in _trace_rows(result):
-        if _r[TRACE_COLS[0]] == "nav_series" and _r[TRACE_COLS[1]] == TRACE_FAIL:
+        if _r[TRACE_COLS[0]] == TRACE_NAV_SERIES and _r[TRACE_COLS[1]] == TRACE_FAIL:
             return _r[TRACE_COLS[2]] or NO_REASON
     return "這次沒有帶回淨值序列，上游也沒有說明原因。"
 
@@ -735,13 +793,29 @@ def _fetch_failed_note(result: dict) -> str:
     **兩種都是編出來的**，而 L2 沒有給我們分辨所需的資訊。
     → 誠實的做法是說出兩種可能，並把逐源軌跡攤開讓使用者自己判斷（格 6）。
     """
-    _n = sum(1 for _r in _trace_rows(result) if _r[TRACE_COLS[1]] == TRACE_FAIL)
+    _n = _failed_source_count(result)
     _where = f"（逐一嘗試的結果列在下方的「{DEEP_DIVE_PROVENANCE}」）"
     if _n:
-        return (f"這個代碼在 {_n} 個來源都沒有取到淨值 —— "
-                f"可能是代碼打錯，也可能是來源當下不可用。{_where}")
-    return ("這次取數沒有帶回任何淨值，上游也沒有留下逐源紀錄 —— "
-            "可能是代碼打錯，也可能是來源當下不可用。")
+        return (f"在 {_n} 個來源都沒有取到淨值 —— {_BLAME_FREE}{_where}")
+    return f"這次取數沒有帶回任何淨值，上游也沒有留下逐源紀錄 —— {_BLAME_FREE}"
+
+
+def _failed_source_count(result: dict) -> int:
+    """**真的試過而且失敗**的來源數；合成標記不算，同名只算一次。
+
+    ⛔ **不要退回 `sum(1 for … if 失敗)`**（2026-09-06 獨立稽核 應修 2）：
+    那會把 :data:`SYNTHETIC_TRACE_SOURCES` 也算進去 —— 實測畫面曾印
+    「這個代碼在 **3** 個來源都沒有取到淨值」，而**實際只試了 2 個**，
+    第 3 個是 `nav_series`（「沒有淨值序列」這個**判定**本身）。
+    **同一個東西一邊被 :func:`_nav_reason` 當標記用、一邊被算成來源數**，
+    那個數字是編出來的證據。
+
+    ⚠️ **去重**：同一個來源在 fallback chain 裡可能被追加多次
+    （例如短窗重試），數兩次同樣是虛報。
+    """
+    _names = {_r[TRACE_COLS[0]] for _r in _trace_rows(result)
+              if _r[TRACE_COLS[1]] == TRACE_FAIL}
+    return len({_n for _n in _names if _n and _n not in SYNTHETIC_TRACE_SOURCES})
 
 
 def _render_deep_dive() -> None:
@@ -805,7 +879,7 @@ def _render_deep_dive() -> None:
                                  "這一檔在上游沒有配息紀錄 —— "
                                  "可能是它不配息，也可能是配息頁當下取不到。"),
                   empty_where=_where):
-        st.caption(_dividend_caption(_div_rows))
+        st.caption(_dividend_caption(_div_rows, str(_result.get("currency") or "")))
 
     # ── 來源標註（讀法 A：標註，不是第六個內容區塊；理由見模組 docstring）──────
     _trace = _trace_rows(_result)
@@ -883,11 +957,45 @@ def _holdings_caption(result: dict, n_rows: int) -> str:
     return " · ".join(_bits)
 
 
-def _dividend_caption(rows: list[dict]) -> str:
-    """配息表底下的一行：能誠實宣告單一幣別就講，**不能就明說不能**。"""
-    _ccy = _declared_currency(rows)
-    if _ccy:
-        return f"{len(rows)} 筆 · 全部以 {_ccy} 計價 · 金額為原幣，未做任何換算"
+def _dividend_caption(rows: list[dict], fund_ccy: str) -> str:
+    """配息表底下的一行。**逐列一致「而且」與基金計價幣別一致，才敢宣告單一幣別。**
+
+    ## ⛔ 這個 `fund_ccy` 參數是 2026-09-06 獨立稽核（必修 2）加的，別再拿掉
+
+    在此之前本函式**只看逐列**，於是同一個畫面上同時出現：
+
+    ```
+    NAV 走勢     59.99 TWD
+    配息紀錄     2 筆 · 全部以 USD 計價
+    ```
+
+    **兩句都是本頁印的，而且互相矛盾。** 成因在上游、但**本頁是第一個把它端上畫面的**：
+    - `repositories/fund/sources.py::_src_fundclear_div` 缺欄時
+      `item.get("Currency") or item.get("currency") or **"USD"**` —— **逐列 USD 死預設**；
+    - 而 `repositories/fund/fund_orchestration.py::_ensure_currency` 的 docstring 自陳
+      「純代碼經 **`auto_fetch_moneydj`** 會被合成 URL →「計價幣別」缺欄 **USD 死預設** …
+      此處在收口再修一次」—— 也就是 **v19.505 已經認定這個死預設是 bug 並修了
+      `result["currency"]`，但沒修 `dividends[i]["currency"]`。**
+      本頁走的正是那條路，端出來的正是沒修的那一半。
+
+    **數字是真的、單位是編的**（§4.1 量綱陷阱），也正是客戶原話「我不接受假資料」。
+
+    ⛔ **不得改成「相信 `result` 那一邊」**：`result["currency"]` 經過 `_ensure_currency`
+    修正，只是**比較可信**，不是**確定對**。**§1 的答案是不宣稱，不是挑一個比較可能的宣稱。**
+
+    ⚠️ 三方比對一律走 `reconcile_row_currencies`（**不自己寫比較邏輯**）：
+    單一元素進去 ＝ 借它做 ISO 正規化（認不得就回 `""`），兩元素進去 ＝ 一致性判定。
+    """
+    _row = _declared_currency(rows)                       # 逐列一致才非空
+    _fund = reconcile_row_currencies([fund_ccy])          # 可辨識的 ISO 才非空
+    _agreed = reconcile_row_currencies([_row, _fund])
+    if _agreed:
+        return f"{len(rows)} 筆 · 全部以 {_agreed} 計價 · 金額為原幣，未做任何換算"
+    if _row and _fund:
+        # 兩邊都講得出一個 ISO，但講的不是同一個 —— 這是**資料疑義**，要指名道姓。
+        return (f"{len(rows)} 筆 · ⚠️ 資料疑義：逐筆配息宣告 {_row}，"
+                f"這檔基金的計價幣別卻是 {_fund} —— 兩邊不一致，本頁**不挑一個**宣告"
+                "（§1 不猜值）· 金額照原幣顯示，不合計、不換算")
     return (f"{len(rows)} 筆 · {CCY_UNKNOWN}或逐筆幣別不一致 —— "
             "金額照原幣顯示，**不合計、不換算**（不猜值）")
 

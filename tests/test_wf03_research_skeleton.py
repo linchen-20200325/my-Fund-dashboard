@@ -121,6 +121,8 @@ from ui.views.page_03_research import (  # noqa: E402
     _LABEL_SOURCE,
     _LABEL_TERM,
     CCY_UNKNOWN,
+    SYNTHETIC_TRACE_SOURCES,
+    TRACE_NAV_SERIES,
     DIVIDEND_COLS,
     HOLDING_COLS,
     NO_REASON,
@@ -145,6 +147,8 @@ from ui.views.page_03_research import (  # noqa: E402
     _nav_facts,
     _normalise_query,
     _pending_where,
+    _failed_source_count,
+    _fmt,
     _perf_lines,
     _risk_lines,
     _trace_rows,
@@ -202,6 +206,29 @@ class _FakeIndex:
 
     def max(self):
         return max(self._d)
+
+
+class _ExplodingIndex:
+    """索引**有** `min` / `max`，但一碰就拋 —— 模擬「上游契約破了」。
+
+    ⚠️ **刻意讓方法存在**：獨立稽核有一顆突變因為「`BadIndex` 有 `min` 只是會拋」
+    而**其實沒生效**，稽核組自己把它撤回了、不列為證據。
+    本類別把那個教訓做成 fixture：要驗「壞索引會不會被吞成灰態」，
+    就必須讓它**真的走到 `.min()` 才炸**，不能靠 `hasattr` 早退。
+    """
+
+    def min(self):
+        raise TypeError("哨兵：索引不是時間軸（上游契約被破壞）")
+
+    def max(self):
+        raise TypeError("哨兵：索引不是時間軸（上游契約被破壞）")
+
+
+def _broken_series(n: int = 3):
+    """長度正常、`iloc` 正常，**只有索引會炸**的假序列。"""
+    _s = _FakeSeries([1.0] * n, ["2024-01-0%d" % (i + 1) for i in range(n)])
+    _s.index = _ExplodingIndex()
+    return _s
 
 
 class _FakeILoc:
@@ -1054,9 +1081,16 @@ def test_every_grey_unit_says_where_to_look(unit: str):
         f"單位「{unit}」的灰態沒有「去哪補」—— 指路要走 `where_to_find('research')`，"
         "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。\n"
         + _body)
+    # ⚠️ **這一條近乎恆真，失敗訊息 2026-09-06 就地改正**（獨立稽核 登記 3）：
+    #    `_body` 是灰態自己的文字，而指路是 `_pending_where(BLOCK_FORM)` 組出來的
+    #    → 它**必然**包含 `BLOCK_FORM`。**底層性質成立，但它驗不到「畫面上找得到」**
+    #    —— 舊訊息寫「在畫面上找不到」，**宣稱的比它驗到的多**。
+    #    真正驗「指路指到的東西存不存在」的規則見 `CLAUDE.md §8.3.P` 的
+    #    `P-WHERECONTENT-1`（執行期組出來的指路，靜態規則看不到）。
     assert BLOCK_FORM in _body, (
-        f"單位「{unit}」指路提到的「{BLOCK_FORM}」在畫面上找不到 —— "
-        "指到一個使用者看不到的名字，等於沒有指路。")
+        f"單位「{unit}」的指路沒有提到「{BLOCK_FORM}」—— "
+        "本條只驗**指路字串的組成**（它是否由 `_pending_where(BLOCK_FORM)` 產生），"
+        "**不驗**那個名字在畫面上是否真的存在。")
 
 
 def test_the_page_never_hand_rolls_the_grey_mark():
@@ -1361,8 +1395,14 @@ def test_a_total_failure_shows_the_source_trace_and_never_paints_red():
         "那是使用者唯一能自己判斷「打錯還是掛掉」的依據。\n" + _prov)
     # 三個 grey 卡片必須說出「兩種可能」而不是二選一
     _nav = "\n".join(_seg.get(DEEP_DIVE_CARDS[0], []))
-    assert "可能是代碼打錯" in _nav and "來源當下不可用" in _nav, (
+    assert "不是本頁查得到的基金代碼" in _nav and "當下不可用" in _nav, (
         "全敗時的說明沒有同時給出兩種可能 —— 挑一種講就是編的。\n" + _nav)
+    # ⚠️ 2026-09-06 獨立稽核 應修 1：**不得把責任推給使用者**。
+    #    舊文案「可能是代碼打錯」對一個打對了 secId 的人是假的 ——
+    #    不能用的是本頁自己宣告的輸入格式，不是他的手指。
+    assert "打錯" not in _all, (
+        "失敗文案把責任推給使用者（「打錯」）—— 但 secId 與名稱查不到是"
+        "**本頁自己的限制**，help 已據實改口，這裡不得再指著使用者。\n" + _all)
 
 
 def test_a_real_exception_stays_a_real_exception():
@@ -1723,3 +1763,186 @@ def test_holdings_keep_the_upstream_ranking_and_do_not_drop_weightless_rows():
     assert _weightless[HOLDING_COLS[3]] == "", (
         f"沒有權重的持股被補了一個值 {_weightless[HOLDING_COLS[3]]!r} —— "
         "「沒揭露」與「是 0%」不是同一件事（§1）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-09-06 獨立稽核回修 —— 三項必修 ＋ 兩項應修
+#
+# ⚠️ **通則（本節存在的理由，比任何一條斷言重要）**：
+#    **修完一個 bug，第一顆該試的突變就是「把那個修復拔掉」。**
+#    上一輪的 24 顆突變對它們自己為真，但**沒有一顆是「拔掉我剛修好的東西」** ——
+#    於是 `_has_anything()` 這個 fix（它的 docstring 自己寫「存在的唯一理由是
+#    不要讓一句話跑到不屬於它的格子裡」）**零守衛**，稽核組三顆突變全部存活。
+# ══════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("hollow,unit,keep", [
+    # (把哪一格挖空, 該格單位名, 其餘哪一格必須仍有料 —— 證明「有料」這個前提成立)
+    ("dividends", DEEP_DIVE_TABLES[1], DEEP_DIVE_CARDS[0]),
+    ("holdings", DEEP_DIVE_TABLES[0], DEEP_DIVE_CARDS[0]),
+    ("perf", DEEP_DIVE_CARDS[1], DEEP_DIVE_CARDS[0]),
+    ("metrics", DEEP_DIVE_CARDS[2], DEEP_DIVE_CARDS[0]),
+])
+def test_the_all_sources_failed_note_never_leaks_into_a_unit_whose_neighbours_have_data(
+        hollow: str, unit: str, keep: str):
+    """⛔ 只有**一格都沒有**時才准講「N 個來源都沒有取到淨值」。
+
+    ## 這條守的是 `_has_anything()`，而它上一輪**零守衛**（獨立稽核 必修 1）
+
+    稽核組三顆突變**全部存活 58/58 × 3 序**：配息格 `empty_missing` 退回共用文案、
+    持股格同樣退回、以及 **`_has_anything()` 整個改成 `return False`**
+    （＝本組初稿的 bug 完整復辟）。
+
+    **失效模式長這樣**（稽核組實測的畫面）：淨值 3 筆、績效有、持股有、**就是沒配息**
+    → 配息格印出「這次取數沒有帶回任何淨值」，
+    **而同一個畫面上 NAV 卡正印著「59.99 USD · 3 筆」**。
+    兩句都是本頁印的，其中一句是假的。
+
+    ## 判準：**指名道姓**，不是「有沒有灰態」
+
+    只驗「這一格是灰的」擋不住任何東西（兩種文案都是灰的）。
+    本條驗的是**那一格說的理由對不對** —— 全敗文案的特徵句不得出現在
+    「鄰居有料」的畫面上，而且該格必須換上**它自己**的理由。
+    """
+    _res = _RICH_RESULT()
+    _res[hollow] = {} if hollow in ("holdings", "perf", "metrics") else []
+    _seg = _segments(_render(applied=FAKE_QUERY, result=_res))
+
+    # 前提：鄰居真的有料（否則這條測試會空轉，稽核組要求的「排除突變沒生效」）
+    _keep_body = "\n".join(_seg.get(keep, []))
+    assert "59.99" in _keep_body, (
+        f"前提不成立：挖空 {hollow!r} 之後鄰居「{keep}」也沒有料了，"
+        f"本條會空轉。\n{_keep_body}")
+
+    _body = "\n".join(_seg.get(unit, []))
+    assert _body.strip(), f"挖空 {hollow!r} 之後「{unit}」整格消失了。"
+    assert NOT_READY_MARK in _body, f"「{unit}」沒料卻不是灰的：\n{_body}"
+    for _leak in ("都沒有取到淨值", "沒有帶回任何淨值"):
+        assert _leak not in _body, (
+            f"「{unit}」沒料，卻印出了**全敗**才該講的話（{_leak!r}）——\n"
+            f"但同一個畫面上「{keep}」正印著淨值。**那句話是假的。**\n"
+            f"共用文案只准在「一格都沒有」時使用（見 `_has_anything()`）。\n{_body}")
+
+
+def test_the_dividend_currency_never_contradicts_the_fund_currency():
+    """⛔ 配息幣別與基金計價幣別不一致時，**不得宣告任何一個**（獨立稽核 必修 2）。
+
+    ## 這是活的缺陷，不是突變 —— HEAD 未突變時就會發生
+
+    稽核組實測畫面：
+
+    ```
+    NAV 走勢     [metric]  59.99 TWD
+    配息紀錄     [caption] 2 筆 · 全部以 USD 計價
+    ```
+
+    成因在上游、**但本頁是第一個把它端上畫面的**：`_src_fundclear_div` 缺欄時
+    逐列填 `"USD"` 死預設，而 `_ensure_currency` 已經為了同一個死預設修好了
+    `result["currency"]` —— **只修了一半，本頁端出沒修的那一半，還加了一句
+    斬釘截鐵的「全部以 USD 計價」。數字真、單位編（§4.1）。**
+
+    ⛔ **答案不是「相信 `result` 那一邊」**：它只是**比較可信**，不是**確定對**。
+    §1 的答案是**不宣稱**。
+    """
+    _res = _RICH_RESULT()
+    _res["currency"] = "TWD"                     # 基金計價幣別（已被 _ensure_currency 修正）
+    for _d in _res["dividends"]:
+        _d["currency"] = "USD"                   # 逐列死預設
+    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    assert "全部以 USD 計價" not in _all and "全部以 TWD 計價" not in _all, (
+        "兩邊幣別不一致，本頁卻還是挑了一個宣告：\n" + _all)
+    assert "資料疑義" in _all, (
+        "幣別矛盾沒有被標成資料疑義 —— 使用者看不出這一頁自己在打架。\n" + _all)
+
+    # 反向：兩邊一致時**要**敢宣告（否則「不知道」與「知道」又長得一樣了）
+    _ok = _RICH_RESULT()                          # currency=USD、逐列 USD
+    assert "全部以 USD 計價" in _text(_render(applied=FAKE_QUERY, result=_ok)), (
+        "兩邊都說 USD，本頁卻不敢宣告 —— 那會讓「不知道」與「知道」長得一樣。")
+
+
+def test_a_broken_series_index_is_red_not_grey():
+    """壞掉的索引 ＝ 上游契約破了 → **紅框**，不得被吞成灰態（獨立稽核 必修 3）。
+
+    ## 為什麼純 AST 的「0 個 except」不夠
+
+    稽核組用 `contextlib.suppress` 把本組**自陳拆掉**的那個「會說謊的 except」
+    **原樣復辟**：零 `except` 節點、**58 passed × 3 序**。畫面：
+
+    ```
+    HEAD → NAV 格空，紅框 + traceback                     ← 正確（§1）
+    突變 → ⬜ 這次沒有帶回淨值序列，上游也沒有說明原因      ← 序列明明帶回來了，3 筆
+    ```
+
+    **形狀檢查擋不住換一個形狀。** 本條改驗**行為**；
+    純 AST 那條（`test_the_page_has_no_exception_handler_of_its_own`）
+    **留著當第二層**，不是被取代。
+
+    ⚠️ fixture 刻意讓 `min` / `max` **存在但會拋**（見 :class:`_ExplodingIndex`）——
+    稽核組有一顆突變就是因為「方法存在、只是會拋」而其實沒生效，它自己撤回了。
+    """
+    _res = _RICH_RESULT(series=_broken_series())
+    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    assert "[error]" in _all, (
+        "索引壞掉（上游契約被破壞）被畫成灰態或被吞掉了 —— "
+        "序列**有**帶回來，只是讀不出來，說「沒有帶回序列」是假的（§1 要求炸掉）。\n"
+        + _all)
+    assert "哨兵：索引不是時間軸" in _all, (
+        "紅框沒有帶出真正的例外訊息 —— 那就只是一個紅色的猜測。\n" + _all)
+    assert "這次沒有帶回淨值序列" not in _all, (
+        "壞索引被說成「沒有帶回淨值序列」—— 序列帶回來了，那句話是假的。\n" + _all)
+
+
+def test_the_failed_source_count_excludes_synthetic_markers():
+    """「N 個來源」只能數**真的來源**（獨立稽核 應修 2）。
+
+    `nav_series` 是 `finalize_fund_metrics` 追加的**合成標記**（意思是「沒有淨值序列」），
+    不是一個被試過的來源。畫面曾印「這個代碼在 **3** 個來源都沒有取到淨值」，
+    **實際只試了 2 個** —— 而 `_nav_reason()` 正是靠這個名字把它挑出來當缺值原因用。
+    **同一個東西一邊當標記、一邊當來源數**，那個數字是編出來的證據。
+
+    ⚠️ 本條也守**去重**：同一個來源被 append 兩次不得算成兩個。
+    """
+    assert TRACE_NAV_SERIES in SYNTHETIC_TRACE_SOURCES, (
+        "`nav_series` 沒有被列為合成標記 —— 它會被算進來源數。")
+    _blank = _BLANK_RESULT()
+    assert _failed_source_count(_blank) == 2, (
+        "來源數把合成標記也算進去了。fixture 的 source_trace 是 "
+        "bank_platform（失敗）／morningstar（失敗）／nav_series（合成標記）"
+        f"→ 應為 2，實得 {_failed_source_count(_blank)}。")
+    assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, result=_blank)), (
+        "畫面上的來源數與 `_failed_source_count()` 不一致。")
+    # 去重
+    _dupe = _BLANK_RESULT()
+    _dupe["source_trace"].append(
+        {"source": "bank_platform", "success": False, "error": "短窗重試也失敗"})
+    assert _failed_source_count(_dupe) == 2, (
+        "同一個來源被追加兩次就被算成兩個 —— 那同樣是虛報。")
+    # 合成標記全員：逐一確認每一個都不會把數字撐大
+    for _syn in SYNTHETIC_TRACE_SOURCES:
+        _r = _BLANK_RESULT()
+        _r["source_trace"].append({"source": _syn, "success": False, "error": "x"})
+        assert _failed_source_count(_r) == 2, (
+            f"合成標記 {_syn!r} 把來源數撐大了。")
+
+
+@pytest.mark.parametrize("key,label,unit", RISK_METRICS)
+def test_a_nan_metric_is_treated_as_missing_not_as_a_value(key: str, label: str, unit: str):
+    """`NaN` ＝ 缺值，**不得**被畫成一個有值的指標（獨立稽核 應修 3）。
+
+    拿掉 `_fmt()` 的 `if value != value: return None` → 稽核組實測 58 passed，
+    而行為**確實變了**：`Sharpe nan` 從「未提供」變成一個有值的 metric。
+    **缺值被重新分類成有值** —— 使用者失去「未提供」那個誠實訊號，
+    而 `nan` 在畫面上看起來只像是一個沒見過的格式，不像是「這個算不出來」。
+
+    ⚠️ 純函式層也驗一次：`_fmt(float("nan"))` 必須是 `None`，
+    不是「渲染時剛好看不出來」。
+    """
+    assert _fmt(float("nan")) is None, "`_fmt()` 把 NaN 當成一個可顯示的數值。"
+    assert _fmt(float("nan"), "%") is None, "帶單位時 NaN 的防線失效。"
+    _metrics = {**RISK_SENTINELS, key: float("nan")}
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY,
+                                        result=_RICH_RESULT(metrics=_metrics))
+                                ).get(DEEP_DIVE_CARDS[2], []))
+    assert "nan" not in _body.lower(), (
+        f"`metrics[{key!r}]` 是 NaN，卻被畫成一個值：\n{_body}")
+    assert re.search(re.escape(label) + r"\s*[-+]?\d", _body) is None, (
+        f"「{label}」是 NaN（＝算不出來），畫面上卻給了它一個數字：\n{_body}")
