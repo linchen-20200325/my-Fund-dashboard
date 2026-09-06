@@ -31,6 +31,33 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
+      # ⛔ 暫時性診斷步驟（事故 P0 一手證據用，唯讀，取證後即以另一個 commit 移除）。
+      # 只讀 gridProperties / 表頭，**不寫入任何一格**。
+      - name: "TEMP DIAG (read-only) nav_history gridProperties"
+        env:
+          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          NAV_SHEET_ID: ${{ secrets.NAV_SHEET_ID }}
+        run: |
+          python - <<'PY'
+          import json
+          from infra.config import get_secret
+          from repositories.policy_repository import get_gspread_client
+          from services.nav_history_gs import _nav_sheet_id, _WS_NAV, _NAV_HEADERS
+          cl = get_gspread_client(get_secret("google_service_account"))
+          sh = cl.open_by_key(_nav_sheet_id())
+          print("DIAG expected_headers_len:", len(_NAV_HEADERS))
+          for w in sh.worksheets():
+              print("DIAG worksheet:", json.dumps(
+                  {"title": w.title, "rowCount": w.row_count, "colCount": w.col_count},
+                  ensure_ascii=False))
+          ws = sh.worksheet(_WS_NAV)
+          print("DIAG gridProperties:", json.dumps(
+              ws._properties.get("gridProperties"), ensure_ascii=False))
+          hdr = ws.row_values(1)
+          print("DIAG header_len:", len(hdr))
+          print("DIAG header:", json.dumps(hdr, ensure_ascii=False))
+          PY
+
       - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
         # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
         env:
