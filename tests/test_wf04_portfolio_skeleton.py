@@ -251,6 +251,15 @@ FAKE_HOLDINGS_PRICED: list[dict[str, Any]] = [
      "invest_twd": 380000, "policy_tier": "satellite"},
 ]
 
+#: :data:`FAKE_HOLDINGS_PRICED` 經 `summarize_core_satellite()` 之後的兩個百分比字串。
+#: 620000 / (620000+380000) = 62.0%、380000 / 同分母 = 38.0%（實測回傳值）。
+#: ⚠️ **有名字才擋得住對調**：舊斷言寫 ``"62.0%" in _body and "38.0%" in _body``，
+#: 把核心／衛星互換後兩個字串都還在 ⇒ 綠燈（2026-09-06 稽核存活突變 F1-b，實測 49 passed）。
+#: 具名之後，:func:`test_the_mix_block_pairs_each_label_with_its_own_number`
+#: 才能寫成「``核心`` 要貼 :data:`_CORE_PCT_TEXT`」這種**配對**斷言。
+_CORE_PCT_TEXT: str = "62.0%"
+_SAT_PCT_TEXT: str = "38.0%"
+
 
 def _reset_streamlit_container_stack() -> None:
     """把 Streamlit 的「目前開著哪個容器」重設回乾淨狀態。
@@ -976,6 +985,81 @@ def test_the_mix_block_shows_the_real_ratio():
         f"「{BLOCK_MIX}」已經接上真資料，不該還是灰態：\n{_body}")
     assert MIX_CURRENT_LABEL in _body and "62.0%" in _body and "38.0%" in _body, (
         f"「{BLOCK_MIX}」沒有畫出現況比例（預期核心 62.0% ／ 衛星 38.0%）：\n{_body}")
+    # ⚠️ 上面那條**只驗兩個數字在不在**，驗不到它們有沒有貼對標籤 ——
+    #    把核心／衛星對調，兩個字串都還在（實測 49 passed）。配對由下一條守。
+
+
+def test_the_mix_block_pairs_each_label_with_its_own_number():
+    """⭐ **順序**：`核心` 要貼 62.0%、`衛星` 要貼 38.0% —— 對調就是說謊。
+
+    ## 這條是補洞，不是加保險（2026-09-06 稽核存活突變 F1-b）
+
+    :func:`test_the_mix_block_shows_the_real_ratio` 的斷言是
+    ``"62.0%" in _body and "38.0%" in _body``。**把兩個數字對調，它照樣綠**
+    —— 實測：核心／衛星互換後全檔仍 **49 passed**。
+
+    對調後畫面長這樣（真實輸出，不是想像）::
+
+        **現況**　核心 38.0%　衛星 62.0%　→　**你設定的目標**　核心 75.0%
+        **差距**　核心比目標少 13.0%
+
+    ⛔ **它自己跟自己打架**：核心若真的是 38%，離 75% 的目標差的是 **37 個百分點**，
+    不是 13。畫面同時說「核心 38%」與「差 13%」，兩句不可能都對。
+    而使用者會照著這一格**調自己的部位** —— 這正是客戶說的
+    「我不接受假資料、缺資料」裡最貴的那一種：**不是缺，是反的。**
+
+    ⚠️ **本條驗的是「標籤↔數字的配對」，不是「數字對不對」**（後者由上一條 + SSOT 守）。
+    兩條合起來才完整：一條問「數字在不在」，一條問「有沒有貼對人」。
+    """
+    _body = _mix_body("priced")
+    assert f"核心 {_CORE_PCT_TEXT}" in _body, (
+        f"「{BLOCK_MIX}」沒有把核心與 {_CORE_PCT_TEXT} 貼在一起：\n{_body}")
+    assert f"衛星 {_SAT_PCT_TEXT}" in _body, (
+        f"「{BLOCK_MIX}」沒有把衛星與 {_SAT_PCT_TEXT} 貼在一起：\n{_body}")
+    # 把對調後的形狀直接寫成禁令：失敗訊息才看得出「紅在哪」而不只是「少了什麼」。
+    assert f"核心 {_SAT_PCT_TEXT}" not in _body and f"衛星 {_CORE_PCT_TEXT}" not in _body, (
+        f"「{BLOCK_MIX}」把核心／衛星的數字對調了 —— "
+        f"預期核心 {_CORE_PCT_TEXT} ／ 衛星 {_SAT_PCT_TEXT}：\n{_body}")
+
+
+def test_the_mix_gap_direction_agrees_with_the_numbers_it_just_printed():
+    """⭐ **方向**：現況 62% < 目標 75% ⇒ 只能說「**少**」，而且差額要等於 |62−75|。
+
+    ## 這條是補洞，不是加保險（2026-09-06 稽核存活突變 F1-c）
+
+    既有斷言只驗數字、不驗方向詞：把 `_render_mix()` 裡的多／少**反轉**，
+    畫面變成「核心比目標**多** 13.0%」，**全檔仍 49 passed**（實測）。
+    「核心配置過重、該減碼」與「核心配置不足、該加碼」是**相反的動作指示**，
+    而這一格的存在目的就是告訴使用者往哪邊調。
+
+    ## 為什麼用「自我一致」而不是寫死「少 13.0%」
+
+    寫死字串只能釘住這一組 fixture；**改成從畫面自己讀回來對帳**，
+    等於要求這一格**內部不自相矛盾** —— 它同時擋住：
+
+    * 方向詞反轉（F1-c：62 < 75 卻說「多」）；
+    * 差額算錯或沒跟著變（F1-b 對調後：說「核心 38%」卻仍寫「差 13%」，
+      而 |38−75| = 37 ⇒ 本條也會轉紅，與上一條形成交叉守備）。
+
+    ⛔ **守不到什麼**：現況與目標**同時**被改成另一組自洽的數字（例如全部 ×2），
+    本條看不出來 —— 那要靠上一條與 SSOT 的實際回傳值。**兩條互補，缺一不可。**
+    """
+    _body = _mix_body("priced")
+    # 從畫面**讀回**現況核心、目標核心、以及差距那一行講的方向與差額。
+    _cur = re.search(r"核心 (\d+\.\d)%\u3000衛星", _body)
+    _tgt = re.search(r"目標\*\*\u3000核心 (\d+\.\d)%", _body)
+    _gap = re.search(r"核心比目標(多|少) (\d+\.\d)%", _body)
+    assert _cur and _tgt and _gap, (
+        f"「{BLOCK_MIX}」讀不出現況／目標／差距三者之一，無法對帳：\n{_body}")
+    _cur_v, _tgt_v, _gap_v = float(_cur.group(1)), float(_tgt.group(1)), float(_gap.group(2))
+    _expect_word = "多" if _cur_v > _tgt_v else "少"
+    assert _gap.group(1) == _expect_word, (
+        f"「{BLOCK_MIX}」的方向詞與它自己印出來的數字相反："
+        f"現況核心 {_cur_v}% vs 目標 {_tgt_v}% 應該是「{_expect_word}」，"
+        f"畫面卻寫「{_gap.group(1)}」：\n{_body}")
+    assert abs(_gap_v - abs(_cur_v - _tgt_v)) < 0.05, (
+        f"「{BLOCK_MIX}」的差額對不上它自己印出來的數字："
+        f"|{_cur_v} − {_tgt_v}| = {abs(_cur_v - _tgt_v):.1f}，畫面卻寫 {_gap_v}：\n{_body}")
 
 
 def test_the_mix_block_never_prints_a_zero_when_it_cannot_compute():
