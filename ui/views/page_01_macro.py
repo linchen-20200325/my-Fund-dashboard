@@ -148,6 +148,7 @@ from services.ai_service import gemini_generate, get_gemini_keys
 from services.allocation_ladder import allocation_from_composite
 from services.hot_money_service import fetch_hot_money_frames
 from services.liquidity_engine import (
+    STRESS_FACTORS,
     compute_liquidity_score,
     fetch_liquidity_factors,
     liquidity_verdict,
@@ -422,7 +423,7 @@ def _radar_lit(summary: dict) -> int:
     而它比畫面更嚴重：prompt 開頭寫著「**只能根據下面的資料快照來講**」，
     等於直接告訴模型「市場平靜」。當時的守衛只側錄 `st.*` 渲染 API，
     **prompt 字串不經過任何 `st.*`**，所以一條都不會紅。
-    → 現在三個消費端**共用這一支**，並由
+    → 現在四個消費端**共用這一支**（2026-09-06 加入第四個 `_card_exceptions()`），並由
     `tests/test_wf01_detail_zone_order.py::test_every_summarize_radar_consumer_goes_through_the_lit_guard`
     以 AST 鎖住「`summarize_radar()` 有幾個呼叫點，`_radar_lit()` 就要有幾個」。
 
@@ -448,6 +449,18 @@ def _radar_lit(summary: dict) -> int:
       - **配對了但沒用回傳值**（那一半由兩條行為鎖守，不由本鎖守）；
       - **跨檔**：本鎖只讀 `ui/views/page_01_macro.py` 一個檔，
         第四個消費端若寫在別的檔，它看不到。
+      - 🆕 **兩邊都不呼叫**（2026-09-06 實測補上，**這一種真的發生過**）——
+        一個消費端從 session 拿到原始 10 燈之後，**既不叫 `summarize_radar()`
+        也不叫 `_radar_lit()`**，直接對原始 dict 讀 `.get("red", 0)`。
+        兩邊的計數**一起少一**、依然相等，**本鎖全綠**。
+        實測（`_card_exceptions()` 的真實 bug，**量測於 merge-base `1ad0821`**）：
+        `3 / 3`、**743** passed / 32 skipped、零紅燈，而那張卡把 5 盞紅燈印成「🔴 0」。
+        ⚠️ **本行原寫「744」，2026-09-06 獨立稽核擋下：那個數字在任何一個 SHA 都不成立**
+        （`1ad0821` 是 743；到 744 時新守衛已經在，計數是 `4 / 4` 不是 `3 / 3`）。
+        本組重跑確認 743。**「3/3」「744」「零紅燈」三者無法同時為真。**
+        → 由 `test_every_radar_session_read_is_summarized_in_the_same_function`
+        補上：它改**逐函式**配對「讀 `_SK_RADAR`」與「呼叫 `summarize_radar`」，
+        不比對總數。**一條「數量對得上」的鎖，擋不住「兩邊都是 0」。**
 
     ⛔ **所以它是「少一道人為疏漏」，不是「不可能再漏」。**
     """
@@ -460,6 +473,29 @@ def _radar_lit(summary: dict) -> int:
 # ══════════════════════════════════════════════════════════════════
 def _card_phase(ind: dict) -> dict:
     _phase = calc_macro_phase(ind)
+    # ⚠️ **2026-09-06：本卡以前完全沒讀 `support`，於是零資料時印綠色的「擴張（5/10）」。**
+    #    `calc_macro_phase({})` 實跑回 `score=5`、`phase='擴張'`、
+    #    `support.sufficient=False`、`support.reason='一個計分指標都沒取到，
+    #    分數 5.0 是分母為零時的預設值，不是量測'` —— 那個 5 是**分母為零的預設值**，
+    #    不是量到的東西。照印就是把「什麼都沒抓到」畫成一張綠色的擴張燈（§1）。
+    #    生產端早就把判斷交過來了（該函式 `support=_phase_support(...)` 上方註解
+    #    逐字寫「消費端讀 `.sufficient`」），只是本卡沒接。
+    # ⚠️ **`support` 是 `EvidenceSupport` 物件、不是 dict** —— 沒有 `.get()`。
+    #    判斷一律走 `is_sufficient()`（`shared/evidence_support.py` 的 L0 SSOT，
+    #    全站唯一被允許的判斷式）；本頁 ① 結論與 ② 依據用的就是同一支，
+    #    **不在這裡發明第三套**。以前的矛盾正是這樣來的：① 說「撐不起結論」，
+    #    同一畫面的本卡卻印綠色「擴張」。
+    _support = _phase.get("support")
+    if not is_sufficient(_support) or not _phase.get("phase"):
+        return {
+            "title": "景氣位階",
+            "state": STATE_NOT_READY,
+            # 灰態不印 value（`state_card` 的灰分支只印 note）→ 原因併進 note。
+            # `support.reason` 是產出端寫給使用者看的中文，直接印，不另編一句。
+            "note": ("這一輪的資料撐不起一個位階判讀："
+                     f"{getattr(_support, 'reason', '') or '證據不足'}"),
+            "where": _where_to_load(),
+        }
     return {
         "title": "景氣位階",
         "value": f"{_phase.get('phase') or '—'}（{_phase.get('score')}/10）",
@@ -578,7 +614,7 @@ def _card_risk_radar() -> dict:
     #    `summarize_radar()` 是純函式（無 I/O），所以「一份資料兩個消費端」
     #    只是同一份 dict 被彙總兩次，不是第二個取數點。
     _sum = summarize_radar(_stash)
-    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 1／3）
+    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 1／4）
     if not _radar_lit(_sum):
         return {
             "title": "極端風險警語",
@@ -793,13 +829,47 @@ def _card_exceptions(ev: dict) -> dict:
                 "where": _where_to_load()}
 
     _radar = st.session_state.get(_SK_RADAR)
-    _red = int(_radar.get("red", 0)) if isinstance(_radar, dict) else 0
-    _yellow = int(_radar.get("yellow", 0)) if isinstance(_radar, dict) else 0
+    # ⚠️ **2026-09-06：本卡以前直接對原始 dict 讀 `red` / `yellow`，那兩個 key 不存在。**
+    #    `_SK_RADAR` 存的是 `detect_risk_radar()` 的**原始 10 燈**，key 是
+    #    `vix_level` / `vix_term_struct` / `hy_oas_delta` / … —— 見 `_SK_RADAR` 的說明。
+    #    產生 `red` / `yellow` 計數的是 `summarize_radar()`；漏掉它的後果不是「少一個
+    #    數字」，是**兩個數字恆為 0** —— 10 燈全紅的極端警報，這張卡照樣印
+    #    「🔴 0 ／ 🟡 0」，而且 `_alarm` 的 `_red > 0` 那半是死的（本組實測：
+    #    5 盞紅燈 → `summarize_radar` 回 `level='極端警報'`、`red=5`，本卡卻讀到 0）。
+    #    本卡是第 4 個消費端，與另外三個一樣**當場彙總**（純函式，非新取數點）。
+    # 📌 **登記（2026-09-06 稽核 B 組，總管裁決：不修）**：`_radar` 是
+    #    **Exception**（取數炸了）與**全 ⬜**（抓到但一盞都沒讀數）時，
+    #    本卡輸出**逐字相同**、`state` 都是 `ok`（本組實測確認）。
+    #    ⚠️ **這是既有問題，merge-base 上一模一樣，不是本批造成的** ——
+    #    但它就長在本批重寫的這幾行上，而且**新文案把「炸了」也說成
+    #    「沒有量到」，語意比之前更肯定**。隔壁的 `_card_risk_radar()` 有分
+    #    （`isinstance(_stash, BaseException)` → `STATE_ERROR`），本卡沒有。
+    #    **登記於此，本批不修**（不在射程內，且會動到卡片狀態語意）。
+    _sum = summarize_radar(_radar) if isinstance(_radar, dict) else {}
+    # ⛔ **§1 的必要防線，理由與唯一定義都在 `_radar_lit()`。**（消費端 4／4）
+    #    全 ⬜ 時 `red`/`yellow` 也是 0，但那是「沒抓到」不是「沒有風險」——
+    #    兩者若印成同一句，就是把空氣講成平靜。
+    _lit = _radar_lit(_sum) if _sum else 0
+    _red = int(_sum.get("red") or 0) if _lit else 0
+    _yellow = int(_sum.get("yellow") or 0) if _lit else 0
     _lvl = str(_infl.get("level", ""))
+    # 📌 **登記（2026-09-06 獨立稽核 D2，本批刻意不改門檻）**：本卡用 `_red > 0`，
+    #    而「極端風險警語」卡用 `summarize_radar()` 的 `level`（門檻 `red >= 2`）。
+    #    → **紅燈恰為 1 盞時，同一份資料兩張卡會是相反顏色**
+    #    （本組實測：`level='平靜'` ⇒ 那張卡 `ok`；`red=1 > 0` ⇒ 本卡 `business`）。
+    #    base 不會發生，因為本卡的 `_red` 在 base 恆為 0（那正是本批修掉的 bug）。
+    #    ⚠️ **兩個門檻各自都有道理**（一盞紅算不算「該警覺的例外」是業務判斷），
+    #    故**不自行拍板**；登記於此並寫進 PR 的行為變更表，待客戶／總管裁決。
     _alarm = _lvl == "red" or _red > 0
+    # 短線雷達：**有讀數才報數字**；沒有讀數就說「沒取到」，不報 0（§1）。
+    # 📌 **登記（同上，不修）**：`/10` 寫死。`_RADAR_KEYS` 今天確為 10 盞，
+    #    且同檔已有多處同樣寫法 —— **既有慣例的延伸，登記即可。**
+    _radar_txt = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}（{_lit}/10 盞有讀數）。"
+                  if _lit else
+                  "短線雷達這一輪一盞都沒有取到讀數 —— 不是「沒有風險」，是「沒有量到」。")
     # 新聞桶恆為 ⬜「未掃描」（客戶拍板第 2 條）—— 把它**說出來**，
     # 否則「沒有系統性風險」與「沒有掃描系統性風險」在畫面上長得一模一樣。
-    _note = (f"短線雷達 🔴 {_red} ／ 🟡 {_yellow}。"
+    _note = (f"{_radar_txt}"
              f"系統性風險（新聞面）{_news.get('emoji', '⬜')} "
              f"{_news.get('label', '未掃描')} —— 本頁尚未接上新聞取數，"
              "所以這一項不是「沒有風險」，是「沒有查」。")
@@ -1301,7 +1371,7 @@ def _detail_short() -> None:
         not_ready("尚未計算短線風險雷達。", where=_where_to_load())
     else:
         _sum = summarize_radar(_radar)
-        # ⛔ 同 `_card_risk_radar()`，理由見 `_radar_lit()`。（消費端 2／3）
+        # ⛔ 同 `_card_risk_radar()`，理由見 `_radar_lit()`。（消費端 2／4）
         if not _radar_lit(_sum):
             not_ready("10 盞燈這一輪一盞都沒有取到讀數，沒有可以下的風險結論。",
                       where=_where_to_load())
@@ -1358,9 +1428,75 @@ def _detail_short() -> None:
     if isinstance(_score, dict):
         _tier = str(_score.get("tier") or "")
         _val = _score.get("value")
+        # ⚠️ **2026-09-06：分數幾個因子算出來的，以前看不出來。**
+        #    `compute_liquidity_score()` 對缺席因子**自動重正規化權重**，所以
+        #    只有 1 個因子在線時該因子權重被放大成 `1.0` ——
+        #    本組實測：`{'XCCY_PROXY': {'zscore': 2.5}}` 與三個因子都給 2.5，
+        #    `value` 同為 `2.5`、`tier` 同為「流動性危機」，**完全分不出來**；
+        #    而 `liquidity_verdict()` 那段照樣寫「⚠️ 美元/避險/波動率**多軌同時緊繃**」
+        #    並給出「宜降槓桿、備現金」。一個因子的讀數，不該長成三軌共振的樣子。
+        #    數字取自 `breakdown`（逐因子貢獻，長度＝實際在線數），分母取服務層的
+        #    `STRESS_FACTORS`，**不用本檔的 `_LIQ_FACTOR_ROWS`** —— 後者含 SSR，
+        #    而 SSR 依契約**不計入**壓力分數，拿它當分母會多算一個。
+        _n_on = len(_score.get("breakdown") or [])
+        _n_all = len(STRESS_FACTORS)
+        # ⛔ **2026-09-06 總管裁決：因子不全時，整句研判不印。**
+        #    前一版只在**下一段**加一句更正，那不夠 —— 使用者讀到的**第一句**
+        #    仍然是「⚠️ 美元/避險/波動率**多軌同時緊繃**……**宜降槓桿、備現金**」，
+        #    而那句**假前提與行動建議同在一句**。客戶原話：「我不接受假資料、
+        #    缺資料（會影響判斷的數據）」。**加註解不等於修好。**
+        #    機制（實測）：`compute_liquidity_score()` 對缺席因子**重正規化權重**，
+        #    單一因子在線時它的權重被放大成 1.0 → 分數照樣衝到 2.5 →
+        #    觸發 `liquidity_verdict()` 的 `val >= 2.0` 分支，**一軌講出三軌的話**。
+        # ⛔ **不反向修 `services/liquidity_engine.py`**（客戶方針）——
+        #    那支函式就它自己的契約而言沒有錯：它描述的是**分數**，不是**因子數**。
+        #    知道「這個分數只有幾軌撐著」的是 UI，**這是 UI 層該擋的**。
+        # ⚠️ **代價（總管已裁定可接受）**：部分因子情境下一併損失「主導因子」與
+        #    「SSR 子彈水位」兩句 —— 一軌在線時「主導因子」本來就是廢話。
+        # ⚠️ **本組評估過兩個更小的改法，都不採用，理由寫在這裡免得下一個人再試一次**：
+        #    (a) 只在 `val >= 2.0`（或 `tier == "流動性危機"`）時抑制 ——
+        #        `_tier()` 用的正是同一個 `2.0`，所以判得準；**但那個門檻與那個字串
+        #        都沒有匯出成常數**，抄進 UI 就是 §3.3 明禁的 inline magic，
+        #        而且服務層日後重新校準分級時，這裡會**無聲**失準。
+        #    (b) 只在 `_n_on == 1` 時抑制（「多軌」在 2 軌時字面上為真）——
+        #        **不成立**：那句話是「**美元/避險/波動率**多軌同時緊繃」，
+        #        它**逐一點名三軌**，2/3 在線時仍然對那個沒量到的軌下了斷言。
+        # ⛔ **射程聲明（2026-09-06 總管裁決：登記，本輪不做，也不要順手做）**
+        #    本次擋的是「**因子不全**時不下多軌研判」。
+        #    **不涵蓋**：三軌**都量到**、但其中一軌其實很鬆（z 為負）的情形 ——
+        #    各因子 z clip ±3 後加權平均，兩軌 z=+3 配一軌負 z，平均仍可 ≥ 2.0，
+        #    於是「多軌同時緊繃」在 3/3 之下**照樣可能不成立**。
+        #    **不在本 PR 射程內，理由三條**：(1) 不是本批造成的，是
+        #    `liquidity_verdict()` 既有的契約問題（它描述**分數**，那句話卻**點名三軌**）；
+        #    (2) 要在 UI 擋它需要一個「多緊才算緊」的門檻，而那個門檻**住在服務層、
+        #    沒有匯出成常數** —— 抄進 UI 就是本檔上方已經正確否決過的 §3.3 inline magic；
+        #    (3) 客戶方針**絕不反向要求修改底層**。要嘛另立一批，要嘛送客戶裁決。
+        #    ⚠️ **寫這一句是為了不讓下一個人以為這個洞已經補了。**
+        _partial = 0 < _n_on < _n_all
+        _verdict = (
+            f"這一輪只有 {_n_on}/{_n_all} 軌真的量到，不足以判讀多軌共振，"
+            "本輪不下研判。"
+            if _partial else liquidity_verdict(_score, _factors))
         st.caption(
             f"壓力分數 **{_val if _val is not None else '—'}**"
-            f"（{_tier or '—'}）：{liquidity_verdict(_score, _factors)}")
+            f"（{_tier or '—'}；{_n_on}/{_n_all} 壓力因子在線）：{_verdict}")
+        if _partial:
+            # ⚠️ **2026-09-06：本段原本有後半兩行，已刪，理由要留著。**
+            #    原文是「…直接比大小；**上面那句研判裡關於「多軌同時」的描述**，
+            #    這一輪只有 N 軌真的量到。」—— 那兩行是在**反駁主 caption 的研判**。
+            #    同一輪把那句研判改成不印之後，這兩行就同時壞掉兩次：
+            #      (a) 「上面那句研判」**已經不存在**，使用者往上找會找不到；
+            #      (b) 「這一輪只有 N 軌真的量到」主 caption 現在自己就這樣寫，**重複**。
+            # ⛔ **前半句保留，不要一起刪** —— 「缺席因子的權重被重新分配，所以不能
+            #    跟 N/N 的讀數直接比大小」是**唯一**解釋「為什麼 1/3 也能算出 2.5」
+            #    的地方，主 caption 沒講。刪掉它，那個 2.5 就又變成一個沒人解釋的數字。
+            # 📌 **這是一個形狀，不只是這一處**：**撤回一句假宣稱時，
+            #    「引用它的那句話」不會自動跟著撤回。** 本次是「被撤回的是文案、
+            #    引用它的也是文案」，兩邊都不在型別系統裡，沒有東西會報錯。
+            st.caption(
+                f"⚠️ 這個分數只用了 {_n_on}/{_n_all} 個壓力因子 —— 缺席因子的權重"
+                f"被重新分配給在線因子，所以它**不能**跟 {_n_all}/{_n_all} 的讀數"
+                "直接比大小。")
     else:
         # `compute_liquidity_score()` 的契約：三個壓力因子**全缺**時回 `None`。
         # 那不是故障，是「這一輪沒有足夠因子可以合成」→ 灰態（鐵則 03）。
@@ -1584,8 +1720,31 @@ def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
     餵 0 進去它會當成一個真的觀測值去推論。
     """
     _lines: list[str] = []
-    _lines.append(f"[總經位階] {phase.get('phase') or '—'}"
-                  f"（分數 {phase.get('score')}/10）")
+    # ⛔ **2026-09-06 M-1：這一行以前直接把位階分數餵給 AI，沒有閘門。**
+    #    同一個 `calc_macro_phase()` 的 `score`，卡片會誠實印灰態
+    #    「這一輪的資料撐不起一個位階判讀」，而**這裡同時把那個
+    #    分母為零的預設分數（5.0／「擴張」）餵進 prompt** ——
+    #    prompt 路徑比卡片更嚴重：**AI 會拿它去推論，而使用者看不到它從哪來。**
+    #    這一行等於違反上面那段 docstring 自己寫的「`—` 就是 `—`，不補值」。
+    # ⚠️ 走**同一支** `is_sufficient()`（L0 SSOT，與 `_card_phase()`、
+    #    ① 結論、② 依據同一支）—— **不在這裡發明第四套判斷式。**
+    _ph_ok = is_sufficient(phase.get("support"))
+    if _ph_ok:
+        _lines.append(f"[總經位階] {phase.get('phase') or '—'}"
+                      f"（分數 {phase.get('score')}/10）")
+    else:
+        # `—` 就是 `—`：不給分數、不給位階名，並把**原因**一起交代給 AI，
+        # 否則它只會看到一個沒有值的欄位，不知道那是「沒取到」還是「中性」。
+        _lines.append(
+            "[總經位階] —（證據不足，未給位階）："
+            f"{getattr(phase.get('support'), 'reason', '') or '證據不足'}")
+    # 📌 **順帶查證（M-1 的延伸問題）：`ev.get("score")` 不是同一個病，不改。**
+    #    實測全站斷線時：位階 `score=5`／`phase='擴張'`（**分母為零的中點預設值**，
+    #    讀起來像一個正面判讀）；綜合健康度 `score=0.0`（**真的加總**，Σ score×weight，
+    #    沒有指標就是 0，不是中點）。且 `_render_layer_evidence()` 的 docstring 已明訂
+    #    政策：「撐不住時**分數照印**（它是真的加總，不是捏造的），但**不給等級、
+    #    不給行動**」—— 下一行的 `level` **已經照這條閘住**（印「證據不足，未給等級」）。
+    #    → 兩者的差別是「**捏造的中點** vs **真實的加總**」，不是同一個病。
     _score = ev.get("score")
     _lines.append(f"[綜合健康度] 加權淨分 "
                   f"{_score if _score is not None else '—'}"
@@ -1605,7 +1764,7 @@ def _ai_snapshot(ind: dict, phase: dict, ev: dict) -> str:
     _radar = st.session_state.get(_SK_RADAR)
     if isinstance(_radar, dict):
         _s = summarize_radar(_radar)
-        # ⛔ **消費端 3／3 —— 這一份是 2026-09-05 稽核 F1 補的，前一版漏掉。**
+        # ⛔ **消費端 3／4 —— 這一份是 2026-09-05 稽核 F1 補的，前一版漏掉。**
         #    它比另外兩個更嚴重：這一行會進 prompt，而 prompt 開頭寫著
         #    「**只能根據下面的『資料快照』來講**」——
         #    餵 `整體 平靜` 進去，等於**直接告訴模型市場平靜**，
