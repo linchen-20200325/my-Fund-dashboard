@@ -99,7 +99,15 @@ class LocalJsonPoolStore:
 
     def __init__(self, base_dir: "Path | None" = None) -> None:
         self._dir = base_dir or _CACHE_DIR
-        self._dir.mkdir(parents=True, exist_ok=True)
+        # ⚠️ 2026-09-06:~~`self._dir.mkdir(parents=True, exist_ok=True)`~~ 由建構子移到
+        #    `_write()`(**有意識的更正,不是漏刪** · 決策者:AI 執行組,依客戶
+        #    2026-09-06「查詢一律唯讀」的同一把尺)。
+        #    **舊寫法的理由仍然成立**:建構子先把目錄準備好,`_write` 就永遠不必操心。
+        #    **被權衡掉的是**:`get_pool_store()` 在**唯讀**路徑上也會 new 一個本地後端,
+        #    於是「只是列出選股池」會在磁碟上長出一個目錄 —— 同一個形狀的病,
+        #    只是落點從 Google Sheet 換成本機檔案系統。
+        #    ⛔ 這**不在**客戶那句授權的字面射程內(他講的是 Google Sheet),
+        #       本項為執行組主動收斂,若客戶認為多餘,單獨撤銷本項即可,不影響三處主切除。
         self._path = self._dir / _LOCAL_FILE
 
     def is_available(self) -> bool:
@@ -123,6 +131,7 @@ class LocalJsonPoolStore:
         return _data
 
     def _write(self, rows: list) -> None:
+        self._dir.mkdir(parents=True, exist_ok=True)   # 2026-09-06:由建構子移來(只在真寫時建目錄)
         self._path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def list_pool(self) -> list:
@@ -260,21 +269,65 @@ class GoogleSheetsPoolStore:
         # (sheet id 恆 baked 非空)。原僅 `_gs_enabled()`(SA-only)。
         return bool((_sa_present() or self._oauth_client is not None) and _pool_sheet_id())
 
-    def _ws(self):
+    def _ws(self, *, for_write: bool = False):
+        """取得 `_fund_pool` worksheet。
+
+        ⚠️ **2026-09-06:本函式從「無條件確保 schema」改為「只有寫入路徑才確保 schema」**
+        (**有意識的政策變更,不是漏刪** · 決策者:**客戶** · 客戶 2026-09-06 永久授權:
+        「凡是『查詢/搜尋』功能,一律強制走『純讀取(唯讀)』,絕對禁止反向寫入我的
+        Google Sheet。不用問我,直接切斷寫入!」)。
+
+        **舊寫法**(原文保留於下,加刪除線):
+        ~~try: ws = self._sh.worksheet(_WS_POOL)~~
+        ~~except Exception:~~
+        ~~    ws = self._sh.add_worksheet(...); ws.update("A1", [_HEADERS]); return ws~~
+        ~~if ws.row_values(1)[: len(_HEADERS)] != _HEADERS: ws.update("A1", [_HEADERS])~~
+
+        **舊寫法的理由仍然成立**:把「分頁存在 + 表頭正確」這個不變式收在**唯一一處**,
+        讀寫兩條路徑都不必各自處理 schema —— 那是很正統的做法,一行都沒有寫錯。
+        **被權衡掉的是它的副作用位置**:`list_pool()` 這個名字叫「列出」、語意是純讀的函式,
+        會經由本函式**改動使用者的試算表**;而觸發條件綁在**遠端狀態**(分頁不存在、
+        或表頭列與 `_HEADERS` 不符)、**不綁在使用者意圖** ——
+        於是「沒用過選股池的人」與「自己在 Sheet 上改過表頭文字的人」,
+        只要打開 ⑤ 設定頁就會被無聲改一次表,而且平常測不出來、log 也看不到。
+
+        **現行**:`for_write=False`(預設,讀取路徑)—— 分頁不存在就回 `None`,
+        表頭不符也**一格都不碰**。`for_write=True`(`upsert` / `remove` 等真正的寫入動作)
+        —— 行為與舊寫法**逐字相同**,建表與補表頭都還在,功能沒有消失。
+
+        ⚠️ **表頭不符時為什麼讀得下去**:`PoolEntry.from_row` 是**按位置**解析的,
+        表頭列的文字對程式沒有作用。舊寫法的整排重寫也**不會**修好資料列,
+        它只是把使用者自己取的欄名改掉 —— 換來的好處是零。
+        (同精神已見於 `services/nav_history_gs.py::_get_worksheet` 的長註:
+        「表頭文字對程式完全沒有作用,它只是給人看的,因此它屬於使用者。」)
+
+        回傳:worksheet;或 `None`(唯讀路徑且分頁尚不存在)。
+        """
         if self._sh is None:
             self._sh = _get_sheet(self._oauth_client)
         try:
             ws = self._sh.worksheet(_WS_POOL)
         except Exception:
+            if not for_write:
+                # 唯讀路徑:分頁還沒建 → 這本試算表上就是**沒有選股池**,
+                # 誠實回報「沒有」,不代替使用者建一個(§1:不猜、也不偷偷寫)。
+                import sys
+                print(f"[pool_repository] 唯讀路徑:`{_WS_POOL}` 分頁尚不存在 → 視為空選股池"
+                      f"(不建表;新增標的時才會建)", file=sys.stderr)
+                return None
             ws = self._sh.add_worksheet(title=_WS_POOL, rows=200, cols=len(_HEADERS))
             ws.update("A1", [_HEADERS])
             return ws
-        if ws.row_values(1)[: len(_HEADERS)] != _HEADERS:     # 補 header(欄位缺失時)
+        if for_write and ws.row_values(1)[: len(_HEADERS)] != _HEADERS:   # 補 header(欄位缺失時)
             ws.update("A1", [_HEADERS])
         return ws
 
     def list_pool(self) -> list:
-        rows = self._ws().get_all_values()[1:]
+        # 唯讀:`_ws()` 不帶 for_write → 不建表、不補表頭(2026-09-06 客戶授權)。
+        ws = self._ws()
+        if ws is None:                      # 分頁尚不存在 = 空選股池(不是失敗,不拋)
+            return []
+        rows = ws.get_all_values()[1:]
         out = []
         for row in rows:
             e = PoolEntry.from_row(row)
@@ -287,7 +340,8 @@ class GoogleSheetsPoolStore:
             raise ValueError("選股池 upsert 需要 code(§1 不接受空鍵)")
         if not entry.added_at:
             entry.added_at = _today_tw()
-        ws = self._ws()
+        # 真正的寫入路徑 → 照舊確保分頁與表頭存在(行為與 2026-09-06 之前逐字相同)。
+        ws = self._ws(for_write=True)
         rows = ws.get_all_values()
         for idx, row in enumerate(rows[1:], start=2):
             if row and str(row[0]).strip() == entry.code:
@@ -299,7 +353,8 @@ class GoogleSheetsPoolStore:
 
     def remove(self, code: str) -> None:
         code = str(code or "").strip()
-        ws = self._ws()
+        # 同 upsert:使用者明確按下的刪除動作屬寫入路徑,行為與 2026-09-06 之前逐字相同。
+        ws = self._ws(for_write=True)
         rows = ws.get_all_values()
         for idx, row in enumerate(rows[1:], start=2):
             if row and str(row[0]).strip() == code:
