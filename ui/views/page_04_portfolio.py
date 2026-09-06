@@ -458,9 +458,25 @@ REASON_POLICY: str = (
 #: 本組實測 `services.dividend_calendar.build_month_calendar`（純 CPU、零 IO，
 #: 持倉的 `dividends` 已經在 session 裡，不必連網）：成本隨**配息史長度**超線性成長 ——
 #: 6 筆 2.5 ms／12 筆 37 ms／24 筆 156 ms／36 筆 275 ms（單檔，量測日 2026-09-06）。
-#: 一個持有 20 檔月配、各三年史的組合 ≈ **3 秒**，而 Streamlit **每次互動都會重跑整頁**。
-#: ⚠️ 早期量到的「約 5 ms／檔」是**短路路徑**（無配息 / 陳舊 → 直接落 excluded），
-#:    **資料越完整反而越慢**：會出事的正好是資料最好的那個使用者。
+#: ⚠️ **2026-09-06 更正：~~一個持有 20 檔月配、各三年史的組合 ≈ 3 秒~~ 低估了**
+#: （稽核指出，本組獨立重量確認）—— **實測 5.4~5.5 秒**。
+#: 上面那四個單檔數字**本組重量後全部重現**（2.4／36.7／159.2／274.7 ms，誤差 <2%），
+#: **錯的只有那個乘出來的總數**：20 × 275 ms ≈ 5.5 秒，不是 3 秒
+#: （看起來是拿 24 筆那一格 156 ms 去乘，而不是 36 筆那一格）。**結論只有更糟，沒有變好。**
+#:
+#: **為什麼會這麼貴（機制，2026-09-06 補；原本只有數字沒有機制）**：
+#: 成本不在畫月曆，在 `estimate_error_band` / `estimate_error_worst` 共用的
+#: `services/dividend_calendar.py::_walk_forward_errors` —— 它對**每一筆歷史各重跑一次**
+#: `infer_schedule(_records_to_dividends(recs[:i]))`（逐字：``for i in range(...): ...
+#: infer_schedule(_records_to_dividends(recs[:i]))``）。第 i 圈要看 i 筆
+#: ⇒ 單檔是 **O(k²)**（k = 配息史長度），量到的 6→36 筆呈超線性正是這個形狀。
+#: ⚠️ 早期量到的「約 5 ms／檔」是**短路路徑**（無配息 / 陳舊 / 節奏對不上 → 直接落
+#:    `excluded` 或 `unpredictable`，`_walk_forward_errors` **一次都不會被呼叫**）。
+#:    **本組實測佐證**：一份「每月固定 15 號、未校正成營業日」的合成歷史被判 `anchor_weak`
+#:    落 `unpredictable`，36 筆也只要 5.1 ms、walk-forward 呼叫次數 **0**；
+#:    把同一份資料改成 `roll_to_business_day` 校正過（節奏推得出來）後，同樣 36 筆變成
+#:    **274.7 ms**、walk-forward 開始被呼叫。
+#:    → **資料越完整反而越慢**：會出事的正好是資料最好的那個使用者。
 #: → 要接上必須先加一道 Checkbox Gate（同 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的
 #:   總管裁決：在 `ui/**` 自建 `@st.cache_data` 會替 `CLAUDE.md` 的 `EX-UICACHE-1`
 #:   新增一個成員，而那個例外的成立**繫於尚未裁決的** `P-UIGSPREAD-1`）。
