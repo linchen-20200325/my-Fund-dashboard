@@ -164,14 +164,24 @@
 
   📌 **草稿的憑據在哪（2026-09-06 補；稽核指出「已送客戶裁決」在 repo 內查無出處）**：
   草稿是 **PR #791** 的**題一**（分支 `claude/fund-three-open-decisions-wireframe`、
-  head `d9e8f0f`、檔案 `docs/wireframes/three-open-decisions-wireframe.html`），
-  標題逐字「④ 資產配置 ── 『保單與扣款標的』要多寬？」。
+  檔案 `docs/wireframes/three-open-decisions-wireframe.html`），標題逐字：
+
+      ④ 資產配置 ── 「保單與扣款標的」要多寬？
+
+  ⚠️ **2026-09-06 二度更正（稽核擋下）**：上面這行原本寫成 `『保單與扣款標的』`，
+  **原文用的是「」不是『』**。**一句自稱「逐字」的話，標點也要對** —— 否則
+  下一個人拿它去 grep 會 0 命中，然後合理懷疑整段憑據。
+  ⚠️ **head SHA 刻意不再寫死，而且這一點是當場量出來的**：本組第一次查證時是 `d9e8f0f`，
+  **同一個工作階段內就先後前進到 `c3dd2d9`、再到 `a64af07`**（三次標題內容相同，本組實測）。
+  **分支 head 是會漂移的量測值**（`CLAUDE.md §8.2.A.0` 規則 4）—— 寫死一個 SHA，
+  下一輪就會變成一條「看起來有出處、實際指不到」的引用。
+  → **以分支名為準**，需要 SHA 時現場 `git ls-remote`。
   ⚠️ **那個 PR 尚未合併** —— 所以在 `main` 上 `git grep "已送客戶裁決"` **找不到憑據**。
   **稽核的觀察是對的，缺的是「出處」不是「事實」。** 可自驗（不必等它合併）::
 
       git ls-remote origin refs/heads/claude/fund-three-open-decisions-wireframe
       git ls-tree origin/main docs/wireframes/three-open-decisions-wireframe.html  # 空 ⇒ 未合併
-      git show d9e8f0f:docs/wireframes/three-open-decisions-wireframe.html | grep 題一
+      git show origin/claude/fund-three-open-decisions-wireframe:docs/wireframes/three-open-decisions-wireframe.html | grep 題一
 
   ⛔ **「已送出」不等於「已裁決」**：客戶**尚未回覆**，本項仍是未決，上面的前置條件不變。
   ⚠️ **跨 PR 一致性登記（本批射程外，回報總管）**：PR #791 的題一內文
@@ -470,6 +480,16 @@ REASON_POLICY: str = (
 #: `infer_schedule(_records_to_dividends(recs[:i]))`（逐字：``for i in range(...): ...
 #: infer_schedule(_records_to_dividends(recs[:i]))``）。第 i 圈要看 i 筆
 #: ⇒ 單檔是 **O(k²)**（k = 配息史長度），量到的 6→36 筆呈超線性正是這個形狀。
+#: ⚠️ **而且那個 O(k²) 每檔付了兩遍**（2026-09-06 稽核指出，本組實測確認）：
+#: `estimate_error_band`（典型值）與 `estimate_error_worst`（最壞值）**各自**呼叫一次
+#: `_walk_forward_errors` —— 實測單檔 **2 次呼叫、每次都吃完整 36 筆**。
+#: ⛔ **它們共用的是「函式」，不是「計算結果」** —— `_walk_forward_errors` 的 docstring
+#: 寫「兩個數字共用同一份樣本 → 口徑不可能漂」，**那句就口徑而言為真**（兩次算出來一樣），
+#: **但不是「只算一次」**。讀那句時很容易以為抽出函式順便把成本也省了，**沒有**。
+#: 📌 **本批不動**：`services/dividend_calendar.py` 在本頁的檔案邊界外
+#: （`CLAUDE.md §-1.5` File Boundary），且無 user 指派、無 bug 觸發（`§-1`）。
+#: **登記，不宣稱已解決** —— 若日後要接這一塊，這是第一個該看的地方
+#: （一次 memoize 就能把成本砍半，且不改任何數字）。
 #: ⚠️ 早期量到的「約 5 ms／檔」是**短路路徑**（無配息 / 陳舊 / 節奏對不上 → 直接落
 #:    `excluded` 或 `unpredictable`，`_walk_forward_errors` **一次都不會被呼叫**）。
 #:    **本組實測佐證**：一份「每月固定 15 號、未校正成營業日」的合成歷史被判 `anchor_weak`
@@ -703,7 +723,7 @@ def _render_mix() -> None:
        「核心配置 **0.0%** 低於目標 75%（-75.0%）」。
        0.0 的來源正是 (a)：fixture 沒有 `is_core` 欄位，它就當成一檔核心都沒有。
 
-       ⚠️ **它其實連 `core_pct` 這個欄位都不回**（AST 掃過 4 條 return path，
+       ⚠️ **它其實連 `core_pct` 這個欄位都不回**（AST 掃過 **6** 條 return path，
        鍵一律只有 `{code, color, text}`）—— 那個數字是**內嵌在 `text` 字串裡**的。
        所以「接它」實際上是把一句**用另一把尺算出來的中文句子**貼到畫面上，
        比「拿錯一個數字」更難被發現。
