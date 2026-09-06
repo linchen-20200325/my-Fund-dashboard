@@ -187,8 +187,8 @@ SRC = ROOT / "ui" / "views" / "page_04_portfolio.py"
 #: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
 #:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _ast_bindings import (const_str_values, gate_guarded_ids,  # noqa: E402
-                           gate_ifs, session_writes)
+from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
+                           guarded_key_names, session_writes)
 
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
@@ -1026,7 +1026,10 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     #    widget 一定建在 `with applied_form(...)` 內，而閘門 `if` 一定在 `with` 外
     #    ⇒ 帶 `key=` 的 widget 結構上永遠不可能落在閘門 body 裡，不收窄就是一條
     #    **永遠無法滿足**的守衛（本 repo `ui/**` 有 231 處 `key=`，量測日 2026-09-05）。
-    _applied_keys = const_str_values(_t, "_SK_APPLIED")
+    # ⚠️ **自動收齊模組層所有 `_SK_*`，不要列舉** —— 列舉一定會漏下一個新加的鍵。
+    #    上一版只餵 `_SK_APPLIED`，於是 `key=_SK_PORTFOLIO`（使用者的 live 持股）
+    #    那顆突變從紅掉成綠（2026-09-06 稽核 M-1，三頁 × 三序實測）。
+    _applied_keys = guarded_key_names(_t)
     _writes = session_writes(_form_fn, widget_key_names=_applied_keys)
     assert _writes, "`_render_rebalance_form()` 沒有把送出結果寫回 session。"
     _gate_ifs = gate_ifs(_form_fn)

@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import ast
 
-__all__ = ["bound_names", "const_str_values", "dotted",
-           "gate_guarded_ids", "gate_ifs", "session_writes"]
+__all__ = ["bound_names", "const_str_values", "dotted", "gate_guarded_ids",
+           "gate_ifs", "guarded_key_names", "session_writes"]
 
 
 def dotted(node: ast.AST) -> str:
@@ -127,6 +127,43 @@ def const_str_values(tree: ast.AST, *names: str) -> set[str]:
             if isinstance(t, ast.Name) and t.id in names:
                 out.add(value.value)
     return out
+
+
+def guarded_key_names(tree: ast.AST, prefix: str = "_SK_") -> set[str]:
+    """模組層所有 ``<prefix>*`` 常數的**名字與字面值**，餵給 `session_writes` 的
+    ``widget_key_names``。
+
+    ⭐ **為什麼是「自動收齊」而不是列舉**（2026-09-06 稽核 M-1，實測過的迴歸）：
+    上一版三頁都寫死 ``const_str_values(_t, "_SK_APPLIED")`` —— **只餵一個常數名**。
+    於是 ``key=_SK_PORTFOLIO``（**使用者的 live 持股**，由
+    `ui/helpers/portfolio/linkage.py` 寫入、②④ 都在讀）那顆突變
+    **從 `180fb93` 的 R/R/R 掉成 `d6c8cbc` 的 G/G/G**（三頁 × 三序實測）。
+    一顆帶 `key=_SK_PORTFOLIO` 的 widget 擺在 form 內、閘門外，會在使用者
+    **還沒按送出**時就把持股改掉 —— 而守衛看不到。
+
+    **列舉一定會漏下一個新加的鍵**，所以改成掃前綴：**新增一個 `_SK_*` 就自動被守到**，
+    方向是 fail-closed。
+
+    ⚠️ **只掃模組層**（`tree.body`），不 `ast.walk` 進函式內 ——
+    函式內的區域變數不是「這一頁的 session 鍵」，收進來會擴大射程而非收緊。
+    ⚠️ **`AnnAssign` 與 `Assign` 兩種都要收**：本 repo 三頁的寫法是
+    ``_SK_APPLIED: str = "…"``（帶型別註記）。只認 `Assign` 會一個都收不到。
+
+    ⚠️ **刻意不收 `_FORM_KEY`**（它不帶 `_SK_` 前綴）：那是 form 自己的 widget 鍵，
+    由 `applied_form()` 內部使用，**不是**這一頁的 session 資料鍵。
+    """
+    names: set[str] = set()
+    for node in getattr(tree, "body", []):          # ← 模組層，不 walk
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id.startswith(prefix):
+                names.add(t.id)
+    return const_str_values(tree, *names) if names else set()
 
 
 def session_writes(fn_node: ast.AST, receiver: str = "st.session_state",

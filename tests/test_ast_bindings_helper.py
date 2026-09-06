@@ -26,7 +26,8 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from _ast_bindings import (bound_names, const_str_values, dotted,
-                           gate_guarded_ids, gate_ifs, session_writes)  # noqa: E402
+                           gate_guarded_ids, gate_ifs, guarded_key_names,
+                           session_writes)  # noqa: E402
 
 
 def _fn(body: str) -> ast.FunctionDef:
@@ -312,6 +313,43 @@ def test_include_imports_false_is_not_a_cosmetic_flag() -> None:
     assert "os" not in bound_names(tree, include_imports=False)
     assert "Y" not in bound_names(tree, include_imports=False)
     assert "A" in bound_names(tree, include_imports=False)
+
+
+_PAGE_LIKE = (
+    '_FORM_KEY: str = "v02_form"\n'
+    '_SK_APPLIED: str = "v02_applied"\n'
+    '_SK_PORTFOLIO: str = "portfolio_funds"\n'
+    'def _f():\n'
+    '    _SK_LOCAL: str = "should_not_be_collected"\n'
+)
+
+
+def test_guarded_key_names_sweeps_every_sk_constant() -> None:
+    """**自動收齊，不是列舉** —— 列舉一定會漏下一個新加的鍵。
+
+    ⚠️ 這條守的是一個**真的發生過的迴歸**（2026-09-06 稽核 M-1）：
+    上一版三頁都寫死 `const_str_values(_t, "_SK_APPLIED")`，於是
+    `key=_SK_PORTFOLIO`（**使用者的 live 持股**）那顆突變
+    **從 R/R/R 掉成 G/G/G**（三頁 × 三序實測）。
+    """
+    got = guarded_key_names(ast.parse(_PAGE_LIKE))
+    assert got == {"_SK_APPLIED", "v02_applied",
+                   "_SK_PORTFOLIO", "portfolio_funds"}, (
+        "模組層每一個 `_SK_*` 的**名字與字面值**都要收齊。")
+
+
+def test_guarded_key_names_ignores_form_key_and_locals() -> None:
+    """射程有邊界：`_FORM_KEY` 不收（那是 form 自己的 widget 鍵，不是資料鍵）；
+    函式內的區域 `_SK_*` 也不收（只掃模組層，不 `ast.walk` 進函式）。
+    """
+    got = guarded_key_names(ast.parse(_PAGE_LIKE))
+    assert "_FORM_KEY" not in got and "v02_form" not in got
+    assert "_SK_LOCAL" not in got and "should_not_be_collected" not in got
+
+
+def test_guarded_key_names_needs_annassign() -> None:
+    """三頁的寫法是 `_SK_X: str = "…"`（**AnnAssign**）—— 只認 `Assign` 會一個都收不到。"""
+    assert guarded_key_names(ast.parse('_SK_A: str = "aaa"')) == {"_SK_A", "aaa"}
 
 
 def test_all_matches_the_public_surface() -> None:
