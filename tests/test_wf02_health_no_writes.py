@@ -50,8 +50,12 @@
 
 **看不見（照實列，不要讀成「守死了」）**
 
-* **本檔 primitive 字表以外的寫法** —— `sqlite3` / `subprocess` / 原始 socket /
-  `os.write(fd, ...)` 這類 fd 級寫入、以及任何 C 擴充直接落盤。
+* **本檔 primitive 字表以外的寫法** —— `sqlite3` / `subprocess` / 原始 `socket` /
+  `os.write(fd, ...)` 這類 fd 級寫入、`http.client` 直接組請求、
+  `httpx.AsyncClient` 以外的非同步 client、以及任何 C 擴充直接落盤。
+  （HTTP 那一面目前守到 `requests.Session.request` / `httpx.Client` 與 `AsyncClient.request` /
+  `urllib.request.urlopen` 三條；`urlopen` 是 2026-09-06 補的 ——
+  本 repo 有真實的 urlopen 直連家風，只守前兩條會整條漏掉。）
 * **`builtins.open` 這一路是「觀察」不是「攔截」**：它會**放行**真正的呼叫
   （不放行會把渲染期間所有合法讀檔一起打死 —— 實測 patch 全域 `open` 會波及
   pytest／streamlit／importlib）。只在 mode 含 `w` / `x` / `a` / `+` 時記一筆。
@@ -537,6 +541,25 @@ def _gspread_write_methods() -> "list[tuple[Any, str]]":
 _WRITE_MODES = "wxa+"
 
 
+class _FakeResponse:
+    """`urlopen` 被攔下時回的無害假回應（理由見 :func:`_primitive_sentinels` 內的長註）。"""
+
+    status = 200
+    headers: dict = {}
+
+    def read(self, *_a: Any) -> bytes:
+        return b""
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, *_exc: Any) -> bool:
+        return False
+
+    def close(self) -> None:
+        return None
+
+
 @contextlib.contextmanager
 def _primitive_sentinels(trips: list[str]) -> Iterator[list[str]]:
     """把**寫入 primitive 本身**換成哨兵，只在 `with` 這一小段生命週期內。
@@ -632,8 +655,44 @@ def _primitive_sentinels(trips: list[str]) -> Iterator[list[str]]:
         pass
 
     # ⑤ 原始 HTTP 寫入動詞（繞過 gspread 直接打 Sheets API 也擋得到）
+    #    ⚠️ `urllib.request.urlopen` **必須列進來**：本 repo 有真實的家風用它直打 HTTP
+    #    （`repositories/fund/sources.py` 的 Yahoo v8 chart 就是 urlopen 直連，
+    #    見 `CLAUDE.md §8.3.P` 的 `P-YFDUPE-1`）—— 只守 requests/httpx 會整條漏掉。
+    #    判準：`data` 非 None（＝ POST body）或 Request 物件自報寫入動詞才算，
+    #    否則一律放行（純 GET 取數不是寫入，攔了會製造偽陽性）。
+    try:
+        import urllib.request as _urlreq                      # noqa: PLC0415
+        _orig_urlopen = _urlreq.urlopen
+
+        def _urlopen(*_a: Any, **_kw: Any) -> Any:
+            _data = _kw.get("data") if "data" in _kw else (_a[1] if len(_a) > 1 else None)
+            _verb = ""
+            _req = _a[0] if _a else _kw.get("url")
+            _get_method = getattr(_req, "get_method", None)
+            if callable(_get_method):
+                try:
+                    _verb = str(_get_method()).upper()
+                except Exception:                            # pragma: no cover
+                    _verb = ""
+            if _data is not None or _verb in ("POST", "PUT", "PATCH", "DELETE"):
+                trips.append(f"urllib.request.urlopen({_verb or 'data='})")
+                # ⚠️ 回**無害的假回應**而不是 `None`：`urlopen` 的回傳值幾乎一定會被
+                #    `.read()`／`with` 用掉，回 None 會讓紅燈變成一句
+                #    `AttributeError: 'NoneType' object has no attribute 'read'`——
+                #    **一樣是紅的（fail-closed），但訊息看不出「這裡有一個寫入」**。
+                #    （其餘 primitive 回 `None`，因為它們的回傳值多半沒人用。）
+                return _FakeResponse()
+            return _orig_urlopen(*_a, **_kw)
+
+        _urlreq.urlopen = _urlopen                            # type: ignore[assignment]
+        _undo.append((_urlreq, "urlopen", _orig_urlopen))
+        _installed.append("urllib.request.urlopen")
+    except Exception:                                        # pragma: no cover
+        pass
+
     for _mod_name, _paths in (("requests", (("Session", "request"),)),
-                              ("httpx", (("Client", "request"),))):
+                              ("httpx", (("Client", "request"),
+                                         ("AsyncClient", "request")))):
         try:
             _mod = importlib.import_module(_mod_name)
         except Exception:                                    # pragma: no cover
@@ -857,6 +916,9 @@ def test_rendering_the_page_touches_no_write_sink(branch, portfolio, monkeypatch
     M9   ``requests.post(...)``（繞過 gspread 直打 API）    **primitive** **全綠**  轉紅
     M10  把寫入藏在**空持倉**分支                           兩層皆可      **全綠**  轉紅
     M11  ``st.session_state["portfolio_funds"] = []``      靜態          轉紅      轉紅
+    M12  ``urllib.request.urlopen(url, data=...)``         **primitive** **全綠**  轉紅
+    M13  ``urlopen(Request(..., method="DELETE"))``        **primitive** **全綠**  轉紅
+    M14  同 M12，但打**本機 200 伺服器**（見下）             **primitive** **全綠**  轉紅
     ==== =============================================== ============= ========= =========
 
     ※ **M3／M5 是被「名字掃描」接住的，不是 primitive** —— 它們把一個**列名** primitive
@@ -867,7 +929,14 @@ def test_rendering_the_page_touches_no_write_sink(branch, portfolio, monkeypatch
     ✱ M5 在初版也是紅的，但那是**未初始化的 `Worksheet` 自己 AttributeError 崩掉**，
     **不是守衛接住的** —— 意外的紅不是保證。
 
-    **M1／M3／M4／M6／M7／M8／M9／M10 八顆在初版全是「7 passed」全綠** —— 那就是本輪賺回來的保證。
+    ⚑ **M14 是 `urlopen` 那條的乾淨證明。** M12／M13 打的是外部 URL，**舊版之所以紅是因為
+    遠端回了 400／DNS 失敗**（意外的紅，不是守衛接住的 —— 而且那代表**請求真的送出去了**）。
+    M14 改打一個本機回 200 的伺服器：**舊版 11 passed 全綠**（寫入送出去了，沒人吭聲）、
+    新版轉紅並印出 ``urllib.request.urlopen(data=)``。
+    ⚠️ 本 repo 有真實的 `urlopen` 直連家風（`repositories/fund/sources.py` 的 Yahoo v8 chart），
+    **只守 requests／httpx 會整條漏掉**。
+
+    **初版全綠的那十一顆（M1／M3／M4／M6～M10／M12～M14）就是本輪賺回來的保證。**
     """
     _run = _render_with_sentinels(
         RICH_HOLDINGS if portfolio == "RICH" else [], monkeypatch)
