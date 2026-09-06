@@ -220,11 +220,20 @@ _ALWAYS_SENTINEL: tuple[tuple[str, str], ...] = (
 )
 
 #: **別人擁有的 session 契約鍵**（本頁一律只讀不寫）。
-#: ⚠️ 這一份是**實測掃出來的**，不是想到什麼寫什麼：
-#: ``git grep -ohE 'session_state\[...\]|session_state\.(get|setdefault|pop)\(...'``
-#: 掃 `ui/**` `services/**` `repositories/**` 後人工判讀（量測日 2026-09-06）。
-#: ⚠️ **仍不是窮舉**：`_nav_hist_*` 這類**前綴**族只列到實際出現過的兩個，
-#: 動態組出來的鍵一律看不到。射程限制同步寫在模組 docstring 的 ⛔ 那一格。
+#:
+#: ⚠️ 這一份是**實測掃出來的**，不是想到什麼寫什麼。
+#: **產生它的指令，逐字照抄（單行，repo 根目錄；2026-09-06 實跑 → 84 個鍵，人工判讀後留下這 9 個）**::
+#:
+#:     git grep -ohE "session_state\.(get|setdefault|pop)\(['\"][A-Za-z_][A-Za-z0-9_]*['\"]|session_state\[['\"][A-Za-z_][A-Za-z0-9_]*['\"]\]" -- 'ui/**' 'services/**' 'repositories/**' | grep -oE "['\"][A-Za-z_][A-Za-z0-9_]*['\"]" | tr -d "\"'" | sort -u
+#:
+#: **正對照**（證明這條指令抓得到我們**知道存在**的那兩個）：把上面的輸出接
+#: ``| grep -cE '^portfolio_funds$|^_nav_hist_written$'`` → 應為 ``2``。
+#: ⚠️ **上一版這裡寫的是帶 `...` 的縮寫，看起來可執行、實際跑不動** ——
+#: 本檔整份 PR 的主題就是這個，所以就地換成真的跑過的那一條。
+#: ⚠️ **仍不是窮舉**（這條指令自己就有射程）：只認**字面字串**的下標／`get`／`setdefault`／`pop`，
+#: **看不到** 屬性式 ``session_state.k``、``update(**kw)``、以及動態組出來的鍵；
+#: `_nav_hist_*` 這類**前綴族**因此只列到實際出現過的兩個。
+#: 射程限制同步寫在模組 docstring 的 ⛔ 那一格。
 _KNOWN_FOREIGN_KEYS: tuple[str, ...] = (
     "portfolio_funds", "portfolio_core_pct",
     "policy_sheet_id", "policy_tabs", "v2_new_policy_name",
