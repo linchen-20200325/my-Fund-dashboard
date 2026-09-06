@@ -103,7 +103,12 @@ Tab 03／04 兩個 panel 逐行掃過 `<h4>`／chip／「尚未|還沒|沒有」
 ⛔ **但「最長 X 年」永遠不會回來**：不是因為它是線框的假數字，
 而是因為 `span_days = last - first` **單獨出現就會說謊**（見 :func:`coverage_line`）。
 ⚠️ **黑名單的已知代價，就地登記**：`_PINNED_FAKE_VALUES` 收了字面值 `"42 檔"`，
-而本頁現在會印真的「N 檔」—— **測試資料剛好是 42 檔時，那條守衛會誤紅**。
+而本頁現在會印真的「N 檔」—— **若哪天有 fixture 剛好是 42 檔，那條守衛會誤紅**。
+⛔ **2026-09-06 就地收斂措辭（獨立稽核指出本組寫得比實況強）**：本段原本寫
+~~「測試資料剛好是 42 檔時會誤紅」~~，讀起來像是**現行風險**。**實測不是**：
+`len(FAKE_COVERAGE) == 2`、`_PROBE_COVERAGES` 的檔數分別是 `1 / 2 / 0`，
+**現行沒有任何 fixture 是 42 檔**。它是**潛在風險，不是現行風險** ——
+一句把潛在講成現行的登記，會讓下一個人去「修」一個不存在的問題。
 黑名單式守衛的既有性質，**登記在此，不是沒看到**。
 
 使用者**看不出它是假的**，而且會拿它判斷「我的資料到底可不可信」——
@@ -168,6 +173,7 @@ NAV 累積狀態          :func:`nav_status_label` → SSOT      `nav_status`
 """
 from __future__ import annotations
 
+import datetime as _dt
 from typing import Any
 
 import streamlit as st
@@ -357,6 +363,70 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
+def _parse_day(value: Any) -> "_dt.date | None":
+    """把一端的日期字串 parse 成 `date`；**parse 不出來回 `None`，不猜**。"""
+    try:
+        return _dt.date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def span_days_or_unknown(first: Any, last: Any, reported: Any) -> int | None:
+    """跨度**可不可信** —— 不可信回 `None`。**全檔唯一決定「要不要印跨度」的地方。**
+
+    ⛔ **為什麼不能直接用上游的 `span_days`（2026-09-06 獨立稽核必修）**
+    ----------------------------------------------------------------
+    `services/nav_history_gs.py::coverage_status` 在日期 parse 失敗時
+    **把「未知」編成 `0`** —— 它自己那一行的註解就寫著「**跨度未知**，點數仍誠實回報」，
+    然後 `_span = 0`。而 `norm_date_key()` **刻意讓壞日期的原字串通過**
+    （它的 docstring：「不靜默丟資料（§1：不猜）」），所以壞日期真的會走到這裡。
+
+    **本組端到端重現（`coverage_status(_sheet=…)` 注入假 worksheet，非推論）**：
+
+    ====================================================  =====================
+    上游回傳                                                真實跨度
+    ====================================================  =====================
+    `BBB {'first': '113/01/02', 'last': '2025-06-01', 'span_days': 0}`   **約 1.4 年**
+    `DDD {'first': '2024-05-05', 'last': '2024-05-05', 'span_days': 0}`  **真的 0 天**
+    ====================================================  =====================
+
+    **兩者在畫面上長得一模一樣。** 那正是本檔 :func:`_as_int` 的 docstring 寫的那條分界
+    （「`0` 是一個宣稱，`None` 是我不知道」）被違反的地方 ——
+    ⚠️ **而且本檔原本的防禦蓋錯了格子**：`_as_int` 那一整套瞄準的是 `points`，
+    但 `points` 在 production 恆為 `len(_ds)`、**永遠是 int**；
+    **真正會出現「未知」的是 `span_days`，而它在本檔看到之前就已經被壓成 `0` 了**
+    → 原本那條 `if _span is None:` 在 production **恆不觸發**。
+
+    做法：**用兩端自己重算一次**（同一條算式，所以上游算得出來時兩者必然相等）
+    ---------------------------------------------------------------------
+    1. **任一端 parse 不出來 → 回 `None`。** 上游的 `0` 在這種情況下是「放棄」不是「零」。
+    2. **兩端都 parse 得出來，但與上游回報的值不一致 → 也回 `None`。**
+       兩邊用的是同一條算式，不一致代表**至少有一個前提不成立**，
+       這時候挑一個印出來就是猜（§1）。⚠️ 這個分支在今天的 L2 下不會發生，
+       它是**兩層之間的契約檢查** —— L2 哪天改算法，這裡會誠實地變成「不知道」而不是默默跟著錯。
+    3. 兩端都 parse 得出來且一致 → 回那個數字。
+
+    ⛔ **不要改成「`first != last` 而 `span_days == 0` 就當作未知」那種啟發式。**
+    它有一個**真的偽陽性**：`date.fromisoformat` 在 3.11+ 接受 `2024-1-1` 這種變體，
+    所以 `"2024-01-01"` 與 `"2024-1-1"` **字串不同、都 parse 得出來、而且是同一天**
+    → 那條啟發式會把一個**真的 0 天**誤判成「算不出來」。
+    本函式**不用那條規則**，所以沒有那個偽陽性。
+
+    ⚠️ **本函式仍然守不到的（照實列）**：上游 `first`/`last` 取的是**字串排序**的頭尾
+    （`sorted(_ds)`），混入非 ISO 字串時**頭尾可能不是時序上的頭尾**。
+    兩端都 parse 得出來時本函式會**照算**，算出來若為負數視為不一致（走第 2 條回 `None`）；
+    但「兩個都 parse 得出來、順序卻是錯的、而且差值剛好為正」這種情況**抓不到**。
+    ⛔ **這一段不在本批的射程內**（要修得動 L2 的排序），**登記，不是沒看到**。
+    """
+    _a, _b = _parse_day(first), _parse_day(last)
+    if _a is None or _b is None:
+        return None
+    _computed = (_b - _a).days
+    if _computed < 0 or _computed != _as_int(reported):
+        return None
+    return _computed
+
+
 def coverage_headline(coverage: dict[str, Any]) -> str:
     """涵蓋度的一句話總結 —— **只講數量，不講跨度**。
 
@@ -368,22 +438,24 @@ def coverage_headline(coverage: dict[str, Any]) -> str:
     ⚠️ 純函式、無 I/O —— 這樣「這句話怎麼算出來的」可以被單獨測，
     不必先跑起一整個 Streamlit session。
     """
-    _codes = [_c for _c, _e in coverage.items() if isinstance(_e, dict)]
+    _readable = 0
     _points = 0
     _unknown = 0
     for _e in coverage.values():
-        if not isinstance(_e, dict):
-            continue
-        _n = _as_int(_e.get("points"))
-        if _n is None:
-            # ⛔ **算不出來的那幾筆要說出來，不能只是「跳過」** —— 靜靜略過會讓
-            #    總數比實際少，而畫面上完全看不出少了東西（§1：那是無聲的低報）。
+        # ⛔ **兩種「讀不出來」都要算進 `_unknown`，不能只防一種**
+        #    （2026-09-06 獨立稽核應修）：同一個迴圈裡原本只揭露「`points` 算不出來」，
+        #    **非 dict 的條目卻是無聲丟棄** —— `{'AAA': None, 'BBB': 'x', 'CCC': [1]}`
+        #    會印成「**0 檔 · 共 0 筆**」，那是一句**斷言**（你什麼都沒累積），
+        #    而事實是我們收到了三筆讀不懂的東西（§1）。
+        if not isinstance(_e, dict) or (_n := _as_int(_e.get("points"))) is None:
             _unknown += 1
             continue
+        _readable += 1
         _points += _n
-    _head = f"{len(_codes)} 檔 · 共 {_points} {POINTS_UNIT}"
+    # ⚠️ **「可讀取」三個字是承重的**：沒有它，「0 檔」會被讀成「你一檔都沒累積」。
+    _head = f"可讀取 {_readable} 檔 · 共 {_points} {POINTS_UNIT}"
     if _unknown:
-        _head += f"（另有 {_unknown} 檔的點數讀不出來，未計入）"
+        _head += f"（另有 {_unknown} 檔讀不出來，未計入）"
     return _head
 
 
@@ -408,7 +480,9 @@ def coverage_line(code: str, entry: dict[str, Any], *, held: bool = False) -> st
            開站不自動載入），所以沒有標記的那些**不寫任何否定的話**。
     """
     _points = _as_int(entry.get("points"))
-    _span = _as_int(entry.get("span_days"))
+    # ⛔ **不准直接用上游的 `span_days`** —— 它把「未知」編成 `0`（見 :func:`span_days_or_unknown`）。
+    _span = span_days_or_unknown(entry.get("first"), entry.get("last"),
+                                 entry.get("span_days"))
     _first = str(entry.get("first") or "").strip() or "?"
     _last = str(entry.get("last") or "").strip() or "?"
     _mark = " ・本 session 已列入" if held else ""
@@ -426,10 +500,23 @@ def coverage_line(code: str, entry: dict[str, Any], *, held: bool = False) -> st
 
 
 def coverage_lines(coverage: dict[str, Any], held_codes: set[str]) -> list[str]:
-    """逐檔明細的全部行，**依代碼排序**（穩定順序，不隨 dict 插入序漂移）。"""
-    return [coverage_line(_c, _e, held=_c.upper() in held_codes)
-            for _c, _e in sorted(coverage.items())
-            if isinstance(_e, dict)]
+    """逐檔明細的全部行，**依代碼排序**（穩定順序，不隨 dict 插入序漂移）。
+
+    ⛔ **讀不懂的條目也要有一行**（2026-09-06 獨立稽核應修）：原本 `if isinstance(_e, dict)`
+    把非 dict 條目**整個濾掉**，於是「收到三筆讀不懂的東西」與「什麼都沒有」
+    在畫面上一模一樣，而且會畫出一個**空的**「逐檔明細」展開器（違鐵則 04）。
+    ⚠️ **排序 key 走 `str(...)`**：代碼理論上可能不是字串，混型別直接 `sorted()` 會炸。
+    """
+    _out: list[str] = []
+    for _c, _e in sorted(coverage.items(), key=lambda _kv: str(_kv[0])):
+        if not isinstance(_e, dict):
+            # ⚠️ 只印**型別**不印值：一個壞掉的條目可能是很大的東西，
+            #    把它整包倒進畫面既沒用又危險。
+            _out.append(f"- `{_c}`：這一筆讀不出來"
+                        f"（收到 {type(_e).__name__}，不是預期的欄位表）")
+            continue
+        _out.append(coverage_line(_c, _e, held=str(_c).upper() in held_codes))
+    return _out
 
 
 def held_codes() -> set[str]:
@@ -563,7 +650,13 @@ def _render_nav_status() -> None:
         return
 
     _coverage = fetch_nav_coverage()
-    if not _coverage:
+    # ⚠️ **展開器開不開，看的是「有沒有可渲染的行」，不是「dict 空不空」**
+    #    （2026-09-06 獨立稽核應修）：`{'AAA': None}` 這種**非空但整包讀不懂**的回傳，
+    #    舊寫法會走進下面、然後畫一個**空的**展開器（違鐵則 04）。
+    #    現在每一個條目都會產出一行（含「讀不出來」那種），
+    #    所以 `_lines` 空 ⟺ `_coverage` 空 —— **這條性質是結構保證的，不是巧合。**
+    _lines = coverage_lines(_coverage, held_codes())
+    if not _lines:
         empty_state(_EMPTY_TITLE, _EMPTY_MISSING,
                     where=_pending_where(nav_manual_label()),
                     footer=_EMPTY_FOOTER)
@@ -574,7 +667,7 @@ def _render_nav_status() -> None:
         st.caption(
             f"「{SPAN_PHRASE}」量的是**第一筆到最後一筆**的日曆天數，"
             "**不代表中間每天都有**；能不能算長期指標看的是點數。")
-        for _line in coverage_lines(_coverage, held_codes()):
+        for _line in _lines:
             st.markdown(_line)
 
 

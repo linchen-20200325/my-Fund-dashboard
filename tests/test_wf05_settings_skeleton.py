@@ -74,6 +74,36 @@ NAV 那一塊在沒有基金時走**空狀態**而其餘四塊照樣渲染（D-2
 - ⛔ **「使用手冊不是灰態」守的是「它沒有 ⬜、也沒走 empty_state」**，
   **不守**「它的內容是對的」—— 那三行目錄的正確性靠線框逐字比對（:func:`test_the_manual_lists_exactly_the_wireframe_three`）。
 
+⚠️ **頁首落在所有 unit-scoped 守衛的射程之外（2026-09-06 獨立稽核，本組自行複量）**
+-----------------------------------------------------------------------------
+`_units()` 只認 `####`（`_L4_OPEN` 是 `#{4}`），而本頁頁首是 `## ` ＋ `st.caption`
+—— :func:`_units` 會**丟掉第一個 opener 之前的全部文字**。
+稽核組的突變（在頁首 caption 寫「目前 18 個資料來源全部正常」）**存活 ×3 序、畫面可見**。
+
+⚠️ **本組複量的數字與稽核組不同，兩個讀法並陳，不挑一個講**：
+稽核組說「落在 `_units()` 外的只有 **4 個 part**」；本組實跑 `loaded` 狀態實得
+**23 個 part、其中落在單位外的是 2 個**（`[Markdown] ## ⚙️ 設定與診斷` 與頁面層 `[Caption]`）。
+**差在算不算結構元素**：`[Block]` / `[Column]` 這種**不帶文字**的節點也在單位外，
+把它們算進去就是 4。→ **「4」與「2」都對，但承重的是 2** ——
+**只有帶文字的節點會說謊**，結構節點不會。
+
+✅ **另一組回報的「整個 `st.form` 也在單位之外」對本頁不成立** —— 本組實測：
+`手動補資料` 那個單位內**確實**含三個欄位標籤（`_LABEL_SOURCE_CSV` / `_LABEL_SOURCE_REFETCH`
+/ `_LABEL_ONLY_MISSING`），form 沒有溢出。**別頁的結論不要直接搬過來。**
+
+⚠️ **本輪只補了一半**：:func:`test_no_rendered_line_shows_a_duration_without_its_point_count`
+是**整頁**規則（掃 `_flat()` 全部元素，**含頁首**），所以「在頁首印一個裸跨度」現在會紅；
+但「在頁首寫一句**結論**」（例：「全部正常」）**仍然沒有人守** ——
+那要把 :data:`_CONCLUSION_WORDS` 從 unit-scoped 擴成全頁，而那會與
+:data:`_PINNED_FAKE_VALUES` 的「不收『正常』」正面打架（既有登記）。**本批不動，登記。**
+
+⚠️ **`_units` 這套機制到底有幾個檔在用（2026-09-06 更正，本組實測 `grep -c '^def _units'`）**：
+`wf01`＝**0**（那一檔根本沒有這套機制）、`wf02`／`wf03`／`wf04`／`wf05`＝各 **1**
+→ **是四個檔 `wf02`~`wf05`**。
+⛔ 本組 PR 描述原本寫「`wf02`／`wf03`／`wf04` **三頁**」—— **漏了本檔自己**；
+派工單原本寫「**四頁**」但指的是 `wf01`~`wf04` —— **成員也錯**。
+**兩邊錯的方向相反，數字碰巧接近，這正是「數字對了不代表清單對了」的實例。**
+
 ⚠️ **本檔對 `_SECTION_LABELS` 的依賴，據實寫**
 ---------------------------------------------
 被測檔的五個區塊名裡**只有兩個**走 SSOT（`nav_status` / `nav_manual`），
@@ -137,6 +167,7 @@ from ui.views.page_05_settings import (  # noqa: E402
     coverage_lines,
     nav_manual_label,
     nav_status_label,
+    span_days_or_unknown,
 )
 
 #: AppTest 跑的 script。**只做兩件事**：把 repo 根加進 `sys.path`、呼叫被測 View。
@@ -845,6 +876,223 @@ def test_the_headline_says_when_some_counts_are_unreadable():
         f"總結句裡出現了跨度：{_got!r}")
 
 
+#: 「一段時間有多長」在畫面上的形狀：**一個十進位數字，緊接著一個時間單位**。
+#:
+#: ⛔ **第一版寫成「有數字 or 有單位字」的兩個 `any()`，當場誤紅四個 state** ——
+#:    `'⑤'.isdigit()` 在 Python 是 **`True`**（圈號屬 Numeric_Type=Digit），
+#:    於是灰態那句「⑤ ⚙️ 設定與診斷 → …資料**日**期」同時滿足「有數字」與「有單位」。
+#:    **那不是誤紅一次就算了的小事**：一條會誤紅的規則會被下一個人放寬或刪掉，
+#:    然後真正的繞道就沒人擋了。改成**相鄰**判斷之後，那四個 state 全部乾淨。
+#: ⚠️ **白名單，抓不到名單外的第 N+1 種寫法**（`weeks` / `季` / 中文數字「七年」）。**登記。**
+#: ⚠️ **已知的偽陽性方向**：若哪天日期改成 `2024年01月05日` 這種寫法，本條會要求同行帶點數。
+#:    那是**往安全側錯**（多一個「筆」不會說謊），登記，不是沒看到。
+_DURATION_RE = re.compile(r"[0-9０-９]+(?:[.,][0-9０-９]+)?\s*(?:年|個月|月|週|天|日)")
+
+
+def _duration_bearing_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
+    """渲染流裡印出「**一段時間有多長**」的那些元素（數字**緊接著**時間單位）。"""
+    return [_p for _p in parts if _DURATION_RE.search(_p)]
+
+
+@pytest.mark.parametrize("state", sorted(_NAV_STATES))
+def test_no_rendered_line_shows_a_duration_without_its_point_count(state: str):
+    """⭐⭐ **整頁**任何一則「有數字＋有時間單位」的字，都必須同行帶點數。
+
+    ⛔ **2026-09-06 獨立稽核必修：本檔原本那三層「跨度不得單獨出現」的防禦，
+    實際只有一層有效。** 稽核組加了一段**從 `first`/`last` 自己算年數**的程式
+    （**完全沒碰 `"span_days"` 這個字串**）、印出 `[Caption] 最長 7.0 年`，
+    然後 **92 passed × 3 序** —— 三層全瞎：
+
+    ===================================  ======================================
+    原本那一層                             為什麼看不到
+    ===================================  ======================================
+    AST：`"span_days"` 只在一處被讀         它沒有用那個字串
+    渲染層：含 `SPAN_PHRASE` 的行要有點數    它印的是「最長 N 年」，不含「首末相距」
+    純函式：`coverage_headline()` 不含跨度   它印在那個函式**外面一行**
+    黑名單：`_PINNED_FAKE_VALUES` 釘 6.2 年  它印 7.0
+    ===================================  ======================================
+
+    ⚠️ **M3 突變（2 failed ×3）給了錯誤的信心** —— M3 改的是 `coverage_headline()`
+    **內部**，所以純函式那條抓得到；**把同一句話印在那個函式外面一行，四層全部通過。**
+
+    **本條是替代品，判準改成看「畫面上印了什麼」，不看「程式怎麼寫的」**：
+    只要一個渲染元素同時有數字與時間單位，就必須同行帶 :data:`POINTS_UNIT`。
+    **繞不過去** —— 因為要說謊就一定得把那個數字印出來。
+
+    ⚠️ **本條是【整頁】的，不是 unit-scoped** —— 這是刻意的：
+    本檔既有的 unit-scoped 守衛**全部看不見頁首**（`_units()` 只認 `####`，
+    而頁首是 `## ` ＋ `st.caption`）。本條掃 `_flat()` 的全部元素，**含頁首**。
+
+    ⚠️ **本條守不到的（照實列）**：
+    - :data:`_DURATION_UNITS` 是白名單 —— 「個月」以外的寫法、英文 `years`、
+      全形數字，都抓不到。
+    - 它要求的是「**同一個渲染元素**內有點數」；把點數印在**上一行**、跨度印在下一行，
+      本條看不到（那是 `_flat()` 以元素為單位的既有性質）。
+    """
+    _backend, _cov, _open = _NAV_STATES[state]
+    _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)
+    for _p in _duration_bearing_parts(_parts):
+        assert POINTS_UNIT in _p, (
+            f"（{state}）畫面上有一則帶時間長度的字，卻沒有點數：\n{_p}\n"
+            "⛔ 一段沒有點數的「N 年 / N 天」會被讀成「我有這麼長的完整歷史」，"
+            "而真相可能是兩個點（§1）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 必修：上游把「跨度未知」編成 0 —— 不准照著印
+# ══════════════════════════════════════════════════════════════════
+
+def test_an_unknown_span_is_never_rendered_as_a_real_number():
+    """⭐⭐ **上游的 `span_days == 0` 有兩個意思，畫面上不准把它們畫成同一個。**
+
+    ⛔ **2026-09-06 獨立稽核必修，本組已端到端重現（不是讀出來的）**：
+    `services/nav_history_gs.py::coverage_status` 在日期 parse 失敗時
+    **把「未知」編成 `0`** —— 那一行的註解自己寫著「**跨度未知**，點數仍誠實回報」。
+    而 `norm_date_key()` **刻意讓壞日期的原字串通過**，所以它真的會走到畫面上：
+
+    ``BBB {'points': 2, 'first': '113/01/02', 'last': '2025-06-01', 'span_days': 0}``
+    → 真實跨度 **約 1.4 年**，畫面卻印「首末相距 **0** 天」，
+    與真的只有一天的 ``DDD`` **一模一樣**。
+
+    ⚠️ **本條也記下本檔原本防錯格子這件事**：`_as_int → None` 那一整套瞄準的是
+    `points`，而 `points` 在 production 恆為 `len(_ds)`、**永遠是 int**；
+    **真正會出現「未知」的是 `span_days`** —— 防禦蓋在不會壞的那一格，會壞的那一格沒蓋。
+    """
+    _unknown = {"points": 2, "first": "113/01/02", "last": "2025-06-01",
+                "span_days": 0}
+    _really_zero = {"points": 1, "first": "2024-05-05", "last": "2024-05-05",
+                    "span_days": 0}
+    _l_unknown = coverage_line("BBB", _unknown)
+    _l_zero = coverage_line("DDD", _really_zero)
+    assert SPAN_PHRASE not in _l_unknown, (
+        f"上游把「未知」編成 0，畫面照著印了一個假的跨度：{_l_unknown!r}")
+    assert SPAN_PHRASE in _l_zero and f"{SPAN_PHRASE} 0 天" in _l_zero, (
+        f"真的是 0 天卻不敢印 —— 那是反向的錯（§1 不是「什麼都別說」）：{_l_zero!r}")
+    assert _l_unknown != _l_zero, "「未知」與「真的 0 天」畫成了同一行。"
+    # 兩行都仍然要帶點數（跨度規則不因這次改動被繞開）。
+    for _l in (_l_unknown, _l_zero):
+        assert POINTS_UNIT in _l, _l
+
+
+def test_the_unknown_span_rule_is_reproduced_against_the_real_service():
+    """⭐ 用**真的** `coverage_status()`（注入假 worksheet，零網路）再證一次。
+
+    ⛔ 上一條餵的是**手寫的** dict —— 那只證明「本頁對這個形狀的反應」。
+    本條把同一件事**從上游走一遍**，證明**那個形狀真的產得出來**。
+    ⚠️ 走 `_sheet=` 注入（`load_points` 的測試注入口），**不碰 gspread、不連網**。
+    """
+    from services.nav_history_gs import coverage_status as _real_coverage
+
+    class _WS:
+        def __init__(self, rows: list) -> None:
+            self._rows = rows
+
+        def get_all_values(self) -> list:
+            return self._rows
+
+    class _SH:
+        def __init__(self, rows: list) -> None:
+            self._ws = _WS(rows)
+
+        def worksheet(self, _name: str) -> Any:
+            return self._ws
+
+    _rows = [
+        ["code", "date", "nav", "fund_name", "source", "recorded_at", "currency"],
+        ["BBB", "113/01/02", "10.0", "", "", "", ""],      # 民國年 → parse 不出來
+        ["BBB", "2025-06-01", "11.0", "", "", "", ""],
+        ["DDD", "2024-05-05", "12.0", "", "", "", ""],     # 只有一天 → 真的 0
+    ]
+    _got = _real_coverage(_sheet=_SH(_rows))
+    assert _got["BBB"]["span_days"] == 0 and _got["DDD"]["span_days"] == 0, (
+        f"上游不再把「未知」與「真的 0」編成同一個值了 —— 本條的前提變了，"
+        f"請回頭重新評估 `span_days_or_unknown()` 還需不需要：{_got}")
+    _lines = coverage_lines(_got, set())
+    _bbb = [_l for _l in _lines if "BBB" in _l][0]
+    _ddd = [_l for _l in _lines if "DDD" in _l][0]
+    assert SPAN_PHRASE not in _bbb, f"未知的跨度被印出來了：{_bbb!r}"
+    assert SPAN_PHRASE in _ddd, f"真的 0 天沒印出來：{_ddd!r}"
+
+
+@pytest.mark.parametrize(
+    "first,last,reported,want",
+    [
+        ("2024-01-01", "2024-01-01", 0, 0),          # 真的 0 天
+        ("2024-01-01", "2024-12-31", 365, 365),      # 正常
+        ("113/01/02", "2025-06-01", 0, None),        # 一端 parse 不出來
+        ("2024-01-01", "壞掉", 0, None),              # 另一端 parse 不出來
+        ("", "", 0, None),                           # 兩端都空
+        ("2024-01-01", "2024-12-31", 999, None),     # 與上游回報不一致 → 不猜
+        ("2024-12-31", "2024-01-01", -365, None),    # 負數 → 不合理
+        ("2024-01-01", "20240101", 0, 0),            # ⚠️ 見下方偽陽性說明
+        ("2024-01-01", "2024-W01-1", 0, 0),          # 同上（ISO 週日期，也是同一天）
+    ],
+)
+def test_span_days_or_unknown_is_a_pure_decision(first: str, last: str,
+                                                 reported: Any, want: Any):
+    """:func:`span_days_or_unknown` 的判準 —— 純函式，逐案釘住。
+
+    ⚠️ **最後兩列是刻意放進來的，而且它們的例子與派工單給的不一樣 —— 本組實測後更正**：
+    派工單說「`date.fromisoformat` 在 3.11+ 接受 `2024-1-1`」。
+    **實測（`python3.11.15`）：`2024-1-1` 會 `ValueError: Invalid isoformat string`**
+    —— 3.11 放寬的是**大部分 ISO-8601 格式**，**不含未補零的欄位**。
+    ⛔ **但那個顧慮的形狀是真的，只是例子舉錯了**：`"20240101"` 與 `"2024-W01-1"`
+    **都 parse 得出來、都等於 `2024-01-01`、字串卻不同** —— 本組實測命中。
+    → 也就是說，「`first != last` 而 `span_days == 0` ⟺ 至少一端 parse 不出來」
+    **那條啟發式確實有偽陽性**，只是觸發它的是這兩個寫法而不是 `2024-1-1`。
+    ✅ **本函式不用那條啟發式**（改成兩端各自 parse ＋ 與上游對帳），
+    所以這兩列**回的是 0 而不是 None** —— **沒有那個偽陽性。**
+    """
+    assert span_days_or_unknown(first, last, reported) == want
+
+
+# ══════════════════════════════════════════════════════════════════
+# 應修：讀不懂的條目不准無聲丟棄
+# ══════════════════════════════════════════════════════════════════
+
+def test_unreadable_entries_are_disclosed_not_dropped():
+    """⭐ 非 dict 的條目**要被說出來**，不准無聲丟棄成「0 檔」。
+
+    ⛔ **2026-09-06 獨立稽核應修。** 原本 `coverage_headline` / `coverage_lines`
+    兩處都是 `if not isinstance(_e, dict): continue` —— **同一個迴圈裡防了一種
+    （`points` 讀不出來會揭露），漏了另一種（非 dict 連揭露都沒有）**：
+
+    ``{'AAA': None, 'BBB': 'corrupt', 'CCC': [1, 2]}`` → 「**0 檔 · 共 0 筆**」
+    ＋ 一個**空的**「逐檔明細」展開器。
+
+    「0 檔」是一句**斷言**（你什麼都沒累積），而事實是我們收到了三筆讀不懂的東西（§1）。
+    """
+    _junk = {"AAA": None, "BBB": "corrupt", "CCC": [1, 2]}
+    _head = coverage_headline(_junk)
+    assert "3" in _head and "讀不出來" in _head, (
+        f"三筆讀不懂的東西被無聲丟棄了：{_head!r}")
+    assert "可讀取 0 檔" in _head, (
+        f"「0 檔」沒有被限定成「可讀取 0 檔」—— 那是一句對使用者資產的斷言：{_head!r}")
+    _lines = coverage_lines(_junk, set())
+    assert len(_lines) == 3, f"讀不懂的條目沒有各自一行：{_lines}"
+    for _c in _junk:
+        assert any(_c in _l and "讀不出來" in _l for _l in _lines), (
+            f"「{_c}」沒有被說出來：{_lines}")
+    for _l in _lines:
+        assert SPAN_PHRASE not in _l, f"讀不懂的條目卻印了跨度：{_l!r}"
+
+
+def test_a_wholly_unreadable_payload_never_draws_an_empty_expander():
+    """整包讀不懂時**不准畫一個空的展開器**（鐵則 04）。
+
+    ⚠️ 舊版 `test_the_detail_expander_exists_only_when_there_is_data` 用
+    `if not _coverage` 判斷，**不是**「有沒有可渲染的行」——
+    `{'AAA': None}` 這種**非空但讀不懂**的回傳照樣過關。
+    """
+    _parts, _ = _run_gated(BACKEND_ON, {"AAA": None, "BBB": "x"},
+                           funds=FAKE_HOLDINGS)
+    _names = [_n for _n, _ in _units(_parts)]
+    assert NAV_DETAIL_LABEL in _names, (
+        "有讀不懂的條目要列出來，展開器不該消失。")
+    _body = _text(_segments(_parts).get(NAV_DETAIL_LABEL, []))
+    assert "讀不出來" in _body, f"展開器是空的：{_body!r}"
+
+
 def test_span_days_is_read_in_exactly_one_place():
     """⭐ **全檔只有 :func:`coverage_line` 可以讀 `span_days`。**
 
@@ -897,8 +1145,10 @@ def test_the_headline_counts_but_never_spans():
             f"總結句裡出現了跨度：{_got!r}")
         assert POINTS_UNIT in _got and "檔" in _got, (
             f"總結句沒有同時給出檔數與點數：{_got!r}")
+    # ⚠️ **「可讀取」三個字是承重的**（2026-09-06 獨立稽核）：沒有它，
+    #    「0 檔」會被讀成「你一檔都沒累積」，而事實可能是「收到的東西全都讀不懂」。
     assert coverage_headline(FAKE_COVERAGE) == (
-        f"{len(FAKE_COVERAGE)} 檔 · 共 "
+        f"可讀取 {len(FAKE_COVERAGE)} 檔 · 共 "
         f"{sum(_e['points'] for _e in FAKE_COVERAGE.values())} {POINTS_UNIT}")
 
 
@@ -921,7 +1171,16 @@ def test_the_detail_is_sorted_and_marks_only_what_is_loaded():
 
 
 def test_the_detail_expander_exists_only_when_there_is_data():
-    """「逐檔可展開」**只在真的有逐檔可展開時才畫**（鐵則 04：不畫空的占位）。"""
+    """「逐檔可展開」**只在真的有逐檔可展開時才畫**（鐵則 04：不畫空的占位）。
+
+    ⚠️ **本條有一個洞，2026-09-06 獨立稽核指出，已由另一條補上（本條保留）**：
+    它餵的 `coverage` 要嘛有正常資料、要嘛是 `{}` —— **沒有測「非空但整包讀不懂」**
+    （`{'AAA': None}`）。而頁面當時判斷用的是 `if not _coverage`，
+    那種回傳**會走進資料分支、畫一個空的展開器**，本條完全看不到。
+    → 補上的是 :func:`test_a_wholly_unreadable_payload_never_draws_an_empty_expander`；
+    頁面端也改成看「**有沒有可渲染的行**」（`_lines`）而不是「dict 空不空」。
+    **本條仍然有價值**（它守的是另外三種狀態不准畫展開器），故保留、不合併。
+    """
     _with_data, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
     assert NAV_DETAIL_LABEL in [_n for _n, _ in _units(_with_data)], (
         f"有資料卻沒有「{NAV_DETAIL_LABEL}」展開器。")
