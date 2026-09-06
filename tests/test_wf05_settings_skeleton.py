@@ -615,11 +615,26 @@ def test_the_manual_lists_exactly_the_wireframe_three():
     把 caption 換成編造的「指標定義：**Sharpe 大於 1 就是好基金**；門檻由來：**業界共識**。」
     → **47 passed**；目錄多列「**投資建議**」「**保證報酬**」→ **47 passed**。
     **一條 docstring 明寫「不准編一段內文充數」的守衛，放行了一段編出來的內文。**
-    現行改**集合相等**，兩顆一起擋掉。
+    現行改**集合相等**。
 
-    ⚠️ **仍然守不到**：目錄項以外的地方（例如 caption）寫了什麼，本條看不到 ——
-    那由 :func:`test_no_grey_unit_states_a_conclusion` 的字表**部分**涵蓋，
-    而那同樣是黑名單。
+    ⛔ **2026-09-06 更正：上一行原寫「集合相等，**兩顆一起擋掉**」—— 那句是假的，
+    而且它自己三行後就寫著「caption 本條看不到」，前後自相矛盾。**
+    集合相等做在 :data:`_MANUAL_ITEM_RE` 撈出來的**目錄項集合**上，
+    **結構上看不見 caption**。三序重測（`-p no:randomly` ＋ seed 101 ＋ seed 20260906）：
+    - 目錄多列「投資建議」「保證報酬」→ **1 failed**（✅ 這一顆確實擋掉了）；
+    - caption 換成編造的「指標定義：Sharpe 大於 1 就是好基金；門檻由來：業界共識。」
+      → **50 passed**（❌ **這一顆沒擋到，從頭到現在都沒有**）。
+    **實際是擋掉一顆、放行一顆。**
+
+    ⚠️ **仍然守不到**：目錄項以外的地方（例如 caption）寫了什麼，本條看不到。
+    ⛔ **2026-09-06 更正：原寫「那由 `test_no_grey_unit_states_a_conclusion` 的字表
+    「部分」涵蓋」—— 那也是假的，實際是【完全不涵蓋】。**
+    根因：那條守衛的迴圈開頭是 `if NOT_READY_MARK not in _joined: continue`，
+    而**使用手冊這一塊刻意不畫成灰態**（D-1：`dim` 是視覺降權、不是灰態）→
+    **沒有 ⬜ → 整個單位直接被跳過**。三序實測：把該字表的四個詞全塞進手冊的 caption
+    → **50 passed**。**覆蓋率是 0，不是「部分」。**
+    → 也就是說：**使用手冊的 caption 目前沒有任何守衛在看**，
+    而這是一份**專門用來解釋門檻由來**的文件。**登記在此，不是沒看到。**
     """
     _body = _text(_segments(_stream("loaded")).get(BLOCK_MANUAL, []))
     _got = set(_MANUAL_ITEM_RE.findall(_body))
@@ -928,6 +943,19 @@ def test_the_write_block_is_form_wrapped():
 
     ⚠️ **本條守不到的**：`_INPUT_WIDGETS` 是白名單，Streamlit 新增的輸入元件不會自動進來；
     以及 `getattr(st, "checkbox")(...)` 這種非字面呼叫（同本檔其他 AST 條的既有限制）。
+
+    ⛔ **2026-09-06 補登記：本條會把一個【合法且自然】的重構打紅。**
+    :func:`_input_widget_calls` **全檔**掃 `st.<widget>` 並用 `lineno` 判斷落不落在
+    那個 `with` 的行區間內 —— **它不看呼叫關係**。所以把 CSV 那顆 checkbox 抽成
+    module 層 helper `_csv_box()`、再於 form 內呼叫（**行為完全相同、widget 仍在
+    form 裡渲染**）→ **1 failed 三序一致**，因為 helper 的 `def` 在 `with` 之外。
+    ⚠️ **下一批接真內容時，把 widget 抽成 helper 是最自然的一步** ——
+    屆時錯誤訊息會寫「**有輸入元件落在 form 之外**」，而**那句話是錯的**；
+    而且**消紅最省事的做法是把 helper 內聯回去** —— 也就是
+    **這條守衛會把人推向比較差的寫法**。碰到時請改守衛（例如改判「呼叫點是否在
+    form body 內」而不是「def 在哪一行」），**不要為了消紅而放棄抽 helper**。
+    ✅ **對「行號位移」本身不脆弱**：`_lo` / `_hi` 是從 AST 現算的，
+    在 form 之前或之後插入任意行數都不會誤紅（本輪另兩顆突變已證）。
     """
     _with = _applied_form_with()
     assert _with is not None, (
@@ -1081,6 +1109,16 @@ def test_the_page_does_not_render_cache_or_backoff_state():
     不是「畫面上有沒有那幾個字」—— 後者在骨架階段恆為真，驗不到東西。
     """
     _names = [_t.id.upper() for _t in _module_level_names(_tree())]
+    # ⚠️ **2026-09-06 補登記：這一行的子字串比對也會誤紅，而且機率遠高於下面那個
+    #    `_bad_imports`（它已經有五行登記，這一行原本一個字都沒有）。**
+    #    `"TTL" in _n` 會命中 `_SETTLEMENT_DATE_COL`（基金**交割日**欄名，
+    #    與快取毫無關係）—— **三序實測：`常數 ['_SETTLEMENT_DATE_COL']` 打紅。**
+    #    同族還有 `_SETTLE_*` / `_BOTTLENECK_*`。
+    #    ⛔ **本輪刻意不收窄判準**：改成 `_TTL` / `TTL_` 之類的前後綴會不會**漏放**
+    #    （例如 `NAV_TTL_SECONDS` 以外的寫法）**需要另外評估，不在本批射程**。
+    #    取捨與下面那段相同：這一條要防的東西（偷偷把快取／退避狀態做成畫面）
+    #    值得寧可誤紅、不可漏放 —— 真的誤紅時改的人會來讀這一行並就地決定。
+    #    **登記在此，不是沒看到。**
     _bad_names = [_n for _n in _names
                   if any(_k in _n for _k in ("BACKOFF", "CACHE", "TTL"))]
     # ⚠️ **這一處刻意保留寬鬆的子字串比對**（2026-09-05 稽核點名）：
