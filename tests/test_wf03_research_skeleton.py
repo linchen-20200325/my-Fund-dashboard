@@ -120,6 +120,17 @@ from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_03_research import (  # noqa: E402
     _LABEL_SOURCE,
     _LABEL_TERM,
+    CCY_UNKNOWN,
+    SYNTHETIC_TRACE_SOURCES,
+    TRACE_NAV_SERIES,
+    DIVIDEND_COLS,
+    HOLDING_COLS,
+    NO_REASON,
+    PERF_PERIODS,
+    RISK_METRICS,
+    TRACE_COLS,
+    TRACE_FAIL,
+    TRACE_OK,
     BLOCK_BATCH,
     BLOCK_DEEP,
     BLOCK_FORM,
@@ -130,10 +141,173 @@ from ui.views.page_03_research import (  # noqa: E402
     SOURCE_OPTIONS,
     SUBMIT_LABEL,
     _PENDING_NOTE,
+    _declared_currency,
+    _dividend_rows,
+    _holdings_rows,
+    _nav_facts,
     _normalise_query,
     _pending_where,
+    _failed_source_count,
+    _fmt,
+    _perf_lines,
+    _risk_lines,
+    _trace_rows,
     render_fund_research,
 )
+
+#: `_render(result=…)` 的「沒有傳」哨兵 —— 不能用 `None`，`None` 是合法的假回傳。
+_SENTINEL: Any = object()
+
+# ══════════════════════════════════════════════════════════════════
+# 假的 L2 回傳（**唯一的資料入口**，本檔所有深度區斷言都吃它）
+#
+# ⚠️ **每一個數字都是獨一無二的哨兵**，這是刻意的：
+#    「某一格印出了別格的數字」與「某一格印出了 0」都是本檔要抓的失效模式，
+#    而它們在**共用同一個數值**的 fixture 底下**完全看不出來**。
+# ⚠️ **哨兵值必須避開 `_PINNED_FAKE_VALUES`**（它含裸子字串 `"0.81"` / `"0.22"`）——
+#    撞到的話會讓另一條守衛誤紅，而且那個紅燈指的方向是錯的。
+# ══════════════════════════════════════════════════════════════════
+
+#: 風險指標的哨兵：`metrics 鍵 -> 值`。刻意**每個都不同、且不含 0.81 / 0.22**。
+RISK_SENTINELS: dict = {
+    "sharpe": 71.11, "sortino": 72.22, "calmar": 73.33,
+    "max_drawdown": -74.44, "std_1y": 75.55,
+}
+#: 績效的哨兵：`perf 鍵 -> 值`。
+PERF_SENTINELS: dict = {
+    "1M": 61.11, "3M": 62.22, "6M": 63.33,
+    "1Y": 64.44, "3Y": 65.55, "5Y": 66.66,
+}
+
+
+class _FakeSeries:
+    """夠用的假 `pd.Series` —— 只實作被測檔真的會碰的那幾個介面。
+
+    ⚠️ **刻意不 import pandas**：本檔要驗的是「UI 怎麼讀資料」，
+    不是 pandas 的行為；真的 Series 進來會讓失敗訊息指向 pandas 而不是被測檔。
+    """
+
+    def __init__(self, values: list, dates: list, attrs: dict | None = None) -> None:
+        self._v, self._d = values, dates
+        self.attrs = dict(attrs or {})
+        self.index = _FakeIndex(dates)
+        self.iloc = _FakeILoc(values)
+
+    def __len__(self) -> int:
+        return len(self._v)
+
+
+class _FakeIndex:
+    def __init__(self, dates: list) -> None:
+        self._d = dates
+
+    def min(self):
+        return min(self._d)
+
+    def max(self):
+        return max(self._d)
+
+
+class _ExplodingIndex:
+    """索引**有** `min` / `max`，但一碰就拋 —— 模擬「上游契約破了」。
+
+    ⚠️ **刻意讓方法存在**：獨立稽核有一顆突變因為「`BadIndex` 有 `min` 只是會拋」
+    而**其實沒生效**，稽核組自己把它撤回了、不列為證據。
+    本類別把那個教訓做成 fixture：要驗「壞索引會不會被吞成灰態」，
+    就必須讓它**真的走到 `.min()` 才炸**，不能靠 `hasattr` 早退。
+    """
+
+    def min(self):
+        raise TypeError("哨兵：索引不是時間軸（上游契約被破壞）")
+
+    def max(self):
+        raise TypeError("哨兵：索引不是時間軸（上游契約被破壞）")
+
+
+def _broken_series(n: int = 3):
+    """長度正常、`iloc` 正常，**只有索引會炸**的假序列。"""
+    _s = _FakeSeries([1.0] * n, ["2024-01-0%d" % (i + 1) for i in range(n)])
+    _s.index = _ExplodingIndex()
+    return _s
+
+
+class _FakeILoc:
+    def __init__(self, values: list) -> None:
+        self._v = values
+
+    def __getitem__(self, i):
+        return self._v[i]
+
+
+def _BLANK_RESULT() -> dict:
+    """**全敗**的回傳：淨值一筆都沒有，只有逐源軌跡。
+
+    形狀照 `repositories/fund/fund_orchestration.py` 與
+    `services/fund_service.py::finalize_fund_metrics` 實際會 append 的鍵
+    （`{source, success, error}` / `{source, success, nav_count}`）——
+    **不是憑印象編的**，見被測檔模組 docstring 的實測段。
+    """
+    return {
+        "status": "failed",
+        "fund_code": "ZZTEST",
+        "series": None, "perf": {}, "metrics": {}, "holdings": {}, "dividends": [],
+        "currency": "",
+        "source_trace": [
+            {"source": "bank_platform", "success": False, "error": "所有平台均無回應"},
+            {"source": "morningstar", "success": False, "error": "查無資料"},
+            {"source": "nav_series", "success": False, "error": "無淨值序列"},
+        ],
+    }
+
+
+def _RICH_RESULT(**over: Any) -> dict:
+    """**六格都有料**的回傳。`over` 用來逐格挖掉東西做突變。"""
+    _res: dict = {
+        "status": "complete",
+        "fund_name": "測試用基金甲",
+        "fund_code": "ZZTEST",
+        "currency": "USD",
+        "nav_span_days": 909,
+        "_moneydj_fetched_at": "2026-09-06 07:07:07",
+        "series": _FakeSeries(
+            [50.01, 50.02, 59.99], ["2024-01-02", "2024-06-03", "2026-09-05"],
+            attrs={"source": "FundClear:GetFundNAV",
+                   "fetched_at": "2026-09-06T07:00:00+00:00"}),
+        "perf": dict(PERF_SENTINELS),
+        "perf_source": "wb01",
+        "metrics": {
+            **RISK_SENTINELS,
+            "std_source": "wb07",
+            "risk_metric_meta": {
+                "sharpe": {"source": "wb07", "self_calc_reason": None},
+                "sortino": {"source": "self_calc", "reason": None},
+                "calmar": {"source": "self_calc", "reason": None},
+                "max_drawdown": {"source": "self_calc", "reason": None},
+            },
+        },
+        "holdings": {
+            "data_date": "2026/07",
+            "source": "MoneyDJ:yp:yp013001",
+            "fetched_at": "2026-09-06T07:00:01+00:00",
+            "top_holdings": [
+                {"name": "哨兵持股甲", "sector": "科技", "pct": 91.11},
+                {"name": "哨兵持股乙", "sector": "金融", "pct": 92.22},
+            ],
+        },
+        "dividends": [
+            {"date": "2026/08/15", "ex_date": "2026/08/16", "pay_date": "2026/08/20",
+             "amount": 81.11, "yield_pct": 83.33, "currency": "USD"},
+            {"date": "2026/07/15", "ex_date": "2026/07/16", "pay_date": "2026/07/20",
+             "amount": 82.22, "yield_pct": 84.44, "currency": "USD"},
+        ],
+        "source_trace": [
+            {"source": "fundclear", "success": True, "nav_count": 3},
+            {"source": "calc_metrics", "success": True},
+        ],
+    }
+    _res.update(over)
+    return _res
+
 
 #: 會產生「使用者看得到的字」的 st API。錄下來當作單位有沒有真的畫東西的證據。
 _TEXT_APIS = (
@@ -200,11 +374,27 @@ class _Rec:
             return getattr(self._root, name)
 
 
-def _render(applied: dict | None = None) -> list[str]:
+def _render(applied: dict | None = None, result: Any = _SENTINEL,
+            raiser: BaseException | None = None) -> list[str]:
     """跑一次整頁，回傳**有序**的渲染紀錄。
 
     ⚠️ 回傳 list 而不是一整塊字串 —— 順序本身是本檔要驗的東西之一，
     join 成一坨就驗不了「哪一句落在哪一塊底下」。
+
+    ## ⛔ `auto_fetch_moneydj` **一律被換掉，這不是方便，是必要**
+
+    2026-09-06 深度區接上取數之後，本函式若不換掉它，
+    **每一條帶 `applied=` 的測試都會真的連外網**。
+    本組實測：第一次跑改動後的測試檔，沙箱的 egress proxy 擋下了
+    `fund.api.cnyes.com:443`，整份測試**掛在網路逾時上跑不完**（不是紅，是不會結束）。
+    → 一份會連外網的守衛，在 CI 上是**不可重現**的；它紅不紅取決於當天上游活著沒有。
+
+    Parameters
+    ----------
+    result : 假的 L2 回傳。預設 :data:`_BLANK_RESULT`（全敗），
+             因為那才是**大多數既有斷言**在骨架時期看到的處境。
+    raiser : 給它一個例外物件 → 假的 `auto_fetch_moneydj` 會 `raise` 它。
+             用來驗「真的例外走 `safe_section` 的紅框」那條路徑。
     """
     import sys
 
@@ -235,6 +425,35 @@ def _render(applied: dict | None = None) -> list[str]:
     if applied is not None:
         _rec.session_state["v03_research_applied_query"] = applied
 
+    # ⛔ **紅燈也要錄得到，否則「不准紅」那一族斷言是空的。**
+    #    `render_state.system_error()` 走 **lazy** `from ui.helpers.session import
+    #    friendly_error`，而 `friendly_error` 自己又是**函式內** `import streamlit`
+    #    —— 兩層都繞過了上面那份 `_targets` 的 module 層 `st` 替換，
+    #    紅框因此打在**真的** streamlit 上（bare 模式無聲）。
+    #    本組實測：補這一段之前，`assert "[error]" not in _all` 是
+    #    **恆真**的（頁面就算真的塗紅它也看不見）；補了之後
+    #    `test_a_real_exception_stays_a_real_exception` 才第一次真的驗到東西。
+    #    ⚠️ 這正是本檔 `_render()` 開頭那段「錯的 patch 不會報錯，
+    #    只會讓斷言對著半份畫面生效」講的同一個陷阱，換一層發作。
+    import ui.helpers.session as _sess          # noqa: PLC0415 — 與 _targets 同理由
+    _real_friendly = _sess.friendly_error
+
+    def _fake_friendly(_title, _exc, *, hint: str = "", level: str = "warning"):
+        _rec.parts.append(f"[{level}] {_title} — {type(_exc).__name__}: {_exc}")
+
+    _sess.friendly_error = _fake_friendly
+
+    _page = sys.modules["ui.views.page_03_research"]
+    _real_fetch = _page.auto_fetch_moneydj
+    _payload = _BLANK_RESULT() if result is _SENTINEL else result
+
+    def _fake_fetch(_raw, **_kw):
+        _rec.parts.append(f"[fetch] {_raw}")
+        if raiser is not None:
+            raise raiser
+        return _payload
+
+    _page.auto_fetch_moneydj = _fake_fetch
     _saved = [(_m, getattr(_m, "st", None)) for _m in _targets]
     # 錨點：每一個目標模組**都要**真的有 `st` 可以換掉。少一個就代表上面那個
     # 遮蔽陷阱又發作了，而它的症狀是**靜默漏錄**，不是報錯。
@@ -249,6 +468,8 @@ def _render(applied: dict | None = None) -> list[str]:
     finally:
         for _m, _old in _saved:
             _m.st = _old
+        _page.auto_fetch_moneydj = _real_fetch
+        _sess.friendly_error = _real_friendly
     return _rec.parts
 
 
@@ -265,6 +486,28 @@ _L5_OPEN = re.compile(r"^\[markdown\] #{5}\s+(.*)$")
 _CARD_OPEN = re.compile(r"^\[markdown\] \*\*(.+)\*\*$")
 
 
+def _metric_open(part: str) -> str | None:
+    """**OK 狀態**的卡片開頭 —— `state_card()` 走 `st.metric(title, value)`。
+
+    ⚠️ **這一條是 2026-09-06 深度區接上真資料時補的，沒有它整份斷言會靜靜半盲。**
+    在此之前 :func:`_units` 只認得灰態卡的 `**標題**`；卡片一旦有值就改走
+    `st.metric`，錄下來長成 `[metric] NAV 走勢 59.99 USD` ——
+    **三個 opener regex 沒有一個match得到**，於是那張卡的內容會被歸進**前一個單位**。
+    症狀是「斷言全綠、但它驗的是別人的字」，正是本檔 `_units` 長註在講的那個病。
+
+    ⚠️ 為什麼比對**已知標題**而不是用 regex 切第一個詞：recorder 把位置引數用空白
+    join 起來（`f"[metric] " + " ".join(bits)`），而標題自己就含空白（「NAV 走勢」）
+    —— 從字串上**無法**分辨標題到哪裡結束。已知標題集合是唯一不會猜錯的判準。
+    """
+    if not part.startswith("[metric] "):
+        return None
+    _rest = part[len("[metric] "):]
+    for _t in DEEP_DIVE_CARDS:
+        if _rest == _t or _rest.startswith(_t + " "):
+            return _t
+    return None
+
+
 def _units(parts: list[str]) -> list[tuple[str, list[str]]]:
     """把紀錄切成**有序**的最小單位：一級／次級段落，或**一張卡**。
 
@@ -274,9 +517,39 @@ def _units(parts: list[str]) -> list[tuple[str, list[str]]]:
     同一個形狀在 ① 被獨立稽核連續打穿兩輪。**答案每次都一樣：把邊界往下降。**
 
     ⛔ **不要為了讓斷言好寫而把邊界往上收。** 邊界一寬，鄰居的字就會替你通過。
+
+    ## ⚠️ 這個切法**看不到什麼**（2026-09-06 實測補；不要讀成「整頁都被切進單位裡」）
+
+    **第一個 opener 之前的每一行都會被整段丟掉** —— 本函式只在 `if _out:` 成立時
+    才把行歸進單位，而 `_out` 在遇到第一個 opener 之前是空的。
+    以本頁**送出查詢後**的實際渲染紀錄實測，落在所有單位之外的有 **6 行**：
+
+    ```
+    [markdown] ## 🔍 標的探索          ← 頁標題
+    [caption]  回答一個問題：…          ← 職責宣告 ＋「這裡不放什麼」的指路
+    [caption]  搜尋條件：輸入完按…      ← Form 的說明
+    [text_input] 代碼或名稱             ┐
+    [selectbox]  來源                   ├ **整個 Form**
+    [form_submit_button] 搜尋           ┘
+    ```
+
+    ⚠️ **重點不是「頁首看不到」，是「Form 整塊看不到」** —— 而 Form 正是本頁
+    唯一真的做完、也是所有灰態指路都指向的那一塊。
+    → 任何**針對 Form 的**斷言都必須走**整頁**紀錄（`_text(_render(...))`）
+    或直接呼叫純函式，**不能**用 `_segments()` 去拿它（會拿到空字串而**靜靜通過**）。
+    本檔既有的 Form 斷言（`test_the_search_form_is_the_first_thing_on_the_page`
+    等）**本來就是走整頁的**，所以現況沒有被打穿；這段是寫給**下一個**要加
+    Form 斷言的人看的。
+    ⚠️ 同型限制在 ①②④⑤ 四頁的骨架守衛都存在（同一套 `_units` 寫法）。
     """
     _out: list[tuple[str, list[str]]] = []
     for _p in parts:
+        _metric = _metric_open(_p)
+        if _metric is not None:
+            # ⚠️ 有值的卡：`st.metric` 那一行**自己也算內容**（值就印在裡面），
+            #    所以開新單位之後要把它放回 body，否則「這一格印了什麼數字」驗不到。
+            _out.append((_metric, [_p]))
+            continue
         _m = _L4_OPEN.match(_p) or _L5_OPEN.match(_p) or _CARD_OPEN.match(_p)
         if _m:
             _out.append((_m.group(1).strip(), []))
@@ -306,6 +579,25 @@ GREY_UNITS: tuple[str, ...] = (
     (BLOCK_RESULTS,) + DEEP_DIVE_CARDS + DEEP_DIVE_TABLES
     + (DEEP_DIVE_PROVENANCE, BLOCK_BATCH)
 )
+
+#: 仍然吃 :data:`_PENDING_NOTE`（「本頁分批上線」）的單位 —— **本批只剩這兩個**。
+#: ⚠️ 深度區的六格自 2026-09-06 起**不再**吃那一句：它們的灰態理由來自資料本身。
+#:    共用一句話會讓「查無此檔」「來源當下不可用」「樣本數不足」長得一模一樣。
+PENDING_UNITS: tuple[str, ...] = (BLOCK_RESULTS, BLOCK_BATCH)
+
+#: 深度區的六個單位（三張卡 ＋ 兩張大表 ＋ 來源標註）。
+DEEP_UNITS: tuple[str, ...] = (
+    DEEP_DIVE_CARDS + DEEP_DIVE_TABLES + (DEEP_DIVE_PROVENANCE,)
+)
+
+#: 取數**全敗**時應該是灰的單位。
+#: ⛔ **`DEEP_DIVE_PROVENANCE` 刻意不在其中，這是本批的核心設計不是遺漏**：
+#:    全敗正是那一格**最該有內容**的時候 —— 它要把逐源軌跡攤開，
+#:    讓使用者自己判斷「代碼打錯」還是「來源當下不可用」（L2 分不出來，見被測檔
+#:    `_fetch_failed_note()`）。把它一起要求成灰態，等於要求證據在最需要時消失。
+#:    它有沒有真的攤開，由
+#:    :func:`test_a_total_failure_shows_the_source_trace_and_never_paints_red` 驗。
+GREY_ON_BLANK: tuple[str, ...] = PENDING_UNITS + DEEP_DIVE_CARDS + DEEP_DIVE_TABLES
 
 #: 一份「已送出」的查詢。形狀就是 `_normalise_query()` 的回傳值。
 FAKE_QUERY = {"term": "ACDD", "source": SOURCE_OPTIONS[0]}
@@ -695,7 +987,7 @@ def test_downstream_reads_the_applied_query_not_the_widget_values():
 # 灰態：八個單位各自誠實
 # ══════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("unit", GREY_UNITS)
+@pytest.mark.parametrize("unit", PENDING_UNITS)
 def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
     """送出搜尋、但內容還沒接上 → 每一個單位**各自**要有灰態記號與理由。
 
@@ -703,9 +995,13 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
     ② 的初版以「一級區塊」為單位，突變「只拿掉其中一塊的灰態」**沒有轉紅**
     （同一段裡別張卡的 ⬜ 替它通過了）—— 粒度因此下降。詳見 :func:`_units` 的長註。
 
-    ⚠️ **下一批把真內容接上時，這條會轉紅 —— 那是預期的。**
-    屆時請把它改成「真內容放行」（例如驗結果卡有基金名、驗持股表有列），
-    **不要把它放寬成「有東西就好」**。
+    ⚠️ ~~**下一批把真內容接上時，這條會轉紅 —— 那是預期的。**~~
+    → **2026-09-06 已發生，這是狀態更新不是漏刪**：深度區六格接上真取數之後
+    本條對它們**全部轉紅**（它們不再印 `_PENDING_NOTE`）。
+    **依它自己寫的處置照做了**：參數化由八個單位收成 :data:`PENDING_UNITS` 兩個，
+    深度區改由
+    :func:`test_a_deep_unit_that_has_data_shows_it_and_one_that_has_none_stays_grey`
+    等條**驗真內容**，**不是**把本條放寬成「有東西就好」。
     """
     _seg = _segments(_render(applied=FAKE_QUERY))
     _body = "\n".join(_seg.get(unit, []))
@@ -752,7 +1048,7 @@ def test_the_pending_pointer_is_a_place_not_a_status_sentence():
         "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
 
 
-@pytest.mark.parametrize("unit", GREY_UNITS)
+@pytest.mark.parametrize("unit", GREY_ON_BLANK)
 def test_every_grey_unit_says_where_to_look(unit: str):
     """每一個灰態單位**各自**要有「去哪補」，而且不得手抄分頁名。
 
@@ -785,9 +1081,16 @@ def test_every_grey_unit_says_where_to_look(unit: str):
         f"單位「{unit}」的灰態沒有「去哪補」—— 指路要走 `where_to_find('research')`，"
         "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。\n"
         + _body)
+    # ⚠️ **這一條近乎恆真，失敗訊息 2026-09-06 就地改正**（獨立稽核 登記 3）：
+    #    `_body` 是灰態自己的文字，而指路是 `_pending_where(BLOCK_FORM)` 組出來的
+    #    → 它**必然**包含 `BLOCK_FORM`。**底層性質成立，但它驗不到「畫面上找得到」**
+    #    —— 舊訊息寫「在畫面上找不到」，**宣稱的比它驗到的多**。
+    #    真正驗「指路指到的東西存不存在」的規則見 `CLAUDE.md §8.3.P` 的
+    #    `P-WHERECONTENT-1`（執行期組出來的指路，靜態規則看不到）。
     assert BLOCK_FORM in _body, (
-        f"單位「{unit}」指路提到的「{BLOCK_FORM}」在畫面上找不到 —— "
-        "指到一個使用者看不到的名字，等於沒有指路。")
+        f"單位「{unit}」的指路沒有提到「{BLOCK_FORM}」—— "
+        "本條只驗**指路字串的組成**（它是否由 `_pending_where(BLOCK_FORM)` 產生），"
+        "**不驗**那個名字在畫面上是否真的存在。")
 
 
 def test_the_page_never_hand_rolls_the_grey_mark():
@@ -955,3 +1258,691 @@ def test_the_page_does_not_assume_i_already_hold_these_funds():
         "本頁讀了組合持股的 session 契約：\n  " + "\n  ".join(_bad)
         + "\n線框 Tab 03：「這裡的基金**不預設我有持有**」。"
           "要標示持有狀態是 ② 的職責，不是這裡的。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 深度區：一次取數、六格共用、缺值不生數字
+#
+# ⚠️ **本節的每一條都寫「機制」，不寫「某一顆突變會紅」。**
+#    「拿掉 X 這一行會轉紅」是一次觀察；下一個人換個寫法犯同一個錯，
+#    那條斷言照樣綠。所以下面一律**逐指標／逐格參數化**，
+#    讓「所有同類的錯」都在射程內，而不是其中一個示範。
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_deep_dive_fetches_exactly_once():
+    """六格由**一次** L2 呼叫供給 —— AST 數 `auto_fetch_moneydj(...)` 的呼叫點。
+
+    ## 機制（為什麼是「恰好 1 個」而不是「至少 1 個」）
+
+    每多一個呼叫點就是**多一次網路往返**；更糟的是六格會拿到**不同時間點**的快照
+    （L1 的 `@_ttl_cache` 只擋重複的 HTTP，`finalize_fund_metrics` 每次都重跑），
+    於是畫面上可能出現「NAV 是這一秒的、持股是上一分鐘的」而**沒有任何跡象**。
+
+    ⚠️ **AST 不是 grep**：本檔的 docstring 就寫了好幾次 `auto_fetch_moneydj`
+    這個字，字串比對會把它們一起算進去。
+    ⛔ 這條看不到的：`getattr(mod, "auto_fetch_moneydj")()` 這種間接呼叫，
+    以及**別的模組**替本頁去呼叫（本檔只掃這一個檔案）。**登記，不宣稱涵蓋。**
+    """
+    _calls = [_n for _n in ast.walk(_tree())
+              if isinstance(_n, ast.Call)
+              and (getattr(_n.func, "id", None) == "auto_fetch_moneydj"
+                   or getattr(_n.func, "attr", None) == "auto_fetch_moneydj")]
+    assert len(_calls) == 1, (
+        f"本頁對 `auto_fetch_moneydj()` 有 {len(_calls)} 個呼叫點（應為 1）："
+        + ", ".join(f"第 {_c.lineno} 行" for _c in _calls)
+        + "\n六格共用同一次取數；多一個呼叫點 = 多一次往返 + 六格可能不同步。")
+    # 渲染路徑上也真的只呼叫一次（AST 數的是「寫了幾處」，這裡數「跑了幾次」）。
+    _fetches = [_p for _p in _render(applied=FAKE_QUERY, result=_RICH_RESULT())
+                if _p.startswith("[fetch] ")]
+    assert len(_fetches) == 1, (
+        f"一次渲染實際呼叫了 {len(_fetches)} 次取數：{_fetches}")
+
+
+@pytest.mark.parametrize("key,label,unit", RISK_METRICS)
+def test_a_missing_risk_metric_never_becomes_a_number(key: str, label: str, unit: str):
+    """`metrics[<指標>] is None` → **那個指標不得出現任何數字**，且要說出自己的原因。
+
+    ## 機制（三件事一起驗，缺一都能被繞過）
+
+    1. **它自己的哨兵值不得出現** —— 擋「其實有值卻說沒有」以外的反向錯誤；
+    2. **不得出現 `<標籤> <數字>` 的形狀** —— 這才是真正在擋的東西：
+       `metrics.get(k) or 0` / `or 0.0` / 沿用上一個指標的值 / 填一個「保守估計」，
+       全部會在這個形狀上現形；
+    3. **其餘四個指標的哨兵必須還在** —— 擋「乾脆整格不畫」這種假修法
+       （把一格藏起來，前兩條都會通過）。
+
+    ⚠️ **逐指標參數化**，不是挑一個示範：`sharpe` 的缺值原因鍵是
+    `self_calc_reason`、其餘三個是 `reason`、`std_1y` **在 `risk_metric_meta`
+    裡根本沒有條目**（實測，見被測檔模組 docstring 第 4 點）——
+    只驗其中一個，另外四條路完全沒有守到。
+    """
+    _metrics = {**RISK_SENTINELS, key: None,
+                "risk_metric_meta": {key: {"reason": f"哨兵原因：{label} 樣本不足"}}}
+    _seg = _segments(_render(applied=FAKE_QUERY,
+                             result=_RICH_RESULT(metrics=_metrics)))
+    _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[2], []))
+    assert _body.strip(), f"風險指標那一格不見了（{label}）。"
+
+    _own = f"{RISK_SENTINELS[key]:,.2f}"
+    assert _own not in _body, (
+        f"`metrics[{key!r}]` 是 None，畫面上卻出現了它的哨兵值 {_own}：\n{_body}")
+    _leak = re.search(re.escape(label) + r"\s*[-+]?\d", _body)
+    assert _leak is None, (
+        f"`{label}` 沒有值，畫面上卻出現「{_leak.group(0)}」——"
+        "那是憑空生出來的數字（`or 0` / 沿用別的指標 / 自己估一個）。\n" + _body)
+    assert f"哨兵原因：{label}" in _body, (
+        f"`{label}` 缺值卻沒有說出**它自己的**原因 —— "
+        "八格共用一句話會讓「樣本不足」和「來源掛掉」長得一模一樣。\n" + _body)
+    _others = [f"{_v:,.2f}" for _k, _v in RISK_SENTINELS.items() if _k != key]
+    _gone = [_o for _o in _others if _o not in _body]
+    assert not _gone, (
+        f"拿掉 `{key}` 之後，其他指標的值也一起消失了：{_gone} —— "
+        "整格藏起來不算誠實降級，那是把有的資料也丟掉。\n" + _body)
+
+
+@pytest.mark.parametrize("key,label", PERF_PERIODS)
+def test_a_missing_performance_period_is_named_not_zeroed(key: str, label: str):
+    """某個期別沒有值 → **列出它的名字，不得補一個數字**。
+
+    機制同上一條：`perf.get("3Y") or 0` 會讓「近三年沒資料」變成「近三年 0%」，
+    而 0% 是一個**看起來完全合理**的報酬率 —— 使用者不可能看出它是編的（§1）。
+    """
+    _perf = {**PERF_SENTINELS}
+    _perf.pop(key)
+    _seg = _segments(_render(applied=FAKE_QUERY, result=_RICH_RESULT(perf=_perf)))
+    _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[1], []))
+    _own = f"{PERF_SENTINELS[key]:,.2f}"
+    assert _own not in _body, f"`perf[{key!r}]` 已拿掉，畫面上卻仍有 {_own}：\n{_body}"
+    assert re.search(re.escape(label) + r"\s*[-+]?\d", _body) is None, (
+        f"「{label}」沒有值，畫面上卻給了它一個數字：\n{_body}")
+    assert label in _body, (
+        f"「{label}」缺值時應**列出名字**（讓使用者知道少了哪一段），"
+        f"不得整個消失：\n{_body}")
+
+
+def test_a_total_failure_shows_the_source_trace_and_never_paints_red():
+    """取數全敗 → **灰態 ＋ 逐源證據**；畫面上**不得**出現系統紅燈。
+
+    ## 機制（總管 2026-09-06 裁決的可執行版本）
+
+    `auto_fetch_moneydj` 對「代碼打錯」與「來源全掛」**回傳完全一樣的 failed**
+    （本組實測：兩者都走同一條 `_attempts` 路徑，`error` 是「查無資料」
+    「所有平台均無回應」這種泛稱）。所以：
+    - 塗紅 → 對打錯代碼的人謊稱系統故障；
+    - 寫「查無此檔」→ 對來源掛掉的人謊稱這檔不存在。
+    **兩種都是編的**，因此本條同時釘住「不准紅」與「必須攤開證據」兩半。
+
+    ⚠️ **紅燈的判準是 `state_card(state=STATE_ERROR)` 走的 `system_error()`，
+    不是「畫面上有沒有紅色」** —— 顏色驗不到，入口驗得到。
+    `system_error` 的第一個 render 是 `friendly_error(level="error")`，
+    在 recorder 底下會錄成 `[error] …`。
+    """
+    _parts = _render(applied=FAKE_QUERY, result=_BLANK_RESULT())
+    _all = _text(_parts)
+    assert "[error]" not in _all, (
+        "取數全敗被畫成了系統紅燈 —— 但 L2 分不出「代碼打錯」與「來源當下不可用」，"
+        "塗紅等於對打錯代碼的使用者謊稱系統故障。\n" + _all)
+    assert "查無此檔" not in _all, (
+        "畫面上宣告了「查無此檔」—— 同一份 failed 也可能只是來源當下不可用，"
+        "這句話對後者是假的。")
+    # 逐源證據必須真的出現在來源標註那一格
+    _seg = _segments(_parts)
+    _prov = "\n".join(_seg.get(DEEP_DIVE_PROVENANCE, []))
+    _rows = _trace_rows(_BLANK_RESULT())
+    assert _rows, "fixture 自己就沒有 source_trace，這條測試會空轉。"
+    assert "[dataframe]" in _prov, (
+        f"全敗時「{DEEP_DIVE_PROVENANCE}」沒有攤開逐源軌跡 —— "
+        "那是使用者唯一能自己判斷「打錯還是掛掉」的依據。\n" + _prov)
+    # 三個 grey 卡片必須說出「兩種可能」而不是二選一
+    _nav = "\n".join(_seg.get(DEEP_DIVE_CARDS[0], []))
+    assert "不是本頁查得到的基金代碼" in _nav and "當下不可用" in _nav, (
+        "全敗時的說明沒有同時給出兩種可能 —— 挑一種講就是編的。\n" + _nav)
+    # ⚠️ 2026-09-06 獨立稽核 應修 1：**不得把責任推給使用者**。
+    #    舊文案「可能是代碼打錯」對一個打對了 secId 的人是假的 ——
+    #    不能用的是本頁自己宣告的輸入格式，不是他的手指。
+    assert "打錯" not in _all, (
+        "失敗文案把責任推給使用者（「打錯」）—— 但 secId 與名稱查不到是"
+        "**本頁自己的限制**，help 已據實改口，這裡不得再指著使用者。\n" + _all)
+
+
+def test_a_real_exception_stays_a_real_exception():
+    """取數**真的拋例外** → 走 `safe_section()` 的紅框；**不得**被降級成灰態。
+
+    ## 機制
+
+    `auto_fetch_moneydj` 的 **URL 直傳分支沒有 try/except**（本組實測：patch 掉
+    下游使其拋 `RuntimeError`，URL 分支原封拋出、純代碼分支才回 `{'error': …}`）。
+    那條路徑是**真的系統故障**，必須紅。
+
+    ⛔ 反向也要擋（下一條）：**不得為了塗紅而自己造一個例外**。
+    """
+    _all = _text(_render(applied=FAKE_QUERY,
+                         raiser=RuntimeError("哨兵：上游炸了")))
+    assert "[error]" in _all, (
+        "取數拋出的真例外沒有被畫成紅燈 —— 它被吞了或被降級成灰態（§1）。\n" + _all)
+    assert BLOCK_DEEP in _all, (
+        f"紅框沒有標明是「{BLOCK_DEEP}」出事，使用者不知道哪一塊壞了。\n" + _all)
+    # 其餘區塊照常渲染（區塊級隔離，不是整頁陪葬）
+    assert BLOCK_BATCH in _all, "深度區炸掉不該帶走批次分析那一塊。"
+
+
+def test_the_page_never_fabricates_an_exception_to_paint_red():
+    """⛔ 本頁**不得**自己 `raise` 一個由 `result["error"]` / 字串組出來的例外。
+
+    ## 機制
+
+    `state_card(state=STATE_ERROR)` 對非 `BaseException` 直接 `TypeError`，
+    所以「想塗紅」最順手的寫法就是 `raise Exception(result["error"])` ——
+    那是**捏造的故障**：手上根本沒有例外，只有一句上游的錯誤字串。
+
+    本條掃所有 `raise`：**只准 raise 型別錯誤這種「契約被破壞」的真斷言**，
+    不准把 `result[...]` / `.get(...)` 的內容包成例外丟出去。
+    """
+    _bad: list[str] = []
+    for _n in ast.walk(_tree()):
+        if not isinstance(_n, ast.Raise) or _n.exc is None:
+            continue
+        _txt = ast.unparse(_n)
+        if "error" in _txt or "source_trace" in _txt:
+            _bad.append(f"第 {_n.lineno} 行 {_txt[:90]}")
+    assert not _bad, (
+        "本頁把上游的錯誤字串包成例外丟出去，好讓它被畫成紅框：\n  "
+        + "\n  ".join(_bad)
+        + "\n手上沒有例外就不是系統故障 —— 那一格該是灰的，技術細節交給"
+          " `safe_section()` 去接真的例外。")
+
+
+def test_a_grey_reason_is_never_an_exception_object():
+    """⛔ `result["error"]` 不得出現在畫面上的任何一個字裡。
+
+    ## ⚠️ 本條原本是**純 AST**，突變實測後改寫 —— 記下來免得有人改回去
+
+    初版只掃 `not_ready(...)` / `empty_state(...)` 的**直接呼叫引數**。
+    突變 **M9**（把 `result["error"]` 當成卡片 `note` 傳給 `_risk_card()`，
+    再由 `state_card()` 轉交 `not_ready()`）→ **全綠**。
+    也就是說：它擋得住最笨的那個寫法，擋不住本檔**實際在用**的那個寫法
+    （卡片一律走 dict → `render_cards()` → `state_card()`）。
+    **拔不紅的守衛是裝飾品**，故改為「**執行期哨兵**：把 `error` 換成一個
+    絕不會自然出現的字串，然後要求它在整份渲染紀錄裡一次都不出現」——
+    這樣**不管經過幾層轉交**都攔得到。
+
+    ## 兩個獨立的理由，都不是理論
+
+    1. **型別**：`not_ready()` / `empty_state()` 對 `BaseException` **直接 `TypeError`**
+       （就地防呆），所以這種寫法在 production 是一顆會炸的地雷。
+    2. **版面注入**：`empty_state()` 的 `title` 走 **`unsafe_allow_html=True`**
+       （實測其實作）。上游是 HTML 爬蟲，`error` 可能含 `<` `>`。
+
+    ## 這條**允許**什麼（分清楚，否則會被讀成「所有上游文字都不准顯示」）
+
+    `source_trace[i]["error"]`（逐源診斷，如「查無資料」）**照樣要顯示** ——
+    那是使用者判斷「代碼打錯 vs 來源掛掉」的唯一依據，而且它走
+    `st.caption` / `st.dataframe`（兩者都不開 `unsafe_allow_html`）。
+    本條釘的是**頂層那個 `result["error"]`**，它可能是 `f"{type(e).__name__}: {e}"`
+    這種原始例外字面（見 `services/moneydj_fetcher.py` 的 `_attempts` 分支）。
+    """
+    _poison = "<b>哨兵毒藥XYZ</b>"
+    for _base in (_BLANK_RESULT(), _RICH_RESULT()):
+        _base["error"] = _poison
+        _all = _text(_render(applied=FAKE_QUERY, result=_base))
+        assert _poison not in _all, (
+            f'`result["error"]` 的內容被畫到畫面上了（狀態={_base.get("status")!r}）：\n'
+            + _all)
+        assert "哨兵毒藥XYZ" not in _all, (
+            "錯誤字串經過改寫後仍然流到畫面上 —— 逃逸的是內容不是標籤。")
+
+    # AST 那一半保留：直接呼叫的寫法要在**讀 code 時**就看得出來，
+    # 不必等到有人跑測試（兩層一起才叫縱深，不是重複）。
+    _bad: list[str] = []
+    for _n in ast.walk(_tree()):
+        if not (isinstance(_n, ast.Call)
+                and getattr(_n.func, "id", None) in ("not_ready", "empty_state")):
+            continue
+        for _a in list(_n.args) + [_k.value for _k in _n.keywords]:
+            _txt = ast.unparse(_a)
+            if ("error" in _txt or "exc" in _txt) and "empty_" not in _txt:
+                _bad.append(f"第 {_n.lineno} 行 {ast.unparse(_n.func)}(… {_txt[:60]} …)")
+    assert not _bad, (
+        "灰態的文案吃到了錯誤字串 / 例外物件：\n  " + "\n  ".join(_bad))
+
+
+def test_the_empty_state_title_never_carries_upstream_text():
+    """⛔ `empty_state()` 的**標題**只准是本檔自己的字面值。
+
+    ## 機制（這一條與上一條守的不是同一件事）
+
+    上一條守「錯誤字串不要外流」；本條守的是**注入面本身**：
+    `empty_state()` 的 title 是本頁唯一走 **`unsafe_allow_html=True`** 的參數
+    （實測 `ui/helpers/ia/empty_state.py`）。**只要那個位置永遠是常數，
+    這個注入面就結構性地不存在** —— 不必逐一去猜哪個上游欄位可能含 `<`。
+
+    ⚠️ `wide_table(empty_title=…)` 也算，它會原封轉交給 `empty_state()`。
+    ⚠️ 允許 f-string，但**內插的每一段都必須是本檔的模組層常數**
+    （`DEEP_DIVE_TABLES[0]` 這種），不得是 `result` / 參數 / 區域變數。
+    """
+    _allowed = {"DEEP_DIVE_CARDS", "DEEP_DIVE_TABLES", "DEEP_DIVE_PROVENANCE",
+                "BLOCK_RESULTS", "BLOCK_DEEP", "BLOCK_BATCH", "BLOCK_FORM"}
+    _bad: list[str] = []
+    for _n in ast.walk(_tree()):
+        if not isinstance(_n, ast.Call):
+            continue
+        _fn = getattr(_n.func, "id", None)
+        if _fn not in ("empty_state", "wide_table"):
+            continue
+        _title = None
+        if _fn == "empty_state" and _n.args:
+            _title = _n.args[0]
+        for _k in _n.keywords:
+            if _k.arg in ("title", "empty_title"):
+                _title = _k.value
+        if _title is None:
+            continue
+        for _sub in ast.walk(_title):
+            if isinstance(_sub, ast.Name) and _sub.id not in _allowed:
+                _bad.append(f"第 {_n.lineno} 行 {_fn}(…) 標題內插了 `{_sub.id}`")
+            if isinstance(_sub, ast.Attribute):
+                _bad.append(f"第 {_n.lineno} 行 {_fn}(…) 標題內插了 "
+                            f"`{ast.unparse(_sub)[:40]}`")
+    assert not _bad, (
+        "空狀態標題吃到了非常數的東西：\n  " + "\n  ".join(_bad)
+        + "\n那個位置走 `unsafe_allow_html=True`，上游是 HTML 爬蟲 —— "
+          "任何含 `<` 的字串都會直接打壞版面，而且畫面上沒有任何跡象。")
+
+
+def test_the_page_has_no_exception_handler_of_its_own():
+    """本頁**只准**有一個 `except`，而且它不准印任何東西。
+
+    ## 為什麼是「幾乎不准有」而不是「不准吞」
+
+    區塊級隔離已經由 `safe_section()` 提供（它走 `system_error()` ＋ traceback）。
+    本頁自己再接一層，只會有兩種結果：**吞掉**（違 §1），
+    或**用錯顏色重印一次**（踩 `tests/test_render_state_color_separation.py`
+    的方向 A ratchet —— 那條規則掃 `ui/**` 全部，本檔在射程內）。
+
+    ⚠️ **本條的門檻 2026-09-06 由「≤1」收成「0」**（本組自己拆掉了那一個）：
+    初稿在 `_nav_facts()` 有一個 `except`，把「序列的索引讀不出來」收斂成
+    `return None` → 呼叫端走灰態、文案是「這次沒有帶回淨值序列」——
+    **但序列帶回來了，只是讀不出來，那句話是假的。**
+    索引不是時間軸 ＝ 上游契約被破壞（`CLAUDE.md §3.1`），§1 要求炸掉。
+    **一個 `except` 都沒有，這條規則才不必再判斷「這個 handler 乖不乖」。**
+    """
+    _handlers = [_n for _n in ast.walk(_tree()) if isinstance(_n, ast.ExceptHandler)]
+    assert not _handlers, (
+        f"本頁有 {len(_handlers)} 個 except（應為 0） —— 區塊級隔離已由 `safe_section()` 提供，"
+        "自己再接一層不是吞掉就是用錯顏色重印一次。\n  "
+        + "\n  ".join(f"第 {_h.lineno} 行" for _h in _handlers))
+    for _h in _handlers:
+        _printed = [ast.unparse(_c)[:60] for _c in ast.walk(_h)
+                    if isinstance(_c, ast.Call)
+                    and (getattr(_c.func, "attr", None) or "") in _TEXT_APIS]
+        assert not _printed, (
+            f"第 {_h.lineno} 行的 except 裡印了東西：{_printed} —— "
+            "在 handler 裡印例外是「把系統故障畫成別的顏色」，"
+            "而且會撞上 `test_render_state_color_separation.py` 的方向 A ratchet。")
+
+
+@pytest.mark.parametrize("unit", DEEP_UNITS)
+def test_a_deep_unit_that_has_data_shows_it_and_one_that_has_none_stays_grey(unit: str):
+    """**逐格**：有料就把料畫出來、沒料就灰 —— 兩個方向同時驗。
+
+    ⚠️ 這條取代了骨架時期
+    :func:`test_every_grey_unit_is_grey_until_its_content_lands` 對深度區那六格的涵蓋。
+    **它不是「有東西就好」**：正向要求那一格**真的出現自己的哨兵字**，
+    反向要求全敗時它**不得**印出任何哨兵字。
+    """
+    _need = {
+        DEEP_DIVE_CARDS[0]: "59.99",                    # 最新淨值
+        DEEP_DIVE_CARDS[1]: f"{PERF_SENTINELS['1Y']:,.2f}",
+        DEEP_DIVE_CARDS[2]: f"{RISK_SENTINELS['sharpe']:,.2f}",
+        DEEP_DIVE_TABLES[0]: "[dataframe]",
+        DEEP_DIVE_TABLES[1]: "[dataframe]",
+        DEEP_DIVE_PROVENANCE: "[dataframe]",
+    }[unit]
+    _rich = _segments(_render(applied=FAKE_QUERY, result=_RICH_RESULT()))
+    _body = "\n".join(_rich.get(unit, []))
+    assert _body.strip(), f"有料的時候「{unit}」這一格不見了。現有單位：{list(_rich)}"
+    assert _need in _body, (
+        f"「{unit}」有資料卻沒有把它畫出來（找不到 {_need!r}）：\n{_body}")
+
+    _blank = _segments(_render(applied=FAKE_QUERY, result=_BLANK_RESULT()))
+    _bbody = "\n".join(_blank.get(unit, []))
+    assert _bbody.strip(), f"沒料的時候「{unit}」這一格整個消失了 —— 應該留灰態。"
+    if unit != DEEP_DIVE_PROVENANCE:      # 來源標註在全敗時要攤開證據，見 GREY_ON_BLANK
+        assert NOT_READY_MARK in _bbody, (
+            f"「{unit}」沒料卻不是灰的：\n{_bbody}")
+        assert _need not in _bbody, (
+            f"「{unit}」沒料卻印出了 {_need!r} —— 那是憑空生出來的：\n{_bbody}")
+
+
+def test_the_page_only_talks_to_the_service_layer():
+    """本頁的 import 清單：**不得**碰資料層 / 網路函式庫，也不得委派舊三頁。
+
+    ⚠️ **AST 掃 import 節點，不是字串 grep** —— 本檔與被測檔的 docstring 都反覆
+    提到 `repositories.fund.tdcc_search_fund`、`fund_research`、`single_fund`
+    這些名字（那是在說明「為什麼不能用」），grep 會把說明文字當成違規。
+    ⚠️ 本條與既有的
+    :func:`test_the_page_never_reaches_into_the_data_layer` /
+    :func:`test_the_page_does_not_delegate_to_the_old_tabs` **是同一組規則的合驗**，
+    多一條的價值在於：它同時釘住「**該有的那一個** L2 入口真的在」——
+    只有反向禁令的話，把整段取數刪掉也會全綠。
+    """
+    _mods = _imported_modules(_tree())
+    _bad_layer = [_m for _m in _mods
+                  if _m.split(".")[0] in ("repositories", "infra", "requests",
+                                          "httpx", "yfinance", "gspread",
+                                          "urllib", "bs4", "feedparser")]
+    assert not _bad_layer, f"本頁 import 了資料層 / 網路函式庫：{_bad_layer}"
+    _bad_old = [_m for _m in _mods
+                if _m.startswith("ui.tab") or "fund_research" in _m
+                or "batch_analysis" in _m or "single_fund" in _m]
+    assert not _bad_old, f"本頁委派了舊 ③ 的來源分頁：{_bad_old}"
+    assert "services.moneydj_fetcher" in _mods, (
+        "本頁沒有 import L2 取數入口 —— 只有反向禁令的話，"
+        "把整段取數刪掉也會全綠，那是一份守不到東西的規則。")
+
+
+def test_the_dividend_currency_is_reconciled_not_guessed():
+    """配息幣別：**逐列一致才敢宣告**，不一致就明說不知道，**絕不挑一個**。
+
+    委派 `shared.data_quality.reconcile_row_currencies`（本組實測
+    `['TWD','USD'] → ''`、`['USD','USD'] → 'USD'`）。
+    ⚠️ 這一格是**線框第三張示意卡在示範的處境**（「幣別未知／此來源未提供計價幣別」
+    ＋ chip「不猜值」），所以它不是邊角，是線框點名要做對的地方。
+    """
+    _mixed = _RICH_RESULT()
+    _mixed["dividends"][0]["currency"] = "TWD"          # 兩列幣別不一致
+    _seg = _segments(_render(applied=FAKE_QUERY, result=_mixed))
+    _body = "\n".join(_seg.get(DEEP_DIVE_TABLES[1], []))
+    assert CCY_UNKNOWN in _body, (
+        "逐列幣別不一致，畫面卻沒有標示幣別無法宣告：\n" + _body)
+    # 純函式層再驗一次（渲染層可能被別的字串蒙混過去）
+    assert _declared_currency(_dividend_rows(_mixed)) == "", (
+        "`_declared_currency()` 對混幣別的配息挑了一個幣別出來 —— "
+        "那正是 `reconcile_row_currencies` 的 docstring 明禁的事。")
+    assert _declared_currency(_dividend_rows(_RICH_RESULT())) == "USD", (
+        "逐列一致時反而不敢宣告幣別 —— 那會讓「不知道」與「知道」長得一樣。")
+
+
+def test_missing_upstream_reason_is_admitted_not_invented():
+    """上游**沒有**給缺值原因時，畫面要說「上游沒給」，**不准自己編一個**。
+
+    ⚠️ 這條擋的是最容易被當成「貼心」的退化：缺 `reason` 就補一句
+    「資料不足」——那是**我們猜的**，而使用者無從分辨它是上游說的還是我們編的。
+    """
+    _metrics = {_k: None for _k in RISK_SENTINELS}       # 五個全缺、且沒有任何 meta
+
+    # (a) 純函式層：**每一個**缺值指標都要據實承認「上游沒給原因」。
+    #     ⚠️ 這一半是本條真正在守的東西 —— 渲染層看不到它
+    #     （`_risk_card()` 會在「每一條原因都是 NO_REASON」時改用區塊層級的
+    #      處境描述，那是刻意的，見該函式）。只驗渲染層等於沒驗到這條規則。
+    _shown, _missing = _risk_lines({"metrics": _metrics})
+    assert not _shown, f"五個指標都是 None，卻有東西被當成有值：{_shown}"
+    _invented = [_m for _m in _missing if not _m.endswith(NO_REASON)]
+    assert not _invented, (
+        "上游沒有給缺值原因，本頁卻自己編了一個：\n  " + "\n  ".join(_invented)
+        + f"\n沒有原因就據實寫 {NO_REASON!r} —— 使用者無從分辨"
+          "「上游說的」與「我們猜的」，猜的那一種比沒有更危險（§1）。")
+    assert len(_missing) == len(RISK_METRICS), (
+        f"缺值清單少了指標：{_missing} —— 缺一個就整個不提，等於靜默丟掉。")
+
+    # (b) 渲染層：不得因此生出任何數字。
+    _seg = _segments(_render(applied=FAKE_QUERY,
+                             result=_RICH_RESULT(metrics=_metrics)))
+    _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[2], []))
+    assert NOT_READY_MARK in _body, "五個指標全缺卻不是灰態：\n" + _body
+    for _key, _label, _unit in RISK_METRICS:
+        assert re.search(re.escape(_label) + r"\s*[-+]?\d", _body) is None, (
+            f"「{_label}」沒有值，畫面上卻出現了數字：\n{_body}")
+
+
+@pytest.mark.parametrize("unit,ccy_field", [
+    (DEEP_DIVE_CARDS[0], "currency"),        # NAV 卡：`result["currency"]`
+    (DEEP_DIVE_TABLES[1], "dividends"),      # 配息表：逐列 `currency`
+])
+def test_an_unknown_currency_is_declared_unknown_not_filled_in(unit: str, ccy_field: str):
+    """幣別取不到 → **明說不知道**，不得填一個 ISO 三碼上去。
+
+    ## 這條是突變 **M18** 逼出來的，不是設計出來的
+
+    上一輪把 `nav["currency"] or CCY_UNKNOWN` 改成 `nav["currency"] or "USD"`
+    → **全套 55 條一條都沒紅**。也就是說：本檔當時**只守了配息那一格的幣別**
+    （`test_the_dividend_currency_is_reconciled_not_guessed`），
+    NAV 卡那一格的幣別**完全沒有守**，而它就印在最顯眼的位置（`st.metric` 的值旁邊）。
+
+    ⚠️ **`"USD"` 是本 repo 反覆出現的死預設**（`repositories/fund/` 至少三處
+    `.get("計價幣別", "USD")` / `result.get("currency", "USD")`，L1 自己的註解就寫著
+    「v19.505:不矇 USD」是為了修這個病）。所以這不是假想的突變 ——
+    **它是這份 codebase 已經犯過的那一種錯**，只是換到 UI 層再犯一次。
+
+    ⚠️ 一個台幣基金被標成 USD，使用者看到的是「淨值 59.99 美元」——
+    數字是真的、單位是編的，而畫面上沒有任何跡象（`CLAUDE.md §4.1` 量綱陷阱）。
+    """
+    _res = _RICH_RESULT()
+    if ccy_field == "currency":
+        _res["currency"] = ""                      # 上游沒給計價幣別
+    else:
+        for _d in _res["dividends"]:
+            _d["currency"] = ""
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY, result=_res)).get(unit, []))
+    assert _body.strip(), f"「{unit}」這一格不見了。"
+    assert CCY_UNKNOWN in _body, (
+        f"「{unit}」的幣別取不到，畫面卻沒有標示 {CCY_UNKNOWN!r}：\n{_body}")
+    for _iso in ("USD", "TWD", "EUR", "JPY", "AUD"):
+        assert _iso not in _body, (
+            f"「{unit}」的幣別取不到，畫面上卻出現了 {_iso!r} —— "
+            "那是憑空填上去的計價幣別。數字是真的、單位是編的，"
+            "使用者看不出任何異狀（§4.1 量綱陷阱）。\n" + _body)
+
+
+def test_holdings_keep_the_upstream_ranking_and_do_not_drop_weightless_rows():
+    """持股表：**沒有權重照樣列、沒有名稱才跳過，而且排名用上游的原始位置**。
+
+    ## 三個失效模式，一條各守一個
+
+    1. **過濾掉沒有權重的持股** → 「前十大」悄悄變成「我算得出權重的那幾大」，
+       使用者看到的排名不再是上游給的排名。
+    2. **跳過之後重新編號** → 「上游第 2 檔沒有名字」這件事被抹掉，
+       畫面上是一份看起來完整、實際上少一檔的前 N 大（§1：比缺資料更危險）。
+    3. **權重缺值補 0** → 「沒揭露權重」與「權重是 0%」長得一樣。
+    """
+    _res = _RICH_RESULT()
+    _res["holdings"]["top_holdings"] = [
+        {"name": "哨兵持股甲", "sector": "科技", "pct": 91.11},
+        {"name": "", "sector": "金融", "pct": 92.22},          # 無名 → 應跳過
+        {"name": "哨兵持股丙", "sector": "能源", "pct": None},  # 無權重 → 應保留
+    ]
+    _rows = _holdings_rows(_res)
+    _names = [_r[HOLDING_COLS[1]] for _r in _rows]
+    assert _names == ["哨兵持股甲", "哨兵持股丙"], (
+        f"無名列沒被跳過，或有權重的列被丟掉了：{_names}")
+    assert [_r[HOLDING_COLS[0]] for _r in _rows] == [1, 3], (
+        "排名被重新編號了 —— 上游第 2 檔沒有名字這件事因此被抹掉，"
+        "畫面上會是一份看起來完整、實際上少一檔的前 N 大。"
+        f"實際排名：{[_r[HOLDING_COLS[0]] for _r in _rows]}")
+    _weightless = [_r for _r in _rows if _r[HOLDING_COLS[1]] == "哨兵持股丙"][0]
+    assert _weightless[HOLDING_COLS[3]] == "", (
+        f"沒有權重的持股被補了一個值 {_weightless[HOLDING_COLS[3]]!r} —— "
+        "「沒揭露」與「是 0%」不是同一件事（§1）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-09-06 獨立稽核回修 —— 三項必修 ＋ 兩項應修
+#
+# ⚠️ **通則（本節存在的理由，比任何一條斷言重要）**：
+#    **修完一個 bug，第一顆該試的突變就是「把那個修復拔掉」。**
+#    上一輪的 24 顆突變對它們自己為真，但**沒有一顆是「拔掉我剛修好的東西」** ——
+#    於是 `_has_anything()` 這個 fix（它的 docstring 自己寫「存在的唯一理由是
+#    不要讓一句話跑到不屬於它的格子裡」）**零守衛**，稽核組三顆突變全部存活。
+# ══════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("hollow,unit,keep", [
+    # (把哪一格挖空, 該格單位名, 其餘哪一格必須仍有料 —— 證明「有料」這個前提成立)
+    ("dividends", DEEP_DIVE_TABLES[1], DEEP_DIVE_CARDS[0]),
+    ("holdings", DEEP_DIVE_TABLES[0], DEEP_DIVE_CARDS[0]),
+    ("perf", DEEP_DIVE_CARDS[1], DEEP_DIVE_CARDS[0]),
+    ("metrics", DEEP_DIVE_CARDS[2], DEEP_DIVE_CARDS[0]),
+])
+def test_the_all_sources_failed_note_never_leaks_into_a_unit_whose_neighbours_have_data(
+        hollow: str, unit: str, keep: str):
+    """⛔ 只有**一格都沒有**時才准講「N 個來源都沒有取到淨值」。
+
+    ## 這條守的是 `_has_anything()`，而它上一輪**零守衛**（獨立稽核 必修 1）
+
+    稽核組三顆突變**全部存活 58/58 × 3 序**：配息格 `empty_missing` 退回共用文案、
+    持股格同樣退回、以及 **`_has_anything()` 整個改成 `return False`**
+    （＝本組初稿的 bug 完整復辟）。
+
+    **失效模式長這樣**（稽核組實測的畫面）：淨值 3 筆、績效有、持股有、**就是沒配息**
+    → 配息格印出「這次取數沒有帶回任何淨值」，
+    **而同一個畫面上 NAV 卡正印著「59.99 USD · 3 筆」**。
+    兩句都是本頁印的，其中一句是假的。
+
+    ## 判準：**指名道姓**，不是「有沒有灰態」
+
+    只驗「這一格是灰的」擋不住任何東西（兩種文案都是灰的）。
+    本條驗的是**那一格說的理由對不對** —— 全敗文案的特徵句不得出現在
+    「鄰居有料」的畫面上，而且該格必須換上**它自己**的理由。
+    """
+    _res = _RICH_RESULT()
+    _res[hollow] = {} if hollow in ("holdings", "perf", "metrics") else []
+    _seg = _segments(_render(applied=FAKE_QUERY, result=_res))
+
+    # 前提：鄰居真的有料（否則這條測試會空轉，稽核組要求的「排除突變沒生效」）
+    _keep_body = "\n".join(_seg.get(keep, []))
+    assert "59.99" in _keep_body, (
+        f"前提不成立：挖空 {hollow!r} 之後鄰居「{keep}」也沒有料了，"
+        f"本條會空轉。\n{_keep_body}")
+
+    _body = "\n".join(_seg.get(unit, []))
+    assert _body.strip(), f"挖空 {hollow!r} 之後「{unit}」整格消失了。"
+    assert NOT_READY_MARK in _body, f"「{unit}」沒料卻不是灰的：\n{_body}"
+    for _leak in ("都沒有取到淨值", "沒有帶回任何淨值"):
+        assert _leak not in _body, (
+            f"「{unit}」沒料，卻印出了**全敗**才該講的話（{_leak!r}）——\n"
+            f"但同一個畫面上「{keep}」正印著淨值。**那句話是假的。**\n"
+            f"共用文案只准在「一格都沒有」時使用（見 `_has_anything()`）。\n{_body}")
+
+
+def test_the_dividend_currency_never_contradicts_the_fund_currency():
+    """⛔ 配息幣別與基金計價幣別不一致時，**不得宣告任何一個**（獨立稽核 必修 2）。
+
+    ## 這是活的缺陷，不是突變 —— HEAD 未突變時就會發生
+
+    稽核組實測畫面：
+
+    ```
+    NAV 走勢     [metric]  59.99 TWD
+    配息紀錄     [caption] 2 筆 · 全部以 USD 計價
+    ```
+
+    成因在上游、**但本頁是第一個把它端上畫面的**：`_src_fundclear_div` 缺欄時
+    逐列填 `"USD"` 死預設，而 `_ensure_currency` 已經為了同一個死預設修好了
+    `result["currency"]` —— **只修了一半，本頁端出沒修的那一半，還加了一句
+    斬釘截鐵的「全部以 USD 計價」。數字真、單位編（§4.1）。**
+
+    ⛔ **答案不是「相信 `result` 那一邊」**：它只是**比較可信**，不是**確定對**。
+    §1 的答案是**不宣稱**。
+    """
+    _res = _RICH_RESULT()
+    _res["currency"] = "TWD"                     # 基金計價幣別（已被 _ensure_currency 修正）
+    for _d in _res["dividends"]:
+        _d["currency"] = "USD"                   # 逐列死預設
+    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    assert "全部以 USD 計價" not in _all and "全部以 TWD 計價" not in _all, (
+        "兩邊幣別不一致，本頁卻還是挑了一個宣告：\n" + _all)
+    assert "資料疑義" in _all, (
+        "幣別矛盾沒有被標成資料疑義 —— 使用者看不出這一頁自己在打架。\n" + _all)
+
+    # 反向：兩邊一致時**要**敢宣告（否則「不知道」與「知道」又長得一樣了）
+    _ok = _RICH_RESULT()                          # currency=USD、逐列 USD
+    assert "全部以 USD 計價" in _text(_render(applied=FAKE_QUERY, result=_ok)), (
+        "兩邊都說 USD，本頁卻不敢宣告 —— 那會讓「不知道」與「知道」長得一樣。")
+
+
+def test_a_broken_series_index_is_red_not_grey():
+    """壞掉的索引 ＝ 上游契約破了 → **紅框**，不得被吞成灰態（獨立稽核 必修 3）。
+
+    ## 為什麼純 AST 的「0 個 except」不夠
+
+    稽核組用 `contextlib.suppress` 把本組**自陳拆掉**的那個「會說謊的 except」
+    **原樣復辟**：零 `except` 節點、**58 passed × 3 序**。畫面：
+
+    ```
+    HEAD → NAV 格空，紅框 + traceback                     ← 正確（§1）
+    突變 → ⬜ 這次沒有帶回淨值序列，上游也沒有說明原因      ← 序列明明帶回來了，3 筆
+    ```
+
+    **形狀檢查擋不住換一個形狀。** 本條改驗**行為**；
+    純 AST 那條（`test_the_page_has_no_exception_handler_of_its_own`）
+    **留著當第二層**，不是被取代。
+
+    ⚠️ fixture 刻意讓 `min` / `max` **存在但會拋**（見 :class:`_ExplodingIndex`）——
+    稽核組有一顆突變就是因為「方法存在、只是會拋」而其實沒生效，它自己撤回了。
+    """
+    _res = _RICH_RESULT(series=_broken_series())
+    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    assert "[error]" in _all, (
+        "索引壞掉（上游契約被破壞）被畫成灰態或被吞掉了 —— "
+        "序列**有**帶回來，只是讀不出來，說「沒有帶回序列」是假的（§1 要求炸掉）。\n"
+        + _all)
+    assert "哨兵：索引不是時間軸" in _all, (
+        "紅框沒有帶出真正的例外訊息 —— 那就只是一個紅色的猜測。\n" + _all)
+    assert "這次沒有帶回淨值序列" not in _all, (
+        "壞索引被說成「沒有帶回淨值序列」—— 序列帶回來了，那句話是假的。\n" + _all)
+
+
+def test_the_failed_source_count_excludes_synthetic_markers():
+    """「N 個來源」只能數**真的來源**（獨立稽核 應修 2）。
+
+    `nav_series` 是 `finalize_fund_metrics` 追加的**合成標記**（意思是「沒有淨值序列」），
+    不是一個被試過的來源。畫面曾印「這個代碼在 **3** 個來源都沒有取到淨值」，
+    **實際只試了 2 個** —— 而 `_nav_reason()` 正是靠這個名字把它挑出來當缺值原因用。
+    **同一個東西一邊當標記、一邊當來源數**，那個數字是編出來的證據。
+
+    ⚠️ 本條也守**去重**：同一個來源被 append 兩次不得算成兩個。
+    """
+    assert TRACE_NAV_SERIES in SYNTHETIC_TRACE_SOURCES, (
+        "`nav_series` 沒有被列為合成標記 —— 它會被算進來源數。")
+    _blank = _BLANK_RESULT()
+    assert _failed_source_count(_blank) == 2, (
+        "來源數把合成標記也算進去了。fixture 的 source_trace 是 "
+        "bank_platform（失敗）／morningstar（失敗）／nav_series（合成標記）"
+        f"→ 應為 2，實得 {_failed_source_count(_blank)}。")
+    assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, result=_blank)), (
+        "畫面上的來源數與 `_failed_source_count()` 不一致。")
+    # 去重
+    _dupe = _BLANK_RESULT()
+    _dupe["source_trace"].append(
+        {"source": "bank_platform", "success": False, "error": "短窗重試也失敗"})
+    assert _failed_source_count(_dupe) == 2, (
+        "同一個來源被追加兩次就被算成兩個 —— 那同樣是虛報。")
+    # 合成標記全員：逐一確認每一個都不會把數字撐大
+    for _syn in SYNTHETIC_TRACE_SOURCES:
+        _r = _BLANK_RESULT()
+        _r["source_trace"].append({"source": _syn, "success": False, "error": "x"})
+        assert _failed_source_count(_r) == 2, (
+            f"合成標記 {_syn!r} 把來源數撐大了。")
+
+
+@pytest.mark.parametrize("key,label,unit", RISK_METRICS)
+def test_a_nan_metric_is_treated_as_missing_not_as_a_value(key: str, label: str, unit: str):
+    """`NaN` ＝ 缺值，**不得**被畫成一個有值的指標（獨立稽核 應修 3）。
+
+    拿掉 `_fmt()` 的 `if value != value: return None` → 稽核組實測 58 passed，
+    而行為**確實變了**：`Sharpe nan` 從「未提供」變成一個有值的 metric。
+    **缺值被重新分類成有值** —— 使用者失去「未提供」那個誠實訊號，
+    而 `nan` 在畫面上看起來只像是一個沒見過的格式，不像是「這個算不出來」。
+
+    ⚠️ 純函式層也驗一次：`_fmt(float("nan"))` 必須是 `None`，
+    不是「渲染時剛好看不出來」。
+    """
+    assert _fmt(float("nan")) is None, "`_fmt()` 把 NaN 當成一個可顯示的數值。"
+    assert _fmt(float("nan"), "%") is None, "帶單位時 NaN 的防線失效。"
+    _metrics = {**RISK_SENTINELS, key: float("nan")}
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY,
+                                        result=_RICH_RESULT(metrics=_metrics))
+                                ).get(DEEP_DIVE_CARDS[2], []))
+    assert "nan" not in _body.lower(), (
+        f"`metrics[{key!r}]` 是 NaN，卻被畫成一個值：\n{_body}")
+    assert re.search(re.escape(label) + r"\s*[-+]?\d", _body) is None, (
+        f"「{label}」是 NaN（＝算不出來），畫面上卻給了它一個數字：\n{_body}")
