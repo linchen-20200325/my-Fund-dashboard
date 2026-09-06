@@ -166,6 +166,7 @@ from __future__ import annotations
 import ast
 import functools
 import pathlib
+import sys
 import re
 from typing import Any
 
@@ -180,6 +181,15 @@ SRC = ROOT / "ui" / "views" / "page_04_portfolio.py"
 
 #: 灰態的視覺記號（`ui/helpers/render_state.py::NOT_READY_MARK`）。
 #: ⚠️ **從那個模組 import，不在這裡抄一份字面值** —— 抄了就是第二份真相源。
+#: form 閘門守衛共用的 AST 偵測（`tests/_ast_bindings.py`）——
+#: ⚠️ 這裡**不要**再抄一份掃描邏輯：②③④ 三頁曾各自抄一份較弱的版本，
+#:    三份同時漏掉屬性賦值／`update()`／widget `key=` 三條管道（`CLAUDE.md §2.1`）。
+#: ⚠️ `sys.path` 那一行不是多餘的：pytest 預設會把 `tests/` 放進 `sys.path`，
+#:    但那是預設值的副作用，換 `--import-mode=importlib` 就沒了。
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
+                           guarded_key_names, session_writes)
+
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
 from ui.views.page_04_portfolio import (  # noqa: E402
@@ -477,7 +487,54 @@ def _imported_modules(tree: ast.AST) -> list[str]:
         if isinstance(_n, ast.Import):
             _mods.extend(_a.name for _a in _n.names)
         elif isinstance(_n, ast.ImportFrom) and _n.module:
+            # ⚠️ **兩個都要吐**：只吐 `_n.module` 會漏掉「同層 import」這條最自然的寫法 ——
+            #    `import ui.tab3_portfolio`                     -> "ui.tab3_portfolio"  ✅
+            #    `from ui.tab3_portfolio import render_...`     -> "ui.tab3_portfolio"  ✅
+            #    `from ui import tab3_portfolio`                -> "ui"  🔴 舊寫法靜靜通過
+            #    而下面的判準是 `startswith("ui.tab")` ⇒ 第三種完全不會被擋。
+            #    「不得委派舊分頁」是客戶方針的唯一機械保證，漏掉這條等於沒守。
+            # ⚠️ **代價照實寫（2026-09-06 更正：原本這裡寫「多吐無害」，那是假的）**：
+            #    `from services.fund_service import single_fund_metrics` 會多吐
+            #    "services.fund_service.single_fund_metrics" 這種**不是模組**的字串。
+            #
+            #    ~~消費端都是 `startswith` 比對，多吐無害~~
+            #    → **四個消費端沒有一個是純 `startswith`**（實測，不是推論）：
+            #      兩個是 `_m.split(".")[0] in (...)`（多吐的字串首段與模組相同 ⇒ 無影響），
+            #      **另外兩個是 `startswith(...) or <子字串> in _m`** ⇒ **會被符號名誤觸發**。
+            #
+            #    **已量到的誤紅形狀（三序一致；`180fb93` 上皆為綠 ⇒ 這些偽陽性是
+            #    「同時吐兩個」這個改動新引入的）**。
+            #    ⚠️ **量測形態要講清楚，否則照抄會得到相反的結論**：下列 import
+            #    **是放在一個「函式內、永不被呼叫」的 lazy import 裡量的**
+            #    （`def _qa_never_called(): from services.batch import ...`）——
+            #    這樣模組載入時不會真的去 import，pytest 回 **rc=1（測試真的紅）**。
+            #    **若照抄成模組頂層 import，會得到 rc=4（collection error）**，
+            #    那是**壞掉的突變、不是守衛的結果**（2026-09-06 兩種形態各實測一次）。
+            #    這五個模組多數**並不存在**（`services/batch.py` 等），
+            #    lazy import 不需要它們存在 —— **AST 掃描看的是原始碼，不是能不能 import**。
+            #      `from services.fund_service import single_fund_metrics`  → 命中 "single_fund"
+            #      `from services.batch import batch_analysis_runner`       → 命中 "batch_analysis"
+            #      `from services.research import fund_research_helper`     → 命中 "fund_research"
+            #      `from services.perf import portfolio_perf_summary`       → 命中 "portfolio_perf"
+            #      `from services.health import fund_grp_health_score`      → 命中 "fund_grp_health"
+            #    這些 import **本來就合法**（同檔另一條測試只禁 repositories/infra/網路函式庫，
+            #    `services/**` 是允許的），現況只是**還沒有人這樣寫**，屬**潛伏**的誤紅。
+            #
+            #    ⛔ **不要為了消掉誤紅而把這裡收窄** —— 「兩個都要吐」的理由仍然成立
+            #    （`from ui import tab3_portfolio` 是同層 import 最自然的寫法，只吐
+            #    `_n.module` 會得到 "ui"、被 `startswith("ui.tab")` 靜靜放過）。
+            #    ⚠️ ~~**真要修，該動的是那兩個子字串消費端**（讓它們只看模組清單）~~
+            #    → **2026-09-06 更正：這個方向被實測推翻，不要照做**（有意識的更正，不是漏刪）。
+            #    「只看模組清單」會**重開剛關掉的洞**：`ui/helpers/fund_research/` 是
+            #    **真實存在的套件**，`from ui.helpers import fund_research` 在
+            #    只看模組清單時是 `["ui.helpers"]` → **綠（漏放）**；
+            #    同時吐兩個才是 `["ui.helpers", "ui.helpers.fund_research"]` → **紅**。
+            #    **正確方向：讓 `_imported_modules` 回傳結構化的 `(module, symbol)`，
+            #    由消費端各自選比對哪一半** —— 兩邊的分辨能力都保住，也不必碰檔案系統。
+            #    超出本批邊界，**已登記待裁決**。
+            #    **本函式的回傳值自此不是一份「真的 import 到的模組」清單，不要拿去做別的用途。**
             _mods.append(_n.module)
+            _mods.extend(f"{_n.module}.{_a.name}" for _a in _n.names)
     return _mods
 
 
@@ -902,13 +959,20 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     **沒有擋住重運算** —— 每次 rerun 照樣把下游跑一遍，畫面看起來沒問題、成本一分沒省
     （`ui/helpers/ia/gated_form.py` 模組 docstring 把這個陷阱寫得很清楚）。
 
-    ⚠️ **這條分不出真假閘門**（② 的紅隊實測：`if True:` 與 `if not _gate:` 都全綠）——
-    它只驗「session 寫入有沒有被某個 `if` 包住」。**登記，本批不補。**
+    ⚠️ ~~**這條分不出真假閘門**（② 的紅隊實測：`if True:` 與 `if not _gate:` 都全綠）——
+    它只驗「session 寫入有沒有被某個 `if` 包住」。**登記，本批不補。**~~
+    → **2026-09-05 狀態更新，不是漏刪**：**`if True:` 那一種已修**（見下方重寫說明）；
+    **`if not _gate:` 那一種仍然分不出來**。
     ✅ 但 :func:`test_a_zero_budget_never_counts_as_applied` 的 AppTest 那半
     **會**抓到「閘門恆真」那一種（沒按也寫進去）。兩條互補。
 
-    📌 **2026-09-05 順帶查了 `ast.Assign` 的同型盲點（總管指定，查完照實寫）——
-    結論不是「這裡不受影響」，是「一半受影響、一半 fail-closed」，故本輪不改，只登記**：
+    📌 ~~**2026-09-05 順帶查了 `ast.Assign` 的同型盲點（總管指定，查完照實寫）——
+    結論不是「這裡不受影響」，是「一半受影響、一半 fail-closed」，故本輪不改，只登記**~~
+    → ✅ **2026-09-05 同日已修，登記在此保留當病史（狀態變更，不是漏刪）**：
+    下面整段描述的洞（`AnnAssign` / **屬性賦值** / `update()` / **`key=`**）
+    已由 `tests/_ast_bindings.py::session_writes` 四條管道全收，
+    三頁 × 四管道 × 修前修後 × 三種測試順序的突變矩陣實跑於本輪 PR 描述。
+    **以下原文一字未改**，因為它記的是「當時為什麼判斷可以不修」，那個判斷過程仍值得讀：
     Python 允許 ``st.session_state[k]: dict = v`` 這種 **subscript 的 `AnnAssign`**，
     本條的兩段掃描都只收 `ast.Assign`，所以：
     - **前半 fail-closed（安全）**：若把**唯一**那個寫入改成 `AnnAssign`，
@@ -939,8 +1003,16 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
     `grep` 的 3 個命中全部是 `tests/test_wpg_portfolio_health_link_20260831.py`
     **docstring 裡的散文**，不是呼叫。
 
-    📌 **要修這個洞的人請先看這兩份既有實作，不要再寫第四份**
-    （本批不動它們 —— 跨檔重構，超出邊界；總管另排）：
+    📌 ~~**要修這個洞的人請先看這兩份既有實作，不要再寫第四份**
+    （本批不動它們 —— 跨檔重構，超出邊界；總管另排）：~~
+    → ✅ **2026-09-05 部分照辦**：兩份的長處合併進 `tests/_ast_bindings.py`
+    （綁定形態取前者、session 四管道取後者），`test_settings_diag_merge.py` 已改成 import 它；
+    本條與 ②③ 同樣改用它。下面兩行保留當出處：
+    ⚠️ ~~**不留第二份**~~ → **2026-09-05 稽核更正，這句不為真（狀態描述錯誤，不是漏刪）**：
+    **本輪只收斂了 `test_settings_diag_merge.py`。**
+    `tests/test_wpg_portfolio_health_link_20260831.py` **原封未動**，
+    它自己那份四管道掃描與 `_dotted` 都還在（實測仍在檔內）。
+    → **待另案**；本批**刻意不遷**（跨檔重構，超出本批檔案邊界）。
     - `tests/test_settings_diag_merge.py::_reassigned_names` —— **綁定形態**最完整的一份
       （`Assign`／`AnnAssign`／`AugAssign`／`NamedExpr`／`For`／`withitem`，
       且對 target 再跑一次 `ast.walk` 找 `ast.Name`，所以 tuple／starred 解包自動涵蓋）。
@@ -951,6 +1023,33 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
       streamlit 會**代呼叫端**把 widget 值寫進 `session_state`，
       它看起來完全不像賦值。**本頁的 form 三個 widget 目前都沒帶 `key=`**（本組實測），
       所以現在不是問題；**但真要補這個洞時，這一種不能漏。**
+        ## 這條看得見／看不見什麼（2026-09-05 重寫，**先讀這段再信它**）
+
+    session 寫入有**四條管道**，本條靠 `tests/_ast_bindings.py::session_writes`
+    四條全收：下標賦值／**屬性賦值**／`update()`＋`setdefault()`／**widget 的 `key=`**。
+    ⚠️ **2026-09-05 第二輪：管道 4 已收窄，這不是放水，是修一條無解的偽陽性。**
+    widget 一定建在 `with applied_form(...)` 內、閘門 `if` 一定在 `with` 外
+    ⇒ 帶 `key=` 的 widget **結構上永遠不可能**落在閘門 body 裡；不收窄的話這條
+    **沒有任何合法擺法能轉綠**（本 repo `ui/**` 有 231 處 `key=`，那是家風）。
+    現行判準：`key=` **指到守衛在乎的那個 session key** 才算違規（常數名與字面值都認），
+    widget 寫自己的鍵不是。**此判準不依賴任何未經實測的 streamlit runtime 語意。**
+    ⚠️ 重寫前它**只認第一條**（`ast.Assign` ＋ target 是 `ast.Subscript`）——
+    本組 2026-09-05 的基線實測：三頁 × 另外三條管道，注入裸寫入後**全部 18/18 綠**。
+    其中**屬性賦值**是本 repo `ui/**` 跨 6 檔 27 處的主流寫法，
+    **最可能被下一個人照家風真的踩到**；`key=` 那條最陰 —— streamlit **代呼叫端**
+    把 widget 值寫進 session，AST 上是普通 `ast.Call`，任何「找賦值節點」的手段都收不到。
+
+    「被閘門包住」的判準也換了：從「在**任何**一個 `ast.If` 底下」改成
+    **「在 `with applied_form(...) as X` 綁出來的那個 `X` 所控制的 `if` 底下」**
+    （`gate_ifs()`）。舊判準的洞：只要有人往這個函式加第二個 `if`
+    （例如 `if not _funds: return`），藏在它底下的裸寫入就會被算成「已被閘門包住」。
+    **實測**：重寫前本函式只有 `_gate` 一個 `if`，所以那個洞**尚未發作** ——
+    修的是「下一個人加第二個 `if` 就會中」。
+
+    ⛔ **仍然分不出真假閘門**：`if not _gate:` 的 test 一樣提到 `_gate`，
+    本條照樣認它是閘門（`gate_ifs()` 的 docstring 就地寫明）。
+    那一種要靠 AppTest 行為測試去驗，靜態規則做不到。
+    ⛔ **不遞迴進被呼叫的函式**：把 `st.session_state` 傳出去、由別處寫，本條看不到。
     """
     _t = _tree()
     _fns = {_n.name: _n for _n in ast.walk(_t) if isinstance(_n, ast.FunctionDef)}
@@ -959,20 +1058,28 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
             f"找不到 `{_need}()` —— 「已送出值」這一層被拿掉了，"
             "下游就會直接讀 widget 值，等於沒有 form。")
     _form_fn = _fns["_render_rebalance_form"]
-    _writes = [_n for _n in ast.walk(_form_fn)
-               if isinstance(_n, ast.Assign)
-               and any(isinstance(_t2, ast.Subscript) for _t2 in _n.targets)]
+        # ⚠️ 管道 4（widget `key=`）**必須**收窄成「只認守衛在乎的那個 session key」：
+    #    widget 一定建在 `with applied_form(...)` 內，而閘門 `if` 一定在 `with` 外
+    #    ⇒ 帶 `key=` 的 widget 結構上永遠不可能落在閘門 body 裡，不收窄就是一條
+    #    **永遠無法滿足**的守衛（本 repo `ui/**` 有 231 處 `key=`，量測日 2026-09-05）。
+    # ⚠️ **自動收齊模組層所有 `_SK_*`，不要列舉** —— 列舉一定會漏下一個新加的鍵。
+    #    上一版只餵 `_SK_APPLIED`，於是 `key=_SK_PORTFOLIO`（使用者的 live 持股）
+    #    那顆突變從紅掉成綠（2026-09-06 稽核 M-1，三頁 × 三序實測）。
+    _applied_keys = guarded_key_names(_t)
+    _writes = session_writes(_form_fn, widget_key_names=_applied_keys)
     assert _writes, "`_render_rebalance_form()` 沒有把送出結果寫回 session。"
-    _guarded: list[int] = []
-    for _if in ast.walk(_form_fn):
-        if isinstance(_if, ast.If):
-            _guarded.extend(id(_n) for _n in ast.walk(_if)
-                            if isinstance(_n, ast.Assign))
+    _gate_ifs = gate_ifs(_form_fn)
+    assert _gate_ifs, (
+        "`_render_rebalance_form()` 裡找不到 `with applied_form(...) as <gate>:` 綁出來的那個閘門 `if` —— "
+        "form 沒有 gate 住任何東西（或閘門換了寫法，請同步 `gate_ifs()` 的判準）。")
+    # ⚠️ 只算閘門 `if` 的 **body** —— `else:` / `elif` 是閘門為假才跑的路徑，
+    #    整棵 `ast.walk(_g)` 會把它們一起算成 guarded（2026-09-05 實測的洞）。
+    _guarded = gate_guarded_ids(_form_fn)
     _naked = [_w for _w in _writes if id(_w) not in _guarded]
     assert not _naked, (
         "有 session 寫入**沒有**被送出閘門包住 —— 那代表每次 rerun 都會覆寫已送出值，\n"
         "使用者拖滑桿的當下就會觸發下游重算，form 等於白包。\n  "
-        + "\n  ".join(f"第 {_w.lineno} 行" for _w in _naked))
+        + "\n  ".join(f"第 {_w.lineno} 行：{ast.unparse(_w)[:70]}" for _w in _naked))
 
 
 # ══════════════════════════════════════════════════════════════════
