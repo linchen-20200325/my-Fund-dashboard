@@ -1529,6 +1529,80 @@ def test_a_partial_liquidity_reading_never_claims_multi_track_stress():
         f"三軌全在線時研判被連坐擋掉了 —— 抑制過頭：{_blob2[:600]!r}")
 
 
+#: 回指詞 —— 一句話用這些字說「我在講上面某句」時，那句必須真的在畫面上。
+_BACKREF_MARKERS = ("上面", "上述", "前面")
+
+
+def test_no_sentence_points_back_at_something_the_page_no_longer_prints():
+    """畫面上任何「**上面那句…「X」…**」的回指，`X` 必須真的印在畫面上。
+
+    ⛔ **2026-09-06 由一個真實的回修副作用逼出來的。**
+    同一輪把「多軌同時緊繃」那句研判改成**因子不全時不印**之後，
+    第二段警語裡這半句沒有跟著撤：
+
+        「…直接比大小；**上面那句研判裡關於「多軌同時」的描述**，
+          這一輪只有 N 軌真的量到。」
+
+    使用者往上找，**找不到那句話** —— 因為它已經不印了。
+    （另一半「這一輪只有 N 軌真的量到」也與主 caption 重複。）
+
+    📌 **這是一個形狀，不是一處筆誤**：
+    **撤回一句宣稱時，「引用它的那句話」不會自動跟著撤回。**
+    本次兩邊**都是文案**、都不在型別系統裡，所以**沒有任何東西會報錯** ——
+    刪掉被引用的那句，引用它的那句只會安靜地變成廢話。
+
+    **本條怎麼做到通用**：沿用本 repo 既有的 `「」` 慣例（`where=` 的
+    「去哪補」內容規則用的是同一個約定 —— `「」` 裡放的是**畫面上真的看得到的東西**）。
+    規則是：**任何含回指詞（上面／上述／前面）的句子，其 `「」` 內的字串
+    必須在整頁其他地方也出現。**
+
+    **突變會紅**：把第二段警語的後半兩行加回去
+    （`…直接比大小；上面那句研判裡關於「多軌同時」的描述，…`）→ 本條紅（實測，見 PR）。
+
+    ⚠️ **擋不到（非窮舉，照本檔體例寫成「已知」不是「全部」）**
+      - **不用 `「」` 的回指**：「上面那句研判提到的多軌同時」—— 沒有引號可抓；
+      - **不用上列三個回指詞**：「剛才那句」「稍早提到的」；
+      - **語意上的回指**：「它其實只有一軌」—— 完全沒有形式標記；
+      - **本條只渲染本頁**：跨頁的回指看不到；
+      - **只驗「有沒有出現」，不驗「指的是不是同一個東西」**：
+        同一個字串在畫面別處剛好出現，本條就放行。
+    """
+    import re as _re
+
+    _sent_re = _re.compile(
+        r"[^。；\n]*(?:" + "|".join(_BACKREF_MARKERS) + r")[^。；\n]*")
+    _quote_re = _re.compile(r"「([^」]+)」")
+
+    def _check(_blob: str, _what: str) -> None:
+        _bad = []
+        for _sent in _sent_re.findall(_blob):
+            for _q in _quote_re.findall(_sent):
+                # 被引用的字串必須在「這句以外」的地方也出現。
+                if _blob.replace(_sent, "", 1).find(_q) < 0:
+                    _bad.append((_q, _sent.strip()[:90]))
+        assert not _bad, (
+            f"[{_what}] 畫面上有句子回指了一個**畫面上找不到**的東西：\n"
+            + "\n".join(f"  引用「{_q}」← 出自：{_s!r}" for _q, _s in _bad)
+            + "\n⛔ 使用者會往上找，然後找不到。\n"
+            "→ 撤回一句話時，**引用它的那句話要一起撤**；"
+            "兩邊都是文案，沒有東西會替你報錯。")
+
+    # 因子不全（研判被抑制）—— 就是踩到這個坑的那個狀態。
+    from services.liquidity_engine import (
+        STRESS_FACTORS as _SF, compute_liquidity_score as _cls)
+    _one = _cls({"XCCY_PROXY": {"zscore": 2.5}})
+    _sess = _loaded_session()
+    _sess[_page._SK_LIQ] = ({"XCCY_PROXY": {"zscore": 2.5, "value": 2.5}}, _one)
+    _check(_render_all_text(_sess), "因子不全")
+
+    # 因子齊全（研判照印）—— 確認本條不是只在一種狀態下成立。
+    _three = _cls({_k: {"zscore": 2.5} for _k in _SF})
+    _sess2 = _loaded_session()
+    _sess2[_page._SK_LIQ] = ({_k: {"zscore": 2.5, "value": 2.5} for _k in _SF},
+                             _three)
+    _check(_render_all_text(_sess2), "因子齊全")
+
+
 def test_the_exceptions_card_reports_the_real_radar_counts():
     """「⚡ ③ 例外」卡印出來的 🔴／🟡 必須是**真的計數**，不是恆 0。
 
