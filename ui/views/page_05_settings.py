@@ -71,8 +71,22 @@ Tab 03／04 兩個 panel 逐行掃過 `<h4>`／chip／「尚未|還沒|沒有」
   真答案**，不是「空」。把「你沒設金鑰」畫成空狀態，等於把一個已知事實
   講成「查不到」。→ 兩者用**灰態**（本批未接線）。
 - 「手動補資料」是 Form、「使用手冊」是靜態文字 → **都不會空**。
-- **只有「NAV 累積狀態」可能真的空**（一檔基金都沒有 → 沒有涵蓋度可談）
-  → **那一塊**走 :func:`ui.helpers.ia.empty_state.empty_state`，指路指向 ④。
+- ~~**只有「NAV 累積狀態」可能真的空**（一檔基金都沒有 → 沒有涵蓋度可談）
+  → **那一塊**走 :func:`ui.helpers.ia.empty_state.empty_state`，指路指向 ④。~~
+  → ⚠️ **2026-09-06（P05-1）就地更正：括號裡那個條件是錯的，而且它會讓畫面說謊**
+  （**有意識的更正，不是漏刪** · 決策者 **AI 總管** · 依據：**實測**）。
+  **仍然成立的半句**：這一頁**只有 NAV 累積狀態可能真的空**，其餘四塊不會 ——
+  **(D-2) 的結論一個字都沒有被推翻。**
+  **被推翻的是它的判定條件**：舊版把「空」綁在 `portfolio_funds`（`_holdings()`）上，
+  而 :func:`services.nav_history_gs.coverage_status` 讀的是**整張雲端 sheet**，
+  **與那個 session 鍵毫無關係**。於是一個雲端已經累積三年的人，
+  開站第一眼看到的是「這個工作階段還沒載入任何基金…就沒有涵蓋度可看」——
+  **那句話的每一個字都對，合起來卻把使用者導向一個錯的結論**（他以為要先去列入基金）。
+  **現行**：空狀態**只在「gate 勾了 → 後端已啟用 → 真的讀到、而且一筆都沒有」時出現**；
+  `portfolio_funds` **降級為一個標記**（逐檔明細裡標「本 session 已列入」），不再決定任何分支。
+  **兩邊理由並陳**：舊條的用意仍然成立（它想避免對一個什麼都沒有的人畫一張空表），
+  **被權衡掉的是它挑錯了那個「什麼都沒有」的量**。
+  → 守衛：:func:`~tests.test_wf05_settings_skeleton.test_the_empty_state_only_appears_after_a_successful_read`。
 
 ⛔ **不得**因為別頁有頁面層級空狀態就照抄一個到 ⑤（實際上也只有 ② 有）。
 ⚠️ 對照 `page_04_portfolio.py`：④ 的空狀態是**頁面層級**的（沒持倉 ⇒ 四塊全都無意義），
@@ -81,6 +95,21 @@ Tab 03／04 兩個 panel 逐行掃過 `<h4>`／chip／「尚未|還沒|沒有」
 (D-3) 線框裡的示意值**一個都不准畫**
 ------------------------------------
 `18 源 · 2 異常`／`42 檔 · 最長 6.2 年`／`正常` **全是線框示範版面用的假數字**。
+
+⚠️ **2026-09-06（P05-1）補一則射程說明，(D-3) 本身未變**：NAV 那一塊現在會印
+**真的**「N 檔 · 共 M 筆」。那不是示意值 —— 它有出處
+（:func:`services.nav_history_gs.coverage_status` 回傳的逐檔點數），
+每一個數字都答得出「從哪個函式來、來源是誰」。
+⛔ **但「最長 X 年」永遠不會回來**：不是因為它是線框的假數字，
+而是因為 `span_days = last - first` **單獨出現就會說謊**（見 :func:`coverage_line`）。
+⚠️ **黑名單的已知代價，就地登記**：`_PINNED_FAKE_VALUES` 收了字面值 `"42 檔"`，
+而本頁現在會印真的「N 檔」—— **若哪天有 fixture 剛好是 42 檔，那條守衛會誤紅**。
+⛔ **2026-09-06 就地收斂措辭（獨立稽核指出本組寫得比實況強）**：本段原本寫
+~~「測試資料剛好是 42 檔時會誤紅」~~，讀起來像是**現行風險**。**實測不是**：
+`len(FAKE_COVERAGE) == 2`、`_PROBE_COVERAGES` 的檔數分別是 `1 / 2 / 0`，
+**現行沒有任何 fixture 是 42 檔**。它是**潛在風險，不是現行風險** ——
+一句把潛在講成現行的登記，會讓下一個人去「修」一個不存在的問題。
+黑名單式守衛的既有性質，**登記在此，不是沒看到**。
 
 使用者**看不出它是假的**，而且會拿它判斷「我的資料到底可不可信」——
 **這一頁的職責就是回答那個問題，在這裡放假數字是最壞的一種**（§1：錯誤的數字比
@@ -144,10 +173,15 @@ NAV 累積狀態          :func:`nav_status_label` → SSOT      `nav_status`
 """
 from __future__ import annotations
 
+import datetime as _dt
 from typing import Any
 
 import streamlit as st
 
+from services.nav_history_gs import (
+    coverage_status as fetch_nav_coverage,
+    status as fetch_nav_backend_status,
+)
 from ui.helpers.ia import (
     STATE_NOT_READY,
     applied_form,
@@ -226,6 +260,53 @@ def nav_manual_label() -> str:
 #: 各寫一句就是多份會各自漂移的真相源（§2.1）。
 _PENDING_NOTE: str = "本頁分批上線，這一塊的內容還沒接上"
 
+# ── 區塊 2「NAV 累積狀態」的接線常數（2026-09-06 第一批 P05-1）──────────────
+#: 讀雲端 NAV 累積狀態的 **Checkbox Gate**。勾起來才會去讀一次。
+#:
+#: ⚠️ **為什麼是 gate 而不是 `@st.cache_data`（總管裁決，理由寫在這裡讓後人能推翻）**：
+#:    (a) 在 `ui/**` 自建 `@st.cache_data` 會替憲法例外 `EX-UICACHE-1` 新增一個成員，
+#:        而那個例外的成立**繫於一個尚未裁決的問題**（`CLAUDE.md §8.3.P` 的
+#:        `P-UIGSPREAD-1`：gspread 直呼算不算 EX-CRUD-1 的「本地持久化」）；
+#:    (b) `coverage_status()` 內部走 `load_points(None)` —— **一次讀完整張 sheet**，
+#:        而 L2 那層**沒有**任何快取，UI 再疊一層就會變成 `P-NDCCACHE-1` 的同型
+#:        （兩層 TTL 疊加、失效語意不可推理）。
+#:    → gate 同時解掉這兩件事：**沒勾就一次都不讀**，勾了才讀，而且讀的責任留在 L2。
+#: ⚠️ **gate 是唯一一個落在 `applied_form(...)` 之外的輸入元件**，
+#:    由 `tests/test_wf05_settings_skeleton.py::test_the_write_block_is_form_wrapped`
+#:    的**唯讀閘門豁免**明文登記（那條同時證明本函式寫不到任何 session）。
+NAV_GATE_LABEL: str = "讀取雲端 NAV 累積狀態"
+
+#: 逐檔明細的展開器標題（線框：「雲端歷史涵蓋度，**逐檔可展開**」）。
+#: ⚠️ **刻意是固定字串、不帶檔數** —— 它在 `_units()` 裡是一個**單位名**，
+#:    帶了檔數就會隨資料變動，`test_unit_names_are_unique` 之類的斷言會失去錨點。
+NAV_DETAIL_LABEL: str = "逐檔明細"
+
+#: 「跨度」在畫面上的**唯一措辭**。具名是為了讓守衛認得出「哪一行在講跨度」。
+#: ⚠️ 用「首末相距」而不是「跨度 N 年」：`span_days = last - first`，
+#:    它**不代表中間連續** —— 兩個點相距六年也會是六年。措辭本身要說出這件事。
+SPAN_PHRASE: str = "首末相距"
+#: 點數的單位字。**跨度出現的地方一定要有它**（見 :func:`coverage_line`）。
+POINTS_UNIT: str = "筆"
+
+#: gate 沒勾時的灰態本文。**不講任何數量**，因為我們一次都還沒讀。
+_NOT_LOADED_NOTE: str = (
+    "尚未讀取雲端 NAV 累積狀態 —— 這是一次會往返 Google Sheets 的讀取，"
+    "所以預設不做；勾上面那個選項才會讀一次。")
+
+#: 後端未啟用時的灰態本文開頭。⚠️ **這不是「沒有資料」，是「我們沒辦法去看」**（§1）。
+_BACKEND_UNAVAILABLE_NOTE: str = (
+    "讀不到雲端 NAV 歷史 —— 累積功能所需的設定不完整，"
+    "所以**這一格不知道你累積了多少**（不是「你沒有累積」）。缺少：")
+
+#: 真的讀到了、但一筆都沒有時的空狀態三要素。
+#: ⚠️ 這一則**只在真的讀成功之後**才可能出現（見 :func:`_render_nav_status` 的分流），
+#:    所以它可以對「那本試算表」下斷言 —— 它**沒有**對使用者的資產下任何斷言。
+_EMPTY_TITLE: str = "雲端 NAV 歷史目前一筆都沒有"
+_EMPTY_MISSING: str = (
+    "已經讀到雲端了，但 nav_history 裡沒有任何一筆紀錄 —— "
+    "可能是還沒開始累積，也可能是那張工作表還沒建立")
+_EMPTY_FOOTER: str = "開始累積之後，這裡會逐檔列出點數與首末日期。"
+
 
 def _pending_where(block: str) -> str:
     """「內容還沒填」這種灰態的指路。**回傳的必須是一個「地方」。**
@@ -267,6 +348,188 @@ def _holdings() -> list[dict[str, Any]]:
     return [_f for _f in _cur if isinstance(_f, dict)] if isinstance(_cur, list) else []
 
 
+def _as_int(value: Any) -> int | None:
+    """能算出整數就回它，**算不出來回 `None`，不回 `0`**。
+
+    ⛔ **`0` 是一個宣稱（「一筆都沒有」），`None` 是「我不知道」** —— §1 的分界就在這裡。
+    把一個讀不出來的值悄悄當成 0，畫面上會長得跟「真的是 0」一模一樣，
+    而這一頁的職責正好是回答「這個數字可不可信」。
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_day(value: Any) -> "_dt.date | None":
+    """把一端的日期字串 parse 成 `date`；**parse 不出來回 `None`，不猜**。"""
+    try:
+        return _dt.date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def span_days_or_unknown(first: Any, last: Any, reported: Any) -> int | None:
+    """跨度**可不可信** —— 不可信回 `None`。**全檔唯一決定「要不要印跨度」的地方。**
+
+    ⛔ **為什麼不能直接用上游的 `span_days`（2026-09-06 獨立稽核必修）**
+    ----------------------------------------------------------------
+    `services/nav_history_gs.py::coverage_status` 在日期 parse 失敗時
+    **把「未知」編成 `0`** —— 它自己那一行的註解就寫著「**跨度未知**，點數仍誠實回報」，
+    然後 `_span = 0`。而 `norm_date_key()` **刻意讓壞日期的原字串通過**
+    （它的 docstring：「不靜默丟資料（§1：不猜）」），所以壞日期真的會走到這裡。
+
+    **本組端到端重現（`coverage_status(_sheet=…)` 注入假 worksheet，非推論）**：
+
+    ====================================================  =====================
+    上游回傳                                                真實跨度
+    ====================================================  =====================
+    `BBB {'first': '113/01/02', 'last': '2025-06-01', 'span_days': 0}`   **約 1.4 年**
+    `DDD {'first': '2024-05-05', 'last': '2024-05-05', 'span_days': 0}`  **真的 0 天**
+    ====================================================  =====================
+
+    **兩者在畫面上長得一模一樣。** 那正是本檔 :func:`_as_int` 的 docstring 寫的那條分界
+    （「`0` 是一個宣稱，`None` 是我不知道」）被違反的地方 ——
+    ⚠️ **而且本檔原本的防禦蓋錯了格子**：`_as_int` 那一整套瞄準的是 `points`，
+    但 `points` 在 production 恆為 `len(_ds)`、**永遠是 int**；
+    **真正會出現「未知」的是 `span_days`，而它在本檔看到之前就已經被壓成 `0` 了**
+    → 原本那條 `if _span is None:` 在 production **恆不觸發**。
+
+    做法：**用兩端自己重算一次**（同一條算式，所以上游算得出來時兩者必然相等）
+    ---------------------------------------------------------------------
+    1. **任一端 parse 不出來 → 回 `None`。** 上游的 `0` 在這種情況下是「放棄」不是「零」。
+    2. **兩端都 parse 得出來，但與上游回報的值不一致 → 也回 `None`。**
+       兩邊用的是同一條算式，不一致代表**至少有一個前提不成立**，
+       這時候挑一個印出來就是猜（§1）。⚠️ 這個分支在今天的 L2 下不會發生，
+       它是**兩層之間的契約檢查** —— L2 哪天改算法，這裡會誠實地變成「不知道」而不是默默跟著錯。
+    3. 兩端都 parse 得出來且一致 → 回那個數字。
+
+    ⛔ **不要改成「`first != last` 而 `span_days == 0` 就當作未知」那種啟發式。**
+    它有一個**真的偽陽性**：`date.fromisoformat` 在 3.11+ 接受 `2024-1-1` 這種變體，
+    所以 `"2024-01-01"` 與 `"2024-1-1"` **字串不同、都 parse 得出來、而且是同一天**
+    → 那條啟發式會把一個**真的 0 天**誤判成「算不出來」。
+    本函式**不用那條規則**，所以沒有那個偽陽性。
+
+    ⚠️ **本函式仍然守不到的（照實列）**：上游 `first`/`last` 取的是**字串排序**的頭尾
+    （`sorted(_ds)`），混入非 ISO 字串時**頭尾可能不是時序上的頭尾**。
+    兩端都 parse 得出來時本函式會**照算**，算出來若為負數視為不一致（走第 2 條回 `None`）；
+    但「兩個都 parse 得出來、順序卻是錯的、而且差值剛好為正」這種情況**抓不到**。
+    ⛔ **這一段不在本批的射程內**（要修得動 L2 的排序），**登記，不是沒看到**。
+    """
+    _a, _b = _parse_day(first), _parse_day(last)
+    if _a is None or _b is None:
+        return None
+    _computed = (_b - _a).days
+    if _computed < 0 or _computed != _as_int(reported):
+        return None
+    return _computed
+
+
+def coverage_headline(coverage: dict[str, Any]) -> str:
+    """涵蓋度的一句話總結 —— **只講數量，不講跨度**。
+
+    ⛔ **這裡刻意不放「最長 N 年」**（線框的示意值正是「42 檔 · 最長 6.2 年」）。
+    理由不是「線框的數字是假的」（那由 D-3 管），而是**跨度單獨出現會說謊**：
+    `span_days = last - first`，一檔只有兩個點、相距六年，也會顯示「六年」。
+    跨度只在 :func:`coverage_line` 裡出現，而且**永遠與點數同行**。
+
+    ⚠️ 純函式、無 I/O —— 這樣「這句話怎麼算出來的」可以被單獨測，
+    不必先跑起一整個 Streamlit session。
+    """
+    _readable = 0
+    _points = 0
+    _unknown = 0
+    for _e in coverage.values():
+        # ⛔ **兩種「讀不出來」都要算進 `_unknown`，不能只防一種**
+        #    （2026-09-06 獨立稽核應修）：同一個迴圈裡原本只揭露「`points` 算不出來」，
+        #    **非 dict 的條目卻是無聲丟棄** —— `{'AAA': None, 'BBB': 'x', 'CCC': [1]}`
+        #    會印成「**0 檔 · 共 0 筆**」，那是一句**斷言**（你什麼都沒累積），
+        #    而事實是我們收到了三筆讀不懂的東西（§1）。
+        if not isinstance(_e, dict) or (_n := _as_int(_e.get("points"))) is None:
+            _unknown += 1
+            continue
+        _readable += 1
+        _points += _n
+    # ⚠️ **「可讀取」三個字是承重的**：沒有它，「0 檔」會被讀成「你一檔都沒累積」。
+    _head = f"可讀取 {_readable} 檔 · 共 {_points} {POINTS_UNIT}"
+    if _unknown:
+        _head += f"（另有 {_unknown} 檔讀不出來，未計入）"
+    return _head
+
+
+def coverage_line(code: str, entry: dict[str, Any], *, held: bool = False) -> str:
+    """一檔的明細行。**全檔唯一被允許讀 `span_days` 的地方。**
+
+    ⛔ **跨度永遠與點數同行，這是本函式存在的唯一理由**（總管裁決，2026-09-06）：
+    `span_days` 是 `last - first`，**中間有沒有斷掉它一個字都沒說**。
+    單獨印一個「6.2 年」會被讀成「我有六年的完整歷史」，而真相可能是兩個點。
+    → 本函式的輸出**恆含**點數（`{N} 筆`），措辭也用 :data:`SPAN_PHRASE`
+    （「首末相距」）而不是「跨度」，讓那句話自己說出它只量了頭尾兩點。
+
+    ⚠️ **守衛靠的是「機制」不是「這一行長怎樣」**（`tests/test_wf05_settings_skeleton.py`）：
+    (a) AST 驗 `"span_days"` 這個鍵**只在本函式內被讀**；
+    (b) 對任意輸入驗「輸出裡只要有 :data:`SPAN_PHRASE`，就一定有點數」。
+    改文案不會讓守衛失效，把跨度搬去別的地方單獨印才會 —— **那正是要擋的那件事。**
+
+    Parameters
+    ----------
+    held : 這一檔是不是**這個 session 已列入**的持倉。
+           ⚠️ 只是一個標記；**沒列入不代表使用者沒有它**（`portfolio_funds`
+           開站不自動載入），所以沒有標記的那些**不寫任何否定的話**。
+    """
+    _points = _as_int(entry.get("points"))
+    # ⛔ **不准直接用上游的 `span_days`** —— 它把「未知」編成 `0`（見 :func:`span_days_or_unknown`）。
+    _span = span_days_or_unknown(entry.get("first"), entry.get("last"),
+                                 entry.get("span_days"))
+    _first = str(entry.get("first") or "").strip() or "?"
+    _last = str(entry.get("last") or "").strip() or "?"
+    _mark = " ・本 session 已列入" if held else ""
+    if _points is None:
+        # ⛔ **點數算不出來 → 這一行連跨度都不印。**
+        #    這不只是為了滿足「跨度要有點數作伴」那條規則 —— 沒有點數的跨度
+        #    是**這一頁最危險的那一種數字**：它看起來像一段完整歷史，
+        #    而我們連有幾個點都不知道（§1）。
+        return f"- `{code}`{_mark}：這一筆的點數讀不出來（原始值 {entry.get('points')!r}）"
+    if _span is None:
+        return (f"- `{code}`{_mark}：**{_points} {POINTS_UNIT}**"
+                f"（{_first} → {_last}，首末日期算不出天數）")
+    return (f"- `{code}`{_mark}：**{_points} {POINTS_UNIT}**"
+            f"（{_first} → {_last}，{SPAN_PHRASE} {_span} 天）")
+
+
+def coverage_lines(coverage: dict[str, Any], held_codes: set[str]) -> list[str]:
+    """逐檔明細的全部行，**依代碼排序**（穩定順序，不隨 dict 插入序漂移）。
+
+    ⛔ **讀不懂的條目也要有一行**（2026-09-06 獨立稽核應修）：原本 `if isinstance(_e, dict)`
+    把非 dict 條目**整個濾掉**，於是「收到三筆讀不懂的東西」與「什麼都沒有」
+    在畫面上一模一樣，而且會畫出一個**空的**「逐檔明細」展開器（違鐵則 04）。
+    ⚠️ **排序 key 走 `str(...)`**：代碼理論上可能不是字串，混型別直接 `sorted()` 會炸。
+    """
+    _out: list[str] = []
+    for _c, _e in sorted(coverage.items(), key=lambda _kv: str(_kv[0])):
+        if not isinstance(_e, dict):
+            # ⚠️ 只印**型別**不印值：一個壞掉的條目可能是很大的東西，
+            #    把它整包倒進畫面既沒用又危險。
+            _out.append(f"- `{_c}`：這一筆讀不出來"
+                        f"（收到 {type(_e).__name__}，不是預期的欄位表）")
+            continue
+        _out.append(coverage_line(_c, _e, held=str(_c).upper() in held_codes))
+    return _out
+
+
+def held_codes() -> set[str]:
+    """這個 session 已列入的基金代碼（大寫）。**只用來加標記，不用來過濾。**
+
+    ⛔ **不得**拿它去縮小 `coverage_status()` 的範圍：雲端累積的是**整張表**，
+    用一個「開站不會自動載入」的 session 鍵去過濾，等於把使用者真的有、
+    但這個 session 還沒載入的那些**藏起來**（§1：不知道 ≠ 沒有）。
+    """
+    return {str(_f.get("code", "")).strip().upper()
+            for _f in _holdings() if str(_f.get("code", "")).strip()}
+
+
 def _normalise_request(csv_import: Any, refetch: Any, only_missing: Any) -> dict[str, Any]:
     """把三個 widget 值收成一份**已送出**的補資料請求。"""
     return {
@@ -305,44 +568,107 @@ def _render_source_health() -> None:
 
 
 def _render_nav_status() -> None:
-    """區塊 2｜NAV 累積狀態（`grid3` 第 2 欄）。**本頁唯一可能真的空的一塊**（D-2）。
+    """區塊 2｜NAV 累積狀態（`grid3` 第 2 欄）。**2026-09-06 第一批 P05-1 接上真取數。**
 
-    線框：「雲端歷史涵蓋度，逐檔可展開。」
+    線框逐字：「雲端歷史涵蓋度，逐檔可展開。」
+
+    四種狀態，**一次只顯示一種**（順序不可顛倒）
+    ---------------------------------------------
+
+    ===========================  ==================================================
+    狀態                          畫面
+    ===========================  ==================================================
+    gate 沒勾（**預設**）           ⬜ 尚未讀取（:data:`_NOT_LOADED_NOTE`）
+    後端未啟用                     ⬜ 讀不到 ＋ **缺哪幾把 secret**
+    讀到了、但一筆都沒有             空狀態（:func:`empty_state`）
+    讀到了、有資料                   總結一句 ＋ 逐檔明細（展開器）
+    ===========================  ==================================================
+
+    ⛔ **「後端未啟用」必須排在「一筆都沒有」前面，這是總管裁決也是 §1。**
+    `coverage_status()` 在**未啟用**與**工作表不存在**時**都回 `{}`**
+    —— 它自己的 docstring 逐字寫著「呼叫端須據此顯示『未啟用』而非『0 點』，
+    兩者意義完全不同（§1：不知道 ≠ 沒有）」。
+    先分流 `status()["enabled"]`，才有辦法把這兩件事分開講。
+    **本組已實測那條路徑**：`load_points()` 開頭
+    ``if _sheet is None and not is_enabled() and oauth_client is None: return []``
+    → `coverage_status()` 的 ``if not _pts: return {}``。**兩條路真的會匯流成同一個 `{}`。**
 
     ⛔ **不畫「42 檔 · 最長 6.2 年」** —— 線框示意值（D-3）。
-    ⚠️ **一檔都沒列 → 走空狀態**，指路指向 ④ 的「➕ 加入與管理基金」。
-       ✅ **這一則的「去哪補」照著做真的有效**，而且是 AppTest 實跑驗過的：
-       `portfolio_funds` 一有項目，本塊當場離開空狀態、改印灰態
-       （`test_the_empty_state_pointer_actually_works`）。
-    ⛔ **不得**在空狀態裡順便說「加完就會看到涵蓋度」：加完看到的是**灰態**
-       （本塊還沒接線）。**兩種灰的下一步不同，一次只給一個**
-       （`page_02_health.py` / `page_04_portfolio.py` 同型）。
-    ⚠️ **「逐檔可展開」本批不畫**：沒有真資料就沒有「逐檔」可展開，
-       先畫一個空的展開器就是鐵則 04 的冗餘占位。
+       ⚠️ 現在這一格會印**真的**「N 檔」了；`_PINNED_FAKE_VALUES` 黑名單裡有
+       `"42 檔"` 這個字面寫法，也就是說**如果哪天測試用的資料剛好是 42 檔，
+       那條守衛會誤紅**。已在測試檔就地登記，不是沒看到。
+
+    ⚠️ **為什麼標題是手寫的 `st.markdown(f"**{…}**")` 而不是 `state_card()`**：
+       `state_card(state=STATE_OK)` 走的是 `st.metric(title, value)`，
+       而 `st.metric` 在 AppTest 的元素樹裡**不是 `[Markdown] **標題**`** ——
+       `tests/test_wf05_settings_skeleton.py::_units` 的 `_CARD_OPEN` 認不出它。
+       **後果是：這一塊一旦真的有資料，它就不再是一個「單位」**，
+       所有 unit-scoped 的守衛（灰態、結論字表、指路）會**在它終於有內容的那一刻
+       靜靜停止覆蓋它**，而且沒有任何測試會紅。
+       → 故本塊四種狀態**一律先手寫同一個標題**，讓單位邊界不隨資料變動。
+       **這是實測出來的，不是風格選擇**（`_flat()` 對 Metric 走的是 `[Metric] 標籤` 那一支）。
+
+    ⚠️ **gate 的 `st.checkbox` 是全檔唯一落在 form 外的輸入元件** ——
+       它是**唯讀閘門**（本函式一個 session 鍵都不寫、一次寫入都沒有），
+       與線框那句「寫入類動作，全部 Form 封裝」不衝突。
+       守衛的豁免與其**證明**寫在
+       `tests/test_wf05_settings_skeleton.py::test_the_write_block_is_form_wrapped`。
+
+    ⚠️ **本塊不自己接 `try/except`**：`coverage_status()` 在來源冷卻期／真 I/O 失敗時
+       **會拋 `NavHistoryError`**（那是 L2 刻意的 §1 行為，不是 bug）。
+       由 :func:`_render_grid` 幫本塊單獨包一層 `safe_section()` 接住 ——
+       **只倒這一張卡，不連坐另外兩張**。自己 `except` 會變成吞例外（§1 違憲）。
     """
-    if not _holdings():
-        # ⚠️ **「這個工作階段」這五個字是承重的，不是修辭**（2026-09-05 獨立稽核必修）。
-        #    舊文案是 ~~「還沒有任何基金可以談涵蓋度」／「**一檔都還沒列入**」／
-        #    「**列入之後**…」~~ —— 那是**對每一位使用者說的一句假話**，包含雲端有 42 檔的人。
-        #    **實測依據**：`git grep -c portfolio_funds origin/main -- app.py` → **0 命中**，
-        #    開站**沒有任何自動載入**；所有寫入點都在使用者按鈕內
-        #    （`ui/helpers/cloud_io.py` 的「📥 立即全部讀回」、`linkage.py` 的「➕ 加入組合」、
-        #    `json_backup.py` 還原）。→ **每一位使用者的每一次新 session，這個鍵都不存在。**
-        #    我們知道的只有「**這個 session 還沒載入**」，說出口的卻是「**你沒有基金**」。
-        # ⛔ ④ `page_04_portfolio.py` 做對了（「還沒有任何**已載入的**保單或扣款標的」），
-        #    ⑤ 第一版把那個限定詞拿掉了 —— **同一個 repo 裡，對的版本就在隔壁檔案。**
-        #    由 `test_the_empty_state_never_claims_the_user_has_no_funds` 釘住。
-        empty_state(
-            "這個工作階段還沒載入任何基金",
-            "雲端 NAV 歷史是逐檔累積的 —— 這個 session 還沒有任何已列入的基金，"
-            "就沒有涵蓋度可看",
-            where=where_to_find("pf_add"),
-            footer="載入或列入之後，這一塊才會開始累積。",
-        )
+    # 標題先畫 —— 四種狀態共用同一個單位邊界（理由見 docstring）。
+    st.markdown(f"**{nav_status_label()}**")
+    _open = st.checkbox(
+        NAV_GATE_LABEL,
+        value=False,
+        help="讀一次 Google Sheets 的 nav_history；沒勾就完全不連線。",
+    )
+    if not _open:
+        not_ready(_NOT_LOADED_NOTE, where=_pending_where(nav_status_label()))
         return
-    state_card(nav_status_label(), state=STATE_NOT_READY,
-               note=f"{_PENDING_NOTE}（雲端歷史涵蓋度與逐檔明細）。",
-               where=_pending_where(nav_manual_label()))
+
+    # ⛔ 先問「能不能看」，再問「看到什麼」—— 順序顛倒就會把「未啟用」講成「0 點」。
+    _backend = fetch_nav_backend_status()
+    if not _backend.get("enabled"):
+        _missing = ", ".join(str(_m) for _m in (_backend.get("missing") or [])) or "（未回報）"
+        not_ready(
+            f"{_BACKEND_UNAVAILABLE_NOTE}{_missing}。"
+            # ⚠️ **刻意不寫「這兩把」** —— `status()` 的 `missing` 可能只有一項
+            #    （`NAV_SHEET_ID` 有 baked 預設 → 多數情況只缺 SA 那一把）。
+            #    在一個職責是「資料可不可信」的頁面上，連數量詞都不該猜。
+            "這些是部署環境的 secret，畫面上改不了。",
+            # ⚠️ **這一則指路是「一個地方」，但它不保證有效** —— 「連線與金鑰」那一塊
+            #    本批仍是灰態，去了也不能在畫面上設 secret。
+            #    照 `_pending_where` 已登記的分界：**指的是「誰負責這件事」，
+            #    不是「按這裡就會好」**；本文那句「畫面上改不了」已經先講清楚了。
+            #    ⛔ 不要因此改指別的地方 —— 本頁沒有更接近的地方，
+            #    指到手動補資料反而會讓人以為「補一下就好」（補不了，是設定缺）。
+            where=_pending_where(BLOCK_KEYS))
+        return
+
+    _coverage = fetch_nav_coverage()
+    # ⚠️ **展開器開不開，看的是「有沒有可渲染的行」，不是「dict 空不空」**
+    #    （2026-09-06 獨立稽核應修）：`{'AAA': None}` 這種**非空但整包讀不懂**的回傳，
+    #    舊寫法會走進下面、然後畫一個**空的**展開器（違鐵則 04）。
+    #    現在每一個條目都會產出一行（含「讀不出來」那種），
+    #    所以 `_lines` 空 ⟺ `_coverage` 空 —— **這條性質是結構保證的，不是巧合。**
+    _lines = coverage_lines(_coverage, held_codes())
+    if not _lines:
+        empty_state(_EMPTY_TITLE, _EMPTY_MISSING,
+                    where=_pending_where(nav_manual_label()),
+                    footer=_EMPTY_FOOTER)
+        return
+
+    st.markdown(f"### {coverage_headline(_coverage)}")
+    with st.expander(NAV_DETAIL_LABEL, expanded=False):
+        st.caption(
+            f"「{SPAN_PHRASE}」量的是**第一筆到最後一筆**的日曆天數，"
+            "**不代表中間每天都有**；能不能算長期指標看的是點數。")
+        for _line in _lines:
+            st.markdown(_line)
 
 
 def _render_keys() -> None:
@@ -381,7 +707,14 @@ def _render_grid() -> None:
         with _c1:
             _render_source_health()
         with _c2:
-            _render_nav_status()
+            # ⚠️ **只有這一張卡另外包一層 `safe_section()`，這是刻意的**（2026-09-06）：
+            #    它是本頁唯一會真的做 I/O 的一塊，而 `coverage_status()` 在
+            #    來源冷卻期／真 I/O 失敗時**會拋 `NavHistoryError`**（L2 的 §1 行為）。
+            #    外層 `safe_section("狀態三卡", _render_grid)` 接得住，但它會把
+            #    **三張卡一起**換成一個紅框 —— 資料來源健康度與連線與金鑰
+            #    明明沒壞，卻跟著消失。**把診斷跟故障綁在同一條命上，是最糟的順序**
+            #    （`render_state.safe_section` 的 docstring 逐字寫著這句）。
+            safe_section(nav_status_label(), _render_nav_status)
         with _c3:
             _render_keys()
 

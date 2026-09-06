@@ -74,6 +74,36 @@ NAV 那一塊在沒有基金時走**空狀態**而其餘四塊照樣渲染（D-2
 - ⛔ **「使用手冊不是灰態」守的是「它沒有 ⬜、也沒走 empty_state」**，
   **不守**「它的內容是對的」—— 那三行目錄的正確性靠線框逐字比對（:func:`test_the_manual_lists_exactly_the_wireframe_three`）。
 
+⚠️ **頁首落在所有 unit-scoped 守衛的射程之外（2026-09-06 獨立稽核，本組自行複量）**
+-----------------------------------------------------------------------------
+`_units()` 只認 `####`（`_L4_OPEN` 是 `#{4}`），而本頁頁首是 `## ` ＋ `st.caption`
+—— :func:`_units` 會**丟掉第一個 opener 之前的全部文字**。
+稽核組的突變（在頁首 caption 寫「目前 18 個資料來源全部正常」）**存活 ×3 序、畫面可見**。
+
+⚠️ **本組複量的數字與稽核組不同，兩個讀法並陳，不挑一個講**：
+稽核組說「落在 `_units()` 外的只有 **4 個 part**」；本組實跑 `loaded` 狀態實得
+**23 個 part、其中落在單位外的是 2 個**（`[Markdown] ## ⚙️ 設定與診斷` 與頁面層 `[Caption]`）。
+**差在算不算結構元素**：`[Block]` / `[Column]` 這種**不帶文字**的節點也在單位外，
+把它們算進去就是 4。→ **「4」與「2」都對，但承重的是 2** ——
+**只有帶文字的節點會說謊**，結構節點不會。
+
+✅ **另一組回報的「整個 `st.form` 也在單位之外」對本頁不成立** —— 本組實測：
+`手動補資料` 那個單位內**確實**含三個欄位標籤（`_LABEL_SOURCE_CSV` / `_LABEL_SOURCE_REFETCH`
+/ `_LABEL_ONLY_MISSING`），form 沒有溢出。**別頁的結論不要直接搬過來。**
+
+⚠️ **本輪只補了一半**：:func:`test_no_rendered_line_shows_a_duration_without_its_point_count`
+是**整頁**規則（掃 `_flat()` 全部元素，**含頁首**），所以「在頁首印一個裸跨度」現在會紅；
+但「在頁首寫一句**結論**」（例：「全部正常」）**仍然沒有人守** ——
+那要把 :data:`_CONCLUSION_WORDS` 從 unit-scoped 擴成全頁，而那會與
+:data:`_PINNED_FAKE_VALUES` 的「不收『正常』」正面打架（既有登記）。**本批不動，登記。**
+
+⚠️ **`_units` 這套機制到底有幾個檔在用（2026-09-06 更正，本組實測 `grep -c '^def _units'`）**：
+`wf01`＝**0**（那一檔根本沒有這套機制）、`wf02`／`wf03`／`wf04`／`wf05`＝各 **1**
+→ **是四個檔 `wf02`~`wf05`**。
+⛔ 本組 PR 描述原本寫「`wf02`／`wf03`／`wf04` **三頁**」—— **漏了本檔自己**；
+派工單原本寫「**四頁**」但指的是 `wf01`~`wf04` —— **成員也錯**。
+**兩邊錯的方向相反，數字碰巧接近，這正是「數字對了不代表清單對了」的實例。**
+
 ⚠️ **本檔對 `_SECTION_LABELS` 的依賴，據實寫**
 ---------------------------------------------
 被測檔的五個區塊名裡**只有兩個**走 SSOT（`nav_status` / `nav_manual`），
@@ -90,10 +120,11 @@ NAV 那一塊在沒有基金時走**空狀態**而其餘四塊照樣渲染（D-2
 from __future__ import annotations
 
 import ast
+import contextlib
 import functools
 import pathlib
 import re
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 
@@ -112,21 +143,31 @@ from ui.views.page_05_settings import (  # noqa: E402
     BLOCK_HEALTH,
     BLOCK_KEYS,
     BLOCK_MANUAL,
+    NAV_DETAIL_LABEL,
+    NAV_GATE_LABEL,
+    POINTS_UNIT,
+    SPAN_PHRASE,
     SUBMIT_LABEL,
     _DEFAULT_ONLY_MISSING,
     _DEFAULT_SOURCE_CSV,
     _DEFAULT_SOURCE_REFETCH,
+    _EMPTY_TITLE,
     _LABEL_ONLY_MISSING,
     _LABEL_SOURCE_CSV,
     _LABEL_SOURCE_REFETCH,
+    _NOT_LOADED_NOTE,
     _PENDING_NOTE,
     _SK_APPLIED,
     _applied_request,
     _holdings,
     _normalise_request,
     _pending_where,
+    coverage_headline,
+    coverage_line,
+    coverage_lines,
     nav_manual_label,
     nav_status_label,
+    span_days_or_unknown,
 )
 
 #: AppTest 跑的 script。**只做兩件事**：把 repo 根加進 `sys.path`、呼叫被測 View。
@@ -255,6 +296,94 @@ def _text(parts: tuple[str, ...] | list[str]) -> str:
     return "\n".join(parts)
 
 
+# ══════════════════════════════════════════════════════════════════
+# NAV 累積狀態的 Checkbox Gate ＋ L2 取數（2026-09-06 第一批 P05-1）
+# ══════════════════════════════════════════════════════════════════
+
+def _cb(at: Any, label: str) -> Any:
+    """依**標籤**取 checkbox，不用索引。
+
+    ⛔ **不要用 `at.checkbox[0]`。** 2026-09-06 之前本檔到處這樣寫，
+    而那時 `[0]` 剛好是 Form 的第一個欄位；接上 gate 之後 `[0]` 變成**gate**，
+    於是「勾一個來源再送出」那幾條測試會**在完全沒有錯的情況下**去勾錯的框，
+    然後測出一個假的結論。索引是位置的函數，位置會變；標籤是規格的函數。
+    """
+    for _c in at.checkbox:
+        if _c.label == label:
+            return _c
+    raise AssertionError(
+        f"畫面上找不到標籤為 {label!r} 的 checkbox：{[_c.label for _c in at.checkbox]}")
+
+
+#: `status()` 未啟用時的回傳形狀（照 `services/nav_history_gs.py::status` 的契約）。
+BACKEND_OFF: dict = {"enabled": False,
+                     "missing": ["google_service_account", "NAV_SHEET_ID"],
+                     "diag": {"google_service_account": "absent"}}
+#: `status()` 啟用時的回傳形狀。
+BACKEND_ON: dict = {"enabled": True, "missing": [], "diag": {"nav_sheet_id": "ok"}}
+
+#: 一份**有資料**的涵蓋度。
+#: ⚠️ **檔數刻意不是 42**：`_PINNED_FAKE_VALUES` 收了字面值 `"42 檔"`，
+#:    而本頁現在會印**真的**「N 檔」—— 資料剛好 42 檔時那條守衛會誤紅。
+#:    這是黑名單式守衛的既有性質（登記，不是沒看到）。
+FAKE_COVERAGE: dict = {
+    "TESTCODE1": {"points": 137, "first": "2024-01-05", "last": "2026-08-29",
+                  "span_days": 967},
+    "ZZOTHER9": {"points": 2, "first": "2019-03-01", "last": "2026-03-01",
+                 "span_days": 2557},
+}
+
+
+@contextlib.contextmanager
+def _patched_backend(backend: Any, coverage: Any) -> Iterator[dict]:
+    """把頁面模組上的兩個 L2 入口換掉，並**數它們被叫了幾次**。
+
+    ⚠️ **一定要 patch 模組屬性**（`ui.views.page_05_settings.fetch_nav_*`），
+    不是 patch `services.nav_history_gs` —— 頁面在 import 時就把名字綁進自己的
+    globals 了，改 service 端那一份對已經綁好的名字**沒有作用**。
+
+    ⚠️ **次數本身就是斷言的對象**：本批最重要的一條性質是
+    「**gate 沒勾就一次都不讀**」。看畫面驗不到它（沒讀也可能剛好沒東西可印），
+    只有數呼叫次數驗得到。
+
+    `coverage` 傳一個 `Exception` 實例 → 呼叫時 raise（模擬 `NavHistoryError`）。
+    """
+    import ui.views.page_05_settings as _mod
+    _calls = {"backend": 0, "coverage": 0}
+
+    def _fake_backend() -> Any:
+        _calls["backend"] += 1
+        return backend
+
+    def _fake_coverage(*_a: Any, **_k: Any) -> Any:
+        _calls["coverage"] += 1
+        if isinstance(coverage, BaseException):
+            raise coverage
+        return coverage
+
+    _orig = (_mod.fetch_nav_backend_status, _mod.fetch_nav_coverage)
+    _mod.fetch_nav_backend_status, _mod.fetch_nav_coverage = _fake_backend, _fake_coverage
+    try:
+        yield _calls
+    finally:
+        _mod.fetch_nav_backend_status, _mod.fetch_nav_coverage = _orig
+
+
+def _run_gated(backend: Any, coverage: Any, *,
+               funds: list[dict[str, Any]] | None = None,
+               open_gate: bool = True) -> tuple[list[str], dict]:
+    """跑一次整頁（可選擇把 gate 勾起來），回傳 `(渲染流, 呼叫次數)`。
+
+    ⚠️ 勾 gate 之後**一定要再 run 一次** —— Streamlit 的 widget 值要下一輪才生效。
+    """
+    with _patched_backend(backend, coverage) as _calls:
+        _at = _app(funds)
+        if open_gate:
+            _cb(_at, NAV_GATE_LABEL).check()
+            _rerun(_at)
+        return _flat(_at.main), dict(_calls)
+
+
 #: 一級區塊標題（`st.markdown("#### …")`）。
 _L4_OPEN = re.compile(r"^\[Markdown\] #{4}\s+(.*)$")
 #: 一張卡的標題 —— `ia.state_card()` 在灰態時畫的 `st.markdown(f"**{title}**")`。
@@ -318,14 +447,35 @@ def _expected_units() -> tuple[str, ...]:
 
 
 def _grey_units() -> tuple[str, ...]:
-    """**每一個都要各自帶灰態**的三個單位（有基金時）。
+    """**每一個都要各自帶灰態**的三個單位（有基金時、gate 未勾）。
 
     ⚠️ `nav_manual_label()`（Form）不在這裡：它是本批**唯一真的做完**的一塊，
     由 :func:`test_the_form_block_is_not_grey` 反向守著。
     ⚠️ `BLOCK_MANUAL`（使用手冊）**也不在這裡**：D-1 判定它是**靜態文字不是灰態**，
     由 :func:`test_the_manual_is_static_text_not_a_grey_placeholder` 反向守著。
+
+    ⚠️ **2026-09-06 起 `nav_status_label()` 的灰態意思變了**（P05-1 接上取數）：
+    它**不再**是「這一塊的內容還沒接上」，而是「**gate 沒勾，所以還沒去讀**」——
+    兩者的**指路不同**（前者指手動補資料、後者指 gate 自己就在旁邊），
+    所以 :data:`_GREY_POINTER` 把「哪一塊該指哪裡」寫成表，不再假設三塊共用一句。
+    ⛔ 這一塊**只在 gate 未勾時**是灰的；勾起來之後它有四種狀態，
+    由 :func:`test_the_nav_block_has_exactly_one_state_at_a_time` 等條守。
     """
     return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS)
+
+
+def _GREY_POINTER() -> dict[str, str]:
+    """`灰態單位 -> 它應該帶的那一句指路`。
+
+    ⛔ **不要退回「三塊共用一句」** —— 那正是把 NAV 那一塊的指路指錯的方法：
+    它的下一步是**勾旁邊那個 gate**，不是去手動補資料。
+    """
+    return {
+        BLOCK_HEALTH: _pending_where(nav_manual_label()),
+        BLOCK_KEYS: _pending_where(nav_manual_label()),
+        # gate 未勾 → 下一步就在同一張卡上（勾它）。指到自己這一塊是**有效**的指路。
+        nav_status_label(): _pending_where(nav_status_label()),
+    }
 
 
 def _live_strings(tree: ast.AST) -> list[ast.Constant]:
@@ -480,52 +630,708 @@ def test_the_page_renders_in_every_session_shape(kind: str):
 # D-2：只有 NAV 那一塊可能真的空
 # ══════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("kind", ["empty", "missing"])
-def test_the_nav_block_is_the_only_one_that_can_be_empty(kind: str):
-    """沒有基金時，**只有** NAV 那一塊走空狀態；其餘四塊不得出現空狀態。
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+def test_no_block_is_empty_before_the_gate_is_opened(kind: str):
+    """⭐ **gate 沒勾 → 一個空狀態都不准有。**（2026-09-06 P05-1 取代舊條）
 
-    D-2：「資料來源健康度」「連線與金鑰」是**系統自己的狀態**，永遠有話可說；
-    「手動補資料」是 Form、「使用手冊」是靜態文字 —— 都不會空。
+    ⛔ **舊條的形狀是錯的，這是本批最重要的一次語意更正**：
+    2026-09-06 之前，NAV 那一塊在 `portfolio_funds` 為空時就畫空狀態
+    「這個工作階段還沒載入任何基金 …… 就沒有涵蓋度可看」。
+    **那句話的前提是假的** —— `coverage_status()` 讀的是**整張雲端 sheet**，
+    它與 `portfolio_funds`（一個開站不會自動載入的 session 鍵）**毫無關係**。
+    一個雲端累積了三年的人，開站第一眼看到的是「沒有涵蓋度可看」。
+
+    **現行**：空狀態只在**真的讀成功、而且真的一筆都沒有**時出現。
+    gate 沒勾 ＝ 我們**什麼都還沒讀**，那時唯一誠實的畫面是**灰態**，不是空狀態。
+    → 由 :func:`test_the_empty_state_only_appears_after_a_successful_read` 從另一邊守。
     """
-    _names = [_n for _n, _ in _units(_stream(kind))]
-    assert nav_status_label() not in _names, (
-        f"（{kind}）一檔基金都沒有，NAV 那一塊卻還印著「{nav_status_label()}」的灰卡 —— "
-        "它應該走空狀態（D-2）。")
-    # 空狀態標題是被測檔自己寫的一句話（不是 SSOT），這裡只驗「有一個空狀態單位」。
-    _empty_titles = [_m.group(1).strip() for _p in _stream(kind)
-                     if (_m := _EMPTY_OPEN.match(_p))]
-    assert len(_empty_titles) == 1, (
-        f"（{kind}）空狀態單位有 {len(_empty_titles)} 個，應該恰好 1 個"
-        f"（只有 NAV 那一塊可能空）：{_empty_titles}")
+    _empty = [_m.group(1).strip() for _p in _stream(kind) if (_m := _EMPTY_OPEN.match(_p))]
+    assert _empty == [], (
+        f"（{kind}）gate 還沒勾就出現了空狀態 {_empty} —— "
+        "我們一次都還沒讀雲端，說不出「沒有」（§1：不知道 ≠ 沒有）。")
+
+
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+def test_the_nav_block_is_grey_and_reads_nothing_before_the_gate(kind: str):
+    """⭐ **gate 沒勾 → `status()` 與 `coverage_status()` 一次都不會被呼叫。**
+
+    ⛔ **這一條看的是呼叫次數，不是畫面。** 看畫面驗不到它：
+    「沒讀」與「讀了但沒東西可印」長得一模一樣。
+    這是本批選 Checkbox Gate（而不是 UI 層 `@st.cache_data`）**唯一真正買到的東西** ——
+    首屏一次 Google Sheets 往返都沒有。
+    """
+    _parts, _calls = _run_gated(
+        BACKEND_ON, FAKE_COVERAGE,
+        funds={"empty": [], "missing": None, "loaded": FAKE_HOLDINGS}[kind],
+        open_gate=False)
+    assert _calls == {"backend": 0, "coverage": 0}, (
+        f"（{kind}）gate 都還沒勾，L2 就被呼叫了 {_calls} —— "
+        "首屏無條件取數正是 Checkbox Gate 要擋掉的那件事。")
+    _body = _text(_segments(_parts).get(nav_status_label(), []))
+    assert NOT_READY_MARK in _body and _NOT_LOADED_NOTE in _body, (
+        f"（{kind}）gate 未勾時，NAV 那一塊沒有誠實說「還沒讀」：\n{_body}")
+
+
+def test_a_read_failure_takes_down_only_the_nav_card():
+    """⭐ `coverage_status()` 拋例外 → **只有 NAV 那一張卡變紅框**，另外兩張照常。
+
+    ⚠️ **這不是假想的失敗路徑**：`services/nav_history_gs.py::load_points` 在
+    **來源冷卻期內**（前一次失敗登記了 cooldown）與**真 I/O 失敗**時
+    都會拋 `NavHistoryError` —— 那是 L2 刻意的 §1 行為（回 `[]` 會與
+    「這檔真的還沒累積」同義），**不是 bug，是這一塊的正常路徑之一**。
+
+    ⛔ **少了 `_render_grid()` 裡那一層 `safe_section()`，外層那個
+    `safe_section("狀態三卡", _render_grid)` 會把三張卡一起換成一個紅框** ——
+    「資料來源健康度」與「連線與金鑰」明明沒壞，卻跟著消失。
+    `render_state.safe_section` 的 docstring 逐字寫著這句：
+    **「把診斷跟故障綁在同一條命上，是最糟的順序。」**
+
+    ⚠️ **本條驗的是「隔離」，不驗紅框長什麼樣**（那是 `system_error()` 的事）。
+    """
+    class _Boom(RuntimeError):
+        pass
+
+    _parts, _calls = _run_gated(BACKEND_ON, _Boom("nav_history load 失敗（模擬冷卻期）"),
+                                funds=FAKE_HOLDINGS)
+    assert _calls["coverage"] == 1, f"沒有真的走到取數：{_calls}"
+    _reds = [_p for _p in _parts if _p.startswith("[Error]")]
+    assert len(_reds) == 1, (
+        f"讀取失敗時的紅框有 {len(_reds)} 個，應該恰好 1 個（只有 NAV 那一張）：{_reds}")
+    _names = [_n for _n, _ in _units(_parts)]
+    for _u in (BLOCK_HEALTH, BLOCK_KEYS, nav_manual_label(), BLOCK_MANUAL):
+        assert _u in _names, (
+            f"NAV 讀取失敗把「{_u}」一起帶走了 —— 區塊隔離沒有生效。\n實際單位：{_names}")
+
+
+def test_opening_the_gate_reads_exactly_once():
+    """勾了 gate → 兩個 L2 入口**各被呼叫一次**（不是 0 次，也不是每塊各一次）。
+
+    ⚠️ 這條與上一條是一對：上一條防「沒勾也讀」，本條防「勾了不讀」。
+    只留其中一條，另一個方向就沒人守。
+    """
+    _parts, _calls = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
+    assert _calls == {"backend": 1, "coverage": 1}, (
+        f"勾了 gate 之後 L2 的呼叫次數是 {_calls}，應該各恰好一次。")
+
+
+#: NAV 那一塊的四種狀態 → `(backend, coverage, 要不要勾 gate)`。
+#: ⚠️ **四種是窮舉的**（`_render_nav_status` 只有這四條 return 路徑），
+#:    但那是**讀出來的**，不是量出來的 —— 加第五條路徑時本表不會自動長大。
+_NAV_STATES: dict = {
+    "gate 未勾": (BACKEND_ON, FAKE_COVERAGE, False),
+    "後端未啟用": (BACKEND_OFF, FAKE_COVERAGE, True),
+    "讀到空": (BACKEND_ON, {}, True),
+    "讀到有資料": (BACKEND_ON, FAKE_COVERAGE, True),
+}
+
+
+@pytest.mark.parametrize("state", sorted(_NAV_STATES))
+def test_the_nav_block_keeps_its_unit_boundary_in_every_state(state: str):
+    """⭐ **四種狀態下，「NAV 累積狀態」都必須是一個【單位】。**
+
+    ⛔ **這一條是實測逼出來的，不是風格潔癖。** `ia.state_card(state=STATE_OK)` 走的是
+    `st.metric(title, value)`，而 `st.metric` 在 AppTest 的元素樹裡是
+    `[Metric] 標籤`、**不是** `[Markdown] **標題**` —— :func:`_units` 的 `_CARD_OPEN`
+    認不出它。若這一塊照抄別頁用 `state_card` 畫「有資料」的狀態，
+    **它會在終於有內容的那一刻停止成為一個單位**：
+    灰態、結論字表、指路那幾條 unit-scoped 守衛會**全部靜靜停止覆蓋它**，
+    而且**沒有任何一條測試會紅**（它們只會去看「這個單位」有沒有問題，
+    而那個單位已經不存在了）。
+    → 故 `_render_nav_status()` **四種狀態一律先手寫同一個標題**。
+
+    ⚠️ 順帶釘住邊界：這一塊的內容**不准溢出到隔壁那張卡**（資料來源健康度）。
+
+    ⚠️ **這一條的突變驗證第一次寫錯了，記在這裡不美化**（2026-09-06）：
+    第一顆突變（M6）把 `state_card` 放在一個 `if st.session_state.get("__mut6"):`
+    分支底下，而那個鍵**從來沒有被設過** —— 也就是那顆突變**根本沒有改到行為**，
+    於是它「存活」了（三序 **89 passed**）。
+    ⛔ **一顆存活的突變有兩種意思：守衛有洞、或突變沒生效。**
+    分不清就寫「守衛有洞」是把自己的錯記到守衛頭上；分不清就寫「守衛沒問題」
+    更糟 —— 那正是本 repo 記載過的「假的補償控制」。
+    **改寫成真的把手寫標題拿掉、整組走 `state_card` 的版本（M6b）之後：三序皆
+    6 failed，其中 4 條是本函式的四個參數化。**
+    """
+    _backend, _cov, _open = _NAV_STATES[state]
+    _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)
+    _names = [_n for _n, _ in _units(_parts)]
+    assert nav_status_label() in _names, (
+        f"（{state}）「{nav_status_label()}」不再是一個單位 —— "
+        "unit-scoped 的守衛會全部對它失效，而且不會有人發現。\n"
+        f"實際單位：{_names}")
+    _seg = _segments(_parts)
+    assert NAV_GATE_LABEL in _text(_seg[nav_status_label()]), (
+        f"（{state}）gate 沒有落在 NAV 那個單位裡 —— "
+        "它會被算進**前一張卡**（資料來源健康度），那張卡的斷言就會被它污染。")
+    assert NAV_GATE_LABEL not in _text(_seg.get(BLOCK_HEALTH, [])), (
+        f"（{state}）gate 溢出到「{BLOCK_HEALTH}」那個單位裡了。")
+
+
+@pytest.mark.parametrize("state", sorted(_NAV_STATES))
+def test_the_nav_block_has_exactly_one_state_at_a_time(state: str):
+    """⭐ 四種狀態**互斥**：一次只講一件事，不准把兩種灰疊在一起。
+
+    ⛔ 「還沒讀」「讀不到」「讀到了是空的」「讀到了有資料」是**四個不同的事實**，
+    疊在一起使用者無從判斷下一步該做什麼（本頁的職責就是回答「要不要我補」）。
+    """
+    _backend, _cov, _open = _NAV_STATES[state]
+    _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)
+    _body = _text(_segments(_parts)[nav_status_label()])
+    _seen = {
+        "還沒讀": _NOT_LOADED_NOTE in _body,
+        "讀不到": any(_m in _body for _m in BACKEND_OFF["missing"]),
+        "有資料": SPAN_PHRASE in _text(_parts),
+    }
+    # 空狀態自己是一個獨立單位（`_EMPTY_OPEN`），故在整份渲染流裡數。
+    _seen["是空的"] = bool([_p for _p in _parts if _EMPTY_OPEN.match(_p)])
+    _on = sorted(_k for _k, _v in _seen.items() if _v)
+    _want = {"gate 未勾": ["還沒讀"], "後端未啟用": ["讀不到"],
+             "讀到空": ["是空的"], "讀到有資料": ["有資料"]}[state]
+    assert _on == _want, (
+        f"（{state}）NAV 那一塊同時講了 {_on}，應該只有 {_want}：\n{_body}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 裁決 3：跨度**永遠**與點數同行 —— 驗的是機制，不是某一行長怎樣
+# ══════════════════════════════════════════════════════════════════
+
+#: 餵給 :func:`coverage_line` 的邊界輸入。**刻意包含壞值** ——
+#: 「跨度不准單獨出現」這條性質**在壞資料上也必須成立**（那時最容易只印得出跨度）。
+_LINE_INPUTS: tuple[dict, ...] = (
+    {"points": 1, "first": "2026-01-01", "last": "2026-01-01", "span_days": 0},
+    {"points": 2, "first": "2019-03-01", "last": "2026-03-01", "span_days": 2557},
+    {"points": 9999, "first": "1990-01-01", "last": "2026-09-06", "span_days": 13398},
+    {"points": 0, "first": "", "last": "", "span_days": 0},
+    {"points": None, "first": None, "last": None, "span_days": None},
+    {"points": "壞掉", "first": 12345, "last": [], "span_days": "壞掉"},
+    {},
+)
+
+
+@pytest.mark.parametrize("entry", _LINE_INPUTS)
+@pytest.mark.parametrize("held", [True, False])
+def test_a_span_never_appears_without_its_point_count(entry: dict, held: bool):
+    """⭐ **`coverage_line()` 的輸出裡只要有「跨度」，就一定有「點數」。**
+
+    ⛔ **為什麼這條規則存在**：`span_days = last - first`，**它一個字都沒說中間有沒有斷**。
+    單獨印一個「6.2 年」會被讀成「我有六年的完整歷史」，而真相可能是
+    **兩個點相距六年**（:data:`_LINE_INPUTS` 第二筆就是這個形狀）。
+    點數是唯一能戳破它的東西，所以兩者不准分開。
+
+    ⚠️ **這是性質，不是字串比對**：對**任意**輸入（含壞值、空 dict）都成立，
+    不綁死在任何一句文案上。改文案不會讓它失效。
+    """
+    _line = coverage_line("ABC123", entry, held=held)
+    if SPAN_PHRASE in _line:
+        assert POINTS_UNIT in _line, (
+            f"這一行印了跨度卻沒有點數：{_line!r}\n"
+            "跨度單獨出現會把「兩個點相距六年」講成「六年的歷史」（§1）。")
+        _before = _line.split(SPAN_PHRASE, 1)[0]
+        assert any(_ch.isdigit() for _ch in _before.split(POINTS_UNIT, 1)[0]), (
+            f"這一行有「{POINTS_UNIT}」但它前面沒有數字，點數不是真的印出來了：{_line!r}")
+
+
+def test_an_uncomputable_count_is_never_rendered_as_zero():
+    """⭐ **點數算不出來時，畫面上不准出現 `0`** —— `0` 是宣稱，`None` 是「不知道」。
+
+    ⛔ **這是本批自查出來的一個 §1 破口，不是派工單交代的。** 第一版寫的是
+    `int(entry.get("points") or 0)` ＋ `except: _points = 0` ——
+    一個讀不出來的值會被畫成「**0 筆**」，而它跟「**真的一筆都沒有**」
+    在畫面上**長得一模一樣**。這一頁的職責正好是回答「這個數字可不可信」。
+
+    **現行**：算不出來 → 整行改成「這一筆的點數讀不出來（原始值 …）」，
+    而且**連跨度都不印**（沒有點數的跨度是這一頁最危險的那種數字：
+    它看起來像一段完整歷史，而我們連有幾個點都不知道）。
+
+    ⚠️ **本條驗的是性質，對每一種算不出來的形態都成立**，不綁死在某個字串。
+    """
+    for _bad in (None, "壞掉", [], {}, object()):
+        _line = coverage_line("ABC123", {"points": _bad, "span_days": 999,
+                                         "first": "2020-01-01", "last": "2026-01-01"})
+        assert SPAN_PHRASE not in _line, (
+            f"點數是 {_bad!r} 算不出來，卻還是印了跨度：{_line!r}")
+        assert f"0 {POINTS_UNIT}" not in _line, (
+            f"點數是 {_bad!r} 算不出來，卻被畫成 0：{_line!r}\n"
+            "⛔ 0 是一個宣稱（「一筆都沒有」），我們沒有資格說它。")
+    # 真的是 0 → 照印 0（那是一個我們算得出來的事實，不是猜的）。
+    _zero = coverage_line("ABC123", {"points": 0, "span_days": 0,
+                                     "first": "2026-01-01", "last": "2026-01-01"})
+    assert f"0 {POINTS_UNIT}" in _zero and SPAN_PHRASE in _zero, _zero
+
+
+def test_the_headline_says_when_some_counts_are_unreadable():
+    """總結句**不准無聲低報** —— 算不出來的那幾筆要說出來。
+
+    ⛔ 只把壞值「跳過」的話，總數會比實際少，而畫面上**完全看不出少了東西**。
+    那是 §1 的另一種形狀：不是造假，是**無聲的低報**。
+    """
+    _mixed = {"OK1": {"points": 10, "first": "2026-01-01", "last": "2026-02-01",
+                      "span_days": 31},
+              "BAD1": {"points": "壞掉", "first": "", "last": "", "span_days": 0},
+              "BAD2": {"points": None, "first": "", "last": "", "span_days": 0}}
+    _got = coverage_headline(_mixed)
+    assert f"10 {POINTS_UNIT}" in _got, f"可算的那一筆沒有被算進去：{_got!r}"
+    assert "2" in _got and "讀不出來" in _got, (
+        f"總結句沒有說出有幾筆算不出來，等於無聲低報：{_got!r}")
+    assert SPAN_PHRASE not in _got and "年" not in _got, (
+        f"總結句裡出現了跨度：{_got!r}")
+
+
+#: 「一段時間有多長」在畫面上的形狀：**一個十進位數字，緊接著一個時間單位**。
+#:
+#: ⛔ **第一版寫成「有數字 or 有單位字」的兩個 `any()`，當場誤紅四個 state** ——
+#:    `'⑤'.isdigit()` 在 Python 是 **`True`**（圈號屬 Numeric_Type=Digit），
+#:    於是灰態那句「⑤ ⚙️ 設定與診斷 → …資料**日**期」同時滿足「有數字」與「有單位」。
+#:    **那不是誤紅一次就算了的小事**：一條會誤紅的規則會被下一個人放寬或刪掉，
+#:    然後真正的繞道就沒人擋了。改成**相鄰**判斷之後，那四個 state 全部乾淨。
+#: ⚠️ **白名單，抓不到名單外的第 N+1 種寫法**（`weeks` / `季` / 中文數字「七年」）。**登記。**
+#: ⚠️ **已知的偽陽性方向**：若哪天日期改成 `2024年01月05日` 這種寫法，本條會要求同行帶點數。
+#:    那是**往安全側錯**（多一個「筆」不會說謊），登記，不是沒看到。
+_DURATION_RE = re.compile(r"[0-9０-９]+(?:[.,][0-9０-９]+)?\s*(?:年|個月|月|週|天|日)")
+
+
+def _duration_bearing_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
+    """渲染流裡印出「**一段時間有多長**」的那些元素（數字**緊接著**時間單位）。"""
+    return [_p for _p in parts if _DURATION_RE.search(_p)]
+
+
+@pytest.mark.parametrize("state", sorted(_NAV_STATES))
+def test_no_rendered_line_shows_a_duration_without_its_point_count(state: str):
+    """⭐⭐ **整頁**任何一則「有數字＋有時間單位」的字，都必須同行帶點數。
+
+    ⛔ **2026-09-06 獨立稽核必修：本檔原本那三層「跨度不得單獨出現」的防禦，
+    實際只有一層有效。** 稽核組加了一段**從 `first`/`last` 自己算年數**的程式
+    （**完全沒碰 `"span_days"` 這個字串**）、印出 `[Caption] 最長 7.0 年`，
+    然後 **92 passed × 3 序** —— 三層全瞎：
+
+    ===================================  ======================================
+    原本那一層                             為什麼看不到
+    ===================================  ======================================
+    AST：`"span_days"` 只在一處被讀         它沒有用那個字串
+    渲染層：含 `SPAN_PHRASE` 的行要有點數    它印的是「最長 N 年」，不含「首末相距」
+    純函式：`coverage_headline()` 不含跨度   它印在那個函式**外面一行**
+    黑名單：`_PINNED_FAKE_VALUES` 釘 6.2 年  它印 7.0
+    ===================================  ======================================
+
+    ⚠️ **M3 突變（2 failed ×3）給了錯誤的信心** —— M3 改的是 `coverage_headline()`
+    **內部**，所以純函式那條抓得到；**把同一句話印在那個函式外面一行，四層全部通過。**
+
+    **本條是替代品，判準改成看「畫面上印了什麼」，不看「程式怎麼寫的」**：
+    只要一個渲染元素同時有數字與時間單位，就必須同行帶 :data:`POINTS_UNIT`。
+    **繞不過去** —— 因為要說謊就一定得把那個數字印出來。
+
+    ⚠️ **本條是【整頁】的，不是 unit-scoped** —— 這是刻意的：
+    本檔既有的 unit-scoped 守衛**全部看不見頁首**（`_units()` 只認 `####`，
+    而頁首是 `## ` ＋ `st.caption`）。本條掃 `_flat()` 的全部元素，**含頁首**。
+
+    ⚠️ **本條守不到的（照實列）**：
+    - :data:`_DURATION_UNITS` 是白名單 —— 「個月」以外的寫法、英文 `years`、
+      全形數字，都抓不到。
+    - 它要求的是「**同一個渲染元素**內有點數」；把點數印在**上一行**、跨度印在下一行，
+      本條看不到（那是 `_flat()` 以元素為單位的既有性質）。
+    """
+    _backend, _cov, _open = _NAV_STATES[state]
+    _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS, open_gate=_open)
+    for _p in _duration_bearing_parts(_parts):
+        assert POINTS_UNIT in _p, (
+            f"（{state}）畫面上有一則帶時間長度的字，卻沒有點數：\n{_p}\n"
+            "⛔ 一段沒有點數的「N 年 / N 天」會被讀成「我有這麼長的完整歷史」，"
+            "而真相可能是兩個點（§1）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 必修：上游把「跨度未知」編成 0 —— 不准照著印
+# ══════════════════════════════════════════════════════════════════
+
+def test_an_unknown_span_is_never_rendered_as_a_real_number():
+    """⭐⭐ **上游的 `span_days == 0` 有兩個意思，畫面上不准把它們畫成同一個。**
+
+    ⛔ **2026-09-06 獨立稽核必修，本組已端到端重現（不是讀出來的）**：
+    `services/nav_history_gs.py::coverage_status` 在日期 parse 失敗時
+    **把「未知」編成 `0`** —— 那一行的註解自己寫著「**跨度未知**，點數仍誠實回報」。
+    而 `norm_date_key()` **刻意讓壞日期的原字串通過**，所以它真的會走到畫面上：
+
+    ``BBB {'points': 2, 'first': '113/01/02', 'last': '2025-06-01', 'span_days': 0}``
+    → 真實跨度 **約 1.4 年**，畫面卻印「首末相距 **0** 天」，
+    與真的只有一天的 ``DDD`` **一模一樣**。
+
+    ⚠️ **本條也記下本檔原本防錯格子這件事**：`_as_int → None` 那一整套瞄準的是
+    `points`，而 `points` 在 production 恆為 `len(_ds)`、**永遠是 int**；
+    **真正會出現「未知」的是 `span_days`** —— 防禦蓋在不會壞的那一格，會壞的那一格沒蓋。
+    """
+    _unknown = {"points": 2, "first": "113/01/02", "last": "2025-06-01",
+                "span_days": 0}
+    _really_zero = {"points": 1, "first": "2024-05-05", "last": "2024-05-05",
+                    "span_days": 0}
+    _l_unknown = coverage_line("BBB", _unknown)
+    _l_zero = coverage_line("DDD", _really_zero)
+    assert SPAN_PHRASE not in _l_unknown, (
+        f"上游把「未知」編成 0，畫面照著印了一個假的跨度：{_l_unknown!r}")
+    assert SPAN_PHRASE in _l_zero and f"{SPAN_PHRASE} 0 天" in _l_zero, (
+        f"真的是 0 天卻不敢印 —— 那是反向的錯（§1 不是「什麼都別說」）：{_l_zero!r}")
+    assert _l_unknown != _l_zero, "「未知」與「真的 0 天」畫成了同一行。"
+    # 兩行都仍然要帶點數（跨度規則不因這次改動被繞開）。
+    for _l in (_l_unknown, _l_zero):
+        assert POINTS_UNIT in _l, _l
+
+
+def test_the_unknown_span_rule_is_reproduced_against_the_real_service():
+    """⭐ 用**真的** `coverage_status()`（注入假 worksheet，零網路）再證一次。
+
+    ⛔ 上一條餵的是**手寫的** dict —— 那只證明「本頁對這個形狀的反應」。
+    本條把同一件事**從上游走一遍**，證明**那個形狀真的產得出來**。
+    ⚠️ 走 `_sheet=` 注入（`load_points` 的測試注入口），**不碰 gspread、不連網**。
+    """
+    from services.nav_history_gs import coverage_status as _real_coverage
+
+    class _WS:
+        def __init__(self, rows: list) -> None:
+            self._rows = rows
+
+        def get_all_values(self) -> list:
+            return self._rows
+
+    class _SH:
+        def __init__(self, rows: list) -> None:
+            self._ws = _WS(rows)
+
+        def worksheet(self, _name: str) -> Any:
+            return self._ws
+
+    _rows = [
+        ["code", "date", "nav", "fund_name", "source", "recorded_at", "currency"],
+        ["BBB", "113/01/02", "10.0", "", "", "", ""],      # 民國年 → parse 不出來
+        ["BBB", "2025-06-01", "11.0", "", "", "", ""],
+        ["DDD", "2024-05-05", "12.0", "", "", "", ""],     # 只有一天 → 真的 0
+    ]
+    _got = _real_coverage(_sheet=_SH(_rows))
+    assert _got["BBB"]["span_days"] == 0 and _got["DDD"]["span_days"] == 0, (
+        f"上游不再把「未知」與「真的 0」編成同一個值了 —— 本條的前提變了，"
+        f"請回頭重新評估 `span_days_or_unknown()` 還需不需要：{_got}")
+    _lines = coverage_lines(_got, set())
+    _bbb = [_l for _l in _lines if "BBB" in _l][0]
+    _ddd = [_l for _l in _lines if "DDD" in _l][0]
+    assert SPAN_PHRASE not in _bbb, f"未知的跨度被印出來了：{_bbb!r}"
+    assert SPAN_PHRASE in _ddd, f"真的 0 天沒印出來：{_ddd!r}"
+
+
+@pytest.mark.parametrize(
+    "first,last,reported,want",
+    [
+        ("2024-01-01", "2024-01-01", 0, 0),          # 真的 0 天
+        ("2024-01-01", "2024-12-31", 365, 365),      # 正常
+        ("113/01/02", "2025-06-01", 0, None),        # 一端 parse 不出來
+        ("2024-01-01", "壞掉", 0, None),              # 另一端 parse 不出來
+        ("", "", 0, None),                           # 兩端都空
+        ("2024-01-01", "2024-12-31", 999, None),     # 與上游回報不一致 → 不猜
+        ("2024-12-31", "2024-01-01", -365, None),    # 負數 → 不合理
+        ("2024-01-01", "20240101", 0, 0),            # ⚠️ 見下方偽陽性說明
+        ("2024-01-01", "2024-W01-1", 0, 0),          # 同上（ISO 週日期，也是同一天）
+    ],
+)
+def test_span_days_or_unknown_is_a_pure_decision(first: str, last: str,
+                                                 reported: Any, want: Any):
+    """:func:`span_days_or_unknown` 的判準 —— 純函式，逐案釘住。
+
+    ⚠️ **最後兩列是刻意放進來的，而且它們的例子與派工單給的不一樣 —— 本組實測後更正**：
+    派工單說「`date.fromisoformat` 在 3.11+ 接受 `2024-1-1`」。
+    **實測（`python3.11.15`）：`2024-1-1` 會 `ValueError: Invalid isoformat string`**
+    —— 3.11 放寬的是**大部分 ISO-8601 格式**，**不含未補零的欄位**。
+    ⛔ **但那個顧慮的形狀是真的，只是例子舉錯了**：`"20240101"` 與 `"2024-W01-1"`
+    **都 parse 得出來、都等於 `2024-01-01`、字串卻不同** —— 本組實測命中。
+    → 也就是說，「`first != last` 而 `span_days == 0` ⟺ 至少一端 parse 不出來」
+    **那條啟發式確實有偽陽性**，只是觸發它的是這兩個寫法而不是 `2024-1-1`。
+    ✅ **本函式不用那條啟發式**（改成兩端各自 parse ＋ 與上游對帳），
+    所以這兩列**回的是 0 而不是 None** —— **沒有那個偽陽性。**
+    """
+    assert span_days_or_unknown(first, last, reported) == want
+
+
+# ══════════════════════════════════════════════════════════════════
+# 應修：讀不懂的條目不准無聲丟棄
+# ══════════════════════════════════════════════════════════════════
+
+def test_unreadable_entries_are_disclosed_not_dropped():
+    """⭐ 非 dict 的條目**要被說出來**，不准無聲丟棄成「0 檔」。
+
+    ⛔ **2026-09-06 獨立稽核應修。** 原本 `coverage_headline` / `coverage_lines`
+    兩處都是 `if not isinstance(_e, dict): continue` —— **同一個迴圈裡防了一種
+    （`points` 讀不出來會揭露），漏了另一種（非 dict 連揭露都沒有）**：
+
+    ``{'AAA': None, 'BBB': 'corrupt', 'CCC': [1, 2]}`` → 「**0 檔 · 共 0 筆**」
+    ＋ 一個**空的**「逐檔明細」展開器。
+
+    「0 檔」是一句**斷言**（你什麼都沒累積），而事實是我們收到了三筆讀不懂的東西（§1）。
+    """
+    _junk = {"AAA": None, "BBB": "corrupt", "CCC": [1, 2]}
+    _head = coverage_headline(_junk)
+    assert "3" in _head and "讀不出來" in _head, (
+        f"三筆讀不懂的東西被無聲丟棄了：{_head!r}")
+    assert "可讀取 0 檔" in _head, (
+        f"「0 檔」沒有被限定成「可讀取 0 檔」—— 那是一句對使用者資產的斷言：{_head!r}")
+    _lines = coverage_lines(_junk, set())
+    assert len(_lines) == 3, f"讀不懂的條目沒有各自一行：{_lines}"
+    for _c in _junk:
+        assert any(_c in _l and "讀不出來" in _l for _l in _lines), (
+            f"「{_c}」沒有被說出來：{_lines}")
+    for _l in _lines:
+        assert SPAN_PHRASE not in _l, f"讀不懂的條目卻印了跨度：{_l!r}"
+
+
+def test_a_wholly_unreadable_payload_never_draws_an_empty_expander():
+    """整包讀不懂時**不准畫一個空的展開器**（鐵則 04）。
+
+    ⚠️ 舊版 `test_the_detail_expander_exists_only_when_there_is_data` 用
+    `if not _coverage` 判斷，**不是**「有沒有可渲染的行」——
+    `{'AAA': None}` 這種**非空但讀不懂**的回傳照樣過關。
+    """
+    _parts, _ = _run_gated(BACKEND_ON, {"AAA": None, "BBB": "x"},
+                           funds=FAKE_HOLDINGS)
+    _names = [_n for _n, _ in _units(_parts)]
+    assert NAV_DETAIL_LABEL in _names, (
+        "有讀不懂的條目要列出來，展開器不該消失。")
+    _body = _text(_segments(_parts).get(NAV_DETAIL_LABEL, []))
+    assert "讀不出來" in _body, f"展開器是空的：{_body!r}"
+
+
+def test_span_days_is_read_in_exactly_one_place():
+    """⭐ **全檔只有 :func:`coverage_line` 可以讀 `span_days`。**
+
+    上一條保證「那一個地方」不會只印跨度；本條保證**沒有第二個地方**。
+    ⛔ 少了本條，任何人都可以在別處寫 `st.metric("最長", f"{e['span_days']//365} 年")`
+    ——上一條完全看不到它（它只驗 `coverage_line` 的輸出）。
+    **兩條合起來才是那句裁決；只留一條等於沒守。**
+
+    ⚠️ **守不到的**：`entry.get(_K)`（把鍵名藏進一個常數）、
+    `for k, v in entry.items()` 這種不提鍵名的走訪、以及 `**entry` 解包。
+    本條認的是**字面字串 `"span_days"`**。**登記，不是沒看到。**
+    """
+    _tree_ = _tree()
+    _defs = _func_defs(_tree_)
+    _owner: dict[int, str] = {}
+    for _name, _fn in _defs.items():
+        for _n in ast.walk(_fn):
+            _owner[id(_n)] = _name
+    _hits = sorted({_owner.get(id(_n), "<module>")
+                    for _n in _live_strings(_tree_) if _n.value == "span_days"})
+    assert _hits == ["coverage_line"], (
+        f"讀 `span_days` 的地方是 {_hits}，應該只有 `coverage_line`。\n"
+        "⛔ 跨度只准由那一個函式印出來，因為只有它保證會同時印出點數（裁決 3）。")
+
+
+def test_the_rendered_detail_never_shows_a_span_alone():
+    """⭐ 渲染層再驗一次：畫面上任何一則帶 `SPAN_PHRASE` 的字，都要有點數。
+
+    上面兩條走 AST／純函式；本條走**真的渲染出來的那串字**——
+    三個角度都成立才算數（AST 可能被非字面寫法繞過，純函式測不到「誰真的被畫出來」）。
+    """
+    _parts, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
+    _with_span = [_p for _p in _parts if SPAN_PHRASE in _p and _p.startswith("[Markdown]")]
+    assert _with_span, (
+        f"有資料時畫面上找不到任何逐檔明細（`{SPAN_PHRASE}`）：\n{_text(_parts)}")
+    for _p in _with_span:
+        assert POINTS_UNIT in _p, (
+            f"畫面上有一行只印了跨度、沒有點數：{_p!r}")
+
+
+def test_the_headline_counts_but_never_spans():
+    """總結那一句**只講數量**（檔數 ＋ 點數），一個跨度字都不准有。
+
+    ⛔ 線框的示意值是「42 檔 · **最長 6.2 年**」—— 後半正是本裁決要擋的形狀：
+    一個**單獨出現的跨度**，而且是**最大值**（最容易誤導的那一種）。
+    """
+    for _cov in (FAKE_COVERAGE, {}, _PROBE_COVERAGES[0], _PROBE_COVERAGES[1]):
+        _got = coverage_headline(_cov)
+        assert SPAN_PHRASE not in _got and "年" not in _got, (
+            f"總結句裡出現了跨度：{_got!r}")
+        assert POINTS_UNIT in _got and "檔" in _got, (
+            f"總結句沒有同時給出檔數與點數：{_got!r}")
+    # ⚠️ **「可讀取」三個字是承重的**（2026-09-06 獨立稽核）：沒有它，
+    #    「0 檔」會被讀成「你一檔都沒累積」，而事實可能是「收到的東西全都讀不懂」。
+    assert coverage_headline(FAKE_COVERAGE) == (
+        f"可讀取 {len(FAKE_COVERAGE)} 檔 · 共 "
+        f"{sum(_e['points'] for _e in FAKE_COVERAGE.values())} {POINTS_UNIT}")
+
+
+def test_the_detail_is_sorted_and_marks_only_what_is_loaded():
+    """逐檔明細**依代碼排序**（順序不隨 dict 插入序漂移），且只標記已列入的那些。
+
+    ⛔ **沒列入的不准寫任何否定的話** —— `portfolio_funds` 開站不自動載入，
+    「這一檔你沒有」是一句我們證明不了的話（§1）。本條只驗**有標記的那些是對的**。
+    """
+    _codes = sorted(FAKE_COVERAGE)
+    _lines = coverage_lines(FAKE_COVERAGE, {"TESTCODE1"})
+    assert [_ln.split("`")[1] for _ln in _lines] == _codes, (
+        f"逐檔明細沒有依代碼排序：{_lines}")
+    assert "已列入" in _lines[_codes.index("TESTCODE1")]
+    assert "已列入" not in _lines[_codes.index("ZZOTHER9")]
+    for _ln in _lines:
+        for _lie in ("你沒有", "未持有", "不在你的"):
+            assert _lie not in _ln, (
+                f"逐檔明細對使用者的持有下了斷言 {_lie!r}：{_ln!r}")
+
+
+def test_the_detail_expander_exists_only_when_there_is_data():
+    """「逐檔可展開」**只在真的有逐檔可展開時才畫**（鐵則 04：不畫空的占位）。
+
+    ⚠️ **本條有一個洞，2026-09-06 獨立稽核指出，已由另一條補上（本條保留）**：
+    它餵的 `coverage` 要嘛有正常資料、要嘛是 `{}` —— **沒有測「非空但整包讀不懂」**
+    （`{'AAA': None}`）。而頁面當時判斷用的是 `if not _coverage`，
+    那種回傳**會走進資料分支、畫一個空的展開器**，本條完全看不到。
+    → 補上的是 :func:`test_a_wholly_unreadable_payload_never_draws_an_empty_expander`；
+    頁面端也改成看「**有沒有可渲染的行**」（`_lines`）而不是「dict 空不空」。
+    **本條仍然有價值**（它守的是另外三種狀態不准畫展開器），故保留、不合併。
+    """
+    _with_data, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
+    assert NAV_DETAIL_LABEL in [_n for _n, _ in _units(_with_data)], (
+        f"有資料卻沒有「{NAV_DETAIL_LABEL}」展開器。")
+    for _label, _backend, _cov in (
+            ("gate 未勾", BACKEND_ON, FAKE_COVERAGE),
+            ("後端未啟用", BACKEND_OFF, FAKE_COVERAGE),
+            ("讀到空", BACKEND_ON, {})):
+        _parts, _ = _run_gated(_backend, _cov, funds=FAKE_HOLDINGS,
+                               open_gate=_label != "gate 未勾")
+        assert NAV_DETAIL_LABEL not in [_n for _n, _ in _units(_parts)], (
+            f"（{_label}）沒有任何逐檔資料，卻先畫了一個空的「{NAV_DETAIL_LABEL}」展開器。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 裁決 2：「未啟用」與「一筆都沒有」是兩件事，不得共用文案
+# ══════════════════════════════════════════════════════════════════
+
+#: 用來驗「未啟用時畫面上不准出現數量」的**探針**涵蓋度。
+#: ⚠️ 數字刻意是罕見長串 —— 本條要驗的是「**對任意 `coverage_status()` 回傳值成立**」，
+#:    所以探針值由測試注入、不綁死頁面上任何一句文案。
+_PROBE_COVERAGES: tuple[dict, ...] = (
+    {"PRB1": {"points": 987654321, "first": "2001-02-03", "last": "2009-08-07",
+              "span_days": 424242}},
+    {"PRB2": {"points": 555555, "first": "1999-12-31", "last": "2000-01-01",
+              "span_days": 313131},
+     "PRB3": {"points": 777777, "first": "2010-10-10", "last": "2011-11-11",
+              "span_days": 191919}},
+    {},
+)
+
+
+@pytest.mark.parametrize("probe", _PROBE_COVERAGES)
+def test_a_disabled_backend_never_prints_a_quantity(probe: dict):
+    """⭐ **`status()["enabled"]` 是 False 時，畫面上不得出現任何代表「數量」的數字。**
+
+    **機制有兩半，兩半都驗**（不綁死在任何一句產品文案上）：
+    (a) **`coverage_status()` 一次都不會被呼叫** —— 沒讀就不可能有數字；
+    (b) 即使把它換成會回**任意值**的探針，那些值**一個字都不會出現在畫面上**。
+
+    ⛔ **為什麼要有這一條**：`coverage_status()` 在「未啟用」與「工作表不存在」時
+    **都回 `{}`**（它自己的 docstring 逐字寫著「呼叫端須據此顯示『未啟用』
+    而非『0 點』」）。少了 `enabled` 這道分流，一個**根本沒設定**的人
+    會看到「0 檔 · 共 0 筆」——**那是一個我們沒有查證過的數字**（§1）。
+    """
+    _parts, _calls = _run_gated(BACKEND_OFF, probe, funds=FAKE_HOLDINGS)
+    assert _calls["coverage"] == 0, (
+        f"後端未啟用，卻還是去讀了雲端（{_calls}）—— "
+        "分流的順序反了：要先問「能不能看」，再問「看到什麼」。")
+    _all = _text(_parts)
+    for _entry in probe.values():
+        for _v in _entry.values():
+            assert str(_v) not in _all, (
+                f"後端未啟用，畫面上卻印出了探針值 {_v!r}：\n{_all}")
+    assert "0 檔" not in _all, (
+        "後端未啟用卻印了「0 檔」—— 我們沒看過那張表，說不出 0（§1：不知道 ≠ 沒有）。")
+
+
+def test_the_disabled_state_names_what_is_missing():
+    """未啟用時要說出**缺哪幾把 secret**，不只是「不可用」。
+
+    `status()` 回的 `missing` 是它唯一能給的可行動資訊；吞掉它等於把
+    「你少設了 google_service_account」壓成「這裡沒東西」。
+    """
+    _parts, _ = _run_gated(BACKEND_OFF, {}, funds=FAKE_HOLDINGS)
+    _body = _text(_segments(_parts).get(nav_status_label(), []))
+    for _m in BACKEND_OFF["missing"]:
+        assert _m in _body, (
+            f"未啟用的灰態沒有指名缺少的 {_m!r}：\n{_body}")
+    assert NOT_READY_MARK in _body, "未啟用是灰態（我們看不到），不是空狀態（我們看到了、是空的）。"
+
+
+def test_the_empty_state_only_appears_after_a_successful_read():
+    """⭐ **空狀態只在「讀成功 ＋ 真的一筆都沒有」時出現。**
+
+    這一條是舊 `test_the_empty_state_never_claims_the_user_has_no_funds` 的**替代品**，
+    而且比它強：舊條要求文案帶「這個 session」這種限定詞，**因為那時我們根本沒讀**；
+    現在我們**真的讀了**，所以可以對那張表下斷言 —— 而這條保證
+    **只有讀成功那條路徑到得了空狀態**。
+
+    ⛔ 三種路徑各驗一次：未啟用 → 灰態（0 個空狀態）；讀到空 → 恰好 1 個；讀到有資料 → 0 個。
+    """
+    _off, _ = _run_gated(BACKEND_OFF, {}, funds=FAKE_HOLDINGS)
+    assert not [_p for _p in _off if _EMPTY_OPEN.match(_p)], (
+        "後端未啟用卻走了空狀態 —— 「看不到」被講成「看到了、是空的」。")
+
+    _on_empty, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
+    _titles = [_m.group(1).strip() for _p in _on_empty if (_m := _EMPTY_OPEN.match(_p))]
+    assert _titles == [_EMPTY_TITLE], (
+        f"讀成功且一筆都沒有時，空狀態應恰好 1 個且是那一句：{_titles}")
+
+    _on_data, _ = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS)
+    assert not [_p for _p in _on_data if _EMPTY_OPEN.match(_p)], (
+        "已經讀到資料了還畫空狀態。")
+
+
+def test_the_empty_state_asserts_nothing_about_the_users_funds():
+    """⭐ **客戶紅線：任何文案都不得對使用者的雲端資產下斷言。**
+
+    ⛔ 2026-09-05 獨立稽核抓到的那組謊話（「一檔都還沒列入」「還沒有任何基金」）
+    **黑名單原封保留**；改掉的只有**限定詞那半**——
+    舊版要求文案帶「這個 session / 已載入」，理由是**我們那時根本沒讀過雲端**。
+    現在空狀態只在讀成功之後出現（見上一條），那個限定詞會變成一句**假話**
+    （它會說成「這個 session 沒載入」，而事實是「那張表真的是空的」）。
+    **承重的保護搬去上一條**（＝結構性的「只有讀成功才到得了」），黑名單留著當第二層。
+
+    ⚠️ 標題與內文**各查一次**，不查聯集 —— 使用者可能只讀到粗體標題那一行
+    （2026-09-06 稽核必修的形狀，原封沿用）。
+    """
+    _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
+    _titles = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
+    assert len(_titles) == 1, f"空狀態單位應恰好 1 個：{_titles}"
+    _body = _text(_segments(_parts).get(_titles[0], []))
+    for _where, _txt in (("標題", _titles[0]), ("內文", _body)):
+        for _lie in ("一檔都還沒列入", "還沒有任何基金", "你沒有基金", "一檔都沒有",
+                     "你的基金", "你沒有累積"):
+            assert _lie not in _txt, (
+                f"空狀態的{_where}對使用者的資產下了斷言 {_lie!r}：\n{_txt}\n"
+                "我們讀到的是**那張試算表**是空的，不是「他沒有基金」。")
+        assert "nav_history" in _txt or "雲端" in _txt or "工作表" in _txt, (
+            f"空狀態的{_where}沒有講清楚「空的是什麼」：\n{_txt}\n"
+            "只寫「沒有資料」會被讀成「你沒有基金」。")
 
 
 def test_the_empty_state_pointer_actually_works():
-    """空狀態的「去哪補」**照著做真的有效** —— 實跑，不是形容詞。
+    """空狀態的「去哪補」是一個**地方**，而且指向本頁真的能動的那一塊。
 
-    照做（讓 `portfolio_funds` 有項目）→ 空狀態**真的消失**、NAV 灰卡**真的出現**。
-    ⛔ 這條與 :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 是一對：
-       **本頁的兩種灰，一種指路有效、一種無效**，本檔把兩者都釘成會轉紅的斷言。
+    ⚠️ **與舊版同名，但驗的東西換了**：舊版驗「列入基金之後空狀態會消失」——
+    那條路徑已經不存在（空狀態不再由 `portfolio_funds` 決定）。
+    現在驗的是「指路指向 `手動補資料`」＋「那一塊真的在畫面上」。
+    ⛔ **不宣稱它有效** —— 手動補抓本身還沒接上，那件事由
+    :func:`test_pressing_submit_says_the_backfill_is_not_wired_yet` 誠實說出來。
     """
-    _before = _stream("missing")
-    assert where_to_find("pf_add") in _text(_before), (
-        "空狀態沒有指向 ④ 的「加入與管理基金」—— 那是唯一能讓它離開空狀態的地方。")
-    _after = [_n for _n, _ in _units(_stream("loaded"))]
-    assert nav_status_label() in _after, (
-        "照著空狀態的指路做（列入基金）之後，NAV 那一塊沒有離開空狀態 —— "
-        "那句指路是死的。")
+    _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
+    _titles = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
+    _body = _text(_segments(_parts).get(_titles[0], []))
+    assert _pending_where(nav_manual_label()) in _body, (
+        f"空狀態沒有帶指路：\n{_body}")
+    assert nav_manual_label() in [_n for _n, _ in _units(_parts)], (
+        "空狀態指向「手動補資料」，但那一塊不在畫面上 —— 指路指到了不存在的地方。")
 
 
 def test_the_empty_state_does_not_also_print_the_pending_excuse():
     """空狀態**不得**同時印「本頁分批上線」那句。
 
-    兩種灰的下一步不同：空狀態的下一步是**使用者去列入基金**（有效），
+    兩種灰的下一步不同：空狀態的下一步是**去補資料**，
     「還沒接上」的下一步是**等我們接線**（使用者做不了）。
-    ⛔ 疊在一起會讓使用者以為列入基金也沒用 —— 一次只給一個。
+    ⛔ 疊在一起會讓使用者以為補資料也沒用 —— 一次只給一個。
     """
-    _parts = _stream("missing")
-    _empty_names = {_m.group(1).strip() for _p in _parts
-                    if (_m := _EMPTY_OPEN.match(_p))}
-    assert _empty_names, "（missing）根本沒有空狀態單位 —— NAV 那一塊應該要走空狀態。"
+    _parts, _ = _run_gated(BACKEND_ON, {}, funds=FAKE_HOLDINGS)
+    _empty_names = {_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))}
+    assert _empty_names, "讀成功且沒有資料時應該要有空狀態。"
     _seg = _segments(_parts)
     for _name in _empty_names:
         assert _PENDING_NOTE not in _text(_seg.get(_name, [])), (
@@ -555,8 +1361,13 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
 def test_every_grey_unit_says_where_to_look(unit: str):
     """每個灰態單位都要帶「去哪補」—— 沒有它，占位只是把「消失」換成「灰色的消失」。"""
     _body = _text(_segments(_stream("loaded")).get(unit, []))
-    assert _pending_where(nav_manual_label()) in _body, (
-        f"單位「{unit}」的灰態沒有帶指路。線框 §02：這是最容易省掉、也最有價值的一項。")
+    _want = _GREY_POINTER()[unit]
+    assert _want in _body, (
+        f"單位「{unit}」的灰態沒有帶它該帶的那一句指路 {_want!r}。\n"
+        "線框 §02：這是最容易省掉、也最有價值的一項。\n"
+        "⚠️ 三塊的指路**不一樣**（見 `_GREY_POINTER`）—— "
+        "NAV 那一塊的下一步是勾同一張卡上的 gate，不是去手動補資料。\n"
+        f"{_body}")
 
 
 def test_the_form_block_is_not_grey():
@@ -720,83 +1531,27 @@ def test_no_grey_unit_states_a_conclusion():
                     "說「正常」是憑空捏造一個系統健康狀態的結論（§1）。")
 
 
-def test_the_empty_state_never_claims_the_user_has_no_funds():
-    """⭐ 空狀態只准說「**這個 session 還沒載入**」，**不准說「你沒有基金」**。
-
-    ⛔ **2026-09-05 獨立稽核必修（客戶紅線 §1）。** 舊文案是
-    ~~「還沒有任何基金可以談涵蓋度」／「**一檔都還沒列入**」／「**列入之後**…」~~ ——
-    **那是對每一位使用者說的一句假話，包含雲端有 42 檔的人。**
-
-    **實測依據**：`git grep -c portfolio_funds origin/main -- app.py` → **0 命中**，
-    開站**沒有任何自動載入**；所有寫入點都在使用者按鈕內
-    （`ui/helpers/cloud_io.py`「📥 立即全部讀回」、`linkage.py`「➕ 加入組合」、
-    `json_backup.py` 還原）。→ **每一位使用者的每一次新 session，這個鍵都不存在。**
-    我們知道的只有「這個 session 還沒載入」，說出口的卻是「你沒有基金」。
-
-    ✅ **④ `page_04_portfolio.py` 做對了**（「還沒有任何**已載入的**保單或扣款標的」／
-    footer「**載入**之後」）—— ⑤ 第一版把那個限定詞拿掉了。
-    **同一個 repo 裡，對的版本就在隔壁檔案。**
-
-    ⚠️ **本條守的是「有沒有那個限定詞」，不守文案好不好讀。**
-
-    ⛔ **2026-09-06 獨立稽核必修 —— 舊版把限定詞查在「標題＋內文的聯集」上，
-    等於沒守到標題。** 三序實測（`-p no:randomly` ＋ seed 101 ＋ seed 20260906）：
-    只改標題成「你的雲端一檔基金都沒有」、內文保留限定詞 → **50 passed**；
-    標題改「目前沒有任何基金」、內文保留限定詞 → **50 passed**；
-    內文改「你的雲端還沒有任何 NAV 歷史，一筆都沒有」、標題保留限定詞 → **50 passed**。
-    **⑤ 這一整批裡，這是唯一一句直接對使用者說話、而且會說謊的東西** ——
-    而使用者讀的是那行**粗體標題**。現行改成**標題與內文各查一次**，四顆全紅。
-
-    ⚠️ **本條明確守不到的（照實列）**
-    - ⛔ **說謊黑名單只有那四個字面寫法**，近義詞抓不到：內文寫
-      「你的雲端**一筆都沒有**」只因為**內文自己也帶了限定詞**才過關 ——
-      **擋下它的是限定詞那半條，不是黑名單**。黑名單結構上抓不到名單外的第 N+1 種說法。
-      ⛔ **不要為了補這個而去窮舉近義詞** —— 那條路沒有盡頭；
-      承重的是「兩半各自都要帶限定詞」這條結構性要求。
-    - ⛔ **`footer` 併在 `_body` 裡一起查**（`_EMPTY_OPEN` 只認 `font-weight:600` 的標題 div）。
-      也就是 footer **自己**沒有限定詞不會紅，只要內文別處有 —— 這是刻意的
-      （footer 是尾註不是主張），但**不得**被讀成「footer 怎麼寫都行」。
-    - ⛔ **限定詞只要在那一半的【任何地方】出現就算數，包含括號裡的附註。**
-      實測（三序 **50 passed**）：標題寫
-      「你的雲端沒有任何基金（**這個 session** 已載入 0 檔）」——
-      前半在對使用者的雲端下斷言、後半塞一個限定詞就過關，而黑名單四個字面寫法
-      也抓不到「沒有任何基金」（名單裡是「**還**沒有任何基金」）。
-      ⛔ **這是本條最短的一條繞道，而且不需要繞開任何結構** —— 補它要能判「這句話
-      在講 session 還是在講雲端」，那是語意問題，字面比對做不到。**登記，不是沒看到。**
-    """
-    # ⛔ **兩條路都要跑**（2026-09-06 補）：`missing`（鍵不存在，第一次進站）與
-    #    `empty`（鍵在但是空 list）**在頁面端目前共用同一段 `if not _holdings():`**，
-    #    但守衛原本只跑 `missing` —— 也就是**「空 list」那條路可以自由說謊**。
-    #    實測：只在 `portfolio_funds` 存在時改印「你的雲端一檔基金都沒有」
-    #    → **50 passed 三序**。現在兩條都跑，那顆突變當場紅。
-    for _kind in ("missing", "empty"):
-        _check_empty_state_is_honest(_kind)
-
-
-def _check_empty_state_is_honest(kind: str) -> None:
-    """:func:`test_the_empty_state_never_claims_the_user_has_no_funds` 的單一形狀檢查。"""
-    _parts = _stream(kind)
-    _empty = [_m.group(1).strip() for _p in _parts if (_m := _EMPTY_OPEN.match(_p))]
-    assert len(_empty) == 1, f"（{kind}）空狀態單位應恰好 1 個：{_empty}"
-    _body = _text(_segments(_parts).get(_empty[0], []))
-    # ⛔ **標題與內文分開查，不查聯集**（2026-09-06 獨立稽核必修）。
-    #    舊版把兩者接成 `_all` 再查一次 —— 於是**誰有限定詞誰就替對方過關**：
-    #    只把標題換成「你的雲端一檔基金都沒有」、內文保留限定詞 → **50 passed 三序**；
-    #    只把內文換成「你的雲端還沒有任何 NAV 歷史」、標題保留限定詞 → 同樣**全綠**。
-    #    **使用者讀的是那行粗體標題**，而標題可以整句說謊、只要內文某處還留著限定詞。
-    #    這與 :func:`_units` 那句「邊界一寬，鄰居的字就會替你通過」是同一個病。
-    for _where, _txt in (("標題", _empty[0]), ("內文", _body)):
-        # 必須帶「這個 session / 工作階段 / 已載入」這一類**限定詞**。
-        assert any(_q in _txt for _q in ("這個 session", "工作階段", "已載入", "還沒載入")), (
-            f"（{kind}）空狀態的{_where}沒有任何「這個 session」的限定詞：\n{_txt}\n"
-            "⛔ 開站不會自動載入（app.py 對 `portfolio_funds` 0 命中）—— "
-            "沒有限定詞就是在對一個雲端有 42 檔的人說「你沒有基金」（§1）。\n"
-            "⚠️ 標題與內文**各自**都要帶，不能靠對方 —— 使用者可能只讀到其中一半。")
-        # 不准出現「一檔都還沒列入」這種**斷言使用者資產**的說法。
-        for _lie in ("一檔都還沒列入", "還沒有任何基金", "你沒有基金", "一檔都沒有"):
-            assert _lie not in _txt, (
-                f"（{kind}）空狀態的{_where}出現了斷言使用者資產的說法 {_lie!r}：\n{_txt}\n"
-                "我們只知道「這個 session 沒載入」，不知道他雲端有沒有基金。")
+# ⛔ **`test_the_empty_state_never_claims_the_user_has_no_funds` 與其 helper
+#    `_check_empty_state_is_honest` 已於 2026-09-06（P05-1）整段移除，取代品是
+#    :func:`test_the_empty_state_only_appears_after_a_successful_read` ＋
+#    :func:`test_the_empty_state_asserts_nothing_about_the_users_funds`。**
+#
+#    **這是有意識的替換，不是把一條客戶紅線的守衛刪掉，理由請讀完再動它：**
+#    舊條有兩半 —— (a) 說謊黑名單、(b) 「文案必須帶『這個 session / 已載入』這種限定詞」。
+#    - **(a) 原封保留**（黑名單搬進 `..._asserts_nothing_about_the_users_funds`，
+#      而且**多收了兩個**：「你的基金」「你沒有累積」）。
+#    - **(b) 必須拿掉，因為它在新行為下會強迫產生一句假話**：那個限定詞存在的唯一理由是
+#      「**我們那時根本沒讀過雲端**，只知道這個 session 沒載入」。P05-1 之後空狀態
+#      **只在真的讀成功之後**才出現 —— 這時再寫「這個 session 還沒載入」是錯的，
+#      事實是「**那張表真的是空的**」。
+#    - **承重的保護不是搬走而是換成更強的**：`..._only_appears_after_a_successful_read`
+#      是**結構性**的（未啟用 → 0 個空狀態；讀到空 → 恰好 1 個；讀到有資料 → 0 個），
+#      它管的是「這句話有沒有資格被說出口」，比「這句話裡有沒有某個詞」上游。
+#    ⚠️ **據實登記代價**：舊條會擋下「空狀態文案裡出現名單外的第 N+1 種說法」的機率
+#      **沒有變好也沒有變差**（黑名單本來就抓不到）；真正變掉的是
+#      **舊條那半條結構性要求（兩半各自都要帶限定詞）不再存在**。
+#      新條的結構性要求換成了「只有讀成功才到得了空狀態」——**不是同一件事**，
+#      只是本組判斷它在新行為下更貼題。**這是判斷，不是量出來的。**
 
 
 def test_pressing_submit_says_the_backfill_is_not_wired_yet():
@@ -813,7 +1568,9 @@ def test_pressing_submit_says_the_backfill_is_not_wired_yet():
     「資料可不可信」的頁面上，比多一句話糟得多（§1）。
     """
     _at = _app(FAKE_HOLDINGS)
-    _at.checkbox[0].check()
+    # ⚠️ **依標籤取，不用索引**（2026-09-06）：接上 NAV gate 之後 `checkbox[0]` 是 gate，
+    #    照舊寫法會勾錯框、然後測出一個假的結論。見 :func:`_cb`。
+    _cb(_at, _LABEL_SOURCE_CSV).check()
     _at.button[0].click()
     _rerun(_at)
     _all = _text(_flat(_at.main))
@@ -943,6 +1700,110 @@ def _input_widget_calls(tree: ast.AST) -> list[ast.Call]:
             and _n.func.attr in _INPUT_WIDGETS]
 
 
+#: **唯讀閘門**：可以把輸入元件放在 `applied_form(...)` 之外的函式。
+#:
+#: ⚠️ **2026-09-06（P05-1）新增的豁免，理由與它的證明一起寫在這裡。**
+#: 線框那句粗體管的是「**寫入類**動作，全部 Form 封裝」。
+#: NAV 累積狀態的 Checkbox Gate **不是寫入類** —— 它是一個
+#: 「**要不要去讀一次**」的唯讀開關，作用**恰好相反**：把一次 Google Sheets 往返
+#: 擋在點擊之後。把它塞進補資料的 form 裡，使用者就得**按下「開始補抓」才能看涵蓋度**，
+#: 那是把一個唯讀動作綁在一個寫入鈕上。
+#:
+#: ⛔ **豁免不是憑一句話成立的，它有機器證明**（見
+#: :func:`test_the_read_only_gate_really_is_read_only`）：名單上的函式必須
+#: **真的存在**、**一個 session 都不寫**、**不呼叫任何寫入類 L2 入口**、
+#: 而且**只放得下 checkbox / toggle 這種布林閘門**。
+#: 任何人想把一個 form 欄位搬出去，只要它會寫東西，那條證明就會紅。
+READ_ONLY_GATE_FUNCS: frozenset = frozenset({"_render_nav_status"})
+
+#: 會寫入 nav_history 的 L2 入口（`services/nav_history_gs.py::__all__` 的寫入側）。
+#: 唯讀閘門函式裡出現任何一個 → 它就不是唯讀的。
+_WRITE_CALL_NAMES: frozenset = frozenset({
+    "append_point", "append_points", "import_csv_text",
+})
+#: 唯讀閘門裡**唯一**允許的輸入元件形態（布林開關）。
+_GATE_ONLY_WIDGETS: frozenset = frozenset({"checkbox", "toggle"})
+
+
+def _func_defs(tree: ast.AST) -> dict[str, ast.FunctionDef]:
+    return {_n.name: _n for _n in ast.walk(tree)
+            if isinstance(_n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+def _read_only_gate_ranges(tree: ast.AST) -> list[tuple[int, int]]:
+    """:data:`READ_ONLY_GATE_FUNCS` 各函式的行區間。"""
+    _defs = _func_defs(tree)
+    return [(_d.lineno, getattr(_d, "end_lineno", _d.lineno))
+            for _n, _d in _defs.items() if _n in READ_ONLY_GATE_FUNCS]
+
+
+def test_the_read_only_gate_really_is_read_only():
+    """⭐ 唯讀閘門的**豁免證明** —— 沒有這條，上面那條豁免就是一個洞。
+
+    四項全部要過（任一不過 ＝ 那個函式不配拿豁免）：
+
+    1. **名單上的函式真的存在** —— 打錯字會讓豁免對一個不存在的名字生效，
+       而豁免區間變成空集合的話上面那條會**照常綠**（因為 form 外本來就沒東西）。
+       ⛔ 這一項擋的是「豁免悄悄失效」與「豁免悄悄擴大」兩個方向裡的**後者的入口**。
+    2. **函式內一個 session 都不寫**（下標／屬性／`update` / `setdefault` /
+       widget `key=` 四條管道全看，形狀沿用 :func:`test_the_page_writes_only_its_own_session_key`）。
+    3. **函式內不呼叫任何寫入類 L2 入口**（:data:`_WRITE_CALL_NAMES`）。
+    4. **函式內 form 外的輸入元件只能是 checkbox / toggle** —— 布林閘門。
+       ⛔ 這一項擋的是「把一個 `text_input` 搬進閘門函式來躲 form」。
+
+    ⚠️ **本條守不到的（照實列）**：
+    - 豁免是**以函式為單位**的，所以在 `_render_nav_status` 裡多放**第二個** checkbox
+      不會紅（第 4 項只管型別，不管數量）。目前那個函式只有一個 gate；
+      要不要連數量一起釘，本組判斷**不值得**（會把「多一個唯讀開關」也打紅）。**登記。**
+    - 第 3 項是**裸函式名**比對，`getattr(mod, "append_points")(...)` 這種非字面呼叫抓不到
+      （同本檔其他 AST 條的既有限制）。
+    - 「唯讀」只驗到**寫入的四條管道 ＋ 寫入類 L2 入口**；一個會寫檔案的新 helper
+      （例如 `pathlib.Path.write_text`）**不在射程內**。
+    """
+    _tree_ = _tree()
+    _defs = _func_defs(_tree_)
+    _missing = sorted(READ_ONLY_GATE_FUNCS - set(_defs))
+    assert not _missing, (
+        f"唯讀閘門名單上的 {_missing} 在被測檔裡不存在 —— "
+        "豁免正指著一個不存在的名字（改名之後這個豁免會靜靜留在檔案裡）。")
+
+    for _name in sorted(READ_ONLY_GATE_FUNCS):
+        _fn = _defs[_name]
+        _bad: list[str] = []
+        for _n in ast.walk(_fn):
+            _targets: list[ast.AST] = []
+            if isinstance(_n, ast.Assign):
+                _targets = list(_n.targets)
+            elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
+                _targets = [_n.target]
+            for _t in _targets:
+                if (isinstance(_t, (ast.Subscript, ast.Attribute))
+                        and "session_state" in _dotted(getattr(_t, "value", _t))):
+                    _bad.append(f"L{_n.lineno} 寫 session {_dotted(_t)}")
+            if isinstance(_n, ast.Call):
+                _d = _dotted(_n.func)
+                _leaf = _d.rsplit(".", 1)[-1]
+                if "session_state" in _d and _leaf in ("update", "setdefault"):
+                    _bad.append(f"L{_n.lineno} {_d}(...)")
+                if _d.startswith("st.") and any(_k.arg == "key" for _k in _n.keywords):
+                    _bad.append(f"L{_n.lineno} widget key= → {_d}")
+                if _leaf in _WRITE_CALL_NAMES:
+                    _bad.append(f"L{_n.lineno} 寫入類呼叫 {_d}(...)")
+        assert not _bad, (
+            f"「{_name}」拿了唯讀閘門豁免，但它會寫東西：{_bad}\n"
+            "⛔ 豁免只給**唯讀**閘門 —— 會寫的東西一律回到 `applied_form(...)` 裡面。")
+
+        _widgets = [_c for _c in _input_widget_calls(_fn)]
+        _wrong = sorted({_c.func.attr for _c in _widgets} - _GATE_ONLY_WIDGETS)
+        assert not _wrong, (
+            f"「{_name}」裡的輸入元件 {_wrong} 不是布林閘門 —— "
+            f"唯讀閘門只放得下 {sorted(_GATE_ONLY_WIDGETS)}；"
+            "其他輸入元件請回到 `applied_form(...)` 裡面。")
+        assert _widgets, (
+            f"「{_name}」在唯讀閘門名單上，卻一個輸入元件都沒有 —— "
+            "這個豁免已經沒有用途，請把它降回來（雙向 ratchet）。")
+
+
 def test_the_write_block_is_form_wrapped():
     """⭐ 線框**唯一**用粗體寫的硬要求：「寫入類動作，**全部 Form 封裝**」。
 
@@ -996,16 +1857,22 @@ def test_the_write_block_is_form_wrapped():
         "線框粗體要求「寫入類動作，全部 Form 封裝」。\n"
         "⚠️ 換成裸 `st.button` 是渲染層看不出來的（AppTest 沒有 `.form`），"
         "所以這條必須走 AST。")
+    _tree_ = _tree()
     _lo = min(_st.lineno for _st in _with.body)
     _hi = max(getattr(_st, "end_lineno", _st.lineno) for _st in _with.body)
-    _outside = [f"L{_c.lineno} st.{_c.func.attr}(…)"
-                for _c in _input_widget_calls(_tree())
-                if not (_lo <= _c.lineno <= _hi)]
+    _gate_ranges = _read_only_gate_ranges(_tree_)
+    _outside = [
+        f"L{_c.lineno} st.{_c.func.attr}(…)"
+        for _c in _input_widget_calls(_tree_)
+        if not (_lo <= _c.lineno <= _hi)
+        and not any(_a <= _c.lineno <= _b for _a, _b in _gate_ranges)]
     assert not _outside, (
         f"有輸入元件落在 `applied_form(...)` 的 `with` 之外：{_outside}\n"
-        f"（form body 行區間 = {_lo}~{_hi}）\n"
+        f"（form body 行區間 = {_lo}~{_hi}；唯讀閘門豁免區間 = {_gate_ranges}）\n"
         "線框粗體：「寫入類動作，**全部 Form 封裝**」—— form 外的 widget "
-        "每動一下就觸發一次 rerun，那正是鐵則 02 要買掉的成本。")
+        "每動一下就觸發一次 rerun，那正是鐵則 02 要買掉的成本。\n"
+        f"⚠️ 唯讀閘門的豁免名單是 {sorted(READ_ONLY_GATE_FUNCS)}，"
+        "而且**要通過 `test_the_read_only_gate_really_is_read_only` 的證明**才算數。")
     # 送出鈕的字仍然要對得上（這一條**恆真**，見 PR 描述的登記 10：
     # 測試 import 的就是頁面同一個常數，改字不可能紅；它的價值只有
     # 「鈕沒用到那個常數」這一種死法）。
@@ -1058,7 +1925,7 @@ def test_pressing_submit_with_a_source_records_the_applied_request():
     _at = _app(FAKE_HOLDINGS)
     # 勾一個來源、按送出，**同一次 run** —— 這才是使用者真的做的事
     #（form 內的 widget 值本來就要等送出才提交，中間不該多跑一輪）。
-    _at.checkbox[0].check()
+    _cb(_at, _LABEL_SOURCE_CSV).check()      # 依標籤，不用索引（見 `_cb`）
     _at.button[0].click()
     _rerun(_at)
     assert _SK_APPLIED in _at.session_state, (
@@ -1108,14 +1975,62 @@ def test_the_page_draws_no_grid_form_or_tabs_of_its_own():
         "巢狀 `st.tabs` 線框明文禁止。")
 
 
+#: 本頁**唯一**准許 import 的 L2 service。
+#: ⚠️ **2026-09-06（P05-1）從「一個都不准」放寬成「只准這一個」，理由寫在這裡。**
+#:    舊版寫「本批連取數都還沒有，更不該有」—— 那句話在**骨架批**是對的，
+#:    它的前提是「這一頁還沒有任何真內容」。P05-1 把 NAV 累積狀態接上了真取數，
+#:    **前提消失，條文跟著換**（不是把守衛放寬去遷就程式碼）。
+#: ⛔ **放寬的射程只有一個模組名**：`repositories`（L1）、`infra`（L0）、
+#:    `requests` / `httpx` / `gspread` / `yfinance` / `pandas` **一個都沒鬆**，
+#:    其餘 `services.*` 也**一個都沒鬆** —— 想再加一個就得再改這一行，
+#:    而改這一行會出現在 diff 裡。**這正是它該長的樣子。**
+#: ⚠️ `ui/**` → `services/**` 是 `CLAUDE.md §8.2` 的**正常方向**（L3→L2），
+#:    不需要任何憲法例外；本 repo 既有的 `ui/tab5_data_guard.py` 也是這樣呼叫它。
+_ALLOWED_SERVICE_MODULES: frozenset = frozenset({"services.nav_history_gs"})
+
+
 def test_the_page_never_reaches_into_the_data_layer():
-    """View 不得直接碰 L1／L2 —— 本批連取數都還沒有，更不該有。"""
-    _bad = [_m for _m in _imported_modules(_tree())
-            if _m.split(".")[0] in ("repositories", "services", "infra", "requests",
-                                    "httpx", "pandas", "yfinance", "gspread")]
+    """View 不得直接碰 L1／L0／HTTP；L2 只准 :data:`_ALLOWED_SERVICE_MODULES` 那一個。
+
+    ⚠️ **`_imported_modules()` 對 `from X import Y` 會同時吐 `X` 與 `X.Y`**
+    （見該函式 docstring），所以判定要**兩種形狀都認**：
+    `services.nav_history_gs` 本身、以及 `services.nav_history_gs.<符號>`。
+    ⛔ **點邊界不能省**：裸 `startswith` 會讓 `services.nav_history_gs_v2`
+    這種**不同的模組**跟著被放行（同本檔 `..._does_not_delegate_to_the_old_tabs`
+    2026-09-05 修過的那個洞）。
+    """
+    _banned_roots = ("repositories", "infra", "requests", "httpx",
+                     "pandas", "yfinance", "gspread")
+    _bad: list[str] = []
+    for _m in _imported_modules(_tree()):
+        _root = _m.split(".")[0]
+        if _root in _banned_roots:
+            _bad.append(_m)
+        elif _root == "services" and not any(
+                _m == _a or _m.startswith(_a + ".") for _a in _ALLOWED_SERVICE_MODULES):
+            _bad.append(_m)
     assert not _bad, (
-        f"被測檔 import 了資料／計算層：{_bad}\n"
-        "本批只做骨架，沒有取數；接線那一批也要走 L2 service，不得直呼 L1。")
+        f"被測檔 import 了不准碰的資料／計算層：{_bad}\n"
+        f"L2 只准 {sorted(_ALLOWED_SERVICE_MODULES)}；L1（`repositories`）與 L0（`infra`）"
+        "以及任何 HTTP client 一律不得直呼。")
+
+
+def test_the_service_allowlist_is_not_a_dead_letter():
+    """⭐ 錨點：白名單上的模組**必須真的存在，而且真的被本頁 import**。
+
+    ⛔ 沒有這一條，白名單就會變成一張**只增不減**的紙：
+    模組改名 → 上一條照樣綠（它只檢查「有沒有 import 不該 import 的」，
+    白名單上的東西不見了它一個字都不會說），於是那一行放寬會**永久留在檔案裡**，
+    替下一個人開一道沒有人記得為什麼存在的門。
+    """
+    for _a in _ALLOWED_SERVICE_MODULES:
+        assert (ROOT / (_a.replace(".", "/") + ".py")).is_file(), (
+            f"白名單上的 {_a!r} 在磁碟上不存在 —— 放寬條文指向一個不存在的模組。")
+    _imported = set(_imported_modules(_tree()))
+    _unused = sorted(_a for _a in _ALLOWED_SERVICE_MODULES if _a not in _imported)
+    assert not _unused, (
+        f"白名單上的 {_unused} 本頁根本沒有 import —— "
+        "放寬條文已經沒有用途，請把它降回來（`CLAUDE.md §8.2.A.0` 規則 2 的雙向 ratchet）。")
 
 
 def test_the_page_does_not_delegate_to_the_old_tabs():
@@ -1182,9 +2097,18 @@ def test_the_page_writes_only_its_own_session_key():
                                 **任何「找賦值節點」的手段都收不到它**
     == ======================== ==============================================
 
-    📌 **另一組正在把這段共用實作收進 `tests/_ast_bindings.py`**
-    （分支 `claude/fund-guard-ast-sn42bh`，本批**不得碰、也不得 import** —— 它還沒合併）。
-    **共用 helper 合併後，本條應改為 import 它，不要留兩份**（`CLAUDE.md §2.1`）。
+    📌 ~~**另一組正在把這段共用實作收進 `tests/_ast_bindings.py`**
+    （分支 `claude/fund-guard-ast-sn42bh`，本批**不得碰、也不得 import** —— 它還沒合併）。~~
+    → ⚠️ **2026-09-06 狀態更新（不是漏刪）：它已經合併了**（#785，`f22a7b3`）——
+    `tests/_ast_bindings.py` 與 `tests/test_ast_bindings_helper.py` 現在都在 main 上，
+    `wf02` / `wf03` / `wf04` / `settings_diag_merge` 四檔已改為 import 它。
+    **上面那句「它還沒合併」在寫下的當天為真，今天不再為真** —— 留著會讓下一個人
+    以為那個 helper 還不能用。
+
+    ⛔ **本檔【還沒】改成 import 它，而且是刻意的**：那是一次會動到本條斷言邏輯的
+    重構，**不在 P05-1 的射程內**（本批的任務是 NAV 累積狀態接線）。
+    **共用 helper 已經在了，本條應改為 import 它、不要留兩份**（`CLAUDE.md §2.1`）——
+    **登記為待辦，交給碰到本檔的下一批**；本組沒有做，不假裝做了。
     本檔目前的寫法比照 `tests/test_wpg_portfolio_health_link_20260831.py`。
     """
     _tree_ = _tree()
@@ -1317,7 +2241,7 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     _before = {_u: _text(_segments(_stream("loaded")).get(_u, []))
                for _u in _grey_units()}
     _at = _app(FAKE_HOLDINGS)
-    _at.checkbox[0].check()
+    _cb(_at, _LABEL_SOURCE_CSV).check()      # 依標籤，不用索引（見 `_cb`）
     _at.button[0].click()
     # ⚠️ **一定要跑兩次，這不是保險是必需**（2026-09-05 獨立稽核應修）：
     #    `render_settings_and_diagnostics()` 裡 `_render_grid()` 在**最前面**、
