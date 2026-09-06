@@ -799,6 +799,52 @@ def test_a_span_never_appears_without_its_point_count(entry: dict, held: bool):
             f"這一行有「{POINTS_UNIT}」但它前面沒有數字，點數不是真的印出來了：{_line!r}")
 
 
+def test_an_uncomputable_count_is_never_rendered_as_zero():
+    """⭐ **點數算不出來時，畫面上不准出現 `0`** —— `0` 是宣稱，`None` 是「不知道」。
+
+    ⛔ **這是本批自查出來的一個 §1 破口，不是派工單交代的。** 第一版寫的是
+    `int(entry.get("points") or 0)` ＋ `except: _points = 0` ——
+    一個讀不出來的值會被畫成「**0 筆**」，而它跟「**真的一筆都沒有**」
+    在畫面上**長得一模一樣**。這一頁的職責正好是回答「這個數字可不可信」。
+
+    **現行**：算不出來 → 整行改成「這一筆的點數讀不出來（原始值 …）」，
+    而且**連跨度都不印**（沒有點數的跨度是這一頁最危險的那種數字：
+    它看起來像一段完整歷史，而我們連有幾個點都不知道）。
+
+    ⚠️ **本條驗的是性質，對每一種算不出來的形態都成立**，不綁死在某個字串。
+    """
+    for _bad in (None, "壞掉", [], {}, object()):
+        _line = coverage_line("ABC123", {"points": _bad, "span_days": 999,
+                                         "first": "2020-01-01", "last": "2026-01-01"})
+        assert SPAN_PHRASE not in _line, (
+            f"點數是 {_bad!r} 算不出來，卻還是印了跨度：{_line!r}")
+        assert f"0 {POINTS_UNIT}" not in _line, (
+            f"點數是 {_bad!r} 算不出來，卻被畫成 0：{_line!r}\n"
+            "⛔ 0 是一個宣稱（「一筆都沒有」），我們沒有資格說它。")
+    # 真的是 0 → 照印 0（那是一個我們算得出來的事實，不是猜的）。
+    _zero = coverage_line("ABC123", {"points": 0, "span_days": 0,
+                                     "first": "2026-01-01", "last": "2026-01-01"})
+    assert f"0 {POINTS_UNIT}" in _zero and SPAN_PHRASE in _zero, _zero
+
+
+def test_the_headline_says_when_some_counts_are_unreadable():
+    """總結句**不准無聲低報** —— 算不出來的那幾筆要說出來。
+
+    ⛔ 只把壞值「跳過」的話，總數會比實際少，而畫面上**完全看不出少了東西**。
+    那是 §1 的另一種形狀：不是造假，是**無聲的低報**。
+    """
+    _mixed = {"OK1": {"points": 10, "first": "2026-01-01", "last": "2026-02-01",
+                      "span_days": 31},
+              "BAD1": {"points": "壞掉", "first": "", "last": "", "span_days": 0},
+              "BAD2": {"points": None, "first": "", "last": "", "span_days": 0}}
+    _got = coverage_headline(_mixed)
+    assert f"10 {POINTS_UNIT}" in _got, f"可算的那一筆沒有被算進去：{_got!r}"
+    assert "2" in _got and "讀不出來" in _got, (
+        f"總結句沒有說出有幾筆算不出來，等於無聲低報：{_got!r}")
+    assert SPAN_PHRASE not in _got and "年" not in _got, (
+        f"總結句裡出現了跨度：{_got!r}")
+
+
 def test_span_days_is_read_in_exactly_one_place():
     """⭐ **全檔只有 :func:`coverage_line` 可以讀 `span_days`。**
 

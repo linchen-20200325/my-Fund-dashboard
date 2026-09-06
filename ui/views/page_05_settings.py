@@ -342,6 +342,21 @@ def _holdings() -> list[dict[str, Any]]:
     return [_f for _f in _cur if isinstance(_f, dict)] if isinstance(_cur, list) else []
 
 
+def _as_int(value: Any) -> int | None:
+    """能算出整數就回它，**算不出來回 `None`，不回 `0`**。
+
+    ⛔ **`0` 是一個宣稱（「一筆都沒有」），`None` 是「我不知道」** —— §1 的分界就在這裡。
+    把一個讀不出來的值悄悄當成 0，畫面上會長得跟「真的是 0」一模一樣，
+    而這一頁的職責正好是回答「這個數字可不可信」。
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def coverage_headline(coverage: dict[str, Any]) -> str:
     """涵蓋度的一句話總結 —— **只講數量，不講跨度**。
 
@@ -355,15 +370,21 @@ def coverage_headline(coverage: dict[str, Any]) -> str:
     """
     _codes = [_c for _c, _e in coverage.items() if isinstance(_e, dict)]
     _points = 0
+    _unknown = 0
     for _e in coverage.values():
-        if isinstance(_e, dict):
-            try:
-                _points += int(_e.get("points") or 0)
-            except (TypeError, ValueError):
-                # §1：壞值不猜、也不靜默當 0 影響結論 —— 它就是「這一筆算不出來」，
-                # 但總數仍要誠實反映其餘可算的部分，故只跳過這一筆。
-                continue
-    return f"{len(_codes)} 檔 · 共 {_points} {POINTS_UNIT}"
+        if not isinstance(_e, dict):
+            continue
+        _n = _as_int(_e.get("points"))
+        if _n is None:
+            # ⛔ **算不出來的那幾筆要說出來，不能只是「跳過」** —— 靜靜略過會讓
+            #    總數比實際少，而畫面上完全看不出少了東西（§1：那是無聲的低報）。
+            _unknown += 1
+            continue
+        _points += _n
+    _head = f"{len(_codes)} 檔 · 共 {_points} {POINTS_UNIT}"
+    if _unknown:
+        _head += f"（另有 {_unknown} 檔的點數讀不出來，未計入）"
+    return _head
 
 
 def coverage_line(code: str, entry: dict[str, Any], *, held: bool = False) -> str:
@@ -386,17 +407,20 @@ def coverage_line(code: str, entry: dict[str, Any], *, held: bool = False) -> st
            ⚠️ 只是一個標記；**沒列入不代表使用者沒有它**（`portfolio_funds`
            開站不自動載入），所以沒有標記的那些**不寫任何否定的話**。
     """
-    try:
-        _points = int(entry.get("points") or 0)
-    except (TypeError, ValueError):
-        _points = 0
-    try:
-        _span = int(entry.get("span_days") or 0)
-    except (TypeError, ValueError):
-        _span = 0
+    _points = _as_int(entry.get("points"))
+    _span = _as_int(entry.get("span_days"))
     _first = str(entry.get("first") or "").strip() or "?"
     _last = str(entry.get("last") or "").strip() or "?"
     _mark = " ・本 session 已列入" if held else ""
+    if _points is None:
+        # ⛔ **點數算不出來 → 這一行連跨度都不印。**
+        #    這不只是為了滿足「跨度要有點數作伴」那條規則 —— 沒有點數的跨度
+        #    是**這一頁最危險的那一種數字**：它看起來像一段完整歷史，
+        #    而我們連有幾個點都不知道（§1）。
+        return f"- `{code}`{_mark}：這一筆的點數讀不出來（原始值 {entry.get('points')!r}）"
+    if _span is None:
+        return (f"- `{code}`{_mark}：**{_points} {POINTS_UNIT}**"
+                f"（{_first} → {_last}，首末日期算不出天數）")
     return (f"- `{code}`{_mark}：**{_points} {POINTS_UNIT}**"
             f"（{_first} → {_last}，{SPAN_PHRASE} {_span} 天）")
 
