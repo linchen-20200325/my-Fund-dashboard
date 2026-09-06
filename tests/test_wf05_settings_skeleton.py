@@ -15,39 +15,59 @@
 - 「NAV 累積狀態」**維持本檔實作**（總管裁決 2），因為委派回去會把一個
   **已知的假數字**放回線上（見 :func:`test_the_old_status_block_really_does_print_a_bare_zero_span`）。
 
-⛔ **本輪移除的守衛，逐條列出理由（不要以為是漏刪）**
------------------------------------------------------
+⛔ **本輪的守衛增減，逐條列出（不要以為是漏刪）**
+-----------------------------------------------
 
-== ============================================================ =========================================
-#  被移除的 test                                                 為什麼它不再有對象
-== ============================================================ =========================================
-1  `test_the_page_does_not_delegate_to_the_old_tabs`             **它禁止的正是 (A) 路線要求的事。**
-                                                                 取代品是**正向**的
-                                                                 :func:`test_the_page_delegates_to_exactly_the_documented_public_entries`
-                                                                 —— 從「不准委派」換成「**只准委派這幾支**」，
-                                                                 封閉集合、fail-closed，**保護沒有變弱**。
-2  `test_every_grey_unit_is_grey_until_its_content_lands`        它自己的 docstring 就寫著
-   `test_every_grey_unit_says_where_to_look`                     「真內容接上時這條會轉紅 ——
-                                                                 **那是預期的**」。真內容接上了。
-                                                                 剩下的兩個 gate 灰態由
-                                                                 :func:`test_both_gates_are_grey_and_point_at_themselves` 守。
-3  `test_the_form_block_is_not_grey`                             那一塊已委派，不再由本檔畫。
-   `test_the_manual_is_static_text_not_a_grey_placeholder`       改由
-   `test_the_manual_lists_exactly_the_wireframe_three`           :func:`test_the_delegated_blocks_have_real_content_not_a_grey_placeholder`
-                                                                 一次守四塊（**比原本三條各守一塊強**）。
-4  Form 那一整節（`_render_backfill_form` 的 7 條）                被測檔已無自寫 Form。
-                                                                 「三條寫入路徑一條不少」改由既有的
-                                                                 `tests/test_ia_tab5_nav_history_merge.py::`
-                                                                 `test_manual_block_renders_all_three_write_paths` 守
-                                                                 （**那一條本來就在，而且驗得比本檔深**）。
-5  `test_pressing_submit_says_the_backfill_is_not_wired_yet`     「按了不會寫」這件事**消失了** ——
-                                                                 委派之後它真的會寫。
-6  `test_the_pending_pointer_is_*`（2 條）                        `_pending_where()` 已改名為 `_where()`
-                                                                 且不再有「分批上線」那種指路。
-                                                                 形狀由 :func:`test_the_pointer_is_a_place_not_a_status_sentence` 續守。
-== ============================================================ =========================================
+⚠️ **本段的數字是實測的，而且改正過一次。** 本組第一版在這裡寫「移除 6 條」——
+**實測是 17 條**（AST 比對 `origin/main` 與本檔的 `test_*` 函式名，62 → 60；分類 A2／B1／C5／D9）。
+⛔ **一段在講「守衛為什麼可以消失」的文字，自己的計數必須先為真**
+（`CLAUDE.md §-2` 規則 6）。**下面是重數之後的版本。**
 
-⚠️ **1、3、4 三項是「換成更強的」，2、5、6 是「對象真的消失了」。兩種不要混為一談。**
+**移除 17 條，分成四類**（類別是本組的判讀，數字是量出來的）：
+
+== ==== ============================================================ ==================================
+類  條數  哪幾條                                                       為什麼
+== ==== ============================================================ ==================================
+A  2    `test_all_units_are_present_and_in_wireframe_order`           **純改名**（`units`→`blocks`）／
+        `test_unit_names_are_unique`                                  **換成更強的**
+                                                                      （`test_each_block_heading_is_drawn_exactly_once`
+                                                                      雙向驗每個標題恰好 1 次）
+B  1    `test_the_page_does_not_delegate_to_the_old_tabs`              **語意翻面**：它禁止的正是 (A) 路線
+                                                                      要求的事。取代品是封閉集合、
+                                                                      雙向 fail-closed，**射程更大**
+C  5    `test_every_grey_unit_is_grey_until_its_content_lands`         **對象消失**：那三塊接上真內容了。
+        `test_every_grey_unit_says_where_to_look`                      舊條自己的 docstring 就寫著
+        `test_the_form_block_is_not_grey`                              「真內容接上時會轉紅 ——
+        `test_the_manual_is_static_text_not_a_grey_placeholder`        **那是預期的**」。
+        `test_the_manual_lists_exactly_the_wireframe_three`            改由
+                                                                      `test_the_delegated_blocks_have_real_content_not_a_grey_placeholder`
+                                                                      ＋ `test_both_gates_are_grey_and_point_at_themselves`
+                                                                      兩條接手
+D  9    Form 那一整節（`test_the_write_block_is_form_wrapped` /         **對象消失**：自寫 Form 退役。
+        `test_the_three_fields_are_present_and_default_to_doing_nothing` / **真正的契約沒有失去守衛** ——
+        `test_pressing_submit_with_no_source_never_counts_as_a_request` /  委派之後三條寫入路徑由
+        `test_pressing_submit_with_a_source_records_the_applied_request` / `tests/test_ia_tab5_nav_history_merge.py`
+        `test_normalise_request_coerces_to_bool` /                        `::test_every_write_path_is_wrapped_in_a_form`
+        `test_applied_request_ignores_a_corrupted_session_value` /        守（驗實際送給 `st.form()` 的 key，
+        `test_pressing_submit_says_the_backfill_is_not_wired_yet`）        **比原本那條深**）；
+        ＋ `test_the_pending_pointer_is_a_place_not_a_status_sentence`     指路那條**純改名**為
+        （改名）／`test_the_pending_pointer_is_honest_about_being_ineffective` `test_the_pointer_is_a_place_not_a_status_sentence`
+== ==== ============================================================ ==================================
+
+⚠️ **A／B 是「換成更強的」，C／D 是「對象真的消失了」。兩種不要混為一談。**
+
+⛔ **另有 1 條是本組差點弄丟的，據實記在這裡**：
+`test_the_page_writes_only_its_own_session_key` 原本落在被丟棄的區間裡，
+**本組在做「舊 vs 新逐條對帳」時才發現它不見了** ——
+也就是說，**如果沒有回頭數一次，它會無聲消失**。已補回並**收緊**：
+舊版的形態 4 是「只要 widget 帶 `key=` 就紅」，那擋不住「帶了一個**別人的** key」
+（它根本不看 key 是什麼）；現在改成**看 key 的名字**，不在白名單裡才紅。
+四條寫入管道各有一顆突變（M18~M21），全部 KILLED。
+
+**新增 15 條**（委派白名單、禁委派回會說謊的那塊、上游假數字的實證、
+旗標靜態綁定 ＋ 呼叫當下 sentinel、`POLICY_ADMIN` 未開、兩個 gate 的灰態與指路、
+gate 預設與 key 命名空間、gate 的呼叫次數與順序、每個標題恰好一次、
+六區塊順序、委派區塊有真內容、新舊委派集合對帳、指路形狀）。
 
 守什麼、不守什麼（先講清楚，避免下一個人以為這裡已經守死了）
 ------------------------------------------------------------
@@ -2232,6 +2252,76 @@ def test_the_page_does_not_render_cache_or_backoff_state():
     assert not _bad_names and not _bad_imports, (
         f"被測檔碰了快取／退避：常數 {_bad_names}、import {_bad_imports}\n"
         "線框明文：那批不必改任何畫面，本次不推翻。")
+
+def test_the_page_writes_only_its_own_session_key():
+    """本頁只准寫**自己命名空間**的 session 鍵，不准動別人的。
+
+    ⚠️ **session 寫入有四條管道，四條都要看**（本 repo 既有的失效模式）：
+
+    == ======================== ==============================================
+    #  管道                      長相
+    == ======================== ==============================================
+    1  下標賦值                  `st.session_state["k"] = v`
+    2  **屬性賦值**              `st.session_state.k = v`（本 repo 的主流寫法）
+    3  `.update()` / `.setdefault()`
+    4  ⭐ **widget 的 `key=`**   streamlit **代呼叫端寫入**；AST 上是普通 `ast.Call`，
+                                **任何「找賦值節點」的手段都收不到它**
+    == ======================== ==============================================
+
+    ⚠️ **2026-09-06 委派化：白名單從 `_SK_APPLIED` 換成 `_SK_DIAG_GATE`。**
+    自寫 Form 退役 → 那個鍵沒了；新增的是資料來源健康度 gate 的 key。
+    **白名單仍然只有一個名字**，射程一格未鬆。
+
+    ⛔ **本條在委派之下更重要，不是更不重要**：被測檔現在會呼叫四支舊模組，
+    而那些模組**自己**會寫一堆 session —— 本條只掃**被測檔自己的原始碼**（AST），
+    所以委派進來的寫入不會誤紅，但**被測檔自己順手寫別人的鍵**照樣會紅。
+
+    📌 **待辦（登記，本輪沒做）**：`tests/_ast_bindings.py`（#785 已合併）有這段共用實作，
+    `wf02`/`wf03`/`wf04`/`settings_diag_merge` 四檔已改為 import 它。
+    **本檔還沒改，而且是刻意的** —— 那是一次會動到本條斷言邏輯的重構，
+    不在本批射程內。**共用 helper 已經在了，本條應改為 import 它、不要留兩份**
+    （`CLAUDE.md §2.1`）；交給碰到本檔的下一批。本組沒有做，不假裝做了。
+    """
+    _tree_ = _tree()
+    _allowed = {_SK_DIAG_GATE}
+    _writes: list[str] = []
+    for _n in ast.walk(_tree_):
+        _targets: list[ast.AST] = []
+        if isinstance(_n, ast.Assign):
+            _targets = list(_n.targets)
+        elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
+            _targets = [_n.target]
+        for _t in _targets:
+            # `x = st.session_state.get(...)` 是**讀**，target 是 Name，不會命中。
+            if isinstance(_t, ast.Subscript) and "session_state" in _dotted(_t.value):
+                _key = _dotted(_t.slice)
+                if _key not in {"_SK_DIAG_GATE"} | {repr(_k) for _k in _allowed}:
+                    _writes.append(f"L{_n.lineno} 下標賦值 {_dotted(_t)}")
+            elif isinstance(_t, ast.Attribute) and "session_state" in _dotted(_t.value):
+                _writes.append(f"L{_n.lineno} 屬性賦值 {_dotted(_t)}")
+        if isinstance(_n, ast.Call):
+            _d = _dotted(_n.func)
+            if ("session_state" in _d
+                    and _d.rsplit(".", 1)[-1] in ("update", "setdefault")):
+                _writes.append(f"L{_n.lineno} {_d}(...)")
+            # 形態 4：widget 帶 `key=` —— streamlit 會代為寫入 session_state。
+            # ⚠️ **2026-09-06 收緊而不是放寬**：舊版是「只要帶 `key=` 就紅」，
+            #    那在被測檔一個 `key=` 都沒有的時候等價於本版，**但它擋不住**
+            #    「帶了一個**別人的** key」——因為它根本不看 key 是什麼。
+            #    現在改成**看 key 的名字**：不在白名單裡才紅。
+            # ⛔ **fail-closed**：key 不是單純名稱／字面值（例如算出來的 f-string）→
+            #    照樣紅，因為那時本守衛**無法證明**它在白名單內。
+            for _k in _n.keywords:
+                if _k.arg != "key" or not _d.startswith("st."):
+                    continue
+                _src = _dotted(_k.value)
+                if _src not in {"_SK_DIAG_GATE"} | {repr(_x) for _x in _allowed}:
+                    _writes.append(f"L{_n.lineno} widget key={_src} → {_d}")
+    assert _writes == [], (
+        f"被測檔寫了自己命名空間以外的 session：{_writes}\n"
+        f"本頁只准寫 {_SK_DIAG_GATE!r}（`portfolio_funds` 是**別人定義**的鍵，只讀不寫）。\n"
+        "（widget `key=` 也算：streamlit 會代你把 widget 值寫進 session_state。）")
+
 
 def test_the_page_does_not_call_a_no_op_story_nav():
     """⛔ 不准照抄 `render_story_nav("settings")` —— 它會**靜默什麼都不畫**。
