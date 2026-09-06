@@ -619,11 +619,31 @@ def _render_mix() -> None:
        不是檔數）、分類**`policy_tier` 優先**（使用者在 Sheet 明示的級別），
        目標**一律讀 `portfolio_core_pct`**。這正是「核心／衛星現況 vs 目標」。
        ⛔ **對照組（差一點就接錯的那個）**：`services/policy_advisor_service.py::`
-       `recommend_policy` 也吐一個叫 `core_pct` 的數字 —— **名字對，意思錯**：
-       它是**單一保單**級（不是整個組合）、只看 `is_core` **不看 `policy_tier`**、
-       而且 `target_core_pct` **寫死預設 75.0** 不讀 session
-       （`PHASE1_UX_AUDIT_PROPOSAL.md` 就地記著這一條「碰巧一致，無機制保證」）。
-       接了它會得到一個「看起來合理、但用另一把尺量出來」的比例。
+       `recommend_policy` —— **名字對，意思錯**。分歧軸有兩條，**都與滑桿無關**：
+       (a) **分類**：它只看 `is_core`（名稱關鍵字啟發式），**完全不看 `policy_tier`**
+       （實測 `git grep -n policy_tier -- services/policy_advisor_service.py` **0 命中**；
+       正對照：同一條 grep 在全 repo 命中 10+ 檔，所以那個 0 是真的 0）；
+       (b) **範圍**：它是**單一保單**級，本頁是**整個組合**。
+
+       ⚠️ **`target_core_pct` 寫死 75.0 那條不成立，不要再拿它當理由**
+       （2026-09-06 稽核擋下，實測更正）：`75.0` 是**參數預設值，production 從來沒被用過**。
+       全 repo 唯一的 production 呼叫點是 `ui/tab3_portfolio.py`
+       （`recommend_policy(_funds_enriched, target_core_pct=_policy_target)`），
+       而 `_policy_target` 來自 `get_core_target_pct(st.session_state)` ——
+       **與本頁同一支 SSOT 函式**。也就是說目標值兩邊本來就同源，
+       ~~「預設下一模一樣、拉滑桿才分歧」~~ 這個機制**是假的**。
+
+       **把目標值固定成同一個數（排除該變因）後實測，差距 62 個百分點**：
+       用本檔 fixture（620000 `core` ／ 380000 `satellite`，`policy_tier` 明示）、
+       兩邊同給 `target=75.0` ——
+       SSOT `core_pct` = **62.0**；`recommend_policy` 的訊息是
+       「核心配置 **0.0%** 低於目標 75%（-75.0%）」。
+       0.0 的來源正是 (a)：fixture 沒有 `is_core` 欄位，它就當成一檔核心都沒有。
+
+       ⚠️ **它其實連 `core_pct` 這個欄位都不回**（AST 掃過 4 條 return path，
+       鍵一律只有 `{code, color, text}`）—— 那個數字是**內嵌在 `text` 字串裡**的。
+       所以「接它」實際上是把一句**用另一把尺算出來的中文句子**貼到畫面上，
+       比「拿錯一個數字」更難被發現。
     3. **算不出來時它回什麼** —— 回 `None`，**不是 0**。該函式的 docstring 逐字寫著
        「缺資料時誠實回 None，不捏造 0；CLAUDE.md §1」，並另外吐一個
        `is_amount_weighted` 旗標。→ 本函式據此走 :func:`not_ready`，**不畫 0%**。

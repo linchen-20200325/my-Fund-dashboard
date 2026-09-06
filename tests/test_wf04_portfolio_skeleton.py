@@ -1489,7 +1489,8 @@ def test_the_page_never_reaches_into_the_data_layer():
 #:    summarize_core_satellite|get_core_target_pct" origin/main -- 'services/'`
 #:    只命中 `services/health/asset_class.py` 的**註解**（它自己也是指回這一支）。
 #:    唯一名字相近的 `services/policy_advisor_service.py::recommend_policy` 是
-#:    **另一把尺**（單一保單級／不看 `policy_tier`／target 寫死 75），
+#:    **另一把尺**（單一保單級／不看 `policy_tier`；2026-09-06 更正：~~target 寫死 75~~
+#:    那條實測不成立，見 `test_the_page_does_not_use_the_look_alike_advisor` 的更正段），
 #:    接了會得到「名字對、意思錯」的比例 —— 由
 #:    :func:`test_the_page_does_not_use_the_look_alike_advisor` 明文擋住。
 #:
@@ -1618,29 +1619,55 @@ def test_the_named_exemption_is_still_a_pure_ssot():
 def test_the_page_does_not_use_the_look_alike_advisor():
     """⛔ **名字對、意思錯的那一個**：`policy_advisor_service` 不准出現在本頁。
 
-    `services/policy_advisor_service.py::recommend_policy` 也吐一個叫 `core_pct`
-    的數字，接起來畫面上**看不出任何異狀** —— 但它是用另一把尺量的（三處都實測過）：
+    `services/policy_advisor_service.py::recommend_policy` 講的也是「核心配置百分之幾」，
+    接起來畫面上**看不出任何異狀** —— 但它是用另一把尺量的：
 
     ====================== ================================ ==============================
     項目                    `recommend_policy`               本頁用的 SSOT
     ====================== ================================ ==============================
     範圍                    **單一保單**內的基金              **整個組合**
     核心／衛星怎麼分         只看 `is_core`（名稱關鍵字啟發）  **`policy_tier` 優先**，缺才退
-    目標值哪來              參數預設**寫死 75.0**             session `portfolio_core_pct`
     ====================== ================================ ==============================
 
-    ⚠️ 第三欄那個「碰巧一致」特別陰險：session 的預設值**也是 75**
-    （`ui/helpers/session.py`），所以**在預設情況下兩者算出來一模一樣** ——
-    使用者一旦把滑桿拉到別的值，這一格就會安靜地繼續用 75。
-    `PHASE1_UX_AUDIT_PROPOSAL.md` 就地記著這一條：「`portfolio_core_pct` 75%
-    （**碰巧一致，無機制保證**）」。
+    ## ⚠️ 2026-09-06 更正：原本這裡還有第三列「目標值哪來」，那一列是**假的**
+
+    舊表寫「`recommend_policy` 的 target 參數預設**寫死 75.0**」，並據此推出
+    ~~「session 預設也是 75 ⇒ **預設下兩者一模一樣，使用者拉滑桿才分歧**」~~。
+    **實測推翻（稽核擋下）**：`75.0` 只是**參數預設值，production 從來沒被用過**。
+    全 repo 唯一的 production 呼叫點是 `ui/tab3_portfolio.py`::
+
+        _policy_target = _get_core_target_p(st.session_state)   # = get_core_target_pct
+        _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
+
+    —— 它傳的是 **session 值**，而且走的是**與本頁同一支 SSOT 函式**
+    (`ui.helpers.portfolio.allocation.get_core_target_pct`)。目標值兩邊本來就同源，
+    **分歧軸與滑桿無關**，只有上表那兩條（分類、範圍）。
+
+    ## 分歧有多大：把目標值固定成同一個數，實測差 62 個百分點
+
+    用本檔 :data:`FAKE_HOLDINGS_PRICED`（620000 `core` ／ 380000 `satellite`）、
+    兩邊同給 ``target=75.0``（刻意排除「目標不同」這個變因）：
+
+    * `summarize_core_satellite` → ``core_pct = 62.0``
+    * `recommend_policy` → 訊息是「核心配置 **0.0%** 低於目標 75%（-75.0%）」
+
+    0.0 的來源正是分類那一列：fixture 用 `policy_tier` 明示級別、**沒有 `is_core` 欄位**，
+    而 `recommend_policy` 只看 `is_core` ⇒ 它認為一檔核心都沒有。
+    （`git grep -n policy_tier -- services/policy_advisor_service.py` **0 命中**；
+    正對照：同一條 grep 在全 repo 命中 10+ 檔，所以那個 0 是真的 0。）
+
+    ⚠️ **它連 `core_pct` 這個欄位都不回** —— AST 掃過它 4 條 return path，
+    鍵一律只有 ``{code, color, text}``；那個百分比是**內嵌在 `text` 中文句子裡**的。
+    （舊表述寫「也吐一個叫 `core_pct` 的數字」，一併更正。）
+    所以「接它」實際上是把一句**用另一把尺算出來的話**貼上畫面，
+    比「拿錯一個數字」更難被發現 —— 這反而讓本條的阻擋結論**更強**，不是更弱。
 
     ⛔ 這正是派工單點名的那個坑：**接一個名字對、語意錯的來源，比留白更糟。**
     """
     _bad = [_m for _m in _imported_modules(_tree()) if "policy_advisor" in _m]
     assert not _bad, (
         "本頁 import 了 `policy_advisor_service`：" + ", ".join(_bad)
-        + "\n它的 `core_pct` 是保單級、不看 `policy_tier`、目標寫死 75 —— "
+        + "\n它是保單級、只看 `is_core` 不看 `policy_tier` —— "
         "與本頁「整個組合 vs 使用者自己設的目標」不是同一件事。")
 
 
