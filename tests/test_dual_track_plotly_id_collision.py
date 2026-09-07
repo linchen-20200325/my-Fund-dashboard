@@ -339,3 +339,62 @@ def test_the_gate_still_has_a_reason_to_exist():
         f"（本頁委派且有風險的模組：{sorted(str(p.relative_to(ROOT)) for p in risky_mods)}）\n"
         "如果舊 ② 真的整批拔除了 ⇒ `_render_delegated_sections` 的 Checkbox Gate "
         "已經沒有存在理由，**請連同本條一起移除**，不要讓一個永久的勾選框留在畫面上。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 4｜行為層：**注入持倉**，也就是 CI 平常永遠沒有的那個前提
+# ══════════════════════════════════════════════════════════════════
+#: 委派區的標題，`_render_delegated_sections` 進到 gate 之後才會畫。
+_DELEGATED_HEADING = "#### 🔬 逐檔健診與互斥分析"
+
+
+def test_with_holdings_the_delegated_block_stays_closed_by_default():
+    """⭐ **有持倉**時渲染一輪：gate 恰好畫 1 次，委派區恰好畫 0 次。
+
+    ⚠️ **這一條的價值全在「有持倉」三個字**：本檔其餘四條是純靜態的，
+    而線上那顆 bug 的觸發前提就是「使用者**有持倉**」—— CI 永遠沒有持倉，
+    所以那條路徑在平常的測試裡**一次都不會被走到**。
+    本條用 `RICH_HOLDINGS` 把那個前提補上，證明**即使走到了**，
+    委派區在預設狀態下仍然關著 ⇒ 舊 ② 與本頁不會在同一個 run 各畫一次 plotly。
+
+    ⚠️ **數次數，而且 `== 0` 也要能紅**：
+    - gate `== 1`：0 代表 gate 整個不見了（委派區變成無條件執行）；
+      2 代表出現第二道語意不明的閘門。
+    - 委派區 `== 0`：**這個 0 是斷言的重點，不是「沒東西可驗」** ——
+      配合上面 gate `== 1` 的斷言，兩條一起才排除了「整塊消失所以當然是 0」。
+
+    ⚠️ **本條只驗 gate 關著的那一半，刻意不驗「打開會怎樣」**：把 gate 打開會**真的**
+    執行那七支舊模組（`render_allocation_backtest_section` 會去抓 USDTWD 歷史），
+    在測試裡跑它們等於引進網路 I/O 與一大票副作用。**那不是這一條該承擔的東西。**
+
+    ⚠️ **`streamlit` 相關的 import 一律留在函式內** —— 本檔另外四條是純 `ast`、
+    在沒有 streamlit 的環境也跑得動；把 import 提到模組層會把它們一起拖下水。
+    """
+    import sys  # noqa: PLC0415
+
+    # ⚠️ 與 `test_wf02_health_no_writes.py` 同一手法：**明示**把 `tests/` 放進
+    #    `sys.path` 再跨檔 import，不依賴 pytest 的 rootdir 插入行為。
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    # ⚠️ 錄影機與持股 fixture **一律沿用骨架守衛那一份**，不在這裡再造一台 ——
+    #    兩台錄影機必然漂移，而漂移的那一天沒有人會發現。
+    from test_wf02_health_skeleton import RICH_HOLDINGS, _render  # noqa: PLC0415
+
+    parts = _render(portfolio=RICH_HOLDINGS)
+
+    # 錨點：整頁根本沒渲染出東西的話，下面兩個計數都會是 0 而「通過」。
+    assert len(parts) > 10, (
+        f"整頁只錄到 {len(parts)} 筆渲染 —— 頁面沒有真的跑起來，"
+        "下面的計數會對著一片空白做斷言。")
+
+    _label = _page_const("DELEGATE_GATE_LABEL")
+    _gates = [p for p in parts if p.startswith("[checkbox] ") and _label in p]
+    assert len(_gates) == 1, (
+        f"有持倉時，gate「{_label}」被畫了 {len(_gates)} 次，應該**恰好 1 次**。\n"
+        "0 次 ＝ gate 不見了 ⇒ 委派區變成無條件執行 ⇒ 舊 ② 與本頁會在同一個 run "
+        "各畫一次 `st.plotly_chart` ⇒ 線上紅字塊。\n"
+        f"實際錄到的 checkbox：{[p for p in parts if p.startswith('[checkbox] ')]}")
+
+    _body = [p for p in parts if _DELEGATED_HEADING in p]
+    assert len(_body) == 0, (
+        f"gate 沒勾，委派區卻還是畫了 {len(_body)} 次 —— gate 沒有真的擋住它。\n"
+        "（`_Rec.checkbox` 一律回 `False`，所以這裡看到的就是「沒勾」的行為。）")
