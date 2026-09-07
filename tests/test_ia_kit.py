@@ -434,7 +434,14 @@ _SLOT_RENDER: dict[str, str] = {
     "tab_health":    "render_fund_grp_health_tab",   # ② 只診斷，不給建議動作
     "tab_research":  "render_fund_research_tab",     # ③ 找標的、研究單檔
     "tab_portfolio": "render_portfolio_tab",         # ④ 要執行的動作都在這裡
-    "tab_settings":  "render_settings_diag_tab",     # ⑤ 系統面
+    # 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：⑤ 改掛新 View
+    # `ui/views/page_05_settings.py::render_settings_and_diagnostics`。
+    # ⚠️ **同 ① 那一格：這是「意圖」變更，不是把規則放寬** —— 本條的作用
+    #    （分頁內容不准跟著改名一起漂走）一字未減：它仍然斷言 `with tab_settings:`
+    #    只呼叫這一個 render 函式，把別頁的 render 搬進來照樣紅。改的只是**該叫哪一個**。
+    # ⚠️ 舊 `ui/tab_settings_diag.py::render_settings_diag_tab` **一個字都沒有動**
+    #    （它是回退路徑，且新頁委派的正是它底下那些舊模組），只是不再被 `app.py` 掛上 ⑤。
+    "tab_settings":  "render_settings_and_diagnostics",  # ⑤ 系統面
 }
 
 

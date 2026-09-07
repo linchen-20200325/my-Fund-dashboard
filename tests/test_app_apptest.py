@@ -243,6 +243,33 @@ def test_tab2_search_input_and_button_rendered(at: AppTest) -> None:
         f"Tab2 「🚀 分析」按鈕 (key=btn_mj_load) 未找到；button keys: {btn_keys!r}"
 
 
+def _expander_labels(node) -> list[str]:
+    """AppTest 元素樹裡**所有 `st.expander` 的標題** —— 使用者點得到的那一行字。
+
+    ⚠️ **為什麼需要它**：`st.expander` 的標題**不是** `at.subheader`／`at.markdown`
+    的任何一種，它是 Block 的 `.label`。⑤ 換頁之後說明書就收在這種折疊區裡，
+    不走這條路就看不到它（見 :func:`test_tab6_manual_renders_key_sections` 的更正註）。
+
+    ⚠️ **走 `children` 這個 dict，⛔ 不要 `for c in node`** —— Block 的 `__iter__`
+    會把自己也走進去 → 無限遞迴。型別名是 `Expander`、標題在 `.label` ——
+    這兩件事**不是本組推的**，是 `tests/test_wf05_settings_skeleton.py::_flat`
+    早就在 CI 上實跑驗證過的寫法，本函式逐字沿用。
+    ⚠️ 與該處唯一的差別：本函式**不排序**（`.values()` 而非 `sorted(.items())`）——
+    本條只問「在不在」，不問順序，少一個排序就少一種會炸在無關地方的可能。
+    """
+    _out: list[str] = []
+    _ch = getattr(node, "children", None)
+    if not isinstance(_ch, dict):
+        return _out
+    for _c in _ch.values():
+        if type(_c).__name__ == "Expander":
+            _lbl = getattr(_c, "label", None)
+            if isinstance(_lbl, str):
+                _out.append(_lbl)
+        _out.extend(_expander_labels(_c))
+    return _out
+
+
 def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
     """說明書容器層必須有標題 + 內文（防整塊被誤刪 / 章標被誤改）。
 
@@ -305,14 +332,76 @@ def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
     **覆蓋面是變大的**：舊寫法只驗一行 `##`，新寫法驗「⑤ 的分區標題」＋
     「說明書自己的 caption」＋「說明書內文」三段。
 
-    ⚠️ 分區標題**從 SSOT 取**（`_SECTION_LABELS['manual']`），不在測試裡再抄一份。
-    """
-    from ui.helpers.story_nav import _SECTION_LABELS
+    ⚠️ 分區標題**從 SSOT 取**，不在測試裡再抄一份 —— 但**取的是哪一份 SSOT，
+    2026-09-07 換過**，見下方更正註。
 
-    _want_head = _SECTION_LABELS["manual"]          # 「📖 說明書」
-    _subs = [s.value for s in at.subheader if isinstance(s.value, str)]
-    assert any(_want_head in s for s in _subs), (
-        f"⑤ 沒有畫說明書分區標題「{_want_head}」；實際 subheader: {_subs!r}")
+    ⚠️ **2026-09-07 就地更正：⑤ 換頁之後，這條找錯了元素、也找錯了字。
+    有意識的政策變更，不是漏刪**（日期 **2026-09-07** · 決策者：**AI 總管**）::
+
+        ~~from ui.helpers.story_nav import _SECTION_LABELS~~
+        ~~_want_head = _SECTION_LABELS["manual"]          # 「📖 說明書」~~
+        ~~_subs = [s.value for s in at.subheader if isinstance(s.value, str)]~~
+        ~~assert any(_want_head in s for s in _subs)~~
+
+    **舊斷言的理由一個字都沒有被推翻** —— 「說明書整塊被誤刪、章標被誤改時要有人紅燈」
+    正是本條的全部價值，下面兩條斷言接的就是同一根針，而且**多釘了一個容器**。
+    **被權衡掉的是它的兩個前提，兩個都是 `app.py` ⑤ 換頁（本 PR）打壞的**：
+
+    ① **元素型別**：舊 ⑤（`ui/tab_settings_diag.py`）畫的是
+       `st.subheader("📖 說明書", anchor=ANCHOR_MANUAL)`；新 ⑤
+       （`ui/views/page_05_settings.py`）**全頁 `st.subheader` 呼叫數 ＝ 0**
+       （實測 `grep -c "st[.]subheader"` → 0；舊 ⑤ 是 4），版面一律
+       `st.markdown("### …")`，說明書本體再收進
+       `st.expander(BLOCK_MANUAL, expanded=False)`（「不佔首屏」的落地方式）。
+       → `at.subheader` **結構上就看不到它，再跑一百次也一樣**
+       —— 與 `CLAUDE.md` 反覆記載的「字表／取樣面選錯」是同一種病。
+
+    ② **字面**：新 ⑤ 取**線框逐字**的「使用手冊」（`page_05_settings.BLOCK_MANUAL`），
+       不是 SSOT `_SECTION_LABELS["manual"]` 的「📖 說明書」。
+       **線框是客戶親自審過的那份視覺；兩者不一致時新頁以線框為準**（總管裁決）。
+       ⛔ **不得**為了讓本條變綠去改頁面上的字；
+       ⛔ **也不得**去改 `_SECTION_LABELS["manual"]` —— **舊 ⑤ 還在用它**
+       （回退路徑，`tests/test_story_nav.py::test_section_labels_match_merged_pages`
+       以實際檔案內容比對它），動它會打壞另一條線。
+
+    ⚠️ **`st.subheader` → `st.markdown("### …")` 少掉的是 anchor —— 這件事查過了，
+    結論是「沒有消費者」，所以走改斷言、不是改頁面**（實測，非推論）：
+    以 `ANCHOR_MANUAL` **這個符號本身**當起點全 repo 追（不限副檔名），
+    它**只有 2 個消費者，而且兩個都在 `ui/tab_settings_diag.py` 檔內**：
+    同檔 `_render_shared_top()` 的頁內目錄那一行 ``[📖 說明書](#{ANCHOR_MANUAL})``
+    （跳轉來源）＋ 同檔 `_render_manual_section()` 的 `st.subheader(anchor=…)`（跳轉目標）。
+    **來源與目標同住一檔、而該檔本 PR 一個字都沒動** → 舊 ⑤ 的目錄照樣能跳。
+    追字面值 `sd-sec` 同樣**只命中該檔的 4 行定義**（另 2 行是本 docstring 自己）。
+    而新 ⑤ **沒有頁內目錄**（對該檔 grep ``](#`` → 0 命中）
+    → **新頁上沒有任何東西會跳到 anchor，補 anchor 只會補出一個沒人連的錨點**。
+    ⚠️ **反過來也不能做**：新 ⑤ 的區塊標題若改回 `st.subheader` 以取得 anchor，
+    `tests/test_wf05_settings_skeleton.py::test_each_block_heading_is_drawn_exactly_once`
+    會**六塊全部數到 0 次**（它認的是 ``[Markdown] ### ``，不是 `Subheader`）——
+    那是 **fast lane、擋 merge** 的守衛，等於拿一條綠的阻擋型守衛去換一個沒人連的錨點。
+    說明書自己的十章 anchor 與章目錄住在 `ui/tab6_manual.py`
+    （本 PR 一字未動、新 ⑤ 委派過去，`tests/test_manual_anchor_toc.py` 照舊守著），
+    **仍然可跳**。→ 這一半是**呈現差異，不是功能退步**。
+    ⚠️ **正對照**：同一條 grep 確實抓得到活著的頁內目錄
+    （`ui/tab6_manual.py` / `ui/tab_settings_diag.py` / `ui/tab3_t7_ledger.py`），
+    **不是一把恆空的尺**。
+    ⚠️ 「沒有第四個消費者」取決於「有沒有漏看」，**單組實測、未經第二組驗證**
+    （`CLAUDE.md §-2` 規則 6）。
+    """
+    from ui.views.page_05_settings import BLOCK_MANUAL
+
+    # (1) 使用者讀到的**分區標題**那一行（新 ⑤ 一律 `### `，不是 subheader）。
+    _heads = [m.value.strip() for m in at.markdown if isinstance(m.value, str)]
+    assert f"### {BLOCK_MANUAL}" in _heads, (
+        f"⑤ 沒有畫說明書分區標題「### {BLOCK_MANUAL}」；"
+        f"實際 `### ` 標題: {[h for h in _heads if h.startswith('### ')]!r}")
+
+    # (2) 使用者**點得開的那個容器** —— 說明書本體收在這個折疊區裡。
+    #     ⛔ 這一條不可以用 (1) 代替：只留標題、把 `safe_section(...)` 拿掉，
+    #        (1) 照樣綠，而畫面上那一塊已經是空的。
+    _exp = _expander_labels(at.main)
+    assert BLOCK_MANUAL in _exp, (
+        f"⑤ 沒有把說明書收進標題為「{BLOCK_MANUAL}」的折疊區；"
+        f"實際 expander 標題: {_exp!r}")
 
     _caps = " ".join(c.value for c in at.caption if isinstance(c.value, str))
     assert "公式聖經" in _caps, (

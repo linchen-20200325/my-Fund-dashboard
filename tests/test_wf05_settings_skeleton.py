@@ -503,9 +503,30 @@ def _block_order() -> tuple[str, ...]:
 
     ⚠️ 做成函式而不是 module 常數：`section_label()` 在 import 期炸掉會讓整個
     測試檔收集失敗，而那個錯誤訊息會指向 import 行，不是指向真正的原因。
+
+    ⚠️ **2026-09-07 順序變更（有意識的政策變更，不是漏刪 · 決策者：客戶）**
+    -------------------------------------------------------------------
+    舊順序 ~~`(BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS, nav_manual_label(),
+    maintain_label(), BLOCK_MANUAL)`~~ —— `maintain_label()` 原本夾在
+    「手動補資料」與「使用手冊」之間。
+
+    客戶 2026-09-07 逐字裁決：「🗄️ 資料維護與通報 決策【**保留**】在 ⑤ 的**最底部**
+    作為**進階折疊區（`st.expander`）**。理由：系統維護與通報屬管理設定範疇，
+    折疊收攏即可，不影響主視覺。」→ 移到 tuple 末端。
+
+    **舊順序的理由仍然成立**（它跟著「從哪裡搬來」的檔案順序走，且不動線框五塊的相對序）；
+    **被權衡掉的是它的視覺成本** —— 那一塊展開後很長，夾在中間會把使用手冊推到很下面。
+
+    ⛔ **這次只動 `maintain_label()` 一格的位置。**
+       線框五塊彼此的相對順序（健康度 → NAV → 金鑰 → 手動補資料 → 使用手冊）**一格未動**，
+       :func:`test_all_blocks_are_present_and_in_wireframe_order` 仍然在守它。
+    ⛔ **區塊數仍然是 6，一塊都沒有被刪掉** ——
+       :func:`test_each_block_heading_is_drawn_exactly_once` 的雙向斷言（0 次／2 次都紅）
+       與 :func:`test_the_page_renders_in_every_session_shape` 的「六塊一個都不少」
+       **一個字未改**，它們會繼續抓「搬一搬結果搬丟了」。
     """
     return (BLOCK_HEALTH, nav_status_label(), BLOCK_KEYS,
-            nav_manual_label(), maintain_label(), BLOCK_MANUAL)
+            nav_manual_label(), BLOCK_MANUAL, maintain_label())
 
 
 #: 一級區塊標題（`st.markdown("### …")`）。
@@ -608,11 +629,19 @@ def _nav_expander_body(parts: tuple[str, ...] | list[str], label: str) -> list[s
 # ══════════════════════════════════════════════════════════════════
 
 def test_all_blocks_are_present_and_in_wireframe_order():
-    """線框 Tab 05 由上而下：健康度 → NAV → 金鑰 → 手動補資料 →（維護）→ 使用手冊。
+    """線框 Tab 05 由上而下：健康度 → NAV → 金鑰 → 手動補資料 → 使用手冊 →（維護）。
 
     ⚠️ 「🗄️ 資料維護與通報」**不是線框的區塊** —— 線框只在「從哪裡搬來」列了
     `ui/tab_manage.py`，五個 `<h4>` 裡沒有它。被測檔就地登記為 (D-5) 的偏離，
     本條把那個**現況**釘住：哪天客戶／總管裁決它該搬走或該併進別塊，這條會轉紅。
+
+    ⚠️ **2026-09-07 就地更正（有意識的政策變更，不是漏刪 · 決策者：客戶）**：
+       本行原寫 ~~「…手動補資料 →（維護）→ 使用手冊」~~ ——
+       客戶同日裁決把（維護）移到**最底部**當折疊區，故改為
+       「…手動補資料 → 使用手冊 →（維護）」。
+       ⛔ **這一條的用意一字未變**：它釘的是「六塊都在、而且照這個順序」；
+          它**不是**在替（維護）背書一個線框位置 —— (D-5) 的偏離登記照舊有效。
+       ⛔ **線框五塊彼此的相對順序一格未動**，本次只搬了那個「線框沒有給位置」的第六塊。
     """
     _got = [_n for _n, _ in _units(_stream("loaded"))]
     _want = list(_block_order())
@@ -644,6 +673,91 @@ def test_each_block_heading_is_drawn_exactly_once(block: str):
         "0 次 ＝ 那一塊不見了；2 次 ＝ 被測檔與被委派模組各畫了一次"
         "（畫面上會連著出現兩個一樣的標題）。\n"
         f"實際的全部 `### ` 標題：{_lines}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 客戶 2026-09-07 裁決：🗄️ 資料維護與通報 ＝ 最底部的進階折疊區
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_maintain_block_is_the_last_thing_on_the_page():
+    """⭐ 客戶 2026-09-07 裁決的**位置**那一半：那一塊必須排在**最底部**。
+
+    客戶逐字：「決策【**保留**】在 ⑤ 的**最底部**作為**進階折疊區（`st.expander`）**。」
+
+    ⚠️ **本條與 :func:`test_all_blocks_are_present_and_in_wireframe_order` 不重複**：
+    那一條驗的是「六塊都在、而且照 :func:`_block_order` 的順序」——
+    也就是說，**有人把 `_block_order()` 一起改掉，那一條就會跟著綠**。
+    本條**不讀 `_block_order()`**，它直接釘「**最後一塊必須是維護**」這個
+    客戶裁決的字面，所以改 `_block_order()` 繞不過它。
+
+    ⛔ **這正是本 repo 反覆記載的那個病**：把守衛跟著被測物一起改，紅燈就消失了。
+       兩條的判準必須來自**不同的地方**，否則第二條只是第一條的影子。
+    """
+    _got = [_n for _n, _ in _units(_stream("loaded"))]
+    assert _got, "整頁一個區塊都沒認出來 —— 本條失去對象（fail-closed）。"
+    assert _got[-1] == maintain_label(), (
+        f"⑤ 的最後一塊是「{_got[-1]}」，客戶 2026-09-07 裁決要求是「{maintain_label()}」。\n"
+        f"實際渲染順序：{_got}\n"
+        "⚠️ 若這是一次有意的改版，請先回去看客戶那句裁決 —— 它是 UI 決定，不是實作細節。")
+
+
+def test_the_maintain_block_is_folded_and_collapsed_by_default():
+    """⭐ 客戶 2026-09-07 裁決的**包裝**那一半：`st.expander`、而且**預設收合**。
+
+    **靜態 ＋ 行為兩邊都驗，因為它們各自有守不到的東西**：
+
+    - **靜態（AST）** 驗得到 `expanded=False` —— 行為面驗不到（:func:`_flat`
+      只記 expander 的**標籤**，不記它展開沒有）。
+    - **行為（AppTest）** 驗得到「委派的內容**真的**落在那個 expander 底下」——
+      靜態只看得到 `with` 寫在原始碼裡，看不到 `render_manage_tab()`
+      是不是被寫在 `with` **外面**（那正是本檔 sentinel 那條記載過的形狀）。
+
+    ⛔ **`expanded=False` 不准省略也不准寫成別的**：`st.expander` 的預設值本來就是
+       `False`，所以「省略」在今天等價 —— 但客戶要的是**明示**的收合，
+       而預設值是 Streamlit 的、不是我們的。fail-closed：省略即紅。
+    """
+    # ── (1) 靜態：`_render_maintain` 用 `st.expander(..., expanded=False)` 包住委派 ──
+    _fn = next((_n for _n in ast.walk(_tree())
+                if isinstance(_n, ast.FunctionDef) and _n.name == "_render_maintain"), None)
+    assert _fn is not None, "被測檔裡找不到 `_render_maintain` —— 斷言失去對象（fail-closed）。"
+
+    _folds = [_w for _w in ast.walk(_fn) if isinstance(_w, ast.With)
+              for _it in _w.items
+              if isinstance(_it.context_expr, ast.Call)
+              and isinstance(_it.context_expr.func, ast.Attribute)
+              and _it.context_expr.func.attr == "expander"
+              and isinstance(_it.context_expr.func.value, ast.Name)
+              and _it.context_expr.func.value.id == "st"]
+    assert len(_folds) == 1, (
+        f"`_render_maintain` 裡的 `st.expander(...)` 有 {len(_folds)} 個（應為 1 個）。\n"
+        "客戶 2026-09-07 裁決：這一塊收成**一個**進階折疊區。")
+
+    _call = next(_it.context_expr for _it in _folds[0].items
+                 if isinstance(_it.context_expr, ast.Call))
+    _kw = {_k.arg: _k.value for _k in _call.keywords}
+    assert "expanded" in _kw, (
+        "`st.expander(...)` 沒有明寫 `expanded=` —— 客戶要的是**明示收合**。\n"
+        "⚠️ Streamlit 的預設值今天剛好也是 False，但那是**它的**預設值，不是我們的決定。")
+    assert isinstance(_kw["expanded"], ast.Constant) and _kw["expanded"].value is False, (
+        f"`expanded=` 不是字面的 False，而是 {ast.unparse(_kw['expanded'])} —— "
+        "fail-closed 視為沒有收合。")
+
+    # 委派呼叫必須真的落在那個 `with` 裡面（不是寫在外面）。
+    _inside = {ast.unparse(_n.func) for _n in ast.walk(_folds[0])
+               if isinstance(_n, ast.Call)}
+    assert "render_manage_tab" in _inside, (
+        "`render_manage_tab()` 不在那個 `st.expander` 的 `with` 裡面 —— "
+        "折疊區會是空的，而委派的內容會落在折疊區外面。")
+
+    # ── (2) 行為：那一塊的第一個元素就是標籤正確的 expander ──
+    _seg = _segments(_stream("loaded")).get(maintain_label())
+    assert _seg, (
+        f"渲染流裡找不到「{maintain_label()}」那一塊 —— 本條失去對象（fail-closed）。")
+    _first = _seg[0]
+    assert _first == f"[Expander] {maintain_label()}", (
+        f"「{maintain_label()}」那一塊的第一個元素是 {_first!r}，\n"
+        f"應為 [Expander] {maintain_label()} —— 也就是內容**沒有**被收進折疊區。\n"
+        "⚠️ `safe_section()` 本身不畫任何東西，所以這一格就是委派內容的第一個元素。")
 
 
 @pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
