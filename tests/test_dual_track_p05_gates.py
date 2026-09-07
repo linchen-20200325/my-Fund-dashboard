@@ -295,6 +295,10 @@ _OLD5 = ("ui.tab_settings_diag", "render_settings_diag_tab")
 _NEW7 = ("ui.views.page_05_settings", "render_settings_and_diagnostics")
 _OLD2 = ("ui.tab_fund_grp_health", "render_fund_grp_health_tab")
 _NEW6 = ("ui.views.page_02_health", "render_holdings_health")
+#: ⑧ `[新] 標的探索`（#820，2026-09-07 合併進 `main`）—— **第三對雙軌**。
+#: ⚠️ 本檔在 `ac7050e` 上開工時它還不存在；合併 `main` 之後補掃，**不是原本就有**。
+_OLD3 = ("ui.tab_fund_research", "render_fund_research_tab")
+_NEW8 = ("ui.views.page_03_research", "render_fund_research")
 
 
 def test_no_keyless_element_is_drawn_by_both_old_five_and_new_seven():
@@ -359,6 +363,52 @@ def test_the_scanner_really_catches_a_reintroduced_ungated_delegate():
         f"實際命中：{sorted(_hits)}")
     assert hashlib.sha256(NEW_P05.read_bytes()).hexdigest() == _before, \
         "本測試污染了 production 檔"
+
+
+def test_the_third_dual_track_pair_has_no_keyless_collision_either():
+    """⭐ **第三對（舊 ③ ↔ 新 ⑧，#820 剛合併）也掃一次 —— 不是「只治我這一頁」。**
+
+    雙軌並行是**結構性代價**：每多掛一格 `[新]` 預覽，就多一組「兩頁委派同一批舊模組」。
+    ①（指標地圖那張圖）之所以漏掉兩輪，正是因為先前的盤點**只比對具名 `key=`**，
+    對「沒有 key、自動 ID 撞在一起」這一類**結構上看不見**。
+
+    **本組實測（量測日 2026-09-07，於本分支合併 `origin/main` 之後）：命中 0。**
+    ⚠️ **0 是本輪的量測值，不是保證** —— 這一條的作用是：⑧ 哪天長出一個沒有 key
+    的共用元素，**這裡會紅**，而不是等使用者打開網站才看到紅字。
+
+    ⛔ **本輪不動 `ui/views/page_03_research.py` 一個位元組**（不在本批檔案邊界內）。
+       本條只讀不寫；真的紅了請**回報總管**，由 ⑧ 那一組決定修在哪一側。
+    """
+    _hits = _collision_candidates(_OLD3, _NEW8)
+    assert not _hits, (
+        "舊 ③ ↔ 新 ⑧ 出現沒有 `key=`、而且兩頁都畫得到的元素：\n"
+        + "\n".join(f"  {_m}:{_ln}  st.{_e}" for _m, _e, _ln in sorted(_hits))
+        + "\n→ 這是提醒不是責備：**回報總管**，由 ⑧ 那一組決定修在哪一側"
+          "（`ui/views/page_03_research.py` 不在本批邊界內）。")
+
+
+def test_the_known_static_candidates_between_old_two_and_new_six_are_registered():
+    """⚠️ **⑥ 的靜態候選：登記，不宣稱「沒問題」，也不動 `page_02_health.py`。**
+
+    本組的掃描器（A 段）在 **舊 ② ↔ 新 ⑥** 之間找到 **4 個**沒有 key、
+    而且兩頁都跑得到的元素，全部在
+    `ui/helpers/fund_grp_health/backtest_section.py::render_allocation_backtest_section`
+    （`st.dataframe` ×3、`st.plotly_chart` ×1）。
+
+    ⛔ **本輪不修它**：`ui/views/page_02_health.py` 不在本批的檔案邊界內
+       （總管明令「要動 `page_02_health.py` 先回報」），且 CI 的預設載入
+       **沒有持倉、沒有憑證**，那一段走不到 → 現況觀測不到。
+    ⚠️ **「觀測不到」不等於「不會發生」**：有持倉的真實使用者可能一打開就撞。
+       本條把它釘成**會說話的登記**：清單一變（多了、少了、搬家了），本條就紅，
+       逼下一個人回頭看，而不是讓它靜靜爛掉。
+    """
+    _hits = _collision_candidates(_OLD2, _NEW6)
+    _by_mod = sorted({_m for _m, _, _ in _hits})
+    assert _by_mod == ["ui.helpers.fund_grp_health.backtest_section"], (
+        "舊 ② ↔ 新 ⑥ 的無 key 重複候選清單**變了**，不再是登記的那一組：\n"
+        + "\n".join(f"  {_m}:{_ln}  st.{_e}" for _m, _e, _ln in sorted(_hits))
+        + "\n→ 這是提醒不是責備：清單一變就該回頭判一次，"
+          "**並回報總管**（`page_02_health.py` 不在本批邊界內）。")
 
 
 #: 舊 ⑤ **無條件**（一次都不必點）就會呼叫的委派 —— 新 ⑦ 的四顆 gate 全部靠它成立。
@@ -665,30 +715,6 @@ def test_the_health_preview_tab_is_clean_on_default_load(at_default: Any):
         + "\n".join(f"  {_m[:400]}" for _m in _bad))
 
 
-def test_the_known_static_candidates_between_old_two_and_new_six_are_registered():
-    """⚠️ **⑥ 的靜態候選：登記，不宣稱「沒問題」，也不動 `page_02_health.py`。**
-
-    本組的掃描器（A 段）在 **舊 ② ↔ 新 ⑥** 之間找到 **4 個**沒有 key、
-    而且兩頁都跑得到的元素，全部在
-    `ui/helpers/fund_grp_health/backtest_section.py::render_allocation_backtest_section`
-    （`st.dataframe` ×3、`st.plotly_chart` ×1）。
-
-    ⛔ **本輪不修它**：`ui/views/page_02_health.py` 不在本批的檔案邊界內
-       （總管明令「要動 `page_02_health.py` 先回報」），且 CI 的預設載入
-       **沒有持倉、沒有憑證**，那一段走不到 → 現況觀測不到。
-    ⚠️ **「觀測不到」不等於「不會發生」**：有持倉的真實使用者可能一打開就撞。
-       本條把它釘成**會說話的登記**：清單一變（多了、少了、搬家了），本條就紅，
-       逼下一個人回頭看，而不是讓它靜靜爛掉。
-    """
-    _hits = _collision_candidates(_OLD2, _NEW6)
-    _by_mod = sorted({_m for _m, _, _ in _hits})
-    assert _by_mod == ["ui.helpers.fund_grp_health.backtest_section"], (
-        "舊 ② ↔ 新 ⑥ 的無 key 重複候選清單**變了**，不再是登記的那一組：\n"
-        + "\n".join(f"  {_m}:{_ln}  st.{_e}" for _m, _e, _ln in sorted(_hits))
-        + "\n→ 這是提醒不是責備：清單一變就該回頭判一次，"
-          "**並回報總管**（`page_02_health.py` 不在本批邊界內）。")
-
-
 # ══════════════════════════════════════════════════════════════════
 # ⚠️ 本檔**沒有**涵蓋的範圍（據實列出，不要把「沒測到」讀成「沒問題」）
 # ══════════════════════════════════════════════════════════════════
@@ -707,5 +733,13 @@ def test_the_known_static_candidates_between_old_two_and_new_six_are_registered(
 # 4. **兩顆同名的「🔭 載入資料診斷」**（舊 ⑤ 一顆、新 ⑦ 一顆）同時勾 —— 要
 #    **兩次點擊**，本檔沒有跑過（`_tick()` 依標籤找，兩顆同名只會勾到第一顆）。
 #    #819 檔尾也記了同一項，狀態未變。
-# 5. **③④ 兩格（`page_03_research` / `page_04_portfolio`）本檔完全沒有掃** ——
-#    它們目前沒有掛上雙軌預覽格，但這是**本組沒有查證**的印象，不是實測。
+# 5. ~~**③④ 兩格（`page_03_research` / `page_04_portfolio`）本檔完全沒有掃** ——
+#    它們目前沒有掛上雙軌預覽格，但這是**本組沒有查證**的印象，不是實測。~~
+#    → **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管 · 依據：實測）**：
+#    **那個「印象」是錯的**，而且在寫下它的**同一天**就被推翻 —— #820 已把
+#    `ui/views/page_03_research.py` 掛成第 **⑧** 格（`app.py` 的 `tab_preview_research`），
+#    也就是說本檔開工時（`ac7050e`）為真的事，在合併 `origin/main` 之後不再為真。
+#    **這正是本檔在講的那件事：憑印象寫下的全稱句，撐不過一次 merge。**
+#    現況：**⑧ 已補掃**（見 `test_the_third_dual_track_pair_has_no_keyless_collision_either`，
+#    命中 0）；**`page_04_portfolio` 仍未掛預覽格，本檔未掃**（實測 `app.py` 的
+#    `st.tabs(...)` 目前是八格，沒有 ④ 的 `[新]` 那一格）。
