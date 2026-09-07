@@ -245,6 +245,14 @@ _SECTION_LABELS: dict[str, str] = {
     #    （`tests/test_ia_tracking_card_scope_caption.py`
     #     ::test_the_sister_card_label_is_not_a_hand_copied_literal，執行期比對真實標題）。
     "pf_perf": "📊 組合績效",
+    # ④ 頁內既有的「交易帳本」區塊（`ui/tab3_portfolio.py` 的 `_sec_ledger`，
+    # 畫面上逐字是 `### 💼 持倉戰情（T7 帳本）`）。收進本表的理由同 `pf_add` / `pf_perf`：
+    # ④ 新頁的「交易帳本」目前是灰態，而灰態**必須指得出「現在去哪裡看得到」**
+    # （客戶 2026-09-07 指示：不得只寫「尚未提供」）。手抄那八個字就是本模組整篇在防的事。
+    # ⚠️ 這個 key 與 `pf_add` / `pf_perf` 一樣，指的是**舊 ④ 的區塊**；
+    #    舊分頁整批拔除時，這三個 key 要一起回頭處理（漂移鎖：
+    #    `tests/test_story_nav.py::test_section_labels_match_merged_pages` 的 `pf_ledger` 那一列）。
+    "pf_ledger": "💼 持倉戰情（T7 帳本）",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -259,6 +267,7 @@ _SECTION_TO_TAB: dict[str, str] = {
     "switch": "portfolio",
     "pf_add": "portfolio",
     "pf_perf": "portfolio",
+    "pf_ledger": "portfolio",
 }
 
 

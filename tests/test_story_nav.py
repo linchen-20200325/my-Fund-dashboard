@@ -217,6 +217,11 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     # 所以漂移鎖錨到那一檔而不是 `tab_settings_diag.py`。
     ("nav_status", "ui/helpers/settings_diag/nav_history_section.py"),
     ("nav_manual", "ui/helpers/settings_diag/nav_history_section.py"),
+    # 2026-09-07：④ 新頁的「交易帳本」灰態要指得出「現在去哪裡看得到」，
+    # 而那個地方是**舊 ④** 的 `_sec_ledger`。字面值住在 `ui/tab3_portfolio.py`。
+    # ⚠️ `pf_add` / `pf_perf` 兩個同型 key **沒有**這條鎖（既有缺口，本輪未補）——
+    #    本列是把新增的那一個先鎖住，不是宣稱三個都鎖了。
+    ("pf_ledger", "ui/tab3_portfolio.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。
