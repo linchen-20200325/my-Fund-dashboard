@@ -87,7 +87,8 @@ def _scan() -> dict[str, dict]:
             continue
         for _t in _n.targets:
             if isinstance(_t, ast.Name):
-                _slots[_t.id] = {"declared": _n.lineno, "span": None, "helpers": set()}
+                _slots[_t.id] = {"declared": _n.lineno, "span": None,
+                                 "helpers": set(), "calls": set()}
 
     for _n in ast.walk(_fn):
         if not isinstance(_n, ast.With):
@@ -109,7 +110,45 @@ def _scan() -> dict[str, dict]:
                     continue
                 if _base.startswith(("render_", "_render_")):
                     _slots[_name]["helpers"].add(_base)
+                _slots[_name]["calls"].add(_base)
     return _slots
+
+
+def _toplevel_calls() -> set[str]:
+    """`render_portfolio_tab()` 內**不在任何版面 slot 裡**的呼叫。
+
+    ⭐ **這個視角是 2026-09-07 補的，補的原因是它抓到了 `_scan()` 抓不到的東西。**
+    `_scan()` 以 slot 為單位，於是**頁面 chrome**（動線列之類、直接畫在函式頂層的東西）
+    對它是**不存在**的 —— 不是「掃到了但沒登記」，是**根本不在視野內**。
+    `render_flow_nav()` 就是這樣掉出去的。
+    """
+    _tree = ast.parse(_OLD_TAB.read_text(encoding="utf-8"))
+    _fn = next((n for n in ast.walk(_tree)
+                if isinstance(n, ast.FunctionDef) and n.name == _ENTRY), None)
+    if _fn is None:                                          # pragma: no cover
+        raise AssertionError(f"找不到 `{_ENTRY}()` —— 見 `_scan()` 的同款說明。")
+    _slots = set(_scan())
+    _spans: list[tuple[int, int]] = []
+    for _n in ast.walk(_fn):
+        if isinstance(_n, ast.With):
+            for _item in _n.items:
+                try:
+                    _nm = ast.unparse(_item.context_expr)
+                except Exception:                            # pragma: no cover
+                    continue
+                if _nm in _slots:
+                    _spans.append((_n.lineno, _n.end_lineno))
+    _out: set[str] = set()
+    for _n in ast.walk(_fn):
+        if not isinstance(_n, ast.Call):
+            continue
+        if any(_a <= _n.lineno <= _b for _a, _b in _spans):
+            continue
+        try:
+            _out.add(ast.unparse(_n.func).split(".")[-1])
+        except Exception:                                    # pragma: no cover
+            continue
+    return _out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -182,7 +221,13 @@ OLD_TAB4_INVENTORY: tuple[tuple[str, str, str, str], ...] = (
     ("_ov_core", "📊 配置總覽（KPI 卡＋淨值成長模擬曲線）", "已委派",
      "核心／衛星那一半已由 `page_04_portfolio._render_mix()` 接上，走全站唯一真相 "
      "`ui/helpers/portfolio/allocation.py`。"
-     "⚠️ **本 slot 底下另有三個子區塊處置不同**，見下方 `UNDECIDED_SUBBLOCKS`。"),
+     "⚠️ **本 slot 底下每一支的處置都不一樣，不要拿這一格的 `已委派` 讀整個 slot**："
+     "`render_concentration_summary` ／ `render_sector_concentration_summary` ／ "
+     "`render_macro_exposure_link` 見 `UNDECIDED_SUBBLOCKS`；"
+     "`render_metric_explainer` ／ `render_mj_freshness_banner` 見 `UNREGISTERED_FINDINGS`。"
+     "⛔ **2026-09-07 改寫**：舊表述寫「另有**三個**子區塊處置不同」，"
+     "而本 slot 底下實測有**五支** `render_*` —— 那個數字把另外兩支排除在讀者的視野外，"
+     "而它們正是後來被第二種切法抓出來的兩支。**計數會過期，過期的計數看起來像已經查過。**"),
     ("_ov_warroom", "💱 FX 曝險摘要／智能戰情室", "已由總管裁決搬走",
      "⚠️ **這個 slot 底下三支 helper 的狀態互不相同，不要當成一塊讀**（實測）："
      "(1) `render_fund_checkup` → **已在 ② 的 `DELEGATED_ENTRIES` 內**"
@@ -219,6 +264,66 @@ UNDECIDED_SUBBLOCKS: tuple[tuple[str, str, str], ...] = (
      "產業集中度（同上，產業維度）"),
     ("render_macro_exposure_link", "_ov_core",
      "總經曝險聯動（① 的景氣位階接到組合上，大盤與我的配置之間唯一一條連線）"),
+)
+
+
+#: ⭐ **第二種切法撿回來的東西 —— 掉在前兩張表中間的已知項。**
+#:
+#: **怎麼被找到的（比清單本身重要）**：前兩張表都是**以 slot 為單位、以命名慣例
+#: （`render_*`）為篩子**建起來的。2026-09-07 的獨立稽核改用**另一種切法** ——
+#: 從 `render_portfolio_tab()` 往下走呼叫圖、**不看命名慣例**，再與 slot 常數取差集 ——
+#: 於是撿回下面這些。**同一份程式碼，換一把尺就多出五個。**
+#:
+#: ⛔ **這張表不是窮舉，而且刻意不寫「共 N 筆」。**
+#:    它是**第二種切法的產出**；第三種切法可能還有。發現第六個請往下加，
+#:    **不必先推翻本註**。⛔ 也**不得**引用本表主張「舊 ④ 已經掃乾淨了」。
+#:
+#: 每一筆 = ``(符號, 位置, 找法, 說明)``。`找法` 決定
+#: :func:`test_every_unregistered_finding_still_lives_where_the_table_says`
+#: 怎麼去驗它還在不在 —— **三種，因為這三種各自是被不同的盲點漏掉的**：
+#:
+#: * ``slot-helper``    —— 在某個 slot 內、名字也符合 `render_*`。
+#:   **前兩張表看得到它，只是沒人登記。**
+#: * ``slot-call``      —— 在某個 slot 內，但**名字不是** `render_*`。
+#:   **掃描器的篩子直接濾掉它**，前兩張表結構上不可能有它。
+#: * ``top-level-call`` —— 在 `render_portfolio_tab()` 內、但**不在任何 slot 裡**。
+#:   **`_scan()` 的視野以 slot 為單位，它根本不在視野內。**
+UNREGISTERED_FINDINGS: tuple[tuple[str, str, str, str], ...] = (
+    ("render_metric_explainer", "_ov_core", "slot-helper",
+     "指標說明卡（`ui/helpers/chart/metric_explainers.py::render_metric_explainer`，"
+     "舊 ④ 於 `_ov_core` 內以 `[\"core_satellite\", \"div_coverage\"]` 呼叫）。"
+     "⚠️ **本組實測：這一支最接近無聲消失** —— "
+     "`git grep -o metric_explainer -- 'docs/wireframes/*'` **0 命中**、"
+     "`git grep render_metric_explainer -- 'ui/views/*'` **0 命中**。"
+     "也就是**線框沒點過它、新頁沒接過它、兩張表也沒登記它**。"
+     "⛔ 本組**不判定**它該接還是該砍 —— 本檔只擋『沒有人記得』。"),
+    ("render_mj_freshness_banner", "_ov_core", "slot-helper",
+     "MoneyDJ 資料新鮮度 banner（`ui/helpers/io/freshness.py::render_mj_freshness_banner`）。"
+     "⚠️ **它沒有失蹤，但『線框逐字有它』這句要講精確**（本組實測）："
+     "逐字出現的地方是 `docs/wireframes/wireframe-macro-health.html`「大表區」那一段，"
+     "寫的是 **`_render_mj_freshness_banner`**（②`ui/tab_fund_grp_health.py` 的同名包裝），"
+     "**那是 ② 的線框、不是 ia Tab 04**。"
+     "→ **④ 這一處自己沒有線框覆蓋**，`ui/views/` 也 0 命中。"),
+    ("render_rotation_section", "_sec_add", "slot-helper",
+     "輪動配對區（`ui/helpers/fund_grp_health/rotation.py::render_rotation_section`）。"
+     "**實際已委派給 ②**：`ui/views/page_02_health.py` 的委派鏈就地寫著 "
+     "`rotation::render_rotation_section → _render_pairs_ui → _render_pairs_body`，"
+     "且該檔另註明它硬編 `offer_download=False`。"
+     "→ 也就是**去向是清楚的，只是兩張表都沒有它** ——"
+     "這一筆的風險不是消失，是『下一個人重複接一次』。"),
+    ("calc_correlation_matrix", "_sec_overlap", "slot-call",
+     "持股重疊度診斷的**真引擎**（`services/portfolio_service.py::calc_correlation_matrix`，"
+     "與同一 slot 內的 `_calc_holdings_overlap` 併用）。"
+     "⚠️ **它不叫 `render_*`，所以 `_scan()` 的 helper 篩子結構上看不到它** ——"
+     "`_sec_overlap` 在 helper 那一欄是**空的**，讀表的人會以為那個 slot 沒有委派任何東西。"
+     "⛔ 這一筆點出的是**篩子本身的盲點**，不只是漏登一列："
+     "凡是不以 `render_` 開頭的委派，前兩張表一律看不見。"),
+    ("render_flow_nav", "", "top-level-call",
+     "頁面共用動線列（chrome）。它畫在 `render_portfolio_tab()` 的**頂層**、"
+     "不在任何 `st.container()` slot 內，因此 `_scan()` **視野內沒有它**。"
+     "⚠️ 風險等級低（它是全站共用 chrome，不是 ④ 專屬功能，"
+     "`tests/test_flow_layer1.py` 另有全站接線守衛在管它），"
+     "**但它證明了一件事：以 slot 為單位的表，天生看不到不在 slot 裡的東西。**"),
 )
 
 
@@ -321,6 +426,82 @@ def test_every_undecided_subblock_still_lives_where_the_table_says():
         + "\n→ PR #791 題三那張表過期了，回覆進來之前要先更新。")
 
 
+def test_every_unregistered_finding_still_lives_where_the_table_says():
+    """⭐ :data:`UNREGISTERED_FINDINGS` 的每一筆，都要真的還在它宣稱的位置。
+
+    ## 這條在守什麼
+
+    這五筆是**手工的第二種切法**撿回來的，沒有任何機器規則在產生它們 ——
+    所以它們最可能的死法是：**舊 ④ 把東西搬走了，表卻沒人改**，
+    於是表上寫著「在 `_ov_core` 裡」的東西其實兩邊都不存在，
+    而讀表的人會以為那個功能還活著。（同
+    :func:`test_the_inventory_has_no_phantom_entries` 要擋的那個病。）
+
+    ## ⚠️ 三種 `找法` 各自驗不同的東西，不要合併
+
+    * ``slot-helper``    —— 該 slot 的 `render_*` 委派清單裡有它。
+    * ``slot-call``      —— 該 slot 內有這個名字的呼叫（**不限** `render_*`）。
+    * ``top-level-call`` —— 在 `render_portfolio_tab()` 內、且**不在任何 slot 裡**。
+      ⚠️ 這一種**同時驗兩件事**：它還在，而且它**仍然在 slot 外面** ——
+      哪天它被搬進某個 slot，本條會轉紅，那正是該把它改登記成 `slot-call` 的時候。
+    """
+    _slots = _scan()
+    _top = _toplevel_calls()
+    _bad: list[str] = []
+    for _sym, _where, _kind, _note in UNREGISTERED_FINDINGS:
+        if _kind == "top-level-call":
+            if _sym not in _top:
+                _bad.append(
+                    f"{_sym}：宣稱是 `{_ENTRY}()` 的頂層呼叫，但在 slot 外面找不到它"
+                    "（被搬進某個 slot 了？那要改登記成 `slot-call`／`slot-helper`）")
+            continue
+        if _where not in _slots:
+            _bad.append(f"{_sym}：宣稱住在 `{_where}`，但那個 slot 不存在了")
+            continue
+        _pool = (_slots[_where]["helpers"] if _kind == "slot-helper"
+                 else _slots[_where]["calls"])
+        if _sym not in _pool:
+            _bad.append(
+                f"{_sym}（{_kind}）：宣稱住在 `{_where}`，"
+                f"但那個 slot 現在只有 {sorted(_pool)}")
+    assert not _bad, (
+        "第二種切法撿回來的項目，位置已經跟表上寫的不一樣了：\n  "
+        + "\n  ".join(_bad)
+        + "\n\n→ 舊 ④ 搬動了它嗎？搬了就改這一筆，"
+          "**不要**直接刪掉它 —— 刪掉就回到『沒有人記得它存在』的原點。")
+
+
+def test_the_two_tables_do_not_overlap():
+    """兩張子區塊表**不得**登記同一個符號 —— 一個東西只准有一個處置。
+
+    ⚠️ 擋的是這種腐爛：同一支 helper 在 `UNDECIDED_SUBBLOCKS` 寫「送客戶了」、
+    在 :data:`UNREGISTERED_FINDINGS` 寫「已委派給 ②」——
+    兩句都寫在同一個檔案裡，而讀者只會讀到先看到的那一句（`CLAUDE.md §2.1` SSOT）。
+    """
+    _a = {_h for _h, _s, _l in UNDECIDED_SUBBLOCKS}
+    _b = {_sym for _sym, _w, _k, _n in UNREGISTERED_FINDINGS}
+    _dupe = sorted(_a & _b)
+    assert not _dupe, (
+        "同一個符號同時登記在兩張表裡，兩邊的處置會各自漂移：\n  "
+        + "\n  ".join(_dupe) + "\n→ 決定它屬於哪一張，另一張刪掉。")
+
+
+@pytest.mark.parametrize("sym,where,kind,note", UNREGISTERED_FINDINGS)
+def test_every_unregistered_finding_is_filled_in_properly(sym: str, where: str,
+                                                          kind: str, note: str):
+    """每一筆都要有合法的 `找法` 與非空的說明（同 `OLD_TAB4_INVENTORY` 的同款要求）。"""
+    assert kind in ("slot-helper", "slot-call", "top-level-call"), (
+        f"`{sym}` 的找法 `{kind}` 不在允許清單內。"
+        "⛔ 不得自創第四種；真的需要，先在 `UNREGISTERED_FINDINGS` 的註解裡寫清楚為什麼，"
+        "並在 `test_every_unregistered_finding_still_lives_where_the_table_says` 補上驗法 ——"
+        "**沒有驗法的找法等於沒有登記。**")
+    assert (kind == "top-level-call") == (not where), (
+        f"`{sym}`：`top-level-call` 不該有 slot，其餘兩種一定要有。實際 where={where!r}")
+    assert len(note.strip()) >= 20, (
+        f"`{sym}` 的說明太短（{len(note.strip())} 字）—— "
+        "說明要能讓下一個人自己去查，不是一句『掃到的』。")
+
+
 @pytest.mark.parametrize("slot,label,disposition,evidence", OLD_TAB4_INVENTORY)
 def test_every_entry_is_filled_in_properly(slot: str, label: str,
                                            disposition: str, evidence: str):
@@ -339,27 +520,38 @@ def test_every_entry_is_filled_in_properly(slot: str, label: str,
 
 
 def test_the_client_gated_entries_are_not_quietly_marked_done():
-    """⭐ **本批被指派、但卡在客戶那一關的三件事，不得被記成「做完了」。**
+    """⭐ **卡在客戶那一關的區塊，不得被記成「做完了」。**
 
     ## 這條為什麼要存在
 
-    本批派工單逐字寫「總管已拍板」，而本組實測發現那三件事
+    本批派工單逐字寫「總管已拍板」，而本組實測發現那幾件事
     **逐字就是 PR #791 送給客戶、尚未答覆的推薦方案**。
     在客戶回覆之前，把它們記成 `已委派` / `本批委派` 會讓對照表**說謊**，
     而這張表存在的唯一理由就是不說謊。
 
-    → 本條把三個相關 slot 釘在 `待客戶裁決`。
+    → 本條把相關 slot 釘在 `待客戶裁決`。
+
+    ## ⚠️ `_GATED` 少一格 ＝ 那一格不設防（2026-09-07 補 `_sec_raw`）
+
+    `#809` 的 `_GATED` 漏了 `_sec_raw`。**突變實證（本組實跑）**：把 `_sec_raw`
+    偷改成 `已委派` → **16/16 全綠**；同一改動套在 `_sec_ai` → **1 failed**。
+    兩筆的 `evidence` 逐字就是「同 `_sec_ai`」，也就是**它們卡在同一題**，
+    卻只有一格有守衛。
+    ⛔ **這張表的守衛是逐格的，不是整張的** —— 往 :data:`OLD_TAB4_INVENTORY`
+    新增／改動任何一筆 `待客戶裁決` 時，**同一次要問「它進 `_GATED` 了嗎」**。
 
     ## ⚠️ 客戶回覆之後這條會擋路 —— 那時候**正解是改它，不是繞過它**
 
     客戶說「照 A 做」之後，把該筆改成 `本批委派`／`已委派`，
     **同時**把本條的 `_GATED` 清單一起改小。
-    ⛔ **不要**因為它擋路就整條刪掉 —— 剩下的兩筆還需要它。
+    ⛔ **不要**因為它擋路就整條刪掉 —— 其餘各筆還需要它。
     """
     _GATED = {
         "_ov_group": "PR #791 題一（保單版面：3 欄摘要卡 vs 全寬明細表）",
         "_sec_add": "PR #791 題三（舊 ④ 頂層區塊去留）",
         "_sec_ai": "PR #791 題三（同上）",
+        # 2026-09-07 補：`evidence` 逐字寫「同 `_sec_ai`」，卻沒有一起被釘住。
+        "_sec_raw": "PR #791 題三（同 `_sec_ai`；`#809` 漏釘，2026-09-07 補）",
     }
     _byslot = {_slot: _disp for _slot, _label, _disp, _ev in OLD_TAB4_INVENTORY}
     _bad = [f"`{_slot}` 被記成 `{_byslot.get(_slot)}`，但它卡在 {_why}"
