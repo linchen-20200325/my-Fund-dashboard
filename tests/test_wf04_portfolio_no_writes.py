@@ -47,13 +47,66 @@
 1. **只追靜態 import。** `importlib.import_module("a." + "b")` 這種動態載入
    不在閉包內，本檔看不到它引進來的模組。
 2. **閘門偵測是語法層的。** 一個 `if _go:` 而 `_go` 來自別的函式的回傳值，
-   本檔會判成**未被擋住**（偽陽性，從嚴）。**寧可誤報，不可漏報。**
-3. ⛔ **本檔不驗執行期。** 它讀 AST，不渲染。真的跑一輪、用假件攔截的那一層，
+   本檔會判成**未被擋住**（偽陽性，從嚴）。
+   ~~**寧可誤報，不可漏報。**~~
+   → ⛔ **2026-09-07 更正：這句話在 `#809` 當時是假的**（**有意識的更正，不是漏刪**；
+   由獨立稽核抓出，本組已自行重現）。**現在它才是真的**，逐條說明：
+
+   **`#809` 的實況** —— 閘門偵測是把 `If.test` **unparse 成字串**，看裡面有沒有
+   ``.button(``。於是下面這段被判成「**有擋住**」，而它**每次渲染都寫**::
+
+       if not st.button("送出"):
+           ws.append_row(row)
+
+   字串裡確實有 ``.button(``，但那是一個**反向**閘門。也就是說：
+   **它在自己宣告的方向上漏報。** `if _flag or st.button(...)` 是同一個病的另一張臉。
+   ⚠️ 這個 idiom 在本 repo **有前科**，不是理論上的角落：`ui/tab_fund_grp_health.py`
+   與 `ui/helpers/fund_grp_health/switch_advisor_section.py` 兩處都留著
+   「原 ``if not st.button(): return`` 的**致命 bug**」的就地註解。
+
+   **本次修法** —— 改成比對 `If.test` 的**節點形狀**（:func:`_is_intent_expr`）：
+   test 必須**整個就是**那個意圖運算式（`st.button(...)` 或指派自它的變數名）；
+   包了任何一層（``not`` ／ ``and`` ／ ``or`` ／ ``==`` …）一律當「看不懂」＝**沒擋住**。
+   **回歸釘**：:func:`test_a_reversed_or_widened_gate_is_not_treated_as_a_gate`
+   （已實測：對 `#809` 的舊邏輯轉紅）。
+
+   ⚠️ **這個修法自己帶了一個已知誤報，就地寫明，不要當成瑕疵去「修掉」**：
+   ``if _ready and st.button(...):`` **真的有擋住**，本檔仍判它沒擋住。
+   **那是刻意選的方向** —— 誤報會被人看到並就地處理，漏報只會安靜地放行一次寫入。
+   ⛔ **不得**為了消掉這種誤報而讓判定「更聰明」；不確定算不算擋住，一律判**沒擋住**。
+3. ⛔ **`getattr` 家族整族看不見** —— 本檔只認 `ast.Attribute`，
+   而下面四種寫法**連一個 `ast.Attribute` 節點都不會產生**，故 sink 名字從頭到尾不出現::
+
+       getattr(ws, "append_row")(row)              # 字面字串
+       getattr(ws, "append" + "_row")(row)         # 執行期拼接
+       _M = "append_row"; getattr(ws, _M)(row)     # 名字放進常數
+       _fn = getattr(ws, "append" + "_row"); wrap(_fn, row)   # 組好再當引數傳出去
+
+   ⚠️ **四種本組都實測過，對本檔全部是綠燈**（2026-09-07，注入 `ui/views/page_04_portfolio.py`
+   的渲染路徑後跑本檔）。⛔ **本批刻意不補**：要看穿它們得追值的來源（跨函式、跨模組），
+   那是**行為層**的事，而本檔是純靜態的；硬補會變成另一個題目，
+   而且補到一半的靜態追蹤最危險 —— 它會讓人以為這一族已經守住了。
+   ⛔ **絕對不要把這一條讀成「已經守住了」。** 真正罩得住它的是執行期那一層（見下一條）。
+4. ⛔ **本檔不驗執行期。** 它讀 AST，不渲染。真的跑一輪、用假件攔截的那一層，
    由 `tests/test_portfolio_perf_render_no_writes.py` 負責（deny-by-default 假件）。
    **兩者互補，不重疊**：那一份只罩「📈 組合績效追蹤」那一條路，本檔罩整個閉包。
-4. **本地無 `streamlit`，故本檔刻意設計成不需要它** —— 見上一條。
+   ⚠️ 上一條的 `getattr` 家族**只有這一層攔得到**（哨兵是靠 `__getattr__` 認名字的，
+   名字怎麼組出來的它不在乎）—— 本檔的 :class:`_Recorder` 已具備該能力，
+   但它**只在本檔自己的單元測試裡跑**，沒有接到 ④ 的整頁渲染上。
+5. **本地無 `streamlit`，故本檔刻意設計成不需要它** —— 見上一條。
+6. ⚠️ **主規則目前在寫入這一半是「空掃通過」，這一點必須寫出來**（2026-09-07 實測）：
+   閉包共 **11** 個模組，其中 `_WRITE_SINKS` 命中的節點數是 **0**。
+   也就是說 :func:`test_the_page_closure_never_writes_on_render` 現在恆綠，
+   **不是因為擋住了什麼，是因為還沒有東西可擋** ——
+   `#809` 的閘門漏報能活下來正是這個緣故：閘門那一段**只被合成 fixture 跑過**，
+   而當時的 fixture 只有正向的 `if st.button(...)`，一格反向的都沒有。
+   → 這正是本檔三條「正對照」存在的理由（**空掃就是最危險的那種綠燈**）；
+   委派一落地，閉包會自己變大，屆時這一條會自然過期。**過期時請刪掉本條，不要留著誤導。**
 
 ⚠️ **本檔由執行組單組產出，未經第二組獨立複驗**（`CLAUDE.md §-2` 規則 6）。
+   ⚠️ 上列第 3 條的「四種 `getattr` 寫法全綠」與第 6 條的「11 模組 / 0 個 sink 節點」
+   是**本組實測**（可自行重跑）；但「**除了這四種以外沒有第五種繞道**」
+   本組**沒有查證，也不宣稱** —— 那是一句取決於「有沒有漏看」的全稱句。
 """
 
 from __future__ import annotations
@@ -150,6 +203,40 @@ def _intent_names(tree: ast.AST) -> set[str]:
     return _out
 
 
+def _is_intent_expr(node: ast.AST, intent: set[str]) -> bool:
+    """這個運算式**本身**是不是「使用者剛剛按了某個東西」。
+
+    ⭐ **本函式刻意只認兩種形狀，其餘一律回 `False`**（＝判成「沒被擋住」）::
+
+        st.button("送出")      # ast.Call，func 的最後一段是意圖元件
+        _go                    # ast.Name，且它被指派自上面那種呼叫
+
+    ⛔ **為什麼不肯再聰明一點** —— 這正是 `#809` 那個洞的成因。
+    舊版判斷閘門的方式是**把 `If` 的 test unparse 成字串，看裡面有沒有 `.button(`**，
+    於是下面這一段被判成「有擋住」::
+
+        if not st.button("送出"):
+            ws.append_row(row)          # ← 其實**每次渲染都寫**
+
+    字串裡確實有 `.button(`，但那是一個**反向**閘門：沒按的時候才寫。
+    也就是舊版在**它自陳「寧可誤報，不可漏報」的方向上漏報**。
+    `if _flag or st.button(...)` 是同一個病的另一張臉（不按也可能寫）。
+
+    → 現在的規則是：**test 必須整個就是那個意圖運算式**。
+    包了任何一層（`not X` ／ `X and Y` ／ `X or Y` ／ `X == True` ／ 三元式 …）
+    一律當成「看不懂」，也就是**沒被擋住**。
+    ⚠️ 這對 `if _ready and st.button(...)` 這種**真的有擋住**的寫法會**誤報** ——
+    **那是刻意的**，也是本檔唯一可接受的錯誤方向：
+    誤報會被人看到並就地處理，漏報只會安靜地放行一次寫入。
+    """
+    if isinstance(node, ast.Call):
+        try:
+            return ast.unparse(node.func).split(".")[-1] in _INTENT_WIDGETS
+        except Exception:                                    # pragma: no cover
+            return False
+    return isinstance(node, ast.Name) and node.id in intent
+
+
 def _write_refs(tree: ast.AST) -> list[tuple[int, str, bool]]:
     """`(行號, 寫入動作, 有沒有被使用者意圖擋住)` —— **呼叫與傳參都算**。
 
@@ -165,20 +252,19 @@ def _write_refs(tree: ast.AST) -> list[tuple[int, str, bool]]:
     _intent = _intent_names(tree)
 
     def _gated(node: ast.AST) -> bool:
+        """往上找：這個寫入有沒有長在某個 `if <意圖運算式>:` 的**正**分支裡。
+
+        ⚠️ **比對的是 `If.test` 這個節點的形狀，不是它 unparse 出來的字串** ——
+        字串比對看不出 `not`，那正是 `#809` 漏報的成因（見 :func:`_is_intent_expr`）。
+        ⚠️ `_cur in _up.body` 是刻意的：`else` 分支**不算**被擋住
+        （`if st.button(): ... else: ws.append_row(...)` 是沒按才寫）。
+        """
         _cur = node
         while id(_cur) in _parent:
             _up = _parent[id(_cur)]
-            if isinstance(_up, ast.If) and _cur in _up.body:
-                try:
-                    _src = ast.unparse(_up.test)
-                except Exception:                            # pragma: no cover
-                    _src = ""
-                if any(f".{_w}(" in _src or _src.startswith(f"{_w}(")
-                       for _w in _INTENT_WIDGETS):
-                    return True
-                if any(isinstance(_t, ast.Name) and _t.id in _intent
-                       for _t in ast.walk(_up.test)):
-                    return True
+            if (isinstance(_up, ast.If) and _cur in _up.body
+                    and _is_intent_expr(_up.test, _intent)):
+                return True
             _cur = _up
         return False
 
@@ -254,6 +340,85 @@ def test_the_detector_sees_the_four_evasions():
         f"`if st.button(...)` 那一個應該被判成「有擋住」，實際：{_gated}\n"
         "閘門偵測壞了 —— 它會把合法的按鈕寫入也報成違規，"
         "然後有人為了讓 CI 綠而把整條守衛放寬。")
+
+
+#: ⭐ **反向／放寬閘門的正對照。`#809` 的漏報就住在這裡。**
+#:
+#: 每一格用**不同的** sink 名字，理由與 :data:`_EVASIONS` 的 M7 註記相同：
+#: 名字撞在一起時，漏掉其中一格**集合不會變**，斷言就抓不到。
+_REVERSED_GATES = '''
+import streamlit as st
+def not_button(ws, row):
+    # ⛔ `#809` 的漏報形狀：字串裡有 `.button(`，但它是**反向**閘門 —— 每次渲染都寫。
+    if not st.button("送出"):
+        ws.append_row(row)
+def not_name(ws, row):
+    # 同上，換成「先存成變數再 `if not`」。
+    _go = st.button("送出")
+    if not _go:
+        ws.append_rows([row])
+def or_widened(ws, row):
+    # `or` —— 沒按也可能寫。
+    if st.session_state.get("f") or st.button("送出"):
+        ws.insert_row(row)
+def else_branch(ws, row):
+    # `else` —— 沒按才寫。
+    if st.button("送出"):
+        pass
+    else:
+        ws.update_cell(1, 1, row)
+def and_narrowed(ws, row):
+    # ⚠️ `and` —— 這一格**真的被擋住了**，本檔仍刻意判成「沒擋住」。
+    #    這是本檔唯一**已知且接受**的誤報，理由見 `_is_intent_expr` 的 docstring。
+    if st.session_state.get("f") and st.button("送出"):
+        ws.update_acell("A1", row)
+def really_gated(ws, row):
+    if st.button("送出"):
+        ws.batch_update([row])
+def really_gated_name(ws, row):
+    _go2 = st.button("送出")
+    if _go2:
+        ws.values_update(row)
+'''
+
+
+def test_a_reversed_or_widened_gate_is_not_treated_as_a_gate():
+    """⭐ **`#809` 漏報的回歸釘 —— 反向／放寬的閘門一律不算閘門。**
+
+    ## 這條為什麼存在（病史，不要刪）
+
+    `#809` 的閘門偵測是**把 `If.test` unparse 成字串，看裡面有沒有 `.button(`**。
+    於是下面這段被判成「有擋住」，而它**每次渲染都寫**::
+
+        if not st.button("送出"):
+            ws.append_row(row)
+
+    也就是那道守衛在**它自陳「寧可誤報，不可漏報」的方向上漏報**
+    —— 比沒有守衛更糟，因為後面的人會信它。
+    ⚠️ 這個 idiom 在本 repo **有前科**：`ui/tab_fund_grp_health.py` 與
+    `ui/helpers/fund_grp_health/switch_advisor_section.py` 兩處都留著
+    「原 `if not st.button(): return` 的**致命 bug**」的就地註解。**它不是理論上的角落。**
+
+    ## 這條釘住什麼
+
+    * **五種不算閘門**：`not <呼叫>` ／ `not <變數>` ／ `or` ／ `else` 分支 ／
+      以及 `and`（**它其實真的擋住了，我們刻意誤報** —— 見 :func:`_is_intent_expr`）。
+    * **兩種算閘門**：`if st.button(...)` 與 `if _go:`（`_go` 指派自意圖元件）。
+      ⚠️ 這兩格是**反向保險**：少了它們，一個「一律回 False」的偵測器
+      也能通過上半段，而那會讓主規則變成整片誤報，接著就有人來放寬它。
+    """
+    _refs = _write_refs(ast.parse(_REVERSED_GATES))
+    _ungated = sorted({_a for _l, _a, _g in _refs if not _g})
+    _gated = sorted({_a for _l, _a, _g in _refs if _g})
+    assert _ungated == ["append_row", "append_rows", "insert_row",
+                        "update_acell", "update_cell"], (
+        f"反向／放寬的閘門被當成閘門了 —— 實際判成「沒擋住」的只有：{_ungated}\n"
+        "⛔ 這正是 `#809` 的漏報：閘門偵測若比對 unparse 出來的**字串**，"
+        "`not st.button(...)` 裡面一樣有 `.button(`。**要比對 `If.test` 的節點形狀。**")
+    assert _gated == ["batch_update", "values_update"], (
+        f"正向閘門被判成沒擋住了，實際：{_gated}\n"
+        "偵測器變成「一律回 False」——主規則會整片誤報，"
+        "接下來就會有人為了讓 CI 綠而把整條守衛放寬。")
 
 
 def test_the_detector_finds_real_writes_in_a_known_writer():
