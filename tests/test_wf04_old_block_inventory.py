@@ -300,10 +300,24 @@ UNREGISTERED_FINDINGS: tuple[tuple[str, str, str, str], ...] = (
     ("render_mj_freshness_banner", "_ov_core", "slot-helper",
      "MoneyDJ 資料新鮮度 banner（`ui/helpers/io/freshness.py::render_mj_freshness_banner`）。"
      "⚠️ **它沒有失蹤，但『線框逐字有它』這句要講精確**（本組實測）："
-     "逐字出現的地方是 `docs/wireframes/wireframe-macro-health.html`「大表區」那一段，"
+     "~~逐字出現的地方是 `docs/wireframes/wireframe-macro-health.html`「大表區」那一段，"
      "寫的是 **`_render_mj_freshness_banner`**（②`ui/tab_fund_grp_health.py` 的同名包裝），"
-     "**那是 ② 的線框、不是 ia Tab 04**。"
-     "→ **④ 這一處自己沒有線框覆蓋**，`ui/views/` 也 0 命中。"),
+     "**那是 ② 的線框、不是 ia Tab 04**。~~ "
+     "⛔ **2026-09-07 更正：這句指錯了檔**（**有意識的更正，不是漏刪** · 日期 **2026-09-07** · "
+     "決策者 **AI 總管（依獨立稽核實測）**）。它把兩個不同的檔講成同一個："
+     "**逐字**（無底線前綴）的 `render_mj_freshness_banner` 在 "
+     "**`docs/wireframes/wireframe-fund-research.html`**（① 單檔深掘那一區，"
+     "「① 基本資料 & 淨值趨勢」那一列）；`wireframe-macro-health.html` 的「大表區」"
+     "（`_render_health_table`）那一處寫的是**底線前綴**的 `_render_mj_freshness_banner`，"
+     "那才是 ② 的線框。舊句把**底線前綴的那一處**稱作「逐字出現的地方」，"
+     "於是**真正逐字的那一處（①）整個沒被提到**。"
+     "**驗證指令**（repo 根執行，單行；`[^_A-Za-z0-9]` 就是用來排掉底線前綴的）："
+     "`git grep -nE '(^|[^_A-Za-z0-9])render_mj_freshness_banner' -- 'docs/wireframes/*'` "
+     "→ **只命中 `wireframe-fund-research.html` 一處**。"
+     "⚠️ **被推翻的只有它指的那個檔名，結論沒有被推翻** —— "
+     "⛔ 不要讀成「這一筆整句作廢」："
+     "→ **④ 這一處自己沒有線框覆蓋**（兩處命中一個屬 ①、一個屬 ②，**都不是 ia Tab 04**），"
+     "`ui/views/` 也 0 命中 —— **這半句經稽核複驗為真，一字未改。**"),
     ("render_rotation_section", "_sec_add", "slot-helper",
      "輪動配對區（`ui/helpers/fund_grp_health/rotation.py::render_rotation_section`）。"
      "**實際已委派給 ②**：`ui/views/page_02_health.py` 的委派鏈就地寫著 "
