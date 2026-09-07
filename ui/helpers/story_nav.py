@@ -364,7 +364,7 @@ def preview_tab_label(key: str) -> str:
     except KeyError:
         _hint = ""
         if key in _TAB_LABELS:
-            _hint = (f"；'{key}' 是**正式**分頁,沒有並行預覽版,"
+            _hint = (f"；'{key}' 屬正式分頁清單（`_TAB_LABELS`）,沒有並行預覽版,"
                      f"請改用 tab_label('{key}')")
         raise KeyError(
             f"story_nav.preview_tab_label: 未知的預覽分頁 key '{key}';"

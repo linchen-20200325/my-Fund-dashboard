@@ -819,18 +819,24 @@ def _render_maintain() -> None:
     #    ⚠️ **這是從 repo 既有證據推出來的，本組沒有在本機重現**（本環境無 streamlit）——
     #      真正的裁判是 CI 的 fast lane，不是這段註解。
     #    ⛔ 若哪天 streamlit 把限制加回來，**先紅的會是區塊 5，不是這一塊**。
-    # ⭐ **2026-09-07 雙軌並行：`st.expander` 升級成 Checkbox Gate。**
+    # ⭐ **2026-09-07 雙軌並行：折疊區**之內**再加一道 Checkbox Gate。**
     # **有意識的變更，不是漏刪**（決策者：AI 總管，裁決 2）。
     #
-    # **舊寫法**（原地保留、加刪除線，不刪）::
+    # **舊寫法**（原地保留、加刪除線，不刪）—— 注意**被劃掉的只有中間那一層**::
     #
-    #     ~~with st.expander(maintain_label(), expanded=False):~~
+    #     with st.expander(maintain_label(), expanded=False):        # ← 保留
     #     ~~    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):~~
-    #     ~~        render_manage_tab()~~
+    #     ~~        render_manage_tab()~~                            # ← 改到 gate 之後
+    #
+    # ⚠️ **`st.expander` 本身一個字都沒動** —— 本段第一版寫成「expander 升級成
+    #    Checkbox Gate」，那句話是**假的**：expander 還在，gate 是**疊在它裡面**。
+    #    （寫下當時本組確實把 expander 拿掉了，後來發現
+    #     `tests/test_wf05_settings_skeleton.py::test_the_maintain_block_is_folded_and_collapsed_by_default`
+    #     直接釘著客戶逐字要的那個包裝，才改成兩者並存 —— 敘述隨之更正。）
     #
     # **舊寫法的理由一個字都沒有被推翻**：客戶 2026-09-07 逐字裁決
     # 「保留在 ⑤ 的最底部作為進階折疊區（`st.expander`）……折疊收攏即可，
-    # 不影響主視覺」—— 那個**視覺意圖**在 gate 之下完全保留（預設收攏、不佔版面）。
+    # 不影響主視覺」—— 那個包裝**原封不動還在**，gate 只是多擋一層 body 執行。
     #
     # **被權衡掉的是它的一個前提：「折疊 ＝ 不載入」。那個前提是假的。**
     # `st.expander` **收合時 body 照樣執行**（本 repo 自證：
@@ -853,17 +859,26 @@ def _render_maintain() -> None:
     # ⚠️ **本 gate 只解「預設載入就雙跑」那一族**。使用者若**同時**勾起舊 ⑤ 與本頁
     #    的其他 gate（例如兩邊的「載入資料診斷」），仍會碰到重複 key ——
     #    **已知、未解、本批不處理**，逐一具名登記在 PR 描述。
-    if not st.checkbox(
-            _maintain_gate_label(), value=False, key=_SK_MAINTAIN_GATE,
-            help=f"舊「{tab_label('settings')}」分頁已經在跑同一個維護區；"
-                 "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
-        # ⚠️ 指路吃 :func:`_maintain_gate_label`，**不手抄**（手抄那一刻就開始漂移）。
-        not_ready(_maintain_not_loaded_note(),
-                  where=f"上方「{_maintain_gate_label()}」")
-        return
+    # ⚠️ **折疊區保留、gate 疊在它裡面 —— 兩個約束同時成立，不是二選一。**
+    #    客戶 2026-09-07 逐字要的是「進階折疊區（`st.expander`）」那個**包裝**，
+    #    而 gate 解的是「**body 會不會執行**」。兩件事不衝突：
+    #    expander 照畫（收合、不佔主視覺），委派則被 gate 擋在 `if` 後面。
+    #    ⛔ 拿掉 expander 會讓
+    #       `tests/test_wf05_settings_skeleton.py::test_the_maintain_block_is_folded_and_collapsed_by_default`
+    #       轉紅（它同時驗 `expanded=False` **與**「委派真的落在那個 `with` 裡」），
+    #       而那條釘的是**客戶逐字裁決**，不是實作細節。
+    with st.expander(maintain_label(), expanded=False):
+        if not st.checkbox(
+                _maintain_gate_label(), value=False, key=_SK_MAINTAIN_GATE,
+                help=f"舊「{tab_label('settings')}」分頁已經在跑同一個維護區；"
+                     "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
+            # ⚠️ 指路吃 :func:`_maintain_gate_label`，**不手抄**（手抄那一刻就開始漂移）。
+            not_ready(_maintain_not_loaded_note(),
+                      where=f"上方「{_maintain_gate_label()}」")
+            return
 
-    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
-        render_manage_tab()
+        with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
+            render_manage_tab()
 
 
 def _render_manual() -> None:
