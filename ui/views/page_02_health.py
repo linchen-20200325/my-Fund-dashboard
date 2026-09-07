@@ -336,6 +336,71 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
 )
 
+# ── ⑥ 委派區 Checkbox Gate（2026-09-07，雙軌並行的必要條件）──────────────
+#: gate 的字面。**畫面上與灰態指路吃的是同一個常數** —— 指到一個不存在的勾選框，
+#: 是本 repo 發作過三次的死指路（同 ④ `page_04_portfolio.py::DIVCAL_GATE_LABEL`
+#: 與 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的處置）。
+DELEGATE_GATE_LABEL: str = "載入逐檔健診與互斥分析（與舊分頁同一份程式碼）"
+
+#: ⛔ **這個 gate 擋的不是效能，是一個 CI 結構上看不到的當機。逐步寫清楚，不要靠記憶。**
+#:
+#: ## 機制（**讀 streamlit 1.59.1 原始碼求證，不是推論**）
+#:
+#: `st.tabs` 一次 run 會把**所有**分頁的 body 全部執行（`app.py` 自己的註解就地寫著）。
+#: 雙軌之後舊 ②（`tab_health`）與新 ⑥（`tab_preview_health`）**委派同一批舊模組**，
+#: 於是同一個 run 裡同一支 renderer 會被呼叫兩次。此時：
+#:
+#: - **`st.plotly_chart` 每一次呼叫都會註冊 element id** —— 1.59.1 `plotly_chart.py`
+#:   就地註解逐字寫著「We are computing the widget id for all plotly uses」，
+#:   `compute_and_register_element_id(...)` **不在任何 `if` 底下**。
+#:   id 由 `plotly_spec`（圖的 JSON）＋ config ＋ theme ＋ 寬高算出 ⇒
+#:   **同一份資料畫出同一張圖 ⇒ 同一個 id ⇒ 第二次呼叫拋 `StreamlitDuplicateElementId`**
+#:   （`elements/lib/utils.py::_register_element_id`）。
+#: - **`st.dataframe` 不會** —— 同版 `arrow.py` 的 `compute_and_register_element_id`
+#:   包在 `if is_selection_activated:` 裡，而 `is_selection_activated = on_select != "ignore"`，
+#:   預設就是 `"ignore"`。**本頁委派到的 7 個 `st.dataframe` 一個都沒有傳 `on_select`。**
+#:
+#: ⚠️ **這個不對稱是本批最容易搞錯的一點，據實寫明**：交接說明把
+#:    `backtest_section.py` 的「3 個 `dataframe` ＋ 1 個 `plotly_chart`」當成同一種危險，
+#:    **實測不是** —— 危險的只有 `plotly_chart` 那一個；而真正的 collision surface
+#:    **另外還有兩個 `plotly_chart`**（`correlation.py` 與 `dividend.py`），
+#:    那兩支交接說明完全沒有提到。**清單見 `tests/test_dual_track_plotly_id_collision.py`。**
+#:
+#: ## 為什麼 CI 看不到（這才是本批的重點）
+#:
+#: 舊 ② 在 `st.session_state["_fund_grp_health_ran"]` 沒有被設起來之前**直接 `return`**，
+#: 而那個旗標要使用者**按過一次「🩺 開始健診」**才會是 True（`tab_fund_grp_health.py`
+#: v19.504 就地註解）。CI 既沒有持倉、也不會去按那顆鈕 ⇒ **舊 ② 那一半永遠不執行**
+#: ⇒ 兩份永遠不會同時出現 ⇒ **測試永遠是綠的**。
+#: **但客戶有持倉，而且他按過那顆鈕之後旗標會一直留在 session 裡** ——
+#: 從那一刻起他**每一次** rerun 都同時渲染兩份。
+#:
+#: ## 為什麼是 gate，不是「誠實留白（乾脆不委派）」
+#:
+#: 留白**不可逆**：它等於把「舊 ② 還在」寫死成一個永久假設，而**沒有任何機制**
+#: 會在那個假設失效（舊 ② 整批拔除）的那天叫一聲。gate 則有前提守衛 ——
+#: `tests/test_dual_track_plotly_id_collision.py::test_the_gate_still_has_a_reason_to_exist`
+#: 在舊 ② 不再委派同一批模組的那一刻轉紅，告訴我們可以把 gate 拿掉了。
+#: （同一個取捨 ⑤ 那一組已經做過一次並被獨立稽核驗過，本檔沿用，不另發明第二套。）
+#:
+#: ## 三顆已知的雷，逐一避開（本 repo 都真的踩過）
+#:
+#: 1. ⛔ **不得帶 `key=`** —— streamlit 對帶 `key=` 的 widget 會**代呼叫端**把值寫進
+#:    `st.session_state`，那是每次渲染都發生、不經任何閘門的寫入，會踩
+#:    `tests/test_wf02_health_no_writes.py::test_the_page_only_writes_its_own_session_namespace`。
+#:    gate 只需要「這一次 run 有沒有勾」，直接用回傳值當條件即可。
+#: 2. ⛔ **不得放進 `st.form`** —— 本檔一個 `st.form(` 站點都沒有（鐵則 02 走
+#:    `ui.helpers.ia.applied_form`，`FORM_SITE_TOTAL` 精確 `== 7`），而且 form 內的
+#:    widget 要按送出才生效，行為上也是錯的。gate 在 form **外面**。
+#: 3. ⛔ **灰態本文不得把「勾下去」當成解法** —— 勾下去**正是撞的那一刻**。
+#:    本文因此寫的是「勾下去會發生什麼」，指路指向**舊 ② 分頁**（內容現在真的在那裡），
+#:    不是指向這個勾選框。**說反了比沒說更糟。**
+#: ⚠️ **不寫 `where=` 指向 gate 自己**：那會變成「要修就勾它」，與第 3 點直接矛盾。
+DELEGATE_GATE_HELP: str = (
+    "舊「② 持倉體檢」分頁已經在畫同一批圖表。兩份同時載入會撞 Streamlit 的"
+    "重複元件 ID（`plotly_chart`），畫面上會出現紅色錯誤塊。"
+    "勾選只建議在**舊分頁尚未跑過健診**時用來預覽新版動線。")
+
 #: `render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。
 #: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
 #: 下一個人看到 ② 沒有「投資試算」時，要能查到這是**線框指定的**，不是漏接。
@@ -1199,6 +1264,29 @@ def _render_delegated_sections() -> None:
     """
     _funds = _uniq_by_code(_holdings())
     if not _funds:
+        return
+
+    # ── Checkbox Gate ───────────────────────────────────────────────────
+    # ⛔ **這一段是本區塊唯一的進入條件，理由整段寫在 :data:`DELEGATE_GATE_LABEL` 上方。**
+    #    一句話：舊 ② 與本頁委派**同一批**舊模組，其中三支會畫 `st.plotly_chart`，
+    #    而 `plotly_chart` **每次呼叫都註冊 element id** ⇒ 同一個 run 畫兩次就拋
+    #    `StreamlitDuplicateElementId`。CI 沒有持倉、也不會按舊 ② 的「🩺 開始健診」，
+    #    **所以測試永遠是綠的，只有真實使用者會踩到。**
+    #
+    # ⚠️ **`st.checkbox` 必須是這個 `if` 的唯一運算元** —— 不要寫成
+    #    `if not X and st.checkbox(...)` 這類布林短路：那會讓 gate 在某些情況下
+    #    被跳過，而靜態守衛看到的仍然是一個「有 checkbox 的 if」。
+    #    守衛 `test_the_gate_is_the_only_way_in` 對這一點是 fail-closed 的。
+    _open = st.checkbox(DELEGATE_GATE_LABEL, value=False, help=DELEGATE_GATE_HELP)
+    if not _open:
+        # ⚠️ 指路指向**舊 ② 分頁**，不是指向上面那個勾選框 —— 內容現在真的在那裡，
+        #    而「勾下去」是撞的那一刻、不是解法（見 :data:`DELEGATE_GATE_LABEL` 第 3 點）。
+        not_ready(
+            f"逐檔健診與互斥分析**尚未載入**。這一區與舊「{tab_label('health')}」分頁"
+            "是同一份程式碼；兩邊同時載入會撞 Streamlit 的重複元件 ID，"
+            f"畫面上會出現紅色錯誤塊。勾選上方「{DELEGATE_GATE_LABEL}」會**立刻載入本頁這一份**"
+            "（舊分頁若已跑過健診，那一刻就會撞）。",
+            where=f"{where_to_find('health')}（該分頁已經在畫同一批圖表）")
         return
 
     # ⛔ **lazy import，且逐支具名** —— 不是 `from ui.helpers import fund_grp_health`
