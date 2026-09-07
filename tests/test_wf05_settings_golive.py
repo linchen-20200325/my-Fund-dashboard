@@ -214,6 +214,26 @@ def test_the_maintain_block_stays_behind_a_checkbox_gate():
         "沒有 gate 就會撞重複 widget key（`divcal_gen` / `manage_notify_preview` / `pool_*`）。"
         "⚠️ `st.expander(expanded=False)` **不算** gate：收合的 expander body 照樣執行。")
 
+    # ── ⭐ gate 的條件不得被布林字面值短路掉 ──────────────────────────────
+    # ⚠️ **這一段是突變實測補上的，不是想像出來的**：本條的第一版只問
+    #    「test 裡有沒有 checkbox 呼叫」，於是 `if False and st.checkbox(...)`
+    #    **照樣綠** —— checkbox 還在、`return` 還在、形狀完美，
+    #    但條件恆假 → 永遠不 return → `render_manage_tab()` 照跑，重複 key 全部回來。
+    #    （突變 C1 實測：十二條守衛沒有一條轉紅。）
+    # ⛔ 判定方式：把 `st.checkbox(...)` 這棵子樹**整個排除**（它自己的
+    #    `value=False` 是合法的），剩下的部分不准出現 `True` / `False` 字面值。
+    for _g in _gates:
+        _cb_ids = {id(_c) for _n in ast.walk(_g.test)
+                   if isinstance(_n, ast.Call)
+                   and getattr(_n.func, "attr", None) == "checkbox"
+                   for _c in ast.walk(_n)}
+        _lits = [_n for _n in ast.walk(_g.test)
+                 if isinstance(_n, ast.Constant) and isinstance(_n.value, bool)
+                 and id(_n) not in _cb_ids]
+        assert not _lits, (
+            f"gate 的條件被布林字面值短路了：`{ast.unparse(_g.test)[:90]}` —— "
+            "形狀還在、擋不到東西。gate 的條件只准由 `st.checkbox(...)` 決定。")
+
     # (3) ⭐ 委派必須在 gate **之後** —— gate 存在但 render 在它前面等於沒 gate
     _gate_end = max(_g.end_lineno for _g in _gates)
     _early = [_c.lineno for _c in _calls_manage if _c.lineno < _gate_end]

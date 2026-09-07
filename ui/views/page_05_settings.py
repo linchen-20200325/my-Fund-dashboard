@@ -233,13 +233,6 @@ _SK_PORTFOLIO: str = "portfolio_funds"
 #:    換掉的只有 key 的命名空間。
 _SK_DIAG_GATE: str = "v05_diag_gate"
 
-#: 「🗄️ 資料維護與通報」整塊的 Checkbox Gate 鍵。
-#:
-#: ⚠️ **這個 gate 是 2026-09-07「雙軌並行」逼出來的，不是效能考量** ——
-#:    理由完整寫在 :func:`_render_maintain`，這裡只放 key 本身。
-#:    命名空間比照 `_SK_DIAG_GATE`：`v05_` 前綴，**絕不與舊 ⑤ 共用**。
-_SK_MAINTAIN_GATE: str = "v05_maintain_gate"
-
 # ── 區塊名 ────────────────────────────────────────────────────────────────
 #: 線框 Tab 05 `<h4>` 逐字。**SSOT `_SECTION_LABELS` 沒有這個 key**，
 #: 本批**刻意不新增 key**（不在檔案邊界內，同 `page_04_portfolio.py::BLOCK_POLICY`）。
@@ -868,8 +861,15 @@ def _render_maintain() -> None:
     #       轉紅（它同時驗 `expanded=False` **與**「委派真的落在那個 `with` 裡」），
     #       而那條釘的是**客戶逐字裁決**，不是實作細節。
     with st.expander(maintain_label(), expanded=False):
+        # ⚠️ **刻意不帶 `key=`** —— 本檔的
+        #    `tests/test_wf05_settings_skeleton.py::test_the_page_writes_only_its_own_session_key`
+        #    把「widget 帶 `key=`」算成**寫 session_state**（streamlit 會代為寫入），
+        #    而本頁只准寫 `_SK_DIAG_GATE` 一個鍵。gate 只需要「**這一次 run 有沒有勾**」，
+        #    不需要跨 run 保存 → 直接用回傳值當條件即可。
+        #    **同檔先例**：`_render_nav_status()` 的 `NAV_GATE_LABEL` gate 就是這樣寫的
+        #    （`value=False`、不帶 `key=`），本條照抄它，不另發明第二套寫法。
         if not st.checkbox(
-                _maintain_gate_label(), value=False, key=_SK_MAINTAIN_GATE,
+                _maintain_gate_label(), value=False,
                 help=f"舊「{tab_label('settings')}」分頁已經在跑同一個維護區；"
                      "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
             # ⚠️ 指路吃 :func:`_maintain_gate_label`，**不手抄**（手抄那一刻就開始漂移）。
