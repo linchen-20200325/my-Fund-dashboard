@@ -120,9 +120,15 @@ PREVIEW_PREFIX: str = "[新] "
 #:    正式分頁改名時預覽分頁自動跟上（本 repo 分頁改名漏改已發作三次）。
 #: ⚠️ key 刻意與正式分頁**同名**：它們是同一個分頁的新舊兩版，
 #:    「⑤ 與 ⑦ 是同一件事的兩個版本」這件事應該由 key 表達，不是由註解表達。
+#: ⚠️ **本表的順序 ＝ 分頁列上預覽分頁的順序**（⑥⑦⑧），不是裝飾。
+#:    2026-09-07 新增 `research`（⑧）時**刻意 append 在最後、不插進 ⑥⑦ 中間** ——
+#:    ⑥ / ⑦ 已經在線上，客戶對它們的位置有肌肉記憶；而且照 ①~⑤ 的順序插隊
+#:    （health / research / settings）會把 ⑦ 往後推一格，那是一次**沒有人要求的
+#:    動線變更**。新的掛在最後，既有的一格都不動。
 PREVIEW_TAB_LABELS: dict[str, str] = {
     "health":   PREVIEW_PREFIX + _TAB_LABELS["health"],
     "settings": PREVIEW_PREFIX + _TAB_LABELS["settings"],
+    "research": PREVIEW_PREFIX + _TAB_LABELS["research"],
 }
 
 

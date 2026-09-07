@@ -97,7 +97,7 @@ def test_preview_tab_labels_are_a_separate_namespace():
           指路文案會開始吐「⑥ [新] 持倉體檢」這種**線框上不存在**的路徑，
           正是本 repo 已發作三次的死指路。
 
-    突變實驗：把 `PREVIEW_TAB_LABELS` 的兩個 key 併進 `_TAB_LABELS` → **本條轉紅**
+    突變實驗：把 `PREVIEW_TAB_LABELS` 的三個 key 併進 `_TAB_LABELS` → **本條轉紅**
     （而且 `test_tab_labels_are_exactly_the_five_top_level_tabs` 會一起紅）。
     """
     from ui.helpers.story_nav import (

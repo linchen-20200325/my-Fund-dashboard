@@ -34,7 +34,10 @@ _FIVE_KEYS = ["macro", "health", "research", "portfolio", "settings"]
 
 #: 掛在五格**之後**的並行預覽分頁 key（順序＝分頁列順序）。
 #: ⚠️ **從 SSOT 導出，不手抄** —— 本檔整篇在禁止的就是「第二份標籤」。
-_PREVIEW_KEYS = ["health", "settings"]
+# ⚠️ 2026-09-07 由 2 擴為 3（新增 ⑧ `research`）。**append 在最後，不插隊** ——
+#:    ⑥ / ⑦ 已在線上，插進中間會把 ⑦ 往後推一格（一次沒有人要求的動線變更）。
+#:    順序即分頁列順序，本清單與 `app.py` 的 `st.tabs` 逐格比對。
+_PREVIEW_KEYS = ["health", "settings", "research"]
 
 
 def _app_tree() -> ast.Module:

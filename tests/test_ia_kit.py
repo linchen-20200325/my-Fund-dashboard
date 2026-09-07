@@ -461,6 +461,13 @@ _SLOT_RENDER: dict[str, str] = {
     #    那不是「守不到」，是「**假裝守到了**」。故一併登記。
     "tab_preview_health":   "render_holdings_health",             # ⑥ [新] 持倉體檢
     "tab_preview_settings": "render_settings_and_diagnostics",    # ⑦ [新] 設定與診斷
+    # ⚠️ 2026-09-07 新增 ⑧。登記進本表是**必要的**，理由同上方那段：
+    #    `_slot_to_render_calls()` 用 `_ctx.id in _SLOT_RENDER` 過濾，
+    #    沒登記的 slot 它整個看不到 —— ⑧ 掛錯 render 函式照樣綠。
+    # ⚠️ 同時注意 `"tab_research": "render_fund_research_tab"` 那一格**一個字都沒動** ——
+    #    舊 ③ 留在原位是客戶「雙軌並行」的明文要求；本表是它現在唯一的守衛
+    #    （有人把舊 ③ 換掉或拿掉，那一格會紅）。
+    "tab_preview_research": "render_fund_research",                # ⑧ [新] 標的探索
 }
 
 

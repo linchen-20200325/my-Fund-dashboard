@@ -86,7 +86,19 @@
 
 錄製法：為什麼不用 AppTest
 --------------------------
-本頁尚未接進 `app.py`（客戶明令舊三頁不動、不接線），AppTest 走不到它。
+~~本頁尚未接進 `app.py`（客戶明令舊三頁不動、不接線），AppTest 走不到它。~~
+⚠️ **2026-09-07 更正：這個理由已經不成立**（**有意識的更正，不是漏刪** ·
+決策者：**客戶 2026-09-07「雙軌並行」**）。本頁已掛成第 ⑧ 格 `[新] 標的探索`，
+`tests/test_app_apptest.py` 的 AppTest **走得到它了**。
+**舊表述在寫下的當天是對的**（那時 `app.py` 真的沒有掛它）；**被推翻的是它的前提**。
+**但錄製法不因此換掉，理由換了一個、而且更強**：
+(a) AppTest 是 **slow lane**、且該 lane 是 `continue-on-error: true`
+    —— 它紅了**不會擋 merge**，本檔這些逐格斷言不能建在一條不擋門的 lane 上；
+(b) AppTest 只跑**一種** session 形狀，而本檔要對**同一頁的多種 session 形狀**
+    各錄一次呼叫序列，那是 AppTest fixture 做不到的。
+⚠️ 反過來也要講清楚：**AppTest 現在補上了本檔結構上做不到的那一半** ——
+「這一頁在真的 Streamlit runtime 裡畫得出來、而且不會與舊 ③ 撞 widget key」。
+**兩者互補，不是誰取代誰。**
 故以**替換 `st` 的渲染 API**錄下呼叫序列 —— 與
 `tests/test_wf01_detail_zone_order.py` / `tests/test_wf02_health_skeleton.py`
 同一套做法，那裡已經被多輪獨立稽核打過。
