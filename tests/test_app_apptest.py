@@ -350,7 +350,7 @@ def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
     ① **元素型別**：舊 ⑤（`ui/tab_settings_diag.py`）畫的是
        `st.subheader("📖 說明書", anchor=ANCHOR_MANUAL)`；新 ⑤
        （`ui/views/page_05_settings.py`）**全頁 `st.subheader` 呼叫數 ＝ 0**
-       （實測 `grep -c "st\.subheader"` → 0；舊 ⑤ 是 4），版面一律
+       （實測 `grep -c "st[.]subheader"` → 0；舊 ⑤ 是 4），版面一律
        `st.markdown("### …")`，說明書本體再收進
        `st.expander(BLOCK_MANUAL, expanded=False)`（「不佔首屏」的落地方式）。
        → `at.subheader` **結構上就看不到它，再跑一百次也一樣**
