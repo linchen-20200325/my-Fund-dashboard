@@ -431,7 +431,14 @@ _SLOT_RENDER: dict[str, str] = {
     # ⚠️ 舊 `ui/tab1_macro.py::render_macro_tab` **一個字都沒有動**（客戶方針第 3 條
     #    「舊版 tab 檔案暫留作為參考」），只是不再被 `app.py` 掛上 ①。
     "tab_macro":     "render_market_overview",       # ① 只做總體環境判讀
-    "tab_health":    "render_fund_grp_health_tab",   # ② 只診斷，不給建議動作
+    # 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：② 改掛新 View
+    # `ui/views/page_02_health.py::render_holdings_health`。
+    # ⚠️ **同 ①／⑤ 那兩格：這是「意圖」變更，不是把規則放寬** —— 本條的作用
+    #    （分頁內容不准跟著改名一起漂走）一字未減：它仍然斷言 `with tab_health:`
+    #    只呼叫這一個 render 函式，把別頁的 render 搬進來照樣紅。改的只是**該叫哪一個**。
+    # ⚠️ 舊 `ui/tab_fund_grp_health.py::render_fund_grp_health_tab` **一個字都沒有動**
+    #    （它是回退路徑，且新頁委派的正是它底下那些舊模組），只是不再被 `app.py` 掛上 ②。
+    "tab_health":    "render_holdings_health",       # ② 只診斷，不給建議動作
     "tab_research":  "render_fund_research_tab",     # ③ 找標的、研究單檔
     "tab_portfolio": "render_portfolio_tab",         # ④ 要執行的動作都在這裡
     # 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：⑤ 改掛新 View
