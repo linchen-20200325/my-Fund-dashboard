@@ -99,13 +99,23 @@ def test_all_five_slots_go_through_tab_label():
     #    **舊斷言的理由一個字都沒有被推翻**：它守的是「**每一格都必須走 SSOT、
     #    一個字面值都不准有**」＋「**順序即站號**」。下面兩段接的是同一根針，
     #    而且**多釘了一格**：前五格仍必須逐一是 `tab_label(<key>)`、key 與順序不變；
-    #    後兩格必須是 `preview_tab_label(<key>)` —— 也就是說
+    #    後面**三格**必須是 `preview_tab_label(<key>)` —— 也就是說
     #    **「把預覽分頁寫成字面值」與「把預覽分頁混進正式那五格」兩種寫法都會紅**。
-    #    **被權衡掉的只有那個「5」**，因為客戶把分頁列改成 7 格了。
+    #    **被權衡掉的只有那個「5」**，因為客戶把分頁列改成 **8 格**了。
+    #    ⚠️ 2026-09-07 計數同步（決策者：**AI 總管**）：本段原寫 ~~7 格~~ / ~~後兩格~~，
+    #       那是 ⑥⑦ 時代的數字；本 PR 新增 ⑧ 之後是 **5 ＋ 3 ＝ 8**。
+    #       **計數刻意不加刪除線**（`CLAUDE.md §-2.A` 增補輪註記）——
+    #       它們是描述現況的數字、不是條文，旁邊留一個劃掉的舊數字只會讓記錄自相矛盾。
+    #       ⚠️ **哪些會過期、哪些不會，講清楚**：底下 `assert` 比的是
+    #       `_want_n = len(_FIVE_KEYS) + len(_PREVIEW_KEYS)`（SSOT 導出，**加一格不必改**）；
+    #       **會過期的是它的失敗訊息裡那句「五格正式 ＋ 三格 [新] 預覽」** ——
+    #       那是**手寫的**，本輪由 ~~兩格~~ 改成 **三格**。
+    #       ⛔ 它錯了**不會讓任何測試轉紅**（訊息只在斷言失敗時才印出來），
+    #          所以它只能靠人回頭讀 —— 這正是本輪要修的那一族。
     _elts = _top_level_tabs_call().args[0].elts
     _want_n = len(_FIVE_KEYS) + len(_PREVIEW_KEYS)
     assert len(_elts) == _want_n, (
-        f"app.py 的頂層分頁數不是 {_want_n}（五格正式 ＋ 兩格 [新] 預覽），"
+        f"app.py 的頂層分頁數不是 {_want_n}（五格正式 ＋ 三格 [新] 預覽），"
         f"而是 {len(_elts)}")
 
     _keys: list[str] = []
@@ -121,7 +131,7 @@ def test_all_five_slots_go_through_tab_label():
         f"分頁 key 或**順序**不對：{_keys} != {_FIVE_KEYS}。"
         "順序即站號 ①②③④⑤，不是裝飾。")
 
-    # ── 後兩格：[新] 並行預覽分頁 ──────────────────────────────────────
+    # ── 後三格：[新] 並行預覽分頁 ──────────────────────────────────────
     # ⚠️ 這裡要求的是 **`preview_tab_label`**，不是 `tab_label` —— 兩個命名空間
     #    刻意分開（理由寫死在 `ui/helpers/story_nav.py` 的 `PREVIEW_TAB_LABELS`）。
     #    把預覽分頁改成 `tab_label("health")` 會讓分頁列出現**兩個同名分頁**，
@@ -221,17 +231,17 @@ def _fetch_diag_owner_with(tree: ast.Module) -> ast.With | None:
 
 def test_fetch_diag_is_owned_by_app():
     """⭐ **本批最重要的一條**：`FETCH_DIAG` 的所有權必須由 `app.py` 持有，
-    而且範圍要涵蓋**全部五個**分頁的 `with tab_*:` 區塊。
+    而且範圍要涵蓋**每一個**分頁的 `with tab_*:` 區塊（2026-09-07 實測：**8 格**）。
 
     為什麼不能讓 ⑤ 自己 `with`（這是本條存在的全部理由）：
     旗標是 thread-local context manager，**只在 `with` 區塊內成立**；而
-    Streamlit 的 `st.tabs` 一次 run 會把五個分頁的 body 全部執行過，順序就是
+    Streamlit 的 `st.tabs` 一次 run 會把**所有**分頁的 body 全部執行過，順序就是
     程式碼順序 —— **③ 跑在 ⑤ 之前**。⑤ 就算把自己整個包起來，那時 ③ 底下的
     `ui/tab2_single_fund.py` 早就把「🔍 抓取診斷細節」畫出去了，回頭關不掉。
     結果就是同一塊在 ③ 與 ⑤ 各出現一次。
 
     突變實驗：把 `app.py` 的 `with _settings_page_owns(_SD_FETCH_DIAG):` 整個
-    拿掉（五個 `with tab_*:` 退回頂層）→ **本條轉紅**。
+    拿掉（所有 `with tab_*:` 退回頂層）→ **本條轉紅**。
     只把其中一個 `with tab_*:` 移出該區塊 → **本條也轉紅**（涵蓋範圍檢查）。
     """
     _tree = _app_tree()
@@ -248,7 +258,7 @@ def test_fetch_diag_is_owned_by_app():
                 if isinstance(_item.context_expr, ast.Name):
                     _inside.add(_item.context_expr.id)
 
-    # app.py 全檔的 `with tab_*:` 變數名（即五個分頁 context）——**同一棵樹**
+    # app.py 全檔的 `with tab_*:` 變數名（即每一個分頁 context）——**同一棵樹**
     _all_tabs = {
         _item.context_expr.id
         for _n in ast.walk(_tree) if isinstance(_n, ast.With)
@@ -380,10 +390,10 @@ def test_flag_actually_flips_the_two_consumers(monkeypatch):
 
 
 # ══════════════════════════════════════════════════════════════════
-# 3) 分頁隔離：五段 try/except 的分頁名不得寫死
+# 3) 分頁隔離：每一段 try/except 的分頁名不得寫死
 # ══════════════════════════════════════════════════════════════════
 def test_every_tab_render_is_wrapped_in_isolation():
-    """五個 `with tab_*:` 裡面都必須走分頁隔離（一頁炸掉不連坐其他頁）。
+    """**每一個** `with tab_*:` 裡面都必須走分頁隔離（一頁炸掉不連坐其他頁）。
 
     `st.tabs` 單次 run 會渲染全部分頁，任一頁拋未捕捉例外會中止整個 script →
     **其後所有分頁空白**（§1 分頁隔離，v19.429）。
