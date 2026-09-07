@@ -182,7 +182,12 @@ from ui.tab3_portfolio import render_portfolio_tab
 #   ⚠️ 消費者清單是**會漂移的量測值**,需要時**現場量測**,不要引用本行。查證方式:
 #   `git grep -n "crisis_backtest" -- '*.py'` 後**逐一判讀是 import 還是 docstring 提及**
 #   —— 只看 grep 命中數,就會複製 (1) 的錯誤。
-from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
+# 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：② 改掛新 View。
+# ⛔ 舊 `ui/tab_fund_grp_health.py` **刻意保留、一個字都沒動** —— 它是回退路徑，
+#    而且新頁委派的正是它底下那些舊模組（(A) 路線）。**不要順手刪掉它。**
+from ui.views.page_02_health import (  # noqa: E402  (② 持倉體檢)
+    render_holdings_health,
+)
 # 2026-08-31 七→五接線:③ 與 ⑤ 是**合併頁**,由它們自己去 lazy import 五個舊入口
 # (render_single_fund_tab / render_batch_analysis_tab / render_manage_tab /
 #  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
@@ -537,7 +542,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
     with tab_health:
         try:
-            render_fund_grp_health_tab()
+            render_holdings_health()
         except Exception as _health_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
             from ui.helpers.session import friendly_error as _fe_health
             _fe_health(f"「{_tab_label('health')}」分頁渲染失敗", _health_tab_e,

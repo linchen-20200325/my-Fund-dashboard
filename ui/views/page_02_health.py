@@ -506,8 +506,17 @@ def _render_filter_form() -> None:
         # ⚠️ **放在既有的 `applied_form` 裡面，不另開第二個 form**（鐵則 02：
         #    本頁 `st.form` 站點必須維持 0，`applied_form` 維持 1；自己寫 form
         #    會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==7`）轉紅）。
-        # ⚠️ 它跟其他三個條件一樣**受送出閘門管**：拖數字的當下不會觸發下游重算，
-        #    因為委派區塊讀的是 `_principal_twd()`（＝已套用值），不是這個回傳值。
+        # ⚠️ 它跟其他三個條件一樣**受送出閘門管**：拖數字的當下不會觸發下游重算。
+        # ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+        #    本行原寫 ~~「因為委派區塊讀的是 `_principal_twd()`（＝已套用值）」~~ ——
+        #    **那是假的**。實測（AST）`_principal_twd` 在本檔的**呼叫點 0、裸參照 0**，
+        #    也就是它目前是 **0 caller**，委派區塊一個字都沒讀它。
+        #    → 這個 widget 現在**收得到值、但沒有任何下游消費它**。
+        #    **不受閘門影響的真正原因**是更前面那一句：`_render_filter_form()` 只把值
+        #    寫進 `_SK_APPLIED`，而委派區塊傳給舊模組的是 `_uniq_by_code(_holdings())`，
+        #    整條路徑上沒有 principal 這個引數。
+        #    ⛔ **本批不接線**：接上去等於改變委派區塊餵給舊模組的輸入
+        #    （齊頭本金 vs 實際 `invest_twd`），那是行為變更，不是切換。已具名登記於 PR。
         _principal = st.number_input(
             "本金（TWD）",
             min_value=_PRINCIPAL_MIN, max_value=_PRINCIPAL_MAX,
@@ -1112,9 +1121,32 @@ def _render_delegated_sections() -> None:
     ⚠️ **唯一的實質差異，據實寫明、不掩蓋**：`_build_fund_dict` 把每檔的 `invest_twd`
     **統一覆寫成同一個 `principal_twd`**（那是「假設每檔都投入相同金額才能比較」的
     刻意設計）；而 `portfolio_funds` 帶的是**使用者每檔真正投入的金額**。
-    → 對本批接的這兩支**沒有影響**（實測兩支都不讀 `invest_twd`：
-      `render_fund_checkup` 走 `metrics`／`moneydj_raw`／`series`，
-      `render_mutual_exclusion_section` 走持股與相關性）。
+    ~~→ 對本批接的這兩支**沒有影響**（實測兩支都不讀 `invest_twd`：~~
+      ~~`render_fund_checkup` 走 `metrics`／`moneydj_raw`／`series`，~~
+      ~~`render_mutual_exclusion_section` 走持股與相關性）。~~
+
+    ⛔ **2026-09-07 就地更正：上面那句對 `render_fund_checkup` 是假的。
+    有意識的更正，不是漏刪**（決策者：**AI 總管**；依據：**本組實測**，非轉述）::
+
+        grep -n "invest_twd" ui/helpers/fund/checkup.py   # → 11 處命中
+
+    `render_fund_checkup` **確實會讀 `invest_twd`**，而且它驅動使用者看得到的東西：
+    `_compute_fund_health_kpis` 的月配息、`build_checkup_dataframe` 的
+    **原幣本金 ／ 月配 TWD ／ 年配 TWD 三欄**，以及健診卡上那句
+    「本金 N TWD ÷ 12 月」。`ui/tab3_portfolio.py` 就地寫著同一件事
+    （「`invest_twd` 會驅動可見輸出（原幣本金 / 月配息 / 年配息三欄 + 健診卡文案）」）
+    —— **同一個 repo 裡兩份記錄互相矛盾，本行是錯的那一份。**
+    ⚠️ `render_mutual_exclusion_section` 那半句**仍然成立**（實測 0 命中）。
+
+    **這個差異的實際後果，據實寫明（它不是 bug，但它是一個功能面的變化）**：
+    舊 ② 餵的是 `_build_fund_dict(..., principal_twd)` ——「**每檔硬寫同一個本金**」
+    的**齊頭模擬基準**；新 ② 餵的是 `portfolio_funds` ——「**使用者每檔實際投入**」。
+    也就是說 ② 切換之後，**全站不再有任何地方畫齊頭本金版的基金體檢 PK**
+    （④ 那一份在 WP-G 已經移除，它當時的理由就是「同型的齊頭模擬版在 ② 仍在」，
+    而那句話自本次切換起不再成立）。
+    ⛔ **本批不補**：要補等於把 `_build_fund_dict` 接回來，那是委派清單的變更、
+    不是切換，且會連帶把 `_render_investment_calc` 的那個張力提前引爆。
+    **已寫進 PR 描述具名登記。**
     ⛔ **但下一批接 `render_fund_grp_health_extras` 時這個差異會變成真的**
       —— 它底下的 `_render_investment_calc` 就是吃那個本金算「可申購單位／月配 TWD」。
       **那正是 :data:`DEFERRED_ENTRIES` 第一條擋著它的原因，不要以為那只是缺個 widget。**
