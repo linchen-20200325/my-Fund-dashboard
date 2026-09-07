@@ -269,11 +269,11 @@ _LAG_PENDING_NOTE: str = (
 #: `ui/helpers/fund_grp_health/` 的不同子模組，簽名幾乎都是 `(funds)` ——
 #: **本檔逐支呼叫它們，沒有改舊模組一個字**（路線 (A)「原封不動」）。
 #:
-#: ⛔ **但有一個必須講明的代價：留 ② 的五塊裡，只有 `render_rotation_section`
-#: 是 public，另外四支是 `_` 開頭的私有名。** 該套件的 `__init__` 確實把它們
-#: 全部 re-export（docstring 自陳「re-export 全部子函式」，且既有 14+ 測試就是這樣取用），
-#: 但**沒有 `__all__`**。也就是說本檔對它們的依賴**比對 public API 的依賴更脆**——
-#: 舊模組整批拔除時，這五條是最先斷的。**這一點登記在此，不是藏在 PR 描述裡。**
+#: ⛔ **但有一個必須講明的代價：從 extras 拆進來的四支全是 `_` 開頭的私有名。**
+#: 該套件的 `__init__` 確實把它們全部 re-export（docstring 自陳「re-export 全部子函式」，
+#: 且既有 14+ 測試就是這樣取用），但**沒有 `__all__`**。也就是說本檔對它們的依賴
+#: **比對 public API 的依賴更脆** —— 舊模組整批拔除時，這幾條是最先斷的。
+#: **這一點登記在此，不是藏在 PR 描述裡。**
 DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     # ── 原本就接的兩支（public）────────────────────────────────
     ("ui.helpers.fund.checkup", "render_fund_checkup"),
@@ -288,7 +288,6 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.dividend", "_render_dividend_matrix"),
     ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
     ("ui.helpers.fund_grp_health.risk", "_render_oversold_badges"),
-    ("ui.helpers.fund_grp_health.rotation", "render_rotation_section"),
     ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
 )
 
@@ -296,6 +295,39 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
 #: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
 #: 下一個人看到 ② 沒有「投資試算」時，要能查到這是**線框指定的**，不是漏接。
 #: ⛔ **不要因為「舊 ② 本來就有」就把它們加回來** —— 那正是線框要拆掉的東西。
+#: ⛔ **線框判給 ②、但因為會碰到寫入槽而「本批不接」的區塊。**
+#:
+#: **這一列不是「做不到」，是依既有裁決本來就不該進來** ——
+#: 總管 2026-09-06 裁決（讀法甲）：**② 零寫入**；
+#: 「在 `nav_history` 涵蓋範圍調查有結論之前，**不得**新增任何寫使用者 Google Sheet 的路徑」。
+#:
+#: **它是怎麼被抓到的（呼叫圖逐跳，不是猜的）**::
+#:
+#:     ui.views.page_02_health::_render_delegated_sections
+#:       → ui.helpers.fund_grp_health.rotation::render_rotation_section
+#:       → ui.helpers.fund_grp_health.rotation::_render_pairs_ui
+#:       → ui.helpers.fund_grp_health.rotation::_render_pairs_body   ← 寫入槽
+#:
+#: **渲染期就會碰到，不是綁在使用者點擊後面**：那個呼叫是
+#: `st.download_button(..., _out.to_csv(...).encode("utf-8-sig"), ...)` 的**引數**，
+#: 必須在按鈕建立**之前**求值 —— 使用者沒有按任何東西，它就已經被呼叫了。
+#:
+#: ⚠️ **本組的觀察，據實記，但它沒有解除這一列**：那個 primitive 是
+#: `DataFrame.to_csv()`，**沒有傳路徑**，回傳的是記憶體字串。
+#: ⛔ **但本組拿不出「呼叫圖 ＋ 執行期哨兵」兩者兼備的誤報證據**
+#: （本機沒有 streamlit，跑不了執行期哨兵）—— **證據不齊就不主張誤報**，
+#: 而且既有裁決是「**零寫入**」而不是「非明示不寫」，所以**照裁決拿掉**。
+#:
+#: ✅ **它要回到 ② 的前提（寫清楚，才不會變成沒有出口的待辦）**：
+#:   (1) `nav_history` 涵蓋範圍調查有結論、② 零寫入裁決被更新；**或**
+#:   (2) 有人補齊「這個 `to_csv()` 是記憶體內操作」的**雙重證據**
+#:       （呼叫圖 ＋ 執行期哨兵實跑），由總管裁決該守衛的判定要不要收窄。
+#: ⛔ **在那之前不得把它加進 `DELEGATED_ENTRIES`，也不得改守衛去配合它**
+#:    —— 動守衛去配合實作，是本 repo 反覆吃虧的形狀。
+DROPPED_FOR_ZERO_WRITE: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health.rotation", "render_rotation_section"),
+)
+
 MOVED_TO_PAGE_03: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.investment", "_render_investment_calc"),
     ("ui.helpers.fund_grp_health.investment", "_render_holdings_block"),
@@ -1091,7 +1123,6 @@ def _render_delegated_sections() -> None:
     from ui.helpers.fund_grp_health.correlation import _render_correlation_matrix
     from ui.helpers.fund_grp_health.dividend import _render_dividend_matrix
     from ui.helpers.fund_grp_health.risk import _render_oversold_badges
-    from ui.helpers.fund_grp_health.rotation import render_rotation_section
 
     st.divider()
     st.markdown("#### 🔬 逐檔健診與互斥分析")
@@ -1112,15 +1143,27 @@ def _render_delegated_sections() -> None:
     safe_section("真實收益矩陣", lambda: _render_dividend_matrix(_funds))
     safe_section("持股相關性矩陣", lambda: _render_correlation_matrix(_funds))
     safe_section("−2σ 超跌警示", lambda: _render_oversold_badges(_funds))
-    safe_section("輪動配對建議", lambda: render_rotation_section(_funds))
     # 🔁 配置回測 —— 線框 §04「留 ② 原位」，標註「教學非建議」。
     # ⚠️ 它吃的是 rich fund dict（含 `series` 原幣 NAV ＋ `currency`），
     #    `<2 檔有序列` 時它自己會印標題 ＋ 一句灰字說明缺什麼，**不會靜默消失**。
     safe_section("配置回測", lambda: render_allocation_backtest_section(_funds))
     # ⑫ AI 跨檔評論 —— 線框「留 ②（按鈕觸發）」。
-    # ⚠️ **這一支是本頁唯一會產生外部 API 呼叫與本機磁碟寫入的委派**
-    #    （Gemini ＋ `repositories/ai_cache.py` 的原子寫），但**兩者都由按鈕觸發、
-    #    且都不是 Google Sheet 寫入** —— 零寫入守衛守的是 Sheet，這一點不要混淆。
+    # ⚠️ **這一支是本頁唯一還會碰到寫入 primitive 的委派**
+    #    （Gemini API ＋ `repositories/ai_cache.py` 的本機原子寫）。
+    #
+    # ⭐ **它與被拿掉的「輪動配對」差在哪 —— 這一段是實測，不是推論**
+    #    （2026-09-07，`44a1474` 那次 CI 紅燈之後逐條查的）：
+    #
+    #      輪動配對  `_render_pairs_body` 的 `to_csv(...)` 是
+    #                `st.download_button(...)` 的**引數** ⇒ **渲染期無條件求值**
+    #                ⇒ 執行期哨兵當場記一筆 ⇒ **紅**。（已移出，見 DROPPED_FOR_ZERO_WRITE）
+    #      AI 跨檔    `ai_cache.save(...)` 的外層守衛（AST 實測，由內而外）是
+    #                `try` → **`if run`** → `with st.container()`，
+    #                而 `run = st.button(...)`；守衛測試的假 streamlit
+    #                （`_Rec`）對 `button` **回傳 `False`** ⇒ 該分支不執行。
+    #    ⇒ **兩者都不是 Google Sheet 寫入，但只有前者在渲染期會被碰到。**
+    #    ⛔ 若日後那個假 streamlit 改成 `button` 回 `True`，這一支會變成第二顆紅燈 ——
+    #       屆時**照裁決把它也移進 `DROPPED_FOR_ZERO_WRITE`，不要改守衛**。
     safe_section("AI 跨檔評論", lambda: _render_ai_cross_fund_evaluation(_funds))
 
 

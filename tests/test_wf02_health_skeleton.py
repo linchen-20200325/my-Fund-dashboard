@@ -1660,3 +1660,48 @@ def test_the_principal_input_lives_inside_the_single_applied_form():
         "本金 `number_input` 不在 `applied_form` 的 `with` 區塊內 —— "
         "那代表它沒被送出閘門包住，改一個數字就會全頁重跑（鐵則 02）。"
         f"\n目前 with 區塊內的 number_input 標籤：{_labels}")
+
+
+def test_the_zero_write_dropouts_stay_out():
+    """⛔ 因「② 零寫入」被拿掉的區塊，**不准悄悄回來**。
+
+    2026-09-07 實測（CI，`44a1474`）：把 `render_rotation_section` 接進來之後，
+    `tests/test_wf02_health_no_writes.py::test_rendering_the_page_touches_no_write_sink`
+    **當場轉紅**，指名 `ui.helpers.fund_grp_health.rotation._render_pairs_body`。
+    呼叫鏈（逐跳）::
+
+        page_02_health::_render_delegated_sections
+          → rotation::render_rotation_section → rotation::_render_pairs_ui
+          → rotation::_render_pairs_body      ← 寫入槽
+
+    **那個寫入槽在渲染期就會碰到**（它是 `st.download_button` 的引數，
+    必須在按鈕建立前求值），不是綁在使用者點擊後面。
+
+    ⚠️ **本條與零寫入守衛不重複，它擋的是不同的東西**：
+    零寫入守衛要**真的渲染一輪**才會紅（需要 streamlit，且只在 CI 跑得動）；
+    本條是**純靜態**、在本機一秒可驗，而且錯誤訊息會直接說出
+    「這一塊是被那條裁決擋掉的、回來的前提是什麼」。
+    ⇒ **下一個人想加回來時，先撞到的是這一條，而不是一次 CI 紅燈。**
+    """
+    _dropped = {tuple(_e) for _e in _page_const("DROPPED_FOR_ZERO_WRITE")}
+    assert _dropped, (
+        "DROPPED_FOR_ZERO_WRITE 是空的 —— 若那些區塊真的可以回來了，"
+        "請連同本條與 PR 說明一起改，不要只清空常數。")
+
+    _approved = {tuple(_e) for _e in _page_const("DELEGATED_ENTRIES")}
+    _sneaked = _dropped & _approved
+    assert not _sneaked, (
+        "這些區塊被「② 零寫入」裁決擋掉，卻又出現在 DELEGATED_ENTRIES："
+        + ", ".join(f"{_m}::{_s}" for _m, _s in sorted(_sneaked))
+        + "\n總管 2026-09-06 裁決（讀法甲）：② **零寫入** —— 在 `nav_history` "
+          "涵蓋範圍調查有結論之前，不得新增任何寫使用者 Google Sheet 的路徑。"
+          "\n要讓它回來，見 `DROPPED_FOR_ZERO_WRITE` 註解裡列的兩個前提；"
+          "\n⛔ **不得**改零寫入守衛去配合它。")
+
+    # 連 import 都不准 —— 只從常數移走、卻還 import 進來，等於留一條會再爆的線。
+    _pairs = _import_pairs(ast.parse(SRC.read_text(encoding="utf-8")))
+    assert _pairs, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+    _still = [(_m, _s) for _m, _s in _pairs if (_m, _s) in _dropped]
+    assert not _still, (
+        "本頁仍然 import 了被零寫入裁決擋掉的區塊："
+        + ", ".join(f"{_m}::{_s}" for _m, _s in sorted(_still)))
