@@ -17,10 +17,23 @@
 3      連線與金鑰              **委派** `render_policy_admin_bridge(sheet_client=None)`
                               ＋ `render_fetch_diag_from_session()`
 4      手動補資料              **委派** `render_nav_manual_section()`（三條寫入路徑）
-（4.5） 🗄️ 資料維護與通報      **委派** `ui.tab_manage.render_manage_tab()`
-                              ⚠️ **線框沒有給它位置**，見下方 (D-5) 的登記
 5      使用手冊                **委派** `ui.tab6_manual.render_manual_tab()`
+6      🗄️ 資料維護與通報      **委派** `ui.tab_manage.render_manage_tab()`
+                              **最底部的進階折疊區**（客戶 2026-09-07 裁決）
+                              ⚠️ **線框沒有給它位置**，見下方 (D-5) 的登記
 ===== ====================== =====================================================
+
+⚠️ **2026-09-07 順序變更（有意識的政策變更，不是漏刪 · 決策者：客戶）**
+   舊順序 ~~「…4 手動補資料 →（4.5）🗄️ 資料維護與通報 → 5 使用手冊」~~
+   —— 客戶 2026-09-07 逐字裁決：「🗄️ 資料維護與通報 決策【**保留**】在 ⑤ 的**最底部**
+   作為**進階折疊區（`st.expander`）**。理由：系統維護與通報屬管理設定範疇，
+   折疊收攏即可，不影響主視覺。」
+   **舊擺法的理由仍然成立**（它跟著「從哪裡搬來」的檔案順序走，且不動線框五塊的相對序）；
+   **被權衡掉的是它的視覺成本** —— 那一塊展開後很長，夾在「手動補資料」與「使用手冊」
+   之間會把使用手冊推到很下面。
+   ⛔ **這次裁決沒有推翻 (D-5) 的登記**：它裁的是「這一塊放在哪、怎麼收」，
+   **不是**「線框裡有沒有它」。**(D-5) 照舊有效、照舊是登記在案的偏離。**
+   ⛔ **也沒有動到線框五塊彼此的相對順序**（1→2→3→4→5 一格未變）。
 
 線框同時釘死了本頁的**職責邊界**：
 
@@ -714,7 +727,15 @@ def _render_backfill() -> None:
 
 
 def _render_maintain() -> None:
-    """（4.5）｜🗄️ 資料維護與通報 —— **委派** `render_manage_tab()`。
+    """區塊 6｜🗄️ 資料維護與通報 —— **委派** `render_manage_tab()`，**收在折疊區裡**。
+
+    ⭐ **客戶 2026-09-07 逐字裁決**：「決策【**保留**】在 ⑤ 的**最底部**作為**進階折疊區
+    （`st.expander`）**。理由：系統維護與通報屬管理設定範疇，折疊收攏即可，不影響主視覺。」
+    → 本函式**只有位置與包裝改了**；**委派對象、旗標、內容一個字都沒動**
+      （見 commit 訊息與 PR 的新舊委派集合對帳）。
+    ⚠️ 舊標號 ~~「（4.5）」~~ 已失效（**有意識的變更，不是漏刪** · 2026-09-07 · 決策者：客戶）
+      —— 它當時表達的是「夾在 4 與 5 中間、線框沒給它位置」，
+      而**現在它排在最後**。⛔ 但「線框沒給它位置」這件事**沒有改變**，見下一段。
 
     ⚠️ **線框 Tab 05 沒有這一塊，這是登記在案的偏離**（見模組 docstring 的 (D-5)）。
     線框的「從哪裡搬來」逐字列了 `ui/tab_manage.py`，但五個 `<h4>` 裡沒有任何一塊
@@ -739,8 +760,25 @@ def _render_maintain() -> None:
     """
     from ui.tab_manage import render_manage_tab
 
-    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
-        render_manage_tab()
+    # ⭐ **客戶 2026-09-07 裁決：收進折疊區、預設收合**（「折疊收攏即可，不影響主視覺」）。
+    # ⚠️ **巢狀 expander 的疑慮，據實寫明，不要靠記憶重新推一次**：
+    #    `render_manage_tab()` **傳遞地**含 `st.expander`
+    #    （`_sec_notify` 的「📖 每週自動通報 — NAS 設定步驟」是無條件的；
+    #    `_sec_nav_backfill` 那條被 `NAV_HISTORY` 旗標跳掉）。
+    #    本 repo 多處註記寫著「Streamlit 禁止 expander 巢狀」
+    #    （`ui/helpers/v2_editor.py` / `ui/tab1_macro_longterm.py` / `tests/test_app_smoke.py` T2）。
+    #    **但本頁早就在做同一件事**：區塊 5 `_render_manual()` 把
+    #    `render_manual_tab()`（檔內 2 個**無條件** `st.expander`）包在 expander 裡，
+    #    而本檔的守衛是**真的 AppTest**、跑在**會擋 merge 的 fast lane**
+    #    （`tests/test_wf05_settings_skeleton.py` 無 `slow` 標記），且 `origin/main` 是綠的。
+    #    → 也就是說，在本 repo 釘的 streamlit（`requirements.txt`：>=1.59.1,<1.60.0）下，
+    #      這個巢狀**實測不會炸**；本塊與區塊 5 是**同一個形狀**。
+    #    ⚠️ **這是從 repo 既有證據推出來的，本組沒有在本機重現**（本環境無 streamlit）——
+    #      真正的裁判是 CI 的 fast lane，不是這段註解。
+    #    ⛔ 若哪天 streamlit 把限制加回來，**先紅的會是區塊 5，不是這一塊**。
+    with st.expander(maintain_label(), expanded=False):
+        with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
+            render_manage_tab()
 
 
 def _render_manual() -> None:
@@ -750,7 +788,12 @@ def _render_manual() -> None:
 
     ⛔ **這一塊不准畫成灰態**（依據見 (D-1)）。改寫前的版本只放了三行**目錄**，
        而真內容（`ui/tab6_manual.py`，十章 + 錨點目錄）一直都在 —— (A) 路線委派過去。
-    ⚠️ **「不佔首屏」怎麼落地**：本塊排在最後、且**收在 `st.expander` 裡預設不展開**。
+    ⚠️ **「不佔首屏」怎麼落地**：本塊排在很後面、且**收在 `st.expander` 裡預設不展開**。
+       ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：客戶）**：
+          原寫 ~~「本塊排在**最後**」~~ —— 客戶同日把「🗄️ 資料維護與通報」移到**最底部**，
+          所以本塊**不再是最後一塊**。**「不佔首屏」這個結論一字未變**
+          （它靠的是「排在很後面 ＋ 預設收合」，不是「排在最末」）；
+          改的只是那個**會說謊的位置描述**。
        線框的 `dim`（虛線框 + 灰標題）是 HTML 的視覺降權手法，在 Streamlit 沒有等價物；
        「預設收合」是本 repo 拿得到、且**語意相同**（在，但不搶版面）的那一個。
        ⚠️ **這是本組挑的落地方式，不是線框指定的** —— 線框只說「不佔首屏」。
@@ -810,9 +853,17 @@ def render_settings_and_diagnostics() -> None:
     #       0 次 ＝ 那一塊不見了、2 次 ＝ 畫重複了，**兩個方向都紅**）。
     safe_section(nav_manual_label(), _render_backfill)
 
-    # ⚠️ 線框沒有給這一塊位置，見模組 docstring 的 (D-5)。**登記在案的偏離。**
-    st.markdown(f"### {maintain_label()}")
-    safe_section(maintain_label(), _render_maintain)
-
     st.markdown(f"### {BLOCK_MANUAL}")
     safe_section(BLOCK_MANUAL, _render_manual)
+
+    # ── 頁面最底部：進階折疊區 ──────────────────────────────────────────
+    # ⭐ **客戶 2026-09-07 裁決：這一塊【保留】，但移到最底部、收進 `st.expander`。**
+    #    客戶原話：「系統維護與通報屬管理設定範疇，折疊收攏即可，不影響主視覺。」
+    # ⚠️ 線框沒有給這一塊位置（(D-5)），本次裁決**沒有推翻那個登記** ——
+    #    它裁的是「這一塊放在哪、怎麼收」，不是「線框有沒有它」。**(D-5) 照舊有效。**
+    # ⚠️ **標題仍由本檔畫 `### `，而且畫在 expander 外面** —— 與區塊 5（使用手冊）
+    #    同一個做法：`st.expander` 的標題**不是** `### ` 標題，
+    #    `test_each_block_heading_is_drawn_exactly_once` 數的是 `### `。
+    #    把 `st.markdown` 挪進 expander 內會讓那條紅燈（0 次 ＝ 這一塊不見了）。
+    st.markdown(f"### {maintain_label()}")
+    safe_section(maintain_label(), _render_maintain)
