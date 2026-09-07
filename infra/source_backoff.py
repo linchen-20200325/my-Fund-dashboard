@@ -128,6 +128,31 @@ def kind_for_status(status: "int | None") -> str:
     避免同一套規則在兩處各寫一遍後漂移（§2 SSOT）。
 
     `status is None` = 連線層例外（逾時 / DNS / ConnectionError）→ unreachable。
+
+    ⛔ **這是「冷卻分類」，不是「該不該重試」——不要拿它去決定重試（2026-09-07 補）**
+
+    本函式回答的是「**這個來源接下來幾秒不要碰**」，回傳值餵給 `cooldown_for()`。
+    它**刻意**把 400 / 401 / 402 / 409 / 410 這些非特例的 4xx 與 5xx 一起歸
+    `server_error` —— 那是 `shared/backoff_policy.py`（冷卻 SSOT）白紙黑字的分法：
+    「`server_error` ← 5xx / 401 / 402 等非 404 的錯誤碼 → 300s」，
+    因為對**冷卻長度**而言它們同級。**在這條軸上，這個分法沒有錯。**
+
+    ⚠️ 但它**不能**被讀成「暫時性 → 值得立刻重試」。2026-09-07 實證：
+    `infra/gspread_retry.py::with_gspread_retry` 曾直接拿本函式（經
+    `kind_for_gspread_error`）的結果當重試判準，於是 **400 / 404 / 407 / 409 / 410
+    各被重打 4 次** —— 而 400（`exceeds grid limits`）正是 2026-09 那班 NAV 排程
+    失敗的第一根因的形狀，重打一百次還是同一個錯，只是把**確定性失敗**變成
+    **多打三次再失敗**，並且遮蔽根因。
+    → 重試判準已另立一條軸：`infra/gspread_retry.py::is_transient_gspread_error()`。
+    **要判「該不該重試」請用那個；本函式只管冷卻長度。**
+
+    ⚠️ **本次（2026-09-07）刻意不動本函式的分類與回傳值**，理由存證：
+    (a) 冷卻分法由邊界外的 `shared/backoff_policy.py` 定義；
+    (b) 另兩個 production 消費者（`repositories/fund/fx_and_main.py`、
+        `repositories/hot_money_repository.py`）都只拿它決定冷卻長度，
+        分裂分類會讓它們的冷卻靜靜從 300s 掉到 60s（未知 kind 走「從寬」預設）；
+    (c) `tests/test_gspread_source_backoff.py` 已釘住 `kind_for_status(401) == "server_error"`。
+    **本段是文件補充，行為零變更。**
     """
     if status is None:
         return "unreachable"

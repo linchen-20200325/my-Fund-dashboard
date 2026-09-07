@@ -209,9 +209,79 @@ def kind_for_gspread_error(exc: BaseException) -> str:
 # 「唯一一種『對方明確叫我們停』的失敗，繼續探測會延長封鎖窗口」；立刻重試等於違反
 # 那個定性。也排除 `blocked`（403，IP/Referer 層級封鎖，秒級重試不會解除）與
 # `not_found` / `proxy_auth`（設定問題，不是暫時性抖動，重試不會自癒）。
-# 只留 `server_error`（5xx）與 `unreachable`（逾時／連線層）—— 兩者才是「多半是
-# 暫時性抖動」的分類，這正是 2026-09-02 production 事故命中的那一種。
+# ~~只留 `server_error`（5xx）與 `unreachable`（逾時／連線層）—— 兩者才是「多半是
+# 暫時性抖動」的分類，這正是 2026-09-02 production 事故命中的那一種。~~
+#
+# ⚠️ **2026-09-07 更正（有意識的更正，不是漏刪 · 決策者：F30 修復組，依客戶
+# 2026-09-07「非 UI 的底層技術／模組修復一律內部自決」授權）**：
+# **上面括號裡的等式是假的，兩個都是** ——
+#   · `server_error` **不等於** 5xx：`kind_for_status` 把 400 / 401 / 402 / 409 / 410
+#     等**非特例的 4xx 一起**歸進來（那是 `shared/backoff_policy.py` 對**冷卻長度**
+#     刻意的分法，見該檔表格「5xx / 401 / 402 等非 404 的錯誤碼 → 300s」）；
+#   · `unreachable` **不等於**逾時／連線層：`kind_for_gspread_error` 明文把
+#     **404 / 407 改判**成它（為了拿到 60s 冷卻，而不是 0）。
+# 於是把本集合當成重試判準時，400 / 404 / 407 / 409 / 410 全部落進「可重試」——
+# **2026-09-07 實測（修復前）各重打 4 次**，而它們一次都不該重打。
+#
+# **本集合自 2026-09-07 起降為「caller 的收窄旋鈕」，不再是重試判準。**
+# 判準改由 `is_transient_gspread_error()` 承擔（獨立的一條軸，見該函式 docstring）。
+# 本集合保留不刪的理由：它仍是 `with_gspread_retry(retry_kinds=...)` 的預設值，
+# 讓 caller 能**再收窄**（例如只重試 5xx、不重試連線層）；**它只能收窄，不能放寬**。
 GSPREAD_RETRYABLE_KINDS: "frozenset[str]" = frozenset({"server_error", "unreachable"})
+
+
+def is_transient_gspread_error(exc: BaseException) -> bool:
+    """這次失敗值不值得**在同一次呼叫內立刻重試**？（重試軸判準，2026-09-07 新增）
+
+    ## 為什麼不能沿用冷卻分類（這是本函式存在的唯一理由）
+
+    `kind_for_status` / `kind_for_gspread_error` 回的是**冷卻分類** —— 它們回答的是
+    「**這個來源接下來幾秒不要碰**」，不是「**這次值不值得馬上再打一次**」。
+    兩條軸多數時候一致，但有三處**必然分岔**；舊實作直接把冷卻分類當重試判準，
+    三處全錯：
+
+    | 狀態 | 冷卻分類 | 冷卻軸為何這樣分 | 重試軸的正確答案 |
+    |---|---|---|---|
+    | 400 / 409 / 410 等 4xx | `server_error` | `shared/backoff_policy.py` 明文把「5xx / 401 / 402 等非 404 的錯誤碼」**一起**給 300s —— 對**冷卻長度**而言它們同級 | ⛔ **不重試**：請求本身壞掉，重打一百次還是同一個錯 |
+    | 404 | `unreachable`（60s） | gspread 沒有探測鏈，不能照抄 `not_found` 的 0 冷卻 | ⛔ **不重試**：sheet_id 不存在／沒被分享，每次 rerun 都重演 |
+    | 407 | `unreachable`（60s） | 同上，取最短冷卻讓使用者改完 secrets 就恢復 | ⛔ **不重試**：設定問題，秒級重打不會自癒 |
+
+    **`unreachable` 這個名字是給冷卻軸用的**（意思是「給它最短的冷卻」），
+    重試軸卻把它讀成「連線層抖動 → 值得重試」—— **同一個字串在兩條軸上意思不同**，
+    這就是 2026-09-07 之前 400 / 404 / 407 會被重打 4 次的機制。
+
+    ⚠️ **為什麼不去改 `kind_for_status` 讓它把 4xx 分出來**（本次刻意不做，理由存證）：
+    (a) 那張表是**冷卻**的 SSOT，`shared/backoff_policy.py` 白紙黑字把 401 / 402 歸在
+        `server_error`，**改它等於改一份本批邊界外的 SSOT**；
+    (b) 它另有兩個 production 消費者（`repositories/fund/fx_and_main.py`、
+        `repositories/hot_money_repository.py`），兩者都**只拿它決定冷卻長度**，
+        分裂分類會讓它們的冷卻從 300s 掉到 60s（未知 kind 從寬的預設）——
+        一個沒有人要求、也沒有人量過的行為變更；
+    (c) `tests/test_gspread_source_backoff.py` 已釘住 `kind_for_status(401) == "server_error"`
+        與 `kind_for_gspread_error(404/407) == "unreachable"`，該檔在本批邊界外。
+    → **兩條軸分開，才是既修對又不外溢的做法。**
+
+    ## 判準
+
+    - **有 HTTP 狀態碼** → 只有 **5xx** 算暫時性。4xx 一律是「請求／權限／設定」問題，
+      不會因為隔一秒再打就變好。
+    - **沒有狀態碼** → 連線層（逾時 / DNS / 連線被重設）算暫時性，**除非**它是只剩
+      字串的配額錯誤（`is_quota_error`）—— 429 是「對方明確叫我們停」，立刻重試會
+      延長封鎖窗口（`shared/backoff_policy.py` 對 `rate_limited` 的定性）。
+
+    ⚠️ **已知限制（誠實揭露，§-2 規則 6）**：狀態碼來自 `http_status_of`，而它在
+    **無 gspread 的精簡環境**一律回 `None`（該函式對 `ImportError` 的既有處置）。
+    在那種環境裡，一個帶 400 的 `APIError` 會退化成「無狀態碼」→ 判為暫時性 → 照舊
+    重試。本 repo `requirements.txt` pin 了 `gspread>=6.0.0`，正常 CI 與 production
+    不會落到這條路；但**這個 fail-open 是真的存在**，不要以為它守得住沒有 gspread
+    的環境。`tests/test_gspread_retry_kind.py` 有一條專門釘住這個退化行為。
+    """
+    _status = http_status_of(exc)
+    if _status is not None:
+        return 500 <= _status <= 599
+    if is_quota_error(exc):     # 只剩字串的 429：對方叫我們停，不是抖動
+        return False
+    return True                 # 逾時 / DNS / 連線被重設
 
 
 def with_gspread_retry(call: Callable, *args,
@@ -233,7 +303,32 @@ def with_gspread_retry(call: Callable, *args,
     `kind_for_gspread_error` 才分得出 429 / 403 / 5xx / 逾時，本函式據此分流重試。
 
     嘗試次數 = `len(backoffs)`；最後一次仍失敗 → 拋出原例外（§1 fail loud，不吞）。
-    非 `retry_kinds` 內的分類（429 / 403 / 404 / 407）**第一次失敗就直接拋出，不重試**。
+
+    ~~非 `retry_kinds` 內的分類（429 / 403 / 404 / 407）**第一次失敗就直接拋出，不重試**。~~
+    ⚠️ **2026-09-07 更正（有意識的更正，不是漏刪 · 決策者：F30 修復組，依客戶
+    2026-09-07「非 UI 的底層技術／模組修復一律內部自決」授權）**：
+    **上句自寫下起就與實作不符** —— 404 / 407 被 `kind_for_gspread_error` 明文改判成
+    `"unreachable"`，而 `"unreachable"` **就在** `retry_kinds` 裡；400 / 409 / 410 則被
+    `kind_for_status` 歸進 `"server_error"`（同樣在裡面）。**2026-09-07 實測（修復前）：
+    400 / 404 / 407 / 409 / 410 各被重打 4 次。**
+    ⛔ **本次修的是行為，不是這句話** —— 那句話描述的**才是對的行為**，錯的是實作；
+    故不採「改 docstring 去遷就壞行為」的解法。修法：新增
+    `is_transient_gspread_error()` 這條**獨立的重試軸**（兩軸為何必須分開，見該函式
+    docstring 的對照表），不再拿冷卻分類當重試判準。
+
+    **現行行為（兩道閘門，兩道都過才重試）**：
+      1. `is_transient_gspread_error(e)` —— **判準**：只有 5xx 與連線層算暫時性；
+      2. `kind_for_gspread_error(e) in retry_kinds` —— **旋鈕**：留給 caller 再收窄
+         （例如只重試 5xx、不重試連線層）。**只能收窄，不能放寬。**
+    → 400 / 403 / 404 / 407 / 409 / 410 / 429 一律**第一次失敗就直接拋出，不重試**。
+
+    ⚠️ **429 刻意維持「不重試」，本次沒有改**（理由寫在這裡，免得後人以為是漏掉）：
+    (a) `shared/backoff_policy.py` 對它的定性是「唯一一種『對方明確叫我們停』的失敗，
+        繼續探測會延長封鎖窗口」；(b) 429 已經有專屬的重試路徑
+        `with_quota_retry`（`repositories/policy/_helpers.py` /
+        `snapshot_repository.py` 在用），本函式與它是**刻意的分工**，
+        讓本函式也重試 429 會把那個分工壓平；(c) 它現況沒壞，且已被
+        `tests/test_nav_append_retry.py` 與 `tests/test_nav_gate0_retry.py` 各釘一條。
 
     ⚠️ **本函式本身不登記冷卻**（`record_gspread_failure` 一律留給呼叫端，在重試迴圈
     之外、例外真正往外傳播之後才呼叫）—— 這是 2026-09-02 事故的第二個教訓：
@@ -248,7 +343,11 @@ def with_gspread_retry(call: Callable, *args,
         except Exception as e:  # noqa: BLE001 — gspread 例外類型隨版本變
             last_err = e
             is_last = attempt == len(backoffs) - 1
-            if kind_for_gspread_error(e) not in retry_kinds or is_last:
+            # 兩道閘門，順序有意義：先問「這是不是暫時性」（判準），
+            # 再問「caller 允不允許這個冷卻分類」（旋鈕，只能收窄）。
+            _retry = (is_transient_gspread_error(e)
+                      and kind_for_gspread_error(e) in retry_kinds)
+            if not _retry or is_last:
                 raise
             time.sleep(delay)
     if last_err is not None:

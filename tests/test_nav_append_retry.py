@@ -28,8 +28,11 @@
 本檔釘住四件事，缺一不可
 ------------------------
   (1) `_get_sheet` 前兩次 5xx、第三次成功 → `append_points` **仍能完成**且真的寫進去；
-  (2) 永久性錯誤（400 / 403 / 429 配額）→ **不重試、第一次就拋** ——
-      重試不得把永久性錯誤也吞掉重打；
+  (2) 永久性錯誤（400 / 403 / 404 / 407 / 409 / 410 / 429 配額）→ **不重試、第一次就拋**
+      —— 重試不得把永久性錯誤也吞掉重打；
+      ⚠️ **2026-09-07 註**：本行原寫「400 / 403 / 429」，其中 **400 在寫下當時並不成立**
+      —— 實作直到 2026-09-07 才真的讓 400 不重試（見下方 `test_known_gap_*` 的翻面記錄）。
+      本次把清單補成與實作一致，並補上同型的 404 / 407 / 409 / 410。
   (3) 重試全部耗盡 → 仍然 raise 且**一列都沒寫**（不得因為加了重試就吞掉最終失敗）；
   (4) `_sheet=` 測試注入路徑**零行為變更**（不進重試、完全不碰 gspread）。
 
@@ -224,19 +227,29 @@ def test_happy_path_makes_no_extra_call(gs):
 # ══════════════════════════════════════════════════════════════
 # (2) 永久性錯誤 → 不重試、第一次就拋
 # ══════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("status", [403, 429])
+@pytest.mark.parametrize("status", [400, 403, 404, 407, 409, 410, 429])
 def test_append_does_not_retry_permanent_errors(gs, status):
     """⛔ 重試**不得**把永久性錯誤也吞掉重打。
 
+    · 400 / 409 / 410 → 請求本身壞掉（400 正是 `exceeds grid limits` 的形狀），
+      重打一百次還是同一個錯；
     · 403 → 權限／封鎖，秒級重試不會解除；
+    · 404 / 407 → sheet_id 不存在／沒被分享、或 proxy 設定錯 —— 設定問題不會自癒；
     · 429 → `shared/backoff_policy.py` 對它的定性是「唯一一種『對方明確叫我們停』的
       失敗，繼續探測會延長封鎖窗口」—— 重試等於違反那個定性。
 
-    兩者都不在 `GSPREAD_RETRYABLE_KINDS` 內，必須第一次失敗就拋。
+    全部必須第一次失敗就拋。
     ⚠️ 狀態碼是經 `NavHistoryError.__cause__` 鏈取得的（`_get_sheet` 會把底層例外
     包成 `NavHistoryError(...) from e`），這正是 `http_status_of` 走 cause 鏈的理由。
-    ⚠️ **400 / 404 / 407 刻意不在這條的參數裡** —— 它們今天**會**被重試，
-    見下一條 `test_known_gap_*`。"""
+
+    ~~⚠️ **400 / 404 / 407 刻意不在這條的參數裡** —— 它們今天**會**被重試，
+    見下一條 `test_known_gap_*`。~~
+    ⚠️ **2026-09-07 政策變更（有意識的變更，不是漏刪 · 決策者：F30 修復組，依客戶
+    2026-09-07「非 UI 的底層技術／模組修復一律內部自決」授權）**：該缺口已修
+    （`infra/gspread_retry.py::is_transient_gspread_error`），400 / 404 / 407 依原
+    作者在下一條留下的指示**加回本參數表**；順帶補上同型的 409 / 410
+    （`kind_for_status` 對它們同樣回 `server_error`，修復前一樣會被重打 4 次）。
+    """
     import services.nav_history_gs as NG
 
     client, appended = gs(999, lambda: _api_error(status))
@@ -250,8 +263,32 @@ def test_append_does_not_retry_permanent_errors(gs, status):
 
 
 @pytest.mark.parametrize("status", [400, 404, 407])
-def test_known_gap_non_transient_statuses_are_currently_retried(gs, status):
-    """⚠️ **已知缺口的 ratchet —— 這條釘的是「現況」，不是「應然」。**
+def test_known_gap_non_transient_statuses_are_no_longer_retried(gs, status):
+    """✅ **已修（2026-09-07）—— 這條從「釘現況」翻面成「釘應然」。**
+
+    ⚠️ **有意識的政策變更，不是漏刪** · 日期 **2026-09-07** · 決策者：**F30 修復組**
+    （依客戶 2026-09-07「非 UI 的底層技術／模組修復一律內部自決」授權）。
+    **本條刻意保留、不刪除** —— 它是這三個狀態碼唯一的回歸守衛，
+    刪掉等於把「曾經壞過」這件事一起刪掉。
+
+    ~~**舊斷言（修復前的現況記錄）**：`client.calls == len(GR.DEFAULT_QUOTA_BACKOFFS)`
+    —— 400 / 404 / 407 **會**被重試滿 4 次。~~
+    **新斷言**：`client.calls == 1` —— 第一次失敗就拋。
+    **2026-09-07 實測**：修復前 4 次 → 修復後 1 次（400 / 404 / 407 / 409 / 410 皆同）。
+
+    ## 這條與上一條不重複：它釘的是**機制**，不只是次數
+
+    修好這件事有兩條路，只有一條是對的：
+      · ✅ **本次採用**：新增獨立的重試軸 `is_transient_gspread_error()`，
+        **冷卻分類原封不動**；
+      · ⛔ **看起來也會過、但是錯的**：去改 `kind_for_status` / `kind_for_gspread_error`
+        讓 400 / 404 / 407 不再落在 `GSPREAD_RETRYABLE_KINDS` 裡 —— 那會把**冷卻長度**
+        一起改掉（404 / 407 的 60s 冷卻是 `kind_for_gspread_error` 刻意改判來的，
+        `tests/test_gspread_source_backoff.py` 有兩條在守它）。
+    故本條**同時**斷言「冷卻分類沒被動到」與「重試軸說不該重試」，
+    讓走錯那條路的人在**這裡**就轉紅，而不是去弄壞別的檔。
+
+    ## 原始缺口記錄（保留，供追溯）
 
     下列三個狀態碼**今天會被重試**，而它們都不是暫時性抖動：
 
@@ -273,9 +310,12 @@ def test_known_gap_non_transient_statuses_are_currently_retried(gs, status):
     今天在 production 就是這個分類。本次只是把同一套行為對稱地帶到寫入路徑。
     已於本批 PR 描述具名回報為提案，**未動手**。
 
-    **這條測試的用途**：當有人真的去修 `kind_for_status` / `GSPREAD_RETRYABLE_KINDS`
+    ~~**這條測試的用途**：當有人真的去修 `kind_for_status` / `GSPREAD_RETRYABLE_KINDS`
     時，本條會**轉紅**，逼他回來把預期改掉（並順手把上一條的參數表補回 400/404/407）
-    —— 而不是讓這個缺口悄悄地被修掉或悄悄地繼續存在。
+    —— 而不是讓這個缺口悄悄地被修掉或悄悄地繼續存在。~~
+    → **2026-09-07：該事件已發生，本條照原作者的指示轉向** —— 上一條的參數表已補回
+    400 / 404 / 407（另加同型的 409 / 410）；本條依客戶「不得刪除該測試」的指示
+    **保留並翻面**，改守機制。
     """
     import services.nav_history_gs as NG
 
@@ -284,12 +324,19 @@ def test_known_gap_non_transient_statuses_are_currently_retried(gs, status):
     with pytest.raises(NG.NavHistoryError):
         NG.append_points(_one_point())
 
-    n = len(GR.DEFAULT_QUOTA_BACKOFFS)
-    assert client.calls == n, (
-        f"現況記錄：HTTP {status} 目前會被重試滿 {n} 次。"
-        f"若你剛修好分類邏輯讓它不再重試，請把本條移除、並把 {status} 加回上一條 "
-        f"test_append_does_not_retry_permanent_errors 的參數表。實際 {client.calls} 次")
+    assert client.calls == 1, (
+        f"HTTP {status} 不是暫時性抖動，必須第一次失敗就拋；實際 open_by_key "
+        f"{client.calls} 次（修復前是 {len(GR.DEFAULT_QUOTA_BACKOFFS)} 次）")
     assert appended == [], "不論重試幾次，失敗時都不得寫入任何一列"
+
+    # ── 機制斷言：修對的路只有一條 ──────────────────────────────────────
+    exc = _api_error(status)
+    assert GR.kind_for_gspread_error(exc) in GR.GSPREAD_RETRYABLE_KINDS, (
+        f"HTTP {status} 的**冷卻分類**必須維持原樣（仍落在 GSPREAD_RETRYABLE_KINDS "
+        f"裡）—— 若這裡轉紅，代表有人是靠改冷卻分類來『修』重試，"
+        f"那會連 404/407 的 60s 冷卻一起改掉，見 tests/test_gspread_source_backoff.py")
+    assert GR.is_transient_gspread_error(exc) is False, (
+        f"HTTP {status} 必須被**重試軸**判為非暫時性")
 
 
 # ══════════════════════════════════════════════════════════════
