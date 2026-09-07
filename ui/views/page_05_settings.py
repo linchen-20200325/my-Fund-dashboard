@@ -800,7 +800,9 @@ def _render_manual() -> None:
     """
     from ui.tab6_manual import render_manual_tab
 
-    with st.expander(BLOCK_MANUAL, expanded=False):
+    # ⛔⛔ 突變測試用（下一顆 commit 立刻 revert）：只改折疊區的**標題字面**，
+    #     結構／內容／縮排一格未動 —— 這樣 fast lane 不受影響，slow lane 才跑得到。
+    with st.expander(BLOCK_MANUAL + "・MUT", expanded=False):
         # ⑤ 已畫區塊標題 → 說明書不再畫自己的 `##` 頁面大標（其餘一行不動）。
         with settings_page_owns(MANUAL_HEADER):
             render_manual_tab()
