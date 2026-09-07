@@ -92,7 +92,12 @@
 
 **本組唯一真的量到的東西（可自行重跑）**：本 repo `ui/**` 現有
 **15 個 `st.columns(4)` 站點**、**5 個 `st.columns(5)` 站點**
-（`git grep -ohE "\.columns\((\[[^]]*\]|[0-9]+)" -- 'ui/**' | sort | uniq -c`，量測日 2026-09-07）。
+（驗證指令見下方 :data:`STATUS_COLS` 的註解，量測日 2026-09-07）。
+⚠️ **指令刻意不寫在這個 docstring 裡** —— 它含正則的反斜線跳脫，
+而模組 docstring 不是 raw string，Python 會對「反斜線 ＋ 一般字元」發
+``SyntaxWarning: invalid escape sequence``（本批 CI 實測到 `DeprecationWarning`，
+就是本行原本那個指令造成的）。
+**一個為了可自驗而貼上去的指令，不該讓整個模組在 import 時噴警告。**
 ⛔ **這只是先例，不是證據** —— 它證明「本 repo 早就到處在用 4 欄」，
 **不證明**「4 欄在 375px 不會塌」。
 
@@ -575,6 +580,10 @@ STATUS_INVESTED_LABEL: str = "💰 總投入"
 #: ⚠️ 走 `ui.helpers.ia.card_row(cols=…)`，**不是**本檔自己 `st.columns(4)` ——
 #:    後者會在 `tests/test_ui_grid_contract.py` 開一個**新的**非 3 欄站點，
 #:    而 `card_row` 那一個站點早已具名登記在 `GRID_EXEMPT_SITES`（本頁不新增豁免）。
+#: **驗證指令**（repo 根執行，單行；放在 `#` 註解裡而不是 docstring 裡，
+#: 是因為 `#` 註解不是字串字面值，不會有跳脫序列警告）::
+#:
+#:     git grep -ohE "\.columns\((\[[^]]*\]|[0-9]+)" -- 'ui/**' | sort | uniq -c
 STATUS_COLS: int = 4
 
 #: 台北時區的 UTC 位移。§4.1「TW 時區 vs UTC」：配息月曆問的是「**今天**幾號」，
@@ -1367,7 +1376,7 @@ def _render_policy() -> None:
 
     ## 版面：狀態列（4 格）＋ 保單一覽（全寬表）
 
-    - **狀態列** 走 `ia.card_row(cols=`:data:`STATUS_COLS`\ `)`。
+    - **狀態列** 走 `ia.card_row(cols=…)`，欄數吃 :data:`STATUS_COLS`。
       前三格逐字取自 `policy-split-wireframe.html` 的 3 欄狀態列，
       第四格 :data:`STATUS_INVESTED_LABEL` 是**決定 ② 新增的**。
     - **保單一覽** 走 `ia.wide_table()`（欄多，1/3 寬會被壓到無法閱讀）。

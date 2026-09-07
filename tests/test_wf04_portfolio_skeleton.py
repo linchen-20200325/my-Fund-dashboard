@@ -1402,6 +1402,70 @@ def test_the_page_never_hand_rolls_the_grey_mark():
 # Form：三個欄位、一個刻意的偏離、以及「0 不算送出」
 # ══════════════════════════════════════════════════════════════════
 
+#: ⭐ **線框那三個欄位之外，本頁**額外**允許出現的 checkbox —— 逐一具名。**
+#:
+#: ## 為什麼需要這個常數（2026-09-07，決策者 **AI 總管**）
+#:
+#: :func:`test_the_three_fields_and_the_submit_verb_come_from_the_wireframe` 的
+#: checkbox 斷言原本是 ``== [_LABEL_SATELLITE_ONLY]`` —— **整頁精確相等**。
+#: 它的失敗訊息自陳前提是「**骨架階段**不該有第二顆按鈕」，
+#: 而**本批正是 ④ 從骨架進入內容的那一批**：客戶決定 ④ 要求配息月曆改成
+#: **Checkbox Gate 延遲載入**，那必然是頁面上的第二個 checkbox。
+#: → **前提過期了，所以更新這條守衛；但只更新過期的那一半。**
+#:
+#: ⛔ **這是「具名放行」，不是「放寬」，兩者的分界寫死在這裡**：
+#: * 比對仍然是 **`==` 精確相等**，不是 `in` / `<=` / 「≥1 個」；
+#: * 每一個額外的 checkbox 都要**逐字列名**在這裡；
+#: * 塞第三個沒列名的 checkbox → **照樣紅**。
+#: ⛔ **不准**把本常數改成 pattern／前綴／「以 gate 開頭就放行」之類的東西 ——
+#:    那一刻起這條守衛就變成裝飾品。
+#: ⚠️ **字面吃 `page_04_portfolio.DIVCAL_GATE_LABEL` 這個 SSOT，不在這裡抄第二份** ——
+#:    抄了的話，gate 改字時本檔會**跟著錯**而不是**跟著對**。
+_ALLOWED_EXTRA_CHECKBOXES: tuple[str, ...] = (DIVCAL_GATE_LABEL,)
+
+
+def _expected_checkbox_labels() -> list[str]:
+    """整頁**應該**出現的 checkbox 標籤，**依渲染順序**。
+
+    線框那一個（`只調衛星`，在 Form 裡、排在前面）＋
+    :data:`_ALLOWED_EXTRA_CHECKBOXES` 逐一具名的那些（排在後面）。
+
+    ⚠️ **回傳 list 而不是 set** —— 順序本身也是斷言的一部分：
+    gate 若跑到 Form 前面去，代表版面順序被動過了，那也該紅。
+    """
+    return [_LABEL_SATELLITE_ONLY, *_ALLOWED_EXTRA_CHECKBOXES]
+
+
+def test_the_extra_checkbox_allowlist_is_exact_and_named():
+    """⭐ **上面那個放行清單本身要被守住** —— 它是本批唯一在既有守衛上開的口。
+
+    ## 這條是「更新守衛」與「改鬆守衛」的分界線
+
+    一個「開了就沒人再看」的放行清單，就是 `CLAUDE.md §8.2.A.0` 規則 5 點名的
+    **把違憲寫成合憲**。所以放行的**前提**要被釘成斷言：
+
+    1. 清單**不是空的**（空清單會讓 :func:`_expected_checkbox_labels` 退化回舊行為，
+       那時本批的 gate 反而過不了 —— 這一條是防「有人為了讓別的東西過而把它清空」）；
+    2. 清單**恰好一項**，而且**就是** `page_04_portfolio.DIVCAL_GATE_LABEL`
+       —— 多一項就要有人來改這條測試，也就是**多一項就要有人負責**；
+    3. 它**不等於**線框那個欄位（避免有人用複製貼上把線框欄位塞進放行清單，
+       那會讓 :func:`_expected_checkbox_labels` 出現兩個一樣的字串而永遠對不上）。
+
+    ⛔ **本條刻意不驗「畫面上有幾個 checkbox」** —— 那是上一條的事。
+    本條驗的是**清單本身**，所以它**不需要渲染**，在沒有 streamlit 的環境也跑得到。
+    """
+    assert _ALLOWED_EXTRA_CHECKBOXES, (
+        "放行清單是空的 —— 空清單會讓整頁 checkbox 斷言退回「只有線框那一個」，"
+        "而客戶決定 ④ 明示要有一個 Checkbox Gate。清空它等於撤銷那個決定。")
+    assert _ALLOWED_EXTRA_CHECKBOXES == (DIVCAL_GATE_LABEL,), (
+        f"放行清單被改成 {_ALLOWED_EXTRA_CHECKBOXES!r}。\n"
+        "⛔ 每多一個 checkbox 就要多一個具名項，而且要有人來改這條測試 —— "
+        "**那個「要有人來改」就是這道關卡本身**。")
+    assert _LABEL_SATELLITE_ONLY not in _ALLOWED_EXTRA_CHECKBOXES, (
+        "線框那個欄位被塞進「額外放行」清單了 —— 它本來就在預期清單裡，"
+        "重複會讓預期清單出現兩個一樣的字串，整條斷言永遠對不上。")
+
+
 def test_the_three_fields_and_the_submit_verb_come_from_the_wireframe():
     """線框 Tab 04 的 Form 逐字：「目標核心比例」「可動用金額」「只調衛星」「試算」。
 
@@ -1422,7 +1486,25 @@ def test_the_three_fields_and_the_submit_verb_come_from_the_wireframe():
     _at = _app(FAKE_HOLDINGS)
     assert [_s.label for _s in _at.slider] == [f"{_LABEL_CORE_PCT}（%）"]
     assert [_n.label for _n in _at.number_input] == [f"{_LABEL_BUDGET}（TWD）"]
-    assert [_c.label for _c in _at.checkbox] == [_LABEL_SATELLITE_ONLY]
+    # ⛔ ~~`assert [_c.label for _c in _at.checkbox] == [_LABEL_SATELLITE_ONLY]`~~
+    #    → **2026-09-07 更新（有意識的政策變更，不是漏刪；決策者：AI 總管）。**
+    #    **理由：這條斷言自陳的前提是「骨架階段」，而本批正是 ④ 進入內容階段的那一批。**
+    #    客戶決定 ④ 要求配息月曆改成 Checkbox Gate 延遲載入 ⇒ 頁面上必然有第二個
+    #    checkbox。舊斷言在那一刻起就不是在守線框，而是在守一個**已經過期的階段假設**。
+    #    ⚠️ **只更新過期的那一半**：上面三條（線框欄位逐字、`SUBMIT_LABEL`、
+    #    slider／number_input 精確相等）**一個字都沒動** —— 那些釘的是客戶核准線框的字面。
+    #    ⛔ **比對仍是 `==` 精確相等**，放行的每一個都逐字具名在
+    #    :data:`_ALLOWED_EXTRA_CHECKBOXES`（另有 :func:`test_the_extra_checkbox_allowlist_is_exact_and_named`
+    #    守著那份清單本身）。**塞第三個沒列名的 checkbox 照樣紅。**
+    assert [_c.label for _c in _at.checkbox] == _expected_checkbox_labels(), (
+        "整頁的 checkbox 與預期清單不符。\n"
+        f"預期：{_expected_checkbox_labels()}\n"
+        "⛔ 多出來的那一個若是刻意新增的互動元件，請**具名**加進 "
+        "`_ALLOWED_EXTRA_CHECKBOXES`（並在 PR 描述說明它為什麼該存在）；"
+        "⛔ **不要**把這條改成「包含即可」——那樣任何人塞一個 checkbox 都不會紅。")
+    # ⚠️ **按鈕那一條一個字都沒改**：本批**沒有**新增任何按鈕
+    #    （gate 是 checkbox，不是 button）。沒有新增就不動它 —— 順手放寬一條
+    #    自己用不到的守衛，是最廉價也最常見的退步。
     assert [_b.label for _b in _at.button] == [SUBMIT_LABEL], (
         "整頁的按鈕不是「恰好一顆送出鈕」—— 骨架階段不該有第二顆按鈕。")
 
@@ -2544,3 +2626,56 @@ def test_the_dividend_gate_is_a_real_gate_and_cannot_be_short_circuited():
         "昂貴的那一段長在「沒勾」的分支裡 —— 那是把閘門接反了（不勾才算）。")
     assert _body_calls[0].lineno > _gate.lineno, (
         "昂貴的那一段在閘門**之前**就被呼叫了 —— 客戶逐字的紅線是「⛔ 不得預設載入」。")
+
+
+def test_the_checkbox_assertion_is_still_an_exact_equality():
+    """⭐ **那條 checkbox 斷言必須維持 `==` 精確相等，不得被改成「包含即可」。**
+
+    ## 這條為什麼要存在（它守的是**守衛本身**）
+
+    2026-09-07 本批把整頁 checkbox 斷言從
+    ``== [_LABEL_SATELLITE_ONLY]`` 改成 ``== _expected_checkbox_labels()``——
+    那是**具名放行**（多一個就要有人來改清單），不是放寬。
+    **但這兩者只差一個運算子**：把 `==` 換成 ``set(...) <= set(...)`` 或 `in`，
+    畫面上、清單上、PR 描述上**看不出任何差別**，而守衛從此對「多一個 checkbox」失明。
+
+    ⚠️ **這一條是本地唯一能證明那件事的方法。** 真正的行為突變（在頁面上塞第三個
+    checkbox，看那條斷言會不會紅）**需要渲染**，而本批的環境沒有 streamlit ——
+    所以改成從**測試自己的原始碼**驗運算子。**兩者不等價，這一點照實寫在這裡。**
+
+    ## 釘住三件事
+
+    1. 那個 assert 的 test 是一個 `ast.Compare`；
+    2. 運算子**恰好一個，而且是 `ast.Eq`**（不是 `In` / `LtE` / `NotEq`）；
+    3. 右邊**就是** ``_expected_checkbox_labels()`` 的呼叫
+       （不是就地拼一份，那會繞過 :data:`_ALLOWED_EXTRA_CHECKBOXES` 的關卡）。
+
+    ⛔ **本條看不到什麼**：把 `_expected_checkbox_labels()` 的**實作**改鬆
+    （例如回傳 `[]`）它看不到 —— 那一半由
+    :func:`test_the_extra_checkbox_allowlist_is_exact_and_named` 守。
+    """
+    _self = pathlib.Path(__file__).read_text(encoding="utf-8")
+    _fn = next((_n for _n in ast.walk(ast.parse(_self))
+                if isinstance(_n, ast.FunctionDef)
+                and _n.name == "test_the_three_fields_and_the_submit_verb_come_from_the_wireframe"), None)
+    assert _fn is not None, (
+        "找不到那條線框守衛 —— 它被改名或刪掉了，而本條所有斷言都掛在它身上。")
+    _cands = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Assert)
+              and "_at.checkbox" in ast.unparse(_n.test)]
+    assert len(_cands) == 1, (
+        f"那條守衛裡提到 `_at.checkbox` 的 assert 有 {len(_cands)} 條，預期恰好 1 條。")
+    _test = _cands[0].test
+    assert isinstance(_test, ast.Compare), (
+        f"checkbox 斷言不再是一個比較式，而是 {type(_test).__name__} —— "
+        f"實際：{ast.unparse(_test)[:120]}")
+    assert len(_test.ops) == 1 and isinstance(_test.ops[0], ast.Eq), (
+        "checkbox 斷言的運算子不是 `==` —— "
+        f"實際：{ast.unparse(_test)[:120]}\n"
+        "⛔ `in` / `<=` / `issubset` 這一族會讓「多一個沒列名的 checkbox」**不再轉紅**，"
+        "那一刻起這條守衛就只是裝飾品。")
+    _right = _test.comparators[0]
+    assert (isinstance(_right, ast.Call)
+            and getattr(_right.func, "id", None) == "_expected_checkbox_labels"), (
+        "checkbox 斷言的右邊不是 `_expected_checkbox_labels()` —— "
+        f"實際：{ast.unparse(_right)[:120]}\n"
+        "⛔ 就地拼一份預期清單會繞過 `_ALLOWED_EXTRA_CHECKBOXES` 那道關卡。")
