@@ -29,6 +29,13 @@
         總經曝險聯動。**組合績效只留一份尺。**            :func:`_render_macro_link`。
                                                          **推翻**「本頁一條委派都沒有，而且要維持
                                                          這樣」—— 見 :data:`DELEGATED_ENTRIES`。
+                                                         ⛔ **三塊裡有一塊只做到一半，據實寫在這裡**：
+                                                         **組合績效的「具名區塊」與「只留一份尺」
+                                                         都做到了，但委派本身沒有做** ——
+                                                         它一渲染就打一次匯率 API 並落盤，
+                                                         被本批的零寫入量測擋下。
+                                                         數字、驗證指令與兩條出路見
+                                                         :data:`REASON_PERF`。**已回報總管裁決。**
 ④       配息月曆 → 維持灰態，但改成 **Checkbox Gate**    :func:`_render_dividend_calendar_card`。
         延遲載入（勾了才算）；⛔ 不得預設載入。          **推翻** :data:`REASON_DIVIDEND_CAL` 舊表述
                                                          最後半句「那是版面異動，得先過客戶那一關」。
@@ -100,15 +107,18 @@
 
 ⚠️ 本批**沒有**做到的事，逐條寫下來（不寫就等於沒查）
 --------------------------------------------------------------------------------
-* **五支被委派的函式，本批沒有在 AppTest 裡真的跑過它們的內容。**
+* **被委派的那三支，本批沒有在 AppTest 裡真的跑過它們的內容。**
+  ⚠️ **「三支」不是「五支」** —— 組合績效那兩支（`render_portfolio_performance` /
+  `render_efficient_frontier`）**根本沒有被接上**，見 :data:`REASON_PERF`。
   測試 fixture（`FAKE_HOLDINGS` / `FAKE_HOLDINGS_PRICED`）**沒有 `series`、
-  沒有 `dividends`、沒有 `moneydj_raw`**，所以每一塊都停在本頁自己畫的灰態。
+  沒有 `dividends`、沒有 `moneydj_raw`、沒有 `phase_info`**，
+  所以每一塊都停在本頁自己畫的灰態。
   **委派本身由 AST 守衛釘住**（`test_delegation_matches_the_registry` 對
   :data:`DELEGATED_ENTRIES` 做**精確集合相等**比對），
-  **內容則沒有**。⛔ 不得把「守衛全綠」讀成「那五塊畫得出來」。
-  **為什麼不補**：`render_portfolio_performance` 內部會 `fetch_usdtwd_frame()`（**連網**），
-  在 AppTest 裡跑它等於把一條網路往返綁進 fast lane —— 那要另開一批、用
-  `tests/test_ia_tracking_card_scope_caption.py` 那種 hermetic 假件，不是這一批的事。
+  **內容則沒有**。⛔ 不得把「守衛全綠」讀成「那幾塊畫得出來」。
+  **為什麼不補**：要在 AppTest 裡跑出真內容，得先造一份帶 `series` / `moneydj_raw`
+  的 fixture，而那一族的其中一條路（組合績效）會**連網**——
+  那要另開一批、用 `tests/test_ia_tracking_card_scope_caption.py` 那種 hermetic 假件。
 * **`div_cash_pct` 這一欄本組沒有在真資料上看過。** 它是
   `repositories/policy/_helpers.py::ALL_COLS` 的既有欄位（v18.183 起），
   但「它有沒有真的流進 `portfolio_funds`」本組**未查證** ——
