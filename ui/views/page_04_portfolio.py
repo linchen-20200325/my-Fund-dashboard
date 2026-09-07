@@ -3,6 +3,118 @@
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；每一塊的真內容**分批填**。
 
+2026-09-07 內容批：**客戶四項拍板全部落地；本頁自此開始「委派」舊模組**
+--------------------------------------------------------------------------------
+⚠️ **架構前提換了，先讀這一段再讀下面任何一段。**
+客戶 2026-09-07 頒布**雙軌並行**（凌駕先前的「逐頁切換」）：
+**新頁以新增 Tab 掛載，舊 Tab 一律原樣保留，直到客戶親自驗收才會刪舊的。**
+→ 也就是說**本頁是 WIP、它不取代任何東西**；同時客戶指示**路線 (A)**：
+「新頁只做版面與互動；邏輯**呼叫既有舊模組**，不重寫、不搬移、不改資料路徑。」
+⛔ **本批不動 `app.py`**（另一組正在改掛載）；掛 `[新] ④` 分頁是下一批的事。
+
+**四項拍板逐條落地（每一條都寫「它推翻了本檔原本的哪一句」）**
+
+======= ================================================ ==========================================
+決定     內容                                              本檔的落點 / 它推翻了什麼
+======= ================================================ ==========================================
+①       保單與扣款標的 → **全寬區塊**；`ia` 那張 1/3      :func:`_render_policy`。
+        摘要卡**不另外保留**。客戶理由逐字：1/3 卡放      **推翻未決事項 (B)**（下方該段已就地標記結案）；
+        不下保單一覽表；兩者並存會讓同一份資料在同頁      :data:`REASON_POLICY` 退役為
+        出現兩次，不一致時使用者不知道信哪個。            :data:`RETIRED_REASON_POLICY`。
+②       狀態列補一格 **💰 總投入**，變**四格**。          :data:`STATUS_COLS` ＝ 4。
+                                                         **這是本頁唯一偏離「固定 3 欄」的地方**，
+                                                         實測結果見下方「四格會不會塌」那一段。
+③       三個埋在舊 ④ 深處的區塊升成**具名區塊**：         :func:`_render_perf` /
+        組合績效／效率前緣、穿透式持股／產業集中度、       :func:`_render_concentration` /
+        總經曝險聯動。**組合績效只留一份尺。**            :func:`_render_macro_link`。
+                                                         **推翻**「本頁一條委派都沒有，而且要維持
+                                                         這樣」—— 見 :data:`DELEGATED_ENTRIES`。
+④       配息月曆 → 維持灰態，但改成 **Checkbox Gate**    :func:`_render_dividend_calendar_card`。
+        延遲載入（勾了才算）；⛔ 不得預設載入。          **推翻** :data:`REASON_DIVIDEND_CAL` 舊表述
+                                                         最後半句「那是版面異動，得先過客戶那一關」。
+======= ================================================ ==========================================
+
+**⛔ 客戶同批明示「不做的」**：選股池 ＋ 除息行事曆**維持留在 ⑤**，本批不碰。
+→ 所以決定 ④ 畫的是 ia Tab 04 那張**摘要卡**（線框逐字「本月 4 筆」就是一個計數），
+**不是**把 ⑤ 的整張月曆搬過來。
+
+2026-09-07 版面：六個單位 → **九個**，順序與理由
+--------------------------------------------------------------------------------
+====== ======================================== ==========================================
+順序    區塊                                       版面 / 來源
+====== ======================================== ==========================================
+1      核心 ／ 衛星現況 vs 建議                    全寬（線框 Tab 04，未動）
+2      Form — 再平衡試算                          `applied_form`（線框 Tab 04，未動）
+3      換股顧問 ／ 配息月曆                        3 欄網格，**只用兩格、第三格留白**
+                                                  （決定 ①：保單那一張搬走了）
+4      保單與扣款標的                             **全寬**（決定 ①）＝ 4 格狀態列 ＋ 保單一覽
+5      組合績效（內含效率前緣）                    **全寬**（決定 ③）
+6      穿透式持股 ／ 產業集中度                    **全寬**（決定 ③）
+7      總經曝險聯動                               **全寬**（決定 ③）
+8      交易帳本                                   全寬 ＋ 橫向捲動（線框 Tab 04，仍是灰態）
+–      尚未設定持倉                               空狀態三要素（取代 1～8）
+====== ======================================== ==========================================
+
+**為什麼保單排在網格之後、而不是之前**（一句話，免得下一個人以為是隨手放的）：
+線框把保單畫在那一列 3 張卡的**中間**，把它抽出來之後只有「排在那一列前面」與
+「排在那一列後面」兩個位置，**兩者都是一格的位移**。選後面的理由是
+**那一列網格是線框的一個完整視覺單位**，把一個全寬區塊插進它前面會讓網格變成
+孤零零掛在頁中間的兩張卡；排在後面，則整頁自然分成「上半：現況＋動作」與
+「下半：全寬明細」兩段。
+⚠️ **這是本組的版面判斷，不是客戶指定的位置** —— 客戶只說「全寬」，沒說排第幾。
+**若客戶要它排在網格之前，改一行 `render_asset_allocation()` 就好，成本很低。**
+
+⚠️ 四格狀態列會不會在窄螢幕塌成兩列 —— **實測結果據實寫（結論：沒能測到）**
+--------------------------------------------------------------------------------
+決定 ② 帶著一個**本 repo 從來沒有人實測過**的風險：四格在窄螢幕可能塌成兩列。
+本組**試了，而且失敗了**。逐條寫清楚「試了什麼、為什麼不算數」：
+
+* **本地跑不了**：沙箱**沒有** `streamlit`（也沒有 `pytest` / `pandas`），
+  且本批不得 `pip install`。**本組從頭到尾沒有渲染過任何一次真畫面。**
+* **AppTest 也答不了這一題**：AppTest 回的是**元素樹**，它會告訴你「有四個 column
+  block」，**但它沒有 viewport、沒有 CSS、沒有寬度** —— 用它去回答「會不會塌」，
+  等於用一份沒有寬度的資料去證明一件只跟寬度有關的事。
+* **repo 內唯一能測的那套，測不到這裡**：`tests/test_app_playwright.py` 有
+  `RESPONSIVE_VIEWPORTS`（1440 / 768 / **375**）與
+  `test_mobile_viewport_no_horizontal_overflow`，但它 (a) 整檔
+  `pytest.importorskip("playwright.sync_api")`、(b) 只跑 **Tab1**、
+  (c) 需要一個真的跑起來的 app。**本頁還沒接進 `app.py`，它結構上到不了這裡。**
+* **`ui/helpers/ia/layout.py` 自己也已經登記過同一件事**：
+  「手機自動塌為 1 欄由 Streamlit 內建的 responsive 行為提供……
+  本組**沒有實測**這件事 —— 沙箱沒有瀏覽器、也沒有任何裝置寬度可模擬」。
+
+**本組唯一真的量到的東西（可自行重跑）**：本 repo `ui/**` 現有
+**15 個 `st.columns(4)` 站點**、**5 個 `st.columns(5)` 站點**
+（`git grep -ohE "\.columns\((\[[^]]*\]|[0-9]+)" -- 'ui/**' | sort | uniq -c`，量測日 2026-09-07）。
+⛔ **這只是先例，不是證據** —— 它證明「本 repo 早就到處在用 4 欄」，
+**不證明**「4 欄在 375px 不會塌」。
+
+→ **本組的處置：照客戶決定做四格，不退回三格。** 理由是**沒有量到「會塌」**，
+而不是量到了「不會塌」。⚠️ **兩者的差別很重要，不要讀反。**
+✅ **同時把這個風險的代價壓到最低**：四格每一格都是**自足的一個標籤 ＋ 一個值**，
+即使真的折成 2×2，**每一格的意思都不會壞**（這與「一張九欄的表被壓成 1/3 寬」
+是完全不同等級的後果 —— 後者才是鐵則 01 第二半在防的東西）。
+⛔ **若客戶在真機上看到它折行且不接受**，正確的修法是把
+:data:`STATUS_COLS` 改成 3 並拿掉一格，**不是**去 `ui/helpers/ia/layout.py` 加 CSS
+（那會影響全站每一個網格）。
+
+⚠️ 本批**沒有**做到的事，逐條寫下來（不寫就等於沒查）
+--------------------------------------------------------------------------------
+* **五支被委派的函式，本批沒有在 AppTest 裡真的跑過它們的內容。**
+  測試 fixture（`FAKE_HOLDINGS` / `FAKE_HOLDINGS_PRICED`）**沒有 `series`、
+  沒有 `dividends`、沒有 `moneydj_raw`**，所以每一塊都停在本頁自己畫的灰態。
+  **委派本身由 AST 守衛釘住**（`test_delegation_matches_the_registry` 對
+  :data:`DELEGATED_ENTRIES` 做**精確集合相等**比對），
+  **內容則沒有**。⛔ 不得把「守衛全綠」讀成「那五塊畫得出來」。
+  **為什麼不補**：`render_portfolio_performance` 內部會 `fetch_usdtwd_frame()`（**連網**），
+  在 AppTest 裡跑它等於把一條網路往返綁進 fast lane —— 那要另開一批、用
+  `tests/test_ia_tracking_card_scope_caption.py` 那種 hermetic 假件，不是這一批的事。
+* **`div_cash_pct` 這一欄本組沒有在真資料上看過。** 它是
+  `repositories/policy/_helpers.py::ALL_COLS` 的既有欄位（v18.183 起），
+  但「它有沒有真的流進 `portfolio_funds`」本組**未查證** ——
+  缺值時該欄畫 :data:`UNKNOWN_VALUE`，不會造假，但也可能整欄都是 `—`。
+* **「本頁沒有第十個單位」本組不宣稱。** 這是一句取決於「有沒有漏看」的全稱句。
+
 2026-09-06 接線批：**六塊裡接上一塊，另外四塊的「為什麼還沒接」全部查清楚並就地寫死**
 --------------------------------------------------------------------------------
 本批的產出**不是**「接了幾塊」，是「**每一塊的狀態都變成可查證的**」。逐塊如下：
@@ -137,7 +249,19 @@
   它解除的是「**沒列 ⇒ 不該存在**」這個推論，**不是**授權在線框之外新增版面
   （那仍是 `CLAUDE.md §-1.5.1c` v3 §03-2 ① 的客戶 gate）。
 
-- ⏳ **(B) 保單那一塊的版面 —— 未決，且「下一批動工前必須先決」。**
+- ✅ **(B) 保單那一塊的版面 —— 2026-09-07 客戶裁決結案：全寬區塊，1/3 摘要卡不另外保留。**
+  ⚠️ **以下整段（原「⏳ 未決」的內容）一字不刪，理由寫在這裡**：本段自己警告過
+  「『登記為未裁決』的事項，最常見的死法是**裁決真的落下時，沒有人回頭改它**」——
+  留著它，是為了讓那句警告**這一次真的被執行過**看得出來。
+  **裁決內容**：全寬區塊（＝ `policy-split-wireframe.html` **決定 E** 那一邊贏），
+  且 ia 的 1/3 摘要卡**不另外保留**。**客戶的理由不是「哪一份線框比較大」**，
+  而是：**1/3 卡放不下保單一覽表；兩者並存會讓同一份資料在同頁出現兩次，
+  不一致時使用者不知道信哪個。**
+  ⚠️ **本段 2026-09-06 那次更正（「兩者理論上可以並存」）並沒有被推翻，反而被用上了** ——
+  正因為兩者可以並存，客戶要回答的才是「**要哪一個**」而不是「哪一份線框有效」，
+  而他答的是「**只要全寬那一個**」。
+  ⛔ 下面那句「**硬性前置：動工前必須先有客戶裁決**」**已經滿足**，不是被略過。
+  ⏳ **以下為結案前的原文**：
   ia 把「保單與扣款標的」畫成 **3 欄網格裡的一張卡**；
   `policy-split-wireframe.html` **決定 E** 逐字寫「保單明細表**維持全寬**，不塞進三欄」。
   **兩份都是客戶拍板過的線框，對「保單與扣款標的」這個名字給了兩種不同的東西** ——
@@ -327,10 +451,13 @@ from typing import Any
 
 import streamlit as st
 
+from services.format_helpers import fmt_twd
 from ui.helpers.ia import (
+    GRID_COLS,
     STATE_NOT_READY,
     applied_form,
-    render_cards,
+    card_row,
+    state_card,
     wide_table,
 )
 from ui.helpers.ia.empty_state import empty_state
@@ -391,6 +518,155 @@ BLOCK_POLICY: str = "保單與扣款標的"
 BLOCK_DIVIDEND_CAL: str = "配息月曆"
 #: 線框 Tab 04 逐字。線框 chip：「解掉巢狀分頁」「大表全寬」。
 BLOCK_LEDGER: str = "交易帳本"
+
+# ── 2026-09-07 客戶四項拍板新增的區塊名 ────────────────────────────────────
+#: 決定 ③ 的第二塊。**不是線框字面** —— ia Tab 04 沒有列這一塊
+#: （總管 2026-09-05 裁決 (A)：線框清單不是窮舉，是版面規範不是功能清單）。
+#: 字面取自**客戶 2026-09-07 決定 ③ 的原話**「穿透式持股／產業集中度」，
+#: 斜線改用本檔既有的全形「 ／ 」以與 :data:`BLOCK_MIX` 一致。
+#: ⚠️ **這一塊沒有 SSOT key 可吃**（`story_nav._SECTION_LABELS` 沒有它），
+#:    與 :data:`BLOCK_POLICY` 同樣屬「只有這裡一份」的名字，不是漏走 SSOT。
+BLOCK_CONCENTRATION: str = "穿透式持股 ／ 產業集中度"
+#: 決定 ③ 的第三塊。同上，字面取自客戶原話「總經曝險聯動」。
+BLOCK_MACRO_LINK: str = "總經曝險聯動"
+
+
+def perf_block_label() -> str:
+    """決定 ③ 的第一塊 —— 組合績效。**走 SSOT，不抄字面**（同 :func:`switch_block_label`）。
+
+    `ui/helpers/story_nav.py::_SECTION_LABELS["pf_perf"]` 已經是這一塊的 SSOT，
+    而且它的就地註解逐字寫著它指的就是
+    `ui/helpers/portfolio_perf.render_portfolio_performance` —— **也就是本頁委派的那一支**。
+    手抄「組合績效」四個字，會讓同一塊在 ④ 出現兩個名字（本 repo 死指路已發作三次）。
+
+    ⚠️ 做成函式而不是 module 層常數，理由與 :func:`switch_block_label` 完全相同
+    （`section_label()` 的 §1 Fail Loud 要發生在渲染當下，不是 import 期）。
+    ⚠️ **效率前緣沒有自己的 SSOT key，所以它不另立區塊名** —— 它畫在本塊之內，
+    小標由被委派的 `render_efficient_frontier()` 自己出（`### 🎯 效率前緣診斷（教學・非建議）`）。
+    **一個字都不抄**，就不會有第二份會漂移的字面值。
+    """
+    return section_label("pf_perf")
+
+
+# ── ① 保單與扣款標的：全寬區塊（客戶 2026-09-07 決定 ①）─────────────────────
+#: 狀態列四格的抬頭。前三格**逐字取自** `docs/wireframes/policy-split-wireframe.html`
+#: ④ 那一段的 3 欄狀態列（`📒 目前帳本` / `📋 保單` / `🕐 上次讀回`）；
+#: 第四格 `💰 總投入` 是**客戶 2026-09-07 決定 ② 新增的**，線框上沒有。
+#: ⚠️ 具名而不 inline：讓「客戶拍板的抬頭被改掉」看得見（§3.3）。
+STATUS_BOOK_LABEL: str = "📒 目前帳本"
+STATUS_POLICY_LABEL: str = "📋 保單"
+STATUS_LOADED_AT_LABEL: str = "🕐 上次讀回"
+#: ⭐ 決定 ② 新增的第四格。
+STATUS_INVESTED_LABEL: str = "💰 總投入"
+
+#: 狀態列的欄數。**4，不是鐵則 01 的 3** —— 客戶 2026-09-07 決定 ② 明示「變四格」。
+#: ⚠️ **這是本頁唯一一處偏離「固定 3 欄」的地方，理由是客戶拍板，不是實作方便。**
+#: ⛔ 不要「順手」改回 3：那會把決定 ② 撤銷掉。要改請回去問客戶。
+#: ⚠️ 走 `ui.helpers.ia.card_row(cols=…)`，**不是**本檔自己 `st.columns(4)` ——
+#:    後者會在 `tests/test_ui_grid_contract.py` 開一個**新的**非 3 欄站點，
+#:    而 `card_row` 那一個站點早已具名登記在 `GRID_EXEMPT_SITES`（本頁不新增豁免）。
+STATUS_COLS: int = 4
+
+#: 台北時區的 UTC 位移。§4.1「TW 時區 vs UTC」：配息月曆問的是「**今天**幾號」，
+#: 用 UTC 會在每天 08:00 前算成前一天，月初／月底各差一天。
+_TW_UTC_OFFSET_HOURS: int = 8
+
+#: 「數字不知道」時填的字。**不是 0**：`0` 與「不知道」在畫面上長得一樣、意思相反（§1）。
+#: ⚠️ 沿用 `ui/helpers/portfolio_perf.py` 既有的同一個字，不另創第二種寫法。
+UNKNOWN_VALUE: str = "—"
+
+#: 保單一覽的欄位。**逐字取自** `docs/wireframes/policy-split-wireframe.html` ④ 段
+#: 「📋 保單一覽」那張表的表頭：`保單編號 │ 基金代號 │ 基金名稱 │ 幣別 │ 級別 │ 金額 │ 現金%`。
+#:
+#: ⭐ **這裡可以釘欄位，交易帳本不行 —— 差別不是我想不想，是線框有沒有列**：
+#: 那張表的表頭是客戶拍板線框裡**逐欄列出來的**（同 `page_02_health.py::HEALTH_TABLE_COLUMNS`
+#: 之所以能釘 9 欄的理由）；而交易帳本線框**只寫了內容類型**，所以那裡一欄都不准釘
+#: （守衛：`test_the_ledger_invents_no_column_list`）。
+#: ⚠️ 七欄**全部**有對應的既有欄位，沒有一欄是本檔發明的：
+#: `policy_id` / `code` / `name` / `currency` / `policy_tier` / `invest_twd` / `div_cash_pct`
+#: （前六個由 `ui/helpers/portfolio/load.py` 寫進 session，第七個是
+#:  `repositories/policy/_helpers.py::ALL_COLS` 的既有欄位，v18.183 起存在）。
+#: ⛔ **不要為了讓表好看而加第八欄** —— 那一刻起這份清單就變成自己發明的規格。
+POLICY_TABLE_COLUMNS: tuple[str, ...] = (
+    "保單編號", "基金代號", "基金名稱", "幣別", "級別", "金額", "現金%")
+
+# ── ④ 配息月曆：Checkbox Gate（客戶 2026-09-07 決定 ④）─────────────────────
+#: gate 的字面。**畫面上與灰態指路吃的是同一個常數** —— 指到一個不存在的勾選框，
+#: 正是本 repo 發作過三次的死指路（同 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的處置）。
+DIVCAL_GATE_LABEL: str = "載入本月配息月曆（要算幾秒）"
+#: gate 的 widget key。⚠️ 具名前綴 `v04_`：本頁與舊 ④ **同時活在 repo 裡**，
+#: 共用 key 會在兩者一起上線那天撞 `DuplicateWidgetID`。
+DIVCAL_GATE_KEY: str = "v04_portfolio_divcal_gate"
+
+# ── 委派登記（客戶 2026-09-07「路線 (A)」）────────────────────────────────
+#: ⭐ **本頁委派給既有舊模組的入口，逐支列名。這是白名單，不是說明文字。**
+#:
+#: ## 為什麼 2026-09-07 之後本頁開始委派（前一批一條都沒有）
+#:
+#: 客戶 2026-09-07 指示**路線 (A)**：「新頁只做版面與互動；邏輯**呼叫既有舊模組**，
+#: 不重寫、不搬移、不改資料路徑。」——與 ② `ui/views/page_02_health.py` 2026-09-06
+#: 收到的是**同一條**指示（該檔 `DELEGATED_ENTRIES` 的長註逐字記著客戶原話）。
+#: **舊條「本頁一條委派都沒有，而且要維持這樣」因此被推翻**（有意識的政策變更，不是漏刪）：
+#: - **舊條為什麼是對的** —— 「每多一條委派，那一刻就多一處會斷頭」今天依然成立，
+#:   舊 ④ 確實排定要整批拔除。這個顧慮**沒有消失**，它變成了本常數的存在理由：
+#:   **拔除那天要回來改的地方，只有這一張表。**
+#: - **新條為什麼勝出** —— 從零重寫這五支要重新實作組合績效數學、效率前緣、
+#:   穿透式持股/產業聚合與總經聯動判讀；那既違反客戶「資料路徑不動」的要求，
+#:   也把 Google Sheet 的風險面重新打開一次。**呼叫既有 public 入口，寫入面完全不變。**
+#:
+#: ## ⛔ 這張表**不含**什麼，以及為什麼（比它含什麼更重要）
+#:
+#: **`ui.helpers.fund_grp_health.switch_advisor_section::render_portfolio_tracking`
+#: 刻意不在這裡，而且不得加進來。** 它與本表第一支
+#: （`render_portfolio_performance`）**在畫面上是同一個標籤的兩張卡**
+#: （年化報酬／年化波動 σ／最大回撤三個字串逐字相同，舊 ④ 就地註解已逐位元組核對過）。
+#: 決定 ③ 明示「新 ④ 只留一份」。留的是 `render_portfolio_performance`，三條依據：
+#: 1. **零寫入**：`render_portfolio_tracking` **打開就寫一列進客戶的 Google Sheet**，
+#:    沒有按鈕、沒有勾選 —— 它已經被 ② 具名列進
+#:    `page_02_health.DELEGATION_BLACKLIST`，理由逐字是「接了就是把 P0 寫入面搬回 ②」。
+#:    接它到 ④ 會讓本頁的零寫入 delta 當場不是 0。
+#: 2. **它會少給數字**：`reconstruct_trend()` 有年化閘門（共同交易日 <
+#:    `PORTFOLIO_TREND_MIN_DAYS`）→ 短序列時把年化報酬與年化波動抹成 `None`；
+#:    `performance_metrics()` 沒有那道閘門，且多給一個 Sharpe。
+#:    **同一個標籤，一個顯示「—」一個顯示數字**，正是舊 ④ 那段登記講的「使用者只會
+#:    讀成其中一張壞了」。二選一時留**不會憑空少掉數字**的那一支。
+#: 3. **名字只有這一支有 SSOT**：`story_nav._SECTION_LABELS["pf_perf"]` 的就地註解
+#:    指名的就是 `render_portfolio_performance`（見 :func:`perf_block_label`）。
+#: ⚠️ **兩張卡的「演算法不同」是假的，不要拿它當理由** —— 舊 ④ 2026-09-02 已就地更正：
+#:    兩者數學收口到同一個 `services.portfolio_performance` SSOT。**差別在閘門與寫入，不在數學。**
+#: ⛔ **本頁不碰舊 ④ 的那兩張卡**（它們的去留是客戶 gate，舊 ④ 已具名回報總管）。
+#:    本頁做的只是「**新頁不把重複帶進來**」。
+#:
+#: ## 舊 ④ 整批拔除時，要回來改的就是這一張表
+#: 每一筆 = ``(模組, 符號)``。守衛拿它與本檔**實際 import 到的符號**做**精確集合相等**比對
+#: （`tests/test_wf04_portfolio_skeleton.py::test_delegation_matches_the_registry`），
+#: 所以「悄悄多接一支」與「表沒更新」都會轉紅。
+DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
+    # ⛔ **③-1 組合績效 ／ 效率前緣：本批「量到了、所以沒接」，不是漏接。**
+    #    ~~("ui.helpers.portfolio_perf", "render_portfolio_performance")~~
+    #    ~~("ui.helpers.portfolio_perf", "render_efficient_frontier")~~
+    #    理由是**實測**（指令與數字見 :data:`REASON_PERF` 上方那段），不是顧慮：
+    #    接上它會讓 ④ 的**渲染路徑**多出一次**網路往返**與**本地落盤**
+    #    （`render_portfolio_performance` 在函式體**無條件**呼叫 `fetch_usdtwd_frame()`）。
+    #    而這一頁**每一次互動都會整頁重跑** —— 那正是決定 ④ 為配息月曆加 gate 要防的東西，
+    #    只是這一支的成本是**網路**不是 CPU。**已具名回報總管裁決。**
+    # ③-2 穿透式持股 ／ 產業集中度
+    ("ui.helpers.portfolio.concentration", "render_concentration_summary"),
+    ("ui.helpers.portfolio.concentration", "render_sector_concentration_summary"),
+    # ③-3 總經曝險聯動
+    ("ui.helpers.macro.linkage", "render_macro_exposure_link"),
+)
+
+#: ⛔ **黑名單：接了就把 P0 寫入面搬進 ④。** 理由見 :data:`DELEGATED_ENTRIES` 的長註。
+#: ⚠️ 寫成常數而不是只寫在註解裡，是為了讓守衛**機械地**擋住它
+#: （`test_the_page_never_delegates_to_the_write_blacklist`）——
+#: 一條只寫在註解裡的禁令，下一輪就會被當成「還沒排到」隨手補上。
+DELEGATION_BLACKLIST: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health.switch_advisor_section",
+     "render_portfolio_tracking"),
+    ("ui.helpers.fund_grp_health.switch_advisor_section",
+     "render_switch_advisor_section"),
+)
 
 
 def switch_block_label() -> str:
@@ -459,10 +735,24 @@ REASON_SWITCH: str = (
 #: 已另派線框組產出草稿送客戶；**在客戶拍板之前，這一區不動工**
 #: （`CLAUDE.md §-1.5.1c` v3 §03-2 ①：版面異動一律客戶 gate）。
 #: 📌 這正是模組 docstring **未決事項 (B)** 所說的那個觸發點，現在踩到了。
-REASON_POLICY: str = (
+#: ⛔ **2026-09-07 退役：這一塊不再是灰態**（**有意識的狀態變更，不是漏刪**；
+#: 日期 **2026-09-07**，決策者 **客戶**）。上面那句「已送客戶裁決，拍板前不動工」
+#: 講的那個裁決**落下來了** —— 決定 ①：**全寬區塊，`ia` 那張 1/3 摘要卡不另外保留**。
+#: 客戶給的理由逐字：**1/3 卡放不下保單一覽表；兩者並存會讓同一份資料在同頁出現兩次，
+#: 不一致時使用者不知道信哪個。**
+#: ⚠️ **常數保留不刪**，因為它是「未決事項 (B) 從登記到結案」的完整病史 ——
+#: 模組 docstring 的 (B) 段自己寫著「『登記為未裁決』的事項，最常見的死法是
+#: 裁決真的落下時，沒有人回頭改它」。**留著這個常數，是為了讓那句話被驗證過一次。**
+#: ⛔ **它不再出現在 :func:`grey_why` 裡**，所以它**不會**被畫到畫面上；
+#:    守衛 `test_the_retired_policy_reason_is_not_on_screen` 釘住這一點。
+RETIRED_REASON_POLICY: str = (
     "（每張保單下的基金與投入金額）。"
     "原因不是資料，是版面：兩份都已拍板的線框把這一區畫成兩種不同的東西"
     "（三欄網格裡的一張摘要卡 vs 維持全寬的明細表），要哪一個已送客戶裁決，拍板前不動工")
+
+#: 為了讓既有 import 不斷（`tests/test_wf04_portfolio_skeleton.py` 匯入這個名字），
+#: 別名保留；**語意已變成「退役的那一句」**。
+REASON_POLICY: str = RETIRED_REASON_POLICY
 
 #: 配息月曆：**推得出來，但貴到必須先有一道開關。**
 #: 本組實測 `services.dividend_calendar.build_month_calendar`（純 CPU、零 IO，
@@ -504,10 +794,22 @@ REASON_POLICY: str = (
 #:    「要不要為它多一個開關」是版面問題 → 客戶 gate，與 :data:`REASON_POLICY` 同一道。
 #: ⚠️ **UI 文案刻意不寫那幾個毫秒數**（`CLAUDE.md §8.2.A.0` 規則 4：會漂移的量測值
 #:    不寫死）；數字留在這裡並標了量測日，要用請現場重量。
+#: ⛔ **2026-09-07 改寫（有意識的政策變更，不是漏刪；決策者 **客戶**，決定 ④）**：
+#: 舊表述的最後半句 ~~「要接上得先多一道『按了才算』的開關，那是版面異動，
+#: 得先過客戶那一關」~~ **已經不成立** —— 那一關過了，客戶明示「改成 Checkbox Gate
+#: 延遲載入（勾了才算）」「⛔ 不得預設載入」。
+#: **舊表述的理由仍然成立**（成本是真的，機制也沒變）；**被權衡掉的只有它的結論**：
+#: 從「所以先不做」變成「所以**做成勾了才算**」。
+#: ⚠️ **UI 文案現在必須說出兩件事**（客戶逐字要求）：**為什麼預設不載入**（成本）
+#: 與**勾哪裡會載入**。後者走 :data:`DIVCAL_GATE_LABEL` 這個 SSOT，不手抄。
+#: ⚠️ **秒數寫進 UI 文案，是本檔唯一一處刻意違反「會漂移的量測值不寫死」的地方**
+#: （`CLAUDE.md §8.2.A.0` 規則 4）—— 因為客戶**明示**要在灰態上寫出 5.4–5.5 秒。
+#:    折衷：文案寫「**約五秒**」（口語、不精確到會過期），精確數字與量測日留在
+#:    本常數上方那段既有註解裡。**兩者不要互相取代。**
 REASON_DIVIDEND_CAL: str = (
     "（預估除息日與誤差天數）。"
-    "原因不是沒有來源：推估算得出來，但它很花時間，而這一頁每次互動都會整頁重跑；"
-    "要接上得先多一道「按了才算」的開關，那是版面異動，得先過客戶那一關")
+    "原因不是沒有來源：推估算得出來，但一組月配基金要算**約五秒**，"
+    "而這一頁每次互動都會整頁重跑 —— 所以預設不算，勾了才算")
 
 #: 交易帳本：**線框沒有給欄位規格。**
 #: 線框對它只寫了**內容類型**（買賣紀錄／成本／已實現損益／對帳），沒有像 Tab 02
@@ -517,10 +819,63 @@ REASON_DIVIDEND_CAL: str = (
 #: 由雲端還原），所以「沒有資料」**不是**這一塊的原因 —— 卡住的是「要顯示哪幾欄」。
 #: ⛔ 這一條由 `test_the_ledger_invents_no_column_list` 機械釘住（禁止出現名字帶
 #:    `COLUMN` 的模組層常數），本說明只是把**為什麼**寫下來。
+#: ⚠️ **2026-09-07 增補（客戶指示：灰態必須指出去哪裡看得到，不得只寫「尚未提供」）**：
+#: 本句的**原因一字未改**（線框沒給欄位規格，這一點今天依然成立）；
+#: 增補的是**指路**——`_pending_where()` 對本塊改指
+#: `where_to_find("pf_ledger")`（＝舊 ④ 的「💼 持倉戰情（T7 帳本）」），
+#: 而**那個地方現在就看得到帳本**。
+#: ⛔ 這是本頁**唯一一塊「指了真的有用」的灰態**，與另外兩塊「指了也沒用」不同 ——
+#:    :func:`_pending_where` 的長註把這個差別寫死在那裡，**不要混為一談**。
 REASON_LEDGER: str = (
     "（買賣紀錄、成本、已實現損益與對帳）。"
     "原因不是沒有資料：線框沒有給這張表的欄位規格，補一份等於自己發明，"
-    "而欄位要列哪幾個是客戶要拍板的事")
+    "而欄位要列哪幾個是客戶要拍板的事；在那之前，帳本本身在下面這個地方看得到")
+
+
+#: 組合績效 ／ 效率前緣：**量到了，所以沒接。**（2026-09-07）
+#:
+#: ⭐ **這一塊的原因與另外三塊都不同，而且它是本批唯一「實測擋下自己」的一塊。**
+#: 客戶決定 ③ 要它升成具名區塊並**只留一份尺**；「只留一份」做到了
+#: （見 :data:`DELEGATED_ENTRIES` 的長註與 `test_the_two_perf_cards_are_not_both_brought_over`），
+#: **委派本身沒有做**，理由是本組實測出來的三件事：
+#:
+#: 1. **它在渲染路徑上打網路。** `ui/helpers/portfolio_perf.py::render_portfolio_performance`
+#:    的函式體**無條件**呼叫 `services.hot_money_service.fetch_usdtwd_frame(...)`
+#:    —— 不是在按鈕的正分支裡，是**一渲染就打**。
+#:    而這一頁**每一次互動都會整頁重跑**（決定 ④ 為配息月曆加 gate 的理由逐字就是這句）；
+#:    只是這一支的成本是**網路往返**，不是 CPU。
+#: 2. **它在渲染路徑上落盤。** 那條鏈往下走到 `infra/cache.py`，
+#:    實測命中 `_os.makedirs(_CACHE_DIR, ...)` / `s.to_csv(fp, header=["nav"])` /
+#:    `_os.remove(...)` 三個**真的**磁碟寫入（不是偵測器的偽陽性）。
+#: 3. **數字**（本組實測，指令見下）：接上這一支會讓 ④ 的靜態 import 閉包
+#:    從 **11 → 34 個模組**、寫入槽從 **0 → 14 個**；
+#:    拿掉它之後，另外三支委派（穿透式集中度 ／ 總經聯動 ／ 配息月曆）合計
+#:    只讓閉包變成 **17 個模組、1 個寫入槽**，而那 1 個是
+#:    `services/dividend_calendar.py` 裡的 `str.replace("/", "-")` —— **偽陽性**。
+#:    **驗證指令**（repo 根執行，用守衛自己那把尺，不另寫偵測邏輯）::
+#:
+#:        python3 -c "import ast,sys;sys.path.insert(0,'tests');\
+#:        import test_wf04_portfolio_no_writes as g;\
+#:        c=g._closure();print(len(c));\
+#:        print(sum(len(g._write_refs(ast.parse(p.read_text()))) for p in c.values()))"
+#:
+#: ⛔ **這不是「做不到」，是「做了會把一個決定的代價偷渡進另一個決定」**：
+#:    決定 ④ 才剛剛因為五秒的 CPU 成本被要求加一道 gate，
+#:    同一批卻讓另一塊在**沒有任何 gate** 的情況下每次互動打一次網路 —— 那是自相矛盾。
+#: ✅ **兩條可能的出路，本組不裁決（`CLAUDE.md §8.4` step 4：範圍屬總管／客戶）**：
+#:    (a) 比照決定 ④ 也給它一道 Checkbox Gate（**版面異動 → 客戶 gate**）；
+#:    (b) 由總管裁決 ④ 的零寫入守衛要不要比照 ② 改成
+#:        「窄字表 ＋ 呼叫圖可達性 ＋ 執行期哨兵」（`tests/test_wf02_health_no_writes.py`
+#:        的 `_WRITE_PRIMITIVES` 已經把 `update` / `clear` / `rename` 這類**歧義名字**
+#:        排除掉，並就地寫著「寧可多抓不可漏抓 —— **那句是錯的**」）。
+#:    ⛔ **本組刻意沒有動 ④ 的守衛** —— 那是守衛設計，屬另一批、須重新稽核。
+#: ⚠️ **指路指向舊 ④ 的「📊 組合績效」，而那裡現在真的看得到它**
+#:    （同交易帳本那一塊；`where_to_find("pf_perf")` 走 SSOT，不手抄）。
+REASON_PERF: str = (
+    "（年化報酬 / 波動 / Sharpe / 最大回撤，以及效率前緣）。"
+    "原因不是算不出來：既有那一支**一渲染就打一次匯率 API、還會落盤快取**，"
+    "而這一頁每次互動都會整頁重跑 —— 接上去等於每次互動一次網路往返。"
+    "要接得先像配息月曆那樣加一道「按了才算」的開關；在那之前，它在下面這個地方看得到")
 
 
 def grey_why() -> dict[str, str]:
@@ -532,8 +887,8 @@ def grey_why() -> dict[str, str]:
     """
     return {
         switch_block_label(): REASON_SWITCH,
-        BLOCK_POLICY: REASON_POLICY,
         BLOCK_DIVIDEND_CAL: REASON_DIVIDEND_CAL,
+        perf_block_label(): REASON_PERF,
         BLOCK_LEDGER: REASON_LEDGER,
     }
 
@@ -551,6 +906,14 @@ def _pending_where(block: str) -> str:
     這一塊沒接上，去任何地方都不會讓它出現 —— 能指的最誠實的地方就是本頁上
     唯一真的做完的那一塊（＝ :data:`BLOCK_FORM`），而灰態本文
     （:data:`_PENDING_NOTE`）已經先講了「這一塊的內容還沒接上」。
+
+    ⚠️ **2026-09-07 射程縮小到只剩一個 caller，這一點要講清楚，不要讀成「還是三塊共用」**：
+    - **交易帳本**改指 `where_to_find("pf_ledger")` ＝ 舊 ④ 的「💼 持倉戰情（T7 帳本）」，
+      **那個地方現在真的看得到帳本**（客戶 2026-09-07 指示：灰態必須指出去哪裡看得到）。
+    - **配息月曆**改指它自己那個勾選框（:data:`DIVCAL_GATE_LABEL`），**勾了真的會出現**。
+    - **保單與扣款標的**已經不是灰態了（決定 ①）。
+    → **本函式現在只剩「換股顧問」一個 caller**，也就是本頁**唯一**一塊
+      「指了也沒用」的灰態。**這三種灰的下一步各不相同，不要再合成一句。**
     ✅ **對照**：空狀態（:func:`_render_no_holdings`）那一則的指路是**真的有效**的，
     而且是 AppTest 實跑驗過的。**兩者不要混為一談。**
 
@@ -812,11 +1175,23 @@ def _render_rebalance_form() -> None:
 
 
 def _render_action_cards() -> None:
-    """區塊 3｜三張卡（3 欄自適應網格）。本批三張全灰。
+    """區塊 3｜**兩張**卡（3 欄自適應網格，最後一格留白）。
 
-    線框 Tab 04 三張卡逐字：
+    ⚠️ **2026-09-07 由三張變兩張，這是客戶決定 ① 的直接後果，不是漏畫。**
+    「保單與扣款標的」已升為**全寬區塊**（:func:`_render_policy`），
+    客戶理由逐字：**1/3 卡放不下保單一覽表；兩者並存會讓同一份資料在同頁出現兩次，
+    不一致時使用者不知道信哪個。** 也就是說 `ia` 那張 1/3 摘要卡**刻意不另外保留**。
+    ⚠️ **最後一格留白，不補空卡** —— `card_grid` 的既有行為，也是鐵則 04
+    （補一張空卡就是「畫一個沒有內容的框給使用者看」）。
+
+    ⚠️ **配息月曆那一張自 2026-09-07 起帶一個 Checkbox Gate**（客戶決定 ④），
+    所以它不能走 `render_cards()` 的宣告式 dict（那裡塞不進 widget）——
+    改成本函式自己開一列網格，第一格走 `state_card`、第二格走
+    :func:`_render_dividend_calendar_card`。**網格仍然是 `ia.card_row`，不是自己 `st.columns`。**
+
+    線框 Tab 04 三張卡逐字（保留全文，讓「哪一張被搬走」看得出來）：
       「換股顧問／2 組建議／把 02 診斷出的問題檔，配對到 03 的候選標的。」
-      「保單與扣款標的／3 張保單／每張保單下的基金與投入金額；權重是算出來的，不是存的。」
+      ~~「保單與扣款標的／3 張保單／每張保單下的基金與投入金額；權重是算出來的，不是存的。」~~
       「配息月曆／本月 4 筆／預估除息日與誤差天數，推不出來的保留可見。」
 
     ⛔ **本批不畫「2 組建議」「3 張保單」「本月 4 筆」** —— 那些是示意值（§1）。
@@ -827,13 +1202,416 @@ def _render_action_cards() -> None:
        下一批接上時，推不出除息日的那幾筆**要留在畫面上並標明推不出來**，
        不得從清單裡消失 —— 消失會被讀成「這檔本月不配息」。**登記，本批不實作。**
     """
-    _where = _pending_where(BLOCK_FORM)
-    _why = grey_why()
-    render_cards([
-        {"title": _t, "state": STATE_NOT_READY,
-         "note": f"{_PENDING_NOTE}{_why[_t]}。", "where": _where}
-        for _t in (switch_block_label(), BLOCK_POLICY, BLOCK_DIVIDEND_CAL)
-    ])
+    with card_row(cols=GRID_COLS) as _cells:
+        with _cells[0]:
+            state_card(
+                switch_block_label(), state=STATE_NOT_READY,
+                note=f"{_PENDING_NOTE}{grey_why()[switch_block_label()]}。",
+                where=_pending_where(BLOCK_FORM))
+        with _cells[1]:
+            _render_dividend_calendar_card()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ① 保單與扣款標的 —— 全寬區塊（客戶 2026-09-07 決定 ①）
+# ══════════════════════════════════════════════════════════════════════════
+
+def _all_portfolio_rows() -> list[dict[str, Any]]:
+    """`portfolio_funds` 的**全部**條目（含尚未載入 / 載入失敗的）。
+
+    ⚠️ **與 :func:`_holdings` 是兩把不同的尺，這一點必須看清楚**：
+    - :func:`_holdings` 只回**已載入且沒有錯誤**的，因為拿沒載到的去算比例＝用不完整
+      的資料生一個看起來完整的結論（§1）。
+    - 本函式回**全部**，只用來回答一個問題：「**有幾筆沒被算進去**」。
+      沒有它，狀態列的「總投入」會**安靜地少算**，而畫面上看不出來 —— 那正是 §1 最在意的形狀。
+    ⛔ **不要拿本函式的回傳去算任何比例或金額。** 它只負責提供分母的差額。
+    """
+    _raw = st.session_state.get(_SK_PORTFOLIO) or []
+    return [_f for _f in _raw if isinstance(_f, dict)] if isinstance(_raw, list) else []
+
+
+def _book_title() -> str:
+    """目前在看哪一本帳本。**讀 session，零連線**（既有鍵，本檔只讀不寫）。
+
+    ⚠️ 兩個鍵都是**別人定義**的（`ui/helpers/portfolio/policy_admin_section.py`
+    與 `ui/helpers/cloud_io.py` 寫入），本檔不改名、不補寫。
+    ⚠️ 讀不到時回空字串，由呼叫端畫成灰態 —— **不編一個「我的投資組合」出來**
+    （那正是線框拿來示範版面的那個示意值，§1）。
+    """
+    _title = str(st.session_state.get("_t3_cur_sheet_title") or "").strip()
+    if _title:
+        return _title
+    _sid = str(st.session_state.get("policy_sheet_id") or "").strip()
+    # 沒有標題但有 ID → 給 ID 的前段（**事實**），不是給一個猜出來的名字。
+    return f"{_sid[:14]}…" if _sid else ""
+
+
+def _status_tiles() -> list[dict[str, Any]]:
+    """狀態列四格。**每一格要嘛有真值，要嘛明講「不知道」——沒有第三種。**
+
+    回傳 ``[{label, value, missing, where}]``；``value is None`` 代表這一格不知道，
+    由呼叫端畫 :data:`UNKNOWN_VALUE` ＋ 灰字說明（**不畫 0**）。
+
+    四格的來源（逐格可自驗，全部是 session 既有鍵，**零連線、零寫入**）
+    ----------------------------------------------------------------------
+    ===================== ================================================
+    格                     來源
+    ===================== ================================================
+    :data:`STATUS_BOOK_LABEL`       `_t3_cur_sheet_title` → `policy_sheet_id`
+    :data:`STATUS_POLICY_LABEL`     `portfolio_funds` 的相異 `policy_id` 數
+    :data:`STATUS_LOADED_AT_LABEL`  `t3_last_load_at`
+    :data:`STATUS_INVESTED_LABEL`   Σ 已載入標的的 `invest_twd`
+    ===================== ================================================
+
+    ⛔ **「上次讀回」讀不到時，文案寫的是「這次進站後還沒讀回」，不是「從來沒讀回」** ——
+       `t3_last_load_at` 是 **session 級**的鍵，重開瀏覽器就沒了。
+       說「從來沒有」是一句我們無從得知真假的話（§1）。
+    ⛔ **「總投入」在一檔都沒填金額時回 `None`，不回 0** ——
+       「0 元」與「不知道投了多少」在畫面上長得一樣，意思差到相反。
+    """
+    _loaded = _holdings()
+    _all = _all_portfolio_rows()
+
+    _book = _book_title()
+    _pids = {str(_f.get("policy_id") or "").strip()
+             for _f in _all if str(_f.get("policy_id") or "").strip()}
+    _last = str(st.session_state.get("t3_last_load_at") or "").strip()
+
+    _amounts = [float(_f.get("invest_twd") or 0) for _f in _loaded]
+    _sum = sum(_a for _a in _amounts if _a > 0)
+    _n_priced = sum(1 for _a in _amounts if _a > 0)
+
+    return [
+        {"label": STATUS_BOOK_LABEL,
+         "value": _book or None,
+         "missing": "還沒選定要用哪一本 Google Sheet 當投組資料庫",
+         "where": where_to_find("pf_add")},
+        {"label": STATUS_POLICY_LABEL,
+         # 一張保單都認不出來 ≠ 沒有保單：多半是這些標的還沒帶保單編號。
+         "value": f"{len(_pids)} 張 / {len(_all)} 檔" if _pids else None,
+         "missing": f"目前 {len(_all)} 檔標的都沒有帶保單編號，分不出屬於哪幾張保單",
+         "where": where_to_find("pf_add")},
+        {"label": STATUS_LOADED_AT_LABEL,
+         "value": _last or None,
+         "missing": "這次進站後還沒有從雲端讀回過（重開瀏覽器就會歸零，不代表從來沒讀過）",
+         "where": where_to_find("pf_add")},
+        {"label": STATUS_INVESTED_LABEL,
+         "value": fmt_twd(_sum) if _n_priced else None,
+         "missing": "已載入的標的都沒有填投入金額，加不出總投入",
+         "where": where_to_find("pf_add")},
+    ]
+
+
+def _policy_rows() -> list[dict[str, Any]]:
+    """保單一覽的列。欄位＝:data:`POLICY_TABLE_COLUMNS`，**一欄都不多、一欄都不少**。
+
+    ⚠️ **每一格缺值都畫 :data:`UNKNOWN_VALUE`，不畫 0、不畫空字串** ——
+       空字串在表格裡看起來像「這一欄不適用」，`—` 才看得出「這裡本來該有東西」。
+    ⚠️ **「級別」不做關鍵字啟發式猜測**：`policy_tier` 是使用者在 Sheet 上明示的東西，
+       猜一個出來就是替他決定核心／衛星。缺就是缺（對照
+       `ui/helpers/portfolio/allocation.py` 那支 SSOT —— 它**允許**退回關鍵字啟發式，
+       但那是為了算比例時不整組斷掉，**而且它會在 caption 裡講明**；
+       這張表是**逐列的事實清單**，沒有那個講明的位置，所以這裡不猜）。
+    """
+    _rows: list[dict[str, Any]] = []
+    for _f in _all_portfolio_rows():
+        _tier = str(_f.get("policy_tier") or "").strip().lower()
+        _amt = _f.get("invest_twd")
+        _cash = _f.get("div_cash_pct")
+        _rows.append({
+            POLICY_TABLE_COLUMNS[0]: str(_f.get("policy_id") or "") or UNKNOWN_VALUE,
+            POLICY_TABLE_COLUMNS[1]: str(_f.get("code") or "") or UNKNOWN_VALUE,
+            POLICY_TABLE_COLUMNS[2]: str(_f.get("name") or "") or UNKNOWN_VALUE,
+            POLICY_TABLE_COLUMNS[3]: str(_f.get("currency") or "") or UNKNOWN_VALUE,
+            POLICY_TABLE_COLUMNS[4]: {"core": "核心", "satellite": "衛星"}.get(
+                _tier, UNKNOWN_VALUE),
+            POLICY_TABLE_COLUMNS[5]: fmt_twd(float(_amt)) if _amt else UNKNOWN_VALUE,
+            POLICY_TABLE_COLUMNS[6]: (f"{float(_cash):.0f}%"
+                                      if _cash is not None else UNKNOWN_VALUE),
+        })
+    return _rows
+
+
+def _render_policy() -> None:
+    """區塊｜保單與扣款標的（**全寬**）。**客戶 2026-09-07 決定 ① 落地。**
+
+    ## 決定 ① 逐字與它推翻了什麼
+
+    客戶：**全寬區塊；`ia` 線框那張 1/3 摘要卡不另外保留。**
+    理由（客戶原話）：**1/3 卡放不下保單一覽表；兩者並存會讓同一份資料在同頁出現兩次，
+    不一致時使用者不知道信哪個。**
+    → 模組 docstring 的**未決事項 (B)** 自此結案；:data:`REASON_POLICY` 退役
+    （改名 :data:`RETIRED_REASON_POLICY`，保留不刪，理由見該處）。
+
+    ## 版面：狀態列（4 格）＋ 保單一覽（全寬表）
+
+    - **狀態列** 走 `ia.card_row(cols=`:data:`STATUS_COLS`\ `)`。
+      前三格逐字取自 `policy-split-wireframe.html` 的 3 欄狀態列，
+      第四格 :data:`STATUS_INVESTED_LABEL` 是**決定 ② 新增的**。
+    - **保單一覽** 走 `ia.wide_table()`（欄多，1/3 寬會被壓到無法閱讀）。
+
+    ## §1：這一塊最容易造假的兩個地方
+
+    1. **總投入**只加**已載入**的標的（:func:`_holdings`）。
+       若有標的還沒載入／載入失敗，**caption 會逐一講明有幾筆沒被算進去** ——
+       一個安靜少算的總投入，比沒有總投入更危險。
+    2. **級別**缺就是缺，不做關鍵字猜測（見 :func:`_policy_rows`）。
+    """
+    _tiles = _status_tiles()
+    with card_row(cols=STATUS_COLS) as _cells:
+        for _cell, _tile in zip(_cells, _tiles):
+            with _cell:
+                # ⚠️ **刻意用 `st.markdown` 而不是 `st.metric`，這不是排版偏好。**
+                # `st.metric` 是 widget：`tests/…::_flat` 對 widget **只記標籤、不記值**
+                # （那一行就地註解逐字：「值是使用者的東西，標籤才是線框定的」）。
+                # 用 metric 的話，「這一格印了 0 還是印了 —」**測試看不見** ——
+                # 而那正是本區塊最需要被守住的一件事（§1：不知道不准寫成 0）。
+                # ⛔ 不要「順手」改回 `st.metric`：那會讓
+                #    `test_the_status_bar_never_prints_a_number_it_does_not_know`
+                #    變成一條**恆真**的守衛（值根本不在它看得到的串流裡）。
+                # ⚠️ 標籤在前、值在後（不是 `**值**` 開頭）：整行以 `**` 起訖會被
+                #    `_CARD_OPEN` 認成**一個新單位的標題**，畫面上就會多出四個線框沒有的單位。
+                st.markdown(f"{_tile['label']}　**{_tile['value'] or UNKNOWN_VALUE}**")
+                if _tile["value"] is None:
+                    not_ready(_tile["missing"], where=_tile["where"])
+
+    # 範圍說明：**總投入算了哪些、沒算哪些**（§1；沒有這一句，少算是看不見的）。
+    _loaded_n = len(_holdings())
+    _all_n = len(_all_portfolio_rows())
+    _skipped = _all_n - _loaded_n
+    st.caption(
+        f"「{STATUS_INVESTED_LABEL}」只加**已載入**的 {_loaded_n} 檔"
+        + (f"；另有 {_skipped} 檔尚未載入或載入失敗，**沒有**算進去。"
+           if _skipped > 0 else "，目前沒有未載入的標的。"))
+
+    wide_table(
+        _policy_rows(),
+        empty_title="保單一覽目前沒有可列的標的",
+        empty_missing="`portfolio_funds` 裡一筆都沒有 —— 這一頁上面本來就會先擋掉，"
+                      "走到這裡代表清單在渲染中途被清空了",
+        empty_where=where_to_find("pf_add"),
+        hide_index=True,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ③ 三個原本埋在舊 ④ 深處的區塊，升成看得見的具名區塊（客戶 2026-09-07 決定 ③）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# ⭐ **這三塊全部走「委派」，不是重寫**（客戶路線 (A)）。清單見 :data:`DELEGATED_ENTRIES`。
+#
+# ⛔ **每一塊都先自己判前提，判不過就畫灰態，不把判斷交給被委派的那一支** ——
+#    理由是實測出來的，不是風格：那五支在資料不足時的行為**各不相同**，
+#    而且沒有一支符合鐵則 03／04：
+#      · `render_portfolio_performance`  → 有序列但算不出時走 `st.info(...)`（藍框，不是灰態）
+#      · `render_efficient_frontier`     → 不足 2 檔直接 `return`（**畫面上完全空白**）
+#      · `render_concentration_summary`  → 無穿透資料直接 `return`（同上）
+#      · `render_sector_concentration_summary` → 同上
+#      · `render_macro_exposure_link`    → 走 `st.caption("🧭 載入…")`（灰字，但**沒有 ⬜ 記號**）
+#    「一個有標題、底下什麼都沒有的區塊」正是鐵則 04 要禁的冗餘占位；
+#    而「藍框」與「沒有 ⬜ 的灰字」都不是鐵則 03 的三態之一。
+#    → **本頁在委派之前先把前提問完**，前提不足就自己畫 `not_ready`。
+# ⛔ **不得為了統一而去改那五支**（客戶路線 (A)：不重寫、不搬移、不改資料路徑）。
+
+
+def _render_perf() -> None:
+    """區塊｜組合績效 ／ 效率前緣（**全寬**）。**決定 ③ 第一塊。**
+
+    ## ⛔ 現況：**具名區塊做到了、委派沒有做，而且是被實測擋下來的**
+
+    決定 ③ 要它「升成看得見的具名區塊」＋「只留一份尺」。
+    - **具名區塊** ✅ —— 它就在這裡，有標題、有位置、在 `_expected_units()` 裡。
+    - **只留一份尺** ✅ —— 見下一段；另有守衛
+      `test_the_two_perf_cards_are_not_both_brought_over` 釘住。
+    - **委派** ⛔ —— **沒有做**。理由不是顧慮，是量出來的：那一支
+      **一渲染就打一次匯率 API、還會落盤快取**，而這一頁每次互動都會整頁重跑。
+      完整數字、驗證指令與兩條出路寫在 :data:`REASON_PERF`。
+      **已具名回報總管裁決**（`CLAUDE.md §8.4` step 4：範圍屬總管／客戶）。
+    ⚠️ **下面那兩段是「接的時候該怎麼接」的設計，本批沒有用到，刻意留著** ——
+    它們是這一塊真正動工時的規格；刪掉的話下一批要重新想一次。
+
+    ## 為什麼是 `render_portfolio_performance` 而不是 `render_portfolio_tracking`
+
+    舊 ④ 同頁有**兩張標籤逐字相同**的績效卡（年化報酬／年化波動 σ／最大回撤）。
+    決定 ③ 明示「新 ④ 只留一份」。三條依據逐條寫在 :data:`DELEGATED_ENTRIES` 的長註裡，
+    **最硬的一條是零寫入**：`render_portfolio_tracking` 打開就寫一列進客戶的
+    Google Sheet，且已被 ② 具名列進 `page_02_health.DELEGATION_BLACKLIST`。
+    ⛔ 本頁**不碰舊 ④ 的那兩張卡**（它們的去留是客戶 gate，舊 ④ 已具名回報總管）。
+    本頁做的只是**不把重複帶進來**。
+
+    ## 兩個前提各自判，理由不同
+
+    - 組合績效：**至少 1 檔**有 NAV 序列（同 `render_portfolio_performance` 自己的門檻）。
+    - 效率前緣：**至少 2 檔**（它要的是組合雲，一檔畫不出前緣）——
+      不足時本頁**不畫**、也**不另外印一句灰字**：一塊區塊已經有一句灰態了，
+      再加一句會變成同一件事講兩遍（`test_m2_same_grey_line_is_not_printed_twice_in_one_function`）。
+      **1 檔時它本來就該缺席，那不是「壞了」。**
+    ⚠️ **這兩段是規格，不是現況**（見本 docstring 最上面那一段）。
+    """
+    not_ready(f"{_PENDING_NOTE}{grey_why()[perf_block_label()]}。",
+              where=where_to_find("pf_perf"))
+
+
+def _render_concentration() -> None:
+    """區塊｜穿透式持股 ／ 產業集中度（**全寬**）。**決定 ③ 第二塊。**
+
+    這一塊回答的是：「我以為分散了，實際上呢？」——把各基金的 `top_holdings`
+    與 `sector_alloc` 穿透聚合，看真正押在哪幾檔個股／哪幾個產業。
+
+    ⚠️ **兩支被委派的函式在無穿透資料時都是直接 `return`（畫面全空）**，
+    所以前提由本頁先問：`moneydj_raw` 裡有沒有 `top_holdings` / `sector_alloc`。
+    ⛔ **前提用「有沒有那個欄位」判，不用「算完是不是空的」判** ——
+       後者要先付整段聚合的成本，而那正是我們想避免的。
+    """
+    from ui.helpers.portfolio.concentration import (
+        render_concentration_summary,
+        render_sector_concentration_summary,
+    )
+
+    _funds = _holdings()
+    _has_holdings = any((_f.get("moneydj_raw") or {}).get("top_holdings") for _f in _funds)
+    _has_sectors = any((_f.get("moneydj_raw") or {}).get("sector_alloc") for _f in _funds)
+    if not (_has_holdings or _has_sectors):
+        not_ready(
+            "已載入的標的都還沒有成分股／產業配置資料，穿不進去看實際押在哪裡",
+            where=where_to_find("pf_add"))
+        return
+    if _has_holdings:
+        render_concentration_summary(_funds)
+    if _has_sectors:
+        render_sector_concentration_summary(_funds)
+
+
+def _render_macro_link() -> None:
+    """區塊｜總經曝險聯動（**全寬**）。**決定 ③ 第三塊。**
+
+    線框 Tab 04 的 chip「**與 01 同源**」講的就是這條線：把 ① 算好的景氣位階
+    接到組合上。⚠️ 它給的是**股／債／現金**，不是核心／衛星 ——
+    :data:`MIX_TARGET_PROVENANCE` 已經就地講明那個落差，本塊**不重複講**。
+
+    ⚠️ **前提由本頁問，理由與另外兩塊不同**：被委派的
+    `render_macro_exposure_link()` 在 ① 沒載入時**會**畫一句灰字，
+    但那是 `st.caption("🧭 …")` —— **沒有 ⬜ 記號**，
+    也就是它不在鐵則 03 的三態之內（灰態的機械記號是 `render_state.NOT_READY_MARK`）。
+    本頁先問一次，讓「前提不足」在整頁維持同一種長相。
+
+    ⚠️ **`core_pct` 走的是本頁 :func:`_render_mix` 用的同一支 SSOT**
+    （`ui/helpers/portfolio/allocation.py`），**不另算一份** ——
+    同一頁上兩個「核心比例」是本 repo 明文在防的東西（`CLAUDE.md §2.1`）。
+    """
+    from ui.helpers.macro.linkage import render_macro_exposure_link
+    from ui.helpers.portfolio.allocation import (
+        get_core_target_pct,
+        summarize_core_satellite,
+    )
+
+    _phase = st.session_state.get("phase_info")
+    if not st.session_state.get("macro_done") or not (
+            isinstance(_phase, dict) and _phase.get("phase")):
+        not_ready("① 的景氣位階還沒算出來，這裡接不到「總經 → 建議配置」",
+                  where=where_to_find("macro"))
+        return
+    _summary = summarize_core_satellite(
+        _holdings(), target_pct=get_core_target_pct(st.session_state))
+    render_macro_exposure_link(st.session_state, core_pct=_summary.get("core_pct"))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ④ 配息月曆 —— Checkbox Gate 延遲載入（客戶 2026-09-07 決定 ④）
+# ══════════════════════════════════════════════════════════════════════════
+
+def _render_dividend_calendar_card() -> None:
+    """配息月曆那一張卡。**預設灰態；勾了才算。**（決定 ④）
+
+    ## 決定 ④ 逐字與它推翻了什麼
+
+    客戶：**維持灰態，但改成 Checkbox Gate 延遲載入（勾了才算）；
+    灰態文案要誠實寫出「為什麼預設不載入」與「勾哪裡會載入」；⛔ 不得預設載入。**
+    → :data:`REASON_DIVIDEND_CAL` 舊表述的最後半句（「那是版面異動，得先過客戶那一關」）
+    **就是被這一條推翻的** —— 那一關過了。
+
+    ## 為什麼一定要 gate（成本是量出來的，不是感覺）
+
+    `services.dividend_calendar.build_month_calendar` 是**純 CPU、零 IO**，
+    但成本隨配息史長度 **O(k²)** 成長，且**每檔付兩遍**
+    （`estimate_error_band` 與 `estimate_error_worst` 各呼叫一次 `_walk_forward_errors`）。
+    實測（量測日 2026-09-06）：單檔 36 筆 275 ms；一組 20 檔月配、各三年史 **5.4~5.5 秒**。
+    而**這一頁每一次互動都會整頁重跑** —— 沒有 gate 就是每次拖滑桿付一次五秒。
+    ⚠️ **資料越完整反而越慢**：配息史推得出節奏時 walk-forward 才會跑，
+    也就是會被拖到的正好是資料最好的那個使用者。
+
+    ## 畫出來的是「卡片版」，不是整張月曆 —— 這不是縮水，是照線框
+
+    ia Tab 04 那張卡逐字是「**配息月曆／本月 4 筆**／預估除息日與誤差天數，
+    推不出來的保留可見。」—— **它本來就是一張帶計數的摘要卡**（「本月 4 筆」是它的示意值）。
+    ⛔ **示意值一個都不畫**（§1）：這裡畫的是**真的算出來的**檔數。
+    ⚠️ **「推不出來的保留可見」是線框逐字的 §1 約束**：推不出除息日的那幾檔
+    **要留在畫面上並講明推不出來**，不得從計數裡消失 —— 消失會被讀成「這檔本月不配息」。
+    ⛔ 整張月曆（`ui/helpers/dividend_calendar_render.render_month_calendar_html`）
+       **本批不畫**：那是一個新的全寬視覺元件，屬版面異動（客戶 gate），
+       而決定 ④ 給的是「gate ＋ 誠實文案」，**不是**「把 ⑤ 的除息行事曆搬過來」
+       （客戶同批明示：選股池＋除息行事曆維持留在 ⑤，本批不碰）。
+    """
+    st.markdown(f"**{BLOCK_DIVIDEND_CAL}**")
+    # ⚠️ 變數名 `_divcal_open` 是**專用**的，不與本檔任何其他旗標同名 ——
+    #    `tests/test_wf04_portfolio_no_writes.py` 的缺口 7-(2)：意圖變數名在**整份模組**
+    #    沒有作用域，一個被重複使用的 `_go` 會讓別處的 `if _go:` 被誤判成「使用者按過了」。
+    _divcal_open = st.checkbox(
+        DIVCAL_GATE_LABEL,
+        value=False,
+        key=DIVCAL_GATE_KEY,
+        help="不勾就完全不算。這一項是純 CPU 計算，不會連線、也不會寫任何東西。",
+    )
+    if not _divcal_open:
+        not_ready(f"{_PENDING_NOTE}{grey_why()[BLOCK_DIVIDEND_CAL]}。",
+                  where=f"上方「{DIVCAL_GATE_LABEL}」")
+        return
+    _render_dividend_calendar_body()
+
+
+def _render_dividend_calendar_body() -> None:
+    """勾了之後真的去算 —— **只在 :func:`_render_dividend_calendar_card` 勾選後呼叫**。
+
+    ⚠️ 拆成兩個函式不是為了好看：**閘門與被閘門的東西分開**，
+    才看得出「這段昂貴的計算只長在勾選的正分支裡」。
+    ⚠️ **零 IO**：`build_month_calendar` 吃的是已經在 session 裡的 `dividends`
+    （`ui/helpers/portfolio/load.py` 載入基金時一併寫入），**不連網、不寫任何東西**。
+    """
+    import datetime as _dt
+
+    from services.dividend_calendar import build_month_calendar, is_all_unpredictable
+
+    _items = [{"code": _f.get("code"), "name": _f.get("name") or _f.get("code"),
+               "dividends": _f.get("dividends") or []}
+              for _f in _holdings() if _f.get("code")]
+    if not any(_i["dividends"] for _i in _items):
+        not_ready("已載入的標的都還沒有配息紀錄，推不出本月的除息日",
+                  where=where_to_find("pf_add"))
+        return
+
+    # `ref_day` 傳今天幾號：不傳的話 L2 會退回「月中 15 號」估陳舊度，
+    # 月配基金在門檻附近會忽有忽無（`build_month_calendar` 的 v19.532 bug 4 註）。
+    _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=_TW_UTC_OFFSET_HOURS)))
+    _cal = build_month_calendar(_items, _now.year, _now.month, ref_day=_now.day)
+    _counts = _cal.get("counts") or {}
+    _n_events = int(_counts.get("events") or 0)
+    _n_unpred = int(_counts.get("unpredictable") or 0)
+    _n_excl = int(_counts.get("excluded") or 0)
+
+    if is_all_unpredictable(_cal):
+        # ⛔ 這裡**不得**寫「本月推估除息 0 檔」——那讀起來是「這個月沒配息」，
+        #    而事實是「推不出來」。同一畫面兩個口徑，正是 §1 最在意的形狀。
+        # ⚠️ **刻意不寫成整行 `**…**`**：`tests/…::_CARD_OPEN` 把「整行粗體」認成
+        #    **一個新單位的標題**，那會讓勾選之後畫面上多出一個線框裡沒有的單位。
+        #    只把數字加粗，語意一樣、不會被當成標題。
+        st.markdown(f"本月有 **{_n_unpred}** 檔推不出除息日（是推不出，不是沒配息）")
+    else:
+        st.markdown(f"本月推估除息 **{_n_events}** 檔")
+    # 「推不出來的保留可見」（線框逐字的 §1 約束）—— 它們**不從計數裡消失**。
+    st.caption(
+        f"另有 {_n_unpred} 檔推不出日期（**不是**沒配息）"
+        f"；{_n_excl} 檔累積型／查無配息。"
+        "推估用過往配息節奏推算，**非官方公告**。")
 
 
 def _render_ledger() -> None:
@@ -859,9 +1637,17 @@ def _render_ledger() -> None:
     #    「還沒有可顯示的列」是一句我們無從得知真假的話，而且與同一個呼叫的
     #    `empty_missing`（「本頁分批上線，這一塊的內容還沒接上」）**互相矛盾**。
     #    使用者讀完舊標題會以為系統查過他的帳本、結論是空的 —— 那是造假。
+    # ⭐ **指路改指「現在真的看得到帳本的地方」**（客戶 2026-09-07 指示：
+    #    灰態必須指出去哪裡看得到，⛔ 不得只寫「尚未提供」）。
+    #    走 `where_to_find("pf_ledger")` SSOT，**不手抄**「💼 持倉戰情（T7 帳本）」——
+    #    那八個字的唯一真相在 `ui/helpers/story_nav.py`，並有漂移鎖釘住它與舊 ④ 一致
+    #    （`tests/test_story_nav.py::test_section_labels_match_merged_pages` 的 `pf_ledger` 那列）。
+    # ⚠️ **這一條指路與另外兩塊灰態不同：它是真的有用的。**
+    #    另外兩塊（換股顧問／配息月曆未勾）去任何地方都不會讓它們出現；
+    #    這一塊照著走過去**現在就看得到帳本**。差別寫在 `_pending_where()` 的長註。
     wide_table([], empty_title="交易帳本這一塊還沒接上",
                empty_missing=f"{_PENDING_NOTE}{grey_why()[BLOCK_LEDGER]}。",
-               empty_where=_pending_where(BLOCK_FORM))
+               empty_where=where_to_find("pf_ledger"))
 
 
 def render_asset_allocation() -> None:
@@ -895,5 +1681,14 @@ def render_asset_allocation() -> None:
     st.markdown(f"#### {BLOCK_FORM}")
     safe_section(BLOCK_FORM, _render_rebalance_form)
     safe_section("動作卡", _render_action_cards)
+    # ── 以下全部是**全寬**區塊。順序的理由見模組 docstring 的「2026-09-07 版面」段。
+    st.markdown(f"#### {BLOCK_POLICY}")
+    safe_section(BLOCK_POLICY, _render_policy)
+    st.markdown(f"#### {perf_block_label()}")
+    safe_section(perf_block_label(), _render_perf)
+    st.markdown(f"#### {BLOCK_CONCENTRATION}")
+    safe_section(BLOCK_CONCENTRATION, _render_concentration)
+    st.markdown(f"#### {BLOCK_MACRO_LINK}")
+    safe_section(BLOCK_MACRO_LINK, _render_macro_link)
     st.markdown(f"#### {BLOCK_LEDGER}")
     safe_section(BLOCK_LEDGER, _render_ledger)

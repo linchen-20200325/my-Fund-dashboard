@@ -115,8 +115,23 @@
    名字怎麼組出來的它不在乎）—— 本檔的 :class:`_Recorder` 已具備該能力，
    但它**只在本檔自己的單元測試裡跑**，沒有接到 ④ 的整頁渲染上。
 5. **本地無 `streamlit`，故本檔刻意設計成不需要它** —— 見上一條。
-6. ⚠️ **主規則目前在寫入這一半是「空掃通過」，這一點必須寫出來**（2026-09-07 實測）：
-   閉包共 **11** 個模組，其中 `_WRITE_SINKS` 命中的節點數是 **0**。
+6. ⚠️ ~~**主規則目前在寫入這一半是「空掃通過」**~~ → **2026-09-07 已經不是空掃了，
+   而且它是被本條自己預告的那件事終結的**（**有意識的狀態變更，不是漏刪**）。
+   本條原文逐字寫著「**委派一落地，閉包會自己變大，屆時這一條會自然過期**」——
+   ④ 依客戶路線 (A) 開始委派，**閉包 11 → 17**，主規則命中 **1** 個節點。
+   ⛔ **原文那句「過期時請刪掉本條，不要留著誤導」本組沒有照做**，理由如下：
+   本條真正有價值的是**它記載的失效模式**（空掃恆綠 ＋ 三條正對照存在的理由），
+   那一半今天依然成立；過期的只有**數字**。**刪掉它會連教訓一起刪掉。**
+   → 現行：**數字就地更新、舊敘述加刪除線保留**。
+   ⚠️ **那唯一命中的 1 個節點是偽陽性**（`str.replace`），已具名豁免，
+   見 :data:`_FALSE_POSITIVE_SINKS`。也就是說**真陽性目前仍然是 0** ——
+   ⛔ 但那是「**接進來的那幾支真的沒有寫入**」，**不再是**「沒有東西可掃」。
+   ⚠️ **一支被實測擋下來的委派**：`ui/helpers/portfolio_perf.py`
+   （接上去閉包會變 **34**、槽變 **14**，其中 `infra/cache.py` 的
+   `makedirs` / `to_csv` / `remove` 是**真的**磁碟寫入，而且它**一渲染就打一次匯率 API**）——
+   本批**沒有接它**，理由與出路寫在 `ui/views/page_04_portfolio.py::REASON_PERF`。
+   **舊表述（量測日 2026-09-07 稍早，接線前）**：
+   ~~閉包共 **11** 個模組，其中 `_WRITE_SINKS` 命中的節點數是 **0**。~~
    也就是說 :func:`test_the_page_closure_never_writes_on_render` 現在恆綠，
    **不是因為擋住了什麼，是因為還沒有東西可擋** ——
    `#809` 的閘門漏報能活下來正是這個緣故：閘門那一段**只被合成 fixture 跑過**，
@@ -223,6 +238,50 @@ _DISK_WRITES: frozenset[str] = frozenset({
     "rmdir", "remove", "rename", "replace", "to_csv", "to_parquet", "to_json",
 })
 _WRITE_SINKS: frozenset[str] = _SHEET_WRITES | _DISK_WRITES
+
+#: ⭐ **具名偽陽性豁免 —— 逐行、綁原始碼文字，不是綁行號、也不是整條放寬。**
+#:
+#: ## 為什麼是這個形狀（本檔自己的「紅了要做什麼」就是這樣寫的）
+#:
+#: :func:`test_the_page_closure_never_writes_on_render` 的 docstring 逐字寫著：
+#: 「紅了要做什麼：看那一行是不是真的會在渲染時跑到。…
+#:  **不是** → …**在此處具名豁免**，不要整條放寬。」本常數就是那個「此處」。
+#:
+#: ## 這一筆是怎麼來的（2026-09-07，實測，可自行重跑）
+#:
+#: ④ 這一批依客戶路線 (A) 開始委派既有模組，閉包從 **11 → 17** 個模組。
+#: 新進來的模組裡，`_WRITE_SINKS` 只命中**一個**節點，而它是::
+#:
+#:     services/dividend_calendar.py::_pdate
+#:         s = str(v or "").strip()[:10].replace("/", "-")
+#:
+#: —— 一個 **`str.replace`**。它與 `pathlib.Path.replace`（**真的**會覆寫檔案）
+#: 同名，而本檔的偵測器**只比對名字**（那正是它比「函式名白名單」強的原因，
+#: 也是它必然會有的代價）。
+#:
+#: ⚠️ **姊妹頁早就踩過同一顆雷，而且它的結論寫得比本檔重**：
+#: `tests/test_wf02_health_no_writes.py::_WRITE_PRIMITIVES` 就地寫著 ——
+#: 「初版 docstring 寫『寧可多抓不可漏抓（多抓的代價只是多裝一個哨兵）』——
+#:   **那句是錯的**：名字比對命中一個無辜的函式…得到的是**偽陽性紅燈**，
+#:   而下一個人只會去加豁免。」
+#: 它的做法是把 `update` / `clear` / `rename` 這類**歧義名字整批移出字表**，
+#: 改用執行期哨兵去守 primitive 本身。
+#: ⛔ **本檔刻意不照抄那個做法** —— 那會把 `ws.update(...)`（**真的** Google Sheets 寫入）
+#:    一起放掉，而本檔**沒有**接上執行期哨兵那一層（見已知缺口 4）。
+#:    **整條放寬的代價比一筆具名豁免大得多。**
+#:
+#: ## 這個豁免**綁的是原始碼那一行的文字**，不是行號
+#:
+#: 每一筆 = ``(相對路徑, sink 名, 那一行 strip 之後的原文)``。
+#: 檔案一改動那一行，比對就對不上 → **豁免自動失效、主規則當場轉紅**。
+#: 由 :func:`test_every_false_positive_exemption_still_points_at_that_exact_line` 釘住。
+#: ⛔ **不得**改成綁行號（行號會漂移，漂移之後豁免會落到另一行上，那比沒有豁免更糟）。
+#: ⛔ **不得**往這裡加「我覺得它不會跑到」的東西 —— 判準只有一個：
+#:    **那一行的接收者在語法上就不可能是檔案系統物件**（這裡是 `str(...)` 的回傳值）。
+_FALSE_POSITIVE_SINKS: frozenset[tuple[str, str, str]] = frozenset({
+    ("services/dividend_calendar.py", "replace",
+     's = str(v or "").strip()[:10].replace("/", "-")'),
+})
 
 #: 使用者**明示意圖**的 streamlit 元件。寫入只能發生在它們的正分支裡。
 #: ⛔ **session 旗標不在此列，而且永遠不會加進來** —— `#800` 的教訓逐字：
@@ -573,11 +632,17 @@ def test_the_page_closure_never_writes_on_render():
     """
     _bad: list[str] = []
     for _mod, _path in sorted(_closure().items()):
-        _tree = ast.parse(_path.read_text(encoding="utf-8"))
+        _src = _path.read_text(encoding="utf-8").splitlines()
+        _tree = ast.parse("\n".join(_src))
+        _rel = str(_path.relative_to(_REPO))
         for _line, _attr, _gated in _write_refs(_tree):
-            if not _gated:
-                _bad.append(
-                    f"{_path.relative_to(_REPO)}:{_line}  `.{_attr}(…)`  （模組 {_mod}）")
+            if _gated:
+                continue
+            _text = _src[_line - 1].strip() if 0 < _line <= len(_src) else ""
+            if (_rel, _attr, _text) in _FALSE_POSITIVE_SINKS:
+                continue          # 具名偽陽性，見 `_FALSE_POSITIVE_SINKS` 的長註
+            _bad.append(
+                f"{_rel}:{_line}  `.{_attr}(…)`  （模組 {_mod}）")
     assert not _bad, (
         "④ 的 import 閉包裡有**沒有被按鈕擋住**的寫入動作 —— "
         "使用者只是打開這一頁，它就會動到磁碟或他的 Google Sheet：\n  "
@@ -664,3 +729,57 @@ def test_every_declared_sink_is_actually_intercepted(sink: str):
     _r = _Recorder()
     getattr(_r, sink)()
     assert _r.records == [sink], f"`{sink}` 宣告在 `_WRITE_SINKS` 裡，但哨兵沒攔到它。"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 具名偽陽性豁免的**自我巡邏**（2026-09-07）
+# ⚠️ 一個「開了就沒人再看」的豁免，就是 `CLAUDE.md §8.2.A.0` 規則 5 點名的那種
+#    **把違憲寫成合憲**。所以豁免的前提要被釘成斷言，不是寫在註解裡自律。
+# ══════════════════════════════════════════════════════════════════════
+
+def test_every_false_positive_exemption_still_points_at_that_exact_line():
+    """⭐ 每一筆豁免的**那一行原文**都要還在原檔裡，而且該行真的被偵測器命中。
+
+    兩件事一起驗，缺一邊豁免就會變成一張空頭支票：
+
+    1. **那一行還在** —— 檔案改了那一行 ⇒ 對不上 ⇒ 豁免自動失效（主規則會轉紅）。
+       ⛔ 這正是**綁文字而不綁行號**的理由：行號會漂，漂到別行上就是替另一段程式碼背書。
+    2. **偵測器真的會命中它** —— 若哪天 `replace` 從 :data:`_WRITE_SINKS` 移除，
+       這一筆就是**死豁免**；死豁免會讓下一個人以為那條路徑「已經審過了」。
+
+    ⚠️ 第 2 點紅了**不是**要去刪這條測試，是要去刪那一筆豁免（它不再需要）。
+    """
+    for _rel, _attr, _text in sorted(_FALSE_POSITIVE_SINKS):
+        _p = _REPO / _rel
+        assert _p.exists(), (
+            f"豁免指到一個不存在的檔案：{_rel}\n"
+            "⛔ 這不是「測試過期」：檔案不在了，那筆豁免就是在替空氣背書，請刪掉它。")
+        _lines = [_l.strip() for _l in _p.read_text(encoding="utf-8").splitlines()]
+        assert _text in _lines, (
+            f"豁免登記的那一行原文在 {_rel} 裡找不到了：\n  {_text}\n"
+            "⛔ 那一行被改過了 —— 請重新判斷它現在是不是還是偽陽性，"
+            "**不要**直接把新的文字貼進 `_FALSE_POSITIVE_SINKS` 了事。")
+        assert _attr in _WRITE_SINKS, (
+            f"`{_attr}` 已經不在 `_WRITE_SINKS` 裡了 —— "
+            f"{_rel} 那一筆豁免變成**死豁免**，請刪掉它（死豁免會讓人以為那條路徑審過了）。")
+
+
+def test_the_exemption_does_not_blind_the_detector_to_a_real_write():
+    """⭐ **正對照：豁免只認「那一個檔 ＋ 那一個名字 ＋ 那一行文字」，三者缺一就不放行。**
+
+    ⛔ 沒有這一條，`_FALSE_POSITIVE_SINKS` 有可能被寫成「凡是 `.replace` 都放行」
+    而**沒有任何東西會發現** —— 那會讓 `pathlib.Path.replace`（真的會覆寫檔案）
+    整族隱形。本條用三個**只差一項**的變體去戳它。
+    """
+    _rel, _attr, _text = sorted(_FALSE_POSITIVE_SINKS)[0]
+    _variants = [
+        ("換一個檔", (_rel + "x", _attr, _text)),
+        ("換一個 sink 名", (_rel, "write_text", _text)),
+        ("換一行文字", (_rel, _attr, _text + "  # 動過了")),
+    ]
+    for _label, _v in _variants:
+        assert _v not in _FALSE_POSITIVE_SINKS, (
+            f"豁免比對太寬：{_label} 之後竟然還在豁免集合裡 —— {_v}")
+    # 反向保險：原本那一筆**確實**在集合裡（否則上面三條在空集合上恆真）。
+    assert (_rel, _attr, _text) in _FALSE_POSITIVE_SINKS, (
+        "豁免集合是空的 —— 上面三條在空集合上恆真，等於這條正對照沒有驗到東西。")
