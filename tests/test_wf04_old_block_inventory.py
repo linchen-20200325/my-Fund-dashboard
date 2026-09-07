@@ -184,10 +184,17 @@ OLD_TAB4_INVENTORY: tuple[tuple[str, str, str, str], ...] = (
      "`ui/helpers/portfolio/allocation.py`。"
      "⚠️ **本 slot 底下另有三個子區塊處置不同**，見下方 `UNDECIDED_SUBBLOCKS`。"),
     ("_ov_warroom", "💱 FX 曝險摘要／智能戰情室", "已由總管裁決搬走",
-     "`ui/views/page_02_health.py` 模組 docstring 逐字：波段觀測站"
-     "（`ui/components/mk_dashboard.py`）線框列進 ②，客戶 2026-09-05 裁決"
-     "『搬，排在本頁上線之後的獨立批次』。同 slot 的 `render_fund_checkup` "
-     "已在 ② 的 `DELEGATED_ENTRIES` 內。"),
+     "⚠️ **這個 slot 底下三支 helper 的狀態互不相同，不要當成一塊讀**（實測）："
+     "(1) `render_fund_checkup` → **已在 ② 的 `DELEGATED_ENTRIES` 內**"
+     "（`ui.helpers.fund.checkup`）；"
+     "(2) `render_mk_war_room`（波段觀測站）→ 客戶 2026-09-05 裁決『搬 ②，"
+     "**排在該頁上線之後的獨立批次**』——**裁決有了、搬遷還沒做**，"
+     "且 ② 自己的守衛目前**明文擋** `mk_dashboard` 的 import；"
+     "(3) `render_hero_kpi_cards`（`ui/helpers/portfolio/health.py`，6 格 KPI）→ "
+     "**本組在 ② 找不到它**；它是 **PR #791 題二**（『② 總分那一格』）的標的，"
+     "**客戶尚未答覆**。"
+     "→ 本列的 `disposition` 取 (1)(2) 的多數判定；**(3) 嚴格說仍懸著**，"
+     "在此具名登記以免它從兩張表中間掉下去。"),
     ("_ov_group", "🗂️ 保單分組視圖", "待客戶裁決",
      "＝新 ④ 的 `BLOCK_POLICY`「保單與扣款標的」的資料來源。"
      "版面（3 欄摘要卡 vs 全寬明細表）為 PR #791 題一，客戶**尚未答覆**；"
