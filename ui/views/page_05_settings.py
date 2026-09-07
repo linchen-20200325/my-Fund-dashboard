@@ -800,9 +800,7 @@ def _render_manual() -> None:
     """
     from ui.tab6_manual import render_manual_tab
 
-    # ⛔⛔ 突變測試用（下一顆 commit 立刻 revert）：拿掉承載說明書的折疊區 ⛔⛔
-    # with st.expander(BLOCK_MANUAL, expanded=False):
-    if True:
+    with st.expander(BLOCK_MANUAL, expanded=False):
         # ⑤ 已畫區塊標題 → 說明書不再畫自己的 `##` 頁面大標（其餘一行不動）。
         with settings_page_owns(MANUAL_HEADER):
             render_manual_tab()
