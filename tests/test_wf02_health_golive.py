@@ -385,7 +385,12 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
         ("判給 ③（尚未實作）",
          "核准線框 §04 逐字：「🎯 選基金（低基期進場點）"
          "｜tab_fund_grp_health.py::_render_low_base_screener｜搬｜③ 基金研究」"
-         "——『回答該買哪一檔而不是哪一檔有問題』。" + _MOVED),
+         "——『回答該買哪一檔而不是哪一檔有問題』。"
+         "⚠️ 它**不在** `page_02_health.MOVED_TO_PAGE_03` 裡（那個常數只收 "
+         "`render_fund_grp_health_extras` 底下的，而本支住在舊 ② 根檔）—— "
+         "**這句仍然成立，2026-09-07 原樣保留**（本批只改標籤，沒有動那個常數）。"
+         "~~⭐ 本批新查出。~~（那是 2026-09-07 之前那一批的字，"
+         "留著會讓讀者以為它是今天才被發現的。）" + _MOVED),
 
     # ── ③ 的活入口實測可達（**不是**因為被搬過去，理由見各列）──────────
     "ui.helpers.holdings::render_holdings_detail":
