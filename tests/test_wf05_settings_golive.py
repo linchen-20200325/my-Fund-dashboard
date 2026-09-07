@@ -159,29 +159,122 @@ def _sinks(entry: str) -> set[tuple[str, str, str]]:
     return _out
 
 
+def test_the_maintain_block_stays_behind_a_checkbox_gate():
+    """⭐ 新 ⑤ 的「🗄️ 資料維護與通報」**必須**在 Checkbox Gate 之後才呼叫
+    `render_manage_tab()` —— 拿掉 gate，重複 widget key 會回來。
+
+    ## 為什麼需要這一條（不是為了好看，是因為突變實測它原本抓不到）
+
+    2026-09-07 雙軌並行之後，`app.py` 同時掛舊 ⑤（`ui/tab_settings_diag.py`）與
+    新 ⑤（`ui/views/page_05_settings.py`），而**兩頁委派同一支** `render_manage_tab()`。
+    那支無條件畫 `_sec_pool()` / `_sec_dividend_calendar()` / `_sec_notify()`，
+    其中帶具名 key（`pool_*` ×10 / `divcal_gen` / `manage_notify_preview`）——
+    同一次 run 畫兩份會拋 `StreamlitDuplicateElementKey`
+    （`ui/helpers/ia/gated_form.py` 自陳：「全站唯一，Streamlit 會在重複時炸掉」）。
+
+    **`st.expander(expanded=False)` 擋不住** —— 收合的 expander **body 照樣執行**
+    （本 repo 自證：`tests/test_app_apptest.py::test_tab6_manual_renders_key_sections`
+    驗的正是收在 `expanded=False` 裡的說明書內容，它在 `origin/main` 是綠的）。
+    **只有「gate 沒過就提前 return」才真的不呼叫。**
+
+    ⚠️ **這一條是突變實測逼出來的**：本批把 gate 拆回 `st.expander` 之後
+    （突變 C1），當時**十一條守衛沒有一條轉紅** —— 也就是說在它存在之前，
+    「有人把這個修復拿掉」是**靜默**的。憲法 §-1.5 v3 `03`-1 要求的
+    「突變測試（拔掉修復邏輯必須轉為紅燈）」在這一格原本是不成立的。
+
+    ⛔ **不得**用「改成 expander 也很像 gate」為由放寬本條：
+       那正是本條要擋的那一個改動。
+    """
+    _tree = ast.parse(NEW_SRC.read_text(encoding="utf-8"))
+    _fn = next((_n for _n in ast.walk(_tree)
+                if isinstance(_n, ast.FunctionDef) and _n.name == "_render_maintain"), None)
+    assert _fn is not None, (
+        "`ui/views/page_05_settings.py` 找不到 `_render_maintain` —— "
+        "維護區的委派被改名或搬走了，本條失去對象，請先確認它現在住在哪裡。")
+
+    # (1) 這個函式裡真的呼叫了 render_manage_tab（否則本條在守一個空殼）
+    _calls_manage = [_n for _n in ast.walk(_fn)
+                     if isinstance(_n, ast.Call)
+                     and (getattr(_n.func, "id", None) == "render_manage_tab"
+                          or getattr(_n.func, "attr", None) == "render_manage_tab")]
+    assert _calls_manage, (
+        "`_render_maintain` 沒有呼叫 `render_manage_tab()` —— fail-closed："
+        "本條的比較對象不見了，先確認委派是不是被拿掉了（那是刪功能）。")
+
+    # (2) 函式裡有一個「條件不成立就提前 return」的 gate，且它的條件讀 st.checkbox
+    _gates = [_n for _n in ast.walk(_fn)
+              if isinstance(_n, ast.If)
+              and any(isinstance(_b, ast.Return) for _b in _n.body)
+              and any(isinstance(_c, ast.Call)
+                      and getattr(_c.func, "attr", None) == "checkbox"
+                      for _c in ast.walk(_n.test))]
+    assert _gates, (
+        "`_render_maintain` 沒有『st.checkbox 沒勾就提前 return』的 gate —— "
+        "雙軌並行下舊 ⑤ 也在跑同一支 `render_manage_tab()`，"
+        "沒有 gate 就會撞重複 widget key（`divcal_gen` / `manage_notify_preview` / `pool_*`）。"
+        "⚠️ `st.expander(expanded=False)` **不算** gate：收合的 expander body 照樣執行。")
+
+    # (3) ⭐ 委派必須在 gate **之後** —— gate 存在但 render 在它前面等於沒 gate
+    _gate_end = max(_g.end_lineno for _g in _gates)
+    _early = [_c.lineno for _c in _calls_manage if _c.lineno < _gate_end]
+    assert not _early, (
+        f"`render_manage_tab()` 出現在 gate 結束（第 {_gate_end} 行）之前："
+        f"{_early} —— gate 擋不到它，重複 key 照樣會發生。")
+
+
 def test_app_mounts_the_new_settings_view():
     """⑤ 真的掛在 `app.py` 上 —— 而且是**新** View。
 
     ⛔ 沒有這一條，前面所有「新頁很乾淨」的證明都可能是在證明一個**沒有人打開**
        的檔案（本 repo 的既有病：「算對了沒接出去」）。
+
+    ⚠️ **2026-09-07 由雙軌並行改寫：這一格驗的東西從「換掉」變成「兩格都對」。**
+    **有意識的政策變更，不是把規則改鬆**（決策者：客戶 2026-09-07
+    「舊 ⑤ 保留原位……新 ⑤ 則掛為獨立新 Tab」）。
+
+    **舊斷言**（原地保留、加刪除線，不刪）::
+
+        ~~assert _in_slot == ["render_settings_and_diagnostics"]~~
+
+    **舊斷言的理由一個字都沒有被推翻** —— 它要防的是「新頁算對了卻沒接出去」
+    （本 repo 的既有病）。下面**兩條**斷言接的是同一根針，而且**多釘了一格**：
+    新頁必須掛在 `tab_preview_settings`（沒接出去 → 紅），
+    **舊頁必須還在 `tab_settings`**（被覆蓋掉 → 也紅，
+    那正是客戶明令禁止的「破壞現有線上正常運作的舊版 Tab」）。
+    **被權衡掉的只有「新頁必須佔住 `tab_settings` 那一格」這個前提**，
+    因為客戶把它改成並行了。
+
     ⚠️ 只驗 ⑤ 那一格；①②③④ 由 `tests/test_ia_kit.py::_SLOT_RENDER` 整表守。
     """
     _app = (ROOT / "app.py").read_text(encoding="utf-8")
     _tree = ast.parse(_app)
     assert "from ui.views.page_05_settings import" in _app, (
         "`app.py` 沒有 import 新 ⑤ —— 接線鏈斷在 app.py 這一節。")
-    _in_slot = [
-        _c.func.id
-        for _n in ast.walk(_tree) if isinstance(_n, ast.With)
-        for _it in _n.items
-        if isinstance(_it.context_expr, ast.Name) and _it.context_expr.id == "tab_settings"
-        for _c in ast.walk(_n)
-        if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Name)
-        and _c.func.id.startswith("render_")
-    ]
-    assert _in_slot == ["render_settings_and_diagnostics"], (
-        f"`with tab_settings:` 呼叫的是 {_in_slot}，應為 "
-        "['render_settings_and_diagnostics']。")
+    def _renders_in(slot: str) -> list:
+        return [
+            _c.func.id
+            for _n in ast.walk(_tree) if isinstance(_n, ast.With)
+            for _it in _n.items
+            if isinstance(_it.context_expr, ast.Name)
+            and _it.context_expr.id == slot
+            for _c in ast.walk(_n)
+            if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Name)
+            and _c.func.id.startswith("render_")
+        ]
+
+    # ① 新頁真的掛出去了（掛在 [新] 並行預覽那一格）
+    assert _renders_in("tab_preview_settings") == ["render_settings_and_diagnostics"], (
+        f"`with tab_preview_settings:` 呼叫的是 {_renders_in('tab_preview_settings')}，應為 "
+        "['render_settings_and_diagnostics'] —— 新頁沒接出去，底下所有證明都是在證一個沒人打開的檔案。")
+
+    # ② ⭐ **舊頁必須還在原位** —— 客戶 2026-09-07 明令舊 Tab 原樣保留。
+    #    ⛔ 這一條不可以省：少了它，「把舊頁換掉」這個動作會**靜默通過**，
+    #       而那正是本次要撤銷的東西。
+    assert _renders_in("tab_settings") == ["render_settings_diag_tab"], (
+        f"`with tab_settings:` 呼叫的是 {_renders_in('tab_settings')}，應為 "
+        "['render_settings_diag_tab'] —— 舊 ⑤ 被覆蓋掉了，那是客戶明令禁止的。")
+    assert "from ui.tab_settings_diag import" in _app, (
+        "`app.py` 沒有 import 舊 ⑤ —— 舊分頁的接線鏈斷了。")
 
 
 def test_the_new_page_adds_no_write_surface():

@@ -233,6 +233,13 @@ _SK_PORTFOLIO: str = "portfolio_funds"
 #:    換掉的只有 key 的命名空間。
 _SK_DIAG_GATE: str = "v05_diag_gate"
 
+#: 「🗄️ 資料維護與通報」整塊的 Checkbox Gate 鍵。
+#:
+#: ⚠️ **這個 gate 是 2026-09-07「雙軌並行」逼出來的，不是效能考量** ——
+#:    理由完整寫在 :func:`_render_maintain`，這裡只放 key 本身。
+#:    命名空間比照 `_SK_DIAG_GATE`：`v05_` 前綴，**絕不與舊 ⑤ 共用**。
+_SK_MAINTAIN_GATE: str = "v05_maintain_gate"
+
 # ── 區塊名 ────────────────────────────────────────────────────────────────
 #: 線框 Tab 05 `<h4>` 逐字。**SSOT `_SECTION_LABELS` 沒有這個 key**，
 #: 本批**刻意不新增 key**（不在檔案邊界內，同 `page_04_portfolio.py::BLOCK_POLICY`）。
@@ -281,6 +288,10 @@ _NOT_LOADED_NOTE: str = (
 _DIAG_NOT_LOADED_NOTE: str = (
     "資料來源健康度尚未載入（避免每次互動都重跑註冊表更新與匯率抓取）")
 
+#: 「🗄️ 資料維護與通報」gate 的標籤。
+MAINTAIN_GATE_LABEL: str = "🗄️ 載入資料維護與通報"
+
+
 #: 後端未啟用時的灰態本文開頭。⚠️ **這不是「沒有資料」，是「我們沒辦法去看」**（§1）。
 _BACKEND_UNAVAILABLE_NOTE: str = (
     "讀不到雲端 NAV 歷史 —— 累積功能所需的設定不完整，"
@@ -317,6 +328,38 @@ def maintain_label() -> str:
     有 key 卻手抄字面，是本 repo 已經發作過三次的那個病。
     """
     return section_label("manage")
+
+
+def _maintain_not_loaded_note() -> str:
+    """「🗄️ 資料維護與通報」gate 沒勾時的灰態本文。
+
+    ⛔ **這段話刻意把真正的原因寫出來，不准改寫成「效能考量」之類的含混說法**
+       （總管 2026-09-07 裁決 2 明令）。使用者看到同一塊東西在舊 Tab 有、
+       在新 Tab 要自己勾，如果我們給的理由是假的，他只會以為新頁功能比較少。
+
+    ⚠️ **是函式不是常數，而且分頁名走 `tab_label('settings')`** ——
+       本檔第一版把「⚙️ 設定與診斷」六個字直接寫進字串，被
+       `tests/test_wpf_five_tab_wiring.py` 的**兩條**守衛同時抓到
+       （黑名單向：活字串命中現行分頁名；形態向：「「X」分頁」的指路形狀
+       沒有經過 story_nav 求值）。**那兩條是對的** —— 手抄的分頁名在下一次
+       改名時會變成死指路，本 repo 同型 bug 已發作三次。
+    """
+    return (
+        f"尚未載入本頁自己的維護區 —— 舊的「{tab_label('settings')}」分頁"
+        "**已經在跑同一個維護區**，同一次畫面更新載入兩份會撞到 Streamlit 的"
+        "重複元件鍵（`divcal_gen` / `manage_notify_preview` / `pool_*` 等），"
+        "那一塊會整塊變成紅色錯誤。勾上面那個選項，本頁才會載入自己的一份；"
+        "**功能沒有少，舊分頁那一份隨時可以用**。")
+
+
+def _maintain_gate_label() -> str:
+    """「🗄️ 資料維護與通報」gate 的標籤（區塊名走 SSOT，不手抄）。
+
+    ⚠️ 標籤 ＝ :data:`MAINTAIN_GATE_LABEL`；本函式存在的理由是讓
+    **灰態指路**與 **checkbox 本體**吃同一個字串 —— 兩邊各寫一份，
+    改一邊就會指到一個畫面上不存在的選項（本 repo 同型 bug 已發作三次）。
+    """
+    return MAINTAIN_GATE_LABEL
 
 
 def _where(block: str) -> str:
@@ -776,9 +819,51 @@ def _render_maintain() -> None:
     #    ⚠️ **這是從 repo 既有證據推出來的，本組沒有在本機重現**（本環境無 streamlit）——
     #      真正的裁判是 CI 的 fast lane，不是這段註解。
     #    ⛔ 若哪天 streamlit 把限制加回來，**先紅的會是區塊 5，不是這一塊**。
-    with st.expander(maintain_label(), expanded=False):
-        with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
-            render_manage_tab()
+    # ⭐ **2026-09-07 雙軌並行：`st.expander` 升級成 Checkbox Gate。**
+    # **有意識的變更，不是漏刪**（決策者：AI 總管，裁決 2）。
+    #
+    # **舊寫法**（原地保留、加刪除線，不刪）::
+    #
+    #     ~~with st.expander(maintain_label(), expanded=False):~~
+    #     ~~    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):~~
+    #     ~~        render_manage_tab()~~
+    #
+    # **舊寫法的理由一個字都沒有被推翻**：客戶 2026-09-07 逐字裁決
+    # 「保留在 ⑤ 的最底部作為進階折疊區（`st.expander`）……折疊收攏即可，
+    # 不影響主視覺」—— 那個**視覺意圖**在 gate 之下完全保留（預設收攏、不佔版面）。
+    #
+    # **被權衡掉的是它的一個前提：「折疊 ＝ 不載入」。那個前提是假的。**
+    # `st.expander` **收合時 body 照樣執行**（本 repo 自證：
+    # `tests/test_app_apptest.py::test_tab6_manual_renders_key_sections` 驗的正是
+    # 收在 `expanded=False` 裡的說明書內容，它在 `origin/main` 是綠的）。
+    #
+    # **為什麼非改不可**：舊 ⑤（`ui/tab_settings_diag.py::_render_maintain_section`）
+    # **無條件**呼叫同一支 `render_manage_tab()`。雙軌並行之後兩頁同一次 run 都跑，
+    # 而 `render_manage_tab()` 無條件畫 `_sec_pool()` / `_sec_dividend_calendar()` /
+    # `_sec_notify()`，其中帶具名 key（`pool_*` ×10 / `divcal_gen` /
+    # `manage_notify_preview`）→ **Streamlit 重複 key 會炸**
+    # （`ui/helpers/ia/gated_form.py` 自陳：「全站唯一，Streamlit 會在重複時炸掉」）。
+    # 折疊擋不住，`if` 才擋得住。
+    #
+    # ⛔ **為什麼不是改舊模組的 key**：客戶 2026-09-07 明文
+    #    「絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼」——
+    #    `ui/tab_manage.py` 與 `ui/tab_settings_diag.py` 本批 **blob 前後相同**。
+    # ⛔ **也不是把這一塊從新頁拿掉**：那是刪功能，不是解衝突（裁決 3 (b)）。
+    #
+    # ⚠️ **本 gate 只解「預設載入就雙跑」那一族**。使用者若**同時**勾起舊 ⑤ 與本頁
+    #    的其他 gate（例如兩邊的「載入資料診斷」），仍會碰到重複 key ——
+    #    **已知、未解、本批不處理**，逐一具名登記在 PR 描述。
+    if not st.checkbox(
+            _maintain_gate_label(), value=False, key=_SK_MAINTAIN_GATE,
+            help=f"舊「{tab_label('settings')}」分頁已經在跑同一個維護區；"
+                 "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
+        # ⚠️ 指路吃 :func:`_maintain_gate_label`，**不手抄**（手抄那一刻就開始漂移）。
+        not_ready(_maintain_not_loaded_note(),
+                  where=f"上方「{_maintain_gate_label()}」")
+        return
+
+    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
+        render_manage_tab()
 
 
 def _render_manual() -> None:

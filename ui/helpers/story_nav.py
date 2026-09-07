@@ -95,6 +95,38 @@ _TAB_LABELS: dict[str, str] = {
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 1-A0) 【並行預覽分頁】—— 客戶 2026-09-07「雙軌並行」原則
+# ══════════════════════════════════════════════════════════════════════════
+# 客戶 2026-09-07 明文：新 UI 一律以**新增 Tab** 形式掛載，
+# 「舊 ② 與舊 ⑤ 保留原位……新 ② 與新 ⑤ 則掛為獨立新 Tab」；
+# **未經客戶親自驗收並明文下令，舊 Tab 一律維持原樣保留。**
+#
+# ⛔ **為什麼刻意不併進 `_TAB_LABELS`（這是本表存在的全部理由，不要「順手整理」）**
+# --------------------------------------------------------------------------
+# `_TAB_LABELS` 有兩個不變量，併進去會同時打破：
+#   (1) **站號 ①~⑤ 由它的順序推導**（`_tab_ordinal`）—— 多兩個 key，
+#       預覽分頁會拿到「⑥」「⑦」，而客戶拍板的線框只有五站；
+#   (2) **`tab_label()` / `where_to_find()` 回的字串一定是線框上那五個分頁之一** ——
+#       併進去之後指路文案就可能吐出「⑥ [新] 持倉體檢」，
+#       那正是本模組 docstring 整篇在防、且本 repo 已發作三次的「死指路」。
+# 故另立一張表 + 一個**獨立的取值函式**，兩個命名空間互不汙染。
+# 守衛：`tests/test_story_nav.py::test_preview_tab_labels_are_a_separate_namespace`。
+
+#: 預覽分頁的顯示前綴。
+PREVIEW_PREFIX: str = "[新] "
+
+#: 掛在既有五格**之後**的並行預覽分頁：key → 顯示名。
+#: ⚠️ 顯示名**從 `_TAB_LABELS` 導出**，不另抄一份中文 ——
+#:    正式分頁改名時預覽分頁自動跟上（本 repo 分頁改名漏改已發作三次）。
+#: ⚠️ key 刻意與正式分頁**同名**：它們是同一個分頁的新舊兩版，
+#:    「⑤ 與 ⑦ 是同一件事的兩個版本」這件事應該由 key 表達，不是由註解表達。
+PREVIEW_TAB_LABELS: dict[str, str] = {
+    "health":   PREVIEW_PREFIX + _TAB_LABELS["health"],
+    "settings": PREVIEW_PREFIX + _TAB_LABELS["settings"],
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 1-A) 失效分頁名字表 — 給守衛用的**黑名單 SSOT**（不參與任何渲染）
 # ══════════════════════════════════════════════════════════════════════════
 # 存在的理由（讀之前先看這段，否則會以為它只是註解垃圾）
@@ -314,6 +346,29 @@ def tab_label(key: str) -> str:
         raise KeyError(
             f"story_nav.tab_label: 未知的分頁 key '{key}';"
             f"合法值 = {sorted(_TAB_LABELS)}{_hint}"
+        ) from None
+
+
+def preview_tab_label(key: str) -> str:
+    """回傳【並行預覽分頁】的 `st.tabs` 分頁名（`[新] …`）。
+
+    §1 Fail Loud：未知 key 直接 `KeyError`，**不回退**成 `tab_label()` ——
+    回退會讓「預覽分頁」與「正式分頁」在畫面上叫同一個名字，
+    使用者分不出自己在看哪一版，那比整條炸掉更難查。
+
+    ⚠️ 這是**獨立命名空間**：`preview_tab_label('macro')` 一律 `KeyError`
+    （① 不在雙軌射程內），`tab_label('health')` 也永遠不會回 `[新] …`。
+    """
+    try:
+        return PREVIEW_TAB_LABELS[key]
+    except KeyError:
+        _hint = ""
+        if key in _TAB_LABELS:
+            _hint = (f"；'{key}' 是**正式**分頁,沒有並行預覽版,"
+                     f"請改用 tab_label('{key}')")
+        raise KeyError(
+            f"story_nav.preview_tab_label: 未知的預覽分頁 key '{key}';"
+            f"合法值 = {sorted(PREVIEW_TAB_LABELS)}{_hint}"
         ) from None
 
 
