@@ -83,9 +83,18 @@
    線框「從哪裡搬來」把它列進 ②，但客戶 2026-09-05 裁決：**搬，排在本頁上線之後的獨立批次**。
    本檔沒有任何對它的 import 或呼叫。
 
-⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 `with tab_health:` 仍呼叫舊的
-   `render_fund_grp_health_tab()`，客戶明令「舊 ② 這批不動、不接線、不下架」。
-   接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。
+~~⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 `with tab_health:` 仍呼叫舊的~~
+   ~~`render_fund_grp_health_tab()`，客戶明令「舊 ② 這批不動、不接線、不下架」。~~
+   ~~接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。~~
+
+⚠️ **2026-09-07 事實更正：上段已過期。有意識的更正，不是漏刪**
+   （決策者：**AI 總管**，依獨立稽核指出）。**舊表述在寫下的當天是對的** ——
+   那一批確實沒有接線；**被推翻的是它的前提**：接線那一批已經做完。
+   **實測**：`app.py` 的 `with tab_health:` 現在呼叫的是本檔的
+   `render_holdings_health()`，機器規則見
+   `tests/test_wf02_health_golive.py::test_app_mounts_the_new_health_view`。
+   ⚠️ 這句過期敘述**沒有任何守衛看得到**（它是散文，不是斷言）——
+   它是靠獨立稽核回頭讀才撿到的，與 `DROPPED_WITH_REASON` 那張表同一種病。
 
 Form 為什麼是本批唯一「真的做完」的一塊
 --------------------------------------
@@ -161,8 +170,13 @@ from ui.helpers.render_state import NOT_READY_MARK, not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
-# ⚠️ 刻意**不**沿用舊 ② 的鍵：舊頁依方針第 3 條仍在磁碟上、且仍接在 `app.py`，
+# ⚠️ 刻意**不**沿用舊 ② 的鍵：舊頁依方針第 3 條仍在磁碟上，
 #    共用鍵會讓兩套 View 互相覆寫對方的狀態，而 payload 形狀並不相同。
+#    ⚠️ 2026-09-07 就地更正：原文為「~~仍在磁碟上、**且仍接在 `app.py`**~~」——
+#    **後半句已過期**（`with tab_health:` 現在呼叫的是本檔）。
+#    **有意識的更正，不是漏刪**；決策者：AI 總管。
+#    **本註的結論一字未改** —— 舊頁仍在磁碟上、仍是回退路徑與委派對象，
+#    不共用鍵的理由完全不受影響。
 _FORM_KEY: str = "v02_health_filter_form"
 #: **已套用**的診斷條件（不是 widget 當下值）。下游只准讀這個 —— 理由見模組 docstring。
 _SK_APPLIED: str = "v02_health_applied_filters"
@@ -1228,9 +1242,17 @@ def _render_delegated_sections() -> None:
 def render_holdings_health() -> None:
     """渲染「② 持倉體檢」整頁。
 
-    ⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），
-    所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。
-    接線是下一批的事。
+    ~~⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），~~
+    ~~所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。~~
+    ~~接線是下一批的事。~~
+
+    ⚠️ **2026-09-07 事實更正：上段已過期，本函式現在有 production caller。**
+    **有意識的更正，不是漏刪**（決策者：**AI 總管**，依獨立稽核指出）。
+    **實測**：`app.py` 的 `with tab_health:` 呼叫本函式（守衛：
+    `tests/test_wf02_health_golive.py::test_app_mounts_the_new_health_view`）。
+    ⛔ **同一句「沒有 production caller」在 `ui/views/page_05_settings.py` 也有一份，
+    而 ⑤ 同樣已經掛上 `app.py`** —— **本批不碰那個檔**（另一組正在動它），
+    已於本批 PR 描述具名登記。
 
     ⚠️ **區塊之間走 `safe_section()` 隔離**：`st.tabs` 是單次 run 渲染全部分頁，
     任一區塊拋未捕捉例外會**中止整個 script**，其後所有分頁空白。
