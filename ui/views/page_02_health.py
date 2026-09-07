@@ -188,6 +188,25 @@ _SIGMA_STEP: float = 0.1
 _WINDOW_MIN: int = 1
 _WINDOW_MAX: int = 36
 
+#: 本金（TWD）—— **核准線框 `docs/wireframes/wireframe-macro-health.html` 的
+#: 「Form ②-A　健診輸入（防全頁重繪）」內逐字寫著「本金（TWD）：1,000,000」**
+#: （本組 2026-09-06 自行開檔核對，非轉述）。三個界值沿用舊 ②
+#: `ui/tab_fund_grp_health.py` 的 `st.number_input`，**不是本組挑的**。
+#:
+#: ⚠️ **它的語意是「假設每檔都投入這個金額」的比較基準，不是使用者的實際持倉金額。**
+#: ⛔ **不得**改用 `sum(invest_twd)` 之類推導 —— 那會把「每檔各投入 N」
+#: 悄悄換成「每檔各投入全部身家」，畫面上每一個「可申購單位／月配 TWD」都會變，
+#: 而使用者**看不出來**（§1）。要改語意請走線框草稿，不要在這裡動常數。
+#:
+#: ⚠️ **這一欄在 `ia-wireframe.html`（本頁骨架的來源）裡不存在** ——
+#: 本組實測該檔 `本金` 僅 2 命中，且**兩處都是「吃本金警示」卡**，不是輸入欄。
+#: 依總管 2026-09-06 裁決加回：客戶永久授權第 2 條把「批次輸入框等細節元件」
+#: 列為總管自決，且它**有既有規格可對照**（＝修正錯誤，不是改變設計）。
+_DEFAULT_PRINCIPAL_TWD: float = 1_000_000.0
+_PRINCIPAL_MIN: float = 10_000.0
+_PRINCIPAL_MAX: float = 10_000_000.0
+_PRINCIPAL_STEP: float = 100_000.0
+
 #: 逐檔體檢表的欄位 —— **線框 Tab 02 逐字**：
 #: 「代碼 / 名稱 / 幣別 / 近 1 年 / Sharpe / 最大回撤 / 配息覆蓋 / 五桶評等 / 資料日期」。
 #: ⚠️ 定成常數而不是散在下一批的程式碼裡，是為了讓「欄位少了一欄」看得見
@@ -234,9 +253,55 @@ _LAG_PENDING_NOTE: str = (
 #: 後者是 v19.204 P2-7 的**向後相容 shim**（整檔只有 `import *` ＋ `dir()` 迴圈），
 #: 兩者 re-export 的是**同一個函式物件**，行為完全一致；直接指 canonical 位置，
 #: shim 哪天依 `CLAUDE.md` §-1.5.1c `01`-2「用不到即清理」被刪時本檔不會斷。
+#: ⚠️ **2026-09-06 第二輪：由 2 支擴為 8 支。`render_fund_grp_health_extras`
+#: 刻意「拆開逐支接」，⛔ 不整支接** —— 理由是核准線框把它的子區塊**分派到不同頁**
+#: （本組開檔核對逐字，非轉述）：
+#:
+#:   `docs/wireframes/wireframe-macro-health.html` §04 對照表
+#:     「💼 逐檔深度分析（投資試算／TER／持股）… **搬 ③ 基金研究** …
+#:       每檔一個 expander ＝ 單一檔基金的細節，依動線原則一律屬 ③」
+#:     「⑪ Bollinger 詳圖／⑬ 個股新聞／⑭ 三率穿透 … **搬 ③ 基金研究**」
+#:     「📊 健診大表／🩺 體檢 PK／📈 比較圖／**🔁 回測**／⑫ AI 跨檔 … **留 ② 原位**」
+#:
+#: → **整支接會把 5 個屬 ③ 的子區塊一起搬回 ②，那是違反核准線框。**
+#:
+#: ⚠️ **「拆得開」是實測結論**：那 10 塊各自是獨立的 module-level 函式、住在
+#: `ui/helpers/fund_grp_health/` 的不同子模組，簽名幾乎都是 `(funds)` ——
+#: **本檔逐支呼叫它們，沒有改舊模組一個字**（路線 (A)「原封不動」）。
+#:
+#: ⛔ **但有一個必須講明的代價：留 ② 的五塊裡，只有 `render_rotation_section`
+#: 是 public，另外四支是 `_` 開頭的私有名。** 該套件的 `__init__` 確實把它們
+#: 全部 re-export（docstring 自陳「re-export 全部子函式」，且既有 14+ 測試就是這樣取用），
+#: 但**沒有 `__all__`**。也就是說本檔對它們的依賴**比對 public API 的依賴更脆**——
+#: 舊模組整批拔除時，這五條是最先斷的。**這一點登記在此，不是藏在 PR 描述裡。**
 DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
+    # ── 原本就接的兩支（public）────────────────────────────────
     ("ui.helpers.fund.checkup", "render_fund_checkup"),
     ("ui.components.mutual_exclusion", "render_mutual_exclusion_section"),
+    # ── 🔁 配置回測（public）──────────────────────────────────
+    # 線框 §04：「🔁 回測 … 留 ② 原位 … 全部是跨檔比較或組合層結論，正是 ② 的題目」，
+    # 同檔另標「哪套配置效益最高（**教學非建議**）」。
+    # ⚠️ **本組原先判它屬 ④ 是錯的**，已依線框逐字更正（詳見 DEFERRED_ENTRIES 的說明）。
+    ("ui.helpers.fund_grp_health.backtest_section",
+     "render_allocation_backtest_section"),
+    # ── `render_fund_grp_health_extras` 底下「留 ②」的五塊 ────────
+    ("ui.helpers.fund_grp_health.dividend", "_render_dividend_matrix"),
+    ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
+    ("ui.helpers.fund_grp_health.risk", "_render_oversold_badges"),
+    ("ui.helpers.fund_grp_health.rotation", "render_rotation_section"),
+    ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
+)
+
+#: `render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。
+#: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
+#: 下一個人看到 ② 沒有「投資試算」時，要能查到這是**線框指定的**，不是漏接。
+#: ⛔ **不要因為「舊 ② 本來就有」就把它們加回來** —— 那正是線框要拆掉的東西。
+MOVED_TO_PAGE_03: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health.investment", "_render_investment_calc"),
+    ("ui.helpers.fund_grp_health.investment", "_render_holdings_block"),
+    ("ui.helpers.fund_grp_health.signals", "_render_bollinger_expanders"),
+    ("ui.helpers.fund_grp_health.ai", "_render_per_fund_news_expanders"),
+    ("ui.helpers.fund_grp_health.ai", "_render_per_fund_three_ratio_expanders"),
 )
 
 #: ⛔ **黑名單：接了就是把 P0 寫入面搬回 ②。**
@@ -256,22 +321,31 @@ DELEGATION_BLACKLIST: tuple[tuple[str, str], ...] = (
 #: 一個沒有理由的缺口，下一輪就會被當成「還沒排到」隨手補上（本檔上方
 #: `_SCORE_PENDING_NOTE` 那段講的就是這件事）。
 #:
-#: ⛔ **這三條的前兩條是「業務規則衝突」，不是技術問題** ——
-#: 依 `CLAUDE.md` §-1.5 v3 `03`-2 ② **須由客戶拍板**，本檔不自行決定。
+#: ⭐ **2026-09-06 第二輪：原本三條裡的前兩條已被核准線框推翻，就地加刪除線保留。**
+#: **有意識的政策變更，不是漏刪** · 日期 **2026-09-06** · 決策者：**AI 總管**（依核准線框逐字）。
+#:
+#: ~~① `render_fund_grp_health_extras`：`principal_twd` 無第二來源、新增 widget 需客戶草稿。~~
+#:   → **推翻**：核准線框 `wireframe-macro-health.html` 的「Form ②-A　健診輸入」內
+#:     **逐字就有「本金（TWD）：1,000,000」**（本組開檔核對）。既然有既有規格可對照，
+#:     加回去屬「**修正錯誤**」而非「改變設計」，是內部自決。**已加回**（見
+#:     :data:`_DEFAULT_PRINCIPAL_TWD`）。**舊理由的事實面仍然成立**
+#:     （repo 裡確實只有舊 ② 那一個 widget）—— **被推翻的是它的結論**：
+#:     我漏查了線框，把「本頁骨架來源 `ia-wireframe.html` 沒有」誤當成「線框沒有」。
+#:   ⚠️ 但 `render_fund_grp_health_extras` **整支仍然不接**，改成**拆開逐支接**（見
+#:     :data:`DELEGATED_ENTRIES` 與 :data:`MOVED_TO_PAGE_03`）—— 換了理由，不是換了結論。
+#:
+#: ~~② `render_allocation_backtest_section`：屬再平衡試算，線框說 → 04。~~
+#:   → **推翻，這一條是本組判錯**：同一份線框 §04 對照表**逐字**寫
+#:     「📊 健診大表／🩺 體檢 PK／📈 比較圖／**🔁 回測**／⑫ AI 跨檔｜**留 ② 原位**｜
+#:     全部是**跨檔**比較或組合層結論，正是 ② 的題目」，並標「哪套配置效益最高
+#:     （**教學非建議**）」。**已接**。
+#:   ⚠️ **歸屬判斷的分界由總管承擔，不是線框明文**：線框**沒有定義**「再平衡試算」的外延，
+#:     總管的依據是「教學非建議」這個標註 ⇒ 它不落在被排除的「**建議**」那一類。
+#:     **這一句刻意寫在程式碼裡，不是只寫在 PR 描述裡** —— 日後有人質疑
+#:     「② 為什麼有回測」時，要看得到這是誰、依據什麼下的判斷。
+#:
+#: **只剩下面這一條仍然成立**（key 交集是實測，不是判讀）：
 DEFERRED_ENTRIES: tuple[tuple[str, str], ...] = (
-    ("ui.helpers.fund_grp_health::render_fund_grp_health_extras",
-     "① 它需要 `principal_twd`（一個**使用者選的比較基準本金**）。舊 ② 從一個 "
-     "`st.number_input`（預設 1,000,000）拿這個值；**本頁沒有那個 widget，"
-     "而新增 widget 屬版面異動，要先送客戶線框草稿**。實測全 repo 除了舊 ② 那個 "
-     "widget 之外**沒有第二個來源**。用 `sum(invest_twd)` 會把「每檔各投入 N」"
-     "悄悄換成「每檔各投入全部身家」，畫面數字全變、使用者看不出來 —— "
-     "那正是 §1 禁止的那種造假。② 它還會轉呼叫 `services/rotation.py` 的"
-     "**輪動配對建議**，那是本頁 docstring 逐字點名要停手的「建議類服務」。"),
-    ("ui.helpers.fund_grp_health.backtest_section::render_allocation_backtest_section",
-     "它輸出「📋 勝出策略建議」「🔄 賣→買 配對建議」「⚖️ 建議配置權重／目標權重%」—— "
-     "那就是**再平衡試算與換股建議**，而客戶核准的線框在 Tab 02 的「這裡不放什麼」"
-     "逐字寫著「換股建議與再平衡試算 → 04（那是決策，不是診斷）」。"
-     "**技術上可以接（只吃 `funds`、實測零寫入），是範圍邊界擋著，不是做不到。**"),
     ("ui.helpers.fund_grp_health.{switch_section,regime_section}"
      "::{render_switch_section,render_regime_fit_section}",
      "兩支都吃**健診大表列** `df.to_dict('records')`，不是本頁的 9 欄列。"
@@ -334,7 +408,23 @@ def _applied_filters() -> dict[str, Any]:
         "sigma": _DEFAULT_SIGMA,
         "window_months": _DEFAULT_WINDOW_MONTHS,
         "satellite_only": _DEFAULT_SATELLITE_ONLY,
+        "principal_twd": _DEFAULT_PRINCIPAL_TWD,
     }
+
+
+def _principal_twd() -> float:
+    """**已套用**的本金（TWD）。委派區塊的 `principal_twd` 引數只准從這裡拿。
+
+    ⚠️ **舊值相容**：`_SK_APPLIED` 可能是本欄位加入**之前**存下的 dict
+    （使用者上一輪按過「套用」、session 還活著），那時候沒有 `principal_twd` 這個鍵。
+    `.get(..., 預設)` 是為了那個情形，**不是**為了容忍缺值 —— 缺就退回線框的預設值，
+    那是**有出處的常數**（見 :data:`_DEFAULT_PRINCIPAL_TWD`），不是隨手編一個數字。
+    """
+    _v = _applied_filters().get("principal_twd", _DEFAULT_PRINCIPAL_TWD)
+    try:
+        return float(_v)
+    except (TypeError, ValueError):
+        return float(_DEFAULT_PRINCIPAL_TWD)
 
 
 def _render_filter_form() -> None:
@@ -363,6 +453,20 @@ def _render_filter_form() -> None:
             "只看衛星", value=bool(_cur["satellite_only"]),
             help="勾選後只診斷衛星部位，核心部位不列入。",
         )
+        # ⭐ 本金（TWD）—— 核准線框 Form ②-A 逐字有這一欄，2026-09-06 加回。
+        # ⚠️ **放在既有的 `applied_form` 裡面，不另開第二個 form**（鐵則 02：
+        #    本頁 `st.form` 站點必須維持 0，`applied_form` 維持 1；自己寫 form
+        #    會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==7`）轉紅）。
+        # ⚠️ 它跟其他三個條件一樣**受送出閘門管**：拖數字的當下不會觸發下游重算，
+        #    因為委派區塊讀的是 `_principal_twd()`（＝已套用值），不是這個回傳值。
+        _principal = st.number_input(
+            "本金（TWD）",
+            min_value=_PRINCIPAL_MIN, max_value=_PRINCIPAL_MAX,
+            value=float(_cur.get("principal_twd", _DEFAULT_PRINCIPAL_TWD)),
+            step=_PRINCIPAL_STEP,
+            help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」"
+                 "放在同一個尺度上比較。**這不是你的實際投入金額。**",
+        )
 
     # ⚠️ `if _gate:` 必須在 `with` **之外**（送出鈕在 `yield` 之後才建立）。
     if _gate:
@@ -370,6 +474,7 @@ def _render_filter_form() -> None:
             "sigma": float(_sigma),
             "window_months": int(_window),
             "satellite_only": bool(_satellite_only),
+            "principal_twd": float(_principal),
         }
 
 
@@ -979,6 +1084,14 @@ def _render_delegated_sections() -> None:
     #    守衛拿 `DELEGATED_ENTRIES` 對本檔實際 import 到的符號做**精確集合相等**比對。
     from ui.components.mutual_exclusion import render_mutual_exclusion_section
     from ui.helpers.fund.checkup import render_fund_checkup
+    from ui.helpers.fund_grp_health.ai import _render_ai_cross_fund_evaluation
+    from ui.helpers.fund_grp_health.backtest_section import (
+        render_allocation_backtest_section,
+    )
+    from ui.helpers.fund_grp_health.correlation import _render_correlation_matrix
+    from ui.helpers.fund_grp_health.dividend import _render_dividend_matrix
+    from ui.helpers.fund_grp_health.risk import _render_oversold_badges
+    from ui.helpers.fund_grp_health.rotation import render_rotation_section
 
     st.divider()
     st.markdown("#### 🔬 逐檔健診與互斥分析")
@@ -991,6 +1104,24 @@ def _render_delegated_sections() -> None:
     # ⚠️ `safe_section` **不吞例外**（§1）：走 `system_error()` 顯式紅框 ＋ traceback。
     safe_section("基金體檢", lambda: render_fund_checkup(_funds, expanded=True))
     safe_section("持倉互斥避險", lambda: render_mutual_exclusion_section(_funds))
+
+    # ── 以下五塊拆自 `render_fund_grp_health_extras`，**只接線框判給 ② 的那些** ──
+    #    ⛔ 屬 ③ 的五塊（投資試算／TER＋持股／Bollinger／個股新聞／三率穿透）
+    #       一支都沒有接，清單見 :data:`MOVED_TO_PAGE_03`。
+    #    ⚠️ 順序照線框 §04「留 ②」那一列的敘述走：先跨檔矩陣、再風險、再輪動、最後 AI。
+    safe_section("真實收益矩陣", lambda: _render_dividend_matrix(_funds))
+    safe_section("持股相關性矩陣", lambda: _render_correlation_matrix(_funds))
+    safe_section("−2σ 超跌警示", lambda: _render_oversold_badges(_funds))
+    safe_section("輪動配對建議", lambda: render_rotation_section(_funds))
+    # 🔁 配置回測 —— 線框 §04「留 ② 原位」，標註「教學非建議」。
+    # ⚠️ 它吃的是 rich fund dict（含 `series` 原幣 NAV ＋ `currency`），
+    #    `<2 檔有序列` 時它自己會印標題 ＋ 一句灰字說明缺什麼，**不會靜默消失**。
+    safe_section("配置回測", lambda: render_allocation_backtest_section(_funds))
+    # ⑫ AI 跨檔評論 —— 線框「留 ②（按鈕觸發）」。
+    # ⚠️ **這一支是本頁唯一會產生外部 API 呼叫與本機磁碟寫入的委派**
+    #    （Gemini ＋ `repositories/ai_cache.py` 的原子寫），但**兩者都由按鈕觸發、
+    #    且都不是 Google Sheet 寫入** —— 零寫入守衛守的是 Sheet，這一點不要混淆。
+    safe_section("AI 跨檔評論", lambda: _render_ai_cross_fund_evaluation(_funds))
 
 
 def render_holdings_health() -> None:
