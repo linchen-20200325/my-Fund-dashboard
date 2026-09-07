@@ -147,6 +147,111 @@
   </p>
 </div>
 
+<div class="banner" style="margin:10px 0 16px">
+  <b>⚠️ 2026-09-07 時效註 —— 下面那三條原文一個字都沒有改，這是<u>補註</u>，不是更正。</b>
+  <p style="margin:8px 0 0" class="small">
+    決策者：<b>AI 總管</b>　·　查證：<b>文件與治理組</b>（單組實測，<b>未經第二組複驗</b>）　·
+    量測基準：<code>origin/main</code> ＝ <code>c6b4d1b</code>，量測日 <b>2026-09-07</b>。
+  </p>
+
+  <p style="margin:10px 0 0">
+    <b>下面那三條在 2026-09-06 寫下的當天全部為真</b>，本註不推翻其中任何一條。
+    被推翻的是它們的<b>前提</b>：它們描述的 ② 是<b>舊 ②</b>（<code>ui/tab_fund_grp_health.py</code>），
+    而<b>「② 這一格掛的是哪一支 render」在本草稿寫下的隔天之內換了兩次</b>。
+  </p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>時間（UTC）</th><th>commit</th><th>② 這一格掛誰</th><th>第一條 bullet 那句話</th></tr>
+    <tr><td>2026-09-06</td><td>本草稿寫下</td><td>舊 ②</td><td><b>真</b></td></tr>
+    <tr><td>2026-09-07 13:46</td><td><code>c321c0a</code>（#811）</td>
+        <td><b>換成新 ②</b> <code>ui/views/page_02_health.py</code></td>
+        <td><b>假</b>（維持約 3 小時 14 分）</td></tr>
+    <tr><td>2026-09-07 17:00</td><td><code>c6b4d1b</code>（#814 雙軌並行）</td>
+        <td><b>舊 ② 接回 ②</b>；新 ② 改掛 <code>⑥ [新] 💊 持倉體檢</code></td>
+        <td><b>又變回真，但不再窮舉</b></td></tr>
+  </table>
+  </div>
+
+  <p style="margin:10px 0 0">
+    <b>所以今天畫面上是三個東西，不是兩個</b>（逐項實測；<b>刻意不寫行號</b> ——
+    行號在任何一次重構後就失效，而重構不會觸發本草稿更新）：
+  </p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>使用者看到的分頁</th><th>入口</th><th>本金口徑</th><th>使用者改得動嗎</th></tr>
+    <tr><td><b>② 💊 持倉體檢</b></td>
+        <td><code>ui/tab_fund_grp_health.py::render_fund_grp_health_tab</code>（<b>舊 ②</b>）</td>
+        <td><b>齊頭統一</b>（widget <code>value=1_000_000.0</code>）</td>
+        <td>✅ 可調 1 萬～1000 萬，但<b>對所有基金是同一個值</b></td></tr>
+    <tr><td><b>⑥ [新] 💊 持倉體檢</b></td>
+        <td><code>ui/views/page_02_health.py::render_holdings_health</code>（<b>新 ②</b>）</td>
+        <td><b>各檔實際 <code>invest_twd</code></b>（餵 <code>portfolio_funds</code> 進舊模組）</td>
+        <td>⛔ 畫面上<b>有</b>一個「本金（TWD）」框，但它<b>沒有下游</b>（見下一段）</td></tr>
+    <tr><td><b>③ 🔍 標的探索 › 批次分析</b></td>
+        <td><code>ui/views/page_03_research.py</code></td>
+        <td><b>齊頭統一 100 萬</b>（<code>BATCH_PRINCIPAL_TWD = 1_000_000.0</code>）</td>
+        <td>⛔ <b>整頁沒有本金 widget</b>，連改都改不了</td></tr>
+    <tr><td><b>④ 📊 資產配置</b></td>
+        <td><code>ui/tab3_portfolio.py::render_portfolio_tab</code></td>
+        <td><b>各檔實際 <code>invest_twd</code></b></td>
+        <td>—（第二條半句「走實際持倉金額的是 Tab3」<b>今天仍然成立</b>）</td></tr>
+  </table>
+  </div>
+
+  <p style="margin:10px 0 0">
+    ⚠️ <b>怎麼讀第一條 bullet，兩個方向都不要走偏</b>：那句「健診 Tab 在『統一 100 萬』那一側」
+    <b>對今天的「② 💊 持倉體檢」這一格仍然成立</b>（舊 ② 已接回原位）；
+    <b>但它不再窮舉</b> —— 現在多了一個同樣叫「持倉體檢」的 <code>⑥ [新] 💊 持倉體檢</code>，
+    而它的本金口徑<b>相反</b>。
+    ⛔ 不要把本註讀成「Q3 講反了」，也<b>不要</b>讀成「Q3 沒事、不必看」。
+    <b>它的問題是「不完整」，不是「說反」。</b>
+  </p>
+
+  <p style="margin:10px 0 0">
+    ⚠️ <b>新 ② 畫面上還留著一個講反話的死 widget，據實寫明（本組自己實測，不是轉述）</b>：
+    <code>ui/views/page_02_health.py</code> 有一個 <code>st.number_input("本金（TWD）")</code>，
+    <b>它真的會畫出來</b>（<code>render_holdings_health</code> →
+    <code>safe_section("診斷條件", _render_filter_form)</code>，本組以呼叫圖實測可達）。
+    它的 <code>help</code> 逐字：「<b>所有基金都假設投入這個金額</b>…<b>這不是你的實際投入金額。</b>」
+    —— 而<b>同一頁實際餵下去的正是「你的實際投入金額」</b>。
+    使用者拖動它，<b>畫面上一個數字都不會變</b>：值只寫進 session，再被同一個框讀回來當預設值，
+    <b>閉環，沒有第三個消費者</b>。
+  </p>
+  <p style="margin:8px 0 0" class="small">
+    ⚠️ <b>「0 caller」要講精確，不要誇大</b>：供應它的 <code>_principal_twd()</code>
+    在<b>全 repo 的呼叫點 0、裸參照 0</b>（AST 掃描；正對照：植入一行呼叫後掃得到，
+    負對照：不存在的名字 0 命中）。<b>但它不是沒人提到</b> ——
+    <code>tests/test_wf02_health_skeleton.py</code> 有一條<b>靜態守衛</b>釘住它必須存在、
+    必須讀 <code>_applied_filters()</code>、body 不得出現 <code>_holdings</code> /
+    <code>sum(</code> / <code>invest_twd</code>。那是<b>守衛，不是消費者</b>。
+    所以正確的說法是「<b>production 0 消費者</b>」，不是「沒有任何東西引用它」。
+    ⛔ 本批<b>不動那個檔</b>（它在另一個 PR 的檔案邊界內），已具名回報總管。
+  </p>
+
+  <p style="margin:10px 0 0">
+    📌 <b>要判斷「畫面上現在顯示什麼」，讀原始碼，不要讀本草稿</b> ——
+    本草稿是 <b>2026-09-06 的提案紀錄</b>，不是現況文件：
+  </p>
+  <ul class="small" style="margin-top:6px">
+    <li><b>哪一格掛哪一支</b> → <code>app.py</code> 的 <code>st.tabs([...])</code> 那一段
+        （分頁名走 <code>ui/helpers/story_nav.py</code> 的 <code>tab_label()</code> /
+        <code>preview_tab_label()</code> 兩張表）。</li>
+    <li><b>③ 的本金口徑</b> → <code>ui/views/page_03_research.py</code> 的
+        <code>BATCH_PRINCIPAL_TWD</code> 與其上方註解（<b>那段自己就記著本草稿 Q3 這件事</b>）。</li>
+    <li><b>新 ② 餵什麼進舊模組</b> → <code>ui/views/page_02_health.py</code> 的
+        <code>_render_delegated_sections</code> docstring。</li>
+  </ul>
+
+  <p style="margin:10px 0 0" class="small">
+    <b>本註沒有查的範圍（不寫全稱句）</b>：沒有起 Streamlit、<b>沒有真的渲染過任何一頁</b>
+    （沙箱無 streamlit／pandas），以上全部是<b>靜態追蹤</b>（AST ＋ 呼叫圖 ＋ blob 比對）；
+    <b>沒有</b>逐頁查 ①④⑤⑦ 是否另有第三種本金口徑 —— 上表是<b>已知分類，不是窮舉</b>；
+    <b>沒有</b>查後續 PR 會不會再動那個 widget。
+  </p>
+</div>
+
 <p><b>先講實測到的事實（三條，都可自驗）：</b></p>
 <ul class="small">
   <li><code>services/fund_row.py</code> 的 <code>process_one_fund</code> docstring 逐字：
