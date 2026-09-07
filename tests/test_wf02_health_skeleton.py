@@ -1556,10 +1556,19 @@ def test_every_delegated_entry_is_actually_called():
 #: 核准線框 `docs/wireframes/wireframe-macro-health.html` 的
 #: 「Form ②-A　健診輸入（防全頁重繪）」內**逐字**寫著「本金（TWD）：1,000,000」。
 #: 三個界值沿用舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`。
+#: ⭐ **2026-09-07 稽核補：`_PRINCIPAL_STEP` 原本不在這份表裡。**
+#: 舊表只釘 `value` / `min` / `max` 三個 ⇒ **`step` 被改掉不會有任何守衛轉紅**。
+#: 本組 2026-09-07 覆核舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`：
+#: `min_value=10_000.0, max_value=10_000_000.0, value=1_000_000.0, step=100_000.0`
+#: —— **四個值逐字相同**。
+#: ⚠️ `step` 不只是手感：它決定使用者「按一下加多少」。改成 `1.0` 會讓這一欄要按
+#: 一百萬次才走得完；改成 `1_000_000.0` 則整條區間只剩幾個可選值。
+#: **會影響使用者實際能輸入什麼的東西，就該被釘住。**
 _WIREFRAME_PRINCIPAL = {
     "_DEFAULT_PRINCIPAL_TWD": 1_000_000.0,
     "_PRINCIPAL_MIN": 10_000.0,
     "_PRINCIPAL_MAX": 10_000_000.0,
+    "_PRINCIPAL_STEP": 100_000.0,
 }
 
 

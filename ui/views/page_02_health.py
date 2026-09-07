@@ -308,22 +308,36 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
 #:       → ui.helpers.fund_grp_health.rotation::_render_pairs_ui
 #:       → ui.helpers.fund_grp_health.rotation::_render_pairs_body   ← 寫入槽
 #:
-#: **渲染期就會碰到，不是綁在使用者點擊後面**：那個呼叫是
-#: `st.download_button(..., _out.to_csv(...).encode("utf-8-sig"), ...)` 的**引數**，
-#: 必須在按鈕建立**之前**求值 —— 使用者沒有按任何東西，它就已經被呼叫了。
+#: ~~**渲染期就會碰到，不是綁在使用者點擊後面**：那個呼叫是~~
+#: ~~`st.download_button(..., _out.to_csv(...).encode("utf-8-sig"), ...)` 的**引數**，~~
+#: ~~必須在按鈕建立**之前**求值 —— 使用者沒有按任何東西，它就已經被呼叫了。~~
 #:
-#: ⚠️ **本組的觀察，據實記，但它沒有解除這一列**：那個 primitive 是
-#: `DataFrame.to_csv()`，**沒有傳路徑**，回傳的是記憶體字串。
-#: ⛔ **但本組拿不出「呼叫圖 ＋ 執行期哨兵」兩者兼備的誤報證據**
-#: （本機沒有 streamlit，跑不了執行期哨兵）—— **證據不齊就不主張誤報**，
-#: 而且既有裁決是「**零寫入**」而不是「非明示不寫」，所以**照裁決拿掉**。
+#: ⚠️ **2026-09-07 更正：上面那句機制是錯的。有意識的更正，不是漏刪。**
+#: **決策者：AI 總管（依獨立稽核實跑）**。本組已自行覆核（AST 實測，逐條）：
+#:   - `_render_pairs_body` 的 `to_csv` **包在 `if offer_download:` 裡**；
+#:   - 本檔委派的 `render_rotation_section` **硬編 `offer_download=False`**；
+#:     傳 `True` 的是 `render_rotation_section_from_df`（**批次分頁，不是這一支**）。
+#:   → **舊敘述只對批次那一支成立，對被委派的這一支不成立。**
 #:
-#: ✅ **它要回到 ② 的前提（寫清楚，才不會變成沒有出口的待辦）**：
-#:   (1) `nav_history` 涵蓋範圍調查有結論、② 零寫入裁決被更新；**或**
-#:   (2) 有人補齊「這個 `to_csv()` 是記憶體內操作」的**雙重證據**
-#:       （呼叫圖 ＋ 執行期哨兵實跑），由總管裁決該守衛的判定要不要收窄。
-#: ⛔ **在那之前不得把它加進 `DELEGATED_ENTRIES`，也不得改守衛去配合它**
-#:    —— 動守衛去配合實作，是本 repo 反覆吃虧的形狀。
+#: ✅ **守衛為什麼還是紅（這才是真正的機制）**：
+#: `_sink_targets` 是**函式粒度的名字哨兵** —— 只要函式體內**任何位置**出現
+#: `.to_csv(`（`ast.walk`，**不看分支、不看可達性、不看引數**），就把**整顆函式**
+#: 登記為寫入槽、並把函式物件換成 recorder。
+#: ⇒ 那筆紅是記在**進入** `_render_pairs_body` 的當下，**函式體一行都沒跑**。
+#: ⇒ **對這個 call site 而言它是偽陽性。**
+#: 📌 佐證：同一份 PR 的另一條守衛判定相反 —— `_callgraph_sheet_writes` 對
+#:    `render_rotation_section` 是 **hits 0**（`to_csv` 不在 `_SHEET_WRITE_METHODS`，
+#:    那條只管 Google Sheet）。
+#:
+#: ⛔ **但「偽陽性」不是把它接回來的理由，也不是改守衛的理由。**
+#: `to_csv` 是依前次稽核**刻意補進**名字清單的，判準是「名字含不含糊」。
+#: **在合併壓力下放寬守衛，正是本 repo 反覆吃虧的形狀。**
+#:
+#: ✅ **它要回到 ② 的前提（2026-09-07 更正：前提換了，因為舊前提繫於錯的機制）**：
+#:   ~~(1) `nav_history` 涵蓋範圍調查有結論；(2) 補齊呼叫圖 ＋ 執行期哨兵雙重證據。~~
+#:   → **改為：等守衛能分辨「分支／引數」之後**（也就是 `_sink_targets` 不再是
+#:     純函式粒度的名字比對）。**總管已另開一單處理守衛精度，不併進本批。**
+#: ⛔ **在那之前不得把它加進 `DELEGATED_ENTRIES`，也不得改守衛去配合它。**
 DROPPED_FOR_ZERO_WRITE: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.rotation", "render_rotation_section"),
 )
@@ -1151,19 +1165,28 @@ def _render_delegated_sections() -> None:
     # ⚠️ **這一支是本頁唯一還會碰到寫入 primitive 的委派**
     #    （Gemini API ＋ `repositories/ai_cache.py` 的本機原子寫）。
     #
-    # ⭐ **它與被拿掉的「輪動配對」差在哪 —— 這一段是實測，不是推論**
-    #    （2026-09-07，`44a1474` 那次 CI 紅燈之後逐條查的）：
+    # ~~⭐ 它與被拿掉的「輪動配對」差在哪 —— 這一段是實測，不是推論：~~
+    # ~~  輪動配對  `to_csv(...)` 是 `st.download_button(...)` 的引數 ⇒ 渲染期無條件求值。~~
+    # ~~  AI 跨檔   `ai_cache.save(...)` 的外層守衛是 `try` → `if run` → `with st.container()`，~~
+    # ~~            而 `run = st.button(...)`；假 streamlit（`_Rec`）對 `button` 回 `False`~~
+    # ~~            ⇒ 該分支不執行。~~
+    # ~~  ⛔ 若日後假 streamlit 改成 `button` 回 `True`，這一支會變成第二顆紅燈。~~
     #
-    #      輪動配對  `_render_pairs_body` 的 `to_csv(...)` 是
-    #                `st.download_button(...)` 的**引數** ⇒ **渲染期無條件求值**
-    #                ⇒ 執行期哨兵當場記一筆 ⇒ **紅**。（已移出，見 DROPPED_FOR_ZERO_WRITE）
-    #      AI 跨檔    `ai_cache.save(...)` 的外層守衛（AST 實測，由內而外）是
-    #                `try` → **`if run`** → `with st.container()`，
-    #                而 `run = st.button(...)`；守衛測試的假 streamlit
-    #                （`_Rec`）對 `button` **回傳 `False`** ⇒ 該分支不執行。
-    #    ⇒ **兩者都不是 Google Sheet 寫入，但只有前者在渲染期會被碰到。**
-    #    ⛔ 若日後那個假 streamlit 改成 `button` 回 `True`，這一支會變成第二顆紅燈 ——
-    #       屆時**照裁決把它也移進 `DROPPED_FOR_ZERO_WRITE`，不要改守衛**。
+    # ⚠️ **2026-09-07 更正：上面整段機制是錯的。有意識的更正，不是漏刪。**
+    #    **決策者：AI 總管（依獨立稽核實跑四個變體）**。稽核實測：**`button=True` 仍不紅**。
+    #    ⇒ 我原本寫的「靠 `_Rec.button` 回 `False` 擋住」**不成立**，
+    #      連帶那句「改回 `True` 就會變第二顆紅燈」也是錯的。
+    #
+    # ✅ **真正先擋住的是更前面的一道早退**（本組 AST 覆核 `ai.py` 確認）：
+    #    `_render_ai_cross_fund_evaluation` 在呼叫 `render_ai_summary_widget` **之前**
+    #    就有 `if not _key: st.caption("⬜ 未設定 GEMINI_API_KEY…"); return`
+    #    ⇒ **CI 沒有 `GEMINI_API_KEY`，所以三個 `st` 呼叫之後直接返回，連 button 都走不到。**
+    #
+    # ⚠️ **據實講清楚這個結論靠什麼成立**：它**依賴「CI 環境沒有 `GEMINI_API_KEY`」**，
+    #    而那不是本檔能保證的事。⇒ **若哪天 CI 設了那把 key，這一支就會往下走**，
+    #    屆時 `ai_cache.save`（`tempfile.mkstemp` ＋ `os.replace` 的**本機磁碟**寫，
+    #    **不是** Google Sheet）會不會被碰到，**必須重驗**。
+    #    ⛔ 真的紅了就**照裁決移進 `DROPPED_FOR_ZERO_WRITE`，不要改守衛**。
     safe_section("AI 跨檔評論", lambda: _render_ai_cross_fund_evaluation(_funds))
 
 
