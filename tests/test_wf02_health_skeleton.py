@@ -1555,7 +1555,10 @@ def test_every_delegated_entry_is_actually_called():
 # ══════════════════════════════════════════════════════════════════════
 #: 核准線框 `docs/wireframes/wireframe-macro-health.html` 的
 #: 「Form ②-A　健診輸入（防全頁重繪）」內**逐字**寫著「本金（TWD）：1,000,000」。
-#: 三個界值沿用舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`。
+#: **本表列出的各界值**沿用舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`。
+#: ⚠️ **刻意不寫「N 個」** —— 這份表會被增減（`_PRINCIPAL_STEP` 就是 2026-09-07
+#: 補進來的，而當時舊敘述留了個「三個」沒跟著改）。**本表自己就是權威清單，
+#: 數量看 `len(_WIREFRAME_PRINCIPAL)`，不要在散文裡再抄一份會過期的數字。**
 #: ⭐ **2026-09-07 稽核補：`_PRINCIPAL_STEP` 原本不在這份表裡。**
 #: 舊表只釘 `value` / `min` / `max` 三個 ⇒ **`step` 被改掉不會有任何守衛轉紅**。
 #: 本組 2026-09-07 覆核舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`：
@@ -1585,17 +1588,24 @@ def _page_scalar(name: str):
 
 @pytest.mark.parametrize("const,expected", sorted(_WIREFRAME_PRINCIPAL.items()))
 def test_the_principal_input_keeps_the_wireframe_numbers(const, expected):
-    """本金三個界值必須**逐字等於**核准線框／舊 ② 的數字。
+    """本金的**每一個界值**（:data:`_WIREFRAME_PRINCIPAL` 逐鍵）必須**逐字等於**
+    核准線框／舊 ② 的數字。
 
     ⚠️ 本條擋的不是「數字漂移」這種抽象風險，是一個**具體的、我自己差點犯的錯**：
     這一欄的語意是「**假設每檔都投入這個金額**」的比較基準，
     一旦有人把它改成使用者的實際投入（或任何推導值），
     畫面上每一個「可申購單位／每月配息 TWD」都會變，而**使用者看不出來**（§1）。
     數字被釘住，改動就必須先過這條、必須在 diff 裡解釋。
+
+    ⚠️ **本 docstring 刻意不寫「N 個界值」** —— 它原本寫「三個」，而
+    `_PRINCIPAL_STEP` 在 2026-09-07 補進表裡之後那個「三」就過期了，
+    **一支主題正是「數字會漂移而沒人發現」的守衛，自己留了一個過期數字**。
+    參數化直接吃 `_WIREFRAME_PRINCIPAL.items()`，**數量由表決定，散文不再抄一份**。
     """
     assert _page_scalar(const) == expected, (
         f"{const} 從 {expected} 變成 {_page_scalar(const)}。\n"
-        "這三個值出自核准線框 `wireframe-macro-health.html` 的「Form ②-A 健診輸入」"
+        f"`_WIREFRAME_PRINCIPAL` 釘住的 {len(_WIREFRAME_PRINCIPAL)} 個值全部出自核准線框 "
+        "`wireframe-macro-health.html` 的「Form ②-A 健診輸入」"
         "與舊 ② 的 `st.number_input`，**不是本頁自己挑的**。\n"
         "要改請先確認線框改了，並在 PR 說明語意有沒有跟著變。")
 

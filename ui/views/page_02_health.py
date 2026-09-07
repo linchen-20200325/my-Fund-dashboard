@@ -190,8 +190,11 @@ _WINDOW_MAX: int = 36
 
 #: 本金（TWD）—— **核准線框 `docs/wireframes/wireframe-macro-health.html` 的
 #: 「Form ②-A　健診輸入（防全頁重繪）」內逐字寫著「本金（TWD）：1,000,000」**
-#: （本組 2026-09-06 自行開檔核對，非轉述）。三個界值沿用舊 ②
+#: （本組 2026-09-06 自行開檔核對，非轉述）。**下列各界值**沿用舊 ②
 #: `ui/tab_fund_grp_health.py` 的 `st.number_input`，**不是本組挑的**。
+#: ⚠️ **刻意不寫「N 個」** —— 這幾個常數會被增減（`_PRINCIPAL_STEP` 就是 2026-09-07
+#: 補進來的），寫死數量等於埋一個下一輪會過期的數字。**權威清單是
+#: `tests/test_wf02_health_skeleton.py::_WIREFRAME_PRINCIPAL`，那裡有守衛釘住值。**
 #:
 #: ⚠️ **它的語意是「假設每檔都投入這個金額」的比較基準，不是使用者的實際持倉金額。**
 #: ⛔ **不得**改用 `sum(invest_twd)` 之類推導 —— 那會把「每檔各投入 N」
