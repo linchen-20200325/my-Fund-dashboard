@@ -45,13 +45,34 @@
   在渲染那一小段被換成記名哨兵（本地 JSON 後端那一路）。
 * **跨函式／動態呼叫** —— 上面兩層都是**行為**測試，渲染真的跑一輪；
   不管呼叫端怎麼 import、取什麼別名，只要真的動到就會撞上。
-  ⇒ 這正是本檔**不**做 `import` 來源白名單、也**不**比對函式名的原因：
+  ⇒ 這正是~~本檔~~ **行為層**（**2026-09-07 更正措辭，見下一則**）**不**做 `import` 來源白名單、
+  也**不**比對函式名的原因：
   `from m import f as _g` / `importlib.import_module("a."+"b")` / `g = m.f` 再 `g()` / `getattr`
   這四種寫法在本 repo 都實測繞得過名字型守衛，但**繞不過「真的被呼叫到」**。
+* **靜態層的別名、與「把寫入當值傳出去」** —— §7 的結構規則（:func:`_refs`）**2026-09-07**
+  把命中條件由「只走 `ast.Call`、只比對字面名字」放寬為「**呼叫 ＋ 裸參照**」，並補上別名解析
+  （import 別名／賦值別名做到不動點）。放寬前這兩種在靜態層是**全綠**的（當日實測）：
+
+      _f = _sv ; _f(None)                     # 別名規避
+      _with_quota_retry(ws.update, "A1", [])  # 當引數傳給包裝器（`ast.Attribute` 不是 `ast.Call`）
+
+  ⚠️ 上一則原本寫「**本檔**不比對函式名」—— 那句話**對 §7 從來就不精確**（§7 一直在比對名字），
+  2026-09-07 之後更不精確，故把主詞縮回**行為層**。**它想講的事沒有變**：
+  行為層之所以擋得住，正是因為它不靠名字。
 
 **看不見（已知缺口，不要當成保證）**
 
 * **哨兵只在渲染那一小段生命週期內生效**；渲染之外的寫入本檔看不到。
+* **靜態層看不到「靜態期根本不存在的名字」** —— `getattr(o, "a" + "b")`、
+  `importlib.import_module("a." + "b")` 這一類，屬性名／模組名是**執行期才拼出來的**，
+  任何靜態解析都讀不到，:func:`_refs` 也一樣。
+  ⛔ **不要把 2026-09-07 那次放寬讀成「靜態層守得住了」** —— 它補的是
+  「**名字寫得出來、只是換了個寫法**」那兩種，補不到「**名字根本不在原始碼裡**」。
+  這一類**在本檔靠行為層擋**（哨兵不看名字，只看有沒有真的被呼叫到）。
+  ⚠️ 對照 `tests/test_readonly_query_paths.py`（#796）：那一支守的是**沒有行為層可靠**的讀路徑，
+  所以它多做一件事 —— 把整個形狀禁掉（`_dynamic_backdoors`）。
+  **本檔刻意不照抄那一招**：這裡的動態寫法有行為層真的擋得住，
+  再加一條形狀禁令只會禁到無辜的 `getattr`，而擋不到任何本檔擋不住的東西。
 * **`_DenyByDefaultWorksheet` 只擋「經過這個假件」的寫入**。若有人繞過
   `get_perf_store()`／`_sh`、自己另開一個 gspread client，本檔的假件根本不在那條路上。
   磁碟哨兵沒有這個問題（它換的是 `pathlib` / `os` 本身）。
@@ -695,6 +716,12 @@ def test_reading_local_snapshots_creates_no_directory(tmp_path):
 # ══════════════════════════════════════════════════════════════════════
 # 7｜結構 —— 寫入呼叫只能長在按鈕的 `if` 正分支裡
 # ══════════════════════════════════════════════════════════════════════
+#: 「渲染不得碰」的寫入入口（`_maybe_snapshot` 是 2026-09-06 之前那個無條件寫入的舊名字）。
+_WRITE_ENTRIES = ("append_snapshot", "_maybe_snapshot")
+#: 唯讀開啟器 `_ws()` 裡不得出現的寫入動詞。
+_WS_WRITE_VERBS = ("add_worksheet", "update", "append_row", "batch_update")
+
+
 def _tree(rel: str) -> ast.Module:
     return ast.parse((ROOT / rel).read_text(encoding="utf-8"))
 
@@ -706,32 +733,149 @@ def _func(tree: ast.Module, name: str) -> ast.FunctionDef:
     raise AssertionError(f"找不到函式 {name}()")
 
 
-def _calls(node: ast.AST) -> "list[str]":
-    out = []
+def _method(tree: ast.Module, cls_name: str, name: str) -> ast.FunctionDef:
+    cls = next(n for n in ast.walk(tree)
+               if isinstance(n, ast.ClassDef) and n.name == cls_name)
+    return next(n for n in cls.body
+                if isinstance(n, ast.FunctionDef) and n.name == name)
+
+
+def _src(node: ast.AST) -> str:
+    """把節點還原成可讀的一小段原始碼，純為了錯誤訊息。"""
+    try:
+        return ast.unparse(node)
+    except Exception:                       # pragma: no cover — 舊 runtime 沒有 ast.unparse
+        return getattr(node, "attr", "") or getattr(node, "id", "") or "<expr>"
+
+
+def _bindings(tree: ast.Module) -> "dict[str, str]":
+    """這個檔案裡每個名字**最後**綁到的原始符號名 —— 別名解析。
+
+    ⚠️ **做法沿用 `tests/test_readonly_query_paths.py::_pool_symbol_bindings`（#796）**，
+    不是新發明的解析器；差別只有一處，寫在下面 ③。
+
+    認的形狀：
+
+      ① `from m import append_snapshot`          → ``{"append_snapshot": "append_snapshot"}``
+      ② `from m import append_snapshot as _sv`   → ``{"_sv": "append_snapshot"}``
+      ③ `import m as P` → `P.append_snapshot(…)` → **不需要模組別名表**：本檔的 want 是
+         **裸符號名**（`update` / `button` / `_ws_for_write` 這些本來就長在任意物件上），
+         所以 `ast.Attribute` 那一支直接比對 `.attr` 就命中。
+         （#796 的 want 是「某個模組匯出的符號」，才需要限定 base 是該模組的別名。）
+      ④ `g = _sv` / `g = ws.update` → `g(…)`     → 賦值別名，**做到不動點**
+         （`g = _sv; h = g` 這種鏈也要跟上）。
+
+    ⚠️ ④ 只認**值是裸 `Name` 或 `Attribute`** 的賦值 —— 也就是「把函式物件本身存起來」那一種。
+    `x = f(...)`（值是 `ast.Call`）**不算**，否則整份檔案的每個區域變數都會被綁進來。
+    """
+    binds: "dict[str, str]" = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.name != "*":
+                    binds[a.asname or a.name] = a.name
+
+    for _ in range(8):                      # 8 圈護欄，防病態輸入
+        grew = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            tgt, val = node.targets[0], node.value
+            if not isinstance(tgt, ast.Name):
+                continue
+            if isinstance(val, ast.Name):
+                orig = binds.get(val.id, val.id)
+            elif isinstance(val, ast.Attribute):
+                orig = val.attr
+            else:
+                continue
+            if binds.get(tgt.id) != orig:
+                binds[tgt.id] = orig
+                grew = True
+        if not grew:
+            break
+    return binds
+
+
+def _refs(node: ast.AST, tree: ast.Module, want) -> "list[tuple[str, str, int, str]]":
+    """`node` 這棵子樹裡，對 `want` 那組符號的**任何參照** —— 不只是呼叫。
+
+    回 ``[(原始符號, 實際寫法, 行號, 形態)]``，形態為 ``"call"`` 或 ``"ref"``。
+
+    ⚠️ **2026-09-07 由「只看呼叫」擴為「呼叫 ＋ 裸參照」，並補上別名解析**
+    （**有意識的更正，不是漏刪** · 日期 **2026-09-07** · 決策者：**AI 執行組**，
+    依憲法 §8.3.P 登記的 `P-CALLSTATIC-1`）。舊名 ``_calls()``。
+
+    **舊寫法的理由仍然成立**：「有沒有被呼叫」是最直接的問法，訊息也最好讀。
+    **被權衡掉的是它的射程** —— 它只走 `ast.Call` 節點、而且只比對字面名字，於是
+    **兩種形態在靜態層整個看不見**（2026-09-07 於 `810ebc5` 實測，逐字紀錄，不是推測）：
+
+        _f = _sv ; _f(None)                     # ← 舊規則 GREEN（別名規避）
+        _with_quota_retry(ws.update, "A1", [])  # ← 舊規則 GREEN（當引數傳出去）
+
+    第二種的根因是 `ws.update` 在 AST 上是**引數位置的 `ast.Attribute`，不是 `ast.Call`**。
+
+    ⚠️ **這不是假想敵**：`repositories/snapshot_repository.py` 有 **12** 處
+    `_with_quota_retry(ws.append_row, …)`、`repositories/policy/v2.py` 有 **3** 處
+    （量測日 **2026-09-06**，數字引自 #796，本組未重新清點；⛔ 那兩檔是既有寫入面、
+    有它們自己的正當用途，**不在本規則射程內**）。
+    **一個只掃 `Call` 的掃描器，在那些檔上會回報 0。**
+
+    **現行命中條件**：只要一個名字**最後綁到 `want` 裡的符號**，
+    **不論它是被呼叫、還是被當成值傳出去／存起來**，一律命中。
+
+    ⚠️ `Store` context 刻意排除：``_g = ws.update`` 這一行命中的是**右側**那個
+    `ws.update`（ref），不是左側被賦值的 `_g` —— 否則同一處會被算兩次。
+    **但「先存起來、之後才呼叫」不會因此漏掉**：後面那個 `_g` 是 `Load`，
+    經 :func:`_bindings` 解析回 `update` 照樣命中
+    （:func:`test_the_assigned_name_is_not_counted_twice` 就是釘這件事的）。
+    """
+    binds = _bindings(tree)
+    # 先記住哪些節點站在「呼叫的 func 位置」，好把 call 與 ref 分開標（不重複計數）
+    call_funcs = {id(n.func) for n in ast.walk(node) if isinstance(n, ast.Call)}
+
+    hits: "list[tuple[str, str, int, str]]" = []
     for n in ast.walk(node):
-        if isinstance(n, ast.Call):
-            f = n.func
-            out.append(f.id if isinstance(f, ast.Name)
-                       else f.attr if isinstance(f, ast.Attribute) else "")
-    return out
+        if isinstance(n, ast.Name):
+            if isinstance(n.ctx, ast.Store):
+                continue
+            origin, spelled = binds.get(n.id, n.id), n.id
+        elif isinstance(n, ast.Attribute):
+            if isinstance(n.ctx, ast.Store):
+                continue
+            origin, spelled = n.attr, _src(n)
+        else:
+            continue
+        if origin not in want:
+            continue
+        hits.append((origin, spelled, n.lineno,
+                     "call" if id(n) in call_funcs else "ref"))
+    return sorted(hits, key=lambda h: (h[2], h[1]))
 
 
 def test_the_render_function_never_calls_the_writer_directly():
-    """`render_portfolio_tracking()` 自己**不得**出現 `append_snapshot` ——
+    """`render_portfolio_tracking()` 自己**不得**參照 `append_snapshot` ——
     寫入只能經由 :func:`_snapshot_control`（而它由按鈕守著）。
 
-    ⚠️ 本條是**結構**輔助，不是主守衛：改個別名就繞得過去。
-    真正擋得住的是上面那組行為測試（哨兵不看名字，只看有沒有真的被呼叫到）。
-    兩條並存的理由是**壞掉的方式不同** —— 結構這條會在 code review 的
-    diff 上直接顯眼，行為那條會在 CI 上轉紅。
+    ⚠️ ~~本條是**結構**輔助，不是主守衛：改個別名就繞得過去。~~
+    → **2026-09-07 更正（有意識的更正，不是漏刪 · 決策者：AI 執行組）**：
+    **「改個別名就繞得過去」已經不成立** —— :func:`_refs` 會把 import 別名與賦值別名
+    解回原始符號（:func:`test_bypass_1_alias_then_call_is_caught` 釘住）。
+    **舊敘述的用意仍然成立**（結構層本來就比行為層弱、不該被當成主守衛），
+    **被權衡掉的只有它舉的那個例子** —— 它把一個**已經補上**的洞寫成永久性質，
+    會讓後人以為這一層本來就守不住別名，而不去修它。
+    **現在仍然守不到的是「靜態期不存在的名字」**（`getattr(o, "a"+"b")` /
+    `importlib.import_module`），那一類靠行為層擋，見模組 docstring。
 
-    突變驗證：在 `render_portfolio_tracking` 內加一行 `append_snapshot(...)` → 本條轉紅。
+    突變驗證（2026-09-07 實跑）：在 `render_portfolio_tracking` 內加一行
+    `append_snapshot(...)` → 本條轉紅；改成 `_f = _sv; _f(...)` → **本條同樣轉紅**。
     """
-    fn = _func(_tree(SECTION_REL), "render_portfolio_tracking")
-    bad = [c for c in _calls(fn) if c in ("append_snapshot", "_maybe_snapshot")]
+    tree = _tree(SECTION_REL)
+    bad = _refs(_func(tree, "render_portfolio_tracking"), tree, _WRITE_ENTRIES)
     assert not bad, (
-        "`render_portfolio_tracking()` 直接呼叫了寫入函式 —— 渲染就會寫：\n  "
-        f"{bad}\n寫入只能放在 `_snapshot_control()` 內、按鈕的 `if` 正分支裡。")
+        "`render_portfolio_tracking()` 參照了寫入函式 —— 渲染就會寫：\n  "
+        f"{bad}\n（形態 `ref` ＝ 沒有直接呼叫，是把它當值傳出去／存起來）\n"
+        "寫入只能放在 `_snapshot_control()` 內、按鈕的 `if` 正分支裡。")
 
 
 def test_the_write_lives_inside_the_button_branch():
@@ -742,8 +886,10 @@ def test_the_write_lives_inside_the_button_branch():
 
     突變驗證：把 `if not _clicked: return` 拿掉 → 本條轉紅。
     """
-    fn = _func(_tree(SECTION_REL), "_snapshot_control")
-    assert "button" in _calls(fn), "`_snapshot_control()` 裡沒有 `st.button` —— 沒有任何明示動作可言"
+    tree = _tree(SECTION_REL)
+    fn = _func(tree, "_snapshot_control")
+    assert _refs(fn, tree, ("button",)), (
+        "`_snapshot_control()` 裡沒有 `st.button` —— 沒有任何明示動作可言")
 
     guards = [n for n in fn.body
               if isinstance(n, ast.If)
@@ -753,11 +899,11 @@ def test_the_write_lives_inside_the_button_branch():
         "`_snapshot_control()` 沒有「沒按就 return」的提前退出 —— "
         "無法確認 `append_snapshot` 只在按下之後才走得到")
     guard_at = fn.body.index(guards[0])
-    before = [c for stmt in fn.body[:guard_at] for c in _calls(stmt)]
-    assert "append_snapshot" not in before, (
-        "`append_snapshot` 出現在「沒按就 return」之前 —— 那等於沒有閘門")
-    after = [c for stmt in fn.body[guard_at + 1:] for c in _calls(stmt)]
-    assert "append_snapshot" in after, (
+    before = [h for stmt in fn.body[:guard_at] for h in _refs(stmt, tree, ("append_snapshot",))]
+    assert not before, (
+        f"`append_snapshot` 出現在「沒按就 return」之前 —— 那等於沒有閘門：{before}")
+    after = [h for stmt in fn.body[guard_at + 1:] for h in _refs(stmt, tree, ("append_snapshot",))]
+    assert after, (
         "閘門之後找不到 `append_snapshot` —— 按下按鈕也不會寫，功能是壞的")
 
 
@@ -767,25 +913,135 @@ def test_the_read_path_does_not_reach_the_provisioning_helper():
     突變驗證：把 `load_snapshots` 的 `self._ws()` 改成 `self._ws_for_write()` → 本條轉紅。
     """
     tree = _tree(REPO_REL)
-    cls = next(n for n in ast.walk(tree)
-               if isinstance(n, ast.ClassDef) and n.name == "GoogleSheetsPerfStore")
-    load = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "load_snapshots")
-    assert "_ws_for_write" not in _calls(load), (
-        "讀路徑走到了會補建分頁的 `_ws_for_write()` —— 那正是 2026-09-06 之前的病灶")
-    write = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "append_snapshot")
-    assert "_ws_for_write" in _calls(write), (
+    bad = _refs(_method(tree, "GoogleSheetsPerfStore", "load_snapshots"), tree, ("_ws_for_write",))
+    assert not bad, (
+        f"讀路徑走到了會補建分頁的 `_ws_for_write()` —— 那正是 2026-09-06 之前的病灶：{bad}")
+    assert _refs(_method(tree, "GoogleSheetsPerfStore", "append_snapshot"), tree,
+                 ("_ws_for_write",)), (
         "寫路徑沒有走 `_ws_for_write()` —— 遠端還沒有分頁時第一次存會失敗")
 
 
 def test_the_readonly_opener_contains_no_write_verbs():
     """`_ws()`（唯讀開啟）內不得出現 `add_worksheet` / `update` 這類動詞。
 
-    ⚠️ 這是**字面**檢查，改個別名就繞得過 —— 它的價值在於讓「有人把補建搬回來」
-    這件事在 diff 上一眼看得見。真正擋得住的是
+    ⚠️ ~~這是**字面**檢查，改個別名就繞得過。~~
+    → **2026-09-07 更正（有意識的更正，不是漏刪 · 決策者：AI 執行組）**：
+    改為**參照**檢查 —— 把寫入方法**當引數傳出去**（`_with_quota_retry(ws.update, …)`）
+    現在也會命中（:func:`test_bypass_2_passed_as_an_argument_is_caught` 釘住）。
+    **舊敘述的用意仍然成立**（它想說「別把這一條當成唯一防線」），
+    **被權衡掉的是它的事實面** —— 那句話在 2026-09-07 之前是對的，現在只對「動態組出的名字」還成立。
+    真正把所有形態都擋下的仍然是
     :func:`test_read_path_never_provisions_the_sheet`（行為，不看名字）。
     """
-    cls = next(n for n in ast.walk(_tree(REPO_REL))
-               if isinstance(n, ast.ClassDef) and n.name == "GoogleSheetsPerfStore")
-    ws = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_ws")
-    bad = [c for c in _calls(ws) if c in ("add_worksheet", "update", "append_row", "batch_update")]
-    assert not bad, f"唯讀開啟器 `_ws()` 裡出現了寫入動詞：{bad}"
+    tree = _tree(REPO_REL)
+    bad = _refs(_method(tree, "GoogleSheetsPerfStore", "_ws"), tree, _WS_WRITE_VERBS)
+    assert not bad, (
+        f"唯讀開啟器 `_ws()` 裡出現了寫入動詞：{bad}\n"
+        "（形態 `ref` ＝ 沒有直接呼叫，是把它當值傳給包裝器／存起來）")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 7b｜規則自己的守衛 —— 放寬命中條件之後，它到底看得見什麼
+# ══════════════════════════════════════════════════════════════════════
+#: 繞道 ①：import 別名 → 賦值別名 → 呼叫。舊規則（只走 `ast.Call` 比對字面名）**全綠**。
+_FIXTURE_ALIAS = (
+    "from repositories.portfolio_perf_repository import append_snapshot as _sv\n"
+    "def render_portfolio_tracking():\n"
+    "    _f = _sv\n"
+    "    _f(None)\n"
+)
+#: 繞道 ②：把寫入方法當引數傳給包裝器 —— `ast.Attribute`，不是 `ast.Call`。舊規則**全綠**。
+_FIXTURE_PASSED_ARG = (
+    "class GoogleSheetsPerfStore:\n"
+    "    def _ws(self):\n"
+    "        ws = self._sh.worksheet('x')\n"
+    "        _with_quota_retry(ws.update, 'A1', [])\n"
+    "        return ws\n"
+)
+
+
+def test_bypass_1_alias_then_call_is_caught():
+    """⭐ 繞道 ①（別名規避）—— 舊規則活得下來，新規則必須抓到。
+
+        from … import append_snapshot as _sv
+        _f = _sv          # ← 賦值別名
+        _f(None)          # ← 呼叫的是 `_f`，字面上沒有 `append_snapshot`
+
+    **兩處都要看到**：`_f = _sv` 的右側（ref）＋ 之後那次呼叫（call）——
+    這正是「先存起來、之後才呼叫」的形態，排除 `Store` context 不得把它漏掉。
+    """
+    tree = ast.parse(_FIXTURE_ALIAS)
+    hits = _refs(_func(tree, "render_portfolio_tracking"), tree, _WRITE_ENTRIES)
+    assert [h[0] for h in hits] == ["append_snapshot", "append_snapshot"], (
+        f"別名規避沒被完整抓到：{hits}")
+    assert [h[3] for h in hits] == ["ref", "call"], (
+        f"「先存起來、之後才呼叫」的兩個點沒有各記一次：{hits}")
+
+
+def test_bypass_2_passed_as_an_argument_is_caught():
+    """⭐ 繞道 ②（當引數傳出去）—— #796 稽核時七種繞道裡唯一活下來的那一種。
+
+        _with_quota_retry(ws.update, "A1", [])      # 舊規則 GREEN
+
+    根因：`ws.update` 在 AST 上是**引數位置的 `ast.Attribute`，不是 `ast.Call`**。
+    """
+    tree = ast.parse(_FIXTURE_PASSED_ARG)
+    hits = _refs(_method(tree, "GoogleSheetsPerfStore", "_ws"), tree, _WS_WRITE_VERBS)
+    assert [(h[0], h[1], h[3]) for h in hits] == [("update", "ws.update", "ref")], (
+        f"把寫入方法當值傳出去仍然逃得掉：{hits}")
+
+
+def test_a_call_is_still_reported_as_a_call():
+    """⭐ 反向護欄：放寬之後，**直接呼叫**仍然被標成 `call`（訊息可讀性不得退化）。"""
+    tree = ast.parse(
+        "from repositories.portfolio_perf_repository import append_snapshot\n"
+        "def render_portfolio_tracking():\n"
+        "    append_snapshot(None)\n")
+    hits = _refs(_func(tree, "render_portfolio_tracking"), tree, _WRITE_ENTRIES)
+    assert [(h[0], h[3]) for h in hits] == [("append_snapshot", "call")], (
+        f"直接呼叫被誤標成 ref：{hits}")
+
+
+def test_the_assigned_name_is_not_counted_twice():
+    """⭐ `Store` context 排除的是**左側**，不是整行。
+
+        _g = ws.update      # 命中右側那個 `ws.update`（ref），左側的 `_g` 不算
+        return _g           # 但 `_g` 在 Load 位置時照樣命中 —— 「存起來」不等於「逃掉」
+    """
+    tree = ast.parse("def f(ws):\n    _g = ws.update\n    return _g\n")
+    hits = _refs(_func(tree, "f"), tree, ("update",))
+    assert [(h[1], h[3]) for h in hits] == [("ws.update", "ref"), ("_g", "ref")], (
+        f"左側被算了兩次、或「存起來之後」那一次被漏掉：{hits}")
+
+
+def test_no_false_positive_on_the_managed_files():
+    """⭐ **放寬規則最該擔心的事** —— 受管的每一個檔逐一實跑，確認沒有多出來的命中。
+
+    ⚠️ 真出現誤紅時，**正解是收窄規則，不是加豁免** ——
+    一張為了讓規則變綠而長出來的豁免表，等於把規則關掉。
+
+    ⚠️ 本條**不是**「整個檔零命中」：這兩個檔本來就有正當的寫入面
+    （`_ws_for_write()` 會 `add_worksheet` + `update`、`append_snapshot()` 會 `append_row`）。
+    受管的是**節點**，不是整檔 —— 下面三處必須 0，另外兩處必須非 0
+    （否則「0 命中」可能只是因為規則壞掉了在空掃）。
+    """
+    sec, rep = _tree(SECTION_REL), _tree(REPO_REL)
+    assert (ROOT / SECTION_REL).exists() and (ROOT / REPO_REL).exists(), (
+        "輸入非空斷言：受管檔案不存在 → 本條在空掃")
+
+    zero = {
+        "render_portfolio_tracking ✕ 寫入入口":
+            _refs(_func(sec, "render_portfolio_tracking"), sec, _WRITE_ENTRIES),
+        "load_snapshots ✕ _ws_for_write":
+            _refs(_method(rep, "GoogleSheetsPerfStore", "load_snapshots"), rep, ("_ws_for_write",)),
+        "_ws ✕ 寫入動詞":
+            _refs(_method(rep, "GoogleSheetsPerfStore", "_ws"), rep, _WS_WRITE_VERBS),
+    }
+    assert not any(zero.values()), (
+        f"放寬規則後出現命中 —— 先看規則是不是寫太寬，不要急著加豁免：{zero}")
+
+    ctl = _func(sec, "_snapshot_control")
+    assert _refs(ctl, sec, ("append_snapshot",)), (
+        "正對照失敗：`_snapshot_control()` 裡看不到 `append_snapshot` —— 規則在空掃")
+    assert _refs(_method(rep, "GoogleSheetsPerfStore", "_ws_for_write"), rep, _WS_WRITE_VERBS), (
+        "正對照失敗：`_ws_for_write()` 裡看不到任何寫入動詞 —— 規則在空掃")
