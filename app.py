@@ -188,7 +188,12 @@ from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 #  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
 # 留著會讓「app.py 到底掛了幾個入口」有兩種讀法,而那正是本次要消滅的東西。
 from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 標的探索)
-from ui.tab_settings_diag import render_settings_diag_tab  # noqa: E402  (⑤ 設定與診斷)
+# 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：⑤ 改掛新 View。
+# ⛔ 舊 `ui/tab_settings_diag.py` **刻意保留、一個字都沒動** —— 它是回退路徑，
+#    而且新頁委派的正是它底下那些舊模組（(A) 路線）。**不要順手刪掉它。**
+from ui.views.page_05_settings import (  # noqa: E402  (⑤ 設定與診斷)
+    render_settings_and_diagnostics,
+)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
 
@@ -572,7 +577,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
     with tab_settings:
         try:
-            render_settings_diag_tab()
+            render_settings_and_diagnostics()
         except Exception as _settings_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
             from ui.helpers.session import friendly_error as _fe_settings
             _fe_settings(f"「{_tab_label('settings')}」分頁渲染失敗", _settings_tab_e,
