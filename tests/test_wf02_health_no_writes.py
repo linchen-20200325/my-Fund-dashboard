@@ -14,9 +14,31 @@
 ⇒ 於是「委派真的有發生」這條守衛**在甲之下沒有對象**，本檔把它翻成**反面**：
    **驗這一頁真的一次寫入都沒有。**
 
-⛔ 本檔**不**驗「有沒有 import 舊 ②」—— 那是
-   `tests/test_wf02_health_skeleton.py::test_the_page_does_not_delegate_to_the_old_tab`
-   的職責，在這裡再抄一份就是第二把尺（`CLAUDE.md §2.1`）。
+⭐ **2026-09-06 路線 (A)：上一段的前提「沒有東西可委派」已經不成立了 ——
+   但本檔的結論不但沒鬆，反而變成更重要的那一條。**
+   客戶拍板「功能接回既有 public 入口」，本頁**現在真的會委派舊模組**
+   （見 `page_02_health.DELEGATED_ENTRIES`）。
+   **所以「零寫入」從「反正也沒東西可寫」變成「委派過去之後仍然零寫入」** ——
+   後者才是客戶那句「**Google Sheet 零風險**」真正需要被證明的東西。
+
+   ✅ **好消息是本檔的機器不用改就跟上了**：:func:`_sink_targets` 走的是
+   :func:`_closure`（**靜態 import 轉移閉包**），委派一加，被委派模組的寫入槽
+   **自動進入哨兵射程**。實測（2026-09-06，本輪）::
+
+       閉包模組數      65 → 95
+       掃描器哨兵數    53 → 60
+       ui.helpers.fund.checkup          in-closure: False → True
+       ui.components.mutual_exclusion   in-closure: False → True
+
+   ⚠️ **這一格是「機器本來就設計對了」，不是「本輪補的」** —— 據實記，不邀功。
+
+⛔ 本檔**不**驗「有沒有 import 舊 ②」、也不驗「委派名單對不對」—— 那是
+   `tests/test_wf02_health_skeleton.py` 的
+   :func:`test_the_page_delegates_to_exactly_the_approved_entries` ／
+   :func:`test_the_page_never_delegates_to_the_write_blacklist` ／
+   :func:`test_the_page_does_not_delegate_to_the_old_tab` 的職責，
+   在這裡再抄一份就是第二把尺（`CLAUDE.md §2.1`）。
+   **本檔只回答一個問題：這一頁渲染一輪，有沒有碰到任何寫入槽。**
 
 
 ⚠️ 這道守衛**看得見什麼、看不見什麼**（2026-09-06 回修：整段改寫，理由見下）
@@ -1261,3 +1283,211 @@ def test_the_foreign_key_snapshot_actually_has_something_to_protect():
     _foreign = {_k for _k in _rec.session_state if not _k.startswith(OWN_PREFIX)}
     assert len(_foreign) >= 2, (
         f"外來鍵快照只有 {_foreign} —— 保護對象太少，突變殺不死這條守衛")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 5｜路線 (A) 委派之後的第三道：**呼叫圖可達性**（2026-09-06 新增）
+# ══════════════════════════════════════════════════════════════════════
+#
+# 前面兩道各有射程，這一道補的是它們中間的縫：
+#
+#   ① 靜態名字掃描      —— 看得到「本頁原始碼裡出現的寫入名字」，
+#                          看不到**委派過去之後**才發生的寫入。
+#   ② 執行期哨兵         —— 最強，但只證明**那一次渲染**沒踩到；
+#                          走到的分支才算數（`safe_section` 早退、資料不齊就 return
+#                          的區塊都不會被走到）。
+#   ③ **本節：呼叫圖可達性** —— 不執行、不看分支，
+#                          問的是「**從這個入口出發，有沒有任何一條路走得到寫入槽**」。
+#
+# ⚠️ **三道互補、不可互相取代**，尤其 ② 與 ③：② 證明「這次沒踩到」，
+#    ③ 證明「**根本走不到**」。委派之後真正要回答客戶的是後者
+#    （客戶原話：「Google Sheet **零風險**」，不是「這次沒事」）。
+
+#: 真正會落到使用者 Google Sheet 上的 gspread 方法名。
+#: ⚠️ 刻意**只收 Sheet 寫入**，不收本機檔案寫入 —— 本節要回答的是客戶那句
+#: 「Google Sheet 零風險」。本機快取（例如 `repositories/ai_cache.py` 的原子寫）
+#: **是寫入但不是 Sheet 寫入**，混在一起會讓這條規則的紅燈失去意義。
+_SHEET_WRITE_METHODS = frozenset({
+    "append_row", "append_rows", "add_worksheet", "del_worksheet",
+    "update", "update_cell", "update_cells", "batch_update",
+    "insert_row", "insert_rows", "delete_rows",
+})
+
+
+def _callgraph_sheet_writes(entries):
+    """從 `entries`（`[(relpath, funcname), …]`）出發，回傳可達的 Sheet 寫入點。
+
+    **刻意過度近似（over-approximate）**：遇到解析不掉的 receiver
+    （`x.foo()` 而 `x` 不是已知模組別名）就把**全 repo 同名函式**都當成候選往下走。
+    → 偽陽性只是害我多讀一段程式碼；**偽陰性會讓一條寫使用者 Sheet 的路徑溜過去**。
+    這個不對稱是本函式所有設計取捨的依據。
+
+    ⛔ **不是字面 grep**：本 repo 已實證失效的形態包含 `from m import f as _g`、
+    `import m` 後 `m.f()`、`g = m.f` 再 `g()`、`getattr`、以及把方法當引數傳給包裝器。
+    """
+    _root = ROOT
+    _mods: dict[str, ast.AST] = {}
+    for _p in _root.rglob("*.py"):
+        _rel = _p.relative_to(_root)
+        if _rel.parts[0] in {"tests", "docs", "scripts", ".git", ".github"}:
+            continue
+        _dotted = str(_rel.with_suffix("")).replace("/", ".")
+        if _dotted.endswith(".__init__"):
+            _dotted = _dotted[: -len(".__init__")]
+        try:
+            _mods[_dotted] = ast.parse(_p.read_text(encoding="utf-8"))
+        except SyntaxError:                                   # pragma: no cover
+            continue
+
+    # ⛨ **一個名字可能對應多個定義，這裡必須存 list —— 存單一節點會靜默漏路徑。**
+    #    實證（2026-09-06，本條的**正對照當場轉紅**抓到的）：
+    #    `repositories/pool_repository.py` 裡 `list_pool` **有三個定義**
+    #    （模組級函式 ＋ `GoogleSheetsPoolStore.list_pool` ＋ `LocalJsonPoolStore.list_pool`）。
+    #    初版寫 `_funcs[(module, last_segment)] = node`，於是**後蓋前**，
+    #    模組級的 `list_pool`（真正通往 `_ws()` → `add_worksheet`／`update` 的那一個）
+    #    被類別方法蓋掉 ⇒ **W1 這條已知寫入路徑整條看不見** ⇒ 掃描器回 0。
+    #    ⚠️ **那個 0 看起來跟「程式碼很乾淨」一模一樣。**
+    #    這就是為什麼「零寫入」這種結論**不准**在沒有正對照的情況下交付。
+    _funcs: dict[tuple[str, str], list[ast.AST]] = {}
+    _byname: dict[str, set[str]] = {}
+    for _m, _t in _mods.items():
+        for _q, _fn in _functions(_t):
+            _last = _q.split(".")[-1]
+            _funcs.setdefault((_m, _last), []).append(_fn)
+            _byname.setdefault(_last, set()).add(_m)
+
+    _amod: dict[str, dict[str, str]] = {}
+    _asym: dict[str, dict[str, tuple[str, str]]] = {}
+    for _m, _t in _mods.items():
+        _am, _as = {}, {}
+        for _n in ast.walk(_t):
+            if isinstance(_n, ast.Import):
+                for _a in _n.names:
+                    _am[_a.asname or _a.name.split(".")[0]] = _a.name
+            elif isinstance(_n, ast.ImportFrom) and _n.module and not _n.level:
+                for _a in _n.names:
+                    _as[_a.asname or _a.name] = (_n.module, _a.name)
+                    _am[_a.asname or _a.name] = f"{_n.module}.{_a.name}"
+        _amod[_m], _asym[_m] = _am, _as
+
+    _seen: set[tuple[str, str]] = set()
+    _hits: list[str] = []
+    _stack = []
+    for _rel, _name in entries:
+        _d = _rel[:-3].replace("/", ".")
+        if _d.endswith(".__init__"):
+            _d = _d[: -len(".__init__")]
+        _stack.append((_d, _name))
+
+    while _stack:
+        _key = _stack.pop()
+        if _key in _seen or _key not in _funcs:
+            continue
+        _seen.add(_key)
+        # ⚠️ **走完同名的每一個定義**（模組級函式與各 class 的同名方法都算）——
+        #    理由見上方 `_funcs` 那段的 W1 實證。過度近似是刻意的。
+        _walk = [_y for _node in _funcs[_key] for _y in ast.walk(_node)]
+        for _x in _walk:
+            if (isinstance(_x, ast.Call) and isinstance(_x.func, ast.Attribute)
+                    and _x.func.attr in _SHEET_WRITE_METHODS):
+                _hits.append(f"{_key[0]}::{_key[1]} -> .{_x.func.attr}()  (line {_x.lineno})")
+            if not isinstance(_x, ast.Call):
+                continue
+            _f = _x.func
+            if isinstance(_f, ast.Name):
+                _nm = _f.id
+                if _nm in _asym.get(_key[0], {}):
+                    _stack.append(_asym[_key[0]][_nm])
+                elif (_key[0], _nm) in _funcs:
+                    _stack.append((_key[0], _nm))
+                else:
+                    _stack.extend((_c, _nm) for _c in _byname.get(_nm, ()))
+            elif isinstance(_f, ast.Attribute):
+                _nm = _f.attr
+                _tgt = (_amod.get(_key[0], {}).get(_f.value.id)
+                        if isinstance(_f.value, ast.Name) else None)
+                if _tgt and (_tgt, _nm) in _funcs:
+                    _stack.append((_tgt, _nm))
+                else:
+                    _stack.extend((_c, _nm) for _c in _byname.get(_nm, ()))
+    return _hits, len(_seen)
+
+
+#: **正對照** —— 兩條「已知真的會寫使用者 Google Sheet」的路徑。
+#: ⚠️ 這是本節最重要的一格：**一個回「0 命中」的掃描器，在壞掉的時候也回 0。**
+#: 沒有正對照的「零寫入」等於沒有結論（`CLAUDE.md`：0 命中在空輸入上永遠成立）。
+_KNOWN_WRITE_PATHS = [
+    # W1：健診批次 → 選股池 → `_ws()` 的 add_worksheet / update
+    (("ui/tab_fund_grp_health.py", "_run_batch_health"), "W1 pool_repository"),
+    # W2：批次 NAV 記錄 → `append_points` → `append_rows`
+    (("ui/helpers/nav_history_hook.py", "record_batch_nav_points"), "W2 nav_history_gs"),
+]
+
+
+@pytest.mark.parametrize("entry,label", _KNOWN_WRITE_PATHS,
+                         ids=[_l for _, _l in _KNOWN_WRITE_PATHS])
+def test_the_reachability_scanner_can_actually_see_a_known_write(entry, label):
+    """**正對照**：掃描器必須抓得到 W1／W2，否則它回的 0 沒有意義。
+
+    ⛔ **這條不是裝飾**。本 repo 的教訓逐字寫著：
+    「每次掃描附 (1) 正對照 (2) 輸入非空斷言」——
+    因為**壞掉的掃描器與乾淨的程式碼會給出一模一樣的輸出**。
+    這條轉綠，下一條的「0」才是證據；這條轉紅，下一條**一律不可信**。
+    """
+    _hits, _reached = _callgraph_sheet_writes([entry])
+    assert _reached > 1, (
+        f"{label}：掃描器只走到 {_reached} 個函式 —— 呼叫圖沒有展開，"
+        "這代表解析器壞了，不是程式碼乾淨。")
+    assert _hits, (
+        f"{label}：掃描器**看不到一條已知的 Google Sheet 寫入路徑** —— "
+        "它壞了。在修好之前，下一條的「零寫入」不成立。")
+
+
+def test_no_delegated_entry_can_reach_a_google_sheet_write():
+    """⛔ **路線 (A) 的核心承諾**：本頁與它委派出去的每一支，
+    **呼叫圖上走不到任何 Google Sheet 寫入**。
+
+    客戶 2026-09-06 原話：「資料路徑不動，**Google Sheet 零風險**。」
+    本條就是那句話的機器版本。
+
+    ⚠️ **與 :func:`test_rendering_the_page_touches_no_write_sink` 的分工**：
+    那條是**執行期**、證明「這次渲染沒踩到」；本條是**靜態可達性**、
+    證明「**根本走不到**」。走不到 ⊃ 這次沒踩到 —— 但靜態的代價是會有偽陽性，
+    所以兩條都要，**任何一條紅了都不准放行**。
+
+    ⚠️ **本條會隨委派名單自動長大**：entries 直接讀
+    `page_02_health.DELEGATED_ENTRIES`，**新增一支委派就自動納入掃描**，
+    不需要（也不可以）在這裡手抄一份第二名單。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _approved = None
+    for _n in _tree.body:
+        _tgt = (_n.targets[0] if isinstance(_n, ast.Assign)
+                else getattr(_n, "target", None) if isinstance(_n, ast.AnnAssign) else None)
+        if isinstance(_tgt, ast.Name) and _tgt.id == "DELEGATED_ENTRIES":
+            _approved = ast.literal_eval(_n.value)
+    assert _approved is not None, (
+        "page_02_health 裡找不到 DELEGATED_ENTRIES —— 它是委派名單的 SSOT。")
+
+    _entries = [("ui/views/page_02_health.py", "render_holdings_health")]
+    for _m, _s in _approved:
+        _p = _m.replace(".", "/")
+        for _cand in (f"{_p}.py", f"{_p}/__init__.py"):
+            if (ROOT / _cand).exists():
+                _entries.append((_cand, _s))
+                break
+
+    assert len(_entries) == 1 + len(_approved), (
+        f"有委派入口的檔案找不到：登記 {len(_approved)} 支，只解析出 {len(_entries) - 1} 支。")
+
+    _hits, _reached = _callgraph_sheet_writes(_entries)
+    assert _reached > 10, (
+        f"掃描器只走到 {_reached} 個函式 —— 輸入形同空的，這條結論沒有意義。"
+        "（正對照見上一條。）")
+    assert not _hits, (
+        "⛔ 本頁或它委派的入口，呼叫圖上走得到 **Google Sheet 寫入**：\n  "
+        + "\n  ".join(sorted(set(_hits)))
+        + "\n\n客戶 2026-09-06：「資料路徑不動，**Google Sheet 零風險**。」"
+          "\n新增委派前請先確認那一支不會寫使用者的 Sheet；"
+          "\n⚠️ 特別小心 `ui/helpers/fund_grp_health/switch_advisor_section.py` 那兩支 ——"
+          "\n**打開就寫一列，沒有按鈕、沒有勾選**（見 DELEGATION_BLACKLIST）。")

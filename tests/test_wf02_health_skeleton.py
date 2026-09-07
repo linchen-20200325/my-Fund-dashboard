@@ -1243,19 +1243,61 @@ def test_downstream_reads_the_applied_filters_not_the_widget_values():
         + "\n  ".join(f"第 {_w.lineno} 行：{ast.unparse(_w)[:70]}" for _w in _naked))
 
 
+def _import_pairs(tree: ast.AST) -> list[tuple[str, str]]:
+    """本頁**實際 import 到的** `(module, symbol)`；`import x.y` 記成 `("x.y", "")`。
+
+    ⭐ **這支就是 2026-09-06 之前那個 fail-open 的修補**（原本兩條守衛各自就地寫
+    `_mods`，且 `ImportFrom` **只吐 `_n.module`**）。實測後果（rc=0，也就是放行）::
+
+        from ui import tab3_portfolio          → 舊 `_mods = ["ui"]`
+                                                 `"ui".startswith("ui.tab")` False ⇒ **綠**
+        from ui.helpers import fund_grp_health → 舊 `_mods = ["ui.helpers"]`
+                                                 `"fund_grp_health" in "ui.helpers"` False ⇒ **綠**
+
+    也就是說舊寫法對「**同層 import 舊 ②／`fund_grp_health`**」是不設防的 ——
+    而 `fund_grp_health` 正是**黑名單那兩支寫 Google Sheet 的函式所在的資料夾**。
+
+    ⛔ **修法刻意不是「把 `module.name` 加進 `_mods` 就算」** —— 那會讓
+    `from ui.helpers.ia import applied_form` 產生 `"ui.helpers.ia.applied_form"`，
+    子字串比對容易誤傷。本函式回傳 **`(module, symbol)` 兩欄**，
+    讓每個消費端自己決定要比對哪一欄。
+    """
+    _out: list[tuple[str, str]] = []
+    for _n in ast.walk(tree):
+        if isinstance(_n, ast.Import):
+            _out.extend((_a.name, "") for _a in _n.names)
+        elif isinstance(_n, ast.ImportFrom) and _n.module and not _n.level:
+            _out.extend((_n.module, _a.name) for _a in _n.names)
+    return _out
+
+
+def _module_strings(pairs: list[tuple[str, str]]) -> list[str]:
+    """`(module, symbol)` → 要拿去做**模組**比對的字串。
+
+    `from ui import tab3_portfolio` 同時產出 `"ui"` **與** `"ui.tab3_portfolio"`，
+    後者才是舊寫法漏掉的那一個。⚠️ 只有當 `symbol` 看起來像**模組名**
+    （全小寫、非 dunder）才拼接，避免把 `from x import SomeClass` 誤拼成模組。
+    """
+    _out: list[str] = []
+    for _m, _s in pairs:
+        _out.append(_m)
+        if _s and _s == _s.lower() and not _s.startswith("__"):
+            _out.append(f"{_m}.{_s}")
+    return _out
+
+
 def test_the_page_never_reaches_into_the_data_layer():
     """客戶方針第 2 條：資料只走 `services/**`，**不碰** `repositories` / `infra` / 網路函式庫。
 
-    ⚠️ 本批連 `services/**` 都沒有呼叫（骨架階段沒有東西要算）——
-    但這條**現在就要在**，因為下一批填內容時它才是真正在守的那道線。
+    ⚠️ **2026-09-06 路線 (A) 之後這條更要緊，不是更鬆**：本頁現在會委派舊模組，
+    而那些模組**自己**會碰 `repositories/**`。這條守的是「**本頁自己不直呼**」——
+    委派過去之後由被委派的模組走它**既有的**資料路徑（客戶：「資料路徑不動」）。
+    ⛔ 所以**不要**因為「反正委派過去也會碰到」就放寬這條。
+
+    ⚠️ **fail-open 已於 2026-09-06 修掉**，見 :func:`_import_pairs`。
     """
-    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
-    _mods: list[str] = []
-    for _n in ast.walk(_tree):
-        if isinstance(_n, ast.Import):
-            _mods.extend(_a.name for _a in _n.names)
-        elif isinstance(_n, ast.ImportFrom) and _n.module:
-            _mods.append(_n.module)
+    _mods = _module_strings(_import_pairs(ast.parse(SRC.read_text(encoding="utf-8"))))
+    assert _mods, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
     _banned = ("repositories", "infra", "requests", "httpx", "yfinance",
                "gspread", "urllib", "bs4", "feedparser")
     _bad = [_m for _m in _mods if _m.split(".")[0] in _banned]
@@ -1265,39 +1307,420 @@ def test_the_page_never_reaches_into_the_data_layer():
 
 
 def test_the_page_does_not_delegate_to_the_old_tab():
-    """⛔ 不 import 舊 ②。它會在五頁驗收完成後**整批拔除**，每一條委派都是一處會斷頭。
+    """⛔ 不 import **舊 ② 那個 tab 檔本身**，也不碰波段觀測站。
 
-    ⚠️ ① 留了一條對 `ui/tab1_macro_midcycle.py` 的委派並就地登記
-    「有效期到舊 tab 整批拔除為止」—— **本頁一條都沒有，而且要維持這樣。**
+    ⭐ **2026-09-06 路線 (A)：本條的射程被縮小了一次，據實寫明差在哪。**
+    客戶拍板「功能接回既有 public 入口」之後，本頁**確實會委派舊模組** ——
+    但委派的是 `ui/helpers/**`、`ui/components/**` 底下的 **public 入口**，
+    **不是** `ui/tab_fund_grp_health.py` 這個 1,441 行的 tab 檔，
+    也**不是** `ui/helpers/fund_grp_health/` 那一包（那裡面住著黑名單那兩支）。
 
-    ⚠️ **已知漏洞，本批刻意不修（登記後果，不只登記決定）—— 2026-09-06 稽核**：
-    本函式的 `_mods` 是**就地寫的**，`ImportFrom` **只吐 `_n.module`**
-    （`extend(_a.name …)` 那一支是給 `ast.Import` 用的，`ImportFrom` 走不到）。
-    ③④ 已改成「`module` 與 `module.name` 兩個都吐」，**本函式沒有跟上**。
-    **實測後果（rc=0，也就是放行）**：
+    **所以這條的三個 pattern 一個都沒有放寬，全部原樣保留**：
+    `ui.tab*`（tab 檔）／`fund_grp_health`（黑名單所在資料夾）／`mk_dashboard`（下一批）。
 
-        from ui import tab3_portfolio        → `_mods = ["ui"]`
-                                               `"ui".startswith("ui.tab")` 為 False ⇒ **綠**
-        from ui.helpers import fund_grp_health → `_mods = ["ui.helpers"]`
-                                               `"fund_grp_health" in "ui.helpers"` 為 False ⇒ **綠**
+    ⚠️ **這條擋不到「多接了一支別的」** —— 它只是黑名單。
+    **正向的、fail-closed 的那條是**
+    :func:`test_the_page_delegates_to_exactly_the_approved_entries`（精確集合相等）。
+    ⛔ 兩條要一起讀：**這條防「碰到不該碰的」，那條防「悄悄多接一支」。**
 
-    也就是說**本頁對「同層 import 舊 ②／`fund_grp_health`」是不設防的**。
-    ③④ 的 PR 描述寫過「② 沒有 `_imported_modules`，刻意不為此新增」——
-    那句只講了**決定**，沒講**後果**；後果就是上面這兩行。
-    ⛔ 要修請一併看 ③④ 的 `_imported_modules` 註解裡登記的「回傳 `(module, symbol)`
-    讓消費端各自選」那個方向，**不要**只把 `module.name` 加進來就算
-    （那會把 ③④ 已量到的 5 個子字串誤紅一起帶進本頁）。
+    ⚠️ **2026-09-06：舊版的 fail-open 已修掉。** 原本 `_mods` 就地寫、`ImportFrom`
+    只吐 `_n.module`，於是 ``from ui.helpers import fund_grp_health`` 會得到
+    ``_mods = ["ui.helpers"]`` ⇒ **綠燈放行**（實測 rc=0）。
+    現在走 :func:`_import_pairs` ＋ :func:`_module_strings`，
+    後者會補出 ``"ui.helpers.fund_grp_health"``，該寫法**當場轉紅**。
+    （突變證明見本輪 PR 描述。）
+
+    ⭐ **2026-09-06 第二輪：`fund_grp_health` 由「整包子字串封鎖」改為「白名單之外全鎖」。**
+    ~~`_bad = [... or "fund_grp_health" in _m ...]`~~ ——
+    **有意識的政策變更，不是漏刪**（日期 2026-09-06，決策者 AI 總管，依核准線框逐字）。
+
+    **舊寫法為什麼是對的**：在只接 2 支 public 入口的那一輪，② 根本不該碰那個資料夾，
+    整包封鎖是最省事也最安全的寫法。**這個顧慮沒有消失** ——
+    那個資料夾裡就住著 `switch_advisor_section`（渲染即寫客戶 Google Sheet）。
+
+    **為什麼被取代**：核准線框 `wireframe-macro-health.html` §04 把該套件的子區塊
+    **分派到不同頁**，其中五塊明文「留 ② 原位」——② 因此**必須進得去**那個資料夾。
+
+    ⛔ **取代它的版本射程更窄，不是更寬**：舊條的放行面是「凡不在 `fund_grp_health`
+    裡的東西一律放行」；新條的放行面是「**只有 `DELEGATED_ENTRIES` 逐字列名的那幾個模組**」。
+    也就是說 `render_fund_grp_health_extras`（整支入口）與 `switch_advisor_section`
+    （寫 Sheet 那兩支）**仍然全鎖**，而且白名單是精確集合 —— 要多放一個就得先改常數。
+    """
+    _mods = _module_strings(_import_pairs(ast.parse(SRC.read_text(encoding="utf-8"))))
+    assert _mods, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+
+    _allowed = {_m for _m, _ in _page_const("DELEGATED_ENTRIES")}
+    assert _allowed, "DELEGATED_ENTRIES 是空的 —— 白名單為空會讓本條退化成整包封鎖。"
+
+    def _under_allowed(_s: str) -> bool:
+        """`_s` 是白名單模組本身，或它底下的符號（`模組.符號` 的合成字串）嗎？
+
+        ⚠️ :func:`_module_strings` **刻意**同時吐 `module` 與 `module.symbol`
+        （那是修 fail-open 的關鍵），所以這裡不能只用 `in _allowed` 比對 ——
+        `ui.helpers.fund_grp_health.ai._render_ai_cross_fund_evaluation`
+        永遠不會等於模組名 `ui.helpers.fund_grp_health.ai`。
+        **本函式的前綴比對只放行「白名單模組底下的東西」，不放行它的兄弟模組。**
+        """
+        return _s in _allowed or any(_s.startswith(_a + ".") for _a in _allowed)
+
+    _bad = [_m for _m in _mods
+            if _m.startswith("ui.tab")
+            or "mk_dashboard" in _m
+            or ("fund_grp_health" in _m and not _under_allowed(_m))]
+    assert not _bad, (
+        "本頁委派了舊 ② 的 tab 檔／**未經核准**的 `fund_grp_health` 模組／波段觀測站："
+        + ", ".join(sorted(set(_bad)))
+        + "\n路線 (A) 允許的是**逐支**委派線框判給 ② 的子區塊（見 DELEGATED_ENTRIES），"
+          "\n⛔ 不是整包委派、也不是整支接 `render_fund_grp_health_extras` —— 那會把"
+          "投資試算／TER＋持股／Bollinger／個股新聞／三率穿透這 5 個**線框明文搬 ③**"
+          "的區塊一起搬回 ②。"
+          "\n⛔ 更不是 `switch_advisor_section` —— 那兩支**打開就寫使用者的 Google Sheet**。")
+
+
+def _page_const(name: str) -> tuple:
+    """從**被測頁的原始碼**讀出一個 tuple 常數（`ast.literal_eval`，不 import 本頁）。
+
+    ⚠️ 刻意**不** `from ui.views.page_02_health import DELEGATED_ENTRIES` ——
+    那會把整頁的 import 副作用拉進測試程序，而本檔其餘部分是純靜態掃描。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
-    _mods: list[str] = []
+    for _n in _tree.body:
+        _tgt = (_n.targets[0] if isinstance(_n, ast.Assign)
+                else getattr(_n, "target", None) if isinstance(_n, ast.AnnAssign) else None)
+        if isinstance(_tgt, ast.Name) and _tgt.id == name:
+            return ast.literal_eval(_n.value)
+    raise AssertionError(f"{SRC.name} 裡找不到常數 {name} —— 它是機器規則的 SSOT，不可以被改名或刪掉。")
+
+
+#: 本頁**畫自己版面**用的共用元件模組 —— 它們不是「被委派的舊模組」。
+#:
+#: ⚠️ 這份清單是**刻意窄**的：只收本頁 docstring「四大鐵律的落點」逐字登記的那幾支
+#: （`ia` 三欄網格／`applied_form`／`render_state` 三態／`story_nav` 指路）。
+#: ⛔ **不要**因為「反正也是 `ui/helpers/` 底下的」就把新模組加進來 ——
+#: 每加一個，就等於在 fail-closed 的那道牆上開一個洞。
+#: 新的東西應該進 `page_02_health.DELEGATED_ENTRIES` 受審，不是進這裡。
+_LAYOUT_TOOLKIT: frozenset[str] = frozenset({
+    "ui.helpers.ia",
+    "ui.helpers.ia.empty_state",
+    "ui.helpers.render_state",
+    "ui.helpers.story_nav",
+})
+
+
+def test_the_page_delegates_to_exactly_the_approved_entries():
+    """⭐ **fail-closed 的那一條**：本頁委派到的 public 入口，必須**精確等於**
+    `page_02_health.DELEGATED_ENTRIES`。
+
+    **為什麼是 `==` 而不是「白名單過濾」** —— 這是本條存在的全部理由：
+    白名單只擋「碰到黑名單」，**擋不掉「多接了一支沒人審過的」**。
+    本 repo 已實測過那種守衛在 bug 活著時 20/20 全綠。
+    用集合相等，**三個方向都會紅**：
+
+    ========================================= =========
+    動作                                       結果
+    ========================================= =========
+    多委派一支（含黑名單那兩支）                 **紅**
+    少委派一支（悄悄拔掉功能）                   **紅**
+    改成整包 `from ui.helpers import x` 委派      **紅**
+    ========================================= =========
+
+    ⛔ **要新增一支委派，必須同時改兩個地方**（常數 ＋ 這條會自動跟著），
+    而改常數就會在 diff 裡看得見 —— **這道摩擦是刻意的**，
+    因為「多接一支」正是把 P0 寫入面搬回 ② 的那條路。
+
+    ⚠️ **本條比對的是「本頁 import 到什麼」，不是「本頁呼叫了什麼」** ——
+    後者由 :func:`test_every_delegated_entry_is_actually_called` 守。
+    兩條分開，是因為「import 了但沒呼叫」跟「呼叫了但沒登記」是兩種不同的病。
+    """
+    _approved = {tuple(_e) for _e in _page_const("DELEGATED_ENTRIES")}
+    assert _approved, "DELEGATED_ENTRIES 是空的 —— 若真的不再委派，請連同本條一起改。"
+
+    _pairs = _import_pairs(ast.parse(SRC.read_text(encoding="utf-8")))
+    assert _pairs, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+
+    # 只看「委派」：本 repo 自己的 ui/ 與 services/ 底下的 public render 入口。
+    # `ui.helpers.ia` / `ui.helpers.render_state` / `ui.helpers.story_nav` 是本頁的
+    # **版面共用元件**，不是被委派的舊模組 —— 用 DELEGATED_ENTRIES 的模組集合界定射程。
+    _delegated_mods = {_m for _m, _ in _approved}
+    _actual = {(_m, _s) for _m, _s in _pairs if _m in _delegated_mods}
+
+    # ⚠️ 還要抓「委派到**沒登記過**的模組」：`render_*` 符號都算委派嫌疑，
+    #    **但本頁自己的版面工具箱不算**（見 :data:`_LAYOUT_TOOLKIT`）。
+    #
+    # ⛨ **這一段是本條自己被自己抓到過一次的地方，留痕**：初版把「任何 `render_*`」
+    #    都當成委派嫌疑，於是 `ui.helpers.ia::render_cards` 與
+    #    `ui.helpers.story_nav::render_story_nav` **當場誤紅** ——
+    #    那兩支是本頁**畫自己的版面**用的共用元件（頁 docstring「四大鐵律的落點」
+    #    逐字登記過），不是被委派的舊模組。
+    #    ⛔ 修法是**列出工具箱**、其餘一律視為委派嫌疑，
+    #    **不是**把 `render_*` 這條規則整個拔掉 —— 那會讓本條退化成只驗已登記的那幾支，
+    #    「悄悄多接一支」就又看不見了。
+    # ⚠️ **`lstrip("_")` 是 2026-09-06 第二輪補的，不是風格調整** ——
+    #    第二輪接的五塊裡有四塊是**私有名**（`_render_dividend_matrix` 等），
+    #    而 `"_render_x".startswith("render_")` 是 **False** ⇒ 舊寫法對
+    #    **私有委派完全不設防**：多接一支 `_render_*` 不會被本條看見。
+    #    （精確集合那一條仍會紅，但錯誤訊息不會說「你多接了一支未登記的委派」。）
+    _suspect = {(_m, _s) for _m, _s in _pairs
+                if _s.lstrip("_").startswith("render_")
+                and (_m, _s) not in _approved
+                and _m not in _LAYOUT_TOOLKIT}
+
+    assert _actual == _approved, (
+        "本頁實際 import 到的委派入口與 DELEGATED_ENTRIES 不一致。\n"
+        f"  少了：{sorted(_approved - _actual)}\n"
+        f"  多了：{sorted(_actual - _approved)}\n"
+        "⛔ 新增委派請同時更新 `page_02_health.DELEGATED_ENTRIES`（那是 SSOT），"
+        "並確認新增的那一支**不會寫使用者的 Google Sheet**。")
+    assert not _suspect, (
+        "本頁 import 了未登記的 `render_*` 入口：" + ", ".join(f"{_m}::{_s}" for _m, _s in sorted(_suspect))
+        + "\n每一支委派都要進 DELEGATED_ENTRIES 受審 —— 這正是防「悄悄多接一支」的那道關卡。")
+
+
+def test_the_page_never_delegates_to_the_write_blacklist():
+    """⛔ **黑名單：這兩支打開就寫一列進客戶的 Google Sheet。**
+
+    `switch_advisor_section.py::render_switch_advisor_section` 與同檔
+    `::render_portfolio_tracking` —— 該區塊 caption 自陳「**每次開啟本區自動存一筆**」：
+    **沒有按鈕、沒有勾選**，渲染即寫入。它們現在住在 ④，另有一組正在修。
+
+    ⚠️ **為什麼需要一條專門的規則，而不是靠上面那條 `fund_grp_health` 子字串**：
+    子字串比對擋的是**模組路徑**；一旦有人把那兩支**搬到別的資料夾**
+    （或從別處 re-export），路徑比對就失效，而**函式名不會變**。
+    本條同時比對**模組**與**符號名**，兩條路都堵。
+
+    ⚠️ 這條與 :func:`test_the_page_delegates_to_exactly_the_approved_entries` **不重複**：
+    後者已經能擋下「多接一支」，但它的錯誤訊息只會說「多了一支未登記的」。
+    **黑名單這條要的是：訊息當場說出「你正在把 P0 寫入面搬回 ②」。**
+    一條規則同時是機器守衛與給下一個人的說明。
+    """
+    _black = {tuple(_e) for _e in _page_const("DELEGATION_BLACKLIST")}
+    assert _black, "DELEGATION_BLACKLIST 是空的 —— 這條規則會變成空掃。"
+
+    _pairs = _import_pairs(ast.parse(SRC.read_text(encoding="utf-8")))
+    assert _pairs, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+
+    _black_syms = {_s for _, _s in _black}
+    _black_mods = {_m for _m, _ in _black}
+    _hit = [(_m, _s) for _m, _s in _pairs
+            if _s in _black_syms or _m in _black_mods
+            or any(_b.split(".")[-1] in _m for _b in _black_mods)]
+    # 連原始碼裡出現那兩個函式名（例如 getattr 動態取用）都要抓。
+    _src_txt = SRC.read_text(encoding="utf-8")
+    _named = [_s for _s in _black_syms
+              if re.search(rf"(?<![\w.]){re.escape(_s)}\s*\(", _src_txt)]
+
+    assert not _hit and not _named, (
+        "⛔ 本頁碰到了**寫入黑名單**："
+        + ", ".join(sorted({f"{_m}::{_s}" for _m, _s in _hit} | set(_named)))
+        + "\n這兩支**打開就寫一列進客戶的 Google Sheet**（無按鈕、無勾選）。"
+          "\n它們住在 `ui/helpers/fund_grp_health/`（＝舊 ② 的資料夾），"
+          "**照資料夾委派的人會把它們搬回 ②** —— 那就是把 P0 搬回來。"
+          "\n它們現在的家在 ④，由另一組處理。")
+
+
+def test_every_delegated_entry_is_actually_called():
+    """登記了、也 import 了，**但沒有真的呼叫** —— 那是「假委派」，本條專門抓它。
+
+    ⚠️ **為什麼這條不能省**：只驗 import 的話，把
+    ``safe_section("基金體檢", lambda: render_fund_checkup(...))`` 那一行刪掉、
+    只留 import，:func:`test_the_page_delegates_to_exactly_the_approved_entries`
+    **照樣全綠** —— 功能沒了，守衛沒感覺。**那正是「委派了但畫不出東西」的形狀。**
+
+    ⛔ **用 AST 數呼叫點，不用字面 grep**。本 repo 已實證失效的形態包含
+    ``import m`` 後 ``m.f()``、``g = m.f`` 再 ``g()``、``getattr``、
+    以及**把方法當引數傳給包裝器**（`ast.Attribute` 不是 `ast.Call`）。
+    本頁正是最後那一種的變形 —— 委派包在 ``lambda:`` 裡再交給 ``safe_section``，
+    所以這裡走 `ast.walk` 找 `ast.Call`，`lambda` 內的呼叫照樣看得到。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _called: set[str] = set()
     for _n in ast.walk(_tree):
-        if isinstance(_n, ast.ImportFrom) and _n.module:
-            _mods.append(_n.module)
-        elif isinstance(_n, ast.Import):
-            _mods.extend(_a.name for _a in _n.names)
-    _bad = [_m for _m in _mods
-            if _m.startswith("ui.tab") or "fund_grp_health" in _m
-            or "mk_dashboard" in _m]
-    assert not _bad, (
-        "本頁委派了舊 ② 或波段觀測站：" + ", ".join(_bad)
-        + "\n舊實作會被整批拔除；波段觀測站是客戶指定的**下一個獨立批次**，本批不碰。")
+        if isinstance(_n, ast.Call):
+            _f = _n.func
+            if isinstance(_f, ast.Name):
+                _called.add(_f.id)
+            elif isinstance(_f, ast.Attribute):
+                _called.add(_f.attr)
+    assert _called, "本頁一個呼叫都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+
+    _missing = [f"{_m}::{_s}" for _m, _s in _page_const("DELEGATED_ENTRIES")
+                if _s not in _called]
+    assert not _missing, (
+        "這些入口**登記了、也 import 了，但沒有任何呼叫點**：" + ", ".join(_missing)
+        + "\n那是假委派 —— 使用者看不到任何東西，而其他守衛不會轉紅。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 本金（TWD）—— 2026-09-06 依核准線框加回
+# ══════════════════════════════════════════════════════════════════════
+#: 核准線框 `docs/wireframes/wireframe-macro-health.html` 的
+#: 「Form ②-A　健診輸入（防全頁重繪）」內**逐字**寫著「本金（TWD）：1,000,000」。
+#: **本表列出的各界值**沿用舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`。
+#: ⚠️ **刻意不寫「N 個」** —— 這份表會被增減（`_PRINCIPAL_STEP` 就是 2026-09-07
+#: 補進來的，而當時舊敘述留了個「三個」沒跟著改）。**本表自己就是權威清單，
+#: 數量看 `len(_WIREFRAME_PRINCIPAL)`，不要在散文裡再抄一份會過期的數字。**
+#: ⭐ **2026-09-07 稽核補：`_PRINCIPAL_STEP` 原本不在這份表裡。**
+#: 舊表只釘 `value` / `min` / `max` 三個 ⇒ **`step` 被改掉不會有任何守衛轉紅**。
+#: 本組 2026-09-07 覆核舊 ② `ui/tab_fund_grp_health.py` 的 `st.number_input`：
+#: `min_value=10_000.0, max_value=10_000_000.0, value=1_000_000.0, step=100_000.0`
+#: —— **四個值逐字相同**。
+#: ⚠️ `step` 不只是手感：它決定使用者「按一下加多少」。改成 `1.0` 會讓這一欄要按
+#: 一百萬次才走得完；改成 `1_000_000.0` 則整條區間只剩幾個可選值。
+#: **會影響使用者實際能輸入什麼的東西，就該被釘住。**
+_WIREFRAME_PRINCIPAL = {
+    "_DEFAULT_PRINCIPAL_TWD": 1_000_000.0,
+    "_PRINCIPAL_MIN": 10_000.0,
+    "_PRINCIPAL_MAX": 10_000_000.0,
+    "_PRINCIPAL_STEP": 100_000.0,
+}
+
+
+def _page_scalar(name: str):
+    """從被測頁原始碼讀出一個純量常數（不 import 本頁）。"""
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    for _n in _tree.body:
+        _tgt = (_n.targets[0] if isinstance(_n, ast.Assign)
+                else getattr(_n, "target", None) if isinstance(_n, ast.AnnAssign) else None)
+        if isinstance(_tgt, ast.Name) and _tgt.id == name:
+            return ast.literal_eval(_n.value)
+    raise AssertionError(f"{SRC.name} 裡找不到常數 {name}。")
+
+
+@pytest.mark.parametrize("const,expected", sorted(_WIREFRAME_PRINCIPAL.items()))
+def test_the_principal_input_keeps_the_wireframe_numbers(const, expected):
+    """本金的**每一個界值**（:data:`_WIREFRAME_PRINCIPAL` 逐鍵）必須**逐字等於**
+    核准線框／舊 ② 的數字。
+
+    ⚠️ 本條擋的不是「數字漂移」這種抽象風險，是一個**具體的、我自己差點犯的錯**：
+    這一欄的語意是「**假設每檔都投入這個金額**」的比較基準，
+    一旦有人把它改成使用者的實際投入（或任何推導值），
+    畫面上每一個「可申購單位／每月配息 TWD」都會變，而**使用者看不出來**（§1）。
+    數字被釘住，改動就必須先過這條、必須在 diff 裡解釋。
+
+    ⚠️ **本 docstring 刻意不寫「N 個界值」** —— 它原本寫「三個」，而
+    `_PRINCIPAL_STEP` 在 2026-09-07 補進表裡之後那個「三」就過期了，
+    **一支主題正是「數字會漂移而沒人發現」的守衛，自己留了一個過期數字**。
+    參數化直接吃 `_WIREFRAME_PRINCIPAL.items()`，**數量由表決定，散文不再抄一份**。
+    """
+    assert _page_scalar(const) == expected, (
+        f"{const} 從 {expected} 變成 {_page_scalar(const)}。\n"
+        f"`_WIREFRAME_PRINCIPAL` 釘住的 {len(_WIREFRAME_PRINCIPAL)} 個值全部出自核准線框 "
+        "`wireframe-macro-health.html` 的「Form ②-A 健診輸入」"
+        "與舊 ② 的 `st.number_input`，**不是本頁自己挑的**。\n"
+        "要改請先確認線框改了，並在 PR 說明語意有沒有跟著變。")
+
+
+def test_the_principal_is_read_from_the_applied_gate_not_derived():
+    """⛔ 本金只准從**已套用值**拿，**不准從持倉推導**。
+
+    ⚠️ **這條是突變測試逼出來的**：2026-09-06 我跑了一顆突變
+    —— 把 `_principal_twd()` 改成 `sum(invest_twd)` ——
+    **當時七條守衛沒有一條轉紅**（其他六顆突變都有人接住，只有這顆全綠）。
+    也就是說「不要用 sum 推導」原本**只是一句寫在註解裡的話**，沒有任何機器在守。
+
+    **為什麼這顆特別危險**：它不會壞掉、不會報錯、CI 全綠，
+    只是把「每檔各投入 100 萬」悄悄換成「每檔各投入使用者的全部身家」，
+    於是每一檔的「可申購單位／每月配息」全部放大 N 倍 —— **而畫面看起來完全正常**。
+    這正是 §1 點名最危險的那一種：**錯的數字比沒有數字更危險**。
+
+    ⛔ 本條同時擋掉「從別的 session 鍵抄一個本金過來」——
+    只要 `_principal_twd` 的函式體裡出現 `_holdings` / `sum(` / `invest_twd`，就是紅。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _fn = next((_n for _n in ast.walk(_tree)
+                if isinstance(_n, ast.FunctionDef) and _n.name == "_principal_twd"), None)
+    assert _fn is not None, (
+        "找不到 `_principal_twd()` —— 委派區塊的 `principal_twd` 引數必須集中由它供應，"
+        "否則每個呼叫點都可以各自決定本金從哪來。")
+
+    _body = ast.unparse(_fn)
+    _banned = [_w for _w in ("_holdings", "invest_twd", "sum(") if _w in _body]
+    assert not _banned, (
+        "`_principal_twd()` body 出現了推導來源：" + ", ".join(_banned)
+        + "\n⛔ 本金是**使用者選的比較基準**，不是算出來的。"
+          "\n改用推導值會讓畫面每一個現金流數字都變，而使用者看不出來（§1）。")
+
+    # 正向：它必須真的讀已套用值（否則 form 的送出閘門對這一欄等於不存在）。
+    assert "_applied_filters" in _body, (
+        "`_principal_twd()` 沒有讀 `_applied_filters()` —— "
+        "那代表本金沒有被送出閘門 gate 住，拖數字的當下就會觸發下游重算（鐵則 02）。")
+
+
+def test_the_principal_input_lives_inside_the_single_applied_form():
+    """本金輸入必須長在**既有的**那一個 `applied_form` 裡，⛔ 不准另開第二個 form。
+
+    ⚠️ 另開 `st.form` 會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`
+    （精確 `==7`）轉紅；本條在**本頁**就先擋下來，錯誤訊息才講得清楚為什麼。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _own_form = [_n for _n in ast.walk(_tree)
+                 if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute)
+                 and _n.func.attr == "form"
+                 and isinstance(_n.func.value, ast.Name) and _n.func.value.id == "st"]
+    assert not _own_form, (
+        f"本頁自己寫了 {len(_own_form)} 個 `st.form(` —— 鐵則 02 的落點是 "
+        "`ui.helpers.ia.applied_form`，本頁不自己實作。")
+
+    _af = [_n for _n in ast.walk(_tree)
+           if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+           and _n.func.id == "applied_form"]
+    assert len(_af) == 1, (
+        f"`applied_form` 呼叫數 = {len(_af)}，應為 1。"
+        "\n多一個 = 多一個送出閘門，使用者要按兩次「套用」；少一個 = 條件沒被 gate 住。")
+
+    # 本金 widget 必須在那個 form 的 `with` 區塊內 —— 否則它就沒被 gate 住。
+    _fn = next(_n for _n in ast.walk(_tree)
+               if isinstance(_n, ast.FunctionDef) and _n.name == "_render_filter_form")
+    _labels = [ast.unparse(_c.args[0]) for _w in ast.walk(_fn) if isinstance(_w, ast.With)
+               for _c in ast.walk(_w)
+               if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Attribute)
+               and _c.func.attr == "number_input" and _c.args]
+    assert any("本金" in _l for _l in _labels), (
+        "本金 `number_input` 不在 `applied_form` 的 `with` 區塊內 —— "
+        "那代表它沒被送出閘門包住，改一個數字就會全頁重跑（鐵則 02）。"
+        f"\n目前 with 區塊內的 number_input 標籤：{_labels}")
+
+
+def test_the_zero_write_dropouts_stay_out():
+    """⛔ 因「② 零寫入」被拿掉的區塊，**不准悄悄回來**。
+
+    2026-09-07 實測（CI，`44a1474`）：把 `render_rotation_section` 接進來之後，
+    `tests/test_wf02_health_no_writes.py::test_rendering_the_page_touches_no_write_sink`
+    **當場轉紅**，指名 `ui.helpers.fund_grp_health.rotation._render_pairs_body`。
+    呼叫鏈（逐跳）::
+
+        page_02_health::_render_delegated_sections
+          → rotation::render_rotation_section → rotation::_render_pairs_ui
+          → rotation::_render_pairs_body      ← 寫入槽
+
+    **那個寫入槽在渲染期就會碰到**（它是 `st.download_button` 的引數，
+    必須在按鈕建立前求值），不是綁在使用者點擊後面。
+
+    ⚠️ **本條與零寫入守衛不重複，它擋的是不同的東西**：
+    零寫入守衛要**真的渲染一輪**才會紅（需要 streamlit，且只在 CI 跑得動）；
+    本條是**純靜態**、在本機一秒可驗，而且錯誤訊息會直接說出
+    「這一塊是被那條裁決擋掉的、回來的前提是什麼」。
+    ⇒ **下一個人想加回來時，先撞到的是這一條，而不是一次 CI 紅燈。**
+    """
+    _dropped = {tuple(_e) for _e in _page_const("DROPPED_FOR_ZERO_WRITE")}
+    assert _dropped, (
+        "DROPPED_FOR_ZERO_WRITE 是空的 —— 若那些區塊真的可以回來了，"
+        "請連同本條與 PR 說明一起改，不要只清空常數。")
+
+    _approved = {tuple(_e) for _e in _page_const("DELEGATED_ENTRIES")}
+    _sneaked = _dropped & _approved
+    assert not _sneaked, (
+        "這些區塊被「② 零寫入」裁決擋掉，卻又出現在 DELEGATED_ENTRIES："
+        + ", ".join(f"{_m}::{_s}" for _m, _s in sorted(_sneaked))
+        + "\n總管 2026-09-06 裁決（讀法甲）：② **零寫入** —— 在 `nav_history` "
+          "涵蓋範圍調查有結論之前，不得新增任何寫使用者 Google Sheet 的路徑。"
+          "\n要讓它回來，見 `DROPPED_FOR_ZERO_WRITE` 註解裡列的兩個前提；"
+          "\n⛔ **不得**改零寫入守衛去配合它。")
+
+    # 連 import 都不准 —— 只從常數移走、卻還 import 進來，等於留一條會再爆的線。
+    _pairs = _import_pairs(ast.parse(SRC.read_text(encoding="utf-8")))
+    assert _pairs, "本頁一個 import 都沒有 —— 掃描輸入是空的，這條結論沒有意義。"
+    _still = [(_m, _s) for _m, _s in _pairs if (_m, _s) in _dropped]
+    assert not _still, (
+        "本頁仍然 import 了被零寫入裁決擋掉的區塊："
+        + ", ".join(f"{_m}::{_s}" for _m, _s in sorted(_still)))
