@@ -5,6 +5,20 @@
    本機唯一跑得動、而且真的跑過的，是下方 **A 段的純 AST 守衛**
    （`python3` 直接執行，不需要任何第三方套件）。
 
+   **CI 實跑紀錄**：run `34167952135`（commit `ffb37a5`）——
+   Fast checks / Schema gate / Slow tests **三條 lane `conclusion` 逐條皆 `success`**
+   （⛔ 本 repo 紀律：不看 `mergeable_state`；`cancelled` / `skipped` 皆 ≠ `success`）。
+
+⭐ **「全綠」怎麼證明不是「全部被 skip 掉」**（這一段刻意寫在最前面）：
+   本檔有**兩條正向斷言**，harness 沒跑起來時它們會**紅**而不是綠 ——
+   :func:`test_the_gate_labels_this_file_hardcodes_are_really_on_screen`
+   （畫面上必須真的有那四顆 checkbox）與
+   :func:`test_ticking_the_manual_gate_brings_the_collision_straight_back`
+   （勾下去必須**真的**噴出那個紅框）。
+   **它們綠 ⇒ AppTest 真的跑了、app 真的渲染了、那個衝突真的還在**。
+   ⛔ 一整檔都是「不准有 X」的斷言時，`importorskip` 跳過與「全部通過」長得一模一樣 ——
+   那是本 repo 記過的失效模式，故本檔刻意各留一條正向的。
+
 本檔與 `tests/test_dual_track_widget_key_collision.py`（#819）的分工
 ------------------------------------------------------------------
 #819 **只把事實釘成證據、不修任何東西**；本檔是**修完之後的守衛**。
