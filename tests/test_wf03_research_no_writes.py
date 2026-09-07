@@ -15,13 +15,20 @@
 這些**低階寫入動作的名字**，再看它有沒有被按鈕擋住。
 
 **它在 ④ 上可行，是因為 ④ 的閉包只有 11 個模組、`_WRITE_SINKS` 命中 0 個節點**
-（該檔自己的缺口 6 就地記載了這件事）。**③ 的閉包是 56 個模組**（本組實測，
-指令見 :func:`test_a_whole_closure_name_scan_would_be_useless_here`），
-因為它經 `services.moneydj_fetcher` 一路連到 `repositories.fund.*` 與 `infra.*`。
+（該檔自己的缺口 6 就地記載了這件事）。**③ 的閉包是 102 個模組**
+（量測日 2026-09-07、量到本分支批次接線之後；
+指令見 :func:`test_a_whole_closure_name_scan_would_be_useless_here`）——
+它經 `services.moneydj_fetcher` 連到 `repositories.fund.*` 與 `infra.*`，
+再經 `ui.helpers.fund_grp_health.unified` 連到 `services.fund_row` 那一整片。
 
-把同一份 sink 名單套上去，**實測得到 106 個「未被擋住的寫入」**，而其中
-壓倒性多數是 `str.replace()` / `dict.update()` / `set.clear()` / `os.makedirs()`
-—— **全部是偽陽性**。一份 106 個偽陽性的守衛不會被讀，只會被關掉。
+把同一份 sink 名單套上去，**實測命中 147 個節點**，而其中壓倒性多數是
+`str.replace()` / `dict.update()` / `set.clear()` / `os.makedirs()` —— **全部是偽陽性**。
+一份上百個偽陽性的守衛不會被讀，只會被關掉。
+
+⚠️ **兩組數字，不要混用**（本組實測，兩次都跑過）：批次接線**之前**是
+**56 個模組 / 106 個節點**；接線**之後**是 **102 / 147**。
+本檔的斷言吃的是**後者所在的數量級**，用的是**下限**而不是等號 ——
+寫等號的話，上游任何一次無關的 import 變動都會讓這道守衛紅在一個沒有意義的地方。
 
 → **本檔改走行為層**：真的把頁面渲染一輪，在**物件邊界**攔低階寫入動作本身。
    ⛔ **不用函式名白名單，也不用 import 來源白名單** —— 本 repo 已實測那種守衛
@@ -580,7 +587,8 @@ def test_a_whole_closure_name_scan_would_be_useless_here():
     _c = _closure()
     assert _PAGE in _c, f"閉包裡沒有本頁自己 —— `{_PAGE}` 解析失敗了？"
     assert len(_c) >= 30, (
-        f"③ 的 import 閉包只剩 {len(_c)} 個模組（本組 2026-09-07 實測是 56）。\n"
+        f"③ 的 import 閉包只剩 {len(_c)} 個模組"
+        "（本組 2026-09-07 實測：批次接線前 56、接線後 102）。\n"
         "它若真的縮到跟 ④ 一樣小（11 個），靜態層就變得可行了 —— "
         "**請回頭評估要不要補上那一層**，不要只是把這個數字改掉。")
     _hits = 0
@@ -590,6 +598,6 @@ def test_a_whole_closure_name_scan_would_be_useless_here():
                      if isinstance(_n, ast.Attribute) and _n.attr in _SINK_NAMES)
     assert _hits >= 50, (
         f"用 ④ 那份 sink 名單掃 ③ 的閉包只命中 {_hits} 個節點"
-        "（本組 2026-09-07 實測是 106，壓倒性多數是 `str.replace` / `dict.update` / "
-        "`set.clear` 這些偽陽性）。\n"
+        "（本組 2026-09-07 實測：批次接線前 106、接線後 147；"
+        "壓倒性多數是 `str.replace` / `dict.update` / `set.clear` 這些偽陽性）。\n"
         "若它真的降到可以逐一判讀的量，靜態層就值得補上了。")
