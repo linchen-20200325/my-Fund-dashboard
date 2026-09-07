@@ -356,7 +356,22 @@ BATCH_PRINCIPAL_TWD: float = 1_000_000.0
 #:       而該頁那個「本金（TWD）」輸入框**目前 0 caller**（同檔 2026-09-07 就地登記），
 #:       所以 ② 畫面上的配息金額吃的是實際投入、不是那個框裡的數字。
 #:
-#: ⚠️ **本組沒有查證的那一半，據實寫明**：以上三條都是**靜態追蹤**（讀原始碼 ＋ 呼叫點）。
+#:    4. **⚠️ 已核准線框目錄裡有一份草稿說的是相反的事，這一條非讀不可**：
+#:       `docs/wireframes/draft-p03-batch-input.html`（**2026-09-06**，實作組 R 提出、
+#:       客戶尚未拍板的提案草稿）的 Q3 逐字寫著「**健診 Tab 在「統一 100 萬」那一側**，
+#:       走實際持倉金額的是 **Tab3（＝④ 資產配置）**」。
+#:       **那句話在寫下的當天是對的** —— 它描述的是**舊** ②
+#:       （`ui/tab_fund_grp_health.py`，本金 widget `value=1_000_000.0`、
+#:       help 逐字「所有基金都假設投入這個金額」）。
+#:       **被推翻的是它的前提**：`app.py` 已於 **2026-09-07**（commit `c321c0a`）
+#:       把 ② 換成 `ui/views/page_02_health.py`（`render_holdings_health()`），
+#:       而**舊的 `render_fund_grp_health_tab()` 現在 production 0 caller**（本組實測）。
+#:       → **本註描述的是使用者今天真的看得到的那個 ②**，與草稿不衝突，
+#:       只是**兩者講的是不同時點的兩個實作**。
+#:       ⛔ **不要**拿草稿 Q3 來「更正」這裡，也**不要**拿這裡去改草稿 ——
+#:       草稿是拍板紀錄，本檔是現況；**已回報總管，由他決定要不要在草稿上補一行時效註**。
+#:
+#: ⚠️ **本組沒有查證的那一半，據實寫明**：以上第 1~3 條都是**靜態追蹤**（讀原始碼 ＋ 呼叫點）。
 #:    本組**沒有**在真的 Streamlit 裡跑一次兩頁、拿同一檔基金去比對兩邊的配息金額欄
 #:    —— 沙箱沒有 streamlit / pandas，跑不了（見模組 docstring 末段）。
 #:    依 `CLAUDE.md §-2` 規則 6，這一段只能當**單組實測的靜態結論**，不是端到端實證。
@@ -1514,6 +1529,27 @@ def _batch_table_rows(codes: list[str], rows: dict) -> list[dict]:
     return _out
 
 
+def _batch_csv(rows: list[dict]) -> bytes:
+    """把大表轉成可下載的 CSV bytes。**欄序與畫面上完全相同。**
+
+    ⚠️ **`utf-8-sig` 不是隨手挑的**：少了那個 BOM，Excel 會把中文欄名讀成亂碼
+    （舊 `ui/tab_batch_analysis.py` 的下載鈕用的也是它，同一個理由）。
+    ⚠️ **不走 pandas 的 `to_csv`** —— 本頁不 import pandas（沒有必要），
+    而 `csv` 是標準庫。⛔ 也**不要**改成 `to_csv`：那個名字落在零寫入守衛的
+    磁碟 sink 清單裡，會讓一個**根本不碰磁碟**的動作看起來像在寫檔。
+    ⚠️ `None` 由 `csv` 寫成空字串 ＝ **留白**，⛔ 不得填 0（§1）。
+    """
+    import csv
+    import io
+    _buf = io.StringIO()
+    _cols = list(rows[0]) if rows else []
+    _w = csv.DictWriter(_buf, fieldnames=_cols, extrasaction="ignore")
+    _w.writeheader()
+    for _r in rows:
+        _w.writerow({_c: ("" if _r.get(_c) is None else _r.get(_c)) for _c in _cols})
+    return _buf.getvalue().encode("utf-8-sig")
+
+
 def _batch_column_config(cols: list[str]) -> dict:
     """大表的逐欄顯示設定（欄寬 ＋ **逐欄 tooltip**）。
 
@@ -1658,6 +1694,15 @@ def _render_batch_results() -> None:
         f"表格可以**左右捲動**（共 {len(_table[0])} 欄）；"
         "每一個欄名都可以把滑鼠移上去看說明 —— 怎麼算的、單位是什麼、"
         "留白代表什麼、能不能拿去跨檔比大小。")
+    # ⬇️ CSV 下載 —— **草稿版面裡就有這一顆**，不是本組加的新元件
+    #    （`docs/wireframes/draft-p03-batch-input.html` 的「提案版面（最小可用）」
+    #    末行逐字：「⬇️ 下載 CSV」）。舊分頁同樣有一顆。
+    # ⚠️ **它不寫任何檔案** —— `st.download_button` 收的是 bytes，由瀏覽器存檔；
+    #    本頁到磁碟的距離仍然是 0（`tests/test_wf03_research_no_writes.py` 釘住）。
+    st.download_button(
+        "⬇️ 下載這張表（CSV）", _batch_csv(_table),
+        file_name=f"fund_batch_{tw_now_str('%Y%m%d_%H%M')}.csv",
+        mime="text/csv", use_container_width=True, key="v03_batch_download")
 
 
 def _render_batch() -> None:

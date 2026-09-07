@@ -37,6 +37,8 @@
 from __future__ import annotations
 
 import ast
+import csv
+import io
 import pathlib
 import sys
 from typing import Any
@@ -71,6 +73,7 @@ from ui.views.page_03_research import (  # noqa: E402
     _LONG_RUN_FUNDS,
     _SEC_PER_FUND_FAST,
     _SEC_PER_FUND_SLOW,
+    _batch_csv,
     _batch_estimate,
     _batch_table_rows,
     _batch_where,
@@ -697,3 +700,69 @@ def test_a_long_run_warns_before_the_user_commits_hours():
     _body = _batch_body(_render(applied=_APPLIED, patch={"_batch_column_config": lambda cols: {}}, session={
         _SK_CODES: _codes, _SK_ROWS: {_codes[0]: _fake_row(_codes[0])}}))
     assert "請不要關掉分頁" in _body, f"長時間批次沒有事前警告。\n{_body[:800]}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# CSV 下載 —— 草稿版面裡就有的那一顆
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_csv_keeps_the_same_columns_in_the_same_order_as_the_table():
+    """下載的 CSV **不是另一份投影** —— 欄名與欄序必須與畫面上那張表完全相同。
+
+    ⚠️ 這條擋的是一個很容易發生、而且**畫面上完全看不出來**的漂移：
+    有人為了「CSV 乾淨一點」在匯出端挑欄位／換順序，於是使用者拿去對帳時
+    對不上他螢幕上看到的那張表，而兩邊都沒有任何錯誤訊息。
+    """
+    _rows = _batch_table_rows(["AAA"], {"AAA": _fake_row("AAA")})
+    _raw = _batch_csv(_rows)
+    assert isinstance(_raw, bytes), "下載內容必須是 bytes（`st.download_button` 收 bytes）。"
+    assert _raw.startswith(b"\xef\xbb\xbf"), (
+        "CSV 少了 UTF-8 BOM —— Excel 會把中文欄名讀成亂碼。"
+        "（舊 `ui/tab_batch_analysis.py` 的下載鈕用的也是 `utf-8-sig`，同一個理由。）")
+    _text_csv = _raw.decode("utf-8-sig")
+    _header = _text_csv.splitlines()[0]
+    _cols = next(csv.reader([_header]))
+    assert _cols == list(BATCH_UNIFIED_COLUMNS), (
+        "CSV 的欄位與畫面上那張表不一致。\n"
+        f"  少了：{[_c for _c in BATCH_UNIFIED_COLUMNS if _c not in _cols]}\n"
+        f"  多了：{[_c for _c in _cols if _c not in BATCH_UNIFIED_COLUMNS]}")
+
+
+def test_a_missing_value_stays_blank_in_the_csv_and_never_becomes_zero():
+    """CSV 裡的缺值是**空白**，⛔ 不得變成 0（§1：錯的數字比沒有數字更危險）。"""
+    _rows = _batch_table_rows(["AAA"], {"AAA": _fake_row("AAA", **{"Sharpe 1Y": None})})
+    _text_csv = _batch_csv(_rows).decode("utf-8-sig")
+    _reader = list(csv.DictReader(io.StringIO(_text_csv)))
+    assert _reader[0]["Sharpe 1Y"] == "", (
+        f"缺值在 CSV 裡變成了 {_reader[0]['Sharpe 1Y']!r} —— 缺值就留白。")
+    assert _reader[0]["code"] == "AAA", "非缺值的欄位被一起清掉了。"
+
+
+def test_the_download_button_only_appears_once_there_is_a_table():
+    """沒有表就沒有下載鈕 —— 一顆按下去會拿到空檔案的鈕是鐵則 04 的冗餘占位。"""
+    _empty = _batch_body(_render(applied=_APPLIED,
+                                 session={_SK_CODES: ["AAA"], _SK_ROWS: {}}))
+    assert "download_button" not in _empty and "下載這張表" not in _empty, (
+        f"還沒有任何一檔跑完，卻畫了下載鈕。\n{_empty}")
+    _full = _batch_body(_render(
+        applied=_APPLIED, session={_SK_CODES: ["AAA"], _SK_ROWS: {"AAA": _fake_row("AAA")}},
+        patch={"_batch_column_config": lambda cols: {}}))
+    assert "下載這張表" in _full, f"有表了卻沒有下載鈕。\n{_full}"
+
+
+def test_the_csv_is_built_without_pandas_and_without_touching_disk():
+    """CSV 走標準庫 `csv`，**不得**改成 `to_csv` / `write_text` 那一族。
+
+    ⚠️ 理由不是「pandas 不好」，是**名字**：`to_csv` 落在零寫入守衛的磁碟 sink
+    清單裡，會讓一個**根本不碰磁碟**的動作在守衛眼裡看起來像在寫檔 ——
+    那種偽陽性最後一定會用「把它加進豁免」收場，而豁免會一路長大。
+    """
+    _fn = _fns(_tree())["_batch_csv"]
+    _names = {_n.attr for _n in ast.walk(_fn) if isinstance(_n, ast.Attribute)}
+    for _bad in ("to_csv", "to_json", "to_parquet", "write_text", "write_bytes"):
+        assert _bad not in _names, (
+            f"`_batch_csv()` 用到了 `{_bad}` —— 請改回標準庫 `csv`（理由見本條 docstring）。")
+    _mods = {_a.name for _n in ast.walk(_fn) if isinstance(_n, ast.Import)
+             for _a in _n.names}
+    assert "csv" in _mods and "io" in _mods, (
+        f"`_batch_csv()` 沒有走標準庫 `csv` / `io`，實際 import 了 {_mods}。")

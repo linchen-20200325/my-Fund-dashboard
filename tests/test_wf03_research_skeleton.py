@@ -322,6 +322,9 @@ _TEXT_APIS = (
     #    **少了它不是「少錄一行」，是整條路徑會炸** —— `__getattr__` 的預設分支
     #    回傳的是假容器，`_parse_codes()` 拿到它之後 `for line in …` 會 TypeError。
     "text_area",
+    # ⚠️ 同輪補：批次的 CSV 下載鈕。**少了它是「靜靜漏錄」而不是炸** ——
+    #    比對「有沒有畫出下載鈕」的斷言會恆為 False，看起來像產品碼少畫了一顆。
+    "download_button",
 )
 
 
@@ -375,6 +378,9 @@ class _Rec:
                 return bool(kwargs.get("value", False))
             if name in ("button", "form_submit_button"):
                 return self.submitted
+            # 下載鈕：**恆回 `False`（＝沒人按）**，與其他按鈕同一個立場。
+            if name == "download_button":
+                return False
             if name == "columns":
                 _spec = args[0] if args else 1
                 _n = _spec if isinstance(_spec, int) else len(list(_spec))

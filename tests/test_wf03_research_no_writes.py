@@ -399,6 +399,17 @@ def test_the_sentinels_are_removed_afterwards():
                                          "v03_research_batch_rows": {}}}),
     ("使用者在框裡打了字但沒按送出", {"applied": _APPLIED,
                                      "widget": {"基金代碼（每行一檔）": "AAA\nBBB"}}),
+    # ⭐ **這一格是 2026-09-07 補的，補之前是一個真的缺口**：上面四格都沒有結果，
+    #    於是「有表可畫」那一整段（含 CSV 組字串、`column_config`、下載鈕）
+    #    **從來沒有被這道守衛跑過**。實測：把一行 `Path(...).write_text(...)`
+    #    放進 `_batch_csv()`，補這一格之前**行為層全綠**（只有靜態那條規則抓到）。
+    ("有結果、整張表都畫出來了", {
+        "applied": _APPLIED,
+        "session": {"v03_research_batch_codes": ["AAA", "BBB"],
+                    "v03_research_batch_rows": {
+                        "AAA": {"code": "AAA", "狀態": "✅ 成功"},
+                        "BBB": {"code": "BBB", "狀態": "❌ 抓取失敗"}}},
+        "patch": {"_batch_column_config": lambda cols: {}}}),
 ])
 def test_rendering_this_page_writes_nothing(label: str, kw: dict):
     """⭐ **本檔的本體：使用者只是打開這一頁，不得動到磁碟或他的 Google Sheet。**
