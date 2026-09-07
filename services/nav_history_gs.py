@@ -470,7 +470,58 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
 
     try:
         with _gs_guard(oauth_client, _sheet):     # v19.509:序列化共用 OAuth client 併發讀寫
-            sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
+            # ── 2026-09-07 P0:寫入路徑補上與讀取端對稱的重試 ──────────────
+            # `_get_sheet()` 內的 `client.open_by_key` 吃到**單次** gspread 5xx,
+            # 整批寫入就直接 fail(§1 往上拋)。而這張表 `(code, date)` 去重、
+            # **只增不減** —— 一次寫失敗 ＝ 那一天的淨值**永久缺一格**
+            # (cron 隔天抓的是隔天的淨值,不會回頭補這一格;本模組存在的前提就是
+            #  境外/保單基金的歷史序列從 Actions 的美國 IP 幾乎抓不到)。
+            # 2026-08-31 / 09-02 兩班 `weekly_nav_backfill` 即斷在 gspread 5xx;
+            # 讀取端已於 `abba317` 修好,寫入端當時明文「留給後續任務視情況處理」
+            # (見 `load_points` docstring「retries」段末),本次即為該後續任務。
+            #
+            # **只包 `_get_sheet()` 這一步,與 `load_points` 對稱** ——
+            # 之後的 `_get_worksheet()` / `get_all_values()` / `append_rows()`
+            # 一行不動。分類與退避節奏完全沿用 `with_gspread_retry`,不另訂判準。
+            #
+            # ⚠️ **實測到的分類現況(2026-09-07,不是照抄上游 docstring)**:
+            #    · **會**重試:5xx、連線層逾時 —— 以及 **400 / 404 / 407**。
+            #    · **不**重試:429(配額)、403(封鎖)。
+            #    `infra/gspread_retry.py::with_gspread_retry` 的 docstring 寫著
+            #    「429 / 403 / **404** / 407 第一次失敗就直接拋」—— **404 / 407 那半句
+            #    與實測不符**(兩者被 `kind_for_gspread_error` 改判為 `"unreachable"`,
+            #    而 `"unreachable"` 就在 `GSPREAD_RETRYABLE_KINDS` 裡);400 則是
+            #    `infra/source_backoff.py::kind_for_status` 把 4xx 一律歸 `"server_error"`。
+            #    **這是既有行為,不是本次引入的** —— 已合併的 `load_points(retries=True)`
+            #    (Gate 0 讀取)走的是同一個函式,今天在 production 就是這樣。
+            #    根因在 `infra/`,**不在本批檔案邊界內**,已具名回報為提案、未動手;
+            #    現況由 `tests/test_nav_append_retry.py::test_known_gap_*` 釘住,
+            #    有人修好分類時那條會轉紅。
+            #
+            # ⛔ **`append_rows` 刻意不包**:重試一個「可能已經送達」的 append
+            #    會破壞 `(code, date)` 冪等(§5),需先驗證重複 append 的安全性,
+            #    不在本批範圍。
+            # ⛔ **刻意不包成巢狀 function**:那會把 `get_all_values` /
+            #    `append_rows` 的 AST 歸屬從 `append_points()` 搬到別的符號名下,
+            #    悄悄弄丟 `tests/test_services_purity_contract.py::GSPREAD_DEBT`
+            #    的既有登記(該測試按**符號名**認地雷,不是按行號)。理由同
+            #    `load_points` 內的對應註解。
+            #
+            # ⚠️ **已知取捨,據實記下**:這裡**不做成 `load_points` 那樣的 opt-in
+            #    `retries` 旗標**,因為寫入端的 P0 呼叫點是
+            #    `services/nav_history_store.py::backfill_to_gs`,它沒有傳任何旗標
+            #    —— 預設 False 的旗標對這次事故等於沒修。代價是:真的遇到 5xx 時,
+            #    `ui/helpers/nav_history_hook.py` 那條**畫面路徑**會多等最多約 7 秒
+            #    (`DEFAULT_QUOTA_BACKOFFS` 前三拍 1+2+4)才走它既有的 fail-soft 分支。
+            #    **成功時零延遲**(第一次就回),且該 hook 有 session 級
+            #    `_nav_hist_written` 去重,同一 (code, date) 每個 session 只會走一次。
+            #    判斷依據:讀取失敗是 fail-soft(退回 live-only,下次 rerun 再讀),
+            #    寫入失敗是**永久掉一格資料** —— 兩者代價不對稱,故取「一律重試」。
+            if _sheet is not None:
+                sh = _sheet                  # 測試注入:不碰真 gspread,不重試
+            else:
+                from infra.gspread_retry import with_gspread_retry
+                sh = with_gspread_retry(_get_sheet, oauth_client)
             ws = _get_worksheet(sh)
             existing = ws.get_all_values()  # 含 header
             seen: set = set()
