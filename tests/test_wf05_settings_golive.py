@@ -159,16 +159,30 @@ def _sinks(entry: str) -> set[tuple[str, str, str]]:
     return _out
 
 
-def test_the_maintain_block_stays_behind_a_checkbox_gate():
-    """⭐ 新 ⑤ 的「🗄️ 資料維護與通報」**必須**在 Checkbox Gate 之後才呼叫
-    `render_manage_tab()` —— 拿掉 gate，重複 widget key 會回來。
+#: 雙軌並行之下**必須待在 Checkbox Gate 之後**的委派：`(函式, 被委派的入口)`。
+#:
+#: ⚠️ **這張表是封閉集合，而且兩個方向都會紅**：登記了卻沒 gate → 紅；
+#:    表上的函式不存在（改名／搬走）→ 也紅（fail-closed，豁免不准指著空氣）。
+#: **成因對兩筆完全相同**：舊 ⑤ 無條件呼叫同一支委派，兩頁同一次 run 都跑 →
+#: 撞 Streamlit 重複元件鍵。
+_MUST_BE_GATED: tuple[tuple[str, str], ...] = (
+    # 客戶 2026-09-07 裁決的「進階折疊區」——折疊區保留，gate 疊在它裡面。
+    ("_render_maintain", "render_manage_tab"),
+    # 客戶拍板線框 Tab 05 五個 `<h4>` 之一 —— **加 gate 是總管 2026-09-07 裁決的**，
+    # 不是執行組自行決定（理由見被測檔該函式的註記）。
+    ("_render_backfill", "render_nav_manual_section"),
+)
+
+
+def test_the_dual_track_delegations_stay_behind_a_checkbox_gate():
+    """⭐ :data:`_MUST_BE_GATED` 的每一筆都必須在 Checkbox Gate 之後才委派。
 
     ## 為什麼需要這一條（不是為了好看，是因為突變實測它原本抓不到）
 
-    2026-09-07 雙軌並行之後，`app.py` 同時掛舊 ⑤（`ui/tab_settings_diag.py`）與
-    新 ⑤（`ui/views/page_05_settings.py`），而**兩頁委派同一支** `render_manage_tab()`。
-    那支無條件畫 `_sec_pool()` / `_sec_dividend_calendar()` / `_sec_notify()`，
-    其中帶具名 key（`pool_*` ×10 / `divcal_gen` / `manage_notify_preview`）——
+    雙軌並行之後，`app.py` 同時掛舊 ⑤（`ui/tab_settings_diag.py`）與新 ⑤
+    （`ui/views/page_05_settings.py`），而**兩頁委派同一批舊模組**：
+    `render_manage_tab()` 帶 `pool_*` ×10 / `divcal_gen` / `manage_notify_preview`，
+    `render_nav_manual_section()` 帶 `_nh_*` / `navhist_import_*` 共 11 個 ——
     同一次 run 畫兩份會拋 `StreamlitDuplicateElementKey`
     （`ui/helpers/ia/gated_form.py` 自陳：「全站唯一，Streamlit 會在重複時炸掉」）。
 
@@ -177,69 +191,70 @@ def test_the_maintain_block_stays_behind_a_checkbox_gate():
     驗的正是收在 `expanded=False` 裡的說明書內容，它在 `origin/main` 是綠的）。
     **只有「gate 沒過就提前 return」才真的不呼叫。**
 
-    ⚠️ **這一條是突變實測逼出來的**：本批把 gate 拆回 `st.expander` 之後
-    （突變 C1），當時**十一條守衛沒有一條轉紅** —— 也就是說在它存在之前，
-    「有人把這個修復拿掉」是**靜默**的。憲法 §-1.5 v3 `03`-1 要求的
-    「突變測試（拔掉修復邏輯必須轉為紅燈）」在這一格原本是不成立的。
+    ⚠️ **這條是突變實測逼出來的，而且逼了兩次**：
+    - 第一版（只守維護區）把 gate 拆回 `st.expander` 之後，**十二條守衛沒有一條轉紅**；
+    - 補上之後，`if False and st.checkbox(...)` **照樣綠** —— checkbox 還在、
+      `return` 還在、形狀完美，但條件恆假 → 永遠不 return → 委派照跑，重複 key 全部回來。
+    故本條驗三件事：**gate 在**、**條件不被布林字面值短路**、**委派排在 gate 之後**。
 
-    ⛔ **不得**用「改成 expander 也很像 gate」為由放寬本條：
-       那正是本條要擋的那一個改動。
+    ⛔ **不得**用「改成 expander 也很像 gate」為由放寬本條：那正是本條要擋的那一個改動。
     """
     _tree = ast.parse(NEW_SRC.read_text(encoding="utf-8"))
-    _fn = next((_n for _n in ast.walk(_tree)
-                if isinstance(_n, ast.FunctionDef) and _n.name == "_render_maintain"), None)
-    assert _fn is not None, (
-        "`ui/views/page_05_settings.py` 找不到 `_render_maintain` —— "
-        "維護區的委派被改名或搬走了，本條失去對象，請先確認它現在住在哪裡。")
+    _defs = {_n.name: _n for _n in ast.walk(_tree)
+             if isinstance(_n, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
-    # (1) 這個函式裡真的呼叫了 render_manage_tab（否則本條在守一個空殼）
-    _calls_manage = [_n for _n in ast.walk(_fn)
-                     if isinstance(_n, ast.Call)
-                     and (getattr(_n.func, "id", None) == "render_manage_tab"
-                          or getattr(_n.func, "attr", None) == "render_manage_tab")]
-    assert _calls_manage, (
-        "`_render_maintain` 沒有呼叫 `render_manage_tab()` —— fail-closed："
-        "本條的比較對象不見了，先確認委派是不是被拿掉了（那是刪功能）。")
+    _missing = sorted({_f for _f, _ in _MUST_BE_GATED} - set(_defs))
+    assert not _missing, (
+        f"`_MUST_BE_GATED` 上的 {_missing} 在被測檔裡不存在 —— "
+        "本條正指著一個不存在的名字（改名之後這個守衛會靜靜留在檔案裡）。")
 
-    # (2) 函式裡有一個「條件不成立就提前 return」的 gate，且它的條件讀 st.checkbox
-    _gates = [_n for _n in ast.walk(_fn)
-              if isinstance(_n, ast.If)
-              and any(isinstance(_b, ast.Return) for _b in _n.body)
-              and any(isinstance(_c, ast.Call)
-                      and getattr(_c.func, "attr", None) == "checkbox"
-                      for _c in ast.walk(_n.test))]
-    assert _gates, (
-        "`_render_maintain` 沒有『st.checkbox 沒勾就提前 return』的 gate —— "
-        "雙軌並行下舊 ⑤ 也在跑同一支 `render_manage_tab()`，"
-        "沒有 gate 就會撞重複 widget key（`divcal_gen` / `manage_notify_preview` / `pool_*`）。"
-        "⚠️ `st.expander(expanded=False)` **不算** gate：收合的 expander body 照樣執行。")
+    for _fname, _delegate in _MUST_BE_GATED:
+        _fn = _defs[_fname]
 
-    # ── ⭐ gate 的條件不得被布林字面值短路掉 ──────────────────────────────
-    # ⚠️ **這一段是突變實測補上的，不是想像出來的**：本條的第一版只問
-    #    「test 裡有沒有 checkbox 呼叫」，於是 `if False and st.checkbox(...)`
-    #    **照樣綠** —— checkbox 還在、`return` 還在、形狀完美，
-    #    但條件恆假 → 永遠不 return → `render_manage_tab()` 照跑，重複 key 全部回來。
-    #    （突變 C1 實測：十二條守衛沒有一條轉紅。）
-    # ⛔ 判定方式：把 `st.checkbox(...)` 這棵子樹**整個排除**（它自己的
-    #    `value=False` 是合法的），剩下的部分不准出現 `True` / `False` 字面值。
-    for _g in _gates:
-        _cb_ids = {id(_c) for _n in ast.walk(_g.test)
-                   if isinstance(_n, ast.Call)
-                   and getattr(_n.func, "attr", None) == "checkbox"
-                   for _c in ast.walk(_n)}
-        _lits = [_n for _n in ast.walk(_g.test)
-                 if isinstance(_n, ast.Constant) and isinstance(_n.value, bool)
-                 and id(_n) not in _cb_ids]
-        assert not _lits, (
-            f"gate 的條件被布林字面值短路了：`{ast.unparse(_g.test)[:90]}` —— "
-            "形狀還在、擋不到東西。gate 的條件只准由 `st.checkbox(...)` 決定。")
+        # (1) 委派真的在（否則本條在守一個空殼）
+        _calls = [_n for _n in ast.walk(_fn)
+                  if isinstance(_n, ast.Call)
+                  and (getattr(_n.func, "id", None) == _delegate
+                       or getattr(_n.func, "attr", None) == _delegate)]
+        assert _calls, (
+            f"`{_fname}` 沒有呼叫 `{_delegate}()` —— fail-closed："
+            "本條的比較對象不見了，先確認委派是不是被拿掉了（那是刪功能）。")
 
-    # (3) ⭐ 委派必須在 gate **之後** —— gate 存在但 render 在它前面等於沒 gate
-    _gate_end = max(_g.end_lineno for _g in _gates)
-    _early = [_c.lineno for _c in _calls_manage if _c.lineno < _gate_end]
-    assert not _early, (
-        f"`render_manage_tab()` 出現在 gate 結束（第 {_gate_end} 行）之前："
-        f"{_early} —— gate 擋不到它，重複 key 照樣會發生。")
+        # (2) 有一個「條件不成立就提前 return」的 gate，且條件讀 st.checkbox
+        _gates = [_n for _n in ast.walk(_fn)
+                  if isinstance(_n, ast.If)
+                  and any(isinstance(_b, ast.Return) for _b in _n.body)
+                  and any(isinstance(_c, ast.Call)
+                          and getattr(_c.func, "attr", None) == "checkbox"
+                          for _c in ast.walk(_n.test))]
+        assert _gates, (
+            f"`{_fname}` 沒有『st.checkbox 沒勾就提前 return』的 gate —— "
+            f"雙軌並行下舊 ⑤ 也在跑同一支 `{_delegate}()`，"
+            "沒有 gate 就會撞重複 widget key。"
+            "⚠️ `st.expander(expanded=False)` **不算** gate：收合的 body 照樣執行。")
+
+        # (3) gate 的條件不得被布林字面值短路掉
+        # ⛔ 判定：把 `st.checkbox(...)` 這棵子樹**整個排除**（它自己的
+        #    `value=False` 是合法的），剩下的部分不准出現 True / False 字面值。
+        for _g in _gates:
+            _cb_ids = {id(_c) for _n in ast.walk(_g.test)
+                       if isinstance(_n, ast.Call)
+                       and getattr(_n.func, "attr", None) == "checkbox"
+                       for _c in ast.walk(_n)}
+            _lits = [_n for _n in ast.walk(_g.test)
+                     if isinstance(_n, ast.Constant) and isinstance(_n.value, bool)
+                     and id(_n) not in _cb_ids]
+            assert not _lits, (
+                f"`{_fname}` 的 gate 條件被布林字面值短路了："
+                f"`{ast.unparse(_g.test)[:90]}` —— 形狀還在、擋不到東西。"
+                "gate 的條件只准由 `st.checkbox(...)` 決定。")
+
+        # (4) ⭐ 委派必須在 gate **之後** —— gate 存在但委派在它前面等於沒 gate
+        _gate_end = max(_g.end_lineno for _g in _gates)
+        _early = [_c.lineno for _c in _calls if _c.lineno < _gate_end]
+        assert not _early, (
+            f"`{_delegate}()` 出現在 `{_fname}` 的 gate 結束（第 {_gate_end} 行）之前："
+            f"{_early} —— gate 擋不到它，重複 key 照樣會發生。")
 
 
 def test_app_mounts_the_new_settings_view():
