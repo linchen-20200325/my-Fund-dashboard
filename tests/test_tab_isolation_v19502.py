@@ -54,10 +54,23 @@ def test_all_tab_blocks_exist():
     ⚠️ 比較改用 `==` 而非舊的 `<=`:多出一個**沒登記在 SSOT** 的 `with tab_*:`
     同樣要紅(那代表有分頁沒進 SSOT)。**這比舊寫法嚴,不是放寬。**
     """
-    from ui.helpers.story_nav import _TAB_LABELS
+    # ⚠️ **2026-09-07 由雙軌並行擴充：期望集合 ＝ 正式分頁 ∪ [新] 並行預覽分頁。**
+    #    **有意識的政策變更，不是把規則改鬆**（決策者：客戶 2026-09-07 雙軌並行原則）。
+    #
+    #    **舊斷言**（原地保留、加刪除線，不刪）::
+    #
+    #        ~~expected = {f"tab_{_k}" for _k in _TAB_LABELS}~~
+    #
+    #    **舊斷言的理由一個字都沒有被推翻**，而且**比較符號仍然是 `==`**：
+    #    多一個**沒登記在任一張 SSOT** 的 `with tab_*:` 照樣紅（那代表有分頁沒進 SSOT），
+    #    少一個照樣紅。**擴的是 SSOT 的來源，不是比較的嚴格度。**
+    #    ⚠️ 預覽分頁的變數名前綴刻意是 `tab_preview_<key>` 而不是 `tab_<key>` ——
+    #       後者會與正式分頁**撞名**（兩張表的 key 是同一組，這是刻意的）。
+    from ui.helpers.story_nav import PREVIEW_TAB_LABELS, _TAB_LABELS
 
     names = {n for n, _ in _tab_with_blocks()}
-    expected = {f"tab_{_k}" for _k in _TAB_LABELS}
+    expected = ({f"tab_{_k}" for _k in _TAB_LABELS}
+                | {f"tab_preview_{_k}" for _k in PREVIEW_TAB_LABELS})
     assert names == expected, (
         f"app.py 的 `with tab_*:` 與分頁 SSOT 對不上:"
         f"缺 {sorted(expected - names)}／多 {sorted(names - expected)}")
@@ -133,10 +146,12 @@ def test_every_tab_try_calls_friendly_error():
         f"以下分頁的 except 沒有**呼叫** friendly_error(靜默吞或只 import 沒接):{bad}")
 
     # 順帶鎖數量:分頁數由 SSOT 導出,不再寫死 7
-    from ui.helpers.story_nav import _TAB_LABELS
-    assert len(_tab_with_blocks()) == len(_TAB_LABELS), (
+    # ⚠️ 2026-09-07：SSOT 由一張表變兩張（正式 ＋ [新] 並行預覽），理由同上一條。
+    from ui.helpers.story_nav import PREVIEW_TAB_LABELS, _TAB_LABELS
+    _want = len(_TAB_LABELS) + len(PREVIEW_TAB_LABELS)
+    assert len(_tab_with_blocks()) == _want, (
         f"`with tab_*:` 區塊數 {len(_tab_with_blocks())} 與分頁 SSOT "
-        f"{len(_TAB_LABELS)} 不符")
+        f"{_want}（{len(_TAB_LABELS)} 正式 ＋ {len(PREVIEW_TAB_LABELS)} 預覽）不符")
 
 
 # ── requirements.txt 漂移鎖:pandas/numpy 必鎖上界(py3.14 雲端防 segfault)──────

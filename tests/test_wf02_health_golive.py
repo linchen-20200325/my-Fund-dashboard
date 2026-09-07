@@ -620,23 +620,54 @@ def test_app_mounts_the_new_health_view():
 
     ⛔ 沒有這一條，底下所有「新頁沒有多寫、沒有掉東西」的證明都可能是在證明一個
        **沒有人打開**的檔案（本 repo 的既有病：「算對了沒接出去」）。
+
+    ⚠️ **2026-09-07 由雙軌並行改寫：這一格驗的東西從「換掉」變成「兩格都對」。**
+    **有意識的政策變更，不是把規則改鬆**（決策者：客戶 2026-09-07
+    「舊 ② 保留原位……新 ② 則掛為獨立新 Tab」）。
+
+    **舊斷言**（原地保留、加刪除線，不刪）::
+
+        ~~assert _in_slot == ["render_holdings_health"]~~
+
+    **舊斷言的理由一個字都沒有被推翻** —— 它要防的是「新頁算對了卻沒接出去」
+    （本 repo 的既有病）。下面**兩條**斷言接的是同一根針，而且**多釘了一格**：
+    新頁必須掛在 `tab_preview_health`（沒接出去 → 紅），
+    **舊頁必須還在 `tab_health`**（被覆蓋掉 → 也紅，
+    那正是客戶明令禁止的「破壞現有線上正常運作的舊版 Tab」）。
+    **被權衡掉的只有「新頁必須佔住 `tab_health` 那一格」這個前提**，
+    因為客戶把它改成並行了。
+
     ⚠️ 只驗 ② 那一格；①③④⑤ 由 `tests/test_ia_kit.py::_SLOT_RENDER` 整表守。
     """
     _app = (ROOT / "app.py").read_text(encoding="utf-8")
     assert "from ui.views.page_02_health import" in _app, (
         "`app.py` 沒有 import 新 ② —— 接線鏈斷在 app.py 這一節。")
     _tree = ast.parse(_app)
-    _in_slot = [
-        _c.func.id
-        for _n in ast.walk(_tree) if isinstance(_n, ast.With)
-        for _it in _n.items
-        if isinstance(_it.context_expr, ast.Name) and _it.context_expr.id == "tab_health"
-        for _c in ast.walk(_n)
-        if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Name)
-        and _c.func.id.startswith("render_")
-    ]
-    assert _in_slot == ["render_holdings_health"], (
-        f"`with tab_health:` 呼叫的是 {_in_slot}，應為 ['render_holdings_health']。")
+    def _renders_in(slot: str) -> list:
+        return [
+            _c.func.id
+            for _n in ast.walk(_tree) if isinstance(_n, ast.With)
+            for _it in _n.items
+            if isinstance(_it.context_expr, ast.Name)
+            and _it.context_expr.id == slot
+            for _c in ast.walk(_n)
+            if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Name)
+            and _c.func.id.startswith("render_")
+        ]
+
+    # ① 新頁真的掛出去了（掛在 [新] 並行預覽那一格）
+    assert _renders_in("tab_preview_health") == ["render_holdings_health"], (
+        f"`with tab_preview_health:` 呼叫的是 {_renders_in('tab_preview_health')}，應為 "
+        "['render_holdings_health'] —— 新頁沒接出去，底下所有證明都是在證一個沒人打開的檔案。")
+
+    # ② ⭐ **舊頁必須還在原位** —— 客戶 2026-09-07 明令舊 Tab 原樣保留。
+    #    ⛔ 這一條不可以省：少了它，「把舊頁換掉」這個動作會**靜默通過**，
+    #       而那正是本次要撤銷的東西。
+    assert _renders_in("tab_health") == ["render_fund_grp_health_tab"], (
+        f"`with tab_health:` 呼叫的是 {_renders_in('tab_health')}，應為 "
+        "['render_fund_grp_health_tab'] —— 舊 ② 被覆蓋掉了，那是客戶明令禁止的。")
+    assert "from ui.tab_fund_grp_health import" in _app, (
+        "`app.py` 沒有 import 舊 ② —— 舊分頁的接線鏈斷了。")
 
 
 def test_the_switch_adds_no_write_surface():

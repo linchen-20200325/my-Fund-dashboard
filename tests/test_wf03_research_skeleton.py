@@ -141,7 +141,8 @@ from ui.views.page_03_research import (  # noqa: E402
     DEEP_DIVE_TABLES,
     SOURCE_OPTIONS,
     SUBMIT_LABEL,
-    _BATCH_PENDING_NOTE,
+    _BATCH_EMPTY_MISSING,
+    _BATCH_UNPARSED_MISSING,
     _RESULTS_PENDING_NOTE,
     _declared_currency,
     _dividend_rows,
@@ -317,15 +318,31 @@ _TEXT_APIS = (
     "success", "metric", "dataframe", "table", "code", "header", "subheader",
     "title", "slider", "number_input", "checkbox", "text_input", "selectbox",
     "form_submit_button",
+    # ⚠️ 2026-09-07 批次接上真取數時補：批次的貼上框走 `st.text_area`。
+    #    **少了它不是「少錄一行」，是整條路徑會炸** —— `__getattr__` 的預設分支
+    #    回傳的是假容器，`_parse_codes()` 拿到它之後 `for line in …` 會 TypeError。
+    "text_area",
+    # ⚠️ 同輪補：批次的 CSV 下載鈕。**少了它是「靜靜漏錄」而不是炸** ——
+    #    比對「有沒有畫出下載鈕」的斷言會恆為 False，看起來像產品碼少畫了一顆。
+    "download_button",
 )
 
 
 class _Rec:
     """把 `st.<api>(...)` 錄成一串字，其餘屬性一律回傳可呼叫 / 可進 `with` 的假物件。"""
 
-    def __init__(self) -> None:
+    def __init__(self, submitted: bool = False,
+                 widgets: dict[str, Any] | None = None) -> None:
         self.parts: list[str] = []
         self.session_state: dict[str, Any] = {}
+        #: `{widget 的 label: 要回傳的值}`。**沒指定的 widget 行為完全不變**
+        #: （`text_input` 回 `value=`、`checkbox` 回 `value=`），
+        #: 所以既有的每一條斷言都看到與從前一模一樣的畫面。
+        self.widgets: dict[str, Any] = dict(widgets or {})
+        #: 送出鈕的回傳值。**預設 `False`（＝純渲染）**，這是絕大多數斷言要的處境。
+        #: ⚠️ 2026-09-07 批次上線時補：在此之前**沒有任何測試走得到送出後的路徑**，
+        #:    也就是「按下去會發生什麼」整條是**沒有被驗過的**。
+        self.submitted = bool(submitted)
 
     # ── context manager（`with st.container():` 之類）────────────────
     def __enter__(self) -> "_Rec":
@@ -343,7 +360,10 @@ class _Rec:
                 _bits = [str(a) for a in args if isinstance(a, (str, int, float))]
                 # widget 的 label 是第一個位置引數；`metric` 的值是第二個。
                 self.parts.append(f"[{name}] " + " ".join(_bits))
-            if name == "text_input":
+            if name in ("text_input", "text_area"):
+                _label = args[0] if args else kwargs.get("label")
+                if _label in self.widgets:
+                    return self.widgets[_label]
                 return kwargs.get("value", "")
             if name == "selectbox":
                 _opts = kwargs.get("options") or (args[1] if len(args) > 1 else ())
@@ -351,7 +371,15 @@ class _Rec:
                 return _opts[kwargs.get("index", 0) or 0] if _opts else ""
             if name in ("slider", "number_input"):
                 return kwargs.get("value", args[2] if len(args) > 2 else 0)
-            if name in ("checkbox", "toggle", "button", "form_submit_button"):
+            if name in ("checkbox", "toggle"):
+                _label = args[0] if args else kwargs.get("label")
+                if _label in self.widgets:
+                    return bool(self.widgets[_label])
+                return bool(kwargs.get("value", False))
+            if name in ("button", "form_submit_button"):
+                return self.submitted
+            # 下載鈕：**恆回 `False`（＝沒人按）**，與其他按鈕同一個立場。
+            if name == "download_button":
                 return False
             if name == "columns":
                 _spec = args[0] if args else 1
@@ -377,7 +405,11 @@ class _Rec:
 
 
 def _render(applied: dict | None = None, result: Any = _SENTINEL,
-            raiser: BaseException | None = None) -> list[str]:
+            raiser: BaseException | None = None, *,
+            session: dict[str, Any] | None = None,
+            submitted: bool = False,
+            widget: dict[str, Any] | None = None,
+            patch: dict[str, Any] | None = None) -> list[str]:
     """跑一次整頁，回傳**有序**的渲染紀錄。
 
     ⚠️ 回傳 list 而不是一整塊字串 —— 順序本身是本檔要驗的東西之一，
@@ -397,6 +429,23 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
              因為那才是**大多數既有斷言**在骨架時期看到的處境。
     raiser : 給它一個例外物件 → 假的 `auto_fetch_moneydj` 會 `raise` 它。
              用來驗「真的例外走 `safe_section` 的紅框」那條路徑。
+    session : 額外預塞的 session 鍵值（批次的已送出清單／已跑完的列）。
+              ⚠️ 2026-09-07 補。**不要**改成「測試自己去動真的 `st.session_state`」——
+              本函式用的是 recorder 自帶的那一份 dict，改動不會外洩到別條測試。
+    patch : 渲染期間要暫時換掉的**被測模組屬性**（`{名字: 替身}`）。
+            ⚠️ 一個泛用的鉤子，**刻意不做成三個具名參數** —— 每加一個具名參數
+            就是一次「這個 harness 只服務某一條測試」的耦合。
+            用途：批次那一塊的重運算入口（`_run_batch`）與需要 pandas 的
+            `_batch_column_config` 都必須換掉，否則測試會連外網 / 進不了 CI 以外的環境。
+            **一律在 `finally` 還原**（與底下 `st` / `auto_fetch_moneydj` 同一套）。
+    widget : `{widget label: 使用者輸入的值}`。**沒指定的完全照舊。**
+             ⚠️ 2026-09-07 補：批次的貼上框是 `st.text_area`，
+             在此之前 recorder 對它恆回 `value=`（空字串）——
+             也就是「使用者真的貼了東西進去」這條路徑**從來沒有被走過**。
+    submitted : 送出鈕的回傳值。`True` ＝ 模擬使用者**按下去了**。
+              ⚠️ 在此之前 recorder 對送出鈕**恆回 `False`**，也就是整條
+              「按下去之後會發生什麼」的路徑**從來沒有被任何測試走過** ——
+              批次的長時間運算就長在那條路徑上，所以它必須可驗。
     """
     import sys
 
@@ -423,9 +472,10 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
     #    它那一行麵包屑 caption 走的是**真的** streamlit（bare 模式下無害）、
     #    **不會**進到紀錄裡。本檔沒有任何斷言依賴它。
 
-    _rec = _Rec()
+    _rec = _Rec(submitted=submitted, widgets=widget)
     if applied is not None:
         _rec.session_state["v03_research_applied_query"] = applied
+    _rec.session_state.update(session or {})
 
     # ⛔ **紅燈也要錄得到，否則「不准紅」那一族斷言是空的。**
     #    `render_state.system_error()` 走 **lazy** `from ui.helpers.session import
@@ -456,6 +506,16 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
         return _payload
 
     _page.auto_fetch_moneydj = _fake_fetch
+    # ⚠️ 先確認要換的名字**真的存在**：打錯字的 patch 會靜靜地新增一個沒人讀的屬性，
+    #    然後測試對著**沒有被換掉**的真實實作跑（那正是本函式開頭那段長註的病）。
+    _patch = dict(patch or {})
+    _missing = [_k for _k in _patch if not hasattr(_page, _k)]
+    assert not _missing, (
+        f"`patch=` 指定了被測模組沒有的名字：{_missing} —— "
+        "打錯字的 patch 不會報錯，只會讓斷言對著真實實作生效。")
+    _patched = [(_k, getattr(_page, _k)) for _k in _patch]
+    for _k, _v in _patch.items():
+        setattr(_page, _k, _v)
     _saved = [(_m, getattr(_m, "st", None)) for _m in _targets]
     # 錨點：每一個目標模組**都要**真的有 `st` 可以換掉。少一個就代表上面那個
     # 遮蔽陷阱又發作了，而它的症狀是**靜默漏錄**，不是報錯。
@@ -470,6 +530,8 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
     finally:
         for _m, _old in _saved:
             _m.st = _old
+        for _k, _old in _patched:
+            setattr(_page, _k, _old)
         _page.auto_fetch_moneydj = _real_fetch
         _sess.friendly_error = _real_friendly
     return _rec.parts
@@ -591,13 +653,20 @@ GREY_UNITS: tuple[str, ...] = (
 #:    「**這個單位有沒有印它自己那一句**」，而不是「頁面上有沒有出現那句共用的話」。
 #: ⚠️ **這個粒度差別是有實據的**：舊寫法只要頁面上任一處印了共用那句就通過，
 #:    把兩塊的理由對調**不會轉紅**；改 dict 之後對調就轉紅（突變 P2，見該函式）。
+#: ⚠️ **2026-09-07：批次也離開了這一族（狀態變更，不是漏刪）。**
+#:    批次接上真取數之後，它的灰態理由不再是「這一塊還沒做」，而是
+#:    **「你還沒貼代碼」**（`_BATCH_EMPTY_MISSING`）或**「貼了但認不得」**
+#:    （`_BATCH_UNPARSED_MISSING`）—— 兩者都是使用者**照著做真的能解決**的空狀態。
+#:    依既有處置（深度區 2026-09-06 離開時走的同一條路）：**參數化縮小，
+#:    不是把規則放寬** —— 批次改由 `tests/test_wf03_research_batch.py` 驗真內容。
 PENDING_NOTES: dict[str, str] = {
     BLOCK_RESULTS: _RESULTS_PENDING_NOTE,
-    BLOCK_BATCH: _BATCH_PENDING_NOTE,
 }
-#: 仍然吃「內容還沒接上」灰態的單位 —— **本批只剩這兩個**。
-#: ⚠️ 深度區的六格自 2026-09-06 起**不再**吃那一族：它們的灰態理由來自資料本身。
+#: 仍然吃「內容還沒接上」灰態的單位 —— **只剩「搜尋結果」一個**。
+#: ⚠️ 深度區的六格自 2026-09-06 起、批次自 2026-09-07 起**不再**吃那一族：
+#:    它們的灰態理由來自資料本身 / 使用者的輸入，不是本頁的進度。
 PENDING_UNITS: tuple[str, ...] = tuple(PENDING_NOTES)
+
 
 #: 深度區的六個單位（三張卡 ＋ 兩張大表 ＋ 來源標註）。
 DEEP_UNITS: tuple[str, ...] = (
@@ -611,6 +680,16 @@ DEEP_UNITS: tuple[str, ...] = (
 #:    `_fetch_failed_note()`）。把它一起要求成灰態，等於要求證據在最需要時消失。
 #:    它有沒有真的攤開，由
 #:    :func:`test_a_total_failure_shows_the_source_trace_and_never_paints_red` 驗。
+#: ⚠️ **2026-09-07：`BLOCK_BATCH` 已自動掉出這個清單，這是刻意的，不是漏改。**
+#:    它是跟著 :data:`PENDING_UNITS` 縮的（批次接上真取數 → 離開「內容還沒接上」那一族）。
+#:    **後果要講明**：`test_every_grey_unit_says_where_to_look` 對批次**不再生效** ——
+#:    因為那條除了驗「有指路」還會驗「指路指回**搜尋條件**」，而批次的指路
+#:    現在指的是**它自己的貼上框**（`page_03_research._batch_where()`）。
+#:    「去搜尋條件打一個代碼」**解決不了**「你還沒貼多個代碼」，照著做會回到一模一樣的灰。
+#:    ⛔ **不得**為了讓批次留在這條規則裡而把它的指路改回搜尋條件 —— 那是把一則
+#:    **真的有效**的指路換成一則**已知無效**的。批次的指路改由
+#:    `tests/test_wf03_research_batch.py::test_the_batch_pointer_is_the_paste_box` 驗，
+#:    而且**驗得比本條嚴**（它連「指到的欄位在畫面上真的存在」都驗）。
 GREY_ON_BLANK: tuple[str, ...] = PENDING_UNITS + DEEP_DIVE_CARDS + DEEP_DIVE_TABLES
 
 #: 一份「已送出」的查詢。形狀就是 `_normalise_query()` 的回傳值。
@@ -1037,17 +1116,24 @@ def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
             "串到一起會讓使用者以為它們等的是同一件事。\n" + _body)
 
 
-def test_the_two_pending_reasons_are_not_the_same_sentence():
-    """兩塊灰態的理由**必須不一樣** —— 它們卡住的原因根本不同。
+def test_the_greys_on_this_page_are_not_one_recycled_sentence():
+    """本頁的灰態理由**兩兩不得相同** —— 它們卡住的原因根本不同。
 
-    · 「{results}」卡在**沒有可以列出候選的搜尋**（資料面）；
-    · 「{batch}」卡在**沒有可以收多個代碼的輸入欄位**（版面決定，不是資料問題）。
+    ⚠️ **2026-09-07 換了主詞（狀態變更，不是漏刪）**：本條原名
+    `test_the_two_pending_reasons_are_not_the_same_sentence`，驗的是
+    `_RESULTS_PENDING_NOTE` vs ~~`_BATCH_PENDING_NOTE`~~。批次接上真取數之後
+    後者**已不存在**（它的灰換成兩句**空狀態**），故主詞由「兩句 pending」
+    換成「本頁現有的三句灰」。**規則一個字都沒有放寬，涵蓋的句子反而多了一句。**
+
+    · 「搜尋結果」卡在**沒有可以列出候選的搜尋**（資料面）；
+    · 「批次（還沒貼）」卡在**使用者還沒給代碼**（他照著做就能解決）；
+    · 「批次（貼了但認不得）」卡在**格式不對**（下一步是去改格式，不是去貼）。
 
     共用一句「本頁分批上線」會把兩件事說成同一件，使用者無從判斷哪一個跟他有關、
     也無從知道哪一個是他等得到的 —— 那是 §1 的失效模式（**看起來有解釋、實際沒有**）。
 
-    ⚠️ **本條不驗那兩句話的「意思」**（測試沒有判讀語意的能力），只驗三件可驗的事：
-    (1) 兩句不相等、(2) 兩句都不是空的、(3) 兩句都沒有退回舊的共用措辭。
+    ⚠️ **本條不驗那幾句話的「意思」**（測試沒有判讀語意的能力），只驗三件可驗的事：
+    (1) 兩兩不相等、(2) 每句都不是空的、(3) 都沒有退回舊的共用措辭。
 
     ## 突變實驗（2026-09-06 實跑）
 
@@ -1057,25 +1143,34 @@ def test_the_two_pending_reasons_are_not_the_same_sentence():
       但 :func:`test_every_grey_unit_is_grey_until_its_content_lands` **轉紅** ——
       那條驗的是「這個單位有沒有印**它自己**那一句」。**兩條分工，缺一不可。**
     """
-    assert _RESULTS_PENDING_NOTE != _BATCH_PENDING_NOTE, (
-        "兩塊灰態共用同一句理由 —— 它們卡住的原因不同（一個缺搜尋、一個缺輸入欄位），"
-        "共用一句等於對使用者說謊。")
+    _NOTES = {
+        "搜尋結果（列不出候選）": _RESULTS_PENDING_NOTE,
+        "批次（還沒貼代碼）": _BATCH_EMPTY_MISSING,
+        "批次（貼了但認不得）": _BATCH_UNPARSED_MISSING,
+    }
+    assert len(set(_NOTES.values())) == len(_NOTES), (
+        "本頁的灰態理由有兩句以上是同一句 —— 它們卡住的原因不同"
+        f"（{' / '.join(_NOTES)}），共用一句等於對使用者說謊。\n"
+        + "\n".join(f"  {_k}: {_v}" for _k, _v in _NOTES.items()))
     # ⛔ **內容錨定**（2026-09-06 獨立稽核 應修 2）：只驗「兩者不相等」擋不住
     #    **把兩個常數的字串內容互換**（突變 B1）—— 因為 `PENDING_NOTES` 是按**常數名字**
     #    綁期望值，內容一起換、期望值就跟著換，畫面輸出與突變 P2 一模一樣卻全綠。
     #    ⚠️ 而那兩個常數在檔案裡**相鄰**、呼叫點卻隔 600 行 ——
     #    **本組守住了難發現的那一種（P2 對調呼叫點），漏掉了容易寫錯的那一種。**
     #    下面兩條各挑一個**真的只屬於那一塊**的詞釘住。
-    assert "多代碼" in _BATCH_PENDING_NOTE, (
-        "批次那一句沒有講到「多代碼」—— 它卡住的原因就是缺一個能收多個代碼的欄位。")
+    assert "多代碼" in _BATCH_EMPTY_MISSING, (
+        "批次「還沒貼」那一句沒有講到「多代碼」—— 它缺的就是多個代碼。")
     assert "候選" in _RESULTS_PENDING_NOTE, (
         "搜尋結果那一句沒有講到「候選」—— 它卡住的原因就是列不出候選清單。")
-    assert "多代碼" not in _RESULTS_PENDING_NOTE and "候選" not in _BATCH_PENDING_NOTE, (
+    assert "英數字" in _BATCH_UNPARSED_MISSING, (
+        "批次「認不得」那一句沒有講出代碼的形狀 —— "
+        "使用者無從知道要把貼上的內容改成什麼樣子。")
+    assert "多代碼" not in _RESULTS_PENDING_NOTE and "候選" not in _BATCH_EMPTY_MISSING, (
         "兩句的內容被互換了（或串在一起）—— 錨定詞跑到另一塊去了。")
-    for _unit, _note in PENDING_NOTES.items():
-        assert _note.strip(), f"單位「{_unit}」的灰態理由是空的。"
+    for _unit, _note in _NOTES.items():
+        assert _note.strip(), f"「{_unit}」的灰態理由是空的。"
         assert "本頁分批上線" not in _note, (
-            f"單位「{_unit}」退回了舊的共用措辭「本頁分批上線」—— "
+            f"「{_unit}」退回了舊的共用措辭「本頁分批上線」—— "
             "那句話講的是**這一頁的進度**，不是**這一塊缺什麼**。")
 
 
@@ -1585,11 +1680,48 @@ def test_the_empty_state_title_never_carries_upstream_text():
     ⚠️ `wide_table(empty_title=…)` 也算，它會原封轉交給 `empty_state()`。
     ⚠️ 允許 f-string，但**內插的每一段都必須是本檔的模組層常數**
     （`DEEP_DIVE_TABLES[0]` 這種），不得是 `result` / 參數 / 區域變數。
+
+    ## ⚠️ 2026-09-07：白名單改成**推導**的（收緊，不是放寬）
+
+    ~~舊寫法是一份**手寫的七個名字**清單。~~ 它有兩個問題，批次接上真取數時同時發作：
+      1. **會過期** —— 本頁新增一個模組層標題常數（`_BATCH_EMPTY_TITLE`）就誤紅，
+         而修法會被推向「把名字加進清單」，那是**每次都要有人記得**的維護；
+      2. **它其實沒有驗到「那個名字真的是常數」** —— 清單裡的名字若哪天被改成
+         `BLOCK_BATCH = _fetch_title()`，這條照樣綠。
+
+    **現行判準**：允許的名字 ＝ **本頁模組層、綁定到一個 `ast.literal_eval` 得出來的
+    字面值**（字串或字串 tuple）的那些。它自己會長大，而且**驗的是值的性質不是名字**
+    —— 一個名字只要改成執行期算出來的東西，當場就掉出集合、本條轉紅。
+    ⚠️ 舊的七個名字改成**下限斷言**（見下）：推導壞掉時會當場看見，不會靜靜放行。
     """
-    _allowed = {"DEEP_DIVE_CARDS", "DEEP_DIVE_TABLES", "DEEP_DIVE_PROVENANCE",
-                "BLOCK_RESULTS", "BLOCK_DEEP", "BLOCK_BATCH", "BLOCK_FORM"}
+    _tree_mod = _tree()
+    _allowed = set()
+    for _stmt in _tree_mod.body:
+        if isinstance(_stmt, ast.Assign):
+            _targets, _value = _stmt.targets, _stmt.value
+        elif isinstance(_stmt, ast.AnnAssign) and _stmt.value is not None:
+            _targets, _value = [_stmt.target], _stmt.value
+        else:
+            continue
+        try:
+            _lit = ast.literal_eval(_value)
+        except Exception:
+            continue
+        if not isinstance(_lit, (str, tuple)):
+            continue
+        if isinstance(_lit, tuple) and not all(isinstance(_x, str) for _x in _lit):
+            continue
+        _allowed.update(_t.id for _t in _targets if isinstance(_t, ast.Name))
+    # ⛔ **下限**：推導若壞掉（例如有人把常數改成執行期算的），本條要當場說出來，
+    #    而不是變成一個空集合把所有東西都判成違規（那會是**方向相反**的假紅）。
+    _floor = {"DEEP_DIVE_CARDS", "DEEP_DIVE_TABLES", "DEEP_DIVE_PROVENANCE",
+              "BLOCK_RESULTS", "BLOCK_DEEP", "BLOCK_BATCH", "BLOCK_FORM"}
+    assert _floor <= _allowed, (
+        "推導出來的『模組層字面值常數』集合少了原本就該在裡面的名字："
+        f"{sorted(_floor - _allowed)} —— 它們被改成執行期算出來的東西了嗎？"
+        "若是，那正是本條要擋的事，請改回字面值；若是推導邏輯壞了，請修推導。")
     _bad: list[str] = []
-    for _n in ast.walk(_tree()):
+    for _n in ast.walk(_tree_mod):
         if not isinstance(_n, ast.Call):
             continue
         _fn = getattr(_n.func, "id", None)

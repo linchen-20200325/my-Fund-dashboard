@@ -182,10 +182,16 @@ from ui.tab3_portfolio import render_portfolio_tab
 #   ⚠️ 消費者清單是**會漂移的量測值**,需要時**現場量測**,不要引用本行。查證方式:
 #   `git grep -n "crisis_backtest" -- '*.py'` 後**逐一判讀是 import 還是 docstring 提及**
 #   —— 只看 grep 命中數,就會複製 (1) 的錯誤。
-# 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：② 改掛新 View。
-# ⛔ 舊 `ui/tab_fund_grp_health.py` **刻意保留、一個字都沒動** —— 它是回退路徑，
-#    而且新頁委派的正是它底下那些舊模組（(A) 路線）。**不要順手刪掉它。**
-from ui.views.page_02_health import (  # noqa: E402  (② 持倉體檢)
+# ⚠️ 2026-09-07 **雙軌並行**（客戶同日再頒，凌駕同日稍早的「逐頁切換」裁決）：
+#    「舊 ② 與舊 ⑤ 保留原位……新 ② 與新 ⑤ 則掛為獨立新 Tab」，
+#    且「**絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼**」。
+#    → ② 這一格**接回舊入口**；新 View 改掛 ⑥（見本檔最後兩個 with 區塊）。
+#    ⚠️ 舊 `ui/tab_fund_grp_health.py` 與新 `ui/views/page_02_health.py`
+#       **兩檔本批都一個字沒動**，改的只有 `app.py` 的掛載方式。
+from ui.tab_fund_grp_health import (  # noqa: E402  (② 持倉體檢・現行)
+    render_fund_grp_health_tab,
+)
+from ui.views.page_02_health import (  # noqa: E402  (⑥ [新] 持倉體檢・並行預覽)
     render_holdings_health,
 )
 # 2026-08-31 七→五接線:③ 與 ⑤ 是**合併頁**,由它們自己去 lazy import 五個舊入口
@@ -193,10 +199,19 @@ from ui.views.page_02_health import (  # noqa: E402  (② 持倉體檢)
 #  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
 # 留著會讓「app.py 到底掛了幾個入口」有兩種讀法,而那正是本次要消滅的東西。
 from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 標的探索)
-# 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：⑤ 改掛新 View。
-# ⛔ 舊 `ui/tab_settings_diag.py` **刻意保留、一個字都沒動** —— 它是回退路徑，
-#    而且新頁委派的正是它底下那些舊模組（(A) 路線）。**不要順手刪掉它。**
-from ui.views.page_05_settings import (  # noqa: E402  (⑤ 設定與診斷)
+# ⚠️ 2026-09-07 **雙軌並行**（理由同上方 ② 那一段）：⑤ 這一格接回舊入口，
+#    新 View 改掛 ⑦。
+# ⛔ **⑤ 的雙軌有一個 ② 沒有的結構問題，動這裡之前務必讀懂**：
+#    新舊 ⑤ **委派同一批舊模組**，其中 `ui/tab_manage.py::render_manage_tab()`
+#    帶具名 widget key（`divcal_gen` / `manage_notify_preview` / `pool_*` …），
+#    同一次 run 畫兩份會撞 Streamlit 的重複 key。
+#    解法**不在本檔** —— 新 ⑤ 已把那一塊改成 Checkbox Gate（勾了才載入），
+#    見 `ui/views/page_05_settings.py::_render_maintain`。
+#    ⛔ 不得改用「把舊 ⑤ 那一塊拿掉」來解：那就是客戶明令禁止的「破壞舊版 Tab」。
+from ui.tab_settings_diag import (  # noqa: E402  (⑤ 設定與診斷・現行)
+    render_settings_diag_tab,
+)
+from ui.views.page_05_settings import (  # noqa: E402  (⑦ [新] 設定與診斷・並行預覽)
     render_settings_and_diagnostics,
 )
 
@@ -467,6 +482,7 @@ render_sidebar(
 #        `ui/tab3_t7_ledger.py`,也就是**會漏掉上面唯一 live 的那一個**)。
 #        本輪用的是全 repo `git grep -nE "\.tabs\(" -- '*.py'` 再逐一判讀
 #        (排除 `tests/` 與註解/docstring 命中)。
+from ui.helpers.story_nav import preview_tab_label as _preview_tab_label
 from ui.helpers.story_nav import tab_label as _tab_label
 
 # ⭐ 「🔍 抓取診斷細節」的所有權必須由**本檔**持有,不能讓 ⑤ 自己 with ——
@@ -485,9 +501,15 @@ from ui.helpers.settings_diag.merge_context import (  # noqa: E402
     settings_page_owns as _settings_page_owns,
 )
 
-tab_macro, tab_health, tab_research, tab_portfolio, tab_settings = st.tabs(
+# ⚠️ **五格正式分頁在前、兩格 `[新]` 預覽分頁在後** —— 順序即站號 ①~⑤，
+#    預覽分頁刻意排在最後，不插進既有動線中間（客戶 2026-09-07：舊 Tab 原樣保留）。
+#    兩張標籤表**分屬兩個命名空間**（`tab_label` vs `preview_tab_label`），
+#    理由寫死在 `ui/helpers/story_nav.py` 的 `PREVIEW_TAB_LABELS` 上方。
+(tab_macro, tab_health, tab_research, tab_portfolio, tab_settings,
+ tab_preview_health, tab_preview_settings) = st.tabs(
     [_tab_label("macro"), _tab_label("health"), _tab_label("research"),
-     _tab_label("portfolio"), _tab_label("settings")])
+     _tab_label("portfolio"), _tab_label("settings"),
+     _preview_tab_label("health"), _preview_tab_label("settings")])
 
 
 # ⚠️ 五段 try/except **刻意逐段展開,不收成 helper** —— 這是一次「本來想收、實測之後
@@ -542,7 +564,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
     with tab_health:
         try:
-            render_holdings_health()
+            render_fund_grp_health_tab()
         except Exception as _health_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
             from ui.helpers.session import friendly_error as _fe_health
             _fe_health(f"「{_tab_label('health')}」分頁渲染失敗", _health_tab_e,
@@ -582,8 +604,38 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
     with tab_settings:
         try:
-            render_settings_and_diagnostics()
+            render_settings_diag_tab()
         except Exception as _settings_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
             from ui.helpers.session import friendly_error as _fe_settings
             _fe_settings(f"「{_tab_label('settings')}」分頁渲染失敗", _settings_tab_e,
                          hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ══════════════════════════════════════════════════════
+    # TAB ⑥ / ⑦ — [新] 並行預覽（客戶 2026-09-07「雙軌並行」）
+    # ══════════════════════════════════════════════════════
+    # 這兩格是**新版 View 的預覽入口**，與上面 ② / ⑤ 兩格**同時存在**：
+    #   ② ↔ ⑥ 是同一件事的舊 / 新兩版；⑤ ↔ ⑦ 同理。
+    # 客戶原則：未經客戶親自驗收並明文下令，**舊 Tab 一律維持原樣保留**，
+    # 所以「管理室 / 說明書等功能同時出現在舊 Tab 與新 Tab」是**雙軌的正常狀態**，
+    # ⛔ **不是 bug，不要順手去「解決重複」**。
+    #
+    # ⚠️ 這兩格**必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**：
+    #    旗標是 thread-local，只在 `with` 區塊內成立；⑦ 一旦跑到區塊外，
+    #    它底下的 `render_fetch_diag_from_session()` 就會與 ③ 各畫一份。
+    #    守衛：`tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+    #    （它逐一比對「全檔 `with tab_*:`」⊆「owner 區塊內」，本批已隨分頁數擴充）。
+    with tab_preview_health:
+        try:
+            render_holdings_health()
+        except Exception as _pv_health_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_health
+            _fe_pv_health(f"「{_preview_tab_label('health')}」分頁渲染失敗", _pv_health_e,
+                          hint=_TAB_ISOLATION_HINT, level="error")
+
+    with tab_preview_settings:
+        try:
+            render_settings_and_diagnostics()
+        except Exception as _pv_settings_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_settings
+            _fe_pv_settings(f"「{_preview_tab_label('settings')}」分頁渲染失敗",
+                            _pv_settings_e, hint=_TAB_ISOLATION_HINT, level="error")

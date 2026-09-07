@@ -1152,12 +1152,28 @@ def test_the_delegation_really_holds_the_nav_flag_at_call_time():
     _orig_cb = _st.checkbox
     try:
         _st.session_state.clear()
-        _mod._render_maintain()
         # ⚠️ **把 gate 直接換成「回 True」，不是塞 session_state** —— bare 模式下
         #    `st.checkbox(..., key=…)` 不讀 session 的既有值，一律回預設 `False`
         #    （同 :func:`test_the_diag_gate_really_gates_the_registry_update` 的登記）。
         #    本條驗的是**旗標的作用域**，不是 gate 本身，所以直接跳過 gate 是對的切法。
+        # ⚠️ **2026-09-07：`_render_maintain()` 移到這一行之下。有意識的變更，不是漏改。**
+        #    （決策者：AI 總管，雙軌並行裁決 2）
+        #    **舊寫法**（原地保留、加刪除線，不刪）::
+        #
+        #        ~~_mod._render_maintain()~~          # ← 在 patch 之前，那時它沒有 gate
+        #        ~~_st.checkbox = lambda *_a, **_k: True~~
+        #        ~~_mod._render_source_health()~~
+        #
+        #    **舊寫法的理由一個字都沒有被推翻**，斷言也一個字都沒改 —— 本條驗的仍然是
+        #    「呼叫 `render_manage_tab()` 的那一刻 `NAV_HISTORY` 在不在手上」。
+        #    **被權衡掉的是它的一個前提：「維護區沒有 gate，直接呼叫就會委派」。**
+        #    雙軌並行之後維護區也有 gate 了（舊 ⑤ 同時在跑同一支 `render_manage_tab()`，
+        #    不 gate 會撞重複 widget key），不跳過 gate 就**根本走不到被測的那一行**，
+        #    `_seen["manage"]` 會整個不存在 —— 那不是守衛抓到東西，是**守衛失去對象**。
+        #    ⛔ 這是把兩個 gated 區塊**一視同仁**，不是放寬：`_render_source_health()`
+        #       從一開始就是這樣處理的，本行只是讓 `_render_maintain()` 跟它一致。
         _st.checkbox = lambda *_a, **_k: True                # type: ignore[assignment]
+        _mod._render_maintain()
         _mod._render_source_health()
     finally:
         _st.checkbox = _orig_cb                             # type: ignore[assignment]
