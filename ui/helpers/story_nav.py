@@ -120,9 +120,15 @@ PREVIEW_PREFIX: str = "[新] "
 #:    正式分頁改名時預覽分頁自動跟上（本 repo 分頁改名漏改已發作三次）。
 #: ⚠️ key 刻意與正式分頁**同名**：它們是同一個分頁的新舊兩版，
 #:    「⑤ 與 ⑦ 是同一件事的兩個版本」這件事應該由 key 表達，不是由註解表達。
+#: ⚠️ **本表的順序 ＝ 分頁列上預覽分頁的順序**（⑥⑦⑧），不是裝飾。
+#:    2026-09-07 新增 `research`（⑧）時**刻意 append 在最後、不插進 ⑥⑦ 中間** ——
+#:    ⑥ / ⑦ 已經在線上，客戶對它們的位置有肌肉記憶；而且照 ①~⑤ 的順序插隊
+#:    （health / research / settings）會把 ⑦ 往後推一格，那是一次**沒有人要求的
+#:    動線變更**。新的掛在最後，既有的一格都不動。
 PREVIEW_TAB_LABELS: dict[str, str] = {
     "health":   PREVIEW_PREFIX + _TAB_LABELS["health"],
     "settings": PREVIEW_PREFIX + _TAB_LABELS["settings"],
+    "research": PREVIEW_PREFIX + _TAB_LABELS["research"],
 }
 
 
@@ -245,6 +251,14 @@ _SECTION_LABELS: dict[str, str] = {
     #    （`tests/test_ia_tracking_card_scope_caption.py`
     #     ::test_the_sister_card_label_is_not_a_hand_copied_literal，執行期比對真實標題）。
     "pf_perf": "📊 組合績效",
+    # ④ 頁內既有的「交易帳本」區塊（`ui/tab3_portfolio.py` 的 `_sec_ledger`，
+    # 畫面上逐字是 `### 💼 持倉戰情（T7 帳本）`）。收進本表的理由同 `pf_add` / `pf_perf`：
+    # ④ 新頁的「交易帳本」目前是灰態，而灰態**必須指得出「現在去哪裡看得到」**
+    # （客戶 2026-09-07 指示：不得只寫「尚未提供」）。手抄那八個字就是本模組整篇在防的事。
+    # ⚠️ 這個 key 與 `pf_add` / `pf_perf` 一樣，指的是**舊 ④ 的區塊**；
+    #    舊分頁整批拔除時，這三個 key 要一起回頭處理（漂移鎖：
+    #    `tests/test_story_nav.py::test_section_labels_match_merged_pages` 的 `pf_ledger` 那一列）。
+    "pf_ledger": "💼 持倉戰情（T7 帳本）",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -259,6 +273,7 @@ _SECTION_TO_TAB: dict[str, str] = {
     "switch": "portfolio",
     "pf_add": "portfolio",
     "pf_perf": "portfolio",
+    "pf_ledger": "portfolio",
 }
 
 

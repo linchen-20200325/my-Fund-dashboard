@@ -193,12 +193,25 @@ from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
 from ui.views.page_04_portfolio import (  # noqa: E402
+    BLOCK_CONCENTRATION,
     BLOCK_DIVIDEND_CAL,
     BLOCK_FORM,
     BLOCK_LEDGER,
+    BLOCK_MACRO_LINK,
     BLOCK_MIX,
     BLOCK_POLICY,
+    DELEGATED_ENTRIES,
+    DELEGATION_BLACKLIST,
+    DIVCAL_GATE_LABEL,
+    POLICY_TABLE_COLUMNS,
+    RETIRED_REASON_POLICY,
+    STATUS_BOOK_LABEL,
+    STATUS_COLS,
+    STATUS_INVESTED_LABEL,
+    STATUS_LOADED_AT_LABEL,
+    STATUS_POLICY_LABEL,
     SUBMIT_LABEL,
+    UNKNOWN_VALUE,
     _DEFAULT_BUDGET_TWD,
     _DEFAULT_CORE_PCT,
     _DEFAULT_SATELLITE_ONLY,
@@ -215,6 +228,7 @@ from ui.views.page_04_portfolio import (  # noqa: E402
     _normalise_plan,
     _pending_where,
     grey_why,
+    perf_block_label,
     switch_block_label,
 )
 
@@ -482,9 +496,27 @@ def _segments(parts: tuple[str, ...] | list[str]) -> dict[str, list[str]]:
 
 
 def _expected_units() -> tuple[str, ...]:
-    """線框 Tab 04 由上而下的六個單位。**`換股顧問` 走 SSOT，不在這裡抄字面。**"""
-    return (BLOCK_MIX, BLOCK_FORM, switch_block_label(),
-            BLOCK_POLICY, BLOCK_DIVIDEND_CAL, BLOCK_LEDGER)
+    """由上而下的**九**個單位。**`換股顧問` 與 `組合績效` 走 SSOT，不在這裡抄字面。**
+
+    ## ⚠️ 2026-09-07：六 → 九，而且**其中一個換了版面**
+
+    客戶 2026-09-07 四項拍板（逐條見被測檔的模組 docstring）：
+    - **決定 ①** 把 `保單與扣款標的` 從那一列 3 張卡裡**抽出來變成全寬區塊** ——
+      所以它在本序列裡**往後挪了一格**（原本夾在 `換股顧問` 與 `配息月曆` 中間）。
+    - **決定 ③** 新增三個具名區塊：組合績效（SSOT）／穿透式持股 ／ 產業集中度／總經曝險聯動。
+
+    ⛔ **本函式的舊 docstring 說「線框 Tab 04 的六個單位」，那句自此不再為真** ——
+    現行序列裡有**三個是線框沒有列的**（決定 ③ 那三塊）。
+    這**不是**偏離線框：總管 2026-09-05 裁決 (A) 已明訂
+    「**線框是版面規範，不是功能清單**；線框沒列 ⇒ 不該存在，這個推論不成立」。
+    ⚠️ 但**反過來也不成立**（裁決 (A) 的原文）：**不得**因此主張「線框沒列的都可以自己加」。
+    這三塊之所以可以加，是因為**客戶 2026-09-07 逐條點名要它們**。
+    """
+    return (BLOCK_MIX, BLOCK_FORM,
+            switch_block_label(), BLOCK_DIVIDEND_CAL,
+            BLOCK_POLICY,
+            perf_block_label(), BLOCK_CONCENTRATION, BLOCK_MACRO_LINK,
+            BLOCK_LEDGER)
 
 
 #: **已經接上真資料、因此不該再有「本頁分批上線」那句話**的單位。
@@ -492,15 +524,40 @@ def _expected_units() -> tuple[str, ...]:
 #: （`BLOCK_FORM` → :func:`test_the_form_block_is_not_grey`；
 #:  `BLOCK_MIX` → :func:`test_the_mix_block_shows_the_real_ratio` 等四條）。
 #: ⛔ **不准只把名字加進來、不補正向守衛** —— 那等於把一塊的守衛整個拿掉。
-_WIRED_UNITS: tuple[str, ...] = (BLOCK_FORM, BLOCK_MIX)
+#: ⚠️ **2026-09-07 從 2 個變成 6 個**，每一個新加的名字都有一條**正向**守衛接手：
+#: - `BLOCK_POLICY`      → :func:`test_the_policy_block_shows_the_status_bar_and_the_roster`
+#:                         ＋ :func:`test_the_retired_policy_excuse_is_off_the_screen`
+#: - `BLOCK_CONCENTRATION`／`BLOCK_MACRO_LINK`
+#:                       → :func:`test_a_delegated_block_says_what_is_missing_instead_of_going_blank`
+#:                         （逐單位 parametrize）＋ :func:`test_delegation_matches_the_registry`
+#: ⚠️ **`perf_block_label()` 刻意不在這裡** —— 決定 ③ 要它升成具名區塊（**做到了**，
+#:    它是 `_expected_units()` 的一員），但**委派本身被實測擋下來**
+#:    （那一支一渲染就打匯率 API ＋ 落盤，見 `page_04_portfolio.REASON_PERF`）。
+#:    所以它是**具名區塊 ＋ 灰態**，歸 :func:`_grey_units`。
+#:    ⛔ **不要因為「決定 ③ 說要接」就把它移到這裡** —— 那會讓一條正向守衛去驗
+#:       一塊其實沒接上的東西，也就是把「沒做」寫成「做了」。
+#: ⛔ **「委派了」不等於「畫得出來」**：測試 fixture 沒有 `series` / `moneydj_raw` /
+#:    `phase_info`，所以那三塊在測試裡走的是**本頁自己畫的灰態**。
+#:    被委派的五支函式**本檔一次都沒有真的跑過它們的內容** ——
+#:    被測檔的模組 docstring「本批沒有做到的事」已具名登記這一點。
+_WIRED_UNITS: tuple[str, ...] = (
+    BLOCK_FORM, BLOCK_MIX, BLOCK_POLICY,
+    BLOCK_CONCENTRATION, BLOCK_MACRO_LINK)
 
 
 def _grey_units() -> tuple[str, ...]:
-    """**每一個都要各自帶灰態**的四個單位。
+    """**每一個都要各自帶 :data:`_PENDING_NOTE` 灰態**的單位（2026-09-07 起剩三個）。
 
-    ⚠️ `BLOCK_FORM` 與 `BLOCK_MIX` 不在這裡（見 :data:`_WIRED_UNITS`）：
-    前者是骨架批唯一做完的一塊，後者於 2026-09-06 接上核心／衛星 SSOT。
-    兩者都由**正向**守衛反向釘著 —— 一旦變回灰態，那些條就轉紅。
+    ⚠️ 六個 :data:`_WIRED_UNITS` 不在這裡，而且它們**不在的理由各不相同**：
+    - `BLOCK_FORM` —— 骨架批唯一做完的一塊；
+    - `BLOCK_MIX` —— 2026-09-06 接上核心／衛星 SSOT；
+    - `BLOCK_POLICY` —— **2026-09-07 客戶決定 ①**，改成全寬區塊、真的畫出來了；
+    - 另外三個 —— **2026-09-07 客戶決定 ③**，委派既有模組。
+    全部由**正向**守衛反向釘著 —— 一旦變回「本頁分批上線」那句灰態，那些條就轉紅。
+
+    ⛔ **不要把「這裡少了一個」讀成「那一塊不會是灰的」。** 委派的那三塊在資料不足時
+    **仍然是灰的**，只是它們的灰**不帶 `_PENDING_NOTE`**（它們不是「還沒接」，
+    是「接上了，但你的資料還不夠」）。**兩種灰的下一步不同，所以文案不共用。**
     """
     return tuple(_u for _u in _expected_units() if _u not in _WIRED_UNITS)
 
@@ -821,21 +878,52 @@ def test_every_grey_unit_states_its_own_reason(unit: str):
         f"預期包含：{_why[unit]!r}\n實際：\n{_body}")
 
 
-def test_the_four_grey_reasons_are_actually_different():
-    """⛔ 四個原因**兩兩相異** —— 防止「各寫一句」退化回「複製同一句四次」。
+def test_the_grey_reasons_are_actually_different():
+    """⛔ 每個原因**兩兩相異** —— 防止「各寫一句」退化回「複製同一句 N 次」。
 
     ⚠️ 這條與上一條**不重複**：上一條驗「每塊有帶自己的字串」，
-    但如果有人把 `grey_why()` 的四個值填成同一句，上一條**照樣全綠**
+    但如果有人把 `grey_why()` 的值全填成同一句，上一條**照樣全綠**
     （每塊都含有那一句）。本條才擋得住那個退化。
+
+    ⚠️ **2026-09-07 從「四個」變成「三個」，而且函式名一起改了**（原
+    `test_the_four_grey_reasons_are_actually_different`）——
+    保單那一塊不再是灰態（客戶決定 ①）。
+    ⛔ **名字裡不再寫死數量**：上一次寫死「four」的代價就是這一次得連函式名一起改，
+    而**改函式名會讓「這條測試有沒有被停用過」在 git 上變得難查**。
+    本條改用 `len(grey_why())` 自己算 —— 下次增減灰態，本條不必再改一次名字。
     """
     _vals = list(grey_why().values())
     assert len(set(_vals)) == len(_vals), (
-        "四塊灰態的原因出現重複 —— 那就是「一句藉口蓋四個原因」的退化形狀：\n"
+        f"{len(_vals)} 塊灰態的原因出現重複 —— 那就是「一句藉口蓋 N 個原因」的退化形狀：\n"
         + "\n".join(_vals))
+    # 反向保險：`grey_why()` 空掉時上面那條恆真（`set() == list()` 長度都是 0）。
+    assert len(_vals) >= 2, (
+        f"`grey_why()` 只剩 {len(_vals)} 筆 —— 少於兩筆時「兩兩相異」這條恆真，"
+        "等於守衛靜默失效。真的只剩一塊灰態時，請連同本條一起改。")
 
 
-def test_the_policy_block_does_not_blame_the_data():
-    """⭐ **保單那一區的灰態不准把原因說成「資料還沒接」**（總管裁決 2）。
+def test_the_retired_policy_excuse_is_off_the_screen():
+    """⭐ **保單那一區的「灰態理由」已經退役，而且不准再出現在畫面上。**
+
+    ## ⚠️ 2026-09-07：本條**換了守的東西**，函式名一起改（原
+    `test_the_policy_block_does_not_blame_the_data`）
+
+    客戶 2026-09-07 **決定 ①** 把這一區改成**全寬區塊**，它**不再是灰態** ——
+    於是舊斷言（「畫面上要說原因是版面」「畫面上要說已送客戶裁決」）
+    **全部會轉紅，而且轉紅是對的**：那兩句話現在是**假的**（沒有人還在等裁決）。
+
+    ⛔ **舊斷言不是被放寬，是被反轉**：本條現在驗**相反**的事 ——
+    那句退役的理由（:data:`RETIRED_REASON_POLICY`）**必須從畫面上消失**。
+    一個「已經拍板了、但畫面上還在說『已送客戶裁決』」的區塊，
+    正是 `CLAUDE.md §-2` 講的那種**會說謊的記錄**。
+
+    ⚠️ **被測檔的常數刻意保留不刪**（改名為 `RETIRED_REASON_POLICY`），
+    因為它是「未決事項 (B) 從登記到結案」的完整病史；
+    **本條就是負責證明「保留常數」沒有變成「保留在畫面上」。**
+
+    ⏳ **以下為 2026-09-07 之前的原文，一字未刪**（它記載了那次裁決之前的判斷）：
+
+    ⭐ **保單那一區的灰態不准把原因說成「資料還沒接」**（總管裁決 2）。
 
     真正卡住它的是**版面**：`docs/wireframes/ia-wireframe.html` 把它畫成三欄網格
     裡的**一張摘要卡**，而 `docs/wireframes/policy-split-wireframe.html` 的**決定 E**
@@ -866,13 +954,66 @@ def test_the_policy_block_does_not_blame_the_data():
     ⚠️ 說成「資料還沒接」不只是不精確，是**假的原因**：它會讓下一個人以為
     「去把資料接上就好」，然後一頭撞進那個還沒裁決的版面衝突。
     """
-    assert "版面" in REASON_POLICY, (
-        "保單那一區的灰態沒有指出真正的原因（版面尚未裁決）：\n" + REASON_POLICY)
+    # (a) 常數本身還在（病史保留），而且它確實還是**那一句** —— 不是被清空後留個空殼。
+    assert "版面" in RETIRED_REASON_POLICY and "已送客戶裁決" in RETIRED_REASON_POLICY, (
+        "`RETIRED_REASON_POLICY` 已經不是原來那句話了 —— 它的用途是保存病史，"
+        "改掉它等於把「(B) 曾經未決」這件事從記錄裡抹掉：\n" + RETIRED_REASON_POLICY)
+    # (b) ⛔ 但它**不准**出現在畫面上。四種 session 形狀都查。
+    for _kind in ("empty", "missing", "loaded", "priced"):
+        _all = _text(_stream(_kind))
+        assert "已送客戶裁決" not in _all, (
+            f"（{_kind}）畫面上還在說保單版面「已送客戶裁決」—— "
+            "客戶 2026-09-07 已經裁決了（決定 ①：全寬區塊）。"
+            "一個已經拍板、畫面卻還在等的區塊，是一則會說謊的記錄。")
+    # (c) 那一區確實不再帶「本頁分批上線」那句灰態藉口。
     _body = "\n".join(_segments(_stream("loaded")).get(BLOCK_POLICY, []))
-    assert "版面" in _body, f"畫面上沒說原因是版面：\n{_body}"
-    assert "已送客戶裁決" in _body, (
-        f"畫面上沒說這件事已經有出口（送客戶裁決）—— "
-        f"沒有出口的「待確認」會變成實質的永久擱置：\n{_body}")
+    assert _body.strip(), f"單位「{BLOCK_POLICY}」不見了 —— 決定 ① 要它變成全寬區塊，不是消失。"
+    assert _PENDING_NOTE not in _body, (
+        f"「{BLOCK_POLICY}」還帶著「{_PENDING_NOTE}」的灰態藉口 —— "
+        "它已經接上真資料了（決定 ①）。\n" + _body)
+
+
+def _expected_pointer() -> dict[str, str]:
+    """單位名 → 它的灰態**應該**指到哪裡。**三塊三個地方，刻意不共用。**
+
+    ## ⚠️ 2026-09-07：從「三塊共用一個地方」變成「三塊三個地方」
+
+    到 2026-09-06 為止，三塊灰態的指路**全部**是
+    ``where_to_find("portfolio") → 再平衡試算``（本頁唯一做完的那一塊）——
+    也就是三句「去了也沒用」的指路。客戶 2026-09-07 指示
+    「**交易帳本的灰態必須指出去哪裡看得到**，⛔ 不得只寫『尚未提供』」，
+    加上決定 ④ 給了配息月曆一個勾選框，於是三塊各自有了自己的下一步：
+
+    ===================== ================================ =========================
+    單位                   指到哪                            照著做真的有用嗎
+    ===================== ================================ =========================
+    換股顧問               本頁的「再平衡試算」               ❌ **沒用**（它撞既有渲染點）
+    配息月曆               它自己上方那個勾選框               ✅ **有用**（勾了就會算）
+    組合績效               舊 ④ 的「📊 組合績效」             ✅ **有用**（那裡現在就看得到）
+    交易帳本               舊 ④ 的「💼 持倉戰情（T7 帳本）」  ✅ **有用**（那裡現在就看得到）
+    ===================== ================================ =========================
+
+    ⚠️ **四塊裡有三塊的指路是「真的有用」的，只有換股顧問不是** —— 這與 2026-09-06
+    「三塊全部指到一個去了也沒用的地方」是相反的局面。
+    :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 因此**只能**
+    拿換股顧問當樣本，不能再拿「全頁灰態不變」當斷言。
+
+    ⛔ **三個都要逐字比對，不要退回「有 `where_to_find('portfolio')` 就好」** ——
+    那種寬鬆比對在 2026-09-07 之後會**同時放過三種錯**：
+    (a) 交易帳本指回本頁（`pf_ledger` 的字串剛好也以 `④ 📊 資產配置` 開頭）；
+    (b) 配息月曆指到一個不存在的勾選框；
+    (c) 三塊又退回共用同一句。
+    ⚠️ **配息月曆那一格的期望值吃 :data:`DIVCAL_GATE_LABEL` 這個 SSOT** ——
+    不在這裡抄第二份字面值，改了 gate 的字，本條會**跟著對**而不是**跟著錯**。
+    """
+    return {
+        switch_block_label(): _pending_where(BLOCK_FORM),
+        BLOCK_DIVIDEND_CAL: f"上方「{DIVCAL_GATE_LABEL}」",
+        # 組合績效：委派被實測擋下（見 `page_04_portfolio.REASON_PERF`），
+        # 但**它現在就在舊 ④ 看得到** —— 與交易帳本同一種「指了真的有用」的灰。
+        perf_block_label(): where_to_find("pf_perf"),
+        BLOCK_LEDGER: where_to_find("pf_ledger"),
+    }
 
 
 @pytest.mark.parametrize("unit", _grey_units())
@@ -900,13 +1041,10 @@ def test_every_grey_unit_says_where_to_look(unit: str):
     _seg = _segments(_stream("loaded"))
     _body = "\n".join(_seg.get(unit, []))
     assert _body.strip(), f"單位「{unit}」不見了。"
-    assert where_to_find("portfolio") in _body, (
-        f"單位「{unit}」的灰態沒有「去哪補」—— 指路要走 `where_to_find('portfolio')`，"
-        "手抄的分頁名在本 repo 已經指錯三次（見 `story_nav.RETIRED_TAB_LABELS`）。\n"
-        + _body)
-    assert BLOCK_FORM in _body, (
-        f"單位「{unit}」指路提到的「{BLOCK_FORM}」在畫面上找不到 —— "
-        "指到一個使用者看不到的名字，等於沒有指路。")
+    _want = _expected_pointer()[unit]
+    assert f"（請先到：{_want}）" in _body, (
+        f"單位「{unit}」的灰態沒有帶到它該帶的「去哪補」。\n"
+        f"應含：（請先到：{_want}）\n實際：\n{_body}")
 
 
 def test_the_pending_pointer_is_a_place_not_a_status_sentence():
@@ -938,8 +1076,13 @@ def test_the_pending_pointer_is_a_place_not_a_status_sentence():
     #    ⛔ 這不是把斷言放寬 —— 換的是**取樣的單位**，斷言的字串一字未改，
     #    而且 `BLOCK_POLICY` 是四個灰態單位中**最不可能被下一批接走**的那一個
     #    （它卡在客戶裁決上，見 `REASON_POLICY`）。
+    # ⚠️ **2026-09-07 再改一次，改指換股顧問** —— 上面那句「最不可能被下一批接走」
+    #    **在寫下來的第二天就被推翻了**（客戶決定 ①，保單改成全寬區塊，不再走
+    #    `_pending_where()`）。⛔ **這次不再挑「最不可能被接走的那一個」** ——
+    #    那個判斷已經錯過一次；改挑 `_pending_where()` **目前唯一的 caller**，
+    #    也就是說：它哪天沒有 caller 了，本條就會紅，而那正是該來重看本條的時機。
     _seg = _segments(_stream("loaded"))
-    _body = "\n".join(_seg.get(BLOCK_POLICY, []))
+    _body = "\n".join(_seg.get(switch_block_label(), []))
     assert f"（請先到：{where_to_find('portfolio')} → {BLOCK_FORM}）" in _body, (
         "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
 
@@ -975,9 +1118,19 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     #    換掉的只有 fixture。
     _at = _app(FAKE_HOLDINGS_PRICED)
     _before = [_p for _p in _flat(_at.main) if NOT_READY_MARK in _p]
-    assert len(_before) == len(_grey_units()), (
-        f"有持倉（且已填本金）時應該剛好 {len(_grey_units())} 條灰態，"
-        f"實際 {len(_before)} 條：\n" + _text(_before))
+    # ⚠️ **2026-09-07：舊斷言是「全頁 ⬜ 條數 == len(_grey_units())」，那條已經失效。**
+    #    決定 ①／③ 之後，畫面上**合法地**多了好幾條不帶 `_PENDING_NOTE` 的灰
+    #    （狀態列缺值那幾格、三個委派區塊在資料不足時的誠實灰態）。
+    #    ⛔ 舊斷言若照留，會把**正確的行為**判成紅，然後有人為了讓 CI 綠而放寬它。
+    # ✅ **換成更嚴的形狀，不是更鬆的**：舊的只數總數（多一條少一條都看不出是哪一塊）；
+    #    現在逐單位驗「這一塊有且只有一條『本頁分批上線』的灰」——
+    #    多長一條、少長一條、跑到別的單位底下，三種都會指名道姓地紅。
+    _seg_before = _segments(_flat(_at.main))
+    for _u in _grey_units():
+        _n = sum(1 for _p in _seg_before.get(_u, []) if _PENDING_NOTE in _p)
+        assert _n == 1, (
+            f"單位「{_u}」應該剛好帶一條「{_PENDING_NOTE}」的灰態，實際 {_n} 條：\n"
+            + _text(_seg_before.get(_u, [])))
     # 照著指路做：回到「再平衡試算」，填金額、按「試算」。
     _at.number_input[0].set_value(150_000)
     _at.button[0].click()
@@ -1249,6 +1402,70 @@ def test_the_page_never_hand_rolls_the_grey_mark():
 # Form：三個欄位、一個刻意的偏離、以及「0 不算送出」
 # ══════════════════════════════════════════════════════════════════
 
+#: ⭐ **線框那三個欄位之外，本頁**額外**允許出現的 checkbox —— 逐一具名。**
+#:
+#: ## 為什麼需要這個常數（2026-09-07，決策者 **AI 總管**）
+#:
+#: :func:`test_the_three_fields_and_the_submit_verb_come_from_the_wireframe` 的
+#: checkbox 斷言原本是 ``== [_LABEL_SATELLITE_ONLY]`` —— **整頁精確相等**。
+#: 它的失敗訊息自陳前提是「**骨架階段**不該有第二顆按鈕」，
+#: 而**本批正是 ④ 從骨架進入內容的那一批**：客戶決定 ④ 要求配息月曆改成
+#: **Checkbox Gate 延遲載入**，那必然是頁面上的第二個 checkbox。
+#: → **前提過期了，所以更新這條守衛；但只更新過期的那一半。**
+#:
+#: ⛔ **這是「具名放行」，不是「放寬」，兩者的分界寫死在這裡**：
+#: * 比對仍然是 **`==` 精確相等**，不是 `in` / `<=` / 「≥1 個」；
+#: * 每一個額外的 checkbox 都要**逐字列名**在這裡；
+#: * 塞第三個沒列名的 checkbox → **照樣紅**。
+#: ⛔ **不准**把本常數改成 pattern／前綴／「以 gate 開頭就放行」之類的東西 ——
+#:    那一刻起這條守衛就變成裝飾品。
+#: ⚠️ **字面吃 `page_04_portfolio.DIVCAL_GATE_LABEL` 這個 SSOT，不在這裡抄第二份** ——
+#:    抄了的話，gate 改字時本檔會**跟著錯**而不是**跟著對**。
+_ALLOWED_EXTRA_CHECKBOXES: tuple[str, ...] = (DIVCAL_GATE_LABEL,)
+
+
+def _expected_checkbox_labels() -> list[str]:
+    """整頁**應該**出現的 checkbox 標籤，**依渲染順序**。
+
+    線框那一個（`只調衛星`，在 Form 裡、排在前面）＋
+    :data:`_ALLOWED_EXTRA_CHECKBOXES` 逐一具名的那些（排在後面）。
+
+    ⚠️ **回傳 list 而不是 set** —— 順序本身也是斷言的一部分：
+    gate 若跑到 Form 前面去，代表版面順序被動過了，那也該紅。
+    """
+    return [_LABEL_SATELLITE_ONLY, *_ALLOWED_EXTRA_CHECKBOXES]
+
+
+def test_the_extra_checkbox_allowlist_is_exact_and_named():
+    """⭐ **上面那個放行清單本身要被守住** —— 它是本批唯一在既有守衛上開的口。
+
+    ## 這條是「更新守衛」與「改鬆守衛」的分界線
+
+    一個「開了就沒人再看」的放行清單，就是 `CLAUDE.md §8.2.A.0` 規則 5 點名的
+    **把違憲寫成合憲**。所以放行的**前提**要被釘成斷言：
+
+    1. 清單**不是空的**（空清單會讓 :func:`_expected_checkbox_labels` 退化回舊行為，
+       那時本批的 gate 反而過不了 —— 這一條是防「有人為了讓別的東西過而把它清空」）；
+    2. 清單**恰好一項**，而且**就是** `page_04_portfolio.DIVCAL_GATE_LABEL`
+       —— 多一項就要有人來改這條測試，也就是**多一項就要有人負責**；
+    3. 它**不等於**線框那個欄位（避免有人用複製貼上把線框欄位塞進放行清單，
+       那會讓 :func:`_expected_checkbox_labels` 出現兩個一樣的字串而永遠對不上）。
+
+    ⛔ **本條刻意不驗「畫面上有幾個 checkbox」** —— 那是上一條的事。
+    本條驗的是**清單本身**，所以它**不需要渲染**，在沒有 streamlit 的環境也跑得到。
+    """
+    assert _ALLOWED_EXTRA_CHECKBOXES, (
+        "放行清單是空的 —— 空清單會讓整頁 checkbox 斷言退回「只有線框那一個」，"
+        "而客戶決定 ④ 明示要有一個 Checkbox Gate。清空它等於撤銷那個決定。")
+    assert _ALLOWED_EXTRA_CHECKBOXES == (DIVCAL_GATE_LABEL,), (
+        f"放行清單被改成 {_ALLOWED_EXTRA_CHECKBOXES!r}。\n"
+        "⛔ 每多一個 checkbox 就要多一個具名項，而且要有人來改這條測試 —— "
+        "**那個「要有人來改」就是這道關卡本身**。")
+    assert _LABEL_SATELLITE_ONLY not in _ALLOWED_EXTRA_CHECKBOXES, (
+        "線框那個欄位被塞進「額外放行」清單了 —— 它本來就在預期清單裡，"
+        "重複會讓預期清單出現兩個一樣的字串，整條斷言永遠對不上。")
+
+
 def test_the_three_fields_and_the_submit_verb_come_from_the_wireframe():
     """線框 Tab 04 的 Form 逐字：「目標核心比例」「可動用金額」「只調衛星」「試算」。
 
@@ -1269,7 +1486,25 @@ def test_the_three_fields_and_the_submit_verb_come_from_the_wireframe():
     _at = _app(FAKE_HOLDINGS)
     assert [_s.label for _s in _at.slider] == [f"{_LABEL_CORE_PCT}（%）"]
     assert [_n.label for _n in _at.number_input] == [f"{_LABEL_BUDGET}（TWD）"]
-    assert [_c.label for _c in _at.checkbox] == [_LABEL_SATELLITE_ONLY]
+    # ⛔ ~~`assert [_c.label for _c in _at.checkbox] == [_LABEL_SATELLITE_ONLY]`~~
+    #    → **2026-09-07 更新（有意識的政策變更，不是漏刪；決策者：AI 總管）。**
+    #    **理由：這條斷言自陳的前提是「骨架階段」，而本批正是 ④ 進入內容階段的那一批。**
+    #    客戶決定 ④ 要求配息月曆改成 Checkbox Gate 延遲載入 ⇒ 頁面上必然有第二個
+    #    checkbox。舊斷言在那一刻起就不是在守線框，而是在守一個**已經過期的階段假設**。
+    #    ⚠️ **只更新過期的那一半**：上面三條（線框欄位逐字、`SUBMIT_LABEL`、
+    #    slider／number_input 精確相等）**一個字都沒動** —— 那些釘的是客戶核准線框的字面。
+    #    ⛔ **比對仍是 `==` 精確相等**，放行的每一個都逐字具名在
+    #    :data:`_ALLOWED_EXTRA_CHECKBOXES`（另有 :func:`test_the_extra_checkbox_allowlist_is_exact_and_named`
+    #    守著那份清單本身）。**塞第三個沒列名的 checkbox 照樣紅。**
+    assert [_c.label for _c in _at.checkbox] == _expected_checkbox_labels(), (
+        "整頁的 checkbox 與預期清單不符。\n"
+        f"預期：{_expected_checkbox_labels()}\n"
+        "⛔ 多出來的那一個若是刻意新增的互動元件，請**具名**加進 "
+        "`_ALLOWED_EXTRA_CHECKBOXES`（並在 PR 描述說明它為什麼該存在）；"
+        "⛔ **不要**把這條改成「包含即可」——那樣任何人塞一個 checkbox 都不會紅。")
+    # ⚠️ **按鈕那一條一個字都沒改**：本批**沒有**新增任何按鈕
+    #    （gate 是 checkbox，不是 button）。沒有新增就不動它 —— 順手放寬一條
+    #    自己用不到的守衛，是最廉價也最常見的退步。
     assert [_b.label for _b in _at.button] == [SUBMIT_LABEL], (
         "整頁的按鈕不是「恰好一顆送出鈕」—— 骨架階段不該有第二顆按鈕。")
 
@@ -1498,6 +1733,57 @@ def test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe(
                 "那不是資料，是線框用來示範版面的假數字。")
 
 
+#: ⭐ **「欄位清單常數」的唯一具名豁免。**
+#:
+#: ## 為什麼開這個洞（判準不是「我想釘」，是「線框有沒有逐欄列」）
+#:
+#: :func:`test_the_ledger_invents_no_column_list` 的判準是**模組層有沒有一個
+#: 看起來像欄位表的常數**，而它擋的那件事是「**線框沒列欄位，所以不准自己發明**」。
+#: 保單一覽**不是那個情形**：`docs/wireframes/policy-split-wireframe.html` ④ 那一段
+#: 的「📋 保單一覽」把表頭**逐欄畫出來了**
+#: （`保單編號 │ 基金代號 │ 基金名稱 │ 幣別 │ 級別 │ 金額 │ 現金%`）——
+#: 這正是那條守衛自己的 docstring 拿來當**正面對照**的情形
+#: （「`page_02_health.py::HEALTH_TABLE_COLUMNS` 之所以能釘住 9 欄，
+#:   是因為**線框真的逐字列了那 9 欄**」）。
+#:
+#: ⛔ **豁免的前提被釘成斷言，不是寫在註解裡自律**（同 `_ALLOC_SSOT` 的處置）：
+#: :func:`test_the_policy_columns_are_the_wireframe_header_verbatim` 每次跑都
+#: **打開線框檔重新查證**那七個字真的在裡面。**線框改了、或有人偷加第八欄，本檔當場轉紅。**
+#: ⛔ **不得往這個集合加第二個名字**，除非同樣附上一條「去線框裡查證」的斷言。
+_WIREFRAMED_COLUMN_CONSTS: frozenset[str] = frozenset({"POLICY_TABLE_COLUMNS"})
+
+#: 保單一覽表頭的出處。**客戶已拍板的線框**（`docs/wireframes/README.md` 的「客戶已拍板」表）。
+_POLICY_WIREFRAME = ROOT / "docs" / "wireframes" / "policy-split-wireframe.html"
+
+
+def test_the_policy_columns_are_the_wireframe_header_verbatim():
+    """⭐ :data:`POLICY_TABLE_COLUMNS` 的每一欄，都要**真的**在客戶拍板的線框裡。
+
+    ## 這條是上面那個豁免的**代價**，不是裝飾
+
+    :data:`_WIREFRAMED_COLUMN_CONSTS` 在
+    :func:`test_the_ledger_invents_no_column_list` 上開了一個洞。
+    一個「開了就沒人再看」的豁免，正是 `CLAUDE.md §8.2.A.0` 規則 5 點名的那種
+    **把違憲寫成合憲**：豁免當下的理由成立，之後那份清單長成什麼樣沒有人知道。
+    → 所以豁免的**前提**（「這七欄是線框逐字列的」）本身要被釘成斷言。
+
+    ⚠️ **本條讀的是線框檔，不是被測檔的常數自己** —— 沒有自我參照的恆真式。
+    ⛔ **加第八欄就會紅**（除非線框裡真的也有它）—— 那正是預期行為：
+       畫面上多一欄，就是自己發明了一條規格。
+    """
+    assert _POLICY_WIREFRAME.exists(), (
+        f"找不到線框 {_POLICY_WIREFRAME} —— 保單一覽那七欄的**唯一出處**不見了。"
+        "這不是「測試過期」：出處不在了，那份欄位清單就退回「自己發明」的狀態。")
+    _src = _POLICY_WIREFRAME.read_text(encoding="utf-8")
+    _missing = [_c for _c in POLICY_TABLE_COLUMNS if _c not in _src]
+    assert not _missing, (
+        f"這幾欄在客戶拍板的線框裡找不到：{_missing}\n"
+        f"線框：{_POLICY_WIREFRAME.relative_to(ROOT)}\n"
+        "⛔ 線框沒有的欄位 ＝ 自己發明的規格（欄位增減是客戶 gate）。")
+    assert len(set(POLICY_TABLE_COLUMNS)) == len(POLICY_TABLE_COLUMNS), (
+        f"欄位名重複：{POLICY_TABLE_COLUMNS}")
+
+
 def test_the_ledger_invents_no_column_list():
     """⛔ 交易帳本**不准**自己發明一份欄位清單。
 
@@ -1526,10 +1812,14 @@ def test_the_ledger_invents_no_column_list():
         elif isinstance(_n, ast.AnnAssign) and isinstance(_n.target, ast.Name):
             # `AnnAssign` 只有單一 `target`，不是 `targets` —— 不能跟上面共用一行。
             _names.append(_n.target)
-    _bad = [_t.id for _t in _names if "COLUMN" in _t.id.upper()]
+    _bad = [_t.id for _t in _names
+            if "COLUMN" in _t.id.upper() and _t.id not in _WIREFRAMED_COLUMN_CONSTS]
     assert not _bad, (
         f"被測檔多了看起來像欄位清單的常數：{_bad}\n"
-        "線框對交易帳本沒有列欄位 —— 補一份等於自己發明規格。")
+        "線框對交易帳本沒有列欄位 —— 補一份等於自己發明規格。\n"
+        f"（唯一具名豁免：{sorted(_WIREFRAMED_COLUMN_CONSTS)} —— "
+        "見 `_WIREFRAMED_COLUMN_CONSTS` 的長註，豁免的前提由 "
+        "`test_the_policy_columns_are_the_wireframe_header_verbatim` 每次重新查證）")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1828,23 +2118,100 @@ def test_the_page_does_not_use_the_look_alike_advisor():
         "與本頁「整個組合 vs 使用者自己設的目標」不是同一件事。")
 
 
-def test_the_page_does_not_delegate_to_the_old_tabs():
-    """⛔ 不 import 線框「從哪裡搬來」列的那幾個舊檔，也不 import 已經住在 ④ 的換股顧問。
+def _delegated_modules() -> set[str]:
+    """:data:`DELEGATED_ENTRIES` 裡出現過的模組名（白名單的模組那一半）。"""
+    return {_m for _m, _ in DELEGATED_ENTRIES}
 
-    它們會在五頁驗收完成後**整批拔除**，每一條委派都是一處會斷頭。
-    ⚠️ ① 留了一條對 `ui/tab1_macro_midcycle.py` 的委派並就地登記
-    「有效期到舊 tab 整批拔除為止」—— **本頁一條都沒有，而且要維持這樣。**
+
+def test_the_page_only_delegates_to_the_registered_entries():
+    """⛔ 委派只能發生在 :data:`DELEGATED_ENTRIES` 逐字列名的那幾支上。
+
+    ## ⚠️ 2026-09-07：本條的**放行面**換了，函式名一起改（原
+    `test_the_page_does_not_delegate_to_the_old_tabs`）
+
+    **舊條**：`ui.tab*` / `fund_grp_health` / `portfolio_perf` / `ui.helpers.portfolio`
+    **一律禁止**（只有 `_ALLOC_SSOT` 一個具名豁免），docstring 逐字寫著
+    「**本頁一條都沒有，而且要維持這樣**」。
+    **新條**：客戶 2026-09-07 指示**路線 (A)**（「邏輯呼叫既有舊模組，不重寫、
+    不搬移、不改資料路徑」）—— 與 ② 2026-09-06 收到的是同一條指示。
+    **舊條的顧慮沒有消失**（「每多一條委派就多一處會斷頭」今天依然成立），
+    它變成了 :data:`DELEGATED_ENTRIES` 的存在理由：**拔除那天要回來改的地方只有那一張表。**
+
+    ⛔ **放行面沒有變成「那幾個資料夾都放行」** —— 那會是真的放寬。
+    放行的是**逐支列名**的模組；同一個資料夾裡沒被列名的東西**照樣紅**。
+    形狀直接抄 `tests/test_wf02_health_skeleton.py` 的同型守衛
+    （② 的那條也是「舊條整包封鎖 → 新條逐支白名單」，理由與本條逐字相同）。
     """
+    _allowed = _delegated_modules() | {_ALLOC_SSOT}
+    assert _allowed, "白名單是空的 —— 空白名單會讓本條退化成整包封鎖。"
     _bad = [_m for _m in _imported_modules(_tree())
             if (_m.startswith("ui.tab")
                 or "fund_grp_health" in _m
                 or "portfolio_perf" in _m
-                or ("ui.helpers.portfolio" in _m
-                    and not _exempted_by_name(_m)))]
+                or "ui.helpers.portfolio" in _m
+                or "ui.helpers.macro" in _m)
+            and not any(_m == _a or _m.startswith(_a + ".") for _a in _allowed)]
     assert not _bad, (
-        "本頁委派了舊 ④ 的來源檔：" + ", ".join(_bad)
-        + "\n舊實作會被整批拔除；本頁一律自己畫完。"
-        + f"\n（唯一具名豁免：{_ALLOC_SSOT} —— 見 `_ALLOC_SSOT` 的長註）")
+        "本頁委派了**沒有登記**的舊 ④ 來源檔：" + ", ".join(_bad)
+        + "\n每一支委派都要進 `page_04_portfolio.DELEGATED_ENTRIES` 受審 —— "
+          "那是「悄悄多接一支」唯一的關卡。\n"
+        + f"（另有一個具名豁免：{_ALLOC_SSOT} —— 見 `_ALLOC_SSOT` 的長註）")
+
+
+def test_delegation_matches_the_registry():
+    """⭐ **本頁實際 import 到的委派入口，與 :data:`DELEGATED_ENTRIES` 精確集合相等。**
+
+    ## 兩個方向都要擋，缺一邊就等於沒守
+
+    - **多接一支沒登記的** → 白名單那條（上一條）擋得住「模組」，
+      但擋不住「同一個模組裡多 import 一個符號」。本條擋得住。
+    - **登記了卻沒接** → 一張比實作長的表，讀的人會以為那幾塊已經接上了。
+      這一半**沒有任何其他守衛在看**。
+
+    ⚠️ 形狀（精確 `==`，不是 `<=` 也不是 `>=`）直接抄 ② 的
+    `tests/test_wf02_health_skeleton.py`；那條的病史逐字記著單向比對的代價。
+    ⚠️ 只比對 :data:`DELEGATED_ENTRIES` **列到的那幾個模組**的 import ——
+    版面共用元件（`ui.helpers.ia` / `render_state` / `story_nav`）不在射程內，
+    它們不是「被委派的舊模組」。
+    """
+    _mods = _delegated_modules()
+    _actual: set[tuple[str, str]] = set()
+    for _n in ast.walk(_tree()):
+        if isinstance(_n, ast.ImportFrom) and _n.module in _mods:
+            _actual |= {(_n.module, _a.name) for _a in _n.names}
+    _want = {tuple(_e) for _e in DELEGATED_ENTRIES}
+    assert _actual == _want, (
+        "本頁實際 import 到的委派入口與 `DELEGATED_ENTRIES` 不一致。\n"
+        f"表上有、實作沒接：{sorted(_want - _actual)}\n"
+        f"實作接了、表上沒有：{sorted(_actual - _want)}\n"
+        "⛔ 新增委派請同時更新 `page_04_portfolio.DELEGATED_ENTRIES`（那是 SSOT）。")
+
+
+def test_the_page_never_delegates_to_the_write_blacklist():
+    """⛔ :data:`DELEGATION_BLACKLIST` 上那兩支，一個字都不准 import。
+
+    ## 為什麼要有一條**專門**擋它們的守衛
+
+    `render_portfolio_tracking` **打開就寫一列進客戶的 Google Sheet**，
+    沒有按鈕、沒有勾選（② 已具名列進 `page_02_health.DELEGATION_BLACKLIST`，
+    理由逐字：「接了就是把 P0 寫入面搬回 ②」）。
+    它與本頁委派的 `render_portfolio_performance` **在畫面上是同一個標籤的兩張卡**，
+    所以「順手把兩張都接上」是一個**看起來很合理**的動作 ——
+    客戶決定 ③ 明示「只留一份」，而留的是不寫入的那一支。
+
+    ⚠️ **這條與零寫入守衛不重複**：`tests/test_wf04_portfolio_no_writes.py`
+    掃的是**閉包內的寫入動作**，它會在接了之後才紅；本條在**接的當下**就紅，
+    而且訊息會直接說出「這是那兩支不准接的東西」。
+    ⚠️ 它們同時也**不在** :data:`DELEGATED_ENTRIES` 裡，所以上面兩條也會紅 ——
+    **三條一起紅是刻意的**（`CLAUDE.md` 的縱深防禦）。
+    """
+    _imports = set(_imported_modules(_tree()))
+    _bad = [f"{_m}::{_sym}" for _m, _sym in DELEGATION_BLACKLIST
+            if _m in _imports or f"{_m}.{_sym}" in _imports]
+    assert not _bad, (
+        "本頁 import 了寫入黑名單上的東西：" + ", ".join(_bad)
+        + "\n它們**打開就寫一列進客戶的 Google Sheet**（沒有按鈕、沒有勾選）。"
+          "客戶決定 ③『組合績效只留一份』留的是不寫入的那一支。")
 
 
 def test_the_page_never_renders_the_switch_advisor_section():
@@ -1934,3 +2301,381 @@ def test_no_block_silently_renders_a_system_error(kind: str):
     assert not _bad, (
         f"（{kind}）有區塊掉進 `safe_section()` 的紅框 —— 骨架階段不該有任何例外：\n  "
         + "\n  ".join(_bad))
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-09-07 客戶四項拍板：每一項各自的**正向**守衛
+# ⚠️ `_WIRED_UNITS` 多一個名字，這裡就要多一組守衛（那條規則寫在 `_WIRED_UNITS` 上）。
+# ══════════════════════════════════════════════════════════════════
+
+def _policy_body(kind: str = "loaded") -> str:
+    """`BLOCK_POLICY` 那一個單位的渲染內容（字串）。"""
+    return "\n".join(_segments(_stream(kind)).get(BLOCK_POLICY, []))
+
+
+def test_the_status_bar_is_four_cells_because_the_client_said_so():
+    """⭐ **決定 ②：狀態列四格。** 四個抬頭都要在畫面上，而且 :data:`STATUS_COLS` 是 4。
+
+    ## ⚠️ 這條同時是一個**已知未驗風險**的登記點，不要把它讀成「已經驗過了」
+
+    「四格在窄螢幕會不會塌成兩列」**本 repo 從來沒有人實測過**，本輪也**沒有測到** ——
+    沙箱沒有 `streamlit`／沒有瀏覽器；AppTest 回的是元素樹、**沒有 viewport 也沒有 CSS**；
+    repo 內唯一能測寬度的 `tests/test_app_playwright.py` 整檔 `importorskip`、
+    而且只跑 Tab1、還需要一個真的跑起來的 app（本頁尚未接進 `app.py`）。
+    完整說明寫在被測檔的模組 docstring「四格狀態列會不會塌」那一段。
+    ⛔ **本條驗的是「有四格、抬頭沒被改掉」，不是「四格排得下」。**
+
+    ⚠️ 前三個抬頭**逐字**取自 `docs/wireframes/policy-split-wireframe.html` 的 3 欄狀態列；
+    第四個是決定 ② 新增的。這裡對**線框檔**查證前三個，第四個對**客戶原話**的字面。
+    """
+    assert STATUS_COLS == 4, (
+        f"`STATUS_COLS` 是 {STATUS_COLS} —— 客戶 2026-09-07 決定 ② 明示「變四格」。"
+        "改回 3 等於把那個決定撤銷掉，那要回去問客戶，不是實作細節。")
+    _body = _policy_body()
+    for _lbl in (STATUS_BOOK_LABEL, STATUS_POLICY_LABEL,
+                 STATUS_LOADED_AT_LABEL, STATUS_INVESTED_LABEL):
+        assert _lbl in _body, (
+            f"狀態列少了「{_lbl}」這一格。\n{_body}")
+    # 前三格對線框查證（第四格線框上沒有，它是決定 ② 新增的 —— 不去線框裡找它）。
+    _src = _POLICY_WIREFRAME.read_text(encoding="utf-8")
+    for _lbl in (STATUS_BOOK_LABEL, STATUS_POLICY_LABEL, STATUS_LOADED_AT_LABEL):
+        assert _lbl in _src, (
+            f"「{_lbl}」在客戶拍板的線框裡找不到 —— 這一格的抬頭被改成自己想的字了。")
+    assert STATUS_INVESTED_LABEL not in _src, (
+        f"「{STATUS_INVESTED_LABEL}」竟然在線框裡 —— 那它就不是決定 ② 新增的，"
+        "本條與被測檔的註解都要重寫（**這種紅燈是提醒，不是責備**）。")
+
+
+def test_the_status_bar_never_prints_a_number_it_does_not_know():
+    """⭐ **§1：不知道就寫 `—` ＋ 灰字，不准寫 0。**
+
+    測試 fixture 的持倉**沒有 `invest_twd`、沒有 `policy_id`**，也沒有帳本設定 ——
+    也就是四格**全部都不知道**。這時畫面上：
+
+    - **必須**出現 :data:`UNKNOWN_VALUE`（`—`）；
+    - **必須**每一格各帶一句灰字說「缺什麼」；
+    - ⛔ **不准**出現 `NT$0` / `0 張` 這種**把「不知道」寫成「是 0」**的東西。
+
+    「0 元」與「不知道投了多少」在畫面上長得一樣，意思差到相反 ——
+    而使用者會拿它去決定要不要加碼（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
+    """
+    _body = _policy_body()
+    assert UNKNOWN_VALUE in _body, (
+        f"四格都不知道，畫面上卻找不到 {UNKNOWN_VALUE!r}。\n{_body}")
+    assert NOT_READY_MARK in _body, (
+        f"狀態列有格子不知道，卻沒有任何灰字說缺什麼。\n{_body}")
+    for _fake in ("NT$0", "0 張", "NT$ 0"):
+        assert _fake not in _body, (
+            f"畫面上出現了 {_fake!r} —— 那是把「不知道」寫成「是 0」。\n{_body}")
+
+
+def test_the_total_invested_says_what_it_left_out():
+    """⭐ **總投入只加「已載入」的，而且必須說出來。**
+
+    一個**安靜少算**的總投入，比沒有總投入更危險：畫面上看不出少了誰。
+    本條驗那句範圍說明真的在畫面上，而且提到 :data:`STATUS_INVESTED_LABEL`
+    （吃常數，不抄字面 —— 抬頭改字時本條會跟著對，而不是跟著錯）。
+    """
+    _body = _policy_body()
+    assert STATUS_INVESTED_LABEL in _body and "已載入" in _body, (
+        "畫面上沒有說「總投入只加已載入的那幾檔」—— "
+        "少算是看不見的，所以它必須被說出來。\n" + _body)
+
+
+def test_the_policy_roster_is_on_screen_and_not_an_empty_frame():
+    """⭐ **決定 ①：保單一覽是一張全寬表，不是一張 1/3 摘要卡。**
+
+    ⚠️ 本條驗的是**表真的被畫出來**（有持倉時），以及**它不是空框**
+    （鐵則 04：無資料不畫空表格外框 —— 由 `wide_table()` 的空分支保證）。
+    ⛔ 不驗欄位內容 —— 欄位由
+    :func:`test_the_policy_columns_are_the_wireframe_header_verbatim` 對線框查證。
+    """
+    _parts = _segments(_stream("loaded")).get(BLOCK_POLICY, [])
+    # ⚠️ **不寫死 AppTest 的元素類別名**（`Dataframe` / `ArrowDataFrame` / … 版本間會變）：
+    #    改成「這一塊裡出現了一個**不是文字類**的元素」。狀態列與 caption 全是
+    #    `[Markdown]` / `[Caption]`，所以**只有那張表**能滿足這一條。
+    # ⛔ 這不是把斷言放寬 —— 寫死類別名的版本會在 streamlit 升版時**靜默轉綠或轉紅**，
+    #    而兩種都不是我們要驗的事。
+    _TEXTY = ("[Markdown]", "[Caption]", "[Text]", "[Header]", "[Subheader]",
+              "[Title]", "[Code]", "[Info]", "[Warning]", "[Error]", "[Success]")
+    _non_text = [_p for _p in _parts if not _p.startswith(_TEXTY)]
+    assert _non_text, (
+        "保單一覽那張表沒有被畫出來 —— 決定 ① 要的是全寬表，不是一張摘要卡。\n"
+        "（這一塊裡找不到任何非文字元素；若 streamlit 改了元素命名，"
+        "請看下面這份實際串流再決定怎麼改。）\n" + _text(_parts))
+    # 有持倉時**不得**走空狀態（那代表 `_policy_rows()` 空掉了）。
+    assert "保單一覽目前沒有可列的標的" not in _text(_parts), (
+        "有持倉，保單一覽卻走了空狀態 —— `_policy_rows()` 的來源接錯了。\n"
+        + _text(_parts))
+
+
+@pytest.mark.parametrize(
+    "unit", [BLOCK_CONCENTRATION, BLOCK_MACRO_LINK],
+    ids=["concentration", "macro_link"])
+def test_a_delegated_block_says_what_is_missing_instead_of_going_blank(unit: str):
+    """⭐ **決定 ③ 的三塊：資料不足時要誠實灰態，不准是一個「有標題、底下全空」的區塊。**
+
+    ## 這條擋的是一種**看起來沒事**的退化
+
+    被委派的五支在資料不足時的行為**各不相同，而且沒有一支合鐵則 03／04**：
+    兩支直接 `return`（畫面全空）、一支走 `st.info`（藍框）、一支走沒有 ⬜ 的灰字。
+    本頁因此在委派**之前**先把前提問完；本條驗那道前提檢查真的在。
+
+    ⛔ **拿掉本頁的前提檢查 → 這三塊會變成「標題底下什麼都沒有」，
+       而現有的其他守衛一條都不會紅**（順序守衛只看標題、灰態守衛只看
+       `_grey_units()`，而這三塊不在裡面）。**本條是唯一在看它的。**
+
+    ⚠️ **這三塊的灰不帶** :data:`_PENDING_NOTE` —— 它們不是「還沒接」，
+    是「**接上了，但你的資料還不夠**」。兩種灰的下一步不同，所以文案不共用；
+    本條把「不共用」也釘成斷言。
+    """
+    _seg = _segments(_stream("loaded"))
+    _body = "\n".join(_seg.get(unit, []))
+    assert _body.strip(), (
+        f"單位「{unit}」有標題、底下什麼都沒有 —— 那是鐵則 04 明禁的冗餘占位。"
+        "被委派的那幾支在資料不足時會直接 `return`，所以前提要由本頁先問。")
+    assert NOT_READY_MARK in _body, (
+        f"單位「{unit}」資料不足，卻沒有灰態記號 {NOT_READY_MARK!r}。\n{_body}")
+    assert _PENDING_NOTE not in _body, (
+        f"單位「{unit}」用了「{_PENDING_NOTE}」這句 —— 它**已經接上了**，"
+        "缺的是使用者的資料。用「還沒接上」會讓使用者去等一個不會來的版本。\n" + _body)
+
+
+def test_the_dividend_calendar_is_gated_and_defaults_to_off():
+    """⭐ **決定 ④：Checkbox Gate，預設不載入。**
+
+    三件事一起驗（缺一都會讓那個決定失效）：
+
+    1. **勾選框在畫面上**，字面吃 :data:`DIVCAL_GATE_LABEL`（SSOT，不抄）；
+    2. **預設沒勾** —— ⛔「不得預設載入」是客戶逐字的紅線；
+    3. **灰態說得出「為什麼預設不載入」與「勾哪裡會載入」**（客戶逐字要求）。
+
+    ⚠️ 第 3 點的「為什麼」驗的是**成本**這個語意（`約五秒`／`每次互動`），
+    不是驗某一句固定文案 —— 文案可以改，**理由不能消失**。
+    """
+    _seg = _segments(_stream("loaded"))
+    _parts = _seg.get(BLOCK_DIVIDEND_CAL, [])
+    _body = "\n".join(_parts)
+    assert any(DIVCAL_GATE_LABEL in _p for _p in _parts), (
+        f"配息月曆那一塊找不到勾選框「{DIVCAL_GATE_LABEL}」。\n{_body}")
+    assert NOT_READY_MARK in _body, (
+        f"配息月曆預設應該是灰的（不得預設載入）。\n{_body}")
+    assert "約五秒" in _body, (
+        "灰態沒有說**為什麼**預設不載入（成本）—— 客戶逐字要求要寫出來。\n" + _body)
+    assert "每次互動" in _body, (
+        "灰態沒有說「這一頁每次互動都會整頁重跑」—— 少了它，"
+        "使用者看不出為什麼一個算得出來的東西要他自己按。\n" + _body)
+    assert f"（請先到：上方「{DIVCAL_GATE_LABEL}」）" in _body, (
+        "灰態沒有指出**勾哪裡**會載入 —— 客戶逐字要求要寫出來。\n" + _body)
+
+
+def test_ticking_the_dividend_gate_actually_changes_the_block():
+    """⭐ **勾了要真的算 —— 而且算不出來時要說實話。**
+
+    ## 這條為什麼不是多餘的
+
+    上一條驗「預設不載入」。**只有上一條的話，一個永遠不做事的勾選框也會全綠** ——
+    那正是 `CLAUDE.md` 反覆記載的「空掃綠燈」。本條實跑：勾下去、重跑一次，
+    **那一塊的內容必須變**。
+
+    ⚠️ **測試 fixture 的持倉沒有 `dividends`**，所以勾下去之後正確的結果是
+    「已載入的標的都還沒有配息紀錄」——**不是**一張月曆。
+    本條驗的就是那句實話：**算不出來時說算不出來，不是畫一個空月曆或 0 筆**
+    （「本月 0 筆」讀起來是「這個月沒配息」，那是造假）。
+    """
+    _at = _app(FAKE_HOLDINGS_PRICED)
+    _before = "\n".join(_segments(_flat(_at.main)).get(BLOCK_DIVIDEND_CAL, []))
+    _boxes = [_c for _c in _at.checkbox if DIVCAL_GATE_LABEL in str(_c.label)]
+    assert _boxes, f"找不到那個勾選框「{DIVCAL_GATE_LABEL}」。"
+    _boxes[0].check()
+    _rerun(_at)
+    assert not _at.exception, (
+        "勾下去之後整頁炸了：\n"
+        + "\n".join(str(_e.value) for _e in _at.exception))
+    _after = "\n".join(_segments(_flat(_at.main)).get(BLOCK_DIVIDEND_CAL, []))
+    assert _after != _before, (
+        "勾了之後那一塊一個字都沒變 —— 這個勾選框沒有接到任何東西。\n"
+        f"之前：\n{_before}\n之後：\n{_after}")
+    assert "配息紀錄" in _after, (
+        "fixture 的持倉沒有配息史，勾下去之後應該誠實說「還沒有配息紀錄」，"
+        "而不是畫一張空月曆或宣稱「本月 0 筆」。\n" + _after)
+    for _fake in ("本月推估除息 0 檔", "本月 0 筆"):
+        assert _fake not in _after, (
+            f"畫面上出現 {_fake!r} —— 那讀起來是「這個月沒配息」，"
+            "而事實是「沒有配息史可以推」。\n" + _after)
+
+
+def test_the_two_perf_cards_are_not_both_brought_over():
+    """⭐ **決定 ③「組合績效只留一份」—— 兩張同名卡不准同時出現在新 ④。**
+
+    舊 ④ 同頁有兩張**標籤逐字相同**的績效卡（年化報酬／年化波動 σ／最大回撤）。
+    本條從**被測檔的原始碼**驗：只 import 了其中一支，另一支連名字都沒有。
+
+    ⚠️ 與 :func:`test_the_page_never_delegates_to_the_write_blacklist` **不重複**：
+    那條看 `import`，本條連**字面提及**都看（有人可能用 `getattr` 或字串繞過 import）。
+    ⛔ **本條只擋「本頁把重複帶進來」**，不處置舊 ④ 那兩張卡的去留 ——
+    那是客戶 gate，舊 ④ 已具名回報總管。
+    """
+    # ⚠️ **要先把黑名單那一格自己排掉，否則本條會被它自己打紅**（本輪實測撞到）：
+    #    `DELEGATION_BLACKLIST` 的值裡**本來就有**這個符號名的字串字面值 ——
+    #    那正是「具名擋住它」的做法，不是「接它」。
+    #    ⛔ 排除法用**節點身分**（`id()`），不是用字串內容比對 ——
+    #       用內容比對的話，任何地方只要寫出同一個字串都會被一起放行。
+    _tree_ = _tree()
+    _blacklist_ids: set[int] = set()
+    for _n in _tree_.body:
+        _tgt = (_n.targets[0] if isinstance(_n, ast.Assign)
+                else getattr(_n, "target", None) if isinstance(_n, ast.AnnAssign) else None)
+        if isinstance(_tgt, ast.Name) and _tgt.id == "DELEGATION_BLACKLIST":
+            _blacklist_ids = {id(_c) for _c in ast.walk(_n) if isinstance(_c, ast.Constant)}
+    assert _blacklist_ids, (
+        "被測檔找不到 `DELEGATION_BLACKLIST` —— 那是「具名擋住那兩支」的 SSOT，"
+        "它不見了代表擋它的機制被拿掉了。")
+    _bad = [_n.value[:60] for _n in _live_strings(_tree_)
+            if "render_portfolio_tracking" in _n.value and id(_n) not in _blacklist_ids]
+    assert not _bad, (
+        "被測檔的**活字串**裡出現了 `render_portfolio_tracking`（且不在黑名單宣告內）—— "
+        "那是繞過 import 守衛去接它的形狀：\n  " + "\n  ".join(_bad))
+    _calls = [ast.unparse(_n.func) for _n in ast.walk(_tree())
+              if isinstance(_n, ast.Call)]
+    assert not [_c for _c in _calls if "portfolio_tracking" in _c], (
+        "被測檔呼叫了 `render_portfolio_tracking` —— 決定 ③ 明示只留一份，"
+        "而留的是不寫入客戶 Google Sheet 的 `render_portfolio_performance`。")
+
+
+def test_the_dividend_gate_is_a_real_gate_and_cannot_be_short_circuited():
+    """⭐ **那個勾選框必須真的是閘門 —— 而且不得被布林字面值短路。**
+
+    ## 這條為什麼要存在（⑤ 那一組今天實測出來的洞，本檔照抄它的教訓）
+
+    ⑤ 的第一版 gate 守衛只問「**這個函式裡有沒有 `st.checkbox` 呼叫**」——
+    於是 ``if False and st.checkbox(...):`` **照樣綠**：勾選框在、閘門形同虛設。
+    「有一個 widget」與「那個 widget 真的擋住了東西」是兩件事。
+
+    ## 本條釘住的四件事（缺一都能讓 gate 變成裝飾）
+
+    1. :func:`~ui.views.page_04_portfolio._render_dividend_calendar_card` 裡
+       **恰好一個** `st.checkbox` 呼叫，而且它的回傳值**被指派給一個變數**
+       （沒有指派 ⇒ 那個值不可能被拿來當條件）。
+    2. 函式裡有一個 `if`，其 test **就是** ``not <那個變數>``，
+       而且那個分支**以 `return` 結束** —— 也就是「沒勾就到此為止」。
+    3. ⭐ **那個 test 裡不得出現任何布林字面值**（`True` / `False`）。
+       這一條擋的就是 ``if False and _flag:`` ／ ``if _flag or True:`` 這一族。
+    4. 昂貴的那一段（:func:`~ui.views.page_04_portfolio._render_dividend_calendar_body`）
+       **只在那個 early-return 之後**被呼叫，且**不在**那個 early-return 分支裡。
+
+    ⚠️ **為什麼驗「沒勾就 return」而不是「有勾才呼叫」**：本頁採的是 ⑤ 的
+    early-return 形狀（`ui/views/page_05_settings.py` 的 `NAV_GATE_LABEL` gate），
+    那是 repo 內已經跑過 CI 的合規樣板。**驗實際的形狀，不是驗我希望的形狀。**
+
+    ⛔ **本條看不到什麼（照實寫）**：它是**語法**檢查。
+    `_render_dividend_calendar_body()` 內部若自己又去做了昂貴的事而不管旗標，
+    本條看不到；`st.checkbox` 被 alias 成別的名字也看不到。
+    **「不勾就真的沒有執行」那一半由 :func:`test_ticking_the_dividend_gate_actually_changes_the_block`
+    在 AppTest 裡實跑**，兩條互補、都不可省。
+    """
+    _fn = next((_n for _n in ast.walk(_tree())
+                if isinstance(_n, ast.FunctionDef)
+                and _n.name == "_render_dividend_calendar_card"), None)
+    assert _fn is not None, (
+        "找不到 `_render_dividend_calendar_card()` —— 本條所有斷言都掛在它身上，"
+        "找不到它就等於這道 gate 的守衛靜默失效。")
+
+    # (1) 恰好一個 checkbox，且回傳值有被接住
+    _cb_assigns = [_n for _n in ast.walk(_fn)
+                   if isinstance(_n, ast.Assign) and isinstance(_n.value, ast.Call)
+                   and getattr(_n.value.func, "attr", None) == "checkbox"]
+    _cb_calls = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Call)
+                 and getattr(_n.func, "attr", None) == "checkbox"]
+    assert len(_cb_calls) == 1, (
+        f"`_render_dividend_calendar_card()` 裡有 {len(_cb_calls)} 個 `checkbox` 呼叫，"
+        "預期恰好 1 個。多一個 gate ＝ 多一個沒人在守的閘門。")
+    assert len(_cb_assigns) == 1 and isinstance(_cb_assigns[0].targets[0], ast.Name), (
+        "那個 `st.checkbox(...)` 的回傳值沒有被指派給變數 —— "
+        "沒接住的值不可能拿來當條件，那個勾選框就只是裝飾。")
+    _flag = _cb_assigns[0].targets[0].id
+
+    # (2)(3) `if not <flag>:` 且以 return 收尾，且 test 裡沒有布林字面值
+    _gates = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.If)
+              and isinstance(_n.test, ast.UnaryOp) and isinstance(_n.test.op, ast.Not)
+              and isinstance(_n.test.operand, ast.Name)
+              and _n.test.operand.id == _flag]
+    assert len(_gates) == 1, (
+        f"找不到（或不只一個）`if not {_flag}:` 的 early-return 閘門 —— 實際 {len(_gates)} 個。\n"
+        "⛔ 這正是 ⑤ 那一組實測過的洞：勾選框在、閘門不在，畫面看起來一模一樣。")
+    _gate = _gates[0]
+    assert any(isinstance(_s, ast.Return) for _s in _gate.body), (
+        f"`if not {_flag}:` 那個分支沒有 `return` —— 沒勾的時候會繼續往下跑，等於沒有閘門。")
+    _bools = [_n for _n in ast.walk(_gate.test)
+              if isinstance(_n, ast.Constant) and isinstance(_n.value, bool)]
+    assert not _bools, (
+        f"閘門條件裡出現布林字面值 {[_b.value for _b in _bools]} —— "
+        "`if False and _flag:` / `if _flag or True:` 這一族會讓閘門恆真或恆假，"
+        "而畫面上**看不出任何差別**（⑤ 2026-09-07 實測：這種寫法在只問「有沒有 checkbox」"
+        "的守衛下照樣全綠）。")
+
+    # (4) 昂貴的那一段只在閘門之後、且不在閘門分支內
+    _body_calls = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Call)
+                   and getattr(_n.func, "id", None) == "_render_dividend_calendar_body"]
+    assert len(_body_calls) == 1, (
+        f"`_render_dividend_calendar_body()` 在這個函式裡被呼叫 {len(_body_calls)} 次，預期 1 次。")
+    _in_gate_branch = [_n for _s in _gate.body for _n in ast.walk(_s)
+                       if isinstance(_n, ast.Call)
+                       and getattr(_n.func, "id", None) == "_render_dividend_calendar_body"]
+    assert not _in_gate_branch, (
+        "昂貴的那一段長在「沒勾」的分支裡 —— 那是把閘門接反了（不勾才算）。")
+    assert _body_calls[0].lineno > _gate.lineno, (
+        "昂貴的那一段在閘門**之前**就被呼叫了 —— 客戶逐字的紅線是「⛔ 不得預設載入」。")
+
+
+def test_the_checkbox_assertion_is_still_an_exact_equality():
+    """⭐ **那條 checkbox 斷言必須維持 `==` 精確相等，不得被改成「包含即可」。**
+
+    ## 這條為什麼要存在（它守的是**守衛本身**）
+
+    2026-09-07 本批把整頁 checkbox 斷言從
+    ``== [_LABEL_SATELLITE_ONLY]`` 改成 ``== _expected_checkbox_labels()``——
+    那是**具名放行**（多一個就要有人來改清單），不是放寬。
+    **但這兩者只差一個運算子**：把 `==` 換成 ``set(...) <= set(...)`` 或 `in`，
+    畫面上、清單上、PR 描述上**看不出任何差別**，而守衛從此對「多一個 checkbox」失明。
+
+    ⚠️ **這一條是本地唯一能證明那件事的方法。** 真正的行為突變（在頁面上塞第三個
+    checkbox，看那條斷言會不會紅）**需要渲染**，而本批的環境沒有 streamlit ——
+    所以改成從**測試自己的原始碼**驗運算子。**兩者不等價，這一點照實寫在這裡。**
+
+    ## 釘住三件事
+
+    1. 那個 assert 的 test 是一個 `ast.Compare`；
+    2. 運算子**恰好一個，而且是 `ast.Eq`**（不是 `In` / `LtE` / `NotEq`）；
+    3. 右邊**就是** ``_expected_checkbox_labels()`` 的呼叫
+       （不是就地拼一份，那會繞過 :data:`_ALLOWED_EXTRA_CHECKBOXES` 的關卡）。
+
+    ⛔ **本條看不到什麼**：把 `_expected_checkbox_labels()` 的**實作**改鬆
+    （例如回傳 `[]`）它看不到 —— 那一半由
+    :func:`test_the_extra_checkbox_allowlist_is_exact_and_named` 守。
+    """
+    _self = pathlib.Path(__file__).read_text(encoding="utf-8")
+    _fn = next((_n for _n in ast.walk(ast.parse(_self))
+                if isinstance(_n, ast.FunctionDef)
+                and _n.name == "test_the_three_fields_and_the_submit_verb_come_from_the_wireframe"), None)
+    assert _fn is not None, (
+        "找不到那條線框守衛 —— 它被改名或刪掉了，而本條所有斷言都掛在它身上。")
+    _cands = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Assert)
+              and "_at.checkbox" in ast.unparse(_n.test)]
+    assert len(_cands) == 1, (
+        f"那條守衛裡提到 `_at.checkbox` 的 assert 有 {len(_cands)} 條，預期恰好 1 條。")
+    _test = _cands[0].test
+    assert isinstance(_test, ast.Compare), (
+        f"checkbox 斷言不再是一個比較式，而是 {type(_test).__name__} —— "
+        f"實際：{ast.unparse(_test)[:120]}")
+    assert len(_test.ops) == 1 and isinstance(_test.ops[0], ast.Eq), (
+        "checkbox 斷言的運算子不是 `==` —— "
+        f"實際：{ast.unparse(_test)[:120]}\n"
+        "⛔ `in` / `<=` / `issubset` 這一族會讓「多一個沒列名的 checkbox」**不再轉紅**，"
+        "那一刻起這條守衛就只是裝飾品。")
+    _right = _test.comparators[0]
+    assert (isinstance(_right, ast.Call)
+            and getattr(_right.func, "id", None) == "_expected_checkbox_labels"), (
+        "checkbox 斷言的右邊不是 `_expected_checkbox_labels()` —— "
+        f"實際：{ast.unparse(_right)[:120]}\n"
+        "⛔ 就地拼一份預期清單會繞過 `_ALLOWED_EXTRA_CHECKBOXES` 那道關卡。")

@@ -45,6 +45,13 @@ pandas / plotly）；本檔**純 AST，不 import 被測模組**。分開的好�
   （寫「必須掛著」在舊 ② 接回之前恆紅，寫「必須沒掛」在接回當天恆紅）。
   ⇒ 它保證的是「**路徑存在且完好**」，**不是**「**它現在被掛出來了**」。
   舊 ② 的接回是另一組的 PR；在那之前，那六塊對使用者**仍然是看不見的**。
+  📌 **2026-09-07 狀態更新（不是更正 —— 上句是條件句，它在當時與現在都為真）**：
+  **那個條件已經達成** —— #814 已把舊 ② 接回 `app.py` 的 `tab_health`
+  （新 View 改掛 `tab_preview_health`，雙軌並行），**所以那六塊現在看得到了**。
+  ⛔ 但**本條的射程一個字都沒變**：它仍然只保證「路徑存在且完好」；
+  「它現在被掛出來了」由 :func:`test_app_mounts_the_new_health_view` 守。
+  ⚠️ 加這一句的理由：上句雖然是條件句，**讀者很容易只讀到後半段**
+  （本批就有一段引用它時把它當成「目前不可見」的證據）。
 * :func:`_sinks` 是**名字比對**（`ast.walk`，不看分支、不看可達性、不看引數）——
   它會**誤報**（`CLAUDE.md §8.3.P` 的 `P-SINKGRAIN-1` 就是一個實證）。
   本檔用它做的是**差集**，兩邊同一把尺，偽陽性在相減時會抵銷。
@@ -53,6 +60,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 from collections import defaultdict
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -335,6 +343,70 @@ _DISPOSITIONS = frozenset({
 
 #: 切換之後**到不了**的渲染函式，逐一具名去處。
 #:
+#: ⛔⛔ **先讀這一段再讀表 —— 這張表的「敘述欄」不是機器產生的，它會說謊。**
+#:
+#: **處置欄（第一格）有機器在守**：`test_every_dropped_renderer_has_a_named_disposition`
+#: 驗它是不是合法值，`test_a_page_three_label_must_be_reachable_from_page_three` /
+#: `test_a_pending_label_must_still_have_a_live_path` /
+#: `test_an_intentional_label_must_declare_where_it_still_lives` 驗它與可達性一致。
+#: **但敘述欄（第二格）是人手寫的散文，機器只驗得動其中極小一塊**
+#: （目前只有「唯一 caller 是 X」這一種句型，見
+#: :func:`test_a_sole_caller_claim_must_actually_be_sole`）。
+#:
+#: **歷史紀錄（2026-09-07，同一天）：本表的標籤與敘述已被抓到 7 處與實際不符**
+#: （**其中第 7 處翻面兩次**，見表中 `7b` —— 刻意不計成「第 8 處」，
+#: 它是同一列的同一句話被同一個外因推翻第二次，不是新發現的一處）。
+#: **⚠️ 這是「已知 7 處」，不是「已全部更正」，更不是窮舉** ——
+#: 已更正的是這幾處，**沒有人查過有沒有下一處**，本檔也不宣稱沒有。
+#:
+#: ==== ================================================== ==================================
+#: #    被抓到的不符                                         誰、用什麼切法抓到
+#: ==== ================================================== ==================================
+#: 1-2  八筆 ~~`已搬 ③`~~ 裡有六筆連 ③ 都到不了               獨立稽核，AST 遞移閉包重掃
+#: 3    `render_mj_freshness_banner`「唯一 caller」是假的      獨立稽核，全 repo caller 掃描
+#: 4    `_render_health_summary`「另三格」與自己的列舉矛盾      實測舊 ② 畫的是 5 格 KPI
+#: 5    `_render_pairs_ui`「唯一 caller」是假的（實測 2 支）    獨立稽核；而且 `CLAUDE.md`
+#:                                                          的 `P-SINKGRAIN-1` **早就寫著**
+#: 6    `_render_pairs_body`「下游：同上」錯兩層（實測 2 支，   同上
+#:      且直接 caller 根本不是上一列那支）
+#: 7    `_MOVED`「它**現在**看得見，靠的是雙軌」是假的 ——      獨立稽核；而且**本檔開頭
+#:      當時舊 ② 沒掛在 `app.py` 上，那六塊不可見              「不守什麼」那一段早就寫著**
+#: 7b   **同一列的更正本身，幾分鐘後又翻面** —— 它寫「五個      獨立稽核（第二輪）；
+#:      分頁槽」「連 import 都沒有」「畫面上看不到」，          **成因與 1~7 完全不同**
+#:      #814 合併後三句全假                                  （見下方 ⚠️）
+#: ==== ================================================== ==================================
+#:
+#: ⚠️ **六處的共通點，比六處本身重要**：**每一次都是「只查了被點名的那幾筆」。**
+#:    第 1-2 處修完，沒有人拿同一把尺去掃第 3 處；第 3-4 處修完，
+#:    沒有人拿同一把尺去掃 `刻意不接` 那一族（**它當時零機器守衛**）。
+#:    第 5 處尤其刺眼：**推翻它的證據一直躺在同一份 `CLAUDE.md` 裡，
+#:    而且就在上一列自己引用的那一段**（`P-SINKGRAIN-1` 逐字寫著
+#:    「傳 `True` 的是批次那一支 `render_rotation_section_from_df`」）。**沒有人回頭讀。**
+#:    **第 7 處更近**：推翻它的那句話就在**本檔開頭**（「不守什麼」段），
+#:    離它不到三百行。**docstring 誠實、表格誇大，而沒有人交叉讀。**
+#:
+#: ⚠️ **`7b` 的成因與 1~7 完全不同，不要混為一談** ——
+#:    1~7 全是「**沒有人回頭讀**」；**`7b` 是「寫的時候是真的，外面的世界變了**」：
+#:    `#814`（雙軌並行）在本批交件後**幾分鐘**合併，一次推翻三項前提。
+#:    ⇒ **教訓不是「要更小心」，是「時效性宣稱要把條件寫進句子本身」** ——
+#:    `7b` 那三句是**無條件的現在式事實**，旁邊那句「截至本次修改」的時間戳
+#:    **保護不了它們**。對照本檔開頭「不守什麼」那一段：它用的是**條件句**
+#:    （「在那之前…」），所以 #814 之後**它仍然為真**，只需要補一則狀態更新。
+#:    **同一件事、兩種寫法，一種要改、一種不用 —— 差別只在有沒有把條件寫進去。**
+#:    ⚠️ 而且 `7b` 這一輪**CI 三條 lane 全綠、本檔 12 條守衛全綠** ——
+#:    **散文不是斷言，綠燈不保證文件為真。**
+#:
+#: ⚠️ **第 7 處還帶出另一件事：修這張表的那一批自己也會犯同一個病。**
+#:    本輪（2026-09-07 第二輪）在守衛 docstring、commit 訊息與 PR 描述**三個永久紀錄**裡
+#:    寫過「三句原話原封放回去，三次全轉紅」—— **那是假的**：
+#:    #3／#6 的**原始措辭**沒有反引號識別字，:func:`test_a_sole_caller_claim_must_actually_be_sole`
+#:    **結構上看不見它們**（實測 🟢）。被展示成「轉紅」的 #3 是**改寫過的句子**。
+#:    **一條在修『說謊的表』的改動，自己說了謊 —— 而且說在守衛自己的 docstring 上。**
+#:    ⇒ 已就地改成誠實版（見該守衛 docstring 的射程表）。
+#:
+#: ⇒ **動這張表的任何一列時，把同一把尺對全部同類列重跑一次**
+#:   （`CLAUDE.md §8.2.A.1` 驗證段 ④ 的既有教訓：「只改被點名的那一條 ＝ 沒改」）。
+#:
 #: ⚠️ **這張表不是「可以一直缺下去的清單」** —— `未登記缺口` 那幾筆是本批
 #:    用 AST 遞移閉包**新查出來的**，在此之前**沒有任何地方記載它們**
 #:    （`ui/views/page_02_health.py` 的四個常數都沒有收它們）。
@@ -355,15 +427,55 @@ _DISPOSITIONS = frozenset({
 #: **2026-09-07 實測全 repo：目前沒有任何東西靜態解析這張表**
 #: （`grep -rn "DROPPED_WITH_REASON" --include=*.py` 只命中本檔），所以現在是安全的。
 #: ⛔ **哪天要加一個靜態讀它的工具，先改這裡（拆回字面值），不要去改那個工具。**
+#: ══ `刻意不接` 的**可達性標記** —— 三選一，機器逐列比對 ══════════════════════
+#:
+#: ⚠️ **為什麼要有這三個字串（這一段是 2026-09-07 第五／第六處不符的解藥）**：
+#: `刻意不接` 這一族在本檔**原本零機器守衛** —— 上面兩條新規則只管
+#: `③ 已到得了` 與 `判給 ③（尚未實作）`，`刻意不接` **完全在射程外**。
+#: 於是它底下兩句「唯一 caller 是 X」的**假全稱句**活了整整一輪，**CI 一次都沒紅過**。
+#:
+#: **假話本身不是最糟的，糟的是它把因果講反**：「下游：唯一 caller 是 X」讀起來像
+#: 「X 被 ② 移出 ⇒ 這一支跟著從 App 消失」。**實際上它們經 ③／④ 都還活著。**
+#: 與 `render_mj_freshness_banner` 完全同型：**掉的是 ② 的入口，不是那個東西本身**——
+#: 而這兩種情況的**補法完全不同**（前者只要接回入口，後者要重做一個東西）。
+#:
+#: ⇒ 所以標記釘的不是「理由寫得好不好」（機器判不動），而是**一個可量測的事實**：
+#: **除了保留的舊 ② 以外，還有沒有活的分頁到得了它。**
+#:
+#: ⛔ **「活路徑」的定義刻意排除舊 ②**（含日後舊 ② 被接回成為某個分頁槽的情形）——
+#: 否則舊 ② 一接回，六列標記會同時翻面，而那**不是**可達性真的改變了。
+_STILL_LIVES: str = "［其他活路徑：有］"
+#: 只剩保留的舊 ② 到得了 ⇒ **② 的入口沒了，靠雙軌還看得見**。
+_ONLY_OLD_TWO: str = "［其他活路徑：無（僅保留的舊 ②）］"
+#: 全 App 都到不了 ⇒ 這是**真的移除**。允許，但**必須明講**，不准用「刻意不接」四個字含混過去。
+_GONE_EVERYWHERE: str = "［其他活路徑：無（全 App 都到不了）］"
+
+_LIVE_PATH_TAGS: "tuple[str, ...]" = (_STILL_LIVES, _ONLY_OLD_TWO, _GONE_EVERYWHERE)
+
 _MOVED: str = (
     "~~已搬 ③~~ → **判給 ③（尚未實作）**（2026-09-07 就地更正，"
     "**有意識的更正，不是漏刪**；決策者：AI 總管，依獨立稽核實測）。"
     "**實測：③ 的活入口到不了它，尚未掛載的新 ③ view 也到不了。** "
     "線框 §04 判給 ③ 是**真的**，被推翻的是「已搬」二字隱含的『③ 已經有了』。"
-    "⚠️ **它現在看得見，靠的是雙軌**：客戶 2026-09-07 原則 —— "
-    "新 UI 以**新增 Tab 並行掛載**、**舊 Tab 一律保留不動**，直到客戶親自驗收才刪。"
-    "本支經**保留的舊 ②**仍到得了（守衛："
-    "`test_a_pending_label_must_still_have_a_live_path`）。"
+    "~~⚠️ **它現在看得見，靠的是雙軌**：…本支經**保留的舊 ②**仍到得了。~~ "
+    "~~⛔ 2026-09-07 更正：『現在看得見』是假的 —— `app.py` 的**五個**分頁槽裡沒有舊 ②，~~"
+    "~~`render_fund_grp_health_tab` **連 import 都沒有**；**在那之前，畫面上看不到**。~~ "
+    "⛔ **2026-09-07 同日第二次更正：上面那段（第七處的更正本身）也翻面了。**"
+    "**有意識的更正，不是漏刪**（日期 **2026-09-07** · 決策者：**AI 總管**，依獨立稽核實測）。"
+    "**它寫下時為真，`#814` 在幾分鐘後合併把三項前提一次推翻** ——"
+    "「五個分頁槽」現在是**七**個；「連 import 都沒有」現在**有**；"
+    "「畫面上看不到」現在**看得到**（`tab_health` 掛的就是舊 ②）。"
+    "⚠️ **那三句是無條件的現在式事實宣稱，"
+    "「截至本次修改」那個 hedge 保護不了它們** —— 這是本輪自己踩到的教訓："
+    "**時效性寫法要把條件寫進句子本身，不能靠一句時間戳兜底。**"
+    "**現行（實測 `origin/main` `c6b4d1b`，本分支已 merge）**：客戶 2026-09-07 原則是"
+    "**舊 Tab 原位保留、新 View 並行掛新 Tab**；舊 ② 已接回 `app.py` 的 `tab_health`，"
+    "**該條件已達成** ⇒ **本支經保留的舊 ② 在畫面上看得到**，"
+    "呼叫圖上的路徑由 `test_a_pending_label_must_still_have_a_live_path` 釘住。"
+    "⛔ **但那條守衛保證的仍只有「路徑存在且完好」，不是「它現在被掛出來了」** ——"
+    "掛載那一面由 `test_app_mounts_the_new_health_view` 負責（它現在**兩格都釘**："
+    "新頁在 `tab_preview_health`、舊 ② 在 `tab_health`，少一格就紅）。"
+    "⇒ **本句今天為真是因為那條掛載守衛在守它，不是因為有人記得回來改這裡。**"
     "⛔ **不得**把它讀成「所以可以不用做 ③」——"
     "它讀作「**債還在，而且現在有機器盯著它有沒有路可走**」。")
 
@@ -417,19 +529,67 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
     "ui.helpers.fund_grp_health.rotation::render_rotation_section":
         ("刻意不接", "page_02_health.DROPPED_FOR_ZERO_WRITE：依「② 零寫入」裁決移出。"
                       "守衛對它是**已知偽陽性**（`CLAUDE.md §8.3.P` 的 `P-SINKGRAIN-1`），"
-                      "但偽陽性不是把它接回來的理由，也不是改守衛的理由。"),
+                      "但偽陽性不是把它接回來的理由，也不是改守衛的理由。"
+                      + _STILL_LIVES),
     "ui.helpers.fund_grp_health.rotation::_render_pairs_ui":
-        ("刻意不接", "下游：唯一 caller 是 `render_rotation_section`。"),
+        ("刻意不接",
+         "~~下游：唯一 caller 是 `render_rotation_section`。~~ "
+         "⛔ **2026-09-07 更正：那句是假的 —— 本表第五處被抓到的『唯一 caller』"
+         "全稱句**（**有意識的更正，不是漏刪**；決策者：AI 總管，依獨立稽核實測）。"
+         "實測全 repo（排除 `tests/`／`scripts/`）呼叫它的有**兩支**："
+         "`render_rotation_section` **與 `render_rotation_section_from_df`**。"
+         "⚠️ **推翻它的證據一直躺在同一份文件裡**：`CLAUDE.md §8.3.P` 的 "
+         "`P-SINKGRAIN-1` 逐字寫著「（傳 `True` 的是批次那一支 "
+         "`render_rotation_section_from_df`）」—— 那句話的意思就是"
+         "**`render_rotation_section_from_df` 也呼叫本函式**，"
+         "而 `P-SINKGRAIN-1` 正是上一列自己引用的那一段。**沒有人回頭讀。**"
+         "⚠️ **舊理由不只少算一個 caller，它把因果講反了**（與 "
+         "`render_mj_freshness_banner` 同型）：照它讀，`render_rotation_section` "
+         "一旦被 ② 移出，本函式就跟著從 App 消失 —— **不會**。"
+         "**掉的是 ② 的入口，不是這個東西本身。** 它經 **④ 持倉組合**"
+         "（`ui/tab3_portfolio.py::render_portfolio_tab` → `render_rotation_section`）"
+         "仍然到得了，機器規則見 "
+         "`test_an_intentional_label_must_declare_where_it_still_lives`。"
+         "⚠️ **本更正自己的界線，先講清楚，免得變成第七處不符**："
+         "第二個 caller `render_rotation_section_from_df` **自己是 production 0 caller**"
+         "（它的 docstring 自陳「production 端 `ui/tab_batch_analysis.py` 已不再呼叫它」，"
+         "本組實測相符）—— 所以「本函式還活著」**靠的是 ④ 那條線，不是它**。"
+         "**兩件事都是真的，但不要混成一句。**"
+         + _STILL_LIVES),
     "ui.helpers.fund_grp_health.rotation::_render_pairs_body":
-        ("刻意不接", "下游：同上。它就是那個偽陽性寫入槽本身（`to_csv` 在 "
-                      "`if offer_download:` 內，而委派入口硬編 `offer_download=False`）。"),
+        ("刻意不接",
+         "~~下游：同上。~~ ⛔ **2026-09-07 更正：那句是假的，而且錯兩層 —— "
+         "本表第六處被抓到的不符**（**有意識的更正，不是漏刪**；"
+         "決策者：AI 總管，依獨立稽核實測）。"
+         "**第一層**：「同上」指向上一列的 `render_rotation_section`，"
+         "但本函式的直接 caller **根本不是它** —— 是 `_render_pairs_ui`。"
+         "**第二層**：caller 也不只一支，實測**兩支** —— `_render_pairs_ui` "
+         "**與 `render_complementary_explorer_from_df`**（後者直接呼叫本函式，"
+         "不經 `_render_pairs_ui`）。"
+         "⚠️ **因果同樣講反了**（與 `render_mj_freshness_banner` 同型）："
+         "`render_complementary_explorer_from_df` 那條線經 "
+         "`ui/tab_batch_analysis.py` 從 **③** 獨立到得了，"
+         "**跟 ② 接不接毫無關係**。**掉的是 ② 的入口，不是這個東西本身。**"
+         "（原句其餘部分仍然成立，原樣保留：）它就是那個偽陽性寫入槽本身"
+         "（`to_csv` 在 `if offer_download:` 內，而 ② 那條委派入口硬編 "
+         "`offer_download=False`）。⚠️ 但**另一條入口 "
+         "`render_rotation_section_from_df` 硬編 `offer_download=True`** ——"
+         "「委派入口硬編 False」只對 ② 那一條成立，不是對全部 caller 成立。"
+         + _STILL_LIVES),
     "ui.helpers.story_nav::render_flow_nav":
         ("刻意不接", "新 View 一律只畫 `render_story_nav`，不畫四層流程導覽 —— "
                       "① `page_01_macro` 與 ⑤ `page_05_settings` 已是同樣作法（既有前例，"
-                      "非本批發明）。ui/tab1_macro.py 就地註明「render_flow_nav 移除」。"),
+                      "非本批發明）。ui/tab1_macro.py 就地註明「render_flow_nav 移除」。"
+                      "⚠️ **2026-09-07 就地補測**：本列的「⑤ 已是同樣作法」只對 "
+                      "`page_05_settings` **自己的程式碼**成立 —— 它委派的 "
+                      "`ui.tab_manage::render_manage_tab` **仍然呼叫** `render_flow_nav`，"
+                      "所以 ⑤ 的畫面上其實還看得到它。**本列不改判**（該句字面沒錯），"
+                      "但標記如實記載可達性，不讓讀者以為它已經全站絕跡。"
+                      + _STILL_LIVES),
     "ui.tab_fund_grp_health::_render_health_table":
         ("刻意不接", "新頁自己畫線框指定的 **9 欄**逐檔體檢表"
-                      "（`page_02_health._render_health_table`），不是舊的 48 欄大表。"),
+                      "（`page_02_health._render_health_table`），不是舊的 48 欄大表。"
+                      + _ONLY_OLD_TWO),
     "ui.tab_fund_grp_health::_render_health_summary":
         ("刻意不接", "新頁以「組合健康總分」＋三張警示卡取代 5 格 KPI；"
                       "其中『🔴 吃本金』那一格由 `_eating_tally()` 承接。"
@@ -441,7 +601,8 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
                       "（`k1`~`k5`），其中 `🔴 吃本金` 由 `_eating_tally()` 承接 "
                       "⇒ 剩下的是 **4 格**，不是 3 格。"
                       "⚠️ **一個數字對不上自己的清單，讀者只會相信數字** —— "
-                      "「另三格」會讓下一個人補完三格就以為結清了。"),
+                      "「另三格」會讓下一個人補完三格就以為結清了。"
+                      + _ONLY_OLD_TWO),
 
     # ── 橋接容器（本身不畫內容）────────────────────────────────────
     "ui.helpers.fund_grp_health::render_fund_grp_health_extras":
@@ -727,6 +888,9 @@ def test_a_pending_label_must_still_have_a_live_path():
     寫「必須掛著」則在舊 ② 接回之前恆紅，寫「必須沒掛」則接回當天恆紅。
     **舊 ② 的接回是另一組的 PR，本批不動 `app.py`。**
     ⇒ 若舊 ② 尚未接回，這幾塊對使用者**仍然是看不見的**；
+    📌 **2026-09-07 狀態更新（同檔頭那一段；上句是條件句，兩種世界下都為真）**：
+    **#814 已把舊 ② 接回 `tab_health`** ⇒ 那個「若」不再成立，**現在看得到**。
+    **本條的斷言與射程一個字都沒改** —— 它守的仍是「路徑存在且完好」。
       本條保證的是「**路徑存在且完好**」，不是「**它現在被掛出來了**」。
       掛載那一面由 :func:`test_app_mounts_the_new_health_view` 與另一組的 PR 負責。
     **這一段刻意寫在守衛裡，不是只寫在 PR 描述裡** —— PR 描述沒有人會回頭讀。
@@ -786,6 +950,261 @@ def test_a_pending_label_must_still_have_a_live_path():
     # 負對照：虛構符號不得命中任何一條路徑。
     _bogus = _resolve("ui.tab_fund_grp_health", "_render_bogus_zzz_9999")
     assert _bogus is None and not any(_bogus in _s for _s in _paths.values())
+
+
+# ══════════════════════════════════════════════════════════════════
+# 3｜⭐ 2026-09-07（第二輪）：`刻意不接` 這一族的兩條守衛
+#
+# **為什麼補這兩條** —— 上面第 8／9 條是 2026-09-07 第一輪的解藥，但它們的射程
+# **只有兩個標籤**（`③ 已到得了` / `判給 ③（尚未實作）`）。標 `刻意不接` 的那六列
+# **完全在射程外** ⇒ 它底下兩句假的下游敘述（#5 寫「唯一 caller 是
+# `render_rotation_section`」、#6 寫「下游：同上」）**CI 一次都沒紅過**，
+# 最後是靠人回頭讀 `CLAUDE.md` 才撿到。
+#
+# ⚠️ **這張表今天被三組人各抓到一批，每一組都只查了自己被點名的那幾筆。**
+#    那不是誰不用心 —— **是沒有機器在守。**
+# ══════════════════════════════════════════════════════════════════
+def _strip_struck(text: str) -> str:
+    """把 `~~…~~` 的**已撤回**字串挖掉，只留還在生效的敘述。
+
+    ⚠️ 本檔的慣例是「舊表述加刪除線保留、不刪」（`CLAUDE.md` 全域慣例）——
+    所以**不挖掉劃線段，任何規則都會被自己保留下來的舊錯誤觸發**，
+    那會逼下一個人為了讓 CI 變綠而去**刪掉歷史**，正好與那條慣例相反。
+    """
+    return re.sub(r"~~.*?~~", "", text, flags=re.S)
+
+
+#: 「唯一 caller 是 `X`」這一類**全稱句**。容忍「唯一的 caller」「唯一 production caller」。
+_SOLE_CALLER_RE = re.compile(
+    r"唯一\s*(?:的)?\s*(?:production\s+)?caller\s*(?:是|為)\s*`([A-Za-z_][A-Za-z0-9_.]*)`")
+
+
+def _sole_caller_claims(text: str) -> "list[str]":
+    """從**未撤回**的敘述裡抽出所有「唯一 caller 是 `X`」宣稱，回傳 `X` 清單。"""
+    return _SOLE_CALLER_RE.findall(_strip_struck(text))
+
+
+def _callers(target: "tuple[str, str]") -> "set[tuple[str, str]]":
+    """全 repo（**已排除 `tests/` 與 `scripts/`**，見 :func:`_index`）誰參照 `target`。
+
+    回傳 `(module, 頂層符號名)`。與 :func:`_reach` **同一把尺**：
+    「呼叫 ＋ 裸參照」都算邊 —— 本 repo 的委派慣例 `safe_section("標籤", _render_x)`
+    是裸參照，只跟 `ast.Call` 會嚴重低估（#805 的教訓）。
+
+    ⛔ **射程外，照實列**（不要把本函式的沉默讀成「沒有別的 caller」）：
+    * **模組層**的參照（`_FN = render_x` 寫在任何 def 之外）——本函式只走頂層定義底下。
+    * `getattr` / 字典派發 / 字串組出來的動態呼叫（同 :func:`_reach` 的射程外）。
+    * `tests/` 與 `scripts/` **刻意不算**：本表描述的是 **production 可達性**。
+    """
+    _out: set[tuple[str, str]] = set()
+    for (_m, _top), _node in _NODES.items():
+        if (_m, _top) == target:
+            continue
+        for _n in ast.walk(_node):
+            _t = None
+            if isinstance(_n, ast.Name) and isinstance(_n.ctx, ast.Load):
+                _t = _resolve(_m, _n.id)
+            elif (isinstance(_n, ast.Attribute) and isinstance(_n.ctx, ast.Load)
+                  and isinstance(_n.value, ast.Name)):
+                _am = _ALIAS.get(_m, {}).get(_n.value.id)
+                if _am and _am in _MODS and _n.attr in _DEFS.get(_am, ()):
+                    _t = (_am, _n.attr)
+            if _t == target:
+                _out.add((_m, _top))
+                break
+    return _out
+
+
+def test_a_sole_caller_claim_must_actually_be_sole():
+    """⭐ **2026-09-07（第二輪）：表上任何「唯一 caller 是 `X`」，都要真的只有 X。**
+
+    ⛔⛔ **先讀這一段：本條只看得見一種寫法，它不是那兩處不符的「解藥」。**
+
+    :data:`_SOLE_CALLER_RE` 要求「唯一 caller 是」後面接一個**反引號包住的識別字**。
+    下面是**已知的**原始措辭（逐字取自 `c321c0a`）與逐句實測落點 ——
+    **這張表是實跑出來的，不是推論**（把刪除線拿掉讓原話重新生效，逐句各跑一次）：
+
+    ==== ====================================== ================================ ======
+    #    原始措辭（逐字）                          本條看得見嗎                        結果
+    ==== ====================================== ================================ ======
+    #1   下游：唯一 caller 是 `_render_             ✅ 有反引號識別字                  🔴 紅
+         holdings_block`（已搬 ③）。
+    #2   下游：唯一 caller 是 `_render_per_         ✅ 有反引號識別字                  🔴 紅
+         fund_news_expanders`（已搬 ③）。
+    #5   下游：唯一 caller 是 `render_              ✅ 有反引號識別字                  🔴 紅
+         rotation_section`。
+    #3   下游：唯一 caller 是**上一列那支包裝**。    ⛔ **沒有反引號識別字**            🟢 綠
+    #6   下游：**同上**。                          ⛔ 連「唯一 caller」都沒出現        🟢 綠
+    ==== ====================================== ================================ ======
+
+    ⇒ **分類敘述（⛔ 不是窮舉）**：本條攔得住的是**帶反引號識別字**的那一類
+    （已知 3 句，全紅）；**看不見**的是**不含反引號識別字**的那一類
+    （已知 2 句，全綠）。**兩類都不宣稱窮舉** —— 「`c321c0a` 上只有這 5 句」
+    取決於「有沒有漏看」，**本檔不作此宣稱**。
+
+    ⚠️ **這張表自己就被抓到過一次低估**（2026-09-07，獨立稽核）：
+    上一版只列 4 句、漏掉 **#2 `render_holdings_diag`**，於是把守備範圍寫成
+    ~~「四句原話裡只攔得住兩句」~~ —— **實測是 3 紅 / 2 盲**。
+    **有意識的更正，不是漏刪**（決策者：AI 總管，依獨立稽核實測）。
+    ⚠️ **誤差方向是低估自己，不是誇大** —— 但**低估一樣要改**：
+    一個把自己講得比實際弱的射程表，會讓下一個人去重造一條已經存在的規則。
+    ⚠️ #3 之所以在別處被描述成「回溯轉紅」，是因為那裡引的是**改寫成
+    ``唯一 caller 是 `_render_mj_freshness_banner`。`` 之後的句子**，不是原話。
+    **改寫後才紅 —— 那證明的是正則會動，不是它涵蓋得到原始措辭。**
+
+    ⛔ **所以不要把本條讀成「這個形狀已經有機器在守」** —— 只有**帶反引號識別字**的
+    那一種寫法有。「同上」「上一列那支」「僅有的 caller 是 …」這些**都沒有**，
+    下一處不符很可能就長成它們的樣子。**（射程外的規避寫法另見下方 ⛔ 段。）**
+
+    **本條實際擋得住的**：`_render_pairs_ui` 那種寫法 —— 寫「唯一 caller 是
+    `render_rotation_section`」而實測有兩支（另一支 `render_rotation_section_from_df`）。
+
+    ⛔ **最刺眼的一點，寫在守衛裡而不是只寫在 PR 描述裡**（PR 描述沒有人會回頭讀）：
+    推翻第一句的證據**一直躺在同一份文件裡** —— `CLAUDE.md §8.3.P` 的
+    `P-SINKGRAIN-1` 逐字寫著「（傳 `True` 的是批次那一支
+    `render_rotation_section_from_df`）」，而 `P-SINKGRAIN-1` **正是上一列自己引用的那一段**。
+    **沒有人回頭讀。**
+
+    ⚠️ **本條對「劃掉的舊表述」視而不見**（:func:`_strip_struck`）——
+    本檔慣例是舊表述加刪除線保留，不挖掉的話規則會被自己保留的歷史觸發。
+
+    ⛔ **射程外，照實列（登記，不修）**：下列寫法本條**一律看不見** ——
+    「下游：同上」「唯一 caller 是**上一列那支**」「**僅有的** caller 是 `X`」
+    「caller **只有** `X` 一支」，以及任何不用反引號標識別字的講法。
+    **這不是「還沒做」，是「本條的形狀就是這樣」** ——
+    想涵蓋它們要換一種驗法（例如強制敘述用結構化欄位而不是散文），不是把正則加寬。
+
+    ⚠️ **正對照在下面就地做**（沒有它，本條在表上零宣稱時會退化成恆綠）。
+    """
+    # ── 正對照 ①：抽取器看得見一個合成宣稱 ──────────────────────────
+    _fixture = "下游：唯一 caller 是 `render_rotation_section`。"
+    assert _sole_caller_claims(_fixture) == ["render_rotation_section"], (
+        f"抽取器看不見最直白的宣稱：{_sole_caller_claims(_fixture)} —— 本條等於恆綠。")
+    # ── 正對照 ②：抽取器 ＋ 掃描器合起來真的判得出「這句是假的」──────
+    _probe = _callers(("ui.helpers.fund_grp_health.rotation", "_render_pairs_ui"))
+    assert {_s for _m, _s in _probe} != {"render_rotation_section"}, (
+        "合成探針失效：掃描器認為 `_render_pairs_ui` 真的只有一個 caller —— "
+        "那正是本輪被推翻的那句話，掃描器若同意它，本條就抓不到同型的下一次。")
+    assert len(_probe) >= 2, f"掃描器只看到 {sorted(_probe)} —— 少於實測的兩支。"
+    # ── 負對照：劃掉的舊表述不得被抽出；虛構符號零命中 ─────────────
+    assert _sole_caller_claims("~~" + _fixture + "~~") == [], (
+        "劃掉的舊表述也被抽出來了 —— 本檔「舊表述保留不刪」的慣例會逼人刪歷史。")
+    assert not _callers(("ui.helpers.fund_grp_health.rotation", "_render_bogus_zzz_9999"))
+
+    # ── 本體：逐列驗 ──────────────────────────────────────────────
+    _bad: "list[str]" = []
+    for _k, (_disp, _why) in DROPPED_WITH_REASON.items():
+        _m, _, _sym = _k.partition("::")
+        for _claim in _sole_caller_claims(_why):
+            _tgt = _resolve(_m, _sym)
+            if _tgt is None:
+                _bad.append(f"{_k}：本列的符號解析不到，宣稱無從驗起。")
+                continue
+            _actual = sorted({_s for _, _s in _callers(_tgt)})
+            if _actual != [_claim]:
+                _bad.append(
+                    f"{_k}\n      宣稱：唯一 caller 是 `{_claim}`"
+                    f"\n      實測：{_actual or '（零個）'}")
+    assert not _bad, (
+        f"下列 {len(_bad)} 筆的「唯一 caller」宣稱與實測不符：\n  "
+        + "\n  ".join(_bad)
+        + "\n⛔ 這種句子最貴的地方不是少算一個 caller，是**它把因果講反** —— "
+          "\n   「下游：唯一 caller 是 X」讀起來像「X 被 ② 移出 ⇒ 這支跟著從 App 消失」，"
+          "\n   而實際上它經 ③／④ 還活著。**掉的是 ② 的入口，不是那個東西本身。**"
+          "\n   兩者的補法完全不同：前者接回入口就好，後者要重做一個已經存在的東西。"
+          "\n⛔ 不要為了變綠就把宣稱刪掉 —— 改成**實測的樣子**，舊表述加刪除線保留。")
+
+
+def test_an_intentional_label_must_declare_where_it_still_lives():
+    """⭐ **2026-09-07（第二輪）：標「刻意不接」的，必須據實交代它還活在哪。**
+
+    **這一條補的是一個射程缺口，不是一個新想法。** 第 8／9 條把
+    `③ 已到得了` / `判給 ③（尚未實作）` 兩個標籤釘成機器驗得動的東西，
+    但 **`刻意不接` 完全沒被涵蓋** —— 而本輪兩處不符**全部**長在那一族裡。
+
+    **釘什麼**：不是「理由寫得好不好」（機器判不動），是**一個可量測的事實** ——
+    **除了保留的舊 ② 以外，還有沒有活的分頁到得了它。** 三選一，逐列比對：
+
+    * :data:`_STILL_LIVES` —— 還有別條活路徑 ⇒ **它沒有從 App 消失**。
+    * :data:`_ONLY_OLD_TWO` —— 只剩保留的舊 ② ⇒ **② 的入口沒了，靠雙軌還看得見**。
+    * :data:`_GONE_EVERYWHERE` —— 全 App 到不了 ⇒ **真的移除**，允許但必須明講。
+
+    ⛔ **「活路徑」刻意排除舊 ②**（含日後舊 ② 被接回成為某個分頁槽的情形），
+       否則舊 ② 一接回六列會同時翻面，而那**不是**可達性真的改變了。
+
+    ⛔ **本條守不到什麼，照實列（不要讀成「這一族已經證完了」）**：
+    * 它驗**可達性**，**不驗理由文字對不對**。一列可以掛對標記、理由整段瞎編。
+      理由那一半由 :func:`test_a_sole_caller_claim_must_actually_be_sole` 接手
+      **一種**句型（「唯一 caller 是 X」），**其餘句型仍然零守衛**。
+    * 它是**呼叫圖**可達，**不是**「使用者螢幕上看得到」。
+      本輪就地實測到一個現成例子：`render_flow_nav` 那一列寫
+      「⑤ `page_05_settings` 已是同樣作法」——`page_05_settings` **自己的程式碼**
+      確實沒畫它，但它委派的 `ui.tab_manage::render_manage_tab` **仍然呼叫** ——
+      **圖上到得了，畫面上也真的看得到**。兩者這次剛好一致，**下次不保證**。
+    * :func:`_reach` 的既有射程外（`getattr` / 字典派發 / 字串組出來的呼叫）照舊。
+
+    **突變驗證（2026-09-07 實跑，逐列各一次）**：把任一列的標記換成另外兩個之一
+    → **本條轉紅並指名那一列、印出實測值**；還原 → 轉綠。
+    """
+    _rows = _rows_labelled("刻意不接")
+    assert _rows, (
+        "沒有任何一筆標 `刻意不接` —— 本條會退化成恆綠。\n"
+        "⛔ 若真的一筆都不剩，請連同本條一起改，不要讓它空掃。")
+
+    _entries = _live_entries()
+    assert _entries, "`app.py` 一個分頁槽都抽不到 —— 掃描輸入是空的，本條結論沒有意義。"
+    _old_tgt = _resolve(*OLD_ENTRY)
+    assert _old_tgt, f"舊 ② 入口解析不到：{OLD_ENTRY}"
+    #: 「其他活路徑」＝ `app.py` 掛著的分頁，**扣掉**掛的是舊 ② 的那一格。
+    _other: "dict[str, set[tuple[str, str]]]" = {
+        f"app.py::{_slot}": _reach(_ent)
+        for _slot, _ent in sorted(_entries.items())
+        if _resolve(*_ent) != _old_tgt}
+    assert _other, "扣掉舊 ② 之後一條活路徑都不剩 —— 掃描輸入是空的。"
+    for _lbl, _set in _other.items():
+        assert len(_set) > 20, f"路徑「{_lbl}」可達集合只有 {len(_set)} 個 —— walker 可能壞了。"
+    _old_reach = _reach(OLD_ENTRY)
+    assert len(_old_reach) > 50, f"舊 ② 可達集合只有 {len(_old_reach)} 個 —— walker 可能壞了。"
+
+    _bad: "list[str]" = []
+    for _k in _rows:
+        _m, _, _sym = _k.partition("::")
+        _tgt = _resolve(_m, _sym)
+        assert _tgt is not None, f"`{_k}` 解析不到 —— 它是不是被改名或刪掉了？"
+        _hit = sorted(_lbl for _lbl, _set in _other.items() if _tgt in _set)
+        _want = (_STILL_LIVES if _hit
+                 else _ONLY_OLD_TWO if _tgt in _old_reach
+                 else _GONE_EVERYWHERE)
+        #: ⚠️ **走 `_strip_struck`，與守衛 1 同一把尺**（2026-09-07 稽核 N1 補）。
+        #: 少了它會兩個方向同時壞掉，**而且反方向更痛**：
+        #: (a) 把標記整個包進 `~~…~~`（＝已撤回）仍算數 → **該紅不紅**；
+        #: (b) 照本 repo「舊表述劃線保留 ＋ 新表述」的慣例更正一列標記時，
+        #:     會被數成**兩個**標記 → **恆紅，逼下一個人刪掉歷史** ——
+        #:     那正是 :func:`_strip_struck` 自己寫著要避免的事。
+        #: **兩種都已實測**（見本批 PR 描述），修法就是這一行。
+        _why = _strip_struck(DROPPED_WITH_REASON[_k][1])
+        _found = [_t for _t in _LIVE_PATH_TAGS if _t in _why]
+        if len(_found) != 1:
+            _bad.append(f"{_k}\n      標記：{_found or '（一個都沒有）'}"
+                        f"\n      應為（實測）：{_want}"
+                        f"\n      實測其他活路徑：{_hit or '（無）'}")
+        elif _found[0] != _want:
+            _bad.append(f"{_k}\n      標記：{_found[0]}"
+                        f"\n      實測應為：{_want}"
+                        f"\n      實測其他活路徑：{_hit or '（無）'}"
+                        f"\n      舊 ② 到得了：{_tgt in _old_reach}")
+    assert not _bad, (
+        f"下列 {len(_bad)} 筆 `刻意不接` 的可達性標記與實測不符：\n  "
+        + "\n  ".join(_bad)
+        + f"\n\n合法標記（三選一，恰好一個）：\n  " + "\n  ".join(_LIVE_PATH_TAGS)
+        + "\n\n⛔ 這一族在 2026-09-07 第一輪之後**仍然零守衛**，"
+          "\n   於是兩句『唯一 caller 是 X』的假話活了整整一輪、CI 一次都沒紅過。"
+          "\n   標記存在的意義是：**「② 不接它」與「它從 App 消失了」是兩件事**，"
+          "\n   而含混會讓下一個人去重做一個已經存在的東西。")
+
+    # 負對照：虛構符號不得命中任何一條路徑。
+    _bogus = _resolve("ui.helpers.fund_grp_health.rotation", "_render_bogus_zzz_9999")
+    assert _bogus is None and not any(_bogus in _s for _s in _other.values())
 
 
 def test_the_disposition_table_never_lists_something_still_reachable():

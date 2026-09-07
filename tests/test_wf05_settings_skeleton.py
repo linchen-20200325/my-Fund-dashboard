@@ -1348,6 +1348,21 @@ def test_the_delegated_blocks_have_real_content_not_a_grey_placeholder():
       那是**真實狀態**，不是佔位。
     - **使用手冊**：它收在 `st.expander` 裡，AppTest 仍會渲染其內容，
       故它**在**射程內（見下方 `_want`）。
+
+    ⚠️ **2026-09-07 就地更正：使用手冊那一列現在是「形式通過」，不是「內容通過」**
+    （**有意識的更正，不是漏刪** · 日期 **2026-09-07** · 決策者：**AI 總管**）。
+    雙軌並行（#814）之後 `_render_manual` **加了 Checkbox Gate**（理由見被測檔該函式：
+    舊 ⑤ 也無條件畫同一份說明書，兩份一起畫會撞 `render_indicator_map` 那張**不帶 key**
+    的 `plotly_chart`，使用者**零點擊**就會看到紅字）。
+    → gate 沒勾時，`BLOCK_MANUAL` 那一段裡的 `[Expander]` 與 `[Checkbox]`
+    **本身就滿足下方的 `_widgets` 判準** —— 也就是說，**這一列現在即使委派被整個
+    拿掉也照樣綠**。
+    ⛔ **據實寫出來，不假裝它還守著原本那件事。** 真正在守「委派沒有被拿掉」的是
+    `tests/test_wf05_settings_golive.py::test_the_dual_track_delegations_stay_behind_a_checkbox_gate`
+    的斷言 (1)（2026-09-07 已把 `_render_manual` / `_render_keys` 加進 `_MUST_BE_GATED`）。
+    **覆蓋沒有消失，是換了地方**；本行的作用是讓下一個人知道該去哪裡看。
+    ⚠️ 另兩列（手動補資料 / 維護區）**本來就已經在 gate 之後**，狀況與本列相同，
+    只是那兩顆 gate 更早加、當時沒有人把這件事寫下來。
     """
     _seg = _segments(_stream("loaded"))
     _want = (nav_manual_label(), maintain_label(), BLOCK_MANUAL)
