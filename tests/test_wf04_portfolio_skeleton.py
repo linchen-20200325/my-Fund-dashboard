@@ -2459,3 +2459,88 @@ def test_the_two_perf_cards_are_not_both_brought_over():
     assert not [_c for _c in _calls if "portfolio_tracking" in _c], (
         "被測檔呼叫了 `render_portfolio_tracking` —— 決定 ③ 明示只留一份，"
         "而留的是不寫入客戶 Google Sheet 的 `render_portfolio_performance`。")
+
+
+def test_the_dividend_gate_is_a_real_gate_and_cannot_be_short_circuited():
+    """⭐ **那個勾選框必須真的是閘門 —— 而且不得被布林字面值短路。**
+
+    ## 這條為什麼要存在（⑤ 那一組今天實測出來的洞，本檔照抄它的教訓）
+
+    ⑤ 的第一版 gate 守衛只問「**這個函式裡有沒有 `st.checkbox` 呼叫**」——
+    於是 ``if False and st.checkbox(...):`` **照樣綠**：勾選框在、閘門形同虛設。
+    「有一個 widget」與「那個 widget 真的擋住了東西」是兩件事。
+
+    ## 本條釘住的四件事（缺一都能讓 gate 變成裝飾）
+
+    1. :func:`~ui.views.page_04_portfolio._render_dividend_calendar_card` 裡
+       **恰好一個** `st.checkbox` 呼叫，而且它的回傳值**被指派給一個變數**
+       （沒有指派 ⇒ 那個值不可能被拿來當條件）。
+    2. 函式裡有一個 `if`，其 test **就是** ``not <那個變數>``，
+       而且那個分支**以 `return` 結束** —— 也就是「沒勾就到此為止」。
+    3. ⭐ **那個 test 裡不得出現任何布林字面值**（`True` / `False`）。
+       這一條擋的就是 ``if False and _flag:`` ／ ``if _flag or True:`` 這一族。
+    4. 昂貴的那一段（:func:`~ui.views.page_04_portfolio._render_dividend_calendar_body`）
+       **只在那個 early-return 之後**被呼叫，且**不在**那個 early-return 分支裡。
+
+    ⚠️ **為什麼驗「沒勾就 return」而不是「有勾才呼叫」**：本頁採的是 ⑤ 的
+    early-return 形狀（`ui/views/page_05_settings.py` 的 `NAV_GATE_LABEL` gate），
+    那是 repo 內已經跑過 CI 的合規樣板。**驗實際的形狀，不是驗我希望的形狀。**
+
+    ⛔ **本條看不到什麼（照實寫）**：它是**語法**檢查。
+    `_render_dividend_calendar_body()` 內部若自己又去做了昂貴的事而不管旗標，
+    本條看不到；`st.checkbox` 被 alias 成別的名字也看不到。
+    **「不勾就真的沒有執行」那一半由 :func:`test_ticking_the_dividend_gate_actually_changes_the_block`
+    在 AppTest 裡實跑**，兩條互補、都不可省。
+    """
+    _fn = next((_n for _n in ast.walk(_tree())
+                if isinstance(_n, ast.FunctionDef)
+                and _n.name == "_render_dividend_calendar_card"), None)
+    assert _fn is not None, (
+        "找不到 `_render_dividend_calendar_card()` —— 本條所有斷言都掛在它身上，"
+        "找不到它就等於這道 gate 的守衛靜默失效。")
+
+    # (1) 恰好一個 checkbox，且回傳值有被接住
+    _cb_assigns = [_n for _n in ast.walk(_fn)
+                   if isinstance(_n, ast.Assign) and isinstance(_n.value, ast.Call)
+                   and getattr(_n.value.func, "attr", None) == "checkbox"]
+    _cb_calls = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Call)
+                 and getattr(_n.func, "attr", None) == "checkbox"]
+    assert len(_cb_calls) == 1, (
+        f"`_render_dividend_calendar_card()` 裡有 {len(_cb_calls)} 個 `checkbox` 呼叫，"
+        "預期恰好 1 個。多一個 gate ＝ 多一個沒人在守的閘門。")
+    assert len(_cb_assigns) == 1 and isinstance(_cb_assigns[0].targets[0], ast.Name), (
+        "那個 `st.checkbox(...)` 的回傳值沒有被指派給變數 —— "
+        "沒接住的值不可能拿來當條件，那個勾選框就只是裝飾。")
+    _flag = _cb_assigns[0].targets[0].id
+
+    # (2)(3) `if not <flag>:` 且以 return 收尾，且 test 裡沒有布林字面值
+    _gates = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.If)
+              and isinstance(_n.test, ast.UnaryOp) and isinstance(_n.test.op, ast.Not)
+              and isinstance(_n.test.operand, ast.Name)
+              and _n.test.operand.id == _flag]
+    assert len(_gates) == 1, (
+        f"找不到（或不只一個）`if not {_flag}:` 的 early-return 閘門 —— 實際 {len(_gates)} 個。\n"
+        "⛔ 這正是 ⑤ 那一組實測過的洞：勾選框在、閘門不在，畫面看起來一模一樣。")
+    _gate = _gates[0]
+    assert any(isinstance(_s, ast.Return) for _s in _gate.body), (
+        f"`if not {_flag}:` 那個分支沒有 `return` —— 沒勾的時候會繼續往下跑，等於沒有閘門。")
+    _bools = [_n for _n in ast.walk(_gate.test)
+              if isinstance(_n, ast.Constant) and isinstance(_n.value, bool)]
+    assert not _bools, (
+        f"閘門條件裡出現布林字面值 {[_b.value for _b in _bools]} —— "
+        "`if False and _flag:` / `if _flag or True:` 這一族會讓閘門恆真或恆假，"
+        "而畫面上**看不出任何差別**（⑤ 2026-09-07 實測：這種寫法在只問「有沒有 checkbox」"
+        "的守衛下照樣全綠）。")
+
+    # (4) 昂貴的那一段只在閘門之後、且不在閘門分支內
+    _body_calls = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Call)
+                   and getattr(_n.func, "id", None) == "_render_dividend_calendar_body"]
+    assert len(_body_calls) == 1, (
+        f"`_render_dividend_calendar_body()` 在這個函式裡被呼叫 {len(_body_calls)} 次，預期 1 次。")
+    _in_gate_branch = [_n for _s in _gate.body for _n in ast.walk(_s)
+                       if isinstance(_n, ast.Call)
+                       and getattr(_n.func, "id", None) == "_render_dividend_calendar_body"]
+    assert not _in_gate_branch, (
+        "昂貴的那一段長在「沒勾」的分支裡 —— 那是把閘門接反了（不勾才算）。")
+    assert _body_calls[0].lineno > _gate.lineno, (
+        "昂貴的那一段在閘門**之前**就被呼叫了 —— 客戶逐字的紅線是「⛔ 不得預設載入」。")

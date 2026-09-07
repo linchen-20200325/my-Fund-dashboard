@@ -604,9 +604,21 @@ POLICY_TABLE_COLUMNS: tuple[str, ...] = (
 #: gate 的字面。**畫面上與灰態指路吃的是同一個常數** —— 指到一個不存在的勾選框，
 #: 正是本 repo 發作過三次的死指路（同 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的處置）。
 DIVCAL_GATE_LABEL: str = "載入本月配息月曆（要算幾秒）"
-#: gate 的 widget key。⚠️ 具名前綴 `v04_`：本頁與舊 ④ **同時活在 repo 裡**，
-#: 共用 key 會在兩者一起上線那天撞 `DuplicateWidgetID`。
-DIVCAL_GATE_KEY: str = "v04_portfolio_divcal_gate"
+#: ⛔ ~~`DIVCAL_GATE_KEY`：gate 的 widget key~~ —— **2026-09-07 移除，不要加回來。**
+#: （**有意識的政策變更，不是漏刪**；決策者 **AI 總管**，依據 ⑤ 那一組的實測。）
+#:
+#: **理由不是風格，是 `key=` 會多開一條 session 寫入管道**：streamlit 對帶 `key=` 的
+#: widget **會代呼叫端把值寫進 `st.session_state`**，而那是**每次渲染**都發生、
+#: **不經任何閘門**的寫入。`tests/test_wf05_settings_skeleton.py` 把它列為
+#: 「session 寫入的四條管道」之一（形態 4，就地逐字：「widget 的 `key=` ——
+#: streamlit **代呼叫端寫入**；AST 上是普通 `ast.Call`」）。
+#: → **gate 直接用回傳值當條件就好**，`value=False`，一個 key 都不需要。
+#: ⚠️ **repo 內的合規樣板**：`ui/views/page_05_settings.py` 的 `NAV_GATE_LABEL`
+#: 那個 gate —— 實測**沒有** `key=`，本頁照抄它的形狀。
+#: ⚠️ **舊理由（避免與舊 ④ 撞 `DuplicateWidgetID`）本身沒有錯**，只是被權衡掉了：
+#: 不給 key 時 streamlit 依 widget 的型別＋標籤＋位置自動產生內部 id，
+#: 而本頁的 gate 標籤（:data:`DIVCAL_GATE_LABEL`）**在舊 ④ 不存在** ——
+#: 也就是那個顧慮在本例不成立。**兩者哪天真的撞了，正解是改標籤，不是加回 `key=`。**
 
 # ── 委派登記（客戶 2026-09-07「路線 (A)」）────────────────────────────────
 #: ⭐ **本頁委派給既有舊模組的入口，逐支列名。這是白名單，不是說明文字。**
@@ -1566,10 +1578,11 @@ def _render_dividend_calendar_card() -> None:
     # ⚠️ 變數名 `_divcal_open` 是**專用**的，不與本檔任何其他旗標同名 ——
     #    `tests/test_wf04_portfolio_no_writes.py` 的缺口 7-(2)：意圖變數名在**整份模組**
     #    沒有作用域，一個被重複使用的 `_go` 會讓別處的 `if _go:` 被誤判成「使用者按過了」。
+    # ⛔ **不帶 `key=`**（理由見 `DIVCAL_GATE_KEY` 那一段的退役說明）：
+    #    帶了就等於多開一條「每次渲染、不經閘門」的 session 寫入管道。
     _divcal_open = st.checkbox(
         DIVCAL_GATE_LABEL,
         value=False,
-        key=DIVCAL_GATE_KEY,
         help="不勾就完全不算。這一項是純 CPU 計算，不會連線、也不會寫任何東西。",
     )
     if not _divcal_open:
