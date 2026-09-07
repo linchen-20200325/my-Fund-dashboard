@@ -278,6 +278,54 @@ _WRITE_SINKS: frozenset[str] = _SHEET_WRITES | _DISK_WRITES
 #: ⛔ **不得**改成綁行號（行號會漂移，漂移之後豁免會落到另一行上，那比沒有豁免更糟）。
 #: ⛔ **不得**往這裡加「我覺得它不會跑到」的東西 —— 判準只有一個：
 #:    **那一行的接收者在語法上就不可能是檔案系統物件**（這裡是 `str(...)` 的回傳值）。
+#:
+#: ## ⭐ 2026-09-07：這張表上了兩道鎖（**本節是新增，不是改鬆**）
+#:
+#: **為什麼非上鎖不可** —— 獨立稽核 2026-09-07 三步實測，本組已自行重現（指令與輸出見 PR）：
+#:
+#: 1. 把一個**真的** ``pathlib.Path(...).write_text(...)`` 注入 ④ 的渲染路徑
+#:    → 主規則**當場轉紅**（`40 passed, 1 failed`）。**偵測器本身是好的。**
+#: 2. 在本表**加一行**指向那一行 → **`41 passed, 0 failed`**。
+#: 3. 把植入物換成 gspread ``_ws.append_row(...)``
+#:    （**客戶永久紅線**：絕對禁止反向寫入他的 Google Sheet）→ **一樣 41/41 全綠**。
+#:
+#: **零阻力的三個成因（本組逐一實測）**：
+#:
+#: * 本表**沒有任何計數上限** —— 從 1 筆長到 2 筆，沒有任何東西出聲；
+#: * :func:`test_every_false_positive_exemption_still_points_at_that_exact_line`
+#:   只逐筆檢查「**檔在、文字在、sink 名還在**」——
+#:   一筆**指向真寫入**的豁免，這三項**全部通過**；
+#: * :func:`test_the_exemption_does_not_blind_the_detector_to_a_real_write`
+#:   當時只看 ``sorted(...)[0]``，新加的那筆**根本不在射程內**（已於本次一併修掉）。
+#:
+#: → **那兩條巡邏擋的是「死豁免／過期豁免」，不是「不正當的豁免」。**
+#:
+#: ⚠️ **而本表上方那句「判準只有一個」，在上鎖前只活在這段註解裡** ——
+#:    也就是本檔的自我要求（「**豁免的前提要被釘成斷言，不是寫在註解裡自律**」，
+#:    見下方自我巡邏段的標頭）**它自己沒有做到**。本次補上：
+#:
+#: * **鎖一** :func:`test_the_false_positive_exemption_table_is_exact_and_named`
+#:   —— **整張表精確相等**（沿用同批 `tests/test_wf04_portfolio_skeleton.py::
+#:   test_the_extra_checkbox_allowlist_is_exact_and_named` 的形狀：``==`` 精確相等）。
+#:   **多一筆就要有人來改這條測試 —— 那個「要有人來改」就是關卡本身。**
+#: * **鎖二** :func:`test_every_exemption_receiver_is_syntactically_not_a_filesystem_object`
+#:   —— 把上面那句**判準本身**變成斷言：被豁免那一行的**接收者鏈**必須
+#:   根在 ``str(...)`` 或字串字面值上。
+#:
+#: ⚠️ **兩道鎖為什麼都要，講清楚它們各自擋不住什麼**：
+#:    改本表的人**本來就在編輯本檔** —— 鎖一紅了，最順手的「修 CI」動作就是
+#:    **把鎖一裡那份字面也一起更新**（兩行的 diff，看起來像例行公事）。
+#:    鎖二擋的正是這一步：``append_row`` / ``write_text`` 的接收者是裸 `Name` 或
+#:    `Path(...)`，**再怎麼更新鎖一的字面都不會變綠**，只能去砍掉鎖二本身 ——
+#:    那是一個**大聲得多**的 diff。
+#:    反過來，鎖二對「接收者剛好合格、但其實會跑到」的東西無能為力，那由鎖一的
+#:    具名問責擋。**兩者失效的方式不一樣，這正是要兩道的理由。**
+#:
+#: ⚠️ **鎖二會擋掉一種「其實合理」的未來豁免，這是刻意的**：
+#:    例如 ``_d.update(...)``（`_d` 是 dict）或 ``_s.clear()``（set）——
+#:    它們確實不是檔案系統寫入，但**從語法上看不出來**（`_d` 是裸名字），
+#:    所以**不滿足本表自己寫的判準**。屆時正解是**大聲修改鎖二並在 PR 說明**，
+#:    ⛔ **不是**把鎖二放寬成「凡是裸名字都放行」——那等於把整張表交回給自律。
 _FALSE_POSITIVE_SINKS: frozenset[tuple[str, str, str]] = frozenset({
     ("services/dividend_calendar.py", "replace",
      's = str(v or "").strip()[:10].replace("/", "-")'),
@@ -770,16 +818,208 @@ def test_the_exemption_does_not_blind_the_detector_to_a_real_write():
     ⛔ 沒有這一條，`_FALSE_POSITIVE_SINKS` 有可能被寫成「凡是 `.replace` 都放行」
     而**沒有任何東西會發現** —— 那會讓 `pathlib.Path.replace`（真的會覆寫檔案）
     整族隱形。本條用三個**只差一項**的變體去戳它。
+
+    ⚠️ **2026-09-07 就地更正：本條原本只戳** ``sorted(_FALSE_POSITIVE_SINKS)[0]``
+    （**有意識的更正，不是漏刪** · 日期 **2026-09-07** ·
+    決策者 **品管與 CI 守衛組（依獨立稽核實測）**）。舊寫法逐字::
+
+        _rel, _attr, _text = sorted(_FALSE_POSITIVE_SINKS)[0]
+
+    **舊寫法在只有一筆豁免時完全正確** —— 被權衡掉的是它的**前提**：
+    表一旦長到兩筆，它就只驗得到排最前面那一筆。**兩個方向都實測過**：
+
+    * 新豁免排在**後面**（``ui/views/...`` > ``services/...``）→ 新的那筆**完全沒被驗到**；
+    * 新豁免排在**前面**（``infra/...`` / ``repositories/...`` < ``services/...``）
+      → 更糟：它**擠掉**原本那筆，於是**真正該被驗的那筆反而沒被驗**，
+      而末尾那句「反向保險」變成在替**植入物**背書。
+
+    → 現行：**逐筆驗**，位置不再影響射程。非空保險改成獨立的一句。
     """
-    _rel, _attr, _text = sorted(_FALSE_POSITIVE_SINKS)[0]
-    _variants = [
-        ("換一個檔", (_rel + "x", _attr, _text)),
-        ("換一個 sink 名", (_rel, "write_text", _text)),
-        ("換一行文字", (_rel, _attr, _text + "  # 動過了")),
-    ]
-    for _label, _v in _variants:
-        assert _v not in _FALSE_POSITIVE_SINKS, (
-            f"豁免比對太寬：{_label} 之後竟然還在豁免集合裡 —— {_v}")
-    # 反向保險：原本那一筆**確實**在集合裡（否則上面三條在空集合上恆真）。
-    assert (_rel, _attr, _text) in _FALSE_POSITIVE_SINKS, (
-        "豁免集合是空的 —— 上面三條在空集合上恆真，等於這條正對照沒有驗到東西。")
+    assert _FALSE_POSITIVE_SINKS, (
+        "豁免集合是空的 —— 下面的迴圈在空集合上恆真，等於這條正對照沒有驗到東西。")
+    for _rel, _attr, _text in sorted(_FALSE_POSITIVE_SINKS):
+        _variants = [
+            ("換一個檔", (_rel + "x", _attr, _text)),
+            ("換一個 sink 名", (_rel, "write_text" if _attr != "write_text" else "to_csv", _text)),
+            ("換一行文字", (_rel, _attr, _text + "  # 動過了")),
+        ]
+        for _label, _v in _variants:
+            assert _v not in _FALSE_POSITIVE_SINKS, (
+                f"豁免比對太寬：{_rel} 那一筆，{_label} 之後竟然還在豁免集合裡 —— {_v}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⭐ 豁免表本身的兩道鎖（2026-09-07 新增）
+#
+# 上面那三條巡邏擋的是**死豁免／過期豁免**（檔不見了、那一行被改了、sink 名被拿掉了）。
+# 它們**擋不住「不正當的豁免」** —— 一筆指向**真寫入**的豁免，三項全部通過。
+# 獨立稽核 2026-09-07 實測：加一行就能讓 `Path(...).write_text(...)` 與 gspread
+# `append_row(...)` 兩者都變成 41/41 全綠（本組已自行重現，見 `_FALSE_POSITIVE_SINKS` 的長註）。
+# 下面兩條補的就是那個口。
+# ══════════════════════════════════════════════════════════════════════
+
+def test_the_false_positive_exemption_table_is_exact_and_named():
+    """⭐ **鎖一：整張豁免表精確相等 —— 多一筆就要有人來改這條測試。**
+
+    ## 這條是「加一筆豁免」與「偷偷把違憲寫成合憲」的分界線
+
+    形狀**刻意沿用同批** ``tests/test_wf04_portfolio_skeleton.py::
+    test_the_extra_checkbox_allowlist_is_exact_and_named``（那條把放行清單釘成
+    ``== (DIVCAL_GATE_LABEL,)``）。**同一個病，用同一把鎖**：
+
+    一個「開了就沒人再看」的放行口，就是 ``CLAUDE.md §8.2.A.0`` 規則 5 點名的
+    **把違憲寫成合憲**。本檔自我巡邏段的標頭逐字寫著
+    「**豁免的前提要被釘成斷言，不是寫在註解裡自律**」——
+    ⚠️ 而在本條之前，**那個判準本身（「接收者在語法上不可能是檔案系統物件」）
+    只活在註解裡**。也就是這張表**自己違反自己那句話**。
+
+    ## 釘住三件事
+
+    1. 表**不是空的**（空表會讓上面三條巡邏全部在空集合上恆真）；
+    2. 表**恰好就是**那一筆已知的 `str.replace` 偽陽性 —— 逐字、精確相等；
+    3. 表裡**沒有任何一筆指到 ④ 這一頁自己**
+       —— 頁面是閉包的**根**，它自己的寫入永遠不會是「別的模組的偽陽性」，
+       而稽核的兩顆植入物正是放在那裡。
+
+    ⛔ **本條看不到什麼（照實寫，不要讀成「守死了」）**：
+    改本表的人**本來就在編輯本檔**，所以他可以「加一筆 ＋ 順手更新本條的字面」——
+    兩行的 diff。**擋那一步的是鎖二**
+    （:func:`test_every_exemption_receiver_is_syntactically_not_a_filesystem_object`），
+    不是本條。**兩條要一起讀。**
+    """
+    assert _FALSE_POSITIVE_SINKS, (
+        "豁免表是空的 —— 三條自我巡邏會在空集合上恆真，等於整組關卡沒有驗到東西。\n"
+        "⛔ 若那一筆偽陽性真的不再需要，請連同本條一起刪，不要只把表清空。")
+    _expected = frozenset({
+        ("services/dividend_calendar.py", "replace",
+         's = str(v or "").strip()[:10].replace("/", "-")'),
+    })
+    assert _FALSE_POSITIVE_SINKS == _expected, (
+        "豁免表被改動了。\n"
+        f"  現在：{sorted(_FALSE_POSITIVE_SINKS)}\n"
+        f"  預期：{sorted(_expected)}\n"
+        "⛔ **每多一筆豁免，就是在主規則上開一個洞，所以要有人來改這條測試 —— "
+        "那個「要有人來改」就是這道關卡本身。**\n"
+        "加之前先回答：那一行的**接收者在語法上**真的不可能是檔案系統物件嗎？"
+        "（那是本表唯一的判準，由鎖二強制執行）")
+    for _rel, _attr, _text in sorted(_FALSE_POSITIVE_SINKS):
+        assert _rel != _PAGE.replace(".", "/") + ".py", (
+            f"有一筆豁免指到 ④ 這一頁自己（{_rel}）。\n"
+            "⛔ 本頁是閉包的**根** —— 它自己的寫入不可能是「別的模組的偽陽性」，"
+            "而那正是 2026-09-07 稽核植入物放的位置。這種豁免一律不得存在。")
+
+
+def _exempted_attribute_nodes(rel: str, attr: str, text: str) -> list[ast.Attribute]:
+    """找出被豁免那一行上、名字相符的 `ast.Attribute` 節點。
+
+    ⚠️ **行號解析規則刻意與主規則一致** —— 主規則
+    (:func:`test_the_page_closure_never_writes_on_render`) 是拿 ``_n.lineno``
+    去查 ``_src[_line - 1].strip()``。本函式用**同一條規則**，
+    否則兩邊可能對「哪一行」有不同看法，鎖就會驗到別的東西。
+    """
+    _src = (_REPO / rel).read_text(encoding="utf-8").splitlines()
+    _tree = ast.parse("\n".join(_src))
+    _out = []
+    for _n in ast.walk(_tree):
+        if not isinstance(_n, ast.Attribute) or _n.attr != attr:
+            continue
+        _line = _n.lineno
+        if 0 < _line <= len(_src) and _src[_line - 1].strip() == text:
+            _out.append(_n)
+    return _out
+
+
+def _receiver_root(node: ast.Attribute) -> ast.AST:
+    """從 `x.y.z[0].sink` 一路往下走到**接收者鏈的根**。
+
+    走法：`Attribute` → `.value`；`Subscript` → `.value`；`Call` → `.func`，
+    但 ``str(...)`` 是這條鏈**合法見底**的地方，碰到就直接回傳它。
+
+    實例（本表現有那一筆）::
+
+        str(v or "").strip()[:10].replace("/", "-")
+        └ .replace → Subscript → Call(.strip) → Attribute(strip) → Call(str)  ← 根
+
+    反例::
+
+        _ws.append_row(row)                    → 根是 Name('_ws')            ✗
+        _pathlib.Path("x").write_text("y")     → 根是 Name('_pathlib')       ✗
+    """
+    _cur: ast.AST = node.value
+    while True:
+        if isinstance(_cur, ast.Attribute):
+            _cur = _cur.value
+        elif isinstance(_cur, ast.Subscript):
+            _cur = _cur.value
+        elif isinstance(_cur, ast.Call):
+            if isinstance(_cur.func, ast.Name) and _cur.func.id == "str":
+                return _cur                      # 合法見底
+            _cur = _cur.func
+        else:
+            return _cur
+
+
+def test_every_exemption_receiver_is_syntactically_not_a_filesystem_object():
+    """⭐ **鎖二：把本表的判準本身變成斷言，不再只是註解裡的自律。**
+
+    :data:`_FALSE_POSITIVE_SINKS` 的長註逐字寫著判準只有一個 ——
+    「**那一行的接收者在語法上就不可能是檔案系統物件**（這裡是 ``str(...)`` 的回傳值）」。
+    ⚠️ 在本條之前，**那句話沒有任何東西在執行它**。
+    本檔自己的標頭又寫著「豁免的前提要被釘成斷言，不是寫在註解裡自律」——
+    **本條就是那句話的可執行版本。**
+
+    ## 判準（逐字實作，不多不少）
+
+    被豁免那一行的**接收者鏈**，往下走到底必須是下列兩者之一：
+
+    * ``str(...)`` 的呼叫（本表現有那一筆就是這種）；
+    * **字串字面值**（``"a/b".replace(...)``）。
+
+    其餘一律**不合格** —— 尤其是裸名字（``_ws.append_row``）與
+    ``Path(...)``（``_pathlib.Path("x").write_text("y")``）。
+
+    ## 這條真正擋住的是什麼（鎖一擋不住的那一步）
+
+    改本表的人**本來就在編輯本檔**：鎖一紅了，最順手的「修 CI」動作是
+    **連同鎖一裡那份字面一起更新**，兩行的 diff、看起來像例行公事。
+    **本條讓那一步無效** —— ``append_row`` / ``write_text`` 的接收者是裸 `Name`
+    或 ``Path(...)``，**再怎麼更新鎖一的字面都不會變綠**，
+    只能去砍掉本條本身，而那是一個**大聲得多**的 diff。
+
+    ## ⛔ 本條看不到什麼（不要讀成「守死了」）
+
+    * **只看語法，不看語意** —— ``str`` 這個名字若在該模組被遮蔽
+      （``str = something_else``），本條會被騙。本組**沒有**追值的來源，
+      也**不打算**追（同本檔缺口 3／7 的理由：半套的靜態追蹤最危險）。
+    * **不判斷那一行會不會真的跑到** —— 那一半由鎖一的具名問責擋。
+    * 找不到節點時**一律判失敗（fail closed）** —— 驗不了就不背書。
+    """
+    assert _FALSE_POSITIVE_SINKS, (
+        "豁免表是空的 —— 下面的迴圈恆真，本條沒有驗到任何東西。")
+    for _rel, _attr, _text in sorted(_FALSE_POSITIVE_SINKS):
+        _nodes = _exempted_attribute_nodes(_rel, _attr, _text)
+        assert _nodes, (
+            f"在 {_rel} 裡找不到 `.{_attr}` 長在這一行上：\n  {_text}\n"
+            "⛔ **驗不到就不背書（fail closed）** —— 這一筆豁免無法被本條檢查，"
+            "請確認它指的位置，不要繞過本條。")
+        for _n in _nodes:
+            _root = _receiver_root(_n)
+            _ok_str_call = (isinstance(_root, ast.Call)
+                            and isinstance(_root.func, ast.Name)
+                            and _root.func.id == "str")
+            _ok_literal = (isinstance(_root, ast.Constant)
+                           and isinstance(_root.value, str))
+            assert _ok_str_call or _ok_literal, (
+                f"豁免不合格：{_rel}:{_n.lineno} 的 `.{_attr}(…)`\n"
+                f"  那一行：{_text}\n"
+                f"  接收者鏈的根：{ast.unparse(_root)[:120]}"
+                f"（{type(_root).__name__}）\n\n"
+                "⛔ 本表的判準逐字是：**那一行的接收者在語法上就不可能是檔案系統物件** ——\n"
+                "   也就是接收者鏈必須根在 `str(...)` 或字串字面值上。\n"
+                f"   `{ast.unparse(_root)[:60]}` 是一個裸名字／別的呼叫，"
+                "從語法上**看不出**它不是 worksheet 或 Path。\n"
+                "⛔ 這正是 2026-09-07 稽核用來把 `append_row` / `write_text` "
+                "變成全綠的那條路 —— 本條就是為了堵它而存在。\n"
+                "⛔ **不要**為了讓 CI 綠而放寬本條；若這一筆真的合理"
+                "（例如 dict.update / set.clear），那是一次**要大聲說明**的修改，"
+                "請在 PR 描述寫清楚為什麼，並同時更新鎖一。")
