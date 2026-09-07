@@ -226,25 +226,47 @@ def at_maintain_on(_hermetic) -> Any:
     return _tick(_boot(str(APP_PY)), MAINTAIN_GATE_LABEL)
 
 
+def _warnings(at: Any) -> list[str]:
+    """畫面上所有黃框。
+
+    ⚠️ **這個函式非有不可**：`ui/tab_manage.py::_sec_pool` 用它自己的
+    `try/except` → `_friendly(...)`（**預設 `level="warning"`**）把例外接住，
+    也就是說**選股池那一份重複 key 會被降級成一個黃框**，
+    `at.error` 結構上看不見它。只驗紅框會漏掉這一半。
+    """
+    return [str(w.value) for w in at.warning]
+
+
 def _dump(at: Any, what: str) -> str:
-    _errs = _errors(at)
+    _errs, _warns = _errors(at), _warnings(at)
     _lines = [f"=== {what} ===",
               f"exceptions : {len(at.exception)}",
-              *[f"   EXC {str(e)[:500]}" for e in at.exception],
+              *[f"   EXC {str(e)[:600]}" for e in at.exception],
               f"st.error   : {len(_errs)}",
               *[f"   ERR[{i}] {e[:900]}" for i, e in enumerate(_errs)],
+              f"st.warning : {len(_warns)}",
+              *[f"   WRN[{i}] {w[:900]}" for i, w in enumerate(_warns)],
               f"checkboxes : {len(at.checkbox)}",
               f"labels     : {[c.label for c in at.checkbox]}"]
     return "\n".join(_lines)
 
 
-def test_EXPLORE_what_happens_when_the_maintenance_gate_is_ticked(
-        at_maintain_on: Any, at_default: Any) -> None:
+@pytest.fixture(scope="module")
+def at_backfill_on(_hermetic) -> Any:
+    """勾起 `[新] ⑦` 的「🗄️ 載入手動補資料」之後的畫面。
+
+    同型的第二條單擊路徑：舊 ⑤ 也是**無條件**呼叫 `render_nav_manual_section()`。
+    """
+    return _tick(_boot(str(APP_PY)), BACKFILL_GATE_LABEL)
+
+
+def test_EXPLORE_what_happens_when_a_gate_is_ticked(
+        at_default: Any, at_maintain_on: Any, at_backfill_on: Any) -> None:
     """⚠️ 探測用，**故意失敗**以便從 CI log 讀出真實行為（本機無 streamlit 跑不動）。
 
     這一條在拿到 CI 的真實輸出之後會被換成正式斷言。
     """
     pytest.fail("EXPLORATION DUMP (deliberate failure, phase 1)\n"
-                + _dump(at_default, "DEFAULT (nothing ticked)")
-                + "\n"
-                + _dump(at_maintain_on, "AFTER ticking " + MAINTAIN_GATE_LABEL))
+                + _dump(at_default, "DEFAULT (nothing ticked)") + "\n"
+                + _dump(at_maintain_on, "TICKED " + MAINTAIN_GATE_LABEL) + "\n"
+                + _dump(at_backfill_on, "TICKED " + BACKFILL_GATE_LABEL))
