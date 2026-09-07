@@ -396,10 +396,21 @@ DELEGATE_GATE_LABEL: str = "載入逐檔健診與互斥分析（與舊分頁同�
 #:    本文因此寫的是「勾下去會發生什麼」，指路指向**舊 ② 分頁**（內容現在真的在那裡），
 #:    不是指向這個勾選框。**說反了比沒說更糟。**
 #: ⚠️ **不寫 `where=` 指向 gate 自己**：那會變成「要修就勾它」，與第 3 點直接矛盾。
-DELEGATE_GATE_HELP: str = (
-    "舊「② 持倉體檢」分頁已經在畫同一批圖表。兩份同時載入會撞 Streamlit 的"
-    "重複元件 ID（`plotly_chart`），畫面上會出現紅色錯誤塊。"
-    "勾選只建議在**舊分頁尚未跑過健診**時用來預覽新版動線。")
+#: ⚠️ **寫成函式、分頁名走 `tab_label()`，刻意不手抄** —— 本 repo 分頁改名漏改
+#: 已發作三次，每次都是「文案裡抄了一份分頁名」這個形狀。
+#: ⛔ **不要改回模組層常數**：常數就得在 import 時求值，而 `tab_label()` 是
+#: `story_nav` 的 SSOT 查表；寫成函式才能在改名後**自動跟著變**。
+#: ⚠️ 這裡特別要提一筆：`tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+#: 的比對規則是「**完整標籤（含 emoji 前綴）的子字串出現**」，所以像
+#: 「② 持倉體檢」這種**丟掉 emoji 的手抄**它**抓不到**（該守衛自己的 docstring
+#: 就地登記了這個缺口）。**本檔不靠那條守衛沒抓到就放行** —— 走 SSOT 是因為它對，
+#: 不是因為抄了不會被抓。
+def _delegate_gate_help() -> str:
+    """gate 的 `help=` 文案。**同 ⑤ `_backfill_gate_label()` 的既有家風。**"""
+    return (f"舊「{tab_label('health')}」分頁已經在畫同一批圖表。"
+            "兩份同時載入會撞 Streamlit 的重複元件 ID（`plotly_chart`），"
+            "畫面上會出現紅色錯誤塊。"
+            "勾選只建議在**舊分頁尚未跑過健診**時用來預覽新版動線。")
 
 #: `render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。
 #: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
@@ -1277,7 +1288,7 @@ def _render_delegated_sections() -> None:
     #    `if not X and st.checkbox(...)` 這類布林短路：那會讓 gate 在某些情況下
     #    被跳過，而靜態守衛看到的仍然是一個「有 checkbox 的 if」。
     #    守衛 `test_the_gate_is_the_only_way_in` 對這一點是 fail-closed 的。
-    _open = st.checkbox(DELEGATE_GATE_LABEL, value=False, help=DELEGATE_GATE_HELP)
+    _open = st.checkbox(DELEGATE_GATE_LABEL, value=False, help=_delegate_gate_help())
     if not _open:
         # ⚠️ 指路指向**舊 ② 分頁**，不是指向上面那個勾選框 —— 內容現在真的在那裡，
         #    而「勾下去」是撞的那一刻、不是解法（見 :data:`DELEGATE_GATE_LABEL` 第 3 點）。
