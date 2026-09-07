@@ -44,15 +44,32 @@ body 全部執行過，這是本檔存在的前提。
 `merge_context`）→ ⑦ 與 ⑧ 各一份。本條就是那個當下唯一會響的東西。
 
 ════════════════════════════════════════════════════════════════════
+3) 無 `key=` 的 widget：(型別, label) 必須全 App 唯一
+════════════════════════════════════════════════════════════════════
+新 ③ 的 4 個輸入 widget **一個 `key=` 都沒有**，走 Streamlit 自動產生的 ID
+（依 (元素型別, label, 其餘參數, form_id) 產生）。**上面第 1 節完全沒有涵蓋這一層。**
+
+**為什麼驗 (型別, label) 就夠**：它是**充分條件** —— 兩個 widget 的 label 不同，
+ID 就不可能相同。這條推論**不需要**「form_id 有沒有進雜湊」那個前提（本 repo
+沒有 streamlit 可讀原始碼求證，本檔刻意不依賴它）。
+⚠️ **反向不成立**：(型別,label) 重複**不代表**一定撞（其餘參數或 form_id 可能不同）。
+所以本條紅了要**人工判讀**，補一個具名 `key=`（走 `v03_` 命名空間）就能解。
+
+⛔ **為什麼這一條非有不可（2026-09-07 就地補，起因是一個被推翻的假設）**：
+本檔第一版把這一層外包給 `tests/test_app_apptest.py::test_app_runs_without_exception`，
+寫著「執行層才是唯一真憑據」。**那句話是假的，已刪。** 獨立稽核在別的批次上實測發現：
+`app.py` 每格分頁的 `except Exception` → `friendly_error(level="error")` → **`st.error()`**，
+而那條測試只斷言 **`assert not at.exception`** —— **撞 key 會被接住畫成紅字，測試照樣綠**。
+（全 repo 也找不到任何「跑完不得有紅字」的斷言；補那一層的工作在 **#819**，不在本檔。）
+**把一層安全性外包給一個看不見它的測試，比沒有守衛更危險** —— 因為它會讓人以為驗過了。
+
+════════════════════════════════════════════════════════════════════
 ⚠️ 本檔**看不到**的形態（誠實揭露，不是免責）
 ════════════════════════════════════════════════════════════════════
-- **動態組出來的 key**：f-string / 變數 / `getattr` / dict 派發 / 由參數傳進來的 key。
+- **動態組出來的 key / label**：f-string / 變數 / `getattr` / dict 派發 / 由參數傳進來的。
   本檔只認**字面值**與**模組層級的字串常數**。
-- **沒有 `key=` 的 widget**：Streamlit 會依 (元素型別, label, 其餘參數, form_id)
-  自動產生 ID，兩個參數完全相同的 widget 同樣會撞。新 ③ 目前 4 個無 key widget
-  全部住在兩個**唯一 key 的 form** 裡，但**本檔不驗這件事**。
-- **執行層**：本檔是靜態的。「畫得出來、不會撞 key」的唯一真憑據是
-  `tests/test_app_apptest.py::test_app_runs_without_exception`（slow lane）。
+- **執行層本檔一概沒有**：本檔是純靜態的。理由見上方第 3 節那段 ⛔ ——
+  這個 repo 目前**沒有**任何測試看得見「畫面上出現了一行紅字」。
 """
 from __future__ import annotations
 
@@ -199,3 +216,75 @@ def test_page_03_never_renders_the_fetch_diag_block_itself():
     assert not hits, (
         f"⑧ 自己畫了抓取診斷：{hits} —— ⑦ 也在畫同一塊，畫面上會有兩份。"
         "那塊的家是 ⑤ / ⑦（線框 §03 已拍板），不要在 ⑧ 再開一份。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 3) 無 key= 的 widget：(型別, label) 全 App 唯一
+# ══════════════════════════════════════════════════════════════════
+#: 會產生 widget 的 `st.*` 方法（第一個位置引數是 label）。
+_WIDGETS = {
+    "text_input", "selectbox", "checkbox", "radio", "slider", "number_input",
+    "text_area", "file_uploader", "download_button", "button", "multiselect",
+    "toggle", "date_input", "time_input", "color_picker", "camera_input",
+    "select_slider", "data_editor", "pills", "segmented_control", "chat_input",
+}
+
+
+def _widget_labels(path: pathlib.Path) -> list[tuple[str, str, int, bool]]:
+    """(widget 名, label, lineno, 有沒有具名 key)。label 只認字面值與模組層級常數。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+    consts = _module_str_consts(tree)
+    out: list[tuple[str, str, int, bool]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in _WIDGETS or not node.args:
+            continue
+        has_key = any(k.arg == "key" for k in node.keywords)
+        a0 = node.args[0]
+        label: str | None = None
+        if isinstance(a0, ast.Constant) and isinstance(a0.value, str):
+            label = a0.value
+        elif isinstance(a0, ast.Name) and a0.id in consts:
+            label = consts[a0.id]
+        if label is not None:
+            out.append((node.func.attr, label, node.lineno, has_key))
+    return out
+
+
+def test_page_03_keyless_widgets_have_an_app_wide_unique_label():
+    """⑧ 沒帶 `key=` 的 widget，其 (型別, label) 不得與全 App 任何一處重複。
+
+    突變實驗（本批實跑）：把 `_LABEL_SOURCE` 由 `"來源"` 改成 `"幣別（外幣/台幣）"`
+    （`ui/tab_fund_grp_health.py` 真的有的 `multiselect` label）→ **不會紅**，
+    因為型別不同（`selectbox` vs `multiselect`）—— 這是**對的**，型別不同就不會撞。
+    改成同型別同 label 才紅，見 PR 描述的 M5 / M6。
+    """
+    keyless = [(w, lab, ln) for w, lab, ln, hk in _widget_labels(PAGE) if not hk]
+    # ── 輸入非空斷言 ──
+    assert keyless, (
+        f"{PAGE.relative_to(ROOT)} 掃不到任何『無 key 且 label 可解析』的 widget —— "
+        "本條會變成恆綠的假守衛。若那一頁的 label 改成動態組法，"
+        "請回頭讀本檔開頭的『看不到的形態』並補一條新的守衛。")
+
+    files = _production_py()
+    assert len(files) > 100, f"production .py 只掃到 {len(files)} 個 —— rglob 壞了"
+
+    elsewhere: dict[tuple[str, str], list[str]] = {}
+    for p in files:
+        try:
+            for w, lab, ln, _hk in _widget_labels(p):
+                if p == PAGE:
+                    continue
+                elsewhere.setdefault((w, lab), []).append(f"{p.relative_to(ROOT)}:{ln}")
+        except SyntaxError:                                  # pragma: no cover
+            continue
+
+    clashes = [(w, lab, ln, elsewhere[(w, lab)])
+               for w, lab, ln in keyless if (w, lab) in elsewhere]
+    assert not clashes, (
+        f"⑧ 有無 key 的 widget 與別處同型別同 label：{clashes}\n"
+        "Streamlit 對沒有具名 key 的 widget 以 (型別, label, 其餘參數, form_id) 產生 ID，"
+        "這是**可能**撞的形狀（不是一定撞 —— 其餘參數或 form_id 可能不同）。\n"
+        f"最省事也最明確的解法：給它一個 `{_NS}` 前綴的具名 key。"
+    )
