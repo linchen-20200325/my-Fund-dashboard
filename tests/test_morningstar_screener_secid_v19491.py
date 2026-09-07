@@ -183,13 +183,47 @@ def test_cache_hit_skips_network(monkeypatch):
 
 # ── 接線:_src_morningstar_nav 先走 screener,再退 SecuritySearch ──────────
 def test_src_morningstar_prefers_screener(monkeypatch):
+    """screener 優先於 SecuritySearch(原意,**未變**);2026-09-06 起**不再回填**選股池。
+
+    ⚠️ **有意識的政策變更,不是漏刪** · 日期 **2026-09-06** · 決策者:**客戶**
+       (2026-09-06 永久授權,逐字:「凡是『查詢/搜尋』功能,一律強制走『純讀取(唯讀)』,
+        絕對禁止反向寫入我的 Google Sheet。不用問我,直接切斷寫入!」)
+
+    **舊斷言逐字保留於下,加刪除線**:
+        ~~_wb = {}~~
+        ~~monkeypatch.setattr(PR, "set_secid",~~
+        ~~                    lambda code, secid, **k: _wb.update({"code": code, "secid": secid, **k}))~~
+        ~~…~~
+        ~~assert _wb["secid"] == "F_SCREENER"        # 回填走 screener 結果~~
+
+    **舊斷言的理由仍然成立**:v19.491 的重點是「screener 比名稱搜尋準,保單平台基金
+    才查得到 secId」,而「查到就存回去、下次不必再搜」是很自然的省成本設計,
+    ⑤ 設定頁的表格也因此會自動長出晨星 ID。**那個目的一個字都沒有錯。**
+    **被權衡掉的是它的形狀**:那個寫入綁在「查詢成功」上、不綁在使用者的意圖上,
+    沒有任何按鈕或確認,而且外面包著 `except Exception: pass` —— 成功失敗都不上畫面。
+    客戶禁的是**查詢的副作用寫入**這個形狀本身,不是寫入的大小。
+
+    **可達性**:2026-09-06 第三組仲裁判定**走得到**(離線寫入哨兵從
+    `fetch_fund_from_moneydj_url` 往下實跑,`ws.update` 當場觸發且函式正常回傳)。
+
+    ⚠️ **代價據實寫明**:secId 不再自動回填 → 往後每次符合閘門條件的查詢都會
+    **重新解析一次 ISIN→secId**,對外部來源的呼叫次數上升。**這是刻意的代價。**
+    📌 **登記(只登記,不動手)**:若要保留自動回填,**正解是改成使用者明示動作**
+    (按鈕／表單送出才寫)—— 那會新增視覺元件,須先送客戶線框草稿,不在本批授權內。
+
+    ⛔ 本測試**不刪除**:`screener 優先`那一半原封不動,只把「回填」翻成「不准回填」。
+    """
     import repositories.pool_repository as PR
     monkeypatch.setattr(PR, "resolve_secid", lambda code: None)      # 池中無 secId → 走 ISIN 解析
     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
     monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
     _wb = {}
-    monkeypatch.setattr(PR, "set_secid",
-                        lambda code, secid, **k: _wb.update({"code": code, "secid": secid, **k}))
+    def _must_not_be_called(code, secid, **k):        # noqa: ANN001 — 哨兵
+        _wb.update({"code": code, "secid": secid, **k})
+        raise AssertionError(
+            f"查詢路徑回寫了選股池:set_secid({code!r}, {secid!r}, **{k!r}) —— "
+            f"客戶 2026-09-06:查詢一律唯讀。")
+    monkeypatch.setattr(PR, "set_secid", _must_not_be_called)
     # screener 命中 → SecuritySearch 不該被呼叫
     monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, ccy="USD": "F_SCREENER")
     monkeypatch.setattr(S, "_morningstar_search_secid",
@@ -202,8 +236,10 @@ def test_src_morningstar_prefers_screener(monkeypatch):
         ]}]},
     }))
     out = S._src_morningstar_nav("ZZZZ9")
-    assert len(out) == 2
-    assert _wb["secid"] == "F_SCREENER"                             # 回填走 screener 結果
+    # ⭐ 功能沒有消失:screener 解析出來的 secId **本次抓取照舊使用**
+    assert len(out) == 2, "切掉回寫之後連 NAV 都抓不到了 → 那是砍功能,不是切副作用"
+    # ⭐ 但一格都沒有寫回使用者的表
+    assert _wb == {}, f"查詢路徑仍在回寫選股池:{_wb}"
 
 
 def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):

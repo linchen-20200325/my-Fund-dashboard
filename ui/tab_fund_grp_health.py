@@ -196,12 +196,19 @@ def render_fund_grp_health_tab() -> None:
             st.rerun()
 
     # ── 診斷條件表單(2026-09-02 T1;拍板線框 Tab 02「Form ─ 診斷條件」)──────────
-    # 為什麼一定要包 `st.form`:本頁**每一次 rerun 都會重抓淨值、並打一次 Google Sheets**
-    # (`_run_batch_health` → MoneyDJ/FundClear 逐檔取數;`record_batch_nav_points` →
-    # nav_history 分頁 append)。沒有 form 時,使用者在「本金」上按一下上下鍵、
-    # 或在代號框改一個字,Streamlit 就整頁重跑一輪 —— 對外部來源等於一次白打的轟炸
+    # 為什麼一定要包 `st.form`:本頁**每一次 rerun 都會重抓淨值**
+    # (`_run_batch_health` → MoneyDJ/FundClear 逐檔取數)。沒有 form 時,使用者在「本金」上
+    # 按一下上下鍵、或在代號框改一個字,Streamlit 就整頁重跑一輪 —— 對外部來源等於一次白打的轟炸
     # (§02「失敗時退避,不連續轟炸來源」的同一個成本面)。
     # 包進 form 之後,widget 的值只在**按下送出鈕**時才提交一次。
+    #
+    # ⚠️ **2026-09-06 就地更正(有意識的更正,不是漏刪 · 決策者:客戶)**:上面那句原寫
+    #    ~~「每一次 rerun 都會重抓淨值、**並打一次 Google Sheets**」~~,括號裡並舉
+    #    `record_batch_nav_points` → nav_history 分頁 append 為例。**那半句自本日起為假**
+    #    —— 該呼叫已在本檔下方(健診跑完處)整段切除,健診路徑不再寫任何 Google Sheet。
+    #    **舊表述在寫下當天是對的**,被推翻的是它的前提,不是它的判斷。
+    # ⚠️ **form 不因此拿掉**:它要擋的另一半(重抓淨值、轟炸外部來源)一字未變,
+    #    所以本段的結論完全不動,只有「有幾個成本」這個事實從兩個變成一個。
     #
     # ⚠️ 「🔗 從我的組合帶入」**刻意留在 form 外**:它會寫 session_state 後 `st.rerun()`,
     #    而 `st.button` 在 form 內是被 Streamlit 明文禁止的(只能有 form_submit_button)。
@@ -320,17 +327,34 @@ def render_fund_grp_health_tab() -> None:
                 if _d["note"]:
                     st.caption("　" + str(_d["note"]))
 
-    # v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet
-    # nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。
-    try:
-        from ui.helpers.nav_history_hook import record_batch_nav_points
-        record_batch_nav_points(
-            [(r["code"], r["_fund_raw"]) for r in rows
-             if r.get("ok") and r.get("_fund_raw")],
-            source="健診",
-        )
-    except Exception:
-        pass  # 記錄失敗不影響主流程(helper 內已顯示提示)
+    # ── 2026-09-06:健診批次跑完**不再**回寫 Google Sheet ──────────────────────
+    # ~~v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet~~
+    # ~~nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。~~
+    # ~~try:~~
+    # ~~    from ui.helpers.nav_history_hook import record_batch_nav_points~~
+    # ~~    record_batch_nav_points(~~
+    # ~~        [(r["code"], r["_fund_raw"]) for r in rows~~
+    # ~~         if r.get("ok") and r.get("_fund_raw")],~~
+    # ~~        source="健診",~~
+    # ~~    )~~
+    # ~~except Exception:~~
+    # ~~    pass  # 記錄失敗不影響主流程(helper 內已顯示提示)~~
+    #
+    # **有意識的政策變更,不是漏刪**(日期 **2026-09-06** · 決策者:**客戶**)。
+    # 客戶 2026-09-06 永久授權:「凡是『查詢/搜尋』功能,一律強制走『純讀取(唯讀)』,
+    # 絕對禁止反向寫入我的 Google Sheet。」健診是**查詢**(輸入一串代號 → 看報表),
+    # 它跑完就 append 屬於**查詢的副作用寫入**,一律切斷。
+    #
+    # **舊條文的理由仍然成立**:「一鍵累積全部持倉」在使用者的心智裡確實比逐檔匯入省事;
+    # 而且此處是批次,一次能累積最多檔,ROI 是三處裡最高的。
+    # **被權衡掉的是它的形狀**:使用者按的是「🩺 開始健診」,不是「存進我的試算表」——
+    # 一個送出鈕同時做了兩件事,而第二件他沒同意過,也看不見。
+    #
+    # ⚠️ **本頁上方 `st.form` 的存在理由因此少了一半,但那個理由沒有消失,form 不動**:
+    #    原註解寫 form 是為了擋「每次 rerun 都重抓淨值**並打一次 Google Sheets**」。
+    #    Sheets 那一半已由本次切除,**但「每次 rerun 都重抓淨值」那一半原封不動**
+    #    (`_run_batch_health` → MoneyDJ/FundClear 逐檔取數),對外部來源的轟炸成本照舊。
+    # 守衛:`tests/test_readonly_query_paths.py`。
 
     # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）移到「健診總表」上方
     #（user 要求：易讀的摘要 PK + 健診卡應先看到，逐欄 🧮 總表移其下）。
