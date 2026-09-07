@@ -171,6 +171,24 @@ _MUST_BE_GATED: tuple[tuple[str, str], ...] = (
     # 客戶拍板線框 Tab 05 五個 `<h4>` 之一 —— **加 gate 是總管 2026-09-07 裁決的**，
     # 不是執行組自行決定（理由見被測檔該函式的註記）。
     ("_render_backfill", "render_nav_manual_section"),
+    # ⭐ **2026-09-07 第二輪雙軌修補新增兩筆**（決策者：AI 總管）。
+    # 前兩筆是「**勾了才撞**」；這兩筆的性質不同，逐一寫明理由，
+    # 免得後人以為只是照抄多加兩行：
+    #
+    # - `_render_manual` → **零點擊就已經在噴紅字**（#819 的 ① · CI run 34147466074）：
+    #   舊 ⑤ `_render_manual_section` 與新 ⑦ **兩邊都沒有 gate**，
+    #   而 `ui/tab6_manual.py` 復用的 `ui/tab1_macro.py::render_indicator_map`
+    #   那個 `st.plotly_chart` **不帶 key** → 自動 element ID 撞。
+    #   ⚠️ 它與前兩筆的**共通點**是「舊 ⑤ 無條件畫同一份」，
+    #   **差別**是撞的不是具名 key 而是**自動產生的 ID** ——
+    #   先前兩輪只盤點 literal `key=`，**結構上看不到這一類**。
+    ("_render_manual", "render_manual_tab"),
+    # - `_render_keys` → **兩份都畫得出來、Streamlit 一聲不吭**（#819 的 ④）：
+    #   兩頁都無條件呼叫 `render_fetch_diag_from_session()`，畫面上兩塊一模一樣。
+    #   ⛔ `app.py` 的 `settings_page_owns(FETCH_DIAG)` **救不了它** ——
+    #   那支旗標壓的是 ③（個基頁），它的設計前提是「全站只有一個消費者」，
+    #   雙軌之後消費者變兩個（舊 ⑤ ＋ 新 ⑦）而**旗標分不出新舊**。
+    ("_render_keys", "render_fetch_diag_from_session"),
 )
 
 
