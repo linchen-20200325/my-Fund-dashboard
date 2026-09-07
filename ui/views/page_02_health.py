@@ -292,12 +292,35 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
     ("ui.helpers.fund_grp_health.risk", "_render_oversold_badges"),
     ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
+    # ── ⭐ 2026-09-07 **接回 ②** 的五塊（見 :data:`REATTACHED_PENDING_PAGE_03`）──
+    #    它們原本被標成「已搬 ③」，但**③ 從來沒有接過它們** ——
+    #    ② 切換上線之後，全 App 五個活分頁與尚未掛載的新 ③ view **都到不了**。
+    #    線框寫的是「**搬**」，不是「刪除」；② 與 ③ 都沒有 ⇒ 線框未被滿足。
+    #    ⛔ **這不是把線框判給 ③ 的東西搶回來**，是「壞掉的畫面修回它原本該有的樣子」
+    #       （`CLAUDE.md §-1.5.4` 修正錯誤 vs 改變設計的**修正錯誤**那一側）。
+    #       ③ 真的實作好之後**要回來把這五筆移走**，登記見上述常數。
+    ("ui.helpers.fund_grp_health.investment", "_render_investment_calc"),
+    ("ui.helpers.fund_grp_health.investment", "_render_holdings_block"),
+    ("ui.helpers.fund_grp_health.signals", "_render_bollinger_expanders"),
+    ("ui.helpers.fund_grp_health.ai", "_render_per_fund_news_expanders"),
+    ("ui.helpers.fund_grp_health.ai", "_render_per_fund_three_ratio_expanders"),
 )
 
-#: `render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。
-#: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
-#: 下一個人看到 ② 沒有「投資試算」時，要能查到這是**線框指定的**，不是漏接。
-#: ⛔ **不要因為「舊 ② 本來就有」就把它們加回來** —— 那正是線框要拆掉的東西。
+#: ~~`render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。~~
+#: ~~⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——~~
+#: ~~下一個人看到 ② 沒有「投資試算」時，要能查到這是**線框指定的**，不是漏接。~~
+#: ~~⛔ **不要因為「舊 ② 本來就有」就把它們加回來** —— 那正是線框要拆掉的東西。~~
+#:
+#: ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管，依獨立稽核實測）**：
+#: 上面那四行**在寫下的當天並不假 —— 線框確實把這五塊判給 ③**；
+#: **被推翻的是它們的前提**：那段文字假設了「不接 ＝ 它們在 ③ 那邊」。
+#: **實測：③ 從來沒有接過它們。** ② 切換上線之後，五個活分頁與尚未掛載的新 ③ view
+#: **全部到不了**（量測與正對照見下方 :data:`REATTACHED_PENDING_PAGE_03`）。
+#: ⛔ 尤其最後那一句「不要把它們加回來」**現在會直接造成功能消失**，
+#: 故整段劃線退場；它要防的東西（「不要無視線框把 ③ 的東西搶回 ②」）
+#: 改由 :data:`REATTACHED_PENDING_PAGE_03` 的「欠 ③ 的債」登記承接 ——
+#: **接回來是暫時的，③ 實作好要移走。**
+#:
 #: ⛔ **線框判給 ②、但因為會碰到寫入槽而「本批不接」的區塊。**
 #:
 #: **這一列不是「做不到」，是依既有裁決本來就不該進來** ——
@@ -345,12 +368,77 @@ DROPPED_FOR_ZERO_WRITE: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.rotation", "render_rotation_section"),
 )
 
-MOVED_TO_PAGE_03: tuple[tuple[str, str], ...] = (
+#: ⭐ **2026-09-07：本常數由 ~~`MOVED_TO_PAGE_03`~~ 更名為
+#: :data:`REATTACHED_PENDING_PAGE_03`，五筆內容一個都沒動。**
+#: **有意識的更正，不是漏刪** · 日期 **2026-09-07** ·
+#: 決策者：**AI 總管（依獨立稽核實測）**。
+#:
+#: **舊名字錯在哪（這一段比更名本身重要）**：`MOVED_TO_PAGE_03` 讀起來是
+#: 「**已經搬到 ③ 了**」，而實際狀態是「**線框判給 ③、但誰都還沒接**」。
+#: 一個含混的標籤（「已搬」既可讀成「移轉完成」也可讀成「線框判給」）
+#: ⇒ 沒有任何機器規則在驗它是不是真的 ⇒ ② 切換上線的那一刻，
+#: 這五塊**在整個 App 都到不了了，而且全綠**。
+#:
+#: **實測（2026-09-07，於 `d0efb98`，AST 遞移閉包「呼叫 ＋ 裸參照」）**：
+#: 從 `app.py` 現行掛載的**五個活分頁入口**出發，可達集合 994 個符號，
+#: 這五筆**一個都不在裡面**；對尚未掛載的新 ③ view
+#: （`ui/views/page_03_research.py::render_fund_research`，可達 106 個）
+#: 單獨再掃一次，**同樣一個都不在**。
+#: **正對照**：`ui.helpers.holdings::render_holdings_detail` / `::render_holdings_diag`
+#: 在同一次掃描中**可達**（經 ③ `ui/tab2_single_fund.py`），掃描器沒有壞。
+#:
+#: **處置（總管裁決）**：**接回 ②**，等 ③ 真的實作好再移走。
+#: 法源：線框從來沒說「刪除」，它說的是**搬去 ③**；現在 ② 與 ③ 都沒有 ⇒ **線框未被滿足**。
+#: 接回去是「把壞掉的修回它原本該有的樣子」（`CLAUDE.md §-1.5.4` **修正錯誤**那一側），
+#: 屬內部自決，**不是改設計**。
+#:
+#: ⚠️ **這份清單現在是「欠 ③ 的債」，不是「已經給 ③ 的東西」** ——
+#: 五筆**同時**出現在 :data:`DELEGATED_ENTRIES`（② 現在真的畫得出來）
+#: 與本常數（③ 實作好時要來這裡把它們搬走）。**兩份都要，缺一就會再無聲掉一次。**
+#: 守衛：`tests/test_wf02_health_golive.py::test_the_reattached_blocks_are_reachable_from_page_two`
+#: （突變：拿掉任一支的委派 → 轉紅）。
+REATTACHED_PENDING_PAGE_03: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.investment", "_render_investment_calc"),
     ("ui.helpers.fund_grp_health.investment", "_render_holdings_block"),
     ("ui.helpers.fund_grp_health.signals", "_render_bollinger_expanders"),
     ("ui.helpers.fund_grp_health.ai", "_render_per_fund_news_expanders"),
     ("ui.helpers.fund_grp_health.ai", "_render_per_fund_three_ratio_expanders"),
+)
+
+#: ⛔ **線框同樣判給 ③、同樣哪裡都到不了，但本批「接不回來」的那一支。**
+#:
+#: `ui/tab_fund_grp_health.py::_render_low_base_screener`（🎯 選基金 · 低基期進場點）
+#: 與 :data:`REATTACHED_PENDING_PAGE_03` 那五筆是**同一個病**
+#: （標「已搬 ③」、五個活分頁與新 ③ view 都到不了），
+#: **但它有三道各自獨立的阻擋，任何一道都不該為了接回它而放寬**：
+#:
+#: 1. **它住在舊 ② 的 tab 檔本身。**
+#:    `tests/test_wf02_health_skeleton.py::test_the_page_does_not_delegate_to_the_old_tab`
+#:    對 `ui.tab*` 是**無白名單出口的硬封鎖**（`_under_allowed` 的放行只給
+#:    `fund_grp_health` 那一條 clause）。放寬它等於把整個 1,441 行的舊 tab 一起放進來。
+#: 2. **它在渲染期就會碰到寫入 primitive。**
+#:    `st.download_button("⬇️ 下載選基金清單 CSV", _df.to_csv(index=False).encode(...), …)`
+#:    —— `to_csv` 是 `download_button` 的**引數**，在 `if not rows: return` 早退之後
+#:    **無條件求值**（本組 AST 實測：該呼叫的 `if` 巢深為 0）。
+#:    ⚠️ **這正是當初被誤記在 `render_rotation_section` 頭上的那個機制** ——
+#:    那一支的 `to_csv` 其實包在 `if offer_download:` 裡、而委派入口硬編 `False`
+#:    （見 :data:`DROPPED_FOR_ZERO_WRITE` 的 2026-09-07 更正）。
+#:    **在這一支身上，那個機制是真的。** 依「② 零寫入」裁決 ⇒ 不接。
+#: 3. **它吃的不是本頁的持股列。**
+#:    簽名是 `_render_low_base_screener(ok_rows)`，`ok_rows` 是**健診大表列**
+#:    （每列帶 `_fund_raw`），而本頁的 `_holdings()` 給的是 `portfolio_funds` 項本身。
+#:    需要一個 rows adapter —— 與 :data:`DEFERRED_ENTRIES` 那兩支**同一類問題**，
+#:    規格未定。**不硬湊一份假的 rows**（§1）。
+#:
+#: ⛔ **不得**為了讓它回來而改上述任何一道守衛。要接回它，正解是**先解掉阻擋**：
+#: 把它搬出舊 tab 檔（或在 ③ 實作它）、把 `to_csv` 移進使用者觸發的分支、
+#: 定出 rows adapter 規格。**在那之前它必須留在
+#: `tests/test_wf02_health_golive.py::DROPPED_WITH_REASON` 裡具名掛著**，
+#: 這樣它**不能無聲消失第二次**（守衛：同檔
+#: `test_every_dropped_renderer_has_a_named_disposition`；
+#: 突變：把它那一列刪掉 → 轉紅）。
+BLOCKED_FROM_REATTACH: tuple[tuple[str, str], ...] = (
+    ("ui.tab_fund_grp_health", "_render_low_base_screener"),
 )
 
 #: ⛔ **黑名單：接了就是把 P0 寫入面搬回 ②。**
@@ -381,7 +469,9 @@ DELEGATION_BLACKLIST: tuple[tuple[str, str], ...] = (
 #:     （repo 裡確實只有舊 ② 那一個 widget）—— **被推翻的是它的結論**：
 #:     我漏查了線框，把「本頁骨架來源 `ia-wireframe.html` 沒有」誤當成「線框沒有」。
 #:   ⚠️ 但 `render_fund_grp_health_extras` **整支仍然不接**，改成**拆開逐支接**（見
-#:     :data:`DELEGATED_ENTRIES` 與 :data:`MOVED_TO_PAGE_03`）—— 換了理由，不是換了結論。
+#:     :data:`DELEGATED_ENTRIES` 與 ~~:data:`MOVED_TO_PAGE_03`~~
+#:     → :data:`REATTACHED_PENDING_PAGE_03`（2026-09-07 更名，理由見該常數））
+#:     —— 換了理由，不是換了結論。
 #:
 #: ~~② `render_allocation_backtest_section`：屬再平衡試算，線框說 → 04。~~
 #:   → **推翻，這一條是本組判錯**：同一份線框 §04 對照表**逐字**寫
@@ -1185,9 +1275,14 @@ def _render_delegated_sections() -> None:
     safe_section("基金體檢", lambda: render_fund_checkup(_funds, expanded=True))
     safe_section("持倉互斥避險", lambda: render_mutual_exclusion_section(_funds))
 
-    # ── 以下五塊拆自 `render_fund_grp_health_extras`，**只接線框判給 ② 的那些** ──
-    #    ⛔ 屬 ③ 的五塊（投資試算／TER＋持股／Bollinger／個股新聞／三率穿透）
-    #       一支都沒有接，清單見 :data:`MOVED_TO_PAGE_03`。
+    # ── 以下五塊拆自 `render_fund_grp_health_extras`，**線框判給 ② 的那些** ──
+    #    ~~⛔ 屬 ③ 的五塊（投資試算／TER＋持股／Bollinger／個股新聞／三率穿透）~~
+    #    ~~   一支都沒有接，清單見 :data:`MOVED_TO_PAGE_03`。~~
+    #    ⚠️ **2026-09-07 更正（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+    #       那兩行**在寫下當天為真**（本頁確實一支都沒接），
+    #       **被推翻的是它隱含的前提** —— 「不接 ＝ 它們在 ③ 那邊」。**③ 從來沒有接過。**
+    #       那五塊已於 2026-09-07 **接回 ②**，見下方 `_render_reattached_sections()`
+    #       與 :data:`REATTACHED_PENDING_PAGE_03`（③ 實作好時要回來把它們移走）。
     #    ⚠️ 順序照線框 §04「留 ②」那一列的敘述走：先跨檔矩陣、再風險、再輪動、最後 AI。
     safe_section("真實收益矩陣", lambda: _render_dividend_matrix(_funds))
     safe_section("持股相關性矩陣", lambda: _render_correlation_matrix(_funds))
@@ -1224,13 +1319,117 @@ def _render_delegated_sections() -> None:
     #    ⛔ 真的紅了就**照裁決移進 `DROPPED_FOR_ZERO_WRITE`，不要改守衛**。
     safe_section("AI 跨檔評論", lambda: _render_ai_cross_fund_evaluation(_funds))
 
+    _render_reattached_sections(_funds)
+
+
+def _render_reattached_sections(funds: list[dict]) -> None:
+    """區塊 6｜⭐ **2026-09-07 接回 ②** 的五塊（見 :data:`REATTACHED_PENDING_PAGE_03`）。
+
+    **為什麼它們在這裡（讀完再改）**
+    --------------------------------
+    核准線框 §04 把這五塊判給 **③ 基金研究**，於是 ② 切換上線時它們沒有被委派。
+    **但 ③ 從來沒有接過它們** —— 獨立稽核 2026-09-07 實測、本組以獨立掃描器複驗：
+    從 `app.py` 現行掛載的五個活分頁入口出發（可達 994 個符號），
+    這五支**一個都不可達**；對尚未掛載的新 ③ view
+    （`ui/views/page_03_research.py::render_fund_research`，可達 106 個）單獨再掃，
+    **同樣一個都不可達**。**正對照**：同一次掃描裡
+    `ui.helpers.holdings::render_holdings_detail` / `::render_holdings_diag` **可達**
+    （經 ③ 的 `ui/tab2_single_fund.py`）⇒ 掃描器不是恆假。
+
+    **總管裁決：接回 ②，等 ③ 真的實作好再移走。**
+    線框寫的是「**搬**」，不是「刪除」；② 與 ③ 都沒有 ⇒ **線框未被滿足**。
+    把它接回去是「把壞掉的畫面修回它原本該有的樣子」
+    （`CLAUDE.md §-1.5.4` 兩步判定的**修正錯誤**那一側），屬內部自決，**不是改變設計**。
+
+    **版面為什麼長這樣 —— 刻意逐字沿用舊 ② 的容器，一個字都沒有自己發明**
+    ------------------------------------------------------------------
+    `ui/helpers/fund_grp_health/__init__.py::render_fund_grp_health_extras` 就地寫著
+    它自己的分界原則：「原則 1『不要闔上的資料』：這裡面是**每檔的實際現金流數字**
+    （不是圖、不是按鈕）… （仍維持摺疊的是：Bollinger N 張大圖、AI 觸發鈕、純說明文
+    —— 那些摺疊裡沒有資料。）」。本函式照它辦：
+
+    ===================================== ====================================
+    區塊                                   容器
+    ===================================== ====================================
+    投資試算 ＋ TER/持股（**現金流數字**）    每檔一個 `st.expander(expanded=True)`
+    Bollinger／個股新聞／三率穿透（圖與鈕）   那三支**自己**就畫 collapsed expander
+    ===================================== ====================================
+
+    ⛔ **刻意不另外加一層預設收合的外框。** 那會推翻舊 ② 一個**寫下理由的**設計決定
+    （「不要闔上的資料」），而本批的授權是「修回原本的樣子」，不是重新設計版面。
+    ⚠️ 鐵則 04 在本 repo 指的是**空狀態三要素／不畫空表格外框／不畫冗餘占位**
+    （見 `tests/test_wf02_health_skeleton.py` 的多處引用），**不是「首屏要短」**；
+    而且這一區在整頁**最後面**，本來就不在首屏。**所以沒有與鐵則 04 的衝突要調解。**
+
+    ⚠️ **本函式自己不算任何東西**（路線 (A)）：拿持股 → 傳給既有 public 入口 → 隔離失敗。
+    `principal_twd` 走 :func:`_principal_twd`（＝**已套用**值，鐵則 02 的送出閘門）——
+    ⭐ **這也讓那個 widget 第一次有了下游消費者**：本檔 2026-09-07 之前就地登記著
+    「`_principal_twd` 在本檔的呼叫點 0、裸參照 0 … 這個 widget 現在收得到值、
+    但沒有任何下游消費它」。`_render_investment_calc(fund, principal_twd)` **正是**
+    線框「Form ②-A 健診輸入：本金（TWD）1,000,000」那一欄要餵的地方。
+    ⚠️ 它吃的是**引數**、不是 `fund["invest_twd"]`（本組實測：該函式全檔 0 次
+    `invest_twd`），所以接上它**不會**動到委派區塊餵給其他舊模組的輸入 ——
+    舊 ② 齊頭本金 vs `portfolio_funds` 實際金額那個既有張力**未被本批擴大**。
+
+    ⛔ **`_render_low_base_screener` 不在這裡，而且不是漏接** ——
+    它有三道各自獨立的阻擋，逐條見 :data:`BLOCKED_FROM_REATTACH`。
+    """
+    if not funds:
+        return
+
+    # ⛔ lazy import 且逐支具名（同 :func:`_render_delegated_sections`）——
+    #    整包委派會把黑名單那兩支（渲染即寫客戶 Google Sheet）一起帶進射程。
+    from ui.helpers.fund_grp_health.ai import (
+        _render_per_fund_news_expanders,
+        _render_per_fund_three_ratio_expanders,
+    )
+    from ui.helpers.fund_grp_health.investment import (
+        _render_holdings_block,
+        _render_investment_calc,
+    )
+    from ui.helpers.fund_grp_health.signals import _render_bollinger_expanders
+
+    _principal = _principal_twd()
+
+    st.divider()
+    # ⚠️ `###`（三個井號）是**舊 ② 的原字**，同時也刻意避開
+    #    `tests/test_wf02_health_skeleton.py::_BLOCK_OPEN`（只認 `#### `）——
+    #    這一區不該變成線框四塊之外的第五個「一級區塊單位」。
+    st.markdown("### 💼 逐檔深度分析（投資試算 + TER + 持股）")
+    st.caption("以本頁**已套用**的本金為基準，逐檔算出可申購單位數 / 每月配息 TWD / "
+               "配息來源（真實記錄 or 年化估算）＋ 總費用率與前十大持股。")
+    for _f in funds:
+        _code = _f.get("code", "?")
+        _name = (_f.get("name") or _code)[:30]
+        with st.expander(f"💎 {_name}　·　{_code}", expanded=True):
+            # ⚠️ `_f=_f` 的預設引數綁定是必要的：lambda late-binding 會讓整個迴圈
+            #    都拿到最後一檔（本 repo 既有的 `safe_section(標籤, lambda: …)` 家風
+            #    在迴圈內就必須這樣寫）。
+            safe_section("投資試算",
+                         lambda _f=_f: _render_investment_calc(_f, _principal))
+            st.divider()
+            safe_section("TER 與持股", lambda _f=_f: _render_holdings_block(_f))
+
+    # 以下三支**自己**就畫 collapsed expander（圖 / 按鈕 / 說明文，摺疊裡沒有資料）。
+    safe_section("Bollinger 詳圖", lambda: _render_bollinger_expanders(funds))
+    safe_section("持股新聞", lambda: _render_per_fund_news_expanders(funds))
+    safe_section("三率穿透", lambda: _render_per_fund_three_ratio_expanders(funds))
+
 
 def render_holdings_health() -> None:
     """渲染「② 持倉體檢」整頁。
 
-    ⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），
-    所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。
-    接線是下一批的事。
+    ~~⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），~~
+    ~~所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。~~
+    ~~接線是下一批的事。~~
+
+    ⚠️ **2026-09-07 狀態更新（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+    上段**在寫下當天為真**，但 **`d0efb98`（PR #811）已把本頁接上 `app.py`
+    的 `with tab_health:`** —— 它現在是 production 的 ②。
+    **舊 ② `ui/tab_fund_grp_health.py` 一個字都沒動，仍在磁碟上當回退路徑。**
+    留著那句「沒有 production caller」會讓下一個人以為改這裡不影響線上，
+    **那是最貴的一種過期敘述**（`tests/test_wf02_health_golive.py::
+    test_app_mounts_the_new_health_view` 就是在守這件事）。
 
     ⚠️ **區塊之間走 `safe_section()` 隔離**：`st.tabs` 是單次 run 渲染全部分頁，
     任一區塊拋未捕捉例外會**中止整個 script**，其後所有分頁空白。

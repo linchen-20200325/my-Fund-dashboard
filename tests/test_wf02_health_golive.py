@@ -21,6 +21,13 @@ pandas / plotly）；本檔**純 AST，不 import 被測模組**。分開的好�
 6. :func:`test_the_disposition_table_never_lists_something_still_reachable` ——
    反向：表上不准出現「其實還在」的項目（一張會說謊的表比沒有表更糟）。
 7. :func:`test_the_old_page_is_still_the_fallback` —— 舊 ② 還在磁碟上。
+8. :func:`test_the_reattached_blocks_are_reachable_from_page_two` —— ⭐ **2026-09-07 新增**：
+   登記為「已接回 ②」的那幾塊，必須真的從 ② 的入口**到得了**。
+   （2026-09-07 事故的根因是「已搬 ③」這個標籤含混、而**沒有機器規則在驗它** ——
+   **這一條才是擋住下一次的那個**，接回去只修今天這幾支。）
+9. :func:`test_the_blocked_reattach_cannot_disappear_quietly` —— ⭐ **2026-09-07 新增**：
+   同一批裡**接不回來**的那一支，必須具名掛在 :data:`DROPPED_WITH_REASON` 上，
+   不准無聲消失第二次。
 
 ⛔ **不守什麼（照實列，不要讀成「功能未丟失已經證完了」）**
 ------------------------------------------------------------
@@ -289,29 +296,73 @@ _DISPOSITIONS = frozenset({
 #:
 #: ⚠️ **處置欄的權威來源**：核准線框 `docs/wireframes/wireframe-macro-health.html`
 #:    §04 搬移對照表（逐字），以及 `ui/views/page_02_health.py` 的四個常數。
+#: ⛔⛔ **2026-09-07：本表被實測抓到會說謊，七筆已移除、一筆改判。讀完再改這張表。**
+#: **有意識的更正，不是漏刪** · 日期 **2026-09-07** ·
+#: 決策者：**AI 總管（依獨立稽核實測）**。
+#:
+#: **病根不是「誰漏接了幾支」，是「已搬 ③」這個標籤本身含混** ——
+#: 它既可讀成「**移轉完成**」，也可讀成「**線框判給 ③**」，
+#: 而**沒有任何機器規則在驗它是不是真的**。於是 ② 切換上線的那一刻，
+#: 八筆標「已搬 ③」的東西裡有**六筆在整個 App 都到不了了，全綠**。
+#:
+#: **實測（2026-09-07，於 `d0efb98`；AST 遞移閉包，「呼叫 ＋ 裸參照」都算邊）**：
+#: 從 `app.py` 現行掛載的**五個活分頁入口**出發（可達 994 個符號），
+#: 下列六支**一個都不可達**；對**尚未掛載**的新 ③ view
+#: （`ui/views/page_03_research.py::render_fund_research`，可達 106 個）單獨再掃，
+#: **同樣一個都不可達** ——
+#: `_render_investment_calc` / `_render_holdings_block` /
+#: `_render_bollinger_expanders` / `_render_per_fund_news_expanders` /
+#: `_render_per_fund_three_ratio_expanders` / `_render_low_base_screener`。
+#: **正對照**：同一次掃描裡 `render_holdings_detail` / `render_holdings_diag` **可達**
+#: ⇒ 掃描器不是恆假。**負對照**：虛構符號解析不到、零命中。
+#:
+#: **兩種被抓到的說謊，逐一寫明（不要只讀結論）**
+#:
+#: 1. **「已搬 ③」對六筆為假** —— ③ 從來沒有接過它們。線框寫的是「**搬**」，
+#:    不是「刪除」；② 與 ③ 都沒有 ⇒ **線框未被滿足**。
+#:    **處置**：五筆**接回 ②**（`page_02_health.REATTACHED_PENDING_PAGE_03`，
+#:    ③ 實作好要移走），故從本表移除 —— 本表只收「**到不了**」的東西。
+#:    第六筆 `_render_low_base_screener` **接不回來**，改判 `刻意不接` 並具名三道阻擋（見該列）。
+#: 2. ~~「`render_holdings_detail` 的**唯一 caller** 是 `_render_holdings_block`」~~
+#:    ~~「`render_holdings_diag` 的**唯一 caller** 是 `_render_per_fund_news_expanders`」~~
+#:    —— **兩句都是假的**。實測全 repo（排除 `tests/`、`scripts/`）參照它們的模組各有**兩個**：
+#:    另一個是 **`ui/tab2_single_fund.py`**，而它經 ③ `ui.tab_fund_research` 可達。
+#:    ⇒ 這兩支**當時根本沒有掉**，是被一個假的下游推論列進來的。
+#:    **它們自 2026-09-07 起經接回的 `_render_holdings_block` /
+#:    `_render_per_fund_news_expanders` 也從 ② 可達**，故一併從本表移除。
+#:
+#: ⚠️ **為什麼既有守衛沒擋住**：`test_the_disposition_table_never_lists_something_still_reachable`
+#: 比對的是「**新 ② 到不到得了**」，而這兩支當時對 ② 確實到不了 ——
+#: **表上的「處置」是 ②-scoped，但「理由」寫的是 repo-wide 的全稱句**，
+#: 兩者射程不同，而**沒有任何規則在驗理由**。
+#: ⛔ 新增或修改任何一列的理由時，**「唯一 caller 是 X」這種全稱句要實測再寫**
+#: （`git grep` 之後**逐一判讀是 import、字串還是註解**），否則就別寫。
 DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
-    # ── 核准線框 §04 明文「搬 ③ 基金研究」──────────────────────────
-    "ui.helpers.fund_grp_health.investment::_render_investment_calc":
-        ("已搬 ③", "線框 §04：每檔一個 expander ＝ 單檔細節，一律屬 ③。"
-                    "已登記於 page_02_health.MOVED_TO_PAGE_03。"),
-    "ui.helpers.fund_grp_health.investment::_render_holdings_block":
-        ("已搬 ③", "同上（TER ＋ 前十大持股）。已登記於 MOVED_TO_PAGE_03。"),
-    "ui.helpers.fund_grp_health.signals::_render_bollinger_expanders":
-        ("已搬 ③", "線框 §04：⑪ Bollinger 詳圖 → ③。已登記於 MOVED_TO_PAGE_03。"),
-    "ui.helpers.fund_grp_health.ai::_render_per_fund_news_expanders":
-        ("已搬 ③", "線框 §04：⑬ 個股新聞 → ③。已登記於 MOVED_TO_PAGE_03。"),
-    "ui.helpers.fund_grp_health.ai::_render_per_fund_three_ratio_expanders":
-        ("已搬 ③", "線框 §04：⑭ 三率穿透 → ③。已登記於 MOVED_TO_PAGE_03。"),
-    "ui.helpers.holdings::render_holdings_detail":
-        ("已搬 ③", "下游：唯一 caller 是 `_render_holdings_block`（已搬 ③）。"),
-    "ui.helpers.holdings::render_holdings_diag":
-        ("已搬 ③", "下游：唯一 caller 是 `_render_per_fund_news_expanders`（已搬 ③）。"),
+    # ── 核准線框 §04 明文「搬 ③ 基金研究」，但 ③ 從來沒有接過 ────────
+    #    ⭐ 五筆（投資試算／TER＋持股／Bollinger／個股新聞／三率穿透）與
+    #       `render_holdings_detail` / `render_holdings_diag` 兩筆已於 2026-09-07 移除，
+    #       理由見本常數上方。**它們現在從 ② 可達，留在表上就是說謊。**
     "ui.tab_fund_grp_health::_render_low_base_screener":
-        ("已搬 ③", "⭐ **本批新查出**。核准線框 §04 逐字：「🎯 選基金（低基期進場點）"
-                    "｜tab_fund_grp_health.py::_render_low_base_screener｜搬｜③ 基金研究」"
-                    "——『回答該買哪一檔而不是哪一檔有問題』。"
-                    "⚠️ 它**不在** page_02_health.MOVED_TO_PAGE_03 裡（那個常數只收"
-                    "`render_fund_grp_health_extras` 底下的，而本支住在舊 ② 根檔）。"),
+        ("刻意不接", "🎯 選基金（低基期進場點）。核准線框 §04 逐字判給 ③ "
+                      "（『回答該買哪一檔而不是哪一檔有問題』），"
+                      "~~但本列 2026-09-07 之前標的是「已搬 ③」，而 ③ 從來沒有接過它~~ —— "
+                      "**有意識的更正，不是漏刪**（2026-09-07，AI 總管，依獨立稽核實測）。"
+                      "與同批接回 ② 的五塊是**同一個病**，但它**接不回來**，三道阻擋各自獨立、"
+                      "任何一道都不該為了它而放寬（逐條見 "
+                      "`page_02_health.BLOCKED_FROM_REATTACH`）："
+                      "(1) 它住在**舊 ② 的 tab 檔本身**，而 "
+                      "`test_the_page_does_not_delegate_to_the_old_tab` 對 `ui.tab*` "
+                      "是**無白名單出口的硬封鎖**；"
+                      "(2) `st.download_button(..., _df.to_csv(index=False).encode(...), ...)` "
+                      "—— `to_csv` 是引數，在 `if not rows: return` 早退之後**無條件求值**"
+                      "（實測 `if` 巢深 0），依「② 零寫入」裁決不接。"
+                      "⚠️ **這正是當初被誤記在 `render_rotation_section` 頭上的機制**，"
+                      "在這一支身上是真的；"
+                      "(3) 它吃**健診大表列** `ok_rows`（每列帶 `_fund_raw`），不是本頁的持股項，"
+                      "需要 rows adapter —— 與下方兩筆「待客戶裁決」同類，規格未定，"
+                      "**不硬湊一份假的 rows**（§1）。"
+                      "⛔ 要接回它，正解是**先解掉阻擋**（搬出舊 tab 檔／把 `to_csv` 移進"
+                      "使用者觸發的分支／定出 adapter 規格），**不是改守衛**。"),
 
     # ── 刻意不接（具名理由）────────────────────────────────────────
     "ui.helpers.fund_grp_health.rotation::render_rotation_section":
@@ -333,8 +384,15 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
     "ui.tab_fund_grp_health::_render_health_summary":
         ("刻意不接", "新頁以「組合健康總分」＋三張警示卡取代 5 格 KPI；"
                       "其中『🔴 吃本金』那一格由 `_eating_tally()` 承接。"
-                      "⚠️ 另三格（檢查檔數／🟢 健康／🟡 警示／累積 TWD 配息）與"
-                      "『抓取失敗前置摘要』**沒有承接者** —— 見下方 `未登記缺口`。"),
+                      "⚠️ ~~另三格~~ → **另四格**（檢查檔數／🟢 健康／🟡 警示／"
+                      "累積 TWD 配息）與『抓取失敗前置摘要』**沒有承接者**。"
+                      "**2026-09-07 更正：本表第四處被抓到的不符 —— 數字與它自己的"
+                      "列舉互相矛盾**（有意識的更正，不是漏刪；AI 總管，依實測）。"
+                      "舊 ② `_render_health_summary` 實測畫 **5 格** KPI "
+                      "（`k1`~`k5`），其中 `🔴 吃本金` 由 `_eating_tally()` 承接 "
+                      "⇒ 剩下的是 **4 格**，不是 3 格。"
+                      "⚠️ **一個數字對不上自己的清單，讀者只會相信數字** —— "
+                      "「另三格」會讓下一個人補完三格就以為結清了。"),
 
     # ── 橋接容器（本身不畫內容）────────────────────────────────────
     "ui.helpers.fund_grp_health::render_fund_grp_health_extras":
@@ -360,7 +418,17 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
                         "⚠️ #809 的獨立稽核已就 ④ 點名過同一支「本表未記」。"
                         "⛔ 本批**不補**：補它要決定新頁哪裡放、吃哪一份 rows，那是規格。"),
     "ui.helpers.io.freshness::render_mj_freshness_banner":
-        ("未登記缺口", "下游：唯一 caller 是上一列那支包裝。"),
+        ("未登記缺口", "~~下游：唯一 caller 是上一列那支包裝。~~ "
+                        "⛔ **2026-09-07 更正：那句是假的 —— 本表第三處被抓到的"
+                        "「唯一 caller」全稱句**（有意識的更正，不是漏刪；AI 總管，依實測）。"
+                        "實測全 repo（排除 `tests/`／`scripts/`）另有兩個呼叫端："
+                        "`ui/tab2_single_fund.py` 與 `ui/tab3_portfolio.py`，"
+                        "本函式因此**經 ③ 與 ④ 仍然可達、並沒有從 App 消失**。"
+                        "⇒ 真正掉的只有上一列那支**② 專屬的包裝**"
+                        "（`_render_mj_freshness_banner`，吃 `ok_rows`）。"
+                        "**本列因此是「② 的入口沒了」，不是「這個 banner 沒了」** —— "
+                        "兩者的補法完全不同，含混會讓下一個人去重做一個已經存在的東西。"
+                        "⛔ 本批仍**不補**（補它要決定新頁哪裡放、吃哪一份 rows，那是規格）。"),
 }
 
 
@@ -470,6 +538,103 @@ def test_every_dropped_renderer_has_a_named_disposition():
           "\n   真的還沒有答案 → 標 `未登記缺口` 並寫進 PR 描述，**不要靜默略過**。")
     _bad = {k: v[0] for k, v in DROPPED_WITH_REASON.items() if v[0] not in _DISPOSITIONS}
     assert not _bad, f"處置欄用了未定義的值：{_bad}（合法值：{sorted(_DISPOSITIONS)}）"
+
+
+def _page_const(name: str) -> tuple:
+    """從**被測頁的原始碼**讀出一個 tuple 常數（`ast.literal_eval`，不 import 本頁）。
+
+    ⚠️ 與 `tests/test_wf02_health_skeleton.py` 的同名 helper 是**同一把尺的兩份拷貝**，
+    刻意不互相 import —— 本檔的賣點是「純 AST、不碰 runtime」，
+    那一份在模組層 import streamlit。代價寫在這裡：常數改名兩邊都要改。
+    """
+    for _n in ast.parse(NEW_SRC.read_text(encoding="utf-8")).body:
+        _t = (_n.targets[0] if isinstance(_n, ast.Assign)
+              else getattr(_n, "target", None) if isinstance(_n, ast.AnnAssign) else None)
+        if isinstance(_t, ast.Name) and _t.id == name:
+            return ast.literal_eval(_n.value)
+    raise AssertionError(
+        f"{NEW_SRC.name} 裡找不到常數 {name} —— 它是機器規則的 SSOT，不可以被改名或刪掉。")
+
+
+def test_the_reattached_blocks_are_reachable_from_page_two():
+    """⭐ **2026-09-07 新增：接回 ② 的那幾塊，必須真的從 ② 的入口到得了。**
+
+    **這條為什麼比「把它們接回去」更重要**
+    --------------------------------------
+    2026-09-07 的事故不是「有人漏接了六支」，是**一張表用了一個含混的標籤**
+    （「已搬 ③」既可讀成「移轉完成」也可讀成「線框判給」），
+    而**沒有任何機器規則在驗它是不是真的**。
+    接回去只修今天這幾支；**這條才擋得住下一次**。
+
+    ⛔ **它是 fail-closed 的**：常數空了、符號解析不到、或委派被拿掉，**三種都紅**。
+
+    **突變驗證（2026-09-07 逐支實跑，五支各驗一次）**：
+    把 `page_02_health._render_reattached_sections` 裡任一支的委派拿掉 →
+    **本條轉紅並指名那一支**；還原 → 轉綠。
+    第六支（`_render_low_base_screener`，接不回來）由
+    :func:`test_the_blocked_reattach_cannot_disappear_quietly` 承接。
+
+    ⚠️ **本條不宣稱「使用者看得到它們」** —— 它只看呼叫圖（同本檔其餘規則的射程限制）。
+    畫面側由 `tests/test_wf02_health_skeleton.py` 的渲染守衛負責。
+    """
+    _entries = [tuple(_e) for _e in _page_const("REATTACHED_PENDING_PAGE_03")]
+    assert _entries, (
+        "`REATTACHED_PENDING_PAGE_03` 是空的 —— 本條會退化成恆綠。\n"
+        "⛔ 若那幾塊真的搬去 ③ 了，請連同本條與 `DELEGATED_ENTRIES` 一起改，"
+        "並在 `DROPPED_WITH_REASON` 補上它們的新去處。")
+
+    _reachable = _reach(NEW_ENTRY)
+    assert len(_reachable) > 50, (
+        f"新 ② 可達集合只有 {len(_reachable)} 個 —— walker 可能壞了，本條結論沒有意義。")
+
+    _missing = [f"{_m}::{_s}" for _m, _s in _entries
+                if _resolve(_m, _s) is None or _resolve(_m, _s) not in _reachable]
+    assert not _missing, (
+        f"下列 {len(_missing)} 支登記為「已接回 ②」，但從 ② 的入口 "
+        f"`{NEW_ENTRY[0]}::{NEW_ENTRY[1]}` **到不了**：\n  "
+        + "\n  ".join(_missing)
+        + "\n⛔ 這正是 2026-09-07 那次事故的形狀：**表上寫著有，實際上哪裡都沒有。**"
+          "\n   要嘛把委派接回 `_render_reattached_sections()`，"
+          "\n   要嘛把它從 `REATTACHED_PENDING_PAGE_03` 移走並在 "
+          "`DROPPED_WITH_REASON` 給它一筆具名去處 —— **不准兩邊都沒有。**")
+
+    # 負對照：虛構符號不得命中（沒有這一行，上面的 `not in` 可能只是恆真）。
+    assert _resolve("ui.helpers.fund_grp_health.investment",
+                    "_render_nothing_at_all_xyz_9999") is None
+
+
+def test_the_blocked_reattach_cannot_disappear_quietly():
+    """⭐ **2026-09-07 新增：接不回來的那一支，必須具名掛在對照表上。**
+
+    `_render_low_base_screener` 與接回的那五塊是**同一個病**（標「已搬 ③」、
+    五個活分頁與新 ③ view 都到不了），但它有三道各自獨立的阻擋（見
+    `page_02_health.BLOCKED_FROM_REATTACH`）。
+    **接不回來不是「可以讓它消失」** —— 它必須留在 :data:`DROPPED_WITH_REASON` 裡，
+    這樣它**不能無聲消失第二次**。
+
+    ⛔ **本條不驗那三道阻擋還成不成立**（那要跑 runtime 與讀另一份測試檔）；
+       它只釘住「**這一支有沒有被除名**」。阻擋的內容由該常數的註解負責。
+
+    **突變驗證（2026-09-07 實跑）**：把它從 `DROPPED_WITH_REASON` 刪掉 →
+    本條 ＋ :func:`test_every_dropped_renderer_has_a_named_disposition` **兩條同時轉紅**；
+    還原 → 轉綠。
+    """
+    _blocked = [tuple(_e) for _e in _page_const("BLOCKED_FROM_REATTACH")]
+    assert _blocked, (
+        "`BLOCKED_FROM_REATTACH` 是空的 —— 若那一支真的接回來了，"
+        "請把它移進 `REATTACHED_PENDING_PAGE_03` 與 `DELEGATED_ENTRIES`。")
+
+    _reachable = _reach(NEW_ENTRY)
+    for _m, _sym in _blocked:
+        _key = f"{_m}::{_sym}"
+        assert _key in DROPPED_WITH_REASON, (
+            f"`{_key}` 登記為「接不回來」，卻**不在 DROPPED_WITH_REASON 裡** —— "
+            "那就等於它可以無聲消失，正是 2026-09-07 事故的形狀。")
+        assert DROPPED_WITH_REASON[_key][0] in _DISPOSITIONS, (
+            f"`{_key}` 的處置欄用了未定義的值：{DROPPED_WITH_REASON[_key][0]!r}")
+        assert _resolve(_m, _sym) not in _reachable, (
+            f"`{_key}` 登記為「接不回來」，但新 ② **其實到得了它** —— "
+            "一張說謊的對照表比沒有表更糟；請把它移出 `BLOCKED_FROM_REATTACH`。")
 
 
 def test_the_disposition_table_never_lists_something_still_reachable():
