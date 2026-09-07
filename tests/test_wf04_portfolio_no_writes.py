@@ -1004,6 +1004,12 @@ def test_every_exemption_receiver_is_syntactically_not_a_filesystem_object():
     assert _FALSE_POSITIVE_SINKS, (
         "豁免表是空的 —— 下面的迴圈恆真，本條沒有驗到任何東西。")
     for _rel, _attr, _text in sorted(_FALSE_POSITIVE_SINKS):
+        # ⚠️ 自己驗檔案在不在，**不要**倚賴巡邏一先跑過 —— pytest 各條測試獨立，
+        #    少了這一句，檔案被改名時本條會噴 `FileNotFoundError`（仍是紅的，
+        #    fail closed 沒破，但訊息看不出發生什麼事）。
+        assert (_REPO / _rel).exists(), (
+            f"豁免指到一個不存在的檔案：{_rel}\n"
+            "⛔ 檔案不在了，那筆豁免就是在替空氣背書，請刪掉它。")
         _nodes = _exempted_attribute_nodes(_rel, _attr, _text)
         assert _nodes, (
             f"在 {_rel} 裡找不到 `.{_attr}` 長在這一行上：\n  {_text}\n"
