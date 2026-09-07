@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import not_ready, system_error
 
 #: 區塊錨點。Streamlit 對中文標題自動產生的 anchor 不可靠 → 顯式指定
 #: (沿用 `ui/tab_settings_diag.py` 的 `ANCHOR_*` 慣例)。
@@ -276,9 +276,50 @@ def _ccy_fx_for(funds: list):
     return _ccy, _fx
 
 
-def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: list) -> None:
-    """本 session 首次進入 → 寫一筆組合績效快照(往前累積;repo 依 date 去重,每天最多一列)。"""
-    if st.session_state.get("_perf_snapshot_done"):
+#: 快照按鈕的 widget key。**寫入的唯一開關** —— 具名而不 inline,是為了讓守衛
+#: (`tests/test_portfolio_perf_render_no_writes.py`)能引用同一個字串,
+#: 而不是各自手抄一份然後某天默默漂移(`CLAUDE.md §2.1` SSOT)。
+_SNAPSHOT_BTN_KEY = "perf_snapshot_save_btn"
+
+#: 快照按鈕的**文字**。灰態的「去哪補」一律引用它,**不寫方位詞**。
+#: ⚠️ 這不是潔癖:`tests/test_ia_tracking_card_scope_caption.py`
+#: `::test_the_caption_uses_no_positional_words` 會把本卡渲染出來的**每一句 caption**
+#: 掃過一遍,出現「上方 / 下方 / 上面 / 下面 / 底下」就紅 ——
+#: 因為**方位是版面順序的函數**,而 ④ 的版面線框正在客戶端審批、很可能重排。
+#: 指路只准指**名字**,不准指位置(本 repo 的指路已經因此指錯過三次)。
+_SNAPSHOT_BTN_LABEL = "💾 存一筆今天的績效快照"
+
+
+def _snapshot_control(nav_by_code: dict, weights: dict, is_equal: bool, funds: list) -> None:
+    """快照存檔控制項 —— **只有使用者按下按鈕才寫**,渲染本身零寫入。
+
+    2026-09-06 為什麼整個改掉(這一段別刪,它是這顆按鈕存在的唯一理由)
+    ----------------------------------------------------------------
+    舊版叫 `_maybe_snapshot()`,由 :func:`render_portfolio_tracking` **無條件呼叫**,
+    唯一的閘門是 `st.session_state["_perf_snapshot_done"]`。也就是說 ——
+    **打開 ④ 這一頁、什麼都不按,就有一列被寫進客戶的 Google Sheet**。
+    離線實測(fake worksheet,零真連線)逐字紀錄:按下的按鈕 0 顆、送出的 `ws.append_row` 1 筆。
+
+    而那**不是 bug,是當時刻意的設計** —— 舊 caption 自己寫著「每次開啟本區自動存一筆」。
+    所以要修的不是一個壞掉的判斷,是**把「自動」換成「明示」**。
+
+    ⛔ **session 旗標不是修法。** 它只讓「每個 session 寫一次」變成「少寫幾次」,
+    寫入依然發生在使用者沒有表達任何意圖的時候。客戶 2026-09-06 永久授權的原話是
+    「絕對禁止反向寫入我的 Google Sheet……直接切斷寫入」—— 少寫幾次不叫切斷。
+
+    :`_perf_snapshot_done` 現在是什麼:
+        **純顯示狀態**(寫成功之後給一句「本次已存」),**不是**寫入閘門。
+        它保留下來是因為 `tests/test_ia_switch_advisor_moved_to_portfolio.py` 的
+        `OWN_SESSION_KEYS` 以它當錨點;**任何人若把它改回 `if ...: return` 的守門形狀,
+        就是把本函式改回 2026-09-06 之前的病灶。**
+    """
+    _clicked = st.button(_SNAPSHOT_BTN_LABEL, key=_SNAPSHOT_BTN_KEY,
+                         use_container_width=True,
+                         help="按下才會寫入雲端;不按就只看走勢,不動你的 Google Sheet。")
+    if not _clicked:
+        # ⬜ 灰態:不是故障,是「還沒按」。三要素(缺什麼 / 去哪補)走 SSOT `not_ready()`。
+        not_ready("這次的績效還沒存成快照(不按就不會寫入你的雲端試算表)",
+                  where=f"本區的「{_SNAPSHOT_BTN_LABEL}」")
         return
     try:
         from repositories.portfolio_perf_repository import PerfSnapshot, append_snapshot
@@ -288,9 +329,20 @@ def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: lis
         _row = build_snapshot_row(nav_by_code, weights, total_cost_twd=_cost,
                                   is_equal_weight=is_equal, ccy_by_code=_ccy, fx_series=_fx)
         if _row is None:
-            return                                       # 資料不足 → 不寫、不設旗標(下次資料夠再試)
-        st.session_state["_perf_snapshot_done"] = True   # 已嘗試寫入即設(避免 GS 錯誤時每次 rerun 重打)
+            # ⬜ 資料不足以重建走勢 → 沒有東西可存。**不寫、不假裝寫成功**(§1)。
+            # ⚠️ 指路吃 `story_nav` SSOT,**不得手抄**:本行初版手抄了「載入 / 補抓淨值」,
+            #    而畫面上根本沒有那個字 —— CI 的
+            #    `tests/test_batch2_top_card_grid.py::test_every_where_names_something_that_exists_on_screen`
+            #    當場擋下(`（畫面上最接近的：無）`)。同檔上方的空狀態早就走 `_sl('pf_add')` 了,
+            #    本行沒跟上就是新增一條死指路。
+            from ui.helpers.story_nav import section_label as _sl_add  # noqa: PLC0415
+            not_ready("目前的資料還不足以算出一筆完整的績效快照,所以沒有寫入任何東西",
+                      where=f"本頁的「{_sl_add('pf_add')}」,補齊各檔的每日淨值之後"
+                            f"再按一次「{_SNAPSHOT_BTN_LABEL}」")
+            return
         append_snapshot(PerfSnapshot(**_row))
+        st.session_state["_perf_snapshot_done"] = True   # 純顯示狀態,不是閘門(見 docstring)
+        st.success(f"✅ 已存入 {_row['date']} 的績效快照。")
     except Exception as _e:  # noqa: BLE001 — 快照失敗不影響走勢顯示;誠實提示
         system_error("組合績效快照未寫入", _e,
                      hint="本區顯示的走勢數字不受影響;但這一筆歷史沒有累積上去,"
@@ -397,16 +449,31 @@ def render_portfolio_tracking(funds: list) -> None:
     if _t["excluded"]:
         st.caption("⬜ 排除:" + "、".join(f"{e['code']}（{e['reason']}）" for e in _t["excluded"]))
 
-    _maybe_snapshot(_nav, _w, _equal, funds)
-
-    # 永久快照歷史(往前累積)
+    # 永久快照歷史(往前累積)——**純讀**。
+    # ⛔ 這一段 2026-09-06 之前會寫:`load_snapshots()` 在遠端分頁不存在時,
+    #    會在 L1 內部 `add_worksheet` + `update("A1", ...)`。名字是讀、實際會寫,
+    #    而且**只在遠端狀態不符預期時**才發作 —— 最不容易被測到的那一種。
+    #    修法見 `repositories/portfolio_perf_repository.py` 的讀寫分離(`_ws` / `_ws_for_write`)。
+    _snaps: list = []
     try:
-        from repositories.portfolio_perf_repository import load_snapshots
+        from repositories.portfolio_perf_repository import SheetNotProvisioned, load_snapshots
         _snaps = load_snapshots()
+    except SheetNotProvisioned:
+        # ⬜ **前提不足,不是故障** → 灰色(客戶鐵律 03:兩者不可混用)。
+        # ⛔ 刻意**不綁 `as _e`、不印例外內容** —— 把例外文字用灰色 widget 印出去,
+        #    正是 `tests/test_render_state_color_separation.py` 方向 A 要擋的那個形狀
+        #    (「真的壞掉了,畫面卻只是『還沒載入』」)。這裡沒壞,所以連例外都不該出現在畫面上。
+        not_ready("雲端還沒有這個組合的績效快照分頁,所以沒有歷史可以顯示",
+                  where=f"本區的「{_SNAPSHOT_BTN_LABEL}」(按一次會幫你把分頁與表頭建好)")
+    except Exception as _e:  # noqa: BLE001 — 真的壞掉了 → 🔴,不得降級成灰
+        system_error("組合績效快照歷史讀取失敗", _e,
+                     hint="上方走勢圖以當下資料重建,不受影響;缺的是歷史累積筆數。")
+    else:
         if _snaps:
             _last = _snaps[-1]
             st.caption(f"🗂️ 已累積績效快照 {len(_snaps)} 筆(最新 {_last.date})。"
-                       "每次開啟本區自動存一筆,幾週後可看組合績效隨時間的變化。")
+                       f"**按「{_SNAPSHOT_BTN_LABEL}」才會存一筆**,"
+                       "幾週後可看組合績效隨時間的變化。")
             if len(_snaps) >= 2:
                 import pandas as pd
                 _sdf = pd.DataFrame({
@@ -414,9 +481,11 @@ def render_portfolio_tracking(funds: list) -> None:
                 }, index=[s.date for s in _snaps]).dropna()
                 if len(_sdf) >= 2:
                     st.line_chart(_sdf)
-    except Exception as _e:  # noqa: BLE001
-        system_error("組合績效快照歷史讀取失敗", _e,
-                     hint="上方走勢圖以當下資料重建,不受影響;缺的是歷史累積筆數。")
+        else:
+            not_ready("還沒有累積任何績效快照,所以還看不到「隨時間的變化」",
+                      where=f"本區的「{_SNAPSHOT_BTN_LABEL}」(存第一筆之後就會開始累積)")
+
+    _snapshot_control(_nav, _w, _equal, funds)
 
 
 # ───────────────────────── 選股池 CRUD UI ─────────────────────────
