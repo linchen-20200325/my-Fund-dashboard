@@ -323,7 +323,18 @@ UNREGISTERED_FINDINGS: tuple[tuple[str, str, str, str], ...] = (
      "不在任何 `st.container()` slot 內，因此 `_scan()` **視野內沒有它**。"
      "⚠️ 風險等級低（它是全站共用 chrome，不是 ④ 專屬功能，"
      "`tests/test_flow_layer1.py` 另有全站接線守衛在管它），"
-     "**但它證明了一件事：以 slot 為單位的表，天生看不到不在 slot 裡的東西。**"),
+     "**但它證明了一件事：以 slot 為單位的表，天生看不到不在 slot 裡的東西。**"
+     "📌 **實測：新 ④ 沒有接它** —— `ui/views/page_04_portfolio.py` 內 "
+     "`render_flow_nav` **0 命中**（對照下一筆的 `render_story_nav`，那一支接了）。"),
+    ("render_story_nav", "", "top-level-call",
+     "頁面共用決策動線（chrome），與上一筆是同一類、同一個位置。"
+     "⭐ **登記它的理由不是它有問題，是它把上一筆的意義釘出來** ——"
+     "**實測：新 ④ 有接它**（`ui/views/page_04_portfolio.py::render_asset_allocation` 內 "
+     "`render_story_nav(\"portfolio\")`），而同一位置的 `render_flow_nav` **沒接**。"
+     "→ 也就是說**這一類不是整類被漏掉，是其中一支被漏掉** ——"
+     "少了這一筆，讀者會以為『頂層 chrome』整類都沒人處理，那是假的。"
+     "⚠️ **本筆是回修組自己跑 `_toplevel_calls()` 撿到的第六個，不在稽核給的五個之內**"
+     "—— 它就是本表註解所說「第三種切法可能還有」的實例。"),
 )
 
 
