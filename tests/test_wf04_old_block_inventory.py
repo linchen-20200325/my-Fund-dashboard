@@ -157,9 +157,14 @@ OLD_TAB4_INVENTORY: tuple[tuple[str, str, str, str], ...] = (
     ("_sec_overview", "（版面容器，本身無內容）", "已委派",
      "它只 `st.container()` 出 `_ov_core` / `_ov_warroom` / `_ov_group` 三個子 slot，"
      "自己不畫任何東西。三個子 slot 各自登記在下方。"),
-    ("_sec_overlap", "🔬 持股重疊度診斷（T5）", "已由總管裁決搬走",
+    ("_sec_overlap", "🔬 持股重疊度診斷（T5 — 底層持股＋產業重疊度，按保單分組）",
+     "已由總管裁決搬走",
      "ia Tab 04「這裡不放什麼」逐字：『診斷「哪裡有問題」→ 02』。"
-     "⚠️ **本組未實測 ② 是否真的接上了它** —— 只讀線框判讀，見本檔模組 docstring 的未驗聲明。"),
+     "⚠️ **實測補正（本組後續查證，與初判不同，據實留痕）**：② **確實**接上了同一支 SSOT "
+     "`services/portfolio_service.py::calc_holdings_overlap`，"
+     "但它渲染的是**「影子基金重疊」一張 1/3 卡**（`page_02_health` 三欄網格第三格），"
+     "**不是**舊 ④ 這一塊的**按保單分組矩陣 ＋ 兩張 `st.dataframe`**。"
+     "→ **計算搬走了，呈現沒有一比一搬走。** 那個差異是刻意縮編還是漏搬，**本組未查證**。"),
     ("_sec_switch", "🎯 換股顧問", "刻意灰態",
      "`page_04_portfolio.REASON_SWITCH`：撞既有唯一渲染點（`switch_advise_btn` 會 "
      "`DuplicateWidgetID`），且需要雲端選股池與逐檔基準線。"
