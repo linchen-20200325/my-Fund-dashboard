@@ -1420,8 +1420,12 @@ def _batch_estimate(todo_n: int) -> str:
 def _run_batch(codes: list[str], *, retry_failed: bool) -> None:
     """逐檔跑（進度條）。已完成的跳過；`retry_failed` 時把可重試的檔一起重抓。
 
-    ⭐ **這是本頁唯一的長時間運算，它只會在送出閘門的正分支裡被呼叫**
+    ⭐ **它只會在送出閘門的正分支裡被呼叫**
     （線框 Tab 03 的 chip：「長時間運算，**必須在 Form 之後才啟動**」）。
+    ⚠️ **刻意不寫「本頁唯一的長時間運算」** —— 那句話不成立：深度區的
+    :func:`auto_fetch_moneydj` 同樣是一次外部往返，只是**單檔**。
+    本函式真正特別的地方是它**隨代碼數線性放大**（N × 20~45 秒），
+    所以「有沒有被 gate 住」在這裡的代價是幾小時，在深度區是幾秒。
     ⛔ 不得改成「頁面載入就跑」或「有代碼就跑」—— 那會讓每一次 rerun
     都重打一輪 MoneyDJ。
 
@@ -1516,8 +1520,9 @@ def _batch_column_config(cols: list[str]) -> dict:
     ⭐ **這不是新設計，是接既有的那一份** ——
     `ui.helpers.fund_grp_health.columns.unified_column_config(batch=True)`
     是健診大表與批次大表**共用**的 SSOT，舊分頁用的就是它。
-    ⚠️ 它是本頁對「79 欄橫向捲很久」唯一的緩解手段，而且**不動任何欄位**：
+    ⚠️ 它是**本批**對「79 欄橫向捲很久」唯一做了的緩解，而且**不動任何欄位**：
     欄名一律可以把滑鼠移上去看「怎麼算的、單位是什麼、留白代表什麼」。
+    （**不宣稱它是唯一可能的手段** —— 凍結欄／分組欄也是，只是那屬版面決定，見下。）
     ⛔ **凍結欄 / 分組欄不在本批**：repo 內確實有一支
     `ui/components/column_group_tabs.py`，但它 **production 0 caller**、
     而且**要求呼叫端自己傳 `groups` 與 `pinned`** —— 也就是「哪幾欄算一組」
