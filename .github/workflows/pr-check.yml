@@ -8,8 +8,16 @@ on:
   workflow_dispatch:
 
 # 同一 PR 重複推 commit 時，取消前一輪未跑完的 runs
+# ⚠️ push 到 main 例外：group 尾端補上 github.sha，讓每顆 merge commit 自成一組。
+#    原本 push 事件的 github.ref 恆為 refs/heads/main，連續兩次合併會共用同一組 →
+#    後一次合併的 push 取消前一次尚未跑完的 main run（實例：run 34107180350，
+#    head_sha d60910f，Fast checks 與 Slow tests 皆 cancelled）。那會讓「merge 完
+#    回頭逐 job 驗 main 那一次 CI run」結構上跑不完，且沒有人會察覺；run-level 顯示
+#    cancelled 又長得像失敗（本 repo 紀律：cancelled ≠ success）。
+#    PR 事件走 'shared' → group 在同一個 PR 內維持穩定，新 push 取消舊 run 的省時行為保留。
+#    守衛：tests/test_ci_concurrency_main_push_guard.py
 concurrency:
-  group: pr-check-${{ github.ref }}
+  group: pr-check-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'shared' }}
   cancel-in-progress: true
 
 jobs:
