@@ -156,7 +156,10 @@
 <ul>
 <li><b><code>DIAG_GATE_LABEL</code> 不是雙軌造成的 —— 舊 ⑤ 自己就有一顆一模一樣的。</b>
   <code>ui/tab_settings_diag.py</code> 的資料診斷分區同樣是 <code>st.checkbox("🔭 載入資料診斷", key="sd_diag_gate", …)</code>，
-  <code>help=</code> 與灰態文案與新 ⑦ <b>逐字相同</b>。刪掉舊 ⑤ 不會讓這顆消失 —— 它本來就是從舊 ⑤ 抄過來的。</li>
+  <b>標籤與 <code>help=</code> 與新 ⑦ 逐字相同</b>。刪掉舊 ⑤ 不會讓這顆消失 —— 它本來就是從舊 ⑤ 抄過來的。
+  ⚠️ <b>2026-09-08 就地收窄</b>：初版寫「<code>help=</code> <b>與灰態文案</b>逐字相同」，
+  <b>灰態文案那半是假的</b> —— 舊 ⑤ 是「<b>資料診斷</b>尚未載入（…）」、新 ⑦ 是「<b>資料來源健康度</b>尚未載入（…）」，
+  <b>括號內完全相同、主詞不同</b>（sha256 實測不同）。<b>結論不變</b>（它仍不是雙軌造成的），改的是證據的射程。</li>
 <li><b><code>DIVCAL_GATE_LABEL</code> 的檔內註記逐字寫著「客戶 2026-09-07 決定 ④」。</b>
   裁決 2 若照字面執行，就是<b>用一句通則覆蓋掉客戶本人的個案決定</b>。</li>
 </ul>
@@ -187,7 +190,23 @@
 「<b>這個 key 與 <code>pf_add</code> / <code>pf_perf</code> 一樣，指的是<b>舊 ④ 的區塊</b>；舊分頁整批拔除時，這三個 key 要一起回頭處理</b>」。</p>
 
 <p><b>⇒ 修正後的說法</b>：這不是「訊息重複」的文案問題，是<b>退場的硬相依</b>。
-⑨ 的三塊灰態<b>不是「還沒做」，是「做了會撞舊 ④」</b>（<code>REASON_SWITCH</code> 逐字：「這一塊在目前線上的 ④ 已經有唯一的渲染點，本頁再畫一次會撞同一個按鈕」）。
+⚠️ <b>但那三塊灰態<b>灰的理由互不相同</b>，⛔ 不可以用同一句蓋過去</b>
+（<b>2026-09-08 就地更正</b>：本草稿初版把 <code>REASON_SWITCH</code> 的「會撞按鈕」套到三塊，<b>那是錯的</b>）：
+
+<div class="scroll"><table>
+<tr><th>區塊</th><th>它自己寫的理由（逐字節錄）</th><th>舊 ④ 刪掉會怎樣</th></tr>
+<tr><td>🎯 換股顧問<br><code>REASON_SWITCH</code></td><td>「這一塊在目前線上的 ④ 已經有唯一的渲染點，本頁再畫一次<b>會撞同一個按鈕</b>」<b>＋</b>「它另外還<b>需要雲端選股池與逐檔基準線，兩者本頁都拿不到</b>」</td><td><b>只解掉一半</b> —— 撞按鈕沒了，<b>拿不到資料那一半還在</b></td></tr>
+<tr><td>📊 組合績效<br><code>REASON_PERF</code></td><td>「<b>原因不是算不出來</b>：既有那一支<b>一渲染就打一次匯率 API、還會落盤快取</b>……要接得先像配息月曆那樣<b>加一道「按了才算」的開關</b>」</td><td>⛔ <b>不會解鎖</b> —— 那是<b>成本</b>問題，要自己蓋閘門</td></tr>
+<tr><td>💼 交易帳本<br><code>REASON_LEDGER</code></td><td>「<b>原因不是沒有資料</b>：<b>線框沒有給這張表的欄位規格</b>，補一份等於自己發明，而欄位要列哪幾個是<b>客戶要拍板的事</b>」</td><td>⛔ <b>不會解鎖</b> —— 那是<b>規格缺口</b>，要客戶拍板</td></tr>
+</table></div>
+
+<p>⛔ <b>後果是實質的，不是措辭問題</b>：照初版那個講法排程，<b>刪掉舊 ④ 只解掉一塊半</b>，
+卻會讓<b>現在真的能用</b>的 T7 帳本與組合績效<b>從畫面上消失</b>，而新 ⑨ 那兩塊<b>仍然是灰的</b>。</p>
+
+<p>⚠️ <b><code>ui/views/page_04_portfolio.py</code> 自己早就寫過這件事</b>，逐字：
+「⭐ <b>四塊灰態的原因互不相同，這是本批最重要的一件事。</b>……
+<b>用一句藉口蓋住四個不同的原因，等於對使用者說了三次謊</b>，而且會讓下一個人一頭撞進那些其實卡在別處的東西。」
+—— <b>本草稿初版就是那句話在講的那個錯</b>，而且是<b>在引用同一個檔案的時候</b>犯的。</p>
 <b>也就是說：舊 ④ 不刪，這三塊就永遠是灰的；而刪了，這四條指路同時失效。</b>
 兩件事必須同一批做完 —— 這是本草稿「退場順序」把 ⑨ 排最後的唯一理由。</p>
 
@@ -618,7 +637,11 @@
 <tr><td>三處分散的搜尋框</td><td>舊③ 各處</td><td><span class="chip keep">已被取代</span></td><td>線框 Tab 03 逐字「<b>Form ─ 唯一搜尋入口（取代目前三處分散的搜尋框）</b>」，⑧ 已收成一個</td></tr>
 <tr><td>💡 <code>render_metric_explainer</code> 教學卡</td><td>舊③</td><td><span class="chip keep">必須搬（改形狀）</span></td><td>同 ⑥。舊 ③ 是它兩個 import 端之一</td></tr>
 <tr><td>🔍 抓取診斷細節</td><td>舊③</td><td><span class="chip moved">已由線框裁決搬 ⑤</span></td><td>已經搬了（<code>FETCH_DIAG</code> 旗標由 <code>app.py</code> 持有，舊③ 那份恆不畫）</td></tr>
-<tr><td>AI 深度解盤／買賣點信號／三合一趨勢圖／3-3-3</td><td>舊③</td><td><span class="chip drop">明確丟掉</span></td><td><b>為什麼我認為你不會想念</b>：README 的 2026-09-08 裁決逐字把這幾項列為「<b>正是客戶說的『資訊太多』</b>」，而那句判定是你自己第 2 句話推出來的。⚠️ <b>可推翻點</b>：如果你其實會用「買賣點信號」，請直接說 —— 這一列是<b>轉述已有裁決</b>，本組沒有另外查證你的實際使用習慣</td></tr>
+<tr><td>AI 深度解盤／買賣點信號／三合一趨勢圖／3-3-3</td><td>舊③</td><td><span class="chip drop">明確丟掉</span></td><td><b>為什麼我認為你不會想念</b>：README 的 2026-09-08 裁決逐字把這幾項列為「<b>正是客戶說的『資訊太多』</b>」，而那句判定是你自己第 2 句話推出來的。⚠️ <b>可推翻點</b>：如果你其實會用「買賣點信號」，請直接說 —— 這一列是<b>轉述已有裁決</b>，本組沒有另外查證你的實際使用習慣。
+⚠️ <b>而且那則裁決自己就標了未複驗</b>：README 在該句<b>下一行</b>逐字寫著
+「<b>這一句是轉述盤點結論，本組未逐項複驗</b>（<code>CLAUDE.md §-2</code> 規則 6）」——
+<b>本草稿初版沒有把這個限定帶過來</b>，2026-09-08 補上。
+⇒ <b>這一列是「轉述一則自己也沒複驗過的裁決」，信任要打兩次折</b></td></tr>
 </table></div>
 
 <hr>
@@ -752,7 +775,10 @@
 <tr><td>➕ 加入與管理基金</td><td>舊④ <code>_sec_add</code></td><td><span class="chip keep">必須搬（本草稿主提案）</span></td><td>對照表原本標「<b>待客戶裁決</b>」。<b>本草稿就是那個請示</b>：線框 Tab 02 逐字指定新增入口在「④ › 保單與扣款標的」</td></tr>
 <tr><td>保單管理（Google Sheets CRUD）</td><td>舊④ <code>_sec_policy</code></td><td><span class="chip moved">已由線框裁決搬 ⑤</span></td><td><code>policy-split-wireframe.html</code> 決定 A~F，你已回覆「版面 OK，動工」</td></tr>
 <tr><td>🔬 持股重疊度診斷（T5）</td><td>舊④ <code>_sec_overlap</code></td><td><span class="chip moved">計算已搬 ②，呈現沒有</span></td><td>對照表逐字：「<b>計算搬走了，呈現沒有一比一搬走</b>……那個差異是刻意縮編還是漏搬，<b>本組未查證</b>」。<b>本草稿沿用它的未查證狀態，不下判定</b></td></tr>
-<tr><td>🎯 換股顧問</td><td>舊④ <code>_sec_switch</code></td><td><span class="chip keep">必須搬（舊④ 刪同一批）</span></td><td>新 ⑨ 灰的原因不是沒資料，是「會撞舊 ④ 的同一顆按鈕」。<b>舊④ 一刪就可以接</b></td></tr>
+<tr><td>🎯 換股顧問</td><td>舊④ <code>_sec_switch</code></td><td><span class="chip keep">必須搬（舊④ 刪同一批）</span></td><td>新 ⑨ 灰的原因不是沒資料，是「會撞舊 ④ 的同一顆按鈕」。
+⚠️ <b>2026-09-08 補：這一列初版寫「舊④ 一刪就可以接」，講得太滿</b> ——
+<code>REASON_SWITCH</code> 同一句話裡還有<b>第二個阻礙</b>：「它另外還<b>需要雲端選股池與逐檔基準線，兩者本頁都拿不到</b>」。
+<b>刪掉舊 ④ 只解掉撞按鈕那一半</b></td></tr>
 <tr><td>📊 組合績效 ／ 🎯 效率前緣</td><td>舊④ <code>_sec_add</code></td><td><span class="chip keep">必須搬（要加閘門）</span></td><td><code>REASON_PERF</code> 逐字：「既有那一支<b>一渲染就打一次匯率 API、還會落盤快取</b>……要接得先像配息月曆那樣加一道『按了才算』的開關」</td></tr>
 <tr><td>💼 持倉戰情（T7 帳本）＋ 費用與扣款</td><td>舊④ <code>_sec_ledger</code></td><td><span class="chip">⛔ 待你裁決（欄位）</span></td><td><code>REASON_LEDGER</code> 逐字：「線框沒有給這張表的欄位規格，補一份等於自己發明，而欄位要列哪幾個是客戶要拍板的事」。<b>⑨ 的線框有「交易帳本」這一塊、但沒有欄位清單</b></td></tr>
 <tr><td>🤖 AI 摘要</td><td>舊④ <code>_sec_ai</code></td><td><span class="chip">⛔ 待你裁決</span></td><td>對照表標「待客戶裁決」：<code>fund-wireframe-final.html</code> 有、<code>ia-wireframe.html</code> Tab 04 未列</td></tr>
@@ -787,7 +813,7 @@
 <tr><td><b>1</b></td><td><b>⑦ 退場</b>：<code>app.py</code> 撤掉 ⑤ 那一格 ＋ 刪 <code>ui/tab_settings_diag.py</code></td><td>三條理由：(a) 它與舊 ⑤ <b>委派同一批模組</b>，畫面內容沒有落差；(b) 舊 ⑤ 是<b>薄的一層</b> —— 刪它<b>不</b>刪掉底下那五支，因為 ⑦ 也在用；(c) 4 顆雙軌閘門一起消失，⑦ 當場變好用</td><td>⑦ 剩 2 顆成本閘門。<b>驗一件事：🔔 換股通報還在不在</b>（README 自己標的到期日）</td></tr>
 <tr><td><b>2</b></td><td><b>⑥ 退場</b>：撤掉舊 ② ＋ 刪 <code>ui/tab_fund_grp_health.py</code></td><td>排 ⑦ 之後、⑧⑨ 之前，因為：(a) ⑥ 只有 <b>1 顆</b>雙軌閘門，拆完那一整塊逐檔健診就直接展開；(b) ⑥ <b>不擁有</b>任何別頁的指路目標 —— 刪它不會讓別頁的「去哪補」失效</td><td>⚠️ <b>先確認</b>：<code>ui/helpers/fund_grp_health/</code> 那個資料夾<b>不能跟著刪</b> —— ⑥ 與 ⑨ 都還在用它底下的模組</td></tr>
 <tr><td><b>3</b></td><td><b>⑧ 退場</b>：撤掉舊 ③ ＋ 處理 <code>ui/tab2_single_fund.py</code></td><td>排在 ⑨ 之前，因為 <b>⑧ 是 <code>render_metric_explainer</code> 兩個 import 端之一</b>，而白話解釋要先接進新頁才能刪舊端</td><td>⚠️ <b>前置</b>：投資試算要先接進 ⑧（§4），否則刪掉就沒了</td></tr>
-<tr><td><b>4</b></td><td><b>⑨ 退場</b>：撤掉舊 ④ ＋ 處理 <code>ui/tab3_portfolio.py</code></td><td><b>排最後，因為它最貴</b>：它同時是 <b>4 條指路的目標</b>（<code>pf_add</code>／<code>switch</code>／<code>pf_perf</code>／<code>pf_ledger</code>）、<b>3 塊灰態的解鎖條件</b>、以及 <code>render_metric_explainer</code> 另一個 import 端</td><td>4 條指路要同一批改掉，3 塊灰態要同一批接上</td></tr>
+<tr><td><b>4</b></td><td><b>⑨ 退場</b>：撤掉舊 ④ ＋ 處理 <code>ui/tab3_portfolio.py</code></td><td><b>排最後，因為它最貴</b>：它同時是 <b>4 條指路的目標</b>（<code>pf_add</code>／<code>switch</code>／<code>pf_perf</code>／<code>pf_ledger</code>）、<b>1 塊灰態的解鎖條件（不是 3 塊，見 §0）</b>、以及 <code>render_metric_explainer</code> 另一個 import 端</td><td>4 條指路要同一批改掉。⚠️ <b>灰態只解得掉換股顧問的一半</b> —— 組合績效要<b>自己蓋閘門</b>、交易帳本要<b>客戶先拍欄位</b>，<b>兩者都不會因為刪掉舊 ④ 而變好</b>。⛔ <b>不先把這兩塊接起來就撤舊 ④，等於把現在能用的帳本與績效拿掉、換兩塊灰的</b></td></tr>
 </table></div>
 
 <div class="card warn">
