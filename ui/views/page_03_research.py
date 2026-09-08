@@ -308,6 +308,7 @@ from services.fund_invest_calc import (
     ADR_OFFICIAL,
     BASIS_RECORDS,
     CCY_CONFLICT,
+    comparable_ccy,
     DEFAULT_AMOUNT_TWD,
     MAX_AMOUNT_TWD,
     MIN_AMOUNT_TWD,
@@ -1454,7 +1455,8 @@ def _declared_currency(rows: list[dict]) -> str:
     直接委派 `shared.data_quality.reconcile_row_currencies`（**不自己寫一份**）：
     本組實測 `['TWD','USD'] → ''`、`['USD','USD'] → 'USD'`、`[] → ''`、`['USD',''] → ''`。
     """
-    return reconcile_row_currencies([_r.get(DIVIDEND_COLS[4], "") for _r in rows])
+    return reconcile_row_currencies(
+        [comparable_ccy(_r.get(DIVIDEND_COLS[4], "")) for _r in rows])
 
 
 def _trace_rows(result: dict) -> list[dict]:
@@ -1761,7 +1763,7 @@ def _dividend_caption(rows: list[dict], fund_ccy: str) -> str:
     單一元素進去 ＝ 借它做 ISO 正規化（認不得就回 `""`），兩元素進去 ＝ 一致性判定。
     """
     _row = _declared_currency(rows)                       # 逐列一致才非空
-    _fund = reconcile_row_currencies([fund_ccy])          # 可辨識的 ISO 才非空
+    _fund = reconcile_row_currencies([comparable_ccy(fund_ccy)])  # 可辨識的 ISO 才非空
     _agreed = reconcile_row_currencies([_row, _fund])
     if _agreed:
         return f"{len(rows)} 筆 · 全部以 {_agreed} 計價 · 金額為原幣，未做任何換算"

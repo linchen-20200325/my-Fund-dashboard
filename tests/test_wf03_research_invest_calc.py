@@ -81,7 +81,9 @@ from services.health.dividend import _resolve_adr_with_fallback  # noqa: E402
 from shared.data_quality import reconcile_row_currencies  # noqa: E402
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.views.page_03_research import (  # noqa: E402
+    CCY_UNKNOWN,
     DEEP_DIVE_INVEST,
+    DEEP_DIVE_TABLES,
     INVEST_SUBMIT_LABEL,
     _ADR_SOURCE_LABELS,
     _INVEST_AMOUNT_KEY,
@@ -89,6 +91,9 @@ from ui.views.page_03_research import (  # noqa: E402
     _INVEST_FORM_KEY,
     _LABEL_INVEST_AMOUNT,
     _SK_INVEST_AMOUNT,
+    _declared_currency,
+    _dividend_caption,
+    _dividend_rows,
     _invest_basis_note,
     _invest_compare,
     _invest_note_for,
@@ -1345,3 +1350,75 @@ def test_none_of_the_three_payout_sources_speaks_our_internal_language(src, agre
     _hits = sorted({_w for _w in _INTERNAL_WORDS if _w in _line})
     assert not _hits, (
         f"來源 {src!r}（agree={agree}）的比較句出現內部語言：{_hits}\n{_line}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 第五輪｜同一頁上的**第二對**命名空間（總管放行的兩行）
+#
+# `_dividend_caption` 走 **L0 only**（`reconcile_row_currencies` → `normalize_iso_ccy`，
+# 看不懂中文別名），投資試算走 **L2→L0**（`comparable_ccy`）。於是一檔 `currency`
+# 欄寫中文「人民幣」的基金，同一個畫面上會**同時**出現：
+#
+#     【配息紀錄】2 筆 · 幣別未知或逐筆幣別不一致 …
+#     【投資試算】…最近一筆實際配息 0.0500 CNY／單位…
+#
+# **上面說不知道，下面斬釘截鐵印 CNY，還拿它做了換算。**
+# ⚠️ **與 B1 是同一個病的第二對**，藥方也同一帖：兩側都過 `comparable_ccy`。
+# ══════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("written", _ALL_CCY_WRITINGS)
+def test_the_caption_and_the_invest_block_agree_on_what_currency_this_fund_is(written):
+    """⭐ **機制測試**：同一個宣告，配息表那一句與投資試算那一格必須收成同一個字。
+
+    ⛔ 這一條**不看任何特定幣別**，所以它擋的是**整個類別** ——
+    下一個中文別名（「港幣」「日圓」…）不必再寫一條新測試。
+    """
+    _caption_side = reconcile_row_currencies([comparable_ccy(written)])
+    _invest_side = fund_currency({"currency": written})
+    assert _caption_side == _invest_side, (
+        f"宣告 {written!r}：配息表那一句收成 {_caption_side!r}、"
+        f"投資試算收成 {_invest_side!r} —— 同一個畫面、同一檔基金，兩句會互相矛盾。")
+
+
+def test_a_chinese_currency_never_makes_the_page_say_unknown_and_a_code_at_once():
+    """⭐ **畫面級**：中文計價幣別不得讓同一頁一邊說「不知道」、一邊印出代碼。
+
+    ⚠️ 這一條驗的是**畫面**，上一條驗的是**兩個函式的回傳值** —— 兩者都要：
+    上一條擋「邏輯寫錯」，這一條擋「邏輯對但沒接線」
+    （B3 就是後者：`_render_invest_calc` 從來沒拿到 `_blank`）。
+    """
+    _rows = [{"date": "2026/08/15", "amount": SENT_DIV, "currency": "人民幣"}]
+    _res = _FUND(currency="人民幣", dividends=_rows)
+    _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res, fx=SENT_FX)
+    _seg = _segments(_parts)
+    _caption = "\n".join(_seg.get(DEEP_DIVE_TABLES[1], []))
+    _invest = "\n".join(_seg.get(DEEP_DIVE_INVEST, []))
+    assert _caption, f"配息紀錄那一塊沒有畫出來：{list(_seg)}"
+    assert "CNY" in _invest, (
+        f"前提垮了 —— 投資試算沒有印出 CNY，這條測試就沒有在驗矛盾：\n{_invest}")
+    assert CCY_UNKNOWN not in _caption, (
+        f"同一個畫面：配息表說「{CCY_UNKNOWN}」，投資試算卻印 CNY 並拿它換算。\n"
+        f"【配息紀錄】{_caption}\n【投資試算】{_invest}\n"
+        "⛔ 兩句都是本頁印的（§1：錯誤的數字比沒有數字更危險）。")
+    assert "全部以 CNY 計價" in _caption, (
+        f"配息表沒有誠實宣告 CNY：\n{_caption}")
+
+
+@pytest.mark.parametrize("fund_ccy, div_ccy", [
+    ("人民幣", "USD"),      # 中文 vs ISO —— 過了 L2 之後才看得見的真衝突
+    ("美元", "TWD"),
+    ("TWD", "美元"),
+])
+def test_the_caption_still_flags_a_real_clash_after_the_alias_pass(fund_ccy, div_ccy):
+    """⛔ **反面守衛**：為了讓中文別名過關，不得把比對器變成永不擋。
+
+    `_dividend_caption` 對真衝突的既有處置是**指名道姓**（「⚠️ 資料疑義：逐筆配息宣告 X，
+    這檔基金的計價幣別卻是 Y」）。過了 L2 之後**那條路必須還在**。
+    """
+    _rows = _dividend_rows(_FUND(dividends=[
+        {"date": "2026/08/15", "amount": SENT_DIV, "currency": div_ccy}]))
+    _cap = _dividend_caption(_rows, fund_ccy)
+    assert "資料疑義" in _cap, (
+        f"基金 {fund_ccy!r} vs 逐筆 {div_ccy!r} 是**真的**幣別衝突，"
+        f"配息表卻沒有標成資料疑義：\n{_cap}")
+    assert "全部以" not in _cap, f"真衝突卻宣告了單一幣別：\n{_cap}"
