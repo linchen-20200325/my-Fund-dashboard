@@ -1613,12 +1613,50 @@ def test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe(
     不會被讀成任何一檔基金的績效或分數，而線框正是用它來指定這個欄位收什麼形狀的字。
     故本條**不釘它**，被測檔的 `_CODE_PLACEHOLDER` 就地寫了同一段理由。
     ⛔ 若客戶認為連 placeholder 都不該出現一個像真的代碼，改那個常數即可。
+
+    ## ⚠️ 2026-09-08：本條曾在**一顆 commit 之內悄悄失去深度區的視野**（獨立稽核抓到）
+
+    ~~舊寫法只渲染**一種**情境：``_all = _text(_render(applied=FAKE_QUERY))``。~~
+    「選定後展開」的 gate 上線之後，**那一種情境不再包含深度區的六格**
+    （沒有選定 → 深度區整塊不渲染），於是 :data:`_PINNED_FAKE_VALUES` 這 10 個字面值
+    **在深度區完全無人看守**；`search=[]` 的空狀態那一屏同樣不在視野內。
+
+    **稽核用同一顆突變在兩個 commit 上跑，證明的就是這件事**
+    （把 ``Sharpe 0.81`` / ``+12.4%`` / 線框基金名種進 `_render_deep_dive` 的渲染路徑）：
+
+    ===========================  ==========  ================================
+    commit                        本條結果    為什麼
+    ===========================  ==========  ================================
+    gate 上線**前**               **RED**     那一種情境會渲染深度區
+    gate 上線**後**（舊寫法）      **GREEN**   深度區沒被渲染 → 守衛看不見
+    ===========================  ==========  ================================
+
+    ⛔ **綠的理由從「掃過了、沒有」變成「沒去掃」** —— 而本 PR 的描述當時還拿它當保證。
+    **這正是憲法 §8.2.A.1 驗證段 ④ 記的失效模式：同一把尺只往外用、不往內用** ——
+    同一輪新寫的 :func:`test_no_block_still_explains_itself_with_this_pages_progress`
+    **已經**用了多情境迴圈，卻沒有回頭把同一個 pattern 套到本條上。
+
+    **現行：五種情境各掃一次**，`gate 前／後`、`有候選／沒候選`、`灰態／有真值`
+    四個維度都覆蓋得到。⛔ **不要為了跑快一點把情境砍回一種** ——
+    砍掉哪一種，那一屏的示意值就從那一刻起無人看守，**而且畫面上看不出來**。
     """
-    _all = _text(_render(applied=FAKE_QUERY))
-    for _fake in _PINNED_FAKE_VALUES:
-        assert _fake not in _all, (
-            f"畫面上出現了線框的示意值 {_fake!r} —— "
-            "那不是資料，是線框用來示範版面的假數字。")
+    # ⚠️ 五種情境的分工，逐條寫明（少一種就是少一屏的視野）：
+    #   1. 還沒搜尋            → 空狀態三要素那一屏
+    #   2. 有候選、還沒選定     → 結果卡 ＋ 深度區的 gate 空狀態
+    #   3. 沒候選（名錄回空）   → 搜尋結果的空狀態 ＋ 逃生門那一屏
+    #   4. 已選定、取數全敗     → 深度區六格的**灰態**
+    #   5. 已選定、取數有真值   → 深度區六格的**有值**路徑（`st.metric` 那一半）
+    for _kw in (dict(applied=None),
+                dict(applied=FAKE_QUERY),
+                dict(applied=FAKE_QUERY, search=[]),
+                dict(applied=FAKE_QUERY, selected=SELECTED_CODE),
+                dict(applied=FAKE_QUERY, selected=SELECTED_CODE,
+                     result=_RICH_RESULT())):
+        _all = _text(_render(**_kw))
+        for _fake in _PINNED_FAKE_VALUES:
+            assert _fake not in _all, (
+                f"（處境 {_kw}）畫面上出現了線框的示意值 {_fake!r} —— "
+                "那不是資料，是線框用來示範版面的假數字。\n" + _all)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -2865,8 +2903,30 @@ def test_the_results_block_lists_the_candidates_the_service_returned():
     assert FAKE_ROW_FULL[KEY_NAV] in _body, "有淨值的那一列沒有把淨值印出來。"
     assert FAKE_ROW_FULL[KEY_NAV_DATE] in _body, (
         "有淨值日的那一列沒有把日期印出來 —— 一個沒有日期的淨值無法判斷新不新。")
+    # ⚠️ **2026-09-08 補：`總代理` 這一欄原本零守衛**（獨立稽核 S2）——
+    #    整段刪掉是 GREEN，而 `來源`／`淨值日` 刪掉都會 RED。
+    #    **PR 描述當時宣稱「逐欄照抄」六欄，守衛只驗到五欄** ——
+    #    過度宣稱的是描述，不是實作，故補守衛而不是改描述。
+    #    ⛔ 它不是可有可無的欄位：境外基金**買哪一檔要看總代理**
+    #    （同一檔基金不同總代理的手續費與可買通路不同），這正是線框把它畫在卡上的理由。
+    assert FAKE_ROW_FULL[KEY_AGENT] in _body, (
+        "有總代理的那一列沒有把總代理印出來 —— 那是使用者要拿去查通路的欄位。")
     assert FAKE_ROW_FULL[KEY_SOURCE] in _body, (
         "沒有標出這一列是哪個來源給的（§2.2 血緣）。")
+    # 反向：上游**沒給**總代理的那一列，那個標籤**整個不准出現**。
+    # ⚠️ **判準是「那一列自己的說明行裡有沒有這三個字」，不是字串樣式比對** ——
+    #    初版寫 ``"總代理 ·" not in _body``，突變（空值也硬畫標籤）**沒有轉紅**：
+    #    實際輸出是 ``總代理  · ``（f-string 一個空白 ＋ join 一個空白，**兩個**），
+    #    樣式差一個空白就漏掉。**猜輸出長什麼樣 ＝ 猜；抓那一列來看 ＝ 驗。**
+    _lines = _segments(_render(applied=FAKE_QUERY)).get(BLOCK_RESULTS, [])
+    _sparse = [_p for _p in _lines
+               if _p.startswith("[caption] ") and FAKE_ROW_SPARSE[KEY_CODE] in _p]
+    assert _sparse, (
+        f"找不到沒有總代理那一列（{FAKE_ROW_SPARSE[KEY_CODE]}）的說明行 —— "
+        "本段反向斷言會對空氣生效。\n" + "\n".join(_lines))
+    assert "總代理" not in _sparse[0], (
+        "上游沒給總代理的那一列還是印出了「總代理」標籤 —— "
+        "上游沒給的欄位整段不畫，佔位會讓每一列看起來一樣完整。\n" + _sparse[0])
     # 順序：L2 回傳的順序就是畫面順序，不得重排（重排＝本頁自己發明了一套排名）
     _i_a = _body.index(FAKE_ROW_FULL[KEY_NAME])
     _i_b = _body.index(FAKE_ROW_SPARSE[KEY_NAME])
@@ -3027,6 +3087,53 @@ def test_the_deep_dive_does_not_fetch_until_a_fund_is_selected():
     assert _picked == [f"[fetch] {SELECTED_CODE}"], (
         f"選定之後的取數不是「剛好一次、且吃選定的那一檔」：{_picked}\n"
         "吃查詢字串而不是選定值 ＝ gate 是假的（畫面換了、資料沒換）。")
+
+
+def test_the_expanded_deep_dive_says_which_fund_it_is_showing():
+    """⭐ gate 打開之後，畫面上必須說出**現在展開的是哪一檔**。
+
+    ## 為什麼這是 §1 等級、不是文案潤飾
+
+    深度區六格的數字**全部是真的**，只是**不知道是誰的**。使用者從九張候選卡裡
+    點了其中一張、或換過關鍵字之後，下面那六格是哪一檔**完全看不出來** ——
+    `CLAUDE.md §1`：**錯誤的數字比沒有數字更危險**，而「對的數字掛錯基金」
+    就是錯誤的數字。被測檔 `_render_deep_dive()` 的註解自己就是這樣寫的。
+
+    ## ⚠️ 2026-09-08 補：這句話原本**零守衛**（獨立稽核 S1）
+
+    整行刪掉 → **GREEN**；`grep 目前展開 tests/` **0 命中**。
+    ⛔ 一句被程式碼註解與 PR 描述雙雙當成交付項的 §1 宣稱，**不能只靠自律**。
+
+    ## 判準刻意**不是**關鍵字黑名單
+
+    黑名單（「必須出現『目前展開』四個字」）只擋得住上一次那個寫法，換句話說就繞過。
+    本條釘的是**可驗證的內容**：深度區的 `st.caption` 裡要出現
+    (1) **選定的那一檔**的識別字、(2) 換一檔的**去處**（區塊名 ＋ 那顆按鈕的字）。
+
+    ⚠️ **只看 `[caption]` 行，不看整段** —— recorder 會把 `[fetch] <代碼>` 也記進
+    同一個單位，拿整段做 containment 會**恆真**（那條線根本不是畫給使用者看的）。
+    """
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE))
+    _body = _seg.get(BLOCK_DEEP, [])
+    assert _body, f"深度區那一段不見了。現有單位：{list(_seg)}"
+    _caps = [_p for _p in _body if _p.startswith("[caption] ")]
+    assert _caps, (
+        "深度區一句 `st.caption` 都沒有 —— 「現在展開的是哪一檔」沒有落點。\n"
+        + "\n".join(_body))
+    _named = [_c for _c in _caps if SELECTED_CODE in _c]
+    assert _named, (
+        f"深度區沒有任何一句說明文字提到選定的那一檔（{SELECTED_CODE!r}）——\n"
+        "六格的數字都是真的，只是使用者不知道是誰的（§1）。\n"
+        + "\n".join(_caps))
+    # 它同時要給出「換一檔」的去處，否則使用者只知道是誰、不知道怎麼換
+    assert any(BLOCK_RESULTS in _c and SELECT_LABEL in _c for _c in _named), (
+        f"說出了是哪一檔，卻沒說怎麼換 —— 應指回「{BLOCK_RESULTS}」的"
+        f"「{SELECT_LABEL}」。\n" + "\n".join(_named))
+    # 反向：它講的必須是**選定值**，不是查詢字串（兩者在本檔刻意不相等）
+    assert not any(FAKE_QUERY["term"] in _c and SELECTED_CODE not in _c
+                   for _c in _caps), (
+        "深度區的說明文字報的是**查詢字串**而不是選定的那一檔 —— "
+        "那會讓使用者以為看到的是他打的那一串。\n" + "\n".join(_caps))
 
 
 def test_the_locked_deep_dive_says_how_to_unlock_it():

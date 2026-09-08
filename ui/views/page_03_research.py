@@ -922,6 +922,20 @@ def _render_results() -> None:
     ⚠️ **空清單不等於「查無此基金」** —— L1 把「名錄裡真的沒有」與「三個來源全掛」
        都回成 `[]`，本頁分不出來，所以空狀態照抄
        `services.fund_search.EMPTY_MEANS_UNKNOWN`（見 :data:`_RESULTS_EMPTY_MISSING`）。
+
+    ⛔ **本函式每一次 render 都會呼叫一次 `search_funds()` —— 這是本頁的設計選擇，
+       不是純粹繼承自上游的性質**（2026-09-08 獨立稽核 M2）。
+       **舊 ③ 不是這樣**：`ui/helpers/fund_research/code_finder.py::_search` 只在
+       `if do_search and keyword.strip():` 之內打 L1，結果存進
+       `st.session_state["tdcc_results"]`，之後的 rerun 讀 session。
+       而 `app.py` 用 `st.tabs`（**一次 run 渲染全部分頁**）—— 所以使用者只要送出過一次
+       「TDCC 名錄命不中」的關鍵字，此後 **App 裡任何一次 widget 互動都會再送一次
+       未快取的 FundClear 請求**（`timeout=8`），而那正是他最會反覆操作的那一屏。
+       ⚠️ **完整登記（含 L1 端的實測與為什麼正解不在這裡）見
+       `services/fund_search.py` 的 `GAP-SEARCH-CACHE-1`** —— 這裡只放指標，
+       不抄第二份（§2.1）。
+       ⛔ **不要在本頁用 `@st.cache_data` 把它包起來** —— 那是憲法 §8.2.A.1
+       `EX-UICACHE-1` 升級條件 (1) 明禁的「UI 層快取外部 HTTP」。**家在 L1。**
     """
     _query = _applied_query() or {}
     _rows = search_funds(str(_query.get("term") or ""))
