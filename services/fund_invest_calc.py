@@ -324,6 +324,13 @@ def estimate_monthly_income(
         _out["income_blocked"] = NO_INCOME_BASIS
         return _out
 
+    # ⚠️ **不變式（呼叫端靠它，改動前先讀）**：走到這一行時 `_fx > 0` 已經確定
+    #    （上面那道 :data:`NO_FX` 閘門擋掉了 `None` 與 `<= 0`），而
+    #    `monthly_dividend_from_records` 只在 `fx > 0` 時才填 `mon_div_twd`
+    #    —— 所以 `income_blocked == ""` ⇒ `monthly_twd is not None`。
+    # ⛔ 若哪天有人放寬那道閘門，這裡會變成「宣告成功卻沒有金額」，
+    #    畫面上會是 `None` 進格式化字串**當場炸掉** —— 那是**對的**（§1：
+    #    契約破了要炸給 `safe_section()` 畫紅框），**不要**在這裡補一個 `or 0`。
     _monthly_twd = safe_float(_mdiv.get("mon_div_twd"))
     _out.update({
         "monthly_ccy": safe_float(_mdiv.get("mon_div_ccy")),
