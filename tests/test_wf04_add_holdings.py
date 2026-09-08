@@ -468,11 +468,31 @@ def test_the_principal_pointer_is_not_a_dead_end():
     - `pf_add`（舊 ④「➕ 加入與管理基金」）**填不了本金** —— 實測
       `ui/tab3_portfolio.py` 對 `invest_twd` **只有** `invest_twd: 0` 的字面值
       （新條目）與原樣搬運既有值，**沒有任何一處寫使用者輸入的金額**。
-    - `pf_policy_admin` 走得通，但要**離開 App** 去改 Sheet 再回來讀。
+    - `pf_policy_admin` ~~走得通，但要**離開 App** 去改 Sheet 再回來讀。~~
+      → **第三輪更正（R3）**：只在 OAuth 設定下成立；SA 設定下
+      `policy_admin_section.py::form_policy_upsert` **有 in-app 的
+      `number_input("invest_twd")`**。
 
     → 兩處統一指 `pf_ledger`（舊 ④「💼 持倉戰情（T7 帳本）」），因為那裡的
-    `🟨 淨投資金額 (NT)` 是**全站唯一「使用者打一個金額進去、它就落在持倉清單上」**
-    的地方，而且**無 OAuth／schema 條件**。
+    `🟨 淨投資金額 (NT)` ~~是**全站唯一「使用者打一個金額進去、它就落在持倉清單上」**
+    的地方，而且**無 OAuth／schema 條件**。~~
+    → ⛔ **2026-09-08 第五輪就地更正（有意識的更正，不是漏刪 · 依第四輪稽核 N2／R-B）**：
+    **兩個半句都過強，而且這是同一句話的第三處。**
+    · 「**全站唯一**」不成立：T7 的 A/B/C 落帳（`t7a_amt_new` / `t7a_amt__{pk}` 等）
+      經 `ui/helpers/io/data_registry.py::_sync_invest_twd_from_ledgers` **同樣會寫**
+      `portfolio_funds[i]["invest_twd"]`。⚠️ **它們也住在 `pf_ledger` 底下
+      ⇒ 指路的結論不變**，變的是這句話的射程。
+    · 「**無 OAuth／schema 條件**」就 OAuth／schema 而言為真，
+      **但漏掉真正會咬人的 usable-funds 閘門** —— 那正是第三輪稽核擋下本頁的原因。
+    **現行讀法**：`pf_ledger` 是**指路的正確答案**，但**不是「全站唯一」**。
+
+    ⚠️ **這一處是怎麼被漏掉的，記一筆** —— 同一句話全 repo 共 **3 處**：
+    `page_04_portfolio.py` 的就地註解（第三輪已劃線）、同檔 `_render_policy` 四格表
+    （第五輪劃線）、**以及這裡（第五輪才補）**。
+    **第三輪修第 1 處時把「修了那一支、漏了隔壁這一支」寫成教訓，
+    第四輪漏了第 2 處，第五輪又漏了第 3 處 —— 同一個教訓連續發作三次。**
+    → **往後改這種跨檔重複的宣稱，一律先 `grep` 列出全部命中、再逐一劃掉，
+    ⛔ 不要靠讀一遍。**
 
     ⚠️ **本條同時是 `pf_ledger` 的逐字相等鎖。** `P-SECLABEL-1`（見
     `EXCEPTIONS.md §8.3.P`）記著：既有漂移鎖走 `_want in _src`（**子字串**），
