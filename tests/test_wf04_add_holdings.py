@@ -105,7 +105,17 @@ def test_the_code_is_upper_cased_like_the_old_entry_did():
     # ⭐ **也驗 `parse_lines` 這一層** —— 少了這一行，「把 `parse_lines` 的正規化
     #    拿掉」這顆突變**活得下來**（實測：`passed=18 failed=0`），因為下游
     #    `new_holding()` 又走了一次 `entry_key`。那不是安全網，那是重複實作。
-    #    現行 `parse_lines` 已改為委派 `entry_key`，本行釘住那個委派。
+    #    ⚠️ ~~現行 `parse_lines` 已改為委派 `entry_key`，本行釘住那個委派。~~
+    #    → **2026-09-08 更正：這句話比它撐得起的強**（**有意識的更正，不是漏刪** ·
+    #      決策者：**AI 總管**，依據獨立稽核指出後本組自行突變複驗）。
+    #      **實測**：把 `parse_lines` 裡的 `entry_key(...)` 換成一份**行為完全相同的
+    #      inline 複製**（`.strip().upper()` / `.strip()`），**本檔 22 條全綠**。
+    #      也就是說本行釘住的是**行為**，**不是**「有沒有真的委派」——
+    #      它擋得住「正規化被拿掉」，擋不住「正規化被複製成第二份」。
+    #      **舊表述的用意仍然成立**（這一行確實補住了第一輪那顆存活的突變，
+    #      而那顆突變正是「拿掉 `parse_lines` 的正規化」）；**被權衡掉的是它的強度宣稱**。
+    #    ⛔ 要真的釘住委派，需要 AST 驗 `parse_lines` 內確實呼叫 `entry_key`。
+    #      **本批沒有加那一條**（它會擴大本批射程），據實登記為缺口。
     assert parse_lines(" abc , p1 ")[0] == [("ABC", "p1")]
 
 
@@ -214,6 +224,55 @@ def test_parse_lines_reads_only_the_first_comma():
     assert _entries == [("0050", "保單甲,附約")]
 
 
+def test_a_non_list_existing_blows_up_instead_of_being_shredded():
+    """⭐ **§1 Fail Loud：`existing` 型別不對就當場炸，不准安靜地拆掉它。**
+
+    ## 這條擋的是一個「畫面正常、資料已壞」的事故（2026-09-08 獨立稽核指出）
+
+    :func:`plan_new_holdings` 的 `merged` 會被
+    `page_04_portfolio._render_add_fund` **直接寫回持倉清單** ——
+    它是新五頁**唯一**會寫那個鍵的地方。而在補護欄之前那裡只有
+    ``list(existing or [])``，於是傳進來一個 dict 會變成**它的 key 清單**、
+    傳進來一個字串會變成**單一字元的清單**，然後被原樣寫回去。
+    下游 `_holdings()` / :func:`pending_rows` 的 ``isinstance(_f, dict)``
+    會把那些垃圾**全部濾掉** —— **畫面看起來一切正常，清單已經被換掉了。**
+
+    ⛔ **正解是 raise，不是 `or []` / `if isinstance(...) else []`**：
+       後者會把「呼叫端傳錯東西」這個 bug 靜靜吞掉，症狀變成**使用者的持倉憑空消失**，
+       而那是 `CLAUDE.md §1` 逐字點名的「掩蓋問題，不是解決問題」。
+    ⚠️ 兄弟函式 :func:`pending_rows` 用 ``return []`` 是**唯讀**路徑（最多少畫幾列），
+       本函式是**寫入**路徑 —— 兩者代價不同級，所以處置刻意不同。
+
+    ⚠️ **本條驗的是「有沒有炸」，不是訊息長什麼樣**：訊息措辭另受
+    :func:`test_the_new_wording_carries_no_internal_progress_language` 約束
+    （它禁止在本檔的活字串裡出現內部語言），比對字面值會讓兩條互相打架。
+    """
+    # `None` 與 list 一律照舊放行 —— session 鍵還沒建立時 `.get()` 就是回 `None`。
+    assert plan_new_holdings("0050", None)["added"] == [("0050", "")]
+    assert plan_new_holdings("0050", [])["added"] == [("0050", "")]
+
+    # ⛔ 非 list 一律 raise。**四種形狀都測**，因為它們壞掉的方式不一樣：
+    #    dict → 拆成 key；str → 拆成單一字元；int → `list()` 直接 TypeError
+    #    （那一種本來就會炸，但訊息完全看不出是誰傳錯的）；tuple → 悄悄被接受。
+    for _bad in ({"0050": 1}, "0050", 42, ("0050",)):
+        with pytest.raises(TypeError):
+            plan_new_holdings("0056", _bad)
+
+    # ⭐ **最承重的一條：dict 不得被拆成 key 寫進 `merged`。**
+    #    這是突變測試真正會抓到的那一顆 —— 把護欄拿掉之後，下面這行不會 raise，
+    #    而 `merged` 會變成 `["0050", "0056"]`（兩個**字串**，不是 dict）。
+    try:
+        _m = plan_new_holdings("XXXX", {"0050": 1, "0056": 2})["merged"]
+    except TypeError:
+        pass                                    # 期望路徑
+    else:                                       # pragma: no cover - 護欄失效才會到
+        raise AssertionError(
+            "dict 沒有被擋下來，而且已經被拆成："
+            f"{[_x for _x in _m if not isinstance(_x, dict)]!r} —— "
+            "這幾筆會被寫回持倉清單，然後被下游的 isinstance 過濾**整個吃掉**："
+            "畫面上完全看不出來，資料已經壞了。")
+
+
 # ══════════════════════════════════════════════════════════════════
 # 2) 指路 —— AST，**不需要 streamlit**
 # ══════════════════════════════════════════════════════════════════
@@ -280,6 +339,154 @@ def test_the_load_pointer_is_not_a_dead_end():
         "（`key=\"btn_pf_load_all_top\"`）—— 使用者到了那一區會找不到東西可按。\n"
         "⛔ 若它真的搬走了，正解是改 `story_nav._SECTION_LABELS['pf_load']` 指到新家，"
         "不是把本條拿掉。")
+
+
+def _button_keys(tree: ast.AST) -> set[str]:
+    """檔內所有 `st.button(..., key=…)` 的 key。
+
+    ⚠️ **f-string 的 key 取它的常數前綴**（`f"del_pf_{i}"` → `"del_pf_"`）——
+    逐列產生的按鈕 key 一定帶變數，只收 `ast.Constant` 會**一顆都收不到**。
+    """
+    _out: set[str] = set()
+    for _n in ast.walk(tree):
+        if not (isinstance(_n, ast.Call)
+                and getattr(_n.func, "attr", None) == "button"):
+            continue
+        for _kw in _n.keywords:
+            if _kw.arg != "key":
+                continue
+            if isinstance(_kw.value, ast.Constant):
+                _out.add(str(_kw.value.value))
+            elif isinstance(_kw.value, ast.JoinedStr):
+                _out.add("".join(_v.value for _v in _kw.value.values
+                                 if isinstance(_v, ast.Constant)))
+    return _out
+
+
+def test_the_policy_admin_pointer_is_not_a_dead_end():
+    """⭐ **狀態列三格指去的「保單管理」，真的按得到那兩件事** —— 去那個檔案裡確認。
+
+    ## 這條與 `test_story_nav.py` 的漂移鎖**不重複**（同 `pf_load` 的雙鎖形狀）
+
+    那一條驗的是「那個 expander 標題還在不在」——**字還在，不代表那裡還做得到事**。
+    本條驗後者，而且**逐格對應到它真正要解決的那個鍵**：
+
+    ===================== ====================================================
+    ⑨ 狀態列的哪一格       它指過去要按的東西
+    ===================== ====================================================
+    📒 目前帳本            `key="btn_pick_my_sheet"`（✅ 使用此 Sheet 作為投組
+                          資料庫）→ 寫 `policy_sheet_id`
+    🕐 上次讀回            `key="t3_io_panel_load_run"`（📥 立即全部讀回）
+                          → 寫 `t3_last_load_at`
+    💰 總投入              同上那顆讀回鈕（金額在雲端 Sheet 上填，讀回才會進來）
+    ===================== ====================================================
+
+    ⚠️ **還要驗「舊 ④ 真的會渲染它」**：那 800 行被 WP-D 抽成獨立模組，
+    舊 ④ 只剩一行委派。**模組存在 ≠ 使用者到得了** —— 若舊 ④ 不再呼叫它，
+    這三格就全部變成死指路，而漂移鎖（比字串）**完全看不出來**。
+
+    ⛔ **紅了要做什麼**：那個收合區若真的搬家了，正解是改
+    `story_nav._SECTION_LABELS['pf_policy_admin']` 指到新家，**不是把本條拿掉**。
+    """
+    from ui.helpers.story_nav import where_to_find
+
+    from ui.helpers.story_nav import section_label
+
+    _where = where_to_find("pf_policy_admin")
+    _mod = ROOT / "ui" / "helpers" / "portfolio" / "policy_admin_section.py"
+    _tree = ast.parse(_mod.read_text(encoding="utf-8"))
+
+    # ⭐ **SSOT 的字必須和那個 expander 的標題「逐字相等」，不是「包含」。**
+    # ⚠️ 這一條是突變測試逼出來的，不是設計出來的：`test_story_nav.py` 的漂移鎖
+    #    走的是 `_want in _src`（**子字串**），所以把 SSOT 從
+    #    「📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單」**截短**成
+    #    「📋 保單管理」**照樣全綠** —— 實測那顆突變 10 passed。
+    #    截短的指路會把使用者送去找一個畫面上不存在的標題，而漂移鎖看不見。
+    #    → 本條用**相等**補上那個缺口（子字串鎖仍然保留，兩條方向不同：
+    #      那條擋「目的地改字」，本條擋「SSOT 自己被改鬆」）。
+    _labels = [_n.args[0].value for _n in ast.walk(_tree)
+               if isinstance(_n, ast.Call)
+               and getattr(_n.func, "attr", None) == "expander"
+               and _n.args and isinstance(_n.args[0], ast.Constant)]
+    assert len(_labels) == 1, (
+        f"{_mod.name} 現在有 {len(_labels)} 個常數標題的 expander：{_labels!r} —— "
+        "本條原本靠「只有一個」來認出那一區。多出來的話要改成具名定位，"
+        "**不是**把這條斷言拿掉。")
+    assert section_label("pf_policy_admin") == _labels[0], (
+        "`_SECTION_LABELS['pf_policy_admin']` 與那個 expander 的標題不再逐字相同：\n"
+        f"  SSOT     = {section_label('pf_policy_admin')!r}\n"
+        f"  畫面實際 = {_labels[0]!r}\n"
+        "⛔ 指路會指到一個使用者在畫面上找不到的標題。")
+
+    # (a) 兩顆鈕都在。
+    _keys = _button_keys(_tree)
+    for _k, _what in (("btn_pick_my_sheet", "換一本帳本"),
+                      ("t3_io_panel_load_run", "從雲端全部讀回")):
+        assert _k in _keys, (
+            f"{_mod.name} 裡找不到「{_what}」那顆鈕（`key=\"{_k}\"`）—— "
+            f"⑨ 的狀態列把使用者指到 {_where}，他到了那裡按不到東西。")
+
+    # (b) 兩顆鈕**真的寫到 ⑨ 讀的那兩個鍵**（不是只長得像）。
+    #     ⚠️ 這兩個鍵正是 `page_04_portfolio._book_title()` 與 `_status_tiles()`
+    #        讀的東西 —— 沒有這一半，指路只是「那裡有一顆鈕」而已。
+    _written = {_t.slice.value
+                for _n in ast.walk(_tree) if isinstance(_n, ast.Assign)
+                for _t in _n.targets
+                if isinstance(_t, ast.Subscript)
+                and "session_state" in ast.dump(_t.value)
+                and isinstance(_t.slice, ast.Constant)
+                and isinstance(_t.slice.value, str)}
+    for _key in ("policy_sheet_id", "t3_last_load_at"):
+        assert _key in _written, (
+            f"{_mod.name} 沒有寫 `{_key}` —— ⑨ 狀態列讀的就是這個鍵，"
+            f"指使用者去 {_where} 等於叫他做一件不會改變畫面的事。")
+
+    # (c) 舊 ④ 真的會渲染這一支（否則使用者根本到不了）。
+    _old = ROOT / "ui" / "tab3_portfolio.py"
+    _old_tree = ast.parse(_old.read_text(encoding="utf-8"))
+    _names = {_a.asname or _a.name
+              for _n in ast.walk(_old_tree) if isinstance(_n, ast.ImportFrom)
+              for _a in _n.names if _a.name == "render_policy_admin_section"}
+    assert _names, (
+        f"{_old.name} 沒有 import `render_policy_admin_section` —— "
+        f"⑨ 把使用者指到 {_where}，但舊 ④ 已經不渲染那一區了。")
+    assert [_n.lineno for _n in ast.walk(_old_tree)
+            if isinstance(_n, ast.Call)
+            and getattr(_n.func, "id", None) in _names], (
+        f"{_old.name} import 了卻沒有呼叫 `render_policy_admin_section` —— 死指路。")
+
+
+def test_the_delete_pointer_is_not_a_dead_end():
+    """⭐ **失敗卡說「要刪只能到舊 ④」，那裡就真的要刪得掉。**
+
+    本頁的失敗卡（:func:`_render_pending_notice`）逐字告訴使用者：這一頁改不了、
+    也刪不掉，要移掉錯的那一筆只能到 `where_to_find('pf_add')` 用該列的 🗑️。
+    **那句話是本批寫的，所以本批要為它負責。**
+
+    ⚠️ 驗的是**那顆鈕真的會刪**（`portfolio_funds.pop(...)`），不是「有一顆 🗑️」——
+    一顆不會刪東西的垃圾桶圖示，比不提還糟。
+
+    ⚠️ **key 是 f-string**（`f"del_pf_{i}"`，逐列產生），所以走
+    :func:`_button_keys` 取常數前綴；只收 `ast.Constant` 會**一顆都收不到**。
+
+    ⛔ **紅了要做什麼**：舊 ④ 若把刪除搬走了，正解是改失敗卡那句指路指到新家；
+       若是**整個不見了**（舊 ④ 被拔），那代表全站再也沒有地方能刪掉一筆加錯的標的
+       —— 那是**必須先解決的斷點**，不是一條可以刪掉的測試。
+    """
+    _old = ROOT / "ui" / "tab3_portfolio.py"
+    _tree = ast.parse(_old.read_text(encoding="utf-8"))
+
+    assert "del_pf_" in _button_keys(_tree), (
+        f"{_old.name} 裡找不到逐列的刪除鈕（`key=f\"del_pf_{{i}}\"`）—— "
+        "而本頁的失敗卡告訴使用者「要刪只能去那裡」。")
+
+    _pops = [ast.unparse(_n) for _n in ast.walk(_tree)
+             if isinstance(_n, ast.Call)
+             and getattr(_n.func, "attr", None) == "pop"
+             and "portfolio_funds" in ast.unparse(_n)]
+    assert _pops, (
+        f"{_old.name} 有刪除鈕、卻沒有任何 `portfolio_funds.pop(...)` —— "
+        "那顆 🗑️ 不會真的刪掉東西，而本頁正把使用者指過去。")
 
 
 def test_the_empty_state_no_longer_sends_people_to_the_old_add_block():

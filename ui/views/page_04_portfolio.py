@@ -773,8 +773,13 @@ _SK_ADD_RESULT: str = "v04_portfolio_add_result"
 #: ⭐ **本區塊的已知落差登記**（`CLAUDE.md §-2` 規則 6：不假裝做完了）。
 #: 寫成常數而不是只寫在註解裡，是為了讓它**被測試讀得到**、不會在下一輪被靜靜刪掉。
 #: ⛔ **這不是畫面文案，不會渲染** —— 它是給下一個人看的登記。
+#: ⚠️ **2026-09-08：由「兩件」增為「三件」**（第 (3) 條由獨立稽核指出，本批補登）。
+#: 計數隨內容同步、**刻意不加刪除線** —— 依 `CLAUDE.md §-2.A`，
+#: 「舊條文加刪除線」的慣例針對**被權衡掉的條文與政策**，
+#: **不含**必須與內容保持一致的計數（旁邊留一個劃掉的「兩件」只會讓記錄自相矛盾）。
+#: 條文本身**一條未刪、一條未改**，只多了第 (3) 條。
 ADD_FUND_SCOPE_NOTE: str = (
-    "本批只做「把標的寫進持倉清單」。兩件**沒有**做、而且是實測後決定不做的："
+    "本批只做「把標的寫進持倉清單」。三件**沒有**做、而且是實測後決定不做的："
     "(1) 就地的載入鈕 —— 實測把 `ui.helpers.portfolio.load` 接進本頁，"
     "零寫入守衛的靜態閉包會從 17 個模組長到 63 個、未被按鈕擋住的寫入動作從 1 個"
     "變成 126 個（`repositories/fund/nav_metrics.py` 真的會 `mkdir` ＋ `write_text` "
@@ -783,6 +788,12 @@ ADD_FUND_SCOPE_NOTE: str = (
     "(2) 寫回 Google Sheet —— 新五頁目前完全沒有雲端寫入面"
     "（`ui/views/page_05_settings.py` 的保單管理橋接是 `sheet_client=None`，"
     "掛在它底下那一整支寫入是死碼），所以這裡不做，也**不在畫面上承諾**會存回雲端。"
+    "(3) 修改與刪除 —— 本頁只能「加」。加錯的那一筆**在新五頁裡改不掉也刪不掉**"
+    "（實測：`ui/views/**` 對 `portfolio_funds` 只有本頁那一處指派，"
+    "`pop` / `remove` / `= []` 一個都沒有；全站唯一的刪除鈕在舊 ④ "
+    "`ui/tab3_portfolio.py` 的 `key=\"del_pf_{i}\"` → `portfolio_funds.pop(i)`）。"
+    "**新增刪除路徑屬新功能、要走客戶那條線，不在本批**；本批只負責讓畫面"
+    "**停止承諾一件做不到的事**（見 `_render_pending_notice` 失敗卡的 footer）。"
 )
 
 # ── ④ 配息月曆：Checkbox Gate（客戶 2026-09-07 決定 ④）─────────────────────
@@ -1701,20 +1712,35 @@ def _status_tiles() -> list[dict[str, Any]]:
         {"label": STATUS_BOOK_LABEL,
          "value": _book or None,
          "missing": "還沒選定要用哪一本 Google Sheet 當投組資料庫",
-         "where": where_to_find("pf_add")},
+         # 「✅ 使用此 Sheet 作為投組資料庫」那顆鈕就在該收合區裡，按下去寫的正是
+         # `policy_sheet_id` —— 也就是本格 :func:`_book_title` 讀的那個鍵。
+         "where": where_to_find("pf_policy_admin")},
         {"label": STATUS_POLICY_LABEL,
          # 一張保單都認不出來 ≠ 沒有保單：多半是這些標的還沒帶保單編號。
          "value": f"{len(_pids)} 張 / {len(_all)} 檔" if _pids else None,
-         "missing": f"目前 {len(_all)} 檔標的都沒有帶保單編號，分不出屬於哪幾張保單",
-         "where": where_to_find("pf_add")},
+         # ⚠️ **射程講清楚，不要讓使用者照著做卻沒效**：下面那格只套用到**之後**
+         #    加入的那幾行；已經在清單裡的那幾筆改不到（去重鍵是
+         #    `entry_key(code, policy_id)` 複合鍵，同一檔基金填上保單編號再送一次
+         #    會**多出一筆**，不是把舊的那筆補上）。已列入的要到保單表改再讀回。
+         "missing": f"目前 {len(_all)} 檔標的都沒有帶保單編號，分不出屬於哪幾張保單"
+                    "　—— 下面那格只套用到之後加入的；已經在清單裡的要到保單表改再讀回",
+         "where": f"本頁下面的「{ADD_FUND_HEADING}」的「{_LABEL_ADD_POLICY_ID}」",
+         },
         {"label": STATUS_LOADED_AT_LABEL,
          "value": _last or None,
          "missing": "這次進站後還沒有從雲端讀回過（重開瀏覽器就會歸零，不代表從來沒讀過）",
-         "where": where_to_find("pf_add")},
+         # 「📥 立即全部讀回」那顆鈕就在該收合區裡，按下去寫的正是 `t3_last_load_at`
+         # —— 也就是本格讀的那個鍵。
+         "where": where_to_find("pf_policy_admin")},
         {"label": STATUS_INVESTED_LABEL,
          "value": fmt_twd(_sum) if _n_priced else None,
-         "missing": "已載入的標的都沒有填投入金額，加不出總投入",
-         "where": where_to_find("pf_add")},
+         # ⚠️ **金額的真相源是保單表，不是這一頁**（`ui/helpers/portfolio/add_entry.py`
+         #    的 :data:`NEW_ENTRY_INVEST_TWD` 就地註解：「在這裡再開一個輸入格會讓
+         #    同一個數字有兩個出處」）。所以這一格的下一步是「到保單表填，再讀回」，
+         #    而讀回那顆鈕就在下面指的那個收合區裡。
+         "missing": "已載入的標的都沒有填投入金額，加不出總投入"
+                    "　—— 金額來自保單表的 invest_twd 欄，在雲端 Sheet 上填好後讀回",
+         "where": where_to_find("pf_policy_admin")},
     ]
 
 
@@ -1945,8 +1971,33 @@ def _render_pending_notice() -> None:
              for _f in _failed[:_FAILED_DETAIL_LIMIT]]
             + ([f"（另有 {len(_failed) - _FAILED_DETAIL_LIMIT} 檔，原因同上面那幾種）"]
                if len(_failed) > _FAILED_DETAIL_LIMIT else []),
-            footer="再按一次載入不會有不同結果 —— 先確認代碼有沒有打錯，"
-                   "或這一檔在來源網站上還在不在。")
+            # ⛔ **2026-09-08：舊文案整句退場（有意識的更正，不是漏刪 · 依據：獨立稽核）**
+            #    ~~"再按一次載入不會有不同結果 —— 先確認代碼有沒有打錯，"~~
+            #    ~~"或這一檔在來源網站上還在不在。"~~
+            #    **舊文案的用意仍然成立**（「別再按了、去看看是不是代碼的問題」這個
+            #    方向沒有錯，而且前半句「再按一次不會有不同結果」今天依然為真）。
+            #    **被推翻的是它的前提**：它叫使用者去「確認代碼有沒有打錯」，
+            #    暗示打錯了就能改 —— 而**新五頁沒有任何修改或刪除路徑**
+            #    （實測：`ui/views/**` 對 `portfolio_funds` 只有本頁那一處指派，
+            #    `pop` / `remove` / `= []` 一個都沒有；唯一的 🗑️ 在舊 ④
+            #    `ui/tab3_portfolio.py` 的 `key="del_pf_{i}"`）。
+            #    也就是說：**打錯的那一筆會永遠留在清單裡**，而我們卻叫他去修它。
+            #    那是 §1 的鏡像違規 —— 承諾一件做不到的事，比不講更糟。
+            # ⚠️ 指路走 `where_to_find("pf_add")` SSOT，**不手抄**「加入與管理基金」。
+            #    那個 key 指的是舊 ④ 的區塊，而客戶已拍板退場順序（⑦→⑥→⑧→⑨）——
+            #    **舊 ④ 一拔這句就要跟著改**，處置與同頁 `pf_load` 那一句完全同型
+            #    （接線鎖：`tests/test_wf04_add_holdings.py::`
+            #    `test_the_delete_pointer_is_not_a_dead_end`，AST 驗那顆 🗑️ 真的
+            #    會 `portfolio_funds.pop(...)`，不是只比字串）。
+            # ⚠️ **粗體用 `<b>`，不是 `**`** —— `footer` 是被直接塞進
+            #    `business_alert()` 那個 `unsafe_allow_html=True` 的 `<div>` 裡的
+            #    （見 `ui/helpers/render_state.py`），HTML 區塊裡的 markdown 語法
+            #    **不會**被解析，`**…**` 會原樣印出兩顆星。
+            #    這正是本函式上方那條既有規則 1 講的同一件事。
+            footer=("再按一次載入不會有不同結果。<b>這一頁還不能改代碼、也不能把已經"
+                    "加進去的那一筆刪掉</b> —— 要移掉錯的那一筆，目前只能到 "
+                    f"{where_to_find('pf_add')} 用該列的 🗑️。"
+                    "代碼沒打錯的話，就是這一檔在來源網站上已經查不到了。"))
 
 
 def _render_add_fund() -> None:
@@ -2043,11 +2094,18 @@ def _render_add_result(result: dict[str, Any]) -> None:
                    f"{'、'.join(_skipped)}")
     if _invalid:
         # 讀不懂 ＝ 使用者的輸入有問題，不是系統故障 → ⬜ 灰態 ＋ 怎麼改。
+        # ⚠️ **「去哪補」指的是正上方那一格，不是別的分頁**：本函式在
+        #    :func:`_render_add_fund` 的表單**之後**才渲染，所以那格就在畫面上方，
+        #    使用者不必換頁、不必捲動到別的區塊 —— 改完再按一次「加入」就好。
+        #    走 :data:`_LABEL_ADD_CODES` 這個既有常數，**不手抄欄位名**
+        #    （手抄的那一份會在欄位改名時變成死指路，本 repo 同型 bug 已發作三次）。
         not_ready(f"有 {len(_invalid)} 行讀不出基金代碼，沒有加進去："
                   + "、".join(f"「{_ln}」" for _ln in _invalid[:_INVALID_DETAIL_LIMIT])
-                  + "　—— 每一行要以基金代碼開頭，逗號後面才是保單編號")
+                  + "　—— 每一行要以基金代碼開頭，逗號後面才是保單編號",
+                  where=f"上面的「{_LABEL_ADD_CODES}」")
     if not (_added or _skipped or _invalid):
-        not_ready("上一次送出時什麼都沒填 —— 至少要有一行基金代碼")
+        not_ready("上一次送出時什麼都沒填 —— 至少要有一行基金代碼",
+                  where=f"上面的「{_LABEL_ADD_CODES}」")
 
 
 # ══════════════════════════════════════════════════════════════════════════

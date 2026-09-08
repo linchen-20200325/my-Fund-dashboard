@@ -279,6 +279,22 @@ _SECTION_LABELS: dict[str, str] = {
     #    —— 那一條會去 `ui/tab3_portfolio.py` 裡確認 `batch_load_unloaded_funds`
     #    真的被呼叫，所以它不是「字串出現在檔案裡」那種弱鎖。
     "pf_load": "🗂️ 保單分組視圖",
+    # ④ 頁內既有的「保單管理」收合區（`ui/helpers/portfolio/policy_admin_section.py`
+    # 的 `st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單", …)`）。
+    # ⭐ **它是目前全站唯一按得到「換一本帳本」與「從雲端全部讀回」的地方** ——
+    #    「✅ 使用此 Sheet 作為投組資料庫」寫 `policy_sheet_id`（＝⑨ 狀態列「📒 目前帳本」
+    #    讀的那個鍵），「📥 立即全部讀回」寫 `t3_last_load_at`（＝「🕐 上次讀回」讀的那個鍵）。
+    #    **兩顆鈕都在這個 expander 裡**，指過去不會撲空。
+    # ⚠️ **為什麼字面值住在 helper 而不是 `ui/tab3_portfolio.py`**：WP-D 把約 800 行的
+    #    保單管理整段抽成獨立模組，舊 ④ 只剩一行委派呼叫（`render_policy_admin_section(...)`）。
+    #    漂移鎖因此錨到 helper 那一檔（同 `nav_status` / `nav_manual` 的處理）。
+    # ⚠️ 這個 key 與 `pf_add` / `pf_perf` / `pf_ledger` / `pf_load` 一樣指**舊 ④ 的區塊**，
+    #    舊分頁整批拔除時要一起回頭處理。漂移鎖：
+    #    `tests/test_story_nav.py::test_section_labels_match_merged_pages` 的
+    #    `pf_policy_admin` 那一列（比字串）；「那裡真的按得到那兩顆鈕、而且舊 ④ 真的會渲染它」
+    #    另由 `tests/test_wf04_add_holdings.py::test_the_policy_admin_pointer_is_not_a_dead_end`
+    #    以 AST 驗接線 —— 兩條合起來才完整（同 `pf_load` 的雙鎖形狀）。
+    "pf_policy_admin": "📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -295,6 +311,7 @@ _SECTION_TO_TAB: dict[str, str] = {
     "pf_perf": "portfolio",
     "pf_ledger": "portfolio",
     "pf_load": "portfolio",
+    "pf_policy_admin": "portfolio",
 }
 
 

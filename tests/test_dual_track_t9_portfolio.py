@@ -684,6 +684,22 @@ def test_the_new_chain_writes_only_its_own_session_namespace():
        「用一個掃描器看不到的寫法把寫入偷渡進來，比違規本身更糟」。
        ⚠️ **這是一個已知缺口，不是保證**：本條擋得住「明目張膽的指派」，
        擋不住「就地變異」。**照實寫在這裡，不假裝守死了。**
+
+    ## ⭐ 2026-09-08：補起**第二個**盲點 —— 屬性指派（獨立稽核突變抓到）
+
+    在此之前本條只看 `ast.Subscript` 目標，也就是 `session_state["k"] = …`。
+    稽核的突變 `st.session_state.portfolio_funds = …`（**屬性指派**）
+    **完全沒有被殺**。而那個盲點**正好開在最可能被用到的形狀上** ——
+    舊 ④ `ui/tab3_portfolio.py` 與 `ui/helpers/portfolio/load.py` 的慣用寫法
+    就是屬性式（例：`st.session_state.portfolio_funds = []`）。
+    也就是說：一個從舊 ④ 複製過來的寫法，會**直接穿過**這道守衛。
+
+    → 本輪把 `ast.Attribute` 目標一起收（`t.attr` 就是鍵名）。
+    ⚠️ **這是把守衛改嚴，不是改鬆**：收進來的形狀只會**多**紅、不會少紅。
+       實測補之前補之後 ⑨ 的可達集合都是 **0 個違規**（新鏈一處屬性指派都沒有），
+       所以本次強化**不靠放寬任何既有斷言換綠燈**。
+    ⚠️ **仍然沒有補起來的是 `.append` / `.pop` 那種「就地變異」**（上一段那個缺口）——
+       兩個盲點是**不同**的東西，補了這個不代表那個也好了。**不要合併讀。**
     """
     seen, _ = _reach(CHAINS[NEW9])
     own_prefix = "v04_"
@@ -695,10 +711,16 @@ def test_the_new_chain_writes_only_its_own_session_namespace():
                     else [n.target] if isinstance(n, (ast.AugAssign, ast.AnnAssign))
                     else [])
             for t in tgts:
-                if not (isinstance(t, ast.Subscript)
+                # 形態 1：`session_state["k"] = …`（下標）
+                if (isinstance(t, ast.Subscript)
                         and "session_state" in ast.dump(t.value)):
+                    key = _const_str(t.slice, mod)
+                # 形態 2：`session_state.k = …`（**屬性**，2026-09-08 補）
+                elif (isinstance(t, ast.Attribute)
+                      and "session_state" in ast.dump(t.value)):
+                    key = t.attr
+                else:
                     continue
-                key = _const_str(t.slice, mod)
                 if key is not None and key.startswith(own_prefix):
                     continue
                 if (mod, fname, key) in _FOREIGN_WRITE_OK:

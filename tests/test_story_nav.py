@@ -230,6 +230,18 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     #    由 `tests/test_wf04_add_holdings.py::test_the_load_pointer_is_not_a_dead_end`
     #    以 AST 驗 `batch_load_unloaded_funds` 真的被呼叫 —— 兩條合起來才完整。
     ("pf_load", "ui/tab3_portfolio.py"),
+    # 2026-09-08：⑨ 狀態列有三格（📒 目前帳本／🕐 上次讀回／💰 總投入）要指得出
+    # 「去哪換帳本、去哪從雲端讀回」，而全站唯一按得到的地方是**舊 ④** 的
+    # `st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單", …)`。
+    # ⚠️ **字面值住在 `ui/helpers/portfolio/policy_admin_section.py` 而不是
+    #    `ui/tab3_portfolio.py`** —— WP-D 把那 800 行整段抽成獨立模組，
+    #    舊 ④ 只剩一行委派呼叫。錨到 `tab3_portfolio.py` 會**永遠找不到**那個字串。
+    #    （同 `nav_status` / `nav_manual` 錨到 helper 的處理。）
+    # ⚠️ 本列只鎖「那個標題還在不在」。「那裡真的按得到那兩顆鈕、而且舊 ④ 真的會
+    #    渲染它」是**另一件事**，由 `tests/test_wf04_add_holdings.py::`
+    #    `test_the_policy_admin_pointer_is_not_a_dead_end` 以 AST 驗接線
+    #    —— 兩條合起來才完整（同 `pf_load` 的雙鎖形狀）。
+    ("pf_policy_admin", "ui/helpers/portfolio/policy_admin_section.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。

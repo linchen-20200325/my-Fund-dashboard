@@ -167,7 +167,45 @@ def plan_new_holdings(raw: object, existing: object,
        第二次不該再長出一筆。
     ⚠️ **`existing` 裡形狀不對的元素（不是 dict）一律原樣保留、不參與去重** ——
        它不是我們寫的，我們不猜它的意思，也不悄悄把它丟掉（§1）。
+
+    Raises
+    ------
+    TypeError
+        `existing` 既不是 `None` 也不是 `list` 時**當場炸掉**（§1 Fail Loud）。
+
+    ## ⛔ 為什麼這個護欄非有不可（2026-09-08 獨立稽核指出，本批補）
+
+    本函式的 `merged` 會被 :func:`ui.views.page_04_portfolio._render_add_fund`
+    **直接寫回 `st.session_state["portfolio_funds"]`** —— 它是新五頁**唯一**
+    會寫那個鍵的地方。而在此之前這裡只有 `list(existing or [])`，於是：
+
+    ===================== ==================================================
+    `existing` 傳進來是     `list(existing or [])` 會變成
+    ===================== ==================================================
+    `{"a": 1, "b": 2}`     `["a", "b"]`（**dict 被拆成 key**）
+    `"0050"`               `["0", "0", "5", "0"]`（**字串被拆成單一字元**）
+    ===================== ==================================================
+
+    兩種都會被**原樣寫回 session**，而下游（`_holdings()` / :func:`pending_rows`）
+    的 `isinstance(_f, dict)` 會把它們**全部濾掉** ——
+    **畫面看起來一切正常，session 裡的資料已經壞了。**
+    那正是 `CLAUDE.md §1` 點名的形狀：**這是在掩蓋問題，不是解決問題。**
+
+    ⛔ **刻意不寫成 `existing if isinstance(existing, list) else []`** ——
+       那會把一個「呼叫端傳錯東西」的 bug 靜靜吞掉，變成使用者的持倉憑空消失。
+       兄弟函式 :func:`pending_rows` 走 `return []` 是**唯讀**路徑（最多少畫幾列），
+       本函式是**寫入**路徑，兩者的代價不同級，故這裡 raise。
+    ⚠️ `None` 仍然合法（session 鍵還沒建立時 `.get()` 就是回 `None`），
+       falsy 的 `{}` / `""` 則一律當成「呼叫端傳錯型別」處理 —— 它們雖然
+       不會造成上表的破壞，但同樣代表上游有 bug，**沉默地放行等於幫它藏起來**。
     """
+    if existing is not None and not isinstance(existing, list):
+        raise TypeError(
+            "plan_new_holdings: `existing`（呼叫端傳進來的那份持倉清單）"
+            f"必須是 list 或 None，收到的是 {type(existing).__name__}：{existing!r:.120}。"
+            " —— 本函式的 `merged` 會被呼叫端直接寫回去，"
+            "把非 list 交給 `list(...)` 會把 dict 拆成 key、把 str 拆成單一字元，"
+            "而下游的 isinstance 過濾會讓這件事在畫面上完全看不出來（§1 Fail Loud）。")
     _existing = list(existing or [])
     _seen: set[tuple[str, str]] = {
         entry_key(_f.get("code"), _f.get("policy_id"))
