@@ -208,7 +208,7 @@ def test_the_income_line_uses_each_funds_real_amount_not_a_flat_principal():
     assert "11,000" in _body, f"畫面上沒有印出合計 11,000 TWD。\n{_body}"
 
 
-def test_funds_left_out_of_the_income_total_are_named_by_reason(monkeypatch):
+def test_funds_left_out_of_the_income_total_are_named_by_reason():
     """⭐ **沒算進去的必須講出來，而且兩種原因要分開講。**
 
     ``monthly_div_twd`` 是 None 有兩個原因，**下一步完全不同**：
