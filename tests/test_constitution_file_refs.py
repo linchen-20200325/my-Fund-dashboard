@@ -674,6 +674,9 @@ _DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
     #    **本清單是比對名單、不是門檻**，所以它擋得住「這一列被刪掉」，
     #    但擋不住「上表被塞進一列它認不出來的」。兩者不要混為一談。
     "P-COUNTGUARD-1", "P-MIXEDROWDATE-1", "P-SAMESOURCE-1",
+    # 2026-09-08 隨 #834 併入 main 的三列。**本清單是「內容不得靜默消失」的比對名單**，
+    # ⇒ 別人加的列同樣該進來；漏掉它們，就是重演 #833 那三列「五輪沒被保護」的同一個缺口。
+    "P-SECLABEL-1", "P-TILEARGS-1", "P-FETCHPOINTER-1",
 })
 
 _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")

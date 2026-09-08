@@ -222,6 +222,31 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     # ⚠️ `pf_add` / `pf_perf` 兩個同型 key **沒有**這條鎖（既有缺口，本輪未補）——
     #    本列是把新增的那一個先鎖住，不是宣稱三個都鎖了。
     ("pf_ledger", "ui/tab3_portfolio.py"),
+    # 2026-09-08：⑨ 新頁的「已列入但還沒抓到淨值」灰態要指得出「去哪按載入」，
+    # 而 ~~全站唯一~~ 按得到的地方是**舊 ④** 的 `#### 🗂️ 保單分組視圖`
+    # （那顆 📡 主按鈕就在該區塊最上面，且只有真的有未載入標的時才出現）。
+    # ⛔ **2026-09-08 第五輪就地更正（有意識的更正，不是漏刪 · 依第四輪稽核 N3）**：
+    #    「全站唯一」不成立 —— 全站三顆載入鈕分屬**兩個**區段，
+    #    `btn_pf_load_all` 在 `### ➕ 加入與管理基金`（實測，依外層容器歸屬）。
+    #    ✅ **本列鎖的東西完全不變**（那個標題還在不在），被推翻的只有「唯一」二字。
+    #    完整理由見 `ui/helpers/story_nav.py` 該 key 上方的就地更正。
+    # 字面值住在 `ui/tab3_portfolio.py`。
+    # ⚠️ 本列只鎖「那個標題還在不在」。「那裡真的按得到載入」是**另一件事**，
+    #    由 `tests/test_wf04_add_holdings.py::test_the_load_pointer_is_not_a_dead_end`
+    #    以 AST 驗 `batch_load_unloaded_funds` 真的被呼叫 —— 兩條合起來才完整。
+    ("pf_load", "ui/tab3_portfolio.py"),
+    # 2026-09-08：⑨ 狀態列有三格（📒 目前帳本／🕐 上次讀回／💰 總投入）要指得出
+    # 「去哪換帳本、去哪從雲端讀回」，而全站唯一按得到的地方是**舊 ④** 的
+    # `st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單", …)`。
+    # ⚠️ **字面值住在 `ui/helpers/portfolio/policy_admin_section.py` 而不是
+    #    `ui/tab3_portfolio.py`** —— WP-D 把那 800 行整段抽成獨立模組，
+    #    舊 ④ 只剩一行委派呼叫。錨到 `tab3_portfolio.py` 會**永遠找不到**那個字串。
+    #    （同 `nav_status` / `nav_manual` 錨到 helper 的處理。）
+    # ⚠️ 本列只鎖「那個標題還在不在」。「那裡真的按得到那兩顆鈕、而且舊 ④ 真的會
+    #    渲染它」是**另一件事**，由 `tests/test_wf04_add_holdings.py::`
+    #    `test_the_policy_admin_pointer_is_not_a_dead_end` 以 AST 驗接線
+    #    —— 兩條合起來才完整（同 `pf_load` 的雙鎖形狀）。
+    ("pf_policy_admin", "ui/helpers/portfolio/policy_admin_section.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。

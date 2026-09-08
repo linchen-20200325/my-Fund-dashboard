@@ -613,12 +613,93 @@ def test_the_new_chain_collides_with_no_other_tab(other):
         "→ 兩邊同一次 run 都會畫 ⇒ StreamlitDuplicateElementId。")
 
 
+#: ⭐ **⑨ 唯一准許寫入的「別人的」session 契約鍵，連同准許寫它的那一支函式一起釘。**
+#:
+#: ## 為什麼 2026-09-08 要開這個洞（決策者：**客戶**，不是本組）
+#:
+#: 客戶拍板逐字：「**加入基金入口：拍板整合至 ⑨「保單與扣款標的」，
+#: 無持倉時直接就地展開輸入表單。**」並指定它是退場順序（⑦→⑥→⑧→⑨）的
+#: **第一前置**。
+#: → 「加入一檔基金」這件事**在定義上**就是往 `portfolio_funds` 寫一筆；
+#:   本條原本的「一個字都不准回寫」與那個拍板**直接互斥**。
+#:
+#: ## 舊條為什麼是對的（它的理由一個字都沒被推翻）
+#:
+#: 舊 docstring 逐字：「這一條擋的是 widget-key 掃描**結構上看不到**的那種雙軌事故：
+#: 新頁安靜地覆寫舊頁的狀態。」**這個顧慮今天完全成立** ——
+#: 差別只在「**安靜地**」三個字：本項是客戶點名要的、寫在畫面上按鈕後面的、
+#: 而且**寫的是同一份使用者資料本來就該長的樣子**（`loaded=False` 骨架，
+#: 與 `repositories/policy/v1.py::sync_policies_to_portfolio_funds` 逐欄位同構）。
+#:
+#: ## ⛔ 這個豁免有多窄（三道，缺一不可）
+#:
+#: 1. **只有這一個鍵**（`portfolio_funds`）。`policy_sheet_id` / `t7_ledgers` /
+#:    `_t3_cur_sheet_title` 等**照舊一個字都不准寫**。
+#: 2. **只有這一支函式**（`_render_add_fund`）。同一頁別處寫同一個鍵**照樣紅** ——
+#:    那才是「安靜覆寫」真正會發生的形狀。
+#: 3. 由 :func:`test_the_foreign_write_allowlist_is_exact_and_named` 釘住清單本身：
+#:    多一項就要有人來改那一條，**那個「要有人來改」就是這道關卡**。
+_FOREIGN_WRITE_OK: frozenset[tuple[str, str, str]] = frozenset({
+    ("ui.views.page_04_portfolio", "_render_add_fund", "portfolio_funds"),
+})
+
+
+def test_the_foreign_write_allowlist_is_exact_and_named():
+    """⭐ 上面那個放行清單本身要被守住。**恰好一項，而且三個欄位都要對。**
+
+    ⛔ 清空它 → 本條紅（那會撤銷客戶 2026-09-08 的拍板）；
+    ⛔ 多一項 → 本條紅（多一處寫入就要有人負責）。
+    ⚠️ **本條不渲染**，在沒有 streamlit 的環境也跑得到。
+    """
+    assert _FOREIGN_WRITE_OK == frozenset({
+        ("ui.views.page_04_portfolio", "_render_add_fund", "portfolio_funds"),
+    }), (
+        f"放行清單被改成 {sorted(_FOREIGN_WRITE_OK)}。\n"
+        "⛔ 客戶 2026-09-08 只點名了「加入基金入口」這一件事 —— "
+        "多一項就要有人來改這一條，那個「要有人來改」就是這道關卡本身。")
+    for _mod, _fn, _key in _FOREIGN_WRITE_OK:
+        assert not _key.startswith("v04_"), (
+            f"`{_key}` 是 ⑨ 自己的命名空間，本來就准寫 —— "
+            "把它放進豁免清單只會讓清單看起來比實際需要的長。")
+
+
 def test_the_new_chain_writes_only_its_own_session_namespace():
-    """⑨ 只准寫自己命名空間的 session key —— 讀別人的可以，寫別人的不行。
+    """⑨ 只准寫自己命名空間的 session key —— 讀別人的可以，寫別人的**原則上**不行。
 
     這一條擋的是 widget-key 掃描**結構上看不到**的那種雙軌事故：
     新頁安靜地覆寫舊頁的狀態。⑨ 讀 `portfolio_funds` / `policy_sheet_id` 等
-    由舊 ④ 寫入的鍵是**刻意**的（同一份使用者資料），但它一個字都不准回寫。
+    由舊 ④ 寫入的鍵是**刻意**的（同一份使用者資料）。
+
+    ## ⚠️ 2026-09-08：多了**一個**具名例外，理由與邊界見 :data:`_FOREIGN_WRITE_OK`
+
+    ~~「但它一個字都不准回寫。」~~ —— **有意識的政策變更，不是漏刪**
+    （決策者：**客戶**，2026-09-08 拍板「加入基金入口整合至 ⑨」）。
+    **放行的是 `(模組, 函式, 鍵)` 三元組**，不是「那個鍵」也不是「那一頁」——
+    同一頁別的函式寫同一個鍵，本條照樣紅。
+
+    ⛔ **實作端不准用掃描器看不到的寫法繞過本條。**
+       `st.session_state["portfolio_funds"].append(...)` 在 AST 上**不是**對
+       `session_state[...]` 的指派，本條**看不到它** —— 被測檔就地註解已寫明
+       它刻意用整份指派而不是 `.append`，理由逐字是
+       「用一個掃描器看不到的寫法把寫入偷渡進來，比違規本身更糟」。
+       ⚠️ **這是一個已知缺口，不是保證**：本條擋得住「明目張膽的指派」，
+       擋不住「就地變異」。**照實寫在這裡，不假裝守死了。**
+
+    ## ⭐ 2026-09-08：補起**第二個**盲點 —— 屬性指派（獨立稽核突變抓到）
+
+    在此之前本條只看 `ast.Subscript` 目標，也就是 `session_state["k"] = …`。
+    稽核的突變 `st.session_state.portfolio_funds = …`（**屬性指派**）
+    **完全沒有被殺**。而那個盲點**正好開在最可能被用到的形狀上** ——
+    舊 ④ `ui/tab3_portfolio.py` 與 `ui/helpers/portfolio/load.py` 的慣用寫法
+    就是屬性式（例：`st.session_state.portfolio_funds = []`）。
+    也就是說：一個從舊 ④ 複製過來的寫法，會**直接穿過**這道守衛。
+
+    → 本輪把 `ast.Attribute` 目標一起收（`t.attr` 就是鍵名）。
+    ⚠️ **這是把守衛改嚴，不是改鬆**：收進來的形狀只會**多**紅、不會少紅。
+       實測補之前補之後 ⑨ 的可達集合都是 **0 個違規**（新鏈一處屬性指派都沒有），
+       所以本次強化**不靠放寬任何既有斷言換綠燈**。
+    ⚠️ **仍然沒有補起來的是 `.append` / `.pop` 那種「就地變異」**（上一段那個缺口）——
+       兩個盲點是**不同**的東西，補了這個不代表那個也好了。**不要合併讀。**
     """
     seen, _ = _reach(CHAINS[NEW9])
     own_prefix = "v04_"
@@ -630,17 +711,29 @@ def test_the_new_chain_writes_only_its_own_session_namespace():
                     else [n.target] if isinstance(n, (ast.AugAssign, ast.AnnAssign))
                     else [])
             for t in tgts:
-                if not (isinstance(t, ast.Subscript)
+                # 形態 1：`session_state["k"] = …`（下標）
+                if (isinstance(t, ast.Subscript)
                         and "session_state" in ast.dump(t.value)):
+                    key = _const_str(t.slice, mod)
+                # 形態 2：`session_state.k = …`（**屬性**，2026-09-08 補）
+                elif (isinstance(t, ast.Attribute)
+                      and "session_state" in ast.dump(t.value)):
+                    key = t.attr
+                else:
                     continue
-                key = _const_str(t.slice, mod)
-                if key is None or not key.startswith(own_prefix):
-                    bad.append(f"{mod}::{fname}:{n.lineno} 寫入 session_state[{key!r}]")
+                if key is not None and key.startswith(own_prefix):
+                    continue
+                if (mod, fname, key) in _FOREIGN_WRITE_OK:
+                    continue          # 具名豁免，見 `_FOREIGN_WRITE_OK` 的長註
+                bad.append(f"{mod}::{fname}:{n.lineno} 寫入 session_state[{key!r}]")
     assert bad == [], (
-        "⑨ 寫入了不屬於自己命名空間（`v04_` 前綴）的 session key：\n  "
+        "⑨ 寫入了不屬於自己命名空間（`v04_` 前綴）、也不在具名豁免清單裡的 "
+        "session key：\n  "
         + "\n  ".join(bad)
         + "\n→ 雙軌之下這會讓新頁安靜地覆寫舊 ④ 的狀態，"
-          "而任何 widget-key 掃描都看不到它。")
+          "而任何 widget-key 掃描都看不到它。"
+        + f"\n（唯一的具名豁免：{sorted(_FOREIGN_WRITE_OK)} —— "
+          "見 `_FOREIGN_WRITE_OK` 的長註）")
 
 
 # ══════════════════════════════════════════════════════════════════
