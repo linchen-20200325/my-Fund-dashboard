@@ -371,6 +371,62 @@ def test_constitution_has_no_dangling_file_references():
 #    不要把這條測試刪掉或改成 `>= 0`。刪掉它 = 把 2026-09-08 這個教訓一起刪掉。
 _MIN_LIVE_TIER1_REFS = 300
 
+# ── 第二道：per-file 下限 ──────────────────────────────────────────────
+# 總下限擋的是「**整個檔**沒被讀到」。它擋**不住**「**一半內容**被搬到第三個檔、
+# 而那個檔忘了登記」—— 2026-09-08 實測該情境：守衛看得到 315、看不到 111（26.1%），
+# `315 >= 300` ⇒ **18 passed 全綠**（`test_retired_exception_ids` 的金絲雀也沒抓到，
+# 因為 `EX-` ID 還留在沒被搬走的那半）。
+# ⇒ **總下限擋不住它自己剛修好的那個病的下一個版本。** 故補這一道：
+#    **每個已登記的檔，各自不得縮到下限以下。**
+# 量測（量測日 2026-09-08）：`CLAUDE.md` 184、`EXCEPTIONS.md` 242。
+# 下限留約 20~25% 餘裕，理由同總下限（不擋正常退役；實測 `CLAUDE.md` 最近 25 個 commit
+# 只有 1 步是負的、幅度 −6）。
+# ⚠️ **這一道有一個已知弱點，據實寫明**：它是**絕對值**，而這些檔只會長大 ——
+#    檔案越大，它就越不 binding（一個長到 500 的檔掉 300 仍會過）。
+#    **它擋的是「今天這一刀」，不是「明年那一刀」**；那個缺口由下面第三道（雙向綁定）補，
+#    因為第三道**不隨檔案長大而失效**。三道各擋不同的東西，**不得合併，也不得互相取代**。
+_MIN_LIVE_TIER1_PER_FILE: dict[str, int] = {
+    "CLAUDE.md": 150,
+    "EXCEPTIONS.md": 200,
+}
+
+# ── 第三道：雙向綁定 ─────────────────────────────────────────────────
+# **憲法裡指標段點名的每一個 `.md`，都必須在 `CONSTITUTION_FILES` 裡。**
+# 這一道是三道裡**唯一不隨檔案長大而失效**的 —— 它比對的是「宣告」與「登記」兩份名單，
+# 不是任何一個會漂移的量測值。搬檔案的人**一定**會寫「搬至 `X.md`」（那是母檔留指標的慣例），
+# 於是「寫了指標卻忘了登記」當場紅燈。
+_POINTER_TO_OTHER_MD = re.compile(r"搬[至到][^。\n]{0,12}?[`]([A-Za-z0-9_./-]+\.md)[`]")
+
+
+def test_pointer_sections_and_registered_files_agree():
+    """**雙向綁定**：指標段點名的憲法檔，必須都在 `CONSTITUTION_FILES` 裡。
+
+    擋的是這個順序：有人把一塊內容搬到新檔 → 在原位置留下「搬至 `X.md`」的指標
+    → **忘了把 `X.md` 加進 `CONSTITUTION_FILES`**。
+    在這一條之前，那個情境**完全不會紅**（2026-09-08 實測 18 passed）。
+    """
+    registered = {p.name for p in CONSTITUTION_FILES}
+    found: dict[str, list[str]] = {}
+    for fname, text in _read_constitution_files():
+        for m in _POINTER_TO_OTHER_MD.finditer(text):
+            found.setdefault(Path(m.group(1)).name, []).append(fname)
+
+    # 反空轉金絲雀：這條規則靠「搬至 `X.md`」這個句式運作。若指標段被改寫成別的說法，
+    # 本規則會**一筆都找不到**而安靜地永遠通過 —— 那正是本檔要防的形態。
+    assert found, (
+        "在憲法各檔裡找不到任何『搬至 `X.md`』形式的指標段。\n"
+        "**這幾乎一定是指標段的措辭被改了，而不是真的沒有指標** ——"
+        "本規則會因此安靜地停止工作（永遠 0 命中 ⇒ 永遠通過）。\n"
+        "請更新 `_POINTER_TO_OTHER_MD`，不要把這條斷言刪掉。")
+
+    unregistered = sorted(n for n in found if n not in registered)
+    assert not unregistered, (
+        "憲法的指標段點名了下列 `.md`，但它們**不在 `CONSTITUTION_FILES` 裡**："
+        + "、".join(f"{n}（出現於 {'、'.join(found[n])}）" for n in unregistered) + "\n"
+        "⇒ 那些檔的內容**完全沒有被本守衛檢查**，而且不會有任何其他訊號。\n"
+        "修法：把它加進 `CONSTITUTION_FILES`，並替它在 `_MIN_LIVE_TIER1_PER_FILE` "
+        "設一個下限（現場量測後填，並註明量測日）。")
+
 
 def test_guard_still_sees_the_whole_constitution():
     """**反空轉**：確認本守衛真的還在看整部憲法，而不是安靜地只看了一半。
@@ -392,6 +448,19 @@ def test_guard_still_sees_the_whole_constitution():
         "這幾乎一定是「檔案被讀到了，但內容不是預期的那份」——"
         "例如路徑指到一個空殼、或內容被搬走而 `CONSTITUTION_FILES` 沒跟著改。\n"
         f"各檔實測：{per_file}")
+
+    shrunk = sorted(
+        (f, n, _MIN_LIVE_TIER1_PER_FILE[f])
+        for f, n in per_file.items()
+        if f in _MIN_LIVE_TIER1_PER_FILE and n < _MIN_LIVE_TIER1_PER_FILE[f]
+    )
+    assert not shrunk, (
+        "下列憲法檔的活 Tier-1 引用掉到它自己的下限以下："
+        + "、".join(f"{f} {n} < {lo}" for f, n, lo in shrunk) + "\n"
+        "最可能的原因：**這個檔的一部分被搬到別的檔了，而那個檔沒有被登記** ——"
+        "總下限擋不住這種『搬走一半』（2026-09-08 實測：看得到 315、看不到 111，仍然全綠）。\n"
+        "先確認 `CONSTITUTION_FILES` 列全了；確認之後若真的是有意識的瘦身，"
+        "再現場重新量測並下修這個檔的下限，**同時註明量測日與理由**。")
 
     assert total >= _MIN_LIVE_TIER1_REFS, (
         f"本守衛目前只看得到 {total} 筆活的 Tier-1 引用，低於下限 "
