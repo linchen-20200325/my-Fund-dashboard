@@ -200,7 +200,7 @@ def _get_benchmark_series(ticker: str = "SPY"):
     L1 `repositories/macro/yf.py::fetch_benchmark_close`（TTL 走
     `shared/ttls.py` SSOT，不再是無上限的 session 快取）。
 
-    ⚠️ L3 直呼 L1：見 CLAUDE.md §8.2.A **EX-PASSTHRU-1**（本檔為登錄成員）。
+    ⚠️ L3 直呼 L1：見 EXCEPTIONS.md §8.2.A **EX-PASSTHRU-1**（本檔為登錄成員）。
     本層**不做任何後處理**（無多源 fallback、無跨 fetcher TTL 統一、無結果加工），
     加一層純 pass-through 的 L2 wrapper 即 §8.1 step 6「用不到的抽象」反例。
 

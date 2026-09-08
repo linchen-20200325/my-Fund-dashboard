@@ -797,7 +797,7 @@ def _primitive_sentinels(trips: list[str]) -> Iterator[list[str]]:
     # ⑤ 原始 HTTP 寫入動詞（繞過 gspread 直接打 Sheets API 也擋得到）
     #    ⚠️ `urllib.request.urlopen` **必須列進來**：本 repo 有真實的家風用它直打 HTTP
     #    （`repositories/fund/sources.py` 的 Yahoo v8 chart 就是 urlopen 直連，
-    #    見 `CLAUDE.md §8.3.P` 的 `P-YFDUPE-1`）—— 只守 requests/httpx 會整條漏掉。
+    #    見 `EXCEPTIONS.md §8.3.P` 的 `P-YFDUPE-1`）—— 只守 requests/httpx 會整條漏掉。
     #    判準：`data` 非 None（＝ POST body）或 Request 物件自報寫入動詞才算，
     #    否則一律放行（純 GET 取數不是寫入，攔了會製造偽陽性）。
     try:
