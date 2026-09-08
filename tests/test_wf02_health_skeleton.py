@@ -1068,9 +1068,19 @@ def test_a_value_we_could_not_compute_never_renders_as_zero():
     - `配息覆蓋 0.00` 更糟 —— 那是**憑空生出來的最壞值**，等於對一檔我們一無所知的
       基金**報一個假警**（`CLAUDE.md §1`：錯誤的數字比沒有數字更危險）。
 
-    ⚠️ **這一項的嚴重度被一件事放大**：本頁**目前沒有任何 production caller**
-    （`git grep -c 'page_02_health' origin/main -- app.py` → 0）——
-    沒有人在畫面上看得到它，**守衛就是唯一的防線**。
+    ~~⚠️ **這一項的嚴重度被一件事放大**：本頁**目前沒有任何 production caller**~~
+    ~~（`git grep -c 'page_02_health' origin/main -- app.py` → 0）——~~
+    ~~沒有人在畫面上看得到它，**守衛就是唯一的防線**。~~
+
+    ⛔ **2026-09-08 事實更正：上段已過期。有意識的更正，不是漏刪**
+    （決策者：**AI 總管**）。**舊表述在寫下的當天是對的** —— 那一輪本頁確實沒接線；
+    **被推翻的是它的前提**：接線那一批已經做完。
+    **實測**（本輪，`origin/main`）：`git grep -c 'page_02_health' origin/main -- app.py`
+    → **2**（`app.py` 的 import 行 ＋ `with tab_preview_health:` 的呼叫）。
+    ⚠️ **本條守衛的價值一個字都沒有變，只有變**更**大** ——
+    以前它守的是一個沒人看得到的頁面；現在客戶**真的會看到**這些格子。
+    ⚠️ 這正是本檔他處記載過的同一個病：**一句在寫下當天為真的話不會自己過期，
+    它只會安靜地變成假的**，而且**守衛全綠也擋不住**（散文不是斷言）。
     """
     assert _pct(None) == NOT_READY_MARK, "`_pct(None)` 應為灰態記號。"
     assert _num(None) == NOT_READY_MARK, "`_num(None)` 應為灰態記號。"
