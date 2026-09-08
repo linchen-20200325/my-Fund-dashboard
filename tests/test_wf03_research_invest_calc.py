@@ -1172,8 +1172,25 @@ def test_a_declared_dividend_currency_does_not_get_the_assumption_sentence():
 def test_normalising_only_one_side_of_the_currency_check_turns_the_guard_red():
     """突變①：把 `fund_currency` 還原成**修復前**的 ``mode="yf"`` → B1 守衛必須紅。
 
-    ⚠️ **刻意只換一側。** 兩側一起換回 yf 反而**不會**紅（兩邊仍在同一個命名空間）——
-    這正是本 bug 的本質：**病灶是兩側不一致，不是某一側用了哪個模式**。
+    ## ⚠️ 為什麼刻意只換一側（2026-09-08 就地更正，舊表述寫得比事實強）
+
+    ~~兩側一起換回 yf 反而**不會**紅（兩邊仍在同一個命名空間）。~~
+    → **有意識的更正，不是漏刪** —— **這句話是假的，本組自己重跑推翻的。**
+    實測（真 pytest，兩側一起改回 ``mode="yf"``）：基線 `1 failed, 182 passed`
+    → 突變後 `4 failed, 179 passed`，也就是**多出 3 條紅**：
+    `test_the_screen_never_shows_a_rate_lookup_only_code[CNY-CNH]`、
+    `test_the_two_currency_lines_on_one_screen_never_contradict_each_other`、
+    以及本函式自己。
+
+    **成立的版本（範圍收窄到「哪一條守衛」）**：兩側一起換回 yf 時，
+    **幣別衝突那一條**（:func:`test_the_same_currency_written_two_ways_is_never_a_clash`）
+    確實**不會**紅 —— 因為兩邊仍落在同一個命名空間，不會產生假衝突。
+    **但整份守衛不是沒反應**：`CNH` 會被印到畫面上，於是**顯示層那兩條**照樣轉紅。
+
+    **舊表述的用意仍然成立**（要打中「兩側不一致」這個病灶，就必須只換一側，
+    否則那條守衛咬不到）；**被權衡掉的是它的射程** —— 它把「某一條守衛不會紅」
+    寫成了「不會紅」，而那是一句**可以被一次 pytest 推翻**的全稱句
+    （同 `CLAUDE.md §-1.5.1c 判定 2`：能被一條指令推翻的全稱句就不該那樣寫）。
     """
     _real = CALC.fund_currency
     CALC.fund_currency = lambda _r: normalize_ccy(
