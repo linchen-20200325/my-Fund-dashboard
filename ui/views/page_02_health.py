@@ -785,7 +785,13 @@ def _peer_verdicts(funds: list[dict]) -> "tuple[list[tuple[str, int]], list[tupl
     同一次 run 錄到::
 
         [markdown] **這 4 檔裡：🏆 … 1 檔、🟡 … 1 檔、⚠️ … 1 檔**      ← 本函式
-        [markdown] **🏆 1 檔優等生** ・ ⚠️ 1 檔汰弱候選 ・ ⬜ 1 檔…（共 4 檔）  ← 上游
+        [markdown] **🏆 1 檔…** ・ ⚠️ 1 檔… ・ ⬜ 1 檔…（共 4 檔）              ← 上游
+
+    ⚠️ **上面兩行的桶名刻意用 `…` 省略，不是排版偷懶** ——
+    本檔受 `test_the_page_never_hardcodes_the_ssot_verdict_words` 管，
+    **整份原始碼**（含 docstring）都不准出現 `_grade()` 的中文判定字面值。
+    ⛔ **不要「為了讀起來完整」把它們補回來** —— 那條守衛會當場轉紅，
+    而它是對的：docstring 裡的抄本一樣會漂移。**要指哪一桶，用 emoji。**
 
     ⚠️ **但預設畫面只有本函式這一句** —— 上游那句要使用者**主動勾**
     :data:`DELEGATE_GATE_LABEL`（`value=False`）才會出現。
