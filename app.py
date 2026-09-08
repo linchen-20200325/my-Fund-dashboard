@@ -237,6 +237,25 @@ from ui.tab_settings_diag import (  # noqa: E402  (⑤ 設定與診斷・現行)
 from ui.views.page_05_settings import (  # noqa: E402  (⑦ [新] 設定與診斷・並行預覽)
     render_settings_and_diagnostics,
 )
+# ⚠️ 2026-09-08 **雙軌並行**（同上）：④ 這一格接回舊入口，新 View 改掛 ⑨。
+# ⭐ **⑨ 沒有 gate，這是掃描出來的結論，不是省略** —— 理由與證據逐條寫在
+#    `tests/test_dual_track_t9_portfolio.py` 的模組 docstring，摘要如下：
+#    · 新 ④ 的可達集合是 **14 個模組、105 個函式、未解析呼叫 0**（全解出）；
+#    · 它**顯式 `key=` 0 個、`st.form` key 只有 `v04_portfolio_rebalance_form`（全 repo 唯一）**，
+#      無 key 但會註冊 element id 的元素 5 個，標籤全 repo 唯一；
+#    · 與其餘 8 條鏈的**共用函式**中，沒有任何一個會呼叫「會註冊 element id」的元素
+#      （共用的只有 `markdown` / `caption` / `code` / `error` / `info` / `warning`
+#       與**無 key 的** `expander` —— 後者在 1.59.x 只有帶 key 才註冊）；
+#    · 它**一個 I/O 層函式都到不了**（0 個 `repositories.*` / `infra.proxy` / gspread / HTTP），
+#      所以「每次 run 都會執行 ⑨ 的 body」不會帶來取數成本。
+#    ⛔ **不要因為 ⑥ / ⑦ 有 gate 就「順手」給 ⑨ 補一個**：gate 是**有碰撞才付的成本**
+#       （它會讓使用者多按一下、且灰態會佔一塊版面）。沒有碰撞卻加 gate，
+#       等於把一個沒有理由的門檻永久寫進畫面。
+#    ⛔ 反過來也一樣：**⑨ 日後若開始委派舊模組、或新增顯式 `key=`，就必須重跑那份掃描**。
+#       守衛 `tests/test_dual_track_t9_portfolio.py` 會在那一刻轉紅並指名要怎麼處理。
+from ui.views.page_04_portfolio import (  # noqa: E402  (⑨ [新] 資產配置・並行預覽)
+    render_asset_allocation,
+)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
 
@@ -326,7 +345,7 @@ FRED_KEY, GEMINI_KEY = _load_keys()
 # 這裡原本有一個 `_check_secrets()`,在 module top-level 無條件執行 → **每一個分頁的
 # 最上方都會看到**那一行,而它多半不代表任何故障(GEMINI 缺了只是少 AI 摘要,可降級)。
 # ⚠️ 2026-09-07 計數更正(決策者:**AI 總管**):本句原寫「五個分頁」——
-#    那在寫下的當天(2026-08-28)為真,當時分頁列就是 5 格;現在是 **8 格**(5 正式 + 3 [新] 預覽)。
+#    那在寫下的當天(2026-08-28)為真,當時分頁列就是 5 格;現在是 **9 格**(5 正式 + 4 [新] 預覽)。
 #    **改成「每一個」而不是改成「八個」**:module top-level 的東西本來就與分頁數無關,
 #    寫死數字只會在下一次增減分頁時再過期一次。
 # 批次一已先把它從 🔴 改成 ⬜(只改顏色、不改位置);本批依 Q3 **整段移走**,
@@ -521,7 +540,7 @@ from ui.helpers.story_nav import tab_label as _tab_label
 #    → 由 app.py 在**進入第一個分頁之前**就宣告持有,所有分頁全程有效:
 #      ③ 底下的 `ui/tab2_single_fund.py` 看到旗標 → 跳過那一塊;
 #      ⑤ 的 `render_fetch_diag_from_session()` 是無條件渲染。
-#    ⚠️ 2026-09-07 計數更正(決策者:**AI 總管**):上面兩處原寫「五個分頁」,現為 **8 格**;
+#    ⚠️ 2026-09-08 計數更正(決策者:**AI 總管**):上面兩處原寫「五個分頁」,現為 **9 格**;
 #       改成「所有」而不是「八個」—— 這段講的機制與分頁數無關,寫死數字必然再過期。
 #
 # ⛔ **2026-09-07 更正:原本這裡還有一句「→ 全站只剩它那一份」,那是假的**
@@ -548,11 +567,11 @@ from ui.helpers.settings_diag.merge_context import (  # noqa: E402
     settings_page_owns as _settings_page_owns,
 )
 
-# ⚠️ **五格正式分頁在前、三格 `[新]` 預覽分頁在後** —— 順序即站號 ①~⑤，
+# ⚠️ **五格正式分頁在前、四格 `[新]` 預覽分頁在後** —— 順序即站號 ①~⑤，
 #    預覽分頁刻意排在最後，不插進既有動線中間（客戶 2026-09-07：舊 Tab 原樣保留）。
 #    ⚠️ 2026-09-07 計數同步（決策者：**AI 總管**）：原寫 ~~兩格~~，本 PR 新增 ⑧ 之後是
-#       **三格**（⑥ health / ⑦ settings / ⑧ research），頂層分頁總數 **8**。
-#       **計數刻意不加刪除線**（同下方 ⑥⑦⑧ 區塊已寫過的理由，`CLAUDE.md §-2.A`）——
+#       **四格**（⑥ health / ⑦ settings / ⑧ research / ⑨ portfolio），頂層分頁總數 **9**。
+#       **計數刻意不加刪除線**（同下方 ⑥⑦⑧⑨ 區塊已寫過的理由，`CLAUDE.md §-2.A`）——
 #       它是描述下面那個 `st.tabs(...)` 有幾格的數字，不是條文；
 #       旁邊留一個劃掉的舊數字只會讓記錄自相矛盾。
 #       ⛔ 這一行**沒有任何守衛在對**（它是註解）；真正被機器比對的是
@@ -560,11 +579,12 @@ from ui.helpers.settings_diag.merge_context import (  # noqa: E402
 #    兩張標籤表**分屬兩個命名空間**（`tab_label` vs `preview_tab_label`），
 #    理由寫死在 `ui/helpers/story_nav.py` 的 `PREVIEW_TAB_LABELS` 上方。
 (tab_macro, tab_health, tab_research, tab_portfolio, tab_settings,
- tab_preview_health, tab_preview_settings, tab_preview_research) = st.tabs(
+ tab_preview_health, tab_preview_settings, tab_preview_research,
+ tab_preview_portfolio) = st.tabs(
     [_tab_label("macro"), _tab_label("health"), _tab_label("research"),
      _tab_label("portfolio"), _tab_label("settings"),
      _preview_tab_label("health"), _preview_tab_label("settings"),
-     _preview_tab_label("research")])
+     _preview_tab_label("research"), _preview_tab_label("portfolio")])
 
 
 # ⚠️ 每一段 try/except **刻意逐段展開,不收成 helper** —— 這是一次「本來想收、實測之後
@@ -586,9 +606,10 @@ _TAB_ISOLATION_HINT = ("此分頁已隔離,其他分頁不受影響;請展開「
 
 
 # ⚠️ 這個 `with` 必須包住**每一個**分頁(理由見上方 ⭐ 區塊)。
-#    ⚠️ 2026-09-07 計數更正(決策者:**AI 總管**):原寫「全部五個」,實測現為 **8 格**
+#    ⚠️ 2026-09-08 計數更正(決策者:**AI 總管**):原寫「全部五個」,實測現為 **9 格**
 #       (`tab_macro` / `health` / `research` / `portfolio` / `settings` /
-#        `preview_health` / `preview_settings` / `preview_research`,全部在本區塊內)。
+#        `preview_health` / `preview_settings` / `preview_research` /
+#        `preview_portfolio`,全部在本區塊內)。
 #       守衛 `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
 #       比的是「全檔每一個 `with tab_*:`」⊆「本區塊內」,**不吃寫死的數字**。
 with _settings_page_owns(_SD_FETCH_DIAG):
@@ -671,16 +692,17 @@ with _settings_page_owns(_SD_FETCH_DIAG):
                          hint=_TAB_ISOLATION_HINT, level="error")
 
     # ══════════════════════════════════════════════════════
-    # TAB ⑥ / ⑦ / ⑧ — [新] 並行預覽（客戶 2026-09-07「雙軌並行」）
+    # TAB ⑥ / ⑦ / ⑧ / ⑨ — [新] 並行預覽（客戶 2026-09-07「雙軌並行」）
     # ══════════════════════════════════════════════════════
-    # ⚠️ 2026-09-07 由 ⑥⑦ 擴為 ⑥⑦⑧（新增 ⑧ [新] 標的探索）。
+    # ⚠️ 2026-09-07 由 ⑥⑦ 擴為 ⑥⑦⑧（新增 ⑧ [新] 標的探索）；
+    #    2026-09-08 再擴為 ⑥⑦⑧⑨（新增 ⑨ [新] 資產配置）。
     #    ~~「TAB ⑥ / ⑦」~~ / ~~「這兩格」~~ 只是**描述下面有幾格的計數**，
     #    不是條文也不是政策 —— 依本 repo 慣例（`CLAUDE.md §-2.A` 增補輪註記）
     #    這類計數**與內容保持一致、不加刪除線**；旁邊留一個劃掉的「兩」
     #    只會讓記錄自相矛盾。**下面那句「這兩格必須留在 owner `with` 裡面」
     #    是另一回事，它有自己的射程，見該處。**
-    # 這三格是**新版 View 的預覽入口**，與上面 ② / ③ / ⑤ 三格**同時存在**：
-    #   ② ↔ ⑥ 是同一件事的舊 / 新兩版；⑤ ↔ ⑦、③ ↔ ⑧ 同理。
+    # 這四格是**新版 View 的預覽入口**，與上面 ② / ③ / ④ / ⑤ 四格**同時存在**：
+    #   ② ↔ ⑥ 是同一件事的舊 / 新兩版；⑤ ↔ ⑦、③ ↔ ⑧、④ ↔ ⑨ 同理。
     # 客戶原則：未經客戶親自驗收並明文下令，**舊 Tab 一律維持原樣保留**，
     # 所以「管理室 / 說明書等功能同時出現在舊 Tab 與新 Tab」是**雙軌的正常狀態**，
     # ⛔ **不是 bug，不要順手去「解決重複」**。
@@ -688,9 +710,9 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     # ⚠️ 這兩格（⑥ / ⑦）**必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**：
     #    旗標是 thread-local，只在 `with` 區塊內成立；⑦ 一旦跑到區塊外，
     #    它底下的 `render_fetch_diag_from_session()` 就會與 ③ 各畫一份。
-    #    ⚠️ **⑧ 也必須留在裡面，但理由不是這一個** —— 見 ⑧ 那一格上方的註解。
-    #       （寫在那裡而不是併進本句，是因為「同一句話涵蓋三格」會讓後人以為
-    #        ⑧ 底下也有一份抓取診斷；它沒有。）
+    #    ⚠️ **⑧ / ⑨ 也必須留在裡面，但理由不是這一個** —— 見那兩格上方的註解。
+    #       （寫在那裡而不是併進本句，是因為「同一句話涵蓋四格」會讓後人以為
+    #        ⑧ / ⑨ 底下也有一份抓取診斷；它們沒有。）
     #    守衛：`tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
     #    （它逐一比對「全檔 `with tab_*:`」⊆「owner 區塊內」，本批已隨分頁數擴充）。
     with tab_preview_health:
@@ -732,3 +754,27 @@ with _settings_page_owns(_SD_FETCH_DIAG):
             from ui.helpers.session import friendly_error as _fe_pv_research
             _fe_pv_research(f"「{_preview_tab_label('research')}」分頁渲染失敗",
                             _pv_research_e, hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ⚠️ ⑨ 與 ⑥ / ⑦ / ⑧ 是同一件事（雙軌並行）。**它與那三格的差別要看清楚**：
+    #    ⑥ 與 ⑦ 各有一個 Checkbox Gate，⑧ 與 ⑨ 沒有 —— 而**理由不一樣**：
+    #      · ⑥ / ⑦ 有 gate，是因為它們**委派同一批舊模組**（⑥ 撞 `plotly_chart`
+    #        的 element id；⑦ 撞 `ui/tab_manage.py` 的具名 widget key 與三個 form key）。
+    #      · **⑨ 沒有 gate，是因為掃出來真的沒有東西可撞** —— 新 ④ 是自足實作，
+    #        委派的三個 `ui/helpers/portfolio|macro` 模組與舊 ④ **沒有共用任何
+    #        會註冊 element id 的函式**。完整證據與掃描器射程見
+    #        `tests/test_dual_track_t9_portfolio.py`。
+    #    ⛔ **新舊 ④ 同時出現在畫面上是雙軌的正常狀態**，不要順手去「解決重複」。
+    #
+    # ⚠️ **本格同樣必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**，
+    #    理由**與 ⑧ 那一格逐字相同、與 ⑦ 不同**：⑨ 底下一個字都沒有畫抓取診斷
+    #    （本批實測：`ui/views/page_04_portfolio.py` 的可達集合 14 個模組裡，
+    #     沒有任何一個是 `ui.helpers.settings_diag.*`）。它要留在裡面純粹是因為
+    #    `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+    #    要求「全檔每一個 `with tab_*:` 都在 owner 區塊內」—— 那條規則刻意不開例外。
+    with tab_preview_portfolio:
+        try:
+            render_asset_allocation()
+        except Exception as _pv_portfolio_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_portfolio
+            _fe_pv_portfolio(f"「{_preview_tab_label('portfolio')}」分頁渲染失敗",
+                             _pv_portfolio_e, hint=_TAB_ISOLATION_HINT, level="error")
