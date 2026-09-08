@@ -847,6 +847,156 @@ def test_the_invested_hint_is_right_in_every_state():
         "「全部抓過而失敗」的文案還在叫使用者去抓 —— 抓過了，而且失敗了。")
 
 
+def test_the_call_site_feeds_invested_hint_the_right_three_numbers():
+    """⭐⭐ **有人在守「傳進去的是什麼」** —— 真值表守的是函式，這一條守的是實參。
+
+    ## 這條是第四輪獨立稽核擋下來的那件事
+
+    :func:`test_the_invested_hint_is_right_in_every_state` 把那個純函式守得很緊
+    （27 種組合、8 顆突變全紅）。**但沒有任何一條在看「呼叫端餵了什麼進去」。**
+    稽核在呼叫處做了兩顆**單 token** 突變，**24 條守衛與 CI 兩條渲染斷言全部綠燈**：
+
+    ==== ====================================== ==========================================
+    突變  改了什麼                                畫面上長出什麼（真渲染逐字）
+    ==== ====================================== ==========================================
+    M10   ``n_loaded=len(_loaded)`` → ``len(_all)``  **第三輪擋下的那個 bug 逐字重現** ——
+                                                「已載入的標的都沒有填投入金額」＋ `pf_ledger`，
+                                                而同一畫面下一行寫著「只加已載入的 **0** 檔」
+    M11   ``pending_split(session[…])``            「⬜ **一檔標的都還沒有**」，
+          → ``pending_split(_loaded)``            而下一行寫著「另有 **2** 檔尚未載入或載入失敗」
+    ==== ====================================== ==========================================
+
+    ⛔ **M11 打臉的正是本組自己寫在 `_status_tiles` 上方那句話**：
+    「同源 ⇒ 同一畫面上的兩段**不可能**對同一批資料給出不同的分類」——
+    **同源只在「兩邊吃同一份資料」時成立，而在此之前沒有人在驗這件事。**
+    改一個 token，同源就斷了。
+
+    ## 為什麼是**行為**檢查，不是再一次形狀檢查
+
+    上一輪本組才剛證明「形狀對、答案錯」擋不住東西（把有 bug 的 `00a69d2` 拿舊守衛跑，全綠），
+    並據此把 (f) 從形狀改成接線。**這裡不能反過來又寫一條「實參必須逐字是 `len(_loaded)`」** ——
+    那會在有人用一個**正確但不同拼法**的運算式時誤紅，而且它守的仍然是拼字。
+
+    **做法**：從產品檔把 `_status_tiles` 裡**餵給 `invested_hint` 的那條資料鏈**
+    （對 `_loaded` / `_all` / `_waiting` / `_failed` 的指派 ＋ 那個呼叫本身）
+    **逐字取出來執行**，把它依賴的每一個名字換成**行為已知的替身**，
+    再看它算出來的三個數字對不對。**執行的是產品的原始碼，驗的是它算出什麼。**
+
+    ⚠️ **替身裡的 `st` 只是一個「拿得到 session 的容器」**（一個屬性），
+    **不是 streamlit 假件、也沒有進 `sys.modules`** —— 本檔仍然是 streamlit-free 的那一半。
+    """
+    import ast as _ast
+
+    from ui.helpers.portfolio.add_entry import pending_split
+    from ui.helpers.session import fund_is_usable
+
+    _page = ROOT / "ui" / "views" / "page_04_portfolio.py"
+    _tree = _ast.parse(_page.read_text(encoding="utf-8"))
+    _fn = next((_n for _n in _ast.walk(_tree)
+                if isinstance(_n, _ast.FunctionDef) and _n.name == "_status_tiles"), None)
+    assert _fn is not None, "`_status_tiles` 不見了（改名或刪掉）。"
+
+    # ── 取出那條資料鏈：對這四個名字的指派，加上 `invested_hint(...)` 那一句 ──
+    _WANT = {"_loaded", "_all", "_waiting", "_failed"}
+
+    def _targets(stmt):
+        _out = set()
+        for _t in getattr(stmt, "targets", []):
+            for _n in _ast.walk(_t):
+                if isinstance(_n, _ast.Name):
+                    _out.add(_n.id)
+        return _out
+
+    _chain = []
+    for _stmt in _fn.body:
+        if isinstance(_stmt, _ast.Assign):
+            _src = _ast.unparse(_stmt)
+            if _targets(_stmt) & _WANT or "invested_hint(" in _src:
+                _chain.append(_stmt)
+    assert any("invested_hint(" in _ast.unparse(_s) for _s in _chain), (
+        "`_status_tiles` 沒有一句在呼叫 `invested_hint` —— 那個純函式與它的真值表都空轉了。")
+    for _name in _WANT:
+        assert any(_name in _targets(_s) for _s in _chain), (
+            f"`_status_tiles` 不再指派 `{_name}` —— 本條抓不到它餵了什麼進去，"
+            "若這是刻意改的，本條要跟著改（**不是拿掉**）。")
+
+    # ── 替身：行為已知，且刻意與產品端「不同源」，這樣餵錯就一定看得出來 ──
+    class _SessionHolder:
+        """只有一個屬性的容器（`st.session_state` 的形狀），**不是 streamlit 假件**。"""
+
+        def __init__(self, rows):
+            self.session_state = {"portfolio_funds": rows}
+
+    _CASES = (
+        # rows                                              期望的 (n_loaded, n_waiting, n_failed)
+        # ⭐ 第一組刻意讓三個數字**互不相同**（1／2／3）—— 三個都相同的話，
+        #    把兩個實參對調也算得出一樣的答案，這一條就看不見那種錯。
+        ([{"code": "A", "loaded": True, "load_error": None},
+          {"code": "B", "loaded": False, "load_error": None},
+          {"code": "B2", "loaded": False, "load_error": None},
+          {"code": "C", "loaded": True, "load_error": "404"},
+          {"code": "C2", "loaded": True, "load_error": "timeout"},
+          {"code": "C3", "loaded": True, "load_error": "500"}], (1, 2, 3)),
+        ([{"code": "B", "loaded": False, "load_error": None},
+          {"code": "D", "loaded": False, "load_error": None}], (0, 2, 0)),
+        ([{"code": "C", "loaded": True, "load_error": "404"}], (0, 0, 1)),
+        ([{"code": "A", "loaded": True, "load_error": None}], (1, 0, 0)),
+        ([], (0, 0, 0)),
+    )
+
+    for _rows, _want in _CASES:
+        _seen: dict[str, Any] = {}
+
+        def _spy(**_kw):
+            _seen.update(_kw)
+            return ("<missing>", "<where>")
+
+        _ns: dict[str, Any] = {
+            # 產品端真正依賴的名字，全部換成行為已知的替身
+            "_holdings": lambda: [_f for _f in _rows if fund_is_usable(_f)],
+            "_all_portfolio_rows": lambda: list(_rows),
+            "pending_split": pending_split,
+            "st": _SessionHolder(_rows),
+            "_SK_PORTFOLIO": "portfolio_funds",
+            "invested_hint": _spy,
+        }
+        for _stmt in _chain:
+            exec(compile(_ast.Module(body=[_stmt], type_ignores=[]),  # noqa: S102
+                         filename=str(_page), mode="exec"), _ns)
+
+        # ⭐ `_all` 沒有被餵給 `invested_hint`，但它餵的是**同一排的 📋 保單那一格**
+        #    （`f"{len(_pids)} 張 / {len(_all)} 檔"` 與「目前 N 檔標的都沒有帶保單編號」）。
+        #    ⚠️ **這一項是本組自己找到的，稽核沒有報**：用稽核那一招在呼叫端做單 token 突變
+        #    （`_all = _all_portfolio_rows()` → `_all = _holdings()`），
+        #    **25 條守衛與 CI 兩條渲染斷言全綠**，而整頁逐字 diff 顯示畫面在說謊 ——
+        #    「目前 **0** 檔標的都沒有帶保單編號」（實際 2 檔）、
+        #    「📋 保單 **1 張 / 1 檔**」（實際 2 張 / 2 檔）。
+        #    **同一種病、隔壁一格**：呼叫端餵錯，而沒有人在看餵了什麼。
+        assert _ns["_all"] == list(_rows), (
+            f"`_all` 被算成 {_ns['_all']!r}，應為**整份清單** {list(_rows)!r}。\n"
+            "⛔ 它是 📋 保單那一格的分母（`len(_all)` 與「目前 N 檔…沒有帶保單編號」）——"
+            "餵成 `_holdings()` 會讓畫面**少報**未載入的那幾檔，而且看起來完全正常。")
+
+        _got = (_seen.get("n_loaded"), _seen.get("n_waiting"), _seen.get("n_failed"))
+        assert _got == _want, (
+            f"呼叫端餵給 `invested_hint` 的是 {_got}，應為 {_want}（rows={_rows!r}）。\n"
+            "⛔ 這正是第四輪稽核那兩顆單 token 突變做的事：\n"
+            "   · `n_loaded=len(_all)` → 把「可用」當成「全部」，"
+            "第三輪擋下的那個 bug 會逐字回到畫面上；\n"
+            "   · `pending_split(_loaded)` → 餵的是**過濾後**的清單，"
+            "畫面會說「一檔標的都還沒有」，而下一行同時說「另有 N 檔尚未載入」。\n"
+            "**純函式再對，餵錯了一樣是錯的。**")
+
+    # ── 反向自我檢查：第一組測資必須真的分辨得出三個位置 ──
+    #    ⚠️ **本組第一版把這裡寫反了**：原本用 `(1, 1, 1)` 還斷言「三個相同 ＝ 可區分」——
+    #       三個相同正好是**最分辨不出東西**的那一組（兩個實參對調也照樣通過）。
+    #       這是一條「看起來像在自我檢查、實際上恆真」的斷言，就地更正並留痕。
+    _first = _CASES[0][1]
+    assert len(set(_first)) == 3, (
+        f"第一組測資的三個數字是 {_first}，它們必須**互不相同** —— "
+        "否則把兩個實參對調也算得出同樣的答案，本條就看不見那種錯。")
+
+
 def test_the_delete_pointer_is_not_a_dead_end():
     """⭐ **失敗卡說「要刪只能到舊 ④」，那裡就真的要刪得掉。**
 

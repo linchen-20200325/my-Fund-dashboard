@@ -51,6 +51,7 @@ from ui.views.page_04_portfolio import (  # noqa: E402
     BLOCK_POLICY,
     EMPTY_TITLE_NONE,
     EMPTY_TITLE_PENDING,
+    invested_hint,
     STATUS_INVESTED_LABEL,
 )
 
@@ -273,6 +274,73 @@ def test_a_list_of_only_failed_rows_does_not_tell_him_to_press_load():
     assert where_to_find("pf_load") not in _all, (
         "全部都抓失敗，畫面卻叫使用者去按載入 —— 那顆按鈕不會碰這幾筆。\n" + _all)
     assert "連線逾時" in _all, "抓不到的原因沒有出現在畫面上。\n" + _all
+
+
+def test_a_list_that_is_added_but_not_fetched_says_neither_of_the_two_wrong_things():
+    """⭐ **「加了但還沒抓到」那個狀態，畫面上兩句話都不准出現。**
+
+    ## 這條守的是**呼叫端餵錯資料**，不是那個純函式
+
+    第四輪獨立稽核在 `_status_tiles` 的**呼叫處**做了兩顆單 token 突變，
+    **24 條 streamlit-free 守衛與本檔既有的兩條渲染斷言全部綠燈**，而畫面上：
+
+    - ``n_loaded=len(_loaded)`` → ``len(_all)``：畫面說「**已載入的**標的都沒有填投入
+      金額」＋ 指 `pf_ledger`，**而同一畫面下一行寫著「只加已載入的 0 檔」** ——
+      這正是第三輪獨立稽核擋下的那個 bug，逐字重現。
+    - ``pending_split(session[…])`` → ``pending_split(_loaded)``：畫面說
+      「**一檔標的都還沒有**」，**而下一行寫著「另有 2 檔尚未載入或載入失敗」**。
+
+    **兩顆都是餵錯資料，不是那個函式算錯。** 所以擋它們的斷言必須看**畫面**。
+
+    ## 為什麼是這兩句話
+
+    這個狀態下 `_holdings()` 是空的、清單卻非空，所以：
+
+    - `pf_ledger`（T7「✏️ 編輯持倉」）**在這個狀態下不渲染**（閘門 `fund_is_usable`），
+      指過去是死路 —— **第三輪擋下的就是它**；
+    - :data:`EMPTY_TITLE_NONE`（「還沒有任何保單或扣款標的」）**是假的** ——
+      使用者剛加過，清單裡有兩檔，照著做只會加出重複的一筆。
+
+    ⚠️ **本條不重複驗那個純函式**（那是 `tests/test_wf04_add_holdings.py` 的真值表
+    與 `test_the_call_site_feeds_invested_hint_the_right_three_numbers` 的工作）。
+    **它只驗這個狀態下畫面說的是不是對的那一句。**
+
+    ⚠️ **稽核建議的那條斷言（`EMPTY_TITLE_NONE` 不得出現）只殺得掉一半，本組實測後換掉了。**
+    M11 印在畫面上的是 `invested_hint` **第四支**的句子（「一檔標的都還沒有，所以沒有
+    金額可以加」），**不是** :data:`EMPTY_TITLE_NONE`（「還沒有任何保單或扣款標的」）——
+    兩者是不同的字串，所以那條斷言在 M11 之下**照樣綠**（本組以 stand-in 逐樹實測：
+    M10 → RED、**M11 → GREEN**）。**照抄建議會留下一半的洞。**
+
+    ## 改成：**問 SSOT 這個狀態該說哪一句，然後要求畫面上真的是那一句**
+
+    不硬抄任何文案 —— 直接呼叫 :func:`invested_hint`（產品自己那支）算出
+    「0 已載入 / 2 還沒抓 / 0 失敗」該說什麼，再確認畫面上就是它。
+    **餵錯任何一個數字，渲染出來的就會是別支的句子 ⇒ 當場紅。**
+    """
+    _at = _app([{"code": "0050", "loaded": False, "load_error": None},
+                {"code": "0056", "loaded": False, "load_error": None}])
+    _all = _text(_at)
+
+    assert EMPTY_TITLE_PENDING in _all, (
+        "沒有講出「東西有了、資料還沒抓回來」這個處境。\n" + _all)
+    assert EMPTY_TITLE_NONE not in _all, (
+        "清單裡明明有兩檔，畫面卻說「還沒有任何保單或扣款標的」。\n" + _all)
+
+    # ⭐ 這一組測資是 2 檔、都沒抓過 ⇒ 正解必然是「還沒抓過淨值」那一支。
+    _want_missing, _want_where = invested_hint(n_loaded=0, n_waiting=2, n_failed=0)
+    assert _want_missing in _all, (
+        f"💰 那格說的不是這個狀態該說的話。應該要有：\n  {_want_missing}\n"
+        "⛔ 稽核的兩顆呼叫端突變都會在這裡紅：\n"
+        "   · M10 `n_loaded=len(_all)` → 畫面改說「**已載入的**標的都沒有填投入金額」，"
+        "而同一畫面下一行寫著「只加已載入的 **0** 檔」；\n"
+        "   · M11 `pending_split(_loaded)` → 畫面改說「**一檔標的都還沒有**」，"
+        "而下一行寫著「另有 **2** 檔尚未載入或載入失敗」。\n" + _all)
+    assert _want_where in _all, (
+        f"💰 那格的「去哪補」不是 {_want_where!r}。\n" + _all)
+    assert where_to_find("pf_ledger") not in _all, (
+        "一檔都還沒抓到，畫面卻指去帳本的「編輯持倉」—— 那個 expander 在這個狀態"
+        "**不渲染**（閘門是 `fund_is_usable`），使用者走過去只會看到「請先載入至少一檔」。\n"
+        "⛔ 這是第三輪已經擋下過一次的 bug，稽核的 M10 讓它逐字重現。\n" + _all)
 
 
 def test_the_failure_card_escapes_what_the_fetcher_sent_back():
