@@ -456,6 +456,108 @@ def test_the_policy_admin_pointer_is_not_a_dead_end():
         f"{_old.name} import 了卻沒有呼叫 `render_policy_admin_section` —— 死指路。")
 
 
+def test_the_principal_pointer_is_not_a_dead_end():
+    """⭐ **「去哪填本金」指到的地方，真的打得進一個金額** —— 而且兩處是同一個答案。
+
+    ## 這條是第二輪獨立稽核擋下來的那件事
+
+    在此之前**同一個缺失欄位 `invest_twd`、同一個畫面、兩句相反的話**：
+    :func:`_render_mix` 指 `pf_add`、`_status_tiles` 的 💰 那一格指 `pf_policy_admin`。
+    **兩句不可能同時是對的**，而實測顯示**兩句都不是最好的那一句**：
+
+    - `pf_add`（舊 ④「➕ 加入與管理基金」）**填不了本金** —— 實測
+      `ui/tab3_portfolio.py` 對 `invest_twd` **只有** `invest_twd: 0` 的字面值
+      （新條目）與原樣搬運既有值，**沒有任何一處寫使用者輸入的金額**。
+    - `pf_policy_admin` 走得通，但要**離開 App** 去改 Sheet 再回來讀。
+
+    → 兩處統一指 `pf_ledger`（舊 ④「💼 持倉戰情（T7 帳本）」），因為那裡的
+    `🟨 淨投資金額 (NT)` 是**全站唯一「使用者打一個金額進去、它就落在持倉清單上」**
+    的地方，而且**無 OAuth／schema 條件**。
+
+    ⚠️ **本條同時是 `pf_ledger` 的逐字相等鎖。** `P-SECLABEL-1`（見
+    `EXCEPTIONS.md §8.3.P`）記著：既有漂移鎖走 `_want in _src`（**子字串**），
+    **截短照樣全綠**。本批把 `pf_ledger` 變成「去哪填本金」的唯一答案，
+    它因此成為本批的**承重** key —— 所以在這裡把它鎖成相等。
+    ⛔ **其餘幾個仍然只有子字串鎖，本批刻意不動**（`CLAUDE.md §8.4 步驟 4`：
+    不擅自擴大範圍），已登記在 `P-SECLABEL-1`。
+    """
+    import ast as _ast
+
+    from ui.helpers.story_nav import section_label, where_to_find
+
+    _page = ROOT / "ui" / "views" / "page_04_portfolio.py"
+    _ptree = _ast.parse(_page.read_text(encoding="utf-8"))
+
+    # (a) 兩處都指 `pf_ledger`，而且**都不**指 `pf_add`。
+    def _where_keys(fnname: str) -> set[str]:
+        _fn = next((_n for _n in _ast.walk(_ptree)
+                    if isinstance(_n, _ast.FunctionDef) and _n.name == fnname), None)
+        assert _fn is not None, f"找不到 {fnname} —— 它被改名或刪掉了。"
+        return {_n.args[0].value for _n in _ast.walk(_fn)
+                if isinstance(_n, _ast.Call)
+                and getattr(_n.func, "id", None) == "where_to_find"
+                and _n.args and isinstance(_n.args[0], _ast.Constant)}
+
+    _mix = _where_keys("_render_mix")
+    _tiles = _where_keys("_status_tiles")
+    assert "pf_ledger" in _mix, (
+        f"`_render_mix` 的指路不是 `pf_ledger`，而是 {sorted(_mix)} —— "
+        "算不出比例時要指到「去哪填本金」，而那裡是帳本。")
+    assert "pf_ledger" in _tiles, (
+        f"`_status_tiles` 沒有任何一格指 `pf_ledger`（實際：{sorted(_tiles)}）—— "
+        "💰 總投入那一格要指到「去哪填本金」。")
+    assert "pf_add" not in _mix, (
+        "`_render_mix` 又指回 `pf_add` 了 —— 那一區填不了本金，使用者會撲空。")
+
+    # (b) SSOT 的字與舊 ④ 那個抬頭**逐字相等**（不是「包含」）。
+    _old = ROOT / "ui" / "tab3_portfolio.py"
+    _osrc = _old.read_text(encoding="utf-8")
+    _otree = _ast.parse(_osrc)
+    _heads = {_n.args[0].value.removeprefix("### ")
+              for _n in _ast.walk(_otree)
+              if isinstance(_n, _ast.Call)
+              and getattr(_n.func, "attr", None) == "markdown"
+              and _n.args and isinstance(_n.args[0], _ast.Constant)
+              and isinstance(_n.args[0].value, str)
+              and _n.args[0].value.startswith("### ")}
+    assert section_label("pf_ledger") in _heads, (
+        f"`_SECTION_LABELS['pf_ledger']` ＝ {section_label('pf_ledger')!r} 不在舊 ④ 的"
+        f"一級抬頭清單裡：{sorted(_heads)}\n"
+        "⛔ 指路會指到一個使用者在畫面上找不到的標題（截短也會在這裡紅）。")
+
+    # (c) 那一區真的會渲染 T7（否則使用者到得了標題、到不了輸入格）。
+    _names = {_a.asname or _a.name for _n in _ast.walk(_otree)
+              if isinstance(_n, _ast.ImportFrom)
+              for _a in _n.names if _a.name == "render_t7_section"}
+    assert _names and [_n for _n in _ast.walk(_otree)
+                       if isinstance(_n, _ast.Call)
+                       and getattr(_n.func, "id", None) in _names], (
+        f"{_old.name} 沒有真的呼叫 `render_t7_section` —— "
+        f"本頁把使用者指到 {where_to_find('pf_ledger')}，那是一條死指路。")
+
+    # (d) ⭐ 那裡真的有一個「打得進金額」的輸入格，而且它真的寫 `invest_twd`。
+    _led = ROOT / "ui" / "tab3_t7_ledger.py"
+    _ltree = _ast.parse(_led.read_text(encoding="utf-8"))
+    _keys = _button_keys(_ltree) | {
+        "".join(_v.value for _v in _kw.value.values if isinstance(_v, _ast.Constant))
+        for _n in _ast.walk(_ltree)
+        if isinstance(_n, _ast.Call) and getattr(_n.func, "attr", None) == "number_input"
+        for _kw in _n.keywords
+        if _kw.arg == "key" and isinstance(_kw.value, _ast.JoinedStr)}
+    assert "t7_init_inv_" in _keys, (
+        f"{_led.name} 裡找不到那個金額輸入格（`key=f\"t7_init_inv_{{pk}}\"`）—— "
+        "本頁把使用者指過去，他到了那裡沒有東西可以填。")
+    _writes = [_ast.unparse(_n) for _n in _ast.walk(_ltree)
+               if isinstance(_n, _ast.Assign)
+               for _t in _n.targets
+               if isinstance(_t, _ast.Subscript)
+               and isinstance(_t.slice, _ast.Constant)
+               and _t.slice.value == "invest_twd"]
+    assert _writes, (
+        f"{_led.name} 有輸入格、卻**沒有任何一處**把它寫進 `invest_twd` —— "
+        "那就跟 `pf_add` 一樣是撲空。")
+
+
 def test_the_delete_pointer_is_not_a_dead_end():
     """⭐ **失敗卡說「要刪只能到舊 ④」，那裡就真的要刪得掉。**
 
@@ -543,8 +645,19 @@ def test_the_new_wording_carries_no_internal_progress_language():
     _page_tree = ast.parse(_page.read_text(encoding="utf-8"))
     for _fn in ast.walk(_page_tree):
         if (isinstance(_fn, ast.FunctionDef)
+                # ⭐ **2026-09-08 第二輪：射程多收 `_status_tiles`（獨立稽核指出的缺口）。**
+                #    稽核往 `_status_tiles` 塞了 5 個違禁詞，**92 條測試無一抓到** ——
+                #    那四格的 `missing` 文案**是會印在畫面上的字**，卻不在任何一條
+                #    內部語言守衛的射程內。這是**既有守衛的射程缺口**（不是本批造成的），
+                #    但本批正好在改那四格的文案，依 `CLAUDE.md §-1.5.1c 判定 3`
+                #    屬「本次弄到的東西」的收尾義務 —— 故就地補上。
+                #    ⚠️ **這是把射程放大，不是放寬**：收進來的字只會**多**紅、不會少紅。
+                #    ⚠️ **仍然看不到的**：`_status_tiles` 的 `label` 走的是模組層常數
+                #    （`STATUS_*_LABEL`），那些常數的**定義處不在本清單裡** ——
+                #    也就是把違禁詞寫進那幾個常數，本條照樣抓不到。**據實登記，不假裝全守住。**
                 and _fn.name in ("_render_add_fund", "_render_add_result",
-                                 "_render_pending_notice", "_render_no_holdings")):
+                                 "_render_pending_notice", "_render_no_holdings",
+                                 "_status_tiles")):
             _targets.append((f"{_page.name}::{_fn.name}", _fn))
 
     _docs: set[int] = set()

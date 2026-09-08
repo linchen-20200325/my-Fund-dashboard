@@ -1478,8 +1478,34 @@ def test_the_mix_block_never_prints_a_zero_when_it_cannot_compute():
     assert "0.0%" not in _body and "0%" not in _body, (
         f"「{BLOCK_MIX}」在算不出比例時畫了 0% —— 「不知道」被畫成了「是零」（§1）：\n{_body}")
     # 指路必須是**真的有效**的那一條（去填本金），不是四塊灰態那種「去了也沒用」。
-    assert where_to_find("pf_add") in _body, (
-        f"算不出比例時要指到「去哪填本金」（`pf_add`），而不是指回本頁的試算：\n{_body}")
+    #
+    # ⛔ **2026-09-08 第二輪：斷言的目標 key 改了（有意識的更正，不是漏刪 ·
+    #    決策者：AI 總管，依獨立稽核擋下的「同一畫面兩個相反答案」）**
+    #    ~~assert where_to_find("pf_add") in _body~~
+    #
+    #    **本條的用意一個字都沒有變**，上面那句註解就是它：「指路必須是**真的有效**
+    #    的那一條（去填本金）」。**被推翻的是「`pf_add` 就是那一條」這個事實前提。**
+    #    **實測（AST，掃全檔 `invest_twd` 的寫入點）**：
+    #      · `ui/tab3_portfolio.py`（＝ `pf_add` 那一區）**沒有任何一處**把使用者輸入的
+    #        金額寫進 `invest_twd` —— 只有 `invest_twd: 0` 的字面值（新條目）與搬運既有值。
+    #        **使用者照著這條指路走會撲空**，正是本條註解自己在防的「去了也沒用」。
+    #      · 真正打得到字的是 `ui/tab3_t7_ledger.py` 的 `🟨 淨投資金額 (NT)`
+    #        （`key=f"t7_init_inv_{pk}"` → `_f_obj["invest_twd"] = int(_inv)`），
+    #        它住在舊 ④ 的「💼 持倉戰情（T7 帳本）」＝ `where_to_find("pf_ledger")`。
+    #
+    #    ⚠️ **這不是把斷言放寬，是換一個正確答案並且再收緊一格**：
+    #    除了正面釘住新答案，另加一條**負面**斷言把舊的錯答案擋掉
+    #    （在此之前「畫面同時出現兩個指路」是過得了的）。
+    #    自我檢查（本條唯一該問的問題）：**如果 `pf_ledger` 其實是錯的，本條會不會轉紅？**
+    #    → 會：把 `where=` 改回 `pf_add`（或任何別的 key），**正面那條當場紅**；
+    #      而若有人「兩個都印」想同時討好兩邊，**負面那條紅**。
+    assert where_to_find("pf_ledger") in _body, (
+        "算不出比例時要指到「**去哪填本金**」——而那是舊 ④ 的「💼 持倉戰情（T7 帳本）」"
+        f"（`pf_ledger`），不是指回本頁的試算：\n{_body}")
+    assert where_to_find("pf_add") not in _body, (
+        "又指回 `pf_add`（「➕ 加入與管理基金」）了 —— 那一區**填不了本金**"
+        "（實測：`ui/tab3_portfolio.py` 只會寫 `invest_twd: 0`），"
+        f"使用者照著做會撲空：\n{_body}")
 
 
 def test_the_target_number_comes_from_the_user_setting_not_a_constant():
