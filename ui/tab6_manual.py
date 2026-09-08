@@ -707,7 +707,7 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
     # ⛔ 也就是說：本組**創造了** `test_tab5_does_not_hand_copy_the_labels_it_already_imports`
     #    那條規則要抓的形狀（「已經 import 了卻還手抄一份」），
     #    卻**沒有把同一把尺套到自己身上** —— 同檔、同函式、同缺陷類別。
-    # 這與 `EXCEPTIONS.md §8.2.A.1` 記載的失效模式同型：**條件只往外用、不往內用。**
+    # 這與 `CLAUDE.md §8.2.A.1` 記載的失效模式同型：**條件只往外用、不往內用。**
     st.caption(
         f"💡 以下面板需先在 {_where_to_find('macro')} 按「{_LBL_MACRO_LOAD_FIRST}」"
         "後方可顯示即時數據。未載入時各區塊顯示提示訊息。"
