@@ -359,8 +359,16 @@ def test_the_gate_still_has_a_reason_to_exist():
 # ══════════════════════════════════════════════════════════════════
 # 4｜行為層：**注入持倉**，也就是 CI 平常永遠沒有的那個前提
 # ══════════════════════════════════════════════════════════════════
-#: 委派區的標題，`_render_delegated_sections` 進到 gate 之後才會畫。
+#: 委派區的標題。⭐ **它畫在 gate 之【前】**，所以 gate 關著時它**仍然要出現** ——
+#: 理由見 `page_02_health.py` 該處的長註：標題若留在 gate 後面，關著時灰字會
+#: **被歸到上一個區塊「逐檔體檢表」名下**，`test_wf02_health_skeleton.py::_units()`
+#: 以 `#### 標題` 切段，於是那條「已接線區塊不得變灰」的守衛會誤紅。
+#: **本檔把「標題必須在 gate 前面」釘成斷言，就是為了不讓那個回歸再發生一次。**
 _DELEGATED_HEADING = "#### 🔬 逐檔健診與互斥分析"
+
+#: 委派區**真的跑起來**才會畫的第一句（gate 之後）。用它當「body 有沒有執行」的判準，
+#: **不要用標題** —— 標題現在兩種狀態都會出現。
+_DELEGATED_BODY_MARK = "本區直接沿用既有的健診模組"
 
 
 def test_with_holdings_the_delegated_block_stays_closed_by_default():
@@ -409,7 +417,26 @@ def test_with_holdings_the_delegated_block_stays_closed_by_default():
         "各畫一次 `st.plotly_chart` ⇒ 線上紅字塊。\n"
         f"實際錄到的 checkbox：{[p for p in parts if p.startswith('[checkbox] ')]}")
 
-    _body = [p for p in parts if _DELEGATED_HEADING in p]
+    # ── (a) 標題必須畫，而且恰好 1 次 —— 這一條鎖的是「標題在 gate 之前」──
+    _heads = [p for p in parts if _DELEGATED_HEADING in p]
+    assert len(_heads) == 1, (
+        f"委派區標題被畫了 {len(_heads)} 次，應該**恰好 1 次**（gate 開關都要有）。\n"
+        "0 次 ＝ 標題又被移回 gate 後面了 ⇒ 關著時那句灰字會**被歸到上一個區塊**"
+        "「逐檔體檢表」名下 ⇒ `test_wf02_health_skeleton.py::"
+        "test_wired_blocks_show_real_content_when_the_data_is_there[逐檔體檢表]` "
+        "會誤報「已接線區塊變灰態」。**那條守衛沒有錯，是標題放錯位置。**\n"
+        "（2026-09-08 CI 實際發生過一次，就是這個原因。）")
+
+    # ── (b) body 不准跑 —— 判準是 gate 之後那句 caption，不是標題 ──
+    _body = [p for p in parts if _DELEGATED_BODY_MARK in p]
     assert len(_body) == 0, (
-        f"gate 沒勾，委派區卻還是畫了 {len(_body)} 次 —— gate 沒有真的擋住它。\n"
+        f"gate 沒勾，委派區的 body 卻還是跑了 {len(_body)} 次 —— gate 沒有真的擋住它。\n"
         "（`_Rec.checkbox` 一律回 `False`，所以這裡看到的就是「沒勾」的行為。）")
+
+    # ── (c) 關著時必須留下灰態說明，不能整塊靜默消失 ──
+    _grey = [p for p in parts if p.startswith("[caption] ⬜")
+             and "尚未載入" in p]
+    assert _grey, (
+        "gate 關著，卻連一句灰態說明都沒有 —— 使用者會看到一個標題底下空無一物，"
+        "分不出「這個功能不存在」「這次沒算出來」還是「我沒勾」。"
+        "（2026-08-28 客戶 Q1 三問判準：一律留灰色占位 ＋ 缺什麼 ＋ 去哪裡補。）")
