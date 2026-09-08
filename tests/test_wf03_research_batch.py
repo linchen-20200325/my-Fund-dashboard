@@ -440,17 +440,70 @@ def test_the_batch_never_opens_a_form_or_a_grid_of_its_own():
     assert not _bad, ("本頁自己開了網格 / 表單：\n  " + "\n  ".join(_bad))
 
 
-def test_the_two_forms_have_different_keys():
-    """兩個 form 的 key 不得相同 —— 撞 key 在 streamlit 會當場炸掉整頁。"""
-    _keys = {_n.args[0].value for _n in ast.walk(_tree())
-             if isinstance(_n, ast.Call) and getattr(_n.func, "id", "") == "applied_form"
-             and _n.args and isinstance(_n.args[0], ast.Constant)}
-    _names = {ast.unparse(_n.args[0]) for _n in ast.walk(_tree())
+#: 本頁 `applied_form(...)` 的站點數。**資產登記，不是門檻。**
+#:
+#: ⚠️ ~~`== 2`（搜尋 ＋ 批次）~~ → **2026-09-08 改為 3（狀態變更，不是漏刪）**：
+#:    客戶拍板把「投資試算」搬進深度區，它有自己的金額輸入框，**照鐵則 02 必須包 form**。
+#:    **舊數字在寫下的當天是對的**，被推翻的只是它的前提（本頁那時只有兩個輸入區）。
+#: ⚠️ **為什麼仍然寫死一個數字**（而不是改成 `>= 2` 一勞永逸）：等號擋的是
+#:    「**拆掉一個、別處補一個**」的淨零置換 —— 同 `tests/test_ui_rerun_contract.py::
+#:    FORM_SITE_TOTAL` 的立場。**紅燈是提醒你來更新這一行，不是叫你別加 form。**
+_APPLIED_FORM_SITES: int = 3
+
+
+def test_every_form_on_this_page_has_its_own_v03_key():
+    """本頁每一個 `applied_form(...)` 的 key **各不相同、而且都在 `v03_` 命名空間裡**。
+
+    撞 key 在 streamlit 會當場炸掉整頁（不是某一格壞掉而已），而新舊 ③
+    在同一次 `st.tabs` run 裡**同時渲染**，所以前綴不是風格問題。
+
+    ## ⚠️ 2026-09-08 改寫：從「數 2 個」變成「**逐一驗每一個**」（收緊，不是放寬）
+
+    ~~舊版只驗「站點數 ＝ 2」＋「批次那一個有前綴」。~~ 它有兩個結構性缺口：
+      1. **只點名批次那一個**有前綴 —— 搜尋與（本輪新增的）投資試算那兩個
+         **完全不在射程內**，把它們的 key 改成 `fr_mode`（舊 ③ 真的有的 key）不會轉紅；
+      2. **`_keys` 那個區域變數算完就沒被用到** —— 也就是「key 兩兩不同」
+         這件事**從來沒有被斷言過**，靠的是「兩個常數名不一樣」這個代理指標。
+
+    現行：站點數照樣釘（資產登記，見 :data:`_APPLIED_FORM_SITES`），
+    **但每一個 key 的值都逐一驗前綴、並驗彼此不重複**。
+    """
+    _sites = [_n for _n in ast.walk(_tree())
               if isinstance(_n, ast.Call) and getattr(_n.func, "id", "") == "applied_form"
-              and _n.args}
-    assert len(_names) == 2, f"`applied_form(...)` 的站點應為 2 個，實際：{sorted(_names)}"
-    assert _BATCH_FORM_KEY.startswith("v03_"), (
-        "批次 form 的 key 沒有本頁的命名前綴 —— 會與舊分頁的 session 互相覆寫。")
+              and _n.args]
+    _names = {ast.unparse(_n.args[0]) for _n in _sites}
+    assert len(_names) == _APPLIED_FORM_SITES, (
+        f"`applied_form(...)` 的站點應為 {_APPLIED_FORM_SITES} 個，實際：{sorted(_names)}\n"
+        "新增 form 是好事 —— 請把 `_APPLIED_FORM_SITES` 一起更新，"
+        "並確認不是把某一處拆掉換來的。")
+
+    # key 的**實際值**：位置引數若是本頁的模組層常數就解出它的值。
+    _consts = {_t.id: _n.value.value
+               for _n in _tree().body
+               if isinstance(_n, (ast.Assign, ast.AnnAssign))
+               and isinstance(getattr(_n, "value", None), ast.Constant)
+               and isinstance(_n.value.value, str)
+               for _t in (_n.targets if isinstance(_n, ast.Assign) else [_n.target])
+               if isinstance(_t, ast.Name)}
+    _keys: list[str] = []
+    for _n in _sites:
+        _a0 = _n.args[0]
+        if isinstance(_a0, ast.Constant) and isinstance(_a0.value, str):
+            _keys.append(_a0.value)
+        elif isinstance(_a0, ast.Name) and _a0.id in _consts:
+            _keys.append(_consts[_a0.id])
+    assert len(_keys) == len(_sites), (
+        f"有 form key 解不出字面值（解到 {_keys}，站點 {len(_sites)} 個）—— "
+        "動態組出來的 key 本條看不見，請改回模組層常數。")
+    _dupes = sorted({_k for _k in _keys if _keys.count(_k) > 1})
+    assert not _dupes, f"有兩個 form 用同一個 key：{_dupes} —— streamlit 會當場炸掉整頁。"
+    _bad = sorted(_k for _k in _keys if not _k.startswith("v03_"))
+    assert not _bad, (
+        f"這些 form key 沒有本頁的命名前綴：{_bad} —— "
+        "新舊 ③ 同時渲染，會與舊分頁的 session 互相覆寫。")
+    # 錨點：批次那一個仍然在（它是本檔的主題，被改名要看得見）。
+    assert _BATCH_FORM_KEY in _keys, (
+        f"批次 form 的 key `{_BATCH_FORM_KEY}` 不在掃到的清單裡：{_keys}")
 
 
 # ══════════════════════════════════════════════════════════════════
