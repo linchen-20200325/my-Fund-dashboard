@@ -1,0 +1,949 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>草稿 · ⑥⑦⑧⑨ 四頁線框</title>
+<style>
+  :root{
+    --ink:#1a1c1f; --ink-2:#5b6068; --ink-3:#8b9198;
+    --bg:#fbfbfa; --surface:#fff; --rule:#e6e5e2; --rule-strong:#cfcdc8;
+    --grey:#9aa0a6; --warn:#b26a00; --berry:#a8324a; --ok:#2e7d4f;
+    --accent:#2f5fd0; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ink:#e8e8e6; --ink-2:#a8adb4; --ink-3:#787e86;
+    --bg:#16181b; --surface:#1e2125; --rule:#2c3036; --rule-strong:#3b4148;
+    --accent:#7aa2f7; --berry:#e07a90; --ok:#6cc38f; --warn:#e0a458;
+  }}
+  :root[data-theme="dark"]{
+    --ink:#e8e8e6; --ink-2:#a8adb4; --ink-3:#787e86;
+    --bg:#16181b; --surface:#1e2125; --rule:#2c3036; --rule-strong:#3b4148;
+    --accent:#7aa2f7; --berry:#e07a90; --ok:#6cc38f; --warn:#e0a458;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 90px}
+  h1{font-size:23px;margin:0 0 6px;line-height:1.4}
+  h2{font-size:17px;margin:40px 0 12px;padding-bottom:7px;border-bottom:2px solid var(--rule-strong)}
+  h3{font-size:15px;margin:26px 0 9px;color:var(--ink)}
+  h4{font-size:13.5px;margin:18px 0 7px;color:var(--ink-2);text-transform:none}
+  p,li{color:var(--ink-2)}
+  b,strong{color:var(--ink)}
+  code,.mono{font-family:var(--mono);font-size:12.5px;
+             background:color-mix(in srgb,var(--ink) 7%,transparent);
+             padding:1px 4px;border-radius:3px}
+  .sub{color:var(--ink-3);font-size:12.5px;margin:0 0 18px}
+  .banner{border:2px solid var(--warn);border-radius:8px;padding:14px 16px;margin:18px 0 26px;
+          background:color-mix(in srgb,var(--warn) 9%,transparent)}
+  .banner b{color:var(--warn)}
+  .card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;
+        padding:14px 16px;margin:14px 0}
+  .card.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 5%,transparent)}
+  .card.berry{border-left:4px solid var(--berry)}
+  pre.wf{background:var(--surface);border:1px solid var(--rule-strong);border-radius:8px;
+         padding:14px 16px;margin:12px 0;overflow-x:auto;
+         font-family:var(--mono);font-size:12px;line-height:1.62;color:var(--ink);
+         white-space:pre}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12.5px}
+  th,td{border:1px solid var(--rule);padding:7px 9px;text-align:left;vertical-align:top;
+        color:var(--ink-2)}
+  th{background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink);font-weight:600}
+  td b{color:var(--ink)}
+  .scroll{overflow-x:auto}
+  .chip{display:inline-block;font-size:11px;border:1px solid var(--rule-strong);
+        border-radius:999px;padding:1px 9px;margin:0 4px 4px 0;color:var(--ink-2);
+        white-space:nowrap}
+  .chip.keep{border-color:var(--ok);color:var(--ok)}
+  .chip.drop{border-color:var(--berry);color:var(--berry)}
+  .chip.moved{border-color:var(--accent);color:var(--accent)}
+  .q{border-left:4px solid var(--accent);padding:2px 0 2px 14px;margin:16px 0}
+  .q h4{margin-top:0;color:var(--accent);font-size:14px}
+  ul{padding-left:22px}
+  li{margin:3px 0}
+  hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
+  .foot{color:var(--ink-3);font-size:12px;margin-top:50px;padding-top:14px;
+        border-top:1px solid var(--rule)}
+
+  /* 行內 code 不得把版心撐寬（長符號名如 render_switch_advisor_section）。 */
+  code{overflow-wrap:anywhere}
+  /* 但線框裡的等寬框圖**不准**斷行 —— 斷了框就散了，它靠容器橫捲。 */
+  pre.wf code{overflow-wrap:normal}
+
+  /* ── 要你決定的五件事：置頂快捷 ───────────────────────────── */
+  .decide{border:2px solid var(--accent);border-radius:10px;padding:16px 18px;margin:22px 0 30px;
+          background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .decide h2{margin:0 0 4px;border:0;padding:0;font-size:16px;color:var(--accent)}
+  .decide p{margin:0 0 12px;font-size:12.5px}
+  .decide ol{margin:0;padding-left:20px}
+  .decide li{margin:7px 0;color:var(--ink)}
+  .decide a{color:var(--accent);text-decoration:none;border-bottom:1px solid
+            color-mix(in srgb,var(--accent) 40%,transparent)}
+  .decide a:hover,.decide a:focus-visible{border-bottom-color:var(--accent)}
+  .decide .rec{display:block;color:var(--ink-2);font-size:12.5px;margin-top:2px}
+  :target{scroll-margin-top:16px}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ── 手機（線框靠自己的容器橫捲，整頁絕不橫捲）───────────────── */
+  @media (max-width:640px){
+    .wrap{padding:20px 14px 70px}
+    h1{font-size:20px}
+    h2{font-size:15.5px;margin-top:32px}
+    body{font-size:13.5px}
+    pre.wf{font-size:10.5px;line-height:1.55;padding:11px 12px}
+    table{font-size:11.5px}
+    th,td{padding:6px 7px}
+    .decide{padding:14px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<div class="wrap">
+
+<h1>草稿 · ⑥⑦⑧⑨ 四頁內容線框與退場清單</h1>
+<p class="sub">UI 架構組 ／ 2026-09-08 ／ 對應 <code>ui/views/page_02_health.py</code>、<code>page_05_settings.py</code>、<code>page_03_research.py</code>、<code>page_04_portfolio.py</code></p>
+
+<div class="banner">
+  <p style="margin:0 0 8px"><b>⚠️ 這是提案草稿，客戶尚未拍板 —— 不是已核准線框。</b></p>
+  <p style="margin:0 0 8px">本目錄其餘 <code>*.html</code> 除 <code>draft-p03-batch-input.html</code> 外都是客戶已拍板的原件。
+  本檔與那一份同一種身分：<b>我方提出、等你拍板</b>。拍板之後再依 <code>README.md</code> 的規矩正式進表。</p>
+  <p style="margin:0"><b>量測基準：<code>origin/main</code> ＝ <code>ba3b06d</code>（2026-09-08 19:05 +0800，PR #830 合併點），本組於自有 clone 唯讀查證，未動共用工作樹。</b>
+  本檔所有實測數字皆以此顆為準；<b>會漂移，引用前請現場重跑</b>。</p>
+</div>
+
+<div class="card warn">
+  <p style="margin:0 0 8px"><b>⚠️ 本組跑不出畫面，這是設計提案不是實際畫面。</b></p>
+  <p style="margin:0">本環境<b>裝不了 streamlit</b>（且本批禁止 <code>pip install</code>），所以下面每一張線框都是<b>文字設計稿</b>，
+  不是渲染出來的截圖。逐字文案是<b>提案文案</b>；哪幾句最後真的出現在畫面上，要等實作與 QA 實跑才算數。</p>
+</div>
+
+<nav class="decide" aria-label="要你決定的五件事">
+  <h2>要你決定的五件事</h2>
+  <p>其餘的我已經決定了、不佔用你的時間。下面五題<b>只有你能拍板</b>，每題都附我的推薦與被我權衡掉的另一案。</p>
+  <ol>
+    <li><a href="#q1">白話解釋要用哪一種形狀？</a>
+        <span class="rec">我建議：括號內一句話，跟數字同一行。</span></li>
+    <li><a href="#q2">⑨ 的「加入基金」放在哪一塊？</a>
+        <span class="rec">我建議：放進「保單與扣款標的」，沒持倉時展開。</span></li>
+    <li><a href="#q3">「投資試算」放 ⑧ 還是放 ⑥？</a>
+        <span class="rec">我建議：放 ⑧。⑥ 回答「你現在實際領多少」，⑧ 回答「如果投 X 會領多少」。</span></li>
+    <li><a href="#q4">「📋 逐檔配息明細」要不要留？</a>
+        <span class="rec">我建議：不留逐筆。⚠️ <b>這是我最可能讀錯你的一題</b> —— 你說「配息金額」，我讀成「每月領多少」而不是「每一筆各多少」。</span></li>
+    <li><a href="#q5">🤖 AI 摘要 ／ 🗂️ Raw data ／ 💼 帳本欄位怎麼處理？</a>
+        <span class="rec">我建議：前兩塊先撤畫面、不刪檔（可逆）；帳本欄位另出一張草稿。</span></li>
+  </ol>
+</nav>
+
+<h2>0 · 先講三件我不同意總管的事</h2>
+
+<p>總管在派工單末尾寫「<b>請把上面七條當草案而不是命令 —— 你不同意就推翻</b>」。以下三條是本組實測後推翻或修正的。</p>
+
+<h3>推翻 1 · 「Checkbox Gate 全是雙軌鷹架」不成立 —— 8 顆裡有 3 顆是真的成本閘門，其中 1 顆是客戶親自決定的</h3>
+
+<p>裁決 2 說「現有的 Checkbox Gate 是雙軌鷹架，不是設計……拆舊分頁那一刻一起拿掉」。
+<b>照做會刪掉一顆客戶 2026-09-07 親自拍板的閘門，並讓兩頁在打開的瞬間就對外取數。</b></p>
+
+<div class="scroll"><table>
+<tr><th>閘門</th><th>住在</th><th>檔內自陳的理由（摘要，非逐字）</th><th>拆舊分頁後</th></tr>
+<tr><td><code>DELEGATE_GATE_LABEL</code></td><td>⑥</td><td>舊 ② 與本頁委派同一批模組，其中三支畫 <code>st.plotly_chart</code> → <code>StreamlitDuplicateElementId</code></td><td><b>可拆</b> 雙軌</td></tr>
+<tr><td><code>MAINTAIN_GATE_LABEL</code></td><td>⑦</td><td>舊 ⑤ 也在跑同一支委派，兩份同時載入撞重複元件鍵</td><td><b>可拆</b> 雙軌</td></tr>
+<tr><td><code>BACKFILL_GATE_LABEL</code></td><td>⑦</td><td>同上</td><td><b>可拆</b> 雙軌</td></tr>
+<tr><td><code>MANUAL_GATE_LABEL</code></td><td>⑦</td><td><code>render_manual_tab()</code> 底下那張 <code>plotly_chart</code> 不帶 key，兩份 element id 相同</td><td><b>可拆</b> 雙軌</td></tr>
+<tr><td><code>FETCH_DIAG_GATE_LABEL</code></td><td>⑦</td><td>舊 ⑤ 與新 ⑦ 各畫一份，<b>不會報錯</b>，畫面上就是兩塊一樣的面板</td><td><b>可拆</b> 雙軌</td></tr>
+<tr><td><code>DIAG_GATE_LABEL</code></td><td>⑦</td><td>「避免每次互動都重跑註冊表更新與匯率抓取」</td><td>⛔ <b>不可拆</b> 成本</td></tr>
+<tr><td><code>NAV_GATE_LABEL</code></td><td>⑦</td><td>「這是一次會往返 Google Sheets 的讀取，所以預設不做」＋ 憲法 <code>P-UIGSPREAD-1</code> 未裁決</td><td>⛔ <b>不可拆</b> 成本</td></tr>
+<tr><td><code>DIVCAL_GATE_LABEL</code></td><td>⑨</td><td>「一組月配基金要算<b>約五秒</b>，而這一頁每次互動都會整頁重跑」</td><td>⛔ <b>不可拆・客戶決定</b></td></tr>
+</table></div>
+
+<p><b>兩條硬證據</b>：</p>
+<ul>
+<li><b><code>DIAG_GATE_LABEL</code> 不是雙軌造成的 —— 舊 ⑤ 自己就有一顆一模一樣的。</b>
+  <code>ui/tab_settings_diag.py</code> 的資料診斷分區同樣是 <code>st.checkbox("🔭 載入資料診斷", key="sd_diag_gate", …)</code>，
+  <b>標籤與 <code>help=</code> 與新 ⑦ 逐字相同</b>。刪掉舊 ⑤ 不會讓這顆消失 —— 它本來就是從舊 ⑤ 抄過來的。
+  ⚠️ <b>2026-09-08 就地收窄</b>：初版寫「<code>help=</code> <b>與灰態文案</b>逐字相同」，
+  <b>灰態文案那半是假的</b> —— 舊 ⑤ 是「<b>資料診斷</b>尚未載入（…）」、新 ⑦ 是「<b>資料來源健康度</b>尚未載入（…）」，
+  <b>括號內完全相同、主詞不同</b>（sha256 實測不同）。<b>結論不變</b>（它仍不是雙軌造成的），改的是證據的射程。</li>
+<li><b><code>DIVCAL_GATE_LABEL</code> 的檔內註記逐字寫著「客戶 2026-09-07 決定 ④」。</b>
+  裁決 2 若照字面執行，就是<b>用一句通則覆蓋掉客戶本人的個案決定</b>。</li>
+</ul>
+
+<p><b>修正後的說法（本草稿採用）</b>：<b>拆舊分頁那一刻，⑥ 的 1 顆與 ⑦ 的 4 顆一起拿掉；⑦ 會剩 2 顆、⑨ 會剩 1 顆，那 3 顆留著。</b>
+留下來的三顆<b>要換文案</b> —— 現在的字在講「為什麼系統不幫你做」（進度語言），該換成「這一項要花多久、你要不要現在花」（處境語言）。逐字見各頁線框。</p>
+
+<h3>推翻 2 · ⑨ 的空狀態不是「閉環死路」，是「四條指路同時指進一個要被刪掉的檔案」</h3>
+
+<p>裁決 6 說「⑥ 與 ⑨ 沒資料時都指路到『④ → ➕ 加入與管理基金』，但新 ⑨ 在沒資料時 early return，那個區塊根本不畫 ⇒ 使用者點進 ④ 看到同一句話再說一次」。</p>
+
+<p><b>前半對、後半的機制講錯了，而真正的問題比它大。</b>
+使用者<b>不會</b>「點進 ④ 看到同一句話再說一次」—— 因為 <code>where_to_find("pf_add")</code> 指的那一塊<b>現在真的存在，而且真的有用</b>：
+它住在<b>舊 ④</b>（<code>ui/tab3_portfolio.py</code> 的 <code>➕ 批次加入</code> 按鈕），現在的畫面上點進去就加得了。
+<code>page_04_portfolio.py</code> 就地寫著這條指路「<b>是對的、有效的，不改</b>」，並說 AppTest 實跑釘住它。</p>
+
+<p><b>真正的問題在退場那一刻才爆</b>：本組實測，<b>新 ⑨ 有四條指路指進舊 ④</b>，而舊 ④ 是要被刪的那一個：</p>
+
+<div class="scroll"><table>
+<tr><th>新 ⑨ 的哪一塊</th><th>指去哪</th><th>那個東西實際住在</th></tr>
+<tr><td>空狀態「尚未設定持倉」<br>＋ 另外 8 處灰態<br><span style="font-size:11px">（本組實測：<code>page_04_portfolio.py</code> 內 <b>9 個實際呼叫點</b>，扣掉 docstring 內的 2 處引述）</span></td><td><code>where_to_find("pf_add")</code></td><td><b>舊 ④</b> <code>ui/tab3_portfolio.py</code> 的 <code>btn_pf_add</code></td></tr>
+<tr><td>🎯 換股顧問（灰卡）</td><td><code>where_to_find("switch")</code></td><td><b>舊 ④</b> —— <code>render_switch_advisor_section()</code> 在 <code>ui/**</code> 的呼叫點本組只查到這一個</td></tr>
+<tr><td>📊 組合績效（灰）</td><td><code>where_to_find("pf_perf")</code></td><td><b>舊 ④</b> —— <code>render_portfolio_performance()</code> 同上</td></tr>
+<tr><td>💼 交易帳本（灰）</td><td><code>where_to_find("pf_ledger")</code></td><td><b>舊 ④</b> 的 <code>_sec_ledger</code></td></tr>
+</table></div>
+
+<p>而 <code>ui/helpers/story_nav.py</code> 自己就已經登記了這件事，逐字：
+「<b>這個 key 與 <code>pf_add</code> / <code>pf_perf</code> 一樣，指的是<b>舊 ④ 的區塊</b>；舊分頁整批拔除時，這三個 key 要一起回頭處理</b>」。</p>
+
+<p><b>⇒ 修正後的說法</b>：這不是「訊息重複」的文案問題，是<b>退場的硬相依</b>。
+⚠️ <b>但那三塊灰態<b>灰的理由互不相同</b>，⛔ 不可以用同一句蓋過去</b>
+（<b>2026-09-08 就地更正</b>：本草稿初版把 <code>REASON_SWITCH</code> 的「會撞按鈕」套到三塊，<b>那是錯的</b>）：</p>
+
+<div class="scroll"><table>
+<tr><th>區塊</th><th>它自己寫的理由（逐字節錄）</th><th>舊 ④ 刪掉會怎樣</th></tr>
+<tr><td>🎯 換股顧問<br><code>REASON_SWITCH</code></td><td>「這一塊在目前線上的 ④ 已經有唯一的渲染點，本頁再畫一次<b>會撞同一個按鈕</b>」<b>＋</b>「它另外還<b>需要雲端選股池與逐檔基準線，兩者本頁都拿不到</b>」</td><td><b>只解掉一半</b> —— 撞按鈕沒了，<b>拿不到資料那一半還在</b></td></tr>
+<tr><td>📊 組合績效<br><code>REASON_PERF</code></td><td>「<b>原因不是算不出來</b>：既有那一支<b>一渲染就打一次匯率 API、還會落盤快取</b>……要接得先像配息月曆那樣<b>加一道「按了才算」的開關</b>」</td><td>⛔ <b>不會解鎖</b> —— 那是<b>成本</b>問題，要自己蓋閘門</td></tr>
+<tr><td>💼 交易帳本<br><code>REASON_LEDGER</code></td><td>「<b>原因不是沒有資料</b>：<b>線框沒有給這張表的欄位規格</b>，補一份等於自己發明，而欄位要列哪幾個是<b>客戶要拍板的事</b>」</td><td>⛔ <b>不會解鎖</b> —— 那是<b>規格缺口</b>，要客戶拍板</td></tr>
+</table></div>
+
+<p>⛔ <b>後果是實質的，不是措辭問題</b>：照初版那個講法排程，<b>刪掉舊 ④ 只解掉一塊半</b>，
+卻會讓<b>現在真的能用</b>的 T7 帳本與組合績效<b>從畫面上消失</b>，而新 ⑨ 那兩塊<b>仍然是灰的</b>。</p>
+
+<p>⚠️ <b><code>ui/views/page_04_portfolio.py</code> 自己早就寫過這件事</b>，逐字：
+「⭐ <b>四塊灰態的原因互不相同，這是本批最重要的一件事。</b>……
+<b>用一句藉口蓋住四個不同的原因，等於對使用者說了三次謊</b>，而且會讓下一個人一頭撞進那些其實卡在別處的東西。」
+—— <b>本草稿初版就是那句話在講的那個錯</b>，而且是<b>在引用同一個檔案的時候</b>犯的。</p>
+<p><b>⇒ 兩件事必須同一批做完，但不是初版說的那個組合</b>：
+<b>刪掉舊 ④ 會讓四條指路同時失效</b>（那半初版說對了），
+<b>卻只解掉一塊半灰態</b> —— 組合績效與交易帳本<b>不會因此變好</b>。
+⛔ <b>所以不能只做「撤掉舊 ④」這一件事</b>：撤之前要<b>先替組合績效蓋好閘門、先請客戶拍掉帳本欄位</b>，
+否則就是把現在能用的東西換成兩塊灰的。<b>這是本草稿「退場順序」把 ⑨ 排最後的理由。</b></p>
+
+<p>⚠️ <b>這一段的訂正過程本身值得記一筆</b>：初版那句「這三塊就永遠是灰的」，
+在 2026-09-08 第一次更正時<b>沒有跟著改</b> —— 上面那張表已經換掉了，
+它卻以<b>結尾一句話</b>的形式留在原地，還維持著被推翻的講法。
+<b>這正是本 repo 反覆記載的「只改被點名的那一處」</b>，
+而且發生在<b>修正這個錯的那一次改動裡</b>。它是本組讀回已發布的成品時才發現的。</p>
+
+<h3>修正 3 · 「⑦ 的欄位落差是零」成立，但「唯一問題是 6 個 gate」不成立</h3>
+
+<p>「100% 委派同一批舊模組」本組複核<b>成立</b>：⑦ 的五塊全部委派
+<code>render_data_guard_tab</code>／<code>render_nav_manual_section</code>／<code>render_policy_admin_bridge</code>／<code>render_manage_tab</code>／<code>render_manual_tab</code>，
+與舊 ⑤ 是<b>同一批</b>。</p>
+
+<p><b>但 ⑦ 自己的檔內就登記了一個非 gate 的缺口</b>，逐字：
+「<b>「API 金鑰狀態 / NAS Proxy 測試」仍住在 <code>render_data_guard_tab()</code> 深處</b>……<b>這是已知缺口，不是漏做</b>」。
+也就是：「連線與金鑰」這一塊的<b>標題承諾了 Proxy 與 API 金鑰，內容卻不在這一塊裡</b>（它在上一塊「資料來源健康度」的委派深處）。
+畫面上東西沒少，<b>但放錯格子</b>。<b>本組仍然同意 ⑦ 第一個退場</b>，理由改成下面「退場順序」那一節的三條。</p>
+
+<hr>
+
+<h2>1 · 共同設計語彙（四頁一致，不另發明元件）</h2>
+
+<p><b>本草稿的每一塊都能用 repo 現有元件畫出來，沒有一個新元件。</b>這是刻意的 —— 新元件＝新失敗路徑，也＝更多要你拍板的東西。</p>
+
+<div class="scroll"><table>
+<tr><th>要畫什麼</th><th>用現成的哪一支</th><th>對應鐵則</th></tr>
+<tr><td>一句結論／一段依據</td><td><code>st.markdown("### 🧾 ① 結論 — …")</code>（① 已經在用的四層閱讀順序）</td><td>—</td></tr>
+<tr><td>三欄卡片</td><td><code>ia.cards.state_card()</code> ＋ <code>render_cards()</code> ／ <code>ia.layout.card_row()</code></td><td>01 三欄自適應網格</td></tr>
+<tr><td>篩選／輸入</td><td><code>ia.gated_form.applied_form()</code>（按「套用」才運算）</td><td>02 Form 封裝防重繪</td></tr>
+<tr><td>灰態</td><td><code>render_state.not_ready(訊息, where=去哪補)</code></td><td>03 三態顏色分離</td></tr>
+<tr><td>業務警示（莓紅左軌）</td><td><code>render_state.business_alert(標題, 逐條, footer=)</code></td><td>03</td></tr>
+<tr><td>系統真出錯（紅框）</td><td><code>render_state.system_error()</code>／<code>safe_section()</code></td><td>03</td></tr>
+<tr><td>空狀態三要素</td><td><code>ia.empty_state.empty_state(標題, 缺什麼, where=去哪補, footer=)</code></td><td>04 首屏無冗餘占位</td></tr>
+<tr><td>全寬大表</td><td><code>ia.layout.wide_table(…, empty_title=, empty_missing=, empty_where=)</code></td><td>01</td></tr>
+</table></div>
+
+<h3>四層閱讀順序 —— 四頁一律照 ① 已拍板的那一套</h3>
+
+<pre class="wf">### 🧾 ① 結論 — &lt;這一頁那句問題的答案&gt;      ← 一句話 ＋ 幾條「要做什麼」
+&lt;3 欄卡：每張卡 = 一件要做的事，不是一個指標&gt;
+### 🧾 ② 依據 — 憑什麼這樣說                  ← 支撐上面那句的數字
+&lt;全寬大表／展開才有的細節&gt;</pre>
+
+<p><b>為什麼是這個順序（而不是總管說的「一句結論 → 卡 → 表」）</b>：兩者其實同一件事，
+但 ① 那一套<b>多了「② 依據」這個明確的分界標題</b>，而那正是客戶第二句話要的東西 ——
+<b>把「你要知道的」和「憑什麼」分開，新手可以只讀上半、老手可以往下讀。</b>
+① 是 2026-08-05 客戶拍板的架構，<b>沿用它比另發明一套安全</b>。</p>
+
+<h3>⭐ 貫穿四頁的一條規則：每個數字後面接一句白話，不另開教學區</h3>
+
+<p>裁決 1「不做新手模式、不藏東西，全部展開 ＋ 就地解釋」與裁決 3「白話文教學要接進新頁」，
+本組合成一條可執行的：<b>Sharpe／σ／最大回撤／配息覆蓋／重疊度這幾個字，第一次出現時就在同一行後面接一句白話，不做成另一張卡、不做成 tooltip。</b></p>
+
+<p><b>為什麼不沿用舊的做法</b>：舊 ③／舊 ④ 是在頁面底部另外畫一張
+<code>💡 這些數據代表什麼？</code> 卡（<code>render_metric_explainer</code>）。
+那是「<b>把解釋藏在別的地方</b>」，正是裁決 1 要擋的形狀 —— 而且新手根本不會捲到那裡。</p>
+
+<div class="card">
+<p style="margin:0 0 6px"><b>本組實測（<code>ba3b06d</code>，可自驗）</b></p>
+<ul style="margin:0">
+<li><code>ui/helpers/chart/metric_explainers.py</code> 現在的非測試 import 端<b>只有 <code>ui/tab2_single_fund.py</code> 與 <code>ui/tab3_portfolio.py</code> 兩個舊分頁</b>；<code>git grep render_metric_explainer -- 'ui/views/*'</code> → <b>0 命中</b>。<b>總管這一條完全成立。</b></li>
+<li><code>METRIC_EXPLAINERS</code> 現有 8 個 key：<code>sharpe</code>／<code>sigma</code>／<code>alpha</code>／<code>beta</code>／<code>mdd</code>／<code>core_satellite</code>／<code>div_coverage</code>／<code>overlap</code>。</li>
+<li>⚠️ <b>更正總管一處</b>：裁決 3 寫「新頁上的 Sharpe／Sortino／Calmar／σ 一個解釋都沒有」——
+  <b>Sortino 與 Calmar 本來就沒有解釋，現在沒有、以前也沒有</b>：<code>METRIC_EXPLAINERS</code> <b>從來沒有這兩個 key</b>。
+  而它們<b>確實出現在 ⑧ 的畫面上</b>（<code>page_03_research.py</code> 的風險指標列有 <code>("sortino","Sortino","")</code>／<code>("calmar","Calmar","")</code>）。
+  <b>⇒ 這兩個字是「本來就缺」，不是「舊分頁一刪才缺」。修法一樣，但不要記成同一筆帳。</b></li>
+<li>⚠️ <code>tests/test_wf04_old_block_inventory.py</code> 已經把 <code>render_metric_explainer</code> 登記為
+  「<b>這一支最接近無聲消失</b> —— 線框沒點過它、新頁沒接過它、兩張表也沒登記它」。<b>本草稿就是在回答那一筆。</b></li>
+</ul>
+</div>
+
+<div class="q">
+<h4>Q1 · 白話解釋要接進去，但用哪一種形狀？（要你拍板，因為它改變視覺密度）</h4>
+<p><b>總管推薦：括號內一句話，跟數字同一行。</b>例：<code>Sharpe 0.81（每冒 1 分風險換到 0.81 分報酬；&gt;0.5 算好）</code>。</p>
+<p><b>理由</b>：(a) 它是<b>唯一</b>同時滿足「不藏」與「不新增區塊」的形狀；
+(b) 每個指標只講一次，重複出現時不再講 —— 這樣才不會變成客戶說的「資訊太多」；
+(c) 現有 <code>METRIC_EXPLAINERS</code> 的 <code>body</code> 太長（三、四句，含「實戰：」段），塞進括號會很擠，
+所以<b>要在同一份 SSOT 上加一個 <code>short</code> 欄位</b>，長版留給展開區用 —— <b>不另開第二份文案</b>。</p>
+<p><b>被權衡掉的另外兩案</b>：<b>維持底部教學卡</b>（＝維持現狀，但那是裁決 1 明文要拆的「藏起來」）；
+<b>用 <code>help=</code> 問號 tooltip</b>（手機不好按，而且一樣是藏）。</p>
+</div>
+
+<hr>
+
+<h2>2 · ⑥ 💊 持倉體檢</h2>
+<p class="sub">線框 Tab 02 的那句話：<b>回答一個問題：我手上這些，哪一檔出問題了？只診斷、不決策 ─ 要換什麼、怎麼配，在 04。</b></p>
+
+<h3>狀態 (1) 完全沒資料</h3>
+
+<pre class="wf">┌─ ⑥ 💊 持倉體檢 ──────────────────────────────────────────────────┐
+│ 決策動線第 2 站　·　① 🌐 市場總覽 › ② 💊 持倉體檢 › ③ 🔍 標的探索 › ④ 📊 資產配置 │
+│                                                                  │
+│ 回答一個問題：**我手上這些，哪一檔出問題了？**                          │
+│ 只診斷、不決策 —— 要換什麼、怎麼配，在 ④ 📊 資產配置。                   │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ⬜ 尚未設定持倉                                                   │
+│     缺什麼 ─ 還沒有任何保單或扣款標的                                 │
+│     去哪補 ─ ④ 📊 資產配置 › 保單與扣款標的                          │
+│     補完後這裡會自動出現逐檔體檢。                                    │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<div class="card">
+<p style="margin:0 0 6px"><b>與現況的兩個差別（都要你拍板，因為都是版面異動）</b></p>
+<ul style="margin:0">
+<li><b>「診斷條件」表單不畫了。</b> 現況是先畫 <code>診斷條件（輪動門檻 σ ±1.0 ／ 回看窗 12 個月 ／ 只看衛星 ☐ ／［套用］）</code>，
+  <b>再</b>畫空狀態。一個沒有東西可以篩的篩選器，正是鐵則 04「首屏無冗餘占位」要擋的。
+  <b>推薦：沒有持倉時整個表單不畫。</b></li>
+<li><b>「去哪補」的字改了。</b> 現況吃 <code>where_to_find("pf_add")</code>（＝「④ 📊 資產配置 → ➕ 加入與管理基金」，那一塊住在<b>舊 ④</b>）。
+  <b>推薦改指線框逐字的「④ 📊 資產配置 › 保單與扣款標的」</b> —— 因為那是<b>新 ⑨ 真的有</b>的區塊。
+  ⛔ <b>但這一改有嚴格前置</b>：新 ⑨ 的「保單與扣款標的」目前<b>不能新增基金</b>（見 §5 的退場順序）。
+  <b>在 ⑨ 的載入器做好之前不要改這句</b>，否則會從「指到要被刪的東西」變成「立刻指到一塊做不了事的東西」。</li>
+</ul>
+</div>
+
+<h3>狀態 (2) 有資料</h3>
+
+<pre class="wf">┌─ ⑥ 💊 持倉體檢 ──────────────────────────────────────────────────┐
+│ 回答一個問題：**我手上這些，哪一檔出問題了？**                          │
+│ 只診斷、不決策 —— 要換什麼、怎麼配，在 ④ 📊 資產配置。                   │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ ### 🧾 ① 結論 — 哪一檔該處理                                       │
+│                                                                  │
+│ 🫐 **這 2 檔要處理**                                              │
+│    · **安聯台灣智慧 ACDD19** — 配息覆蓋 0.62：每領 100 元有 38 元      │
+│      是配回你自己的本金，不是賺來的。                                  │
+│      → 到 ④ 📊 資產配置 › 🎯 換股顧問 看要換成什麼                    │
+│    · **貝萊德世界礦業 A2 0P00000XYZ** — 近一年 −8.4%，同類平均 +2.1%， │
+│      落後 10.5 個百分點。                                           │
+│      → 到 ④ 📊 資產配置 › 🎯 換股顧問 看要換成什麼                    │
+│                                                                  │
+│ 🟢 **這 3 檔沒有查出問題** ACCP138、B07、0050                        │
+│    配息蓋得住、也沒有落後同類。                                       │
+│                                                                  │
+│ ⬜ **這 1 檔判不出來** 元大高股息平衡                                 │
+│    查不到同類型平均。**判不出來不等於沒問題。**                         │
+│    去哪補 ─ 下方「② 依據」的逐檔體檢表可先逐檔看                        │
+│                                                                  │
+│ 💰 **每月配息合計約 8,420 TWD**（依這 5 檔各自實際投入的金額推估，      │
+│    不是齊頭本金）。另有 1 檔沒有填投入金額，**沒有算進上面那個數字**。   │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ② 依據 — 憑什麼這樣說                                       │
+│                                                                  │
+│ ┌── 組合健康總分 ───┐┌── 吃本金 ───────┐┌── 影子基金重疊 ──┐        │
+│ │ ⬜ 還沒有分數     ││ 🫐 2 檔          ││ 🫐 相似度 0.78    │        │
+│ │ 逐檔評等要用的     ││ 配息覆蓋低於 1.0， ││ 這兩檔的持股高度  │        │
+│ │ 那把尺還沒定案，   ││ 也就是在把你自己  ││ 重疊，你以為買了  │        │
+│ │ 所以不先湊一個     ││ 的本金配回來給你。││ 兩檔，其實壓在同  │        │
+│ │ 分數給你看。      ││                 ││ 一批股票上。      │        │
+│ │ （↓下面三張卡     ││ ACDD19、JFZN3    ││ ACCP138 × B07     │        │
+│ │   照樣看得出問題）││                 ││                 │        │
+│ └─────────────────┘└────────────────┘└─────────────────┘        │
+│                                                                  │
+│ **逐檔體檢表**（欄位多，左右捲動）                                    │
+│ ┌────────┬────────────┬────┬───────┬────────┬────────┬──────┐    │
+│ │ 代碼    │ 名稱        │幣別│ 近 1 年│ Sharpe │最大回撤 │配息覆蓋│    │
+│ │ ACDD19 │ 安聯台灣智慧 │TWD │ +12.4% │  0.81  │ −18.2% │ 0.62 │    │
+│ │ …      │             │    │        │        │        │      │    │
+│ └────────┴────────────┴────┴───────┴────────┴────────┴──────┘    │
+│ 　Sharpe：每冒 1 分風險換到多少報酬，&gt;0.5 算好。                      │
+│ 　最大回撤：從最高點摔到最低點的最大跌幅，也就是最慘要忍受多少帳面虧損。   │
+│ 　配息覆蓋：配出來的錢有多少是真的賺到的，&lt;1.0 就是在吃本金。           │
+│ 　「五桶評等」整欄顯示 ⬜ —— 那一欄的評等定義還沒定案，                 │
+│ 　**不拿別的評等填進來充數**。                                       │
+│                                                                  │
+│ ▸ 🔬 逐檔健診與互斥分析（要算幾秒，勾了才算）　☐                       │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h4>這一頁改了什麼</h4>
+<ul>
+<li><b>結論句改成點名。</b> 現況的結論是「<code>這 3 檔裡：🟢 2 檔、🔴 1 檔</code>」——<b>只給總數</b>，
+  而線框問的是「<b>哪一檔</b>出問題了」。<b>這是本頁最重要的一改，也是總管裁決 7。</b>
+  ⚠️ <b>它不需要新資料</b>：逐檔體檢表已經逐檔算出配息覆蓋與同類比較，結論層只是<b>把同一批數字換一個講法</b>
+  —— 符合裁決 4「要加的是一句結論，不是第 10 欄」。</li>
+<li><b>每條結論都帶一個「做法」。</b> 現況只有判定沒有下一步。這是總管裁決 5，<b>正例就是 ⑨ 的「差距」那一句</b>。</li>
+<li><b>三張卡從「指標」改成「一件事」。</b> 現況三張卡是三個名詞；改成「這是什麼意思、是哪幾檔」。</li>
+<li><b>「已送客戶確認」四個字從畫面上拿掉</b>（裁決 4）。現況<b>兩處</b>都在畫面上：
+  組合健康總分的灰態、以及逐檔表底下那句 caption。
+  改成「<b>那一欄的評等定義還沒定案，不拿別的評等填進來充數</b>」——
+  <b>使用者需要知道的是「這個數字為什麼是空的」，不是「我們送到哪裡了」。</b>
+  <b>理由搬回程式碼註解，一個字都不刪。</b></li>
+<li><b><code>Jaccard</code> 從畫面上拿掉</b>（裁決 4，本組實測 ⑥ 有 1 處）。改成「這兩檔的持股高度重疊」。</li>
+</ul>
+
+<h4>⑥ 退場清單</h4>
+<div class="scroll"><table>
+<tr><th>項目</th><th>現在住在哪</th><th>下場</th><th>為什麼</th></tr>
+<tr><td>🎯 選基金（低基期進場點 · HWM σ rank）</td><td>舊②</td><td><span class="chip moved">已由線框裁決搬 ③</span></td><td><code>wireframe-macro-health.html</code> 逐字把它搬去 ③；⑥ 只診斷不選標的</td></tr>
+<tr><td>💼 逐檔深度分析（投資試算＋TER＋持股）</td><td>舊②</td><td><span class="chip drop">⚠️ 搬去 ③ 但 ③ 沒接手 —— 見 §4</span></td><td><code>page_02_health.py::MOVED_TO_PAGE_03</code> 登記了 5 支，本組實測 <b>⑧ 一支都沒接</b></td></tr>
+<tr><td>⑪ Bollinger／⑬ 個股新聞／⑭ 三率穿透</td><td>舊②</td><td><span class="chip drop">⚠️ 同上，同一張表的另外 3 支</span></td><td>同上</td></tr>
+<tr><td>🔎 235 各檔理由</td><td>舊②</td><td><span class="chip moved">已由線框裁決搬 ③</span></td><td><code>wireframe-macro-health.html</code> 逐字</td></tr>
+<tr><td>🧭 核心/衛星資產屬性分布</td><td>舊②</td><td><span class="chip drop">明確丟掉</span></td><td><b>為什麼我認為你不會想念</b>：它自陳「純資訊，不評價配置」——<b>不下判定的那一類</b>，正是裁決 3 說的病灶；而「核心/衛星現在幾比幾」⑨ 第一塊就在講，且⑨那句還帶「要搬多少錢」</td></tr>
+<tr><td>📋 逐檔配息明細 🧮</td><td>舊②</td><td><span class="chip drop">明確丟掉（但金額要留）</span></td><td><b>為什麼我認為你不會想念</b>：你要的是「我每月領多少、其中多少是本金」，那是<b>一個數字</b>，本草稿放進 ⑥ 結論層；<b>逐筆明細</b>是另一件事。⚠️ <b>這是本清單最可能被你推翻的一列</b> —— 你第 1 句話點名「配息金額」，如果你要的是逐筆，請直接否決</td></tr>
+<tr><td>❌ 抓取失敗</td><td>舊②</td><td><span class="chip moved">已被取代</span></td><td>⑦「資料來源健康度」＋各塊灰態的「缺什麼」已經在講同一件事</td></tr>
+<tr><td>💡 <code>render_metric_explainer</code> 教學卡</td><td>舊④（<code>_ov_core</code>）</td><td><span class="chip keep">必須搬（改形狀）</span></td><td>裁決 3。改成 §1 Q1 的行內括號，<b>不再是底部一張卡</b></td></tr>
+<tr><td>波段觀測站 <code>render_mk_war_room</code></td><td>舊④</td><td><span class="chip keep">必須搬（客戶已裁決，尚未執行）</span></td><td><code>test_wf04_old_block_inventory.py</code> 逐字：「客戶 2026-09-05 裁決『搬 ②，<b>排在該頁上線之後的獨立批次</b>』——<b>裁決有了、搬遷還沒做</b>」</td></tr>
+<tr><td>6 格 KPI <code>render_hero_kpi_cards</code></td><td>舊④</td><td><span class="chip">⛔ 待你裁決</span></td><td>同上表逐字：「本組在 ② 找不到它；它是 <b>PR #791 題二</b>的標的，<b>客戶尚未答覆</b>」</td></tr>
+</table></div>
+
+<hr>
+
+<h2>3 · ⑦ ⚙️ 設定與診斷</h2>
+<p class="sub">線框 Tab 05 的那句話：<b>回答一個問題：資料本身可不可信、要不要我補？平常不用進來；出事時第一個進來。</b></p>
+
+<h3>狀態 (1) 完全沒資料（＝什麼都沒設定、剛開站）</h3>
+
+<pre class="wf">┌─ ⑦ ⚙️ 設定與診斷 ────────────────────────────────────────────────┐
+│ 回答一個問題：**資料本身可不可信、要不要我補？**                        │
+│ 平常不用進來；出事時第一個進來 —— 任何投資判斷在 ① 到 ④ 之間。          │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ ### 🧾 ① 結論 — 現在能不能信畫面上的數字                             │
+│                                                                  │
+│ 🔴 **還不能。有 2 項沒設定完，會讓 ① 到 ④ 出現空白或舊資料。**          │
+│                                                                  │
+│  ┌── 還缺這個 ───────┐┌── 還缺這個 ───────┐┌── 這個好了 ─────┐     │
+│  │ 🔴 FRED 金鑰      ││ 🔴 Google 授權    ││ 🟢 網路連線     │     │
+│  │ 沒有它，① 市場總覽 ││ 沒有它，你的保單與 ││ 三個資料源都通， │     │
+│  │ 整頁抓不到美國總經 ││ 淨值歷史存不上雲， ││ 平均 0.4 秒。   │     │
+│  │ 資料。            ││ 換一台裝置就不見。 ││                │     │
+│  │ 去哪補 ─ 下方      ││ 去哪補 ─ 下方      ││                │     │
+│  │ 「連線與金鑰」     ││ 「連線與金鑰」     ││                │     │
+│  └──────────────────┘└──────────────────┘└────────────────┘     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ② 依據 — 逐項狀態                                           │
+│                                                                  │
+│ ### 資料來源健康度                                                 │
+│   ⬜ 還沒去查。查一次會更新資料註冊表、並抓一次即時匯率，                │
+│      大約要幾秒；沒遇到問題時可以完全略過。                            │
+│      ☐ 🔭 查一次資料來源狀態                                        │
+│                                                                  │
+│ ### NAV 累積狀態                                                  │
+│   ⬜ 還沒去查。查一次會連上你的 Google 試算表讀一遍，                   │
+│      所以預設不做。                                                 │
+│      ☐ 讀一次雲端累積狀態                                           │
+│                                                                  │
+│ ### 連線與金鑰                                                     │
+│   〔Google 授權 · Proxy · API 金鑰 —— 逐項狀態與設定入口〕             │
+│                                                                  │
+│ ### 手動補資料                                                     │
+│   ⬜ 還沒有任何持倉，沒有東西需要補。                                  │
+│      去哪補 ─ ④ 📊 資產配置 › 保單與扣款標的                          │
+│                                                                  │
+│ ### 使用手冊                                                       │
+│   〔指標定義、門檻由來、常見誤讀〕                                     │
+│                                                                  │
+│ ▸ 🗄️ 資料維護與通報（進階）                                          │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h3>狀態 (2) 有資料</h3>
+
+<pre class="wf">┌─ ⑦ ⚙️ 設定與診斷 ────────────────────────────────────────────────┐
+│ ### 🧾 ① 結論 — 現在能不能信畫面上的數字                             │
+│                                                                  │
+│ 🫐 **大致可以，但有 2 個來源今天沒更新。**                             │
+│                                                                  │
+│  ┌── 要注意 ─────────┐┌── 要注意 ─────────┐┌── 都正常 ───────┐     │
+│  │ 🫐 台灣 PMI       ││ 🫐 NAV 累積       ││ 🟢 其他 16 源   │     │
+│  │ 最後成功 3 天前，  ││ 42 檔裡有 5 檔    ││ 今天都抓到了。   │     │
+│  │ 月頻指標還在容忍   ││ 上週之後就沒再    ││                │     │
+│  │ 範圍內。          ││ 累積。            ││                │     │
+│  │                  ││ 去哪補 ─ 下方      ││                │     │
+│  │                  ││ 「手動補資料」     ││                │     │
+│  └──────────────────┘└──────────────────┘└────────────────┘     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ② 依據 — 逐項狀態                                           │
+│ 　（五塊順序同上，內容換成實際狀態）                                   │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h4>這一頁改了什麼</h4>
+<ul>
+<li><b>加一層結論。</b> 現況 ⑦ <b>沒有結論層</b> —— 本組實測 <code>ba3b06d</code>：字串「① 結論」在 <code>page_05_settings.py</code> <b>0 次</b>。
+  ⚠️ <b>順帶更正一句 README 的話（本組實測，與它不同）</b>：<code>README.md</code> 2026-09-08 那節寫
+  「字串『① 結論』……在 <code>page_02_health.py</code> / <code>page_03_research.py</code> / <code>page_04_portfolio.py</code> <b>各 0 次</b>
+  → <b>⑥⑧⑨ 三頁確實都還沒有結論層</b>」。
+  <b>那句話對 ⑥ 已經不成立</b>：本組在 <code>ba3b06d</code> 實測 <code>page_02_health.py</code> <b>命中 9 次</b>，
+  且 <code>CONCLUSION_HEADING = "### 🧾 ① 結論 — 我手上這些，現在怎麼了"</code>、
+  <code>render_holdings_health()</code> 內就有 <code>safe_section("結論", _render_conclusion)</code>。
+  <b>⑥ 已經有結論層了</b>（本草稿 §2 要改的是它<b>只給總數、不點名</b>，不是它不存在）。
+  <b>⑧⑨ 那半仍然為真</b>（本組實測兩者皆 0）。
+  <b>舊表述在寫下當天很可能為真，被推翻的是它的前提</b>；⛔ 本組<b>不改 <code>README.md</code></b>（它不在本批的檔案邊界內），僅就地登記。
+  這一頁的問題是「<b>資料可不可信</b>」，而現在它只給五塊逐項狀態，<b>沒有人回答那個問題</b>。</li>
+<li><b>兩顆留下來的閘門換文案。</b> 現況是「<code>🔭 載入資料診斷</code>」「<code>讀取雲端 NAV 累積狀態</code>」——
+  <b>「載入」是系統在講自己</b>。改成「<b>查一次資料來源狀態</b>」「<b>讀一次雲端累積狀態</b>」，
+  灰態文案講「<b>要花多久、為什麼預設不做</b>」而不是「尚未載入」。</li>
+<li><b>四顆雙軌閘門直接消失</b>（維護／手動補資料／使用手冊／抓取診斷細節）——舊 ⑤ 一刪就不需要了。</li>
+<li><b>「連線與金鑰」要真的裝得下它的標題。</b> 這是 §0 修正 3 那個已登記缺口：
+  現在 Proxy 與 API 金鑰狀態<b>在上一塊的委派深處</b>。
+  ⚠️ <b>本組不在這張草稿裡決定怎麼抽</b> —— 那要動 <code>ui/tab5_data_guard.py</code>，屬另一個批次。<b>登記，不動工。</b></li>
+</ul>
+
+<h4>⑦ 退場清單</h4>
+<div class="scroll"><table>
+<tr><th>項目</th><th>現在住在哪</th><th>下場</th><th>為什麼</th></tr>
+<tr><td>頁面大標「⚙️ 設定與診斷」＋ 一句話職責</td><td>舊⑤</td><td><span class="chip keep">已被取代</span></td><td>新 ⑦ 自己畫，文案改成線框逐字</td></tr>
+<tr><td>目錄列（🔌 連線與帳號 · 🗄️ 資料維護與通報 · 🔭 資料診斷 · 📖 說明書）</td><td>舊⑤</td><td><span class="chip drop">明確丟掉</span></td><td><b>為什麼我認為你不會想念</b>：五塊全部展開在同一頁、每塊一個 <code>###</code> 標題，捲一下就到；四個連結的目錄列在<b>只有五塊</b>的頁面上是純佔位（鐵則 04）。⚠️ <b>可推翻點</b>：⑦ 委派的 <code>render_data_guard_tab()</code> 很長，如果你實際用起來覺得要捲太久，把目錄列加回來是合理的</td></tr>
+<tr><td>A · 🔌 連線與帳號（保單管理橋接 ＋ 抓取診斷細節）</td><td>舊⑤</td><td><span class="chip keep">已被取代</span></td><td>新 ⑦「連線與金鑰」<b>委派同兩支</b>（<code>render_policy_admin_bridge</code>／<code>render_fetch_diag_from_session</code>）</td></tr>
+<tr><td>B＋C · 🗄️ 資料維護與通報（管理室）</td><td>舊⑤</td><td><span class="chip keep">已被取代（收進最底部折疊）</span></td><td>客戶 2026-09-07 逐字：「系統維護與通報屬管理設定範疇，折疊收攏即可，不影響主視覺」</td></tr>
+<tr><td>D · 🔭 資料診斷</td><td>舊⑤</td><td><span class="chip keep">已被取代</span></td><td>新 ⑦「資料來源健康度」委派<b>同一支</b> <code>render_data_guard_tab()</code>，連 gate 都是同一顆</td></tr>
+<tr><td>E · 📖 說明書</td><td>舊⑤</td><td><span class="chip keep">已被取代</span></td><td>新 ⑦「使用手冊」委派<b>同一支</b> <code>render_manual_tab()</code></td></tr>
+<tr><td>NAV 累積狀態（唯讀查詢）</td><td>舊⑤ 的 B 分區內</td><td><span class="chip moved">必須搬（已搬完）</span></td><td><code>ia-wireframe.html</code> Tab 05 把 NAV 由一塊拆成兩塊：唯讀的「NAV 累積狀態」與寫入類的「手動補資料」。<b>新 ⑦ 已照這個切</b></td></tr>
+<tr><td>🔔 換股通報</td><td>舊⑤ 的 B 分區內</td><td><span class="chip">⛔ 待你裁決</span></td><td>README 逐字登記：<code>ia-wireframe.html</code> Tab 05 的五塊裡<b>沒有「通報」</b>，且該登記自己標了到期日：「<b>T18 落地時本條必須重審</b>」。<b>⑦ 上線就是那個時刻。</b></td></tr>
+<tr><td>⑤ 五塊的最終順序</td><td>—</td><td><span class="chip">⛔ 已知未落地</span></td><td>README 逐字：線框順序是「資料來源健康度 → NAV 累積狀態 → <b>連線與金鑰</b> → 手動補資料 → 使用手冊」（兩塊 NAV 中間<b>夾著</b>連線與金鑰）。<b>新 ⑦ 已照這個順序</b>。⚠️ <b>本組複核時要講精確</b>：該函式體內只有 <b>5 行</b> <code>st.markdown(f"### …")</code>（資料來源健康度／NAV 累積狀態／連線與金鑰／使用手冊／資料維護與通報），<b>「手動補資料」那一行不在其中</b> —— 它的標題由被委派的 <code>render_nav_manual_section()</code> 自己畫，檔內就地寫明「本檔再畫一次的結果是畫面上連著出現兩個一模一樣的『手動補資料』」。<b>五塊的相對順序與線框相符，但「五個標題」不等於「五塊」</b></td></tr>
+</table></div>
+
+<hr>
+
+<h2>4 · ⑧ 🔍 標的探索</h2>
+<p class="sub">線框 Tab 03 的那句話：<b>回答一個問題：有沒有更好的標的？這裡的基金不預設我有持有。</b></p>
+
+<h3>狀態 (1) 完全沒資料（＝還沒搜尋）</h3>
+
+<pre class="wf">┌─ ⑧ 🔍 標的探索 ──────────────────────────────────────────────────┐
+│ 回答一個問題：**有沒有更好的標的？** 這裡的基金不預設我有持有 ——        │
+│ 我持有部位的健康度在 ② 💊 持倉體檢，                                  │
+│ 「要不要換成這檔」的試算在 ④ 📊 資產配置。                             │
+├──────────────────────────────────────────────────────────────────┤
+│ **搜尋條件**                                                       │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ 代碼或名稱 ［ 0P0000ABCD 或「安聯台灣」          ］          │    │
+│  │ 來源       ［ 全部 ▾ ］                                     │    │
+│  │                                          ［ 搜尋 ］        │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ⬜ 還沒開始搜尋                                                   │
+│     缺什麼 ─ 還沒有查詢條件 —— 代碼或名稱是空的，或還沒按下送出         │
+│     去哪補 ─ 上方的搜尋條件                                         │
+│     送出後，這一頁才會往下展開。                                      │
+│                                                                  │
+│  💡 **不知道要找什麼？** 這一頁不預設你有持有 ——                       │
+│     想看手上這幾檔的狀況，去 ② 💊 持倉體檢。                          │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h3>狀態 (2) 有資料</h3>
+
+<pre class="wf">┌─ ⑧ 🔍 標的探索 ──────────────────────────────────────────────────┐
+│ **搜尋條件** ［ 安聯台灣 ］［ 全部 ▾ ］  ［ 搜尋 ］                    │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ① 結論 — 這幾檔值不值得看                                    │
+│                                                                  │
+│ 找到 3 檔。**其中 1 檔近一年勝過同類平均、也沒有吃本金**：             │
+│  · **安聯台灣智慧 ACDD19** — 近一年 +12.4%，Sharpe 0.81，配息覆蓋 1.24 │
+│    → 想換成它？到 ④ 📊 資產配置 › 🎯 換股顧問 試算                    │
+│                                                                  │
+│ 另外 2 檔判不出來（下方逐檔可以自己看）。                              │
+│                                                                  │
+│ ┌── 搜尋結果 ────────┐┌── 搜尋結果 ────────┐┌── 搜尋結果 ──────┐    │
+│ │ 安聯台灣智慧基金    ││ 貝萊德世界礦業 A2   ││ 元大高股息平衡    │    │
+│ │ ACDD19 · TWD       ││ 0P00000XYZ · EUR   ││ 幣別未知         │    │
+│ │ 近 1 年 +12.4%     ││ 近 1 年 +3.1%      ││ ⬜ 這個來源沒有   │    │
+│ │ Sharpe 0.81        ││ Sharpe 0.22        ││ 提供計價幣別，   │    │
+│ │                    ││                    ││ 換算後的績效不    │    │
+│ │ ［ 選這一檔 ］      ││ ［ 選這一檔 ］      ││ 顯示，免得誤導。 │    │
+│ └───────────────────┘└───────────────────┘└─────────────────┘    │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ② 依據 — 單一基金深度：安聯台灣智慧 ACDD19                    │
+│                                                                  │
+│ ┌── 淨值走勢 ───────┐┌── 績效分期 ───────┐┌── 風險指標 ─────┐     │
+│ │ 最新 24.31 TWD    ││ 近 1 月　 +1.2%   ││ Sharpe　 0.81   │     │
+│ │ 2026-09-05        ││ 近 3 月　 +4.0%   ││ 每冒 1 分風險換  │     │
+│ │ 〔近一年折線圖〕   ││ 近 1 年　+12.4%   ││ 到 0.81 分報酬， │     │
+│ │                  ││ 近 3 年　+31.7%   ││ &gt;0.5 算好。     │     │
+│ │                  ││                  ││ 最大回撤 −18.2% │     │
+│ │                  ││                  ││ 最慘要忍受的帳面 │     │
+│ │                  ││                  ││ 虧損。          │     │
+│ │                  ││                  ││ Sortino  ⬜     │     │
+│ │                  ││                  ││ 樣本不足，算不出 │     │
+│ │                  ││                  ││ 來就不填。      │     │
+│ └─────────────────┘└──────────────────┘└────────────────┘     │
+│                                                                  │
+│ **前十大持股**（全寬）                                              │
+│ **💸 近期配息** 除息日 ／ 金額 ／ 年化配息率（全寬）                   │
+│                                                                  │
+│ **💰 投資試算 — 投入多少，每月領多少**　⭐ 新                         │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ 投入金額（新台幣）［ 1,000,000 ］            ［ 試算 ］      │    │
+│  │                                                          │    │
+│  │ 換成原幣　1,000,000 TWD ÷ 1.00 = 1,000,000 TWD            │    │
+│  │ 可買單位　41,135.3 單位（依 NAV 24.31）                    │    │
+│  │ **每月配息　約 2,858 TWD**（年化配息率 3.43%）              │    │
+│  │ 　其中約 0 元是配回本金 —— 配息覆蓋 1.24，配得出來。         │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│ ▸ 資料來源與抓取時間                                                │
+│                                                                  │
+│ ### 批次分析                                                      │
+│   〔一次丟多個代碼跑同一組指標；Form 後才跑，大表全寬〕                 │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h4>⭐ 這一頁最重要的一改：把「投資試算」接回來</h4>
+
+<div class="card berry">
+<p style="margin:0 0 8px"><b>本組實測，這一格是客戶第 1 句話點名的「配息金額」，而它現在是無主的。</b></p>
+<ul style="margin:0 0 8px">
+<li><code>ui/views/page_02_health.py</code> 有一個常數<b>名字就叫 <code>MOVED_TO_PAGE_03</code></b>，列了 5 支：
+<code>_render_investment_calc</code>（投資試算）／<code>_render_holdings_block</code>／<code>_render_bollinger_expanders</code>／<code>_render_per_fund_news_expanders</code>／<code>_render_per_fund_three_ratio_expanders</code>。</li>
+<li><b>本組逐支查 <code>ui/views/page_03_research.py</code>：5 支全部 0 命中。</b>
+  字串「投資試算」在 ⑧ 也是 <b>0 次</b>（⑥ 提到 3 次、全部是「為什麼這裡沒有它」的註解；舊 ③ <code>ui/tab2_single_fund.py</code> 有 8 次）。</li>
+<li><b>⇒ 交接表寫了，接收端沒做。</b> 舊分頁一刪，投資試算就沒有任何一頁擁有它。</li>
+</ul>
+<p style="margin:0"><b>推薦：接進 ⑧ 的「單一基金深度」，而不是接回 ⑥。</b>
+理由：⑧ 的問題是「有沒有更好的標的」，而「投入 X 每月領多少」正是拿來<b>比較兩檔</b>的東西；
+⑥ 只診斷你已經有的，那一頁該講的是「你現在<b>實際</b>領多少」（已在 ⑥ 結論層）。
+<b>同一個算式、兩個問題：⑥ 回答「現在」，⑧ 回答「如果」。</b></p>
+</div>
+
+<h4>這一頁還改了什麼</h4>
+<ul>
+<li><b>加一層結論。</b> 現況 ⑧ 搜完直接給三張結果卡，<b>沒有人說哪一檔比較值得看</b>。</li>
+<li><b>「上游」14 處全部改掉</b>（裁決 4，本組 AST 實測 ⑧ 的非 docstring 字串共 14 處含「上游」，是四頁裡最多的）。
+  例：<code>這一檔在上游沒有配息紀錄 —— 可能是它不配息，也可能是配息頁當下取不到。</code>
+  → <code>查不到這一檔的配息紀錄 —— 可能是它不配息，也可能是這次沒抓到。</code>
+  <b>「上游」是我們的架構詞，使用者不知道那是什麼。</b></li>
+<li><b>「取數」5 處改成「抓資料」／「這次沒抓到」。</b></li>
+<li><b>Sortino／Calmar 缺值時說人話。</b> 現況是灰的但理由用架構詞；改成「樣本不足，算不出來就不填」。
+  ⚠️ 這兩個指標<b>本來就沒有白話解釋</b>（見 §1），要新增 <code>METRIC_EXPLAINERS</code> 條目。</li>
+</ul>
+
+<h4>⑧ 退場清單</h4>
+<div class="scroll"><table>
+<tr><th>項目</th><th>現在住在哪</th><th>下場</th><th>為什麼</th></tr>
+<tr><td>💰 投資試算</td><td>舊③ ＋ 舊②的 helper</td><td><span class="chip keep">必須搬（本草稿的主提案）</span></td><td>見上。<code>MOVED_TO_PAGE_03</code> 登記了、⑧ 沒接</td></tr>
+<tr><td>⑤ TER／持股分析 <code>_render_holdings_block</code></td><td>舊②的 helper</td><td><span class="chip keep">必須搬</span></td><td>同一張 <code>MOVED_TO_PAGE_03</code> 表，同樣 0 命中。線框「單一基金深度」逐字含「前十大持股」</td></tr>
+<tr><td>⑪ Bollinger 展開</td><td>舊②的 helper</td><td><span class="chip">⛔ 待你裁決</span></td><td>同一張表登記要搬 ③，但線框 Tab 03 的「單一基金深度」五個區塊<b>沒有它</b>。<b>兩份規範不一致，本組不自己決定</b></td></tr>
+<tr><td>⑬ 個股新聞／⑭ 三率穿透</td><td>舊②的 helper</td><td><span class="chip">⛔ 待你裁決</span></td><td>同上</td></tr>
+<tr><td>三處分散的搜尋框</td><td>舊③ 各處</td><td><span class="chip keep">已被取代</span></td><td>線框 Tab 03 逐字「<b>Form ─ 唯一搜尋入口（取代目前三處分散的搜尋框）</b>」，⑧ 已收成一個</td></tr>
+<tr><td>💡 <code>render_metric_explainer</code> 教學卡</td><td>舊③</td><td><span class="chip keep">必須搬（改形狀）</span></td><td>同 ⑥。舊 ③ 是它兩個 import 端之一</td></tr>
+<tr><td>🔍 抓取診斷細節</td><td>舊③</td><td><span class="chip moved">已由線框裁決搬 ⑤</span></td><td>已經搬了（<code>FETCH_DIAG</code> 旗標由 <code>app.py</code> 持有，舊③ 那份恆不畫）</td></tr>
+<tr><td>AI 深度解盤／買賣點信號／三合一趨勢圖／3-3-3</td><td>舊③</td><td><span class="chip drop">明確丟掉</span></td><td><b>為什麼我認為你不會想念</b>：README 的 2026-09-08 裁決逐字把這幾項列為「<b>正是客戶說的『資訊太多』</b>」，而那句判定是你自己第 2 句話推出來的。⚠️ <b>可推翻點</b>：如果你其實會用「買賣點信號」，請直接說 —— 這一列是<b>轉述已有裁決</b>，本組沒有另外查證你的實際使用習慣。
+⚠️ <b>而且那則裁決自己就標了未複驗</b>：README 在該句<b>下一行</b>逐字寫著
+「<b>這一句是轉述盤點結論，本組未逐項複驗</b>（<code>CLAUDE.md §-2</code> 規則 6）」——
+<b>本草稿初版沒有把這個限定帶過來</b>，2026-09-08 補上。
+⇒ <b>這一列是「轉述一則自己也沒複驗過的裁決」，信任要打兩次折</b></td></tr>
+</table></div>
+
+<hr>
+
+<h2>5 · ⑨ 📊 資產配置</h2>
+<p class="sub">線框 Tab 04 的那句話：<b>回答一個問題：那我要怎麼調？所有會改變我部位的動作都集中在這裡。</b></p>
+
+<h3>狀態 (1) 完全沒資料 —— <b>四頁裡最重要的一張</b></h3>
+
+<pre class="wf">┌─ ⑨ 📊 資產配置 ──────────────────────────────────────────────────┐
+│ 回答一個問題：**那我要怎麼調？** 所有會改變我部位的動作都集中在這裡 ——   │
+│ 診斷「哪裡有問題」在 ② 💊 持倉體檢，                                  │
+│ 研究「這檔好不好」在 ③ 🔍 標的探索。                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ ### 保單與扣款標的                                                 │
+│                                                                  │
+│  ⬜ 還沒有任何保單或扣款標的                                        │
+│     缺什麼 ─ 沒有標的就沒有配置可以調，這一頁下面的每一塊都是空的       │
+│     去哪補 ─ 就在下面，貼上基金代碼                                  │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ 基金代碼（一行一檔；「代碼,保單號碼」可以綁保單）              │    │
+│  │ ［ ACCP138                                        ］      │    │
+│  │ ［ ACDD01                                         ］      │    │
+│  │ ［ JFZN3,PL-2024-002                              ］      │    │
+│  │                                                          │    │
+│  │ 預設保單號碼（可以不填）［                        ］        │    │
+│  │                                                          │    │
+│  │                          ［ ➕ 加入這幾檔 ］               │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  加完之後按這裡去抓資料：［ 📡 載入所有未載入基金 ］                    │
+│  抓完，② 💊 持倉體檢 與這一頁的其他區塊就會自己出現。                   │
+│                                                                  │
+│  💡 **不知道代碼？** 到 ③ 🔍 標的探索 用名字搜，搜到的卡片上就有代碼。  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<div class="card warn">
+<p style="margin:0 0 8px"><b>⛔ 這張圖是本草稿最大的一個提案，而且它現在做不到。</b></p>
+<p style="margin:0 0 8px"><b>現況（本組實測）</b>：新 ⑨ 在沒有持倉時<b>整頁 <code>return</code></b>，只畫一則空狀態，
+「去哪補」指向 <code>where_to_find("pf_add")</code>，而<b>那一塊住在舊 ④</b>。
+<code>ui/views/**</code> 四頁<b>沒有任何一條寫入持倉的路徑</b>
+（本組 AST 掃 <code>ui/views/*.py</code>：<code>st.button</code> <b>掃到 2 個</b>、都在 ⑧ 的搜尋結果選取；
+<code>write_policy_v2</code>／<code>append_*</code>／<code>ensure_policy_worksheet</code> <b>0 命中</b>。⚠️ <b>這是字表掃得到的範圍，不是窮舉</b> —— 掃不到的形態列在 §8）。</p>
+<p style="margin:0 0 8px"><b>⇒ 新四頁目前<b>物理上加不了一檔基金</b>。舊 ④ 一刪，這個產品就沒有入口了。</b></p>
+<p style="margin:0"><b>而線框自己指定了這個入口</b>：<code>ia-wireframe.html</code> <b>Tab 02</b> 的空狀態逐字寫著
+「<b>去哪補 ─ 到「04 資產配置 › 保單與扣款標的」新增</b>」——
+<b>線框指定新增入口在 ④ 的「保單與扣款標的」，而那一塊現在只讀不寫。</b>
+本草稿把「加入基金」畫進那一塊，就是在把線框做完（README 裁決 2：<b>四題全部是進度，不是規格缺口</b>）。</p>
+</div>
+
+<h3>狀態 (2) 有資料</h3>
+
+<pre class="wf">┌─ ⑨ 📊 資產配置 ──────────────────────────────────────────────────┐
+│ 回答一個問題：**那我要怎麼調？**                                     │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ① 結論 — 那我要怎麼調                                       │
+│                                                                  │
+│ 🫐 **核心比你設的目標少 13.0% —— 從衛星移 NT$130,000 到核心就到目標。**│
+│    現況 62.0 ／ 38.0　→　你設定的目標 75.0 ／ 25.0                  │
+│    「你設定的目標」是你自己在組合設定裡設的值，不是系統算出來的建議 ——   │
+│    這一頁只把它跟現況擺在一起看差距。                                 │
+│    分母 = Σ 投入本金（金額加權，非檔數）。                            │
+│                                                                  │
+│  ┌── 要做的事 ─────────┐┌── 要做的事 ────────┐┌── 要做的事 ─────┐   │
+│  │ 🫐 換掉 2 檔        ││ ⬜ 本月配息月曆     ││ 🟢 沒有其他要動 │   │
+│  │ ② 診斷出 ACDD19、  ││ 推估算得出來，但一  ││ 的了            │   │
+│  │ JFZN3 在吃本金。    ││ 組月配基金要算約五  ││                │   │
+│  │ 這裡可以配對到 ③   ││ 秒，所以預設不算。  ││                │   │
+│  │ 的候選標的。        ││ ☐ 算一次本月配息   ││                │   │
+│  │ ［ 看換股建議 ］    ││                   ││                │   │
+│  └────────────────────┘└───────────────────┘└────────────────┘   │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ### 🧾 ② 依據 — 你現在的部位長什麼樣                                │
+│                                                                  │
+│ **再平衡試算**                                                     │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ 目標核心比例 ［ 75 ］%　可動用金額 ［ 200,000 ］            │    │
+│  │ 只調衛星 ☑                              ［ 試算 ］         │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│ **保單與扣款標的**（全寬）                                          │
+│  3 張保單・12 檔・總投入 NT$1,000,000                              │
+│  ┌────────┬────────┬────────────┬────┬────┬─────────┬──────┐    │
+│  │保單編號 │基金代號 │ 基金名稱    │幣別│級別│  金額    │現金% │    │
+│  └────────┴────────┴────────────┴────┴────┴─────────┴──────┘    │
+│  權重是算出來的，不是存的 —— 每一檔的比重 = 它的投入金額 ÷ 總投入。     │
+│  ▸ ➕ 加入或修改扣款標的                                            │
+│                                                                  │
+│ **組合績效**（全寬）                                                │
+│  ⬜ 還沒算。算一次會抓一次即時匯率，而這一頁每次互動都會整頁重跑，       │
+│     所以預設不算。　☐ 算一次組合績效                                 │
+│                                                                  │
+│ **穿透式持股 ／ 產業集中度**（全寬）                                  │
+│  你以為分散了，實際上呢 —— 把每檔基金拆開，看真正押在哪幾檔股票。       │
+│                                                                  │
+│ **總經曝險聯動**（全寬）                                            │
+│  ① 市場總覽算出來的景氣位階，接到你的部位上。                          │
+│                                                                  │
+│ **交易帳本**（全寬）                                                │
+│  ⬜ 還沒有這張表。買賣紀錄、成本、已實現損益要列哪幾欄還沒定案，        │
+│     不先自己發明一份給你看。                                        │
+│     現在看得到的地方 ─ ④ 📊 資產配置 › 💼 持倉戰情（T7 帳本）         │
+└──────────────────────────────────────────────────────────────────┘</pre>
+
+<h4>這一頁改了什麼</h4>
+<ul>
+<li><b>七塊平鋪 → 一句結論 ＋ 三張「要做的事」＋ 依據區。</b>
+  <b>本組同意總管的讀法，並補一個數字</b>：⑨ 現在是 <b>7 個 <code>####</code> 標題 ＋ 1 列卡片</b>，
+  其中<b>無條件灰的有 3 塊</b>（換股顧問／組合績效／交易帳本）、<b>閘門後才算的 1 塊</b>（配息月曆）、
+  <b>資料不足時也會灰的 2 塊</b>（集中度／總經聯動）。
+  <b>最壞情況：8 塊裡 6 塊是灰的。</b>讀起來像目錄，這一點總管說得對。</li>
+<li><b>「差距」那一句升到結論層。</b> 它現在住在第一塊裡；
+  <b>那是本組在四頁裡讀到的、唯一一句同時給了「判定 ＋ 做法 ＋ 金額」的話</b>，應該是這一頁的第一句。⚠️ <b>本組沒有掃過全站，不宣稱它是全站唯一</b> —— 射程是 ⑥⑦⑧⑨ 四頁的人工通讀。
+  ⚠️ <b>它的三條煞車一條都不能拿掉</b>（本組逐條複核 <code>_gap_action_text</code>）：
+  ① 一檔本金都沒填 → 不講金額；② 落在容差內 → 不講（不然會出現「把 NT$3 搬過去」）；
+  ③ 四捨五入不足 1 元 → 不講。<b>另外那個「（只算已填本金的 N 檔）」的括號也不能拿掉</b> ——
+  沒有它，「搬完就到目標」對沒填本金的那幾檔是一句謊。</li>
+<li><b>「保單與扣款標的」變成可寫。</b> 見上面的警告框。</li>
+<li><b><code>policy_tier</code> 與「分批上線」從畫面上拿掉</b>（裁決 4，本組實測 ⑨ 各 1 處）。</li>
+<li><b>三塊灰態的文案改成「要花多久 / 還沒定案」，不是「本批未接」。</b></li>
+</ul>
+
+<h4>⑨ 退場清單</h4>
+<p class="sub">⚠️ 這一張<b>不是本組新做的</b>：<code>tests/test_wf04_old_block_inventory.py</code> 已經有一份逐塊對照表，<b>而且有機器規則守著它不腐爛</b>。下表是它的摘要 ＋ 本組補的三列。</p>
+<div class="scroll"><table>
+<tr><th>項目</th><th>現在住在哪</th><th>下場</th><th>為什麼</th></tr>
+<tr><td>➕ 加入與管理基金</td><td>舊④ <code>_sec_add</code></td><td><span class="chip keep">必須搬（本草稿主提案）</span></td><td>對照表原本標「<b>待客戶裁決</b>」。<b>本草稿就是那個請示</b>：線框 Tab 02 逐字指定新增入口在「④ › 保單與扣款標的」</td></tr>
+<tr><td>保單管理（Google Sheets CRUD）</td><td>舊④ <code>_sec_policy</code></td><td><span class="chip moved">已由線框裁決搬 ⑤</span></td><td><code>policy-split-wireframe.html</code> 決定 A~F，你已回覆「版面 OK，動工」</td></tr>
+<tr><td>🔬 持股重疊度診斷（T5）</td><td>舊④ <code>_sec_overlap</code></td><td><span class="chip moved">計算已搬 ②，呈現沒有</span></td><td>對照表逐字：「<b>計算搬走了，呈現沒有一比一搬走</b>……那個差異是刻意縮編還是漏搬，<b>本組未查證</b>」。<b>本草稿沿用它的未查證狀態，不下判定</b></td></tr>
+<tr><td>🎯 換股顧問</td><td>舊④ <code>_sec_switch</code></td><td><span class="chip keep">必須搬（舊④ 刪同一批）</span></td><td>新 ⑨ 灰的原因不是沒資料，是「會撞舊 ④ 的同一顆按鈕」。
+⚠️ <b>2026-09-08 補：這一列初版寫「舊④ 一刪就可以接」，講得太滿</b> ——
+<code>REASON_SWITCH</code> 同一句話裡還有<b>第二個阻礙</b>：「它另外還<b>需要雲端選股池與逐檔基準線，兩者本頁都拿不到</b>」。
+<b>刪掉舊 ④ 只解掉撞按鈕那一半</b></td></tr>
+<tr><td>📊 組合績效 ／ 🎯 效率前緣</td><td>舊④ <code>_sec_add</code></td><td><span class="chip keep">必須搬（要加閘門）</span></td><td><code>REASON_PERF</code> 逐字：「既有那一支<b>一渲染就打一次匯率 API、還會落盤快取</b>……要接得先像配息月曆那樣加一道『按了才算』的開關」</td></tr>
+<tr><td>💼 持倉戰情（T7 帳本）＋ 費用與扣款</td><td>舊④ <code>_sec_ledger</code></td><td><span class="chip">⛔ 待你裁決（欄位）</span></td><td><code>REASON_LEDGER</code> 逐字：「線框沒有給這張表的欄位規格，補一份等於自己發明，而欄位要列哪幾個是客戶要拍板的事」。<b>⑨ 的線框有「交易帳本」這一塊、但沒有欄位清單</b></td></tr>
+<tr><td>🤖 AI 摘要</td><td>舊④ <code>_sec_ai</code></td><td><span class="chip">⛔ 待你裁決</span></td><td>對照表標「待客戶裁決」：<code>fund-wireframe-final.html</code> 有、<code>ia-wireframe.html</code> Tab 04 未列</td></tr>
+<tr><td>🗂️ Raw data（核對數字來源）</td><td>舊④ <code>_sec_raw</code></td><td><span class="chip">⛔ 待你裁決</span></td><td>同上。⚠️ <b>本組的意見</b>：它與 ⑦「資料來源健康度」講的是同一件事，可能是重複；但這是<b>意見不是查證</b></td></tr>
+<tr><td>💱 FX 曝險摘要／智能戰情室</td><td>舊④ <code>_ov_warroom</code></td><td><span class="chip moved">已由總管裁決搬 ②</span></td><td>對照表逐字，但同表另一處寫「<b>裁決有了、搬遷還沒做</b>」——<b>兩邊都要記</b></td></tr>
+<tr><td>🗂️ 保單分組視圖</td><td>舊④ <code>_ov_group</code></td><td><span class="chip keep">必須搬</span></td><td>對照表標「本批委派」。線框「保單與扣款標的」逐字「每張保單下的基金與投入金額」</td></tr>
+<tr><td>💡 指標說明卡 ／ MoneyDJ 新鮮度 banner</td><td>舊④ <code>_ov_core</code></td><td><span class="chip keep">必須搬（見 §1）</span></td><td><code>UNREGISTERED_FINDINGS</code> 兩筆，逐字「線框沒點過它、新頁沒接過它、兩張表也沒登記它」</td></tr>
+</table></div>
+
+<hr>
+
+<h2>6 · 退場順序建議</h2>
+
+<div class="card">
+<p style="margin:0 0 10px"><b>⭐ 先講一件必須先分清楚的事：退場有兩層，而且第二層比第一層難很多。</b></p>
+<ul style="margin:0">
+<li><b>第一層 · 畫面撤掉</b>：<code>app.py</code> 不再掛那一格。<b>幾行的事。</b></li>
+<li><b>第二層 · 檔案刪掉</b>：那個 <code>.py</code> 從 repo 消失。<b>要先確認沒有人 import 它。</b></li>
+</ul>
+<p style="margin:10px 0 0"><b>① 已經示範過這兩層有多不一樣</b>（本組以 AST 實測，非 grep）：
+<code>app.py</code> <b>已經不掛舊 ①</b>，但 <code>ui/tab1_macro.py</code> <b>仍被 5 個檔 import</b> ——
+<code>tab1_macro_inflection</code>／<code>tab1_macro_longterm</code>／<code>tab1_macro_midcycle</code>／<code>tab1_macro_radar</code>／<b><code>tab6_manual</code>（說明書）</b>。
+而 <code>ui/views/page_01_macro.py</code> 自己就地寫著「<b>① 頁的新 View 目前仍在執行期相依 <code>ui/tab1_macro.py</code></b>」。
+<b>⇒ 舊 ① 撤了一年也刪不掉，因為新 ① 還在用它的零件。</b></p>
+</div>
+
+<h3>建議順序：⑦ → ⑥ → ⑧ → ⑨</h3>
+
+<div class="scroll"><table>
+<tr><th>#</th><th>做什麼</th><th>為什麼是這個位置</th><th>做完之後</th></tr>
+<tr><td><b>0</b></td><td><b>⑨ 的「保單與扣款標的」加上寫入</b>（＝把 <code>_sec_add</code> 搬進去）</td><td><b>這是所有退場的前置，不是第一步退場。</b> 新四頁目前<b>一條寫入持倉的路徑都沒有</b>；沒有它，任何一頁的空狀態都是死路</td><td>新四頁第一次可以獨立運作</td></tr>
+<tr><td><b>1</b></td><td><b>⑦ 退場</b>：<code>app.py</code> 撤掉 ⑤ 那一格 ＋ 刪 <code>ui/tab_settings_diag.py</code></td><td>三條理由：(a) 它與舊 ⑤ <b>委派同一批模組</b>，畫面內容沒有落差；(b) 舊 ⑤ 是<b>薄的一層</b> —— 刪它<b>不</b>刪掉底下那五支，因為 ⑦ 也在用；(c) 4 顆雙軌閘門一起消失，⑦ 當場變好用</td><td>⑦ 剩 2 顆成本閘門。<b>驗一件事：🔔 換股通報還在不在</b>（README 自己標的到期日）</td></tr>
+<tr><td><b>2</b></td><td><b>⑥ 退場</b>：撤掉舊 ② ＋ 刪 <code>ui/tab_fund_grp_health.py</code></td><td>排 ⑦ 之後、⑧⑨ 之前，因為：(a) ⑥ 只有 <b>1 顆</b>雙軌閘門，拆完那一整塊逐檔健診就直接展開；(b) ⑥ <b>不擁有</b>任何別頁的指路目標 —— 刪它不會讓別頁的「去哪補」失效</td><td>⚠️ <b>先確認</b>：<code>ui/helpers/fund_grp_health/</code> 那個資料夾<b>不能跟著刪</b> —— ⑥ 與 ⑨ 都還在用它底下的模組</td></tr>
+<tr><td><b>3</b></td><td><b>⑧ 退場</b>：撤掉舊 ③ ＋ 處理 <code>ui/tab2_single_fund.py</code></td><td>排在 ⑨ 之前，因為 <b>⑧ 是 <code>render_metric_explainer</code> 兩個 import 端之一</b>，而白話解釋要先接進新頁才能刪舊端</td><td>⚠️ <b>前置</b>：投資試算要先接進 ⑧（§4），否則刪掉就沒了</td></tr>
+<tr><td><b>4</b></td><td><b>⑨ 退場</b>：撤掉舊 ④ ＋ 處理 <code>ui/tab3_portfolio.py</code></td><td><b>排最後，因為它最貴</b>：它同時是 <b>4 條指路的目標</b>（<code>pf_add</code>／<code>switch</code>／<code>pf_perf</code>／<code>pf_ledger</code>）、<b>1 塊灰態的解鎖條件（不是 3 塊，見 §0）</b>、以及 <code>render_metric_explainer</code> 另一個 import 端</td><td>4 條指路要同一批改掉。⚠️ <b>灰態只解得掉換股顧問的一半</b> —— 組合績效要<b>自己蓋閘門</b>、交易帳本要<b>客戶先拍欄位</b>，<b>兩者都不會因為刪掉舊 ④ 而變好</b>。⛔ <b>不先把這兩塊接起來就撤舊 ④，等於把現在能用的帳本與績效拿掉、換兩塊灰的</b></td></tr>
+</table></div>
+
+<div class="card warn">
+<p style="margin:0 0 8px"><b>⚠️ 本組不同意「⑦ 是唯一『刪掉舊的、新的自動變好』的一頁」這個說法，但同意結論。</b></p>
+<p style="margin:0"><b>⑥ 也是</b> —— 它那 1 顆閘門同樣純粹是雙軌造成的，拆完「🔬 逐檔健診與互斥分析」就直接展開。
+<b>⑦ 之所以還是排第一，理由是「刪掉的檔案最薄、風險最小」，不是「唯一」。</b>
+<b>差別很重要</b>：如果理由是「唯一」，那 ⑥ 就會被排到後面去；照本組的理由，<b>⑥ 是第二順位而不是第三</b>。</p>
+</div>
+
+<hr>
+
+<h2>7 · 要你拍板的問題</h2>
+
+<div class="q" id="q1">
+<h4>Q1 · 白話解釋的形狀（見 §1）</h4>
+<p><b>總管推薦：括號內一句話、跟數字同一行</b>，在 <code>METRIC_EXPLAINERS</code> 加一個 <code>short</code> 欄位當 SSOT。</p>
+</div>
+
+<div class="q" id="q2">
+<h4>Q2 · ⑨ 的「加入基金」要放在哪一塊？</h4>
+<p><b>總管推薦：放進「保單與扣款標的」，收在一個預設展開的區塊裡（沒持倉時展開、有持倉時收合成「▸ ➕ 加入或修改扣款標的」）。</b></p>
+<p><b>理由</b>：(a) <code>ia-wireframe.html</code> Tab 02 的空狀態<b>逐字指定</b>新增入口是「04 資產配置 › 保單與扣款標的」；
+(b) 有持倉之後這一塊每天都會看（保單一覽），而新增是偶爾才做，收合起來不佔版面；
+(c) 不必新增第七個區塊 —— 客戶說過資訊太多。</p>
+<p><b>被權衡掉的另一案</b>：<b>照舊 ④ 開一個獨立的「➕ 加入與管理基金」區塊</b>。
+它的好處是與舊 ④ 一模一樣、使用者不必重新學；壞處是 ⑨ 會變成 8 個區塊，而且與線框指定的位置不一致。</p>
+</div>
+
+<div class="q" id="q3">
+<h4>Q3 · 「投資試算」放 ⑧ 還是放 ⑥？（見 §4）</h4>
+<p><b>總管推薦：放 ⑧「單一基金深度」。</b> ⑥ 的結論層回答「你現在實際領多少」，⑧ 回答「如果投 X 會領多少」。</p>
+<p><b>被權衡掉的另一案</b>：<b>兩頁都放</b>。它的好處是你在哪一頁都算得到；壞處是同一個算式兩個入口，<b>正是你說的「去重複」要拆掉的東西</b>。</p>
+</div>
+
+<div class="q" id="q4">
+<h4>Q4 · 「📋 逐檔配息明細」要不要留？（⑥ 退場清單裡本組標「明確丟掉」的那一列）</h4>
+<p><b>總管推薦：不留逐筆明細，只留 ⑥ 結論層那一句「每月配息合計約 N TWD」＋ ⑧ 的投資試算。</b></p>
+<p><b>理由</b>：你的原話是「無法判斷……<b>配息金額</b>」，本組讀成「我每月領多少」而不是「每一筆分別多少」。</p>
+<p>⚠️ <b>這是本草稿最可能讀錯你的一題</b>，本組刻意把它單獨列出來。如果你要的是逐筆，請直接否決 —— 那會讓 ⑥ 多一張全寬表。</p>
+</div>
+
+<div class="q" id="q5">
+<h4>Q5 · 三塊「⛔ 待你裁決」的舊 ④ 區塊：🤖 AI 摘要 ／ 🗂️ Raw data ／ 💼 交易帳本的欄位</h4>
+<p><b>總管推薦：AI 摘要與 Raw data 兩塊「先撤掉、不刪檔」，交易帳本的欄位另出一張草稿。</b></p>
+<p><b>理由</b>：前兩塊 <code>ia-wireframe.html</code> Tab 04 沒有列，而先撤畫面是<b>可逆</b>的 —— 你用一陣子發現少了它們，加回來只要幾行。
+交易帳本不一樣，它<b>線框有這一塊、只是沒給欄位</b>，那是<b>欄位增減</b>，依規矩要單獨出草稿給你勾。</p>
+</div>
+
+<hr>
+
+<h2>8 · 本組沒有查證的部分（照實列）</h2>
+
+<p>依 <code>CLAUDE.md §-2</code> 規則 6。以下每一條<b>只能當待驗事項</b>，⛔ 不得被引用為已查證的事實。</p>
+
+<h4>完全沒查的</h4>
+<ul>
+<li><b>本組跑不出任何畫面。</b> 環境裝不了 streamlit、本批禁 <code>pip install</code>。
+  <b>所有線框都是設計稿</b>，沒有一張是渲染出來的。<b>逐字文案沒有經過任何實跑驗證。</b></li>
+<li><b>沒有跑過任何測試。</b> 本批是純文件產出，一個 <code>.py</code> 都沒改，也沒跑 <code>pytest</code>。</li>
+<li><b>沒有讀 <code>SPEC.md</code>／<code>ARCHITECTURE.md</code>／<code>STATE.md</code>／<code>BACKLOG.md</code>／<code>TODO.md</code>。</b>
+  那幾份是否另有與本草稿牴觸的規範，<b>未知</b>。</li>
+<li><b>沒有讀完九份線框。</b> 本組<b>逐字讀了 <code>ia-wireframe.html</code> 全文與 <code>README.md</code> 全文</b>；
+  其餘七份<b>只讀了 README 的轉述</b>，<b>沒有開檔核對</b>。
+  ⚠️ 這一點特別要記：README 自己就登記過「引用的那句其實在另一個檔」這種錯至少一次。</li>
+<li><b>沒有查證客戶的實際使用習慣。</b> 退場清單裡每一句「為什麼我認為你不會想念」<b>都是推論</b>，
+  依據是既有裁決與線框，<b>不是</b>對你實際點過什麼的觀察。<b>那是這份文件最主要的失敗模式</b>（本組的自評，不是查證結果）。</li>
+<li><b>沒有查證另一組的規則書草稿。</b> 派工單給的那份「十二條可驗收規則」的 artifact 連結，
+  本環境無法開啟，<b>本組完全沒有讀到它的內容</b>，因此<b>不知道本草稿與它是否一致</b>。</li>
+</ul>
+
+<h4>查了、但只有一組眼睛（未經第二組複驗）</h4>
+<ul>
+<li><b>8 顆閘門的分類</b>（§0 推翻 1）：理由是逐顆讀檔內自陳 ＋ 比對舊 ⑤ 的同名閘門。<b>「還有沒有第 9 顆」本組不宣稱</b>
+  —— 本組掃的是 <code>ui/views/*.py</code> 的 <code>st.checkbox</code>，<b>被委派的舊模組內部自帶的閘門完全不在射程內</b>。</li>
+<li><b>「<code>ui/views/**</code> 沒有寫入持倉的路徑」</b>：以 AST ＋ 字表掃 <code>st.button</code>／<code>form_submit_button</code>／<code>write_policy_v2</code>／<code>append_*</code>／<code>save_*</code>／<code>upsert</code>／<code>ensure_policy_worksheet</code>。
+  ⚠️ <b>字表掃不到的形態</b>：動態 <code>getattr</code>、被委派模組內部的寫入、<code>st.data_editor</code> 這類自帶寫入的元件、以及本組沒想到的第三方 SDK 寫法。
+  <b>這是取決於「有沒有漏看」的全稱句，本組不宣稱窮舉。</b></li>
+<li><b>裁決 4 的六組字數</b>（已送客戶確認 ×2／上游 ×14／取數 ×7／分批上線 ×1／<code>policy_tier</code> ×1／<code>Jaccard</code> ×1）：
+  本組以 AST 排除 docstring 後重數，<b>與總管的數字逐項相符</b>（射程 ＝ ⑥⑦⑧⑨ 四頁，<b>不含 ①</b>）。
+  ⚠️ 但「非 docstring 的字串常數」<b>不等於</b>「會出現在畫面上」——
+  本組<b>只抽樣看了 ⑧ 的 14 處「上游」</b>（確認都是使用者看得到的句子），<b>其餘沒有逐處確認</b>。</li>
+<li><b>「5 個檔 import <code>ui/tab1_macro.py</code>」</b>：AST 實測，排除 <code>tests/</code>。
+  ⚠️ <b>只涵蓋靜態 <code>import</code>／<code>from … import</code></b>；<code>importlib</code>、<code>__import__</code>、
+  <code>sys.modules</code> 查表這類動態載入<b>掃不到</b>。</li>
+<li><b>「<code>MOVED_TO_PAGE_03</code> 的 5 支在 ⑧ 全部 0 命中」</b>：字串比對 ＋ 「投資試算」四個字的計數。
+  ⚠️ 如果 ⑧ 用<b>別名</b> import 了其中任何一支，這個查法看不到
+  ——<code>draft-p03-batch-input.html</code> 自己就記過一次「初版寫 4 個是漏了別名 import，用 AST 數才看得到」。<b>本組這一項沒有用 AST 補驗。</b></li>
+</ul>
+
+<h4 id="stale">⚠️ 已知過期：兩句「寫在 repo 裡、但今天已經是假的」記載</h4>
+<p><b>本組實測撞到，兩句都沒有改</b>（本批 0 個 <code>.py</code> 改動是硬約束，<code>README.md</code> 也不在檔案邊界內）。
+<b>列在這裡，是為了不讓下一個人照它們做決定。</b></p>
+
+<div class="card warn">
+<p style="margin:0 0 6px"><b>(1) <code>docs/wireframes/README.md</code>：「⑥ 還沒有結論層」—— 已經不成立。</b></p>
+<p style="margin:0">它 2026-09-08 那節寫「字串『① 結論』……在 <code>page_02_health.py</code> /
+<code>page_03_research.py</code> / <code>page_04_portfolio.py</code> <b>各 0 次</b>
+→ <b>⑥⑧⑨ 三頁確實都還沒有結論層</b>」。
+<b>本組實測 <code>ba3b06d</code>：<code>page_02_health.py</code> 命中 9 次</b> ——
+⑥ <b>早就有結論層</b>（<code>CONCLUSION_HEADING</code>、<code>safe_section("結論", _render_conclusion)</code>）。
+<b>⑧⑨ 那半仍然為真</b>（實測皆 0）。
+⚠️ 本草稿 §2 要改的是 ⑥ 的結論<b>只給總數、不點名</b>，<b>不是它不存在</b>。</p>
+</div>
+
+<div class="card warn">
+<p style="margin:0 0 6px"><b>(2) <code>ui/views/page_03_research.py</code>：「舊 ② production 0 caller」—— 已經不成立。</b></p>
+<p style="margin:0">它就地寫著「<b>舊的 <code>render_fund_grp_health_tab()</code> 現在 production 0 caller</b>（本組實測）」——
+<b>這句話今天是假的</b>：<code>app.py</code> 的 <code>with tab_health:</code> 就在呼叫它（雙軌並行之後掛回去了）。
+<b>舊表述在寫下當天很可能為真，被推翻的是它的前提。</b>
+⛔ <b>本組不改任何 <code>.py</code></b>，僅登記回報總管另派。</p>
+</div>
+
+<p>⚠️ <b>這兩筆都是本組自查時撞到的，不是別人指出來的。</b>
+共通點是<b>「在寫下的當天為真，之後前提變了、而記載沒有跟著改」</b> ——
+本 repo 的憲法對這個形狀記過很多次（<code>CLAUDE.md §2.1</code>：
+<b>已被查證為假、卻沒被撤下的宣稱，比沒查證的更危險，因為它看起來已經有出處</b>）。</p>
+
+<p class="foot">
+UI 架構組 · 2026-09-08 · 量測基準 <code>origin/main</code> = <code>ba3b06d</code><br>
+⛔ 客戶尚未拍板。拍板之後依 <code>docs/wireframes/README.md</code> 的規矩正式進線框目錄表。<br>
+本檔由單組產出，<b>未經第二組獨立複驗</b>（<code>CLAUDE.md §-2</code> 規則 6）。
+</p>
+
+</div>
