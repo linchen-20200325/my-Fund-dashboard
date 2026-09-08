@@ -8,9 +8,18 @@
 ===================== ================================================================
 要算的東西             走哪一個既有 SSOT
 ===================== ================================================================
-計價幣別正規化         :func:`services.currency.normalize_ccy`（``mode="yf"``，
-                      與舊 ③ `ui/tab2_single_fund.py` 及 ②
-                      `ui/helpers/fund_grp_health/investment.py` 同一個模式）
+計價幣別正規化         :func:`services.currency.normalize_ccy` ＋
+                      :func:`shared.data_quality.normalize_iso_ccy`
+                      —— L2 解別名、L0 收 ISO，見 :func:`comparable_ccy`
+                      ⚠️ ~~``mode="yf"``，與舊 ③ `ui/tab2_single_fund.py` 及 ②
+                      `ui/helpers/fund_grp_health/investment.py` 同一個模式~~
+                      → **2026-09-08 更正（有意識的更正，不是漏刪）**：
+                      那個模式**只適合拿去查匯率**，不適合拿去比對或顯示。
+                      舊表述的理由仍然成立（`CNHTWD=X` 確實比 `CNYTWD=X` 可靠，
+                      而那半邊**原封保留在** :func:`fx_rate_to_twd`）；
+                      **被權衡掉的是它的射程** —— 它被同時當成
+                      「比對用」與「畫面顯示用」的幣別，於是人民幣基金
+                      被自己誣告「幣別對不上」。事故經過見 :func:`comparable_ccy`。
 年化配息率             :func:`services.health.dividend._resolve_adr_with_fallback`
                       —— 三層 fallback ＋ **回傳實際命中的那一層**（§2.2 血緣）
 每月配息               :func:`services.health.dividend_calc.monthly_dividend_from_records`
@@ -67,10 +76,14 @@ from shared.converters import safe_float
 from shared.data_quality import (
     NAV_CCY_MISMATCH,
     nav_currency_verdict,
+    normalize_iso_ccy,
     reconcile_row_currencies,
 )
 
 __all__ = [
+    "ADR_FROM_RECORDS",
+    "ADR_LOCAL_RATE",
+    "ADR_OFFICIAL",
     "BASIS_ESTIMATE",
     "BASIS_RECORDS",
     "CCY_CONFLICT",
@@ -83,6 +96,7 @@ __all__ = [
     "NO_INCOME_BASIS",
     "NO_NAV",
     "TWD",
+    "comparable_ccy",
     "dividend_currency",
     "estimate_monthly_income",
     "fund_currency",
@@ -113,6 +127,31 @@ BASIS_RECORDS: str = "records"
 #: 年化配息率 ÷ 12 攤平 —— **平均值，不是每個月真的入帳這麼多**。
 BASIS_ESTIMATE: str = "estimate"
 
+# ── 年化配息率**是哪裡來的**（`_resolve_adr_with_fallback` 的 source label 原值）──
+#
+# ⭐ **這三個常數是 2026-09-08 補的，補的是一個真實的假話。**
+# `adr_pct` 有三層 fallback，**只有第一層是「掛牌的」**，另外兩層是本地拿
+# **同一批配息紀錄**回推出來的。畫面（`ui/views/page_03_research.py::_invest_compare`）
+# 卻**無條件**寫「對照這一檔**掛牌的**年化配息率」——
+# 於是一個自算的 1.44% 被講成官方公布值，而且差異原因被講成
+# 「最近一筆配息不是常態」，**真因是那個 12 個月的分母裡只裝了 3 個月的資料**。
+# §1：**錯誤的數字比沒有數字更危險**；把「我自己算的」講成「官方公布的」是其中最貴的一種。
+#
+# ⚠️ **具名而不 inline**（§3.3）：這三個字串是 `services/health/dividend.py::
+# _resolve_adr_with_fallback` 的回傳值，本檔與 UI 都要靠它們分辨來源。
+# 兩邊若各自寫死字面值，上游改字時**畫面會靜靜地退回講官方話**。
+# 它們與上游必須一致這件事由
+# `tests/test_wf03_research_invest_calc.py::test_the_payout_rate_source_labels_match_the_resolver` 釘住。
+#: MoneyDJ wb05 **官方掛牌**值 —— 三層裡**唯一**真的是「掛牌的」那一層。
+ADR_OFFICIAL: str = "moneydj_wb05"
+#: 上游 `metrics.annual_div_rate` —— **本地自算**（`calc_metrics` 拿配息紀錄推的），
+#: 不是掛牌值。`services/fund_service.py` 就地自陳「本算 fallback；主源 moneydj_div_yield wb05」。
+ADR_LOCAL_RATE: str = "metrics_annual_div_rate"
+#: 把**同一批**逐筆配息近 12 個月加總 ÷ 淨值回推 —— **本地自算，而且與月配同源**。
+#: ⚠️ 它有一個**畫面上看不出來的**失效模式：配息紀錄不滿一年時，
+#: 分母是 12 個月、分子只有實際有紀錄的那幾個月 ⇒ 這個率**系統性偏低**。
+ADR_FROM_RECORDS: str = "divs_12m_sum"
+
 #: 試算金額的預設值。**走 `dividend_calc.DEFAULT_PRINCIPAL_TWD` 這個既有 SSOT**，
 #: 不另寫一個 100 萬 —— 全站「預設本金」只准有一個真相源（§2.1）。
 DEFAULT_AMOUNT_TWD: float = DEFAULT_PRINCIPAL_TWD
@@ -122,31 +161,76 @@ MIN_AMOUNT_TWD: float = 10_000.0
 MAX_AMOUNT_TWD: float = 100_000_000.0
 
 
-def fund_currency(result: Any) -> str:
-    """這檔基金的**計價**幣別（ISO 三碼）；認不得 → `""`。
+def comparable_ccy(raw: Any) -> str:
+    """任何一種幣別宣告 → **比對／顯示用**的 ISO 三碼；認不得 → `""`。
+
+    ⭐ **本模組裡「拿來比對」與「拿來給人看」的幣別，一律只准經過這一個函式。**
+    拿去**查匯率**的那個代碼是另一回事 —— 它住在 :func:`fx_rate_to_twd`，
+    那裡才用 ``mode="yf"``。**兩者不必相同，而且刻意不同**：
+    `CNHTWD=X` 在 yfinance 比 `CNYTWD=X` 可靠（`services/currency.py` 就地寫明），
+    但 `CNH` 這個代碼**基金公司沒用過、使用者也沒在本頁其他地方看過**，
+    不該印到畫面上、更不該拿去跟配息紀錄比對。
+
+    ## ⛔ 這個函式是 2026-09-08 修一個真實 bug 加的 —— 別再繞過它
+
+    在此之前 :func:`fund_currency` 走 ``mode="yf"``（人民幣 → **CNH**），
+    而 :func:`dividend_currency` 經 `reconcile_row_currencies` 走 L0
+    `normalize_iso_ccy`（**CNY 原樣保留**）。**兩個不同命名空間的值被丟進同一個比對器**：
+    一檔人民幣基金、配息紀錄還誠實標了 `CNY` → ``nav_currency_verdict("CNH", "CNY")``
+    → **mismatch** → 每月配息整段被關掉，理由是一句**假的**「兩邊對不上」。
+    同一個畫面上，配息表底下卻寫著「全部以 CNY 計價」——
+    **兩句都是本頁印的，而且互相矛盾**（§1：錯誤的數字比沒有數字更危險）。
+
+    ⛔ **這不是「人民幣特例」，所以修法也不是特例。** 病灶是
+    **同一件事被兩個不同的正規化器算了兩次**；在比對器裡放行人民幣，
+    只會讓下一個雙代碼幣別再犯一次。**修的是命名空間本身。**
+
+    寫法**沿用本 repo 既有慣例，不發明第三種**：L2 先解別名 → L0 再收 ISO。
+    `services/nav_history_store.py` 逐字就是
+    ``normalize_iso_ccy(normalize_ccy(_raw, default=""))``；而 L0 `normalize_iso_ccy`
+    自己的 docstring 也寫著「中文別名的正規化是 L2 `services.currency.normalize_ccy`
+    的職責…**呼叫端能拿到 L2 時請先過那一層**」—— 本模組是 L2，拿得到。
 
     ⛔ **`default=""` 不是 `default="USD"`。** `normalize_ccy` 的預設值是 USD
     （對保單場景合理），但在這裡「沒說」必須維持沒說 —— 上游本來就有 USD 死預設的
     前科（`repositories/fund/sources.py::_src_fundclear_div` 缺欄時填 `"USD"`），
     再疊一層預設就徹底分不出「真的是美元」與「沒人講過」。
     """
+    return normalize_iso_ccy(normalize_ccy(raw, default=""))
+
+
+def fund_currency(result: Any) -> str:
+    """這檔基金的**計價**幣別（ISO 三碼）；認不得 → `""`。
+
+    ⚠️ 走 :func:`comparable_ccy` —— 它同時是**畫面上印的那個代碼**
+    （算式區、配息說明、灰態理由都讀這個值），所以它必須是使用者認得的 ISO，
+    不是 yfinance 的報價代碼。理由與事故經過見該函式。
+    """
     if not isinstance(result, dict):
         return ""
-    return normalize_ccy(result.get("currency"), default="", mode="yf")
+    return comparable_ccy(result.get("currency"))
 
 
 def dividend_currency(result: Any) -> str:
     """**逐筆配息自己宣告**的幣別；逐列不一致、或有任一列未知 → `""`。
 
-    直接委派 `shared.data_quality.reconcile_row_currencies`（**不自己寫一份**）——
-    `ui/views/page_03_research.py::_declared_currency` 走的也是它，
-    兩邊對「這組配息能不能誠實宣告單一幣別」必須是同一個答案。
+    一致性判定**仍然委派** `shared.data_quality.reconcile_row_currencies`
+    （**不自己寫一份**）—— `ui/views/page_03_research.py::_declared_currency`
+    走的也是它，兩邊對「這組配息能不能誠實宣告單一幣別」必須是同一個答案。
+
+    ⭐ **改變的只有「餵進去之前先過 L2」**（2026-09-08）：逐列先過
+    :func:`comparable_ccy`，讓它與 :func:`fund_currency` **落在同一個命名空間**。
+    事故經過見 :func:`comparable_ccy` —— 兩邊各自正規化，是那個 bug 的成因本身。
+
+    ⚠️ **這一步順帶讓「中文宣告」變成看得見的**：逐列寫「人民幣」以前會被 L0
+    當成未知（→ `""` → 不比對、照算），現在收成 `CNY` 會**真的參與比對**。
+    方向是**變嚴**：一檔美元基金、逐列卻寫「人民幣」，以前靜靜算下去，現在擋住。
     """
     _rows = result.get("dividends") if isinstance(result, dict) else None
     if not isinstance(_rows, list):
         return ""
     return reconcile_row_currencies(
-        [_r.get("currency") for _r in _rows if isinstance(_r, dict)])
+        [comparable_ccy(_r.get("currency")) for _r in _rows if isinstance(_r, dict)])
 
 
 def fund_nav(result: Any) -> Optional[float]:

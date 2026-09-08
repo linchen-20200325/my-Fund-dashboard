@@ -57,7 +57,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import services.fund_invest_calc as CALC  # noqa: E402
+import ui.views.page_03_research as _PAGE_MOD  # noqa: E402
+from services.currency import CCY_NORMALIZE, _CCY_YF_OVERRIDES, normalize_ccy  # noqa: E402
 from services.fund_invest_calc import (  # noqa: E402
+    ADR_FROM_RECORDS,
+    ADR_LOCAL_RATE,
+    ADR_OFFICIAL,
     BASIS_ESTIMATE,
     BASIS_RECORDS,
     CCY_CONFLICT,
@@ -67,17 +72,26 @@ from services.fund_invest_calc import (  # noqa: E402
     NO_FX,
     NO_INCOME_BASIS,
     NO_NAV,
+    comparable_ccy,
+    dividend_currency,
     estimate_monthly_income,
+    fund_currency,
 )
+from services.health.dividend import _resolve_adr_with_fallback  # noqa: E402
+from shared.data_quality import reconcile_row_currencies  # noqa: E402
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.views.page_03_research import (  # noqa: E402
     DEEP_DIVE_INVEST,
     INVEST_SUBMIT_LABEL,
+    _ADR_SOURCE_LABELS,
     _INVEST_AMOUNT_KEY,
     _INVEST_BLOCKED_NOTES,
     _INVEST_FORM_KEY,
     _LABEL_INVEST_AMOUNT,
     _SK_INVEST_AMOUNT,
+    _invest_basis_note,
+    _invest_compare,
+    _invest_note_for,
     _invest_where,
 )
 
@@ -86,6 +100,7 @@ from ui.views.page_03_research import (  # noqa: E402
 from test_wf03_research_skeleton import (  # noqa: E402
     FAKE_QUERY,
     SELECTED_CODE,
+    _BLANK_RESULT,
     _RICH_RESULT,
     _render,
     _segments,
@@ -743,3 +758,552 @@ def test_reusing_one_sentence_for_every_reason_turns_the_copy_guard_red():
         _INVEST_BLOCKED_NOTES.clear()
         _INVEST_BLOCKED_NOTES.update(_real)
     test_each_reason_says_something_different()
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 回修｜B1 幣別：**比對用**與**查匯率用**是兩個命名空間
+#
+# 事故（獨立稽核抓到，本組實測復現）：`fund_currency` 走 ``mode="yf"``
+# （人民幣 → **CNH**）、`dividend_currency` 走 L0 `normalize_iso_ccy`
+# （**CNY 原樣**），兩個值被丟進同一個比對器 → 一檔人民幣基金、配息紀錄還誠實
+# 標了 `CNY`，畫面卻說「兩邊對不上」，並印出使用者從沒見過的 `CNH`；
+# 同一個畫面的配息表底下同時寫著「全部以 CNY 計價」。**兩句都是本頁印的。**
+#
+# ⚠️ **本組刻意不寫「人民幣不得被誤判」這種單點測試** —— 那只釘住今天這一個症狀。
+#    病灶是「同一件事被兩個正規化器算了兩次」，下一個雙代碼幣別會再犯一次。
+#    故下列守衛一律**從 `services.currency.CCY_NORMALIZE` 自己長出案例**。
+# ══════════════════════════════════════════════════════════════════
+
+#: 全 repo 認得的**每一種**幣別寫法（別名 ＋ 別名指向的 ISO 碼 ＋ yf 覆寫碼）。
+#: ⛔ **不手寫清單**：手寫的只涵蓋今天想得到的幣別，而這個 bug 的形狀正是
+#: 「**下一個**雙代碼幣別」。字表一旦擴充，這些守衛自動跟著擴。
+_ALL_CCY_WRITINGS: tuple[str, ...] = tuple(sorted(
+    set(CCY_NORMALIZE) | set(CCY_NORMALIZE.values())
+    | set(_CCY_YF_OVERRIDES) | set(_CCY_YF_OVERRIDES.values())))
+
+
+@pytest.mark.parametrize("written", _ALL_CCY_WRITINGS)
+def test_both_sides_of_the_currency_check_speak_the_same_language(written):
+    """⭐ **這是 B1 的機制測試** —— 同一個宣告，兩邊必須收成同一個字。
+
+    幣別比對只有在**兩邊用同一個正規化器**時才有意義。只要哪一邊自己走一套，
+    「同一種幣的兩種寫法」就會被判成衝突 —— 那正是 2026-09-08 修掉的那個 bug。
+
+    ⚠️ 這一條**不看任何特定幣別**，所以它擋的是**整個類別**，
+    不是「人民幣」這一個症狀。
+    """
+    _fund = fund_currency({"currency": written})
+    _div = dividend_currency({"dividends": [{"currency": written}]})
+    assert _fund == _div, (
+        f"同一個幣別宣告 {written!r}，基金側收成 {_fund!r}、配息側收成 {_div!r} —— "
+        "兩邊落在不同的命名空間，比對器會把同一種幣判成衝突。\n"
+        "⛔ 兩邊都必須走 `services.fund_invest_calc.comparable_ccy`。")
+
+
+@pytest.mark.parametrize("written", _ALL_CCY_WRITINGS)
+def test_the_same_currency_written_two_ways_is_never_a_clash(written):
+    """同一種幣的**任意兩種寫法**配起來，都不得被判成「幣別對不上」。
+
+    端到端走 :func:`estimate_monthly_income`，而不是只比兩個字串 ——
+    使用者受害的是**那一整段被關掉**，不是那兩個字串。
+    """
+    _canon = comparable_ccy(written)
+    if not _canon:                     # 認不得的寫法 → 本條不適用（那是 NO_CURRENCY 的射程）
+        return
+    for _other in _ALL_CCY_WRITINGS:
+        if comparable_ccy(_other) != _canon:
+            continue
+        _f = estimate_monthly_income(
+            _FUND(currency=written,
+                  dividends=[{"date": "2026/08/15", "amount": SENT_DIV,
+                              "currency": _other}]),
+            SENT_AMOUNT, fx_lookup=_fx)
+        assert _f["income_blocked"] != CCY_CONFLICT, (
+            f"基金宣告 {written!r}、配息宣告 {_other!r} —— **同一種幣**（都是 "
+            f"{_canon}），卻被判成幣別衝突，每月配息整段被關掉。\n"
+            f"畫面會印：{_INVEST_BLOCKED_NOTES[CCY_CONFLICT]}")
+
+
+@pytest.mark.parametrize("fund_ccy, div_ccy", [
+    ("TWD", "USD"),          # ⭐ 客戶點名的那一條（既有守衛的案例，不得被放寬）
+    ("USD", "TWD"),
+    ("CNY", "USD"),
+    ("USD", "人民幣"),        # 中文宣告過了 L2 之後**才**看得見的真衝突
+    ("HKD", "CNY"),
+])
+def test_a_real_currency_clash_is_still_blocked(fund_ccy, div_ccy):
+    """⛔ **反面守衛**：為了讓人民幣過關而把比對器變成永不擋，是另一種違憲。
+
+    §4.1 量綱：把美元的「最近一筆實配」當成台幣乘上匯率，畫面會印出一個
+    **看起來完全正常、實際差三十倍**的月配息金額。
+    """
+    _f = estimate_monthly_income(
+        _FUND(currency=fund_ccy,
+              dividends=[{"date": "2026/08/15", "amount": SENT_DIV,
+                          "currency": div_ccy}]),
+        SENT_AMOUNT, fx_lookup=_fx)
+    assert _f["income_blocked"] == CCY_CONFLICT, (
+        f"基金 {fund_ccy!r} vs 配息 {div_ccy!r} 是**真的**幣別衝突，必須擋住 —— "
+        f"實際卻是 {_f['income_blocked']!r}，月配 {_f['monthly_twd']!r}。")
+    assert _f["monthly_twd"] is None
+    assert _f["units_blocked"] == "", "衝突只該擋住配息那一半，單位數仍然算得出來。"
+
+
+@pytest.mark.parametrize("iso, yf_code", sorted(_CCY_YF_OVERRIDES.items()))
+def test_the_screen_never_shows_a_rate_lookup_only_code(iso, yf_code):
+    """⛔ **拿去打 API 的代碼不准印到畫面上。**
+
+    `fund_currency` 的回傳值會被印進**算式區**（「原幣金額 … CNH」）、
+    **配息說明**（「最近一筆實際配息 … CNH／單位」）與**灰態理由**。
+    `CNH` 這個代碼基金公司沒用過、使用者在本頁其他地方也沒看過。
+    """
+    for _written in (iso, yf_code):
+        _got = fund_currency({"currency": _written})
+        assert _got != yf_code, (
+            f"宣告 {_written!r} → 畫面會印出 {_got!r}，那是 yfinance 的報價代碼，"
+            f"不是使用者認得的計價幣別。\n"
+            f"⛔ 查匯率用 {yf_code!r} 是對的，但那件事屬於 `fx_rate_to_twd`。")
+
+
+def test_the_rate_lookup_still_asks_for_the_yf_code(monkeypatch):
+    """⭐ **反面守衛**：修 B1 不得把「查匯率用 yf 代碼」一起改掉。
+
+    `CNHTWD=X` 在 yfinance 比 `CNYTWD=X` 可靠（`services/currency.py` 就地寫明），
+    那半邊**必須原封保留**在 :func:`fx_rate_to_twd`。
+    """
+    import services.fund_service as _FS
+    _asked: list[str] = []
+
+    def _spy(_pair):
+        _asked.append(_pair)
+        return SENT_FX
+
+    monkeypatch.setattr(_FS, "get_latest_fx", _spy)
+    for _written in ("CNY", "人民幣", "CNH"):
+        _asked.clear()
+        assert CALC.fx_rate_to_twd(_written) == SENT_FX
+        assert _asked == ["CNHTWD=X"], (
+            f"{_written!r} 的匯率查詢變成 {_asked!r} —— "
+            "yf 覆寫（人民幣→CNH）被連帶改掉了，那是**對的**那一半。")
+    _asked.clear()
+    assert CALC.fx_rate_to_twd("TWD") == 1.0
+    assert _asked == [], "台幣計價不該打網路。"
+
+
+def test_the_two_currency_lines_on_one_screen_never_contradict_each_other():
+    """⭐ 事故的**畫面級**復現：配息表說「全部以 CNY 計價」、投資試算說「基金是 CNH」。
+
+    ⚠️ 兩句都是本頁印的 —— 這不是上游的鍋，是本頁自己在同一個畫面上自相矛盾。
+    `_dividend_caption` 拿的是 `result["currency"]` 原值，投資試算拿的是
+    `fund_currency()`；**兩者對「這檔基金是什麼幣」必須給同一個答案**。
+    """
+    _rows = [{"date": "2026/08/15", "amount": SENT_DIV, "currency": "CNY"}]
+    _res = _FUND(currency="CNY", dividends=_rows)
+    _caption_side = reconcile_row_currencies([str(_res.get("currency") or "")])
+    _invest_side = fund_currency(_res)
+    assert _caption_side == _invest_side, (
+        f"配息表底下說 {_caption_side!r}、投資試算說 {_invest_side!r} —— "
+        "同一個畫面、同一檔基金，兩句互相矛盾（§1）。")
+    assert estimate_monthly_income(_res, SENT_AMOUNT,
+                                   fx_lookup=_fx)["income_blocked"] != CCY_CONFLICT
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 回修｜B2 「掛牌的年化配息率」有兩條 fallback 其實是本地自算的
+#
+# 事故：`_invest_compare` **無條件**寫「對照這一檔**掛牌的**年化配息率」，
+# 而 `adr_pct` 有三層 fallback，**只有第一層是掛牌值**。實測一檔只有 3 個月
+# 配息紀錄的基金：畫面把**自己算的 1.44%** 講成「掛牌的」，還把差異原因講成
+# 「最近一筆配息不是常態」—— 而那三筆配息**金額完全相同**，
+# 真因是那個 12 個月的分母裡只裝了 3 個月。
+# ══════════════════════════════════════════════════════════════════
+
+def _recent_divs(n: int, amount: float = SENT_DIV) -> list[dict]:
+    """`n` 筆**落在近一年內**的月配紀錄（金額全部相同 → 排除「配息不規律」這個解釋）。
+
+    ⚠️ 日期**動態算**，不寫死 —— 寫死的日期會在一年後滑出 12 個月窗，
+    屆時這幾條測試會**無聲地改測別的東西**（`divs_12m_sum` 那層會退成 `None`）。
+    """
+    import datetime as _dt
+    _today = _dt.date.today()
+    return [{"date": (_today - _dt.timedelta(days=30 * (_i + 1))).strftime("%Y/%m/%d"),
+             "amount": amount} for _i in range(n)]
+
+
+@pytest.mark.parametrize("fund, want", [
+    ({"moneydj_div_yield": SENT_ADR, "metrics": {"nav": SENT_NAV}}, ADR_OFFICIAL),
+    ({"metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR}}, ADR_LOCAL_RATE),
+    ({"metrics": {"nav": SENT_NAV}, "dividends": _recent_divs(3)}, ADR_FROM_RECORDS),
+])
+def test_the_payout_rate_source_labels_match_the_resolver(fund, want):
+    """本檔那三個常數，必須**真的**是上游那支 resolver 回傳的字。
+
+    ⛔ 兩邊各自寫死字面值的話，上游改字時**畫面會靜靜退回講官方話** ——
+    而那正是 B2 的形狀：一個自算值被講成掛牌值。
+    """
+    assert _resolve_adr_with_fallback(fund)[1] == want, (
+        f"`_resolve_adr_with_fallback` 對 {fund!r} 回的來源標籤不是 {want!r} —— "
+        "本檔（與畫面）分辨『這個數字是不是掛牌的』就是靠它。")
+
+
+def _compare_facts(**over) -> dict:
+    """`_invest_compare` 讀得到的最小事實集。**只放它真的會讀的鍵。**"""
+    _f = {"annual_twd": 57_600.0, "implied_annual_pct": 5.76,
+          "adr_pct": SENT_ADR, "adr_source": ADR_OFFICIAL,
+          "income_basis": BASIS_RECORDS, "income_reconcile": {"agree": True}}
+    _f.update(over)
+    return _f
+
+
+@pytest.mark.parametrize("src", [ADR_OFFICIAL, ADR_LOCAL_RATE, ADR_FROM_RECORDS,
+                                 "某個上游日後才新增的來源"])
+def test_only_the_official_rate_is_ever_called_listed(src):
+    """⭐ **只有** :data:`ADR_OFFICIAL` 那一層可以被稱為「掛牌」。
+
+    最後一個參數是 **fail-safe**：上游多一層 fallback 時，畫面必須退成**保守**講法，
+    **不得**擅自把一個不認得的來源升格成官方值。
+    """
+    _line = _invest_compare(_compare_facts(adr_source=src))
+    assert (_ADR_SOURCE_LABELS[ADR_OFFICIAL] in _line) == (src == ADR_OFFICIAL), (
+        f"來源 {src!r} 的比較句用了「掛牌」那一套說法：\n{_line}\n"
+        "⛔ 把『我自己算的』講成『官方公布的』，是 §1「錯誤的數字比沒有數字更危險」"
+        "最貴的一種。")
+
+
+@pytest.mark.parametrize("src", [ADR_LOCAL_RATE, ADR_FROM_RECORDS])
+def test_a_locally_derived_rate_is_never_sold_as_a_second_opinion(src):
+    """⭐ 配息率也是本地推的時候，`agree` **不是**獨立驗證 —— 不得講成「站得住」。
+
+    本頁對**年化攤平**那條路早就有這條規矩（「兩個數字是同一個來源推出來的…
+    不能拿來當第二個驗證」）。這兩層 fallback 是**同一個病**：
+    對照值與月配都出自**同一批配息紀錄**。原本卻走到了
+    「兩個數字對得上 —— 這個推算站得住」，那是一個**假的第二意見**。
+    """
+    _line = _invest_compare(_compare_facts(adr_source=src,
+                                           income_reconcile={"agree": True}))
+    assert "互相獨立的驗證" in _line, (
+        f"來源 {src!r} 沒有說出「這不是獨立驗證」：\n{_line}")
+    assert "站得住" not in _line, (
+        f"來源 {src!r} 把同源的兩個數字講成互相驗證：\n{_line}")
+
+
+def test_an_incomplete_year_of_records_is_not_blamed_on_an_unusual_payout():
+    """⭐ **稽核抓到的那一句**：差很多的原因被講成「最近一筆配息不是常態」。
+
+    真因是 :data:`ADR_FROM_RECORDS` 那層拿**近 12 個月**加總當分子、
+    卻只有幾個月的紀錄 ⇒ 對照值**系統性偏低**。
+    ⚠️ 本例三筆配息**金額完全相同**，「不是常態」這個解釋在此**可證為假**。
+    """
+    _f = estimate_monthly_income(
+        _FUND(currency="TWD", moneydj_div_yield=None,
+              metrics={"nav": SENT_NAV}, dividends=_recent_divs(3)),
+        SENT_AMOUNT, fx_lookup=_explodes)
+    assert _f["adr_source"] == ADR_FROM_RECORDS, _f
+    assert _f["income_basis"] == BASIS_RECORDS, _f
+    _line = _invest_compare(_f)
+    assert "不滿一年" in _line, (
+        f"沒有說出真正的原因（紀錄不滿一年）：\n{_line}")
+    assert "不是常態" not in _line, (
+        f"把「紀錄不滿一年」誤診成「最近一筆配息不是常態」：\n{_line}\n"
+        "三筆配息金額完全相同 —— 這個解釋在本例可證為假。")
+
+
+def test_the_no_rate_sentence_does_not_pretend_only_the_listed_one_is_missing():
+    """`adr_pct is None` ＝ **三層全敗**，不是「只有掛牌值沒有」。"""
+    _line = _invest_compare(_compare_facts(adr_pct=None))
+    assert "沒有任何" in _line, _line
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 回修｜B3 全敗時，第六格是唯一不吃共用文案的一格
+#
+# `_has_anything()` 的 docstring 已經把規矩寫死：「全敗才用共用文案；
+# 只要有任何一格有料，其餘空格一律講**自己**的原因。」前五格都照做，
+# 第六格**沒有拿到 `_blank`** → 前五格說「在 2 個來源都沒有取到淨值」、
+# 第六格說「查不到這一檔是用哪一種幣別計價的」。**同一個原因，兩種故事。**
+# ══════════════════════════════════════════════════════════════════
+
+#: 全敗時的共用哨兵句（內容不重要，**是不是同一句**才是重點）。
+_SHARED_BLANK: str = "「這是深度區全敗時六格共用的那一句」"
+
+
+@pytest.mark.parametrize("reason", [NO_CURRENCY, NO_NAV, NO_FX,
+                                    CCY_CONFLICT, NO_INCOME_BASIS])
+def test_when_nothing_came_back_the_sixth_cell_says_what_the_other_five_say(reason):
+    """全敗時，**資料類**的原因一律改說共用那一句 —— 與其餘五格逐字相同。"""
+    assert _invest_note_for(reason, {}, _SHARED_BLANK) == _SHARED_BLANK, (
+        f"原因 {reason!r} 在全敗時沒有改口說共用那一句 —— "
+        "六格會對同一個原因講出兩種故事。")
+
+
+def test_a_missing_amount_is_never_blamed_on_the_data_sources():
+    """⛔ **反面守衛**：「金額沒填」是使用者自己的輸入，跟這次抓到什麼無關。
+
+    對它說「在 N 個來源都沒有取到淨值」一樣是假話。這條線與
+    :func:`_invest_where_for` 的兩路分法**刻意用同一個判準**。
+    """
+    _note = _invest_note_for(NO_AMOUNT, {}, _SHARED_BLANK)
+    assert _note != _SHARED_BLANK, (
+        "「金額沒填」被歸咎到資料來源身上 —— 那是一句假話。")
+    assert _note == _INVEST_BLOCKED_NOTES[NO_AMOUNT]
+
+
+@pytest.mark.parametrize("reason", [NO_CURRENCY, NO_AMOUNT, NO_NAV])
+def test_without_a_shared_note_every_reason_still_speaks_for_itself(reason):
+    """⛔ **反面守衛**：沒全敗（`blank == ""`）時，一律講**自己**的原因。
+
+    這是 :func:`_has_anything` 記載那個病的**原始方向** —— 共用文案跑進
+    不屬於它的格子。兩個方向都要擋。
+    """
+    assert _invest_note_for(reason, {}, "") == _INVEST_BLOCKED_NOTES[reason]
+
+
+def test_the_sixth_cell_is_wired_to_the_same_shared_note_as_the_other_five():
+    """⭐ **接線守衛**：production 呼叫點必須真的把 `_blank` 傳進去。
+
+    ⚠️ 上面那幾條驗的是「拿到 `blank` 之後會不會用」，**不是**「有沒有拿到」。
+    把參數從呼叫點刪掉，它們**全部照樣綠** —— 那正是 B3 的形狀：
+    邏輯是對的，**只是沒有接線**（同 `adr_source` 那個病：算了但沒人讀）。
+    """
+    _calls = [_n for _n in ast.walk(ast.parse(_PAGE.read_text(encoding="utf-8")))
+              if isinstance(_n, ast.Call)
+              and getattr(_n.func, "id", "") == "_render_invest_calc"]
+    assert _calls, "找不到 `_render_invest_calc` 的呼叫點 —— 這一塊被拔掉了？"
+    for _c in _calls:
+        assert len(_c.args) + len(_c.keywords) >= 2, (
+            f"`_render_invest_calc` 只被傳了 {len(_c.args)} 個位置引數 —— "
+            "深度區的共用全敗文案沒有接進第六格，全敗時它會自己講一套。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 回修｜X4 對帳的**單位約定**沒有守衛
+#
+# `reconcile_dividend_yield` 的 `abs_tol=0.001` 是照**小數**訂的
+# （docstring 自陳「容差:絕對 0.1 個百分點」⇒ 0.001 只有在餵小數時才等於 0.1 個百分點）。
+#
+# ⚠️ **本組自己重推過，結論與 PR 描述原文不同**（詳見 PR 描述的更正）：
+#    `math.isclose` 的判定式是 ``|a-b| <= max(rel_tol*max(|a|,|b|), abs_tol)``。
+#    **`rel_tol` 是尺度無關的** —— 兩種用法的相對項完全相同（都是 0.05×max）。
+#    有尺度的只有 `abs_tol`：餵小數 ⇒ 地板 ＝ **0.1 個百分點**；
+#    餵百分點 ⇒ 地板 ＝ **0.001 個百分點**，也就是**嚴 100 倍**，不是鬆。
+#    相對項勝出的門檻：餵小數 max>2%、餵百分點 max>0.02% ⇒
+#    **配息率 > 2% 時兩種用法判定相同**，≤ 2% 時餵百分點**比較嚴**。
+#    ⇒ 守衛必須用一個**低配息率**的案例，否則它殺不掉這顆突變。
+# ══════════════════════════════════════════════════════════════════
+
+#: 低配息率哨兵：`implied ≈ 1.00%` / `adr = 1.09%`。
+#: 餵小數 → **agree**（差 0.0009 ≤ 地板 0.001）；餵百分點 → **disagree**（差 0.09 > 0.0545）。
+#: ⚠️ 這兩個數字是**挑過的**：用 5.75% 那組哨兵，兩種用法都 agree，突變殺不掉。
+_LOW_ADR_PCT: float = 1.09
+_LOW_DIV: float = SENT_NAV * 1.00 / (12.0 * 100.0)
+
+
+def test_the_reconciler_is_fed_decimals_not_percentage_points():
+    """⭐ 對帳兩邊必須餵**小數**（`x/100`），因為容差是照小數訂的。
+
+    兩道斷言各擋一種改法：**值本身**（有人把 `/100.0` 拿掉）、
+    **判定結果**（有人換一個尺度但湊巧值也對）。
+    """
+    _f = estimate_monthly_income(
+        _FUND(currency="TWD", moneydj_div_yield=_LOW_ADR_PCT,
+              metrics={"nav": SENT_NAV},
+              dividends=[{"date": "2026/08/15", "amount": _LOW_DIV,
+                          "currency": "TWD"}]),
+        SENT_AMOUNT, fx_lookup=_explodes)
+    _rec = _f["income_reconcile"]
+    assert _rec is not None, _f
+    assert math.isclose(_rec["value_a"], _f["implied_annual_pct"] / 100.0,
+                        rel_tol=1e-12), (
+        f"對帳吃到的不是小數：value_a={_rec['value_a']!r}、"
+        f"implied={_f['implied_annual_pct']!r}（百分點）。\n"
+        "⛔ `abs_tol=0.001` 是照小數訂的（＝0.1 個百分點）；餵百分點會讓那個地板"
+        "變成 0.001 個百分點，**嚴 100 倍**，低配息率的基金會被誤判成「差很多」。")
+    assert math.isclose(_rec["value_b"], _f["adr_pct"] / 100.0, rel_tol=1e-12)
+    assert _rec["agree"] is True, (
+        f"implied={_f['implied_annual_pct']:.4f}% vs adr={_f['adr_pct']:.4f}% —— "
+        "差 0.09 個百分點，照小數的容差（地板 0.1 個百分點）應當算對得上。\n"
+        f"實際 {_rec!r}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08 回修｜Y2 「這裡假設同幣別」那句 §1 揭露沒有守衛
+#
+# 逐筆配息沒標幣別是**常態**，此時算式**假設**它與基金計價同幣別，
+# 而那個假設會直接乘上匯率。揭露句原本存在，但**拿掉它沒有任何測試會紅**。
+# ══════════════════════════════════════════════════════════════════
+
+def test_an_unlabelled_dividend_currency_is_declared_as_an_assumption_on_screen():
+    """⭐ 沒標幣別 → 畫面**必須**把「這裡是假設」講出來，並指名假設成哪一種幣。"""
+    _f = estimate_monthly_income(
+        _FUND(dividends=[{"date": "2026/08/15", "amount": SENT_DIV}]),
+        SENT_AMOUNT, fx_lookup=_fx)
+    assert _f["dividend_currency"] == "" and _f["income_basis"] == BASIS_RECORDS, _f
+    _note = _invest_basis_note(_f)
+    assert "假設" in _note, (
+        f"配息紀錄沒標幣別，畫面卻沒有把這個假設講出來：\n{_note}\n"
+        "⚠️ 那個假設會**直接乘上匯率** —— 不講出來，使用者無從判斷這個數字可不可信（§1）。")
+    assert _f["currency"] in _note, (
+        f"揭露句沒有指名假設成哪一種幣：\n{_note}")
+
+
+def test_a_declared_dividend_currency_does_not_get_the_assumption_sentence():
+    """⛔ **反面守衛**：逐筆有標幣別時**不得**多講一句「這裡是假設」。
+
+    沒有這一條，上面那條可以用「無條件永遠印那句話」通過 —— 那會讓
+    **真的有標**的基金也被講成「我們猜的」，同樣是不誠實。
+    """
+    _note = _invest_basis_note(
+        estimate_monthly_income(_FUND(), SENT_AMOUNT, fx_lookup=_fx))
+    assert "假設" not in _note, (
+        f"逐筆已宣告 USD，畫面卻還說「假設」：\n{_note}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 突變測試（2026-09-08 回修這一批）—— **把修復拔掉，上面的守衛必須真的轉紅**
+#
+# 憲法 §-1.5 v3 `03`-1：「突變測試（拔掉修復邏輯必須轉為紅燈）」。
+# 形狀沿用本檔既有那四條：**換掉合作者**，斷言對應守衛拋 `AssertionError`，
+# 還原之後**再驗回綠**（否則那個 `raises` 可能是別的原因造成的）。
+#
+# ⚠️ **一條殺不掉任何突變的測試，等於沒有測試** —— 下面每一顆突變都對應
+#    上面某一條具名守衛，不是「跑一遍看看會不會紅」。
+# ══════════════════════════════════════════════════════════════════
+
+def test_normalising_only_one_side_of_the_currency_check_turns_the_guard_red():
+    """突變①：把 `fund_currency` 還原成**修復前**的 ``mode="yf"`` → B1 守衛必須紅。
+
+    ⚠️ **刻意只換一側。** 兩側一起換回 yf 反而**不會**紅（兩邊仍在同一個命名空間）——
+    這正是本 bug 的本質：**病灶是兩側不一致，不是某一側用了哪個模式**。
+    """
+    _real = CALC.fund_currency
+    CALC.fund_currency = lambda _r: normalize_ccy(
+        (_r or {}).get("currency"), default="", mode="yf")
+    try:
+        with pytest.raises(AssertionError):
+            test_the_same_currency_written_two_ways_is_never_a_clash("人民幣")
+    finally:
+        CALC.fund_currency = _real
+    test_the_same_currency_written_two_ways_is_never_a_clash("人民幣")
+
+
+def test_skipping_the_alias_pass_on_the_dividend_side_turns_the_clash_guard_red():
+    """突變②：把 `dividend_currency` 還原成**修復前**（不先過 L2）→ 真衝突守衛必須紅。
+
+    修復前逐列的中文宣告會被 L0 當成未知（→ 不比對、**照算**）——
+    一檔美元基金、逐列卻寫「人民幣」，會靜靜地算下去。
+    """
+    _real = CALC.dividend_currency
+    CALC.dividend_currency = lambda _r: reconcile_row_currencies(
+        [_d.get("currency") for _d in ((_r or {}).get("dividends") or [])
+         if isinstance(_d, dict)])
+    try:
+        with pytest.raises(AssertionError):
+            test_a_real_currency_clash_is_still_blocked("USD", "人民幣")
+    finally:
+        CALC.dividend_currency = _real
+    test_a_real_currency_clash_is_still_blocked("USD", "人民幣")
+
+
+def test_calling_every_payout_rate_listed_turns_the_provenance_guard_red():
+    """突變③：讓本地自算的來源也用「掛牌」那一套說法 → B2 守衛必須紅。"""
+    _real = dict(_ADR_SOURCE_LABELS)
+    try:
+        _ADR_SOURCE_LABELS[ADR_FROM_RECORDS] = _real[ADR_OFFICIAL]
+        with pytest.raises(AssertionError):
+            test_only_the_official_rate_is_ever_called_listed(ADR_FROM_RECORDS)
+    finally:
+        _ADR_SOURCE_LABELS.clear()
+        _ADR_SOURCE_LABELS.update(_real)
+    test_only_the_official_rate_is_ever_called_listed(ADR_FROM_RECORDS)
+
+
+def test_treating_a_same_source_rate_as_a_second_opinion_turns_the_guard_red():
+    """突變④：讓「同源」那道分流失效（所有來源都當成官方）→ 假第二意見守衛必須紅。"""
+    _page_real = _PAGE_MOD.ADR_OFFICIAL
+    try:
+        # 把畫面眼中的「官方」指到本地自算那一層 ⇒ 同源分流當場失效。
+        _PAGE_MOD.ADR_OFFICIAL = ADR_FROM_RECORDS
+        with pytest.raises(AssertionError):
+            test_a_locally_derived_rate_is_never_sold_as_a_second_opinion(
+                ADR_FROM_RECORDS)
+    finally:
+        _PAGE_MOD.ADR_OFFICIAL = _page_real
+    test_a_locally_derived_rate_is_never_sold_as_a_second_opinion(ADR_FROM_RECORDS)
+
+
+def test_dropping_the_shared_note_in_the_sixth_cell_turns_the_guard_red():
+    """突變⑤：把 `_invest_note_for` 還原成**修復前**（無視 `blank`）→ B3 守衛必須紅。"""
+    _real = _PAGE_MOD._invest_note_for
+    _PAGE_MOD._invest_note_for = (
+        lambda _reason, _facts, _blank: _PAGE_MOD._invest_blocked_note(_reason, _facts))
+    try:
+        with pytest.raises(AssertionError):
+            _mutated_note_for_guard(NO_CURRENCY)
+    finally:
+        _PAGE_MOD._invest_note_for = _real
+    _mutated_note_for_guard(NO_CURRENCY)
+
+
+def _mutated_note_for_guard(reason: str) -> None:
+    """與 :func:`test_when_nothing_came_back_the_sixth_cell_says_what_the_other_five_say`
+    同一條斷言，但**在呼叫時**才去模組上取 `_invest_note_for` ——
+    這樣突變⑤換掉模組屬性之後才咬得到（直接 import 進來的名字換不掉）。"""
+    assert _PAGE_MOD._invest_note_for(reason, {}, _SHARED_BLANK) == _SHARED_BLANK
+
+
+def test_feeding_percentage_points_to_the_reconciler_turns_the_unit_guard_red():
+    """突變⑥：把小數換成**百分點**餵給對帳 → X4 單位守衛必須紅。
+
+    ⚠️ 這顆突變只在**低配息率**時咬得到（見上方推導：>2% 兩種用法判定相同）——
+    這正是那條守衛必須用 1.00% / 1.09% 這組哨兵、而不是 5.75% 的原因。
+    """
+    _real = CALC.reconcile_dividend_yield
+    CALC.reconcile_dividend_yield = lambda _a, _b: _real(_a * 100.0, _b * 100.0)
+    try:
+        with pytest.raises(AssertionError):
+            test_the_reconciler_is_fed_decimals_not_percentage_points()
+    finally:
+        CALC.reconcile_dividend_yield = _real
+    test_the_reconciler_is_fed_decimals_not_percentage_points()
+
+
+def test_hiding_the_same_currency_assumption_turns_the_disclosure_guard_red():
+    """突變⑦：讓沒標幣別的配息看起來「有標」→ Y2 揭露守衛必須紅。
+
+    這是**真的會發生**的那種退化：只要 `dividend_currency` 哪天改成
+    「沒標就當成跟基金一樣」，那句 §1 揭露就會**靜靜地消失**，
+    而畫面上的數字**一個都不會變** —— 沒有這顆突變，沒有人會發現。
+    """
+    _real = CALC.dividend_currency
+    CALC.dividend_currency = lambda _r: CALC.fund_currency(_r)
+    try:
+        with pytest.raises(AssertionError):
+            test_an_unlabelled_dividend_currency_is_declared_as_an_assumption_on_screen()
+    finally:
+        CALC.dividend_currency = _real
+    test_an_unlabelled_dividend_currency_is_declared_as_an_assumption_on_screen()
+
+
+def test_on_a_total_failure_the_invest_block_prints_the_same_sentence_on_screen():
+    """⭐ **B3 的畫面級守衛** —— 前五格與第六格在畫面上印的是**同一句**。
+
+    ⚠️ 上面那幾條驗的是 :func:`_invest_note_for` 這個純函式；**這一條驗的是畫面**。
+    兩者都要：純函式那條擋「邏輯寫錯」，這一條擋「邏輯對但沒接線」——
+    B3 本身就是後者（`_render_invest_calc` 從來沒拿到 `_blank`）。
+    """
+    _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE,
+                     result=_BLANK_RESULT())
+    _seg = _segments(_parts)
+    _invest = "\n".join(_seg.get(DEEP_DIVE_INVEST, []))
+    assert _invest, f"深度區沒有畫出「{DEEP_DIVE_INVEST}」：{list(_seg)}"
+    # 前五格印的那一句 —— 從**畫面上**取，不自己重算一份（重算就變成第二個真相源）。
+    _others = "\n".join(_l for _k, _v in _seg.items() if _k != DEEP_DIVE_INVEST
+                        for _l in _v)
+    assert "在 2 個來源都沒有取到淨值" in _others, (
+        f"前五格沒有印出全敗共用句，這條測試的前提垮了：\n{_others[:400]}")
+    assert "在 2 個來源都沒有取到淨值" in _invest, (
+        f"全敗時第六格沒有跟其餘五格說同一句：\n{_invest}\n"
+        "⛔ 它會改口說「查不到這一檔是用哪一種幣別計價的」—— "
+        "同一個原因、兩種故事，而且第二種把使用者導向錯的結論。")
+    assert "查不到這一檔是用哪一種幣別計價" not in _invest, (
+        f"全敗時第六格仍在講自己的幣別原因：\n{_invest}")
