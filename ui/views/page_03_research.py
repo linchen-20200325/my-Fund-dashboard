@@ -3,7 +3,10 @@
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；結果卡、深度區與批次的真內容**分批填**。
 2026-09-06 深度區接上真取數；**2026-09-07 批次分析接上真取數**（客戶三項拍板，見 :func:`_render_batch`）。
-⚠️ **仍是灰態的只剩「搜尋結果」一塊** —— 它卡在 `services/**` 沒有搜尋入口，理由見下方。
+~~⚠️ **仍是灰態的只剩「搜尋結果」一塊** —— 它卡在 `services/**` 沒有搜尋入口，理由見下方。~~
+✅ **2026-09-08 搜尋結果也接上了**（`services.fund_search.search_funds`，總管裁決建 L2 入口），
+**同一批恢復線框的「選定後展開」gate** —— 本頁**四塊全部是真資料或誠實的空狀態**，
+沒有任何一塊還在拿「這一頁做到哪裡」當理由。兩件事的完整沿革見下方各自的段落。
 
 整頁骨架 —— 逐字取自已核准線框 `docs/wireframes/ia-wireframe.html` 的 **Tab 03**
 ------------------------------------------------------------------------------
@@ -99,14 +102,33 @@
 
 - **「Form 後才跑」照做** —— 沒有送出過搜尋，下面**一塊都不畫**（鐵則 04 首屏無冗餘占位），
   只留空狀態三要素。
-- ⚠️ **「選定後展開」本批做不到，據實登記而不是假裝有做**：骨架階段**沒有任何東西可以被選定**
-  （結果卡還沒接上），若照字面「選定後才畫」，深度區在本批**永遠不會被渲染** ——
-  等於既沒有骨架、也沒有守衛。故本批在送出搜尋後**一律畫出深度區的灰態**。
-  ⛔ **下一批接上結果卡時，這個 gate 必須恢復**，屆時
-  `tests/test_wf03_research_skeleton.py` 的順序斷言會轉紅 ——
-  **正解是把它改成「選定後才展開」的 gate 驗證，不是把斷言放寬。**
+- ~~⚠️ **「選定後展開」本批做不到，據實登記而不是假裝有做**：骨架階段**沒有任何東西可以被選定**~~
+  ~~（結果卡還沒接上），若照字面「選定後才畫」，深度區在本批**永遠不會被渲染** ——~~
+  ~~等於既沒有骨架、也沒有守衛。故本批在送出搜尋後**一律畫出深度區的灰態**。~~
+  ~~⛔ **下一批接上結果卡時，這個 gate 必須恢復**，屆時~~
+  ~~`tests/test_wf03_research_skeleton.py` 的順序斷言會轉紅 ——~~
+  ~~**正解是把它改成「選定後才展開」的 gate 驗證，不是把斷言放寬。**~~
 
-資料從哪裡來（**深度區與批次都已接上**；只剩搜尋結果是缺口）
+- ✅ **2026-09-08：gate 已恢復**（**狀態變更，不是漏刪**）。舊表述自己寫的觸發條件
+  （「下一批接上結果卡時」）**已經發生**，就照它說的做了：
+
+  · **深度區只在「有選定的基金」時才去取數** —— 沒選定就走空狀態三要素，
+    :func:`auto_fetch_moneydj` **一次都不會被呼叫**（守衛驗的是呼叫次數 0／1，
+    不是畫面上有沒有字：只驗畫面的話，把 fetch 留著、只是不顯示，照樣會全綠）。
+  · **選定怎麼發生**：結果卡上的「:data:`SELECT_LABEL`」按鈕，或（名錄查不到候選時）
+    深度區空狀態裡的「:data:`DIRECT_LABEL`」按鈕。
+  · **送出新查詢會清掉舊的選定**（:func:`_render_search_form` 的閘門內）——
+    否則使用者換了關鍵字，深度區還停在上一檔，而畫面上沒有任何跡象。
+
+  ⚠️ **順序斷言（`test_all_blocks_are_present_and_in_wireframe_order`）沒有轉紅，
+  這一點要講清楚，不要讀成「gate 沒做」**：本頁的 gate 擋的是**深度區的內容與取數**，
+  **不是那一塊的標題** —— 三個一級區塊照樣在、照樣是線框順序（鐵則 04 要的是
+  「不畫空框」，而空狀態三要素正是它指定的替代物）。
+  真正因此轉紅、且**已改成 gate 驗證而不是放寬**的是深度區**逐格**那一族斷言：
+  它們現在一律要求 `_render(selected=…)`，另外新增
+  `test_the_deep_dive_does_not_fetch_until_a_fund_is_selected` 等條驗 gate 本身。
+
+資料從哪裡來（**三塊都已接上真資料**）
 ------------------------------------------------------------
 **單一基金深度的六格全部由同一次呼叫供給**：
 :func:`services.moneydj_fetcher.auto_fetch_moneydj`（**L2**，一次往返、六格共用）。
@@ -136,28 +158,57 @@
    且 `sharpe` 那一格的缺值原因鍵是 **`self_calc_reason`**，不是 `reason`
    （只有稀疏降級路徑會補寫 `reason`）。**逐格缺因要照這個實況取，不能假設一致。**
 
-⛔ **仍然是缺口，本批沒有動**：**「搜尋」在 L2 沒有入口。**
+~~⛔ **仍然是缺口，本批沒有動**：**「搜尋」在 L2 沒有入口。**~~
 
-   本組實測 `services/**` 沒有任何 fund 搜尋函式；現行搜尋實作住在 **L1**
-   （`repositories.fund.tdcc_search_fund`），UI 直呼它走的是憲法 §8.2.A.1
-   **已登記的 `EX-PASSTHRU-1` 例外**（該列現行登記的呼叫點是
-   `ui/helpers/fund_research/code_finder.py::_search`）。
-   → 下一批**不得**擅自新增一層 L2 facade（那是動後端邊界，本批方針明禁），
-   也**不得**直接多開一個 UI 呼叫點就算了 —— `EX-PASSTHRU-1` 該列自己寫著
-   「**本 fetcher 出現第二個 UI caller**」就是它的**升級觸發條件**。
-   **兩條路都要總管裁決，不是執行組自己選。**
-   ⚠️ 本段的「`services/**` 沒有搜尋入口」是**單組 grep 的全稱句，未經第二組驗證**。
+   ~~本組實測 `services/**` 沒有任何 fund 搜尋函式；現行搜尋實作住在 **L1**~~
+   ~~（`repositories.fund.tdcc_search_fund`），UI 直呼它走的是憲法 §8.2.A.1~~
+   ~~**已登記的 `EX-PASSTHRU-1` 例外**（該列現行登記的呼叫點是~~
+   ~~`ui/helpers/fund_research/code_finder.py::_search`）。~~
+   ~~→ 下一批**不得**擅自新增一層 L2 facade（那是動後端邊界，本批方針明禁），~~
+   ~~也**不得**直接多開一個 UI 呼叫點就算了 —— `EX-PASSTHRU-1` 該列自己寫著~~
+   ~~「**本 fetcher 出現第二個 UI caller**」就是它的**升級觸發條件**。~~
+   ~~**兩條路都要總管裁決，不是執行組自己選。**~~
+
+✅ **2026-09-08 已接上：`services.fund_search.search_funds`**
+   （**有意識的狀態變更，不是漏刪** · 決策者：**AI 總管 2026-09-08 裁決**）。
+
+   **舊表述在寫下的當天是對的** —— 那時 `services/**` 真的沒有搜尋入口，
+   而它自己寫的處置（「兩條路都要總管裁決」）**就是照做了**：總管裁決
+   **建 L2 入口、⑧ 呼叫它、`code_finder.py` 一個字都不動**。
+   依據是 `EX-PASSTHRU-1` 該列自己寫的升級觸發條件逐字：
+   「…**或本 fetcher 出現第二個 UI caller**（fan-out 一旦出現，(a) 的理由即失效，
+   **應比照 R16 上提 L2**）」—— 也就是「直接多開一個 UI 呼叫點」那條路，
+   **憲法自己把它導向 L2**。兩條路其實是同一個答案。
+
+   ⚠️ **過渡期會有兩個消費者，這是雙軌的預期狀態、不是違憲**：舊 ③ 仍**直呼 L1**
+   （客戶明令「絕對禁止修改現有線上正常運作的舊版 Tab 代碼」），⑧ 走 L2。
+   **兩者呼叫的是同一份 L1 實作，不是兩份實作** —— v3 §01-2 管的是後者。
+   完整理由寫在 `services/fund_search.py` 的模組 docstring。
+
+   ⛔ **本頁分不出「查無結果」與「查詢失敗」，而且不假裝分得出來**：L1 的
+   `tdcc_search_fund` 把所有例外都吞掉（`_tdcc_get` 是 `except Exception: return []`，
+   FundClear 備援是 `except Exception: pass`），**三個來源全掛與名錄裡真的沒有，
+   回傳值一模一樣是 `[]`**。空狀態因此照抄
+   `services.fund_search.EMPTY_MEANS_UNKNOWN` 那句實話，**不寫「查無此基金」**（§1）。
+   ⚠️ 本段對 L1 的描述是**本組逐行讀原始碼**得到的，**未經第二組驗證**。
 
 三態與空狀態：兩種灰的理由不同，文案必須分開
 ------------------------------------------
 - **還沒開始搜尋** → 線框 Rule 04 的空狀態三要素，指路回本頁上方的搜尋條件
   （使用者**照著做真的能解決**「沒有查詢條件」這件事）。
-- **送出了、但這一塊的內容還沒填** → 該塊**自己那一句**的灰態
-  （:data:`_RESULTS_PENDING_NOTE`）。
-  ⚠️ 2026-09-06 起**不再是一句共用的「本頁分批上線」** —— 各塊卡住的原因不同，
-  理由見那些常數上方的 ⛔ 段。
-  ⚠️ 這些句子混成一句，會讓使用者以為「輸入代碼按下去就會出現結果」—— 不會。
-  同樣的分岔在 ① 與 ② 都做過一次（`page_01_macro.py::_detail_pending`、
+- ~~**送出了、但這一塊的內容還沒填** → 該塊**自己那一句**的灰態~~
+  ~~（:data:`_RESULTS_PENDING_NOTE`）。~~
+  → **2026-09-08：這一族已經空了（狀態變更，不是漏刪）。** 搜尋結果是它最後一個成員，
+  接上真取數之後，本頁**沒有任何一塊**還在拿「這一頁做到哪裡」當理由 ——
+  每一塊的灰／空都來自**資料本身或使用者的輸入**。
+  ⛔ 不要把這一族復活：一句「本頁分批上線」對使用者沒有下一步，
+  而 §1 要的是「缺什麼、去哪補」，不是進度回報。
+- **搜尋送出了、但名錄沒有回傳候選** → :data:`_RESULTS_EMPTY_MISSING`
+  （照抄 `services.fund_search.EMPTY_MEANS_UNKNOWN`，**不寫「查無此基金」**）。
+- **有候選、但還沒選定要看哪一檔** → :data:`_NOT_SELECTED_MISSING`
+  （下一步是**去上面點一張卡**，使用者照著做真的有效）。
+  ⚠️ 這些句子混成一句，會讓使用者以為「輸入代碼按下去就會出現績效」—— 不會，
+  他還要選一檔。同樣的分岔在 ① 與 ② 都做過一次（`page_01_macro.py::_detail_pending`、
   `page_02_health.py::_pending_where`）。
 - **批次自己的兩種空** → :data:`_BATCH_EMPTY_MISSING`（還沒貼）與
   :data:`_BATCH_UNPARSED_MISSING`（貼了但認不得）。**同樣刻意不共用一句** ——
@@ -171,7 +222,14 @@
 
 四大鐵律的落點（本檔不自己實作任何一條，一律走既有共用元件）
 ------------------------------------------------------------
-- **鐵則 01 三欄網格** → `ui.helpers.ia.render_cards`。**本檔沒有任何 `st.columns` 呼叫。**
+- **鐵則 01 三欄網格** → `ui.helpers.ia.render_cards`（深度區三張卡）與
+  `ui.helpers.ia.card_grid`（**搜尋結果卡**，2026-09-08 加）。
+  **本檔沒有任何 `st.columns` 呼叫。**
+  ⚠️ **為什麼結果卡走 `card_grid` 而不是 `render_cards`**：每一張結果卡底下要有一顆
+  「選這一檔」的按鈕，而 `render_cards()` 只吃卡片 dict、拿不到欄位容器（它的
+  `state_card(**spec)` 沒有按鈕這個參數）。`card_grid()` 是 IA kit **為這件事開的**
+  入口（它的 docstring 例子就是 `with _c: st.metric(...)`），**不是繞過鐵則 01** ——
+  欄數仍由 `GRID_COLS` 決定，本檔沒有寫任何一個 `3`。
   ⚠️ **這裡曾寫「自己寫會讓 `GRID_EXEMPT_CALL_TOTAL`（精確 `==` 90）轉紅」——那是假的，
   已於 2026-09-05 由獨立紅隊實測推翻**：加 `st.columns(3)`（＝鐵則 01 叫你開的那個）
   → **全綠**；`st.columns(2)` → 2 failed。那個計數器抓的是「**欄數不是 3**」的呼叫，
@@ -196,8 +254,11 @@ import streamlit as st
 
 from ui.helpers.ia import (
     STATE_NOT_READY,
+    STATE_OK,
     applied_form,
+    card_grid,
     render_cards,
+    state_card,
     wide_table,
 )
 from ui.helpers.ia.empty_state import empty_state
@@ -210,6 +271,20 @@ from ui.helpers.tw_time import tw_now_str
 #    enriched wrapper → L1。本檔**不碰** `repositories` / `infra` / 任何網路函式庫，
 #    由 `tests/test_wf03_research_skeleton.py::test_the_page_never_reaches_into_the_data_layer` 釘住。
 from services.moneydj_fetcher import auto_fetch_moneydj
+# ⚠️ **搜尋的 L2 入口（2026-09-08 新建）**。thin facade → L1 `tdcc_search_fund`。
+#    ⛔ **不要**改成在這裡直接 import `repositories.fund` —— 那是憲法 §8.2.A.1
+#    `EX-PASSTHRU-1` 該列自己寫的「出現第二個 UI caller」升級觸發條件，
+#    而總管 2026-09-08 已依它裁決走 L2。完整理由見 `services/fund_search.py`。
+from services.fund_search import (
+    EMPTY_MEANS_UNKNOWN,
+    KEY_AGENT,
+    KEY_CODE,
+    KEY_NAME,
+    KEY_NAV,
+    KEY_NAV_DATE,
+    KEY_SOURCE,
+    search_funds,
+)
 # 幣別一致性判定（純函式、零 I/O）。**不自己寫一份** —— §1 的失效模式就寫在它的 docstring 裡。
 from shared.data_quality import reconcile_row_currencies
 # 寬鬆數值轉換（`"1,234"` / `"12.3%"` / None → float | None）。批次大表的數值欄要它。
@@ -223,6 +298,12 @@ _FORM_KEY: str = "v03_research_search_form"
 #: **已送出**的查詢（不是 widget 當下值）。下游只准讀這個 —— 理由見 `_applied_query()`。
 #: `None`／不存在 ＝ 還沒搜尋過（或上一次送出時查詢條件是空的）。
 _SK_APPLIED: str = "v03_research_applied_query"
+#: **選定要看深度資料的那一檔**（一個基金代碼字串，或使用者原封輸入的那一串）。
+#: `None`／不存在／不是字串 ＝ 還沒選 ⇒ 深度區走空狀態、**一次取數都不做**。
+#: ⚠️ 它與 :data:`_SK_APPLIED` **是兩個東西，刻意不合併**：查詢條件換了，
+#:    選定就作廢（:func:`_render_search_form` 的閘門內會清掉它）；
+#:    但**同一個查詢條件底下換選另一檔，不該重跑搜尋**。
+_SK_SELECTED: str = "v03_research_selected_fund"
 
 # ── Form 的兩個欄位（線框 Tab 03 逐字：「代碼或名稱　0P0000ABCD」「來源　全部」）──
 #: 線框把送出鈕的字寫成「搜尋」，**不是** `ia.APPLY_LABEL` 的預設「套用」。
@@ -313,12 +394,63 @@ DEEP_DIVE_PROVENANCE: str = "資料來源與抓取時間"
 # 📌 同型前例：② `ui/views/page_02_health.py` 的 `_SCORE_PENDING_NOTE` /
 #    `_LAG_PENDING_NOTE`（2026-09-06 同日、同一個理由拆的）。**本檔照同一個形狀。**
 
-#: 區塊 2 的灰態理由。**說的是「這一塊缺什麼」，不是「這一頁的進度」。**
-#: ⚠️ 內容與搜尋框的 `help` 是**同一個事實的兩面**，改一邊要順手看另一邊：
-#:    本頁把輸入原封當成代碼送去查（`services/**` 沒有可回傳候選清單的搜尋入口）。
-_RESULTS_PENDING_NOTE: str = (
-    "本頁目前只查得到**完整代碼** —— 你輸入的字會被原封當成代碼送去查，"
-    "結果顯示在下方的「單一基金深度」。**依名稱或關鍵字列出多檔候選**還沒有接上")
+#: ~~區塊 2 的灰態理由。**說的是「這一塊缺什麼」，不是「這一頁的進度」。**~~
+#: ~~`_RESULTS_PENDING_NOTE = "本頁目前只查得到**完整代碼** —— 你輸入的字會被原封~~
+#: ~~當成代碼送去查，結果顯示在下方的「單一基金深度」。**依名稱或關鍵字列出多檔候選**~~
+#: ~~還沒有接上"`~~
+#: → **2026-09-08 移除（有意識的政策變更，不是漏刪；決策者：AI 總管）。**
+#:
+#: **舊表述在寫下的當天逐字為真** —— 那時 `services/**` 真的沒有搜尋入口，
+#: 而它誠實地把這件事說給使用者聽，那個處置是對的。
+#: **被推翻的是它的前提**：`services.fund_search.search_funds` 已經接上，
+#: 「依名稱或關鍵字列出多檔候選」**現在做得到了**。留著這句就是對使用者說謊。
+#: ⛔ **「內容還沒接上」這一族自此空了，不要復活它** —— 理由見模組 docstring
+#:    「三態與空狀態」那一段：一句進度回報對使用者沒有下一步。
+
+#: 一次最多畫幾張結果卡。**這是版面決定，不是資料決定** —— L2 回幾筆就是幾筆
+#: （`services.fund_search.search_funds` 刻意不截斷），截斷發生在這裡。
+#: ⚠️ 3 的倍數：`card_grid()` 一列開 `GRID_COLS` 欄，取 9 剛好三整列、最後一列不留白。
+#: ⛔ **超出的部分不是「不見了」** —— :func:`_results_caption` 會把總筆數講出來，
+#:    並告訴使用者「再打精確一點」。**默默截斷、讓使用者以為只有 9 檔，是 §1 的造假。**
+MAX_RESULT_CARDS: int = 9
+
+#: 結果卡上那顆按鈕的字。**具名而不 inline**：守衛要拿它比對，
+#: 而且它是本頁「選定後展開」這個 gate 的**唯一**入口之一（另一個是 :data:`DIRECT_LABEL`）。
+SELECT_LABEL: str = "查這一檔"
+#: 深度區空狀態裡那顆按鈕的字 —— 名錄查不到候選時的**逃生門**。
+#: ⛔ **它不是可有可無的裝飾。** 沒有它，一個手上就有完整代碼／MoneyDJ 網址、
+#:    但那串字不在 TDCC 名錄裡的使用者，**在新頁上就再也到不了深度區** ——
+#:    那會是一次功能退化（舊 ③ 支援這條路），不是「gate 做得比較嚴」。
+DIRECT_LABEL: str = "直接用我輸入的內容查"
+
+#: 區塊 2「名錄沒有回傳任何候選」的空狀態三要素。
+_RESULTS_EMPTY_TITLE: str = "這次沒有列出任何候選"
+#: ⛔ **後半句照抄 `services.fund_search.EMPTY_MEANS_UNKNOWN`，不要改寫成「查無此基金」**：
+#:    L1 把「名錄裡真的沒有」與「三個來源全掛」都回成 `[]`（它 `except Exception` 吞掉），
+#:    本頁**分不出是哪一種**。挑一種講就是替上游編了一個它沒說過的結論（§1）。
+#:    同一個道理已經寫在 :data:`_BLAME_FREE` 上方 —— 那是深度區的同型處境。
+_RESULTS_EMPTY_MISSING: str = (
+    f"名錄沒有回傳任何符合的基金 —— {EMPTY_MEANS_UNKNOWN}")
+
+#: 區塊 3「還沒選定」的空狀態三要素。**這是「選定後展開」那個 gate 的臉。**
+_NOT_SELECTED_TITLE: str = "還沒選定要看哪一檔"
+_NOT_SELECTED_MISSING: str = (
+    f"深度資料一次只看一檔，而上面的候選還沒有任何一張被點選 —— "
+    f"按下卡片上的「{SELECT_LABEL}」就會展開")
+
+#: 上游那一列連 `基金名稱` 與 `基金代碼` 都沒有時，卡片的標題。
+#: ⛔ **刻意不寫「未知基金」或流水號** —— 那兩種都長得像一個真的名字。
+#:    這一句直接說「上游沒給」，使用者一眼看得出問題出在資料不是在他身上。
+_NAMELESS_TITLE: str = "這一列上游沒有給名稱"
+
+#: 結果卡上**沒有**的東西，一句話講完（**整塊一句，不是每張卡各印一次**）。
+#: ⚠️ 線框那三張示意卡上有「+12.4%」「Sharpe 0.81」這種績效欄，
+#:    而名錄搜尋**根本不回傳績效** —— 每一檔的績效要各打一次深度取數才有。
+#:    ⛔ 在卡上填一個看起來合理的數字，使用者完全看不出它是假的（§1）；
+#:    留白又會讓他以為「這檔沒有績效」。**所以據實說一次：這份清單只有淨值。**
+_RESULTS_NO_PERF_NOTE: str = (
+    f"這份清單只有名稱與淨值 —— 績效、風險、持股、配息要按「{SELECT_LABEL}」"
+    "才會去抓那一檔的深度資料。")
 
 #: ~~區塊 4 的灰態理由。**缺的是一個輸入欄位，不是資料。**~~
 #: ~~`_BATCH_PENDING_NOTE = "批次要能一次收多個代碼，而本頁目前只有一個收單一代碼的~~
@@ -477,11 +609,18 @@ CCY_UNKNOWN: str = "幣別未知"
 #: 搜尋框的 `help` 當時承諾「基金代碼、Morningstar secId，或名稱的一部分」，
 #: 但**後兩種靜默失敗**（`services/**` 沒有搜尋入口，term 直接被拼成 `?a=<原字串>`）。
 #: 一個打對了 secId 的使用者，會被告知他「打錯了」。
-#: **現在改成據實說明本頁只查得到代碼**，並保留「來源當下不可用」這第二種可能
-#: —— L2 分不出這兩者，挑一種講就是編的。
+#: ~~**現在改成據實說明本頁只查得到代碼**，並保留「來源當下不可用」這第二種可能~~
+#: ~~`_BLAME_FREE = "可能是這串輸入不是本頁查得到的基金代碼（本頁目前只查得到代碼，~~
+#: ~~secId 與名稱查不到），也可能是這幾個來源當下不可用。"`~~
+#: → **2026-09-08 改寫（有意識的更正，不是漏刪）。**
+#: **舊表述的用意完全成立、而且原封保留**（不把責任推給使用者、兩種可能都講）；
+#: **被推翻的是它括號裡那半句事實** —— 搜尋入口接上之後「本頁目前只查得到代碼」
+#: 已經不為真（名稱查得到），留著就是另一句假話。
+#: ⚠️ 兩種可能仍然**分不出來**：深度區的 L2 入口回的是同一個「什麼都沒有」，
+#: 挑一種講就是編的（同 :data:`_RESULTS_EMPTY_MISSING` 在搜尋那一側的處境）。
 _BLAME_FREE: str = (
-    "可能是這串輸入不是本頁查得到的基金代碼（本頁目前只查得到代碼，"
-    "secId 與名稱查不到），也可能是這幾個來源當下不可用。")
+    "可能是這串輸入不是 MoneyDJ 與備援來源認得的基金代碼／網址，"
+    "也可能是這幾個來源當下不可用 —— 這兩種本頁分不出來。")
 
 
 def _pending_where(block: str) -> str:
@@ -498,13 +637,20 @@ def _pending_where(block: str) -> str:
     **現行**：回傳 ``③ 🔍 標的探索 → 搜尋條件`` —— 一個真的地方，
     包進祈使句之後文法與語意都成立。
 
-    ⛔ **這一族的指路仍然「有效性有限」，據實寫明，不要讀成已經解決**：
-    這一塊沒接上，**去任何地方都不會讓它出現**；能指的最誠實的地方，
-    就是這一頁上**唯一真的做完**的那一塊（＝搜尋條件），而灰態本文
-    （:data:`_RESULTS_PENDING_NOTE`、:data:`_BATCH_EMPTY_MISSING` …）已經先講了
-    **這一塊**缺的是什麼。
-    ✅ **對照**：空狀態（:func:`_render_not_searched_yet`）那一則的指路是**真的有效**的
-    —— 紅隊實跑：照它做真的會離開灰態。**兩者不要混為一談。**
+    ⚠️ ~~**這一族的指路仍然「有效性有限」，據實寫明，不要讀成已經解決**：~~
+    ~~這一塊沒接上，**去任何地方都不會讓它出現**；能指的最誠實的地方，~~
+    ~~就是這一頁上**唯一真的做完**的那一塊（＝搜尋條件），而灰態本文~~
+    ~~（:data:`_RESULTS_PENDING_NOTE`、:data:`_BATCH_EMPTY_MISSING` …）已經先講了~~
+    ~~**這一塊**缺的是什麼。~~
+    → **2026-09-08 部分失效，據實重寫（狀態變更，不是漏刪）**：
+    「這一塊沒接上」的那一族**已經不存在**（搜尋結果是最後一個成員，已接上真取數）。
+    **本函式現在唯一的消費者是深度區的六格**，而那裡的指路**有效性依然有限** ——
+    NAV／持股／配息缺值是**上游沒有給**，回搜尋條件換個代碼**有時**有用
+    （換一檔真的可能有資料）、**有時**沒用（那一檔上游就是沒有）。
+    ⛔ 本頁**不宣稱**分得出這兩種，所以指路只保證「這是一個地方」，不保證「去了有效」。
+    ✅ **對照**：空狀態（:func:`_render_not_searched_yet`）與深度區的
+    「還沒選定」（:func:`_render_deep_dive`）那兩則指路是**真的有效**的
+    —— 照著做真的會離開空狀態。**三者不要混為一談。**
 
     ⚠️ 分頁名走 `where_to_find()`，**不手抄**；區塊名由呼叫端傳進來，
     不在這裡再抄一份（手抄的指路在本 repo 已經指錯三次）。
@@ -540,6 +686,21 @@ def _applied_query() -> dict[str, str] | None:
     """
     _cur = st.session_state.get(_SK_APPLIED)
     return _cur if isinstance(_cur, dict) else None
+
+
+def _selected_code() -> str:
+    """**選定要展開的那一檔**；還沒選（或 session 裡是髒值）→ `""`。
+
+    ⚠️ **回 `""` 而不是 `None`**：呼叫端只需要「有沒有」這一個判斷，
+    多一種型別就多一條分支要驗。
+    ⚠️ **型別檢查不是防禦性程式碼的裝飾**：`st.session_state` 是一個全 App 共用的
+    可變 dict，任何人（含舊 ③）都寫得進去。拿到 list／dict 卻直接丟給
+    `auto_fetch_moneydj()`，錯誤會在下游三層之外才炸出來。
+    ⚠️ **不 strip 之外的清洗**：使用者貼的可能是 MoneyDJ 網址，
+    `auto_fetch_moneydj` 自己認得 URL —— 在這裡動它會把合法輸入弄壞。
+    """
+    _cur = st.session_state.get(_SK_SELECTED)
+    return _cur.strip() if isinstance(_cur, str) else ""
 
 
 def _render_search_form() -> None:
@@ -589,15 +750,29 @@ def _render_search_form() -> None:
     吞例外路徑（右答案、錯理由）**。稽核組改成植入「池裡確實有這個 secId」的 fixture：
     ``_pool_secid_or_isin('ACDD19') -> True``（用**代碼**查，通）／
     ``_pool_secid_or_isin('0P0000ABCD') -> False``（用 **secId** 查，即使池裡就有它也不通）。
-    **它還多找到一件本組沒說的：連「名稱」也不通**，理由同上（`services/**` 沒有搜尋入口）。
+    ~~**它還多找到一件本組沒說的：連「名稱」也不通**，理由同上（`services/**` 沒有搜尋入口）。~~
+    → ⚠️ **2026-09-08 只有這半句失效（狀態變更，不是漏刪）**：搜尋入口已接上
+    （`services.fund_search`），**名稱現在查得到**，`help` 已同步改寫。
+    ⛔ **secId 那一半沒有被推翻，一個字都不要放寬**：本組**沒有**實測過
+    secId 走名錄搜尋會怎樣，而名錄是**子字串比對**，Morningstar secId 會不會
+    出現在 TDCC 的名稱／代碼欄裡，本組不知道 —— 所以 `help` 寫的是
+    「本組沒有驗過」，**不是**「查得到」。**不知道就不承諾。**
     """
     with applied_form(_FORM_KEY, submit_label=SUBMIT_LABEL) as _gate:
         st.caption(f"{BLOCK_FORM}：輸入完按「{SUBMIT_LABEL}」才查 —— "
                    "打字的當下不會觸發任何取數。")
         _term = st.text_input(
             _LABEL_TERM, value="", placeholder=_CODE_PLACEHOLDER,
-            help="目前只查得到**基金代碼**。Morningstar secId 與基金名稱查不到 —— "
-                 "本頁沒有搜尋入口，輸入會被原封當成代碼送去查。",
+            # ⚠️ **2026-09-08 改寫，因為上一版那句話變成假的了**（§1）：它寫
+            #    「本頁沒有搜尋入口，輸入會被原封當成代碼送去查」——
+            #    搜尋入口已經接上（`services.fund_search`），**名稱現在查得到**。
+            #    ⛔ 但**不得**順手把 secId 也寫成查得到：本組沒有實測過那條路，
+            #    上一版對它的靜態追蹤結論（secId 被原封當 MoneyDJ 代碼送出）
+            #    **仍未被推翻**，而名錄搜尋是**子字串比對**，
+            #    Morningstar secId 會不會出現在 TDCC 的名稱／代碼欄裡，本組不知道。
+            #    **不知道就不承諾。**
+            help="名稱或代碼都可以查（名錄以**關鍵字比對**，打片段也會列出候選）。"
+                 "Morningstar secId 本組沒有驗過，查不到時請改用基金名稱或代碼。",
         )
         _source = st.selectbox(
             _LABEL_SOURCE, options=SOURCE_OPTIONS, index=0,
@@ -607,6 +782,14 @@ def _render_search_form() -> None:
     # ⚠️ `if _gate:` 必須在 `with` **之外**（送出鈕在 `yield` 之後才建立）。
     if _gate:
         st.session_state[_SK_APPLIED] = _normalise_query(_term, _source)
+        # ⛔ **送出新查詢一定要把「選定的那一檔」清掉。** 不清的話，使用者換了關鍵字，
+        #    深度區還停在上一次選的基金上，而畫面上**沒有任何跡象**告訴他那一塊
+        #    講的不是這次的查詢 —— 那正是 §2.4「過期資料可以留，但必須帶旗標」
+        #    要防的形狀，而這裡連旗標都給不出來（它不是「舊的同一檔」，是**另一檔**）。
+        # ⚠️ 寫成 `None` 而不是 `pop()`：兩者行為相同，但賦值看得見
+        #    （`tests/_ast_bindings.py::session_writes` 收的是賦值，
+        #     而閘門守衛要確認**每一次** session 寫入都被送出鈕包住）。
+        st.session_state[_SK_SELECTED] = None
 
 
 def _render_not_searched_yet() -> None:
@@ -625,18 +808,148 @@ def _render_not_searched_yet() -> None:
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 區塊 2｜搜尋結果 —— 純函式先把「一列要顯示什麼」算完，再交給渲染
+#
+# ⚠️ **為什麼要拆**：這一區的規則是「**上游沒給的東西不准生一個出來**」
+#    （沒有淨值就不准填、沒有日期就不准編一個），而那種規則在渲染函式裡幾乎驗不動。
+#    拆成純函式之後，守衛可以逐欄餵空值再看回傳 —— 突變拿掉任何一條判斷都會轉紅。
+# ══════════════════════════════════════════════════════════════════════════
+
+def _row_str(row: dict, key: str) -> str:
+    """取一列裡的某一欄，收成乾淨字串；沒有／空白 → `""`。
+
+    ⚠️ **刻意不給任何預設值**：上游那六個鍵**不保證都有**
+    （L1 的 TDCC-3-2 分支就把 `淨值` / `日期` 填成空字串，等 3-4 補；補不到就留空）。
+    這裡回 `""` 讓呼叫端**看得見「沒有」**，而不是拿到一個假的 `0` 或 `—`。
+    """
+    _v = row.get(key)
+    return str(_v).strip() if _v is not None else ""
+
+
+def _pick_token(row: dict, index: int) -> str:
+    """一列的**穩定識別字**，只拿來組 widget key。
+
+    ⚠️ **不是給人看的**：它把非英數字元換成 `_`，所以中文基金名會被壓成一串底線 ——
+    序號 `index` 就是為了讓那種情形仍然唯一。
+    ⚠️ **為什麼要含 `index` 而不是只用代碼**：`基金代碼` 可能是空字串（L1 的
+    FundClear 備援分支只保證有 `基金名稱`），兩列同時沒有代碼就會撞 key，
+    而撞 key 在 Streamlit 是**整個 App 當場崩潰**，不是那一格壞掉。
+    """
+    _raw = _row_str(row, KEY_CODE) or _row_str(row, KEY_NAME)
+    _safe = re.sub(r"[^0-9A-Za-z]+", "_", _raw)[:24].strip("_")
+    return f"{index}_{_safe}" if _safe else str(index)
+
+
+def _result_value(row: dict) -> str:
+    """結果卡的主數值 —— **淨值**，上游沒給就回 `""`（`state_card` 會畫「—」）。
+
+    ⛔ **不做任何格式化、不補幣別**：名錄那六個鍵**沒有計價幣別**
+    （本組逐一讀過 L1 的四個 `results.append({...})`）。
+    在數字旁邊補一個看起來合理的幣別，正是線框第三張示意卡在示範要**避免**的事
+    （「此來源未提供計價幣別」＋ chip「不猜值」）。
+    """
+    return _row_str(row, KEY_NAV)
+
+
+def _result_note(row: dict) -> str:
+    """結果卡底下那一行 —— **只講上游真的給了的欄位**。
+
+    每一段都有前提：`代碼` / `淨值日` / `總代理` / `來源` 任一為空就**整段不出現**，
+    不用 `—` 或「未知」去佔位（那會讓四段看起來一樣長、實際上有幾段是編的）。
+    沒有淨值時**明說**是這個來源沒給，而不是留一個孤零零的「—」讓人猜。
+    """
+    _bits: list[str] = []
+    _code = _row_str(row, KEY_CODE)
+    if _code:
+        _bits.append(f"代碼 {_code}")
+    _date = _row_str(row, KEY_NAV_DATE)
+    if _date:
+        _bits.append(f"淨值日 {_date}")
+    _agent = _row_str(row, KEY_AGENT)
+    if _agent:
+        _bits.append(f"總代理 {_agent}")
+    _src = _row_str(row, KEY_SOURCE)
+    if _src:
+        _bits.append(f"來源 {_src}")
+    if not _row_str(row, KEY_NAV):
+        _bits.append("這個來源沒有給淨值")
+    return " · ".join(_bits)
+
+
+def _result_card(row: dict) -> dict:
+    """一列 → 一張 :func:`ui.helpers.ia.state_card` 的規格。
+
+    ⚠️ **標題的退路只有一層，而且它不編東西**：`基金名稱` 空 → 用 `基金代碼`；
+    兩個都空 → :data:`_NAMELESS_TITLE`（明說上游沒給名字），
+    **不是**「未知基金」或流水號 —— 後者看起來像一個真的名字。
+    ⚠️ **`where` 無條件帶著**：這張卡在「連名字都沒有」時會是灰的，
+    而灰卡沒有「去哪補」就只是「灰色的消失」（`render_state` 的 docstring 逐字）。
+    """
+    _name = _row_str(row, KEY_NAME) or _row_str(row, KEY_CODE)
+    if not _name:
+        return {"title": _NAMELESS_TITLE, "state": STATE_NOT_READY,
+                "note": _result_note(row) or "上游這一列連名稱與代碼都沒有。",
+                "where": _pending_where(BLOCK_FORM)}
+    return {"title": _name, "value": _result_value(row), "state": STATE_OK,
+            "note": _result_note(row), "where": _pending_where(BLOCK_FORM)}
+
+
+def _results_caption(total: int, shown: int) -> str:
+    """結果卡上方那一句：**幾筆、顯示幾張、以及這份清單裡沒有什麼**。
+
+    ⛔ **截斷一定要說出來。** 只畫前 :data:`MAX_RESULT_CARDS` 張、卻不講總數，
+       使用者會以為名錄裡就只有這幾檔 —— 那是用版面決定去偽造一個資料事實（§1）。
+    """
+    if total > shown:
+        return (f"共 {total} 檔符合，先顯示前 {shown} 檔（其餘沒有消失，"
+                f"把關鍵字打得更精確就會進到前 {shown} 名）。{_RESULTS_NO_PERF_NOTE}")
+    return f"共 {total} 檔符合。{_RESULTS_NO_PERF_NOTE}"
+
+
 def _render_results() -> None:
-    """區塊 2｜搜尋結果（**3 欄結果卡**）。本批灰態。
+    """區塊 2｜搜尋結果（**3 欄結果卡**）。2026-09-08 接上真取數。
 
     線框畫了三張示意卡，其中第三張本身就是灰態示範
     （「幣別未知／此來源未提供計價幣別，換算後績效不予顯示」＋ chip「不猜值」）——
     **那是線框在示範「查得到、但某一欄不可信時該長什麼樣」，不是三張要照抄的卡。**
+    本函式照那個精神做：**上游沒給的欄位整段不畫，絕不補一個看起來合理的值。**
 
-    ⛔ **本批不畫任何一張結果卡**：骨架階段連「有幾筆結果」都不知道，
-       畫三張空卡就是鐵則 04 要禁的冗餘占位；填上線框的基金名與績效則是造假（§1）。
+    ⛔ **本函式沒有 try/except，這是刻意的**（與 :func:`_render_deep_dive` 同一個理由）：
+       `search_funds()` 若拋例外，一路拋到 `safe_section(BLOCK_RESULTS, …)`，
+       由它用**真的**例外物件畫紅框 ＋ traceback。自己接下來包一個假例外去塗紅是造假（§1）。
+
+    ⚠️ **空清單不等於「查無此基金」** —— L1 把「名錄裡真的沒有」與「三個來源全掛」
+       都回成 `[]`，本頁分不出來，所以空狀態照抄
+       `services.fund_search.EMPTY_MEANS_UNKNOWN`（見 :data:`_RESULTS_EMPTY_MISSING`）。
     """
-    not_ready(f"{_RESULTS_PENDING_NOTE}（符合條件的基金清單與各自的績效摘要）。",
-              where=_pending_where(BLOCK_FORM))
+    _query = _applied_query() or {}
+    _rows = search_funds(str(_query.get("term") or ""))
+
+    if not _rows:
+        empty_state(
+            _RESULTS_EMPTY_TITLE, _RESULTS_EMPTY_MISSING,
+            where=_pending_where(BLOCK_FORM),
+            footer=(f"若你手上就是完整代碼或 MoneyDJ 網址，"
+                    f"下面「{BLOCK_DEEP}」有一顆「{DIRECT_LABEL}」可以直接查。"),
+        )
+        return
+
+    _shown = _rows[:MAX_RESULT_CARDS]
+    st.caption(_results_caption(len(_rows), len(_shown)))
+    # ⚠️ **`card_grid()` 而不是 `render_cards()`** —— 每張卡底下要一顆按鈕，
+    #    而 `render_cards()` 拿不到欄位容器。理由與「這不是繞過鐵則 01」的論證
+    #    寫在模組 docstring 的鐵則 01 那一條。
+    for _col, (_i, _row) in zip(card_grid(len(_shown)), enumerate(_shown)):
+        with _col:
+            state_card(**_result_card(_row))
+            # ⚠️ **key 必須逐列唯一**：撞 key 在 Streamlit 是整個 App 當場崩潰。
+            #    前綴 `v03_` 是 ⑧ 的命名空間（`tests/test_wf03_research_wiring.py`）。
+            if st.button(SELECT_LABEL, key=f"v03_pick_{_pick_token(_row, _i)}",
+                         help=f"把下面「{BLOCK_DEEP}」切到這一檔。"):
+                # 選定 = 代碼優先；沒有代碼就用名稱（`auto_fetch_moneydj` 兩者都收）。
+                st.session_state[_SK_SELECTED] = (
+                    _row_str(_row, KEY_CODE) or _row_str(_row, KEY_NAME))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1123,12 +1436,46 @@ def _render_deep_dive() -> None:
     `safe_section(BLOCK_DEEP, …)`，由它用**真的**例外物件畫紅框 ＋ traceback。
     自己接下來再包一個假例外去塗紅，是 §1 明禁的造假。
 
-    ⚠️ **「選定後展開」仍未恢復**（模組 docstring 已登記）：結果卡還沒接上，
-    沒有東西可以被「選定」，所以本批直接拿**已送出的查詢字串**當基金鍵。
-    下一批接上結果卡時，這裡要改吃使用者選中的那一檔。
+    ~~⚠️ **「選定後展開」仍未恢復**（模組 docstring 已登記）：結果卡還沒接上，~~
+    ~~沒有東西可以被「選定」，所以本批直接拿**已送出的查詢字串**當基金鍵。~~
+    ~~下一批接上結果卡時，這裡要改吃使用者選中的那一檔。~~
+
+    ✅ **2026-09-08：「選定後展開」已恢復**（**狀態變更，不是漏刪**）——
+    舊表述自己寫的觸發條件（「下一批接上結果卡時」）已經發生，就照它說的做了。
+
+    **gate 擋的是「取數」，不是「標題」**：沒有選定時，本函式**在呼叫
+    `auto_fetch_moneydj` 之前就 return**，走空狀態三要素。
+    ⛔ **不要把 gate 改成「照樣取數、只是不顯示」** —— 那看起來一模一樣，
+    但每一次 rerun 都在打上游，而畫面上沒有任何跡象。守衛
+    `test_the_deep_dive_does_not_fetch_until_a_fund_is_selected` 數的是**呼叫次數**，
+    正是為了讓這種「看起來對」的寫法轉紅。
+
+    ⚠️ **空狀態裡那顆「:data:`DIRECT_LABEL`」按鈕不是裝飾，拿掉是功能退化**：
+    名錄（TDCC／FundClear）查不到候選時，一個手上就有完整代碼或 MoneyDJ 網址的
+    使用者**會完全到不了這一塊**（舊 ③ 支援這條路）。它讓使用者**明示**
+    「就用我打的這一串」，而不是由本頁偷偷替他決定 —— 那才是 gate 的原意。
     """
     _query = _applied_query() or {}
-    _result = auto_fetch_moneydj(str(_query.get("term") or ""))
+    _term = str(_query.get("term") or "")
+    _code = _selected_code()
+    if not _code:
+        empty_state(
+            _NOT_SELECTED_TITLE, _NOT_SELECTED_MISSING,
+            where=f"{where_to_find('research')} → {BLOCK_RESULTS}",
+            footer="選定之後，這一塊才會去抓那一檔的 NAV、績效、風險、持股與配息。",
+        )
+        if _term and st.button(DIRECT_LABEL, key="v03_use_raw_term",
+                               help=f"跳過候選清單，直接把「{_term}」"
+                                    "當成基金代碼／MoneyDJ 網址去查。"):
+            st.session_state[_SK_SELECTED] = _term
+        return
+
+    # ⚠️ **一定要說出「現在展開的是哪一檔」。** 沒有這一行，使用者換了關鍵字、
+    #    或從 9 張卡裡點了其中一張之後，下面六格是誰的**完全看不出來** ——
+    #    那正是 §1「錯誤的數字比沒有數字更危險」的形狀（數字都是真的，只是不知道是誰的）。
+    st.caption(f"目前展開的是「{_code}」 —— 要換一檔，回到上面的"
+               f"「{BLOCK_RESULTS}」按另一張卡的「{SELECT_LABEL}」。")
+    _result = auto_fetch_moneydj(_code)
     if not isinstance(_result, dict):
         # `return_page_type=False` 的契約就是回 dict；型別不對代表上游換了契約。
         # ⛔ 不猜、不降級 —— 交給 `safe_section()` 畫紅框（§1）。
@@ -1646,7 +1993,9 @@ def _render_batch_results() -> None:
     2. **送出了但一個代碼都認不出來** → **另一句**空狀態（:data:`_BATCH_UNPARSED_TITLE`）。
        ⚠️ 與第 1 種**刻意不共用一句**：一個是「還沒給」、一個是「給了但認不得」，
        下一步不同（去貼 vs 去改格式）。共用一句使用者無從判斷哪一個跟他有關 ——
-       同一個道理在本檔的 :data:`_RESULTS_PENDING_NOTE` 那裡已經吃過一次虧。
+       同一個道理在本檔的 :data:`_RESULTS_EMPTY_MISSING` 與
+       :data:`_NOT_SELECTED_MISSING` 那一對上也成立（「名錄沒回候選」與
+       「還沒選定」是兩個處境、兩個下一步，刻意不共用一句）。
     3. **有結果** → 三態摘要 ＋ 全部欄位的大表。
 
     ⚠️ **狀態 2 與狀態 1 分不出來的那一格**：送出了、解析到 0 個代碼 →
