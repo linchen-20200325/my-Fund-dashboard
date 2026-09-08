@@ -3,6 +3,35 @@
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；每一塊的真內容**分批填**。
 
+2026-09-08 寫入入口批：**本頁第一次能寫東西**（客戶拍板，退場順序的「第一前置」）
+--------------------------------------------------------------------------------
+⭐ **先讀這一段：本頁在這一批之前，物理上加不了一檔基金。**
+
+客戶 2026-09-08 拍板（逐字）：
+> 「**加入基金入口：拍板整合至 ⑨「保單與扣款標的」，無持倉時直接就地展開輸入表單。**」
+> 「…退場順序完全同意採「⑦ → ⑥ → ⑧ → ⑨」，並**以「⑨ 建立寫入入口」為第一前置**。」
+
+**它解掉的是一條實測出來的死路，不是新功能**：
+新五頁寫進 `portfolio_funds` 的呼叫點**是 0 個**（全 repo 只有 `ui/tab3_portfolio.py`
+與 `ui/tab3_t7_ledger.py` 兩處，都在舊分頁裡），而本頁在沒有持倉時
+**連表單都不畫就 `return`** —— 它印的那句空狀態指向舊 ④，舊 ④ 一拔就是一條死指路。
+
+本批動了三個地方（每一處都在它自己的 docstring 裡寫了「推翻了什麼」）：
+
+====================================== ==========================================
+改動                                     落點
+====================================== ==========================================
+加入標的的表單（本頁唯一的寫入）           :func:`_render_add_fund`；純函式在
+                                        `ui/helpers/portfolio/add_entry.py`
+「沒有持倉就整塊不畫」的 early return      :func:`render_asset_allocation` ——
+不再蓋掉保單那一塊                        客戶指定的那一塊改為照畫
+「已列入但還沒抓到淨值」不再是無聲的空白    :func:`_render_pending_notice` ＋
+                                        :func:`_render_no_holdings` 的兩種空狀態
+====================================== ==========================================
+
+⛔ **本批刻意不做的三件事**（都在 :data:`ADD_FUND_SCOPE_NOTE` 具名登記）：
+不打網路、不寫 Google Sheet、不收投入金額。**已知落差，不是漏做。**
+
 2026-09-07 內容批：**客戶四項拍板全部落地；本頁自此開始「委派」舊模組**
 --------------------------------------------------------------------------------
 ⚠️ **架構前提換了，先讀這一段再讀下面任何一段。**
@@ -482,6 +511,12 @@ Form 的三個預設值：兩個照線框、一個**刻意不照**，理由逐�
 """
 from __future__ import annotations
 
+# ⚠️ `escape` 只給 `business_alert()` 那一處用（它走 `unsafe_allow_html`）。
+#    以 `_escape` 為名 import，是為了讓「這裡在做跳脫」在呼叫點就看得見。
+#    ⛔ 不要拿它去包 `st.caption` / `st.markdown` 的字：那兩個走 markdown，
+#       Streamlit 自己會擋 HTML，先 escape 反而變成雙重跳脫（`<` 印成 `&lt;`）——
+#       `ui/views/page_01_macro.py` 就地註解記著同一件事。
+from html import escape as _escape
 from typing import Any
 
 import streamlit as st
@@ -496,7 +531,19 @@ from ui.helpers.ia import (
     wide_table,
 )
 from ui.helpers.ia.empty_state import empty_state
-from ui.helpers.render_state import not_ready, safe_section
+# ⭐ **新增持倉的純函式 SSOT**（2026-09-08 寫入入口批新增）。
+# 它是本頁在 `ui.helpers.portfolio` 底下的**第二個**具名豁免（第一個是
+# `allocation`），受同一條純度守衛巡邏：
+# `tests/test_wf04_portfolio_skeleton.py::test_the_named_exemption_is_still_a_pure_ssot`
+# 每次跑都重新讀它的 import —— 它哪天多 import 一個 `streamlit`／`requests`／
+# `repositories`，那條當場轉紅、本豁免同時失效。
+# ⚠️ **它不是「委派舊模組」**（路線 (A) 指的是既有的舊實作），
+#    而是本批為了不把解析／去重邏輯寫進 View 而抽出來的純函式。
+from ui.helpers.portfolio.add_entry import (
+    pending_split,
+    plan_new_holdings,
+)
+from ui.helpers.render_state import business_alert, not_ready, safe_section
 from ui.helpers.story_nav import (
     render_story_nav,
     section_label,
@@ -639,6 +686,104 @@ UNKNOWN_VALUE: str = "—"
 #: ⛔ **不要為了讓表好看而加第八欄** —— 那一刻起這份清單就變成自己發明的規格。
 POLICY_TABLE_COLUMNS: tuple[str, ...] = (
     "保單編號", "基金代號", "基金名稱", "幣別", "級別", "金額", "現金%")
+
+# ══════════════════════════════════════════════════════════════════════════
+# ⑤ 加入標的：**本頁的寫入入口**（客戶 2026-09-08 拍板）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 客戶原話（逐字）：「**加入基金入口：拍板整合至 ⑨「保單與扣款標的」，
+# 無持倉時直接就地展開輸入表單。**」並指定它是退場順序（⑦→⑥→⑧→⑨）的
+# **第一前置** —— 也就是「舊分頁還能不能拔」取決於這一塊做不做得出來。
+#
+# **它解掉的是一個實測出來的死路，不是錦上添花**：在此之前，
+# 新五頁寫進 `portfolio_funds` 的呼叫點是 **0 個**（全 repo 只有
+# `ui/tab3_portfolio.py` 與 `ui/tab3_t7_ledger.py` 兩處，都在舊分頁裡），
+# 而本頁在沒有持倉時**連表單都不畫就 return** —— 空狀態指去舊 ④，
+# 舊 ④ 一拔就是一條指向不存在的路。
+#
+# ⛔ **本區塊不做的三件事，逐條寫明，免得被讀成漏做**
+# 1. **不打任何網路**：加進來的標的是 `loaded=False` 骨架，淨值／名稱／幣別
+#    要按一次載入才有。理由見 `ui/helpers/portfolio/add_entry.py` 的模組 docstring
+#    （選 `loaded=False` 而不是舊 ④ 的 `True`，是本批最承重的決定）。
+#    **為什麼載入鈕不直接放在這裡**，見 :data:`ADD_FUND_SCOPE_NOTE`。
+# 2. **不寫 Google Sheet**：舊 ④ 在有保單編號且 OAuth 可用時會順手寫一列回雲端；
+#    本頁整條渲染鏈目前是**零寫入**（`tests/test_wf04_portfolio_no_writes.py` 在守），
+#    把那條寫入面接進來是另一批的授權。**已知落差**，同見 :data:`ADD_FUND_SCOPE_NOTE`。
+# 3. **不收「投入金額」**：金額的真相源是保單表（`repositories/policy/` 的
+#    `invest_twd` 欄）。在這裡再開一個輸入格，同一個數字就有兩個出處 ——
+#    正是客戶決定 ① 拿掉 1/3 摘要卡的那個理由（「不一致時使用者不知道信哪個」）。
+
+#: 加入區塊在畫面上的抬頭。**刻意不是 `**粗體**` 也不是 `#### ` 開頭** ——
+#: 那兩種寫法都會被 `tests/test_wf04_portfolio_skeleton.py::_units` 認成
+#: **一個新的版面單位**，而本頁的單位清單是客戶拍板的九個（`_expected_units()`）。
+#: 這一塊是「保單與扣款標的」**底下的一段**，不是第十個單位。
+ADD_FUND_HEADING: str = "➕ 加入標的"
+
+#: 表單上方那一句：講**這裡能做什麼**，不講我們的進度。
+ADD_FUND_CAPTION: str = (
+    f"**{ADD_FUND_HEADING}** —— 一行一檔基金代碼；"
+    "同一檔基金分屬不同保單就分行寫成「代碼,保單編號」。")
+
+#: 兩個輸入欄的抬頭。⚠️ 「保單編號」與 :data:`POLICY_TABLE_COLUMNS` 第一欄**同字** ——
+#: 使用者在上面那張表看到的欄名，跟他在這裡要填的東西，必須是同一個詞。
+#:
+#: ⚠️ **「要加入的」三個字不是贅字，它擋掉一個會當場拋例外的碰撞**：
+#: ③ `ui/views/page_03_research.py::_LABEL_BATCH_CODES` 是
+#: **「基金代碼（每行一檔）」**，同樣是 `st.text_area`。Streamlit 的 element id ＝
+#: hash(型別 ＋ 參數 ＋ form_id ＋ root container)，而 **root container 不分 tab**
+#: （`tests/test_dual_track_t9_portfolio.py` 就地註解逐字：「『它們在不同分頁』
+#: **不是**理由，這是本 repo 最容易誤判的一點」）。
+#: ⛔ **所以這裡不准為了「用字一致」改成「每行一檔」** —— 改的下一秒就是
+#:    `StreamlitDuplicateElementId`。真的要對齊用字，要動的是**兩邊**、
+#:    而且要讓兩邊都獨特，不是把其中一個改成跟另一個一樣。
+_LABEL_ADD_CODES: str = "要加入的基金代碼（一行一檔）"
+_LABEL_ADD_POLICY_ID: str = "保單編號（沒有可留白）"
+
+#: 送出鈕。線框沒有規定這個動詞（加入標的不在 ia Tab 04 的清單裡），
+#: 取與抬頭同一個動詞「加入」，讓按鈕與它上面那句話對得起來。
+ADD_SUBMIT_LABEL: str = "加入"
+
+#: 兩個欄位的 placeholder —— **示範格式，不是預填值**。
+#: ⚠️ 用 `placeholder=` 而不是 `value=`：預填一個代碼會讓使用者一按就加到一檔
+#: 他沒有打算加的基金（同 :data:`_DEFAULT_BUDGET_TWD` 不照線框填 200,000 的理由）。
+#: ⚠️ 示範用的兩個代碼**刻意選得出來就是示範**（`0050` 是台灣最廣為人知的
+#: ETF 代號，不是「我們預設你有這一檔」）。
+ADD_CODES_PLACEHOLDER: str = "0050\n00713,某某投資型保單"
+ADD_POLICY_ID_PLACEHOLDER: str = "沒有在行內指定保單的那幾行，會套用這一格"
+
+#: 失敗明細最多逐行印幾檔；超過就收尾說「還有幾檔」。
+#: ⚠️ 具名而不 inline：這是**可讀性的取捨**，不是規格 —— 具名之後改它看得見。
+_FAILED_DETAIL_LIMIT: int = 5
+#: 讀不懂的行最多引用幾行（同上）。
+_INVALID_DETAIL_LIMIT: int = 5
+
+#: `st.form` 的 key。**必須全站唯一**，且與本頁既有的 :data:`_FORM_KEY` 不同 ——
+#: 重複的 form key 是 `StreamlitAPIException`，無條件拋。
+#: 由 `tests/test_dual_track_t9_portfolio.py::test_the_new_chain_collides_with_no_other_tab`
+#: 與其餘八條鏈逐一比對。
+_ADD_FORM_KEY: str = "v04_portfolio_add_fund_form"
+
+#: 送出之後要顯示的結果。**放 session 是因為寫完會 `st.rerun()`** ——
+#: 不 rerun 的話，這一次渲染裡排在表單**上面**的狀態列、範圍說明與保單一覽
+#: 全部還是寫入前的舊值，畫面會自相矛盾一輪。
+#: ⚠️ `v04_` 前綴是本頁自己的命名空間（`tests/test_dual_track_t9_portfolio.py::`
+#: `test_the_new_chain_writes_only_its_own_session_namespace`）。
+_SK_ADD_RESULT: str = "v04_portfolio_add_result"
+
+#: ⭐ **本區塊的已知落差登記**（`CLAUDE.md §-2` 規則 6：不假裝做完了）。
+#: 寫成常數而不是只寫在註解裡，是為了讓它**被測試讀得到**、不會在下一輪被靜靜刪掉。
+#: ⛔ **這不是畫面文案，不會渲染** —— 它是給下一個人看的登記。
+ADD_FUND_SCOPE_NOTE: str = (
+    "本批只做「把標的寫進持倉清單」。兩件**沒有**做、而且是實測後決定不做的："
+    "(1) 就地的載入鈕 —— 實測把 `ui.helpers.portfolio.load` 接進本頁，"
+    "零寫入守衛的靜態閉包會從 17 個模組長到 63 個、未被按鈕擋住的寫入動作從 1 個"
+    "變成 126 個（`repositories/fund/nav_metrics.py` 真的會 `mkdir` ＋ `write_text` "
+    "落盤）；要 126 個具名豁免才能變綠，那等於把守衛整條放寬。故改為指路，"
+    "指到目前全站唯一按得到載入的地方（`where_to_find('pf_load')`）。"
+    "(2) 寫回 Google Sheet —— 新五頁目前完全沒有雲端寫入面"
+    "（`ui/views/page_05_settings.py` 的保單管理橋接是 `sheet_client=None`，"
+    "掛在它底下那一整支寫入是死碼），所以這裡不做，也**不在畫面上承諾**會存回雲端。"
+)
 
 # ── ④ 配息月曆：Checkbox Gate（客戶 2026-09-07 決定 ④）─────────────────────
 #: gate 的字面。**畫面上與灰態指路吃的是同一個常數** —— 指到一個不存在的勾選框，
@@ -1017,31 +1162,115 @@ def _applied_plan() -> dict[str, Any] | None:
     return _cur if isinstance(_cur, dict) else None
 
 
-def _render_no_holdings() -> None:
-    """空狀態三要素（鐵則 04）—— 一檔持倉都還沒載入。
+#: 「一檔都還沒有」的空狀態標題。
+EMPTY_TITLE_NONE: str = "尚未設定持倉"
+#: 「清單裡有，但一檔都還沒抓到資料」的空狀態標題。**與上面那個是兩件事。**
+EMPTY_TITLE_PENDING: str = "標的有了，還沒有淨值資料"
+#: 空狀態那一段在 `safe_section()` 紅框裡的名字（**只有渲染失敗時才會出現**）。
+#: 刻意不用上面兩個標題其中之一 —— 那兩個是**互斥**的兩種情況，
+#: 寫死一個會讓另一種情況的錯誤訊息指錯地方。
+EMPTY_SECTION_LABEL: str = "目前的持倉狀態"
 
-    ✅ **這一則的「去哪補」照著做真的有效**，而且是 AppTest 實跑驗過的：
-       `portfolio_funds` 一有已載入的項目，本頁當場離開空狀態。
-    ⛔ 但它的有效性繫於「④ 仍然保有『➕ 加入與管理基金』」。
-       ✅ **2026-09-05 更正（獨立稽核指出；有意識的狀態更新，不是漏刪）**：本句原寫
-       ~~「而 ia Tab 04 的清單裡**沒有那一塊**。完整說明見模組 docstring 的**未決事項 (A)**。」~~
-       —— **(A) 早已在同一份檔案的模組 docstring 裡被裁決為「線框清單不是窮舉」**，
-       這裡卻還把它當成未決，**同一份檔案自己打自己**。
-       **現行**：見模組 docstring **已裁決的 (A)** ——「線框是版面規範，不是功能清單」。
-       ⚠️ **當初的顧慮是真的，病史保留**：ia Tab 04 的六塊裡確實沒有逐字寫
-       「➕ 加入與管理基金」，所以當時懷疑這條指路會指空**是合理的**；
-       被推翻的是那個推論（沒列 ⇒ 不存在），不是當時的謹慎。
-       ⛔ **這一則本身就是 (B) 段警告的那個死法的實例**：同一個 commit 裡，(B) 寫著
-       「『登記為未裁決』的事項，最常見的死法是裁決落下時沒有人回頭改它」，
-       **而它警告的事就發生在同一份檔案的下游 docstring。留著這段，是為了讓它可被引用。**
+
+def _render_no_holdings() -> None:
+    """空狀態三要素（鐵則 04）—— **兩種形狀，兩句不同的話。**
+
+    ## ⚠️ 2026-09-08：本函式從「一句話」改成「兩句話」，這是修一個會說錯話的 bug
+
+    :func:`_holdings` 的 docstring 早就登記了這個坑，逐字：「**回傳空 list 有兩種原因**
+    （完全沒設定 vs 設定了但都還沒載入成功），**本批的骨架不區分它們**」。
+    不區分的代價很具體：**雲端讀回或 JSON 還原之後，清單裡明明有十幾檔基金**
+    （`sync_policies_to_portfolio_funds` 寫的是 `loaded=False` 骨架），
+    畫面卻對他說「還沒有任何保單或扣款標的，去加一個吧」——
+    **他已經有了，那句話是錯的**，而照著做只會加出重複的一筆。
+
+    現行兩種形狀：
+
+    ================================ ==================================================
+    清單裡的狀況                       說什麼
+    ================================ ==================================================
+    一筆都沒有                         :data:`EMPTY_TITLE_NONE`；去哪補 ＝ **本頁下面**
+                                      那個加入區（`ADD_FUND_HEADING`），不是別的分頁
+    有幾筆，但沒有一筆載入成功           :data:`EMPTY_TITLE_PENDING`；去哪補 ＝
+                                      `where_to_find('pf_load')`（目前全站唯一
+                                      按得到載入的地方）
+    ================================ ==================================================
+
+    ## ⭐ 「去哪補」為什麼從別的分頁改成指自己這一頁
+
+    ~~`where=where_to_find("pf_add")`~~ —— **2026-09-08 客戶拍板後改掉**
+    （**有意識的變更，不是漏刪**；客戶原話：「加入基金入口：拍板整合至 ⑨
+    『保單與扣款標的』，**無持倉時直接就地展開輸入表單**」）。
+    **舊指路在寫下的當天是對的**：那時本頁真的沒有加入入口，指去舊 ④ 是唯一誠實的答案。
+    **被推翻的是它的前提** —— 那個入口現在就在同一個畫面上，
+    再把使用者送去另一個分頁，等於要他為一件眼前就能做的事換頁。
+    ⚠️ 而且舊指路撐不過退場：客戶已拍板退場順序（⑦→⑥→⑧→⑨），
+    舊 ④ 一拔，`where_to_find('pf_add')` 就指向一個不存在的地方。
+
     ⛔ **不得**在這裡順便說「加完就會看到再平衡建議」：加完看到的是下一段的灰態。
        兩種灰的下一步不同，一次只給一個（`page_02_health.py` / `page_03_research.py` 同型）。
+
+    ## 舊 docstring 原文保留（加刪除線，**不是漏刪**）
+
+    ⚠️ **本段刻意整段留著**：它自己最後一句就寫著「**留著這段，是為了讓它可被引用**」，
+    而 2026-09-08 這一批**正好就是它預言的那件事發生的時候** ——
+    它擔心的「這條指路會不會指空」不再是假設，客戶直接把那個入口搬進本頁了。
+    ⛔ 把一段自陳「請留著我」的病史刪掉，是本 repo 反覆記載過的那種失效模式
+    （`CLAUDE.md` 慣例：**舊條文保留不刪 ＋ 加刪除線 ＋ 兩邊理由並陳**）。
+
+        ~~✅ **這一則的「去哪補」照著做真的有效**，而且是 AppTest 實跑驗過的：~~
+        ~~`portfolio_funds` 一有已載入的項目，本頁當場離開空狀態。~~
+        ~~⛔ 但它的有效性繫於「④ 仍然保有『➕ 加入與管理基金』」。~~
+        ~~✅ **2026-09-05 更正（獨立稽核指出；有意識的狀態更新，不是漏刪）**：本句原寫~~
+        ~~「而 ia Tab 04 的清單裡**沒有那一塊**。完整說明見模組 docstring 的**未決事項 (A)**。」~~
+        ~~—— **(A) 早已在同一份檔案的模組 docstring 裡被裁決為「線框清單不是窮舉」**，~~
+        ~~這裡卻還把它當成未決，**同一份檔案自己打自己**。~~
+        ~~**現行**：見模組 docstring **已裁決的 (A)** ——「線框是版面規範，不是功能清單」。~~
+        ~~⚠️ **當初的顧慮是真的，病史保留**：ia Tab 04 的六塊裡確實沒有逐字寫~~
+        ~~「➕ 加入與管理基金」，所以當時懷疑這條指路會指空**是合理的**；~~
+        ~~被推翻的是那個推論（沒列 ⇒ 不存在），不是當時的謹慎。~~
+        ~~⛔ **這一則本身就是 (B) 段警告的那個死法的實例**：同一個 commit 裡，(B) 寫著~~
+        ~~「『登記為未裁決』的事項，最常見的死法是裁決落下時沒有人回頭改它」，~~
+        ~~**而它警告的事就發生在同一份檔案的下游 docstring。留著這段，是為了讓它可被引用。**~~
+
+    **兩邊理由並陳**：舊表述**在寫下的當天完全成立** —— 那時本頁真的沒有加入入口，
+    「這條指路有效、但有效性繫於舊 ④ 還在」是對它處境的準確描述。
+    **被推翻的只有它的前提**：入口不在舊 ④ 了。
+    **它擔心的那個風險沒有消失，只是換了對象** —— 現在繫於「本頁保有加入區」，
+    而那件事由 `tests/test_wf04_add_holdings_render.py::`
+    `test_the_form_is_on_screen_when_there_are_no_holdings_at_all` 釘住。
     """
+    _waiting, _failed = pending_split(st.session_state.get(_SK_PORTFOLIO))
+    _pending_n = len(_waiting) + len(_failed)
+    if _pending_n:
+        # ⚠️ **不講「未載入」三個字** —— 那是我們的說法。使用者的處境是
+        #    「東西登記好了，可是還沒去把資料抓回來」。
+        #
+        # ⭐ **「去哪補」要看還沒抓的那一半有沒有東西，這是一個實測抓到的錯**：
+        #    本函式第一版無條件指去 :func:`where_to_find`（`pf_load`），
+        #    於是「清單裡只有抓失敗的那幾檔」時，畫面會叫使用者去按載入 ——
+        #    而 `batch_load_unloaded_funds()` **根本不會碰那幾筆**
+        #    （它只挑 `loaded` 為假的，抓失敗的是 `loaded=True` ＋ `load_error`）。
+        #    **按下去什麼都不會發生**，那正是 `render_state` 五態表警告的
+        #    「使用者會以為按一下就好，實際按幾次都一樣」。
+        if _waiting:
+            _missing = (f"清單裡有 {_pending_n} 檔標的，其中 {len(_waiting)} 檔還沒抓過淨值"
+                        + (f"、另外 {len(_failed)} 檔抓過但沒抓到" if _failed else "")
+                        + " —— 沒有淨值就算不出比例、績效與集中度")
+            _where = where_to_find("pf_load")
+        else:
+            # 全部都是「抓過、失敗」→ 再按一次載入沒有用，要看的是原因。
+            _missing = (f"清單裡有 {_pending_n} 檔標的，但每一檔都抓不到淨值 —— "
+                        "沒有淨值就算不出比例、績效與集中度")
+            _where = f"本頁下面的「{BLOCK_POLICY}」，那裡逐檔列出了抓不到的原因"
+        empty_state(EMPTY_TITLE_PENDING, _missing, where=_where,
+                    footer="抓回來之後，這一頁才會往下展開。")
+        return
     empty_state(
-        "尚未設定持倉",
-        "還沒有任何已載入的保單或扣款標的 —— 沒有標的就沒有配置可以調",
-        where=where_to_find("pf_add"),
-        footer="載入之後，這一頁才會往下展開。",
+        EMPTY_TITLE_NONE,
+        "還沒有任何保單或扣款標的 —— 沒有標的就沒有配置可以調",
+        where=f"本頁下面的「{ADD_FUND_HEADING}」",
+        footer="加完並抓到淨值之後，這一頁才會往下展開。",
     )
 
 
@@ -1543,7 +1772,43 @@ def _render_policy() -> None:
        若有標的還沒載入／載入失敗，**caption 會逐一講明有幾筆沒被算進去** ——
        一個安靜少算的總投入，比沒有總投入更危險。
     2. **級別**缺就是缺，不做關鍵字猜測（見 :func:`_policy_rows`）。
+
+    ## ⭐ 2026-09-08：本區塊多了**寫入入口**，而且在沒有持倉時**也會渲染**
+
+    客戶拍板（逐字）：「加入基金入口：拍板整合至 ⑨『保單與扣款標的』，
+    **無持倉時直接就地展開輸入表單**。」
+    → :func:`render_asset_allocation` 的 early return **不再蓋掉這一塊**，
+      本函式因此會在「一筆都沒有」的情況下被呼叫。
+
+    **一筆都沒有時只畫加入欄位，其餘一律不畫** —— 這不是偷懶，是鐵則 04：
+    四格狀態列在那個情況下是**四個「不知道」**、範圍說明會變成「只加已載入的 0 檔」、
+    保單一覽是空表。四塊灰堆在一個「我只想加第一檔基金」的人面前，
+    正是線框 Rule 04 要禁的冗餘占位，而且他要做的那件事會被推到最下面。
+    ⚠️ 上面那句「缺什麼」已經由 :func:`_render_no_holdings` 講完了，
+       這裡再講一次只是重複（一次只給一個下一步）。
+
+    ## ⚠️ 本批**沒有**修、但本批讓它更常被看到的一件事（登記，不夾帶）
+
+    :func:`_status_tiles` 有**三格**的「去哪補」寫的是 `where_to_find("pf_add")`
+    （📒 目前帳本 ／ 🕐 上次讀回 ／ 💰 總投入）—— 那是**舊 ④ 的「➕ 加入與管理基金」**，
+    而那三件事**都不是在那裡做的**：選帳本與雲端讀回在舊 ④ 的「📋 保單管理」，
+    填投入金額在保單編輯器。**三條指路的目的地都不對。**
+
+    ⚠️ **本批讓它更常被看到**：在此之前這一塊只有「已載入 ≥ 1 檔」時才渲染；
+    現在「清單裡有東西但都還沒抓到」也會渲染它。**內容沒有變得更錯，但更常出現。**
+
+    ⛔ **本批仍然不動它，理由不是懶**（`CLAUDE.md §-1.5.3 C` 禁止夾帶）：
+    那三格問的是**三個不同的動作**（選帳本／讀回雲端／填金額），
+    每一個都要先決定「新五頁裡它該指去哪」—— 而新五頁目前**一個都沒有**
+    （保單管理橋接是 `sheet_client=None`，掛在它底下那一整支是死碼）。
+    把它們一起改，等於在這一批裡順手決定三件退場相關的事。
+    **已具名回報總管，另派一批。**
     """
+    if not _all_portfolio_rows():
+        # 一筆都沒有 —— 只留下一步（見上方 docstring）。
+        _render_add_fund()
+        return
+
     _tiles = _status_tiles()
     with card_row(cols=STATUS_COLS) as _cells:
         for _cell, _tile in zip(_cells, _tiles):
@@ -1571,14 +1836,218 @@ def _render_policy() -> None:
         + (f"；另有 {_skipped} 檔尚未載入或載入失敗，**沒有**算進去。"
            if _skipped > 0 else "，目前沒有未載入的標的。"))
 
+    # 上面那句話講完「少算了幾筆」就停了 —— **沒有下一步**。這一行接上下一步。
+    _render_pending_notice()
+
+    # ⛔ **舊值三項一起退場，原文保留在這裡加刪除線（不是漏刪）**
+    #    ~~empty_title="保單一覽目前沒有可列的標的",~~
+    #    ~~empty_missing="`portfolio_funds` 裡一筆都沒有 —— 這一頁上面本來就會先擋掉，"~~
+    #    ~~              "走到這裡代表清單在渲染中途被清空了",~~
+    #    ~~empty_where=where_to_find("pf_add"),~~
+    #    **三項都是 2026-09-08 才變成假的**（有意識的變更，決策者：客戶）：
+    #    (a) 舊的 `empty_missing` 把一個**內部鍵名**印給使用者看；
+    #    (b) 它宣稱「這一頁上面本來就會先擋掉」—— 客戶拍板「無持倉時直接就地展開
+    #        輸入表單」之後，**沒有持倉正是本區塊會被畫出來的那一種情況**，
+    #        於是那句「防禦性註解」變成畫面上的一句錯話；
+    #    (c) 舊的 `empty_where` 指向舊 ④，而那個入口已經搬進本頁、舊 ④ 排定要拔。
+    #    **舊表述在寫下的當天是對的** —— 當時這一塊確實只有 `_holdings()` 非空才渲染，
+    #    「走到這裡代表清單被清空了」是一句準確的防禦性描述。**被推翻的是它的前提。**
+    #    ⚠️ 新的 `empty_where` 指的是**本頁下面那個加入區**（同 :func:`_render_no_holdings`）。
     wide_table(
         _policy_rows(),
-        empty_title="保單一覽目前沒有可列的標的",
-        empty_missing="`portfolio_funds` 裡一筆都沒有 —— 這一頁上面本來就會先擋掉，"
-                      "走到這裡代表清單在渲染中途被清空了",
-        empty_where=where_to_find("pf_add"),
+        empty_title="這裡還沒有任何標的",
+        empty_missing="保單一覽是空的 —— 下面那個加入欄位就是它的入口",
+        empty_where=f"本頁下面的「{ADD_FUND_HEADING}」",
         hide_index=True,
     )
+
+    _render_add_fund()
+
+
+def _codes_text(rows: list[dict[str, Any]], limit: int = 8) -> str:
+    """把一串條目印成「代碼、代碼、代碼…」。**超過 `limit` 就收尾，不整串倒出來。**
+
+    ⚠️ 收尾那一句寫的是「**還有 N 檔**」而不是「…」—— 使用者要知道被藏起來幾檔，
+       一個刪節號只告訴他「還有」，不告訴他「多少」。
+    """
+    _codes = [str(_r.get("code") or "").strip() or UNKNOWN_VALUE for _r in rows]
+    if len(_codes) <= limit:
+        return "、".join(_codes)
+    return "、".join(_codes[:limit]) + f"（還有 {len(_codes) - limit} 檔）"
+
+
+def _render_pending_notice() -> None:
+    """**已經在清單裡、但沒有淨值資料**的那幾筆 —— 講出來，並給下一步。
+
+    ## 這一段補的是一個實測出來的斷點
+
+    雲端讀回（`repositories/policy/v1.py::sync_policies_to_portfolio_funds`）
+    與 JSON 還原（`ui/helpers/io/json_backup.py`）寫進來的都是 **`loaded=False`
+    的骨架**，而 :func:`_holdings` 會把它們濾掉 —— 於是**清單裡明明有十幾檔，
+    畫面卻是空的**，而且**沒有任何一句話告訴使用者還差一步**。
+
+    ## 兩種狀況，兩種顏色，兩個不同的下一步 —— 不准合成一句
+
+    ================== ================================ ==============================
+    狀況                下一步                            用什麼畫
+    ================== ================================ ==============================
+    **還沒抓過**        去按一次載入就好                  ⬜ `not_ready`（＝「還沒做」）
+    **抓過、失敗了**    再按幾次都一樣；要看原因           🫐 `business_alert`
+    ================== ================================ ==============================
+
+    ⛔ **失敗的那一半絕對不能用灰色。** `ui/helpers/render_state.py` 的五態表逐字寫著：
+       「真正的失敗（抓取／渲染／模組載入）如果用灰字印，畫面看起來只是『還沒載入』——
+       使用者會以為按一下就好，**實際按幾次都一樣**。」
+
+    ## ⚠️ `business_alert` 這個選擇是取捨，不是完美對應 —— 據實登記（`§-2` 規則 6）
+
+    四個既有狀態都有不對的地方，本組選了**最接近**的那一個，理由逐條寫在這裡，
+    **不是因為它剛好可以用**：
+
+    - ⛔ `not_ready`（⬜）：它的 docstring 逐字寫「**不是**故障」。抓取失敗就是故障。
+    - ⛔ `system_error`（🔴）：它的 docstring 確實把「**抓取失敗**」列在射程內，
+      **但它要一個活的 `BaseException` 並印出 traceback**。這裡的失敗發生在
+      **上一次 run**、在載入 helper 裡；此刻手上只有一段被記下來的字串。
+      為了滿足它的簽章而現場 `raise` 一個例外，等於**製造證據** ——
+      而且那份 traceback 會指向這一行（一段完全無辜的程式碼），
+      比不印還誤導。
+    - ⛔ `st.warning`（🟠）：憲法已登記「🟠 在同一頁上現在有三種意思」且**尚未收斂**，
+      再塞第四種進去只會讓那個模糊更糟。
+    - ✅ `business_alert`（🫐）：顏色與形狀都與「還沒載入」分得開，而且它收
+      **標題 ＋ 逐行明細**，正好是這裡要講的東西（哪幾檔、各自的原因）。
+      ⚠️ **它的 docstring 寫著「那是成果，不是故障」—— 這一句對不上，本組不假裝對得上。**
+      若總管認為這種「上一輪記下來的失敗」該有自己的一態，
+      **那要改的是 `ui/helpers/render_state.py`（新增第六態），不是在本頁自己拼一個** ——
+      本頁沒有自己拼任何顏色（模組 docstring 的鐵則 03 落點）。
+    """
+    _waiting, _failed = pending_split(st.session_state.get(_SK_PORTFOLIO))
+    if _waiting:
+        # ⚠️ 不寫「未載入」—— 那是我們的說法。使用者的處境是「登記好了，資料還沒抓回來」。
+        not_ready(
+            f"這 {len(_waiting)} 檔還沒抓過淨值：{_codes_text(_waiting)}　"
+            "—— 上面的比例、績效與集中度都沒有把它們算進去",
+            where=where_to_find("pf_load"))
+    if _failed:
+        # ⚠️ **`business_alert()` 走 `unsafe_allow_html`，所以這裡有兩條硬規則**
+        #    （兩條都是 repo 既有的處置，不是本批發明的）：
+        #    1. **粗體用 `<b>`，不是 `**`** —— HTML 區塊裡的 markdown 語法不會被解析，
+        #       `**BAD1**` 會原樣印出兩顆星。正例：`ui/tab_fund_grp_health.py` 的
+        #       淘汰候選卡就是 `<b>{code}</b>`。
+        #    2. **外來字串一律 `html.escape`** —— `load_error` 是**抓取端丟回來的**
+        #       （例外訊息 / HTTP 回應片段），含 `<` `>` 時會被當標籤吃掉，
+        #       輕則原因看不見、重則插進畫面結構。正例：`ui/views/page_01_macro.py`
+        #       的 `business_alert(..., [html.escape(_r) for _r in _reasons])`。
+        #    ⛔ 代碼那一半**同樣要 escape**：它是使用者自己打進來的字，不是我們的常數。
+        business_alert(
+            f"這 {len(_failed)} 檔抓不到淨值",
+            [f"<b>{_escape(str(_f.get('code') or '') or UNKNOWN_VALUE)}</b>　"
+             f"{_escape(str(_f.get('load_error') or '').strip()) or '（沒有留下原因）'}"
+             for _f in _failed[:_FAILED_DETAIL_LIMIT]]
+            + ([f"（另有 {len(_failed) - _FAILED_DETAIL_LIMIT} 檔，原因同上面那幾種）"]
+               if len(_failed) > _FAILED_DETAIL_LIMIT else []),
+            footer="再按一次載入不會有不同結果 —— 先確認代碼有沒有打錯，"
+                   "或這一檔在來源網站上還在不在。")
+
+
+def _render_add_fund() -> None:
+    """⭐ **本頁的寫入入口** —— 把使用者打的代碼寫進持倉清單（客戶 2026-09-08 拍板）。
+
+    ## 它憑什麼在這裡（不是本組挑的位置）
+
+    客戶逐字：「**加入基金入口：拍板整合至 ⑨「保單與扣款標的」，
+    無持倉時直接就地展開輸入表單。**」
+
+    ## 它**不**做什麼（三條，理由見本檔上方 `⑤ 加入標的` 那一段的長註）
+
+    1. 不抓資料 —— 寫進去的是 `loaded=False` 骨架，下一步由
+       :func:`_render_pending_notice` 指路。
+    2. 不寫 Google Sheet。
+    3. 不收投入金額。
+
+    ## ⛔ 為什麼**沒有**用摺疊層把表單收起來
+
+    客戶 **2026-06-25** 已否決「新手／進階模式」那一路（`ui/tab1_macro.py` 就地記著
+    「只保留專家，新手模式／進階模式／原理教室全刪」），原則逐字是
+    **「所有資訊一律展開，不藏」**。
+    本頁確實有一個 Checkbox Gate（配息月曆，客戶決定 ④），但那一個擋的是**運算成本**
+    （「要算幾秒」）—— **這個表單一毛成本都沒有**，把它藏起來就只是藏起來。
+    ⚠️ 它總共只有兩個欄位 ＋ 一顆鈕，對「已經有持倉的人」增加的高度很小；
+       而對「還沒有持倉的人」它是**畫面上唯一要做的事**。
+
+    ## 寫入之後為什麼 `st.rerun()`
+
+    表單送出時，排在它**上面**的狀態列、範圍說明、待抓提示與保單一覽
+    **都已經用寫入前的舊值渲染完了** —— 不 rerun 的話，這一輪的畫面會自相矛盾
+    （「目前沒有未載入的標的」與「已加入 3 檔」同時出現在同一個畫面上）。
+    ⚠️ **`st.rerun()` 在 `safe_section()` 裡是安全的，這是既有實證不是推論**：
+       `ui/helpers/portfolio/load.py::batch_load_unloaded_funds()` 結尾就是 `st.rerun()`，
+       而它的呼叫鏈整段包在 `app.py` 的 `with tab_portfolio: try/except Exception` 裡
+       —— 那顆載入鈕現在是好的，代表 `RerunException` 沒有被 `except Exception` 吃掉。
+    ⚠️ 結果訊息因此要**過一次 rerun**，故存在 :data:`_SK_ADD_RESULT`（本頁自己的
+       `v04_` 命名空間）。它**只顯示一次**：確認訊息留在畫面上不走，
+       下一次進來會被讀成「我剛剛又加了一次」。
+    """
+    _prev = st.session_state.get(_SK_ADD_RESULT)
+    if isinstance(_prev, dict):
+        st.session_state[_SK_ADD_RESULT] = None      # 一次性：看過就收掉
+
+    st.caption(ADD_FUND_CAPTION)
+    with applied_form(_ADD_FORM_KEY, submit_label=ADD_SUBMIT_LABEL,
+                      clear_on_submit=True) as _gate:
+        _codes_raw = st.text_area(_LABEL_ADD_CODES, placeholder=ADD_CODES_PLACEHOLDER)
+        _pid_raw = st.text_input(_LABEL_ADD_POLICY_ID,
+                                 placeholder=ADD_POLICY_ID_PLACEHOLDER)
+
+    if _gate:
+        # ⚠️ 讀 widget 回傳值只發生在**送出的那一輪**（`_gate` 為真）——
+        #    這與模組 docstring 說的「下游不要讀 widget 回傳值」不衝突：
+        #    那條講的是**重運算不得繞過閘門**，而這裡就在閘門的正分支裡。
+        _plan = plan_new_holdings(
+            _codes_raw, st.session_state.get(_SK_PORTFOLIO),
+            default_policy_id=_pid_raw)
+        if _plan["rows"]:
+            # ⭐ **本頁唯一一處寫入別人的 session 契約鍵**，客戶拍板才有的。
+            #    具名豁免登記在 `tests/test_dual_track_t9_portfolio.py::_FOREIGN_WRITE_OK`。
+            # ⚠️ **刻意用整份指派而不是 `.append(...)`**：`.append` 在 AST 上
+            #    **不是**對 `session_state[...]` 的指派，那道守衛**看不到它** ——
+            #    用一個掃描器看不到的寫法把寫入偷渡進來，比違規本身更糟。
+            st.session_state[_SK_PORTFOLIO] = _plan["merged"]
+        st.session_state[_SK_ADD_RESULT] = {
+            "added": [_c for _c, _ in _plan["added"]],
+            "skipped": [_c for _c, _ in _plan["skipped"]],
+            "invalid": list(_plan["invalid"]),
+        }
+        st.rerun()
+
+    if isinstance(_prev, dict):
+        _render_add_result(_prev)
+
+
+def _render_add_result(result: dict[str, Any]) -> None:
+    """上一輪送出的結果。**加了什麼、跳過什麼、看不懂什麼 —— 三件事各講各的。**
+
+    ⚠️ **「跳過」與「看不懂」不會被靜靜吃掉**（§1）：使用者打了十行、只進來八行，
+       他有權知道另外兩行怎麼了，以及那是**他重複貼了**還是**我們讀不懂**。
+    ⚠️ **成功那一句不用綠色 `st.success`** —— 加進來的標的**還沒有淨值資料**，
+       打一個綠勾等於說「好了」。它的下一步由 :func:`_render_pending_notice` 講，
+       而那一段就在同一個畫面的上方。
+    """
+    _added = list(result.get("added") or [])
+    _skipped = list(result.get("skipped") or [])
+    _invalid = list(result.get("invalid") or [])
+    if _added:
+        st.caption(f"已加入 {len(_added)} 檔：{'、'.join(_added)}"
+                   "　—— 還沒有淨值資料，往上看「還沒抓過淨值」那一行的做法。")
+    if _skipped:
+        st.caption(f"有 {len(_skipped)} 檔本來就在清單裡，沒有重複加："
+                   f"{'、'.join(_skipped)}")
+    if _invalid:
+        # 讀不懂 ＝ 使用者的輸入有問題，不是系統故障 → ⬜ 灰態 ＋ 怎麼改。
+        not_ready(f"有 {len(_invalid)} 行讀不出基金代碼，沒有加進去："
+                  + "、".join(f"「{_ln}」" for _ln in _invalid[:_INVALID_DETAIL_LIMIT])
+                  + "　—— 每一行要以基金代碼開頭，逗號後面才是保單編號")
+    if not (_added or _skipped or _invalid):
+        not_ready("上一次送出時什麼都沒填 —— 至少要有一行基金代碼")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1873,9 +2342,38 @@ def render_asset_allocation() -> None:
         f"研究「這檔好不好」在 {where_to_find('research')}。")
 
     if not _holdings():
-        # 一檔都還沒載入 —— 下面四塊沒有任何東西可以呈現或調整，直接走空狀態，
-        # **不要**把四塊各印一次灰（那會變成五份在講同一件事的灰字，違鐵則 04）。
-        safe_section("尚未設定持倉", _render_no_holdings)
+        # ⛔ **舊註解原文保留（加刪除線，不是漏刪）**：
+        #    ~~# 一檔都還沒載入 —— 下面四塊沒有任何東西可以呈現或調整，直接走空狀態，~~
+        #    ~~# **不要**把四塊各印一次灰（那會變成五份在講同一件事的灰字，違鐵則 04）。~~
+        #    ~~safe_section("尚未設定持倉", _render_no_holdings)~~
+        #    ~~return~~
+        #
+        # 一檔都還沒載入 —— 其餘七塊沒有任何東西可以呈現或調整，**照舊不畫**
+        # （不要把它們各印一次灰，那會變成七份在講同一件事的灰字，違鐵則 04）。
+        #
+        # ⭐ **2026-09-08：`保單與扣款標的` 從這個 `return` 底下拉出來，照畫。**
+        # （**有意識的變更，不是漏刪** · 決策者：**客戶**，2026-09-08 拍板逐字：
+        #  「加入基金入口：拍板整合至 ⑨『保單與扣款標的』，
+        #    **無持倉時直接就地展開輸入表單**。」）
+        #
+        # **舊寫法為什麼是對的**：骨架批那時候，這一塊底下**沒有任何使用者能做的事** ——
+        # 四格狀態列全是「不知道」、保單一覽是空表，畫出來只是四塊灰。
+        # **被推翻的是它的前提**：那個「能做的事」現在就在這一塊底下
+        # （:func:`_render_add_fund`）。**再擋著它，就是把唯一的入口擋在唯一需要它的人面前。**
+        #
+        # ⚠️ **這一頁在此之前物理上加不了一檔基金**（實測：新五頁寫進
+        #    `portfolio_funds` 的呼叫點是 0 個），而空狀態指去舊 ④ ——
+        #    客戶已拍板的退場順序（⑦→⑥→⑧→⑨）走到底時，那句指路會指向不存在的地方。
+        # ⚠️ `_render_policy()` 在「一筆都沒有」時**只畫加入欄位**（見該函式 docstring），
+        #    所以這裡不會多出四塊灰。
+        # ⚠️ 這個 label 只在**渲染失敗**時出現在紅框裡（`safe_section`），
+        #    所以它必須是使用者讀得懂的字，不是函式名。
+        #    ⛔ 也不能寫死「尚未設定持倉」—— 空狀態現在有**兩種**標題
+        #    （:data:`EMPTY_TITLE_NONE` / :data:`EMPTY_TITLE_PENDING`），
+        #    寫死其中一個會在另一種情況下把錯誤指到錯的地方。
+        safe_section(EMPTY_SECTION_LABEL, _render_no_holdings)
+        st.markdown(f"#### {BLOCK_POLICY}")
+        safe_section(BLOCK_POLICY, _render_policy)
         return
 
     st.markdown(f"#### {BLOCK_MIX}")

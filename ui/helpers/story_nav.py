@@ -262,6 +262,23 @@ _SECTION_LABELS: dict[str, str] = {
     #    舊分頁整批拔除時，這三個 key 要一起回頭處理（漂移鎖：
     #    `tests/test_story_nav.py::test_section_labels_match_merged_pages` 的 `pf_ledger` 那一列）。
     "pf_ledger": "💼 持倉戰情（T7 帳本）",
+    # ④ 頁內既有的「保單分組視圖」（`ui/tab3_portfolio.py` 的
+    # `st.markdown("#### 🗂️ 保單分組視圖")`）。
+    # ⭐ **它是目前全站唯一按得到「把已列入但還沒抓資料的標的抓回來」的地方** ——
+    #    那顆 📡 主按鈕（`key="btn_pf_load_all_top"` → `batch_load_unloaded_funds()`）
+    #    就在這個區塊的**最上面**，而且**只有真的有未載入標的時才會出現**，
+    #    所以指過去不會撲空。
+    # ⚠️ **為什麼指「區塊」而不是指那顆按鈕的字**：那顆按鈕的標籤是**動態組出來的**
+    #    （`f"📡 載入未載入基金（{n} 條…）"`），而且同一支 helper 在舊 ④ 底下另一處
+    #    用的是**另一組字**（`📡 載入所有未載入基金（…）`）。手抄任何一組，
+    #    數字一變就變成死指路 —— 區塊標題才是穩定的那一個。
+    # ⚠️ 這個 key 同樣指**舊 ④ 的區塊**，舊分頁拔除時要與上面三個一起回頭處理。
+    #    漂移鎖：`tests/test_story_nav.py::test_section_labels_match_merged_pages`
+    #    的 `pf_load` 那一列；「那裡真的按得到載入」另由
+    #    `tests/test_wf04_add_holdings.py::test_the_load_pointer_is_not_a_dead_end` 驗
+    #    —— 那一條會去 `ui/tab3_portfolio.py` 裡確認 `batch_load_unloaded_funds`
+    #    真的被呼叫，所以它不是「字串出現在檔案裡」那種弱鎖。
+    "pf_load": "🗂️ 保單分組視圖",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -277,6 +294,7 @@ _SECTION_TO_TAB: dict[str, str] = {
     "pf_add": "portfolio",
     "pf_perf": "portfolio",
     "pf_ledger": "portfolio",
+    "pf_load": "portfolio",
 }
 
 

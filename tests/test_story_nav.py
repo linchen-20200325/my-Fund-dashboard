@@ -222,6 +222,14 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     # ⚠️ `pf_add` / `pf_perf` 兩個同型 key **沒有**這條鎖（既有缺口，本輪未補）——
     #    本列是把新增的那一個先鎖住，不是宣稱三個都鎖了。
     ("pf_ledger", "ui/tab3_portfolio.py"),
+    # 2026-09-08：⑨ 新頁的「已列入但還沒抓到淨值」灰態要指得出「去哪按載入」，
+    # 而全站唯一按得到的地方是**舊 ④** 的 `#### 🗂️ 保單分組視圖`
+    # （那顆 📡 主按鈕就在該區塊最上面，且只有真的有未載入標的時才出現）。
+    # 字面值住在 `ui/tab3_portfolio.py`。
+    # ⚠️ 本列只鎖「那個標題還在不在」。「那裡真的按得到載入」是**另一件事**，
+    #    由 `tests/test_wf04_add_holdings.py::test_the_load_pointer_is_not_a_dead_end`
+    #    以 AST 驗 `batch_load_unloaded_funds` 真的被呼叫 —— 兩條合起來才完整。
+    ("pf_load", "ui/tab3_portfolio.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。

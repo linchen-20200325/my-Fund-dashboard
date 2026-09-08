@@ -281,6 +281,8 @@ from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import section_label, where_to_find  # noqa: E402
 from ui.views.page_04_portfolio import (  # noqa: E402
+    ADD_FUND_HEADING,
+    ADD_SUBMIT_LABEL,
     BLOCK_CONCENTRATION,
     BLOCK_DIVIDEND_CAL,
     BLOCK_FORM,
@@ -291,6 +293,7 @@ from ui.views.page_04_portfolio import (  # noqa: E402
     DELEGATED_ENTRIES,
     DELEGATION_BLACKLIST,
     DIVCAL_GATE_LABEL,
+    EMPTY_TITLE_NONE,
     POLICY_TABLE_COLUMNS,
     RETIRED_REASON_POLICY,
     STATUS_BOOK_LABEL,
@@ -856,27 +859,79 @@ def test_the_switch_block_name_comes_from_the_ssot_not_a_hand_copy():
 # 鐵則 02 / 04：沒有持倉就什麼都不畫
 # ══════════════════════════════════════════════════════════════════
 
+#: 一檔持倉都沒有時，**唯一**准許渲染的單位。
+#: ⭐ **2026-09-08 由「零個」改成「這一個」，決策者是客戶，不是本組**（逐字）：
+#: 「加入基金入口：拍板整合至 ⑨『保單與扣款標的』，**無持倉時直接就地展開輸入表單**。」
+#: ⚠️ 具名成常數而不是寫進斷言裡，是為了讓「又多准了一個」**要有人來改這一行**
+#: （同 `_ALLOWED_EXTRA_CHECKBOXES` / `_NAMED_SSOTS` 的形狀）。
+_EMPTY_STATE_ALLOWED_UNITS: tuple[str, ...] = (BLOCK_POLICY,)
+
+
+def test_the_empty_state_allowlist_is_exactly_the_one_the_client_named():
+    """⭐ 上面那個放行清單本身要被守住 —— **恰好一個，而且就是保單那一塊。**
+
+    客戶點名的是「⑨**保單與扣款標的**」這一塊，不是「隨便哪一塊都可以」。
+    多放一個就要有人來改這條測試 —— **那個「要有人來改」就是這道關卡本身。**
+    ⛔ 清單被清空同樣要紅：那會讓 :func:`test_nothing_renders_before_holdings_land`
+       退回舊行為（一個都不准畫），而那正是客戶推翻掉的那一條。
+    """
+    assert _EMPTY_STATE_ALLOWED_UNITS == (BLOCK_POLICY,), (
+        f"放行清單被改成 {_EMPTY_STATE_ALLOWED_UNITS!r} —— "
+        "客戶 2026-09-08 只點名了「保單與扣款標的」這一塊。")
+    assert set(_EMPTY_STATE_ALLOWED_UNITS) <= set(_expected_units()), (
+        "放行清單裡有不在九個單位裡的名字 —— 那個名字不會出現在畫面上，"
+        "本條會變成一條恆真的守衛。")
+
+
 @pytest.mark.parametrize("kind", ["empty", "missing"])
 def test_nothing_renders_before_holdings_land(kind: str):
-    """一檔持倉都沒有 → 只有空狀態三要素，下面**四塊都不畫**。
+    """一檔持倉都沒有 → 空狀態三要素 ＋ **只有**保單那一塊，其餘七塊都不畫。
 
     線框 Rule 04：「無資料不畫空表格外框，改用空狀態三要素：標題、缺什麼、去哪補」。
+
+    ## ⚠️ 2026-09-08：本條由「下面四塊都不畫」放寬為「只准畫保單那一塊」
+
+    **有意識的政策變更，不是漏刪**（決策者：**客戶**，2026-09-08 拍板，逐字：
+    「加入基金入口：拍板整合至 ⑨『保單與扣款標的』，**無持倉時直接就地展開輸入表單**」）。
+
+    - **舊條為什麼是對的**：骨架批那時候，保單那一塊底下**沒有任何使用者能做的事** ——
+      四格狀態列全是「不知道」、保單一覽是空表。畫出來只是四塊灰，正是 Rule 04 要禁的。
+      **這個顧慮沒有消失**，它變成了 `_render_policy()` 開頭那個
+      「一筆都沒有時只畫加入欄位」的分支的存在理由。
+    - **新條為什麼勝出**：那一塊底下現在有**本頁唯一的寫入入口**，
+      而在「一檔都沒有」的時候，那正是使用者**唯一**要做的事。
+      擋著它等於把入口擋在唯一需要它的人面前。
+
+    ⛔ **放寬的只有一格**（:data:`_EMPTY_STATE_ALLOWED_UNITS`，由上一條釘住），
+       其餘七塊照舊一個都不准漏出來。
 
     ⚠️ 兩種 session 形狀都測：**空 list** 與 **鍵根本不存在**（第一次進站）。
     前三頁的同型守衛只測了一種，而「`.get()` 回 `None` 時炸掉」是真的會發生的。
     """
     _parts = _stream(kind)
     _seg = _segments(_parts)
-    _leaked = [_u for _u in _expected_units() if _u in _seg]
+    _leaked = [_u for _u in _expected_units()
+               if _u in _seg and _u not in _EMPTY_STATE_ALLOWED_UNITS]
     assert not _leaked, (
         f"（{kind}）還沒有持倉就畫出了 {_leaked} —— 空狀態應**取代**它們。")
+    _missing = [_u for _u in _EMPTY_STATE_ALLOWED_UNITS if _u not in _seg]
+    assert not _missing, (
+        f"（{kind}）客戶點名要在無持倉時就地展開的 {_missing} 沒有畫出來 —— "
+        "使用者會回到「沒有任何地方可以加基金」那個死路。")
     _all = _text(_parts)
-    assert "尚未設定持倉" in _all, f"（{kind}）沒有空狀態的標題。\n{_all}"
-    assert "還沒有任何已載入的保單或扣款標的" in _all, (
+    assert EMPTY_TITLE_NONE in _all, f"（{kind}）沒有空狀態的標題。\n{_all}"
+    assert "還沒有任何保單或扣款標的" in _all, (
         f"（{kind}）空狀態缺了「缺什麼」這一要素。\n{_all}")
-    assert where_to_find("pf_add") in _all, (
-        "空狀態的「去哪補」沒有指到加入基金的地方 —— "
-        f"應含 `where_to_find('pf_add')` ＝ {where_to_find('pf_add')!r}。\n{_all}")
+    # ⭐ 「去哪補」現在指的是**本頁自己下面那個加入區**，不是別的分頁。
+    # ⛔ 舊斷言 ~~`where_to_find("pf_add")`~~ 一起退場（**有意識的變更，不是漏刪**）：
+    #    那個 key 指的是**舊 ④** 的區塊，而客戶已拍板退場順序（⑦→⑥→⑧→⑨）——
+    #    舊 ④ 一拔，那句指路就指向一個不存在的地方。
+    assert ADD_FUND_HEADING in _all, (
+        "空狀態的「去哪補」沒有指到本頁的加入區 —— "
+        f"應含 `ADD_FUND_HEADING` ＝ {ADD_FUND_HEADING!r}。\n{_all}")
+    assert where_to_find("pf_add") not in _all, (
+        "空狀態還在把使用者指去舊 ④ 的「加入與管理基金」—— "
+        "客戶已拍板那個入口整合到本頁，而舊 ④ 排定要拔掉。\n" + _all)
 
 
 def test_the_empty_state_does_not_also_print_the_pending_excuse():
@@ -899,31 +954,45 @@ def test_the_empty_state_does_not_also_print_the_pending_excuse():
 def test_the_empty_state_pointer_actually_works():
     """⭐ **照著空狀態的指路做，這一頁真的會離開空狀態** —— 實跑，不是推論。
 
-    指路寫的是「④ 📊 資產配置 → ➕ 加入與管理基金」，而那個區塊做的事就是
-    把基金寫進 `portfolio_funds`（`ui/tab3_portfolio.py` 現行 ④ 真的有
-    `### ➕ 加入與管理基金` 這個標題）。本條**在同一個 AppTest session 裡**
-    模擬「使用者照著做完了」：把已載入的持倉放進 session，再跑一次。
+    ## ⚠️ 2026-09-08：指路的目的地換了，本條的**驗法**也跟著往前走了一步
 
-    ⛔ **本條驗的是「機制通了」，不驗「那個按鈕長什麼樣」** ——
-    AppTest 到不了舊 ④（本頁尚未接線），所以它按不到那顆真的按鈕。
-    **本條證明的是：那句指路描述的那件事一旦發生，這一塊真的會換掉。**
+    **舊指路**是「④ 📊 資產配置 → ➕ 加入與管理基金」（`where_to_find('pf_add')`），
+    指的是**舊 ④**；那時 AppTest 到不了那裡，所以本條只能**模擬**
+    「使用者照著做完了」—— 直接把持倉塞進 session，證明「那件事一旦發生，畫面會換」。
+    **新指路指的是本頁自己下面那個加入區**（客戶 2026-09-08 拍板），
+    而那個地方**AppTest 按得到** —— 所以本條不再需要模擬，**它真的去按**。
+    ⚠️ 舊寫法的價值仍然成立（在指路指向別的分頁時，那是唯一驗得到的方式）；
+    **被權衡掉的是它的強度** —— 模擬只能證明「機制通了」，
+    按下去能證明「**使用者照著做真的會成功**」。
 
-    ⚠️ **它同時是未決事項 (A) 的哨兵**：`ia-wireframe.html` Tab 04 的清單裡
-    **沒有**「加入與管理基金」。若 ④ 日後真的被收斂成 ia 的六塊，這句指路會變成
-    死指路（而且使用者將無處可加基金）—— 那時要改的是線框的裁決，不是這條測試。
+    ⛔ **真正按下去這件事有一半在別條**：本條驗「按完就離開空狀態、九塊都出現」；
+    「按完之後 `portfolio_funds` 裡到底多了什麼」由
+    `tests/test_wf04_add_holdings.py` 逐欄位驗。**兩條合起來才完整。**
     """
     _at = _app([])
-    assert any("尚未設定持倉" in _p for _p in _flat(_at.main)), "起手式應該是空狀態。"
-    # 照著指路做：那個區塊做的事 ＝ 把已載入的基金寫進 `portfolio_funds`。
+    assert any(EMPTY_TITLE_NONE in _p for _p in _flat(_at.main)), "起手式應該是空狀態。"
+    # ⭐ 照著指路做 —— **真的去填、真的去按**，不是塞 session 模擬。
+    # ⚠️ 空狀態時畫面上只有加入表單這一個 form，所以 `button[0]` 就是它的送出鈕。
+    _at.text_area[0].set_value("TESTCODE1\nTESTCODE2")
+    _at.button[0].click()
+    _rerun(_at)
+    assert not _at.exception, "按下加入之後整頁炸了。"
+    # 加進來的是 `loaded=False` 骨架 → 這一步**還不會**離開空狀態（那是對的：
+    # 沒有淨值就沒有配置可以調），但空狀態的**標題會換成另一種**。
+    _mid = _flat(_at.main)
+    assert not any(EMPTY_TITLE_NONE in _p for _p in _mid), (
+        "加完之後畫面還在說「尚未設定持倉」—— 使用者剛剛才加過，那句話是錯的。\n"
+        + _text(_mid))
+    # 抓回淨值（＝到 `where_to_find('pf_load')` 按那顆載入鈕）之後才會往下展開。
     _at.session_state["portfolio_funds"] = FAKE_HOLDINGS
     _rerun(_at)
     _after = _flat(_at.main)
-    assert not any("尚未設定持倉" in _p for _p in _after), (
+    assert not any(EMPTY_TITLE_NONE in _p for _p in _after), (
         "照著空狀態的指路做完之後，空狀態**還在** —— 那句指路是無效的。\n"
         + _text(_after))
     _names = [_k for _k, _ in _units(_after)]
     assert _names == list(_expected_units()), (
-        "照著做之後，四塊沒有如預期出現。\n"
+        "照著做之後，九塊沒有如預期出現。\n"
         f"實際：{_names}\n應為：{list(_expected_units())}")
 
 
@@ -2041,6 +2110,36 @@ def test_the_page_never_hand_rolls_the_grey_mark():
 #:    抄了的話，gate 改字時本檔會**跟著錯**而不是**跟著對**。
 _ALLOWED_EXTRA_CHECKBOXES: tuple[str, ...] = (DIVCAL_GATE_LABEL,)
 
+#: ⭐ **線框那顆「試算」之外，本頁**額外**允許出現的按鈕 —— 逐一具名。**
+#:
+#: ## 為什麼 2026-09-08 需要它（形狀直接抄上面那個 checkbox 清單）
+#:
+#: :func:`test_the_three_fields_and_the_submit_verb_come_from_the_wireframe` 的
+#: 按鈕斷言原本是 ``== [SUBMIT_LABEL]``，就地註解逐字寫著
+#: 「**本批沒有新增任何按鈕**（gate 是 checkbox，不是 button）。沒有新增就不動它 ——
+#: 順手放寬一條自己用不到的守衛，是最廉價也最常見的退步。」
+#: —— **那句話在 2026-09-07 是對的；2026-09-08 起不再是。**
+#: 客戶拍板「加入基金入口整合至 ⑨」，而一個表單**必須**有送出鈕
+#: （`ui/helpers/ia/gated_form.py` 的模組 docstring 第 1 點：少了它 Streamlit 會拋
+#: `StreamlitAPIException`）。**這一次是真的新增了按鈕，所以才動它。**
+#:
+#: ⛔ **同樣是「具名放行」，不是「放寬」**：比對仍是 `==` 精確相等、
+#:    每一顆逐字列名、塞第三顆沒列名的照樣紅。
+#: ⚠️ **順序有意義**：畫面上「再平衡試算」排在「保單與扣款標的」前面
+#:    （`_expected_units()` 的順序），所以送出鈕也是那個順序。
+#:    順序反了代表版面被動過了，那也該紅。
+_ALLOWED_EXTRA_BUTTONS: tuple[str, ...] = (ADD_SUBMIT_LABEL,)
+
+
+def _expected_button_labels() -> list[str]:
+    """整頁**應該**出現的按鈕標籤，**依渲染順序**（形狀同
+    :func:`_expected_checkbox_labels`）。
+
+    線框那一顆（`試算`，在再平衡 Form 裡、排在前面）＋
+    :data:`_ALLOWED_EXTRA_BUTTONS` 逐一具名的那些（排在後面）。
+    """
+    return [SUBMIT_LABEL, *_ALLOWED_EXTRA_BUTTONS]
+
 
 def _expected_checkbox_labels() -> list[str]:
     """整頁**應該**出現的 checkbox 標籤，**依渲染順序**。
@@ -2120,11 +2219,37 @@ def test_the_three_fields_and_the_submit_verb_come_from_the_wireframe():
         "⛔ 多出來的那一個若是刻意新增的互動元件，請**具名**加進 "
         "`_ALLOWED_EXTRA_CHECKBOXES`（並在 PR 描述說明它為什麼該存在）；"
         "⛔ **不要**把這條改成「包含即可」——那樣任何人塞一個 checkbox 都不會紅。")
-    # ⚠️ **按鈕那一條一個字都沒改**：本批**沒有**新增任何按鈕
-    #    （gate 是 checkbox，不是 button）。沒有新增就不動它 —— 順手放寬一條
-    #    自己用不到的守衛，是最廉價也最常見的退步。
-    assert [_b.label for _b in _at.button] == [SUBMIT_LABEL], (
-        "整頁的按鈕不是「恰好一顆送出鈕」—— 骨架階段不該有第二顆按鈕。")
+    # ⛔ ~~`assert [_b.label for _b in _at.button] == [SUBMIT_LABEL]`~~
+    #    → **2026-09-08 更新（有意識的政策變更，不是漏刪；決策者：客戶）。**
+    #    舊斷言的就地註解逐字寫著「**本批沒有新增任何按鈕**……沒有新增就不動它」——
+    #    **那句話在 2026-09-07 是對的**；客戶 2026-09-08 拍板「加入基金入口整合至 ⑨」
+    #    之後，本頁**真的**多了一個表單，而表單必須有送出鈕。
+    #    ⚠️ **形狀一個字沒鬆**：仍是 `==` 精確相等，多出來的那一顆逐字具名在
+    #    :data:`_ALLOWED_EXTRA_BUTTONS`（另有一條守著那份清單本身）。
+    assert [_b.label for _b in _at.button] == _expected_button_labels(), (
+        "整頁的按鈕與預期清單不符。\n"
+        f"預期：{_expected_button_labels()}\n"
+        f"實際：{[_b.label for _b in _at.button]}\n"
+        "⛔ 多出來的那一顆若是刻意新增的，請**具名**加進 `_ALLOWED_EXTRA_BUTTONS`；"
+        "⛔ **不要**把這條改成「包含即可」——那樣任何人塞一顆按鈕都不會紅。")
+
+
+def test_the_extra_button_allowlist_is_exact_and_named():
+    """⭐ 按鈕放行清單本身要被守住（形狀抄
+    :func:`test_the_extra_checkbox_allowlist_is_exact_and_named`）。
+
+    ⛔ **本條刻意不渲染** —— 它驗的是清單本身，所以在沒有 streamlit 的環境也跑得到。
+    """
+    assert _ALLOWED_EXTRA_BUTTONS, (
+        "放行清單是空的 —— 空清單會讓按鈕斷言退回「只有線框那一顆」，"
+        "而客戶 2026-09-08 明示要有一個加入入口。清空它等於撤銷那個決定。")
+    assert _ALLOWED_EXTRA_BUTTONS == (ADD_SUBMIT_LABEL,), (
+        f"放行清單被改成 {_ALLOWED_EXTRA_BUTTONS!r}。\n"
+        "⛔ 每多一顆按鈕就要多一個具名項，而且要有人來改這條測試 —— "
+        "**那個「要有人來改」就是這道關卡本身**。")
+    assert SUBMIT_LABEL not in _ALLOWED_EXTRA_BUTTONS, (
+        "線框那顆送出鈕被塞進「額外放行」清單了 —— 它本來就在預期清單裡，"
+        "重複會讓預期清單出現兩顆一樣的，整條斷言永遠對不上。")
 
 
 def test_the_budget_default_deviates_from_the_wireframe_on_purpose():
@@ -2544,9 +2669,36 @@ def test_the_page_never_reaches_into_the_data_layer():
 #:    退回的成本只有一格，遠低於留一條會斷頭的委派。
 _ALLOC_SSOT: str = "ui.helpers.portfolio.allocation"
 
+#: ⭐ **第二個具名豁免**（2026-09-08 寫入入口批新增）——
+#: `ui/helpers/portfolio/add_entry.py`：把使用者打的字算成 `portfolio_funds`
+#: 骨架條目的**純函式**。
+#:
+#: ## 為什麼要有它，而不是把解析／去重寫進 View
+#:
+#: 那段邏輯有**真的會出錯的邊界**（大小寫、`(代碼, 保單編號)` 複合鍵去重、
+#: 同一批內重複、讀不懂的行），寫在 View 裡就只能靠 AppTest 去測 ——
+#: 而 AppTest 需要 streamlit。抽成純函式之後，這些邊界可以在**沒有 streamlit 的
+#: 環境**下被逐條測到（`tests/test_wf04_add_holdings.py` 的前半段）。
+#:
+#: ## 它與 :data:`_ALLOC_SSOT` 的差別（不要混為一談）
+#:
+#: `allocation` 是**既有**的全站 SSOT，本頁只是借用；
+#: 本模組是**本批新寫**的，只有本頁在用。
+#: ⚠️ 所以它的豁免理由**不是**「它是全站真相源」，而是
+#: 「**它是純函式，而且它是本頁自己的**」——
+#: 前者由 :func:`test_the_named_exemption_is_still_a_pure_ssot` 每次跑都重新查證
+#: （本次起改為**逐一巡邏** :data:`_NAMED_SSOTS` 的每一支，不是只巡 `allocation`）。
+_ADD_ENTRY_SSOT: str = "ui.helpers.portfolio.add_entry"
+
+#: 具名豁免的完整清單。**新增一支就要在這裡具名，而且要有人來改這一行** ——
+#: 那個「要有人來改」就是這道關卡本身（同 `_ALLOWED_EXTRA_CHECKBOXES` 的形狀）。
+#: ⛔ **不得**改成前綴或萬用比對：那會從「具名豁免」退化成「資料夾豁免」，
+#:    而 2026-09-06 的稽核已經實測示範過那個洞（`allocation_evil.py`）。
+_NAMED_SSOTS: tuple[str, ...] = (_ALLOC_SSOT, _ADD_ENTRY_SSOT)
+
 
 def _exempted_by_name(mod: str) -> bool:
-    """具名豁免的判準：**恰好是** :data:`_ALLOC_SSOT`，或它底下用點接的名字。
+    """具名豁免的判準：**恰好是** :data:`_NAMED_SSOTS` 其中一支，或它底下用點接的名字。
 
     ## 為什麼不是 ``mod.startswith(_ALLOC_SSOT)``（2026-09-06 稽核擋下，實測後更正）
 
@@ -2581,7 +2733,11 @@ def _exempted_by_name(mod: str) -> bool:
     若日後它被改成套件，:func:`test_the_named_exemption_is_still_a_pure_ssot`
     會因為解析到的檔案清單改變而重新涵蓋它（該條已改為讀「本頁實際 import 的東西」）。
     """
-    return mod == _ALLOC_SSOT or mod.startswith(_ALLOC_SSOT + ".")
+    # ⚠️ **2026-09-08：由「一支」改成「逐一比對 :data:`_NAMED_SSOTS`」** ——
+    #    判準的**形狀一個字沒鬆**（仍然是「恰好相等，或它底下用點接的名字」），
+    #    變的只有它比幾支。上表那些 `allocation_evil` / `allocationX` 的反例
+    #    在新判準下**結論完全相同**（實測：`_exempted_by_name` 對它們仍回 `False`）。
+    return any(mod == _n or mod.startswith(_n + ".") for _n in _NAMED_SSOTS)
 
 
 def test_the_named_exemption_is_still_a_pure_ssot():
@@ -2639,9 +2795,11 @@ def test_the_named_exemption_is_still_a_pure_ssot():
     ⚠️ **仍然保留「宣告的那支一定要在、一定要乾淨」**：若本頁哪天完全不 import 它，
     只驗「實際 import 到的」會**空集合通過**（vacuous pass），豁免的自我巡邏就沒了。
     """
-    # 要police 的檔案 = 宣告的那支（永遠驗）∪ 本頁實際在豁免名下 import 到的每一支。
-    _names = {_ALLOC_SSOT} | {_m for _m in _imported_modules(_tree())
-                              if _exempted_by_name(_m)}
+    # 要police 的檔案 = **宣告的每一支**（永遠驗）∪ 本頁實際在豁免名下 import 到的每一支。
+    # ⚠️ **2026-09-08 由「宣告的那一支」改為「宣告的每一支」** —— 具名豁免變成兩個之後，
+    #    只巡第一個等於第二個沒人看，而「開了就沒人再看的豁免」正是本條要防的東西。
+    _names = set(_NAMED_SSOTS) | {_m for _m in _imported_modules(_tree())
+                                  if _exempted_by_name(_m)}
     _srcs: dict[str, pathlib.Path] = {}
     for _name in sorted(_names):
         _base = ROOT.joinpath(*_name.split("."))
@@ -2649,7 +2807,7 @@ def test_the_named_exemption_is_still_a_pure_ssot():
             _srcs[_name] = _base / "__init__.py"
         elif _base.with_suffix(".py").exists():   # 它是模組
             _srcs[_name] = _base.with_suffix(".py")
-        elif _name == _ALLOC_SSOT:
+        elif _name in _NAMED_SSOTS:
             # 宣告的豁免指向一個不存在的東西 ⇒ 一定是錯的，立刻炸。
             raise AssertionError(f"具名豁免指向一個不存在的模組：{_name}")
         # 其餘解析不到的，是 `_imported_modules` 對 `from X import Y` 多吐的**符號名**
@@ -2775,7 +2933,7 @@ def test_the_page_only_delegates_to_the_registered_entries():
     形狀直接抄 `tests/test_wf02_health_skeleton.py` 的同型守衛
     （② 的那條也是「舊條整包封鎖 → 新條逐支白名單」，理由與本條逐字相同）。
     """
-    _allowed = _delegated_modules() | {_ALLOC_SSOT}
+    _allowed = _delegated_modules() | set(_NAMED_SSOTS)
     assert _allowed, "白名單是空的 —— 空白名單會讓本條退化成整包封鎖。"
     _bad = [_m for _m in _imported_modules(_tree())
             if (_m.startswith("ui.tab")
@@ -2788,7 +2946,7 @@ def test_the_page_only_delegates_to_the_registered_entries():
         "本頁委派了**沒有登記**的舊 ④ 來源檔：" + ", ".join(_bad)
         + "\n每一支委派都要進 `page_04_portfolio.DELEGATED_ENTRIES` 受審 —— "
           "那是「悄悄多接一支」唯一的關卡。\n"
-        + f"（另有一個具名豁免：{_ALLOC_SSOT} —— 見 `_ALLOC_SSOT` 的長註）")
+        + f"（另有具名豁免：{sorted(_NAMED_SSOTS)} —— 見 `_NAMED_SSOTS` 的長註）")
 
 
 def test_delegation_matches_the_registry():
@@ -3312,3 +3470,44 @@ def test_the_checkbox_assertion_is_still_an_exact_equality():
         "checkbox 斷言的右邊不是 `_expected_checkbox_labels()` —— "
         f"實際：{ast.unparse(_right)[:120]}\n"
         "⛔ 就地拼一份預期清單會繞過 `_ALLOWED_EXTRA_CHECKBOXES` 那道關卡。")
+
+
+def test_the_button_assertion_is_still_an_exact_equality():
+    """⭐ **按鈕斷言同樣必須維持 `==` 精確相等** —— 形狀逐條抄上面那條 checkbox 版。
+
+    ## 為什麼要複製一條，而不是把上面那條寫成 parametrize
+
+    上面那條的三個斷言裡有**兩個是綁死在 checkbox 上的字串**
+    （`"_at.checkbox"`、`"_expected_checkbox_labels"`）；改成 parametrize 之後
+    失敗訊息會變成「某一個 widget 的斷言鬆掉了」，讀的人還要回頭查是哪一個。
+    **這兩條各自紅、各自指名道姓，比少寫十行有價值。**
+
+    ⚠️ 與上面那條**同樣的已知限制**：真正的行為突變（在頁面上塞第三顆按鈕，
+    看那條斷言會不會紅）需要渲染，而本批的環境沒有 streamlit ——
+    所以改成從**測試自己的原始碼**驗運算子。**兩者不等價，照實寫在這裡。**
+    """
+    _self = pathlib.Path(__file__).read_text(encoding="utf-8")
+    _fn = next((_n for _n in ast.walk(ast.parse(_self))
+                if isinstance(_n, ast.FunctionDef)
+                and _n.name == "test_the_three_fields_and_the_submit_verb_come_from_the_wireframe"), None)
+    assert _fn is not None, (
+        "找不到那條線框守衛 —— 它被改名或刪掉了，而本條所有斷言都掛在它身上。")
+    _cands = [_n for _n in ast.walk(_fn) if isinstance(_n, ast.Assert)
+              and "_at.button" in ast.unparse(_n.test)]
+    assert len(_cands) == 1, (
+        f"那條守衛裡提到 `_at.button` 的 assert 有 {len(_cands)} 條，預期恰好 1 條。")
+    _test = _cands[0].test
+    assert isinstance(_test, ast.Compare), (
+        f"按鈕斷言不再是一個比較式，而是 {type(_test).__name__} —— "
+        f"實際：{ast.unparse(_test)[:120]}")
+    assert len(_test.ops) == 1 and isinstance(_test.ops[0], ast.Eq), (
+        "按鈕斷言的運算子不是 `==` —— "
+        f"實際：{ast.unparse(_test)[:120]}\n"
+        "⛔ `in` / `<=` / `issubset` 這一族會讓「多一顆沒列名的按鈕」**不再轉紅**，"
+        "那一刻起這條守衛就只是裝飾品。")
+    _right = _test.comparators[0]
+    assert (isinstance(_right, ast.Call)
+            and getattr(_right.func, "id", None) == "_expected_button_labels"), (
+        "按鈕斷言的右邊不是 `_expected_button_labels()` —— "
+        f"實際：{ast.unparse(_right)[:120]}\n"
+        "⛔ 就地拼一份預期清單會繞過 `_ALLOWED_EXTRA_BUTTONS` 那道關卡。")
