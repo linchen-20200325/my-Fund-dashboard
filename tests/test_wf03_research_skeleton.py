@@ -225,6 +225,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from _ast_bindings import (gate_guarded_ids, gate_ifs,  # noqa: E402
                            guarded_key_names, session_writes)
 
+from ui.helpers.ia import STATE_NOT_READY  # noqa: E402
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_03_research import (  # noqa: E402
@@ -251,9 +252,17 @@ from ui.views.page_03_research import (  # noqa: E402
     DEEP_DIVE_TABLES,
     SOURCE_OPTIONS,
     SUBMIT_LABEL,
+    DIRECT_LABEL,
+    MAX_RESULT_CARDS,
+    SELECT_LABEL,
     _BATCH_EMPTY_MISSING,
     _BATCH_UNPARSED_MISSING,
-    _RESULTS_PENDING_NOTE,
+    _NAMELESS_TITLE,
+    _NOT_SELECTED_MISSING,
+    _NOT_SELECTED_TITLE,
+    _RESULTS_EMPTY_MISSING,
+    _RESULTS_EMPTY_TITLE,
+    _RESULTS_NO_PERF_NOTE,
     _declared_currency,
     _dividend_rows,
     _holdings_rows,
@@ -263,9 +272,26 @@ from ui.views.page_03_research import (  # noqa: E402
     _failed_source_count,
     _fmt,
     _perf_lines,
+    _pick_token,
+    _result_card,
+    _result_note,
+    _result_value,
+    _results_caption,
     _risk_lines,
+    _row_str,
+    _selected_code,
     _trace_rows,
     render_fund_research,
+)
+# ⚠️ L2 的鍵名 SSOT —— **不在本檔抄一份中文字面值**（抄了就是第二份真相源，§2.1）。
+from services.fund_search import (  # noqa: E402
+    EMPTY_MEANS_UNKNOWN,
+    KEY_AGENT,
+    KEY_CODE,
+    KEY_NAME,
+    KEY_NAV,
+    KEY_NAV_DATE,
+    KEY_SOURCE,
 )
 
 #: `_render(result=…)` 的「沒有傳」哨兵 —— 不能用 `None`，`None` 是合法的假回傳。
@@ -422,6 +448,40 @@ def _RICH_RESULT(**over: Any) -> dict:
     return _res
 
 
+# ══════════════════════════════════════════════════════════════════
+# 假的 L2 搜尋回傳（2026-09-08 加，搜尋結果接上真取數時）
+#
+# ⚠️ **每一個字串都是獨一無二的哨兵**，理由與上面那組數字哨兵一樣：
+#    「某一張卡印出了別一列的欄位」在共用值的 fixture 底下完全看不出來。
+# ⚠️ **NAV 哨兵刻意避開 `_PINNED_FAKE_VALUES` 的裸子字串**（它含 `"0.81"` / `"0.22"`）
+#    —— 一個長得像 `10.81` 的真實淨值會讓那條守衛誤紅，而且紅的方向是錯的。
+# ⚠️ **第二列刻意殘缺**（沒有淨值、沒有日期、沒有總代理）：那是 L1 真的會吐的形狀
+#    （TDCC-3-2 分支把 `淨值`/`日期` 填成空字串等 3-4 補，補不到就留空），
+#    也是本頁「上游沒給就整段不畫」那條規則唯一驗得到的地方。
+# ══════════════════════════════════════════════════════════════════
+
+#: 完整的一列（六個鍵都有值）。
+FAKE_ROW_FULL: dict = {
+    KEY_NAME: "哨兵候選甲基金", KEY_CODE: "SENTINELFUNDA",
+    KEY_AGENT: "哨兵總代理甲", KEY_NAV: "51.53",
+    KEY_NAV_DATE: "2026/09/05", KEY_SOURCE: "TDCC-3-2",
+}
+#: 殘缺的一列（只有名稱、代碼、來源）。
+FAKE_ROW_SPARSE: dict = {
+    KEY_NAME: "哨兵候選乙基金", KEY_CODE: "SENTINELFUNDB",
+    KEY_AGENT: "", KEY_NAV: "", KEY_NAV_DATE: "", KEY_SOURCE: "FundClear",
+}
+
+
+def _FAKE_ROWS() -> list[dict]:
+    """`search_funds()` 的預設假回傳 —— 每次呼叫回**新的** list，避免測試之間互相污染。"""
+    return [dict(FAKE_ROW_FULL), dict(FAKE_ROW_SPARSE)]
+
+
+#: 「使用者已經選定的那一檔」。**刻意不等於 `FAKE_QUERY["term"]`** ——
+#: 兩者一樣的話，「深度區吃的是選定值還是查詢字串」這件事在畫面上分不出來。
+SELECTED_CODE: str = "SENTINELPICKED"
+
 #: 會產生「使用者看得到的字」的 st API。錄下來當作單位有沒有真的畫東西的證據。
 _TEXT_APIS = (
     "markdown", "write", "caption", "text", "info", "warning", "error",
@@ -435,6 +495,12 @@ _TEXT_APIS = (
     # ⚠️ 同輪補：批次的 CSV 下載鈕。**少了它是「靜靜漏錄」而不是炸** ——
     #    比對「有沒有畫出下載鈕」的斷言會恆為 False，看起來像產品碼少畫了一顆。
     "download_button",
+    # ⚠️ 2026-09-08 搜尋結果接上真取數時補：結果卡的「查這一檔」與深度區的
+    #    「直接用我輸入的內容查」都是 `st.button`。**在此之前這一頁一個
+    #    `st.button` 都沒有**（實測），所以補它不會改到任何既有錄音行。
+    #    ⛔ 少了它，「選定後展開」那個 gate 的**入口**整個錄不到 ——
+    #    斷言只看得到 gate 關著，看不到有沒有人打得開它。
+    "button",
 )
 
 
@@ -442,7 +508,8 @@ class _Rec:
     """把 `st.<api>(...)` 錄成一串字，其餘屬性一律回傳可呼叫 / 可進 `with` 的假物件。"""
 
     def __init__(self, submitted: bool = False,
-                 widgets: dict[str, Any] | None = None) -> None:
+                 widgets: dict[str, Any] | None = None,
+                 clicked: set[str] | None = None) -> None:
         self.parts: list[str] = []
         self.session_state: dict[str, Any] = {}
         #: `{widget 的 label: 要回傳的值}`。**沒指定的 widget 行為完全不變**
@@ -453,6 +520,14 @@ class _Rec:
         #: ⚠️ 2026-09-07 批次上線時補：在此之前**沒有任何測試走得到送出後的路徑**，
         #:    也就是「按下去會發生什麼」整條是**沒有被驗過的**。
         self.submitted = bool(submitted)
+        #: **被按下的 `st.button` 的 `key` 集合**（2026-09-08 加）。
+        #: `None` ＝ 沒有指定 ⇒ `st.button` 一律回 :attr:`submitted`（＝舊行為）。
+        #: ⚠️ **為什麼要按 key 而不是跟著 `submitted` 走**：搜尋結果一次會畫最多
+        #:    :data:`ui.views.page_03_research.MAX_RESULT_CARDS` 顆「查這一檔」，
+        #:    `submitted=True` 會讓**九顆同時回 True** —— 那不是任何使用者做得到的事，
+        #:    而且「哪一顆被按 → 選定哪一檔」正是本輪要驗的東西，混在一起就驗不了。
+        self.clicked: set[str] | None = (
+            None if clicked is None else set(clicked))
 
     # ── context manager（`with st.container():` 之類）────────────────
     def __enter__(self) -> "_Rec":
@@ -469,7 +544,18 @@ class _Rec:
             if name in _TEXT_APIS:
                 _bits = [str(a) for a in args if isinstance(a, (str, int, float))]
                 # widget 的 label 是第一個位置引數；`metric` 的值是第二個。
-                self.parts.append(f"[{name}] " + " ".join(_bits))
+                _line = f"[{name}] " + " ".join(_bits)
+                # ⚠️ **只有 `button` 把 `key=` 一起錄**（2026-09-08）：
+                #    這一頁的 `st.button` 都是**動態組 key**（每一列一顆），
+                #    而 `tests/test_wf03_research_wiring.py` 的靜態掃描
+                #    **只認字面值 key**、結構上看不到它們（那一檔的
+                #    「看不到的形態」段自己就寫著）。錄下來，本檔才驗得到
+                #    「⑧ 的每一顆按鈕都在 `v03_` 命名空間裡」。
+                #    ⛔ 刻意**不**對 `download_button` / `form_submit_button` 這樣做 ——
+                #    它們是既有錄音行，改格式會動到別條斷言看到的字。
+                if name == "button" and kwargs.get("key") is not None:
+                    _line += f" key={kwargs['key']}"
+                self.parts.append(_line)
             if name in ("text_input", "text_area"):
                 _label = args[0] if args else kwargs.get("label")
                 if _label in self.widgets:
@@ -486,7 +572,12 @@ class _Rec:
                 if _label in self.widgets:
                     return bool(self.widgets[_label])
                 return bool(kwargs.get("value", False))
-            if name in ("button", "form_submit_button"):
+            if name == "button":
+                # `clicked=` 沒指定 → 完全照舊（回 `submitted`）。
+                if self.clicked is None:
+                    return self.submitted
+                return kwargs.get("key") in self.clicked
+            if name == "form_submit_button":
                 return self.submitted
             # 下載鈕：**恆回 `False`（＝沒人按）**，與其他按鈕同一個立場。
             if name == "download_button":
@@ -519,7 +610,12 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
             session: dict[str, Any] | None = None,
             submitted: bool = False,
             widget: dict[str, Any] | None = None,
-            patch: dict[str, Any] | None = None) -> list[str]:
+            patch: dict[str, Any] | None = None,
+            selected: str | None = None,
+            search: Any = _SENTINEL,
+            search_raiser: BaseException | None = None,
+            clicked: set[str] | None = None,
+            state_out: dict[str, Any] | None = None) -> list[str]:
     """跑一次整頁，回傳**有序**的渲染紀錄。
 
     ⚠️ 回傳 list 而不是一整塊字串 —— 順序本身是本檔要驗的東西之一，
@@ -556,6 +652,24 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
               ⚠️ 在此之前 recorder 對送出鈕**恆回 `False`**，也就是整條
               「按下去之後會發生什麼」的路徑**從來沒有被任何測試走過** ——
               批次的長時間運算就長在那條路徑上，所以它必須可驗。
+    selected : **已選定的那一檔**（寫進 `v03_research_selected_fund`）。
+              ⚠️ 2026-09-08 加。`None` ＝ **還沒選** ⇒ 深度區走空狀態、
+              `auto_fetch_moneydj` 一次都不會被呼叫（＝線框「選定後展開」那個 gate）。
+              ⛔ **不要**為了讓舊斷言少改而給它一個「有值」的預設 ——
+              那等於讓每一條測試都繞過 gate，gate 就沒有人在驗了。
+    search : 假的 `services.fund_search.search_funds` 回傳。預設兩列哨兵
+              （:func:`_FAKE_ROWS`）。給 `[]` 走「名錄沒有回傳候選」那條路。
+              ⚠️ **與 `auto_fetch_moneydj` 同一個理由必須換掉**：不換的話，
+              每一條帶 `applied=` 的測試都會真的連 TDCC / FundClear。
+    search_raiser : 給它一個例外物件 → 假的 `search_funds` 會 `raise` 它。
+              用來驗「搜尋炸了走 `safe_section` 的紅框，而不是被畫成查無結果」。
+    clicked : **被按下的 `st.button` 的 key 集合**。`None` ＝ 一顆都沒按
+              （`st.button` 回 `submitted`，＝舊行為）。
+    state_out : 給它一個 dict → 渲染結束後把 recorder 那份 `session_state`
+              **倒進去**。⚠️ 這是「按下按鈕之後 session 變成什麼」唯一驗得到的方式；
+              沒有它，「選定後展開」那個 gate 的**寫入端**完全沒有人在看。
+              ⛔ **不要**改成讓測試去動真的 `st.session_state` —— recorder 用的是
+              自己那一份 dict，改真的那一份會外洩到別條測試。
     """
     import sys
 
@@ -582,9 +696,11 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
     #    它那一行麵包屑 caption 走的是**真的** streamlit（bare 模式下無害）、
     #    **不會**進到紀錄裡。本檔沒有任何斷言依賴它。
 
-    _rec = _Rec(submitted=submitted, widgets=widget)
+    _rec = _Rec(submitted=submitted, widgets=widget, clicked=clicked)
     if applied is not None:
         _rec.session_state["v03_research_applied_query"] = applied
+    if selected is not None:
+        _rec.session_state["v03_research_selected_fund"] = selected
     _rec.session_state.update(session or {})
 
     # ⛔ **紅燈也要錄得到，否則「不准紅」那一族斷言是空的。**
@@ -616,6 +732,18 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
         return _payload
 
     _page.auto_fetch_moneydj = _fake_fetch
+
+    # ── 搜尋的 L2 入口，同樣一律換掉（2026-09-08）────────────────────────
+    _real_search = _page.search_funds
+    _search_payload = _FAKE_ROWS() if search is _SENTINEL else search
+
+    def _fake_search(_term, **_kw):
+        _rec.parts.append(f"[search] {_term}")
+        if search_raiser is not None:
+            raise search_raiser
+        return _search_payload
+
+    _page.search_funds = _fake_search
     # ⚠️ 先確認要換的名字**真的存在**：打錯字的 patch 會靜靜地新增一個沒人讀的屬性，
     #    然後測試對著**沒有被換掉**的真實實作跑（那正是本函式開頭那段長註的病）。
     _patch = dict(patch or {})
@@ -643,7 +771,11 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
         for _k, _old in _patched:
             setattr(_page, _k, _old)
         _page.auto_fetch_moneydj = _real_fetch
+        _page.search_funds = _real_search
         _sess.friendly_error = _real_friendly
+        if state_out is not None:
+            state_out.clear()
+            state_out.update(_rec.session_state)
     return _rec.parts
 
 
@@ -769,13 +901,30 @@ GREY_UNITS: tuple[str, ...] = (
 #:    （`_BATCH_UNPARSED_MISSING`）—— 兩者都是使用者**照著做真的能解決**的空狀態。
 #:    依既有處置（深度區 2026-09-06 離開時走的同一條路）：**參數化縮小，
 #:    不是把規則放寬** —— 批次改由 `tests/test_wf03_research_batch.py` 驗真內容。
-PENDING_NOTES: dict[str, str] = {
-    BLOCK_RESULTS: _RESULTS_PENDING_NOTE,
-}
-#: 仍然吃「內容還沒接上」灰態的單位 —— **只剩「搜尋結果」一個**。
-#: ⚠️ 深度區的六格自 2026-09-06 起、批次自 2026-09-07 起**不再**吃那一族：
-#:    它們的灰態理由來自資料本身 / 使用者的輸入，不是本頁的進度。
+#: ⚠️ **2026-09-08：這一族空了（狀態變更，不是漏刪）。**
+#:    搜尋結果是它最後一個成員；接上 `services.fund_search.search_funds` 之後，
+#:    它的空狀態理由變成 :data:`_RESULTS_EMPTY_MISSING`（**來自資料**：名錄回了空清單），
+#:    不再是「這一頁做到哪裡」。
+#:    ⛔ **空 dict 會讓 `test_every_grey_unit_is_grey_until_its_content_lands`
+#:    變成零參數的死測試**，所以那一條**沒有留著空轉** —— 它已依自己 docstring 寫的
+#:    處置改寫成 :func:`test_no_block_still_explains_itself_with_this_pages_progress`，
+#:    驗的是「這一族真的空了、而且畫面上沒有進度式的措辭」。
+#:    **這不是放寬**：舊條驗「還沒接上的那幾塊有沒有誠實留灰」，新條驗「已經沒有
+#:    任何一塊還沒接上」，**後者比前者強**（它連「悄悄把一塊退回灰態」都會抓到）。
+PENDING_NOTES: dict[str, str] = {}
+#: 仍然吃「內容還沒接上」灰態的單位 —— **一個都沒有了**。
+#: ⚠️ 深度區的六格自 2026-09-06 起、批次自 2026-09-07 起、搜尋結果自 2026-09-08 起
+#:    **都不再**吃那一族：它們的灰／空理由來自資料本身或使用者的輸入。
 PENDING_UNITS: tuple[str, ...] = tuple(PENDING_NOTES)
+
+#: 本頁**現行**所有「沒有內容時要說的話」，每一句都必須不一樣（:func:`test_the_greys_on_this_page_are_not_one_recycled_sentence`）。
+#: ⚠️ 它取代了舊的 `PENDING_NOTES` 當那條規則的主詞 —— **句子只增不減**。
+LIVE_EMPTY_NOTES: dict[str, str] = {
+    "搜尋結果（名錄沒回候選）": _RESULTS_EMPTY_MISSING,
+    "深度區（還沒選定）": _NOT_SELECTED_MISSING,
+    "批次（還沒貼代碼）": _BATCH_EMPTY_MISSING,
+    "批次（貼了但認不得）": _BATCH_UNPARSED_MISSING,
+}
 
 
 #: 深度區的六個單位（三張卡 ＋ 兩張大表 ＋ 來源標註）。
@@ -800,6 +949,13 @@ DEEP_UNITS: tuple[str, ...] = (
 #:    **真的有效**的指路換成一則**已知無效**的。批次的指路改由
 #:    `tests/test_wf03_research_batch.py::test_the_batch_pointer_is_the_paste_box` 驗，
 #:    而且**驗得比本條嚴**（它連「指到的欄位在畫面上真的存在」都驗）。
+#: ⚠️ **2026-09-08：`PENDING_UNITS` 空了之後，本清單剩下純深度區的五格**
+#:    （狀態變更，不是漏刪）。**後果要講明，不要讓下一個人以為射程沒變**：
+#:    使用這個清單的 :func:`test_every_grey_unit_says_where_to_look` 現在
+#:    **只在「已選定一檔」的處境下**生效 —— 沒選定時深度區根本不畫這五格
+#:    （那是線框「選定後展開」的 gate，見被測檔 `_render_deep_dive()`）。
+#:    「搜尋結果」的指路改由 :func:`test_the_pending_pointer_is_a_place_not_a_status_sentence`
+#:    與 :func:`test_the_empty_results_state_carries_all_three_elements` 驗。
 GREY_ON_BLANK: tuple[str, ...] = PENDING_UNITS + DEEP_DIVE_CARDS + DEEP_DIVE_TABLES
 
 #: 一份「已送出」的查詢。形狀就是 `_normalise_query()` 的回傳值。
@@ -946,7 +1102,12 @@ def test_deep_dive_keeps_the_five_blocks_and_the_source_annotation():
         f"深度區的大表與線框不符：{DEEP_DIVE_TABLES}")
     assert DEEP_DIVE_PROVENANCE == "資料來源與抓取時間", (
         f"來源標註與線框不符：{DEEP_DIVE_PROVENANCE!r}")
-    _seg = _segments(_render(applied=FAKE_QUERY))
+    # ⚠️ **2026-09-08 起要先「選定一檔」才畫得出這六段（狀態變更，不是漏刪）** ——
+    #    那是線框「選定後展開」的 gate。**規則一個字沒放寬**：六段照樣一段都不准少，
+    #    只是換到 gate 打開之後才驗。gate **關著**的那一半由
+    #    :func:`test_the_deep_dive_does_not_fetch_until_a_fund_is_selected` 與
+    #    :func:`test_the_locked_deep_dive_says_how_to_unlock_it` 各驗一半。
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE))
     for _name in DEEP_DIVE_CARDS + DEEP_DIVE_TABLES + (DEEP_DIVE_PROVENANCE,):
         assert _name in _seg, (
             f"深度區少了「{_name}」這一段。現有單位：{list(_seg)}")
@@ -1193,37 +1354,59 @@ def test_downstream_reads_the_applied_query_not_the_widget_values():
 # 灰態：八個單位各自誠實
 # ══════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("unit", PENDING_UNITS)
-def test_every_grey_unit_is_grey_until_its_content_lands(unit: str):
-    """送出搜尋、但內容還沒接上 → 每一個單位**各自**要有灰態記號與理由。
+#: 「這一頁做到哪裡」這一族的措辭 —— **本頁一句都不准再出現**。
+#: ⚠️ 這是一份**黑名單**，黑名單結構上抓不到名單外的第 N+1 個寫法
+#:    （同 :data:`_PINNED_FAKE_VALUES` 的自陳）。它守的是「**退回**舊寫法」，
+#:    不是「所有可能的進度式措辭」。真正的主力是下面第一條 `PENDING_NOTES == {}`。
+_PROGRESS_EXCUSES: tuple[str, ...] = (
+    "本頁分批上線", "還沒有接上", "還沒接上", "本批", "下一批", "尚未實作",
+)
 
-    ⚠️ **斷言的單位是「一段」或「一張卡」，不是整頁，也不是整塊。**
-    ② 的初版以「一級區塊」為單位，突變「只拿掉其中一塊的灰態」**沒有轉紅**
-    （同一段裡別張卡的 ⬜ 替它通過了）—— 粒度因此下降。詳見 :func:`_units` 的長註。
 
-    ⚠️ ~~**下一批把真內容接上時，這條會轉紅 —— 那是預期的。**~~
-    → **2026-09-06 已發生，這是狀態更新不是漏刪**：深度區六格接上真取數之後
-    本條對它們**全部轉紅**（它們不再印 `_PENDING_NOTE`）。
-    **依它自己寫的處置照做了**：參數化由八個單位收成 :data:`PENDING_UNITS` 兩個，
-    深度區改由
-    :func:`test_a_deep_unit_that_has_data_shows_it_and_one_that_has_none_stays_grey`
-    等條**驗真內容**，**不是**把本條放寬成「有東西就好」。
+def test_no_block_still_explains_itself_with_this_pages_progress():
+    """本頁**沒有任何一塊**還在拿「這一頁做到哪裡」當「為什麼沒有內容」。
+
+    ## 這一條是誰的接班人，以及為什麼不是放寬
+
+    ~~`test_every_grey_unit_is_grey_until_its_content_lands`~~
+    （逐一驗 :data:`PENDING_UNITS` 裡每個單位有沒有誠實留灰）
+    **2026-09-08 起沒有參數可以跑了** —— 它的最後一個成員「搜尋結果」
+    在同一批接上了 `services.fund_search.search_funds`。
+    一個零參數的 parametrize **會靜靜地通過**，那是本 repo 反覆記載的
+    「規則對空氣生效還天天綠」。
+
+    **舊條自己寫的處置逐字是**：「屆時請把它改成『真內容放行』，**不要把它放寬**」。
+    照做的結果就是本條 —— 而且它**比舊條強**：
+      · 舊條問「**還沒接上的那幾塊**有沒有誠實留灰」（漏掉的塊它看不到）；
+      · 本條問「**還有沒有塊還沒接上**」（多一塊退回灰態，它當場紅）。
+    真內容那一半沒有消失，散在各自的守衛裡：搜尋結果由
+    :func:`test_the_results_block_lists_the_candidates_the_service_returned` 等條，
+    深度區由 :func:`test_a_deep_unit_that_has_data_shows_it_and_one_that_has_none_stays_grey`，
+    批次由 `tests/test_wf03_research_batch.py`。
+
+    ## 兩條斷言，各守一半
+
+    1. **`PENDING_NOTES == {}`** —— 有人新增一個「內容還沒接上」的常數並登記進來，
+       本條當場紅。這一半是**結構性**的，不靠字表。
+    2. **畫面上不得出現進度式措辭**（:data:`_PROGRESS_EXCUSES`）——
+       擋的是「不登記、直接把句子寫進渲染函式」那條繞道。
+       ⚠️ 這一半是黑名單，**只擋得住列出來的那幾個寫法**，照實寫在這裡。
     """
-    _seg = _segments(_render(applied=FAKE_QUERY))
-    _body = "\n".join(_seg.get(unit, []))
-    assert _body.strip(), f"單位「{unit}」有標題但沒有任何內容 —— 那是空占位。"
-    assert NOT_READY_MARK in _body, (
-        f"單位「{unit}」沒有灰態記號 {NOT_READY_MARK!r} —— "
-        "內容還沒接上就要誠實留灰，不得空著也不得填示意值（§1）。\n" + _body)
-    # ⚠️ 驗的是**這個單位自己那一句**，不是「頁面上有出現某句共用的話」。
-    #    後者在兩塊理由對調時不會轉紅（突變 P2 實測）。
-    assert PENDING_NOTES[unit] in _body, (
-        f"單位「{unit}」的灰態沒說**它自己**「為什麼沒有」。\n" + _body)
-    _others = [_n for _u, _n in PENDING_NOTES.items() if _u != unit]
-    for _other in _others:
-        assert _other not in _body, (
-            f"單位「{unit}」印的是**別一塊**的理由 —— 兩塊卡住的原因不同，"
-            "串到一起會讓使用者以為它們等的是同一件事。\n" + _body)
+    assert PENDING_NOTES == {}, (
+        "有單位回到了「這一頁做到哪裡」那一族的灰態："
+        f"{sorted(PENDING_NOTES)}\n"
+        "一句進度回報對使用者沒有下一步 —— §1 要的是「缺什麼、去哪補」。\n"
+        "若真的有一塊還沒接上，請給它一句**來自資料或使用者輸入**的理由，"
+        "而不是復活 `_PENDING_NOTE` 那一族。")
+    for _kw in (dict(applied=None),
+                dict(applied=FAKE_QUERY),
+                dict(applied=FAKE_QUERY, search=[]),
+                dict(applied=FAKE_QUERY, selected=SELECTED_CODE)):
+        _all = _text(_render(**_kw))
+        _hit = sorted({_e for _e in _PROGRESS_EXCUSES if _e in _all})
+        assert not _hit, (
+            f"（處境 {_kw}）畫面上出現了進度式措辭 {_hit} —— "
+            "使用者要的是「缺什麼、去哪補」，不是這一頁的開發進度。\n" + _all)
 
 
 def test_the_greys_on_this_page_are_not_one_recycled_sentence():
@@ -1253,11 +1436,12 @@ def test_the_greys_on_this_page_are_not_one_recycled_sentence():
       但 :func:`test_every_grey_unit_is_grey_until_its_content_lands` **轉紅** ——
       那條驗的是「這個單位有沒有印**它自己**那一句」。**兩條分工，缺一不可。**
     """
-    _NOTES = {
-        "搜尋結果（列不出候選）": _RESULTS_PENDING_NOTE,
-        "批次（還沒貼代碼）": _BATCH_EMPTY_MISSING,
-        "批次（貼了但認不得）": _BATCH_UNPARSED_MISSING,
-    }
+    # ⚠️ **2026-09-08 換主詞（狀態變更，不是漏刪）**：本條原本吃
+    #    ~~`_RESULTS_PENDING_NOTE`~~，而它在搜尋結果接上真取數之後**已不存在**
+    #    （它的灰換成一句**空狀態**：名錄回了空清單）。主詞改成
+    #    :data:`LIVE_EMPTY_NOTES` —— **本頁現行所有「沒有內容時要說的話」**。
+    #    **規則一個字沒放寬，涵蓋的句子從三句變成四句。**
+    _NOTES = dict(LIVE_EMPTY_NOTES)
     assert len(set(_NOTES.values())) == len(_NOTES), (
         "本頁的灰態理由有兩句以上是同一句 —— 它們卡住的原因不同"
         f"（{' / '.join(_NOTES)}），共用一句等於對使用者說謊。\n"
@@ -1270,12 +1454,21 @@ def test_the_greys_on_this_page_are_not_one_recycled_sentence():
     #    下面兩條各挑一個**真的只屬於那一塊**的詞釘住。
     assert "多代碼" in _BATCH_EMPTY_MISSING, (
         "批次「還沒貼」那一句沒有講到「多代碼」—— 它缺的就是多個代碼。")
-    assert "候選" in _RESULTS_PENDING_NOTE, (
-        "搜尋結果那一句沒有講到「候選」—— 它卡住的原因就是列不出候選清單。")
+    assert "名錄" in _RESULTS_EMPTY_MISSING, (
+        "搜尋結果那一句沒有講到「名錄」—— 它缺的就是名錄回來的候選清單。")
+    # ⛔ **這一條比錨定詞更要緊**：空清單的意思**必須**照抄 L2 那句實話，
+    #    不得被改寫成「查無此基金」——L1 把「真的沒有」與「來源全掛」都回成 `[]`。
+    assert EMPTY_MEANS_UNKNOWN in _RESULTS_EMPTY_MISSING, (
+        "搜尋結果的空狀態沒有照抄 `services.fund_search.EMPTY_MEANS_UNKNOWN` ——\n"
+        "本頁分不出「名錄裡真的沒有」與「名錄來源當下取不到」，"
+        "挑一種講就是替上游編了一個它沒說過的結論（§1）。")
+    assert "候選" in _NOT_SELECTED_MISSING and "一次只看一檔" in _NOT_SELECTED_MISSING, (
+        "深度區「還沒選定」那一句沒有講出它在等什麼 —— "
+        "使用者無從知道下一步是「去上面點一張卡」。")
     assert "英數字" in _BATCH_UNPARSED_MISSING, (
         "批次「認不得」那一句沒有講出代碼的形狀 —— "
         "使用者無從知道要把貼上的內容改成什麼樣子。")
-    assert "多代碼" not in _RESULTS_PENDING_NOTE and "候選" not in _BATCH_EMPTY_MISSING, (
+    assert "多代碼" not in _RESULTS_EMPTY_MISSING and "名錄" not in _BATCH_EMPTY_MISSING, (
         "兩句的內容被互換了（或串在一起）—— 錨定詞跑到另一塊去了。")
     for _unit, _note in _NOTES.items():
         assert _note.strip(), f"「{_unit}」的灰態理由是空的。"
@@ -1313,7 +1506,11 @@ def test_the_pending_pointer_is_a_place_not_a_status_sentence():
             "舊寫法「…→ 目前只有「X」是完整的」被包起來之後是一句**不可執行的指令**："
             "使用者照著回到搜尋條件再送一次，8 條灰態逐字完全相同（紅隊實跑）。")
     # 組成之後真的長成祈使句該有的樣子（不是只驗回傳值，也驗它進到畫面上的形狀）。
-    _seg = _segments(_render(applied=FAKE_QUERY))
+    # ⚠️ **2026-09-08 加 `search=[]`（狀態變更，不是放寬）**：搜尋結果接上真取數之後，
+    #    「有候選」時那一塊畫的是**卡片**（`STATE_OK`，沒有「請先到」），
+    #    指路只在**名錄沒有回傳候選**那條路上出現。本條驗的就是那一條路。
+    #    ⛔ 不要改成去別的區塊找那句話 —— 那會讓本條驗到的東西換了對象。
+    _seg = _segments(_render(applied=FAKE_QUERY, search=[]))
     _body = "\n".join(_seg.get(BLOCK_RESULTS, []))
     assert f"（請先到：{where_to_find('research')} → {BLOCK_FORM}）" in _body, (
         "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
@@ -1345,7 +1542,11 @@ def test_every_grey_unit_says_where_to_look(unit: str):
     ✅ 真的有效的是**空狀態**那一則（另由
     :func:`test_nothing_below_the_form_renders_before_a_search` 驗）。
     """
-    _seg = _segments(_render(applied=FAKE_QUERY))
+    # ⚠️ **2026-09-08 加上 `selected=`（狀態變更，不是放寬）**：本清單自這一天起
+    #    只剩深度區那五格，而深度區在「還沒選定」時**整段不畫**（線框的 gate）。
+    #    不給選定的話，這五條會全部紅在「單位不見了」——那是 gate 的正常行為，
+    #    不是指路不見了。**斷言本身一個字沒改。**
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE))
     _body = "\n".join(_seg.get(unit, []))
     assert _body.strip(), f"單位「{unit}」不見了。"
     assert where_to_find("research") in _body, (
@@ -1412,12 +1613,50 @@ def test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe(
     不會被讀成任何一檔基金的績效或分數，而線框正是用它來指定這個欄位收什麼形狀的字。
     故本條**不釘它**，被測檔的 `_CODE_PLACEHOLDER` 就地寫了同一段理由。
     ⛔ 若客戶認為連 placeholder 都不該出現一個像真的代碼，改那個常數即可。
+
+    ## ⚠️ 2026-09-08：本條曾在**一顆 commit 之內悄悄失去深度區的視野**（獨立稽核抓到）
+
+    ~~舊寫法只渲染**一種**情境：``_all = _text(_render(applied=FAKE_QUERY))``。~~
+    「選定後展開」的 gate 上線之後，**那一種情境不再包含深度區的六格**
+    （沒有選定 → 深度區整塊不渲染），於是 :data:`_PINNED_FAKE_VALUES` 這 10 個字面值
+    **在深度區完全無人看守**；`search=[]` 的空狀態那一屏同樣不在視野內。
+
+    **稽核用同一顆突變在兩個 commit 上跑，證明的就是這件事**
+    （把 ``Sharpe 0.81`` / ``+12.4%`` / 線框基金名種進 `_render_deep_dive` 的渲染路徑）：
+
+    ===========================  ==========  ================================
+    commit                        本條結果    為什麼
+    ===========================  ==========  ================================
+    gate 上線**前**               **RED**     那一種情境會渲染深度區
+    gate 上線**後**（舊寫法）      **GREEN**   深度區沒被渲染 → 守衛看不見
+    ===========================  ==========  ================================
+
+    ⛔ **綠的理由從「掃過了、沒有」變成「沒去掃」** —— 而本 PR 的描述當時還拿它當保證。
+    **這正是憲法 §8.2.A.1 驗證段 ④ 記的失效模式：同一把尺只往外用、不往內用** ——
+    同一輪新寫的 :func:`test_no_block_still_explains_itself_with_this_pages_progress`
+    **已經**用了多情境迴圈，卻沒有回頭把同一個 pattern 套到本條上。
+
+    **現行：五種情境各掃一次**，`gate 前／後`、`有候選／沒候選`、`灰態／有真值`
+    四個維度都覆蓋得到。⛔ **不要為了跑快一點把情境砍回一種** ——
+    砍掉哪一種，那一屏的示意值就從那一刻起無人看守，**而且畫面上看不出來**。
     """
-    _all = _text(_render(applied=FAKE_QUERY))
-    for _fake in _PINNED_FAKE_VALUES:
-        assert _fake not in _all, (
-            f"畫面上出現了線框的示意值 {_fake!r} —— "
-            "那不是資料，是線框用來示範版面的假數字。")
+    # ⚠️ 五種情境的分工，逐條寫明（少一種就是少一屏的視野）：
+    #   1. 還沒搜尋            → 空狀態三要素那一屏
+    #   2. 有候選、還沒選定     → 結果卡 ＋ 深度區的 gate 空狀態
+    #   3. 沒候選（名錄回空）   → 搜尋結果的空狀態 ＋ 逃生門那一屏
+    #   4. 已選定、取數全敗     → 深度區六格的**灰態**
+    #   5. 已選定、取數有真值   → 深度區六格的**有值**路徑（`st.metric` 那一半）
+    for _kw in (dict(applied=None),
+                dict(applied=FAKE_QUERY),
+                dict(applied=FAKE_QUERY, search=[]),
+                dict(applied=FAKE_QUERY, selected=SELECTED_CODE),
+                dict(applied=FAKE_QUERY, selected=SELECTED_CODE,
+                     result=_RICH_RESULT())):
+        _all = _text(_render(**_kw))
+        for _fake in _PINNED_FAKE_VALUES:
+            assert _fake not in _all, (
+                f"（處境 {_kw}）畫面上出現了線框的示意值 {_fake!r} —— "
+                "那不是資料，是線框用來示範版面的假數字。\n" + _all)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1563,7 +1802,7 @@ def test_the_deep_dive_fetches_exactly_once():
         + ", ".join(f"第 {_c.lineno} 行" for _c in _calls)
         + "\n六格共用同一次取數；多一個呼叫點 = 多一次往返 + 六格可能不同步。")
     # 渲染路徑上也真的只呼叫一次（AST 數的是「寫了幾處」，這裡數「跑了幾次」）。
-    _fetches = [_p for _p in _render(applied=FAKE_QUERY, result=_RICH_RESULT())
+    _fetches = [_p for _p in _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_RICH_RESULT())
                 if _p.startswith("[fetch] ")]
     assert len(_fetches) == 1, (
         f"一次渲染實際呼叫了 {len(_fetches)} 次取數：{_fetches}")
@@ -1589,7 +1828,7 @@ def test_a_missing_risk_metric_never_becomes_a_number(key: str, label: str, unit
     """
     _metrics = {**RISK_SENTINELS, key: None,
                 "risk_metric_meta": {key: {"reason": f"哨兵原因：{label} 樣本不足"}}}
-    _seg = _segments(_render(applied=FAKE_QUERY,
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE,
                              result=_RICH_RESULT(metrics=_metrics)))
     _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[2], []))
     assert _body.strip(), f"風險指標那一格不見了（{label}）。"
@@ -1620,7 +1859,7 @@ def test_a_missing_performance_period_is_named_not_zeroed(key: str, label: str):
     """
     _perf = {**PERF_SENTINELS}
     _perf.pop(key)
-    _seg = _segments(_render(applied=FAKE_QUERY, result=_RICH_RESULT(perf=_perf)))
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_RICH_RESULT(perf=_perf)))
     _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[1], []))
     _own = f"{PERF_SENTINELS[key]:,.2f}"
     assert _own not in _body, f"`perf[{key!r}]` 已拿掉，畫面上卻仍有 {_own}：\n{_body}"
@@ -1648,7 +1887,7 @@ def test_a_total_failure_shows_the_source_trace_and_never_paints_red():
     `system_error` 的第一個 render 是 `friendly_error(level="error")`，
     在 recorder 底下會錄成 `[error] …`。
     """
-    _parts = _render(applied=FAKE_QUERY, result=_BLANK_RESULT())
+    _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_BLANK_RESULT())
     _all = _text(_parts)
     assert "[error]" not in _all, (
         "取數全敗被畫成了系統紅燈 —— 但 L2 分不出「代碼打錯」與「來源當下不可用」，"
@@ -1666,8 +1905,17 @@ def test_a_total_failure_shows_the_source_trace_and_never_paints_red():
         "那是使用者唯一能自己判斷「打錯還是掛掉」的依據。\n" + _prov)
     # 三個 grey 卡片必須說出「兩種可能」而不是二選一
     _nav = "\n".join(_seg.get(DEEP_DIVE_CARDS[0], []))
-    assert "不是本頁查得到的基金代碼" in _nav and "當下不可用" in _nav, (
+    # ⚠️ **2026-09-08 只換了錨點字，規則一個字沒放寬**（狀態變更，不是漏刪）：
+    #    上一版的錨點是 ~~「不是本頁查得到的基金代碼」~~，而 `_BLAME_FREE` 那半句
+    #    在搜尋入口接上之後**變成假的**（「本頁只查得到代碼」不再為真），
+    #    被測檔已就地改寫。本條改抓兩個**只屬於其中一半**的詞，
+    #    並**多加一條**：那句話必須自陳「這兩種分不出來」——
+    #    只給兩種可能、卻讓使用者以為我們知道是哪一種，同樣是編的。
+    assert "認得的基金代碼" in _nav and "當下不可用" in _nav, (
         "全敗時的說明沒有同時給出兩種可能 —— 挑一種講就是編的。\n" + _nav)
+    assert "分不出來" in _nav, (
+        "全敗時的說明給了兩種可能，卻沒有說明「本頁分不出是哪一種」——\n"
+        "使用者會以為我們心裡有數只是沒講。\n" + _nav)
     # ⚠️ 2026-09-06 獨立稽核 應修 1：**不得把責任推給使用者**。
     #    舊文案「可能是代碼打錯」對一個打對了 secId 的人是假的 ——
     #    不能用的是本頁自己宣告的輸入格式，不是他的手指。
@@ -1687,7 +1935,7 @@ def test_a_real_exception_stays_a_real_exception():
 
     ⛔ 反向也要擋（下一條）：**不得為了塗紅而自己造一個例外**。
     """
-    _all = _text(_render(applied=FAKE_QUERY,
+    _all = _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE,
                          raiser=RuntimeError("哨兵：上游炸了")))
     assert "[error]" in _all, (
         "取數拋出的真例外沒有被畫成紅燈 —— 它被吞了或被降級成灰態（§1）。\n" + _all)
@@ -1755,7 +2003,7 @@ def test_a_grey_reason_is_never_an_exception_object():
     _poison = "<b>哨兵毒藥XYZ</b>"
     for _base in (_BLANK_RESULT(), _RICH_RESULT()):
         _base["error"] = _poison
-        _all = _text(_render(applied=FAKE_QUERY, result=_base))
+        _all = _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_base))
         assert _poison not in _all, (
             f'`result["error"]` 的內容被畫到畫面上了（狀態={_base.get("status")!r}）：\n'
             + _all)
@@ -1906,13 +2154,13 @@ def test_a_deep_unit_that_has_data_shows_it_and_one_that_has_none_stays_grey(uni
         DEEP_DIVE_TABLES[1]: "[dataframe]",
         DEEP_DIVE_PROVENANCE: "[dataframe]",
     }[unit]
-    _rich = _segments(_render(applied=FAKE_QUERY, result=_RICH_RESULT()))
+    _rich = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_RICH_RESULT()))
     _body = "\n".join(_rich.get(unit, []))
     assert _body.strip(), f"有料的時候「{unit}」這一格不見了。現有單位：{list(_rich)}"
     assert _need in _body, (
         f"「{unit}」有資料卻沒有把它畫出來（找不到 {_need!r}）：\n{_body}")
 
-    _blank = _segments(_render(applied=FAKE_QUERY, result=_BLANK_RESULT()))
+    _blank = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_BLANK_RESULT()))
     _bbody = "\n".join(_blank.get(unit, []))
     assert _bbody.strip(), f"沒料的時候「{unit}」這一格整個消失了 —— 應該留灰態。"
     if unit != DEEP_DIVE_PROVENANCE:      # 來源標註在全敗時要攤開證據，見 GREY_ON_BLANK
@@ -1959,7 +2207,7 @@ def test_the_dividend_currency_is_reconciled_not_guessed():
     """
     _mixed = _RICH_RESULT()
     _mixed["dividends"][0]["currency"] = "TWD"          # 兩列幣別不一致
-    _seg = _segments(_render(applied=FAKE_QUERY, result=_mixed))
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_mixed))
     _body = "\n".join(_seg.get(DEEP_DIVE_TABLES[1], []))
     assert CCY_UNKNOWN in _body, (
         "逐列幣別不一致，畫面卻沒有標示幣別無法宣告：\n" + _body)
@@ -1994,7 +2242,7 @@ def test_missing_upstream_reason_is_admitted_not_invented():
         f"缺值清單少了指標：{_missing} —— 缺一個就整個不提，等於靜默丟掉。")
 
     # (b) 渲染層：不得因此生出任何數字。
-    _seg = _segments(_render(applied=FAKE_QUERY,
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE,
                              result=_RICH_RESULT(metrics=_metrics)))
     _body = "\n".join(_seg.get(DEEP_DIVE_CARDS[2], []))
     assert NOT_READY_MARK in _body, "五個指標全缺卻不是灰態：\n" + _body
@@ -2031,7 +2279,7 @@ def test_an_unknown_currency_is_declared_unknown_not_filled_in(unit: str, ccy_fi
     else:
         for _d in _res["dividends"]:
             _d["currency"] = ""
-    _body = "\n".join(_segments(_render(applied=FAKE_QUERY, result=_res)).get(unit, []))
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res)).get(unit, []))
     assert _body.strip(), f"「{unit}」這一格不見了。"
     assert CCY_UNKNOWN in _body, (
         f"「{unit}」的幣別取不到，畫面卻沒有標示 {CCY_UNKNOWN!r}：\n{_body}")
@@ -2113,7 +2361,7 @@ def test_the_all_sources_failed_note_never_leaks_into_a_unit_whose_neighbours_ha
     """
     _res = _RICH_RESULT()
     _res[hollow] = {} if hollow in ("holdings", "perf", "metrics") else []
-    _seg = _segments(_render(applied=FAKE_QUERY, result=_res))
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res))
 
     # 前提：鄰居真的有料（否則這條測試會空轉，稽核組要求的「排除突變沒生效」）
     _keep_body = "\n".join(_seg.get(keep, []))
@@ -2155,7 +2403,7 @@ def test_the_dividend_currency_never_contradicts_the_fund_currency():
     _res["currency"] = "TWD"                     # 基金計價幣別（已被 _ensure_currency 修正）
     for _d in _res["dividends"]:
         _d["currency"] = "USD"                   # 逐列死預設
-    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    _all = _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res))
     assert "全部以 USD 計價" not in _all and "全部以 TWD 計價" not in _all, (
         "兩邊幣別不一致，本頁卻還是挑了一個宣告：\n" + _all)
     assert "資料疑義" in _all, (
@@ -2163,7 +2411,7 @@ def test_the_dividend_currency_never_contradicts_the_fund_currency():
 
     # 反向：兩邊一致時**要**敢宣告（否則「不知道」與「知道」又長得一樣了）
     _ok = _RICH_RESULT()                          # currency=USD、逐列 USD
-    assert "全部以 USD 計價" in _text(_render(applied=FAKE_QUERY, result=_ok)), (
+    assert "全部以 USD 計價" in _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_ok)), (
         "兩邊都說 USD，本頁卻不敢宣告 —— 那會讓「不知道」與「知道」長得一樣。")
 
 
@@ -2188,7 +2436,7 @@ def test_a_broken_series_index_is_red_not_grey():
     稽核組有一顆突變就是因為「方法存在、只是會拋」而其實沒生效，它自己撤回了。
     """
     _res = _RICH_RESULT(series=_broken_series())
-    _all = _text(_render(applied=FAKE_QUERY, result=_res))
+    _all = _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res))
     assert "[error]" in _all, (
         "索引壞掉（上游契約被破壞）被畫成灰態或被吞掉了 —— "
         "序列**有**帶回來，只是讀不出來，說「沒有帶回序列」是假的（§1 要求炸掉）。\n"
@@ -2216,7 +2464,7 @@ def test_the_failed_source_count_excludes_synthetic_markers():
         "來源數把合成標記也算進去了。fixture 的 source_trace 是 "
         "bank_platform（失敗）／morningstar（失敗）／nav_series（合成標記）"
         f"→ 應為 2，實得 {_failed_source_count(_blank)}。")
-    assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, result=_blank)), (
+    assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_blank)), (
         "畫面上的來源數與 `_failed_source_count()` 不一致。")
     # 去重
     _dupe = _BLANK_RESULT()
@@ -2379,7 +2627,7 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
             f"{_why}：`nav_history_merge` 被算進來源數了 —— "
             f"實際試過的取數來源仍是 2 個（bank_platform／morningstar），"
             f"實得 {_failed_source_count(_r)}。")
-        assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, result=_r)), (
+        assert "在 2 個來源" in _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_r)), (
             f"{_why}：畫面上的來源數被撐大了。")
 
     # ⭐ **期望值不是 2 的那一組**（2026-09-06 第二輪複驗建議，實測值得做）
@@ -2398,7 +2646,7 @@ def test_the_nav_history_merge_marker_never_counts_as_a_failed_source():
         "三個真來源（bank_platform／morningstar／yahoo_finance）全敗、外加一個合成標記 —— "
         f"應為 3，實得 {_failed_source_count(_three)}。\n"
         "⚠️ 若這裡回 2，多半是來源數被寫死或被夾住了，而不是合成標記被排除。")
-    assert "在 3 個來源" in _text(_render(applied=FAKE_QUERY, result=_three)), (
+    assert "在 3 個來源" in _text(_render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_three)), (
         "畫面上的來源數與 `_failed_source_count()` 不一致（期望「在 3 個來源」）。")
 
 
@@ -2571,10 +2819,451 @@ def test_a_nan_metric_is_treated_as_missing_not_as_a_value(key: str, label: str,
     assert _fmt(float("nan")) is None, "`_fmt()` 把 NaN 當成一個可顯示的數值。"
     assert _fmt(float("nan"), "%") is None, "帶單位時 NaN 的防線失效。"
     _metrics = {**RISK_SENTINELS, key: float("nan")}
-    _body = "\n".join(_segments(_render(applied=FAKE_QUERY,
+    _body = "\n".join(_segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE,
                                         result=_RICH_RESULT(metrics=_metrics))
                                 ).get(DEEP_DIVE_CARDS[2], []))
     assert "nan" not in _body.lower(), (
         f"`metrics[{key!r}]` 是 NaN，卻被畫成一個值：\n{_body}")
     assert re.search(re.escape(label) + r"\s*[-+]?\d", _body) is None, (
         f"「{label}」是 NaN（＝算不出來），畫面上卻給了它一個數字：\n{_body}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 搜尋結果：真候選、真欄位，缺什麼就說什麼（2026-09-08 接上 L2 之後）
+#
+# ⚠️ **本節的斷言一律以「上游給了什麼」為前提**，不以「畫面上有沒有東西」為前提。
+#    後者在「隨便印點什麼」的實作下也會通過 —— 那正是 §1 要防的。
+# ══════════════════════════════════════════════════════════════════
+
+#: `[button] <label> key=<key>` 這種錄音行 → key 清單（**有序**）。
+#: ⚠️ 只認**帶 key 的** `st.button` —— 沒有 key 的按鈕靠 (型別, label) 產生 ID，
+#:    那是 `tests/test_wf03_research_wiring.py` 第三條規則的射程，不在這裡重抄一份。
+def _button_keys(parts: list[str]) -> list[str]:
+    return [_p.rsplit(" key=", 1)[1] for _p in parts
+            if _p.startswith("[button] ") and " key=" in _p]
+
+
+#: 搜尋結果那一塊的錄音（一級區塊 `#### 搜尋結果` 底下那一段）。
+def _results_body(**kw: Any) -> str:
+    return "\n".join(_segments(_render(applied=FAKE_QUERY, **kw)).get(
+        BLOCK_RESULTS, []))
+
+
+def test_the_page_asks_the_search_service_not_the_repository():
+    """⑧ 的搜尋走 **L2** `services.fund_search`，不是 L1 `repositories.fund`。
+
+    ⚠️ 這一條是**正向錨點**，與既有的兩條反向禁令
+    （:func:`test_the_page_never_reaches_into_the_data_layer` /
+    :func:`test_the_page_only_talks_to_the_service_layer`）**一組的**：
+    只有反向禁令的話，把整段搜尋刪掉也會全綠。
+
+    ## 為什麼是 L2 而不是「再開一個 UI 直呼點」（總管 2026-09-08 裁決）
+
+    `CLAUDE.md §8.2.A.1` 的 **`EX-PASSTHRU-1`** 那一列自己寫著升級觸發條件：
+    「…**或本 fetcher 出現第二個 UI caller**（fan-out 一旦出現，(a) 的理由即失效，
+    **應比照 R16 上提 L2**）」。也就是說「直接多開一個 UI 呼叫點」那條路，
+    **憲法自己把它導向 L2** —— 兩條路是同一個答案。
+    ⛔ 舊 ③（`ui/helpers/fund_research/code_finder.py`）仍直呼 L1，**那是刻意保留**
+    （客戶明令不動線上舊 Tab），不是可以拿來當「所以 ⑧ 也可以直呼」的先例。
+    """
+    _mods = _imported_modules(_tree())
+    assert "services.fund_search" in _mods, (
+        "⑧ 沒有 import 搜尋的 L2 入口 `services.fund_search` —— "
+        "只有反向禁令的話，把整段搜尋刪掉也會全綠。")
+    assert not [_m for _m in _mods if _m.split(".")[0] == "repositories"], (
+        "⑧ 直接 import 了 L1 —— 那正是 `EX-PASSTHRU-1` 的升級觸發條件"
+        "（第二個 UI caller），總管 2026-09-08 已裁決走 L2。")
+
+
+def test_the_search_service_is_called_once_with_the_applied_term():
+    """搜尋**每次渲染只打一次**，而且吃的是**已送出**的查詢字串。
+
+    ⛔ 兩個各自獨立的失效模式，一條斷言擋不住兩個，所以這裡兩件都驗：
+      · 打兩次 ＝ 一次 rerun 兩趟往返（而 L1 的 FundClear 備援分支沒有快取）；
+      · 吃 widget 當下值 ＝ 使用者每打一個字就查一次（鐵則 02 的重點）。
+    """
+    _hits = [_p for _p in _render(applied=FAKE_QUERY) if _p.startswith("[search] ")]
+    assert _hits == [f"[search] {FAKE_QUERY['term']}"], (
+        f"搜尋的呼叫序列不是「剛好一次、且吃已送出的字串」：{_hits}")
+
+
+def test_the_results_block_lists_the_candidates_the_service_returned():
+    """L2 回幾列，畫面就列幾張卡 —— **名稱、代碼、淨值、日期、來源逐欄照抄**。
+
+    ⚠️ 每一個哨兵值都獨一無二，所以「某一張卡印了別一列的欄位」會被抓到；
+    共用同一個值的 fixture 底下那種錯**完全看不出來**。
+    """
+    _body = _results_body()
+    for _row in _FAKE_ROWS():
+        assert _row[KEY_NAME] in _body, (
+            f"候選「{_row[KEY_NAME]}」沒有出現在搜尋結果裡。\n" + _body)
+        assert _row[KEY_CODE] in _body, (
+            f"候選「{_row[KEY_NAME]}」的代碼沒有出現 —— "
+            "使用者要拿它去別的地方查，代碼是這張卡最實用的欄位。\n" + _body)
+    assert FAKE_ROW_FULL[KEY_NAV] in _body, "有淨值的那一列沒有把淨值印出來。"
+    assert FAKE_ROW_FULL[KEY_NAV_DATE] in _body, (
+        "有淨值日的那一列沒有把日期印出來 —— 一個沒有日期的淨值無法判斷新不新。")
+    # ⚠️ **2026-09-08 補：`總代理` 這一欄原本零守衛**（獨立稽核 S2）——
+    #    整段刪掉是 GREEN，而 `來源`／`淨值日` 刪掉都會 RED。
+    #    **PR 描述當時宣稱「逐欄照抄」六欄，守衛只驗到五欄** ——
+    #    過度宣稱的是描述，不是實作，故補守衛而不是改描述。
+    #    ⛔ 它不是可有可無的欄位：境外基金**買哪一檔要看總代理**
+    #    （同一檔基金不同總代理的手續費與可買通路不同），這正是線框把它畫在卡上的理由。
+    assert FAKE_ROW_FULL[KEY_AGENT] in _body, (
+        "有總代理的那一列沒有把總代理印出來 —— 那是使用者要拿去查通路的欄位。")
+    assert FAKE_ROW_FULL[KEY_SOURCE] in _body, (
+        "沒有標出這一列是哪個來源給的（§2.2 血緣）。")
+    # 反向：上游**沒給**總代理的那一列，那個標籤**整個不准出現**。
+    # ⚠️ **判準是「那一列自己的說明行裡有沒有這三個字」，不是字串樣式比對** ——
+    #    初版寫 ``"總代理 ·" not in _body``，突變（空值也硬畫標籤）**沒有轉紅**：
+    #    實際輸出是 ``總代理  · ``（f-string 一個空白 ＋ join 一個空白，**兩個**），
+    #    樣式差一個空白就漏掉。**猜輸出長什麼樣 ＝ 猜；抓那一列來看 ＝ 驗。**
+    _lines = _segments(_render(applied=FAKE_QUERY)).get(BLOCK_RESULTS, [])
+    _sparse = [_p for _p in _lines
+               if _p.startswith("[caption] ") and FAKE_ROW_SPARSE[KEY_CODE] in _p]
+    assert _sparse, (
+        f"找不到沒有總代理那一列（{FAKE_ROW_SPARSE[KEY_CODE]}）的說明行 —— "
+        "本段反向斷言會對空氣生效。\n" + "\n".join(_lines))
+    assert "總代理" not in _sparse[0], (
+        "上游沒給總代理的那一列還是印出了「總代理」標籤 —— "
+        "上游沒給的欄位整段不畫，佔位會讓每一列看起來一樣完整。\n" + _sparse[0])
+    # 順序：L2 回傳的順序就是畫面順序，不得重排（重排＝本頁自己發明了一套排名）
+    _i_a = _body.index(FAKE_ROW_FULL[KEY_NAME])
+    _i_b = _body.index(FAKE_ROW_SPARSE[KEY_NAME])
+    assert _i_a < _i_b, (
+        "畫面把 L2 回傳的順序重排了 —— 本頁沒有任何排序依據，"
+        "重排等於憑空發明一個排名（§1）。\n" + _body)
+
+
+def test_the_results_block_never_invents_a_nav_it_was_not_given():
+    """沒有淨值的那一列：**不准生一個數字**，而且要說出是這個來源沒給。
+
+    ⚠️ 這是本節最重要的一條：填一個看起來合理的淨值，使用者**完全看不出它是假的**
+    （`CLAUDE.md §1`）。留白又會讓他以為「這檔沒有淨值」——所以要**明說是來源沒給**。
+    """
+    _body = _results_body(search=[dict(FAKE_ROW_SPARSE)])
+    assert "這個來源沒有給淨值" in _body, (
+        "沒有淨值的那一列沒有說明原因 —— 一個孤零零的「—」讓使用者只能猜。\n" + _body)
+    # 上游沒給的欄位**整段不畫**，不用「未知」「N/A」去佔位
+    for _word in ("未知", "N/A", "無資料"):
+        assert f"淨值日 {_word}" not in _body and f"總代理 {_word}" not in _body, (
+            f"用「{_word}」去佔位了 —— 上游沒給的欄位整段不畫，"
+            "佔位會讓四段看起來一樣長、實際上有幾段是編的。\n" + _body)
+    # 純函式層：餵空值進去不得長出任何東西
+    assert _result_value(dict(FAKE_ROW_SPARSE)) == "", (
+        "`_result_value()` 在上游沒給淨值時生出了一個值。")
+    assert _row_str({}, KEY_NAV) == "" and _row_str({KEY_NAV: None}, KEY_NAV) == "", (
+        "`_row_str()` 把「沒有」變成了別的東西。")
+
+
+def test_a_row_with_no_name_is_declared_grey_not_numbered():
+    """連名稱與代碼都沒有的那一列 → **灰態 ＋ 說出上游沒給**，不得編一個名字。
+
+    ⛔ 「未知基金」「候選 3」這種標題看起來像一個真的名字，
+       使用者會以為那是基金的名字。**灰態 ＋ 一句實話**才是誠實的畫法。
+    """
+    _nameless = {KEY_NAME: "", KEY_CODE: "", KEY_AGENT: "", KEY_NAV: "",
+                 KEY_NAV_DATE: "", KEY_SOURCE: "TDCC-3-4"}
+    _card = _result_card(dict(_nameless))
+    assert _card["title"] == _NAMELESS_TITLE, (
+        f"沒有名稱的那一列被安上了標題 {_card['title']!r}。")
+    assert _card["state"] == STATE_NOT_READY, (
+        "沒有名稱的那一列不是灰態 —— 它看起來會像一張正常的卡。")
+    assert _card.get("where"), (
+        "灰卡沒有「去哪補」—— `render_state` 的 docstring 逐字："
+        "「沒有它，占位只是把『消失』換成『灰色的消失』。」")
+    # ⚠️ **這裡刻意讀整頁而不是 `_results_body()`**：灰態卡走
+    #    `state_card()` 的 `st.markdown(f"**{title}**")`，而那正是 `_units()`
+    #    的卡片 opener —— 它會**自己開一個新單位**，不會留在「搜尋結果」那一段裡。
+    #    （同理：兩列都沒有名稱時，畫面上會出現兩個同名單位，
+    #    `test_unit_names_are_unique` 會紅 —— 那是 `_segments()` 的已知性質，
+    #    不是本頁的 bug，所以本檔的 fixture 不製造那個處境。）
+    _all = _text(_render(applied=FAKE_QUERY, search=[dict(_nameless)]))
+    assert _NAMELESS_TITLE in _all and NOT_READY_MARK in _all, (
+        "畫面上沒有把那一列標成灰態。\n" + _all)
+
+
+def test_the_results_block_says_out_loud_that_it_has_no_performance():
+    """結果卡上**沒有績效**，而且這件事要說出來一次（不是每張卡各印一次）。
+
+    線框那三張示意卡有「+12.4%」「Sharpe 0.81」——**名錄搜尋根本不回傳績效**
+    （L1 那六個鍵裡沒有）。填一個數字是造假；留白會讓使用者以為「這檔沒有績效」。
+    ⚠️ 只印**一次**是刻意的：客戶原話「舊 UI 資訊太多」，
+    同一句話印九遍就是那個病。
+    """
+    _body = _results_body()
+    assert _RESULTS_NO_PERF_NOTE in _body, (
+        "沒有說明這份清單裡為什麼沒有績效。\n" + _body)
+    assert _body.count(_RESULTS_NO_PERF_NOTE) == 1, (
+        f"「這份清單只有淨值」印了 {_body.count(_RESULTS_NO_PERF_NOTE)} 次 —— "
+        "整塊講一次就夠，每張卡各印一次正是客戶說的「資訊太多」。\n" + _body)
+
+
+def test_truncating_the_candidate_list_is_disclosed_not_silent():
+    """只畫前 N 張卡時，**總筆數一定要講出來**。
+
+    ⛔ 默默截斷 ＝ 用一個版面決定去偽造一個資料事實（使用者會以為名錄裡就這幾檔）。
+    """
+    _many = [dict(FAKE_ROW_FULL, **{KEY_NAME: f"哨兵候選第{_i}檔",
+                                    KEY_CODE: f"SENTINELMANY{_i}"})
+             for _i in range(MAX_RESULT_CARDS + 3)]
+    _body = _results_body(search=_many)
+    assert str(len(_many)) in _body, (
+        f"截斷了卻沒有講出總筆數 {len(_many)}。\n" + _body)
+    _drawn = [_r for _r in _many if _r[KEY_NAME] in _body]
+    assert len(_drawn) == MAX_RESULT_CARDS, (
+        f"畫了 {len(_drawn)} 張卡，`MAX_RESULT_CARDS` 是 {MAX_RESULT_CARDS}。")
+    # 純函式層：講不講總數與畫幾張是兩件事，分開驗
+    assert "12" in _results_caption(12, 9) and "9" in _results_caption(12, 9)
+    assert "5" in _results_caption(5, 5), "沒有截斷時也要講總筆數。"
+
+
+def test_the_empty_results_state_never_claims_the_fund_does_not_exist():
+    """名錄回空清單 → 空狀態三要素 ＋ **照抄 L2 那句「分不出是哪一種」**。
+
+    ⛔ L1 的 `tdcc_search_fund` 把所有例外都吞掉（`_tdcc_get` 是
+       `except Exception: return []`，FundClear 備援是 `except Exception: pass`）——
+       **三個來源全掛與名錄裡真的沒有，回傳值一模一樣是 `[]`**。
+       寫「查無此基金」就是替上游編了一個它沒說過的結論（§1）。
+    """
+    _body = _results_body(search=[])
+    assert _RESULTS_EMPTY_TITLE in _body, "空狀態少了標題這一要素。\n" + _body
+    assert EMPTY_MEANS_UNKNOWN in _body, (
+        "空狀態沒有照抄 `services.fund_search.EMPTY_MEANS_UNKNOWN` —— "
+        "本頁分不出「真的沒有」與「來源取不到」。\n" + _body)
+    assert where_to_find("research") in _body, "空狀態少了「去哪補」這一要素。\n" + _body
+    for _lie in ("查無此基金", "查無結果", "這檔基金不存在", "沒有這檔"):
+        assert _lie not in _body, (
+            f"空狀態宣告了「{_lie}」—— 同一個空清單也可能是三個來源都掛了，"
+            "這句話對後者是假的（§1）。\n" + _body)
+
+
+def test_a_search_failure_is_a_red_frame_not_an_empty_result():
+    """搜尋**拋例外** → 真的紅框（`safe_section`），**不得**被畫成「沒有候選」。
+
+    ⚠️ 這一條與上一條是**一對的**：上一條要求空清單不准講成「不存在」，
+    本條要求**真的炸掉**不准講成「空清單」。兩者都是把「不知道」講成「知道」。
+    ⛔ 本頁**刻意沒有** try/except（`test_the_page_has_no_exception_handler_of_its_own`
+    在守），所以例外會一路走到 `safe_section()` —— 那才是有 traceback 的紅框。
+    """
+    _parts = _render(applied=FAKE_QUERY,
+                     search_raiser=RuntimeError("哨兵：搜尋炸了"))
+    _all = _text(_parts)
+    assert "[error]" in _all, (
+        "搜尋拋出的真例外沒有被畫成紅燈 —— 它被吞了或被降級成空狀態（§1）。\n" + _all)
+    assert "哨兵：搜尋炸了" in _all, (
+        "紅框沒有帶出真正的例外訊息 —— 那只是一個紅色的猜測。\n" + _all)
+    assert _RESULTS_EMPTY_TITLE not in _all, (
+        "搜尋炸了卻畫成「沒有列出任何候選」—— 那是把系統故障說成業務事實。\n" + _all)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 「選定後展開」—— 線框 Tab 03 的 gate（2026-09-08 恢復）
+#
+# ⚠️ **每一條都驗「取數有沒有真的被擋住」，不是「畫面上有沒有字」。**
+#    只驗畫面的話，「照樣取數、只是不顯示」會全綠 —— 那看起來一模一樣，
+#    但每一次 rerun 都在打上游。
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_deep_dive_does_not_fetch_until_a_fund_is_selected():
+    """⭐ **gate 的本體**：沒選定 → `auto_fetch_moneydj` **一次都不准被呼叫**。
+
+    ## 這一條取代了什麼（不是放寬，是換一個更嚴的判準）
+
+    2026-09-05 的骨架版**沒有** gate（那時沒有東西可以被選定，模組 docstring 就地登記過），
+    深度區直接拿**已送出的查詢字串**去取數。本輪接上結果卡之後，
+    舊登記自己寫的觸發條件成立，gate 照它說的恢復。
+
+    ⛔ **判準是呼叫次數，不是畫面**。「照樣 fetch、只是把結果藏起來」在任何
+       只看畫面的斷言底下都是全綠的，而它每一次 rerun 都在打上游。
+    """
+    _no_pick = [_p for _p in _render(applied=FAKE_QUERY) if _p.startswith("[fetch] ")]
+    assert _no_pick == [], (
+        f"還沒選定任何一檔，深度區就已經去取數了：{_no_pick}\n"
+        "線框 Tab 03 寫的是「**選定後**展開」——"
+        "沒有選定就不該有任何一次往返。")
+    _picked = [_p for _p in _render(applied=FAKE_QUERY, selected=SELECTED_CODE)
+               if _p.startswith("[fetch] ")]
+    assert _picked == [f"[fetch] {SELECTED_CODE}"], (
+        f"選定之後的取數不是「剛好一次、且吃選定的那一檔」：{_picked}\n"
+        "吃查詢字串而不是選定值 ＝ gate 是假的（畫面換了、資料沒換）。")
+
+
+def test_the_expanded_deep_dive_says_which_fund_it_is_showing():
+    """⭐ gate 打開之後，畫面上必須說出**現在展開的是哪一檔**。
+
+    ## 為什麼這是 §1 等級、不是文案潤飾
+
+    深度區六格的數字**全部是真的**，只是**不知道是誰的**。使用者從九張候選卡裡
+    點了其中一張、或換過關鍵字之後，下面那六格是哪一檔**完全看不出來** ——
+    `CLAUDE.md §1`：**錯誤的數字比沒有數字更危險**，而「對的數字掛錯基金」
+    就是錯誤的數字。被測檔 `_render_deep_dive()` 的註解自己就是這樣寫的。
+
+    ## ⚠️ 2026-09-08 補：這句話原本**零守衛**（獨立稽核 S1）
+
+    整行刪掉 → **GREEN**；`grep 目前展開 tests/` **0 命中**。
+    ⛔ 一句被程式碼註解與 PR 描述雙雙當成交付項的 §1 宣稱，**不能只靠自律**。
+
+    ## 判準刻意**不是**關鍵字黑名單
+
+    黑名單（「必須出現『目前展開』四個字」）只擋得住上一次那個寫法，換句話說就繞過。
+    本條釘的是**可驗證的內容**：深度區的 `st.caption` 裡要出現
+    (1) **選定的那一檔**的識別字、(2) 換一檔的**去處**（區塊名 ＋ 那顆按鈕的字）。
+
+    ⚠️ **只看 `[caption]` 行，不看整段** —— recorder 會把 `[fetch] <代碼>` 也記進
+    同一個單位，而那條線根本不是畫給使用者看的。
+
+    ~~拿整段做 containment 會**恆真**。~~
+    → **2026-09-08 就地收窄措辭（複驗組實測；有意識的更正，不是漏刪）**：
+    恆真的是**第一條斷言**（「選定值有沒有落在這一段裡」）—— 把 caption 整行刪掉，
+    `[fetch] SENTINELPICKED` 會替它通過。
+    ⛔ **但整條測試不會恆真**：第二條斷言要求**同一行**同時含 `BLOCK_RESULTS` 與
+    `SELECT_LABEL`，而 `[fetch]` 行兩個都沒有 → 整條仍會 RED（複驗組跑了整段版本的
+    變體，結果仍是 RED）。
+    **濾成 `[caption]` 仍然是正解**（它讓 RED 指向正確的原因，而不是靠第二條補救），
+    **被權衡掉的只有那句「恆真」的射程** —— 一條在講「不要過度宣稱」的守衛，
+    自己的 docstring 要先為真。
+    """
+    _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE))
+    _body = _seg.get(BLOCK_DEEP, [])
+    assert _body, f"深度區那一段不見了。現有單位：{list(_seg)}"
+    _caps = [_p for _p in _body if _p.startswith("[caption] ")]
+    assert _caps, (
+        "深度區一句 `st.caption` 都沒有 —— 「現在展開的是哪一檔」沒有落點。\n"
+        + "\n".join(_body))
+    _named = [_c for _c in _caps if SELECTED_CODE in _c]
+    assert _named, (
+        f"深度區沒有任何一句說明文字提到選定的那一檔（{SELECTED_CODE!r}）——\n"
+        "六格的數字都是真的，只是使用者不知道是誰的（§1）。\n"
+        + "\n".join(_caps))
+    # 它同時要給出「換一檔」的去處，否則使用者只知道是誰、不知道怎麼換
+    assert any(BLOCK_RESULTS in _c and SELECT_LABEL in _c for _c in _named), (
+        f"說出了是哪一檔，卻沒說怎麼換 —— 應指回「{BLOCK_RESULTS}」的"
+        f"「{SELECT_LABEL}」。\n" + "\n".join(_named))
+    # 反向：它講的必須是**選定值**，不是查詢字串（兩者在本檔刻意不相等）
+    assert not any(FAKE_QUERY["term"] in _c and SELECTED_CODE not in _c
+                   for _c in _caps), (
+        "深度區的說明文字報的是**查詢字串**而不是選定的那一檔 —— "
+        "那會讓使用者以為看到的是他打的那一串。\n" + "\n".join(_caps))
+
+
+def test_the_locked_deep_dive_says_how_to_unlock_it():
+    """gate 關著時 → 空狀態三要素，而且「去哪補」指回**搜尋結果**。
+
+    ⚠️ 指回搜尋條件是**錯的**：使用者已經搜尋過了，他缺的是「點一張卡」。
+    這是本頁少數幾則**照著做真的有效**的指路之一，不要把它換成那族
+    「有效性有限」的（見 `_pending_where()` 的 docstring）。
+    """
+    _seg = _segments(_render(applied=FAKE_QUERY))
+    _body = "\n".join(_seg.get(BLOCK_DEEP, []))
+    assert _NOT_SELECTED_TITLE in _body, "gate 關著卻沒有標題。\n" + _body
+    assert _NOT_SELECTED_MISSING in _body, "gate 關著卻沒說在等什麼。\n" + _body
+    assert f"{where_to_find('research')} → {BLOCK_RESULTS}" in _body, (
+        "「去哪補」沒有指回搜尋結果 —— 使用者已經搜尋過了，"
+        "叫他回搜尋條件再打一次是一則無效的指路。\n" + _body)
+    # 深度區的六格一格都不准畫（畫了就等於 gate 只是視覺上的）
+    for _unit in DEEP_UNITS:
+        assert _unit not in _seg, (
+            f"gate 關著，深度區的「{_unit}」卻還是畫出來了。現有單位：{list(_seg)}")
+
+
+def test_clicking_a_result_card_selects_that_fund():
+    """⭐ 按下某一張卡的「查這一檔」→ session 記住**那一列**的代碼。
+
+    ⚠️ **按 key 而不是按 `submitted`**：一次會畫最多九顆同樣 label 的按鈕，
+    `submitted=True` 會讓九顆同時回 True —— 那不是任何使用者做得到的事，
+    而且「哪一顆被按 → 選定哪一檔」正是本條要驗的東西。
+    """
+    _keys = _button_keys(_render(applied=FAKE_QUERY))
+    _picks = [_k for _k in _keys if _k.startswith("v03_pick_")]
+    assert len(_picks) == len(_FAKE_ROWS()), (
+        f"「{SELECT_LABEL}」的按鈕數 {len(_picks)} 與候選數不符：{_picks}")
+    _state: dict = {}
+    _render(applied=FAKE_QUERY, clicked={_picks[1]}, state_out=_state)
+    assert _state.get("v03_research_selected_fund") == FAKE_ROW_SPARSE[KEY_CODE], (
+        "按了第二張卡，選定的卻不是第二列那一檔 —— "
+        f"session 是 {_state.get('v03_research_selected_fund')!r}。")
+    _state.clear()
+    _render(applied=FAKE_QUERY, clicked={_picks[0]}, state_out=_state)
+    assert _state.get("v03_research_selected_fund") == FAKE_ROW_FULL[KEY_CODE]
+
+
+def test_every_pick_button_has_its_own_key_in_the_v03_namespace():
+    """每一顆按鈕的 key **兩兩不同**，而且都在 `v03_` 命名空間裡。
+
+    ## 為什麼要在**行為層**驗這件事
+
+    `tests/test_wf03_research_wiring.py` 的靜態掃描**只認字面值 key**
+    （它自己的「看不到的形態」段就寫著），而這一頁的按鈕 key 是**逐列動態組出來**的
+    —— 那條規則結構上看不到它們。
+
+    ⛔ 撞 key 在 Streamlit 是 `StreamlitDuplicateElementId`，
+       而 `app.py` 的分頁 body 會把它接住畫成紅框、**`at.exception` 仍然是空的**
+       （本檔開頭那段長註已記載）—— 也就是說 AppTest 也看不到。
+       **這一條是那個洞在 ⑧ 這一頁上唯一的守衛。**
+    """
+    _dupe = [dict(FAKE_ROW_FULL), dict(FAKE_ROW_FULL)]   # 兩列一模一樣
+    for _label, _search in (("一般", _SENTINEL), ("兩列完全相同", _dupe)):
+        _keys = _button_keys(_render(applied=FAKE_QUERY, search=_search))
+        assert _keys, f"（{_label}）一顆帶 key 的按鈕都沒錄到 —— 本條會變成假守衛。"
+        _bad = sorted(_k for _k in _keys if not _k.startswith("v03_"))
+        assert not _bad, (
+            f"（{_label}）有按鈕的 key 不在 `v03_` 命名空間內：{_bad}\n"
+            "新舊 ③ 在同一次 `st.tabs` run 裡同時渲染，key 撞上 ＝ 整個 App 當場崩潰。")
+        assert len(set(_keys)) == len(_keys), (
+            f"（{_label}）按鈕 key 重複了：{_keys}\n"
+            "`_pick_token()` 含序號正是為了擋這個 —— 兩列代碼相同時它必須仍然唯一。")
+    # 純函式層：同樣的兩列，token 也必須不同
+    assert _pick_token(dict(FAKE_ROW_FULL), 0) != _pick_token(dict(FAKE_ROW_FULL), 1)
+    # 連代碼與名稱都空的兩列（`re.sub` 之後是空字串）同樣不准撞
+    assert _pick_token({}, 0) != _pick_token({}, 1)
+
+
+def test_the_escape_hatch_lets_a_known_code_through_when_the_directory_has_none():
+    """⭐ 名錄查不到候選時，使用者**仍然到得了**深度區（`DIRECT_LABEL`）。
+
+    ⛔ **拿掉這顆按鈕是功能退化，不是「gate 做得比較嚴」**：一個手上就有完整代碼
+       或 MoneyDJ 網址、但那串字不在 TDCC 名錄裡的使用者（保單商代碼、境內基金…），
+       在新頁上會**完全到不了**深度區 —— 而舊 ③ 支援這條路。
+    ⚠️ 它仍然是 gate：使用者要**明示**「就用我打的這一串」，
+       不是由本頁偷偷替他決定。
+    """
+    _keys = _button_keys(_render(applied=FAKE_QUERY, search=[]))
+    assert "v03_use_raw_term" in _keys, (
+        f"名錄沒有候選時找不到「{DIRECT_LABEL}」那顆按鈕 —— "
+        "手上有完整代碼的使用者到不了深度區。\n" + str(_keys))
+    _state: dict = {}
+    _render(applied=FAKE_QUERY, search=[], clicked={"v03_use_raw_term"},
+            state_out=_state)
+    assert _state.get("v03_research_selected_fund") == FAKE_QUERY["term"], (
+        "按下逃生門之後，選定的不是使用者原封輸入的那一串 —— "
+        f"session 是 {_state.get('v03_research_selected_fund')!r}。")
+    # 已經選定之後，這顆按鈕不該再出現（那一塊已經展開了）
+    _after = _button_keys(_render(applied=FAKE_QUERY, search=[],
+                                  selected=SELECTED_CODE))
+    assert "v03_use_raw_term" not in _after, (
+        "已經展開了還畫著逃生門 —— 那是鐵則 04 要禁的冗餘占位。")
+
+
+def test_submitting_a_new_search_drops_the_previous_selection():
+    """⭐ 送出**新的**查詢 → 舊的選定作廢。
+
+    ⛔ 不清的話：使用者換了關鍵字，深度區還停在上一次選的**另一檔**上，
+       而畫面上**沒有任何跡象**。那比顯示過期資料更糟 ——
+       §2.4 允許留著過期資料**但必須帶旗標**，而這裡連旗標都給不出來
+       （它不是「舊的同一檔」，是完全另一檔）。
+    ⚠️ `clicked=set()` ＝ **一顆按鈕都沒按**。不給它的話，recorder 會讓
+       `st.button` 跟著 `submitted=True` 一起回 True，九顆卡片鈕同時「被按」，
+       送出之後又立刻把選定寫回去 —— 本條就驗不到東西了。
+    """
+    _state: dict = {}
+    _render(applied=FAKE_QUERY, selected=SELECTED_CODE, submitted=True,
+            clicked=set(), widget={_LABEL_TERM: "另一個哨兵關鍵字"},
+            state_out=_state)
+    assert _state.get("v03_research_selected_fund") is None, (
+        "送出新查詢之後，上一次選定的那一檔還留著："
+        f"{_state.get('v03_research_selected_fund')!r}\n"
+        "深度區會停在一檔與這次查詢無關的基金上，而畫面上沒有任何跡象。")
+    assert (_state.get("v03_research_applied_query") or {}).get("term") \
+        == "另一個哨兵關鍵字", (
+        "送出之後已套用查詢沒有換成新的 —— 那 gate 清掉選定就沒有意義了。")
