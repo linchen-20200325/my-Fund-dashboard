@@ -394,6 +394,59 @@ def test_the_conclusion_layer_draws_nothing_through_the_shared_helpers():
         + "\n⛔ 那會讓「放在閘門前」重新引發重複 element ID 的碰撞。")
 
 
+def test_the_per_fund_number_is_gated_but_our_total_is_not():
+    """⭐ **本批賴以成立的那個事實，用機器釘住 —— 因為它已經被講反過兩次。**
+
+    ⛔ **「⑥ 沒有配息金額」是假的**：逐檔的月配息 TWD 早就存在
+    （`checkup._compute_fund_health_kpis` → `_render_fund_health_card` 無條件渲染），
+    而且吃的就是使用者各檔真實 `invest_twd`。本檔 2026-09-07 已經就地更正過同一個誤解。
+
+    ✅ **成立的是另外兩件事，本條各釘一半**：
+
+    1. **那個逐檔數字被閘門關著** —— `render_fund_checkup` 的呼叫點必須落在
+       `_render_delegated_sections` 裡（那裡有 Checkbox Gate，預設不勾）。
+    2. **我們這句合計沒有被關著** —— `_render_conclusion` 必須在
+       `render_holdings_health` 裡、且排在 `_render_delegated_sections` **之前**。
+
+    ⛔ **哪天有人把 `render_fund_checkup` 搬到閘門外，本條轉紅** —— 那一刻起
+       「使用者看不到逐檔月配息」不再成立，這一層的說明文字**必須跟著改**，
+       而不是讓一句在寫下當天為真的話安靜地變成假的。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _fns = {_n.name: _n for _n in ast.walk(_tree) if isinstance(_n, ast.FunctionDef)}
+
+    # ── 一半：逐檔那個數字只能在委派區（＝閘門後）被畫出來 ──────────
+    _hosts = [_name for _name, _fn in _fns.items()
+              for _c in ast.walk(_fn)
+              if isinstance(_c, ast.Call) and isinstance(_c.func, ast.Name)
+              and _c.func.id == "render_fund_checkup"]
+    assert _hosts == ["_render_delegated_sections"], (
+        f"`render_fund_checkup` 的呼叫點跑出委派區了：{_hosts}\n"
+        "⛔ 那裡才有 Checkbox Gate。搬出去等於本層說明文字（「它被閘門關著」）當場變成假的。")
+
+    # ── 另一半：我們的合計在閘門**前面** ────────────────────────────
+    # ⚠️ **這一段的第一版是錯的，留痕**：原本寫成
+    #    `_c.func.id if isinstance(_c.func, ast.Name) else (_c.args[1].id …)`
+    #    —— 但 `safe_section("結論", _render_conclusion)` 的 `_c.func` **本來就是**
+    #    `ast.Name("safe_section")`，三元式因此**永遠走第一條**、`args` 那半從來沒被看過，
+    #    於是 `_render_conclusion` 整個消失、`_order` 只剩一個元素。
+    #    **本機實跑當場 `AssertionError`** —— 一條「順序守衛」看不到它要守的那一半，
+    #    正是本 repo 反覆吃虧的 fail-open。修法是**兩者都收**，不是二選一。
+    _entry = _fns["render_holdings_health"]
+    _order: list[str] = []
+    for _c in ast.walk(_entry):
+        if not isinstance(_c, ast.Call) or not isinstance(_c.func, ast.Name):
+            continue
+        _order.append(_c.func.id)
+        if len(_c.args) > 1 and isinstance(_c.args[1], ast.Name):
+            _order.append(_c.args[1].id)      # `safe_section(label, fn)` 的那個 fn
+    _order = [_x for _x in _order if _x in
+              ("_render_conclusion", "_render_delegated_sections")]
+    assert _order == ["_render_conclusion", "_render_delegated_sections"], (
+        f"結論層與委派區的先後不對：{_order}\n"
+        "結論必須在閘門**之前**畫 —— 那正是這一批要解決的問題（數字存在、但看不到）。")
+
+
 def test_the_conclusion_layer_never_reaches_the_fx_fetcher():
     """⛔ 結論層的呼叫閉包裡**不得出現 `checkup._safe_fx`** —— 那支會打 `get_latest_fx`。
 

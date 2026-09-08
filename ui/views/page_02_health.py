@@ -616,9 +616,46 @@ _VERDICT_ERROR: str = f"{NOT_READY_MARK} 判定時出錯（詳見系統紀錄）
 def _income_tally(funds: list[dict]) -> dict[str, Any]:
     """每月配息合計（TWD），**外加「沒算進去的各是什麼原因」**。
 
-    ⭐ **這是本批最高價值的一句話：客戶目前在三頁閘門前完全答不出「我每個月領多少」。**
-    盤點實測：「配息覆蓋」是**比率**、「吃本金警示」給**檔數**、⑧ 的配息表是
-    **每單位、原幣** —— 三頁閘門前**沒有任何一個 TWD 金額**。
+    ~~⭐ **這是本批最高價值的一句話：客戶目前在三頁閘門前完全答不出「我每個月領多少」。**~~
+    ~~盤點實測：「配息覆蓋」是**比率**、「吃本金警示」給**檔數**、⑧ 的配息表是~~
+    ~~**每單位、原幣** —— 三頁閘門前**沒有任何一個 TWD 金額**。~~
+
+    ⛔ **2026-09-08 就地更正：上段為假。有意識的更正，不是漏刪**
+    （決策者：**AI 總管**，依獨立稽核指出；**本組已逐條複驗，不是轉述**）。
+
+    **實測推翻它的兩條（指令與輸出見本輪 PR 描述）**：
+
+    - **逐檔的月配息 TWD 早就存在，而且吃的就是使用者各檔真實 `invest_twd`**：
+      `ui/helpers/fund/checkup.py::_compute_fund_health_kpis` 算它、同檔
+      `_render_fund_health_card` **無條件**渲染那格 KPI，`build_checkup_dataframe`
+      另有「原幣本金／月配息／年配息」三欄。
+    - **本檔早在 2026-09-07 就更正過同一個誤解** —— 見 :func:`_render_delegated_sections`
+      docstring 那段「⛔ 上面那句對 `render_fund_checkup` 是假的」。
+      **再講反一次，等於覆蓋掉 repo 已經查證過的事實。**
+
+    ✅ **真正成立的問題是兩個，而且是不同的兩個 —— 分開讀**：
+
+    1. **它被閘門關著。** ⑥ 對 `render_fund_checkup` 的呼叫住在
+       :func:`_render_delegated_sections` 的 Checkbox Gate **之後**（預設不勾），
+       所以使用者一打開 ⑥ **看不到**它。**存在 ≠ 看得到。**
+    2. **它是逐檔的，沒有「合計」。** 客戶問的是「**我每個月總共領多少**」。
+       實測全 repo，`monthly_div_twd` 只有逐檔消費者，**沒有任何地方把它加總**。
+       ⇒ **本函式新增的只有「加總」這一步，公式仍然完全走 SSOT。**
+
+    📌 **另一個相關、但不是同一個東西的量，據實登記（⛔ 不得互相冒充）**：
+    核准線框 `docs/wireframes/wireframe-macro-health.html` 的「大表區」5 格 KPI，
+    第 5 格逐字是「**累積 TWD 配息**」，而它**已經實作在舊 ②**
+    （`ui/tab_fund_grp_health.py::_render_health_summary`，
+    `total_twd = sum(r["累積 TWD 配息 🧮"] …)` ＋ `k5.metric(...)`）。
+    **那是「到今天為止實際領到的」；本函式算的是「依年化配息率推估的每月」——
+    兩個不同的數。** ⛔ **所以不得在任何地方寫「線框沒要求配息金額」，也不得宣稱
+    本批做到了線框那一格。**
+    **本批沒有接它，理由不是漏做**：它的列來自
+    `services/fund_row.py::process_one_fund`，該函式 docstring 自陳「**純 IO** + 計算」
+    （`auto_fetch_moneydj` / `get_latest_fx`）—— 在閘門前跑它等於把重取數搬到頁面入口；
+    而舊 ② 那份合計住在 `ui/tab_fund_grp_health.py`，本檔**禁止 import**
+    （`tests/test_wf02_health_skeleton.py::test_the_page_does_not_delegate_to_the_old_tab`）。
+    ⇒ **登記為缺口，不是宣稱不需要。**
 
     **數字從哪來（不是本檔算的）**
     ------------------------------
