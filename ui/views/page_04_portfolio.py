@@ -1181,6 +1181,13 @@ def _gap_action_text(summary: dict[str, Any]) -> str:
     _diff = summary.get("diff_pct")
     if _diff is None or not summary.get("is_amount_weighted"):
         return ""
+    # ⚠️ **往這個 try 裡面加東西之前先讀這一句**（2026-09-08 稽核登記）：
+    #    它的射程在建議 1 那一輪由 2 行擴大到 6 行，而 `except` 接的是
+    #    `TypeError / ValueError / OverflowError` —— **未來在這段裡寫出的真 bug
+    #    若剛好是這三種，會被靜默吞成「不講金額」**，畫面上看不出有東西壞了。
+    #    目前這段**只有純算術與格式化**，沒有業務判斷，所以可接受；
+    #    ⛔ 一旦要在這裡加會失敗的呼叫（取數、解析、查表），**請把它放在 try 外面**，
+    #    或替它單獨接一個更窄的 except，不要靠這一個把所有東西一起蓋掉（§1）。
     try:
         _diff = float(_diff)
         _total = float(summary.get("total_twd") or 0.0)

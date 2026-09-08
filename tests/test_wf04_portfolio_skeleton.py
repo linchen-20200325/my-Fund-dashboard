@@ -133,7 +133,28 @@ B  `test_the_pending_pointer_is_a_place_not_a_status_sentence`
 `_expected_pointer()` 的完整字串比對（由
 :func:`test_every_grey_unit_says_where_to_look` 逐單位跑）**接手了畫面形狀那一半**，
 但「`_pending_where()` 的回傳值結構」那一半**沒有接手者，因為對象不存在了**。
-✅ **同型的保護在另外兩頁仍然在**（`wf02` / `wf03` 各有自己的同名守衛）。
+~~✅ **同型的保護在另外兩頁仍然在**（`wf02` / `wf03` 各有自己的同名守衛）。~~
+⛔ **2026-09-08 更正：那句話對 `wf02` 是假的**（稽核指出，本組 AST 普查確認）。
+**全 `tests/` 只有 `tests/test_wf03_research_skeleton.py` 一個檔 import／呼叫
+`_pending_where`**（該檔 import 1 次、呼叫 2 次）；
+`tests/test_wf02_health_skeleton.py` **沒有任何 `*pending*` / `*pointer*` 測試**。
+
+⚠️ **而 ② 正好是最需要它的那一頁 —— 缺口長這樣，寫出來讓下一個人看得到**：
+`ui/views/page_02_health.py` 唯一的 caller 傳的是
+``_pending_where("下方「逐檔體檢表」可先逐檔看")``，實際渲染成::
+
+    （請先到：② 💊 持倉體檢 → 下方「逐檔體檢表」可先逐檔看）
+
+**尾巴那個「可先逐檔看」是述語**，正是被退役的那條守衛
+（判準：``<分頁路徑> → <區塊名>``，中間**不得夾述語**）會擋下的形狀 ——
+而 ② **一條守衛都沒有**。
+
+⛔ **這個缺口不是本 PR 造成的**：`ui/views/page_02_health.py` 在本 PR 內
+**byte-identical**，該缺口在本輪之前就存在。
+⛔ **本 PR 也刻意不去修 ②**（那是另一頁、屬另案，總管另派）——
+這裡只負責**把它登記成看得見的缺口**，因為本段自己就寫著
+「刪測試必須留對帳，不留就是靜默降低守備」。
+**一句安慰話會讓那個缺口從此沒有人再想起來。**
 
 ⭐ 本檔實測到的**全域守衛盲點**（登記給後人；不是本頁造成的）
 ------------------------------------------------------------
@@ -1331,9 +1352,14 @@ def test_the_mix_gap_direction_agrees_with_the_numbers_it_just_printed():
     """
     _body = _mix_body("priced")
     # 從畫面**讀回**現況核心、目標核心、以及差距那一行講的方向與差額。
-    _cur = re.search(r"核心 (\d+\.\d)%\u3000衛星", _body)
-    _tgt = re.search(r"目標\*\*\u3000核心 (\d+\.\d)%", _body)
-    _gap = re.search(r"核心比目標(多|少) (\d+\.\d)%", _body)
+    # ⚠️ **2026-09-08：小數位數不寫死**（稽核必修 A）。這三條**不是**本輪引進的，
+    #    但與 `test_the_money_and_the_percentage_are_two_views_of_one_number`
+    #    那一條是**同一個缺陷**，一併修：`_pct_text()` 的精度改成 `.0f` 或 `.2f` 時，
+    #    寫死 `\d+\.\d` 會讓比對**在 parse 就死掉**，紅在「讀不出三者之一」這種
+    #    **看不出真正原因**的地方 —— 而**程式碼其實是對的**。
+    _cur = re.search(r"核心 (\d+(?:\.\d+)?)%\u3000衛星", _body)
+    _tgt = re.search(r"目標\*\*\u3000核心 (\d+(?:\.\d+)?)%", _body)
+    _gap = re.search(r"核心比目標(多|少) (\d+(?:\.\d+)?)%", _body)
     assert _cur and _tgt and _gap, (
         f"「{BLOCK_MIX}」讀不出現況／目標／差距三者之一，無法對帳：\n{_body}")
     _cur_v, _tgt_v, _gap_v = float(_cur.group(1)), float(_tgt.group(1)), float(_gap.group(2))
@@ -1578,9 +1604,26 @@ def test_the_money_and_the_percentage_are_two_views_of_one_number():
 
     * **(a) 對未捨入的 SSOT `diff_pct` 精確對帳** —— 這一條才是「金額算得對不對」。
       容差 ±1 元，**這一次是真的只吃 `fmt_twd()` 的整數捨入**。
-    * **(b) 螢幕對螢幕的自我一致** —— 容差 ＝ `半個顯示步階 × 總投入`，
-      步階由 :func:`_display_pct_step` **從 `_pct_text()` 自己身上量出來**，
-      所以 `_pct_text` 改精度時本條**跟著對**而不是**跟著錯**。
+    * **(b) 螢幕對螢幕的自我一致** —— 容差 ＝ `半個顯示步階 × 總投入 ＋ 1 元`，
+      步階由 :func:`_display_pct_step` **從 `_pct_text()` 自己身上量出來**。
+      ⚠️ **`＋ 1 元` 是第二個誤差源**（`fmt_twd()` 的整數捨入），**不是放寬** ——
+      舊寫法把它當**下限**（`max(1.0, …)`），百分比那一項一變大就蓋不住；
+      本組 200,000 組隨機實測：舊寫法 **44 組假紅**，改成加項後 **0 組**。
+
+    ## ⚠️ 2026-09-08 再修一次：**「跟著對」原本做不到**（稽核必修 A）
+
+    本 docstring 上一版寫著「有人把 `_pct_text` 改成 `.0f` 或 `.2f`，容差會自動跟著變，
+    **不會變成一個過期的常數**」。⛔ **那句話當時做不到。**
+    :func:`_display_pct_step` 本身是對的（`.0f`/`.1f`/`.2f`/`.3f` 四種實測全對），
+    但**同一條測試裡的 parse 寫死了一位小數**（``(\d+\.\d)``），於是：
+
+    * `_pct_text` → `.2f`（畫面「少 13.00%」）→ **在 parse 就死**；
+    * `_pct_text` → `.0f`（畫面「少 13%」）→ **同樣在 parse 就死**。
+
+    **兩個方向都走不到容差那一行**，結果仍然是「**正確的程式碼被判紅**」，
+    而且紅在「讀不出百分比或金額」這種**看不出真正原因**的地方 ——
+    **那正是必修 1 本來要消滅的失效模式，在同一條測試裡復發了一次。**
+    → 改成 ``(\d+(?:\.\d+)?)``；本檔另外三處同型的寫死（方向那條）**一併修**。
 
     ⚠️ **就地登記 fixture 依賴（比照 `_PINNED_FAKE_VALUES` 的 `200,000` 那一則）**：
     (a) **不依賴** fixture 整不整除；(b) 的容差**會隨總投入等比放大**，
@@ -1596,7 +1639,8 @@ def test_the_money_and_the_percentage_are_two_views_of_one_number():
     _s = _summary_for(FAKE_HOLDINGS_PRICED, 75.0)
     _total = float(_s["total_twd"])
     _line = _mix_gap_paragraph("priced")
-    _pct = re.search(r"核心比目標(?:多|少) (\d+\.\d)%", _line)
+    # ⚠️ **小數位數不寫死**（稽核必修 A）—— 理由見上方 docstring 的「原本做不到」那段。
+    _pct = re.search(r"核心比目標(?:多|少) (\d+(?:\.\d+)?)%", _line)
     _amt = re.search(r"NT\$([\d,]+)", _line)
     assert _pct and _amt, (
         f"「{MIX_GAP_LABEL}」那一行讀不出百分比或金額，無法對帳：\n{_line}")
@@ -1609,7 +1653,12 @@ def test_the_money_and_the_percentage_are_two_views_of_one_number():
         f"總投入 {_total:,.0f} = {_exact:,}，畫面卻寫 {_got:,}。\n{_line}")
 
     # (b) 螢幕對螢幕 —— 容差由**顯示精度**推導（半個步階），不是常數。
-    _slack = max(1.0, _display_pct_step() / 2.0 / 100.0 * _total)
+    # ⚠️ **`+ 1.0` 不是「放寬」，是補上第二個誤差源**（稽核建議，本組重量後接受）：
+    #    畫面上的金額還吃了 `fmt_twd()` 自己的**整數捨入**（±0.5 元）。
+    #    舊寫法 `max(1.0, …)` 把 1 元當**下限**，百分比那一項一變大就**蓋不住**它 ——
+    #    本組 200,000 組隨機（總額 10^5~10^8）實測：舊寫法仍有 **44 組假紅**，
+    #    改成加項之後 **0 組**。**與必修 1 同型，只是小了五個數量級。**
+    _slack = _display_pct_step() / 2.0 / 100.0 * _total + 1.0
     _from_screen = float(_pct.group(1)) / 100.0 * _total
     assert abs(_got - _from_screen) <= _slack, (
         f"金額與**畫面上那個**百分比差得比顯示精度能解釋的還多："
