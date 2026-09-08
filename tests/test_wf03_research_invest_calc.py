@@ -40,9 +40,25 @@
    那是 `services/fund_service.py` 那一側的事。
 2. **不驗 `monthly_dividend_from_records` 算得對不對** —— 它有自己的守衛
    （`tests/test_monthly_dividend_units.py`）。本檔驗的是「**有沒有真的走它**」。
-3. **本地沒有 `streamlit` / `pandas` / `pytest`，本檔從未在真 pytest 下跑過**
+3. ~~**本地沒有 `streamlit` / `pandas` / `pytest`，本檔從未在真 pytest 下跑過**
    （見 PR 的自陳）。畫面層那幾條是靠 `tests/test_wf03_research_skeleton.py::_render`
-   這個既有 harness 跑的，**判定邏輯本地實跑過**，但那不是 pytest。
+   這個既有 harness 跑的，**判定邏輯本地實跑過**，但那不是 pytest。~~
+
+   → **2026-09-08 就地更正（有意識的更正，不是漏刪；由第五輪獨立稽核點名）：
+   前半句不成立，本檔已經在真 pytest 下跑過了。**
+
+   * **`pytest` 本地是有的**：`/root/.local/bin/pytest` 9.0.2（uv tool venv）。
+     當初只用**系統 `python3`** 試過一次 `import pytest` 就下了「沒有 pytest」這個結論
+     —— **一個直譯器的結果被寫成整個環境的事實**。
+   * **跑法**：streamlit 最小假件放 `PYTHONPATH`（**不進 repo**）＋ `--noconftest`
+     ＋ 系統 `site-packages`。本檔在此組合下 **242 passed / 1 failed**
+     （唯一那條紅是 `test_the_rate_lookup_still_asks_for_the_yf_code`，它要 `pandas`）。
+   * **仍然成立的那半邊**：`streamlit` / `pandas` 本地**確實**沒有，
+     完整套件（`tests/` 全部）本地**仍然**跑不起來，**全套的真憑據以 CI 為準**。
+
+   ⚠️ **這一則被留下來的原因值得記**：PR 描述裡我已經把這句話撤回了，
+   **但沒有回頭改程式碼裡的這一份** —— 而**下一個人是先讀 docstring 才讀 PR 的**。
+   「更正只寫在別的地方 ＝ 沒有更正」是本 repo 明文記載過的失效模式。
 """
 from __future__ import annotations
 
@@ -84,6 +100,11 @@ from ui.views.page_03_research import (  # noqa: E402
     CCY_UNKNOWN,
     DEEP_DIVE_INVEST,
     DEEP_DIVE_TABLES,
+    DIVIDEND_COLS,
+    GAP_AMOUNT,
+    GAP_AMOUNT_NEG,
+    GAP_NO_DATE,
+    GAP_NO_ROWS,
     INVEST_SUBMIT_LABEL,
     _ADR_SOURCE_LABELS,
     _INVEST_AMOUNT_KEY,
@@ -94,6 +115,7 @@ from ui.views.page_03_research import (  # noqa: E402
     _declared_currency,
     _dividend_caption,
     _dividend_rows,
+    _income_basis_gap,
     _invest_basis_note,
     _invest_compare,
     _invest_note_for,
@@ -1422,3 +1444,250 @@ def test_the_caption_still_flags_a_real_clash_after_the_alias_pass(fund_ccy, div
         f"基金 {fund_ccy!r} vs 逐筆 {div_ccy!r} 是**真的**幣別衝突，"
         f"配息表卻沒有標成資料疑義：\n{_cap}")
     assert "全部以" not in _cap, f"真衝突卻宣告了單一幣別：\n{_cap}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⛔ 2026-09-08 第六輪｜**第四個同頁矛盾**：表上畫著 N 筆，下面說「沒有紀錄」
+#
+# `_invest_basis_note` 的 `else` 分支原本**無條件**寫「這一檔沒有逐筆配息紀錄」，
+# 但走到那條路的真正條件是「**推不出最近一筆實際配息**」—— 那有四種成因，
+# 「沒有紀錄」只是其中**一種**。於是：
+#
+#     【配息紀錄】2 筆 · 全部以 USD 計價 …          ← 表照畫
+#     【投資試算】這一檔沒有逐筆配息紀錄，所以…      ← 同一個畫面說沒有
+#
+# ⚠️ 這是本 PR 第四次同型（B1 幣別命名空間 → 掛牌 vs 自算 → 幣別未知 vs CNY → 這個）。
+# ⛔ 修法**不是把那句話刪掉** —— 使用者需要知道為什麼算不出來；
+#    是**講對原因**，而且**四種成因四句話，不准用一句蓋住**。
+# ══════════════════════════════════════════════════════════════════
+
+#: 三種「有紀錄、但推不出最近一筆」的觸發。**每一種的成因都不一樣，畫面必須分開講。**
+_GAP_TRIGGERS: tuple[tuple[str, str, list[dict]], ...] = (
+    ("缺日期", GAP_NO_DATE, [
+        {"amount": SENT_DIV, "currency": "USD"},
+        {"amount": SENT_DIV, "currency": "USD"}]),
+    ("金額全 0", GAP_AMOUNT, [
+        {"date": "2026/08/15", "amount": 0.0, "currency": "USD"},
+        {"date": "2026/07/15", "amount": 0.0, "currency": "USD"}]),
+    ("金額全負", GAP_AMOUNT_NEG, [
+        {"date": "2026/08/15", "amount": -SENT_DIV, "currency": "USD"},
+        {"date": "2026/07/15", "amount": -SENT_DIV, "currency": "USD"}]),
+)
+
+
+@pytest.mark.parametrize("label, expect_gap, divs", _GAP_TRIGGERS)
+def test_the_page_never_says_there_are_no_dividend_records_while_the_table_shows_some(
+        label, expect_gap, divs):
+    """⭐ **畫面級**：配息表畫得出列的時候，投資試算不得說「這一檔沒有逐筆配息紀錄」。
+
+    ⚠️ 這一條驗的是**同一次渲染的兩塊**（不是兩個函式的回傳值）——
+    §1 的違憲點在於「**兩句都是本頁印的，而且互相矛盾**」，
+    只驗其中一塊看不出矛盾。
+    """
+    _res = _RICH_RESULT()
+    _res["currency"] = "USD"
+    _res["metrics"]["nav"] = SENT_NAV
+    _res["nav_latest"] = SENT_NAV
+    _res["moneydj_div_yield"] = SENT_ADR
+    _res["dividends"] = divs
+    _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res, fx=SENT_FX)
+    _seg = _segments(_parts)
+    _table = "\n".join(_seg.get(DEEP_DIVE_TABLES[1], []))
+    _invest = "\n".join(_seg.get(DEEP_DIVE_INVEST, []))
+    assert "筆 ·" in _table, (
+        f"前提垮了 —— {label}：配息表沒有畫出「N 筆」，這條測試就沒有在驗矛盾：\n{_table}")
+    assert "沒有逐筆配息紀錄" not in _invest, (
+        f"{label}：配息表畫著列，投資試算卻說「沒有逐筆配息紀錄」。\n"
+        f"【配息紀錄】{_table}\n【投資試算】{_invest}\n"
+        "⛔ 兩句都是本頁印的（§1：錯誤的說明比沒有說明更危險）。")
+
+
+def test_a_fund_with_truly_no_dividend_records_still_says_so():
+    """⛔ **正對照**：真的一列都沒有時，那句話**必須**還在。
+
+    沒有這一條，上一條可以用「把整句話刪掉」通過 —— 而刪掉之後使用者
+    **再也不知道為什麼算不出來**，那是另一種不誠實（總管：⛔ 不准刪掉了事）。
+    """
+    _res = _RICH_RESULT()
+    _res["currency"] = "USD"
+    _res["metrics"]["nav"] = SENT_NAV
+    _res["nav_latest"] = SENT_NAV
+    _res["moneydj_div_yield"] = SENT_ADR
+    _res["dividends"] = []
+    _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res, fx=SENT_FX)
+    _invest = "\n".join(_segments(_parts).get(DEEP_DIVE_INVEST, []))
+    assert "沒有逐筆配息紀錄" in _invest, (
+        f"真的沒有配息紀錄，畫面卻不講原因了：\n{_invest}")
+
+
+@pytest.mark.parametrize("label, expect_gap, divs", _GAP_TRIGGERS)
+def test_each_trigger_is_diagnosed_as_its_own_cause_not_one_blanket_excuse(
+        label, expect_gap, divs):
+    """⭐ **三種成因三句話** —— ⛔ 不准用一句藉口蓋住三個不同的原因（本 repo 鐵則）。
+
+    驗兩件事：(a) 判定拿到的是**它自己那一個** `GAP_*`；
+    (b) 那句話**指名**了卡住的是金額還是日期 —— 只說「算不出來」不算數。
+    """
+    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+            "moneydj_div_yield": SENT_ADR, "dividends": divs}
+    _gap, _n = _income_basis_gap(_res)
+    assert _gap == expect_gap, f"{label}：判定成 {_gap!r}，應為 {expect_gap!r}"
+    assert _n == len(_dividend_rows(_res)), (
+        f"{label}：說 {_n} 筆，配息表卻畫 {len(_dividend_rows(_res))} 筆 —— "
+        "兩個數字必須同源，否則就是換一個地方再矛盾一次")
+    _facts = estimate_monthly_income(_res, SENT_AMOUNT, fx_lookup=_fx)
+    _note = _invest_basis_note(_facts, _res)
+    _named = "日期" if expect_gap == GAP_NO_DATE else "金額"
+    assert _named in _note, (
+        f"{label}：那句話沒有指名卡住的是「{_named}」，等於用一句藉口蓋過去：\n{_note}")
+    assert str(_n) in _note, (
+        f"{label}：那句話沒有把「表上有 {_n} 筆」講出來 —— "
+        f"不講筆數就等於默認「沒有紀錄」：\n{_note}")
+
+
+def test_the_three_causes_do_not_share_one_sentence():
+    """⛔ 三種成因的那句話**必須兩兩不同** —— 一樣就是「一句蓋住三個」。"""
+    _notes = {}
+    for label, _gap, divs in _GAP_TRIGGERS:
+        _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+                "moneydj_div_yield": SENT_ADR, "dividends": divs}
+        _notes[label] = _invest_basis_note(
+            estimate_monthly_income(_res, SENT_AMOUNT, fx_lookup=_fx), _res)
+    assert len(set(_notes.values())) == len(_notes), (
+        "三種成因講出了同一句話：\n" + "\n".join(f"  {k}: {v}" for k, v in _notes.items()))
+
+
+def test_the_basis_note_is_wired_to_the_actual_result_not_left_at_its_default():
+    """⛔ **接線守衛**：production 呼叫點必須把 `result` 傳進去。
+
+    ⚠️ 這是 B3 那個病的同一種形狀：**邏輯對了但沒接線**
+    （`_render_invest_calc` 當初就是從來沒拿到 `_blank`）。
+    `_invest_basis_note` 的第二個參數有預設值（既有測試逐一呼叫它時不必每次傳），
+    **所以少傳不會炸、只會靜靜退回「講不出成因」那一句** —— 正好是最難察覺的失效。
+    """
+    _src = _PAGE.read_text(encoding="utf-8")
+    _call = "_invest_basis_note(_facts, result)"
+    assert _call in _src, (
+        f"`{_call}` 不在 {_PAGE.name} 裡 —— "
+        "少傳 `result` 不會報錯，畫面只會退成「推不出最近一筆實際配息」，"
+        "所有成因一律講不出來。")
+
+
+def test_the_count_in_the_note_comes_from_the_same_rows_the_table_draws():
+    """⛔ 筆數必須與配息表**同源**，否則只是換個地方再矛盾一次。
+
+    ⚠️ **這一條是突變測試逼出來的，不是我一開始就想到的**：`_income_basis_gap`
+    的 docstring 自陳「筆數取自 `_dividend_rows`，結構上不可能對不上」，
+    但把它換成 `len(result["dividends"])` 之後**九條守衛一條都沒紅**
+    —— 因為前面三組觸發的 raw 與顯示筆數**剛好一樣**。
+    **一個「有揭露、零守衛」的宣稱，和沒有宣稱是一樣的**（本 PR X4/Y2 的同型）。
+
+    這一組刻意讓兩者**不一樣**：第一列 `amount=None` 會被配息表丟掉
+    （`_dividend_rows`：「沒有金額的配息列不是資料，是雜訊」），
+    但它仍然留在 raw list 裡 ⇒ raw 3 筆、表上 2 筆。
+    """
+    _divs = [
+        {"date": "2026/09/01", "amount": None, "currency": "USD"},   # ← 表上不會出現
+        {"amount": SENT_DIV, "currency": "USD"},                     # ← 有金額、無日期
+        {"amount": SENT_DIV, "currency": "USD"},
+    ]
+    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+            "moneydj_div_yield": SENT_ADR, "dividends": _divs}
+    _shown = len(_dividend_rows(_res))
+    assert _shown == 2 and len(_divs) == 3, (
+        f"前提垮了 —— 表上 {_shown} 筆 / raw {len(_divs)} 筆，兩者必須不同，"
+        "否則這條測試殺不掉「拿 raw 長度來數」那顆突變")
+    _gap, _n = _income_basis_gap(_res)
+    assert (_gap, _n) == (GAP_NO_DATE, _shown), f"判定 {(_gap, _n)!r}，應為 {(GAP_NO_DATE, _shown)!r}"
+    _note = _invest_basis_note(
+        estimate_monthly_income(_res, SENT_AMOUNT, fx_lookup=_fx), _res)
+    _cap = _dividend_caption(_dividend_rows(_res), "USD")
+    assert f"{_shown} 筆" in _note and f"{_shown} 筆" in _cap, (
+        f"配息表說的筆數與投資試算說的對不上：\n【配息紀錄】{_cap}\n【投資試算】{_note}")
+    assert f"{len(_divs)} 筆" not in _note, (
+        f"投資試算報了 raw 的 {len(_divs)} 筆，而表上只畫 {_shown} 筆：\n{_note}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# M3（第五輪稽核）｜`TRACE_UNKNOWN` 是深度區**活著的**內部語言字串
+#
+# 既有的 `test_this_block_never_speaks_our_internal_language` 只渲染
+# **投資試算那一塊**，來源軌跡表在它的射程外 —— 於是「上游沒說」
+# 一路印在「結果」欄裡，與「成功」「失敗」並列，**四輪都沒有人看到**。
+# ⚠️ 前四個同類用字當初被具名登記交總管另派，**這第五個沒有** —— 漏的是登記本身。
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_source_trace_result_column_speaks_the_users_language():
+    """⛔ 來源軌跡「結果」欄的三個字面值都會**直接印給使用者看**，不得帶內部語言。
+
+    ⚠️ 這一條與 `test_this_block_never_speaks_our_internal_language` **不重疊**：
+    那一條渲染投資試算那一塊，**看不到**來源軌跡表。
+    """
+    from ui.views.page_03_research import TRACE_FAIL, TRACE_OK, TRACE_UNKNOWN
+    _hits = sorted({f"{_v}:{_w}" for _v in (TRACE_OK, TRACE_FAIL, TRACE_UNKNOWN)
+                    for _w in _INTERNAL_WORDS if _w in _v})
+    assert not _hits, (
+        f"來源軌跡的「結果」欄出現內部語言：{_hits}\n"
+        "這三個字面值是**直接印在表格裡**的，使用者讀得到。")
+
+
+def test_the_source_trace_still_tells_three_states_apart():
+    """⛔ **正對照**：改用字不得把三態壓成兩態（否則「沒說」會被讀成「失敗」）。"""
+    from ui.views.page_03_research import TRACE_FAIL, TRACE_OK, TRACE_UNKNOWN
+    _three = (TRACE_OK, TRACE_FAIL, TRACE_UNKNOWN)
+    assert len(set(_three)) == 3, f"三態塌成 {set(_three)!r}"
+    assert all(_v.strip() for _v in _three), f"有空字面值：{_three!r}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# M1（第五輪稽核）｜那兩行的**副作用**：三組別名由「軟的未知」變成「硬的假指控」
+#
+# ⚠️ **這一條釘的是「今天長這樣」，不是「這樣是對的」** —— 形狀沿用本檔既有的
+# `test_the_no_amount_branch_is_unreachable_from_this_screen_today`：
+# 一旦有人把它修好，這條會**轉紅**，逼下一個人回來讀 `P-CNHALIAS-1` / `P-ALIASSHAPE-1`。
+#
+# **為什麼不直接修**：兩個根因都在 `services/currency.py` 那張**共用表**，
+# 它另有三個消費者（含客戶紅線凍結的 `ui/tab2_single_fund.py`）——
+# 改表不必編輯那些檔，**但會改變它們的行為**。那是 scope 決定（§8.4 步驟 4），
+# 本輪總管放行的範圍寫死在「那個 `else` 分支的原因判斷」。
+# ══════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("fund_ccy, div_ccy, ticket", [
+    ("人民幣(CNH)", "CNY", "P-CNHALIAS-1"),    # CCY_NORMALIZE 單次查表，停在 CNH
+    ("人民幣(CNH)", "人民幣", "P-CNHALIAS-1"),
+    ("RMB", "CNY", "P-ALIASSHAPE-1"),          # 不在表裡，被形狀檢查當成合法 ISO 放行
+    ("NTD", "TWD", "P-ALIASSHAPE-1"),
+])
+def test_two_spellings_of_one_currency_are_still_accused_of_clashing_today(
+        fund_ccy, div_ccy, ticket):
+    """⛔ **釘住已知的假指控**：這幾組是**同一種幣的兩種寫法**，畫面卻說「資料疑義」。
+
+    這一條**故意斷言錯誤的現況**。它存在的理由有兩個：
+
+    1. **不讓它靜默漂移** —— 修好了會轉紅，修壞了（例如再多一組別名）也會被發現；
+    2. **把登記單號寫進斷言訊息** —— 下一個人踩到時，直接知道要去讀哪一列。
+
+    ⚠️ **不得把本條讀成「這個行為是對的」。** 它是 §1 的假話：
+    對使用者說兩邊不一致，而 `services/currency.py::CCY_NORMALIZE` 自己就寫著
+    `CNH → CNY`、`台幣 → TWD`。**同時它還把配息試算整段擋掉。**
+    """
+    _rows = [{DIVIDEND_COLS[4]: div_ccy, DIVIDEND_COLS[0]: "2026/08/15"}]
+    _cap = _dividend_caption(_rows, fund_ccy)
+    assert "資料疑義" in _cap, (
+        f"{fund_ccy!r} vs {div_ccy!r} 已經不再被誤判成衝突了 —— **這是好事**。\n"
+        f"請回頭把 `EXCEPTIONS.md` 的 `{ticket}` 結案，並刪掉這一條釘樁。\n"
+        f"目前畫面：{_cap}")
+
+
+def test_the_currency_table_still_says_these_spellings_mean_the_same_thing():
+    """⭐ **正對照**：上一條指控的「兩種寫法」，repo 自己的表確實說它們是同一種幣。
+
+    沒有這一條，上一條只是「有兩個字串不相等」——**證明不了那是假指控**。
+    """
+    assert CCY_NORMALIZE.get("CNH") == "CNY", CCY_NORMALIZE.get("CNH")
+    assert CCY_NORMALIZE.get("人民幣") == "CNY", CCY_NORMALIZE.get("人民幣")
+    assert CCY_NORMALIZE.get("人民幣(CNH)") == "CNH", (
+        "`人民幣(CNH)` 不再指向 CNH —— P-CNHALIAS-1 可能已被修掉")
+    assert CCY_NORMALIZE.get("台幣") == "TWD", CCY_NORMALIZE.get("台幣")
+    assert "RMB" not in CCY_NORMALIZE and "NTD" not in CCY_NORMALIZE, (
+        "`RMB`／`NTD` 已被補進 CCY_NORMALIZE —— P-ALIASSHAPE-1 可能已被修掉")

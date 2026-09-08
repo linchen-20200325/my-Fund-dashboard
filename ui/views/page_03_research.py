@@ -321,6 +321,10 @@ from services.fund_invest_calc import (
     estimate_monthly_income,
     fx_rate_to_twd,
 )
+# 「最近一筆實際配息」的判定 SSOT（純函式、零 I/O）。**本頁只拿它反問，不自己寫一份**：
+# `_income_basis_gap()` 用它來分辨「年化攤平那條路是卡在金額還是卡在日期」——
+# 用同一支函式問，答案就不可能與算式層分歧（分歧正是本頁被抓到的那一類 bug）。
+from services.health.dividend_calc import latest_dividend_per_unit
 # 幣別一致性判定（純函式、零 I/O）。**不自己寫一份** —— §1 的失效模式就寫在它的 docstring 裡。
 from shared.data_quality import reconcile_row_currencies
 # 寬鬆數值轉換（`"1,234"` / `"12.3%"` / None → float | None）。批次大表的數值欄要它。
@@ -1137,12 +1141,18 @@ TRACE_FAIL: str = "失敗"
 #: **(b) ``success: None`` 這一格與上面那句原則不自洽，我承認。**
 #:     引入 :data:`_MISSING` 的理由是「**說了但值是空** ≠ **沒說**」，
 #:     然後這裡把「說了但值是空」畫成**確定的失敗並計入** ——
-#:     按「不知道就說不知道」，它其實也該是「上游沒說」。
+#:     按「不知道就說不知道」，它其實也該是 :data:`TRACE_UNKNOWN`（~~「上游沒說」~~ → 「沒有回報」）。
 #:     ⛔ **本輪不改**：目前**沒有任何 production 形狀**會產生它
 #:     （見上方 §「哪些 source 會以 falsy success 出現」的實測列舉），
 #:     為一個不存在的形狀改行為是拿猜測換猜測。**但這個不自洽登記在這裡，不是沒看到。**
 #: ---------------------------------------------------------------------------
-TRACE_UNKNOWN: str = "上游沒說"
+#: ⚠️ **2026-09-08 就地更正（有意識的更正，不是漏刪）**：~~`"上游沒說"`~~ → `"沒有回報"`。
+#: 「上游」是**我們的**流程詞，不是使用者的處境（客戶原話：看不懂）——
+#: 而這個字串**印在畫面上的「結果」欄裡**，與 `TRACE_OK`／`TRACE_FAIL` 並列。
+#: **舊表述的用意仍然成立**（要區分「沒說」與「說了失敗」，那個三態設計一字未改）；
+#: **被權衡掉的只有它的用字**。本輪由第五輪獨立稽核點名（M3）——
+#: 它是本頁**第五個**同類用字，而前四個當初被具名登記、**它沒有**。
+TRACE_UNKNOWN: str = "沒有回報"
 
 #: `source_trace` 裡「**沒有淨值序列**」那一則合成標記的名字。
 #: :func:`_nav_reason` 靠它挑出缺值原因，:data:`SYNTHETIC_TRACE_SOURCES` 靠它排除計數。
@@ -1469,7 +1479,7 @@ def _trace_rows(result: dict) -> list[dict]:
         if not isinstance(_t, dict):
             continue
         # ⚠️ **三態，不是二態**：`success` 缺鍵 ≠ 失敗（見 :data:`TRACE_UNKNOWN`）。
-        #    `_failed_source_count()` 只數 `TRACE_FAIL`，所以「上游沒說」不會被計入 ——
+        #    `_failed_source_count()` 只數 `TRACE_FAIL`，所以「沒有回報」不會被計入 ——
         #    這與 :data:`SYNTHETIC_TRACE_SOURCES` 那條排除是**兩道各自獨立**的防線：
         #    前者按**名字**排除（就算上游哪天補上 `success: False` 也擋得住），
         #    後者按**有沒有說**排除（就算名字沒被登記也不會被誣賴成失敗）。
@@ -2005,7 +2015,54 @@ def _invest_compare(facts: dict) -> str:
     return "；".join(_bits) + "。"
 
 
-def _invest_basis_note(facts: dict) -> str:
+#: 年化攤平那條路**為什麼**走上來 —— :func:`_income_basis_gap` 的回傳值。
+#: ⛔ 這四個不是同一件事的四種說法，是**四個不同的事實**，畫面必須分開講
+#: （本 repo 鐵則：不准用一句藉口蓋住不同的原因）。
+GAP_NO_ROWS: str = "no_rows"          #: 表上一列都沒有 —— 「沒有逐筆配息紀錄」在此為真。
+GAP_AMOUNT: str = "amount"            #: 表上有列，但金額沒有一筆是正數。
+GAP_AMOUNT_NEG: str = "amount_neg"    #: 同上，而且其中**有負數**（資料本身就不對）。
+GAP_NO_DATE: str = "no_date"          #: 表上有列、金額也有，但沒有一筆帶得出日期。
+GAP_UNKNOWN: str = ""                 #: 沒拿到 `result`，只講得出「推不出最近一筆」。
+
+
+def _income_basis_gap(result: dict | None) -> tuple[str, int]:
+    """年化攤平那條路是**卡在哪裡** → ``(GAP_*, 表上看得到的筆數)``。
+
+    ## ⛔ 這裡不自己寫一份金額／日期解析
+
+    判定**整個委派** :func:`services.health.dividend_calc.latest_dividend_per_unit`
+    —— 那就是**擋下這條路的那一支函式**。做法是**把日期補成一個合法值再問一次**：
+
+    * 補完日期它**還是**回 `None` ⇒ 卡的是**金額**（沒有一筆是正數）；
+    * 補完日期它**回得出來** ⇒ 金額是有的，卡的是**日期**。
+
+    ⚠️ 為什麼非這樣不可：自己寫一份「有沒有日期」會與 L2 的 `_norm_date` 分歧
+    （例如純空白的日期字串，L2 視為**有**、直覺寫法視為**無**），
+    於是畫面會講出一個「聽起來合理但與實際擋人的理由不同」的原因 —— 那正是 §1 要防的。
+
+    ⚠️ **筆數取自 :func:`_dividend_rows`，與配息表那張表同一份** ——
+    所以「表上說 N 筆、這裡說 N 筆」**結構上不可能對不上**
+    （對不上正是 2026-09-08 第四次被抓到的那個同頁矛盾）。
+
+    ⚠️ 負數的判定用的是本頁既有的 `shared.converters.safe_num`（同樣不自己寫一份）；
+    它只用來**加一句附註**，主判定（卡金額還是卡日期）不依賴它。
+    """
+    if not isinstance(result, dict):
+        return GAP_UNKNOWN, 0
+    _shown = len(_dividend_rows(result))
+    if _shown == 0:
+        return GAP_NO_ROWS, 0
+    _raw = result.get("dividends")
+    _dicts = [_d for _d in _raw if isinstance(_d, dict)] if isinstance(_raw, list) else []
+    # 把日期補成一個一定合法的值，再問**同一支**函式一次。
+    _dated = [{**_d, "date": "1970-01-01"} for _d in _dicts]
+    if latest_dividend_per_unit(_dated) is not None:
+        return GAP_NO_DATE, _shown          # 金額有，卡在日期
+    _neg = any((_v := safe_num(_d.get("amount"))) is not None and _v < 0 for _d in _dicts)
+    return (GAP_AMOUNT_NEG if _neg else GAP_AMOUNT), _shown
+
+
+def _invest_basis_note(facts: dict, result: dict | None = None) -> str:
     """這個月配息**是怎麼推出來的** —— 真實記錄與年化攤平是兩件事，必須講明白。
 
     ⛔ 兩者的差別對使用者是**行為上的差別**：真實記錄推的數字，季配基金有 11 個月是 0；
@@ -2019,7 +2076,30 @@ def _invest_basis_note(facts: dict) -> str:
                 f"要看真正的節奏，往上看「{DEEP_DIVE_TABLES[1]}」那張表。")
     else:
         _adr = facts.get("adr_pct")
-        _txt = (f"這一檔沒有逐筆配息紀錄，所以這個金額是用年化配息率 {_adr:.2f}% ÷ 12 "
+        _gap, _n = _income_basis_gap(result)
+        _tbl = DEEP_DIVE_TABLES[1]
+        # ⛔ 四種情形四句話。~~原本無條件寫「這一檔沒有逐筆配息紀錄」~~
+        # → **2026-09-08 就地更正（有意識的更正，不是漏刪）：那句話只在其中一種情形為真。**
+        # 走到這條路的真正條件是「**推不出最近一筆實際配息**」，而那有四種成因；
+        # 表上明明畫著 N 筆、下面卻說「沒有紀錄」，是**同一個畫面自相矛盾**（§1）。
+        # **舊表述的用意仍然成立**（要講清楚這個數字是攤平出來的，不是實配）——
+        # 那半句一字未改、四種情形都照講；**被權衡掉的只有它對「為什麼」的宣稱**。
+        if _gap == GAP_NO_ROWS:
+            _why = "這一檔沒有逐筆配息紀錄，"          # ← 唯一為真的那一種，原文保留
+        elif _gap == GAP_NO_DATE:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆、金額也有，"
+                    "但**沒有一筆帶得出日期**，排不出哪一筆才是最近的一筆，")
+        elif _gap == GAP_AMOUNT_NEG:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆，但**金額沒有一筆是正數**"
+                    "（而且其中有負數 —— 那是資料本身有問題，不是你看錯），"
+                    "推不出「最近一筆實際配息」，")
+        elif _gap == GAP_AMOUNT:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆，但**金額沒有一筆是正數**，"
+                    "推不出「最近一筆實際配息」，")
+        else:
+            # 沒拿到 `result`。**只講得出這條路的定義**，不猜是哪一種成因（§1）。
+            _why = "推不出「最近一筆實際配息」，"
+        _txt = (f"{_why}所以這個金額是用年化配息率 {_adr:.2f}% ÷ 12 "
                 "攤平出來的**平均值**，不是每個月真的入帳這麼多。")
     if not facts.get("dividend_currency") and facts["income_basis"] == BASIS_RECORDS:
         # ⚠️ 逐筆配息沒有標幣別是常態，此時算式**假設**它與基金計價同幣別。
@@ -2148,7 +2228,7 @@ def _render_invest_calc(result: dict, blank: str = "") -> None:
                   where=_invest_where_for(_facts["income_blocked"]))
     else:
         st.caption(_invest_compare(_facts))
-        st.caption(_invest_basis_note(_facts))
+        st.caption(_invest_basis_note(_facts, result))
     with st.expander("怎麼算出來的（把數字代進算式）", expanded=False):
         st.code(_invest_formula(_facts), language="text")
         st.caption(
