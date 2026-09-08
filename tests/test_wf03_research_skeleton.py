@@ -3111,7 +3111,18 @@ def test_the_expanded_deep_dive_says_which_fund_it_is_showing():
     (1) **選定的那一檔**的識別字、(2) 換一檔的**去處**（區塊名 ＋ 那顆按鈕的字）。
 
     ⚠️ **只看 `[caption]` 行，不看整段** —— recorder 會把 `[fetch] <代碼>` 也記進
-    同一個單位，拿整段做 containment 會**恆真**（那條線根本不是畫給使用者看的）。
+    同一個單位，而那條線根本不是畫給使用者看的。
+
+    ~~拿整段做 containment 會**恆真**。~~
+    → **2026-09-08 就地收窄措辭（複驗組實測；有意識的更正，不是漏刪）**：
+    恆真的是**第一條斷言**（「選定值有沒有落在這一段裡」）—— 把 caption 整行刪掉，
+    `[fetch] SENTINELPICKED` 會替它通過。
+    ⛔ **但整條測試不會恆真**：第二條斷言要求**同一行**同時含 `BLOCK_RESULTS` 與
+    `SELECT_LABEL`，而 `[fetch]` 行兩個都沒有 → 整條仍會 RED（複驗組跑了整段版本的
+    變體，結果仍是 RED）。
+    **濾成 `[caption]` 仍然是正解**（它讓 RED 指向正確的原因，而不是靠第二條補救），
+    **被權衡掉的只有那句「恆真」的射程** —— 一條在講「不要過度宣稱」的守衛，
+    自己的 docstring 要先為真。
     """
     _seg = _segments(_render(applied=FAKE_QUERY, selected=SELECTED_CODE))
     _body = _seg.get(BLOCK_DEEP, [])
