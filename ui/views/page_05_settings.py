@@ -296,7 +296,7 @@ NAV_DETAIL_LABEL: str = "逐檔明細"
 #:
 #: ⚠️ **為什麼是 gate 而不是 `@st.cache_data`（總管裁決，理由寫在這裡讓後人能推翻）**：
 #:    (a) 在 `ui/**` 自建 `@st.cache_data` 會替憲法例外 `EX-UICACHE-1` 新增一個成員，
-#:        而那個例外的成立**繫於一個尚未裁決的問題**（`CLAUDE.md §8.3.P` 的 `P-UIGSPREAD-1`）；
+#:        而那個例外的成立**繫於一個尚未裁決的問題**（`EXCEPTIONS.md §8.3.P` 的 `P-UIGSPREAD-1`）；
 #:    (b) `coverage_status()` 內部走 `load_points(None)` —— **一次讀完整張 sheet**，
 #:        而 L2 那層**沒有**任何快取，UI 再疊一層就會變成 `P-NDCCACHE-1` 的同型。
 #:    → gate 同時解掉這兩件事：**沒勾就一次都不讀**，勾了才讀，而且讀的責任留在 L2。

@@ -301,7 +301,7 @@ def _st_aliases(mod: str) -> set[str]:
     """`mod` 裡綁到 streamlit 的名字（`import streamlit as _st_mod` 也算）。
 
     ⚠️ **刻意不寫死 `st.`** —— `ui/helpers/macro/ndc.py` 用的是 `@_st_mod.cache_data`，
-       寫死模組名的掃描器對它結構上不可見（`CLAUDE.md §8.2.A.1` 記過同一個病）。
+       寫死模組名的掃描器對它結構上不可見（`EXCEPTIONS.md §8.2.A.1` 記過同一個病）。
     """
     _t, _out = _tree(mod), {"st"}
     if _t is not None:

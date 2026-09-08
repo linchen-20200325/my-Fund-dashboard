@@ -25,13 +25,13 @@
    把它的「連線／授權」部分接到 ⑤、把「新增／更新保單列」留在 ④ 即可，
    `ui/tab3_portfolio.py` 端只有一行呼叫要改。
 
-分層（`CLAUDE.md §8.2` / §8.2.A）
+分層（`CLAUDE.md §8.2` / `EXCEPTIONS.md §8.2.A`）
 --------------------------------
 本檔是 **L3 UI**，直接 import `repositories.policy_repository` /
 `repositories.snapshot_repository` / `repositories.ledger_repository`。
 這是既有的 **EX-CRUD-1** 例外（本地／Google Sheets 持久化 CRUD：read+write 同檔、
 無 `@_ttl_cache` / `@st.cache_data` 裝飾、無外部 HTTP fetcher 的 TTL 集中問題），
-見 `CLAUDE.md §8.2.A.1` 該列。**搬遷沒有新增任何跨層呼叫** ——
+見 `EXCEPTIONS.md §8.2.A.1` 該列。**搬遷沒有新增任何跨層呼叫** ——
 這些 import 在搬遷前就存在於 `ui/tab3_portfolio.py`（同為 L3 UI），
 本檔只是換了一個 L3 檔案來放它們。
 
@@ -64,7 +64,7 @@ import streamlit as st
 
 from infra.oauth import OAuthError, build_authorize_url
 from repositories.ledger_repository import load_all_ledgers
-from repositories.policy_repository import (  # EX-CRUD-1（CLAUDE.md §8.2.A.1）
+from repositories.policy_repository import (  # EX-CRUD-1（EXCEPTIONS.md §8.2.A.1）
     PolicySheetError,
     create_dashboard_sheet,
     delete_policy_row,

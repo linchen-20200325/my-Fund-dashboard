@@ -931,7 +931,7 @@ def test_a_block_with_nothing_to_show_goes_grey_and_says_where():
       - **📈 中期循環不在斷言範圍內**（見 :data:`_GREY_BLOCKS` 的說明）。
       - 本條只驗「有沒有 ⬜ 與指路」，**不驗那句話講得對不對** ——
         灰態文案寫錯內容（例如指到別頁）本條看不到；
-        指路內容的既有缺口見 `CLAUDE.md §8.3.P` 的 `P-WHERECONTENT-1`。
+        指路內容的既有缺口見 `EXCEPTIONS.md §8.3.P` 的 `P-WHERECONTENT-1`。
       - **側錄器沒攔的渲染 API 一律隱形**（真界線是 :data:`_TEXT_APIS`）。
         `assert _units` 擋得住「整段因此空掉」，**擋不住**「同一單位裡另有 ⬜、
         但那段假話是用沒列進字表的 API 印的」。
