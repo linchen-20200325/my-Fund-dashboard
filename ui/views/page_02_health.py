@@ -33,11 +33,29 @@
 順序   區塊                                版面
 ===== ================================== ==========================================
 1      Form — 診斷條件（σ／回看窗／只看衛星）  `applied_form`，按「套用」才算
+1.5    🧾 ① 結論（2026-09-08 補，見下）        **全寬**，兩句話
 2      組合健康總分                          **全寬**
 3      吃本金警示／衛星連續落後／影子基金重疊    3 欄自適應網格
 4      逐檔體檢表（9 欄）                    **全寬 + 橫向捲動**
 –      尚未設定持倉                          空狀態三要素（取代 2～4）
 ===== ================================== ==========================================
+
+⭐ **2026-09-08 新增「🧾 ① 結論」層 —— 這一列不在線框的四塊裡，理由寫在這裡。**
+   客戶原話（同日，兩句要**合起來**讀）：
+   「新的 UI 設計我不滿意，少了很多資訊，**無法判斷這檔基金好不好，配息金額**，
+     搭配組合以及標的是否需要調整，這些都沒有」
+   ＋「我覺得**舊 UI 資訊太多**，才希望總管 AI 重新設計，去重複然後讓新手也能看得懂」
+   ⇒ **他要的不是更多欄位，是看一眼就知道「所以呢」。**
+   盤點結論：本頁的**數字都在**（9 欄有 8 欄是真資料），**缺的是有人下判定**。
+
+   ⛔ **因此這一層只准放「一句話」等級的結論，不准長成第二張表。**
+   逐檔體檢表**維持 9 欄**（`HEALTH_TABLE_COLUMNS`），這一批**一欄都沒有加** ——
+   要加的是一句結論，不是第 10 欄。想在這裡加卡片／表格／把舊 ② 的欄位搬回來的人，
+   請先讀客戶的第二句話：**那正是他當初要求重新設計的理由**，把密度搬回來等於推翻它。
+
+   結構照 ① `ui/views/page_01_macro.py` 的既有四層閱讀順序
+   （`### 🧾 ① 結論` → 卡片 → `### 🧾 ② 依據` → 詳細區）—— **不另發明第二套**。
+   本層用 `###`（H3），比下面四個 `####` 區塊大一級，讀者一眼看得出誰是結論、誰是依據。
 
 線框同時釘死了本頁的**職責邊界**，這一條比版面更要緊：
 
@@ -334,6 +352,29 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
     ("ui.helpers.fund_grp_health.risk", "_render_oversold_badges"),
     ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
+    # ── 🧾 ① 結論層用的**純計算** helper（2026-09-08）─────────────
+    # ⚠️ **這一組跟上面每一支都不同類，讀本表的人必須看得出差別**：
+    #    上面那些是**會畫東西**的 renderer，住在閘門**後面**的委派區；
+    #    這一組**一個 `st.` 都沒有**，住在閘門**前面**的結論層，只把數字算出來。
+    #
+    # ⭐ **「為什麼可以放在閘門前面」——本批的關鍵前提，用 AST 實測，不是推論：**
+    #    閘門擋的是 `StreamlitDuplicateElementId`，而那個 id 是
+    #    **`st.plotly_chart` 每次呼叫都註冊**才產生的（見 :data:`DELEGATE_GATE_LABEL`
+    #    上方那一整段）。**渲染才會撞，計算不會。**
+    #    這四支的函式體與其呼叫閉包（`check_eating_principal_1y_mk` /
+    #    `compute_1y_total_return` / `_safe_num`）**沒有任何 `st.` 呼叫、也沒有任何
+    #    I/O** —— 特別是**沒有** `checkup._safe_fx`（那支才會打 `get_latest_fx`）。
+    #    守衛：`tests/test_wf02_health_conclusion.py::
+    #           test_the_conclusion_layer_draws_nothing_through_the_shared_helpers`
+    #    （用假 streamlit 錄一輪，錄到任何一筆就紅）。
+    # ⛔ **因此不得為了拿這兩句結論而拆掉閘門、或放寬任何守衛** —— 也不需要。
+    #
+    # ⚠️ 它們是**私有名**（`_` 開頭），脆度與上面那四支 `fund_grp_health` 私有名相同，
+    #    理由同上方那段登記：舊模組整批拔除時，這幾條是最先斷的。
+    ("ui.helpers.fund.checkup", "_compute_fund_health_kpis"),
+    ("ui.helpers.fund.checkup", "_ret_1y_total"),
+    ("ui.helpers.fund.checkup", "_extract_peer_1y"),
+    ("ui.helpers.fund.checkup", "_grade"),
 )
 
 # ── ⑥ 委派區 Checkbox Gate（2026-09-07，雙軌並行的必要條件）──────────────
@@ -523,6 +564,377 @@ DEFERRED_ENTRIES: tuple[tuple[str, str], ...] = (
 )
 
 
+#: 本金（TWD）widget 的 `help=`。**寫成常數，是為了讓「文案有沒有跟著接線走」可以被機器守。**
+#:
+#: ⛔ **2026-09-08 就地更正：舊文案是一句不成立的話。有意識的更正，不是漏刪**
+#: （決策者：**AI 總管**；依據：**本頁既有的 AST 實測**，見 `_render_filter_form` 內
+#: 2026-09-07 那條更正 ——「`_principal_twd` 呼叫點 0、裸參照 0」）。
+#: 舊文案逐字寫著：
+#:
+#:     ~~「所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個
+#:       尺度上比較。**這不是你的實際投入金額。**」~~
+#:
+#: **它描述的是一個本頁沒有發生的行為**：本頁沒有任何區塊讀這個值，而唯一真的會用到
+#: 「每月配息」的地方（本檔新增的 🧾 ① 結論層）用的是**各檔實際 `invest_twd`**，
+#: 也就是**與舊文案所述正好相反**。
+#: **舊表述在寫下的當天為什麼是對的**：它照抄舊 ② 的語意（舊 ② 真的把每檔本金覆寫成
+#: 同一個值），那是有出處的；**被推翻的是它的前提** —— 新頁沒有把那條線接上。
+#:
+#: ⚠️ **這是「修正錯誤」不是「改變設計」**（§-1.5.4 兩步判定）：版面結構未動、
+#: widget 未增未減、四個界值一個沒改（`_WIREFRAME_PRINCIPAL` 照舊釘住）；
+#: 改的只有一句**與實際行為不符的描述**。
+#: ⛔ **這一批沒有動這個 widget 的去留** —— 拿掉它會同時打掉三條既有守衛
+#: （`test_the_principal_input_keeps_the_wireframe_numbers` /
+#:  `test_the_principal_is_read_from_the_applied_gate_not_derived` /
+#:  `test_the_principal_input_lives_inside_the_single_applied_form`），
+#: 而**為了拿掉一個 widget 去放寬守衛是本 repo 反覆吃虧的形狀**。已具名回報總管裁決。
+#: **守衛**：`tests/test_wf02_health_conclusion.py::
+#: test_the_principal_help_never_claims_a_consumer_it_does_not_have`
+#: —— 它把**文案**跟**接線**綁在一起：0 caller 時文案必須誠實揭露；
+#: 哪天有人真的把它接上，那條守衛會轉紅，逼他回來改文案。**兩個方向都 fail-closed。**
+PRINCIPAL_HELP: str = (
+    "這個欄位**目前不影響上面任何一個數字**。"
+    "上方的「每月配息合計」算的是**你每一檔實際投入的金額**。"
+    "這裡填的是「假設每檔都投入同一筆錢」的比較基準，保留給日後的齊頭比較功能。")
+
+#: ⚠️ **上面那段 `help=` 是給使用者看的，工程細節一律留在這裡（2026-09-08 M3）。**
+#:
+#: **舊文案**（同日稍早）寫的是：
+#:   ~~「⚠️ **這一欄目前沒有任何區塊在讀它**（本頁實測 **0 caller**）……**接線與否待客戶裁決**」~~
+#:
+#: **事實完全正確**（獨立稽核驗過 0 caller），**錯的是講給誰聽**：
+#: 「0 caller／接線／待客戶裁決」是**我們內部的話**，而客戶第二條驗收標準逐字是
+#: 「讓**新手**也能看得懂」。**一句對的話講給錯的人聽，在這一頁就是錯的。**
+#: ⛔ **不得把工程術語搬回 `help=`** —— 那是使用者滑鼠停在輸入框上會看到的東西。
+#:
+#: **工程事實（留在這裡，不上畫面）**：`_principal_twd()` 目前 **0 caller**；
+#: 使用者填了數字、按了套用，下游一個字都不會讀。
+#: 該 widget 的去留已具名回報總管，本批**不動**（拿掉會打掉三條既有守衛）。
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🧾 ① 結論層 —— 本頁原本缺的那一層（2026-09-08）
+# ══════════════════════════════════════════════════════════════════════
+#: 結論層的標題。**與 ① `page_01_macro.py::_render_layer_conclusion` 同一個層級、
+#: 同一種寫法**（`###`）—— 本 repo 已經有一套四層閱讀順序，這裡不發明第二套。
+#:
+#: ⚠️ 寫成常數而不是 inline 字面值：守衛要拿它比對「結論在依據**前面**」，
+#: 抄一份字面值到測試裡就是第二份真相源（§2.1）。
+CONCLUSION_HEADING: str = "### 🧾 ① 結論 — 我手上這些，現在怎麼了"
+
+#: 逐檔判定失敗時的落點。**具名，不靜默丟掉那一檔**（§1）——
+#: 一檔判定拋例外若直接 `continue`，那一檔就從分母裡消失，而使用者看不出來。
+_VERDICT_ERROR: str = f"{NOT_READY_MARK} 判定時出錯（詳見系統紀錄）"
+
+
+def _income_tally(funds: list[dict]) -> dict[str, Any]:
+    """每月配息合計（TWD），**外加「沒算進去的各是什麼原因」**。
+
+    ~~⭐ **這是本批最高價值的一句話：客戶目前在三頁閘門前完全答不出「我每個月領多少」。**~~
+    ~~盤點實測：「配息覆蓋」是**比率**、「吃本金警示」給**檔數**、⑧ 的配息表是~~
+    ~~**每單位、原幣** —— 三頁閘門前**沒有任何一個 TWD 金額**。~~
+
+    ⛔ **2026-09-08 就地更正：上段為假。有意識的更正，不是漏刪**
+    （決策者：**AI 總管**，依獨立稽核指出；**本組已逐條複驗，不是轉述**）。
+
+    **實測推翻它的兩條（指令與輸出見本輪 PR 描述）**：
+
+    - **逐檔的月配息 TWD 早就存在，而且吃的就是使用者各檔真實 `invest_twd`**：
+      `ui/helpers/fund/checkup.py::_compute_fund_health_kpis` 算它、同檔
+      `_render_fund_health_card` **無條件**渲染那格 KPI，`build_checkup_dataframe`
+      另有「原幣本金／月配息／年配息」三欄。
+    - **本檔早在 2026-09-07 就更正過同一個誤解** —— 見 :func:`_render_delegated_sections`
+      docstring 那段「⛔ 上面那句對 `render_fund_checkup` 是假的」。
+      **再講反一次，等於覆蓋掉 repo 已經查證過的事實。**
+
+    ✅ **真正成立的問題是兩個，而且是不同的兩個 —— 分開讀**：
+
+    1. **它被閘門關著。** ⑥ 對 `render_fund_checkup` 的呼叫住在
+       :func:`_render_delegated_sections` 的 Checkbox Gate **之後**（預設不勾），
+       所以使用者一打開 ⑥ **看不到**它。**存在 ≠ 看得到。**
+    2. **它是逐檔的，沒有「合計」。** 客戶問的是「**我每個月總共領多少**」。
+       實測全 repo，`monthly_div_twd` 的消費者**全部是逐檔的**（`checkup.py` 內
+       計算處、回傳處、健診卡文字、逐檔 row dict），**沒有任何地方把它加總**。
+       ⇒ **本函式新增的只有「加總」這一步，公式仍然完全走 SSOT。**
+       ⚠️ **這一句只對「月配息 TWD」成立，不要外推** —— 舊 ② 確實有一個
+       **別的**金額合計（「累積 TWD 配息」，見下方 📌），那是另一個量。
+       ⚠️ 而本頁的另一句結論（:func:`_peer_verdicts`）**處境不同**：
+       那個盤點**上游已經有了**，本頁新增的是「把它搬到閘門前」＋兩處改良，
+       **不是新增一個統計**。**兩句不要一起宣稱成「本批新做的」。**
+
+    📌 **另一個相關、但不是同一個東西的量，據實登記（⛔ 不得互相冒充）**：
+    核准線框 `docs/wireframes/wireframe-macro-health.html` 的「大表區」5 格 KPI，
+    第 5 格逐字是「**累積 TWD 配息**」，而它**已經實作在舊 ②**
+    （`ui/tab_fund_grp_health.py::_render_health_summary`，
+    `total_twd = sum(r["累積 TWD 配息 🧮"] …)` ＋ `k5.metric(...)`）。
+    **那是「到今天為止實際領到的」；本函式算的是「依年化配息率推估的每月」——
+    兩個不同的數。** ⛔ **所以不得在任何地方寫「線框沒要求配息金額」，也不得宣稱
+    本批做到了線框那一格。**
+    **本批沒有接它，理由不是漏做**：它的列來自
+    `services/fund_row.py::process_one_fund`，該函式 docstring 自陳「**純 IO** + 計算」
+    （`auto_fetch_moneydj` / `get_latest_fx`）—— 在閘門前跑它等於把重取數搬到頁面入口；
+    而舊 ② 那份合計住在 `ui/tab_fund_grp_health.py`，本檔**禁止 import**
+    （`tests/test_wf02_health_skeleton.py::test_the_page_does_not_delegate_to_the_old_tab`）。
+    ⇒ **登記為缺口，不是宣稱不需要。**
+
+    **數字從哪來（不是本檔算的）**
+    ------------------------------
+    走 `ui.helpers.fund.checkup._compute_fund_health_kpis`，取它的
+    ``monthly_div_twd`` —— 那是 SSOT 自己的公式
+    ``invest_twd × 年化配息率 ÷ 12``（`adr` 走 MoneyDJ wb05 優先、缺則退
+    `metrics.annual_div_rate`）。**本檔一個門檻、一條公式都沒有自己寫**（§3.3）。
+
+    ⛔ **不用齊頭本金。** 這一句要回答的是「**我**每個月領多少」，
+       所以吃的是使用者**每檔真正的** ``invest_twd``；
+       用 `_principal_twd()`（＝「假設每檔都投入 100 萬」）會變成**另一個問題的答案**，
+       而畫面上看不出差別（§1：錯的數字比沒有數字更危險）。
+
+    **為什麼可以放在委派區的 Checkbox Gate 前面（AST 實測，非推論）**
+    ------------------------------------------------------------------
+    閘門擋的是 `st.plotly_chart` 的重複 element id；**那是渲染才會發生的事**。
+    `_compute_fund_health_kpis` 的函式體與其呼叫閉包
+    （`check_eating_principal_1y_mk` / `_ret_1y_total` / `_safe_num`）
+    **一個 `st.` 都沒有、也沒有任何 I/O**（特別是**沒有** `checkup._safe_fx` ——
+    那支在幣別非 `TWD` 時會去打 `get_latest_fx`；`TWD` 直接回 `1.0`、沒有幣別則整個跳過。
+    **精確講清楚，是因為本 PR 已經因為含糊的全稱句被推翻兩次**）。
+    ⇒ **計算搬到閘門前不會撞，也不會多一次網路往返。**
+    守衛：`test_the_conclusion_layer_draws_nothing_through_the_shared_helpers`。
+
+    **回傳的四個計數，為什麼要分那麼細**
+    ------------------------------------
+    ``monthly_div_twd`` 是 None 有**兩個完全不同的原因**，而它們的下一步不一樣：
+
+    - **沒有 `invest_twd`** → 使用者**可以去補**（④ 加入與管理基金）→ ``no_amount``
+    - **有金額、但查不到年化配息率** → 使用者**補不了**，那是上游沒抓到 → ``no_rate``
+
+    把兩者併成一句「N 檔資料不足」，等於把**唯一可行動的那個原因**蓋掉
+    （同本檔 `_SCORE_PENDING_NOTE` 上方那一整段講的病）。
+
+    ⚠️ **兩個都缺時算進 ``no_amount``**：那句話（「沒有填投入金額」）對它**仍然為真**，
+    只是不是唯一的原因；選這一邊是因為它是**可行動**的那一邊。**這是刻意的取捨，不是漏判。**
+
+    ⚠️ **單檔失敗不拖垮整句**（同 :func:`_eating_verdict` 的處置）：例外印到 stderr
+    並落進 ``no_rate``，**不是靜默跳過** —— 靜默跳過會讓那一檔從分母消失。
+    """
+    from ui.helpers.fund.checkup import _compute_fund_health_kpis
+
+    _out: dict[str, Any] = {"monthly_twd": None, "counted": 0,
+                            "no_amount": 0, "no_rate": 0, "total": len(funds)}
+    _sum = 0.0
+    for _f in funds:
+        try:
+            _k = _compute_fund_health_kpis(_f)
+        except Exception as _exc:  # noqa: BLE001 — 留痕，不靜默
+            import sys as _sys
+            print(f"[page_02_health] _compute_fund_health_kpis 失敗 "
+                  f"({_f.get('code')}): {type(_exc).__name__}: {_exc}", file=_sys.stderr)
+            _out["no_rate"] += 1
+            continue
+        if not isinstance(_k, dict):
+            _out["no_rate"] += 1
+            continue
+        _m = _safe_num(_k.get("monthly_div_twd"))
+        if _m is not None:
+            _sum += _m
+            _out["counted"] += 1
+        elif _safe_num(_k.get("invest_twd")) is None:
+            _out["no_amount"] += 1
+        else:
+            _out["no_rate"] += 1
+    if _out["counted"]:
+        _out["monthly_twd"] = _sum
+    return _out
+
+
+def _peer_verdicts(funds: list[dict]) -> "tuple[list[tuple[str, int]], list[tuple[str, int]]]":
+    """逐檔「跟同類型比，到底好不好」→ ``(判得動的, 判不動的)``，各為 ``[(判定字, 檔數)]``。
+
+    ⭐ **這一句回答客戶的第一題：「無法判斷這檔基金好不好」。**
+
+    ⛔⛔ **先講清楚「新在哪裡」，因為這一句**不是**憑空多出來的（2026-09-08 實測）**
+    ------------------------------------------------------------------------
+    `ui/helpers/fund/checkup.py::render_fund_checkup` **已經在畫一句幾乎一樣的話**::
+
+        _verdict = df["體檢判定"]
+        n_good = int(_verdict.str.startswith("🏆").sum())
+        n_lag  = int(_verdict.str.startswith("⚠️").sum())
+        n_na   = int(_verdict.str.startswith("⬜").sum())
+        # …接著印出「🏆 n_good 檔 ・ ⚠️ n_lag 檔 ・ ⬜ n_na 檔（共 len(df) 檔）」
+
+    **和上面 :func:`_income_tally` 那個配息數字一模一樣的處境** ——
+    它**存在、而且是對的**，只是**住在閘門後面**（⑥ 對 `render_fund_checkup`
+    的呼叫在 :func:`_render_delegated_sections` 的 Checkbox Gate 之後，預設不勾）。
+    ⛔ **所以不得寫「⑥ 判不出基金好不好」——那是假的。** 成立的說法是
+    **「使用者一打開 ⑥ 看不到它」**。
+
+    **本函式真正新增的只有三件事，逐條列出，不要多宣稱**：
+
+    1. **它在閘門前**（那正是這一批要解決的問題）。
+    2. **它不丟掉 `🟡` 那一桶。** 上游那一句只印 🏆／⚠️／⬜ 三個桶，
+       **`🟡` 沒有自己的數字**，使用者得拿「（共 N 檔）」自己減。本函式按
+       `_grade` **實際回傳的每一個桶**計數，一個都不省。
+    3. **它不寫死 emoji 前綴。** 上游用 `.str.startswith("🏆")`；本函式拿
+       `_grade` **回傳的整句話**當 key ⇒ SSOT 改措辭，本頁自動跟著改。
+
+    ⚠️ **上游那一句同時是本函式的正確性對照**：同一組持股，兩邊的 🏆／⚠️／⬜
+    **必須對得上**（都走同一支 `_grade`）。對不上就是本函式錯了。
+
+    ⛔⛔ **兩個必須寫在這裡、不能只寫在 PR 留言的事實（2026-09-08 獨立稽核實測）**
+    ----------------------------------------------------------------------------
+    **(1) 勾開閘門之後，這一頁會有兩句在講同一件事。**
+    稽核把畫面真的渲染出來，同一次 run 錄到**兩句摘要**：一句來自本函式，
+    一句來自 `checkup.render_fund_checkup`（上游）。
+    ⚠️ **但預設畫面只有本函式這一句** —— 上游那句要使用者**主動勾**
+    :data:`DELEGATE_GATE_LABEL`（`value=False`）才會出現。
+
+    **(2) ⛔ 上游那一句是錯的 —— 它漏數一個桶。**
+    上游只 `startswith` **三個** emoji 前綴（`🏆` / `⚠️` / `⬜`），
+    而 `_grade()` 實際會回**四種**判得動／判不動的結果 ——
+    **`🟡`（與同類持平）那一桶沒有自己的數字**。
+    於是在「四檔、每桶各一」的情境下，它印出來的三個數字加起來是 **3**，
+    卻同時宣稱「**共 4 檔**」：**第 4 檔在摘要裡憑空消失。**
+    **這不是「重複」的問題，這是線上舊分頁現在就有的缺陷 —— 摘要與分母對不起來。**
+
+    ⚠️ **上面刻意用「描述」而不是貼原文，這一點請照做下去。**
+    本檔受 `test_the_page_never_hardcodes_the_ssot_verdict_words` 管，
+    **整份原始碼**（含 docstring）都不准出現 `_grade()` 的中文判定字面值 ——
+    **貼一段畫面輸出當證據，就會把那些字帶進來**（本 PR 為此紅了兩次，第二次
+    正是「為了記錄第一次」而貼了原文）。
+    ⛔ **不要為了「讀起來完整」把桶名補回來。** 要指哪一桶，用 **emoji** 或
+    `_grade()` 的回傳值來指 —— **描述保住了每一個承重事實，而且一個字面值都沒抄。**
+
+    ⛔ **本批不修它，四個理由，這是總管 2026-09-08 的裁決，不是我的偷懶**：
+      1. 它住在**舊 ② 分頁共用**的 `ui/helpers/fund/checkup.py`，而客戶紅線是
+         「**絕對禁止**修改現有線上正常運作的舊版 Tab 代碼」——**那條線不由我方放寬**。
+      2. 重複**只在使用者主動勾選之後才出現**；預設畫面只有本函式這一句，而且是對的那一句。
+      3. 另兩條「消重」路都被否決：給 gate checkbox 加 `key=` 會踩本頁的寫入守衛，
+         **而且會藏掉對的、留下錯的**；把結論搬到閘門後則讓整批失去意義。
+      4. 客戶驗收新 ⑥ 並下令拆掉舊分頁時，重複與該缺陷會**一起消失**。
+    ⚠️ **不要把上面第 4 點讀成「未來會修」** —— 那不是本批能承諾的事，
+    它只是說明「為什麼現在為它碰紅線划不來」。
+    **守衛**：`test_the_per_fund_number_is_gated_but_our_total_is_not`
+    釘住「`render_fund_checkup` 的呼叫點只在委派區」——
+    它一旦被搬到閘門外，上面「使用者看不到」這句話當場失效，該條轉紅。
+
+    **判準完全走既有 SSOT，本檔沒有自己定義任何門檻**
+    --------------------------------------------------
+    `ui.helpers.fund.checkup._grade(近一年含息報酬, 同類型平均)` ——
+    它就是使用者在**閘門後**那張基金體檢表「體檢判定」欄看到的同一支函式，
+    門檻 `_EXCESS_GOOD` / `_EXCESS_LAG` 也住在那裡。
+
+    ⛔ **為什麼不照派工單原本舉例的「四項都在標準內」**（近 1 年／Sharpe／最大回撤／配息覆蓋）：
+       那需要替 Sharpe 與最大回撤**發明兩個門檻** —— 本站的 `services/**` 沒有這兩個門檻，
+       而在 UI 層自己訂一個，等於在畫面上生出一條沒有出處的業務規則（§3.3 反捏造），
+       而且它會**跟閘門後那張表的判定各說各話**（§2.1：同一個組合、兩個結論，
+       使用者只會覺得系統壞了）。
+       改走 `_grade` 之後：**零新門檻、零新公式，而且與同頁那張表逐字一致。**
+
+    ⛔ **本檔不把 `_grade` 的字串抄一份下來分桶。** 分桶直接拿它**回傳的那句話**當 key
+       —— SSOT 改措辭，畫面自動跟著改；抄一份就會有一天兩邊不一樣而沒人發現。
+
+    **「判不動」為什麼一定要獨立成一類**
+    ------------------------------------
+    `_grade` 對缺資料回的是 ``(None, "⬜ …資料不足")``。把它併進「沒問題」那一堆，
+    就是本頁 `_eating_tally` 早就寫死的那條規矩的反面 ——
+    該處逐字寫著「**無法判定（不是判定為沒有吃本金）**」。**這裡照同一個慣例。**
+
+    **排序**：判得動的依**該桶最好的超額報酬**由大到小（好消息在前、壞消息看得見）；
+    判不動的依檔數由多到少。**兩者都是決定性的**，不吃 dict 的插入順序。
+    """
+    from ui.helpers.fund.checkup import _extract_peer_1y, _grade, _ret_1y_total
+
+    _judged: dict[str, list[float]] = {}
+    _unjudged: dict[str, int] = {}
+    for _f in funds:
+        try:
+            _peer, _ = _extract_peer_1y(_f)
+            _excess, _text = _grade(_ret_1y_total(_f), _peer)
+        except Exception as _exc:  # noqa: BLE001 — 留痕，且**仍然計入分母**
+            import sys as _sys
+            print(f"[page_02_health] _grade 失敗 "
+                  f"({_f.get('code')}): {type(_exc).__name__}: {_exc}", file=_sys.stderr)
+            _unjudged[_VERDICT_ERROR] = _unjudged.get(_VERDICT_ERROR, 0) + 1
+            continue
+        _e = _safe_num(_excess)
+        if _e is None:
+            _key = str(_text or _VERDICT_ERROR)
+            _unjudged[_key] = _unjudged.get(_key, 0) + 1
+        else:
+            _judged.setdefault(str(_text), []).append(_e)
+    return (
+        [(_t, len(_v)) for _t, _v in
+         sorted(_judged.items(), key=lambda _kv: -max(_kv[1]))],
+        sorted(_unjudged.items(), key=lambda _kv: (-_kv[1], _kv[0])),
+    )
+
+
+def _render_income_line(funds: list[dict]) -> None:
+    """結論句 ①：**每月配息合計（TWD）**。算不出來就誠實留白（§1）。"""
+    _t = _income_tally(funds)
+    _left_out = []
+    if _t["no_amount"]:
+        _left_out.append(f"{_t['no_amount']} 檔沒有填投入金額")
+    if _t["no_rate"]:
+        _left_out.append(f"{_t['no_rate']} 檔查不到配息率")
+
+    if _t["monthly_twd"] is None:
+        # ⛔ **不印「0 TWD」。**「算不出來」與「一毛都沒領」在畫面上長得一樣、意思相反
+        #    （同 `_render_alert_cards` 對「0 檔吃本金」的處置）。
+        not_ready(
+            "算不出你每月的配息合計（TWD）："
+            + ("、".join(_left_out) or f"這 {_t['total']} 檔都沒有可用的配息資料")
+            + "。**不拿「假設每檔都投入同一個金額」的齊頭本金替你估一個數字** —— "
+              "那是另一個問題的答案。"
+            # ⚠️ 這句刻意**不寫出那個金額**：本檔已經有 `_DEFAULT_PRINCIPAL_TWD`，
+            #    在文案裡抄一份數字就是第二份真相源，常數一改畫面就開始說謊（§3.3）。
+            ,
+            where=where_to_find("pf_add"))
+        return
+
+    st.markdown(
+        f"**每月配息合計約 {_t['monthly_twd']:,.0f} TWD**"
+        f"（依這 {_t['counted']} 檔**各自實際投入的金額**推估，不是齊頭本金）。")
+    if _left_out:
+        # §1：沒進到那個數字裡的檔數要講出來，否則使用者會以為「這就是全部」。
+        st.caption("・另有 " + "、".join(_left_out) + "，**都沒有算進上面那個數字**。")
+
+
+def _render_verdict_line(funds: list[dict]) -> None:
+    """結論句 ②：**這幾檔跟同類型比，好不好**。判不動的獨立成一類（§1）。"""
+    _judged, _unjudged = _peer_verdicts(funds)
+    # ⚠️ `{_c} 檔` 與 `{_t}` 之間的空格是刻意的：`_t` 以 `⬜` 開頭，
+    #    黏在一起會變成「3 檔⬜ 同類資料不足」，一頁在講「看得懂」的畫面不該這樣讀。
+    _undecided = "、".join(f"{_c} 檔 {_t}" for _t, _c in _unjudged)
+
+    if not _judged:
+        not_ready(
+            f"這 {len(funds)} 檔**都判不出**跟同類型比好不好："
+            + (_undecided or "沒有可比對的同類型平均")
+            + "。**判不出來不等於沒問題。**",
+            where=_pending_where("下方「逐檔體檢表」可先逐檔看"))
+        return
+
+    st.markdown(
+        f"**這 {len(funds)} 檔裡："
+        + "、".join(f"{_t} {_c} 檔" for _t, _c in _judged)
+        + "**（比的是「近一年含息報酬 − 同類型平均」）。")
+    if _unjudged:
+        st.caption(f"・另有 {_undecided}，**未判定 ≠ 沒問題** —— 那幾檔在下方逐檔表也是空的。")
+
+
+def _render_conclusion() -> None:
+    """區塊 1.5｜🧾 ① 結論 —— **兩句話，沒有第三樣東西。**
+
+    ⛔ **這一層的驗收標準是「有沒有回答問題」，不是「有沒有更多資訊」。**
+    若哪天有人在這裡加了第三、第四句、或一張表，請先回頭讀本檔模組 docstring
+    引的客戶第二句原話：**「我覺得舊 UI 資訊太多」** —— 把密度搬回來就是把它推翻。
+    """
+    st.markdown(CONCLUSION_HEADING)
+    _funds = _uniq_by_code(_holdings())
+    _render_income_line(_funds)
+    _render_verdict_line(_funds)
+
+
 def _pending_where(block: str) -> str:
     """「內容還沒填」這種灰態的指路。
 
@@ -640,8 +1052,7 @@ def _render_filter_form() -> None:
             min_value=_PRINCIPAL_MIN, max_value=_PRINCIPAL_MAX,
             value=float(_cur.get("principal_twd", _DEFAULT_PRINCIPAL_TWD)),
             step=_PRINCIPAL_STEP,
-            help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」"
-                 "放在同一個尺度上比較。**這不是你的實際投入金額。**",
+            help=PRINCIPAL_HELP,
         )
 
     # ⚠️ `if _gate:` 必須在 `with` **之外**（送出鈕在 `yield` 之後才建立）。
@@ -1433,6 +1844,10 @@ def render_holdings_health() -> None:
         safe_section("尚未設定持倉", _render_no_holdings)
         return
 
+    # 🧾 ① 結論 —— **排在所有依據之前**（同 ① 的四層閱讀順序）。
+    # ⚠️ 位置在 `if not _holdings(): return` **之後**：沒有持倉時空狀態**取代**全部內容，
+    #    不得再多印一句結論（`test_no_holdings_hides_the_diagnosis_blocks_entirely` 的精神）。
+    safe_section("結論", _render_conclusion)
     safe_section("組合健康總分", _render_health_score)
     safe_section("警示卡片", _render_alert_cards)
     safe_section("逐檔體檢表", _render_health_table)
