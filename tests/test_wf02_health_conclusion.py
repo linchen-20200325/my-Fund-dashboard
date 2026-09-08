@@ -51,6 +51,7 @@ from ui.views.page_02_health import (  # noqa: E402
     PRINCIPAL_HELP,
     _income_tally,
     _peer_verdicts,
+    _uniq_by_code,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -100,6 +101,25 @@ NO_MONEY = [_with_peer(_fund("NM1", div=8.0, ret=10.0), 2.0),
 
 #: 有金額、但**查不到年化配息率**（`div=None` 且 metrics 沒有 `annual_div_rate`）。
 NO_RATE = [_with_money(_with_peer(_fund("NR", div=None, ret=6.0), 2.0), 900_000.0)]
+
+
+def _expected_best_excess(funds: list[dict]) -> dict[str, float]:
+    """`判定字 -> 該桶內最好的超額報酬`，**獨立於被測物算出來**。
+
+    ⚠️ **刻意不從 `_peer_verdicts()` 的回傳值反推** —— 拿被測物的輸出當期望值，
+    等於讓它自己替自己打分（排序反轉時兩邊會一起反轉，斷言恆真）。
+    這裡直接走 `checkup` 的 SSOT 重算一次。
+    """
+    from ui.helpers.fund.checkup import _extract_peer_1y, _grade, _ret_1y_total
+
+    _best: dict[str, float] = {}
+    for _f in funds:
+        _peer, _ = _extract_peer_1y(_f)
+        _excess, _text = _grade(_ret_1y_total(_f), _peer)
+        if _excess is None:
+            continue
+        _best[str(_text)] = max(_best.get(str(_text), float("-inf")), float(_excess))
+    return _best
 
 
 def _conclusion_slice(parts: list[str]) -> list[str]:
@@ -207,6 +227,19 @@ def test_the_income_line_uses_each_funds_real_amount_not_a_flat_principal():
     _body = "\n".join(_conclusion_slice(_render(portfolio=[WIN, LAG])))
     assert "11,000" in _body, f"畫面上沒有印出合計 11,000 TWD。\n{_body}"
 
+    # ⭐ **X2（2026-09-08 稽核）：主句本身不得說謊，不是只驗子字串。**
+    #    稽核實測：把主句改成「已涵蓋你手上全部 N 檔」而附註仍誠實 → **全綠**，
+    #    因為斷言只比對 `11,000` / `2 檔` 這種子字串。**主句與附註可以互相矛盾。**
+    #    這裡改成正反兩面都釘：有東西沒算進去時**不得**宣稱「全部／都」。
+    _left_out_funds = [WIN, LAG, _with_peer(_fund("NM", div=8.0, ret=3.0), 2.0)]
+    _t2 = _income_tally(_left_out_funds)
+    assert _t2["counted"] == 2 and _t2["no_amount"] == 1, f"前提不成立：{_t2}"
+    _body2 = "\n".join(_conclusion_slice(_render(portfolio=_left_out_funds)))
+    assert "全部" not in _body2 and "都算進" not in _body2, (
+        "有 1 檔沒算進合計，主句卻宣稱涵蓋全部 —— 主句與附註互相矛盾（§1）。\n" + _body2)
+    assert "依這 2 檔" in _body2, (
+        "主句沒有說清楚這個合計是由**幾檔**加出來的（應為 2 檔，共 3 檔）。\n" + _body2)
+
 
 def test_funds_left_out_of_the_income_total_are_named_by_reason():
     """⭐ **沒算進去的必須講出來，而且兩種原因要分開講。**
@@ -219,13 +252,30 @@ def test_funds_left_out_of_the_income_total_are_named_by_reason():
     併成一句「N 檔資料不足」等於把**唯一可行動的那個原因**蓋掉。
     ⛔ 更不准的是**默默漏掉**：那個合計會被讀成「這就是我全部的配息」。
     """
-    _funds = [WIN, _with_peer(_fund("NM", div=8.0, ret=3.0), 2.0), NO_RATE[0]]
+    # ⭐ **fixture 刻意「不對稱」（2 / 1），這是被一顆存活的突變逼出來的。**
+    #    2026-09-08 獨立稽核實測：舊 fixture 是 `(counted, no_amount, no_rate) == (1, 1, 1)`，
+    #    把 `_income_tally` 那兩個分支**對調**之後三個數字一模一樣、兩句附註也都還在
+    #    ⇒ **141 次執行全綠**。也就是「哪個原因對應哪個數字」原本零守衛。
+    #    ⛔ 後果不是排版難看：使用者會被叫去補一個他**早就填好**的欄位，
+    #       而真正的原因（抓不到配息率）被蓋掉 —— 正是 `_income_tally` docstring
+    #       自己說要防的那件事。
+    _funds = [
+        WIN,                                                    # counted
+        _with_peer(_fund("NM1", div=8.0, ret=3.0), 2.0),        # 沒填金額 ①
+        _with_peer(_fund("NM2", div=8.0, ret=3.0), 2.0),        # 沒填金額 ②
+        NO_RATE[0],                                             # 有金額、查不到配息率
+    ]
     _t = _income_tally(_funds)
-    assert (_t["counted"], _t["no_amount"], _t["no_rate"]) == (1, 1, 1), (
-        f"三種落點沒有分開：{_t}")
+    assert (_t["counted"], _t["no_amount"], _t["no_rate"]) == (1, 2, 1), (
+        f"三種落點沒有分開（期望 counted=1 / no_amount=2 / no_rate=1）：{_t}")
     _body = "\n".join(_conclusion_slice(_render(portfolio=_funds)))
-    assert "1 檔沒有填投入金額" in _body, f"沒有說出「誰因為沒填金額而未列入」。\n{_body}"
-    assert "1 檔查不到配息率" in _body, f"沒有說出「誰因為缺配息率而未列入」。\n{_body}"
+    # ⛔ 數字與標籤必須**綁在一起**驗；分開驗等於沒驗（那正是舊版存活的突變）。
+    assert "2 檔沒有填投入金額" in _body, (
+        "「沒填投入金額」那一類的**檔數不對或標籤接錯**（應為 2 檔）。\n" + _body)
+    assert "1 檔查不到配息率" in _body, (
+        "「查不到配息率」那一類的**檔數不對或標籤接錯**（應為 1 檔）。\n" + _body)
+    assert "1 檔沒有填投入金額" not in _body and "2 檔查不到配息率" not in _body, (
+        "兩個原因的標籤對調了 —— 使用者會被叫去補一個他早就填好的欄位。\n" + _body)
 
 
 def test_the_income_line_goes_grey_instead_of_printing_a_zero():
@@ -257,8 +307,16 @@ def test_the_verdict_tally_counts_each_bucket_from_the_ssot_grade():
         f"判得動的應為 3 檔（贏／輸／平各 1）：{_judged}")
     assert sum(_c for _, _c in _unjudged) == 1, (
         f"判不動的應為 1 檔（BLIND 沒有同類平均）：{_unjudged}")
-    # 排序：好消息在前 —— 桶內最好的超額報酬由大到小。
-    assert _judged[0][0] != _judged[-1][0]
+    # ⭐ **X3（2026-09-08 稽核）：排序反轉原本不會轉紅。**
+    #    舊斷言是 `_judged[0][0] != _judged[-1][0]` —— 只要有兩個以上的桶就恆真，
+    #    **近乎空轉**；稽核把排序反轉過來，測試照樣全綠。
+    #    docstring 明寫「好消息在前」，那就要真的驗它。
+    _order_texts = [_t for _t, _ in _judged]
+    _by_best = [_t for _t, _ in sorted(
+        _expected_best_excess(FOUR_WAY).items(), key=lambda _kv: -_kv[1])]
+    assert _order_texts == _by_best, (
+        "判得動的桶沒有依「桶內最好的超額報酬」由大到小排 —— "
+        f"docstring 說好消息在前。\n  實際：{_order_texts}\n  應為：{_by_best}")
     _body = "\n".join(_conclusion_slice(_render(portfolio=FOUR_WAY)))
     assert "這 4 檔裡" in _body, f"沒有講出分母（手上總共幾檔）。\n{_body}"
 
@@ -286,6 +344,58 @@ def test_a_fund_we_cannot_judge_is_counted_as_undecided_not_as_fine():
         "畫面上沒有把那 3 檔「判不動」講出來。\n" + _body)
     assert "未判定 ≠ 沒問題" in _body, (
         "沒有點破「未判定 ≠ 沒問題」—— 少了這半句，使用者會把留白讀成安全。\n" + _body)
+
+
+def test_the_same_fund_across_two_policies_is_counted_once_in_the_conclusion():
+    """⭐⭐ **裁決 2（2026-09-08 稽核 X8）：結論層的去重原本零守衛。**
+
+    `portfolio_funds` 的主鍵是 `(policy_id, code)` —— **同一檔基金買在兩張保單就有兩筆**
+    （`ui/helpers/portfolio/load.py::reconcile_funds_with_ledgers`）。
+
+    **稽核實測**：把結論層的 `_uniq_by_code(...)` 拿掉 → **全綠**，
+    而畫面會變成「這 **3** 檔裡…🏆 **2** 檔」，底下的逐檔表卻說「共 **1** 檔」。
+    ⛔ 那正是 `_uniq_by_code` 自己 docstring 點名要防的
+    「**一個看不出來的錯誤數字**」（`CLAUDE.md §1`）——
+    配息合計更嚴重：**同一筆錢會被加兩次**。
+
+    本條兩半都釘（缺任一半，突變就會活）：
+      (a) **計數**：兩筆同 code 只能算一檔；
+      (b) **金額**：合計不得因為重複而變成兩倍。
+    """
+    _dup = [dict(WIN, policy_id="P1"), dict(WIN, policy_id="P2")]
+    assert len({_f["code"] for _f in _dup}) == 1, "前提：這兩筆是同一檔基金。"
+
+    # (a) 計數 —— 判定盤點只能看見一檔
+    _judged, _unjudged = _peer_verdicts(_uniq_by_code(_dup))
+    _seen = sum(_c for _, _c in _judged) + sum(_c for _, _c in _unjudged)
+    assert _seen == 1, f"同一檔基金跨兩張保單被算成 {_seen} 檔：{_judged} {_unjudged}"
+
+    # (b) 金額 —— 合計不得翻倍
+    _t = _income_tally(_uniq_by_code(_dup))
+    assert _t["counted"] == 1 and _t["monthly_twd"] == pytest.approx(8_000.0), (
+        f"配息合計把同一筆錢加了兩次（應為 1 檔 / 8,000）：{_t}")
+
+    # (c) 端到端 —— 畫面上講的是「1 檔」，不是「2 檔」
+    _body = "\n".join(_conclusion_slice(_render(portfolio=_dup)))
+    assert "這 1 檔裡" in _body, (
+        "畫面上的分母把同一檔基金算了兩次 —— 使用者看不出來，但每個數字都會偏。\n" + _body)
+    assert "8,000" in _body, f"畫面上的配息合計不是 8,000（重複加總？）。\n{_body}"
+
+    # (d) **靜態的那一半 —— 這一半是被一顆存活的突變逼出來的，留痕。**
+    #     本組先寫了 (a)(b)(c)，然後在本機跑突變「把 `_render_conclusion` 裡的
+    #     `_uniq_by_code(...)` 拿掉」—— (a)(b) **抓不到**（它們自己就先呼叫了去重），
+    #     (c) 抓得到但**本機跑不動**（要 streamlit）。
+    #     ⇒ 只有 (a)(b)(c) 的話，這條守衛在本機是「看起來有守、其實驗不到」。
+    #     本半用 AST 直接釘住**餵給兩句結論的到底是不是去重過的東西**，
+    #     於是**本機與 CI 都殺得死**這顆突變。
+    _fn = next(_n for _n in ast.walk(ast.parse(SRC.read_text(encoding="utf-8")))
+               if isinstance(_n, ast.FunctionDef) and _n.name == "_render_conclusion")
+    _src = ast.unparse(_fn)
+    assert "_uniq_by_code(" in _src, (
+        "`_render_conclusion()` 沒有對持股去重 —— `portfolio_funds` 的主鍵是 "
+        "`(policy_id, code)`，同一檔基金買在兩張保單就會被算兩次，"
+        "而**配息合計會把同一筆錢加兩次**（`CLAUDE.md §1`：看不出來的錯誤數字）。\n"
+        + _src)
 
 
 def test_every_fund_is_accounted_for_in_both_conclusions():
@@ -471,7 +581,16 @@ def test_the_conclusion_layer_never_reaches_the_fx_fetcher():
     ⚠️ 這條不是重複上一條。上一條問「會不會**畫**東西」，本條問「會不會**上網**」。
        `build_checkup_dataframe`（閘門後那張表用的）**會呼叫 `_safe_fx`**；
        若有人為了省事把結論層改接它，畫面照樣正確，但**每一次 rerun 都可能多打一輪匯率**
-       —— 而那正是 Checkbox Gate 這種設計要避免的東西，且不會有任何守衛轉紅。
+       —— 而那正是 Checkbox Gate 這種設計要避免的東西。
+
+    ⛔ **2026-09-08 射程更正 ＋ 補上缺的那一半（獨立稽核指出）。**
+    **舊版只走 `checkup.py` 的呼叫圖，完全不看 `page_02_health.py`** ——
+    也就是它**守不到自己 docstring 講的那個情境**：稽核直接在本頁裡呼叫 `_safe_fx`，
+    抓到它的是**另一條**守衛（`test_the_page_delegates_to_exactly_the_approved_entries`
+    的精確集合相等），不是本條。**縱深防禦沒破，但那段 docstring 在說謊。**
+    ⇒ 本條現在**兩邊都掃**：(a) `checkup.py` 那四支的呼叫閉包；
+      (b) **本頁自己**有沒有出現 `_safe_fx` / `get_latest_fx`。
+    ⚠️ **這是把射程補齊，不是放寬** —— 舊斷言一個字都沒有拿掉。
     """
     _tree = ast.parse((ROOT / "ui" / "helpers" / "fund" / "checkup.py")
                       .read_text(encoding="utf-8"))
@@ -490,12 +609,36 @@ def test_the_conclusion_layer_never_reaches_the_fx_fetcher():
         f"結論層的呼叫閉包碰到了 `_safe_fx`（閉包：{sorted(_seen)}）—— "
         "那支會呼叫 `services.fund_service.get_latest_fx`，也就是每次 rerun 多一輪取數。")
 
+    # ── (b) 補上的那一半：**本頁自己**不得直接碰匯率取數 ──────────────
+    _page = ast.parse(SRC.read_text(encoding="utf-8"))
+    _names: set[str] = set()
+    for _n in ast.walk(_page):
+        if isinstance(_n, ast.Call):
+            if isinstance(_n.func, ast.Name):
+                _names.add(_n.func.id)
+            elif isinstance(_n.func, ast.Attribute):
+                _names.add(_n.func.attr)
+        elif isinstance(_n, ast.ImportFrom):
+            _names.update(_a.name for _a in _n.names)
+    _hit = sorted({_w for _w in ("_safe_fx", "get_latest_fx") if _w in _names})
+    assert not _hit, (
+        f"本頁直接碰了匯率取數：{_hit}\n"
+        "⛔ 結論層跑在 Checkbox Gate **之前**，每一次 rerun 都會走到它 —— "
+        "在那裡打匯率等於把重取數搬到頁面入口。")
+
 
 # ══════════════════════════════════════════════════════════════════
 # ⑥ 本金（TWD）：文案不得聲稱一個它沒有的消費者
 # ══════════════════════════════════════════════════════════════════
-#: 誠實揭露句必須含的關鍵字。**列成常數**，讓「它到底守了什麼」讀得出來。
-_HONEST_BITS = ("沒有任何區塊在讀", "實際")
+#: 0 caller 時，畫面文案**必須**講清楚的兩件事（**使用者語言**，不是工程話）。
+#: ⚠️ 2026-09-08 M3：舊值是 `("沒有任何區塊在讀", "實際")` —— 那是**內部術語**。
+#: 事實沒錯，錯的是講給誰聽：客戶第二條驗收標準逐字是「讓**新手**也能看得懂」。
+_HONEST_BITS = ("不影響", "實際投入")
+
+#: ⛔ **畫面文案裡不准出現的工程術語。** 這一條是 M3 的**回歸防線** ——
+#: 沒有它，下一個人（或下一輪的我）會很自然地把「0 caller」寫回 tooltip 裡，
+#: 因為那在 repo 的 docstring 裡到處都是。**docstring 可以，`help=` 不行。**
+_JARGON = ("caller", "接線", "SSOT", "session", "commit", "docstring", "AST")
 
 
 def test_the_principal_help_never_claims_a_consumer_it_does_not_have():
@@ -520,16 +663,26 @@ def test_the_principal_help_never_claims_a_consumer_it_does_not_have():
     _callers = [_n.lineno for _n in ast.walk(_tree)
                 if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
                 and _n.func.id == "_principal_twd"]
+    # ⭐ **不論接線與否都成立的一半：畫面上不准講工程話（2026-09-08 M3）。**
+    _bad_jargon = [_w for _w in _JARGON if _w in PRINCIPAL_HELP]
+    assert not _bad_jargon, (
+        "本金欄的 `help=` 出現了工程術語：" + "、".join(_bad_jargon)
+        + "\n⛔ 那是使用者滑鼠停在輸入框上會看到的字。客戶第二條驗收標準逐字是"
+          "「讓**新手**也能看得懂」。**工程細節寫在 docstring，不要寫在 `help=`。**"
+        + f"\n目前文案：{PRINCIPAL_HELP}")
+
     if _callers:
         assert not any(_b in PRINCIPAL_HELP for _b in _HONEST_BITS[:1]), (
             f"`_principal_twd()` 現在有 {len(_callers)} 個呼叫點"
-            f"（行 {_callers}），但 help 文案還寫著「沒有任何區塊在讀它」。\n"
+            f"（行 {_callers}），但 help 文案還寫著它「不影響上面任何一個數字」。\n"
             "接線之後請回來把文案改成真的 —— 一句在寫下當天為真的話，"
             "不會自己過期，它只會安靜地變成假的。")
         return
     for _b in _HONEST_BITS:
         assert _b in PRINCIPAL_HELP, (
             f"`_principal_twd()` 是 0 caller，但 help 文案沒有揭露這件事（缺「{_b}」）。\n"
+            "⛔ 揭露要用**使用者語言**：他要知道的是「填了會不會影響上面的數字」，"
+            "不是我們的接線狀態。\n"
             f"目前文案：{PRINCIPAL_HELP}")
 
 
