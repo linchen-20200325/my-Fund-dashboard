@@ -26,9 +26,11 @@
    **參數化**，讓所有同類的錯都在射程內。（同一段話寫在
    `tests/test_wf03_research_batch.py` 開頭，本檔照同一個形狀。）
 
-⭐ **本檔末段有真的突變測試**（`tests/test_wf03_research_invest_calc.py::
-   test_removing_*`）—— 它們**在同一個 process 裡把修復拔掉**（monkeypatch 合作者），
-   然後斷言對應的守衛**真的轉紅**。憲法 §-1.5 v3 `03`-1 要的就是這個：
+⭐ **本檔末段有真的突變測試** —— 命名一律是 ``test_<拔掉什麼>_turns_the_<誰>_red``
+   （四條：`test_removing_the_currency_clash_guard…` / `test_fabricating_a_payout_rate…` /
+   `test_pretending_a_missing_rate_is_one…` / `test_reusing_one_sentence_for_every_reason…`）。
+   它們**在同一個 process 裡把修復拔掉**（換掉合作者），然後斷言對應的守衛**真的轉紅**、
+   還原之後**再驗回綠**。憲法 §-1.5 v3 `03`-1 要的就是這個：
    「突變測試（拔掉修復邏輯必須轉為紅燈）」。
 
 ⚠️ **本檔看不見什麼（照實寫，不要讀成「守死了」）**
