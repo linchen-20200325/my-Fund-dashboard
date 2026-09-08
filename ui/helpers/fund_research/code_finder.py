@@ -36,7 +36,7 @@
    決策者：**AI 總管**）。舊段落在寫下的當天是對的（登記確實還指著已刪除的呼叫點，
    且執行組確實不得自行改憲法）；**被權衡掉的是它的前提** —— 總管裁決
    「該失效**是本批刪除造成的**，依 v3 §01-2 屬同一次任務的收尾義務，本批修掉」。
-   **現行登記**：`CLAUDE.md §8.2.A` EX-PASSTHRU-1 →
+   **現行登記**：`EXCEPTIONS.md §8.2.A` EX-PASSTHRU-1 →
    `repositories.fund.tdcc_search_fund`（**`ui/helpers/fund_research/code_finder.py::_search`**，
    依姊妹 repo §8.2.A.0 規則 1 **不寫行號**）。舊路徑在該表就地加刪除線保留。
    **本註解即該表要求的「對應檔案加註解指回此表」**（§8.2.A 末句第 2 項）。

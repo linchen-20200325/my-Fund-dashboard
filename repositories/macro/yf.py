@@ -146,7 +146,7 @@ def fetch_yf_latest(tickers: tuple[str, ...]) -> dict[str, Optional[float]]:
 #   判斷題(若算,§8.2.A EX-PASSTHRU-1 的升級觸發條件會要求上提 L2)。
 #
 # ⚠️ 本函式由 L3 UI(`ui/components/mk_dashboard.py::_get_benchmark_series`)**直呼**,
-#   已登錄 CLAUDE.md §8.2.A **EX-PASSTHRU-1**。升級觸發條件見該表 ——
+#   已登錄 EXCEPTIONS.md §8.2.A **EX-PASSTHRU-1**。升級觸發條件見該表 ——
 #   其中一條是「本 fetcher 出現第二個 UI caller」,屆時應比照 v19.247 R16 上提 L2。
 
 # 抓取窗口:取 `1y` 再依日期裁到 9 個月。

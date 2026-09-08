@@ -32,7 +32,7 @@
 - `.github/workflows/export_db.yml` 是 `git push -f origin _pub:data` —— 推的是 `data` 分支，
   **不是 main**。
 - 若把 workflow 一起掃，本守衛第一天就會紅在 `update_macro_history.yml` 上，
-  逼下一個人要嘛放寬判定、要嘛加一份白名單 —— 那正是 `CLAUDE.md §8.2.A` 點名要防的
+  逼下一個人要嘛放寬判定、要嘛加一份白名單 —— 那正是 `EXCEPTIONS.md §8.2.A` 點名要防的
   「未經登錄的軟例外」溫床，最後守衛會被改到守不住東西。
 - 且 workflow 檔本身的每一次修改都要走 PR，已有一道 gate。
 

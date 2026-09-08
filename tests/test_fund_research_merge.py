@@ -5,7 +5,7 @@
 ## 為什麼這一組測試長這樣（方法先講清楚）
 
 本 repo 已實證過**字串比對型守衛會被檔案自己的說明文字騙過**
-（`CLAUDE.md §8.2.A` EX-PASSTHRU-1 該列：docstring 裡出現 `import yfinance`
+（`EXCEPTIONS.md §8.2.A` EX-PASSTHRU-1 該列：docstring 裡出現 `import yfinance`
 這幾個字，守衛就以為還在 import）。故本檔一律用兩種尺，**不用純字串 grep**：
 
 1. **sentinel（行為）**：把底層換成記錄器，跑一次渲染，驗「有沒有真的被呼叫」。

@@ -486,7 +486,7 @@ def test_the_batch_pointer_is_the_paste_box():
     「去搜尋條件打一個代碼」解決不了「你還沒貼多個代碼」。
 
     ⚠️ 本條比骨架那條嚴：它連**指路指到的那個欄位在畫面上真的存在**都驗
-    （`CLAUDE.md §8.3.P` 的 `P-WHERECONTENT-1` 記載這一層通常守不到）。
+    （`EXCEPTIONS.md §8.3.P` 的 `P-WHERECONTENT-1` 記載這一層通常守不到）。
     """
     _where = _batch_where()
     assert where_to_find("research") in _where, "指路沒有走 `where_to_find()`。"

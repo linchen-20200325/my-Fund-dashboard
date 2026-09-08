@@ -53,7 +53,7 @@ pandas / plotly）；本檔**純 AST，不 import 被測模組**。分開的好�
   ⚠️ 加這一句的理由：上句雖然是條件句，**讀者很容易只讀到後半段**
   （本批就有一段引用它時把它當成「目前不可見」的證據）。
 * :func:`_sinks` 是**名字比對**（`ast.walk`，不看分支、不看可達性、不看引數）——
-  它會**誤報**（`CLAUDE.md §8.3.P` 的 `P-SINKGRAIN-1` 就是一個實證）。
+  它會**誤報**（`EXCEPTIONS.md §8.3.P` 的 `P-SINKGRAIN-1` 就是一個實證）。
   本檔用它做的是**差集**，兩邊同一把尺，偽陽性在相減時會抵銷。
 """
 from __future__ import annotations
@@ -405,7 +405,7 @@ _DISPOSITIONS = frozenset({
 #:    ⇒ 已就地改成誠實版（見該守衛 docstring 的射程表）。
 #:
 #: ⇒ **動這張表的任何一列時，把同一把尺對全部同類列重跑一次**
-#:   （`CLAUDE.md §8.2.A.1` 驗證段 ④ 的既有教訓：「只改被點名的那一條 ＝ 沒改」）。
+#:   （`EXCEPTIONS.md §8.2.A.1` 驗證段 ④ 的既有教訓：「只改被點名的那一條 ＝ 沒改」）。
 #:
 #: ⚠️ **這張表不是「可以一直缺下去的清單」** —— `未登記缺口` 那幾筆是本批
 #:    用 AST 遞移閉包**新查出來的**，在此之前**沒有任何地方記載它們**
@@ -528,7 +528,7 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
     # ── 刻意不接（具名理由）────────────────────────────────────────
     "ui.helpers.fund_grp_health.rotation::render_rotation_section":
         ("刻意不接", "page_02_health.DROPPED_FOR_ZERO_WRITE：依「② 零寫入」裁決移出。"
-                      "守衛對它是**已知偽陽性**（`CLAUDE.md §8.3.P` 的 `P-SINKGRAIN-1`），"
+                      "守衛對它是**已知偽陽性**（`EXCEPTIONS.md §8.3.P` 的 `P-SINKGRAIN-1`），"
                       "但偽陽性不是把它接回來的理由，也不是改守衛的理由。"
                       + _STILL_LIVES),
     "ui.helpers.fund_grp_health.rotation::_render_pairs_ui":
@@ -538,7 +538,7 @@ DROPPED_WITH_REASON: "dict[str, tuple[str, str]]" = {
          "全稱句**（**有意識的更正，不是漏刪**；決策者：AI 總管，依獨立稽核實測）。"
          "實測全 repo（排除 `tests/`／`scripts/`）呼叫它的有**兩支**："
          "`render_rotation_section` **與 `render_rotation_section_from_df`**。"
-         "⚠️ **推翻它的證據一直躺在同一份文件裡**：`CLAUDE.md §8.3.P` 的 "
+         "⚠️ **推翻它的證據一直躺在同一份文件裡**：`EXCEPTIONS.md §8.3.P` 的 "
          "`P-SINKGRAIN-1` 逐字寫著「（傳 `True` 的是批次那一支 "
          "`render_rotation_section_from_df`）」—— 那句話的意思就是"
          "**`render_rotation_section_from_df` 也呼叫本函式**，"
@@ -1060,7 +1060,7 @@ def test_a_sole_caller_claim_must_actually_be_sole():
     `render_rotation_section`」而實測有兩支（另一支 `render_rotation_section_from_df`）。
 
     ⛔ **最刺眼的一點，寫在守衛裡而不是只寫在 PR 描述裡**（PR 描述沒有人會回頭讀）：
-    推翻第一句的證據**一直躺在同一份文件裡** —— `CLAUDE.md §8.3.P` 的
+    推翻第一句的證據**一直躺在同一份文件裡** —— `EXCEPTIONS.md §8.3.P` 的
     `P-SINKGRAIN-1` 逐字寫著「（傳 `True` 的是批次那一支
     `render_rotation_section_from_df`）」，而 `P-SINKGRAIN-1` **正是上一列自己引用的那一段**。
     **沒有人回頭讀。**
