@@ -194,7 +194,7 @@ def test_the_facade_adds_no_cache_of_its_own():
     """同一個關鍵字連呼三次 → L1 真的被打三次。
 
     ⛔ 在這一層加 TTL ＝ 與 L1 既有的快取疊加，之後沒有人推理得出
-       「畫面上這份清單是多久以前的」（`CLAUDE.md §8.2.A.1 EX-UICACHE-1` 升級條件 (3)）。
+       「畫面上這份清單是多久以前的」（`EXCEPTIONS.md §8.2.A.1 EX-UICACHE-1` 升級條件 (3)）。
     ⚠️ **順帶記一筆已知缺口（本組實測，未經第二組驗證）**：L1 的
        `_tdcc_get()` 有 module 層字典擋著，但 **FundClear 備援分支沒有任何快取** ——
        它只在 TDCC 兩個 endpoint 都沒命中時才跑，那條路每次 rerun 都真的送一次 HTTP。
@@ -212,7 +212,7 @@ def test_the_module_declares_no_cache_decorator():
 
     ⚠️ **別名不敏感**：`@_st.cache_data` / `@ttl.cache` 都掃得到 ——
     寫死 `@st.` 的字表在本 repo 已經漏抓過一次
-    （`CLAUDE.md §8.2.A.1` 驗證段 ① 就地記載）。
+    （`EXCEPTIONS.md §8.2.A.1` 驗證段 ① 就地記載）。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
     _bad = []

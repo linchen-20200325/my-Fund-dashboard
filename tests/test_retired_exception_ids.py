@@ -2,7 +2,7 @@
 
 ## 這道守衛在擋什麼
 
-憲法主檔 §8.2.A 的例外表是「架構硬規則的合法豁免清單」,末句明文
+憲法 §8.2.A 的例外表是「架構硬規則的合法豁免清單」,末句明文
 **「禁止未經登錄的潛在『軟例外』」**。例外會退役(豁免對象被刪掉、或被升級成真重構),
 退役時該列**整列加刪除線**保留在表上 —— 保留是為了可追溯,**不是**為了讓人繼續引用。
 
@@ -28,8 +28,13 @@
 
 ## 退役清單從哪來
 
-**不寫死在測試裡** —— 直接從憲法主檔 §8.2.A 例外表抽:第一格被 `~~ ~~` 包起來的 = 退役。
+**不寫死在測試裡** —— 直接從憲法的 §8.2.A 例外表抽:第一格被 `~~ ~~` 包起來的 = 退役。
 憲法改一次,守衛自動跟著改;人工同步一份名單正是 §8.2.A.0 規則 3 點名的失效模式。
+
+⚠️ **2026-09-08 起憲法是兩個檔**:`§8.2.A` 例外表已搬到 `EXCEPTIONS.md`,
+`CLAUDE.md` 原位置只剩指標段。本檔因此讀 `_CONSTITUTION_FILES` 裡的**每一個**檔。
+**只讀 `CLAUDE.md` 的話,這支守衛會安靜地空轉**(退役清單為空 ⇒ 掃描恆 0 命中,
+**綠燈,但什麼都沒查**)—— 那比紅燈危險得多,故 `_constitution_text()` 對缺檔一律 `raise`。
 """
 from __future__ import annotations
 
@@ -39,14 +44,39 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parent.parent
-_CONSTITUTION = _REPO / "CLAUDE.md"
 _SELF = Path(__file__).resolve()
+
+# 憲法**不只一個檔**(2026-09-08 拆檔):`§8.2.A` 例外表已搬到 `EXCEPTIONS.md`,
+# `CLAUDE.md` 原位置只剩指標段。**兩個都要讀** —— 只讀 `CLAUDE.md` 會讓
+# `parse_exception_ids()` 回一組空的退役清單,於是全 repo 掃描永遠 0 命中:
+# **守衛不會紅燈,它會安靜地什麼都不做**。那正是本檔開頭在講的失效模式。
+_CONSTITUTION_FILES: tuple[Path, ...] = (
+    _REPO / "CLAUDE.md",
+    _REPO / "EXCEPTIONS.md",   # ← `8.2.A` 例外表的現住址
+)
+
+
+def _constitution_text() -> str:
+    """把憲法各檔接起來當一份讀。**缺檔一律 raise,不得靜默跳過**(§1 Fail Loud)。
+
+    ⚠️ 這個 `raise` 是刻意的,而且是本檔拆檔後**唯一**擋得住「路徑寫錯」的東西:
+    若改成 `if p.exists()` 靜默跳過,把 `EXCEPTIONS.md` 改成任何錯字都不會有人發現 ——
+    退役清單默默少一半,守衛默默停止工作。**寧可炸掉,不可假裝有讀到。**
+    """
+    _missing = [str(_p.relative_to(_REPO)) for _p in _CONSTITUTION_FILES
+                if not _p.is_file()]
+    if _missing:
+        raise FileNotFoundError(
+            "憲法檔不見了:" + "、".join(_missing) + "\n"
+            "本檔的退役 ID 清單是從憲法 §8.2.A 例外表現抽的,讀不到就等於清單為空、"
+            "整支守衛空轉。若檔案是**刻意**改名或再拆,請同步改 `_CONSTITUTION_FILES`。")
+    return "\n".join(_p.read_text(encoding="utf-8") for _p in _CONSTITUTION_FILES)
 
 # 引用退役 ID 時同一行必須出現其一。刻意**很短** —— 清單越長,規避越容易。
 # 兩個非字面「退役」的收錄理由,據實寫出(不是隨手加寬):
 #   - 「避免重蹈」:既有 code(services/fund_service.py)用它把退役例外當**反面前例**引,
 #     語意正確,不收就是誤殺。
-#   - 「升級」:本 repo 的退役路徑之一就叫「升級退役」(憲法主檔 §8.2.A 對 EX-L1ORCH-1
+#   - 「升級」:本 repo 的退役路徑之一就叫「升級退役」(憲法 §8.2.A 對 EX-L1ORCH-1
 #     的原文是「v19.240 R8 升級退役」),寫「EX-L1ORCH-1 升級」是在描述**例外被拿掉**,
 #     不是在主張它還有效。
 # ⚠️ 代價據實記:這兩個詞比「退役」寬,理論上可被拿來規避。守衛擋的是**無意識沿用**
@@ -106,7 +136,7 @@ def _python_sources() -> list[Path]:
 
 @pytest.fixture(scope="module")
 def retired_ids() -> set[str]:
-    _retired, _active = parse_exception_ids(_CONSTITUTION.read_text(encoding="utf-8"))
+    _retired, _active = parse_exception_ids(_constitution_text())
     return _retired
 
 
@@ -120,10 +150,9 @@ class TestParserLiveness:
         故釘住三個**已知事實**當金絲雀:EX-POLICY-1 / EX-L1ORCH-1 已退役、
         EX-CACHE-1 生效中。金絲雀死掉 = parser 需要更新,不是「repo 變乾淨了」。
         """
-        _retired, _active = parse_exception_ids(
-            _CONSTITUTION.read_text(encoding="utf-8"))
+        _retired, _active = parse_exception_ids(_constitution_text())
         assert "EX-POLICY-1" in _retired, (
-            f"parser 沒抓到 EX-POLICY-1 已退役 —— 憲法 §8.2.A 表格格式可能變了。"
+            f"parser 沒抓到 EX-POLICY-1 已退役 —— 憲法 §8.2.A 表格格式可能變了(或 `EXCEPTIONS.md` 沒被讀到)。"
             f"目前解析結果 retired={sorted(_retired)} active={sorted(_active)}")
         assert "EX-L1ORCH-1" in _retired, f"retired={sorted(_retired)}"
         assert "EX-CACHE-1" in _active, f"active={sorted(_active)}"
@@ -144,7 +173,7 @@ class TestNoRetiredExceptionCitedAsLiveAuthority:
                     _p.read_text(encoding="utf-8", errors="replace"), retired_ids):
                 _bad.append(f"{_rel}:{_n}: {_line}")
         assert not _bad, (
-            "引用了已退役的 §8.2.A 例外 ID 卻沒標明它已退役 —— 這是憲法主檔 §8.2.A "
+            "引用了已退役的 §8.2.A 例外 ID 卻沒標明它已退役 —— 這是憲法 §8.2.A "
             "末句禁止的「未經登錄的軟例外」。\n"
             "改法:要嘛改引用真正成立的依據,要嘛比照 shared/regime_fit.py 明寫「已退役」"
             "並且只當反面前例用。\n命中:\n  " + "\n  ".join(_bad))

@@ -83,7 +83,47 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONSTITUTION = REPO_ROOT / "CLAUDE.md"
+
+# ══════════════════════════════════════════════════════════════════════════
+# 憲法**不只一個檔**(2026-09-08 拆檔)
+# ══════════════════════════════════════════════════════════════════════════
+# `§8.2.A` 例外表與 `§8.3.P` 待判定表已搬到 `EXCEPTIONS.md`,`CLAUDE.md` 原位置
+# 只留指標段。**兩個都要讀。**
+#
+# ⚠️ **這裡是本檔最容易安靜壞掉的地方,講清楚為什麼**:
+# 拆檔當下若只留 `CLAUDE.md`,本守衛**不會紅燈** —— `hard` 照樣是 0、測試照樣綠。
+# 它只是**少看了 229 筆活的 Tier-1 引用**(拆檔前全檔 413 筆的 **55.4%**),
+# warning 由 80 掉到 57。**一支綠燈但少看一半的守衛,比一支紅燈的守衛危險得多** ——
+# 下一個人會從綠燈推論出「憲法的檔案引用已經全部查過了」,而那個推論是錯的。
+# → 故本檔除了讀多檔之外,另備一條 **liveness 下限**
+#   (`test_guard_still_sees_the_whole_constitution`),見該處。
+CONSTITUTION_FILES: tuple[Path, ...] = (
+    REPO_ROOT / "CLAUDE.md",
+    REPO_ROOT / "EXCEPTIONS.md",   # ← `8.2.A` 例外表 ＋ `8.3.P` 待判定表的現住址
+)
+
+# 向後相容:檔內既有敘述與外部引用仍以 `CLAUDE.md` 為憲法主檔。
+CONSTITUTION = CONSTITUTION_FILES[0]
+
+
+def _read_constitution_files() -> list[tuple[str, str]]:
+    """回 [(顯示用檔名, 內容)]。**缺檔一律 raise,不得靜默跳過**(§1 Fail Loud)。
+
+    ⚠️ 這個 `raise` 是拆檔之後**唯一**擋得住「路徑寫錯 / 檔案被改名」的東西。
+    若改成 `if p.exists()` 靜默跳過,把 `EXCEPTIONS.md` 打成任何錯字都不會有人發現:
+    那一半的引用默默不再被檢查,而測試**照樣綠**。**寧可炸掉,不可假裝有讀到。**
+    """
+    missing = [str(p.relative_to(REPO_ROOT)) for p in CONSTITUTION_FILES
+               if not p.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "憲法檔不見了:" + "、".join(missing) + "\n"
+            "本守衛的全部價值來自「真的把憲法讀完」。讀不到其中一個檔,"
+            "它就會少檢查那個檔裡的所有引用,而且**不會紅燈** —— 故此處直接炸掉。\n"
+            "若檔案是**刻意**改名或再拆,請同步改 `CONSTITUTION_FILES`,"
+            "並重新量測 `_MIN_LIVE_TIER1_REFS` 的下限。")
+    return [(str(p.relative_to(REPO_ROOT)), p.read_text(encoding="utf-8"))
+            for p in CONSTITUTION_FILES]
 
 # --------------------------------------------------------------------------
 # 刪除線解析
@@ -283,28 +323,83 @@ _FIX_GUIDE = """
 
 
 def test_constitution_has_no_dangling_file_references():
-    """CLAUDE.md 內**活的**路徑引用，必須指向存在的檔案與界內的行號。"""
-    text = CONSTITUTION.read_text(encoding="utf-8")
-    hard, warns, _ = audit(text, REPO_ROOT)
+    """憲法各檔內**活的**路徑引用，必須指向存在的檔案與界內的行號。
 
-    if warns:
-        print(f"\n[warning] Tier 2 裸檔名引用 {len(warns)} 筆（不影響成敗，僅供追蹤）：")
-        for ref, why in warns[:20]:
-            print(f"  CLAUDE.md:{ref.md_line}  {ref.cited}  — {why}")
-        if len(warns) > 20:
-            print(f"  …另有 {len(warns) - 20} 筆未列出")
+    ⚠️ 2026-09-08 起憲法是多個檔（見 `CONSTITUTION_FILES`）—— **每一個都要掃**。
+    """
+    all_hard: list[tuple[str, Reference, str]] = []
+    all_warns: list[tuple[str, Reference, str]] = []
+    for fname, text in _read_constitution_files():
+        hard, warns, _ = audit(text, REPO_ROOT)
+        all_hard += [(fname, r, w) for r, w in hard]
+        all_warns += [(fname, r, w) for r, w in warns]
 
-    if hard:
+    if all_warns:
+        print(f"\n[warning] Tier 2 裸檔名引用 {len(all_warns)} 筆（不影響成敗，僅供追蹤）：")
+        for fname, ref, why in all_warns[:20]:
+            print(f"  {fname}:{ref.md_line}  {ref.cited}  — {why}")
+        if len(all_warns) > 20:
+            print(f"  …另有 {len(all_warns) - 20} 筆未列出")
+
+    if all_hard:
         lines = [
             "",
-            f"CLAUDE.md 有 {len(hard)} 筆**活的**引用指向不存在的檔案或界外的行號。",
+            f"憲法有 {len(all_hard)} 筆**活的**引用指向不存在的檔案或界外的行號。",
             "（被 `~~刪除線~~` 包住的引用不算 —— 那是已正確退役的紀錄，本守衛不碰。）",
             "",
         ]
-        for ref, why in sorted(hard, key=lambda r: r[0].md_line):
-            lines.append(f"  CLAUDE.md:{ref.md_line}\t{ref.cited}\n\t\t→ {why}")
+        for fname, ref, why in sorted(all_hard, key=lambda x: (x[0], x[1].md_line)):
+            lines.append(f"  {fname}:{ref.md_line}\t{ref.cited}\n\t\t→ {why}")
         lines.append(_FIX_GUIDE)
         raise AssertionError("\n".join(lines))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ⭐ liveness 下限 —— 本檔在 2026-09-08 拆檔前**沒有**這一條，而那正是它最大的洞
+# ══════════════════════════════════════════════════════════════════════════
+# 量測（量測日 2026-09-08，拆檔前 `CLAUDE.md` @ ba3b06d）：
+#     活的 Tier-1 引用 **413** 筆 = `CLAUDE.md` 其餘各節 184 ＋ §8.2.A 124 ＋ §8.3.P 105。
+# 也就是說：**拆檔時若漏掉 `EXCEPTIONS.md`，這支守衛會少看 229 筆（55.4%）而照樣綠燈。**
+#
+# 下限刻意設在 **300**，理由據實寫出（不是隨手挑一個數）：
+#   * 它**擋得住結構性損失** —— 掉任一個憲法檔都會跌破它
+#     （少了 `EXCEPTIONS.md` → 184；少了 `CLAUDE.md` → 229；兩者都 < 300）。
+#   * 它**擋不住、也刻意不擋逐筆的正常增減** —— 本 repo 鼓勵把過期引用
+#     加刪除線退役（那會讓活的引用變少），把下限貼著現值會把「正確退役」變成紅燈，
+#     逼人不敢退役。**那是反效果。**
+# ⚠️ 若哪天憲法真的瘦到 300 以下：**請改這個常數並在此寫下新的量測與理由**，
+#    不要把這條測試刪掉或改成 `>= 0`。刪掉它 = 把 2026-09-08 這個教訓一起刪掉。
+_MIN_LIVE_TIER1_REFS = 300
+
+
+def test_guard_still_sees_the_whole_constitution():
+    """**反空轉**：確認本守衛真的還在看整部憲法，而不是安靜地只看了一半。
+
+    這一條擋的不是「憲法寫錯」，是「**守衛自己壞了但沒人發現**」。
+    2026-09-08 拆檔實測：只讀 `CLAUDE.md` 的話 `hard` 仍是 0、測試全綠，
+    但覆蓋率掉掉 55.4%。**沒有這一條，那次退化不會有任何訊號。**
+    """
+    per_file: dict[str, int] = {}
+    for fname, text in _read_constitution_files():
+        per_file[fname] = sum(
+            1 for r in parse_references(text) if not r.struck and r.is_tier1
+        )
+    total = sum(per_file.values())
+
+    empty = sorted(f for f, n in per_file.items() if n == 0)
+    assert not empty, (
+        f"下列憲法檔**一筆活的 Tier-1 引用都沒有**：{empty}\n"
+        "這幾乎一定是「檔案被讀到了，但內容不是預期的那份」——"
+        "例如路徑指到一個空殼、或內容被搬走而 `CONSTITUTION_FILES` 沒跟著改。\n"
+        f"各檔實測：{per_file}")
+
+    assert total >= _MIN_LIVE_TIER1_REFS, (
+        f"本守衛目前只看得到 {total} 筆活的 Tier-1 引用，低於下限 "
+        f"{_MIN_LIVE_TIER1_REFS}（各檔：{per_file}）。\n"
+        "最可能的原因：**憲法內容被搬走了，但 `CONSTITUTION_FILES` 沒跟著更新** ——"
+        "那會讓本守衛安靜地少檢查一整批引用，而其他測試**全部照樣綠燈**。\n"
+        "先確認 `CONSTITUTION_FILES` 列全了；確認之後若憲法是真的變小了，"
+        "再**有意識地**下修 `_MIN_LIVE_TIER1_REFS` 並就地寫明新的量測與理由。")
 
 
 def test_every_exemption_is_still_needed():
@@ -313,8 +408,10 @@ def test_every_exemption_is_still_needed():
     沒有這條，豁免清單會變成一個只進不出的垃圾桶 —— 而一份會說謊的豁免清單，
     正是 §8.2.A.0 規則 2/3 點名的失效模式（人工維護的窮舉清單必然過期）。
     """
-    text = CONSTITUTION.read_text(encoding="utf-8")
-    _, _, used = audit(text, REPO_ROOT)
+    used: set[str] = set()
+    for _fname, text in _read_constitution_files():
+        _, _, u = audit(text, REPO_ROOT)
+        used |= u
     stale = sorted(set(EXEMPTIONS) - used)
     assert not stale, (
         "下列豁免已經沒有作用（CLAUDE.md 內已經沒有這個活的引用了），請從 EXEMPTIONS 移除：\n  "
