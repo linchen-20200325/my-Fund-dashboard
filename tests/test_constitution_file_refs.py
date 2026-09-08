@@ -669,6 +669,11 @@ _DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
     #    **新增登記簿列的人要同時更新這裡**，否則新的一列天生不受保護。
     "P-CNHALIAS-1", "P-NAVSERIES-1", "P-ADRUNKNOWN-1",
     "P-ALIASSHAPE-1", "P-STALEDIV-1",
+    # 2026-09-08 #833 第六輪（第四輪差異稽核抓出的三項）。
+    # ⚠️ `P-COUNTGUARD-1` 記的正是「數這張表的那道守衛是 **fail-open**」——
+    #    **本清單是比對名單、不是門檻**，所以它擋得住「這一列被刪掉」，
+    #    但擋不住「上表被塞進一列它認不出來的」。兩者不要混為一談。
+    "P-COUNTGUARD-1", "P-MIXEDROWDATE-1", "P-SAMESOURCE-1",
 })
 
 _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")

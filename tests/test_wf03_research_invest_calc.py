@@ -67,6 +67,7 @@ from __future__ import annotations
 import ast
 import math
 import pathlib
+import re
 import sys
 
 import pytest
@@ -1693,3 +1694,102 @@ def test_the_currency_table_still_says_these_spellings_mean_the_same_thing():
     assert CCY_NORMALIZE.get("台幣") == "TWD", CCY_NORMALIZE.get("台幣")
     assert "RMB" not in CCY_NORMALIZE and "NTD" not in CCY_NORMALIZE, (
         "`RMB`／`NTD` 已被補進 CCY_NORMALIZE —— P-ALIASSHAPE-1 可能已被修掉")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⛔ 2026-09-08 第七輪｜自稱「實跑」的分類矩陣印著**舊值**
+#
+# `TRACE_UNKNOWN` 由 `"上游沒說"` 改成 `"沒有回報"` 的**同一顆 commit**
+# 更新了三處引用，**漏掉矩陣裡的兩格**。於是那張**自稱「實跑」**的表
+# 印著一個**程式裡已經不存在的字串**。
+#
+# ⚠️ **一張自稱實跑的表印著舊值，比沒有那張表更糟** —— 它讓讀者以為那是量出來的。
+# ⚠️ 這是本 PR 一路在修的同一個病，**範圍縮到同一個檔案的 30 行之內**。
+# ⛔ 之前**零守衛**：那張表是 `#:` 註解，沒有任何東西在讀它。
+# ══════════════════════════════════════════════════════════════════
+
+def _trace_matrix_rows() -> list[tuple[str, str, str]]:
+    """把 `page_03_research.py` 那張分類矩陣讀出來 → `[(形狀, 結果欄, 計入來源數)]`。
+
+    矩陣是 RST 風格的定寬表，夾在兩條 `=====` 之間、每行以 `#:` 開頭。
+    ⚠️ **刻意用「兩條分隔線之間」定位，不用行號** —— 行號在任何一次編輯後就失效。
+    """
+    _lines = [_l.rstrip("\n") for _l in _PAGE.read_text(encoding="utf-8").split("\n")]
+    _sep = [_i for _i, _l in enumerate(_lines)
+            if _l.startswith("#: =====") and "============" in _l]
+    assert len(_sep) == 3, (
+        f"矩陣的分隔線應該恰好 3 條（頭／欄名下／尾），實際 {len(_sep)}：{_sep}\n"
+        "⇒ 表被改過形狀了，這支解析器要一起更新（**不要放寬斷言**）。")
+    _out: list[tuple[str, str, str]] = []
+    for _l in _lines[_sep[1] + 1:_sep[2]]:
+        _body = _l[2:].strip()          # 去掉 "#:"
+        if not _body:
+            continue
+        # ⚠️ **刻意不用定寬字元切**：欄位對齊靠的是**顯示寬度**（CJK 佔 2 欄），
+        #    而 Python 的字串索引是**字元數** —— 用固定索引切，CJK 多的那幾列會錯位。
+        #    （本組第一版就是這樣寫的，當場被自己的斷言擋下來。）
+        #    RST 定寬表的欄位之間**至少兩個空白**，以此切最穩。
+        _cells = re.split(r"\s{2,}", _body)
+        # 第 4 欄**只准**是腳註標記（表尾那一列有 `← **(a)**`）。
+        # ⛔ 不是「>= 3 就放行」：多出來的東西必須長成腳註，否則表的形狀變了。
+        assert len(_cells) == 3 or (len(_cells) == 4 and _cells[3].startswith("←")), (
+            f"這一列切不出「形狀／結果欄／計入來源數（＋選配腳註）」：{_l!r}\n"
+            f"切出來的是：{_cells!r}\n"
+            "⛔ 不要把這裡放寬成 `>= 2` —— 切不乾淨就表示表的形狀變了，該修的是解析器。")
+        _out.append((_cells[0], _cells[1], _cells[2]))
+    return _out
+
+
+def test_the_trace_matrix_never_prints_a_literal_the_code_no_longer_has():
+    """⭐ 矩陣「結果欄」的每一格，都必須是**現行三個常數之一**。
+
+    ⛔ 這一條是**漂移守衛**，不看語意：常數改了字、矩陣沒跟上 → 當場轉紅。
+    **它擋的正是 2026-09-08 那一顆 commit 漏掉的那兩格。**
+    """
+    from ui.views.page_03_research import TRACE_FAIL, TRACE_OK, TRACE_UNKNOWN
+    _live = {TRACE_OK, TRACE_FAIL, TRACE_UNKNOWN}
+    _rows = _trace_matrix_rows()
+    assert _rows, "矩陣一列都沒讀到 —— 解析器壞了（0 列的綠燈等於沒檢查）"
+    _bad = sorted({_r[1] for _r in _rows if _r[1] not in _live})
+    assert not _bad, (
+        f"矩陣的「結果欄」印著程式裡已經不存在的字串：{_bad}\n"
+        f"現行三個常數：{sorted(_live)}\n"
+        "⚠️ 那張表**自稱「實跑」** —— 印著舊值比沒有那張表更糟。")
+
+
+#: 矩陣四列各自對應的 `source_trace` 形狀。**這份對映是人寫的**，
+#: 所以下面那條守衛同時驗「對映還對不對」（形狀描述變了就轉紅）。
+_TRACE_SHAPE_FIXTURES: tuple[tuple[str, dict], ...] = (
+    ("缺 ``success`` 鍵", {"source": "S1", "note": "ok"}),
+    ("``success: None``（說了、值是空）", {"source": "S2", "success": None}),
+    ("``success: False``（真的失敗）", {"source": "S3", "success": False}),
+    ("有 ``error`` 但**無** ``success`` 鍵", {"source": "S4", "error": "HTTP 500"}),
+)
+
+
+def test_every_cell_of_the_trace_matrix_matches_a_real_run():
+    """⭐ **逐格**比對矩陣與真跑 —— 結果欄**與**計入來源數都驗。
+
+    ⛔ **不是只驗被點名的那兩格**：本 PR 反覆發作的病就是
+    「更正一個被點名的項目時，沒有把同一把尺對全部同類項目重跑」
+    （`CLAUDE.md` §8.2.A 驗證段 ④ 的既有教訓）。
+    """
+    from ui.views.page_03_research import TRACE_COLS, _failed_source_count, _trace_rows
+    _rows = _trace_matrix_rows()
+    assert len(_rows) == len(_TRACE_SHAPE_FIXTURES), (
+        f"矩陣有 {len(_rows)} 列、對映有 {len(_TRACE_SHAPE_FIXTURES)} 筆 —— "
+        "有人加／刪了一列卻沒更新這裡（**不要把對映補成寬鬆的**）。")
+    for (_shape_doc, _declared_result, _declared_count), (_shape_fx, _trace) in zip(
+            _rows, _TRACE_SHAPE_FIXTURES):
+        assert _shape_doc == _shape_fx, (
+            f"矩陣第一欄變了：文件寫 {_shape_doc!r}、對映寫 {_shape_fx!r}\n"
+            "⇒ 下面那一格的比對會變成拿錯的形狀去驗，先修對映。")
+        _res = {"source_trace": [_trace]}
+        _actual_result = _trace_rows(_res)[0][TRACE_COLS[1]]
+        _actual_count = _failed_source_count(_res)
+        assert _declared_result == _actual_result, (
+            f"「{_shape_doc}」：矩陣說結果欄是 {_declared_result!r}，"
+            f"真跑是 {_actual_result!r}。")
+        assert _declared_count == str(_actual_count), (
+            f"「{_shape_doc}」：矩陣說計入來源數是 {_declared_count!r}，"
+            f"真跑是 {_actual_count!r}。")
