@@ -484,6 +484,14 @@ def test_the_known_static_candidates_between_old_two_and_new_six_are_registered(
     （那個檔**有**橋接它，見該檔 `test_the_gate_still_has_a_reason_to_exist`
     裡的 `bridge = ROOT / "ui" / "helpers" / "fund_grp_health_extras.py"`）。
 
+    ⭐ **括號裡那句「拿掉閘門 → 轉紅」本組也重跑過，它仍然為真** ——
+    而且它現在**多說了兩件事**：把閘門短路掉（`if False and not _open:`，
+    語法合法、`ast.parse` 過）之後，候選命中的模組
+    **修正前只有 `backtest_section` 一個，修正後是三個全到**。
+    ⇒ 同一顆突變，**紅的顏色沒變，但它照出來的東西多了兩倍**。
+    這就是「射程」與「宣稱」的差別：舊守衛不是不會紅，是**紅得不夠寬**，
+    而那句「任何」把不夠寬的說成了全覆蓋。
+
     ✅ **2026-09-08 已補**：:func:`_reexport_home` ⇒ 上表右欄三顆全紅。
     ⛔ **但仍然不得寫成「任何」** —— 這條守衛看得到什麼、看不到什麼，逐條寫在檔尾
     射程聲明（第 6 項專講 shim 的殘留邊界）。**下面這句才是現在成立的版本**：
