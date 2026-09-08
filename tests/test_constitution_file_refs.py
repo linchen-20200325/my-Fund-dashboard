@@ -372,6 +372,14 @@ def test_constitution_has_no_dangling_file_references():
 _MIN_LIVE_TIER1_REFS = 300
 
 # ── 第二道：per-file 下限 ──────────────────────────────────────────────
+# ⛔⛔ **射程：這三道數量下限（總／per-file／ratchet）擋的是「引用被靜默漏檢」，
+#      不是「內容完整性」。** 2026-09-08 第三輪稽核實測：
+#        * `§-1.5` 整節（**全檔 49.6%**、客戶三份逐字頒布原文）只含 28 筆引用
+#          ⇒ 剪掉它，三道下限**一個都不會動**；
+#        * 以現行下限，最大可靜默搬走的**連續**區塊是 `CLAUDE.md` 的 **56.9%**（實測）。
+#      ⇒ **內容完整性由 `test_declared_sections_all_present` 與
+#          `test_declared_registry_ids_all_present` 負責，不是由這三道。**
+#      ⛔ 本檔任何地方都不得再暗示數量下限保護內容完整性。
 # 總下限擋的是「**整個檔**沒被讀到」。它擋**不住**「**一半內容**被搬到第三個檔、
 # 而那個檔忘了登記」—— 2026-09-08 實測該情境：守衛看得到 315、看不到 111（26.1%），
 # `315 >= 300` ⇒ **全綠**。故補這一道：**每個已登記的檔，各自不得縮到下限以下。**
@@ -406,57 +414,75 @@ _MIN_LIVE_TIER1_PER_FILE: dict[str, int] = {
 _PER_FILE_FLOOR_MAX_SLACK = 1.6
 
 
-# ── 第三道：雙向綁定（**檔頭標記**，不依賴任何散文措辭）───────────────
-# **repo 根目錄帶標記的 `.md`，與 `CONSTITUTION_FILES`，兩份名單必須完全相等。**
+# ══════════════════════════════════════════════════════════════════════════
+# ⛔⛔ 讀這一段再改下面任何一行 —— 這道守衛的歷史
+# ══════════════════════════════════════════════════════════════════════════
+# **這道守衛已經被三組獨立稽核分別繞過 5 次、1 次、7 次，每一次都是在前一組
+#   「全部轉紅」之後。**
+# ⛔ **任何人看到它全綠，都不得據此推論「憲法不會被靜默搬走」。**
 #
-# ⚠️ **這一道 2026-09-08 被整條換掉過，原因寫在這裡，免得有人改回去**：
-# 舊版靠「搬至 `X.md`」這個**散文句式**建白名單，第二輪獨立稽核做出**五組繞過，全部全綠**：
-#   * `搬至 \`EXCEPTIONS.md\` 與 \`PENDING.md\`` —— **完全照約定寫**，但 regex 非貪婪、
-#     一句只抓第一個 `.md`，第二個檔靜默消失；
-#   * `移至`（換個動詞）／完全不寫指標段／`現住址:`（**守衛自己在旁邊用的詞**）；
-#   * 以及把檔案移進 `docs/`、兩支守衛路徑都同步改對 → per-file 下限的 key 對不上 → 靜默失去下限。
-# **舊版的反空轉金絲雀擋不住這些**：它是**全域**的（「憲法**任何地方**存在一個 `搬至 X.md`」），
-# 而 `CLAUDE.md` 現有 4 個指向 `EXCEPTIONS.md` 的指標段 ⇒ **只要它們還在，金絲雀就永遠不會再響。**
-# 它保護的是「既有措辭被全部改掉」，**不是**「下一次搬檔用了別的措辭」。
+# 每一輪都是同一個劇本：作者想得到的突變全部轉紅 → 換一組人來 → 當場繞過。
+# 第三輪最貴的一課是：**前兩輪都在調門檻，而門檻量的東西從一開始就是錯的**——
+# 下限數的是「**引用筆數**」，我們真正怕的是「**內容被搬走**」，兩者不成比例：
+#   實測（2026-09-08）：`CLAUDE.md` 的 `§-1.5` 整節 ＝ **141,198 bytes ＝ 全檔 49.6%**
+#   （裡面是客戶三份逐字頒布原文 v1/v2/v3、兩則裁決、七個判定），
+#   但它只含 **28 筆**活的 Tier-1 引用 ⇒ 整節剪進一個沒登記的檔 → **20 passed 全綠**。
+#   **半部憲法可以無聲消失，而所有數量下限都不會動。**
 #
-# ⛔ **根因是「靠人寫的散文句式」，所以修法不是把 regex 改貪婪** —— 那只擋掉五組裡的一組。
-#    改用**機器寫給機器看的標記**：措辭怎麼改都不影響它。
-# ⚠️⚠️ **這三道合起來仍有一個已知缺口，據實寫明 —— 不要從綠燈推論出「拆檔已經安全了」**：
+# → 故本檔的**主防線不是數量，是內容清單**（`test_declared_sections_all_present`）。
+#   數量下限**保留**，但它們擋的是「**引用被靜默漏檢**」，**不是**「內容完整性」。
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── 第三道：檔案集合綁定（**檔頭標記**，不依賴任何散文措辭）───────────────
+# **帶標記的 `.md/.markdown`（全 repo、大小寫不敏感）與 `CONSTITUTION_FILES`
+#   兩份名單必須完全相等。**
 #
-#   **標記規則抓得到**：登記了卻沒標記（改名／搬到子目錄／標記被刪）、
-#                       帶標記卻沒登記（新拆的憲法檔照慣例帶了標記但忘了登記）。
-#   **標記規則抓不到**：把一塊內容從既有憲法檔**剪到一個從未帶標記的新檔** ——
-#                       那個新檔對本規則而言根本不是憲法，兩份名單依舊相等。
-#   → 2026-09-08 實測：五組繞過裡有**四組**（MUT-A/B/C/E）就是這種形狀，
-#     它們**全部只由 per-file 下限攔下**，標記規則一次都沒響。
-#
-#   **也就是說：擋住「剪一塊走」的，到今天為止仍然只有 per-file 下限這個量測值。**
-#   下限有餘裕（**這是刻意的**，見下方註解：貼著現值會讓「正確退役」變紅燈），
-#   餘裕就是可以被靜默搬走的量。`_PER_FILE_FLOOR_MAX_SLACK` 這個 ratchet
-#   **只把餘裕的上界固定住，並沒有讓它變成 0** —— 它解的是「餘裕隨檔案長大而無限增加」，
-#   **不是**「完全不能靜默搬走」。
-#
-#   ⛔ **要現值請跑下面那條量測指令**，不要引用任何寫死的數字。
-#   📌 已登記為 `EXCEPTIONS.md` 的 `8.3.P` → **`P-SPLITSLACK-1`**（附由誰查與觸發點）。
+# ⚠️ 這一道 2026-09-08 被換過兩次，兩次的原因都寫在這裡，免得有人改回去：
+#   **第一版**靠「搬至 `X.md`」這個**散文句式**建白名單 → 第二輪稽核五組繞過全綠
+#   （`搬至 X 與 Y` 非貪婪只抓第一個／`移至` 換動詞／不寫指標／`現住址`（守衛自己的詞）／
+#     移進 `docs/` 讓 per-file key 對不上）。**根因是「靠人寫的散文」。**
+#   **第二版**（標記 ＋ `Path.glob("*.md")`）→ 第三輪稽核再兩組：
+#     **(A1)** `Path.glob` **大小寫敏感** ⇒ 帶標記的 `GOVERNANCE.MD` 完全隱形（實測全綠）。
+#             ⚠️ `.MD` 在 macOS／Windows 上**會自然發生，不必有人故意**。
+#     **(A2)** 標記用**子字串**比對 ⇒ 任何根目錄 `.md` 只要**提到**這個標記就誤紅（實測）。
+#   → 現行版：**全 repo 掃、副檔名與大小寫都不敏感、標記必須是檔頭的獨立一行**。
 _CONSTITUTION_MARKER = "<!-- CONSTITUTION-FILE -->"
 
-# 憲法檔一律住在 repo 根目錄（`CLAUDE.md` / `PROCESS.md` / `SPEC.md` … 全部如此）。
-# glob 範圍刻意**只**掃根目錄：想把憲法搬進子目錄，就必須**有意識地**改這一行，
-# 而那個動作會連帶被下面的雙向比對擋下來 —— 這正是我們要的「不能靜默發生」。
-_CONSTITUTION_GLOB = "*.md"
+# 副檔名一律小寫比對；`.markdown` 一併涵蓋。⚠️ 不要改回單一 `"*.md"` glob（見 A1）。
+_MARKDOWN_SUFFIXES = {".md", ".markdown"}
+# 標記必須出現在檔頭前 N 行、且是**獨立一行**（見 A2：子字串比對會誤殺說明文件）。
+_MARKER_HEAD_LINES = 20
+_SCAN_SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__",
+                   ".pytest_cache", "site-packages", ".mypy_cache", ".ruff_cache"}
+
+
+def _iter_markdown_files():
+    """全 repo 的 markdown 檔（副檔名大小寫不敏感）。"""
+    for p in REPO_ROOT.rglob("*"):
+        if not p.is_file():
+            continue
+        if any(part in _SCAN_SKIP_DIRS for part in p.parts):
+            continue
+        if p.suffix.lower() in _MARKDOWN_SUFFIXES:
+            yield p
+
+
+def _has_marker(path: Path) -> bool:
+    """標記必須是**檔頭前 N 行內的獨立一行** —— 不是「檔案裡有提到這串字」。"""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for i, line in enumerate(fh):
+                if i >= _MARKER_HEAD_LINES:
+                    return False
+                if line.strip() == _CONSTITUTION_MARKER:
+                    return True
+    except OSError:
+        return False
+    return False
 
 
 def _marked_files() -> set[str]:
-    """repo 根目錄下、檔頭帶標記的 `.md`（相對路徑字串）。"""
-    out = set()
-    for p in sorted(REPO_ROOT.glob(_CONSTITUTION_GLOB)):
-        try:
-            head = p.read_text(encoding="utf-8", errors="replace")[:4096]
-        except OSError:
-            continue
-        if _CONSTITUTION_MARKER in head:
-            out.add(str(p.relative_to(REPO_ROOT)))
-    return out
+    return {str(p.relative_to(REPO_ROOT)) for p in _iter_markdown_files() if _has_marker(p)}
 
 
 def _registered_files() -> set[str]:
@@ -464,50 +490,185 @@ def _registered_files() -> set[str]:
 
 
 def test_constitution_file_set_is_bidirectionally_bound():
-    """**雙向綁定**：帶標記的檔 ＝ 已登記的檔。少一個或多一個都紅。
-
-    * **帶標記但沒登記** → 有人拆出了新的憲法檔卻忘了加進 `CONSTITUTION_FILES`
-      ⇒ 那個檔的內容**完全沒有被檢查**，而且不會有任何其他訊號。
-    * **登記了但沒標記** → 檔案被改名／搬走／標記被刪掉。
-
-    ⚠️ **本條刻意不看任何散文措辭**（理由見上方註解的五組繞過實測）。
-    """
+    """**雙向綁定**：帶標記的檔 ＝ 已登記的檔。少一個或多一個都紅。"""
     marked, registered = _marked_files(), _registered_files()
-
-    # 反空轉：標記一個都掃不到，幾乎一定是標記被刪或 glob 壞了，不是「憲法沒了」。
     assert marked, (
-        f"repo 根目錄下找不到任何帶 `{_CONSTITUTION_MARKER}` 的 `.md`。\n"
-        "**這幾乎一定是標記被刪掉、或 `_CONSTITUTION_GLOB` 壞了**，"
-        "而不是憲法真的不存在 —— 本條會因此安靜地停止工作。\n"
-        "⛔ 不要把這條斷言刪掉，請修好標記或 glob。")
-
-    only_marked = sorted(marked - registered)
-    only_reg = sorted(registered - marked)
+        f"全 repo 找不到任何檔頭帶 `{_CONSTITUTION_MARKER}` 的 markdown。\n"
+        "**這幾乎一定是標記被刪掉，而不是憲法真的不存在** —— 本條會因此安靜地停止工作。")
+    only_marked, only_reg = sorted(marked - registered), sorted(registered - marked)
     assert not only_marked and not only_reg, (
         "憲法檔名單對不上：\n"
         + (f"  **帶標記但沒登記**：{only_marked}\n"
-           "    ⇒ 這些檔的內容完全沒有被本守衛檢查。修法：加進 `CONSTITUTION_FILES`，"
-           "並在 `_MIN_LIVE_TIER1_PER_FILE` 替它設下限（現場量測後填）。\n" if only_marked else "")
-        + (f"  **登記了但沒有標記**：{only_reg}\n"
-           f"    ⇒ 檔案被改名／搬到子目錄／標記被刪。若是**有意識**地搬進子目錄，"
-           "請一併調整 `_CONSTITUTION_GLOB`，不要只改路徑。\n" if only_reg else ""))
+           "    ⇒ 這些檔完全沒有被檢查。修法：加進 `CONSTITUTION_FILES`，"
+           "並在 `_MIN_LIVE_TIER1_PER_FILE` 替它設下限。\n" if only_marked else "")
+        + (f"  **登記了但檔頭沒有標記**：{only_reg}\n"
+           "    ⇒ 檔案被改名／搬走／標記被刪，或標記不在檔頭前"
+           f"{_MARKER_HEAD_LINES} 行、不是獨立一行。\n" if only_reg else ""))
 
 
 def test_per_file_floor_keys_match_registered_files_exactly():
     """`_MIN_LIVE_TIER1_PER_FILE` 的 key **必須恰好等於** `CONSTITUTION_FILES`。
 
-    ⚠️ **這條擋的是一個實測過的靜默失效**（2026-09-08）：把 `EXCEPTIONS.md` 移到
-    `docs/EXCEPTIONS.md`、**兩支守衛的路徑都同步改對** → `per_file` 的 key 變成
-    `docs/EXCEPTIONS.md`，而字典裡是 `EXCEPTIONS.md` ⇒ 舊寫法 `if f in dict` 讓它
-    **直接沒有下限**，`19 passed` 全綠、**112 筆（25.7%）不再受任何下限保護**。
+    ⚠️ 擋一個實測過的靜默失效：把 `EXCEPTIONS.md` 移到 `docs/`、**兩支守衛路徑都同步改對**
+    → key 變成 `docs/EXCEPTIONS.md`、字典裡是 `EXCEPTIONS.md` ⇒ 舊寫法 `if f in dict`
+    讓它**直接沒有下限**，全綠、112 筆不再受保護。
     """
     keys, registered = set(_MIN_LIVE_TIER1_PER_FILE), _registered_files()
     assert keys == registered, (
-        f"`_MIN_LIVE_TIER1_PER_FILE` 的 key 與 `CONSTITUTION_FILES` 不一致：\n"
+        "`_MIN_LIVE_TIER1_PER_FILE` 的 key 與 `CONSTITUTION_FILES` 不一致：\n"
         f"  有登記但沒下限：{sorted(registered - keys)}\n"
         f"  有下限但沒登記：{sorted(keys - registered)}\n"
-        "**兩邊必須逐字相同**（都用 repo 相對路徑）——「不在字典裡就等於沒有下限」"
-        "是一個會安靜生效的漏洞。")
+        "「不在字典裡就等於沒有下限」是一個會安靜生效的漏洞。")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ⭐ 主防線：內容清單 —— 章節名不見了就紅，不看任何量測值
+# ══════════════════════════════════════════════════════════════════════════
+# **為什麼這是主防線、而數量下限不是**（2026-09-08 第三輪稽核逼出來的結論）：
+#   * 我們真正怕的是「**某一節整個消失**」。**章節是內容形狀的，不會因為檔案長大而失效。**
+#   * 數量下限量的是引用筆數，而引用密度與內容量**不成比例** ——
+#     `§-1.5` 佔全檔 49.6% 卻只有 28 筆引用，剪掉它所有下限都不動。
+#   * ⛔ **刻意不用位元組數當主防線**：那同樣是量測值，同樣要有人回頭調，
+#     同樣會在檔案長大之後變鬆 —— 那正是前兩輪失敗的原因。
+#
+# **兩個方向都要紅**（同標記綁定的精神：比對兩份名單，不是比對一個門檻）：
+#   * 清單裡有、憲法裡找不到 → 有人把那一節搬走／刪掉了；
+#   * 憲法裡有、清單裡沒有   → 新增了頂層章節，**請有意識地把它加進清單**。
+#
+# ⚠️ **這一條擋得到什麼、擋不到什麼，講清楚**：
+#   擋得到「**整節連標題一起消失**」（B1 那種：`§-1.5` 整段剪走 → 標題沒了 → 紅）。
+#   **擋不到「留下標題、把內文掏空」** —— 那需要另一種檢查，本檔沒有做。
+#   ⛔ 不得從本條全綠推論出「每一節的內容都還在」。
+_DECLARED_SECTIONS: tuple[str, ...] = (
+    # `CLAUDE.md` 頂層（`^## §…`）
+    "§-2", "§-1.5", "§-1", "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8",
+    # `§-1.5` 底下承載**客戶逐字頒布原文與總管裁決**的小節 —— 這幾節是 B1 那次
+    # 被整段剪走的東西，單看頂層 `§-1.5` 在不在並不夠。
+    "§-1.5.0", "§-1.5.1", "§-1.5.1a", "§-1.5.1b", "§-1.5.1c",
+    "§-1.5.2", "§-1.5.3", "§-1.5.4", "§-1.5.5",
+    # 2026-09-08 搬到 `EXCEPTIONS.md` 的兩張表（`CLAUDE.md` 原位置留有同名指標段，
+    # 兩邊任一個在即可 —— 這正是「留指標」這個慣例該有的效果）。
+    "8.2.A", "8.3.P",
+)
+
+# ⚠️ 刻意用字串串接而不是 `.format()` —— regex 裡的 `{1,6}` 會被 `.format()` 當成欄位名
+#    （初稿就是這樣炸的：`KeyError: '1,6'`）。
+_SECTION_ANCHOR_PREFIX = r"^(?:#{1,6}[ \t]*|\*\*)"   # markdown 標題，或本檔慣用的粗體行
+# 邊界：`§-2.` 這種「ID 後面接句點再接空白」要命中；`§-1` 不得命中 `§-1.5`、
+# `§-1.5.1` 不得命中 `§-1.5.1a`。⇒ 不可被字母數字/連字號接續，且不可被「點＋字母數字」接續。
+_SECTION_ANCHOR_SUFFIX = r"(?![0-9A-Za-z\-])(?!\.[0-9A-Za-z])"
+
+
+def _sections_present() -> set[str]:
+    import re as _re
+    texts = [txt for _f, txt in _read_constitution_files()]
+    found = set()
+    for sec in _DECLARED_SECTIONS:
+        pat = _re.compile(_SECTION_ANCHOR_PREFIX + _re.escape(sec) + _SECTION_ANCHOR_SUFFIX, _re.M)
+        if any(pat.search(txt) for txt in texts):
+            found.add(sec)
+    return found
+
+
+def test_declared_sections_all_present():
+    """⭐ **主防線**：清單裡的每一個章節，都必須在某一個憲法檔裡找得到標題。
+
+    **這一條是 2026-09-08 第三輪稽核逼出來的。** 在它之前，把 `§-1.5`（全檔 **49.6%**，
+    客戶三份逐字頒布原文 ＋ 兩則裁決 ＋ 七個判定）整段剪進一個沒標記、沒登記的
+    `GOVERNANCE.md`，**所有守衛 20 passed 全綠** —— 因為那一整節只含 28 筆引用，
+    數量下限一個都沒被觸發。
+    """
+    missing = [s for s in _DECLARED_SECTIONS if s not in _sections_present()]
+    assert not missing, (
+        f"下列憲法章節在**所有**憲法檔裡都找不到標題：{missing}\n"
+        "⇒ 最可能的原因：**那幾節被搬到一個沒有登記的檔，或被刪掉了。**\n"
+        "**數量下限擋不住這個** —— 引用密度與內容量不成比例"
+        "（實測：`§-1.5` 佔全檔 49.6%，卻只有 28 筆引用）。\n"
+        "修法：把它搬回來，或（若是**有意識**的拆檔）把新檔加標記 ＋ 登記進 "
+        "`CONSTITUTION_FILES`，章節標題就會重新被找到。\n"
+        "⛔ 不要為了讓測試變綠而把章節名從 `_DECLARED_SECTIONS` 刪掉。")
+
+
+def test_declared_section_list_has_no_unlisted_top_level_sections():
+    """反向：憲法裡出現了清單沒有的**頂層**章節 → 紅，逼人有意識地更新清單。
+
+    只有兩份名單互相綁死，這條規則才不會隨時間鬆掉 —— 同標記綁定的道理。
+    """
+    import re as _re
+    seen = set()
+    for _f, txt in _read_constitution_files():
+        for m in _re.finditer(r"^##\s+(§-?[0-9][0-9A-Za-z.\-]*)\.", txt, _re.M):
+            seen.add(m.group(1))
+    unlisted = sorted(seen - set(_DECLARED_SECTIONS))
+    assert not unlisted, (
+        f"憲法裡有頂層章節不在 `_DECLARED_SECTIONS` 清單裡：{unlisted}\n"
+        "新增頂層章節時請**同時**把它加進清單 —— 否則它從一開始就不受主防線保護。")
+
+
+# ── 主防線之二：登記簿的**每一列**（`EX-*` / `P-*` / `GAP-*` ID）────────────
+# **為什麼章節清單還不夠**（2026-09-08 第三輪稽核 B3）：
+#   章節清單擋得住「整節連標題一起消失」，**擋不住「從一節的尾巴剪掉一半的列」** ——
+#   實測：把 `8.3.P` 尾端 **53 筆引用 / 38,634 bytes** 剪進未登記的 `PENDING.md`
+#   （標題還在、per-file 259→206 仍高於下限 200）⇒ **22 passed 全綠**。
+#
+# → 兩張表的**內容單位就是那些 ID**，而它們是機器可讀的（`test_retired_exception_ids.py`
+#   早就在解析同一批東西）。**ID 消失 ＝ 那一列被搬走或刪掉，直接紅。**
+#   這仍然是「**比對兩份名單**」，不是門檻 —— 不會因為檔案長大而失效。
+#
+# ⚠️ **方向刻意只有一個（不得消失，可以新增）**，理由據實寫明：
+#   新增 `P-*` 列是**常態**（本 PR 自己就加了 3 列），要求每加一列就改測試會製造
+#   高頻 churn，而「多一個 ID」**不會讓任何內容消失** —— 它不是我們怕的那件事。
+#   ⇒ 這裡的不對稱是**有理由的**，與章節清單的雙向綁定不同，不要「順手對齊」。
+_DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
+    # `8.2.A` 例外表 —— 生效中的
+    "EX-CACHE-1", "EX-AI-1", "EX-CRUD-1", "EX-PASSTHRU-1",
+    "EX-UICACHE-1", "EX-CISCRIPT-1",
+    # 同表**已退役**、依本 repo 慣例加刪除線保留在表上的兩列。**這裡列它們不是拿它們當授權**，
+    # 是要確保那兩列**不會被人順手刪掉** —— 退役紀錄消失，就沒有人知道當初為什麼豁免過。
+    # （⚠️ 本行的「已退役」三個字是 `test_retired_exception_ids.py` 要求的退役標記；
+    #   初稿沒寫，被那支守衛當場抓到 —— 一個守衛抓到另一個守衛的作者，照實記在這裡。）
+    "EX-POLICY-1", "EX-L1ORCH-1",  # ← 兩者皆**已退役**（此處只保護該列不被刪，不是引用其授權）
+    # `8.3.P` 待判定表
+    "P-NAVCACHE-1", "P-NDCCACHE-1", "P-UIHTTP-1", "P-UIGSPREAD-1", "P-UISUBPROC-1",
+    "P-YFDUPE-1", "P-BENCHTZ-1", "P-WHERECONTENT-1", "P-GREYSCENARIO-1",
+    "P-SINKGRAIN-1", "P-RETRYKIND-1", "P-WSTOREWRITE-1", "P-AIKEYCI-1",
+    "P-CONCURGUARD-1", "P-GRIDPRESENCE-1", "P-CALLSTATIC-1",
+    "GAP-SEARCH-CACHE-1", "P-AIFLAG-1", "P-POOLCACHE-1", "P-LEDGERNAV-1",
+    "P-PASSTHRUSCOPE-1",
+    # 2026-09-08 拆檔輪新增
+    "P-PHANTOMSEC-1", "P-FROZENTABREF-1", "P-SPLITSLACK-1",
+})
+
+_REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
+
+
+def _registry_ids_present() -> set[str]:
+    """憲法各檔的**表格第一格**裡出現的登記簿 ID（與 `test_retired_exception_ids.py` 同一條路徑）。"""
+    out: set[str] = set()
+    for _f, txt in _read_constitution_files():
+        for line in txt.split("\n"):
+            s = line.lstrip()
+            if not s.startswith("|"):
+                continue
+            out |= set(_REGISTRY_ID_RE.findall(s[1:].split("|", 1)[0]))
+    return out
+
+
+def test_declared_registry_ids_all_present():
+    """⭐ **主防線之二**：登記簿的每一列都不得靜默消失。
+
+    **這一條是 2026-09-08 第三輪稽核 B3 逼出來的。** 在它之前，把 `8.3.P` 尾端
+    53 筆引用 / 38,634 bytes 剪進未登記的檔（**逐字照著約定的措辭寫指標**）
+    → **22 passed 全綠**：章節標題還在、per-file 下限還沒破。
+    """
+    missing = sorted(_DECLARED_REGISTRY_IDS - _registry_ids_present())
+    assert not missing, (
+        f"下列登記簿 ID 在**所有**憲法檔的表格裡都找不到了：{missing}\n"
+        "⇒ 最可能的原因：**那幾列被搬到一個沒有登記的檔，或被刪掉了。**\n"
+        "數量下限與章節清單都擋不住這個（實測：剪掉 53 筆引用、標題還在 ⇒ 全綠）。\n"
+        "修法：搬回來，或（若是**有意識**的拆檔）把新檔加標記 ＋ 登記進 `CONSTITUTION_FILES`。\n"
+        "⛔ 退役一列請照本 repo 慣例**加刪除線保留在表上**，不要把 ID 整個刪掉 ——"
+        "本條讀的是表格第一格，劃線的列**照樣算存在**。")
 
 
 def test_guard_still_sees_the_whole_constitution():
@@ -566,7 +727,12 @@ def test_guard_still_sees_the_whole_constitution():
         "下列憲法檔已經長到遠高於它自己的下限，**保護力正在安靜地衰減**："
         + "、".join(f"{f} 實測 {n} > 下限 {lo} × {_PER_FILE_FLOOR_MAX_SLACK}" for f, n, lo in too_slack)
         + "\n下限是絕對值：檔案越大，『可以被靜默搬走而不觸發紅燈』的量就越多。\n"
-        "**請把該檔的下限往上調**（建議取現值的 75~80%），並就地註明量測日與理由。\n"
+        "**請把該檔的下限往上調**，並就地註明量測日與理由。\n"
+        "⚠️ **新下限必須「只升不降」：取 `max(現行下限, 現值×0.8)`。**\n"
+        "   ⛔ **不要**照舊版寫的「取現值的 75~80%」直接算 —— 那句話 2026-09-08 被實測推翻：\n"
+        "   `CLAUDE.md` 現值 185、現行下限 150，而 185×0.75 ＝ 138 **比現行下限還低**，\n"
+        "   照著做等於**放寬**。實測後果：最大可靜默搬走的連續區塊由 **56.9% 變成 73.8%**。\n"
+        "   **一條寫在守衛裡的補救建議，自己是個放寬指令 —— 這是本檔踩過最貴的一次。**\n"
         "⛔ 不要改大 `_PER_FILE_FLOOR_MAX_SLACK` 來閉嘴 —— 那正好是這條要防的動作。")
 
 
