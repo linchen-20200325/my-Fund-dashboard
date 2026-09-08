@@ -129,8 +129,8 @@
 <div class="scroll"><table>
 <tr><th>新 ⑨ 的哪一塊</th><th>指去哪</th><th>那個東西實際住在</th></tr>
 <tr><td>空狀態「尚未設定持倉」<br>＋ 另外 8 處灰態<br><span style="font-size:11px">（本組實測：<code>page_04_portfolio.py</code> 內 <b>9 個實際呼叫點</b>，扣掉 docstring 內的 2 處引述）</span></td><td><code>where_to_find("pf_add")</code></td><td><b>舊 ④</b> <code>ui/tab3_portfolio.py</code> 的 <code>btn_pf_add</code></td></tr>
-<tr><td>🎯 換股顧問（灰卡）</td><td><code>where_to_find("switch")</code></td><td><b>舊 ④</b> <code>render_switch_advisor_section()</code> 的唯一呼叫點</td></tr>
-<tr><td>📊 組合績效（灰）</td><td><code>where_to_find("pf_perf")</code></td><td><b>舊 ④</b> <code>render_portfolio_performance()</code> 的唯一呼叫點</td></tr>
+<tr><td>🎯 換股顧問（灰卡）</td><td><code>where_to_find("switch")</code></td><td><b>舊 ④</b> —— <code>render_switch_advisor_section()</code> 在 <code>ui/**</code> 的呼叫點本組只查到這一個</td></tr>
+<tr><td>📊 組合績效（灰）</td><td><code>where_to_find("pf_perf")</code></td><td><b>舊 ④</b> —— <code>render_portfolio_performance()</code> 同上</td></tr>
 <tr><td>💼 交易帳本（灰）</td><td><code>where_to_find("pf_ledger")</code></td><td><b>舊 ④</b> 的 <code>_sec_ledger</code></td></tr>
 </table></div>
 
@@ -614,8 +614,8 @@
 <p style="margin:0 0 8px"><b>現況（本組實測）</b>：新 ⑨ 在沒有持倉時<b>整頁 <code>return</code></b>，只畫一則空狀態，
 「去哪補」指向 <code>where_to_find("pf_add")</code>，而<b>那一塊住在舊 ④</b>。
 <code>ui/views/**</code> 四頁<b>沒有任何一條寫入持倉的路徑</b>
-（本組 AST 掃 <code>ui/views/*.py</code>：<code>st.button</code> 只有 2 個、都在 ⑧ 的搜尋結果選取；
-<code>write_policy_v2</code>／<code>append_*</code>／<code>ensure_policy_worksheet</code> <b>全部 0 命中</b>）。</p>
+（本組 AST 掃 <code>ui/views/*.py</code>：<code>st.button</code> <b>掃到 2 個</b>、都在 ⑧ 的搜尋結果選取；
+<code>write_policy_v2</code>／<code>append_*</code>／<code>ensure_policy_worksheet</code> <b>0 命中</b>。⚠️ <b>這是字表掃得到的範圍，不是窮舉</b> —— 掃不到的形態列在 §8）。</p>
 <p style="margin:0 0 8px"><b>⇒ 新四頁目前<b>物理上加不了一檔基金</b>。舊 ④ 一刪，這個產品就沒有入口了。</b></p>
 <p style="margin:0"><b>而線框自己指定了這個入口</b>：<code>ia-wireframe.html</code> <b>Tab 02</b> 的空狀態逐字寫著
 「<b>去哪補 ─ 到「04 資產配置 › 保單與扣款標的」新增</b>」——
@@ -686,7 +686,7 @@
   <b>資料不足時也會灰的 2 塊</b>（集中度／總經聯動）。
   <b>最壞情況：8 塊裡 6 塊是灰的。</b>讀起來像目錄，這一點總管說得對。</li>
 <li><b>「差距」那一句升到結論層。</b> 它現在住在第一塊裡；
-  <b>那是全站唯一一句同時給了「判定 ＋ 做法 ＋ 金額」的話</b>，應該是這一頁的第一句。
+  <b>那是本組在四頁裡讀到的、唯一一句同時給了「判定 ＋ 做法 ＋ 金額」的話</b>，應該是這一頁的第一句。⚠️ <b>本組沒有掃過全站，不宣稱它是全站唯一</b> —— 射程是 ⑥⑦⑧⑨ 四頁的人工通讀。
   ⚠️ <b>它的三條煞車一條都不能拿掉</b>（本組逐條複核 <code>_gap_action_text</code>）：
   ① 一檔本金都沒填 → 不講金額；② 落在容差內 → 不講（不然會出現「把 NT$3 搬過去」）；
   ③ 四捨五入不足 1 元 → 不講。<b>另外那個「（只算已填本金的 N 檔）」的括號也不能拿掉</b> ——
@@ -804,7 +804,7 @@
   其餘七份<b>只讀了 README 的轉述</b>，<b>沒有開檔核對</b>。
   ⚠️ 這一點特別要記：README 自己就登記過「引用的那句其實在另一個檔」這種錯至少一次。</li>
 <li><b>沒有查證客戶的實際使用習慣。</b> 退場清單裡每一句「為什麼我認為你不會想念」<b>都是推論</b>，
-  依據是既有裁決與線框，<b>不是</b>對你實際點過什麼的觀察。<b>那是這份文件唯一的失敗模式。</b></li>
+  依據是既有裁決與線框，<b>不是</b>對你實際點過什麼的觀察。<b>那是這份文件最主要的失敗模式</b>（本組的自評，不是查證結果）。</li>
 <li><b>沒有查證另一組的規則書草稿。</b> 派工單給的那份「十二條可驗收規則」的 artifact 連結，
   本環境無法開啟，<b>本組完全沒有讀到它的內容</b>，因此<b>不知道本草稿與它是否一致</b>。</li>
 </ul>
