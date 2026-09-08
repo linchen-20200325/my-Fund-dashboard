@@ -367,7 +367,11 @@ def test_the_per_fund_table_still_shows_exactly_nine_columns():
 # ⑤ 為什麼結論層可以住在委派區的 Checkbox Gate 前面
 # ══════════════════════════════════════════════════════════════════
 def test_the_conclusion_layer_draws_nothing_through_the_shared_helpers():
-    """⭐ **這條是「把數字提到閘門前」唯一需要證明的那件事。**
+    """⭐ **這條證明的是「把數字提到閘門前」的前提：它不會撞。**
+
+    ⚠️ **本 docstring 原寫「唯一需要證明的那件事」，已改掉** —— 那是一句我證不出來的
+    全稱句（同一份 PR 已經因為兩句「⑥ 沒有 X」的全稱句被實測推翻兩次）。
+    **實際上至少還有一件事要證：它不會多打一輪網路**（見下一條）。
 
     閘門（`DELEGATE_GATE_LABEL`）擋的是 `StreamlitDuplicateElementId`，
     而那個 id 是 **`st.plotly_chart` 每次呼叫都註冊**才產生的 ——
@@ -451,8 +455,8 @@ def test_the_conclusion_layer_never_reaches_the_fx_fetcher():
     """⛔ 結論層的呼叫閉包裡**不得出現 `checkup._safe_fx`** —— 那支會打 `get_latest_fx`。
 
     ⚠️ 這條不是重複上一條。上一條問「會不會**畫**東西」，本條問「會不會**上網**」。
-       `build_checkup_dataframe`（閘門後那張表用的）**每一檔都會呼叫 `_safe_fx`**；
-       若有人為了省事把結論層改接它，畫面照樣正確，但**每一次 rerun 都會多打一輪匯率**
+       `build_checkup_dataframe`（閘門後那張表用的）**會呼叫 `_safe_fx`**；
+       若有人為了省事把結論層改接它，畫面照樣正確，但**每一次 rerun 都可能多打一輪匯率**
        —— 而那正是 Checkbox Gate 這種設計要避免的東西，且不會有任何守衛轉紅。
     """
     _tree = ast.parse((ROOT / "ui" / "helpers" / "fund" / "checkup.py")

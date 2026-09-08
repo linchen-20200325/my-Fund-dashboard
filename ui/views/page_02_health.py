@@ -357,7 +357,7 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     #    上面那些是**會畫東西**的 renderer，住在閘門**後面**的委派區；
     #    這一組**一個 `st.` 都沒有**，住在閘門**前面**的結論層，只把數字算出來。
     #
-    # ⭐ **「為什麼可以放在閘門前面」——這是本批唯一需要證明的一件事，用 AST 實測，不是推論：**
+    # ⭐ **「為什麼可以放在閘門前面」——本批的關鍵前提，用 AST 實測，不是推論：**
     #    閘門擋的是 `StreamlitDuplicateElementId`，而那個 id 是
     #    **`st.plotly_chart` 每次呼叫都註冊**才產生的（見 :data:`DELEGATE_GATE_LABEL`
     #    上方那一整段）。**渲染才會撞，計算不會。**
@@ -680,8 +680,10 @@ def _income_tally(funds: list[dict]) -> dict[str, Any]:
     閘門擋的是 `st.plotly_chart` 的重複 element id；**那是渲染才會發生的事**。
     `_compute_fund_health_kpis` 的函式體與其呼叫閉包
     （`check_eating_principal_1y_mk` / `_ret_1y_total` / `_safe_num`）
-    **一個 `st.` 都沒有、也沒有任何 I/O**（特別是**沒有** `checkup._safe_fx`，
-    那支才會去打 `get_latest_fx`）。⇒ **計算搬到閘門前不會撞，也不會多一次網路往返。**
+    **一個 `st.` 都沒有、也沒有任何 I/O**（特別是**沒有** `checkup._safe_fx` ——
+    那支在幣別非 `TWD` 時會去打 `get_latest_fx`；`TWD` 直接回 `1.0`、沒有幣別則整個跳過。
+    **精確講清楚，是因為本 PR 已經因為含糊的全稱句被推翻兩次**）。
+    ⇒ **計算搬到閘門前不會撞，也不會多一次網路往返。**
     守衛：`test_the_conclusion_layer_draws_nothing_through_the_shared_helpers`。
 
     **回傳的四個計數，為什麼要分那麼細**
