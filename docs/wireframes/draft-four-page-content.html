@@ -411,7 +411,16 @@
 
 <h4>這一頁改了什麼</h4>
 <ul>
-<li><b>加一層結論。</b> 現況 ⑦ <b>沒有結論層</b>（本組複核 README 的實測：字串「① 結論」在 <code>page_02/03/04</code> <b>各 0 次</b>；⑦ 同樣 0）。
+<li><b>加一層結論。</b> 現況 ⑦ <b>沒有結論層</b> —— 本組實測 <code>ba3b06d</code>：字串「① 結論」在 <code>page_05_settings.py</code> <b>0 次</b>。
+  ⚠️ <b>順帶更正一句 README 的話（本組實測，與它不同）</b>：<code>README.md</code> 2026-09-08 那節寫
+  「字串『① 結論』……在 <code>page_02_health.py</code> / <code>page_03_research.py</code> / <code>page_04_portfolio.py</code> <b>各 0 次</b>
+  → <b>⑥⑧⑨ 三頁確實都還沒有結論層</b>」。
+  <b>那句話對 ⑥ 已經不成立</b>：本組在 <code>ba3b06d</code> 實測 <code>page_02_health.py</code> <b>命中 9 次</b>，
+  且 <code>CONCLUSION_HEADING = "### 🧾 ① 結論 — 我手上這些，現在怎麼了"</code>、
+  <code>render_holdings_health()</code> 內就有 <code>safe_section("結論", _render_conclusion)</code>。
+  <b>⑥ 已經有結論層了</b>（本草稿 §2 要改的是它<b>只給總數、不點名</b>，不是它不存在）。
+  <b>⑧⑨ 那半仍然為真</b>（本組實測兩者皆 0）。
+  <b>舊表述在寫下當天很可能為真，被推翻的是它的前提</b>；⛔ 本組<b>不改 <code>README.md</code></b>（它不在本批的檔案邊界內），僅就地登記。
   這一頁的問題是「<b>資料可不可信</b>」，而現在它只給五塊逐項狀態，<b>沒有人回答那個問題</b>。</li>
 <li><b>兩顆留下來的閘門換文案。</b> 現況是「<code>🔭 載入資料診斷</code>」「<code>讀取雲端 NAV 累積狀態</code>」——
   <b>「載入」是系統在講自己</b>。改成「<b>查一次資料來源狀態</b>」「<b>讀一次雲端累積狀態</b>」，
