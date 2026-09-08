@@ -51,8 +51,10 @@
      當初只用**系統 `python3`** 試過一次 `import pytest` 就下了「沒有 pytest」這個結論
      —— **一個直譯器的結果被寫成整個環境的事實**。
    * **跑法**：streamlit 最小假件放 `PYTHONPATH`（**不進 repo**）＋ `--noconftest`
-     ＋ 系統 `site-packages`。本檔在此組合下 **242 passed / 1 failed**
-     （唯一那條紅是 `test_the_rate_lookup_still_asks_for_the_yf_code`，它要 `pandas`）。
+     ＋ 系統 `site-packages`。本檔在此組合下**只有一條紅**：
+     `test_the_rate_lookup_still_asks_for_the_yf_code`（它要 `pandas`，本地沒有）。
+     ⚠️ **刻意不寫「N passed」** —— 那個數字每加一條測試就過期，
+     而**這一則正是在更正一句過期的話**；寫一個會漂的數字進來，只是替下一輪製造同樣的錯。
    * **仍然成立的那半邊**：`streamlit` / `pandas` 本地**確實**沒有，
      完整套件（`tests/` 全部）本地**仍然**跑不起來，**全套的真憑據以 CI 為準**。
 
