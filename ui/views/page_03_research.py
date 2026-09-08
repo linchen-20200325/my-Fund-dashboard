@@ -2,6 +2,8 @@
 
 客戶方針（2026-09-04）第 1 條：UI 渲染層打掉重練，不改舊 `tab*.py`，從零撰寫全新 View。
 客戶方針（2026-09-05）：本頁**只做骨架 + 灰態**；結果卡、深度區與批次的真內容**分批填**。
+2026-09-06 深度區接上真取數；**2026-09-07 批次分析接上真取數**（客戶三項拍板，見 :func:`_render_batch`）。
+⚠️ **仍是灰態的只剩「搜尋結果」一塊** —— 它卡在 `services/**` 沒有搜尋入口，理由見下方。
 
 整頁骨架 —— 逐字取自已核准線框 `docs/wireframes/ia-wireframe.html` 的 **Tab 03**
 ------------------------------------------------------------------------------
@@ -38,9 +40,34 @@
    `ui/tab1_macro_midcycle.py` 的委派，它自己的 docstring 就登記著
    「有效期到舊 tab 整批拔除為止」。**本檔一條都沒有**（② `page_02_health.py` 亦然）。
 
-⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 ③ 仍呼叫舊的
-   `render_fund_research_tab()`，客戶明令「舊分頁這批不動、不接線、不下架」。
-   接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。
+~~⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 ③ 仍呼叫舊的~~
+   ~~`render_fund_research_tab()`，客戶明令「舊分頁這批不動、不接線、不下架」。~~
+   ~~接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。~~
+
+✅ **2026-09-07 已接線：掛成第 ⑧ 格 `[新] 標的探索`**
+   （**有意識的狀態變更，不是漏刪** · 日期 **2026-09-07** ·
+   決策者：**客戶 2026-09-07「雙軌並行」**「新 UI 設計一律以『新增 Tab』形式掛載」）。
+
+   **舊表述在寫下的當天是對的，不是當初寫錯** —— 那一批的授權範圍確實只到骨架，
+   而它自己寫的觸發條件（「骨架先上線、CI 綠、再分批填內容」）**已經逐項達成**。
+   **被推翻的只是它的前提**：客戶把接線方式從「逐頁切換（改寫 ③ 那一格）」
+   改成「**新增一格**」，於是「接線」不再等於「動到舊分頁」——
+   舊表述裡「客戶明令舊分頁不動」那半句**到今天仍然成立，而且被更嚴格地執行了**：
+   `app.py` 的 ③ **一個字都沒動**，仍然呼叫 `render_fund_research_tab()`。
+
+   ⚠️ **所以現在新舊 ③ 會同時出現在分頁列上（③ 與 ⑧）。那是雙軌的正常狀態，
+   不是 bug** —— 客戶明文：未經他親自驗收並下令，舊 Tab 一律維持原樣保留。
+   ⛔ **不要為了「消除重複」去動舊 ③、也不要把本頁改成委派舊模組。**
+   本檔「一行都不 import 舊分頁模組」那條規則因此**比接線前更重要**：
+   兩條鏈同時渲染，**只要共用一段帶著寫死具名 `key=` 的程式碼就會撞**
+   （⑤ ↔ ⑦ 已經為此付過一次代價 —— `render_manage_tab` 帶 `divcal_gen` /
+   `pool_*` 等具名 key，只好加一道 Checkbox Gate）。
+   ⚠️ **一句話不要寫過頭**：本頁與舊 ③ **確實共用** `ui.helpers.*` 那一批共用元件
+   （2026-09-07 實測 102 個可達模組重疊），其中 `ui.helpers.ia.gated_form`
+   **就會產生 widget**。它們之所以不撞，**不是因為沒共用**，而是
+   **那些共用元件自己不帶具名 key** —— key 一律由呼叫端傳進去，兩邊給的值不同。
+   **共用元件 ≠ 共用 key。** 要守的是「不要 import 那些**帶著寫死 key** 的舊分頁模組」，
+   不是「不要共用任何會畫東西的程式碼」（後者做不到，也沒必要）。
 
 線框的一處**內部歧義**，以及本檔取哪一種讀法（不要略過這一段）
 --------------------------------------------------------------
@@ -79,7 +106,7 @@
   `tests/test_wf03_research_skeleton.py` 的順序斷言會轉紅 ——
   **正解是把它改成「選定後才展開」的 gate 驗證，不是把斷言放寬。**
 
-資料從哪裡來（**深度區已接上**；其餘兩塊仍是缺口）
+資料從哪裡來（**深度區與批次都已接上**；只剩搜尋結果是缺口）
 ------------------------------------------------------------
 **單一基金深度的六格全部由同一次呼叫供給**：
 :func:`services.moneydj_fetcher.auto_fetch_moneydj`（**L2**，一次往返、六格共用）。
@@ -126,12 +153,15 @@
 - **還沒開始搜尋** → 線框 Rule 04 的空狀態三要素，指路回本頁上方的搜尋條件
   （使用者**照著做真的能解決**「沒有查詢條件」這件事）。
 - **送出了、但這一塊的內容還沒填** → 該塊**自己那一句**的灰態
-  （:data:`_RESULTS_PENDING_NOTE` / :data:`_BATCH_PENDING_NOTE`）。
-  ⚠️ 2026-09-06 起**不再是一句共用的「本頁分批上線」** —— 兩塊卡住的原因不同，
-  理由見那兩個常數上方的 ⛔ 段。
-  ⚠️ 這兩句混成一句，會讓使用者以為「輸入代碼按下去就會出現結果」—— 不會。
+  （:data:`_RESULTS_PENDING_NOTE`）。
+  ⚠️ 2026-09-06 起**不再是一句共用的「本頁分批上線」** —— 各塊卡住的原因不同，
+  理由見那些常數上方的 ⛔ 段。
+  ⚠️ 這些句子混成一句，會讓使用者以為「輸入代碼按下去就會出現結果」—— 不會。
   同樣的分岔在 ① 與 ② 都做過一次（`page_01_macro.py::_detail_pending`、
   `page_02_health.py::_pending_where`）。
+- **批次自己的兩種空** → :data:`_BATCH_EMPTY_MISSING`（還沒貼）與
+  :data:`_BATCH_UNPARSED_MISSING`（貼了但認不得）。**同樣刻意不共用一句** ——
+  下一步不同（去貼 vs 去改格式）。
 
 ⛔ **線框裡的示意值一個都不准畫**（`CLAUDE.md §1`）：那三張結果卡的
    基金名、`ACDD19` / `0P00000XYZ`、`+12.4%` / `Sharpe 0.81` / `+3.1%` / `0.22`
@@ -159,6 +189,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import streamlit as st
@@ -172,6 +203,7 @@ from ui.helpers.ia import (
 from ui.helpers.ia.empty_state import empty_state
 from ui.helpers.render_state import not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
+from ui.helpers.tw_time import tw_now_str
 
 # ⚠️ **L2 服務層（客戶方針第 2 條的唯一取數入口）**。
 #    `services.moneydj_fetcher` 是 L2；它自己往下走 `services.fund_service` 的
@@ -180,6 +212,9 @@ from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 from services.moneydj_fetcher import auto_fetch_moneydj
 # 幣別一致性判定（純函式、零 I/O）。**不自己寫一份** —— §1 的失效模式就寫在它的 docstring 裡。
 from shared.data_quality import reconcile_row_currencies
+# 寬鬆數值轉換（`"1,234"` / `"12.3%"` / None → float | None）。批次大表的數值欄要它。
+# **不自己寫一份** —— 它是 repo 既有的 SSOT（`shared/converters.py`）。
+from shared.converters import safe_num
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
 # ⚠️ 刻意**不**沿用舊三頁的鍵：舊頁依方針第 3 條仍在磁碟上、且仍接在 `app.py`，
@@ -285,12 +320,128 @@ _RESULTS_PENDING_NOTE: str = (
     "本頁目前只查得到**完整代碼** —— 你輸入的字會被原封當成代碼送去查，"
     "結果顯示在下方的「單一基金深度」。**依名稱或關鍵字列出多檔候選**還沒有接上")
 
-#: 區塊 4 的灰態理由。**缺的是一個輸入欄位，不是資料。**
-#: ⚠️ 刻意把「為什麼還沒加」講出來：多代碼輸入欄位屬**版面異動**，
-#:    依草稿先行原則要先提線框草稿拍板（§-1.5 v3 `03`-2 ①），不是實作組自己加。
-_BATCH_PENDING_NOTE: str = (
-    "批次要能**一次收多個代碼**，而本頁目前只有一個收**單一**代碼的搜尋框 —— "
-    "多代碼的輸入欄位是版面異動，要先出線框草稿拍板才會加")
+#: ~~區塊 4 的灰態理由。**缺的是一個輸入欄位，不是資料。**~~
+#: ~~`_BATCH_PENDING_NOTE = "批次要能一次收多個代碼，而本頁目前只有一個收單一代碼的~~
+#: ~~搜尋框 —— 多代碼的輸入欄位是版面異動，要先出線框草稿拍板才會加"`~~
+#: → **2026-09-07 換掉（有意識的政策變更，不是漏刪；決策者：客戶）。**
+#:
+#: **舊表述在寫下的當天完全正確**：多代碼輸入欄位確實是版面異動，確實該先拍板 ——
+#: 上一批把它擋下來、寫成灰態、登記待請示，那個處置是對的。
+#: **被推翻的是它的前提**：客戶 2026-09-07 已就三項拍板（① 只做貼上框、不做檔案上傳
+#: ② 大表照搬全部欄位、不挑子集 ③ ③ 與 ② 的功能重疊兩邊都留），
+#: 「要先出線框草稿拍板才會加」這句話**自那一刻起不再為真**，留著就是對使用者說謊。
+#:
+#: 現在這一塊卡住的原因換成一句**當下真的成立**的話：**貼上框是空的**。
+#: ⚠️ 它是**空狀態**（使用者照著做真的能解決），不是「這一塊還沒做」的 pending ——
+#:    差別寫在 :func:`_render_batch` 的 docstring。
+_BATCH_EMPTY_TITLE: str = "還沒有要批次分析的基金"
+_BATCH_EMPTY_MISSING: str = (
+    "上面的貼上框是空的，或還沒按下送出 —— "
+    "批次是**多代碼**一次跑，貼幾行代碼進去它才有東西可跑")
+#: 貼上框有字、但一個代碼都認不出來。**與上一句不是同一件事**：
+#: 上一句是「還沒給」，這一句是「給了但認不得」—— 下一步不同（去貼 vs 去改格式），
+#: 混成一句使用者無從判斷哪一個跟他有關。
+_BATCH_UNPARSED_TITLE: str = "貼上的內容裡找不到基金代碼"
+#: 代碼收到了、但一檔都還沒跑完。**與上面兩句又是不同的處境**（他已經給了、也送出了）。
+_BATCH_NOTHING_RUN_TITLE: str = "這一批還沒有任何一檔跑完"
+_BATCH_NOTHING_RUN_MISSING: str = (
+    "代碼已經收到了，但還沒有任何一檔跑完 —— 按一次「{submit}」開始跑")
+_BATCH_UNPARSED_MISSING: str = (
+    "認得的形狀是**3~20 碼的英數字**（小寫會自動轉大寫）；每行只讀第一欄，"
+    "所以「代碼,基金名」這種貼法也可以。常見的表頭字（代號／基金代碼／CODE …）會自動略過")
+
+#: ⭐ **批次的本金口徑**。`build_batch_unified_row(code, principal_twd=…)` 的預設值就是它，
+#: 而舊 `ui/tab_batch_analysis.py` 的呼叫端**不傳這個引數** —— 也就是說批次向來就是
+#: 「**每一檔都假設投入 100 萬台幣**」的齊頭模擬基準。本頁**照舊**，不改口徑。
+#:
+#: ⛔ **不得**改成「使用者實際投入的金額」：那是 ② 的口徑（見 :data:`BATCH_PRINCIPAL_NOTE`），
+#:    在這裡改掉會讓同一張大表的配息金額欄突然換一套意義，而畫面上看不出來（§1）。
+#: ⚠️ 具名而不 inline，是為了讓「有人把它改成別的數字」看得見 —— 它一改，
+#:    四類欄位（原幣本金／可申購單位／每月配息／累積配息）全部跟著變。
+BATCH_PRINCIPAL_TWD: float = 1_000_000.0
+
+#: ⭐ **本頁與 ② 的口徑差異** —— `{health}` 由呼叫端以 `tab_label('health')` 填入。
+#:
+#: ⚠️ **這一句是實測出來的，不是照抄派工單** —— 派工單給的例句把兩邊講反了，
+#:    本組查證後採相反的寫法。三條各自獨立的依據（皆本組實跑／開檔核對）：
+#:
+#:    1. `services/fund_row.py::process_one_fund` 的 docstring 逐字：
+#:       「`principal_twd`: 本金 TWD（健診 Tab／**批次統一 100 萬**；
+#:       Tab3 用**各檔實際 invest_twd**）」。
+#:    2. `build_batch_unified_row(code, principal_twd=1_000_000.0, …)` 的**預設值**是
+#:       100 萬，而舊 `ui/tab_batch_analysis.py` 的唯一呼叫點**不傳這個引數**
+#:       —— 也就是說批次**吃預設**，使用者連改都改不了。
+#:       旁證：該檔的欄位說明 expander 逐字寫著「每月配息／累積台幣配息／原幣本金／
+#:       單位 全都假設**投入 100 萬台幣**來比較」。
+#:    3. **② 那一側是新頁、不是舊健診 Tab**：`ui/views/page_02_health.py::`
+#:       `_render_delegated_sections` 餵給舊模組的是使用者的持股清單
+#:       （**各檔實際投入金額**），它的 docstring 就地寫著「舊 ② 餵的是
+#:       `_build_fund_dict(..., principal_twd)` ——『每檔硬寫同一個本金』的齊頭模擬基準；
+#:       新 ② 餵的是 …『使用者每檔實際投入』」。
+#:       而該頁那個「本金（TWD）」輸入框**目前 0 caller**（同檔 2026-09-07 就地登記），
+#:       所以 ② 畫面上的配息金額吃的是實際投入、不是那個框裡的數字。
+#:
+#:    4. **⚠️ 已核准線框目錄裡有一份草稿說的是相反的事，這一條非讀不可**：
+#:       `docs/wireframes/draft-p03-batch-input.html`（**2026-09-06**，實作組 R 提出、
+#:       客戶尚未拍板的提案草稿）的 Q3 逐字寫著「**健診 Tab 在「統一 100 萬」那一側**，
+#:       走實際持倉金額的是 **Tab3（＝④ 資產配置）**」。
+#:       **那句話在寫下的當天是對的** —— 它描述的是**舊** ②
+#:       （`ui/tab_fund_grp_health.py`，本金 widget `value=1_000_000.0`、
+#:       help 逐字「所有基金都假設投入這個金額」）。
+#:       **被推翻的是它的前提**：`app.py` 已於 **2026-09-07**（commit `c321c0a`）
+#:       把 ② 換成 `ui/views/page_02_health.py`（`render_holdings_health()`），
+#:       而**舊的 `render_fund_grp_health_tab()` 現在 production 0 caller**（本組實測）。
+#:       → **本註描述的是使用者今天真的看得到的那個 ②**，與草稿不衝突，
+#:       只是**兩者講的是不同時點的兩個實作**。
+#:       ⛔ **不要**拿草稿 Q3 來「更正」這裡，也**不要**拿這裡去改草稿 ——
+#:       草稿是拍板紀錄，本檔是現況；**已回報總管，由他決定要不要在草稿上補一行時效註**。
+#:
+#: ⚠️ **本組沒有查證的那一半，據實寫明**：以上第 1~3 條都是**靜態追蹤**（讀原始碼 ＋ 呼叫點）。
+#:    本組**沒有**在真的 Streamlit 裡跑一次兩頁、拿同一檔基金去比對兩邊的配息金額欄
+#:    —— 沙箱沒有 streamlit / pandas，跑不了（見模組 docstring 末段）。
+#:    依 `CLAUDE.md §-2` 規則 6，這一段只能當**單組實測的靜態結論**，不是端到端實證。
+BATCH_PRINCIPAL_NOTE: str = (
+    "這張表的每一檔都**假設投入 100 萬台幣**來比較 —— 原幣本金／可申購單位／"
+    "每月配息／累積台幣配息這幾欄全部吃這個假設，**不是你實際投入的金額**。"
+    "「{health}」算的才是**你每一檔實際投入的金額**：同一檔基金在兩邊的配息金額欄"
+    "**不會一樣，那不是算錯** —— 這裡問的是「同樣一筆錢，買哪一檔比較好」，"
+    "那裡問的是「我手上這一檔現在怎麼樣」。")
+
+# ── 批次分析：Form 與 session 鍵 ──────────────────────────────────────────
+#: 批次自己的送出閘門。**與搜尋框是兩個獨立的 form**，理由見 :func:`_render_batch`。
+_BATCH_FORM_KEY: str = "v03_research_batch_form"
+#: **已送出**的代碼清單（`list[str]`）。沒送出過 ＝ 不存在。
+_SK_BATCH_CODES: str = "v03_research_batch_codes"
+#: 已跑完的列：`{代碼: 79 欄的 dict}`。**只活在 session 裡**（見 :func:`_run_batch`）。
+_SK_BATCH_ROWS: str = "v03_research_batch_rows"
+#: 本輪執行時間（台北）。
+_SK_BATCH_RUN_AT: str = "v03_research_batch_run_at"
+
+#: 線框沒有指定批次送出鈕的字（它只畫了頁面頂端那一顆「搜尋」）。
+#: 取最平鋪直敘的動詞，並把「繼續」寫進去 —— 因為再按一次會**跳過已完成的檔**。
+BATCH_SUBMIT_LABEL: str = "開始 / 繼續批次分析"
+_LABEL_BATCH_CODES: str = "基金代碼（每行一檔）"
+_LABEL_BATCH_RETRY: str = "連同上一輪失敗 / 部分成功的檔一起重抓"
+
+#: 代碼的形狀 ＋ 常見表頭字。**與舊 `ui/tab_batch_analysis.py::_parse_codes` 同一組規則**
+#: —— ⚠️ 那是一份**重複**，不是共用：舊檔依方針第 3 條會被整批拔除，
+#:    而本頁**一行都不 import 它**（`tests/test_wf03_research_skeleton.py::`
+#:    `test_the_page_does_not_delegate_to_the_old_tabs`），所以只能各留一份。
+#:    ⛔ 這是**已知的第二份真相源**，已寫進 PR 登記；舊檔拔除時應收成一處。
+_CODE_RE_SRC: str = r"^[A-Z0-9]{3,20}$"
+_HEADER_TOKENS: frozenset[str] = frozenset({
+    "CODE", "SYMBOL", "TICKER", "代號", "基金代號", "基金代碼", "標的", "標的代號"})
+
+#: 每檔耗時（秒）。⚠️ **不是本組估的**：逐字取自舊 `ui/tab_batch_analysis.py` 的
+#: `_SEC_PER_FUND_FAST` / `_SEC_PER_FUND_SLOW`，那兩個值來自該檔記載的 2026-08-14 實測
+#: （「原本 ~5s/檔、實機實測 ~45s/檔，400 檔原顯示『約 33 分鐘』實際約 5 小時 —— 差 9 倍」）。
+#: ⛔ **不得**憑印象調小：使用者照這個數字決定要不要按下去，**低報等於騙他**。
+#: ⚠️ 同上，這是第二份真相源；`tests/test_wf03_research_batch.py::`
+#: `test_the_time_estimate_mirrors_the_old_tab` 會逐值比對舊檔，改一邊就轉紅。
+_SEC_PER_FUND_FAST: int = 20
+_SEC_PER_FUND_SLOW: int = 45
+#: 超過這個檔數就跳警告（舊檔同值）。
+_LONG_RUN_FUNDS: int = 100
 
 # ── 單一基金深度：欄位對照表（**畫面順序即這裡的順序**）────────────────────
 #: 績效分期：`(result["perf"] 的鍵, 畫面標籤)`。
@@ -350,7 +501,7 @@ def _pending_where(block: str) -> str:
     ⛔ **這一族的指路仍然「有效性有限」，據實寫明，不要讀成已經解決**：
     這一塊沒接上，**去任何地方都不會讓它出現**；能指的最誠實的地方，
     就是這一頁上**唯一真的做完**的那一塊（＝搜尋條件），而灰態本文
-    （:data:`_RESULTS_PENDING_NOTE` / :data:`_BATCH_PENDING_NOTE`）已經先講了
+    （:data:`_RESULTS_PENDING_NOTE`、:data:`_BATCH_EMPTY_MISSING` …）已經先講了
     **這一塊**缺的是什麼。
     ✅ **對照**：空狀態（:func:`_render_not_searched_yet`）那一則的指路是**真的有效**的
     —— 紅隊實跑：照它做真的會離開灰態。**兩者不要混為一談。**
@@ -1157,29 +1308,459 @@ def _provenance_caption(result: dict, nav: dict | None) -> str:
     return " · ".join(_bits)
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 區塊 4｜批次分析 —— 版面與互動在這裡，**計算一行都不在這裡**
+#
+# 客戶 2026-09-07 三項拍板（逐條落在下面哪裡，寫清楚免得下一個人以為可以自己改）：
+#   ① **只做貼上框，不做檔案上傳** → :func:`_render_batch` 只有一個 `st.text_area`。
+#      理由（客戶原話的技術面）：多一個上傳元件就多一組失敗路徑（解碼失敗、
+#      編碼判斷、檔案型別），而真的需要再加屬**純新增**，不會推翻這張草稿。
+#      ⚠️ 舊 `ui/tab_batch_analysis.py` **有** `st.file_uploader` —— 本頁刻意沒有，
+#      **那是拍板，不是漏做**，由 `tests/test_wf03_research_batch.py` 釘住。
+#   ② **大表照搬全部欄位，不挑子集** → :func:`_batch_table_rows` 以
+#      `BATCH_UNIFIED_COLUMNS`（實測 79 欄）為欄骨架逐列投影，**一欄都不篩**。
+#      挑哪幾欄是**新的業務決定**，會讓這一批從「搬版面」變成「改規格」。
+#   ③ **③ 與 ② 的功能重疊：兩邊都留，③ 不收欄位** → 重疊是刻意的，
+#      口徑差異就地寫在畫面上（:data:`BATCH_PRINCIPAL_NOTE`）。
+#
+# ⚠️ **路線 (A)：邏輯一律呼叫既有舊模組。** 本區唯一的計算入口是
+#    `ui.helpers.fund_grp_health.unified.build_batch_unified_row`（**與舊批次分頁
+#    同一支、同一條資料路徑**）。本檔**不重寫、不搬移、不改資料路徑**。
+#    ⛔ 它**不是**線框「從哪裡搬來」列的那三個舊分頁之一 —— 那三個是
+#    `ui/tab2_single_fund.py` / `ui/tab_fund_research.py` / `ui/tab_batch_analysis.py`，
+#    本檔一行都沒 import（`test_the_page_does_not_delegate_to_the_old_tabs`）。
+#    ② `ui/views/page_02_health.py` 委派 `ui.helpers.fund_grp_health.*` 是同一個形狀。
+# ══════════════════════════════════════════════════════════════════════════
+
+def _parse_codes(raw: object) -> list[str]:
+    """把一坨貼上的文字收成**去重、大寫、保留首次出現順序**的代碼清單。
+
+    規則（逐條與舊 `ui/tab_batch_analysis.py::_parse_codes` 相同）：
+    逗號／分號／Tab／換行皆為分隔；**每行只取第一欄**（容忍「ACCP138,美元基金」
+    這種從試算表貼過來的兩欄）；只留符合 :data:`_CODE_RE_SRC` 的 token；
+    過濾 :data:`_HEADER_TOKENS` 那幾個常見表頭字。
+
+    ⛔ **這是一份重複實作，不是共用** —— 理由寫在 :data:`_CODE_RE_SRC` 上方。
+
+    ⚠️ **`raw` 刻意收 `object` 而不是 `str`**：`st.text_area` 在某些替身／
+    降級路徑下不保證回字串，而 `"".join` 之類的寫法遇到非字串會**靜默**產生
+    一個看起來合理的空清單。這裡顯式 `isinstance` 判斷，非字串一律回 `[]`
+    —— 空清單會讓畫面走空狀態（誠實），不會假裝跑了一輪。
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    _out: list[str] = []
+    _seen: set[str] = set()
+    for _line in raw.replace("\r", "\n").split("\n"):
+        _line = _line.strip()
+        if not _line:
+            continue
+        _token = re.split(r"[,\t;]", _line, maxsplit=1)[0].strip().upper()
+        if not _token or _token in _HEADER_TOKENS:
+            continue
+        if not re.match(_CODE_RE_SRC, _token):
+            continue
+        if _token not in _seen:
+            _seen.add(_token)
+            _out.append(_token)
+    return _out
+
+
+def _batch_where() -> str:
+    """批次那兩種空狀態的「去哪補」。**這一則是真的有效的那一種。**
+
+    ⚠️ **刻意不走** :func:`_pending_where`（它指的是「搜尋條件」）——
+    搜尋條件那一格**解決不了**「還沒貼代碼」這件事：使用者照它做會去打一個
+    單一代碼、按「搜尋」，然後回到這裡看到**一模一樣的灰**。
+    本則指到**批次自己的貼上框**：分頁 → 區塊 → 欄位，三段都是畫面上真的有的東西，
+    而且照著做**真的會離開灰態**。
+
+    ⛔ 對照 :func:`_pending_where` 的長註：那一族之所以「有效性有限」，
+    是因為那一塊還沒接上、去哪都沒用。**批次已經接上了，所以這一則不該再沿用它。**
+    `tests/test_wf03_research_batch.py::test_the_batch_pointer_is_the_paste_box`
+    釘住這個差別 —— 改回 `_pending_where()` 會轉紅。
+    """
+    return f"{where_to_find('research')} → {BLOCK_BATCH} → {_LABEL_BATCH_CODES}"
+
+
+def _applied_batch_codes() -> list[str]:
+    """**已送出**的批次清單。沒送出過（或送出的解析不到代碼）＝ 空 list。
+
+    ⚠️ 與 :func:`_applied_query` 同一個道理：下游一律讀這個，
+    **不要讀 `st.text_area` 的回傳值** —— 讀了就等於沒有 form。
+    """
+    _cur = st.session_state.get(_SK_BATCH_CODES)
+    return [str(_c) for _c in _cur] if isinstance(_cur, list) else []
+
+
+def _batch_rows() -> dict:
+    """已跑完的列：`{代碼: 79 欄的 dict}`。"""
+    _cur = st.session_state.get(_SK_BATCH_ROWS)
+    return _cur if isinstance(_cur, dict) else {}
+
+
+def _is_batch_fail(row: object) -> bool:
+    """這一檔算不算失敗 / 無效 —— 狀態欄含「失敗」或「無效」。
+
+    ⚠️ 「⚠️ 部分成功」**不算**失敗：它有抓到淨值、大部分欄位算得出來，
+    只是某一組欄留白。**判「該不該重跑」請用** :func:`_is_batch_retryable`。
+    """
+    _s = str((row or {}).get("狀態", "")) if isinstance(row, dict) else ""
+    return ("失敗" in _s) or ("無效" in _s)
+
+
+def _is_batch_retryable(row: object) -> bool:
+    """值不值得重跑 ＝ 抓取失敗／代號無效／**部分成功**。
+
+    ⚠️ 「部分成功」多半是暫時的（大盤基準抓失敗／匯率逾時），重跑單檔通常就好了；
+    把它排除在重試之外，使用者會拿到一個**自己無法處理**的狀態。
+    """
+    if _is_batch_fail(row):
+        return True
+    _s = str((row or {}).get("狀態", "")) if isinstance(row, dict) else ""
+    return "部分成功" in _s
+
+
+def split_batch_status_counts(statuses) -> tuple[int, int, int]:
+    """狀態欄 → `(完全成功, 部分成功, 失敗/無效)` 三態計數。
+
+    ⭐ **具名而不 inline，全部的理由就是這一句**：`"部分成功"` 這個字串
+    **字面上含有「成功」** —— 任何人回頭用最直覺的 `"成功" in s` 改寫，
+    都會把「有 13~22 欄沒算出來」的檔靜靜混進全綠計數，
+    而使用者永遠不會去看它的備註。抽成純函式才守得住。
+    ⚠️ 三者相加**必等於**輸入長度（`tests/test_wf03_research_batch.py` 釘住）。
+    """
+    _ok = _partial = _fail = 0
+    for _s in statuses:
+        _t = str(_s or "")
+        if "部分成功" in _t:
+            _partial += 1
+        elif "成功" in _t:
+            _ok += 1
+        else:
+            _fail += 1
+    return _ok, _partial, _fail
+
+
+def _batch_estimate(todo_n: int) -> str:
+    """剩餘檔數 → 預估時間字串。**給區間，不給單點。**
+
+    ⚠️ 每檔秒數來自 :data:`_SEC_PER_FUND_FAST` / :data:`_SEC_PER_FUND_SLOW`
+    （＝舊分頁的實測值，見那兩個常數）。給區間是因為 MoneyDJ 每檔要走多頁
+    ＋ fallback chain，境外基金常態跑兩輪 page_type，**離散度本來就大**。
+    """
+    _n = max(int(todo_n or 0), 0)
+    if _n <= 0:
+        return "—"
+    _lo = max(1, round(_n * _SEC_PER_FUND_FAST / 60))
+    _hi = max(1, round(_n * _SEC_PER_FUND_SLOW / 60))
+    return f"約 {_hi} 分鐘" if _hi <= _lo else f"約 {_lo}~{_hi} 分鐘"
+
+
+def _run_batch(codes: list[str], *, retry_failed: bool) -> None:
+    """逐檔跑（進度條）。已完成的跳過；`retry_failed` 時把可重試的檔一起重抓。
+
+    ⭐ **它只會在送出閘門的正分支裡被呼叫**
+    （線框 Tab 03 的 chip：「長時間運算，**必須在 Form 之後才啟動**」）。
+    ⚠️ **刻意不寫「本頁唯一的長時間運算」** —— 那句話不成立：深度區的
+    :func:`auto_fetch_moneydj` 同樣是一次外部往返，只是**單檔**。
+    本函式真正特別的地方是它**隨代碼數線性放大**（N × 20~45 秒），
+    所以「有沒有被 gate 住」在這裡的代價是幾小時，在深度區是幾秒。
+    ⛔ 不得改成「頁面載入就跑」或「有代碼就跑」—— 那會讓每一次 rerun
+    都重打一輪 MoneyDJ。
+
+    ⚠️ **與舊分頁的四個已知差異，逐條寫明，不要讀成「一模一樣」**：
+
+    1. ⛔ **沒有磁碟續存（checkpoint）。** 舊分頁每跑完一檔就寫
+       `repositories/batch_checkpoint`，關分頁 / 重啟後可續跑。
+       本頁**不寫任何磁碟、不寫任何 Google Sheet** —— 客戶 2026-09-06 永久授權
+       「查詢/搜尋一律唯讀」，而且本頁一行都不 import `repositories`
+       （`test_the_page_never_reaches_into_the_data_layer`）。
+       → **結果只活在 session 裡**：同一個 session 內可以續跑（再按一次會跳過
+       已完成的檔），**關掉分頁就沒了**。線框寫的「結果落地可續跑」，
+       **落地那一半本頁沒有做到** —— 這是缺口，已在 PR 具名登記，不是靜默省略。
+    2. **不傳 `name_hint`。** 舊分頁會去選股池查名字（`repositories.pool_repository`），
+       線上抓不到真名的池成員因此顯示池名。本頁不能 import `repositories`，
+       所以那種檔的「基金名」會留白 —— **留白是誠實的**（我們真的不知道它叫什麼）。
+    3. **不傳 `oauth_client`。** 舊分頁會把登入者的 OAuth client 傳下去，
+       讓沒有 service account 的環境也讀得到雲端 `nav_history` 補回歷史。
+       本頁不碰 OAuth（那是 ⑤ 的職責），故退回 service account / 空。
+    4. **`phase` / `score` 改由 session 讀**（見下方）—— 這一項與舊分頁**相同**，
+       列在這裡只是為了讓四項並排看得完整。
+
+    ⚠️ **每一檔跑完就立刻寫回 session**，不是整輪跑完才寫一次 ——
+    中途出錯／使用者切走時，已經跑完的檔不會白費。
+    """
+    from ui.helpers.fund_grp_health.unified import build_batch_unified_row
+
+    _rows = dict(_batch_rows())
+    _todo = [_c for _c in codes
+             if _c not in _rows or (retry_failed and _is_batch_retryable(_rows[_c]))]
+    if not _todo:
+        st.session_state[_SK_BATCH_ROWS] = _rows
+        return
+
+    # 景氣位階 —— 與舊分頁同一個 session 鍵。① 還沒載過總經資料時它是空的，
+    # 那時「資產屬性 / 操作訊號 / 景氣適配」三欄會誠實留白（§1），**不猜一個位階**。
+    _pi = st.session_state.get("phase_info") or {}
+    _phase = str(_pi.get("phase") or "") if isinstance(_pi, dict) else ""
+    _score = _pi.get("score") if isinstance(_pi, dict) else None
+
+    _bar = st.progress(0.0)
+    _live = st.empty()
+    _total = len(_todo)
+    for _i, _code in enumerate(_todo, start=1):
+        _live.markdown(f"⏳ 處理中 **{_i}/{_total}**：`{_code}` …")
+        # ⭐ `principal_twd` **顯式傳**，即使它等於函式的預設值 ——
+        #    口徑是這一區最容易被悄悄改掉的東西，寫出來才看得見（見該常數）。
+        _rows[_code] = build_batch_unified_row(
+            _code, principal_twd=BATCH_PRINCIPAL_TWD, phase=_phase, score=_score)
+        st.session_state[_SK_BATCH_ROWS] = _rows
+        _bar.progress(_i / _total)
+    _bar.empty()
+    _live.markdown(f"✅ 本輪完成 **{_total}** 檔。")
+    st.session_state[_SK_BATCH_RUN_AT] = tw_now_str()
+
+
+def _batch_table_rows(codes: list[str], rows: dict) -> list[dict]:
+    """把已完成的列投影成**大表的欄骨架**，依送出順序排列。
+
+    ⭐ **客戶拍板②「照搬全部欄位、不挑子集」就落在這一行**：欄骨架是
+    `BATCH_UNIFIED_COLUMNS`（＝ 舊分頁 `_build_df(columns=…)` 用的同一份 SSOT），
+    **本函式一欄都不篩、一欄都不加**。
+    ⛔ 想少放幾欄請先回去讀該拍板 —— 挑哪幾欄是**新的業務決定**，不是實作細節。
+
+    ⚠️ **數值欄的轉型**：舊分頁走 `pd.to_numeric(errors="coerce")`。本頁不 import
+    pandas（沒有必要 —— `build_batch_unified_row` 回的已經是 79 個鍵的 flat dict），
+    改用 repo 既有的 `shared.converters.safe_num`。
+    **兩者有一處差異，據實寫明**：`safe_num` 會額外 strip `%` 與 `,`，
+    也就是 `"12.3%"` 在 pandas 下是空白、在這裡會變 `12.3`。
+    方向是**多顯示一個真值**，不會產生假值（認不得的一律回 `None` → 留白）。
+    """
+    from ui.helpers.fund_grp_health.unified import (
+        BATCH_NUMERIC_COLUMNS,
+        BATCH_UNIFIED_COLUMNS,
+    )
+    _numeric = set(BATCH_NUMERIC_COLUMNS)
+    _out: list[dict] = []
+    for _c in codes:
+        _row = rows.get(_c)
+        if not isinstance(_row, dict):
+            continue
+        _out.append({
+            _col: (safe_num(_row.get(_col)) if _col in _numeric else _row.get(_col))
+            for _col in BATCH_UNIFIED_COLUMNS
+        })
+    return _out
+
+
+def _batch_csv(rows: list[dict]) -> bytes:
+    """把大表轉成可下載的 CSV bytes。**欄序與畫面上完全相同。**
+
+    ⚠️ **`utf-8-sig` 不是隨手挑的**：少了那個 BOM，Excel 會把中文欄名讀成亂碼
+    （舊 `ui/tab_batch_analysis.py` 的下載鈕用的也是它，同一個理由）。
+    ⚠️ **不走 pandas 的 `to_csv`** —— 本頁不 import pandas（沒有必要），
+    而 `csv` 是標準庫。⛔ 也**不要**改成 `to_csv`：那個名字落在零寫入守衛的
+    磁碟 sink 清單裡，會讓一個**根本不碰磁碟**的動作看起來像在寫檔。
+    ⚠️ `None` 由 `csv` 寫成空字串 ＝ **留白**，⛔ 不得填 0（§1）。
+    """
+    import csv
+    import io
+    _buf = io.StringIO()
+    _cols = list(rows[0]) if rows else []
+    _w = csv.DictWriter(_buf, fieldnames=_cols, extrasaction="ignore")
+    _w.writeheader()
+    for _r in rows:
+        _w.writerow({_c: ("" if _r.get(_c) is None else _r.get(_c)) for _c in _cols})
+    return _buf.getvalue().encode("utf-8-sig")
+
+
+def _batch_column_config(cols: list[str]) -> dict:
+    """大表的逐欄顯示設定（欄寬 ＋ **逐欄 tooltip**）。
+
+    ⭐ **這不是新設計，是接既有的那一份** ——
+    `ui.helpers.fund_grp_health.columns.unified_column_config(batch=True)`
+    是健診大表與批次大表**共用**的 SSOT，舊分頁用的就是它。
+    ⚠️ 它是**本批**對「79 欄橫向捲很久」唯一做了的緩解，而且**不動任何欄位**：
+    欄名一律可以把滑鼠移上去看「怎麼算的、單位是什麼、留白代表什麼」。
+    （**不宣稱它是唯一可能的手段** —— 凍結欄／分組欄也是，只是那屬版面決定，見下。）
+    ⛔ **凍結欄 / 分組欄不在本批**：repo 內確實有一支
+    `ui/components/column_group_tabs.py`，但它 **production 0 caller**、
+    而且**要求呼叫端自己傳 `groups` 與 `pinned`** —— 也就是「哪幾欄算一組」
+    得由我們發明，那是**版面決定**（§-1.5 v3 `03`-2 ①），已回報總管，不自決。
+    """
+    from ui.helpers.fund_grp_health.columns import unified_column_config
+    _cfg = unified_column_config(batch=True)
+    return {_k: _v for _k, _v in _cfg.items() if _k in set(cols)}
+
+
+def _render_batch_form() -> None:
+    """批次自己的送出閘門（貼上框 ＋ 重試勾選 ＋ 送出鈕）。
+
+    ⚠️ **為什麼是第二個 form，而不是把欄位塞進頂端那一個** —— 三個理由：
+      1. 頂端那一顆鈕的字是線框逐字指定的「**搜尋**」，它送出的語意是「查一檔」；
+         批次送出的語意是「跑一批、可能要好幾小時」。**同一顆鈕做兩件事，
+         使用者按下去之前不知道會發生什麼。**
+      2. 線框給批次的 chip 是「**Form 後才跑**」——「Form」在那句話裡指的是
+         「有一道送出閘門」，不是「必須是同一個 form」。
+      3. 合成一個的話，每次查單檔都會順便重跑整批（或反之），
+         那正是鐵則 02 要擋的重運算。
+    ⚠️ 兩個 form 都走 `ui.helpers.ia.applied_form`，**本檔沒有任何 `st.form(` 站點**
+    —— 自己寫會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==` 7）轉紅。
+
+    ⛔ **沒有 `st.file_uploader`，那是客戶 2026-09-07 拍板①，不是漏做。**
+    """
+    with applied_form(_BATCH_FORM_KEY, submit_label=BATCH_SUBMIT_LABEL) as _gate:
+        st.caption(BATCH_PRINCIPAL_NOTE.format(health=tab_label("health")))
+        st.caption(
+            f"逐檔**序列**跑（避免對來源造成過高請求速率），每檔約 "
+            f"{_SEC_PER_FUND_FAST}~{_SEC_PER_FUND_SLOW} 秒 —— "
+            f"送出後才開始，打字的當下不會觸發任何取數。"
+            f"結果**只留在這個瀏覽器分頁裡**，關掉就沒了（本頁不寫任何檔案）。")
+        _raw = st.text_area(
+            _LABEL_BATCH_CODES, value="", height=140,
+            placeholder=_CODE_PLACEHOLDER,
+            help="每行一檔；逗號／分號／Tab 也可以當分隔，每行只讀第一欄，"
+                 "所以直接從試算表貼「代碼,基金名」兩欄也可以。"
+                 "重複的代碼會自動去掉，小寫會自動轉大寫。",
+        )
+        _retry = st.checkbox(
+            _LABEL_BATCH_RETRY, value=False,
+            help="不勾：只跑還沒跑過的檔（已完成的直接跳過，所以再按一次很快）。"
+                 "勾了：連「抓取失敗 / 代號無效 / 部分成功」的檔一起重抓 —— "
+                 "那幾種多半是暫時性的，重抓通常就會補齊。",
+        )
+
+    # ⚠️ `if _gate:` 必須在 `with` **之外**（送出鈕在 `yield` 之後才建立）。
+    if _gate:
+        _codes = _parse_codes(_raw)
+        st.session_state[_SK_BATCH_CODES] = _codes
+        if _codes:
+            _run_batch(_codes, retry_failed=bool(_retry))
+
+
+def _render_batch_results() -> None:
+    """送出之後的三種處境，**一次只給一個下一步**。
+
+    1. **還沒送出 / 貼上框是空的** → 空狀態三要素（:data:`_BATCH_EMPTY_TITLE`）。
+    2. **送出了但一個代碼都認不出來** → **另一句**空狀態（:data:`_BATCH_UNPARSED_TITLE`）。
+       ⚠️ 與第 1 種**刻意不共用一句**：一個是「還沒給」、一個是「給了但認不得」，
+       下一步不同（去貼 vs 去改格式）。共用一句使用者無從判斷哪一個跟他有關 ——
+       同一個道理在本檔的 :data:`_RESULTS_PENDING_NOTE` 那裡已經吃過一次虧。
+    3. **有結果** → 三態摘要 ＋ 全部欄位的大表。
+
+    ⚠️ **狀態 2 與狀態 1 分不出來的那一格**：送出了、解析到 0 個代碼 →
+    `_SK_BATCH_CODES` 是 `[]`，與「送出前」的預設值長得一樣。
+    本函式因此**看的是 session 鍵在不在**（`in st.session_state`），不是它的真假值。
+    """
+    _submitted = _SK_BATCH_CODES in st.session_state
+    _codes = _applied_batch_codes()
+    _rows = _batch_rows()
+
+    if not _codes:
+        if _submitted:
+            empty_state(_BATCH_UNPARSED_TITLE, _BATCH_UNPARSED_MISSING,
+                        where=_batch_where(),
+                        footer="改成每行一個代碼再送出一次即可。")
+        else:
+            empty_state(_BATCH_EMPTY_TITLE, _BATCH_EMPTY_MISSING,
+                        where=_batch_where(),
+                        footer="送出後這裡會出現一張大表，每一檔一列。")
+        return
+
+    _table = _batch_table_rows(_codes, _rows)
+    _done = len(_table)
+    _todo_n = max(len(_codes) - _done, 0)
+    _ok, _partial, _fail = split_batch_status_counts(
+        str((_rows.get(_c) or {}).get("狀態", "")) for _c in _codes if _c in _rows)
+    st.caption(
+        f"解析到 **{len(_codes)}** 檔（已去重）　·　已完成 **{_done}**　·　"
+        f"剩餘 **{_todo_n}**（{_batch_estimate(_todo_n)}）　·　"
+        f"✅ 完全成功 {_ok}　·　⚠️ 部分成功 {_partial}　·　❌ 失敗 / 無效 {_fail}"
+        + (f"　·　執行時間（台北）{st.session_state.get(_SK_BATCH_RUN_AT)}"
+           if st.session_state.get(_SK_BATCH_RUN_AT) else ""))
+    if _todo_n >= _LONG_RUN_FUNDS:
+        st.caption(
+            f"⚠️ 還有 **{_todo_n}** 檔沒跑，預估 **{_batch_estimate(_todo_n)}**。"
+            "跑的過程中請不要關掉分頁；已完成的檔會即時留在這個分頁裡，"
+            "中斷後再送出同一份清單會從沒跑過的那一檔接下去。")
+    if _partial or _fail:
+        st.caption(
+            "失敗與部分成功的檔**完整留在表裡**（狀態 ＋ 備註寫明原因、數值欄留白），"
+            "**不會偷偷丟掉、也不會填 0**。「部分成功」是淨值抓到了、但某一組欄位"
+            "算到一半出錯而留白 —— **留白不代表這檔沒有那個特性**。"
+            f"勾上「{_LABEL_BATCH_RETRY}」再送出一次通常就會補齊。")
+
+    if not _table:
+        # ⚠️ **早退是刻意的，不是為了少寫一行** —— `_batch_column_config()` 會
+        #    lazy import 一條需要 `pandas` 的鏈（`services.fund_service`）。
+        #    空表根本不需要那份設定，硬算等於在「代碼收到了、還沒跑完任何一檔」
+        #    這個**必經**處境上多掛一條進口路徑；那條路徑一出事，
+        #    使用者看到的是**紅框**，而他其實只是還沒開始跑（那是灰）。
+        #    ⚠️ **這不是假想**：本組第一版就是先算 config 再判空，
+        #    本機驅動器當場把那一格畫成紅框（`ModuleNotFoundError: pandas`）。
+        wide_table([], empty_title=_BATCH_NOTHING_RUN_TITLE,
+                   empty_missing=_BATCH_NOTHING_RUN_MISSING.format(
+                       submit=BATCH_SUBMIT_LABEL),
+                   empty_where=_batch_where())
+        return
+    # ⭐ 全部欄位、全寬。`wide_table` 走 `st.dataframe` —— 它自己就是一個
+    #    `overflow-x` 的捲動容器；`height` 讓它成為**固定高度**的捲動區，
+    #    不會把整頁撐長。**欄位一欄都沒有少**（客戶拍板②）。
+    wide_table(
+        _table,
+        empty_title=_BATCH_NOTHING_RUN_TITLE,
+        empty_missing=_BATCH_NOTHING_RUN_MISSING.format(submit=BATCH_SUBMIT_LABEL),
+        empty_where=_batch_where(),
+        column_config=_batch_column_config(list(_table[0])),
+        height=460, hide_index=True,
+    )
+    st.caption(
+        f"表格可以**左右捲動**（共 {len(_table[0])} 欄）；"
+        "每一個欄名都可以把滑鼠移上去看說明 —— 怎麼算的、單位是什麼、"
+        "留白代表什麼、能不能拿去跨檔比大小。")
+    # ⬇️ CSV 下載 —— **草稿版面裡就有這一顆**，不是本組加的新元件
+    #    （`docs/wireframes/draft-p03-batch-input.html` 的「提案版面（最小可用）」
+    #    末行逐字：「⬇️ 下載 CSV」）。舊分頁同樣有一顆。
+    # ⚠️ **它不寫任何檔案** —— `st.download_button` 收的是 bytes，由瀏覽器存檔；
+    #    本頁到磁碟的距離仍然是 0（`tests/test_wf03_research_no_writes.py` 釘住）。
+    st.download_button(
+        "⬇️ 下載這張表（CSV）", _batch_csv(_table),
+        file_name=f"fund_batch_{tw_now_str('%Y%m%d_%H%M')}.csv",
+        mime="text/csv", use_container_width=True, key="v03_batch_download")
+
+
 def _render_batch() -> None:
-    """區塊 4｜批次分析（**大表全寬**）。本批灰態。
+    """區塊 4｜批次分析（**大表全寬**）。
 
     線框逐字：「一次丟多個代碼跑同一組指標，結果落地可續跑。
     **長時間運算，必須在 Form 之後才啟動。**」
 
-    ⚠️ **線框沒有畫批次自己的輸入框** —— 它只畫了頁面頂端那一個「唯一搜尋入口」，
-       而該入口收的是**單一**代碼或名稱，餵不了「一次丟多個代碼」。
-       ⛔ **本批刻意不發明一個批次輸入框**（那是線框沒有的新版面 ＝ 客戶 gate，
-       §-1.5 v3 §03-2 ①）。**已登記，待下一批連同真內容一起請示。**
-       在那之前，本頁靠「送出過搜尋才往下畫」滿足 chip「Form 後才跑」的下限：
-       **批次絕不會在頁面載入時自己啟動。**
+    ⚠️ ~~「線框沒有畫批次自己的輸入框……本批刻意不發明一個批次輸入框
+    （那是線框沒有的新版面 ＝ 客戶 gate）。已登記，待下一批連同真內容一起請示。」~~
+    → **2026-09-07 狀態更新（不是漏刪）：那次請示已經回來了。**
+    客戶拍板「**只做貼上框，不做檔案上傳**」，所以輸入框現在有了、而且刻意只有一個。
+    **舊表述當時的處置是對的** —— 它擋下了一個沒有被拍板的版面異動；
+    **被推翻的只有它的前提**（那時還沒拍板，現在拍了）。
+
+    ⚠️ **「結果落地可續跑」只做到一半，這是缺口不是取捨** ——
+    `session` 內可續跑，**落地（磁碟 checkpoint）沒有做**，理由與代價見
+    :func:`_run_batch` 的差異第 1 條。**已在 PR 具名登記。**
     """
-    wide_table([], empty_title="批次結果還沒有可顯示的列",
-               empty_missing=f"{_BATCH_PENDING_NOTE}（多檔同一組指標的結果表與續跑進度）。",
-               empty_where=_pending_where(BLOCK_FORM))
+    _render_batch_form()
+    _render_batch_results()
 
 
 def render_fund_research() -> None:
     """渲染「③ 標的探索」整頁。
 
-    ⚠️ **本批尚未接進 `app.py`**（客戶明令舊三頁不動、不接線、不下架），
-    所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。
+    ~~⚠️ **本批尚未接進 `app.py`**（客戶明令舊三頁不動、不接線、不下架），~~
+    ~~所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。~~
+
+    ✅ **2026-09-07 已接線**（**有意識的狀態變更，不是漏刪** · 決策者：**客戶
+    2026-09-07「雙軌並行」**）：本函式是 `app.py` 第 ⑧ 格 `[新] 標的探索`
+    的進入點（`with tab_preview_research:`）。**舊 ③ 留在第 ③ 格原樣不動。**
+    完整理由與「舊表述當時為什麼是對的」見模組 docstring 同日的那則更正。
 
     ⚠️ **區塊之間走 `safe_section()` 隔離**：`st.tabs` 是單次 run 渲染全部分頁，
     任一區塊拋未捕捉例外會**中止整個 script**，其後所有分頁空白。

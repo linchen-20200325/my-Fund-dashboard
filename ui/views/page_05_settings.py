@@ -17,10 +17,23 @@
 3      連線與金鑰              **委派** `render_policy_admin_bridge(sheet_client=None)`
                               ＋ `render_fetch_diag_from_session()`
 4      手動補資料              **委派** `render_nav_manual_section()`（三條寫入路徑）
-（4.5） 🗄️ 資料維護與通報      **委派** `ui.tab_manage.render_manage_tab()`
-                              ⚠️ **線框沒有給它位置**，見下方 (D-5) 的登記
 5      使用手冊                **委派** `ui.tab6_manual.render_manual_tab()`
+6      🗄️ 資料維護與通報      **委派** `ui.tab_manage.render_manage_tab()`
+                              **最底部的進階折疊區**（客戶 2026-09-07 裁決）
+                              ⚠️ **線框沒有給它位置**，見下方 (D-5) 的登記
 ===== ====================== =====================================================
+
+⚠️ **2026-09-07 順序變更（有意識的政策變更，不是漏刪 · 決策者：客戶）**
+   舊順序 ~~「…4 手動補資料 →（4.5）🗄️ 資料維護與通報 → 5 使用手冊」~~
+   —— 客戶 2026-09-07 逐字裁決：「🗄️ 資料維護與通報 決策【**保留**】在 ⑤ 的**最底部**
+   作為**進階折疊區（`st.expander`）**。理由：系統維護與通報屬管理設定範疇，
+   折疊收攏即可，不影響主視覺。」
+   **舊擺法的理由仍然成立**（它跟著「從哪裡搬來」的檔案順序走，且不動線框五塊的相對序）；
+   **被權衡掉的是它的視覺成本** —— 那一塊展開後很長，夾在「手動補資料」與「使用手冊」
+   之間會把使用手冊推到很下面。
+   ⛔ **這次裁決沒有推翻 (D-5) 的登記**：它裁的是「這一塊放在哪、怎麼收」，
+   **不是**「線框裡有沒有它」。**(D-5) 照舊有效、照舊是登記在案的偏離。**
+   ⛔ **也沒有動到線框五塊彼此的相對順序**（1→2→3→4→5 一格未變）。
 
 線框同時釘死了本頁的**職責邊界**：
 
@@ -45,6 +58,17 @@
 
 ⛔ **因此使用手冊不得畫成灰態佔位。** 自 (A) 路線起這一條**更沒有藉口** ——
    說明書的真內容（`ui/tab6_manual.py`，十章）**一直都在**，只是舊版沒有委派過去。
+
+⚠️ **2026-09-07 雙軌期間的例外，就地登記（(D-1) 的理由一個字都沒有被推翻）**
+（**有意識的變更，不是漏刪** · 決策者：**AI 總管** · 客戶 2026-09-07 雙軌並行原則）：
+:func:`_render_manual` **加了 Checkbox Gate**，本頁的使用手冊**預設不顯示內容**。
+**這不違反 (D-1)，因為 (D-1) 禁的是「假的未載入」** —— 東西明明出得來卻說出不來。
+**雙軌期間它真的出不來**：舊 ⑤ 無條件畫同一份說明書，兩份一起畫會撞
+`ui/tab1_macro.py::render_indicator_map` 那張**不帶 key** 的 `plotly_chart`，
+使用者**零點擊**就會看到一則紅字（CI 實測，見 :func:`_manual_not_loaded_note`）。
+灰態本文把「舊 ⑤ 已經有一份完整的」與「勾下去會怎樣」兩件事都寫在畫面上。
+⛔ **代價要記，不要假裝沒有**：⑦ 的使用手冊在雙軌期間預設看不到內容 ——
+   那是用「一則零點擊的紅字」換來的。**舊 ⑤ 一下架，四顆 gate 應一起拿掉。**
 
 (D-2) 本頁**沒有頁面層級的空狀態**；空狀態只可能出現在單一區塊
 --------------------------------------------------------------
@@ -146,8 +170,13 @@ NAV 那一塊現在會印**真的**「N 檔 · 共 M 筆」—— 那不是示�
   —— 檔內 `st.columns` / `st.form` / `card_row` / `applied_form` 全是 0，
   **沒有東西可查**（本檔自己的 `test_the_page_draws_no_grid_form_or_tabs_of_its_own`
   同理：它驗的是「**不准有**」，不是「**有而且對**」）。
-- **鐵律 ④**（首屏無冗餘占位）：那條守衛的 scope 是 `app.py`，而**本檔尚未接線**
-  （`app.py` 一個字未動），**射程為零**。
+- **鐵律 ④**（首屏無冗餘占位）：那條守衛的 scope 是 `app.py`。
+  ⚠️ ~~而**本檔尚未接線**（`app.py` 一個字未動），**射程為零**。~~
+  → **2026-09-07 事實更正（有意識的更正，不是漏刪 · 決策者：AI 總管 · 依據：實測）**：
+  **本檔已於 #814「雙軌並行」接進 `app.py` 的第 ⑦ 格**（見下方「本檔的接線狀態」）。
+  ⛔ **但「射程為零」這個結論本組沒有重驗** —— 它取決於那條守衛的 scope 到底怎麼寫，
+  而本輪沒有去讀那條守衛。**只更正已被實測推翻的那半句（「尚未接線」），
+  不對另一半（「射程為零」）背書。**
 - **鐵律 ③**（三態顏色分離）：本檔確實走 `render_state` 的 `not_ready()` /
   `safe_section()` / `system_error()`，**但**獨立紅隊 2026-09-06 回報：
   手繪 6 種紅色形狀、**存活 5 種**（fail-open）。⚠️ **這一項本組沒有重現**
@@ -170,8 +199,29 @@ NAV 那一塊現在會印**真的**「N 檔 · 共 M 筆」—— 那不是示�
 自己就寫著「**⑤ 設定與診斷不在其中**」。照抄 ①②③④ 那一行進來，會得到一個
 **看起來有做、實際是 no-op** 的呼叫。**本檔不放那一行。**
 
-⚠️ **本批尚未接進 `app.py`**（客戶明令舊分頁不動、不接線、不下架），
-所以本檔現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。
+⚠️ **本檔的接線狀態（2026-09-07 實測）**
+-------------------------------------
+~~本批尚未接進 `app.py`（客戶明令舊分頁不動、不接線、不下架），
+所以本檔現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。~~
+
+⚠️ **2026-09-07 事實更正：本檔已經接線了，「沒有 production caller」是假的**
+（**有意識的更正，不是漏刪** · 日期 **2026-09-07** · 決策者：**AI 總管**）。
+**實測**：`git grep -n "page_05_settings" app.py` → `app.py` 有
+``from ui.views.page_05_settings import render_settings_and_diagnostics``；
+同檔 `with tab_preview_settings:` 內呼叫 `render_settings_and_diagnostics()`。
+也就是說本頁**現在真的會在 production 每一次 script run 被渲染**。
+**舊表述在它寫下的當天是對的**（那一批確實只寫檔、沒接線，`app.py` 一個字未動）；
+**被推翻的是它的前提** —— #814「雙軌並行」把本頁掛上了 `app.py` 的第 ⑦ 格，
+而**那一批沒有回頭改本檔的自我描述**。
+⛔ **這一句不是無害的過期**：本檔多處推論建立在「反正還沒接線、射程為零」之上，
+   而本輪要修的四個線上缺陷，全部是「已經接線」才會發生的。
+
+**現行**：本檔掛在 `app.py` 的第 ⑦ 格（`tab_preview_settings`，`[新] 設定與診斷`），
+與**仍然在線上**的舊 ⑤（`ui/tab_settings_diag.py`）**同時渲染** ——
+`st.tabs` 一次 run 會把**所有分頁的 body 全部執行過**，「⑦ 沒被點開」
+**不代表它沒渲染**。本檔與舊 ⑤ 委派同一批舊模組，故本檔四個區塊都掛了
+Checkbox Gate（見各該函式）。⛔ **客戶明令舊 Tab 一個位元組都不准動**，
+所以修法一律落在本檔（新頁側），不得去改 `ui/tab*.py`。
 
 ⚠️ **接線批次必讀：`FETCH_DIAG` 要由 `app.py` 持有，不是本檔**
 ---------------------------------------------------------------
@@ -268,6 +318,41 @@ _NOT_LOADED_NOTE: str = (
 _DIAG_NOT_LOADED_NOTE: str = (
     "資料來源健康度尚未載入（避免每次互動都重跑註冊表更新與匯率抓取）")
 
+#: 「手動補資料」gate 的標籤。
+#:
+#: ⚠️ ~~**這是本頁第二顆同型的 gate**（第一顆是 `MAINTAIN_GATE_LABEL`）~~ ——
+#:    **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+#:    它**當時**確實是第二顆；**現在本頁共有四顆**（維護區 / 手動補資料 /
+#:    使用手冊 / 抓取診斷細節）。**序數是會漂移的量測值**，本行改為只記成因。
+#:    成因：舊 ⑤ 也在跑同一支委派，兩份同時載入會撞 Streamlit 重複元件鍵。
+BACKFILL_GATE_LABEL: str = "🗄️ 載入手動補資料"
+
+#: 「🗄️ 資料維護與通報」gate 的標籤。
+MAINTAIN_GATE_LABEL: str = "🗄️ 載入資料維護與通報"
+
+#: 「使用手冊」gate 的標籤（**2026-09-07 第二輪雙軌修補新增**）。
+#:
+#: ⚠️ **這是本頁第三顆同型的 gate，而且是唯一一顆「使用者一次都不必點就已經在噴紅字」
+#:    的**：`render_manual_tab()` 在舊 ⑤ 與新 ⑦ **兩邊都沒有 gate**，
+#:    而它底下 `ui/tab1_macro.py::render_indicator_map` 的 `st.plotly_chart`
+#:    **不帶 key** → 兩份的自動 element ID 完全相同 → `StreamlitDuplicateElementId`。
+#: ⛔ **不得帶 `key=`**（會命中 `test_the_page_writes_only_its_own_session_key`）；
+#: ⛔ **不得放進 `st.form`**。正例就是同檔 `_render_maintain` 那顆。
+MANUAL_GATE_LABEL: str = "📖 載入使用手冊"
+
+#: 「🔍 抓取診斷細節」gate 的標籤（**2026-09-07 第二輪雙軌修補新增**）。
+#:
+#: ⚠️ **這一顆與前三顆不同族：它擋的東西「不會報錯」** —— 舊 ⑤ 與新 ⑦ 都無條件呼叫
+#:    `render_fetch_diag_from_session()`，兩份都畫得出來、Streamlit 一聲都不吭，
+#:    畫面上就是**兩塊一模一樣的「🔍 抓取診斷細節」**。
+#: ⛔ **`app.py` 的 `settings_page_owns(FETCH_DIAG)` 救不了這一個** —— 那支旗標的
+#:    設計前提是「全站只有一個消費者」（它壓的是 ③ `ui/tab2_single_fund.py` 那份），
+#:    雙軌之後消費者變成兩個（舊 ⑤ ＋ 新 ⑦），**而旗標分不出新舊**。
+#:    修在旗標那一層要動 `ui/helpers/settings_diag/merge_context.py` 與 `app.py`，
+#:    兩者都在本批的檔案邊界外，故修在新頁側。
+FETCH_DIAG_GATE_LABEL: str = "🔍 載入抓取診斷細節"
+
+
 #: 後端未啟用時的灰態本文開頭。⚠️ **這不是「沒有資料」，是「我們沒辦法去看」**（§1）。
 _BACKEND_UNAVAILABLE_NOTE: str = (
     "讀不到雲端 NAV 歷史 —— 累積功能所需的設定不完整，"
@@ -304,6 +389,114 @@ def maintain_label() -> str:
     有 key 卻手抄字面，是本 repo 已經發作過三次的那個病。
     """
     return section_label("manage")
+
+
+def _backfill_gate_label() -> str:
+    """「手動補資料」gate 的標籤（理由同 :func:`_maintain_gate_label`）。"""
+    return BACKFILL_GATE_LABEL
+
+
+def _backfill_not_loaded_note() -> str:
+    """「手動補資料」gate 沒勾時的灰態本文。
+
+    ⛔ **規格同 :func:`_maintain_not_loaded_note`：把真正的原因寫出來，
+       不准改寫成「效能考量」之類的含混說法**（總管 2026-09-07 明令）。
+    """
+    return (
+        f"尚未載入本頁自己的手動補資料 —— 舊的「{tab_label('settings')}」分頁"
+        "**已經在跑同一塊**（三條寫入路徑都在裡面），同一次畫面更新載入兩份會撞到 "
+        "Streamlit 的重複元件鍵（`_nh_*` / `navhist_import_*` 等 11 個）。"
+        f"⚠️ **勾上面那個選項，這一塊就會變成紅色錯誤**"
+        "（CI 實測訊息：`StreamlitAPIException: multiple identical forms with "
+        "key='navhist_import_form'`）—— 勾它只能看到這一塊在新版版面上的位置，"
+        "**看不到能用的表單**。"
+        f"要真的補資料，請到舊的「{tab_label('settings')}」分頁，那一份完好、隨時可以用。")
+
+
+def _maintain_not_loaded_note() -> str:
+    """「🗄️ 資料維護與通報」gate 沒勾時的灰態本文。
+
+    ⛔ **這段話刻意把真正的原因寫出來，不准改寫成「效能考量」之類的含混說法**
+       （總管 2026-09-07 裁決 2 明令）。使用者看到同一塊東西在舊 Tab 有、
+       在新 Tab 要自己勾，如果我們給的理由是假的，他只會以為新頁功能比較少。
+
+    ⚠️ **是函式不是常數，而且分頁名走 `tab_label('settings')`** ——
+       本檔第一版把「⚙️ 設定與診斷」六個字直接寫進字串，被
+       `tests/test_wpf_five_tab_wiring.py` 的**兩條**守衛同時抓到
+       （黑名單向：活字串命中現行分頁名；形態向：「「X」分頁」的指路形狀
+       沒有經過 story_nav 求值）。**那兩條是對的** —— 手抄的分頁名在下一次
+       改名時會變成死指路，本 repo 同型 bug 已發作三次。
+    """
+    return (
+        f"尚未載入本頁自己的維護區 —— 舊的「{tab_label('settings')}」分頁"
+        "**已經在跑同一個維護區**，同一次畫面更新載入兩份會撞到 Streamlit 的"
+        "重複元件鍵（`divcal_gen` / `manage_notify_preview` / `pool_*` 等）。"
+        f"⚠️ **勾上面那個選項，這一塊就會變成紅色錯誤**"
+        "（CI 實測訊息：`StreamlitDuplicateElementKey: key='divcal_gen'`；"
+        "選股池那一份另外被降級成一則黃框「選股池管理載入失敗 … `pool_add_form`」）"
+        "—— 勾它只能看到這一塊在新版版面上的位置，**看不到能用的維護區**。"
+        f"要真的用，請到舊的「{tab_label('settings')}」分頁，那一份完好、隨時可以用。")
+
+
+def _maintain_gate_label() -> str:
+    """「🗄️ 資料維護與通報」gate 的標籤（區塊名走 SSOT，不手抄）。
+
+    ⚠️ 標籤 ＝ :data:`MAINTAIN_GATE_LABEL`；本函式存在的理由是讓
+    **灰態指路**與 **checkbox 本體**吃同一個字串 —— 兩邊各寫一份，
+    改一邊就會指到一個畫面上不存在的選項（本 repo 同型 bug 已發作三次）。
+    """
+    return MAINTAIN_GATE_LABEL
+
+
+def _manual_gate_label() -> str:
+    """「使用手冊」gate 的標籤（理由同 :func:`_maintain_gate_label`）。"""
+    return MANUAL_GATE_LABEL
+
+
+def _manual_not_loaded_note() -> str:
+    """「使用手冊」gate 沒勾時的灰態本文。
+
+    ⛔ **規格同 :func:`_maintain_not_loaded_note`：把真正的原因與「勾下去會怎樣」
+       兩件事都寫在畫面上，不准只留在 `help=` 的 tooltip 裡**（總管 2026-09-07 明令）。
+
+    ⚠️ **本則刻意只點名「指標地圖」一項，不寫「全部都會撞」** —— CI 實測（run
+       34147466074，`abecc1c`）在預設載入時**只噴一則**紅字「指標地圖載入失敗」。
+       同一支 `render_manual_tab()` 底下另有 4 個 `st.dataframe` ＋ 1 個
+       `st.plotly_chart` 同樣不帶 key（本組 AST 實測），**但它們沒有撞** ——
+       內容不同 ⇒ 自動 ID 不同。**那是實測結果，不是保證**：哪天內容改成一樣就會撞。
+    """
+    return (
+        f"尚未載入本頁自己的使用手冊 —— 舊的「{tab_label('settings')}」分頁"
+        "**已經在跑同一份說明書**（十章 ＋ 錨點目錄，一個字都不少），"
+        "而它底下的「指標地圖」用的 `st.plotly_chart` **沒有帶 key**，"
+        "同一次畫面更新畫兩份會撞到 Streamlit 自動產生的 element ID。"
+        f"⚠️ **勾上面那個選項，本頁會載入自己的一份，但「指標地圖」那一小塊會變成紅字**"
+        "（CI 實測訊息：`StreamlitDuplicateElementId: multiple plotly_chart elements "
+        "with the same auto-generated ID`）；其餘章節照常顯示。"
+        f"要看完整的說明書，請到舊的「{tab_label('settings')}」分頁。")
+
+
+def _fetch_diag_gate_label() -> str:
+    """「🔍 抓取診斷細節」gate 的標籤（理由同 :func:`_maintain_gate_label`）。"""
+    return FETCH_DIAG_GATE_LABEL
+
+
+def _fetch_diag_not_loaded_note() -> str:
+    """「🔍 抓取診斷細節」gate 沒勾時的灰態本文。
+
+    ⚠️ **這一則的措辭與另外三則不同，因為它擋的東西不會報錯** ——
+       重複渲染在畫面上是**兩塊一模一樣的面板**，Streamlit 一聲都不吭。
+       ⛔ **「不噴錯」不等於「沒事」**：使用者分不出哪一份是活的，
+       而這一頁的職責正是回答「資料可不可信」（§1：錯誤的數字比沒有數字更危險，
+       兩份一樣的數字則是讓人不知道該信哪一份）。
+    """
+    return (
+        f"尚未載入本頁自己的抓取診斷細節 —— 舊的「{tab_label('settings')}」分頁"
+        "**已經在跑同一塊**，而 `app.py` 的 `FETCH_DIAG` 旗標**分不出新舊兩個消費者**"
+        "（它的設計前提是「全站只有一個」，雙軌之後前提破了）。"
+        f"⚠️ **勾上面那個選項，畫面上會出現兩塊一模一樣的「🔍 抓取診斷細節」** ——"
+        "**不會報錯**，但你分不出哪一份是活的。"
+        f"要看抓取診斷，請到舊的「{tab_label('settings')}」分頁。")
 
 
 def _where(block: str) -> str:
@@ -668,6 +861,44 @@ def _render_keys() -> None:
        **這是已知缺口，不是漏做。**
     """
     render_policy_admin_bridge(sheet_client=None)
+    # ⭐ **2026-09-07 第二輪雙軌修補：抓取診斷加 Checkbox Gate。**
+    # **有意識的變更，不是漏刪**（決策者：AI 總管，客戶 2026-09-07 雙軌並行原則）。
+    #
+    # **舊寫法**（原地保留、加刪除線，不刪）::
+    #
+    #     ~~render_fetch_diag_from_session()~~      # ← 無條件，改到 gate 之後
+    #
+    # **舊寫法的理由一個字都沒有被推翻**：「個基頁那份由 `FETCH_DIAG` 旗標控制，
+    # 而那個旗標**必須由 `app.py` 持有**才壓得住它，本檔刻意不在這裡包」——
+    # 那句話**今天依然為真**，本次也**沒有**在這裡包旗標。
+    #
+    # **被權衡掉的是它的一個前提：「持有旗標 ⇒ 全站只剩一份」。那個前提破了。**
+    # 旗標壓的是 ③（`ui/tab2_single_fund.py`）那一份，它只認「⑤ 這個頁面有沒有持有」，
+    # **分不出「⑤」是舊的還是新的**。雙軌之後舊 ⑤ `_render_conn_section` 與本函式
+    # **各畫一份**，畫面上就是兩塊一模一樣的「🔍 抓取診斷細節」。
+    #
+    # ⛔ **這一個與另外三個 gate 最大的差別：它不會報錯。**
+    #    Streamlit 一聲都不吭 —— 沒有任何「只驗紅框 / 只驗例外」的守衛看得見它。
+    #    **不噴錯不等於沒事**：使用者分不出哪一份是活的。
+    # ⛔ **為什麼不改旗標**：那要動 `ui/helpers/settings_diag/merge_context.py`
+    #    與 `app.py`，兩者都在本批的檔案邊界外（另一組正在 `app.py` 上）。
+    # ⛔ **也不是直接把這一行拿掉**：那會讓「⑤ 有沒有抓取診斷」變成一句要靠註解
+    #    維持的約定；gate 留著，舊 ⑤ 哪天下架把 gate 拿掉即可（**可逆**）。
+    #
+    # ⚠️ **刻意不帶 `key=`**（同 `_render_maintain` / `_render_backfill`）：
+    #    帶了會命中 `tests/test_wf05_settings_skeleton.py::`
+    #    `test_the_page_writes_only_its_own_session_key`（本頁只准寫 `_SK_DIAG_GATE`）。
+    # ⚠️ **刻意不放進 `st.form`**：form 內的 checkbox 要按送出鍵才生效，
+    #    那會讓 gate 變成兩段式，且 `st.form` 本身就是本批在解的衝突源之一。
+    if not st.checkbox(
+            _fetch_diag_gate_label(), value=False,
+            help=f"舊「{tab_label('settings')}」分頁已經在畫同一塊；"
+                 "兩份同時載入不會報錯，但畫面上會有兩塊一模一樣的面板。"):
+        # ⚠️ 指路吃 :func:`_fetch_diag_gate_label`，**不手抄**。
+        not_ready(_fetch_diag_not_loaded_note(),
+                  where=f"上方「{_fetch_diag_gate_label()}」")
+        return
+
     # ⚠️ 個基頁那份由 `FETCH_DIAG` 旗標控制，而那個旗標**必須由 `app.py` 持有**
     #    才壓得住它（理由見模組 docstring 最後一段）。本檔刻意不在這裡包。
     render_fetch_diag_from_session()
@@ -710,11 +941,71 @@ def _render_backfill() -> None:
     #    在舊 ⑤ 那邊它是**分區共用同一個 `with`** 帶進來的副作用，不是這一塊需要的。
     #    ⚠️ **登記它，是因為新舊逐行對照時這一格會多一個要用腦的差異** ——
     #       下一個做對照的人不必再推一次。**語意未變、無害；但別把「無害」讀成「一樣」。**
+    # ⭐ **2026-09-07 雙軌並行：加 Checkbox Gate。**
+    # （原寫 ~~「本頁第二顆同型的 gate」~~ —— **序數會漂移，2026-09-07 第二輪之後
+    #   本頁共四顆**；就地更正，不是漏刪。）
+    # **有意識的變更，不是漏刪**（決策者：AI 總管，客戶 2026-09-07 雙軌並行原則）。
+    #
+    # **為什麼非加不可**：舊 ⑤（`ui/tab_settings_diag.py::_render_maintain_section`）
+    # **無條件**呼叫同一支 `render_nav_manual_section()`。雙軌並行之後兩頁同一次 run
+    # 都會跑到它，而它底下有 **11 個具名 widget key**
+    # （`_nh_sel` / `_nh_upload_csv` / `_nh_update_btn` / `_nh_dl_btn` / `_nh_clear_btn` /
+    #  `_nh_upload_csv_form` / `_nh_backfill_all_form` / `navhist_import_code` /
+    #  `navhist_import_file` / `navhist_import_name` / `navhist_import_form`）
+    # → **Streamlit 重複 key 會炸**，`[新]` 這一塊會整塊變紅。
+    #
+    # ⚠️ **這一塊與維護區不同，它是客戶拍板線框 Tab 05 五個 `<h4>` 之一**，
+    #    所以「要不要 gate」是**送過總管、拿到裁決才做的**，不是本組自行決定。
+    #    裁決理由（2026-09-07）：(1) gate 只影響 `[新]` 預覽分頁，客戶簽核的舊 ⑤
+    #    一格未動（blob 前後相同）；(2) 不 gate 的後果更糟 —— 客戶要拿這個分頁驗收，
+    #    一打開就有一塊紅等於沒交；(3) **可逆** —— 舊 ⑤ 哪天真的下架，
+    #    重複 key 消失，這個 gate 可以直接拿掉。
+    #
+    # ⛔ **不得改用 `st.expander(expanded=False)`**：收合的 expander body 照樣執行，
+    #    擋不住重複 key（本 repo 自證見 :func:`_render_maintain` 的註記）。
+    # ⛔ **不得改成「不畫這一塊」**：那是刪功能，不是解衝突。
+    #
+    # ⭐ **標題的所有權隨 gate 切換 —— 這一段最容易改壞，讀完再動**：
+    #    `### 手動補資料` 在**全頁六塊裡是唯一一個不由 `render_settings_and_diagnostics`
+    #    畫的**（它由被委派的 `render_nav_manual_section()` 自己畫，
+    #    見 `tests/test_wf05_settings_skeleton.py::test_each_block_heading_is_drawn_exactly_once`
+    #    的 docstring —— 那條記載的正是「兩邊各畫一次」這個真的發生過的 bug）。
+    #    加了 gate 之後，gate 關著時委派不會跑 → **標題會整個消失**（那條守衛的「0 次」方向）。
+    #    故：**gate 關 → 由本函式畫；gate 開 → 由委派方畫。兩種狀態都恰好一次。**
+    #    ⚠️ 用 `st.empty()` 佔位是為了讓標題**排在 checkbox 之前** ——
+    #       否則 checkbox 會落在上一塊的區段裡（`_units()` 以 `### ` 切段），
+    #       「手動補資料」那一段就只剩一句灰字，
+    #       `test_the_delegated_blocks_have_real_content` 會轉紅。
+    _heading_slot = st.empty()
+
+    # ⚠️ **刻意不帶 `key=`**：帶了會命中
+    #    `tests/test_wf05_settings_skeleton.py::test_the_page_writes_only_its_own_session_key`
+    #    （widget `key=` ＝ 寫 session_state，本頁只准寫 `_SK_DIAG_GATE`）。
+    #    同檔先例：`_render_nav_status()` 的 `NAV_GATE_LABEL` gate 與
+    #    `_render_maintain()` 的 gate 都是這樣寫的。
+    if not st.checkbox(
+            _backfill_gate_label(), value=False,
+            help=f"舊「{tab_label('settings')}」分頁已經在跑同一塊；"
+                 "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
+        _heading_slot.markdown(f"### {nav_manual_label()}")
+        # ⚠️ 指路吃 :func:`_backfill_gate_label`，**不手抄**。
+        not_ready(_backfill_not_loaded_note(),
+                  where=f"上方「{_backfill_gate_label()}」")
+        return
+
     render_nav_manual_section()
 
 
 def _render_maintain() -> None:
-    """（4.5）｜🗄️ 資料維護與通報 —— **委派** `render_manage_tab()`。
+    """區塊 6｜🗄️ 資料維護與通報 —— **委派** `render_manage_tab()`，**收在折疊區裡**。
+
+    ⭐ **客戶 2026-09-07 逐字裁決**：「決策【**保留**】在 ⑤ 的**最底部**作為**進階折疊區
+    （`st.expander`）**。理由：系統維護與通報屬管理設定範疇，折疊收攏即可，不影響主視覺。」
+    → 本函式**只有位置與包裝改了**；**委派對象、旗標、內容一個字都沒動**
+      （見 commit 訊息與 PR 的新舊委派集合對帳）。
+    ⚠️ 舊標號 ~~「（4.5）」~~ 已失效（**有意識的變更，不是漏刪** · 2026-09-07 · 決策者：客戶）
+      —— 它當時表達的是「夾在 4 與 5 中間、線框沒給它位置」，
+      而**現在它排在最後**。⛔ 但「線框沒給它位置」這件事**沒有改變**，見下一段。
 
     ⚠️ **線框 Tab 05 沒有這一塊，這是登記在案的偏離**（見模組 docstring 的 (D-5)）。
     線框的「從哪裡搬來」逐字列了 `ui/tab_manage.py`，但五個 `<h4>` 裡沒有任何一塊
@@ -739,8 +1030,89 @@ def _render_maintain() -> None:
     """
     from ui.tab_manage import render_manage_tab
 
-    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
-        render_manage_tab()
+    # ⭐ **客戶 2026-09-07 裁決：收進折疊區、預設收合**（「折疊收攏即可，不影響主視覺」）。
+    # ⚠️ **巢狀 expander 的疑慮，據實寫明，不要靠記憶重新推一次**：
+    #    `render_manage_tab()` **傳遞地**含 `st.expander`
+    #    （`_sec_notify` 的「📖 每週自動通報 — NAS 設定步驟」是無條件的；
+    #    `_sec_nav_backfill` 那條被 `NAV_HISTORY` 旗標跳掉）。
+    #    本 repo 多處註記寫著「Streamlit 禁止 expander 巢狀」
+    #    （`ui/helpers/v2_editor.py` / `ui/tab1_macro_longterm.py` / `tests/test_app_smoke.py` T2）。
+    #    **但本頁早就在做同一件事**：區塊 5 `_render_manual()` 把
+    #    `render_manual_tab()`（檔內 2 個**無條件** `st.expander`）包在 expander 裡，
+    #    而本檔的守衛是**真的 AppTest**、跑在**會擋 merge 的 fast lane**
+    #    （`tests/test_wf05_settings_skeleton.py` 無 `slow` 標記），且 `origin/main` 是綠的。
+    #    → 也就是說，在本 repo 釘的 streamlit（`requirements.txt`：>=1.59.1,<1.60.0）下，
+    #      這個巢狀**實測不會炸**；本塊與區塊 5 是**同一個形狀**。
+    #    ⚠️ **這是從 repo 既有證據推出來的，本組沒有在本機重現**（本環境無 streamlit）——
+    #      真正的裁判是 CI 的 fast lane，不是這段註解。
+    #    ⛔ 若哪天 streamlit 把限制加回來，**先紅的會是區塊 5，不是這一塊**。
+    # ⭐ **2026-09-07 雙軌並行：折疊區**之內**再加一道 Checkbox Gate。**
+    # **有意識的變更，不是漏刪**（決策者：AI 總管，裁決 2）。
+    #
+    # **舊寫法**（原地保留、加刪除線，不刪）—— 注意**被劃掉的只有中間那一層**::
+    #
+    #     with st.expander(maintain_label(), expanded=False):        # ← 保留
+    #     ~~    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):~~
+    #     ~~        render_manage_tab()~~                            # ← 改到 gate 之後
+    #
+    # ⚠️ **`st.expander` 本身一個字都沒動** —— 本段第一版寫成「expander 升級成
+    #    Checkbox Gate」，那句話是**假的**：expander 還在，gate 是**疊在它裡面**。
+    #    （寫下當時本組確實把 expander 拿掉了，後來發現
+    #     `tests/test_wf05_settings_skeleton.py::test_the_maintain_block_is_folded_and_collapsed_by_default`
+    #     直接釘著客戶逐字要的那個包裝，才改成兩者並存 —— 敘述隨之更正。）
+    #
+    # **舊寫法的理由一個字都沒有被推翻**：客戶 2026-09-07 逐字裁決
+    # 「保留在 ⑤ 的最底部作為進階折疊區（`st.expander`）……折疊收攏即可，
+    # 不影響主視覺」—— 那個包裝**原封不動還在**，gate 只是多擋一層 body 執行。
+    #
+    # **被權衡掉的是它的一個前提：「折疊 ＝ 不載入」。那個前提是假的。**
+    # `st.expander` **收合時 body 照樣執行**（本 repo 自證：
+    # `tests/test_app_apptest.py::test_tab6_manual_renders_key_sections` 驗的正是
+    # 收在 `expanded=False` 裡的說明書內容，它在 `origin/main` 是綠的）。
+    #
+    # **為什麼非改不可**：舊 ⑤（`ui/tab_settings_diag.py::_render_maintain_section`）
+    # **無條件**呼叫同一支 `render_manage_tab()`。雙軌並行之後兩頁同一次 run 都跑，
+    # 而 `render_manage_tab()` 無條件畫 `_sec_pool()` / `_sec_dividend_calendar()` /
+    # `_sec_notify()`，其中帶具名 key（`pool_*` ×10 / `divcal_gen` /
+    # `manage_notify_preview`）→ **Streamlit 重複 key 會炸**
+    # （`ui/helpers/ia/gated_form.py` 自陳：「全站唯一，Streamlit 會在重複時炸掉」）。
+    # 折疊擋不住，`if` 才擋得住。
+    #
+    # ⛔ **為什麼不是改舊模組的 key**：客戶 2026-09-07 明文
+    #    「絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼」——
+    #    `ui/tab_manage.py` 與 `ui/tab_settings_diag.py` 本批 **blob 前後相同**。
+    # ⛔ **也不是把這一塊從新頁拿掉**：那是刪功能，不是解衝突（裁決 3 (b)）。
+    #
+    # ⚠️ **本 gate 只解「預設載入就雙跑」那一族**。使用者若**同時**勾起舊 ⑤ 與本頁
+    #    的其他 gate（例如兩邊的「載入資料診斷」），仍會碰到重複 key ——
+    #    **已知、未解、本批不處理**，逐一具名登記在 PR 描述。
+    # ⚠️ **折疊區保留、gate 疊在它裡面 —— 兩個約束同時成立，不是二選一。**
+    #    客戶 2026-09-07 逐字要的是「進階折疊區（`st.expander`）」那個**包裝**，
+    #    而 gate 解的是「**body 會不會執行**」。兩件事不衝突：
+    #    expander 照畫（收合、不佔主視覺），委派則被 gate 擋在 `if` 後面。
+    #    ⛔ 拿掉 expander 會讓
+    #       `tests/test_wf05_settings_skeleton.py::test_the_maintain_block_is_folded_and_collapsed_by_default`
+    #       轉紅（它同時驗 `expanded=False` **與**「委派真的落在那個 `with` 裡」），
+    #       而那條釘的是**客戶逐字裁決**，不是實作細節。
+    with st.expander(maintain_label(), expanded=False):
+        # ⚠️ **刻意不帶 `key=`** —— 本檔的
+        #    `tests/test_wf05_settings_skeleton.py::test_the_page_writes_only_its_own_session_key`
+        #    把「widget 帶 `key=`」算成**寫 session_state**（streamlit 會代為寫入），
+        #    而本頁只准寫 `_SK_DIAG_GATE` 一個鍵。gate 只需要「**這一次 run 有沒有勾**」，
+        #    不需要跨 run 保存 → 直接用回傳值當條件即可。
+        #    **同檔先例**：`_render_nav_status()` 的 `NAV_GATE_LABEL` gate 就是這樣寫的
+        #    （`value=False`、不帶 `key=`），本條照抄它，不另發明第二套寫法。
+        if not st.checkbox(
+                _maintain_gate_label(), value=False,
+                help=f"舊「{tab_label('settings')}」分頁已經在跑同一個維護區；"
+                     "兩份同時載入會撞 Streamlit 的重複元件鍵。"):
+            # ⚠️ 指路吃 :func:`_maintain_gate_label`，**不手抄**（手抄那一刻就開始漂移）。
+            not_ready(_maintain_not_loaded_note(),
+                      where=f"上方「{_maintain_gate_label()}」")
+            return
+
+        with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
+            render_manage_tab()
 
 
 def _render_manual() -> None:
@@ -750,7 +1122,12 @@ def _render_manual() -> None:
 
     ⛔ **這一塊不准畫成灰態**（依據見 (D-1)）。改寫前的版本只放了三行**目錄**，
        而真內容（`ui/tab6_manual.py`，十章 + 錨點目錄）一直都在 —— (A) 路線委派過去。
-    ⚠️ **「不佔首屏」怎麼落地**：本塊排在最後、且**收在 `st.expander` 裡預設不展開**。
+    ⚠️ **「不佔首屏」怎麼落地**：本塊排在很後面、且**收在 `st.expander` 裡預設不展開**。
+       ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：客戶）**：
+          原寫 ~~「本塊排在**最後**」~~ —— 客戶同日把「🗄️ 資料維護與通報」移到**最底部**，
+          所以本塊**不再是最後一塊**。**「不佔首屏」這個結論一字未變**
+          （它靠的是「排在很後面 ＋ 預設收合」，不是「排在最末」）；
+          改的只是那個**會說謊的位置描述**。
        線框的 `dim`（虛線框 + 灰標題）是 HTML 的視覺降權手法，在 Streamlit 沒有等價物；
        「預設收合」是本 repo 拿得到、且**語意相同**（在，但不搶版面）的那一個。
        ⚠️ **這是本組挑的落地方式，不是線框指定的** —— 線框只說「不佔首屏」。
@@ -758,6 +1135,56 @@ def _render_manual() -> None:
     from ui.tab6_manual import render_manual_tab
 
     with st.expander(BLOCK_MANUAL, expanded=False):
+        # ⭐ **2026-09-07 第二輪雙軌修補：折疊區**之內**再加一道 Checkbox Gate。**
+        # **有意識的變更，不是漏刪**（決策者：AI 總管，客戶 2026-09-07 雙軌並行原則）。
+        #
+        # **舊寫法**（原地保留、加刪除線，不刪）—— **被劃掉的只有最後兩行**::
+        #
+        #     with st.expander(BLOCK_MANUAL, expanded=False):     # ← 保留
+        #     ~~    with settings_page_owns(MANUAL_HEADER):~~
+        #     ~~        render_manual_tab()~~                     # ← 改到 gate 之後
+        #
+        # **為什麼非加不可（這是四個 gate 裡唯一一個「零點擊就已經在噴紅字」的）**：
+        # 舊 ⑤（`ui/tab_settings_diag.py::_render_manual_section`）**無條件**呼叫
+        # 同一支 `render_manual_tab()`，本函式在雙軌之前也是無條件 ——
+        # **兩邊都沒有 gate**。而 `st.tabs` 一次 run 會把所有分頁 body 全部執行過，
+        # 於是使用者**打開網站、什麼都還沒點**就會在 ⑦ 看到一則紅字
+        # 「指標地圖載入失敗 — `StreamlitDuplicateElementId`」。
+        # 根因：`ui/tab6_manual.py` 復用 `ui/tab1_macro.py::render_indicator_map`，
+        # 那支的 `st.plotly_chart` **不帶 key** → 兩份的自動 element ID 完全相同。
+        #
+        # ⛔ **`st.expander(expanded=False)` 擋不住**：收合的 expander **body 照樣執行**
+        #    （本 repo 自證：`tests/test_app_apptest.py::test_tab6_manual_renders_key_sections`
+        #     驗的正是收在 `expanded=False` 裡的說明書內容，它在 `origin/main` 是綠的）。
+        #    **只有「gate 沒過就提前 return」才真的不呼叫。**
+        # ⛔ **不是改 `ui/tab1_macro.py` 幫那個 chart 補 `key=`**：客戶 2026-09-07 明文
+        #    「絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼」。
+        # ⛔ **也不是把這一塊從新頁拿掉**：那是刪功能，不是解衝突。
+        #
+        # ⚠️ **與模組 docstring (D-1) 的關係，就地講清楚，不要以為它被推翻了**：
+        #    (D-1) 說「使用手冊**不准畫成灰態佔位**」，理由是「它是**現在就能出的
+        #    靜態文字**，畫成『未載入』是對使用者說一句假話」。
+        #    **那個理由今天依然成立，而且本改動沒有違反它** ——
+        #    (D-1) 禁的是**假的**「未載入」（東西明明出得來卻說出不來）；
+        #    本 gate 沒勾時畫面上那句話是**真的**：本頁這一份**確實還沒載入**，
+        #    而且**一載入就會有一塊變紅**。灰態本文（:func:`_manual_not_loaded_note`）
+        #    把「舊 ⑤ 已經有一份完整的」與「勾下去會怎樣」兩件事都寫了出來。
+        #    ⛔ **代價要記**：雙軌期間，⑦ 的使用手冊**預設看不到內容**。
+        #       那是本改動用「一則零點擊的紅字」換來的，不是免費的。
+        #       舊 ⑤ 一下架，這個 gate 就該連同另外三個一起拿掉（**可逆**）。
+        #
+        # ⚠️ **刻意不帶 `key=`**（本頁只准寫 `_SK_DIAG_GATE`）、
+        #    **刻意不放進 `st.form`**（form 內的 checkbox 要按送出鍵才生效）——
+        #    正例就是同檔 `_render_maintain` 那顆已經在線上跑的 gate。
+        if not st.checkbox(
+                _manual_gate_label(), value=False,
+                help=f"舊「{tab_label('settings')}」分頁已經在跑同一份說明書；"
+                     "兩份同時載入會撞到「指標地圖」那張圖的自動 element ID。"):
+            # ⚠️ 指路吃 :func:`_manual_gate_label`，**不手抄**。
+            not_ready(_manual_not_loaded_note(),
+                      where=f"上方「{_manual_gate_label()}」")
+            return
+
         # ⑤ 已畫區塊標題 → 說明書不再畫自己的 `##` 頁面大標（其餘一行不動）。
         with settings_page_owns(MANUAL_HEADER):
             render_manual_tab()
@@ -775,7 +1202,13 @@ def render_settings_and_diagnostics() -> None:
 
     ⚠️ **沒有 `render_story_nav("settings")`** —— 它會靜默 no-op，理由見模組 docstring。
     ⚠️ **沒有頁面層級的空狀態**（D-2）—— 與 ④ 刻意不同。
-    ⚠️ **本批尚未接進 `app.py`**，所以現在**沒有 production caller**。
+    ⚠️ ~~**本批尚未接進 `app.py`**，所以現在**沒有 production caller**。~~
+    → **2026-09-07 事實更正（有意識的更正，不是漏刪 · 決策者：AI 總管 · 依據：實測
+      `git grep -n "page_05_settings" app.py`）**：**本函式就是 `app.py` 第 ⑦ 格的
+      進入點**（`with tab_preview_settings:` → `render_settings_and_diagnostics()`）。
+      舊表述在寫下當天為真；被推翻的是它的前提（#814 雙軌並行接線，未回頭改本檔）。
+      **同一句話在本檔出現三處**（模組 docstring 兩處 ＋ 本處），**三處一起更正** ——
+      只修被點名的那一句，等於留兩句一樣的假話在旁邊。
     """
     st.markdown(f"## {tab_label('settings')}")
     # 線框 Tab 05 的職責宣告 ＋「這裡不放什麼」。
@@ -810,9 +1243,17 @@ def render_settings_and_diagnostics() -> None:
     #       0 次 ＝ 那一塊不見了、2 次 ＝ 畫重複了，**兩個方向都紅**）。
     safe_section(nav_manual_label(), _render_backfill)
 
-    # ⚠️ 線框沒有給這一塊位置，見模組 docstring 的 (D-5)。**登記在案的偏離。**
-    st.markdown(f"### {maintain_label()}")
-    safe_section(maintain_label(), _render_maintain)
-
     st.markdown(f"### {BLOCK_MANUAL}")
     safe_section(BLOCK_MANUAL, _render_manual)
+
+    # ── 頁面最底部：進階折疊區 ──────────────────────────────────────────
+    # ⭐ **客戶 2026-09-07 裁決：這一塊【保留】，但移到最底部、收進 `st.expander`。**
+    #    客戶原話：「系統維護與通報屬管理設定範疇，折疊收攏即可，不影響主視覺。」
+    # ⚠️ 線框沒有給這一塊位置（(D-5)），本次裁決**沒有推翻那個登記** ——
+    #    它裁的是「這一塊放在哪、怎麼收」，不是「線框有沒有它」。**(D-5) 照舊有效。**
+    # ⚠️ **標題仍由本檔畫 `### `，而且畫在 expander 外面** —— 與區塊 5（使用手冊）
+    #    同一個做法：`st.expander` 的標題**不是** `### ` 標題，
+    #    `test_each_block_heading_is_drawn_exactly_once` 數的是 `### `。
+    #    把 `st.markdown` 挪進 expander 內會讓那條紅燈（0 次 ＝ 這一塊不見了）。
+    st.markdown(f"### {maintain_label()}")
+    safe_section(maintain_label(), _render_maintain)

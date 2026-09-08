@@ -431,10 +431,43 @@ _SLOT_RENDER: dict[str, str] = {
     # ⚠️ 舊 `ui/tab1_macro.py::render_macro_tab` **一個字都沒有動**（客戶方針第 3 條
     #    「舊版 tab 檔案暫留作為參考」），只是不再被 `app.py` 掛上 ①。
     "tab_macro":     "render_market_overview",       # ① 只做總體環境判讀
-    "tab_health":    "render_fund_grp_health_tab",   # ② 只診斷，不給建議動作
+    # 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：② 改掛新 View
+    # `ui/views/page_02_health.py::render_holdings_health`。
+    # ⚠️ **同 ①／⑤ 那兩格：這是「意圖」變更，不是把規則放寬** —— 本條的作用
+    #    （分頁內容不准跟著改名一起漂走）一字未減：它仍然斷言 `with tab_health:`
+    #    只呼叫這一個 render 函式，把別頁的 render 搬進來照樣紅。改的只是**該叫哪一個**。
+    # ⚠️ 舊 `ui/tab_fund_grp_health.py::render_fund_grp_health_tab` **一個字都沒有動**
+    #    （它是回退路徑，且新頁委派的正是它底下那些舊模組），只是不再被 `app.py` 掛上 ②。
     "tab_research":  "render_fund_research_tab",     # ③ 找標的、研究單檔
     "tab_portfolio": "render_portfolio_tab",         # ④ 要執行的動作都在這裡
-    "tab_settings":  "render_settings_diag_tab",     # ⑤ 系統面
+    # 2026-09-07 逐頁切換（客戶裁決，順序 ⑤ → ② → ④ → ③）：⑤ 改掛新 View
+    # `ui/views/page_05_settings.py::render_settings_and_diagnostics`。
+    # ⚠️ **同 ① 那一格：這是「意圖」變更，不是把規則放寬** —— 本條的作用
+    #    （分頁內容不准跟著改名一起漂走）一字未減：它仍然斷言 `with tab_settings:`
+    #    只呼叫這一個 render 函式，把別頁的 render 搬進來照樣紅。改的只是**該叫哪一個**。
+    # ⚠️ 舊 `ui/tab_settings_diag.py::render_settings_diag_tab` **一個字都沒有動**
+    #    （它是回退路徑，且新頁委派的正是它底下那些舊模組），只是不再被 `app.py` 掛上 ⑤。
+    # ⚠️ **2026-09-07 雙軌並行（客戶裁決，凌駕同日稍早的「逐頁切換」）**：
+    #    ② / ⑤ 兩格**接回舊入口**，新 View 改掛 ⑥ / ⑦ 兩個獨立新分頁。
+    #    ⛔ 客戶明文「絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼」，
+    #       所以這兩格現在守的是**舊入口還在原位**；新入口由下方兩格守。
+    "tab_health":    "render_fund_grp_health_tab",       # ② 只診斷,不給建議動作
+    "tab_settings":  "render_settings_diag_tab",         # ⑤ 系統面
+    # ── [新] 並行預覽分頁（掛在五格之後）────────────────────────────────
+    # ⚠️ **這兩格是本批新加的，而且是本表原本結構上看不見的那一塊。**
+    #    `_slot_to_render_calls()` 用 `_ctx.id in _SLOT_RENDER` 過濾 —— 也就是說
+    #    **沒登記進本表的 slot，它整個看不到**：新分頁掛錯 render 函式、
+    #    甚至整個沒掛，`set(_actual) == set(_SLOT_RENDER)` 照樣成立、本條照樣綠。
+    #    那不是「守不到」，是「**假裝守到了**」。故一併登記。
+    "tab_preview_health":   "render_holdings_health",             # ⑥ [新] 持倉體檢
+    "tab_preview_settings": "render_settings_and_diagnostics",    # ⑦ [新] 設定與診斷
+    # ⚠️ 2026-09-07 新增 ⑧。登記進本表是**必要的**，理由同上方那段：
+    #    `_slot_to_render_calls()` 用 `_ctx.id in _SLOT_RENDER` 過濾，
+    #    沒登記的 slot 它整個看不到 —— ⑧ 掛錯 render 函式照樣綠。
+    # ⚠️ 同時注意 `"tab_research": "render_fund_research_tab"` 那一格**一個字都沒動** ——
+    #    舊 ③ 留在原位是客戶「雙軌並行」的明文要求；本表是它現在唯一的守衛
+    #    （有人把舊 ③ 換掉或拿掉，那一格會紅）。
+    "tab_preview_research": "render_fund_research",                # ⑧ [新] 標的探索
 }
 
 

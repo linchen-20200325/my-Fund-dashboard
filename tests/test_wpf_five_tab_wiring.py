@@ -32,6 +32,18 @@ APP = ROOT / "app.py"
 #: 接線後 `app.py` 應該掛上的五個頂層分頁 key（順序＝分頁列順序＝站號 ①~⑤）。
 _FIVE_KEYS = ["macro", "health", "research", "portfolio", "settings"]
 
+#: 掛在五格**之後**的並行預覽分頁 key（順序＝分頁列順序）。
+#: ⚠️ **從 SSOT 導出，不手抄** —— 本檔整篇在禁止的就是「第二份標籤」。
+#: ⚠️ 2026-09-07 就地澄清上一句的射程（**沒有改它，也沒有推翻它**）：
+#:    「不手抄」講的是**顯示名**（那由 `PREVIEW_TAB_LABELS` 從 `_TAB_LABELS` 導出，
+#:    本檔一個中文字都沒抄）。**本清單裡的是 key 與它們的順序，那是「期望值」** ——
+#:    與 `_FIVE_KEYS` 同性質，刻意手列，否則就變成拿 `app.py` 驗 `app.py`。
+#: ⚠️ 2026-09-07 由 2 擴為 3（新增 ⑧ `research`）；2026-09-08 由 3 擴為 4
+#:    （新增 ⑨ `portfolio`）。**一律 append 在最後，不插隊** ——
+#:    ⑥ / ⑦ 已在線上，插進中間會把 ⑦ 往後推一格（一次沒有人要求的動線變更）。
+#:    順序即分頁列順序，本清單與 `app.py` 的 `st.tabs` 逐格比對。
+_PREVIEW_KEYS = ["health", "settings", "research", "portfolio"]
+
 
 def _app_tree() -> ast.Module:
     return ast.parse(APP.read_text(encoding="utf-8"))
@@ -76,11 +88,39 @@ def test_all_five_slots_go_through_tab_label():
 
     突變實驗：把任一 slot 改回寫死字串（例如 `"⚙️ 設定與診斷"`）→ **本條轉紅**。
     """
+    # ⚠️ **2026-09-07 由雙軌並行擴充：5 → 5 ＋ 2。有意識的政策變更，不是把規則改鬆。**
+    #    （決策者：客戶 2026-09-07「舊 ② 與舊 ⑤ 保留原位……新 ② 與新 ⑤ 則掛為獨立新 Tab」）
+    #
+    #    **舊斷言**（原地保留、加刪除線，不刪）::
+    #
+    #        ~~assert len(_elts) == 5, f"app.py 的頂層分頁數不是 5，而是 {len(_elts)}"~~
+    #        ~~for _i, _e in enumerate(_elts): ... _call_name(_e) == "tab_label"~~
+    #        ~~assert _keys == _FIVE_KEYS~~
+    #
+    #    **舊斷言的理由一個字都沒有被推翻**：它守的是「**每一格都必須走 SSOT、
+    #    一個字面值都不准有**」＋「**順序即站號**」。下面兩段接的是同一根針，
+    #    而且**多釘了一格**：前五格仍必須逐一是 `tab_label(<key>)`、key 與順序不變；
+    #    後面**四格**必須是 `preview_tab_label(<key>)` —— 也就是說
+    #    **「把預覽分頁寫成字面值」與「把預覽分頁混進正式那五格」兩種寫法都會紅**。
+    #    **被權衡掉的只有那個「5」**，因為客戶把分頁列改成 **9 格**了。
+    #    ⚠️ 2026-09-07 計數同步（決策者：**AI 總管**）：本段原寫 ~~7 格~~ / ~~後兩格~~，
+    #       那是 ⑥⑦ 時代的數字；2026-09-08 新增 ⑨ 之後是 **5 ＋ 4 ＝ 9**。
+    #       **計數刻意不加刪除線**（`CLAUDE.md §-2.A` 增補輪註記）——
+    #       它們是描述現況的數字、不是條文，旁邊留一個劃掉的舊數字只會讓記錄自相矛盾。
+    #       ⚠️ **哪些會過期、哪些不會，講清楚**：底下 `assert` 比的是
+    #       `_want_n = len(_FIVE_KEYS) + len(_PREVIEW_KEYS)`（SSOT 導出，**加一格不必改**）；
+    #       **會過期的是它的失敗訊息裡那句「五格正式 ＋ 三格 [新] 預覽」** ——
+    #       那是**手寫的**，本輪由 ~~三格~~ 改成 **四格**。
+    #       ⛔ 它錯了**不會讓任何測試轉紅**（訊息只在斷言失敗時才印出來），
+    #          所以它只能靠人回頭讀 —— 這正是本輪要修的那一族。
     _elts = _top_level_tabs_call().args[0].elts
-    assert len(_elts) == 5, f"app.py 的頂層分頁數不是 5，而是 {len(_elts)}"
+    _want_n = len(_FIVE_KEYS) + len(_PREVIEW_KEYS)
+    assert len(_elts) == _want_n, (
+        f"app.py 的頂層分頁數不是 {_want_n}（五格正式 ＋ 四格 [新] 預覽），"
+        f"而是 {len(_elts)}")
 
     _keys: list[str] = []
-    for _i, _e in enumerate(_elts):
+    for _i, _e in enumerate(_elts[:len(_FIVE_KEYS)]):
         assert isinstance(_e, ast.Call) and _call_name(_e) == "tab_label", (
             f"第 {_i + 1} 個 slot 不是 tab_label(...) 呼叫，而是 "
             f"{ast.dump(_e)[:120]} —— app.py 與 story_nav 又變成兩份標籤。")
@@ -92,13 +132,33 @@ def test_all_five_slots_go_through_tab_label():
         f"分頁 key 或**順序**不對：{_keys} != {_FIVE_KEYS}。"
         "順序即站號 ①②③④⑤，不是裝飾。")
 
+    # ── 後四格：[新] 並行預覽分頁 ──────────────────────────────────────
+    # ⚠️ 這裡要求的是 **`preview_tab_label`**，不是 `tab_label` —— 兩個命名空間
+    #    刻意分開（理由寫死在 `ui/helpers/story_nav.py` 的 `PREVIEW_TAB_LABELS`）。
+    #    把預覽分頁改成 `tab_label("health")` 會讓分頁列出現**兩個同名分頁**，
+    #    使用者分不出自己在看舊版還是新版 → **本條會紅**。
+    _pv_keys: list[str] = []
+    for _i, _e in enumerate(_elts[len(_FIVE_KEYS):], start=len(_FIVE_KEYS) + 1):
+        assert isinstance(_e, ast.Call) and _call_name(_e) == "preview_tab_label", (
+            f"第 {_i} 個 slot 不是 preview_tab_label(...) 呼叫，而是 "
+            f"{ast.dump(_e)[:120]} —— [新] 預覽分頁的名字也必須走 SSOT。")
+        assert _e.args and isinstance(_e.args[0], ast.Constant), (
+            f"第 {_i} 個 slot 的 preview_tab_label 參數不是字面 key，無法靜態驗證")
+        _pv_keys.append(_e.args[0].value)
+
+    assert _pv_keys == _PREVIEW_KEYS, (
+        f"[新] 預覽分頁 key 或**順序**不對：{_pv_keys} != {_PREVIEW_KEYS}。"
+        "預覽分頁必須排在五格正式分頁**之後**，不得插進既有動線中間。")
+
 
 def test_slot_keys_all_resolve_in_story_nav():
     """五個 key 都必須真的能從 SSOT 取到標籤（fail loud 會在這裡先炸）。"""
-    from ui.helpers.story_nav import tab_label
+    from ui.helpers.story_nav import preview_tab_label, tab_label
 
     for _k in _FIVE_KEYS:
         assert tab_label(_k), f"tab_label('{_k}') 取不到標籤"
+    for _k in _PREVIEW_KEYS:
+        assert preview_tab_label(_k), f"preview_tab_label('{_k}') 取不到標籤"
 
 
 def test_old_seven_tab_entrypoints_are_no_longer_imported_by_app():
@@ -172,17 +232,17 @@ def _fetch_diag_owner_with(tree: ast.Module) -> ast.With | None:
 
 def test_fetch_diag_is_owned_by_app():
     """⭐ **本批最重要的一條**：`FETCH_DIAG` 的所有權必須由 `app.py` 持有，
-    而且範圍要涵蓋**全部五個**分頁的 `with tab_*:` 區塊。
+    而且範圍要涵蓋**每一個**分頁的 `with tab_*:` 區塊（2026-09-08 實測：**9 格**）。
 
     為什麼不能讓 ⑤ 自己 `with`（這是本條存在的全部理由）：
     旗標是 thread-local context manager，**只在 `with` 區塊內成立**；而
-    Streamlit 的 `st.tabs` 一次 run 會把五個分頁的 body 全部執行過，順序就是
+    Streamlit 的 `st.tabs` 一次 run 會把**所有**分頁的 body 全部執行過，順序就是
     程式碼順序 —— **③ 跑在 ⑤ 之前**。⑤ 就算把自己整個包起來，那時 ③ 底下的
     `ui/tab2_single_fund.py` 早就把「🔍 抓取診斷細節」畫出去了，回頭關不掉。
     結果就是同一塊在 ③ 與 ⑤ 各出現一次。
 
     突變實驗：把 `app.py` 的 `with _settings_page_owns(_SD_FETCH_DIAG):` 整個
-    拿掉（五個 `with tab_*:` 退回頂層）→ **本條轉紅**。
+    拿掉（所有 `with tab_*:` 退回頂層）→ **本條轉紅**。
     只把其中一個 `with tab_*:` 移出該區塊 → **本條也轉紅**（涵蓋範圍檢查）。
     """
     _tree = _app_tree()
@@ -199,7 +259,7 @@ def test_fetch_diag_is_owned_by_app():
                 if isinstance(_item.context_expr, ast.Name):
                     _inside.add(_item.context_expr.id)
 
-    # app.py 全檔的 `with tab_*:` 變數名（即五個分頁 context）——**同一棵樹**
+    # app.py 全檔的 `with tab_*:` 變數名（即每一個分頁 context）——**同一棵樹**
     _all_tabs = {
         _item.context_expr.id
         for _n in ast.walk(_tree) if isinstance(_n, ast.With)
@@ -207,7 +267,17 @@ def test_fetch_diag_is_owned_by_app():
         if isinstance(_item.context_expr, ast.Name)
         and _item.context_expr.id.startswith("tab_")
     }
-    assert len(_all_tabs) == 5, f"app.py 的 `with tab_*:` 區塊數不是 5：{sorted(_all_tabs)}"
+    # ⚠️ **2026-09-07：由寫死的 5 改為從 SSOT 導出。不是放寬，是把它變成不會過期的。**
+    #    舊寫法 ~~`assert len(_all_tabs) == 5`~~ 在分頁增減時**必然誤紅**，
+    #    而它真正要守的是下面那句 `_outside`（**每一個分頁都要在所有權範圍內**）。
+    #    現在預覽分頁一樣被算進去 → 把 ⑥ / ⑦ 任何一格移出 owner `with` **照樣紅**。
+    from ui.helpers.story_nav import PREVIEW_TAB_LABELS, _TAB_LABELS
+
+    _want_tabs = len(_TAB_LABELS) + len(PREVIEW_TAB_LABELS)
+    assert len(_all_tabs) == _want_tabs, (
+        f"app.py 的 `with tab_*:` 區塊數不是 {_want_tabs}"
+        f"（{len(_TAB_LABELS)} 正式 ＋ {len(PREVIEW_TAB_LABELS)} 預覽）："
+        f"{sorted(_all_tabs)}")
     _outside = sorted(_all_tabs - _inside)
     assert not _outside, (
         f"這些分頁不在 FETCH_DIAG 的所有權範圍內：{_outside}。"
@@ -321,10 +391,10 @@ def test_flag_actually_flips_the_two_consumers(monkeypatch):
 
 
 # ══════════════════════════════════════════════════════════════════
-# 3) 分頁隔離：五段 try/except 的分頁名不得寫死
+# 3) 分頁隔離：每一段 try/except 的分頁名不得寫死
 # ══════════════════════════════════════════════════════════════════
 def test_every_tab_render_is_wrapped_in_isolation():
-    """五個 `with tab_*:` 裡面都必須走分頁隔離（一頁炸掉不連坐其他頁）。
+    """**每一個** `with tab_*:` 裡面都必須走分頁隔離（一頁炸掉不連坐其他頁）。
 
     `st.tabs` 單次 run 會渲染全部分頁，任一頁拋未捕捉例外會中止整個 script →
     **其後所有分頁空白**（§1 分頁隔離，v19.429）。
@@ -407,8 +477,14 @@ def test_tab_error_titles_go_through_tab_label():
                 _nm = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
                 if _nm:
                     _resolved.add(_alias.get(_nm, _nm))
-        assert "tab_label" in _resolved, (
-            f"錯誤標題沒有**真的**呼叫到 story_nav.tab_label()："
+        # ⚠️ **2026-09-07 擴充：`preview_tab_label` 一併認可。不是放寬。**
+        #    本條要的是「分頁名**只有一個來源**」，而 `preview_tab_label` 同樣住在
+        #    `ui/helpers/story_nav.py`、同樣 fail loud、同樣從 `_TAB_LABELS` 導出顯示名。
+        #    ⛔ **把標題改回寫死字串照樣紅**（那種寫法一個合格呼叫都沒有），
+        #       **把 `_tab_label` 換成任何非 story_nav 的函式也照樣紅**
+        #       —— alias 一律解析回原名，N10 那個洞沒有被重新打開。
+        assert _resolved & {"tab_label", "preview_tab_label"}, (
+            f"錯誤標題沒有**真的**呼叫到 story_nav 的分頁名取值函式："
             f"{ast.unparse(_m)[:120]}；解析出來的呼叫 = {sorted(_resolved)}，"
             f"已解析的 story_nav alias = {_alias}。\n"
             "（只是名字裡帶 `tab_label` 三個字不算 —— 那是 N10 那個洞。）")

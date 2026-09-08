@@ -182,13 +182,80 @@ from ui.tab3_portfolio import render_portfolio_tab
 #   ⚠️ 消費者清單是**會漂移的量測值**,需要時**現場量測**,不要引用本行。查證方式:
 #   `git grep -n "crisis_backtest" -- '*.py'` 後**逐一判讀是 import 還是 docstring 提及**
 #   —— 只看 grep 命中數,就會複製 (1) 的錯誤。
-from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
+# ⚠️ 2026-09-07 **雙軌並行**（客戶同日再頒，凌駕同日稍早的「逐頁切換」裁決）：
+#    「舊 ② 與舊 ⑤ 保留原位……新 ② 與新 ⑤ 則掛為獨立新 Tab」，
+#    且「**絕對禁止直接覆寫、修改或破壞現有線上正常運作的舊版 Tab 代碼**」。
+#    → ② 這一格**接回舊入口**；新 View 改掛 ⑥（見本檔最後兩個 with 區塊）。
+#    ⚠️ 舊 `ui/tab_fund_grp_health.py` 與新 `ui/views/page_02_health.py`
+#       **兩檔本批都一個字沒動**，改的只有 `app.py` 的掛載方式。
+from ui.tab_fund_grp_health import (  # noqa: E402  (② 持倉體檢・現行)
+    render_fund_grp_health_tab,
+)
+from ui.views.page_02_health import (  # noqa: E402  (⑥ [新] 持倉體檢・並行預覽)
+    render_holdings_health,
+)
 # 2026-08-31 七→五接線:③ 與 ⑤ 是**合併頁**,由它們自己去 lazy import 五個舊入口
 # (render_single_fund_tab / render_batch_analysis_tab / render_manage_tab /
 #  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
 # 留著會讓「app.py 到底掛了幾個入口」有兩種讀法,而那正是本次要消滅的東西。
-from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 標的探索)
-from ui.tab_settings_diag import render_settings_diag_tab  # noqa: E402  (⑤ 設定與診斷)
+from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 標的探索・現行)
+# ⚠️ 2026-09-07 **雙軌並行**（理由同上方 ② 那一段）：③ 這一格**接回舊入口不動**，
+#    新 View 掛 ⑧。
+# ⛔ **③ 的雙軌與 ⑤ 那種「委派同一批舊模組」的結構問題不同，先讀懂再動**：
+#    新 ③（`ui/views/page_03_research.py`）**一行都不 import 舊分頁模組**
+#    （`tab2_single_fund` / `tab_batch_analysis` / `fund_research.code_finder` …），
+#    而**具名 key 全部長在那些模組裡**。故 ⑤ 那道 Checkbox Gate 在這裡
+#    **不需要、也不該加**（加了只是多一次點擊）。
+#    ⚠️ **一句話不要寫過頭**：新舊 ③ **確實共用** `ui.helpers.*` 那一批共用元件
+#    （實測 102 個可達模組重疊），其中 `ui.helpers.ia.gated_form` **會產生 widget**。
+#    它們之所以不撞，**不是因為沒共用**，而是因為**那些共用元件自己不帶具名 key** ——
+#    key 一律由呼叫端傳進去（`applied_form(<caller 的 key>)`），
+#    而兩邊呼叫端給的值不同。**共用元件 ≠ 共用 key，這兩件事要分開讀。**
+#    本批實測（AST，指令與正/負對照見 PR 描述）：
+#      · 具名 `key=` 交集：新 ③ {v03_batch_download} ∩ 舊 ③ 17 個 key = **0**；
+#        再對「其他全部已掛載鏈的聯集（152 個 key）」比一次，同樣 **0**。
+#      · form key（`applied_form()` 把 key **位置傳**給 `st.form`，
+#        `key=` 掃描器結構上看不到它 —— 另掃一次）：全 repo 18 個 form key **無重複**。
+#      · 掛上 ⑧ 之後真正新增進 app process 的模組**只有 1 個**
+#        （`ui.views.page_03_research` 自己）—— 其餘 103 個相依模組
+#        早就被現有分頁載進來了。
+from ui.views.page_03_research import (  # noqa: E402  (⑧ [新] 標的探索・並行預覽)
+    render_fund_research,
+)
+# ⚠️ 2026-09-07 **雙軌並行**（理由同上方 ② 那一段）：⑤ 這一格接回舊入口，
+#    新 View 改掛 ⑦。
+# ⛔ **⑤ 的雙軌有一個 ② 沒有的結構問題，動這裡之前務必讀懂**：
+#    新舊 ⑤ **委派同一批舊模組**，其中 `ui/tab_manage.py::render_manage_tab()`
+#    帶具名 widget key（`divcal_gen` / `manage_notify_preview` / `pool_*` …），
+#    同一次 run 畫兩份會撞 Streamlit 的重複 key。
+#    解法**不在本檔** —— 新 ⑤ 已把那一塊改成 Checkbox Gate（勾了才載入），
+#    見 `ui/views/page_05_settings.py::_render_maintain`。
+#    ⛔ 不得改用「把舊 ⑤ 那一塊拿掉」來解：那就是客戶明令禁止的「破壞舊版 Tab」。
+from ui.tab_settings_diag import (  # noqa: E402  (⑤ 設定與診斷・現行)
+    render_settings_diag_tab,
+)
+from ui.views.page_05_settings import (  # noqa: E402  (⑦ [新] 設定與診斷・並行預覽)
+    render_settings_and_diagnostics,
+)
+# ⚠️ 2026-09-08 **雙軌並行**（同上）：④ 這一格接回舊入口，新 View 改掛 ⑨。
+# ⭐ **⑨ 沒有 gate，這是掃描出來的結論，不是省略** —— 理由與證據逐條寫在
+#    `tests/test_dual_track_t9_portfolio.py` 的模組 docstring，摘要如下：
+#    · 新 ④ 的可達集合是 **14 個模組、105 個函式、未解析呼叫 0**（全解出）；
+#    · 它**顯式 `key=` 0 個、`st.form` key 只有 `v04_portfolio_rebalance_form`（全 repo 唯一）**，
+#      無 key 但會註冊 element id 的元素 5 個，標籤全 repo 唯一；
+#    · 與其餘 8 條鏈的**共用函式**中，沒有任何一個會呼叫「會註冊 element id」的元素
+#      （共用的只有 `markdown` / `caption` / `code` / `error` / `info` / `warning`
+#       與**無 key 的** `expander` —— 後者在 1.59.x 只有帶 key 才註冊）；
+#    · 它**一個 I/O 層函式都到不了**（0 個 `repositories.*` / `infra.proxy` / gspread / HTTP），
+#      所以「每次 run 都會執行 ⑨ 的 body」不會帶來取數成本。
+#    ⛔ **不要因為 ⑥ / ⑦ 有 gate 就「順手」給 ⑨ 補一個**：gate 是**有碰撞才付的成本**
+#       （它會讓使用者多按一下、且灰態會佔一塊版面）。沒有碰撞卻加 gate，
+#       等於把一個沒有理由的門檻永久寫進畫面。
+#    ⛔ 反過來也一樣：**⑨ 日後若開始委派舊模組、或新增顯式 `key=`，就必須重跑那份掃描**。
+#       守衛 `tests/test_dual_track_t9_portfolio.py` 會在那一刻轉紅並指名要怎麼處理。
+from ui.views.page_04_portfolio import (  # noqa: E402  (⑨ [新] 資產配置・並行預覽)
+    render_asset_allocation,
+)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
 
@@ -275,8 +342,12 @@ FRED_KEY, GEMINI_KEY = _load_keys()
 
 # ── 金鑰狀態的顯示位置(2026-08-28 客戶拍板 Q3:「同意移走。移至『⑤ 設定與診斷』
 #    的 API 金鑰狀態」)──────────────────────────────────────────────────────
-# 這裡原本有一個 `_check_secrets()`,在 module top-level 無條件執行 → **五個分頁的
+# 這裡原本有一個 `_check_secrets()`,在 module top-level 無條件執行 → **每一個分頁的
 # 最上方都會看到**那一行,而它多半不代表任何故障(GEMINI 缺了只是少 AI 摘要,可降級)。
+# ⚠️ 2026-09-07 計數更正(決策者:**AI 總管**):本句原寫「五個分頁」——
+#    那在寫下的當天(2026-08-28)為真,當時分頁列就是 5 格;現在是 **9 格**(5 正式 + 4 [新] 預覽)。
+#    **改成「每一個」而不是改成「八個」**:module top-level 的東西本來就與分頁數無關,
+#    寫死數字只會在下一次增減分頁時再過期一次。
 # 批次一已先把它從 🔴 改成 ⬜(只改顏色、不改位置);本批依 Q3 **整段移走**,
 # 不是在兩邊各留一份。
 #
@@ -457,17 +528,38 @@ render_sidebar(
 #        `ui/tab3_t7_ledger.py`,也就是**會漏掉上面唯一 live 的那一個**)。
 #        本輪用的是全 repo `git grep -nE "\.tabs\(" -- '*.py'` 再逐一判讀
 #        (排除 `tests/` 與註解/docstring 命中)。
+from ui.helpers.story_nav import preview_tab_label as _preview_tab_label
 from ui.helpers.story_nav import tab_label as _tab_label
 
 # ⭐ 「🔍 抓取診斷細節」的所有權必須由**本檔**持有,不能讓 ⑤ 自己 with ——
 #    這是七→五接線唯一一個「不做就會畫兩份」的地方,理由寫死在這裡:
 #    旗標是 thread-local context manager(`ui/helpers/settings_diag/merge_context.py`),
-#    只在 `with` 區塊內成立;而 Streamlit 的 `st.tabs` **一次 run 會把五個分頁的
+#    只在 `with` 區塊內成立;而 Streamlit 的 `st.tabs` **一次 run 會把所有分頁的
 #    body 全部執行過**,順序就是下面 with 區塊的順序 —— ③ 跑在 ⑤ 之前。
 #    ⑤ 就算把自己整個包起來,那時 ③ 早就跑完了,回頭關不掉它已經畫出去的那一份。
-#    → 由 app.py 在**進入第一個分頁之前**就宣告持有,五個分頁全程有效:
+#    → 由 app.py 在**進入第一個分頁之前**就宣告持有,所有分頁全程有效:
 #      ③ 底下的 `ui/tab2_single_fund.py` 看到旗標 → 跳過那一塊;
-#      ⑤ 的 `render_fetch_diag_from_session()` 是無條件渲染 → 全站只剩它那一份。
+#      ⑤ 的 `render_fetch_diag_from_session()` 是無條件渲染。
+#    ⚠️ 2026-09-08 計數更正(決策者:**AI 總管**):上面兩處原寫「五個分頁」,現為 **9 格**;
+#       改成「所有」而不是「八個」—— 這段講的機制與分頁數無關,寫死數字必然再過期。
+#
+# ⛔ **2026-09-07 更正:原本這裡還有一句「→ 全站只剩它那一份」,那是假的**
+#    (**有意識的更正,不是漏刪** · 決策者:**AI 總管**)。舊表述加刪除線保留於下:
+#      ~~⑤ 的 `render_fetch_diag_from_session()` 是無條件渲染 → **全站只剩它那一份**。~~
+#    **實測(2026-09-07,AST 追呼叫鏈,非推論)**:這一塊現在**有兩份**,不是一份 ——
+#      (1) 舊 ⑤ `ui/tab_settings_diag.py::render_settings_diag_tab`
+#          → `safe_section("🔌 連線與帳號", _render_conn_section)` → `render_fetch_diag_from_session()`
+#      (2) 新 ⑤(掛在 ⑦)`ui/views/page_05_settings.py::render_settings_and_diagnostics`
+#          → `safe_section(BLOCK_KEYS, _render_keys)` → `render_fetch_diag_from_session()`
+#    **兩條路徑都不在任何 `if` 底下**(本輪 AST 實測),所以 ⑤ 與 ⑦ **各畫一份**。
+#    ⚠️ **這句話在本 PR 的 merge-base(`c6b4d1b`)上就已經是假的** —— ⑦ 是 #814 掛上去的,
+#       當時 `ui/views/page_05_settings.py` 的那個呼叫點就已經存在(本輪 `git show` 實測)。
+#       **不是本 PR 弄壞的,是 #814 漏改、本輪順手改對。**
+#    **舊表述的理由仍然成立**:它要講的是「③ 底下那一份被旗標關掉了」,那件事**今天依然為真**,
+#    旗標機制一個字都沒有被推翻;**被權衡掉的是它的射程** ——
+#    它從「③ 不再重複畫」擴寫成了「全站只有一份」,而後者從來沒有被驗過。
+#    ⚠️ **本註只描述現況,不預告未來**:這個「⑤ 與 ⑦ 各一份」的**行為**要怎麼處置,
+#       正由另一批在 `ui/views/page_05_settings.py` 上進行,**本輪不知道、也不假設它會怎麼修**。
 #    守衛:`tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
 #         (突變:拿掉這個 with → 轉紅)。
 from ui.helpers.settings_diag.merge_context import (  # noqa: E402
@@ -475,12 +567,27 @@ from ui.helpers.settings_diag.merge_context import (  # noqa: E402
     settings_page_owns as _settings_page_owns,
 )
 
-tab_macro, tab_health, tab_research, tab_portfolio, tab_settings = st.tabs(
+# ⚠️ **五格正式分頁在前、四格 `[新]` 預覽分頁在後** —— 順序即站號 ①~⑤，
+#    預覽分頁刻意排在最後，不插進既有動線中間（客戶 2026-09-07：舊 Tab 原樣保留）。
+#    ⚠️ 2026-09-07 計數同步（決策者：**AI 總管**）：原寫 ~~兩格~~，本 PR 新增 ⑧ 之後是
+#       **四格**（⑥ health / ⑦ settings / ⑧ research / ⑨ portfolio），頂層分頁總數 **9**。
+#       **計數刻意不加刪除線**（同下方 ⑥⑦⑧⑨ 區塊已寫過的理由，`CLAUDE.md §-2.A`）——
+#       它是描述下面那個 `st.tabs(...)` 有幾格的數字，不是條文；
+#       旁邊留一個劃掉的舊數字只會讓記錄自相矛盾。
+#       ⛔ 這一行**沒有任何守衛在對**（它是註解）；真正被機器比對的是
+#          `tests/test_wpf_five_tab_wiring.py` 的 `_FIVE_KEYS` / `_PREVIEW_KEYS`。
+#    兩張標籤表**分屬兩個命名空間**（`tab_label` vs `preview_tab_label`），
+#    理由寫死在 `ui/helpers/story_nav.py` 的 `PREVIEW_TAB_LABELS` 上方。
+(tab_macro, tab_health, tab_research, tab_portfolio, tab_settings,
+ tab_preview_health, tab_preview_settings, tab_preview_research,
+ tab_preview_portfolio) = st.tabs(
     [_tab_label("macro"), _tab_label("health"), _tab_label("research"),
-     _tab_label("portfolio"), _tab_label("settings")])
+     _tab_label("portfolio"), _tab_label("settings"),
+     _preview_tab_label("health"), _preview_tab_label("settings"),
+     _preview_tab_label("research"), _preview_tab_label("portfolio")])
 
 
-# ⚠️ 五段 try/except **刻意逐段展開,不收成 helper** —— 這是一次「本來想收、實測之後
+# ⚠️ 每一段 try/except **刻意逐段展開,不收成 helper** —— 這是一次「本來想收、實測之後
 #    決定不收」的取捨,理由寫下來免得下一個人又想收一次:
 #    (a) `tests/test_macro_tab_section_isolation.py::test_app_macro_tab_isolation_guard`
 #        與 `tests/test_tab_isolation_v19502.py::test_every_tab_block_has_try_except`
@@ -498,7 +605,13 @@ _TAB_ISOLATION_HINT = ("此分頁已隔離,其他分頁不受影響;請展開「
                        "(含 File \"...\", line N)回報,即可精準定位根因。")
 
 
-# ⚠️ 這個 `with` 必須包住**全部五個**分頁(理由見上方 ⭐ 區塊)。
+# ⚠️ 這個 `with` 必須包住**每一個**分頁(理由見上方 ⭐ 區塊)。
+#    ⚠️ 2026-09-08 計數更正(決策者:**AI 總管**):原寫「全部五個」,實測現為 **9 格**
+#       (`tab_macro` / `health` / `research` / `portfolio` / `settings` /
+#        `preview_health` / `preview_settings` / `preview_research` /
+#        `preview_portfolio`,全部在本區塊內)。
+#       守衛 `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+#       比的是「全檔每一個 `with tab_*:`」⊆「本區塊內」,**不吃寫死的數字**。
 with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
     # TAB ① — 🌐 市場總覽（決策動線第 1 站:加碼或防禦;只做總體環境判讀）
@@ -577,3 +690,91 @@ with _settings_page_owns(_SD_FETCH_DIAG):
             from ui.helpers.session import friendly_error as _fe_settings
             _fe_settings(f"「{_tab_label('settings')}」分頁渲染失敗", _settings_tab_e,
                          hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ══════════════════════════════════════════════════════
+    # TAB ⑥ / ⑦ / ⑧ / ⑨ — [新] 並行預覽（客戶 2026-09-07「雙軌並行」）
+    # ══════════════════════════════════════════════════════
+    # ⚠️ 2026-09-07 由 ⑥⑦ 擴為 ⑥⑦⑧（新增 ⑧ [新] 標的探索）；
+    #    2026-09-08 再擴為 ⑥⑦⑧⑨（新增 ⑨ [新] 資產配置）。
+    #    ~~「TAB ⑥ / ⑦」~~ / ~~「這兩格」~~ 只是**描述下面有幾格的計數**，
+    #    不是條文也不是政策 —— 依本 repo 慣例（`CLAUDE.md §-2.A` 增補輪註記）
+    #    這類計數**與內容保持一致、不加刪除線**；旁邊留一個劃掉的「兩」
+    #    只會讓記錄自相矛盾。**下面那句「這兩格必須留在 owner `with` 裡面」
+    #    是另一回事，它有自己的射程，見該處。**
+    # 這四格是**新版 View 的預覽入口**，與上面 ② / ③ / ④ / ⑤ 四格**同時存在**：
+    #   ② ↔ ⑥ 是同一件事的舊 / 新兩版；⑤ ↔ ⑦、③ ↔ ⑧、④ ↔ ⑨ 同理。
+    # 客戶原則：未經客戶親自驗收並明文下令，**舊 Tab 一律維持原樣保留**，
+    # 所以「管理室 / 說明書等功能同時出現在舊 Tab 與新 Tab」是**雙軌的正常狀態**，
+    # ⛔ **不是 bug，不要順手去「解決重複」**。
+    #
+    # ⚠️ 這兩格（⑥ / ⑦）**必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**：
+    #    旗標是 thread-local，只在 `with` 區塊內成立；⑦ 一旦跑到區塊外，
+    #    它底下的 `render_fetch_diag_from_session()` 就會與 ③ 各畫一份。
+    #    ⚠️ **⑧ / ⑨ 也必須留在裡面，但理由不是這一個** —— 見那兩格上方的註解。
+    #       （寫在那裡而不是併進本句，是因為「同一句話涵蓋四格」會讓後人以為
+    #        ⑧ / ⑨ 底下也有一份抓取診斷；它們沒有。）
+    #    守衛：`tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+    #    （它逐一比對「全檔 `with tab_*:`」⊆「owner 區塊內」，本批已隨分頁數擴充）。
+    with tab_preview_health:
+        try:
+            render_holdings_health()
+        except Exception as _pv_health_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_health
+            _fe_pv_health(f"「{_preview_tab_label('health')}」分頁渲染失敗", _pv_health_e,
+                          hint=_TAB_ISOLATION_HINT, level="error")
+
+    with tab_preview_settings:
+        try:
+            render_settings_and_diagnostics()
+        except Exception as _pv_settings_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_settings
+            _fe_pv_settings(f"「{_preview_tab_label('settings')}」分頁渲染失敗",
+                            _pv_settings_e, hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ⚠️ ⑧ 與 ⑥ / ⑦ 是同一件事（雙軌並行），**但它沒有 ⑤ ↔ ⑦ 的那個結構問題** ——
+    #    理由與實測寫在本檔上方 `from ui.views.page_03_research import ...` 那一段。
+    #    ⛔ 新舊 ③ 同時出現在畫面上是**雙軌的正常狀態**，不要順手去「解決重複」。
+    #
+    # ⚠️ **本格同樣必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**，
+    #    但**理由與 ⑥ / ⑦ 不同，不要照抄那段話**：
+    #    ⑦ 是因為它自己會呼叫 `render_fetch_diag_from_session()`；
+    #    **⑧ 底下一個字都沒有畫抓取診斷**（本批實測：`ui/views/page_03_research.py`
+    #    全檔沒有 `fetch_diag` 任何一種寫法，唯一含 `diag` 的地方是上游 fetcher 塞在
+    #    `holdings["diag"]` 裡的失敗原因字串，那是另一件事）。
+    #    ⑧ 要留在裡面純粹是因為守衛
+    #    `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+    #    要求「全檔每一個 `with tab_*:` 都在 owner 區塊內」——
+    #    那條規則刻意不開例外（開了就得逐格判斷誰該在裡面，正是它要消滅的東西）。
+    #    ⛔ **不得**因為「⑧ 反正不畫抓取診斷」就把它移到區塊外：那會讓上面那條
+    #       涵蓋範圍檢查轉紅，而且下一個人在 ⑧ 裡加一塊診斷時沒有任何東西擋他。
+    with tab_preview_research:
+        try:
+            render_fund_research()
+        except Exception as _pv_research_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_research
+            _fe_pv_research(f"「{_preview_tab_label('research')}」分頁渲染失敗",
+                            _pv_research_e, hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ⚠️ ⑨ 與 ⑥ / ⑦ / ⑧ 是同一件事（雙軌並行）。**它與那三格的差別要看清楚**：
+    #    ⑥ 與 ⑦ 各有一個 Checkbox Gate，⑧ 與 ⑨ 沒有 —— 而**理由不一樣**：
+    #      · ⑥ / ⑦ 有 gate，是因為它們**委派同一批舊模組**（⑥ 撞 `plotly_chart`
+    #        的 element id；⑦ 撞 `ui/tab_manage.py` 的具名 widget key 與三個 form key）。
+    #      · **⑨ 沒有 gate，是因為掃出來真的沒有東西可撞** —— 新 ④ 是自足實作，
+    #        委派的三個 `ui/helpers/portfolio|macro` 模組與舊 ④ **沒有共用任何
+    #        會註冊 element id 的函式**。完整證據與掃描器射程見
+    #        `tests/test_dual_track_t9_portfolio.py`。
+    #    ⛔ **新舊 ④ 同時出現在畫面上是雙軌的正常狀態**，不要順手去「解決重複」。
+    #
+    # ⚠️ **本格同樣必須留在 `with _settings_page_owns(_SD_FETCH_DIAG):` 裡面**，
+    #    理由**與 ⑧ 那一格逐字相同、與 ⑦ 不同**：⑨ 底下一個字都沒有畫抓取診斷
+    #    （本批實測：`ui/views/page_04_portfolio.py` 的可達集合 14 個模組裡，
+    #     沒有任何一個是 `ui.helpers.settings_diag.*`）。它要留在裡面純粹是因為
+    #    `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+    #    要求「全檔每一個 `with tab_*:` 都在 owner 區塊內」—— 那條規則刻意不開例外。
+    with tab_preview_portfolio:
+        try:
+            render_asset_allocation()
+        except Exception as _pv_portfolio_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_pv_portfolio
+            _fe_pv_portfolio(f"「{_preview_tab_label('portfolio')}」分頁渲染失敗",
+                             _pv_portfolio_e, hint=_TAB_ISOLATION_HINT, level="error")

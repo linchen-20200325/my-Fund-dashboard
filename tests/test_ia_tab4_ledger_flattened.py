@@ -774,19 +774,38 @@ def test_matrix_home_actually_renders_the_heading() -> None:
 
 
 def test_matrix_home_is_still_wired_into_the_health_tab() -> None:
-    """② 的呼叫鏈完整：`app.py` → 健檢 Tab → extras → `_render_dividend_matrix`。
+    """② 的呼叫鏈完整：`app.py` → ② 的 View → 委派區 → `_render_dividend_matrix`。
 
     上一條證明「那個函式會畫」，本條證明「有人會呼叫它」。
     兩條都要 —— 只證明前者的話，整條鏈被拔掉時本檔照樣全綠。
 
-    突變實驗：把 `ui/helpers/fund_grp_health/__init__.py` 裡的
-    `_render_dividend_matrix(funds)` 那行註解掉 → **轉紅**。
+    突變實驗：把 `ui/views/page_02_health.py::_render_delegated_sections` 裡的
+    `_render_dividend_matrix(_funds)` 那行拿掉 → **轉紅**（2026-09-07 實跑）。
+
+    ⚠️ **2026-09-07 就地更新：鏈上三節改指現在真的掛在線上的 ②。
+    有意識的政策變更，不是漏刪**（決策者：**客戶** 2026-09-07 逐頁切換裁決）::
+
+        ~~(ROOT / "app.py", "render_fund_grp_health_tab"),~~
+        ~~(ROOT / "ui" / "tab_fund_grp_health.py", "render_fund_grp_health_extras"),~~
+        ~~(ROOT / "ui" / "helpers" / "fund_grp_health" / "__init__.py",~~
+        ~~ "_render_dividend_matrix"),~~
+
+    **舊斷言的理由完全成立、而且原封搬過來了** —— 「真實收益矩陣有沒有人呼叫」
+    正是本條的全部價值，**三節結構、驗的東西（AST 真實呼叫，不是字串出現）、
+    嚴格程度一格未動**。被權衡掉的只是**它指名的那條路徑**：
+    ② 的 `app.py` 掛載已改為 `ui/views/page_02_health.py::render_holdings_health`，
+    新頁**不經 `render_fund_grp_health_extras` 橋接**，而是逐支具名委派
+    （見該檔 `DELEGATED_ENTRIES`）。
+
+    ⛔ **繼續指著舊鏈才是真的放寬**：舊 `ui/tab_fund_grp_health.py` 一個字都沒動、
+    仍在磁碟上當回退路徑，所以那三節**永遠是綠的** —— 新 ② 哪天把矩陣的委派弄丟，
+    它會**照樣綠**。這正是 ⑤ 切換時 `tests/test_tab_manage.py` 遇到的同一件事。
     """
+    _P02 = ROOT / "ui" / "views" / "page_02_health.py"
     chain = [
-        (ROOT / "app.py", "render_fund_grp_health_tab"),
-        (ROOT / "ui" / "tab_fund_grp_health.py", "render_fund_grp_health_extras"),
-        (ROOT / "ui" / "helpers" / "fund_grp_health" / "__init__.py",
-         "_render_dividend_matrix"),
+        (ROOT / "app.py", "render_holdings_health"),
+        (_P02, "_render_delegated_sections"),
+        (_P02, "_render_dividend_matrix"),
     ]
     broken: list[str] = []
     for path, callee in chain:

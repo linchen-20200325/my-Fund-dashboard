@@ -67,7 +67,14 @@ def test_manage_tab_registered_in_app():
     import ast as _ast
 
     _app = (_ROOT / "app.py").read_text(encoding="utf-8")
-    _sd = (_ROOT / "ui" / "tab_settings_diag.py").read_text(encoding="utf-8")
+    # ⚠️ **2026-09-07：`_sd` 改指新 ⑤（有意識的政策變更，不是漏刪 · 決策者：客戶）。**
+    # 舊值 ~~`ui/tab_settings_diag.py`~~ —— 客戶 2026-09-07 裁決「逐頁切換」，
+    # ⑤ 的 `app.py` 掛載已改為 `ui/views/page_05_settings.py`。
+    # **本條的用意一字未變**：它驗的是「**現在真的掛在線上的那個 ⑤**，有沒有把管理室接出去」。
+    # 繼續指著舊檔的話，這條會變成「驗一個**已經不在線上**的檔」—— 那才是真的放寬：
+    # 新 ⑤ 哪天把管理室接線弄丟，它會**照樣綠**。
+    # ⛔ 舊 `ui/tab_settings_diag.py` **一個字都沒有動**，它仍在磁碟上作為回退路徑。
+    _sd = (_ROOT / "ui" / "views" / "page_05_settings.py").read_text(encoding="utf-8")
 
     def _calls(src: str, fn: str) -> list:
         """該原始碼裡對 `fn` 的**真實呼叫**（AST），不是字串出現次數。
@@ -90,9 +97,17 @@ def test_manage_tab_registered_in_app():
     assert _calls(_sd, "render_manage_tab"), "⑤ 只 import 沒呼叫 —— 算對了沒接出去"
 
     # (b) app.py → ⑤
-    assert "from ui.tab_settings_diag import render_settings_diag_tab" in _app
+    # ⚠️ **2026-09-07 就地更新（有意識的政策變更，不是漏刪 · 決策者：客戶）**：
+    #    舊斷言 ~~`"from ui.tab_settings_diag import render_settings_diag_tab" in _app`~~
+    #    ＋ ~~`_calls(_app, "render_settings_diag_tab")`~~。
+    #    **舊斷言的理由完全成立、而且原封搬過來了**（⑤ 只 import 沒呼叫 ＝ 死碼）；
+    #    被權衡掉的只是**它指名的那個符號** —— 客戶 2026-09-07 裁決逐頁切換，
+    #    ⑤ 現在掛的是 `ui/views/page_05_settings.py::render_settings_and_diagnostics`。
+    #    **三段結構、驗的東西、嚴格程度一格未動。**
+    assert "from ui.views.page_05_settings import" in _app, (
+        "app.py 沒有 import 新 ⑤ —— 接線鏈斷在 app.py 這一節")
     assert "with tab_settings:" in _app, "app.py 沒有 ⑤ 的 with 區塊"
-    assert _calls(_app, "render_settings_diag_tab"), "app.py 只 import 沒呼叫 ⑤"
+    assert _calls(_app, "render_settings_and_diagnostics"), "app.py 只 import 沒呼叫 ⑤"
 
     # (c) ⑤ 的分頁名吃 SSOT(不得寫死字面值)
     #

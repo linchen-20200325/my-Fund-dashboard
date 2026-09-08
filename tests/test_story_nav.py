@@ -86,6 +86,49 @@ def test_tab_labels_are_exactly_the_five_top_level_tabs():
     ], "頂層分頁 SSOT 的內容或**順序**變了 —— 順序即站號 ①②③④⑤，不是裝飾"
 
 
+def test_preview_tab_labels_are_a_separate_namespace():
+    """【並行預覽分頁】必須是**獨立命名空間**，不得混進 `_TAB_LABELS`。
+
+    2026-09-07 客戶頒「雙軌並行」：新版 View 以**新增 Tab** 掛載、舊 Tab 原樣保留。
+    最省事的做法是把兩個新分頁塞進 `_TAB_LABELS` —— **那會同時打破它的兩個不變量**：
+      (1) 站號 ①~⑤ 由它的順序推導 → 預覽分頁會拿到「⑥」「⑦」，
+          而客戶拍板的線框只有五站；
+      (2) `tab_label()` / `where_to_find()` 回的字串一定是線框上那五個分頁之一 →
+          指路文案會開始吐「⑥ [新] 持倉體檢」這種**線框上不存在**的路徑，
+          正是本 repo 已發作三次的死指路。
+
+    突變實驗：把 `PREVIEW_TAB_LABELS` 的三個 key 併進 `_TAB_LABELS` → **本條轉紅**
+    （而且 `test_tab_labels_are_exactly_the_five_top_level_tabs` 會一起紅）。
+    """
+    from ui.helpers.story_nav import (
+        PREVIEW_PREFIX, PREVIEW_TAB_LABELS, preview_tab_label,
+    )
+
+    # (a) 兩張表的 key 可以同名（同一個分頁的新舊兩版），但**值不准重疊**
+    assert not (set(_TAB_LABELS.values()) & set(PREVIEW_TAB_LABELS.values())), (
+        "預覽分頁名與正式分頁名重疊 —— 分頁列上會出現兩個同名分頁，"
+        "使用者分不出自己在看舊版還是新版")
+
+    # (b) 顯示名**從 `_TAB_LABELS` 導出**，不是手抄的第二份中文
+    for _k, _v in PREVIEW_TAB_LABELS.items():
+        assert _v == PREVIEW_PREFIX + _TAB_LABELS[_k], (
+            f"preview 標籤 {_v!r} 不是「前綴 ＋ tab_label('{_k}')」—— "
+            "又出現第二份標籤，正式分頁改名時它不會跟著改")
+
+    # (c) 兩個取值函式互不越界（§1 Fail Loud，兩個方向都驗）
+    for _k in PREVIEW_TAB_LABELS:
+        assert preview_tab_label(_k) != tab_label(_k)
+    for _k in _TAB_LABELS:
+        if _k not in PREVIEW_TAB_LABELS:
+            with pytest.raises(KeyError):
+                preview_tab_label(_k)
+
+    # (d) 預覽分頁**不得**進入指路 / 站號機制
+    for _k in PREVIEW_TAB_LABELS:
+        assert PREVIEW_PREFIX not in where_to_find(_k), (
+            "where_to_find() 吐出了預覽分頁名 —— 指路會指到線框上不存在的分頁")
+
+
 def test_old_top_level_keys_now_fail_loud():
     """**突變自證點**：七→五之後，舊分頁 key 不得再從 `tab_label()` 拿到東西。
 
@@ -174,6 +217,11 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     # 所以漂移鎖錨到那一檔而不是 `tab_settings_diag.py`。
     ("nav_status", "ui/helpers/settings_diag/nav_history_section.py"),
     ("nav_manual", "ui/helpers/settings_diag/nav_history_section.py"),
+    # 2026-09-07：④ 新頁的「交易帳本」灰態要指得出「現在去哪裡看得到」，
+    # 而那個地方是**舊 ④** 的 `_sec_ledger`。字面值住在 `ui/tab3_portfolio.py`。
+    # ⚠️ `pf_add` / `pf_perf` 兩個同型 key **沒有**這條鎖（既有缺口，本輪未補）——
+    #    本列是把新增的那一個先鎖住，不是宣稱三個都鎖了。
+    ("pf_ledger", "ui/tab3_portfolio.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。

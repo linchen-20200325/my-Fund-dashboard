@@ -83,9 +83,37 @@
    線框「從哪裡搬來」把它列進 ②，但客戶 2026-09-05 裁決：**搬，排在本頁上線之後的獨立批次**。
    本檔沒有任何對它的 import 或呼叫。
 
-⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 `with tab_health:` 仍呼叫舊的
-   `render_fund_grp_health_tab()`，客戶明令「舊 ② 這批不動、不接線、不下架」。
-   接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。
+~~⚠️ **本頁本批尚未接進 `app.py`。** `app.py` 的 `with tab_health:` 仍呼叫舊的~~
+   ~~`render_fund_grp_health_tab()`，客戶明令「舊 ② 這批不動、不接線、不下架」。~~
+   ~~接線是下一批的事 —— 骨架先上線、CI 綠、再分批填內容。~~
+
+⚠️ **2026-09-07 事實更正：上段已過期。有意識的更正，不是漏刪**
+   （決策者：**AI 總管**，依獨立稽核指出）。**舊表述在寫下的當天是對的** ——
+   那一批確實沒有接線；**被推翻的是它的前提**：接線那一批已經做完。
+   ~~**實測**：`app.py` 的 `with tab_health:` 現在呼叫的是本檔的~~
+   ~~`render_holdings_health()`。~~
+
+⛔ **2026-09-07 同日再更正（第二次）：上面那句只活了幾分鐘，#814 之後為假。**
+   **有意識的更正，不是漏刪**（日期 **2026-09-07** · 決策者：**AI 總管**，依獨立稽核實測）。
+   **實測（`origin/main` `c6b4d1b`，本分支已 merge）—— 雙軌並行**：
+
+   ===================== ==========================================
+   `app.py` 的分頁槽        呼叫誰
+   ===================== ==========================================
+   `tab_health`（②）      **`render_fund_grp_health_tab()`（舊 ②）**
+   `tab_preview_health`   **`render_holdings_health()`（本檔）**
+   ===================== ==========================================
+
+   ⇒ **本檔掛的是「[新] 並行預覽」那一格，不是 ② 那一格**；`app.py` 現在有
+   **七**個分頁槽，而且**同時 import 舊 ② 與本檔**。客戶 2026-09-07 原則：
+   **舊 Tab 原位保留、新 View 並行掛新 Tab**，直到客戶親自驗收才換。
+   機器規則見 `tests/test_wf02_health_golive.py::test_app_mounts_the_new_health_view`
+   —— ⚠️ **它現在斷言的正是「`tab_health` 必須是舊 ②」**，與上面那句劃掉的話**正面相反**。
+
+   ⚠️ **這一輪要記的教訓比事實本身重要**：上一版寫下那句話時它是真的，
+   **#814 在本 PR 交件後幾分鐘合併，把它的前提整個翻面** ——
+   而**本檔 12 條守衛全綠、CI 也全綠**，因為那句話是**散文，不是斷言**。
+   **綠燈不保證文件為真**；這正是 `DROPPED_WITH_REASON` 那張表一路在犯的同一個病。
 
 Form 為什麼是本批唯一「真的做完」的一塊
 --------------------------------------
@@ -161,8 +189,22 @@ from ui.helpers.render_state import NOT_READY_MARK, not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
 
 # ── session 鍵名（本檔自己的命名空間）────────────────────────────────────────
-# ⚠️ 刻意**不**沿用舊 ② 的鍵：舊頁依方針第 3 條仍在磁碟上、且仍接在 `app.py`，
+# ⚠️ 刻意**不**沿用舊 ② 的鍵：舊頁依方針第 3 條仍在磁碟上、**且仍接在 `app.py`**，
 #    共用鍵會讓兩套 View 互相覆寫對方的狀態，而 payload 形狀並不相同。
+#
+#    ⚠️ **這一行的刪除線來回過一次，過程照實留著（2026-09-07，決策者：AI 總管）**：
+#    ~~2026-09-07 就地更正：「且仍接在 `app.py`」**後半句已過期**~~
+#    ~~（`with tab_health:` 現在呼叫的是本檔）。~~
+#    **⛔ 同日 #814 合併後，那句劃掉的話又變回真的，故刪除線撤銷、原句恢復效力。**
+#    **劃掉它在當時是對的**：那一刻 `tab_health` 確實掛的是本檔（新 ②）；
+#    **被推翻的是它的前提** —— #814 把舊 ② 接回 `tab_health`、新 View 改掛
+#    `tab_preview_health`（雙軌並行），於是「舊頁仍接在 `app.py`」重新成立。
+#    ⚠️ **不直接把刪除線拿掉了事** —— 留著這條來回的痕跡，
+#    下一個人才看得出這句話為什麼曾經被劃掉，以及它是怎麼回來的。
+#
+#    ⭐ **而且本註的結論在兩種世界下都成立、從頭到尾一字未改** ——
+#    兩套 View **現在真的同時掛在 `app.py` 上**（② 舊、⑥ 新），
+#    **不共用鍵的理由因此比當初更硬，不是更軟。**
 _FORM_KEY: str = "v02_health_filter_form"
 #: **已套用**的診斷條件（不是 widget 當下值）。下游只准讀這個 —— 理由見模組 docstring。
 _SK_APPLIED: str = "v02_health_applied_filters"
@@ -293,6 +335,82 @@ DELEGATED_ENTRIES: tuple[tuple[str, str], ...] = (
     ("ui.helpers.fund_grp_health.risk", "_render_oversold_badges"),
     ("ui.helpers.fund_grp_health.ai", "_render_ai_cross_fund_evaluation"),
 )
+
+# ── ⑥ 委派區 Checkbox Gate（2026-09-07，雙軌並行的必要條件）──────────────
+#: gate 的字面。**畫面上與灰態指路吃的是同一個常數** —— 指到一個不存在的勾選框，
+#: 是本 repo 發作過三次的死指路（同 ④ `page_04_portfolio.py::DIVCAL_GATE_LABEL`
+#: 與 ⑤ `page_05_settings.py::NAV_GATE_LABEL` 的處置）。
+DELEGATE_GATE_LABEL: str = "載入逐檔健診與互斥分析（與舊分頁同一份程式碼）"
+
+#: ⛔ **這個 gate 擋的不是效能，是一個 CI 結構上看不到的當機。逐步寫清楚，不要靠記憶。**
+#:
+#: ## 機制（**讀 streamlit 1.59.1 原始碼求證，不是推論**）
+#:
+#: `st.tabs` 一次 run 會把**所有**分頁的 body 全部執行（`app.py` 自己的註解就地寫著）。
+#: 雙軌之後舊 ②（`tab_health`）與新 ⑥（`tab_preview_health`）**委派同一批舊模組**，
+#: 於是同一個 run 裡同一支 renderer 會被呼叫兩次。此時：
+#:
+#: - **`st.plotly_chart` 每一次呼叫都會註冊 element id** —— 1.59.1 `plotly_chart.py`
+#:   就地註解逐字寫著「We are computing the widget id for all plotly uses」，
+#:   `compute_and_register_element_id(...)` **不在任何 `if` 底下**。
+#:   id 由 `plotly_spec`（圖的 JSON）＋ config ＋ theme ＋ 寬高算出 ⇒
+#:   **同一份資料畫出同一張圖 ⇒ 同一個 id ⇒ 第二次呼叫拋 `StreamlitDuplicateElementId`**
+#:   （`elements/lib/utils.py::_register_element_id`）。
+#: - **`st.dataframe` 不會** —— 同版 `arrow.py` 的 `compute_and_register_element_id`
+#:   包在 `if is_selection_activated:` 裡，而 `is_selection_activated = on_select != "ignore"`，
+#:   預設就是 `"ignore"`。**本頁委派到的 7 個 `st.dataframe` 一個都沒有傳 `on_select`。**
+#:
+#: ⚠️ **這個不對稱是本批最容易搞錯的一點，據實寫明**：交接說明把
+#:    `backtest_section.py` 的「3 個 `dataframe` ＋ 1 個 `plotly_chart`」當成同一種危險，
+#:    **實測不是** —— 危險的只有 `plotly_chart` 那一個；而真正的 collision surface
+#:    **另外還有兩個 `plotly_chart`**（`correlation.py` 與 `dividend.py`），
+#:    那兩支交接說明完全沒有提到。**清單見 `tests/test_dual_track_plotly_id_collision.py`。**
+#:
+#: ## 為什麼 CI 看不到（這才是本批的重點）
+#:
+#: 舊 ② 在 `st.session_state["_fund_grp_health_ran"]` 沒有被設起來之前**直接 `return`**，
+#: 而那個旗標要使用者**按過一次「🩺 開始健診」**才會是 True（`tab_fund_grp_health.py`
+#: v19.504 就地註解）。CI 既沒有持倉、也不會去按那顆鈕 ⇒ **舊 ② 那一半永遠不執行**
+#: ⇒ 兩份永遠不會同時出現 ⇒ **測試永遠是綠的**。
+#: **但客戶有持倉，而且他按過那顆鈕之後旗標會一直留在 session 裡** ——
+#: 從那一刻起他**每一次** rerun 都同時渲染兩份。
+#:
+#: ## 為什麼是 gate，不是「誠實留白（乾脆不委派）」
+#:
+#: 留白**不可逆**：它等於把「舊 ② 還在」寫死成一個永久假設，而**沒有任何機制**
+#: 會在那個假設失效（舊 ② 整批拔除）的那天叫一聲。gate 則有前提守衛 ——
+#: `tests/test_dual_track_plotly_id_collision.py::test_the_gate_still_has_a_reason_to_exist`
+#: 在舊 ② 不再委派同一批模組的那一刻轉紅，告訴我們可以把 gate 拿掉了。
+#: （同一個取捨 ⑤ 那一組已經做過一次並被獨立稽核驗過，本檔沿用，不另發明第二套。）
+#:
+#: ## 三顆已知的雷，逐一避開（本 repo 都真的踩過）
+#:
+#: 1. ⛔ **不得帶 `key=`** —— streamlit 對帶 `key=` 的 widget 會**代呼叫端**把值寫進
+#:    `st.session_state`，那是每次渲染都發生、不經任何閘門的寫入，會踩
+#:    `tests/test_wf02_health_no_writes.py::test_the_page_only_writes_its_own_session_namespace`。
+#:    gate 只需要「這一次 run 有沒有勾」，直接用回傳值當條件即可。
+#: 2. ⛔ **不得放進 `st.form`** —— 本檔一個 `st.form(` 站點都沒有（鐵則 02 走
+#:    `ui.helpers.ia.applied_form`，`FORM_SITE_TOTAL` 精確 `== 7`），而且 form 內的
+#:    widget 要按送出才生效，行為上也是錯的。gate 在 form **外面**。
+#: 3. ⛔ **灰態本文不得把「勾下去」當成解法** —— 勾下去**正是撞的那一刻**。
+#:    本文因此寫的是「勾下去會發生什麼」，指路指向**舊 ② 分頁**（內容現在真的在那裡），
+#:    不是指向這個勾選框。**說反了比沒說更糟。**
+#: ⚠️ **不寫 `where=` 指向 gate 自己**：那會變成「要修就勾它」，與第 3 點直接矛盾。
+#: ⚠️ **寫成函式、分頁名走 `tab_label()`，刻意不手抄** —— 本 repo 分頁改名漏改
+#: 已發作三次，每次都是「文案裡抄了一份分頁名」這個形狀。
+#: ⛔ **不要改回模組層常數**：常數就得在 import 時求值，而 `tab_label()` 是
+#: `story_nav` 的 SSOT 查表；寫成函式才能在改名後**自動跟著變**。
+#: ⚠️ 這裡特別要提一筆：`tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+#: 的比對規則是「**完整標籤（含 emoji 前綴）的子字串出現**」，所以像
+#: 「② 持倉體檢」這種**丟掉 emoji 的手抄**它**抓不到**（該守衛自己的 docstring
+#: 就地登記了這個缺口）。**本檔不靠那條守衛沒抓到就放行** —— 走 SSOT 是因為它對，
+#: 不是因為抄了不會被抓。
+def _delegate_gate_help() -> str:
+    """gate 的 `help=` 文案。**同 ⑤ `_backfill_gate_label()` 的既有家風。**"""
+    return (f"舊「{tab_label('health')}」分頁已經在畫同一批圖表。"
+            "兩份同時載入會撞 Streamlit 的重複元件 ID（`plotly_chart`），"
+            "畫面上會出現紅色錯誤塊。"
+            "勾選只建議在**舊分頁尚未跑過健診**時用來預覽新版動線。")
 
 #: `render_fund_grp_health_extras` 底下**線框明文搬 ③**、故本檔**刻意不接**的五塊。
 #: ⚠️ 寫成常數是為了讓「為什麼少了這幾塊」可稽核 ——
@@ -506,8 +624,17 @@ def _render_filter_form() -> None:
         # ⚠️ **放在既有的 `applied_form` 裡面，不另開第二個 form**（鐵則 02：
         #    本頁 `st.form` 站點必須維持 0，`applied_form` 維持 1；自己寫 form
         #    會讓 `tests/test_ui_rerun_contract.py::FORM_SITE_TOTAL`（精確 `==7`）轉紅）。
-        # ⚠️ 它跟其他三個條件一樣**受送出閘門管**：拖數字的當下不會觸發下游重算，
-        #    因為委派區塊讀的是 `_principal_twd()`（＝已套用值），不是這個回傳值。
+        # ⚠️ 它跟其他三個條件一樣**受送出閘門管**：拖數字的當下不會觸發下游重算。
+        # ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+        #    本行原寫 ~~「因為委派區塊讀的是 `_principal_twd()`（＝已套用值）」~~ ——
+        #    **那是假的**。實測（AST）`_principal_twd` 在本檔的**呼叫點 0、裸參照 0**，
+        #    也就是它目前是 **0 caller**，委派區塊一個字都沒讀它。
+        #    → 這個 widget 現在**收得到值、但沒有任何下游消費它**。
+        #    **不受閘門影響的真正原因**是更前面那一句：`_render_filter_form()` 只把值
+        #    寫進 `_SK_APPLIED`，而委派區塊傳給舊模組的是 `_uniq_by_code(_holdings())`，
+        #    整條路徑上沒有 principal 這個引數。
+        #    ⛔ **本批不接線**：接上去等於改變委派區塊餵給舊模組的輸入
+        #    （齊頭本金 vs 實際 `invest_twd`），那是行為變更，不是切換。已具名登記於 PR。
         _principal = st.number_input(
             "本金（TWD）",
             min_value=_PRINCIPAL_MIN, max_value=_PRINCIPAL_MAX,
@@ -1112,9 +1239,32 @@ def _render_delegated_sections() -> None:
     ⚠️ **唯一的實質差異，據實寫明、不掩蓋**：`_build_fund_dict` 把每檔的 `invest_twd`
     **統一覆寫成同一個 `principal_twd`**（那是「假設每檔都投入相同金額才能比較」的
     刻意設計）；而 `portfolio_funds` 帶的是**使用者每檔真正投入的金額**。
-    → 對本批接的這兩支**沒有影響**（實測兩支都不讀 `invest_twd`：
-      `render_fund_checkup` 走 `metrics`／`moneydj_raw`／`series`，
-      `render_mutual_exclusion_section` 走持股與相關性）。
+    ~~→ 對本批接的這兩支**沒有影響**（實測兩支都不讀 `invest_twd`：~~
+      ~~`render_fund_checkup` 走 `metrics`／`moneydj_raw`／`series`，~~
+      ~~`render_mutual_exclusion_section` 走持股與相關性）。~~
+
+    ⛔ **2026-09-07 就地更正：上面那句對 `render_fund_checkup` 是假的。
+    有意識的更正，不是漏刪**（決策者：**AI 總管**；依據：**本組實測**，非轉述）::
+
+        grep -n "invest_twd" ui/helpers/fund/checkup.py   # → 11 處命中
+
+    `render_fund_checkup` **確實會讀 `invest_twd`**，而且它驅動使用者看得到的東西：
+    `_compute_fund_health_kpis` 的月配息、`build_checkup_dataframe` 的
+    **原幣本金 ／ 月配 TWD ／ 年配 TWD 三欄**，以及健診卡上那句
+    「本金 N TWD ÷ 12 月」。`ui/tab3_portfolio.py` 就地寫著同一件事
+    （「`invest_twd` 會驅動可見輸出（原幣本金 / 月配息 / 年配息三欄 + 健診卡文案）」）
+    —— **同一個 repo 裡兩份記錄互相矛盾，本行是錯的那一份。**
+    ⚠️ `render_mutual_exclusion_section` 那半句**仍然成立**（實測 0 命中）。
+
+    **這個差異的實際後果，據實寫明（它不是 bug，但它是一個功能面的變化）**：
+    舊 ② 餵的是 `_build_fund_dict(..., principal_twd)` ——「**每檔硬寫同一個本金**」
+    的**齊頭模擬基準**；新 ② 餵的是 `portfolio_funds` ——「**使用者每檔實際投入**」。
+    也就是說 ② 切換之後，**全站不再有任何地方畫齊頭本金版的基金體檢 PK**
+    （④ 那一份在 WP-G 已經移除，它當時的理由就是「同型的齊頭模擬版在 ② 仍在」，
+    而那句話自本次切換起不再成立）。
+    ⛔ **本批不補**：要補等於把 `_build_fund_dict` 接回來，那是委派清單的變更、
+    不是切換，且會連帶把 `_render_investment_calc` 的那個張力提前引爆。
+    **已寫進 PR 描述具名登記。**
     ⛔ **但下一批接 `render_fund_grp_health_extras` 時這個差異會變成真的**
       —— 它底下的 `_render_investment_calc` 就是吃那個本金算「可申購單位／月配 TWD」。
       **那正是 :data:`DEFERRED_ENTRIES` 第一條擋著它的原因，不要以為那只是缺個 widget。**
@@ -1125,6 +1275,44 @@ def _render_delegated_sections() -> None:
     """
     _funds = _uniq_by_code(_holdings())
     if not _funds:
+        return
+
+    # ⭐ **標題與分隔線一定要畫在閘門【之前】,這不是排版偏好,是本 repo 拍板過的判準。**
+    #    2026-08-28 客戶 Q1「三問判準」的結論逐字寫在
+    #    `ui/helpers/fund_grp_health/backtest_section.py` 的就地註解裡:
+    #    「守衛寫在標題前面,使用者看不到任何痕跡;寫在後面,他看到標題和一句灰字說明。」
+    #
+    # ⚠️ **第一版把標題留在閘門後面,CI 當場抓到,值得記一筆**:
+    #    `tests/test_wf02_health_skeleton.py` 的 `_units()` 以 `#### 標題` 切段,
+    #    閘門關著時標題不會畫 ⇒ 灰字**被歸到上一個區塊「逐檔體檢表」名下**
+    #    ⇒ `test_wired_blocks_show_real_content_when_the_data_is_there[逐檔體檢表]`
+    #    紅了,訊息是「資料齊全時仍是灰態 —— 那是退化」。
+    #    **那條守衛沒有錯,是我把灰字掛到了別人的區塊上。** 標題移到閘門前面之後,
+    #    灰字落在它自己的單位裡,那條守衛**一個字都不必改**就恢復綠燈。
+    st.divider()
+    st.markdown("#### 🔬 逐檔健診與互斥分析")
+
+    # ── Checkbox Gate ───────────────────────────────────────────────────
+    # ⛔ **這一段是本區塊唯一的進入條件，理由整段寫在 :data:`DELEGATE_GATE_LABEL` 上方。**
+    #    一句話：舊 ② 與本頁委派**同一批**舊模組，其中三支會畫 `st.plotly_chart`，
+    #    而 `plotly_chart` **每次呼叫都註冊 element id** ⇒ 同一個 run 畫兩次就拋
+    #    `StreamlitDuplicateElementId`。CI 沒有持倉、也不會按舊 ② 的「🩺 開始健診」，
+    #    **所以測試永遠是綠的，只有真實使用者會踩到。**
+    #
+    # ⚠️ **`st.checkbox` 必須是這個 `if` 的唯一運算元** —— 不要寫成
+    #    `if not X and st.checkbox(...)` 這類布林短路：那會讓 gate 在某些情況下
+    #    被跳過，而靜態守衛看到的仍然是一個「有 checkbox 的 if」。
+    #    守衛 `test_the_gate_is_the_only_way_in` 對這一點是 fail-closed 的。
+    _open = st.checkbox(DELEGATE_GATE_LABEL, value=False, help=_delegate_gate_help())
+    if not _open:
+        # ⚠️ 指路指向**舊 ② 分頁**，不是指向上面那個勾選框 —— 內容現在真的在那裡，
+        #    而「勾下去」是撞的那一刻、不是解法（見 :data:`DELEGATE_GATE_LABEL` 第 3 點）。
+        not_ready(
+            f"逐檔健診與互斥分析**尚未載入**。這一區與舊「{tab_label('health')}」分頁"
+            "是同一份程式碼；兩邊同時載入會撞 Streamlit 的重複元件 ID，"
+            f"畫面上會出現紅色錯誤塊。勾選上方「{DELEGATE_GATE_LABEL}」會**立刻載入本頁這一份**"
+            "（舊分頁若已跑過健診，那一刻就會撞）。",
+            where=f"{where_to_find('health')}（該分頁已經在畫同一批圖表）")
         return
 
     # ⛔ **lazy import，且逐支具名** —— 不是 `from ui.helpers import fund_grp_health`
@@ -1141,8 +1329,6 @@ def _render_delegated_sections() -> None:
     from ui.helpers.fund_grp_health.dividend import _render_dividend_matrix
     from ui.helpers.fund_grp_health.risk import _render_oversold_badges
 
-    st.divider()
-    st.markdown("#### 🔬 逐檔健診與互斥分析")
     # ⚠️ 這句 caption 是**誠實揭露**，不是行銷詞：本區塊的內容與舊 ② 同源同碼，
     #    使用者若發現這裡跟舊 ② 長得一樣，那是對的、是刻意的。
     st.caption("本區直接沿用既有的健診模組（**與舊分頁同一份程式碼、同一條資料路徑**），"
@@ -1196,9 +1382,30 @@ def _render_delegated_sections() -> None:
 def render_holdings_health() -> None:
     """渲染「② 持倉體檢」整頁。
 
-    ⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），
-    所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。
-    接線是下一批的事。
+    ~~⚠️ **本批尚未接進 `app.py`**（客戶明令舊 ② 不動、不接線、不下架），~~
+    ~~所以現在**沒有 production caller** —— 這是**刻意的中間狀態**，不是漏接。~~
+    ~~接線是下一批的事。~~
+
+    ⚠️ **2026-09-07 事實更正：上段已過期，本函式現在有 production caller。**
+    **有意識的更正，不是漏刪**（決策者：**AI 總管**，依獨立稽核指出）。
+
+    ~~**實測**：`app.py` 的 `with tab_health:` 呼叫本函式。~~
+    ⛔ **2026-09-07 同日再更正（第二次）：「有 caller」這半仍然為真，
+    但「是哪一格」講錯了**（決策者：**AI 總管**，依獨立稽核實測）。
+    **實測（`origin/main` `c6b4d1b`）**：呼叫本函式的是
+    **`with tab_preview_health:`（[新] 並行預覽那一格）**；
+    **`tab_health` 掛的是舊 ② `render_fund_grp_health_tab()`** ——
+    客戶 2026-09-07 雙軌原則：舊 Tab 原位保留、新 View 並行掛新 Tab。
+    守衛 `tests/test_wf02_health_golive.py::test_app_mounts_the_new_health_view`
+    **兩格都釘**（新頁沒接出去 → 紅；舊頁被覆蓋 → 也紅）。
+    ⚠️ **舊表述在寫下當天是真的**（那時 `tab_health` 確實掛本檔），
+    **被推翻的是它的前提** —— #814 在幾分鐘後合併改成了雙軌。
+
+    ⛔ **同一句「沒有 production caller」在 `ui/views/page_05_settings.py` 也有一份**
+    —— **本批不碰那個檔**（另一組正在動它），已於本批 PR 描述具名登記。
+    ⚠️ 該檔的落點與本檔**不同**（⑤ 現在是 `tab_settings` → `render_settings_diag_tab`、
+    `tab_preview_settings` → `render_settings_and_diagnostics`），**由那一組現場實測，
+    不要照抄本段的結論。**
 
     ⚠️ **區塊之間走 `safe_section()` 隔離**：`st.tabs` 是單次 run 渲染全部分頁，
     任一區塊拋未捕捉例外會**中止整個 script**，其後所有分頁空白。
