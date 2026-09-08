@@ -759,8 +759,11 @@ def _render_income_line(funds: list[dict]) -> None:
         not_ready(
             "算不出你每月的配息合計（TWD）："
             + ("、".join(_left_out) or f"這 {_t['total']} 檔都沒有可用的配息資料")
-            + "。**不拿「假設每檔都投入 100 萬」的齊頭本金替你估一個數字** —— "
-              "那是另一個問題的答案。",
+            + "。**不拿「假設每檔都投入同一個金額」的齊頭本金替你估一個數字** —— "
+              "那是另一個問題的答案。"
+            # ⚠️ 這句刻意**不寫出那個金額**：本檔已經有 `_DEFAULT_PRINCIPAL_TWD`，
+            #    在文案裡抄一份數字就是第二份真相源，常數一改畫面就開始說謊（§3.3）。
+            ,
             where=where_to_find("pf_add"))
         return
 
@@ -775,7 +778,9 @@ def _render_income_line(funds: list[dict]) -> None:
 def _render_verdict_line(funds: list[dict]) -> None:
     """結論句 ②：**這幾檔跟同類型比，好不好**。判不動的獨立成一類（§1）。"""
     _judged, _unjudged = _peer_verdicts(funds)
-    _undecided = "、".join(f"{_c} 檔{_t}" for _t, _c in _unjudged)
+    # ⚠️ `{_c} 檔` 與 `{_t}` 之間的空格是刻意的：`_t` 以 `⬜` 開頭，
+    #    黏在一起會變成「3 檔⬜ 同類資料不足」，一頁在講「看得懂」的畫面不該這樣讀。
+    _undecided = "、".join(f"{_c} 檔 {_t}" for _t, _c in _unjudged)
 
     if not _judged:
         not_ready(

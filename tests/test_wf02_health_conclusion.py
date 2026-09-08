@@ -351,8 +351,12 @@ def test_the_per_fund_table_still_shows_exactly_nine_columns():
     """
     assert len(HEALTH_TABLE_COLUMNS) == 9
     _parts = _render(portfolio=FOUR_WAY)
-    _header = next(_p for _p in _parts if _p.startswith("[dataframe] "))
-    _cols = [_c for _c in _header[len("[dataframe] "):].split("　") if _c]
+    # ⚠️ 不用 `next(...)`：找不到時它拋 `StopIteration`，訊息完全看不出發生什麼事
+    #    —— 而「表根本沒畫出來」正是本條要能講清楚的一種失敗。
+    _headers = [_p for _p in _parts if _p.startswith("[dataframe] ")]
+    assert _headers, (
+        "畫面上沒有任何表格 —— 有持股時逐檔體檢表應該畫得出來。\n" + "\n".join(_parts))
+    _cols = [_c for _c in _headers[0][len("[dataframe] "):].split("　") if _c]
     assert len(_cols) == 9, (
         f"畫面上的逐檔體檢表有 {len(_cols)} 欄，不是 9 欄：{_cols}\n"
         "⛔ 客戶說的是「舊 UI 資訊太多」—— 舊 ② 那張表約 85 欄，新頁收成 9 欄是對的。\n"
