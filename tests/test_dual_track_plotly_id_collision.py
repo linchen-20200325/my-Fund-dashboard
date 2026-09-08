@@ -333,6 +333,21 @@ def test_the_gate_still_has_a_reason_to_exist():
     still = {p for p in risky_mods
              if any(p == ROOT / pathlib.Path(m.replace(".", "/") + ".py")
                     for m in old_imports)}
+    # ── 前提 (2)：舊 ② 仍然掛在 `app.py` 上 ──────────────────────────────
+    #    ⭐ 這一半是總管 2026-09-08 指定要有的：**閘門的正當性繫於「舊 ② 還在」**，
+    #       前提消失時必須有人被叫醒，否則就是把一個暫時措施寫成永久假設。
+    _app = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"), "app.py")
+    _called = {n.func.id for n in ast.walk(_app)
+               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "render_fund_grp_health_tab" in _called, (
+        "⚠️ **前提已經失效，請回來重新判斷（本條紅了不一定是 bug）**：\n"
+        "`app.py` 已經不再呼叫舊 ② 的 `render_fund_grp_health_tab()` —— "
+        "舊 ② 下架了。\n"
+        "⇒ `_render_delegated_sections` 的 Checkbox Gate **已經沒有存在理由**"
+        "（它擋的是「兩頁同時畫同一張圖」，現在只剩一頁在畫）。\n"
+        "**正解：把那道閘門連同本檔一起移除**，不要讓一個永久的勾選框留在畫面上；"
+        "⛔ 不要把本條刪掉了事。")
+
     assert still, (
         "⚠️ **前提可能已經失效，請回來重新判斷（本條紅了不一定是 bug）**：\n"
         "舊 ② 看起來已經不再委派任何『會畫無 key `plotly_chart`』的模組。\n"

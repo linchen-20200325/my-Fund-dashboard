@@ -388,27 +388,58 @@ def test_the_third_dual_track_pair_has_no_keyless_collision_either():
 
 
 def test_the_known_static_candidates_between_old_two_and_new_six_are_registered():
-    """⚠️ **⑥ 的靜態候選：登記，不宣稱「沒問題」，也不動 `page_02_health.py`。**
+    """⚠️ **⑥ 的靜態候選：2026-09-08 已由 #822 閘門化，本條隨之換方向釘。**
+
+    ## 本條原本登記的是什麼（原文保留，因為它是這條測試存在的理由）
 
     本組的掃描器（A 段）在 **舊 ② ↔ 新 ⑥** 之間找到 **4 個**沒有 key、
     而且兩頁都跑得到的元素，全部在
     `ui/helpers/fund_grp_health/backtest_section.py::render_allocation_backtest_section`
-    （`st.dataframe` ×3、`st.plotly_chart` ×1）。
+    （`st.dataframe` ×3、`st.plotly_chart` ×1）。當時 `ui/views/page_02_health.py`
+    不在該批的檔案邊界內，所以**只登記、不修**，並寫明「清單一變就該回頭判一次」。
 
-    ⛔ **本輪不修它**：`ui/views/page_02_health.py` 不在本批的檔案邊界內
-       （總管明令「要動 `page_02_health.py` 先回報」），且 CI 的預設載入
-       **沒有持倉、沒有憑證**，那一段走不到 → 現況觀測不到。
-    ⚠️ **「觀測不到」不等於「不會發生」**：有持倉的真實使用者可能一打開就撞。
-       本條把它釘成**會說話的登記**：清單一變（多了、少了、搬家了），本條就紅，
-       逼下一個人回頭看，而不是讓它靜靜爛掉。
+    ## 清單真的變了，而且是因為**它被修好了**
+
+    #822 在 `ui/views/page_02_health.py::_render_delegated_sections` 加了
+    **Checkbox Gate**（`st.checkbox(..., value=False)`、無 `key=`、在 form 外），
+    於是那七支委派全部落到閘門之後 —— :func:`_reach` 只走 :func:`_ungated` 的節點，
+    **候選集合因此變成空的**。這正是本條要求的「回頭判一次」，已經判完。
+
+    ⛔ **所以本條改成 `== []`，但這不是把它放寬，是把它換一個方向釘死**：
+    今天它守的是「**那道閘門不准消失**」—— 有人拿掉閘門、或在閘門之外重新委派
+    任何一支會畫無 key 元素的舊模組，候選集合就會再度非空，**本條立刻轉紅**。
+    （突變實測：把閘門的 `if not _open: … return` 拿掉 → 本條轉紅。）
+
+    ## ⚠️ 兩件必須一起讀的事，否則本條的 `== []` 會被誤讀成「這件事沒問題了」
+
+    1. **`== []` 只代表「新 ⑥ 這一側關著」，不代表那些元素安全。**
+       舊 ② 仍然無條件畫它們；閘門一勾，兩份就同時存在。
+       灰態本文因此明寫「勾下去會發生什麼」，**不把勾選講成解法**。
+    2. **真正危險的只有 `st.plotly_chart`，`st.dataframe` 不會撞** ——
+       上面原文寫的「4 個」是本掃描器的候選數（它保守地把兩種都算進來）。
+       實測 streamlit 1.59.1：`plotly_chart.py` **無條件**
+       `compute_and_register_element_id(...)`；而 `arrow.py`（`st.dataframe`）
+       的同一支呼叫**包在 `if is_selection_activated:` 裡**
+       （`= on_select != "ignore"`，預設 `"ignore"`）⇒ **不註冊 id、撞不了**。
+       ⇒ 真正的 collision surface 是 **3 個 `plotly_chart`**
+       （`backtest_section` / `correlation` / `dividend`），
+       **不是** `backtest_section` 那 4 個。
+       ⛔ 本條**不改**上面那個保守的掃描器 —— 掃描器寧可多抓，那是對的；
+       這一段只是把「候選 ≠ 一定會撞」講清楚，免得下一個人照著 4 這個數字去修錯地方。
+
+    **完整機制、逐模組清單與突變表**：見 `tests/test_dual_track_plotly_id_collision.py`
+    與 #822 的 PR 描述。**閘門的前提守衛**（舊 ② 一旦不再畫同一批圖就轉紅、
+    並指明正解是拿掉閘門）在該檔的
+    `test_the_gate_still_has_a_reason_to_exist`。
     """
     _hits = _collision_candidates(_OLD2, _NEW6)
     _by_mod = sorted({_m for _m, _, _ in _hits})
-    assert _by_mod == ["ui.helpers.fund_grp_health.backtest_section"], (
-        "舊 ② ↔ 新 ⑥ 的無 key 重複候選清單**變了**，不再是登記的那一組：\n"
+    assert _by_mod == [], (
+        "舊 ② ↔ 新 ⑥ 之間又出現「不必點就跑得到、而且沒有 key」的元素：\n"
         + "\n".join(f"  {_m}:{_ln}  st.{_e}" for _m, _e, _ln in sorted(_hits))
-        + "\n→ 這是提醒不是責備：清單一變就該回頭判一次，"
-          "**並回報總管**（`page_02_health.py` 不在本批邊界內）。")
+        + "\n→ #822 的 Checkbox Gate 應該讓這個集合維持空的。"
+          "\n   要嘛閘門被拿掉了，要嘛有人在閘門**之外**新增了委派。"
+          "\n   ⛔ 正解是把新的委派移到閘門之後，**不是**把本條的期望值改成非空。")
 
 
 #: 舊 ⑤ **無條件**（一次都不必點）就會呼叫的委派 —— 新 ⑦ 的四顆 gate 全部靠它成立。

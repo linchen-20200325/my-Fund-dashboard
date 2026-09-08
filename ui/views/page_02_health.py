@@ -1277,6 +1277,21 @@ def _render_delegated_sections() -> None:
     if not _funds:
         return
 
+    # ⭐ **標題與分隔線一定要畫在閘門【之前】,這不是排版偏好,是本 repo 拍板過的判準。**
+    #    2026-08-28 客戶 Q1「三問判準」的結論逐字寫在
+    #    `ui/helpers/fund_grp_health/backtest_section.py` 的就地註解裡:
+    #    「守衛寫在標題前面,使用者看不到任何痕跡;寫在後面,他看到標題和一句灰字說明。」
+    #
+    # ⚠️ **第一版把標題留在閘門後面,CI 當場抓到,值得記一筆**:
+    #    `tests/test_wf02_health_skeleton.py` 的 `_units()` 以 `#### 標題` 切段,
+    #    閘門關著時標題不會畫 ⇒ 灰字**被歸到上一個區塊「逐檔體檢表」名下**
+    #    ⇒ `test_wired_blocks_show_real_content_when_the_data_is_there[逐檔體檢表]`
+    #    紅了,訊息是「資料齊全時仍是灰態 —— 那是退化」。
+    #    **那條守衛沒有錯,是我把灰字掛到了別人的區塊上。** 標題移到閘門前面之後,
+    #    灰字落在它自己的單位裡,那條守衛**一個字都不必改**就恢復綠燈。
+    st.divider()
+    st.markdown("#### 🔬 逐檔健診與互斥分析")
+
     # ── Checkbox Gate ───────────────────────────────────────────────────
     # ⛔ **這一段是本區塊唯一的進入條件，理由整段寫在 :data:`DELEGATE_GATE_LABEL` 上方。**
     #    一句話：舊 ② 與本頁委派**同一批**舊模組，其中三支會畫 `st.plotly_chart`，
@@ -1314,8 +1329,6 @@ def _render_delegated_sections() -> None:
     from ui.helpers.fund_grp_health.dividend import _render_dividend_matrix
     from ui.helpers.fund_grp_health.risk import _render_oversold_badges
 
-    st.divider()
-    st.markdown("#### 🔬 逐檔健診與互斥分析")
     # ⚠️ 這句 caption 是**誠實揭露**，不是行銷詞：本區塊的內容與舊 ② 同源同碼，
     #    使用者若發現這裡跟舊 ② 長得一樣，那是對的、是刻意的。
     st.caption("本區直接沿用既有的健診模組（**與舊分頁同一份程式碼、同一條資料路徑**），"
