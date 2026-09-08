@@ -1015,4 +1015,3 @@ def test_the_health_preview_tab_is_clean_on_default_load(at_default: Any):
 #    ⚠️ **也要知道它多抓了什麼**：:func:`_names` 連**函式內的 lazy import** 都收，
 #    所以「模組 M 的某個函式裡 `from X import helper`」也會被當成 M 轉出 `helper`。
 #    那是刻意的 over-approximation（fail-closed），**只會多抓、不會漏抓**。
-
