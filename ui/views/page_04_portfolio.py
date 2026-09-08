@@ -547,7 +547,10 @@ BLOCK_MIX: str = "核心 ／ 衛星現況 vs 建議"
 #: → **2026-09-08 事實更正（有意識的更正，不是漏刪 · 決策者：架構與前端組）**：
 #: 這句話**今天一條都不成立** —— 四塊灰態的指路現在分別指向
 #: 舊 ④ 的 🎯 換股顧問／上方的配息月曆勾選框／舊 ④ 的 📊 組合績效／舊 ④ 的 💼 持倉戰情，
-#: **沒有任何一塊指向本區塊**，:func:`_pending_where` 也因此變成 0 caller。
+#: **沒有任何一塊指向本區塊**，`_pending_where()` 也因此變成 0 caller。
+#: ⛔ **2026-09-08 續：那個函式已經整支退役刪除**（總管授權，理由見測試檔的
+#:    「退役 ／ 改名對帳表」）—— 所以本行提到的它**已經不存在於本檔**，
+#:    只留在 git history 裡。**不要為了讓這段註解讀起來完整而把它加回來。**
 #: ⚠️ **舊表述在寫下的當天是對的**（那時三塊灰態確實全部指向這裡）；
 #: **被推翻的是它的前提** —— 2026-09-07 決定 ①／③／④ 與 2026-09-08 的換股顧問改指，
 #: 一次拿走了它的全部四個 caller，而**沒有人回頭改這一行**。
@@ -888,11 +891,13 @@ REASON_DIVIDEND_CAL: str = (
 #:    `COLUMN` 的模組層常數），本說明只是把**為什麼**寫下來。
 #: ⚠️ **2026-09-07 增補（客戶指示：灰態必須指出去哪裡看得到，不得只寫「尚未提供」）**：
 #: 本句的**原因一字未改**（線框沒給欄位規格，這一點今天依然成立）；
-#: 增補的是**指路**——`_pending_where()` 對本塊改指
+#: 增補的是**指路**——~~`_pending_where()`~~（**2026-09-08 已整支退役刪除**）對本塊改指
 #: `where_to_find("pf_ledger")`（＝舊 ④ 的「💼 持倉戰情（T7 帳本）」），
 #: 而**那個地方現在就看得到帳本**。
 #: ⛔ 這是本頁**唯一一塊「指了真的有用」的灰態**，與另外兩塊「指了也沒用」不同 ——
-#:    :func:`_pending_where` 的長註把這個差別寫死在那裡，**不要混為一談**。
+#:    ~~:func:`_pending_where` 的長註把這個差別寫死在那裡~~ —— **2026-09-08 更正**：
+#:    那個函式與它的長註**已隨退役一併消失**，該差別現在寫在
+#:    :func:`_render_action_cards` 換股顧問那張卡的就地註解裡。**不要混為一談。**
 REASON_LEDGER: str = (
     "（買賣紀錄、成本、已實現損益與對帳）。"
     "原因不是沒有資料：線框沒有給這張表的欄位規格，補一份等於自己發明，"
@@ -958,64 +963,6 @@ def grey_why() -> dict[str, str]:
         perf_block_label(): REASON_PERF,
         BLOCK_LEDGER: REASON_LEDGER,
     }
-
-
-def _pending_where(block: str) -> str:
-    """「內容還沒填」這種灰態的指路。**回傳的必須是一個「地方」。**
-
-    `render_state.not_ready()` 會把它包成「（請先到：…）」——
-    也就是說回傳值會變成一句**祈使句的受詞**。塞一句狀態陳述進去
-    （「目前只有 X 是完整的」）會產生一句**不可執行的指令**：
-    那是 ③ `ui/views/page_03_research.py` 2026-09-05 被獨立紅隊實測抓到的錯，
-    修法與病史逐字寫在該檔的同名函式上。**本檔從第一版就避開它。**
-
-    ⛔ **「是一個地方」不等於「去了有用」，這兩件事本檔分開講**：
-    ~~這一塊沒接上，去任何地方都不會讓它出現 —— 能指的最誠實的地方就是本頁上
-    唯一真的做完的那一塊（＝ :data:`BLOCK_FORM`），而灰態本文
-    （:data:`_PENDING_NOTE`）已經先講了「這一塊的內容還沒接上」。~~
-
-    ✅ **2026-09-08 推翻（有意識的更正，不是漏刪 · 決策者：架構與前端組）**：
-    上面那句對**換股顧問**（本函式最後一個 caller）**是假的** ——
-    換股顧問**有一個真的能用的家**，就在舊 ④，而且它**現在就在線上跑**：
-    `tests/test_ia_switch_advisor_moved_to_portfolio.py` 的
-    `EXPECTED_RENDER_SITE == "ui/tab3_portfolio.py::render_portfolio_tab"`
-    把那個渲染點釘成**恰好一個**，而 :data:`REASON_SWITCH` 自己就寫著
-    「這一塊在目前線上的 ④ 已經有唯一的渲染點」——
-    **也就是說，這一頁一邊寫著「它在舊 ④ 有渲染點」，一邊把使用者指回本頁的試算。**
-    → 改指 `where_to_find("switch")`（＝ ``④ 📊 資產配置 → 🎯 換股顧問``）。
-    ⚠️ **舊表述在寫下的當天是對的**：那時「去哪都沒用」是**針對整族**四塊灰態說的，
-    而其中三塊（保單／配息月曆／帳本）當時確實無處可去。**被推翻的是它的射程** ——
-    2026-09-07 三塊各自有了下一步之後，它只剩換股顧問一個對象，
-    **而那一個恰好是這一族裡唯一「其實有地方可去」的**。
-
-    ⛔ **本函式自 2026-09-08 起 0 caller。** 依 `CLAUDE.md §-1.5.1c` 判定 3，
-    「本次任務造成的孤兒應在同一次任務內實體刪除」——
-    **本批刻意沒有刪**，理由據實寫明、不美化：
-    刪掉它會連帶要刪
-    `tests/test_wf04_portfolio_skeleton.py::test_the_pending_pointer_is_a_place_not_a_status_sentence`
-    （那是 ③ 紅隊突變 R5 逼出來的守衛），而**刪守衛屬派工單明令要先回報的事**。
-    → **已回報總管裁決；在裁決之前，它的 0-caller 狀態由
-    `test_the_pending_pointer_is_a_place_not_a_status_sentence` 機械釘住**
-    （有人把它接回任何渲染路徑，那條會當場轉紅）。
-
-    ⚠️ **2026-09-07 射程縮小到只剩一個 caller，這一點要講清楚，不要讀成「還是三塊共用」**：
-    - **交易帳本**改指 `where_to_find("pf_ledger")` ＝ 舊 ④ 的「💼 持倉戰情（T7 帳本）」，
-      **那個地方現在真的看得到帳本**（客戶 2026-09-07 指示：灰態必須指出去哪裡看得到）。
-    - **配息月曆**改指它自己那個勾選框（:data:`DIVCAL_GATE_LABEL`），**勾了真的會出現**。
-    - **保單與扣款標的**已經不是灰態了（決定 ①）。
-    → **本函式現在只剩「換股顧問」一個 caller**，也就是本頁**唯一**一塊
-      「指了也沒用」的灰態。**這三種灰的下一步各不相同，不要再合成一句。**
-    ✅ **對照**：空狀態（:func:`_render_no_holdings`）那一則的指路是**真的有效**的，
-    而且是 AppTest 實跑驗過的。**兩者不要混為一談。**
-
-    ⚠️ 分頁名走 `where_to_find()`，**不手抄**；區塊名由呼叫端傳進來，
-    不在這裡再抄一份（手抄的指路在本 repo 已經指錯三次）。
-    ⚠️ **刻意不用「」把 `block` 括起來**：`tests/test_batch2_top_card_grid.py::`
-    `test_every_where_names_something_that_exists_on_screen` 只對 ``「」`` 內的
-    **字面值**比對「畫面上有沒有這個字」，而它的字表不收 `st.caption` ——
-    加了括號會產生一條**必然失敗**的比對，不是多一層保護（③ 的既有登記）。
-    """
-    return f"{where_to_find('portfolio')} → {block}"
 
 
 def _holdings() -> list[dict[str, Any]]:
@@ -1112,6 +1059,14 @@ MIX_GAP_LABEL: str = "差距"
 #: 「所需動作」那半句的收尾 —— 「搬這麼多**就到目標**」。
 #: ⭐ 它不是裝飾：少了這三個字，使用者不知道那筆錢是「搬過去就結束」還是「先搬這些」。
 #: 具名而不 inline，是為了讓守衛與未來的文案調整**只有一個出處**（`CLAUDE.md §2.1`）。
+#:
+#: ⚠️ **承重點登記（2026-09-08 稽核建議 3，本組接受為「登記，不動工」）**：
+#: 這三個字是**無條件語氣**（「搬完就到了」），而在 `n_missing_amount > 0` 的情境下
+#: 它其實只對「已填本金的那幾檔」成立 —— 目前靠 :func:`_gap_action_text` 補在後面的
+#: **括號射程**（「只算已填本金的 N 檔」）限定住，**現況可接受**。
+#: ⛔ **但那個限定是靠括號，不是靠這三個字本身** ——
+#:    日後若有人把括號拿掉、或把這一句改成獨立顯示，這裡就會變成一句
+#:    **對部分持倉說謊的無條件承諾**。**動這一句之前先讀這一段。**
 MIX_MOVE_TAIL: str = "就到目標"
 
 #: ⭐ **裁決 1 要求逐字出現在畫面上的那句話。**
@@ -1229,15 +1184,23 @@ def _gap_action_text(summary: dict[str, Any]) -> str:
     try:
         _diff = float(_diff)
         _total = float(summary.get("total_twd") or 0.0)
-    except (TypeError, ValueError):
+        if abs(_diff) < _ON_TARGET_TOL_PCT:
+            return ""
+        _need_twd = -_diff / 100.0 * _total
+        # ⚠️ **`round()` 必須待在這個 try 裡面**（2026-09-08 稽核建議 1，本組接受）：
+        #    `round(nan)` 拋 `ValueError`、`round(inf)` 拋 `OverflowError`，
+        #    而**這一整條路徑是本 PR 新增的** —— base 版遇到 NaN 只會印一個 `nan%`，
+        #    不會炸。上游 `parse_invest_twd` 目前明文擋掉 ±inf/NaN，所以它**不可達**；
+        #    但「不可達」是上游的性質，不是本函式的性質，而正上方這個 try
+        #    本來就是為了接這一類東西寫的。**移進來是一行的事，不移是給下一個人埋雷。**
+        if round(abs(_need_twd)) < 1:
+            return ""
+        _amount = fmt_twd(abs(_need_twd))
+    except (TypeError, ValueError, OverflowError):
         # ⛔ 不吞成 0、不猜 —— 算不出來就**什麼都不說**（§1：寧可少講，不可講錯）。
+        # ⚠️ 這**不是**把錯誤藏起來：百分比那一半照樣會畫（它走別的路徑），
+        #    消失的只有「要搬多少錢」這句衍生結論 —— 而它本來就算不出來。
         return ""
-    if abs(_diff) < _ON_TARGET_TOL_PCT:
-        return ""
-    _need_twd = -_diff / 100.0 * _total
-    if round(abs(_need_twd)) < 1:
-        return ""
-    _amount = fmt_twd(abs(_need_twd))
     _move = (f"從衛星移 {_amount} 到核心" if _need_twd > 0
              else f"從核心移 {_amount} 到衛星")
     _missing = int(summary.get("n_missing_amount") or 0)
@@ -1416,11 +1379,14 @@ def _render_action_cards() -> None:
             state_card(
                 switch_block_label(), state=STATE_NOT_READY,
                 note=f"{_PENDING_NOTE}{grey_why()[switch_block_label()]}。",
-                # ⛔ **不要改回 `_pending_where(...)`** —— 它指回本頁的試算，
-                #    而換股顧問**在舊 ④ 有一個真的能用的家**（理由與證據寫死在
-                #    :func:`_pending_where` 的 docstring）。走 `where_to_find` 這個
-                #    SSOT 而不是 `_pending_where`，還有第二個理由：哪天換股顧問被搬到
-                #    別的分頁，這一行**會自己跟著對**；`_pending_where` 寫死的是「本頁」。
+                # ⛔ **不要回頭發明一個「指回本頁試算」的 helper** —— 本檔原本有一支
+                #    `_pending_where()` 在做那件事，**2026-09-08 已整支退役刪除**
+                #    （它最後一個 caller 就是這一行；理由見測試檔的「退役 ／ 改名對帳表」）。
+                # ⭐ **四塊灰態的指路現在各自指向真的去處，沒有一塊指回本頁**：
+                #    這一塊 → 舊 ④ 的換股顧問（它在那裡**真的在跑**）；
+                #    配息月曆 → 上方的勾選框；組合績效／交易帳本 → 舊 ④ 的對應區塊。
+                # ⚠️ 走 `where_to_find` 這個 SSOT 還有第二個理由：哪天那一塊被搬到
+                #    別的分頁，這一行**會自己跟著對**；寫死「本頁」的做法不會。
                 where=where_to_find("switch"))
         with _cells[1]:
             _render_dividend_calendar_card()
@@ -1859,7 +1825,9 @@ def _render_ledger() -> None:
     #    （`tests/test_story_nav.py::test_section_labels_match_merged_pages` 的 `pf_ledger` 那列）。
     # ⚠️ **這一條指路與另外兩塊灰態不同：它是真的有用的。**
     #    另外兩塊（換股顧問／配息月曆未勾）去任何地方都不會讓它們出現；
-    #    這一塊照著走過去**現在就看得到帳本**。差別寫在 `_pending_where()` 的長註。
+    #    這一塊照著走過去**現在就看得到帳本**。
+    #    ⚠️ 這個差別原本寫在 `_pending_where()` 的長註裡，**那支函式 2026-09-08 已退役刪除**；
+    #    現在寫在 :func:`_render_action_cards` 換股顧問那張卡的就地註解。
     wide_table([], empty_title="交易帳本這一塊還沒接上",
                empty_missing=f"{_PENDING_NOTE}{grey_why()[BLOCK_LEDGER]}。",
                empty_where=where_to_find("pf_ledger"))
