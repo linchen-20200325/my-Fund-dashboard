@@ -2140,6 +2140,21 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
 
 #: 本條**實際釘住**的字面值 —— 線框 Tab 04 四張示意卡與 Form 上的東西。
 #: 列成常數，是為了讓「它到底守了什麼」可以被讀出來，而不是藏在 docstring 的形容詞裡。
+#:
+#: ⚠️ **`"200,000"` 那一筆有一個已知的碰撞風險，讀到這裡就要知道**（2026-09-08 登記）：
+#: 2026-09-08 起「差距」那一行會印出**真實的再平衡金額**，走 `fmt_twd()` ——
+#: 而 `fmt_twd(200000)` ＝ ``"NT$200,000"`` **含有這個子字串**。
+#: 也就是說，**一個真實的 20 萬再平衡金額會讓黑名單轉紅**。
+#: ⛔ **屆時的正解與 2026-09-06「62 ／ 38」那次完全相同：改 fixture 或改格式，
+#:    絕不是把這一筆從黑名單拿掉** —— 為了讓一個真數字過關而剪開擋假數字的網子，
+#:    正是 :func:`test_a_real_ratio_that_collides_with_the_mock_up_still_passes`
+#:    整條在防的東西。
+#: ⚠️ **會由哪一條抓到，2026-09-08 實測過**：
+#:    :func:`test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe`
+#:    只掃 `empty` / `missing` / `loaded`，而金額只在 `priced` 出現 —— **它掃不到**；
+#:    真正會轉紅的是 :func:`test_a_real_ratio_that_collides_with_the_mock_up_still_passes`。
+#: 📌 完整理由同時就地寫在 `page_04_portfolio._gap_action_text` 的 docstring 裡
+#:    （**兩邊都寫，是刻意的**：改黑名單的人讀這裡，改金額格式的人讀那裡）。
 _PINNED_FAKE_VALUES: tuple[str, ...] = (
     "現況 62 ／ 38", "建議 70 ／ 30", "62 ／ 38", "70 ／ 30",
     "2 組建議", "3 張保單", "本月 4 筆",
