@@ -395,19 +395,91 @@ def test_every_chain_entrypoint_resolves():
 # ══════════════════════════════════════════════════════════════════
 # 1) 「⑨ 不加閘門」的五條前提
 # ══════════════════════════════════════════════════════════════════
-def test_the_new_chain_is_fully_resolved():
-    """⭐ **本檔的錨**：⑨ 的鏈上**未解析呼叫必須是 0**。
+#: ⑨ 的鏈上**已知的動態派發點**（`模組::函式`）。**這是白名單，也是快門。**
+#:
+#: ⚠️ **為什麼需要這張表**：本檔第一版的錨只斷言「未解析呼叫 == 0」，而那是
+#: **fail-open** 的 —— 突變測試 B6 當場證明：把
+#: `safe_section(BLOCK_MIX, _render_mix)` 換成
+#: `getattr(__import__("..."), "_render_mix")()`，掃描器**一個 unresolved 都不會記**
+#: （它根本沒看見那個呼叫），於是那條錨**綠著放行**。
+#: **「沒有偵測到失敗」不等於「沒有東西被漏掉」** —— 這是本檔最重要的一課。
+#:
+#: 現有兩筆都是**對資料物件的屬性探測**，不是函式派發，本組逐一開檔判讀過：
+#:   * `ia.layout::_is_empty` —— `getattr(data, "empty", None)`（pandas 判空）
+#:   * `session::friendly_error` —— `getattr(exc, "__traceback__", None)`
+#: 兩者都在**九條鏈共用**的 helper 裡，且都不可能是渲染器。
+KNOWN_DYNAMIC_DISPATCH: frozenset[str] = frozenset({
+    "ui.helpers.ia.layout::_is_empty",
+    "ui.helpers.session::friendly_error",
+})
 
-    其餘四條前提都是「交集為空」型的**否定句**，而否定句最容易假綠 ——
-    掃描器看不見的東西，在它眼裡就是不存在。這一條把「看不見」本身變成紅燈。
+#: 會讓靜態追蹤斷掉的呼叫形態。⛔ 只增不減。
+_DYNAMIC_CALL_NAMES: frozenset[str] = frozenset({
+    "getattr", "setattr", "__import__", "eval", "exec", "globals", "locals", "vars"})
 
-    轉紅時的正解**不是**放寬本條，而是：把 ⑨ 新引入的那個動態呼叫改成靜態可追的
-    形態，或者（若真的必要）為 ⑨ 補一個 gate 並在此註明。
+
+def _dynamic_dispatch_sites(entry: tuple[str, str]) -> dict[str, list[str]]:
+    """該鏈上所有**會讓靜態追蹤斷掉**的呼叫形態，依 `模組::函式` 歸戶。"""
+    seen, _ = _reach(entry)
+    out: dict[str, list[str]] = {}
+    for mod, fname in sorted(seen):
+        node = _defs(mod).get(fname)
+        for n in (ast.walk(node) if node else ()):
+            if not isinstance(n, ast.Call):
+                continue
+            f, why = n.func, None
+            if isinstance(f, ast.Name) and f.id in _DYNAMIC_CALL_NAMES:
+                why = f"{f.id}()"
+            elif isinstance(f, ast.Attribute) and f.attr == "import_module":
+                why = "importlib.import_module()"
+            elif isinstance(f, ast.Subscript):
+                why = "字典／序列派發 D[k]()"
+            elif isinstance(f, ast.Call):
+                why = "高階回傳值直接呼叫 f()()"
+            if why:
+                out.setdefault(f"{mod}::{fname}", []).append(f"{why}@{n.lineno}")
+    return out
+
+
+def test_the_new_chain_has_no_new_blind_spot():
+    """⭐ **本檔的錨** —— ⑨ 的鏈上不得出現**新的**動態派發點。
+
+    其餘幾條前提都是「交集為空」型的**否定句**，而否定句最容易假綠：
+    掃描器看不見的東西，在它眼裡就是不存在。這一條把「**看不見**」本身變成紅燈。
+
+    ⛔ **轉紅時的正解不是把新的那一筆加進 :data:`KNOWN_DYNAMIC_DISPATCH`。**
+       那等於把尺改短。正解依序是：
+       (1) 把新引入的動態派發改回靜態可追的形態（絕大多數情況都做得到）；
+       (2) 真的必要時 —— **開檔判讀它到底會不會派發到渲染器**，
+           把判讀結果寫進那張表的註解，**並且**重新評估 ⑨ 要不要補 gate，
+           因為本檔其餘幾條「沒有碰撞」的結論**已經不再涵蓋整條鏈**。
+    """
+    got = _dynamic_dispatch_sites(CHAINS[NEW9])
+    new_sites = sorted(set(got) - KNOWN_DYNAMIC_DISPATCH)
+    assert not new_sites, (
+        "⑨ 的渲染鏈出現**新的**動態派發點，靜態掃描到此為止：\n  "
+        + "\n  ".join(f"{k} -> {got[k]}" for k in new_sites)
+        + "\n→ 本檔其餘『沒有碰撞』的結論**自此不再涵蓋整條鏈**，不可再當成證據。"
+          "\n⛔ 不准把它加進白名單了事，先讀 KNOWN_DYNAMIC_DISPATCH 上方那段。")
+    stale = sorted(KNOWN_DYNAMIC_DISPATCH - set(got))
+    assert not stale, (
+        f"白名單裡這幾筆已經不在 ⑨ 的鏈上了：{stale} —— 請從 "
+        "`KNOWN_DYNAMIC_DISPATCH` 移除，否則它會替未來新增的同名項目**預先開好門**。")
+    # 輸入非空斷言：白名單若整個掃不到，代表掃描器壞了而不是「很乾淨」。
+    assert got, ("一個動態派發點都沒掃到 —— 連已知的兩筆 `getattr` 都不見了，"
+                 "掃描器八成壞了，這是假綠不是通過。")
+
+
+def test_the_new_chain_reports_no_unresolved_call():
+    """⑨ 的鏈上，掃描器**偵測得到**的追蹤失敗必須是 0。
+
+    ⚠️ **這一條比較弱，不要單獨依賴它** —— 它只涵蓋「我看見了一個 import 目標
+    但找不到它的 def」這一種。「我根本沒看見那個呼叫」由
+    :func:`test_the_new_chain_has_no_new_blind_spot` 負責。**兩條一起才是錨。**
     """
     _, unresolved = _reach(CHAINS[NEW9])
     assert unresolved == [], (
-        f"⑨ 的渲染鏈出現 {len(unresolved)} 個掃描器追不到的呼叫：{unresolved[:5]}\n"
-        "→ 本檔其餘『沒有碰撞』的結論**自此不再涵蓋整條鏈**，不可再當成證據。")
+        f"⑨ 的渲染鏈出現 {len(unresolved)} 個掃描器追不到的呼叫：{unresolved[:5]}")
 
 
 def test_the_new_chain_declares_no_explicit_widget_key():
