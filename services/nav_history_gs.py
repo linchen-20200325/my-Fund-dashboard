@@ -484,19 +484,51 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
             # 之後的 `_get_worksheet()` / `get_all_values()` / `append_rows()`
             # 一行不動。分類與退避節奏完全沿用 `with_gspread_retry`,不另訂判準。
             #
-            # ⚠️ **實測到的分類現況(2026-09-07,不是照抄上游 docstring)**:
-            #    · **會**重試:5xx、連線層逾時 —— 以及 **400 / 404 / 407**。
-            #    · **不**重試:429(配額)、403(封鎖)。
-            #    `infra/gspread_retry.py::with_gspread_retry` 的 docstring 寫著
-            #    「429 / 403 / **404** / 407 第一次失敗就直接拋」—— **404 / 407 那半句
-            #    與實測不符**(兩者被 `kind_for_gspread_error` 改判為 `"unreachable"`,
-            #    而 `"unreachable"` 就在 `GSPREAD_RETRYABLE_KINDS` 裡);400 則是
-            #    `infra/source_backoff.py::kind_for_status` 把 4xx 一律歸 `"server_error"`。
-            #    **這是既有行為,不是本次引入的** —— 已合併的 `load_points(retries=True)`
-            #    (Gate 0 讀取)走的是同一個函式,今天在 production 就是這樣。
-            #    根因在 `infra/`,**不在本批檔案邊界內**,已具名回報為提案、未動手;
-            #    現況由 `tests/test_nav_append_retry.py::test_known_gap_*` 釘住,
-            #    有人修好分類時那條會轉紅。
+            # ⚠️ ~~**實測到的分類現況(2026-09-07,不是照抄上游 docstring)**:~~
+            #    ~~· **會**重試:5xx、連線層逾時 —— 以及 **400 / 404 / 407**。~~
+            #    ~~· **不**重試:429(配額)、403(封鎖)。~~
+            #    ~~`infra/gspread_retry.py::with_gspread_retry` 的 docstring 寫著~~
+            #    ~~「429 / 403 / **404** / 407 第一次失敗就直接拋」—— **404 / 407 那半句~~
+            #    ~~與實測不符**(兩者被 `kind_for_gspread_error` 改判為 `"unreachable"`,~~
+            #    ~~而 `"unreachable"` 就在 `GSPREAD_RETRYABLE_KINDS` 裡);400 則是~~
+            #    ~~`infra/source_backoff.py::kind_for_status` 把 4xx 一律歸 `"server_error"`。~~
+            #    ~~**這是既有行為,不是本次引入的** —— 已合併的 `load_points(retries=True)`~~
+            #    ~~(Gate 0 讀取)走的是同一個函式,今天在 production 就是這樣。~~
+            #    ~~根因在 `infra/`,**不在本批檔案邊界內**,已具名回報為提案、未動手;~~
+            #    ~~現況由 `tests/test_nav_append_retry.py::test_known_gap_*` 釘住,~~
+            #    ~~有人修好分類時那條會轉紅。~~
+            #
+            # → **2026-09-07 就地更正(有意識的更正,不是漏刪)** ——
+            #    決策者:**AI 總管(依獨立稽核實測)**。
+            #    **上面整段在寫下當天為真,被推翻的是它的前提**:本 PR(#807)已把
+            #    **重試軸與冷卻軸分開**,判準改為
+            #    `infra/gspread_retry.py::is_transient_gspread_error`,
+            #    **400 / 404 / 407 / 409 / 410 自本 PR 起第一次失敗就直接拋**。
+            #
+            # ⚠️ **現行分類(以本 PR 合併後為準)**:
+            #    · **會**重試:5xx、連線層逾時(無狀態碼)—— **這半邊一次都沒動**,
+            #      2026-08-31 / 09-02 兩班事故命中的正是這一種,重試次數維持 4 次。
+            #    · **不**重試:429(配額)、403(封鎖),**以及 400 / 404 / 407 / 409 / 410**
+            #      —— 更精確地說:**任何帶 HTTP 狀態碼而非 5xx 者**(獨立稽核以
+            #      100–599 窮舉實測:398 個狀態碼由 4 次收窄為 1 次,**0 個變多**)。
+            #    判準 `is_transient_gspread_error`:有狀態碼 → 只有 5xx 算暫時性;
+            #    無狀態碼 → 連線層算,但只剩字串的配額錯誤不算。
+            #    `GSPREAD_RETRYABLE_KINDS` 已降級為**只能收窄、不能放寬**的旋鈕,
+            #    **不再是判準**(它的名字因此已成錯名,本批刻意不改名,見本 PR 描述的登記)。
+            #
+            # ⛔ **舊句「有人修好分類時那條會轉紅」方向是反的 —— 這是被劃掉的四句裡
+            #    最危險的一句**,因為它會主動把後人指向一條**意思相反**的測試:
+            #    `tests/test_nav_append_retry.py::test_known_gap_*` 已在本 PR 翻面 ——
+            #    更名為 `test_known_gap_non_transient_statuses_are_no_longer_retried`、
+            #    斷言由 `calls == 4` 改為 **`calls == 1`**。它現在釘的是**已修好的行為**,
+            #    **有人把它弄壞的時候才會紅**。
+            #
+            # 📌 **法源與教訓**:依 `CLAUDE.md §-1.5.1c 判定 3`,
+            #    **本次改動自己造成的孤兒 → 同一次任務內收尾**,不是 scope 擴大;
+            #    並依 `CLAUDE.md §2.1` 已記載兩次的教訓 ——
+            #    「**已被查證為假、卻沒被撤下的宣稱,比沒查證的更危險,因為它看起來
+            #    已經有出處**」、「**推翻一條記載的那一輪,必須在同一輪回頭改**」。
+            #    ⚠️ 本次**只改註解、一行可執行程式碼都沒動**(證明見本 PR 描述)。
             #
             # ⛔ **`append_rows` 刻意不包**:重試一個「可能已經送達」的 append
             #    會破壞 `(code, date)` 冪等(§5),需先驗證重複 append 的安全性,
@@ -623,10 +655,21 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
     對照 8/31(冷卻機制當時還不存在),2 分鐘後同一張表的其他讀取就成功了,證明那次是
     短暫性的。
 
-    `retries=True` 時,`infra.gspread_retry.kind_for_gspread_error` 判為「多半是暫時性」
-    (5xx / 逾時,`GSPREAD_RETRYABLE_KINDS`)的失敗,會在**同一次呼叫內**依
+    `retries=True` 時,~~`infra.gspread_retry.kind_for_gspread_error` 判為「多半是暫時性」
+    (5xx / 逾時,`GSPREAD_RETRYABLE_KINDS`)~~ 的失敗,會在**同一次呼叫內**依
     `infra.gspread_retry.DEFAULT_QUOTA_BACKOFFS` 重試;配額(429)/封鎖(403)/設定錯誤
     (404/407)**不重試**,理由見 `infra.gspread_retry.with_gspread_retry` docstring。
+
+    → **2026-09-07 就地更正(有意識的更正,不是漏刪;決策者:AI 總管,依獨立稽核實測)**:
+    **只有上面被劃掉的那半句(機制歸屬)過期了。** 現在下這個判斷的是
+    **`infra.gspread_retry.is_transient_gspread_error`** —— 本 PR(#807)把重試軸與
+    冷卻軸分開後,`kind_for_gspread_error` / `GSPREAD_RETRYABLE_KINDS` 只剩
+    「**收窄旋鈕**」的角色,**不再是判準**。判為暫時性的仍是 5xx 與連線層逾時,
+    **重試節奏與次數一字未變**。
+    ⚠️ **緊接其後那句(「配額 429 / 封鎖 403 / 設定錯誤 404 / 407 不重試」)刻意不劃線 ——
+    這是兩處性質不同的地方**:它在寫下當時**與實測不符**(404 / 407 當時其實會被重試
+    4 次),是本 PR 把行為修對之後才**由假變真**。
+    **一句由假變真的話要留著,不是劃掉。**
 
     **冷卻的登記時機不變**:仍在下面 `except Exception as e:` 那一層 ——
     即**全部重試用完、例外真正往外傳播之後**才登記,不會被中途的暫時性失敗提前鎖住。
@@ -648,10 +691,26 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
     ——這句話指錯了函式,已就地更正（有意識的更正，不是漏刪）**：`nav_history_hook.py`
     呼叫的是 `append_points()`（寫入路徑，本檔 :371 起）與 `status()`（純讀 secrets，
     完全不碰 `_get_sheet` / gspread I/O），**不是** `load_points()`；本次修復範圍
-    僅限 Gate 0 的**讀取**路徑，`append_points()` 內部同樣呼叫 `_get_sheet()`
-    且同樣零重試（:399），但那是**寫入路徑**，不在本次任務範圍內
+    僅限 Gate 0 的**讀取**路徑，~~`append_points()` 內部同樣呼叫 `_get_sheet()`
+    且同樣零重試（:399）~~，但那是**寫入路徑**，不在本次任務範圍內
     （任務原文：「讓那次 Gate 0 預讀有重試機會，就這一件事」）——
-    寫入路徑的 `_get_sheet()` 零重試現況維持不變，留給後續任務視情況處理。
+    ~~寫入路徑的 `_get_sheet()` 零重試現況維持不變，留給後續任務視情況處理。~~
+
+    ⚠️ **2026-09-07 就地更正（有意識的更正，不是漏刪；決策者：AI 總管，依獨立稽核實測）**：
+    上段被劃掉的兩句 —— 「`append_points()` …… 同樣零重試」與「寫入路徑的
+    `_get_sheet()` 零重試現況維持不變」——**今日皆為假**。`append_points()` 已把
+    `_get_sheet()` 包進 `with_gspread_retry`（本檔 `sh = with_gspread_retry(_get_sheet,
+    oauth_client)` 那一行），實測**會重試 4 次**，不是零重試。
+    ⛔ **這一句不是 PR #807 造成的，是更早那批的殘骸** —— 加上重試的是
+    **`c591ff4`**（「P0：NAV 寫入路徑補上與讀取端對稱的 gspread 重試（第二根因）」）；
+    #807（`2c4a211`）**一行都沒有動過本檔**（`git show --stat 2c4a211` 只有
+    `infra/` 兩檔與 `tests/` 兩檔）。本次順手更正，**不得記在 #807 頭上**。
+    **舊句在寫下當天為真**（`db859967`，2026-09-03，那時寫入端確實還沒有重試），
+    被推翻的是它的前提。
+    📌 **另一個載體刻意不動**：`tests/test_nav_append_retry.py` 檔頭同樣引了這句，
+    但它是**明確標注出處的歷史引文**（「`abba317`（2026-09-03）…… 並在 `load_points`
+    docstring 內明文記下：……」＋「**本檔即為該後續任務的守衛**」），
+    讀起來是「當年說了什麼」而不是「現在是什麼」，**framing 正確，不需更正**。
 
     ── 2026-09-01 跨呼叫來源冷卻(客戶指示:批次 2)────────────────────────────
     **為什麼冷卻要放在這一支,而不是放在 `coverage_status` 或 UI 的快取上**:
