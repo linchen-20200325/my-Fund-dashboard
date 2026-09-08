@@ -308,6 +308,20 @@ def test_the_page_never_hardcodes_the_ssot_verdict_words():
 
     抄了之後 SSOT 一改措辭，**畫面與閘門後那張表就會各說各話**，而沒有任何東西會報錯
     （`CLAUDE.md §2.1`；本頁 `_shadow_formula` / `_eating_note` 都是同一個處置）。
+
+    ⭐ **本條在 CI 上抓到過一次，抓的是我自己 —— 留痕，因為結論違反直覺。**
+    2026-09-08：我在 `_peer_verdicts` 的 docstring 裡**引用上游那段程式碼時，
+    連它的中文行末註解一起抄了進去**（`# 🏆 N 檔優等生` 之類）。
+    那是**說明**、不是分桶邏輯，`8126 passed, 1 failed` 的那一顆就是它。
+
+    ⛔ **修的是文字，不是這條守衛。** 兩個理由：
+    1. **docstring 裡的抄本一樣會漂移** —— SSOT 改了措辭，這裡的說明就開始說謊，
+       而讀者無從得知（`_shadow_formula` 的 docstring 早就把這個形狀寫下來了）。
+    2. **「在合併壓力下放寬守衛」是本 repo 反覆吃虧的形狀**（`CLAUDE.md §-2`）。
+       一條守衛第一次擋到自己人就被改精確，下一次它就不會擋到別人。
+
+    ⇒ 現行寫法：引用上游程式碼時**只留 `startswith("🏆")` 這種 emoji 判準**，
+    桶名一律用 emoji 指稱。**要講「哪一桶」，指 emoji，不要抄它的中文。**
     """
     _txt = SRC.read_text(encoding="utf-8")
     _bad = [_w for _w in ("優等生", "汰弱", "普通生") if _w in _txt]

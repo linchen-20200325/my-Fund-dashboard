@@ -742,9 +742,10 @@ def _peer_verdicts(funds: list[dict]) -> "tuple[list[tuple[str, int]], list[tupl
     `ui/helpers/fund/checkup.py::render_fund_checkup` **已經在畫一句幾乎一樣的話**::
 
         _verdict = df["體檢判定"]
-        n_good = int(_verdict.str.startswith("🏆").sum())   # 🏆 N 檔優等生
-        n_lag  = int(_verdict.str.startswith("⚠️").sum())   # ⚠️ N 檔汰弱候選
-        n_na   = int(_verdict.str.startswith("⬜").sum())   # ⬜ N 檔同類資料不足
+        n_good = int(_verdict.str.startswith("🏆").sum())
+        n_lag  = int(_verdict.str.startswith("⚠️").sum())
+        n_na   = int(_verdict.str.startswith("⬜").sum())
+        # …接著印出「🏆 n_good 檔 ・ ⚠️ n_lag 檔 ・ ⬜ n_na 檔（共 len(df) 檔）」
 
     **和上面 :func:`_income_tally` 那個配息數字一模一樣的處境** ——
     它**存在、而且是對的**，只是**住在閘門後面**（⑥ 對 `render_fund_checkup`
@@ -755,7 +756,7 @@ def _peer_verdicts(funds: list[dict]) -> "tuple[list[tuple[str, int]], list[tupl
     **本函式真正新增的只有三件事，逐條列出，不要多宣稱**：
 
     1. **它在閘門前**（那正是這一批要解決的問題）。
-    2. **它不丟掉 `🟡 普通生`。** 上游那一句只印 🏆／⚠️／⬜ 三個桶，
+    2. **它不丟掉 `🟡` 那一桶。** 上游那一句只印 🏆／⚠️／⬜ 三個桶，
        **`🟡` 沒有自己的數字**，使用者得拿「（共 N 檔）」自己減。本函式按
        `_grade` **實際回傳的每一個桶**計數，一個都不省。
     3. **它不寫死 emoji 前綴。** 上游用 `.str.startswith("🏆")`；本函式拿
