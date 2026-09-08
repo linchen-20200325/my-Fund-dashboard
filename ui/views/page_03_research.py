@@ -24,6 +24,14 @@
 ⚠️ 第 3、4 塊的名字曾被登記為「兩份已核准線框衝突」，**2026-09-05 總管裁決以本線框字面為準**；
 沿革與那條具名守衛豁免的理由寫在 :data:`BLOCK_DEEP` 上方那段 ⛔ 註解。
 
+⭐ **2026-09-08：第 3 塊多了一個「投資試算」，而它不在上面那份線框列舉裡** ——
+它是**客戶 2026-09-08 逐字拍板搬進來的**：「投資試算歸屬：定案搬移至 ⑧（標的探索）的
+單一基金深度區塊，⑥ 僅保留現有持倉之每月配息推估總額。」
+⛔ **不要**把它併進 :data:`DEEP_DIVE_CARDS` / :data:`DEEP_DIVE_TABLES` ——
+那兩個常數是**線框逐字**（守衛就釘在它們身上）；混進去之後
+「線框寫了什麼」與「客戶後來又加了什麼」就再也分不出來。它自己是
+:data:`DEEP_DIVE_INVEST`，理由與版面位置寫在該常數上方那一段。
+
 線框同時釘死了本頁的**職責邊界**，這一條比版面更要緊：
 
 > 回答一個問題：**有沒有更好的標的？** 這裡的基金**不預設我有持有**。
@@ -285,6 +293,38 @@ from services.fund_search import (
     KEY_SOURCE,
     search_funds,
 )
+# ⚠️ **投資試算的算式層（2026-09-08 客戶拍板搬進本頁）**。
+#    客戶原話：「投資試算歸屬：定案搬移至 ⑧（標的探索）的單一基金深度區塊，
+#    ⑥ 僅保留現有持倉之每月配息推估總額。」
+#    ⛔ **本頁一行算式都不寫** —— 幣別正規化／年化配息率三層 fallback／每月配息
+#    （真實記錄優先、年化估算 fallback）全部是既有 SSOT，由 `services.fund_invest_calc`
+#    串起來。本頁只負責「把事實翻成人話」。四條 SSOT 的對照表見該模組的 docstring。
+#    ⛔ **不得**改成 import `ui.helpers.fund_grp_health.investment`（② 的那支元件）：
+#    那是舊 ② 的渲染碼，本金口徑也不同（見 :data:`BATCH_PRINCIPAL_NOTE`），
+#    而本頁明令不委派舊分頁模組。
+from services.fund_invest_calc import (
+    ADR_FROM_RECORDS,
+    ADR_LOCAL_RATE,
+    ADR_OFFICIAL,
+    BASIS_RECORDS,
+    CCY_CONFLICT,
+    comparable_ccy,
+    DEFAULT_AMOUNT_TWD,
+    MAX_AMOUNT_TWD,
+    MIN_AMOUNT_TWD,
+    NO_AMOUNT,
+    NO_CURRENCY,
+    NO_FX,
+    NO_INCOME_BASIS,
+    NO_NAV,
+    TWD,
+    estimate_monthly_income,
+    fx_rate_to_twd,
+)
+# 「最近一筆實際配息」的判定 SSOT（純函式、零 I/O）。**本頁只拿它反問，不自己寫一份**：
+# `_income_basis_gap()` 用它來分辨「年化攤平那條路是卡在金額還是卡在日期」——
+# 用同一支函式問，答案就不可能與算式層分歧（分歧正是本頁被抓到的那一類 bug）。
+from services.health.dividend_calc import latest_dividend_per_unit
 # 幣別一致性判定（純函式、零 I/O）。**不自己寫一份** —— §1 的失效模式就寫在它的 docstring 裡。
 from shared.data_quality import reconcile_row_currencies
 # 寬鬆數值轉換（`"1,234"` / `"12.3%"` / None → float | None）。批次大表的數值欄要它。
@@ -372,6 +412,87 @@ DEEP_DIVE_CARDS: tuple[str, ...] = ("NAV 走勢", "績效分期", "風險指標"
 DEEP_DIVE_TABLES: tuple[str, ...] = ("前十大持股", "配息紀錄")
 #: **來源標註**（不是第六個內容區塊，理由見模組 docstring 的「內部歧義」段）。
 DEEP_DIVE_PROVENANCE: str = "資料來源與抓取時間"
+
+# ══════════════════════════════════════════════════════════════════════════
+# 投資試算（客戶 2026-09-08 拍板搬進深度區）
+#
+# ⭐ **它為什麼在這裡，而不是在線框那五塊裡**：線框 Tab 03 寫的是深度區的**五塊**，
+#    投資試算**不在那份列舉裡** —— 它是客戶 2026-09-08 逐字拍板搬進來的第六塊
+#    （「定案搬移至 ⑧（標的探索）的單一基金深度區塊，⑥ 僅保留現有持倉之每月配息推估總額」）。
+#    ⛔ **不要**把它讀成「線框漏列的第六塊」而拿去改 :data:`DEEP_DIVE_CARDS` /
+#    :data:`DEEP_DIVE_TABLES` —— 那兩個常數是**線框逐字**，由
+#    `tests/test_wf03_research_skeleton.py::test_deep_dive_keeps_the_five_blocks_and_the_source_annotation`
+#    釘住；混進去會讓「線框寫了什麼」與「客戶後來又加了什麼」再也分不出來。
+#
+# ⚠️ **版面位置**：接在「配息紀錄」之後、「來源標註」之前。
+#    ——「這一檔配了多少」看完，緊接著問「那我投 X 會領多少」，是同一條思路；
+#    而來源標註本來就是整塊的頁尾。
+# ══════════════════════════════════════════════════════════════════════════
+
+#: 投資試算那一段的段落名。**它是一個獨立的單位**（有自己的標題、自己的灰態）。
+DEEP_DIVE_INVEST: str = "投資試算"
+#: 金額輸入框的 label。**具名**：灰態的「去哪補」要指到它，而指路與欄位必須是同一個字。
+_LABEL_INVEST_AMOUNT: str = "打算投入多少（新台幣）"
+#: 送出鈕的字。線框鐵則 02 的預設是「套用」，這一塊的動詞是「試算」——
+#: `applied_form()` 的 docstring 明寫「其他分頁有自己的動詞……那些是有意義的差異」。
+INVEST_SUBMIT_LABEL: str = "試算"
+#: 這一塊自己的 form key（`v03_` 命名空間，見 `tests/test_wf03_research_wiring.py`）。
+_INVEST_FORM_KEY: str = "v03_research_invest_form"
+#: 金額 widget 的具名 key。**刻意給** —— 沒有 key 的 widget 靠 (型別, label) 產生 ID，
+#: 而舊 ③ `ui/tab2_single_fund.py` 也有一個投資試算的金額輸入框；給 key 就結構上不可能撞。
+_INVEST_AMOUNT_KEY: str = "v03_research_invest_amount"
+#: **已送出**的試算金額。⚠️ 與 widget 的當下值是兩件事（同 :data:`_SK_APPLIED` 的道理）——
+#: 下游只准讀這個，讀 widget 回傳值就等於沒有 form（鐵則 02）。
+#: 不存在／不是正數 → :func:`_applied_amount` 退回 :data:`DEFAULT_AMOUNT_TWD`。
+_SK_INVEST_AMOUNT: str = "v03_research_invest_amount_twd"
+
+#: 算不出來時要對使用者說的話。**key 是 `services.fund_invest_calc` 的原因代碼。**
+#:
+#: ⚠️ **一個原因一句話，刻意不共用** —— 同 :data:`_BATCH_EMPTY_MISSING` /
+#: :data:`_BATCH_UNPARSED_MISSING` 那一對的理由：這六種處境**下一步完全不同**
+#: （改金額／換一檔／等一下再按／看配息表），共用一句就等於對使用者說謊。
+#: ⚠️ 兩句帶 `{}` 的要由 :func:`_invest_blocked_note` 填 —— 它們**必須**說出是哪一種幣別，
+#: 「換算不出來」與「**日圓**換算不出來」對使用者的意義不一樣。
+_INVEST_BLOCKED_NOTES: dict[str, str] = {
+    # ⚠️ **這一句今天在這個畫面上印不出來，據實寫明，不要讀成「已經在守某個東西」**
+    #    （`CLAUDE.md §-2` 規則 6 的實證就是這種形狀：宣稱修好的偵測，
+    #     production 路徑恆不觸發）。
+    #    **為什麼恆不觸發**：:func:`_applied_amount` 拿不到正數就退
+    #    :data:`DEFAULT_AMOUNT_TWD`，而金額 widget 自己有 `min_value`
+    #    —— 兩層加起來，送進算式的金額**結構上不可能 ≤ 0**。
+    #    **本組實測**：把 `_SK_INVEST_AMOUNT` 換成 13 種髒值
+    #    （不存在／None／0／-1／''／'abc'／NaN／[]／{}／True／False／空白／1e-9），
+    #    `_applied_amount()` **每一種都回正的 float**。
+    #    ⛔ **那為什麼還留著它**：`NO_AMOUNT` 是**算式層的契約**，
+    #    `services.fund_invest_calc` 對任何呼叫端都會回它；這一句是它在本頁的
+    #    對應文案。少了它，哪天有人把預設值拿掉（例如改成「不填就留白」），
+    #    畫面會掉進 :func:`_invest_blocked_note` 的「拿不到原因」那條退路。
+    #    這個「今天不可達」的狀態由
+    #    `tests/test_wf03_research_invest_calc.py::`
+    #    `test_the_no_amount_branch_is_unreachable_from_this_screen_today` 釘住 ——
+    #    **它一旦變成可達，那條測試會轉紅**，提醒下一個人回來重讀這一段。
+    NO_AMOUNT: (
+        "金額還是空的，或填的不是一個大於 0 的數字 —— "
+        f"填一個你打算投入的台幣金額，再按一次「{INVEST_SUBMIT_LABEL}」"),
+    NO_CURRENCY: (
+        "查不到這一檔是用哪一種幣別計價的。沒有它就沒辦法把台幣換成基金的原幣，"
+        "所以這裡刻意留白 —— 猜一個幣別會讓下面每一個金額差好幾倍"),
+    NO_NAV: (
+        "還沒有這一檔的最新淨值（一單位現在值多少錢）—— "
+        "沒有它算不出這筆錢買得到幾單位"),
+    NO_FX: (
+        "這是 {ccy} 計價的基金，而 {ccy} 換台幣的匯率這次查不到。"
+        "沒有匯率就換算不出原幣金額，這裡是**刻意留白**的，不是壞掉 —— "
+        f"過一會兒再按一次「{INVEST_SUBMIT_LABEL}」"),
+    CCY_CONFLICT: (
+        "這一檔的配息紀錄自己標的是 {div_ccy}，但這一檔基金是 {ccy} 計價 —— "
+        "兩邊對不上，本頁**不挑一邊當真**，所以每個月領多少這一段不算"
+        "（照著換算會差好幾倍）。買得到幾單位不受影響，就在上面那一行"),
+    NO_INCOME_BASIS: (
+        "這一檔沒有配息紀錄，也沒有年化配息率，所以推不出每個月領多少。"
+        "可能是它本來就不配息（累積型），也可能是配息資料這次沒拿到 —— "
+        f"往上看「{DEEP_DIVE_TABLES[1]}」那張表就分得出是哪一種"),
+}
 
 # ── 兩塊還沒接上的灰態理由：**一塊一句，刻意不共用** ────────────────────────
 # ⚠️ ~~本批共用的灰態理由。**只有一句話**，因為它會出現在八個地方，~~
@@ -996,15 +1117,23 @@ TRACE_FAIL: str = "失敗"
 #:
 #: ⛔ **三態開了兩個新邊界，據實揭露；本輪刻意不改行為** ⛔
 #: ---------------------------------------------------------------------------
-#: 完整分類矩陣（**2026-09-06 實跑**，不是推論）：
+#: 完整分類矩陣（~~**2026-09-06 實跑**~~ → **2026-09-08 就地更正，見下**，不是推論）：
+#: ⚠️ **舊表述為什麼要換掉（有意識的更正，不是漏刪）**：那個日期在 2026-09-08 之後
+#:    **同時指向兩次重跑**（2026-09-06 那次、以及本輪修正兩格時那次），
+#:    而「某一天量完就算數」本來就是會過期的宣稱（§8.2.A.0 規則 4 的同一個精神）。
+#:    **現在的憑據不是日期，是守衛**：`tests/test_wf03_research_invest_calc.py::`
+#:    `test_every_cell_of_the_trace_matrix_matches_a_real_run` **每一次 CI 都逐格拿真跑對過**
+#:    （結果欄 ＋ 計入來源數兩欄都驗）。**舊表述的用意仍然成立**（要講明這是量出來的、
+#:    不是推論）；**被權衡掉的只有它把憑據綁在一個會過期的日期上。**
 #:
 #: ===================================== ============ ==============
 #: 上游那一則的形狀                        結果欄        計入來源數
 #: ===================================== ============ ==============
-#: 缺 ``success`` 鍵                       上游沒說       0
+#: 缺 ``success`` 鍵                       沒有回報       0
 #: ``success: None``（說了、值是空）        失敗          1
 #: ``success: False``（真的失敗）           失敗          1
-#: 有 ``error`` 但**無** ``success`` 鍵      上游沒說       0   ← **(a)**
+#: 有 ``error`` 但**無** ``success`` 鍵      沒有回報       0   ← **(a)**
+#: ``success: True``（真的成功）           成功          0   ← **(c)**
 #: ===================================== ============ ==============
 #:
 #: **(a) 我修掉「多報」的同時，開了一條「少報」的路。**
@@ -1017,15 +1146,28 @@ TRACE_FAIL: str = "失敗"
 #:     ⛔ **不改行為的理由**：要改就得訂一條「有 ``error`` 就算失敗」的規則，
 #:     而上游**沒有保證** ``error`` 只在失敗時出現 —— 那會是另一個沒查證就發明的規則。
 #:
+#: **(c) ``success: True``（正常成功）這一列是 2026-09-08 補的 —— 原本沒有。**
+#:     ⛔ **那張表自稱「完整分類矩陣」，卻少了最常見的那一種形狀。**
+#:     「完整」是**全稱句**，而它**一條真跑就被推翻** ——
+#:     憲法 `§-1.5.1c 判定 2` 明訂「**能被一條指令推翻的全稱句，就不該那樣寫**」。
+#:     ⚠️ **這與「自稱實跑卻印著舊值」是同一個病**（同一段註解裡的兩處，同日一起修）。
+#:     **計入來源數 0** 是對的：`_failed_source_count` 只數 `TRACE_FAIL`，成功不計入。
+#:
 #: **(b) ``success: None`` 這一格與上面那句原則不自洽，我承認。**
 #:     引入 :data:`_MISSING` 的理由是「**說了但值是空** ≠ **沒說**」，
 #:     然後這裡把「說了但值是空」畫成**確定的失敗並計入** ——
-#:     按「不知道就說不知道」，它其實也該是「上游沒說」。
+#:     按「不知道就說不知道」，它其實也該是 :data:`TRACE_UNKNOWN`（~~「上游沒說」~~ → 「沒有回報」）。
 #:     ⛔ **本輪不改**：目前**沒有任何 production 形狀**會產生它
 #:     （見上方 §「哪些 source 會以 falsy success 出現」的實測列舉），
 #:     為一個不存在的形狀改行為是拿猜測換猜測。**但這個不自洽登記在這裡，不是沒看到。**
 #: ---------------------------------------------------------------------------
-TRACE_UNKNOWN: str = "上游沒說"
+#: ⚠️ **2026-09-08 就地更正（有意識的更正，不是漏刪）**：~~`"上游沒說"`~~ → `"沒有回報"`。
+#: 「上游」是**我們的**流程詞，不是使用者的處境（客戶原話：看不懂）——
+#: 而這個字串**印在畫面上的「結果」欄裡**，與 `TRACE_OK`／`TRACE_FAIL` 並列。
+#: **舊表述的用意仍然成立**（要區分「沒說」與「說了失敗」，那個三態設計一字未改）；
+#: **被權衡掉的只有它的用字**。本輪由第五輪獨立稽核點名（M3）——
+#: 它是本頁**第五個**同類用字，而前四個當初被具名登記、**它沒有**。
+TRACE_UNKNOWN: str = "沒有回報"
 
 #: `source_trace` 裡「**沒有淨值序列**」那一則合成標記的名字。
 #: :func:`_nav_reason` 靠它挑出缺值原因，:data:`SYNTHETIC_TRACE_SOURCES` 靠它排除計數。
@@ -1105,7 +1247,7 @@ SYNTHETIC_TRACE_SOURCES: frozenset = frozenset({
     "nav_history_merge",
 })
 #: 上游**沒有**給缺值原因時的誠實佔位。⛔ 不得換成一句猜出來的理由。
-NO_REASON: str = "上游沒有附缺值原因"
+NO_REASON: str = "資料來源沒有說為什麼缺這一項"
 
 #: 「這個鍵根本不存在」的哨兵。⛔ **不得用 `None` 代替** —— 上游是有可能寫
 #: `{"success": None}` 的，那是「說了、但值是空」，與「沒說」不是同一件事。
@@ -1293,7 +1435,7 @@ def _holdings_reason(result: dict) -> str:
     if isinstance(_diag, list) and _diag:
         return " ".join(str(_d).strip() for _d in _diag if str(_d).strip())[:300]
     _src = str(_h.get("source") or "").strip()
-    return f"上游回報來源：{_src}" if _src else NO_REASON
+    return f"資料來源回報：{_src}" if _src else NO_REASON
 
 
 def _dividend_rows(result: dict) -> list[dict]:
@@ -1338,7 +1480,8 @@ def _declared_currency(rows: list[dict]) -> str:
     直接委派 `shared.data_quality.reconcile_row_currencies`（**不自己寫一份**）：
     本組實測 `['TWD','USD'] → ''`、`['USD','USD'] → 'USD'`、`[] → ''`、`['USD',''] → ''`。
     """
-    return reconcile_row_currencies([_r.get(DIVIDEND_COLS[4], "") for _r in rows])
+    return reconcile_row_currencies(
+        [comparable_ccy(_r.get(DIVIDEND_COLS[4], "")) for _r in rows])
 
 
 def _trace_rows(result: dict) -> list[dict]:
@@ -1351,7 +1494,7 @@ def _trace_rows(result: dict) -> list[dict]:
         if not isinstance(_t, dict):
             continue
         # ⚠️ **三態，不是二態**：`success` 缺鍵 ≠ 失敗（見 :data:`TRACE_UNKNOWN`）。
-        #    `_failed_source_count()` 只數 `TRACE_FAIL`，所以「上游沒說」不會被計入 ——
+        #    `_failed_source_count()` 只數 `TRACE_FAIL`，所以「沒有回報」不會被計入 ——
         #    這與 :data:`SYNTHETIC_TRACE_SOURCES` 那條排除是**兩道各自獨立**的防線：
         #    前者按**名字**排除（就算上游哪天補上 `success: False` 也擋得住），
         #    後者按**有沒有說**排除（就算名字沒被登記也不會被誣賴成失敗）。
@@ -1398,7 +1541,7 @@ def _nav_reason(result: dict) -> str:
     for _r in _trace_rows(result):
         if _r[TRACE_COLS[0]] == TRACE_NAV_SERIES and _r[TRACE_COLS[1]] == TRACE_FAIL:
             return _r[TRACE_COLS[2]] or NO_REASON
-    return "這次沒有帶回淨值序列，上游也沒有說明原因。"
+    return "這次沒有拿到淨值序列，資料來源也沒有說為什麼。"
 
 
 def _fetch_failed_note(result: dict) -> str:
@@ -1416,7 +1559,7 @@ def _fetch_failed_note(result: dict) -> str:
     _where = f"（逐一嘗試的結果列在下方的「{DEEP_DIVE_PROVENANCE}」）"
     if _n:
         return (f"在 {_n} 個來源都沒有取到淨值 —— {_BLAME_FREE}{_where}")
-    return f"這次取數沒有帶回任何淨值，上游也沒有留下逐源紀錄 —— {_BLAME_FREE}"
+    return f"這次一筆淨值都沒有拿到，也沒有留下逐一嘗試的紀錄 —— {_BLAME_FREE}"
 
 
 def _failed_source_count(result: dict) -> int:
@@ -1508,9 +1651,9 @@ def _render_deep_dive() -> None:
     render_cards([
         _nav_card(_nav, _blank or _nav_reason(_result), _where),
         _perf_card(_perf_shown, _perf_missing, _perf_source(_result),
-                   _blank or "上游沒有給任何期別的報酬。", _where),
+                   _blank or "這一檔這次沒有拿到任何一個期別的報酬數字。", _where),
         _risk_card(_risk_shown, _risk_missing,
-                   _blank or "上游沒有給任何風險指標。", _where),
+                   _blank or "資料來源這次沒給風險數字。", _where),
     ])
 
     # ── 持股與配息：大表全寬（線框：「持股與配息為大表全寬」）───────────────
@@ -1520,7 +1663,7 @@ def _render_deep_dive() -> None:
     if wide_table(_hold_rows,
                   empty_title=f"{DEEP_DIVE_TABLES[0]}還沒有可顯示的列",
                   empty_missing=(_holdings_reason(_result) if _result.get("holdings")
-                                 else _blank or "上游這次沒有回傳持股資料。"),
+                                 else _blank or "資料來源這次沒有給持股明細。"),
                   empty_where=_where):
         st.caption(_holdings_caption(_result, len(_hold_rows)))
 
@@ -1529,10 +1672,15 @@ def _render_deep_dive() -> None:
     if wide_table(_div_rows,
                   empty_title=f"{DEEP_DIVE_TABLES[1]}還沒有可顯示的列",
                   empty_missing=(_blank or
-                                 "這一檔在上游沒有配息紀錄 —— "
-                                 "可能是它不配息，也可能是配息頁當下取不到。"),
+                                 "這一檔沒有配息紀錄 —— "
+                                 "可能是它不配息，也可能是配息那一頁當下讀不到。"),
                   empty_where=_where):
         st.caption(_dividend_caption(_div_rows, str(_result.get("currency") or "")))
+
+    # ── 投資試算（客戶 2026-09-08 拍板搬進來的第六塊；理由見 `DEEP_DIVE_INVEST` 上方）──
+    # ⚠️ 位置在「配息紀錄」之後、來源標註之前：看完「這一檔配了多少」，
+    #    緊接著問「那我投 X 會領多少」，是同一條思路。
+    _render_invest_calc(_result, _blank)
 
     # ── 來源標註（讀法 A：標註，不是第六個內容區塊；理由見模組 docstring）──────
     _trace = _trace_rows(_result)
@@ -1540,7 +1688,7 @@ def _render_deep_dive() -> None:
     st.caption(_provenance_caption(_result, _nav))
     wide_table(_trace,
                empty_title=f"{DEEP_DIVE_PROVENANCE}還沒有可顯示的列",
-               empty_missing="這次取數沒有留下逐源紀錄（上游未提供 source_trace）。",
+               empty_missing="這次沒有留下逐一嘗試哪些來源的紀錄。",
                empty_where=_where)
 
 
@@ -1640,7 +1788,7 @@ def _dividend_caption(rows: list[dict], fund_ccy: str) -> str:
     單一元素進去 ＝ 借它做 ISO 正規化（認不得就回 `""`），兩元素進去 ＝ 一致性判定。
     """
     _row = _declared_currency(rows)                       # 逐列一致才非空
-    _fund = reconcile_row_currencies([fund_ccy])          # 可辨識的 ISO 才非空
+    _fund = reconcile_row_currencies([comparable_ccy(fund_ccy)])  # 可辨識的 ISO 才非空
     _agreed = reconcile_row_currencies([_row, _fund])
     if _agreed:
         return f"{len(rows)} 筆 · 全部以 {_agreed} 計價 · 金額為原幣，未做任何換算"
@@ -1648,9 +1796,459 @@ def _dividend_caption(rows: list[dict], fund_ccy: str) -> str:
         # 兩邊都講得出一個 ISO，但講的不是同一個 —— 這是**資料疑義**，要指名道姓。
         return (f"{len(rows)} 筆 · ⚠️ 資料疑義：逐筆配息宣告 {_row}，"
                 f"這檔基金的計價幣別卻是 {_fund} —— 兩邊不一致，本頁**不挑一個**宣告"
-                "（§1 不猜值）· 金額照原幣顯示，不合計、不換算")
+                "（這裡不猜）· 金額照原幣顯示，不合計、不換算")
     return (f"{len(rows)} 筆 · {CCY_UNKNOWN}或逐筆幣別不一致 —— "
             "金額照原幣顯示，**不合計、不換算**（不猜值）")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 深度區第六塊｜投資試算 —— **算式全部在 `services.fund_invest_calc`，這裡只有文案**
+#
+# 這一塊要回答的就一句話：**我投 X 元，每個月大概領多少？**
+#
+# ⛔ **刻意不做成舊 ③ 那種整段**（舊 `ui/tab2_single_fund.py` 的投資試算有多個輸入、
+#    四個 metric、兩張表、還會把結果塞進 session 給 AI 解盤引用）。
+#    客戶問的是一個答案，其餘都是他沒問的 —— **一句結論 ＋ 一個輸入框 ＋ 一個可展開的公式**。
+#
+# ⚠️ **版面順序是「輸入框 → 結論 → 公式」，不是「結論 → 輸入框 → 公式」**，理由：
+#    結論裡的金額是使用者自己填的，控制項擺在它上面，「這個數字我可以改」才看得出來；
+#    而且與同頁批次那一塊（Form 在上、結果在下）**同一個形狀**，兩塊不會一個朝上一個朝下。
+#    ⚠️ 這與派工單的草案順序不同，**是本組的判斷**（派工單自己寫「若你判斷不同，以你的為準」）。
+#
+# ⚠️ **「計算公式收進 expander」是客戶這次核准的，與「所有資訊一律展開，不藏」不衝突**：
+#    藏起來的是**推導過程**，不是任何一個結論或數字 —— 三個結論句、比較對象、
+#    依據說明**全部在 expander 外面**，展開與否不影響使用者拿到答案。
+# ══════════════════════════════════════════════════════════════════════════
+
+def _invest_where() -> str:
+    """投資試算的「去哪補」—— 指到**它自己的金額欄位**。
+
+    ⚠️ **刻意不走** :func:`_pending_where`（它指的是「搜尋條件」）：
+    金額沒填是**這一格自己**的事，去搜尋條件重打一次代碼**解決不了**它 ——
+    照著做只會回到一模一樣的灰。同 :func:`_batch_where` 的處置與理由。
+
+    ⛔ 但這一則**只給「金額沒填」那一種**。缺淨值／缺匯率／缺配息依據是**資料**的事，
+    改金額改不動它們，那幾種指回搜尋條件（見 :func:`_invest_where_for`）。
+    """
+    return (f"{where_to_find('research')} → {DEEP_DIVE_INVEST} → "
+            f"{_LABEL_INVEST_AMOUNT}")
+
+
+def _invest_where_for(reason: str) -> str:
+    """依「算不出來的原因」挑指路。**兩種原因，兩個地方，不共用。**
+
+    * 金額沒填 → 指到金額欄位（**照著做真的有效**）；
+    * 其餘（缺幣別／淨值／匯率／配息依據／幣別對不上）→ 指回搜尋條件，
+      與深度區其餘五格同一則。⚠️ 它的**有效性有限**，理由見 :func:`_pending_where`
+      的長註：換一檔**有時**有資料、**有時**沒有，本頁分不出來，所以只保證
+      「這是一個地方」，不保證「去了有效」。
+    """
+    return _invest_where() if reason == NO_AMOUNT else _pending_where(BLOCK_FORM)
+
+
+def _applied_amount() -> float:
+    """**已送出**的試算金額；沒送出過（或送出的不是正數）→ :data:`DEFAULT_AMOUNT_TWD`。
+
+    ⚠️ 與 :func:`_applied_query` 同一個道理：下游一律讀這個，
+    **不要讀 `st.number_input` 的回傳值** —— 讀了就等於沒有 form（鐵則 02）。
+
+    ⚠️ **為什麼給預設值而不是「沒填就整塊留白」**：留白的話，使用者第一次看到這一塊
+    是灰的，而他**還不知道這裡可以問什麼**。給一個公定的起手金額（100 萬，走
+    `services.health.dividend_calc.DEFAULT_PRINCIPAL_TWD` 這個既有 SSOT），
+    畫面一開始就是一個**真的答案**，他要改再改。
+    ⛔ 這**不是**捏造：那個金額就印在結論句裡（「投入 1,000,000 元 → …」），
+    使用者一眼看得出這個答案是對哪一筆錢算的。
+    """
+    _cur = safe_num(st.session_state.get(_SK_INVEST_AMOUNT))
+    return float(_cur) if (_cur is not None and _cur > 0) else DEFAULT_AMOUNT_TWD
+
+
+def _invest_blocked_note(reason: str, facts: dict) -> str:
+    """把原因代碼翻成一句人話。**每個原因一句，下一步各自不同。**
+
+    ⚠️ 兩句要填幣別（缺匯率／幣別對不上）—— 「換算不出來」與
+    「**日圓**換算不出來」對使用者的意義不一樣，後者他至少知道問題出在哪一種幣。
+    """
+    _txt = _INVEST_BLOCKED_NOTES.get(reason, "")
+    if not _txt:
+        # 原因代碼是本 repo 自己的常數，對不上代表 `services.fund_invest_calc`
+        # 新增了一種而這裡忘了跟上。**據實說「我不知道」，不編一句聽起來合理的。**
+        return "這一格算不出來，而本頁拿不到原因。"
+    return _txt.format(ccy=facts.get("currency") or CCY_UNKNOWN,
+                       div_ccy=facts.get("dividend_currency") or CCY_UNKNOWN)
+
+
+def _invest_note_for(reason: str, facts: dict, blank: str) -> str:
+    """整塊算不出來時**要說哪一句** —— 全敗時跟其餘五格說**同一句**。
+
+    ## ⛔ 這個函式是 2026-09-08 修一個真實 bug 加的
+
+    :func:`_has_anything` 的 docstring 已經把規矩寫死了：
+    **「全敗才用共用文案；只要有任何一格有料，其餘空格一律講自己的原因。」**
+    深度區其餘五格都照做（每一格都寫成 ``_blank or <自己的原因>``），
+    **只有投資試算這一格沒有拿到 `_blank`** —— 於是取數全敗時：
+
+    * 前五格：「在 2 個來源都沒有取到淨值 —— …」
+    * 第六格：「查不到這一檔是用哪一種幣別計價的。…」
+
+    **同一個原因，六格講出兩種故事。** 而第六格那句還把使用者導向
+    「這一檔沒有幣別資料」這個**錯的結論** —— 真相是這次**什麼都沒抓到**。
+
+    ⚠️ 這正是 :func:`_has_anything` 記載那個病的**鏡像**：那次是共用文案**跑進**
+    不屬於它的格子，這次是共用文案**沒跑進**屬於它的格子。**同一條規矩的兩個方向。**
+
+    ⛔ **`NO_AMOUNT` 是唯一的例外，而且理由不是「順手留一個特例」**：
+    其餘五種原因（缺幣別／缺淨值／缺匯率／缺配息依據／幣別對不上）都是
+    **這次取數帶不回東西**造成的，全敗時它們與前五格同因同源；
+    而「金額沒填」是**使用者自己的輸入**，跟這次抓到什麼**完全無關** ——
+    對它說「在 N 個來源都沒有取到淨值」一樣是假話。
+    這與 :func:`_invest_where_for` 的兩路分法**是同一條線**（那裡分的是「去哪補」，
+    這裡分的是「說什麼」），**刻意用同一個判準**，不要讓兩者漂開。
+
+    ⚠️ **只有「整塊灰」才吃 `blank`，半塊灰（`income_blocked`）不吃** ——
+    半塊灰代表單位數**算出來了**（＝拿到了幣別與淨值），那就**不可能**是全敗；
+    真的把 `blank` 套上去，畫面會一邊印著算好的單位數、一邊說「一筆淨值都沒拿到」。
+    """
+    if blank and reason != NO_AMOUNT:
+        return blank
+    return _invest_blocked_note(reason, facts)
+
+
+def _invest_headline(facts: dict) -> str:
+    """**一句話結論** —— 這一塊唯一非讀不可的東西。
+
+    ⚠️ 刻意**不是**整行粗體：整行 `**…**` 的 markdown 在骨架守衛裡會被當成
+    「一張卡的標題」而切出一個新單位（`tests/test_wf03_research_skeleton.py::_units`），
+    那會讓這一塊的內容被歸到一個不存在的段落底下。
+    """
+    _amt = f"{facts['amount_twd']:,.0f}"
+    _units = f"{facts['units']:,.2f}"
+    _unit_gloss = "單位 ＝ 你持有的份數，配息是按份數發的"
+    if facts["income_blocked"]:
+        # 單位數算得出來、每月領多少算不出來 —— **講得出來的那一半照樣講**。
+        return (f"投入 **{_amt}** 元，這一檔買得到約 **{_units}** 單位"
+                f"（{_unit_gloss}）。每個月領多少這一段算不出來，原因在下面。")
+    return (f"投入 **{_amt}** 元 → 買得到約 **{_units}** 單位（{_unit_gloss}），"
+            f"每個月大約領 **{facts['monthly_twd']:,.0f}** 元。")
+
+
+#: 年化配息率的三種來源各自**該怎麼稱呼**。⛔ 三種各一句，**不准用一句含糊的蓋過去**。
+#:
+#: ⭐ **這張表是 2026-09-08 補的，補的是一句假話**：在此之前這一句**無條件**寫
+#: 「對照這一檔**掛牌的**年化配息率」，而 `adr_pct` 三層 fallback 裡**只有第一層**
+#: 是掛牌值。實測：一檔只有 3 個月配息紀錄的基金，畫面把**自己算出來的 1.44%**
+#: 講成「掛牌的」，還把差異原因講成「最近一筆配息不是常態」——
+#: 而三筆配息**金額完全相同**，真因是那個 12 個月的分母裡只裝了 3 個月。
+#: §1：把「我自己算的」講成「官方公布的」，是「錯誤的數字比沒有數字更危險」最貴的一種。
+_ADR_SOURCE_LABELS: dict[str, str] = {
+    ADR_OFFICIAL: "這一檔**掛牌**的年化配息率（資料來源公布的，"
+                  "一年配出去的錢佔淨值的比例）",
+    ADR_LOCAL_RATE: "系統**自己算**的年化配息率（拿這一檔的配息紀錄推的，"
+                    "**不是**掛牌公布值）",
+    ADR_FROM_RECORDS: "系統把**最近 12 個月的配息加總 ÷ 淨值**回推的年化配息率"
+                      "（**不是**掛牌公布值）",
+}
+
+
+def _invest_compare(facts: dict) -> str:
+    """把月配息換成**一年**、換成**佔這筆錢的比例**，再找一個數字跟它對帳。
+
+    ⭐ 客戶的兩條硬規則同時落在這一句上：
+    **每個數字要有比較對象**（一年多少、佔這筆錢幾 %、對照年化配息率），
+    **每句結論要「判定 ＋ 做法」**（對得上／差很多是**判定**，後面接的是**做法**）。
+
+    ⛔ **判定不是本檔自己拍的**：兩個數字對不對得上走
+    `services.reconcile.reconcile_dividend_yield` 這個既有 SSOT（§4.3 雙演算法對帳），
+    容差在那裡。**這裡不定容差，也不得改成「差超過 N% 就算不一致」** ——
+    那會是本頁自己發明的第二套判準。
+
+    ## ⛔ 「對照的那個數字是哪裡來的」必須講出來（2026-09-08 補）
+
+    ~~原本無條件稱它為「掛牌的年化配息率」。~~
+    → **有意識的更正，不是漏刪**：`adr_pct` 有**三層** fallback
+    （`services.health.dividend._resolve_adr_with_fallback`），
+    **只有 :data:`ADR_OFFICIAL` 那一層是掛牌值**，另外兩層是本地拿**同一批配息紀錄**
+    回推的。**舊表述的用意仍然成立**（使用者確實需要一個比較對象，
+    而三層 fallback 的存在就是為了盡量給得出一個）；**被權衡掉的是它的事實面** ——
+    它把「我自己算的」講成「官方公布的」，而且**那正是本頁其他地方明令禁止的事**
+    （見下一段「同源」的處置）。
+
+    ## ⚠️ 「這是不是一個獨立的第二意見」有三種答案，不是兩種
+
+    這是本函式最容易被寫錯的地方 —— 原本只擋了其中一種：
+
+    * **年化攤平**（`income_basis != BASIS_RECORDS`）：月配就是「配息率 ÷ 12」，
+      **恆等式**，對得上證明不了任何事。（原本就有擋，**未改**。）
+    * **配息率也是本地推的**（:data:`ADR_OFFICIAL` 以外）：兩個數字都出自
+      **同一批配息紀錄**，同樣**不是**獨立驗證。（**本次補上** —— 原本這條路
+      會走到「兩個數字對得上 —— 這個推算站得住」，那是一個**假的第二意見**。）
+    * **真的掛牌值**：這時候 `agree` / `disagree` 才有資訊量。
+
+    ⚠️ **而 disagree 的原因也講錯了**：:data:`ADR_FROM_RECORDS` 那條路
+    差很多的**首要**原因是**配息紀錄不滿一年**（分母 12 個月、分子只有幾個月），
+    不是「最近一筆配息不是常態」。照著錯的原因去看配息表，看不出所以然。
+
+    ⚠️ **未知的 `adr_source` 一律當「不是掛牌」處理**（fail-safe）：
+    上游哪天多一層 fallback，畫面會退成**比較保守**的講法，不會擅自升格成官方值。
+    """
+    _bits = [f"一年約 **{facts['annual_twd']:,.0f}** 元，"
+             f"等於這筆錢的 **{facts['implied_annual_pct']:.2f}%**"]
+    _adr = facts.get("adr_pct")
+    if _adr is None:
+        return (_bits[0] + "。這一檔**沒有任何**年化配息率可以對照（掛牌值沒有，"
+                "也推不出來），所以只有這一個推算值，沒有第二個數字可以驗證它 —— "
+                "拿它做決定前，請先看下面的算式確認前提對不對。")
+    _src = str(facts.get("adr_source") or "")
+    _bits.append(f"對照{_ADR_SOURCE_LABELS.get(_src, _ADR_SOURCE_LABELS[ADR_FROM_RECORDS])}"
+                 f"**{_adr:.2f}%**")
+    if facts["income_basis"] != BASIS_RECORDS:
+        # 同源，必然一致 —— **據實說它不是驗證**。
+        _bits.append("⚠️ 這兩個數字**是同一個來源推出來的**（月配就是這個配息率 ÷ 12），"
+                     "所以它們一定一樣，**不能拿來當第二個驗證**")
+        return "；".join(_bits) + "。"
+    if _src != ADR_OFFICIAL:
+        # 配息率也是本地拿同一批紀錄推的 —— **同樣不是獨立的第二意見**。
+        _bits.append("⚠️ 這兩個數字**都是從同一批配息紀錄推出來的**，"
+                     "**不是**互相獨立的驗證；"
+                     f"要對照官方公布的配息率，請到「{DEEP_DIVE_PROVENANCE}」"
+                     "看這次的資料來自哪裡")
+        if _src == ADR_FROM_RECORDS:
+            _bits.append("⚠️ 而且這個對照值是把**近 12 個月**的配息加總算的 —— "
+                         "配息紀錄**不滿一年**時它會偏低，"
+                         f"兩者差很多多半是**紀錄還不滿一年**，不是配息不正常；"
+                         f"請先到「{DEEP_DIVE_TABLES[1]}」那張表數一下有幾筆")
+        return "；".join(_bits) + "。"
+    _rec = facts.get("income_reconcile") or {}
+    if _rec.get("agree"):
+        _bits.append("兩個數字**對得上** —— 最近一筆配息看起來就是這一檔的常態，"
+                     "這個推算站得住")
+    else:
+        _bits.append(
+            "⚠️ 兩個數字**差很多** —— 多半是最近一筆配息不是常態（剛好多配或減配），"
+            f"這時候以「{DEEP_DIVE_TABLES[1]}」那張表的實際節奏為準，"
+            "**不要**拿這裡的月配去乘 12")
+    return "；".join(_bits) + "。"
+
+
+#: 年化攤平那條路**為什麼**走上來 —— :func:`_income_basis_gap` 的回傳值。
+#: ⛔ 這四個不是同一件事的四種說法，是**四個不同的事實**，畫面必須分開講
+#: （本 repo 鐵則：不准用一句藉口蓋住不同的原因）。
+GAP_NO_ROWS: str = "no_rows"          #: 表上一列都沒有 —— 「沒有逐筆配息紀錄」在此為真。
+GAP_AMOUNT: str = "amount"            #: 表上有列，但金額沒有一筆是正數。
+GAP_AMOUNT_NEG: str = "amount_neg"    #: 同上，而且其中**有負數**（資料本身就不對）。
+GAP_NO_DATE: str = "no_date"          #: 表上有列、金額也有，但沒有一筆帶得出日期。
+GAP_UNKNOWN: str = ""                 #: 沒拿到 `result`，只講得出「推不出最近一筆」。
+
+
+def _income_basis_gap(result: dict | None) -> tuple[str, int]:
+    """年化攤平那條路是**卡在哪裡** → ``(GAP_*, 表上看得到的筆數)``。
+
+    ## ⛔ 這裡不自己寫一份金額／日期解析
+
+    判定**整個委派** :func:`services.health.dividend_calc.latest_dividend_per_unit`
+    —— 那就是**擋下這條路的那一支函式**。做法是**把日期補成一個合法值再問一次**：
+
+    * 補完日期它**還是**回 `None` ⇒ 卡的是**金額**（沒有一筆是正數）；
+    * 補完日期它**回得出來** ⇒ 金額是有的，卡的是**日期**。
+
+    ⚠️ 為什麼非這樣不可：自己寫一份「有沒有日期」會與 L2 的 `_norm_date` 分歧
+    （例如純空白的日期字串，L2 視為**有**、直覺寫法視為**無**），
+    於是畫面會講出一個「聽起來合理但與實際擋人的理由不同」的原因 —— 那正是 §1 要防的。
+
+    ⚠️ **筆數取自 :func:`_dividend_rows`，與配息表那張表同一份** ——
+    所以「表上說 N 筆、這裡說 N 筆」**結構上不可能對不上**
+    （對不上正是 2026-09-08 第四次被抓到的那個同頁矛盾）。
+
+    ⚠️ 負數的判定用的是本頁既有的 `shared.converters.safe_num`（同樣不自己寫一份）；
+    它只用來**加一句附註**，主判定（卡金額還是卡日期）不依賴它。
+    """
+    if not isinstance(result, dict):
+        return GAP_UNKNOWN, 0
+    _shown = len(_dividend_rows(result))
+    if _shown == 0:
+        return GAP_NO_ROWS, 0
+    _raw = result.get("dividends")
+    _dicts = [_d for _d in _raw if isinstance(_d, dict)] if isinstance(_raw, list) else []
+    # 把日期補成一個一定合法的值，再問**同一支**函式一次。
+    _dated = [{**_d, "date": "1970-01-01"} for _d in _dicts]
+    if latest_dividend_per_unit(_dated) is not None:
+        return GAP_NO_DATE, _shown          # 金額有，卡在日期
+    _neg = any((_v := safe_num(_d.get("amount"))) is not None and _v < 0 for _d in _dicts)
+    return (GAP_AMOUNT_NEG if _neg else GAP_AMOUNT), _shown
+
+
+def _invest_basis_note(facts: dict, result: dict | None = None) -> str:
+    """這個月配息**是怎麼推出來的** —— 真實記錄與年化攤平是兩件事，必須講明白。
+
+    ⛔ 兩者的差別對使用者是**行為上的差別**：真實記錄推的數字，季配基金有 11 個月是 0；
+    年化攤平推的數字，**每個月都不會真的長這樣**。合併成一句「估算」等於沒講。
+    """
+    if facts["income_basis"] == BASIS_RECORDS:
+        _latest = facts.get("latest_div_per_unit")
+        _txt = (f"這個金額是用**最近一筆實際配息 {_latest:,.4f} "
+                f"{facts['currency']}／單位**推出來的。"
+                "季配或年配的基金，沒有配息的那幾個月實際是 0 —— "
+                f"要看真正的節奏，往上看「{DEEP_DIVE_TABLES[1]}」那張表。")
+    else:
+        _adr = facts.get("adr_pct")
+        _gap, _n = _income_basis_gap(result)
+        _tbl = DEEP_DIVE_TABLES[1]
+        # ⛔ 四種情形四句話。~~原本無條件寫「這一檔沒有逐筆配息紀錄」~~
+        # → **2026-09-08 就地更正（有意識的更正，不是漏刪）：那句話只在其中一種情形為真。**
+        # 走到這條路的真正條件是「**推不出最近一筆實際配息**」，而那有四種成因；
+        # 表上明明畫著 N 筆、下面卻說「沒有紀錄」，是**同一個畫面自相矛盾**（§1）。
+        # **舊表述的用意仍然成立**（要講清楚這個數字是攤平出來的，不是實配）——
+        # 那半句一字未改、四種情形都照講；**被權衡掉的只有它對「為什麼」的宣稱**。
+        if _gap == GAP_NO_ROWS:
+            _why = "這一檔沒有逐筆配息紀錄，"          # ← 唯一為真的那一種，原文保留
+        elif _gap == GAP_NO_DATE:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆、金額也有，"
+                    "但**沒有一筆帶得出日期**，排不出哪一筆才是最近的一筆，")
+        elif _gap == GAP_AMOUNT_NEG:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆，但**金額沒有一筆是正數**"
+                    "（而且其中有負數 —— 那是資料本身有問題，不是你看錯），"
+                    "推不出「最近一筆實際配息」，")
+        elif _gap == GAP_AMOUNT:
+            _why = (f"上面「{_tbl}」那張表有 {_n} 筆，但**金額沒有一筆是正數**，"
+                    "推不出「最近一筆實際配息」，")
+        else:
+            # 沒拿到 `result`。**只講得出這條路的定義**，不猜是哪一種成因（§1）。
+            _why = "推不出「最近一筆實際配息」，"
+        _txt = (f"{_why}所以這個金額是用年化配息率 {_adr:.2f}% ÷ 12 "
+                "攤平出來的**平均值**，不是每個月真的入帳這麼多。")
+    if not facts.get("dividend_currency") and facts["income_basis"] == BASIS_RECORDS:
+        # ⚠️ 逐筆配息沒有標幣別是常態，此時算式**假設**它與基金計價同幣別。
+        #    這個假設會直接乘上匯率，講出來才對得起使用者（不知道 ≠ 不一致）。
+        _txt += (f"　⚠️ 配息紀錄上沒有標幣別，這裡是**假設**它和這一檔的計價幣別"
+                 f"（{facts['currency']}）相同才換算的。")
+    return _txt
+
+
+def _invest_formula(facts: dict) -> str:
+    """把數字代進算式，一行一步 —— **展開才看得到，收起來也不影響任何結論**。
+
+    ⚠️ 它不是裝飾：本頁其餘每一個數字都標得出來源，而這一格的數字是**算出來的**，
+    「怎麼算的」就是它的來源（§2.2 血緣）。
+    """
+    _ccy = facts["currency"]
+    _lines: list[str] = ["# 這筆錢買得到幾單位"]
+    if _ccy != TWD:
+        _lines += [
+            "原幣金額 = 投入台幣 ÷ 匯率",
+            f"         = {facts['amount_twd']:,.0f} ÷ {facts['fx_to_twd']:,.4f}",
+            f"         = {facts['amount_ccy']:,.2f} {_ccy}",
+            "",
+            "單位數   = 原幣金額 ÷ 淨值",
+            f"         = {facts['amount_ccy']:,.2f} ÷ {facts['nav']:,.4f}",
+            f"         = {facts['units']:,.2f} 單位",
+        ]
+    else:
+        _lines += [
+            "單位數   = 投入台幣 ÷ 淨值",
+            f"         = {facts['amount_twd']:,.0f} ÷ {facts['nav']:,.4f}",
+            f"         = {facts['units']:,.2f} 單位",
+        ]
+    if facts["income_blocked"]:
+        # ⚠️ `st.code()` 是純文字，markdown 的 `**` 在裡面只會變成兩顆星星 —— 拿掉。
+        _why = _invest_blocked_note(facts["income_blocked"], facts).replace("**", "")
+        _lines += ["", "# 每個月大約領多少", f"（算不到這一步：{_why}）"]
+        return "\n".join(_lines)
+
+    _lines.append("")
+    if facts["income_basis"] == BASIS_RECORDS:
+        _lines += [
+            "# 每個月大約領多少（依據：最近一筆實際配息）",
+            f"最近一筆實配   = {facts['latest_div_per_unit']:,.4f} {_ccy}／單位",
+            "每月配息(原幣) = 最近一筆實配 × 單位數",
+            f"               = {facts['latest_div_per_unit']:,.4f} × {facts['units']:,.2f}",
+            f"               = {facts['monthly_ccy']:,.2f} {_ccy}",
+        ]
+    else:
+        _lines += [
+            "# 每個月大約領多少（依據：年化配息率 ÷ 12 攤平）",
+            "原幣本金       = 單位數 × 淨值",
+            f"               = {facts['units']:,.2f} × {facts['nav']:,.4f}",
+            f"               = {facts['amount_ccy']:,.2f} {_ccy}",
+            "每月配息(原幣) = 原幣本金 × 年化配息率 ÷ 12",
+            f"               = {facts['amount_ccy']:,.2f} × {facts['adr_pct']:,.2f}% ÷ 12",
+            f"               = {facts['monthly_ccy']:,.2f} {_ccy}",
+        ]
+    if _ccy != TWD:
+        _lines += [
+            "每月配息(台幣) = 每月配息(原幣) × 匯率",
+            f"               = {facts['monthly_ccy']:,.2f} × {facts['fx_to_twd']:,.4f}",
+            f"               = {facts['monthly_twd']:,.0f} 元",
+        ]
+    _lines += [
+        "",
+        "# 一年領多少 / 佔這筆錢的比例",
+        f"一年           = 每月 × 12 = {facts['annual_twd']:,.0f} 元",
+        f"佔這筆錢       = {facts['annual_twd']:,.0f} ÷ {facts['amount_twd']:,.0f}"
+        f" = {facts['implied_annual_pct']:.2f}%",
+    ]
+    return "\n".join(_lines)
+
+
+def _render_invest_calc(result: dict, blank: str = "") -> None:
+    """深度區第六塊｜投資試算。**它只讀 `result`，不會再打一次資料來源。**
+
+    Parameters
+    ----------
+    blank :
+        深度區的**共用**全敗文案（`_fetch_failed_note`，只在 :func:`_has_anything`
+        為假時非空）。**與其餘五格拿到的是同一個字串** —— 用法見
+        :func:`_invest_note_for`。⚠️ 預設 `""` 是為了讓現有測試逐一呼叫它時
+        不必每次都傳；**production 呼叫點一律要傳**，由
+        `tests/test_wf03_research_invest_calc.py::`
+        `test_the_sixth_cell_is_wired_to_the_same_shared_note_as_the_other_five` 釘住。
+
+    ⛔ **不得**在這裡另外呼叫 `auto_fetch_moneydj` —— 深度區「一次呼叫供六格」是
+    `tests/test_wf03_research_skeleton.py::test_the_deep_dive_fetches_exactly_once`
+    釘住的設計；再打一次會讓這一格拿到與上面五格**不同時間點**的快照，
+    而畫面上沒有任何跡象。
+
+    ⚠️ **唯一會出網的是匯率**，而且只在「非台幣計價 ＋ 金額與淨值都到齊」時才問
+    （順序寫死在 `services.fund_invest_calc.estimate_monthly_income`）。
+    台幣計價的基金**一次網路都不會打**。
+    """
+    st.markdown(f"##### {DEEP_DIVE_INVEST}")
+    with applied_form(_INVEST_FORM_KEY, submit_label=INVEST_SUBMIT_LABEL) as _gate:
+        st.caption(f"改完金額按「{INVEST_SUBMIT_LABEL}」才重算 —— "
+                   "打字的當下不會重新計算，也不會重抓任何資料。")
+        _typed = st.number_input(
+            _LABEL_INVEST_AMOUNT,
+            min_value=MIN_AMOUNT_TWD, max_value=MAX_AMOUNT_TWD,
+            value=_applied_amount(), step=100_000.0,
+            key=_INVEST_AMOUNT_KEY,
+            help="一筆一次投入的台幣金額。非台幣計價的基金會先用即時匯率換成原幣，"
+                 "再算買得到幾單位；匯率查不到就整段留白，不會拿台幣金額當原幣金額算。",
+        )
+    # ⚠️ `if _gate:` 必須在 `with` **之外**（送出鈕在 `yield` 之後才建立）。
+    if _gate:
+        st.session_state[_SK_INVEST_AMOUNT] = safe_num(_typed)
+
+    _facts = estimate_monthly_income(result, _applied_amount(),
+                                     fx_lookup=fx_rate_to_twd)
+    if _facts["units_blocked"]:
+        # 連「買得到幾單位」都算不出來 → 整塊灰。**灰＝前提不足，不是故障**（鐵則 03）。
+        # ⚠️ 全敗時說的是**共用那一句**，與其餘五格一致（理由見 :func:`_invest_note_for`）。
+        not_ready(_invest_note_for(_facts["units_blocked"], _facts, blank),
+                  where=_invest_where_for(_facts["units_blocked"]))
+        return
+
+    st.markdown(_invest_headline(_facts))
+    if _facts["income_blocked"]:
+        # 半塊灰：單位數是真的、每月配息算不出來。**兩件事分開講，不要一起吞掉。**
+        not_ready(_invest_blocked_note(_facts["income_blocked"], _facts),
+                  where=_invest_where_for(_facts["income_blocked"]))
+    else:
+        st.caption(_invest_compare(_facts))
+        st.caption(_invest_basis_note(_facts, result))
+    with st.expander("怎麼算出來的（把數字代進算式）", expanded=False):
+        st.code(_invest_formula(_facts), language="text")
+        st.caption(
+            "這是估算，不是承諾：淨值與匯率都用**現在**的值算，不是你申購當天的值；"
+            "實際入帳金額以你的保單或對帳單為準。")
 
 
 def _provenance_caption(result: dict, nav: dict | None) -> str:
@@ -1665,7 +2263,7 @@ def _provenance_caption(result: dict, nav: dict | None) -> str:
         _bits.append(f"序列抓取於 {nav['fetched_at']}")
     if not _bits:
         # ⚠️ **不留空**：血緣掉了本身就是要告訴使用者的事（`attrs` 會在 concat 中掉）。
-        return "上游這次沒有帶回抓取時間與序列來源標記。"
+        return "這次沒有留下抓取時間，也沒有留下淨值是從哪裡來的標記。"
     return " · ".join(_bits)
 
 

@@ -482,6 +482,12 @@ def _FAKE_ROWS() -> list[dict]:
 #: 兩者一樣的話，「深度區吃的是選定值還是查詢字串」這件事在畫面上分不出來。
 SELECTED_CODE: str = "SENTINELPICKED"
 
+#: 假的匯率（2026-09-08 投資試算接上時加）。
+#: ⚠️ **刻意不是 30 / 32 這種真實美元匯率** —— 一個看起來合理的值會讓
+#: 「這個數字是算出來的還是抄來的」在失敗訊息裡分不出來（同上面那組數字哨兵的理由）。
+#: ⚠️ 同樣**刻意避開** :data:`_PINNED_FAKE_VALUES` 的裸子字串（`"0.81"` / `"0.22"`）。
+FAKE_FX_RATE: float = 41.53
+
 #: 會產生「使用者看得到的字」的 st API。錄下來當作單位有沒有真的畫東西的證據。
 _TEXT_APIS = (
     "markdown", "write", "caption", "text", "info", "warning", "error",
@@ -501,6 +507,13 @@ _TEXT_APIS = (
     #    ⛔ 少了它，「選定後展開」那個 gate 的**入口**整個錄不到 ——
     #    斷言只看得到 gate 關著，看不到有沒有人打得開它。
     "button",
+    # ⚠️ 2026-09-08 投資試算接上時補：算式收在 `st.expander("怎麼算出來的…")` 裡。
+    #    **少了它是「靜靜漏錄」** —— `__getattr__` 的預設分支照樣回一個可以進 `with`
+    #    的假容器，所以**不會炸**，只是那顆 expander 的標題永遠不會進紀錄，
+    #    「算式有沒有被收進可展開區」這件事就沒有人驗得到。
+    #    ⚠️ 收它**不影響**它仍然回傳假容器（`_TEXT_APIS` 只多錄一行，
+    #    後面的 if 鏈一個都沒 match，最後照樣 `return self._child()`）。
+    "expander",
 )
 
 
@@ -615,6 +628,7 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
             search: Any = _SENTINEL,
             search_raiser: BaseException | None = None,
             clicked: set[str] | None = None,
+            fx: Any = _SENTINEL,
             state_out: dict[str, Any] | None = None) -> list[str]:
     """跑一次整頁，回傳**有序**的渲染紀錄。
 
@@ -665,6 +679,10 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
               用來驗「搜尋炸了走 `safe_section` 的紅框，而不是被畫成查無結果」。
     clicked : **被按下的 `st.button` 的 key 集合**。`None` ＝ 一顆都沒按
               （`st.button` 回 `submitted`，＝舊行為）。
+    fx : 假的 `services.fund_invest_calc.fx_rate_to_twd` 回傳（2026-09-08 加）。
+              預設 :data:`FAKE_FX_RATE`；傳 `None` ＝ **匯率查不到**那條路。
+              ⚠️ **與 `auto_fetch_moneydj` 同一個理由必須換掉** —— 不換的話，
+              深度區一有非台幣計價的基金就會真的連外網。
     state_out : 給它一個 dict → 渲染結束後把 recorder 那份 `session_state`
               **倒進去**。⚠️ 這是「按下按鈕之後 session 變成什麼」唯一驗得到的方式；
               沒有它，「選定後展開」那個 gate 的**寫入端**完全沒有人在看。
@@ -744,6 +762,22 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
         return _search_payload
 
     _page.search_funds = _fake_search
+
+    # ── 匯率入口，**一律換掉**（2026-09-08 投資試算接上時補）────────────────
+    # ⛔ **與 `auto_fetch_moneydj` / `search_funds` 完全同一個理由**：不換的話，
+    #    任何「深度區有一檔非台幣計價的基金」的測試都會**真的連 Yahoo / FRED /
+    #    er-api / Frankfurter** —— 一份會連外網的守衛在 CI 上不可重現。
+    # ⚠️ **預設值刻意不是 `None`**：`None` ＝「匯率查不到」，那會讓所有外幣情境
+    #    永遠停在灰態，happy path 就沒有人走得到。預設給一個**哨兵匯率**
+    #    （:data:`FAKE_FX_RATE`，刻意不是 30/32 這種真實值，也刻意避開
+    #    `_PINNED_FAKE_VALUES` 的裸子字串），要驗「查不到」就傳 `fx=None`。
+    _real_fx = _page.fx_rate_to_twd
+
+    def _fake_fx(_ccy, **_kw):
+        _rec.parts.append(f"[fx] {_ccy}")
+        return FAKE_FX_RATE if fx is _SENTINEL else fx
+
+    _page.fx_rate_to_twd = _fake_fx
     # ⚠️ 先確認要換的名字**真的存在**：打錯字的 patch 會靜靜地新增一個沒人讀的屬性，
     #    然後測試對著**沒有被換掉**的真實實作跑（那正是本函式開頭那段長註的病）。
     _patch = dict(patch or {})
@@ -772,6 +806,7 @@ def _render(applied: dict | None = None, result: Any = _SENTINEL,
             setattr(_page, _k, _old)
         _page.auto_fetch_moneydj = _real_fetch
         _page.search_funds = _real_search
+        _page.fx_rate_to_twd = _real_fx
         _sess.friendly_error = _real_friendly
         if state_out is not None:
             state_out.clear()

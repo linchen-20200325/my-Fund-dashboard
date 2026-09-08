@@ -663,6 +663,20 @@ _DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
     "P-PASSTHRUSCOPE-1",
     # 2026-09-08 拆檔輪新增
     "P-PHANTOMSEC-1", "P-FROZENTABREF-1", "P-SPLITSLACK-1",
+    # 2026-09-08 #833 新增（第三輪 3 列 ＋ 第五輪 2 列）。
+    # ⚠️ 前三列在 #833 第三輪就登記了，**但沒有人把它們加進這份清單** ——
+    #    也就是說它們有五輪的時間可以被靜默搬走而這條主防線看不到。
+    #    **新增登記簿列的人要同時更新這裡**，否則新的一列天生不受保護。
+    "P-CNHALIAS-1", "P-NAVSERIES-1", "P-ADRUNKNOWN-1",
+    "P-ALIASSHAPE-1", "P-STALEDIV-1",
+    # 2026-09-08 #833 第六輪（第四輪差異稽核抓出的三項）。
+    # ⚠️ `P-COUNTGUARD-1` 記的正是「數這張表的那道守衛是 **fail-open**」——
+    #    **本清單是比對名單、不是門檻**，所以它擋得住「這一列被刪掉」，
+    #    但擋不住「上表被塞進一列它認不出來的」。兩者不要混為一談。
+    "P-COUNTGUARD-1", "P-MIXEDROWDATE-1", "P-SAMESOURCE-1",
+    # 2026-09-08 隨 #834 併入 main 的三列。**本清單是「內容不得靜默消失」的比對名單**，
+    # ⇒ 別人加的列同樣該進來；漏掉它們，就是重演 #833 那三列「五輪沒被保護」的同一個缺口。
+    "P-SECLABEL-1", "P-TILEARGS-1", "P-FETCHPOINTER-1",
 })
 
 _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
@@ -912,3 +926,65 @@ def test_bare_filename_is_warning_not_failure(tmp_path):
     hard, warns, _ = audit("如 tab1_macro.py 或 tab3_portfolio.py 中的私有取數", tmp_path)
     assert hard == []
     assert {r.cited for r, _ in warns} == {"tab1_macro.py", "tab3_portfolio.py"}
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⭐ 2026-09-08（#833 第五輪）｜`8.3.P` 兩張表的**計數**，機器數一次
+#
+# **這一條是被真事故逼出來的**：#833 第三輪把三列新登記加進了
+# `EXCEPTIONS.md` 上面那張**自稱「逐位元組搬過來、一列都沒動」**的表，
+# 而下面那段計數（`上表 21 ＋ 本段 3 ＝ 24`）**一個字都沒改**
+# —— 實際變成 `24 + 3 = 27`。於是那張表的「純搬移」**從可自驗變成不可驗**，
+# 而且**四輪 CI 全綠**，因為**沒有任何守衛在數它**。
+#
+# ⚠️ 那段文字自己就寫著「把兩批混在一起數，會讓『上表是純搬移』這個
+#    可自驗的事實變成不可驗」—— **寫在正上方三行，還是被踩了。**
+#    **一個只寫在散文裡的不變式，等於沒有不變式。**
+# ══════════════════════════════════════════════════════════════════
+
+_SPLIT_HEADING: str = "### ⭐ 本篇搬入之後**新增**的待判定項"
+_ROW_ID_RE = __import__("re").compile(r"^\|\s*~*\*\*((?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*)\*\*")
+_COUNT_RE = __import__("re").compile(
+    r"\*\*計數\*\*：上表 \*\*(\d+) 列\*\* ＋ 本段 \*\*(\d+) 列\*\* ＝ 本篇目前共 \*\*(\d+) 列\*\*")
+
+
+def _p_table_counts(text: str) -> tuple[int, int]:
+    """`EXCEPTIONS.md` 的 `8.3.P` 上表 / 下表各有幾列登記。"""
+    upper = lower = 0
+    sec = ""
+    for line in text.split("\n"):
+        if line.startswith("#"):
+            sec = line
+        if not _ROW_ID_RE.match(line):
+            continue
+        if sec.startswith("#### 8.3.P"):
+            upper += 1
+        elif sec.startswith(_SPLIT_HEADING):
+            lower += 1
+    return upper, lower
+
+
+def test_the_two_p_tables_declared_counts_match_what_is_actually_there():
+    """⭐ 「上表 N ＋ 本段 M ＝ 共 T」必須與**實際列數**相符。
+
+    ⛔ 這不是為了數字好看：上表那張自稱**逐位元組搬過來**，
+    而「純搬移」是靠 `diff` 驗的 —— 一旦有人往上表塞新列，
+    那個 `diff` 就再也不會是空的，**而計數是唯一看得出來的地方**。
+    """
+    _exc = [f for f in CONSTITUTION_FILES if f.name == "EXCEPTIONS.md"]
+    assert _exc, f"CONSTITUTION_FILES 裡沒有 EXCEPTIONS.md：{[f.name for f in CONSTITUTION_FILES]}"
+    _txt = _exc[0].read_text(encoding="utf-8")
+    # 只讀**沒有被劃掉**的那一行計數（劃掉的是歷史，不是現況）。
+    _live = [m for line in _txt.split("\n") if not line.lstrip("> ").startswith("~~")
+             for m in [_COUNT_RE.search(line)] if m]
+    assert len(_live) == 1, (
+        f"找到 {len(_live)} 行**生效中**的計數宣告，應該恰好 1 行。\n"
+        "（0 行 ＝ 有人把它刪了或改了句式；>1 行 ＝ 有人新增一行卻沒把舊的劃掉。）")
+    _up_d, _lo_d, _tot_d = (int(x) for x in _live[0].groups())
+    _up_a, _lo_a = _p_table_counts(_txt)
+    assert (_up_d, _lo_d, _tot_d) == (_up_a, _lo_a, _up_a + _lo_a), (
+        f"計數對不上 —— 宣告：上表 {_up_d} ＋ 本段 {_lo_d} ＝ {_tot_d}；"
+        f"實際：上表 {_up_a} ＋ 本段 {_lo_a} ＝ {_up_a + _lo_a}。\n"
+        "⚠️ **上表增加就是警訊**：那張表自稱「逐位元組搬過來、一列都沒動」，\n"
+        "   新登記一律該放進下面那張「本篇搬入之後新增的」。\n"
+        "   驗法：`diff <(git show origin/main:EXCEPTIONS.md) EXCEPTIONS.md` 在上表區間內應為空。")
