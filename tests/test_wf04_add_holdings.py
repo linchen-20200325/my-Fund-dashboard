@@ -499,7 +499,11 @@ def test_the_principal_pointer_is_not_a_dead_end():
                 and _n.args and isinstance(_n.args[0], _ast.Constant)}
 
     _mix = _where_keys("_render_mix")
-    _tiles = _where_keys("_status_tiles")
+    # ⚠️ **2026-09-08 第四輪：`_status_tiles` 的 💰 那格搬進了 :func:`invested_hint`**
+    #    （純函式，四分支）。這裡取**兩個函式的聯集** —— 搬家不該讓守衛看不到它，
+    #    而**只改成看 `invested_hint`** 會讓「有人把指路搬回 `_status_tiles` 硬寫死」
+    #    這件事變成看不見。兩個都看，才是嚴格不放鬆。
+    _tiles = _where_keys("_status_tiles") | _where_keys("invested_hint")
     assert "pf_ledger" in _mix, (
         f"`_render_mix` 的指路不是 `pf_ledger`，而是 {sorted(_mix)} —— "
         "算不出比例時要指到「去哪填本金」，而那裡是帳本。")
@@ -597,25 +601,44 @@ def test_the_principal_pointer_is_not_a_dead_end():
         "`_holdings()` 的過濾條件變了 —— 它必須與 `fund_is_usable` 同一個謂詞，"
         f"否則本格的狀態分界就不再對應 T7 的閘門：\n{_hold_src[:400]}")
 
-    # (f) ⭐ **本格必須是條件式**，不能無條件給 `pf_ledger`。
-    #     這一條直接對應被擋下的那個 bug：無條件給 = 在 pending 狀態下指到不存在的東西。
+    # (f) ⭐ **那個純函式真的被接上了** —— 否則整張真值表是空轉的。
+    #
+    #     ⚠️ **2026-09-08 第四輪：本項換掉了，而且是換成更緊的（有意識的更正，不是漏刪）**
+    #     ~~舊 (f)：`where_to_find("pf_ledger")` 必須住在一個提到 `_loaded` 的 `IfExp` 裡。~~
+    #     **舊 (f) 為什麼是對的**：它擋的是第三輪那個 bug（無條件給 `pf_ledger`），
+    #     而且真的擋得住 —— 這一點沒有被推翻。
+    #     **被權衡掉的是它的方法**：它驗的是**形狀**（有沒有包在條件式裡），
+    #     不是**答案**（那個條件式在每個狀態下給出什麼）。
+    #     ⛔ **而 CI 證明了形狀不夠**：第四輪那個 bug（`_loaded` 為空時無條件給
+    #     `pf_load`）**完全滿足舊 (f)** —— 它就是一個提到 `_loaded` 的 `IfExp`，
+    #     舊 (f) 全綠，紅的是渲染守衛。**一個看形狀的守衛，擋不住形狀對、答案錯。**
+    #     → 現在的分工：**答案**由下面那條真值表逐狀態驗（`n_waiting == 0` 就不准
+    #     出現 `pf_load`、`n_loaded == 0` 就不准出現 `pf_ledger`，
+    #     **兩條各自對應第三、第四輪的 bug**）；本項只負責證明那張表**不是空轉的**。
     _tiles_fn = next(_n for _n in _ast.walk(_ptree)
                      if isinstance(_n, _ast.FunctionDef) and _n.name == "_status_tiles")
-    _led_calls = [_n for _n in _ast.walk(_tiles_fn)
-                  if isinstance(_n, _ast.Call)
-                  and getattr(_n.func, "id", None) == "where_to_find"
-                  and _n.args and isinstance(_n.args[0], _ast.Constant)
-                  and _n.args[0].value == "pf_ledger"]
-    assert _led_calls, "`_status_tiles` 不再指 `pf_ledger` —— 若是刻意改的，本條要一起改。"
-    _guarded = [_c for _c in _led_calls
-                if any(isinstance(_n, _ast.IfExp)
-                       and _n.lineno <= _c.lineno <= (_n.end_lineno or 0)
-                       and "_loaded" in _ast.unparse(_n.test)
-                       for _n in _ast.walk(_tiles_fn))]
-    assert len(_guarded) == len(_led_calls), (
-        "`_status_tiles` 裡有 `where_to_find(\"pf_ledger\")` **不在**「有沒有已載入標的」"
-        "的條件式底下 —— 那會在「加了但還沒抓到」的狀態下指到一個**不存在**的輸入格"
-        "（T7 的「✏️ 編輯持倉」在該狀態不渲染）。**這正是第三輪稽核擋下的那個 bug。**")
+    _hint_calls = [_n for _n in _ast.walk(_tiles_fn)
+                   if isinstance(_n, _ast.Call)
+                   and getattr(_n.func, "id", None) == "invested_hint"]
+    assert _hint_calls, (
+        "`_status_tiles` 沒有呼叫 `invested_hint` —— 那個純函式變成死碼，"
+        "而驗它的真值表跟著變成一條**恆綠**的守衛（它驗的東西不在畫面上）。")
+    _tiles_src = _ast.unparse(_tiles_fn)
+    assert "_inv_missing" in _tiles_src and "_inv_where" in _tiles_src, (
+        "`_status_tiles` 呼叫了 `invested_hint`，卻沒有把它的兩個回傳值用進那一格 —— "
+        "同樣是空轉。")
+    # ⚠️ **只擋那三個 key，不擋全部** —— 另外兩格（📒 目前帳本 / 🕐 上次讀回）
+    #    本來就直接寫 `where_to_find("pf_policy_admin")`，那是對的、不在本項射程內。
+    #    （本組第一版寫成「一個 `where_to_find` 都不准有」，那會把那兩格誤判成違規。）
+    _bad = [_ast.unparse(_n) for _n in _ast.walk(_tiles_fn)
+            if isinstance(_n, _ast.Call)
+            and getattr(_n.func, "id", None) == "where_to_find"
+            and _n.args and isinstance(_n.args[0], _ast.Constant)
+            and _n.args[0].value in {"pf_ledger", "pf_load", "pf_add"}]
+    assert not _bad, (
+        f"`_status_tiles` 裡又直接寫了 💰 那格會用到的指路 key（{_bad}）—— "
+        "在這裡硬寫一個，就繞過了 `invested_hint` 那張真值表，"
+        "而那張表正是前兩輪 bug 唯一看得見的地方。")
 
     # (g) ⭐ **舊 ④ 必須無條件渲染 T7**（擋 M-GATE-1）。
     #     只驗「有沒有被呼叫」不夠：包一層恆假的 `if` 一樣叫「被呼叫」。
@@ -652,6 +675,176 @@ def test_the_principal_pointer_is_not_a_dead_end():
             f"「編輯持倉」改成 `expanded={_kw.get('expanded')}` 了 —— "
             "本頁的就地註解把「預設展開」列為挑這條指路的理由之一，"
             "理由變了就要一起改（或把那句理由撤掉），不是讓它留著過期。")
+
+
+def _load_invested_hint():
+    """把 `page_04_portfolio.invested_hint` 的**原始碼**取出來、真的執行它。
+
+    ⛔ **為什麼不 `import ui.views.page_04_portfolio`**：那個模組 `import streamlit`，
+       而本檔**刻意**是 streamlit-free 的那一半（檔頭 docstring 講了理由：
+       `pytest.importorskip` 是模組級的，混在一起會讓純函式的斷言也被 skip）。
+    ⛔ **為什麼不把那段邏輯在測試裡抄一份**：抄一份就是抄一份，
+       產品改了測試不會知道 —— 那正是本 repo 反覆記載的那種**恆綠**守衛。
+    → 折衷：`ast.get_source_segment` 逐字取出**產品檔裡那一個函式**，
+      在一個只放它真正需要的兩個名字的命名空間裡 `exec`。
+      **執行的是產品的原始碼本身**，不是它的複製品。
+
+    ⚠️ 命名空間裡的 `where_to_find` 是**真的那一支**（`ui.helpers.story_nav`，
+       stdlib-only，import 得起來），`ADD_FUND_HEADING` 則從產品檔的模組層
+       assignment 逐字讀出來 —— 兩者都不手抄。
+    """
+    _page = ROOT / "ui" / "views" / "page_04_portfolio.py"
+    _src = _page.read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+    _fn = next((_n for _n in _tree.body
+                if isinstance(_n, ast.FunctionDef) and _n.name == "invested_hint"), None)
+    assert _fn is not None, (
+        "`page_04_portfolio.invested_hint` 不見了（改名或刪掉）—— "
+        "💰 那格的四個狀態就此沒有任何守衛看得到。")
+
+    _heading = next((_n.value.value for _n in _tree.body
+                     if isinstance(_n, ast.AnnAssign)
+                     and getattr(_n.target, "id", None) == "ADD_FUND_HEADING"
+                     and isinstance(_n.value, ast.Constant)), None)
+    assert isinstance(_heading, str) and _heading, (
+        "讀不到產品檔的 `ADD_FUND_HEADING` —— 不手抄它是刻意的，"
+        "抄一份會讓本條在它改字時仍然全綠。")
+
+    from ui.helpers.story_nav import where_to_find
+
+    _ns: dict[str, Any] = {"where_to_find": where_to_find,
+                           "ADD_FUND_HEADING": _heading}
+    exec(compile(ast.Module(body=[_fn], type_ignores=[]),  # noqa: S102
+                 filename=str(_page), mode="exec"), _ns)
+    return _ns["invested_hint"], _heading
+
+
+def test_the_invested_hint_is_right_in_every_state():
+    """⭐⭐ **💰「總投入」那格：四個狀態逐一驗，而且驗的是答案不是形狀。**
+
+    ## 這條為什麼存在（三次紅燈換來的）
+
+    這一格的指路連續錯了三次，**每一次都是「換一個目的地」而不是「換一個狀態」**：
+
+    ==== ==================================================== ==========================
+    輪次  錯法                                                  誰抓到
+    ==== ==================================================== ==========================
+    一     指去一個**做不到那件事**的地方（`pf_add` 填不了金額）    第二輪獨立稽核
+    二     指去一個**那個狀態下不存在**的地方（`pf_ledger`）        第三輪獨立稽核（真渲染）
+    三     指去一個**我們自己剛剛才說沒有用**的地方（`pf_load`）    CI（AppTest 渲染守衛）
+    ==== ==================================================== ==========================
+
+    第三次那個畫面，同一頁上下兩句互相打臉：
+    💰 那格說「先把標的抓回來（請先到：🗂️ 保單分組視圖）」，
+    失敗卡說「**再按一次載入不會有不同結果。**」
+
+    **第四個變種是本組在修第三個的時候自己找到的，沒有任何測試看得到它**：
+    「一筆標的都沒有」時，舊的兩分支同樣落進 `else` → 指 `pf_load`，
+    而 `count_unloaded_funds()` ＝ 0 ⇒ **那顆鈕連渲染都不會渲染**。
+
+    ## 本條與既有守衛的分工（**它不取代誰，它補一個誰都到不了的位置**）
+
+    - `tests/test_wf04_add_holdings_render.py` 的渲染守衛**看得到答案**，
+      但它需要 streamlit，**沒有 streamlit 時整檔 skip** ——
+      「有沒有被驗到」取決於環境，那不算守衛。
+    - 同檔 :func:`test_the_principal_pointer_is_not_a_dead_end` 的 (e)~(h)
+      **看得到結構**（目的地存不存在、閘門是不是同一個謂詞），
+      但它**看不到答案** —— 第三個變種完全滿足舊 (f) 的形狀檢查，舊 (f) 全綠。
+    - **本條在沒有 streamlit 的環境也跑得到，而且驗的是答案。**
+
+    ## 兩條承重不變式（各自對應一個真的發生過的 bug）
+
+    1. ``n_waiting == 0`` ⇒ **不得出現** `pf_load` ——
+       那顆鈕的 guard 是 `count_unloaded_funds()`（`not loaded`），
+       而 `_waiting` ⊂ `not loaded`；沒有 waiting 就沒有那顆鈕。**（第三、第四個變種）**
+    2. ``n_loaded == 0`` ⇒ **不得出現** `pf_ledger` ——
+       T7「✏️ 編輯持倉」的閘門是 `fund_is_usable`，與本頁 `_holdings` 同一個謂詞。
+       **（第二個變種）**
+
+    ⚠️ **本條逐狀態列舉 0/1/2 三種計數的所有組合（27 種）**，不是挑幾個順眼的 ——
+    「挑幾個」正是前三輪每一次都做過的事。
+    """
+    import itertools
+
+    from ui.helpers.story_nav import where_to_find
+
+    _hint, _heading = _load_invested_hint()
+    _LOAD = where_to_find("pf_load")
+    _LEDGER = where_to_find("pf_ledger")
+    _ADD = where_to_find("pf_add")
+
+    # ── (1) 每一個狀態都要給得出三要素中的「缺什麼」與「去哪補」 ──────────────
+    for _l, _w, _f in itertools.product(range(3), repeat=3):
+        _missing, _where = _hint(n_loaded=_l, n_waiting=_w, n_failed=_f)
+        _tag = f"(n_loaded={_l}, n_waiting={_w}, n_failed={_f})"
+        assert isinstance(_missing, str) and _missing.strip(), (
+            f"{_tag} 沒有講「缺什麼」—— 線框鐵則 04 的三要素缺一項。")
+        assert isinstance(_where, str) and _where.strip(), (
+            f"{_tag} 沒有講「去哪補」—— 線框鐵則 04 的三要素缺一項。")
+
+        # ── (2) ⭐ 承重不變式一：沒有「還沒抓過」的，就不准叫他去按載入 ──────
+        if _w == 0:
+            assert _LOAD not in _where and _LOAD not in _missing, (
+                f"{_tag} 指去了 {_LOAD!r} —— 那個狀態下**沒有任何一筆是 `not loaded`**，"
+                "所以 `count_unloaded_funds()` ＝ 0，那顆 📡 載入鈕**連渲染都不會渲染**；"
+                "就算它在，`batch_load_unloaded_funds()` 只挑 `not loaded` 的，"
+                "也**不會碰**這幾筆。\n"
+                "⛔ 這正是 CI 擋下的那個 bug（`n_failed>0` 時）"
+                "與本組自己找到的那個（三個計數全 0 時）。")
+
+        # ── (3) ⭐ 承重不變式二：一檔都沒載入成功，就不准叫他去填金額 ────────
+        if _l == 0:
+            assert _LEDGER not in _where and _LEDGER not in _missing, (
+                f"{_tag} 指去了 {_LEDGER!r} —— T7 的「✏️ 編輯持倉」住在 "
+                "`if not _pf_t7:` 的 else 分支（`_pf_t7 = usable_funds(...)`），"
+                "一檔都沒載入成功時那個 expander **不渲染**，"
+                "`🟨 淨投資金額 (NT)` 不存在。\n"
+                "⛔ 這正是第三輪獨立稽核用真渲染擋下的那個 bug。")
+
+        # ── (4) 文案不得宣稱一件那個狀態下不成立的事 ─────────────────────────
+        if _l == 0:
+            assert "已載入的標的" not in _missing, (
+                f"{_tag} 的文案說「已載入的標的都沒有填投入金額」，"
+                "但那個狀態下已載入的是 **0 檔** —— 同一畫面下一行的範圍說明"
+                "就寫著「只加已載入的 0 檔」，兩句話對不上（§1）。")
+
+    # ── (5) 四個分支各自的正確答案（逐一釘死，不是只驗不變式） ───────────────
+    for _args, _want_where, _why in (
+            (dict(n_loaded=1, n_waiting=0, n_failed=0), _LEDGER,
+             "有已載入的標的 ⇒ 金額填得進去，指帳本"),
+            (dict(n_loaded=2, n_waiting=1, n_failed=1), _LEDGER,
+             "只要有一檔已載入，填得進去就先講填 —— 沒被算進去的由範圍說明另外講"),
+            (dict(n_loaded=0, n_waiting=1, n_failed=0), _LOAD,
+             "有還沒抓過的 ⇒ 那顆載入鈕一定在，而且真的會挑到它"),
+            (dict(n_loaded=0, n_waiting=2, n_failed=1), _LOAD,
+             "混合時只要還有沒抓過的，按載入就有意義"),
+            (dict(n_loaded=0, n_waiting=0, n_failed=1), _ADD,
+             "全部抓過而失敗 ⇒ 按載入沒有用，唯一做得到的是把打錯的移掉重加"),
+    ):
+        _missing, _where = _hint(**_args)
+        assert _where == _want_where, (
+            f"{_args} 的指路是 {_where!r}，應為 {_want_where!r} —— {_why}。")
+
+    # 一筆都沒有 → 指**本頁自己**下面那個加入區，不是別的分頁。
+    _missing, _where = _hint(n_loaded=0, n_waiting=0, n_failed=0)
+    assert _heading in _where, (
+        f"一筆標的都沒有時的指路是 {_where!r} —— 應該指本頁下面的 {_heading!r}"
+        "（客戶 2026-09-08 拍板「無持倉時直接就地展開輸入表單」）。")
+    assert _ADD not in _where, (
+        "一筆都沒有時又把使用者指去舊 ④ 的「加入與管理基金」了 —— "
+        "客戶已拍板那個入口整合到本頁，而舊 ④ 排定要拔掉"
+        "（`tests/test_wf04_portfolio_skeleton.py::test_nothing_renders_before_holdings_land` "
+        "也釘著同一件事）。")
+
+    # ── (6) ⭐ 「全部抓失敗」那句話，必須與同一畫面的失敗卡**同一個方向** ──────
+    #        失敗卡逐字寫著「再按一次載入不會有不同結果」，而那句話是**對的**。
+    #        兩段對同一批資料講相反的話，正是第三個變種的全部內容。
+    _missing, _where = _hint(n_loaded=0, n_waiting=0, n_failed=2)
+    assert "不會有不同結果" in _missing, (
+        f"「全部抓過而失敗」的文案是 {_missing!r} —— 它必須跟同一畫面的失敗卡"
+        "站在同一邊（那張卡寫的是「再按一次載入不會有不同結果」）。")
+    assert "先把標的抓回來" not in _missing, (
+        "「全部抓過而失敗」的文案還在叫使用者去抓 —— 抓過了，而且失敗了。")
 
 
 def test_the_delete_pointer_is_not_a_dead_end():
@@ -751,9 +944,15 @@ def test_the_new_wording_carries_no_internal_progress_language():
                 #    ⚠️ **仍然看不到的**：`_status_tiles` 的 `label` 走的是模組層常數
                 #    （`STATUS_*_LABEL`），那些常數的**定義處不在本清單裡** ——
                 #    也就是把違禁詞寫進那幾個常數，本條照樣抓不到。**據實登記，不假裝全守住。**
+                #    ⭐ **2026-09-08 第四輪：再收 `invested_hint`（本批自己造出來的射程缺口）。**
+                #       💰 那格的四句文案**搬出** `_status_tiles`、進了那個純函式 ——
+                #       如果不把它一起收進來，這次重構等於**默默把既有守衛的射程縮小**，
+                #       而那正是本 repo 反覆記載的那種失效模式：
+                #       **搬家不該讓守衛看不到搬走的東西。**
+                #       （本組是在跑這一條之前先讀它的射程清單才發現的，不是它報紅。）
                 and _fn.name in ("_render_add_fund", "_render_add_result",
                                  "_render_pending_notice", "_render_no_holdings",
-                                 "_status_tiles")):
+                                 "_status_tiles", "invested_hint")):
             _targets.append((f"{_page.name}::{_fn.name}", _fn))
 
     _docs: set[int] = set()

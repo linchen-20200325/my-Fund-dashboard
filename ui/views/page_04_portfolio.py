@@ -1701,6 +1701,114 @@ def _book_title() -> str:
     return f"{_sid[:14]}…" if _sid else ""
 
 
+def invested_hint(*, n_loaded: int, n_waiting: int, n_failed: int) -> tuple[str, str]:
+    """💰「總投入」那一格的 ``(缺什麼, 去哪補)`` —— **四個狀態各一句，沒有預設值**。
+
+    ## 為什麼把它抽成一個純函式（不是留在 :func:`_status_tiles` 裡寫條件式）
+
+    **因為前一版就是在這裡出的錯，而當時的守衛看不到。** 這一格的指路連續錯了三次，
+    每一次都是「換一個目的地」而不是「換一個狀態」：
+
+    ==== ================================================ ==============================
+    輪次  錯法                                              誰抓到
+    ==== ================================================ ==============================
+    一     指去一個**做不到那件事**的地方（`pf_add` 填不了金額）  第二輪獨立稽核
+    二     指去一個**在那個狀態下不存在**的地方（`pf_ledger`）     第三輪獨立稽核（真渲染）
+    三     指去一個**我們自己剛剛才說沒有用**的地方（`pf_load`）   CI（本頁自己的渲染守衛）
+    ==== ================================================ ==============================
+
+    第三次的畫面長這樣 —— **同一個畫面，上下兩句互相打臉**：
+
+    - 💰 那格：「先把標的抓回來」（請先到：🗂️ 保單分組視圖）
+    - 失敗卡：「**再按一次載入不會有不同結果。**」
+
+    抽成純函式換到兩件事，**都是前三輪缺的**：
+
+    1. **四個狀態一次全部寫出來**，漏掉一個會在讀 code 時就看得見
+       （前一版是 ``A if _loaded else B`` 的兩分支，
+       **「全部抓過但失敗」與「一筆都沒有」被併進了 B**，而 B 說的是「先把標的抓回來」）。
+    2. **沒有 streamlit 也驗得到** —— 守衛
+       :func:`tests.test_wf04_add_holdings.test_the_invested_hint_is_right_in_every_state`
+       直接把本函式的原始碼取出來執行，逐狀態比對回傳值。
+       在此之前，唯一看得到這一層的是 AppTest 渲染守衛，而它在沒有 streamlit 的
+       環境**整檔 skip** —— 也就是「有沒有被驗到」取決於環境，那不算守衛。
+
+    ## 四個狀態，以及每一句話的**有效性依據**（逐條可自驗，不是選一個順眼的）
+
+    ``n_loaded > 0``（至少一檔已載入且沒有錯誤）
+        → 錢**填得進去**：`pf_ledger`（舊 ④「💼 持倉戰情（T7 帳本）」）。
+        **依據**：T7「✏️ 編輯持倉」的閘門是
+        `ui/helpers/session.py::fund_is_usable` ＝ ``loaded and not load_error``，
+        與本頁 :func:`_holdings` **逐字同一個謂詞** ⇒
+        ``n_loaded > 0`` ⟺ 那個 `🟨 淨投資金額 (NT)` 輸入格一定渲染得出來。
+
+    ``n_waiting > 0``（有還沒抓過的）
+        → 先把資料抓回來：`pf_load`（舊 ④「🗂️ 保單分組視圖」）。
+        **依據**：那顆 📡 主按鈕的 guard 是
+        `ui/helpers/portfolio/load.py::count_unloaded_funds` ＝ ``not f.get("loaded")``；
+        而 `pending_split` 的 ``_waiting`` ＝ ``not loaded and not load_error``
+        ⊂ ``not loaded`` ⇒ **``n_waiting > 0`` ⇒ 那顆鈕一定在**，
+        而且 `batch_load_unloaded_funds` 真的會挑到它。
+
+    ``n_failed > 0``（有標的，而且**全部**都抓過、全部失敗）
+        → **按載入沒有用**，唯一做得到的事是把打錯的那一筆移掉重加：`pf_add`。
+        **依據**：`batch_load_unloaded_funds` 只挑 ``not loaded`` 的，
+        而這些是 ``loaded=True`` ＋ ``load_error`` —— **它根本不會碰**，
+        且 `count_unloaded_funds()` ＝ 0 ⇒ **那顆載入鈕在這個狀態下連渲染都不會渲染**。
+        舊 ④ 的「➕ 加入與管理基金」是**無條件**渲染的（AST 實測：
+        `### ➕ 加入與管理基金` 沒有任何 `if` 包著它），逐列的 🗑️ 住在
+        ``if not pf:`` 的 **else** 分支、迴圈跑的是**全部**條目（不濾 `loaded`）、
+        外層 expander ``expanded=True`` ⇒ **這個狀態下那顆 🗑️ 一定在**。
+        ⚠️ **而且同一畫面的失敗卡已經指著同一個地方** —— 兩句話因此不會打架，
+        這正是上一版最大的毛病。
+
+    其餘（一筆都沒有）
+        → 指**本頁自己下面**那個加入區，不是別的分頁。
+        **依據**：客戶 2026-09-08 拍板「無持倉時直接就地展開輸入表單」，
+        `tests/test_wf04_portfolio_skeleton.py::test_nothing_renders_before_holdings_land`
+        釘住這個狀態下 :data:`BLOCK_POLICY` 會渲染、而且 `pf_add` **不得**出現。
+        ⚠️ **上一版在這個狀態也是錯的，而且沒有任何測試看得到**：它落進 ``else``
+        說「先把標的抓回來」＋指 `pf_load` —— 但 ``count_unloaded_funds()`` ＝ 0，
+        **那顆鈕同樣不存在**。本組是在修第三次那個錯的時候自己找到它的，
+        不是誰指出來的。
+
+    ⚠️ **一個已知的不對稱，據實寫下（`CLAUDE.md §-2` 規則 6）**：
+    ``_waiting`` 用的是 ``not loaded and not load_error``，而載入鈕的 guard 是
+    ``not loaded`` —— 兩者在 ``loaded=False`` **且** ``load_error`` 有值時分岔
+    （會落進 ``n_failed``，於是本函式說「按了也沒用」，但那顆鈕其實會挑到它）。
+    **本組實測全 repo 的寫入端，沒有任何一處產生那個組合**：
+    `load.py:118` / `json_backup.py:72` / `policy/v1.py:282` 三處
+    ``loaded=False`` 都明寫 ``load_error=None``；`add_entry.py` 的新條目同樣是
+    ``load_error=None``；`linkage.py` 那處根本不寫 `load_error`（`.get` 回 `None`）；
+    失敗一律走 `load.py:232` 的 ``loaded=True`` ＋ ``load_error``。
+    ⛔ 但「**沒有第七個寫入端**」取決於「有沒有漏看」，**單組掃描、未經第二組驗證**，
+    只能當待驗事項。⛔ 本函式**刻意不去修 `pending_split`**（`CLAUDE.md §8.4 步驟 4`：
+    不擅自擴大範圍）—— 它是 :func:`_render_pending_notice` 也在用的同一支，
+    改它會連帶改掉本批射程外的行為。**沿用同一支的好處是：同一畫面上的兩段
+    永遠不會對同一批資料給出不同的分類。**
+    """
+    if n_loaded > 0:
+        return ("已載入的標的都沒有填投入金額，加不出總投入"
+                "　—— 在帳本的「編輯持倉」把金額、平均買入淨值、匯率三欄一起填上",
+                where_to_find("pf_ledger"))
+    if n_waiting > 0:
+        return (f"還有 {n_waiting} 檔還沒抓過淨值，所以還沒有金額可以加"
+                "　—— 先把標的抓回來，才填得了每一檔投入多少",
+                where_to_find("pf_load"))
+    if n_failed > 0:
+        # ⛔ **這一句不得改成「再按一次載入」** —— 同一畫面的失敗卡逐字寫著
+        #    「再按一次載入不會有不同結果」，而那句話是**對的**（實測：
+        #    `batch_load_unloaded_funds` 只挑 `not loaded`，這些是 `loaded=True`）。
+        # ⚠️ 句型**刻意**與同一畫面 :func:`_render_pending_notice` 的空狀態平行
+        #    （那句是「清單裡有 N 檔標的，但每一檔都抓不到淨值 —— …」），
+        #    同一批資料在同一頁被講兩次時，兩次的說法要看得出是同一件事。
+        return (f"清單裡有 {n_failed} 檔標的，但每一檔都抓不到淨值，所以還沒有金額可以加"
+                "　—— 再按一次載入不會有不同結果；代碼打錯的話，要用該列的 🗑️ 移掉重加",
+                where_to_find("pf_add"))
+    return ("一檔標的都還沒有，所以沒有金額可以加",
+            f"本頁下面的「{ADD_FUND_HEADING}」")
+
+
 def _status_tiles() -> list[dict[str, Any]]:
     """狀態列四格。**每一格要嘛有真值，要嘛明講「不知道」——沒有第三種。**
 
@@ -1726,6 +1834,12 @@ def _status_tiles() -> list[dict[str, Any]]:
     """
     _loaded = _holdings()
     _all = _all_portfolio_rows()
+    # ⭐ 走 **同一支** `pending_split`，而不是在這裡自己寫一次條件 ——
+    #    :func:`_render_pending_notice` 用的就是它。同源 ⇒ 同一畫面上的兩段
+    #    **不可能**對同一批資料給出不同的分類（上一版正是那樣打架的）。
+    _waiting, _failed = pending_split(st.session_state.get(_SK_PORTFOLIO))
+    _inv_missing, _inv_where = invested_hint(
+        n_loaded=len(_loaded), n_waiting=len(_waiting), n_failed=len(_failed))
 
     _book = _book_title()
     _pids = {str(_f.get("policy_id") or "").strip()
@@ -1833,16 +1947,33 @@ def _status_tiles() -> list[dict[str, Any]]:
          #      這不是猜一個時機，是拿目的地自己的閘門當條件。
          #      漂移鎖：`tests/test_wf04_add_holdings.py::test_the_principal_pointer_is_not_a_dead_end`
          #      的 (e)~(h) 四項（謂詞等價／無條件呼叫／`expanded=True`／本格必須是條件式）。
-         #    ⚠️ 沒有已載入標的時改指 `pf_load`：**那顆載入鈕在該狀態下一定在**
-         #      （`btn_pf_load_all_top` 的 guard 是「有未載入的標的」，而這個狀態正是如此），
-         #      而且同一畫面的 :func:`_render_pending_notice` 已經指著同一個地方 —— **兩句話不打架。**
-         "missing": ("已載入的標的都沒有填投入金額，加不出總投入"
-                     "　—— 在帳本的「編輯持倉」把金額、平均買入淨值、匯率三欄一起填上"
-                     if _loaded else
-                     "一檔都還沒載入，所以還沒有金額可以加"
-                     "　—— 先把標的抓回來，才填得了每一檔投入多少"),
-         "where": (where_to_find("pf_ledger") if _loaded
-                   else where_to_find("pf_load"))},
+         #    ⚠️ ~~沒有已載入標的時改指 `pf_load`：**那顆載入鈕在該狀態下一定在**~~
+         #      ~~（`btn_pf_load_all_top` 的 guard 是「有未載入的標的」，而這個狀態正是如此），~~
+         #      ~~而且同一畫面的 :func:`_render_pending_notice` 已經指著同一個地方 —— **兩句話不打架。**~~
+         #
+         # ⛔ **2026-09-08 第四輪：整個兩分支換成四分支的純函式 :func:`invested_hint`
+         #    （有意識的更正，不是漏刪 · 決策者：AI 總管，依 CI 紅燈）**
+         #    上面那句劃掉的話，**它的前半在寫下當天是對的，後半當場就是假的**：
+         #    · **前半成立**：`_waiting` 非空時那顆載入鈕確實一定在（`count_unloaded_funds`
+         #      的 guard 是 `not loaded` ⊇ `_waiting`）。這一半原封搬進 `invested_hint`
+         #      的第二個分支，一個字沒改。
+         #    · **後半是假的**：「同一畫面的 `_render_pending_notice` 指著同一個地方」
+         #      **只在 `_waiting` 非空時成立** —— 它自己是 `if _waiting:` 才印 `pf_load` 的。
+         #      而 `else` 分支的射程是「**沒有已載入標的**」，那涵蓋了三個狀態，不是一個：
+         #        (i) 有還沒抓的  → 指 `pf_load` 對；
+         #        (ii) 全部抓過而失敗 → **同一畫面的失敗卡逐字寫著「再按一次載入不會有
+         #             不同結果」，而那顆鈕根本不渲染**（`count_unloaded_funds()` ＝ 0）；
+         #        (iii) 一筆都沒有 → 同樣沒有那顆鈕，而且該講的是「去加一檔」。
+         #      **(ii) 由 CI 抓到**（`test_a_list_of_only_failed_rows_does_not_tell_him_to_press_load`）；
+         #      **(iii) 沒有任何測試看得到，是本組在修 (ii) 時自己找到的。**
+         #    → **這是同一個病的第三、第四個變種**：一、指去做不到那件事的地方；
+         #      二、指去那個狀態下不存在的地方；三、指去我們自己剛說沒用的地方；
+         #      四、指去一顆不會渲染的鈕。**四次都是「換目的地」而不是「換狀態」。**
+         #    四個狀態、每一句的有效性依據、以及一個已知的不對稱，全部寫在
+         #    :func:`invested_hint` 的 docstring 裡（**那裡才是它們的住所**，
+         #    不是在這個 dict 中間）。
+         "missing": _inv_missing,
+         "where": _inv_where},
     ]
 
 
