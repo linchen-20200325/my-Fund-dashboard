@@ -374,58 +374,140 @@ _MIN_LIVE_TIER1_REFS = 300
 # ── 第二道：per-file 下限 ──────────────────────────────────────────────
 # 總下限擋的是「**整個檔**沒被讀到」。它擋**不住**「**一半內容**被搬到第三個檔、
 # 而那個檔忘了登記」—— 2026-09-08 實測該情境：守衛看得到 315、看不到 111（26.1%），
-# `315 >= 300` ⇒ **18 passed 全綠**（`test_retired_exception_ids` 的金絲雀也沒抓到，
-# 因為 `EX-` ID 還留在沒被搬走的那半）。
-# ⇒ **總下限擋不住它自己剛修好的那個病的下一個版本。** 故補這一道：
-#    **每個已登記的檔，各自不得縮到下限以下。**
-# 量測（量測日 2026-09-08）：`CLAUDE.md` 184、`EXCEPTIONS.md` 242。
-# 下限留約 20~25% 餘裕，理由同總下限（不擋正常退役；實測 `CLAUDE.md` 最近 25 個 commit
-# 只有 1 步是負的、幅度 −6）。
-# ⚠️ **這一道有一個已知弱點，據實寫明**：它是**絕對值**，而這些檔只會長大 ——
-#    檔案越大，它就越不 binding（一個長到 500 的檔掉 300 仍會過）。
-#    **它擋的是「今天這一刀」，不是「明年那一刀」**；那個缺口由下面第三道（雙向綁定）補，
-#    因為第三道**不隨檔案長大而失效**。三道各擋不同的東西，**不得合併，也不得互相取代**。
+# `315 >= 300` ⇒ **全綠**。故補這一道：**每個已登記的檔，各自不得縮到下限以下。**
+#
+# ⚠️ **這些數字會漂移，本檔刻意不寫「現在是幾筆」**（`CLAUDE.md` 引的姊妹 repo
+#    §8.2.A.0 規則 4：會漂移的量測值一律標日期或不寫）。上一版在註解裡寫了
+#    「`EXCEPTIONS.md` 242」，**在同一個 PR 內就過期了**（變成 251）——
+#    一個會自己說謊的註解，比沒有註解糟。**要現值請跑下面那條指令。**
+#
+#    現場量測：
+#        python3 -c "import importlib.util as u,pathlib; \
+#          s=u.spec_from_file_location('g','tests/test_constitution_file_refs.py'); \
+#          g=u.module_from_spec(s); s.loader.exec_module(g); \
+#          print({f: sum(1 for r in g.parse_references(pathlib.Path(f).read_text('utf-8')) \
+#                        if not r.struck and r.is_tier1) for f in g._MIN_LIVE_TIER1_PER_FILE})"
+#
+# 下限的選法（2026-09-08 訂）：取當時實測值向下留約 20~25% 餘裕。餘裕**不能是 0**——
+# 本 repo 鼓勵把過期引用加刪除線退役，那會讓活的引用變少；貼著現值會把「正確退役」
+# 變成紅燈，逼人不敢退役。實測 `CLAUDE.md` 最近 25 個 commit 只有 1 步是負的、幅度 −6。
 _MIN_LIVE_TIER1_PER_FILE: dict[str, int] = {
     "CLAUDE.md": 150,
     "EXCEPTIONS.md": 200,
 }
 
-# ── 第三道：雙向綁定 ─────────────────────────────────────────────────
-# **憲法裡指標段點名的每一個 `.md`，都必須在 `CONSTITUTION_FILES` 裡。**
-# 這一道是三道裡**唯一不隨檔案長大而失效**的 —— 它比對的是「宣告」與「登記」兩份名單，
-# 不是任何一個會漂移的量測值。搬檔案的人**一定**會寫「搬至 `X.md`」（那是母檔留指標的慣例），
-# 於是「寫了指標卻忘了登記」當場紅燈。
-_POINTER_TO_OTHER_MD = re.compile(r"搬[至到][^。\n]{0,12}?[`]([A-Za-z0-9_./-]+\.md)[`]")
+# ⚠️ **餘裕的 ratchet（雙向）** —— 這一條解的是稽核點名的「**餘裕隨檔案長大而增加**」：
+# 下限是絕對值，檔案越長，「可以靜默搬走多少」就越多，而**沒有人會回頭調它**。
+# 故加一個上界：**實測值不得超過下限的 `_PER_FILE_FLOOR_MAX_SLACK` 倍**。
+# 檔案長大到超出這個帶寬時，CI 會**要求你把下限往上調**（而不是安靜地讓保護力衰減）。
+# ⚠️ 這是**刻意的維護負擔**，不是 bug：本 repo 已有同型前例（`test_every_exemption_is_still_needed`
+# 逼你清掉沒用的豁免；`test_wf05_settings_skeleton` 的「放寬條文已經沒有用途，請把它降回來」
+# 也自稱雙向 ratchet）。**把衰減變成一次看得見的紅燈，是這條的全部意義。**
+_PER_FILE_FLOOR_MAX_SLACK = 1.6
 
 
-def test_pointer_sections_and_registered_files_agree():
-    """**雙向綁定**：指標段點名的憲法檔，必須都在 `CONSTITUTION_FILES` 裡。
+# ── 第三道：雙向綁定（**檔頭標記**，不依賴任何散文措辭）───────────────
+# **repo 根目錄帶標記的 `.md`，與 `CONSTITUTION_FILES`，兩份名單必須完全相等。**
+#
+# ⚠️ **這一道 2026-09-08 被整條換掉過，原因寫在這裡，免得有人改回去**：
+# 舊版靠「搬至 `X.md`」這個**散文句式**建白名單，第二輪獨立稽核做出**五組繞過，全部全綠**：
+#   * `搬至 \`EXCEPTIONS.md\` 與 \`PENDING.md\`` —— **完全照約定寫**，但 regex 非貪婪、
+#     一句只抓第一個 `.md`，第二個檔靜默消失；
+#   * `移至`（換個動詞）／完全不寫指標段／`現住址:`（**守衛自己在旁邊用的詞**）；
+#   * 以及把檔案移進 `docs/`、兩支守衛路徑都同步改對 → per-file 下限的 key 對不上 → 靜默失去下限。
+# **舊版的反空轉金絲雀擋不住這些**：它是**全域**的（「憲法**任何地方**存在一個 `搬至 X.md`」），
+# 而 `CLAUDE.md` 現有 4 個指向 `EXCEPTIONS.md` 的指標段 ⇒ **只要它們還在，金絲雀就永遠不會再響。**
+# 它保護的是「既有措辭被全部改掉」，**不是**「下一次搬檔用了別的措辭」。
+#
+# ⛔ **根因是「靠人寫的散文句式」，所以修法不是把 regex 改貪婪** —— 那只擋掉五組裡的一組。
+#    改用**機器寫給機器看的標記**：措辭怎麼改都不影響它。
+# ⚠️⚠️ **這三道合起來仍有一個已知缺口，據實寫明 —— 不要從綠燈推論出「拆檔已經安全了」**：
+#
+#   **標記規則抓得到**：登記了卻沒標記（改名／搬到子目錄／標記被刪）、
+#                       帶標記卻沒登記（新拆的憲法檔照慣例帶了標記但忘了登記）。
+#   **標記規則抓不到**：把一塊內容從既有憲法檔**剪到一個從未帶標記的新檔** ——
+#                       那個新檔對本規則而言根本不是憲法，兩份名單依舊相等。
+#   → 2026-09-08 實測：五組繞過裡有**四組**（MUT-A/B/C/E）就是這種形狀，
+#     它們**全部只由 per-file 下限攔下**，標記規則一次都沒響。
+#
+#   **也就是說：擋住「剪一塊走」的，到今天為止仍然只有 per-file 下限這個量測值。**
+#   下限有餘裕（**這是刻意的**，見下方註解：貼著現值會讓「正確退役」變紅燈），
+#   餘裕就是可以被靜默搬走的量。`_PER_FILE_FLOOR_MAX_SLACK` 這個 ratchet
+#   **只把餘裕的上界固定住，並沒有讓它變成 0** —— 它解的是「餘裕隨檔案長大而無限增加」，
+#   **不是**「完全不能靜默搬走」。
+#
+#   ⛔ **要現值請跑下面那條量測指令**，不要引用任何寫死的數字。
+#   📌 已登記為 `EXCEPTIONS.md` 的 `8.3.P` → **`P-SPLITSLACK-1`**（附由誰查與觸發點）。
+_CONSTITUTION_MARKER = "<!-- CONSTITUTION-FILE -->"
 
-    擋的是這個順序：有人把一塊內容搬到新檔 → 在原位置留下「搬至 `X.md`」的指標
-    → **忘了把 `X.md` 加進 `CONSTITUTION_FILES`**。
-    在這一條之前，那個情境**完全不會紅**（2026-09-08 實測 18 passed）。
+# 憲法檔一律住在 repo 根目錄（`CLAUDE.md` / `PROCESS.md` / `SPEC.md` … 全部如此）。
+# glob 範圍刻意**只**掃根目錄：想把憲法搬進子目錄，就必須**有意識地**改這一行，
+# 而那個動作會連帶被下面的雙向比對擋下來 —— 這正是我們要的「不能靜默發生」。
+_CONSTITUTION_GLOB = "*.md"
+
+
+def _marked_files() -> set[str]:
+    """repo 根目錄下、檔頭帶標記的 `.md`（相對路徑字串）。"""
+    out = set()
+    for p in sorted(REPO_ROOT.glob(_CONSTITUTION_GLOB)):
+        try:
+            head = p.read_text(encoding="utf-8", errors="replace")[:4096]
+        except OSError:
+            continue
+        if _CONSTITUTION_MARKER in head:
+            out.add(str(p.relative_to(REPO_ROOT)))
+    return out
+
+
+def _registered_files() -> set[str]:
+    return {str(p.relative_to(REPO_ROOT)) for p in CONSTITUTION_FILES}
+
+
+def test_constitution_file_set_is_bidirectionally_bound():
+    """**雙向綁定**：帶標記的檔 ＝ 已登記的檔。少一個或多一個都紅。
+
+    * **帶標記但沒登記** → 有人拆出了新的憲法檔卻忘了加進 `CONSTITUTION_FILES`
+      ⇒ 那個檔的內容**完全沒有被檢查**，而且不會有任何其他訊號。
+    * **登記了但沒標記** → 檔案被改名／搬走／標記被刪掉。
+
+    ⚠️ **本條刻意不看任何散文措辭**（理由見上方註解的五組繞過實測）。
     """
-    registered = {p.name for p in CONSTITUTION_FILES}
-    found: dict[str, list[str]] = {}
-    for fname, text in _read_constitution_files():
-        for m in _POINTER_TO_OTHER_MD.finditer(text):
-            found.setdefault(Path(m.group(1)).name, []).append(fname)
+    marked, registered = _marked_files(), _registered_files()
 
-    # 反空轉金絲雀：這條規則靠「搬至 `X.md`」這個句式運作。若指標段被改寫成別的說法，
-    # 本規則會**一筆都找不到**而安靜地永遠通過 —— 那正是本檔要防的形態。
-    assert found, (
-        "在憲法各檔裡找不到任何『搬至 `X.md`』形式的指標段。\n"
-        "**這幾乎一定是指標段的措辭被改了，而不是真的沒有指標** ——"
-        "本規則會因此安靜地停止工作（永遠 0 命中 ⇒ 永遠通過）。\n"
-        "請更新 `_POINTER_TO_OTHER_MD`，不要把這條斷言刪掉。")
+    # 反空轉：標記一個都掃不到，幾乎一定是標記被刪或 glob 壞了，不是「憲法沒了」。
+    assert marked, (
+        f"repo 根目錄下找不到任何帶 `{_CONSTITUTION_MARKER}` 的 `.md`。\n"
+        "**這幾乎一定是標記被刪掉、或 `_CONSTITUTION_GLOB` 壞了**，"
+        "而不是憲法真的不存在 —— 本條會因此安靜地停止工作。\n"
+        "⛔ 不要把這條斷言刪掉，請修好標記或 glob。")
 
-    unregistered = sorted(n for n in found if n not in registered)
-    assert not unregistered, (
-        "憲法的指標段點名了下列 `.md`，但它們**不在 `CONSTITUTION_FILES` 裡**："
-        + "、".join(f"{n}（出現於 {'、'.join(found[n])}）" for n in unregistered) + "\n"
-        "⇒ 那些檔的內容**完全沒有被本守衛檢查**，而且不會有任何其他訊號。\n"
-        "修法：把它加進 `CONSTITUTION_FILES`，並替它在 `_MIN_LIVE_TIER1_PER_FILE` "
-        "設一個下限（現場量測後填，並註明量測日）。")
+    only_marked = sorted(marked - registered)
+    only_reg = sorted(registered - marked)
+    assert not only_marked and not only_reg, (
+        "憲法檔名單對不上：\n"
+        + (f"  **帶標記但沒登記**：{only_marked}\n"
+           "    ⇒ 這些檔的內容完全沒有被本守衛檢查。修法：加進 `CONSTITUTION_FILES`，"
+           "並在 `_MIN_LIVE_TIER1_PER_FILE` 替它設下限（現場量測後填）。\n" if only_marked else "")
+        + (f"  **登記了但沒有標記**：{only_reg}\n"
+           f"    ⇒ 檔案被改名／搬到子目錄／標記被刪。若是**有意識**地搬進子目錄，"
+           "請一併調整 `_CONSTITUTION_GLOB`，不要只改路徑。\n" if only_reg else ""))
+
+
+def test_per_file_floor_keys_match_registered_files_exactly():
+    """`_MIN_LIVE_TIER1_PER_FILE` 的 key **必須恰好等於** `CONSTITUTION_FILES`。
+
+    ⚠️ **這條擋的是一個實測過的靜默失效**（2026-09-08）：把 `EXCEPTIONS.md` 移到
+    `docs/EXCEPTIONS.md`、**兩支守衛的路徑都同步改對** → `per_file` 的 key 變成
+    `docs/EXCEPTIONS.md`，而字典裡是 `EXCEPTIONS.md` ⇒ 舊寫法 `if f in dict` 讓它
+    **直接沒有下限**，`19 passed` 全綠、**112 筆（25.7%）不再受任何下限保護**。
+    """
+    keys, registered = set(_MIN_LIVE_TIER1_PER_FILE), _registered_files()
+    assert keys == registered, (
+        f"`_MIN_LIVE_TIER1_PER_FILE` 的 key 與 `CONSTITUTION_FILES` 不一致：\n"
+        f"  有登記但沒下限：{sorted(registered - keys)}\n"
+        f"  有下限但沒登記：{sorted(keys - registered)}\n"
+        "**兩邊必須逐字相同**（都用 repo 相對路徑）——「不在字典裡就等於沒有下限」"
+        "是一個會安靜生效的漏洞。")
 
 
 def test_guard_still_sees_the_whole_constitution():
@@ -449,10 +531,14 @@ def test_guard_still_sees_the_whole_constitution():
         "例如路徑指到一個空殼、或內容被搬走而 `CONSTITUTION_FILES` 沒跟著改。\n"
         f"各檔實測：{per_file}")
 
+    # ⚠️ 這裡**不寫** `if f in _MIN_LIVE_TIER1_PER_FILE` —— 「不在字典裡就等於沒有下限」
+    #    正是 2026-09-08 實測過的靜默漏洞（把檔案移進 `docs/` 之後 key 對不上、全綠）。
+    #    key 一致性由 `test_per_file_floor_keys_match_registered_files_exactly` 保證，
+    #    此處直接索引：真的少了 key 就 `KeyError` 炸掉，**不會安靜跳過**。
     shrunk = sorted(
         (f, n, _MIN_LIVE_TIER1_PER_FILE[f])
         for f, n in per_file.items()
-        if f in _MIN_LIVE_TIER1_PER_FILE and n < _MIN_LIVE_TIER1_PER_FILE[f]
+        if n < _MIN_LIVE_TIER1_PER_FILE[f]
     )
     assert not shrunk, (
         "下列憲法檔的活 Tier-1 引用掉到它自己的下限以下："
@@ -469,6 +555,19 @@ def test_guard_still_sees_the_whole_constitution():
         "那會讓本守衛安靜地少檢查一整批引用，而其他測試**全部照樣綠燈**。\n"
         "先確認 `CONSTITUTION_FILES` 列全了；確認之後若憲法是真的變小了，"
         "再**有意識地**下修 `_MIN_LIVE_TIER1_REFS` 並就地寫明新的量測與理由。")
+
+    # ── 餘裕 ratchet：檔案長大時，逼下限跟著長 ──────────────────────────
+    too_slack = sorted(
+        (f, n, _MIN_LIVE_TIER1_PER_FILE[f])
+        for f, n in per_file.items()
+        if n > _MIN_LIVE_TIER1_PER_FILE[f] * _PER_FILE_FLOOR_MAX_SLACK
+    )
+    assert not too_slack, (
+        "下列憲法檔已經長到遠高於它自己的下限，**保護力正在安靜地衰減**："
+        + "、".join(f"{f} 實測 {n} > 下限 {lo} × {_PER_FILE_FLOOR_MAX_SLACK}" for f, n, lo in too_slack)
+        + "\n下限是絕對值：檔案越大，『可以被靜默搬走而不觸發紅燈』的量就越多。\n"
+        "**請把該檔的下限往上調**（建議取現值的 75~80%），並就地註明量測日與理由。\n"
+        "⛔ 不要改大 `_PER_FILE_FLOOR_MAX_SLACK` 來閉嘴 —— 那正好是這條要防的動作。")
 
 
 def test_every_exemption_is_still_needed():
