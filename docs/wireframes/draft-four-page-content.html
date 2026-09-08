@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>草稿 · ⑥⑦⑧⑨ 四頁內容線框與退場清單</title>
+<title>草稿 · ⑥⑦⑧⑨ 四頁線框</title>
 <style>
   :root{
     --ink:#1a1c1f; --ink-2:#5b6068; --ink-3:#8b9198;
@@ -62,6 +62,38 @@
   hr{border:0;border-top:1px solid var(--rule);margin:34px 0}
   .foot{color:var(--ink-3);font-size:12px;margin-top:50px;padding-top:14px;
         border-top:1px solid var(--rule)}
+
+  /* 行內 code 不得把版心撐寬（長符號名如 render_switch_advisor_section）。 */
+  code{overflow-wrap:anywhere}
+  /* 但線框裡的等寬框圖**不准**斷行 —— 斷了框就散了，它靠容器橫捲。 */
+  pre.wf code{overflow-wrap:normal}
+
+  /* ── 要你決定的五件事：置頂快捷 ───────────────────────────── */
+  .decide{border:2px solid var(--accent);border-radius:10px;padding:16px 18px;margin:22px 0 30px;
+          background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .decide h2{margin:0 0 4px;border:0;padding:0;font-size:16px;color:var(--accent)}
+  .decide p{margin:0 0 12px;font-size:12.5px}
+  .decide ol{margin:0;padding-left:20px}
+  .decide li{margin:7px 0;color:var(--ink)}
+  .decide a{color:var(--accent);text-decoration:none;border-bottom:1px solid
+            color-mix(in srgb,var(--accent) 40%,transparent)}
+  .decide a:hover,.decide a:focus-visible{border-bottom-color:var(--accent)}
+  .decide .rec{display:block;color:var(--ink-2);font-size:12.5px;margin-top:2px}
+  :target{scroll-margin-top:16px}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ── 手機（線框靠自己的容器橫捲，整頁絕不橫捲）───────────────── */
+  @media (max-width:640px){
+    .wrap{padding:20px 14px 70px}
+    h1{font-size:20px}
+    h2{font-size:15.5px;margin-top:32px}
+    body{font-size:13.5px}
+    pre.wf{font-size:10.5px;line-height:1.55;padding:11px 12px}
+    table{font-size:11.5px}
+    th,td{padding:6px 7px}
+    .decide{padding:14px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 <div class="wrap">
 
@@ -81,6 +113,23 @@
   <p style="margin:0">本環境<b>裝不了 streamlit</b>（且本批禁止 <code>pip install</code>），所以下面每一張線框都是<b>文字設計稿</b>，
   不是渲染出來的截圖。逐字文案是<b>提案文案</b>；哪幾句最後真的出現在畫面上，要等實作與 QA 實跑才算數。</p>
 </div>
+
+<nav class="decide" aria-label="要你決定的五件事">
+  <h2>要你決定的五件事</h2>
+  <p>其餘的我已經決定了、不佔用你的時間。下面五題<b>只有你能拍板</b>，每題都附我的推薦與被我權衡掉的另一案。</p>
+  <ol>
+    <li><a href="#q1">白話解釋要用哪一種形狀？</a>
+        <span class="rec">我建議：括號內一句話，跟數字同一行。</span></li>
+    <li><a href="#q2">⑨ 的「加入基金」放在哪一塊？</a>
+        <span class="rec">我建議：放進「保單與扣款標的」，沒持倉時展開。</span></li>
+    <li><a href="#q3">「投資試算」放 ⑧ 還是放 ⑥？</a>
+        <span class="rec">我建議：放 ⑧。⑥ 回答「你現在實際領多少」，⑧ 回答「如果投 X 會領多少」。</span></li>
+    <li><a href="#q4">「📋 逐檔配息明細」要不要留？</a>
+        <span class="rec">我建議：不留逐筆。⚠️ <b>這是我最可能讀錯你的一題</b> —— 你說「配息金額」，我讀成「每月領多少」而不是「每一筆各多少」。</span></li>
+    <li><a href="#q5">🤖 AI 摘要 ／ 🗂️ Raw data ／ 💼 帳本欄位怎麼處理？</a>
+        <span class="rec">我建議：前兩塊先撤畫面、不刪檔（可逆）；帳本欄位另出一張草稿。</span></li>
+  </ol>
+</nav>
 
 <h2>0 · 先講三件我不同意總管的事</h2>
 
@@ -752,12 +801,12 @@
 
 <h2>7 · 要你拍板的問題</h2>
 
-<div class="q">
+<div class="q" id="q1">
 <h4>Q1 · 白話解釋的形狀（見 §1）</h4>
 <p><b>總管推薦：括號內一句話、跟數字同一行</b>，在 <code>METRIC_EXPLAINERS</code> 加一個 <code>short</code> 欄位當 SSOT。</p>
 </div>
 
-<div class="q">
+<div class="q" id="q2">
 <h4>Q2 · ⑨ 的「加入基金」要放在哪一塊？</h4>
 <p><b>總管推薦：放進「保單與扣款標的」，收在一個預設展開的區塊裡（沒持倉時展開、有持倉時收合成「▸ ➕ 加入或修改扣款標的」）。</b></p>
 <p><b>理由</b>：(a) <code>ia-wireframe.html</code> Tab 02 的空狀態<b>逐字指定</b>新增入口是「04 資產配置 › 保單與扣款標的」；
@@ -767,20 +816,20 @@
 它的好處是與舊 ④ 一模一樣、使用者不必重新學；壞處是 ⑨ 會變成 8 個區塊，而且與線框指定的位置不一致。</p>
 </div>
 
-<div class="q">
+<div class="q" id="q3">
 <h4>Q3 · 「投資試算」放 ⑧ 還是放 ⑥？（見 §4）</h4>
 <p><b>總管推薦：放 ⑧「單一基金深度」。</b> ⑥ 的結論層回答「你現在實際領多少」，⑧ 回答「如果投 X 會領多少」。</p>
 <p><b>被權衡掉的另一案</b>：<b>兩頁都放</b>。它的好處是你在哪一頁都算得到；壞處是同一個算式兩個入口，<b>正是你說的「去重複」要拆掉的東西</b>。</p>
 </div>
 
-<div class="q">
+<div class="q" id="q4">
 <h4>Q4 · 「📋 逐檔配息明細」要不要留？（⑥ 退場清單裡本組標「明確丟掉」的那一列）</h4>
 <p><b>總管推薦：不留逐筆明細，只留 ⑥ 結論層那一句「每月配息合計約 N TWD」＋ ⑧ 的投資試算。</b></p>
 <p><b>理由</b>：你的原話是「無法判斷……<b>配息金額</b>」，本組讀成「我每月領多少」而不是「每一筆分別多少」。</p>
 <p>⚠️ <b>這是本草稿最可能讀錯你的一題</b>，本組刻意把它單獨列出來。如果你要的是逐筆，請直接否決 —— 那會讓 ⑥ 多一張全寬表。</p>
 </div>
 
-<div class="q">
+<div class="q" id="q5">
 <h4>Q5 · 三塊「⛔ 待你裁決」的舊 ④ 區塊：🤖 AI 摘要 ／ 🗂️ Raw data ／ 💼 交易帳本的欄位</h4>
 <p><b>總管推薦：AI 摘要與 Raw data 兩塊「先撤掉、不刪檔」，交易帳本的欄位另出一張草稿。</b></p>
 <p><b>理由</b>：前兩塊 <code>ia-wireframe.html</code> Tab 04 沒有列，而先撤畫面是<b>可逆</b>的 —— 你用一陣子發現少了它們，加回來只要幾行。
@@ -828,14 +877,33 @@
   ——<code>draft-p03-batch-input.html</code> 自己就記過一次「初版寫 4 個是漏了別名 import，用 AST 數才看得到」。<b>本組這一項沒有用 AST 補驗。</b></li>
 </ul>
 
-<h4>本組順手撿到、與本草稿無關、但會影響下一個人的一筆</h4>
-<div class="card">
-<p style="margin:0"><code>ui/views/page_03_research.py</code> 就地寫著
-「<b>舊的 <code>render_fund_grp_health_tab()</code> 現在 production 0 caller</b>（本組實測）」——
+<h4 id="stale">⚠️ 已知過期：兩句「寫在 repo 裡、但今天已經是假的」記載</h4>
+<p><b>本組實測撞到，兩句都沒有改</b>（本批 0 個 <code>.py</code> 改動是硬約束，<code>README.md</code> 也不在檔案邊界內）。
+<b>列在這裡，是為了不讓下一個人照它們做決定。</b></p>
+
+<div class="card warn">
+<p style="margin:0 0 6px"><b>(1) <code>docs/wireframes/README.md</code>：「⑥ 還沒有結論層」—— 已經不成立。</b></p>
+<p style="margin:0">它 2026-09-08 那節寫「字串『① 結論』……在 <code>page_02_health.py</code> /
+<code>page_03_research.py</code> / <code>page_04_portfolio.py</code> <b>各 0 次</b>
+→ <b>⑥⑧⑨ 三頁確實都還沒有結論層</b>」。
+<b>本組實測 <code>ba3b06d</code>：<code>page_02_health.py</code> 命中 9 次</b> ——
+⑥ <b>早就有結論層</b>（<code>CONCLUSION_HEADING</code>、<code>safe_section("結論", _render_conclusion)</code>）。
+<b>⑧⑨ 那半仍然為真</b>（實測皆 0）。
+⚠️ 本草稿 §2 要改的是 ⑥ 的結論<b>只給總數、不點名</b>，<b>不是它不存在</b>。</p>
+</div>
+
+<div class="card warn">
+<p style="margin:0 0 6px"><b>(2) <code>ui/views/page_03_research.py</code>：「舊 ② production 0 caller」—— 已經不成立。</b></p>
+<p style="margin:0">它就地寫著「<b>舊的 <code>render_fund_grp_health_tab()</code> 現在 production 0 caller</b>（本組實測）」——
 <b>這句話今天是假的</b>：<code>app.py</code> 的 <code>with tab_health:</code> 就在呼叫它（雙軌並行之後掛回去了）。
 <b>舊表述在寫下當天很可能為真，被推翻的是它的前提。</b>
 ⛔ <b>本組不改任何 <code>.py</code></b>，僅登記回報總管另派。</p>
 </div>
+
+<p>⚠️ <b>這兩筆都是本組自查時撞到的，不是別人指出來的。</b>
+共通點是<b>「在寫下的當天為真，之後前提變了、而記載沒有跟著改」</b> ——
+本 repo 的憲法對這個形狀記過很多次（<code>CLAUDE.md §2.1</code>：
+<b>已被查證為假、卻沒被撤下的宣稱，比沒查證的更危險，因為它看起來已經有出處</b>）。</p>
 
 <p class="foot">
 UI 架構組 · 2026-09-08 · 量測基準 <code>origin/main</code> = <code>ba3b06d</code><br>
