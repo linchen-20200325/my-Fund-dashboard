@@ -221,11 +221,50 @@ def _ungated(fn: ast.AST):
     yield from _walk(fn.body)
 
 
+def _reexport_home(mod: str, fname: str) -> tuple[str, str] | None:
+    """`mod` 只是**把 `fname` 從別處轉出來**時，回傳它真正的家；否則 `None`。
+
+    ⭐ **這一支是 2026-09-08 補的，補的是一個會讓守衛說謊的 fail-open 盲點。**
+
+    在它之前，:func:`_reach` 追到 **re-export shim** 就斷 —— `_funcs(mod).get(fname)`
+    對一個「只有 docstring ＋ `from X import a, b, c`」的檔案回 `None`，
+    於是整條呼叫鏈在那裡無聲地結束。**本 repo 真的有這種檔**：
+    `ui/helpers/fund_grp_health_extras.py`（**38 行、`FunctionDef` 0 個**，
+    v19.198 P1-6 拆子套件後留下的向後相容 shim）。
+
+    追法**刻意是通則、不是具名列舉**：任何模組只要
+    「`fname` 不是它自己定義的」＋「它有 `from <pkg> import <fname>`」，
+    就往那個 `<pkg>` 續追。所以日後新長出來的 shim **會自動被涵蓋**，
+    不必回頭改本檔（具名列舉會有這個問題，故不採用）。
+
+    **終止性**：續追走的是 :func:`_reach` 既有的 ``seen`` 集合，
+    `(mod, fname)` 進去之後才續追 ⇒ ``A→B→A`` 這種互轉在第二次就被 ``seen`` 擋下。
+    **不會無限遞迴。**
+
+    ⚠️ **這是刻意的過度近似（over-approximation），方向是 fail-closed**：
+    :func:`_names` 連**函式內的 lazy import** 都收，所以「模組 M 的某個函式裡
+    `from X import helper`」也會被當成 M 轉出了 `helper`。那不精確 ——
+    但它只會讓候選**變多**，不會讓候選**變少**。
+    掃描器寧可多抓是本檔一貫的立場（見 :func:`test_the_known_static_candidates_...`
+    內「候選 ≠ 一定會撞」那一段），**不得**為了乾淨把它改成窄的。
+    """
+    if _tree(mod) is None or _funcs(mod).get(fname) is not None:
+        return None
+    _tgt = _names(mod).get(fname)
+    if _tgt is None or _tgt[1] == "*module*":
+        return None
+    return _tgt if _mod_path(_tgt[0]) else None
+
+
 def _reach(mod: str, fname: str, seen: set[tuple[str, str]] | None = None):
     """從 (mod, fname) 出發、**不必點任何東西**就跑得到的函式集合。
 
     ⚠️ 連 **函式參考** 也追（`safe_section(label, _render_x)`）—— 本頁六個區塊
        全部是這樣掛上去的，只追 `Call` 會一個都追不到。
+
+    ⚠️ 也追 **re-export shim**（見 :func:`_reexport_home`）—— 少了那一段，
+       舊 ② 經 `ui/helpers/fund_grp_health_extras.py` 轉出去的整批委派
+       **對本掃描器結構上不可見**，守衛會安靜地放行。
     """
     seen = set() if seen is None else seen
     if (mod, fname) in seen:
@@ -233,6 +272,10 @@ def _reach(mod: str, fname: str, seen: set[tuple[str, str]] | None = None):
     seen.add((mod, fname))
     _fn = _funcs(mod).get(fname)
     if _fn is None:
+        # 追不到函式本體 ⇒ 可能是純轉出的 shim，續追它真正的家。
+        _home = _reexport_home(mod, fname)
+        if _home is not None and _home[0].split(".")[0] in _PKGS:
+            _reach(_home[0], _home[1], seen)
         return seen
     _nm, _local = _names(mod), _funcs(mod)
 
@@ -406,9 +449,58 @@ def test_the_known_static_candidates_between_old_two_and_new_six_are_registered(
     **候選集合因此變成空的**。這正是本條要求的「回頭判一次」，已經判完。
 
     ⛔ **所以本條改成 `== []`，但這不是把它放寬，是把它換一個方向釘死**：
-    今天它守的是「**那道閘門不准消失**」—— 有人拿掉閘門、或在閘門之外重新委派
-    任何一支會畫無 key 元素的舊模組，候選集合就會再度非空，**本條立刻轉紅**。
+    今天它守的是「**那道閘門不准消失**」。
+    ~~有人拿掉閘門、或在閘門之外重新委派
+    任何一支會畫無 key 元素的舊模組，候選集合就會再度非空，**本條立刻轉紅**。~~
     （突變實測：把閘門的 `if not _open: … return` 拿掉 → 本條轉紅。）
+
+    ⚠️ **2026-09-08 就地更正：上面劃掉那句的後半是假的。有意識的更正，不是漏刪。**
+    **決策者：AI 總管**（依 #822 獨立稽核實測；本組**已自行重現**，不是照收）。
+
+    **舊表述在寫下當天是善意的、而且前半仍然為真** ——「拿掉閘門會紅」本組重現確認。
+    **被推翻的是它的後半**：「**任何**一支」。**它的射程被高估成三倍。**
+
+    ⭐ **三顆突變逐一注入的實測結果（在閘門之【前】各插一行委派，其餘不動）**::
+
+        注入的委派                                          修正前     修正後
+        ────────────────────────────────────────────────  ────────  ────────
+        backtest_section.render_allocation_backtest_section   RED ✅    RED ✅
+        correlation._render_correlation_matrix                GREEN ❌  RED ✅
+        dividend._render_dividend_matrix                      GREEN ❌  RED ✅
+        （控制組：不注入）                                    GREEN     GREEN
+
+    **為什麼只有一顆紅 —— 根因不在閘門那一側，在 :func:`_reach` 追不進 shim**：
+    舊 ② 觸及那三支的路徑**不一樣**。`ui/tab_fund_grp_health.py` 對
+    `backtest_section` 是**直接 import**，所以 :func:`_reach` 追得到；
+    另兩支它走的是 `from ui.helpers.fund_grp_health_extras import
+    render_fund_grp_health_extras`，而那個檔是 **38 行、`FunctionDef` 0 個的純
+    re-export shim** ⇒ `_funcs(mod).get(fname)` 回 `None` ⇒ **整條追蹤在那裡無聲斷掉**
+    ⇒ `_reach(舊 ②)` 裡根本沒有那兩支 ⇒ 交集恆空 ⇒ **守衛安靜地放行**。
+
+    ⚠️ **這是 merge-base 就有的盲點，不是誰在 #822 弄壞的** ——
+    它同時解釋了另一件當時看不懂的事：本掃描器當初**只登記到 `backtest_section`
+    一個模組**，而姊妹檔 `tests/test_dual_track_plotly_id_collision.py`
+    數出來的危險模組是**三個**。兩邊對不起來的原因就是這個 shim
+    （那個檔**有**橋接它，見該檔 `test_the_gate_still_has_a_reason_to_exist`
+    裡的 `bridge = ROOT / "ui" / "helpers" / "fund_grp_health_extras.py"`）。
+
+    ⭐ **括號裡那句「拿掉閘門 → 轉紅」本組也重跑過，它仍然為真** ——
+    而且它現在**多說了兩件事**：把閘門短路掉（`if False and not _open:`，
+    語法合法、`ast.parse` 過）之後，候選命中的模組
+    **修正前只有 `backtest_section` 一個，修正後是三個全到**。
+    ⇒ 同一顆突變，**紅的顏色沒變，但它照出來的模組從一個變成三個**。
+    這就是「射程」與「宣稱」的差別：舊守衛不是不會紅，是**紅得不夠寬**，
+    而那句「任何」把不夠寬的說成了全覆蓋。
+
+    ✅ **2026-09-08 已補**：:func:`_reexport_home` ⇒ 上表右欄三顆全紅。
+    ⛔ **但仍然不得寫成「任何」** —— 這條守衛看得到什麼、看不到什麼，逐條寫在檔尾
+    射程聲明（第 6 項專講 shim 的殘留邊界）。**下面這句才是現在成立的版本**：
+
+    ✅ **成立的宣稱**：閘門被拿掉、或有人在閘門之外重新委派一支
+    **「本掃描器追得到、而且會畫 `_AUTOID_ELEMS` 白名單內無 `key=` 元素」**
+    的舊模組 ⇒ 本條轉紅。
+    ⛔ **不成立的宣稱**：「任何舊模組都會紅」。**動態組出的呼叫、白名單外的元素、
+    以及本檔檔尾第 1／2／6 項所列的形態，本條結構上看不見。**
 
     ## ⚠️ 兩件必須一起讀的事，否則本條的 `== []` 會被誤讀成「這件事沒問題了」
 
@@ -440,6 +532,143 @@ def test_the_known_static_candidates_between_old_two_and_new_six_are_registered(
         + "\n→ #822 的 Checkbox Gate 應該讓這個集合維持空的。"
           "\n   要嘛閘門被拿掉了，要嘛有人在閘門**之外**新增了委派。"
           "\n   ⛔ 正解是把新的委派移到閘門之後，**不是**把本條的期望值改成非空。")
+
+
+#: 本 repo 的 **re-export shim** 實例，用來釘住 :func:`_reexport_home` 不再退化。
+#: ⚠️ **這是「已知實例」，不是掃描器的判準** —— 判準是通則（見 :func:`_reexport_home`），
+#:    所以新長出來的 shim 會自動被涵蓋，**不必**回頭加進本 tuple。
+#:    本 tuple 只負責：這一個已經害守衛說過謊的檔案，不准再讓它靜靜地斷掉。
+_KNOWN_REEXPORT_SHIM = ("ui.helpers.fund_grp_health_extras",
+                        "render_fund_grp_health_extras")
+
+
+def test_the_scanner_can_see_through_a_pure_reexport_shim():
+    """⭐ **這條守的是「守衛的射程」本身 —— 2026-09-08 補。**
+
+    在它之前，:func:`_reach` 追到純 re-export shim 就**無聲斷掉**，
+    於是本檔另一條守衛的 docstring 寫著「**任何**一支……都會轉紅」，
+    而實測 3 支只有 1 支會紅（表在
+    :func:`test_the_known_static_candidates_between_old_two_and_new_six_are_registered`）。
+    **一條宣稱涵蓋「任何」、實際只涵蓋三分之一的守衛，比沒有守衛更危險** ——
+    下一個人會信它，然後停止自己檢查。本條就是那句話的機器版本。
+
+    ⚠️ **本條紅了有兩種可能，訊息裡分開講**：
+    (a) shim 追蹤壞掉了 → 修 :func:`_reexport_home`，**不要放寬本條**；
+    (b) 那個 shim 被刪掉／改寫成真函式了（v19.198 留下的相容層總有一天會走）
+        → 那是好事，**把本條連同 `_KNOWN_REEXPORT_SHIM` 一起刪掉**，不要留一條指著
+        不存在的檔案的測試。
+    """
+    _mod, _fn = _KNOWN_REEXPORT_SHIM
+    if _mod_path(_mod) is None:                       # (b) shim 已經不在了
+        pytest.skip(f"`{_mod}` 已不存在 —— 見本條 docstring 的 (b)，"
+                    "請刪掉本條與 `_KNOWN_REEXPORT_SHIM`，不要留著空轉。")
+
+    # 前提：它真的是「純轉出」——一個 FunctionDef 都沒有。前提變了要有人知道。
+    _t = _tree(_mod)
+    assert _t is not None
+    _own = [_n for _n in ast.walk(_t)
+            if isinstance(_n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    assert not _own, (
+        f"`{_mod}` 已經不是純 re-export shim 了（它自己定義了 {[_n.name for _n in _own]}）"
+        " —— 本條的前提變了，請回來重新判斷，不要直接放寬。")
+
+    _home = _reexport_home(_mod, _fn)
+    assert _home is not None, (
+        f"`{_reexport_home.__name__}` 追不到 `{_mod}::{_fn}` 的家 —— "
+        "shim 追蹤壞了。⛔ 正解是修 `_reexport_home`，不是放寬本條。")
+
+    _seen = _reach(_mod, _fn)
+    assert _home in _seen, f"追到了家 {_home} 卻沒有把它收進可達集合"
+    # 真正的重點：**經過 shim 之後還要能繼續往下追**，不是只跳一格。
+    _downstream = {
+        ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
+        ("ui.helpers.fund_grp_health.dividend", "_render_dividend_matrix"),
+    }
+    _missing = sorted(_downstream - _seen)
+    assert not _missing, (
+        f"穿過 shim 之後追不到 {_missing} —— 追蹤只跳了一格就停了。\n"
+        "這正是 2026-09-08 修掉的那個 fail-open：交集恆空 ⇒ 守衛安靜地放行。")
+
+
+#: ⭐ **驗收表**：在閘門**之前**各注入一行委派，本檔的候選守衛必須**每一顆都紅**。
+#: 2026-09-08 之前只有第一顆會紅（後兩顆走 re-export shim，掃描器看不見）。
+_UNGATED_DELEGATE_MUTANTS: tuple[tuple[str, str], ...] = (
+    ("ui.helpers.fund_grp_health.backtest_section",
+     "render_allocation_backtest_section"),
+    ("ui.helpers.fund_grp_health.correlation", "_render_correlation_matrix"),
+    ("ui.helpers.fund_grp_health.dividend", "_render_dividend_matrix"),
+)
+
+_P02 = REPO_ROOT / "ui/views/page_02_health.py"
+#: 閘門那一行。注入點在它**之前**（＝閘門之外）。
+_GATE_LINE = ("    _open = st.checkbox(DELEGATE_GATE_LABEL, value=False, "
+              "help=_delegate_gate_help())")
+
+
+def test_every_ungated_redelegation_really_turns_the_candidate_guard_red():
+    """⭐⭐ **把上面那句宣稱釘成可執行的驗收表 —— 三顆全紅，控制組綠。**
+
+    突變紀律逐條落地（與 :func:`test_the_scanner_really_catches_a_reintroduced_ungated_delegate`
+    同一套）：**不寫任何檔案**（只換記憶體裡的 AST）、突變體先 `ast.parse` 過
+    （語法錯 ＝ **當機紅**，不是**守衛紅**，不計）、用 `str.replace` 而**不用
+    `ast.col_offset` 切字串**（那是 **UTF-8 位元組**位移，本 repo 的檔案滿是中文，
+    用字元索引切會讓突變**根本沒套上卻回報綠**）、斷言位元組真的變了、
+    事後 `sha256` 逐位元組確認 production 檔沒被碰過。
+
+    ⚠️ **控制組（不注入必須綠）是這一條的另一半** —— 少了它，一條恆紅的斷言
+    也會讓上面三個 `assert` 全過，那等於什麼都沒驗。
+
+    ⛔ **不要「優化」它 —— 本條刻意每一輪都重呼叫 :func:`_collision_candidates`。**
+    本機實測（暖快取）約 **7.8s**，其中約 4 × 1.8s 花在重算 `_reach(*_OLD2)` 上，
+    而 `_reach(*_OLD2)` **實測不含任何 `ui.views.*`**（＝突變 `page_02_health`
+    影響不到它），所以把它提到迴圈外**在今天是正確的**。
+    **不那樣做的理由**：那必須把 :func:`_collision_candidates` 的內容抄一份到本條裡，
+    於是「被驗的那個判準」與「驗它的那條測試」就變成**兩份會各自漂移的東西** ——
+    而本檔整個 2026-09-08 這一輪，修的正是「守衛與它的宣稱對不起來」。
+    ⇒ **省下的那幾秒不值得換一個會靜靜分岔的判準。**
+    （量測日 **2026-09-08**，CI run `34176157138`：fast lane 的 pytest 步驟
+    `01:18:40Z → 01:24:36Z` ＝ **5 分 56 秒**，本條約 **+2.2%**。
+    ⚠️ **這是會漂移的量測值，要比請現場量，不要引用本行的數字** ——
+    本行原本寫的是一個**沒有日期的「約 5 分鐘」**，而那正是本檔這一輪在修的形狀。）
+    ⛔ 也**不得**改用 `@pytest.mark.slow` 搬到 slow lane —— 那條 lane 掛
+    `continue-on-error: true`，紅了不會擋 merge，等於把守衛降級。
+    """
+    _before = hashlib.sha256(_P02.read_bytes()).hexdigest()
+    _src = _P02.read_text(encoding="utf-8")
+    assert _src.count(_GATE_LINE) == 1, (
+        f"注入錨點出現 {_src.count(_GATE_LINE)} 次，不是 1 —— 錨點已漂移，"
+        "請更新本測試而不是放寬它。")
+
+    def _candidates() -> set[tuple[str, str, int]]:
+        return _collision_candidates(_OLD2, _NEW6)
+
+    assert not _candidates(), "控制組就已經非空 —— 這一輪的紅綠都不算數"
+
+    _blind: list[str] = []
+    for _mod, _fn in _UNGATED_DELEGATE_MUTANTS:
+        _inj = (f"    from {_mod} import {_fn} as _probe_delegate\n"
+                f"    _probe_delegate([])\n" + _GATE_LINE)
+        _mut = _src.replace(_GATE_LINE, _inj)
+        assert _mut.encode() != _src.encode(), "替換沒套上，這一輪不算驗過"
+        assert _mut.count("_probe_delegate") == 2, "注入不完整"
+        ast.parse(_mut)                      # 語法先過，否則是當機紅不是守衛紅
+        _TREE_CACHE["ui.views.page_02_health"] = ast.parse(_mut)
+        try:
+            _hits = _candidates()
+        finally:
+            _TREE_CACHE.pop("ui.views.page_02_health", None)
+        if not _hits:
+            _blind.append(f"{_mod}::{_fn}")
+
+    assert not _blind, (
+        "在閘門**之外**重新委派下列舊模組，候選守衛**沒有轉紅** —— 它對這些是瞎的：\n"
+        + "\n".join(f"  {_x}" for _x in _blind)
+        + "\n\n2026-09-08 的根因是 :func:`_reach` 追不進 re-export shim"
+          "（`ui/helpers/fund_grp_health_extras.py`）。\n"
+          "⛔ 正解是把追蹤補起來（`_reexport_home`），**不是**把本條的期望值改掉。")
+
+    assert hashlib.sha256(_P02.read_bytes()).hexdigest() == _before, \
+        "本測試污染了 production 檔"
 
 
 #: 舊 ⑤ **無條件**（一次都不必點）就會呼叫的委派 —— 新 ⑦ 的四顆 gate 全部靠它成立。
@@ -774,3 +1003,19 @@ def test_the_health_preview_tab_is_clean_on_default_load(at_default: Any):
 #    現況：**⑧ 已補掃**（見 `test_the_third_dual_track_pair_has_no_keyless_collision_either`，
 #    命中 0）；**`page_04_portfolio` 仍未掛預覽格，本檔未掃**（實測 `app.py` 的
 #    `st.tabs(...)` 目前是八格，沒有 ④ 的 `[新]` 那一格）。
+# 6. **re-export shim：2026-09-08 補了追蹤，但只補到「純轉出」這一種。**
+#    `_reach` 現在會經 :func:`_reexport_home` 穿過
+#    `from X import a, b, c` 這類純轉出檔（本 repo 實例：
+#    `ui/helpers/fund_grp_health_extras.py`、`ui/helpers/ia/__init__.py`、
+#    `services/health/__init__.py`）。**沒有涵蓋的形態，逐一列出**：
+#      (a) `from X import *` —— :func:`_names` 會把它存成一個**叫 `*` 的鍵**，
+#          而沒有任何呼叫點叫 `*`，所以**永遠查不到、等於看不見**
+#          （姊妹檔 `tests/test_wf02_health_golive.py::_resolve` **有**追 `*`；
+#          本檔沒有，因為本 repo 的委派鏈上目前沒有 `*` shim，**但那是現況不是保證**）；
+#      (b) 相對匯入 `from . import x` —— :func:`_names` 明文 `_n.level == 0` 才收；
+#      (c) `x = X.y` 這種**賦值式**別名、`globals().update(...)`、`getattr` 等
+#          動態轉出 —— 靜態一律看不見；
+#      (d) `__all__` 與實際匯入不一致時，本掃描器以**實際 `ImportFrom`** 為準。
+#    ⚠️ **也要知道它多抓了什麼**：:func:`_names` 連**函式內的 lazy import** 都收，
+#    所以「模組 M 的某個函式裡 `from X import helper`」也會被當成 M 轉出 `helper`。
+#    那是刻意的 over-approximation（fail-closed），**只會多抓、不會漏抓**。
