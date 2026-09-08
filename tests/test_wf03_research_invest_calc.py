@@ -1764,6 +1764,10 @@ _TRACE_SHAPE_FIXTURES: tuple[tuple[str, dict], ...] = (
     ("``success: None``（說了、值是空）", {"source": "S2", "success": None}),
     ("``success: False``（真的失敗）", {"source": "S3", "success": False}),
     ("有 ``error`` 但**無** ``success`` 鍵", {"source": "S4", "error": "HTTP 500"}),
+    # ⭐ 2026-09-08 補：**原本沒有這一列**，而那張表自稱「完整分類矩陣」。
+    #    「完整」是全稱句，**一條真跑就推翻它**（憲法 §-1.5.1c 判定 2）。
+    #    ⚠️ 它與「自稱實跑卻印著舊值」是同一個病 —— 同一段註解裡的兩處，同日一起修。
+    ("``success: True``（真的成功）", {"source": "S5", "success": True}),
 )
 
 
