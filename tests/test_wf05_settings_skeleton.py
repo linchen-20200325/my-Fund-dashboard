@@ -603,6 +603,21 @@ def _page_authored_parts(parts: tuple[str, ...] | list[str]) -> list[str]:
     `render_data_guard_tab()` 的輸出。本檔的 :func:`_stream` 三種形狀
     **gate 都沒勾**（`value=False` / 預設不勾），所以對它們成立。
     ⛔ 拿它去看 `_run_gated(..., open_gate=True)` 的結果是錯的。
+
+    ⚠️ **2026-09-08 就地更正：本函式的名字自本日起比它的內容大（有意識的更正，不是漏刪）。**
+    本頁新增了 **🧾 ① 結論層**，那也是「被測檔自己畫的內容」——
+    但它排在第一個 `### ` 區塊**之前**，:func:`_units` / :func:`_segments`
+    **結構上看不到它**，所以本函式**回傳值裡沒有它**。
+    ⛔ **本輪刻意不把它加進來，理由是「不要靜靜擴大一個既有 helper 的語意」**：
+       本函式今天在檔內**只被一段註解引用**（`git grep` 實測：定義 1 處、註解 1 處、
+       0 個真正的呼叫端），把結論層塞進來不會讓任何一條規則變強，
+       只會讓下一個人以為「用它就掃得到全部自畫內容」。
+    ✅ **結論層由專屬的 :func:`_conclusion_parts` ＋ 該節四條守衛涵蓋**
+       （`test_no_conclusion_word_appears_in_the_conclusion_layer` /
+        `test_the_verdict_names_the_only_switch_it_can_see` /
+        `test_the_conclusion_says_it_does_not_know_instead_of_guessing` /
+        `test_every_conclusion_card_points_at_a_block_that_is_really_on_screen`）。
+    ⛔ **要拿本函式當「本頁自畫內容的全集」之前，先把結論層加進來並跑一次突變。**
     """
     _seg = _segments(parts)
     return list(_seg.get(BLOCK_HEALTH, [])) + list(_seg.get(nav_status_label(), []))
@@ -3107,3 +3122,211 @@ def test_the_two_remaining_gates_stopped_talking_about_themselves(
         f"「{what}」又開始講系統自己了：命中 {_hit}\n  {value!r}\n"
         "⛔ 線框 §0 推翻 1：「載入」是系統在講自己；使用者要知道的是"
         "「這一下要花我多久、不按會怎樣」。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-09-08 回修：把內容型守衛的射程放大到結論層
+# ══════════════════════════════════════════════════════════════════
+# ⛔⛔ **這一節補的是本檔自己早就登記過的那個縫，而且是被它放走一顆真違規之後才補的。**
+#
+# 本檔模組 docstring 的「守不到」清單第 4 條逐字寫著：
+#   「**頁首（`## 標題` ＋ `st.caption`）落在所有 unit-scoped 守衛的射程之外** ——
+#     :func:`_units` 會丟掉第一個區塊標題之前的全部文字。**既有登記，本輪未修。**」
+# 而 :func:`_nav_parts` 的長註記也寫著
+#   「**哪天本頁又開始自己畫東西，這裡要一起放大**」。
+# **2026-09-08 這一批就是那一天** —— 新增的結論層排在第一個 `### ` 之前，
+# 於是 :func:`_units` 結構上看不到它，`_CONCLUSION_WORDS` 那份黑名單對它**完全不生效**。
+#
+# **獨立稽核的實證（本組已自行重現，附三道正對照）**：把 verdict 換成
+#   「一切正常，全部來源都正常，你的資料可信」→ **132 passed、突變存活**
+#   （三個詞逐字都在 :data:`_CONCLUSION_WORDS` 上）；
+#   「可以信。今天每一個來源都抓到了，沒有一項缺設定。」→ **132 passed、突變存活**
+#   （**這一顆連黑名單的邊都沒沾到** —— 它是本節第二條規則存在的理由）。
+#
+# ⛔ **修法是【放大射程】，不是【放寬條件】** —— 沒有動 :data:`_CONCLUSION_WORDS`
+#    一個字、沒有加任何豁免、沒有調降任何下限。
+
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+def test_no_conclusion_word_appears_in_the_conclusion_layer(kind: str):
+    """⭐ 把 :data:`_CONCLUSION_WORDS` 那份既有黑名單**放大到結論層**。
+
+    ⛔ **這條與 :func:`test_no_grey_unit_states_a_conclusion` 用的是同一份字表，
+       但掃的是不同的地方** —— 那一條掃 :func:`_units` 認得的六個區塊，
+       而結論層排在第一個區塊之前，**它結構上看不到**。
+
+    ⚠️ **它擋不到什麼，照實寫**：黑名單抓不到字表以外的第 N+1 種說法
+    （稽核那第二顆突變「可以信。今天每一個來源都抓到了」**一個詞都沒命中**）。
+    **那一半由 :func:`test_the_verdict_names_the_only_switch_it_can_see` 用
+    「正向要求」擋，不是靠把黑名單愈加愈長。** 兩條要一起看。
+    """
+    _body = _text(_conclusion_parts(_stream(kind)))
+    assert _body, f"（{kind}）結論層是空的 —— 本條失去對象（fail-closed）。"
+    for _w in _CONCLUSION_WORDS:
+        assert _w not in _body, (
+            f"（{kind}）結論層出現了結論性字眼 {_w!r}：\n{_body}\n"
+            "⛔ 結論層排在**所有閘門之前**，它一次都還沒量過任何來源 —— "
+            "說「正常」是憑空捏造一個系統健康狀態（`CLAUDE.md §1`）。")
+
+
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+def test_the_verdict_names_the_only_switch_it_can_see(kind: str):
+    """⭐⭐ **正向要求**：結論那句話必須**指名它量到的那一顆開關**。
+
+    ⛔ **這是本節唯一擋得住「換一種說法」的規則，理由請讀完再改。**
+
+    這一層唯一量得到的東西是 :data:`_SK_DIAG_GATE`（本頁自己寫的那個鍵，見
+    :func:`_diag_gate_is_on`）。**一句沒有指名自己量了什麼的結論，不是結論，是斷言。**
+    於是規則反過來寫：**本文裡必須出現 :data:`DIAG_GATE_LABEL`。**
+
+    - 稽核突變 A「一切正常，全部來源都正常，你的資料可信」→ 沒指名 → **紅**；
+    - 稽核突變 B「可以信。今天每一個來源都抓到了，沒有一項缺設定。」→ 沒指名 → **紅**。
+      ⭐ **B 是黑名單抓不到的那一顆** —— 它證明「正向要求」比「再加幾個詞」強。
+
+    ⚠️ **`（請先到：…）` 那一段要先切掉再驗**：未勾那一支的 `where=` 本來就帶著
+    同一個標籤，不切掉的話「本文有沒有指名」這件事會被指路**免費送過關** ——
+    那就變成一條看起來有牙、實際恆真的規則。
+
+    ⚠️ **它擋不到什麼**：指名了、然後在後面再接一句謊
+    （「「🔭 …」是關的，但我可以告訴你一切正常」）——本條看得到前半、擋不到後半，
+    那一半由上一條黑名單接。**兩條都不是「結論層不可能說謊了」。**
+    """
+    _seg = _conclusion_parts(_stream(kind))
+    _grid = next((_i for _i, _p in enumerate(_seg) if _p.startswith("[Column]")), len(_seg))
+    _verdict = [_p for _p in _seg[:_grid] if _p.startswith("[Caption]")]
+    assert len(_verdict) == 1, (
+        f"（{kind}）卡片網格之前的說明有 {len(_verdict)} 則（線框 §1：一句結論）：\n"
+        + "\n".join(_verdict))
+    _body = _verdict[0].split("（請先到：", 1)[0]
+    assert DIAG_GATE_LABEL in _body, (
+        f"（{kind}）結論那一句沒有指名它量到的那一顆開關 "
+        f"（{DIAG_GATE_LABEL!r} 不在本文裡）：\n{_body}\n"
+        "⛔ 這一層唯一量得到的就是那顆開關的狀態。**一句沒有指名自己量了什麼的結論，"
+        "不是結論，是斷言** —— 而斷言在這一頁上就是 `CLAUDE.md §1` 的造假。\n"
+        "⚠️ 若你想讓結論說更多，正解是先讀被測檔的 **(D-6)**："
+        "那是一個**待裁決**的問題，不是實作組自己決定的事。")
+
+
+#: 兩顆留下來的閘門的 `help=` tooltip。**AST 取值，不手抄。**
+def _gate_helps() -> dict[str, str]:
+    """`{閘門常數名: help= 的字面值}` —— 只收 :data:`DIAG_GATE_LABEL` /
+    :data:`NAV_GATE_LABEL` 那兩顆。
+
+    ⛔ **另外四顆是雙軌鷹架，刻意不收**：它們的 `help=` 講的是「舊分頁已經在跑同一塊」
+    ——那是**真的原因**，不是進度語言，而且它們會在舊 ⑤ 下架那一批**整顆消失**。
+
+    ⚠️ **只認 `Constant`**：四顆雙軌的 `help=` 是 f-string（`JoinedStr`），
+    本函式拿不到值 —— 但那正好是刻意不收的那四顆，所以**這個限制在今天沒有缺口**。
+    ⛔ **哪天那兩顆的 `help=` 改成 f-string，本函式會靜默漏掉它** ——
+    故下方 :func:`test_..._in_the_tooltip_too` 對「取不到值」**fail-closed**。
+    """
+    _out: dict[str, str] = {}
+    for _n in ast.walk(_tree()):
+        if not (isinstance(_n, ast.Call)
+                and getattr(_n.func, "attr", None) == "checkbox" and _n.args):
+            continue
+        _lbl = _dotted(_n.args[0])
+        if _lbl not in ("DIAG_GATE_LABEL", "NAV_GATE_LABEL"):
+            continue
+        _h = next((_k.value for _k in _n.keywords if _k.arg == "help"), None)
+        _out[_lbl] = (_h.value if isinstance(_h, ast.Constant)
+                      and isinstance(_h.value, str) else None)     # type: ignore[assignment]
+    return _out
+
+
+@pytest.mark.parametrize("gate", ["DIAG_GATE_LABEL", "NAV_GATE_LABEL"])
+def test_the_two_remaining_gates_stopped_talking_about_themselves_in_the_tooltip_too(
+        gate: str):
+    """⭐ 線框 §0 推翻 1 那條規則，**射程放大到 `help=` tooltip**。
+
+    ⛔ **為什麼要有這一條（它補的是一個真的漏掉，不是假想的）**：
+    2026-09-08 第一版把兩顆閘門的**標籤與灰態**換成處境語言，
+    **`help=` 卻原封留著**「診斷區**載入**時會更新資料註冊表…」。
+    **它會被漏掉不是巧合** —— :func:`test_the_two_remaining_gates_stopped_talking_about_themselves`
+    的參數表是 label ＋ note 四個字串，**結構上看不到 `help=`**。
+    → **文案與守衛射程一起修**（`CLAUDE.md §8.2.A.1` 驗證段 ④：
+      更正一個被點名的項目時，必須把同一把尺對全部同類項目重跑）。
+
+    ⚠️ **與那條的關係**：同一份 :data:`_PROGRESS_WORDS`（**一個字都沒動**），
+       掃的是不同的位置。**放大射程，不是放寬條件。**
+    """
+    _helps = _gate_helps()
+    assert gate in _helps, (
+        f"AST 掃不到 {gate} 那顆 checkbox —— 本條失去對象（fail-closed）。\n"
+        f"掃到的：{sorted(_helps)}")
+    _v = _helps[gate]
+    assert isinstance(_v, str), (
+        f"{gate} 的 `help=` 不是字面字串（可能改成了 f-string）——"
+        "本條讀不到值，**fail-closed**：請改回字面值，或把本函式一起放大。")
+    _hit = [_w for _w in _PROGRESS_WORDS if _w in _v]
+    assert not _hit, (
+        f"{gate} 的 `help=` 又開始講系統自己了：命中 {_hit}\n  {_v!r}\n"
+        "⛔ 線框 §0 推翻 1：使用者要知道的是「這一下要花我多久、不按會怎樣」。")
+
+
+#: 金鑰／Proxy 面板**實際**住的那兩個標題（`ui/tab5_data_guard.py`）。
+#: ⚠️ **這兩個字串是本檔對【別的檔案】的唯一硬編引用** —— 它們是**錨點**：
+#:    哪天那兩塊被搬走或改名，下面那條會 **fail-closed**（而不是靜靜地繼續綠），
+#:    因為那正是「🔑 那張卡該指去哪」需要重新裁決的時刻。
+_KEY_PANEL_HEADINGS: tuple[str, ...] = (
+    "### ④ 🔑 API 金鑰狀態", "### ③ 🌐 NAS Proxy 中繼站狀態")
+
+
+def test_the_key_card_does_not_point_at_a_block_that_cannot_answer_it():
+    """⭐⭐ 🔑 那張卡**不准指向一個自陳裝不下那個答案的區塊**。
+
+    ⛔ **這條補的是 2026-09-08 回修裡唯一存活下來的那顆突變。**
+    把 :data:`_CARD_KEYS_NOTE` 改回「回答：上面那兩件事能不能做。**先看這一塊再看上面。**」
+    → 修完第一版之後 **140 passed、突變存活**。也就是說 ⛔2 那個錯**可以被原封改回去**
+    而沒有任何一條規則會叫 —— 一個「修好了但沒有守衛」的修正，等於還沒修。
+
+    **本條驗三件事，前兩件是【重量事實】、第三件才是斷言**
+    （事實一旦不成立就 fail-closed，因為那正是該重新裁決的時刻）：
+
+    1. **金鑰／Proxy 的面板真的住在 `ui/tab5_data_guard.py`**（:data:`_KEY_PANEL_HEADINGS`）；
+    2. **`_render_keys()` 真的沒有它們** —— 它委派的只有
+       `render_policy_admin_bridge` ＋ `render_fetch_diag_from_session`；
+    3. ⇒ 🔑 那張卡的 `where` **不得**指向 `BLOCK_KEYS`，而它的說明**必須指名**
+       答案真正住的那一塊（:data:`BLOCK_HEALTH`，因為 tab5 由它委派）。
+
+    ⚠️ **這一條不是在說「連線與金鑰這一塊沒用」** —— 它裝的東西（保單管理指路、
+    抓取診斷）是真的；本條只禁止**把一個它答不出來的問題指給它**。
+    ⚠️ **擋不到什麼**：卡片說明可以指名 `BLOCK_HEALTH` 之後再接一句別的謊。
+    本條驗「有沒有指到對的地方」，**不驗整段文案為真**。
+    """
+    # ── (1) 事實：那兩塊真的在 tab5 ──────────────────────────────────
+    _tab5 = (ROOT / "ui" / "tab5_data_guard.py").read_text(encoding="utf-8")
+    _absent = [_h for _h in _KEY_PANEL_HEADINGS if _h not in _tab5]
+    assert not _absent, (
+        f"`ui/tab5_data_guard.py` 裡找不到 {_absent} —— 金鑰／Proxy 面板被搬走或改名了。\n"
+        "⛔ 這不是本條壞了，是**該重新裁決 🔑 那張卡指去哪**的時刻（fail-closed）。")
+
+    # ── (2) 事實：`_render_keys()` 沒有它們，只委派那兩支 ──────────────
+    _fn = next((_n for _n in ast.walk(_tree())
+                if isinstance(_n, ast.FunctionDef) and _n.name == "_render_keys"), None)
+    assert _fn is not None, "`_render_keys` 不見了 —— 本條失去對象（fail-closed）。"
+    _delegates = {_dotted(_n.func) for _n in ast.walk(_fn) if isinstance(_n, ast.Call)}
+    assert "render_policy_admin_bridge" in _delegates, (
+        f"`_render_keys` 不再委派保單管理橋接 —— 那一塊的內容變了，本條的前提要重驗。\n"
+        f"實際呼叫：{sorted(_delegates)}")
+    assert not any(_h.split()[-1] in _s for _h in _KEY_PANEL_HEADINGS
+                   for _s in _delegates), (
+        "`_render_keys` 看起來開始自己畫金鑰／Proxy 了 —— "
+        "若屬實，🔑 那張卡就該改指回 `BLOCK_KEYS`，請一起改本條（fail-closed）。")
+
+    # ── (3) 斷言：卡片指去答案真正住的那一塊 ─────────────────────────
+    _card = next((_c for _c in _conclusion_cards() if "金鑰" in _c["title"]), None)
+    assert _card is not None, (
+        f"結論層沒有金鑰那張卡了：{[_c['title'] for _c in _conclusion_cards()]}")
+    assert _card["where"] != _below(BLOCK_KEYS), (
+        f"🔑 那張卡指向「{BLOCK_KEYS}」，但那一塊**回答不了金鑰** ——\n"
+        "被測檔 `_render_keys` 自己的 docstring 就寫著「「API 金鑰狀態 / NAS Proxy 測試」"
+        "仍住在 `render_data_guard_tab()` 深處……**這是已知缺口，不是漏做**」。\n"
+        "⛔ 一塊自陳裝不下的區塊，不可以被新加的卡說成答案在那裡"
+        "（線框 §3 末項授權的是「**登記，不動工**」，不是「加一張卡宣稱它已經裝得下了」）。")
+    assert _card["where"] == _below(BLOCK_HEALTH), (
+        f"🔑 那張卡的指路是 {_card['where']!r}，但金鑰／Proxy 由「{BLOCK_HEALTH}」"
+        "那一塊委派的 `render_data_guard_tab()` 畫。")
+    assert BLOCK_HEALTH in _card["note"], (
+        f"🔑 那張卡的說明沒有指名答案真正住的那一塊（「{BLOCK_HEALTH}」）：\n"
+        f"{_card['note']}\n"
+        "⛔ 只把 `where` 改對、說明還在講「先看這一塊」，使用者讀到的仍然是錯的地方。")
