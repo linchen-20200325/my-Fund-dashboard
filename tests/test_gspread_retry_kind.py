@@ -46,6 +46,20 @@ from infra import gspread_retry as GR
 _FAST = (0.0,) * len(GR.DEFAULT_QUOTA_BACKOFFS)
 _N = len(_FAST)
 
+# 分類軸與行為軸**共用同一份清單**，兩軸因此不可能再各自漂移（2026-09-08）。
+#
+# ⚠️ 為什麼要共用：它們原本是兩份手寫清單，分類軸有 10 個、行為軸只有 7 個
+# —— 少的正是 401 / 402 / 422。獨立稽核用突變證明那是**真破洞**：把 401 偷偷放回
+# 重試，行為真的變了（attempts 1 → 4），而整套測試**全綠、毫無反應**。
+# 成因是兩份清單**出處不同**（行為軸照著當時重現表的 5 個永久碼 + 403/429 寫，
+# 分類軸則涵蓋更廣），而**沒有任何一條規則要求它們一致**。
+#
+# 這裡不是「再補一次漏掉的三個」，是把「兩份清單必須一致」從**人的自律**
+# 改成**結構上的必然** —— 往後新增一個狀態碼，兩軸同時生效，漏不掉。
+# 若日後真有狀態碼需要「分類是 4xx 但行為不同」，必須**明確拆開並寫下理由**，
+# 那正是應該被迫思考的時刻。
+_NON_TRANSIENT_STATUSES = [400, 401, 402, 403, 404, 407, 409, 410, 422, 429]
+
 
 def _stub_gspread(monkeypatch):
     """注入一個最小 `gspread.exceptions`，只為讓 `http_status_of` 認得出 `APIError`。
@@ -130,7 +144,7 @@ def attempts(monkeypatch):
 # ══════════════════════════════════════════════════════════════
 # (1) 分類軸：is_transient_gspread_error
 # ══════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("status", [400, 401, 402, 403, 404, 407, 409, 410, 422, 429])
+@pytest.mark.parametrize("status", _NON_TRANSIENT_STATUSES)
 def test_client_errors_are_not_transient(api_error, status):
     """4xx 一律**不是**暫時性 —— 請求／權限／設定問題，隔一秒再打不會變好。"""
     assert GR.is_transient_gspread_error(api_error(status)) is False
@@ -156,11 +170,18 @@ def test_quota_error_without_status_is_not_transient():
 # ══════════════════════════════════════════════════════════════
 # (2) 行為軸：with_gspread_retry 的實際嘗試次數
 # ══════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("status", [400, 403, 404, 407, 409, 410, 429])
+@pytest.mark.parametrize("status", _NON_TRANSIENT_STATUSES)
 def test_permanent_status_is_attempted_exactly_once(api_error, attempts, status):
     """⛔ 永久性錯誤：**只打一次**，一次 sleep 都不能有。
 
-    修復前 400 / 404 / 407 / 409 / 410 各打 4 次、sleep 3 次（403 / 429 本來就對）。
+    修復前實測（2026-09-08 於 merge-base `810ebc5` 的 `infra/gspread_retry.py`
+    重跑，⛔ 非轉述）：**400 / 401 / 402 / 404 / 407 / 409 / 410 / 422 各打 4 次、
+    sleep 3 次**；403 / 429 本來就只打 1 次。
+
+    ⚠️ **401 / 402 / 422 是 2026-09-08 才補進來的**（本檔原先只覆蓋 7 個）。
+    它們與另外五個**修復前後的數字完全一樣**（4 → 1），沒有任何理由被排除在外
+    —— 那是漏的，不是刻意的。**參數表已改為與分類軸共用
+    `_NON_TRANSIENT_STATUSES`，同一個漏法不會再發生第二次。**
     """
     n, s = attempts(lambda: api_error(status))
     assert (n, s) == (1, 0), (
