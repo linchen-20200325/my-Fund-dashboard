@@ -414,6 +414,29 @@ _MIN_LIVE_TIER1_PER_FILE: dict[str, int] = {
 _PER_FILE_FLOOR_MAX_SLACK = 1.6
 
 
+# ── 第二道之二：per-file **位元組**下限（2026-09-08 第四輪稽核逼出來的）──────
+# **為什麼引用筆數不夠、非得再加一個位元組下限**：
+#   引用筆數擋不住「**留下標題、把內文搬走**」—— 而那**不是規避形狀，正是本 PR 自己
+#   建立的慣例**（母檔留指標段、節號不改）。第四輪稽核把本 PR 寫進 `CLAUDE.md` 的
+#   指標段句子**逐字拿去、只改日期與檔名**，保留全部 10 個 `§-1.5*` 標題、
+#   把內文搬進未登記的檔 ⇒ **139,089 bytes（48.9%）消失，23 passed 全綠**。
+#   對照組（同樣的突變，只少留一個標題）→ **紅**。**紅與隱形之間只差一行。**
+#   ⇒ **章節清單只驗「標題在不在」，位元組下限才驗「內文還在不在」。兩條缺一不可。**
+#
+# ⚠️ **我原本反對用位元組數，理由是「它會隨檔案長大而失效」——那個理由已經不成立**：
+#   `_PER_FILE_FLOOR_MAX_SLACK` 這個 ratchet 就是為了解那個問題而存在的，
+#   位元組下限**沿用同一個機制**（只升不降）。**反對的理由被自己三段之前的程式碼解掉了。**
+#
+# ⚠️ **刻意不在註解裡寫「現在是幾 bytes」**（同 `_MIN_LIVE_TIER1_PER_FILE`，
+#    §8.2.A.0 規則 4：會漂移的量測值一律不寫）。要現值請跑：
+#        wc -c CLAUDE.md EXCEPTIONS.md
+# 下限訂法：**現值 × 0.8**（第四輪稽核實測此值可讓三組掏空突變全紅、且基線零誤報）。
+_MIN_BYTES_PER_FILE: dict[str, int] = {
+    "CLAUDE.md": 227721,
+    "EXCEPTIONS.md": 131167,
+}
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # ⛔⛔ 讀這一段再改下面任何一行 —— 這道守衛的歷史
 # ══════════════════════════════════════════════════════════════════════════
@@ -513,12 +536,15 @@ def test_per_file_floor_keys_match_registered_files_exactly():
     → key 變成 `docs/EXCEPTIONS.md`、字典裡是 `EXCEPTIONS.md` ⇒ 舊寫法 `if f in dict`
     讓它**直接沒有下限**，全綠、112 筆不再受保護。
     """
-    keys, registered = set(_MIN_LIVE_TIER1_PER_FILE), _registered_files()
-    assert keys == registered, (
-        "`_MIN_LIVE_TIER1_PER_FILE` 的 key 與 `CONSTITUTION_FILES` 不一致：\n"
-        f"  有登記但沒下限：{sorted(registered - keys)}\n"
-        f"  有下限但沒登記：{sorted(keys - registered)}\n"
-        "「不在字典裡就等於沒有下限」是一個會安靜生效的漏洞。")
+    registered = _registered_files()
+    for name, d in (("_MIN_LIVE_TIER1_PER_FILE", _MIN_LIVE_TIER1_PER_FILE),
+                    ("_MIN_BYTES_PER_FILE", _MIN_BYTES_PER_FILE)):
+        keys = set(d)
+        assert keys == registered, (
+            f"`{name}` 的 key 與 `CONSTITUTION_FILES` 不一致：\n"
+            f"  有登記但沒下限：{sorted(registered - keys)}\n"
+            f"  有下限但沒登記：{sorted(keys - registered)}\n"
+            "「不在字典裡就等於沒有下限」是一個會安靜生效的漏洞。")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -643,14 +669,34 @@ _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9
 
 
 def _registry_ids_present() -> set[str]:
-    """憲法各檔的**表格第一格**裡出現的登記簿 ID（與 `test_retired_exception_ids.py` 同一條路徑）。"""
+    """憲法各檔裡**以該 ID 開頭**的表格第一格 —— 也就是「**它的定義列**」。
+
+    ⚠️ **「開頭 token」這個較嚴的條件是 2026-09-08 第四輪稽核逼出來的**，理由：
+    舊版只問「這個 ID 有沒有出現在**某個**第一格」，而那可以被**交叉引用**滿足 ——
+    例如 `P-POOLCACHE-1` 那一列的第一格裡就寫著「起因見 … `EX-CRUD-1` 該列 …」。
+    ⇒ 把 `EX-CRUD-1` 的**定義列整列刪掉**，舊版**照樣綠**。
+    **實測（量測日 2026-09-08）：32 個 ID 裡有 6 個處於這種「別名狀態」**
+    （`EX-AI-1` / `EX-CRUD-1` / `EX-PASSTHRU-1` / `EX-UICACHE-1` /
+      `P-AIKEYCI-1` / `P-WSTOREWRITE-1`），它們的定義列**合計佔 `EXCEPTIONS.md` 約三分之一**。
+    ⚠️ **而且本 PR 自己把別名數從 3 提到 6** —— 靠它新增的那張指代宣告表。
+    改成「必須是開頭 token」之後 **32/32 仍然滿足**（drop-in，零誤報）。
+
+    ⛔ **這只堵住「交叉引用」那一半，堵不住「指標列」那一半** ——
+       一列刻意寫成 `| **EX-CRUD-1** —— 已搬至 X |` 的指標列照樣是開頭 token。
+       **那一半登記在 `EXCEPTIONS.md` 的 `8.3.P` → `P-SPLITSLACK-1` 缺口 (d)。**
+    """
     out: set[str] = set()
     for _f, txt in _read_constitution_files():
         for line in txt.split("\n"):
             s = line.lstrip()
             if not s.startswith("|"):
                 continue
-            out |= set(_REGISTRY_ID_RE.findall(s[1:].split("|", 1)[0]))
+            cell = s[1:].split("|", 1)[0].strip()
+            # 允許前置的刪除線／粗體／反引號標記（退役列寫成 `~~**EX-POLICY-1**~~`）
+            head = cell.lstrip("~*` ")
+            for _id in _REGISTRY_ID_RE.findall(cell):
+                if head.startswith(_id):
+                    out.add(_id)
     return out
 
 
@@ -734,6 +780,32 @@ def test_guard_still_sees_the_whole_constitution():
         "   照著做等於**放寬**。實測後果：最大可靜默搬走的連續區塊由 **56.9% 變成 73.8%**。\n"
         "   **一條寫在守衛裡的補救建議，自己是個放寬指令 —— 這是本檔踩過最貴的一次。**\n"
         "⛔ 不要改大 `_PER_FILE_FLOOR_MAX_SLACK` 來閉嘴 —— 那正好是這條要防的動作。")
+
+
+def test_constitution_files_have_not_been_gutted():
+    """⭐ **位元組下限**：章節標題還在，不代表內文還在。
+
+    2026-09-08 第四輪稽核：保留全部 `§-1.5*` 標題、內文搬進未登記的檔
+    ⇒ **48.9% 消失、23 passed 全綠**。章節清單看不到這種掏空，**只有位元組數看得到**。
+    """
+    sizes = {f: (REPO_ROOT / f).stat().st_size for f in _MIN_BYTES_PER_FILE}
+
+    gutted = sorted((f, n, _MIN_BYTES_PER_FILE[f]) for f, n in sizes.items()
+                    if n < _MIN_BYTES_PER_FILE[f])
+    assert not gutted, (
+        "下列憲法檔小於它自己的位元組下限："
+        + "、".join(f"{f} {n:,} < {lo:,}" for f, n, lo in gutted) + "\n"
+        "⇒ 最可能的原因：**有人保留了標題、把內文搬走了**（章節清單看不到這種掏空）。\n"
+        "若這是**有意識**的拆檔：把新檔加標記 ＋ 登記，並**重新量測**下限"
+        "（`wc -c`，取 `max(現行下限, 新現值×0.8)`）。\n"
+        "⛔ 不要為了讓測試變綠而直接把下限調到剛好通過。")
+
+    too_slack = sorted((f, n, _MIN_BYTES_PER_FILE[f]) for f, n in sizes.items()
+                       if n > _MIN_BYTES_PER_FILE[f] * _PER_FILE_FLOOR_MAX_SLACK)
+    assert not too_slack, (
+        "下列憲法檔已遠大於它自己的位元組下限，**保護力正在安靜地衰減**："
+        + "、".join(f"{f} {n:,} > {lo:,}×{_PER_FILE_FLOOR_MAX_SLACK}" for f, n, lo in too_slack)
+        + "\n**請把下限往上調**：取 `max(現行下限, 現值×0.8)`（**只升不降**），並註明量測日。")
 
 
 def test_every_exemption_is_still_needed():
