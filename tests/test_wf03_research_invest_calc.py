@@ -1307,3 +1307,24 @@ def test_on_a_total_failure_the_invest_block_prints_the_same_sentence_on_screen(
         "同一個原因、兩種故事，而且第二種把使用者導向錯的結論。")
     assert "查不到這一檔是用哪一種幣別計價" not in _invest, (
         f"全敗時第六格仍在講自己的幣別原因：\n{_invest}")
+
+
+@pytest.mark.parametrize("src", [ADR_OFFICIAL, ADR_LOCAL_RATE, ADR_FROM_RECORDS,
+                                 "某個上游日後才新增的來源"])
+@pytest.mark.parametrize("agree", [True, False])
+def test_none_of_the_three_payout_sources_speaks_our_internal_language(src, agree):
+    """⭐ **補上一個本批自己開的缺口**，不是重複既有那條。
+
+    既有的 :func:`test_this_block_never_speaks_our_internal_language` 是用
+    :func:`_invest_body` **渲染整塊**驗的，而它的五份 fixture **全部走
+    :data:`ADR_OFFICIAL`**（`_RICH_WITH_NAV` 帶 `moneydj_div_yield`）——
+    也就是本批新增的**另外兩條** copy 路徑，在那條測試的射程外。
+
+    ⛔ 新增使用者看得到的文案，就要把它拉進同一張字表底下；
+    「我人工看過一遍」不是守衛（§-2 規則 6）。
+    """
+    _line = _invest_compare(_compare_facts(adr_source=src,
+                                           income_reconcile={"agree": agree}))
+    _hits = sorted({_w for _w in _INTERNAL_WORDS if _w in _line})
+    assert not _hits, (
+        f"來源 {src!r}（agree={agree}）的比較句出現內部語言：{_hits}\n{_line}")
