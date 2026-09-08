@@ -446,6 +446,23 @@ _SK_INVEST_AMOUNT: str = "v03_research_invest_amount_twd"
 #: ⚠️ 兩句帶 `{}` 的要由 :func:`_invest_blocked_note` 填 —— 它們**必須**說出是哪一種幣別，
 #: 「換算不出來」與「**日圓**換算不出來」對使用者的意義不一樣。
 _INVEST_BLOCKED_NOTES: dict[str, str] = {
+    # ⚠️ **這一句今天在這個畫面上印不出來，據實寫明，不要讀成「已經在守某個東西」**
+    #    （`CLAUDE.md §-2` 規則 6 的實證就是這種形狀：宣稱修好的偵測，
+    #     production 路徑恆不觸發）。
+    #    **為什麼恆不觸發**：:func:`_applied_amount` 拿不到正數就退
+    #    :data:`DEFAULT_AMOUNT_TWD`，而金額 widget 自己有 `min_value`
+    #    —— 兩層加起來，送進算式的金額**結構上不可能 ≤ 0**。
+    #    **本組實測**：把 `_SK_INVEST_AMOUNT` 換成 13 種髒值
+    #    （不存在／None／0／-1／''／'abc'／NaN／[]／{}／True／False／空白／1e-9），
+    #    `_applied_amount()` **每一種都回正的 float**。
+    #    ⛔ **那為什麼還留著它**：`NO_AMOUNT` 是**算式層的契約**，
+    #    `services.fund_invest_calc` 對任何呼叫端都會回它；這一句是它在本頁的
+    #    對應文案。少了它，哪天有人把預設值拿掉（例如改成「不填就留白」），
+    #    畫面會掉進 :func:`_invest_blocked_note` 的「拿不到原因」那條退路。
+    #    這個「今天不可達」的狀態由
+    #    `tests/test_wf03_research_invest_calc.py::`
+    #    `test_the_no_amount_branch_is_unreachable_from_this_screen_today` 釘住 ——
+    #    **它一旦變成可達，那條測試會轉紅**，提醒下一個人回來重讀這一段。
     NO_AMOUNT: (
         "金額還是空的，或填的不是一個大於 0 的數字 —— "
         f"填一個你打算投入的台幣金額，再按一次「{INVEST_SUBMIT_LABEL}」"),

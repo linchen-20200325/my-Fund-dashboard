@@ -569,6 +569,64 @@ def test_the_amount_is_only_remembered_when_the_form_is_submitted():
         f"沒按「{INVEST_SUBMIT_LABEL}」就把金額寫進 session 了：{_out.get(_SK_INVEST_AMOUNT)!r}")
 
 
+def test_the_no_amount_branch_is_unreachable_from_this_screen_today():
+    """⭐ **據實釘住一個「今天印不出來」的分支** —— 不是守它有效，是守它的**狀態**。
+
+    ## 為什麼要有這一條
+
+    `CLAUDE.md §-2` 記著一個真的發生過的事故：commit message 宣稱「順帶修掉」某個
+    缺資料偵測，**實測在 production 路徑永遠不會觸發**。本批有一個同型的東西：
+    :data:`NO_AMOUNT` 的文案與指路都寫好了，但**這個畫面產不出那個狀態** ——
+    :func:`_applied_amount` 拿不到正數就退 :data:`DEFAULT_AMOUNT_TWD`，
+    加上金額 widget 自己的 `min_value`，送進算式的金額**結構上不可能 ≤ 0**。
+
+    **留著它是刻意的**（理由寫在 :data:`_INVEST_BLOCKED_NOTES` 的 `NO_AMOUNT` 上方）；
+    **本條要防的是「它悄悄變成可達、卻沒有人回頭看那段說明」**。
+
+    ## 這條測的是什麼（別讀成「金額驗證有在守」）
+
+    它斷言的是**現況**：任何塞進 session 的髒值，`_applied_amount()` 都回正的 float。
+    ⛔ **它不保證金額驗證是對的** —— 算式層那一半由
+    :func:`test_every_kind_of_missing_input_gets_its_own_reason_and_zero_numbers` 驗。
+
+    **一旦有人拿掉預設值，本條會轉紅** —— 那時候正解是回去讀那段說明、
+    確認灰態與指路真的走得通，**不是**把這條刪掉。
+    """
+    import ui.views.page_03_research as _P
+
+    _MISSING = object()
+    _dirty = (_MISSING, None, 0, 0.0, -1, "", "  ", "abc", "0", float("nan"),
+              [], {}, True, False, 1e-9)
+
+    class _FakeSt:
+        def __init__(self, value):
+            self.session_state = ({} if value is _MISSING
+                                  else {_SK_INVEST_AMOUNT: value})
+
+    _real_st = _P.st
+    _bad = []
+    try:
+        for _v in _dirty:
+            _P.st = _FakeSt(_v)
+            try:
+                _got = _P._applied_amount()
+            except Exception as _err:  # noqa: BLE001 —— 拋例外也算「狀態變了」
+                _bad.append((_v, f"raised {type(_err).__name__}"))
+                continue
+            if not (isinstance(_got, float) and _got > 0):
+                _bad.append((_v, _got))
+    finally:
+        _P.st = _real_st
+
+    assert not _bad, (
+        f"`_applied_amount()` 現在會吐出非正數（或拋例外）：{_bad}\n"
+        "⇒ `NO_AMOUNT` 那條灰態**變成可達的**了。\n"
+        "這不一定是壞事 —— 但請回去讀 `_INVEST_BLOCKED_NOTES[NO_AMOUNT]` 上方那段說明，"
+        "確認它的文案與指路真的走得通，再決定要不要改本條。**不要直接刪掉本條。**")
+    # 正對照：算式層**真的**有那個分支（否則上面那句「留著它是刻意的」是空話）。
+    assert estimate_monthly_income(_FUND(), 0, fx_lookup=_fx)["units_blocked"] == NO_AMOUNT
+
+
 def test_the_form_and_the_widget_live_in_this_pages_namespace():
     """新舊 ③ 同時渲染 —— key 撞上就是整個 App 當場崩潰，所以前綴是結構性保證。"""
     for _k in (_INVEST_FORM_KEY, _INVEST_AMOUNT_KEY, _SK_INVEST_AMOUNT):
