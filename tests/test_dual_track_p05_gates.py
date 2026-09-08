@@ -609,6 +609,17 @@ def test_every_ungated_redelegation_really_turns_the_candidate_guard_red():
 
     ⚠️ **控制組（不注入必須綠）是這一條的另一半** —— 少了它，一條恆紅的斷言
     也會讓上面三個 `assert` 全過，那等於什麼都沒驗。
+
+    ⛔ **不要「優化」它 —— 本條刻意每一輪都重呼叫 :func:`_collision_candidates`。**
+    本機實測（暖快取）約 **7.8s**，其中約 4 × 1.8s 花在重算 `_reach(*_OLD2)` 上，
+    而 `_reach(*_OLD2)` **實測不含任何 `ui.views.*`**（＝突變 `page_02_health`
+    影響不到它），所以把它提到迴圈外**在今天是正確的**。
+    **不那樣做的理由**：那必須把 :func:`_collision_candidates` 的內容抄一份到本條裡，
+    於是「被驗的那個判準」與「驗它的那條測試」就變成**兩份會各自漂移的東西** ——
+    而本檔整個 2026-09-08 這一輪，修的正是「守衛與它的宣稱對不起來」。
+    ⇒ **省 5 秒不值得換一個會靜靜分岔的判準。** fast lane 現況約 5 分鐘，本條約 +2.7%。
+    ⛔ 也**不得**改用 `@pytest.mark.slow` 搬到 slow lane —— 那條 lane 掛
+    `continue-on-error: true`，紅了不會擋 merge，等於把守衛降級。
     """
     _before = hashlib.sha256(_P02.read_bytes()).hexdigest()
     _src = _P02.read_text(encoding="utf-8")
