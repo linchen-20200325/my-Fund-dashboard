@@ -557,6 +557,102 @@ def test_the_principal_pointer_is_not_a_dead_end():
         f"{_led.name} 有輸入格、卻**沒有任何一處**把它寫進 `invest_twd` —— "
         "那就跟 `pf_add` 一樣是撲空。")
 
+    # ══════════════════════════════════════════════════════════════════
+    # ⭐ (e)~(h)：**指路要在「畫面印出它的那個狀態」下有效**，不是在別的狀態下有效
+    #
+    # 第三輪獨立稽核用**真渲染**擋下一件事：`pf_ledger` 在「加了但還沒抓到」
+    # （rows 有、一檔都沒 `loaded`）那個狀態下**是死的** —— T7 的「✏️ 編輯持倉」
+    # 住在 `if not _pf_t7:` 的 else 分支，那個狀態下整個 expander 不渲染。
+    # ⚠️ 而 (a)~(d) 四項**結構上看不到它**：稽核的兩顆突變都全綠 ——
+    #   M-GATE-1：舊 ④ 只在恆假條件下呼叫 `render_t7_section`  → 23 passed
+    #   M-GATE-2：`expanded=True` → `False`                      → 23 passed
+    #   （正對照：目的地不再寫 `invest_twd` → RED，證明本條不是恆綠。）
+    # 下面四項就是補那個洞。**判準：如果我的新答案在那個狀態下是錯的，這裡會不會紅？**
+    # ══════════════════════════════════════════════════════════════════
+
+    # (e) ⭐ **謂詞等價** —— 這是整個修法賴以成立的那一條，先釘死它。
+    #     本頁 `_holdings()` 濾 `loaded and not load_error`；
+    #     T7 的閘門 `ui/helpers/session.py::fund_is_usable` 也是 `loaded and not load_error`。
+    #     **兩者相同 ⇒ `_holdings()` 非空 ⟺ 那個輸入格一定渲染得出來。**
+    #     任一邊改了謂詞，這個等價就斷了，指路會在某個狀態下再度變死。
+    from ui.helpers.session import fund_is_usable
+
+    for _row, _want in (({"loaded": True}, True),
+                        ({"loaded": True, "load_error": None}, True),
+                        ({"loaded": True, "load_error": "404"}, False),
+                        ({"loaded": False}, False),
+                        ({}, False),
+                        ("not-a-dict", False)):
+        assert fund_is_usable(_row) is _want, (
+            f"`fund_is_usable({_row!r})` 不再等於 `loaded and not load_error` —— "
+            "本頁 `_holdings()` 與 T7 的閘門就此不同源，"
+            "「有已載入的標的 ⇒ 編輯持倉一定在」這個前提斷掉，`pf_ledger` 會變回死指路。")
+
+    _hold_fn = next(_n for _n in _ast.walk(_ptree)
+                    if isinstance(_n, _ast.FunctionDef) and _n.name == "_holdings")
+    # ⚠️ `ast.unparse` 會把字串常數正規化成單引號，所以這裡比對的是**正規化後**的形狀
+    #    （本組第一版寫 `get("loaded")` 雙引號，當場自己紅了一次）。
+    _hold_src = _ast.unparse(_hold_fn)
+    assert "get('loaded')" in _hold_src and "get('load_error')" in _hold_src, (
+        "`_holdings()` 的過濾條件變了 —— 它必須與 `fund_is_usable` 同一個謂詞，"
+        f"否則本格的狀態分界就不再對應 T7 的閘門：\n{_hold_src[:400]}")
+
+    # (f) ⭐ **本格必須是條件式**，不能無條件給 `pf_ledger`。
+    #     這一條直接對應被擋下的那個 bug：無條件給 = 在 pending 狀態下指到不存在的東西。
+    _tiles_fn = next(_n for _n in _ast.walk(_ptree)
+                     if isinstance(_n, _ast.FunctionDef) and _n.name == "_status_tiles")
+    _led_calls = [_n for _n in _ast.walk(_tiles_fn)
+                  if isinstance(_n, _ast.Call)
+                  and getattr(_n.func, "id", None) == "where_to_find"
+                  and _n.args and isinstance(_n.args[0], _ast.Constant)
+                  and _n.args[0].value == "pf_ledger"]
+    assert _led_calls, "`_status_tiles` 不再指 `pf_ledger` —— 若是刻意改的，本條要一起改。"
+    _guarded = [_c for _c in _led_calls
+                if any(isinstance(_n, _ast.IfExp)
+                       and _n.lineno <= _c.lineno <= (_n.end_lineno or 0)
+                       and "_loaded" in _ast.unparse(_n.test)
+                       for _n in _ast.walk(_tiles_fn))]
+    assert len(_guarded) == len(_led_calls), (
+        "`_status_tiles` 裡有 `where_to_find(\"pf_ledger\")` **不在**「有沒有已載入標的」"
+        "的條件式底下 —— 那會在「加了但還沒抓到」的狀態下指到一個**不存在**的輸入格"
+        "（T7 的「✏️ 編輯持倉」在該狀態不渲染）。**這正是第三輪稽核擋下的那個 bug。**")
+
+    # (g) ⭐ **舊 ④ 必須無條件渲染 T7**（擋 M-GATE-1）。
+    #     只驗「有沒有被呼叫」不夠：包一層恆假的 `if` 一樣叫「被呼叫」。
+    _t7_names = {_a.asname or _a.name for _n in _ast.walk(_otree)
+                 if isinstance(_n, _ast.ImportFrom)
+                 for _a in _n.names if _a.name == "render_t7_section"}
+    _t7_calls = [_n for _n in _ast.walk(_otree)
+                 if isinstance(_n, _ast.Call)
+                 and getattr(_n.func, "id", None) in _t7_names]
+    assert _t7_calls, f"{_old.name} 沒有呼叫 `render_t7_section` —— 整個目的地不存在。"
+    for _c in _t7_calls:
+        _ifs = [_n.lineno for _n in _ast.walk(_otree)
+                if isinstance(_n, (_ast.If, _ast.While))
+                and _n.lineno <= _c.lineno <= (_n.end_lineno or 0)]
+        assert not _ifs, (
+            f"{_old.name}:{_c.lineno} 的 `render_t7_section()` 被包進條件式了"
+            f"（第 {_ifs} 行）—— 那代表 T7 可能整段不渲染，而本頁把使用者指過去。\n"
+            "⛔ 若那個條件是刻意的，指路必須跟著它走（就像本格對 `_loaded` 做的那樣），"
+            "不是把本條拿掉。")
+
+    # (h) 那個 expander 必須 `expanded=True`（擋 M-GATE-2）。
+    #     ⚠️ 收合起來**不算死指路**（使用者點得開），但本頁**在註解裡拿它當挑選理由之一**——
+    #        既然引用了它，就要釘住它；理由消失時要當場知道，而不是讓一句過期的理由留著。
+    _exp = [_n for _n in _ast.walk(_ltree)
+            if isinstance(_n, _ast.Call)
+            and getattr(_n.func, "attr", None) == "expander"
+            and _n.args and isinstance(_n.args[0], _ast.Constant)
+            and "編輯持倉" in str(_n.args[0].value)]
+    assert _exp, (
+        f"{_led.name} 找不到「✏️ 編輯持倉」那個收合區 —— 金額輸入格就住在它裡面。")
+    for _e in _exp:
+        _kw = {_k.arg: _ast.unparse(_k.value) for _k in _e.keywords}
+        assert _kw.get("expanded") == "True", (
+            f"「編輯持倉」改成 `expanded={_kw.get('expanded')}` 了 —— "
+            "本頁的就地註解把「預設展開」列為挑這條指路的理由之一，"
+            "理由變了就要一起改（或把那句理由撤掉），不是讓它留著過期。")
+
 
 def test_the_delete_pointer_is_not_a_dead_end():
     """⭐ **失敗卡說「要刪只能到舊 ④」，那裡就真的要刪得掉。**
