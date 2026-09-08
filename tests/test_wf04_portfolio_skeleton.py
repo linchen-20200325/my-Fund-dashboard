@@ -44,18 +44,40 @@
 --------------------------------------------------
 被測檔有兩種灰，文案刻意分開。**本檔把「照著做有沒有用」真的按了一次**：
 
+⚠️ **2026-09-08：這張表少了一列，而少的那一列正是它最想講的那件事。**
+下表**原文保留**（它記載 2026-09-06 的實況），新的一列補在後面。
+
 ===================== ============================================ ==========
 灰的種類               指路指到哪                                    照著做有效嗎
 ===================== ============================================ ==========
 **沒有持倉**（空狀態）  ④ 📊 資產配置 → ➕ 加入與管理基金               ✅ **有效**
-**內容還沒接上**       ④ 📊 資產配置 → 再平衡試算                     ❌ **無效**
+~~**內容還沒接上**~~   ~~④ 📊 資產配置 → 再平衡試算~~                 ~~❌ **無效**~~
+**內容還沒接上**       各塊**各自**的真實去處（見 :func:`_expected_pointer`）  ✅ **有效**
 ===================== ============================================ ==========
+
+⛔ **2026-09-08 起，本頁沒有任何一塊灰態的指路是「去了也沒用」的。**
+最後一塊（換股顧問）在本輪改指 ``④ 📊 資產配置 → 🎯 換股顧問`` ——
+它在舊 ④ **有一個真的在線上跑的家**。
+⚠️ **這件事本檔驗不到，據實揭露**（`CLAUDE.md §-2` 規則 6）：本檔的 AppTest
+只渲染 `ui/views/page_04_portfolio.py` 這一頁（見 :data:`_SCRIPT`），
+**到不了舊 ④**，所以「去了真的有用」在本檔**沒有**被實跑證明。
+它由兩條**別的**東西支撐：(a) `tests/test_ia_switch_advisor_moved_to_portfolio.py::`
+`test_switch_advisor_renders_only_from_the_portfolio_tab` 把渲染點釘成
+**恰好一個**且就在 `ui/tab3_portfolio.py::render_portfolio_tab`；
+(b) 本檔的 :func:`test_the_switch_card_points_at_the_place_that_really_renders_it`
+用 AST 確認**本頁指的那個地方真的會渲染它** —— 那是 (a) 沒有回答的問題
+（(a) 只數渲染點，不管本頁指去哪）。
 
 - ✅ 那一列由 :func:`test_the_empty_state_pointer_actually_works` 實跑：
   照著做（讓 `portfolio_funds` 有已載入的項目）→ 空狀態**真的消失**、四塊**真的出現**。
-- ❌ 那一列由 :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 實跑：
+- ~~❌ 那一列由 :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 實跑：
   照著做（回到再平衡試算、填金額、按「試算」）→ **五條灰態逐字完全相同**。
-  ⛔ **這不是 bug，是本批的實況**：這一塊沒接上，去任何地方都不會讓它出現。
+  ⛔ **這不是 bug，是本批的實況**：這一塊沒接上，去任何地方都不會讓它出現。~~
+  → **2026-09-08 狀態變更，不是漏刪**：那一列已經沒有對象了（見上表的更正）。
+  該測試**原封保留、斷言一字未改**，只是**改名**為
+  :func:`test_the_form_alone_fills_in_no_grey_block` —— 因為它實際在驗的一直都是
+  「**按下試算不會把任何一塊灰態變出內容**」，那件事今天依然為真、依然值得釘。
+  ⛔ **舊名字是一句會過期的形容詞**（「指路無效」），新名字是它真正的斷言。
   **本檔把它寫成一條會轉紅的斷言，而不是一句形容詞** ——
   哪天它真的變有效了（內容接上了），那條測試會紅，而那正是要人回來改文案的時候。
   ⚠️ **為什麼不乾脆把 `where=` 拿掉**：全域
@@ -71,6 +93,68 @@
   **七個全域守衛檔 1001 passed 全綠**，只有本檔的
   :func:`test_nothing_renders_before_holdings_land` 抓到（因為它比對的是
   `where_to_find("pf_add")` 這個**實際字串**有沒有印在畫面上）。
+
+退役 ／ 改名對帳表（2026-09-08 新增；作法比照 `tests/test_wf05_settings_skeleton.py`）
+------------------------------------------------------------------------------
+**這張表存在的唯一理由**：一條測試消失時，如果沒有人回頭數一次，**它會無聲消失** ——
+`wf05` 那一輪就差點弄丟一條（該檔就地記著）。**刪測試必須留對帳，不留就是靜默降低守備。**
+
+== ================================================ ================================
+#  被退役／改名的                                     去哪了、為什麼**不是**降低守備
+== ================================================ ================================
+A  `test_the_pending_pointer_is_honest_about_being_ineffective`
+                                                     **純改名** →
+                                                     :func:`test_the_form_alone_fills_in_no_grey_block`。
+                                                     **斷言一行未改。** 舊名字宣稱「指路去了也沒用」，
+                                                     而它**從來沒驗過那件事**（它按的是本頁的試算鈕）。
+B  `test_the_pending_pointer_is_a_place_not_a_status_sentence`
+   ＋ 被測檔的 `_pending_where()`                     **對象真的消失了**：那支函式在 2026-09-08
+                                                     變成 0 caller（四塊灰態的指路全部改指真的去處），
+                                                     **函式與測試一起退役刪除**（總管授權）。
+== ================================================ ================================
+
+**B 為什麼是刪、不是「留著當觸發器」**（總管上一輪先判「留」，稽核推翻，理由本檔照錄）：
+
+1. `CLAUDE.md §-1.5.1c` 判定 3 自己引的前例（v19.212 拔除 `allocation_simulator.py`）
+   **就是「連 2 個測試孤兒一起清」** —— 也就是說「刪它要連帶刪測試」
+   在憲法的先例裡**根本不構成豁免**。
+2. 「留著當觸發器」自我拆台：那條 0-caller 斷言防的是「有人把它接回渲染路徑」，
+   而**把函式刪掉是比那條斷言更強的保證** ——
+   **斷言可以被下一個人刪掉，不存在的函式必須被刻意重新造出來。**
+3. 只留一條 0-caller 斷言當作已結案，正是判定 3 明文禁止的
+   「**不得只加註解說『已停用』**」的近親形態。
+
+⚠️ **退役前確認過（本組實測，指令可重跑）**：
+`ui/views/page_02_health.py` 與 `ui/views/page_03_research.py`
+**各有自己的同名函式、各有自己的 caller**（1 個 / 2 個），
+且**全 repo 沒有任何檔案 import 別頁的 `_pending_where`** —— 刪的只有 ④ 這一支。
+
+⛔ **B 退役之後，本檔少了一條交叉守備，據實寫明**：
+`_expected_pointer()` 的完整字串比對（由
+:func:`test_every_grey_unit_says_where_to_look` 逐單位跑）**接手了畫面形狀那一半**，
+但「`_pending_where()` 的回傳值結構」那一半**沒有接手者，因為對象不存在了**。
+~~✅ **同型的保護在另外兩頁仍然在**（`wf02` / `wf03` 各有自己的同名守衛）。~~
+⛔ **2026-09-08 更正：那句話對 `wf02` 是假的**（稽核指出，本組 AST 普查確認）。
+**全 `tests/` 只有 `tests/test_wf03_research_skeleton.py` 一個檔 import／呼叫
+`_pending_where`**（該檔 import 1 次、呼叫 2 次）；
+`tests/test_wf02_health_skeleton.py` **沒有任何 `*pending*` / `*pointer*` 測試**。
+
+⚠️ **而 ② 正好是最需要它的那一頁 —— 缺口長這樣，寫出來讓下一個人看得到**：
+`ui/views/page_02_health.py` 唯一的 caller 傳的是
+``_pending_where("下方「逐檔體檢表」可先逐檔看")``，實際渲染成::
+
+    （請先到：② 💊 持倉體檢 → 下方「逐檔體檢表」可先逐檔看）
+
+**尾巴那個「可先逐檔看」是述語**，正是被退役的那條守衛
+（判準：``<分頁路徑> → <區塊名>``，中間**不得夾述語**）會擋下的形狀 ——
+而 ② **一條守衛都沒有**。
+
+⛔ **這個缺口不是本 PR 造成的**：`ui/views/page_02_health.py` 在本 PR 內
+**byte-identical**，該缺口在本輪之前就存在。
+⛔ **本 PR 也刻意不去修 ②**（那是另一頁、屬另案，總管另派）——
+這裡只負責**把它登記成看得見的缺口**，因為本段自己就寫著
+「刪測試必須留對帳，不留就是靜默降低守備」。
+**一句安慰話會讓那個缺口從此沒有人再想起來。**
 
 ⭐ 本檔實測到的**全域守衛盲點**（登記給後人；不是本頁造成的）
 ------------------------------------------------------------
@@ -128,8 +212,12 @@ M25     自己拼 ⬜ 字串、不走 ``not_ready()``            1001 passed（�
 - ⛔ **指路挑錯 key 沒有守衛**：職責宣告那一句裡的 `health` / `research` 兩個 key
   換成別的**合法** key，本檔不會有任何東西轉紅。
   **這是「走 SSOT」擋不到的那一類**：SSOT 保證名字不過期，**不保證你挑對了 key**。
-  （`_pending_where()` 的 `portfolio` 有守，因為 :func:`test_the_pending_pointer_is_a_place`
-  比對的是完整字串。）
+  ~~（`_pending_where()` 的 `portfolio` 有守，因為 `test_the_pending_pointer_is_a_place`
+  比對的是完整字串。）~~ → **2026-09-08：那個函式與那條測試都已退役刪除**
+  （見下方「退役 ／ 改名對帳表」）。**這個洞因此變大了，據實寫**：
+  四塊灰態的指路現在**全部**走 `where_to_find(<key>)`，而
+  :func:`_expected_pointer` 比對的是**完整字串**，所以「key 挑錯」在那四塊**有守**；
+  ⛔ **職責宣告那一句的 `health` / `research` 兩個 key 仍然沒有守衛。**
 - ⛔ **`getattr(st, "columns")(3)` / `from streamlit import columns as _c` 繞得過**
   :func:`test_the_page_draws_no_grid_form_or_tabs_of_its_own`
   —— 但全域 `tests/test_ui_grid_contract.py` 對 alias 同樣失明，
@@ -220,13 +308,16 @@ from ui.views.page_04_portfolio import (  # noqa: E402
     _LABEL_SATELLITE_ONLY,
     MIX_CURRENT_LABEL,
     MIX_GAP_LABEL,
+    MIX_MOVE_TAIL,
     MIX_TARGET_LABEL,
     MIX_TARGET_PROVENANCE,
     REASON_POLICY,
+    _ON_TARGET_TOL_PCT,
     _PENDING_NOTE,
+    _gap_action_text,
     _holdings,
     _normalise_plan,
-    _pending_where,
+    _pct_text,
     grey_why,
     perf_block_label,
     switch_block_label,
@@ -263,6 +354,22 @@ FAKE_HOLDINGS_PRICED: list[dict[str, Any]] = [
      "invest_twd": 620000, "policy_tier": "core"},
     {"code": "TESTCODE2", "name": "測試標的二", "loaded": True,
      "invest_twd": 380000, "policy_tier": "satellite"},
+]
+
+#: **部分**填了本金：兩檔有、一檔沒有 —— 「所需動作」那一句要自己說出射程的唯一形狀。
+#: ⚠️ 前兩筆與 :data:`FAKE_HOLDINGS_PRICED` **完全相同**（刻意）：
+#: 分母、比例、差距、金額全部不變，**唯一的變因是 `n_missing_amount` 由 0 變 1** ——
+#: 於是 :func:`test_the_money_says_so_when_it_only_covers_part_of_the_book`
+#: 量到的差異只可能來自那一個欄位，不會是別的東西順帶造成的。
+FAKE_HOLDINGS_PARTLY_PRICED: list[dict[str, Any]] = [
+    *(dict(_f) for _f in (
+        {"code": "TESTCODE1", "name": "測試標的一", "loaded": True,
+         "invest_twd": 620000, "policy_tier": "core"},
+        {"code": "TESTCODE2", "name": "測試標的二", "loaded": True,
+         "invest_twd": 380000, "policy_tier": "satellite"})),
+    # ⛔ 刻意**沒有** `invest_twd` —— 這一檔進得了檔數、進不了分母。
+    {"code": "TESTCODE3", "name": "測試標的三", "loaded": True,
+     "policy_tier": "satellite"},
 ]
 
 #: :data:`FAKE_HOLDINGS_PRICED` 經 `summarize_core_satellite()` 之後的兩個百分比字串。
@@ -987,16 +1094,46 @@ def _expected_pointer() -> dict[str, str]:
     ===================== ================================ =========================
     單位                   指到哪                            照著做真的有用嗎
     ===================== ================================ =========================
-    換股顧問               本頁的「再平衡試算」               ❌ **沒用**（它撞既有渲染點）
+    ~~換股顧問~~           ~~本頁的「再平衡試算」~~           ~~❌ **沒用**（撞既有渲染點）~~
+    換股顧問               舊 ④ 的「🎯 換股顧問」             ✅ **有用**（那裡現在就在跑）
     配息月曆               它自己上方那個勾選框               ✅ **有用**（勾了就會算）
     組合績效               舊 ④ 的「📊 組合績效」             ✅ **有用**（那裡現在就看得到）
     交易帳本               舊 ④ 的「💼 持倉戰情（T7 帳本）」  ✅ **有用**（那裡現在就看得到）
     ===================== ================================ =========================
 
-    ⚠️ **四塊裡有三塊的指路是「真的有用」的，只有換股顧問不是** —— 這與 2026-09-06
-    「三塊全部指到一個去了也沒用的地方」是相反的局面。
-    :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 因此**只能**
-    拿換股顧問當樣本，不能再拿「全頁灰態不變」當斷言。
+    ## ⚠️ 2026-09-08：最後一塊「沒用」的指路也修掉了
+
+    **有意識的狀態變更，不是漏刪**（決策者：架構與前端組）。上表 ~~刪除線~~ 那一列
+    保留不刪，它記載 2026-09-07 的實況。改的理由**不是**「換股顧問接上了」——
+    它今天**仍然是灰態、仍然沒接**（~~:data:`REASON_SWITCH` 一字未改~~
+    → **2026-09-08 同輪更正：那句話是假的，本輪確實動了它**。改的是**末尾一句導語**
+    （「它本身在下面這個地方就用得到」，好讓後面接上的「（請先到：…）」讀得通），
+    **原因那三句一個字沒動**。⚠️ 第一版的導語寫成「**換股顧問**本身……」，
+    被 `test_the_switch_block_name_comes_from_the_ssot_not_a_hand_copy` **在 CI 抓到** ——
+    那個區塊名有 SSOT，寫進**活字串**就是手抄第二份。
+    ⛔ 守衛沒有錯，是本組錯：**相鄰字串字面值會在 parse 時併成同一個 `ast.Constant`**，
+    所以只要那一整串裡任何一段出現那四個字，整個常數就命中。**改法是不提那個名字。**）；
+    改的是**指路本身原本就指錯了**：那一塊在**舊 ④ 有一個真的在線上跑的家**，
+    而 :data:`REASON_SWITCH` 自己就寫著「這一塊在目前線上的 ④ 已經有唯一的渲染點」。
+    → 也就是說，這一頁**一邊寫著「它在舊 ④ 有渲染點」，一邊把使用者指回本頁的試算**。
+    ⛔ **兩件事不要混為一談**：「這一塊在本頁還沒接上」（仍然為真）
+    vs「使用者現在沒有地方可以用它」（**假的**）。舊指路把前者說成了後者。
+
+    ⚠️ **舊表述在寫下的當天是對的**：2026-09-07 那一輪確實剛把另外三塊各自指出去，
+    「只剩換股顧問沒地方去」是那時候的實況判斷。
+    **被推翻的是那個判斷本身，不是它的謹慎** —— 沒有人回頭問一句
+    「它真的沒地方去嗎」，而答案早就寫在同一份檔案的 :data:`REASON_SWITCH` 裡。
+
+    ⚠️ **9 格分頁列上「兩個資產配置」分不分得出來 —— 本組實測，據實寫**：
+    `app.py` 掛的九格逐字是
+    ``🌐 市場總覽 / 💊 持倉體檢 / 🔍 標的探索 / 📊 資產配置 / ⚙️ 設定與診斷 /``
+    ``[新] 💊 持倉體檢 / [新] ⚙️ 設定與診斷 / [新] 🔍 標的探索 / [新] 📊 資產配置``。
+    本頁是**第 9 格**、名字帶 ``[新] `` 前綴；指路吐的是 ``④ 📊 資產配置``（**無前綴**），
+    指的是**第 4 格**。兩者靠 :data:`ui.helpers.story_nav.PREVIEW_PREFIX` 區分，
+    而那個前綴的存在理由就寫在 `story_nav.py` 的 `preview_tab_label()`：
+    「回退會讓預覽分頁與正式分頁在畫面上叫同一個名字，使用者分不出自己在看哪一版」。
+    → **分得出來。** 由 :func:`test_the_pointer_does_not_collide_with_this_pages_own_tab`
+    釘住（前綴哪天被拿掉，那條會轉紅）。
 
     ⛔ **三個都要逐字比對，不要退回「有 `where_to_find('portfolio')` 就好」** ——
     那種寬鬆比對在 2026-09-07 之後會**同時放過三種錯**：
@@ -1007,7 +1144,9 @@ def _expected_pointer() -> dict[str, str]:
     不在這裡抄第二份字面值，改了 gate 的字，本條會**跟著對**而不是**跟著錯**。
     """
     return {
-        switch_block_label(): _pending_where(BLOCK_FORM),
+        # ⚠️ 走 `where_to_find("switch")` 這個 SSOT，**不抄字面** —— 換股顧問哪天被
+        #    搬到別的分頁，本條會**跟著對**而不是**跟著錯**（同 `pf_perf` / `pf_ledger`）。
+        switch_block_label(): where_to_find("switch"),
         BLOCK_DIVIDEND_CAL: f"上方「{DIVCAL_GATE_LABEL}」",
         # 組合績效：委派被實測擋下（見 `page_04_portfolio.REASON_PERF`），
         # 但**它現在就在舊 ④ 看得到** —— 與交易帳本同一種「指了真的有用」的灰。
@@ -1034,9 +1173,16 @@ def test_every_grey_unit_says_where_to_look(unit: str):
     只有本條轉紅。**也就是那個形狀今天仍然在全域網子的射程外。**
     → **本檔從第一版就是逐單位。**
 
-    ⚠️ 這條驗的是「**有沒有指路**」，**不驗「照著做有沒有用」** ——
-    後者由 :func:`test_the_pending_pointer_is_honest_about_being_ineffective` 實跑，
-    而且答案是**沒用**。兩件事不要混為一談。
+    ⚠️ 這條驗的是「**有沒有指路**」，**不驗「照著做有沒有用」**。兩件事不要混為一談。
+    ⚠️ **2026-09-08 更正（有意識的更正，不是漏刪）**：本段原寫
+    ~~「後者由 `test_the_pending_pointer_is_honest_about_being_ineffective` 實跑，
+    而且答案是**沒用**」~~ —— **那個答案今天是假的**（四塊指路現在都有真的去處），
+    而且那條測試**從來沒有真的驗過「有沒有用」** ：它按的是本頁的「試算」鈕，
+    量的是「按完之後灰態變了沒」，**到不了任何一個指路指去的地方**。
+    → 現行分工：**「去了有用嗎」在本檔只有換股顧問那一塊有守**
+    （:func:`test_the_switch_card_points_at_the_place_that_really_renders_it`，AST）；
+    配息月曆那一塊由 :func:`test_ticking_the_dividend_gate_actually_changes_the_block` 實跑；
+    **組合績效與交易帳本兩塊指向舊 ④，本檔一律驗不到，也不宣稱**（`CLAUDE.md §-2` 規則 6）。
     """
     _seg = _segments(_stream("loaded"))
     _body = "\n".join(_seg.get(unit, []))
@@ -1047,65 +1193,34 @@ def test_every_grey_unit_says_where_to_look(unit: str):
         f"應含：（請先到：{_want}）\n實際：\n{_body}")
 
 
-def test_the_pending_pointer_is_a_place_not_a_status_sentence():
-    """`_pending_where()` 回傳的必須是一個**地方**，不是一句狀態陳述。
+def test_the_form_alone_fills_in_no_grey_block():
+    """⭐ **按下「試算」不會把任何一塊灰態變出內容** —— 本條把那個事實釘成斷言。
 
-    ## 這條是 ③ 的紅隊突變 R5 逼出來的（本檔從第一版就帶著它）
+    ## ⚠️ 2026-09-08：**純改名，斷言一字未改**（原
+    `test_the_pending_pointer_is_honest_about_being_ineffective`）
 
-    ③ 的 `_pending_where()` 原本回傳
-    ``f"{where_to_find('research')} → 目前只有「{block}」是完整的"``，
-    而 `render_state.not_ready()` 會把它包成「（請先到：…）」——
-    畫面上於是印出一句**不可執行的指令**：「請先到：③ … → 目前只有「搜尋條件」是完整的」。
-    修好之後 ③ 把它退回舊寫法重跑，**1014 passed 一條都沒紅** ——
-    也就是**修好了渲染，卻沒有任何東西在防它退回去**。
+    **有意識的更正，不是漏刪**（決策者：架構與前端組）。舊名字宣稱的是
+    「**這一族的指路去了也沒用**」，而本條**從來沒有驗過那件事** ——
+    它按的是**本頁**的「試算」鈕，量的是「按完之後灰態變了沒」，
+    **到不了任何一個指路指去的地方**（那些地方在舊 ④，本檔的 AppTest
+    只渲染本頁，見 :data:`_SCRIPT`）。
+    2026-09-08 換股顧問改指舊 ④ 之後，**舊名字會變成畫面上的一句假話**，
+    但**它的斷言依然為真、依然值得釘**：本頁的 Form 確實不會填出任何一塊內容。
+    → **只改名，一行斷言都沒動。**
 
-    ## 判準用**結構相等**，不用關鍵字黑名單
+    ⛔ **舊 docstring 曾預言「有人把指路改成真的有用的地方 → 它也會紅」—— 那個預言不成立。**
+    理由是**結構**，不是巧合：本條比的是**同一次渲染的前後兩份 ⬜ 清單**
+    （`_after == _before`），而改 `where=` 會讓**兩邊同時**變成新字串 ——
+    差集永遠是空的。逐單位那條數的是 `_PENDING_NOTE` 的**條數**，也與 `where=` 無關。
+    **一條測不到 X 的測試，不會因為 X 變了而轉紅** —— 這正是舊名字誤導人的地方。
+    ⚠️ **本段是推導，不是本地實跑**（沙箱沒有 streamlit／pytest，見模組 docstring）；
+    它由 CI 的 fast lane 實際驗證 —— **本條若在 CI 轉紅，就是這段推導錯了。**
 
-    黑名單（「不准出現『完整』兩個字」之類）只擋得住上一次那個寫法，換個措辭就繞過。
-    本條直接釘住組成：**分頁路徑 ＋ `→` ＋ 區塊名**，中間不得夾任何述語。
-    """
-    for _block in (BLOCK_FORM, "任意區塊名"):
-        assert _pending_where(_block) == f"{where_to_find('portfolio')} → {_block}", (
-            f"`_pending_where({_block!r})` ＝ {_pending_where(_block)!r}\n"
-            "它會被 `render_state.not_ready()` 包成「（請先到：…）」——"
-            "所以它必須是一個**地方**（分頁路徑 → 區塊名），不能是一句狀態陳述。")
-    # 也驗它進到畫面上之後的形狀，不是只驗回傳值。
-    # ⚠️ **2026-09-06 改指 `BLOCK_POLICY`**：本條原本取 `BLOCK_MIX`，而那一塊已經
-    #    接上真資料、不再走 `_pending_where()`（它的指路改成「去哪填本金」那條
-    #    **真的有效**的 `pf_add`）。留著會變成一條驗不到 `_pending_where()` 的測試。
-    #    ⛔ 這不是把斷言放寬 —— 換的是**取樣的單位**，斷言的字串一字未改，
-    #    而且 `BLOCK_POLICY` 是四個灰態單位中**最不可能被下一批接走**的那一個
-    #    （它卡在客戶裁決上，見 `REASON_POLICY`）。
-    # ⚠️ **2026-09-07 再改一次，改指換股顧問** —— 上面那句「最不可能被下一批接走」
-    #    **在寫下來的第二天就被推翻了**（客戶決定 ①，保單改成全寬區塊，不再走
-    #    `_pending_where()`）。⛔ **這次不再挑「最不可能被接走的那一個」** ——
-    #    那個判斷已經錯過一次；改挑 `_pending_where()` **目前唯一的 caller**，
-    #    也就是說：它哪天沒有 caller 了，本條就會紅，而那正是該來重看本條的時機。
-    _seg = _segments(_stream("loaded"))
-    _body = "\n".join(_seg.get(switch_block_label(), []))
-    assert f"（請先到：{where_to_find('portfolio')} → {BLOCK_FORM}）" in _body, (
-        "畫面上那句「請先到：…」不是預期的地方字串。\n" + _body)
+    ## 這條為什麼還要存在
 
-
-def test_the_pending_pointer_is_honest_about_being_ineffective():
-    """⭐ **照著灰態的指路做，這一頁「不會」離開灰態** —— 本條把那個事實釘成斷言。
-
-    ## 這條為什麼要存在（它看起來像在測一個 bug）
-
-    被測檔的 `_pending_where()` docstring 就地寫著「這一族的指路有效性有限」。
-    **一句寫在註解裡的自陳，沒有任何東西在守它** —— 而本 repo 的病史一再證明：
-    沒有守衛的自陳，會在下一次改動時默默變成假話。
-
-    本條實跑「使用者照著做」：回到「再平衡試算」，填一個金額，按下「試算」。
-    **結果：五條灰態逐字完全相同。** 本條把它變成一個會轉紅的事實。
-
-    ## ⚠️ 這條紅了代表什麼（不要直覺地把它刪掉）
-
-    - **下一批把內容接上了** → 它會紅，因為灰態真的消失了。
-      **正解是刪掉本條、並把 `_pending_where()` 的 docstring 那段一起改掉**，
-      而不是把它放寬。
-    - **有人把指路改成一個「照著做真的有用」的地方** → 它也會紅。那是好事，
-      同樣是刪本條 ＋ 改文案，不是繞過。
+    它擋的是**「試算」被偷偷接上下游、卻沒人發現**：`_applied_plan()` 自陳
+    「本批沒有下游」，本條就是那句話的守衛。哪天真的接上了，本條會紅，
+    **正解是刪掉本條並改掉那句 docstring**，不是把它放寬。
     """
     # ⚠️ **2026-09-06 改用 `FAKE_HOLDINGS_PRICED`，理由不是「讓數字對上」** ——
     #    是因為這一頁自本批起有**兩種灰**，混在一起數就數不出東西：
@@ -1138,8 +1253,16 @@ def test_the_pending_pointer_is_honest_about_being_ineffective():
     assert not _at.exception, "按下「試算」之後整頁炸了。"
     _after = [_p for _p in _flat(_at.main) if NOT_READY_MARK in _p]
     assert _after == _before, (
-        "照著灰態的指路做完之後，灰態**變了** —— 那麼被測檔 `_pending_where()` 的 "
-        "docstring（「這一族的指路去了也沒用」）就是假話，要一起改。\n"
+        # ⚠️ **2026-09-08 更正（稽核建議 2，本組接受）**：本訊息原本寫
+        # 「那麼被測檔 `_pending_where()` 的 docstring（「這一族的指路去了也沒用」）
+        #  就是假話，要一起改」—— **那句 docstring 正是本 PR 自己劃掉的**，而該函式
+        # 也已整支退役。一份主題是「文件不該說謊」的 PR，訊息卻指向一個已被自己撤回
+        # 的說法。**這是「斷言一行未改」的代價：改名沒有把訊息一起帶到。**
+        # ⛔ 斷言本身仍然一行未改，改的只有它印出來的字。
+        "按下「試算」之後，灰態**變了** —— 但本頁的 Form 目前沒有接任何下游"
+        "（`_applied_plan()` 的 docstring 逐字：「本批沒有下游」）。\n"
+        "→ 要嘛真的接上了（那就刪掉本條並改掉那句 docstring），"
+        "要嘛有東西被意外連動了。\n"
         f"之前：{_before}\n之後：{_after}")
 
 
@@ -1229,9 +1352,14 @@ def test_the_mix_gap_direction_agrees_with_the_numbers_it_just_printed():
     """
     _body = _mix_body("priced")
     # 從畫面**讀回**現況核心、目標核心、以及差距那一行講的方向與差額。
-    _cur = re.search(r"核心 (\d+\.\d)%\u3000衛星", _body)
-    _tgt = re.search(r"目標\*\*\u3000核心 (\d+\.\d)%", _body)
-    _gap = re.search(r"核心比目標(多|少) (\d+\.\d)%", _body)
+    # ⚠️ **2026-09-08：小數位數不寫死**（稽核必修 A）。這三條**不是**本輪引進的，
+    #    但與 `test_the_money_and_the_percentage_are_two_views_of_one_number`
+    #    那一條是**同一個缺陷**，一併修：`_pct_text()` 的精度改成 `.0f` 或 `.2f` 時，
+    #    寫死 `\d+\.\d` 會讓比對**在 parse 就死掉**，紅在「讀不出三者之一」這種
+    #    **看不出真正原因**的地方 —— 而**程式碼其實是對的**。
+    _cur = re.search(r"核心 (\d+(?:\.\d+)?)%\u3000衛星", _body)
+    _tgt = re.search(r"目標\*\*\u3000核心 (\d+(?:\.\d+)?)%", _body)
+    _gap = re.search(r"核心比目標(多|少) (\d+(?:\.\d+)?)%", _body)
     assert _cur and _tgt and _gap, (
         f"「{BLOCK_MIX}」讀不出現況／目標／差距三者之一，無法對帳：\n{_body}")
     _cur_v, _tgt_v, _gap_v = float(_cur.group(1)), float(_tgt.group(1)), float(_gap.group(2))
@@ -1360,6 +1488,496 @@ def test_a_real_ratio_that_collides_with_the_mock_up_still_passes():
             f"（priced）畫面上出現了線框示意值的字面寫法 {_fake!r}。\n"
             "⚠️ 注意：這一組 fixture 算出來的 62.0 ／ 38.0 是**真數字**，"
             "所以正解**不是**把它從黑名單拿掉，而是把格式改回「數字後面緊跟 %」。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 「差距」的**後半** —— 所需動作（2026-09-08 補上，線框逐字要求的那一半）
+# ══════════════════════════════════════════════════════════════════
+# 客戶 2026-09-07 逐字：「無法判斷……搭配組合以及標的**是否需要調整**」。
+# 線框 `ia-wireframe.html` 自己也寫「這裡只呈現差距**與所需動作**」。
+# 到 2026-09-06 為止本頁只畫了「差距」，後半被一句
+# 「要算該搬多少錢得先知道可動用金額」擋掉 —— **那句話把「再平衡」誤當成「加碼」**。
+#
+# ⚠️ 下面這一組刻意**不寫死任何金額字面值**（除了直接對帳的那一條）：
+#    期望值一律由 `summarize_core_satellite()`（SSOT）＋ `_gap_action_text()` 現算，
+#    fixture 改了、目標值改了、文案改了，這幾條會**跟著對**而不是**跟著錯**。
+
+
+def _mix_gap_paragraph(kind: str = "priced",
+                       session: dict[str, Any] | None = None,
+                       funds: list[dict[str, Any]] | None = None) -> str:
+    """「差距」那**一行**（不是整個單位）——`同一行` 是本批的硬要求之一。
+
+    ⚠️ 回傳的是 `_flat()` 的**單一元素**：`st.markdown()` 一次呼叫 ＝ 一段。
+    所以「金額有沒有跟差距在同一行」在這裡是**可驗證的**，不是形容詞。
+    """
+    _funds = funds if funds is not None else (
+        {"loaded": FAKE_HOLDINGS, "priced": FAKE_HOLDINGS_PRICED}[kind])
+    _at = _app(_funds, session=session)
+    _parts = _segments(tuple(_flat(_at.main))).get(BLOCK_MIX, [])
+    # ⚠️ 比對**粗體**的抬頭而不是裸的「差距」二字 —— :data:`MIX_TARGET_PROVENANCE`
+    #    最後一句也含「差距」，裸比對會抓到那一段 caption（順序上它排在後面，
+    #    今天取 `[0]` 剛好還是對的，但那是**運氣**，不是判準）。
+    _hits = [_p for _p in _parts if f"**{MIX_GAP_LABEL}**" in _p]
+    assert len(_hits) <= 1, (
+        f"「{BLOCK_MIX}」出現了 {len(_hits)} 行「{MIX_GAP_LABEL}」——"
+        f"差距只該有一行：\n{_hits}")
+    return _hits[0] if _hits else ""
+
+
+def _display_pct_step() -> float:
+    """`_pct_text()` 的**顯示步階** —— 從它自己身上量出來，**不寫死**。
+
+    畫面上的百分比被 `_pct_text()` 捨入到固定小數位（現行 1 位 → 步階 0.1）。
+    ⭐ **量而不寫死**，是為了讓下面那條對帳的容差**跟著 `_pct_text` 走**：
+    有人把它改成 `.0f` 或 `.2f`，容差會自動跟著變，不會變成一個過期的常數。
+    """
+    _probe = _pct_text(1.0)                      # 例：「1.0%」
+    _frac = _probe.rstrip("%").split(".")
+    return 10.0 ** (-len(_frac[1])) if len(_frac) > 1 else 1.0
+
+
+def _summary_for(funds: list[dict[str, Any]], target: float) -> dict[str, Any]:
+    """測試自己**獨立**跟 SSOT 要一份摘要 —— 不從被測頁面回讀期望值。"""
+    from ui.helpers.portfolio.allocation import summarize_core_satellite
+    return summarize_core_satellite(funds, target_pct=target)
+
+
+def test_the_gap_also_says_how_much_money_to_move():
+    """⭐ 「核心比目標少 13.0%」後面要接**要搬多少錢**，而且**在同一行**。
+
+    ## 這條在補的是客戶原話裡的那個洞
+
+    百分比回答「差多少」，**不回答「我要動多少錢」**。而使用者拿這一格去調部位。
+    ⛔ 期望值**不是寫死的字串**：本條跟 SSOT 要一份摘要、丟給被測檔自己的
+    :func:`ui.views.page_04_portfolio._gap_action_text` 算出應該長什麼樣，
+    再確認那一整句**逐字**出現在「差距」那一行裡。
+
+    **突變驗證（實跑，見 PR 突變表）**：
+    - 把 `_render_mix()` 裡的 `+ (f"　→　{_action}" if _action else "")` 整段拿掉
+      （＝ 退回 2026-09-06 只畫差距的版本）→ **本條轉紅**。
+    - 把 `_gap_action_text()` 的 `return f"{_move}{MIX_MOVE_TAIL}{_scope}"`
+      改成 `return ""`（＝ 一律不講）→ **本條轉紅**。
+    """
+    _want = _gap_action_text(_summary_for(FAKE_HOLDINGS_PRICED, 75.0))
+    assert _want, "SSOT 這組 fixture 本來就該算得出金額，測試前提壞了。"
+    _line = _mix_gap_paragraph("priced")
+    assert _line, f"「{BLOCK_MIX}」裡找不到「{MIX_GAP_LABEL}」那一行。"
+    assert _want in _line, (
+        "「差距」那一行只講了百分比，沒講要搬多少錢 —— "
+        "線框逐字要的是「差距**與所需動作**」。\n"
+        f"應含：{_want}\n實際那一行：\n{_line}")
+    assert MIX_MOVE_TAIL in _line, (
+        f"少了「{MIX_MOVE_TAIL}」—— 使用者不知道那筆錢是搬完就結束，"
+        f"還是只是第一步：\n{_line}")
+
+
+def test_the_money_and_the_percentage_are_two_views_of_one_number():
+    # ⚠️ **這個 docstring 必須是 `r"""`，不要「順手」改回 `"""`**（2026-09-08 必修）：
+    #    它裡面引用了 `(\d+\.\d)` 與 `(\d+(?:\.\d+)?)` 兩段 regex **字面文字**，
+    #    而 `\d` / `\.` 不是合法的 Python 跳脫。非 raw 的話：
+    #      · 本 repo 的 Python 3.11 → `DeprecationWarning: invalid escape sequence`
+    #        （CI slow lane 這一輪結尾那個 `1 warning` 就是它）；
+    #      · Python 3.12 起升級為 `SyntaxWarning`，官方已宣告未來會變 `SyntaxError`
+    #        —— 屆時這一行會從「一個警告」變成「**整檔載不進來**」。
+    # ⚠️ **這一則的諷刺點值得記著**：它是**在修「regex 寫死」的那段說明文字裡、
+    #    因為引用那個 regex 而產生的** —— 修一個字面值問題的說明，自己踩了字面值。
+    # ⚠️ **偵測指令要用對 warning 類別**（本組實測，`-W error::SyntaxWarning` 在 3.11
+    #    **抓不到**）：`python3 -W error::DeprecationWarning -m compileall <檔>`。
+    r"""⭐ **對帳**：畫面上的金額必須就是畫面上那個百分比講的同一筆錢。
+
+    ## ⚠️ 2026-09-08：本條被獨立稽核打穿過一次，**修法與病史都留著**
+
+    **舊版斷言**是 `abs(金額 − round(畫面百分比/100 × 總投入)) <= 1`，
+    docstring 給的理由是「`fmt_twd` 精度 0 位、百分比 1 位，兩者捨入不可能永遠一致」。
+    ⛔ **那個理由是錯的，而且錯得剛好讓斷言看起來很嚴。**
+    **主導誤差根本不是金額的 1 元捨入，是百分比的顯示捨入** ——
+    畫面上的百分比被捨到 1 位小數，半個步階就值 **`總投入 / 2000`**。
+
+    **本組實測重現（同一份 production 程式碼，只換 fixture）**：
+
+    ======================= ============================== ==============
+    holdings                 畫面                            |差|（舊斷言）
+    ======================= ============================== ==============
+    620,000 / 380,000        少 13.0% → NT$130,000          0      PASS
+    623,456 / 376,544        少 12.7% → NT$126,544          **456**  FAIL
+    611,111 / 388,889        少 13.9% → NT$138,889          **111**  FAIL
+    620,000 / 380,000（目標 75.03） 少 13.0% → NT$130,300    **300**  FAIL
+    ======================= ============================== ==============
+
+    **隨機 20,000 組真實組合（整數金額、總額 100 萬）：19,918 組（99.6%）違反舊不變式，
+    最大誤差 NT$500 —— 恰好等於 `總投入 / 2000`**，機制因此被確認。
+    ⛔ **那三個 FAIL 全部是 production 程式碼「算對了」卻被守衛判紅** ——
+    下一個人只要把 fixture 換成一組不整除的持倉（完全合理的改動），
+    就會拿到一條紅燈、訊息還寫著「金額與百分比對不上」，然後**去找一個不存在的 bug**。
+
+    ## 修法：**兩條並行**，而且容差是**推導出來的**，不是拍腦袋
+
+    * **(a) 對未捨入的 SSOT `diff_pct` 精確對帳** —— 這一條才是「金額算得對不對」。
+      容差 ±1 元，**這一次是真的只吃 `fmt_twd()` 的整數捨入**。
+    * **(b) 螢幕對螢幕的自我一致** —— 容差 ＝ `半個顯示步階 × 總投入 ＋ 1 元`，
+      步階由 :func:`_display_pct_step` **從 `_pct_text()` 自己身上量出來**。
+      ⚠️ **`＋ 1 元` 是第二個誤差源**（`fmt_twd()` 的整數捨入），**不是放寬** ——
+      舊寫法把它當**下限**（`max(1.0, …)`），百分比那一項一變大就蓋不住；
+      本組 200,000 組隨機實測：舊寫法 **44 組假紅**，改成加項後 **0 組**。
+
+    ## ⚠️ 2026-09-08 再修一次：**「跟著對」原本做不到**（稽核必修 A）
+
+    本 docstring 上一版寫著「有人把 `_pct_text` 改成 `.0f` 或 `.2f`，容差會自動跟著變，
+    **不會變成一個過期的常數**」。⛔ **那句話當時做不到。**
+    :func:`_display_pct_step` 本身是對的（`.0f`/`.1f`/`.2f`/`.3f` 四種實測全對），
+    但**同一條測試裡的 parse 寫死了一位小數**（``(\d+\.\d)``），於是：
+
+    * `_pct_text` → `.2f`（畫面「少 13.00%」）→ **在 parse 就死**；
+    * `_pct_text` → `.0f`（畫面「少 13%」）→ **同樣在 parse 就死**。
+
+    **兩個方向都走不到容差那一行**，結果仍然是「**正確的程式碼被判紅**」，
+    而且紅在「讀不出百分比或金額」這種**看不出真正原因**的地方 ——
+    **那正是必修 1 本來要消滅的失效模式，在同一條測試裡復發了一次。**
+    → 改成 ``(\d+(?:\.\d+)?)``；本檔另外三處同型的寫死（方向那條）**一併修**。
+
+    ⚠️ **宣稱要收窄成「（regex／parser 側）0 處」，不是「全檔 0 處」**（稽核登記）：
+    本檔另有 **9 處活的一位小數字面值**（`"62.0%"` / `"38.0%"` / `"41.0%"` /
+    `"75.0%"` / `"21.0%"` / `"0.0%"`）＋ 一個只用於**錯誤訊息格式化**的 `:.1f`。
+    **它們是另一類 —— 期望值釘樁，不是 parser**：`_pct_text` 改精度時它們也會紅，
+    但訊息是「沒有畫出現況比例（預期核心 62.0%）」，**看得出真正原因**。
+    ⛔ **不是缺陷，但不加那四個字會被讀成一個更強的宣稱。**
+
+    ⛔ **這個修法在 repo 內「沒有人看守」—— 這一筆最重要，不要讀成「已經有守衛了」**
+    （稽核查證，本組確認）：驗證它的 `A2c` / `P1` / `P2` **住在執行組本機的 harness 裡，
+    沒有進 repo**；**committed 的測試裡沒有任何一條會變動 `_pct_text` 的精度**。
+    → **所以有人把那 4 處 regex 改回寫死，repo 裡不會有任何東西轉紅。**
+    要真的守住它，得把 `_pct_text` 的精度參數化並讓測試掃過多種精度 ——
+    **那是另一件事，本輪不做**（`CLAUDE.md §8.4` step 4：範圍屬總管／客戶）。
+
+    ⚠️ **就地登記 fixture 依賴（比照 `_PINNED_FAKE_VALUES` 的 `200,000` 那一則）**：
+    (a) **不依賴** fixture 整不整除；(b) 的容差**會隨總投入等比放大**，
+    這是顯示精度的必然結果、**不是**本條被放寬。
+    ⛔ **不要為了讓某組 fixture 過關而把 (b) 的容差改成一個更大的常數** ——
+    那會把 (a) 也一起架空。
+
+    **突變驗證（實跑）**：
+    - `_need_twd = -_diff / 100.0 * _total` → `-_diff * _total`（漏 ÷100）→ (a)(b) 皆紅；
+    - 分母換成 `core_twd` → (a)(b) 皆紅；
+    - 只留舊版 `<= 1`、fixture 換成 623,456／376,544 → 舊版紅、新版綠（見上表）。
+    """
+    _s = _summary_for(FAKE_HOLDINGS_PRICED, 75.0)
+    _total = float(_s["total_twd"])
+    _line = _mix_gap_paragraph("priced")
+    # ⚠️ **小數位數不寫死**（稽核必修 A）—— 理由見上方 docstring 的「原本做不到」那段。
+    _pct = re.search(r"核心比目標(?:多|少) (\d+(?:\.\d+)?)%", _line)
+    _amt = re.search(r"NT\$([\d,]+)", _line)
+    assert _pct and _amt, (
+        f"「{MIX_GAP_LABEL}」那一行讀不出百分比或金額，無法對帳：\n{_line}")
+    _got = int(_amt.group(1).replace(",", ""))
+
+    # (a) 對**未捨入**的 SSOT diff_pct —— 金額本身算得對不對。
+    _exact = round(abs(float(_s["diff_pct"])) / 100.0 * _total)
+    assert abs(_got - _exact) <= 1, (
+        f"金額與 SSOT 的 `diff_pct` 對不上：|{_s['diff_pct']:.6f}|% × "
+        f"總投入 {_total:,.0f} = {_exact:,}，畫面卻寫 {_got:,}。\n{_line}")
+
+    # (b) 螢幕對螢幕 —— 容差由**顯示精度**推導（半個步階），不是常數。
+    # ⚠️ **`+ 1.0` 不是「放寬」，是補上第二個誤差源**（稽核建議，本組重量後接受）：
+    #    畫面上的金額還吃了 `fmt_twd()` 自己的**整數捨入**（±0.5 元）。
+    #    舊寫法 `max(1.0, …)` 把 1 元當**下限**，百分比那一項一變大就**蓋不住**它 ——
+    #    本組 200,000 組隨機（總額 10^5~10^8）實測：舊寫法仍有 **44 組假紅**，
+    #    改成加項之後 **0 組**。**與必修 1 同型，只是小了五個數量級。**
+    _slack = _display_pct_step() / 2.0 / 100.0 * _total + 1.0
+    _from_screen = float(_pct.group(1)) / 100.0 * _total
+    assert abs(_got - _from_screen) <= _slack, (
+        f"金額與**畫面上那個**百分比差得比顯示精度能解釋的還多："
+        f"{_pct.group(1)}% × {_total:,.0f} = {_from_screen:,.0f}，畫面寫 {_got:,}，"
+        f"差 {abs(_got - _from_screen):,.0f} > 容差 {_slack:,.0f}"
+        f"（＝ 半個顯示步階 {_display_pct_step()} × 總投入）。\n{_line}")
+
+
+@pytest.mark.parametrize(
+    "target, expect_from, expect_to",
+    [(75.0, "衛星", "核心"),   # 核心 62% < 目標 75% → 錢要往核心搬
+     (41.0, "核心", "衛星")])  # 核心 62% > 目標 41% → 錢要往衛星搬
+def test_the_move_direction_matches_the_gap_direction(
+        target: float, expect_from: str, expect_to: str):
+    """⭐ **方向**：搬錯邊比不講更糟 —— 那是一句**相反**的操作指示。
+
+    ## 這條是 F1-c 那個教訓的第二個路口
+
+    2026-09-06 稽核的存活突變 F1-c 證明：只驗數字、不驗方向詞，
+    把「多／少」反轉全檔照樣綠。**金額這一句有完全一樣的破口，而且更貴** ——
+    百分比講反了使用者還可能自己算一下；
+    「從核心移 NT$210,000 到衛星」是一句**可以照著下單**的指令。
+
+    **突變驗證（實跑）**：把 `_gap_action_text()` 的
+    `_move = (... if _need_twd > 0 else ...)` 兩支對調 → **兩個參數都轉紅**。
+    """
+    _line = _mix_gap_paragraph("priced", session={"portfolio_core_pct": target})
+    _m = re.search(r"從(核心|衛星)移 NT\$[\d,]+ 到(核心|衛星)", _line)
+    assert _m, f"「{MIX_GAP_LABEL}」那一行沒有講「從哪搬到哪」：\n{_line}"
+    assert (_m.group(1), _m.group(2)) == (expect_from, expect_to), (
+        f"目標 {target}% 時錢應該從「{expect_from}」搬到「{expect_to}」，"
+        f"畫面卻寫從「{_m.group(1)}」搬到「{_m.group(2)}」——"
+        "那是一句方向相反的操作指示。\n" + _line)
+
+
+def test_a_portfolio_already_on_target_is_never_told_to_move_money():
+    """⭐ 「剛好落在目標上」旁邊**不准**再接一句「搬 NT$x 過去」。
+
+    ## 這條擋的是一種很容易寫出來的自相矛盾
+
+    差距那一行有兩個分支共用同一個容差 :data:`_ON_TARGET_TOL_PCT`。
+    若金額那一半各寫一個 `0.05`（或忘了判），畫面就會同時出現
+    「剛好落在目標上」與「把 NT$3 從衛星移到核心就到目標」——
+    **兩句話不可能都對**，而使用者會相信後面那一句（它比較具體）。
+
+    ## ⚠️ 2026-09-08：本條有一個**沒揭露的 fixture 依賴**，稽核指出，就地修掉
+
+    舊版直接把 session `portfolio_core_pct` 寫死成整數 **62** 來取得「剛好落在目標上」。
+    ⛔ **那只有在 `core_pct` 恰好是 `62.0000` 時成立。** 本組實測：
+
+    ======================= ========== ==================================== ====
+    holdings                 core_pct   設 62 之後的畫面                       守衛
+    ======================= ========== ==================================== ====
+    620,000 / 380,000        62.0000    剛好落在目標上                         PASS
+    623,456 / 376,544        62.3456    多 0.3% → 從核心移 NT$3,456 到衛星      **FAIL**
+    621,000 / 379,000        62.1000    多 0.1% → 從核心移 NT$1,000 到衛星      **FAIL**
+    ======================= ========== ==================================== ====
+
+    ⛔ **兩個 FAIL 都是 production 算對了卻被守衛判紅。**
+    而 `portfolio_core_pct` 是**整數 slider** —— 本組逐一試過 0~100，
+    對 623,456／376,544 這組 **沒有任何整數目標值**能讓它落進 0.05pp 的容差裡。
+    也就是說：fixture 一旦不整除，這條測試**在整數目標下根本無法成立**。
+
+    ## 修法：目標值**從 fixture 推導**，並把前提寫成一條會說話的斷言
+
+    不再寫死 62；改成「取 fixture 的 `core_pct`，四捨五入到最近的整數」——
+    那正是**整數 slider 唯一能給的值**。前提（`core_pct` 必須落在某個整數的容差內）
+    由一條**專屬斷言**先擋住，訊息直接告訴下一個人該怎麼辦，
+    **而不是讓主斷言以「畫面沒有出現『剛好落在目標上』」這種難查的形式紅掉。**
+
+    **突變驗證（實跑）**：把 `_gap_action_text()` 裡
+    `if abs(_diff) < _ON_TARGET_TOL_PCT: return ""` 整段拿掉 → **本條轉紅**
+    （由下方兩條容差邊界斷言抓到 —— 渲染那一半在 diff=0 時仍會回空字串，
+    因為 `round(abs(0.0)) < 1` 也會 return，**這一點本組實測確認過**）。
+    """
+    # 前提：整數 slider 給得出來的目標值裡，要有一個能讓這組 fixture「剛好落在目標上」。
+    _cp = _summary_for(FAKE_HOLDINGS_PRICED, None)["core_pct"]
+    _target = round(float(_cp))
+    assert abs(float(_cp) - _target) < _ON_TARGET_TOL_PCT, (
+        f"本條依賴 fixture 的 `core_pct`（實測 {_cp}）落在某個整數的 "
+        f"{_ON_TARGET_TOL_PCT}pp 容差內 —— 現在最近的整數是 {_target}，差 "
+        f"{abs(float(_cp) - _target):.4f}pp，**超出容差**。\n"
+        "⛔ 而 `portfolio_core_pct` 是**整數 slider**，所以這組 fixture 之下"
+        "「剛好落在目標上」那一支**沒有任何整數目標值到得了**。\n"
+        "→ 正解是**換一組整除的 fixture**（或替本條另立一組），"
+        "**不是**把容差調大、也不是塞一個非整數的 session 值"
+        "（那會測到一個 production 到不了的狀態）。")
+    _line = _mix_gap_paragraph("priced", session={"portfolio_core_pct": _target})
+    assert "剛好落在目標上" in _line, (
+        f"目標設成 {_target}、現況 {_cp}%，這一行應該走「剛好落在目標上」：\n{_line}")
+    assert "NT$" not in _line and MIX_MOVE_TAIL not in _line, (
+        "已經在目標上了，畫面卻還叫使用者搬錢 —— 同一行自己跟自己打架：\n" + _line)
+    # 兩支**共用同一個容差**這件事，直接在邊界上驗一次 —— 不是靠「兩邊都寫 0.05」。
+    # ⛔ 若哪天有人把其中一支改成別的數字，這裡就會出現「剛好落在目標上」
+    #    與一句搬錢指令並存的畫面，而上面那兩條斷言在**那一組**參數下未必抓得到。
+    _base = {"total_twd": 1_000_000.0, "is_amount_weighted": True,
+             "n_funds": 2, "n_missing_amount": 0}
+    assert _gap_action_text({**_base, "diff_pct": -_ON_TARGET_TOL_PCT / 2}) == "", (
+        f"差距落在容差（{_ON_TARGET_TOL_PCT}）之內時，畫面說的是「剛好落在目標上」，"
+        "金額那一半必須跟著閉嘴。")
+    assert _gap_action_text({**_base, "diff_pct": -_ON_TARGET_TOL_PCT * 100}), (
+        "差距明顯超出容差時卻算不出金額 —— 那不是保守，是這一格失效了。")
+
+
+def test_no_money_is_promised_when_nobody_filled_in_a_cost():
+    """⭐ **一檔本金都沒填 → 一個金額都不准出現。**
+
+    分母是 0 的時候，`summarize_core_satellite` 連 `core_pct` 都誠實回 `None`
+    （其 docstring 逐字：「缺資料時誠實回 None，不捏造 0」）。
+    此時若還印出一個金額，那個金額**憑空而來** —— 比 `0.0%` 更糟，
+    因為它長得像一筆可以照著執行的交易。
+
+    ⚠️ 本條與 :func:`test_the_mix_block_never_prints_a_zero_when_it_cannot_compute`
+    **不重複**：那條驗「不准畫 0%」，本條驗「不准畫**錢**」。
+    兩者的失敗長相不同，黑名單也不同（`0%` vs `NT$`）。
+
+    **突變驗證（實跑）**：把 `_gap_action_text()` 開頭的
+    `not summary.get("is_amount_weighted")` 拿掉 → 本條**不會**紅
+    （上游 `core_pct is None` 時 `_render_mix()` 更早就 return 了）——
+    ⚠️ **這一點據實寫出來**：本條守的是「畫面上不准有錢」這個**結果**，
+    **守不到** `_gap_action_text()` 裡那一道 `is_amount_weighted` 前提本身。
+    那一道由 :func:`test_the_money_helper_refuses_an_untrustworthy_ratio` 直接呼叫驗。
+    """
+    _body = _mix_body("loaded")
+    assert NOT_READY_MARK in _body, f"沒有本金就該留灰：\n{_body}"
+    assert "NT$" not in _body and MIX_MOVE_TAIL not in _body, (
+        "算不出比例的時候畫面上出現了金額 —— 那筆錢是憑空來的（§1）：\n" + _body)
+
+
+def test_the_money_helper_refuses_an_untrustworthy_ratio():
+    """⭐ 直接呼叫：`is_amount_weighted=False` 時 :func:`_gap_action_text` 必須閉嘴。
+
+    ## 為什麼要有一條「畫面上到不了」的測試
+
+    上一條自陳它守不到這一道前提（`_render_mix()` 更早就 return 了）。
+    但那道前提**不是多餘的**：它是「可以講金額」的**語意**條件 ——
+    哪天上游改成「本金缺一半就補一個估計比例」，`core_pct` 就不再是 `None`，
+    而**金額會跟著被印出來**。到那時，唯一擋著的就是這一道。
+
+    ⛔ **不要因為「現在走不到」就把它刪掉** —— 那正是本 repo 反覆記載的死法：
+    一段沒有測試的防線，下一輪會被當成沒用的東西順手拿掉。
+
+    **突變驗證（實跑）**：把 `_gap_action_text()` 的
+    `or not summary.get("is_amount_weighted")` 拿掉 → **本條轉紅**
+    （它會拿一個不可信的 `diff_pct` 算出一筆錢）。
+    """
+    _fake = {"diff_pct": -13.0, "total_twd": 1_000_000.0,
+             "is_amount_weighted": False, "n_funds": 2, "n_missing_amount": 2}
+    assert _gap_action_text(_fake) == "", (
+        "`is_amount_weighted=False` 代表比例本身不可信（SSOT docstring 逐字），"
+        f"這種時候不准算出金額，實際回了：{_gap_action_text(_fake)!r}")
+
+    # ── 2026-09-08 稽核建議 1：NaN / ±inf **不准把整塊炸掉** ───────────
+    # ⚠️ 這三個輸入目前**不可達**（上游 `parse_invest_twd` 明文擋 ±inf/NaN，
+    #    目標是整數 slider）—— 但「不可達」是**上游**的性質，不是本函式的。
+    #    而「要搬多少錢」這條路徑是本 PR **新增**的：base 版遇到 NaN 只會印一個
+    #    `nan%`，**不會炸**；`round(nan)` 拋 `ValueError`、`round(inf)` 拋
+    #    `OverflowError`，兩者原本都在 try 外面。**本 PR 不該讓畫面多一種炸法。**
+    # ⛔ 這不是「吞例外」：百分比那一半照樣會畫，消失的只有這句衍生結論 ——
+    #    而它本來就算不出來（§1：寧可少講，不可講錯）。
+    for _bad in (float("nan"), float("inf"), float("-inf")):
+        _dirty = {"diff_pct": -13.0, "total_twd": _bad,
+                  "is_amount_weighted": True, "n_funds": 2, "n_missing_amount": 0}
+        assert _gap_action_text(_dirty) == "", (
+            f"`total_twd={_bad}` 時應該安靜回空字串，實際回了："
+            f"{_gap_action_text(_dirty)!r}")
+        _dirty2 = {"diff_pct": _bad, "total_twd": 1_000_000.0,
+                   "is_amount_weighted": True, "n_funds": 2, "n_missing_amount": 0}
+        assert _gap_action_text(_dirty2) == "", (
+            f"`diff_pct={_bad}` 時應該安靜回空字串，實際回了："
+            f"{_gap_action_text(_dirty2)!r}")
+
+
+def test_the_money_says_so_when_it_only_covers_part_of_the_book():
+    """⭐ **只涵蓋一半持倉的金額，必須自己說出它只涵蓋哪幾檔。**
+
+    ## 這是本批最容易造假的一步，理由寫清楚
+
+    沒填 `invest_twd` 的標的**不進分母**。百分比與金額**受害程度完全一樣**，
+    但金額更像一道指令 —— 使用者會照著它搬錢，而它其實只算了三檔裡的兩檔。
+    ⛔ **把只涵蓋一部分的金額講得像全部，比不講更糟**（`CLAUDE.md §1`）。
+
+    ⚠️ **為什麼不是乾脆不講**：只要有一檔沒填本金就整句消失 ——
+    而那正是客戶抱怨「看不出要不要調整」的那個情境。
+    ⚠️ **為什麼不算重複** `format_core_satellite_caption()`：那一行講的是
+    「**分母**漏了幾檔」（資料品質），這一句講的是「**這個金額**涵蓋幾檔」（指令射程）。
+    同一個事實的兩面，但只有後者會被拿去下單。
+
+    fixture：三檔（兩檔有本金、一檔沒有）—— 分母、比例、金額與
+    :data:`FAKE_HOLDINGS_PRICED` **完全相同**，唯一的變因是 `n_missing_amount`。
+
+    **突變驗證（實跑）**：把 `_gap_action_text()` 的 `_scope` 恆設為 `""`
+    → **本條轉紅**，而 :func:`test_the_gap_also_says_how_much_money_to_move`
+    **不會**紅（它用的是全部填了本金的 fixture）——
+    **兩條 fixture 不同，守的東西才不同。**
+    """
+    _s = _summary_for(FAKE_HOLDINGS_PARTLY_PRICED, 75.0)
+    assert _s["n_missing_amount"] == 1 and _s["n_funds"] == 3, (
+        f"測試前提壞了：這組 fixture 應該是 3 檔缺 1，實際 {_s}")
+    _line = _mix_gap_paragraph(funds=FAKE_HOLDINGS_PARTLY_PRICED)
+    assert "NT$" in _line, f"這一組算得出金額，卻沒有畫出來：\n{_line}"
+    _n_priced = _s["n_funds"] - _s["n_missing_amount"]
+    assert f"{_n_priced} 檔" in _line, (
+        f"金額只涵蓋 {_n_priced} 檔（另有 {_s['n_missing_amount']} 檔沒填本金），"
+        f"這一句卻沒有說出它的射程：\n{_line}")
+    assert f"{_s['n_funds']} 檔" not in _line, (
+        f"這一句宣稱涵蓋 {_s['n_funds']} 檔，但其中 {_s['n_missing_amount']} 檔"
+        f"根本不在分母裡：\n{_line}")
+    # 全部填了本金的那一組**不准**冒出這個附註（否則它只是無條件加的裝飾）。
+    assert "檔" not in _mix_gap_paragraph("priced").split("NT$")[-1], (
+        "所有標的都填了本金時，不該還掛一句「只算 N 檔」——"
+        "那會讓使用者以為有東西漏掉了。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 換股顧問的指路 —— 它指的那個地方是不是真的在跑（2026-09-08）
+# ══════════════════════════════════════════════════════════════════
+
+def test_the_switch_card_points_at_the_place_that_really_renders_it():
+    """⭐ **指路不能指到一個沒有東西的地方** —— 本條去那個檔案裡確認它真的會渲染。
+
+    ## 這條與既有的全域守衛**不重複**，差別要看清楚
+
+    `tests/test_ia_switch_advisor_moved_to_portfolio.py::`
+    `test_switch_advisor_renders_only_from_the_portfolio_tab` 釘的是
+    「**全 repo 的渲染點恰好一個，而且在 `ui/tab3_portfolio.py::render_portfolio_tab`**」。
+    它**沒有回答**「**本頁的指路指去哪**」—— 兩件事可以各自成立卻兜不起來
+    （本頁在 2026-09-07 之前就正是這樣：一邊寫著「它在舊 ④ 有渲染點」，
+    一邊把使用者指回本頁的試算）。
+
+    → 本條把兩端接起來：**本頁指的那個分頁，它的檔案裡真的呼叫得到那一支。**
+
+    ⚠️ **本條驗的是「那個地方有沒有東西」，不是「使用者點過去真的看得到」** ——
+    後者要跑起整個 `app.py`，而本檔的 AppTest 只渲染本頁（`CLAUDE.md §-2` 規則 6）。
+    ⛔ 這一點**不得**被讀成「已經驗過去了真的有用」。
+
+    **突變驗證（實跑）**：把 `_render_action_cards()` 的
+    `where=where_to_find("switch")` 改成任何指回本頁的字串
+    → **本條轉紅**（同時 `test_every_grey_unit_says_where_to_look[換股顧問]` 也轉紅）。
+    ⚠️ **2026-09-08 更正**：本段原本還列了
+    ~~`test_the_pending_pointer_is_a_place_not_a_status_sentence` 也轉紅~~ ——
+    **那條已隨 `_pending_where()` 一起退役刪除**（見模組 docstring 的對帳表），
+    所以現在的交叉守備**少一條**，據實寫明、不假裝還在。
+    """
+    from ui.helpers.story_nav import section_label, where_to_find as _wtf
+    # 1) 本頁的換股顧問灰態，指的必須是 `switch` 這個分區。
+    _seg = _segments(_stream("loaded"))
+    _body = "\n".join(_seg.get(switch_block_label(), []))
+    assert f"（請先到：{_wtf('switch')}）" in _body, (
+        f"換股顧問的灰態沒有指向 `where_to_find('switch')`：\n{_body}")
+    assert section_label("switch") in _wtf("switch"), (
+        "`where_to_find('switch')` 沒有帶上分區名 —— 指路只指到分頁，"
+        "使用者到了那一頁還是不知道要看哪一塊。")
+    # 2) 那個分區所屬的舊分頁，檔案裡真的有那一支的渲染呼叫。
+    _old = ROOT / "ui" / "tab3_portfolio.py"
+    _calls = [_n for _n in ast.walk(ast.parse(_old.read_text(encoding="utf-8")))
+              if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+              and _n.func.id == "render_switch_advisor_section"]
+    assert _calls, (
+        f"本頁把使用者指到 {_wtf('switch')}，但 {_old.name} 裡"
+        "找不到 `render_switch_advisor_section(...)` 的呼叫 —— 那是一條死指路。\n"
+        "⛔ 若那一塊真的被移走了，正解是改本頁的指路（走 SSOT），"
+        "不是把本條拿掉。")
+
+
+def test_the_pointer_does_not_collide_with_this_pages_own_tab():
+    """⭐ 分頁列上有**兩個**「資產配置」—— 指路指的必須是舊的那一格，而且分得出來。
+
+    ## 這條為什麼要存在
+
+    雙軌並行之後 `app.py` 掛了 **9 格**，其中第 4 格與第 9 格**同名**
+    （`📊 資產配置` vs `[新] 📊 資產配置`）。換股顧問的指路吐的是
+    ``④ 📊 資產配置 → 🎯 換股顧問`` —— 如果那個 ``[新] `` 前綴哪天沒了，
+    使用者會把它讀成「就是你現在看的這一頁」，而這一頁**正是沒有換股顧問的那一頁**。
+    **那會是一句原地打轉的指路。**
+
+    ⛔ 本條**不**驗分頁列本身（那是 `tests/test_wpf_five_tab_wiring.py` 與
+    `tests/test_dual_track_t9_portfolio.py` 的事）——
+    它驗的是**本頁的指路與本頁自己的分頁名分得出來**。
+
+    **突變驗證（實跑）**：把 `ui/helpers/story_nav.PREVIEW_PREFIX` 改成 `""`
+    → **本條轉紅**。
+    """
+    from ui.helpers.story_nav import (
+        preview_tab_label, tab_label, where_to_find as _wtf)
+    _here = preview_tab_label("portfolio")   # 本頁在分頁列上的名字
+    _there = tab_label("portfolio")          # 指路指去的那一格
+    assert _here != _there, (
+        "分頁列上兩格「資產配置」現在叫同一個名字 —— "
+        f"指路（{_wtf('switch')}）會被讀成「就是你現在這一頁」，"
+        "而這一頁沒有換股顧問。")
+    assert _there in _wtf("switch") and _here not in _wtf("switch"), (
+        f"指路 {_wtf('switch')!r} 指到的不是舊那一格（{_there!r}），"
+        f"或反而帶上了本頁自己的名字（{_here!r}）。")
 
 
 def test_the_form_block_is_not_grey():
@@ -1699,6 +2317,21 @@ def test_downstream_reads_the_applied_plan_not_the_widget_values():
 
 #: 本條**實際釘住**的字面值 —— 線框 Tab 04 四張示意卡與 Form 上的東西。
 #: 列成常數，是為了讓「它到底守了什麼」可以被讀出來，而不是藏在 docstring 的形容詞裡。
+#:
+#: ⚠️ **`"200,000"` 那一筆有一個已知的碰撞風險，讀到這裡就要知道**（2026-09-08 登記）：
+#: 2026-09-08 起「差距」那一行會印出**真實的再平衡金額**，走 `fmt_twd()` ——
+#: 而 `fmt_twd(200000)` ＝ ``"NT$200,000"`` **含有這個子字串**。
+#: 也就是說，**一個真實的 20 萬再平衡金額會讓黑名單轉紅**。
+#: ⛔ **屆時的正解與 2026-09-06「62 ／ 38」那次完全相同：改 fixture 或改格式，
+#:    絕不是把這一筆從黑名單拿掉** —— 為了讓一個真數字過關而剪開擋假數字的網子，
+#:    正是 :func:`test_a_real_ratio_that_collides_with_the_mock_up_still_passes`
+#:    整條在防的東西。
+#: ⚠️ **會由哪一條抓到，2026-09-08 實測過**：
+#:    :func:`test_the_grey_blocks_never_print_the_illustrative_values_from_the_wireframe`
+#:    只掃 `empty` / `missing` / `loaded`，而金額只在 `priced` 出現 —— **它掃不到**；
+#:    真正會轉紅的是 :func:`test_a_real_ratio_that_collides_with_the_mock_up_still_passes`。
+#: 📌 完整理由同時就地寫在 `page_04_portfolio._gap_action_text` 的 docstring 裡
+#:    （**兩邊都寫，是刻意的**：改黑名單的人讀這裡，改金額格式的人讀那裡）。
 _PINNED_FAKE_VALUES: tuple[str, ...] = (
     "現況 62 ／ 38", "建議 70 ／ 30", "62 ／ 38", "70 ／ 30",
     "2 組建議", "3 張保單", "本月 4 筆",
