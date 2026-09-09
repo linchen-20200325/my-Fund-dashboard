@@ -627,7 +627,10 @@ _CARD_HEALTH_UNCHECKED: str = (
 #:    （`test_anything_that_promises_a_result_also_allows_failure`）。
 #: ⛔ **本常數是一個【已登記的待判定項】：`EXCEPTIONS.md §8.3.P` 的 `P-HEDGESEMANTIC-1`。**
 #:    守它的只有一個**長度**下限（`len(...) >= 4`）—— **量不到語意**：
-#:    實測換成 `"或或或或"` → 155 passed 存活，「每一句承諾都有對沖」形式成立、語意全空。
+#:    實測換成 `"或或或或"` → **155 passed 存活（2026-09-09 第三輪快照數）**，
+#:    「每一句承諾都有對沖」形式成立、語意全空。
+#:    ⚠️ **第五輪於 head 重跑：機制仍然存活（161 passed）** —— **數字會隨測試數漂移，
+#:    機制沒有變**。引用時請看機制，不要引用那個數字（§8.2.A.0 規則 4）。
 #: ⚠️ 兩份逐字底本（`_CARD_TEXT_PINNED` / `_VERDICT_PINNED`）**刻意保留 `{fail}` 不展開**，
 #:    所以它換成什麼，對那兩份底本都是**透明的** —— 那是底本的設計取捨，不是它們壞了。
 #: ⛔ 改它之前請先讀那一列（有「待答／由誰查／觸發點」三欄）。
@@ -876,6 +879,12 @@ def _where(block: str) -> str:
     `test_every_where_names_something_that_exists_on_screen` 只對 ``「」`` 內的
     **字面值**比對「畫面上有沒有這個字」，而它的字表不收 `st.caption`。
     """
+    # ⛔ **已登記：`EXCEPTIONS.md §8.3.P` 的 `P-GATEDLAYOUT-1` 第 (2) 筆。**
+    #    `where_to_find("settings")` ＝ `⑤ ⚙️ 設定與診斷` —— **那是【舊】分頁**，本頁是 ⑦；
+    #    而舊 ⑤ **沒有**叫「連線與金鑰」的區塊（AST 實測：非-docstring 字串 0 命中，
+    #    `grep -c` 的 5 命中全是註解在談未來的 T18 重組）。
+    #    ⛔ **既有債**（兩個呼叫點都在 `origin/main` 上），**#835 未修**。
+
     return f"{where_to_find('settings')} → {block}"
 
 
@@ -1289,7 +1298,8 @@ def _render_nav_status() -> None:
             f"{_BACKEND_UNAVAILABLE_NOTE}{_missing}。"
             # ⚠️ **刻意不寫「這兩把」** —— `status()` 的 `missing` 可能只有一項。
             "這些是部署環境的 secret，畫面上改不了。",
-            # ⚠️ **登記，本批不修（2026-09-09 第四輪稽核指出；`EXCEPTIONS.md §-1` ＋ §8.4 步驟 4）**：
+            # ⚠️ **已登記：`EXCEPTIONS.md §8.3.P` 的 `P-GATEDLAYOUT-1` 第 (3) 筆**
+            #    （2026-09-09 第四輪就地登記、第五輪收進該列；`§-1` ＋ §8.4 步驟 4）：
             #    這個指路指向「連線與金鑰」，而**那一塊今天回答不了 Google 授權**
             #    —— 與結論層 🔑 卡被擋下的是**同一個病**（指到一個答不出來的區塊）。
             # ⛔ **但它不是本批寫的**：實測 `origin/main` 上這一行就是 `_where(BLOCK_KEYS)`
@@ -1458,6 +1468,11 @@ def _render_backfill() -> None:
     #       否則 checkbox 會落在上一塊的區段裡（`_units()` 以 `### ` 切段），
     #       「手動補資料」那一段就只剩一句灰字，
     #       `test_the_delegated_blocks_have_real_content` 會轉紅。
+    # ⛔ **已登記：`EXCEPTIONS.md §8.3.P` 的 `P-GATEDLAYOUT-1` 第 (1) 筆。**
+    #    **gate 開時本檔不填這個 slot**（標題交給委派畫）—— 委派炸掉 ⇒ **兩邊都沒畫**。
+    #    實測：`gate=True` ＋ 委派拋例外 → `### 手動補資料` **0 次**、紅框 1。
+    #    ⚠️ 那與這一塊自己的灰態承諾（「勾它**只能看到位置**」）直接牴觸。
+    #    ⛔ **既有債，#835 未修**（§8.4 步驟 4，scope 由總管決定）。
     _heading_slot = st.empty()
 
     # ⚠️ **刻意不帶 `key=`**：帶了會命中

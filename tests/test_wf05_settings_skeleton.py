@@ -99,6 +99,14 @@ gate 預設與 key 命名空間、gate 的呼叫次數與順序、每個標題�
 - ⛔ **`_holdings()` 只測到 `None` / 非 list / 非 dict 元素三種**；舊版 payload 形狀沒測。
 - ⛔ **頁首（`## 標題` ＋ `st.caption`）落在所有 unit-scoped 守衛的射程之外** ——
   :func:`_units` 會丟掉第一個區塊標題之前的全部文字。**既有登記，本輪未修。**
+- ⛔ **那個縫有一個【兄弟】，2026-09-09 第五輪稽核指出，本組實測確認**：
+  `### 🧾 ② 依據` 那一行**之後**、第一個區塊 `### ` **之前**，同樣是 :func:`_units`
+  的射程外（它以 `### ` 切段，這一段前面沒有段可歸）。
+  **實測**：在那裡塞 `st.markdown("以下每一塊今天都正常，可以直接看數字。")`
+  → **161 passed 存活**。⚠️ **登記，本輪未修**（`CLAUDE.md §-1` 無觸發、`§8.4 步驟 4` 不擴大 scope）。
+  ⚠️ **兩個縫要一起讀**：結論層**上面**那一個（頁首）與**下面**那一個（依據標題之後），
+  **中間夾著的結論層本身已經封閉**（見本檔第四／五輪那兩條），
+  **但封閉的邊界就到那兩行為止** —— 不要把「結論層已封閉」讀成「這一頁上半已封閉」。
 
 ⚠️ **`_units()` 的切法本輪換過，理由要記住**
 --------------------------------------------
@@ -280,6 +288,47 @@ def _stream(kind: str) -> tuple[str, ...]:
     """
     _funds = {"empty": [], "missing": None, "loaded": FAKE_HOLDINGS}[kind]
     return tuple(_flat(_app(_funds).main))
+
+
+@functools.lru_cache(maxsize=16)
+def _stream_gated(kind: str, gate_on: bool) -> tuple[str, ...]:
+    """同 :func:`_stream`，但可以指定 **`DIAG_GATE_LABEL` 那顆開關勾了沒有**。
+
+    ⭐⭐ **2026-09-09 第五輪回修新增。它補的是一個【世界】，不是一個斷言。**
+
+    **上一版的洞（第五輪獨立稽核抓到，本組已重量）**：封閉集合那條的 `parametrize`
+    是 `["empty", "missing", "loaded"]` —— **那三個全是 `portfolio_funds` 的形狀，
+    全部落在 gate=OFF**。`_stream()` 從不撥動那顆開關（AST 實測：
+    body 裡沒有 `.check()`、沒有 `DIAG_GATE_LABEL`），
+    而全檔真的會撥它的測試**只有 3 條，封閉集合那條不在其中**。
+    ⇒ **verdict 的 `_VERDICT_CHECKED` 那一支，封閉集合【從來沒有渲染過】。**
+
+    **實測矩陣（同一句謊，三序齊全）**::
+
+        注入通道            gate=OFF     gate=ON
+        verdict 後接字      KILLED       **SURVIVED, 158 passed**   ← 洞
+        卡片 note 後接字    KILLED       KILLED
+        `where=` 後接字     KILLED       KILLED
+
+    兩張卡在 gate=ON 也紅，是因為另有**資料層**守衛
+    （`_card_specs_both_gates()` 兩個狀態都取）接住；
+    **verdict 只在渲染當下才存在，沒有資料層那一半** —— 所以它是唯一漏出去的。
+
+    ⚠️⚠️ **這是本 PR 第五次同型，而且是最難看的一次**：第四輪掃描 3 的軸**就是**
+    「同一把尺有沒有對**另一個世界**重跑」，本組把它套到了對沖那條
+    （`test_the_promise_hedge_holds_in_both_worlds`，`gate_on=[False, True]`），
+    **卻沒有套到同一顆 commit 寫的封閉集合**。
+    ⇒ **「我剛學到的那條教訓」與「我這一顆 commit 的其他產出」之間，也要重跑一次。**
+    """
+    _funds = {"empty": [], "missing": None, "loaded": FAKE_HOLDINGS}[kind]
+    import streamlit as _st                                     # noqa: PLC0415
+
+    _st.session_state.pop(_SK_DIAG_GATE, None)
+    _at = _app(_funds)
+    if gate_on:
+        _cb(_at, DIAG_GATE_LABEL).check()
+        _rerun(_at)
+    return tuple(_flat(_at.main))
 
 
 def _text(parts: tuple[str, ...] | list[str]) -> str:
@@ -3886,7 +3935,9 @@ def test_anything_that_promises_a_result_also_allows_failure():
     #    工具沒有量到它宣稱在量的東西，而空結果被讀成「沒問題」。**
     # ⚠️⚠️ **登記：這一條 fail-closed 量的是【長度】，不是【語意】**
     #    （2026-09-09 第三輪稽核指出，本組實測確認 —— **只登記，本輪不動工**）。
-    #    **實測**：`_FAILURE_ALLOWANCE = "或或或或"` → **155 passed 存活**。
+    #    **實測（2026-09-09 第三輪當下的快照數）**：`_FAILURE_ALLOWANCE = "或或或或"`
+    #    → **155 passed 存活**。⚠️ **第五輪於 head 重跑：機制仍然存活（161 passed）** ——
+    #    **數字會隨測試數漂移，機制沒有變**；引用時請看機制，不要引用那個數字。
     #    四個無意義的字通過 `len(...) >= 4`，也通過下面的 `.count(...) >= N`
     #    （四處都會印出它），於是「每一句承諾都有對沖」在形式上成立、**在語意上全空**。
     # ⛔ **要記的不是「4 應該改成幾」** —— 換成任何長度門檻都是同一個病。
@@ -4143,8 +4194,10 @@ def _expected_conclusion_screen() -> frozenset[str]:
 
 
 
+@pytest.mark.parametrize("gate_on", [False, True], ids=["gate-off", "gate-on"])
 @pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
-def test_the_conclusion_layer_may_only_emit_the_shape_it_is_allowed_to(kind: str):
+def test_the_conclusion_layer_may_only_emit_the_shape_it_is_allowed_to(
+        kind: str, gate_on: bool):
     """⭐⭐⭐ **封閉集合**：結論層只准長成【一句話 ＋ N 張卡】那個形狀，**沒有第四樣東西**。
 
     ⛔⛔ **本條是本節的全部力量所在。它與既有那幾條的差別，是【黑名單 vs 封閉集合】**：
@@ -4181,13 +4234,17 @@ def test_the_conclusion_layer_may_only_emit_the_shape_it_is_allowed_to(kind: str
       封閉卡片數的是 `test_every_conclusion_card_points_at_a_block_that_is_really_on_screen`
       的 `len(_cards) == 3`（本組實測：多一張卡 → **RED**）。**兩條合起來才是完整的。**
     """
-    _seg = _conclusion_parts(_stream(kind))
-    assert _seg, f"（{kind}）結論層底下一個元素都沒有 —— 本條失去對象（fail-closed）。"
+    # ⭐⭐ **2026-09-09 第五輪：兩個世界都要跑。** 上一版只跑 gate=OFF，
+    #    於是 `_VERDICT_CHECKED` 那一支**從來沒有被渲染過** ——
+    #    在它後面接一句謊 → **158 passed 存活**（見 :func:`_stream_gated` 的矩陣）。
+    _seg = _conclusion_parts(_stream_gated(kind, gate_on))
+    _w = f"{kind}/gate={'ON' if gate_on else 'OFF'}"
+    assert _seg, f"（{_w}）結論層底下一個元素都沒有 —— 本條失去對象（fail-closed）。"
 
     # ── (1) 種類序列：多一個紅、少一個也紅 ──────────────────────────────
     _want, _got = _expected_conclusion_kinds(), _kinds(_seg)
     assert _got == _want, (
-        f"（{kind}）結論層的元素種類序列不對。\n"
+        f"（{_w}）結論層的元素種類序列不對。\n"
         f"  應為（{len(_want)} 個）：{_want}\n"
         f"  實際（{len(_got)} 個）：{_got}\n"
         "實際內容：\n" + "\n".join(f"  {_i:2} {_p[:100]}" for _i, _p in enumerate(_seg)) + "\n"
@@ -4231,7 +4288,7 @@ def test_the_conclusion_layer_may_only_emit_the_shape_it_is_allowed_to(kind: str
     _alien = [_p for _p in _texted
               if _p.split("] ", 1)[-1] not in _screen]
     assert not _alien, (
-        f"（{kind}）結論層有 {len(_alien)} 個元素**不是逐字等於**任何一句允許的話：\n"
+        f"（{_w}）結論層有 {len(_alien)} 個元素**不是逐字等於**任何一句允許的話：\n"
         + "\n".join(f"  {_p[:200]}" for _p in _alien) + "\n"
         f"允許的完整畫面共 {len(_screen)} 種組合"
         "（由 `_CARD_TEXT_PINNED` ＋ `_VERDICT_PINNED` ＋ 卡片的 `where` 交叉展開）。\n"
