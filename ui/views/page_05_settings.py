@@ -155,7 +155,14 @@ NAV 那一塊現在會印**真的**「N 檔 · 共 M 筆」—— 那不是示�
 
 (D-6) ⭐ **結論層說得出「不知道」，說不出線框那句「還不能／大致可以」——
       這是一個登記在案的缺口，不是完成品**
+      ⇒ **已登記為 `EXCEPTIONS.md §8.3.P` 的 `P-P05VERDICT-1`**
 ------------------------------------------------------------------------
+📌 **回指登記：`P-P05VERDICT-1`**（`EXCEPTIONS.md §8.3.P`）。
+   `EXCEPTIONS.md §8.2.A.1` 末句明訂新增登記**必須**三件事都做：
+   (1) 在表上登錄、(2) **對應檔案加註解指回該表**、(3) PR 描述附理由。
+   ⚠️ **第一版只做了 (1)(3)** —— 實測 `grep -rn 'P-P05VERDICT-1' --include=*.py .` **回 0**，
+   而對照組 `P-WHERECONTENT-1` 有 6 檔、`P-UIGSPREAD-1` 有 3 檔回指。
+   **而且沒有檔案邊界的理由**：本批本來就在改這個檔。**本輪補上。**
 線框 §3 的兩張圖各給了一句**帶判定**的結論：
 
 - 狀態 (1)：「🔴 **還不能。有 2 項沒設定完**，會讓 ① 到 ④ 出現空白或舊資料。」
@@ -573,7 +580,7 @@ _VERDICT_UNCHECKED: str = (
 #:    「結果（**或失敗原因**）」，**結論卻沒寫** —— 又一次只修一半。
 _VERDICT_CHECKED: str = (
     "**這一格只回答一件事：「{gate}」這個開關已經打開了。** "
-    "查到什麼、或為什麼查不到，在底下「{block}」那一塊 —— 這一格**不**替它壓成一句話"
+    "查到什麼、{fail}，在底下「{block}」那一塊 —— 這一格**不**替它壓成一句話"
     "（壓了就會變成第二份跟底下不同步的真相，而使用者會信排在前面的那一句）。"
     "其餘各塊同樣**各自**寫自己的狀態，這一格看不到它們。")
 
@@ -595,6 +602,8 @@ _VERDICT_CHECKED: str = (
 #:
 #: ⇒ **這一格的正解不在本批**：等 (D-6) 有裁決、或舊 ⑤ 下架讓閘門可以拆之後，
 #:    這三張卡要**整組換掉**成線框那三張。**在那之前它是暫行的目錄。**
+#: 📌 **登記在 `EXCEPTIONS.md §8.3.P` 的 `P-P05VERDICT-1`**（連帶欄），
+#:    觸發點主線：**舊 ⑤ 下架那一批**。
 #:
 #: ⭐ **為什麼這個暫行版仍然有內容、不是三張空卡**：
 #:    這一頁現在有六塊，六塊**都在講自己**（「尚未載入…」「舊分頁已經在跑同一塊…」），
@@ -605,11 +614,22 @@ _CARD_HEALTH_TITLE: str = "🔭 資料來源健康度"
 _CARD_HEALTH_ASKS: str = "回答：畫面上那些數字是不是今天抓到的。"
 _CARD_HEALTH_UNCHECKED: str = (
     f"{_CARD_HEALTH_ASKS}還沒去查 —— 查一次要幾秒。")
-#: ⚠️ **刻意不承諾「下面會有什麼」，只承諾「這一輪去查了」**：
-#:    被委派的 `render_data_guard_tab()` 也可能整塊炸掉（那時下面是一個紅框，
-#:    不是逐源清單）。**一張卡不該替它還沒發生的結果背書。**
+#: ⭐ **「失敗對沖」的唯一措辭，具名共用（2026-09-08 第二輪回修）。**
+#:
+#:    被委派的 `render_data_guard_tab()` 可能整塊炸掉 —— 那時底下是
+#:    :func:`safe_section` 畫的**一個紅框**，不是任何結果。
+#:    **凡是承諾「打開之後看得到什麼」的句子，都必須同時允許失敗。**
+#:
+#: ⛔ **做成常數、而且三處共用，是刻意的**：第一輪回修時
+#:    :data:`_CARD_HEALTH_CHECKED` 已經寫了「（或失敗原因）」，
+#:    **但結論與 🔑 卡都沒有** —— 同一把尺沒有對它們重跑。
+#:    共用一個常數之後，**少寫一處就是少一個引用點，守衛看得見**
+#:    （`test_anything_that_promises_a_result_also_allows_failure`）。
+_FAILURE_ALLOWANCE: str = "或為什麼查不到"
+
+#: ⚠️ **刻意不承諾「下面會有什麼」，只承諾「這一輪去查了」。**
 _CARD_HEALTH_CHECKED: str = (
-    f"{_CARD_HEALTH_ASKS}這一輪已經去查了 —— 結果（或失敗原因）在下面那一塊。")
+    f"{_CARD_HEALTH_ASKS}這一輪已經去查了 —— 查到什麼、{_FAILURE_ALLOWANCE}，在下面那一塊。")
 
 _CARD_NAV_TITLE: str = "🗂️ 雲端 NAV 累積"
 #: ⛔ **這一句刻意「與 gate 狀態無關」，而且那是修過的（讀完再改）**：
@@ -650,11 +670,25 @@ _CARD_KEYS_TITLE: str = "🔑 金鑰與連線"
 #:    —— 抽出來要動舊模組，**本批明令不准**；而線框 §3 末項自己寫的是
 #:    「連線與金鑰**要真的裝得下它的標題**……**登記，不動工**」——
 #:    **線框授權的是「不動工」，不是「加一張卡宣稱它已經裝得下了」。**
-_CARD_KEYS_NOTE: str = (
+#: ⛔⛔ **2026-09-08 第二輪回修：這張卡原本是常數、不翻面，而它講的是
+#:    **同一顆**已經被上面四行讀過的開關（有意識的更正，不是漏刪 · 決策者：AI 總管）。**
+#:
+#:    舊值最後一句 ~~「要先打開那個開關才看得到。」~~ **在開關已經打開時是假的** ——
+#:    同一個畫面上，結論那一行說「這個開關**已經打開了**」，四行之後這張卡說「**要先打開**」。
+#:
+#: ⛔ **它不能引用 :data:`_CARD_NAV_NOTE` 那個免責**：那張卡之所以可以講「機制、不講狀態」，
+#:    是因為 :data:`NAV_GATE_LABEL` **沒有 `key=`、讀不到**。
+#:    **🔑 卡沒有這個免責** —— 它講的是 :data:`DIAG_GATE_LABEL`，
+#:    而那顆的狀態 :func:`_diag_gate_is_on` **就在上面四行被讀過**。
+#: ⇒ **會讀得到卻不讀，就是本檔自己批判過的「一句當場就假掉的話」。**
+_CARD_KEYS_ASKS: str = (
     "回答：上面那兩件事**能不能做**。"
     "⚠️ **底下「連線與金鑰」今天回答不了金鑰** —— 它裝的是保單管理的指路與抓取診斷開關；"
-    "**API 金鑰與 NAS Proxy 的狀態住在「資料來源健康度」的委派深處**，"
-    "要先打開那個開關才看得到。")
+    "**API 金鑰與 NAS Proxy 的狀態住在「{block}」的委派深處**，")
+_CARD_KEYS_UNCHECKED: str = _CARD_KEYS_ASKS + "要先打開那個開關才看得到。"
+#: ⚠️ **開關已開的那一支必須帶 :data:`_FAILURE_ALLOWANCE`（必修 B）**：
+#:    委派炸掉時底下是紅框，「就看得到」會變成第二句假話。
+_CARD_KEYS_CHECKED: str = _CARD_KEYS_ASKS + "而那個開關已經打開了 —— 往下捲就看得到（{fail}）。"
 
 
 def nav_status_label() -> str:
@@ -1050,8 +1084,12 @@ def _conclusion_cards() -> list[dict[str, Any]]:
 
     ⚠️ **`where` 一律走 :func:`_below`**：三張卡指的都是**同一頁下面**那一塊。
     """
-    _health_note = (_CARD_HEALTH_CHECKED if _diag_gate_is_on()
-                    else _CARD_HEALTH_UNCHECKED)
+    # ⭐ **兩張卡都吃同一顆開關的狀態** —— 🔑 卡在第二輪回修前是常數、不翻面，
+    #    而它講的正是這一顆（見 :data:`_CARD_KEYS_UNCHECKED` 的回修註記）。
+    _on = _diag_gate_is_on()
+    _health_note = _CARD_HEALTH_CHECKED if _on else _CARD_HEALTH_UNCHECKED
+    _keys_note = ((_CARD_KEYS_CHECKED if _on else _CARD_KEYS_UNCHECKED)
+                  .format(block=BLOCK_HEALTH, fail=_FAILURE_ALLOWANCE))
     return [
         {"title": _CARD_HEALTH_TITLE, "note": _health_note,
          "state": STATE_NOT_READY, "where": _below(BLOCK_HEALTH)},
@@ -1059,7 +1097,7 @@ def _conclusion_cards() -> list[dict[str, Any]]:
          "state": STATE_NOT_READY, "where": _below(nav_status_label())},
         # ⚠️ **指路刻意不是 `BLOCK_KEYS`** —— 見 :data:`_CARD_KEYS_NOTE` 的回修註記：
         #    金鑰與 Proxy 住在「資料來源健康度」的委派深處，不在「連線與金鑰」那一塊。
-        {"title": _CARD_KEYS_TITLE, "note": _CARD_KEYS_NOTE,
+        {"title": _CARD_KEYS_TITLE, "note": _keys_note,
          "state": STATE_NOT_READY, "where": _below(BLOCK_HEALTH)},
     ]
 
@@ -1074,6 +1112,9 @@ def _render_conclusion() -> None:
     ⚠️ **本層一次外部呼叫都沒有，這是硬性的**（理由見 :data:`_VERDICT_UNCHECKED`
        的長註記）：`fetch_nav_backend_status()` / `fetch_nav_coverage()`
        在兩顆 gate 之前**一次都不准被叫**，而結論層排在所有 gate 之前。
+
+    📌 **本層畫不出線框那句帶判定的結論，已登記為 `EXCEPTIONS.md §8.3.P` 的
+       `P-P05VERDICT-1`**（觸發點主線：**舊 ⑤ 下架那一批**）。完整理由見 (D-6)。
     """
     st.markdown(CONCLUSION_HEADING)
     # ⚠️ **`where=` 不是可選的**（`tests/test_batch2_top_card_grid.py::`
@@ -1087,7 +1128,8 @@ def _render_conclusion() -> None:
     #    這一層唯一量得到的東西就是那一顆開關，**一句沒有指名自己量了什麼的結論，
     #    不是結論，是斷言**。守衛：`test_the_verdict_names_the_only_switch_it_can_see`。
     if _diag_gate_is_on():
-        not_ready(_VERDICT_CHECKED.format(gate=DIAG_GATE_LABEL, block=BLOCK_HEALTH),
+        not_ready(_VERDICT_CHECKED.format(gate=DIAG_GATE_LABEL, block=BLOCK_HEALTH,
+                                          fail=_FAILURE_ALLOWANCE),
                   where=_below(BLOCK_HEALTH))
     else:
         not_ready(_VERDICT_UNCHECKED.format(gate=DIAG_GATE_LABEL),

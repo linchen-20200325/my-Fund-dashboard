@@ -141,6 +141,9 @@ from ui.views.page_05_settings import (  # noqa: E402
     CONCLUSION_HEADING,
     DIAG_GATE_LABEL,
     EVIDENCE_HEADING,
+    _FAILURE_ALLOWANCE,
+    _VERDICT_CHECKED,
+    _VERDICT_UNCHECKED,
     NAV_DETAIL_LABEL,
     NAV_GATE_LABEL,
     POINTS_UNIT,
@@ -3330,3 +3333,348 @@ def test_the_key_card_does_not_point_at_a_block_that_cannot_answer_it():
         f"🔑 那張卡的說明沒有指名答案真正住的那一塊（「{BLOCK_HEALTH}」）：\n"
         f"{_card['note']}\n"
         "⛔ 只把 `where` 改對、說明還在講「先看這一塊」，使用者讀到的仍然是錯的地方。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-09-08 第二輪回修：把「禁令」變成「守衛」
+# ══════════════════════════════════════════════════════════════════
+# ⛔⛔ **本節補的是同一個病的第二次發作，而診斷書是我自己在上一輪寫的**：
+#   PR §4 逐字：「**一個修好了但沒有守衛的修正等於還沒修。**」
+#   —— 上一輪對 🔑 卡照做了（補了 `test_the_key_card_does_not_point_at_...`），
+#   **對結論層沒有**。第二輪獨立稽核用五顆突變證明了這一點：
+#
+#   | 稽核突變 | 修前 |
+#   |---|---|
+#   | **K1** 畫新線框的四個示意值（`0.4 秒`／`3 天前`／`16 源`／`5 檔`） | **存活** |
+#   | **K2/K3** 把線框那兩句判定硬寫進 verdict | **存活** |
+#   | **A3** 整頁全稱句原封改回、句首加一個 gate 標籤 | **存活** |
+#   | **A4** 改回「逐源結果」那個承諾 | **存活** |
+#   | **A5** 指名 gate ＋ 新編一句沒命中黑名單的謊 | **存活** |
+#
+#   **K0 正對照**（塞舊值 `42 檔 · 最長 6.2 年` → RED）證明既有的全頁字表守衛
+#   **已經看得到結論層** —— 所以修法有界，不必發明新機制。
+
+def _wireframe_illustrative_values() -> tuple[str, ...]:
+    """從**客戶簽核的線框** ⑦ 那兩張 ASCII 圖裡，自動萃取「帶單位的數字」。
+
+    ⭐⭐ **為什麼是「自動萃取」而不是再手抄一份字表 —— 這是本條的全部重點。**
+
+    既有的 :data:`_PINNED_FAKE_VALUES` 是**手抄的，而且抄的是上一版線框**。
+    **本組實測（`0` / `1` 是出現次數）**：
+    新線框 ⑦ 的 `<pre>` 裡 `0.4 秒` **1**、`3 天前` **1**、`16 源` **1**、`5 檔` **1**、
+    `2 項` **1**、`2 個來源` **1**、`42 檔` **1**；
+    而字表釘的 `6.2 年` **0**、`18 源` **0**、`2 異常` **0**。
+    ⇒ **字表七個值裡只有 `42 檔` 還在新線框上**，其餘六個釘的是**上一版的東西**，
+    而**新線框的四個示意值一個都沒被釘住**。
+    **一份手抄的黑名單，會在線框改版的那一刻靜靜地開始守錯的東西。**
+
+    ⇒ **本函式讓字表跟著客戶簽核的那份檔案走**：線框改了，禁令自動跟著改。
+
+    ⚠️ **它擋不到什麼，照實寫**：只認 `數字[.數字] + 量詞` 這個形狀。
+       線框裡不帶單位的裸數字、換算成別的寫法（「十六個來源」）、
+       以及**線框以外**的任何捏造值，**本函式結構上看不到**。
+       ⛔ 所以 :data:`_PINNED_FAKE_VALUES` **刻意保留不刪** ——
+       它釘的是**上一版線框**的值，那些在今天仍然不該出現在畫面上。
+       **兩份一起看：一份跟著線框走，一份是歷史沉澱。**
+    """
+    _sec = _wireframe_p7_raw()
+    _txt = re.sub(r"<[^>]+>", "", _sec)
+    _txt = (_txt.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+    _txt = "".join(_c if _c not in "│┌┐└┘├┤─" else " " for _c in _txt)
+    _re = re.compile(r"\d+(?:\.\d+)?\s*(?:秒|天前|天|檔|源|項|個來源|個|年|筆|次|%)")
+    return tuple(sorted({_m.group(0) for _m in _re.finditer(_txt)}))
+
+
+@functools.lru_cache(maxsize=1)
+def _wireframe_p7_raw() -> str:
+    """⑦ 那兩張 `<pre class="wf">` 的**原始**內容（未去空白）。fail-closed 同 :func:`_wireframe_p7`。"""
+    _raw = WIREFRAME.read_text(encoding="utf-8")
+    assert _WF_P7_START in _raw and _WF_P7_END in _raw, (
+        f"線框 {WIREFRAME.name} 裡找不到 ⑦ 那一節的錨點（fail-closed）。")
+    _pres = _WF_PRE.findall(_raw[_raw.index(_WF_P7_START):_raw.index(_WF_P7_END)])
+    assert len(_pres) == 2, f"⑦ 的 ASCII 線框圖有 {len(_pres)} 張，應為 2 張（fail-closed）。"
+    return "\n".join(_pres)
+
+
+@pytest.mark.parametrize("kind", ["empty", "missing", "loaded"])
+def test_the_page_never_prints_an_illustrative_value_from_the_current_wireframe(kind: str):
+    """⭐⭐ **稽核 K1**：新線框那幾個示意值，一個都不准出現在畫面上。
+
+    被測檔自己寫了兩處禁令 —— (D-6) 的「⛔ 線框那三張卡的數字一個都不准畫
+    （`0.4 秒` / `3 天前` / `42 檔` / `16 源` / `5 檔`）」與
+    :data:`_VERDICT_UNCHECKED` 的「⛔ 也不准退而求其次去畫」——
+    **而在本條之前，五個裡只有 `42 檔` 有守衛**（那還是因為它剛好落在
+    :data:`_PINNED_FAKE_VALUES` 這份**上一版**的字表裡）。
+    **禁令是對的，缺的是牙。**
+
+    ⚠️ **字表由 :func:`_wireframe_illustrative_values` 從線框自動萃取**，
+       不是再手抄一份 —— 手抄的那一份已經示範過它會怎麼過期。
+    """
+    _vals = _wireframe_illustrative_values()
+    assert len(_vals) >= 5, (
+        f"從線框只萃取到 {len(_vals)} 個示意值 {_vals} —— 少於 5 個代表萃取器"
+        "或線框結構變了，本條正在對空氣生效（fail-closed）。")
+    _all = _text(_stream(kind))
+    for _v in _vals:
+        assert _v not in _all, (
+            f"（{kind}）畫面上出現了線框的示意值 {_v!r}。\n"
+            "⛔ 那不是資料，是線框用來示範版面的假數字 —— 而這一頁的職責就是回答"
+            "「資料可不可信」，在這裡放假數字是最壞的一種（`CLAUDE.md §1`）。")
+
+
+#: 結論那兩句話的**逐字底本**。⚠️ **這是一份刻意的第二份真相源，理由寫在下面那條守衛裡。**
+_VERDICT_PINNED: dict = {
+    "unchecked": (
+        "**這一格只回答一件事：「{gate}」這個開關現在是關的，所以資料來源狀態還沒查。** "
+        "其餘各塊**各自**寫了自己現在的狀態 —— 這一格**看不到它們，也不替它們發言**"
+        "（它們的開關沒有留下這一格讀得到的痕跡）。"),
+    "checked": (
+        "**這一格只回答一件事：「{gate}」這個開關已經打開了。** "
+        "查到什麼、{fail}，在底下「{block}」那一塊 —— 這一格**不**替它壓成一句話"
+        "（壓了就會變成第二份跟底下不同步的真相，而使用者會信排在前面的那一句）。"
+        "其餘各塊同樣**各自**寫自己的狀態，這一格看不到它們。"),
+}
+
+
+def test_the_verdict_text_is_pinned_word_for_word():
+    """⭐⭐⭐ **稽核 A3 / A4 / A5 的終點**：結論那兩句話**逐字釘死**。
+
+    ⛔⛔ **為什麼非得是逐字，而不是再多幾條語意規則 —— 讀完再改。**
+
+    上一輪加了兩條規則（黑名單 ＋「必須指名那顆開關」），第二輪稽核用三顆突變證明
+    **兩條合起來仍然擋不住**：
+    - **A3**：把整頁全稱句**原封改回去、句首加一個 gate 標籤** → 兩條都過；
+    - **A4**：改回「逐源結果」那個承諾 → 兩條都過；
+    - **A5**：指名 gate ＋ **新編一句沒命中黑名單的謊** → 兩條都過。
+    **A5 是關鍵**：它是**照著黑名單的補集構造**出來的 ——
+    **任何黑名單對它都必敗**，而本檔自己的 docstring 早就寫了這句話。
+    ⇒ **要關掉「第 N+1 種說法」，只有一個辦法：把合法說法列成【封閉集合】。**
+
+    ## ⚠️ 這是一份**刻意的第二份真相源**，代價據實寫
+
+    本 repo 一般禁止在測試裡抄產品碼的字面值（那會讓「改被測檔 ＋ 改守衛」一起變綠）。
+    **本條刻意例外，理由與 :func:`test_the_wireframe_verbatim_strings_...` 同族**：
+    這兩句話是 **§1 承重的宣稱**（它們對使用者斷言「這一頁現在知道什麼」），
+    不是實作細節。**要改動一句 §1 承重的宣稱，本來就應該同時改動它的守衛** ——
+    那正是 `_DELEGATION_ALLOWLIST` 已經在用的形狀：**封閉集合 ＋ 雙向 fail-closed**。
+    ⛔ **代價**：任何合法的措辭調整都會紅。**那是本條的用意，不是它的瑕疵。**
+    ⚠️ **它擋不到的那一種**：有人**同時**改被測檔與本表。**那是一次看得見的 diff**，
+       而且會撞上下面三條「有理由的」守衛（它們解釋 why，本條只負責關住 N+1）。
+
+    ⚠️ **`{gate}` / `{block}` / `{fail}` 這三個佔位符刻意保留** ——
+       它們的值分別走 :data:`DIAG_GATE_LABEL` / :data:`BLOCK_HEALTH` /
+       :data:`_FAILURE_ALLOWANCE`，**本表不抄那三個值**（抄了才真的是第二份真相源）。
+    """
+    assert _VERDICT_UNCHECKED == _VERDICT_PINNED["unchecked"], (
+        "結論（開關關著那一支）的文字被改了。\n"
+        f"現行：{_VERDICT_UNCHECKED!r}\n底本：{_VERDICT_PINNED['unchecked']!r}\n"
+        "⛔ 這是一句 **§1 承重的宣稱**：它對使用者斷言「這一頁現在知道什麼」。\n"
+        "   本層唯一量得到的是 `_SK_DIAG_GATE` 一個鍵 —— 任何超出那一顆開關的說法"
+        "（「這一頁一次都還沒去查」「底下每一塊都要你按一下才會去查」）**都是假的**：\n"
+        "   前者在使用者勾了 NAV 閘門時當場被推翻；後者六塊裡有四塊按下去是**紅色錯誤**，\n"
+        "   不是「去查」（見那四塊自己的灰態原文）。\n"
+        "✅ 若這是一次**有意的**改寫，請把新文字同時放進 `_VERDICT_PINNED` —— "
+        "**登記本身就是那份紀錄**。")
+    assert _VERDICT_CHECKED == _VERDICT_PINNED["checked"], (
+        "結論（開關開著那一支）的文字被改了。\n"
+        f"現行：{_VERDICT_CHECKED!r}\n底本：{_VERDICT_PINNED['checked']!r}\n"
+        "⛔ 特別注意「**逐源結果**」那個舊承諾不得回來：`_render_source_health` 走 "
+        "`safe_section()`，委派拋例外時底下是**一個紅框**，沒有任何逐源結果。\n"
+        "✅ 有意改寫請同步 `_VERDICT_PINNED`。")
+
+
+#: 「這一格看得到整頁」這種**範圍宣稱**的字表。
+#: ⚠️ 黑名單，抓不到第 N+1 種說法 —— **關住 N+1 的是上面那條逐字釘**；
+#:    本條的價值在於**它的失敗訊息說得出「為什麼那句話是假的」**（有量到的反證）。
+_PAGE_SCOPE_WORDS: tuple[str, ...] = (
+    "這一頁", "整頁", "每一塊", "每一項", "所有區塊", "全部區塊", "所有來源", "每一個來源")
+
+
+def test_the_verdict_is_not_contradicted_by_what_the_page_really_did():
+    """⭐⭐ **稽核 A3 的「有理由」那一半**：用一個**真的渲染出來的世界**證明範圍宣稱是假的。
+
+    **做法**：把 **NAV 閘門勾起來、資料來源閘門不勾**，L2 走 patch（⛔ 不打外部）。
+    在那個世界裡：
+
+    1. **本條先量**：`coverage` 真的被呼叫了 —— 也就是**這一頁確實查過東西**；
+    2. 而 `_diag_gate_is_on()` 仍是 `False`，所以結論走的是**「還沒查」那一支**；
+    3. ⇒ **任何「這一頁一次都還沒去查」形狀的句子，在這個畫面上當場為假。**
+
+    ⛔ **這不是假想的世界**：`NAV_GATE_LABEL` 那顆閘門就在同一頁上，使用者點得到，
+       而它**沒有帶 `key=`**（帶了會違反 `test_the_page_writes_only_its_own_session_key`）
+       —— 所以結論層**結構上不可能知道**它被勾了。**這正是「收窄宣稱」的全部理由。**
+
+    ⚠️ **字表是黑名單，擋不住第 N+1 種範圍宣稱** ——
+       那一半由 :func:`test_the_verdict_text_is_pinned_word_for_word` 關住。
+       **本條負責的是「說得出為什麼」，不是「關得住全部」。**
+    """
+    _parts, _calls = _run_gated(BACKEND_ON, FAKE_COVERAGE, funds=FAKE_HOLDINGS,
+                               open_gate=True)
+    assert _calls["coverage"] >= 1, (
+        f"NAV 閘門勾起來之後 L2 一次都沒被呼叫（{_calls}）—— "
+        "本條的反證世界沒有成立，它正在對空氣生效（fail-closed）。")
+    _seg = _conclusion_parts(_parts)
+    _grid = next((_i for _i, _p in enumerate(_seg) if _p.startswith("[Column]")), len(_seg))
+    _verdict = [_p for _p in _seg[:_grid] if _p.startswith("[Caption]")]
+    assert len(_verdict) == 1, f"卡片網格之前的說明有 {len(_verdict)} 則：\n{_verdict}"
+    _body = _verdict[0].split("（請先到：", 1)[0]
+    _hit = [_w for _w in _PAGE_SCOPE_WORDS if _w in _body]
+    assert not _hit, (
+        f"結論那一句做了範圍宣稱：命中 {_hit}\n{_body}\n"
+        f"⛔ **而這個畫面本身就是反證**：同一輪裡 NAV 那一塊真的讀了雲端"
+        f"（`coverage` 被呼叫 {_calls['coverage']} 次），"
+        "而結論層**看不到那顆閘門**（它沒有 `key=`）。\n"
+        "⇒ 這一格只能講它自己那顆開關，不能講「這一頁」。")
+
+
+#: 「先去打開那個開關」這個祈使句的**唯一措辭**（被測檔 `_CARD_KEYS_UNCHECKED` 的字面）。
+#: ⚠️ 具名是為了讓失敗訊息說得出「哪一句在開關已開時變成假的」。
+_OPEN_IT_FIRST: str = "要先打開那個開關才看得到"
+
+
+def test_anything_that_promises_a_result_also_allows_failure():
+    """⭐⭐ **稽核 A4 ＋ 必修 B**：凡是承諾「打開之後看得到什麼」的句子，都要允許失敗。
+
+    **本條先量一個真的世界**：把 `render_data_guard_tab` 換成會拋例外的假件、
+    閘門勾起來 —— 底下出現的是 :func:`safe_section` 的**紅框**，不是任何結果。
+    ⇒ **在那個畫面上，「就看得到」是一句假話**，除非它同時說「或看不到、以及為什麼」。
+
+    ⛔ **這一條抓的是一個真的發作過兩次的病**：
+    第一輪回修時 :data:`_CARD_HEALTH_CHECKED` 已經寫了對沖，
+    **結論與 🔑 卡都沒有** —— **同一把尺沒有對它們重跑**
+    （`EXCEPTIONS.md §8.2.A.1` 驗證段 ④：更正一個被點名的項目時，
+    必須把同一把尺對全部同類項目重跑）。
+    現在三處共用 :data:`_FAILURE_ALLOWANCE` 一個常數，**少寫一處守衛就看得見**。
+    """
+    import sys
+
+    class _Boom(RuntimeError):
+        pass
+
+    class _FakeRegistry:
+        @staticmethod
+        def _update_data_registry(*_a: Any, **_k: Any) -> None:
+            return None
+
+    class _FakeGuard:
+        @staticmethod
+        def render_data_guard_tab(*_a: Any, **_k: Any) -> None:
+            raise _Boom("模擬 render_data_guard_tab 整塊炸掉")
+
+    _fakes = {"ui.helpers.data_registry": _FakeRegistry,
+              "ui.tab5_data_guard": _FakeGuard}
+    _orig = {_n: sys.modules.get(_n) for _n in _fakes}
+    for _n, _f in _fakes.items():
+        sys.modules[_n] = _f                                    # type: ignore[assignment]
+    try:
+        _at = _app(FAKE_HOLDINGS)
+        _cb(_at, DIAG_GATE_LABEL).check()
+        _rerun(_at)
+        _parts = _flat(_at.main)
+    finally:
+        for _n, _m in _orig.items():
+            if _m is None:
+                sys.modules.pop(_n, None)
+            else:
+                sys.modules[_n] = _m
+
+    assert [_p for _p in _parts if _p.startswith("[Error]")], (
+        "委派拋了例外，畫面上卻沒有任何紅框 —— 本條的反證世界沒有成立（fail-closed）。")
+
+    # ⛔⛔ **這一行是被一顆存活的突變逼出來的，刪掉本條就白留**：
+    #    把 `_FAILURE_ALLOWANCE` 掏空成 `""` → `"任何字串".count("")` 回傳的是
+    #    **字元數 + 1**（一個很大的數），於是下面的 `>= 3` **恆真、突變存活**
+    #    （實測 150 passed）。**這正是本 session 反覆記載的那個形狀：
+    #    工具沒有量到它宣稱在量的東西，而空結果被讀成「沒問題」。**
+    assert len(_FAILURE_ALLOWANCE) >= 4, (
+        f"`_FAILURE_ALLOWANCE` 是 {_FAILURE_ALLOWANCE!r} —— 太短或被掏空。\n"
+        "⛔ 空字串會讓下面那個 `.count(...) >= N` **恆真**，本條當場失去對象"
+        "（fail-closed）。對沖要對沖得出來，它得是一句真的話。")
+    _body = _text(_conclusion_parts(_parts))
+    assert _body, "結論層是空的（fail-closed）。"
+    # ⚠️ **下限是 3，不是 2 —— 這個數字是被一顆存活的突變逼上來的。**
+    #    第一版寫 `>= 2`，而拿掉 🔑 卡的對沖之後結論 ＋ 🔭 卡仍有 2 句 → **突變存活**。
+    #    **「至少 N」型的下限，N 必須等於實際該有的數量，少一個就等於白留一格。**
+    _WANT = 3      # 結論那一句 ＋ 🔭 資料來源健康度卡 ＋ 🔑 金鑰與連線卡
+    assert _body.count(_FAILURE_ALLOWANCE) >= _WANT, (
+        f"開關已開的畫面上，帶「{_FAILURE_ALLOWANCE}」對沖的句子只有 "
+        f"{_body.count(_FAILURE_ALLOWANCE)} 句，應有 {_WANT} 句"
+        "（結論那一句 ＋ 🔭 卡 ＋ 🔑 卡）。\n"
+        f"{_body}\n"
+        "⛔ 這個畫面上底下就是一個紅框 —— 任何『打開就看得到』的承諾在這裡是假的。")
+
+    # ── 必修 A：🔑 卡必須跟著同一顆開關翻面 ─────────────────────────
+    # ⛔ **這一段抓的是一顆真的存活過的突變**：把 `_CARD_KEYS_CHECKED` 直接指成
+    #    `_CARD_KEYS_UNCHECKED`（＝不翻面）→ **150 passed、存活**。
+    #    那正是被擋下來的原錯：同一畫面上，結論說「這個開關**已經打開了**」，
+    #    四行之後那張卡說「**要先打開**」。
+    from ui.views.page_05_settings import (           # noqa: PLC0415
+        _CARD_KEYS_CHECKED, _CARD_KEYS_UNCHECKED)
+    assert _CARD_KEYS_CHECKED != _CARD_KEYS_UNCHECKED, (
+        "🔑 那張卡的兩支文案一模一樣 —— 它不會跟著開關翻面。\n"
+        "⛔ 它講的是 `DIAG_GATE_LABEL`，而那顆的狀態在同一次渲染裡**被讀過**"
+        "（`_diag_gate_is_on()`）。**讀得到卻不讀，就是一句當場就假掉的話。**\n"
+        "⚠️ 它不能引用 `_CARD_NAV_NOTE` 那個免責 —— 那張卡的免責是"
+        "「`NAV_GATE_LABEL` 沒有 `key=`、讀不到」，**🔑 卡沒有這個免責**。")
+    assert _OPEN_IT_FIRST not in _body, (
+        f"開關已經打開的畫面上，結論層還在叫使用者「{_OPEN_IT_FIRST}」：\n{_body}\n"
+        "⛔ 同一個畫面上，結論那一行剛說完「這個開關**已經打開了**」。")
+
+
+#: `結論卡的標題關鍵字 -> (它該指的區塊, 那一塊為什麼答得出來的【可重量事實】)`。
+#:
+#: ⛔ **每一列的第二欄是一個 AST 可驗的錨點，不是註解** —— 事實一旦翻轉就 fail-closed，
+#:    因為那正是「這張卡該改指哪裡」需要重新裁決的時刻（同 🔑 卡那條的做法）。
+_CARD_ANSWERED_BY: tuple[tuple[str, str, str, str], ...] = (
+    ("資料來源健康度", "BLOCK_HEALTH", "_render_source_health", "render_data_guard_tab"),
+    ("NAV",           "nav_status_label", "_render_nav_status", "fetch_nav_coverage"),
+    ("金鑰",           "BLOCK_HEALTH", "_render_source_health", "render_data_guard_tab"),
+)
+
+
+@pytest.mark.parametrize("title_key,block_src,fn_name,must_call",
+                         _CARD_ANSWERED_BY,
+                         ids=[_t for _t, _, _, _ in _CARD_ANSWERED_BY])
+def test_every_card_points_at_the_block_that_can_actually_answer_it(
+        title_key: str, block_src: str, fn_name: str, must_call: str):
+    """⭐⭐ **必修 C**：把「不得指向答不了的區塊」這條規則**放大到三張卡**。
+
+    ⛔ **上一輪只替 🔑 一張卡長了守衛。** 第二輪稽核把 🗂️ NAV 卡的 `where` 改指
+    「連線與金鑰」（**存在、但答非所問**）→ **GREEN 存活**。
+    既有的 :func:`test_every_conclusion_card_points_at_a_block_that_is_really_on_screen`
+    只驗「那個區塊在不在畫面上」—— **在，但答不出來**，正好從它底下溜過去。
+
+    **本條的判準**：每張卡指的那一塊，**必須真的在做那件事**（AST 重量）：
+
+    ===================  =========================================
+    卡                    那一塊必須呼叫
+    ===================  =========================================
+    🔭 資料來源健康度       `render_data_guard_tab`
+    🗂️ 雲端 NAV 累積      `fetch_nav_coverage`
+    🔑 金鑰與連線          `render_data_guard_tab`（金鑰住在它的委派深處）
+    ===================  =========================================
+
+    ⚠️ **🔑 那一列刻意與 🔭 同指向**，理由見被測檔 :data:`_CARD_KEYS_UNCHECKED`
+       的回修註記（`### ④ 🔑 API 金鑰狀態` 住在 `ui/tab5_data_guard.py`，
+       由「資料來源健康度」那一塊委派）。**那不是重複，是同一個答案的兩個問題。**
+    """
+    _block = {"BLOCK_HEALTH": BLOCK_HEALTH,
+              "nav_status_label": nav_status_label()}[block_src]
+    _fn = next((_n for _n in ast.walk(_tree())
+                if isinstance(_n, ast.FunctionDef) and _n.name == fn_name), None)
+    assert _fn is not None, f"`{fn_name}` 不見了 —— 本條失去對象（fail-closed）。"
+    _calls = {_dotted(_n.func).rsplit(".", 1)[-1]
+              for _n in ast.walk(_fn) if isinstance(_n, ast.Call)}
+    assert must_call in _calls, (
+        f"`{fn_name}` 不再呼叫 `{must_call}` —— 「{_block}」那一塊不再回答這張卡的問題了。\n"
+        f"實際呼叫：{sorted(_calls)}\n"
+        "⛔ 這不是本條壞了，是**該重新裁決這張卡指去哪**的時刻（fail-closed）。")
+    _card = next((_c for _c in _conclusion_cards() if title_key in _c["title"]), None)
+    assert _card is not None, (
+        f"結論層找不到標題含「{title_key}」的卡："
+        f"{[_c['title'] for _c in _conclusion_cards()]}")
+    assert _card["where"] == _below(_block), (
+        f"卡片「{_card['title']}」指向 {_card['where']!r}，"
+        f"但回答它的是「{_block}」（那一塊呼叫 `{must_call}`）。\n"
+        "⛔ 指到一個**存在、但答非所問**的區塊，比指到不存在的更難發現 ——"
+        "使用者會捲過去、看完、然後以為自己看錯了。")
