@@ -50,7 +50,6 @@
 from __future__ import annotations
 
 import ast
-import copy
 import pathlib
 import re
 import sys
@@ -60,7 +59,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from test_wf02_health_conclusion import (  # noqa: E402
-    BLIND, FOUR_WAY, LAG, WIN, _conclusion_slice)
+    BLIND, FOUR_WAY, LAG, _conclusion_slice)
 from test_wf02_health_skeleton import _fund, _render, _text  # noqa: E402
 
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
