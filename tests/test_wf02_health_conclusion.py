@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import re
 import pathlib
 import sys
 from typing import Any
@@ -47,9 +48,14 @@ from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
     CONCLUSION_HEADING,
+    EVIDENCE_HEADING,
+    GROUP_HEADLINES,
     HEALTH_TABLE_COLUMNS,
+    METRIC_PLAIN_LANGUAGE_KEYS,
     PRINCIPAL_HELP,
+    _fund_findings,
     _income_tally,
+    _lag_verdict_text,
     _peer_verdicts,
     _uniq_by_code,
 )
@@ -123,21 +129,53 @@ def _expected_best_excess(funds: list[dict]) -> dict[str, float]:
 
 
 def _conclusion_slice(parts: list[str]) -> list[str]:
-    """結論層那幾筆 —— 從 :data:`CONCLUSION_HEADING` 到第一個 `#### ` 之前。
+    """結論層那幾筆 —— 從 :data:`CONCLUSION_HEADING` 到 :data:`EVIDENCE_HEADING` 之前。
 
     ⚠️ **切片而不是整頁比對**，理由與骨架檔 `_units()` 的長註同一條：
     **邊界一寬，鄰居的字就會替你通過。**（那份檔案是被兩輪突變逼到這個粒度的。）
+
+    ⭐ **2026-09-09：下界由「第一個 `#### `」收窄成「`### 🧾 ② 依據`」。**
+    **這是把邊界收緊，不是放寬** —— 本批依客戶 2026-09-08 拍板的線框補了
+    `### 🧾 ② 依據` 這條分界線，而它是 `### `（三個 `#`）；
+    舊的下界只認 `#### `（四個），於是**依據層的標題會被算進結論層**，
+    「結論層有幾則」當場多一則。**多算一則的方向是「更容易紅」，
+    但它紅的原因是假的** —— 而一條會為了假原因紅的守衛，
+    下一個人的修法多半是把上限調鬆。**所以要修的是邊界，不是上限。**
+
+    ⚠️ **fail-closed**：兩個錨點**都**必須在畫面上，少一個就 assert 掉 ——
+    「找不到下界所以一路切到頁尾」會讓上限那條守衛從此形同虛設。
     """
     _open = f"[markdown] {CONCLUSION_HEADING}"
+    _close = f"[markdown] {EVIDENCE_HEADING}"
     assert _open in parts, (
         f"畫面上找不到結論層的標題 {CONCLUSION_HEADING!r}。\n" + "\n".join(parts))
+    assert _close in parts, (
+        f"畫面上找不到依據層的標題 {EVIDENCE_HEADING!r} —— "
+        "少了它，結論層的切片就沒有下界，本檔所有「結論層有幾則」的斷言會失去意義。\n"
+        + "\n".join(parts))
     _i = parts.index(_open)
     _out: list[str] = []
     for _p in parts[_i + 1:]:
-        if _p.startswith("[markdown] #### "):
+        if _p == _close or _p.startswith("[markdown] #### "):
             break
         _out.append(_p)
     return _out
+
+
+#: 三群抬頭的正規式 —— **抬頭字面值從被測檔 import，不在這裡抄**（§2.1）。
+_GROUP_RE = re.compile(
+    r"\*\*這 (\d+) 檔(" + "|".join(re.escape(_h) for _h in GROUP_HEADLINES.values())
+    + r")\*\*")
+
+
+def _screen_groups(body: str) -> dict[str, int]:
+    """畫面上三群各自宣稱幾檔 → `{抬頭: 檔數}`。
+
+    ⚠️ **只認「`**這 N 檔<抬頭>**`」這個形狀**，所以配息句那個
+    「依這 3 檔各自實際投入的金額」**不會**被算進來 —— 它講的是另一個分母
+    （算得出配息的那幾檔），混進來會讓下面每一條加總斷言都失去意義。
+    """
+    return {_m.group(2): int(_m.group(1)) for _m in _GROUP_RE.finditer(body)}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -318,7 +356,27 @@ def test_the_verdict_tally_counts_each_bucket_from_the_ssot_grade():
         "判得動的桶沒有依「桶內最好的超額報酬」由大到小排 —— "
         f"docstring 說好消息在前。\n  實際：{_order_texts}\n  應為：{_by_best}")
     _body = "\n".join(_conclusion_slice(_render(portfolio=FOUR_WAY)))
-    assert "這 4 檔裡" in _body, f"沒有講出分母（手上總共幾檔）。\n{_body}"
+
+    # ⭐ **2026-09-09：舊斷言 `"這 4 檔裡" in _body` 換成下面兩條，這是收緊不是放寬。**
+    #    舊版的畫面是「**這 4 檔裡：🏆 2 檔、⚠️ 1 檔**」，一個 substring 就驗得完。
+    #    客戶 2026-09-08 拍板線框 §2 把結論改成**點名**（「哪一檔出問題了」），
+    #    那句「這 N 檔裡」在畫面上已經不存在 —— **但它守的東西（分母對不對）仍然要守**，
+    #    所以換成**更強**的兩條：
+    #      (a) 三群自己宣稱的檔數**加起來等於手上的檔數**（分母不准漏、不准重複算）；
+    #      (b) **每一檔都被指名道姓**（點名才是本批的交付物；只給總數就是回到舊版）。
+    #    ⛔ 只留 (a) 是不夠的：三群數字可以全對、名字卻一個都沒印。
+    _groups = _screen_groups(_body)
+    assert _groups, (
+        "畫面上一群都找不到 —— 三群抬頭的字面值變了，"
+        f"本條會失去對象（fail-closed）。抬頭 SSOT：{GROUP_HEADLINES}\n{_body}")
+    assert sum(_groups.values()) == len(FOUR_WAY), (
+        f"三群加起來不是 {len(FOUR_WAY)} 檔 —— 有人從分母裡消失了（或被算了兩次）。\n"
+        f"  畫面上各群：{_groups}\n{_body}")
+    _missing = [_f["code"] for _f in FOUR_WAY if _f["code"] not in _body]
+    assert not _missing, (
+        f"這幾檔在結論層裡沒有被點名：{_missing}\n"
+        "⛔ 客戶 2026-09-08 拍板的線框問的是「**哪一檔**出問題了」——"
+        "只給總數就是這一批要修掉的那個畫面。\n" + _body)
 
 
 def test_a_fund_we_cannot_judge_is_counted_as_undecided_not_as_fine():
@@ -342,8 +400,16 @@ def test_a_fund_we_cannot_judge_is_counted_as_undecided_not_as_fine():
     _body = "\n".join(_conclusion_slice(_render(portfolio=_funds)))
     assert "3 檔" in _body and NOT_READY_MARK in _body, (
         "畫面上沒有把那 3 檔「判不動」講出來。\n" + _body)
-    assert "未判定 ≠ 沒問題" in _body, (
-        "沒有點破「未判定 ≠ 沒問題」—— 少了這半句，使用者會把留白讀成安全。\n" + _body)
+    # ⚠️ **2026-09-09 換成線框逐字，這是換出處不是換標準。**
+    #    舊字串「未判定 ≠ 沒問題」是本頁自己發明的說法；
+    #    客戶 2026-09-08 拍板的線框 §2 寫的是「**判不出來不等於沒問題。**」。
+    #    **同一件事、同樣強度**，但現在這句話的出處是客戶簽核過的那份檔案。
+    assert "判不出來不等於沒問題" in _body, (
+        "沒有點破「判不出來不等於沒問題」—— 少了這半句，使用者會把留白讀成安全。\n"
+        + _body)
+    # ⛔ 反面：那三檔**不得**被說成「沒有查出問題」。
+    assert f"3 檔{GROUP_HEADLINES['clear']}" not in _body, (
+        "判不動的被寫成「沒有查出問題」了 —— 那是把留白說成安全（§1）。\n" + _body)
 
 
 def test_the_same_fund_across_two_policies_is_counted_once_in_the_conclusion():
@@ -393,8 +459,12 @@ def test_the_same_fund_across_two_policies_is_counted_once_in_the_conclusion():
 
     # (c) 端到端 —— 畫面上講的是「1 檔」，不是「2 檔」
     _body = "\n".join(_conclusion_slice(_render(portfolio=_dup)))
-    assert "這 1 檔裡" in _body, (
-        "畫面上的分母把同一檔基金算了兩次 —— 使用者看不出來，但每個數字都會偏。\n" + _body)
+    # ⚠️ 2026-09-09：舊斷言 `"這 1 檔裡"` 是舊畫面的字面值（見上一條的長註）。
+    #    換成三群加總 —— **同一件事，而且順便擋掉「群組之間互相搬檔數」那一種**。
+    _groups = _screen_groups(_body)
+    assert _groups and sum(_groups.values()) == 1, (
+        "畫面上的分母把同一檔基金算了兩次 —— 使用者看不出來，但每個數字都會偏。\n"
+        f"  畫面上各群：{_groups}\n" + _body)
     assert "8,000" in _body, f"畫面上的配息合計不是 8,000（重複加總？）。\n{_body}"
 
     # (d) **靜態的那一半 —— 這一半是被一顆存活的突變逼出來的，留痕。**
