@@ -1118,3 +1118,118 @@ def test_the_eating_reason_never_invents_a_number():
     _none = _p02._eating_reason(None)
     assert _none and "0" not in _none and NOT_READY_MARK not in _none, (
         f"什麼數字都沒有時，這句話不得編一個數字、也不得只丟一個 {NOT_READY_MARK}：{_none!r}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⑨ 指路：名字必須三邊同源（2026-09-09，被 CI 逼出來的）
+# ══════════════════════════════════════════════════════════════════
+def test_the_where_pointers_and_the_heading_are_one_string(monkeypatch):
+    """⭐⭐ **改一次 SSOT，抬頭與兩處指路要一起變。** 這是「同一份」的可執行定義。
+
+    ## 它從哪來（留痕，因為它不是本組掃出來的）
+
+    本 PR 初版把 ⑥ 結論層「判不出來」那一群的指路寫成
+    ~~「下方『**② 依據**』的逐檔體檢表可先逐檔看」~~ ——
+    **照客戶拍板的線框字面抄的**，但畫面上那個標題的全名是
+    「**🧾 ② 依據 — 憑什麼這樣說**」⇒ **名字對不上，使用者照著找會找不到**。
+    `tests/test_batch2_top_card_grid.py::
+    test_every_where_names_something_that_exists_on_screen` **在 CI 上把它擋下來**。
+    ⚠️ **本機當時看不到它** —— 那個檔案在本機因為缺 `plotly` / `requests` / `numpy`
+    連 collect 都失敗。**「本機全綠」當時涵蓋不到 repo 自己最相關的那條守衛。**
+
+    ## 這一條守的是什麼（與那條既有守衛**不重複**）
+
+    那一條問的是「**這個名字畫面上有沒有**」（字面值比對，逐一驗）。
+    **本條問的是「**這三處是不是同一份**」** —— 也就是**未來會不會漂移**。
+    ⛔ 兩條缺一不可：
+      · 只有那一條 → 三份字面值今天都對，**改了抬頭的那一刻才紅**，
+        而在那之前使用者已經被指錯一段時間了。
+      · 只有本條 → 三份同源，但可能**同時指向一個畫面上沒有的名字**。
+
+    ## 為什麼要用突變而不是「檢查有沒有 import 那個常數」
+
+    `import` 了不代表**用**了。本條直接把常數換掉，看**畫面上三個地方是不是都跟著變** ——
+    有任何一處是手抄的，它就不會變，本條就紅。
+    """
+    from ui.views import page_02_health as _m
+
+    _real = _m.HOLDINGS_HEALTH_TABLE_BLOCK
+    assert _real, "區塊抬頭的 SSOT 常數是空的。"
+
+    # ── CTRL：不突變時，三處都應該講同一個名字 ─────────────────────
+    _parts = _render(portfolio=FOUR_WAY)
+    _head = [_p for _p in _parts if _p == f"[markdown] #### {_real}"]
+    assert _head, (
+        f"畫面上找不到抬頭 `#### {_real}` —— 抬頭沒有讀 SSOT，或區塊不見了。\n"
+        + _text(_parts))
+    _pointers = [_p for _p in _parts
+                 if _p.startswith("[caption] ") and f"「{_real}」" in _p]
+    assert len(_pointers) >= 2, (
+        f"指向「{_real}」的灰態指路只有 {len(_pointers)} 處，應至少 2 處"
+        "（組合健康總分 ＋ 結論層「判不出來」那一群）。\n" + _text(_parts))
+
+    # ── 突變：把 SSOT 換掉，三處必須**全部**跟著變 ──────────────────
+    _fake = "逐檔體檢表_MUTANT"
+    monkeypatch.setattr(_m, "HOLDINGS_HEALTH_TABLE_BLOCK", _fake)
+    # landed
+    assert _m.HOLDINGS_HEALTH_TABLE_BLOCK == _fake, "突變沒有生效。"
+    _mut = _render(portfolio=FOUR_WAY)
+    _mut_txt = _text(_mut)
+    assert f"[markdown] #### {_fake}" in _mut, (
+        "改了 SSOT，**抬頭沒有跟著變** —— 抬頭是手抄的字面值。\n" + _mut_txt)
+    _mut_pointers = [_p for _p in _mut
+                     if _p.startswith("[caption] ") and f"「{_fake}」" in _p]
+    assert len(_mut_pointers) == len(_pointers), (
+        f"改了 SSOT，只有 {len(_mut_pointers)} 處指路跟著變（原本 {len(_pointers)} 處）"
+        "—— 有指路是手抄的字面值，抬頭一改它就會指錯。\n" + _mut_txt)
+    assert f"「{_real}」" not in _mut_txt, (
+        "改了 SSOT，畫面上還留著舊名字 —— 那一處是手抄的。\n" + _mut_txt)
+
+    # restored
+    monkeypatch.undo()
+    assert _m.HOLDINGS_HEALTH_TABLE_BLOCK == _real, "還原失敗。"
+    assert f"[markdown] #### {_real}" in _render(portfolio=FOUR_WAY)
+
+
+def test_no_where_pointer_hand_writes_a_block_name(monkeypatch):
+    """⛔ 本頁的 `where=` **不准再出現手抄的 `「區塊名」` 字面值**。
+
+    ⚠️ **判準刻意是「有沒有 `「」` 包住的字面值」，不是「那個名字對不對」** ——
+    後者由 `tests/test_batch2_top_card_grid.py` 那條既有守衛負責，
+    **本條負責的是「不要再產生第二份真相源」**。
+    ⛔ 兩條都要：一個名字可以**今天是對的、明天漂掉**，
+    而 `CLAUDE.md §2.1` 要防的正是那一種。
+
+    ⚠️ **本條只看本頁的 `where=` / `empty_where=`**（含 `_pending_where(...)` 的引數），
+    **不看 `note` 或其他文案** —— 那些不是指路，不承諾「你去那裡找得到」。
+    """
+    _tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    _bad: list[str] = []
+    for _n in ast.walk(_tree):
+        if not isinstance(_n, ast.Call):
+            continue
+        _args: list[ast.AST] = []
+        for _kw in _n.keywords:
+            if _kw.arg in ("where", "empty_where"):
+                _args.append(_kw.value)
+        if (getattr(_n.func, "id", None) == "_pending_where"
+                or getattr(_n.func, "attr", None) == "_pending_where"):
+            _args.extend(_n.args)
+        for _a in _args:
+            for _s in ast.walk(_a):
+                if isinstance(_s, ast.Constant) and isinstance(_s.value, str):
+                    if "「" in _s.value and "」" in _s.value:
+                        _bad.append(f"第 {getattr(_s, 'lineno', -1)} 行 {_s.value!r}")
+    assert not _bad, (
+        "本頁的「去哪補」裡有**手抄的區塊名字面值**：\n  " + "\n  ".join(_bad)
+        + "\n⛔ 請改讀 SSOT（`shared/ui_control_labels` 或 `ui/helpers/story_nav`），"
+          "讓畫抬頭的那一行與指路讀同一份。\n"
+          "⚠️ 手抄的名字**今天可能是對的** —— 問題是抬頭改字的那一刻它不會跟著改，"
+          "而使用者會被指到一個找不到的地方（本 PR 初版就是這樣被 CI 抓到的）。")
+
+    # ⛔ 正對照：這個掃描必須真的抓得到 —— 否則它只是裝飾。
+    _probe = ast.parse('not_ready("x", where=_pending_where("下方「某某表」可看"))')
+    _hits = [_s.value for _s in ast.walk(_probe)
+             if isinstance(_s, ast.Constant) and isinstance(_s.value, str)
+             and "「" in _s.value and "」" in _s.value]
+    assert _hits, "掃描邏輯抓不到明明就有 `「」` 的字面值 —— 本條不具鑑別力。"

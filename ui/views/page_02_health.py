@@ -35,6 +35,26 @@
   `ui/helpers/chart/metric_explainers.py::METRIC_EXPLAINERS[key]["short"]` 讀**，
   本檔只存 key（:data:`METRIC_PLAIN_LANGUAGE_KEYS`）。**不另開第二份文案。**
 
+⛔ **一處被 CI 擋下來的錯，留痕（2026-09-09，本組沒有自己抓到）**
+   結論層「判不出來」那一群的指路，初版**照客戶拍板線框的字面抄**，寫成
+   ~~「下方『**② 依據**』的逐檔體檢表可先逐檔看」~~ ——
+   而畫面上那個標題的**全名是「🧾 ② 依據 — 憑什麼這樣說」**。
+   **名字對不上 ⇒ 使用者照著找會找不到。**
+   `tests/test_batch2_top_card_grid.py::
+   test_every_where_names_something_that_exists_on_screen` 在 CI 上把它擋下來。
+
+   **修法**：區塊抬頭收成 L0 常數
+   `shared/ui_control_labels.py::HOLDINGS_HEALTH_TABLE_BLOCK`，
+   **畫抬頭的那一行與兩處指路讀同一份**（本檔另一處組合健康總分的指路
+   CI **沒有**點名，但它是同一個字串的第二份，**同一把尺一起改了**）。
+   ⛔ 不是把標題改短去迎合文案；⛔ 不是加進 `WHERE_NAME_EXEMPT`。
+   守衛：`test_the_where_pointers_and_the_heading_are_one_string`（改 SSOT，
+   三處必須一起變）＋ `test_no_where_pointer_hand_writes_a_block_name`。
+
+   ⚠️ **本機當時看不到那條守衛** —— 它所在的檔案在本機因為缺 `plotly` /
+   `requests` / `numpy` 連 collect 都失敗。**「本機全綠」當時涵蓋不到
+   repo 自己最相關的那條指路守衛**，這一點比那個錯本身更值得記。
+
 ⛔ **刻意沒做的四件事（不是漏做，理由逐條寫在這裡）**：
 
 - **空狀態的「去哪補」沒有改。** 線框推薦改指「④ › 保單與扣款標的」，
@@ -266,6 +286,7 @@ from ui.helpers.ia import (
     render_cards,
     wide_table,
 )
+from shared.ui_control_labels import HOLDINGS_HEALTH_TABLE_BLOCK
 from ui.helpers.ia.empty_state import empty_state
 from ui.helpers.render_state import NOT_READY_MARK, not_ready, safe_section
 from ui.helpers.story_nav import render_story_nav, tab_label, where_to_find
@@ -1395,7 +1416,31 @@ def _render_verdict_line(funds: list[dict]) -> None:
             f"**這 {len(_unknown)} 檔{GROUP_HEADLINES[_GROUP_UNKNOWN]}** "
             + "、".join(_r["label"] for _r in _unknown)
             + "。" + "；".join(_why) + "。**判不出來不等於沒問題。**",
-            where=_pending_where("下方「② 依據」的逐檔體檢表可先逐檔看"))
+            # ⛔⛔ **這一句被 CI 抓過一次，改它之前先讀完（2026-09-09）。**
+            #
+            # 初版寫的是 ~~`"下方「② 依據」的逐檔體檢表可先逐檔看"`~~ ——
+            # 那是**照客戶拍板線框的字面抄的**（線框：「去哪補 ─ 下方「② 依據」的
+            # 逐檔體檢表可先逐檔看」），但**畫面上那個標題的全名是
+            # 「🧾 ② 依據 — 憑什麼這樣說」** ⇒ 名字對不上，使用者照著找會找不到。
+            # `tests/test_batch2_top_card_grid.py::
+            # test_every_where_names_something_that_exists_on_screen` 在 CI 上把它擋下來。
+            #
+            # ⚠️ **這是本 session 反覆記載的那個缺陷類別**（指路指到畫面上不存在的東西），
+            #    而**它是既有守衛抓到的，不是本組掃出來的** —— 據實記在這裡。
+            #
+            # **現行修法（三選一裡唯一對的那一個）**：
+            #   ⛔ 不是把標題改短去迎合文案 —— 標題是照客戶拍板的線框寫的。
+            #   ⛔ 不是加進 `WHERE_NAME_EXEMPT` —— 那條路要求寫出
+            #      「**為什麼這個位置是對的**」，而這裡的理由只會是「還沒修」。
+            #   ✅ **指到一個真的存在、而且三邊同源的名字** ——
+            #      區塊抬頭收成 L0 常數 :data:`HOLDINGS_HEALTH_TABLE_BLOCK`，
+            #      畫抬頭的 :func:`_render_health_table` 與**兩處**指路讀同一份。
+            #
+            # ⚠️ **與線框的落差，據實寫**：線框把使用者指向「② 依據」**那一層**，
+            #    本行指向那一層底下的**那張表**。**那張表才是他要看的東西**，
+            #    而且「② 依據」與分頁編號「②」在同一句裡會變成兩個 ② —— 更難讀。
+            where=_pending_where(
+                f"下方的「{HOLDINGS_HEALTH_TABLE_BLOCK}」可先逐檔看"))
 
 
 def _render_conclusion() -> None:
@@ -1998,8 +2043,15 @@ def _render_health_score() -> None:
     那句話會把使用者送去一個什麼結論都沒有的地方。現行指路指向**同一頁下方真的能看的東西**。
     """
     st.markdown("#### 組合健康總分")
+    # ⚠️ **這一處 CI 沒有點名，是本組拿同一把尺重跑時一起改的（2026-09-09）。**
+    #    它的字面值**今天剛好等於**畫面上的抬頭，所以守衛判它合格 ——
+    #    但它仍然是**同一個字串的第二份**：抬頭一改，這裡不會跟著改，
+    #    而**漂移的那一刻守衛才會紅**（那時使用者已經被指錯一段時間了）。
+    # ⛔ **「只修被點名的那一處」是本 repo 反覆記載的失效模式**（⑦ 那一批犯了五次），
+    #    所以兩處一起走 :data:`HOLDINGS_HEALTH_TABLE_BLOCK`。
     not_ready(_SCORE_PENDING_NOTE,
-              where=_pending_where("下方「逐檔體檢表」可先逐檔看"))
+              where=_pending_where(
+                  f"下方的「{HOLDINGS_HEALTH_TABLE_BLOCK}」可先逐檔看"))
 
 
 def _render_alert_cards() -> None:
@@ -2124,7 +2176,9 @@ def _render_health_table() -> None:
     連帶 `test_the_per_fund_table_keeps_the_nine_columns_from_the_wireframe`
     的「畫面上看得到每一欄」那半**已改成驗真表頭**，不是把斷言刪掉。
     """
-    st.markdown("#### 逐檔體檢表")
+    # ⚠️ **抬頭與兩處指路讀同一份**（:data:`HOLDINGS_HEALTH_TABLE_BLOCK`）——
+    #    在這裡寫死字面值，就是那兩處指路會無聲漂移的起點。
+    st.markdown(f"#### {HOLDINGS_HEALTH_TABLE_BLOCK}")
     _rows = _table_rows(_uniq_by_code(_holdings()))
     _drawn = wide_table(
         _rows,
