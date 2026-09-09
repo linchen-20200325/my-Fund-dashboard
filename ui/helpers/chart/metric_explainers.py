@@ -37,8 +37,19 @@ from __future__ import annotations
 #    在它真的要出現在某一頁的數字旁邊之前，先寫一句沒人看的文案沒有意義
 #    （`CLAUDE.md §8.1` step 6「用不到的抽象先不做」）。
 #
-# ⛔ **`short` 不得與 `body` 說不同的話。** 兩者是同一個指標的長短版；
-#    改了其中一個要一起看。守衛：`tests/test_metric_short_explainers.py`。
+# ⛔ **`short` 不得與 `body` 說不同的話。** 兩者是同一個指標的長短版；改了其中一個要一起看。
+#
+# **守衛（2026-09-09 就地更正：本行原本指了一個不存在的檔）**
+# ~~`tests/test_metric_short_explainers.py`~~ —— **那個檔從來沒有存在過。**
+# **有意識的更正，不是漏刪**（決策者：**AI 總管**，依獨立稽核指出）。
+# ⚠️ **`short` 其實是有守的，只是不在那個檔**（稽核實測兩顆突變都轉紅）：
+#   · `tests/test_wf02_health_wireframe.py::test_the_plain_language_lines_come_from_the_shared_ssot`
+#     —— ⑥ 畫面上那三句白話必須逐字等於這裡的 `short`。
+#   · 同檔 `::test_dropping_a_short_explainer_turns_the_plain_language_guard_red`
+#     —— 拿掉某個 key 的 `short`，上面那條必須真的轉紅。
+# ⚠️ **這一筆與 `CLAUDE.md §-2.A` 的 #8／#11 同型**（派工單／文件指錯檔）——
+#    寫下「守衛：X」的當下**沒有跑過 X**。**指錯的守衛比沒有守衛更危險：
+#    它讓下一個人以為這件事有人看著。**
 METRIC_EXPLAINERS: dict[str, dict[str, str]] = {
     "sharpe": {
         "title": "Sharpe 夏普值",

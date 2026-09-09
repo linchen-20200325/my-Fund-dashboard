@@ -50,6 +50,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import pathlib
 import re
 import sys
@@ -66,14 +67,40 @@ from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
 from ui.views import page_02_health as _p02  # noqa: E402
 from ui.views.page_02_health import (  # noqa: E402
+    BUCKET_GRADE_CAPTION,
+    CLEAR_NOTE,
     CONCLUSION_HEADING,
     EVIDENCE_HEADING,
     GROUP_HEADLINES,
     HEALTH_TABLE_COLUMNS,
     METRIC_PLAIN_LANGUAGE_KEYS,
+    _eating_labels,
+    _eating_note,
     _fund_findings,
     _metric_plain_language,
+    _shadow_pair_note,
+    _uniq_by_code,
 )
+
+#: **每一檔的配息都真的蓋得住**（覆蓋 ≥ 1.0）且**都判得動**的持股。
+#: ⚠️ 專門給「配息蓋得住、也沒有落後同類。」那一句用 —— 那句話**只在這種情況下為真**。
+_ALL_COVERED = [
+    _fund("HC1", div=3.0, ret=9.0),   # gap = −6 → healthy
+    _fund("HC2", div=2.0, ret=8.0),   # gap = −6 → healthy
+]
+for _f in _ALL_COVERED:
+    _f["moneydj_raw"]["risk_metrics"] = {"peer_compare": {"同類型平均": {"1Y": 1.0}}}
+    _f["invest_twd"] = 500_000.0
+
+#: **接近警戒**（黃燈）的那一檔：覆蓋 **低於 1.0**，但缺口還在門檻內 ⇒ **不算吃本金**。
+#: ⚠️ 數字是照 `services/health/dividend.py` 的判定式挑的，**不是隨手填的**：
+#:    `ret=6.5, div=8.0` → `coverage = 0.81`（**< 1.0**）、`gap = 1.5pp`（**≤ 2.0**）→ yellow。
+_NEAR_FUND = _fund("NEAR", div=8.0, ret=6.5)
+_NEAR_FUND["moneydj_raw"]["risk_metrics"] = {"peer_compare": {"同類型平均": {"1Y": 1.0}}}
+_NEAR_FUND["invest_twd"] = 500_000.0
+
+#: 一群「都判得動、都沒有落後同類」，**但其中一檔接近警戒**。
+_CLEAR_WITH_NEAR = [_ALL_COVERED[0], _NEAR_FUND]
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "ui" / "views" / "page_02_health.py"
@@ -177,10 +204,13 @@ def _verbatim_pairs() -> list[tuple[str, str]]:
     return [
         ("結論層標題", CONCLUSION_HEADING),
         ("依據層標題", EVIDENCE_HEADING),
-        ("「沒有查出問題」那一群的說明", "配息蓋得住、也沒有落後同類。"),
-        ("逐檔表底下的「五桶評等」說明",
-         f"「五桶評等」整欄顯示 {NOT_READY_MARK} —— 那一欄的評等定義還沒定案，"
-         "**不拿別的評等填進來充數**。"),
+        # ⚠️ **2026-09-09：這兩句改成 import，不再在這裡抄第二份**
+        #    （**有意識的更正，不是漏刪**；依 2026-09-09 獨立稽核必修 D）。
+        #    本清單上方那句「**值一律 import 自被測檔，不在這裡抄第二份**」
+        #    **本來就寫在那裡，而這兩句違反了它** —— 抄一份到測試裡，
+        #    被測檔與測試一起改就一起綠，那正是這一族守衛存在的理由。
+        ("「沒有查出問題」那一群的說明", CLEAR_NOTE),
+        ("逐檔表底下的「五桶評等」說明", BUCKET_GRADE_CAPTION),
         ("白話解釋：Sharpe", _plain[0]),
         ("白話解釋：最大回撤", _plain[1]),
     ]
@@ -216,12 +246,27 @@ def test_those_strings_are_really_on_the_screen_not_just_in_a_constant():
     由結論層的筆數上限與內部語言掃描各守一半）——
     本條只釘「**畫面上真的有這幾句**」。⛔ 不要把它讀成「畫面已封閉」。
     """
-    _parts = _render(portfolio=FOUR_WAY)
-    _all = _text(_parts)
-    _missing = [_w for _w, _v in _verbatim_pairs() if _v not in _all]
-    assert not _missing, (
-        "下列線框逐字的句子**沒有出現在畫面上**（常數在、畫面沒有 ＝ 守衛守到替身）：\n  "
-        + "\n  ".join(_missing) + "\n" + _all)
+    # ⚠️ **「沒有查出問題」那一句要用「這一群裡每一檔的配息都真的蓋得住」的持股**
+    #    —— `FOUR_WAY` 裡的 `MID` 是**接近警戒**，那一群的說明句依 ⛔2 的修正
+    #    會換成另一句（見 :func:`test_the_clear_group_never_tells_a_near_fund_it_is_covered`）。
+    _by_fixture = {"配息蓋得住": _ALL_COVERED}
+    for _what, _value in _verbatim_pairs():
+        _pf = next((_v for _k, _v in _by_fixture.items() if _k in _value), FOUR_WAY)
+        _parts = _render(portfolio=_pf)
+        # ⭐⭐ **2026-09-09：判準由「整頁 join 之後的子字串」改成「某一筆渲染紀錄的
+        #    全部或結尾」**（**收緊，不是放寬**；依 2026-09-09 獨立稽核必修 D）。
+        #    **舊判準擋不住「在後面接一段字」** —— 稽核實測：在五桶評等那句 caption
+        #    後面接「這一欄不重要，可以忽略。」→ **106 passed、突變存活**，
+        #    而那句話正好否定了那一段的 §1 用意（誠實說明為什麼整欄留白）。
+        #    ⛔ 用 `endswith` 而不是全部 `==`：三群那一句是**接在群組抬頭後面**的，
+        #    本來就不是整筆；`endswith` 一樣擋得住「接一段字」。
+        _payloads = [_p.split("] ", 1)[1] if "] " in _p else _p for _p in _parts]
+        _hit = [_x for _x in _payloads if _x == _value or _x.endswith(_value)]
+        assert _hit, (
+            f"線框逐字的句子「{_what}」**沒有以整筆（或整筆結尾）出現在畫面上**。\n"
+            "  ⚠️ 常數在、畫面沒有 ＝ 守衛守到替身；\n"
+            "  ⚠️ 或者它**後面被接了一段字** —— 那同樣是單方面改客戶拍板的文案。\n"
+            f"  期望：{_value!r}\n" + _text(_parts))
 
 
 def test_the_deliberate_deviation_from_the_wireframe_is_still_deliberate():
@@ -705,9 +750,36 @@ def test_the_eating_card_names_the_funds_it_counted():
         f"卡片上少了這幾檔的名字：{_unnamed}\n"
         "⛔ 只給「N 檔」的話，使用者還是得自己去下面那張九欄表逐列比對 ——"
         "那正是這一批要修掉的畫面。\n" + _body)
-    assert "配息覆蓋低於 1.0" in _body, (
-        "卡片沒有用白話講「這是什麼意思」——\n"
-        "  線框那張卡：「配息覆蓋低於 1.0，也就是在把你自己的本金配回來給你。」\n"
+    # ⛔⛔ **這一條斷言 2026-09-09 被獨立稽核判為「釘錯東西」，改掉並留痕。**
+    #
+    # ~~`assert "配息覆蓋低於 1.0" in _body`~~ ——
+    # 它**強迫這張卡說出一句描述錯集合的話**：那張卡的主數字只數 `red`
+    # （`gap > NEAR_DIVIDEND_WARNING_PCT`），而「覆蓋低於 1.0」**還包含黃燈**。
+    # **純算術：`ret=6.5 div=8.0 → coverage=0.81 < 1.0`，但 `gap=1.5pp` → yellow，
+    # 不在那個數字裡。**
+    #
+    # ⚠️⚠️ **最難堪的是：同一個檔案的
+    # :func:`test_the_deliberate_deviation_from_the_wireframe_is_still_deliberate`
+    # 早就把這個道理寫出來了** —— 它逐字說明為什麼**不照抄線框**那句
+    # 「<1.0 就是在吃本金」（會與卡片判準打架）。
+    # **然後這一條卻強制那張卡說出前一段禁止的那句話。**
+    # **偏離 (d) 的理由本身就推翻了它自己的實作。**
+    #
+    # **現行判準：卡片必須講出它真正在數的那個門檻**（數字走 SSOT），
+    # **而且不得再出現那句描述錯集合的話**。
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _gap
+
+    assert f"超過 {_gap:.0f} 個百分點" in _body, (
+        "卡片沒有講出它真正在數的那個門檻（缺口超過 N 個百分點）——\n"
+        "  ⛔ 沒有它，使用者不知道這個「N 檔」是照什麼標準數出來的。\n" + _body)
+    for _wrong in ("配息覆蓋低於 1.0", "覆蓋率低於 1.0", "覆蓋低於 1.0"):
+        assert _wrong not in _body, (
+            f"卡片又出現了「{_wrong}」——\n"
+            "  ⛔ 那句話描述的集合**比這張卡真正數的那一個大**（它把黃燈也含進去），\n"
+            "     而黃燈那幾檔**不在**這個數字裡。同一張卡、兩個集合。\n"
+            "  ⚠️ 要講白話可以，但要講**它真的數的那件事**。\n" + _body)
+    assert "本金配回來給你" in _body, (
+        "卡片沒有用白話講「這是什麼意思」（線框第 3 條：從「指標」改成「一件事」）。\n"
         + _body)
 
 
@@ -1233,3 +1305,203 @@ def test_no_where_pointer_hand_writes_a_block_name(monkeypatch):
              if isinstance(_s, ast.Constant) and isinstance(_s.value, str)
              and "「" in _s.value and "」" in _s.value]
     assert _hits, "掃描邏輯抓不到明明就有 `「」` 的字面值 —— 本條不具鑑別力。"
+
+
+# ══════════════════════════════════════════════════════════════════
+# ⑩ 2026-09-09 獨立稽核擋下的兩項 —— 各自的守衛
+# ══════════════════════════════════════════════════════════════════
+def _coverage_of(fund: dict) -> "float | None":
+    """這一檔的配息覆蓋率（走 SSOT，本檔不自己算）。"""
+    from services.health.dividend import check_eating_principal_1y_mk
+    _v = check_eating_principal_1y_mk(fund)
+    return (_v or {}).get("coverage")
+
+
+def test_the_eating_card_sentence_describes_the_set_it_actually_counts():
+    """⛔⛔ **⛔1：卡片的說明句，不得描述一個比它真正數的更大的集合。**
+
+    ## 純算術（可自驗，不需要渲染）
+
+    `services/health/dividend.py::classify_eating_principal`::
+
+        red    ⟺ gap_pct >  NEAR_DIVIDEND_WARNING_PCT
+        yellow ⟺ 0 < gap_pct <= NEAR_DIVIDEND_WARNING_PCT
+
+    ⇒ **`red ⊂ {coverage < 1.0}`，反過來不成立。**
+    `ret=6.5 / div=8.0` → **coverage 0.81（低於 1.0）**、**gap 1.5pp → yellow**。
+
+    ## 這一條釘的是什麼
+
+    那張卡的主數字**只數 red**（跨頁一致性，見 `_eating_verdict` 的長註）。
+    所以說明句**不得**用「覆蓋低於 1.0」去描述它 —— 覆蓋 0.81 的那一檔
+    **不在那個數字裡，卻會被那句話涵蓋**。
+
+    ⚠️ **本條與 `test_the_eating_card_names_the_funds_it_counted` 不重複**：
+    那一條問「有沒有講出門檻／有沒有點名」，**本條拿一檔真的黃燈基金去證明兩個集合不同**。
+    """
+    _near = copy.deepcopy(_NEAR_FUND)
+    _cov = _coverage_of(_near)
+    assert _cov is not None and _cov < 1.0, (
+        f"前提不成立：這一檔的覆蓋應該低於 1.0，實際 {_cov}")
+    assert _near["code"] not in _eating_labels(_uniq_by_code([_near])), (
+        "前提不成立：這一檔（黃燈）**不該**被算進吃本金的那個數字。\n"
+        "  若它被算進去了，那是 `_eating_verdict` 的跨頁一致性被改掉了，"
+        "要動的是那裡，不是本條。")
+
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _gap
+    _note = _eating_note({"eating": 1, "near": 1, "healthy": 1, "unknown": 0}, ["X"])
+    assert f"超過 {_gap:.0f} 個百分點" in _note, (
+        f"說明句沒有講出它真正在數的門檻（缺口超過 {_gap:.0f} 個百分點）：{_note!r}")
+    assert "低於 1.0" not in _note, (
+        "說明句用「覆蓋低於 1.0」描述這張卡 —— **那個集合比它真正數的大**：\n"
+        f"  覆蓋 {_cov:.2f} 的那一檔不在這個數字裡，卻被這句話涵蓋。\n"
+        f"  實際：{_note!r}")
+
+
+def test_the_clear_group_never_tells_a_near_fund_it_is_covered():
+    """⛔⛔ **⛔2：「沒有查出問題」那一群不得對接近警戒的檔說「配息蓋得住」。**
+
+    **稽核用本檔自己的 fixture 實測到的畫面**（同一個畫面上三個說法）::
+
+        🟢 這 2 檔沒有查出問題 … 配息蓋得住、也沒有落後同類。   ← 結論層
+        MID … 0.75 ⬜                                        ← 同頁表格
+        吃本金警示 … 另有 1 檔接近警戒（缺口在 2pp 內）        ← 同頁卡片
+
+    ⚠️ **舊守衛只驗那句是不是線框逐字，不驗它對那一群是不是真的** ——
+    正是憲法 `EXCEPTIONS.md §8.3.P` 的 `P-GREYSCENARIO-1` 登記的
+    「**形式滿分、內容全反**」。
+
+    ⛔ **修法不是把那句話刪掉** —— 線框要那句話，要的是**對的那一群**才說。
+    本條因此**兩個方向都釘**：該說的時候要說，不該說的時候不准說。
+    """
+    # ── 方向一：全部真的蓋得住 → 線框那句話必須出現 ─────────────
+    _covered = "\n".join(_conclusion_slice(_render(portfolio=_ALL_COVERED)))
+    assert CLEAR_NOTE in _covered, (
+        "這一群每一檔的配息都真的蓋得住，卻沒有講出線框那句話。\n" + _covered)
+
+    # ── 方向二：混了一檔接近警戒 → 那句話不准出現，而且要點名 ───
+    _near_code = _NEAR_FUND["code"]
+    _recs = _fund_findings(_uniq_by_code(copy.deepcopy(_CLEAR_WITH_NEAR)))
+    _near_rec = next(_r for _r in _recs if _r["code"] == _near_code)
+    assert _near_rec["near"] is True, (
+        f"前提不成立：{_near_code} 應該被判成接近警戒。實際：{_near_rec}")
+    assert _near_rec["group"] == "clear", (
+        "前提改變了：接近警戒的檔不再落在「沒有查出問題」那一群。\n"
+        "  ⚠️ 若這是刻意的（例如改成獨立一群），本條要跟著改 —— "
+        "但**不准把它改回去說「蓋得住」**。\n" + str(_near_rec))
+
+    _mixed = "\n".join(_conclusion_slice(_render(portfolio=_CLEAR_WITH_NEAR)))
+    assert CLEAR_NOTE not in _mixed, (
+        f"這一群裡有一檔（{_near_code}）的配息覆蓋**低於 1.0**，"
+        f"畫面卻對它說「{CLEAR_NOTE}」——\n"
+        "  ⛔ 同一頁的表格會顯示它的覆蓋率、卡片會說「另有 1 檔接近警戒」，"
+        "**三個地方兩個結論**（`CLAUDE.md §2.1`）。\n" + _mixed)
+    assert _near_code in _mixed, (
+        f"接近警戒的那一檔（{_near_code}）沒有被點名 —— "
+        "使用者不知道是哪一檔快要出問題。\n" + _mixed)
+
+
+def test_a_fund_whose_dividend_data_is_missing_is_never_called_clear():
+    """⛔ **必修 B：配息完全讀不到的檔，必須落進「判不出來」，⛔ 不是「沒有查出問題」。**
+
+    ⚠️ **稽核實測這一支原本零守衛**：把 `_fund_findings` 裡
+    `elif _eat_bucket == _EAT_UNKNOWN:` 改成 `elif False:` → **106 passed**，
+    而畫面會把「配息完全讀不到」的檔印成「🟢 沒有查出問題 / 配息蓋得住」。
+    **乾淨版的行為本來就是對的 —— 只是沒有人守著它。**
+    """
+    _blind_div = copy.deepcopy(_fund("NODIV", div=None, ret=4.0))
+    _blind_div["metrics"].pop("annual_div_rate", None)
+    _blind_div["moneydj_raw"]["risk_metrics"] = {
+        "peer_compare": {"同類型平均": {"1Y": 1.0}}}
+
+    _rec = _fund_findings([_blind_div])[0]
+    assert _rec["group"] == "unknown", (
+        "配息資料完全讀不到的那一檔被歸成了別群 —— "
+        "「沒查到」不是「沒問題」（§1）。\n" + str(_rec))
+    assert _rec["blind"], "落進「判不出來」卻沒有講出是哪一項查不動。"
+    assert any("配息" in _b for _b in _rec["blind"]), (
+        f"沒有講出「查不到配息資料」這件事：{_rec['blind']}")
+
+    _body = "\n".join(_conclusion_slice(_render(portfolio=[_blind_div])))
+    assert GROUP_HEADLINES["clear"] not in _body, (
+        "畫面上把配息讀不到的那一檔說成「沒有查出問題」。\n" + _body)
+    assert CLEAR_NOTE not in _body, (
+        "畫面上對一檔連配息都讀不到的基金說「配息蓋得住」。\n" + _body)
+
+
+@pytest.mark.parametrize("mode", ["raises", "same-both-ends", "no-excess"])
+def test_the_lag_probe_fails_closed_in_every_degenerate_mode(mode: str, monkeypatch):
+    """⛔ **必修 C：判準探針自己的三種退化模式，每一種都要 fail-closed。**
+
+    `_lag_verdict_text()` 的 docstring 列了三種「問不出來」：**拋例外**、
+    **兩端回同一句話**、**回不出超額報酬**。
+    ⚠️ **稽核實測：原本只有第一種被走到過**（既有那條測試 monkeypatch 的是
+    **消費端**，等於直接把答案設成 `None`）——
+    **「兩端回同一句話」那一支從來沒有被跑過**。
+    刪掉它 → **106 passed**，而配上一個退化的 `_grade`，
+    **領先同類 8pp 的基金會被印成「要處理…落後 0.0 個百分點」**。
+
+    ⛔ 三種模式都必須回 `None`（＝「不知道」），而**不是**回一個桶名 ——
+    回桶名代表每一檔都會被拿去跟它比對，於是**要嘛全部要處理、要嘛全部沒問題**，
+    兩種都是說謊。
+    """
+    from ui.helpers.fund import checkup as _ck
+
+    if mode == "raises":
+        def _grade(_r, _p):
+            raise RuntimeError("degenerate")
+    elif mode == "same-both-ends":
+        # 兩端回**同一句話** ⇒ 分不出「最差」與「最好」。
+        def _grade(_r, _p):
+            return (0.0 if _p is not None else None), "⚠️ 落後（汰弱）"
+    else:  # no-excess
+        def _grade(_r, _p):
+            return None, "⬜ 同類資料不足"
+
+    monkeypatch.setattr(_ck, "_grade", _grade)
+    assert _p02._lag_verdict_text() is None, (
+        f"探針在退化模式「{mode}」下**沒有** fail-closed —— 它回了一個桶名。\n"
+        "⛔ 分不出來就是不知道；回一個桶名會讓每一檔都拿去跟它比。")
+
+
+def test_a_degenerate_grade_never_prints_a_lag_of_zero(monkeypatch):
+    """⛔ **必修 C 的行為面**：`_grade` 退化時，⛔ 不得把領先的基金印成「落後 0.0 個百分點」。
+
+    這是上一條 fail-closed 真正要防的畫面。**稽核構造的正是這個**：
+    領先同類 8pp 的基金被印成「要處理…**落後 0.0 個百分點**」。
+    """
+    from ui.helpers.fund import checkup as _ck
+
+    monkeypatch.setattr(_ck, "_grade", lambda _r, _p: (0.0, "⚠️ 落後（汰弱）"))
+    _body = "\n".join(_conclusion_slice(_render(portfolio=_ALL_COVERED)))
+    assert "落後 0.0 個百分點" not in _body, (
+        "`_grade` 退化成「一律回同一句話 ＋ 超額報酬 0」時，"
+        "畫面把領先同類的基金印成「落後 0.0 個百分點」。\n"
+        "⛔ 探針分不出兩端時應該 fail-closed（回 `None`），"
+        "那幾檔要落進「判不出來」。\n" + _body)
+
+
+def test_the_shadow_note_matches_how_many_pairs_there_are():
+    """⛔ **必修 A：影子基金卡的本文措辭，必須跟著「幾對」走。**
+
+    ⚠️ **稽核實測這一句原本零守衛**：整句刪掉 → **106 passed**。
+    而三檔互相重疊時，卡片主數字是「**3 對**」、本文卻寫「**這兩檔**」——
+    **同一張卡上的兩個數字對不起來。**
+
+    ⚠️ **本條對純函式下斷言、不經渲染**，理由與
+    :func:`test_the_card_text_producers_carry_no_jargon` 同一條：
+    那張卡要 `numpy` 才算得出重疊度，**本機沒有** ⇒ 走渲染的話這一條會對著灰態生效，
+    而「灰態裡當然沒有那句話」與「那句話說錯了」在輸出上長得一模一樣。
+    """
+    _one = _shadow_pair_note(1)
+    assert "這兩檔" in _one, (
+        f"一對的時候沒有用線框那句話（「這兩檔…」）：{_one!r}")
+
+    for _n in (2, 3, 7):
+        _many = _shadow_pair_note(_n)
+        assert f"{_n} 對" in _many, (
+            f"{_n} 對的時候，本文沒有講出到底幾對：{_many!r}")
+        assert "這兩檔" not in _many, (
+            f"{_n} 對的時候，本文還在說「這兩檔」——"
+            f"卡片的主數字會是「{_n} 對」，**同一張卡上兩個數字對不起來**：{_many!r}")
+        assert "重疊" in _many, f"{_n} 對的時候，本文沒有講出「重疊」這件事：{_many!r}"
