@@ -739,6 +739,15 @@ _DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
     "P-P02JARGON-1", "P-P02DELEGJARGON-1",
     # 2026-09-09 第二輪：獨立稽核抓出的區塊名第三份 live copy。
     "P-P02BLOCKNAME-1",
+    # 2026-09-09 第三輪回修：**別人加的四列，補進來。**
+    # ⚠️ **這四列是 main 上就有的既有債，不是 ⑥ 那一批弄的** —— 但**本批依必修 E 動的
+    #    正是這份清單**，卻只把尺對自己的三列用，而上面那句
+    #    「**別人加的列同樣該進來；漏掉它們，就是重演 #833 那三列「五輪沒被保護」的同一個缺口**」
+    #    就寫在旁邊。**只改被點名的那一條 ＝ 沒改**（本 repo 反覆記載的失效模式）。
+    # **本輪實測（量測日 2026-09-09，用的是本檔 `_registry_ids_present()` 自己的規則，
+    #   不是 `**ID**` 粗體樣式）**：登記簿定義列 **50** 個、本清單補前宣告 **46** 個，
+    #   差集正好就是下面這四個。補完 50/50。
+    "P-FLOORSLACK-1", "P-GATEDLAYOUT-1", "P-HEDGESEMANTIC-1", "P-P05VERDICT-1",
 })
 
 _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")

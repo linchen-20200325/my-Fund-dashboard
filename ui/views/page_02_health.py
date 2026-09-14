@@ -360,18 +360,24 @@ _PRINCIPAL_STEP: float = 100_000.0
 #: ⚠️ 定成常數而不是散在下一批的程式碼裡，是為了讓「欄位少了一欄」看得見
 #: （`tests/test_wf02_health_skeleton.py` 釘住它是 9 欄且逐字相符）。
 #: ⚠️ **下一批填內容時，任一欄取不到 → 那一格走灰態，不得從別的欄位湊一個數字充數**（§1）。
-#: 逐檔體檢表底下那句「為什麼『五桶評等』整欄是空的」。**線框逐字。**
-#:
-#: ⚠️ 具名而不 inline，理由同 :data:`CLEAR_NOTE`：測試要拿它跟線框原文比對，
-#: 而測試**不准自己抄一份**。
-BUCKET_GRADE_CAPTION: str = (
-    f"「五桶評等」整欄顯示 {NOT_READY_MARK} —— 那一欄的評等定義還沒定案，"
-    "**不拿別的評等填進來充數**。")
-
 HEALTH_TABLE_COLUMNS: tuple[str, ...] = (
     "代碼", "名稱", "幣別", "近 1 年", "Sharpe",
     "最大回撤", "配息覆蓋", "五桶評等", "資料日期",
 )
+
+#: 逐檔體檢表底下那句「為什麼『五桶評等』整欄是空的」。**線框逐字。**
+#:
+#: ⚠️ 具名而不 inline，理由同 :data:`CLEAR_NOTE`：測試要拿它跟線框原文比對，
+#: 而測試**不准自己抄一份**。
+#:
+#: ⚠️ **2026-09-09 第三輪回修：把它搬到 `HEALTH_TABLE_COLUMNS` 下面。**
+#: 本批第二輪把這個常數**插進了 `HEALTH_TABLE_COLUMNS` 與它那五行 `#:` 中間** ——
+#: 於是那五行（「逐檔體檢表的欄位 …釘住它是 9 欄且逐字相符」）**文件化的是一個字串**，
+#: 而 `HEALTH_TABLE_COLUMNS` **一行文件都沒有**。無執行期影響，
+#: 但它就是「**註解描述的不是它自己**」—— 而本 PR 的主題正是這個。
+BUCKET_GRADE_CAPTION: str = (
+    f"「五桶評等」整欄顯示 {NOT_READY_MARK} —— 那一欄的評等定義還沒定案，"
+    "**不拿別的評等填進來充數**。")
 
 #: 逐檔體檢表底下要接白話的欄位 → `METRIC_EXPLAINERS` 的 key。**順序照表頭。**
 #:
@@ -983,6 +989,40 @@ def _lag_verdict_text() -> "str | None":
     return str(_lag_text)
 
 
+def _near_warning_note(labels: "list[str]") -> str:
+    """「接近警戒」那幾檔的說明句 —— **純函式，好讓邊界值有東西可以釘。**
+
+    ⛔⛔ **這一句的邊界被獨立稽核擋下來過（2026-09-09 第二輪），改它之前先讀完。**
+
+    **SSOT 是含界的**（`services/portfolio_service.py::dividend_safety`）::
+
+        elif gap_pct <= NEAR_DIVIDEND_WARNING_PCT:   # ← `<=`，**含界**
+            ... 黃燈（接近警戒）
+
+    ⇒ `gap == 2.0` **是黃燈**，而且 `gap_pct = round(core.gap_pct, 4)` ——
+    落在 `2.0` 的區間**比嚴格相等更寬**。
+
+    ⚠️ **本批初版寫的是** ~~「但**還不到** {N} 個百分點」~~ —— **對 `gap == 2.0` 為假**。
+    稽核用 `div=8.0, ret=6.0`（**不是構造出來的怪數字**）真渲染出來的畫面是：
+    同一頁上，這一句說「還不到 2 個百分點」，卡片那句
+    （:func:`_eating_note`）說「缺口**在 2pp 內**」——
+    **同一群檔、同一個門檻，一句含界一句不含界。**
+
+    ⇒ 現行措辭 **「缺口還在 N 個百分點內」**，與卡片那句**同為含界**、形狀也對齊。
+    ⛔ **不要改回「還不到 / 未滿 / 少於」那一族** —— 那會把含界的門檻講成不含界；
+    :func:`~tests.test_wf02_health_wireframe
+    .test_the_near_warning_sentence_matches_the_inclusive_ssot_boundary` 會轉紅。
+
+    ⚠️ 門檻數字**現場從 SSOT 讀**，不在本檔抄一個數字（§3.3 反捏造）。
+    """
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _gap
+
+    return (CLEAR_NOTE_WITH_NEAR_PREFIX
+            + "、".join(labels)
+            + f"的配息已經接近警戒（配出去的比賺到的多，但缺口還在 {_gap:.0f}"
+              " 個百分點內）—— **還不算吃本金，但不要再往下掉**。")
+
+
 def _fund_label(fund: dict) -> str:
     """畫面上稱呼這一檔的方式 —— **名稱 ＋ 代碼**（線框逐字的形狀）。
 
@@ -1451,14 +1491,8 @@ def _render_verdict_line(funds: list[dict]) -> None:
         #    （結論層「蓋得住」／表格「0.75」／卡片「另有 1 檔接近警戒」）。
         # ⛔ **修法不是把那句話刪掉** —— 線框要那句話，要的是**對的那一群**才說。
         _near = [_r for _r in _clear if _r["near"]]
-        if _near:
-            from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _gap
-            _why = (CLEAR_NOTE_WITH_NEAR_PREFIX
-                    + "、".join(_r["label"] for _r in _near)
-                    + f"的配息已經接近警戒（配出去的比賺到的多，但還不到 {_gap:.0f}"
-                      " 個百分點）—— **還不算吃本金，但不要再往下掉**。")
-        else:
-            _why = CLEAR_NOTE
+        _why = (_near_warning_note([_r["label"] for _r in _near])
+                if _near else CLEAR_NOTE)
         st.markdown(
             f"🟢 **這 {len(_clear)} 檔{GROUP_HEADLINES[_GROUP_CLEAR]}** "
             + "、".join(_r["label"] for _r in _clear)
