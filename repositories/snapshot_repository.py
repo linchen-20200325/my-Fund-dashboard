@@ -25,6 +25,10 @@ import json as _json
 import pandas as pd
 
 from repositories.policy_repository import PolicySheetError
+# 級別（核心/衛星）判定的 SSOT 在 L0。**本檔是 L1，不得 import L3**
+# （`CLAUDE.md §8.2`：跨層上行 import 違憲），故走 `shared/`，不是
+# `ui/helpers/portfolio/allocation.py`。
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, resolve_tier
 # v19.385 T2a:gspread 429 偵測 + 退避收 L0 infra(與 policy/_helpers 去重)。
 from infra.gspread_retry import (
     with_quota_retry as _shared_quota_retry,
@@ -247,8 +251,16 @@ def save_holdings_overview(
         pid = str(f.get("policy_id", "") or "")
         if not pid and "::" in pk_str:
             pid = pk_str.split("::", 1)[0]
-        tier = ("核心" if f.get("is_core")
-                else "衛星" if f.get("is_core") is False else "")
+        # ⭐ 級別走 L0 SSOT（`policy_tier` 優先 → `is_core` 三態 → 未設定）。
+        # 舊寫法 `("核心" if f.get("is_core") else "衛星" if ... is False else "")`
+        # 只讀 `is_core`，而 v1 讀取路徑寫進 portfolio_funds 的是 `policy_tier`
+        # —— 使用者在 Sheet 明示的級別在這張 `_持倉總覽` 上看不到，
+        # 取而代之的是上游用基金名稱猜出來的那個（該猜測已於 Q8 批次一切斷）。
+        # **未設定一律留空白**：這張表是給人看的事實清單，
+        # 把「還沒決定」印成「衛星」就是替客戶做了決定。
+        _tier = resolve_tier(f)
+        tier = ("核心" if _tier == CORE_TIER
+                else "衛星" if _tier == SATELLITE_TIER else "")
         rows.append([
             pid,
             d.get("fund_code", ""),
