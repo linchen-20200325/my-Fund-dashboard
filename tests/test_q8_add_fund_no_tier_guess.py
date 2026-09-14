@@ -25,7 +25,10 @@ Sheet 上卻出現一個看起來像他設定過的值。
 from __future__ import annotations
 
 import ast
+import sys
+import types
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -171,7 +174,14 @@ def _portfolio_upsert_payload(fund_name: str) -> dict:
         "PolicySheetError": _PolicySheetError, "OAuthError": _OAuthError,
         "st": _StStub(),
     }
-    exec(compile(seg, "<tab3_portfolio:add-fund-loop>", "exec"), ns, ns)
+    # 那段真源碼裡有一句 `from services.fund_history import record_fund`，
+    # 而 `record_fund()` 會**真的寫 `cache/` 底下的 JSON**（相對於 CWD）。
+    # 測試不可以有這種副作用，所以在 exec 期間把該模組換成 no-op。
+    # ⚠️ 換的是**模組**不是被測邏輯 —— 上面那段 for 迴圈本身一個字都沒動。
+    _fake_hist = types.ModuleType("services.fund_history")
+    _fake_hist.record_fund = lambda *a, **k: None
+    with mock.patch.dict(sys.modules, {"services.fund_history": _fake_hist}):
+        exec(compile(seg, "<tab3_portfolio:add-fund-loop>", "exec"), ns, ns)
     assert "payload" in captured, "真的 for 迴圈跑完卻沒走到 Sheet upsert —— 測試前提失效"
     captured["record"] = ns["st"].session_state.portfolio_funds[0]
     return captured
