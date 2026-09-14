@@ -1,4 +1,4 @@
-"""Q8 批次一｜止血：切斷「用基金名稱猜核心/衛星 → 寫回客戶 Google Sheet」這條鏈。
+r"""Q8 批次一｜止血：切斷「用基金名稱猜核心/衛星 → 寫回客戶 Google Sheet」這條鏈。
 
 ## 這條鏈原本長什麼樣（每一段都實測過，指令見各測試 docstring）
 
@@ -19,7 +19,49 @@
 
 ## 讀這個檔之前請先知道：哪些條是真的守衛，哪些不是
 
-本檔每一條測試的 docstring 都標了它在 `origin/main`（`9cbf0377`，修復前）上是紅是綠：
+本檔每一條測試的 docstring 都標了它在 `origin/main`（`9cbf0377`，修復前）上是紅是綠。
+**這句話不是自陳，是被機器守著的** —— 見
+:func:`test_every_test_in_this_file_declares_its_state_on_origin_main`：
+少標一條就轉紅。（它本身**不是**空轉的，內含正對照。）
+
+⚠️ **但那條守衛只驗「有沒有標」，不驗「標得對不對」。**
+「對不對」必須真的把本檔拿到 `origin/main` 上跑一次，那是測試在執行期做不到的事。
+任何人都能自己對帳，兩步（repo 根目錄，`<BASE>` ＝ `9cbf0377`）：
+
+    # 1) 在 base 的原始碼上跑本檔，留下逐條結果
+    mkdir -p /tmp/tierbase && git archive <BASE> | tar -x -C /tmp/tierbase
+    cp tests/test_policy_tier_no_guessing.py /tmp/tierbase/tests/
+    (cd /tmp/tierbase && pytest -v tests/test_policy_tier_no_guessing.py) \
+        2>&1 | grep -E '^tests/[^ ]+::test_[A-Za-z0-9_]+ (PASSED|FAILED)' \
+        | sed 's/ *\[ *[0-9]*%\] *$//' | sort > /tmp/tierbase/measured.txt
+
+    # 2) 把 docstring 的標示與實測逐條比對
+    python3 - tests/test_policy_tier_no_guessing.py /tmp/tierbase/measured.txt <<'EOF'
+    import ast, sys, collections
+    res = {l.split()[0].split('::')[-1]: l.split()[1]
+           for l in open(sys.argv[2], encoding='utf-8') if l.strip()}
+    assert res, "measured.txt 是空的 —— 上一步沒抓到東西，先修那裡"
+    MARK = {"修復前紅": "FAILED", "修復前綠": "PASSED", "機制證據": "PASSED"}
+    bad = []
+    for f in (n for n in ast.parse(open(sys.argv[1], encoding='utf-8').read()).body
+              if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")):
+        d = (ast.get_docstring(f) or "").strip()
+        hit = [v for k, v in MARK.items() if k in (d.splitlines() or [""])[0]]
+        got = res.get(f.name, "<NOT RUN>")
+        if len(hit) != 1 or hit[0] != got:
+            bad.append((f.name, hit, got))
+    print("measured:", dict(collections.Counter(res.values())))
+    print("mismatches:", len(bad))
+    [print("   ", *b) for b in bad]
+    EOF
+
+**最後一次實跑（2026-09-14，`9cbf0377`，本檔共 20 條）**：`FAILED=14, PASSED=6`，`mismatches: 0`。
+⚠️ 第 1 步在**缺 `pandas` / `streamlit` 的精簡環境**下另需該環境慣用的旗標
+（本次用的是 `--noconftest` ＋ `PYTHONPATH` 上的假件）；**假件不進 repo**。
+⚠️ 該次是**單組實測、未經第二組驗證**；數字會隨本檔增刪測試而改變，
+**引用前請自己重跑上面兩步**，不要引用這一行。
+
+分類的意思：
 
 * **「修復前紅」** ＝ 真的在守這次的修復，拿掉修復會轉紅。
 * **「修復前綠（回歸鎖）」** ＝ 現況本來就對，這條只防未來有人改壞。
@@ -474,7 +516,19 @@ def test_load_path_does_not_import_the_name_heuristic() -> None:
 # ══════════════════════════════════════════════════════════════════
 
 def test_v2_read_clears_stale_policy_tier_left_by_v1_or_json_restore(monkeypatch) -> None:
-    """⭐ **本批次新增的防線** —— 它擋的是**本批次自己造出來的**風險，請一起看：
+    """⭐ **修復前紅。** **本批次新增的防線** —— 它擋的是**本批次自己造出來的**風險，請一起看：
+
+    ⚠️ **這一條的「修復前紅」要看清楚是紅在哪裡**（2026-09-14 於 `9cbf0377` 實測）：
+    在 `origin/main` 上它的**直接**死因是 `shared.policy_tier` 這個模組不存在
+    （`ModuleNotFoundError`），**不是**斷言失敗。但它守的那個缺陷**在 `origin/main` 上
+    是真的、而且可以單獨證明** —— 同一段 `_load_all_from_sheet_v2` 流程、同一份輸入，
+    殘留的 `policy_tier` 在兩個 tree 上的下場不同：
+
+        origin/main (9cbf0377) : policy_tier 仍是 'core'   ← 會被寫回客戶 Sheet
+        本分支                  : policy_tier 被清成 ''     ← 以 Sheet 的 satellite 為準
+
+    另見突變 F（拿掉 v2 讀取路徑那一行清除 → 本條在**修復後的 tree 上**轉紅），
+    那才是「這條真的在守東西」的正對照。
 
     `resolve_tier` 讓 `policy_tier` **勝過** `is_core`
     （必要：v1 讀取路徑只寫 `policy_tier`）。
@@ -526,3 +580,70 @@ def test_v2_read_clears_stale_policy_tier_left_by_v1_or_json_restore(monkeypatch
         f"殘留的 policy_tier={_f.get('policy_tier')!r} 蓋掉了 Sheet 上的 satellite")
     assert _captured_v1_tier(monkeypatch, {"portfolio_funds": [_f], "t7_ledgers": {}}) \
         == "satellite", "過期的級別被寫回了客戶的 Sheet"
+
+
+# ══════════════════════════════════════════════════════════════════
+# I. 後設守衛：把本檔開頭那句自陳變成機器檢查
+# ══════════════════════════════════════════════════════════════════
+
+def test_every_test_in_this_file_declares_its_state_on_origin_main() -> None:
+    """**修復前綠（回歸鎖）。** 本檔開頭自陳「每一條測試都標了修復前是紅是綠」——
+    這一條讓那句話**少標一條就轉紅**，而不是靠人記得。
+
+    **為什麼需要它**：本 PR 第一版就是在這裡出錯的 —— 19 條裡有 1 條
+    （:func:`test_v2_read_clears_stale_policy_tier_left_by_v1_or_json_restore`）
+    **沒有標**，而開頭那句寫的是「**每一條**都標了」。
+    人工複讀 18 條沒抓到，commit message 還把它算成「已全數對帳」。
+    **一句沒有機器守著的自陳，遲早會變成假的。**
+
+    **判定規則**：每一條 `test_*` 的 docstring **第一行**必須含**恰好一個**
+    「修復前紅 / 修復前綠 / 機制證據」。只認第一行 —— 內文要怎麼引用都不影響。
+
+    ⚠️ **本條的射程只到「有沒有標」，不到「標得對不對」** ——
+    要驗「對不對」必須把本檔拿到 `origin/main` 的原始碼上實跑一次，
+    那是執行期做不到的事。對帳指令寫在本檔開頭的 module docstring 裡。
+    **不要把本條轉綠讀成「標示都是對的」。**
+    """
+    import ast
+    from pathlib import Path as _Path
+
+    _src = _Path(__file__).read_text(encoding="utf-8")
+    assert _src.strip(), "讀到空檔 —— 這條檢查本身失效了，先修這裡"
+
+    _MARKERS = ("修復前紅", "修復前綠", "機制證據")
+
+    def _labels_of(fn) -> list:
+        """標示只認 docstring 的**第一行** —— 那是本檔每一條實際擺放標示的位置。
+
+        ⚠️ **刻意不是「整段 docstring 裡有沒有出現」**：那樣寫會鬆到抓不到東西 ——
+        本條第一版就是那樣寫的，結果「把第一行的標示刪掉、但內文還提到它」
+        竟然是綠的（實測突變 M1）。**只認第一行，內文要怎麼解釋都不影響判定。**
+        """
+        _doc = (ast.get_docstring(fn) or "").strip()
+        _first = _doc.splitlines()[0] if _doc else ""
+        return [m for m in _MARKERS if m in _first]
+
+    _fns = [n for n in ast.parse(_src).body
+            if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
+    assert _fns, "AST 掃不到任何 test_* —— 這條檢查本身失效了，先修這裡"
+
+    # 正對照：同一段判定邏輯必須真的抓得到「沒標」與「標了兩個」，
+    # 否則它只是一條永遠綠的空轉斷言（本檔開頭：「綠燈但沒有正對照 ＝ 沒有檢查」）。
+    _probe = ast.parse(
+        'def test_no_label():\n    """沒有任何標示。"""\n'
+        'def test_two_labels():\n    """既說修復前紅又說修復前綠。"""\n'
+        'def test_label_buried_in_body():\n'
+        '    """第一行沒有標示。\n\n    內文才提到修復前紅。\n    """\n')
+    _p_none, _p_both, _p_buried = [
+        n for n in _probe.body if isinstance(n, ast.FunctionDef)]
+    assert _labels_of(_p_none) == [], "正對照失效：沒標示的函式竟被判為有標示"
+    assert len(_labels_of(_p_both)) == 2, "正對照失效：標了兩個竟沒被判為歧義"
+    assert _labels_of(_p_buried) == [], (
+        "正對照失效：標示埋在內文、第一行沒有，卻被判為有標示 —— "
+        "這正是本條第一版漏掉的那個形狀（突變 M1）")
+
+    _bad = [(fn.name, _labels_of(fn)) for fn in _fns if len(_labels_of(fn)) != 1]
+    assert not _bad, (
+        "下列測試的 docstring **第一行**沒有**恰好一個**「修復前紅 / 修復前綠 / 機制證據」標示，\n"
+        "本檔開頭那句自陳因此為假。請補上標示（或修掉歧義）：\n  "
+        + "\n  ".join(f"{n}: {labs}" for n, labs in _bad))
