@@ -1,8 +1,18 @@
-"""2026-09-14 合規移除守衛 —— 母法「不產生任何直接買賣建議」的兩個落地點。
+"""2026-09-14 合規移除守衛 —— 母法「不產生任何直接買賣建議」的三個落地點。
 
 ## 這個檔在守什麼（先讀完這段，否則會以為它跟既有守衛重複）
 
-客戶 2026-09-14 **逐案核准**拿掉兩處直接買賣建議，本檔就是那兩處的守衛：
+⚠️ **2026-09-14 第三輪回修就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管）**：
+本檔開頭原寫 ~~「**兩個**落地點」~~／~~「拿掉**兩處**直接買賣建議，本檔就是**那兩處**的守衛」~~
+—— **在 `53b92c4` 新增 C、D 兩個 bullet 的同一次編輯裡就已經失準，卻沒有同步**。
+**實測（本組重量，見下方逐組）：本檔共 A／B／C／D 四組守衛，對應三個實際移除點
+（A ② 依據表、B 說明書、C ① 結論）＋ D 一組預防性守衛**（D 守的那條管道
+**從來沒有上過畫面**，見 D 組前言 —— 它不是「移除」，是「先把門關上」）。
+**舊表述的用意仍然成立**（它要講「本檔是逐案核准那批移除的守衛」），
+**被權衡掉的只有它的計數**：一份主題為「記錄不可說謊」的 PR，自己的第一行不能是假的。
+
+客戶 2026-09-14 **逐案核准**拿掉三處直接買賣建議，本檔就是那三處的守衛
+（＋ 第四組 D 是預防性，不對應任何一次移除）：
 
   · **A 組｜總經綜合結論的「行動句」** —— `ui/views/page_01_macro.py`
     的 ② 依據表。`services/macro/composite_score.py::composite_verdict()`
@@ -49,6 +59,22 @@ L2 日後新增第六句，本檔自動跟著守 —— 手抄的黑名單做不
   - **B2 是字串清單，不是語意檢查。** 有人用**不同措辭**重寫一句買賣建議
     （例如「偏離超過一成時應調整部位」），B2 抓不到。B3 的欄數鎖擋得住
     「把它塞回表格第二欄」這一種形態，擋不住「改寫成一段散文」。
+  - ⛔ **B2 的禁字清單掃不到同一個檔裡「現在就在畫面上」的那幾段行動文字**
+    （2026-09-14 第三輪回修實測補上，**不是推論**）。`ui/tab6_manual.py::
+    render_manual_tab` 底下另有三處行動敘述，**本 PR 前後逐字相同、本批未處理**：
+      · `_chapter("weather")` 那張表 —— 欄名逐字就叫「**行動**」，三列分別寫
+        「增加衛星部位，持有成長型基金」「維持核心配置，輕倉衛星」
+        「啟動防禦，核心配息資產優先」。
+      · `_chapter("macro-score")` 的「景氣位階對應」表 —— 欄名「**建議股債現金**」，
+        四列給出具體百分比（股 35% / 債 45% / 現金 20% …）。
+      · `_chapter("indicator-map")` 的「🎯 投資應用」條列 —— 「提前**減碼**利率敏感資產」
+        「**加碼**利率敏感資產」「防禦類股…優於成長股」。
+    **實測（本組以 `_render_manual().texts()` 實跑）**：上列九個字串
+    **全部 `on_screen=True`**，而 `_forbidden` 八個條目**沒有一個是它們的子字串**
+    ⇒ `caught_by_blacklist=False` ×9。**也就是說：本檔綠燈與「這個檔已經合規」無關。**
+    ⚠️ **那三處不在本輪授權射程內**（客戶 2026-09-14 裁示：v1 舊分頁**只加免責、
+    不改內容**，見 PR 描述的交接段），**本檔因此刻意不把它們加進 `_forbidden`** ——
+    加進去會讓 CI 立刻紅，而該紅燈要求的修法正好是客戶裁示**不要做**的那一種。
   - **A3 比對的是五句逐字字串。** 有人把行動句**改寫**後直接寫進 UI，
     A3 抓不到；A2 只保證 `composite_action` 這條管道是空的。
   - **D 組不判斷 📐 建議資產水位卡本身算不算「直接買賣建議」。** 那張卡的
@@ -606,6 +632,46 @@ def test_the_no_phase_score_path_makes_no_state_claim_at_all():
     _claims = list(_CONCLUSION_STATE_BY_LIGHT.values()) + [_CONCLUSION_STATE_OVERRIDE]
     _hit = [_c for _c in _claims if _c in _blob]
     assert not _hit, f"資料不足卻下了狀態判定：{_hit}"
+
+
+def test_an_empty_state_string_also_falls_back_not_just_none():
+    """`_conclusion_state()` 的 fallback 條件必須是 `not _state`，不是 `_state is None`。
+
+    **這條守的是一個目前不可達的分支，刻意如此。** `dict.get()` 只在**鍵不存在**
+    時回 `None`；上游若新增一個**映射到空字串**的燈號，回來的是 `""` ——
+    `is None` 為假、fallback 不觸發，`_render_layer_conclusion` 會印出
+    `**<燈號> **`：一個燈號後面什麼都沒說。**那比誠實說「這盞燈沒有對應的狀態說明」
+    更糟，因為它看起來像正常渲染**（§1：靜默的空白是掩蓋，不是解決）。
+
+    ⚠️ **現行 `_CONCLUSION_STATE_BY_LIGHT` 三個值皆非空，所以線上走不到這裡** ——
+    本條是預防性收緊，不是在修一個看得見的 bug。
+
+    突變實測（2026-09-14 第三輪回修，本組實跑）：
+      · 把 `if not _state:` 改回 `if _state is None:` → **本條轉紅**
+        （`_conclusion_state` 回 `''`）。
+      · 把它改成 `if True:`（fallback 恆觸發）→ **本條的負對照轉紅**
+        （已知燈號也被吃掉）。
+    """
+    import ui.views.page_01_macro as _P
+
+    _orig = dict(_P._CONCLUSION_STATE_BY_LIGHT)
+    try:
+        # 模擬「上游新增一盞燈、本層還沒補字」——值是空字串，不是缺鍵。
+        _P._CONCLUSION_STATE_BY_LIGHT["🟣"] = ""
+        _got = _P._conclusion_state({"light": "🟣", "override": False})
+        # 負對照：已知燈號**不得**被 fallback 吃掉（擋「乾脆恆回 fallback」的假修法）。
+        _known = _P._conclusion_state({"light": "🟢", "override": False})
+    finally:
+        _P._CONCLUSION_STATE_BY_LIGHT.clear()
+        _P._CONCLUSION_STATE_BY_LIGHT.update(_orig)
+
+    assert _got, (
+        "映射到空字串時回了空字串 —— 畫面會只剩一個燈號、什麼都沒說。"
+        "fallback 條件應為 `not _state`，不是 `_state is None`。")
+    assert _got.startswith("⬜"), f"沒有走 fallback，實際回傳 {_got!r}"
+    assert _known == _orig["🟢"], (
+        f"負對照失敗：已知燈號 🟢 被 fallback 吃掉了（回 {_known!r}）—— "
+        "fallback 不得無條件觸發。")
 
 
 def test_the_client_approved_wording_is_rendered_verbatim():

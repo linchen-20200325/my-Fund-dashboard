@@ -699,7 +699,15 @@ def _conclusion_state(payload: dict) -> str:
     if payload.get("override"):
         return _CONCLUSION_STATE_OVERRIDE
     _state = _CONCLUSION_STATE_BY_LIGHT.get(str(payload.get("light") or ""))
-    if _state is None:
+    # ⚠️ 這裡問的是 `not _state`，**不是** `_state is None`（2026-09-14 第三輪回修）：
+    #    `.get()` 只在**鍵不存在**時回 `None`；上游若新增一個**映射到空字串**的燈號，
+    #    回來的是 `""`，`is None` 為假、fallback 不會觸發，畫面會印出
+    #    「燈號 ＋ 什麼都沒有」—— 那比誠實說「這盞燈沒有對應的狀態說明」更糟，
+    #    因為它**看起來像正常渲染**（§1：靜默的空白就是掩蓋，不是解決）。
+    #    ⚠️ 現行 dict 三個值皆非空 ⇒ 這條路**目前不可達**，這是預防性收緊。
+    #    守衛：`tests/test_no_direct_trade_advice_20260914.py::
+    #          test_an_empty_state_string_also_falls_back_not_just_none`
+    if not _state:
         # L2 新增了燈號而本層沒跟上 —— **不編一句狀態**（§1 Fail Loud），誠實說不知道。
         return "⬜ 這盞燈沒有對應的狀態說明（本層未跟上上游新增的燈號）"
     return _state
