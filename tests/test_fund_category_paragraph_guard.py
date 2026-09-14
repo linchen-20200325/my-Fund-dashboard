@@ -34,11 +34,47 @@ _SNAP = _ROOT / "snap.json"
 # test_produced_category_satisfies_pick_helper_contract 會直接紅。
 _LABEL_MAX = 15
 
+# 比 15 長、但確實是標籤的真實類別名 —— **門檻低側的唯一保護**。
+# ⚠️ 語料只有 32 個名字,窄到撐不起「低側也有餘裕」;稽核用 repo 內既有詞彙就構造出
+#    36 / 39 字的合理類別名(距門檻只差 1)。所以低側**不靠餘裕,靠這個清單**。
+# ⚠️ 新增更長的合法類別名時,**必須加進這裡** —— 只重跑測試沒有用,
+#    清單沒動,test_threshold_window_* 與 test_known_long_but_legitimate_labels_survive
+#    都看不到新標籤,照樣全綠。
+_LEGIT_LONG_LABELS = [
+    "已開發市場非投資等級公司債券基金",              # 16
+    "已開發市場(不含美國)非投資等級公司債券基金",      # 22
+    "新興市場當地貨幣計價政府公債證券投資信託基金",     # 22
+    "全球區塊鏈及金融科技相關產業股票證券投資信託基金",  # 24
+]
+
+# 公開說明書段落的**自稱語**。用它挑樣本,是為了得到一組**不隨門檻移動**的毒樣本。
+_PROSPECTUS_MARKER = "本基金"
+
 
 def _snapshot_categories() -> list[tuple[str, str]]:
     """snap.json → [(fund_code, category)]。唯讀,不打網路。"""
     data = json.loads(_SNAP.read_text(encoding="utf-8"))
     return [(c, (r.get("category") or "")) for c, r in data["funds"].items()]
+
+
+def _prospectus_categories() -> list[tuple[str, str]]:
+    """語料中的「說明書段落」—— ⭐ **用內容挑,不用長度挑**。
+
+    這是本檔唯一一組**不隨 `CATEGORY_PARAGRAPH_MIN_LEN` 移動**的樣本,存在理由見
+    `test_threshold_window_is_pinned_by_corpus_not_by_itself` 的 docstring。
+    """
+    return [(c, t) for c, t in _snapshot_categories() if _PROSPECTUS_MARKER in t]
+
+
+def _probe_of_length(n: int) -> str:
+    """長度**恰為 n**、且保證含桶關鍵字(「股票」)的合成探針。
+
+    填充字「文」刻意不屬於任何 ASSET_BUCKETS 關鍵字,避免探針意外命中別的桶;
+    這一點由 test_boundary_length_equal_to_threshold_is_refused 的反空轉斷言現場驗。
+    """
+    stem = "股票"
+    assert n >= len(stem), f"探針長度 {n} 小於字根 {len(stem)}"
+    return stem + "文" * (n - len(stem))
 
 
 # ── 反空轉:語料本身必須有料,否則下面每一條都會「因為沒東西可驗」而變成綠燈 ──
@@ -61,6 +97,73 @@ def test_snapshot_corpus_contains_clean_short_labels():
     """也要有乾淨標籤 —— 否則『不得誤殺』的正對照驗不到任何東西。"""
     shorts = [(c, t) for c, t in _snapshot_categories() if 0 < len(t) <= _LABEL_MAX]
     assert shorts, "語料裡沒有乾淨短標籤,誤殺正對照將空轉"
+
+
+# ── ⭐ B2:不隨門檻移動的斷言(本檔其餘多數斷言都會跟著門檻一起移動)──
+
+def test_prospectus_selector_is_content_based_and_finds_the_poison():
+    """反空轉:內容選擇器必須真的選到段落、且不誤中合法標籤。"""
+    sel = _prospectus_categories()
+    assert sel, f"內容選擇器 {_PROSPECTUS_MARKER!r} 選不到任何樣本 —— 下面兩條會空轉"
+    assert min(len(t) for _, t in sel) > _LABEL_MAX, "選到的不是段落,是短標籤"
+    for lab in _LEGIT_LONG_LABELS:
+        assert _PROSPECTUS_MARKER not in lab, f"選擇器誤中合法標籤:{lab}"
+
+
+def test_every_prospectus_paragraph_is_refused():
+    """⭐ 真正的安全性質:**每一段**說明書描述都必須被拒絕分類。
+
+    樣本由 `_prospectus_categories()` 以**內容**選出,與門檻完全脫鉤 ——
+    門檻一旦調高到某段落長度之上,那一段就會漏回關鍵字比對,本條立刻紅。
+    """
+    for code, cat in _prospectus_categories():
+        got = asset_bucket(cat)
+        assert got == (None, None), (
+            f"{code}({len(cat)} 字)的說明書段落被分到「{got[0]}」桶 —— "
+            f"門檻 CATEGORY_PARAGRAPH_MIN_LEN={CATEGORY_PARAGRAPH_MIN_LEN} 太高,擋不住它")
+
+
+def test_threshold_window_is_pinned_by_corpus_not_by_itself():
+    """⭐ 門檻必須落在 (最長合法標籤, 最短毒段落] 這個窗內。
+
+    **這條為什麼非有不可**(2026-09-14 第二輪回修;稽核實測):
+    本檔多數斷言用 `len(t) >= CATEGORY_PARAGRAPH_MIN_LEN` **挑樣本**,而實作
+    `asset_bucket` 的分支條件是**同一個常數**。⇒ **門檻一調高,樣本自己縮小,
+    球門跟著球一起移動。** 實測後果:把 40 改成 300,守衛仍 **11 passed**,
+    但 ACCP138(266)與 ACTI71(268)**實際漏過去**被分桶。
+    當時真正釘住門檻的只有 `[25, 383]`(383 才踩到那條**用內容挑樣本**的台股斷言),
+    而安全區間其實是 `[25, 266]` ⇒ **267~383 共 117 個值是「全綠但有毒」。**
+
+    本條與 `test_every_prospectus_paragraph_is_refused` 都**不碰**那個常數來挑樣本,
+    所以門檻往上調會**立刻**紅。
+    """
+    longest_legit = max(len(x) for x in _LEGIT_LONG_LABELS)
+    poisons = _prospectus_categories()
+    assert poisons, "沒有毒樣本,本條會空轉"
+    shortest_poison = min(len(t) for _, t in poisons)
+    assert longest_legit < shortest_poison, (
+        f"語料本身已經無法用長度分開:最長合法 {longest_legit} >= 最短毒 {shortest_poison}")
+    assert longest_legit < CATEGORY_PARAGRAPH_MIN_LEN <= shortest_poison, (
+        f"門檻 {CATEGORY_PARAGRAPH_MIN_LEN} 落在安全窗 "
+        f"({longest_legit}, {shortest_poison}] 之外:"
+        f"太低會誤殺合法標籤,太高會放毒段落過去")
+
+
+def test_boundary_length_equal_to_threshold_is_refused():
+    """邊界語意:長度**恰等於**門檻即視為段落(`>=`,不是 `>`)。
+
+    專殺 off-by-one。語料裡**沒有任何一筆長度剛好等於門檻**,所以少了這條,
+    把實作的 `>=` 改成 `>` 會完全測不出來(稽核實測:該突變存活,11 passed)。
+    """
+    n = CATEGORY_PARAGRAPH_MIN_LEN
+    below, at = _probe_of_length(n - 1), _probe_of_length(n)
+    assert (len(below), len(at)) == (n - 1, n), "探針長度不對,本條會驗錯東西"
+    # 反空轉:探針本身必須是「分得到桶」的,否則下面那條 None 沒有意義
+    assert asset_bucket(below)[0] == "股票", (
+        f"門檻以下的探針分不到桶(得 {asset_bucket(below)[0]})—— 本條會空轉")
+    assert asset_bucket(at) == (None, None), (
+        f"長度恰等於門檻({n})必須被視為段落;現在回 {asset_bucket(at)[0]} "
+        f"⇒ 實作的比較可能被改成了 `>`")
 
 
 # ── 防線 2:段落形狀 → 誠實 None ──
@@ -118,12 +221,24 @@ def test_guard_does_not_fire_below_threshold():
     finally:
         _rf.CATEGORY_PARAGRAPH_MIN_LEN = _saved
 
-    frag = [t for _, t in _snapshot_categories()
-            if 0 < len(t) <= _LABEL_MAX and asset_bucket(t)[0] is None]
-    if frag:                       # 目前有一筆(ACDD19);沒有也不算錯
-        for t in frag:
-            assert len(t) < CATEGORY_PARAGRAPH_MIN_LEN, (
-                f"{t!r} 回 None 應該是關鍵字未命中,不該是段落守衛所致")
+    # ACDD19 型的「短片段」:它回 None 必須是**關鍵字未命中**,不是段落守衛所致。
+    # ⚠️ 2026-09-14 第二輪回修:舊版寫成
+    #       frag = [... if 0 < len(t) <= _LABEL_MAX ...]
+    #       assert len(t) < CATEGORY_PARAGRAPH_MIN_LEN
+    #    ——`_LABEL_MAX` 是硬寫的 15、門檻是 40 ⇒ `15 < 40` **在出貨值下恆真**,
+    #    整段**驗不到任何東西**(稽核實測:常數要降到 ≤12 才會動)。
+    #    現改為真對照:**把守衛整個關掉,它仍須回 None**。
+    frag = [(c, t) for c, t in _snapshot_categories()
+            if 0 < len(t) < CATEGORY_PARAGRAPH_MIN_LEN and asset_bucket(t)[0] is None]
+    assert frag, "語料裡沒有『短且關鍵字未命中』的樣本 —— 本段具名對照失效(ACDD19 不見了?)"
+    for code, t in frag:
+        _rf.CATEGORY_PARAGRAPH_MIN_LEN = 10 ** 9      # 等效於關掉守衛
+        try:
+            assert _rf.asset_bucket(t)[0] is None, (
+                f"{code}: 關掉守衛後反而分得到桶 ⇒ 它的 None 是守衛造成的,"
+                f"不是關鍵字未命中")
+        finally:
+            _rf.CATEGORY_PARAGRAPH_MIN_LEN = _saved
 
 
 def test_known_long_but_legitimate_labels_survive():
@@ -131,15 +246,13 @@ def test_known_long_but_legitimate_labels_survive():
 
     量測日 2026-09-14:語料中最長的合法標籤 24 字;最短的毒段落 266 字。
     門檻 40 落在這個空帶內 —— 這也是本防線**不沿用** `_pick_fund_category` 的 15 的原因
-    (15 會誤殺下列 4 個)。
+    (15 會誤殺 `_LEGIT_LONG_LABELS` 那 4 個)。
+
+    ⚠️ 清單已於 2026-09-14 第二輪回修上移為模組常數 `_LEGIT_LONG_LABELS`,
+    因為 `test_threshold_window_is_pinned_by_corpus_not_by_itself` 也要用它定低側邊界。
+    **新增合法長標籤請加在那裡**;不加就等於沒測到。
     """
-    legit = [
-        "已開發市場非投資等級公司債券基金",              # 16
-        "已開發市場(不含美國)非投資等級公司債券基金",      # 22
-        "新興市場當地貨幣計價政府公債證券投資信託基金",     # 22
-        "全球區塊鏈及金融科技相關產業股票證券投資信託基金",  # 24
-    ]
-    for cat in legit:
+    for cat in _LEGIT_LONG_LABELS:
         assert len(cat) > _LABEL_MAX, f"{cat} 沒有比 {_LABEL_MAX} 長,本條失去對抗性"
         assert asset_bucket(cat)[0] is not None, f"合法長標籤被誤殺:{cat}"
 
@@ -200,8 +313,19 @@ def test_produced_category_satisfies_pick_helper_contract(monkeypatch):
     assert asset_bucket(cat)[0] == "股票", "清洗後應能正確分到股票桶"
 
 
-def test_produced_category_is_not_clobbered_by_later_write(monkeypatch):
-    """waterfall 已經拿到乾淨類別時,後面那一行不得把它蓋回長描述。"""
+def test_later_write_never_puts_a_paragraph_into_category(monkeypatch):
+    """後面那一行寫進 `category` 的**不得是長描述**(waterfall 已有乾淨值時也一樣)。
+
+    ⚠️ **2026-09-14 第二輪回修改名 + 射程寫明**(原名
+    `test_produced_category_is_not_clobbered_by_later_write`)。
+    舊名宣稱的比它驗的多:聽起來像「waterfall 的值會被保護」,**但並沒有**。
+    實測:waterfall 給「平衡型」、頁面「基金類型」給「股票型」→ head 最終寫成
+    **「股票型」**,waterfall 的值**確實被蓋掉**。
+    那一行是**無條件覆寫**(`result["category"] = _pick_fund_category(rows_map)`),
+    本批**沒有**改動它 —— 那是既有行為、**非本 PR 引入**,也不在本批射程內。
+    **本條只保證一件事:蓋上去的值是標籤形狀,不是段落。**
+    留舊名會讓後人以為「無條件覆寫已經被防住了」,故改名。
+    """
     poison = _poison_text()
     res = _run_fetch(monkeypatch, poison, "股票型",
                      {"fund_name": "測試基金A", "nav_latest": 10.0, "category": "股票型"})
@@ -211,11 +335,22 @@ def test_produced_category_is_not_clobbered_by_later_write(monkeypatch):
 
 
 def test_meta_block_survives_no_silent_nameerror(monkeypatch):
-    """`_pick_fund_category` 是底線名、不在 sources.__all__ 內 —— `import *` 帶不進來。
+    """`_pick_fund_category` 定義在 `sources.py`,靠 **`sources.__all__`** 被 `import *` 帶進來。
 
-    若忘了顯式 import,該行會拋 NameError,而外層 `except Exception as e: print(...)`
-    會把它**完整吞掉**,結果是 category 之後的整段 meta(fund_type / investment_target /
-    mgmt_fee / TER…)靜默消失。本條就是釘住那個失效模式。
+    ⚠️ **2026-09-14 第二輪回修:本 docstring 原文兩句都是假的**(有意識的更正,不是漏刪)。
+    原文寫「它**不在** `sources.__all__` 內」「`import *` 帶不進來」「若忘了**顯式 import**
+    就會拋 NameError」—— 實測 head:它**就在** `sources.__all__` 裡,而且全檔**沒有**
+    任何顯式 import。那是本 PR **第一版**(顯式 import 方案)的機制;`6df1951` 已改走
+    `__all__`,同一批把該名字加進 `sources.__all__` 並**刪掉**那行顯式 import,
+    卻**只改了 `fund_orchestration.py` 的註解,漏掉這裡**。
+    ⛔ 原文更糟的一點:它會把下一個人推向 PR body 自己明文禁止的動作
+    (「**不得改用顯式 import 繞過**」)。
+
+    **現行機制**:底線名不被 `from ... import *` 預設帶入,所以它**必須列在
+    `sources.__all__`**(v19.248 R17 守衛 `tests/test_sources_star_export.py` 強制此約定)。
+    一旦從 `__all__` 拿掉,該行就拋 `NameError`,而外層 `except Exception as e: print(...)`
+    會把它**完整吞掉** —— 結果是 category 之後的整段 meta(fund_type / investment_target /
+    mgmt_fee / TER…)**靜默消失**。本條釘住的就是那個失效模式。
     """
     res = _run_fetch(monkeypatch, _poison_text(), "股票型", {})
     assert res.get("fund_type") == "股票型", (
