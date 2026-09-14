@@ -1027,8 +1027,12 @@ C 組自陳「算出差距等於多少錢屬客觀描述（允許）；指名從
 > **這一節推翻了 A 組 §5 G-2 的推薦方案，也推翻了本檔前一版對客戶的建議。**
 > **本組自己跑的**（不打任何 API，只讀 repo 內的 `snap.json` 與三個原始碼常數）。
 
+⚠️ **本節初稿把那支函式寫成 `_peer_quartiles` —— 那個符號不存在，是我編的。**
+定稿前逐一驗過本節引用的 13 個符號（全部存在），**這一個是唯一造出來的，已更正為 `peer_quartile_labels`**。
+**記在這裡，因為本 PR 整份都在指控「沒查證就寫進文件」，我自己犯了一次。**
+
 **方法**：從 `shared/regime_fit.py` 匯入真實的 `ASSET_BUCKETS`，依
-`services/peer_rank.py::_peer_quartiles` 的分組方式（`services/regime_fit.py::asset_bucket(_row_category(...))`）
+`services/peer_rank.py::peer_quartile_labels` 的分組方式（`services/regime_fit.py::asset_bucket(_row_category(...))`）
 把 `snap.json` 的八檔分桶，再套 `PEER_QUARTILE_MIN_N = 4`。
 
 | 桶 | 檔數 | 排得出四分位？ | 成員 |
