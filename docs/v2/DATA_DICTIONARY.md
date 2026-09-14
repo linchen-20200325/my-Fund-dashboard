@@ -676,10 +676,22 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 > ```
 > git grep -niE "本益比|forward_pe|pe_ttm|per_ttm|trailing_pe" 9cbf0377 -- 'shared/**' 'ui/**'
 > ```
-> → `ui/**` **0 命中**；`shared/**` **1 命中，而且它是活的**：
+> → `ui/**` **0 命中**；`shared/**` **1 命中**：
 > `shared/macro_buckets.py` 的 `DangerSpec("forward_pe", "Forward P/E (S&P 500)", …, yellow=19.5, red=22.5)`
 > （`source="DESIGN:FactSet/Yardeni 25Y 統計 PE_MEAN=16.5 σ=3.0"`，與 §3.2 表中
 > 「Forward P/E μ=16.5, σ=3.0」同源）。
+>
+> ⚠️ **「它是不是活的」—— 據實分三層講，不要含混成一個字**（本輪實測；
+> 初稿在這裡寫過「**而且它是活的**」，**那是本組自己的過度宣稱，已撤下**）：
+> 1. ✅ **該筆定義存在且未被註解／未被劃掉** —— 它是 `BUCKET_DANGER_SPECS` 這個 list 的一個成員。
+> 2. ✅ **它所屬的表確實被 production 消費** —— `BUCKET_DANGER_SPECS` 推導出
+>    `SPECS_BY_KEY`，而後者被 `ui/helpers/chart/danger.py`、`ui/helpers/macro/beginner_view.py`、
+>    `ui/tab1_macro.py` **真 import**（非註解）。
+> 3. ⛔ **但「`forward_pe` 這一列有沒有真的被讀到」本組沒有驗，也不宣稱** ——
+>    實測字面 `forward_pe` 在全 repo `*.py` 只有 **2 處**：這筆定義本身，
+>    以及 `external_market_repository.py` 的那行退役註解。**沒有任何一處以字面 key 查它**；
+>    查表走的是 `SPECS_BY_KEY.get(key)` 這種**執行期動態 key**，**grep 結構上看不到**。
+> ⇒ **可說的是「這筆定義在一張活的表裡」，不能說「這筆定義是活的」。** 兩者差一層。
 >
 > ⚠️ **2026-09-14 就地補（由獨立稽核抓出）**：本節原本**只跑了量測 1、卻沒有寫出它的 scope**，
 > 於是一句「在基金儀表板側無實作」讀起來像掃了全 repo。
@@ -1158,19 +1170,23 @@ FIFO 會讓你在早期賣出時看到比較大的已實現獲利，但留下成
 
 **本輪把定義寫死成一支可複跑的腳本**（下方 7.5.4 逐字附上）。該定義下的實測結果：
 
-> **總計 `74` 個 unique path-like token —— `61` 個直接存在，`13` 個不存在。**
+> **總計 `77` 個 unique path-like token —— `63` 個直接存在，`14` 個不存在。**
 > **量測日 2026-09-14；量測對象是本文件的最終定稿；存在性判準 rev ＝ 本 PR head。**
 >
 > ⚠️ **這三個數字是「收斂」出來的，不是量一次就寫下的**：本輪每改一次文字就重量一次，
 > 直到**宣告值 ＝ 實測值**才定稿（實際跑了 **3 輪** —— 每一輪都因為新寫的句子裡又多了路徑而變動）。
 > **這是 7.5.3 那條教訓的可執行版本**：計數若不做這一步，**寫下它的那個動作本身就會讓它失真**。
 
-那 `13` 個逐一判讀後**全部成立**：
+那 `14` 個逐一判讀後**全部成立**：
 
-- **8 個是「只寫檔名」的簡寫**，各自唯一解析到一個真實檔案：
+- **9 個是「只寫檔名」的簡寫**，各自唯一解析到一個真實檔案（**逐一驗過唯一性**）：
   `fred_indicators.parquet`→`data_cache/`、`metadata.json`→`data_cache/`、
   `twii_history.parquet`→`data_cache/`、`sources.py`／`nav_metrics.py`→`repositories/fund/`、
+  `external_market_repository.py`→`repositories/`、
   `peer_rank.py`／`fund_total_return.py`／`fund_invest_calc.py`→`services/`。
+  ⚠️ **唯一性是驗過的，不是假設的** —— 負對照：同樣的解析法對套件初始化檔
+  （每個 package 目錄下那個 dunder-init 檔，此處刻意不以反引號寫出檔名，理由見下方自我污染註）
+  會回 **25** 個命中，所以這個檢查分得出「唯一」與「撞名」。
 - **3 個是「刻意引用一個不存在的東西」**，且本文件正是在陳述它不存在：
   `src/`（階段 1 禁止建立）、`v2_migrations/`（同上）、`ms1.json`（CBC 取數已被刪除）。
 - **1 個是本節自己引用的負向對照** `repositories/DOES_NOT_EXIST.py` —— 它**本來就該不存在**，
