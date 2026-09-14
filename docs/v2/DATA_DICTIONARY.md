@@ -25,6 +25,58 @@
 | `v2_holdings` 的 `asset_class` 完整列舉、ETF 專屬欄位 | ⛔ **不決定** → 見 §4.7 跨儀表板待協調項 |
 | 股票／ETF 指標（本益比 TTM 等） | ⛔ 不盤點。**例外**：若基金側自己也在用，則以基金側實際用法為準（實測結果見 §3.1.3） |
 
+### 0.1 「禁用語」對本文件的射程界定（2026-09-14 總管裁決）
+
+v2 母法 §6.2.1 列了**客戶逐字定死的六個禁用語**：
+**建議買進、立即出清、應該加碼、推薦、必漲、目標價**。
+
+**本文件的實測（量測日 2026-09-14，`str.count` 全文逐一數，含正／負對照）**：
+
+| 禁用語 | 全文命中 | 其中落在 §4.6（**唯一要顯示給使用者看的文案草稿**） |
+|---|---|---|
+| 建議買進 | 0 | 0 |
+| 立即出清 | 0 | 0 |
+| 應該加碼 | 0 | 0 |
+| **推薦** | **5** | **0** |
+| 必漲 | 0 | 0 |
+| 目標價 | 0 | 0 |
+
+**那 5 處「推薦」逐一判讀，全部是治理用語，沒有一處是對使用者講的投資建議**：
+「本文件給推薦但不單方決定」（§4.2）／「**總管推薦**：物化 `v2_holdings`」（§4.2）／
+「**總管推薦方案**（依 `CLAUDE.md §-1.5.1b` 裁決二…）」（§6）／
+「請示必須附推薦，不得只丟選項」（§6）／「本推薦未查證 FRED…」（§6）。
+
+**⭐ 總管裁決（2026-09-14）——「禁用語」的射程是「面向使用者的輸出」，不含內部治理文件。**
+
+- **理由 1（不是新發明，是母法自己已經這樣做的）**：母法 §6.3.1 用來量測 §6.2.2 的掃描器，
+  本身就是 **AST 掃描、且明文區分「使用者看得到的字串」vs「註解／docstring」**，
+  其三顆自測探針是 `planted_user_string → 必須 HIT`、`comment_only → 必須 MISS`、
+  `docstring_only → 必須 MISS`。**「使用者可見」這個限定詞是母法自己下的。**
+- **理由 2**：「**總管推薦方案**」是 `CLAUDE.md §-1.5.1b 裁決二` **強制要求**的治理用語 ——
+  請示**必須**附推薦、**不得**只丟選項。若禁用語掃到治理文件，
+  **母法會與 `CLAUDE.md` 直接互相違反**：一邊強制要寫，一邊禁止出現。
+- **理由 3**：這六個詞禁的是**促使使用者做出買賣動作**（母法 §6.1 G1~G3：只給偏離提示、
+  客觀對照、情境試算）。「總管推薦把 `v2_holdings` 物化」**不會讓任何人去買一檔基金**。
+
+⛔ **對階段 2 的硬性要求（寫在這裡，免得守衛一上線就誤報）**：
+**若階段 2 要建禁用語的機械守衛，其掃描對象必須限定在「面向使用者的輸出」**
+（production `.py` 的 user-facing 字串、UI 文案、AI prompt 產出），
+**⛔ 不得掃治理文件**（`CLAUDE.md`／`EXCEPTIONS.md`／`docs/v2/*.md`／PR 描述／commit message）。
+⚠️ 母法 §6.2.2 已實測「六個詞在 production `.py` 的使用者可見字串命中 **3 處**，
+**3/3 全是誤報**」（兩處是否定句「不推薦」「不會被推薦」，一處是匯入方式的操作提示）——
+**誤報率已知不是 0，守衛上線時必須同時帶豁免條款**，否則它會逼人把誠實的否定句刪掉。
+
+> ⚠️ **本小節引用的母法條文位於 `docs/v2/CONSTITUTION.md`，該檔在量測日
+> 於分支 `origin/docs/v2-constitution-governance` 上，尚未合併進 `origin/main`**
+> **實測（repo 根目錄，2026-09-14 實跑）**：
+> `git ls-tree -r --name-only 9cbf0377 | grep 'docs/v2'` → **0 行（exit 1）** ——
+> base 上**整個 `docs/v2/` 目錄都還不存在**（本文件是它的第一個檔）。
+> **正對照**：同一條指令把 pattern 換成 `'^docs/'` 回 **17 行**，證明它不是恆回 0。
+> 本文件**唯讀引用**該分支內容，**未動它一個字**（它是另一組的檔案邊界）。
+> ⚠️ **若該檔在合併前被改寫，本小節的引用需重驗。**
+
+---
+
 > 📌 **一則過程揭露（`CLAUDE.md §-2` 規則 6）**：本任務的**第一版派工單**要求一併盤點姊妹 repo
 > `my-stock-dashboard`，該指示**事後被總管撤回**（客戶明示本 session 只負責基金儀表板）。
 > 撤回前姊妹 repo 已被 clone 至 `/home/user/linchen-20200325/my-stock-dashboard`，
@@ -54,7 +106,31 @@
 | 1 | 解碼器回報的 `num_rows` vs `data_cache/metadata.json` 宣告的 `row_count` | ✅ 四檔全部一致 |
 | 2 | 解碼出的 `max(date)` vs `metadata.json` 的 `last_updated` | ✅ 一致（vix/spx/twii = 2026-09-11；fred = 2026-09-10） |
 | 3 | **外部世界事實**：VIX 歷史最高收盤 | ✅ 解碼得 **82.69 於 2020-03-16** —— 與真實 COVID 紀錄相符 |
-| 4 | **holiday 形狀**：TWII 的長缺口是否落在農曆年 | ✅ 最長 5 個缺口為 2023-01-17→01-30(13d)、2012-01-18→01-30(12d)、2013-02-06→02-18(12d)、2016-02-03→02-15(12d)、2019-01-30→02-11(12d) —— **全部是農曆春節** |
+| 4 | **holiday 形狀**：TWII 的長缺口是否落在農曆年 | ✅ **`≥ 12` 天的缺口共 9 個**（1 個 13d ＋ **8 個並列 12d**），**9 個全部落在農曆春節**（逐一列於下方） |
+
+**驗證 4 的完整清單（2026-09-14 實測，`twii_history.parquet` 全 3726 列日期序列）**：
+
+| # | 缺口 | 天數 | 落點 |
+|---|---|---|---|
+| 1 | 2023-01-17 → 2023-01-30 | **13d** | 農曆春節 |
+| 2 | 2012-01-18 → 2012-01-30 | 12d | 農曆春節 |
+| 3 | 2013-02-06 → 2013-02-18 | 12d | 農曆春節 |
+| 4 | 2016-02-03 → 2016-02-15 | 12d | 農曆春節 |
+| 5 | 2019-01-30 → 2019-02-11 | 12d | 農曆春節 |
+| 6 | 2021-02-05 → 2021-02-17 | 12d | 農曆春節 |
+| 7 | 2022-01-26 → 2022-02-07 | 12d | 農曆春節 |
+| 8 | 2025-01-22 → 2025-02-03 | 12d | 農曆春節 |
+| 9 | 2026-02-11 → 2026-02-23 | 12d | 農曆春節 |
+
+> ⚠️ **2026-09-14 就地更正：「最長 5 個」這個選法是不可複跑的（由獨立稽核抓出）**
+> （**有意識的更正，不是漏刪**）。原文列的那 5 個缺口**逐一重量後全部真實存在、天數全部正確、
+> 也全部是春節** —— 錯的不是事實，是**「最長 5 個」這個取法本身沒有定義**：
+> **12d 有 8 個並列**，「取前 5 名」必須在 8 個並列者中挑 4 個，而**挑法沒寫**。
+> 換一種 tie-break（例如按年份倒序）就會列出**另外 4 個**，同樣全部正確 ——
+> ⇒ **兩份都對、但互相對不上，讀者無從複驗。**
+> **現改為門檻式敘述（`≥ 12` 天，共 9 個，全部列出）**，沒有 tie-break、可以逐一複跑。
+> 📌 **這條教訓可以推廣**：凡是「最長／最大的前 N 個」，只要**可能並列**，就必須改寫成
+> **門檻 ＋ 全部列出**，否則那個 N 是一個沒有定義的數字。
 
 > ⚠️ **一次真實的假檢查，就地記錄（這比上面的數字更值得讀）**
 > 本文件的**第一版** FRED 涵蓋度檢查，用「4-byte 小端長度前綴 + 字串」去比對 parquet bytes，
@@ -157,7 +233,21 @@ SSOT：`services/nav_history_gs.py::_NAV_HEADERS`（實測 7 欄）
 #### 2.2.4 `snap.json`（v1 本地快照，repo 根目錄）
 
 實測：8 檔基金，`dumped_at = 2026-08-10T18:50:54Z`。
-每檔 7 個 key：`fund_name`／`category`／`inception_date`／`nav_points`／`metrics`(11)／`perf`(8)／`perf_source`。
+每檔 **7 個 key**：`fund_name`／`category`／`inception_date`／`nav_points`／`metrics`／`perf`／`perf_source`。
+`metrics` **8/8 檔皆為 11 個 key**。
+
+> ⚠️ **2026-09-14 就地更正（有意識的更正，不是漏刪；由獨立稽核抓出）**：
+> 本行原寫 ~~`perf`(8)~~ —— **那個 8 只對 8 檔中的 2 檔成立**，且**與本文件 §2.3.3 自己寫的
+> 「`perf` 5/8 無資料」直接矛盾**。**實測（`json.load` 逐檔數 key，量測日 2026-09-14）**：
+>
+> | `perf` key 數 | 檔數 | 代碼 |
+> |---|---|---|
+> | **0**（`perf_source = None`） | 5 | `ACCP138`／`ACDD01`／`ACDD19`／`ACTI71`／`ACTI94` |
+> | **8** | 2 | `JFZN3`／`TLZF9`（`1M`/`3M`/`6M`/`1Y`/`2Y`/`3Y`/`fetched_at`/`source`） |
+> | **7** | 1 | `ALBT8`（同上但**無 `3Y`**） |
+>
+> ⇒ **`perf` 的 key 數不是一個定值，寫成 `(11)` 那種定值標註本身就是錯的表達方式。**
+> `metrics`(11) 與「每檔 7 個 key」**經重量皆正確，未改**。
 
 ### 2.3 歷史缺漏率統計（**實測**）
 
@@ -176,7 +266,7 @@ SSOT：`services/nav_history_gs.py::_NAV_HEADERS`（實測 7 欄）
 
 **判讀（這才是重點，不是三個百分比）**：
 - TWII 缺漏率（6.48%）顯著高於 SPX（3.64%），**差值 ≈ 2.84 個百分點 ≈ 每年 7 個交易日** ——
-  與台灣多出的**農曆春節連假**吻合（§1.2 驗證 4 已逐一列出那 5 個 12–13 天缺口）。
+  與台灣多出的**農曆春節連假**吻合（§1.2 驗證 4 已逐一列出那 9 個 `≥ 12` 天缺口）。
 - ⇒ **這三個數字幾乎全部是「正常休市」，不是「抓取失敗」。**
   ⛔ **不得**把它們當成資料品質指標直接搬進 v2 的告警門檻。
 - ⚠️ **要得到真正的「抓取失敗率」，必須有交易日曆**；而 `CLAUDE.md §4.5` 明載本專案
@@ -291,7 +381,31 @@ SSOT：`services/nav_history_gs.py::_NAV_HEADERS`（實測 7 欄）
 
 #### 2.4.2 冷載入（cache miss）—— 單次 HTTP 的宣告上界
 
-`infra/proxy.py::fetch_url_with_retry` 預設：`timeout=20`、`retries=3`、`backoff_on_429=True`
+**這裡有兩支不同的函式，v1 把它們併成一個引用過，務必分清楚**：
+
+| 函式 | 住哪 | 預設參數（實測簽章） |
+|---|---|---|
+| **`fetch_url`** | **`infra/proxy.py`** | `timeout=20`、`retries=3`、`backoff_on_429=True`、`bypass_backoff=False` |
+| **`fetch_url_with_retry`** | **`fund_fetcher.py`**（**不在 `infra/proxy.py`**） | `timeout=20`、`retries=3`、**`sleep_sec=2`** —— **沒有 `backoff_on_429` 這個參數** |
+
+**`fetch_url_with_retry` 是 MoneyDJ 特化薄殼**：它加上 `Referer` 與 Big5 解碼後，
+轉呼 `infra.proxy.fetch_url(url, headers=..., params=..., timeout=timeout, retries=retries)` ——
+**沒有傳 `backoff_on_429`，因此吃 `fetch_url` 的預設 `True`**。
+其 docstring 自陳 **`sleep_sec` 已不使用**（退避由 infra 內部處理），保留只為 signature 向後相容。
+
+⇒ **429 退避在 NAV 路徑上確實生效**，但**生效的機制是「薄殼吃了下游預設值」，不是薄殼自己有這個參數**。
+
+> ⚠️ **2026-09-14 就地更正（有意識的更正，不是漏刪；由獨立稽核抓出）**：
+> 本段原寫 ~~「`infra/proxy.py::fetch_url_with_retry` 預設：`timeout=20`、`retries=3`、`backoff_on_429=True`」~~
+> —— **一句話裡錯了兩件事**：(1) 該符號**不在** `infra/proxy.py`（`git grep -n "^def fetch_url_with_retry"`
+> 的唯一命中是 `fund_fetcher.py`）；(2) 它的介面**沒有** `backoff_on_429`。
+> **`timeout=20` / `retries=3` 兩個數字碰巧兩支都對** —— 這正是它沒被發現的原因：
+> **數字對了，不代表引用對了。**
+> ⚠️ **這一項承重**：§2.4.2 是整份延遲預算的基礎，而 `nav_metrics.py::fetch_nav`
+> （實測 `from fund_fetcher import ... fetch_url_with_retry ...`）呼叫的是**薄殼那一支**。
+> **延遲上界的結論不變**（薄殼把 `timeout`／`retries` 原樣轉下去），改的是它的出處與介面描述。
+
+**`fetch_url`（真正發 HTTP 的那一支）的行為**：
 - **timeout 實際被拆成 `(connect, read) = (min(5, timeout), timeout)`**
   —— 程式碼自陳理由：proxy 半死時 20s TCP 握手太久，曾是「總經載入卡 10 分鐘」的放大器之一。
 - **429 退避序列**：`_RATE_LIMIT_BACKOFF_SEC = (2.0, 4.0, 8.0)` 秒
@@ -441,7 +555,22 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 ⛔ **實測到的三個 gap（這一節最重要的部分）**：
 
 **(a) `DTB3` 在本 repo 完全不存在。**
-> **量測**：`git grep -n "DTB3" -- '*.py' '*.md'` → **0 命中**（量測日 2026-09-14）。
+> **量測（可複跑；量測日 2026-09-14）**：
+> ```
+> git grep -n "DTB3" 9cbf0377 -- '*.py' '*.md' ':!docs/v2/DATA_DICTIONARY.md'
+> ```
+> → **0 命中**（exit 1）。**正對照**：把 `DTB3` 換成 `DGS3MO`，同一條指令回 **30 命中**
+> —— 證明這條指令不是恆回 0 的假檢查。
+>
+> ⚠️ **2026-09-14 就地更正（有意識的更正，不是漏刪；由獨立稽核抓出）**：
+> 本行原寫 ~~`git grep -n "DTB3" -- '*.py' '*.md'` → **0 命中**~~。
+> **那條指令今天在本分支上會回 10，不是 0** —— 因為 `DTB3` 這個字串**在本文件裡出現了 10 次**
+> （§3.1.1 的客戶原文、規格表、本段、§5 G-8…），而原指令**沒有把本文件排除掉**。
+> ⇒ **讀者照抄複跑，會得到與結論相反的輸出，然後合理懷疑整段更正。**
+> **結論本身不變**（`DTB3` 確實不存在於任何程式碼），修的是**那條指令量錯了範圍**：
+> 現版本**釘死 rev `9cbf0377`（base）** ＋ **明文排除本文件自身**，兩種寫法都能複跑。
+> ⛔ 這是一個「**在文件裡寫一個 token，就會讓量那個 token 的指令失真**」的自我污染陷阱 ——
+> 本文件凡是「某某在 repo 裡 0 命中」的量測，**一律必須排除自身或釘 base rev**。
 > `shared/fred_series.py` 宣告的 3 個月期 series 是 **`DGS3MO`**（3-Month Treasury *Constant Maturity*），
 > **不是** `DTB3`（3-Month Treasury Bill, Secondary Market）。**兩者是不同的 FRED series。**
 ⇒ v2 必須**新增** `FRED_DTB3 = "DTB3"` 至 `shared/fred_series.py`。
@@ -490,8 +619,13 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 - ⛔ **同類中位數：本 repo 無任何實作。**
   > **量測**：`git grep -niE "同類中位|category_median|peer_median|類別中位" -- '*.py'` → **0 命中**。
 
-- ⛔ **`_src_sitca_meta` 只回傳 `fund_name` 與 `nav_latest`**（逐行讀該函式確認），
-  **不回傳任何分類或同類統計**。
+- ⛔ **`_src_sitca_meta` 不回傳任何分類或同類統計**（逐行讀該函式確認）。
+  它實際寫入的 key 是 **`fund_name`／`nav_latest`**，
+  **再加上 provenance 的 `source`（`"SITCA:IN2213.aspx:meta"`）與 `fetched_at`**
+  —— 後兩者只在 `fund_name` 有抓到時才寫入（F-PROV-1 phase 15 v19.101）。
+  > ⚠️ **2026-09-14 就地更正（由獨立稽核抓出）**：原寫 ~~「只回傳 `fund_name` 與 `nav_latest`」~~，
+  > **漏了 provenance 兩欄**。**承重結論（不回傳分類 ⇒ 同類中位數的分組鍵不可能來自 SITCA）完全不受影響**；
+  > 但「**只**回傳 X 與 Y」是一句**封閉全稱句**，而它為假 —— 依 §1.3，本文件不該寫這種句子。
 
 - ⚠️ **現有最接近的東西是 `services/peer_rank.py`，但它不是「公會／晨星標準」**：
   它對**「持倉 ∪ 選股池」這個本地小 universe** 做四分位排名，
@@ -522,8 +656,13 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 
 **基金側實測結果**：
 
-> **量測 1**：`git grep -niE "本益比|forward_pe|pe_ttm|per_ttm|trailing_pe" -- 'services/*.py' 'repositories/*.py' 'repositories/**/*.py'`
-> → 唯一命中是 `repositories/external_market_repository.py` 的一行**退役註解**：
+> **量測 1**（⚠️ **先讀 scope，再讀結論**）：
+> ```
+> git grep -niE "本益比|forward_pe|pe_ttm|per_ttm|trailing_pe" 9cbf0377 \
+>   -- 'services/*.py' 'repositories/*.py' 'repositories/**/*.py'
+> ```
+> **⛔ 這條指令的 scope 只有 `services/` 與 `repositories/`，不含 `shared/`、不含 `ui/`。**
+> 在**該 scope 內**唯一命中是 `repositories/external_market_repository.py` 的一行**退役註解**：
 > 「⚠️ 2026-08-28 退役（**有意識的移除，不是漏刪**）：`fetch_yf_forward_pe` / …」
 > （與 `CLAUDE.md §2.2` 記載的「兩 fn 已整段刪除」一致）。
 >
@@ -531,7 +670,25 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 > 逐行讀其公開 API → `resolve_ticker` 與 `fetch_stock_three_ratios`（**毛利率／營益率／淨利率** QoQ），
 > **不含 EPS、不含本益比**。
 
-⇒ **判定：本益比（TTM）在基金儀表板側無實作、無消費端。**
+> **量測 3（2026-09-14 補，把 scope 補齊）**：同一條 pattern 掃 `shared/**` 與 `ui/**`：
+> ```
+> git grep -niE "本益比|forward_pe|pe_ttm|per_ttm|trailing_pe" 9cbf0377 -- 'shared/**' 'ui/**'
+> ```
+> → `ui/**` **0 命中**；`shared/**` **1 命中，而且它是活的**：
+> `shared/macro_buckets.py` 的 `DangerSpec("forward_pe", "Forward P/E (S&P 500)", …, yellow=19.5, red=22.5)`
+> （`source="DESIGN:FactSet/Yardeni 25Y 統計 PE_MEAN=16.5 σ=3.0"`，與 §3.2 表中
+> 「Forward P/E μ=16.5, σ=3.0」同源）。
+>
+> ⚠️ **2026-09-14 就地補（由獨立稽核抓出）**：本節原本**只跑了量測 1、卻沒有寫出它的 scope**，
+> 於是一句「在基金儀表板側無實作」讀起來像掃了全 repo。
+> **結論的方向不變** —— `forward_pe` 是 **Forward P/E（前瞻，分母用預估 EPS）**，
+> 與客戶指定的**本益比 TTM（近四季 EPS 總和）不是同一個指標**，
+> 且 `shared/macro_buckets.py` 那一條服務的是**總經面板的 S&P 500 估值燈號**，不是個股／基金持股。
+> **但「唯一命中是一行退役註解」這句話，只在原 scope 內為真；補齊 scope 後並不是唯一。**
+> ⛔ **一個沒有寫出 scope 的 grep 結論，讀者無從判斷它涵蓋多少** —— 這是本文件 §1.3 自己的規則。
+
+⇒ **判定：客戶指定的「本益比（TTM）」在基金儀表板側無實作、無消費端**
+（`shared/macro_buckets.py` 的 `forward_pe` 是**前瞻本益比的總經燈號**，不是 TTM，也不在基金／持股路徑上）。
 依 §0 射程，**本文件不為它定義規格** —— 它屬股票／ETF 戰情室。
 
 ⚠️ **但有一個真實的交界，必須具名列出，不得當作不存在**：
@@ -583,7 +740,7 @@ v2 沿用此方向，**不得**存倒數（`CLAUDE.md §4.4` 已列 FX 倒數為
 | **max_drawdown** | 峰谷最大跌幅 | 自算（**吃配息還原序列**） | 日 | 原幣 | wb07 |
 | **1Y 含息報酬** | 四層 fallback（見下） | `services/fund_total_return.py` | 日 | 原幣 | 見下 |
 | **四分位排名** | 同類年化報酬排序 → 四分位 | `services/peer_rank.py` | 日 | 原幣 | 樣本不足則降級 |
-| **吃本金判定** | `real_return_pct = total_return_pct − div_yield_pct`；含息報酬 < 配息率 → 配息來自本金 | `services/fund_service.py::classify_eating_principal` | 日 | 原幣 | — |
+| **吃本金判定** | `real_return_pct = total_return_pct − div_yield_pct`；含息報酬 < 配息率 → 配息來自本金 | **`services/health/dividend.py::classify_eating_principal`**（canonical；`services/fund_service.py` 是 **caller**，lazy import 後呼叫，**不是定義處**）| 日 | 原幣 | — |
 
 **1Y 含息報酬的四層 fallback（`services/fund_total_return.py` 自陳，權威→次選）**：
 1. `perf["1Y"]` —— wb01 真 1Y／本地還原淨值法注入
@@ -868,7 +1025,7 @@ FIFO 會讓你在早期賣出時看到比較大的已實現獲利，但留下成
 | ID | 缺口 | 證據（本輪實測） | 性質 |
 |---|---|---|---|
 | **G-1** | 自算風險指標需 **250** 交易日，但預設取數只給 **30** 筆 | `MIN_OBS_SHARPE_SORTINO=250`；`snap.json` 8/8 檔 `nav_points=30` | 架構（長序列來源） |
-| **G-2** | **同類中位數無實作、無來源、且分組鍵 `category` 已污染** | `同類中位\|category_median\|peer_median` → 0 命中；`_src_sitca_meta` 只回 `fund_name`/`nav_latest`；`snap.json` 5/8 `category` 為說明書段落 | **客戶指定項無法實現** |
+| **G-2** | **同類中位數無實作、無來源、且分組鍵 `category` 已污染** | `同類中位\|category_median\|peer_median` → 0 命中；`_src_sitca_meta` **不回傳任何分類**（只有 `fund_name`/`nav_latest` ＋ provenance 兩欄，見 §3.1.2）；`snap.json` 5/8 `category` 為說明書段落 | **客戶指定項無法實現** |
 | **G-3** | 保單政策表**無 `units`／無 `nav_at_buy`**，無法純自動遷移 | `docs/POLICY_SHEETS_SETUP.md` 9 欄 | 遷移 |
 | **G-4** | v1 `fee` 欄**未宣告幣別** | `LEDGER_COLS` 9 欄無 `fee_ccy` | 資料模型 |
 | **G-5** | 匯率補值**無旗標** | v1 無 `fx_is_imputed` | 違 `CLAUDE.md §1` |
@@ -956,33 +1113,205 @@ FIFO 會讓你在早期賣出時看到比較大的已實現獲利，但留下成
 ### 7.5 本文件自身的路徑引用：已逐一驗證，但**無機器守衛**
 
 本 repo 有一支守衛 `tests/test_constitution_file_refs.py`，會讓「引用了不存在的檔案」在 CI 轉紅燈。
-**但它掃的是一份寫死的清單 —— `CLAUDE.md` 與 `EXCEPTIONS.md` 兩檔而已**（實測其 `_CONST_FILES`）。
-⇒ **本文件不在其射程內，它的路徑引用沒有任何機器在守。**
+**但本文件不在它的射程內** —— 詳見下方「這支守衛實際上是什麼」。
 
-**故本輪以人工 ＋ 腳本逐一驗證**（量測日 2026-09-14）：
-本文件以反引號引用的 path-like token 共 **58** 個 —— **48 個直接存在**；
-另 **10 個**逐一判讀後全部成立：
+#### 7.5.1 這支守衛實際上是什麼（**比原稿寫的更強，這一點對 v2 是好消息**）
 
-- **6 個是「只寫檔名」的簡寫**，各自唯一解析到一個真實檔案：
+它**不只是**一份寫死的清單。實測（rev `9cbf0377`）它有**兩道**互相咬合的機制：
+
+| # | 機制 | 實作（實測符號名） |
+|---|---|---|
+| 1 | **寫死的登記清單** | `CONSTITUTION_FILES`（tuple，實測**只有兩個成員**：`CLAUDE.md`、`EXCEPTIONS.md`） |
+| 2 | **全 repo 標記掃描 ＋ 雙向綁定** | 掃全 repo markdown 找檔頭標記 `<!-- CONSTITUTION-FILE -->`，與 `CONSTITUTION_FILES` **兩份名單必須完全相等**；**帶標記卻沒登記** 紅、**登記了卻沒標記** 也紅 |
+
+> ⚠️ **2026-09-14 就地更正（有意識的更正，不是漏刪；由獨立稽核抓出）**：
+> 原稿寫 ~~「（實測其 `_CONST_FILES`）」~~ —— **`_CONST_FILES` 這個符號全 repo 不存在**。
+> **實測**：`git grep -n "_CONST_FILES" 9cbf0377` → **0 命中**；
+> 在本分支上跑同一條指令，**唯一命中就是原稿那句話自己**。真正的符號是 **`CONSTITUTION_FILES`**。
+> ⛔ **這正是 `CLAUDE.md` 反覆記載的那個失效模式的教科書版本**：
+> **grep 一個不存在的符號名 → 回 0 命中 → 把「查不到」寫成「我實測過」。**
+> **「查錯地方的空輸出」與「真的沒有」長得一模一樣**，而原稿沒有跑正對照去分辨這兩者。
+> **實質結論（那個 tuple 確實只有 `CLAUDE.md` ＋ `EXCEPTIONS.md`）經重量後正確** ——
+> 錯的是「實測」二字所指的**對象**。
+> **本輪的正對照**：`CLAUDE.md` 與 `EXCEPTIONS.md` 檔頭前 20 行各含 **1** 行獨立的
+> `<!-- CONSTITUTION-FILE -->`；本文件 **0** 行 —— 三個數字一起印出來，才分得出「0」是哪一種 0。
+
+⇒ **本文件不在其射程內**（未登記、也未帶標記），**它的路徑引用沒有任何機器在守。**
+
+📌 **但機制 2 給了 v2 一條現成的出路（原稿完全沒提到）**：
+若日後要讓某份 v2 文件受這支守衛保護，**不需要改寫守衛**，只要做**兩件事**：
+**(1)** 在該檔**檔頭前 20 行**加一行獨立的 `<!-- CONSTITUTION-FILE -->`；
+**(2)** 把它登記進 `CONSTITUTION_FILES`，**並同步在 `_MIN_LIVE_TIER1_PER_FILE` 與
+`_MIN_BYTES_PER_FILE` 兩個字典各補一個 key**（實測另有一條 `test_per_file_floor_keys_match_registered_files_exactly`
+要求三者的 key 完全一致，漏補會紅）。
+⚠️ **這兩件事必須在同一個 PR 內做完**：雙向綁定意味著**只做 (1) 會紅、只做 (2) 也會紅**。
+⛔ **本輪刻意沒有做這件事** —— 它要改 `tests/test_constitution_file_refs.py`，
+**在本次的檔案邊界外**（本 PR 只准新增 `docs/v2/DATA_DICTIONARY.md` 一個檔）。**登記 ≠ 動工**（`CLAUDE.md §-1`）。
+
+#### 7.5.2 path-like token 的定義（原稿從未寫明，本輪補上）
+
+⚠️ **原稿寫了「共 58 個」卻沒有定義什麼叫 path-like token，因此那三個數字無法被獨立複跑。**
+獨立稽核實測：只有在「**排除本文件自身路徑**」時才得到 58/48/10，直觀讀法得 59/49/10 ——
+**同一份文件、兩個讀法、兩組數字，而文件沒說它用的是哪一個。**
+
+**本輪把定義寫死成一支可複跑的腳本**（下方 7.5.4 逐字附上）。該定義下的實測結果：
+
+> **總計 `74` 個 unique path-like token —— `61` 個直接存在，`13` 個不存在。**
+> **量測日 2026-09-14；量測對象是本文件的最終定稿；存在性判準 rev ＝ 本 PR head。**
+>
+> ⚠️ **這三個數字是「收斂」出來的，不是量一次就寫下的**：本輪每改一次文字就重量一次，
+> 直到**宣告值 ＝ 實測值**才定稿（實際跑了 **3 輪** —— 每一輪都因為新寫的句子裡又多了路徑而變動）。
+> **這是 7.5.3 那條教訓的可執行版本**：計數若不做這一步，**寫下它的那個動作本身就會讓它失真**。
+
+那 `13` 個逐一判讀後**全部成立**：
+
+- **8 個是「只寫檔名」的簡寫**，各自唯一解析到一個真實檔案：
   `fred_indicators.parquet`→`data_cache/`、`metadata.json`→`data_cache/`、
-  `sources.py`→`repositories/fund/`、`peer_rank.py`／`fund_total_return.py`／`fund_invest_calc.py`→`services/`。
+  `twii_history.parquet`→`data_cache/`、`sources.py`／`nav_metrics.py`→`repositories/fund/`、
+  `peer_rank.py`／`fund_total_return.py`／`fund_invest_calc.py`→`services/`。
 - **3 個是「刻意引用一個不存在的東西」**，且本文件正是在陳述它不存在：
   `src/`（階段 1 禁止建立）、`v2_migrations/`（同上）、`ms1.json`（CBC 取數已被刪除）。
 - **1 個是本節自己引用的負向對照** `repositories/DOES_NOT_EXIST.py` —— 它**本來就該不存在**，
   存在才是出錯。
+- **1 個是「存在，但不在這個 tree 上」**：`docs/v2/CONSTITUTION.md`（§0.1 引用的 v2 母法）——
+  它在分支 `origin/docs/v2-constitution-governance` 上，**尚未合併進 `origin/main`**。
+  ⚠️ **這一類是新出現的，原稿沒有** —— 它提醒一件事：
+  **「檔案不存在」與「檔案不在我量的那個 rev 上」是兩件事**，本表把它們分開列。
 
-> ⚠️ ⭐ **這三個數字改過一次，成因值得記一筆（它是本文件方法論的一個活生生實例）**：
-> 初稿寫的是 **54 / 45 / 9** —— 那是**加進本節 §7.5 之前**量的。
-> **寫下這一節的動作本身，又替文件添了 4 個新的 path token**（其中一個就是上面那個負向對照），
-> 於是那三個數字在**同一次 commit 之內**就過期了。
-> ⇒ 這正是 §1.3 那條規則的形狀：「**一句在寫下當天為真的話，會因為別人後來做的事變成謊**」——
-> 只是這一次**「後來做事的人」就是我自己**。
-> ⇒ **可操作規則**：任何「描述本文件自身」的計數，**必須在文件定稿後重量一次**，
-> 不能沿用寫作途中的量測值。上面的 58 / 48 / 10 是**定稿後重量**的結果。
+> ⚠️ **本節在本輪又踩了一次同一個自我污染陷阱，就地記下來（比修掉它更有用）**：
+> 本輪把計數腳本**逐字附進文件**時，腳本 docstring 裡那個反引號包起來的範例路徑
+> （`<目錄>/<檔名>.py` 形態的假路徑）**被自己的抽取器抓成了一個真實 token**，
+> 於是 MISSING 憑空多一個 —— **一支腳本被貼進它自己要量的文件裡，就會開始量到自己。**
+> ⚠️ **而且它遞迴了一層**：本段第一版在解釋這件事時，**又把那個假路徑用反引號寫了一次**，
+> 於是修掉腳本之後**數字仍然沒降** —— **連「描述這個污染」的句子本身都會造成同一個污染。**
+> ⇒ 故本段刻意**不以反引號書寫任何假路徑**。
+> 修法是把 docstring 裡的範例路徑去掉反引號，並**實跑確認這個改動對輸出零影響**
+> （改動前後對同一份文件都回 `TOTAL=66 EXISTS=56 MISSING=10`）。
+> 📌 **這與 §3.1.1(a) 的 `DTB3` 是同一個病的第二個實例** ——
+> 本文件**兩次**因為「在文件裡寫下某個 token，就污染了量那個 token 的工具」而出錯。
 
-> ⚠️ **這個檢查本身也做了對照**：負向對照 `repositories/DOES_NOT_EXIST.py` 回 `False`、
-> 正向對照 `CLAUDE.md` 回 `True` —— 確認它不是一個恆真的假檢查。
-> ⚠️ **但它只驗「檔案存不存在」，不驗「那個符號是不是它自稱的東西」** ——
-> 這正是 `CLAUDE.md §2.1` 記載的、該守衛自己登記的射程外缺口。**讀者請據此打折信任本文件的符號引用。**
+⚠️ **本輪的數字與原稿的 58/48/10 不同，原因是「定義不同」，不是「事實改變」**：
+本輪的定義**把目錄型 token（如 `repositories/fund/`、`shared/`）也算進去，且不排除本文件自身路徑**。
+**⛔ 不要把這兩組數字拿來相減** —— 它們量的不是同一個母體。
+**真正可攜的是定義與腳本，不是數字。**
+
+#### 7.5.3 ⭐ 原稿對「數字為什麼改過」的解釋，本身從來沒有被量過
+
+原稿在此寫了一段方法論教訓，說那三個數字 ~~由 54/45/9 改成 58/48/10~~ 的成因是：
+~~「**寫下這一節的動作本身，又替文件添了 4 個新的 path token**」~~。
+
+**⛔ 那個成因是編出來的。實測推翻它，而且推翻了兩層**（量測日 2026-09-14）：
+
+| 量測 | 結果 |
+|---|---|
+| 把 §7.5 整段切掉重算 | §7.5 實際新增的 unique token 是 **3 個**（`repositories/DOES_NOT_EXIST.py`、`repositories/fund/`、`tests/test_constitution_file_refs.py`），**不是 4 個**（獨立稽核用它自己的定義算是 **2 個** —— 兩種定義都不是 4） |
+| **第一顆 commit `b19e071` vs 第二顆 `d9a2da2` 的 token 集合** | **完全相同，增減皆為 0** |
+
+**第二列才是致命的那一列。** `§7.5` **在 `b19e071` 就已經存在了**，
+而 `b19e071` 與 `d9a2da2` 的 token 集合**一模一樣**。
+⇒ **`54/45/9` 從來就不是「加進 §7.5 之前」的計數** —— 它只是**同一份文件的一次錯誤計數**。
+⇒ 那段「寫這一節的動作把數字撐大了」的故事**在時序上不可能成立**。
+
+> ⚠️ ⭐ **這一則的反諷必須留著，它比任何一個數字都值錢**：
+> **那一整段的用意，就是要教「任何描述本文件自身的計數，必須在定稿後重量一次」** ——
+> 而它給出的**成因本身，從頭到尾沒有被量過一次**。
+> ⇒ **教訓升級為兩條，不是一條**：
+> **(1)** 描述自己的**計數**要定稿後重量（原稿已寫，仍然成立）；
+> **(2)** 描述自己的**成因**同樣要量 —— **「我知道為什麼會錯」是一句需要證據的話，
+> 而它比錯誤的數字更難被發現**，因為它讀起來像反省。
+> 📌 **順帶一提，同一個病在本 PR 的交件回報裡又犯了一次**：該回報寫「本文件 977 行」，
+> 而 head 實際是 **988 行**（`b19e071` 才是 977）—— **在寫下上述教訓的同一份交付物裡，
+> 又用了一個寫作途中的數字。** 已於 PR 描述就地更正。
+
+#### 7.5.4 計數腳本（逐字附上，**任何人可複跑**）
+
+**跑法**（repo 根目錄，rev 自填）：
+
+```
+git show <rev>:docs/v2/DATA_DICTIONARY.md > /tmp/doc.md
+git ls-tree -r --name-only <rev> > /tmp/tree.txt
+python3 tokens.py /tmp/doc.md /tmp/tree.txt
+```
+
+```python
+#!/usr/bin/env python3
+"""§7.5 "path-like token" 抽取器 —— **本腳本就是該詞的定義**（可獨立複跑）。
+
+定義（五條，缺一不可）：
+  1. 取所有**單層反引號** span：`...`（不跨行）。
+  2. 正規化：先砍 ::symbol 起的尾段（a/b.py::fn -> a/b.py）；
+     再砍第一個空白起的尾段（CLAUDE.md §2.1 -> CLAUDE.md）。
+  3. path-like 的**充要條件**：結尾是已知副檔名，**或**結尾是 `/`（目錄）。
+  4. 排除：glob（含 `*`）／絕對路徑（`/` 開頭）／URL／含 CJK 或全形字元
+     （擋 `N/A（虧損）` 這類）／stem 為空的裸副檔名（如 `.py`）。
+  5. unique 去重後即為母體。**含本文件自身路徑**（不做自我排除）。
+存在性判準：token 屬於 `git ls-tree -r --name-only <rev>`，或等於由該清單推導的目錄前綴。
+"""
+import re, sys
+
+EXTS = (".py", ".md", ".json", ".parquet", ".yml", ".yaml", ".txt", ".toml", ".cfg", ".ini")
+CJK = re.compile(r'[　-〿一-鿿＀-￯]')
+
+def extract(text):
+    out = []
+    for s in re.findall(r'`([^`\n]+)`', text):
+        t = s.strip()
+        if "::" in t:
+            t = t.split("::", 1)[0]
+        parts = t.split()
+        if not parts:
+            continue
+        t = parts[0]
+        if t.startswith(("http://", "https://")):
+            continue
+        if CJK.search(t) or "*" in t or t.startswith("/"):
+            continue
+        if not (t.endswith(EXTS) or t.endswith("/")):
+            continue
+        if t.startswith(".") and "/" not in t:      # 裸副檔名 `.py`，不是路徑
+            continue
+        out.append(t)
+    return out
+
+def classify(doc_text, tree_lines):
+    tree = set(tree_lines.split())
+    dirs = set()
+    for p in tree:
+        seg = p.split("/")
+        for i in range(1, len(seg)):
+            dirs.add("/".join(seg[:i]) + "/")
+    toks = sorted(set(extract(doc_text)))
+    ex = [t for t in toks if t in tree or t in dirs]
+    ms = [t for t in toks if not (t in tree or t in dirs)]
+    return toks, ex, ms
+
+if __name__ == "__main__":
+    doc = open(sys.argv[1], encoding="utf-8").read()
+    toks, ex, ms = classify(doc, open(sys.argv[2], encoding="utf-8").read())
+    print(f"TOTAL={len(toks)}  EXISTS={len(ex)}  MISSING={len(ms)}")
+    for m in ms:
+        print("  MISSING:", m)
+    # ⭐ 正／負對照 —— 沒有這三條，本腳本可能恆真或恆假而無人察覺
+    assert "CLAUDE.md" in ex, "正對照 1 失敗：`CLAUDE.md` 必須判為存在"
+    assert "services/fund_service.py" in ex, "正對照 2 失敗：帶目錄的真實檔必須判為存在"
+    assert "repositories/DOES_NOT_EXIST.py" in ms, "負對照失敗：`repositories/DOES_NOT_EXIST.py` 必須判為不存在"
+    print("[control] PASS", file=sys.stderr)
+```
+
+> ⚠️ **那三顆 assert 不是裝飾品，它們真的擋過事**：本輪把 §7.5 整段切掉重算時（7.5.3 第一列），
+> 負對照那一顆**當場 fire** —— 因為 `repositories/DOES_NOT_EXIST.py` 只出現在 §7.5 裡面，
+> 切掉之後它自然消失。**那一次 fire 正好證明這顆 assert 不是恆真的。**
+> **每一支自製腳本都該有一顆這樣的斷言**，否則「綠燈」只代表「它沒炸」，不代表「它有在看」。
+
+#### 7.5.5 這個檢查驗不到什麼
+
+> ⚠️ **它只驗「檔案存不存在」，不驗「那個符號是不是它自稱的東西」** ——
+> 這正是 `CLAUDE.md §2.1` 記載的、該守衛自己登記的射程外缺口。
+> **本輪的 B1／B3／B4 三個錯（`_CONST_FILES` 不存在、`fetch_url_with_retry` 指錯檔、
+> `classify_eating_principal` 指錯檔）沒有一個是這個檢查抓得到的** ——
+> 因為 `tests/test_constitution_file_refs.py`、`infra/proxy.py`、`services/fund_service.py`
+> **三個檔案全部真實存在**，錯的是掛在它們後面的符號。
+> ⇒ **讀者請據此打折信任本文件的符號引用：路徑經機器驗過，符號只經人工判讀。**
 > ⚠️ **本文件刻意不寫任何行號**（沿用 `CLAUDE.md §8.2.A.0` 規則 1 的精神）：
 > 行號在任何一次重構後就失效，而**重構不會觸發本文件更新**。
+> ⚠️ **本節全部為單組實測，未經第二組獨立複驗**（`CLAUDE.md §-2` 規則 6）。
