@@ -1143,7 +1143,7 @@ git grep -n '\"is_core\":' -- '*.py' | grep -v '^tests/'
 | **產生** | `repositories/fund/nav_metrics.py` 解析 MoneyDJ「同投資類型／同投資區域」比較表 → `out["peer_compare"]` | `git grep -n 'peer_compare'` ＋ 逐段讀 |
 | **萃取** | `services/portfolio_service.py::_peer` 以 `re.search(r"(\d+)\s*/\s*(\d+)")` 抓含「排名」的欄，換算 `peer_percentile`（第 1 名 ＝ 100）＋ 保留 `peer_rank_raw`（`"12/45"`）；**`total >= 2` 才採用** | 同上 |
 | **⭐ 已在畫** | `ui/helpers/fund/checkup.py::render_fund_checkup` 的 `column_config` **欄名逐字就是「同類排名」**，值 `f"{_pp:.0f}%（{_praw}）"`，缺則 `—`；`help` 逐字「MoneyDJ 同類型基金排名換算的 percentile」 | AST 抽 `ui/**` **全部 22 個** `column_config` dict（見下方指令）|
-| **渲染點（三處，⚠️ gate 狀態不同，定稿自查時修正）** | **① `ui/tab3_portfolio.py::render_portfolio_tab`** —— `app.py` 頂層**無條件**呼叫，該呼叫點的完整包覆只有 `with _ov_warroom:`（純 `st.container()`）＋ `if _pf_for_warroom:`（有已載入基金），**無 checkbox gate**，且傳 `expanded=True` ⇒ **今天線上、預設展開**<br>**② `ui/tab_fund_grp_health.py`** —— `if funds_extra:`，同樣 `expanded=True`<br>**③ `ui/views/page_02_health.py::_render_delegated_sections`**（v2 ②）—— ⚠️ **它在 `DELEGATE_GATE_LABEL` 的 checkbox gate（`value=False`）之後**，那是防 `StreamlitDuplicateElementId` 的刻意閘門 ⇒ **勾了才畫** | `git grep -n 'render_fund_checkup'` ＋ AST 取包覆節點 |
+| **渲染點（三處，⚠️ gate 狀態不同，定稿自查時修正）** | **① `ui/tab3_portfolio.py::render_portfolio_tab`** —— `app.py` 頂層**無條件**呼叫，該呼叫點的完整包覆只有 `with _ov_warroom:`（純 `st.container()`）＋ `if _pf_for_warroom:`（有已載入基金），**無 checkbox gate**，且傳 `expanded=True` ⇒ **今天線上、預設展開**<br>**② `ui/tab_fund_grp_health.py`** —— `if ok_rows:` ＋ `if funds_extra:`，同樣 `expanded=True`；⚠️ **但整段在 `applied_form(submit_label="🩺 開始健診")` 之後** ⇒ **要按過那顆送出鈕才有**（**定稿第二次自查才發現，初稿寫「同 ①」是錯的**）<br>**③ `ui/views/page_02_health.py::_render_delegated_sections`**（v2 ②）—— ⚠️ **它在 `DELEGATE_GATE_LABEL` 的 checkbox gate（`value=False`）之後**，那是防 `StreamlitDuplicateElementId` 的刻意閘門 ⇒ **勾了才畫** | `git grep -n 'render_fund_checkup'` ＋ AST 取包覆節點 |
 | **⭐ 同一批資料還驅動 ② 的結論層（⚠️ 這一條在 gate 之外）** | `page_02_health.py` 的結論分桶走 `checkup._extract_peer_1y` ＋ `_grade(_ret_1y_total(f), peer)` —— **`_extract_peer_1y` 讀的就是 `peer_compare`**。該檔就地註記自陳**這一組純計算 helper「住在閘門前面的結論層」**（`DELEGATED_ENTRIES` 分兩組的理由）⇒ **② 的結論句本身不受 gate 影響** | 同上 ＋ 讀 `DELEGATED_ENTRIES` 的就地說明 |
 | **另一消費端** | `services/quality_score.py`（v19.496）檔頭逐字：「**user 2026-08-20 核准 Option A ＋ 母體選 (b)(同類大母體)：核心因子…百分位取自 MoneyDJ 同類大母體(peer_compare「12/45」)**」<br>⚠️ **精確一點**：它的呼叫鏈是 `ui/helpers/fund_grp_health/quality.py` → `…/unified.py::build_merged_extra_columns`，而該支的 caller 是 **`ui/tab_fund_grp_health.py`／`ui/tab_batch_analysis.py`（＝舊分頁）**，**不在 `page_02_health.py` 的 `DELEGATED_ENTRIES` 裡** ⇒ **這一條佐證的是「客戶核准過這個母體」，不是「v2 已接上它」** | 逐行讀檔頭 ＋ `git grep -n 'quality_score'` |
 | **覆蓋率** | `ui/helpers/fund/checkup.py` 檔頭 docstring 自陳「**約 3 成基金抓不到 → 標 ⬜ 不評**」⇒ 約 7 成有 | ⚠️ **這是 repo 自陳，本組未自行量測** |
@@ -1158,9 +1158,15 @@ git grep -n '\"is_core\":' -- '*.py' | grep -v '^tests/'
 ⚠️ **本輪自查抓到的一處自身過度宣稱，就地留痕**：本節初稿把「同類排名」那一欄寫成
 「**已經在 v2 ② 的畫面上**」。**定稿前逐一驗包覆條件時發現：v2 ② 那一處在 checkbox gate 之後。**
 **真正無 gate 的是今天線上的 `render_portfolio_tab`。** 已於上表逐處分開寫。
-**「它是 live 的」這個結論不變**（三處都存在、其中兩處無 gate），
+**「它是 live 的」這個結論不變**（三處都存在），
 **被權衡掉的是那句話的精確度** —— 而本 PR 整份都在指控「沒查證就寫」，
 **本組在同一節裡差點又犯一次。**
+
+⚠️ **而且是兩次，不是一次 —— 第二次就長在第一次的修法裡，照實寫**：
+第一次更正時本組寫「**三處中兩處無 gate**」，把 ② `tab_fund_grp_health` 歸進「無 gate」。
+**再查一次包覆鏈才發現它在 `applied_form(submit_label="🩺 開始健診")` 之後。**
+⇒ **真正「不必按任何東西」的只有 ①（`render_portfolio_tab`）一處。**
+⛔ **這正是本節在講的那個病的最短示範**：**修一個沒查證的宣稱時，用的是另一個沒查證的宣稱。**
 
 ⭐ **本節最重要的一條區分（上一版把兩件事寫成同一件）**：
 
@@ -1348,7 +1354,7 @@ git grep -n 'def classify_core_satellite' -- '*.py'
 
 | # | 送客戶時寫的現況 | 本輪實測 | 對結論的影響 |
 |---|---|---|---|
-| **D7** | 「MoneyDJ 自帶的同類排名是**一條本組查不出結論的出路**」 | ⛔ **假。** 產生→萃取→渲染整條都在，欄名逐字「同類排名」；**三個渲染點中兩個無 gate**（今天線上的 `render_portfolio_tab` 預設展開、`tab_fund_grp_health`），**v2 ② 那一個在 checkbox gate 之後**；repo 自陳約 7 成有值；母體選擇是**客戶 2026-08-20 親自核准**的（§4.4.1）| 🔴 **照 D7 字面做會關掉一個已實作、且今天線上就看得到的欄位。**<br>**本組新建議**：把 D7 拆成 **(1-a) MoneyDJ 名次保留**（畫面上註明同類定義來自 MoneyDJ）＋ **(1-b) 我方四分位維持 ⬜**。<br>⚠️ **已送客戶重新確認，未自行改 D7。** |
+| **D7** | 「MoneyDJ 自帶的同類排名是**一條本組查不出結論的出路**」 | ⛔ **假。** 產生→萃取→渲染整條都在，欄名逐字「同類排名」；**三個渲染點中只有一個完全無 gate**（今天線上的 `render_portfolio_tab`，預設展開；`tab_fund_grp_health` 在「🩺 開始健診」送出鈕之後，v2 ② 在 checkbox gate 之後），**v2 ② 那一個在 checkbox gate 之後**；repo 自陳約 7 成有值；母體選擇是**客戶 2026-08-20 親自核准**的（§4.4.1）| 🔴 **照 D7 字面做會關掉一個已實作、且今天線上就看得到的欄位。**<br>**本組新建議**：把 D7 拆成 **(1-a) MoneyDJ 名次保留**（畫面上註明同類定義來自 MoneyDJ）＋ **(1-b) 我方四分位維持 ⬜**。<br>⚠️ **已送客戶重新確認，未自行改 D7。** |
 | **D9** | 引了那張卡的「逐字」三行 | ⛔ **兩個數字錯、一整句語意相反，且引的是死分支**（§B-7 的 2-bis）| 🟡 **切法（案 C）不受影響**，但客戶是在假引文上點頭的，**已請其重看**；落地值改為 `+1.75` |
 | **D3** | 「這三塊**從來沒有出現在任何一份線框上**，客戶可能沒注意過」 | ⛔ **假。** 三塊全在 `docs/wireframes/draft-four-page-content.html`（含 `☐ 算一次組合績效`、列為「**必須搬（要加閘門）**」）；且 `ui/views/page_04_portfolio.py` 就地記著**客戶 2026-09-07 的決定 ③ 逐字就是這三塊「升成具名區塊」** | 🟢 **結論不變（兩次一致）**。更正的是**問法** —— 把一件已拍板的事當新問題送審 |
 | **D8** | 「該寫入路徑**目前 0 caller，故尚未發生**」 | ⛔ **只對 `v2_editor` 的 wizard 成立**；另有 **4 條 live 寫入點**（§3.6.2c-bis）| 🟢 **(1)(2)(3) 三件不變**，**急迫性上修** —— 不是「將來要防」，是**現在就在覆寫** |
@@ -1815,7 +1821,7 @@ git grep -n 'allocation_from_composite' -- '*.py' | grep -v '^tests/'
 | **J-14** | 核心／衛星 T-1～T-3 三條硬規則 | §3.6.2c ＋ §5 提案 6；**判定缺陷與重現輸出是本組實測**，但「改成只認使用者輸入」是本組的處置建議 |
 | **J-16** | 「分組鍵壞掉時，樣本量規則擋不住錯誤分組」 | §4.4；**0/8 與桶成員是實測**，但「所以現在一律 ⬜」是本組的處置判斷。<br>⚠️ **2026-09-14 更正**：本項上一版另含一句「**今天真正擋住的不是樣本量**」，**那句實測不成立**（§4.4.2）—— **三道閘門各自獨立就給 0/8**。本項的處置判斷不變 |
 | ~~**J-17**~~ | ~~兩套分類器分歧數 **1/8 嚴格相反、2/8 任何不一致**~~ → **2026-09-14 更正：production 是 `0/8 嚴格相反、2/8 任何不一致`**（§4.5）；`1/8` 需餵一個全 repo 無 writer 的欄位才出得來 | §4.5；**本組實測且附方法**，**與外部給的 3/8 不符且本組重現不出** |
-| **J-18**（2026-09-14 新增）| **MoneyDJ `peer_rank_raw` 那條鏈「已在 production 跑」** | §4.4.1。**產生／萃取／渲染三段是本組逐檔讀出＋AST 抽欄名與包覆條件實測**；**但「約 3 成抓不到」是 repo docstring 自陳，本組未量測**，且**本組未在真實 streamlit 下渲染過那張表**（環境缺 `pandas`／`streamlit`）。<br>⚠️ **本項初稿曾寫成「已經在 v2 ② 的畫面上」，定稿自查時更正** —— v2 ② 那一處**在 gate 之後**。⇒ **「它已實作且兩個渲染點無 gate」有程式碼佐證；「實際覆蓋率 7 成」只是轉述；「使用者真的看到了」本組沒有驗過** |
+| **J-18**（2026-09-14 新增）| **MoneyDJ `peer_rank_raw` 那條鏈「已在 production 跑」** | §4.4.1。**產生／萃取／渲染三段是本組逐檔讀出＋AST 抽欄名與包覆條件實測**；**但「約 3 成抓不到」是 repo docstring 自陳，本組未量測**，且**本組未在真實 streamlit 下渲染過那張表**（環境缺 `pandas`／`streamlit`）。<br>⚠️ **本項初稿曾寫成「已經在 v2 ② 的畫面上」，定稿自查時更正** —— v2 ② 那一處**在 gate 之後**。⚠️ **第二次更正**：第一次更正時寫「兩處無 gate」，**再查包覆鏈才發現 `tab_fund_grp_health` 在「🩺 開始健診」送出鈕之後** ⇒ **完全無 gate 的只有 `render_portfolio_tab` 一處**。⇒ **「它已實作、且有一個渲染點完全無 gate」有程式碼佐證；「實際覆蓋率 7 成」只是轉述；「使用者真的看到了」本組沒有驗過** |
 | **J-19**（2026-09-14 新增）| **4 條 `policy_tier` live 寫入點 ＋ 往返會覆蓋使用者值** | §3.6.2c-bis。**四個寫入點與可達性是 AST ＋ 逐檔讀出**；⚠️ **「往返一次就會覆蓋」是本組依程式碼順序推得的，本組沒有在跑起來的 app 裡實際重現過一次覆蓋**（環境跑不起來，且禁止對 Sheets 寫入）⇒ **這一條是推論，不是實測** |
 | **J-20**（2026-09-14 新增）| **`_card_allocation` 的實際輸出（`+1.75` ／「不會跟著景氣燈號變動」）** | §B-7 的 2-bis。**是實跑出來的**，但跑法是「取真函式 ＋ 替身 `composite_verdict`」，**不是在 streamlit 下渲染**。⇒ `value`／`note` 的**字串組裝**已驗；**它在真實畫面上的呈現未驗** |
 | **J-15** | 第 5 套「切一半」的判斷（上半無事實版、下半有） | §3.6.2b ＋ §5 提案 7；**「Z 值是客觀事實」有程式碼佐證，但「所以下半可以留」是本組的處置判斷** |
