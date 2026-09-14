@@ -234,6 +234,9 @@ git grep -nE "settings_page_owns\([^)]*POLICY_ADMIN" 9cbf0377 -- '*.py'
 **⇒ 承重結論一字未變，且本輪已獨立複驗**：
 **production 沒有任何一處 `with settings_page_owns(POLICY_ADMIN)`**
 （唯二命中在 `tests/test_settings_diag_merge.py:347,369`）—— 也就是它在 production 恆為 `False`。
+⚠️ **這仍是一句取決於「有沒有漏看」的全稱句**（`CLAUDE.md §-2` 規則 5／6）：
+兩輪各自單組實測，**未經第二組驗證**；上列 `git grep` 掃不到動態組出的名稱與非 `.py` 路徑。
+**已列入 §9.4 第 8 項。**
 
 `ui/views/page_05_settings.py:689` 自己就記著這件事（「`merge_context.POLICY_ADMIN` **production 0 個持有點**」），
 `page_05_settings.py:1343` 並寫明「⛔ **本檔不切換 `POLICY_ADMIN` 旗標**（總管指示，且有硬前置未解）」。
@@ -982,7 +985,7 @@ git show 9cbf0377:ui/helpers/session.py | grep -n portfolio_core_pct
 
 | # | 衝突點 | 線框／規格要的（逐字） | 母法禁的 |
 |---|---|---|---|
-| T1 | `ui/views/page_01_macro.py` ① 結論 | 該檔模組 docstring `:13`：「🧾 ① 結論 — 現在該加碼還是防禦　**全寬**（**一句行動** ＋ 理由條列）」；畫面上兩處 `st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")`（`:676` 已載入路徑／`:2123` 灰態路徑） | G3「不提供具體處置方向」 |
+| T1 | `ui/views/page_01_macro.py` ① 結論 | 該檔模組 docstring `:13` **逐字**：「🧾 ① 結論 — 現在該加碼還是防禦　**全寬**（一句行動 ＋ 理由條列）」（⚠️ 原文**沒有**任何粗體強調，本欄的「全寬」粗體為排版沿用，**「一句行動」四字刻意不加粗**以免看起來像原文在強調）；畫面上兩處 `st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")`（`:676` 已載入路徑／`:2123` 灰態路徑） | G3「不提供具體處置方向」 |
 | T2 | `ui/views/page_04_portfolio.py` ④ 配置 | `_render_mix()` docstring 引線框：「這裡只呈現**差距與所需動作**」；守衛 `tests/test_wf04_portfolio_skeleton.py:1663` 同字 | G1／G3 |
 | T3 | `ui/tab6_manual.py` 說明書再平衡章 | 「⚖️ 再平衡公式（**One-Click Rebalance**）」＋「白話文**行動指南**生成邏輯」 | G1 明文禁「一鍵再平衡」 |
 
