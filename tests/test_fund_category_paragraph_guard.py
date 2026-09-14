@@ -102,9 +102,22 @@ def test_guard_does_not_fire_below_threshold():
     它 < 門檻 ⇒ 守衛不介入;它回 None 是**既有的關鍵字未命中**(§1 誠實 None),
     不是本批造成的,本批也不宣稱修好它(那屬 SATELLITE_KEYWORDS 的另案)。
     """
-    for code, cat in _snapshot_categories():
-        if 0 < len(cat) < CATEGORY_PARAGRAPH_MIN_LEN:
-            assert len(cat) < CATEGORY_PARAGRAPH_MIN_LEN  # 守衛不會被觸發
+    import services.regime_fit as _rf
+    _saved = _rf.CATEGORY_PARAGRAPH_MIN_LEN
+    try:
+        for code, cat in _snapshot_categories():
+            if not (0 < len(cat) < CATEGORY_PARAGRAPH_MIN_LEN):
+                continue
+            with_guard = asset_bucket(cat)
+            _rf.CATEGORY_PARAGRAPH_MIN_LEN = 10 ** 9      # 等效於關掉守衛
+            without_guard = _rf.asset_bucket(cat)
+            _rf.CATEGORY_PARAGRAPH_MIN_LEN = _saved
+            assert with_guard == without_guard, (
+                f"{code}: 門檻以下的字串不該受守衛影響,"
+                f"開={with_guard[0]} 關={without_guard[0]}")
+    finally:
+        _rf.CATEGORY_PARAGRAPH_MIN_LEN = _saved
+
     frag = [t for _, t in _snapshot_categories()
             if 0 < len(t) <= _LABEL_MAX and asset_bucket(t)[0] is None]
     if frag:                       # 目前有一筆(ACDD19);沒有也不算錯
