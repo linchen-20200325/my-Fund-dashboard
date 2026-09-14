@@ -734,10 +734,24 @@ def _render_layer_evidence(ind: dict, phase: dict) -> dict:
     _prov: dict = {}
     _score = calculate_composite_score(ind, provenance_out=_prov)
     _icon, _level, _color, _action = composite_verdict(_score)
+    # ⛔ 行動句一律不上畫面（客戶 2026-09-14 逐案核准的合規移除）。
+    #    `composite_verdict()` 的第 4 個元素 `action_text` 是**逐字的買賣指示**
+    #    （「可滿倉持有」「分批進場」「拉高現金水位至 15-25%」「現金 30%+」…），
+    #    違反母法「不產生任何直接買賣建議」。
+    #    做法：把本函式**既有**的「證據不足才清空 `_action`」機制改成**無條件清空**，
+    #    而不是發明新開關 —— 下游 `build_evidence_rows` /
+    #    `build_evidence_footnotes` / `split_evidence_footnotes` 都以
+    #    `if composite_action else ""` 判空（見 `beginner_view.py`
+    #    `_evidence_footnote_items`），空字串即整段不渲染。
+    #    ⛔ **刻意不改 `services/macro/composite_score.py`** —— 那是 L2 計算引擎
+    #    （凍結範圍），且另有消費者；本批在**消費端**擋住。
+    #    ⚠️ `_icon` / `_level` 不受影響：證據充足時等級照常顯示，本批只拿掉行動句。
+    _action = ""
     _ok = is_sufficient(_prov.get("support"))
     if not _ok:
-        # 分數留著（真的加總過），等級與行動清空 —— 見上方 ⚠️。
-        _icon, _level, _action = "⬜", "", ""
+        # 分數留著（真的加總過），等級清空 —— 見上方 ⚠️。
+        # （行動已於上方無條件清空，故此處不再提行動。）
+        _icon, _level = "⬜", ""
 
     _5b = compute_five_bucket_summary(ind, phase, news_items=None)
     _rows = build_evidence_rows(
