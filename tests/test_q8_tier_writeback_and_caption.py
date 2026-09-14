@@ -232,6 +232,87 @@ def test_tier_is_identical_for_tech_and_income_fund_names(monkeypatch) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════
+# A2. 本批**已揭露的顯示副作用**（不是「想要的行為」，是「已知且刻意不修的」）
+# ══════════════════════════════════════════════════════════════════
+
+def test_added_fund_chip_label_flips_to_satellite_disclosed_side_effect(
+        monkeypatch) -> None:
+    """⚠️ **這一條不是在保護一個正確的行為，是在把一個已揭露的副作用釘成可執行的事實。**
+
+    同一支 `render_fund_portfolio_membership` 裡，Tab2 聯動 chip 是**二態**：
+    `"核心(穩健)" if _matched.get("is_core") else "衛星(積極)"`。
+    本批拿掉捏造的 `"is_core": True` 之後，剛加入的基金標籤會**翻面**：
+
+    * `origin/main` @ `9cbf0377`（實測）：`定位 核心(穩健)`
+    * 本批之後（實測）：`定位 衛星(積極)`
+
+    **兩個都不是事實** —— 真相是「客戶還沒設定過」。二態裝不下三態。
+
+    ⭐ **機制的精確版（比「同一支函式所以會讀到」更準）**：`:50` 與被刪的那一行
+    **分屬同一次呼叫的兩個互斥分支** —— 按下按鈕的那一次走的是 `else`（`_matched is None`），
+    `定位` 標籤**根本沒有被渲染**；翻面出現在 **`st.rerun()` 之後的下一次呼叫**，
+    那時該檔已在 `portfolio_funds` 裡、`_matched` 就是它。本條把兩次呼叫都跑過。
+
+    ⛔ **本批刻意不修**：要正確顯示就得在畫面上新增第三種標籤，屬版面結構異動，
+    依 `CLAUDE.md §-1.5.4` 必須先出線框草稿給客戶拍板。
+
+    📌 **給未來修它的人**：線框拍板、三態顯示落地之後，**請直接改這一條**
+    （改成斷言新的「未設定」標籤），不要刪掉它 —— 它的用途是讓這個副作用
+    在任何一次改動中都看得見。
+    """
+    import re
+
+    import ui.helpers.portfolio.linkage as _linkage
+
+    _code = "BGF-WT"
+    _ss = {"portfolio_funds": [{"code": "SEED", "name": "既有基金",
+                                "invest_twd": 0, "is_core": False}]}
+
+    def _render() -> list[str]:
+        _out: list[str] = []
+
+        class _Col:
+            def markdown(self, html, *a, **k): _out.append(html)
+
+            def button(self, *a, **k): return True
+
+        class _St:
+            reran = False
+
+            def markdown(self, html, *a, **k): _out.append(html)
+
+            def columns(self, spec, **k): return [_Col() for _ in spec]
+
+            def toast(self, *a, **k): pass
+
+            def rerun(self, *a, **k): type(self).reran = True
+
+        monkeypatch.setattr(_linkage, "st", _St())
+        _linkage.render_fund_portfolio_membership(_ss, [_code], _TECH_FUND)
+        return _out
+
+    def _tag(htmls: list[str]) -> str | None:
+        for _h in htmls:
+            _m = re.search(r"定位\s*([^<（]+)", _h)
+            if _m:
+                return _m.group(1).strip()
+        return None
+
+    # 第 1 次：使用者按下「➕ 加入組合」—— 走 else 分支，`定位` 不會被渲染
+    assert _tag(_render()) is None, (
+        "前提：按下按鈕的那一次走的是 `_matched is None` 分支，不該渲染 `定位`")
+    assert any(_f.get("code") == _code for _f in _ss["portfolio_funds"]), \
+        "前提：真的加進去了"
+
+    # 第 2 次：`st.rerun()` 之後 —— 這次 `_matched` 就是剛加入的那一筆
+    _label = _tag(_render())
+    assert _label == "衛星(積極)", (
+        f"chip 標籤是 {_label!r}。本批已揭露它會由「核心(穩健)」翻成「衛星(積極)」；"
+        "若這裡變成第三種標籤，代表三態顯示落地了 —— 請確認線框草稿已經客戶拍板"
+        "（`CLAUDE.md §-1.5.4`），然後更新本條")
+
+
+# ══════════════════════════════════════════════════════════════════
 # B. 兩句文案不得對客戶說假話
 # ══════════════════════════════════════════════════════════════════
 
