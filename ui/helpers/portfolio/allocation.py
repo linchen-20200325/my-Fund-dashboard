@@ -156,13 +156,47 @@ def summarize_core_satellite(
 
 
 def format_core_satellite_caption(summary: dict) -> str:
-    """一行說明：分母是什麼、級別哪來的、有幾檔沒填本金（原則 4「多做說明」）。"""
+    """一行說明：分母是什麼、級別哪來的、有幾檔沒填本金（原則 4「多做說明」）。
+
+    ⚠️ **2026 文案更正（有意識的變更，不是漏刪）**：舊文案是
+
+        ``f"{k}/{n} 檔級別來自 Google Sheet `policy_tier`，其餘 {n-k} 檔以基金名稱關鍵字推定"``
+
+    **它在三種情況下對客戶說了假話**（三種都在 `origin/main` @ `9cbf0377` 實測過，
+    與 Q8 批次一 #842 是否合併無關）：
+
+    1. **把 Sheet 明示的說成系統猜的。** ``n_tier_from_sheet`` 只數 ``policy_tier``
+       這個 **v1** 欄位；而 **v2** 讀取路徑（``ui/helpers/cloud_io.py::_load_all_from_sheet_v2``）
+       把客戶在 Sheet ``tier`` 欄親手填的值存進 ``is_core``、**不寫** ``policy_tier``
+       ⇒ 那一檔被歸進「其餘」，文案宣稱它「以基金名稱關鍵字推定」——
+       但它根本沒被猜過，是客戶自己填的。
+    2. **把「還沒決定」說成「猜出來的」。** ``is_core`` 缺鍵 / 為 ``None`` 時
+       ``resolve_core_flag`` 回 ``False``，那筆金額**靜靜併進衛星**；
+       文案同樣說它是名稱推定的結果。
+    3. **「其餘 0 檔以…推定」**：全部級別都明示時，舊文案仍會描述一個不存在的群組。
+
+    **新文案的取捨**：`summary` 裡**沒有**任何欄位能區分「`is_core` 是從 Sheet
+    `tier` 欄讀來的」還是「系統推定的」—— 要區分就得在
+    :func:`summarize_core_satellite` 新增欄位，那會動到本模組的回傳契約
+    （超出本批授權：本批**只改文案**，不改任何比例數字）。
+    故新文案**不宣稱來源機制**，只說「改依 ``is_core`` 旗標，來源可能是這兩者之一」
+    —— 寧可講得保守，也不要像舊文案那樣把兩種來源都斷言成「名稱推定」。
+
+    **並且補上舊文案完全沒講的那一句**：**未設定者一律併入衛星。**
+    那是 :func:`summarize_core_satellite` 的既有行為（二態，本批不改），
+    但畫面上完全看不出來 —— 不講，客戶會把「衛星 X%」讀成「我有 X% 的衛星部位」，
+    實際上裡面混著「我還沒決定的部位」（`CLAUDE.md §1`：寧可少講，不可講錯）。
+    """
     if not summary or not summary.get("n_funds"):
         return "尚無持倉可統計核心 / 衛星比例。"
     _n = summary["n_funds"]
     _from_sheet = summary.get("n_tier_from_sheet", 0)
-    _src = (f"{_from_sheet}/{_n} 檔級別來自 Google Sheet `policy_tier`，"
-            f"其餘 {_n - _from_sheet} 檔以基金名稱關鍵字推定")
+    _other = _n - _from_sheet
+    _src = f"{_from_sheet}/{_n} 檔級別由 Sheet `policy_tier` 欄明示"
+    if _other:
+        _src += (f"；其餘 {_other} 檔改依 `is_core` 旗標"
+                 f"（可能沿用 Sheet `tier` 欄，也可能由系統推定），"
+                 f"**未設定者併入衛星**")
     if not summary.get("is_amount_weighted"):
         return (f"⚠️ {_n} 檔皆未填投入本金 → 無法算金額比例（{_src}）。"
                 "請在 Sheet 或「編輯初始持倉」填入本金後再看此比例。")

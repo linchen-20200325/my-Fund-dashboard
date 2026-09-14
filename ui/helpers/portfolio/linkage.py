@@ -87,7 +87,24 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
                         "code": _add_code,
                         "name": fund_name or _add_code,
                         "loaded": False,
-                        "is_core": True,   # 預設核心，使用者可在 Tab3 調整
+                        # ⛔ **這裡刻意沒有 `is_core`（有意識的移除,不是漏刪）。**
+                        # 原本是 `"is_core": True,   # 預設核心,使用者可在 Tab3 調整`
+                        # —— 一個**憑空捏造的級別**：使用者只是說「把這檔加進我的組合」,
+                        # 從來沒有說過它是核心。而這個捏造值會被下一次「全部寫入」
+                        # **寫回客戶的 Google Sheet**（`ui/helpers/cloud_io.py` 兩處寫回
+                        # 都由 `is_core` 推出 `policy_tier` / `tier` 欄）。
+                        #
+                        # 在名稱猜測時代它看不出來 —— `ui/helpers/portfolio/load.py`
+                        # 每次「📡 載入」都會用基金名稱關鍵字再猜一個值蓋掉它,
+                        # 所以這個 `True` 只有在「加入後直接存檔、中間沒載入」時才會浮現。
+                        # 實測（`origin/main` @ `9cbf0377`,科技型與配息型各一檔）：
+                        #   加入 → 存檔（未載入）  → 兩檔都寫回 `core`   ← 本行造成的
+                        #   加入 → 載入 → 存檔     → 科技型 `satellite` / 配息型 `core`
+                        # 兩個值都不是客戶的值：**客戶根本沒設定過,正確答案是留白。**
+                        #
+                        # 少了這個鍵,三處寫回的三元式都會走到 `else ""` 分支 ⇒ 寫回空字串
+                        # ⇒ 客戶 Sheet 上的空白保持空白（`CLAUDE.md §1` Fail Loud:
+                        # 不知道就不要編一個值）。
                         "invest_twd": 0,
                     })
                     session_state["portfolio_funds"] = _pf
