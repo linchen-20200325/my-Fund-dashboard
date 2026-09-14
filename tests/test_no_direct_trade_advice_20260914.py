@@ -12,6 +12,15 @@
   · **B 組｜說明書再平衡章節** —— `ui/tab6_manual.py`：章節名的
     `One-Click Rebalance`、偏離分級表的「動作」欄、以及指名
     「從最大衛星基金**贖回**、轉入最小核心基金」的白話文行動指南。
+  · **C 組｜① 結論的「現在能不能買」行動句** —— `ui/views/page_01_macro.py`。
+    `services/macro/action_light.py::macro_action_light()` 的 `action`
+    （「可加碼／持有／減碼」）改印**狀態句**；五條路徑逐條驗（見 C 組前言）。
+  · **D 組｜📐 建議資產水位卡「一步之遙」** —— `ui/views/page_01_macro.py`。
+    **這一組守的不是已經上畫面的東西。** `services/allocation_ladder.py::
+    allocation_from_composite()` 的回傳 dict 裡**有 `action_text`**，就是
+    `composite_verdict()` 那五句原文；它唯一的線上消費端 `_card_allocation`
+    **不讀這個 key**，所以畫面乾淨 —— 但在本組寫出來之前**沒有任何守衛盯著**，
+    加一行就會把五句買賣指令送上線而 CI 全綠。詳見 D 組前言。
 
 ⚠️ **A 組為什麼一定要在「證據充足」的世界下驗**（本檔最重要的一句）：
 `_action` 原本就會在**證據不足**時被清空。也就是說 —— **只跑預設／斷線狀態
@@ -33,6 +42,8 @@ L2 日後新增第六句，本檔自動跟著守 —— 手抄的黑名單做不
   - 再平衡分級表重新長出第二欄（**不論那一欄寫什麼字**）→ B3 轉紅。
   - 章節名重新掛上 `One-Click` / 「一鍵」→ B1 轉紅。
   - 被移除的那幾句指名買賣的字串重新出現 → B2 轉紅。
+  - 📐 建議資產水位卡開始印 `action_text`（整句／**被截斷的半句**／
+    或只是去讀那個 key）→ D3／D4／D5 轉紅。
 
 **守不到（據實寫明，不要把本檔讀成「合規已完成」）**：
   - **B2 是字串清單，不是語意檢查。** 有人用**不同措辭**重寫一句買賣建議
@@ -40,6 +51,10 @@ L2 日後新增第六句，本檔自動跟著守 —— 手抄的黑名單做不
     「把它塞回表格第二欄」這一種形態，擋不住「改寫成一段散文」。
   - **A3 比對的是五句逐字字串。** 有人把行動句**改寫**後直接寫進 UI，
     A3 抓不到；A2 只保證 `composite_action` 這條管道是空的。
+  - **D 組不判斷 📐 建議資產水位卡本身算不算「直接買賣建議」。** 那張卡的
+    標題逐字有「建議」、給了股債現金百分比、還附停利／加碼 Z 門檻 ——
+    **那是業務規則裁決（客戶），不是技術判斷**，已列在本批 PR 描述請裁決。
+    D 組只保證那五句 `action_text` 沒有從這條管道漏上去。
   - **本檔只看 `ui/views/page_01_macro.py` 與 `ui/tab6_manual.py` 兩個檔。**
     本 repo 另有多處 `composite_verdict` 消費端（`ui/tab1_macro.py`、
     `services/realtime_signal.py`、`mcp_server/tools_macro.py`）與
@@ -621,3 +636,235 @@ def test_the_conclusion_never_reads_the_action_field():
     _bad = [f"{_fn.name}:{_c.lineno}" for _fn in _fns for _c in ast.walk(_fn)
             if isinstance(_c, ast.Constant) and _c.value == "action"]
     assert not _bad, f"① 結論又去讀 `action` 欄位了：{_bad}"
+
+
+# ════════════════════════════════════════════════════════════════
+# D 組｜📐 建議資產水位卡 —— 那五句就在「一次 key 讀取」之外
+# ════════════════════════════════════════════════════════════════
+# **這一組守的東西跟 A／B／C 三組都不一樣，讀之前先看清楚差在哪。**
+#
+# A 組擋的是「行動句**已經**走到畫面上」；D 組擋的是「行動句**還沒**上畫面，
+# 但它就放在一個**線上** L2 函式的公開回傳值裡，距離畫面只差一次 key 讀取」。
+#
+# 具體地形（2026-09-14 實測）：
+#   `services/allocation_ladder.py::allocation_from_composite()` 回的 dict 裡
+#   **有 `action_text`**，而且它就是 `composite_verdict()` 那五句**逐字原文**
+#   （D1 在執行期證明這個同源關係，不靠讀碼推斷）。
+#   它的線上消費端只有一個 —— `ui/views/page_01_macro.py::_card_allocation`
+#   （`app.py` → 層 3 三欄之一）—— 而它**只讀** `allocation` / `stop_gain_z` /
+#   `add_z` / `light` / `status` / `reason`，**沒有讀 `action_text`**。
+#   所以畫面上目前乾淨；但**在本組寫出來之前，沒有任何守衛盯著這件事**，
+#   任何人加一行 `_al["action_text"]` 就會把五句買賣指令送上線，而且 CI 全綠。
+#
+# ⚠️ **為什麼不直接在 L2 把 `action_text` 拿掉？** 不在本批授權內 ——
+#    `services/**` 是凍結範圍，且該 key 另有消費端（見本批 PR 描述的消費端盤點）。
+#    本組的定位因此是**看門，不是拆除**。
+#
+# ⚠️ **本組守不到什麼（不要把它讀成「這張卡已經合規」）**：
+#   · 這張卡**本身**是不是「直接買賣建議」，**本組不判斷、也不宣稱** ——
+#     它的標題逐字有「建議」、`note` 給了股債現金百分比、還附了停利／加碼
+#     Z 門檻。那是**業務規則裁決**（客戶），不是技術判斷，已列在 PR 描述請裁決。
+#     **本組只保證那五句 `action_text` 沒有從這條管道漏上去。**
+#   · D3／D4 都是**逐字／逐子句**比對。有人把行動句**改寫**後寫進這張卡，
+#     兩條都抓不到（同 A3、B2 的既有限制）。D5 的結構鎖只看
+#     `_card_allocation` **自己**的 AST —— leak 若發生在它呼叫的 helper 裡，D5 看不到
+#     （那一種由 D3／D4 的行為比對承接）。
+#   · 本組只看 `_card_allocation` 這一個消費端。`allocation_from_composite`
+#     日後若長出第二個 UI caller，**本組不會自動跟著守**。
+
+def _allocation_probes() -> tuple[tuple[float, str], ...]:
+    """一個代表性分數 × 一句 `action_text` —— **從 L2 現場掃出來**，不手抄。
+
+    刻意**不寫死 verdict cutoffs**（它們走 `get_verdict_cutoffs()` 的 SSOT、
+    且可被 `active.json` 覆寫）。改成掃一排分數、每句取第一個命中的分數 ——
+    cutoffs 日後被調動，本組自己會跟著移動。
+    """
+    from services.allocation_ladder import allocation_from_composite
+    _seen: dict[str, float] = {}
+    for _s in (-1e6, -60.0, -20.0, -12.0, -10.0, -7.0, -5.0, 0.0,
+               5.0, 6.0, 10.0, 11.0, 30.0, 60.0, 1e6):
+        _d = allocation_from_composite(float(_s), None)
+        if _d.get("status") != "ok":
+            continue
+        _t = str(_d.get("action_text") or "")
+        if _t and _t not in _seen:
+            _seen[_t] = float(_s)
+    return tuple((_v, _k) for _k, _v in _seen.items())
+
+
+def _action_clauses() -> tuple[str, ...]:
+    """五句各自切成子句（≥6 字），用來抓**被截斷的半句**。
+
+    為什麼需要它：本 repo 已經踩過一次「這一格斷在『…衛星部位積』」
+    （見 `ui/helpers/macro/beginner_view.py` 必修 3 的就地註解）——
+    **漏出去的不一定是完整句**，逐字比對對半句無效。
+
+    ⚠️ 子句同樣**從 L2 現場切**，不在本檔手抄第二份（§2.1 SSOT）。
+    ⚠️ 已知代價：日後若有一句**正當**的卡片文案剛好含某個 ≥6 字子句，
+       D4 會誤報。那時該做的是**看一眼為什麼卡片在講 verdict 的話**，
+       不是把子句從清單裡挑掉（挑掉就等於把 SSOT 改成手抄黑名單）。
+    """
+    import re
+    _out: dict[str, None] = {}
+    for _, _t in _allocation_probes():
+        for _c in re.split(r"[：，、；。]", _t):
+            _c = _c.strip()
+            if len(_c) >= 6:
+                _out[_c] = None
+    return tuple(_out)
+
+
+def _allocation_card(score: float) -> dict:
+    """在「總分撐得住」的世界渲染 📐 建議資產水位卡。
+
+    `sufficient=False` 那條路會提早 return 一張 `not_ready` 灰卡 ——
+    **只驗那條路的守衛會恆綠**（同 A 組那個「證據不足時本來就是空的」陷阱）。
+    D2 就是把「我真的站在會出內容的那條路上」斷言出來。
+    """
+    import ui.views.page_01_macro as _P
+    return _P._card_allocation({"sufficient": True, "score": float(score)})
+
+
+def _card_strings(card: dict) -> str:
+    """卡片 dict 裡所有會變成畫面文字的東西，攤平成一坨字串。"""
+    _out: list[str] = []
+
+    def _walk(_v):
+        if isinstance(_v, dict):
+            for _k, _x in _v.items():
+                _out.append(str(_k))
+                _walk(_x)
+        elif isinstance(_v, (list, tuple, set)):
+            for _x in _v:
+                _walk(_x)
+        else:
+            _out.append(str(_v))
+    _walk(card)
+    return "\n".join(_out)
+
+
+def test_precondition_the_allocation_service_still_hands_back_the_five_sentences():
+    """**前提**：那五句真的還在 `allocation_from_composite()` 的回傳值裡。
+
+    這條同時做三件事：
+      1. **反空轉** —— 掃不到句子時 D3／D4 會退化成「比對一個空清單」而恆綠。
+      2. **證明同源** —— 服務端那組句子與 `composite_verdict()` 的**完全相同**，
+         所以 D3 拿 :func:`_all_verdict_action_texts` 當比對對象是對的；
+         這是**執行期比對出來的**，不是讀碼推斷的。
+      3. **把風險寫成可執行的斷言** —— 「一次 key 讀取之遙」不是修辭。
+
+    ⚠️ **這條紅掉有兩種完全相反的原因，看訊息判斷，不要直接改斷言**：
+      · L2 **把 `action_text` 拿掉了** → 風險消失，本組功成身退，該撤掉 D 組；
+      · L2 **改了用詞或新增第六句** → 本組自己會跟上，通常不必動；
+      · 掃不到任何句子 → 先查 `get_verdict_cutoffs()` 是不是回了怪值。
+    """
+    _probes = _allocation_probes()
+    _svc = {_t for _, _t in _probes}
+    assert len(_svc) >= 5, (
+        f"`allocation_from_composite()` 只掃到 {len(_svc)} 句 action_text（應 ≥5）"
+        f" —— D3／D4 會因此失去比對對象而恆綠：{_svc}")
+
+    _verdict = set(_all_verdict_action_texts())
+    assert _svc == _verdict, (
+        "服務端回的 action_text 與 `composite_verdict()` 不再同源 —— "
+        "D3 的比對對象因此可能漏掉句子。\n"
+        f"  只在服務端：{_svc - _verdict}\n"
+        f"  只在 verdict：{_verdict - _svc}")
+
+
+def test_precondition_the_allocation_card_really_draws_content():
+    """**前提（正對照）**：這張卡在每個分數帶上真的畫得出內容。
+
+    沒有這一條，D3／D4 會被一種很便宜的方式弄綠：**卡片什麼都不畫**
+    （例如有人把 `sufficient` 的判斷改壞、整張卡恆走 `not_ready`）——
+    畫面上當然掃不到那五句，然後守衛一片綠。
+
+    這條紅 → D3／D4 的綠燈一律不算數。
+    """
+    from ui.helpers.ia import STATE_OK
+
+    _probes = _allocation_probes()
+    assert _probes, "掃不到任何分數帶 —— 下面每一條都會退化成跑 0 個案例"
+
+    for _score, _sentence in _probes:
+        _card = _allocation_card(_score)
+        assert _card.get("state") == STATE_OK, (
+            f"score={_score} 這張卡沒有畫出內容（state={_card.get('state')!r}）—— "
+            f"D3／D4 在這個分數帶上等於沒驗：{_card}")
+        for _field in ("value", "note"):
+            assert str(_card.get(_field) or "").strip(), (
+                f"score={_score} 的 {_field!r} 是空的 —— 同上，等於沒驗")
+
+
+def test_no_verdict_action_sentence_reaches_the_allocation_card():
+    """**D 組主秤**：那五句一句都不准出現在 📐 建議資產水位卡的產出裡。
+
+    比對對象是 :func:`_all_verdict_action_texts`（L2 現場取回，D1 已證同源）。
+
+    突變實測（2026-09-14，突變打在**產生畫面的那條路徑**上 ——
+    `ui/views/page_01_macro.py::_card_allocation`，不是打在本檔讀的常數上）：
+      · 在 `note` 後面接上 `_al["action_text"]` → **轉紅**，訊息逐字印出漏出去的那句。
+      · 把整句塞進 `value` → **轉紅**。
+    """
+    _texts = _all_verdict_action_texts()
+    assert _texts, "反空轉：五句一句都沒掃到（見 D1）"
+
+    _bad: list[str] = []
+    for _score, _ in _allocation_probes():
+        _blob = _card_strings(_allocation_card(_score))
+        for _t in _texts:
+            if _t in _blob:
+                _bad.append(f"score={_score}｜{_t!r}")
+    assert not _bad, (
+        "📐 建議資產水位卡把 `composite_verdict()` 的買賣指示送上畫面了"
+        f"（母法：不產生任何直接買賣建議）：\n  " + "\n  ".join(_bad))
+
+
+def test_no_truncated_action_clause_reaches_the_allocation_card():
+    """**D3 的補位**：連**半句**都不准漏。
+
+    D3 比對完整句，擋不住「只印前 N 個字」或「只接了逗號後那半句」——
+    而本 repo 正是踩過這個形狀的（表格欄寬把行動句截在「…衛星部位積」）。
+    本條改比對 :func:`_action_clauses` 切出來的子句。
+
+    突變實測（2026-09-14，同樣打在 `_card_allocation` 上）：
+      · `note` 後面接 `_al["action_text"][:12]`（**截斷成半句**）
+        → **D3 綠、D4 紅**。這一對結果就是本條存在的理由。
+    """
+    _clauses = _action_clauses()
+    assert len(_clauses) >= 5, (
+        f"反空轉：只切到 {len(_clauses)} 個子句（應 ≥5）—— 本條會恆綠：{_clauses}")
+
+    _bad: list[str] = []
+    for _score, _ in _allocation_probes():
+        _blob = _card_strings(_allocation_card(_score))
+        for _c in _clauses:
+            if _c in _blob:
+                _bad.append(f"score={_score}｜{_c!r}")
+    assert not _bad, (
+        "📐 建議資產水位卡出現 `composite_verdict()` 行動句的子句"
+        "（可能是被截斷的半句）：\n  " + "\n  ".join(_bad))
+
+
+def test_the_allocation_card_source_never_reads_the_action_text_key():
+    """**結構鎖**：`_card_allocation` 的原始碼不得出現 `action_text` 這個字面值。
+
+    擋的是 D3／D4 抓不到的那一種復辟 —— 有人**改寫**過再印
+    （`_al["action_text"].replace(...)`、只取前半、翻譯成別的說法…）：
+    行為比對會放行，但**取這個 key 這個動作本身**在這裡就被擋下。
+
+    ⚠️ **射程只到 `_card_allocation` 自己的 AST。** leak 若寫在它呼叫的
+    helper 裡，本條看不到 —— 那一種交給 D3／D4。兩條是互補，不是重複。
+
+    突變實測（2026-09-14）：`note` 接 `_al["action_text"]` → 轉紅。
+    """
+    _tree = ast.parse(_PAGE.read_text(encoding="utf-8"))
+    _fns = [_n for _n in ast.walk(_tree)
+            if isinstance(_n, ast.FunctionDef) and _n.name == "_card_allocation"]
+    assert len(_fns) == 1, (
+        f"預期恰好一個 `_card_allocation` 定義，實際 {len(_fns)} 個 —— "
+        f"本條可能守錯對象")
+
+    _bad = [f"line {_c.lineno}" for _c in ast.walk(_fns[0])
+            if isinstance(_c, ast.Constant) and _c.value == "action_text"]
+    assert not _bad, f"📐 建議資產水位卡又去讀 `action_text` 了：{_bad}"
