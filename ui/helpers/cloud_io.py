@@ -27,6 +27,9 @@ from repositories.snapshot_repository import (
     save_holdings_overview,
 )
 from infra.oauth import OAuthError
+# 寫回客戶 Google Sheet 的「級別」一律走這一支（L0 純函式）。
+# 本檔原本有兩處各寫一份三元式，且兩處都只讀 `is_core`、完全無視 `policy_tier`。
+from shared.policy_tier import fund_tier_sheet_value
 
 
 def _dump_all_to_sheet_v2(client: object,
@@ -67,9 +70,16 @@ def _dump_all_to_sheet_v2(client: object,
                 "fund_code":        _code,
                 "fund_name":        str(_f.get("name", "") or ""),
                 "currency":         str(_f.get("currency", "")),
-                "tier":             ("core" if _f.get("is_core") else
-                                     "satellite" if _f.get("is_core") is False
-                                     else ""),
+                # ⭐ 級別走 L0 SSOT：`policy_tier`（v1 欄）優先 → `is_core`（v2 三態）
+                #    → 都沒有就寫**空字串**（未設定）。
+                # 舊寫法是 `("core" if is_core else "satellite" if is_core is False else "")`：
+                #  (a) 它**只讀 `is_core`**，使用者在 v1 Sheet 明示的 `policy_tier` 被無視；
+                #  (b) 那個 `""` 分支在實務上到不了 —— 上游
+                #      `ui/helpers/portfolio/load.py` 每次載入都用基金名稱猜一個
+                #      **嚴格 bool** 塞回 `is_core`，`None`（未設定）當場消失，
+                #      於是「空白」必定被寫成 core 或 satellite。
+                # 兩個病都在 Q8 批次一切斷；本行是那條鏈的最後一段。
+                "tier":             fund_tier_sheet_value(_f),
                 "invest_twd":       int(_f.get("invest_twd", 0) or 0),
                 "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                 "units":            _units,
@@ -248,10 +258,13 @@ def dump_all_to_sheet(client: object,
                     "currency":     str(_f.get("currency", "")),
                     "fx_at_buy":    0.0,
                     "notes":        "v18.162 全部寫入",
-                    "policy_tier":  ("core" if _f.get("is_core")
-                                     else "satellite"
-                                     if _f.get("is_core") is False
-                                     else ""),
+                    # ⭐ 同 `_dump_all_to_sheet_v2`：走 L0 SSOT，未設定寫空字串。
+                    # 這一處尤其嚴重 —— v1 讀取路徑
+                    # （`repositories/policy/v1.py::sync_policies_to_portfolio_funds`）
+                    # 寫進 portfolio_funds 的是 `policy_tier`，**不是** `is_core`；
+                    # 舊寫法只讀 `is_core`（＝基金名稱猜出來的那個），
+                    # 等於**拿猜測覆寫使用者在 Sheet 上親手填的 core/satellite**。
+                    "policy_tier":  fund_tier_sheet_value(_f),
                     # v18.183：現金給付% + 含息成本也寫進保單分頁
                     "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                     "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
@@ -367,6 +380,19 @@ def _load_all_from_sheet_v2(client: object,
                 "div_cash_pct":     float(_row.get("div_cash_pct", 100) or 0),
                 "is_core":          (True if _tier == "core" else
                                      False if _tier == "satellite" else None),
+                # ⭐ v2 分頁的 `tier` 欄是本路徑的**唯一**級別權威，
+                # 所以要把 v1 的 `policy_tier` 一併清乾淨，不能讓 `**_prev` 把舊值留著。
+                # 為什麼必要：`shared/policy_tier.resolve_tier` 讓 `policy_tier` 勝過
+                # `is_core`（v1 讀取路徑只寫前者，所以必須這樣排），而 `**_prev` 有兩條
+                # 真實來源會帶進**過期的** `policy_tier`：
+                #   (a) 同一個 session 先走過 v1 讀取路徑
+                #       （`repositories/policy/v1.py::sync_policies_to_portfolio_funds`）；
+                #   (b) 先還原過 JSON 備份 —— `ui/helpers/io/json_backup.py` 有備份這個欄位。
+                # 不清的話，這一輪從 v2 分頁讀到的新級別會被舊值蓋掉，
+                # 而且下一次存檔會把那個舊值**寫回客戶的 Sheet**。
+                # 寫空字串而不是刪 key：對所有讀取端（`resolve_tier` / 保單一覽 /
+                # JSON 備份）與「這個 key 不存在」完全等價，**畫面零變化**。
+                "policy_tier":      "",
             })
         ss["portfolio_funds"] = _new_funds
         out["added"]   = sorted(_new_codes - _prev_codes)
