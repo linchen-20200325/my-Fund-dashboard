@@ -7,8 +7,20 @@
 
 * **「修復前紅」** ＝ 真的在守這次的修復，把修復拿掉會轉紅。
 * **「修復前綠（回歸鎖）」** ＝ 現況本來就對，只防未來改壞。**不是**本次修復的證據。
-* **「形態偵測」** ＝ 比對字串形狀，**可以被繞過**（換個說法就躲掉了）；
-  留著是縱深防禦，真正 fail-closed 的是它隔壁那條語意斷言。
+* **「形態偵測」** ＝ 比對字串形狀，**可以被繞過**（換個說法就躲掉了）。
+
+⚠️ **2026 第二輪更正（有意識的更正，不是漏刪）**：本行原本接著寫
+~~「真正 fail-closed 的是它隔壁那條語意斷言」~~ —— **那句話是假的**。
+`test_old_guess_wording_is_gone_from_both_sites` 與
+`test_sheet_explicit_tier_is_not_described_as_a_name_guess`
+**最後斷言的是同一個字面子字串** `_GUESS_WORDING`，差別只在 summary 怎麼建構、
+**不在斷言什麼**。實測（把同一句謊話換句話說 ——
+「其餘 N 檔是系統照基金名稱裡的字眼猜出來的」）：**兩條全綠，0 failed**。
+⇒ 那兩條**都**只在守「那 8 個字有沒有出現」，**沒有任何一條在守文案是不是真的**。
+**現在守語意的是 `test_the_other_group_is_stated_as_unknown_not_asserted`**
+（它要求的是「必須有不確定性標記」這種**肯定式**條件，
+換句話說的謊話**沒有**那個標記 ⇒ 轉紅）。**它擋得到什麼、擋不到什麼，寫在它自己的
+docstring 裡，已逐條用突變驗過 —— 不要在沒跑突變的情況下替任何一條宣稱 fail-closed。**
 
 ## ⚠️ 本檔涵蓋不到的那一半（誠實標註，不要誤讀本檔的綠燈）
 
@@ -381,6 +393,64 @@ def test_sheet_explicit_tier_is_not_described_as_a_name_guess(monkeypatch) -> No
         f"腳註把客戶自己填的級別說成系統猜的：{_notes}")
 
 
+# ── 語意斷言：換句話說的謊話擋不擋得住 ───────────────────────────────
+# 不確定性標記。**肯定式**條件：文案必須表明「系統不知道」。
+# 一句換了說法的斷言（「其餘 N 檔是系統照基金名稱裡的字眼猜出來的」）
+# 沒有這些標記 ⇒ 轉紅。這正是字面黑名單擋不到的那一半。
+_UNCERTAINTY_MARKS = ("分不出", "無法分辨", "無法確認", "可能")
+# 否定客戶「有填過」的斷言（黑名單那一半，保留當縱深防禦）
+_DENIALS = ("未在 Sheet 的級別欄明示", "非 Sheet 明示", "未在 Sheet 明示")
+
+
+def test_the_other_group_is_stated_as_unknown_not_asserted(monkeypatch) -> None:
+    """⭐ **修復前紅。** 客戶在 v2 Sheet「級別」欄**親手填過**的那一檔，
+    不在 `n_tier_from_sheet` 裡 —— 文案描述這個「其餘」群組時，
+    **只能說「系統分不出」，不得斷言它的來源**。
+
+    **為什麼要有這一條（B2）**：本檔另外兩條
+    （`test_old_guess_wording_is_gone_from_both_sites` /
+    `test_sheet_explicit_tier_is_not_described_as_a_name_guess`）
+    最後都只斷言 `_GUESS_WORDING` 這個**字面子字串**不出現。
+    實測：把同一句謊話換句話說，**兩條全綠**。
+
+    **本條換一種守法**：不是列黑名單（那永遠列不完），而是要求一個**肯定式**條件
+    —— 文案**必須**帶不確定性標記。一句斷言句沒有那個標記，**不管它用什麼詞**。
+
+    ⚠️ **這一條擋得到什麼、擋不到什麼（已用突變逐條驗過，不要擴大解讀）**：
+    * ✅ **擋得到**：把「其餘」那段換成任何**斷言句**（AM6 那種換句話說的謊話）。
+    * ✅ **擋得到**：把否定客戶的舊句貼回來（`_DENIALS` 黑名單那一半）。
+    * ⛔ **擋不到**：一句**掛著「可能」卻仍然誤導**的話
+      （例：「其餘 N 檔可能是系統猜的」）—— 它帶標記，本條會放行。
+      本條守的是「有沒有把話說死」，**不是**「這句話讀起來公不公道」。
+    * ⛔ **擋不到**：文案以外的任何東西（比例數字、`summarize_core_satellite` 的二態行為）。
+    """
+    from ui.components.allocation_donut_card import build_footnotes
+    from ui.helpers.portfolio.allocation import (
+        format_core_satellite_caption, summarize_core_satellite)
+
+    # 一檔客戶在 v2「級別」欄親手填的 + 一檔 v1 `policy_tier` 明示的
+    _v2 = _fund_read_from_sheet_v2_tier_column(monkeypatch, "core")
+    _v2["invest_twd"] = 300
+    _s = summarize_core_satellite([{"policy_tier": "core", "invest_twd": 100}, _v2])
+
+    # 前提：客戶填過的那一檔確實落在「其餘」群組裡（這正是說謊的溫床）
+    assert _s["n_funds"] == 2 and _s["n_tier_from_sheet"] == 1, _s
+
+    for _where, _text in (("caption", format_core_satellite_caption(_s)),
+                          ("footnote", " ".join(build_footnotes(_s)))):
+        assert any(_m in _text for _m in _UNCERTAINTY_MARKS), (
+            f"{_where} 把「其餘」群組的來源說死了 —— 客戶在 Sheet「級別」欄填過的"
+            f"那一檔就在這個群組裡，系統並不知道它是誰決定的。"
+            f"必須帶下列任一不確定性標記 {_UNCERTAINTY_MARKS}：{_text}")
+        for _d in _DENIALS:
+            assert _d not in _text, (
+                f"{_where} 否定了客戶實際做過的事（他在 Sheet「級別」欄填過）：{_text}")
+        # 並且必須把「可能是你設的」留在檯面上，不得只列系統那一側
+        assert ("你" in _text or "您" in _text), (
+            f"{_where} 沒有把「可能是你自己設定的」列為可能來源，"
+            f"等於暗示這一群都是系統決定的：{_text}")
+
+
 def test_caption_and_footnote_disclose_that_unset_counts_as_satellite() -> None:
     """⭐ **修復前紅。** 「未設定」的錢被算進衛星，文案**必須講出來**。
 
@@ -471,10 +541,12 @@ def test_caption_counts_come_from_the_summary_not_from_a_constant() -> None:
 def test_old_guess_wording_is_gone_from_both_sites() -> None:
     """**形態偵測，可被繞過**（換個說法就躲掉了）—— 誠實標註，不要當主要保證。
 
-    真正 fail-closed 的是
-    :func:`test_sheet_explicit_tier_is_not_described_as_a_name_guess`
-    （它驗的是**實際算出來的那一檔**）。本條只是讓「有人把那半句貼回去」
-    在 code review 之前就先紅。
+    ⚠️ **2026 第二輪更正**：本條原本寫 ~~「真正 fail-closed 的是
+    :func:`test_sheet_explicit_tier_is_not_described_as_a_name_guess`」~~ ——
+    **不成立**：那一條的最終斷言與本條**是同一個字面子字串**，
+    它只是換了一種方式把 summary 湊出來。**兩條都是形態偵測。**
+    守語意的是 :func:`test_the_other_group_is_stated_as_unknown_not_asserted`。
+    本條保留的價值只有一個：讓「有人把那半句原封貼回去」先紅。
     """
     from ui.components.allocation_donut_card import build_footnotes
     from ui.helpers.portfolio.allocation import (

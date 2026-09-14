@@ -111,9 +111,27 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
                         #   加入 → 載入 → 存檔     → 科技型 `satellite` / 配息型 `core`
                         # 兩個值都不是客戶的值：**客戶根本沒設定過,正確答案是留白。**
                         #
-                        # 少了這個鍵,三處寫回的三元式都會走到 `else ""` 分支 ⇒ 寫回空字串
-                        # ⇒ 客戶 Sheet 上的空白保持空白（`CLAUDE.md §1` Fail Loud:
-                        # 不知道就不要編一個值）。
+                        # 少了這個鍵,**五處**寫回的三元式都會走到 `else ""` 分支
+                        # ⇒ 寫回空字串 ⇒ 客戶 Sheet 上的空白保持空白
+                        # （`CLAUDE.md §1` Fail Loud: 不知道就不要編一個值）。
+                        #
+                        # ⚠️ **2026 第二輪更正（有意識的更正,不是漏刪）**：本行原寫
+                        # ~~「三處」~~。**結論不變（五處行為完全相同：缺鍵 → `""`）,
+                        # 錯的只有計數。** 實測(AST 結構掃描 + 逐處把運算式取出來,
+                        # 餵一個沒有 `is_core` 鍵的 dict 實際執行,五處輸出皆為 `""`)：
+                        #   `ui/helpers/cloud_io.py`          — v2 `tier` 欄寫回
+                        #   `ui/helpers/cloud_io.py`          — v1 `policy_tier` 欄寫回
+                        #   `ui/tab3_portfolio.py`            — Tab3 批次加入寫回
+                        #   `ui/tab3_t7_ledger.py`            — T7 套用起始部位寫回
+                        #   `repositories/snapshot_repository.py` — 快照分頁寫回
+                        # ⚠️ **第五處當初為什麼被漏掉（這比數字本身重要）**：本輪第一版
+                        # 掃描要求運算式裡出現 `"core"` / `"satellite"` 兩個字面值,
+                        # 而快照那一處用的是**中文** `"核心"` / `"衛星"` ——
+                        # **字表選錯,那條掃描結構上就看不到它**,再跑一百次也一樣。
+                        # 改成「只看結構(巢狀三元 + 測試式提到 `is_core` + `""` 兜底),
+                        # 不看 tier 字面值」之後才掃到五處。
+                        # ⚠️ **刻意不寫行號**：行號在任何一次重構後就失效,
+                        # 而重構**不會**觸發本註解更新(`CLAUDE.md` §8.2.A.0 規則 1 同精神)。
                         "invest_twd": 0,
                     })
                     session_state["portfolio_funds"] = _pf

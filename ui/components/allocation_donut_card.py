@@ -133,6 +133,22 @@ def build_footnotes(summary: Mapping[str, Any] | None) -> list[str]:
     ⛔ 本批**不**把「未設定」做進第三片（那是版面結構異動，依 `CLAUDE.md §-1.5.4`
     須先出線框草稿給客戶拍板）；本批只做**誠實揭露**。
 
+    ⚠️ **2026 第二輪回修（有意識的更正，不是漏刪）—— 第一版的替代腳註自己也在說謊**
+
+    第一版寫「這 N 檔的級別**未在 Sheet 的級別欄明示**，由系統代為分類
+    （來源可能是 Sheet 上的級別資料，也可能是系統推定）」。**兩個問題**：
+    (1) **它否定客戶真的做過的事** —— ``repositories/policy/v2.py`` 寫進客戶分頁的
+    表頭裡，``tier`` 欄在客戶眼裡就叫 **「級別」**；一個在那一欄填了 core 的客戶，
+    會讀到系統點名他剛填的那一欄說他沒填。
+    (2) **同一句自我矛盾** —— 前半斷言「未在級別欄明示」，後半又說「來源可能是
+    Sheet 上的級別資料」；對任何一檔而言，兩半必有一半為假。
+
+    現在的腳註**只陳述系統的無知**（「系統分不出是誰決定的」），把三種可能
+    （你設過／系統依名稱判讀／還沒設定）並列，**不對任何一檔下斷言**。
+
+    :func:`ui.helpers.portfolio.allocation.format_core_satellite_caption`
+    的 docstring 有完整的驗證紀錄（49 組真實來源組合）與該驗證的已知盲點。
+
     ⚠️ **腳註正文刻意不寫出欄位名**（走「Sheet 的級別欄」這種使用者語言）：
     `tests/test_ui3b_components.py::TestAllocationDonutCard
     ::test_component_does_not_recompute_the_summary` 明令本元件的**程式碼**
@@ -157,10 +173,11 @@ def build_footnotes(summary: Mapping[str, Any] | None) -> list[str]:
     n_funds = int(summary.get("n_funds") or 0)
     if n_funds and n_sheet < n_funds:
         notes.append(
-            f"⬜ {n_funds - n_sheet}/{n_funds} 檔的核心／衛星級別"
-            "**未在 Sheet 的級別欄明示**，由系統代為分類"
-            "（來源可能是 Sheet 上的級別資料，也可能是系統推定）。"
-            "**未設定者一律併入衛星**，這張圖只有兩片，看不出哪些是「還沒決定」。")
+            f"⬜ {n_funds - n_sheet}/{n_funds} 檔的核心／衛星級別，"
+            "**系統分不出是誰決定的** —— 可能是你在 Sheet 的級別欄設定過，"
+            "可能是系統依基金名稱代為判定，也可能**未設定**；"
+            "規則上**未設定一律算進衛星**，"
+            "而這張圖只有兩片，看不出哪些是「還沒決定」。")
     return notes
 
 
