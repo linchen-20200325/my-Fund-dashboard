@@ -56,6 +56,9 @@ __all__ = [
     "_src_tdcc_meta",
     "_src_yahoo_finance_nav",
     # ── 內部 helper(orchestration 用)──
+    # 2026-09-14:fund_orchestration 的 meta 填寫段呼叫它挑「基金類別」,
+    # 底線名必須在 __all__ 才會被 `import *` 帶過去(v19.248 R17 守衛所要求)。
+    "_pick_fund_category",
     "_cnyes_parse_navs", "_cnyes_resolve_code",
     # 2026-08-11:`_infer_year_for_mmdd`(v19.333 F5 抽出的 MM/DD 補年份純函式)
     # 新增為 orchestration consumer —— legacy pipeline 的近30日區塊原本 inline

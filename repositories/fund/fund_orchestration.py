@@ -47,12 +47,6 @@ from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re
 from repositories.fund.nav_metrics import (
     fetch_holdings, fetch_nav, fetch_performance_wb01, fetch_risk_metrics,
 )
-# 2026-09-14:`_pick_fund_category` 是底線名且**不在** sources.__all__ 內,
-# 上面的 `import *` 帶不進來 —— 直接裸呼叫會拋 NameError,又被本檔下方
-# `except Exception as e: print(f"[fetch_basic] {e}")` 完整吞掉,結果是整段
-# meta 填寫(category/fund_type/investment_target/mgmt_fee/TER…)靜默消失。
-# 與上面 v19.287/v19.288 那 4 個是**同一種**失效模式,故照同樣辦法顯式 import。
-from repositories.fund.sources import _pick_fund_category
 
 
 def _nav_span_days(_s) -> int:
@@ -1083,6 +1077,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 # 與 _src_tcb_meta)。原式把「投資標的」的公開說明書長描述當類別,污染 UI 與
                 # services/regime_fit.asset_bucket 的子字串比對。呼叫慣例與另兩處一致(不加
                 # .replace:helper 自己 strip,且空的投資標的會正確退回基金類型)。
+                # 本名由檔頭的 `from ...sources import *` 帶入 —— 底線名需列在 sources.__all__
+                # 才過得來,已於同批加入(v19.248 R17 守衛強制此約定,不得改用顯式 import 繞過)。
                 result["category"]        = _pick_fund_category(rows_map)
                 result["fund_region"]     = rows_map.get("投資區域", "").replace(" ","")
                 result["fund_type"]       = rows_map.get("基金類型", "").replace(" ","")
