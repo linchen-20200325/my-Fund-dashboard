@@ -46,6 +46,15 @@
 ⚠️ **本檔的斷言絕大多數是執行期的**（要 streamlit ＋ 假 `st` 錄一輪）。
 撰寫當下本機沒有 `pandas` / `numpy`，所以三條與影子基金重疊有關的既有測試
 在本機是紅的（**base 上就是紅的**，不是本批造成的）；**全套的真憑據以 CI 為準。**
+
+⚠️ **2026-09-14 補一筆，因為上面那句話會被讀成「本檔在本機一定有紅」**：
+**替身換了，結論就換。** 第五輪回修組用的是**fail-loud 假件**
+（`pandas`/`numpy`/`plotly`/`pandera`/`requests`/`urllib3` 都 import 得到、
+**一被真的使用就 raise**），於是 `ui.helpers.fund.checkup` 真的載入得了，
+**本檔在那個替身下是全綠的**。
+⛔ **那三條仍然是紅的 —— 但它們住在 `tests/test_wf02_health_skeleton.py`，不是本檔。**
+⇒ 讀本段時請分清楚「**哪一檔**」與「**哪一套替身**」；
+**兩者任一不同，「本機紅不紅」就是不同的答案，而它從來不是 CI 的替身。**
 """
 from __future__ import annotations
 
@@ -61,7 +70,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from test_wf02_health_conclusion import (  # noqa: E402
     BLIND, FOUR_WAY, LAG, _conclusion_slice)
-from test_wf02_health_skeleton import _fund, _render, _text  # noqa: E402
+from test_wf02_health_skeleton import (  # noqa: E402
+    _fund, _holdings_of, _render, _text)
 
 from ui.helpers.render_state import NOT_READY_MARK  # noqa: E402
 from ui.helpers.story_nav import where_to_find  # noqa: E402
@@ -74,6 +84,7 @@ from ui.views.page_02_health import (  # noqa: E402
     GROUP_HEADLINES,
     HEALTH_TABLE_COLUMNS,
     METRIC_PLAIN_LANGUAGE_KEYS,
+    _GROUP_CLEAR,
     _eating_labels,
     _eating_note,
     _fund_findings,
@@ -233,95 +244,174 @@ def test_the_wireframe_verbatim_strings_really_come_from_the_wireframe(
         f"  線框：{WIREFRAME}")
 
 
-#: 唯一允許的「不是整筆」形態：那句話**接在群組抬頭後面**，中間隔一個**段落換行**。
+#: 「群組抬頭 ＋ 名單」與那句話之間的段落換行。**只在 :func:`_expected_clear_payload`
+#: 裡用來組出整筆的期望值**，⛔ 不再是判準的一部分（理由見 :func:`_verbatim_match`）。
 #: 畫面上長這樣：``🟢 **這 2 檔沒有查出問題** HC1、HC2\n\n配息蓋得住、也沒有落後同類。``
 _PARA_BREAK = "\n\n"
 
 
-def _verbatim_match(payload: str, value: str) -> bool:
+def _expected_clear_payload(portfolio: list) -> str:
+    """clear 群那**一整筆**渲染紀錄應該長的樣子。
+
+    ⭐ **為什麼要把整筆組出來，而不是放寬判準去接受一個「前綴」**
+    ------------------------------------------------------------
+    六句線框逐字裡，**只有這一句不是整筆** —— 它被接在群組抬頭後面送進同一個
+    `st.markdown`。前三輪的做法是**放寬判準**去容忍那個前綴，而「什麼樣的前綴算合法」
+    每收緊一次就漏一種寫法（詳見 :func:`_verbatim_match` 的沿革）。
+    **本輪改成：把那一筆整個組出來，判準退回 `==`。**
+
+    ⭐ **名單、檔數、分群一律問被測檔自己**（`_holdings()` → `_uniq_by_code` →
+    `_fund_findings`），本函式**只負責格式**。於是「哪幾檔算 clear」不是在這裡抄第二份。
+
+    ⚠️ **本函式確實抄了一樣東西：那一行的「組裝方式」**
+    （``🟢 **這 N 檔<抬頭>** `` ＋ ``、`` 串接 ＋ 段落換行）。
+    **這是刻意的**：判準要封閉，就必須有一份「應該長什麼樣」的期望值；
+    把組裝方式放在測試這邊，被測檔一改格式這裡就紅 —— 那正是「逐字」守衛該有的行為。
+    ⛔ **抄的是組裝，不是文案**：抬頭走 `GROUP_HEADLINES` SSOT、那句話走
+    :data:`~ui.views.page_02_health.CLEAR_NOTE` SSOT，**一個字都沒有在這裡重打**。
+    """
+    _clear = [_r for _r in _fund_findings(_uniq_by_code(_holdings_of(portfolio)))
+              if _r["group"] == _GROUP_CLEAR]
+    assert _clear, (
+        "（前提檢查）這個 fixture 跑出來的 clear 群是空的 —— "
+        "那句話根本不會被畫出來，本函式組出來的期望值會對著空氣生效。")
+    assert not any(_r["near"] for _r in _clear), (
+        "（前提檢查）這個 fixture 的 clear 群裡有「接近警戒」的檔 —— "
+        "那一群的說明句會換成 `CLEAR_NOTE_WITH_NEAR_PREFIX` 那一支"
+        "（見 `_render_verdict_line` 的 `_near` 分支），本函式組的期望值就不對了。")
+    return (f"🟢 **這 {len(_clear)} 檔{GROUP_HEADLINES[_GROUP_CLEAR]}** "
+            + "、".join(_r["label"] for _r in _clear)
+            + _PARA_BREAK + CLEAR_NOTE)
+
+
+def _verbatim_match(payload: str, value: str, *, whole: "str | None" = None) -> bool:
     """這一筆渲染紀錄算不算「線框那句話原封出現在畫面上」。
 
-    ⛔⛔ **2026-09-09 第二輪獨立稽核：舊判準 `_x == _value or _x.endswith(_value)`
-    只關了後綴，前綴全開。** 稽核三顆突變**全部 114 passed**：
+    **判準是一個運算子：`==`。** 沒有 `endswith`、沒有前綴形狀、沒有計數。
+    ``whole`` 是**那一筆整筆應該長的樣子**（只有 clear 群那一句需要，
+    由 :func:`_expected_clear_payload` 從被測檔組出來）；不給就是「必須整筆等於 `value`」。
 
-    ======================================================  ==============
-    突變                                                      舊判準
-    ======================================================  ==============
-    在 `BUCKET_GRADE_CAPTION` **前面**接「這一欄不重要，可以忽略。」   **存活**
-    在 clear 群說明句 `_why` **前面**接「不用管下面這句。」            **存活**
-    在三句 SSOT 白話**前面**各接「不用看這些。」                      **存活**
-    ======================================================  ==============
+    ⛔⛔ **沿革 —— 這是同一個洞的第四次，前三次都是「把合法前綴的形狀再描細一點」**
+    ---------------------------------------------------------------------------
+    ============================================  ================================
+    判準                                            被什麼打穿
+    ============================================  ================================
+    ① 整頁 `join` 之後的子字串 `in`                  前後接一段字都通過
+    ② ``== or endswith``                           **前綴全開**（稽核三顆突變 114 passed）
+    ③ ``==``，或前綴「只有一個段落換行且結束在那裡」   **markdown 正規的寫法**：
+                                                   ``"…。" + "\\n\\n" + value`` ——
+                                                   前綴以段落換行結尾、`count == 1`
+                                                   ⇒ **判定為合法**
+    ④ **本輪：`==`（整筆）**                         —
+    ============================================  ================================
 
-    第一顆的效果與稽核當初抓到的那顆存活突變**完全等價**
-    （都是在同一句上加一句否定它 §1 用意的話），只是換到前面。
-    ⚠️ **洞本身在 base 也在**（舊舊判準是整頁 `in`，兩頭都放行）；
-    **本批新增的是「已經收緊」這個描述** —— 註解逐字寫著
-    「`endswith` 一樣擋得住『接一段字』」，**那句話是假的**。
+    ⚠️ **③ 漏掉的正是「讓前綴在畫面上顯示成一個獨立段落」的唯一寫法。**
+    第四輪獨立稽核的產線突變（打在渲染呼叫上，不是打在常數上）::
 
-    **現行判準（兩條，缺一不可）**：
+        - st.caption(BUCKET_GRADE_CAPTION)
+        + st.caption("這一欄不重要，可以忽略。\\n\\n" + BUCKET_GRADE_CAPTION)
 
-    1. **整筆相等** —— 本組實測 6 句裡有 **5 句**走這一條
-       （量測日 2026-09-09：兩個標題、五桶評等 caption、Sharpe、最大回撤）。
-    2. **或**它是**整筆的結尾**，而前面那一段**只有一個段落換行、且就結束在那裡** ——
-       也就是「群組抬頭 ＋ 名單 ＋ `\n\n`」那一種，**再多一個字都不行**。
+    **本組實跑重現：`56 passed`，零紅燈**（同一顆去掉 ``\\n\\n`` 則 `1 failed, 55 passed`
+    —— 也就是**越像 markdown 正規寫法的攻擊，③ 越擋不住**）。畫面上使用者看到的是::
 
-    ⇒ 於是「在前面接一段字」會讓前綴變成 ``…\n\n不用管下面這句。``
-    （**不以段落換行結尾**）或 ``…\n\n不用管。\n\n``（**兩個段落換行**），兩種都轉紅。
+        這一欄不重要，可以忽略。
 
-    ⛔ **為什麼不乾脆全部 `==`**：本組實測，clear 群那句
-    （「配息蓋得住、也沒有落後同類。」）在畫面上**本來就是接在抬頭後面的**，
-    全部 `==` 會**誤殺它**。⇒ 收緊到「整筆」＋「唯一一種合法尾巴」，
-    **不是**放寬，也**不是**一刀切。
+        「五桶評等」整欄顯示 ⬜ —— 那一欄的評等定義還沒定案，**不拿別的評等填進來充數**。
 
-    ⚠️ **本函式的行為由 :func:`test_the_verbatim_matcher_rejects_a_prefix` 直接釘住**
-    —— 那一條不經渲染，**本機沒有 `pandas` 也跑得動**
-    （:func:`test_those_strings_are_really_on_the_screen_not_just_in_a_constant`
-    在本機會因為 clear 群那一塊需要 `pandas` 而紅，**base 上就是紅的**）。
+    **一句叫使用者忽略 §1 誠實說明的話上了畫面，而本檔 56 條守衛全綠**
+    （⚠️ 「56」是本組跑 `tests/test_wf02_health_wireframe.py` 一檔量到的數字，
+    **不是**「全 repo 相關守衛」的總數 —— 那個數本組沒有量，也不宣稱）。
+    ⚠️ 而 ③ 的 docstring 當時寫著「**兩種都轉紅**」—— **第三種存在，而且它才是自然的那一種。**
+
+    ⭐ **為什麼 `==` 這次是封閉的（不是「再描細一點」）**
+    ----------------------------------------------------
+    ① ~ ③ 都在回答「**什麼樣的前綴可以接受**」，那是一個**開放**的問題 ——
+    零寬字元（``\\u200b\\n\\n``）、全形空白（``　\\n\\n``）、多個段落換行、
+    段落換行加空白……每一種都要另外想到。
+    `==` 不回答那個問題：**任何多出來的位元組都不相等。**
+
+    **誤殺量測（本組自己重跑，⛔ 不照抄第三輪的結論；量測日 2026-09-14）**：
+    六句的渲染紀錄裡 **5 句與值整筆相等**（兩個標題、五桶評等 caption、Sharpe、最大回撤），
+    **只有 clear 群那一句是「抬頭 ＋ 名單 ＋ 一個段落換行」的尾巴**，
+    而它現在由 :func:`_expected_clear_payload` 組出**整筆**期望值 ——
+    **6 句全部走 `==`，誤殺 0。**
+
+    ⛔ **它擋不到什麼（照實寫，不要讀成「畫面封閉了」）**：
+    本函式只回答「**這一筆紀錄是不是那句話**」。**畫面上還有沒有別的紀錄在旁邊說反話**，
+    它一個字都看不到 —— 那一半由結論層的筆數上限
+    （`test_the_conclusion_stays_two_sentences_not_a_second_table`）
+    與內部語言掃描（:data:`_BANNED_ON_SCREEN`）各守一段，**兩者都不是本函式的射程**。
     """
-    if payload == value:
-        return True
-    if not payload.endswith(value):
-        return False
-    _prefix = payload[: len(payload) - len(value)]
-    return _prefix.endswith(_PARA_BREAK) and _prefix.count(_PARA_BREAK) == 1
+    return payload == (value if whole is None else whole)
 
 
 def test_the_verbatim_matcher_rejects_a_prefix():
-    """⛔ **必修 ⚠️1（第二輪稽核）：判準必須同時關住前綴與後綴。**
+    """⛔ **必修 ⚠️1：判準必須同時關住前綴與後綴 —— 這是第三次改它。**
 
-    ⚠️ **舊判準 `== or endswith` 對這三顆突變全部放行**（稽核實測 114 passed）——
-    而它們做的事，與稽核當初抓到的那顆「在後面接一段字」**效果等價**。
+    **沿革（逐輪，⛔ 不要只讀結論）**
+    ---------------------------------
+    - **第二輪稽核**：舊判準 ``== or endswith`` **前綴全開**，三顆突變全部 114 passed。
+    - **第三輪修法**：``==``，或「前綴只有一個段落換行且結束在那裡」。
+      當時的 docstring 寫「**兩種都轉紅**」。
+    - **第四輪稽核**：**第三種存在，而且它才是 markdown 正規的寫法** ——
+      ``"一句話。" + "\\n\\n" + value``：前綴以段落換行結尾、``count == 1``
+      ⇒ **第三輪判準判它合法**。產線突變實測 **56 passed，零紅燈**。
+    - **第五輪（本輪）修法**：判準退回 **`==`（整筆相等）**；
+      clear 群那一句改由 :func:`_expected_clear_payload` 組出**整筆**期望值。
+
+    ⚠️ **本輪把一整族攻擊一次關掉，不是再描細一次前綴的形狀。**
+    **本組把下表每一列都餵給第三輪的判準跑過一次**（在 `ed74c08` 的
+    :func:`_verbatim_match` 上直接呼叫，量測日 2026-09-14）：
+    **第 4、5、7、8 列回 `True`** —— 包含兩種「**看不見的前綴**」
+    （零寬字元、全形空白 ＋ 空一行）。
+    **`==` 之下它們與其他列沒有分別，不必逐一想到。**
 
     ⚠️ **本條刻意不經渲染** —— :func:`test_those_strings_are_really_on_the_screen_not_just_in_a_constant`
     要 `pandas` 才跑得到 clear 群那一塊，本機沒有；那樣這一條會對著半份畫面生效。
     ⇒ 直接對 :func:`_verbatim_match` 下斷言，**判準本身就是被測物**。
     """
     _v = "配息蓋得住、也沒有落後同類。"
+    _head = "🟢 **這 2 檔沒有查出問題** HC1、HC2"
 
     # ✅ 合法：整筆。
     assert _verbatim_match(_v, _v)
 
-    # ✅ 合法：接在群組抬頭後面，中間**一個**段落換行。
-    _ok = "🟢 **這 2 檔沒有查出問題** HC1、HC2" + _PARA_BREAK + _v
-    assert _verbatim_match(_ok, _v), (
+    # ✅ 合法：clear 群那一句 —— **但它合法的理由是「整筆等於期望值」**，
+    #    ⛔ 不是「它有一個長得像合法的前綴」。
+    _ok = _head + _PARA_BREAK + _v
+    assert _verbatim_match(_ok, _v, whole=_ok), (
         "把合法的「抬頭 ＋ 名單 ＋ 段落換行 ＋ 那句話」判成不合法了 —— "
         f"這會誤殺 clear 群那一句：{_ok!r}")
 
-    # ⛔ 前面接一段字（**舊判準放行**）。
-    for _bad in (
-        "這一欄不重要，可以忽略。" + _v,
-        "不用管下面這句。" + _v,
-        "不用看這些。" + _v,
-        "🟢 **這 2 檔沒有查出問題** HC1、HC2" + _PARA_BREAK + "不用管下面這句。" + _v,
-        "🟢 **這 2 檔沒有查出問題** HC1、HC2" + _PARA_BREAK + "不用管。" + _PARA_BREAK + _v,
+    # ⛔⛔ **本輪的核心**：同一筆，**不帶整筆期望值**時一律不合法。
+    #     ⇒ 判準不再有「前綴形狀」這個概念，於是也不再有「哪一種前綴漏掉了」。
+    assert not _verbatim_match(_ok, _v), (
+        "判準又開始接受「前綴」了 —— 那正是 ①②③ 三輪各漏掉一種寫法的那個形狀。\n"
+        f"現況：{_ok!r}")
+
+    # ⛔ 每一種「多接了東西」的寫法。**第三輪判準對第 4、5、7、8 列放行。**
+    for _why, _bad in (
+        ("前面接一段字（① ② 放行）", "這一欄不重要，可以忽略。" + _v),
+        ("前面接一段字（① ② 放行）", "不用看這些。" + _v),
+        ("抬頭後面再塞一句（③ 擋得住）", _head + _PARA_BREAK + "不用管下面這句。" + _v),
+        ("⭐ markdown 正規：一段話 ＋ 空一行（**③ 放行，第四輪稽核實測 56 passed**）",
+         "不用管下面這句。" + _PARA_BREAK + _v),
+        ("⭐ 同上，換一句話（**③ 放行**）", "這一欄不重要，可以忽略。" + _PARA_BREAK + _v),
+        ("兩個段落換行（③ 擋得住）", _head + _PARA_BREAK + "不用管。" + _PARA_BREAK + _v),
+        ("看不見的前綴：零寬字元 ＋ 空一行（**③ 放行**）", "​" + _PARA_BREAK + _v),
+        ("看不見的前綴：全形空白 ＋ 空一行（**③ 放行**）", "　" + _PARA_BREAK + _v),
+        ("後面接一段字（② ③ 擋得住，⛔ 不得因本次改動而放掉）",
+         _v + "這一欄不重要，可以忽略。"),
+        ("後面空一行再接一段字", _v + _PARA_BREAK + "這一欄不重要，可以忽略。"),
     ):
         assert not _verbatim_match(_bad, _v), (
-            "**在前面接一段字**卻被判成「線框那句話原封出現在畫面上」——\n"
-            "⛔ 那正是稽核抓到的那顆突變，只是換到前面。\n"
+            f"「{_why}」卻被判成「線框那句話原封出現在畫面上」。\n"
             f"現況：{_bad!r}")
-
-    # ⛔ 後面接一段字（舊判準擋得住，**不得因為本次改動而放掉**）。
-    assert not _verbatim_match(_v + "這一欄不重要，可以忽略。", _v)
+        # 同一顆，**帶著 clear 群的整筆期望值**時同樣不准通過 ——
+        # 否則 `whole=` 會變成一條新的逃生路。
+        assert not _verbatim_match(_bad, _v, whole=_ok), (
+            f"「{_why}」在帶 `whole=` 時被放行了 —— `whole=` 不是一條旁門。\n"
+            f"現況：{_bad!r}")
 
 
 def test_those_strings_are_really_on_the_screen_not_just_in_a_constant():
@@ -356,13 +446,25 @@ def test_those_strings_are_really_on_the_screen_not_just_in_a_constant():
         #    在那句 caption／那句說明句的**前面**接「這一欄不重要，可以忽略。」照樣綠，
         #    效果與它當初抓到的那顆存活突變**完全等價**。
         #    ⇒ 判準改由 :func:`_verbatim_match` 定義，**前綴那一半也關上了**。
+        # ⛔⛔ **2026-09-14 第四輪稽核：上面那個「前綴那一半也關上了」同樣是假的。**
+        #    第三輪的判準放行「**一段話 ＋ 空一行 ＋ 那句話**」——
+        #    也就是 markdown 裡**唯一**能讓前綴顯示成獨立段落的寫法。
+        #    產線突變 `st.caption("這一欄不重要，可以忽略。\n\n" + BUCKET_GRADE_CAPTION)`
+        #    ⇒ **56 passed、零紅燈**（去掉 `\n\n` 才 1 failed）。
+        #    ⇒ **本輪判準退回 `==`（整筆相等）**：六句裡 5 句本來就整筆相等，
+        #    clear 群那一句改用 :func:`_expected_clear_payload` 組出**整筆**期望值。
+        #    **於是「什麼樣的前綴算合法」這個開放問題整個消失。**
         _payloads = [_p.split("] ", 1)[1] if "] " in _p else _p for _p in _parts]
-        _hit = [_x for _x in _payloads if _verbatim_match(_x, _value)]
+        # clear 群那一句是六句裡唯一被接在群組抬頭後面的 —— 期望值整筆組出來。
+        _whole = _expected_clear_payload(_pf) if _value == CLEAR_NOTE else None
+        _hit = [_x for _x in _payloads if _verbatim_match(_x, _value, whole=_whole)]
         assert _hit, (
-            f"線框逐字的句子「{_what}」**沒有以整筆（或整筆結尾）出現在畫面上**。\n"
+            f"線框逐字的句子「{_what}」**沒有以整筆出現在畫面上**。\n"
             "  ⚠️ 常數在、畫面沒有 ＝ 守衛守到替身；\n"
-            "  ⚠️ 或者它**後面被接了一段字** —— 那同樣是單方面改客戶拍板的文案。\n"
-            f"  期望：{_value!r}\n" + _text(_parts))
+            "  ⚠️ 或者它**前面／後面被接了一段字** —— 那同樣是單方面改客戶拍板的文案，\n"
+            "     而接在前面又空一行時，使用者看到的是一個**獨立段落**在否定它。\n"
+            f"  期望整筆：{(_whole if _whole is not None else _value)!r}\n"
+            + _text(_parts))
 
 
 def test_the_deliberate_deviation_from_the_wireframe_is_still_deliberate():
@@ -1558,7 +1660,8 @@ def test_a_fund_whose_dividend_data_is_missing_is_never_called_clear():
         "畫面上對一檔連配息都讀不到的基金說「配息蓋得住」。\n" + _body)
 
 
-@pytest.mark.parametrize("mode", ["raises", "same-both-ends", "no-excess"])
+@pytest.mark.parametrize(
+    "mode", ["raises", "same-both-ends", "no-excess", "no-excess-at-the-winning-end"])
 def test_the_lag_probe_fails_closed_in_every_degenerate_mode(mode: str, monkeypatch):
     """⛔ **必修 C：判準探針自己的三種退化模式，每一種都要 fail-closed。**
 
@@ -1570,9 +1673,18 @@ def test_the_lag_probe_fails_closed_in_every_degenerate_mode(mode: str, monkeypa
     刪掉它 → **106 passed**，而配上一個退化的 `_grade`，
     **領先同類 8pp 的基金會被印成「要處理…落後 0.0 個百分點」**。
 
-    ⛔ 三種模式都必須回 `None`（＝「不知道」），而**不是**回一個桶名 ——
+    ⛔ 每一種模式都必須回 `None`（＝「不知道」），而**不是**回一個桶名 ——
     回桶名代表每一檔都會被拿去跟它比對，於是**要嘛全部要處理、要嘛全部沒問題**，
     兩種都是說謊。
+
+    ⛔⛔ **2026-09-14 第四輪稽核：三種變四種 —— 第三種只造了一半。**
+    `_lag_verdict_text()` 那一行是**兩個**條件：
+    ``_safe_num(_lag_excess) is None or _safe_num(_win_excess) is None``，
+    而 `no-excess` 只造了「**落後端**算不出超額報酬」。
+    **稽核實測**：把 ` or _safe_num(_win_excess) is None` 刪掉 ⇒ **56 passed**。
+    ⇒ 新增 `no-excess-at-the-winning-end` 把另一個方向補上。
+    ⚠️ **這與 `no-excess` 當初被抓到的是同一個病**（「冠了一個名字，走的是隔壁那條路」），
+    只是這一次漏的不是分支，是**同一個 `or` 的另一半**。
     """
     from ui.helpers.fund import checkup as _ck
 
@@ -1583,7 +1695,7 @@ def test_the_lag_probe_fails_closed_in_every_degenerate_mode(mode: str, monkeypa
         # 兩端回**同一句話** ⇒ 分不出「最差」與「最好」。
         def _grade(_r, _p):
             return (0.0 if _p is not None else None), "⚠️ 落後（汰弱）"
-    else:  # no-excess
+    elif mode == "no-excess":
         # ⚠️ **兩端刻意回不同的句子** —— 這一支是 2026-09-09 第二輪稽核抓到的：
         #    初版兩端都回 `(None, "⬜ 同類資料不足")`，於是真正讓它回 `None` 的是
         #    **隔壁那條** `str(_lag_text) == str(_win_text)`。
@@ -1595,6 +1707,20 @@ def test_the_lag_probe_fails_closed_in_every_degenerate_mode(mode: str, monkeypa
             if _r < 0:
                 return None, "⬜ 同類資料不足"
             return 5.0, "🏆 優等生（抱緊）"
+    else:  # no-excess-at-the-winning-end
+        # ⛔⛔ **2026-09-14 第四輪稽核：上面那一支只造了「落後端」一個方向。**
+        #    被測式是 `_safe_num(_lag_excess) is None or _safe_num(_win_excess) is None`
+        #    —— **兩個條件，上面只走得到第一個**。
+        #    **稽核實測**：把 ` or _safe_num(_win_excess) is None` 整段刪掉
+        #    ⇒ **56 passed、零紅燈**（本組已重跑確認）。
+        #    而那是真的 fail-open：**領先端算不出超額報酬**時，
+        #    乾淨版回 `None`（＝不知道），刪掉之後回 `'⚠️ 落後（汰弱）'` ——
+        #    於是**每一檔只要 `_grade` 回同一句，就會被印成「要處理」**。
+        # ⇒ 本支把**另一個方向**造出來：領先端 `None`、落後端正常，兩句話不同。
+        def _grade(_r, _p):
+            if _r > 0:
+                return None, "⬜ 同類資料不足"
+            return -5.0, "⚠️ 落後（汰弱）"
 
     monkeypatch.setattr(_ck, "_grade", _grade)
     assert _p02._lag_verdict_text() is None, (
@@ -1637,7 +1763,18 @@ def test_the_shadow_note_is_only_reached_when_there_is_at_least_one_pair():
 
     ⚠️ **本條看不到什麼（照實寫）**：它驗的是「有沒有閘門、閘門看的是不是 `_pairs`」，
     **不驗那個閘門的語意對不對**（例如有人改成 `if _pairs is not None:` ——
-    形狀還在、`n=0` 照樣進得去）。**那一半由下面對 `n=0` 的行為斷言補。**
+    形狀還在、`n=0` 照樣進得去）。
+    ~~**那一半由下面對 `n=0` 的行為斷言補。**~~
+    → ⛔ **2026-09-14 第四輪稽核就地更正（有意識的更正，不是漏刪 ·
+    決策者：⑥ 第五輪回修組）：那句話是假的。**
+    下面那一行 `assert "重疊" in _zero` 是**前提檢查**（它自己的訊息就寫著「（前提檢查）」）
+    —— 它只問「`_shadow_pair_note(0)` 回的是不是壞消息」，**從不渲染**，
+    **所以閘門被繞過時它一動也不動**。
+    **稽核實測（本組已重跑確認）**：`if _pairs is not None:` → **56 passed**；
+    `if _pairs or True:` → **56 passed**（只有 `if True:` 會紅，因為那一顆連 `_pairs`
+    這個名字都沒了，本條的 AST 掃描才看得見）。
+    ⇒ **那一半改由 :func:`test_a_zero_pair_shadow_card_never_carries_the_bad_news_sentence`
+    真的渲染一次來補**（下一條）。
     """
     _tree = ast.parse(SRC.read_text(encoding="utf-8"))
 
@@ -1671,10 +1808,59 @@ def test_the_shadow_note_is_only_reached_when_there_is_at_least_one_pair():
         "一對都沒有卻呼叫它，畫面會對著一個**沒有任何重疊**的組合說"
         "「這兩檔的持股高度重疊」。**對著綠燈說壞消息，是 §1 的反面。**")
 
-    # 行為面：閘門若被繞過，`n=0` 會拿到一句**壞消息**——把這件事也釘住，
-    # 免得有人把閘門改成 `if _pairs is not None:`（形狀還在、語意沒了）。
+    # 前提檢查：`n=0` 真的會拿到一句**壞消息**（否則下一條守衛沒有對象）。
+    # ⚠️ **這一行不是行為守衛** —— 它不渲染，閘門被繞過時它一動也不動。
+    #    真正守閘門語意的是下一條（它會把畫面畫出來看）。
     _zero = _shadow_pair_note(0)
     assert "重疊" in _zero, f"（前提檢查）n=0 目前回的不是那句壞消息：{_zero!r}"
+
+
+def test_a_zero_pair_shadow_card_never_carries_the_bad_news_sentence(monkeypatch):
+    """⛔ **必修 ⚠️3 的行為面：上一條驗閘門的「形狀」，這一條驗閘門的「語意」。**
+
+    ⚠️ **2026-09-14 第四輪稽核抓到的缺口**：上一條是 AST，只看「有沒有一個提到
+    `_pairs` 的 `if`」。把閘門改成 **`if _pairs is not None:`** 或 **`if _pairs or True:`**
+    —— 形狀全在、語意整個反掉 —— **兩顆都 56 passed**。
+    而 `_pairs == []` 這條路**不是構造出來的怪狀態** —— 讀 `_render_alert_cards` 可見：
+    只要 `_ov` 算得出來、`matrix` 不是 `None`，就走 else 分支，
+    而那裡寫著 ``"state": STATE_BUSINESS if _pairs else STATE_OK``
+    ⇒ **一對都沒有時那張卡是綠燈、主數字「0 對」**，
+    本文卻會多一句「**這兩檔的持股高度重疊…**」。
+    ⚠️ **本組沒有在有 `numpy` 的環境上跑過真實資料**（見下一段），
+    所以「生產上多久會遇到一次」本組不宣稱；**成立的是「這條分支存在且可達」**。
+    **對著綠燈說壞消息，正是 `_shadow_pair_note` 自己 docstring 那條 ⛔ 要防的事。**
+
+    ⚠️ **為什麼要 monkeypatch SSOT**：`calc_holdings_overlap` 要 `numpy` 才算得出矩陣，
+    本機沒有 ⇒ 不換掉它，這一條會落進「算不出來」那一支灰態，**根本走不到 else 分支**
+    （那正是上一條當初只能寫成 AST 的原因）。
+    ⛔ **換掉的是 SSOT 的「回答」，不是被測的那段邏輯** —— 閘門、卡片組裝、
+    `_shadow_pair_note` 三者都跑的是真的。
+    """
+    import services.portfolio_service as _ps
+
+    # 兩檔、矩陣算得出來、**一對影子都沒有**。
+    monkeypatch.setattr(
+        _ps, "calc_holdings_overlap",
+        lambda _rows: {"matrix": [[1.0, 0.1], [0.1, 1.0]],
+                       "codes": ["HC1", "HC2"], "shadow_pairs": []})
+
+    _parts = _render(portfolio=_ALL_COVERED)
+    _body = _text(_parts)
+
+    # ⭐ 前提檢查（fail-closed）：這一輪真的走到了「算得出來、但 0 對」那一支。
+    #    少了它，哪天卡片改成別的形狀，本條會**對著一張不存在的卡**永遠通過。
+    assert "[metric_value] 0 對" in _body, (
+        "這一輪沒有走到「算得出重疊度、但一對都沒有」那一支 —— "
+        "本條的斷言會對著空氣生效（fail-closed）。\n" + _body)
+
+    _bad = _shadow_pair_note(0)
+    assert _bad not in _body, (
+        "一對影子都沒有（卡片主數字是「0 對」、綠燈），畫面上卻出現了"
+        f"「{_bad}」。\n"
+        "⛔ 對著綠燈說壞消息是 §1 的反面 —— `_shadow_pair_note` 的 docstring "
+        "逐字寫著「**一對都沒有時不得呼叫本函式**」。\n"
+        "⇒ 呼叫端的閘門被繞過了（例如改成 `if _pairs is not None:`／"
+        "`if _pairs or True:` —— 形狀還在、語意沒了）。\n" + _body)
 
 
 def test_the_near_warning_sentence_matches_the_inclusive_ssot_boundary():
