@@ -10,7 +10,7 @@
 ===== ============================== ==========================================
 層     區塊                            版面
 ===== ============================== ==========================================
-1      🧾 ① 結論 — 現在該加碼還是防禦   **全寬**（一句行動 ＋ 理由條列）
+1      🧾 ① 結論 — 現在的景氣位階       **全寬**（一句狀態 ＋ 理由條列）
 –      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
 2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
 3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
@@ -656,6 +656,55 @@ def _card_news() -> dict:
 # ══════════════════════════════════════════════════════════════════
 # 層 1：🧾 ① 結論（全寬）
 # ══════════════════════════════════════════════════════════════════
+# ⛔ ① 結論**只講「現在是什麼狀態」，不講「該做什麼」**（客戶 2026-09-14 拍板）。
+#
+# `services/macro/action_light.py::macro_action_light()` 回傳的 `action` 是
+# **買賣指令**，五條路徑逐字如下（2026-09-14 實測）：
+#   · override 🔴  「減碼 / 保守 —— 拉高現金、核心轉防守，等企穩再進」
+#   · 資料不足 🟡  「資料不足 —— 景氣位階缺,先持有觀望」
+#   · 位階 🟢      「可加碼 —— 核心持有不動 + 衛星積極佈局，定期收息再投」
+#   · 位階 🟡      「持有 —— 分批進場、避免重押單一題材」
+#   · 位階 🔴      「減碼 —— 景氣位階偏弱,拉高現金水位」
+# 本層改印**狀態句**，`action` 一律不上畫面。
+#
+# ⛔ **不改 L2**（`action_light.py` 屬凍結範圍，且另有消費者）—— 在消費端擋住，
+#    與本檔 `_render_layer_evidence` 對 `composite_verdict.action_text` 同一招。
+# ⛔ **狀態句依 `light` / `override` 產生，不從 `action` 字串剖字** ——
+#    剖字會在 L2 改用詞時**靜默**壞掉（剖出來的還是一句看起來正常的話）。
+#
+# ⚠️ **為什麼 override 要有自己的一句**：`light` 只有三個值，行動路徑卻有五條。
+#    override 的 🔴 來自**硬衰退／恐慌訊號真的觸發了**（殖利率倒掛 / Sahm / VIX 恐慌），
+#    **不是**景氣位階偏弱 —— 實測 override 可以在位階 5.0（中性）時就亮紅。
+#    若與位階 🔴 共用「偏弱 —— 收縮訊號多於擴張」，那句話**對 override 是假的**。
+#    故兩者分開；實際觸發了哪一項由 `reasons` 逐條說出。
+#
+# ⚠️ **「資料不足」那一條刻意沒有狀態句**：它的 `support` 不充足，
+#    會在下方閘門就被 `not_ready()` 攔下、根本走不到這裡（2026-09-14 實測）。
+#    **⛔ 絕不可把它映射到 🟡 的「中性」** —— 那是把 ⬜ 說成 🟡（違 §1）。
+#    守衛 `tests/test_no_direct_trade_advice_20260914.py` 逐條釘住這件事。
+_CONCLUSION_STATE_BY_LIGHT: dict[str, str] = {
+    # 🟢 這一句是**客戶逐字拍板**的草稿原文，不要改寫。
+    "🟢": "偏強 —— 擴張訊號明顯多於收縮訊號",
+    "🟡": "中性 —— 擴張與收縮訊號互見",
+    "🔴": "偏弱 —— 收縮訊號明顯多於擴張訊號",
+}
+_CONCLUSION_STATE_OVERRIDE = "警戒 —— 硬衰退／恐慌訊號已觸發"
+
+
+def _conclusion_state(payload: dict) -> str:
+    """① 結論要印的**狀態句**（取代 `payload["action"]` 那句買賣指令）。
+
+    只讀 `override` 與 `light` 兩個結構化欄位，**不碰 `action` 字串**。
+    """
+    if payload.get("override"):
+        return _CONCLUSION_STATE_OVERRIDE
+    _state = _CONCLUSION_STATE_BY_LIGHT.get(str(payload.get("light") or ""))
+    if _state is None:
+        # L2 新增了燈號而本層沒跟上 —— **不編一句狀態**（§1 Fail Loud），誠實說不知道。
+        return "⬜ 這盞燈沒有對應的狀態說明（本層未跟上上游新增的燈號）"
+    return _state
+
+
 def _render_layer_conclusion(ind: dict, phase: dict) -> None:
     """🧾 ① 結論 —— 全頁最上面唯一的結論，**全寬、不進三欄**（線框逐字要求）。
 
@@ -673,7 +722,7 @@ def _render_layer_conclusion(ind: dict, phase: dict) -> None:
     服務層字串若含 `<` / `>` 會被當標籤吃掉（同 `ui/tab1_macro.py` 的 ② 對帳 chip
     與 `tab1_macro_midcycle._card_note` 的既有處置）。
     """
-    st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+    st.markdown("### 🧾 ① 結論 — 現在的景氣位階")
     _light = macro_action_light(ind, phase.get("score"))
     _support = _light.get("support")
     if not is_sufficient(_support):
@@ -690,10 +739,10 @@ def _render_layer_conclusion(ind: dict, phase: dict) -> None:
         # ⚠️ **只有這一條路徑要 `html.escape`**：`business_alert()` 走
         #    `unsafe_allow_html`，服務層字串若含 `<` / `>` 會被當標籤吃掉
         #    （同 `ui/tab1_macro.py` ② 對帳 chip、`tab1_macro_midcycle._card_note`）。
-        business_alert(f"{_light['light']} {_light.get('action', '')}",
+        business_alert(f"{_light['light']} {_conclusion_state(_light)}",
                        [html.escape(_r) for _r in _reasons])
         return
-    st.markdown(f"**{_light.get('light', '')} {_light.get('action', '')}**")
+    st.markdown(f"**{_light.get('light', '')} {_conclusion_state(_light)}**")
     for _r in _reasons:
         # ⚠️ **這裡刻意不 escape**：`st.caption()` 走 markdown，Streamlit 自己會把
         #    HTML 擋掉。先 escape 再交給它 ＝ 雙重跳脫，`<` 會原樣印成 `&lt;`。
@@ -2134,7 +2183,7 @@ def render_market_overview() -> None:
         # 尚未載入：四層的骨架仍然畫出來，但一律灰態 ——「還沒點」不是故障。
         # ⚠️ 骨架照畫、內容留灰，使用者才看得出「這一頁有哪幾層、我還缺什麼」；
         #    整頁空白會讓「還沒載入」與「這頁壞了」長得一模一樣（鐵則 04）。
-        st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+        st.markdown("### 🧾 ① 結論 — 現在的景氣位階")
         not_ready("尚未載入總經資料，還沒有結論可以下。", where=_where_to_load())
         render_cards([
             {"title": _t, "state": STATE_NOT_READY,

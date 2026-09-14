@@ -409,3 +409,215 @@ def test_the_rebalance_chapter_is_still_there():
     _texts = "\n".join(_render_manual().texts())
     for _keep in ("再平衡公式", "偏離程度", "Action_i"):
         assert _keep in _texts, f"再平衡章節的 {_keep!r} 不見了 —— 這一批不該刪掉整章"
+
+
+# ════════════════════════════════════════════════════════════════
+# C 組｜① 結論改講「現在是什麼狀態」（客戶 2026-09-14 第二次拍板）
+# ════════════════════════════════════════════════════════════════
+# `services/macro/action_light.py::macro_action_light()` 的 `action` 是買賣指令，
+# 由 `ui/views/page_01_macro.py::_render_layer_conclusion` 渲染在 ① 結論。
+# 本組守「行動句不上畫面、改印狀態句」。
+#
+# ⚠️ **`light` 只有 3 個值，行動路徑有 5 條** —— 五條各自站在不同的世界裡。
+#    比照 A 組，本組**每一條都真的站進去過**，並先用 C1 把「我真的走到這條路徑」
+#    斷言出來；C1 紅 → 同組其餘綠燈一律不算數。
+#
+# ⚠️ **「資料不足」那一條的正確行為是「被閘門擋下」，不是「給它一句狀態」** ——
+#    把它講成 🟡「中性」就是把 ⬜ 說成 🟡（違 §1）。C4 逐字釘住這件事。
+
+# 客戶逐字拍板的兩句（**字面值錨**，刻意不從產品碼 import）——
+# 其餘各鎖都從產品碼推導期望值，代價是「全部同源 ＝ 一起漂移」；
+# 客戶拍板過的文案必須有一根不動的樁。
+_CLIENT_APPROVED_HEADING = "### 🧾 ① 結論 — 現在的景氣位階"
+_CLIENT_APPROVED_GREEN_STATE = "偏強 —— 擴張訊號明顯多於收縮訊號"
+
+
+def _full_indicators(**override) -> dict:
+    """28 項全取到的 indicators（否則 `_phase_support` 不足，🟢/🟡 根本走不到）。
+
+    ⚠️ 這一點是實測換來的：只給 4 個 override key 的稀疏世界，
+    🟢/🟡 兩條路的 `support` **都不充足**，會被閘門擋下 ——
+    在那種世界裡寫守衛，會誤以為「🟢 從來不上畫面」。
+    """
+    from services.macro.evidence import MACRO_INDICATOR_SCORING_WEIGHTS as _W
+    _d = {_k: {"value": 1.0, "weight": _w, "score": 1.0} for _k, _w in _W.items()}
+    for _k, _v in (("YIELD_10Y2Y", 0.8), ("YIELD_10Y3M", 0.6),
+                   ("VIX", 15.0), ("SAHM", 0.1)):
+        _d.setdefault(_k, {"weight": _W.get(_k, 1.0), "score": 1.0})
+        _d[_k]["value"] = _v
+    for _k, _v in override.items():
+        _d.setdefault(_k, {"weight": _W.get(_k, 1.0), "score": 1.0})
+        _d[_k]["value"] = _v
+    return _d
+
+
+# (名稱, indicators, phase_score, 預期 light, 預期 override, 預期 support 充足)
+_LIGHT_WORLDS = (
+    ("P1-override-red",   dict(VIX=45.0), 5.0,  "🔴", True,  True),
+    ("P2-no-phase-score", {},             None, "🟡", False, False),
+    ("P3-phase-green",    {},             9.0,  "🟢", False, True),
+    ("P4-phase-amber",    {},             4.0,  "🟡", False, True),
+    ("P5-phase-red",      {},             1.0,  "🔴", False, True),
+)
+
+
+def _all_action_light_texts() -> tuple[str, ...]:
+    """五句 `action` **從 L2 現場取回**，本檔不抄第二份（§2.1 SSOT）。"""
+    from services.macro.action_light import macro_action_light
+    _seen: dict[str, None] = {}
+    for _n, _ov, _ps, *_ in _LIGHT_WORLDS:
+        _a = macro_action_light(_full_indicators(**_ov), _ps).get("action")
+        if str(_a or "").strip():
+            _seen[str(_a)] = None
+    return tuple(_seen)
+
+
+def _render_conclusion(override: dict, phase_score):
+    """跑 `_render_layer_conclusion`，錄下畫面、`not_ready`、`business_alert`。"""
+    import ui.views.page_01_macro as _P
+
+    _rec = _Recorder()
+    _nr: list = []
+    _ba: list = []
+    _orig = (_P.st, _P.not_ready, _P.business_alert)
+    try:
+        _P.st = _rec
+        _P.not_ready = lambda *a, **k: _nr.append((a, k))
+        _P.business_alert = lambda *a, **k: _ba.append((a, k))
+        _P._render_layer_conclusion(_full_indicators(**override),
+                                    {"score": phase_score})
+    finally:
+        _P.st, _P.not_ready, _P.business_alert = _orig
+    _blob = "\n".join(_rec.texts() + [str(_x) for a, k in _nr for _x in a]
+                      + [str(_x) for a, k in _ba for _x in a])
+    return _rec, _nr, _ba, _blob
+
+
+def test_the_action_light_text_set_is_not_empty():
+    """反空轉：五句 `action` 真的取得到（否則 C2 會比對空清單而恆綠）。"""
+    _t = _all_action_light_texts()
+    assert len(_t) >= 5, f"只掃到 {len(_t)} 句 action（應 ≥5）：{_t}"
+
+
+@pytest.mark.parametrize("name,ov,ps,light,override,ok", _LIGHT_WORLDS)
+def test_precondition_each_action_light_path_is_really_reached(
+        name, ov, ps, light, override, ok):
+    """**前提**：這五個世界真的分別走到那五條路徑上。
+
+    這條紅 → C2／C3／C4 的綠燈一律不算數（它們可能全擠在同一條路徑上）。
+    """
+    from services.macro.action_light import macro_action_light
+    from shared.evidence_support import is_sufficient
+
+    _r = macro_action_light(_full_indicators(**ov), ps)
+    assert _r.get("light") == light, f"[{name}] light={_r.get('light')!r}，預期 {light!r}"
+    assert bool(_r.get("override")) is override, f"[{name}] override 不符"
+    assert is_sufficient(_r.get("support")) is ok, (
+        f"[{name}] support 充足性={is_sufficient(_r.get('support'))}，預期 {ok} —— "
+        f"reason={getattr(_r.get('support'), 'reason', '')!r}")
+    assert str(_r.get("action") or "").strip(), f"[{name}] L2 沒給行動句，本世界證不了事"
+
+
+@pytest.mark.parametrize("name,ov,ps,light,override,ok", _LIGHT_WORLDS)
+def test_no_action_light_sentence_reaches_the_conclusion(
+        name, ov, ps, light, override, ok):
+    """五條路徑**每一條**都不得把 `action` 那句買賣指令畫上畫面。
+
+    突變實測（2026-09-14）：把 `_conclusion_state(_light)` 改回
+    `_light.get('action', '')` → 本條在**四條會上畫面的路徑上全部轉紅**。
+    """
+    _rec, _nr, _ba, _blob = _render_conclusion(ov, ps)
+    _hit = [_a for _a in _all_action_light_texts() if _a in _blob]
+    assert not _hit, f"[{name}] 行動句出現在 ① 結論：{_hit}"
+
+
+@pytest.mark.parametrize("name,ov,ps,light,override,ok",
+                         [_w for _w in _LIGHT_WORLDS if _w[5]])
+def test_each_rendering_path_shows_a_state_sentence_and_keeps_its_light(
+        name, ov, ps, light, override, ok):
+    """會上畫面的四條路徑：**燈號仍在**、**理由條列仍在**、且印的是狀態句。
+
+    正對照不可省 —— 否則「整塊不畫了」也會讓 C2 變綠。
+    """
+    from ui.views.page_01_macro import (
+        _CONCLUSION_STATE_BY_LIGHT, _CONCLUSION_STATE_OVERRIDE)
+
+    _rec, _nr, _ba, _blob = _render_conclusion(ov, ps)
+    assert not _nr, f"[{name}] 這條路徑不該被 not_ready 擋下"
+    assert light in _blob, f"[{name}] 燈號 {light} 不在畫面上"
+
+    _want = _CONCLUSION_STATE_OVERRIDE if override else _CONCLUSION_STATE_BY_LIGHT[light]
+    assert _want in _blob, f"[{name}] 狀態句 {_want!r} 沒出現在畫面上"
+
+    # 理由條列仍在（客戶裁決：燈號保留、理由條列保留）
+    from services.macro.action_light import macro_action_light
+    _reasons = macro_action_light(_full_indicators(**ov), ps).get("reasons") or []
+    assert _reasons, f"[{name}] 前提：這條路徑本來就該有理由"
+    assert any(str(_r)[:12] in _blob for _r in _reasons), (
+        f"[{name}] 理由條列不見了 —— 本批只換掉行動句，理由要留")
+
+
+def test_the_override_red_is_not_described_as_a_weak_phase():
+    """override 🔴 **不得**與位階 🔴 共用「偏弱」那句 —— 那對 override 是假話。
+
+    override 的紅來自**硬衰退／恐慌訊號真的觸發**（本世界：VIX 45 ≥ 30），
+    而位階是 5.0（中性）。說它「收縮訊號明顯多於擴張訊號」與事實不符。
+
+    突變實測（2026-09-14）：把 `_conclusion_state()` 的 `override` 分支拿掉
+    （只依 `light` 對映）→ 本條轉紅。
+    """
+    from ui.views.page_01_macro import _CONCLUSION_STATE_BY_LIGHT
+
+    _rec, _nr, _ba, _blob = _render_conclusion({"VIX": 45.0}, 5.0)
+    assert _CONCLUSION_STATE_BY_LIGHT["🔴"] not in _blob, (
+        "override 🔴 被說成『位階偏弱』—— 位階其實是 5.0（中性）")
+    assert "警戒" in _blob, "override 🔴 沒有自己的狀態句"
+
+
+def test_the_no_phase_score_path_makes_no_state_claim_at_all():
+    """「資料不足」那條路必須**被閘門擋下**，且畫面上不得出現任何狀態判定。
+
+    ⛔ 把它講成 🟡「中性」＝ 把 ⬜ 說成 🟡（違 §1）。
+
+    突變實測（2026-09-14）：拿掉 `_render_layer_conclusion` 的
+    `if not is_sufficient(_support): ... return` 閘門 → 本條轉紅
+    （畫面會冒出「中性 —— 擴張與收縮訊號互見」）。
+    """
+    from ui.views.page_01_macro import (
+        _CONCLUSION_STATE_BY_LIGHT, _CONCLUSION_STATE_OVERRIDE)
+
+    _rec, _nr, _ba, _blob = _render_conclusion({}, None)
+    assert _nr, "「資料不足」沒有被 not_ready 擋下"
+    _claims = list(_CONCLUSION_STATE_BY_LIGHT.values()) + [_CONCLUSION_STATE_OVERRIDE]
+    _hit = [_c for _c in _claims if _c in _blob]
+    assert not _hit, f"資料不足卻下了狀態判定：{_hit}"
+
+
+def test_the_client_approved_wording_is_rendered_verbatim():
+    """**字面值錨**：客戶逐字拍板的標題與 🟢 那句，必須原樣出現在畫面上。
+
+    其餘各鎖都從產品碼推導期望值（不抄第二份），代價是**全部同源、會一起漂移**；
+    客戶拍板過的文案因此需要一根不動的樁。
+    """
+    _rec, _nr, _ba, _blob = _render_conclusion({}, 9.0)
+    assert _CLIENT_APPROVED_HEADING in _blob, (
+        f"標題與客戶拍板的草稿不符，應為 {_CLIENT_APPROVED_HEADING!r}")
+    assert _CLIENT_APPROVED_GREEN_STATE in _blob, (
+        f"🟢 那句與客戶拍板的草稿不符，應為 {_CLIENT_APPROVED_GREEN_STATE!r}")
+
+
+def test_the_conclusion_never_reads_the_action_field():
+    """結構鎖：① 結論的原始碼**不得再出現 `action` 這個欄位**。
+
+    擋兩種復辟：(a) 直接把 `action` 印回去；(b) 去剖 `action` 字串產生狀態句
+    —— 後者會在 L2 改用詞時**靜默**壞掉（剖出來的還是一句看起來正常的話）。
+    """
+    _tree = ast.parse(_PAGE.read_text(encoding="utf-8"))
+    _fns = [_n for _n in ast.walk(_tree)
+            if isinstance(_n, ast.FunctionDef)
+            and _n.name in ("_render_layer_conclusion", "_conclusion_state")]
+    assert len(_fns) == 2, f"預期兩個函式定義，實際 {len(_fns)}"
+
+    _bad = [f"{_fn.name}:{_c.lineno}" for _fn in _fns for _c in ast.walk(_fn)
+            if isinstance(_c, ast.Constant) and _c.value == "action"]
+    assert not _bad, f"① 結論又去讀 `action` 欄位了：{_bad}"
