@@ -47,6 +47,15 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
 
     if _matched is not None:
         _amt = float(_matched.get("invest_twd", 0) or 0)
+        # ⚠️ **二態，會把「使用者還沒決定」顯示成「衛星(積極)」**（已知限制，本批不修）。
+        # Q8 批次二拿掉本檔下方那個捏造的 `"is_core": True` 之後，剛用「➕ 加入組合」
+        # 加進來的基金在這個 chip 上會由「核心(穩健)」變成「衛星(積極)」——
+        # **兩個都不是事實**，真相是「客戶還沒設定過」。
+        # ⛔ 刻意不在本批修：要正確顯示就得在畫面上新增第三個狀態，
+        # 那是版面／設計變更，依 `CLAUDE.md §-1.5.4` 必須先出線框草稿給客戶拍板。
+        # 同型的二態限制也存在於 `ui/helpers/portfolio/allocation.py`
+        # （未設定的金額併入衛星）—— 那一處本批的處置是**文案誠實揭露、行為不動**。
+        # 已在 PR 描述具名回報，等總管裁決是否另開一批。
         _tag = "核心(穩健)" if _matched.get("is_core") else "衛星(積極)"
         if _total > 0 and _amt > 0:
             _w = _amt / _total * 100.0
