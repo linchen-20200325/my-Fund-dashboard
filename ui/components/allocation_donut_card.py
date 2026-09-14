@@ -115,7 +115,52 @@ def build_allocation_donut(summary: Mapping[str, Any] | None) -> go.Figure | Non
 
 
 def build_footnotes(summary: Mapping[str, Any] | None) -> list[str]:
-    """腳註（純字串）。`n_missing_amount > 0` → **必列**「N 檔不在比例裡」。"""
+    """腳註（純字串）。`n_missing_amount > 0` → **必列**「N 檔不在比例裡」。
+
+    ⚠️ **2026 文案更正（有意識的變更，不是漏刪）**：第二條腳註原本是
+
+        ``f"⬜ {n-k}/{n} 檔的核心／衛星級別**非 Sheet 明示**，由基金名稱關鍵字推定。"``
+
+    完整理由見 :func:`ui.helpers.portfolio.allocation.format_core_satellite_caption`
+    的 docstring（同一句假敘述在本 repo 有兩份，這是第二份）。一句話版本：
+    ``n_tier_from_sheet`` 只數 **v1** 的 ``policy_tier`` 欄，
+    而客戶填在 **v2** ``tier`` 欄的值會被歸進「其餘」—— 那一檔是客戶自己填的，
+    **沒有被任何名稱關鍵字猜過**，舊腳註等於當著客戶的面把他填的東西說成系統猜的。
+
+    **本圓環特別需要補的那一句**：這張圖**恆 2 片**（既有裁決，見 module docstring），
+    所以「還沒決定級別」的部位**在圖上完全看不見** —— 它被算進衛星那一片。
+    不講的話，客戶會把「衛星 X%」讀成「我有 X% 的衛星」。
+    ⛔ 本批**不**把「未設定」做進第三片（那是版面結構異動，依 `CLAUDE.md §-1.5.4`
+    須先出線框草稿給客戶拍板）；本批只做**誠實揭露**。
+
+    ⚠️ **2026 第二輪回修（有意識的更正，不是漏刪）—— 第一版的替代腳註自己也在說謊**
+
+    第一版寫「這 N 檔的級別**未在 Sheet 的級別欄明示**，由系統代為分類
+    （來源可能是 Sheet 上的級別資料，也可能是系統推定）」。**兩個問題**：
+    (1) **它否定客戶真的做過的事** —— ``repositories/policy/v2.py`` 寫進客戶分頁的
+    表頭裡，``tier`` 欄在客戶眼裡就叫 **「級別」**；一個在那一欄填了 core 的客戶，
+    會讀到系統點名他剛填的那一欄說他沒填。
+    (2) **同一句自我矛盾** —— 前半斷言「未在級別欄明示」，後半又說「來源可能是
+    Sheet 上的級別資料」；對任何一檔而言，兩半必有一半為假。
+
+    現在的腳註**只陳述系統的無知**（「系統分不出是誰決定的」），把三種可能
+    （你設過／系統依名稱判讀／還沒設定）並列，**不對任何一檔下斷言**。
+
+    :func:`ui.helpers.portfolio.allocation.format_core_satellite_caption`
+    的 docstring 有完整的驗證紀錄（49 組真實來源組合）與該驗證的已知盲點。
+
+    ⚠️ **腳註正文刻意不寫出欄位名**（走「Sheet 的級別欄」這種使用者語言）：
+    `tests/test_ui3b_components.py::TestAllocationDonutCard
+    ::test_component_does_not_recompute_the_summary` 明令本元件的**程式碼**
+    （docstring／註解已被 `_code_only` 塗白，字串常數**不會**）不得出現
+    ``resolve_core_flag`` / ``invest_twd"`` / 級別欄位名 ——
+    守的是「本元件不得自行加總／分類」。本批第一版把欄位名寫進腳註字串，
+    **當場被那條守衛擋下來**（它是子字串比對，分不出「用這個欄位」與
+    「在文案裡提到它」）。**守衛沒有錯，是文案該換句話說** ——
+    要精確欄位名的讀者在
+    :func:`ui.helpers.portfolio.allocation.format_core_satellite_caption`
+    那一行看得到。
+    """
     notes: list[str] = []
     if not summary:
         return notes
@@ -128,8 +173,11 @@ def build_footnotes(summary: Mapping[str, Any] | None) -> list[str]:
     n_funds = int(summary.get("n_funds") or 0)
     if n_funds and n_sheet < n_funds:
         notes.append(
-            f"⬜ {n_funds - n_sheet}/{n_funds} 檔的核心／衛星級別**非 Sheet 明示**，"
-            "由基金名稱關鍵字推定。")
+            f"⬜ {n_funds - n_sheet}/{n_funds} 檔的核心／衛星級別，"
+            "**系統分不出是誰決定的** —— 可能是你在 Sheet 的級別欄設定過，"
+            "可能是系統依基金名稱代為判定，也可能**未設定**；"
+            "規則上**未設定一律算進衛星**，"
+            "而這張圖只有兩片，看不出哪些是「還沒決定」。")
     return notes
 
 
