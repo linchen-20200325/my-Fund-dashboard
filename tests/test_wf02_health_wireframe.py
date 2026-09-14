@@ -85,6 +85,8 @@ from ui.views.page_02_health import (  # noqa: E402
     HEALTH_TABLE_COLUMNS,
     METRIC_PLAIN_LANGUAGE_KEYS,
     _GROUP_CLEAR,
+    _GROUP_PROBLEM,
+    _GROUP_UNKNOWN,
     _eating_labels,
     _eating_note,
     _fund_findings,
@@ -242,6 +244,133 @@ def test_the_wireframe_verbatim_strings_really_come_from_the_wireframe(
         f"  被測檔：{value!r}\n"
         "  ⇒ 要嘛它被改過了，要嘛它被剪短了。**兩種都是單方面動客戶拍板的文案。**\n"
         f"  線框：{WIREFRAME}")
+
+
+#: 線框 §2 把**三群的抬頭**寫成同一個形狀：``**這 N 檔<抬頭>**``。
+#: squash 之後線框上逐行長這樣（本組 2026-09-14 實測，照抄輸出）::
+#:
+#:     🫐**這2檔要處理**
+#:     🟢**這3檔沒有查出問題**ACCP138、B07、0050
+#:     ⬜**這1檔判不出來**元大高股息平衡
+#:
+#: ⭐ **釘的是整個形狀，不是那三個字** —— 純子字串比對擋不住兩種真實的攻擊：
+#:
+#: 1. ``沒問題`` —— **線框自己就寫著**「判不出來不等於沒問題。」（同一節，
+#:    緊接在第三群下一行），子字串比對會**放行**它；而被測檔
+#:    :data:`~ui.views.page_02_health.GROUP_HEADLINES` 上方的註解明文寫著
+#:    「⛔『沒有查出問題』**不得**簡化成『沒問題』」。
+#: 2. ``判不出`` —— **截斷仍然是子字串**。釘住收尾那兩個 ``*`` 才擋得掉。
+#:
+#: ⚠️ ``\d+`` 是線框畫的示例檔數（2／3／1），畫面上是 ``len(...)`` ——
+#: **本形狀刻意不釘數字**，釘的是「抬頭被包在這個殼裡」。
+_WF_GROUP_HEADLINE_SHAPE = r"\*\*這\d+檔{}\*\*"
+
+
+def _wf_pre_lines() -> list[str]:
+    """⑥ 兩張線框圖 squash 之後的**逐行**清單（空行剔除）。**fail-closed**。
+
+    ⚠️ **刻意逐行，不是整張 squash 之後接成一串** —— 接起來會讓上一行的結尾
+    與下一行的開頭黏在一起，憑空生出線框上**不存在**的組合，
+    那正是 :func:`_wf_line_runs` 的 docstring 記載過的「重組」風險。
+    ⛔ 本函式**不**做跨行接合：三群的抬頭在線框上各自住在一整行裡。
+    """
+    _out: list[str] = []
+    for _pre in _wf_pres():
+        _out += [_l for _l in (_squash(_ln) for _ln in _pre.splitlines()) if _l]
+    return _out
+
+
+def _wf_has_group_headline(value: str) -> bool:
+    """線框 §2 的某一行上，有沒有 ``**這 N 檔<value>**`` 這個形狀。"""
+    _pat = re.compile(_WF_GROUP_HEADLINE_SHAPE.format(re.escape(value)))
+    return any(_pat.search(_l) for _l in _wf_pre_lines())
+
+
+@pytest.mark.parametrize("key", [_GROUP_PROBLEM, _GROUP_CLEAR, _GROUP_UNKNOWN])
+def test_the_three_group_headlines_are_wireframe_verbatim(key: str):
+    """⭐ :data:`~ui.views.page_02_health.GROUP_HEADLINES` 的註解寫
+    「三群在**畫面上**的抬頭（**線框逐字**）」——
+    **在本條寫出來之前，「線框逐字」那四個字沒有任何斷言撐著。**
+
+    **本條擋下來的那顆突變（2026-09-14 第六輪獨立稽核實測）**：
+    把 `_GROUP_UNKNOWN` 的抬頭改成 ``"沒事"`` ⇒ 畫面印出
+
+        ``⬜ **這 1 檔沒事** BLIND 基金。同類資料不足。**判不出來不等於沒問題。**``
+
+    —— 「**查不出來**」被印成「**沒事**」，而**同一句話裡就跟著它自己的反證**；
+    當時跑 19 個相關測試檔，**新失敗 0 條**。
+    那三個字串是本批頭號功能（「點名哪一檔」）的**承重文案**，而
+    :data:`~ui.views.page_02_health.GROUP_HEADLINES` 上方那段註解自己就寫著
+    「⛔『沒有查出問題』**不得**簡化成『沒問題』」—— 那條 ⛔ 同樣沒有牙。
+
+    ⭐⭐ **為什麼判準釘線框、不釘畫面（這一段比條文重要）**
+    ----------------------------------------------------
+    把「畫面上印出來的」拿去跟 :data:`~ui.views.page_02_health.GROUP_HEADLINES`
+    比，**兩邊會一起動** —— 改了常數，畫面與期望值同時變，測試照樣綠。
+    **第二雙眼睛必須來自被測檔改不動的地方**，而線框
+    (`docs/wireframes/draft-four-page-content.html`) 是客戶 2026-09-08 逐字拍板、
+    **本 PR 一個位元組都沒有動**的那份規格。
+
+    ⛔ 改這三個抬頭的正解是**先改線框、拿去給客戶看**，不是在 `.py` 裡換句話說。
+    """
+    _value = GROUP_HEADLINES[key]
+    assert _wf_has_group_headline(_value), (
+        f"第 {key!r} 群的抬頭 {_value!r} **不是客戶拍板線框 §2 裡的那一個**。\n"
+        "  線框把三群寫成同一個形狀：`**這 N 檔<抬頭>**`，"
+        "本條要求被測檔的抬頭原封住在那個殼裡。\n"
+        "  ⇒ 要嘛它被改過了（換句話說），要嘛它被剪短了 —— "
+        "**兩種都是單方面動客戶拍板的文案。**\n"
+        f"  線框：{WIREFRAME}\n"
+        f"  線框 §2 逐行（squash 後）：{_wf_pre_lines()!r}")
+
+
+def test_the_group_headline_shape_has_discrimination():
+    """⭐ 上一條的**正對照**：判準必須真的擋得住東西，不是恆真。
+
+    ⛔ **誘餌刻意挑 ``沒問題``，不是隨手編一個字** ——
+    它**真的出現在線框 §2**（「判不出來不等於沒問題。」），
+    也就是說：**純子字串比對會放行它**。本條同時證明兩件事 ——
+    判準有鑑別力、而且它擋掉的正是被測檔註解點名禁止的那個簡化。
+
+    ⚠️ 另一顆誘餌 ``判不出`` 證明**截斷**也擋得掉（截斷永遠是子字串）。
+    """
+    for _decoy in ("沒問題", "判不出", "沒事"):
+        assert not _wf_has_group_headline(_decoy), (
+            f"誘餌 {_decoy!r} 竟然通過了形狀比對 —— "
+            "本判準沒有鑑別力，上一條等於恆真。\n"
+            f"  線框 §2 逐行（squash 後）：{_wf_pre_lines()!r}")
+    # fail-closed：誘餌全部落空有可能是因為線框根本沒被讀到。
+    assert _wf_pre_lines(), "線框 §2 一行都沒讀到 —— 上面三個 `not` 是對著空集合成立的。"
+
+
+def test_the_three_group_headlines_really_reach_the_screen_in_that_shape():
+    """⭐ 上一條釘註解的前半（「線框逐字」），本條釘後半 —— 「**在畫面上**」。
+
+    ⚠️⚠️ **本條單獨沒有牙，這一點必須先講清楚**：它與被測檔讀的是**同一份**
+    :data:`~ui.views.page_02_health.GROUP_HEADLINES`，改了常數兩邊一起動 ——
+    上面那顆 ``"沒事"`` 突變**本條照樣綠**。
+    **它補的是另一種攻擊**：有人把抬頭在 f-string 裡**寫死**，
+    於是常數還對、畫面已經不是它。⇒ **兩條一起看才封閉，缺一不可。**
+
+    ⚠️ 用 `FOUR_WAY` 是因為它是**唯一**三群同時非空的 fixture
+    （`WIN`/`MID` → clear、`LAG` → problem、`BLIND` → unknown）；
+    帶一條 fail-closed 前提檢查，三群有任何一群空掉就紅，
+    ⛔ 不會對著空氣通過。
+    """
+    _parts = _render(portfolio=FOUR_WAY)
+    _payloads = [_p.split("] ", 1)[1] if "] " in _p else _p for _p in _parts]
+    _recs = _fund_findings(_uniq_by_code(_holdings_of(FOUR_WAY)))
+    for _key in (_GROUP_PROBLEM, _GROUP_CLEAR, _GROUP_UNKNOWN):
+        _n = len([_r for _r in _recs if _r["group"] == _key])
+        assert _n, (
+            f"（前提檢查）這個 fixture 的 {_key!r} 群是空的 —— "
+            "那一句根本不會被畫出來，本條會對著空氣通過。")
+        _want = f"**這 {_n} 檔{GROUP_HEADLINES[_key]}**"
+        assert any(_want in _x for _x in _payloads), (
+            f"第 {_key!r} 群的抬頭**沒有以 `{_want}` 的形狀出現在畫面上**。\n"
+            "  ⚠️ 常數對、畫面不對 ＝ 有人在 f-string 裡寫死了另一個字串，\n"
+            "     於是上一條（比線框）看起來還是綠的。\n"
+            + _text(_parts))
 
 
 #: 「群組抬頭 ＋ 名單」與那句話之間的段落換行。**只在 :func:`_expected_clear_payload`

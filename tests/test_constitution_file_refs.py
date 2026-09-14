@@ -748,6 +748,15 @@ _DECLARED_REGISTRY_IDS: frozenset[str] = frozenset({
     #   不是 `**ID**` 粗體樣式）**：登記簿定義列 **50** 個、本清單補前宣告 **46** 個，
     #   差集正好就是下面這四個。補完 50/50。
     "P-FLOORSLACK-1", "P-GATEDLAYOUT-1", "P-HEDGESEMANTIC-1", "P-P05VERDICT-1",
+    # 2026-09-14 第六輪回修：⑥ 那一批依第五輪獨立稽核 R-2 新增的一列。
+    # ⚠️ **本行是「新增登記簿列的人要同時更新這裡」那句話的實踐，不是順手加的** ——
+    #    上面第三輪那段註解已經寫明本清單是**單向**比對
+    #    （`_DECLARED_REGISTRY_IDS - _registry_ids_present()`）：
+    #    **「登記簿多了一列而這裡沒寫」CI 一個字都不會說。**
+    #    本組實測（量測日 2026-09-14）：加完 `P-NEARCOUNT-1` 那一列、**不**動本清單時，
+    #    `present - declared` ＝ `['P-NEARCOUNT-1']`，而 `test_declared_registry_ids_all_present`
+    #    **照樣綠** —— 那正是第三輪必修 E 抓到的同一個缺口。
+    "P-NEARCOUNT-1",
 })
 
 _REGISTRY_ID_RE = __import__("re").compile(r"\b(?:EX|P|GAP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
