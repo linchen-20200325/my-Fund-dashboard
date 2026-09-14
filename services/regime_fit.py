@@ -20,6 +20,24 @@ from shared.regime_fit import (
 
 _EMOJI = "🔵🟢🟡🔴⬜⚪🟠🟦 "
 
+# 段落形狀門檻:公開說明書長描述 ≠ 分類標籤。縱深防禦 —— `category` 不只一個生產者
+# (MoneyDJ rows_map 三處、FundClear FundType…),任一處漏掉清洗,子字串比對就會在
+# 一整段法律文字裡撿到最特定的關鍵字(如「商品ETF」)而判錯桶。
+#
+# ⚠️ 刻意**不沿用** `_pick_fund_category` 的 15:那個 15 回答的是「投資標的 vs 基金類型
+# 哪一欄像標籤」,選錯只是退回另一欄(可回復);本處超標代表**拒絕分類**(⬜ 無法判定),
+# 是不可回復的資訊損失。**同一個數字,錯誤成本不同 ⇒ 門檻不該相同。**
+#
+# 實測(量測日 2026-09-14,語料 = repo 測試 AST 抽出 13 + snap.json 實際值 + 對抗性真實
+# 類別名,共 32 個;毒 = snap.json 4 筆):
+#   最長合法標籤 24 字「全球區塊鏈及金融科技相關產業股票證券投資信託基金」
+#   最短毒段落  266 字(ACCP138)
+#   → 15 誤殺 4/32;40 誤殺 0/32、攔截 4/4,且落在 24~266 的空帶內、兩側皆有餘裕。
+# ⚠️ 這是會漂移的量測值:新增更長的合法類別名時請重跑 tests/test_fund_category_paragraph_guard.py。
+# 📌 本常數的自然歸屬是 `shared/regime_fit.py`(本模組其餘常數的 SSOT),但該檔不在本批
+#    檔案邊界內,故暫置於此並回報總管另批收斂。
+CATEGORY_PARAGRAPH_MIN_LEN: int = 40
+
 
 def normalize_regime(raw) -> "str | None":
     """任意偵測器景氣標籤(可帶 emoji)→ 正規位階(REGIMES 之一)或 None(未知/無法對應)。"""
@@ -44,6 +62,8 @@ def asset_bucket(category):
     _c = str(category or "").strip()
     if not _c:
         return None, None
+    if len(_c) >= CATEGORY_PARAGRAPH_MIN_LEN:
+        return None, None                    # 段落形狀(說明書描述)→ 誠實 None,不在長文裡撿關鍵字(§1)
     for _name, _kws, _aff in ASSET_BUCKETS:
         if any(_kw in _c for _kw in _kws):
             return _name, _aff

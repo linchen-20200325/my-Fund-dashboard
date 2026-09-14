@@ -47,6 +47,12 @@ from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re
 from repositories.fund.nav_metrics import (
     fetch_holdings, fetch_nav, fetch_performance_wb01, fetch_risk_metrics,
 )
+# 2026-09-14:`_pick_fund_category` 是底線名且**不在** sources.__all__ 內,
+# 上面的 `import *` 帶不進來 —— 直接裸呼叫會拋 NameError,又被本檔下方
+# `except Exception as e: print(f"[fetch_basic] {e}")` 完整吞掉,結果是整段
+# meta 填寫(category/fund_type/investment_target/mgmt_fee/TER…)靜默消失。
+# 與上面 v19.287/v19.288 那 4 個是**同一種**失效模式,故照同樣辦法顯式 import。
+from repositories.fund.sources import _pick_fund_category
 
 
 def _nav_span_days(_s) -> int:
@@ -1073,7 +1079,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
                 result["fund_scale"]      = rows_map.get("基金規模", "")
-                result["category"]        = rows_map.get("投資標的", rows_map.get("基金類型", "")).replace(" ","")
+                # v19.419 的修法補到第三個寫入點(另兩處在 sources.py:_src_direct_moneydj_url
+                # 與 _src_tcb_meta)。原式把「投資標的」的公開說明書長描述當類別,污染 UI 與
+                # services/regime_fit.asset_bucket 的子字串比對。呼叫慣例與另兩處一致(不加
+                # .replace:helper 自己 strip,且空的投資標的會正確退回基金類型)。
+                result["category"]        = _pick_fund_category(rows_map)
                 result["fund_region"]     = rows_map.get("投資區域", "").replace(" ","")
                 result["fund_type"]       = rows_map.get("基金類型", "").replace(" ","")
                 result["investment_target"]= rows_map.get("投資標的", "").replace(" ","")
