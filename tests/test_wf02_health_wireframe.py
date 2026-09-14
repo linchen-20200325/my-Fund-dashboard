@@ -352,10 +352,13 @@ def test_the_three_group_headlines_really_reach_the_screen_in_that_shape():
     **它補的是另一種攻擊**：有人把抬頭在 f-string 裡**寫死**，
     於是常數還對、畫面已經不是它。⇒ **兩條一起看才封閉，缺一不可。**
 
-    ⚠️ 用 `FOUR_WAY` 是因為它是**唯一**三群同時非空的 fixture
-    （`WIN`/`MID` → clear、`LAG` → problem、`BLIND` → unknown）；
-    帶一條 fail-closed 前提檢查，三群有任何一群空掉就紅，
-    ⛔ 不會對著空氣通過。
+    ⚠️ 用 `FOUR_WAY`，因為**本組實測它三群同時非空**
+    （`WIN`/`MID` → clear、`LAG` → problem、`BLIND` → unknown）。
+    ⛔ 「**它是唯一一個三群同時非空的 fixture**」本組**沒有查證，也不宣稱**
+    （`CLAUDE.md §-2` 規則 6：會漂移／取決於有沒有漏看的全稱句不寫進永久記錄）。
+    **選它的理由是「它夠用」，不是「只有它行」。**
+    ⚠️ 下面那條 fail-closed 前提檢查就是為此而寫：**哪天這個 fixture 的分群變了、
+    某一群空掉，本條會紅**，⛔ 不會對著空氣通過。
     """
     _parts = _render(portfolio=FOUR_WAY)
     _payloads = [_p.split("] ", 1)[1] if "] " in _p else _p for _p in _parts]
