@@ -1554,8 +1554,6 @@ def render_portfolio_tab() -> None:
                                 "metrics":     _raw_b.get("metrics", {}),
                                 "moneydj_raw": _raw_b,
                                 "risk_metrics":_raw_b.get("risk_metrics", {}),
-                                "is_core":     _is_core_fund(
-                                    _raw_b.get("fund_name") or _code_b),
                                 "currency":    _raw_b.get("currency", "")
                                                 or _raw_b.get("metrics", {}).get("currency", ""),
                             })
