@@ -10,7 +10,7 @@
 ===== ============================== ==========================================
 層     區塊                            版面
 ===== ============================== ==========================================
-1      🧾 ① 結論 — 現在該加碼還是防禦   **全寬**（一句行動 ＋ 理由條列）
+1      🧾 ① 結論 — 現在的景氣位階       **全寬**（一句狀態 ＋ 理由條列）
 –      六張市場卡片                    3 欄自適應網格（`ia` 線框那組）
 2      🧾 ② 依據 — 憑什麼這樣說         **全寬表**（五桶證據表）
 3      📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度   **三欄**
@@ -656,6 +656,63 @@ def _card_news() -> dict:
 # ══════════════════════════════════════════════════════════════════
 # 層 1：🧾 ① 結論（全寬）
 # ══════════════════════════════════════════════════════════════════
+# ⛔ ① 結論**只講「現在是什麼狀態」，不講「該做什麼」**（客戶 2026-09-14 拍板）。
+#
+# `services/macro/action_light.py::macro_action_light()` 回傳的 `action` 是
+# **買賣指令**，五條路徑逐字如下（2026-09-14 實測）：
+#   · override 🔴  「減碼 / 保守 —— 拉高現金、核心轉防守，等企穩再進」
+#   · 資料不足 🟡  「資料不足 —— 景氣位階缺,先持有觀望」
+#   · 位階 🟢      「可加碼 —— 核心持有不動 + 衛星積極佈局，定期收息再投」
+#   · 位階 🟡      「持有 —— 分批進場、避免重押單一題材」
+#   · 位階 🔴      「減碼 —— 景氣位階偏弱,拉高現金水位」
+# 本層改印**狀態句**，`action` 一律不上畫面。
+#
+# ⛔ **不改 L2**（`action_light.py` 屬凍結範圍，且另有消費者）—— 在消費端擋住，
+#    與本檔 `_render_layer_evidence` 對 `composite_verdict.action_text` 同一招。
+# ⛔ **狀態句依 `light` / `override` 產生，不從 `action` 字串剖字** ——
+#    剖字會在 L2 改用詞時**靜默**壞掉（剖出來的還是一句看起來正常的話）。
+#
+# ⚠️ **為什麼 override 要有自己的一句**：`light` 只有三個值，行動路徑卻有五條。
+#    override 的 🔴 來自**硬衰退／恐慌訊號真的觸發了**（殖利率倒掛 / Sahm / VIX 恐慌），
+#    **不是**景氣位階偏弱 —— 實測 override 可以在位階 5.0（中性）時就亮紅。
+#    若與位階 🔴 共用「偏弱 —— 收縮訊號多於擴張」，那句話**對 override 是假的**。
+#    故兩者分開；實際觸發了哪一項由 `reasons` 逐條說出。
+#
+# ⚠️ **「資料不足」那一條刻意沒有狀態句**：它的 `support` 不充足，
+#    會在下方閘門就被 `not_ready()` 攔下、根本走不到這裡（2026-09-14 實測）。
+#    **⛔ 絕不可把它映射到 🟡 的「中性」** —— 那是把 ⬜ 說成 🟡（違 §1）。
+#    守衛 `tests/test_no_direct_trade_advice_20260914.py` 逐條釘住這件事。
+_CONCLUSION_STATE_BY_LIGHT: dict[str, str] = {
+    # 🟢 這一句是**客戶逐字拍板**的草稿原文，不要改寫。
+    "🟢": "偏強 —— 擴張訊號明顯多於收縮訊號",
+    "🟡": "中性 —— 擴張與收縮訊號互見",
+    "🔴": "偏弱 —— 收縮訊號明顯多於擴張訊號",
+}
+_CONCLUSION_STATE_OVERRIDE = "警戒 —— 硬衰退／恐慌訊號已觸發"
+
+
+def _conclusion_state(payload: dict) -> str:
+    """① 結論要印的**狀態句**（取代 `payload["action"]` 那句買賣指令）。
+
+    只讀 `override` 與 `light` 兩個結構化欄位，**不碰 `action` 字串**。
+    """
+    if payload.get("override"):
+        return _CONCLUSION_STATE_OVERRIDE
+    _state = _CONCLUSION_STATE_BY_LIGHT.get(str(payload.get("light") or ""))
+    # ⚠️ 這裡問的是 `not _state`，**不是** `_state is None`（2026-09-14 第三輪回修）：
+    #    `.get()` 只在**鍵不存在**時回 `None`；上游若新增一個**映射到空字串**的燈號，
+    #    回來的是 `""`，`is None` 為假、fallback 不會觸發，畫面會印出
+    #    「燈號 ＋ 什麼都沒有」—— 那比誠實說「這盞燈沒有對應的狀態說明」更糟，
+    #    因為它**看起來像正常渲染**（§1：靜默的空白就是掩蓋，不是解決）。
+    #    ⚠️ 現行 dict 三個值皆非空 ⇒ 這條路**目前不可達**，這是預防性收緊。
+    #    守衛：`tests/test_no_direct_trade_advice_20260914.py::
+    #          test_an_empty_state_string_also_falls_back_not_just_none`
+    if not _state:
+        # L2 新增了燈號而本層沒跟上 —— **不編一句狀態**（§1 Fail Loud），誠實說不知道。
+        return "⬜ 這盞燈沒有對應的狀態說明（本層未跟上上游新增的燈號）"
+    return _state
+
+
 def _render_layer_conclusion(ind: dict, phase: dict) -> None:
     """🧾 ① 結論 —— 全頁最上面唯一的結論，**全寬、不進三欄**（線框逐字要求）。
 
@@ -673,7 +730,7 @@ def _render_layer_conclusion(ind: dict, phase: dict) -> None:
     服務層字串若含 `<` / `>` 會被當標籤吃掉（同 `ui/tab1_macro.py` 的 ② 對帳 chip
     與 `tab1_macro_midcycle._card_note` 的既有處置）。
     """
-    st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+    st.markdown("### 🧾 ① 結論 — 現在的景氣位階")
     _light = macro_action_light(ind, phase.get("score"))
     _support = _light.get("support")
     if not is_sufficient(_support):
@@ -690,10 +747,10 @@ def _render_layer_conclusion(ind: dict, phase: dict) -> None:
         # ⚠️ **只有這一條路徑要 `html.escape`**：`business_alert()` 走
         #    `unsafe_allow_html`，服務層字串若含 `<` / `>` 會被當標籤吃掉
         #    （同 `ui/tab1_macro.py` ② 對帳 chip、`tab1_macro_midcycle._card_note`）。
-        business_alert(f"{_light['light']} {_light.get('action', '')}",
+        business_alert(f"{_light['light']} {_conclusion_state(_light)}",
                        [html.escape(_r) for _r in _reasons])
         return
-    st.markdown(f"**{_light.get('light', '')} {_light.get('action', '')}**")
+    st.markdown(f"**{_light.get('light', '')} {_conclusion_state(_light)}**")
     for _r in _reasons:
         # ⚠️ **這裡刻意不 escape**：`st.caption()` 走 markdown，Streamlit 自己會把
         #    HTML 擋掉。先 escape 再交給它 ＝ 雙重跳脫，`<` 會原樣印成 `&lt;`。
@@ -734,10 +791,24 @@ def _render_layer_evidence(ind: dict, phase: dict) -> dict:
     _prov: dict = {}
     _score = calculate_composite_score(ind, provenance_out=_prov)
     _icon, _level, _color, _action = composite_verdict(_score)
+    # ⛔ 行動句一律不上畫面（客戶 2026-09-14 逐案核准的合規移除）。
+    #    `composite_verdict()` 的第 4 個元素 `action_text` 是**逐字的買賣指示**
+    #    （「可滿倉持有」「分批進場」「拉高現金水位至 15-25%」「現金 30%+」…），
+    #    違反母法「不產生任何直接買賣建議」。
+    #    做法：把本函式**既有**的「證據不足才清空 `_action`」機制改成**無條件清空**，
+    #    而不是發明新開關 —— 下游 `build_evidence_rows` /
+    #    `build_evidence_footnotes` / `split_evidence_footnotes` 都以
+    #    `if composite_action else ""` 判空（見 `beginner_view.py`
+    #    `_evidence_footnote_items`），空字串即整段不渲染。
+    #    ⛔ **刻意不改 `services/macro/composite_score.py`** —— 那是 L2 計算引擎
+    #    （凍結範圍），且另有消費者；本批在**消費端**擋住。
+    #    ⚠️ `_icon` / `_level` 不受影響：證據充足時等級照常顯示，本批只拿掉行動句。
+    _action = ""
     _ok = is_sufficient(_prov.get("support"))
     if not _ok:
-        # 分數留著（真的加總過），等級與行動清空 —— 見上方 ⚠️。
-        _icon, _level, _action = "⬜", "", ""
+        # 分數留著（真的加總過），等級清空 —— 見上方 ⚠️。
+        # （行動已於上方無條件清空，故此處不再提行動。）
+        _icon, _level = "⬜", ""
 
     _5b = compute_five_bucket_summary(ind, phase, news_items=None)
     _rows = build_evidence_rows(
@@ -2120,7 +2191,7 @@ def render_market_overview() -> None:
         # 尚未載入：四層的骨架仍然畫出來，但一律灰態 ——「還沒點」不是故障。
         # ⚠️ 骨架照畫、內容留灰，使用者才看得出「這一頁有哪幾層、我還缺什麼」；
         #    整頁空白會讓「還沒載入」與「這頁壞了」長得一模一樣（鐵則 04）。
-        st.markdown("### 🧾 ① 結論 — 現在該加碼還是防禦")
+        st.markdown("### 🧾 ① 結論 — 現在的景氣位階")
         not_ready("尚未載入總經資料，還沒有結論可以下。", where=_where_to_load())
         render_cards([
             {"title": _t, "state": STATE_NOT_READY,
