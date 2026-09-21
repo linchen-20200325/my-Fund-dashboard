@@ -1089,3 +1089,318 @@ partial 時印的是本檔自己寫的「不足以判讀多軌共振，本輪不
    **「頂層」＝ 不被另一個同型容器包住**（網格不被另一個網格包住），`:2176` 滿足 → 第 1 條直接判得出來，**不再靠本組的解讀**。
    ⛔ **B 那個讀法（「頂層」＝「不在任何 `safe_section` 裡」）已被裁示排除** —— 它會讓區塊數掉到 41、標籤掉到 49。
    ⚠️ **本項與 `DECISION_LOG` ~~F-15~~ 是同一件事，兩邊同步結案。**
+
+## ①宏觀配置鏈缺項清單（2026-09-21）
+
+**這一節只做一件事：把客戶 2026-09-21 點名的七項，逐項答「資料源／計算／畫面／是否撞凍結面／母法衝突」五欄，附資料源與成本。**
+⛔ **本節不寫區塊規格（來源／規則／空狀態／回答四件），也不出線框草稿** —— 那是第二、第三階段，本輪不做。
+⛔ **本節不含任何買賣建議、目標價或配置比例。** 表內凡出現配置字樣者**一律是對現有程式碼字串的原樣引用**，用途是登記衝突，**不是本規格的主張**（體例同 ①-1 的「現況引文・待修」表）。
+
+### ①-Z.1 檔名對映：客戶說的「UI_SPEC.md」＝ 本檔 `docs/v2/20_ui_spec.md`
+
+客戶原話點的是「UI_SPEC.md」。**實測（量測日 2026-09-21，head `2296a0d`）**：
+
+- `git ls-files | grep -c '^spec/'` → **0**（`exit=1`）⇒ **repo 內沒有 `spec/` 目錄。**
+- 全 repo 沒有任何檔名叫 `UI_SPEC.md`；`docs/v2/` 底下唯一的 UI 規格檔就是本檔。
+
+⇒ **本節依此對映寫進本檔。**
+
+⚠️ **這個對映同時是一條待登記的矛盾，不是單純的改名**：`docs/v2/21_decision_log.md` 內
+`spec/UI_SPEC.md` 這個路徑出現 **64 處**（實測 `grep -c 'spec/UI_SPEC\.md' docs/v2/21_decision_log.md` → `64`），
+另有 `spec/PROPOSAL_4a.md`／`spec/PROPOSAL_4b.md` —— **三條路徑在 head 上都指不到東西**。
+repo 內疑似對應 `docs/v2/20_ui_spec.md`／`docs/v2/24_proposal_4a.md`／`docs/v2/25_proposal_4b.md`，
+**但本組沒有逐份比對內容，不宣稱它們是同一份。** 見〈①-Z.7 矛盾登記〉第 1 條。
+
+### ①-Z.2 位階更正：`CONSTITUTION.md` 是**子法 1**，真母法查不到
+
+**本節所有 G1／G2／G3 引用，引的都是子法 1 對母法的轉述，不是母法原文。** 依據（逐字重印，量測日 2026-09-21）：
+
+`docs/v2/CONSTITUTION.md` **第 1 行**與 **第 11–13 行**（原樣重印，含其 markdown 標記；
+⚠️ 刻意用圍欄碼塊而不是行內碼，因為第 12／13 行自己就含反引號，行內碼包不住）：
+
+```
+# v2 子法 1：專案重構憲法（凍結邊界・Feature Flag・權限與資料契約・回滾演練）
+
+> **母法**＝客戶頒布的〈專案重構終審令〉（**已凍結**）。本文件是母法指定的**子法 1**，
+> **本文件不凌駕母法，也不凌駕 repo 既有的 `CLAUDE.md` / `EXCEPTIONS.md`**；
+> 三者牴觸時，位階為 **母法 > `CLAUDE.md` > 本文件**。
+```
+
+⚠️ 上面碼塊內的空行**是本節為了分隔第 1 行與第 11–13 行加的**，原檔第 2–10 行的內容不在此處重印。
+
+⇒ **`CONSTITUTION.md` 自稱子法 1。** 本檔他處（①-1／①-3／①-4／①-8～①-11 各塊的衝突登記）凡寫「母法逐字」者，
+**語意一律讀作「子法 1 的轉述」** —— 那些塊的衝突判定與引文**一個字都不改**，改的只有這個出處標籤。
+
+⛔ **真母法〈專案重構終審令〉原文，全 repo 全歷史查不到。**
+查法：對 40 個 commit 的 `git ls-tree -r --name-only` 聯集掃 `終審令|final_order|final_decree|MOTHER|母法` → **0 命中**；
+同一把尺的正控 `CONSTITUTION` → **命中**（⇒ 方法有效，0 是真 0）。
+**這不是本輪首次發現**：`docs/v2/35_branch_strategy_check.md` 早已登記過同一件事。
+⇒ 「母法衝突：若有引原文」這一欄，**只引得到子法 1 的轉述**。本節不假裝引到了母法原文。
+
+⚠️ **子法 1 不在本工作分支上**：它住在未合併的 `origin/docs/v2-constitution-governance`（head `5569d85`，2,419 行），
+head `2296a0d` 的 `docs/v2/` 無此檔 ⇒ **任何跑在本分支上的守衛／CI 結構上讀不到它。**
+
+**本節用到的三條紅線（子法 1 的轉述表，逐字）**：
+
+| 編號 | 逐字 |
+|---|---|
+| **G1** | **嚴禁提供「一鍵再平衡」按鈕，嚴禁預設「最佳配置推薦」。** |
+| **G2** | 所有標的調整與再平衡一律採「**偏離提示、客觀對照、情境試算**」三種形式之一。 |
+| **G3** | **所有試算參數均由使用者自行輸入**；**偏離提示僅客觀描述現況與目標差距，不提供具體處置方向**。 |
+
+### ①-Z.3 版面撞擊：① 現有 10 塊 ＋ 本清單 7 項 ＝ **17**，客戶本輪上限是 13
+
+- **① 現有活塊 10 個**（實測 `grep -nE '^### ①-' docs/v2/20_ui_spec.md` → `①-1/2/3/4/6/7/8/9/10/11`；
+  `①-5` 已併入 `①-4`、標題帶刪除線，不計）。
+- **客戶 2026-09-21 新規則**：一頁最多 3 張核心卡（第二層）、**一頁不超過 13 塊**、**超過就砍，不是折疊**。
+- **10 ＋ 7 ＝ 17 > 13。**
+
+⛔ **這是範圍（scope）問題，本節只登記，不自行決定砍哪幾塊。**
+⚠️ **也不預設「這七項一定全部要進 ①」** —— 其中 **P0-6／P0-7 需要使用者持倉**，
+而 ① 頁自己在 `ui/views/page_01_macro.py::_render_matrix_signpost` 的 caption 逐字寫
+「**這一頁只講市場（大盤與總經），不出現任何一檔你持有的基金**」（實測命中 1 行）。
+⇒ **那兩項若落在 ①，先撞到的是這條版面定位，不是 13 塊上限。** 兩件事分開讀。
+⚠️ **本組沒有掃 `ui/views/page_02_health.py` 與 `ui/views/page_04_portfolio.py`** ——
+**P0-6／P0-7 是否已部分存在於 ② 或 ④，本節查不到答案。** 見〈①-Z.8〉。
+
+### ①-Z.4 五欄怎麼判（欄位定義，先寫清楚免得被誤讀）
+
+- **資料源**：這個數字的**原料**取得了沒有。`現有`＝已有 production 取數；`需新增`＝要加 series 或新 fetcher；`查不到`＝repo 內查不到任何來源。
+- **計算**：從原料到**成品數字**的那支純函式存在不存在。
+- **畫面**：那個成品**今天印不印得出來**（線上鏈路可達）。
+- **是否撞凍結面**：落點是否落在 F1～F6；若是，寫明哪一格、以及**現有哪一張豁免射得到／射不到**。
+- **母法衝突**：是否命中 G1／G2／G3；若有，引子法 1 轉述的逐字。
+
+⚠️ **三個欄位各自獨立，不要互相推**：「**算得出來但沒畫**」在本表是「計算：現有 ＋ 畫面：需新增」，**不是矛盾**。
+⚠️ **凍結格定義（子法 1 §1.1，量測日 2026-09-14 · base `9cbf0377`）**：
+F1 ＝ 16 個 `ui/tab*.py`／F2 ＝ 5 個 `ui/views/page_0*.py`／F3 ＝ `app.py`／F4 ＝ `services/**`／F5 ＝ 資料表 Schema／F6 ＝ 遷移歷史鏈。
+⚠️ **`repositories/**` 不在 F1～F6 任一格** —— 新增 L1 取數本身不吃凍結令；**一旦要在 L2 加編排就吃 F4。**
+⚠️ **客戶 2026-09-21 給的四張豁免**：F2 限 `ui/views/page_01_macro.py` ①-4／F3 限 `app.py` 關舊入口／
+F1 限 `ui/tab1_macro_midcycle.py` ①-8／`services/ai_prompts.py` 限 `:72-79`（**量測日 2026-09-21**）。
+**第四張客戶沒有標 F 編號**；依子法 1，`services/**` 屬 **F4** —— ⚠️ **這個對映是推的，客戶沒有這樣寫。**
+
+### P0-1 四象限定位：成長動能 × 通膨動能 → 復甦／過熱／滯脹／衰退
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **現有** | `services/macro/us_indicators.py::fetch_all_indicators` 的產出已含該象限函式讀的全部鍵（成長軸 `PMI`／`YIELD_10Y2Y`／`M2`／`ADL`／`CONSUMER_CONF`／`JOBLESS`／`COPPER`；通膨軸 `CPI`／`PPI`／`FED_RATE`） |
+| **計算** | **現有** | `services/macro/us_indicators.py::calc_growth_inflation_axis`（定義於 `:1260`，量測日 2026-09-21）。docstring 逐字列四象限：`復甦/擴張 (Goldilocks) 成長↑通膨↓`／`過熱 (Overheat) 成長↑通膨↑`／`滯脹 (Stagflation) 成長↓通膨↑`／`衰退 (Recession) 成長↓通膨↓`。由同檔 `:1578` 呼叫、`:1598` 以 `growth_inflation` 鍵回出（住在 `calc_macro_phase` 內），`services/macro/__init__.py:43` re-export（三個行號量測日 2026-09-21） |
+| **畫面** | **需新增** | 計算層每次進 ① 都會跑，**渲染層一個欄位都沒讀**。實測 `ui/views/page_01_macro.py` 逐鍵 `grep -c`：`growth_inflation` **0**／`quadrant` **0**／`quad_alloc` **0**／`quad_desc` **0**／`quad_icon` **0**／`growth_dir` **0**／`inflation_dir` **0**。**正控（同一批鍵、換一個檔）**：`ui/tab1_macro.py` → `growth_inflation` **10**／`quadrant` **1**／`quad_desc` **1** ⇒ 掃描命中得到，是線上頁真的沒接。而 `ui/tab1_macro.py` 是舊入口、今天到不了畫面。<br>⚠️ `ui/views/page_01_macro.py::_card_phase` 印的是**另一個東西**（`calc_macro_phase` 的 `phase`＋`score`，一維景氣分數），**不是成長×通膨二維象限**。<br>⚠️ 另有第二套同樣沒接：`ui/components/mk_clock.py::render_mk_clock_section`（檔頭逐字「美林時鐘四象限定位」）**0 個真呼叫點** |
+| **撞凍結面** | **是 —— 四張豁免全部射不到** | 要畫出來就得改 `ui/views/page_01_macro.py` ＝ **F2**；F2 那張豁免**只涵蓋 ①-4 那一處**（射程寫死於 `docs/v2/21_decision_log.md` B21-a），F3 那張是為關舊入口開的。若改在服務層則吃 **F4**，F4 今天沒有豁免 |
+| **母法衝突** | **有（條件性）—— 衝突的不是象限，是它隨身帶的兩個欄位** | 只呈現 `quadrant`／`growth_dir`／`inflation_dir`（陳述狀態）**不命中任何一條**。一旦把 `quad_desc`／`quad_alloc` 一併印出就命中 **G1＋G3** —— `calc_growth_inflation_axis` 的 `quad_alloc` 四個分支**原樣引用**：「衛星成長型↑　核心配息↑　現金↓」「實物資產↑　高息防禦↑　成長型↓」「商品/黃金↑　短天期債↑　成長股↓↓」「長天期債↑↑　防禦股息↑　現金↑　成長股↓」；`quad_desc` 帶「積極持有風險資產」「降低股票，持有商品與短債」。**上列全部是對現有程式碼字串的原樣引用，不是本規格的主張。** |
+
+**附資料源與成本**：**0 條新 series／0 個新 fetcher／0 個新純函式。** 缺的只有渲染端把既有 `phase["growth_inflation"]` 讀出來。
+⚠️ 若要長出第五象限「方向不明」則是新功能：`quadrant` 是封閉四值列舉，`growth_up = growth_score > 0` 把 tie 併進 down，
+要加第五格得連 `quad_color`／`quad_icon`／`quad_alloc` 一起加一組值。
+
+### P0-2 政策利率路徑：市場隱含升息／降息預期
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **查不到** | 三種查法都跑過：(1) `git grep -niE 'cmegroup\|fedwatch\|futures\|\bOIS\b\|implied_polic' -- '*.py'` 的命中**全部**是 Python 標準庫 `concurrent.futures`，外加 `repositories/news_repository.py:108` 的新聞關鍵字 `"index futures"`（量測日 2026-09-21）；(2) 全 repo 對外 endpoint 列舉（`repositories/**` `services/**` 的字面 URL，約 85 個 unique）**無任何 CME／CBOT／FedWatch／利率期貨／OIS／點陣圖來源**，正控 `stlouisfed` → 3 個 URL；(3) `shared/fred_series.py` 全檔逐行讀過，**沒有任何一條是前瞻或市場隱含的**。<br>另：`FedWatch` **0 命中**／`隱含利率` **0 命中**／`利率路徑` **0 命中**（`exit=1`，量測日 2026-09-21） |
+| **計算** | **查不到** | 沒有任何函式從任何序列推導升降息機率、次數或隱含路徑 |
+| **畫面** | **查不到**（＝市場隱含路徑）；**現有**（＝當期政策利率水準，但那不是本項要的東西） | 線上頁印的是 point-in-time 讀數：`ui/views/page_01_macro.py::_card_infl_rate` 印聯邦基金利率；`ui/tab1_macro_midcycle.py::_ZS_INDICATORS` 有 `FED_RATE` 一列。**兩者都沒有前瞻路徑。** 渲染鏈 `_DETAIL_ZONE` 五塊逐塊看過，沒有任何一塊出現利率路徑 |
+| **撞凍結面** | **是（渲染端）／否（取數端）** | 渲染端：畫在 ① ⇒ **F2**（四張豁免射不到）；畫在中期循環 ⇒ **F1**，而 F1 那張豁免只涵蓋 `ui/tab1_macro_midcycle.py` 的 ①-8 兩行。取數端：新 fetcher 落在 `repositories/**` ⇒ **不在 F1～F6**。⚠️ L2 若要加編排則吃 **F4** |
+| **母法衝突** | **無**（以陳述市場隱含機率的形式呈現時） | 本項本身不含處置動作，不命中 G1／G2／G3。⚠️ **邊界**：若以「市場預期降息 ⇒ 宜加碼債券」這種形式收尾則落回 **G3**「不提供具體處置方向」 |
+
+**附資料源與成本**：**要一個全新來源 ＋ 一個全新 L1 fetcher**（Fed Funds futures／OIS 曲線／CME FedWatch 之一）。
+**加 FRED series 解不了** —— `shared/fred_series.py` 現有常數裡沒有任何一條能替代。
+最低成本的替代路線是以 `DGS3MO` 對 `FEDFUNDS` 的利差當**粗代理**（0 新來源 ＋ 1 個純函式），
+但那是 proxy 不是市場隱含值，依 `CLAUDE.md §1` 要標 `is_proxy`（本 repo 已有先例：`repositories/macro/alternate.py::fetch_ism_pmi` 的 Phil Fed 轉換段）。
+⚠️ **`DGS3MO` 在不在 `shared/fred_series.py`，本組沒有查** —— 這條替代路線的成本口徑因此是**下界**，不是定論。
+
+### P0-3 實質利率：名目利率 − 通膨預期
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **需新增（1 條 FRED series）** | ⚠️ **本欄是總管複驗後的修正版**：盤點組原判「現有」，理由是「10Y 名目 ＋ 5Y 通膨預期都在」；**複驗實測推翻它的完整性** —— `DGS5`／`T10YIE`／`DFII10`／`DFII5`／`real_yield`／`實質利率` **全 repo 0 命中**（六個詞逐一 `git grep`，`exit=1`，量測日 2026-09-21）。手上只有 `shared/fred_series.py::FRED_DGS10`（10Y 名目）＋ `shared/fred_series.py::FRED_T5YIE`（5Y 通膨預期），**相減是混期數字，定義上不是實質利率**（`CLAUDE.md §4.1` 量綱陷阱）。⇒ 要拿到定義上正確的實質利率，**至少要加一條 series**（`DFII10` 直接給 10Y TIPS 實質殖利率，連減法都省；或 `T10YIE` 配 `DGS10` 天期對齊）。<br>⚠️ **`T5YIE` 那一腿確實是現有的**：`services/macro/us_indicators.py::fetch_all_indicators` 產出 `INFL_EXP_5Y`（日頻，帶完整 series）；名目 10Y 水位的唯一 production 出口是 `services/risk_radar.py::_signal_yield_10y_shock`（`:331`，量測日 2026-09-21） |
+| **計算** | **查不到** | 兩種查法：(1) 掃 `real_rate\|實質利率\|real_yield\|breakeven\|T5YIE\|T10YIE\|DFII\|TIPS\|通膨預期` 的 17 行命中，**沒有一行是相減**（全是常數／import／`R["INFL_EXP_5Y"]` 建構／新鮮度對映／顯示標籤／`ui/components/macro_card_edu.py` 的教學文）；(2) 逐一讀 `services/macro/us_indicators.py`／`explain.py`／`evidence.py`／`composite_score.py`／`services/calibration/macro_score.py`／`services/liquidity_engine.py` 的全部 top-level `def`，沒有任何一支產生實質利率 |
+| **畫面** | **需新增** | 兩個輸入都在畫面上、差值不在：`ui/tab1_macro_midcycle.py::_ZS_INDICATORS` 同時有 `INFL_EXP_5Y`（「⭐ 5Y 通膨預期」）與 `FED_RATE`（「聯準會利率」）兩列，**沒有任何一列是差值**。`實質利率` 在非測試 `*.py` **0 檔** |
+| **撞凍結面** | **是 —— 三格都沒有可用豁免** | 落在 `_ZS_INDICATORS` 旁邊 ⇒ **F1**（F1 那張豁免只有 ①-8 的兩行，**加一列指標不在射程內**）；落在 ① 卡片 ⇒ **F2**（那張只限 ①-4）；計算下沉 ⇒ **F4**（無豁免）。⚠️ **加 FRED series 本身落在 `repositories/**`／`shared/fred_series.py`，兩者都不在 F1～F6** |
+| **母法衝突** | **無** | 實質利率是客觀讀數，不含動作動詞、不含配置比例、不需使用者輸入參數 ⇒ 不命中 G1／G2／G3。G2 明列允許的「**客觀對照**」正是這種形式 |
+
+**附資料源與成本**：**1 條新 FRED series（`DFII10` 或 `T10YIE`）＋ 1 個純函式（若走 `DFII10` 則連純函式都省）／0 個新 fetcher**
+（`repositories/macro/fred.py::fetch_fred`／`fetch_fred_batch` 現成）。
+⚠️ **另有一步前置**：名目 10Y **水位**目前不是 `fetch_all_indicators` 的一格（那支只產出 `YIELD_10Y2Y`／`YIELD_10Y3M` 兩條**利差**），
+水位只從 `services/risk_radar.py::_signal_yield_10y_shock` 出來 ⇒ **消費端得同時吃兩個形狀不同的 dict**。見〈①-Z.9 P1 候選〉。
+
+### P0-4 美元週期：DXY 或美元實質有效匯率
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **現有（名目）／實質有效匯率查不到** | `shared/fred_series.py::FRED_DXY` 的實際 series 是 **`DTWEXBGS`**（檔內註解逐字 `# USD trade-weighted (broad)`）—— **那是名目廣義貿易加權美元指數，不是 ICE DXY，也不是實質有效匯率**。取數於 `services/macro/us_indicators.py::fetch_all_indicators`（`fetch_fred_batch` 預熱，800 點），產出 `DXY` 一格。<br>⛔ `REER` **0 命中**／`實質有效匯率` **0 命中**（`exit=1`，量測日 2026-09-21）；FRED 的 `RBUSBIS`／`TWEXBPA` 等實質指數**不在** `shared/fred_series.py` 內 |
+| **計算** | **現有（只到「方向」）／「週期定位」需新增** | 現有：`DXY` 一格帶 `trend`（±1% 月變動門檻）、`signal` 三色燈、`score` ∈ {+1,0,−1}，線上可達。<br>歷史位階的實作**存在但接不到線上**：`services/macro/us_indicators.py::calc_macro_phase_zpct` 對每個指標算 60 期 z → 百分位，`DXY` 在 `_ZPCT_REVERSE_KEYS` 裡；**該函式在 Streamlit 側 0 個呼叫點**（非測試命中只有 `services/macro/__init__.py` 的 re-export、`services/macro/composite_score.py` 的註解、與定義處自己）。<br>⇒ **有「這個月美元走強還走弱」，沒有「現在在美元多年週期的哪個位置」** |
+| **畫面** | **現有（部分）** | `ui/tab1_macro_midcycle.py::_ZS_INDICATORS` 有 `DXY` 一列（「美元指數」，方向語「美元走強（外幣壓力）／美元走弱（外幣受益）」），該檔由 `ui/views/page_01_macro.py` lazy import 後呼叫 `render_mid_cycle_section`，線上可達。<br>⚠️ **`ui/views/page_01_macro.py` 自己 `DXY` 命中 0** —— ① 的卡片層沒有美元卡，美元只出現在中期循環那張 Z-Score 矩陣裡。<br>⚠️ **矩陣給的是 Z-Score（相對自身歷史的位置），不是週期階段判定**（無 up/down cycle phase 標籤）；「週期」與 REER 查不到 |
+| **撞凍結面** | **是** | DXY 那一列**字面就住在 `ui/tab1_macro_midcycle.py`** ＝ **F1**（子法 1 §1.1 逐字「16 檔，一個位元組都不准動」）；F1 那張豁免只涵蓋 ①-8 的兩行，**`_ZS_INDICATORS` 那一列不在射程內**。⇒ 沿用現況不改則不吃凍結；**要擴成美元週期就吃 F1** |
+| **母法衝突** | **無** | 現況那一列是方向描述，無動作動詞、無配置比例 ⇒ 不命中 G1／G2／G3 |
+
+**附資料源與成本**：
+- 若接受**名目** DXY ＋ 用既有 `series`（已抓 800 點）算歷史分位：**0 條新 series／0 個新 fetcher／1 個純函式**（或直接接既有 `calc_macro_phase_zpct`）。
+- 若客戶要的是**實質**有效匯率：**+1 條 FRED series（如 `RBUSBIS`）／0 個新 fetcher／1 個純函式**。
+⚠️ **「名目 vs 實質」是客戶的定義選擇，不是技術細節** —— 本節不代選。
+
+### P0-5 跨資產相對價值：ERP、信用利差 vs 歷史
+
+⚠️ **本項分兩半答，兩半結論不同，合成一個字會失真。**
+
+#### 5a. ERP（股票風險溢酬）
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **查不到** | ⚠️ **這一項出過一次誤報，查法本身要記下來**：`git grep -li 'ERP' -- '*.py'` → **22 檔**，看起來遍地都是；改 `git grep -nw 'ERP' -- '*.py'`（詞界＋大小寫敏感）→ **0 命中**（`exit=1`，量測日 2026-09-21）。那 22 檔全是 `UNDERPERF_LAG_THRESHOLD_PCT`／`_blank_underperf` 這類子字串。**只跑第一條指令就會把「查不到」寫成「現有」。**<br>被減數整條不存在：`forward_pe` 全 repo **只有 2 處** —— `repositories/external_market_repository.py:13`（退役註記，`fetch_yf_forward_pe`／`fetch_multpl_pe` 已於 2026-08-28 整段刪除）與 `shared/macro_buckets.py:175` 的 `DangerSpec("forward_pe", …)`（兩個行號量測日 2026-09-21）。**後者沒有任何值餵進去，是個空門檻。**<br>另：`風險溢酬` 只命中 `ui/components/macro_card_edu.py` 的教學文；`股債利差` **0 檔** |
+| **計算** | **查不到** | 沒有股票盈餘殖利率，就沒有 ERP 的被減數 |
+| **畫面** | **查不到** | 同上 |
+
+#### 5b. 信用利差 vs 歷史
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **現有** | `shared/fred_series.py::FRED_HY_SPREAD` ＝ `BAMLH0A0HYM2`（信用利差**水準**），產出 `HY_SPREAD` 一格，`series` 取約 10 年日頻 |
+| **計算** | **需新增** | 現有的「vs 歷史」有三種，**沒有一種是歷史分位**：`services/macro/turning_points.py::detect_turning_points` 用 **90 日高點 ＋ 絕對門檻**判高位回落（線上可達）；`services/risk_radar.py::_signal_hy_oas_delta` 只看**單日 bp 變化**；`shared/macro_thresholds_v2.py::HY_SPREAD_THRESHOLDS` 是**靜態絕對帶**。真正的 60 期 z-percentile 在 `services/macro/us_indicators.py::calc_macro_phase_zpct` 裡（`HY_SPREAD` 在 `_ZPCT_REVERSE_KEYS`），**但同 P0-4，那支在 Streamlit 側 0 個呼叫點** |
+| **畫面** | **水準現有／「vs 歷史」查不到** | 水準：`ui/views/page_01_macro.py::_card_vol_credit` 在層 2 依據層印出 HY 信用利差，線上可達。<br>「vs 歷史」：全站唯一的「相對自身歷史」機制是中期循環那張 Z-Score 矩陣，而**逐列讀過 `_ZS_INDICATORS` 的 18 列，沒有 `HY_SPREAD`、也沒有 `VIX`** ⇒ **信用利差今天只有絕對讀數，沒有歷史分位** |
+
+| 欄（5a＋5b 共用） | 判定 | 依據 |
+|---|---|---|
+| **撞凍結面** | **是 —— 三格都沒有可用豁免** | ERP 需新計算（`services/**` ＝ **F4**）＋ 新渲染（**F2** 或 **F1**）；信用利差補歷史分位最自然是進 `_ZS_INDICATORS`（**F1**，那張豁免射不到）。⚠️ 加 FRED series／新 fetcher 本身落在 `repositories/**`，**不在 F1～F6** |
+| **母法衝突** | **無** | ERP 與信用利差歷史分位都是**客觀對照**，正落在 **G2** 明列允許的三種形式之一。⚠️ **邊界同 P0-2**：不得以「⇒ 股票相對便宜，宜加碼」這種形式收尾（落回 **G3**）。⚠️ 子法 1 §6.7 有一節叫「客觀對照候選欄位清單」，**本組沒有讀該節內容** |
+
+**附資料源與成本**：
+- **信用利差 vs 歷史**：**0 條新 series／0 個新 fetcher／1 個純函式**（或直接接既有 `calc_macro_phase_zpct` 的百分位輸出）。
+- **ERP**：**至少 1 個新來源 ＋ 1 個新 L1 fetcher**（把 2026-08-28 刪掉的 forward P/E 取數整條重建）**＋ 1 個純函式**。
+  ⚠️ **本 repo 沒有任何股票估值來源**（endpoint 全列舉無 `multpl.com` 類來源）⇒ 這不是「加一條 FRED series」能解的。
+
+### P0-6 配置信號表：宏觀象限 → 資產類別方向
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **現有** | 宏觀端：`services/macro/us_indicators.py::calc_macro_phase`（四位階＋分數）＋ `services/macro/composite_score.py::composite_verdict`（5 級）＋ `calc_growth_inflation_axis` 的象限。資產端：`services/health/asset_class.py::classify_core_satellite` ＋ `shared/regime_fit.py::ASSET_BUCKETS`（7 個資產桶的關鍵字表） |
+| **計算** | **現有 —— 而且兩套並存，兩套的鍵都不是象限** | (1) `shared/signal_thresholds.py::ALLOCATION_LADDER`（`:394`）＋ `services/allocation_ladder.py::allocation_from_composite`（`:57`）→ 5 級 verdict 映射成帶數字的股／債／現金（兩個行號量測日 2026-09-21），**線上可達**（①-4 卡 1）；**它的鍵是 composite 分數的 verdict level，不是象限**。<br>(2) `shared/regime_fit.py::ASSET_BUCKETS`（`:24`）＋ `services/regime_fit.py::tag_regime_fit`（`:53`）→ 資產類別關鍵字對四位階的親和度（量測日 2026-09-21），**線上可達**（② 持倉體檢／批次分析）；**它的鍵是 `calc_macro_phase` 的四位階，不是象限**。<br>(3) `services/macro/us_indicators.py::identify_regime` 的 `alloc_by_regime` 是帶數字的象限映射，**但 `ui/**` 對它 0 個呼叫**（非測試呼叫點只有 `mcp_server/tools_macro.py` 與 `services/macro/__init__.py` 的 re-export；`ui/**` 的唯一命中是 `ui/views/page_01_macro.py` docstring 裡把它當反例引用的一行文字） |
+| **畫面** | **需新增** | 「象限 → 資產方向」目前唯一的成品是 `calc_growth_inflation_axis` 的 **`quad_alloc` 一條散文字串**（不是結構化資料，程式消費不了），而 `ui/views/page_01_macro.py` 對 `quad_alloc` **0 命中**（同 P0-1）。<br>⚠️ **線上唯一長得像本項的是 ①-4 卡 1**（`ui/views/page_01_macro.py::_card_allocation`，印股／債／現金百分比）—— **而那正是 F2 豁免要處理的那一張卡**，`docs/v2/21_decision_log.md` §H 第 3 項逐字寫的是「把那張卡改成**不給資產配置百分比、不給停利／加碼門檻**的形式」。⇒ **豁免的方向是拿掉，不是再加一張。** |
+| **撞凍結面** | **是 —— 而且現有那張 F2 豁免的方向是相反的** | 渲染落在 `ui/views/page_01_macro.py` ＝ **F2**。F2 那張豁免（限 ①-4）在**字面上**涵蓋得到這個位置，**但它的任務方向相反** —— 拿一張**為了把那張卡的配置百分比移除掉而開的豁免**，去**新增一張配置方向表**。⛔ **本節只登記這個張力，不裁決**（見〈①-Z.7〉第 7 條）。若方向表在服務層算 ⇒ **F4**（無豁免） |
+| **母法衝突** | **有 —— 本項是七項裡最直接的一項** | **G1** 逐字「**嚴禁提供「一鍵再平衡」按鈕，嚴禁預設「最佳配置推薦」。**」；**G3** 逐字「**偏離提示僅客觀描述現況與目標差距，不提供具體處置方向**」。「宏觀象限 → 資產類別**方向**」在定義上就是給處置方向，現有 `quad_alloc` 的 `↑`／`↓` 即是。<br>**同型前例已被判過**：子法 1 §6.2.3 把 `composite_verdict` 的 `action_text` 判為風險最高的一格；`docs/v2/21_decision_log.md` §H 第 3 項把 ①-4 的股／債／現金百分比判為「比 ②-12 更裸」。<br>⚠️ **不是無解**：若改成「象限 ＋ 各資產類別的**歷史表現分佈**」這種**客觀對照**（G2 明列允許），且不出現 ↑↓ 或加減碼字樣，可能落在 G2 內。**該判定不是本節能下的，登記待裁。** |
+
+**附資料源與成本**：**0 條新 series／0 個新 fetcher。**
+- 最省的一條：**0 個新純函式** —— `shared/regime_fit.py::REGIME_ALIASES` 已把四象限四個標籤全部對映進去，
+  `quadrant` 字串可直接餵進既有 `services/regime_fit.py::tag_regime_fit`。
+  ⚠️ **本組沒有實際把兩支接起來跑過**（只逐字比對了兩邊的字串），**若大小寫或空白有差異，這句成本估計就是錯的**。
+  ⚠️ **而且這條路會吃掉「滯脹」** —— 見〈①-Z.7〉第 8 條。
+- 若要「象限 → 帶數字的水位」：**1 個新常數表（4 鍵）＋ 1 個純函式**，或把 `identify_regime::alloc_by_regime` 從 `mcp_server` 接回 UI
+  —— ⚠️ **但它的象限定義與 `calc_growth_inflation_axis` 不同**（前者是 PMI×CPI×Fed 方向），**兩者不可互相冒充**。
+  ⚠️ **這條路直接命中 G1，不是成本問題。**
+
+### P0-7 情境分析：利率、匯率、信用衝擊下，組合預估影響
+
+| 欄 | 判定 | 依據 |
+|---|---|---|
+| **資料源** | **需新增** | **衝擊變數那一側現有**：利率 ＝ `shared/fred_series.py::FRED_DGS10`（水位由 `services/risk_radar.py::_signal_yield_10y_shock` 吐出，含單日 bp 變化）；匯率 ＝ `repositories/hot_money_repository.py::fetch_usdtwd_series`；信用 ＝ `HY_SPREAD`。<br>**組合那一側現有**：`services/portfolio_frontier.py::annualized_moments`（報酬／共變異數）、`services/allocation_backtest.py::to_twd_total_return_series`（逐檔幣別標記 ＋ FX 換算）、`services/capture_ratio.py::compute_capture`（上／下檔捕捉率）。<br>⛔ **缺的是把兩側連起來的那一層係數**：`fx_exposure\|currency_exposure\|幣別曝險\|匯率曝險\|外幣曝險\|hedge` 在 `services/**` `shared/**` `ui/**` 的唯一命中是 `ui/views/page_05_settings.py` 指向 `EXCEPTIONS.md §8.3.P` 的 `P-HEDGESEMANTIC-1` 待判定登記，**沒有任何幣別曝險彙總實作**；`duration\|久期\|beta\|利率敏感\|匯率敏感` 在 `services/**` `shared/**` 只有 `services/crisis_backtest.py` 的 `duration_days`（危機**天數**，不是債券**久期**）與 `services/portfolio_service.py::risk_alert` 的兩句文案 |
+| **計算** | **查不到** | 三種查法：(1) 掃 `scenario\|情境\|shock\|stress_test\|壓力測試\|衝擊\|sensitivit\|敏感度`（`services/**`）40+ 行命中，**逐行判讀後沒有一行是組合情境分析**；(2) 掃 `what_if\|whatif\|simulate\|模擬`（`services/**`）4 行，全與本題無關；(3) 逐檔讀 `services/portfolio_service.py`／`portfolio_frontier.py`／`portfolio_performance.py`／`allocation_backtest.py`／`crisis_backtest.py`／`capture_ratio.py`／`nav_fx_switch.py`／`homogeneity.py` 的 `def` 清單，**沒有任何一支接受「利率 +X bp」「TWD 貶 Y%」「HY +Z bp」這種輸入**。<br>⚠️ **最接近的兩個都不是**：`services/crisis_backtest.py::attach_fund_drawdown` 是**歷史危機重播**（回看，非前瞻衝擊），且 `services/allocation_backtest.py::strategy_weights_at` 的五個策略**沒有一個是總經 regime 驅動的**；`services/portfolio_service.py::risk_alert` 吃利率方向／HY／VIX，但輸出是**文字警示**，沒有任何一個數字是組合預估影響 |
+| **畫面** | **查不到** | 兩種查法：(1) 非測試 `*.py`：`情境分析` **0 檔**／`匯率衝擊` **0**／`信用衝擊` **0**／`組合影響` **0**／`預估影響` **0**／`stress_test` **0**（量測日 2026-09-21）；(2) 渲染鏈 `_DETAIL_ZONE` 五塊逐塊看過，**沒有任何一塊做組合層級的衝擊試算**。<br>⚠️ `ui/views/page_01_macro.py` 的 10 燈表上有「10Y 殖利率急變」，**但那是總經層的單日變動紅綠燈，沒有任何一檔使用者持股參與計算** |
+| **撞凍結面** | **是 —— 三格全撞，一格豁免都沒有** | 落在 ① ⇒ **F2**（那張只限 ①-4）；持倉來源住在 `ui/tab3_portfolio.py`／`ui/tab3_t7_ledger.py` ⇒ **F1**（那張只限 `ui/tab1_macro_midcycle.py` 的 ①-8）；試算邏輯 ⇒ **F4**（無豁免）。<br>⚠️ **還有一個結構性阻擋，它先於凍結令**：① 頁自己在 `_render_matrix_signpost` 的 caption 逐字宣告「**這一頁只講市場（大盤與總經），不出現任何一檔你持有的基金**」 |
+| **母法衝突** | **無 —— 而且本項是七項裡唯一被點名允許的** | **G2** 逐字：「所有標的調整與再平衡一律採「**偏離提示、客觀對照、情境試算**」三種形式之一。」⇒ **「情境試算」是明列的三種合規形式之一。**<br>⚠️ **但 G3 附帶一個硬條件**：「**所有試算參數均由使用者自行輸入**」⇒ 利率／匯率／信用三個衝擊幅度**由使用者輸入**；**一旦寫死一組預設衝擊幅度，就從合規的情境試算變成 G3 違規** —— 那正是 `docs/v2/21_decision_log.md` §H 第 3 項判 ①-4 違規的同一個理由（該卡兩個門檻恆是寫死的預設值）。<br>⚠️ 輸出亦不得以處置動作收尾（否則落回 G3 後半） |
+
+**附資料源與成本（本項最貴，三條路的口徑不同）**：
+- **(a) 歷史迴歸 beta 法**：0 條新 series／0 個新 fetcher ＋ **約 2–3 個新純函式**（逐檔 NAV 報酬對 ΔDGS10／ΔUSDTWD／ΔHY 迴歸 → 組合加權）。
+  ⚠️ 基金 NAV 是**原幣**，迴歸前要先走 `services/allocation_backtest.py::to_twd_total_return_series`，否則把匯率變動算進利率 beta（`CLAUDE.md §4.1`）。
+- **(b) 幣別曝險法（只解匯率那一支）**：0 條新 series ＋ **1 個新純函式**（`ccy_by_code` 已存在於 `services/allocation_backtest.py::build_aligned_matrices` 的輸入），
+  ⚠️ 但受 `EXCEPTIONS.md §8.3.P` 的 `P-HEDGESEMANTIC-1` 未裁決卡住。
+- **(c) 久期法（只解利率那一支）**：**需要新的資料源**（基金持債久期，MoneyDJ／Morningstar 都不在現有 fallback chain 裡）⇒ **要新 fetcher**。
+
+### ①-Z.5 七項五欄總表
+
+| # | 項目 | 資料源 | 計算 | 畫面 | 撞凍結面 | 母法衝突 |
+|---|---|---|---|---|---|---|
+| **P0-1** | 四象限定位：成長動能 × 通膨動能 → 復甦／過熱／滯脹／衰退 | **現有** | **現有** | **需新增** | **是**（F2；四張豁免射不到。改服務層則 F4，無豁免） | **有（條件性）**：只印 `quadrant`／`growth_dir`／`inflation_dir` ⇒ 無；一併印 `quad_desc`／`quad_alloc` ⇒ **G1＋G3** |
+| **P0-2** | 政策利率路徑：市場隱含升息／降息預期 | **查不到** | **查不到** | **查不到** | **是**（渲染端 F2 或 F1，皆射不到）／**否**（取數端 `repositories/**` 不在 F1～F6；L2 編排吃 F4） | **無**（邊界：不得以處置動作收尾，否則 G3） |
+| **P0-3** | 實質利率：名目利率 − 通膨預期 | **需新增（1 條 FRED series）** ⚠️ 複驗修正 | **查不到** | **需新增** | **是**（F1／F2／F4 三格都沒有可用豁免） | **無**（G2「客觀對照」） |
+| **P0-4** | 美元週期：DXY 或美元實質有效匯率 | **現有（名目 `DTWEXBGS`）／實質有效匯率查不到** | **現有（只到方向）／週期定位需新增** | **現有（部分）** | **是**（F1；那張只限 ①-8 兩行） | **無** |
+| **P0-5a** | 跨資產相對價值：**ERP** | **查不到** | **查不到** | **查不到** | **是**（F4 ＋ F2／F1，皆無可用豁免） | **無**（G2「客觀對照」；邊界同 P0-2） |
+| **P0-5b** | 跨資產相對價值：**信用利差 vs 歷史** | **現有** | **需新增** | **水準現有／vs 歷史查不到** | 同上 | 同上 |
+| **P0-6** | 配置信號表：宏觀象限 → 資產類別方向 | **現有** | **現有（兩套並存，鍵都不是象限）** | **需新增** | **是**（F2；那張豁免字面涵蓋得到，**但方向相反**） | **有（最直接）**：**G1＋G3** |
+| **P0-7** | 情境分析：利率、匯率、信用衝擊下，組合預估影響 | **需新增（缺連接層係數）** | **查不到** | **查不到** | **是**（F2 ＋ F1 ＋ F4，**三格全撞、一格豁免都沒有**） | **無 —— 唯一被點名允許的**（G2「情境試算」）。⚠️ **G3 硬條件：所有試算參數由使用者輸入** |
+
+### ①-Z.6 附資料源與成本一覽
+
+**成本欄寫的是「口徑」（幾條 series・幾個純函式・要不要新 fetcher），不是工時，也不是優先序** —— 那是範圍決定（`CLAUDE.md §8.4` 步驟 4），不在本節射程。
+
+| # | 需要的資料源 | 新 series | 新 fetcher | 新純函式 | 最貴的那一段 |
+|---|---|---|---|---|---|
+| **P0-1** | 全部現有（`fetch_all_indicators` 的 10 個鍵） | 0 | 0 | 0 | 只差渲染端把既有 `growth_inflation` 讀出來 |
+| **P0-2** | **全新來源**：Fed Funds futures／OIS 曲線／CME FedWatch 之一 | — | **1（全新）** | 1 | **原料本身不存在**；FRED 現有常數無一可替代 |
+| **P0-3** | `DFII10`（或 `T10YIE` 配 `DGS10`） | **1** | 0（`repositories/macro/fred.py::fetch_fred` 現成） | 0～1 | 前置：名目 10Y **水位**目前不是 `fetch_all_indicators` 的一格 |
+| **P0-4** | 名目：現有 `FRED_DXY`＝`DTWEXBGS`／實質：`RBUSBIS` 類 | 0（名目）／**1**（實質） | 0 | 1 | 「名目 vs 實質」是客戶的定義選擇 |
+| **P0-5a** | **全新來源**：S&P 500 forward P/E 或 earnings yield | — | **1（重建 2026-08-28 刪掉的那條）** | 1 | 被減數整條不存在 |
+| **P0-5b** | 現有 `FRED_HY_SPREAD`＝`BAMLH0A0HYM2` | 0 | 0 | 1（或接既有 `calc_macro_phase_zpct`） | 演算法已寫好，缺線上消費端 |
+| **P0-6** | 全部現有 | 0 | 0 | 0（經 `REGIME_ALIASES` 直餵 `tag_regime_fit`）～1 | **不是成本問題，是 G1／G3 問題** |
+| **P0-7** | 衝擊側現有／組合側現有／**連接層係數不存在** | 0（a、b 路）／**新來源**（c 路：基金持債久期） | 0（a、b）／**1**（c） | **2～3** | 沒有久期、沒有 beta、沒有幣別曝險彙總 ⇒ 算不出 ΔNAV |
+
+### ①-Z.7 矛盾登記（**只登記，不裁決**）
+
+1. **`spec/UI_SPEC.md` 這個路徑不存在，卻被引用 64 次。** `docs/v2/21_decision_log.md` 內 `spec/UI_SPEC.md` **64 處**（另有 `spec/PROPOSAL_4a.md`／`spec/PROPOSAL_4b.md`），而 `git ls-files | grep -c '^spec/'` → **0**。疑似對應 `docs/v2/20_ui_spec.md`／`24_proposal_4a.md`／`25_proposal_4b.md`，**本組沒有逐份比對內容，不宣稱它們是同一份。**
+2. **`docs/v2/CONSTITUTION.md` 的身分與交辦用詞不符。** 交辦稱它為「母法」；**該檔第 1 行自稱「v2 子法 1」**，前言逐字寫「位階為 **母法 > `CLAUDE.md` > 本文件**」。⇒ **本檔所有「母法逐字」引用，實際引自子法 1 的轉述。**
+3. **真母法〈專案重構終審令〉原文查不到。** 40 個 commit 的檔名聯集掃 `終審令|final_order|final_decree|MOTHER|母法` → **0 命中**，正控 `CONSTITUTION` → 命中。`docs/v2/35_branch_strategy_check.md` 早已登記過同一件事。
+4. **13 塊上限撞擊：① 現有 10 塊 ＋ 本清單 7 項 ＝ 17 > 13。** 客戶本輪規則是「超過就砍，不是折疊」。⛔ **範圍問題，本節不決定砍哪幾塊。**
+5. **`services/ai_prompts.py:72-79` 那一格有兩種讀法，兩邊都寫在檔案裡。** `docs/v2/21_decision_log.md` B25／B30／§H 第 4a 項把它列為 **P0 待修的 G1／G3 衝突**，並逐字寫「**同時撞 F4 與 F1，而且這兩格今天都沒有豁免 → 兩格都要走 §5 母法修正提案單**」；而客戶 2026-09-21 的措辭是「**僅限 `:72-79`**」（讀起來像施工許可）。⇒ **「豁免是為了拆掉它」還是「豁免是為了在那裡動工」，兩種讀法都成立。本節不選。**（行號量測日 2026-09-21。）
+6. **P0-3 資料源欄，兩份盤點給出不同答案。** 盤點組判「**現有**」（10Y 名目 ＋ 5Y 通膨預期都在）；複驗實測判「**需新增**」（`DGS5`／`T10YIE`／`DFII10`／`DFII5` 全 0 命中，10Y 減 5Y 是混期數字）。⇒ **本表採複驗版，兩邊都寫出來。** ⚠️ **兩者不完全互斥**：若客戶接受「混期近似 ＋ 明標天期不匹配」，盤點組那一版成立。**該取捨是客戶的定義選擇。**
+7. **P0-6 想借的那張豁免，方向是相反的。** F2 那張（限 `ui/views/page_01_macro.py` ①-4）在**字面上**涵蓋得到 P0-6 的落點，**但它是為了把 ①-4 那張卡的配置百分比拿掉而開的**（`docs/v2/21_decision_log.md` §H 第 3 項逐字：「改成**不給資產配置百分比、不給停利／加碼門檻**的形式」）。⇒ **拿它去新增一張配置信號表，與它的成因相反。**
+8. **「滯脹」在配置面被摺掉了。** `services/macro/us_indicators.py::calc_growth_inflation_axis` 確實產出獨立的 `quadrant = "滯脹"`（`:1373`，量測日 2026-09-21）；但 `shared/regime_fit.py` 的 `REGIMES`（`:12`）逐字 `("復甦", "擴張", "高峰", "衰退")` **沒有滯脹格**，同檔 `REGIME_ALIASES`（`:19`）逐字把 **`"滯脹": "衰退"`**；`services/macro/us_indicators.py:1902` 另一張表也把 `"衰退": 3, "滯脹": 3` 同列。⇒ **P0-6 那條「0 個新純函式」的捷徑，代價是 P0-1 的第三象限被併進第四象限。** ⚠️ **兩者名字很像但不是同一個東西**：`REGIMES` 是一維景氣分數切出來的帶，客戶要的是成長×通膨二維。**不可互相引用。**
+9. **服務層自己在生成配置方向與水位字串，不只 ①-4 那一張卡。** `services/macro/us_indicators.py::calc_macro_phase` 的回傳除了 `alloc`（股／債／現金）外還有 `advice`／`strategy`／`weather_alloc_str`；`ui/helpers/macro/linkage.py` 亦逐字說明 `phase_info.alloc` 是資產類別配置。⇒ **①-4 是這批輸出的其中一個消費端；本組沒有查其餘消費端有幾個、在不在畫面上。**
+10. **死碼裡躺著一組 G1 等級的配置字串，既有的合規掃描結構上看不到它。** `ui/components/mk_clock.py::_PHASE_META` 帶 `"advice": "股優於債（建議 股 7 : 債 3）…"` 與 `alloc_eq: 70`（**原樣引用**）。該檔 `render_mk_clock_section` **0 個真呼叫點**（今天印不出來），但子法 1 §6.2.2 的六詞掃描結果是「3 個字串、0 處真違規」—— **「建議 股 7 : 債 3」不含那六個詞，那次掃描結構上看不到它。**
+11. **線上頁的指路句指向一個今天不存在的東西（檔案自己承認）。** `ui/views/page_01_macro.py::_render_matrix_signpost` 把使用者指到 ② 去找逐檔加減碼，而同函式上方註解逐字寫該組東西「整組目前只存在於 `ui/tab1_macro.py`，而該檔已不接線到任何分頁 —— 它現在**哪裡都到不了**」。
+12. **子法 1 不在本工作分支上。** 它只存在於未合併的 `origin/docs/v2-constitution-governance`（`5569d85`），head `2296a0d` 的 `docs/v2/` 無此檔 ⇒ **任何跑在本分支上的守衛／CI 結構上讀不到它。**
+13. **客戶四張豁免的第四張沒有 F 編號。** 客戶寫「`services/ai_prompts.py` 限 `:72-79`」，**沒有標 F 幾**；依子法 1 §1.1，`services/**` 屬 **F4**。⇒ **這個對映是推的，客戶沒有這樣寫。**
+14. **P0-7 與 ① 頁自己的版面定位相反。** P0-7 要同時吃總經衝擊與使用者持倉，而 ① 頁 caption 逐字「**不出現任何一檔你持有的基金**」。⇒ **它若落在 ①，先撞到的是這條，不是凍結令。**
+
+### ①-Z.8 本節的判定方法與盲點
+
+**方法**：兩組獨立唯讀盤點（一組答資料源／計算，一組答畫面／凍結／母法，**互不知道對方答案**），再由總管複驗。
+每一輪掃描前後各跑一次負控（**本組現編隨機串，未列出** → 0 命中，`exit=1`），每一項另附自己的正控，
+且正控一律**不是**受測檔本身（例：`def fetch_fred` → `repositories/macro/fred.py` 等 2 檔命中）。
+「畫面上有沒有」不靠 grep 判定，改從 `app.py` 往下追渲染鏈。
+
+**盲點（逐條，都是本輪確實沒做的事）**：
+
+1. **沒有開過瀏覽器，一次都沒有。** 本節所有「畫面上有沒有」**全部是讀渲染碼推論**。Streamlit 的 `st.session_state` gating、toggle、checkbox gate 未點擊時的灰態，**在靜態讀碼下看不出使用者實際看到什麼**。
+2. **沒有執行任何 Python、沒有跑任何測試。** 沒有驗證 `calc_growth_inflation_axis` 的實際回傳值，也沒有把它的輸出餵進 `tag_regime_fit` 跑過 —— **P0-6 那句「0 個新純函式」的成本估計就靠那條字串橋，而它只經過逐字比對。**
+3. **「0 命中」「0 個呼叫點」這類句子取決於有沒有漏看。** 全部是字面 `git grep`，**沒有做 AST 分析**；動態 `getattr`／`importlib`／字串組出的呼叫**結構上掃不到**。⚠️ ERP 那一項已經示範過一次自我誤報（`-li` 的 22 檔 vs `-nw` 的 0 檔），**其餘各項可能還有同型誤報沒被抓到**。
+4. **endpoint 列舉只抓字面 URL**，抓不到變數拼接、f-string 組出、或住在設定檔／環境變數裡的 endpoint。⇒ 「全 repo 沒有 CME／FedWatch 來源」這句話**建立在一個會漏掉動態 URL 的方法上**。
+5. **沒有掃 `ui/views/page_02_health.py` 與 `ui/views/page_04_portfolio.py`。** 只追了 ① 那條鏈。⚠️ **P0-6 與 P0-7 特別可能落在 ④**（它們需要持倉）—— **這是本節最大的射程缺口。**
+6. **沒有逐行通讀任何一個大檔**（`ui/views/page_01_macro.py` 2,000+ 行、`ui/tab1_macro.py` 2,500+ 行、`docs/v2/21_decision_log.md`），一律只讀命中處上下文。⇒ **七項中若有任何一項以本組沒想到的詞彙出現在那些檔裡，本節會漏掉。**
+7. **子法 1（2,419 行）只讀了 §0／§1／§6.1／§6.2／§6.3.1-C 與節標題。** **沒讀**：§2 Feature Flag／§3 資料契約／§4 回滾／§5 提案單範本／**§6.4 資產偏離門檻**／**§6.7 客觀對照候選欄位清單**（⚠️ 與 P0-5 直接相關）／§7／§8／§9。⇒ **「母法衝突」欄只查了 G1／G2／G3 與 §6.2 黑名單，不是全文比對。**
+8. **沒有查這七項是否已在別處被討論或否決。** `BACKLOG.md`／`TODO.md`／`STATE.md`／`SPEC.md`／`STRATEGY.md`／`ARCHITECTURE.md` 都沒搜過。⇒ **可能其中某項早有裁決，本節不知道。**
+9. **沒有做 F5（資料表 Schema）與 F6（遷移歷史鏈）的撞擊分析。** 七項若需新欄位／新快取檔，可能吃到 **F5**，**本節完全沒查**。
+10. **沒有查 `tests/` 內是否有守衛會因新增這七項而轉紅。** 一個守衛都沒讀。
+11. **沒有判斷「值不值得做」。** 成本欄只寫口徑，**沒有估工時、沒有排優先序** —— 那是範圍決定（`CLAUDE.md §8.4` 步驟 4）。
+12. **沒有查七項彼此之間會不會打架。** 已點名一組（P0-1 的象限 vs P0-6 第 2 套表的四位階是兩個不同的分類系統，見矛盾 8），**但沒有查它們同時上畫面的其他互動。**
+13. **`mcp_server/` 算不算客戶說的「production」，本節不判。** P0-6 的 `identify_regime` 走 MCP 可達、走 Streamlit 不可達，本節分開記。
+14. **本節所有 `檔案:行號` 皆為量測日 2026-09-21 於 head `2296a0d` 的快照，會漂移。** 引用前請現場重量。⚠️ 其餘一律寫成 `檔案::符號名`，理由同 `CLAUDE.md` 既有處置：行號在任何一次重構後就失效，而重構不會觸發本表更新。
+
+### ①-Z.9 P1／P2 分級（**本組提出，待客戶裁示 —— 客戶只指定了上面 P0 七項，沒有指定 P1／P2**）
+
+⛔ **以下每一項都是本組依盤點結果提出的候選，不是客戶給的。**
+⛔ **本節不寫它們的區塊規格、不出線框** —— 第二、第三階段本輪不做。
+⚠️ **分級口徑**：**P1 ＝ 不需新來源、原料已在 repo 內、缺口是「接線」或「一個純函式」**；
+**P2 ＝ 需要新來源／新 fetcher／新係數，或本身卡在未裁決的問題上**。**分級只看缺口形狀，不含優先序主張。**
+
+**P1 候選（本組提出，待客戶裁示）**
+
+| # | 候選項 | 缺什麼 | 成本口徑 | 撞凍結面 | 母法衝突 |
+|---|---|---|---|---|---|
+| **P1-a** | 名目 10Y **水位**進 `services/macro/us_indicators.py::fetch_all_indicators` 的產出 | 該支目前只產出 `YIELD_10Y2Y`／`YIELD_10Y3M` 兩條**利差**，水位只從 `services/risk_radar.py::_signal_yield_10y_shock` 出來，形狀不同 | 0 series／0 fetcher／0～1 純函式 | **F4**（無豁免） | **無**（純讀數） |
+| **P1-b** | 信用利差歷史分位接上線上頁 | `services/macro/us_indicators.py::calc_macro_phase_zpct` 已寫好 60 期 z→百分位、`HY_SPREAD` 已在 `_ZPCT_REVERSE_KEYS`，**Streamlit 側 0 個呼叫點** | 0 series／0 fetcher／0～1 純函式 | **F4** ＋ **F1 或 F2**（皆無可用豁免） | **無**（G2「客觀對照」） |
+| **P1-c** | 美元歷史位階（沿用名目 `DTWEXBGS` 的既有 800 點 series） | 同 P1-b 那條 zpct 路徑，`DXY` 也在 `_ZPCT_REVERSE_KEYS` | 0 series／0 fetcher／0～1 純函式 | 同 P1-b | **無** |
+| **P1-d** | 「滯脹」在配置面取得獨立格 | `shared/regime_fit.py::REGIME_ALIASES` 目前把 `"滯脹"` 併進 `"衰退"`，`REGIMES` 只有四位階 | 0 series／0 fetcher／1 個常數表改動 ＋ 連帶 `ASSET_BUCKETS` 的親和度要多一鍵 | **F4** ＋ **L0 `shared/**`（不在 F1～F6）** | **無**（分類本身不含處置方向）⚠️ 但它是 **P0-1 ＋ P0-6 同時上線的前置** |
+
+**P2 候選（本組提出，待客戶裁示）**
+
+| # | 候選項 | 缺什麼 | 成本口徑 | 撞凍結面 | 母法衝突 |
+|---|---|---|---|---|---|
+| **P2-a** | 市場隱含政策利率路徑的資料源 | **原料整條不存在**（＝ P0-2 的阻塞點） | **1 個全新來源 ＋ 1 個全新 L1 fetcher** | 取數端 `repositories/**` **不在 F1～F6**；編排吃 **F4** | **無**（邊界：不得以處置動作收尾） |
+| **P2-b** | S&P 500 forward P/E／earnings yield 取數重建 | ERP 的**被減數**於 2026-08-28 整段刪除（＝ P0-5a 的阻塞點） | **1 個新來源 ＋ 1 個新 fetcher ＋ 1 個純函式** | 同 P2-a | **無**（G2「客觀對照」） |
+| **P2-c** | 美元**實質**有效匯率 | `RBUSBIS` 類 series 不在 `shared/fred_series.py`；`REER` 全 repo 0 命中 | **1 條新 series**／0 新 fetcher／1 純函式 | `shared/fred_series.py` 不在 F1～F6；消費端吃 **F4／F1／F2** | **無** |
+| **P2-d** | 組合對利率／匯率／信用的**敏感度係數** | 沒有久期、沒有 beta、沒有幣別曝險彙總（＝ P0-7 的阻塞點） | 0 series ＋ **2～3 個新純函式**（迴歸 beta 法）；久期法**另需新 fetcher** | **F4** ＋ 持倉端 **F1** | **無**，但 **G3 硬條件：衝擊幅度由使用者輸入** |
+| **P2-e** | 幣別曝險彙總 | `P-HEDGESEMANTIC-1` 在 `EXCEPTIONS.md §8.3.P` **未裁決**，這一項卡在它後面 | 0 series ／ 1 個純函式 | **F4** | **無** ⚠️ **但先卡在一個未裁決的登記上，不是卡在成本** |
+| **P2-f** | 「象限 → 資產類別方向」的**呈現形式**本身 | ＝ P0-6 的 G1／G3 衝突。子法 1 明列允許的路徑是 **G2「客觀對照」**（例：象限 ＋ 各資產類別的歷史表現分佈，不出現 ↑↓ 或加減碼字樣） | **不是成本問題** | — | **有（G1＋G3）** ⛔ **形式怎麼改，本節不裁決** |
+
+⚠️ **P1-a 同時是 P0-3 與 P0-7 的前置；P1-d 同時是 P0-1 與 P0-6 的前置。** 本節只點名這個依賴，**不排施工序**。
+
+⛔ **本輪到此為止：0 個 `.py` 變動，只動本檔這一節。**
