@@ -1,0 +1,400 @@
+# live/dead 登記簿（符號層）
+
+> **U 組 48 列主表全 repo 查不到，本表以 20_ui_spec.md 5A 欄為起點。**
+
+> ⬆️ 上面那一行是**客戶 2026-09-21 追加指定的逐字措辭**，依指示放在標題之後、主表之前，
+> **不得改寫、不得拆開**。本檔 §0 的來源說明是它的展開，不取代它。
+
+- **法源**：客戶 2026-09-21【裁示 2：死碼機制（新一輪）】，逐字收錄於 §2.0。
+- **位階**：本檔受 `CLAUDE.md` 的 `§-2`（AI 總管與執行分工）＋ `§-1.5`（虛擬軟體公司運行規範）
+  ＋ `§-1`（工作準則）管轄。**位階由下往上宣告**，體例沿用 `EXCEPTIONS.md` 開頭 ——
+  因為 `CLAUDE.md` `§-2` 的標題寫的是「凌駕**本檔**其餘各節」，那個「本檔」跨不了檔。
+- **本輪 base**：`ae33704`　｜　**建檔日**：2026-09-21　｜　**建檔組**：P 組（品管與 CI 守衛組）
+- ⛔ **本檔刻意不寫自己的檔名，行文一律以「本檔」指稱。**
+  理由與 `CLAUDE.md` `§-2.A` 第 8 款同型：**把受掃字串寫進受掃文件，下一個人拿它掃文件時它自己就會命中**。
+  本檔受 `tests/test_doc_counters.py` 的 (B) 自掃檢查管轄，而該檢查抓的正是「掃 X 的指令住在 X 裡面」。
+  凡客戶原文出現本檔檔名處，一律換成佔位符 `<本檔>` —— **資訊留著，字串不留**
+  （正例體例出自 `CLAUDE.md` `§-2.A` 第 8 款；該款同時點名兩個反例：整句刪掉、換一個新的具體字串）。
+
+---
+
+## 0. 來源聲明 —— 初始列**不是**來自客戶指定的那張 48 列主表
+
+### 0.1 客戶第 5 點指定的起點，在 repo 內查不到
+
+客戶裁示 2 第 5 點指定「初始建檔用 5B 那張 48 列主表當起點，不重新掃」。
+**那張表在本 repo 內查不到。**
+
+⚠️ **「查不到」就是查不到** —— **不是**「未複驗」、**不是**「還沒找」、**更不是**「已確認」。
+本節把三條查法的指令與真實輸出照抄如下，讓下一個人可以直接推翻它。
+
+### 0.2 依據一｜檔名面（基準釘 `ae33704`）
+
+```
+git ls-tree -r --name-only ae33704 | grep -iE "live|dead"
+```
+
+輸出（`exit=0`）：
+
+```
+PHASE1_LIVE_VERIFICATION.md
+tests/test_dead_fred_pmi_series_removed.py
+tests/test_wf02_health_golive.py
+tests/test_wf05_settings_golive.py
+```
+
+命中 4 筆。`PHASE1_LIVE_VERIFICATION.md` 是 2026-08-14 的**實機驗證紀錄**，主題不同；
+其餘三筆住在 `tests/` 底下。⇒ 沒有一筆是 U 組的掃描報告。
+
+⚠️ **為什麼用 `ls-tree` 而不是 `ls-files`**：後者讀工作樹，而本檔自己就住在工作樹裡、
+檔名又含得到那兩個字 —— 它會**把自己算進去**。前者讀凍結的 commit，本檔在那個 commit 上還不存在。
+（總管原本跑的是 `ls-files` 版本，輸出的四筆與上表逐字相同；本組改釘 SHA 重跑，是為了讓它**下一輪照跑仍然成立**。）
+
+### 0.3 依據二｜引用面（基準釘 `ae33704`）
+
+```
+git grep -n "全 repo live/dead 掃描報告" ae33704 -- 'docs/v2/*.md' | cut -d: -f1-3
+```
+
+輸出（`exit=0`）：
+
+```
+ae33704:docs/v2/20_ui_spec.md:1427
+ae33704:docs/v2/20_ui_spec.md:1449
+```
+
+`:1427` 逐字寫著「**判準與資料一律取自 U 組 2026-09-21 的全 repo live/dead 掃描報告**，
+本節做的是覆核與引用，**不自行重算**」。
+⇒ **`docs/v2/20_ui_spec.md` 是在「引用」那份報告，報告本體沒有被歸檔進 repo。**
+
+⚠️ **本節不宣稱窮舉**：以上是**兩條字串指令**的結果，不是「repo 內沒有那份報告」的證明。
+若那份報告以別的檔名／別的措辭存在，這兩條指令掃不到它（同 `CLAUDE.md` `§-1.5.1c` 判定 2
+的方法教訓：**字表選錯，掃再多次都沒用**）。**能被一條指令推翻的全稱句，本節不寫。**
+
+### 0.4 依據三｜`10_db_inventory.md` 裡的「48 列」是**另一件事**，不要拿它當來源
+
+```
+git grep -c "48 列" ae33704 -- 'docs/v2/10_db_inventory.md'
+```
+
+輸出（`exit=0`）：`ae33704:docs/v2/10_db_inventory.md:11`
+
+其中第 3 筆（截前 120 字元）：
+
+```
+git grep -n "48 列" ae33704 -- 'docs/v2/10_db_inventory.md' | sed -n '3p' | cut -c1-120
+```
+
+輸出（`exit=0`）：
+
+```
+ae33704:docs/v2/10_db_inventory.md:435:**翻了（48 列，全部是「活的 → 只寫不讀」）**：逐列清單見
+```
+
+⇒ 那個「48 列」講的是**資料庫欄位**由「活的」翻成「只寫不讀」，
+與**符號**的 live/dead 是**完全不同的主題**。⛔ **不得**拿它當本檔的來源。
+
+### 0.5 本檔初始列的實際來源
+
+**來源：`docs/v2/20_ui_spec.md` 的 5A「live/dead/未確認」欄**（`:1425`–`:1860` 區段，
+即 `①-Z.4` 欄位定義 ＋ `P0-1`～`P0-7` 七項的 live/dead 格 ＋ `①-Z.5` 七項五欄總表）。
+
+**為什麼這符合客戶「不重新掃」的本意**：5A 那些格子是 U 組主表的**已覆核子集** ——
+每一格都附 AST 覆核依據、量測日 2026-09-21、釘 `4c3066d`。
+本組做的是**把既有判定抄成表**，**沒有重跑任何一次掃描**（見 §6.1）。
+
+⚠️ **這是一個子集的子集，據實寫明**：
+U 組主表（查不到）⊃ 5A 覆核子集（只覆核那七項用得到的符號）⊃ 本表。
+**本表不是全 repo 的母體，也不宣稱是。**
+
+---
+
+## 1. 用途與查表優先規則
+
+**用途**：登記「一個符號今天是不是活的」，**一符號一列**，登記一次之後不再重判。
+
+**查表優先規則**（客戶裁示 2 第 4 點；檔名依 §0 開頭的佔位符規則換成 `<本檔>`，語意未改）：
+
+```
+4. 之後任何一輪遇到死碼：先查 <本檔>，不重新確認。
+```
+
+**操作順序（三步，照順序走）**：
+
+1. **先查 §4 主表。** 命中 → 直接用那一列的判定，**不重新確認**
+   （客戶限制逐字：「不准對同一符號重複確認。」）。
+2. **沒命中 → 才跑 §2 的三層確認程序。**
+3. **跑完把結果補進 §4 主表**（一符號一列，欄位照 §4 表頭）。
+
+⚠️ **命中「未確認」列時的處理 —— 那不是「沒查過」。**
+它的意思是「三層都跑過了、判不出來」。要動它只有一條路：依 §3 重跑三層並累加輪次。
+⛔ **不得**把它當成一個沒查過的新符號從頭再查一次（同上，客戶限制第 2 條）。
+
+⚠️ **本檔是登記簿，不是授權書。** 命中 `dead` 只代表「登記在案」，處置照 §5。
+
+---
+
+## 2. 三層確認程序
+
+### 2.0 客戶裁示 2 全文（**逐字**；僅本檔檔名依 §0 換成佔位符 `<本檔>`）
+
+```
+【裁示 2：死碼機制（新一輪）】
+1. 建 docs/v2/<本檔>，每符號一行：
+   檔案::符號 | live/dead/未確認 | 依據 | 確認日
+2. 三層確認，跑完就停：
+   第一層：grep production caller → 有 = live
+   第二層：查 importer 是否 live → 有 = live
+   第三層：AST 掃 import → 無 = dead
+   三層跑完仍不確定 → 標「未確認」，結案。
+3. 「未確認」出口：
+   連續 3 輪未能確認 live 路徑 → 降級為「dead（推定）」。
+4. 之後任何一輪遇到死碼：先查 <本檔>，不重新確認。
+5. 初始建檔用 5B 那張 48 列主表當起點，不重新掃。
+6. <本檔> 在 docs/v2/ 下，會撞守衛：
+   所有計數必須釘 SHA，不准自掃，全稱句必須附反向檢查。
+```
+
+**反向檢查**（針對上一句在本檔的落實 —— **規則本身不可否證，可否證的是守衛還在不在**）：
+`git show ae33704:tests/test_doc_counters.py | grep -cE "^def (find_counts_without_sha|find_self_scanning_commands|find_universals_without_reverse_check)"` → **3**，`exit=0`。
+⇒ 三道檢查都還在守衛裡；若有人拿掉其中一道，這個數字會掉下來，上面那句話就跟著失去依靠。
+
+```
+7. 建檔後跑守衛一次，確認沒引新錯，停，回報我。
+【限制】
+- 不准刪任何死碼。
+- 不准對同一符號重複確認。
+- 不准無限深入 importer 鏈。
+- 不准把「未確認」當懸案留著。
+- 不准動豁免範圍外的任何程式碼。
+- PR #845 維持 draft。
+```
+
+⚠️ **上面的碼塊刻意切成兩段**，中間插入那條反向檢查 ——
+理由是守衛 (C) 的反向檢查視窗只往下看 8 行，切開才放得進去。
+**客戶原文一個字都沒有改動、沒有刪減、沒有重排順序**（除 §0 已聲明的檔名佔位符）。
+
+### 2.1 第二層的深度上限：**最多兩層 importer**
+
+客戶限制逐字：「不准無限深入 importer 鏈。」本節把它寫成一個可執行的數字：**最多兩層 importer**。
+
+**為什麼一層不夠 —— 本 repo 就有一條兩層動態再匯出鏈（基準釘 `ae33704`）**：
+
+`fetch_fred` 定義在 `repositories/macro/fred.py`，而 production 大量以
+`from repositories.macro_repository import fetch_fred` 取用。中間隔著兩層：
+
+| 層 | 檔案 | 它怎麼再匯出 |
+|---|---|---|
+| 第 1 層 | `repositories/macro_repository.py` | `for _name in dir(_macro_pkg): globals()[_name] = getattr(_macro_pkg, _name)` —— 檔頭自陳是 v19.205 B1 shim，為 backward compat 而留 |
+| 第 2 層 | `repositories/macro/__init__.py` | `from . import alternate, fred, math_utils, yf` 之後同樣用 `globals()[_name] = getattr(_mod, _name)` 攤平 |
+
+⇒ **那兩層的再匯出都是迴圈在 runtime 產生的，不是字面的 `import` 敘述** ——
+客戶第三層指定的「AST 掃 import」在這兩個檔裡**掃不到任何一條把 `fetch_fred` 綁進來的 import 節點**。
+只深入一層會停在 `repositories/macro/__init__.py`，看不到走 shim 路徑的那批消費者 ⇒ **判成假 DEAD**。
+
+⚠️ ~~**兩層都是迴圈產生的動態再匯出，`fetch_fred` 這個名字在那兩個檔裡一次都沒有字面出現。**~~
+→ **2026-09-21 就地更正（本組寫下之後自查、當場實測推翻；有意識的更正，不是漏刪 · 決策者：P 組）**：
+**舊表述是假的。** 實測：
+
+```
+git grep -n "fetch_fred" ae33704 -- 'repositories/macro_repository.py' 'repositories/macro/__init__.py'
+```
+
+輸出（`exit=0`）：
+
+```
+ae33704:repositories/macro/__init__.py:4:- fred.py        FRED series 抓取 (cache helpers + fetch_fred / fetch_fred_batch / next_release_date + MACRO_THRESHOLDS dict)
+ae33704:repositories/macro_repository.py:11:repositories.macro_repository import fetch_fred, fetch_yf_close, zscore, ...`)。
+```
+
+⇒ 那個名字**兩個檔都出現了**，但**兩處都在模組 docstring 裡**，沒有一處是可執行的 import 或賦值。
+**舊表述的用意仍然成立**（AST 掃 import 確實看不到它）；**被權衡掉的是它的事實面** ——
+它寫成「字面上不存在」，而字面上是存在的。
+
+⭐ **這一筆讓本節的結論更強，不是更弱**：
+
+- **AST 掃 import**（客戶第三層）看不到 docstring ⇒ 會在「沒看到」這個方向翻車，**判成假 DEAD**。
+- **字串 grep** 看得到 docstring ⇒ 會在**相反方向**翻車：拿註解當證據判成 live。
+
+⇒ **兩種掃法各自會往相反方向錯，而 §2.1 的兩層深度上限是兩邊都需要的那道防線。**
+
+**量測（兩條指令，基準皆釘 `ae33704`）**：
+`git grep -l "repositories.macro_repository" ae33704 -- '*.py' | wc -l` → **32 個檔**；
+`git grep -l "repositories.macro.fred\|repositories\.macro import fred" ae33704 -- '*.py' | wc -l` → **11 個檔**。
+⇒ 走 shim 路徑的比走直接路徑的多出一截，**而那一截正是只深入一層會漏掉的部分**。
+
+⚠️ **這兩個數字只用來支撐本節的深度上限理由，沒有餵進 §4 主表任何一列**（見 §6.5）。
+
+**佐證（`docs/v2/20_ui_spec.md:1427` 逐字）**：「重算過的人在同一天踩過假 DEAD：
+兩層再匯出的 shim 會讓一個有數十個 import 點的符號在 import 面上看不到檔名。」
+
+**為什麼不是三層或更多**：每多一層，候選集就乘上該層的 importer 數，**成本指數成長、收益遞減**；
+而本 repo 已知最長的再匯出鏈就是上面這一條，**兩層剛好吃得下它**。
+⚠️ **「兩層」是本組依上述實例定的上限，不是客戶指定的數字。**
+若日後出現三層鏈，這個上限**要重訂**，⛔ **不得**默默沿用。
+
+### 2.2 三層跑完仍不確定 → 標「未確認」，**當輪結案**
+
+客戶第 2 點末句逐字：「三層跑完仍不確定 → 標「未確認」，結案。」
+客戶限制逐字：「不准把「未確認」當懸案留著。」
+
+**操作**：寫進 §4 主表 → `未確認輪次` 記 `1` → `確認日` 填當天 → **該輪到此為止**。
+
+⛔ **不得**因為「再查一下說不定就出來了」而超過三層、或超過 §2.1 的兩層 importer 上限 ——
+那正是客戶限制第 3 條要擋的東西。
+⛔ **不得**把它留在報告裡當一個沒有出口的待辦（同 `CLAUDE.md` `§8.3.P` 前言：
+**待查證沒有出口 ＝ 實質永久豁免**）。**出口就是 §3。**
+
+---
+
+## 3. 「未確認」的出口
+
+客戶裁示 2 第 3 點逐字：
+
+```
+3. 「未確認」出口：
+   連續 3 輪未能確認 live 路徑 → 降級為「dead（推定）」。
+```
+
+這一條需要一個**輪次計數**才執行得動，否則沒有人數得出「連續 3 輪」。
+故 §4 主表在客戶指定的四欄之後**增設第五欄 `未確認輪次`**（客戶四欄的名稱與順序一字未動）。
+
+**怎麼累加**：
+
+- **初值**：該符號**第一次**被判「未確認」的那一輪記 `1`。
+- **+1 的唯一條件**：有人**真的依 §2 重跑過一次三層程序**、**仍**判不出來 → 該列 `+1`，並更新 `確認日`。
+- ⛔ **沒有重跑就不准 +1。** 客戶寫的是「連續 3 輪**未能確認**」，**不是**「過了 3 輪」。
+  把它讀成時間到期，會讓一個沒有任何人看過的符號**自己**降級成 `dead（推定）` ——
+  那與 `CLAUDE.md` `§1`「錯誤的數字比沒有數字更危險」正面牴觸。
+- **誰累加**：**那一輪實際跑三層程序的執行組**（不是總管），且必須**在同一輪就地改本檔**。
+  理由：`CLAUDE.md` `§2.1` 記載過同一個病 —— 「**推翻一條記載的那一輪，必須在同一輪回頭改憲法；
+  只寫進別的檔等於沒改**」。本檔是同一種會被反覆引用的記載。
+- **累加到 `3` 時**：`live/dead/未確認` 欄改為 **`dead（推定）`**，
+  `依據` 欄**必須**寫明它是**推定**、以及是哪三輪累積的（三個 `確認日`）。
+
+⚠️ **`dead（推定）` 不等於 `dead`。**
+前者是「查了三輪查不出來」，後者是「查出來沒有 caller」。
+⛔ **兩者不得合併統計**，也**不得**拿 `dead（推定）` 當刪除依據（§5 照舊適用）。
+
+⚠️ live／dead 已定案的列，本欄填 `—`（不適用）。
+
+---
+
+## 4. 主表
+
+**欄位**：`檔案::符號`（客戶指定）｜`live/dead/未確認`（客戶指定）｜`依據`（客戶指定）｜`確認日`（客戶指定）｜`未確認輪次`（§3 增設）。
+
+**本表 30 列**：`live` 22／`dead` 5／`未確認` 1／`不適用` 2。
+⚠️ 這是**本表自己的列數**（數本表的列就得到），**不是**對 repo 的量測值，故不釘 SHA。
+
+⚠️ **依據欄裡「5A 組」＝ `docs/v2/20_ui_spec.md` 5A 欄的作者組**；
+凡寫「釘 `4c3066d`」者，是 5A 當時登記的量測基準，**本組原樣轉抄、未重跑**（§6.4）。
+
+| 檔案::符號 | live/dead/未確認 | 依據 | 確認日 | 未確認輪次 |
+|---|---|---|---|---|
+| `repositories/external_market_repository.py`（模組） | **live** | 5A：該模組 live，因其下三個符號有實際 importer。⚠️ 那三個符號不是 ERP 的原料 | 2026-09-21 | — |
+| `repositories/external_market_repository.py::_validate_market_series` | **live** | U 組主表列其有實際 importer（5A 引用）。⚠️ 本列依據為 U 組主表轉述，5A 未另行 AST 覆核 | 2026-09-21 | — |
+| `repositories/external_market_repository.py::fetch_cboe_csv` | **live** | 同上列 | 2026-09-21 | — |
+| `repositories/external_market_repository.py::fetch_multpl_pe` | ⚠️ **不適用（符號已實體不存在）** | 依 U 組主表已實體不存在。5A 逐字：「那是**刪掉了**，不是 dead code，兩者處置方式完全不同」。⚠️ 本值不在客戶三值之內，見 §6.3 | 2026-09-21 | — |
+| `repositories/external_market_repository.py::fetch_stooq_csv` | **live** | 同 `_validate_market_series` 列 | 2026-09-21 | — |
+| `repositories/external_market_repository.py::fetch_yf_forward_pe` | ⚠️ **不適用（符號已實體不存在）** | 同 `fetch_multpl_pe` 列；見 §6.3 | 2026-09-21 | — |
+| `repositories/hot_money_repository.py::fetch_usdtwd_series` | **live** | 5A 組 AST 覆核（量測日 2026-09-21、釘 `4c3066d`）：可達 production 的 import 或 call 非 0 | 2026-09-21 | — |
+| `repositories/macro/fred.py::fetch_fred` | **live** | 5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 與使用點皆非 0；另為 U 組的正控符號 | 2026-09-21 | — |
+| `scripts/update_macro_history.py`（模組） | **未確認** | U 組判未確認：不在 `app.py` 的可達集內、由排程 workflow 呼叫，而「排程作業算不算 production」U 組**明文不裁決**。5A 跟著標未確認，不替它升成 live | 2026-09-21 | **1** |
+| `services/allocation_backtest.py::to_twd_total_return_series` | **live** | 5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 或 call 非 0 | 2026-09-21 | — |
+| `services/capture_ratio.py::compute_capture` | **live** | 同上列 | 2026-09-21 | — |
+| `services/macro/us_indicators.py`（模組） | **live** | 5A 就地寫明該模組本身 live。⚠️ **符號 dead ≠ 模組 dead** | 2026-09-21 | — |
+| `services/macro/us_indicators.py::calc_growth_inflation_axis` | **live** | 5A 組 AST 覆核：由同檔 `calc_macro_phase` 呼叫，有一個可達 production 呼叫點 | 2026-09-21 | — |
+| `services/macro/us_indicators.py::calc_macro_phase_zpct` | **dead** | U 組判 dead：可達 production 的 import 只有 `services/macro/__init__.py` 那一處 re-export、call 為 0；5A 組 AST 覆核得到同一組數字。⚠️ 模組本身 live | 2026-09-21 | — |
+| `services/macro/us_indicators.py::fetch_all_indicators` | **live** | 不在 U 組 2026-09-21 掃描報告的 dead 清單內；5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 4 處（含 `ui/views/page_01_macro.py`）、call 2 處 | 2026-09-21 | — |
+| `services/portfolio_frontier.py::annualized_moments` | **live** | 5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 或 call 非 0 | 2026-09-21 | — |
+| `services/portfolio_service.py`（模組） | **live** | 5A 就地寫明該模組本身 live | 2026-09-21 | — |
+| `services/portfolio_service.py::risk_alert` | **dead** | U 組判 dead；5A 組 AST 覆核：import 與 call 在 production／`tests/`／`scripts/` 三區皆為 0 ⇒ 它那兩句文案今天印不出來 | 2026-09-21 | — |
+| `services/risk_radar.py::_signal_yield_10y_shock` | **live** | 5A 組覆核：同檔有一個可達 production 呼叫點 | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_DGS10` | **live** | 5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 與使用點皆非 0 | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_DGS3MO` | **live** | 同上列 | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_DXY` | **live** | 同上列 | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_FED_FUNDS` | **live** | 同上列 | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_HY_SPREAD` | **live** | 5A 組 AST 覆核（釘 `4c3066d`）：可達 production 的 import 與使用點皆非 0；消費端含 `services/macro/turning_points.py`／`services/risk_radar.py`／`services/us_liquidity_engine.py` | 2026-09-21 | — |
+| `shared/fred_series.py::FRED_T5YIE` | **live** | 同 `FRED_DGS10` 列 | 2026-09-21 | — |
+| `shared/macro_buckets.py`（模組） | **live** | 5A：live 模組。⚠️ 但其 `DangerSpec("forward_pe", …)` 沒有任何值餵進去 —— **模組 live ≠ 那一格有資料** | 2026-09-21 | — |
+| `ui/components/mk_clock.py`（模組） | **dead** | U 組判**整模組 dead**：該模組的 importer 只有兩個 `tests/` 檔 | 2026-09-21 | — |
+| `ui/components/mk_clock.py::render_mk_clock_section` | **dead** | U 組判 dead；5A 組 AST 覆核：該符號可達 production 的 import 與 call 皆為 0 | 2026-09-21 | — |
+| `ui/tab1_macro.py`（模組） | **live** | U 組：`tab6_manual`／`tab1_macro_*` 取用其 helper。⚠️ dead 的是入口符號，不是模組 | 2026-09-21 | — |
+| `ui/tab1_macro.py::render_macro_tab` | **dead** | U 組判 dead；5A 組 AST 覆核：可達 production 的 import 與 call 皆為 0，repo 內唯一 importer 是一個 `tests/` 檔 | 2026-09-21 | — |
+
+---
+
+## 5. ⛔ 本檔不授權刪除任何東西
+
+客戶限制逐字：**「不准刪任何死碼。」**
+
+- **判 `dead` 只是登記狀態，不是動工授權**（`CLAUDE.md` `§-1`：沒實際 bug、沒具體需求 → 不要動）。
+- ⛔ **不得**引用本檔任何一列去發動刪除、搬遷或清理。
+- ⛔ **不得**引用本檔去發動一輪「全 repo 掃死碼」的巡邏 ——
+  `CLAUDE.md` `§-1` 的禁止提議模式已點名「機械式清 TODO list 充數」，
+  而 `§-1.5.1c` 判定 3 已釘死：**GC 是任務內的收尾義務，不是主動巡邏授權**。
+- ⛔ **`dead（推定）` 更不得當刪除依據**（§3 末段）。
+- ⚠️ **「自稱 Archive／看起來像死碼」不是免驗證的通行證**（`CLAUDE.md` `§-1.5.1c` 判定 3 逐字）——
+  本檔的 `dead` 列同理：它記的是「登記在案」，**不是**「可以砍了」。
+
+**真的要處置某一列時的前提**（照 `CLAUDE.md`，本檔不另立規矩）：
+有任務碰到它 → 依 `§-1.5.1c` 判定 3 的落點表判「內部自決」還是「請示客戶」→ 再動。
+
+---
+
+## 6. 本檔沒有做什麼（誠實揭露）
+
+### 6.1 沒有跑任何 live/dead 掃描
+
+本輪**一條 live/dead 掃描指令都沒有跑**。§4 主表逐列抄自 `docs/v2/20_ui_spec.md` 5A 欄
+（`:1425`–`:1860`）。依據：客戶第 5 點「不重新掃」＋ 本輪派工單「不准自己跑任何 live/dead 掃描去補列」。
+
+### 6.2 沒有補列 —— 抄得到幾列就是幾列
+
+5A 只覆核了它那七項（`P0-1`～`P0-7`）用得到的符號，**它不是全 repo 的母體**。
+兩類東西本表刻意**不收**：
+
+- **5A 明文「不替它判」的** —— 例：`ui/tab3_portfolio.py` 的 FX 曝險摘要那一段
+  （5A 原文：U 組主表未收錄，本欄不替它判 live/dead）。
+- **在 5A 的 live/dead 格裡只被順帶提到、沒有被判定的符號** ——
+  例：`services/macro/us_indicators.py::calc_macro_phase`、`services/macro/__init__.py`。
+  **順帶提到不等於被判過**，本表不替它們填一個值。
+
+### 6.3 客戶三值之外多出一個值，本檔**不硬塞**，登記待裁示
+
+`fetch_yf_forward_pe` 與 `fetch_multpl_pe` 在 5A 是「**已實體不存在**」——
+那既不是 `live`、不是 `dead`、也不是`未確認`。
+本表**沒有**把它硬塞進三值之一，而是登記為「不適用（符號已實體不存在）」並在此揭露。
+
+⇒ **待客戶裁示**：(a) 三值是否增列第四值，或 (b) 這兩列根本不該進表。
+⚠️ 在裁示下來之前，**不得**把這兩列讀成 `dead` —— 5A 已逐字寫明「兩者處置方式完全不同」。
+
+### 6.4 沒有驗證 5A 的判定本身
+
+本表是**轉抄**，不是複驗。5A 那些「AST 覆核、釘 `4c3066d`」的數字，本組**沒有回頭重跑**
+（客戶第 5 點「不重新掃」＋ 限制「不准對同一符號重複確認」）。
+⇒ **本表的可信度等於 5A 的可信度，不高於它。**
+
+### 6.5 §2.1 量到的東西，用途已限定
+
+為了寫出 §2.1 的深度上限理由，本組跑了三條指令（指令與輸出全在 §2.1，基準皆釘 `ae33704`）：
+shim 路徑的 importer 檔數、直接路徑的 importer 檔數、以及那兩個 shim 檔裡 `fetch_fred` 的字面命中。
+
+⛔ **這些結果沒有餵進 §4 主表任何一列**，也不是任何符號的 live/dead 判定 ——
+它們只用來證明「兩層動態再匯出鏈真的存在於本 repo」，是**深度上限的理由**，不是**判定的依據**。
+⚠️ 特別是第三條：它掃的是**字面命中**，而客戶第三層要的是 **AST 掃 import**，**兩者不是同一件事**
+（§2.1 末段已寫明它們會往相反方向翻車）。⛔ **不得**拿它當任何符號的 live 證據。
+
+### 6.6 沒有動別的東西
+
+沒有 commit、沒有 push、沒有 merge；`.py` 一個字都沒動；
+`docs/v2/21_decision_log.md`（O 組使用中）與 `docs/v2/20_ui_spec.md` 未動；
+`CLAUDE.md` 未動；`tests/doc_counters_baseline.json` 未動。PR #845 維持 draft。
+
+### 6.7 單組產出，沒有第二雙眼睛
+
+本檔由 **P 組單組產出，未經第二組獨立複驗**（`CLAUDE.md` `§-2` 規則 6）。
+依該規則，本檔的判斷只能當**待驗事項**讀；
+其中最承重的兩句是 **§0「那張表查不到」** 與 **§2.1「兩層是夠的」**，
+兩句都附了可照跑的指令與輸出，**請直接拿它們推翻我**。
