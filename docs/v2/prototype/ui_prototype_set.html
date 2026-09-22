@@ -1,0 +1,2623 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>設定與診斷頁線框原型</title>
+<!-- 唯一的外連資源：Google Fonts（客戶的 HTML 草稿規範逐字：「無外部框架（字體除外）」）。
+     取 IBM Plex Mono 與 Noto Sans TC 兩支，與前三份原型同一套，讓四份看起來是同一個系統。
+     其餘 CSS／JS／圖一律 inline，全檔沒有第二個外連。 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   TOKENS —— 與持倉體檢頁、標的探索頁、資產配置頁三份原型同一套（刻意逐值相同）。
+   兩路主題：@media (prefers-color-scheme) ＋ :root[data-theme]。
+   深色 app 螢幕 #0e1117；淺色註記層在外框；註記主色青 #0f6b6c／#5fd3d0。
+
+   ⚠️ 與資產配置頁那一份**正好相反**：**本檔定義了紅色的 app 狀態色**（--st-err-fg / --st-err-bg）。
+   理由不是加料，是照 44 畫出來的結果 —— `SET-0` 的規則欄**逐字給了紅**
+   （「失敗來源大於零 → 燈為紅，文案列出失敗的來源層級」），
+   它的那一行判準也逐字要求「讓某一個來源取數失敗，**燈轉紅**」。
+   五枚結論燈逐枚實測（母體封閉、五枚都讀了規則欄）：
+   `MKT-0`／`HLD-0`／`EXP-0`／`SET-0` 四枚有紅，`ALO-0` 那一枚沒有。
+   ⚠️ 紅在本頁**不只出現在燈上**：`SET-2` 的 `failed` 列也是紅 —— 但那是**卡片的正常內容**，
+   不是卡片的 `系統錯誤` 狀態（見 §B 的 `SET-2` 與 ⛔ S-27）。
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  /* — 註記層（隨主題變） — */
+  --paper:#e6eaf0;          /* 圖紙底 */
+  --sheet:#ffffff;          /* 註記卡底 */
+  --sheet-2:#f2f5f9;        /* 註記卡次層 */
+  --ink:#161c24;            /* 主文字 */
+  --ink-2:#4a5663;          /* 次文字 */
+  --ink-3:#5f6b78;          /* 弱文字（逐組算過，見 §J —— 這是全檔最低的一組，4.50） */
+  --rule:#c3ccd8;           /* 髮絲線（純裝飾分隔，非 UI 元件，見 §J 的分類） */
+  --rule-2:#dbe2ea;
+  --edge:#7b8694;           /* 可操作控制項的邊界（≥3:1，見 §J） */
+  --draft:#0f6b6c;          /* 註記主色（青） */
+  --draft-bg:#dff0ef;
+  --stop:#8c1d3f;           /* ⛔ 標記色 */
+  --stop-bg:#fae7ed;
+  --ok-mark:#1d6b3f;        /* ✓ */
+  --warn-mark:#8a5a12;      /* ⚠ */
+  --shadow:0 1px 0 rgba(22,28,36,.06), 0 6px 18px -12px rgba(22,28,36,.35);
+
+  /* — App 螢幕（兩個主題下都一樣：app 本身就是深色） — */
+  --app-bg:#0e1117;
+  --app-card:#161b22;
+  --app-inner:#11161d;      /* 卡內次層（表頭、列框） */
+  --app-border:#30363d;     /* 純裝飾分隔（卡框、表列線、格線），非 UI 元件 —— 見 §J 的分類 */
+  --app-edge:#6b7682;       /* 可操作控制項與狀態容器的邊界（≥3:1，見 §J） */
+  --app-ph:#7d858e;         /* 輸入提示字（逐組算過，見 §J） */
+  --app-fg:#e6edf3;
+  --app-fg-2:#c9d1d9;
+  --app-muted:#8b949e;
+  --st-gray:#8b949e;        /* 資料未備：灰（SSOT 第五節卡片表） */
+  --st-warn-fg:#e3b341;     /* 業務例外／不適用：黃（SSOT 第五節卡片表） */
+  --st-warn-bg:#241d07;
+  --st-err-fg:#ff7b72;      /* 系統錯誤／失敗：紅（SSOT 第五節卡片表 ＋ SET-0 規則欄） */
+  --st-err-bg:#2a0d10;
+
+  --maxw:1180px;
+  --gap:16px;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117;
+    --sheet:#161b22;
+    --sheet-2:#1b222b;
+    --ink:#e6edf3;
+    --ink-2:#adb7c2;
+    --ink-3:#8b949e;
+    --rule:#30363d;
+    --rule-2:#262c34;
+    --edge:#6b7682;
+    --draft:#5fd3d0;
+    --draft-bg:#0f2a2b;
+    --stop:#f294b6;
+    --stop-bg:#2a0a12;
+    --ok-mark:#5fd58a;
+    --warn-mark:#e3b341;
+    --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+  --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+  --rule:#30363d; --rule-2:#262c34; --edge:#6b7682;
+  --draft:#5fd3d0; --draft-bg:#0f2a2b;
+  --stop:#f294b6; --stop-bg:#2a0a12;
+  --ok-mark:#5fd58a; --warn-mark:#e3b341;
+  --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",
+              "Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.72;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:16px; padding-block:28px 64px}
+code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,
+  "Cascadia Mono",Consolas,monospace}
+code{font-size:.88em; background:var(--sheet-2); border:1px solid var(--rule-2);
+  border-radius:4px; padding:1px 5px; color:var(--ink)}
+h1,h2,h3,h4{text-wrap:balance; margin:0; line-height:1.34}
+p{margin:0}
+:focus-visible{outline:2px solid var(--draft); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important; animation:none!important}}
+
+/* ── 圖紙標題塊 ───────────────────────────────────────── */
+.titleblock{border:1px solid var(--rule); background:var(--sheet);
+  border-radius:var(--r); padding:20px 22px; box-shadow:var(--shadow)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--draft); font-weight:600}
+h1{font-size:clamp(24px,4.2vw,34px); font-weight:700; letter-spacing:-.01em; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:16px; padding-top:14px;
+  border-top:1px dashed var(--rule); font-size:12.5px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── 通用區塊 ─────────────────────────────────────────── */
+section{margin-top:34px}
+.sec-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  padding-bottom:8px; border-bottom:2px solid var(--ink); margin-bottom:16px}
+.sec-head h2{font-size:19px; font-weight:700}
+.sec-head .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--draft);
+  font-weight:600; letter-spacing:.08em}
+.sec-head .hint{font-size:12.5px; color:var(--ink-3); margin-left:auto}
+.card{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:16px 18px}
+.note{font-size:13px; color:var(--ink-2)}
+.tiny{font-size:12px; color:var(--ink-3)}
+
+/* ── 落差條（頁首警示） ───────────────────────────────── */
+.gapstrip{margin-top:18px; border:1px solid var(--stop); background:var(--stop-bg);
+  border-radius:var(--r); padding:14px 16px}
+.gapstrip h3{font-size:14px; color:var(--stop); font-weight:700}
+.gapstrip ol{margin:8px 0 0; padding-left:20px; font-size:13.5px; color:var(--ink)}
+.gapstrip li{margin:5px 0}
+.gapstrip li b{color:var(--stop)}
+
+/* ── 控制列（註記層，不是 app 的一部分） ─────────────── */
+.ctlwrap{margin-top:22px; border:2px dashed var(--draft); border-radius:var(--r);
+  background:var(--draft-bg); padding:10px 12px 12px}
+.ctlhead{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:9px}
+.ctlhead .tag{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft); font-weight:700;
+  border:1px solid var(--draft); border-radius:5px; padding:1px 7px}
+.ctlhead .say{font-size:12.5px; color:var(--ink-2)}
+.controls{background:var(--sheet); border:1px solid var(--rule);
+  border-radius:8px; padding:11px 13px; display:flex; flex-wrap:wrap; gap:12px 20px}
+.cgroup{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.clab{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.btn{font:inherit; font-size:13px; padding:5px 11px; border-radius:7px; cursor:pointer;
+  border:1px solid var(--edge); background:var(--sheet-2); color:var(--ink-2)}
+.btn:hover{border-color:var(--draft); color:var(--ink)}
+.btn[aria-pressed="true"]{background:var(--draft); border-color:var(--draft);
+  color:var(--paper); font-weight:600}
+
+/* ── 舞台：螢幕 + 註記軌 ──────────────────────────────── */
+.stage{display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start;
+  margin-top:20px}
+.screenbox{min-width:0}
+.rulerbar{display:flex; align-items:center; gap:10px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; color:var(--ink-3); margin-bottom:6px}
+.rulerbar .tick{flex:1; height:1px; background:repeating-linear-gradient(90deg,
+  var(--rule) 0 1px, transparent 1px 8px)}
+.screen-scroll{overflow-x:auto; padding-bottom:6px; border-radius:var(--r)}
+.screen{
+  width:var(--screen-w,1280px); max-width:100%;
+  container-type:inline-size;
+  background:var(--app-bg); color:var(--app-fg);
+  border:1px solid var(--app-border); border-radius:var(--r);
+  padding:18px 18px 22px; margin:0 auto;
+}
+.screen-chrome{display:flex; align-items:center; gap:8px; padding-bottom:12px;
+  margin-bottom:14px; border-bottom:1px solid var(--app-border);
+  font-size:12px; color:var(--app-muted); font-family:"IBM Plex Mono",monospace}
+.screen-chrome .dot{width:8px; height:8px; border-radius:50%; background:var(--app-border)}
+.screen-chrome .tabs{margin-left:auto; color:var(--app-muted); opacity:.8}
+.screen-chrome .tabs b{color:var(--app-fg-2); font-weight:600}
+
+/* 層標 */
+.layer{margin-top:18px}
+.layer:first-of-type{margin-top:0}
+.layer-tag{display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft)}
+.layer-tag .bar{flex:1; height:1px; background:var(--app-border)}
+.layer-tag .role{color:var(--app-muted); letter-spacing:.04em; text-transform:none;
+  font-size:11px}
+
+/* ── 結論燈（層 1 · SET-0） ───────────────────────────────
+   44 的 SET-0 規則欄逐字給了三色：灰、黃、紅。
+   左邊的圖示與狀態字是為了客戶 WCAG 第二條（狀態要配圖示＋文字）。 */
+.conc{border-radius:8px; padding:14px 16px; border:1px solid var(--app-border);
+  background:var(--app-card)}
+.conc.warn{border-color:var(--st-warn-fg); background:var(--st-warn-bg)}
+.conc.err{border-color:var(--st-err-fg); background:var(--st-err-bg)}
+.conc .top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.conc .glyph{font-size:17px; line-height:1}
+.conc .headline{font-size:16px; font-weight:700; color:var(--app-fg)}
+.conc.warn .headline{color:var(--st-warn-fg)}
+.conc.err .headline{color:var(--st-err-fg)}
+.conc .stword{display:inline-block; font-size:11px; font-weight:700; border-radius:999px;
+  padding:1px 9px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-fg-2); background:var(--app-inner); flex:none}
+.conc.warn .stword{border-color:var(--st-warn-fg); color:var(--st-warn-fg)}
+.conc.err .stword{border-color:var(--st-err-fg); color:var(--st-err-fg)}
+.conc .lines{margin-top:8px; font-size:13.5px; color:var(--app-fg-2)}
+.conc .lines div{margin:3px 0}
+.conc .where{margin-top:8px; font-size:12.5px; color:var(--app-muted)}
+
+/* ── 核心卡（層 2 · SET-1 / SET-2 / SET-3） ───────────── */
+.cards{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.cardx{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:13px 14px; min-width:0}
+.cardx .t{font-size:13.5px; color:var(--app-fg); font-weight:700;
+  display:flex; align-items:baseline; gap:7px; flex-wrap:wrap}
+.cardx .st{font-size:12.5px; color:var(--app-muted); margin-top:4px}
+.cardx .foot{margin-top:9px; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.cardx .subt{font-size:11.5px; color:var(--app-muted); margin-top:10px; font-weight:600}
+
+/* 表（app 內通用） */
+.tscroll{margin-top:8px; border:1px solid var(--app-border); border-radius:6px}
+table.wt{border-collapse:collapse; width:100%; font-size:12.5px;
+  font-variant-numeric:tabular-nums; table-layout:fixed}
+table.wt th,table.wt td{padding:6px 9px; text-align:left;
+  border-bottom:1px solid var(--app-border); overflow-wrap:anywhere}
+table.wt th{color:var(--app-muted); font-weight:600; background:var(--app-inner)}
+table.wt th .u{display:block; color:var(--app-muted); font-size:10px; font-weight:500}
+table.wt tr:last-child td{border-bottom:0}
+table.wt tfoot td{background:var(--app-inner); color:var(--app-fg-2); font-weight:600;
+  border-top:1px solid var(--app-edge)}
+table.wt td .nd{color:var(--st-gray); font-weight:600}
+table.wt td .na{color:var(--st-warn-fg); font-weight:600}
+table.wt td .er{color:var(--st-err-fg); font-weight:600}
+table.wt td .raw{display:block; color:var(--app-muted); font-size:11px; font-weight:400;
+  margin-top:2px; font-family:"IBM Plex Mono",monospace}
+.msgraw{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--st-err-fg);
+  overflow-wrap:anywhere}
+
+/* ≤768 時把表改成逐列堆疊（本組擬定：44 硬規則禁橫向捲動，見 ⛔ S-43） */
+.stackview{display:none; margin-top:8px}
+.stackview .one{border:1px solid var(--app-border); border-radius:6px;
+  background:var(--app-inner); padding:8px 10px; margin-top:7px}
+.stackview .one .h{font-size:12.5px; color:var(--app-fg); font-weight:600;
+  overflow-wrap:anywhere}
+.stackview .kv{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
+  gap:4px 10px; font-size:12px; margin-top:5px}
+.stackview .kv span{color:var(--app-muted)}
+.stackview .kv b{color:var(--app-fg); font-weight:600; font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere}
+.stackview .kv b.nd{color:var(--st-gray)}
+.stackview .kv b.na{color:var(--st-warn-fg)}
+.stackview .kv b.er{color:var(--st-err-fg)}
+
+/* 徽章（app 內） */
+.abadge{display:inline-block; font-size:10.5px; font-weight:600; border-radius:999px;
+  padding:1px 7px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-muted); background:var(--app-inner)}
+.abadge.warn{color:var(--st-warn-fg); border-color:var(--st-warn-fg)}
+.abadge.gray{color:var(--st-gray)}
+.abadge.err{color:var(--st-err-fg); border-color:var(--st-err-fg)}
+.abadge.ph{border-style:dashed; color:var(--app-muted)}
+
+/* ── 操作列（層 3 · SET-4 / SET-5，預設收合） ─────────── */
+.ops{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.exp{border:1px solid var(--app-edge); border-radius:8px; background:var(--app-card);
+  overflow:hidden; min-width:0}
+.exp summary{cursor:pointer; padding:10px 13px; font-size:13.5px; color:var(--app-fg);
+  list-style:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.exp summary::-webkit-details-marker{display:none}
+.exp summary::before{content:"\25B8"; color:var(--app-muted); font-size:11px; flex:none}
+.exp[open] summary::before{content:"\25BE"}
+.exp summary:hover{background:var(--sheet-2)}
+.exp .body{padding:0 13px 13px; font-size:13px; color:var(--app-fg-2);
+  border-top:1px solid var(--app-border); padding-top:11px}
+.exp summary .sm{color:var(--app-muted); font-size:12px; margin-left:auto;
+  overflow-wrap:anywhere}
+.krow{border:1px solid var(--app-edge); border-radius:6px; background:var(--app-inner);
+  margin-top:7px; padding:8px 10px}
+.kgrid{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto;
+  gap:6px 8px; align-items:end}
+.kgrid label{display:block; font-size:10.5px; color:var(--app-muted); margin-bottom:2px}
+.selbox,.inbox{width:100%; font:inherit; font-size:12.5px; padding:5px 8px; border-radius:5px;
+  background:var(--app-bg); color:var(--app-fg); border:1px solid var(--app-edge)}
+.inbox::placeholder{color:var(--app-ph)}
+textarea.inbox{min-height:46px; resize:vertical; font-family:"IBM Plex Mono",monospace;
+  font-size:11.5px}
+.rowbtn{font:inherit; font-size:12px; padding:5px 9px; border-radius:5px; cursor:pointer;
+  background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge); white-space:nowrap}
+.rowbtn:hover{border-color:var(--app-fg-2)}
+.rowtail{margin-top:6px; font-size:12px}
+.rowtail.nd{color:var(--st-gray); font-weight:600}
+.rowtail.na{color:var(--st-warn-fg); font-weight:600}
+.rowtail.er{color:var(--st-err-fg); font-weight:600}
+.savebar{display:flex; gap:8px; flex-wrap:wrap; margin-top:11px; align-items:center}
+.apply{font:inherit; font-size:13.5px; font-weight:600; padding:8px 16px; border-radius:7px;
+  cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.apply:hover{border-color:var(--app-fg-2)}
+.apply[disabled]{cursor:not-allowed; color:var(--app-muted); border-style:dashed}
+.apply[disabled]:hover{border-color:var(--app-edge)}
+.why{color:var(--app-muted); font-size:12px; margin-top:5px}
+.radiorow{display:flex; gap:14px; flex-wrap:wrap; margin-top:7px}
+.rd{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--app-fg-2)}
+.rd input{accent-color:#5fd3d0; width:14px; height:14px}
+
+/* ── 佐證（層 4 · SET-6 / SET-7，預設收合） ───────────── */
+.evi{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.emptybox{border:1px dashed var(--app-edge); border-radius:8px; padding:16px;
+  background:var(--app-card); margin-top:8px}
+.emptybox .et{color:var(--app-muted); font-weight:600; font-size:14px}
+.emptybox .em{color:var(--app-muted); font-size:13px; margin-top:4px}
+.holebox{border:1px dashed var(--st-warn-fg); border-radius:8px; padding:12px;
+  background:var(--st-warn-bg); margin-top:8px; font-size:12.5px; color:var(--st-warn-fg)}
+
+/* ── 註記軌 ───────────────────────────────────────────── */
+.rail{display:flex; flex-direction:column; gap:14px; min-width:0}
+.railcard{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:13px 14px}
+.railcard h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); font-weight:600; margin-bottom:8px}
+.legend{display:flex; flex-direction:column; gap:7px; font-size:12.5px}
+.legend div{display:flex; gap:8px; align-items:flex-start}
+.legend b{flex:none; width:80px; font-weight:600; font-size:11.5px;
+  font-family:"IBM Plex Mono",monospace}
+
+/* ── 註記標籤（pin）：一眼看得出不是 app 的字 ─────────── */
+.pin{display:inline-flex; align-items:center; gap:5px; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; font-weight:600; color:var(--stop); background:var(--stop-bg);
+  border:1px dashed var(--stop); border-radius:5px; padding:1px 6px; vertical-align:middle}
+.pin.ann{color:var(--draft); background:var(--draft-bg); border-color:var(--draft)}
+.pinrow{display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 0}
+.annot{margin-top:8px; font-size:12px; color:var(--ink-2); background:var(--sheet);
+  border:1px dashed var(--draft); border-left:3px solid var(--draft);
+  border-radius:0 6px 6px 0; padding:8px 11px}
+.annot b{color:var(--draft)}
+
+/* ── 表格（註記層） ───────────────────────────────────── */
+.tbl-scroll{overflow-x:auto; border:1px solid var(--rule); border-radius:var(--r);
+  background:var(--sheet)}
+table.ref{border-collapse:collapse; width:100%; min-width:660px; font-size:13px}
+table.ref th,table.ref td{padding:8px 11px; text-align:left; vertical-align:top;
+  border-bottom:1px solid var(--rule-2)}
+table.ref th{background:var(--sheet-2); color:var(--ink-2); font-weight:600;
+  font-size:11.5px; letter-spacing:.04em; white-space:nowrap}
+table.ref tr:last-child td{border-bottom:0}
+table.ref td.id{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--stop); font-weight:600}
+table.ref td.src{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--ink-3)}
+table.ref td.jd{white-space:nowrap; font-size:12px}
+.badge{display:inline-block; font-size:11px; font-weight:600; border-radius:999px;
+  padding:1px 8px; white-space:nowrap}
+.badge.mu{background:var(--stop-bg); color:var(--stop); border:1px solid var(--stop)}
+.badge.no{background:var(--sheet-2); color:var(--ink-3); border:1px solid var(--edge)}
+.badge.ok{background:var(--sheet-2); color:var(--ok-mark); border:1px solid var(--ok-mark)}
+.badge.wn{background:var(--sheet-2); color:var(--warn-mark); border:1px solid var(--warn-mark)}
+
+/* ── 判準框 / 揭露 ────────────────────────────────────── */
+.crit{background:var(--draft-bg); border:1px solid var(--draft); border-radius:var(--r);
+  padding:13px 15px; margin-bottom:14px; font-size:13.5px}
+.crit h4{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); margin-bottom:6px}
+.crit ul{margin:6px 0 0; padding-left:19px}
+.crit li{margin:3px 0}
+.disclose{border:1px solid var(--rule); border-left:4px solid var(--warn-mark);
+  background:var(--sheet); border-radius:0 var(--r) var(--r) 0; padding:15px 17px}
+.disclose ul{margin:8px 0 0; padding-left:19px; font-size:13.5px}
+.disclose li{margin:5px 0}
+.foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--ink-3)}
+.blk{font-size:15px; color:var(--draft); margin-bottom:6px; font-weight:700}
+
+/* ══════════════════════════════════════════════════════════════════════
+   響應式 —— 三個斷點 375 / 768 / 1280，欄數依 SSOT 第二節第一小節最終版：
+     ≤768 單欄　769–1279 兩欄　≥1280 三欄
+   基底寫法就是單欄（＝ ≤768 那一段），兩個 @media 往上加寬。
+   375 是三個斷點值之一，但 SSOT 明寫「它不是欄數的分界」——
+   故 375 那一條只收字級與內距，不動欄數。
+   ════════════════════════════════════════════════════════════════════ */
+@media (min-width:769px) and (max-width:1279px){
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:1280px){
+  .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stage{grid-template-columns:minmax(0,1fr) 316px}
+}
+@media (max-width:1279px){
+  .rail{flex-direction:row; flex-wrap:wrap}
+  .railcard{flex:1 1 260px}
+}
+@media (max-width:768px){
+  .wrap{padding-block:20px 48px}
+  .rail{flex-direction:column}
+  .railcard{flex:1 1 auto}
+  .sec-head .hint{margin-left:0; flex-basis:100%}
+  .screen{padding:14px 13px 18px}
+  .kgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:375px){
+  body{font-size:14px}
+  .legend b{width:100%}
+  .legend div{flex-direction:column; gap:1px}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+  .stackview .kv{grid-template-columns:minmax(0,1fr)}
+}
+/* 模擬螢幕自己的寬度反應：讓上方的斷點鈕即使不縮視窗也看得到塌法。
+   三段與上面的 @media 逐值相同（≤768 / 769–1279 / ≥1280），兩者永遠同時同側。 */
+@container (max-width:768px){
+  .cards,.ops,.evi{grid-template-columns:minmax(0,1fr)}
+  .kgrid{grid-template-columns:minmax(0,1fr)}
+  /* ⛔ S-43：44 沒有寫表格在窄寬度怎麼塌，而硬規則禁橫向捲動。
+     本組把本頁五張表改成逐列堆疊 —— **那是本組擬的**。 */
+  .tscroll{display:none}
+  .stackview{display:block}
+}
+@container (min-width:769px) and (max-width:1279px){
+  .cards,.ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container (min-width:1280px){
+  .cards,.ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container (max-width:375px){
+  .stackview .kv{grid-template-columns:minmax(0,1fr)}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══════════════ 標題塊 ══════════════ -->
+<header class="titleblock">
+  <div class="eyebrow">新工作流 · 先出 HTML 草稿 · 第五頁（最後一頁）</div>
+  <h1>「設定與診斷」頁線框原型</h1>
+  <p class="sub">
+    這是 <code>docs/v2/44_fund_ui_ssot.md</code> 第三節第五小節（設定與診斷）那<b>八塊</b>的<b>可點版本</b>：
+    四層結構、十二種狀態、三個斷點全部畫出來，讓客戶用眼睛驗收，而不是讀規格。
+    <b>本輪一行 Streamlit 也沒有寫</b>，也沒有接任何真實資料 ——
+    <b>畫面上每一個「會隨資料變」的數與字都是示意值，逐處標了（示意）</b>；
+    <b>44 逐字訂死的常數與枚舉刻意不標</b>（分界與兩個邊界案例寫在 §A，不是漏標）。
+  </p>
+  <div class="meta">
+    <span><b>repo</b> my-Fund-dashboard</span>
+    <span><b>規格</b> <code>44_fund_ui_ssot.md</code>（第三節第五小節 ＋ 第一節紅線 ＋ 第二節通則與斷點 ＋ 第三節第零小節 ＋ 第四節資料表 ＋ 第五節元件 ＋ 第七節第二小節與第三小節）</span>
+    <span><b>規格校驗</b> <code>2745</code> 行 · md5 <code>514b518d4c59b6ed1db433b645a8f437</code>（動手前與收工後各量一次，兩次相同）</span>
+    <span><b>體例參考</b> <code>ui_prototype_alo.html</code>（最近一份，體例最完整）與 <code>ui_prototype_exp.html</code>／<code>ui_prototype_hld.html</code>（<b>只借體例與 token，內容一律取自 44</b>）</span>
+    <span><b>斷點來源</b> 44 第二節第一小節（<code>47_fund_wireframe_mkt.md</code> 的 1024／640 <b>是舊值、已過期，本檔不採用</b>）</span>
+    <span><b>產出</b> 設定與診斷草稿組 · 2026-09-22</span>
+    <span><b>複驗</b> 單組產出，沒有第二組獨立複驗</span>
+    <span><b>版本控制</b> <b>刻意不進</b> —— 客戶逐字：「HTML 草稿不准 commit，先給客戶看」</span>
+  </div>
+
+  <div class="card" style="margin-top:18px; background:var(--sheet-2); border-style:dashed">
+    <h3 style="font-size:14px; font-weight:700; color:var(--draft)">怎麼看這份草稿（5 分鐘）</h3>
+    <ol style="margin:8px 0 0; padding-left:20px; font-size:13.5px; line-height:1.75; color:var(--ink)">
+      <li>先看中間深色的那一塊 —— <b>那是 app 的樣子</b>，四層由上往下：結論燈／三張核心卡／操作列／展開佐證。</li>
+      <li>用上方<b>青色虛線框</b>裡的控制列切十二種狀態、三個斷點。<b>那個框不是畫面元件</b>，是給你審稿用的。</li>
+      <li>層 3 與層 4 <b>預設是收合的</b>（規格要求）—— 想看裡面，自己點開。</li>
+      <li>先切第 <b>2 顆「首次載入」</b>與第 <b>9 顆「取數回空」</b>兩種 ——
+        那兩種是這一頁最該先看的畫面，理由在下面紅框的第 1 與第 3 筆。</li>
+      <li>看完再看 <b>§C 的 ⛔ 清單（44 筆）</b>：那是本組畫這一頁時撞到的、規格自己打架或畫不出來的地方。<b>本組一筆都沒有自己補進 44。</b></li>
+      <li>§D 是<b>按鈕逐顆</b>的 ✓／⚠。<b>§J 是 WCAG 2.2 AA</b>（對比逐組算過、狀態配圖示＋文字、多幣別逐檔標明）。
+        <span style="color:var(--ink-2)">§A／§B／§E／§F／§G／§H／§I 是細節，可以後看。</span></li>
+    </ol>
+  </div>
+
+  <div class="gapstrip">
+    <h3>⛔ 四筆最該先拍板的地方（其餘四十筆在 §C）</h3>
+    <ol>
+      <li><b>S-01　這一頁有三塊都要一份「來源層級」的清單，而 44 從頭到尾沒有定義過那份清單。</b>
+        <code>SET-2</code> 規則欄逐字「<b>一列一個 <code>source_tier</code></b>」，空狀態逐字
+        「<b>某層級從無紀錄 → 該列三欄 <code>⬜</code></b>」；<code>SET-5</code> 要「<b>指定層級</b>」、
+        停用原因逐字「<b>尚未選定來源層級</b>」；<code>SET-0</code> 紅燈逐字「<b>文案列出失敗的來源層級</b>」。
+        <b>三塊都需要一份「有哪些層級」的封閉清單</b>，而 44 第五節徽章那一小節的更正段逐字說它是
+        「<b>一個開放集（來源多一層就多一個值）</b>」。<b>開放集裡，一個從來沒有紀錄的層級是列不出來的。</b>
+        本草稿的層級全部是示意值，<b>那是本組擬的</b>。</li>
+      <li><b>S-02　這一頁按下「重新取數」之後，取回來的列沒有地方可以寫。</b>
+        <code>SET-5</code> 規則欄逐字「取數只寫入<b>資料表</b>與 <code>fetch_log</code>」，
+        第三節第零小節那一列也逐字補過「<b>把取回的列寫進資料表與 <code>fetch_log</code> 不在此限</b>」；
+        而第五節按鈕那一小節逐字「<b>持倉、淨值、配息、保單四張表的內容不由本儀表板產生，本儀表板只讀它們</b>」。
+        <b><code>nav</code> 與 <code>dividend</code> 就在那四張裡面。</b>
+        而 <code>SET-1</code> 讀的 <code>nav.fetched_at</code>／<code>dividend.fetched_at</code>
+        <b>只有取數才寫得出來</b>。<b>兩條正面互斥，本組不替 44 選邊。</b></li>
+      <li><b>S-03　「取數回空」這一種狀態，44 用三句話講了三種互斥的行為。</b>
+        <code>SET-5</code> 空狀態逐字：「取數回空 → <code>fetch_log.outcome</code> 寫 <code>ok</code> 而資料表列數不變，
+        <b><code>SET-2</code> 的訊息欄寫「回應為空」</b>」；<code>SET-2</code> 規則欄逐字第三欄是
+        「<b>失敗時的訊息原文</b>」；第四節 <code>fetch_log.message</code> 逐字「失敗訊息原文；<b>成功時為空</b>」。
+        <b>也就是：一列 <code>ok</code> 的紀錄，要在一個只印失敗訊息的欄位裡，印出一句存不進 <code>message</code> 的話。</b>
+        而且那句話若由 <code>SET-2</code> 自己生出來，就違反它同一格的「<b>訊息原文照印，不改寫</b>」。
+        <b>切第 9 顆狀態就是這個畫面。</b></li>
+      <li><b>S-18　<code>SET-4</code> 是九塊 <code>存檔</code> 類裡唯一沒有宣告寫入對象的一塊。</b>
+        44 第五節按鈕那一小節第六輪逐字列出 <code>存檔</code> 類的九塊，其中八塊的來源欄都補過
+        「<b>寫入對象為……<code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code></b>」；
+        <b><code>SET-4</code> 沒有補</b>，它的來源欄只有三個讀取欄，<b>連 <code>updated_at</code> 都沒宣告</b>，
+        而規則欄逐字要「存檔後寫回 <code>user_setting</code> 並<b>更新 <code>updated_at</code></b>」。
+        它的空狀態也<b>沒有</b>那一句「存檔寫入失敗 → …」（<code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 三塊都有）。</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ══════════════ 控制列（註記層） ══════════════ -->
+<div class="ctlwrap">
+  <div class="ctlhead">
+    <span class="tag">審稿控制列</span>
+    <span class="say">這一排<b>不是 app 的一部分</b> —— 是讓你切狀態、切寬度、切主題用的。十二種狀態<b>全部出自 44 各塊的「空狀態」欄與 <code>SET-0</code> 規則欄的三個燈色，沒有一種是本組發明的</b>（對照表在 §F）。</span>
+  </div>
+  <div class="controls">
+    <div class="cgroup"><span class="clab">狀態</span>
+      <button class="btn" type="button" data-state="ok" aria-pressed="true">1 全齊（灰燈）</button>
+      <button class="btn" type="button" data-state="first" aria-pressed="false">2 首次載入</button>
+      <button class="btn" type="button" data-state="stale" aria-pressed="false">3 有逾期（黃燈）</button>
+      <button class="btn" type="button" data-state="zero" aria-pressed="false">4 上限設為 0 日</button>
+      <button class="btn" type="button" data-state="nolimit" aria-pressed="false">5 上限未設</button>
+      <button class="btn" type="button" data-state="norows" aria-pressed="false">6 某類無任何列</button>
+      <button class="btn" type="button" data-state="failed" aria-pressed="false">7 取數失敗（紅燈）</button>
+      <button class="btn" type="button" data-state="notier" aria-pressed="false">8 某層級從無紀錄</button>
+      <button class="btn" type="button" data-state="emptyresp" aria-pressed="false">9 取數回空</button>
+      <button class="btn" type="button" data-state="badkind" aria-pressed="false">10 值與型別不符</button>
+      <button class="btn" type="button" data-state="broken" aria-pressed="false">11 取數中斷</button>
+      <button class="btn" type="button" data-state="undef" aria-pressed="false">12 未定義欄位</button>
+    </div>
+    <div class="cgroup"><span class="clab">模擬寬度</span>
+      <button class="btn" type="button" data-bp="1280" aria-pressed="true">1280</button>
+      <button class="btn" type="button" data-bp="1279" aria-pressed="false">1279</button>
+      <button class="btn" type="button" data-bp="769" aria-pressed="false">769</button>
+      <button class="btn" type="button" data-bp="768" aria-pressed="false">768</button>
+      <button class="btn" type="button" data-bp="375" aria-pressed="false">375</button>
+      <button class="btn" type="button" data-bp="374" aria-pressed="false">374</button>
+    </div>
+    <div class="cgroup"><span class="clab">主題</span>
+      <button class="btn" type="button" id="btn-theme" aria-pressed="false">跟隨系統</button>
+    </div>
+  </div>
+  <div class="annot" id="state-explain"></div>
+  <div class="pinrow" id="pinrow"></div>
+</div>
+
+<!-- ══════════════ 舞台 ══════════════ -->
+<div class="stage">
+  <div class="screenbox">
+    <div class="rulerbar"><span id="bp-read">模擬寬度 1280px</span><span class="tick"></span><span id="bp-actual">實際渲染 —</span></div>
+    <div class="screen-scroll">
+      <div class="screen" id="screen">
+        <div class="screen-chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span>基金儀表板</span>
+          <span class="tabs">市場總覽 · 持倉體檢 · 標的探索 · 資產配置 · <b>設定與診斷</b></span>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 1 · 結論</span><span class="bar"></span><span class="role">預設展開 · SET-0</span></div>
+          <div id="slot-conc"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 2 · 核心卡</span><span class="bar"></span><span class="role">預設展開 · SET-1 / SET-2 / SET-3</span></div>
+          <div id="slot-cards"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 3 · 操作</span><span class="bar"></span><span class="role">預設收合 · SET-4 / SET-5</span></div>
+          <div id="slot-ops"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 4 · 佐證</span><span class="bar"></span><span class="role">預設收合 · SET-6 / SET-7</span></div>
+          <div id="slot-evi"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="rail">
+    <div class="railcard">
+      <h3>圖例</h3>
+      <div class="legend">
+        <div><b>⬜ 灰</b><span>資料未備 —— 該來源一筆也沒有</span></div>
+        <div><b>⬜ 黃</b><span>不適用 —— 來源在，但規則的前提不成立</span></div>
+        <div><b>⚠ 紅</b><span>取數失敗 —— 取數或計算本身失敗</span></div>
+        <div><b>⛔ S-nn</b><span>本組撞到的 44 缺口或互斥，逐筆在 §C</span></div>
+        <div><b>（示意）</b><span>這個數字是假的，只表示位置與格式</span></div>
+      </div>
+    </div>
+    <div class="railcard">
+      <h3>這一頁在回答什麼</h3>
+      <p class="note" style="font-size:12.5px">
+        逐字引 44：「<b>畫面上的數字現在可不可信，不可信是卡在哪一段</b>」。<br>
+        <b>不負責</b>：「不解釋市場（那是市場總覽）；<b>不手動編輯任何一筆資料的值</b>
+        —— 本頁自己改的只有取數與呈現的參數；本頁可以重新取一次來源，把取回的列寫進資料表與
+        <code>fetch_log</code>，那是取數不是編輯；不下任何投資判斷」。
+      </p>
+    </div>
+    <div class="railcard">
+      <h3>這一種狀態在演什麼</h3>
+      <p class="note" style="font-size:12.5px" id="live-annot"></p>
+    </div>
+  </aside>
+</div>
+
+<!-- ══════════════ §A 四層與八塊 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§A</span><h2>四層與八塊：誰在哪一層、預設開還是關</h2>
+    <span class="hint">逐字引 44 第二節通則 ＋ 第三節第五小節的層次表</span></div>
+
+  <div class="crit">
+    <h4>怎麼讀這一份</h4>
+    <ul>
+      <li><b>「加引號」</b>＝ <b>逐字出自 44</b> —— 客戶看到的就是這幾個字。</li>
+      <li><b>〔方括號〕</b>＝ 元件位置示意，<b>不是</b>畫面文字。</li>
+      <li><b>（示意）</b>＝ 這個數字或這段內容<b>是假的</b>，只表示位置與格式。</li>
+      <li><b>〔本組擬定〕</b>＝ 44 未逐字規定，由本組依 44 的規則擬出，<b>等客戶拍板</b>。</li>
+      <li><b><code>S-nn</code></b>＝ 本組畫圖時撞到的 44 缺口或互斥，逐筆列在 §C。</li>
+    </ul>
+  </div>
+
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ <b>本草稿一個真實觀測值也沒有。</b> 螢幕上看到的數字全部是示意值，每一個旁邊都標了（示意）。
+    填一個看起來合理的數字、客戶會把它讀成真的 —— 那是線框最容易犯的一種造假。
+    <b>這一頁尤其危險</b>：它印的是「資料新不新鮮、來源通不通」，一個假的時間戳看起來跟真的一模一樣。
+  </p>
+  <p class="note" style="margin-bottom:12px; border-left:3px solid var(--draft); padding-left:11px">
+    ⚠️ <b>哪些數字<u>刻意沒有</u>標（示意），先講清楚，免得被讀成漏標</b>：
+    畫面上有一種數字<b>不是示意值，是 44 逐字寫死的常數</b> ——
+    例如 <code>SET-1</code> 的「<b>三欄</b>」與「一列一類資料（<b>淨值、配息、市場指標</b>）」那<b>三列</b>、
+    <code>SET-2</code> 的「<b>三欄</b>」、<code>SET-3</code> 的「<b>四欄</b>」與判準的「<b>沒有第五欄</b>」、
+    <code>SET-7</code> 的「<b>兩欄</b>」、<code>SET-6</code> 的耗時「<b>單位秒</b>」、
+    以及四層／八塊／三個斷點值。<b>那些是規格，不是資料</b>，標上（示意）反而會讓客戶以為連規格都還沒定。<br>
+    <b>還有一類也不標：44 逐字訂死的<u>字面值</u></b> ——
+    「<b>內</b>」「<b>外</b>」（<code>SET-1</code> 比較欄）、「<code>ok</code>」「<code>failed</code>」（<code>SET-2</code> 結果欄）、
+    六種 <code>value_kind</code>（<code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code>／<code>list</code>／<code>rules</code>，
+    出自第四節 <code>user_setting</code> 那一列）、以及全部的欄位名與鍵名。
+    <b>那些是枚舉，不是觀測值。</b><br>
+    <b>分界一句話</b>：<b>會隨資料變的數與字 → 標（示意）</b>（時間戳、日數、上限值、設定值、
+    訊息原文、層級名、列數、筆數、<code>N</code>、<code>log_id</code>、<code>row_count</code>、耗時秒數）；
+    <b>44 逐字訂死、不隨資料變的 → 不標</b>（欄數、列數所依據的那三類、四層、八塊、375／768／1280、
+    以及上面那一串字面值與枚舉）。<br>
+    ⚠️ <b>兩個邊界案例，就地寫明</b>：<br>
+    （一）<code>SET-1</code> 的<b>三列</b>沒有標（示意）——「一列一類資料（淨值、配息、市場指標）」是 44 逐字訂的，
+    列數不會隨資料變；<b>但那三列裡每一格的時間與日數都標了</b>，因為那些會變。<br>
+    （二）<code>SET-0</code> 黃燈文案裡的 <code>N</code> <b>標了（示意）</b>，而同一句話的其餘部分
+    「有 N 筆資料超過你設定的新鮮度上限」<b>沒有標</b> —— 那一句是 44 逐字寫的文案模板，
+    <b>只有 <code>N</code> 這個位置是資料</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>層</th><th>放什麼（逐字引 44）</th><th>預設</th><th>本頁的塊</th></tr></thead>
+      <tbody>
+        <tr><td class="src">層 1</td><td>「一枚結論燈：這一頁有沒有需要今天多看一眼的東西」</td><td class="jd"><b>展開</b></td>
+          <td><code>SET-0</code> 可信度結論燈　<span class="badge mu">⛔ S-05</span>
+            <span class="badge mu">⛔ S-06</span> <span class="badge mu">⛔ S-07</span> <span class="badge mu">⛔ S-08</span>
+            <span class="tiny">（三種灰態沒有優先序；「資料齊」在無紀錄時也命中；判準缺一個前提；「筆」與「類」對不上）</span></td></tr>
+        <tr><td class="src">層 2</td><td>「撐起這一頁那個問題的三個面向，一面一張卡」</td><td class="jd"><b>展開</b></td>
+          <td><code>SET-1</code> 資料新鮮度卡、<code>SET-2</code> 來源健康卡、<code>SET-3</code> 規則參數卡
+            <span class="badge mu">⛔ S-01</span> <span class="badge mu">⛔ S-15</span>
+            <span class="badge mu">⛔ S-39</span>
+            <span class="tiny">（三張<b>互不相讀</b>，不是鏈；三張都是表格卡，而 44 的「主值」沒有定義）</span></td></tr>
+        <tr><td class="src">層 3</td><td>「使用者輸入、切換、匯出」</td><td class="jd">收合</td>
+          <td><code>SET-4</code> 參數編輯、<code>SET-5</code> 重新取數
+            <span class="badge mu">⛔ S-18</span> <span class="badge mu">⛔ S-02</span>
+            <span class="badge mu">⛔ S-19</span>
+            <span class="tiny">（九塊 <code>存檔</code> 類裡唯一沒宣告寫入對象的一塊；取回的列沒地方寫）</span></td></tr>
+        <tr><td class="src">層 4</td><td>「原始序列、計算軌跡、來源與新鮮度明細」</td><td class="jd">收合</td>
+          <td><code>SET-6</code> 取數紀錄、<code>SET-7</code> 欄位對照表
+            <span class="badge mu">⛔ S-17</span> <span class="badge mu">⛔ S-29</span>
+            <span class="badge mu">⛔ S-32</span>
+            <span class="tiny">（<code>SET-6</code> 用了一個沒有人宣告的鍵；<code>SET-7</code> 的來源是這份文字本身）</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    逐字引 44 的四條硬規則（前三條出自四層通則，第四條出自展開區元件）：<br>
+    「一頁的層 2 最多 3 張核心卡。第 4 個面向落到層 4，不擠進層 2。」<br>
+    「初次載入時展開的東西 ＝ 結論燈 ＋ 3 張核心卡。其餘層級收合。」<br>
+    「展開狀態不跨頁保留；離開再回來，回到預設。」<br>
+    「展開區不自動展開 —— 沒有任何資料狀態會讓收合區自己打開。」
+  </p>
+  <p class="note" style="margin-top:8px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    ✓ <b>這一頁的層 2 三張卡<u>互不相讀</u>，與資產配置頁、標的探索頁<u>不同</u>。</b>
+    44 第三節第三小節那張五頁對照表逐字寫著本頁那一列：
+    「設定與診斷｜<b>互不相讀</b>（三張各自讀 <code>fetch_log</code>／<code>user_setting</code>／各表的 <code>fetched_at</code>）｜<b>兩張</b>」。
+    <b>也就是抽掉其中一張，另兩張不動</b>。<br>
+    ⚠️ <b>但那一行節判準在這一頁還是有一半跑不過，理由不同</b>：44 第二節那一行逐字
+    「把結論燈「來源」欄點名的<b>任一張</b>核心卡的來源整個抽掉，結論燈改變顏色」——
+    <b><code>SET-0</code> 只點名兩張（<code>SET-1</code> 與 <code>SET-2</code>）</b>，
+    <b><code>SET-3</code> 不在它的來源欄裡</b>，抽掉 <code>SET-3</code> 的來源，燈不會變色。
+    <b>這一筆 44 自己早就登記過了</b> —— 第二節 2026-09-21 那次更正逐字點名
+    「<code>EXP-3</code>、<code>ALO-3</code>、<b><code>SET-3</code></b> 三塊在各自那一頁根本沒有被結論燈讀」。
+    <b>本草稿只是把它畫出來，不是新發現。</b>（見 §C 的 S-34）
+  </p>
+  <p class="note" style="margin-top:8px">
+    ✓ <b>本頁塊數與四層通則對得上</b>：層 2 三張（＝上限 3）、層 3 兩塊、層 4 兩塊、全頁八塊（＜ 一頁上限 10）。
+    <b>層 3 兩塊這一點與 44 第二節第一小節那張排法表逐字相符</b>：「五頁的層 3 各只有兩塊，兩塊並排同一列，第三欄空著」。
+  </p>
+</section>
+
+<!-- ══════════════ §B 逐塊 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§B</span><h2>逐塊：八塊，每塊四件事</h2>
+    <span class="hint">長什麼樣／回答什麼／資料不齊時變什麼／有沒有按鈕</span></div>
+
+  <h3 class="blk"><code>SET-0</code>｜可信度結論燈（層 1）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「不自取數。只讀 <code>SET-1</code> 的逾期筆數與 <code>SET-2</code> 的失敗來源數」——
+      <b>兩塊，不是三塊</b>。<code>SET-3</code> 不在裡面。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字，三色）</b>：「兩者皆為零 → 燈為灰，文案「資料齊、來源皆可達」。
+      <b>逾期筆數大於零而失敗來源為零</b> → 燈為黃，文案「有 N 筆資料超過你設定的新鮮度上限」。
+      失敗來源大於零 → 燈為紅，文案列出失敗的來源層級。燈描述資料狀態，不描述市場或持倉」。</p>
+    <p class="note" style="margin-top:6px; border-left:3px solid var(--stop); padding-left:11px">
+      ⚠️ <b>黃那一條的後半句是它把黃與紅分開的條件，引用時不能掉。</b>
+      「逾期筆數大於零<b>而失敗來源為零</b>」—— 少了後半句，一個「又逾期又有來源失敗」的畫面會同時命中黃與紅。
+      <b>本草稿的第 3 顆（有逾期）刻意把失敗來源做成零，第 7 顆（取數失敗）刻意讓紅蓋過黃</b>，兩顆合起來就把這個條件演完。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「新鮮度上限未設 → 燈為灰，文案「尚未設定新鮮度上限」。
+      無任何來源紀錄 → 燈為灰，文案「尚無取數紀錄」」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「其他四頁的數字，現在可不可以照著讀」。</p>
+    <p class="note" style="margin-top:6px"><b>判準（逐字）</b>：「把新鮮度上限放寬到沒有任何一筆逾期，燈轉灰且文案為「資料齊、來源皆可達」；
+      讓某一個來源取數失敗，燈轉紅且文案含該來源的層級字面值」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-05</span> <b>灰有三句文案，而 44 沒有寫優先序。</b>
+      新環境下「上限未設」與「尚無取數紀錄」<b>必然同時命中</b>。
+      <b>本草稿印「尚無取數紀錄」那一句，並在下一行補印另一句</b> —— <b>那是本組挑的</b>。<br>
+      <span class="pin">⛔ S-06</span> <b>規則第一句在沒有任何取數紀錄時也命中</b>（失敗來源數＝零、逾期筆數＝零），
+      而「<b>資料齊、來源皆可達</b>」在一筆紀錄都沒有的時候是一句假話。<br>
+      <span class="pin">⛔ S-07</span> <b>判準前半句缺一個前提</b>：放寬上限只消掉黃，若同時有來源失敗，燈仍是紅。<br>
+      <span class="pin">⛔ S-08</span> <b>「N 筆」的「筆」對不上 <code>SET-1</code> 的「一列一<u>類</u>」</b> ——
+      <code>SET-1</code> 的判準逐字「三列的比較欄皆為「外」且 <code>SET-0</code> 的 N 等於 <b>3</b>」，
+      也就是 <code>N</code> 數的是<b>類</b>（最多 3），不是資料筆數。<b>本草稿照判準把 N 當類數，並在燈下方寫明。</b></p>
+  </div>
+
+  <h3 class="blk"><code>SET-1</code>｜資料新鮮度卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「<code>nav.fetched_at</code>、<code>dividend.fetched_at</code>、
+      <code>market_indicator.fetched_at</code> <b>與各自的觀測日欄</b>；上限取 <code>user_setting.setting_value</code>，
+      <code>setting_key</code> 為 <code>set_max_age_days</code>」。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一類資料（淨值、配息、市場指標），
+      三欄：最近取得時間、距今日數（<code>days_calendar</code>）、與上限比較的結果（「內」或「外」）。
+      <b>上限由使用者輸入（G3†）</b>。時間以世界協調時間存放，顯示時轉當地時區並在表頭註明時區字面值」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「上限未設 → 比較欄顯示 <code>⬜ 不適用：尚未設定上限</code>，
+      前兩欄照出。某類無任何列 → 三欄皆 <code>⬜</code> 並掛 <code>資料未備</code> 徽章」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「哪一類資料已經放到超過我能接受的時間」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-09</span> <b>來源欄宣告了「各自的觀測日欄」，而規則欄那三欄沒有一欄用到它。</b><br>
+      <span class="pin">⛔ S-10</span> <b>而且那三張表沒有一張有一個叫「觀測日」的欄</b>：
+      <code>nav</code> 有 <code>nav_date</code>；<code>dividend</code> 有 <code>ex_date</code> 與 <code>pay_date</code> <b>兩個</b>；
+      <code>market_indicator</code> 有 <code>obs_date</code> 與 <code>release_date</code> <b>兩個</b>，
+      而第四節那一列逐字說「跨期間對齊<b>一律用</b> <code>release_date</code>，不用 <code>obs_date</code>」。
+      <b>「各自的觀測日欄」對不到唯一的一欄。本草稿不畫觀測日欄，並就地標明。</b><br>
+      <span class="pin">⛔ S-11</span> <b>「距今日數」的「今」用哪個時區算，44 沒寫</b> ——
+      同一格說時間以世界協調時間存、顯示轉當地時區，而<b>日曆日跨時區會差一天</b>。<br>
+      <span class="pin">⛔ S-12</span> <b>「當地時區」是哪一個，44 沒有定義</b>，表頭要註明的那個「時區字面值」也沒給。
+      <b>本草稿的表頭寫的是一個示意字面值。</b><br>
+      <span class="pin">⛔ S-13</span> <b>比較是「大於上限」還是「大於等於上限」，44 沒寫</b>，
+      而它的判準逐字「把上限設成 <b>0</b> 日，<b>三列的比較欄皆為「外」</b>」——
+      若某一列的距今日數剛好是 <b>0</b>，在「大於」的讀法下它是「內」，<b>那一行判準當場跑不過</b>。
+      <b>本草稿的第 4 顆刻意把三列的距今日數都做成大於零，繞開這個邊界；繞開不等於解決，登記在這裡。</b><br>
+      <span class="pin">⛔ S-14</span> <b>同一行判準假設三類都有資料</b> —— 某類無任何列時那一格是
+      <code>⬜</code> 不是「外」（空狀態第二句），<b>那一行同樣跑不過</b>。<b>切第 6 顆就是這個畫面。</b><br>
+      <span class="pin">⛔ S-35</span> <b>上限的輸入欄不在這一塊</b> ——
+      規則欄只說「上限由使用者輸入（G3†）」，<b>沒說輸入欄在哪</b>。
+      本草稿把它放在 <code>SET-4</code>（參數編輯，層 3），<b>那是本組挑的</b>。</p>
+  </div>
+
+  <h3 class="blk"><code>SET-2</code>｜來源健康卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「<code>fetch_log.source_tier</code>、<code>fetch_log.started_at</code>、
+      <code>fetch_log.outcome</code>、<code>fetch_log.message</code>，<b>取各層級最近一次紀錄</b>」。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一個 <code>source_tier</code>，
+      三欄：最近一次結果（<code>ok</code> 或 <code>failed</code>）、最近一次時間、失敗時的訊息原文。
+      <b>訊息原文照印，不改寫成安撫語句。本卡不對失敗給出處置方向</b>」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「某層級從無紀錄 → 該列三欄 <code>⬜</code>，掛 <code>資料未備</code> 徽章。
+      各層級皆無紀錄 → <code>來源缺</code>，文案「尚無取數紀錄」」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「是哪一層來源在失敗，失敗訊息說了什麼」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-01</span> <b>「一列一個 <code>source_tier</code>」要一份封閉清單，44 沒有給。</b>
+      更硬的是空狀態第一句：「<b>某層級從無紀錄</b> → 該列三欄 <code>⬜</code>」——
+      <b>要為一個「沒有紀錄」的層級畫出一列，就必須事先知道有哪些層級</b>，
+      而第五節徽章那一小節的更正段逐字說 <code>source_tier</code> 是「<b>一個開放集</b>」。
+      <b>開放集與「列出沒有紀錄的那一列」正面互斥。</b><br>
+      <span class="pin">⛔ S-04</span> <b>這一頁真正的危險點，就地寫死。</b>
+      「訊息原文照印，不改寫成安撫語句」與「<b>本卡不對失敗給出處置方向</b>」兩句在同一格裡，
+      <b>而一句真實的錯誤訊息常常自帶處置建議</b>（來源端寫的，不是本儀表板寫的）。
+      照印 → 畫面上就出現了處置方向；改寫 → 違反「照印」。<b>44 沒有處理這個情形。</b><br>
+      <b>本草稿怎麼畫</b>：示意訊息<b>刻意挑一句不含處置方向的</b>，並在卡上就地寫明
+      「<b>本卡只印來源回傳的原文，不對它加任何處置方向</b>」。
+      ⚠️ <b>挑一句乾淨的示意訊息<u>不等於</u>解決了這一筆</b> —— 真實訊息本組控制不了。<b>登記，不替 44 選。</b><br>
+      <span class="pin">⛔ S-27</span> <b>第三欄逐字是「<u>失敗時</u>的訊息原文」——<code>ok</code> 的列那一格印什麼，44 沒寫。</b>
+      本草稿印一個中性的破折號佔位，<b>那是本組挑的</b>。<br>
+      <span class="pin">⛔ S-28</span> <b>「各層級皆無紀錄 → <code>來源缺</code>」，而第五節空狀態的
+      <code>來源缺</code> 模板逐字要掛「重新取數」按鈕</b>；重新取數的塊是 <code>SET-5</code>，
+      <b>住在層 3、預設收合、而且「展開區不自動展開」</b>。按鈕掛在這張卡上還是指過去，44 沒寫。
+      <b>本草稿在卡上掛一枚，並在旁邊寫明它做的事與 <code>SET-5</code> 是同一件。</b><br>
+      <span class="pin">⛔ S-30</span> <b><code>failed</code> 的那一列是這張卡的<u>正常內容</u>，不是卡片的
+      <code>系統錯誤</code> 狀態</b> —— 這張卡的工作就是印出哪一層在失敗。
+      但第五節卡片那張表的 <code>系統錯誤</code> 態逐字要「主值位置顯示 <code>⚠ 取數失敗</code>，
+      副標印出失敗訊息原文，並掛「重新取數」按鈕」。<b>兩者在畫面上長得幾乎一樣，而語意相反。</b>
+      44 沒有寫這張卡什麼時候才算進 <code>系統錯誤</code>（例如 <code>fetch_log</code> 自己讀不到）。
+      <b>本草稿把 <code>failed</code> 列畫成內容、不畫成卡片狀態，那是本組挑的。</b></p>
+  </div>
+
+  <h3 class="blk"><code>SET-3</code>｜規則參數卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「<code>user_setting</code> <b>全表</b>，依 <code>setting_key</code> 排列」。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一個 <code>setting_key</code>，
+      四欄：鍵名、目前值、值的型別（<code>value_kind</code>）、最後修改時間。
+      <b>未設定的鍵仍列出</b>，目前值欄顯示 <code>⬜ 未設定</code>。
+      本卡不顯示任何「內建預設值」欄 —— <b>未設定的鍵沒有值（G3†）</b>」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「全表為空 → 逐鍵列出且目前值欄皆 <code>⬜ 未設定</code>。
+      某鍵的值與 <code>value_kind</code> 不符 → 目前值欄顯示 <code>⬜ 不適用：值與型別不符</code>，並印出原始字面值」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「四頁上那些門檻和區間，現在各是多少、是我什麼時候設的」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-15</span> <b>「全表為空 → <u>逐鍵列出</u>」自己跟自己打架。</b>
+      <code>user_setting</code> 的主鍵是 <code>setting_key</code> —— <b>全表為空就是一列都沒有，那就沒有鍵可以逐</b>。
+      <b>兩種讀法 44 都撐得住</b>：（甲）零列 —— 那麼「逐鍵列出」做不到；
+      （乙）有列但值為空 —— 第四節那張表的表判準逐字寫「新環境初始化後，表上<b>有值的</b>列數為 0」，
+      「有值的」三個字正好留了這個空間。<b>本草稿照讀法（乙）畫，那是本組挑的。</b><br>
+      <span class="pin">⛔ S-16</span> <b>那份鍵清單 44 沒有列成表。</b>
+      本組拿 44 各塊的「來源」欄掃出 <b>16</b> 個鍵，拿全檔掃出 <b>17</b> 個 —— <b>差的那一個是
+      <code>set_log_keep_rows</code></b>（指令與原始輸出在 §H）。<b>本草稿的十七列就是這樣來的，那是本組挑的。</b><br>
+      <span class="pin">⛔ S-25</span> <b>「印出原始字面值」印在哪，44 沒寫，而同塊判準逐字「卡上<u>沒有第五欄</u>」。</b>
+      本草稿把它印在目前值欄的第二行、用等寬字，<b>那是本組挑的</b>。<br>
+      <span class="pin">⛔ S-26</span> <b>「最後修改時間」＝ <code>updated_at</code>，第四節逐字「可空」，空時印什麼 44 沒寫。</b>
+      本草稿借 44 <code>ALO-7</code> 那一格的字面 <code>⬜ 資料未備：尚未設定過</code>
+      —— <b>字面出自 44，但套到這一塊是本組挑的</b>。<br>
+      <span class="pin">⛔ S-20</span> <b><code>⬜ 未設定</code> 這五個字不在第五節空狀態那四個模板裡面。</b>
+      那四個模板逐字是 <code>⬜ 資料未備：&lt;來源鍵&gt; 尚無資料</code>／部分缺（掛徽章）／
+      <code>⬜ 不適用：&lt;一句話原因&gt;</code>／<code>⚠ 取數失敗：&lt;訊息原文&gt;</code>。
+      <b><code>⬜ 未設定</code> 是 <code>SET-3</code> 與 <code>SET-4</code> 獨有的第五種字面。</b>
+      本草稿照 44 <code>SET-3</code> 原文印，<b>不改成模板的字</b>。<br>
+      <span class="pin">⛔ S-21</span> <b>這一塊與 <code>SET-4</code> 來源同一張表、顆粒度同樣是「逐鍵」。</b>
+      44 第三節第零小節末尾那一行節層級檢查逐字要求「兩塊的來源欄命中同一張資料表時，
+      兩塊的<b>回答什麼寫出不同的顆粒度</b>」——
+      這兩塊的顆粒度都是「一個鍵」，差的是<b>動作</b>（看 vs 改），不是顆粒度。
+      <b>同型於 44 自己已就地登記的 <code>ALO-7</code>／<code>ALO-1</code> 那一筆，但成因不同。</b><br>
+      <span class="pin">⛔ S-34</span> <b>這一塊不在 <code>SET-0</code> 的來源欄裡</b> —— 44 第二節自己已登記，見 §A。</p>
+  </div>
+
+  <h3 class="blk"><code>SET-4</code>｜參數編輯（層 3）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字，<u>三個讀取欄，沒有寫入對象</u>）</b>：「<code>user_setting.setting_key</code>、
+      <code>user_setting.setting_value</code>、<code>user_setting.value_kind</code>」。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「逐鍵編輯，一鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定。
+      <b>存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code></b>。
+      本塊不提供「一鍵還原為系統值」之類的動作 —— <b>沒有系統值可還原（G1†、G3†）</b>。
+      清除某鍵的操作把它變回未設定，不變成零」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「輸入值與 <code>value_kind</code> 不符 →
+      欄位下方顯示型別說明，不存檔，<code>SET-3</code> 的值不變。
+      必要鍵被清除 → 依賴該鍵的塊改顯示 <code>⬜ 不適用：尚未設定</code>」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「我要怎麼改這些門檻，改了會影響哪幾塊」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-18</span> <b>九塊 <code>存檔</code> 類裡，只有這一塊的來源欄沒有宣告寫入對象</b>
+      （另外八塊：<code>EXP-5</code>／<code>MKT-4</code>／<code>HLD-4</code>／<code>EXP-1</code>／<code>EXP-4</code>／
+      <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code>，<b>逐塊實測，指令與輸出在 §H</b>）。
+      而且它<b>連 <code>updated_at</code> 都沒有宣告</b>，規則欄卻要更新它 ——
+      <b>正是 <code>SET-7</code> 自己登記的那個射程限制：「一塊在規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，
+      本表結構上抓不到」</b>。44 舉的兩個例子是 <code>HLD-2</code> 與 <code>ALO-5</code>，<b>不含這一筆</b>。<br>
+      <span class="pin">⛔ S-19</span> <b>它的空狀態沒有「存檔寫入失敗」那一句。</b>
+      第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 各加了一句
+      「存檔寫入失敗 → 卡上顯示失敗訊息原文，……的當下內容留在畫面上不清掉」；
+      <b>這一塊沒有</b>。<b>存檔失敗時這一塊長什麼樣，44 沒寫。本草稿不畫那個狀態。</b><br>
+      <span class="pin">⛔ S-22</span> <b>「欄位型態依 <code>value_kind</code> 決定」——六種型別各對應什麼欄位，44 沒寫。</b>
+      <code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code> 還猜得出來，
+      <b><code>list</code> 與 <code>rules</code> 完全沒有線索</b>。
+      本草稿把那兩種畫成多行文字框，<b>那是本組挑的</b>。<br>
+      <span class="pin">⛔ S-23</span> <b>「必要鍵」44 沒有定義</b>，<code>user_setting</code> 那張表也沒有一個欄位標得出「必要」。
+      <b>本草稿不標任何一個鍵為必要</b>，只在清除時照實寫出哪幾塊會改顯示。<br>
+      <span class="pin">⛔ S-24</span> <b>「改了會影響哪幾塊」那份對照，正是 <code>SET-7</code> 在做的事。</b>
+      44 沒有寫這一塊的清單從哪來。<b>本草稿把每一列下方那一行影響範圍，照 44 各塊「來源」欄的宣告列出
+      —— 也就是跟 <code>SET-7</code> 同一份母體、同一個射程限制</b>（來源欄沒宣告的抓不到）。<br>
+      <span class="pin">⛔ S-31</span> <b>同一個鍵有兩個寫入口。</b>
+      這一塊「逐鍵編輯」涵蓋全表，而 <code>MKT-4</code>／<code>HLD-4</code>／<code>EXP-1</code>／<code>EXP-4</code>／
+      <code>EXP-5</code>／<code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 八塊各自寫自己那幾個鍵。
+      <b>同一個 <code>alo_tolerance_pp</code>，在資產配置頁改得到、在這一頁也改得到</b> ——
+      哪一邊贏、要不要同步、同時開兩頁會怎樣，<b>44 都沒寫</b>。</p>
+  </div>
+
+  <h3 class="blk"><code>SET-5</code>｜重新取數（層 3）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「寫入對象為 <code>fetch_log</code> 全欄」。<b>這一塊沒有讀取來源。</b></p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「按一次重新取一次指定層級的來源
+      （<b>按鈕標籤為「重新取數」，不含「一鍵」二字，<code>G1†</code></b>）。執行中按鈕顯示進度文字並停用。
+      <b>取數只寫入資料表與 <code>fetch_log</code></b>，不改寫任何 <code>user_setting</code>。
+      取數失敗時把訊息原文寫進 <code>fetch_log.message</code>，不吞掉」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「未選層級 → 按鈕停用，停用原因「尚未選定來源層級」。
+      取數回空 → <code>fetch_log.outcome</code> 寫 <code>ok</code> 而資料表列數不變，<code>SET-2</code> 的訊息欄寫「回應為空」」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「我可以怎麼讓它再試一次，試完結果寫在哪」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-02</span> <b>「取數只寫入資料表」與第五節「那四張表本儀表板只讀它們」正面互斥</b>（見頁首第 2 筆）。<br>
+      <span class="pin">⛔ S-03</span> <b>「取數回空」那一句同時踩到三處</b>（見頁首第 3 筆）。<b>切第 9 顆就是這個畫面。</b><br>
+      <span class="pin">⛔ S-01</span> <b>層級選單裡有哪些層級，44 沒有定義</b>（同 <code>SET-2</code>）。<br>
+      <span class="pin">⛔ S-40</span> <b>那個層級選擇器<u>不屬八類按鈕</u></b> ——
+      第五節只有五類元件，<b>沒有一類是輸入控制項</b>。<b>本組照實寫「不屬八類」，不硬塞進 <code>套用</code> 或 <code>展開</code>。</b><br>
+      <span class="pin">⛔ S-41</span> <b>「執行中」那一態的進度文字字面，44 沒給</b>；
+      第五節按鈕那張表逐字要求「標籤換成進行式文字，按鈕停用，<b>旁邊顯示已耗時秒數</b>」。
+      <b>本草稿的進行式文字與秒數格式都是本組擬的。</b><br>
+      ✓ <b>這一顆按鈕是全頁唯一整顆 <code>✓</code> 的</b>：標籤字面與類別 44 都有明文（見 §D）。</p>
+  </div>
+
+  <h3 class="blk"><code>SET-6</code>｜取數紀錄（層 4）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「<code>fetch_log</code> 全欄：<code>log_id</code>、<code>source_tier</code>、
+      <code>started_at</code>、<code>finished_at</code>、<code>outcome</code>、<code>row_count</code>、<code>message</code>」。</p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一次取數，依 <code>started_at</code> 由新到舊。
+      耗時欄由 <code>finished_at</code> 減 <code>started_at</code> 算出，單位秒。
+      <b>保留筆數上限由 <code>user_setting</code> 的 <code>set_log_keep_rows</code> 決定</b>，
+      超出的最舊列被移除並在表尾註明已移除的筆數」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「無任何列 → <code>來源缺</code>，文案「尚無取數紀錄」。
+      <code>finished_at</code> 為空（取數中斷）→ 耗時欄 <code>⬜ 不適用：未記錄結束時間</code>，其餘欄照印」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「這些數字上一次是什麼時候取的、取回幾列」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-17</span> <b>它的來源欄只宣告了 <code>fetch_log</code> 七欄，<u>沒有宣告 <code>user_setting</code></u></b>，
+      而規則欄用了 <code>set_log_keep_rows</code>。
+      <b>實測：<code>set_log_keep_rows</code> 在 44 全檔各塊的「來源」欄裡一次也沒有出現</b>（指令與輸出在 §H）——
+      <b>它是全檔十七個鍵裡唯一一個沒有任何一塊在來源欄宣告過的</b>。
+      <b>這是 <code>SET-7</code> 射程限制的第三個實例，而 44 登記的只有兩個。</b><br>
+      <span class="pin">⛔ S-29</span> <b>「超出的最舊列被移除」—— 誰移除、什麼時候移除，44 沒寫。</b>
+      移除是<b>刪列</b>，而本頁的「不負責」欄逐字「不手動編輯任何一筆資料的值」，
+      括號裡放行的只有「重新取一次來源、把取回的列寫進資料表與 <code>fetch_log</code>」，<b>沒有放行刪列</b>。
+      <b>本草稿不畫任何移除的動作，只照規則欄在表尾註明筆數。</b><br>
+      <span class="pin">⛔ S-33</span> <b>「表尾註明已移除的筆數」—— 那些列已經不在 <code>fetch_log</code> 裡了，
+      那個數沒有地方算得出來。</b> <code>fetch_log</code> 七欄沒有一欄存得下它。
+      <b>本草稿照規則欄印出來，並就地標明這個數在現行結構裡生不出來。</b><br>
+      <span class="pin">⛔ S-36</span> <b><code>set_log_keep_rows</code> 未設定時保留幾列，44 沒寫</b>，
+      而 <code>user_setting</code> 逐字「沒有內建值」，<b>這一塊的空狀態也沒有這一種</b>。
+      本草稿在未設定時<b>全部列出、不截斷</b>，並在表尾寫明，<b>那是本組挑的</b>。<br>
+      <span class="pin">⛔ S-42</span> <b>耗時欄的小數位數 44 沒寫</b>；欄名也沒給
+      （第四節開頭逐字「欄位名一律把單位編進名字裡」，而這是算出來的欄、不是資料欄）。</p>
+  </div>
+
+  <h3 class="blk"><code>SET-7</code>｜欄位對照表（層 4）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>來源（逐字）</b>：「本檔第四節定義的表與欄位名，對上第三節定義的塊代號」——
+      <b>這是本頁唯一一塊，它的來源不是資料表，是那份規格文字本身。</b></p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一個「表.欄位」，兩欄：欄位名、用到它的塊代號清單。
+      清單為空的欄位仍列出，塊代號欄顯示 <code>⬜ 未被任何塊使用</code>。
+      <b>本表不做推論，只列本檔各塊「來源」欄寫出的對應</b>」，後面接著一整段 44 自己寫的射程限制。</p>
+    <p class="note" style="margin-top:6px"><b>射程限制（逐字，44 自己寫的）</b>：「本表的母體只有「來源」欄。
+      <b>一塊在規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，本表結構上抓不到</b> ——
+      對本表而言那個欄位「沒有被任何塊使用」，而畫面上它其實被用了。
+      這一類漏網要靠人逐塊讀規則欄與空狀態欄，<b>本表不宣稱涵蓋</b>」。</p>
+    <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「某塊的來源欄寫了一個本檔第四節未定義的欄位 →
+      該欄位單獨列出並掛「未定義」徽章」。</p>
+    <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「這一欄資料是餵給哪一塊的；這一塊的數字又是從哪幾欄來的」。</p>
+    <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
+      <span class="pin">⛔ S-32</span> <b>這張表的內容是寫死在介面裡，還是執行時去讀那份規格？44 沒寫。</b>
+      寫死 → 規格改了畫面不會跟著改；執行時讀 → 那份規格就變成一個資料源，而它不在第四節八張表裡。
+      <b>而它的空狀態要能認出「第四節未定義的欄位」，那更需要讀得到規格本身。</b><br>
+      <span class="pin">⛔ S-37</span> <b>「只列各塊『來源』欄寫出的對應」，而來源欄有<u>兩種寫法</u>。</b>
+      有的寫全名（<code>nav.fetched_at</code>），有的寫裸欄名（<code>SET-1</code> 那一格的
+      「上限取 <code>user_setting.setting_value</code>，<b><code>setting_key</code></b> 為 <code>set_max_age_days</code>」——
+      這裡的 <code>setting_key</code> <b>沒有表名前綴</b>，而 <code>set_max_age_days</code> 是一個<b>值</b>、不是欄位）。
+      <b>同一份母體兩種寫法，機械解析不出一致的結果，而這張表正是靠機械解析才畫得出來。</b><br>
+      <span class="pin">⛔ S-38</span> <b>這張表列不到它自己。</b>
+      <code>SET-7</code> 的來源欄沒有寫出任何一個「表.欄位」，
+      <b>所以在「用到它的塊代號清單」那一欄裡，<code>SET-7</code> 三個字一次也不會出現。</b><br>
+      <b>列數（實測，量測日 2026-09-22）</b>：第四節八張表合計 <b>59</b> 個欄位
+      （<code>holding</code> 11、<code>nav</code> 7、<code>dividend</code> 7、<code>policy</code> 8、
+      <code>market_indicator</code> 8、<code>user_setting</code> 4、<code>fetch_log</code> 7、<code>fund_profile</code> 7；
+      指令與輸出在 §H）。<b>本草稿只畫出其中幾列當示意，不逐列畫五十九列</b> ——
+      線框要看的是格式，不是內容。<b>「59」這個數是實測的，不標（示意）；每一列的塊代號清單標（示意）。</b></p>
+  </div>
+</section>
+
+<!-- ══════════════ §C ⛔ 清單 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§C</span><h2>⛔ 清單：本組畫這一頁時撞到的 44 處</h2>
+    <span class="hint">44 已凍結 —— 一筆都沒有回頭改，全部只登記</span></div>
+
+  <div class="crit">
+    <h4>母體與界線，先講清楚</h4>
+    <ul>
+      <li><b>母體是「本組畫這八塊時被迫做決定的地方」</b>，<b>不是</b>「44 第三節第五小節的每一句話」。
+        <b>撞不到的缺口本檔看不到，也不宣稱沒有。</b></li>
+      <li><b>「互斥」＝ 44 兩句話正面打架</b>，照任何一句畫都會違反另一句。</li>
+      <li><b>「缺口」＝ 44 沒寫</b>，本組要畫就得挑一個，挑了的都標「本組擬定」。</li>
+      <li><b>「射程」＝ 44 自己已經寫明或已經登記過的限制</b>，本組只是把它畫出來 —— <b>不是本組的新發現</b>。</li>
+      <li><b>44 已凍結（客戶規則）。本組一筆都沒有補進 44，也沒有替 44 補任何 SSOT 缺口。</b>
+        缺的就寫「44 沒寫」，不自己補一個定義。</li>
+    </ul>
+  </div>
+
+  <p class="note" style="margin-bottom:10px">
+    <b>44 筆逐筆列完，下表沒有第 45 列。</b>
+    <b>分類點算（機器數的，不是憑印象）：互斥 10 筆／射程 4 筆／缺口 30 筆，10 ＋ 4 ＋ 30 ＝ 44，與下表列數相同。</b><br>
+    <b>互斥 10 筆</b>：S-01／S-02／S-03／S-04／S-06／S-15／S-18／S-21／S-29／S-33。
+    <b>射程 4 筆</b>：S-17／S-34／S-38／S-39。<b>其餘 30 筆是缺口。</b><br>
+    ⚠️ <b>射程那四筆的來歷不一樣，逐筆分開講，免得被讀成「四筆都是本組發現的」</b>：
+    <b>S-34 與 S-39 是 44 自己就地登記過的</b>（前者在第二節、後者在第五節，兩筆本組只是把它畫出來）；
+    <b>S-17 是 44 自己寫的射程限制，而那個<u>實例</u>是本組找到的第三個</b>（44 舉的兩個例子不含它）；
+    <b>S-38 是本組的觀察</b>，44 沒有寫過。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>#</th><th>在哪一塊</th><th>撞到什麼</th><th>類型</th><th>本草稿怎麼畫</th></tr></thead>
+      <tbody>
+        <tr><td class="id">S-01</td><td class="src">SET-0 / 2 / 5</td>
+          <td><code>source_tier</code> 的字面值清單 <b>44 從頭到尾沒有定義</b>，而三塊都要它：
+            <code>SET-2</code>「一列一個 <code>source_tier</code>」＋「某層級<b>從無紀錄</b>仍列一列」、
+            <code>SET-5</code>「指定層級」、<code>SET-0</code> 紅燈「列出失敗的來源層級」。
+            而第五節徽章那一小節逐字說它是「<b>一個開放集</b>」。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>層級名全部是<b>示意值</b>，本草稿固定畫四列。<b>那是本組擬的。</b></td></tr>
+
+        <tr><td class="id">S-02</td><td class="src">SET-5 / SET-1</td>
+          <td><code>SET-5</code>「取數只寫入<b>資料表</b>與 <code>fetch_log</code>」＋第三節第零小節
+            「把取回的列寫進資料表……不在此限」　<b>vs</b>　第五節按鈕
+            「持倉、淨值、配息、保單四張表……<b>本儀表板只讀它們</b>」。
+            <code>nav</code>／<code>dividend</code> 就在那四張裡，而 <code>SET-1</code> 讀的
+            <code>fetched_at</code> 只有取數寫得出來。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照 <code>SET-5</code> 畫（按鈕存在、寫 <code>fetch_log</code>），
+            <b>但不在畫面上宣稱任何一張表被寫入</b>，就地標 ⛔。</td></tr>
+
+        <tr><td class="id">S-03</td><td class="src">SET-5 / SET-2 / §4</td>
+          <td>「取數回空 → <code>outcome</code> 寫 <code>ok</code>……<code>SET-2</code> 的訊息欄寫「回應為空」」
+            <b>vs</b> <code>SET-2</code> 第三欄＝「<b>失敗時</b>的訊息原文」
+            <b>vs</b> <code>fetch_log.message</code>＝「失敗訊息原文；<b>成功時為空</b>」。
+            而那句話若由 <code>SET-2</code> 生成，就違反它自己的「訊息原文照印，不改寫」。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>第 9 顆狀態<b>照 <code>SET-5</code> 的字面畫</b>（<code>ok</code> 的列在訊息欄印「回應為空」），
+            並在該列旁邊就地標出三處打架。</td></tr>
+
+        <tr><td class="id">S-04</td><td class="src">SET-2</td>
+          <td>「訊息原文照印，不改寫成安撫語句」<b>vs</b>「本卡<b>不對失敗給出處置方向</b>」——
+            <b>一句真實的錯誤訊息常常自帶處置建議</b>。照印就有方向，改寫就違反照印。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>示意訊息<b>刻意挑不含處置方向的一句</b>，並在卡上寫明「本卡只印原文，不加處置方向」。
+            <b>挑乾淨的示意值不等於解決 —— 真實訊息本組控制不了。</b></td></tr>
+
+        <tr><td class="id">S-05</td><td class="src">SET-0</td>
+          <td>灰有三句文案（「資料齊、來源皆可達」／「尚未設定新鮮度上限」／「尚無取數紀錄」），
+            <b>44 沒有寫優先序</b>，而新環境下後兩句<b>必然同時命中</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>印「尚無取數紀錄」，<b>並在下一行補印另一句</b>。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-06</td><td class="src">SET-0</td>
+          <td>規則第一句「兩者皆為零 → 灰，文案「<b>資料齊、來源皆可達</b>」」在<b>一筆取數紀錄都沒有</b>時也命中
+            （失敗來源數為零），而那句話在那個情形下<b>是假的</b>。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照空狀態走（印「尚無取數紀錄」），<b>不印「資料齊、來源皆可達」</b>。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-07</td><td class="src">SET-0</td>
+          <td>判準前半「把新鮮度上限放寬到沒有任何一筆逾期，燈轉灰」<b>缺一個前提</b> ——
+            還要「失敗來源為零」，否則燈仍是紅。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>第 1 顆狀態<b>兩個條件都做成零</b>，那一行判準才跑得過。登記在這裡。</td></tr>
+
+        <tr><td class="id">S-08</td><td class="src">SET-0 / SET-1</td>
+          <td>黃燈文案「有 <code>N</code> <b>筆</b>資料」<b>vs</b> <code>SET-1</code>「一列一<b>類</b>資料」
+            與它的判準「<code>SET-0</code> 的 <code>N</code> 等於 <b>3</b>」。
+            <b><code>N</code> 數的是類（最多 3），不是筆。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照判準把 <code>N</code> 當<b>類數</b>，並在燈下方那一行寫明它指的是哪幾類。</td></tr>
+
+        <tr><td class="id">S-09</td><td class="src">SET-1</td>
+          <td>來源欄宣告了「<b>與各自的觀測日欄</b>」，而規則欄那三欄
+            （最近取得時間／距今日數／比較結果）<b>沒有一欄用到它</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td><b>不畫觀測日欄</b>（照規則欄的三欄畫），就地標 ⛔。</td></tr>
+
+        <tr><td class="id">S-10</td><td class="src">SET-1 / §4</td>
+          <td>那三張表<b>沒有一張有一個叫「觀測日」的欄</b>：<code>nav</code> 只有 <code>nav_date</code>；
+            <code>dividend</code> 有 <code>ex_date</code> 與 <code>pay_date</code> <b>兩個</b>；
+            <code>market_indicator</code> 有 <code>obs_date</code> 與 <code>release_date</code> <b>兩個</b>，
+            而第四節逐字「跨期間對齊<b>一律用</b> <code>release_date</code>」。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>同 S-09，不畫。<b>本組不替 44 指定哪一欄是「觀測日」。</b></td></tr>
+
+        <tr><td class="id">S-11</td><td class="src">SET-1</td>
+          <td>「距今日數（<code>days_calendar</code>）」的「<b>今</b>」用哪個時區算，44 沒寫；
+            同一格又說時間以世界協調時間存、顯示轉當地時區。<b>日曆日跨時區會差一天。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>日數一律標（示意），<b>不宣稱它是用哪個時區算出來的</b>。</td></tr>
+
+        <tr><td class="id">S-12</td><td class="src">SET-1</td>
+          <td>「顯示時轉<b>當地時區</b>並在表頭註明<b>時區字面值</b>」—— 44 沒有定義「當地時區」是哪一個，
+            字面值也沒給。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>表頭寫一個<b>示意字面值</b>並標（示意）。<b>那是本組擬的。</b></td></tr>
+
+        <tr><td class="id">S-13</td><td class="src">SET-1</td>
+          <td>比較是「<b>大於</b>上限」還是「<b>大於等於</b>上限」，44 沒寫；
+            而它的判準「把上限設成 <b>0</b> 日，三列的比較欄<b>皆為「外」</b>」在
+            「距今剛好 0 日」＋「大於」的讀法下<b>跑不過</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>第 4 顆的三列距今日數<b>都做成大於零</b>，繞開這個邊界。
+            <b>繞開不等於解決，登記在這裡。</b></td></tr>
+
+        <tr><td class="id">S-14</td><td class="src">SET-1</td>
+          <td>同一行判準<b>假設三類都有資料</b> —— 某類無任何列時那一格是 <code>⬜</code> 不是「外」
+            （空狀態第二句），<b>那一行同樣跑不過</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>第 6 顆就是這個畫面，照空狀態畫 <code>⬜</code> ＋ <code>資料未備</code> 徽章。</td></tr>
+
+        <tr><td class="id">S-15</td><td class="src">SET-3</td>
+          <td>「<b>全表為空</b> → <b>逐鍵列出</b>」自己跟自己打架 —— 主鍵是 <code>setting_key</code>，
+            零列就沒有鍵可逐。<b>兩種讀法 44 都撐得住</b>：（甲）零列；
+            （乙）有列但值為空（第四節表判準逐字「表上<b>有值的</b>列數為 0」留了這個空間）。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照讀法（乙）畫：<b>十七列都在，目前值欄皆 <code>⬜ 未設定</code></b>。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-16</td><td class="src">SET-3</td>
+          <td>那份「有哪些鍵」的清單<b>44 沒有列成表</b>。實測：各塊「來源」欄掃出 <b>16</b> 個，
+            全檔掃出 <b>17</b> 個。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>本草稿畫十七列（指令與輸出在 §H）。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-17</td><td class="src">SET-6 / SET-7</td>
+          <td><code>set_log_keep_rows</code> 被 <code>SET-6</code> 規則欄用到，
+            <b>卻沒有任何一塊在「來源」欄宣告過它</b> —— 它是十七個鍵裡唯一一個。
+            <b>這正是 <code>SET-7</code> 自己寫的射程限制的第三個實例</b>，
+            而 44 舉的例子只有 <code>HLD-2</code> 與 <code>ALO-5</code> 兩個。</td>
+          <td class="jd"><span class="badge no">射程</span><br><span class="tiny">44 自己寫的射程限制，第三例</span></td>
+          <td><code>SET-6</code> 照規則欄用這個鍵，<b>並在 <code>SET-7</code> 那張表上把它畫成
+            <code>⬜ 未被任何塊使用</code></b> —— <b>那正是 44 自己說的「畫面上它其實被用了」。</b></td></tr>
+
+        <tr><td class="id">S-18</td><td class="src">SET-4</td>
+          <td><b>九塊 <code>存檔</code> 類裡唯一沒有在來源欄宣告寫入對象的一塊</b>，
+            <b>連 <code>updated_at</code> 都沒宣告</b>，而規則欄逐字要更新它。
+            （另外八塊逐塊實測，指令與輸出在 §H。）</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照規則欄畫存檔鈕，<b>就地標出來源欄缺宣告</b>。</td></tr>
+
+        <tr><td class="id">S-19</td><td class="src">SET-4</td>
+          <td>空狀態<b>沒有「存檔寫入失敗」那一句</b>，而第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／
+            <code>ALO-4</code> 三塊各加了一句。<b>存檔失敗時這一塊長什麼樣，44 沒寫。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td><b>不畫那個狀態</b>（不自己補），登記在這裡。</td></tr>
+
+        <tr><td class="id">S-20</td><td class="src">SET-3 / SET-4</td>
+          <td><code>⬜ 未設定</code> <b>不在第五節空狀態那四個模板裡面</b>
+            （模板是 <code>⬜ 資料未備：…</code>／部分缺／<code>⬜ 不適用：…</code>／<code>⚠ 取數失敗：…</code>）。
+            它是這兩塊獨有的<b>第五種字面</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照 44 這兩塊的原文印 <code>⬜ 未設定</code>，<b>不改成模板的字</b>。</td></tr>
+
+        <tr><td class="id">S-21</td><td class="src">SET-3 / SET-4</td>
+          <td>兩塊<b>來源同一張表、顆粒度同樣是「逐鍵」</b>，而第三節第零小節末尾那一行節層級檢查逐字要求
+            「兩塊的來源欄命中同一張資料表時，兩塊的<b>回答什麼寫出不同的顆粒度</b>」。
+            差的是<b>動作</b>（看 vs 改），不是顆粒度。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照 44 兩塊原樣畫。<b>同型於 44 已登記的 <code>ALO-7</code>／<code>ALO-1</code>，但成因不同
+            —— 那一筆是兩塊問同一個問題，這一筆是顆粒度分不開。</b></td></tr>
+
+        <tr><td class="id">S-22</td><td class="src">SET-4</td>
+          <td>「欄位型態依 <code>value_kind</code> 決定」——六種型別
+            （<code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code>／<code>list</code>／<code>rules</code>）
+            <b>各對應什麼欄位，44 沒寫</b>；<code>list</code> 與 <code>rules</code> 完全沒有線索。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>那兩種畫成<b>多行文字框</b>，其餘四種畫成單行輸入欄。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-23</td><td class="src">SET-4</td>
+          <td>空狀態的「<b>必要鍵</b>」44 沒有定義，<code>user_setting</code> 那張表也沒有一個欄位標得出它。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td><b>不標任何一個鍵為必要</b>，只在清除時照實寫出哪幾塊會改顯示。</td></tr>
+
+        <tr><td class="id">S-24</td><td class="src">SET-4 / SET-7</td>
+          <td>「改了會影響哪幾塊」是 <code>SET-4</code> 的「回答什麼」，
+            <b>而那份對照正是 <code>SET-7</code> 在做的事</b>；44 沒有寫 <code>SET-4</code> 的清單從哪來。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照 44 各塊「來源」欄的宣告列出 —— <b>跟 <code>SET-7</code> 同一份母體、同一個射程限制</b>。</td></tr>
+
+        <tr><td class="id">S-25</td><td class="src">SET-3</td>
+          <td>「並<b>印出原始字面值</b>」印在哪，44 沒寫，而同塊判準逐字「卡上<b>沒有第五欄</b>」。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>印在<b>目前值欄的第二行</b>、用等寬字。<b>那是本組挑的</b>（沒有多一欄，判準跑得過）。</td></tr>
+
+        <tr><td class="id">S-26</td><td class="src">SET-3</td>
+          <td>「最後修改時間」＝ <code>updated_at</code>，第四節逐字「<b>可空</b>；從未設定過時為空」——
+            <b>空時印什麼 44 沒寫</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>借 44 <code>ALO-7</code> 那一格的字面 <code>⬜ 資料未備：尚未設定過</code>。
+            <b>字面出自 44，但套到這一塊是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-27</td><td class="src">SET-2</td>
+          <td>第三欄逐字是「<b>失敗時</b>的訊息原文」—— <b><code>ok</code> 的列那一格印什麼，44 沒寫</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>印一個中性的破折號佔位。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-28</td><td class="src">SET-2 / SET-6</td>
+          <td>兩塊的「無紀錄 → <code>來源缺</code>」按第五節模板<b>要掛「重新取數」按鈕</b>，
+            而那個動作的塊是 <code>SET-5</code>，<b>住在層 3、預設收合、且「展開區不自動展開」</b>。
+            按鈕掛在卡上還是指過去，44 沒寫。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>兩塊<b>各掛一枚</b>，旁邊寫明它與 <code>SET-5</code> 做的是同一件事。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-29</td><td class="src">SET-6</td>
+          <td>「超出的最舊列<b>被移除</b>」—— 誰移除、什麼時候移除，44 沒寫；
+            而移除是<b>刪列</b>，本頁「不負責」欄括號裡放行的只有「重新取一次來源、把取回的列寫進資料表與
+            <code>fetch_log</code>」，<b>沒有放行刪列</b>。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td><b>不畫任何移除的動作</b>，只照規則欄在表尾註明筆數。</td></tr>
+
+        <tr><td class="id">S-30</td><td class="src">SET-2 / §5</td>
+          <td><code>failed</code> 的那一列是這張卡的<b>正常內容</b>（它的工作就是印出哪一層在失敗），
+            而第五節卡片的 <code>系統錯誤</code> 態畫面幾乎一樣
+            （<code>⚠ 取數失敗</code>＋訊息原文＋「重新取數」按鈕）<b>而語意相反</b>。
+            <b>這張卡什麼時候才算進 <code>系統錯誤</code>，44 沒寫。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>把 <code>failed</code> 列畫成<b>內容</b>、不畫成卡片狀態。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-31</td><td class="src">SET-4 ＋ 八塊</td>
+          <td><b>同一個鍵有兩個寫入口</b>：<code>SET-4</code>「逐鍵編輯」涵蓋全表，
+            而 <code>MKT-4</code>／<code>HLD-4</code>／<code>EXP-1</code>／<code>EXP-4</code>／<code>EXP-5</code>／
+            <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 八塊各自寫自己那幾個鍵。
+            <b>哪一邊贏、要不要同步、同時開兩頁會怎樣，44 都沒寫。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照 44 兩邊都畫（本頁畫 <code>SET-4</code> 這一邊），<b>不宣稱任何同步行為</b>。</td></tr>
+
+        <tr><td class="id">S-32</td><td class="src">SET-7</td>
+          <td>這張表的內容是<b>寫死在介面裡</b>，還是<b>執行時去讀那份規格</b>？44 沒寫。
+            而它的空狀態要能認出「第四節<b>未定義</b>的欄位」，<b>那需要讀得到規格本身</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照規則欄畫成一張表，<b>不宣稱它怎麼生出來</b>。第 12 顆狀態演它的空狀態。</td></tr>
+
+        <tr><td class="id">S-33</td><td class="src">SET-6</td>
+          <td>「表尾註明<b>已移除的筆數</b>」—— 那些列<b>已經不在 <code>fetch_log</code> 裡了</b>，
+            而 <code>fetch_log</code> 七欄<b>沒有一欄存得下這個數</b>。</td>
+          <td class="jd"><span class="badge mu">互斥</span></td>
+          <td>照規則欄印出來並標（示意），<b>就地標明這個數在現行結構裡生不出來</b>。</td></tr>
+
+        <tr><td class="id">S-34</td><td class="src">SET-3 / §2</td>
+          <td><code>SET-0</code> 的來源欄<b>只點名 <code>SET-1</code> 與 <code>SET-2</code></b>，
+            <code>SET-3</code> 不在裡面 —— 第二節那一行節判準
+            「把結論燈來源欄點名的<b>任一張</b>核心卡的來源整個抽掉，結論燈改變顏色」
+            <b>在 <code>SET-3</code> 身上跑不過</b>。</td>
+          <td class="jd"><span class="badge no">射程</span><br><span class="tiny">44 第二節自己已登記</span></td>
+          <td>照 44 畫（燈只讀兩塊）。<b>不是本組的新發現 —— 44 第二節 2026-09-21 那次更正逐字點名過
+            <code>SET-3</code>。</b></td></tr>
+
+        <tr><td class="id">S-35</td><td class="src">SET-1 / SET-4</td>
+          <td>規則欄只說「<b>上限由使用者輸入（G3†）</b>」，<b>沒說輸入欄在哪一塊</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>放在 <code>SET-4</code>（參數編輯，層 3）。<b>那是本組挑的</b> ——
+            <b>代價要寫明</b>：層 3 預設收合且不自動展開，所以<b>第一次進這一頁的人看不到那個輸入欄</b>。</td></tr>
+
+        <tr><td class="id">S-36</td><td class="src">SET-6</td>
+          <td><code>set_log_keep_rows</code> <b>未設定時保留幾列，44 沒寫</b>，
+            而 <code>user_setting</code> 逐字「<b>沒有內建值</b>」，<b>這一塊的空狀態也沒有這一種</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>未設定時<b>全部列出、不截斷</b>，並在表尾寫明。<b>那是本組挑的。</b></td></tr>
+
+        <tr><td class="id">S-37</td><td class="src">SET-7</td>
+          <td>「只列各塊「來源」欄寫出的對應」，而<b>來源欄有兩種寫法</b>：
+            全名（<code>nav.fetched_at</code>）與<b>裸欄名</b>（<code>SET-1</code> 那一格的
+            「<code>setting_key</code> 為 <code>set_max_age_days</code>」—— 前者無表名前綴，後者是<b>值</b>不是欄位）。
+            <b>同一份母體兩種寫法，機械解析不出一致的結果。</b></td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>示意列<b>兩種寫法各畫一列</b>，讓客戶看得到差別。</td></tr>
+
+        <tr><td class="id">S-38</td><td class="src">SET-7</td>
+          <td><b>這張表列不到它自己</b> —— <code>SET-7</code> 的來源欄沒有寫出任何一個「表.欄位」，
+            所以「用到它的塊代號清單」那一欄裡，<code>SET-7</code> 三個字一次也不會出現。</td>
+          <td class="jd"><span class="badge no">射程</span></td>
+          <td>照畫，不補。<b>這是「只掃來源欄」這個設計的必然結果，不是漏畫。</b></td></tr>
+
+        <tr><td class="id">S-39</td><td class="src">層 2 三張卡 / §5</td>
+          <td><b>本頁層 2 三張卡全部是表格卡</b>（<code>SET-1</code> 三欄、<code>SET-2</code> 三欄、<code>SET-3</code> 四欄），
+            而第五節第六輪把卡片改成「<b>最多兩個主值</b>」「<b>逐主值判定四狀態</b>」——
+            <b>而 44 自己就地登記著「本檔從頭到尾沒有定義『主值』」，且那一筆待客戶裁決。</b>
+            在一張 N 列 × 四欄的表上，「兩個主值」沒有著力點。</td>
+          <td class="jd"><span class="badge no">射程</span><br><span class="tiny">44 第五節自己已登記待裁</span></td>
+          <td>四狀態<b>逐格</b>套（哪一格缺就哪一格 <code>⬜</code>），<b>不套「兩個主值」那條上限</b>。
+            <b>那是本組挑的</b>，而且它<b>繫於一個 44 自己說還沒裁的定義</b>。</td></tr>
+
+        <tr><td class="id">S-40</td><td class="src">SET-5</td>
+          <td>層級選擇器<b>不屬八類按鈕</b> —— 第五節只有五類元件，<b>沒有一類是輸入控制項</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>照實寫「<b>不屬八類</b>」，<b>不硬塞進 <code>套用</code> 或 <code>展開</code></b>（見 §D 第二張表）。</td></tr>
+
+        <tr><td class="id">S-41</td><td class="src">SET-5</td>
+          <td>「執行中」那一態的<b>進度文字字面 44 沒給</b>；第五節按鈕那張表逐字要求
+            「標籤換成進行式文字，按鈕停用，<b>旁邊顯示已耗時秒數</b>」。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>進行式文字與秒數格式<b>都是本組擬的</b>。<b>這一態在本草稿演不到</b>（見 §F 末段）。</td></tr>
+
+        <tr><td class="id">S-42</td><td class="src">SET-6</td>
+          <td>耗時欄「單位秒」，<b>小數位數 44 沒寫</b>；<b>欄名也沒給</b>
+            （第四節開頭逐字「欄位名一律把單位編進名字裡」，而這是算出來的欄、不是資料欄）。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>示意值畫到小數一位，欄名寫中文「耗時」。<b>兩者都是本組擬的。</b></td></tr>
+
+        <tr><td class="id">S-43</td><td class="src">本頁五張表</td>
+          <td><b>窄寬度（≤768）時表格怎麼塌，44 沒寫</b>，而第二節硬規則逐字
+            「任何一段都<b>不出現橫向捲動</b> —— 一塊放不進當前寬度時，它自己換行或改成單欄」。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td><b>五張表在 ≤768 一律改成逐列堆疊</b>（切第 4／5／6 顆寬度鈕看得到）。<b>那是本組挑的。</b></td></tr>
+      
+        <tr><td class="id">S-44</td><td class="src">SET-3 / SET-4</td>
+          <td><b>哪一個 <code>setting_key</code> 是哪一種 <code>value_kind</code>，44 沒有任何一處寫過。</b>
+            第四節 <code>user_setting</code> 那張表只定義了「<code>value_kind</code> 這一欄存在」與「它有六個可能的值」；
+            <b>沒有一句把某個鍵配到某個型別</b>。而 <code>SET-3</code> 規則欄要印「值的型別（<code>value_kind</code>）」那一欄，
+            <code>SET-4</code> 規則欄要「<b>欄位型態依 <code>value_kind</code> 決定</b>」——<b>兩塊都需要這份對映</b>。</td>
+          <td class="jd"><span class="badge no">缺口</span></td>
+          <td>十七列<b>各配一個型別，全部是本組配的</b>。<span class="pin">⛔ S-44</span> 就地標在 <code>SET-3</code> 的卡上。</td></tr>
+</tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px; border-left:3px solid var(--warn-mark); padding-left:11px">
+    ⚠️ <b>上面那三個數字的來歷，據實寫明。</b> 本組初稿寫的是「互斥 11／缺口 26／射程 6」——
+    <b>三個數都是憑印象寫的，逐筆點算之後三個都不對</b>。
+    現在那三個數是<b>拿一段腳本把上表的「類型」欄逐列數出來的</b>（腳本與原始輸出在 §H），
+    <b>而且加起來等於表的列數</b>。<br>
+    <b>寫下這一段的理由</b>：一份在講「規格自己打架」的文件，<b>自己的計數不能對不上自己的表</b>——
+    而「憑印象寫一個數」正是最容易發生的那一種。<b>這一筆本組自己犯過，所以留著。</b>
+  </p>
+</section>
+
+<!-- ══════════════ §D 按鈕逐顆 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§D</span><h2>按鈕逐顆：✓ 與 ⚠</h2>
+    <span class="hint">✓ ＝ 字面與行為 44 有明文；⚠ ＝ 44 沒寫到這麼細、是本組擬的</span></div>
+
+  <div class="crit">
+    <h4>八類，八類之外沒有第九類（逐字引 44 第五節按鈕）</h4>
+    <ul>
+      <li>「<code>取數</code>（重新取一次）／<code>套用</code>（把輸入的參數套進計算，<b>只讀輸入不改輸入</b>）／
+        <code>展開</code>／<code>匯出</code>／<code>新增列</code>／<code>清除</code>／
+        <code>導覽</code>（開啟本儀表板以外的維護位置，<b>不讀也不寫任何本檔定義的資料表</b>）／
+        <code>存檔</code>（把使用者在本儀表板輸入的設定值寫回 <code>user_setting</code>）。<b>八類之外沒有第九類。</b>」</li>
+      <li>「⛔ 不存在「一鍵再平衡」「一鍵最佳化」「一鍵調整」「一鍵套用推薦」任何一種按鈕（G1†）。」</li>
+      <li>「按鈕標籤不含買、賣、加碼、減碼、調升、調降、最佳、推薦。」</li>
+      <li>「按鈕停用時不隱藏 —— 隱藏會讓使用者以為這個動作不存在，停用附原因才說得清楚。」</li>
+      <li>「<code>存檔</code> 類只寫 <code>user_setting</code>；<code>取數</code> 類只寫取數回來的列與 <code>fetch_log</code>；
+        <code>導覽</code> 類什麼都不寫」——<b>而「取數回來的列寫到哪」正是 ⛔ S-02。</b></li>
+    </ul>
+  </div>
+
+  <p class="note" style="margin-bottom:10px">
+    <b>這一頁畫了 6 種按鈕。下表逐種列完 —— 六種就是全部，畫面上沒有第七種</b>
+    （另有 2 個<b>不屬八類</b>的輸入控制項，在下一張表）。<br>
+    <b>點算單位先講清楚</b>：下表一列＝<b>一種按鈕</b>，不是一個實例。
+    第 3 列（清除）在畫面上有十七個實例（一個鍵一顆）、第 6 列（展開三角）有四處，
+    <b>兩列在下表各算一列</b>。<b>逐列點算：整列標 <code>✓</code> 的 1 種、標 <code>⚠</code> 的 5 種。</b>
+  </p>
+  <p class="note" style="margin-bottom:10px; border-left:3px solid var(--warn-mark); padding-left:11px">
+    ⚠️ <b>「整列 ✓」的門檻寫清楚，免得被讀成「只有一種合規」</b>：
+    <code>✓</code> 指的是<b>標籤字面與類別 44 都有明文</b>。
+    <b>這一頁有一種完全過得了 —— <code>SET-5</code> 的「重新取數」，44 逐字把標籤寫進了規則欄</b>
+    （「按鈕標籤為「重新取數」，不含「一鍵」二字，<code>G1†</code>」）。
+    <b>另有三格逐字出自 44，但不足以讓整列轉 <code>✓</code></b>：
+    <code>SET-5</code> 的<b>停用原因</b>（逐字「尚未選定來源層級」，但那是同一列，已經 ✓）、
+    <code>SET-4</code> 存檔鈕的<b>類別</b>（第五節逐字把 <code>SET-4</code> 列進 <code>存檔</code> 類）、
+    <code>SET-4</code> 清除鈕的<b>類別</b>（規則欄逐字「<b>清除</b>某鍵的操作把它變回未設定」）——
+    <b>後兩者的標籤字面 44 都沒給，所以整列仍是 <code>⚠</code></b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>#</th><th>在哪一塊</th><th>標籤（畫面上的字）</th><th>八類的哪一類</th><th>✓／⚠</th><th>憑據</th></tr></thead>
+      <tbody>
+        <tr><td class="src">1</td><td><code>SET-5</code>（層 3）</td><td><b>「重新取數」</b></td>
+          <td class="src"><code>取數</code></td><td class="jd"><span class="badge ok">✓</span></td>
+          <td><b>標籤逐字出自 44</b>：「<b>按鈕標籤為「重新取數」，不含「一鍵」二字，<code>G1†</code></b>」。
+            <b>類別 ✓</b>（<code>取數</code> 的定義逐字就是「重新取一次」）。<br>
+            <b>停用原因也逐字 ✓</b>：「按鈕停用，停用原因「<b>尚未選定來源層級</b>」」。
+            <b>停用時不隱藏</b>（第五節逐字），本草稿照做。<br>
+            ⚠️ <b>「執行中」那一態的進行式文字與秒數格式是本組擬的</b>（⛔ S-41）。</td></tr>
+
+        <tr><td class="src">2</td><td><code>SET-4</code>（層 3）</td><td>「存檔」<b>〔本組擬定〕</b></td>
+          <td class="src"><code>存檔</code></td><td class="jd"><span class="badge wn">⚠</span></td>
+          <td><b>類別 ✓</b> —— 第五節第六輪那一段逐字把九塊列進 <code>存檔</code> 類，
+            其中就有「<code>SET-4</code> 參數編輯（2026-09-21 原本那兩塊）」。<br>
+            <b>標籤字面 ⚠</b> —— 44 沒給。本組用動作本身當標籤（第五節按鈕 <code>可用</code> 態逐字
+            「文字按鈕，<b>標籤為動作本身</b>」）。<br>
+            <span class="pin">⛔ S-18</span> <b>它的來源欄沒有宣告寫入對象，九塊裡唯一一塊。</b></td></tr>
+
+        <tr><td class="src">3</td><td><code>SET-4</code> 每一鍵（十七處）</td><td>「清除」<b>〔本組擬定〕</b></td>
+          <td class="src"><code>清除</code></td><td class="jd"><span class="badge wn">⚠</span></td>
+          <td><b>類別 ✓</b> —— 規則欄逐字「<b>清除</b>某鍵的操作把它變回未設定，<b>不變成零</b>」，
+            空狀態也逐字「必要鍵<b>被清除</b>」。<br>
+            <b>標籤字面 ⚠</b> —— 44 寫的是一個動作，不是一個標籤。<br>
+            ⚠️ <b>這一種只動 <code>user_setting</code>，不碰 <code>holding</code>／<code>policy</code>／
+            <code>nav</code>／<code>dividend</code>。</b></td></tr>
+
+        <tr><td class="src">4</td><td><code>SET-2</code>（層 2）</td><td>「重新取數」</td>
+          <td class="src"><code>取數</code></td><td class="jd"><span class="badge wn">⚠</span></td>
+          <td><b>標籤字面抄自 <code>SET-5</code>，不是這一塊的字 —— 所以是 ⚠ 不是 ✓。</b><br>
+            <b>為什麼掛</b>：<code>SET-2</code> 空狀態逐字「各層級皆無紀錄 → <b><code>來源缺</code></b>」，
+            而第五節空狀態那張表的 <code>來源缺</code> 一列逐字要「<b>＋「重新取數」按鈕</b>」。
+            <span class="pin">⛔ S-28</span> <b>掛在這張卡上還是指去 <code>SET-5</code>，44 沒寫。</b></td></tr>
+
+        <tr><td class="src">5</td><td><code>SET-6</code>（層 4）</td><td>「重新取數」</td>
+          <td class="src"><code>取數</code></td><td class="jd"><span class="badge wn">⚠</span></td>
+          <td>同上 —— <code>SET-6</code> 空狀態逐字「無任何列 → <b><code>來源缺</code></b>，文案「尚無取數紀錄」」。
+            <span class="pin">⛔ S-28</span></td></tr>
+
+        <tr><td class="src">6</td><td>層 3 兩塊 · 層 4 兩塊（共 4 處）</td><td>展開／收合三角</td>
+          <td class="src"><code>展開</code></td><td class="jd"><span class="badge wn">⚠</span></td>
+          <td><b>類別 ✓</b>（第五節展開區逐字：「層 1 與層 2 的 <code>default_open</code> 為真；
+            <b>層 3 與層 4 的 <code>default_open</code> 為假</b>」）；
+            <b>標籤與圖示字面 ⚠</b> —— 44 沒給。<br>
+            ⚠️ <b>收合那一行的摘要</b>照第五節逐字要求「<b>摘要在資料缺時寫出缺什麼</b>」，<b>摘要文字是本組擬的</b>。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px; border-left:3px solid var(--draft); padding-left:11px">
+    ⚠️ <b><code>SET-1</code> 為什麼<u>沒有</u>掛「重新取數」，理由要寫明（不是漏畫）</b>：
+    <code>SET-2</code> 與 <code>SET-6</code> 的空狀態逐字寫出了<b>空狀態的<u>種類</u>名</b>（<code>來源缺</code>），
+    所以第五節那張模板表整列適用，含那一枚按鈕；
+    而 <code>SET-1</code> 的空狀態<b>只寫「掛 <code>資料未備</code> 徽章」——它寫的是徽章，不是種類名，也沒提按鈕</b>。
+    <b>本組照塊規則為準（客戶對第五節那兩條的裁示逐字就是這一句），所以不替它加一枚。</b>
+    <b>代價要寫明</b>：這使得 <code>SET-1</code> 缺資料時<b>畫面上沒有任何可以讓它重取一次的入口</b>，
+    而那個入口在層 3、預設收合。
+  </p>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:18px 0 6px">不屬八類的控制項（照實寫，不硬塞）</h3>
+  <p class="note" style="margin-bottom:10px">
+    <span class="pin">⛔ S-40</span> 44 第五節只有<b>五類元件</b>（卡片／徽章／按鈕／展開區／空狀態），
+    <b>沒有任何一類是輸入控制項</b>。下列 2 個是這一頁畫出來必須有、而<b>八類與五類都接不住</b>的東西。
+    <b>本組照實寫「不屬八類」，不把它們歸到 <code>套用</code> 或 <code>展開</code> 去充數。</b>
+  </p>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>#</th><th>在哪一塊</th><th>是什麼</th><th>歸類</th><th>44 怎麼寫的</th></tr></thead>
+      <tbody>
+        <tr><td class="src">i</td><td><code>SET-4</code></td><td>每一個鍵的<b>值輸入欄</b>（十七處）</td>
+          <td class="jd"><b>不屬八類</b><br><span class="tiny">（不是按鈕，也不是其餘四類元件）</span></td>
+          <td>「逐鍵編輯，每個鍵一個輸入欄，<b>欄位型態依 <code>value_kind</code> 決定</b>」
+            ——<b>指定了型態的<u>依據</u>，沒有指定元件</b>。<span class="pin">⛔ S-22</span>
+            六種型別各長什麼樣 44 沒寫，<code>list</code> 與 <code>rules</code> 尤其沒有。</td></tr>
+        <tr><td class="src">ii</td><td><code>SET-5</code></td><td><b>來源層級選擇器</b></td>
+          <td class="jd"><b>不屬八類</b><br><span class="tiny">（本草稿畫成單選）</span></td>
+          <td>「按一次重新取一次<b>指定層級</b>的來源」＋空狀態「<b>未選層級</b> → 按鈕停用」
+            ——<b>「選層級」這個動作在八類裡沒有對應的一類</b>。
+            <span class="pin">⛔ S-01</span> <b>而且有哪些層級可選，44 沒有定義。</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="disclose" style="margin-top:18px">
+    <p class="note" style="color:var(--ink); font-weight:600">這一頁<u>沒有</u>的按鈕，逐項寫出理由（不是漏畫）</p>
+    <ul>
+      <li><b>沒有 <code>套用</code> 鈕。</b> 實測：44 第三節第五小節<b>全段「套用」兩個字 0 次</b>。
+        也就是這一頁的設定<b>沒有第二道閘</b>：<code>SET-4</code> 的規則欄寫的是<b>存檔</b>，不是套用。</li>
+      <li><b>沒有 <code>匯出</code> 鈕。</b> 實測：全段「匯出」兩個字 <b>0 次</b>。
+        ⚠️ <b>這一點與前四頁不同</b> —— 層 3 的職責逐字是「使用者輸入、切換、<b>匯出</b>」，
+        而這一頁層 3 兩塊都不是匯出。<b>44 沒有為這一頁安排匯出，本組不自己加。</b></li>
+      <li><b>沒有 <code>新增列</code> 鈕。</b> 實測：全段「新增」兩個字 <b>1 次</b>，
+        而那一次是動詞（<code>SET-5</code> 判準的「按下之後 <code>fetch_log</code> <b>新增一列</b>」），<b>不是按鈕</b>。
+        <b>44 沒有寫使用者可以新增一個 <code>setting_key</code></b>，本組不畫。</li>
+      <li><b>沒有 <code>導覽</code> 鈕。</b> 實測：全段「導覽」兩個字 <b>0 次</b>。
+        ⚠️ <b>這一點值得看一眼</b>：<code>SET-2</code> 印的是「哪一層來源在失敗」，
+        而 <code>HLD-0</code>／<code>ALO-4</code>／<code>ALO-6</code> 在缺持倉時掛的是導覽鈕（去 Sheets 維護）。
+        <b>本頁缺的是取數，不是 Sheets 上的資料，所以導覽接不住</b>。<b>本組不畫。</b></li>
+      <li><b>沒有任何「一鍵」字樣的按鈕。</b> <code>G1†</code> 逐字禁四個詞：「<b>一鍵</b>」「<b>最佳</b>」「<b>推薦</b>」「<b>最適</b>」，
+        而本頁 <code>SET-4</code> 與 <code>SET-5</code> 兩塊<b>各自逐字寫了一次禁令</b>
+        （「不提供「一鍵還原為系統值」之類的動作」／「按鈕標籤為「重新取數」，<b>不含「一鍵」二字</b>」）。
+        <b>本草稿的 app 螢幕一個都沒有</b>（§G 有實測與母體界定）。</li>
+      <li><b>沒有任何寫入 <code>holding</code>／<code>policy</code>／<code>nav</code>／<code>dividend</code> 的按鈕。</b>
+        六種逐種對過：<code>存檔</code>×1 與 <code>清除</code>×1 只動 <code>user_setting</code>；
+        <code>展開</code>×1 不碰資料；<code>取數</code>×3 依 44 只寫「取數回來的列與 <code>fetch_log</code>」——
+        <b>而「取數回來的列寫到哪」就是 ⛔ S-02，本草稿不在畫面上宣稱任何一張表被寫入。</b><br>
+        ⚠️ <b>也就是：第五節那一行元件判準的後半句（「沒有一列的 <code>action_kind</code> 會寫入
+        <code>holding</code>／<code>policy</code>／<code>nav</code>／<code>dividend</code>」）
+        在這一頁<u>畫得過</u>，但那是因為本草稿刻意不畫寫入 —— 44 的字面本身沒有畫得過。</b></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ §E 三個斷點 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§E</span><h2>三個斷點：375 / 768 / 1280</h2>
+    <span class="hint">逐字引 44 第二節第一小節（客戶 2026-09-22 最終版）</span></div>
+
+  <div class="crit">
+    <h4>客戶逐字（44 第二節第一小節收錄的那兩段）</h4>
+    <ul>
+      <li>「斷點改用 375 / 768 / 1280（與今天頁原型一致）。<b>1024 / 640 廢棄，未量過裝置。</b>」</li>
+      <li>「【裁示 2 補充】769–1279 用兩欄。「跟原型一致」指的是<b>斷點值</b>（375/768/1280），<b>不是欄數行為</b>。
+        最終版：- <b>≤768：單欄</b> - <b>769–1279：兩欄</b> - <b>≥1280：三欄</b>」</li>
+    </ul>
+  </div>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>寬度段</th><th>層 1</th><th>層 2（三張核心卡）</th><th>層 3（兩塊）</th><th>層 4（兩塊）</th><th>本頁五張表</th></tr></thead>
+      <tbody>
+        <tr><td class="src">≥ 1280</td><td>單欄滿寬</td><td><b>三欄</b>，三張並排同一列</td>
+          <td><b>三欄</b>；本頁層 3 只有兩塊，兩塊並排，<b>第三欄空著</b></td><td>單欄滿寬，逐塊堆疊</td>
+          <td>表格</td></tr>
+        <tr><td class="src">769 – 1279</td><td>單欄滿寬</td><td><b>兩欄</b>，第三張換到第二列</td>
+          <td><b>兩欄</b>；兩塊並排同一列，<b>沒有第三塊要換列</b></td><td>單欄滿寬，逐塊堆疊</td>
+          <td>表格</td></tr>
+        <tr><td class="src">375 – 768（含 768）</td><td>單欄滿寬</td><td><b>單欄</b>，三張上下堆疊</td>
+          <td><b>單欄</b>，逐塊堆疊</td><td>單欄，逐塊堆疊</td>
+          <td><b>逐列堆疊</b><br><span class="pin">⛔ S-43</span></td></tr>
+        <tr><td class="src">&lt; 375</td><td colspan="4">同上一列（44 逐字：「<b>窄於 375 不另立第四種排法</b>」）</td>
+          <td>同上一列</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    <b>節判準（逐字引 44，本草稿的六顆寬度鈕就是照它排的）</b>：
+    「把視窗寬度依序設成 <code>1280</code>、<code>1279</code>、<code>769</code>、<code>768</code>、<code>375</code>、<code>374</code>，
+    每一次都數層 2 同一列並排的核心卡數，<b>六次得到的數依序是三、二、二、一、一、一</b>；
+    同樣這六個寬度下各自檢查頁面有沒有橫向捲動，<b>六次都沒有</b>；
+    把 <code>1024</code> 與 <code>640</code> 兩個字面值拿去對本檔各頁的排法宣告，<b>兩個值都對不到任何一段</b>。」
+  </p>
+  <p class="note" style="margin-top:8px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    ✓ <b>本草稿實測</b>：上方六顆寬度鈕切過去，<b>鈕右邊那一行會印出「實際渲染 N px · 哪一段生效」</b>，
+    六次的欄數依序就是三、二、二、一、一、一。<b>三段的 <code>@media</code> 與模擬框的
+    <code>@container</code> 逐值相同（≤768／769–1279／≥1280），兩者永遠同時同側。</b><br>
+    ✓ <b><code>1024</code> 與 <code>640</code> 本檔一條 CSS 規則都沒有用到。</b>
+    <b>母體先講清楚，因為這一句最容易寫成假的</b>：判它有沒有被「採用」，母體是
+    <b>全部 <code>@media</code> 與 <code>@container</code> 的條件式</b>。
+    實測那些條件裡出現過的寬度值<b>只有五個</b>：
+    <code>375px</code>／<code>768px</code>／<code>769px</code>／<code>1279px</code>／<code>1280px</code>，
+    <b><code>1024</code> 與 <code>640</code> 在那個母體 0 命中</b>。<br>
+    ⚠️ <b>本組初稿在這裡寫的是「全檔實測 0 命中」——那一句是假的，而且被它自己這一行推翻</b>：
+    這兩個數在本檔的<b>註記層各出現 6 次，全部集中在 6 行上</b>（頁首的斷點來源那一格、
+    客戶逐字那一條、本節那一行節判準、本行、上一行、以及下一段的裝置揭露）——
+    <b>六次全部是在講「44 把它們廢棄了」，沒有一次是在採用它們</b>。
+    ⚠️ <b>這個「6」是把本段自己算進去之後重數的</b>：初稿寫「5 次」，<b>而寫下那一句的動作本身又多加了一次</b>。
+    <b>一個關於本檔自己的計數，要在寫完之後回頭重數，不能在寫之前先寫好。</b>
+    <b>改成「CSS 規則 0 命中」才是真的。</b>
+    <code>47_fund_wireframe_mkt.md</code> 那份線框<b>只借體例，它的斷點值本檔不採用</b>。<br>
+    ⚠️ <b><code>375</code> 是三個斷點值之一，但 44 逐字說「<b>它不是欄數的分界</b>」</b> ——
+    所以本檔 <code>375</code> 那一條 <code>@media</code> <b>只收字級與內距，不動欄數</b>。
+  </p>
+  <p class="note" style="margin-top:8px; border-left:3px solid var(--warn-mark); padding-left:11px">
+    ⚠️ <b>本檔沒有量過任何裝置。</b> 三個值取自 44（客戶 2026-09-22 裁定），
+    而 44 自己也就地登記過那三個值與被廢棄的 1024／640 <b>在「有沒有量過裝置」這一點上處境相同</b>。
+    <b>本檔沒有改變這個狀態。</b>
+  </p>
+</section>
+
+<!-- ══════════════ §F 狀態切換 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§F</span><h2>十二種狀態：切上面的鈕就看得到</h2>
+    <span class="hint">每一種都對得到 44 的某一格 —— 沒有一種是為了湊數發明的</span></div>
+
+  <p class="note" style="margin-bottom:12px">
+    <b>母體先講清楚</b>：44 第三節第五小節八塊的「空狀態」欄，<b>逐格數出 15 個分句</b>
+    （<code>SET-0</code>～<code>SET-6</code> 各 2 句、<code>SET-7</code> 1 句），
+    加上 <code>SET-0</code> 規則欄的<b>三個燈色</b>。<b>下表把這 18 項全部對到某一顆狀態鈕</b>，
+    <b>沒有一項落在外面</b>，也<b>沒有一顆鈕對不到 44</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>#</th><th>狀態鈕</th><th>演到 44 的哪一格</th><th>畫面重點</th><th>撞到的 ⛔</th></tr></thead>
+      <tbody>
+        <tr><td class="src">1</td><td><b>全齊（灰燈）</b></td>
+          <td><code>SET-0</code> 規則欄<b>灰</b>那一句 ＋ 它那一行<b>判準的前半句</b></td>
+          <td>燈灰、文案逐字「資料齊、來源皆可達」；三張核心卡全部出數</td>
+          <td class="src">S-07</td></tr>
+        <tr><td class="src">2</td><td><b>首次載入</b></td>
+          <td><b>一次命中六格</b>：<code>SET-0</code> 空①②、<code>SET-2</code> 空②、<code>SET-3</code> 空①、
+            <code>SET-5</code> 空①、<code>SET-6</code> 空①</td>
+          <td>燈灰；<code>SET-1</code> 比較欄不適用；<code>SET-2</code> 與 <code>SET-6</code> 來源缺；
+            <code>SET-3</code> 十七列全部 <code>⬜ 未設定</code>；<code>SET-5</code> 按鈕停用</td>
+          <td class="src">S-05 S-06 S-15 S-16 S-35</td></tr>
+        <tr><td class="src">3</td><td><b>有逾期（黃燈）</b></td>
+          <td><code>SET-0</code> 規則欄<b>黃</b>那一句（<b>含後半句「而失敗來源為零」</b>）</td>
+          <td>燈黃、文案逐字「有 N 筆資料超過你設定的新鮮度上限」；<b>失敗來源刻意做成零</b></td>
+          <td class="src">S-08</td></tr>
+        <tr><td class="src">4</td><td><b>上限設為 0 日</b></td>
+          <td><code>SET-1</code> 那一行<b>判準的前半句</b>（逐字「三列的比較欄皆為「外」且 <code>SET-0</code> 的 N 等於 3」）</td>
+          <td>三列比較欄皆「外」；燈黃且 <code>N</code> 為 3</td>
+          <td class="src">S-13 S-08</td></tr>
+        <tr><td class="src">5</td><td><b>上限未設</b></td>
+          <td><code>SET-1</code> 空① ＋ <code>SET-0</code> 空① ＋ <code>SET-4</code> 空② 與它那一行<b>判準的前半句</b></td>
+          <td>比較欄 <code>⬜ 不適用：尚未設定上限</code>，<b>前兩欄照出</b>；燈灰「尚未設定新鮮度上限」</td>
+          <td class="src">S-05 S-23</td></tr>
+        <tr><td class="src">6</td><td><b>某類無任何列</b></td>
+          <td><code>SET-1</code> 空②</td>
+          <td>配息那一列<b>三欄皆 <code>⬜</code></b> ＋ <code>資料未備</code> 徽章；另兩列照出</td>
+          <td class="src">S-14</td></tr>
+        <tr><td class="src">7</td><td><b>取數失敗（紅燈）</b></td>
+          <td><code>SET-0</code> 規則欄<b>紅</b>那一句 ＋ 它那一行<b>判準的後半句</b> ＋ <code>SET-2</code> 那一行<b>判準的前半句</b></td>
+          <td>燈紅、文案<b>含失敗層級的字面值</b>；<code>SET-2</code> 該列 <code>failed</code>、訊息欄<b>印原文</b>
+            <br><b>同時有逾期，而紅蓋過黃</b> —— 那正是黃那一條後半句在做的事</td>
+          <td class="src">S-04 S-30</td></tr>
+        <tr><td class="src">8</td><td><b>某層級從無紀錄</b></td>
+          <td><code>SET-2</code> 空①</td>
+          <td>該列<b>三欄皆 <code>⬜</code></b> ＋ <code>資料未備</code> 徽章；其餘層級照出</td>
+          <td class="src">S-01</td></tr>
+        <tr><td class="src">9</td><td><b>取數回空</b></td>
+          <td><code>SET-5</code> 空②</td>
+          <td><code>SET-6</code> 新增一列 <code>outcome</code>＝<code>ok</code>、<code>row_count</code>＝0；
+            <b><code>SET-2</code> 的訊息欄印「回應為空」而那一列的結果欄是 <code>ok</code></b></td>
+          <td class="src">S-03 S-27</td></tr>
+        <tr><td class="src">10</td><td><b>值與型別不符</b></td>
+          <td><code>SET-3</code> 空② ＋ <code>SET-4</code> 空① 與它那一行<b>判準的後半句</b></td>
+          <td><code>SET-3</code> 該列 <code>⬜ 不適用：值與型別不符</code> ＋<b>原始字面值印在同一格第二行</b>；
+            <code>SET-4</code> 該欄下方顯示型別說明、<b>不存檔</b></td>
+          <td class="src">S-25 S-22</td></tr>
+        <tr><td class="src">11</td><td><b>取數中斷</b></td>
+          <td><code>SET-6</code> 空②</td>
+          <td>該列耗時欄 <code>⬜ 不適用：未記錄結束時間</code>，<b>其餘欄照印</b></td>
+          <td class="src">S-42</td></tr>
+        <tr><td class="src">12</td><td><b>未定義欄位</b></td>
+          <td><code>SET-7</code> 空①（本頁唯一一句）</td>
+          <td>那個欄位<b>單獨列出</b>並掛「<b>未定義</b>」徽章</td>
+          <td class="src">S-32 S-37</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px; border-left:3px solid var(--draft); padding-left:11px">
+    ⚠️ <b>一件在對表時發現、但本組<u>不</u>把它算進 ⛔ 的事，寫出來讓客戶自己判</b>：
+    <code>SET-4</code> 空②逐字是「必要鍵被清除 → 依賴該鍵的塊改顯示 <code>⬜ 不適用：尚未設定</code>」，
+    而 <code>SET-1</code> 空①逐字是「<code>⬜ 不適用：<b>尚未設定上限</b></code>」——<b>兩個字面不完全一樣</b>。
+    <b>本組判它不是缺口</b>，理由：<code>SET-4</code> 那一句是<b>通則描述</b>（「依賴該鍵的塊」泛指），
+    而 <code>SET-4</code> 自己那一行判準<b>逐字點名了 <code>SET-1</code> 的完整字面</b>
+    （「清除 <code>set_max_age_days</code>，<code>SET-1</code> 的比較欄改為 <code>⬜ 不適用：尚未設定上限</code>」）——
+    <b>44 自己已經把通則與特例接上了</b>。<b>本草稿照 <code>SET-1</code> 的完整字面印。</b>
+    ⚠️ <b>這是本組的判讀，不是 44 明文，客戶可以推翻。</b>
+  </p>
+
+  <div class="disclose" style="margin-top:18px">
+    <p class="note" style="color:var(--ink); font-weight:600">這一頁<u>演不到</u>的東西，逐項寫出來（不是忘了畫）</p>
+    <ul>
+      <li><b>按鈕的 <code>執行中</code> 態。</b> 第五節逐字「標籤換成進行式文字，按鈕停用，<b>旁邊顯示已耗時秒數</b>」——
+        <b>本草稿是靜態 HTML，沒有真的取數，秒數會是假的</b>。
+        <b>本組選擇不演它</b>（演一個會跑的假秒數，比不演更容易被當真）。<span class="pin">⛔ S-41</span></li>
+      <li><b><code>SET-4</code> 的「存檔寫入失敗」。</b> <b>44 這一塊的空狀態沒有這一句</b>（<code>ALO-1</code>／
+        <code>ALO-3</code>／<code>ALO-4</code> 三塊有）。<b>本組不自己補一個狀態出來。</b><span class="pin">⛔ S-19</span></li>
+      <li><b>層 2 三張卡的 <code>系統錯誤</code> 態。</b> 實測：44 第三節第五小節<b>全段「系統錯誤」四個字 0 次</b>，
+        「業務例外」也 <b>0 次</b>。<b>44 沒有寫本頁哪一塊、在什麼條件下會進這兩態</b>，本組不畫。
+        <span class="pin">⛔ S-30</span><br>
+        ⚠️ <b>不要把這一條讀成「本頁不可能有系統錯誤」</b> —— 第五節那兩張表的定義是全檔共通的，
+        <b>缺的是本頁各塊的觸發條件，不是那兩態本身</b>。</li>
+      <li><b><code>部分缺</code> 空狀態與 <code>推估</code>／<code>修正過</code>／<code>部分缺</code> 三種徽章。</b>
+        實測：44 第三節第五小節全段這三個詞各 <b>0 次</b>。
+        <b>本頁八塊沒有一塊畫線、沒有一塊涵蓋一段區間</b>，所以 <code>部分缺</code> 接不上；
+        <code>推估</code>（<code>nav.is_estimated</code>）與 <code>修正過</code>（<code>market_indicator.is_revised</code>）
+        兩個欄位<b>都不在本頁任何一塊的來源欄裡</b>。<b>本草稿只用 <code>資料未備</code> 與「未定義」兩種徽章。</b></li>
+      <li><b>停用按鈕的滑過提示。</b> 本草稿有畫（<code>SET-5</code> 未選層級時），
+        <b>但那一行原因本草稿是直接印在旁邊</b>，不是只靠滑過 ——
+        第五節逐字「<b>停用時不隱藏</b>」＋「滑過時顯示一行 <code>disabled_reason</code>」，
+        <b>本組兩個都做，直接印是為了在觸控裝置上也看得到。那是本組擬的。</b></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ §G 紅線 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§G</span><h2>紅線：這一頁的落點，與這一頁最容易踩的那一步</h2>
+    <span class="hint">逐字引 44 第一節；本頁的危險點與前四頁不同</span></div>
+
+  <div class="crit">
+    <h4>三條紅線逐字（44 第一節第一小節）</h4>
+    <ul>
+      <li><b>G1†</b>：「嚴禁提供「一鍵再平衡」按鈕，嚴禁預設「最佳配置推薦」。」</li>
+      <li><b>G2†</b>：「所有標的調整與再平衡一律採「偏離提示、客觀對照、情境試算」三種形式之一。」</li>
+      <li><b>G3†</b>：「所有試算參數均由使用者自行輸入；偏離提示僅客觀描述現況與目標差距，<b>不提供具體處置方向</b>。」</li>
+    </ul>
+  </div>
+
+  <p class="note" style="margin-bottom:10px">
+    <b>本頁的落點（逐字引 44 第一節第三小節那張表）</b>：「設定與診斷｜<b><code>G1†</code> <code>G3†</code></b>｜
+    參數由使用者輸入，系統不代填（G3†）；不提供「一鍵還原為系統值」（G1†）」。
+    <b><code>G2†</code> 在這一頁沒有落點</b> —— 那張表本頁那一列<b>只列了兩個標記</b>，
+    而本頁八塊確實沒有任何一塊在做偏離提示、客觀對照或情境試算。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>標記</th><th>落在哪一塊</th><th>44 逐字寫在那一格的話</th></tr></thead>
+      <tbody>
+        <tr><td class="src">G1†</td><td><code>SET-4</code></td>
+          <td>「本塊<b>不提供「一鍵還原為系統值」之類的動作</b> —— 沒有系統值可還原（G1†、G3†）」</td></tr>
+        <tr><td class="src">G1†</td><td><code>SET-5</code></td>
+          <td>「按鈕標籤為「重新取數」，<b>不含「一鍵」二字</b>，<code>G1†</code>」</td></tr>
+        <tr><td class="src">G3†</td><td><code>SET-1</code></td>
+          <td>「<b>上限由使用者輸入（G3†）</b>」</td></tr>
+        <tr><td class="src">G3†</td><td><code>SET-3</code></td>
+          <td>「本卡不顯示任何「內建預設值」欄 —— <b>未設定的鍵沒有值（G3†）</b>」</td></tr>
+        <tr><td class="src">G3†</td><td><code>SET-4</code></td>
+          <td>「沒有系統值可還原（G1†、<b>G3†</b>）」</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gapstrip" style="margin-top:16px">
+    <h3>⚠️ 這一頁的危險點與前四頁不同 —— 它是唯一一個會顯示「系統壞了」的頁</h3>
+    <ol>
+      <li><b>「哪一個來源逾期了」是客觀事實。「你該怎麼辦」不是。</b>
+        <code>SET-1</code> 印的是「最近取得時間／距今日數／內或外」——<b>三欄都是量出來的</b>；
+        <code>SET-2</code> 印的是「<code>ok</code> 或 <code>failed</code>／時間／訊息原文」——<b>三欄都是紀錄裡的</b>。
+        <b>本草稿一句都沒有加「所以你應該……」。</b></li>
+      <li><b>診斷頁最容易長出來的那一句，本草稿刻意不寫</b>：
+        「這個來源壞了，去看看你的網路／去換一個來源／稍後再試」。
+        <b>44 <code>SET-2</code> 自己就寫了這條護欄</b>：「訊息原文照印，<b>不改寫成安撫語句</b>。
+        <b>本卡不對失敗給出處置方向</b>」。<b>本草稿照它做。</b></li>
+      <li><b>但那條護欄有一個 44 沒有處理的破口 —— <code>S-04</code>。</b>
+        「訊息原文照印」與「不給處置方向」在<b>訊息自己帶著處置建議</b>時正面互斥
+        （來源端寫的訊息常常長成「請稍後重試」「請檢查憑證」那樣）。
+        <b>本草稿的示意訊息刻意挑一句不帶處置方向的，但那只是示意值 —— 真實訊息本組控制不了。</b>
+        <b>登記，不替 44 選。</b></li>
+      <li><b>「重新取數」按鈕不是處置方向。</b> 它是 44 逐字定義的一個動作類別（<code>取數</code>），
+        <b>它說的是「這個介面可以再試一次」，不是「你該拿這筆投資怎麼辦」。</b>
+        <b>本草稿把它當按鈕畫，不在它旁邊寫任何一句建議。</b></li>
+    </ol>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:18px 0 8px">§1.2 呈現層禁令，逐條對照本頁</h3>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>禁令（逐字）</th><th>本頁怎麼樣</th></tr></thead>
+      <tbody>
+        <tr><td><b>禁方向詞</b>：「介面文案不出現買進、賣出、加碼、減碼、調升、調降、汰弱留強、逢低、停利、停損」</td>
+          <td><b>app 螢幕十個詞逐詞掃過，10 個全部 0 命中。</b>
+            <b>母體</b>：深色螢幕的靜態標記 ＋ JS 裡 <code>APP-TEXT-START</code> 到 <code>APP-TEXT-END</code>
+            之間那一段（<b>391 行／23,311 字元</b>）—— 也就是<b>會被畫進深色螢幕的每一個字</b>。<br>
+            ⚠️ <b>同一組字在註記層（母體之外）合計出現 14 次</b>
+            （買進 1、賣出 1、加碼 2、減碼 2、調升 2、調降 2、汰弱留強 1、逢低 1、停利 1、停損 1），
+            那是因為本檔<b>逐字引了 44 的禁令條文</b>。
+            <b>兩個數都報出來，不把母體縮到剛好 0 為止。</b></td></tr>
+        <tr><td><b>禁箭頭</b>：「介面不用 <code>↑</code> <code>↓</code> <code>▲</code> <code>▼</code> 標示一個標的「該往哪走」」</td>
+          <td><b>四個字元在 app 螢幕 0 命中</b>（註記層各 1 次，就是上一格那一行逐字引 44 的禁令）。<br>
+            ⚠️ <b>但有一件事要主動講，不能讓它被當成規避</b>：展開區的三角是
+            <code>U+25B8</code>（▸）與 <code>U+25BE</code>（▾），<b>是另外兩個字元，不在禁的那四個裡</b>。
+            <b>而且它標的是「這一區收合／展開」，不掛在任何一個數值旁邊，也不指任何標的。</b>
+            <b>本組主動寫出來，讓客戶自己判要不要一起禁。</b></td></tr>
+        <tr><td><b>禁顏色暗示方向</b>：「顏色只映射<b>資料狀態</b>（齊／缺／不適用／失敗）與<b>新鮮度</b>，不映射投資好壞」</td>
+          <td><b>本頁沒有任何一個投資標的的數</b> —— 畫面上全部是時間、日數、設定值、紀錄與欄位名。
+            灰／黃／紅三色<b>逐處只掛在資料狀態上</b>：灰＝資料未備、黃＝不適用、紅＝失敗。
+            <b>切第 3 顆與第 7 顆，燈色變了而三張卡的數字沒有任何一個因為顏色而改寫。</b></td></tr>
+        <tr><td><b>禁排名為推薦</b>：「清單可以依使用者自選的欄位排序，排序結果不加冠「精選」「推薦」「最佳」任何字樣，<b>也不預設排序欄位</b>」</td>
+          <td><b>本頁五張表沒有一張是排名，也沒有一張讓使用者選排序欄位。</b>
+            排序方式全部是 44 逐字訂的：<code>SET-3</code>「依 <code>setting_key</code> 排列」、
+            <code>SET-6</code>「依 <code>started_at</code> 由新到舊」；
+            <code>SET-1</code> 三列是固定的三類；<code>SET-2</code> 一列一個層級；<code>SET-7</code> 一列一個欄位。
+            ⚠️ <b>「不預設排序欄位」那半句在這一頁跑不過</b> —— 44 自己就替兩張表指定了排序。
+            <b>本組判它不是違規：那半句的射程是「使用者自選排序的清單」，而這五張表都不是。
+            這是本組的判讀，客戶可以推翻。</b></td></tr>
+        <tr><td><b>禁輸出</b>：「不輸出買賣指示、不輸出目標價、不輸出最佳配置、不輸出預期報酬」</td>
+          <td><b>本頁沒有任何一個金額、價格、報酬率或配置比重</b> —— 那四種東西在這一頁<b>連欄位都沒有</b>。
+            實測：本頁八塊的來源欄<b>沒有一格命中 <code>nav_orig_ccy</code>／<code>cost_twd</code>／
+            <code>div_per_unit_orig_ccy</code>／<code>value_num</code>／<code>weight_ratio</code></b>。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gapstrip" style="margin-top:16px; border-color:var(--warn-mark); background:var(--sheet-2)">
+    <h3 style="color:var(--warn-mark)">⚠️ <code>G1†</code> 四個詞：三個 0 命中，一個在 app 螢幕裡命中 1 次 —— 據實寫，不藏</h3>
+    <ol>
+      <li><b>實測</b>：在上面那個 app 螢幕母體裡，「<b>最佳</b>」「<b>推薦</b>」「<b>最適</b>」各 <b>0 次</b>，
+        「<b>一鍵</b>」<b>1 次</b>。</li>
+      <li><b>那一次在哪</b>：<code>SET-5</code> 那一塊的說明區裡，
+        <b>逐字引 44 自己的禁令</b>——「按鈕標籤為「重新取數」，<b>不含「一鍵」二字</b>，<code>G1†</code>」。
+        <b>它是 44 的禁令文字，不是一句 UI 文案，也不是任何一顆按鈕的標籤。</b></li>
+      <li><b><code>G1†</code> 那一行節判準的母體不是「全部文案」，是「全部按鈕的標籤」</b>（逐字：
+        「把介面上<b>全部按鈕的標籤</b>列成一張表，表裡沒有一列的標籤含「一鍵」「最佳」「推薦」「最適」四個詞」）。
+        <b>本草稿 app 螢幕的按鈕標籤逐顆列出來就三種：「重新取數」「清除」「存檔」——四個詞 0 命中。</b>
+        （展開三角沒有文字標籤。）</li>
+      <li><b>本組選擇不把那句引文拿掉</b>，理由：拿掉就等於把 44 自己的護欄從畫面上抹掉，
+        <b>而客戶要看的正是「這一頁怎麼守住紅線」。</b>
+        <b>代價是這個數不是 0，所以就地寫出來。</b></li>
+      <li>⚠️ <b>附帶一個掃描方法上的坑，寫給下一個人</b>：
+        <b>拿「一鍵」去掃 44 全檔是無效的檢查</b> —— 44 <code>SET-4</code> 規則欄逐字寫著
+        「逐鍵編輯，<b>一鍵一個輸入欄</b>」，那裡的「一鍵」是<b>「一個鍵（<code>setting_key</code>）」</b>的意思，
+        <b>與 <code>G1†</code> 禁的那個「一鍵（one click）」是同形不同義</b>。
+        <b>這不是 44 的錯 ——<code>G1†</code> 的射程本來就只到按鈕標籤。</b>
+        <b>錯的會是「拿全文掃描當合規證明」這個做法。</b></li>
+    </ol>
+  </div>
+
+  <p class="note" style="margin-top:12px; border-left:3px solid var(--warn-mark); padding-left:11px">
+    ⚠️ <b>字面掃描是字面，不是語意。</b> 一句話可以一個禁詞都不含、卻仍然在暗示方向。
+    本組逐句讀過寫進 app 螢幕的每一句文案，<b>但「沒有第四句在暗示方向」這種話本檔不宣稱</b>
+    —— 那取決於有沒有漏看。
+  </p>
+</section>
+
+<!-- ══════════════ §H 本組擬定 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§H</span><h2>本組擬定的文案與畫法（逐處列出）</h2>
+    <span class="hint">44 沒有逐字規定、由本組挑一個畫出來的每一處</span></div>
+
+  <p class="note" style="margin-bottom:10px">
+    <b>下表 24 列，是本草稿裡每一處「44 沒寫、本組挑了一個」的地方。</b>
+    <b>母體是「畫這八塊時被迫做決定的地方」</b> —— 與 §C 同一份母體，<b>差別在 §C 記「撞到什麼」、本表記「那我畫成什麼」</b>。
+    ⚠️ <b>「沒有第 25 列」這句話本檔不宣稱</b>：它取決於有沒有漏看，<b>而本組只有一雙眼睛</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>#</th><th>在哪</th><th>本組挑了什麼</th><th>對應 ⛔</th></tr></thead>
+      <tbody>
+        <tr><td class="src">H-01</td><td><code>SET-0</code></td><td>三句灰態同時命中時，<b>印「尚無取數紀錄」，並在下一行補印另一句</b></td><td class="src">S-05</td></tr>
+        <tr><td class="src">H-02</td><td><code>SET-0</code></td><td>一筆紀錄都沒有時<b>不印「資料齊、來源皆可達」</b>（照空狀態，不照規則第一句）</td><td class="src">S-06</td></tr>
+        <tr><td class="src">H-03</td><td><code>SET-0</code></td><td>燈下方那一行<b>寫明 <code>N</code> 指的是哪幾類</b>（因為「筆」與「類」對不上）</td><td class="src">S-08</td></tr>
+        <tr><td class="src">H-04</td><td><code>SET-1</code></td><td><b>不畫觀測日欄</b>（來源欄宣告了、規則欄用不到，而且對不到唯一的一欄）</td><td class="src">S-09 S-10</td></tr>
+        <tr><td class="src">H-05</td><td><code>SET-1</code></td><td>表頭的<b>時區字面值</b>（示意值，44 沒有定義當地時區是哪一個）</td><td class="src">S-12</td></tr>
+        <tr><td class="src">H-06</td><td><code>SET-1</code></td><td>第 4 顆的三列距今日數<b>都做成大於零</b>，繞開「大於 vs 大於等於」的邊界</td><td class="src">S-13</td></tr>
+        <tr><td class="src">H-07</td><td><code>SET-1</code>／<code>SET-4</code></td><td>上限的<b>輸入欄放在 <code>SET-4</code></b>（層 3，預設收合）</td><td class="src">S-35</td></tr>
+        <tr><td class="src">H-08</td><td><code>SET-1</code></td><td><b>不掛「重新取數」按鈕</b>（它的空狀態只寫徽章、沒寫種類名，模板整列不適用）</td><td class="src">S-28</td></tr>
+        <tr><td class="src">H-09</td><td><code>SET-2</code>／<code>SET-5</code></td><td><b>四個來源層級名</b>（全部示意值；44 沒有定義這份清單）</td><td class="src">S-01</td></tr>
+        <tr><td class="src">H-10</td><td><code>SET-2</code></td><td>示意失敗訊息<b>刻意挑一句不含處置方向的</b>，並在卡上寫明本卡不加處置方向</td><td class="src">S-04</td></tr>
+        <tr><td class="src">H-11</td><td><code>SET-2</code></td><td><code>ok</code> 那一列的訊息欄<b>印一個中性破折號佔位</b></td><td class="src">S-27</td></tr>
+        <tr><td class="src">H-12</td><td><code>SET-2</code>／<code>SET-6</code></td><td><b>各掛一枚「重新取數」</b>（照第五節 <code>來源缺</code> 模板），旁邊寫明它與 <code>SET-5</code> 同一件事</td><td class="src">S-28</td></tr>
+        <tr><td class="src">H-13</td><td><code>SET-2</code></td><td><b><code>failed</code> 列畫成卡片內容，不畫成卡片的 <code>系統錯誤</code> 狀態</b></td><td class="src">S-30</td></tr>
+        <tr><td class="src">H-14</td><td><code>SET-3</code></td><td>照讀法（乙）畫：<b>十七列都在、目前值欄皆 <code>⬜ 未設定</code></b>（不畫成零列）；<b>每一列的型別也是本組配的</b></td><td class="src">S-15 S-16 S-44</td></tr>
+        <tr><td class="src">H-15</td><td><code>SET-3</code></td><td><b>原始字面值印在目前值欄的第二行</b>、等寬字（因為判準說沒有第五欄）</td><td class="src">S-25</td></tr>
+        <tr><td class="src">H-16</td><td><code>SET-3</code></td><td><code>updated_at</code> 為空時<b>借 44 <code>ALO-7</code> 那一格的字面</b> <code>⬜ 資料未備：尚未設定過</code></td><td class="src">S-26</td></tr>
+        <tr><td class="src">H-17</td><td><code>SET-4</code></td><td>存檔鈕標籤「<b>存檔</b>」、清除鈕標籤「<b>清除</b>」（照第五節「標籤為動作本身」）</td><td class="src">S-18</td></tr>
+        <tr><td class="src">H-18</td><td><code>SET-4</code></td><td><code>list</code> 與 <code>rules</code> 畫成<b>多行文字框</b>，其餘四種畫成單行輸入欄</td><td class="src">S-22</td></tr>
+        <tr><td class="src">H-19</td><td><code>SET-4</code></td><td><b>不標任何一個鍵為「必要」</b>，只在清除時照實寫出哪幾塊會改顯示</td><td class="src">S-23</td></tr>
+        <tr><td class="src">H-20</td><td><code>SET-4</code></td><td>每一列下方那一行<b>影響範圍，照 44 各塊「來源」欄的宣告列出</b>（同 <code>SET-7</code> 的母體與射程）</td><td class="src">S-24</td></tr>
+        <tr><td class="src">H-21</td><td><code>SET-5</code></td><td>停用原因<b>直接印在按鈕旁邊</b>，不只靠滑過（觸控裝置滑不到）</td><td class="src">—</td></tr>
+        <tr><td class="src">H-22</td><td><code>SET-6</code></td><td><code>set_log_keep_rows</code> 未設定時<b>全部列出、不截斷</b>，並在表尾寫明；耗時<b>小數一位</b>、欄名寫「耗時」</td><td class="src">S-36 S-42</td></tr>
+        <tr><td class="src">H-23</td><td><code>SET-7</code></td><td>示意列<b>兩種來源欄寫法各畫一列</b>；<b>只畫幾列，不畫五十九列</b></td><td class="src">S-37</td></tr>
+        <tr><td class="src">H-24</td><td>本頁五張表</td><td>≤768 時<b>一律改成逐列堆疊</b>；四狀態<b>逐格套</b>，<b>不套「一張卡最多兩個主值」那條上限</b></td><td class="src">S-43 S-39</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:20px 0 8px">實測：本檔引用的幾個數字是怎麼來的（指令與原始輸出照抄）</h3>
+
+  <div class="card" style="margin-bottom:12px">
+    <p class="note"><b>一｜十七個 <code>setting_key</code>，其中一個沒有任何一塊在「來源」欄宣告過（⛔ S-16／S-17）</b></p>
+    <pre class="tiny mono" style="margin:8px 0 0; overflow-x:auto; white-space:pre-wrap; color:var(--ink-2)">$ grep '^| \*\*來源\*\* |' docs/v2/44_fund_ui_ssot.md \
+    | grep -oE '`(mkt|hld|exp|alo|set)_[a-z_]+`' | sort -u | wc -l
+16
+
+$ grep -oE '`(mkt|hld|exp|alo|set)_[a-z_]+`' docs/v2/44_fund_ui_ssot.md | sort -u | wc -l
+17
+
+$ comm -13 &lt;(前者) &lt;(後者)
+`set_log_keep_rows`</pre>
+    <p class="tiny" style="margin-top:6px">
+      ⚠️ <b>這個字表的射程要寫明</b>：它抓的是「<code>mkt_</code>／<code>hld_</code>／<code>exp_</code>／
+      <code>alo_</code>／<code>set_</code> 開頭、包在反引號裡」的字面。
+      <b>一個不照這五個前綴命名的鍵，這條指令結構上掃不到。</b>
+      <b>「44 裡沒有第十八個鍵」這句話本檔不宣稱。</b>
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <p class="note"><b>二｜九塊 <code>存檔</code> 類裡，只有 <code>SET-4</code> 的來源欄沒有寫入對象（⛔ S-18）</b></p>
+    <pre class="tiny mono" style="margin:8px 0 0; overflow-x:auto; white-space:pre-wrap; color:var(--ink-2)">$ for b in EXP-5 SET-4 MKT-4 HLD-4 EXP-1 EXP-4 ALO-1 ALO-3 ALO-4; do
+    n=$(grep -A6 "^#### 塊 $b｜" docs/v2/44_fund_ui_ssot.md \
+        | grep '^| \*\*來源\*\* |' | head -1 | grep -c '寫入對象')
+    printf '%-7s 寫入對象宣告：%s\n' "$b" "$n"
+  done
+EXP-5   寫入對象宣告：1
+SET-4   寫入對象宣告：0
+MKT-4   寫入對象宣告：1
+HLD-4   寫入對象宣告：1
+EXP-1   寫入對象宣告：1
+EXP-4   寫入對象宣告：1
+ALO-1   寫入對象宣告：1
+ALO-3   寫入對象宣告：1
+ALO-4   寫入對象宣告：1</pre>
+    <p class="tiny" style="margin-top:6px">
+      <b>母體封閉、可以逐塊讀完</b>：那九塊<b>不是本組挑的</b>，是 44 第五節第六輪那一段
+      <b>逐字列出來的九塊</b>（「到第六輪為止共<b>九塊</b>，逐塊寫出來：……」）。<b>九塊全部讀了。</b>
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <p class="note"><b>三｜第四節八張表合計 59 個欄位（<code>SET-7</code> 的列數，⛔ S-32）</b></p>
+    <pre class="tiny mono" style="margin:8px 0 0; overflow-x:auto; white-space:pre-wrap; color:var(--ink-2)">holding: 11   nav: 7   dividend: 7   policy: 8
+market_indicator: 8   user_setting: 4   fetch_log: 7   fund_profile: 7
+TOTAL COLUMNS = 59   TABLES = 8</pre>
+    <p class="tiny" style="margin-top:6px">
+      <b>方法</b>：切出第四節各張表的起訖，逐張把欄位列（一列一個反引號包住的欄名）數出來。
+      <b>八張表的數與 44 第七節第一小節計數表的「資料表合計 8」對得上。</b>
+    </p>
+  </div>
+
+  <div class="card">
+    <p class="note"><b>四｜§C 那三個分類數是數出來的，不是憑印象</b></p>
+    <pre class="tiny mono" style="margin:8px 0 0; overflow-x:auto; white-space:pre-wrap; color:var(--ink-2)">rows: 44
+Counter({'缺口': 30, '互斥': 10, '射程': 4})
+missing: []   dupes: []
+互斥 ['S-01','S-02','S-03','S-04','S-06','S-15','S-18','S-21','S-29','S-33']
+射程 ['S-17','S-34','S-38','S-39']</pre>
+    <p class="tiny" style="margin-top:6px">
+      <b>方法</b>：把本檔 §C 那張表逐列切出來，讀每一列的「類型」欄，數出三種各幾筆，
+      並檢查 <code>S-01</code>~<code>S-44</code> <b>有沒有缺號、有沒有重號</b>（兩者都是空的）。
+      <b>本組初稿憑印象寫的是「互斥 11／缺口 26／射程 6」，三個都不對。</b>
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════ §J WCAG ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§J</span><h2>WCAG 2.2 AA：對比逐組算過、狀態配圖示＋文字、多幣別</h2>
+    <span class="hint">客戶 2026-09-22 設計引導三條，逐條落地與逐組數字</span></div>
+
+  <div class="crit">
+    <h4>客戶逐字（本節的法源，已寫進 44 第五節當五類元件的共通硬要求）</h4>
+    <ul>
+      <li>「一般文字 ≥ 4.5:1；大文字 ≥ 3:1；<b>非文字 UI 元件 ≥ 3:1</b>」</li>
+      <li>「<b>狀態色一律配圖示＋文字，不靠顏色單獨辨識</b>」</li>
+      <li>「多幣別：<b>逐檔標明幣別，同卡不混不同幣別做平均</b>」</li>
+    </ul>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:16px 0 6px">一｜對比：逐組算出來的值</h3>
+  <p class="note" style="margin-bottom:10px">
+    對比值以 <b>WCAG 2.x 的相對亮度公式</b>算出（<b>不是目測、也不是工具截圖</b>）：
+    每個通道先做 sRGB 反伽瑪，取 <code>0.2126R + 0.7152G + 0.0722B</code>，
+    再算 <code>(L亮 + 0.05) / (L暗 + 0.05)</code>。算的是 CSS 裡宣告的色碼兩兩之間的比值。
+    <b>客戶指定的三個主色一個字都沒動</b>：深色底 <code>#0e1117</code>、青色 <code>#0f6b6c</code> 與 <code>#5fd3d0</code>。
+  </p>
+  <p class="note" style="margin-bottom:10px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    <b>總帳（三層各自算：淺色註記層、深色註記層、深色 app 螢幕）</b>：
+    <b>合計 86 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>63 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>23 組</b>，
+    <b>未通過 0 組</b>。<br>
+    <b>全檔最低的那一組是 <code>#5f6b78</code>（弱文字）在 <code>#e6eaf0</code>（淺色圖紙底）上＝ <b>4.50</b></b>
+    —— <b>剛好踩在門檻上，不是有餘裕</b>。本組就地寫出來，因為「剛好過」與「輕鬆過」不是同一回事。<br>
+    另有<b>純裝飾分隔線不計入</b>（卡框、表列線、層標橫線、行內碼框，色碼
+    <code>#30363d</code>／<code>#c3ccd8</code>／<code>#dbe2ea</code>／<code>#262c34</code>）——
+    <b>本組判它們不是「非文字 UI 元件」，理由寫在下表最後一列，那是本組的分類判斷、客戶沒有裁、可推翻</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>層</th><th>組</th><th>組數</th><th>門檻</th><th>比值範圍</th><th>最低那一組是誰</th></tr></thead>
+      <tbody>
+        <tr><td class="src">淺色註記層</td><td>一般文字（主文字／次文字／弱文字／青／⛔ 色／✓／⚠／按下的鈕字，各對圖紙底、註記卡底、次層底、色塊底）</td>
+          <td class="jd">21</td><td class="jd">4.5</td><td class="jd">4.50 – 17.13</td>
+          <td><code>#5f6b78</code> 在 <code>#e6eaf0</code> ＝ <b>4.50</b>　<span class="badge wn">剛好踩線</span></td></tr>
+        <tr><td class="src">淺色註記層</td><td>非文字 UI 元件（可操作控制項的邊界、青色虛線框、⛔／✓／⚠ 徽章的邊）</td>
+          <td class="jd">8</td><td class="jd">3</td><td class="jd">3.06 – 7.50</td>
+          <td><code>#7b8694</code> 在 <code>#e6eaf0</code> ＝ <b>3.06</b></td></tr>
+        <tr><td class="src">深色註記層</td><td>同上八種前景，對深色的圖紙底／卡底／次層底／色塊底</td>
+          <td class="jd">21</td><td class="jd">4.5</td><td class="jd">5.21 – 15.99</td>
+          <td><code>#8b949e</code> 在 <code>#1b222b</code> ＝ <b>5.21</b></td></tr>
+        <tr><td class="src">深色註記層</td><td>同上八種元件邊界</td>
+          <td class="jd">8</td><td class="jd">3</td><td class="jd">3.46 – 10.54</td>
+          <td><code>#6b7682</code> 在 <code>#1b222b</code> ＝ <b>3.46</b></td></tr>
+        <tr><td class="src">深色 app 螢幕</td><td>主文字／次文字／弱文字／輸入提示字／黃（不適用）／紅（失敗）／灰（資料未備），
+          各對 app 底 <code>#0e1117</code>、卡底 <code>#161b22</code>、卡內次層 <code>#11161d</code>、黃底、紅底</td>
+          <td class="jd">21</td><td class="jd">4.5</td><td class="jd">4.63 – 15.99</td>
+          <td><code>#7d858e</code>（輸入提示字）在 <code>#161b22</code> ＝ <b>4.63</b></td></tr>
+        <tr><td class="src">深色 app 螢幕</td><td>非文字 UI 元件（輸入欄與按鈕的邊界 <code>#6b7682</code>、
+          黃色狀態容器的邊 <code>#e3b341</code>、紅色狀態容器的邊 <code>#ff7b72</code>）</td>
+          <td class="jd">7</td><td class="jd">3</td><td class="jd">3.74 – 8.89</td>
+          <td><code>#6b7682</code> 在 <code>#161b22</code> ＝ <b>3.74</b></td></tr>
+        <tr><td class="src">（不計入）</td><td><b>純裝飾分隔線</b>：卡框、表列線、層標橫線、行內碼框</td>
+          <td class="jd">—</td><td class="jd">—</td><td class="jd">—</td>
+          <td><b>本組判它們不是「非文字 UI 元件」</b>：它們<b>不承載任何資訊、不劃出任何可操作區域的邊界</b>，
+            拿掉之後畫面仍然讀得懂（每一塊都有自己的標題與背景色）。
+            <b>WCAG 2.2 的 1.4.11 只拘束「理解內容或辨識控制項所必需」的非文字元素。</b>
+            ⚠️ <b>這是本組的分類判斷，客戶沒有裁，可推翻</b> —— 換一個分類，「未通過 0 組」這個結論就會變。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:20px 0 6px">二｜狀態不靠顏色單獨辨識：逐種列出圖示與文字</h3>
+  <p class="note" style="margin-bottom:10px">
+    <b>本頁用到的狀態<u>只有</u>下列這些</b>（母體：44 第三節第五小節八塊的空狀態欄 ＋ <code>SET-0</code> 規則欄的三個燈色，
+    實測本頁全段「系統錯誤」「業務例外」「部分缺」「推估」「修正過」各 <b>0 次</b>）。
+    <b>逐種都有圖示＋文字，拿掉顏色仍然分得出來。</b>
+  </p>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>狀態</th><th>圖示</th><th>文字（逐字出自 44）</th><th>顏色</th><th>拿掉顏色還分得出來嗎</th></tr></thead>
+      <tbody>
+        <tr><td class="src">結論燈 · 灰</td><td class="jd">⬜</td><td>「資料齊、來源皆可達」／「尚未設定新鮮度上限」／「尚無取數紀錄」</td>
+          <td class="jd">中性</td><td class="jd"><b>分得出來</b>（圖示＋三句不同的文字＋燈旁的狀態字）</td></tr>
+        <tr><td class="src">結論燈 · 黃</td><td class="jd">⚠</td><td>「有 N 筆資料超過你設定的新鮮度上限」</td>
+          <td class="jd">黃</td><td class="jd"><b>分得出來</b></td></tr>
+        <tr><td class="src">結論燈 · 紅</td><td class="jd">⛔</td><td>「（列出失敗的來源層級）」</td>
+          <td class="jd">紅</td><td class="jd"><b>分得出來</b></td></tr>
+        <tr><td class="src">資料未備</td><td class="jd">⬜</td><td><code>⬜</code> ＋ <code>資料未備</code> 徽章（<code>SET-1</code>／<code>SET-2</code> 逐字）</td>
+          <td class="jd">灰</td><td class="jd"><b>分得出來</b>（格子裡是 <code>⬜</code>，不是空白也不是 0）</td></tr>
+        <tr><td class="src">不適用</td><td class="jd">⬜</td><td><code>⬜ 不適用：尚未設定上限</code>／<code>⬜ 不適用：值與型別不符</code>／<code>⬜ 不適用：未記錄結束時間</code></td>
+          <td class="jd">黃</td><td class="jd"><b>分得出來</b>（每一種後面都接著一句話原因）</td></tr>
+        <tr><td class="src">未設定</td><td class="jd">⬜</td><td><code>⬜ 未設定</code>（<code>SET-3</code> 逐字）</td>
+          <td class="jd">灰</td><td class="jd"><b>分得出來</b>　<span class="pin">⛔ S-20</span>（這五個字不在第五節那四個模板裡）</td></tr>
+        <tr><td class="src">未定義</td><td class="jd">⬜</td><td>「<b>未定義</b>」徽章（<code>SET-7</code> 逐字）</td>
+          <td class="jd">黃</td><td class="jd"><b>分得出來</b></td></tr>
+        <tr><td class="src">取數結果</td><td class="jd">—</td><td><code>ok</code> ／ <code>failed</code>（<code>SET-2</code> 與 <code>fetch_log.outcome</code> 逐字）</td>
+          <td class="jd">中性／紅</td><td class="jd"><b>分得出來</b>（兩個字面本身就是內容，不是只靠顏色）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:20px 0 6px">三｜多幣別：<u>本頁沒有</u>，據實寫，不硬湊</h3>
+  <p class="note" style="border-left:3px solid var(--ok-mark); padding-left:11px">
+    <b>本頁畫面上沒有任何一個帶幣別的數值，所以「逐檔標明幣別」與「同卡不混不同幣別做平均」
+    在這一頁<u>沒有適用對象</u>。</b><br>
+    <b>實測</b>：44 第三節第五小節全段「幣別」兩個字 <b>0 次</b>、<code>ccy</code> 三個字 <b>0 次</b>；
+    本頁八塊的來源欄<b>沒有一格命中 <code>holding.ccy</code>／<code>nav.ccy</code>／
+    <code>dividend.ccy</code>／<code>fund_profile.ccy</code>／<code>policy.ccy</code> 任何一個</b>。
+    畫面上全部是<b>時間、日數、設定值、紀錄、欄位名與塊代號</b>。<br>
+    ⚠️ <b>一個邊界案例要講清楚，免得被當成漏掉</b>：<code>SET-7</code> 那張欄位對照表<b>會列出那五個
+    <code>ccy</code> 欄位的<u>名字</u></b>（它列的是第四節八張表的全部 59 個欄位）——
+    <b>但那是欄位名，不是幣別值</b>：那一列印的是「<code>holding.ccy</code>」這個字串，
+    <b>不是任何一檔基金的幣別，更不是任何一個數</b>。<b>所以它不觸發這一條。</b><br>
+    ⚠️ <b>這一條在這一頁是「沒有適用對象」，不是「已符合」。</b>
+    日後若有任何一塊被加進金額或淨值，<b>這一條當場適用</b>。
+  </p>
+</section>
+
+<!-- ══════════════ §I 本檔沒有做的事 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§I</span><h2>本檔沒有做的事（誠實揭露，不是免責）</h2></div>
+  <div class="disclose">
+    <ul>
+      <li><b>本檔是單組產出，沒有第二組獨立複驗。</b> §C 的 44 筆、§D 的歸類、§F 的 18 項對映、
+        §H 的 24 列、§J 的分類判斷，<b>全部是本組一組人讀出來的</b>。</li>
+      <li><b>本檔沒有量過任何裝置。</b> 三個斷點值取自 44（客戶 2026-09-22 裁定），
+        44 自己也逐字登記過那三個值「沒有量過任何真機斷點」。<b>本檔沒有改變這個狀態。</b></li>
+      <li><b>§J 的對比值是算出來的，不是量出來的。</b> 算的是 CSS 宣告的色碼；
+        <b>半透明疊色、抗鋸齒、螢幕色彩管理都沒有算進去</b>，也沒有在任何真實裝置或輔具上跑過。
+        <b>「未通過 0 組」這個結論繫於本組對「純裝飾分隔線不算非文字 UI 元件」的分類判斷 —— 換一個分類，結論就變。</b>
+        <b>而且最低那一組是 4.50，剛好踩在門檻上。</b></li>
+      <li><b>本檔沒有讀任何既有程式，也沒有看任何舊版畫面。</b>
+        本輪沒有讀任何 Python 原始碼、沒有碰任何測試、沒有引用舊 repo 的任何模組或畫面。
+        <b>代價據實寫明</b>：本檔因此不知道任何實作上的限制，這些畫法可能撞到本組看不到的東西。</li>
+      <li><b>本檔只畫設定與診斷一頁。</b> 其餘四頁一個字也沒有畫。
+        跨頁的一致性（結論燈在五頁長不長一樣、頁籤怎麼切換）本檔<b>沒有查</b>。
+        <b>與前三份 HTML 原型是否逐處對齊，本檔也沒有逐處比對</b> —— 只借了它們的 token 與分節體例。</li>
+      <li><b>本檔讀了 44 的哪幾節，據實寫出來。</b>
+        第零節第三小節（<code>†</code> 的定義）、第一節全節、第二節全節含第一小節斷點、
+        第三節第零小節、<b>第三節第五小節全段（逐行讀完）</b>、
+        第四節全節（八張表）、第五節全節、第七節第一小節／第二小節／第三小節。
+        <b>其餘四頁的塊（<code>MKT-*</code>／<code>HLD-*</code>／<code>EXP-*</code>／<code>ALO-*</code>）
+        只讀了與本頁有交叉引用或本檔有引用的那幾處</b>（五枚結論燈的規則欄、
+        第三節第三小節那張五頁鏈狀依賴表、九塊 <code>存檔</code> 類的來源欄、
+        <code>ALO-7</code> 與 <code>ALO-1</code> 的重疊登記、<code>ALO-1</code> 的空狀態），
+        <b>沒有逐塊讀。</b></li>
+      <li><b>本檔沒有驗證「44 的設定與診斷那一節與其餘四頁不衝突」。</b>
+        本組只把全檔含 <code>SET-</code> 四個字的行逐一讀過，
+        <b>那只抓得到「別處點名本頁」的情形，抓不到「語意相同但沒點名」的情形</b>。</li>
+      <li><b>§C 的 44 筆不是對 44 的窮舉稽核。</b> 母體是「本組畫這八塊時被迫做決定的地方」，
+        不是「44 第三節第五小節的每一句話」。<b>撞不到的缺口本檔看不到，也不宣稱沒有。</b></li>
+      <li><b>§H 的 24 列，本組<u>不</u>宣稱它涵蓋了本草稿所有「本組擬的」東西。</b>
+        「沒有第 25 列」這句話本檔<b>不宣稱</b>。</li>
+      <li><b>§G 的禁詞掃描是字面，不是語意。</b> 一句話可以一個禁詞都不含、卻仍然在暗示方向。
+        本組逐句讀過寫進 app 螢幕的每一句文案，
+        <b>但「沒有第四句在暗示方向」這種話本檔不宣稱</b> —— 那取決於有沒有漏看。</li>
+      <li><b>§H 那四段實測，射程各自寫在它下面。</b> 尤其第一段那個字表只抓五個前綴，
+        <b>「44 裡沒有第十八個 <code>setting_key</code>」這句話本檔不宣稱。</b></li>
+      <li><b>本檔沒有替 44 補任何一個缺口。</b> 撞到的四十四處一律就地標 ⛔、照最保守的畫法畫。
+        <b>S-01</b>（層級清單）、<b>S-05</b>（三種灰態沒優先序）、<b>S-15</b>（全表為空怎麼讀）、
+        <b>S-30</b>（<code>failed</code> 列算內容還是算狀態）、<b>S-39</b>（表格卡沒有「主值」）、
+        <b>S-43</b>（窄螢幕怎麼塌）六處<b>本組被迫挑了一邊</b>（不然畫不出來），
+        <b>六處都已標明是本組挑的，逐處列在 §H</b>。</li>
+      <li><b>本檔沒有動 44 一個位元組。</b> 44 已凍結（客戶規則），撞到的一律只登記。
+        <b>收工前後各量一次 <code>md5sum</code>，兩次都是 <code>514b518d4c59b6ed1db433b645a8f437</code>。</b>
+        <b>也沒有動 <code>47_fund_wireframe_mkt.md</code>、沒有動前三份 HTML 原型、
+        沒有碰任何 Python 檔、沒有碰任何測試、沒有 <code>git add</code>、沒有 commit、沒有 push。</b></li>
+    </ul>
+  </div>
+</section>
+
+<div class="foot">
+  <b>設定與診斷頁線框原型</b> · my-Fund-dashboard · 2026-09-22 ·
+  規格：<code>docs/v2/44_fund_ui_ssot.md</code>（2745 行 · md5 <code>514b518d4c59b6ed1db433b645a8f437</code>）·
+  <b>本檔刻意不進版本控制</b>（客戶逐字：「HTML 草稿不准 commit，先給客戶看」）·
+  單組產出，沒有第二組獨立複驗。
+</div>
+
+</div><!-- /.wrap -->
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════
+   設定與診斷頁 · 線框渲染
+   —— 所有文案分兩種：加「」的是 44 逐字，其餘是本組擬的（逐處見 §H）。
+   —— 所有會隨資料變的數都帶（示意）；44 逐字訂死的常數與枚舉不帶（見 §A）。
+   ══════════════════════════════════════════════════════════════════ */
+
+var ui = { state:"ok", bp:1280, theme:"system" };
+
+/* ── 來源層級：44 沒有定義這份清單（⛔ S-01），四個全部是示意值 ── */
+var TIERS = ["層級一（示意）","層級二（示意）","層級三（示意）","層級四（示意）"];
+
+/* ── 十七個 setting_key：由 44 各塊的「來源」欄掃出（⛔ S-16）
+      每一列的 value_kind 是本組配的 —— 44 定義了六種型別，
+      但沒有寫哪一個鍵是哪一種（⛔ S-44）。 ── */
+var KEYS = [
+  { k:"alo_basis",           kind:"list",  v:"成本（示意）" },
+  { k:"alo_bucket_names",    kind:"list",  v:"核心／衛星／現金（示意）" },
+  { k:"alo_scenario_input",  kind:"rules", v:"（示意：一組類別與金額）" },
+  { k:"alo_target_weights",  kind:"rules", v:"（示意：一組類別與比重）" },
+  { k:"alo_tolerance_pp",    kind:"float", v:"4（示意）" },
+  { k:"exp_filter_rules",    kind:"rules", v:"（示意：一組篩選條件）" },
+  { k:"exp_sort_column",     kind:"list",  v:"fund_code（示意）" },
+  { k:"exp_visible_columns", kind:"list",  v:"（示意：一組欄名）" },
+  { k:"exp_watchlist",       kind:"list",  v:"（示意：三筆）" },
+  { k:"hld_deviation_rules", kind:"rules", v:"（示意：一組門檻）" },
+  { k:"hld_window_end",      kind:"date",  v:"2026-09-21（示意）" },
+  { k:"hld_window_start",    kind:"date",  v:"2026-06-21（示意）" },
+  { k:"mkt_baseline_date",   kind:"date",  v:"2026-08-31（示意）" },
+  { k:"mkt_indicator_keys",  kind:"list",  v:"（示意：四個指標鍵）" },
+  { k:"mkt_window_days",     kind:"int",   v:"90（示意）" },
+  { k:"set_log_keep_rows",   kind:"int",   v:"50（示意）" },
+  { k:"set_max_age_days",    kind:"int",   v:"7（示意）" }
+];
+/* 哪些塊會因為某個鍵改掉而改顯示 —— 照 44 各塊「來源」欄的宣告列出（⛔ S-24），
+   與 SET-7 同一份母體、同一個射程限制（來源欄沒宣告的抓不到）。 */
+var KEY_USED_BY = {
+  alo_basis:["ALO-4"], alo_bucket_names:["ALO-4"], alo_scenario_input:["ALO-3"],
+  alo_target_weights:["ALO-1","ALO-7"], alo_tolerance_pp:["ALO-1","ALO-7"],
+  exp_filter_rules:["EXP-1"], exp_sort_column:["EXP-4"], exp_visible_columns:["EXP-4"],
+  exp_watchlist:["EXP-5"], hld_deviation_rules:["HLD-1","HLD-4"],
+  hld_window_end:["HLD-2","HLD-3","HLD-4","HLD-8"], hld_window_start:["HLD-2","HLD-3","HLD-4","HLD-8"],
+  mkt_baseline_date:["MKT-4"], mkt_indicator_keys:["MKT-6"], mkt_window_days:["MKT-4"],
+  set_log_keep_rows:[], set_max_age_days:["SET-1"]
+};
+
+/* ── 三類資料：44 逐字「一列一類資料（淨值、配息、市場指標）」 ── */
+function baseKinds(){
+  return [
+    { n:"淨值",     src:"nav.fetched_at",              at:"2026-09-21 03:10 UTC（示意）", d:1,  has:true },
+    { n:"配息",     src:"dividend.fetched_at",         at:"2026-09-18 03:12 UTC（示意）", d:4,  has:true },
+    { n:"市場指標", src:"market_indicator.fetched_at", at:"2026-09-20 03:11 UTC（示意）", d:2,  has:true }
+  ];
+}
+function baseTiers(){
+  return TIERS.map(function(t,i){
+    return { n:t, out:"ok", at:"2026-09-2" + (1-(i%2)) + " 03:1" + i + " UTC（示意）", msg:null };
+  });
+}
+function baseLogs(){
+  return [
+    { id:"lg-0007（示意）", tier:TIERS[0], s:"2026-09-21 03:10:02 UTC（示意）", f:"2026-09-21 03:10:06 UTC（示意）", o:"ok",     rc:"128（示意）", m:null },
+    { id:"lg-0006（示意）", tier:TIERS[1], s:"2026-09-21 03:09:41 UTC（示意）", f:"2026-09-21 03:09:44 UTC（示意）", o:"ok",     rc:"31（示意）",  m:null },
+    { id:"lg-0005（示意）", tier:TIERS[2], s:"2026-09-20 03:11:15 UTC（示意）", f:"2026-09-20 03:11:19 UTC（示意）", o:"ok",     rc:"64（示意）",  m:null }
+  ];
+}
+
+/* ── 十二種狀態：逐種對得到 44 的某一格（對照表在 §F） ── */
+function scene(id){
+  var s = {
+    limitSet:true, limit:"7（示意）", limitNum:7,
+    kinds:baseKinds(), tiers:baseTiers(), logs:baseLogs(),
+    keysSet:true, badKind:false, keepRows:"50（示意）", keepSet:true,
+    undefField:false, tierPicked:true, brokenRow:false, emptyResp:false
+  };
+  if (id === "ok"){ s.limit = "14（示意）"; s.limitNum = 14; }
+  else if (id === "first"){
+    s.limitSet = false; s.keysSet = false; s.keepSet = false; s.tierPicked = false;
+    s.logs = [];
+    s.tiers = TIERS.map(function(t){ return { n:t, out:null, at:null, msg:null }; });
+    s.kinds = baseKinds().map(function(k){ k.at = null; k.d = null; k.has = false; return k; });
+  }
+  else if (id === "stale"){ s.limit = "3（示意）"; s.limitNum = 3; }
+  else if (id === "zero"){ s.limit = "0（示意）"; s.limitNum = 0; }
+  else if (id === "nolimit"){ s.limitSet = false; }
+  else if (id === "norows"){
+    s.limit = "14（示意）"; s.limitNum = 14;
+    s.kinds[1].has = false; s.kinds[1].at = null; s.kinds[1].d = null;
+  }
+  else if (id === "failed"){
+    s.limit = "3（示意）"; s.limitNum = 3;
+    s.tiers[2].out = "failed";
+    s.tiers[2].msg = "HTTP 503 from upstream endpoint (request id 4f2a-91c7)（示意）";
+    s.logs.unshift({ id:"lg-0008（示意）", tier:TIERS[2], s:"2026-09-22 03:10:00 UTC（示意）",
+      f:"2026-09-22 03:10:31 UTC（示意）", o:"failed", rc:null,
+      m:"HTTP 503 from upstream endpoint (request id 4f2a-91c7)（示意）" });
+  }
+  else if (id === "notier"){
+    s.limit = "14（示意）"; s.limitNum = 14;
+    s.tiers[3].out = null; s.tiers[3].at = null;
+  }
+  else if (id === "emptyresp"){
+    s.limit = "14（示意）"; s.limitNum = 14; s.emptyResp = true;
+    s.tiers[1].msg = "回應為空";
+    s.logs.unshift({ id:"lg-0008（示意）", tier:TIERS[1], s:"2026-09-22 03:12:00 UTC（示意）",
+      f:"2026-09-22 03:12:02 UTC（示意）", o:"ok", rc:"0（示意）", m:"回應為空" });
+  }
+  else if (id === "badkind"){ s.limit = "14（示意）"; s.limitNum = 14; s.badKind = true; }
+  else if (id === "broken"){
+    s.limit = "14（示意）"; s.limitNum = 14; s.brokenRow = true;
+    s.logs[0] = { id:"lg-0007（示意）", tier:TIERS[0], s:"2026-09-21 03:10:02 UTC（示意）",
+      f:null, o:"ok", rc:"128（示意）", m:null };
+  }
+  else if (id === "undef"){ s.limit = "14（示意）"; s.limitNum = 14; s.undefField = true; }
+  return s;
+}
+
+function overdueKinds(s){
+  if (!s.limitSet) return [];
+  return s.kinds.filter(function(k){ return k.has && k.d > s.limitNum; });
+}
+function failedTiers(s){ return s.tiers.filter(function(t){ return t.out === "failed"; }); }
+function noRecords(s){ return s.tiers.every(function(t){ return t.out === null; }); }
+
+/* APP-TEXT-START ── 以下到 APP-TEXT-END 之間，是會被畫進深色螢幕的字 ── */
+
+/* ── 層 1：SET-0 可信度結論燈 ─────────────────────────── */
+function renderConc(s){
+  var od = overdueKinds(s), ft = failedTiers(s), nr = noRecords(s);
+  var tone = "", glyph = "⬜", word = "資料狀態：齊", head = "", extra = "", pin = "";
+
+  if (nr){
+    head = "尚無取數紀錄";
+    word = "資料狀態：無紀錄";
+    pin = "S-05 S-06";
+    if (!s.limitSet){
+      extra = "尚未設定新鮮度上限";
+    }
+  } else if (ft.length > 0){
+    tone = "err"; glyph = "⛔"; word = "資料狀態：來源失敗";
+    head = "失敗的來源層級：" + ft.map(function(t){ return t.n; }).join("、");
+    pin = "S-04 S-30";
+  } else if (!s.limitSet){
+    head = "尚未設定新鮮度上限";
+    word = "資料狀態：上限未設";
+    pin = "S-05";
+  } else if (od.length > 0){
+    tone = "warn"; glyph = "⚠"; word = "資料狀態：有逾期";
+    head = "有 " + od.length + "（示意） 筆資料超過你設定的新鮮度上限";
+    extra = "那 " + od.length + "（示意） 筆指的是這幾類：" + od.map(function(k){ return k.n; }).join("、")
+          + "　（SET-1 一列一類，所以這個數最多是 3）";
+    pin = "S-08";
+  } else {
+    head = "資料齊、來源皆可達";
+    word = "資料狀態：齊";
+    pin = "S-07";
+  }
+
+  var html = '<div class="conc ' + tone + '">'
+    + '<div class="top"><span class="glyph">' + glyph + '</span>'
+    + '<span class="headline">' + head + '</span>'
+    + '<span class="stword">' + word + '</span></div>'
+    + '<div class="lines">'
+    + (extra ? '<div>' + extra + '</div>' : '')
+    + '<div>這一頁回答的是：其他四頁的數字，現在可不可以照著讀。</div>'
+    + '</div>'
+    + '<div class="where">來源：只讀 <b>SET-1</b> 的逾期筆數（'
+    + (s.limitSet ? od.length + '（示意）' : '上限未設，算不出來') + '）與 <b>SET-2</b> 的失敗來源數（'
+    + (nr ? '無紀錄，算不出來' : ft.length + '（示意）') + '）。'
+    + '<b>SET-3 不在這枚燈的來源裡</b>　<span class="abadge ph">⛔ S-34</span>'
+    + '　<span class="abadge ph">⛔ ' + pin.split(" ").join("</span> <span class=\"abadge ph\">⛔ ") + '</span></div>'
+    + '</div>';
+  document.getElementById("slot-conc").innerHTML = html;
+}
+
+/* ── 層 2：SET-1 / SET-2 / SET-3 ─────────────────────── */
+function renderCards(s){
+  /* SET-1 資料新鮮度卡 */
+  var head1 = '<thead><tr><th>資料類</th><th>最近取得時間<span class="u">世界協調時間 +08:00（示意）</span></th>'
+            + '<th>距今日數<span class="u">days_calendar</span></th><th>與上限比較</th></tr></thead>';
+  var b1 = '', st1 = '';
+  s.kinds.forEach(function(k){
+    var at, dd, cmp, atC = '', ddC = '', cmpC = '';
+    if (!k.has){
+      at = '⬜'; dd = '⬜'; cmp = '⬜';
+      atC = ddC = cmpC = 'nd';
+    } else {
+      at = k.at; dd = k.d + '（示意）';
+      if (!s.limitSet){ cmp = '⬜ 不適用：尚未設定上限'; cmpC = 'na'; }
+      else { cmp = (k.d > s.limitNum) ? '外' : '內'; }
+    }
+    b1 += '<tr><td>' + k.n + (!k.has ? ' <span class="abadge gray">資料未備</span>' : '')
+       +  '</td><td>' + (atC ? '<span class="' + atC + '">' + at + '</span>' : at)
+       +  '</td><td>' + (ddC ? '<span class="' + ddC + '">' + dd + '</span>' : dd)
+       +  '</td><td>' + (cmpC ? '<span class="' + cmpC + '">' + cmp + '</span>' : '<b>' + cmp + '</b>')
+       +  '</td></tr>';
+    st1 += '<div class="one"><div class="h">' + k.n + (!k.has ? ' <span class="abadge gray">資料未備</span>' : '')
+        +  '</div><div class="kv"><span>最近取得時間</span><b class="' + atC + '">' + at + '</b>'
+        +  '<span>距今日數</span><b class="' + ddC + '">' + dd + '</b>'
+        +  '<span>與上限比較</span><b class="' + cmpC + '">' + cmp + '</b></div></div>';
+  });
+  var c1 = '<div class="cardx"><div class="t">資料新鮮度 <span class="abadge">層 2 · SET-1</span></div>'
+    + '<div class="st">哪一類資料已經放到超過我能接受的時間</div>'
+    + '<div class="tscroll"><table class="wt">' + head1 + '<tbody>' + b1 + '</tbody></table></div>'
+    + '<div class="stackview">' + st1 + '</div>'
+    + '<div class="why">上限 ' + (s.limitSet ? '＝ ' + s.limit + ' 日' : '<b>未設定</b>')
+    + '，由使用者在 <b>SET-4</b> 輸入（44 逐字「上限由使用者輸入（G3†）」）。'
+    + '　⛔ S-09／S-10：來源欄宣告了「各自的觀測日欄」，<b>本卡沒有這一欄</b> —— 規則欄那三欄用不到它，'
+    + '而三張表沒有一張有一個叫「觀測日」的欄。'
+    + '　⛔ S-11／S-12：「距今」用哪個時區算、表頭該寫哪個時區字面值，44 沒寫，<b>表頭那個字面值是示意的</b>。'
+    + '　⛔ S-13：比較是「大於」還是「大於等於」44 沒寫。'
+    + '　⛔ S-28：本卡<b>不掛</b>「重新取數」—— 它的空狀態只寫徽章、沒寫種類名（理由見 §D）。</div>'
+    + '</div>';
+
+  /* SET-2 來源健康卡 */
+  var head2 = '<thead><tr><th>來源層級</th><th>最近一次結果</th><th>最近一次時間</th><th>訊息原文</th></tr></thead>';
+  var b2 = '', st2 = '', allNone = noRecords(s);
+  s.tiers.forEach(function(t){
+    var res, resC = '', at, atC = '', msg, msgC = '';
+    if (t.out === null){ res = '⬜'; at = '⬜'; msg = '⬜'; resC = atC = msgC = 'nd'; }
+    else if (t.out === "failed"){ res = 'failed'; resC = 'er'; at = t.at; msg = t.msg; msgC = 'er'; }
+    else { res = 'ok'; at = t.at; msg = t.msg ? t.msg : '—'; if (!t.msg) msgC = 'nd'; }
+    b2 += '<tr><td>' + t.n + (t.out === null ? ' <span class="abadge gray">資料未備</span>' : '')
+       +  '</td><td>' + (resC ? '<span class="' + resC + '">' + res + '</span>' : res)
+       +  '</td><td>' + (atC ? '<span class="' + atC + '">' + at + '</span>' : at)
+       +  '</td><td>' + (msgC ? '<span class="' + msgC + '">' + msg + '</span>' : msg) + '</td></tr>';
+    st2 += '<div class="one"><div class="h">' + t.n + (t.out === null ? ' <span class="abadge gray">資料未備</span>' : '')
+        +  '</div><div class="kv"><span>最近一次結果</span><b class="' + resC + '">' + res + '</b>'
+        +  '<span>最近一次時間</span><b class="' + atC + '">' + at + '</b>'
+        +  '<span>訊息原文</span><b class="' + msgC + '">' + msg + '</b></div></div>';
+  });
+  var c2 = '<div class="cardx"><div class="t">來源健康 <span class="abadge">層 2 · SET-2</span></div>'
+    + '<div class="st">是哪一層來源在失敗，失敗訊息說了什麼</div>';
+  if (allNone){
+    c2 += '<div class="emptybox"><div class="et">⬜ 來源缺</div>'
+       +  '<div class="em">尚無取數紀錄。</div></div>'
+       +  '<div class="savebar"><button class="apply" type="button">重新取數</button></div>'
+       +  '<div class="why">這一枚按鈕做的事與 <b>SET-5</b> 是同一件。'
+       +  '　⛔ S-28：第五節的 <code>來源缺</code> 模板逐字要掛它，'
+       +  '<b>但 44 沒寫它掛在這張卡上還是指去 SET-5</b>。掛在這裡是本組挑的。</div>';
+  } else {
+    c2 += '<div class="tscroll"><table class="wt">' + head2 + '<tbody>' + b2 + '</tbody></table></div>'
+       +  '<div class="stackview">' + st2 + '</div>'
+       +  '<div class="why"><b>訊息原文照印，本卡不對失敗給出處置方向</b>（44 逐字）。'
+       +  '　⛔ S-04：一句真實的錯誤訊息常常自帶處置建議，<b>照印就會把它印上畫面</b> ——'
+       +  '本草稿的示意訊息刻意挑了一句不帶處置方向的，<b>但真實訊息本組控制不了</b>。'
+       +  '　⛔ S-01：有哪些層級、層級叫什麼，44 沒有定義，<b>這四列全是示意的</b>。'
+       +  '　⛔ S-27：<code>ok</code> 那一列的訊息欄印什麼 44 沒寫，本草稿印一個破折號。'
+       +  (s.emptyResp ? '　⛔ S-03：<b>' + TIERS[1] + ' 那一列結果欄是 <code>ok</code>，訊息欄卻印著「回應為空」</b>'
+            + ' —— 本欄逐字是「失敗時的訊息原文」，而 <code>fetch_log.message</code> 逐字「成功時為空」。<b>三處打架。</b>' : '')
+       +  '</div>';
+  }
+  c2 += '</div>';
+
+  /* SET-3 規則參數卡 */
+  var head3 = '<thead><tr><th>鍵名</th><th>目前值</th><th>型別<span class="u">value_kind</span></th>'
+            + '<th>最後修改時間<span class="u">updated_at</span></th></tr></thead>';
+  var b3 = '', st3 = '';
+  KEYS.forEach(function(row, i){
+    var v, vC = '', up, upC = '';
+    if (!s.keysSet){ v = '⬜ 未設定'; vC = 'nd'; up = '⬜ 資料未備：尚未設定過'; upC = 'nd'; }
+    else if (s.badKind && row.k === "mkt_window_days"){
+      v = '⬜ 不適用：值與型別不符<span class="raw">原始字面值：ninety（示意）</span>'; vC = 'na';
+      up = '2026-09-19 11:04 UTC（示意）';
+    } else {
+      v = row.v; up = '2026-09-' + (10 + (i % 9)) + ' 11:0' + (i % 6) + ' UTC（示意）';
+    }
+    b3 += '<tr><td><code>' + row.k + '</code></td>'
+       +  '<td>' + (vC ? '<span class="' + vC + '">' + v + '</span>' : v) + '</td>'
+       +  '<td>' + row.kind + '</td>'
+       +  '<td>' + (upC ? '<span class="' + upC + '">' + up + '</span>' : up) + '</td></tr>';
+    st3 += '<div class="one"><div class="h"><code>' + row.k + '</code></div><div class="kv">'
+        +  '<span>目前值</span><b class="' + vC + '">' + v + '</b>'
+        +  '<span>型別</span><b>' + row.kind + '</b>'
+        +  '<span>最後修改時間</span><b class="' + upC + '">' + up + '</b></div></div>';
+  });
+  var c3 = '<div class="cardx"><div class="t">規則參數 <span class="abadge">層 2 · SET-3</span></div>'
+    + '<div class="st">四頁上那些門檻和區間，現在各是多少、是我什麼時候設的</div>'
+    + '<div class="tscroll"><table class="wt">' + head3 + '<tbody>' + b3 + '</tbody></table></div>'
+    + '<div class="stackview">' + st3 + '</div>'
+    + '<div class="why"><b>十七列，依 <code>setting_key</code> 排列</b>（44 逐字）；'
+    + '<b>沒有第五欄，也沒有任何「內建預設值」欄</b>（44 逐字：未設定的鍵沒有值，G3†）。'
+    + '　⛔ S-15／S-16：「全表為空 → 逐鍵列出」自相矛盾，而<b>那份鍵清單 44 沒有列成表</b> ——'
+    + '這十七個是本組從 44 各塊「來源」欄掃出來的。'
+    + '　⛔ S-44：每一列的 <b>型別</b>是本組配的 —— 44 定義了六種 <code>value_kind</code>，<b>沒有寫哪個鍵是哪一種</b>。'
+    + '　⛔ S-25：值與型別不符時，<b>原始字面值印在同一格第二行</b>（因為判準說沒有第五欄）。'
+    + '　⛔ S-26：<code>updated_at</code> 為空時印什麼 44 沒寫，本草稿借了 <code>ALO-7</code> 那一格的字面。</div>'
+    + '</div>';
+
+  document.getElementById("slot-cards").innerHTML = '<div class="cards">' + c1 + c2 + c3 + '</div>';
+}
+
+/* ── 層 3：SET-4 參數編輯 / SET-5 重新取數（預設收合） ── */
+function renderOps(s){
+  /* SET-4 */
+  var rows = "";
+  KEYS.forEach(function(row){
+    var multi = (row.kind === "list" || row.kind === "rules");
+    var val = s.keysSet ? row.v.replace(/（示意）/,"") : "";
+    var bad = (s.badKind && row.k === "mkt_window_days");
+    var used = KEY_USED_BY[row.k];
+    rows += '<div class="krow"><div class="kgrid">'
+      + '<div><label for="f-' + row.k + '">' + row.k + '　<span style="opacity:.8">' + row.kind + '</span></label>'
+      + '<div style="font-size:11px;color:var(--app-muted)">'
+      + (used.length ? '改這個鍵會影響：' + used.join("、") : '<b>來源欄沒有任何一塊宣告用它</b>　⛔ S-17')
+      + '</div></div>'
+      + '<div><label for="f-' + row.k + '">值</label>'
+      + (multi
+          ? '<textarea class="inbox" id="f-' + row.k + '" placeholder="（示意：依 ' + row.kind + ' 輸入）">'
+            + (bad ? "ninety" : val) + '</textarea>'
+          : '<input class="inbox" id="f-' + row.k + '" type="text" value="' + (bad ? "ninety" : val)
+            + '" placeholder="（示意：依 ' + row.kind + ' 輸入）">')
+      + '</div>'
+      + '<div><button class="rowbtn" type="button">清除</button></div>'
+      + '</div>'
+      + (bad ? '<div class="rowtail na">型別說明：這個鍵的 value_kind 是 <b>int</b>，要輸入一個整數。<b>本次不存檔，SET-3 的值不變。</b></div>' : '')
+      + (!s.keysSet ? '<div class="rowtail nd">⬜ 未設定</div>' : '')
+      + '</div>';
+  });
+  var a4 = '<details class="exp"><summary>參數編輯 <span class="abadge">層 3 · SET-4</span>'
+    + '<span class="sm">' + (s.keysSet ? '十七個鍵可編輯（示意）' : '十七個鍵都還沒設定過（示意）') + '</span>'
+    + '</summary><div class="body">'
+    + '<div class="why">逐鍵編輯，<b>每個鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。'
+    + '<b>清除某鍵的操作把它變回未設定，不變成零</b>（44 逐字）。'
+    + '<b>本塊不提供還原為系統值之類的動作 —— 沒有系統值可還原（G1†、G3†）。</b>'
+    + '　⛔ S-22：六種 <code>value_kind</code> 各長什麼樣 44 沒寫，'
+    + '<b><code>list</code> 與 <code>rules</code> 本草稿畫成多行框</b>。'
+    + '　⛔ S-23：「必要鍵」44 沒有定義，<b>本草稿不標任何一個鍵為必要</b>。'
+    + '　⛔ S-24：每一列下方那一行「會影響哪幾塊」照 44 各塊「來源」欄列出 ——'
+    + '<b>與 SET-7 同一份母體、同一個射程限制</b>。'
+    + '　⛔ S-31：同一個鍵在別頁也改得到（八塊各自寫自己的鍵），<b>哪一邊贏 44 沒寫</b>。</div>'
+    + rows
+    + '<div class="savebar"><button class="apply" type="button">存檔</button>'
+    + '<span class="tiny" style="color:var(--app-muted)">存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>（44 逐字）</span></div>'
+    + '<div class="why"><span class="abadge ph">⛔ S-18</span> <b>本塊的來源欄只宣告了三個讀取欄，'
+    + '沒有宣告寫入對象、連 <code>updated_at</code> 都沒有</b> —— 九塊 <code>存檔</code> 類裡唯一一塊。'
+    + '　<span class="abadge ph">⛔ S-19</span> <b>存檔寫入失敗時這一塊長什麼樣，44 沒寫，本草稿不畫那個狀態。</b></div>'
+    + '</div></details>';
+
+  /* SET-5 */
+  var picked = s.tierPicked;
+  var a5 = '<details class="exp"><summary>重新取數 <span class="abadge">層 3 · SET-5</span>'
+    + '<span class="sm">' + (picked ? '已選定：' + TIERS[1] : '尚未選定來源層級') + '</span>'
+    + '</summary><div class="body">'
+    + '<div style="font-size:12px;color:var(--app-muted)">選一個來源層級（<b>不屬八類的控制項</b>　⛔ S-40）：</div>'
+    + '<div class="radiorow">'
+    + TIERS.map(function(t,i){
+        return '<label class="rd"><input type="radio" name="tier" '
+          + (picked && i === 1 ? 'checked' : '') + '><span>' + t + '</span></label>';
+      }).join("")
+    + '</div>'
+    + '<div class="savebar"><button class="apply" type="button"' + (picked ? '' : ' disabled title="尚未選定來源層級"')
+    + '>重新取數</button>'
+    + (picked ? '' : '<span class="tiny" style="color:var(--app-muted)">停用原因：<b>尚未選定來源層級</b></span>')
+    + '</div>'
+    + '<div class="why">44 逐字：「按一次重新取一次指定層級的來源（<b>按鈕標籤為「重新取數」，不含「一鍵」二字，G1†</b>）。'
+    + '執行中按鈕顯示進度文字並停用。<b>取數只寫入資料表與 <code>fetch_log</code>，不改寫任何 <code>user_setting</code></b>。'
+    + '取數失敗時把訊息原文寫進 <code>fetch_log.message</code>，<b>不吞掉</b>」。'
+    + '<br><span class="abadge ph">⛔ S-02</span> <b>「取數回來的列寫到哪」，44 兩處正面互斥</b> ——'
+    + '第五節逐字說淨值與配息那四張表「<b>本儀表板只讀它們</b>」。'
+    + '<b>本草稿不在畫面上宣稱任何一張表被寫入。</b>'
+    + '　<span class="abadge ph">⛔ S-01</span> <b>有哪些層級可選 44 沒有定義，上面四個是示意的。</b>'
+    + '　<span class="abadge ph">⛔ S-41</span> <b>「執行中」那一態的進行式文字與秒數格式 44 沒給，本草稿不演它。</b>'
+    + (s.emptyResp
+        ? '<br><span class="abadge ph">⛔ S-03</span> <b>本次取數回空</b>：'
+          + '<code>fetch_log</code> 新增一列 <code>outcome</code>＝<code>ok</code>、<code>row_count</code>＝0，'
+          + '資料表列數不變，而 <b>SET-2</b> 那一列的訊息欄印著「回應為空」。'
+        : '')
+    + '</div></div></details>';
+
+  document.getElementById("slot-ops").innerHTML = '<div class="ops">' + a4 + a5 + '</div>';
+}
+
+/* ── 層 4：SET-6 取數紀錄 / SET-7 欄位對照表（預設收合） ── */
+function renderEvi(s){
+  /* SET-6 */
+  var a6 = '<details class="exp"><summary>取數紀錄 <span class="abadge">層 4 · SET-6</span>'
+    + '<span class="sm">' + (s.logs.length ? s.logs.length + ' 列（示意）' : '來源缺：尚無取數紀錄')
+    + '</span></summary><div class="body">';
+  if (s.logs.length === 0){
+    a6 += '<div class="emptybox"><div class="et">⬜ 來源缺</div>'
+       +  '<div class="em">尚無取數紀錄。</div></div>'
+       +  '<div class="savebar"><button class="apply" type="button">重新取數</button></div>'
+       +  '<div class="why">這一枚按鈕做的事與 <b>SET-5</b> 是同一件。'
+       +  '　⛔ S-28：第五節的 <code>來源缺</code> 模板逐字要掛它，掛在這裡是本組挑的。</div>';
+  } else {
+    var head = '<thead><tr><th>log_id</th><th>來源層級</th><th>開始<span class="u">started_at</span></th>'
+             + '<th>耗時<span class="u">秒</span></th><th>結果<span class="u">outcome</span></th>'
+             + '<th>取回列數<span class="u">row_count</span></th><th>訊息</th></tr></thead>';
+    var body = '', stack = '';
+    s.logs.forEach(function(g){
+      var dur, durC = '';
+      if (g.f === null){ dur = '⬜ 不適用：未記錄結束時間'; durC = 'na'; }
+      else { dur = (g.o === "failed" ? "31.0" : (g.rc === "0（示意）" ? "2.0" : "4.0")) + '（示意）'; }
+      var oC = (g.o === "failed") ? 'er' : '';
+      var rc = g.rc === null ? '⬜' : g.rc, rcC = g.rc === null ? 'nd' : '';
+      var m = g.m === null ? '—' : g.m, mC = g.m === null ? 'nd' : (g.o === "failed" ? 'er' : '');
+      body += '<tr><td>' + g.id + '</td><td>' + g.tier + '</td><td>' + g.s + '</td>'
+           +  '<td>' + (durC ? '<span class="' + durC + '">' + dur + '</span>' : dur) + '</td>'
+           +  '<td>' + (oC ? '<span class="' + oC + '">' + g.o + '</span>' : g.o) + '</td>'
+           +  '<td>' + (rcC ? '<span class="' + rcC + '">' + rc + '</span>' : rc) + '</td>'
+           +  '<td>' + (mC ? '<span class="' + mC + '">' + m + '</span>' : m) + '</td></tr>';
+      stack += '<div class="one"><div class="h">' + g.id + '　' + g.tier + '</div><div class="kv">'
+            +  '<span>開始</span><b>' + g.s + '</b>'
+            +  '<span>耗時（秒）</span><b class="' + durC + '">' + dur + '</b>'
+            +  '<span>結果</span><b class="' + oC + '">' + g.o + '</b>'
+            +  '<span>取回列數</span><b class="' + rcC + '">' + rc + '</b>'
+            +  '<span>訊息</span><b class="' + mC + '">' + m + '</b></div></div>';
+    });
+    var tf = '<tfoot><tr><td colspan="7">'
+      + (s.keepSet
+          ? '保留筆數上限 <code>set_log_keep_rows</code> ＝ ' + s.keepRows
+            + '　已移除的筆數：<b>0（示意）</b>　<span class="abadge ph">⛔ S-33</span>'
+          : '<code>set_log_keep_rows</code> <b>未設定</b> —— 本草稿全部列出、不截斷　<span class="abadge ph">⛔ S-36</span>')
+      + '</td></tr></tfoot>';
+    a6 += '<div class="tscroll"><table class="wt">' + head + '<tbody>' + body + '</tbody>' + tf + '</table></div>'
+       +  '<div class="stackview">' + stack
+       +  '<div class="one"><div class="kv"><span>保留筆數上限</span><b>'
+       +  (s.keepSet ? s.keepRows : '⬜ 未設定') + '</b></div></div></div>'
+       +  '<div class="why">一列一次取數，<b>依 <code>started_at</code> 由新到舊</b>；'
+       +  '<b>耗時由 <code>finished_at</code> 減 <code>started_at</code> 算出，單位秒</b>（44 逐字）。'
+       +  '　⛔ S-17：本塊用了 <code>set_log_keep_rows</code>，<b>而它的來源欄沒有宣告 <code>user_setting</code></b>。'
+       +  '　⛔ S-29：「超出的最舊列被移除」—— <b>誰移除、什麼時候移除 44 沒寫</b>，本草稿不畫任何移除動作。'
+       +  '　⛔ S-33：<b>已移除的列已經不在 <code>fetch_log</code> 裡，那個筆數沒有地方算得出來。</b>'
+       +  '　⛔ S-42：耗時的小數位數與欄名 44 沒給。</div>';
+  }
+  a6 += '</div></details>';
+
+  /* SET-7 —— 只畫幾列示意，不畫五十九列（⛔ S-32 / S-37 / S-38） */
+  var m7 = [
+    { f:"nav.fetched_at",            b:["SET-1"],          note:"來源欄寫全名" },
+    { f:"fetch_log.message",         b:["SET-2","SET-6"],  note:"來源欄寫全名" },
+    { f:"user_setting.setting_key",  b:["SET-3","SET-4"],  note:"<b>來源欄寫裸欄名</b>（SET-1 那一格）　⛔ S-37" },
+    { f:"user_setting.updated_at",   b:["SET-3","ALO-7"],  note:"<b>SET-4 規則欄用到它，來源欄沒宣告</b>　⛔ S-18" },
+    { f:"nav.is_estimated",          b:[],                 note:"本頁不用它" },
+    { f:"policy.fee_rate_pct",       b:[],                 note:"本頁不用它" },
+    { f:"holding.ccy",               b:[],                 note:"<b>這是欄位<u>名</u>，不是幣別值</b>（§J 第三條）" }
+  ];
+  var h7 = '<thead><tr><th>欄位名<span class="u">表.欄位</span></th><th>用到它的塊代號清單</th></tr></thead>';
+  var b7 = '', s7 = '';
+  m7.forEach(function(r){
+    var lst = r.b.length ? r.b.map(function(x){ return '<code>' + x + '</code>'; }).join("、")
+                         : '<span class="nd">⬜ 未被任何塊使用</span>';
+    b7 += '<tr><td><code>' + r.f + '</code></td><td>' + lst
+       +  '<span class="raw">' + r.note + '</span></td></tr>';
+    s7 += '<div class="one"><div class="h"><code>' + r.f + '</code></div><div class="kv">'
+       +  '<span>用到它的塊</span><b>' + lst + '</b><span>註</span><b>' + r.note + '</b></div></div>';
+  });
+  if (s.undefField){
+    b7 += '<tr><td><code>某表.某欄位（示意）</code> <span class="abadge warn">未定義</span></td>'
+       +  '<td><code>某塊（示意）</code><span class="raw">'
+       +  '<b>這個欄位名出現在某塊的來源欄，而第四節沒有定義它</b>（44 逐字的空狀態）</span></td></tr>';
+    s7 += '<div class="one"><div class="h"><code>某表.某欄位（示意）</code> '
+       +  '<span class="abadge warn">未定義</span></div><div class="kv">'
+       +  '<span>用到它的塊</span><b><code>某塊（示意）</code></b></div></div>';
+  }
+  var a7 = '<details class="exp"><summary>欄位對照表 <span class="abadge">層 4 · SET-7</span>'
+    + '<span class="sm">第四節八張表合計 59 個欄位' + (s.undefField ? '，另有 1 個未定義（示意）' : '') + '</span>'
+    + '</summary><div class="body">'
+    + '<div class="tscroll"><table class="wt">' + h7 + '<tbody>' + b7 + '</tbody></table></div>'
+    + '<div class="stackview">' + s7 + '</div>'
+    + '<div class="why"><b>一列一個「表.欄位」，兩欄</b>（44 逐字）。<b>全表應有 59 列，本草稿只畫其中幾列當示意。</b>'
+    + '<br><b>44 自己寫的射程限制，逐字</b>：「本表的母體只有「來源」欄。'
+    + '<b>一塊在規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，本表結構上抓不到</b> ——'
+    + '對本表而言那個欄位「沒有被任何塊使用」，<b>而畫面上它其實被用了</b>」。'
+    + '<br><span class="abadge ph">⛔ S-17</span> <b>上表 <code>user_setting.updated_at</code> 那一列就是活的例子</b>：'
+    + '<code>SET-4</code> 規則欄逐字要更新它，而它的來源欄沒宣告 —— <b>這張表看不見。</b>'
+    + '　<span class="abadge ph">⛔ S-32</span> <b>這張表是寫死的還是執行時去讀那份規格，44 沒寫。</b>'
+    + '　<span class="abadge ph">⛔ S-38</span> <b>這張表列不到它自己</b>（<code>SET-7</code> 的來源欄沒有寫出任何一個「表.欄位」）。</div>'
+    + '</div></details>';
+
+  document.getElementById("slot-evi").innerHTML = '<div class="evi">' + a6 + a7 + '</div>';
+}
+
+/* ── 註記層：pin 與說明 ─────────────────────────────── */
+var EXPLAIN = {
+  ok:        ['全齊（灰燈）', '上限放寬到沒有任何一筆逾期、四個層級全部 <code>ok</code>。<b>這一顆就是 <code>SET-0</code> 判準的前半句</b>：「燈轉灰且文案為「資料齊、來源皆可達」」。<br>⚠️ <b>那一行判準少寫了一個前提</b>：放寬上限只消掉黃，<b>要同時沒有失敗來源，燈才轉得了灰</b>。', ['S-07']],
+  first:     ['首次載入（新環境）', '<code>user_setting</code> 逐字「<b>沒有內建值</b>」→ 上限未設、十七個鍵全空；<code>fetch_log</code> 一列也沒有。<br><b>一次命中六格空狀態</b>，而 <code>SET-0</code> 的兩句灰態同時成立 —— <b>44 沒寫哪一句優先</b>。', ['S-05','S-06','S-15','S-16','S-35']],
+  stale:     ['有逾期（黃燈）', '<code>SET-0</code> 黃那一條逐字是「<b>逾期筆數大於零<u>而失敗來源為零</u></b>」—— <b>後半句是它把黃與紅分開的條件</b>。這一顆刻意把失敗來源做成零，黃才出得來。<br>⚠️ 文案寫「<b>N 筆</b>」，而 <code>SET-1</code> 是「一列一<b>類</b>」，<code>N</code> 最多是 3。', ['S-08']],
+  zero:      ['上限設為 0 日', '<b>這一顆就是 <code>SET-1</code> 判準的前半句</b>：「把上限設成 0 日，<b>三列的比較欄皆為「外」</b>且 <code>SET-0</code> 的 N 等於 <b>3</b>」。<br>⚠️ 三列的距今日數<b>刻意都做成大於零</b> —— 若有一列剛好是 0，在「大於」的讀法下它會是「內」，那一行判準當場跑不過。', ['S-13','S-08']],
+  nolimit:   ['上限未設', '<code>SET-1</code> 空①逐字：「比較欄顯示 <code>⬜ 不適用：尚未設定上限</code>，<b>前兩欄照出</b>」；<code>SET-0</code> 轉灰、文案「尚未設定新鮮度上限」。<br><b>這也是 <code>SET-4</code> 判準的前半句</b>：「清除 <code>set_max_age_days</code>，<code>SET-1</code> 的比較欄改為 <code>⬜ 不適用：尚未設定上限</code><b>而不是以 0 計</b>」。', ['S-05','S-23']],
+  norows:    ['某類無任何列', '<code>SET-1</code> 空②逐字：「某類無任何列 → <b>三欄皆 <code>⬜</code></b> 並掛 <code>資料未備</code> 徽章」。配息那一列整列 <code>⬜</code>，另兩列照出。<br>⚠️ <b>那一行判準在這個畫面下跑不過</b>：它說「三列的比較欄皆為「外」」，而這一列是 <code>⬜</code>。', ['S-14']],
+  failed:    ['某層級取數失敗（紅燈）', '<b>這一顆是 <code>SET-0</code> 判準的後半句</b>：「讓某一個來源取數失敗，<b>燈轉紅且文案含該來源的層級字面值</b>」，也是 <code>SET-2</code> 判準的前半句（訊息欄<b>逐字相同</b>）。<br><b>同時也有逾期，而紅蓋過黃</b> —— 那正是黃那一條後半句在做的事。<br>⚠️ <b>示意訊息刻意挑一句不帶處置方向的</b>，真實訊息本組控制不了（S-04）。', ['S-04','S-30','S-08']],
+  notier:    ['某層級從無紀錄', '<code>SET-2</code> 空①逐字：「某層級從無紀錄 → <b>該列三欄 <code>⬜</code></b>，掛 <code>資料未備</code> 徽章」。<br>⚠️ <b>要為一個「從來沒有紀錄」的層級畫出一列，就必須事先知道有哪些層級</b> —— 而 44 從頭到尾沒有定義那份清單，第五節還逐字說它是「一個<b>開放集</b>」。', ['S-01']],
+  emptyresp: ['取數回空', '<b>這一顆是本頁最硬的一處。</b> <code>SET-5</code> 空②逐字：「取數回空 → <code>fetch_log.outcome</code> 寫 <code>ok</code> 而資料表列數不變，<b><code>SET-2</code> 的訊息欄寫「回應為空」</b>」。<br><b>而 <code>SET-2</code> 第三欄逐字是「<u>失敗時</u>的訊息原文」，<code>fetch_log.message</code> 逐字「<u>成功時為空</u>」。三處打架。</b><br>再加一層：那句話若由 <code>SET-2</code> 生出來，就違反它自己的「訊息原文照印，不改寫」。', ['S-03','S-27','S-02']],
+  badkind:   ['值與型別不符', '<code>SET-3</code> 空②逐字：「目前值欄顯示 <code>⬜ 不適用：值與型別不符</code>，<b>並印出原始字面值</b>」；<code>SET-4</code> 空①逐字：「<b>欄位下方顯示型別說明，不存檔，<code>SET-3</code> 的值不變</b>」。<br>⚠️ <b>原始字面值印在哪，44 沒寫</b>，而同塊判準逐字「卡上<b>沒有第五欄</b>」—— 本草稿印在同一格第二行。', ['S-25','S-22','S-44']],
+  broken:    ['取數中斷', '<code>SET-6</code> 空②逐字：「<code>finished_at</code> 為空（取數中斷）→ 耗時欄 <code>⬜ 不適用：未記錄結束時間</code>，<b>其餘欄照印</b>」。<br>點開層 4 的「取數紀錄」看第一列。', ['S-42']],
+  undef:     ['未定義欄位', '<code>SET-7</code> 空①（本頁唯一一句）逐字：「某塊的來源欄寫了一個本檔第四節<b>未定義</b>的欄位 → <b>該欄位單獨列出並掛「未定義」徽章</b>」。<br>⚠️ <b>要認得出「第四節未定義」，這張表就得讀得到那份規格本身</b> —— 而 44 沒寫它是寫死的還是執行時去讀。', ['S-32','S-37','S-38']]
+};
+/* APP-TEXT-END ── 以上是會被畫進深色螢幕的字 ── */
+
+function renderAnnot(){
+  var e = EXPLAIN[ui.state];
+  document.getElementById("state-explain").innerHTML =
+    '<b style="color:var(--draft)">' + e[0] + '</b><br>' + e[1];
+  var pins = e[2].map(function(id){ return '<span class="pin">⛔ ' + id + '</span>'; }).join("");
+  document.getElementById("pinrow").innerHTML =
+    '<span class="pin ann">這一種狀態撞到的 ⛔</span>' + pins;
+  document.getElementById("live-annot").innerHTML = '<b>' + e[0] + '</b> —— ' + e[1];
+}
+
+function render(){
+  var s = scene(ui.state);
+  renderConc(s); renderCards(s); renderOps(s); renderEvi(s); renderAnnot();
+}
+
+/* ── 控制列 ─────────────────────────────────────────── */
+function press(sel, attr, val){
+  document.querySelectorAll(sel).forEach(function(b){
+    b.setAttribute("aria-pressed", String(b.getAttribute(attr) === String(val)));
+  });
+}
+document.querySelectorAll("[data-state]").forEach(function(b){
+  b.addEventListener("click", function(){
+    ui.state = b.getAttribute("data-state");
+    press("[data-state]", "data-state", ui.state);
+    render();
+  });
+});
+document.querySelectorAll("[data-bp]").forEach(function(b){
+  b.addEventListener("click", function(){
+    ui.bp = parseInt(b.getAttribute("data-bp"), 10);
+    press("[data-bp]", "data-bp", ui.bp);
+    document.getElementById("screen").style.setProperty("--screen-w", ui.bp + "px");
+    document.getElementById("bp-read").textContent = "模擬寬度 " + ui.bp + "px";
+    measure();
+  });
+});
+var themeBtn = document.getElementById("btn-theme");
+themeBtn.addEventListener("click", function(){
+  ui.theme = ui.theme === "system" ? "dark" : (ui.theme === "dark" ? "light" : "system");
+  if (ui.theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", ui.theme);
+  themeBtn.textContent = ui.theme === "system" ? "跟隨系統" : (ui.theme === "dark" ? "深色" : "淺色");
+  themeBtn.setAttribute("aria-pressed", String(ui.theme !== "system"));
+});
+
+/* 量一下螢幕實際渲染寬度，告訴看的人「哪一段生效了」 */
+function measure(){
+  var el = document.getElementById("screen");
+  var w = Math.round(el.getBoundingClientRect().width);
+  var seg = w >= 1280 ? "≥1280 三欄" : (w >= 769 ? "769–1279 兩欄" : "≤768 單欄");
+  document.getElementById("bp-actual").textContent = "實際渲染 " + w + "px · " + seg;
+}
+window.addEventListener("resize", measure);
+
+render();
+measure();
+</script>
+</body>
+</html>
