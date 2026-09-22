@@ -1,0 +1,2287 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>持倉體檢頁線框原型</title>
+<!-- 唯一的外連資源：Google Fonts（客戶的 HTML 草稿規範逐字：「無外部框架（字體除外）」）。
+     取 IBM Plex Mono 與 Noto Sans TC 兩支，與今天頁原型同一套，讓兩份看起來是同一個系統。
+     其餘 CSS／JS／圖一律 inline，全檔沒有第二個外連。 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   TOKENS —— 與今天頁原型同一套（刻意逐值相同，讓客戶看得出是同一個系統）。
+   兩路主題：@media (prefers-color-scheme) ＋ :root[data-theme]。
+   深色 app 螢幕 #0e1117；淺色註記層在外框；註記主色青 #0f6b6c／#5fd3d0。
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  /* — 註記層（隨主題變） — */
+  --paper:#e6eaf0;          /* 圖紙底 */
+  --sheet:#ffffff;          /* 註記卡底 */
+  --sheet-2:#f2f5f9;        /* 註記卡次層 */
+  --ink:#161c24;            /* 主文字 */
+  --ink-2:#4a5663;          /* 次文字 */
+  --ink-3:#5f6b78;          /* 弱文字（WCAG 調色：#6b7885 → #5f6b78，見 §J） */
+  --rule:#c3ccd8;           /* 髮絲線（純裝飾分隔，非 UI 元件，見 §J 的分類） */
+  --rule-2:#dbe2ea;
+  --edge:#7b8694;           /* 可操作控制項的邊界（≥3:1，見 §J） */
+  --draft:#0f6b6c;          /* 註記主色（青） */
+  --draft-bg:#dff0ef;
+  --stop:#8c1d3f;           /* ⛔ 標記色 */
+  --stop-bg:#fae7ed;
+  --ok-mark:#1d6b3f;        /* ✓ */
+  --warn-mark:#8a5a12;      /* ⚠ */
+  --shadow:0 1px 0 rgba(22,28,36,.06), 0 6px 18px -12px rgba(22,28,36,.35);
+
+  /* — App 螢幕（兩個主題下都一樣：app 本身就是深色） — */
+  --app-bg:#0e1117;
+  --app-card:#161b22;
+  --app-border:#30363d;     /* 純裝飾分隔（卡框、表列線、格線），非 UI 元件 —— 見 §J 的分類 */
+  --app-edge:#6b7682;       /* 可操作控制項與狀態容器的邊界（≥3:1，見 §J） */
+  --app-ph:#7d858e;         /* 輸入提示字（WCAG 調色：#5c666f → #7d858e，見 §J） */
+  --app-fg:#e6edf3;
+  --app-fg-2:#c9d1d9;
+  --app-muted:#8b949e;
+  --st-gray:#8b949e;
+  --st-warn-fg:#e3b341;     /* 業務例外／不適用：黃（SSOT 第五節卡片表） */
+  --st-warn-bg:#241d07;
+  --st-err:#ff4b4b;         /* 系統錯誤：紅 */
+  --st-err-bg:#2b1114;
+
+  --maxw:1180px;
+  --gap:16px;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117;
+    --sheet:#161b22;
+    --sheet-2:#1b222b;
+    --ink:#e6edf3;
+    --ink-2:#adb7c2;
+    --ink-3:#8b949e;
+    --rule:#30363d;
+    --rule-2:#262c34;
+    --edge:#6b7682;
+    --draft:#5fd3d0;
+    --draft-bg:#0f2a2b;
+    --stop:#f294b6;
+    --stop-bg:#2a0a12;
+    --ok-mark:#5fd58a;
+    --warn-mark:#e3b341;
+    --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+  --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+  --rule:#30363d; --rule-2:#262c34; --edge:#6b7682;
+  --draft:#5fd3d0; --draft-bg:#0f2a2b;
+  --stop:#f294b6; --stop-bg:#2a0a12;
+  --ok-mark:#5fd58a; --warn-mark:#e3b341;
+  --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",
+              "Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.72;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:16px; padding-block:28px 64px}
+code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,
+  "Cascadia Mono",Consolas,monospace}
+code{font-size:.88em; background:var(--sheet-2); border:1px solid var(--rule-2);
+  border-radius:4px; padding:1px 5px; color:var(--ink)}
+h1,h2,h3,h4{text-wrap:balance; margin:0; line-height:1.34}
+p{margin:0}
+:focus-visible{outline:2px solid var(--draft); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important; animation:none!important}}
+
+/* ── 圖紙標題塊 ───────────────────────────────────────── */
+.titleblock{border:1px solid var(--rule); background:var(--sheet);
+  border-radius:var(--r); padding:20px 22px; box-shadow:var(--shadow)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--draft); font-weight:600}
+h1{font-size:clamp(24px,4.2vw,34px); font-weight:700; letter-spacing:-.01em; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:16px; padding-top:14px;
+  border-top:1px dashed var(--rule); font-size:12.5px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── 通用區塊 ─────────────────────────────────────────── */
+section{margin-top:34px}
+.sec-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  padding-bottom:8px; border-bottom:2px solid var(--ink); margin-bottom:16px}
+.sec-head h2{font-size:19px; font-weight:700}
+.sec-head .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--draft);
+  font-weight:600; letter-spacing:.08em}
+.sec-head .hint{font-size:12.5px; color:var(--ink-3); margin-left:auto}
+.card{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:16px 18px}
+.note{font-size:13px; color:var(--ink-2)}
+.tiny{font-size:12px; color:var(--ink-3)}
+
+/* ── 落差條（頁首警示） ───────────────────────────────── */
+.gapstrip{margin-top:18px; border:1px solid var(--stop); background:var(--stop-bg);
+  border-radius:var(--r); padding:14px 16px}
+.gapstrip h3{font-size:14px; color:var(--stop); font-weight:700}
+.gapstrip ol{margin:8px 0 0; padding-left:20px; font-size:13.5px; color:var(--ink)}
+.gapstrip li{margin:5px 0}
+.gapstrip li b{color:var(--stop)}
+
+/* ── 控制列（註記層，不是 app 的一部分） ─────────────── */
+.ctlwrap{margin-top:22px; border:2px dashed var(--draft); border-radius:var(--r);
+  background:var(--draft-bg); padding:10px 12px 12px}
+.ctlhead{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:9px}
+.ctlhead .tag{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft); font-weight:700;
+  border:1px solid var(--draft); border-radius:5px; padding:1px 7px}
+.ctlhead .say{font-size:12.5px; color:var(--ink-2)}
+.controls{background:var(--sheet); border:1px solid var(--rule);
+  border-radius:8px; padding:11px 13px; display:flex; flex-wrap:wrap; gap:12px 20px}
+.cgroup{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.clab{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.btn{font:inherit; font-size:13px; padding:5px 11px; border-radius:7px; cursor:pointer;
+  border:1px solid var(--edge); background:var(--sheet-2); color:var(--ink-2)}
+.btn:hover{border-color:var(--draft); color:var(--ink)}
+.btn[aria-pressed="true"]{background:var(--draft); border-color:var(--draft);
+  color:var(--paper); font-weight:600}
+
+/* ── 舞台：螢幕 + 註記軌 ──────────────────────────────── */
+.stage{display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start;
+  margin-top:20px}
+.screenbox{min-width:0}
+.rulerbar{display:flex; align-items:center; gap:10px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; color:var(--ink-3); margin-bottom:6px}
+.rulerbar .tick{flex:1; height:1px; background:repeating-linear-gradient(90deg,
+  var(--rule) 0 1px, transparent 1px 8px)}
+.screen-scroll{overflow-x:auto; padding-bottom:6px; border-radius:var(--r)}
+.screen{
+  width:var(--screen-w,1280px); max-width:100%;
+  container-type:inline-size;
+  background:var(--app-bg); color:var(--app-fg);
+  border:1px solid var(--app-border); border-radius:var(--r);
+  padding:18px 18px 22px; margin:0 auto;
+}
+.screen-chrome{display:flex; align-items:center; gap:8px; padding-bottom:12px;
+  margin-bottom:14px; border-bottom:1px solid var(--app-border);
+  font-size:12px; color:var(--app-muted); font-family:"IBM Plex Mono",monospace}
+.screen-chrome .dot{width:8px; height:8px; border-radius:50%; background:var(--app-border)}
+.screen-chrome .tabs{margin-left:auto; color:var(--app-muted); opacity:.8}
+.screen-chrome .tabs b{color:var(--app-fg-2); font-weight:600}
+
+/* 層標 */
+.layer{margin-top:18px}
+.layer:first-of-type{margin-top:0}
+.layer-tag{display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft)}
+.layer-tag .bar{flex:1; height:1px; background:var(--app-border)}
+.layer-tag .role{color:var(--app-muted); letter-spacing:.04em; text-transform:none;
+  font-size:11px}
+
+/* ── 燈（層 1 · HLD-0） ───────────────────────────────── */
+.lamp{border-radius:8px; padding:14px 16px; border:1px solid var(--app-border);
+  background:var(--app-card)}
+.lamp .top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.lamp .glyph{font-size:17px; line-height:1}
+.lamp .headline{font-size:16px; font-weight:700}
+.lamp .lines{margin-top:8px; font-size:13.5px; color:var(--app-fg-2)}
+.lamp .lines div{margin:3px 0}
+.lamp .where{margin-top:8px; font-size:12.5px; color:var(--app-muted)}
+.lamp .stword{display:inline-block; font-size:11px; font-weight:700; border-radius:999px;
+  padding:1px 9px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-fg-2); background:#11161d; flex:none}
+.lamp.warn .stword{color:var(--st-warn-fg); border-color:var(--st-warn-fg)}
+.lamp.err .stword{color:var(--st-err); border-color:var(--st-err)}
+.lamp.gray .headline{color:var(--app-muted); font-weight:600}
+.lamp.warn{background:var(--st-warn-bg); border-color:var(--st-warn-fg)}
+.lamp.warn .headline{color:var(--st-warn-fg)}
+.lamp.err{background:var(--st-err-bg); border:1px solid var(--st-err)}
+.lamp.err .headline{color:var(--st-err)}
+.navbtn{margin-top:10px; font:inherit; font-size:13px; padding:6px 12px; border-radius:7px;
+  cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.navbtn:hover{border-color:var(--app-fg-2)}
+
+/* ── 核心卡（層 2 · HLD-1 / HLD-2 / HLD-3） ───────────── */
+.cards{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.cardx{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:13px 14px; min-width:0}
+.cardx .t{font-size:13.5px; color:var(--app-fg); font-weight:700;
+  display:flex; align-items:baseline; gap:7px; flex-wrap:wrap}
+.cardx .st{font-size:12.5px; color:var(--app-muted); margin-top:4px}
+.cardx .miss{color:var(--st-gray); font-size:14px; font-weight:600; margin-top:8px}
+.cardx .exc{color:var(--st-warn-fg); font-size:14px; font-weight:600; margin-top:8px}
+.cardx .errline{color:var(--st-err); font-size:14px; font-weight:700; margin-top:8px}
+.cardx.warnstate{background:var(--st-warn-bg); border-color:var(--st-warn-fg)}
+.cardx.errstate{background:var(--st-err-bg); border-color:var(--st-err)}
+.cardx .foot{margin-top:9px; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+
+/* 卡內逐檔群組（H-02 落地後：核心卡逐檔兩個主值，第三個值移到層 4 的 HLD-8） */
+.fgrp{border-top:1px dashed var(--app-border); padding-top:8px; margin-top:8px}
+.fgrp:first-of-type{border-top:0; padding-top:0; margin-top:8px}
+.fgrp .fh{font-size:12.5px; color:var(--app-fg-2); font-weight:600}
+.trio{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:5px}
+.trio div{background:#11161d; border:1px solid var(--app-border); border-radius:6px;
+  padding:6px 8px; min-width:0}
+.trio .k{font-size:11px; color:var(--app-muted); display:block}
+.trio .v{font-size:14px; color:var(--app-fg); font-weight:600;
+  font-variant-numeric:tabular-nums; display:block; margin-top:1px;
+  overflow-wrap:anywhere}
+.trio .v.na{color:var(--st-warn-fg); font-size:12px; font-weight:600}
+.trio .v.nd{color:var(--st-gray); font-size:12px; font-weight:600}
+
+/* 卡內小表（HLD-1 的偏離列） */
+.devtable{width:100%; border-collapse:collapse; margin-top:8px; font-size:12.5px;
+  font-variant-numeric:tabular-nums}
+.devtable th,.devtable td{padding:5px 7px; text-align:left; border-bottom:1px solid var(--app-border);
+  overflow-wrap:anywhere}
+.devtable th{color:var(--app-muted); font-weight:600; font-size:11px; background:#11161d}
+.devtable tr:last-child td{border-bottom:0}
+.devtable td.nd{color:var(--st-gray)}
+
+/* 徽章（app 內） */
+.abadge{display:inline-block; font-size:10.5px; font-weight:600; border-radius:999px;
+  padding:1px 7px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-muted); background:#11161d}
+.abadge.warn{color:var(--st-warn-fg); border-color:var(--st-warn-fg)}
+.abadge.gray{color:var(--st-gray)}
+.abadge.ph{border-style:dashed; color:var(--app-muted)}
+
+/* 重新取數鈕（卡內） */
+.retry{margin-top:9px; font:inherit; font-size:12.5px; padding:5px 10px; border-radius:6px;
+  cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.retry:hover{border-color:var(--app-fg-2)}
+
+/* ── 操作列（層 3 · HLD-4 / HLD-5，預設收合） ─────────── */
+.ops{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.exp{border:1px solid var(--app-edge); border-radius:8px; background:var(--app-card);
+  overflow:hidden; min-width:0}
+.exp summary{cursor:pointer; padding:10px 13px; font-size:13.5px; color:var(--app-fg);
+  list-style:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.exp summary::-webkit-details-marker{display:none}
+.exp summary::before{content:"\25B8"; color:var(--app-muted); font-size:11px; flex:none}
+.exp[open] summary::before{content:"\25BE"}
+.exp summary:hover{background:#1b222b}
+.exp summary .sm{color:var(--app-muted); font-size:12px; margin-left:auto;
+  overflow-wrap:anywhere}
+.exp .body{padding:0 13px 13px; font-size:13px; color:var(--app-fg-2);
+  border-top:1px solid var(--app-border); padding-top:11px}
+.frow{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:9px; margin-top:8px}
+.fld{min-width:0}
+.fld label{display:block; font-size:11.5px; color:var(--app-muted); margin-bottom:3px}
+.fld input{width:100%; font:inherit; font-size:13px; padding:6px 9px; border-radius:6px;
+  background:#11161d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.fld input::placeholder{color:var(--app-ph)}
+.thr{display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) auto;
+  gap:7px; align-items:end; margin-top:8px}
+.rowbtn{font:inherit; font-size:12.5px; padding:6px 10px; border-radius:6px; cursor:pointer;
+  background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge); white-space:nowrap}
+.rowbtn:hover{border-color:var(--app-fg-2)}
+.applybar{display:flex; gap:8px; flex-wrap:wrap; margin-top:11px}
+.apply{font:inherit; font-size:13.5px; font-weight:600; padding:8px 16px; border-radius:7px;
+  cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.apply:hover{border-color:var(--app-fg-2)}
+.apply[disabled]{cursor:not-allowed; color:var(--app-muted); border-style:dashed}
+.apply[disabled]:hover{border-color:var(--app-edge)}
+.why{color:var(--app-muted); font-size:12px; margin-top:5px}
+.fielderr{color:var(--st-warn-fg); font-size:12px; margin-top:5px}
+
+/* 單檔展開（HLD-5） */
+.fundlist{margin-top:6px}
+.fundrow{border:1px solid var(--app-edge); border-radius:6px; background:#11161d;
+  margin-top:7px; padding:9px 11px}
+.fundrow .fr-h{display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:13px}
+.fundrow .fr-h .nm{font-weight:600; color:var(--app-fg)}
+.fundrow .fr-b{margin-top:9px; border-top:1px dashed var(--app-border); padding-top:9px}
+.kv{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px 12px; font-size:12.5px}
+.kv span{color:var(--app-muted)}
+.kv b{color:var(--app-fg); font-weight:600; font-variant-numeric:tabular-nums}
+.plot{margin-top:9px; border:1px dashed var(--app-edge); border-radius:6px; padding:10px;
+  color:var(--app-muted); font-size:12px; text-align:center}
+
+/* ── 佐證（層 4 · HLD-6 / HLD-7，預設收合） ───────────── */
+.evi{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.tscroll{overflow-x:auto; margin-top:8px; border:1px solid var(--app-border); border-radius:6px}
+table.wt{border-collapse:collapse; width:100%; font-size:12.5px;
+  font-variant-numeric:tabular-nums}
+table.wt th,table.wt td{padding:6px 9px; text-align:left;
+  border-bottom:1px solid var(--app-border); overflow-wrap:anywhere}
+table.wt th{color:var(--app-muted); font-weight:600; background:#11161d}
+table.wt tr:last-child td{border-bottom:0}
+/* 佐證表格裡的四狀態（顏色 ＋ 圖示 ＋ 文字三條線，不靠顏色單獨辨識） */
+table.wt td .nd{color:var(--st-gray); font-weight:600}
+table.wt td .na{color:var(--st-warn-fg); font-weight:600}
+table.wt td .er{color:var(--st-err); font-weight:700}
+.subt{font-size:12px; color:var(--app-muted); margin-top:10px; font-weight:600}
+.errdetail{margin-top:8px; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  color:#ffb4b4; background:#1b1114; border:1px solid #a24651; border-radius:6px;
+  padding:9px 11px; white-space:pre-wrap; overflow-wrap:anywhere}
+.emptybox{border:1px dashed var(--app-edge); border-radius:8px; padding:16px;
+  background:var(--app-card)}
+.emptybox .et{color:var(--app-muted); font-weight:600; font-size:14px}
+.emptybox .em{color:var(--app-muted); font-size:13px; margin-top:4px}
+
+/* ── 註記軌 ───────────────────────────────────────────── */
+.rail{display:flex; flex-direction:column; gap:14px; min-width:0}
+.railcard{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:13px 14px}
+.railcard h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); font-weight:600; margin-bottom:8px}
+.legend{display:flex; flex-direction:column; gap:7px; font-size:12.5px}
+.legend div{display:flex; gap:8px; align-items:flex-start}
+.legend b{flex:none; width:80px; font-weight:600; font-size:11.5px;
+  font-family:"IBM Plex Mono",monospace}
+
+/* ── 註記標籤（pin）：一眼看得出不是 app 的字 ─────────── */
+.pin{display:inline-flex; align-items:center; gap:5px; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; font-weight:600; color:var(--stop); background:var(--stop-bg);
+  border:1px dashed var(--stop); border-radius:5px; padding:1px 6px; vertical-align:middle}
+.pin.ann{color:var(--draft); background:var(--draft-bg); border-color:var(--draft)}
+.pinrow{display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 0}
+.annot{margin-top:8px; font-size:12px; color:var(--ink-2); background:var(--sheet);
+  border:1px dashed var(--draft); border-left:3px solid var(--draft);
+  border-radius:0 6px 6px 0; padding:8px 11px}
+.annot b{color:var(--draft)}
+
+/* ── 表格（註記層） ───────────────────────────────────── */
+.tbl-scroll{overflow-x:auto; border:1px solid var(--rule); border-radius:var(--r);
+  background:var(--sheet)}
+table.ref{border-collapse:collapse; width:100%; min-width:640px; font-size:13px}
+table.ref th,table.ref td{padding:8px 11px; text-align:left; vertical-align:top;
+  border-bottom:1px solid var(--rule-2)}
+table.ref th{background:var(--sheet-2); color:var(--ink-2); font-weight:600;
+  font-size:11.5px; letter-spacing:.04em; white-space:nowrap}
+table.ref tr:last-child td{border-bottom:0}
+table.ref td.id{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--stop); font-weight:600}
+table.ref td.src{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--ink-3)}
+table.ref td.jd{white-space:nowrap; font-size:12px}
+.badge{display:inline-block; font-size:11px; font-weight:600; border-radius:999px;
+  padding:1px 8px; white-space:nowrap}
+.badge.mu{background:var(--stop-bg); color:var(--stop); border:1px solid var(--stop)}
+.badge.no{background:var(--sheet-2); color:var(--ink-3); border:1px solid var(--edge)}
+.badge.ok{background:var(--sheet-2); color:var(--ok-mark); border:1px solid var(--ok-mark)}
+.badge.wn{background:var(--sheet-2); color:var(--warn-mark); border:1px solid var(--warn-mark)}
+
+/* ── 判準框 / 揭露 ────────────────────────────────────── */
+.crit{background:var(--draft-bg); border:1px solid var(--draft); border-radius:var(--r);
+  padding:13px 15px; margin-bottom:14px; font-size:13.5px}
+.crit h4{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); margin-bottom:6px}
+.crit ul{margin:6px 0 0; padding-left:19px}
+.crit li{margin:3px 0}
+.disclose{border:1px solid var(--rule); border-left:4px solid var(--warn-mark);
+  background:var(--sheet); border-radius:0 var(--r) var(--r) 0; padding:15px 17px}
+.disclose ul{margin:8px 0 0; padding-left:19px; font-size:13.5px}
+.disclose li{margin:5px 0}
+.foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--ink-3)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   響應式 —— 三個斷點 375 / 768 / 1280，欄數依 SSOT 第二節第一小節最終版：
+     ≤768 單欄　769–1279 兩欄　≥1280 三欄
+   基底寫法就是單欄（＝ ≤768 那一段），兩個 @media 往上加寬。
+   375 是三個斷點值之一，但 SSOT 明寫「它不是欄數的分界」——
+   故 375 那一條只收字級與內距，不動欄數。
+   ════════════════════════════════════════════════════════════════════ */
+@media (min-width:769px) and (max-width:1279px){
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:1280px){
+  .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stage{grid-template-columns:minmax(0,1fr) 316px}
+}
+@media (max-width:1279px){
+  .rail{flex-direction:row; flex-wrap:wrap}
+  .railcard{flex:1 1 260px}
+}
+@media (max-width:768px){
+  .wrap{padding-block:20px 48px}
+  .rail{flex-direction:column}
+  .railcard{flex:1 1 auto}
+  .sec-head .hint{margin-left:0; flex-basis:100%}
+  .screen{padding:14px 13px 18px}
+  .frow{grid-template-columns:minmax(0,1fr)}
+  .thr{grid-template-columns:minmax(0,1fr)}
+  .kv{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:375px){
+  body{font-size:14px}
+  .trio{grid-template-columns:minmax(0,1fr)}
+  .legend b{width:100%}
+  .legend div{flex-direction:column; gap:1px}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+}
+/* 模擬螢幕自己的寬度反應：讓上方的斷點鈕即使不縮視窗也看得到塌法。
+   三段與上面的 @media 逐值相同（≤768 / 769–1279 / ≥1280），兩者永遠同時同側。 */
+@container (max-width:768px){
+  .cards,.ops{grid-template-columns:minmax(0,1fr)}
+  .frow,.thr,.kv{grid-template-columns:minmax(0,1fr)}
+}
+@container (min-width:769px) and (max-width:1279px){
+  .cards,.ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container (min-width:1280px){
+  .cards,.ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container (max-width:375px){
+  .trio{grid-template-columns:minmax(0,1fr)}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══════════════ 標題塊 ══════════════ -->
+<header class="titleblock">
+  <div class="eyebrow">新工作流 · 先出 HTML 草稿 · 第二頁</div>
+  <h1>「持倉體檢」頁線框原型</h1>
+  <p class="sub">
+    這是 <code>docs/v2/44_fund_ui_ssot.md</code> 第三節第二小節（持倉體檢）那八塊的<b>可點版本</b>：
+    四層結構、六種狀態、三個斷點全部畫出來，讓客戶用眼睛驗收，而不是讀規格。
+    <b>2026-09-22 第二次修訂</b>：客戶裁定了 <code>H-01</code>／<code>H-02</code>／<code>H-04</code> 三筆並頒了
+    WCAG 2.2 AA 的設計引導，<b>三筆已落地、層 4 因此多一塊（共九塊）</b>，逐處見 §C 與 §J。
+    <b>本輪一行 Streamlit 也沒有寫</b>，也沒有接任何真實資料 —— 畫面上每一個數字都是示意值。
+  </p>
+  <div class="meta">
+    <span><b>repo</b> my-Fund-dashboard</span>
+    <span><b>分支</b> <code>ui-v2</code></span>
+    <span><b>head</b> <code>9609060</code></span>
+    <span><b>規格</b> <code>44_fund_ui_ssot.md</code>（第三節第二小節 ＋ 第五節元件 ＋ 第一節紅線）</span>
+    <span><b>體例參考</b> <code>47_fund_wireframe_mkt.md</code>（只借體例，內容一律取自 44）</span>
+    <span><b>視覺參考</b> <code>ui_prototype_today.html</code>（同一套 token，未改一字）</span>
+    <span><b>產出</b> T 組（架構與前端組）· 2026-09-22</span>
+    <span><b>本輪修訂</b> U 組（架構與前端組）· 2026-09-22 · 客戶三條裁示 ＋ WCAG 2.2 AA 設計引導</span>
+    <span><b>複驗</b> 單組產出，沒有第二組獨立複驗</span>
+  </div>
+
+  <div class="card" style="margin-top:18px; background:var(--sheet-2); border-style:dashed">
+    <h3 style="font-size:14px; font-weight:700; color:var(--draft)">怎麼看這份草稿（5 分鐘）</h3>
+    <ol style="margin:8px 0 0; padding-left:20px; font-size:13.5px; line-height:1.75; color:var(--ink)">
+      <li>先看中間深色的那一塊 —— <b>那是 app 的樣子</b>，四層由上往下：結論燈／三張核心卡／操作列／展開佐證。</li>
+      <li>用上方<b>青色虛線框</b>裡的控制列切六種狀態、三個斷點。<b>那個框不是畫面元件</b>，是給你審稿用的。</li>
+      <li>層 3 與層 4 <b>預設是收合的</b>（規格要求）—— 想看裡面，自己點開。</li>
+      <li>看完再看 <b>§C 的 ⛔ 清單（18 筆）</b>：那是本組畫這一頁時撞到的、規格自己打架或畫不出來的地方。</li>
+      <li>§D 是<b>按鈕逐顆</b>的 ✓／⚠。<b>§J 是本輪新增的 WCAG 2.2 AA 落地</b>（對比逐組算過、狀態配圖示＋文字、多幣別逐檔標明）。
+        <span style="color:var(--ink-2)">§A／§B／§E／§F／§G／§H／§I 是細節，可以後看。</span></li>
+    </ol>
+  </div>
+
+  <div class="gapstrip" style="border-color:var(--ok-mark); background:var(--sheet-2)">
+    <h3 style="color:var(--ok-mark)">✓ 三筆最該先拍板的地方，客戶 2026-09-22 已經裁定，本輪已落地</h3>
+    <ol>
+      <li><b>H-04　你填的區間與門檻存不回去。</b>
+        <s>這一頁的操作列只有「套用」，而規格明訂「套用」只讀輸入不改輸入；
+        八類按鈕裡能寫使用者設定的是「存檔」，而規格沒有給這一頁一枚存檔鈕。
+        下一次打開，你要重填一次。本組沒有自己加一枚。</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地</b>：操作列加一枚「存檔」，與「套用」<b>兩枚並存</b> ——
+        「套用」只重算不寫回，「存檔」只寫回不重算。體例照規格本輪已為市場總覽那一塊訂好的同一段。</li>
+      <li><b>H-02　兩張核心卡各要三個值，而卡片元件的上限是兩個。</b>
+        <s>規格自己已經登記這一條是待客戶裁決。本組照塊規則畫三個值，並在那兩張卡上標了 ⛔。</s><br>
+        → <b>客戶 2026-09-22 裁定「以卡片元件為準（上限兩個值）」，已落地</b>。
+        客戶給了兩條路，<b>本組採「第三個值移到層 4」</b>（另一條「拆成四張」會讓層 2 變成五張卡、撞上限三張）——
+        兩條路的取捨寫在 <b>§C 的 H-02 那一列</b>。</li>
+      <li><b>H-01　結論燈上的「N 檔」和偏離卡的列數，在有檔缺淨值時必不相等。</b>
+        <s>規格的兩行判準互相打架，兩條不可能同時通過。
+        切到狀態 2 就直接看得到：燈說兩檔，卡上三列。</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地</b>：缺淨值的檔<b>不計入列數</b>，
+        於是燈上的 N 等於偏離卡的列數。切到<b>狀態 2</b> 看得到：燈說兩檔、卡上兩列，
+        另一檔改在卡尾一行寫「另有 1 檔缺淨值，未列入」。</li>
+    </ol>
+    <p class="tiny" style="margin-top:9px">
+      十八筆完整清單與逐筆代價仍寫在 <b>§C</b>，其中這三筆已標「已裁定」，<b>其餘十五筆照舊未裁</b>。
+      本輪另依客戶的設計引導做了 WCAG 2.2 AA 的三件事，逐項寫在 <b>§J</b>。</p>
+  </div>
+</header>
+
+<!-- ══════════════ 控制列（註記層） ══════════════ -->
+<div class="ctlwrap">
+  <div class="ctlhead">
+    <span class="tag">審稿用 · 不是畫面元件</span>
+    <span class="say">這一排鈕<b>不存在於 app 裡</b> —— 它在淺色註記層上，只是替你把下面那塊深色螢幕切成不同狀態與寬度。</span>
+  </div>
+  <div class="controls" role="group" aria-label="草稿控制列（註記層）">
+    <div class="cgroup">
+      <span class="clab">六狀態</span>
+      <button class="btn" type="button" data-state="full" aria-pressed="true">1 全齊</button>
+      <button class="btn" type="button" data-state="srcmiss" aria-pressed="false">2 缺來源</button>
+      <button class="btn" type="button" data-state="bizexc" aria-pressed="false">3 業務例外</button>
+      <button class="btn" type="button" data-state="fetchfail" aria-pressed="false">4 取數失敗</button>
+      <button class="btn" type="button" data-state="nothr" aria-pressed="false">5 門檻未設</button>
+      <button class="btn" type="button" data-state="empty" aria-pressed="false">6 全空（首次開啟）</button>
+    </div>
+    <div class="cgroup">
+      <span class="clab">斷點</span>
+      <button class="btn" type="button" data-bp="375" aria-pressed="false">375</button>
+      <button class="btn" type="button" data-bp="768" aria-pressed="false">768</button>
+      <button class="btn" type="button" data-bp="1280" aria-pressed="true">1280</button>
+    </div>
+    <div class="cgroup" style="margin-left:auto">
+      <span class="clab">主題</span>
+      <button class="btn" type="button" id="btn-theme" aria-pressed="false">跟隨系統</button>
+    </div>
+  </div>
+  <p class="tiny" style="margin-top:8px">
+    斷點鈕改的是<b>模擬螢幕的寬度</b>；<b>直接縮瀏覽器視窗也會塌</b>（本檔用的是真的 CSS
+    <code>@media</code>，三段寫死在樣式表裡，見 §E）。兩條路的三段逐值相同，永遠同時同側。
+  </p>
+</div>
+
+<!-- ══════════════ 舞台 ══════════════ -->
+<div class="stage">
+  <div class="screenbox">
+    <div class="rulerbar">
+      <span id="bp-read">模擬寬度 1280px</span>
+      <span class="tick" aria-hidden="true"></span>
+      <span id="bp-actual">實際渲染 —</span>
+    </div>
+    <div class="screen-scroll">
+      <div class="screen" id="screen" style="--screen-w:1280px">
+
+        <div class="screen-chrome">
+          <span class="dot" aria-hidden="true"></span>
+          <span>持倉體檢</span>
+          <span class="tabs">① 市場總覽　<b>② 持倉體檢</b>　③ 標的探索　④ 資產配置　⑤ 設定與診斷</span>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 1</span><span class="role">結論燈 · 滿寬 · 預設展開</span><span class="bar"></span></div>
+          <div id="slot-lamp"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 2</span><span class="role">核心卡 · 三張 · 預設展開</span><span class="bar"></span></div>
+          <div id="slot-cards"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 3</span><span class="role">操作 · 兩塊 · 預設收合</span><span class="bar"></span></div>
+          <div id="slot-ops"></div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-tag"><span>層 4</span><span class="role">佐證 · 三塊 · 預設收合</span><span class="bar"></span></div>
+          <div id="slot-evi"></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="pinrow" id="pinrow"></div>
+    <div class="annot" id="live-annot"></div>
+  </div>
+
+  <aside class="rail">
+    <div class="railcard">
+      <h3>現在在看什麼</h3>
+      <div class="note" id="state-explain"></div>
+    </div>
+    <div class="railcard">
+      <h3>結論燈的規則（逐字引 44）</h3>
+      <div class="legend">
+        <div><b>灰</b><span>「三塊皆 <code>ok</code> 且偏離筆數為零」→ 文案「無偏離項」</span></div>
+        <div><b>黃</b><span>「偏離筆數大於零」→ 文案「有 N 檔超出你設定的門檻」</span></div>
+        <div><b>紅</b><span>「任一塊為 <code>系統錯誤</code>」</span></div>
+      </div>
+      <p class="tiny" style="margin-top:9px">
+        <b>三條規則只涵蓋三種情形。</b> 某塊進「資料未備」或「業務例外」而偏離筆數為零時，
+        <b>三條一條也沒命中</b> —— 燈該什麼色，規格沒有寫（<b>⛔ H-03</b>）。
+        本組畫灰，<b>那是本組被迫選的一邊</b>。
+      </p>
+      <p class="tiny" style="margin-top:7px">
+        規格同段逐字：「燈色描述的是『要不要多看一眼』，<b>不描述持倉好壞</b>」——
+        <b>灰不是「持倉健康」，黃不是「該調整了」。</b>
+      </p>
+    </div>
+    <div class="railcard">
+      <h3>四狀態的顏色（逐字引 44 第五節卡片表）</h3>
+      <div class="legend">
+        <div><b>ok</b><span>主值<b>不著色</b>，用中性文字色</span></div>
+        <div><b>資料未備</b><span>灰 · 主值位置寫 <code>⬜ 資料未備</code></span></div>
+        <div><b>業務例外</b><span>黃 · 主值位置寫 <code>⬜ 不適用</code></span></div>
+        <div><b>系統錯誤</b><span>紅 · 主值位置寫 <code>⚠ 取數失敗</code>＋訊息原文</span></div>
+      </div>
+      <p class="tiny" style="margin-top:9px">
+        顏色<b>只映射這四種資料狀態與新鮮度</b>，不映射投資好壞 ——
+        同一個狀態下把數字換成正負號相反的一個，顏色不變。
+      </p>
+    </div>
+    <div class="railcard">
+      <h3>這一頁的按鈕（逐顆）</h3>
+      <div class="legend">
+        <div><b>✓ 導覽</b><span>「前往 Sheets 維護持倉」（<code>HLD-0</code> 空狀態，標籤逐字出自 44）</span></div>
+        <div><b>✓ 套用</b><span>「套用」（<code>HLD-4</code>，標籤逐字出自 44）</span></div>
+        <div><b>⚠ 取數</b><span>「重新取數」—— 標籤逐字，<b>行為有疑義</b>（⛔ H-05）</span></div>
+        <div><b>⚠ 其餘</b><span>新增列／清除／展開三類的<b>字面全是本組擬的</b>，見 §D</span></div>
+      </div>
+      <p class="tiny" style="margin-top:9px">
+        <b>這一頁沒有匯出鈕。</b> 層 3 的通則寫「使用者輸入、切換、匯出」，
+        但 <code>HLD-4</code>／<code>HLD-5</code> 兩塊<b>都沒有宣告匯出</b> —— 本組不自己加。
+      </p>
+    </div>
+  </aside>
+</div>
+
+<!-- ══════════════ §A 四層與八塊 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§A</span><h2>四層與八塊：誰在哪一層、預設開還是關</h2>
+    <span class="hint">逐字引 44 第二節通則 ＋ 第三節第二小節的層次表</span></div>
+
+  <div class="crit">
+    <h4>怎麼讀這一份</h4>
+    <ul>
+      <li><b>「加引號」</b>＝ <b>逐字出自 44</b> —— 客戶看到的就是這幾個字。</li>
+      <li><b>〔方括號〕</b>＝ 元件位置示意，<b>不是</b>畫面文字。</li>
+      <li><b>（示意）</b>＝ 這個數字<b>是假的</b>，只表示位置與格式。<b>畫面上每一個數字旁邊都有這三個字。</b></li>
+      <li><b>〔本組擬定〕</b>＝ 44 未逐字規定，由本組依 44 的規則擬出，<b>等客戶拍板</b>。</li>
+      <li><b><code>H-nn</code></b>＝ 本組畫圖時撞到的 44 缺口或互斥，逐筆列在 §C。</li>
+    </ul>
+  </div>
+
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ <b>本草稿一個真實觀測值也沒有。</b> 螢幕上看到的數字全部是示意值，每一個旁邊都標了（示意）。
+    填一個看起來合理的數字、客戶會把它讀成真的 —— 那是線框最容易犯的一種造假。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>層</th><th>放什麼（逐字引 44）</th><th>預設</th><th>本頁的塊</th></tr></thead>
+      <tbody>
+        <tr><td class="src">層 1</td><td>「一枚結論燈：這一頁有沒有需要今天多看一眼的東西」</td><td class="jd"><b>展開</b></td><td><code>HLD-0</code> 體檢結論燈</td></tr>
+        <tr><td class="src">層 2</td><td>「撐起這一頁那個問題的三個面向，一面一張卡」</td><td class="jd"><b>展開</b></td><td><code>HLD-1</code> 偏離提示卡、<code>HLD-2</code> 績效與風險卡、<code>HLD-3</code> 配息與本金卡</td></tr>
+        <tr><td class="src">層 3</td><td>「使用者輸入、切換、匯出」</td><td class="jd">收合</td><td><code>HLD-4</code> 檢視區間與門檻輸入、<code>HLD-5</code> 單檔展開</td></tr>
+        <tr><td class="src">層 4</td><td>「原始序列、計算軌跡、來源與新鮮度明細」</td><td class="jd">收合</td><td><code>HLD-6</code> 淨值與配息序列、<code>HLD-7</code> 計算軌跡、<b><code>HLD-8</code> 最大回撤與本金類配息佔比</b>（H-02 裁定後新增，<b>塊代號為本組擬定</b>）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    逐字引 44 的三條硬規則（前兩條出自四層通則，第三條出自展開區元件）：<br>
+    「初次載入時展開的東西 ＝ 結論燈 ＋ 3 張核心卡。其餘層級收合。」<br>
+    「展開狀態不跨頁保留；離開再回來，回到預設。」<br>
+    「展開區不自動展開 —— 沒有任何資料狀態會讓收合區自己打開。」
+  </p>
+  <p class="note" style="margin-top:8px">
+    → <b>所以缺資料的時候，層 3 與層 4 不會自己彈開。</b> 缺了什麼在收合那一行的摘要就看得見
+    （逐字引 44：「展開區不把空狀態藏進展開內容」）。<b>本草稿的四塊一律畫成收合</b>，摘要寫在標題列右邊。
+  </p>
+  <p class="note" style="margin-top:8px">
+    ⛔ <b>這一頁的回答範圍，逐字引 44：</b>「我手上這些基金，哪幾檔偏離了我自己設的門檻」。
+    <b>不負責</b>：「不挑新標的（那是標的探索）；不談市場環境（那是市場總覽）；
+    不決定要不要調整 —— 本頁只呈現偏離，處置方向不在本頁產生」。
+  </p>
+</section>
+
+<!-- ══════════════ §B 逐塊 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§B</span><h2>逐塊：八塊，每塊四件事</h2>
+    <span class="hint">長什麼樣／回答什麼／資料不齊時變什麼／有沒有按鈕</span></div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-0</code>｜體檢結論燈（層 1）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>滿寬一列：左邊一枚燈，右邊一行文案。燈色三種：灰／黃／紅。</li>
+      <li>燈色與文案<b>完全由規則決定</b>，逐字引 44：灰＝「無偏離項」；黃＝「有 N 檔超出你設定的門檻」；紅＝「任一塊為 <code>系統錯誤</code>」。</li>
+      <li><b>這一塊不自己取數</b>（逐字）：「只讀 <code>HLD-1</code>、<code>HLD-2</code>、<code>HLD-3</code> 三塊的狀態值與 <code>HLD-1</code> 的偏離筆數」。</li>
+      <li>紅燈的<b>文案字面 44 沒有給</b> —— 本組擬「有一塊取數失敗，這一頁的數字先不要照著讀」〔本組擬定〕（<b>H-16</b>）。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「這個月我需不需要打開這一頁細看」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b>（逐字引 44 的空狀態那一格）</p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>持倉表為空 → 燈為灰，文案「尚未建立任何持倉」＋一枚「前往 Sheets 維護持倉」按鈕，
+        按鈕下方一行「持倉資料在 Sheets 維護，本儀表板唯讀」。<b>四句全部逐字。</b></li>
+      <li>門檻未設定 → 燈為灰，文案「尚未設定門檻」。</li>
+      <li>⛔ <b>兩者同時成立時哪一句出現，44 沒有寫（H-17）。</b> 本組取持倉那一句（它擋的是更前面的一步），
+        並在燈下<b>補一行</b>把另一句也寫出來 〔本組擬定〕。</li>
+      <li>⛔ <b>某塊不適用／未備而偏離筆數為零時，三條規則一條也沒命中（H-03）。</b> 本組畫灰。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：只有空狀態那一枚「前往 Sheets 維護持倉」（<code>導覽</code> 類 · <b>✓</b>）。
+      依 44，<code>導覽</code> 類「什麼都不寫，只把使用者帶去維護資料的地方」。
+      <b>資料齊的時候這一塊沒有任何按鈕。</b></p>
+    <p class="tiny" style="margin-top:8px">⛔ <b>「燈」不是 44 五類元件之一</b>（卡片／徽章／按鈕／展開區／空狀態，沒有燈）—— <b>H-13</b>。
+      本草稿沿用今天頁原型的燈框畫法 〔本組擬定〕。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-1</code>｜偏離提示卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>逐字引 44：「只列出超出門檻的檔。每一列顯示四件事：<b>基金名、實際值、門檻值、兩者差額</b>。」</li>
+      <li>「差額寫成帶正負號的數字」（逐字）—— <b>不配箭頭</b>。</li>
+      <li>「列不排序成優先順序，依 <code>fund_code</code> 字面值排列」（逐字）。</li>
+      <li>⛔ <b>四欄裡沒有「指標名」欄（H-18）。</b> 而門檻是「一組『指標名＋比較方向＋數值』的列」、使用者可增減列
+        —— 一列讀不出它比的是哪一條線。<b>本組嚴格照 44 畫四欄，不自行加第五欄</b>，
+        示意資料刻意讓兩列比的是不同指標，<b>好讓這個讀不出來的地方看得見</b>。</li>
+      <li>本塊採 44 三形式中的「偏離提示」（<code>G2†</code>）。「列上不出現任何處置方向的字眼」（逐字，<code>G3†</code>）。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「哪幾檔現在超出了我自己寫下的那條線，超出多少」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>無任何持倉 → <code>來源缺</code>，文案「尚未建立任何持倉」（逐字）。</li>
+      <li>門檻未設定 → 「<code>⬜ 不適用：尚未設定門檻</code>」，「不以任何內建值代替」（逐字）。</li>
+      <li><s>某檔缺淨值 → 「該檔單獨列出並標 <code>⬜ 資料未備</code>，不併入偏離筆數」（逐字）。
+        ⛔ 這一條和 <code>HLD-0</code> 的判準直接打架（H-01）—— 切到狀態 2 就看得到。</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地（H-01）</b>：缺淨值的檔<b>不計入列數</b>，
+        於是 <code>HLD-0</code> 的 N 等於本卡的列數，兩行判準自此可以同時通過。</li>
+      <li>⚠️ <b>那些檔要怎麼呈現，客戶沒有逐字點名</b> —— 規格只裁了「不計入列數」，
+        沒有寫它們是另開一區、只寫檔數、還是完全不提。<b>本組取最保守的一邊</b>：
+        <b>在卡尾另寫一行「另有 N 檔缺淨值，未列入」，不另開區塊</b>。
+        <b>這是本組依裁示推得的，客戶未逐字點名，可推翻。</b>
+        理由：另開一區等於憑空多一塊（層 2 的卡數上限是三張，多一塊就撞上限）；
+        完全不提則會讓那些檔在畫面上消失，使用者不知道自己有檔沒被看過。
+        卡尾一行是兩者之間唯一不新增結構、又不讓資料消失的畫法。</li>
+      <li>⛔ <b>門檻已設、資料齊、結果零筆</b>時長什麼樣沒有依據（<b>H-06</b>）：
+        那是一個<b>空結果</b>不是空狀態，44 的空狀態元件四種一種也對不上。
+        本組畫成卡照留、表換成一行「無偏離項」（該句逐字出自 44 的判準）〔畫法為本組擬定〕。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：<code>資料未備</code> 與 <code>系統錯誤</code> 兩態，
+      卡片元件<b>強制</b>掛一枚「重新取數」（<code>取數</code> 類 · <b>⚠</b>）。
+      ⛔ <b>那枚鈕在這一塊無事可做（H-05）</b> —— 缺的是 <code>holding</code>，而 44 明訂
+      「沒有任何一類按鈕寫入 <code>holding</code>」、四張表「不由本儀表板產生」。
+      <b>本組照元件規定把它畫出來，並就地標 ⛔</b>，不自行改成導覽鈕。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-2</code>｜績效與風險卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li><s>逐字引 44：「逐檔顯示<b>三個值</b>：區間報酬率（<code>return_pct</code>…單位百分點，<b>小數 2 位</b>）、
+        期間波動（<code>vol_pct</code>，日報酬標準差年化…）、最大回撤（<code>drawdown_pct</code>）。」</s><br>
+        → <b>客戶 2026-09-22 裁定「以卡片元件為準（上限兩個值）」，已落地（H-02）</b>：
+        本卡逐檔顯示<b>兩個主值</b> —— 區間報酬率、期間波動；
+        <b>第三個值「最大回撤」移到層 4 的 <code>HLD-8</code></b>。</li>
+      <li>「三個值一律以原幣計算，<b>卡上明寫 <code>ccy</code> 的字面值</b>。同一張卡不混不同幣別的數做平均」（逐字）
+        —— 所以卡上每一檔都跟著它自己的幣別字面值，<b>沒有任何一個跨幣別的合計數</b>。</li>
+      <li>本塊採 44 三形式中的「客觀對照」（<code>G2†</code>）。</li>
+      <li><s>⛔ 三個值撞卡片元件「最多兩個主值」的上限（H-02）。44 自己已就地登記這一條是待客戶裁決。
+        本組照塊規則畫三個值，不替客戶選。</s><br>
+        → <b>已裁定並落地</b>。兩條路的取捨、本組為什麼選「移到層 4」，寫在 <b>§C 的 H-02 那一列</b>。</li>
+      <li>⚠️ <b>一件跟著掉出來、本輪沒有動的事</b>：44 這一塊的「回答什麼」逐字是
+        「各自走了多少、<b>抖了多大</b>、<b>最深掉過多少</b>」—— <b>那一句點名了三件事</b>，
+        而卡上現在只剩兩件。<b>那一句要不要跟著改是 44 的事，本輪的授權只准改 44 一處</b>
+        （加無障礙硬要求那一處），<b>所以沒有動它</b>。登記在這裡，不是忘了。</li>
+      <li>⛔ <b>只有區間報酬率定了小數位數</b>，期間波動與最大回撤<b>沒有定</b>（<b>H-10</b>）。
+        本組一律照兩位畫 〔本組擬定〕，並標明它沒有依據。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「我這幾檔在同一段期間裡，各自走了多少、抖了多大、最深掉過多少」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>區間內淨值筆數少於兩筆 → 三個值皆「<code>⬜ 不適用：區間內淨值筆數不足</code>」（逐字）。</li>
+      <li>基金成立日晚於區間起點 → 該檔「<code>⬜ 不適用：成立日晚於區間起點</code>，<b>不截短區間偷算</b>」（逐字）。</li>
+      <li>區間未填 → 副標「<code>⬜ 不適用：尚未設定區間</code>」（逐字，出自 <code>HLD-4</code> 的空狀態欄）。</li>
+      <li>「週末與假日無淨值列<b>屬正常</b>，不補列也不視為缺」（逐字）—— 所以畫面上<b>不會</b>因為週末而變黃。</li>
+      <li>⛔ <b>三個值裡只有一個不適用時，「部分缺」徽章掛不掛？</b> 卡片元件只寫了兩個主值的規則，
+        <b>2 比 1 的情形沒有答案</b>（H-02 的連帶）。本組掛「部分缺」〔本組擬定〕。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：同 <code>HLD-1</code> —— 只有 <code>資料未備</code> 與
+      <code>系統錯誤</code> 兩態的「重新取數」（<code>取數</code> 類 · <b>⚠</b>，H-05）。
+      <b>「不適用」不掛按鈕</b>（卡片元件的 <code>業務例外</code> 那一列沒有按鈕）。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-3</code>｜配息與本金卡（層 2）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li><s>逐字引 44：「逐檔顯示<b>三個值</b>：期間配息合計（<code>div_total_orig_ccy</code>…原幣）、
+        配息佔淨值比（<code>div_yield_pct</code>…單位百分點）、本金類配息佔比（<code>principal_share_pct</code>）。」</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地（H-02）</b>：本卡逐檔顯示<b>兩個主值</b> ——
+        期間配息合計、配息佔淨值比；<b>第三個值「本金類配息佔比」移到層 4 的 <code>HLD-8</code></b>。</li>
+      <li>「三個值皆為算術結果，<b>卡上不對這三個值加任何評語</b>」（逐字）
+        —— 所以卡上<b>不會</b>出現「偏高」「要注意」這類字。</li>
+      <li><s>⛔ 同 <code>HLD-2</code>：三個值撞兩主值上限（<b>H-02</b>）</s> → <b>已裁定並落地</b>；
+        <b>三個值都沒有定小數位數（⛔ H-10）這一條照舊沒有裁</b>，移到層 4 的那個值也一樣沒有。</li>
+      <li>⚠️ <b>同型的一件事，本輪沒有動</b>：44 這一塊的「回答什麼」逐字是
+        「我收到的這些配息裡，<b>有多少是從本金出的</b>」—— <b>那一句問的正好就是被移走的那個值</b>。
+        <b>本組沒有替客戶改挑哪一個值移走</b>：客戶的字面是「第三個值」，本組照列序取第三個。
+        <b>若客戶要的是「留下回答那一句的兩個值、把配息佔淨值比移走」，就地推翻本組這一步</b>，
+        螢幕上只要換兩個欄位、其餘不動。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「我收到的這些配息裡，有多少是從本金出的」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>區間內無配息列 → 三個值「<code>⬜ 不適用：區間內無配息</code>」（逐字）。</li>
+      <li><code>div_kind</code> 為 <code>unknown</code> 的列 → 「<b>計入期間配息合計</b>，但本金類佔比顯示
+        <code>⬜ 不適用：配息類別未知</code>，並在副標<b>寫出未知的筆數</b>」（逐字）。
+        <b>這正是逐主值判定最清楚的一個例子</b>：同一張卡上一個值出數、另一個值不適用。</li>
+      <li>區間末無淨值 → 佔比顯示「<code>⬜ 資料未備</code>」（逐字）。
+        <b>注意這是灰不是黃</b> —— 同一張卡上可能同時有灰與黃兩種狀態色。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：同上兩塊（<b>⚠</b> 重新取數，H-05）。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-4</code>｜檢視區間與門檻輸入（層 3，預設收合）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>逐字引 44：「三組欄位皆為使用者輸入，<b>無預設值</b>（<code>G3†</code>）。區間為兩個日期。
+        門檻為一組『<b>指標名＋比較方向＋數值</b>』的列，使用者可增減列。按下『套用』後三張核心卡重算。
+        <b>本塊不對門檻數值提出任何候選值</b>。」</li>
+      <li><b>所以欄位一律是空的</b>，只有提示文字，沒有任何一個帶值的欄。提示文字字面為 〔本組擬定〕（H-16）。</li>
+      <li>⛔ <b>「指標名」沒有候選清單也沒有自由輸入的宣告（H-12）。</b>
+        不能放下拉選單（那是候選值），也不能留空。<b>本組畫成空的文字欄＋提示文字</b>，那是最保守的一邊。</li>
+      <li><s>⛔ 沒有任何一條寫回 <code>user_setting</code> 的路（H-04）。這是本頁最貴的一筆。</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地（H-04）</b>：本塊掛<b>兩枚按鈕，兩枚並存，各做一件事</b>。
+        <b>「套用」</b>（<code>套用</code> 類）只讀三組欄位的當下值、重算三張核心卡，
+        <b>不寫任何資料表、不改欄位的內容</b>。
+        <b>「存檔」</b>（<code>存檔</code> 類）把當下值寫回使用者設定的同三鍵並更新最後修改時間，
+        <b>不重算三張核心卡</b>。要兩件事都發生就兩枚都按；<b>兩枚的先後不影響結果</b>。
+        「存檔」<b>只寫使用者設定</b>，不寫持倉、保單、淨值、配息四張表任何一張（<code>G1†</code>），
+        也不代使用者填任何值、不把空欄補成任何候選值（<code>G3†</code>）。
+        <b>體例逐條照 44 本輪已為 <code>MKT-4</code> 訂好的那一段。</b></li>
+      <li><b>「存檔」的空狀態</b>（同樣照 <code>MKT-4</code> 的體例）：
+        區間兩欄皆空 → <b>存檔停用，並就地寫出停用原因「區間兩個欄位皆未填」</b>（停用不隱藏）；
+        值不合格（起日晚於迄日、日期格式不符）→ <b>不套用也不存檔</b>，主值不變，
+        使用者設定維持存檔前的值且最後修改時間不更新；
+        存檔寫入失敗 → <b>顯示失敗訊息原文</b>，三組欄位的當下輸入<b>留在畫面上不清掉</b>，三張核心卡的主值不變。</li>
+      <li>⛔ <b>一個跟著「存檔」一起長出來、44 在 <code>MKT-4</code> 已經登記過的缺口，這一塊照樣有</b>：
+        使用者按了「存檔」、<b>沒有</b>按「套用」，然後離開再回來 —— 兩組欄位會回到存過的值，
+        <b>但此時三張核心卡顯示什麼沒有寫</b>。兩種讀法都讀得通（載入時拿存過的值算一次／等再按一次套用才算）。
+        <b>本組不替客戶選</b>；那是「存檔即生效」還是「存檔只記住」的業務語意。
+        <b>本草稿畫的是「載入後三張卡照存過的值出數」</b>，因為切到狀態 1 時卡上本來就有數 ——
+        <b>那是畫面不得不挑的一邊，不是本組替客戶裁的</b>。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「我現在是用哪一段期間、哪幾條線在檢查」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b>（逐字引 44）</p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>「區間未填 → 三張核心卡副標顯示 <code>⬜ 不適用：尚未設定區間</code>。」</li>
+      <li>「門檻一列也沒有 → <code>HLD-1</code> 顯示 <code>⬜ 不適用：尚未設定門檻</code>。」</li>
+      <li>「起日晚於迄日 → 欄位下方顯示『<b>起日不晚於迄日</b>』，<b>不套用</b>。」
+        —— 那一句逐字，本草稿照印。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：「套用」（<code>套用</code> 類 · <b>✓</b>，標籤逐字）；
+      門檻列的「新增一列」（<code>新增列</code> 類 · <b>⚠</b>）與「清除這一列」（<code>清除</code> 類 · <b>⚠</b>）
+      —— 44 只寫「使用者可增減列」，<b>兩個字面都是本組擬的</b>。
+      <s>沒有存檔鈕（H-04），本組不自己加。</s>
+      → <b>「存檔」</b>（<code>存檔</code> 類 · <b>✓</b>，客戶 2026-09-22 逐字裁定的字面）。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-5</code>｜單檔展開（層 3，預設收合）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>逐字引 44：「點一檔展開一檔，<b>同時最多展開一檔</b>。展開內容為該檔的持倉欄位、淨值折線、配息長條。
+        <b>折線與長條共用同一條時間軸</b>。展開區不巢狀第二層。」</li>
+      <li>持倉欄位的日期標籤取 44 已改寫的字面「<b>持有起始日</b>」
+        （44 就地改過，理由是舊標籤撞它自己的禁方向詞）。</li>
+      <li>折線與長條在本草稿以<b>文字佔位框</b>代替 〔本組擬定〕 —— 線框不畫真圖。</li>
+      <li>⛔ <b>層 3 這一塊本身是收合的，裡面再逐檔展開 ＝ 展開區的第二層</b>，
+        而展開區元件明訂「不巢狀第二層」（<b>H-08</b>）。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「這一檔單獨看，淨值和配息是怎麼交錯的」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b>（逐字引 44）
+      「該檔在區間內無淨值 → 折線區顯示 <code>來源缺</code> 文案，<b>長條照畫</b>。
+      <code>policy_id</code> 為 <code>DIRECT</code> → 保單欄位顯示『<b>直接持有</b>』，<b>不顯示空白</b>。」</p>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：逐檔的「展開／收合」（<code>展開</code> 類 · <b>⚠</b>）
+      —— 44 只寫「點一檔展開一檔」，<b>字面是本組擬的</b>。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-6</code>｜淨值與配息序列（層 4，預設收合）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>逐字引 44：「<b>兩張表並列</b>。淨值表一列一個 <code>nav_date</code>；配息表一列一個 <code>ex_date</code>。
+        <code>is_estimated</code> 為真的淨值列掛『<b>推估</b>』徽章。
+        <b>表不做任何補值，缺的日期不出現在表上</b>。」</li>
+      <li>⛔ <b>「兩張表並列」撞斷點通則的「任何一段都不出現橫向捲動」（H-09）。</b>
+        兩張多欄表在 375 放不下；藏欄會讓那張表不再是它自稱的那張表。
+        <b>本草稿改成上下堆疊（不並列）</b> —— <b>那是本組挑的一邊</b>，不是 44 說的。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「上面三張卡用到的原始數字，逐筆是什麼」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b>（逐字引 44）
+      「無列 → <code>來源缺</code>。某格為空 → 顯示 <code>⬜</code>」
+      （44 同格註明：兩張表裡可空的只有 <code>dividend.pay_date</code> 一欄）。</p>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：只有標題列的「展開／收合」（<code>展開</code> 類 · <b>⚠</b>，字面本組擬定）。
+      <b>表上沒有排序鈕</b> —— 44 明訂清單「不預設排序欄位」，而本塊的排列由 44 指定
+      （「依 <code>fund_code</code> 與日期排列」），<b>本組不加可切換的排序</b>。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-7</code>｜計算軌跡（層 4，預設收合）</h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊長什麼樣</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li>逐字引 44：「逐檔逐指標一列，<b>四欄</b>：指標名、取用的輸入筆數與首末日期、<b>算式的文字寫法</b>、輸出值。
+        輸出值與對應核心卡上顯示的值<b>逐字相同</b>。算式以文字寫出，<b>不寫任何實作語言的語法</b>。」</li>
+      <li>所以這一塊的算式欄長這樣：「區間末淨值 ÷ 區間首淨值，再減一」 —— <b>文字，不是程式碼</b>。</li>
+      <li>四個中文欄頭的字面為 〔本組擬定〕（44 給的是欄的語意，不是字面）。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>（逐字引 44）「卡片上那個數字，是拿哪幾筆、怎麼算出來的」</p>
+    <p class="note" style="margin-top:9px"><b>資料不齊時畫面變成什麼</b>（逐字引 44）
+      「對應核心卡為 <code>不適用</code> → 該列輸出欄顯示同一句 <code>不適用</code> 文案，<b>輸入欄照列</b>。
+      無任何核心卡出數 → <code>來源缺</code>。」</p>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：只有標題列的「展開／收合」（<code>展開</code> 類 · <b>⚠</b>）。</p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin-bottom:6px">
+    <code>HLD-8</code>｜最大回撤與本金類配息佔比（層 4，預設收合）　<b style="color:var(--ok-mark)">本輪新增</b></h3>
+  <div class="card" style="margin-bottom:18px">
+    <p class="note"><b>這一塊為什麼存在</b></p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li><b>客戶 2026-09-22 裁定 H-02 時給的第二條路</b>：「兩張核心卡拆成四張，<b>或第三個值移到層 4</b>」。
+        <b>本組採後者</b>，於是兩個被移出來的值要有地方住 —— 就是這一塊。</li>
+      <li>一列一檔，四欄：<b>基金名／幣別／最大回撤／本金類配息佔比</b>。
+        兩個值都是比率，<b>逐檔仍寫出幣別字面值</b>，<b>本表沒有任何跨幣別的合計、平均或比值</b>
+        （客戶 2026-09-22 設計引導的第三條）。</li>
+      <li>四狀態逐值判定，與核心卡同一套：<code>⬜ 資料未備</code>／<code>⬜ 不適用：…</code>／<code>⚠ 取數失敗</code>。
+        切狀態 2、3、4 各看得到一種。</li>
+    </ul>
+    <p class="note" style="margin-top:9px"><b>它回答什麼</b>〔本組擬定〕「那兩個從核心卡移下來的值，逐檔是多少」</p>
+    <p class="note" style="margin-top:9px"><b>有沒有按鈕</b>：只有標題列的「展開／收合」（<code>展開</code> 類 · <b>⚠</b>）。</p>
+    <p class="note" style="margin-top:9px">⛔ <b>這一塊的三件事全是本組擬的，44 一個字也沒有宣告</b>：</p>
+    <ul class="note" style="margin:6px 0 0; padding-left:19px">
+      <li><b>塊代號 <code>HLD-8</code></b> —— 44 的計數表寫著全檔四十塊，多一塊就是四十一。
+        <b>本輪的授權只准改 44 一處</b>（加無障礙硬要求那一處），<b>所以沒有去改它</b>。
+        44 要補宣告這一塊，得另開一輪。</li>
+      <li><b>層 4 的職責</b>逐字是「原始序列、計算軌跡、來源與新鮮度明細」——
+        <b>移下來的兩個值是主值，不是佐證</b>。那一句要不要跟著放寬，同樣是 44 的事，本輪沒有動。</li>
+      <li><b>塊數</b>：本頁層 4 由兩塊變三塊，<b>剛好等於通則的上限三塊</b>；
+        全頁由八塊變九塊，<b>仍在「一頁最多 10 塊」之內</b>。<b>兩條都沒有被撞破</b>（算式見 §C 的 H-02 那一列）。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ §C ⛔ 清單 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§C</span><h2>⛔ 清單：本組畫這一頁時撞到的 18 處（其中三處客戶已裁定）</h2>
+    <span class="hint">✓ 已裁定 ＝ 客戶 2026-09-22 裁了；互斥 ＝ 44 兩條打架；缺 ＝ 44 沒有寫；疑義 ＝ 讀得通兩種</span></div>
+
+  <p class="note" style="margin-bottom:12px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    ✓ <b>客戶 2026-09-22 裁定了 <code>H-01</code>、<code>H-02</code>、<code>H-04</code> 三筆，本輪已落地</b>
+    —— 那三列的舊內容就地劃線保留，後面接裁示與落地方式。
+    <b>表的列數仍是十八列</b>（裁定不等於刪掉那一列），<b>其餘十五筆照舊未裁</b>。
+  </p>
+
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ <b>這張表收的是「本組畫這一頁時撞到、而且不補就畫不出來」的</b>，
+    <b>不是</b>對 44 的窮舉稽核。撞不到的缺口本表看不到，本表也<b>不宣稱</b>沒有。<br>
+    ⚠️ <b>本組一筆都沒有自己補。</b> 螢幕上照最保守的畫法畫，並在該處就地標明是誰挑的。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>編號</th><th>類型</th><th>撞到什麼</th><th>不拍板會怎樣</th><th>本草稿怎麼畫</th></tr></thead>
+      <tbody>
+        <tr><td class="id">H-01</td><td class="jd"><span class="badge ok">✓ 已裁定</span></td>
+          <td><s><b><code>HLD-0</code> 的判準與 <code>HLD-1</code> 的規則不可能同時通過。</b>
+            前者要「文案中的 N…與 <code>HLD-1</code> 列出的列數相等」；
+            後者要缺淨值的檔「<b>單獨列出</b>」卻「<b>不併入偏離筆數</b>」。
+            只要有一檔缺淨值，N 必然小於列數。</s><br>
+            → <b>客戶 2026-09-22 裁定</b>：「修 <code>HLD-1</code> 規則，缺淨值檔不計入列數，讓 N ＝ 列數。」</td>
+          <td><s>兩行判準一定有一行跑不過</s> → <b>兩行自此可以同時通過</b></td>
+          <td><b>已落地</b>：缺淨值的檔不進表、不進筆數；<b>卡尾另寫一行</b>「另有 N 檔缺淨值，未列入」，
+            <b>不另開區塊</b>。⚠️ <b>卡尾那一行是本組依裁示推得，客戶未逐字點名，可推翻</b>（§H 的 T-21）</td></tr>
+
+        <tr><td class="id">H-02</td><td class="jd"><span class="badge ok">✓ 已裁定</span></td>
+          <td><s><b><code>HLD-2</code> 與 <code>HLD-3</code> 各要「逐檔顯示三個值」，卡片元件的上限是「最多承載兩個主值」。</b></s><br>
+            → <b>客戶 2026-09-22 裁定</b>：「以卡片元件為準（上限兩個值），兩張核心卡拆成四張，<b>或</b>第三個值移到層 4。」</td>
+          <td><b>兩條路的取捨（本組算過才選的）</b>：<br>
+            <b>路 A 拆成四張</b> —— 層 2 變成 <code>HLD-1</code> ＋ 四張 ＝ <b>五張卡</b>，
+            而 44 第二節的硬規則是<b>層 2 最多三張</b>。<b>當場撞上限，超出兩張。</b>
+            要救只能把其中兩張再移到層 4 —— 那就繞回路 B，中間白繞一圈，還多改了塊代號與三個斷點的欄數表。<br>
+            <b>路 B 第三個值移到層 4</b> —— 層 2 仍是三張卡（<b>不撞上限</b>）；
+            層 4 由兩塊變三塊（<b>等於上限三塊，不超</b>）；全頁八塊變九塊（<b>不超過一頁十塊</b>）。
+            層 4 在三個斷點下一律是<b>單欄滿寬、逐塊上下堆疊</b> ——
+            <b>所以三個斷點的版面一個字都不必重畫。</b></td>
+          <td><b>本組採路 B</b>，理由即左欄兩條判準：<b>改動較小、且不破壞層 2 上限三張卡</b>。
+            兩個值移到層 4 的 <code>HLD-8</code>。<b>路 A 本組沒有採，因為它必然違反一條 44 的硬規則</b></td></tr>
+
+        <tr><td class="id">H-03</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b><code>HLD-0</code> 的燈色規則沒有涵蓋「某塊 <code>資料未備</code> 或 <code>業務例外</code>、而偏離筆數為零」。</b>
+            三條規則（皆 ok 且零筆→灰／筆數大於零→黃／任一系統錯誤→紅）一條也沒命中</td>
+          <td>最常見的一種資料缺法，燈色沒有依據。實作的人會自己補一條規則</td>
+          <td>畫灰（不自行發明第四條規則）。<b>狀態 3 就是這個場景</b>，客戶可能要黃</td></tr>
+
+        <tr><td class="id">H-04</td><td class="jd"><span class="badge ok">✓ 已裁定</span></td>
+          <td><s><b><code>HLD-4</code> 讀 <code>user_setting</code>，卻沒有任何寫回去的路。</b>
+            層 3 只有「套用」，而按鈕元件明訂 <code>套用</code>「只讀輸入不改輸入」；
+            八類裡能寫 <code>user_setting</code> 的是 <code>存檔</code>，這一頁沒有</s><br>
+            → <b>客戶 2026-09-22 裁定</b>：「加一枚『存檔』按鈕到層 3 操作列，讓使用者設定的區間與門檻能存回去。」</td>
+          <td><s>使用者填的區間與門檻下一次載入回不來</s> → <b>存得回去了</b>。
+            <b>照舊未裁的是</b>：只按存檔、沒按套用，重新載入後三張核心卡顯示什麼
+            （44 在 <code>MKT-4</code> 已登記同一個缺口，這一塊照樣有）</td>
+          <td><b>已落地</b>：<code>HLD-4</code> 掛「套用」與「存檔」<b>兩枚並存</b>，
+            <b>套用只重算不寫回、存檔只寫回不重算</b>，體例逐條照 44 的 <code>MKT-4</code>。
+            <b>塊代號與 44 的塊宣告本輪沒有動</b>（授權只准改 44 一處）</td></tr>
+
+        <tr><td class="id">H-05</td><td class="jd"><span class="badge mu">互斥</span></td>
+          <td><b>卡片元件在 <code>資料未備</code>／<code>系統錯誤</code> 兩態<b>強制</b>掛「重新取數」，
+            但這一頁三張卡的來源是持倉、淨值、配息、使用者設定。</b>
+            44 明訂「沒有任何一類按鈕寫入 <code>holding</code>」、四張表「不由本儀表板產生，本儀表板只讀它們」。
+            <code>HLD-0</code> 對同一種缺法用的是 <code>導覽</code>（前往 Sheets），<b>兩塊給了兩種動作</b></td>
+          <td>那枚鈕在「尚未建立任何持倉」時<b>按了什麼都不會發生</b>；
+            或者為了讓它有用而去寫入一張被明令唯讀的表</td>
+          <td>照元件規定把鈕畫出來，就地標 ⛔。<b>不自行改成導覽鈕</b></td></tr>
+
+        <tr><td class="id">H-06</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>「無偏離項」不屬空狀態元件的四種</b>（來源缺／部分缺／算不出來／系統錯誤）。
+            門檻已設、資料齊、結果零筆 —— 那是一個<b>空結果</b>，不是空狀態</td>
+          <td><code>HLD-1</code> 在最理想的那個情形下長什麼樣，沒有依據</td>
+          <td>卡照留、表換成一行「無偏離項」（該句逐字出自 44 判準），畫法為本組擬定</td></tr>
+
+        <tr><td class="id">H-07</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>「逐檔」的一檔是 <code>fund_code</code>，還是（<code>policy_id</code>, <code>fund_code</code>）？</b>
+            <code>holding</code> 的業務唯一鍵是複合鍵、同一檔基金可以橫跨兩張保單；
+            <code>HLD-1</code> 說「依 <code>fund_code</code> 字面值排列」，<code>HLD-2</code>／<code>HLD-3</code> 說「逐檔」</td>
+          <td>畫一張表之前必須先知道一列是什麼。兩種讀法會給出不同的列數與不同的偏離筆數 —— 連帶影響燈上的 N</td>
+          <td>示意資料<b>刻意不含跨保單的同一檔基金</b>，讓這一題在畫面上不被偷偷決定掉</td></tr>
+
+        <tr><td class="id">H-08</td><td class="jd"><span class="badge mu">互斥</span></td>
+          <td><b><code>HLD-5</code> 在層 3（收合）之內再逐檔展開 ＝ 展開區的第二層</b>，
+            而展開區元件明訂「展開區<b>不巢狀第二層</b>；需要第二層時拆成兩塊」</td>
+          <td>要嘛 <code>HLD-5</code> 不能收合（違反層 3 預設收合），
+            要嘛逐檔不能展開（那這一塊就沒有內容）</td>
+          <td>照塊規則畫成兩層（層 3 收合 ＋ 逐檔展開），就地標 ⛔</td></tr>
+
+        <tr><td class="id">H-09</td><td class="jd"><span class="badge mu">互斥</span></td>
+          <td><b><code>HLD-6</code> 要「兩張表並列」，而斷點通則訂「任何一段都不出現橫向捲動」。</b>
+            兩張多欄表在 375 放不下</td>
+          <td>要嘛違反不捲動，要嘛藏欄 —— 藏欄會讓那張表不再是它自稱的「逐筆原始數字」</td>
+          <td><b>改成上下堆疊、不並列</b>。⚠️ <b>那是本組挑的一邊</b>，不是 44 說的</td></tr>
+
+        <tr><td class="id">H-10</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>小數位數只定了一個。</b> <code>HLD-2</code> 只替區間報酬率定了「小數 2 位」；
+            期間波動、最大回撤、以及 <code>HLD-3</code> 的三個值都沒有定</td>
+          <td>實作時會有人隨手挑一個，同一頁上兩個值的位數不一致</td>
+          <td>一律照兩位畫 〔本組擬定〕，並在此標明它沒有依據</td></tr>
+
+        <tr><td class="id">H-11</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>新鮮度三級（即時／當日／延遲 N 日）的判定門檻</b>；
+            以及<b>一張卡上多檔多來源層級時，那一枚來源徽章顯示哪一個</b></td>
+          <td>徽章文字無法決定；一卡一徽章會在多個層級之間任選一個，客戶看到的來源是假的</td>
+          <td>兩枚徽章一律畫成<b>虛線佔位符</b>（〔新鮮度〕〔來源層級〕），<b>不挑</b></td></tr>
+
+        <tr><td class="id">H-12</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b><code>HLD-4</code> 門檻列的「指標名」沒有候選清單，也沒有自由輸入的宣告。</b>
+            <code>HLD-1</code> 要「算出使用者門檻所指的值」—— 指得到哪些值，44 一個也沒有列</td>
+          <td>放下拉選單 ＝ 提出候選值（44 明訂本塊不提候選值）；留空 ＝ 使用者不知道能填什麼</td>
+          <td>畫成<b>空的文字欄＋提示文字</b>，提示文字字面為本組擬定</td></tr>
+
+        <tr><td class="id">H-13</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>結論燈不是 44 五類元件之一</b>（卡片／徽章／按鈕／展開區／空狀態，<b>沒有燈</b>）</td>
+          <td>層 1 沒有可依據的畫法、沒有尺寸、沒有狀態表</td>
+          <td>沿用今天頁原型的燈框（客戶已看過那一套）〔本組擬定〕</td></tr>
+
+        <tr><td class="id">H-14</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>頁間導覽沒有元件。</b> <code>導覽</code> 類明訂為「開啟本儀表板<b>以外</b>的維護位置」，
+            射程不含五頁之間的切換</td>
+          <td>使用者<b>進不到這一頁</b>。這是第二頁，問題比第一頁更立即</td>
+          <td>螢幕上方的頁籤畫成<b>灰色示意、不可按</b>，不當成規格</td></tr>
+
+        <tr><td class="id">H-15</td><td class="jd"><span class="badge wn">疑義</span></td>
+          <td><b><code>HLD-0</code> 的黃燈映射的是「偏離筆數大於零」</b>，
+            那是一個<b>計算結果</b>，不在禁顏色暗示方向所列的四種資料狀態（齊／缺／不適用／失敗）之內</td>
+          <td>44 自己補了一句「燈色描述的是『要不要多看一眼』，不描述持倉好壞」當免責，
+            但第一節那條列舉<b>沒有把計算結果納入</b> —— 兩處讀得通兩種</td>
+          <td>照塊規則畫黃，登記疑義。<b>本組不替 44 決定哪一處為準</b></td></tr>
+
+        <tr><td class="id">H-16</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>五處字面沒有給</b>：<code>HLD-0</code> 紅燈文案、<code>HLD-4</code> 三組欄位的提示文字、
+            門檻列三欄的欄名、<code>HLD-7</code> 四個欄頭、以及層 3／層 4 四塊<b>在資料齊時</b>的收合摘要
+            （44 只規定資料缺時摘要寫什麼）</td>
+          <td>這五處的字全是本組寫的。客戶不拍板，實作時每個人寫的不一樣</td>
+          <td>逐處寫在 §H，一筆一筆列出來</td></tr>
+
+        <tr><td class="id">H-17</td><td class="jd"><span class="badge no">缺</span></td>
+          <td><b>「全空」時兩句文案同時成立</b>：<code>HLD-0</code> 空狀態的「尚未建立任何持倉」
+            與「尚未設定門檻」，44 沒有寫哪一句出現</td>
+          <td>首次開啟是最常見的一個畫面，而它的文案沒有答案</td>
+          <td>取持倉那一句（它擋的是更前面的一步），燈下<b>補一行</b>把另一句也寫出來 〔本組擬定〕</td></tr>
+
+        <tr><td class="id">H-18</td><td class="jd"><span class="badge mu">互斥</span></td>
+          <td><b><code>HLD-1</code> 的列只有四欄（基金名／實際值／門檻值／差額），<b>沒有指標名欄</b></b>，
+            而 <code>HLD-4</code> 的門檻是「一組『指標名＋比較方向＋數值』的列」、使用者可增減列</td>
+          <td>使用者設了兩條不同指標的線時，卡上那一列<b>讀不出它比的是哪一條</b>。
+            「實際值 8.40%（示意）」沒有指標名就沒有意義</td>
+          <td><b>嚴格照 44 畫四欄</b>，不自行加第五欄；示意資料刻意讓兩列比不同指標，讓這件事看得見</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="crit" style="margin-top:16px; margin-bottom:0">
+    <h4>✓ 最該先拍的三筆，客戶 2026-09-22 已全部裁定（原推薦順序與理由照留，不劃線）</h4>
+    <ul>
+      <li><b>H-04</b> —— 它不是排版問題，是<b>紅線落不落得了地</b>：使用者輸入若存不回去，
+        介面只剩兩條路，一條是系統代填（直接違反 <code>G3†</code>），一條是每次重開都要求重填。
+        與 44 已就 <code>MKT-4</code> 裁決過的那一筆<b>同型</b>，但那條裁示的射程明寫「就是那一塊」。<br>
+        → <b>已裁定</b>：加一枚「存檔」，與「套用」並存。<b>那條射程限制也跟著解掉了</b>。</li>
+      <li><b>H-02</b> —— 它決定兩張核心卡是兩張還是四張，<b>三個斷點的版面全部繫在它身上</b>。
+        44 自己已經登記為待客戶裁決，這一頁只是把代價畫出來。<br>
+        → <b>已裁定</b>：以卡片元件為準，上限兩個值。<b>本組採「第三個值移到層 4」</b>，
+        因為另一條路會讓層 2 變成五張卡、撞破三張的上限；
+        而層 4 在三個斷點下一律單欄滿寬，<b>版面實際上一個字都不必重畫</b>
+        —— 上面那句「版面全部繫在它身上」在本組選的這一條路上<b>沒有應驗</b>，據實寫出來。</li>
+      <li><b>H-01</b> —— 它讓兩行判準<b>必定有一行跑不過</b>。判準是 44 用來驗介面的唯一工具，
+        一行永遠跑不過的判準，下一個人只會學會跳過它。<br>
+        → <b>已裁定</b>：缺淨值不計入列數，兩行自此可以同時通過。</li>
+    </ul>
+    <p class="tiny" style="margin-top:10px">
+      ⚠️ <b>三筆都裁定了，但 44 本身本輪只改了一處</b>（第五節加客戶的無障礙硬要求）——
+      本輪的授權就是這樣寫的。也就是說：<b>三筆的落地目前只存在於這份草稿，44 的塊宣告還沒有跟上</b>
+      （<code>HLD-1</code> 的空狀態、<code>HLD-2</code>／<code>HLD-3</code> 的規則與「回答什麼」、
+      <code>HLD-4</code> 的規則與空狀態與判準、以及新的 <code>HLD-8</code> 與計數表）。
+      <b>那要另開一輪解凍 44。本段是登記，不是動工授權。</b>
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════ §D 按鈕逐顆 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§D</span><h2>按鈕逐顆：✓ 與 ⚠</h2>
+    <span class="hint">✓ ＝ 標籤與行為都在 44 的八類與紅線之內；⚠ ＝ 本組擬定或有疑義</span></div>
+
+  <p class="note" style="margin-bottom:12px">
+    44 的按鈕只有<b>八類，八類之外沒有第九類</b>：
+    <code>取數</code>／<code>套用</code>／<code>展開</code>／<code>匯出</code>／<code>新增列</code>／<code>清除</code>／<code>導覽</code>／<code>存檔</code>。
+    下表每一顆都對得上其中一類 —— <b>沒有一顆落在八類之外</b>。
+    本輪依客戶 2026-09-22 裁定新增的 <b>B-10「存檔」</b> 對到的就是 <code>存檔</code> 那一類，
+    <b>八類沒有因此變成九類</b>。
+  </p>
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ <b>「判」那一欄本輪把 ✓／⚠ 兩個記號各補上了文字</b>（✓ 合規／⚠ 待拍板）——
+    客戶 2026-09-22 的設計引導逐字要求「狀態色一律配圖示＋文字，不靠顏色單獨辨識」，
+    而<b>原本那一欄只有一個記號加一個顏色</b>。同一條也套到 §C 的類型欄與螢幕裡的結論燈，逐處寫在 <b>§J</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>編號</th><th>在哪一塊</th><th>標籤（畫面上的字）</th><th>類</th><th>判</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td class="id">B-01</td><td><code>HLD-0</code> 空狀態</td><td>前往 Sheets 維護持倉</td>
+          <td class="src">導覽</td><td class="jd"><span class="badge ok">✓ 合規</span></td>
+          <td><b>標籤逐字出自 44</b>（<code>HLD-0</code> 空狀態欄，客戶 2026-09-21 裁示改的就是這一枚）；
+            類別也是 44 逐字指定的 <code>導覽</code>。按鈕下那一行「持倉資料在 Sheets 維護，本儀表板唯讀」同樣逐字</td></tr>
+
+        <tr><td class="id">B-02</td><td><code>HLD-1</code>／<code>HLD-2</code>／<code>HLD-3</code> 的 <code>資料未備</code> 態</td>
+          <td>重新取數</td><td class="src">取數</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>標籤逐字</b>（卡片元件與空狀態元件兩處都寫這四個字），<b>但行為有疑義</b>：
+            這一頁缺的是 Sheets 維護的四張表，而 <code>取數</code> 類不得寫入它們 —— <b>⛔ H-05</b>。
+            本組照元件規定畫出來，不自行改掉</td></tr>
+
+        <tr><td class="id">B-03</td><td>同上三塊的 <code>系統錯誤</code> 態</td>
+          <td>重新取數</td><td class="src">取數</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td>同 B-02。此態另有一項 44 明訂而本草稿照做的事：
+            「副標<b>印出失敗訊息原文</b>」——<b>照印，不改寫成安撫語句</b></td></tr>
+
+        <tr><td class="id">B-04</td><td><code>HLD-4</code></td><td>套用</td>
+          <td class="src">套用</td><td class="jd"><span class="badge ok">✓ 合規</span></td>
+          <td><b>標籤逐字出自 44</b>（<code>HLD-4</code> 規則欄：「按下『套用』後三張核心卡重算」）；
+            行為也逐字（<code>套用</code>「只讀輸入不改輸入」）</td></tr>
+
+        <tr><td class="id">B-05</td><td><code>HLD-4</code> 門檻列</td><td>新增一列</td>
+          <td class="src">新增列</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>本組擬定。</b> 44 只寫「使用者可增減列」，<b>沒有給字面</b>；
+            類別對到八類的 <code>新增列</code> 是本組判讀</td></tr>
+
+        <tr><td class="id">B-06</td><td><code>HLD-4</code> 門檻列</td><td>清除這一列</td>
+          <td class="src">清除</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>本組擬定。</b> 同上；「增減」的「減」對到八類的 <code>清除</code> 也是本組判讀
+            —— 八類裡沒有一類叫「刪除列」</td></tr>
+
+        <tr><td class="id">B-07</td><td><code>HLD-5</code> 逐檔</td><td>展開／收合</td>
+          <td class="src">展開</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>本組擬定。</b> 44 只寫「點一檔展開一檔，同時最多展開一檔」，<b>沒有給字面</b>。
+            另見 <b>⛔ H-08</b>（這是展開區的第二層）</td></tr>
+
+        <tr><td class="id">B-08</td><td>層 3／層 4 四塊的標題列</td><td>展開／收合</td>
+          <td class="src">展開</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>本組擬定。</b> 展開區元件<b>沒有規定</b>標題列算不算一顆按鈕，也沒有給字面。
+            本草稿用一個三角記號 ＋ 整列可點，不放文字鈕</td></tr>
+
+        <tr><td class="id">B-10</td><td><code>HLD-4</code></td><td>存檔</td>
+          <td class="src">存檔</td><td class="jd"><span class="badge ok">✓ 合規</span></td>
+          <td><b>客戶 2026-09-22 逐字裁定的字面與類別</b>（「加一枚『存檔』按鈕到層 3 操作列，
+            讓使用者設定的區間與門檻能存回去」）；行為照 44 的 <code>存檔</code> 類逐字
+            （「把使用者在本儀表板輸入的設定值寫回 <code>user_setting</code>」），
+            <b>不寫持倉、保單、淨值、配息四張表任何一張</b>。
+            兩欄皆空時<b>停用而不隱藏</b>，並附 <code>disabled_reason</code> 的文字</td></tr>
+
+        <tr><td class="id">B-09</td><td>螢幕上方頁籤</td><td>（不可按）</td>
+          <td class="src">無</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>本組擬定「不做成按鈕」。</b> 八類裡沒有頁間切換（<b>⛔ H-14</b>）——
+            做成可按的就是憑空多一類按鈕，<b>那條路正是 <code>G1†</code> 要防的</b>。
+            畫成灰色示意，等客戶補裁</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="crit" style="margin-top:14px; margin-bottom:0">
+    <h4>這一頁刻意<b>沒有</b>的按鈕（不是漏畫）</h4>
+    <ul>
+      <li><b>沒有匯出鈕。</b> 層 3 的通則寫「使用者輸入、切換、匯出」，
+        但 <code>HLD-4</code>／<code>HLD-5</code> 兩塊的規則欄<b>都沒有宣告匯出</b> —— 本組不自己加。</li>
+      <li><s><b>沒有存檔鈕。</b> 這是 <b>⛔ H-04</b>，不是本組漏畫。加一枚就等於替客戶把那一題裁掉了。</s><br>
+        → <b>客戶 2026-09-22 裁定，已落地</b>：<code>HLD-4</code> 現在有「存檔」（B-10）。
+        <b>那一題是客戶自己裁的，不是本組替他裁的。</b></li>
+      <li><b>沒有排序鈕、沒有篩選鈕。</b> 44 明訂清單「不預設排序欄位」，
+        而這一頁兩張表的排列由 44 直接指定（<code>HLD-1</code> 依 <code>fund_code</code> 字面值、
+        <code>HLD-6</code> 依 <code>fund_code</code> 與日期）。</li>
+      <li><b>沒有任何一顆按鈕寫入持倉、淨值、配息、保單四張表。</b>
+        資料在 Sheets 維護，儀表板唯讀（客戶 2026-09-21 裁示）。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ §E 三個斷點 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§E</span><h2>三個斷點：375 / 768 / 1280</h2>
+    <span class="hint">欄數依 44 第二節第一小節最終版（客戶 2026-09-22 補裁）</span></div>
+
+  <p class="note" style="margin-bottom:12px">
+    <b>客戶最終版逐字：</b>「<code>≤768</code>：單欄　<code>769–1279</code>：兩欄　<code>≥1280</code>：三欄」。
+    本草稿用的是<b>真的 CSS <code>@media</code></b>（寫在樣式表裡，縮瀏覽器視窗就看得出來），
+    外加一組<b>逐值相同</b>的 <code>@container</code>，讓上方的斷點鈕在不縮視窗的情況下也能示範塌法。
+    <b>兩組三段完全同值，永遠同時同側。</b>
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>寬度段</th><th>層 1 結論</th><th>層 2 核心卡</th><th>層 3 操作</th><th>層 4 佐證</th></tr></thead>
+      <tbody>
+        <tr><td class="src">≥ 1280</td><td>單欄滿寬</td><td><b>三欄</b>，三張並排同一列</td>
+          <td><b>三欄</b>；本頁層 3 只有兩塊，兩塊並排同一列，<b>第三欄空著</b></td><td>單欄滿寬，逐塊上下堆疊</td></tr>
+        <tr><td class="src">769 – 1279</td><td>單欄滿寬</td><td><b>兩欄</b>，第三張換到第二列</td>
+          <td><b>兩欄</b>；兩塊並排同一列，<b>沒有第三塊要換列</b></td><td>單欄滿寬，逐塊上下堆疊</td></tr>
+        <tr><td class="src">≤ 768</td><td>單欄滿寬</td><td><b>單欄</b>，三張上下堆疊</td>
+          <td><b>單欄</b>，逐塊上下堆疊</td><td>單欄滿寬，逐塊上下堆疊</td></tr>
+        <tr><td class="src">窄於 375</td><td colspan="4">同上一列（44 明訂「窄於 375 不另立第四種排法」）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    ⚠️ <b>375 是三個斷點值之一，但它不是欄數的分界</b>（44 逐字）。
+    本草稿在 <code>375</code> 那一條只收<b>字級、內距、以及卡內兩個主值由並排改成上下堆疊</b>，<b>不動層級欄數</b>。
+  </p>
+  <p class="note" style="margin-top:8px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    ✓ <b>H-02 裁定之後這一節<u>沒有</u>重畫，一個斷點也沒動</b> —— 這正是本組選「第三個值移到層 4」的理由之一。
+    <b>層 4 在三段裡一律是單欄滿寬、逐塊上下堆疊</b>，所以多一塊 <code>HLD-8</code> 只是往下多堆一塊，
+    <b>欄數表四列一個字未改</b>。
+    若當初選的是「拆成四張」，層 2 會變成<b>五張卡</b>，上表三段的欄數與 44 第二節的三張上限<b>都要重談</b>。
+  </p>
+  <p class="note" style="margin-top:8px">
+    ⚠️ 44 的四條共通硬規則本草稿逐條照做：堆疊順序一律<b>層 1 → 層 2 → 層 3 → 層 4</b>；
+    <b>任何一段都不出現橫向捲動</b>；<b>斷點只改排法不改內容</b>；<b>窄於 375 不另立第四種</b>。
+  </p>
+  <p class="note" style="margin-top:8px">
+    ⛔ <b>第二條做不到的地方就是 H-09</b>：<code>HLD-6</code> 要「兩張表並列」，
+    而兩張多欄表在 375 一定捲。本草稿改成上下堆疊 —— <b>那是本組挑的一邊，等客戶拍板。</b>
+  </p>
+  <p class="tiny" style="margin-top:8px">
+    本草稿的三段與今天頁原型<b>不同</b>：那份原型是三欄與單欄兩態、中間不落一站。
+    客戶 2026-09-22 已界定「跟原型一致」的射程<b>只到三個斷點值</b>、不及於欄數行為，
+    所以這裡照 44 的三段畫，<b>不是與那份原型不一致</b>。
+  </p>
+</section>
+
+<!-- ══════════════ §F 六種狀態 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§F</span><h2>六種狀態：切上面的鈕就看得到</h2>
+    <span class="hint">每一種都畫整頁，不只畫受影響的那一塊</span></div>
+
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ 取景範圍（<b>整頁</b>，不是只畫受影響的塊）為 〔本組擬定〕——
+    因為這一頁的四層會互相牽動：一塊變狀態，燈會跟著變，層 3／層 4 的收合摘要也會跟著變。
+    只畫一塊看不出那個牽動。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>狀態</th><th>拿什麼當輸入</th><th>畫面上會看到什麼</th><th>撞到的 ⛔</th></tr></thead>
+      <tbody>
+        <tr><td class="src">1 全齊</td><td>持倉、淨值、配息齊；區間與門檻都設了；兩檔超出門檻</td>
+          <td>燈<b>黃</b>（圖示 ⚠ ＋狀態字「要多看一眼」），文案「有 2 檔超出你設定的門檻（示意）」；
+            <code>HLD-1</code> 兩列；<code>HLD-2</code>／<code>HLD-3</code> 逐檔<b>兩個主值</b>全部出數；
+            移下來的兩個值在層 4 的 <code>HLD-8</code>；操作列展開後看得到<b>「套用」與「存檔」兩枚</b></td>
+          <td class="jd">✓ H-02 · ✓ H-04 · H-15 · H-18</td></tr>
+        <tr><td class="src">2 缺來源</td><td>其中一檔的淨值整個抽掉</td>
+          <td>該檔<b>不計入偏離卡的列數</b>，改在<b>卡尾一行</b>寫「另有 1 檔缺淨值，未列入（示意）」；
+            <b>燈上寫兩檔、卡上兩列，兩者相等</b> —— <b>H-01 已裁定並落地</b>；
+            <code>HLD-2</code>／<code>HLD-3</code> 該檔的主值進 <code>⬜ 資料未備</code>，卡掛「部分缺」徽章＋一枚重新取數</td>
+          <td class="jd">✓ <b>H-01</b> · ✓ H-02 · H-05</td></tr>
+        <tr><td class="src">3 業務例外</td><td>其中一檔的成立日晚於區間起點；門檻調到沒有任何一檔超出</td>
+          <td><code>HLD-2</code> 該檔三個值皆 <code>⬜ 不適用：成立日晚於區間起點</code>（<b>黃</b>，不截短區間偷算）；
+            偏離筆數為零 → <b>三條燈色規則一條也沒命中</b>，本組畫灰</td>
+          <td class="jd"><b>H-03</b> · H-02</td></tr>
+        <tr><td class="src">4 取數失敗</td><td>配息來源取數失敗</td>
+          <td><code>HLD-3</code> 主值位置 <code>⚠ 取數失敗</code>＋<b>訊息原文照印</b>＋一枚重新取數；
+            燈轉<b>紅</b>（紅燈文案 44 沒給，本組擬定）</td>
+          <td class="jd">H-16 · H-05</td></tr>
+        <tr><td class="src">5 門檻未設</td><td>區間有設、門檻一列也沒有</td>
+          <td>燈<b>灰</b>（圖示 ⬜ ＋狀態字「中性」）「尚未設定門檻」；<code>HLD-1</code> <code>⬜ 不適用：尚未設定門檻</code>、
+            <b>不以任何內建值代替</b>；<code>HLD-2</code>／<code>HLD-3</code> <b>照常出數</b>（它們不吃門檻）；
+            <b>「存檔」可用</b>（區間已填）</td>
+          <td class="jd">H-06 的反面：這一種 44 有寫</td></tr>
+        <tr><td class="src">6 全空</td><td>首次開啟：持倉表為空、區間未填、門檻未設</td>
+          <td>燈<b>灰</b>「尚未建立任何持倉」＋<b>前往 Sheets 維護持倉</b>＋「持倉資料在 Sheets 維護，本儀表板唯讀」；
+            <code>HLD-1</code> 來源缺；<code>HLD-2</code>／<code>HLD-3</code> 副標 <code>⬜ 不適用：尚未設定區間</code>；
+            <b>四個欄位全空、一個預設值也沒有</b>；
+            <b>「存檔」停用並寫出停用原因</b>（停用不隱藏）</td>
+          <td class="jd"><b>H-17</b> · H-12</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    ⚠️ <b>狀態 1 還有另一半沒有畫成一顆鈕</b>：門檻調到沒有任何一檔超出時，
+    燈轉灰、文案「無偏離項」，<code>HLD-1</code> 列數為零。
+    那一半的畫法<b>沒有元件依據</b>（<b>⛔ H-06</b>），本草稿把它寫在這裡而不是畫成第七顆鈕
+    —— 客戶要看的話本組再補一顆。
+  </p>
+</section>
+
+<!-- ══════════════ §G 紅線 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§G</span><h2>紅線：這一頁的落點，與這一頁沒有什麼</h2>
+    <span class="hint">逐字引 44 第一節</span></div>
+
+  <div class="tbl-scroll" style="margin-bottom:14px">
+    <table class="ref">
+      <thead><tr><th>標記</th><th>44 的原文</th><th>在這一頁落在哪</th></tr></thead>
+      <tbody>
+        <tr><td class="src">G2†</td>
+          <td>「所有標的調整與再平衡一律採『偏離提示、客觀對照、情境試算』三種形式之一」</td>
+          <td><code>HLD-1</code> 採「<b>偏離提示</b>」；<code>HLD-2</code> 採「<b>客觀對照</b>」。
+            這一頁<b>不用情境試算</b>（那是資產配置頁）</td></tr>
+        <tr><td class="src">G3†</td>
+          <td>「所有試算參數均由使用者自行輸入；偏離提示僅客觀描述現況與目標差距，<b>不提供具體處置方向</b>」</td>
+          <td><code>HLD-4</code> 三組欄位<b>無預設值、不提候選值</b>；
+            <code>HLD-1</code> 的列上<b>不出現任何處置方向的字眼</b></td></tr>
+        <tr><td class="src">G1†</td>
+          <td>「嚴禁提供『一鍵再平衡』按鈕，嚴禁預設『最佳配置推薦』」</td>
+          <td><b>禁令適用，本頁無落點標記</b>（44 第一節第三小節 2026-09-21 就地更正過這一格：
+            「適用」與「這一頁有一塊掛了標記」是兩件事）</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tiny" style="margin-bottom:14px">
+    ⚠️ <b>紅線徽章在螢幕上一個也沒有。</b> 44 明訂紅線徽章「只出現在說明區，<b>不出現在任何數值旁</b>」——
+    掛在數值旁會被讀成對那個數值的評價。<b>所以三個標記只出現在這一節（註記層），深色螢幕裡找不到。</b>
+  </p>
+
+  <div class="gapstrip" style="background:var(--sheet-2); border-color:var(--rule)">
+    <h3 style="color:var(--ink-2)">⚠ 給下一個拿字表掃這一份的人：已知的假命中，先看這裡再下結論</h3>
+    <ol style="color:var(--ink-2)">
+      <li>紅線的<b>四個禁詞</b>與<b>十個方向詞</b>、<b>四個箭頭</b>、以及「目標價」「預期報酬」，
+        在本檔<b>只出現在下面那一條禁令敘述裡</b>（以及本段這一句引到它的話）。
+        <b>那是禁令敘述，不是畫面文案。</b> ⇒ 直掃本檔<b>不會</b>回零，那不代表畫面上有那些字。
+        要驗的是 <b>§D 那張按鈕表</b>，以及深色螢幕裡的字。</li>
+      <li>「<b>推薦</b>」另外還出現在 §C 末尾「本組<b>推薦</b>順序」那一處 ——
+        那是母法請示規範<b>強制要求</b>的「總管推薦方案」，是本組對客戶說的話，
+        <b>不是</b>畫面文案、<b>不是</b>排序冠詞。</li>
+      <li>「<b>一鍵</b>」在本檔還有<b>一處子字串假命中</b>：§C 的 <b>H-07</b> 寫著
+        「<code>holding</code> 的<b>業務唯一鍵</b>是複合鍵」——「唯<b>一鍵</b>」被切到了。
+        那是資料表的主鍵，<b>跟「一次點擊」沒有關係</b>。
+        <span class="tiny">（這一條是本組跑完字表掃描才發現的：掃描前本組以為只有下面那種寫法會假命中。
+        ⇒ 拿字表直掃永遠要人工逐處判讀，這就是實例。）</span></li>
+      <li><b>本輪新增的字裡有兩個要先講</b>：§J 的對比表會出現「<b>大文字</b>」「<b>非文字</b>」這種字面，
+        那是 WCAG 的級距名稱，<b>不是畫面文案</b>；§C 的 H-02 那一列會出現「<b>路 A</b>／<b>路 B</b>」，
+        那是<b>兩條裁示選項的代號</b>，不是任何按鈕或排序冠詞。</li>
+      <li>「<b>一鍵</b>」在 44 的空狀態文案裡還會以子字串命中「一鍵缺」「任一鍵缺」這種寫法
+        —— 那個「鍵」指的是資料鍵。<b>本檔沒有沿用那幾個寫法</b>（這一頁的空狀態文案不長那樣），
+        所以本檔不需要那一條豁免，<b>但下一份草稿可能需要</b>。</li>
+    </ol>
+  </div>
+
+  <div class="crit" style="margin-top:14px; margin-bottom:0">
+    <h4>這一頁沒有什麼（<b>禁令敘述</b>，不是畫面文案）</h4>
+    <ul>
+      <li><b>沒有任何一枚按鈕的標籤含「一鍵」「最佳」「推薦」「最適」四個詞。</b>
+        這一頁的按鈕總共六種字面：前往 Sheets 維護持倉／重新取數／套用／新增一列／清除這一列／展開收合。</li>
+      <li><b>沒有任何一個輸入欄帶非空的預設值。</b>
+        <code>HLD-4</code> 的兩個日期欄開著是空的；門檻三欄開著是空的；一列也沒有預先填。</li>
+      <li><b>畫面文案不出現買進、賣出、加碼、減碼、調升、調降、汰弱留強、逢低、停利、停損</b>（逐字引 44 的禁方向詞）。
+        連 <code>holding.opened_on</code> 的畫面標籤都取 44 已改寫的「持有起始日」。</li>
+      <li><b>不用 <code>↑</code> <code>↓</code> <code>▲</code> <code>▼</code> 標示一個標的「該往哪走」</b>（逐字引 44 的禁箭頭）。
+        <code>HLD-1</code> 的差額以<b>正負號與數字</b>寫出，不配箭頭。</li>
+      <li><b>顏色只映射資料狀態與新鮮度，不映射投資好壞。</b>
+        這一頁的灰／黃／紅一律長在「齊／未備／不適用／失敗」上。
+        同一個狀態下把數字換成正負號相反的一個，顏色不變 —— 例如區間報酬率是正是負，卡的顏色都一樣。
+        <b>灰不是「持倉健康」，黃不是「該調整了」。</b>
+        ⚠️ 唯一一處讀得通兩種的是結論燈的黃（<b>⛔ H-15</b>），已登記。</li>
+      <li><b>沒有排序冠詞，也不預設排序欄位。</b>
+        排序結果不加冠「精選」與上一項那四個詞裡的任何一個；
+        <code>HLD-1</code> 依 <code>fund_code</code> 字面值排、<code>HLD-6</code> 依 <code>fund_code</code> 與日期排，
+        <b>兩者都是 44 指定的，不是「由高到低」</b>。</li>
+      <li><b>不輸出買賣指示、不輸出目標價、不輸出最佳配置、不輸出預期報酬。</b>
+        這一頁只呈現偏離與算術結果；<code>HLD-3</code> 那三個值 44 明訂「卡上<b>不對這三個值加任何評語</b>」。</li>
+      <li><b>沒有任何一枚按鈕寫入持倉、淨值、配息、保單四張表。</b>
+        資料在 Sheets 維護，儀表板唯讀。</li>
+      <li><b>這一頁不挑標的、不談市場環境、不決定要不要調整。</b>
+        八塊裡沒有一塊比較兩檔基金誰比較好，也沒有一塊出現市場指標。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ §H 本組擬定 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§H</span><h2>本組擬定的文案與畫法（逐處列出）</h2>
+    <span class="hint">44 未逐字規定、由本組依 44 的規則擬出</span></div>
+
+  <p class="note" style="margin-bottom:12px">
+    ⚠️ 下列每一項都是 <b>44 未逐字規定</b>的。<b>客戶拍板之前，它們沒有規格效力。</b>
+    本輪新增 <b>T-21～T-25</b> 五項，<b>全部是客戶 2026-09-22 三條裁示落地時多出來的、裁示本身沒有點名的東西</b>
+    —— 裁示解決了三個互斥，<b>但每一條裁示都留下它自己沒有寫到的那一半</b>，逐項列在這裡而不是藏進畫面。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>編號</th><th>在哪</th><th>本組擬的東西</th><th>依據</th></tr></thead>
+      <tbody>
+        <tr><td class="id">T-01</td><td>頁首</td><td>螢幕頂端那一列（頁名「持倉體檢」＋五頁頁籤示意）及其存在</td><td>頁名逐字出自 44；這一列元件本身 44 未定（H-14）</td></tr>
+        <tr><td class="id">T-02</td><td>全頁</td><td>左側「層 1／層 2／層 3／層 4」的層標</td><td>沿用今天頁原型的畫法；44 沒有規定層要不要標出來</td></tr>
+        <tr><td class="id">T-03</td><td><code>HLD-0</code></td><td>紅燈文案字面「有一塊取數失敗，這一頁的數字先不要照著讀」</td><td>44 只寫「燈為紅」，沒有給文案（H-16）</td></tr>
+        <tr><td class="id">T-04</td><td><code>HLD-0</code></td><td>全空時取持倉那一句，並在燈下補一行寫出門檻那一句</td><td>兩句同時成立時哪一句出現，44 未寫（H-17）</td></tr>
+        <tr><td class="id">T-05</td><td>全頁</td><td>三檔示意基金的代碼與名稱（<code>AAAA</code>／<code>BBBB</code>／<code>CCCC</code>）</td><td>刻意用不像真代碼的字，<b>避免客戶把示意資料讀成真的持倉</b></td></tr>
+        <tr><td class="id">T-06</td><td>三張核心卡</td><td>來源徽章與新鮮度徽章一律畫成虛線佔位符</td><td>兩者的門檻與選法 44 皆未定（H-11）；<b>不挑就是最保守的一邊</b></td></tr>
+        <tr><td class="id">T-07</td><td><code>HLD-1</code></td><td>四個中文欄頭的字面（基金名／實際值／門檻值／差額）</td><td>44 給的是四件事的語意，不是欄頭字面</td></tr>
+        <tr><td class="id">T-08</td><td><code>HLD-2</code>／<code>HLD-3</code></td><td><s>逐檔三個值的排法：每檔一小段、三值並排</s> → <b>逐檔兩個主值的排法：每檔一小段、兩值並排（≤375 改上下堆疊）</b></td><td>H-02 裁定後改為兩個主值；<b>怎麼排 44 仍然沒有說</b>，排法照舊是本組的</td></tr>
+        <tr><td class="id">T-09</td><td><code>HLD-4</code></td><td>欄位提示文字「請選擇日期（YYYY-MM-DD）」「請輸入指標名」「請輸入數值」</td><td>44 只寫「無預設值」，沒有給提示字面（H-16）</td></tr>
+        <tr><td class="id">T-10</td><td><code>HLD-4</code></td><td>門檻列三欄的欄名與排法（指標名／比較方向／數值 ＋ 一枚清除）</td><td>三個欄的語意逐字出自 44，欄名字面與排法是本組的</td></tr>
+        <tr><td class="id">T-11</td><td><code>HLD-5</code></td><td>逐檔展開的畫法；折線與長條以文字佔位框代替</td><td>44 沒有規定圖的形態；線框不畫真圖</td></tr>
+        <tr><td class="id">T-12</td><td><code>HLD-6</code></td><td><b>兩張表改成上下堆疊，不並列</b></td><td><b>H-09 的一邊</b>。44 說並列，斷點通則說不捲 —— 本組挑了不捲</td></tr>
+        <tr><td class="id">T-13</td><td><code>HLD-7</code></td><td>四個中文欄頭的字面；算式欄的文字寫法</td><td>44 給的是欄的語意與「以文字寫出」，不是字面</td></tr>
+        <tr><td class="id">T-14</td><td>層 3／層 4</td><td>四塊<b>在資料齊時</b>的收合摘要，共四句</td><td>44 只規定資料缺時摘要寫什麼（H-16）</td></tr>
+        <tr><td class="id">T-15</td><td>§F</td><td>六種狀態一律畫整頁，不只畫受影響的塊</td><td>本檔自訂；四層會互相牽動，只畫一塊看不出來</td></tr>
+        <tr><td class="id">T-16</td><td>控制列</td><td>控制列的存在、青色虛線框、以及「審稿用 · 不是畫面元件」那一枚標籤</td><td>本檔自訂；客戶的草稿規範要求它與 app 視覺上明確區隔</td></tr>
+        <tr><td class="id">T-17</td><td>全檔</td><td>「（示意）」這套標記法，貼在螢幕裡每一個數字後面</td><td>客戶的草稿規範逐字要求；<b>標記法的字面是本組的</b></td></tr>
+        <tr><td class="id">T-18</td><td><code>HLD-1</code></td><td>零筆偏離時「卡照留、表換一行」的畫法</td><td><b>H-06</b>。那一句「無偏離項」逐字出自 44 的判準，<b>畫法是本組的</b></td></tr>
+        <tr><td class="id">T-19</td><td><code>HLD-2</code>／<code>HLD-3</code></td><td><s>三個值裡缺一個時仍掛「部分缺」徽章</s> → <b>本項已不再是本組擬定</b></td><td>H-02 裁定後卡上只剩兩個主值，<b>卡片元件那條「一個 ok、一個不是 → 掛部分缺」逐字對得上了</b>，不必再由本組擬</td></tr>
+        <tr><td class="id">T-20</td><td>示意資料</td><td>刻意不放跨保單的同一檔基金；刻意讓兩列比不同指標</td><td>前者避免偷偷決定 H-07，後者讓 H-18 看得見</td></tr>
+        <tr><td class="id">T-21</td><td><code>HLD-1</code></td><td><b>缺淨值的檔怎麼呈現：卡尾一行「另有 N 檔缺淨值，未列入」，不另開區塊</b></td><td><b>客戶 2026-09-22 只裁了「不計入列數」，沒有裁怎麼呈現。本組依裁示推得，客戶未逐字點名，可推翻</b>。取最保守的一邊：另開一區會憑空多一塊，完全不提會讓那些檔消失</td></tr>
+        <tr><td class="id">T-22</td><td>層 4</td><td><b>塊代號 <code>HLD-8</code> 與它的標題、欄名、「回答什麼」那一句</b></td><td>H-02 裁定「第三個值移到層 4」，但<b>沒有說那一塊叫什麼、長什麼樣</b>。44 的塊宣告本輪沒有動（授權只准改 44 一處）</td></tr>
+        <tr><td class="id">T-23</td><td><code>HLD-2</code>／<code>HLD-3</code></td><td><b>「第三個值」取的是 44 列序的第三個</b>（最大回撤／本金類配息佔比）</td><td>客戶的字面是「第三個值」。<b>本組照列序取，不替客戶挑哪一個值比較重要</b>。若客戶要的是「留下回答那一句的兩個」，就地推翻，換兩個欄位即可</td></tr>
+        <tr><td class="id">T-24</td><td><code>HLD-0</code></td><td><b>三種燈各自的圖示（⬜／⚠／✖）與狀態字（中性／要多看一眼／取數失敗）</b></td><td>客戶 2026-09-22 設計引導逐字要求「狀態色一律配圖示＋文字」。<b>44 沒有給燈的圖示與狀態字</b>（燈本來就不是 44 五類元件之一，⛔ H-13），<b>字面是本組擬的</b></td></tr>
+        <tr><td class="id">T-25</td><td>全檔配色</td><td><b>WCAG 調色後的四個新色值與「哪些邊界算 UI 元件」的分類</b></td><td>客戶指定深色底 <code>#0e1117</code> 與兩個青色為主色、<b>優先調其餘的</b>。哪些邊界算「非文字 UI 元件」由本組分類，<b>逐條列在 §J 並寫明理由</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+<!-- ══════════════ §J WCAG 2.2 AA ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§J</span><h2>WCAG 2.2 AA：對比逐組算過、狀態配圖示＋文字、多幣別逐檔標明</h2>
+    <span class="hint">客戶 2026-09-22 設計引導三條，逐條落地與逐組數字</span></div>
+
+  <div class="crit">
+    <h4>客戶逐字（本節的法源）</h4>
+    <ul>
+      <li>「一般文字 ≥ 4.5:1；大文字 ≥ 3:1；非文字 UI 元件 ≥ 3:1」</li>
+      <li>「狀態色一律配圖示＋文字，不靠顏色單獨辨識」</li>
+      <li>「多幣別：逐檔標明幣別，同卡不混不同幣別做平均」</li>
+    </ul>
+    <p class="tiny" style="margin-top:8px">
+      這三條同輪已加進 <b>44 第五節元件清單</b>當五類元件的共通硬要求 ——
+      <b>那是本輪對 44 唯一的改動</b>。本節寫的是它們在這一份草稿上怎麼落地。
+    </p>
+  </div>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:16px 0 6px">一｜對比：逐組算出來的值</h3>
+  <p class="note" style="margin-bottom:10px">
+    對比值以 WCAG 2.x 的相對亮度公式算出（<b>不是目測、也不是工具截圖</b>）。
+    <b>客戶指定的三個主色一個字都沒動</b>：深色底 <code>#0e1117</code>、青色 <code>#0f6b6c</code> 與 <code>#5fd3d0</code>。
+    未達標的<b>一律改其餘的顏色</b>。
+  </p>
+  <p class="note" style="margin-bottom:10px; border-left:3px solid var(--ok-mark); padding-left:11px">
+    <b>逐組算完之後的總帳</b>（三層各自算：深色 app 螢幕、淺色註記層、深色註記層）：
+    <b>受 4.5 拘束的文字組 53 組，未達標 0 組</b>；
+    <b>受 3 拘束的非文字 UI 元件組 24 組，未達標 0 組</b>；
+    另有 <b>11 組判為純裝飾、門檻不適用</b>（逐項在下表最後一列，<b>未改，理由寫在那一格</b>）。
+    <b>合計 88 組。</b>
+    <b>本輪動手前的母體是 86 組，其中 15 組低於它該過的門檻</b>；
+    本輪逐組改到過為止，並因為新增 <code>HLD-8</code> 而多出 <b>2 組</b>（母體 86 → 88）。
+    下表八列：<b>六列是調色</b>、<b>一列是本輪新增的那幾組</b>、<b>最後一列是判為門檻不適用的 11 組</b>。
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>在哪</th><th>前景／背景</th><th>調整前</th><th>調整後</th><th>門檻</th><th>怎麼處理</th></tr></thead>
+      <tbody>
+        <tr><td>淺色註記層的弱文字（<code>.tiny</code>／<code>.meta</code>，12～12.5px）</td>
+          <td class="src">#6b7885 → <b>#5f6b78</b><br>／ #e6eaf0 圖紙底</td>
+          <td class="jd"><b>3.74</b></td><td class="jd"><b>4.50</b></td><td class="jd">4.5</td>
+          <td><b>調前景色</b>。同一個色在 <code>#f2f5f9</code> 上由 4.13 升到 4.97、在 <code>#ffffff</code> 上由 4.52 升到 5.44</td></tr>
+
+        <tr><td>深色螢幕的輸入提示字（<code>.fld input</code> 的 placeholder）</td>
+          <td class="src">#5c666f → <b>#7d858e</b><br>／ #11161d 輸入底</td>
+          <td class="jd"><b>3.10</b></td><td class="jd"><b>4.86</b></td><td class="jd">4.5</td>
+          <td><b>調前景色</b>。提示字是文字，<b>不是裝飾</b>，適用一般文字的 4.5</td></tr>
+
+        <tr><td>深色螢幕的控制項邊界（輸入框、五種按鈕、兩種展開區、徽章、空狀態框、佔位框）</td>
+          <td class="src">#30363d／#3d444d → <b>#6b7682</b><br>／ #0e1117・#11161d・#161b22・#21262d 四種底</td>
+          <td class="jd"><b>1.42～1.76</b></td><td class="jd"><b>3.29～4.08</b></td><td class="jd">3</td>
+          <td><b>新增一個代號專給可操作的東西用</b>。最嚴的一組是按鈕底 <code>#21262d</code>，算出 <b>3.29</b></td></tr>
+
+        <tr><td>淺色註記層的控制鈕邊界（審稿控制列那一排）</td>
+          <td class="src">#c3ccd8 → <b>#7b8694</b><br>／ #ffffff 控制列底</td>
+          <td class="jd"><b>1.62</b></td><td class="jd"><b>3.70</b></td><td class="jd">3</td>
+          <td><b>同上</b>。那一排鈕的底色 <code>#f2f5f9</code> 與控制列底 <code>#ffffff</code> 只差 1.05，
+            <b>邊界就是它唯一看得出是顆鈕的地方</b>，所以它算 UI 元件</td></tr>
+
+        <tr><td>深色註記層的控制鈕邊界</td>
+          <td class="src">#30363d → <b>#6b7682</b><br>／ #1b222b 鈕底</td>
+          <td class="jd"><b>1.31</b></td><td class="jd"><b>3.46</b></td><td class="jd">3</td>
+          <td><b>同上</b>，深色主題那一路一起改</td></tr>
+
+        <tr><td>深色螢幕的失敗訊息框線</td>
+          <td class="src">#4a2029 → <b>#a24651</b><br>／ #1b1114 訊息底</td>
+          <td class="jd"><b>1.35</b></td><td class="jd"><b>3.11</b></td><td class="jd">3</td>
+          <td><b>調框線色</b>。訊息原文本身 <code>#ffb4b4</code>／<code>#1b1114</code> ＝ <b>10.94</b>，原本就過</td></tr>
+
+        <tr><td>層 4 佐證表裡的四狀態文字（<code>HLD-8</code> 本輪新增）</td>
+          <td class="src">#8b949e・#e3b341・#ff4b4b<br>／ #161b22 表格底</td>
+          <td class="jd"><b>本輪新增</b></td><td class="jd"><b>5.62・8.89・5.24</b></td><td class="jd">4.5</td>
+          <td><b>一開始就照門檻挑</b>。三者各自帶<b>自己的圖示與文字</b>
+            （<code>⬜ 資料未備</code>／<code>⬜ 不適用：…</code>／<code>⚠ 取數失敗</code>），顏色只是第三條線</td></tr>
+
+        <tr><td><b>純裝飾分隔線（共 11 組）</b>：卡框、表列線、卡內小格框、逐檔虛線、層標橫線、行內碼框</td>
+          <td class="src">#30363d／#c3ccd8／#dbe2ea／#262c34<br>／ 各自的底</td>
+          <td class="jd">1.23～1.62</td><td class="jd"><b>未改</b></td><td class="jd">不適用</td>
+          <td><b>本組判定它們不是「非文字 UI 元件」</b>：它們不是控制項、不表示任何狀態，
+            拿掉之後每一個字與每一個數<b>照樣讀得到</b>。
+            <b>強行拉到 3 會把這份線框變成一格一格的硬框</b>，而客戶已經看過這一套視覺。
+            ⚠️ <b>這是本組的分類判斷，不是客戶裁的，可推翻</b>（§H 的 T-25）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note" style="margin-top:12px">
+    <b>幾組原本就過、但值得寫出來的</b>（它們是狀態色，最容易被誤以為不夠）：
+    不適用的黃 <code>#e3b341</code> 在黃態卡底 <code>#241d07</code> 上是 <b>8.61</b>、在卡內小格底上是 <b>9.33</b>；
+    取數失敗的紅 <code>#ff4b4b</code> 在紅態卡底 <code>#2b1114</code> 上是 <b>5.33</b>；
+    資料未備的灰 <code>#8b949e</code> 在卡底上是 <b>5.62</b>。
+    <b>黃態卡框與紅態卡框</b>對深色底是 <b>9.71</b> 與 <b>5.72</b>，<b>那兩條是表示狀態的，所以它們算 UI 元件，而且過</b>。
+  </p>
+  <p class="note" style="margin-top:8px">
+    <b>大文字那一級本草稿沒有用到寬限</b>：頁面上 18.66px 以上或 14px 以上粗體的字
+    （<code>h1</code>／<code>h2</code>／燈的標題）<b>用的都是主文字色</b>，
+    算出來是 <b>8.51 以上</b>，<b>連一般文字的 4.5 都超過</b>，所以沒有一處是靠「大文字只要 3」過關的。
+    <b>上面那 51 組因此一律用 4.5 去驗，沒有一組被放寬到 3。</b>
+  </p>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:18px 0 6px">二｜狀態不靠顏色單獨辨識：逐處檢查</h3>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>在哪</th><th>本來長什麼樣</th><th>本輪改成什麼</th></tr></thead>
+      <tbody>
+        <tr><td><b>結論燈</b>（<code>HLD-0</code>，三種燈）</td>
+          <td><b>灰與黃用同一個圖示 ⬜</b>，紅用 ⚠；三種<b>只有顏色不同</b>，
+            灰跟黃在灰階下分不出來</td>
+          <td><b>三種各給自己的圖示與狀態字</b>：
+            灰 ⬜「狀態：中性」／黃 ⚠「狀態：要多看一眼」／紅 ✖「狀態：取數失敗」。
+            <b>圖示與文字兩條線都分得出三種，顏色只是第三條線</b>〔字面本組擬定，T-24〕</td></tr>
+
+        <tr><td><b>核心卡的四狀態</b>（<code>HLD-1</code>／<code>HLD-2</code>／<code>HLD-3</code>／<code>HLD-8</code>）</td>
+          <td><code>ok</code> 出數字；<code>⬜ 資料未備</code>（灰）；<code>⬜ 不適用：…</code>（黃）；
+            <code>⚠ 取數失敗</code>（紅）</td>
+          <td><b>不用改，本來就合規</b>：灰與黃雖然共用圖示 ⬜，<b>但文字不同</b>
+            （「資料未備」對「不適用」），<b>文字這條線就分得開</b>。
+            ⚠️ <b>那四句字面是 44 逐字訂的，本組不得改</b></td></tr>
+
+        <tr><td><b>徽章</b>（部分缺／推估／來源層級／新鮮度）</td>
+          <td>黃徽章與中性徽章顏色不同，<b>文字本來就不同</b></td>
+          <td><b>不用改</b>。兩枚佔位徽章另用<b>虛線框</b>，
+            <b>形狀這條線也分得出它是佔位符</b>（⛔ H-11 未裁，畫法照舊）</td></tr>
+
+        <tr><td><b>§C 的類型欄</b>（互斥／缺／疑義）</td>
+          <td><b>本來就有文字</b></td><td><b>不用改</b>。本輪另補三枚「✓ 已裁定」</td></tr>
+
+        <tr><td><b>§D 的判欄</b>（✓ 與 ⚠）</td>
+          <td><b>只有一個記號加一個顏色，沒有字</b> —— 這是本輪掃出來唯一一處真的違反</td>
+          <td><b>各補文字</b>：<b>✓ 合規</b>／<b>⚠ 待拍板</b>。逐列都補了</td></tr>
+
+        <tr><td><b>停用的按鈕</b>（「存檔」在兩欄皆空時）</td>
+          <td>本輪新增的東西，<b>一開始就照規格畫</b></td>
+          <td><b>變淡＋虛線框＋就地寫出停用原因那一行</b>，<b>不隱藏</b>
+            （44 的按鈕元件逐字：「按鈕停用時不隱藏」）。<b>顏色不是唯一線索</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:10px">
+    ⚠️ <b>本節第二項與 44 第一節「禁顏色暗示方向」不是同一件事，不要混</b>：
+    那一條管的是<b>顏色不准映射投資好壞</b>（本頁的灰黃紅一律長在資料狀態上，§G 已逐條寫過）；
+    本節管的是<b>顏色不准是辨識狀態的唯一手段</b>。<b>兩條方向不同，本輪兩條都守。</b>
+  </p>
+
+  <h3 style="font-size:15px; color:var(--draft); margin:18px 0 6px">三｜多幣別：逐檔標明、同卡不平均</h3>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>在哪</th><th>檢查結果</th><th>本輪動了什麼</th></tr></thead>
+      <tbody>
+        <tr><td><code>HLD-2</code> 績效與風險卡</td>
+          <td><b>沒有違反</b>。示意資料刻意放兩種幣別（兩檔 USD、一檔 EUR），
+            每一檔的小標都寫著自己的幣別字面值；<b>兩個主值都是比率</b>，卡上<b>沒有任何跨檔的合計或平均</b></td>
+          <td>副標由「同一張卡不混不同幣別的數做平均」<b>改寫得更硬</b>：
+            「本卡沒有任何跨幣別的合計、平均或比值」—— <b>把「平均」擴到三種合成</b></td></tr>
+
+        <tr><td><code>HLD-3</code> 配息與本金卡</td>
+          <td><b>沒有違反，但這是最容易出事的一張</b>：期間配息合計是<b>金額</b>，
+            示意資料同卡並陳 <code>128.40 USD</code>／<code>96.20 USD</code>／<code>54.80 EUR</code>
+            —— <b>並陳沒問題，加起來才有問題</b>，而卡上<b>沒有那個合計</b></td>
+          <td>副標<b>補上逐檔幣別與「沒有任何跨幣別的合計、平均或比值」那一句</b>，
+            把「不要去加它」寫在畫面上而不是只寫在規格裡</td></tr>
+
+        <tr><td><code>HLD-8</code>（本輪新增）</td>
+          <td>兩個值<b>都是比率</b>，跨幣別相加的風險比金額低</td>
+          <td><b>仍然給了一個幣別欄、逐檔標明</b>，並在說明寫出「本表沒有任何跨幣別的合計、平均或比值」。
+            <b>理由：比率是從原幣序列算出來的，幣別是它的出身，不寫就追不回去</b></td></tr>
+
+        <tr><td><code>HLD-1</code> 偏離提示卡</td>
+          <td><b>沒有違反</b>。四欄是基金名／實際值／門檻值／差額，示意資料兩列都是<b>比率</b>，
+            差額寫成 <code>pp</code>（百分點），<b>沒有金額欄、沒有跨檔合計</b></td>
+          <td><b>沒有動</b>。⚠️ <b>但登記一件事</b>：門檻是使用者自己填的，
+            <b>如果他填一條金額門檻，這一欄就會變成跨幣別的比較</b>，而 44 的四欄裡<b>沒有幣別欄</b>
+            （與 ⛔ H-18 是同一個根：<b>四欄不夠用</b>）。<b>本組不自行加第五欄</b></td></tr>
+
+        <tr><td><code>HLD-5</code> 單檔展開／<code>HLD-6</code> 序列表</td>
+          <td><b>沒有違反</b>。單檔展開是<b>一次一檔</b>，成本欄原幣與新臺幣兩個都寫了標籤；
+            序列兩張表<b>各有一個幣別欄，一列一幣別</b></td>
+          <td><b>沒有動</b></td></tr>
+
+        <tr><td><code>HLD-7</code> 計算軌跡</td>
+          <td><b>沒有違反</b>。輸出值逐列帶幣別（如 <code>128.40 USD（示意）</code>），
+            <b>沒有跨檔合計列</b></td>
+          <td><b>沒有動</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:10px">
+    ⚠️ <b>本節第三項掃的是這一份草稿畫出來的東西</b>（七塊的示意資料與文案）。
+    <b>44 別處有沒有同型問題，本組沒有查、也不宣稱</b>。
+  </p>
+</section>
+
+<!-- ══════════════ §I 沒做的事 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§I</span><h2>本檔沒有做的事（誠實揭露，不是免責）</h2></div>
+  <div class="disclose">
+    <ul>
+      <li><b>本檔是單組產出，沒有第二組獨立複驗。</b>
+        八塊的畫法、六種狀態的取景、三個斷點的落地、以及 §C 那十八筆的判讀，皆為本組判斷。
+        <b>本輪（2026-09-22 第二次修訂）新增的九塊畫法、§J 的三項落地、以及 T-21～T-25 五項擬定，同樣是單組產出。</b></li>
+      <li><b>§J 的對比值是用公式算的，不是用任何無障礙檢測工具跑的，也不是在真的螢幕上量的。</b>
+        算的是 CSS 裡宣告的色碼兩兩之間的比值。
+        <b>本檔沒有跑過任何自動化的無障礙稽核</b>（沒有跑鍵盤操作流程、沒有跑螢幕報讀軟體、
+        沒有驗焦點順序、沒有驗觸控目標大小、沒有驗文字放大到 200% 之後會不會壞）。
+        <b>WCAG 2.2 AA 不只有對比這三條，本輪只落地客戶逐字點名的那三條。</b></li>
+      <li><b>§J 把哪些邊界算「非文字 UI 元件」是本組分類的，客戶沒有裁。</b>
+        本組把控制項與狀態容器算進去、把純裝飾分隔線排除在外，理由逐條寫在那一節的最後一列。
+        <b>換一個分類，未達標的組數就會變。</b></li>
+      <li><b>本輪三筆裁示的落地只存在於這一份草稿，44 的塊宣告沒有跟上。</b>
+        <b>本輪對 44 唯一的改動是第五節加客戶的無障礙硬要求</b>（授權只准改一處）。
+        也就是說 <code>HLD-1</code> 的空狀態、<code>HLD-2</code>／<code>HLD-3</code> 的規則與「回答什麼」、
+        <code>HLD-4</code> 的規則與空狀態與判準、新的 <code>HLD-8</code>、以及 44 第七節的計數表與凍結紀錄，
+        <b>目前都還是裁示之前的樣子</b>。<b>那要另開一輪解凍 44。</b></li>
+      <li><b>本檔沒有跑 44 的任何一行判準。</b> 判準要等介面存在之後才驗得到（44 自己也這樣寫）。
+        本檔做的是<b>把判準描述的輸入畫成畫面</b>，那不等於驗過。
+        其中 <b>H-01</b> 那一組判準本檔可以斷定<b>跑不過</b> —— 那是讀出來的矛盾，不是跑出來的。</li>
+      <li><b>§C 不是窮舉。</b> 它只收「本組畫這一頁時撞到、而且不補就畫不出來」的。
+        44 別處還有沒有缺口，本檔沒有查、<b>也不宣稱</b>。</li>
+      <li><b>本檔沒有讀任何既有程式，也沒有看任何舊版畫面。</b>
+        本輪授權明令不准讀 <code>.py</code>、不准引用舊 repo 任何模組或畫面。
+        <b>代價據實寫明</b>：本檔因此不知道任何實作上的限制，這些畫法可能撞到本組看不到的東西。</li>
+      <li><b>本檔沒有量過任何裝置。</b> 三個斷點值取自 44（客戶 2026-09-22 裁定），
+        44 自己也登記過那三個值「沒有量過任何真機斷點」。<b>本檔沒有改變這個狀態。</b></li>
+      <li><b>本檔只畫持倉體檢一頁。</b> 其餘四頁一個字也沒有畫。
+        跨頁的一致性（例如結論燈在五頁長不長一樣、頁籤怎麼切換）本檔<b>沒有查</b>。
+        與第一頁（市場總覽）的線框是否逐處對齊，本檔<b>也沒有比對</b> —— 那份是文字線框，本份是 HTML。</li>
+      <li><b>本輪沒有重驗上一輪的判讀。</b> §C 其餘十五筆、§H 的 T-01～T-20、六種狀態的取景、
+        以及八塊原本的畫法，<b>本輪只在其上疊加，沒有回頭查它們當初對不對</b>。</li>
+      <li><b>本檔沒有碰 <code>ui_v2/</code>、沒有碰任何 <code>.py</code>、沒有提交、沒有推送。</b>
+        本檔是<b>唯一</b>新增的檔案，而且<b>刻意不進版本控制</b> —— 客戶的新工作流逐字：
+        「HTML 草稿不准 commit，先給客戶看」。</li>
+      <li><b>本檔沒有替 44 補任何一個缺口。</b> 撞到的十八處一律就地標 ⛔、照最保守的畫法畫。
+        <b>H-09</b> 與 <b>H-03</b> 兩處本組被迫挑了一邊（不然畫不出來），<b>兩處都已標明是本組挑的</b>。</li>
+      <li><b>本檔沒有驗證「44 的持倉體檢那一節與其餘四頁不衝突」。</b>
+        本組只讀了 44 的第零節、第一節、第二節、第三節第二小節、第四節、第五節與第七節第二小節；
+        其餘四頁的塊<b>只掃過沒有逐塊讀</b>。</li>
+      <li><b>若 H-02 或 H-04 客戶裁定與本草稿相反的一邊，§B 與 §E 要整節重畫。</b>
+        這不是瑕疵，是草稿先行的用意：<b>現在重畫一張圖，比之後重寫一頁介面便宜。</b></li>
+    </ul>
+  </div>
+</section>
+
+<div class="foot">
+  <b>持倉體檢頁 HTML 線框草稿</b>　·　T 組（架構與前端組）產出，U 組（架構與前端組）2026-09-22 第二次修訂　·
+  規格 <code>docs/v2/44_fund_ui_ssot.md</code>　·　體例 <code>docs/v2/47_fund_wireframe_mkt.md</code>　·
+  視覺 <code>docs/v2/prototype/ui_prototype_today.html</code><br>
+  <span class="tiny">
+    本檔不凌駕 44。兩份對同一塊有不同說法，一律以 44 為準；本檔若與 44 打架，錯的是本檔。
+    本檔<b>不進版本控制</b>，給客戶看完再決定去留。
+  </span>
+</div>
+
+</div><!-- /.wrap -->
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   六狀態 × 三斷點的切換。無外部框架，這裡全部是原生 DOM。
+   螢幕上每一個數字後面都帶「（示意）」—— 那是客戶的草稿規範逐字要求。
+   ════════════════════════════════════════════════════════════════════ */
+var ui = { state:"full", bp:1280, theme:"system" };
+
+/* APP-TEXT-START ── 以下到 APP-TEXT-END 之間，是會被畫進深色螢幕的字 ── */
+
+var PH_SRC  = '<span class="abadge ph">〔來源層級〕</span>';
+var PH_FRESH= '<span class="abadge ph">〔新鮮度〕</span>';
+var B_PART  = '<span class="abadge warn">部分缺</span>';
+var B_EST   = '<span class="abadge warn">推估</span>';
+var RETRY   = '<button class="retry" type="button">重新取數</button>';
+
+/* ── 層 1：HLD-0 體檢結論燈 ───────────────────────────────
+   ⚠️ WCAG 2.2 AA（客戶 2026-09-22 設計引導）：狀態不靠顏色單獨辨識。
+   三種燈各有**自己的圖示**（灰 ⬜／黃 ⚠／紅 ✖）**與自己的狀態字**
+   （中性／要多看一眼／取數失敗）。把整頁轉成灰階，三種仍然分得出來。 */
+function lampHTML(st){
+  var GRAY = '<span class="glyph" aria-hidden="true">⬜</span>' +
+             '<span class="stword">狀態：中性</span>';
+  var WARN = '<span class="glyph" aria-hidden="true">⚠</span>' +
+             '<span class="stword">狀態：要多看一眼</span>';
+  var ERR  = '<span class="glyph" aria-hidden="true">✖</span>' +
+             '<span class="stword">狀態：取數失敗</span>';
+  if (st === "empty"){
+    return '<div class="lamp gray"><div class="top">' + GRAY +
+      '<span class="headline">尚未建立任何持倉</span></div>' +
+      '<button class="navbtn" type="button">前往 Sheets 維護持倉</button>' +
+      '<div class="where">持倉資料在 Sheets 維護，本儀表板唯讀</div>' +
+      '<div class="where">（另：尚未設定門檻。兩句同時成立時哪一句出現，規格沒有寫）</div></div>';
+  }
+  if (st === "nothr"){
+    return '<div class="lamp gray"><div class="top">' + GRAY +
+      '<span class="headline">尚未設定門檻</span></div>' +
+      '<div class="lines"><div>門檻由你自己輸入，這一頁不提任何候選值。</div></div></div>';
+  }
+  if (st === "bizexc"){
+    return '<div class="lamp gray"><div class="top">' + GRAY +
+      '<span class="headline">無偏離項</span></div>' +
+      '<div class="lines"><div>績效與風險卡有一檔進了「不適用」，偏離筆數為零。</div></div>' +
+      '<div class="where">這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。</div></div>';
+  }
+  if (st === "fetchfail"){
+    return '<div class="lamp err"><div class="top">' + ERR +
+      '<span class="headline">有一塊取數失敗，這一頁的數字先不要照著讀</span></div>' +
+      '<div class="lines"><div>配息與本金卡：取數失敗。</div></div>' +
+      '<div class="where">紅燈說的是「這一頁的數字能不能照著讀」，不是「你的持倉出事了」。</div></div>';
+  }
+  /* full / srcmiss 兩態：偏離筆數大於零 → 黃 */
+  var extra = (st === "srcmiss")
+    ? '<div>另有 1 檔（示意）缺淨值，未列入偏離提示卡的列數 —— 燈上的 2 與卡上的 2 列相等。</div>' : '';
+  return '<div class="lamp warn"><div class="top">' + WARN +
+    '<span class="headline">有 2 檔超出你設定的門檻（示意）</span></div>' +
+    '<div class="lines"><div>兩檔分別超出的是哪一條線，看下面的偏離提示卡。</div>' + extra + '</div>' +
+    '<div class="where">黃燈說的是「要不要多看一眼」，不是「該調整了」。</div></div>';
+}
+
+/* ── 層 2：HLD-1 偏離提示卡 ───────────────────────────── */
+function card1(st){
+  var head = '<div class="t"><span>HLD-1 偏離提示卡</span>' +
+    (st === "srcmiss" ? B_PART : "") + '</div>';
+  var foot = '<div class="foot">' + PH_SRC + PH_FRESH + '</div>';
+
+  if (st === "empty"){
+    return '<div class="cardx"><div class="t"><span>HLD-1 偏離提示卡</span></div>' +
+      '<div class="miss">⬜ 資料未備</div>' +
+      '<div class="st">尚未建立任何持倉</div>' + RETRY + foot + '</div>';
+  }
+  if (st === "nothr"){
+    return '<div class="cardx warnstate"><div class="t"><span>HLD-1 偏離提示卡</span></div>' +
+      '<div class="exc">⬜ 不適用：尚未設定門檻</div>' +
+      '<div class="st">不以任何內建值代替。</div>' + foot + '</div>';
+  }
+  if (st === "bizexc"){
+    return '<div class="cardx">' + head +
+      '<div class="st">依 fund_code 字面值排列，不排序成優先順序。</div>' +
+      '<div class="miss" style="color:var(--app-fg-2);font-weight:600">無偏離項</div>' +
+      '<div class="st">目前這一組門檻下，沒有任何一檔超出。</div>' + foot + '</div>';
+  }
+  var rows =
+    '<tr><td>基金 A（示意）</td><td>-11.20%（示意）</td><td>-10.00%（示意）</td><td>-1.20 pp（示意）</td></tr>' +
+    '<tr><td>基金 B（示意）</td><td>8.40%（示意）</td><td>6.00%（示意）</td><td>+2.40 pp（示意）</td></tr>';
+  /* 客戶 2026-09-22 裁定（H-01）：缺淨值的檔**不計入列數**，讓 HLD-0 的 N 等於本卡列數。
+     那些檔怎麼呈現，客戶未逐字點名 → 本組取最保守：卡尾一行，不另開區塊。 */
+  var tail = (st === "srcmiss")
+    ? '<div class="miss">⬜ 另有 1 檔缺淨值，未列入（示意）</div>' +
+      '<div class="st">未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。</div>'
+    : '';
+  return '<div class="cardx">' + head +
+    '<div class="st">依 fund_code 字面值排列，不排序成優先順序。</div>' +
+    '<table class="devtable"><thead><tr>' +
+    '<th>基金名</th><th>實際值</th><th>門檻值</th><th>差額</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' + tail +
+    (st === "srcmiss" ? RETRY : "") + foot + '</div>';
+}
+
+/* ── 層 2：HLD-2 績效與風險卡 ─────────────────────────── */
+/* H-02 落地後每檔兩格（原本三格）。格數改了，函式名沿舊不改，免得漏改呼叫點。 */
+function trio(k1,v1,c1,k2,v2,c2){
+  return '<div class="trio">' +
+    '<div><span class="k">' + k1 + '</span><span class="v ' + c1 + '">' + v1 + '</span></div>' +
+    '<div><span class="k">' + k2 + '</span><span class="v ' + c2 + '">' + v2 + '</span></div></div>';
+}
+function fgrp(head, body){
+  return '<div class="fgrp"><div class="fh">' + head + '</div>' + body + '</div>';
+}
+function card2(st){
+  var foot = '<div class="foot">' + PH_SRC + PH_FRESH + '</div>';
+  if (st === "empty"){
+    return '<div class="cardx"><div class="t"><span>HLD-2 績效與風險卡</span></div>' +
+      '<div class="st">⬜ 不適用：尚未設定區間</div>' +
+      '<div class="miss">⬜ 資料未備</div>' +
+      '<div class="st">尚未建立任何持倉</div>' + RETRY + foot + '</div>';
+  }
+  var K = ["區間報酬率","期間波動"];
+  var a = fgrp('AAAA（示意）· 幣別 USD（示意）',
+        trio(K[0],'+3.28%（示意）','',K[1],'9.15%（示意）',''));
+  var b = fgrp('BBBB（示意）· 幣別 USD（示意）',
+        trio(K[0],'+1.06%（示意）','',K[1],'12.40%（示意）',''));
+  var c;
+  if (st === "srcmiss"){
+    c = fgrp('CCCC（示意）· 幣別 EUR（示意）',
+        trio(K[0],'⬜ 資料未備','nd',K[1],'⬜ 資料未備','nd'));
+  } else if (st === "bizexc"){
+    c = fgrp('CCCC（示意）· 幣別 EUR（示意）',
+        trio(K[0],'⬜ 不適用：成立日晚於區間起點','na',
+             K[1],'⬜ 不適用：成立日晚於區間起點','na'));
+  } else {
+    c = fgrp('CCCC（示意）· 幣別 EUR（示意）',
+        trio(K[0],'-2.15%（示意）','',K[1],'6.80%（示意）',''));
+  }
+  var cls = (st === "bizexc") ? "cardx warnstate" : "cardx";
+  var badge = (st === "srcmiss" || st === "bizexc") ? B_PART : "";
+  return '<div class="' + cls + '"><div class="t"><span>HLD-2 績效與風險卡</span>' + badge + '</div>' +
+    '<div class="st">兩個主值。各值以原幣計算，逐檔寫出幣別字面值；' +
+    '本卡沒有任何跨幣別的合計、平均或比值。</div>' +
+    a + b + c +
+    '<div class="st" style="color:var(--app-muted);margin-top:9px">' +
+    '第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4（HLD-8）。</div>' +
+    (st === "srcmiss" ? RETRY : "") + foot + '</div>';
+}
+
+/* ── 層 2：HLD-3 配息與本金卡 ─────────────────────────── */
+function card3(st){
+  var foot = '<div class="foot">' + PH_SRC + PH_FRESH + '</div>';
+  if (st === "empty"){
+    return '<div class="cardx"><div class="t"><span>HLD-3 配息與本金卡</span></div>' +
+      '<div class="st">⬜ 不適用：尚未設定區間</div>' +
+      '<div class="miss">⬜ 資料未備</div>' +
+      '<div class="st">尚未建立任何持倉</div>' + RETRY + foot + '</div>';
+  }
+  if (st === "fetchfail"){
+    return '<div class="cardx errstate"><div class="t"><span>HLD-3 配息與本金卡</span></div>' +
+      '<div class="errline">⚠ 取數失敗</div>' +
+      '<div class="errdetail">ConnectionError: 來源未回應，連線逾時（示意）</div>' +
+      '<div class="st">訊息原文照印，不改寫成安撫語句。</div>' + RETRY + foot + '</div>';
+  }
+  var K = ["期間配息合計","配息佔淨值比"];
+  var a = fgrp('AAAA（示意）· 幣別 USD（示意）',
+        trio(K[0],'128.40 USD（示意）','',K[1],'4.10%（示意）',''));
+  var b = fgrp('BBBB（示意）· 幣別 USD（示意）',
+        trio(K[0],'96.20 USD（示意）','',K[1],'8.40%（示意）',''));
+  var c;
+  if (st === "srcmiss"){
+    c = fgrp('CCCC（示意）· 幣別 EUR（示意）',
+        trio(K[0],'54.80 EUR（示意）','',K[1],'⬜ 資料未備','nd'));
+  } else {
+    c = fgrp('CCCC（示意）· 幣別 EUR（示意）',
+        trio(K[0],'54.80 EUR（示意）','',K[1],'3.05%（示意）',''));
+  }
+  var badge = (st === "srcmiss") ? B_PART : "";
+  return '<div class="cardx"><div class="t"><span>HLD-3 配息與本金卡</span>' + badge + '</div>' +
+    '<div class="st">兩個主值，皆為算術結果，卡上不對它們加任何評語。' +
+    '配息合計以原幣逐檔顯示，逐檔寫出幣別字面值；本卡沒有任何跨幣別的合計、平均或比值。</div>' +
+    a + b + c +
+    '<div class="st" style="color:var(--app-muted);margin-top:9px">' +
+    '第三個值「本金類配息佔比」已依客戶 2026-09-22 裁定移到層 4（HLD-8）。</div>' +
+    (st === "srcmiss" ? RETRY : "") + foot + '</div>';
+}
+
+/* ── 層 3：HLD-4 檢視區間與門檻輸入（預設收合） ───────── */
+function fld(lab, ph, val){
+  var v = val ? ' value="' + val + '"' : '';
+  return '<div class="fld"><label>' + lab + '</label>' +
+    '<input type="text" placeholder="' + ph + '"' + v + '></div>';
+}
+function thrRow(i, o, n){
+  return '<div class="thr">' + fld("指標名","請輸入指標名",i) +
+    fld("比較方向","請輸入比較方向",o) + fld("數值","請輸入數值",n) +
+    '<button class="rowbtn" type="button">清除這一列</button></div>';
+}
+function ops4(st){
+  var setWin = (st !== "empty");
+  var setThr = (st !== "empty" && st !== "nothr");
+  var sm;
+  if (st === "empty") sm = "尚未設定區間；門檻一列也沒有；存檔停用";
+  else if (st === "nothr") sm = "區間已設；門檻一列也沒有";
+  else sm = "區間 2026-01-01（示意）至 2026-09-19（示意）· 門檻 2 列（示意）";
+
+  var body =
+    '<div class="frow">' +
+      fld("區間起日","請選擇日期（YYYY-MM-DD）", setWin ? "2026-01-01（示意）" : "") +
+      fld("區間迄日","請選擇日期（YYYY-MM-DD）", setWin ? "2026-09-19（示意）" : "") +
+    '</div>' +
+    (setWin ? '' : '<div class="fielderr">⬜ 不適用：尚未設定區間</div>') +
+    '<div class="subt" style="margin-top:12px">門檻（指標名＋比較方向＋數值，可增減列）</div>' +
+    (setThr
+      ? thrRow("最大回撤（示意）","低於（示意）","-10.00（示意）") +
+        thrRow("配息佔淨值比（示意）","高於（示意）","6.00（示意）")
+      : thrRow("","","") ) +
+    '<div class="applybar">' +
+      '<button class="rowbtn" type="button">新增一列</button>' +
+      '<button class="apply" type="button">套用</button>' +
+      (setWin
+        ? '<button class="apply" type="button">存檔</button>'
+        : '<button class="apply" type="button" disabled>存檔</button>') +
+    '</div>' +
+    (setWin ? '' : '<div class="why">存檔停用：區間兩個欄位皆未填。</div>') +
+    '<div class="st" style="color:var(--app-muted);margin-top:9px">' +
+      '兩枚按鈕並存，各做一件事。' +
+      '「套用」只讀這些欄位的當下值、重算三張核心卡，不寫任何資料表、不改欄位的內容。' +
+      '「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算三張核心卡。' +
+      '要兩件事都發生就兩枚都按；兩枚的先後不影響結果。' +
+      '「存檔」只寫使用者設定，不寫持倉、保單、淨值、配息四張表任何一張，' +
+      '也不代你填任何值、不把空欄補成任何候選值。</div>' +
+    '<div class="st" style="color:var(--app-muted);margin-top:9px">' +
+      '欄位一律無預設值：首次開啟四個欄位全是空的（切到狀態 6 就看得到）。' +
+      '上面這些值是使用者自己填進去的，不是系統填的。' +
+      '本塊不對門檻數值提出任何候選值。</div>';
+
+  return '<details class="exp"><summary>HLD-4 檢視區間與門檻輸入' +
+    '<span class="sm">' + sm + '</span></summary><div class="body">' + body + '</div></details>';
+}
+
+/* ── 層 3：HLD-5 單檔展開（預設收合） ─────────────────── */
+function fundRow(code, name, open, st){
+  var body;
+  if (st === "srcmiss" && code === "CCCC"){
+    body = '<div class="kv">' +
+      '<span>保單</span><b>直接持有</b>' +
+      '<span>持有起始日</span><b>2025-06-02（示意）</b>' +
+      '<span>單位數</span><b>820.000（示意）</b>' +
+      '<span>類別</span><b>衛星（示意）</b>' +
+      '</div>' +
+      '<div class="plot">⬜ 資料未備：該檔在區間內無淨值，折線區沒有東西可畫</div>' +
+      '<div class="plot">〔配息長條〕照畫 · 本草稿以佔位框代替</div>';
+  } else {
+    body = '<div class="kv">' +
+      '<span>保單</span><b>直接持有</b>' +
+      '<span>發行單位</span><b>—</b>' +
+      '<span>持有起始日</span><b>2024-03-11（示意）</b>' +
+      '<span>單位數</span><b>1,240.500（示意）</b>' +
+      '<span>成本（原幣）</span><b>12,800.00 USD（示意）</b>' +
+      '<span>成本（新臺幣）</span><b>398,400 元（示意）</b>' +
+      '<span>類別</span><b>核心（示意）</b>' +
+      '<span>最後對帳</span><b>2026-09-19（示意）</b>' +
+      '</div>' +
+      '<div class="plot">〔淨值折線〕與〔配息長條〕共用同一條時間軸 · 本草稿以佔位框代替，線框不畫真圖</div>';
+  }
+  return '<details class="fundrow"' + (open ? " open" : "") + '>' +
+    '<summary class="fr-h"><span class="nm">' + name + '</span>' +
+    '<span style="color:var(--app-muted);font-size:12px">' + code + '（示意）</span></summary>' +
+    '<div class="fr-b">' + body + '</div></details>';
+}
+function ops5(st){
+  var sm, body;
+  if (st === "empty"){
+    sm = "尚未建立任何持倉";
+    body = '<div class="emptybox"><div class="et">⬜ 資料未備</div>' +
+      '<div class="em">尚未建立任何持倉，沒有可以展開的檔。</div></div>';
+  } else {
+    sm = "3 檔（示意）· 同時最多展開一檔";
+    body = '<div class="st" style="color:var(--app-muted)">點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。</div>' +
+      '<div class="fundlist" id="fundlist">' +
+      fundRow("AAAA","基金 A（示意）", true, st) +
+      fundRow("BBBB","基金 B（示意）", false, st) +
+      fundRow("CCCC","基金 C（示意）", false, st) +
+      '</div>';
+  }
+  return '<details class="exp"><summary>HLD-5 單檔展開' +
+    '<span class="sm">' + sm + '</span></summary><div class="body">' + body + '</div></details>';
+}
+
+/* ── 層 4：HLD-6 淨值與配息序列（預設收合） ───────────── */
+function evi6(st){
+  if (st === "empty"){
+    return '<details class="exp"><summary>HLD-6 淨值與配息序列' +
+      '<span class="sm">⬜ 資料未備：兩張表都沒有列</span></summary><div class="body">' +
+      '<div class="emptybox"><div class="et">⬜ 資料未備</div>' +
+      '<div class="em">尚未建立任何持倉，淨值與配息兩張表都沒有列。</div></div></div></details>';
+  }
+  var navRows =
+    '<tr><td>AAAA（示意）</td><td>2026-09-19（示意）</td><td>10.4821（示意）</td><td>USD（示意）</td><td>' + PH_SRC + '</td><td>—</td></tr>' +
+    '<tr><td>AAAA（示意）</td><td>2026-09-18（示意）</td><td>10.4507（示意）</td><td>USD（示意）</td><td>' + PH_SRC + '</td><td>' + B_EST + '</td></tr>' +
+    '<tr><td>BBBB（示意）</td><td>2026-09-19（示意）</td><td>8.2130（示意）</td><td>USD（示意）</td><td>' + PH_SRC + '</td><td>—</td></tr>';
+  if (st !== "srcmiss"){
+    navRows += '<tr><td>CCCC（示意）</td><td>2026-09-19（示意）</td><td>15.0640（示意）</td><td>EUR（示意）</td><td>' + PH_SRC + '</td><td>—</td></tr>';
+  }
+  var divRows =
+    '<tr><td>AAAA（示意）</td><td>2026-09-16（示意）</td><td>2026-09-20（示意）</td><td>0.0420（示意）</td><td>USD（示意）</td><td>收益</td></tr>' +
+    '<tr><td>BBBB（示意）</td><td>2026-08-15（示意）</td><td>⬜</td><td>0.0650（示意）</td><td>USD（示意）</td><td>本金</td></tr>' +
+    '<tr><td>CCCC（示意）</td><td>2026-07-10（示意）</td><td>2026-07-15（示意）</td><td>0.0310（示意）</td><td>EUR（示意）</td><td>來源未區分</td></tr>';
+
+  var body = '<div class="st" style="color:var(--app-muted)">' +
+    '表不做任何補值，缺的日期不出現在表上；週末與假日沒有列屬正常。' +
+    '可空的只有配息表的入帳日一欄，空的時候顯示 ⬜。</div>' +
+    '<div class="subt">淨值表</div>' +
+    '<div class="tscroll"><table class="wt"><thead><tr>' +
+    '<th>基金代碼</th><th>淨值日期</th><th>單位淨值（原幣）</th><th>幣別</th><th>來源層級</th><th>推估</th>' +
+    '</tr></thead><tbody>' + navRows + '</tbody></table></div>' +
+    '<div class="subt">配息表</div>' +
+    '<div class="tscroll"><table class="wt"><thead><tr>' +
+    '<th>基金代碼</th><th>除息日</th><th>入帳日</th><th>每單位配息（原幣）</th><th>幣別</th><th>配息類別</th>' +
+    '</tr></thead><tbody>' + divRows + '</tbody></table></div>';
+
+  var sm = (st === "srcmiss")
+    ? "淨值 121 列（示意）· 配息 9 列（示意）· 有一檔在區間內無淨值"
+    : "淨值 182 列（示意）· 配息 9 列（示意）";
+  return '<details class="exp"><summary>HLD-6 淨值與配息序列' +
+    '<span class="sm">' + sm + '</span></summary><div class="body">' + body + '</div></details>';
+}
+
+/* ── 層 4：HLD-7 計算軌跡（預設收合） ─────────────────── */
+function evi7(st){
+  if (st === "empty"){
+    return '<details class="exp"><summary>HLD-7 計算軌跡' +
+      '<span class="sm">⬜ 資料未備：沒有任何核心卡出數</span></summary><div class="body">' +
+      '<div class="emptybox"><div class="et">⬜ 資料未備</div>' +
+      '<div class="em">沒有任何核心卡出數，沒有軌跡可列。</div></div></div></details>';
+  }
+  var win = '182 筆（示意）· 2026-01-02（示意）至 2026-09-19（示意）';
+  var rows =
+    '<tr><td>區間報酬率（AAAA（示意））</td><td>' + win + '</td>' +
+    '<td>區間末淨值 ÷ 區間首淨值，再減一</td><td>+3.28%（示意）</td></tr>' +
+    '<tr><td>期間波動（AAAA（示意））</td><td>' + win + '</td>' +
+    '<td>日報酬標準差 × 年化基數的平方根</td><td>9.15%（示意）</td></tr>' +
+    '<tr><td>最大回撤（AAAA（示意））</td><td>' + win + '</td>' +
+    '<td>區間內每一日的淨值除以它之前的最高淨值，取最小值後減一</td><td>-11.20%（示意）</td></tr>' +
+    '<tr><td>期間配息合計（AAAA（示意））</td><td>4 筆（示意）· 2026-01-15（示意）至 2026-09-16（示意）</td>' +
+    '<td>各筆每單位配息 × 持有單位數，加總</td><td>128.40 USD（示意）</td></tr>';
+  if (st === "bizexc"){
+    rows += '<tr><td>區間報酬率（CCCC（示意））</td><td>0 筆（示意）· 成立日 2026-04-08（示意）</td>' +
+      '<td>區間末淨值 ÷ 區間首淨值，再減一</td><td>⬜ 不適用：成立日晚於區間起點</td></tr>';
+  }
+  if (st === "fetchfail"){
+    rows += '<tr><td>期間配息合計（BBBB（示意））</td><td>⬜ 資料未備</td>' +
+      '<td>各筆每單位配息 × 持有單位數，加總</td><td>⚠ 取數失敗</td></tr>';
+  }
+  var body = '<div class="st" style="color:var(--app-muted)">' +
+    '輸出值與對應核心卡上顯示的值逐字相同；算式以文字寫出，不寫任何實作語言的語法。' +
+    '對應核心卡為不適用時，輸出欄顯示同一句不適用文案，輸入欄照列。</div>' +
+    '<div class="tscroll"><table class="wt"><thead><tr>' +
+    '<th>指標名</th><th>取用的輸入筆數與首末日期</th><th>算式的文字寫法</th><th>輸出值</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<details class="exp"><summary>HLD-7 計算軌跡' +
+    '<span class="sm">逐檔逐指標 9 列（示意）</span></summary><div class="body">' + body + '</div></details>';
+}
+/* ── 層 4：HLD-8 移出核心卡的第三個值（預設收合） ─────────
+   客戶 2026-09-22 裁定 H-02 時給的第二條路：「第三個值移到層 4」。
+   本組選這一條（理由見 §C 的 H-02 那一列）。塊代號 HLD-8 為本組擬定 —— 44 尚未宣告這一塊。 */
+function evi8(st){
+  if (st === "empty"){
+    return '<details class="exp"><summary>HLD-8 最大回撤與本金類配息佔比' +
+      '<span class="sm">⬜ 資料未備：尚未建立任何持倉</span></summary><div class="body">' +
+      '<div class="emptybox"><div class="et">⬜ 資料未備</div>' +
+      '<div class="em">尚未建立任何持倉，沒有可以列出的檔。</div></div></div></details>';
+  }
+  var dd3, pr3;
+  if (st === "srcmiss"){ dd3 = '<span class="nd">⬜ 資料未備</span>'; pr3 = '6.70%（示意）'; }
+  else if (st === "bizexc"){ dd3 = '<span class="na">⬜ 不適用：成立日晚於區間起點</span>'; pr3 = '6.70%（示意）'; }
+  else if (st === "fetchfail"){ dd3 = '-8.30%（示意）'; pr3 = '<span class="er">⚠ 取數失敗</span>'; }
+  else { dd3 = '-8.30%（示意）'; pr3 = '6.70%（示意）'; }
+  var pr1 = (st === "fetchfail") ? '<span class="er">⚠ 取數失敗</span>' : '12.50%（示意）';
+  var pr2 = (st === "fetchfail") ? '<span class="er">⚠ 取數失敗</span>' : '41.30%（示意）';
+  var rows =
+    '<tr><td>基金 A（示意）</td><td>USD（示意）</td><td>-11.20%（示意）</td><td>' + pr1 + '</td></tr>' +
+    '<tr><td>基金 B（示意）</td><td>USD（示意）</td><td>-7.40%（示意）</td><td>' + pr2 + '</td></tr>' +
+    '<tr><td>基金 C（示意）</td><td>EUR（示意）</td><td>' + dd3 + '</td><td>' + pr3 + '</td></tr>';
+  var body = '<div class="st" style="color:var(--app-muted)">' +
+    '這兩個值原本各是績效與風險卡、配息與本金卡的第三個值；' +
+    '客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層。' +
+    '兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。</div>' +
+    '<div class="tscroll"><table class="wt"><thead><tr>' +
+    '<th>基金名</th><th>幣別</th><th>最大回撤</th><th>本金類配息佔比</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  var sm = (st === "srcmiss" || st === "bizexc" || st === "fetchfail")
+    ? "3 檔（示意）· 有值取不到或不適用"
+    : "3 檔（示意）· 兩個值皆出數";
+  return '<details class="exp"><summary>HLD-8 最大回撤與本金類配息佔比' +
+    '<span class="sm">' + sm + '</span></summary><div class="body">' + body + '</div></details>';
+}
+
+/* ── APP-TEXT-END ── 以下不再產生深色螢幕裡的字 ────────── */
+
+/* ══════════ 以下是註記層的字（淺色那一層），不進深色螢幕 ══════════ */
+
+var PINS = {
+  full: ['✓ H-02 已裁定 · 核心卡各留兩個主值，第三個值在層 4 的 HLD-8',
+         '⛔ H-18 · 偏離列沒有指標名欄，讀不出比的是哪條線',
+         '⛔ H-15 · 黃燈映射的是計算結果，不是四種資料狀態',
+         '✓ H-04 已裁定 · 操作列有存檔了，填的東西存得回去',
+         '§B · 差額用正負號寫，不配箭頭',
+         '§J · 燈有自己的圖示與狀態字，不靠顏色分辨'],
+  srcmiss: ['✓ H-01 已裁定 · 缺淨值不計入列數，燈上的 2 與卡上的 2 列相等',
+            '⛔ H-05 · 缺的是 Sheets 維護的表，這枚重新取數按了沒事',
+            '✓ H-02 已裁定 · 兩個主值一缺一齊，部分缺徽章有規則可循了',
+            '§B · 缺的那一檔不列入上表，卡尾另寫一行〔本組推得〕'],
+  bizexc: ['⛔ H-03 · 三條燈色規則一條也沒命中，這個灰是本組挑的',
+           '⛔ H-06 · 零筆偏離不屬空狀態四種，這個畫法沒有依據',
+           '§B · 不適用是黃、不截短區間偷算',
+           '§J · 不適用有 ⬜ 與「不適用」四個字，不只靠黃色'],
+  fetchfail: ['⛔ H-16 · 紅燈文案 44 沒有給，這一句是本組擬的',
+              '⛔ H-05 · 重新取數的作用域未定',
+              '§B · 失敗訊息原文照印，不改寫成安撫語句',
+              '§J · 紅燈的圖示是 ✖、黃燈是 ⚠，灰燈是 ⬜'],
+  nothr: ['§B · 不以任何內建值代替門檻',
+          '§B · 另外兩張卡照常出數，它們不吃門檻',
+          '✓ H-04 已裁定 · 門檻設完按存檔就存得回去'],
+  empty: ['⛔ H-17 · 兩句空狀態同時成立，44 沒寫哪一句出現',
+          '⛔ H-12 · 指標名沒有候選清單，不能放下拉選單',
+          '⛔ H-05 · 這枚重新取數在「還沒有持倉」時無事可做',
+          '§B · 四個欄位全空，一個預設值也沒有',
+          '§B · 兩欄皆空 → 存檔停用，並寫出停用原因']
+};
+
+var EXPLAIN = {
+  full:'<b>狀態 1｜全齊。</b>持倉、淨值、配息都齊，區間與門檻都設了，兩檔超出。' +
+    '燈轉黃、文案帶 N。<b>黃不是「該調整了」</b> —— 44 逐字：「燈色描述的是『要不要多看一眼』，不描述持倉好壞」。' +
+    '✓ <b>H-02 已由客戶 2026-09-22 裁定</b>：兩張核心卡各留<b>兩個主值</b>，' +
+    '第三個值（最大回撤／本金類配息佔比）移到<b>層 4 的 HLD-8</b>，層 2 仍是三張卡。' +
+    '偏離卡刻意讓兩列比不同指標，<b>好讓 ⛔ H-18 看得見</b>：四欄裡沒有指標名。' +
+    '✓ <b>H-04 已裁定</b>：操作列展開後可以看到「套用」與「存檔」<b>兩枚並存</b>。',
+  srcmiss:'<b>狀態 2｜某塊缺來源。</b>把基金 C 的淨值整個抽掉。' +
+    '✓ <b>這一張圖原本是 ⛔ H-01 的現場，客戶 2026-09-22 已裁定</b>：缺淨值的檔<b>不計入列數</b>，' +
+    '所以燈上寫「2 檔」、偏離卡上就是 <b>2 列</b>，兩者相等；' +
+    '那一檔改在<b>卡尾一行</b>寫「另有 1 檔缺淨值，未列入」，<b>不另開區塊</b>。' +
+    '⚠️ <b>卡尾那一行怎麼呈現是本組依裁示推得的，客戶未逐字點名，可推翻</b>（見 §B 與 §H 的 T-21）。' +
+    '另外注意配息卡：同一檔的<b>兩個主值</b>裡，<b>一個進了資料未備、另一個照常出數</b> ——' +
+    '那正是 44 逐主值判定的語意，H-02 裁定之後它終於落在兩個主值上，規則對得起來了。',
+  bizexc:'<b>狀態 3｜某塊業務例外。</b>基金 C 的成立日晚於區間起點 → 三個值皆「不適用」（黃），' +
+    '<b>不截短區間偷算</b>（44 逐字）。門檻同時調到沒有任何一檔超出。' +
+    '⚠️ <b>這時燈該什麼色，44 三條規則一條也沒命中（⛔ H-03）</b> ——' +
+    '「三塊皆 ok 且偏離筆數為零」不成立（有一塊不是 ok），「筆數大於零」不成立，「任一系統錯誤」也不成立。' +
+    '<b>本組畫灰，那是被迫挑的一邊。</b>偏離卡這時是零列，而零列長什麼樣同樣沒有依據（⛔ H-06）。',
+  fetchfail:'<b>狀態 4｜某塊取數失敗。</b>配息來源失敗 → 卡進紅、主值位置寫「⚠ 取數失敗」、' +
+    '<b>副標印出訊息原文</b>（44 逐字：照印，不改寫成安撫語句），並掛一枚重新取數。' +
+    '燈依「任一塊為系統錯誤 → 紅」轉紅。' +
+    '⚠️ <b>紅燈的文案字面 44 沒有給（⛔ H-16）</b>，螢幕上那一句是本組擬的。' +
+    '<b>紅燈說的是「這一頁的數字能不能照著讀」，不是「你的持倉出事了」。</b>',
+  nothr:'<b>狀態 5｜門檻未設。</b>區間有設、門檻一列也沒有。' +
+    '偏離卡進「⬜ 不適用：尚未設定門檻」，<b>不以任何內建值代替</b>（44 逐字，那是 <code>G3†</code>）。' +
+    '燈為灰、文案「尚未設定門檻」。' +
+    '<b>另外兩張核心卡照常出數</b> —— 它們吃的是區間，不吃門檻。' +
+    '✓ <b>H-04 已由客戶 2026-09-22 裁定</b>：設完門檻按「存檔」就寫回去了，下一次打開不必重填；' +
+    '按「套用」只重算、不寫回，兩枚各做一件事。',
+  empty:'<b>狀態 6｜全空（首次開啟）。</b>持倉表為空、區間未填、門檻未設，三件事同時成立。' +
+    '燈為灰、文案「尚未建立任何持倉」，掛一枚<b>導覽</b>類按鈕把人帶去 Sheets，' +
+    '下面那一行「持倉資料在 Sheets 維護，本儀表板唯讀」<b>四句全部逐字出自 44</b>。' +
+    '⚠️ <b>「尚未設定門檻」同時也成立，44 沒有寫哪一句出現（⛔ H-17）</b> ——' +
+    '本組取持倉那一句，另一句補在燈下的括號裡。' +
+    '⚠️ 操作列展開後<b>四個欄位全是空的</b>：紅線明訂輸入欄不得有預設值。' +
+    '✓ 此時<b>「存檔」是停用的</b>，並就地寫出停用原因「區間兩個欄位皆未填」' +
+    '（停用不隱藏 —— 44 的按鈕元件逐字要求）。'
+};
+
+/* ── 渲染 ─────────────────────────────────────────────── */
+function render(){
+  document.getElementById("slot-lamp").innerHTML = lampHTML(ui.state);
+  document.getElementById("slot-cards").innerHTML =
+    '<div class="cards">' + card1(ui.state) + card2(ui.state) + card3(ui.state) + '</div>';
+  document.getElementById("slot-ops").innerHTML =
+    '<div class="ops">' + ops4(ui.state) + ops5(ui.state) + '</div>';
+  document.getElementById("slot-evi").innerHTML =
+    '<div class="evi">' + evi6(ui.state) + evi7(ui.state) + evi8(ui.state) + '</div>';
+
+  document.getElementById("state-explain").innerHTML = EXPLAIN[ui.state];
+  document.getElementById("pinrow").innerHTML =
+    PINS[ui.state].map(function(p){
+      var ann = (p.indexOf("⛔") === 0) ? "pin" : "pin ann";
+      return '<span class="' + ann + '">' + p + '</span>';
+    }).join("");
+
+  document.getElementById("live-annot").innerHTML =
+    '<b>提醒：這一塊深色的東西才是 app。</b>' +
+    '外面這一層淺色的圖紙、上面那排控制鈕、還有這些紅色與青色的標籤，' +
+    '<b>全部不存在於畫面上</b> —— 它們是給你審稿用的。' +
+    '深色螢幕裡每一個數字後面的「（示意）」是刻意留的：' +
+    '<b>這份草稿一個真實觀測值也沒有</b>，也沒有接任何資料來源。';
+
+  bindOneOpen();
+  syncWidth();
+}
+
+/* 「同時最多展開一檔」：展開一檔就把同層其他檔收起來 */
+function bindOneOpen(){
+  var list = document.getElementById("fundlist");
+  if (!list) return;
+  var items = list.querySelectorAll("details.fundrow");
+  Array.prototype.forEach.call(items, function(d){
+    d.addEventListener("toggle", function(){
+      if (!d.open) return;
+      Array.prototype.forEach.call(items, function(o){ if (o !== d) o.open = false; });
+    });
+  });
+}
+
+function syncWidth(){
+  var scr = document.getElementById("screen");
+  scr.style.setProperty("--screen-w", ui.bp + "px");
+  document.getElementById("bp-read").textContent = "模擬寬度 " + ui.bp + "px";
+  var w = Math.round(scr.getBoundingClientRect().width);
+  var cols = (w >= 1280) ? "三欄" : (w >= 769 ? "兩欄" : "單欄");
+  document.getElementById("bp-actual").textContent =
+    "實際渲染 " + w + "px · 層 2 " + cols + (w < ui.bp ? "（被視窗夾住）" : "");
+}
+
+/* ── 事件 ─────────────────────────────────────────────── */
+function press(sel, on){
+  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){
+    b.setAttribute("aria-pressed", String(on(b)));
+  });
+}
+Array.prototype.forEach.call(document.querySelectorAll("[data-state]"), function(b){
+  b.addEventListener("click", function(){
+    ui.state = b.dataset.state;
+    press("[data-state]", function(x){ return x.dataset.state === ui.state; });
+    render();
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll("[data-bp]"), function(b){
+  b.addEventListener("click", function(){
+    ui.bp = parseInt(b.dataset.bp, 10);
+    press("[data-bp]", function(x){ return parseInt(x.dataset.bp, 10) === ui.bp; });
+    syncWidth();
+  });
+});
+document.getElementById("btn-theme").addEventListener("click", function(){
+  var order = ["system", "light", "dark"];
+  ui.theme = order[(order.indexOf(ui.theme) + 1) % 3];
+  if (ui.theme === "system"){ document.documentElement.removeAttribute("data-theme"); }
+  else { document.documentElement.setAttribute("data-theme", ui.theme); }
+  this.textContent = { system:"跟隨系統", light:"淺色", dark:"深色" }[ui.theme];
+  this.setAttribute("aria-pressed", String(ui.theme !== "system"));
+});
+window.addEventListener("resize", syncWidth);
+
+render();
+</script>
+</body>
+</html>
