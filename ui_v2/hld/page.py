@@ -319,7 +319,7 @@ def _render_hld4(block: dict) -> None:
                     placeholder=field["placeholder"],
                     key=f"hld4_{field['name']}",
                 )
-        st.caption("門檻（指標名＋比較方向＋數值，可增減列）")
+        st.caption(block["threshold_caption"])
         for index, row in enumerate(block["threshold_rows"]):
             cells = st.columns([3, 2, 2, 2])
             for cell, field in zip(cells, row):
@@ -347,18 +347,29 @@ def _render_hld5(block: dict) -> None:
     with _expander(block):
         st.caption(block["answers"])
         _lines(block["detail_lines"])
+        # `44` :707 與 §5.4 逐字「**展開區不巢狀第二層**」—— 上一輪在塊層 expander 裡面
+        # 又開了一層，那就是第二層。本輪退成**純文字列表**：逐檔一行標題，
+        # 展開中的那一檔（`_open`）才接內容。
+        # ⛔ 刻意**不發明一枚展開鈕**：`open_fund` 目前沒有任何呼叫端會傳值，
+        #    那枚鈕按下去畫面不會變 —— `44` :2420「**一枚按了不動的按鈕，比沒有按鈕更誤導**」。
+        #    要讓它真的可點得接 session_state，那超出本輪射程（已登記待裁）。
         for item in block["_items"]:
-            with st.expander(item["head_text"], expanded=item["_open"]):
-                kv = "".join(
-                    f"<span>{_esc(label)}</span><b>{_esc(value)}</b>"
-                    for label, value in item["_fields"]
-                )
-                st.markdown(
-                    f'<div class="hld-kv">{kv}</div>'
-                    f'<div class="hld-plot">{_esc(item["nav_plot_text"])}</div>'
-                    f'<div class="hld-plot">{_esc(item["div_plot_text"])}</div>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown(
+                f'<div class="hld-fh">{_esc(item["head_text"])}</div>',
+                unsafe_allow_html=True,
+            )
+            if not item["_open"]:
+                continue
+            kv = "".join(
+                f"<span>{_esc(label)}</span><b>{_esc(value)}</b>"
+                for label, value in item["_fields"]
+            )
+            st.markdown(
+                f'<div class="hld-kv">{kv}</div>'
+                f'<div class="hld-plot">{_esc(item["nav_plot_text"])}</div>'
+                f'<div class="hld-plot">{_esc(item["div_plot_text"])}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ───────────────────────── 層 4 ─────────────────────────
@@ -390,9 +401,9 @@ def _render_hld6(block: dict) -> None:
                         _esc(row["nav_date"]),
                         _esc(row["nav_text"]),
                         _esc(row["ccy"]),
-                        _badge_html({"_tone": "中性", "text": row["source_tier"]}),
-                        _badge_html({"_tone": "黃", "text": row["_estimated_badge"]})
-                        if row["_estimated_badge"]
+                        _badge_html(row["_source_badge"]),
+                        _badge_html(row["_estimated_badge_node"])
+                        if row["_estimated_badge_node"]
                         else "—",
                     ],
                 ),

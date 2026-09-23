@@ -25,6 +25,15 @@ from datetime import date, timedelta
 
 CURRENCIES = ("USD", "EUR")
 
+# `44` 4.2／4.5／4.6 三張表的 `source_tier` 欄值域（2026-09-23 補上，決策者：客戶）：
+# **四個之一**，`淨值`／`配息`／`市場指標`／`其他`。同一份值域也是 `44` 5.2 `來源` 徽章的文字
+# —— 該類自 2026-09-23 起**不再是開放集**（同輪就地更正）。
+# ⚠️ 本檔原本寫的是 `"T1"`，那是舊 repo 的五層權威分級，**不在這四個之內**；
+#    它在 `HLD-6` 的淨值表上會被畫成一枚 `來源` 徽章，等於在畫面上印一個值域外的字面值。
+SOURCE_TIERS = ("淨值", "配息", "市場指標", "其他")
+# `nav` 表這一欄取哪一個：本頁的 `nav` 列就是淨值來源。
+SOURCE_TIER_NAV = SOURCE_TIERS[0]
+
 # 草稿 fetchfail 那一態的訊息原文（`44`：照印，不改寫成安撫語句）。
 FETCH_FAIL_MESSAGE = "ConnectionError: 來源未回應，連線逾時（示意）"
 
@@ -204,7 +213,7 @@ def navs() -> list:
                     "nav_date": day,
                     "nav_orig_ccy": value,
                     "ccy": fund["ccy"],
-                    "source_tier": "T1",
+                    "source_tier": SOURCE_TIER_NAV,
                     "is_estimated": (code, day) in _ESTIMATED,
                     "fetched_at": _plus_days(day, 1) + "T02:00:00Z",
                 }

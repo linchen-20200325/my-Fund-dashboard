@@ -124,7 +124,7 @@ ANSWERS = {
     "HLD-3": "我在這段區間裡逐檔收到多少配息，這些配息相當於淨值的多少",
     "HLD-4": "我現在是用哪一段期間、哪幾條線在檢查",
     "HLD-5": "這一檔單獨看，淨值和配息是怎麼交錯的",
-    "HLD-6": "上面三張卡用到的原始數字，逐筆是什麼",
+    "HLD-6": "本頁那四塊用到的原始數字，逐筆是什麼",
     "HLD-7": "本頁那四塊上的每一個數字，是拿哪幾筆、怎麼算出來的",
     "HLD-8": "那兩個從核心卡移下來的值，逐檔是多少",
 }
@@ -151,6 +151,15 @@ INDICATOR_OWNER = {
     "最大回撤": "HLD-8",
     "本金類配息佔比": "HLD-8",
 }
+
+# `44` :583（第七輪）：門檻的指標名取 `HLD-1`／`HLD-2`／`HLD-3`／`HLD-8` 四塊各自出的指標。
+# ⚠️ `HLD-1` 不另外貢獻名字 —— 它出的是「<指標名> 與門檻的差額」，由門檻自己導出來，會繞回自己。
+#    **不替 `44` 發明第七個名字**（登記，不是動工授權）。
+RULE_INDICATOR_NAMES = tuple(INDICATOR_OWNER)
+
+# ⚠️ 0 caller。依 `44` §6「**不刪，只標**」保留（上一輪誤刪，本輪復原）。
+#    它的四項與現行母體六項**對不上** —— ⛔ 不要拿它當母體用。**登記待裁。**
+_RULE_INDICATORS = ("最大回撤", "配息佔淨值比", "區間報酬率", "期間波動")
 
 # 算式的文字寫法（`44` HLD-7：算式以文字寫出，不寫任何實作語言的語法）。
 FORMULA_TEXT = {
@@ -250,6 +259,9 @@ TEXT_DIRECT_HOLD = "直接持有"
 
 NA_NO_WINDOW = not_applicable_text("尚未設定區間")
 NA_NO_RULES = not_applicable_text(TEXT_NO_RULES)
+# ⚠️ 下列四個 0 caller，依 `44` §6「不刪，只標」保留：字面值與 `fund_metrics` 裡
+#    `not_applicable_text(...)` 是同一句話的第二份來源。**登記待裁。**
+#    （`NA_NO_WINDOW`／`NA_NO_RULES` 是 live 的，不在此列。）
 NA_FEW_NAV = not_applicable_text("區間內淨值筆數不足")
 NA_LATE_INCEPTION = not_applicable_text("成立日晚於區間起點")
 NA_NO_DIVIDEND = not_applicable_text("區間內無配息")
@@ -537,13 +549,13 @@ def all_metrics(dataset, window):
 # ───────────────────────── 徽章與按鈕 ─────────────────────────
 
 
-def _status_badge(text: str) -> dict:
+def status_badge(text: str) -> dict:
     if text not in STATUS_BADGE_LITERALS:
         raise ValueError(f"狀態徽章字面值 {text!r} 不在 `44` 5.2 的七個之內")
     return {"_kind": "狀態", "_tone": "灰" if text == "資料未備" else "黃", "text": text}
 
 
-def _source_badge(tier: str) -> dict:
+def source_badge(tier: str) -> dict:
     """`44` 5.2：來源徽章中性、不著色。"""
     return {"_kind": "來源", "_tone": "中性", "text": tier}
 
@@ -584,8 +596,6 @@ def blocks_recalculated_by(action_kind: str) -> tuple:
 
 # ───────────────────────── HLD-1 偏離提示卡 ─────────────────────────
 
-_RULE_INDICATORS = ("最大回撤", "配息佔淨值比", "區間報酬率", "期間波動")
-
 
 def _breaches(rule, value) -> bool:
     if rule["direction"] == "低於":
@@ -606,9 +616,9 @@ def deviation_rows(metrics, rules):
     for metric in metrics:
         for rule in rules:
             name = rule["indicator"]
-            if name not in INDICATOR_OWNER:
-                # ⚠️ 登記：門檻的指標名是使用者自己打的字，`44` 沒有給候選清單（草稿 ⛔ H-12）。
-                #    打到本頁算不出來的名字時，本檔**不猜**，登記成一種未列入。
+            if name not in RULE_INDICATOR_NAMES:
+                # `44` :583 自第七輪起給了母體，草稿 ⛔ H-12「沒有候選清單」已為假、已撤。
+                # 母體之外的名字仍然**不猜**，照舊登記成一種未列入。
                 skipped["na"].add(metric["_fund_code"])
                 continue
             node = metric[name]
@@ -751,7 +761,7 @@ def _build_core_card(code, metrics, labels, *, has_holdings, has_window, subtitl
         for group in groups:
             group_states = [mv["_state"] for mv in group["main_values"]]
             if STATE_OK in group_states and any(s != STATE_OK for s in group_states):
-                badges.append(_status_badge("部分缺"))
+                badges.append(status_badge("部分缺"))
                 break
         if any(s in (STATE_MISSING, STATE_ERROR) for s in states):
             buttons.append(_retry_button())
@@ -972,6 +982,8 @@ def _build_hld4(*, applied_window, fields, rules):
         "answers": ANSWERS["HLD-4"],
         "summary_text": summary,
         "inputs": inputs,
+        "rule_indicator_names": RULE_INDICATOR_NAMES,
+        "threshold_caption": "門檻（指標名＋比較方向＋數值，可增減列）",
         "threshold_rows": threshold_rows,
         "row_buttons": row_buttons,
         "detail_lines": detail_lines,
@@ -1017,15 +1029,15 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
             {
                 "_fund_code": metric["_fund_code"],
                 "_ccy": metric["_ccy"],
-                "_open": (metric["_fund_code"] == open_fund)
-                if open_fund
-                else (index == 0),
+                # `44` :119／:128／§5.4「展開區不自動展開」—— 上一輪寫 `index == 0`，三處都撞。
+                "_open": metric["_fund_code"] == open_fund,
                 "_fields": fields,
                 "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{HINT}",
                 "nav_plot_text": (
                     "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
                     if has_nav
-                    else f"{ND_TEXT}：該檔在區間內無淨值，折線區沒有東西可畫"
+                    # `44` :708 明文回指 §5.5 模板，不是自己寫一句散文。
+                    else empty_source_text(["nav"])
                 ),
                 "div_plot_text": "〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖",
             }
@@ -1073,6 +1085,13 @@ def _build_hld6(dataset):
             {
                 "_fund_code": row["fund_code"],
                 "_estimated_badge": "推估" if row["is_estimated"] else "",
+                # ⚠️ 兩枚徽章**做進模型**：渲染時現組的 dict 沒有 `_kind`，`collect_badges()`
+                #    結構上收不到（`test_來源徽章中性不著色` 因此空掃至今）；走 helper 另有
+                #    字面值守衛（不在 `44` 5.2 那七個之內會 raise）。
+                "_source_badge": source_badge(row["source_tier"]),
+                "_estimated_badge_node": (
+                    status_badge("推估") if row["is_estimated"] else None
+                ),
                 "fund_code": row["fund_code"],
                 "nav_date": row["nav_date"],
                 "nav_text": f"{row['nav_orig_ccy']:.4f}{HINT}",
@@ -1108,7 +1127,9 @@ def _build_hld6(dataset):
         "可空的只有配息表的入帳日一欄，空的時候顯示 ⬜。"
     ]
     if state == STATE_MISSING:
-        detail_lines = [empty_source_text(["nav", "dividend"]), "尚未建立任何持倉，兩張表都沒有列。"]
+        # `44` :719 只寫「無列 → `來源缺`」。兩張表為空**不一定**等於沒有持倉
+        # （取數失敗、區間外都可能），上一輪那句原因是假資料下碰巧成立，已撤。
+        detail_lines = [empty_source_text(["nav", "dividend"])]
 
     return {
         "code": "HLD-6",
@@ -1173,6 +1194,10 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         if unknown_total:
             # `44` HLD-8 空狀態逐字：並在**表下**寫出未知的筆數。
             detail_lines.append(f"配息類別未知的筆數：{unknown_total} 筆{HINT}")
+        # ⚠️ 上一輪曾收成「只有取數失敗才掛」，**本輪撤回**：`44` :762 第一句逐字
+        #    「四狀態逐值判定，**與核心卡同一套**」，收窄後同一個缺淨值條件下核心卡各一枚、
+        #    本塊零枚，同一套當場破掉；上一輪引的 §5.5「整格為準」自己寫明射程不含核心卡那張表。
+        #    ⛔ 「四塊一起拿掉」是另一邊，**屬客戶地盤，不替客戶選**（登記待裁）。
         if any(s in (STATE_MISSING, STATE_ERROR) for s in states):
             buttons.append(_retry_button())
 
@@ -1245,14 +1270,27 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings):
             }
         )
 
-    state = STATE_OK if (has_holdings and rows) else STATE_MISSING
+    # `44` :730「四塊沒有一塊出數 → `來源缺`」。上一輪只看有沒有持倉，於是「有持倉但
+    # 四塊一個數都沒出」時塊態還是 `ok`（實測 18 列全不適用，塊卻宣稱正常）。
+    # ⚠️ 同一格另有一句「輸入欄照列」，兩句**同時滿足**：`來源缺` 定塊的狀態、
+    #    「輸入欄照列」定列的畫面，兩者不同層。⛔ 把列吞掉只印「來源缺」是假話 ——
+    #    來源在，是區間沒設。
+    any_output = bool(hld1_rows) or any(
+        metric[indicator]["_state"] == STATE_OK
+        for metric in metrics
+        for indicator in INDICATOR_OWNER
+    )
+    state = STATE_OK if (has_holdings and rows and any_output) else STATE_MISSING
     if state == STATE_MISSING:
-        rows = []
         detail_lines = [
             empty_source_text(["HLD-1", "HLD-2", "HLD-3", "HLD-8"]),
-            "沒有一塊出數，沒有軌跡可列。",
+            "四塊沒有一塊出數；下面各列的輸入筆數與不適用原因照列。",
         ]
-        summary = f"{ND_TEXT}：四塊沒有一塊出數"
+        summary = (
+            f"{ND_TEXT}：四塊沒有一塊出數 · {len(rows)} 列{HINT}"
+            if rows
+            else f"{ND_TEXT}：四塊沒有一塊出數"
+        )
     else:
         detail_lines = [
             "輸出值與該列指標名所在那一塊上顯示的值逐字相同；"
@@ -1462,20 +1500,35 @@ def empty_state_texts(model) -> set:
 
 
 def cross_currency_nodes(model) -> list:
-    """同一個數裡摻了兩種幣別的節點。客戶 2026-09-22 設計引導第三條。
+    """把兩種幣別的數合成一個值的節點。`44` 5.1「同一張卡不混不同幣別做平均」、
+    `HLD-2` 判準「沒有任何一個跨幣別的合計數」、`HLD-8`「本表不做任何跨幣別的合計、平均或比值」。
 
-    兩道檢查：幣別欄位必須是**單一**字串；顯示字串裡不得同時出現兩個幣別字面值
-    （一個跨幣別的合計／平均／比值，幾乎一定會把兩個幣別都印出來）。
+    ⚠️ **舊版從來沒有守到東西**：它要求「同一個 `text` 字串裡出現兩個幣別字面值」，
+    而本頁的百分比不帶幣別、金額只帶一個 —— 實測六情境每個節點的幣別命中數恆為 1，
+    **那個條件永遠不成立**。稽核把一個真的跨幣別平均塞進核心卡，舊版毫無反應。
+
+    現行改為**歸屬檢查**：每一個出數的值都必須掛在某一檔底下，且幣別與那一檔相同。
+    一個跨幣別的合計／平均／比值，**要嘛掛不到任何一檔底下**（卡層級或表層級的合計），
+    **要嘛幣別對不上它所在的那一檔** —— 兩條路都會被抓到。
     """
     bad = []
-    for node in numeric_nodes(model):
-        ccy = node["_ccy"]
-        if not isinstance(ccy, str) or not ccy:
-            bad.append(node)
-            continue
-        hits = {c for c in KNOWN_CURRENCIES if c in node["text"]}
-        if len(hits) > 1:
-            bad.append(node)
+    for block in model["blocks"]:
+        containers = list(block.get("fund_groups", ())) + [
+            row for row in block.get("_rows", ()) if isinstance(row, dict) and "_fund_code" in row
+        ]
+        owned = set()
+        for container in containers:
+            ccy = container.get("_ccy")
+            for node in value_nodes(container):
+                owned.add(id(node))
+                if not node["_has_number"]:
+                    continue
+                if not isinstance(ccy, str) or not ccy or node["_ccy"] != ccy:
+                    bad.append(node)
+        for node in value_nodes(block):
+            # 掛不到任何一檔底下的出數值 —— 那正是一個跨幣別合計會長的樣子。
+            if node["_has_number"] and id(node) not in owned:
+                bad.append(node)
     return bad
 
 

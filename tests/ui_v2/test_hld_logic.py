@@ -545,10 +545,19 @@ def test_HLD8列依fund_code字面值排列():
 # ───────────────────────── HLD-5 / HLD-6 ─────────────────────────
 
 
-def test_同時最多展開一檔():
+def test_同時最多展開一檔_而且初次載入一檔也不展開():
+    """⚠️ 本條原本斷言初次載入**剛好一檔展開**，那正是被 `44` 禁掉的行為 ——
+    `44` :119／:128「初次載入展開的 ＝ 結論燈 ＋ 3 張核心卡」、
+    §5.4 禁止欄「**展開區不自動展開**」。舊斷言把違憲釘成了規格。
+    現行：初次載入 0 檔；點開一檔才 1 檔；**任何時候都不超過一檔**。
+    """
     model = logic.build_page_model(fixtures.dataset_full())
-    block = logic.find_block(model, "HLD-5")
-    assert sum(1 for item in block["_items"] if item["_open"]) == 1
+    items = logic.find_block(model, "HLD-5")["_items"]
+    assert sum(1 for item in items if item["_open"]) == 0
+
+    picked = logic.build_page_model(fixtures.dataset_full(), open_fund="BBBB")
+    opened = [i for i in logic.find_block(picked, "HLD-5")["_items"] if i["_open"]]
+    assert len(opened) == 1 and opened[0]["_fund_code"] == "BBBB"
 
 
 def test_DIRECT保單欄位顯示直接持有而不是空白():
@@ -953,3 +962,149 @@ def test_theme零streamlit():
     source = pathlib.Path(theme.__file__).read_text(encoding="utf-8")
     assert "import streamlit" not in source
     assert "st." not in source
+
+
+# ─────────── 第 5~8 輪裁示的回補 ＋ 本輪回修（每一條都經突變實測會紅） ───────────
+# 實作那一顆 `7a3f46e` 早於 `44` 第五～第八輪解凍，那幾輪的裁示不可能被它吃到。
+
+
+def _four_block_indicators(model):
+    """那四塊**實際畫出來**的指標名。期望值一律從這裡來，不拿被測常數當自己的期望。"""
+    names = []
+    for code in ("HLD-2", "HLD-3"):
+        for mv in logic.find_block(model, code)["fund_groups"][0]["main_values"]:
+            names.append(mv["label"])
+    row = logic.find_block(model, "HLD-8")["_rows"][0]
+    return names + [row["drawdown"]["label"], row["principal"]["label"]]
+
+
+def test_HLD6回答什麼取改寫後那一句():
+    """`44` :720 第五輪改寫；舊句「上面三張卡」涵蓋不到 `HLD-8`。"""
+    assert logic.ANSWERS["HLD-6"] == "本頁那四塊用到的原始數字，逐筆是什麼"
+    for name in fixtures.SCENARIO_NAMES:
+        model = logic.build_page_model(**fixtures.scenario(name))
+        assert not [s for s in logic.collect_ui_strings(model) if "上面三張卡" in s], name
+
+
+def test_門檻指標名的母體就是那四塊各自出的指標():
+    """`44` :583（第七輪）。母體由那四塊反推，不另抄一份清單。"""
+    model = logic.build_page_model(**fixtures.scenario("full"))
+    expected = _four_block_indicators(model)
+    assert set(logic.RULE_INDICATOR_NAMES) == set(expected)
+    assert len(logic.RULE_INDICATOR_NAMES) == 6
+    for name in logic.RULE_INDICATOR_NAMES:
+        assert logic.INDICATOR_OWNER[name] in ("HLD-1", "HLD-2", "HLD-3", "HLD-8")
+
+
+def test_HLD4帶著母體但不把它寫上畫面():
+    """A1：`44` :583 的動詞是「**取**」＝值域宣告，不是顯示要求（要顯示時 44 寫「寫出／另寫一行」）。"""
+    block = logic.find_block(logic.build_page_model(**fixtures.scenario("full")), "HLD-4")
+    assert set(block["rule_indicator_names"]) == set(logic.RULE_INDICATOR_NAMES)
+    assert "rule_indicator_caption" not in block
+
+
+def test_nav的source_tier落在44第四節寫的四個值域內():
+    """`44` :1799（第七輪）補上值域；同輪 §5.2「`來源` 那一類不再是開放集」。"""
+    assert fixtures.SOURCE_TIERS == ("淨值", "配息", "市場指標", "其他")
+    seen = 0
+    for name in fixtures.SCENARIO_NAMES:
+        for row in logic.find_block(
+            logic.build_page_model(**fixtures.scenario(name)), "HLD-6"
+        )["nav_rows"]:
+            assert row["source_tier"] in fixtures.SOURCE_TIERS, (name, row)
+            seen += 1
+    assert seen > 0, "一列也沒掃到 —— 這一條會變成空掃"
+
+
+def test_HLD8的重新取數與核心卡同一套規則():
+    """A3：`44` :762 第一句「**四狀態逐值判定，與核心卡同一套**」。
+
+    上一輪曾把 `HLD-8` 收成「只有取數失敗才掛鈕」，同一個缺淨值條件下核心卡掛鈕、
+    本塊零枚 —— 同一套當場破掉，已撤回。釘「同一個規則」而不是「同一個結果」：
+    `fetchfail` 只有配息失敗，`HLD-2` 全部主值正常因而本來就不該掛鈕。
+    ⛔ `HLD-1` 不在射程內（它的鈕綁未列入檔數，不是自己的主值狀態）。
+    ⛔ `empty` 不在射程內：那一態三塊都沒有主值，而現行三張卡各一枚、`HLD-8` 零枚
+       —— **本輪之前就有的不一致**，修哪一邊都是替客戶做那個正在送裁的決定。登記回報。
+    """
+    non_ok = {logic.STATE_MISSING, logic.STATE_ERROR}
+    checked = 0
+    for name in ("full", "srcmiss", "bizexc", "fetchfail", "nothr"):
+        model = logic.build_page_model(**fixtures.scenario(name))
+        for code in ("HLD-2", "HLD-3", "HLD-8"):
+            block = logic.find_block(model, code)
+            states = {n["_state"] for n in logic.value_nodes(block)}
+            assert states, (name, code)
+            actual = any(b["label"] == "重新取數" for b in block["buttons"])
+            assert actual == bool(states & non_ok), (name, code, sorted(states))
+            checked += 1
+    assert checked == 15
+
+
+def test_HLD6與HLD7沒有重新取數按鈕():
+    """`44` 5.5「整格為準」：兩塊空狀態欄寫 `來源缺`，一個按鈕也沒寫。"""
+    for name in fixtures.SCENARIO_NAMES:
+        model = logic.build_page_model(**fixtures.scenario(name))
+        for code in ("HLD-6", "HLD-7"):
+            assert logic.find_block(model, code)["buttons"] == [], (name, code)
+
+
+def test_HLD7四塊都不出數時進來源缺而列照印():
+    """A5：`44` :730「四塊沒有一塊出數 → `來源缺`」。同格另有一句「輸入欄照列」，兩句
+    **同時滿足** —— 前者定塊的狀態、後者定列的畫面，不同層。把列吞掉只印「來源缺」是假話。"""
+    block = logic.find_block(logic.build_page_model(**fixtures.scenario("badrange")), "HLD-7")
+    assert {r["output_text"] for r in block["_rows"]} == {logic.NA_NO_WINDOW}
+    assert block["_state"] == logic.STATE_MISSING
+    assert len(block["_rows"]) > 0
+    for row in block["_rows"]:
+        assert row["inputs_text"], row
+
+
+def test_空狀態文案照44不自己寫散文():
+    """A6：`44` :708 折線區明文回指 §5.5 模板。A7：`44` :719 只寫「無列 → `來源缺`」——
+    兩張表為空不一定等於沒有持倉（取數失敗、區間外都可能）。"""
+    src = logic.build_page_model(**fixtures.scenario("srcmiss"))
+    item = logic.find_row(logic.find_block(src, "HLD-5"), "CCCC")
+    assert item["nav_plot_text"] == logic.empty_source_text(["nav"])
+    empty = logic.build_page_model(**fixtures.scenario("empty"))
+    lines = logic.find_block(empty, "HLD-6")["detail_lines"]
+    assert lines == [logic.empty_source_text(["nav", "dividend"])], lines
+
+
+def test_0caller的常數依44第六節不刪只標():
+    """A2／A8：`44` :2476 §6「**不刪，只標**……刪掉是不可逆的，標錯是可逆的」。
+    上一輪刪了 `_RULE_INDICATORS`，同一輪卻留著同樣 0-caller 的 `_source_badge` —— 已復原。"""
+    assert logic._RULE_INDICATORS == ("最大回撤", "配息佔淨值比", "區間報酬率", "期間波動")
+    assert set(logic._RULE_INDICATORS) != set(logic.RULE_INDICATOR_NAMES)
+    for name in ("NA_FEW_NAV", "NA_LATE_INCEPTION", "NA_NO_DIVIDEND", "NA_UNKNOWN_KIND"):
+        assert hasattr(logic, name), name
+
+
+def test_徽章住在模型裡_不是渲染時才生出來():
+    """A9：`collect_badges()` 要 `_kind` 鍵，渲染時現組的 dict 沒有 ——
+    既有的 `test_來源徽章中性不著色` 因此空掃至今。這一條釘住它有東西可掃。"""
+    model = logic.build_page_model(fixtures.dataset_full())
+    kinds = [b.get("_kind") for b in logic.collect_badges(model)]
+    assert kinds.count("來源") > 0, "來源徽章一枚都收不到 —— 684 那條又會變空掃"
+    assert kinds.count("狀態") > 0
+    for badge in logic.collect_badges(model):
+        if badge.get("_kind") == "來源":
+            assert badge["text"] in fixtures.SOURCE_TIERS, badge
+
+
+def test_跨幣別偵測器真的偵測得到跨幣別合成值():
+    """A10：`44` 5.1「同一張卡不混不同幣別做平均」。舊版要求「同一個 `text` 裡出現兩個幣別
+    字面值」，而百分比不帶幣別、金額只帶一個 —— **條件永遠不成立**。
+    這一條當場造兩種違規值，證明偵測器真的抓得到。"""
+    model = logic.build_page_model(fixtures.dataset_full())
+    assert logic.cross_currency_nodes(model) == []
+
+    card = logic.find_block(model, "HLD-2")
+    assert len({g["_ccy"] for g in card["fund_groups"]}) > 1, "這張卡只有一種幣別就驗不到"
+    card["_cross"] = logic._metric(1.23, text="1.23%（示意）", ccy="USD", label="全部平均")
+    assert logic.cross_currency_nodes(model), "卡層級合計沒有被抓到"
+
+    model2 = logic.build_page_model(fixtures.dataset_full())
+    group = logic.find_block(model2, "HLD-2")["fund_groups"][0]
+    other = "EUR" if group["_ccy"] != "EUR" else "USD"
+    group["main_values"][0] = dict(group["main_values"][0], _ccy=other)
+    assert logic.cross_currency_nodes(model2), "幣別對不上所在那一檔也沒有被抓到"
