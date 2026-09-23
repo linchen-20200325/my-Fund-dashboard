@@ -49,14 +49,36 @@
    本檔的負控抓到過這個：早期版本一律切，於是一條釘好 SHA 的
    `git show <sha>:path | grep -c …` 會被切成兩半，後半看不到 SHA 而被誤報。
 2. **去排版裝飾**：反覆剝掉行首的空白、`>`、`#`、清單符號 `-`／`*`／`+`／`1.`、
-   強調符號 `**`／`__`／`` ` ``／`~~`、`(1)`／`（1）` 這類序號、以及 emoji 與符號
-   （⚠️ ⛔ ✅ ❌ 📌 ⭐ → 之類）。
+   強調符號 `**`／`__`／`` ` ``／`~~`、`(1)`／`（1）` 這類序號、emoji 與符號
+   （⚠️ ⛔ ✅ ❌ 📌 ⭐ → 之類）、**以及行首的 HTML 標籤**（`<p>`／`<li>`／`<b>`／`</td>` 之類）。
+   ⚠️ **標籤那一項是第十二輪才補上的**（客戶 2026-09-23 裁示第 1 件）。在那之前，
+   以標籤開頭的那一行，句首斷言**一律偵測不到** —— 而 `docs/v2/prototype/` 的線框整份是 HTML，
+   它們的斷言幾乎都長在標籤後面，於是 (C) 對那一批檔形同空掃：
+   **綠燈、而且少看**，正是本檔下限測試那一段在講的失效模式。
+   ⚠️ **標籤的剝除與其餘裝飾同在一個迴圈裡剝到不動為止**，不是收尾單獨補一刀 ——
+   兩者的差別量得出來：`<td>「…` 這種「標籤 ＋ 開引號」要兩者交替剝才看得到第一個實字，
+   收尾補一刀的版本剝完標籤就停住，那一類會整批漏掉（本輪實測差兩句，見下方續記）。
+   ⚠️ **`<!--` 不在標籤那一項的射程內**（`!` 不是標籤名的字元），**但被註解掉的句子並沒有因此逃掉**：
+   ASCII `!` 本來就是上面第 1 步的切點，`<!-- 句子` 會在那裡被切開，剩下的 `--` 當成清單符號剝掉
+   ⇒ 那句話照樣進 (C)。**本輪改動前後都是這個行為，不是本輪造成的。**
+   ⛔ **本段初稿寫的是「註解掉的句首斷言不會被 (C) 看到」，那一句是假的** ——
+   落筆時沒有實跑，被本輪自己新增的負控當場推翻（見
+   `test_control_C_a_commented_out_universal_is_still_checked`）。留著這一筆，
+   是因為它正是 `CLAUDE.md` §-2.A 第 1 款在講的那件事：能跑的東西不准用猜的。
 3. **剩下的第一個字**是「每一個／所有/全部/都」之一，**且其後還有至少 2 個字**
    （擋掉表格裡只寫「全部」兩個字的那種格子 —— 那是欄位值，不是斷言）。
 
 量測（**全部釘 `0d9753f`**，由本檔的 `--report` 與 `_is_sentence_initial_universal` 跑出來）：
 本定義下**活的**句首斷言 **84** 句，其中已附反向檢查 **16** 句、缺 **68** 句。
 `0d9753f` 上 **1915 → 84** 的收斂，來源只有「句首」這個限定，不是本檔偷偷放寬了什麼。
+
+⚠️ **2026-09-23 第十二輪續記（定義多了「剝行首 HTML 標籤」那一項，數字跟著動）**：
+上面那三個數是 `0d9753f` 的量測，**刻意不改寫** —— 帶日期的歷史量測值一律保留、只在後面續記。
+本輪在 `325fa58` 上重量：`.md` 那一側的句首斷言候選 **85** 句，**與剝標籤前逐筆相同**；
+`prototype/` 那一側在 `325fa58` 上由零變成 **11** 句，且那 **11** 句無一來自 `.md`。
+⚠️ **「交替剝」與「收尾補一刀」在 `325fa58` 上實測差 2 句**（**11** vs **9**）——
+差的那 **2** 句都是 `<td>「…` 這種「標籤 ＋ 開引號」的形狀，兩者要交替剝才看得到第一個實字。
+**寫這一筆是因為它會被誤讀成量錯**：拿到 **9** 的人不是算錯，是剝除寫成了收尾補一刀。
 
 ## 刪除線：被 `~~` 劃掉的一律不檢查
 
@@ -104,8 +126,22 @@ baseline 一筆會蓋住那一檔內的全部同字句。這是已知的、刻�
 **產生端讀的是釘死的 commit，不是工作樹**（見 `docs_at_sha` 的說明）——
 一份要求別人釘 SHA 的守衛，自己的 baseline 若產生自工作樹，就沒有人能原樣重建它。
 本檔隨附的那一份釘在 **`6880a2b`**，`_generated_from_sha` 欄自陳其出處。
-⚠️ 若主線已經往前走，commit 本守衛的人請對**實際的 merge base** 重跑一次，
-   並**逐句讀** `git diff` —— 那份 diff 會列出這段期間新欠的債。
+~~⚠️ 若主線已經往前走，commit 本守衛的人請對**實際的 merge base** 重跑一次，並**逐句讀** `git diff` —— 那份 diff 會列出這段期間新欠的債。~~
+→ **2026-09-23 第十二輪就地更正（有意識的更正，不是漏刪 · 決策者 AI 總管，依客戶 2026-09-23 裁示第 3 件）**：
+   上面那一句**在這個 repo 上不可執行**，理由與可執行版本見下。
+   **舊表述的用意仍然成立** —— 「重建前要先確認基準、重建後要逐句讀 diff」這兩件事一字未變；
+   **被權衡掉的是它指定的那個基準**：merge base 上沒有受檢檔，照它做只會拿到一個例外。
+
+⛔ **自 2026-09-23 起：禁止用任何 SHA 重建這一份 baseline，只准手工增補。**
+   **理由（實測，非推論）**：本份自該日起是**混合來源** —— 多數 entry 出自 `6880a2b`，
+   但線框那 7 筆是**手工增補**的，而 `6880a2b` 上根本沒有 `prototype/`。
+   對它重建實測產出 189／35／**65**：本輪 7 筆全消失，
+   **連既有 5 筆 `why_safe` 與整個 `_why_safe_notes` 一起被洗掉**（產生端每筆只寫 `file` 與 `text`）。
+   ⚠️ merge base 更不能用：`docs/v2/` 是功能分支才出現的（首見 `588e3ae`），
+   而本分支與 `origin/main` 的 merge base（`9cbf037`）底下**一個受檢檔都沒有**，
+   對它重建會撞上 `docs_at_sha` 那句「拒絕產生一份空的 baseline」——**那是對的行為，不是 bug**。
+   ✅ **要登記新欠債就手工加一筆**：`file` ＝ 失敗訊息印的路徑、`text` ＝ 它印的那一句、
+   `why_safe` ＝ 為什麼這一筆可以掛著；改完逐句讀那份 diff 再 commit。
 
 ⛔ **重建 baseline ＝ 承認新的違規，要有人明確決定。**
 它不是「把紅燈弄綠」的按鈕：跑完之後 `git diff` 會列出每一筆新登記的句子，
@@ -127,6 +163,23 @@ baseline 一筆會蓋住那一檔內的全部同字句。這是已知的、刻�
   在 shallow clone（CI 預設）下可能誤紅，**先確認 fetch-depth 再做**。
 * **缺口 3｜(C) 只驗「視窗內有指令與輸出」，不驗那個反向檢查**真的能推翻那句話。
   一條無關的指令貼在旁邊就能過。這一層需要讀懂語意，**機器判不到**。
+* **缺口 5｜(C) 逐行切段，對硬換行的 HTML 會把句中詞讀成句首。**
+  （**2026-09-23 第十二輪登記，下一輪候選；本輪只登記、不動判定**）
+  `split_segments` 以**行**為單位切，所以一句被硬換行斷開的話，**下半行的第一個詞就被當成句首**。
+  markdown 很少這樣寫，但 `docs/v2/prototype/` 的線框是手寫 HTML，整份都在硬換行。
+  **本輪的實證，就是 baseline 裡那 5 筆帶「硬換行假句首」`why_safe` 的登記**
+  （`ui_prototype_alo` ／ `exp` ／ `set` ／ `today` ×2）—— 它們的全稱詞在原句裡都是句子中段的詞，
+  逐筆的「前一行未結句」證據寫在各該筆的 `why_safe` 欄裡。
+  要補的人從這裡開始：把「**前一個非空白行有沒有結句**」納入句首判定（本輪是用這個條件人工判的）。
+  ⚠️ **那條判準太弱，已知至少 1 筆（`exp`）量測通過但結論不成立**（前一行是已閉合的 `</td>`，
+  它真的是格首）—— 該筆的真正理由已就地改寫在它的 `why_safe` 裡，**分類依客戶裁示不動**。
+  ⚠️ **另有五種形狀目前仍逃得掉**（2026-09-23 稽核登記，**不必修**，現況 0 個真實斷言落在上面）：
+  半形雙引號開頭、`title="a>b"`、`title="a<b"`、跨行標籤的下半行、全形冒號開頭。
+  ⚠️ **那 5 筆的內容仍然是本組的全稱宣稱** —— 切段修好之後**要回頭重判**，
+  **不得**因為「已經進 baseline」就當成已結案。
+  ⚠️ 改判定會讓那 5 筆的命中與否改變，**必須同一輪重新登記並逐句讀 diff**（同缺口 4 的警語）。
+  📌 本輪把剝標籤後曝出來的 11 筆分流成：**改文件 4 筆**、**44 逐字進 baseline 2 筆**、
+  **硬換行假句首進 baseline 5 筆**（客戶 2026-09-23 裁示）。
 * **缺口 4｜(B) 的判定分不出「釘 SHA 的快照自掃」與「讀工作樹的自掃」。**
   前者（形如 `git show <凍結 sha>:<自己>`）讀的是凍結的 blob，
   這個檔**現在**長什麼樣影響不了它的輸出 —— **機制上不可能自計**；
@@ -230,16 +283,26 @@ def _in_scope(rel_to_docs_dir: str) -> bool:
 _MAX_STRIKE_NEWLINES = 2
 _MAX_STRIKE_CHARS = 1500
 _STRIKE = "~" * 2
+# HTML 的刪除線標籤 —— **2026-09-23 第十二輪新增**（客戶裁示：`~~` 改 `<s>`，屬修 bug）。
+# ⚠️ `docs/v2/prototype/` 的線框整份是 HTML，**`~~` 在瀏覽器裡不會渲染成刪除線**
+#    （實測：五個線框沒有任何 `line-through` CSS，也沒有把 `~~` 轉成標籤的 JS）⇒
+#    退役句會在**客戶審過的畫面上**直接印出波浪號。改用 `<s>` 之後畫面才對得上。
+# ⚠️ **母體講準**：這個理由適用的是本輪**新加**的 4 處（`alo`×2／`exp`×1／`today`×1，都在會渲染的
+#    `<td>`／`<span>` 裡）；同輪一併轉換的另 3 處（`hld` 在 HTML 註解、`set`×2 在 JS 註解）
+#    **從來沒進過畫面**，改它們的實益是一致性與本遮罩，不是渲染。
+# ⚠️ **遮罩不認 `<s>` 的話，那些退役句會整批重新變成活句** —— 與本輪第 1 件同型：
+#    遮罩不懂 HTML，正如行首判定原本不懂 HTML。
+_STRIKE_TAGS = re.compile(r"<(s|del)\b[^>]*>(.*?)</\1>", re.S)
 
 
 def strike_mask(text: str) -> bytearray:
-    """回傳與 ``text`` 等長的遮罩，被刪除線包住的位置為 1。"""
+    """回傳與 ``text`` 等長的遮罩，被刪除線（`~~` 或 `<s>`／`<del>`）包住的位置為 1。"""
     mask = bytearray(len(text))
     i = 0
     while True:
         open_at = text.find(_STRIKE, i)
         if open_at < 0:
-            return mask
+            break
         limit = min(len(text), open_at + 2 + _MAX_STRIKE_CHARS)
         close_at = text.find(_STRIKE, open_at + 2, limit)
         if close_at < 0 or text.count("\n", open_at, close_at) > _MAX_STRIKE_NEWLINES:
@@ -248,6 +311,13 @@ def strike_mask(text: str) -> bytearray:
         for k in range(open_at, close_at + 2):
             mask[k] = 1
         i = close_at + 2
+    for m in _STRIKE_TAGS.finditer(text):      # 兩個上限與 `~~` 那一側完全相同，理由同上
+        if (text.count("\n", m.start(), m.end()) > _MAX_STRIKE_NEWLINES
+                or m.end() - m.start() > _MAX_STRIKE_CHARS):
+            continue
+        for k in range(m.start(), m.end()):
+            mask[k] = 1
+    return mask
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -263,18 +333,49 @@ def strike_mask(text: str) -> bytearray:
 _SENTENCE_SPLIT = re.compile(r"[。！？!?；;]|<br\s*/?>")
 _TABLE_SPLIT = re.compile(r"[。！？!?；;]|<br\s*/?>|(?<!\\)\|")
 
-# 行首排版裝飾：空白／引用／標題／清單符號／序號／強調符號／emoji 與箭頭符號／開括號。
+# 行首 HTML 標籤 —— **第十二輪新增**（客戶 2026-09-23 裁示第 1 件）。
+# ⚠️ **在它之前，以 `<p>`／`<li>`／`<b>` 開頭的那一行，句首斷言一律偵測不到** ——
+#    而 `docs/v2/prototype/` 的線框整份是 HTML，斷言幾乎都長在標籤後面
+#    ⇒ (C) 對那一批檔形同空掃，**而且是全綠的空掃**。
+# ⚠️ **刻意寫成通用形狀，不列白名單**：白名單漏掉一個標籤名，後果是**無聲漏抓**
+#    （測試照樣全綠）；寫寬的後果只是**多紅一次**，而誤紅有人會來修。
+#    極性與 `_is_word_boundary` 的選邊一致，理由同該處。
+# ⚠️ **只可能多抓、不可能少抓**：三道檢查裡只有 (C) 吃正規化後的文字，
+#    而那四個全稱詞是中日韓字元、本式咬不到它們 ⇒ 剝標籤只會**讓更多句首露出來**。
+#    (A)／(B) 讀的是 `seg.live`（未正規化），完全不受本式影響。
+# ⚠️ **`[^<>]` 而不是 `[^>]`**：後者會讓 `<b 大於 <code>x</code>` 這種文字被一口吃到
+#    第一個 `>` 為止。限制在標籤內不得再出現 `<`，可以少吃掉一段真正的內文。
+# ⛔ **`<!--` 不在本式射程內**（`!` 不是 `[A-Za-z]`），**但那不等於註解掉的句子逃得掉** ——
+#    ASCII `!` 是 `_SENTENCE_SPLIT` 的切點，`<!-- 句子` 會在那裡被切開、`--` 當清單符號剝掉，
+#    那句話照樣進 (C)。**改動前後同一個行為**，正控見
+#    `test_control_C_a_commented_out_universal_is_still_checked`。
+_LEADING_HTML_TAG = r"</?[A-Za-z][^<>]*>"
+
+# 行首排版裝飾：空白／引用／標題／清單符號／序號／強調符號／emoji 與箭頭符號／開括號／HTML 標籤。
 # ⚠️ 這一串**必須反覆剝到不動為止**（見 `normalize`）——「`- **所有**…`」要剝三層
 #    （清單符號 → 空白 → 強調符號）才看得到第一個實字。只剝一次會讓句首斷言漏抓。
-_LEADING_FURNITURE = re.compile(
-    r"^(?:"
-    r"[\s\u3000\u00a0>#*+\-_`~]"
-    r"|\d+[.)]"
-    r"|[(（]\d+[)）]"
-    r"|[\u2190-\u2BFF\uFE0F\u2000-\u206F\U0001F000-\U0001FAFF]"
-    r"|[「『【（(\[]"
-    r")+"
+# ⚠️ **標籤那一項必須留在這個迴圈裡，不得改成收尾單獨補一刀** —— 那不是等價的寫法：
+#    `<td>「…` 這種「標籤 ＋ 開引號」要兩者**交替**剝才看得到第一個實字，
+#    收尾補一刀的版本剝完標籤就停住 ⇒ 那一類整批漏掉（本輪實測兩種寫法差兩句）。
+# ⚠️ **拆成 parts 是為了讓突變測試能精準拿掉其中一項**（見
+#    `test_mutation_removing_the_leading_tag_rule_turns_the_control_red`）——
+#    不拆的話那條突變只能把整串 regex 重打一次，重打的那一份會與本體無聲分家。
+_LEADING_FURNITURE_PARTS: tuple[str, ...] = (
+    r"[\s\u3000\u00a0>#*+\-_`~]",
+    r"\d+[.)]",
+    r"[(（]\d+[)）]",
+    r"[\u2190-\u2BFF\uFE0F\u2000-\u206F\U0001F000-\U0001FAFF]",
+    r"[「『【（(\[]",
+    _LEADING_HTML_TAG,
 )
+
+
+def _furniture_re(parts: tuple[str, ...]) -> "re.Pattern[str]":
+    """把 parts 組成「行首、反覆」的剝除式 —— 本體與突變測試**共用同一個組裝器**。"""
+    return re.compile("^(?:" + "|".join(parts) + ")+")
+
+
+_LEADING_FURNITURE = _furniture_re(_LEADING_FURNITURE_PARTS)
 
 _EMPHASIS = re.compile(r"\*\*|__|" + _STRIKE + r"|`")
 _WHITESPACE = re.compile(r"[\s\u3000\u00a0]+")
@@ -285,7 +386,8 @@ def normalize(segment: str) -> str:
 
     規則（與模組 docstring 的「正規化規則」逐條對應，**改這裡等於讓整份 baseline 失效**）：
 
-    1. 反覆剝掉行首排版裝飾（清單符號／引用／序號／強調／emoji／開括號），剝到不動為止。
+    1. 反覆剝掉行首排版裝飾（清單符號／引用／序號／強調／emoji／開括號／**HTML 標籤**），
+       剝到不動為止。
     2. 去掉所有 markdown 強調符號與反引號。
     3. 連續空白（含全形與不斷行空白）一律壓成一個半形空格。
     4. 去頭尾空白。
@@ -1065,6 +1167,185 @@ def test_control_C_lookalike_table_is_wired_to_the_word_table():
              "「單獨出現」不再由尾長下限擋 —— 請為這個情形補一條真的正控")
 
 
+# ── (C) 行首 HTML 標籤：正控 ／ 負控 ／ 突變（第十二輪客戶裁示第 1 件）─────────
+# 受測字串**現編**：開頭那個詞由 `_UNIVERSAL_HEADS` 取出再接上下文，本段不重打那四個字面
+# （理由同 `_head_ending_with`：受測字串寫進文件就會被自己掃到，`CLAUDE.md` §-2.A 第 8 款）。
+# ⚠️ **六種形狀刻意都留著**：單層、雙層、帶屬性、收尾標籤、以及「標籤 ＋ 開引號」——
+#    最後一種就是 `docs/v2/prototype/ui_prototype_hld.html` 那兩句 44 逐字引述的形狀，
+#    它同時證明「標籤必須與其餘裝飾交替剝」（只剝標籤不剝 `「` 的版本會放過它）。
+_LEADING_TAG_SHAPES: tuple[tuple[str, str], ...] = (
+    ("<p>", "</p>"),
+    ("<li>", "</li>"),
+    ("<b>", "</b>"),
+    ('<td class="src">', "</td>"),
+    ("<span><b>", "</b></span>"),
+    ("<td>「", "」</td>"),
+    ("</td><td>", "</td>"),          # 以**收尾標籤**開頭 —— 本分支原本零覆蓋
+)
+
+# 一句**刻意造的**全稱斷言的尾巴 —— 與 `test_control_C_bare_universal_*` 用的是同一句，
+# 差別只在前面包了標籤。兩者並排，才看得出本輪改的是「標籤」而不是別的東西。
+_TAG_CONTROL_TAIL = "欄位都已經查過了"
+
+
+def _tag_led_sample(head: str, shape: tuple[str, str]) -> str:
+    return f"{shape[0]}{head}{_TAG_CONTROL_TAIL}{shape[1]}"
+
+
+def test_control_C_universal_behind_a_leading_html_tag_fires():
+    """正控：以行首 HTML 標籤開頭的全稱斷言**必須**被 (C) 抓到。
+
+    ⛔ **沒有這一條，本輪的改動就沒有證據。** **本輪（第十二輪）之前** `_LEADING_FURNITURE`
+    只剝 markdown 裝飾、不剝標籤（第十一輪把線框納入射程時也沒有動這裡）
+    ⇒ 下面每一句都被靜默放過，
+    而 `docs/v2/prototype/` 的線框整份是 HTML。
+    ⚠️ **四個全稱詞逐個跑**：只挑一個詞的版本，換一個詞就可能無聲漏抓。
+    """
+    for head in _UNIVERSAL_HEADS:
+        for shape in _LEADING_TAG_SHAPES:
+            doc = _tag_led_sample(head, shape)
+            assert len(find_universals_without_reverse_check(_DEMO, doc)) == 1, \
+                f"正控失效：行首標籤後面的句首全稱斷言被放過（{doc!r}）"
+
+
+def test_control_C_tag_led_universal_with_a_reverse_check_does_not_fire():
+    """負控：標籤開頭、但**附了反向檢查**的全稱句不得被誤報 —— 剝標籤沒有改變 (C) 的判準。"""
+    for head in _UNIVERSAL_HEADS:
+        doc = (_tag_led_sample(head, _LEADING_TAG_SHAPES[0])
+               + "\n<li>反向檢查：`git grep -n 'Y' -- '*.py'` → **0 命中**，exit=1</li>")
+        assert find_universals_without_reverse_check(_DEMO, doc) == [], \
+            f"負控失效：附了反向檢查的標籤開頭全稱句被誤報（head={head!r}）"
+
+
+def test_control_C_a_bare_open_angle_is_not_treated_as_a_tag():
+    """負控：`<` 後面不是標籤名時不得被剝掉 —— 否則本式會咬進真正的內文。
+
+    ⚠️ **`<!--` 刻意不在這一組裡，而且不是因為它「不該紅」** —— 它**會**紅，
+    但成因與本式無關（見 `test_control_C_a_commented_out_universal_is_still_checked`）。
+    把它放進負控會讓這條測試量到別的東西 —— 本組初稿就是這樣寫的，當場被自己的測試推翻。
+    """
+    # ⚠️ `"<b 大於 <code>"` 這一個是 `[^<>]` 的**唯一**覆蓋：換成 `[^>]` 會一口吃到
+    #    第一個 `>`、把後面的斷言曝出來 ⇒ 本條轉紅。那是往「無聲漏抓」走的方向。
+    for prefix in ("<<< ", "< ", "<1> ", "<b 大於 <code>"):
+        for h in _UNIVERSAL_HEADS:
+            doc = f"{prefix}{h}{_TAG_CONTROL_TAIL}"
+            assert find_universals_without_reverse_check(_DEMO, doc) == [], \
+                f"負控失效：{prefix!r} 被當成 HTML 標籤剝掉了（head={h!r}）"
+
+
+def test_control_C_a_commented_out_universal_is_still_checked():
+    """正控：被 HTML 註解掉的句首全稱斷言**照樣**進 (C) —— 而且與剝標籤無關。
+
+    **機制（實測，非推論）**：ASCII `!` 是 `_SENTENCE_SPLIT` 的切點之一，
+    所以 `<!-- 句子` 會在 `!` 處被切成 `<` 與 `-- 句子`，後者的 `--` 被當成清單符號剝掉
+    ⇒ 剩下的就是那句斷言本身。**本輪改動前後都是這個行為。**
+
+    ⚠️ **記這一條的理由**：本組在 `_LEADING_HTML_TAG` 的初稿註解裡寫過
+    「註解掉的句首斷言不會被 (C) 看到，這是已登記的缺口」—— **那一句是假的，沒有實跑就寫下**，
+    被本輪新增的負控當場推翻。條文留著，是為了讓下一個人不要再憑直覺重新登記一次同樣的假缺口。
+    ⚠️ **這一條鎖的是現況，不是主張它應該如此**：若日後有人認為註解掉的句子該被豁免
+    （與刪除線同一個道理），那是**放寬規則**，要走客戶裁示，不是改掉這條測試了事。
+    """
+    for h in _UNIVERSAL_HEADS:
+        for prefix in ("<!-- ", "<!--"):
+            doc = f"{prefix}{h}{_TAG_CONTROL_TAIL}"
+            assert len(find_universals_without_reverse_check(_DEMO, doc)) == 1, \
+                f"正控失效：被註解掉的句首全稱斷言被放過（{doc!r}）"
+
+
+def test_control_html_strike_tags_are_masked_like_tildes():
+    """正控：`<s>`／`<del>` 包住的退役句與 `~~` 一樣不受檢，拿掉標籤就該重新命中。"""
+    for tag in ("s", "del"):
+        for h in _UNIVERSAL_HEADS:
+            body = f"{h}{_TAG_CONTROL_TAIL}"
+            assert find_universals_without_reverse_check(
+                _DEMO, f"<td><{tag}>{body}</{tag}> → 2026-09-23 退役") == [], \
+                f"正控失效：<{tag}> 包住的退役句仍被檢查（head={h!r}）"
+            assert len(find_universals_without_reverse_check(_DEMO, f"<td>{body}")) == 1, \
+                f"對照失效：同一句拿掉 <{tag}> 之後就該命中（head={h!r}）"
+
+
+def test_mutation_dropping_html_strike_tag_support_turns_the_control_red():
+    """突變：拿掉遮罩對 `<s>`／`<del>` 的支援 → 上一條正控必須轉紅。"""
+    global _STRIKE_TAGS
+    original = _STRIKE_TAGS
+    try:
+        _STRIKE_TAGS = re.compile(r"(?!x)x")            # 永不命中
+        for h in _UNIVERSAL_HEADS:
+            assert len(find_universals_without_reverse_check(
+                _DEMO, f"<td><s>{h}{_TAG_CONTROL_TAIL}</s>")) == 1, \
+                f"突變後仍不命中 —— 正控抓的不是 `<s>` 支援，沒有鑑別力（head={h!r}）"
+    finally:
+        _STRIKE_TAGS = original
+    for h in _UNIVERSAL_HEADS:
+        assert find_universals_without_reverse_check(
+            _DEMO, f"<td><s>{h}{_TAG_CONTROL_TAIL}</s>") == [], "突變後沒有還原遮罩"
+
+
+def test_control_leading_tag_stripping_leaves_the_markdown_corpus_untouched():
+    """負控（語料層）：`docs/v2/*.md` 那一側的三道檢查結果**逐筆不變**。
+
+    ⚠️ **這一條刻意不寫死「85」那個數字**：寫死的下一秒就會因為別人正常編輯文件而紅，
+    而本檔自己的下限測試那一段已經說明「把數字貼著現值等於逼人不敢退役」。
+    改成**當場跑兩次**（剝標籤 ／ 不剝標籤）逐筆比對 —— 它問的是
+    「本輪這一項改動有沒有碰到 `.md`」，而那個答案不隨文件編輯漂移。
+
+    ⚠️ **它哪一天會紅**：有人在 `docs/v2/*.md` 寫出一行以 HTML 標籤開頭的句子。
+    那不是這條測試壞了，是 `.md` 那一側**真的**被本項改動涵蓋到了 ——
+    屆時請重新量測、把新出現的那幾筆照 `_FIX_GUIDE_C` 修掉或明確登記，**不要刪掉這條測試**。
+    """
+    global _LEADING_FURNITURE
+    original = _LEADING_FURNITURE
+
+    def md_side() -> dict[str, set[tuple[str, str]]]:
+        return {section: {(f.doc, f.text) for f in collect(section)
+                          if not f.doc.startswith(_PROTOTYPE_DIR)}
+                for section, _ in CHECKS}
+
+    try:
+        with_tags = md_side()
+        _LEADING_FURNITURE = _furniture_re(
+            tuple(p for p in _LEADING_FURNITURE_PARTS if p != _LEADING_HTML_TAG))
+        without_tags = md_side()
+    finally:
+        _LEADING_FURNITURE = original
+    assert _LEADING_FURNITURE is original, "沒有還原 `_LEADING_FURNITURE`"
+    for section, _ in CHECKS:
+        added = sorted(with_tags[section] - without_tags[section])
+        dropped = sorted(without_tags[section] - with_tags[section])
+        assert not added and not dropped, (
+            f"剝行首標籤改動了 `docs/v2/*.md` 那一側的 `{section}`：\n"
+            f"  多出來 {len(added)} 筆：{added[:3]}\n"
+            f"  不見了 {len(dropped)} 筆：{dropped[:3]}\n"
+            "⚠️ **`dropped` 非空是嚴重訊號** —— 剝標籤在設計上只可能讓更多句首露出來，\n"
+            "   少掉任何一筆代表本式咬到了不該咬的東西（見 `_LEADING_HTML_TAG` 的說明）。")
+
+
+def test_mutation_removing_the_leading_tag_rule_turns_the_control_red():
+    """突變：把剝標籤那一項拿掉 → 上面的正控**必須**轉紅。
+
+    ⚠️ **這一條是「正控有沒有鑑別力」的唯一證據**（體例同
+    `test_mutation_narrowing_the_scope_back_turns_the_controls_red`）：
+    一條永遠綠的正控，與根本沒有正控，效果完全一樣。
+    ⚠️ **突變只拿掉一項、其餘 parts 原封不動** —— 這樣轉紅才只能歸因於那一項。
+    """
+    global _LEADING_FURNITURE
+    original = _LEADING_FURNITURE
+    try:
+        _LEADING_FURNITURE = _furniture_re(
+            tuple(p for p in _LEADING_FURNITURE_PARTS if p != _LEADING_HTML_TAG))
+        for head in _UNIVERSAL_HEADS:
+            for shape in _LEADING_TAG_SHAPES:
+                doc = _tag_led_sample(head, shape)
+                assert find_universals_without_reverse_check(_DEMO, doc) == [], (
+                    f"突變後仍然抓得到 {doc!r} —— 正控抓的不是「剝標籤」這一項，沒有鑑別力")
+    finally:
+        _LEADING_FURNITURE = original
+    for head in _UNIVERSAL_HEADS:
+        assert len(find_universals_without_reverse_check(
+            _DEMO, _tag_led_sample(head, _LEADING_TAG_SHAPES[0]))) == 1, "突變後沒有還原剝除式"
+
+
 # ── 射程正控：那五個線框草稿**真的被讀到了** ──────────────────────────
 # ⚠️ **沒有正控的綠燈 ＝ 沒有檢查。** 把 `prototype/*.html` 加進 `DOCS_GLOBS` 之後，
 #    三道檢查對它們的命中數可能很低（**`edc9319` 實測 (A)0／(B)0／(C)3**）——
@@ -1146,6 +1427,106 @@ def test_mutation_dropping_one_named_wireframe_turns_the_identity_control_red():
             f"拿掉 {victim} 之後具名判定沒有咬它 —— 這條正控沒有鑑別力")
 
 
+# ── 射程正控之三：31 個 `.md` 規格文件同樣釘身分（第十二輪客戶裁示第 2 件）──────
+# ⚠️ **線框那一側已經釘了身分（`_PROTOTYPE_FILES`），`.md` 這一側在本輪之前只有個數下限**
+#    —— 同一套劇本照樣通得過：**補一個新檔、再搬走一個真的**，檔數一模一樣、
+#    逐 glob 下限不紅，而被搬走的那一份已經整個離開語料，沒有任何人會發現。
+# ⛔ **清單刻意逐字硬寫，不得改成從 `DOCS_GLOBS`／目錄列表／`glob()` 推導** ——
+#    推導的話「改設定」與「改期望」由同一個動作完成，期望值當場等於不存在。
+# ✅ **新增文件時要有意識地把它加進這張清單**；搬走／改名／刪除時要有意識地把它移除。
+#    **改這個 tuple 本身，就是簽名承認你換掉了哪一個。**
+# ⚠️ **本清單比 `_PROTOTYPE_FILES` 多管一個方向（多出來的檔也紅）**，這是刻意的，不是體例不一致：
+#    客戶第 2 件要的就是「新增文件必須有意識地登記」，只驗「少了誰」擋不住清單無聲過期。
+#    線框那一側本輪**未動**（不在本輪射程內），兩邊的差別記在這裡，不要當成漏改。
+_MD_DOCS: tuple[str, ...] = (
+    "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+    "docs/v2/02_decision_grp_S5-S8.md",
+    "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+    "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+    "docs/v2/10_db_inventory.md",
+    "docs/v2/11_contradictions_resolution.md",
+    "docs/v2/20_ui_spec.md",
+    "docs/v2/21_decision_log.md",
+    "docs/v2/22_ui_page_today.md",
+    "docs/v2/23_ui_draft_01_macro.md",
+    "docs/v2/24_proposal_4a.md",
+    "docs/v2/25_proposal_4b.md",
+    "docs/v2/30_audit_inventory.md",
+    "docs/v2/31_audit_caliber_sweep.md",
+    "docs/v2/32_audit_spec_r1.md",
+    "docs/v2/33_audit_spec_r2.md",
+    "docs/v2/34_audit_spec_r3.md",
+    "docs/v2/35_branch_strategy_check.md",
+    "docs/v2/36_audit_spec_r4.md",
+    "docs/v2/37_audit_spec_r5.md",
+    "docs/v2/38_audit_spec_r6.md",
+    "docs/v2/39_audit_spec_r7.md",
+    "docs/v2/40_handover_2026-09-17.md",
+    "docs/v2/41_counters.md",
+    "docs/v2/42_live_dead.md",
+    "docs/v2/43_ui_draft_01_macro_target.md",
+    "docs/v2/44_fund_ui_ssot.md",
+    "docs/v2/45_fund_db_inventory.md",
+    "docs/v2/46_fund_live_dead.md",
+    "docs/v2/47_fund_wireframe_mkt.md",
+    "docs/v2/README_DRAFT_PACK.md",
+)
+
+
+def _md_docs_in_scope() -> list[str]:
+    """受檢清單裡屬於 `.md` 那一側的檔（repo 相對路徑）。
+
+    ⚠️ **只走 `scoped_paths()` ＋ `_matches_glob`，不自己掃磁碟** —— 理由同 `scope_counts()`：
+    自己掃一套會分家成「清單看得到、三道檢查沒讀到」。
+    ⚠️ 這裡的 `"*.md"` 是**挑語料的哪一側**，不是期望值；期望值只有 `_MD_DOCS` 一份。
+    """
+    return sorted(str(p.relative_to(REPO_ROOT)).replace("\\", "/")
+                  for p in scoped_paths() if _matches_glob(_rel_to_docs(p), "*.md"))
+
+
+def _named_md_docs_diff(seen: set[str]) -> tuple[list[str], list[str]]:
+    """回 (清單有、語料沒有, 語料有、清單沒有) —— 正控與突變測試**共用同一個判定**。"""
+    missing = [f for f in _MD_DOCS if f not in seen]
+    unexpected = sorted(d for d in seen if d not in _MD_DOCS)
+    return missing, unexpected
+
+
+def test_control_each_named_md_doc_is_still_in_scope_by_name():
+    """正控：31 個 `.md` **逐個具名**都還在受檢清單裡，而且沒有沒登記的檔混進來。"""
+    missing, unexpected = _named_md_docs_diff(set(_md_docs_in_scope()))
+    assert not missing and not unexpected, (
+        "`docs/v2/*.md` 的受檢清單與 `_MD_DOCS` 對不起來：\n"
+        + (f"  ⛔ 清單裡有、語料裡沒有（被搬走／改名／刪除了）：{missing}\n" if missing else "")
+        + (f"  ⛔ 語料裡有、清單裡沒有（新增的檔還沒登記）：{unexpected}\n" if unexpected else "")
+        + "\n怎麼修（**改 `_MD_DOCS`，不要改這個測試**）：\n"
+          "  * **新增了文件** → 把它的路徑加進 `_MD_DOCS`。加進去就是承認\n"
+          "    「我知道這一份自此納入三道檢查」—— 它身上的既有違規會當場變成新違規，\n"
+          "    請照 `_FIX_GUIDE_A/B/C` 修，修不動才登記 baseline。\n"
+          "  * **搬走／改名／刪除了文件** → 把它從 `_MD_DOCS` 移除，**並在 PR 描述寫明去向**。\n"
+          "    同時檢查 baseline 裡以它為 `file` 的登記是不是該一起清掉（孤兒會在警告裡印出來）。\n"
+          "⛔ **不得**把 `_MD_DOCS` 改成從目錄列表推導 —— 那樣「改設定」與「改期望」\n"
+          "   會由同一個動作完成，這道防線當場等於不存在。")
+
+
+def test_mutation_swapping_one_named_md_doc_turns_the_identity_control_red():
+    """突變：任一具名 `.md` 被別的檔頂掉 → 上一條必須轉紅，而**個數完全沒變**。
+
+    ⚠️ 這一條證的是「釘身分」比「數個數」多抓到什麼：替換後集合大小不變
+    ⇒ **逐 glob 下限與檔數下限都看不出差別**；具名判定則會同時咬出
+    「不見的那一個」與「沒登記的那一個」，訊息裡點名得出來。
+    （集合層級的突變，不動工作樹上任何一個檔。）
+    """
+    seen = set(_md_docs_in_scope())
+    assert _named_md_docs_diff(seen) == ([], []), "突變前本來就對不起來 —— 先修正控"
+    newcomer = "docs/v2/99_newcomer_that_nobody_registered.md"
+    for victim in _MD_DOCS:
+        mutated = (seen - {victim}) | {newcomer}
+        assert len(mutated) == len(seen), "替換後個數就該不變，否則這條突變測不到東西"
+        missing, unexpected = _named_md_docs_diff(mutated)
+        assert missing == [victim], f"拿掉 {victim} 之後具名判定沒有咬它 —— 這條正控沒有鑑別力"
+        assert unexpected == [newcomer], f"混進來的 {newcomer} 沒有被咬出來 —— 只驗了一個方向"
+
+
 def _docs_each_check_was_run_on() -> dict[str, list[tuple[str, int]]]:
     """把三道檢查各包一層間諜，跑一次 `collect()`，回「它實際被餵了哪些檔、各多長」。
 
@@ -1222,6 +1603,54 @@ def test_mutation_narrowing_the_scope_back_turns_the_controls_red():
     finally:
         DOCS_GLOBS = original
     assert [d for d, _ in iter_docs() if d.startswith(_PROTOTYPE_DIR)], "突變後沒有還原射程"
+
+
+def test_control_no_doc_under_the_scope_dir_escapes_every_glob():
+    """正控：`docs/v2/` 底下不得有 `.md`／`.html` 落在**所有** glob 之外。
+
+    ⚠️ glob 是非遞迴的 ⇒ **新增一層子目錄就能讓整批文件無聲逃掉**
+    （稽核實測：`docs/v2/notes/x.md` 帶違規句 → 三道檢查全綠）。
+    逐 glob 下限擋不住這個：它只數**射程內**的檔。
+    """
+    stray = sorted(_rel_to_docs(p) for p in DOCS_DIR.rglob("*")
+                   if p.is_file() and p.suffix in (".md", ".html")
+                   and not _in_scope(_rel_to_docs(p)))
+    assert not stray, (
+        f"下列檔在 `{DOCS_DIR.name}/` 底下，卻不在任何 glob 射程內 —— 三道檢查對它們完全沒看：\n"
+        f"  {stray}\n"
+        "請把它納入 `DOCS_GLOBS`（並同步該項下限與 `_MIN_DOCS`），"
+        "或確認它本來就不該受檢、並在此就地寫明理由。")
+
+
+def test_control_rebuild_refuses_to_drop_hand_written_rows():
+    """正控＋突變：基準樹上少了線框 → 重建入口那道 raise 必須擋下來；完整清單不得誤擋。
+
+    ⚠️ **只跑那道檢查，不跑 `_update_baseline`** —— 後者會寫檔。
+    """
+    full = [(d, "") for d, _ in iter_docs()]
+    mutated = [(d, t) for d, t in full if not d.startswith(_PROTOTYPE_DIR)]   # ← 突變：模擬沒有線框的 rev
+    try:
+        _refuse_if_rebuild_would_drop_rows("<模擬>", mutated)
+    except RuntimeError as e:
+        assert _PROTOTYPE_DIR in str(e), f"訊息沒有點名被丟掉的檔：{e}"
+    else:
+        raise AssertionError("正控失效：會洗掉手工增補那幾筆的重建竟然沒有被擋下來")
+    _refuse_if_rebuild_would_drop_rows("<模擬>", full)          # 負控：不得誤擋
+
+
+def test_control_strike_tags_are_balanced_in_the_corpus():
+    """正控：語料裡 `<s>`／`<del>` 必須成對、且不得自閉合 —— 沒配對會造成**過度遮罩**。
+
+    ⚠️ `<s>…</s>` 的配對語意與 `~~` 不同：未閉合的 `<s>` 會與**後方不相干**的 `</s>` 配對，
+    把中間整段當成已退役 ⇒ **無聲漏抓**。`~~` 那側有兩個上限擋著，這一側靠這條測試。
+    """
+    for doc_rel, doc in iter_docs():
+        for tag in ("s", "del"):
+            opens = len(re.findall(rf"<{tag}(?:\s[^>]*)?>", doc))
+            closes = doc.count(f"</{tag}>")
+            assert opens == closes, f"{doc_rel}：<{tag}> {opens} 個、</{tag}> {closes} 個 —— 不成對會過度遮罩"
+            assert not re.search(rf"<{tag}(?:\s[^>]*)?/>", doc), \
+                f"{doc_rel}：出現自閉合 <{tag}/>，遮罩會把它當成開標籤"
 
 
 def test_control_scope_predicate_is_not_recursive_by_accident():
@@ -1381,7 +1810,10 @@ _BASELINE_README = [
     "正規化規則的權威定義在 tests/test_doc_counters.py 的模組 docstring 與 normalize()。",
     "",
     "重建：python3 tests/test_doc_counters.py --update-baseline [<rev>]（省略 <rev> ＝ HEAD）",
-    "產生端讀的是 _generated_from_sha 那個 commit，**不是工作樹** —— 所以它可以被原樣重建。",
+    "產生端讀的是 _generated_from_sha 那個 commit，不是工作樹；但自 2026-09-23 起本份是**混合來源** ——",
+    "線框那 7 筆是手工增補的，該 commit 上沒有 prototype/ ⇒ 它**不能**被原樣重建。",
+    "⛔ 禁止用任何 SHA 跑 --update-baseline，只准手工增補：重建會洗掉全部 why_safe 與 _why_safe_notes。",
+    "（本說明 _README 本身會被原樣寫回，_why_safe_notes 不會 —— 產生端每筆只寫 file 與 text。）",
     "⛔ 重建等於承認當下**全部**違規。跑完請逐句讀 git diff 再 commit ——",
     "   那份 diff 就是你在簽名承認的東西。正解一律是先照 _FIX_GUIDE_* 修，修不動才登記。",
 ]
@@ -1435,9 +1867,29 @@ def docs_at_sha(sha: str) -> list[tuple[str, str]]:
     return [(n, _git("show", f"{sha}:{n}")) for n in sorted(names)]
 
 
+def _refuse_if_rebuild_would_drop_rows(sha: str, docs: list[tuple[str, str]]) -> None:
+    """⛔ 重建若會讓現行 baseline 的某些檔**整批消失**，直接炸掉，不留「安靜洗掉」那條路。
+
+    本份 baseline 自 2026-09-23 起是**混合來源**：多數 entry 出自 `_generated_from_sha`，
+    線框那幾筆是**手工增補**的，而那個 commit 上根本沒有 `prototype/`。
+    ⚠️ 在這一道之前，那句「只准手工增補」**只寫在散文裡、零機械守衛** ——
+    而破壞半徑是 7 筆 entry ＋ 12 筆 `why_safe` ＋ 整個 `_why_safe_notes`。
+    """
+    have = {n for n, _ in docs}
+    known = {e["file"] for section, _ in CHECKS for e in load_baseline()[section].values()}
+    lost = sorted(known - have)
+    if lost:
+        raise RuntimeError(
+            f"拒絕重建：{sha} 的樹上沒有下列檔，而現行 baseline 有它們的登記：\n"
+            f"  {lost[:5]}\n"
+            "⇒ 重建會把那些 entry 連同全部 `why_safe` 與 `_why_safe_notes` 一起洗掉。\n"
+            "⛔ 這一份只准**手工增補**（作法見模組 docstring 的「禁止用任何 SHA 重建」那一段）。")
+
+
 def _update_baseline(rev: str = "HEAD") -> int:
     sha = _git("rev-parse", rev).strip()
     docs = docs_at_sha(sha)
+    _refuse_if_rebuild_would_drop_rows(sha, docs)
     print(f"baseline 來源：commit {sha}（{len(docs)} 個受檢檔）—— **不是工作樹**")
     data: dict[str, object] = {"_README": _BASELINE_README, META_SHA: sha}
     total = 0
