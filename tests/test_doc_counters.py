@@ -365,6 +365,75 @@ _UNIVERSAL_HEADS = ("每一個", "所有", "全部", "都")
 # 擋掉的是表格裡只填兩個字當欄位值的格子 —— 那是**值**，不是斷言。
 _MIN_ASSERTION_TAIL = 2
 
+# ── 字表的例外：字面以全稱詞開頭、但整串其實是**另一個詞** ──────────────
+# 客戶 2026-09-23 裁示（第十輪第三件）：(C) 把一個文法術語誤判成全稱詞 → **改字表**。
+#
+# **事發（第九輪實測）**：凍結組在 §7.2 寫紀錄時，一個句段以**文法術語**開頭
+# （英文 possessive case 的中譯，是一個名詞），它的前兩個字剛好就是上面字表裡的一個詞，
+# 於是 (C) 把它讀成句首全稱斷言 ⇒ **CI 誤紅**。
+# 凍結組當時是**改寫措辭繞開**的 —— 守衛沒動、baseline 沒動，
+# 也就是說**下一個人寫到同一個詞還會再紅一次**。本表把那一刀補在守衛上。
+#
+# ⚠️ **這是修誤報，不是放寬規則。** 真正的危險是那個複合詞的**字面會被更長的詞吃回去**：
+#    同樣那幾個字再接一個名詞字，就變回「全稱詞 ＋ 一個名詞」＝ **一句真的全稱斷言**
+#    （本檔的正控就是拿這種句子在守）。所以「命中複合詞」**還不夠**，
+#    後面必須真的碰到**詞尾邊界**才放過 —— 見 `_is_word_boundary`。
+def _head_ending_with(tail: str) -> str:
+    """從 `_UNIVERSAL_HEADS` 取出以 ``tail`` 結尾的那一個詞。
+
+    ⚠️ **刻意用「取」而不是「重打一次」** —— 本檔少一處要同步的字面
+    （理由同 `CLAUDE.md` §-2.A 第 8 款：受測字串寫進文件就會被自己掃到）。
+    ⛔ **不得據此宣稱「其餘各處都沒有寫出那四個字面」** —— 那句話不成立：
+    本檔另有**數十行**逐字寫著它們之一（模組 docstring 的規則說明、錯誤訊息、
+    以及本輪新增的受測字串本身）。本函式做的只是**不再多添一處**，
+    **不是**把既有的那些收乾淨。
+    ⚠️ **也刻意不用索引**：有人重排 `_UNIVERSAL_HEADS` 時，索引會**靜默**指到別的詞，
+    本表就變成一張永遠不命中的死表，**而三道檢查照樣全綠**。
+    這個寫法在那種情況下當場炸掉（`CLAUDE.md` §1 Fail Loud）。
+    """
+    hits = [h for h in _UNIVERSAL_HEADS if h.endswith(tail)]
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"`_UNIVERSAL_HEADS` 裡以 {tail!r} 結尾的詞有 {len(hits)} 個，預期剛好 1 個 —— "
+            "字表被改動過，請同步檢查 `_LOOKALIKE_COMPOUNDS`。")
+    return hits[0]
+
+
+# ⚠️ **只收「有實證誤紅」的詞。** 想像得到、但沒有真的紅過的複合詞一律不收 ——
+#    每收一筆就多放掉一種形狀，而**沒有任何機器驗得出**收進來的是不是真的名詞。
+_LOOKALIKE_COMPOUNDS: tuple[str, ...] = (
+    _head_ending_with("有") + "格",
+)
+
+# 詞尾邊界：複合詞後面接到什麼，才算它真的是一個**獨立的名詞**。
+_CJK = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
+
+
+def _is_word_boundary(text: str, pos: int) -> bool:
+    """``text`` 在 ``pos`` 這個位置是不是一個詞的結尾（或已到句段尾）。
+
+    **判定只有一條**：後面沒有字了，或下一個字**不是中日韓文字**。
+    標點、空白、拉丁字母、數字都算邊界；後面接著一個中日韓文字 ⇒ **不算邊界**，照抓。
+
+    ⚠️ **這個條件是封閉的，而且必須維持封閉 —— 這段比規則本身重要**：
+    它是 `_CJK` 的補集，**不是**一張「還可以再往裡加幾個字」的清單。
+    任何「某些中日韓文字也算邊界」的放寬都會把它變成一張**開放的放過清單**：
+    每加一個字就多放掉一種形狀，而它放掉的是**沒有人會發現**的漏抓 ——
+    三道檢查照樣全綠，沒有任何一條測試會紅。本函式選的是另一邊：
+    判錯的後果只是**多紅一次**，而誤紅有人會來修。
+
+    ⚠️ **代價據實寫明，不要誤以為本判定分得出詞性**：中文不寫空格，
+    「複合詞 ＋ 中日韓文字」與「全稱詞 ＋ 一個名詞」在**字面上完全一樣**，
+    沒有任何詞表分得出來。本判定把這一類**一律判成斷言** ⇒
+    `_LOOKALIKE_COMPOUNDS` 的那個詞**後面直接接中文時仍然會紅**。
+    那是**刻意付的成本，不是漏掉** —— 正控見
+    `test_control_C_lookalike_followed_by_cjk_still_fires`。
+    """
+    if pos >= len(text):
+        return True
+    return not _CJK.match(text[pos])
+
+
 # (C) 的反向檢查視窗：從該句段所在行起算，往下看幾行。
 # 取 8 行的理由：`docs/v2/41_counters.md` §41.3 的既有體例是
 # 「全稱句一行 ＋ 反向檢查標題一行 ＋ 圍籬 3–5 行」，8 行放得下一整組，
@@ -446,6 +515,12 @@ def find_self_scanning_commands(doc_rel: str, doc: str) -> list[Finding]:
 # ── (C) 句首全稱斷言必須附反向檢查 ────────────────────────────────────
 def _is_sentence_initial_universal(text: str) -> str | None:
     """``text`` 已正規化。回傳開頭那個全稱詞，或 ``None``。"""
+    for word in _LOOKALIKE_COMPOUNDS:
+        # 字面以某個全稱詞開頭，但整串其實是另一個詞（名詞）⇒ 根本不是斷言。
+        # ⚠️ 必須**同時**碰到詞尾邊界：否則那幾個字是被更長的詞吃回去了
+        #    （＝「全稱詞 ＋ 一個名詞」），那是**真的**全稱斷言，不得放過。
+        if text.startswith(word) and _is_word_boundary(text, len(word)):
+            return None
     for head in _UNIVERSAL_HEADS:
         if text.startswith(head):
             tail = text[len(head):].strip(" 　)）」』】]　")
@@ -783,6 +858,109 @@ def test_control_C_table_cell_that_is_just_a_value_does_not_fire():
     doc = "| 射程 | 全部 | 見 §2 |"
     assert find_universals_without_reverse_check(_DEMO, doc) == [], \
         "負控失效：表格裡只填兩個字的欄位值被誤判成斷言"
+
+
+def test_control_C_grammar_term_lookalike_does_not_fire():
+    """負控：以**文法術語**開頭的句段不是全稱斷言 —— 客戶 2026-09-23 裁示的那個誤紅。
+
+    第九輪凍結組在 §7.2 寫紀錄時被這一刀誤紅，當時是**改寫措辭繞開**的（守衛沒動、
+    baseline 沒動），所以在本輪之前，下一個人寫到同一個詞還會再紅一次。
+    ⚠️ 受測字串**現編** —— 由 `_LOOKALIKE_COMPOUNDS` 取出再接上下文，不在本檔重打那個字面。
+
+    ⚠️ **射程據實寫明**：本例外只涵蓋「該詞後面碰到**非中日韓字元**」這一種形狀
+    （標點、空白、拉丁字母、數字）。**後面直接接中文的一律照抓** ——
+    那不是漏掉，是刻意付的成本，理由與正控見 `_is_word_boundary`。
+    """
+    word = _LOOKALIKE_COMPOUNDS[0]
+    for tail in ("，限定到第八輪那一行登記",      # 標點邊界
+                 " (possessive case)",            # 空白 ＋ 拉丁字母邊界
+                 "」這個詞在本檔只出現在測試裡"):  # 全形引號邊界
+        assert find_universals_without_reverse_check(_DEMO, word + tail) == [], \
+            f"負控失效：以文法術語開頭的句段被誤判成句首全稱斷言（後接 {tail!r}）"
+
+
+def test_control_C_lookalike_followed_by_cjk_still_fires():
+    """正控：複合詞後面**直接接中文**時一律照抓 —— 第十輪稽核抓到的無聲漏抓。
+
+    第十輪之前，詞尾邊界判定除了「非中日韓字元」之外**還多吃了一種放過條件**，
+    於是下面這四句**真的全稱斷言**全部被放過 —— 而且是
+    **三道檢查照樣全綠、沒有任何一條測試會紅**的那種漏抓。
+    ⚠️ 這四句與那個文法術語**字面同形**（中文不寫空格），**沒有任何詞表分得出來**；
+    本檔選的是「寧可多紅一次」那一邊，理由寫在 `_is_word_boundary` 的 docstring。
+    ⚠️ **這一條同時是「字表例外沒有被放寬過頭」的正控** ——
+    它與下一條（被更長的詞吃回去）合起來，把「後面接中文」的兩種形狀都釘住了。
+    """
+    word = _LOOKALIKE_COMPOUNDS[0]
+    for tail in ("的寬度都一樣",
+                 "是黃的",
+                 "與欄都要對齊",
+                 "在第二欄"):
+        assert len(find_universals_without_reverse_check(_DEMO, word + tail)) == 1, \
+            f"正控失效：以複合詞開頭、後面直接接中文的全稱斷言被放過（後接 {tail!r}）"
+
+
+def test_control_C_longer_word_that_swallows_the_lookalike_still_fires():
+    """正控：複合詞的字面被更長的詞吃回去時，它**還是**一句全稱斷言，必須照抓。
+
+    ⚠️ 這一條就是 `_is_word_boundary` 存在的理由 —— 沒有它，字表例外會從
+    「修誤報」變成「**放寬規則**」：下面這兩句都是**真的**全稱斷言，
+    只是前幾個字碰巧與那個文法術語相同。放寬**不在客戶裁示的射程內**。
+    """
+    word = _LOOKALIKE_COMPOUNDS[0]
+    for tail in ("式都必須改成同一種寫法",   # …＋「格式」
+                 "子都是同一個寬度"):        # …＋「格子」（UI 規格裡真的會這樣寫）
+        assert len(find_universals_without_reverse_check(_DEMO, word + tail)) == 1, \
+            f"正控失效：被更長的詞吃回去的全稱斷言沒有被抓到（後接 {tail!r}）—— 字表例外放寬過頭了"
+
+
+def test_control_C_word_boundary_predicate_is_a_closed_set():
+    """`_is_word_boundary` 的「**不算**邊界」那一側必須維持封閉 —— 不得被逐字挖洞。
+
+    ⚠️ **這一條是第十輪突變實測逼出來的，不是預防性的**：把 `_CJK` 改成帶
+    negative lookahead、只挖掉**一個**中日韓文字，**全部測試照樣綠** ——
+    而挖掉的那個字正好是 `docs/v2/` 底下真的寫過的一句全稱斷言用到的
+    （「⋯⋯線一律 …」）。逐字挖洞是「開放的放過清單」的**同型後繼**，
+    只是門檻高一點：它放掉的同樣是**沒有人會發現**的漏抓。
+
+    ⚠️ **刻意逐碼位窮舉，不取樣** —— 本組第一版用的是「每 17 碼位取一點」，
+    而挖在取樣點之外的洞照樣全綠（實測：挖掉 U+4E86 → 全綠）。
+    **一個抽樣式的封閉性檢查，本身就是一張開放清單。** 現改為把
+    `_CJK` 自己宣告的三個區段**逐一走完**：任何一處被挖掉都會當場紅燈。
+    ⚠️ **本條鎖的是下限不是上限**：把區段**加寬**（例如補上擴充區）不會紅，
+    只有**變窄或挖洞**才會 —— 極性與 `_is_word_boundary` 同向。
+    """
+    word = _LOOKALIKE_COMPOUNDS[0]
+    covered = [(0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xF900, 0xFAFF)]
+    for lo, hi in covered:
+        for cp in range(lo, hi + 1):
+            assert not _is_word_boundary(word + chr(cp), len(word)), \
+                (f"U+{cp:04X} 被判成詞尾邊界 —— 『不算邊界』那一側被挖洞或收窄了，"
+                 "「複合詞 ＋ 這個字」的全稱斷言會無聲漏抓")
+
+
+def test_control_C_lookalike_table_is_wired_to_the_word_table():
+    """字表例外必須真的長在 `_UNIVERSAL_HEADS` 上，否則它是一張**死表**。
+
+    死表的危險與本檔下限測試擋的是同一種：例外永遠不命中、**測試照樣全綠、沒有人會發現**。
+    這一條讓「表寫錯了／字表被重排了」當場紅燈。
+    """
+    assert _LOOKALIKE_COMPOUNDS, "字表例外不得是空的 —— 空表等於這次修復沒有生效"
+    for word in _LOOKALIKE_COMPOUNDS:
+        assert any(word.startswith(h) and len(word) > len(h) for h in _UNIVERSAL_HEADS), \
+            f"{word!r} 並不是「某個全稱詞 ＋ 後綴」—— 這一筆登記在這裡沒有意義"
+        assert _is_sentence_initial_universal(word + "，後面接一句話") is None, \
+            f"{word!r} 沒有被字表例外擋下"
+        # ⚠️ **單獨出現時它不歸字表例外管**，擋它的是**尾長下限** ——
+        #    去掉開頭那個全稱詞之後只剩不到 `_MIN_ASSERTION_TAIL` 個字。
+        #    第十輪稽核實測：原本擺在這裡的
+        #    `assert _is_sentence_initial_universal(word) is None` **毫無鑑別力**
+        #    —— 把整個字表例外拿掉它照樣綠，而它的失敗訊息還會把病因指錯。
+        #    現在改成驗「那條路還在」：有人調低下限或收進更長的複合詞時，
+        #    這一條會紅，提醒他此時才真的需要一條字表例外的正控。
+        head = next(h for h in _UNIVERSAL_HEADS if word.startswith(h))
+        assert len(word) - len(head) < _MIN_ASSERTION_TAIL, \
+            (f"{word!r} 去掉 {head!r} 之後尾長已達 {_MIN_ASSERTION_TAIL}，"
+             "「單獨出現」不再由尾長下限擋 —— 請為這個情形補一條真的正控")
 
 
 def test_control_C_struck_through_universal_does_not_fire():
