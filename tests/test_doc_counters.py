@@ -1,4 +1,6 @@
-"""`docs/v2/*.md` 的計數／指令／全稱句守衛 —— 讓「數字沒釘 SHA、指令自己掃自己、
+"""`docs/v2/` 底下受檢文件（`.md` 規格文件 ＋ `prototype/` 線框 HTML；
+**射程的定義處是 `DOCS_GLOBS`，本句只是轉述**）的計數／指令／全稱句守衛 ——
+讓「數字沒釘 SHA、指令自己掃自己、
 全稱句沒有反向檢查」在 CI 當場紅燈，不再靠人工複驗。
 
 **前例**：`tests/test_constitution_file_refs.py`（憲法的檔案引用守衛）。
@@ -145,6 +147,7 @@ baseline 一筆會蓋住那一檔內的全部同字句。這是已知的、刻�
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import re
@@ -154,7 +157,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = REPO_ROOT / "docs" / "v2"
-DOCS_GLOB = "*.md"
+
+# 受檢語料 —— 每一項是 `(glob, 這個 glob 至少要看到幾個檔)`。
+#
+# ⚠️ **下限綁在「每一個 glob」上，不是只綁總數** —— 這是本輪擴射程最關鍵的一根釘子：
+#    只綁總數的話，有人把 `prototype/*.html` 那一列拿掉，剩下的 `.md` 照樣遠超總數下限
+#    ⇒ **三道檢查全綠、而且少看了五個檔、沒有任何人會發現**。那正是本檔
+#    「綠燈但少看」那一段要擋的失效模式，只是換到射程這一層。
+# ⚠️ **glob 的語意是 `Path.glob`（非遞迴）**：`*.md` 只收 `docs/v2/` 的直屬子檔，
+#    **不含** `prototype/` 底下的。要收子目錄必須像下面那樣把目錄寫出來。
+DOCS_GLOBS: tuple[tuple[str, int], ...] = (
+    ("*.md", 15),
+    ("prototype/*.html", 5),
+)
 BASELINE_PATH = Path(__file__).resolve().parent / "doc_counters_baseline.json"
 
 # baseline 的三個分區 key（改名等於讓既有 baseline 的該區整區失效）
@@ -163,6 +178,47 @@ SEC_SELFSCAN = "self_scanning_commands"
 SEC_UNIVERSALS = "universals_without_reverse_check"
 # baseline 自陳它是從哪個 commit 產生的 —— 讓它可以被**原樣重建**。
 META_SHA = "_generated_from_sha"
+
+
+def _matches_glob(rel_to_docs_dir: str, pattern: str) -> bool:
+    """一條 `DOCS_GLOBS` 的 glob 對一條相對路徑的配對 —— **配對邏輯的單一實作**。
+
+    ⚠️ **`_in_scope()`（受檢與否）與 `scope_counts()`（逐 glob 幾個檔）都只走這裡。**
+    第十一輪稽核實測過兩邊各寫一套的後果（隔離副本重跑確認）：只要讓射程判定
+    多排除一類檔、而 `DOCS_GLOBS` 一字未動，`iter_docs()` 就讀到 0 個線框、
+    `scope_counts()` 卻仍宣稱 5 個 ⇒ **逐 glob 下限不紅，那批檔已經沒有人在檢查。**
+    （`--report` 的「受檢檔數」那一行會掉下來，但**沒有任何測試會因此紅** ——
+    那一行只比 `_MIN_DOCS`，少掉整批線框之後仍然遠高於它。）
+
+    ⚠️ **刻意不拿 `fnmatch` 或 `PurePath.match` 去比整條路徑** —— 兩者都表達不出
+    「非遞迴」，但**成因不同，別混為一談**（py3.11.15 實測）：
+
+    * `fnmatch.fnmatchcase("prototype/x.md", "*.md")` → True：它的 `*` **會吃掉 `/`**。
+    * `PurePath("prototype/x.md").match("*.md")` → True：它的 `*` **不**吃 `/`
+      （`PurePath("a/b/x.md").match("a/*.md")` → False 即為證），
+      為 True 的成因是**相對 pattern 從右端錨定**，左邊多幾層都算命中。
+
+    兩種語意都會讓子目錄的檔被上層的 glob 收進來，**非遞迴當場破掉**。
+    故這裡把 glob 拆成「目錄部分逐字相等 ＋ 檔名部分 `fnmatch`」，
+    自己做出 `Path.glob`（非遞迴）的語意；`iter_docs()` 實際走的是
+    `scoped_paths()`（`rglob("*")` ＋ `_in_scope()` ＋ 本函式），**不是** `Path.glob`。
+    """
+    d, _, n = rel_to_docs_dir.rpartition("/")
+    pd, _, pn = pattern.rpartition("/")
+    return d == pd and fnmatch.fnmatchcase(n, pn)
+
+
+def _in_scope(rel_to_docs_dir: str) -> bool:
+    """``rel_to_docs_dir`` 是相對 `DOCS_DIR` 的路徑；判斷它在不在受檢射程內。
+
+    ⚠️ `iter_docs()`（測試端讀工作樹，經由 `scoped_paths()`）與 `docs_at_sha()`
+    （baseline 產生端讀釘死的 commit，直接呼叫）**都走這一個函式**。
+    兩邊各寫一套過濾是本輪差點踩到的坑：它們一旦不一致，
+    就會出現**測試看得到、`--update-baseline` 產不出來**的違規 ——
+    那一筆永遠登記不進 baseline，卡在紅燈而且沒有任何修法，
+    只能靠改守衛繞過（＝把守衛改成擺設）。
+    """
+    return any(_matches_glob(rel_to_docs_dir, pattern) for pattern, _floor in DOCS_GLOBS)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -357,8 +413,20 @@ _MOVING_REF = re.compile(r"origin/main|(?<![\w])HEAD(?![\w])|工作樹")
 # 反向檢查的「輸出」長什麼樣。
 _OUTPUT_MARKER = re.compile(r"exit\s*=|→|⇒|無輸出|0\s*命中|回\s*非?\s*0|not found|No such")
 
-# 句首全稱詞。⚠️ 這是本檔**唯一**寫出這四個字面的地方 —— 其餘各處一律以
-# 「那四個詞」指稱，理由同 `CLAUDE.md` §-2.A 第 8 款（受測字串寫進文件就會被自己掃到）。
+# 句首全稱詞 —— 本字表是它們在本檔的**定義處**。
+# ⚠️ **2026-09-23 第十一輪就地更正（有意識的更正，不是漏刪 · 決策者 AI 總管，
+#    依客戶第十一輪裁示第 1 件）**：本行原寫 ~~「這是本檔**唯一**寫出這四個字面的地方
+#    —— 其餘各處一律以『那四個詞』指稱」~~，**那句話在它被寫下的那一輪就已經不成立**：
+#    本檔另有**數十行**逐字寫著它們之一（模組 docstring 的規則說明、錯誤訊息、
+#    以及正控／負控的受測字串本身）。第十輪已在 `_head_ending_with` 的 docstring
+#    修掉同一句話的副本，**漏了這一處**，於是同一檔內兩處說法不一致 —— 本輪補齊，
+#    **口徑與該處對齊**。⛔ **不得據此宣稱「其餘各處都沒有寫出那四個字面」。**
+# **舊表述的用意仍然成立**（少寫一處字面就少一處要同步的東西，理由同 `CLAUDE.md`
+#    §-2.A 第 8 款：受測字串寫進文件就會被自己掃到）；**被權衡掉的是它的全稱強度** ——
+#    它把一個「該往哪個方向走」寫成了「現況已經如此」。本字表做的只是**不再多添一處**，
+#    **不是**把既有的那些收乾淨。
+# ⛔ **刻意不寫「有幾處」**：這一段自己就會提到那些詞，寫下數字存檔當刻就過期
+#    （同 `CLAUDE.md` §-2.A 第 8 款：把掃描用的字串寫進文件，它就會自己命中）。
 _UNIVERSAL_HEADS = ("每一個", "所有", "全部", "都")
 
 # 句首斷言的最短長度：去掉開頭那個詞之後，還要剩至少這麼多字才算一句斷言。
@@ -566,8 +634,13 @@ CHECKS = (
 # ══════════════════════════════════════════════════════════════════════════
 # 受檢檔案 ＋ baseline
 # ══════════════════════════════════════════════════════════════════════════
-def iter_docs() -> list[tuple[str, str]]:
-    """回 [(repo 相對路徑, 內容)]，路徑排序固定。
+def _rel_to_docs(path: Path) -> str:
+    """檔案路徑 → 相對 `DOCS_DIR` 的 POSIX 字串（`_matches_glob` 吃的那個形態）。"""
+    return str(path.relative_to(DOCS_DIR)).replace("\\", "/")
+
+
+def scoped_paths() -> list[Path]:
+    """受檢射程內的檔案路徑（排序固定）—— **`iter_docs()` 與 `scope_counts()` 共用這一份**。
 
     ⚠️ **目錄不見了一律 raise，不得靜默回空清單**（`CLAUDE.md` §1 Fail Loud）。
     靜默回空 ＝ 三道檢查全部變成 0 筆違規 ＝ **全綠，而且沒有人會發現**。
@@ -578,11 +651,34 @@ def iter_docs() -> list[tuple[str, str]]:
             f"找不到受檢目錄 {DOCS_DIR.relative_to(REPO_ROOT)}。\n"
             "本守衛的全部價值來自「真的把那些檔讀完」。讀不到就直接炸掉，\n"
             "不要讓它靜默地變成一支什麼都沒檢查的綠燈測試。\n"
-            "若目錄是**刻意**搬走或改名，請同步改 `DOCS_DIR`／`DOCS_GLOB`，\n"
-            "並重新量測 `_MIN_DOCS` 的下限。")
-    paths = sorted(DOCS_DIR.glob(DOCS_GLOB))
+            "若目錄是**刻意**搬走或改名，請同步改 `DOCS_DIR`／`DOCS_GLOBS`，\n"
+            "並重新量測 `DOCS_GLOBS` 的每一項下限與 `_MIN_DOCS`。")
+    return sorted(p for p in DOCS_DIR.rglob("*")
+                  if p.is_file() and _in_scope(_rel_to_docs(p)))
+
+
+def iter_docs() -> list[tuple[str, str]]:
+    """回 [(repo 相對路徑, 內容)]，路徑排序固定（射程見 `scoped_paths()`）。"""
     return [(str(p.relative_to(REPO_ROOT)).replace("\\", "/"),
-             p.read_text(encoding="utf-8")) for p in paths]
+             p.read_text(encoding="utf-8")) for p in scoped_paths()]
+
+
+def scope_counts() -> dict[str, int]:
+    """每一個 glob 在 `scoped_paths()` 交出的**那一份清單**裡各佔幾個檔。
+
+    ⚠️ **刻意不自己再掃一次磁碟** —— 它只能數 `iter_docs()` 真的會交出去的檔。
+    自己掃一套的版本會分家成「下限看得到、三道檢查沒讀到」，理由寫在 `_matches_glob`。
+    ⚠️ 一個檔同時命中多條 glob 時**只算給第一條**（`break`），
+    所以各項之和恆等於受檢檔數 —— 那個等式由 `test_control_scope_counts_*` 看著。
+    """
+    out = {pattern: 0 for pattern, _floor in DOCS_GLOBS}
+    for path in scoped_paths():
+        rel = _rel_to_docs(path)
+        for pattern, _floor in DOCS_GLOBS:
+            if _matches_glob(rel, pattern):
+                out[pattern] += 1
+                break
+    return out
 
 
 def collect(section: str) -> list[Finding]:
@@ -720,7 +816,7 @@ def test_sentence_initial_universals_carry_a_reverse_check():
 # ⭐ 保護這三道檢查本身的東西（不是第四道規則，是防止前三道無聲失效）
 # ══════════════════════════════════════════════════════════════════════════
 # 本守衛最危險的失效模式**不是**紅燈，是**綠燈而少看**：
-# 有人把某條 regex 收窄、或把 `DOCS_GLOB` 改窄、或目錄被搬走，
+# 有人把某條 regex 收窄、或把 `DOCS_GLOBS` 改窄、或目錄被搬走，
 # 三道檢查的命中數一起掉到 0，**測試全綠，而且沒有人會發現**。
 # 下面的下限就是為了讓那種情況**跌破而紅燈**。
 #
@@ -734,7 +830,7 @@ def test_sentence_initial_universals_carry_a_reverse_check():
 #     那會讓命中數變少。把下限貼著現值，等於把「正確退役」變成紅燈，逼人不敢退役。
 # ⚠️ 若哪天真的掉到下限以下：**請改這些常數並在此寫下新的量測與理由**，
 #    不要把下限一路往下調到 0 —— 那等於把這個保護拆掉。
-_MIN_DOCS = 15
+_MIN_DOCS = 20  # ＝ `DOCS_GLOBS` 各項下限之和（15 ＋ 5）
 _MIN_TOTAL_FINDINGS = {SEC_COUNTS: 120, SEC_SELFSCAN: 15, SEC_UNIVERSALS: 50}
 
 
@@ -742,9 +838,15 @@ def test_guard_still_sees_the_documents_it_claims_to_check():
     """受檢檔數與三道檢查的總命中數都不得跌破下限（防「綠燈但少看」）。"""
     docs = iter_docs()
     assert len(docs) >= _MIN_DOCS, (
-        f"只看到 {len(docs)} 個受檢檔，低於下限 {_MIN_DOCS}。\n"
-        f"（`{DOCS_DIR.relative_to(REPO_ROOT)}/{DOCS_GLOB}`）\n"
+        f"只看到 {len(docs)} 個受檢檔，低於總下限 {_MIN_DOCS}。\n"
+        f"（`{DOCS_DIR.relative_to(REPO_ROOT)}/` ＋ globs {DOCS_GLOBS}）\n"
         "檔案被搬走／改副檔名／glob 被改窄時，三道檢查會一起靜默失效。")
+    seen = scope_counts()
+    for pattern, floor in DOCS_GLOBS:
+        assert seen[pattern] >= floor, (
+            f"glob `{pattern}` 只看到 {seen[pattern]} 個檔，低於它自己的下限 {floor}。\n"
+            "⚠️ **這一條是逐 glob 的，不是只看總數** —— 整列被拿掉時總數下限擋不住"
+            "（`.md` 一個人就遠超總下限），三道檢查會對那一批檔靜默停止檢查。")
     for section, floor in _MIN_TOTAL_FINDINGS.items():
         total = len(collect(section))
         assert total >= floor, (
@@ -963,6 +1065,216 @@ def test_control_C_lookalike_table_is_wired_to_the_word_table():
              "「單獨出現」不再由尾長下限擋 —— 請為這個情形補一條真的正控")
 
 
+# ── 射程正控：那五個線框草稿**真的被讀到了** ──────────────────────────
+# ⚠️ **沒有正控的綠燈 ＝ 沒有檢查。** 把 `prototype/*.html` 加進 `DOCS_GLOBS` 之後，
+#    三道檢查對它們的命中數可能很低（**`edc9319` 實測 (A)0／(B)0／(C)3**）——
+#    **低命中與「根本沒讀到」在測試輸出上長得一模一樣**。下面兩條把兩者分開。
+# ⚠️ **那三個數字原本沒有釘 SHA，而它已經漂掉了**（2026-09-23 第十一輪回修就地補釘）：
+#    同輪另一組把線框裡那 3 句全稱斷言改成刪除線之後，**工作樹上 (C) 已經是 0**。
+#    釘 SHA 是本檔自己對 `docs/v2/` 開的第一條規則（客戶裁示第 1 條），
+#    **守衛自己的註解不釘，就沒有立場要求任何人。** 引用這三個數字前請現場重量。
+_PROTOTYPE_DIR = "docs/v2/prototype/"
+# 這五個檔的內容長度下限 —— 用來擋「讀到了，但讀進來的是空字串」。
+# **單位是字元**，因為被比較的量是 `len(doc)`（`str` 的長度），不是檔案的 bytes。
+# ⚠️ **2026-09-23 第十一輪回修（有意識的更正，不是漏刪 · 決策者 AI 總管）**：
+#    本常數原名 ~~`_PROTOTYPE_MIN_BYTES`~~、理由也用 bytes 寫（「8 萬 bytes 以上」），
+#    **但斷言從第一天起比的就是字元數** —— `CLAUDE.md` §4.1 命名規範明文要求
+#    變數名編碼單位，而這裡名、理由、被比較的量**三者是兩種單位**。
+#    **結論沒有被推翻，錯的是援引的證據**：五個之中最短的 `ui_prototype_today.html`
+#    實測 87,147 bytes ／ **67,258 字元**（量測日 2026-09-23；**這兩個數字會漂移，
+#    要用請現場量**）⇒ 安全邊際是 **1.35×**，不是拿 bytes 算出來的 1.74×。
+_PROTOTYPE_MIN_CHARS = 50000
+
+
+def test_control_scope_really_includes_the_prototype_wireframes():
+    """正控：五個線框 HTML 真的進了受檢清單，而且真的被切出句段。"""
+    docs = dict(iter_docs())
+    protos = sorted(d for d in docs if d.startswith(_PROTOTYPE_DIR))
+    assert len(protos) >= 5, (
+        f"只看到 {len(protos)} 個線框草稿：{protos}\n"
+        "`DOCS_GLOBS` 的 `prototype/*.html` 那一列失效了 —— 三道檢查對它們靜默停擺。")
+    for d in protos:
+        live = [s for s in split_segments(docs[d]) if not s.struck]
+        assert len(live) > 100, f"{d} 只切出 {len(live)} 個句段 —— 讀到了但沒真的解析"
+
+
+# ── 射程正控之二：釘的是**身分**，不是個數 ────────────────────────────────
+# ⚠️ **上面那一條與逐 glob 下限都只數個數，擋不住「換人」。** 第十一輪稽核指出的路徑：
+#    先新增第六個線框（這個 repo 一定會發生），再把其中一個搬走或改副檔名 ⇒
+#    **檔數仍是 5、逐 glob 下限照樣過**，而剛修過的那一個已經整個離開語料。
+#    隔離副本實測（補進去的那一個取既有線框的副本）：`--report` 與正常狀態 `diff` 無差異
+#    ⇒ **這支守衛不會發出任何訊號。**
+# ⛔ **期望值刻意逐字硬寫，不得改成從 `DOCS_GLOBS`／目錄列表推導** ——
+#    那樣「改設定」與「改期望」會同一個動作完成，防線當場失效（＝沒有期望值）。
+# ✅ 正解：真的要換掉哪一個，就來改這個 tuple —— **改它本身就是簽名承認換掉了哪一個。**
+_PROTOTYPE_FILES: tuple[str, ...] = (
+    "docs/v2/prototype/ui_prototype_alo.html",
+    "docs/v2/prototype/ui_prototype_exp.html",
+    "docs/v2/prototype/ui_prototype_hld.html",
+    "docs/v2/prototype/ui_prototype_set.html",
+    "docs/v2/prototype/ui_prototype_today.html",
+)
+
+
+def _named_wireframes_missing_from(seen: set[str]) -> list[str]:
+    """`_PROTOTYPE_FILES` 裡有哪幾個不在 ``seen`` —— 正控與突變測試**共用同一個判定**。"""
+    return [f for f in _PROTOTYPE_FILES if f not in seen]
+
+
+def test_control_each_named_wireframe_is_still_in_scope_by_name():
+    """正控：五個線框**逐個具名**都還在受檢清單裡 —— 少一個就紅，**不看總數**。"""
+    missing = _named_wireframes_missing_from({d for d, _ in iter_docs()})
+    assert not missing, (
+        f"下列具名線框已不在受檢清單裡：{missing}\n"
+        "⚠️ **檔數下限與逐 glob 下限都擋不住這個** —— 新增一個、搬走一個，數字一模一樣。\n"
+        "若是刻意改名／搬走／刪除，請同步改 `_PROTOTYPE_FILES`。")
+
+
+def test_mutation_dropping_one_named_wireframe_turns_the_identity_control_red():
+    """突變：任一具名線框被別的檔頂掉 → 上一條必須轉紅，而**個數完全沒變**。
+
+    ⚠️ 這一條證的是「釘身分」比「數個數」多抓到什麼：替換後集合大小不變
+    ⇒ **只數個數的斷言看不出差別**；具名判定則會咬出被換掉的那一個。
+    （實體搬檔的那一半在隔離副本上跑過，不在 CI 裡動工作樹。）
+    """
+    seen = {d for d, _ in iter_docs()}
+    assert not _named_wireframes_missing_from(seen), "突變前本來就缺 —— 先修正控"
+    for victim in _PROTOTYPE_FILES:
+        mutated = (seen - {victim}) | {f"{_PROTOTYPE_DIR}ui_prototype_newcomer.html"}
+        assert len(mutated) == len(seen), "替換後個數就該不變，否則這條突變測不到東西"
+        assert _named_wireframes_missing_from(mutated) == [victim], (
+            f"拿掉 {victim} 之後具名判定沒有咬它 —— 這條正控沒有鑑別力")
+
+
+def _docs_each_check_was_run_on() -> dict[str, list[tuple[str, int]]]:
+    """把三道檢查各包一層間諜，跑一次 `collect()`，回「它實際被餵了哪些檔、各多長」。
+
+    ⚠️ **這是射程正控的核心手法，理由寫在這裡而不是呼叫端**：
+    正控原本釘的是「線框裡那句真的全稱斷言必須被 (C) 抓到」。本輪把那三句**修好了**
+    ⇒ 那條正控當場永遠紅。問題在於**「修好了」與「根本沒讀到」在測試輸出上長得一模一樣**
+    —— 一條會因為別人把文件修好而轉紅的正控，逼的是下一個人把正控拿掉，
+    那就回到「綠燈而沒有正控」。
+    **違規可以被修掉，呼叫不會** ⇒ 改釘「三道檢查有沒有真的被呼叫在那五個檔上、
+    而且餵進去的是真內容」。
+    """
+    global CHECKS
+    original = CHECKS
+    seen: dict[str, list[tuple[str, int]]] = {}
+    try:
+        for section, fn in original:
+            log: list[tuple[str, int]] = []
+
+            def spy(doc_rel, doc, _fn=fn, _log=log):
+                _log.append((doc_rel, len(doc)))
+                return _fn(doc_rel, doc)
+
+            CHECKS = tuple((s, spy if s == section else f) for s, f in original)
+            collect(section)
+            seen[section] = log
+    finally:
+        CHECKS = original
+    return seen
+
+
+def test_control_the_three_checks_really_run_over_the_prototype_wireframes():
+    """正控：三道檢查**真的被呼叫在**那五個線框上，而且拿到的是真內容。
+
+    ⛔ **沒有這一條，`prototype/*.html` 的 0 筆違規就沒有意義** ——
+    「掃過了但很乾淨」與「根本沒掃」會印出一模一樣的 0。
+    """
+    seen = _docs_each_check_was_run_on()
+    for section, _ in CHECKS:
+        protos = [(d, n) for d, n in seen[section] if d.startswith(_PROTOTYPE_DIR)]
+        assert len(protos) >= 5, (
+            f"檢查 `{section}` 只被餵了 {len(protos)} 個線框草稿：{[d for d, _ in protos]}\n"
+            "`DOCS_GLOBS` 的 `prototype/*.html` 那一列失效了 —— 那一批檔靜默停止檢查。")
+        short = [(d, n) for d, n in protos if n < _PROTOTYPE_MIN_CHARS]
+        assert not short, (
+            f"檢查 `{section}` 拿到的線框內容過短（讀到了但內容不對）：{short}")
+
+
+def test_mutation_narrowing_the_scope_back_turns_the_controls_red():
+    """突變測試：把射程改回只看 `.md`，上面兩條正控**必須**轉紅。
+
+    ⚠️ **這一條是「正控有沒有鑑別力」的唯一證據。** 一條永遠綠的正控與一條
+    沒有正控的守衛，效果完全一樣 —— 本檔下限測試的 docstring 講的就是這件事。
+    """
+    global DOCS_GLOBS
+    original = DOCS_GLOBS
+    try:
+        DOCS_GLOBS = (("*.md", 15),)
+        docs = dict(iter_docs())
+        assert not [d for d in docs if d.startswith(_PROTOTYPE_DIR)], \
+            "射程收窄後線框草稿竟然還在 —— `DOCS_GLOBS` 沒有真的控制 `iter_docs()`"
+        # ⚠️ **這裡刻意驗「呼叫」而不是「違規」**：線框裡那三句已在本輪修好，
+        #    「收窄後抓不到違規」在今天是**恆真**的 —— 用它當突變證據等於沒有證據。
+        #    驗呼叫則不受文件內容影響：收窄之後三道檢查**根本不會被餵到**那五個檔。
+        seen = _docs_each_check_was_run_on()
+        for section, _ in CHECKS:
+            assert not [d for d, _n in seen[section] if d.startswith(_PROTOTYPE_DIR)], \
+                f"射程收窄後 `{section}` 仍被餵了線框草稿 —— 正控抓的不是射程，沒有鑑別力"
+        # 逐 glob 下限：整列被拿掉時必須紅 —— 只看總數是擋不住的。
+        seen = scope_counts()
+        assert "prototype/*.html" not in seen, "收窄後 `scope_counts()` 仍宣稱看得到那一列"
+        assert len(docs) >= _MIN_DOCS, (
+            "⚠️ 這一行是**反向證據**：收窄之後總數下限照樣過 —— "
+            "證明總數下限**擋不住整列被拿掉**，逐 glob 下限不是多餘的。")
+    finally:
+        DOCS_GLOBS = original
+    assert [d for d, _ in iter_docs() if d.startswith(_PROTOTYPE_DIR)], "突變後沒有還原射程"
+
+
+def test_control_scope_predicate_is_not_recursive_by_accident():
+    """負控：`*.md` **不得**把 `prototype/` 底下的檔收進來（`fnmatch` 的 `*` 會吃掉 `/`）。"""
+    assert _in_scope("41_counters.md")
+    assert _in_scope("prototype/ui_prototype_set.html")
+    assert not _in_scope("prototype/whatever.md"), \
+        "`*.md` 把子目錄的檔收進來了 —— 非遞迴語意破了，測試端與 baseline 產生端會不一致"
+    assert not _in_scope("prototype/deeper/x.html")
+    assert not _in_scope("README.txt")
+
+
+def test_control_scope_counts_only_counts_what_the_checks_actually_read():
+    """`scope_counts()` 不得宣稱看得到 `iter_docs()` 沒有交出去的檔。
+
+    ⚠️ **這是第十一輪必修二的看門狗。** 稽核實測過兩邊各寫一套配對的後果：
+    只在射程判定多加一行排除、`DOCS_GLOBS` 一字未動 ⇒
+    三道檢查實際讀到 0 個線框，`scope_counts()` 卻仍宣稱 5 個 ⇒
+    **逐 glob 下限不會紅**（而逐 glob 下限正是本輪自稱最關鍵的那根釘子）。
+    合併到 `scoped_paths()` 之後這個等式由結構保證；本條是防止後人再把它拆開。
+    """
+    docs = [d for d, _ in iter_docs()]
+    counts = scope_counts()
+    assert sum(counts.values()) == len(docs), (
+        f"`scope_counts()` 合計 {sum(counts.values())}、`iter_docs()` 交出 {len(docs)} 個檔"
+        " —— 兩邊的射程判定分家了，逐 glob 下限正在數一批沒人檢查的檔。")
+    assert set(counts) == {pattern for pattern, _floor in DOCS_GLOBS}, \
+        "`scope_counts()` 的 key 與 `DOCS_GLOBS` 不同步 —— 逐 glob 下限會查無此 key 而 KeyError"
+
+
+def test_control_scope_predicate_matches_the_baseline_generator():
+    """測試端（工作樹）與 baseline 產生端（釘死的 commit）必須看到**同一組檔**。
+
+    ⚠️ 兩邊不一致的後果是最難查的一種：一筆違規在測試裡看得到、
+    `--update-baseline` 卻產不出它 ⇒ **永遠登記不進去、永遠紅燈、沒有合法修法**。
+    """
+    prefix = f"{DOCS_DIR.relative_to(REPO_ROOT)}/".replace("\\", "/")
+    at_head = {n for n, _ in docs_at_sha(_git("rev-parse", "HEAD").strip())}
+    tracked_at_head = set(_git("ls-tree", "-r", "--name-only", "HEAD", "--", prefix).splitlines())
+    from_worktree = {d for d, _ in iter_docs()}
+    # **方向是單向的，這一點是刻意的**：要擋的是「測試看得到、產生端產不出來」。
+    # 反方向（產生端有、工作樹沒有）在正常開發中會自然發生（有人把檔改名或刪掉還沒 commit），
+    # 拿它紅燈只會製造誤紅。
+    missing = (from_worktree & tracked_at_head) - at_head
+    assert not missing, (
+        "下列檔在測試端（工作樹）看得到，`--update-baseline` 卻產不出來：\n"
+        f"  {sorted(missing)[:5]}\n"
+        "⇒ 它們身上的違規**永遠登記不進 baseline**，會卡在紅燈而且沒有合法修法。\n"
+        "成因一定是 `iter_docs()` 與 `docs_at_sha()` 的射程判定分了家 —— 兩邊都要走 `_in_scope`。")
+    # ⚠️ **刻意不用 `git ls-files`**：那讀的是**索引**，別組新增並 stage 一個 doc
+    #    就會讓這一條為了**不相干的理由**轉紅。改讀 HEAD 的樹，與產生端同一個基準。
+
+
 def test_control_C_struck_through_universal_does_not_fire():
     doc = "~~所有欄位都已經查過了~~ → 2026-09-21 撤銷，見 4851465"
     assert find_universals_without_reverse_check(_DEMO, doc) == [], \
@@ -1076,7 +1388,10 @@ _BASELINE_README = [
 
 
 def _report() -> int:
-    print(f"受檢目錄：{DOCS_DIR.relative_to(REPO_ROOT)}/{DOCS_GLOB}")
+    print(f"受檢目錄：{DOCS_DIR.relative_to(REPO_ROOT)}/")
+    counts = scope_counts()
+    for pattern, floor in DOCS_GLOBS:
+        print(f"  glob {pattern:22s} 看到 {counts[pattern]:3d} 個檔（下限 {floor}）")
     docs = iter_docs()
     print(f"受檢檔數：{len(docs)}")
     try:
@@ -1113,10 +1428,10 @@ def docs_at_sha(sha: str) -> list[tuple[str, str]]:
     """
     prefix = f"{DOCS_DIR.relative_to(REPO_ROOT)}/".replace("\\", "/")
     names = [n for n in _git("ls-tree", "-r", "--name-only", sha, "--", prefix).splitlines()
-             if n.startswith(prefix) and n.endswith(DOCS_GLOB.lstrip("*"))
-             and "/" not in n[len(prefix):]]
+             if n.startswith(prefix) and _in_scope(n[len(prefix):])]
     if not names:
-        raise RuntimeError(f"在 {sha} 上找不到任何 {prefix}{DOCS_GLOB} —— 拒絕產生一份空的 baseline。")
+        raise RuntimeError(
+            f"在 {sha} 上找不到任何符合 {DOCS_GLOBS} 的檔（{prefix}）—— 拒絕產生一份空的 baseline。")
     return [(n, _git("show", f"{sha}:{n}")) for n in sorted(names)]
 
 
