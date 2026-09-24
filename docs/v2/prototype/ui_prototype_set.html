@@ -55,6 +55,10 @@
   --app-fg-2:#c9d1d9;
   --app-muted:#8b949e;
   --st-gray:#8b949e;        /* 資料未備：灰（SSOT 第五節卡片表） */
+  --st-gray-bg:#11161d;     /* 灰態容器底（2026-09-24 新增，只給 SET-4 的 .failbox 用；客戶 2026-09-24 拍板
+                               docs/wireframes/draft_set_savefail.html 時一併定案「失敗框改灰」）。
+                               取值逐位元組取自 ui_prototype_exp.html 的同名代號，且與本檔上面既有的
+                               --app-inner 同值 ⇒ 本檔沒有因此多出任何一個新色碼。 */
   --st-warn-fg:#e3b341;     /* 業務例外／不適用：黃（SSOT 第五節卡片表） */
   --st-warn-bg:#241d07;
   --st-err-fg:#ff7b72;      /* 系統錯誤／失敗：紅（SSOT 第五節卡片表 ＋ SET-0 規則欄） */
@@ -303,6 +307,9 @@ textarea.inbox{min-height:46px; resize:vertical; font-family:"IBM Plex Mono",mon
 .rowtail.nd{color:var(--st-gray); font-weight:600}
 .rowtail.na{color:var(--st-warn-fg); font-weight:600}
 .rowtail.er{color:var(--st-err-fg); font-weight:600}
+/* SET-4 存檔寫入失敗框（2026-09-24 由已拍板草稿 docs/wireframes/draft_set_savefail.html 逐位元組搬回）。 */
+.failbox{border:1px solid var(--st-gray); background:var(--st-gray-bg); border-radius:6px;
+  padding:9px 11px; margin-top:9px; font-size:12.5px; color:var(--st-gray)}
 .savebar{display:flex; gap:8px; flex-wrap:wrap; margin-top:11px; align-items:center}
 .apply{font:inherit; font-size:13.5px; font-weight:600; padding:8px 16px; border-radius:7px;
   cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
@@ -484,9 +491,13 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <code>SET-2</code> 規則欄逐字「<b>一列一個 <code>source_tier</code></b>」，空狀態逐字
         「<b>某層級從無紀錄 → 該列三欄 <code>⬜</code></b>」；<code>SET-5</code> 要「<b>指定層級</b>」、
         停用原因逐字「<b>尚未選定來源層級</b>」；<code>SET-0</code> 紅燈逐字「<b>文案列出失敗的來源層級</b>」。
-        <b>三塊都需要一份「有哪些層級」的封閉清單</b>，而 44 第五節徽章那一小節的更正段逐字說它是
-        「<b>一個開放集（來源多一層就多一個值）</b>」。<b>開放集裡，一個從來沒有紀錄的層級是列不出來的。</b>
-        本草稿的層級全部是示意值，<b>那是本組擬的</b>。</li>
+        <b>三塊都需要一份「有哪些層級」的封閉清單</b>，<s>而 44 第五節徽章那一小節的更正段逐字說它是
+        「<b>一個開放集（來源多一層就多一個值）</b>」。<b>開放集裡，一個從來沒有紀錄的層級是列不出來的。</b></s>
+        <b>44 現行</b>：那句「開放集（來源多一層就多一個值）」已被 44 於 2026-09-23 就地劃掉；
+        <code>SET-2</code> 規則欄現行逐字「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」。
+        本草稿的層級全部是示意值，<b>那是本組擬的</b>。<br>
+        <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕劃掉的引文<b>在寫下當天為真</b>（2026-09-21 那一欄確實沒有值域）；被推翻的是它的前提 —— 44 已把 <code>source_tier</code> 關成四值、劃掉那一句。
+        舊句的用意（指出清單不存在）當時成立；被權衡掉的是它的「逐字」身分：它引的已是退役條文。<br>📌 <b>登記（不是動工授權；S-01 的 badge 與類型不動）</b>：S-01「44 從頭到尾沒有定義那份清單」的<b>前提已不成立</b> —— 44 已於 2026-09-23 在第四節三張表的 <code>source_tier</code> 欄寫出四值，並在 <code>SET-2</code> 規則欄逐字寫「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」。受影響的敘述至少有：§ 頂部四筆第一筆、<code>SET-2</code> 卡片、<code>SET-5</code> 卡片、§C S-01 列、§D 第 ii 列、§H H-09、JS 的 <code>TIERS</code> 註解與 <code>SET-2</code>／<code>SET-5</code> 區塊說明、§F 第 8 種狀態的註記。<b>本輪只更正「逐字」引文，那些敘述與示意的四個層級名一律不動，待裁決。</b></span></li>
       <li><b>S-02　這一頁按下「重新取數」之後，取回來的列沒有地方可以寫。</b>
         <code>SET-5</code> 規則欄逐字「取數只寫入<b>資料表</b>與 <code>fetch_log</code>」，
         第三節第零小節那一列也逐字補過「<b>把取回的列寫進資料表與 <code>fetch_log</code> 不在此限</b>」；
@@ -518,7 +529,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   </div>
 
   <div class="gapstrip" style="margin-top:14px">
-    <h3>⛔ <code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上（2026-09-24 就地更正）</h3>
+    <h3>⛔ <code>S-18</code>／<code>S-19</code>：44 已補、<s>本檔沒跟上</s>（2026-09-24 就地更正）</h3>
+    <p class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕標題裡「本檔沒跟上」劃線保留（全檔有多處「見上方……那一框」用這串字指著本框，字串刻意留著讓它們找得到）。
+      <b>現況照實寫</b>：<code>S-18</code> —— 本檔已跟上（缺口消失，已結案；畫面本來就有存檔鈕，不必動）；
+      <code>S-19</code> —— 本檔已跟上（客戶 2026-09-24 拍板草稿，失敗態已搬回、已畫）。
+      舊標題在寫下當天為真；被推翻的是前提。</p>
     <p class="tiny">〔<b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（裁示本輪併入）〕
       本檔多處以「<b><code>SET-4</code> 的來源欄沒有宣告寫入對象</b>」「<b>它的空狀態沒有『存檔寫入失敗』那一句</b>」
       「<b>九塊裡唯一一塊</b>」的現在式陳述。
@@ -541,8 +556,10 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             「<b>44 沒寫，本草稿不畫那個狀態</b>」</td>
           <td><b>空狀態欄</b>：「<b>存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，該欄的當下輸入留在畫面上不清掉，
             <code>SET-3</code> 該列的目前值與最後修改時間不變</b>」（2026-09-23 新增；決策者：<b>AI 總管</b>，同上理由）</td>
-          <td><b>前半句失效、後半句還活著</b>：44 現在寫了，<b>而本草稿仍然沒有畫那個狀態</b>。<br>
-            ⛔ <b>方向反過來</b>：以前是「44 沒寫」，現在是「<b>44 寫了、草稿沒跟上、待重繪</b>」</td></tr>
+          <td><s><b>前半句失效、後半句還活著</b>：44 現在寫了，<b>而本草稿仍然沒有畫那個狀態</b>。<br>
+            ⛔ <b>方向反過來</b>：以前是「44 沒寫」，現在是「<b>44 寫了、草稿沒跟上、待重繪</b>」</s><br>
+            <b>兩半句都已失效：44 寫了，本檔也已畫</b>（2026-09-24 搬回）。<br>
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</span></td></tr>
       </tbody>
     </table>
     <p class="tiny" style="margin-top:9px">
@@ -560,9 +577,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <b>那三樣是機器數出來的、帶日期的歷史量測值</b>，改掉其中一個就會讓另外兩個對不上，
       而本輪的裁示是<b>把假話改成誠實，不是重算那張表</b>。
       <b>本框就是那三樣東西的現況註記</b> —— 讀到它們的人請一併讀這裡。<br>
-      ⚠️ <b>也沒有重繪</b>：<code>S-19</code> 那個「存檔寫入失敗」的畫面<b>本輪仍然沒有畫</b>，
+      <s>⚠️ <b>也沒有重繪</b>：<code>S-19</code> 那個「存檔寫入失敗」的畫面<b>本輪仍然沒有畫</b>，
       重繪屬「改變設計」，要先出草稿給客戶看。<b>標的探索頁走的就是那條路</b>
-      （出草稿 → 客戶 2026-09-24 拍板 → 才搬回線框）。</p>
+      （出草稿 → 客戶 2026-09-24 拍板 → 才搬回線框）。</s><br>
+      ✓ <b><code>S-19</code> 已走完那條路</b>：出草稿 → 客戶 2026-09-24 拍板 → 搬回本檔。
+      <b>本框標題「本檔沒跟上」對 <code>S-19</code> 自此不再成立</b>（標題已劃線保留，見標題下方那一行）。
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</span></p>
   </div>
 </header>
 
@@ -597,6 +617,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
     </div>
     <div class="cgroup"><span class="clab">主題</span>
       <button class="btn" type="button" id="btn-theme" aria-pressed="false">跟隨系統</button>
+    </div>
+    <!-- 2026-09-24 由已拍板草稿 docs/wireframes/draft_set_savefail.html 搬回：一枚正交開關，
+         不是第 13 種狀態 —— 它疊在上面十二種狀態的任何一種之上（草稿 §3 第一列，客戶已拍板）。 -->
+    <div class="cgroup"><span class="clab">疊加</span>
+      <button class="btn" type="button" id="btn-fail" aria-pressed="false">存檔寫入失敗：<b>關</b></button>
     </div>
   </div>
   <div class="annot" id="state-explain"></div>
@@ -728,8 +753,10 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <span class="badge mu">⛔ S-19</span>
             <span class="tiny"><s>（九塊 <code>存檔</code> 類裡唯一沒宣告寫入對象的一塊；取回的列沒地方寫）</s>
             （<b><code>S-18</code>：44 已於 2026-09-23 補上寫入對象，缺口消失</b>；
-            <code>S-19</code>：44 已寫出失敗態而本草稿沒畫，<b>方向反過來、待重繪</b>；
+            <s><code>S-19</code>：44 已寫出失敗態而本草稿沒畫，<b>方向反過來、待重繪</b>；</s>
+            <b><code>S-19</code>：44 已寫出失敗態，本檔已畫</b>（2026-09-24 搬回，控制列「存檔寫入失敗」開關）；
             <code>S-02</code>：取回的列沒地方寫，<b>照舊開著</b>）</span>
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</span>
             <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span></td></tr>
         <tr><td class="src">層 4</td><td>「原始序列、計算軌跡、來源與新鮮度明細」</td><td class="jd">收合</td>
           <td><code>SET-6</code> 取數紀錄、<code>SET-7</code> 欄位對照表
@@ -775,9 +802,15 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   <div class="card" style="margin-bottom:18px">
     <p class="note"><b>來源（逐字）</b>：「不自取數。只讀 <code>SET-1</code> 的逾期筆數與 <code>SET-2</code> 的失敗來源數」——
       <b>兩塊，不是三塊</b>。<code>SET-3</code> 不在裡面。</p>
-    <p class="note" style="margin-top:6px"><b>規則（逐字，三色）</b>：「兩者皆為零 → 燈為灰，文案「資料齊、來源皆可達」。
+    <p class="note" style="margin-top:6px"><b>規則（逐字，三色，44 現行）</b>：「<s>兩者皆為零 → 燈為灰，文案「資料齊、來源皆可達」。</s>
+      ……兩者皆為零，而且本塊空狀態欄那兩句都不成立 → 燈為灰，文案「資料齊、來源皆可達」；
+      空狀態欄那兩句任一成立時，改出空狀態欄那一句，本句不出。
       <b>逾期筆數大於零而失敗來源為零</b> → 燈為黃，文案「有 N 筆資料超過你設定的新鮮度上限」。
-      失敗來源大於零 → 燈為紅，文案列出失敗的來源層級。燈描述資料狀態，不描述市場或持倉」。</p>
+      失敗來源大於零 → 燈為紅，文案列出失敗的來源層級。燈描述資料狀態，不描述市場或持倉」。<br>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板 S-19 草稿、要求逐處查「逐字」標籤）／<b>AI 總管</b>（紀錄措辭）〕
+      「……」處略掉的是 44 的「→ 2026-09-23 改寫（…）：」沿革標記（同日稽核補上省略號）。
+      劃掉的那一句是 <b>44 已於 2026-09-23 就地劃掉、改寫成緊接其後那一句的舊句</b>，本檔原本把它標成逐字。
+      它在寫下當天為真；被推翻的是它的前提。<b>畫面不受影響</b>：灰燈文案「資料齊、來源皆可達」兩版都有。</span></p>
     <p class="note" style="margin-top:6px; border-left:3px solid var(--stop); padding-left:11px">
       ⚠️ <b>黃那一條的後半句是它把黃與紅分開的條件，引用時不能掉。</b>
       「逾期筆數大於零<b>而失敗來源為零</b>」—— 少了後半句，一個「又逾期又有來源失敗」的畫面會同時命中黃與紅。
@@ -815,7 +848,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <span class="pin">⛔ S-10</span> <b>而且那三張表沒有一張有一個叫「觀測日」的欄</b>：
       <code>nav</code> 有 <code>nav_date</code>；<code>dividend</code> 有 <code>ex_date</code> 與 <code>pay_date</code> <b>兩個</b>；
       <code>market_indicator</code> 有 <code>obs_date</code> 與 <code>release_date</code> <b>兩個</b>，
-      而第四節那一列逐字說「跨期間對齊<b>一律用</b> <code>release_date</code>，不用 <code>obs_date</code>」。
+      而第四節那一列逐字說「<s>跨期間對齊<b>一律用</b> <code>release_date</code>，不用 <code>obs_date</code></s>」
+      「跨期間對齊<b>一律用它</b>，不用 <code>obs_date</code>」（「它」＝ <code>release_date</code>，那一列的欄名）。
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕原引文把「它」換成欄名卻仍標逐字；意思沒變，被權衡掉的是逐字性。</span>
       <b>「各自的觀測日欄」對不到唯一的一欄。本草稿不畫觀測日欄，並就地標明。</b><br>
       <span class="pin">⛔ S-11</span> <b>「距今日數」的「今」用哪個時區算，44 沒寫</b> ——
       同一格說時間以世界協調時間存、顯示轉當地時區，而<b>日曆日跨時區會差一天</b>。<br>
@@ -836,9 +871,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   <div class="card" style="margin-bottom:18px">
     <p class="note"><b>來源（逐字）</b>：「<code>fetch_log.source_tier</code>、<code>fetch_log.started_at</code>、
       <code>fetch_log.outcome</code>、<code>fetch_log.message</code>，<b>取各層級最近一次紀錄</b>」。</p>
-    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一個 <code>source_tier</code>，
+    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「一列一個 <code>source_tier</code>，……
       三欄：最近一次結果（<code>ok</code> 或 <code>failed</code>）、最近一次時間、失敗時的訊息原文。
-      <b>訊息原文照印，不改寫成安撫語句。本卡不對失敗給出處置方向</b>」。</p>
+      <b>訊息原文照印，不改寫成安撫語句。本卡不對失敗給出處置方向</b>」。<br>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板 S-19 草稿、要求逐處查「逐字」標籤）／<b>AI 總管</b>（紀錄措辭）〕
+      「……」是本輪補的省略號：44 在「<code>source_tier</code>，」與「三欄」之間於 2026-09-23 插進了一段層級清單（四個層級名與其註記），
+      原引文略掉它卻沒有標省略。兩段各自逐字，本輪只補省略號。</span></p>
     <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「某層級從無紀錄 → 該列三欄 <code>⬜</code>，掛 <code>資料未備</code> 徽章。
       各層級皆無紀錄 → <code>來源缺</code>，文案「尚無取數紀錄」」。</p>
     <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「是哪一層來源在失敗，失敗訊息說了什麼」。</p>
@@ -846,8 +884,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <span class="pin">⛔ S-01</span> <b>「一列一個 <code>source_tier</code>」要一份封閉清單，44 沒有給。</b>
       更硬的是空狀態第一句：「<b>某層級從無紀錄</b> → 該列三欄 <code>⬜</code>」——
       <b>要為一個「沒有紀錄」的層級畫出一列，就必須事先知道有哪些層級</b>，
-      而第五節徽章那一小節的更正段逐字說 <code>source_tier</code> 是「<b>一個開放集</b>」。
-      <b>開放集與「列出沒有紀錄的那一列」正面互斥。</b><br>
+      <s>而第五節徽章那一小節的更正段逐字說 <code>source_tier</code> 是「<b>一個開放集</b>」。
+      <b>開放集與「列出沒有紀錄的那一列」正面互斥。</b></s>
+      <b>44 現行</b>：「開放集」那一句已於 2026-09-23 劃掉；本塊規則欄現行逐字「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」——
+      <b>也就是那份封閉清單 44 已經給了</b>，上面「44 沒有給」一句的前提已不成立（見頂部 S-01 那一筆的登記）。
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕劃掉的兩句在寫下當天為真；被推翻的是前提。</span><br>
       <span class="pin">⛔ S-04</span> <b>這一頁真正的危險點，就地寫死。</b>
       「訊息原文照印，不改寫成安撫語句」與「<b>本卡不對失敗給出處置方向</b>」兩句在同一格裡，
       <b>而一句真實的錯誤訊息常常自帶處置建議</b>（來源端寫的，不是本儀表板寫的）。
@@ -908,12 +949,29 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
 
   <h3 class="blk"><code>SET-4</code>｜參數編輯（層 3）</h3>
   <div class="card" style="margin-bottom:18px">
-    <p class="note"><b>來源（逐字，<u>三個讀取欄，沒有寫入對象</u>）</b>：「<code>user_setting.setting_key</code>、
-      <code>user_setting.setting_value</code>、<code>user_setting.value_kind</code>」。</p>
-    <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「逐鍵編輯，一鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定。
-      <b>存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code></b>。
+    <p class="note"><s><b>來源（逐字，<u>三個讀取欄，沒有寫入對象</u>）</b>：「<code>user_setting.setting_key</code>、
+      <code>user_setting.setting_value</code>、<code>user_setting.value_kind</code>」。</s><br>
+      <b>來源（逐字，44 現行）</b>：「<code>user_setting.setting_key</code>、<code>user_setting.setting_value</code>、
+      <code>user_setting.value_kind</code>、<code>user_setting.updated_at</code>。
+      寫入對象為被編輯的那一鍵的 <code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code>」
+      （44 該格後面還接著一段連帶補宣告的註記，此處略）。<br>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板 S-19 草稿、要求逐處查「逐字」標籤）／<b>AI 總管</b>（紀錄措辭）〕
+      劃掉的那一行<b>在寫下當天為真</b>；被推翻的是它的前提 —— 44 已於 2026-09-23 補上 <code>updated_at</code> 與寫入對象。
+      <b>它與本檔上方的「✓ S-18 已結案」直接打架</b>（同一塊，上面說補了、這裡說沒有）。舊標籤的用意（標出缺口）仍然成立，只是缺口已消失。</span></p>
+    <p class="note" style="margin-top:6px"><b>規則（逐字，44 現行）</b>：「逐鍵編輯，一鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定。
+      <s><b>存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code></b>。</s>
+      ……<b>本塊掛一枚「存檔」按鈕（<code>action_kind</code> 為 <code>存檔</code>），把被編輯的那一鍵的當下輸入值寫回
+      <code>user_setting</code> 的 <code>setting_value</code> 並更新 <code>updated_at</code>。</b>
+      本塊逐鍵編輯，被寫回的就是當下被編輯的那一鍵，鍵的集合不固定。
+      「存檔」只寫 <code>user_setting</code> 這一張表，不寫入 <code>holding</code>、<code>policy</code>、<code>nav</code>、<code>dividend</code>
+      四張表任何一張（<code>G1†</code>），也不代使用者填任何值、不把空欄補成任何候選值（<code>G3†</code>）。
+      本頁沒有「套用」類按鈕，本塊因此只掛這一枚。
       本塊不提供「一鍵還原為系統值」之類的動作 —— <b>沒有系統值可還原（G1†、G3†）</b>。
-      清除某鍵的操作把它變回未設定，不變成零」。</p>
+      清除某鍵的操作把它變回未設定，不變成零」。<br>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板 S-19 草稿、要求逐處查「逐字」標籤）／<b>AI 總管</b>（紀錄措辭）〕
+      「……」處略掉的是 44 的「→ 2026-09-23 改寫（…）：」沿革標記（同日稽核補上省略號）。
+      劃掉的那一句是 <b>44 已於 2026-09-23 就地劃掉的舊句</b>，本檔原本把它標成逐字 —— 引的是已退役的條文。
+      它在寫下當天為真；被推翻的是它的前提（44 改寫成「存檔」按鈕那一段，即上面粗體起的那幾句）。</span></p>
     <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「輸入值與 <code>value_kind</code> 不符 →
       欄位下方顯示型別說明，不存檔，<code>SET-3</code> 的值不變。
       必要鍵被清除 → 依賴該鍵的塊改顯示 <code>⬜ 不適用：尚未設定</code>」。</p>
@@ -936,7 +994,10 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 各加了一句
       「存檔寫入失敗 → 卡上顯示失敗訊息原文，……的當下內容留在畫面上不清掉」；
       <s><b>這一塊沒有</b>。<b>存檔失敗時這一塊長什麼樣，44 沒寫。本草稿不畫那個狀態。</b></s>
-      <b>這一塊現在也有了</b> —— <b>⛔ 沒有拿掉，方向反過來：44 寫了，而本草稿仍然沒有畫那個狀態，待重繪。</b>
+      <b>這一塊現在也有了</b> —— <s><b>⛔ 沒有拿掉，方向反過來：44 寫了，而本草稿仍然沒有畫那個狀態，待重繪。</b></s>
+      <b>本檔已畫</b>（2026-09-24 搬回：控制列「存檔寫入失敗」開關打開，失敗框掛在 <code>set_max_age_days</code> 那一列下方；
+      示範挑哪一鍵、失敗框走灰、框內兩行字與佔位，都是已拍板草稿 §3 的選擇）。
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</span><br>
       <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span><br>
       <span class="pin">⛔ S-22</span> <b>「欄位型態依 <code>value_kind</code> 決定」——六種型別各對應什麼欄位，44 沒寫。</b>
       <code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code> 還猜得出來，
@@ -958,9 +1019,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   <div class="card" style="margin-bottom:18px">
     <p class="note"><b>來源（逐字）</b>：「寫入對象為 <code>fetch_log</code> 全欄」。<b>這一塊沒有讀取來源。</b></p>
     <p class="note" style="margin-top:6px"><b>規則（逐字）</b>：「按一次重新取一次指定層級的來源
-      （<b>按鈕標籤為「重新取數」，不含「一鍵」二字，<code>G1†</code></b>）。執行中按鈕顯示進度文字並停用。
+      （<b>按鈕標籤為「重新取數」，不含「一鍵」二字，<code>G1†</code></b>）。……執行中按鈕顯示進度文字並停用。
       <b>取數只寫入資料表與 <code>fetch_log</code></b>，不改寫任何 <code>user_setting</code>。
-      取數失敗時把訊息原文寫進 <code>fetch_log.message</code>，不吞掉」。</p>
+      取數失敗時把訊息原文寫進 <code>fetch_log.message</code>，不吞掉」。<br>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板 S-19 草稿、要求逐處查「逐字」標籤）／<b>AI 總管</b>（紀錄措辭）〕
+      「……」是本輪補的省略號：44 在「（…<code>G1†</code>）。」與「執行中」之間於 2026-09-23 插進了一句「可選的層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個…」，
+      原引文略掉它卻沒有標省略。兩段各自逐字，本輪只補省略號。</span></p>
     <p class="note" style="margin-top:6px"><b>空狀態（逐字）</b>：「未選層級 → 按鈕停用，停用原因「尚未選定來源層級」。
       取數回空 → <code>fetch_log.outcome</code> 寫 <code>ok</code> 而資料表列數不變，<code>SET-2</code> 的訊息欄寫「回應為空」」。</p>
     <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「我可以怎麼讓它再試一次，試完結果寫在哪」。</p>
@@ -1078,7 +1142,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td><code>source_tier</code> 的字面值清單 <b>44 從頭到尾沒有定義</b>，而三塊都要它：
             <code>SET-2</code>「一列一個 <code>source_tier</code>」＋「某層級<b>從無紀錄</b>仍列一列」、
             <code>SET-5</code>「指定層級」、<code>SET-0</code> 紅燈「列出失敗的來源層級」。
-            而第五節徽章那一小節逐字說它是「<b>一個開放集</b>」。</td>
+            <s>而第五節徽章那一小節逐字說它是「<b>一個開放集</b>」。</s>
+            <b>44 現行</b>：「開放集」那一句已於 2026-09-23 劃掉；<code>SET-2</code> 規則欄現行逐字「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」。
+            <div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕劃掉的引文在寫下當天為真，被推翻的是前提。📌 <b>登記（不是動工授權；S-01 的 badge 與類型不動）</b>：S-01「44 從頭到尾沒有定義那份清單」的<b>前提已不成立</b> —— 44 已於 2026-09-23 在第四節三張表的 <code>source_tier</code> 欄寫出四值，並在 <code>SET-2</code> 規則欄逐字寫「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」。受影響的敘述至少有：§ 頂部四筆第一筆、<code>SET-2</code> 卡片、<code>SET-5</code> 卡片、§C S-01 列、§D 第 ii 列、§H H-09、JS 的 <code>TIERS</code> 註解與 <code>SET-2</code>／<code>SET-5</code> 區塊說明、§F 第 8 種狀態的註記。<b>本輪只更正「逐字」引文，那些敘述與示意的四個層級名一律不動，待裁決。</b><b>本列「類型」欄刻意不動</b>（與上方機器點算的數互相扣著）。</div></td>
           <td class="jd"><span class="badge mu">互斥</span></td>
           <td>層級名全部是<b>示意值</b>，本草稿固定畫四列。<b>那是本組擬的。</b></td></tr>
 
@@ -1115,8 +1181,15 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td>印「尚無取數紀錄」，<b>並在下一行補印另一句</b>。<b>那是本組挑的。</b></td></tr>
 
         <tr><td class="id">S-06</td><td class="src">SET-0</td>
-          <td>規則第一句「兩者皆為零 → 灰，文案「<b>資料齊、來源皆可達</b>」」在<b>一筆取數紀錄都沒有</b>時也命中
-            （失敗來源數為零），而那句話在那個情形下<b>是假的</b>。</td>
+          <td><s>規則第一句「兩者皆為零 → 灰，文案「<b>資料齊、來源皆可達</b>」」在<b>一筆取數紀錄都沒有</b>時也命中
+            （失敗來源數為零），而那句話在那個情形下<b>是假的</b>。</s><br>
+            <b>44 現行</b>（規則欄首句，2026-09-23 改寫）：「兩者皆為零，而且本塊空狀態欄那兩句都不成立 → 燈為灰，文案「資料齊、來源皆可達」；
+            空狀態欄那兩句任一成立時，改出空狀態欄那一句，本句不出」。
+            <div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕劃掉的引文有兩個問題：<b>不逐字</b>（44 作「燈為灰」），而且<b>整句已被 44 就地劃掉</b>。
+            它在寫下當天指出的互斥是真的；被推翻的是前提 ——
+            📌 <b>登記（只登記、不動工）</b>：44 的改寫看來已經解掉 S-06 的互斥（「一筆紀錄都沒有」會命中空狀態欄，於是灰燈那一句不出），
+            而本檔右欄的畫法（照空狀態走、不印「資料齊、來源皆可達」）正好與改寫後的 44 一致。
+            <b>本列「類型」欄的 <code>互斥</code> 刻意不動</b>（與上方機器點算的數互相扣著），S-06 要不要結案待裁決。</div></td>
           <td class="jd"><span class="badge mu">互斥</span></td>
           <td>照空狀態走（印「尚無取數紀錄」），<b>不印「資料齊、來源皆可達」</b>。<b>那是本組挑的。</b></td></tr>
 
@@ -1143,7 +1216,8 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td>那三張表<b>沒有一張有一個叫「觀測日」的欄</b>：<code>nav</code> 只有 <code>nav_date</code>；
             <code>dividend</code> 有 <code>ex_date</code> 與 <code>pay_date</code> <b>兩個</b>；
             <code>market_indicator</code> 有 <code>obs_date</code> 與 <code>release_date</code> <b>兩個</b>，
-            而第四節逐字「跨期間對齊<b>一律用</b> <code>release_date</code>」。</td>
+            而第四節逐字「<s>跨期間對齊<b>一律用</b> <code>release_date</code></s>」「跨期間對齊<b>一律用它</b>」（「它」＝ <code>release_date</code> 那一列）。
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕原引文把「它」換成欄名卻仍標逐字；意思沒變。</span></td>
           <td class="jd"><span class="badge no">缺口</span></td>
           <td>同 S-09，不畫。<b>本組不替 44 指定哪一欄是「觀測日」。</b></td></tr>
 
@@ -1211,11 +1285,16 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <code>ALO-4</code> 三塊各加了一句。<b>存檔失敗時這一塊長什麼樣，44 沒寫。</b></s>
             <b>44 已於 2026-09-23 為本塊補上那一句</b>，逐字：「存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，
             該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變」。
-            <b>⛔ 沒有拿掉，方向反過來：44 寫了，本草稿仍然沒有畫那個狀態、待重繪。</b><div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。<b>本列的「類型」欄刻意不動</b> —— 它與上方那三個機器點算的數互相扣著，理由寫在那一框。</div></td>
+            <s><b>⛔ 沒有拿掉，方向反過來：44 寫了，本草稿仍然沒有畫那個狀態、待重繪。</b></s>
+            <b>已畫</b>（2026-09-24 搬回）。<div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</div><div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。<b>本列的「類型」欄刻意不動</b> —— 它與上方那三個機器點算的數互相扣著，理由寫在那一框。</div></td>
           <td class="jd"><span class="badge no">缺口</span></td>
-          <td><b>不畫那個狀態</b>（不自己補），登記在這裡。
+          <td><s><b>不畫那個狀態</b>（不自己補），登記在這裡。
             <div class="tiny">〔2026-09-24〕<b>本輪照舊不畫</b> —— 理由換了：以前是 44 沒寫，
-            現在是<b>重繪要先出草稿給客戶看</b>，而客戶本輪的裁示不含重繪。</div></td></tr>
+            現在是<b>重繪要先出草稿給客戶看</b>，而客戶本輪的裁示不含重繪。</div></s>
+            <b>已畫</b>：照客戶 2026-09-24 拍板的草稿搬回 —— 控制列一枚正交開關「存檔寫入失敗」（不是第 13 種狀態），
+            失敗框掛在 <code>set_max_age_days</code> 那一列下方，輸入欄留著當下輸入。
+            <b>44 沒寫的部分（示範哪一鍵、框的顏色、框內第二行、訊息佔位）是草稿 §3 的選擇，客戶已拍板。</b>
+            <div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。<b>本列「類型」欄的 <code>缺口</code> 刻意不動</b>（理由同上一格）。</div></td></tr>
 
         <tr><td class="id">S-20</td><td class="src">SET-3 / SET-4</td>
           <td><code>⬜ 未設定</code> <b>不在第五節空狀態那四個模板裡面</b>
@@ -1256,7 +1335,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td>印在<b>目前值欄的第二行</b>、用等寬字。<b>那是本組挑的</b>（沒有多一欄，判準跑得過）。</td></tr>
 
         <tr><td class="id">S-26</td><td class="src">SET-3</td>
-          <td>「最後修改時間」＝ <code>updated_at</code>，第四節逐字「<b>可空</b>；從未設定過時為空」——
+          <td>「最後修改時間」＝ <code>updated_at</code>，<s>第四節逐字「<b>可空</b>；從未設定過時為空」</s>
+            第四節那一列「可空」欄為「<b>是</b>」、說明欄逐字「最後修改時間；<b>從未設定過時為空</b>」
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕原引文把欄名「可空」與說明欄的字拼成一句當逐字；兩件事都是 44 寫的，被權衡掉的是逐字性。</span>——
             <b>空時印什麼 44 沒寫</b>。</td>
           <td class="jd"><span class="badge no">缺口</span></td>
           <td>借 44 <code>ALO-7</code> 那一格的字面 <code>⬜ 資料未備：尚未設定過</code>。
@@ -1513,7 +1594,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <tbody>
         <tr><td class="src">i</td><td><code>SET-4</code></td><td>每一個鍵的<b>值輸入欄</b>（十七處）</td>
           <td class="jd"><b>不屬八類</b><br><span class="tiny">（不是按鈕，也不是其餘四類元件）</span></td>
-          <td>「逐鍵編輯，每個鍵一個輸入欄，<b>欄位型態依 <code>value_kind</code> 決定</b>」
+          <td><s>「逐鍵編輯，每個鍵一個輸入欄，<b>欄位型態依 <code>value_kind</code> 決定</b>」</s>
+            「逐鍵編輯，一鍵一個輸入欄，<b>欄位型態依 <code>value_kind</code> 決定</b>」
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>／<b>AI 總管</b>（紀錄措辭）：44 作「<b>一鍵</b>」，不是「每個鍵」；意思沒變，被權衡掉的是逐字性〕</span>
             ——<b>指定了型態的<u>依據</u>，沒有指定元件</b>。<span class="pin">⛔ S-22</span>
             六種型別各長什麼樣 44 沒寫，<code>list</code> 與 <code>rules</code> 尤其沒有。</td></tr>
         <tr><td class="src">ii</td><td><code>SET-5</code></td><td><b>來源層級選擇器</b></td>
@@ -1590,10 +1673,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
 
   <p class="note" style="margin-top:12px">
     <b>節判準（逐字引 44，本草稿的六顆寬度鈕就是照它排的）</b>：
-    「把視窗寬度依序設成 <code>1280</code>、<code>1279</code>、<code>769</code>、<code>768</code>、<code>375</code>、<code>374</code>，
+    「把視窗寬度依序設成 <code>1280</code>、<code>1279</code>、<code>769</code>、<code>768</code>、<code>375</code>、<code>374</code>……，
     每一次都數層 2 同一列並排的核心卡數，<b>六次得到的數依序是三、二、二、一、一、一</b>；
     同樣這六個寬度下各自檢查頁面有沒有橫向捲動，<b>六次都沒有</b>；
-    把 <code>1024</code> 與 <code>640</code> 兩個字面值拿去對本檔各頁的排法宣告，<b>兩個值都對不到任何一段</b>。」
+    把 <code>1024</code> 與 <code>640</code> 兩個字面值拿去對本檔各頁的排法宣告，<b>兩個值都對不到任何一段</b>。」<br>
+    <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕「……」是本輪補的省略號：44 在「<code>374</code>」與「，每一次」之間夾著一段「（2026-09-22 依客戶最終版換掉中間兩個寬度…決策者：客戶）」的沿革註記，
+    原引文略掉它卻沒有標省略。兩段各自逐字，本輪只補省略號。</span>
   </p>
   <p class="note" style="margin-top:8px; border-left:3px solid var(--ok-mark); padding-left:11px">
     ✓ <b>本草稿實測</b>：上方六顆寬度鈕切過去，<b>鈕右邊那一行會印出「實際渲染 N px · 哪一段生效」</b>，
@@ -1717,10 +1802,14 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <code>ALO-3</code>／<code>ALO-4</code> 三塊有）。<b>本組不自己補一個狀態出來。</b></s>
         <b>44 已於 2026-09-23 為這一塊補上那一句</b>（逐字：「存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，
         該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變」）。
-        <b>本草稿仍然沒有畫它</b> —— <b>理由換成：重繪要先出草稿給客戶看，客戶本輪的裁示不含重繪。</b>
+        <s><b>本草稿仍然沒有畫它</b> —— <b>理由換成：重繪要先出草稿給客戶看，客戶本輪的裁示不含重繪。</b></s>
+        <b>現在演得到</b>：控制列「存檔寫入失敗」開關（2026-09-24 搬回）。<b>本項留在這份「演不到」清單裡只為保留紀錄。</b>
+        <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（拍板）／<b>AI 總管</b>（紀錄措辭）〕客戶 2026-09-24 拍板 <code>docs/wireframes/draft_set_savefail.html</code>，失敗態已搬回本檔（控制列「存檔寫入失敗」開關，失敗框掛在 <code>set_max_age_days</code> 那一列下方）。劃掉的那句<b>在寫下當天為真</b>（那時草稿還沒拍板，照「先出草稿」的規矩不重繪是對的）；被推翻的是它的前提。</span>
         <span class="pin">⛔ S-19</span>
-        <div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>〕
-        <b>⛔ 沒有拿掉，方向反過來了。</b>見上方「<code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上」那一框。</div></li>
+        <div class="tiny"><s>〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>〕
+        <b>⛔ 沒有拿掉，方向反過來了。</b>見上方「<code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上」那一框。</s><br>
+        〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕劃掉的那句與同一項上面「現在演得到」正面矛盾 —— 它是搬回<b>前</b>的現況（44 寫了、本檔沒畫），在寫下當天為真；
+        搬回之後前提不成立。上一輪改了同一項的正文卻漏了這一行，本輪補上。</div></li>
       <li><b>層 2 三張卡的 <code>系統錯誤</code> 態。</b> 實測：44 第三節第五小節<b>全段「系統錯誤」四個字 0 次</b>，
         「業務例外」也 <b>0 次</b>。<b>44 沒有寫本頁哪一塊、在什麼條件下會進這兩態</b>，本組不畫。
         <span class="pin">⛔ S-30</span><br>
@@ -2015,8 +2104,9 @@ missing: []   dupes: []
   </p>
   <p class="note" style="margin-bottom:10px; border-left:3px solid var(--ok-mark); padding-left:11px">
     <b>總帳（三層各自算：淺色註記層、深色註記層、深色 app 螢幕）</b>：
-    <b>合計 86 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>63 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>23 組</b>，
-    <b>未通過 0 組</b>。<br>
+    <s><b>合計 86 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>63 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>23 組</b>，</s>
+    <b>合計 87 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>63 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>24 組</b>，
+    <b>未通過 0 組</b>。<span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕搬回 S-19 失敗框多了一組「灰色狀態容器的邊 <code>#8b949e</code> 對 <code>#11161d</code> ＝ 5.90」（見本節表後那一段）；舊數是搬回前的量測值，在寫下當天為真。</span><br>
     <b>全檔最低的那一組是 <code>#5f6b78</code>（弱文字）在 <code>#e6eaf0</code>（淺色圖紙底）上＝ <b>4.50</b></b>
     —— <b>剛好踩在門檻上，不是有餘裕</b>。本組就地寫出來，因為「剛好過」與「輕鬆過」不是同一回事。<br>
     另有<b>純裝飾分隔線不計入</b>（卡框、表列線、層標橫線、行內碼框，色碼
@@ -2045,8 +2135,9 @@ missing: []   dupes: []
           <td class="jd">21</td><td class="jd">4.5</td><td class="jd">4.63 – 15.99</td>
           <td><code>#7d858e</code>（輸入提示字）在 <code>#161b22</code> ＝ <b>4.63</b></td></tr>
         <tr><td class="src">深色 app 螢幕</td><td>非文字 UI 元件（輸入欄與按鈕的邊界 <code>#6b7682</code>、
-          黃色狀態容器的邊 <code>#e3b341</code>、紅色狀態容器的邊 <code>#ff7b72</code>）</td>
-          <td class="jd">7</td><td class="jd">3</td><td class="jd">3.74 – 8.89</td>
+          黃色狀態容器的邊 <code>#e3b341</code>、紅色狀態容器的邊 <code>#ff7b72</code>、
+          <b>灰色狀態容器的邊 <code>#8b949e</code></b>〔2026-09-24 新增，S-19 失敗框〕）</td>
+          <td class="jd"><s>7</s> 8</td><td class="jd">3</td><td class="jd">3.74 – 8.89</td>
           <td><code>#6b7682</code> 在 <code>#161b22</code> ＝ <b>3.74</b></td></tr>
         <tr><td class="src">（不計入）</td><td><b>純裝飾分隔線</b>：卡框、表列線、層標橫線、行內碼框</td>
           <td class="jd">—</td><td class="jd">—</td><td class="jd">—</td>
@@ -2057,6 +2148,18 @@ missing: []   dupes: []
       </tbody>
     </table>
   </div>
+  <p class="note" style="margin-top:8px; border-left:3px solid var(--warn-mark); padding-left:11px">
+    ⚠️ <b>2026-09-24 搬回 <code>S-19</code> 失敗框之後，上面那份總帳已重算並更新</b>（舊數劃線保留在總帳與表內）。
+    失敗框帶進來的色碼組合（同一條公式）：
+    框內文字 <code>#8b949e</code> 在框底 <code>#11161d</code> ＝ <b>5.90</b>（這一組本來就在「灰（資料未備）對卡內次層」裡，不新增）；
+    框線 <code>#8b949e</code> 在它的父層 <code>.krow</code> 的底 <code>#11161d</code> 上 ＝ <b>5.90</b>
+    （<b>這一組是新的</b>：灰色狀態容器的邊，上表原本只列了黃、紅兩種容器的邊）⇒ 非文字 UI 元件 +1 組。
+    <s>框線 <code>#8b949e</code> 在卡底 <code>#161b22</code> ＝ <b>5.62</b></s>
+    <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕5.62 算錯了底：失敗框掛在 <code>.krow</code> 裡，<code>.krow</code> 的底是 <code>var(--app-inner)</code> ＝ <code>#11161d</code>，不是卡底 <code>#161b22</code>。</span>
+    <b>本檔沒有因此多出新色碼</b>（<code>--st-gray-bg</code> 與既有 <code>--app-inner</code> 同值）。
+    ⚠️ <b>失敗框只有文字「存檔寫入失敗：」，沒有圖示</b> —— 這是照已拍板草稿原樣搬回的，本輪不自己加；
+    它與下面第二小節「圖示＋文字」那一條的關係，<b>登記給客戶判，本組未裁</b>。
+  </p>
 
   <h3 style="font-size:15px; color:var(--draft); margin:20px 0 6px">二｜狀態不靠顏色單獨辨識：逐種列出圖示與文字</h3>
   <p class="note" style="margin-bottom:10px">
@@ -2072,7 +2175,7 @@ missing: []   dupes: []
           <td class="jd">中性</td><td class="jd"><b>分得出來</b>（圖示＋三句不同的文字＋燈旁的狀態字）</td></tr>
         <tr><td class="src">結論燈 · 黃</td><td class="jd">⚠</td><td>「有 N 筆資料超過你設定的新鮮度上限」</td>
           <td class="jd">黃</td><td class="jd"><b>分得出來</b></td></tr>
-        <tr><td class="src">結論燈 · 紅</td><td class="jd">⛔</td><td>「（列出失敗的來源層級）」</td>
+        <tr><td class="src">結論燈 · 紅</td><td class="jd">⛔</td><td><s>「（列出失敗的來源層級）」</s>「文案列出失敗的來源層級」<span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>（裁定本輪處理；依據：獨立稽核指出，本組對 44 重跑確認）〕原格把 44 的字加括號、去掉「文案」二字，放在「逐字出自 44」欄；意思沒變，被權衡掉的是逐字性。</span></td>
           <td class="jd">紅</td><td class="jd"><b>分得出來</b></td></tr>
         <tr><td class="src">資料未備</td><td class="jd">⬜</td><td><code>⬜</code> ＋ <code>資料未備</code> 徽章（<code>SET-1</code>／<code>SET-2</code> 逐字）</td>
           <td class="jd">灰</td><td class="jd"><b>分得出來</b>（格子裡是 <code>⬜</code>，不是空白也不是 0）</td></tr>
@@ -2182,7 +2285,7 @@ missing: []   dupes: []
       它把「本組打算怎麼寫」寫成了「已經逐句查過」。
    ══════════════════════════════════════════════════════════════════ */
 
-var ui = { state:"ok", bp:1280, theme:"system" };
+var ui = { state:"ok", bp:1280, theme:"system", saveFail:false };
 
 /* ── 來源層級：44 沒有定義這份清單（⛔ S-01），四個全部是示意值 ── */
 var TIERS = ["層級一（示意）","層級二（示意）","層級三（示意）","層級四（示意）"];
@@ -2190,6 +2293,12 @@ var TIERS = ["層級一（示意）","層級二（示意）","層級三（示意
 /* ── 十七個 setting_key：由 44 各塊的「來源」欄掃出（⛔ S-16）
       每一列的 value_kind 是本組配的 —— 44 定義了六種型別，
       但沒有寫哪一個鍵是哪一種（⛔ S-44）。 ── */
+/* ── SET-4 存檔寫入失敗（2026-09-24 由已拍板草稿搬回）：示範用的那一鍵與它的當下輸入。
+      44 寫的是單數的「該鍵」，沒有指定哪一個；挑 set_max_age_days 是草稿 §3 的選擇（客戶已拍板）。
+      失敗開關與上面十二種狀態正交（不是第 13 種狀態），可以疊在任何一種狀態上。 ── */
+var FAIL_KEY   = "set_max_age_days";
+var FAIL_INPUT = "14（示意：剛打進去、還沒存成功）";
+
 var KEYS = [
   { k:"alo_basis",           kind:"list",  v:"成本（示意）" },
   { k:"alo_bucket_names",    kind:"list",  v:"核心／衛星／現金（示意）" },
@@ -2289,6 +2398,7 @@ function scene(id){
       f:null, o:"ok", rc:"128（示意）", m:null };
   }
   else if (id === "undef"){ s.limit = "14（示意）"; s.limitNum = 14; s.undefField = true; }
+  s.saveFail = ui.saveFail;   /* 正交開關，與 id 無關 */
   return s;
 }
 
@@ -2418,7 +2528,11 @@ function renderCards(s){
   } else {
     c2 += '<div class="tscroll"><table class="wt">' + head2 + '<tbody>' + b2 + '</tbody></table></div>'
        +  '<div class="stackview">' + st2 + '</div>'
-       +  '<div class="why"><b>訊息原文照印，本卡不對失敗給出處置方向</b>（44 逐字）。'
+       /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶（要求逐處查「44 逐字」）／AI 總管（紀錄措辭）〕
+          原句把 44 SET-2 規則欄兩句接成一句、中間那半句「不改寫成安撫語句」被略掉，卻標「（44 逐字）」。
+          原句照錄：'<div class="why"><b>訊息原文照印，本卡不對失敗給出處置方向</b>（44 逐字）。'
+          舊句的意思沒有錯；被權衡掉的是它的標籤。會上畫面的字一律直述、不留劃線（本檔體例）。 */
+       +  '<div class="why"><b>訊息原文照印，不改寫成安撫語句。本卡不對失敗給出處置方向</b>（44 逐字）。'
        +  '　⛔ S-04：一句真實的錯誤訊息常常自帶處置建議，<b>照印就會把它印上畫面</b> ——'
        +  '本草稿的示意訊息刻意挑了一句不帶處置方向的，<b>但真實訊息本組控制不了</b>。'
        +  '　⛔ S-01：有哪些層級、層級叫什麼，44 沒有定義，<b>這四列全是示意的</b>。'
@@ -2455,7 +2569,14 @@ function renderCards(s){
     + '<div class="st">四頁上那些門檻和區間，現在各是多少、是我什麼時候設的</div>'
     + '<div class="tscroll"><table class="wt">' + head3 + '<tbody>' + b3 + '</tbody></table></div>'
     + '<div class="stackview">' + st3 + '</div>'
-    + '<div class="why"><b>十七列，依 <code>setting_key</code> 排列</b>（44 逐字）；'
+    /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶（拍板草稿）／AI 總管（紀錄措辭）〕
+       這一句標著「（44 逐字）」但**不逐字**：44 的 SET-3 來源欄寫的是「user_setting **全表**，依 setting_key 排列」，
+       不是「十七列」。（十七是本組自己從各塊「來源」欄掃出來的鍵數，不是 44 給的數。）
+       原句照錄：'<div class="why"><b>十七列，依 <code>setting_key</code> 排列</b>（44 逐字）；'
+       舊句的用意仍成立（畫面上確實是十七列）；被權衡掉的是它的標籤 —— 把本組的數標成 44 的字。
+       ⛔ 會上畫面的字一律直述、不留劃線（本檔體例）。改法與已拍板草稿同。 */
+    + '<div class="why"><b>全表，依 <code>setting_key</code> 排列</b>（44 逐字）'
+    + '<span style="color:var(--app-muted)">——本草稿掃出十七個鍵，<b>那個數是本組的，不是 44 的</b></span>；'
     + '<b>沒有第五欄，也沒有任何「內建預設值」欄</b>（44 逐字：未設定的鍵沒有值，G3†）。'
     + '　⛔ S-15／S-16：「全表為空 → 逐鍵列出」自相矛盾，而<b>那份鍵清單 44 沒有列成表</b> ——'
     + '這十七個是本組從 44 各塊「來源」欄掃出來的。'
@@ -2474,6 +2595,8 @@ function renderOps(s){
   KEYS.forEach(function(row){
     var multi = (row.kind === "list" || row.kind === "rules");
     var val = s.keysSet ? row.v.replace(/（示意）/,"") : "";
+    /* 2026-09-24 搬回 1／2（照已拍板草稿）：失敗態下，被編輯的那一鍵的輸入欄留著當下輸入（44 逐字「不清掉」）。 */
+    if (s.saveFail && row.k === FAIL_KEY) val = FAIL_INPUT;
     var bad = (s.badKind && row.k === "mkt_window_days");
     var used = KEY_USED_BY[row.k];
     rows += '<div class="krow"><div class="kgrid">'
@@ -2492,12 +2615,22 @@ function renderOps(s){
       + '</div>'
       + (bad ? '<div class="rowtail na">型別說明：這個鍵的 value_kind 是 <b>int</b>，要輸入一個整數。<b>本次不存檔，SET-3 的值不變。</b></div>' : '')
       + (!s.keysSet ? '<div class="rowtail nd">⬜ 未設定</div>' : '')
+      /* 2026-09-24 搬回 2／2（照已拍板草稿）：44 逐字「該鍵的輸入欄下方顯示失敗訊息原文」——
+         所以失敗框掛在「該鍵那一列」的列尾，不是掛在卡片層級。 */
+      + (s.saveFail && row.k === FAIL_KEY
+          ? '<div class="failbox">存檔寫入失敗：〔失敗訊息原文〕'
+            + '<br>上面這一欄的當下輸入<b>留在畫面上不清掉</b>（44 逐字）。'
+            + '<br><span style="color:var(--app-muted)">〔失敗訊息原文〕是佔位，不是文案 ——'
+            + ' 44 寫的是「顯示失敗訊息原文」，那是把上游給的字原樣印出來。<b>本草稿不編造。</b></span></div>'
+          : '')
       + '</div>';
   });
   var a4 = '<details class="exp"><summary>參數編輯 <span class="abadge">層 3 · SET-4</span>'
     + '<span class="sm">' + (s.keysSet ? '十七個鍵可編輯（示意）' : '十七個鍵都還沒設定過（示意）') + '</span>'
     + '</summary><div class="body">'
-    + '<div class="why">逐鍵編輯，<b>每個鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。'
+    /* 〔2026-09-24 就地更正 · 同上〕44 作「逐鍵編輯，**一鍵**一個輸入欄，欄位型態依 value_kind 決定」。
+       原句照錄：'<div class="why">逐鍵編輯，<b>每個鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。' */
+    + '<div class="why">逐鍵編輯，<b>一鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。'
     + '<b>清除某鍵的操作把它變回未設定，不變成零</b>（44 逐字）。'
     + '<b>本塊不提供還原為系統值之類的動作 —— 沒有系統值可還原（G1†、G3†）。</b>'
     + '　⛔ S-22：六種 <code>value_kind</code> 各長什麼樣 44 沒寫，'
@@ -2508,18 +2641,33 @@ function renderOps(s){
     + '　⛔ S-31：同一個鍵在別頁也改得到（八塊各自寫自己的鍵），<b>哪一邊贏 44 沒寫</b>。</div>'
     + rows
     + '<div class="savebar"><button class="apply" type="button">存檔</button>'
-    + '<span class="tiny" style="color:var(--app-muted)">存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>（44 逐字）</span></div>'
+    /* 〔2026-09-24 就地更正 · 同上；三句裡最嚴重的一句，因為它就在失敗框所在的存檔列上〕
+       原句把 44 **已經劃掉的舊句**標成「（44 逐字）」：
+         原句照錄：'<span class="tiny" style="color:var(--app-muted)">存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>（44 逐字）</span></div>'
+       44 的 SET-4 規則欄自 2026-09-23 起，那半句已被 44 就地劃掉，改寫成「本塊掛一枚「存檔」按鈕（action_kind 為 存檔），
+       把**被編輯的那一鍵**的當下輸入值寫回 user_setting 的 setting_value 並更新 updated_at」。下面印的是**改寫後的現行逐字**。
+       舊句在寫下當天為真；被權衡掉的是它的前提（44 已改寫）。 */
+    + '<span class="tiny" style="color:var(--app-muted)">把<b>被編輯的那一鍵</b>的當下輸入值寫回 '
+    + '<code>user_setting</code> 的 <code>setting_value</code> 並更新 <code>updated_at</code>（44 現行逐字）</span></div>'
     /* 〔2026-09-24 就地更正 · **有意識的更正，不是漏刪** · 決策者：客戶〕
        這兩句**會被渲染到深色螢幕上**，而兩句都已被 44 推翻（2026-09-23 兩格都補了）。
        原句照錄於此，改法照本檔體例：**會上畫面的短註記改成直述、不留劃線**：
          S-18：'<b>本塊的來源欄只宣告了三個讀取欄，沒有宣告寫入對象、連 updated_at 都沒有</b> —— 九塊存檔類裡唯一一塊。'
          S-19：'<b>存檔寫入失敗時這一塊長什麼樣，44 沒寫，本草稿不畫那個狀態。</b>'
-       S-18 的缺口**已消失**（標記改成 ✓）；S-19 的 ⛔ **沒有拿掉**，只是方向反過來：44 寫了、草稿沒畫。 */
+       S-18 的缺口**已消失**（標記改成 ✓）；S-19 的 ⛔ **沒有拿掉**，只是方向反過來：44 寫了、草稿沒畫。
+       ⚠️ 〔2026-09-24 就地更正〕上一行最後半句（「草稿沒畫」）自本日搬回失敗態起不成立，見下一段註解。 */
     + '<div class="why"><span class="abadge ph">✓ S-18 已結案</span> <b>本塊的來源欄已於 2026-09-23 補完</b>'
     + '（含 <code>updated_at</code>，並寫出寫入對象）—— <b>九塊 <code>存檔</code> 類現在每一塊都有。</b>'
-    + '　<span class="abadge ph">⛔ S-19</span> <b>44 已於 2026-09-23 寫出存檔寫入失敗那一句，'
-    + '本草稿仍然沒有畫那個狀態</b> —— 待重繪。'
-    + '　<span class="tiny" style="color:var(--app-muted)">（重繪要先出草稿給客戶看，本輪的裁示不含重繪。）</span></div>'
+    /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 日期 2026-09-24 · 決策者：客戶（拍板草稿）／AI 總管（紀錄措辭）〕
+       S-19 那一句已不成立 —— 客戶 2026-09-24 拍板 docs/wireframes/draft_set_savefail.html，本輪把失敗態搬回本檔
+       （就在上面那一列的列尾，控制列「存檔寫入失敗」開關打開才看得到）。
+       原句照錄：'　<span class="abadge ph">⛔ S-19</span> <b>44 已於 2026-09-23 寫出存檔寫入失敗那一句，'
+                + '本草稿仍然沒有畫那個狀態</b> —— 待重繪。'
+                + '　<span class="tiny" style="color:var(--app-muted)">（重繪要先出草稿給客戶看，本輪的裁示不含重繪。）</span>'
+       舊句在寫下當天為真（那時草稿還沒拍板）；被推翻的是它的前提。⛔ 會上畫面的字一律直述、不留劃線。 */
+    + '　<span class="abadge ph">S-19</span> <b>44 於 2026-09-23 寫出的存檔寫入失敗那一個狀態，本檔已畫</b>'
+    + '（把控制列「存檔寫入失敗」開關打開，失敗框出現在 <code>set_max_age_days</code> 那一列下方）。'
+    + '<b>畫的只有 44 那一句寫出來的三件事，其餘一律沒畫。</b></div>'
     + '</div></details>';
 
   /* SET-5 */
@@ -2538,8 +2686,12 @@ function renderOps(s){
     + '>重新取數</button>'
     + (picked ? '' : '<span class="tiny" style="color:var(--app-muted)">停用原因：<b>尚未選定來源層級</b></span>')
     + '</div>'
+    /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶（要求逐處查「44 逐字」）／AI 總管（紀錄措辭）〕
+       44 SET-5 規則欄在「（…G1†）。」與「執行中…」之間，2026-09-23 插進了一句「可選的層級取本檔第四節…四個」；
+       原引文把它略掉卻沒標省略，接成一段「逐字」。本輪只補一個「……」省略號，其餘一字未動（兩段各自逐字）。
+       原句照錄：'…不含「一鍵」二字，G1†</b>）。' + '執行中按鈕顯示進度文字並停用。…' */
     + '<div class="why">44 逐字：「按一次重新取一次指定層級的來源（<b>按鈕標籤為「重新取數」，不含「一鍵」二字，G1†</b>）。'
-    + '執行中按鈕顯示進度文字並停用。<b>取數只寫入資料表與 <code>fetch_log</code>，不改寫任何 <code>user_setting</code></b>。'
+    + '……執行中按鈕顯示進度文字並停用。<b>取數只寫入資料表與 <code>fetch_log</code>，不改寫任何 <code>user_setting</code></b>。'
     + '取數失敗時把訊息原文寫進 <code>fetch_log.message</code>，<b>不吞掉</b>」。'
     + '<br><span class="abadge ph">⛔ S-02</span> <b>「取數回來的列寫到哪」，44 兩處正面互斥</b> ——'
     + '第五節逐字說淨值與配息那四張表「<b>本儀表板只讀它們</b>」。'
@@ -2603,7 +2755,10 @@ function renderEvi(s){
        +  '<div class="one"><div class="kv"><span>保留筆數上限</span><b>'
        +  (s.keepSet ? s.keepRows : '⬜ 未設定') + '</b></div></div></div>'
        +  '<div class="why">一列一次取數，<b>依 <code>started_at</code> 由新到舊</b>；'
-       +  '<b>耗時由 <code>finished_at</code> 減 <code>started_at</code> 算出，單位秒</b>（44 逐字）。'
+       /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶（要求逐處查「44 逐字」）／AI 總管（紀錄措辭）〕
+          44 SET-6 規則欄作「耗時**欄**由 finished_at 減 started_at 算出，單位秒」，原句少了「欄」字。
+          原句照錄：'<b>耗時由 <code>finished_at</code> 減 <code>started_at</code> 算出，單位秒</b>（44 逐字）。' */
+       +  '<b>耗時欄由 <code>finished_at</code> 減 <code>started_at</code> 算出，單位秒</b>（44 逐字）。'
        +  '　⛔ S-17：本塊用了 <code>set_log_keep_rows</code>，<b>而它的來源欄沒有宣告 <code>user_setting</code></b>。'
        +  '　⛔ S-29：「超出的最舊列被移除」—— <b>誰移除、什麼時候移除 44 沒寫</b>，本草稿不畫任何移除動作。'
        +  '　⛔ S-33：<b>已移除的列已經不在 <code>fetch_log</code> 裡，那個筆數沒有地方算得出來。</b>'
@@ -2637,7 +2792,11 @@ function renderEvi(s){
   if (s.undefField){
     b7 += '<tr><td><code>某表.某欄位（示意）</code> <span class="abadge warn">未定義</span></td>'
        +  '<td><code>某塊（示意）</code><span class="raw">'
-       +  '<b>這個欄位名出現在某塊的來源欄，而第四節沒有定義它</b>（44 逐字的空狀態）</span></td></tr>';
+       /* 〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶（要求逐處查「44 逐字」）／AI 總管（紀錄措辭）〕
+          原句是本組對 44 SET-7 空狀態的轉述，卻標「（44 逐字的空狀態）」。44 的字是
+          「某塊的來源欄寫了一個本檔第四節未定義的欄位 → 該欄位單獨列出並掛「未定義」徽章」。
+          原句照錄：'<b>這個欄位名出現在某塊的來源欄，而第四節沒有定義它</b>（44 逐字的空狀態）' */
+       +  '<b>某塊的來源欄寫了一個本檔第四節未定義的欄位 → 該欄位單獨列出並掛「未定義」徽章</b>（44 逐字的空狀態）</span></td></tr>';
     s7 += '<div class="one"><div class="h"><code>某表.某欄位（示意）</code> '
        +  '<span class="abadge warn">未定義</span></div><div class="kv">'
        +  '<span>用到它的塊</span><b><code>某塊（示意）</code></b></div></div>';
@@ -2669,7 +2828,10 @@ var EXPLAIN = {
   nolimit:   ['上限未設', '<code>SET-1</code> 空①逐字：「比較欄顯示 <code>⬜ 不適用：尚未設定上限</code>，<b>前兩欄照出</b>」；<code>SET-0</code> 轉灰、文案「尚未設定新鮮度上限」。<br><b>這也是 <code>SET-4</code> 判準的前半句</b>：「清除 <code>set_max_age_days</code>，<code>SET-1</code> 的比較欄改為 <code>⬜ 不適用：尚未設定上限</code><b>而不是以 0 計</b>」。', ['S-05','S-23']],
   norows:    ['某類無任何列', '<code>SET-1</code> 空②逐字：「某類無任何列 → <b>三欄皆 <code>⬜</code></b> 並掛 <code>資料未備</code> 徽章」。配息那一列整列 <code>⬜</code>，另兩列照出。<br>⚠️ <b>那一行判準在這個畫面下跑不過</b>：它說「三列的比較欄皆為「外」」，而這一列是 <code>⬜</code>。', ['S-14']],
   failed:    ['某層級取數失敗（紅燈）', '<b>這一顆是 <code>SET-0</code> 判準的後半句</b>：「讓某一個來源取數失敗，<b>燈轉紅且文案含該來源的層級字面值</b>」，也是 <code>SET-2</code> 判準的前半句（訊息欄<b>逐字相同</b>）。<br><b>同時也有逾期，而紅蓋過黃</b> —— 那正是黃那一條後半句在做的事。<br>⚠️ <b>示意訊息刻意挑一句不帶處置方向的</b>，真實訊息本組控制不了（S-04）。', ['S-04','S-30','S-08']],
-  notier:    ['某層級從無紀錄', '<code>SET-2</code> 空①逐字：「某層級從無紀錄 → <b>該列三欄 <code>⬜</code></b>，掛 <code>資料未備</code> 徽章」。<br>⚠️ <b>要為一個「從來沒有紀錄」的層級畫出一列，就必須事先知道有哪些層級</b> —— 而 44 從頭到尾沒有定義那份清單，第五節還逐字說它是「一個<b>開放集</b>」。', ['S-01']],
+  notier:    ['某層級從無紀錄', '<code>SET-2</code> 空①逐字：「某層級從無紀錄 → <b>該列三欄 <code>⬜</code></b>，掛 <code>資料未備</code> 徽章」。<br>⚠️ <b>要為一個「從來沒有紀錄」的層級畫出一列，就必須事先知道有哪些層級</b> —— <s>而 44 從頭到尾沒有定義那份清單，第五節還逐字說它是「一個<b>開放集</b>」。</s>'
+             + '<br>〔2026-09-24 就地更正 · 有意識的更正，不是漏刪 · 決策者：AI 總管（依獨立稽核指出）〕'
+             + '44 已於 2026-09-23 劃掉「開放集」那一句，<code>SET-2</code> 規則欄現行逐字「層級取本檔第四節那三張表 <code>source_tier</code> 欄寫出的四個（<code>淨值</code>／<code>配息</code>／<code>市場指標</code>／<code>其他</code>），四個逐一列出，不依 <code>fetch_log</code> 裡有沒有紀錄而增減」。'
+             + '劃掉的那半句在寫下當天為真；被推翻的是前提。S-01 的前提已不成立，<b>只登記、不動規格</b>（見頂部 S-01 那一筆）。', ['S-01']],
   emptyresp: ['取數回空', '<b>這一顆是本頁最硬的一處。</b> <code>SET-5</code> 空②逐字：「取數回空 → <code>fetch_log.outcome</code> 寫 <code>ok</code> 而資料表列數不變，<b><code>SET-2</code> 的訊息欄寫「回應為空」</b>」。<br><b>而 <code>SET-2</code> 第三欄逐字是「<u>失敗時</u>的訊息原文」，<code>fetch_log.message</code> 逐字「<u>成功時為空</u>」。三處打架。</b><br>再加一層：那句話若由 <code>SET-2</code> 生出來，就違反它自己的「訊息原文照印，不改寫」。', ['S-03','S-27','S-02']],
   badkind:   ['值與型別不符', '<code>SET-3</code> 空②逐字：「目前值欄顯示 <code>⬜ 不適用：值與型別不符</code>，<b>並印出原始字面值</b>」；<code>SET-4</code> 空①逐字：「<b>欄位下方顯示型別說明，不存檔，<code>SET-3</code> 的值不變</b>」。<br>⚠️ <b>原始字面值印在哪，44 沒寫</b>，而同塊判準逐字「卡上<b>沒有第五欄</b>」—— 本草稿印在同一格第二行。', ['S-25','S-22','S-44']],
   broken:    ['取數中斷', '<code>SET-6</code> 空②逐字：「<code>finished_at</code> 為空（取數中斷）→ 耗時欄 <code>⬜ 不適用：未記錄結束時間</code>，<b>其餘欄照印</b>」。<br>點開層 4 的「取數紀錄」看第一列。', ['S-42']],
@@ -2713,6 +2875,14 @@ document.querySelectorAll("[data-bp]").forEach(function(b){
     document.getElementById("bp-read").textContent = "模擬寬度 " + ui.bp + "px";
     measure();
   });
+});
+/* 存檔寫入失敗：正交開關（2026-09-24 搬回）。只翻 ui.saveFail，不動 ui.state。 */
+var failBtn = document.getElementById("btn-fail");
+failBtn.addEventListener("click", function(){
+  ui.saveFail = !ui.saveFail;
+  failBtn.innerHTML = "存檔寫入失敗：<b>" + (ui.saveFail ? "開" : "關") + "</b>";
+  failBtn.setAttribute("aria-pressed", String(ui.saveFail));
+  render();
 });
 var themeBtn = document.getElementById("btn-theme");
 themeBtn.addEventListener("click", function(){
