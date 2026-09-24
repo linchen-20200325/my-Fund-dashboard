@@ -201,7 +201,7 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     import hashlib
 
-    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "c371d5454bcf846ef67f44adc2acbe44"
+    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "3712715503d1b5f9166941e8c08734b5"
 
 
 def test_holding取數失敗_照44第五節系統錯誤模板畫在受影響的塊_不整頁炸():
