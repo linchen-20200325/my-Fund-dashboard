@@ -79,9 +79,9 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 
 
 def test_44還是凍結的那一份():
-    """本輪一個位元組都沒有動 `44`。行號引用全靠內容比對，不靠行號 —— 但檔案本身要是那一份。"""
+    """`44` 在 2026-09-24 那一輪解凍（落 `A-02` 那一枚的出現條件裁示（2026-09-24）並登記連帶矛盾，只在既有行內擴寫、行數不變），改完重新凍結，下面的 md5 是那一輪改完後的新值。行號引用全靠內容比對，不靠行號 —— 但檔案本身要是那一份。"""
     digest = hashlib.md5(_D44.read_bytes()).hexdigest()
-    assert digest == "7ef41e2996828aaf76986090adf25b06", digest
+    assert digest == "7fa222931facf0d90beb92dc839b2776", digest
     assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4260  # 4259 行 ＋ 末尾換行
 
 
