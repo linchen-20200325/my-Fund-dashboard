@@ -388,6 +388,89 @@ def dataset_fetchfail() -> dict:
     )
 
 
+def dataset_twofail() -> dict:
+    """**兩張來源表同時取數失敗，而且訊息原文一模一樣。**（2026-09-24 稽核必修 G 新增）
+
+    `nav` 與 `dividend` 都是 `HLD-3` 來源欄點名的表，逐值判定會各自產出一行
+    「取數失敗：<同一句>」⇒ 沒有去重的話，同一句會在同一塊的說明區印兩次。
+
+    ⚠️ **在這一組之前，十六個情境沒有任何一個同時有兩張表失敗**
+    （實測：`errors` 長度 ≥ 2 的情境數為 0）⇒
+    `_build_core_card()` 裡那句 `if line not in error_lines` **從出生就沒有被走過**，
+    拿掉它**全綠**。**一條從來沒被執行過的防線，等於沒有防線。**
+    """
+    return _dataset(
+        window=(WINDOW_START, WINDOW_END),
+        rules=_RULES_DEFAULT,
+        errors={"nav": FETCH_FAIL_MESSAGE, "dividend": FETCH_FAIL_MESSAGE},
+    )
+
+
+def dataset_tiedstate() -> dict:
+    """**`HLD-2` 的主值同時出現 `資料未備` 與 `業務例外`** ⇒ 那一塊的狀態排不出來。
+
+    一檔的淨值來源整個抽掉（→ `資料未備`），區間縮到只含一筆淨值（→ `業務例外`），
+    門檻調到沒有任何一檔超出。`44` :310 把那兩個並列同一級 ⇒ `_state` 是哨符。
+
+    ⚠️ **2026-09-24 稽核必修 F 新增**：在它之前，**十五個情境沒有一個產生得出哨符**，
+    於是 `test_九塊在全部情境下都建得出來且狀態合法` 裡那段「掙來的哨符」契約
+    **從出生就沒有被執行過一次**，收尾還寫著恆真的 `assert unranked_seen >= 0`。
+    ⛔ **而同一輪 `mkt` 的孿生版寫的是 `> 0`，而且真的踩得到** ——
+       一份對、一份空轉，尺沒有往內用。本情境就是補那一半。
+    （這一組資料本來就存在，只是散在 `test_A1回歸…` 裡就地拼出來，沒有進情境表。）
+    """
+    return _dataset(
+        nav=[row for row in navs() if row["fund_code"] != "CCCC"],
+        window=ONE_NAV_WINDOW,
+        rules=_RULES_NOEXCEED,
+    )
+
+
+def dataset_holdfail() -> dict:
+    """**有持倉，而 `holding` 這張來源表取數失敗。**（2026-09-24 第 2 件新增）
+
+    `holding` 同時是 `HLD-1` 與 `HLD-3` 來源欄點名的表（`44` :513／:542）。
+    ⚠️ **這個情境在 `fd5e41b` 上畫面完全看不出異常** —— 三塊照常、燈是黃 ——
+       那就是客戶這次要修的那個不對稱：**同一張表掛掉，空持倉時是紅，有持倉時是靜的。**
+    ⚠️ 它**刻意不進** `SCENARIO_NAMES`：那七個對應草稿上方那排狀態鈕，
+       是**畫面狀態**的列舉，不是資料情境的列舉。硬塞進去會讓那一排多長出一顆鈕。
+    """
+    return _dataset(
+        window=(WINDOW_START, WINDOW_END),
+        rules=_RULES_DEFAULT,
+        errors={"holding": FETCH_FAIL_MESSAGE},
+    )
+
+
+def dataset_profilefail() -> dict:
+    """**有持倉，而 `fund_profile` 這張來源表取數失敗。**（2026-09-24 第 2 件新增）
+
+    `fund_profile` 只有 `HLD-2` 的來源欄點名（`44` :531）。
+    與 `dataset_holdfail()` 分成兩個而不是合成一個，是為了讓反向控制看得出
+    **哪一塊該紅、哪一塊不該紅** —— 合成一個就只知道「有東西紅了」。
+    """
+    return _dataset(
+        window=(WINDOW_START, WINDOW_END),
+        rules=_RULES_DEFAULT,
+        errors={"fund_profile": FETCH_FAIL_MESSAGE},
+    )
+
+
+def dataset_holdfail_nothr() -> dict:
+    """**有持倉 ＋ 門檻未設 ＋ `holding` 取數失敗。**（2026-09-24 第 2 件新增）
+
+    ⚠️ 這一組專門釘住第 2 件最容易漏的那一半：「有持倉」**不只**是
+    `_build_hld1()` 最後那個 `else`，`elif not rules` 也是有持倉。
+    只補 `else` 的話這一組會靜悄悄地留在 `業務例外`，
+    **而那正是本件要修的那個形狀：一條路只補一半。**
+    """
+    return _dataset(
+        window=(WINDOW_START, WINDOW_END),
+        rules=None,
+        errors={"holding": FETCH_FAIL_MESSAGE},
+    )
+
+
 def dataset_nothr() -> dict:
     """狀態 5｜門檻未設：區間有設、門檻一列也沒有。"""
     return _dataset(window=(WINDOW_START, WINDOW_END), rules=None)
@@ -467,14 +550,42 @@ def scenario(name: str) -> dict:
         "other_window": {"dataset": dataset_other_window()},
         "onenav": {"dataset": dataset_one_nav()},
         # 欄位填了一段壞區間，而三個鍵一個也沒存過 → 不套用也不存檔。
+        # 2026-09-24 第 2 件新增三組：有持倉時的來源取數失敗（理由見各自的 docstring）。
+        # ⚠️ 它們進 `scenario()`／`_ALL_SCENARIOS`（＝所有全頁守衛都會跑到），
+        #    但**刻意不進** `SCENARIO_NAMES`（那是草稿狀態鈕那一排，不是資料情境清單）。
+        "tiedstate": {"dataset": dataset_tiedstate()},
+        "twofail": {"dataset": dataset_twofail()},
+        "holdfail": {"dataset": dataset_holdfail()},
+        "profilefail": {"dataset": dataset_profilefail()},
+        "holdfail_nothr": {"dataset": dataset_holdfail_nothr()},
         "badrange": {"dataset": dataset_badrange(), "fields": dict(_BAD_FIELDS)},
         # 已套用的是「全齊」那一組；欄位當下被改成壞區間 →
         # 六塊的主值必須與套用前逐字相同（`44` HLD-4 判準）。
         "full_then_badrange": {"dataset": dataset_full(), "fields": dict(_BAD_FIELDS)},
     }
+    # ⚠️ 兩者不得漂移：`ALL_SCENARIO_NAMES` 是 `page.py` 的閘門讀的那一份，
+    #    寫死在模組層（讓 import 得到它）；這一行保證它與本表**永遠一致**。
+    assert tuple(table) == ALL_SCENARIO_NAMES, (tuple(table), ALL_SCENARIO_NAMES)
     if name not in table:
         raise KeyError(f"沒有這個情境：{name!r}")
     return table[name]
+
+
+# `scenario()` 認得的**全部**名字，**照該函式裡的順序**。
+# ⚠️ **這不是 `SCENARIO_NAMES`**（那是草稿上方那排狀態鈕的七個，見下方）。
+# 兩者刻意分開，2026-09-24 客戶裁示後就地寫明理由：
+#   · `SCENARIO_NAMES` ＝ **畫面狀態**的列舉 → 它決定那一排鈕有幾顆，**不該隨資料情境長大**；
+#   · `ALL_SCENARIO_NAMES` ＝ **`?scenario=` 挑得到什麼** → 它決定
+#     「一個畫面能不能被人看到」。
+# ⛔ **第 2 件做出來的那個 `系統錯誤` 畫面，如果只進前者、不進後者，就永遠沒有人看得到** ——
+#    稽核 2026-09-24 指出：`hld/page.py` 原本只認 `SCENARIO_NAMES`，
+#    於是本輪新做的三個情境**頁面永遠選不到、任何測試也沒渲染過**。
+ALL_SCENARIO_NAMES = (
+    "full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty", "emptyfail",
+    "noexceed", "other_window", "onenav", "tiedstate", "twofail",
+    "holdfail", "profilefail", "holdfail_nothr",
+    "badrange", "full_then_badrange",
+)
 
 
 # 草稿上方那排狀態鈕的六種（順序照草稿）＋ 客戶 2026-09-23 裁示補的第七種。

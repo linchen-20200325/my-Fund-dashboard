@@ -506,7 +506,18 @@ def _pick_scenario() -> str:
         name = dict(st.query_params).get("scenario")
     except Exception:
         name = None
-    if name not in fixtures.SCENARIO_NAMES:
+    # ⚠️ **2026-09-24 稽核必修（決策者：AI 總管，依稽核指出的缺口）**：
+    # ~~原本的閘門是 `fixtures.SCENARIO_NAMES`（草稿那排鈕的七個）。~~
+    # **那讓第 2 件新做出來的 `系統錯誤` 畫面永遠選不到** —— `holdfail` 那一類情境
+    # 進得了 `fixtures.scenario()`，卻進不了這道閘門，於是**做出來沒有人看得見**，
+    # 客戶也無從驗收。**舊表述在寫下當時涵蓋得完**（那時只有那七個）；
+    # **被權衡掉的是它的前提**。
+    # ⚠️ **刻意不在這裡寫「有幾個」** —— 本輪就因為寫死「三個」而在同一天過期
+    #    （後來又加了兩個）。**會漂移的數字不寫進註解**；要知道有幾個，
+    #    看 `fixtures.ALL_SCENARIO_NAMES` 本身。
+    # ⛔ 改的只有**閘門讀哪一份清單**；`SCENARIO_NAMES`／`SCENARIO_LABELS`
+    #    （那排鈕與它們的標籤）**一個字未動**。
+    if name not in fixtures.ALL_SCENARIO_NAMES:
         name = "full"
     return name
 
@@ -537,7 +548,9 @@ def render() -> None:
     st.markdown(
         f'<div class="hld-sub">{_esc(model["answers"])}　·　'
         f'資料為假資料，每一個數字都帶「示意」二字　·　'
-        f'情境 {_esc(fixtures.SCENARIO_LABELS[scenario])}</div>',
+        # 不在那七個之內的情境沒有草稿標籤，就印它自己的名字（同 `mkt` 那一頁的做法）。
+        # ⛔ 用 `.get` 而不是 `[...]`：閘門放寬之後，`[...]` 會在那三個新情境上 `KeyError`。
+        f'情境 {_esc(fixtures.SCENARIO_LABELS.get(scenario, scenario))}</div>',
         unsafe_allow_html=True,
     )
 

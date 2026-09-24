@@ -92,8 +92,17 @@ _TONE_BY_STATE = {
 }
 # ⚠️ **`44` 對這四個狀態只排過一次序，而那一次把中間兩個並列同級。**
 # `44` :310（`MKT-0` 規則欄，全檔唯一明文排過卡片四狀態的地方）逐字：
-#   「三塊皆 `ok` → 燈為中性灰；任一塊為 `資料未備` **或** `業務例外` → 燈為黃；
-#     任一塊為 `系統錯誤` → 燈為紅」
+#   「三塊狀態取最差者：三塊皆 `ok` → 燈為中性灰，文案「三張卡的資料齊」；
+#     任一塊為 `資料未備` 或 `業務例外` → 燈為黃，文案列出是哪一張卡；
+#     任一塊為 `系統錯誤` → 燈為紅，文案列出失敗的那一段」
+# ⚠️ **2026-09-24 就地更正（有意識的更正，不是漏刪；決策者：AI 總管）**：
+#   ~~上一輪這裡抄的是刪節版~~ —— 它砍掉「三塊狀態取最差者：」與三個「，文案…」子句、
+#   把「，」換成「；」、還多加了一組粗體，**旁邊卻標著「逐字」**。
+#   語意沒錯，**字不對**；那正是 `44` :2347 寫的那個形狀（改寫一次、標成逐字一次）。
+#   **本輪抓到它的是本輪新建的逐字守衛**（`test_標了逐字的引文_每一句都回比過44`）——
+#   ⚠️ 而**同一輪 `mkt` 那一份從一開始就是全句逐字的**：
+#   **一份對、一份刪節，尺往外用沒往內用。就地補齊。**
+#   ⛔ 只換引文，本段的結論（偏序、不是全序）一字未改。
 # 也就是 `ok` ＜ {`資料未備`, `業務例外`} ＜ `系統錯誤` —— 這是一個**偏序**，不是全序。
 # 舊表述 `{ok:0, 資料未備:1, 業務例外:2, 系統錯誤:3}` 把中間兩個排出先後，
 # **那個先後是實作自己發明的，`44` 沒有授權**（客戶 2026-09-23 裁示拆掉）。
@@ -109,8 +118,16 @@ _BAND = {STATE_OK: 0, STATE_MISSING: 1, STATE_BIZ: 1, STATE_ERROR: 2}
 # `worst_state()` 在「`資料未備` 與 `業務例外` 同時是最差」時回這個哨符。
 # ⛔ 它**不是第五個狀態**（`44` 5.1 的四狀態是封閉列舉），也**不得寫進任何畫面文字**；
 #    它只表示一件事：**`44` 沒有排這兩個的先後，本檔不替它排。**
-# ⚠️ 考慮過、而且刻意**不用** `44` 5.2 的 `未定義` 徽章字面值 —— 那一個在 `44` :1735 是
-#    「某塊來源欄寫了一個第四節未定義的欄位」，與本處無關，借來用等於替 `44` 造新語意。
+# ⚠️ 考慮過、而且刻意**不用** `44` 5.2 的 `未定義` 徽章字面值 —— 那一個在 `44` :1735 逐字是
+#    「某塊的來源欄寫了一個本檔第四節未定義的欄位 → 該欄位單獨列出並掛「未定義」徽章」，
+#    與本處無關，借來用等於替 `44` 造新語意。
+# ⚠️ **2026-09-24 就地更正（有意識的更正，不是漏刪；決策者：AI 總管）**：
+#    ~~原寫「某塊來源欄寫了一個第四節未定義的欄位」~~ —— 少了「的」與「本檔」兩處，
+#    而它就擺在一個行號引用旁邊、包在「」裡，讀起來像逐字。
+#    **這不是本輪三件事之一**，改它的理由是：本輪在 `mkt` 那一邊照抄了這一句，
+#    而本輪的主題正是「引了 `44` 卻沒讀完自己寫了什麼」——
+#    **修 `mkt` 那一份、把它的孿生兄弟留在這裡，就是「同一把尺只往外用」**。
+#    ⛔ 只動引文，這一段的結論（不借 `未定義` 這個字面值）一字未改。
 STATE_UNRANKED = None
 
 # 📌 **2026-09-24 登記兩筆同型、但不是本輪造成的（不處置，只寫下來）**：
@@ -720,17 +737,71 @@ def source_error(dataset, code):
     `44` 5.5 `系統錯誤` 觸發條件逐字：「**取數或計算本身失敗**」——
     來源整張表取數失敗，就是這一種，與這一頁有沒有持倉無關。
 
-    ⚠️ **一筆沒登記的不對稱，2026-09-24 稽核指出，就地登記（不處置）**：
+    ⚠️ ~~**一筆沒登記的不對稱，2026-09-24 稽核指出，就地登記（不處置）**：
     本函式的回傳值**只有 `not has_holdings` 那一支用得到**。有持倉時，
     `nav`／`dividend` 的失敗會經由 `fund_metrics()` 逐值浮出來，但
     **`holding` 與 `fund_profile` 的失敗沒有任何一條路會浮出來** ——
     於是同一個來源掛掉，**資料多的時候反而比較不警戒**
     （有持倉時 `HLD-1` 是 `ok`，空持倉時是 `系統錯誤`）。
     ⛔ **本輪不處置**：補那條路等於讓有持倉的情境也開始變紅，
-    那是行為擴張，**客戶只裁了空持倉那一種畫面**。**登記，待客戶裁決。**
+    那是行為擴張，**客戶只裁了空持倉那一種畫面**。**登記，待客戶裁決。**~~
+    → ✅ **2026-09-24 客戶裁示補那條路（有意識的政策變更，不是漏刪；決策者：客戶）。**
+    **上面那段的事實描述全部成立、一字未被推翻** —— 被權衡掉的只有它的處置
+    （「不處置、待裁」）。**裁決已經下來了，所以待裁那一句過期了。**
+    新路走 `unsurfaced_source_error()`，射程寫在那一支的 docstring 裡。
+    ⚠️ **本函式自己一格未動** —— 它仍然只服務 `not has_holdings` 那一支。
     """
     errors = dataset.get("errors", {})
     for table in BLOCK_SOURCE_TABLES[code]:
+        if errors.get(table):
+            return errors[table]
+    return None
+
+
+# 有持倉時，這兩張表的取數失敗**本來就有一條路浮得出來**：`fund_metrics()` 逐值讀
+# `errors["nav"]`／`errors["dividend"]`，失敗會變成該值的 `系統錯誤`，
+# 再由核心卡與 `HLD-8` 把訊息原文印出來。
+# ⚠️ **這兩個名字不是憑印象列的** —— 逐表注入一個錯誤實測出來的，
+#    而且那個實測本身就是一條測試（見 `test_哪些來源表在有持倉時本來就浮得出來`），
+#    所以日後 `fund_metrics()` 改讀別的鍵，這張清單會**紅燈**，不會靜默過期。
+_SURFACED_PER_VALUE = ("nav", "dividend")
+
+
+def unsurfaced_source_error(dataset, code):
+    """有持倉時，這一塊的來源表裡**沒有任何其他路會浮出來**的那種取數失敗。
+
+    ⭐ **2026-09-24 客戶裁示新增（第 2 件）。射程就在這裡，寫死，不得外推：**
+
+    **補的是**：有持倉時，來源表取數失敗而**現行一條路也沒有**的那幾張
+    （實測為 `holding` 與 `fund_profile`），現在會讓該塊進 `系統錯誤`
+    並把訊息原文印進說明區。
+    **要修掉的病**（上一輪登記的原話）：同一個來源掛掉，
+    **資料多的時候反而比較不警戒**。
+
+    ⛔ **不補、而且一格未動的**（逐條列出來，免得日後被人讀成授權）：
+      · `44` 的四狀態、五塊模板、任何一塊的空狀態欄 —— **一個字未動**；
+      · `not has_holdings` 那兩支（空持倉）的行為 —— **一格未動**，
+        它們照舊走 `source_error()`；
+      · `conclusion_light()` 的早退次序 —— **一格未動**。燈變紅不是本件改的，
+        是 `44` :489 本來就寫「任一塊為 `系統錯誤` → 燈為紅」，
+        本件只是讓更多情形**合法地**進 `系統錯誤`；
+      · `BLOCK_SOURCE_TABLES` 與它的 A3 守衛 —— **一格未動**；
+      · 主值層的逐值判定 —— **一格未動**。本件只動塊層的 `_state` 與說明區；
+      · 那三塊照舊**不掛**「重新取數」按鈕（客戶 2026-09-23 裁示）；
+      · `HLD-7`／`HLD-8` 不在本件射程 —— `BLOCK_SOURCE_TABLES` 沒有它們的來源表，
+        替它們編一組就是造規格。**登記，不處置。**
+
+    **`系統錯誤` 這個狀態的依據**：`44` 5.5 該狀態的觸發條件逐字是
+    「**取數或計算本身失敗**」—— 來源整張表取數失敗就是這一種，
+    **這一句與這一頁有沒有持倉無關**。⇒ 本件不是新規則，
+    是把一條既有規則補到它原本被無理由排除掉的那一半。
+    ⚠️ **與 `source_error()` 的差別只有一處**：本支跳過 `_SURFACED_PER_VALUE`，
+       免得同一個失敗被印兩次（一次逐值、一次整塊）。
+    """
+    errors = dataset.get("errors", {})
+    for table in BLOCK_SOURCE_TABLES[code]:
+        if table in _SURFACED_PER_VALUE:
+            continue
         if errors.get(table):
             return errors[table]
     return None
@@ -805,7 +876,7 @@ def deviation_rows(metrics, rules):
     return rows, skipped
 
 
-def _build_hld1(metrics, rules, *, has_holdings, fail_message=None):
+def _build_hld1(metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None):
     badges = [_redline_badge("G2†")]
     # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
     # `44` :515 本塊空狀態欄**一個按鈕也沒有寫**，而 `44` 5.5「各塊自己寫的優先於本表模板」
@@ -880,6 +951,21 @@ def _build_hld1(metrics, rules, *, has_holdings, fail_message=None):
                 f"⬜ 另有 {len(skipped['na'])} 檔的門檻指標不適用，未列入{HINT}"
             )
 
+    # ⭐ **第 2 件（客戶 2026-09-24 裁示）：有持倉時的來源取數失敗也要浮得出來。**
+    # 射程見 `unsurfaced_source_error()` 的 docstring。
+    # ⚠️ **刻意放在整條 if/elif/else 之後**，因為「有持倉」不只 `else` 那一支 ——
+    #    `elif not rules`（有持倉但門檻未設）同樣是有持倉。只補 `else` 會漏掉它，
+    #    而那正是本件要修的那個形狀（一條路只補一半）。
+    # ⚠️ **算出來的東西一律留著**（`rows`／`placeholder`／`summary` 一格未動）：
+    #    空持倉那一支會清空是因為它本來就沒東西可顯示；這裡有，
+    #    把它清掉等於用一個失敗訊息蓋掉還算得出來的事實，那是另一種說謊。
+    if has_holdings and unsurfaced:
+        state = STATE_ERROR
+        detail_lines = detail_lines + [
+            fetch_failed_text(unsurfaced),
+            "訊息原文照印，不改寫成安撫語句。",
+        ]
+
     return {
         "code": "HLD-1",
         "title": BLOCK_TITLES["HLD-1"],
@@ -905,7 +991,8 @@ def _build_hld1(metrics, rules, *, has_holdings, fail_message=None):
 
 
 def _build_core_card(
-    code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note, fail_message=None
+    code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note,
+    fail_message=None, unsurfaced=None,
 ):
     groups = []
     for metric in metrics:
@@ -998,6 +1085,17 @@ def _build_core_card(
                 if line not in error_lines:
                     error_lines.append(line)
                     error_lines.append("訊息原文照印，不改寫成安撫語句。")
+
+    # ⭐ **第 2 件（客戶 2026-09-24 裁示）** —— 與 `_build_hld1` 同一條路、同一套理由。
+    # 射程見 `unsurfaced_source_error()` 的 docstring。
+    # ⚠️ 訊息走既有的 `error_lines` 管道（去重規則沿用），**不另開一種說明區寫法**。
+    # ⚠️ 逐檔算出來的主值一格未動 —— 本件只動塊層的 `_state`。
+    if has_holdings and unsurfaced:
+        state = STATE_ERROR
+        line = fetch_failed_text(unsurfaced)
+        if line not in error_lines:
+            error_lines.append(line)
+            error_lines.append("訊息原文照印，不改寫成安撫語句。")
 
     return {
         "code": code,
@@ -1681,6 +1779,7 @@ def build_page_model(
     hld1 = _build_hld1(
         metrics, rules, has_holdings=has_holdings,
         fail_message=source_error(dataset, "HLD-1"),
+        unsurfaced=unsurfaced_source_error(dataset, "HLD-1"),
     )
     hld2 = _build_core_card(
         "HLD-2",
@@ -1689,6 +1788,7 @@ def build_page_model(
         has_holdings=has_holdings,
         has_window=has_window,
         fail_message=source_error(dataset, "HLD-2"),
+        unsurfaced=unsurfaced_source_error(dataset, "HLD-2"),
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
         moved_note="第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。",
@@ -1700,6 +1800,7 @@ def build_page_model(
         has_holdings=has_holdings,
         has_window=has_window,
         fail_message=source_error(dataset, "HLD-3"),
+        unsurfaced=unsurfaced_source_error(dataset, "HLD-3"),
         subtitle="兩個主值，皆為算術結果，卡上不對它們加任何評語。"
         "配息合計以原幣逐檔顯示，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",

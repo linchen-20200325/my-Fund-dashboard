@@ -54,6 +54,11 @@
   --app-fg-2:#c9d1d9;
   --app-muted:#8b949e;
   --st-gray:#8b949e;        /* 資料未備：灰（SSOT 第五節卡片表） */
+  --st-gray-bg:#11161d;     /* 灰態容器底（2026-09-24 新增；客戶裁示「失敗框改灰」）——
+                               既有代號一個位元組未改，本行是**新增**。取值與本檔既有的「格底」
+                               逐值相同（table.wt th／.rulerow／.conc .stword／table.cmp 表頭／
+                               .cmpstack .one 都是這個值）⇒ 全檔**沒有因此多出任何一個新色碼**，
+                               §J 的對比母體只多一組「灰框／卡底」（非文字 UI 元件），見 §J 一。 */
   --st-warn-fg:#e3b341;     /* 業務例外／不適用：黃（SSOT 第五節卡片表） */
   --st-warn-bg:#241d07;
 
@@ -252,7 +257,7 @@ section{margin-top:34px}
 table.wt{border-collapse:collapse; width:100%; font-size:12.5px;
   font-variant-numeric:tabular-nums}
 table.wt th,table.wt td{padding:6px 9px; text-align:left;
-  border-bottom:1px solid var(--app-border); overflow-wrap:anywhere}
+  border-bottom:1px solid var(--app-border); overflow-wrap:anywhere; vertical-align:top}
 table.wt th{color:var(--app-muted); font-weight:600; background:#11161d}
 table.wt tr:last-child td{border-bottom:0}
 table.wt td .nd{color:var(--st-gray); font-weight:600}
@@ -262,6 +267,19 @@ table.wt td .na{color:var(--st-warn-fg); font-weight:600}
 .ck input:disabled + span{color:var(--app-muted)}
 .ckwhy{display:block; font-size:10.5px; color:var(--st-warn-fg); margin-top:2px}
 .ckon{display:block; font-size:10.5px; color:var(--app-muted); margin-top:2px}
+/* 兩組勾選框（EXP-2 每一列，44 於 2026-09-22 明訂「兩組並存、互不連動」）——
+   2026-09-24 由客戶拍板的草稿搬入。上下疊是客戶逐字裁的（「兩格上下疊，接受」）。 */
+.ckcol{display:flex; flex-direction:column; gap:6px; min-width:0}
+.ckgrp{display:flex; flex-direction:column; gap:1px}
+.ckgrp .lab{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.08em;
+  color:var(--app-muted)}
+/* 〔2026-09-24 同輪回修〕本處第一版另有一條 `th.ckhead{white-space:nowrap}`，
+   隨那個「勾選」表頭一起撤下（見 card2() 的回修註解）—— 規則留著會是死樣式。 */
+/* 存檔寫入失敗的容器（EXP-1／EXP-4／EXP-5 三塊的空狀態欄各一句）——
+   顏色走**灰**，不走黃：客戶 2026-09-24 逐字「黃是業務例外；存檔失敗是系統級」。
+   草稿當初用的是 --st-warn-fg／--st-warn-bg，本輪照裁示換成 --st-gray／--st-gray-bg。 */
+.failbox{border:1px solid var(--st-gray); background:var(--st-gray-bg); border-radius:6px;
+  padding:9px 11px; margin-top:9px; font-size:12.5px; color:var(--st-gray)}
 
 /* 對照矩陣（EXP-3） */
 .cmpscroll{margin-top:8px}
@@ -483,18 +501,27 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
     <h3 style="font-size:14px; font-weight:700; color:var(--draft)">怎麼看這份草稿（5 分鐘）</h3>
     <ol style="margin:8px 0 0; padding-left:20px; font-size:13.5px; line-height:1.75; color:var(--ink)">
       <li>先看中間深色的那一塊 —— <b>那是 app 的樣子</b>，四層由上往下：結論列／三張核心卡／操作列／展開佐證。</li>
-      <li>用上方<b>青色虛線框</b>裡的控制列切七種狀態、三個斷點。<b>那個框不是畫面元件</b>，是給你審稿用的。</li>
+      <li>用上方<b>青色虛線框</b>裡的控制列切七種狀態、三個斷點，
+        <b>另有一枚「存檔失敗」開關</b>（2026-09-24 新增，<b>與那七種狀態正交</b>，理由見 §F 表下那一框）。
+        <b>那個框不是畫面元件</b>，是給你審稿用的。</li>
       <li>層 3 與層 4 <b>預設是收合的</b>（規格要求）—— 想看裡面，自己點開。</li>
-      <li>看完再看 <b>§C 的 ⛔ 清單（23 筆）</b>：那是本組畫這一頁時撞到的、規格自己打架或畫不出來的地方。<b>本組一筆都沒有自己補。</b></li>
+      <li>看完再看 <b>§C 的 ⛔ 清單（23 筆）</b>：那是本組畫這一頁時撞到的、規格自己打架或畫不出來的地方。<b>本組一筆都沒有自己補。</b>
+        <span class="tiny">〔2026-09-24 第十六輪續記 · 決策者：<b>客戶</b>〕<b>ID 仍是 23 個，一個都沒有拿掉</b>；
+        其中 <code>E-03</code> 與 <code>E-04</code> <b>已結案</b>（客戶拍板草稿後併入畫面），<b>仍然開著的是 21 筆</b>。</span></li>
       <li>§D 是<b>按鈕逐顆</b>的 ✓／⚠。<b>§J 是 WCAG 2.2 AA</b>（對比逐組算過、狀態配圖示＋文字、多幣別逐檔標明）。
         <span style="color:var(--ink-2)">§A／§B／§E／§F／§G／§H／§I 是細節，可以後看。</span></li>
     </ol>
   </div>
 
   <div class="gapstrip">
-    <h3>⛔ 三筆最該先拍板的地方（<s>其餘二十筆在 §C</s> <b>§C 共二十三筆，含這三筆在內</b>）</h3>
+    <h3><s>⛔ 三筆最該先拍板的地方</s> <b>這三筆的現況：兩筆已結案，一筆還開著</b>（<s>其餘二十筆在 §C</s> <b>§C 共二十三筆，含這三筆在內</b>）</h3>
+    <p class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕
+      標題原寫「三筆最該先拍板的地方」 —— <b>客戶已於 2026-09-24 拍板其中兩筆</b>
+      （<code>E-03</code>／<code>E-04</code>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框），
+      所以「該先拍板」只剩 <code>E-01</code> 一筆。<b>三筆的條目一條都沒有刪，原地保留並就地標出結案狀態。</b></p>
     <ol>
-      <li><b>E-03　你設的條件、勾的欄位、選的排序，存不回去。</b>
+      <li><b><s>E-03　你設的條件、勾的欄位、選的排序，存不回去。</s></b>
+        <b>✓ E-03　已結案：三枚存檔鈕都畫出來了。</b>&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span><br>
         這一頁三塊吃 <code>user_setting</code>（<code>EXP-1</code> 的 <code>exp_filter_rules</code>、
         <code>EXP-4</code> 的 <code>exp_visible_columns</code> 與 <code>exp_sort_column</code>、
         <code>EXP-5</code> 的 <code>exp_watchlist</code>），
@@ -505,23 +532,30 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         規則欄各掛一枚「存檔」；<code>EXP-5</code> 那一枚的 <code>action_kind</code> 也在 2026-09-23 補寫為 <code>存檔</code>。
         這與客戶 2026-09-22 已經為 <code>HLD-4</code>／<code>MKT-4</code> 裁定過的缺口<b>同型</b>，
         <s><b>但 44 沒有為這一頁裁</b>。</s>
-        <b>44 已於 2026-09-22 為 <code>EXP-1</code> 與 <code>EXP-4</code> 各明訂一枚「存檔」按鈕，
-        本草稿沒跟上、待重繪</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。本組本輪仍然沒有自己加一枚。</li>
+        <s><b>44 已於 2026-09-22 為 <code>EXP-1</code> 與 <code>EXP-4</code> 各明訂一枚「存檔」按鈕，
+        本草稿沒跟上、待重繪</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。本組本輪仍然沒有自己加一枚。</s>
+        <b>2026-09-24：客戶拍板草稿後，本輪已把 <code>EXP-1</code> 與 <code>EXP-4</code> 那兩枚「存檔」畫上去了，
+        加上原有的 <code>EXP-5</code> 那一枚，本頁現在是三枚存檔類按鈕，七種狀態下每一種都渲染得出來。</b></li>
       <li><s><b>E-01　層 1 這一塊沒有燈。</b></s> <b>E-01　層 1 這一塊的燈色，44 裁了、草稿沒跟上。</b>
         44 第二節逐字說層 1 是「一枚<b>結論燈</b>」，它的節判準逐字要「<b>結論燈改變顏色</b>」；
         而 <code>EXP-0</code> 的規則欄<s>只給</s><b>在 2026-09-22 之前只有</b>「一行文字：『目前條件下有 N 檔』」，
         <s><b>全塊沒有任何一句燈色宣告</b>，空狀態欄也沒有。</s>
         <b>44 已於 2026-09-22 為本塊裁定燈色三種（N 為零 → 灰／N 大於零 → 黃／讀到的塊出錯 → 紅）</b>；
         本草稿<b>照當時的規則欄畫成沒有顏色的一行字</b>，<b>那是舊版，待重繪</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。</li>
-      <li><b>E-04　清單上那個勾選框，是給「對照」用的還是給「觀察清單」用的？</b>
+      <li><b><s>E-04　清單上那個勾選框，是給「對照」用的還是給「觀察清單」用的？</s></b>
+        <b>✓ E-04　已結案：每一列現在是兩組框。</b>&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span><br>
         <code>EXP-3</code> 逐字「勾選超過 3 檔 → 第 4 個勾選<b>停用</b>」，
         <code>EXP-5</code> 逐字「觀察清單已含該檔 → 該檔的<b>勾選框</b>顯示『已在觀察清單』」——
         兩句指的像是同一個框。若共用，<b>第 4 檔就永遠加不進觀察清單</b>；
         <s>若不共用，每一列要兩個勾選框，<b>44 沒有宣告第二個</b>。</s>
         <b>44 已於 2026-09-22 明訂「每一列另有兩組勾選框，兩組並存、互不連動」，
-        而且觀察清單那一組不受上限 3 拘束</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。
-        <s>本草稿畫成<b>共用一組</b></s> <b>本草稿畫的仍是舊版的共用一組（實跑每列 1 個框、全卡 4 個；
-        依現行 44 應為每列 2 組、共 8 個），待重繪</b>，第 4 列的 ⛔ 照舊留著。</li>
+        而且<s>觀察清單那一組不受上限 3 拘束</s>
+        <b>同格並明訂「同一列「觀察清單」那一組不受這個上限拘束，照樣可勾」</b></b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。
+        <s>本草稿畫成<b>共用一組</b></s> <s><b>本草稿畫的仍是舊版的共用一組（實跑每列 1 個框、全卡 4 個；
+        依現行 44 應為每列 2 組、共 8 個），待重繪</b>，第 4 列的 ⛔ 照舊留著。</s>
+        <b>2026-09-24：已改成每列兩組、全卡 8 個</b>（實跑數過）；
+        <b>第 4 列那一枚 ⛔ 已拿掉</b> —— 它標的後果（「第 4 檔加不進觀察清單」）<b>已經不會發生</b>，
+        同一列的「觀察清單」那一組現在勾得起來。</li>
     </ol>
     <p class="tiny" style="margin-top:9px; color:var(--ink-2)">
       ⚠️ <b>這張表收的是「本組畫這一頁時撞到、而且不補就畫不出來」的，不是對 44 的窮舉稽核。</b>
@@ -544,6 +578,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <b>但 ⛔ 一個都沒有拿掉</b>：撤下的是「44 沒裁」那個假前提，
       <b>畫面落差<s>六條</s>七條照舊全開</b>（<code>EXP-0</code> 沒燈色、每列只有一組勾選框、
       三枚存檔鈕只畫了 <code>EXP-5</code> 那一枚、<code>EXP-7</code> 的空狀態仍掛著 <code>來源缺</code> 這個種類名……）。
+      <b>⚠️ 上面那一句對第十五輪為真，第十六輪起不是現況</b>
+      〔2026-09-24 第十六輪就地更正 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕：
+      <b>客戶拍板草稿後，七條裡有兩條被填上了</b> —— 「每列只有一組勾選框」與「三枚存檔鈕只畫了一枚」
+      <b>現在都不成立</b>（每列兩組、三枚都畫了），<b><code>E-03</code> 與 <code>E-04</code> 兩條 ⛔ 因此結案</b>。
+      <b>其餘五條照舊全開</b>（<code>EXP-0</code> 沒燈色、<code>EXP-7</code> 的空狀態仍掛著
+      <code>來源缺</code> 這個種類名……）。見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。
       ⚠️ <s><b><code>E-01</code> 那一列與其餘五列有一個差別</b>：它的原句<b>連 <code>PINS</code> 裡那一枚
       會上畫面的標籤都改了</b>（客戶裁示第 1 件），其餘五列只改註記層的散文。</s>
       ⛔ <b>那一句講反了，2026-09-24 就地更正</b>〔有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕：
@@ -564,12 +604,19 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <b>⛔ 沒有拿掉</b> —— 撤下的是「44 沒給燈色」這個假前提，<b>落差本身還開著：畫面仍然沒有燈色</b></td>
           <td><code>EXP-0</code> 規則欄：「<b>本塊有燈色，三種</b>（2026-09-22 新增；決策者：客戶）：
             N 為零 → 中性灰。N 大於零 → 黃。讀到的那兩塊任一為 <code>系統錯誤</code> → 紅」</td></tr>
-        <tr><td class="id">E-03</td><td>「44 沒有為這一頁裁」</td>
+        <tr><td class="id">E-03<div class="tiny"><b>✓ 已結案</b><br>2026-09-24</div></td><td>「44 沒有為這一頁裁」</td>
           <td><code>EXP-1</code> 與 <code>EXP-4</code> 規則欄<b>各明訂</b>「本塊掛一枚『存檔』按鈕
-            （<code>action_kind</code> 為 <code>存檔</code>）」（2026-09-22 新增；決策者：客戶）</td></tr>
-        <tr><td class="id">E-04</td><td>「44 沒有宣告第二個」、本草稿「共用一組」</td>
+            （<code>action_kind</code> 為 <code>存檔</code>）」（2026-09-22 新增；決策者：客戶）
+            <div class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕
+            <b>這一列自本輪起不再是「草稿沒跟上」</b>：客戶拍板草稿後，那兩枚「存檔」已經畫在畫面上了。
+            <b>本列原文一字未刪</b>，它記的是 2026-09-23 當下的落差，那在當時為真。</div></td></tr>
+        <tr><td class="id">E-04<div class="tiny"><b>✓ 已結案</b><br>2026-09-24</div></td><td>「44 沒有宣告第二個」、本草稿「共用一組」</td>
           <td><code>EXP-2</code> 規則欄：「<b>每一列另有兩組勾選框，兩組並存、互不連動</b>」；
-            <code>EXP-3</code> 空狀態並明訂「觀察清單那一組<b>不受上限 3 拘束</b>」（2026-09-22；決策者：客戶）</td></tr>
+            <code>EXP-3</code> 空狀態並明訂「<s>觀察清單那一組<b>不受上限 3 拘束</b></s>
+            <b>同一列「觀察清單」那一組不受這個上限拘束，照樣可勾</b>」（2026-09-22；決策者：客戶）
+            <div class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕
+            <b>這一列自本輪起不再是「草稿沒跟上」</b>：客戶拍板草稿後，兩組勾選框已經畫在畫面上了。
+            <b>本列原文一字未刪</b>，它記的是 2026-09-23 當下的落差，那在當時為真。</div></td></tr>
         <tr><td class="id">E-07</td><td>「可選欄位清單的母體 44 沒有給」</td>
           <td><code>EXP-4</code> 規則欄：「<b>可選欄位清單取 <code>EXP-2</code> 規則欄逐字列出的那幾欄</b>」
             （2026-09-23 新增）</td></tr>
@@ -636,6 +683,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       ✅ <b>2026-09-24 第十五輪更正上列結果</b>〔有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕：
       <b>44 已裁、⛔ 已失效</b>的是<b>七筆</b> —— <code>E-01</code>／<code>E-03</code>／<code>E-04</code>／
       <code>E-07</code>／<code>E-12</code>／<code>E-14</code>／<code>E-19</code>；其餘<b>十六筆</b>查證為真、仍然開著。
+      <b>✓ 2026-09-24 第十六輪再續記</b>〔<b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕：
+      上面那七筆講的是「<b>44 裁了、本檔的宣稱失效</b>」，<b>⛔ 當時一個都沒有拿掉</b>。
+      <b>本輪拿掉了其中兩個</b> —— <code>E-03</code> 與 <code>E-04</code> ——
+      理由不是宣稱失效，是<b>畫面真的畫出來了</b>，缺口本身沒有了。
+      <b>⛔ 的現況因此是：結案 2 筆、仍然開著 21 筆，ID 一個都沒有刪。</b>
       <b><code>E-13</code> 另有半邊失效</b>（「套哪一種模板都會說謊」那半），<b>核心仍成立</b>，故仍列在開著那一邊。
       ⛔ <b>第十四輪為什麼會把 <code>E-12</code> 判錯，根因寫死在這裡</b>：
       <b>那一輪讀了 44 第三節的 <code>EXP-*</code> 八塊，沒有讀第五節</b> ——
@@ -675,11 +727,118 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <b>八十四份全部逐位元組相同</b>；螢幕<b>外</b>的 <code>#pinrow</code> 有<b>九份</b>不同
       —— <b>狀態 1、狀態 2、狀態 7 各三個斷點</b>，改動的就是那四枚標籤
       （<code>E-01</code>／<code>E-04</code>／<code>E-12</code> ×2，其中狀態 7 那一枚由 ⛔ 改為 ⚠，理由見 §C）。
+      <b>⚠️ 上面整段描述的是第十五輪，對那一輪仍然為真；第十六輪起它已經不是本檔的現況</b>
+      〔2026-09-24 第十六輪就地更正 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕：
+      <b>本輪動的不只是標籤，是畫面本身</b> —— 客戶拍板草稿後，
+      <code>EXP-2</code> 補上第二組勾選框、<code>EXP-1</code> 與 <code>EXP-4</code> 各補一枚「存檔」、
+      三塊補上存檔失敗態。
+      <s><b>七種狀態的四個渲染槽因此每一種都變了，沒有一種是逐位元組相同的。</b></s>
+      <b>⛔ 那一句以「狀態」讀為真、以「槽」讀為假，而它緊接在一句用「槽」計數的話後面，
+      槽的讀法才是自然讀法</b>〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕。
+      <b>精確版（實測）</b>：<b>七種狀態每一種都至少有一個槽變了</b>；
+      但<b>不是四個槽都變</b> —— <code>#slot-conc</code>（<code>EXP-0</code>）<b>七種全部逐位元組相同</b>，
+      <code>#slot-evi</code>（<code>EXP-6</code>／<code>EXP-7</code>）<b>只有三種變</b>
+      （<code>nocond</code>／<code>zero</code>／<code>nocol</code>，改的是 <code>EXP-6</code> 空狀態那一句）。
+      <b>本輪實測的差異逐項寫在「<code>E-03</code>／<code>E-04</code> 已結案」那一框裡。</b>
       ⚠️ <b>「八十四份／九份」的射程同上一段</b>：<code>ui.bp</code> 進不了任何產生 HTML 的函式，
-      斷點那一維不可能測出差異，所以那是<b>二十八份不同輸出各數三次</b>。</span>
+      斷點那一維不可能測出差異，所以那是<b>二十八份不同輸出各數三次</b>。
+      <b>⚠️ 那個「二十八」是第十五輪的渲染空間，第十六輪起不是現況</b>
+      〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕：
+      本輪多了一枚與狀態正交的「存檔失敗」開關，渲染空間由 <b>7 × 3</b> 變成 <b>7 × 2 × 3</b>。
+      <b>本輪實測</b>：<b>7 種狀態 × 2（開關）× 4 個渲染槽 ＝ 56 份</b>，其中<b>相異 28 份</b>
+      （<code>slot-conc</code> 4 種／<code>slot-cards</code> 12 種／<code>slot-ops</code> 6 種／<code>slot-evi</code> 6 種）。
+      <b>斷點那一維照舊不影響 HTML</b>，所以它不進這個乘法。</span>
       ⚠️ <b>第十四輪掃的是整份檔、不是本框點名的那三處</b>：
       同一句假話在本檔另外還長在 §A 層 1 那一列、§B 那條 ⛔ 的標題、
       §C <code>E-01</code> 那一格的標題與「不拍板會怎樣」欄、§I 那一句，<b>一併改完</b>。</p>
+  </div>
+
+  <div class="gapstrip" style="margin-top:14px">
+    <h3>✓ <code>E-03</code>／<code>E-04</code> 已結案（2026-09-24 第十六輪：客戶拍板草稿後併入）</h3>
+    <p class="tiny">〔<b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕
+      客戶 2026-09-24 就那一份勾選框與存檔鈕草稿逐字拍板四條：
+      「<b>兩格上下疊，接受</b>」「<b>存檔鈕卡底，接受</b>」「<b>失敗框改灰</b>
+      （理由逐字：<b>黃是業務例外；存檔失敗是系統級</b>）」、
+      「<b>拍板後搬回本檔，並拿掉 <code>E-03</code>／<code>E-04</code> 兩條 ⛔</b>」。
+      <b>本輪照辦：畫面已經畫出來了，那兩個缺口因此結案。</b>
+      ⚠️ <b>結案不等於刪掉痕跡</b> —— 本檔各處的舊句一律<b>就地劃線保留</b>，一段都沒有整段刪除；
+      劃掉的是「本草稿沒跟上」那個已經不成立的現況，<b>不是那兩筆缺口曾經存在這件事</b>。</p>
+    <table class="wt" style="margin-top:8px">
+      <thead><tr><th>⛔</th><th>原本卡在哪</th><th>現在畫面上是什麼（本輪實跑 <code>render()</code> 數過，非讀程式碼推論）</th></tr></thead>
+      <tbody>
+        <tr><td class="id">E-03</td>
+          <td>三塊吃 <code>user_setting</code>，而本草稿只畫了 <code>EXP-5</code> 那一枚存檔鈕；
+            <code>EXP-1</code> 的條件與 <code>EXP-4</code> 的欄位與排序<b>沒有任何一枚鈕寫得回去</b></td>
+          <td><code>EXP-1</code> <b>卡底</b>一枚「存檔」、<code>EXP-4</code> <b>展開區底</b>一枚「存檔」，
+            加上原有的 <code>EXP-5</code> 那一枚 —— <b>三枚存檔類按鈕，七種狀態下每一種都渲染得出來</b>
+            （實測：每一種狀態的 <code>.apply</code> 皆為 <b>3</b> 枚，其中標籤「存檔」<b>2</b> 枚、
+            「加入觀察清單」<b>1</b> 枚）。<br>
+            <span class="tiny">位置是客戶逐字拍板的（「存檔鈕卡底，接受」）。
+            <b>停用條件 44 沒訂</b>（44 自己在 <code>EXP-1</code> 塊下方登記為待裁決），
+            所以 <code>EXP-1</code>／<code>EXP-4</code> 那兩枚<b>一律可按</b>。
+            <s>那是照 44 的沉默畫，不是本組加的規則。</s>
+            <b>⛔ 那一句講錯了，2026-09-24 同輪回修</b>〔<b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕：
+            <b>44 不是沉默，它是選了邊</b> —— 44 在 <code>EXP-1</code> 塊下方並陳兩種既有前例
+            （「<code>MKT-4</code> 與 <code>HLD-4</code> 在欄位皆未填時把『存檔』停用並寫出停用原因；
+            <code>SET-4</code> 的存檔動作沒有宣告任何停用條件」），裁定「本塊與 <code>EXP-4</code> 走 <code>SET-4</code> 那一種」，
+            並自陳「<b>這一步是本組判讀，客戶未逐字點名，可推翻</b>（決策者：AI 總管）」。
+            <b>本草稿畫成一律可按 ＝ 跟著那一筆可推翻的判讀走</b>；
+            <b>實跑狀態 2（一條條件都沒有）那枚「存檔」是可按的</b>，
+            而那正是 <code>MKT-4</code>／<code>HLD-4</code> 前例會停用的情形。
+            <b>已列進本框下方「本組挑的」那一段。</b></span></td></tr>
+        <tr><td class="id">E-04</td>
+          <td>清單上那個勾選框是給「對照」還是給「觀察清單」；本草稿畫成<b>共用一組</b>，
+            於是第 4 檔永遠加不進觀察清單</td>
+          <td><code>EXP-2</code> <b>每一列兩組勾選框，兩組並存、互不連動</b> ——
+            「對照」只餵 <code>EXP-3</code>，「觀察清單」只餵 <code>EXP-5</code>。
+            實測狀態 1：四列共 <b>8</b> 枚框（<b>4</b> 枚「對照」＋ <b>4</b> 枚「觀察清單」）；
+            <b>基金 D 的「對照」是停用的（附 44 要求的停用原因），同一列的「觀察清單」照樣是勾起來的</b> ——
+            <b>那個上限只拘束「對照」那一組</b>（<code>EXP-3</code> 空狀態逐字「<b>同一列「觀察清單」那一組不受這個上限拘束，照樣可勾</b>」）。<br>
+            <span class="tiny">兩格<b>上下疊</b>是客戶逐字拍板的（「兩格上下疊，接受」）。
+            示意勾選值（基金 B 兩組都勾、基金 D 只勾觀察清單）是<b>本組挑的</b> ——
+            44 沒有指定任何一組示意勾選，挑成這樣的唯一理由是讓上面那兩句逐字在同一張圖上同時看得到。</span></td></tr>
+      </tbody>
+    </table>
+    <p class="tiny" style="margin-top:9px">
+      ⚠️ <b>連帶改掉的一個舊行為，就地寫明（不是順手改的）</b>：
+      舊的 <code>card2()</code> 用 <code>i === 3</code> 把<b>第 4 列</b>的勾選框寫死成停用，
+      於是在<b>勾選為零</b>的狀態（狀態 6）底下，那一枚框<b>照樣是停用的</b> ——
+      而 44 的觸發條件逐字是「<b>「對照」那一組勾到第 4 檔時，該組的第 4 個勾選框停用並附停用原因</b>」。
+      <span class="tiny">⛔ <b>2026-09-24 同輪回修（有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出）</b>：
+      本句的第一版引的是「勾選超過 3 檔 → 第 4 個勾選停用」，
+      <b>那在 44 裡是劃掉的舊表述</b>（<code>EXP-3</code> 空狀態欄，2026-09-22 已改寫），
+      <b>而本檔頁首「44 已裁、草稿沒跟上」那一框下方，兩輪前就登記過
+      「本檔把 44 已劃掉的句子當現行逐字引用」這件事</b>。
+      <b>修復本身不受影響</b>（新舊兩種讀法各推一次，結論相同：「對照」那一組為零時，
+      既沒有「超過 3」也沒有「勾到第 4 檔」，所以那枚框不該停用）——
+      <b>錯的是授權它的那句引文。</b></span>
+      本輪改成依「對照」那一組的實際張數判，<b>勾選為零時就沒有停用框</b>。
+      <b>實測</b>：狀態 6 的停用框由 <b>1</b> 枚變 <b>0</b> 枚，其餘六種狀態不變。
+      <b>這是照 44 修正，不是新設計</b>；但它會動到下面那一句對黃色的計數，一併更新，見「禁顏色暗示方向」那一條。</p>
+    <p class="tiny" style="margin-top:6px">
+      ⚠️ <b>本輪沒有做的事，一併寫明</b>：<b>沒有</b>替 <code>EXP-0</code> 補燈色（<code>E-01</code> 照舊開著）；
+      <b>沒有</b>畫 44 <code>EXP-5</code> 空狀態那一句「觀察清單已含該檔 → 該檔顯示『已在觀察清單』」
+      （客戶本輪裁的三件事裡沒有它，本組<b>不自行多畫</b>，就地登記）；
+      <b>沒有</b>動 44 一個位元組；<b>沒有</b>碰其餘四份線框原型。</p>
+    <p class="tiny" style="margin-top:6px; border-left:3px solid var(--warn-mark); padding-left:11px">
+      ⚠️ <b>本輪「本組挑的」逐項列出（44 沒有指定，全部可推翻）</b>
+      〔2026-09-24 同輪回修補上 · 決策者：<b>AI 總管</b>；依據：獨立稽核指出這一份清單漏了項目〕：
+      <b>(1)</b> <code>EXP-1</code>／<code>EXP-4</code> 那兩枚「存檔」<b>一律可按</b> ——
+      <b>那不是 44 的沉默</b>：44 在 <code>EXP-1</code> 塊下方並陳兩種既有前例
+      （<code>MKT-4</code>／<code>HLD-4</code> 欄位皆未填時停用並寫出原因；<code>SET-4</code> 沒有宣告任何停用條件），
+      裁定本塊與 <code>EXP-4</code> 走 <code>SET-4</code> 那一種，並自陳那是<b>本組判讀、客戶未逐字點名、可推翻</b>。
+      <b>本草稿跟著那一筆走</b>，等於也繼承了它的可推翻性（見 §D <code>X-11</code>／<code>X-12</code>）。<br>
+      <b>(2)</b> <code>EXP-2</code> 兩組的<b>示意勾選值</b>（哪幾檔勾「對照」、哪幾檔勾「觀察清單」）。<br>
+      <b>(3)</b> <code>EXP-5</code> 那一枚<b>停用時不出失敗框</b> —— 44 沒有寫「按不到的按鈕會不會有失敗態」。<br>
+      <b>(4)</b> 「存檔失敗」做成<b>與七種狀態正交的開關</b>，而不是第八種狀態（理由見 §F 表下那一框）。<br>
+      <b>(5)</b> <code>EXP-6</code> 改讀「<b>對照</b>」那一組的第一檔（<code>E-10</code> 本來就開著，兩組之後它只是變得更具體）。</p>
+    <p class="tiny" style="margin-top:6px">
+      📌 <b>一筆只登記、本輪不處置的</b>〔2026-09-24 · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕：
+      <b>客戶拍板的那一份草稿從未進版本控制，併入後已刪除</b> ——
+      也就是「<b>客戶當天看到的那張圖上到底長什麼樣</b>」在 repo 裡<b>已經無從查證</b>。
+      本框對客戶裁示的引用<b>全部是逐字轉述，不是從那份檔案重讀出來的</b>。
+      ⚠️ <b>這一筆牽動的是「草稿不進版控」那條工作流本身，不是本頁的畫法</b> ——
+      <b>本輪只登記，不自行處置</b>，留給客戶裁。</p>
   </div>
 </header>
 
@@ -687,7 +846,8 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
 <div class="ctlwrap">
   <div class="ctlhead">
     <span class="tag">審稿用 · 不是畫面元件</span>
-    <span class="say">這一排鈕<b>不存在於 app 裡</b> —— 它在淺色註記層上，只是替你把下面那塊深色螢幕切成不同狀態與寬度。</span>
+    <span class="say">這一排鈕<b>不存在於 app 裡</b> —— 它在淺色註記層上，只是替你把下面那塊深色螢幕切成不同狀態與寬度。
+      <b>「存檔失敗」那一枚是開關，不是第八種狀態</b>：它可以疊在上面任何一種狀態上。</span>
   </div>
   <div class="controls" role="group" aria-label="草稿控制列（註記層）">
     <div class="cgroup">
@@ -699,6 +859,10 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <button class="btn" type="button" data-state="partial" aria-pressed="false">5 部分缺值</button>
       <button class="btn" type="button" data-state="nocol" aria-pressed="false">6 欄位全不勾</button>
       <button class="btn" type="button" data-state="nofund" aria-pressed="false">7 查無此代碼</button>
+    </div>
+    <div class="cgroup">
+      <span class="clab">存檔失敗</span>
+      <button class="btn" type="button" id="btn-savefail" aria-pressed="false">關</button>
     </div>
     <div class="cgroup">
       <span class="clab">斷點</span>
@@ -715,6 +879,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
     斷點鈕改的是<b>模擬螢幕的寬度</b>；<b>直接縮瀏覽器視窗也會塌</b>（本檔用的是真的 CSS
     <code>@media</code>，三段寫死在樣式表裡，見 §E）。兩條路的三段逐值相同，永遠同時同側。
     <b>七種狀態不是湊出來的</b> —— 每一種都對得到 44 第三節第三小節某一塊「空狀態」欄的一句話，逐句對照見 §F。
+    <b>「存檔失敗」那一枚開關同樣不是湊出來的</b>，它對得到三句
+    （<code>EXP-1</code>／<code>EXP-4</code>／<code>EXP-5</code> 的空狀態欄各一句），
+    <b>做成開關而不是第八種狀態的理由寫在 §F 表下那一框</b>。
   </p>
 </div>
 
@@ -817,8 +984,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       </div>
       <p class="tiny" style="margin-top:9px">
         <b>這一頁沒有匯出鈕、沒有套用鈕、<s>沒有存檔鈕</s>
-        <b>沒有寫回 <code>EXP-1</code> 條件與 <code>EXP-4</code> 欄位／排序的存檔鈕</b>、沒有重新取數鈕。</b>
-        四種都不是漏畫 —— 逐項理由寫在 §D 最後那一框。
+        <s><b>沒有寫回 <code>EXP-1</code> 條件與 <code>EXP-4</code> 欄位／排序的存檔鈕</b></s>、沒有重新取數鈕。</b>
+        <b>⛔ 劃掉那一句已被本輪自己推翻</b>〔2026-09-24 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕：
+        <b>本輪補上的正是那兩枚</b>（<code>EXP-1</code> 卡底、<code>EXP-4</code> 展開區底，見 §D <code>X-11</code>／<code>X-12</code>）。
+        <b>現行為三種沒有：匯出、套用、重新取數。</b>
+        <s>四種都不是漏畫</s> <b>三種都不是漏畫</b> —— 逐項理由寫在 §D 最後那一框
+        <b>（那一框本輪已同步改過，這一行是最後補上的一處）</b>。
         <span class="tiny">〔2026-09-23 第十三輪就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶〕 <b>原句缺限定，被同一張卡上面四行自己推翻</b>：
         那裡就寫著「⚠ 存檔　『加入觀察清單』」，§D <code>X-07</code>／<code>X-08</code> 兩列的「類」欄
         實測也都是 <code>存檔</code>。<b><code>EXP-5</code> 那一枚就是存檔類</b>；
@@ -943,12 +1114,15 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       且 <code>EXP-2</code> 顯示「尚未設定條件」；數值欄留空 → 「該列不生效，列尾顯示 <code>⬜ 資料未備：數值未填</code>」。</p>
     <p class="note" style="margin-top:6px"><b>按鈕</b>：「新增條件」（<b>標籤逐字</b>，對到八類的 <code>新增列</code>）；
       「清除這一列」（<b>整顆本組擬定</b>，見 <b>⛔ E-18</b>）。</p>
-    <p class="note" style="margin-top:6px">⛔ <b>E-03</b>（本頁第一號）：本塊吃 <code>user_setting</code> 的 <code>exp_filter_rules</code>，
+    <p class="note" style="margin-top:6px">✓ <b>E-03 已結案</b>（本頁第一號）：<b>本塊卡底現在有一枚「存檔」。</b>&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span><br>
+      <s>⛔ <b>E-03</b>（本頁第一號）</s>：本塊吃 <code>user_setting</code> 的 <code>exp_filter_rules</code>，
       <s><b>但來源欄沒有寫出「寫入對象」，這一頁也沒有任何 <code>存檔</code> 類按鈕</b> —— 你設的條件存不回去。</s>
       <b>44 已於 2026-09-22 補完兩邊</b>：本塊來源欄寫出「寫入對象為同一鍵的
       <code>user_setting.setting_value</code> 與 <code>updated_at</code>」，規則欄掛一枚「存檔」
-      （<code>action_kind</code> 為 <code>存檔</code>）——<b>存不回去的是本草稿，不是 44</b>
-      （見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。
+      （<code>action_kind</code> 為 <code>存檔</code>）——<s><b>存不回去的是本草稿，不是 44</b>
+      （見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。</s>
+      <b>2026-09-24 起本草稿也存得回去了：這張卡的卡底掛著一枚標籤為「存檔」的按鈕，
+      鈕下一行寫出它寫哪一鍵、不寫哪四張表、不重算任何一塊；切到控制列的「存檔失敗」看得到失敗態。</b>
       <b>對照組</b>：同頁 <code>EXP-5</code> 的來源欄就寫了「寫入對象為同一鍵」，
       44 第三節 <code>MKT-4</code> 那一格還逐字寫「<b>體例同 <code>EXP-5</code>：有寫入動作的塊在來源欄寫出寫入對象</b>」
       —— <s><b>本塊與 <code>EXP-4</code> 沒有照那個體例。</b></s>
@@ -973,7 +1147,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <li><b>「無綜合分數欄，無星等欄，無排名欄」</b>（逐字）。本草稿的欄名集合裡沒有分數、星等、排名、推薦四類欄。</li>
       <li><b>「預設不排序，依 <code>fund_code</code> 字面值排列」</b>（逐字）；使用者自選排序欄位後依該欄排序，
         <b>「排序結果不加任何冠詞」</b>（逐字）—— 沒有「精選」「推薦」「最佳」。</li>
-      <li>每一列一個勾選框（餵 <code>EXP-3</code> 與 <code>EXP-5</code>）—— <b>⛔ E-04：那是一個框還是兩個，44 沒有寫。</b></li>
+      <li><s>每一列一個勾選框（餵 <code>EXP-3</code> 與 <code>EXP-5</code>）—— <b>⛔ E-04：那是一個框還是兩個，44 沒有寫。</b></s><br>
+        <b>✓ E-04 已結案：每一列<b>兩組</b>勾選框，兩組並存、互不連動</b>（44 <code>EXP-2</code> 規則欄逐字，2026-09-22 新增）——
+        一組標「<b>對照</b>」只餵 <code>EXP-3</code>，一組標「<b>觀察清單</b>」只餵 <code>EXP-5</code>。&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span></li>
     </ul>
     <p class="note" style="margin-top:9px"><b>回答什麼</b>（逐字）：「符合我條件的是哪幾檔，它們的客觀欄位各是多少」。</p>
     <p class="note" style="margin-top:6px"><b>資料不齊時</b>（逐字）：條件未設 → 「尚未設定條件」；符合為零 → 「目前條件下沒有符合的基金」；
@@ -1021,8 +1197,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
     <p class="note" style="margin-top:6px">⛔ <b>E-15</b>：3 欄在 <code>375</code> 寬度下塞不下，而 44 第二節第一小節硬規則逐字
       「<b>任何一段都不出現橫向捲動</b>」，<b>但 44 沒有寫卡內表格怎麼塌</b>。
       本草稿在 <code>≤768</code> 改成<b>逐檔上下堆疊</b>〔本組擬定〕—— 切到 768 或 375 看得到。</p>
-    <p class="note" style="margin-top:6px">⛔ <b>E-04</b>：勾選框與 <code>EXP-5</code> 共用還是各有一組，44 沒有寫；
-      而「第 4 個勾選停用」與 <code>EXP-5</code>「該檔的勾選框顯示『已在觀察清單』」兩句<b>正面相反</b>。</p>
+    <p class="note" style="margin-top:6px"><s>⛔ <b>E-04</b>：勾選框與 <code>EXP-5</code> 共用還是各有一組，44 沒有寫；
+      而「第 4 個勾選停用」與 <code>EXP-5</code>「該檔的勾選框顯示『已在觀察清單』」兩句<b>正面相反</b>。</s><br>
+      <b>✓ E-04 已結案</b>：44 已明訂各有一組，<b>本塊只讀「對照」那一組</b>
+      （44 <code>EXP-3</code> 來源欄逐字改寫為「<code>EXP-2</code> 中『對照』那一組勾選框被勾起的檔」）；
+      上限 3 因此<b>只拘束「對照」</b>，兩句不再相反。&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span></p>
   </div>
 
   <h3 class="blk"><code>EXP-4</code>｜欄位與排序設定（層 3，預設收合）</h3>
@@ -1044,12 +1223,15 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       但 <code>EXP-2</code> 那五欄裡<b>有三欄不在 <code>fund_profile</code></b>（最近淨值日、最近淨值來自 <code>nav</code>；配息佔淨值比是算出來的）。
       本草稿照 <code>EXP-2</code> 規則欄那五欄畫（<b>那是 44 唯一寫死的一份欄位清單</b>），
       扣掉「基金名」（44 逐字說它在全不勾時仍然顯示，所以它不在勾選集裡）→ 四個勾選項。</p>
-    <p class="note" style="margin-top:6px">⛔ <b>E-03</b>：同 <code>EXP-1</code> —— 本塊吃 <code>exp_visible_columns</code> 與 <code>exp_sort_column</code>，
+    <p class="note" style="margin-top:6px">✓ <b>E-03 已結案</b>：<b>本塊展開區底現在有一枚「存檔」，一枚同時寫兩鍵。</b>&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span><br>
+      <s>⛔ <b>E-03</b></s>：同 <code>EXP-1</code> —— 本塊吃 <code>exp_visible_columns</code> 與 <code>exp_sort_column</code>，
       <s><b>來源欄沒有寫入對象、也沒有存檔鈕</b>。</s>
       <b>44 已於 2026-09-22 補完兩邊</b>：來源欄寫出「寫入對象為同兩鍵的
       <code>user_setting.setting_value</code> 與 <code>updated_at</code>」，
-      規則欄掛<b>一枚</b>「存檔」同時寫兩鍵、逐字「不拆成兩枚」——<b>沒有存檔鈕的是本草稿</b>
-      （見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。</p>
+      規則欄掛<b>一枚</b>「存檔」同時寫兩鍵、逐字「不拆成兩枚」——<s><b>沒有存檔鈕的是本草稿</b>
+      （見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。</s>
+      <b>2026-09-24 起本草稿也有了：展開區底一枚標籤為「存檔」的按鈕，
+      鈕下一行逐字寫出「一枚按鈕同時寫兩鍵、不拆成兩枚」。</b></p>
     <p class="note" style="margin-top:6px">⛔ <b>E-17</b>：<code>exp_sort_column</code> 存的是<b>一個欄位名</b>（字串），
       而 44 第四節第五小節 <code>user_setting.value_kind</code> 是封閉六種：
       <code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code>／<code>list</code>／<code>rules</code> —— <b>六種都對不上</b>。本組不自行補第七種。</p>
@@ -1075,8 +1257,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       「把同一檔按兩次，觀察清單裡該 <code>fund_code</code> 出現一次」——
       本草稿的按鈕<b>只寫 <code>user_setting</code></b>，畫面上沒有任何一顆按鈕碰
       <code>holding</code>／<code>policy</code>／<code>nav</code>／<code>dividend</code> 四張表。</p>
-    <p class="note" style="margin-top:6px">⛔ <b>E-04</b>：若勾選與 <code>EXP-3</code> 共用，<b>第 4 檔就永遠加不進觀察清單</b>
-      —— 因為 <code>EXP-3</code> 逐字要把第 4 個勾選停用。</p>
+    <p class="note" style="margin-top:6px"><s>⛔ <b>E-04</b>：若勾選與 <code>EXP-3</code> 共用，<b>第 4 檔就永遠加不進觀察清單</b>
+      —— 因為 <code>EXP-3</code> 逐字要把第 4 個勾選停用。</s><br>
+      <b>✓ E-04 已結案</b>：本塊只讀「觀察清單」那一組，
+      <code>EXP-3</code> 空狀態逐字「<b>同一列「觀察清單」那一組不受這個上限拘束，照樣可勾</b>」。
+      <b>實測狀態 1</b>：基金 D 的「對照」是停用的，同一列的「觀察清單」<b>是勾起來的</b> ——
+      「第 4 檔加不進觀察清單」這個後果<b>已經不會發生</b>。&#8195;<span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。</span></p>
   </div>
 
   <h3 class="blk"><code>EXP-6</code>｜單檔基礎資料（層 4，預設收合）</h3>
@@ -1176,8 +1362,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td>結論列到底能不能碰條件文字，兩格各說一句</td>
           <td>照<b>空狀態欄</b>畫（列出條件列），就地標 ⛔。切到<b>狀態 3</b> 看得到那一串條件</td></tr>
 
-        <tr><td class="id">E-03</td><td class="jd"><span class="badge mu">互斥</span></td>
-          <td><b>你設的條件、勾的欄位、選的排序存不回去。</b>
+        <tr><td class="id">E-03</td><td class="jd"><span class="badge ok">✓ 已結案</span>
+            <div class="tiny"><s><span class="badge mu">互斥</span></s><br>2026-09-24<br>決策者：<b>客戶</b></div></td>
+          <td><s><b>你設的條件、勾的欄位、選的排序存不回去。</b></s>
+            <b>✓ 2026-09-24 結案：三枚存檔鈕都在畫面上了。</b>
+            <span class="tiny">〔<b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後併入</b>，
+            見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。<b>本列以下原文一字未刪。</b></span><br>
             本頁三塊吃 <code>user_setting</code>，<s><b>只有 <code>EXP-5</code> 的來源欄寫出「寫入對象」</b>；
             <code>EXP-1</code>（<code>exp_filter_rules</code>）與 <code>EXP-4</code>
             （<code>exp_visible_columns</code>、<code>exp_sort_column</code>）<b>兩塊都沒有寫入對象</b>，
@@ -1188,7 +1378,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <s><b>本頁現在是三枚存檔鈕，本草稿一枚都沒畫</b></s>
             <b>本頁現在是三枚存檔鈕，本草稿畫了其中一枚</b> —— <code>EXP-5</code> 那一枚
             （標籤「加入觀察清單」，<code>action_kind</code> 為 <code>存檔</code>），
-            <b>實跑七種狀態每一種都渲染得出來</b>；沒畫的是 <code>EXP-1</code> 與 <code>EXP-4</code> 那兩枚。<br>
+            <b>實跑七種狀態每一種都渲染得出來</b>；<s>沒畫的是 <code>EXP-1</code> 與 <code>EXP-4</code> 那兩枚。</s>
+            <b>2026-09-24 起那兩枚也畫了</b> —— 實測七種狀態每一種的 <code>.apply</code> 皆為 <b>3</b> 枚
+            （「存檔」<b>2</b> 枚 ＋「加入觀察清單」<b>1</b> 枚），<b>兩把尺數出來的是同一個數。</b><br>
             <span class="tiny">⛔ <b>2026-09-24 就地更正</b>〔有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕：
             劃掉那一句<b>用 <code>action_kind</code> 數到「三枚」，又改用標籤字面數到「一枚都沒畫」</b>——
             <b>同一件事換了兩把尺</b>，而同檔 §D 那一框寫的是對的（「<code>EXP-5</code> 那一枚是存檔類沒錯」）。
@@ -1199,16 +1391,24 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <span class="tiny">44 第三節 <code>MKT-4</code> 那一格逐字寫著這個體例：「<b>體例同 <code>EXP-5</code>：有寫入動作的塊在來源欄寫出寫入對象</b>」
             —— <s><b>體例的範本就在同一頁，另外兩塊卻沒有照</b></s>
             <b>另外兩塊現在都照了；補宣告的那兩格自己就寫著「體例同 <code>EXP-5</code>」</b>。</span></td>
-          <td>下一次打開這一頁，條件、欄位、排序<b>全部要重填</b>。
+          <td><s>下一次打開這一頁，條件、欄位、排序<b>全部要重填</b>。</s>
+            <b>✓ 已結案，後果不再發生。</b>
             這與客戶 2026-09-22 已為 <code>HLD-4</code>（<code>H-04</code>）與 <code>MKT-4</code> 裁定過的缺口<b>同型</b>，
             <s><b>但 44 沒有為這一頁裁</b></s>
             <b>44 已於 2026-09-22 為 <code>EXP-1</code>／<code>EXP-4</code> 各明訂一枚「存檔」按鈕</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）</td>
-          <td><b>不自行加存檔鈕。</b> 畫成沒有存檔鈕，兩塊的卡上就地標 ⛔
-            <div class="tiny"><b>⛔ 的方向已反過來</b>：不是 44 沒裁，是<b>草稿沒跟上、待重繪</b>。
-            本輪只改字、不動畫面。</div></td></tr>
+          <td><s><b>不自行加存檔鈕。</b> 畫成沒有存檔鈕，兩塊的卡上就地標 ⛔</s>
+            <b>2026-09-24：客戶拍板草稿後已加上兩枚</b>（<code>EXP-1</code> 卡底、<code>EXP-4</code> 展開區底），
+            兩塊卡上的 ⛔ 一併撤下。
+            <div class="tiny"><s><b>⛔ 的方向已反過來</b>：不是 44 沒裁，是<b>草稿沒跟上、待重繪</b>。
+            本輪只改字、不動畫面。</s>
+            <b>那一句描述的是第十五輪；第十六輪動了畫面，⛔ 因此不是反過來，是拿掉了。</b></div></td></tr>
 
-        <tr><td class="id">E-04</td><td class="jd"><span class="badge mu">互斥</span></td>
-          <td><b>清單上那個勾選框，是給「對照」用的還是給「觀察清單」用的？</b>
+        <tr><td class="id">E-04</td><td class="jd"><span class="badge ok">✓ 已結案</span>
+            <div class="tiny"><s><span class="badge mu">互斥</span></s><br>2026-09-24<br>決策者：<b>客戶</b></div></td>
+          <td><s><b>清單上那個勾選框，是給「對照」用的還是給「觀察清單」用的？</b></s>
+            <b>✓ 2026-09-24 結案：每一列兩組框，「對照」餵 <code>EXP-3</code>、「觀察清單」餵 <code>EXP-5</code>。</b>
+            <span class="tiny">〔<b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕<b>客戶拍板草稿後併入</b>，
+            見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。<b>本列以下原文一字未刪。</b></span><br>
             <code>EXP-3</code> 來源逐字「<code>EXP-2</code> 中被使用者勾選的檔」、空狀態逐字「勾選超過 3 檔 → 第 4 個勾選<b>停用</b>」；
             <code>EXP-5</code> 規則逐字「按鈕把<b>勾選的檔</b>寫進觀察清單」、空狀態逐字「觀察清單已含該檔 → <b>該檔的勾選框</b>顯示『已在觀察清單』」</td>
           <td>若<b>共用</b>一組：<b>第 4 檔永遠加不進觀察清單</b>（它的勾選被 <code>EXP-3</code> 停用）；
@@ -1216,9 +1416,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <s><b>44 從頭到尾沒有宣告第二個</b></s>
             <b>44 已於 2026-09-22 宣告了第二個（兩組並存、互不連動）</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。
             一列一個框還是兩個，<b>畫面上直接看得出來 —— 這一題不決定就畫不出 <code>EXP-2</code></b></td>
-          <td><b>畫成共用一組</b>〔<b>舊版</b>：44 現行已是兩組並存，本草稿沒跟上、待重繪，見上方<b>「44 已裁、草稿沒跟上」</b>那一框〕
+          <td><s><b>畫成共用一組</b>〔<b>舊版</b>：44 現行已是兩組並存，本草稿沒跟上、待重繪，見上方<b>「44 已裁、草稿沒跟上」</b>那一框〕
             （當初的理由是 <code>EXP-5</code> 那句把勾選框指在清單列上），
-            並在第 4 列的勾選框旁<b>就地標 ⛔</b>，讓「加不進觀察清單」這個後果看得見</td></tr>
+            並在第 4 列的勾選框旁<b>就地標 ⛔</b>，讓「加不進觀察清單」這個後果看得見</s>
+            <b>2026-09-24：改畫成兩組並存、互不連動，第 4 列那一枚 ⛔ 撤下</b> ——
+            實測狀態 1 每列 <b>2</b> 組、四列共 <b>8</b> 枚框；基金 D 的「對照」停用（附 44 要求的停用原因）、
+            同一列的「觀察清單」勾得起來</td></tr>
 
         <tr><td class="id">E-05</td><td class="jd"><span class="badge no">缺</span></td>
           <td><b>「近 12 個月配息佔淨值比」沒有算式。</b> <code>EXP-2</code> 規則欄只給這個欄名。
@@ -1544,12 +1747,21 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td><b>整顆本組擬定。</b> 44 只寫「條件列由使用者<b>新增</b>」，<b>沒有寫怎麼刪、也沒有給字面</b>
             —— 見 <b>⛔ E-18</b>。八類裡沒有一類叫「刪除列」，對到 <code>清除</code> 也是本組判讀</td></tr>
 
-        <tr><td class="id">X-03</td><td><code>EXP-2</code> 每一列</td><td>（勾選框，無文字）</td>
+        <tr><td class="id">X-03</td><td><code>EXP-2</code> 每一列</td>
+          <td><s>（勾選框，無文字）</s> <b>（兩組勾選框，各帶一個字面標籤：「對照」／「觀察清單」）</b>
+            <div class="tiny">〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕
+            本欄第一版仍寫「無文字」，而同一列的理由欄已改成「各帶一個字面標籤」——<b>同一格自己打自己</b>。
+            <b>實跑狀態 1，兩個 <code>.lab</code> 都印得出來。</b></div></td>
           <td class="src">不屬八類</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
           <td>44 只寫「<code>EXP-2</code> 中<b>被使用者勾選的檔</b>」與「該檔的<b>勾選框</b>」，
-            <b>沒有說勾選框算不算一顆按鈕</b>，也沒有給任何字面。
-            <b>而且它到底是一個框還是兩個，44 沒有寫 —— ⛔ E-04。</b>
-            本草稿畫成<b>共用一個</b></td></tr>
+            <b>沒有說勾選框算不算一顆按鈕</b>，也沒有給任何字面 —— <b>這一半還開著</b>。
+            <s><b>而且它到底是一個框還是兩個，44 沒有寫 —— ⛔ E-04。</b>
+            本草稿畫成<b>共用一個</b></s>
+            <b>✓ E-04 那一半已結案</b>：44 已明訂兩組，本草稿 2026-09-24 改畫成<b>兩組上下疊</b>，
+            各帶一個字面標籤（「對照」／「觀察清單」）。
+            <span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕
+            那兩個標籤字面是<b>本組取自 44 的塊名與來源欄用語</b>，不是 44 給的按鈕標籤 ——
+            <b>本列的 ⚠ 待拍板因此沒有拿掉</b>，拿掉的只有 <code>E-04</code> 那一句。</span></td></tr>
 
         <tr><td class="id">X-04</td><td><code>EXP-2</code> 第 4 列（停用態）</td><td>（停用）＋停用原因</td>
           <td class="src">不屬八類</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
@@ -1587,6 +1799,28 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td><b>本組擬定。</b> 44 第五節展開區元件<b>沒有規定標題列算不算一顆按鈕</b>，也沒有給字面。
             本草稿用一個三角記號 ＋ 整列可點，不放文字鈕</td></tr>
 
+        <tr><td class="id">X-11</td><td><code>EXP-1</code> 卡底</td><td>存檔</td>
+          <td class="src">存檔</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>類別與標籤字面都是 44 逐字</b>：規則欄「本塊掛一枚『存檔』按鈕（<code>action_kind</code> 為 <code>存檔</code>）」
+            —— <b>這是本頁第一顆「標籤字面也出自 44」的按鈕</b>（<code>X-07</code> 那一枚引的是塊名，不是標籤）。<br>
+            <b>⚠ 的是位置與停用條件</b>：<b>卡底是客戶 2026-09-24 逐字拍板的</b>（「存檔鈕卡底，接受」）；
+            <b>停用條件見 <code>X-12</code> 那一列的說明，兩枚同一筆。</b>
+            <div class="tiny">〔2026-09-24 新增 · 決策者：<b>客戶</b>（裁示併入）〕
+            <b>本列與 <code>X-12</code> 是本輪補的</b> —— 上一版把兩枚鈕畫上去卻沒有進這張表，
+            而 §A 與本節前言都自陳「按鈕<b>逐顆</b>」。
+            <b>編號接在 <code>X-10</code> 之後、不插在 <code>X-01</code>／<code>X-05</code> 旁邊</b>，
+            理由是 <code>X-04</code> 等既有編號在本檔他處有交叉引用，插號會讓那些引用指錯。</div></td></tr>
+
+        <tr><td class="id">X-12</td><td><code>EXP-4</code> 展開區底</td><td>存檔</td>
+          <td class="src">存檔</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
+          <td><b>類別與標籤字面都是 44 逐字</b>：規則欄「本塊掛一枚『存檔』按鈕（<code>action_kind</code> 為 <code>存檔</code>），
+            把欄位勾選狀態與排序欄位的當下值分別寫回……<b>一枚按鈕同時寫兩鍵，不拆成兩枚</b>」。<br>
+            <b>⚠ 的是停用條件</b>：<b>44 沒有替這兩枚訂停用條件</b>，而 44 在 <code>EXP-1</code> 塊下方
+            就地登記了兩種互相衝突的既有前例 ——「<code>MKT-4</code> 與 <code>HLD-4</code> 在欄位皆未填時把『存檔』停用並寫出停用原因；
+            <code>SET-4</code> 的存檔動作沒有宣告任何停用條件」，並裁「本塊與 <code>EXP-4</code> 走 <code>SET-4</code> 那一種」，
+            同段自陳「<b>這一步是本組判讀，客戶未逐字點名，可推翻</b>（決策者：AI 總管）」。
+            <b>本草稿畫成一律可按，就是走那一邊</b> —— <b>那不是 44 的沉默，是 44 裡一筆可被推翻的判讀。</b></td></tr>
+
         <tr><td class="id">X-10</td><td>螢幕上方頁籤</td><td>（不可按）</td>
           <td class="src">無</td><td class="jd"><span class="badge wn">⚠ 待拍板</span></td>
           <td><b>本組擬定「不做成按鈕」。</b> 八類裡<b>沒有頁間切換</b> ——
@@ -1600,13 +1834,20 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   <div class="crit" style="margin-top:14px; margin-bottom:0">
     <h4>這一頁刻意<b>沒有</b>的按鈕（不是漏畫，逐項寫出理由）</h4>
     <ul>
-      <li><b>沒有存檔鈕。</b> 這是 <b>⛔ E-03</b>。
+      <li><s><b>沒有存檔鈕。</b> 這是 <b>⛔ E-03</b>。</s>
+        <b>✓ 2026-09-24 起本頁有三枚存檔類按鈕</b>（<code>EXP-1</code> 卡底、<code>EXP-4</code> 展開區底、
+        <code>EXP-5</code>），<b>這一條自本輪起不再是「刻意沒有的按鈕」</b>。
+        <span class="tiny">〔<b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕
+        <b>客戶拍板草稿後結案</b>，見上方「<b><code>E-03</code>／<code>E-04</code> 已結案</b>」那一框。
+        <b>以下原文一字未刪。</b></span><br>
         <code>EXP-5</code> 那一枚是<b>存檔類</b>沒錯，但它寫的是 <code>exp_watchlist</code>；
         <code>EXP-1</code> 的條件與 <code>EXP-4</code> 的欄位與排序<b>在本草稿上沒有任何一枚鈕寫得回去</b>
         （<b>44 那一邊已經各有一枚</b>）。
         <s><b>加一枚就等於替客戶把那一題裁掉了。</b></s>
-        <b>那一題客戶已經在 2026-09-22 裁了（<code>EXP-1</code>／<code>EXP-4</code> 各一枚「存檔」），
-        所以現在缺的不是裁示，是本草稿沒跟上</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。<b>重繪要另外出草稿，本輪不畫。</b></li>
+        <s><b>那一題客戶已經在 2026-09-22 裁了（<code>EXP-1</code>／<code>EXP-4</code> 各一枚「存檔」），
+        所以現在缺的不是裁示，是本草稿沒跟上</b>（見上方<b>「44 已裁、草稿沒跟上」</b>那一框）。<b>重繪要另外出草稿，本輪不畫。</b></s>
+        <b>2026-09-24：草稿已出、客戶已拍板，兩枚都畫上去了。</b>
+        <b>照的是「先出草稿、客戶拍板、再動線框」這條路，不是本組自己補的。</b></li>
       <li><b>沒有套用鈕。</b> 這是 <b>⛔ E-19</b>。<code>MKT-4</code>／<code>HLD-4</code> 有，本頁沒有 ——
         <s>本頁 44 沒給。</s>
         <b>44 已於 2026-09-22 逐字寫出「本頁沒有『套用』類按鈕」，所以這裡不畫是照 44，不是缺依據</b>；
@@ -1718,9 +1959,22 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <thead><tr><th>鈕</th><th>這一張圖在演什麼</th><th>出自 44 哪一句（逐字）</th></tr></thead>
       <tbody>
         <tr><td class="src">1 全齊</td>
-          <td>三條條件都設了、濾出 4 檔、勾了 3 檔做對照。
-            <b>第 4 檔的勾選是停用的</b>（<code>EXP-3</code> 上限 3 檔）—— ⛔ E-04 的現場就在這裡</td>
-          <td><code>EXP-3</code> 空狀態：「勾選超過 3 檔 → <b>第 4 個勾選停用並附停用原因</b>」</td></tr>
+          <td>三條條件都設了、濾出 4 檔、「對照」那一組勾了 3 檔。
+            <b>第 4 檔的「對照」是停用的</b>（<code>EXP-3</code> 上限 3 檔），
+            <s>—— ⛔ E-04 的現場就在這裡</s>
+            <b>而同一列的「觀察清單」照樣是勾起來的 —— <code>E-04</code> 結案後的現場就在這裡</b>
+            <div class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕
+            這一格原本是拿來演「共用一組會出什麼事」的，<b>現在演的是兩組分開之後那一句逐字成不成立</b>。
+            <b>實測</b>：本列四檔的「對照」勾／勾／勾／停用，「觀察清單」未勾／勾／未勾／勾。</div></td>
+          <td><code>EXP-3</code> 空狀態：<s>「勾選超過 3 檔 → <b>第 4 個勾選停用並附停用原因</b>」</s>
+            「<b>「對照」那一組勾到第 4 檔時，該組的第 4 個勾選框停用並附停用原因</b>」
+            <div class="tiny">〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕
+            劃掉那一句<b>在 44 裡本來就是劃掉的舊表述</b>，本欄的欄名卻是「出自 44 哪一句（<b>逐字</b>）」。
+            <b>本檔另有四處仍以現行逐字引著它</b>（<b>頁首落差條</b>、<b>§B</b>、
+            <b>§C <code>E-04</code> 那一列</b>、<b>§D <code>X-04</code></b>）——
+            那四處<b>不是本輪碰的</b>，頁首那一框早已就地登記（逐字：「本檔把 44 已劃掉的句子當現行逐字引用……
+            兩處都留著、都只登記，不改畫面」），<b>本輪不擴大射程、也不假裝沒看到</b>。</div>，
+            同格並明訂「<b>同一列「觀察清單」那一組不受這個上限拘束，照樣可勾</b>」</td></tr>
 
         <tr><td class="src">2 尚未設定條件</td>
           <td>首次開啟。條件一列也沒有，<code>EXP-0</code>／<code>EXP-2</code>／<code>EXP-7</code> 三塊同時進「尚未設定條件」。
@@ -1777,6 +2031,40 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             其判準：「<b>輸入一個不存在的 <code>fund_code</code></b>，畫面出現『查無此 <code>fund_code</code>』<b>而不是空白區塊</b>」</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="crit" style="margin-top:14px">
+    <h4>第八個鈕是一枚<b>開關</b>，不是第八種狀態 —— 存檔寫入失敗（2026-09-24 新增）</h4>
+    <p class="note" style="margin-bottom:8px">
+      〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（裁示併入）／
+      <b>AI 總管</b>（做成開關而不是第八種狀態，是本組的落地選擇）〕
+      客戶拍板的草稿把「存檔寫入失敗」畫成它自己那五種狀態裡的<b>第五種</b>。
+      搬回本檔時<b>沒有照抄那個做法</b>，改成一枚與七種狀態<b>正交</b>的開關。<b>理由三條</b>：</p>
+    <ol class="note" style="margin:0 0 8px; padding-left:20px">
+      <li><b>它本來就正交。</b> 存檔會不會寫失敗，與「條件設了沒／濾出幾檔／欄位勾了沒」<b>沒有關係</b> ——
+        做成互斥的第八種，等於宣稱「失敗只會發生在某一種資料狀態底下」，那不是 44 寫的東西。</li>
+      <li><b>做成開關才驗得到三塊。</b> 開關可以疊在任一種狀態上，
+        所以「<code>EXP-5</code> 勾選為零時那一枚是停用的、停用就沒有失敗態」這種交互作用<b>看得到</b>；
+        做成第八種狀態就只看得到一組。</li>
+      <li><b>本檔各處「七種狀態」那個數字因此一個字都不用改。</b>
+        ⚠️ 這是理由，<b>不是</b>藉口：若 44 哪天把失敗態寫成一種獨立的資料狀態，該改還是要改。</li>
+    </ol>
+    <p class="note" style="margin-bottom:0">
+      <b>它對得到 44 哪三句</b>（逐字，2026-09-22／09-23 新增）：
+      <code>EXP-1</code> 空狀態「存檔寫入失敗 → 卡上顯示失敗訊息原文，<b>條件列的當下內容留在畫面上不清掉</b>，<code>EXP-2</code> 的列數不變」；
+      <code>EXP-4</code> 空狀態「存檔寫入失敗 → 卡上顯示失敗訊息原文，<b>欄位勾選狀態與排序欄位的當下值留在畫面上不清掉</b>，<code>EXP-2</code> 顯示的欄與排序不變」；
+      <code>EXP-5</code> 空狀態「存檔寫入失敗 → 卡上顯示失敗訊息原文，<b><code>EXP-2</code> 那一組『觀察清單』勾選框的當下勾選狀態留在畫面上不清掉</b>，觀察清單的內容不變」。<br>
+      <b>實測</b>：開關打開時，有勾到觀察清單的狀態出 <b>3</b> 個失敗框，
+      「觀察清單勾選為零」的三種狀態（<code>2</code>／<code>3</code>／<code>6</code>）出 <b>2</b> 個 ——
+      <code>EXP-5</code> 那一枚按鈕在那幾種狀態下是停用的。
+      <b>停用就不出失敗框，是本組挑的</b>：44 沒有寫「按不到的按鈕會不會有失敗態」，
+      而反過來畫會讓畫面自己打架。<br>
+      ⚠️ <b>失敗訊息的字面 44 沒有給</b> —— 44 三句寫的都是「顯示<b>失敗訊息原文</b>」，
+      那是「把上游給的字原樣印出來」，不是一句可以照抄的文案。
+      <b>本草稿畫成〔佔位〕，不編造。</b><br>
+      ⚠️ <b>顏色是客戶裁的</b>：草稿當初用黃，客戶 2026-09-24 逐字裁「<b>失敗框改灰</b>」，
+      理由逐字「<b>黃是業務例外；存檔失敗是系統級</b>」。
+      本輪照裁示改成 <code>--st-gray</code> ＋ 新增的 <code>--st-gray-bg</code>，對比值見 §J 一。</p>
   </div>
 
   <div class="crit" style="margin-top:14px; margin-bottom:0">
@@ -1863,9 +2151,21 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         它標的是「這一塊開還是關」，<b>不掛在任何數值旁邊</b>，也不指任何標的的方向。</span></li>
       <li><b>禁顏色暗示方向</b> —— 顏色只映射資料狀態（齊／缺）與新鮮度。
         <s><b>這一頁只用到一種狀態色（灰＝資料未備）</b></s>
-        <b>這一頁用到兩種狀態色：灰（資料未備）與黃</b> —— 黃實際渲染於<b>七種狀態裡的五種</b>
+        <s><b>這一頁用到兩種狀態色：灰（資料未備）與黃</b> —— 黃實際渲染於<b>七種狀態裡的五種</b>
         （<code>.ckwhy</code> 的「同時最多對照 3 檔」、<code>blankval</code> 的「未生效」、
-        <code>nofund</code> 的虛線洞框）；主值一律用中性文字色。
+        <code>nofund</code> 的虛線洞框）</s>
+        <b>這一頁用到兩種狀態色：灰（資料未備<b>＋ 2026-09-24 起也用在存檔寫入失敗</b>）與黃 ——
+        黃實際渲染於七種狀態裡的<b>四種</b></b>（<code>full</code>／<code>blankval</code>／
+        <code>partial</code>／<code>nofund</code>）；主值一律用中性文字色。
+        <span class="tiny">〔2026-09-24 第十六輪就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕
+        <b>由五種變四種，不是本輪改了黃的用法，是本輪照 44 修好了一個觸發條件</b>：
+        舊的 <code>card2()</code> 把第 4 列的勾選框寫死成停用（<code>i === 3</code>），
+        於是在<b>勾選為零</b>的狀態 6 底下也會印出那一句黃色的「同時最多對照 3 檔」；
+        44 的觸發條件逐字是「<b>「對照」那一組勾到第 4 檔時，該組的第 4 個勾選框停用並附停用原因</b>」。改成依「對照」那一組的實際張數判之後，狀態 6 不再有黃。
+        ⛔ <b>本句第一版引的是 44 已劃掉的舊表述「勾選超過 3 檔」，2026-09-24 同輪回修</b>
+        （有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出）。
+        <b>實測</b>：黃在 <code>nocond</code>／<code>zero</code>／<code>nocol</code> 三種狀態下<b>一處都沒有</b>，
+        其餘四種各有。<b>黃的三個用處一字未改</b>，改的只是其中一個的觸發時機。</span>
         <span class="tiny">〔2026-09-23 第十三輪就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶〕 <b>實跑七種狀態數過</b>。本檔 §J 自己就把黃列為四種狀態色之一、
         並替它算了三組對比 —— <b>是這一句漏了，不是 §J 多算</b>。
         ⚠️ <b>本條禁令未被推翻</b>：黃標的是「這一列不生效／這個框停用」這類<b>資料與可用性狀態</b>，
@@ -2010,8 +2310,18 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
   </p>
   <p class="note" style="margin-bottom:10px; border-left:3px solid var(--ok-mark); padding-left:11px">
     <b>總帳（三層各自算：淺色註記層、深色註記層、深色 app 螢幕）</b>：
-    <b>合計 65 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>49 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>16 組</b>，
-    <b>未達標 0 組</b>。<br>
+    <s><b>合計 65 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>49 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>16 組</b></s>
+    <b>合計 66 組</b> —— 受 <b>4.5</b> 拘束的一般文字 <b>49 組</b>、受 <b>3</b> 拘束的非文字 UI 元件 <b>17 組</b>，
+    <b>未達標 0 組</b>。
+    <span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（裁示「失敗框改灰」）〕
+    多出來的<b>一組</b>是存檔失敗框的<b>灰色邊框</b>（<code>#8b949e</code>）貼著卡底（<code>#161b22</code>）——
+    <b>那是一個狀態容器的邊界，算「非文字 UI 元件」，受 3 拘束，算出來是 5.62</b>。
+    ⚠️ <b>一般文字那一邊刻意沒有加</b>：框裡的灰字坐在 <code>#11161d</code> 上，
+    <b>而「灰字／<code>#11161d</code>」這一組本來就在那 49 組裡</b>
+    （<code>.cmpstack .one</code> 的底就是這個值，框裡的 <code>.nd</code> 是灰字）——
+    <b>同一組不重複計。</b>
+    ⚠️ 新增的 <code>--st-gray-bg</code> <b>取值與本檔既有的「格底」逐值相同</b>，
+    所以<b>全檔沒有因此多出任何一個新色碼</b>，本表的色碼母體一個都沒有變。</span><br>
     另有<b>純裝飾分隔線不計入</b>（卡框、表列線、層標橫線、行內碼框，色碼
     <code>#30363d</code>／<code>#c3ccd8</code>／<code>#dbe2ea</code>／<code>#262c34</code>）——
     <b>本組判它們不是「非文字 UI 元件」，理由寫在下表最後一列，那是本組的分類判斷、客戶沒有裁、可推翻</b>。
@@ -2036,11 +2346,16 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <tr><td class="src">深色 app 螢幕</td><td>一般文字（主／次／弱、停用鈕文字、輸入提示、層標青、狀態灰、狀態黃）</td>
           <td class="jd">17</td><td class="jd">4.5</td><td class="jd"><b>4.95 – 15.99</b></td>
           <td>停用鈕文字 <code>#8b949e</code> ／ 鈕底 <code>#21262d</code> ＝ <b>4.95</b></td></tr>
-        <tr><td class="src">深色 app 螢幕</td><td>非文字 UI 元件（四種底上的控制項邊界、黃虛框、勾選框著色）</td>
-          <td class="jd">6</td><td class="jd">3</td><td class="jd"><b>3.29 – 10.13</b></td>
-          <td>控制項邊界 <code>#6b7682</code> ／ 鈕底 <code>#21262d</code> ＝ <b>3.29</b></td></tr>
+        <tr><td class="src">深色 app 螢幕</td><td>非文字 UI 元件（四種底上的控制項邊界、黃虛框、勾選框著色、<b>灰失敗框</b>）</td>
+          <td class="jd"><s>6</s> <b>7</b></td><td class="jd">3</td><td class="jd"><b>3.29 – 10.13</b></td>
+          <td>控制項邊界 <code>#6b7682</code> ／ 鈕底 <code>#21262d</code> ＝ <b>3.29</b>
+            <div class="tiny">〔2026-09-24 第十六輪 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>〕
+            新增的第 7 組是<b>存檔失敗框的灰邊</b>：<code>#8b949e</code> ／ 卡底 <code>#161b22</code> ＝ <b>5.62</b>、
+            ／ 框自己的底 <code>#11161d</code> ＝ <b>5.90</b>，<b>兩邊都過 3</b>。
+            <b>比值範圍一個字未改</b>：5.62 落在 3.29 – 10.13 之內，<b>最低與最高那一組都不是它</b>。</div></td></tr>
         <tr><td colspan="6" style="background:var(--sheet-2)"><b>四種狀態色，逐一寫出來（最容易被誤以為不夠的幾組）</b>：
-          資料未備的灰 <code>#8b949e</code> 在卡底 <code>#161b22</code> 上 <b>5.62</b>、在格底 <code>#11161d</code> 上 <b>5.90</b>；
+          資料未備的灰 <code>#8b949e</code> 在卡底 <code>#161b22</code> 上 <b>5.62</b>、在格底 <code>#11161d</code> 上 <b>5.90</b>
+          （<b>2026-09-24 起同一個灰也用在存檔失敗框</b>：框線走 5.62／框裡的字走 5.90，<b>色碼與比值都沒有變，變的是它多了一個用處</b>）；
           黃 <code>#e3b341</code> 在卡底上 <b>8.89</b>、在格底上 <b>9.33</b>、在黃態底 <code>#241d07</code> 上 <b>8.61</b>；
           輸入提示字 <code>#7d858e</code> 在輸入底 <code>#0e1117</code> 上 <b>5.06</b>（<b>提示字是文字，不是裝飾，適用 4.5</b>）。
           <s><b>本頁沒有紅色</b>（⛔ E-14），所以沒有紅色那一組要算。</s>
@@ -2049,7 +2364,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <b>精確版</b>：<b>app 螢幕裡沒有紅色狀態色（⛔ E-14），所以狀態色那一組沒有紅要算</b>；
           註記層的酒紅另計，已在本表 §C／§D 那一列算過。
           <span class="tiny">〔2026-09-23 第十三輪就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶〕 樣式表檔頭那句謹慎版（「本檔沒有定義任何<b>紅色的 app 狀態色</b>」）才是對的。</span></td></tr>
-        <tr><td class="src">—</td><td><b>純裝飾分隔線（不計入上列 65 組）</b>：卡框、表列線、層標橫線、行內碼框</td>
+        <tr><td class="src">—</td><td><b>純裝飾分隔線（不計入上列 <s>65</s> <b>66</b> 組）</b>：卡框、表列線、層標橫線、行內碼框
+          <div class="tiny">〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕
+          表頭那一段本輪已改為 66，<b>這一格漏了</b> —— 同一張表一度有兩個總數。</div></td>
           <td class="jd">—</td><td class="jd"><b>不適用</b></td><td class="jd">1.2 – 1.7</td>
           <td><b>本組判定它們不是「非文字 UI 元件」</b>：不是控制項、不表示任何狀態，
             拿掉之後每一個字與每一個數<b>照樣讀得到</b>。
@@ -2092,6 +2409,17 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td><b>狀態</b>：框本身是 disabled（不只是變淡）<b>＋ 文字</b>：停用原因就寫在旁邊
             <b>＋ 顏色</b>：灰／黃</td>
           <td><b>分得出來</b>：44 第五節逐字「<b>按鈕停用時不隱藏</b>」—— 原因是用字寫的，不是用顏色寫的</td></tr>
+        <tr><td><b>存檔寫入失敗的框</b>（<code>EXP-1</code>／<code>EXP-4</code>／<code>EXP-5</code>，2026-09-24 新增）</td>
+          <td><b>文字</b>：框裡第一行逐字寫著「存檔寫入失敗」<b>＋ 第二行寫出當下內容留著不清掉</b>
+            <b>＋ 位置</b>：就掛在那一枚按鈕下面 <b>＋ 顏色</b>：灰 <code>#8b949e</code></td>
+          <td><b>分得出來</b>：「存檔寫入失敗」五個字本身就說完了；
+            <b>而且它與「資料未備」用同一個灰，兩者靠的一直是字不是色</b>
+            <div class="tiny">⚠️ <b>同一個灰擔兩個意思</b>（資料未備／存檔失敗），這是客戶 2026-09-24 裁的
+            （「黃是業務例外；存檔失敗是系統級」）。<b>在客戶那三條引導底下不成問題</b> ——
+            第二條要的就是「不靠顏色單獨辨識」，兩者的字面完全不同。
+            <b>但據實寫明</b>：44 第五節卡片表把灰定義為「<b>資料未備</b>」，
+            <b>「存檔失敗算不算資料未備」44 沒有寫</b>，本輪是照客戶裁示走，<b>就地登記</b>。</div></td></tr>
+
         <tr><td><b>§C 的類型欄與 §D 的判欄</b>（註記層）</td>
           <td><b>記號＋文字</b>：「✓ 合規」「⚠ 待拍板」「互斥」「缺」「疑義」<b>＋ 顏色</b>：青／綠／褐／酒紅</td>
           <td><b>分得出來</b>：每一枚徽章裡都有字，<b>沒有一枚是只有一個色塊</b></td></tr>
@@ -2164,8 +2492,16 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <code>grep -n 'EXP-' docs/v2/44_fund_ui_ssot.md</code>），
         <b>那只抓得到「別處點名本頁」的情形，抓不到「語意相同但沒點名」的情形</b>。</li>
       <li><b>本檔沒有替 44 補任何一個缺口。</b> 撞到的二十三處一律就地標 ⛔、照最保守的畫法畫。
-        <b>E-04</b>（勾選框共不共用）、<b>E-10</b>（<code>EXP-6</code> 讀哪一檔）、
-        <b>E-15</b>（窄螢幕怎麼塌）三處<b>本組被迫挑了一邊</b>（不然畫不出來），<b>三處都已標明是本組挑的</b>。</li>
+        <s><b>E-04</b>（勾選框共不共用）、</s><b>E-10</b>（<code>EXP-6</code> 讀哪一檔）、
+        <b>E-15</b>（窄螢幕怎麼塌）<s>三處</s><b>兩處</b><b>本組被迫挑了一邊</b>（不然畫不出來），<b>都已標明是本組挑的</b>。
+        <span class="tiny">〔2026-09-24 第十六輪 · <b>有意識的狀態變更，不是漏刪</b> · 決策者：<b>客戶</b>〕
+        <code>E-04</code> 那一處<b>不再是本組挑的</b> —— 44 已明訂兩組，客戶已拍板草稿，本輪照畫。
+        ⚠️ <b>但本輪多了幾個新的「本組挑的」</b>：<code>EXP-2</code> 那兩組的<b>示意勾選值</b>、
+        兩枚存檔鈕的<b>一律可按</b>、<code>EXP-5</code> <b>停用時不出失敗框</b>、
+        「存檔失敗」做成<b>正交開關</b>、<code>EXP-6</code> 改讀「對照」那一組 ——
+        <b>五項逐條列在頁首「<code>E-03</code>／<code>E-04</code> 已結案」那一框裡</b>。
+        <span class="tiny">〔2026-09-24 同輪回修 · 決策者：AI 總管；依據：獨立稽核指出〕
+        本句第一版只列了示意勾選值一項，<b>漏了另外四項</b>。</span></span></li>
       <li><b>本檔沒有動 44 一個位元組。</b> 44 已凍結（客戶規則），撞到的一律只登記。
         <b>也沒有動 <code>47_fund_wireframe_mkt.md</code>、沒有動 <code>ui_prototype_hld.html</code>、
         沒有碰任何 <code>.py</code>、沒有碰 <code>tests/</code>。</b></li>
@@ -2175,8 +2511,11 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         （<code>f48b3d6</code> 第一版、<code>ce2d307</code> 第十二輪）、已在 <code>origin/ui-v2</code> 上。
         <div class="tiny">〔2026-09-23 第十三輪就地更正 · 有意識的更正，不是漏刪 · 決策者：客戶〕 <b>落筆當天為真，被它自己的第一次 commit 推翻之後兩輪都沒改</b> ——
         這正是本檔在講的那個病：<b>已被事實推翻、卻沒被撤下的自述</b>。</div></li>
-      <li><b>若 E-03 或 E-04 客戶裁定與本草稿相反的一邊，§B 與 §D 要整節重畫。</b>
-        這不是瑕疵，是草稿先行的用意：<b>現在重畫一張圖，比之後重寫一頁介面便宜。</b></li>
+      <li><s><b>若 E-03 或 E-04 客戶裁定與本草稿相反的一邊，§B 與 §D 要整節重畫。</b></s>
+        <b>2026-09-24：客戶確實裁到了與當時畫法相反的那一邊，§B 與 §D 也確實改了。</b>
+        這不是瑕疵，是草稿先行的用意：<b>現在重畫一張圖，比之後重寫一頁介面便宜。</b>
+        <span class="tiny">〔<b>有意識的狀態變更，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕
+        走的路正是這一句預期的那一條：先出草稿（勾選框與存檔鈕）、客戶拍板、再搬回本檔。</span></li>
     </ul>
   </div>
 </section>
@@ -2199,7 +2538,7 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
    七狀態 × 三斷點的切換。無外部框架，這裡全部是原生 DOM。
    螢幕上每一個數字與每一段內容後面都帶「（示意）」—— 那是客戶的草稿規範逐字要求。
    ════════════════════════════════════════════════════════════════════ */
-var ui = { state:"full", bp:1280, theme:"system" };
+var ui = { state:"full", bp:1280, theme:"system", savefail:false };
 
 /* APP-TEXT-START ── 以下到 APP-TEXT-END 之間，是會被畫進深色螢幕的字 ── */
 
@@ -2257,11 +2596,36 @@ function trace(st){
 }
 function rowsOf(st){ return (st === "nocond" || st === "zero") ? [] : FUNDS; }
 function nOf(st){ return rowsOf(st).length; }
-/* 勾選：EXP-3 與 EXP-5 共用同一組（⛔ E-04 —— 44 沒有說是共用還是兩組） */
-function checkedOf(st){
+/* 勾選：兩組，兩組並存、互不連動（44 EXP-2 規則欄 2026-09-22 新增的逐字）。
+   〔2026-09-24 第十六輪改寫 · 有意識的狀態變更，不是漏刪 · 決策者：客戶〕
+   本段原寫「勾選：EXP-3 與 EXP-5 共用同一組（⛔ E-04 —— 44 沒有說是共用還是兩組）」，
+   原本只有一個 checkedOf()。客戶 2026-09-24 拍板草稿後搬入，E-04 結案（註解裡用不了劃線標記，
+   照本檔 PINS 那一段的體例改寫並記下原句）。
+   cmpOf ＝「對照」那一組，只餵 EXP-3；watchOf ＝「觀察清單」那一組，只餵 EXP-5。 */
+function cmpOf(st){
   if (st === "nocond" || st === "zero" || st === "nocol") return [];
-  return [0,1,2];   /* A / B / C 三檔；第 4 檔（D）的勾選被 EXP-3 的上限停用 */
+  return [0,1,2];   /* A / B / C 三檔；第 4 檔（D）的「對照」框被 EXP-3 的上限停用 */
 }
+/* ⚠️ watchOf 的示意值是**本組挑的**，44 沒有指定任何一組示意勾選。
+   挑成 [1,3] 的唯一理由：讓 44 那兩句逐字在畫面上同時看得到 ——
+   基金 B 兩組都勾（兩組並存），基金 D 的「對照」停用而「觀察清單」照樣勾得起來
+   （EXP-3 空狀態逐字「同一列「觀察清單」那一組不受這個上限拘束，照樣可勾」）。
+
+   〔2026-09-24 同輪回修 · **有意識的更正，不是漏刪** · 決策者：AI 總管；依據：獨立稽核指出〕
+   本函式第一版寫的是 `return (cmpOf(st).length === 0) ? [] : [1,3];` ——
+   **「觀察清單」那一組的值由「對照」那一組算出來**。
+   ⛔ **這一段程式碼的職務就是演「兩組並存、互不連動」，而它自己寫成了連動。**
+   現改為**自己列自己的狀態**，與 cmpOf 零耦合。
+   ⚠️ **輸出逐狀態與第一版相同**（實跑七種狀態比對過），改的是結構不是畫面。
+   ⚠️ **狀態 6 兩組都是零，那是刻意的、不是耦合的殘跡**：44 的 EXP-3 空狀態逐字
+   「『對照』那一組勾選為零 → 文案『勾選最多 3 檔以並排對照』」與 EXP-5 空狀態逐字
+   「『觀察清單』那一組勾選為零 → 按鈕停用」**兩句都要在那一種狀態下看得到**。 */
+function watchOf(st){
+  if (st === "nocond" || st === "zero" || st === "nocol") return [];
+  return [1,3];
+}
+/* 存檔寫入失敗：與七種狀態**正交**的一個開關，不是第八種狀態 —— 理由見 §F 表下那一框。 */
+function saveFail(){ return ui.savefail === true; }
 function colsOf(st){
   /* 四個可勾欄位（⛔ E-07：母體 44 沒給，本組取 EXP-2 規則欄那五欄扣掉「基金名」） */
   return (st === "nocol") ? [] : ["ccy","navd","nav","dy"];
@@ -2334,7 +2698,7 @@ function card1(st){
       '欄位取自 <code>fund_profile</code> 的欄位名清單。</div>' +
       '<div class="st" style="margin-top:6px">這一張卡不提供任何預先勾選的條件組合，' +
       '也不提供「常用條件」之類的一鍵套用。</div>' +
-      '<button class="addbtn" type="button">新增條件</button>' + foot + '</div>';
+      '<button class="addbtn" type="button">新增條件</button>' + saveBar1() + foot + '</div>';
   }
   var rows = conds(st).map(function(c){
     var tail = c.live ? '' :
@@ -2350,7 +2714,21 @@ function card1(st){
   }).join("");
   return '<div class="cardx">' + head +
     '<div class="st">每一列為「欄位＋比較方向＋數值」；欄位取自 <code>fund_profile</code> 的欄位名清單。</div>' +
-    rows + '<button class="addbtn" type="button">新增條件</button>' + foot + '</div>';
+    rows + '<button class="addbtn" type="button">新增條件</button>' + saveBar1() + foot + '</div>';
+}
+/* EXP-1 卡底那一枚「存檔」＋ 它的失敗態（44 規則欄與空狀態欄各一句，2026-09-22 新增）。
+   位置（卡底）是客戶 2026-09-24 逐字拍板的：「存檔鈕卡底，接受」。
+   ⚠️ 停用條件 44 沒訂（44 自己在 EXP-1 塊下方登記為待裁決），所以這一枚**一律可按**。 */
+function saveBar1(){
+  return '<div class="savebar"><button class="apply" type="button">存檔</button></div>' +
+    '<div class="why">只寫 <code>user_setting</code> 的 <code>exp_filter_rules</code> 與 ' +
+    '<code>updated_at</code>；<b>不寫</b> <code>holding</code>／<code>policy</code>／' +
+    '<code>nav</code>／<code>dividend</code>，<b>不重算任何一塊</b>。</div>' +
+    (saveFail()
+      ? '<div class="failbox">存檔寫入失敗：〔失敗訊息原文〕' +
+        '<div class="why" style="color:inherit">條件列的當下內容<b>留在畫面上不清掉</b>，' +
+        '<code>EXP-2</code> 的列數不變。</div></div>'
+      : '');
 }
 
 /* ── 層 2：EXP-2 候選清單卡 ───────────────────────────── */
@@ -2373,23 +2751,39 @@ function card2(st){
       '<div class="emptybox"><div class="et">目前條件下沒有符合的基金</div>' +
       '<div class="em">生效的條件列印在上方的結論列裡。</div></div>' + foot + '</div>';
   }
-  var cols = colsOf(st), chk = checkedOf(st);
+  var cols = colsOf(st), cmp = cmpOf(st), wat = watchOf(st);
+  /* 〔2026-09-24 同輪回修 · **有意識的更正，不是漏刪** · 決策者：AI 總管；依據：獨立稽核指出〕
+     本行第一版是 '<th class="ckhead">勾選</th>'（從草稿搬來的），**已還原成 HEAD 的空表頭**。
+     理由：44 EXP-2 塊下方的登記逐字寫著，兩組勾選框「**刻意沒有寫進那份欄位清單，
+     也刻意沒有宣告它們不是欄**」，並以「⛔ 本組不替客戶選。登記，不是動工授權。」收尾。
+     **給那一欄一個叫「勾選」的欄名，等於替客戶回答了 44 刻意沒答的那一題。**
+     客戶 2026-09-24 拍板的四條裡沒有這一條；兩組框各自已有 .lab 標籤（「對照」／「觀察清單」），
+     那個表頭功能上也多餘。 */
   var th = '<th style="width:1%"></th><th>基金名</th>' +
     cols.map(function(k){ return '<th>' + COLMETA[k].h + '</th>'; }).join("");
   var body = FUNDS.map(function(f, i){
-    var on = chk.indexOf(i) >= 0;
-    var over = (i === 3);   /* 第 4 檔：EXP-3 上限 3 檔 → 勾選停用 */
-    var box = '<label class="ck"><input type="checkbox"' + (on ? ' checked' : '') +
-      (over ? ' disabled' : '') + ' aria-label="勾選 ' + f.n + '"><span></span></label>' +
-      (over ? '<span class="ckwhy">同時最多對照 3 檔</span>' : '') +
-      (on && st === "full" ? '' : '');
+    var cOn = cmp.indexOf(i) >= 0;
+    /* EXP-3 空狀態逐字：「「對照」那一組勾到第 4 檔時，該組的第 4 個勾選框停用並附停用原因」——
+       〔2026-09-24 同輪回修〕本註解第一版引的是「勾選超過 3 檔 → 第 4 個勾選停用並附停用原因」，
+       那在 44 裡是**劃掉的舊表述**；現行條文以「勾到第 4 檔」為觸發，不是以「超過 3」。
+       那個上限只拘束「對照」那一組；同格逐字「同一列「觀察清單」那一組不受這個上限拘束，照樣可勾」。 */
+    var cOver = (!cOn && cmp.length >= 3);
+    var wOn = wat.indexOf(i) >= 0;
+    var cBox = '<div class="ckgrp"><span class="lab">對照</span>' +
+      '<label class="ck"><input type="checkbox"' + (cOn ? ' checked' : '') +
+      (cOver ? ' disabled' : '') + ' aria-label="對照：' + f.n + '"><span></span></label>' +
+      (cOver ? '<span class="ckwhy">同時最多對照 3 檔</span>' : '') + '</div>';
+    var wBox = '<div class="ckgrp"><span class="lab">觀察清單</span>' +
+      '<label class="ck"><input type="checkbox"' + (wOn ? ' checked' : '') +
+      ' aria-label="觀察清單：' + f.n + '"><span></span></label></div>';
     var tds = cols.map(function(k){
       if (missNav(st) && i === 2 && (k === "navd" || k === "nav" || k === "dy")){
         return '<td>' + ND + '</td>';
       }
       return '<td>' + COLMETA[k].get(f) + '</td>';
     }).join("");
-    return '<tr><td>' + box + '</td><td>' + f.n + '</td>' + tds + '</tr>';
+    return '<tr><td><div class="ckcol">' + cBox + wBox + '</div></td>' +
+      '<td>' + f.n + '</td>' + tds + '</tr>';
   }).join("");
   var note = (st === "nocol")
     ? '<div class="st" style="margin-top:8px">目前只顯示基金名。</div>' : '';
@@ -2399,6 +2793,8 @@ function card2(st){
   return '<div class="cardx">' + head +
     '<div class="st">一列一檔。無綜合分數欄，無星等欄，無排名欄。</div>' +
     '<div class="st" style="margin-top:4px">依 <code>fund_code</code> 字面值排列（未選排序欄位）。</div>' +
+    '<div class="st" style="margin-top:4px"><b>每一列兩組勾選框，兩組並存、互不連動</b>：' +
+    '「對照」只餵 <code>EXP-3</code>，「觀察清單」只餵 <code>EXP-5</code>。</div>' +
     '<div class="tscroll"><table class="wt"><thead><tr>' + th + '</tr></thead>' +
     '<tbody>' + body + '</tbody></table></div>' + note + missNote + foot + '</div>';
 }
@@ -2419,11 +2815,14 @@ function cellOf(st, i, k){
 function card3(st){
   var head = '<div class="t"><span>EXP-3 並排對照卡</span></div>';
   var foot = cardFoot();
-  var chk = checkedOf(st);
+  var chk = cmpOf(st);
   if (chk.length === 0){
     return '<div class="cardx">' + head +
       '<div class="emptybox"><div class="et">勾選最多 3 檔以並排對照</div>' +
-      '<div class="em">在左邊的候選清單上勾選。</div></div>' + foot + '</div>';
+      /* 〔2026-09-24 回修補痕〕本句原為 '在左邊的候選清單上勾選。'
+         —— 兩組分開之後那一句指不到哪一組，故改寫；舊句記在這裡，體例同 checkedOf／PINS.full／evi6。 */
+      '<div class="em">在左邊的候選清單上「<b>對照</b>」那一組勾起來的檔會進這裡。</div></div>' +
+      foot + '</div>';
   }
   var th = '<th></th>' + chk.map(function(i){
     return '<th>' + FUNDS[i].n + '<span class="ccy">幣別 ' + FUNDS[i].ccy + '</span></th>';
@@ -2477,30 +2876,46 @@ function ops4(st){
     '<select class="selbox" aria-label="排序欄位">' + sortOpts + '</select></div>' +
     resetLine +
     '<div class="why">這一塊不提供「推薦欄位組合」。</div>' +
+    '<div class="savebar"><button class="apply" type="button">存檔</button></div>' +
+    '<div class="why"><b>一枚</b>按鈕同時寫 <code>exp_visible_columns</code> 與 ' +
+    '<code>exp_sort_column</code> 兩鍵並更新 <code>updated_at</code>，<b>不拆成兩枚</b>；' +
+    '只寫 <code>user_setting</code>，<b>不重算任何一塊</b>。</div>' +
+    (saveFail()
+      ? '<div class="failbox">存檔寫入失敗：〔失敗訊息原文〕' +
+        '<div class="why" style="color:inherit">欄位勾選狀態與排序欄位的當下值' +
+        '<b>留在畫面上不清掉</b>，<code>EXP-2</code> 顯示的欄與排序不變。</div></div>'
+      : '') +
     '</div></details>';
 }
 
 /* ── 層 3：EXP-5 加入觀察清單（預設收合） ────────────── */
 function ops5(st){
-  var chk = checkedOf(st);
+  var chk = watchOf(st);   /* 44 EXP-5 規則欄逐字：「EXP-2 每一列『觀察清單』那一組勾選框被勾起的檔」 */
   var none = chk.length === 0;
   var sm = none ? '尚未勾選任何基金' : ('已勾選 ' + chk.length + ' 檔（示意）');
   var body = none
-    ? '<div class="why">尚未勾選任何基金 —— 在候選清單上勾選之後這一枚才會啟用。</div>' +
+    ? '<div class="why">尚未勾選任何基金 —— 在候選清單上「<b>觀察清單</b>」那一組勾選之後這一枚才會啟用。</div>' +
       '<div class="savebar"><button class="apply" type="button" disabled>加入觀察清單</button></div>' +
       '<div class="why">停用原因：尚未勾選任何基金。（<b>停用不隱藏</b>）</div>'
-    : '<div class="why">把勾選的 ' + chk.length + ' 檔（示意）寫進觀察清單。' +
+    : '<div class="why">把「觀察清單」那一組勾起來的 ' + chk.length + ' 檔（示意）寫進觀察清單。' +
       '觀察清單<b>只存 <code>fund_code</code></b>，不存任何金額、不存任何比重。</div>' +
       '<div class="savebar"><button class="apply" type="button">加入觀察清單</button></div>' +
       '<div class="why">這一枚<b>不寫入 <code>holding</code></b>，不產生任何交易意圖的紀錄。' +
       '同一檔按兩次，觀察清單裡該 <code>fund_code</code> 只有一筆。</div>';
+  /* ⚠️ 停用時不出失敗框，是**本組挑的**：44 沒有寫「按不到的按鈕會不會有失敗態」。
+     反過來畫（停用還出失敗框）會讓畫面自己打架 —— 那一枚按不下去，失敗從哪裡來。 */
+  if (saveFail() && !none){
+    body += '<div class="failbox">存檔寫入失敗：〔失敗訊息原文〕' +
+      '<div class="why" style="color:inherit"><code>EXP-2</code> 那一組「觀察清單」勾選框的' +
+      '<b>當下勾選狀態留在畫面上不清掉</b>，觀察清單的內容不變。</div></div>';
+  }
   return '<details class="exp"><summary><span>EXP-5 加入觀察清單</span>' +
     '<span class="sm">' + sm + '</span></summary><div class="body">' + body + '</div></details>';
 }
 
 /* ── 層 4：EXP-6 單檔基礎資料（預設收合） ────────────── */
 function evi6(st){
-  var chk = checkedOf(st);
+  var chk = cmpOf(st);
   if (st === "nofund"){
     return '<details class="exp"><summary><span>EXP-6 單檔基礎資料</span>' +
       '<span class="sm">查無此 fund_code</span></summary><div class="body">' +
@@ -2516,7 +2931,8 @@ function evi6(st){
       '<span class="sm">尚未勾選任何基金</span></summary><div class="body">' +
       '<div class="emptybox"><div class="et">尚未勾選任何基金</div>' +
       '<div class="em">⛔ <b>E-10</b>：44 沒有說這一塊讀的是哪一檔。' +
-      '本草稿取「<code>EXP-2</code> 勾選的第一檔」〔本組擬定〕，所以沒有勾選時這裡是空的。</div></div>' +
+      '本草稿取「<code>EXP-2</code>「對照」那一組勾選的第一檔」〔本組擬定〕，' +
+      '所以那一組沒有勾選時這裡是空的。</div></div>' +
       '</div></details>';
   }
   var f = FUNDS[chk[0]];
@@ -2576,9 +2992,16 @@ function evi7(st){
    PINS.full 第二枚原寫「⛔ E-01 層 1 沒有燈色」—— 那一句在 44 於 2026-09-22 為 EXP-0
    裁定燈色三種之後就變成假的，而它**會被渲染到畫面上**。第十三輪為了守「渲染逐位元組不變」
    沒有動它，客戶本輪裁示修。改法同上：短標籤改成直述，不留劃線。
-   ⛔ 標記本身**沒有拿掉** —— 落差還開著，只是方向反過來：以前是 44 沒給，現在是草稿沒跟上。 */
+   ⛔ 標記本身**沒有拿掉** —— 落差還開著，只是方向反過來：以前是 44 沒給，現在是草稿沒跟上。
+
+   〔2026-09-24 第十六輪改寫 · **有意識的狀態變更，不是漏刪** · 日期 2026-09-24 · 決策者：客戶〕
+   PINS.full 第一枚原寫「⛔ E-04 每列只有一組框：草稿沒跟上 44」——
+   客戶 2026-09-24 拍板草稿後，那一枚所標的落差**已經填上了**（每列現在是兩組框），
+   **⛔ 因此是真的拿掉，不是換個方向寫**。改法照本檔既有體例：
+   短標籤改成直述、不留劃線（留著會在畫面上印出一段被劃掉的字），原句記在這裡。
+   ⚠️ **E-01 那一枚一個字未動** —— 那一條落差還開著。 */
 var PINS = {
-  full:     ['⛔ E-04 每列只有一組框：草稿沒跟上 44','⛔ E-01 層 1 燈色：草稿沒跟上 44','⛔ E-21 三張卡都沒有「主值」',
+  full:     ['✓ E-04 每列兩組框，兩組並存、互不連動','⛔ E-01 層 1 燈色：草稿沒跟上 44','⛔ E-21 三張卡都沒有「主值」',
              '⚠ 對照卡指標列本組擬','⚠ EXP-6 讀哪一檔本組擬'],
   nocond:   ['✓ G3† 不顯示條件輸入列','⛔ E-13 「尚未設定條件」不屬空狀態四種','⛔ E-18 沒有路回到這個畫面',
              '⛔ E-12 EXP-7 把非來源缺的畫面掛上「來源缺」'],
@@ -2593,10 +3016,17 @@ var PINS = {
   nofund:   ['⛔ E-10 44 要一個輸入框，但本頁沒有宣告','⚠ E-12 這一半已被 44 裁掉，見 §C']
 };
 
+/* 「存檔失敗」這個開關與七種狀態正交，所以它的 pin 是**附加**上去的，不是取代某一種狀態的。 */
+var SAVEFAIL_PINS = ['✓ E-03 三塊的失敗態（44 空狀態欄各一句）',
+                     '✓ 失敗框走灰，不走黃（客戶 2026-09-24 裁示）',
+                     '⚠ 失敗訊息字面是佔位，本組不編造'];
+
 var EXPLAIN = {
   full:'<b>狀態 1｜全齊。</b>三條條件都設了，濾出 4 檔（示意），勾了 3 檔做對照。' +
-    '<b>第 4 檔的勾選是停用的</b>（<code>EXP-3</code> 逐字「同時最多對照 3 檔」）——' +
-    '<b>⛔ E-04 的現場就在這裡</b>：若這個框與 <code>EXP-5</code> 共用，<b>第 4 檔就永遠加不進觀察清單</b>。' +
+    '<b>第 4 檔的「對照」是停用的</b>（<code>EXP-3</code> 逐字「同時最多對照 3 檔」），' +
+    '<b>而同一列的「觀察清單」照樣勾得起來</b>（<code>EXP-3</code> 空狀態逐字「<b>同一列「觀察清單」那一組不受這個上限拘束，照樣可勾</b>」）。' +
+    '<s><b>⛔ E-04 的現場就在這裡</b>：若這個框與 <code>EXP-5</code> 共用，<b>第 4 檔就永遠加不進觀察清單</b>。</s> ' +
+    '<b>✓ E-04 已於 2026-09-24 結案</b>（客戶拍板草稿後併入）—— 那個後果<b>已經不會發生</b>。' +
     '另外注意 <b>基金 A 的經理費率是 ⬜</b>：那是 <code>fund_profile</code> 裡唯一可空的欄位，' +
     '44 第四節第六小節的表判準逐字要驗它顯示 <code>⬜</code> 而不是 0 —— 展開層 4 的 <code>EXP-6</code> 看得到。',
   nocond:'<b>狀態 2｜尚未設定條件（首次開啟）。</b>' +
@@ -2648,9 +3078,18 @@ function render(){
   document.getElementById("slot-evi").innerHTML =
     '<div class="evi">' + evi6(ui.state) + evi7(ui.state) + '</div>';
 
-  document.getElementById("state-explain").innerHTML = EXPLAIN[ui.state];
+  document.getElementById("state-explain").innerHTML = EXPLAIN[ui.state] +
+    (ui.savefail
+      ? '<div style="margin-top:8px"><b>＋ 存檔寫入失敗（與上面那七種狀態正交，不是第八種）。</b>' +
+        '<code>EXP-1</code>／<code>EXP-4</code>／<code>EXP-5</code> 三塊的空狀態欄各有一句失敗態，' +
+        '<b>當下輸入一律留在畫面上不清掉</b>。失敗框的顏色走<b>灰</b>（<code>--st-gray</code>）——' +
+        '客戶 2026-09-24 逐字：「<b>黃是業務例外；存檔失敗是系統級</b>」。' +
+        '<b>訊息字面是〔佔位〕，本組不編造失敗訊息原文。</b>' +
+        '⚠️ <code>EXP-5</code> 那一枚在「觀察清單勾選為零」時是<b>停用</b>的，' +
+        '所以那幾種狀態下只出兩個失敗框，<b>不是漏畫</b> —— 按不下去的按鈕沒有失敗可言〔本組擬定〕。</div>'
+      : '');
   document.getElementById("pinrow").innerHTML =
-    PINS[ui.state].map(function(p){
+    PINS[ui.state].concat(ui.savefail ? SAVEFAIL_PINS : []).map(function(p){
       var cls = (p.indexOf("⛔") === 0) ? "pin" : "pin ann";
       return '<span class="' + cls + '">' + p + '</span>';
     }).join("");
@@ -2694,6 +3133,12 @@ Array.prototype.forEach.call(document.querySelectorAll("[data-bp]"), function(b)
     press("[data-bp]", function(x){ return parseInt(x.dataset.bp, 10) === ui.bp; });
     syncWidth();
   });
+});
+document.getElementById("btn-savefail").addEventListener("click", function(){
+  ui.savefail = !ui.savefail;
+  this.textContent = ui.savefail ? "開" : "關";
+  this.setAttribute("aria-pressed", String(ui.savefail));
+  render();
 });
 document.getElementById("btn-theme").addEventListener("click", function(){
   var order = ["system", "light", "dark"];

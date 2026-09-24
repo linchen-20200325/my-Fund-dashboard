@@ -455,3 +455,65 @@ def test_A11_展開之後在同一個session內回不到零檔():
     assert at.session_state[logic.HLD5_OPEN_KEY] == code
     assert at.button(key=f"hld5_open_{code}").disabled is True
     assert _expanded_fields(at) == [code]
+
+
+# ═══════ 情境註冊表：做出來的畫面要真的挑得到（2026-09-24 稽核必修 E） ═══════
+
+
+def test_新做的三個情境_頁面真的挑得到而且渲染得出來():
+    """⭐ **稽核 2026-09-24 指出的缺口**：第 2 件做出來的 `系統錯誤` 畫面，
+    `hld/page.py` 原本**永遠選不到** —— 它的閘門讀 `SCENARIO_NAMES`（草稿那七顆鈕），
+    而那三個新情境不在裡面。**做出來沒有人看得見，客戶也無從驗收。**
+
+    ⚠️ **這一條同時是那次修復的正控**：把閘門改回 `SCENARIO_NAMES`，
+    新情境會一起退回 `full`，本條當場轉紅（本組用突變實跑確認）。
+
+    ⭐ **2026-09-24 就地擴寫（本組自查，不是稽核指出）**：
+    ~~原本只跑手寫的三個名字（`holdfail`／`profilefail`／`holdfail_nothr`）。~~
+    **那是同一個病的第三次**：本輪稍後又加了 `tiedstate` 與 `twofail` 兩個情境、
+    也把它們放進 `ALL_SCENARIO_NAMES`（＝頁面挑得到），
+    **卻沒有把這條渲染測試一起擴** —— 與稽核必修 E 指出的形狀一模一樣，
+    也與必修 F 那條「新增情境卻沒擴守衛」同型。
+    ⇒ **改成跑 `ALL_SCENARIO_NAMES` 全部**：往後新增情境**自動納入**，
+    不必有人記得回來改這裡。**這才是那個教訓的可執行版本。**
+    """
+    for name in fixtures.ALL_SCENARIO_NAMES:
+        at = _run(name)
+        assert not at.exception, (name, at.exception)
+        rendered = _rendered(at)
+        assert rendered, name
+        # 真的挑到了那個情境（不是被閘門打回 `full`）——副標會印出情境名或它的草稿標籤。
+        label = fixtures.SCENARIO_LABELS.get(name, name)
+        assert any(label in text for text in rendered), (
+            name, "副標沒印出情境名 ⇒ 八成是被閘門打回 `full` 了")
+        # 畫面上不准漏出 `None`（哨符或缺值漏到畫面就是這個樣子）。
+        for text in rendered:
+            assert "None" not in text, (name, text[:90])
+
+
+def test_新做的系統錯誤畫面_訊息原文真的畫到螢幕上():
+    """光是「選得到、不炸」還不夠 —— 第 2 件的重點是**那一句失敗訊息要浮出來**。
+
+    ⚠️ 沒有這一條，上一條會退化成「頁面沒炸」，
+    而一個把失敗訊息吞掉的頁面同樣不會炸。
+    """
+    at = _run("holdfail")
+    assert not at.exception, at.exception
+    rendered = _rendered(at)
+    assert any(fixtures.FETCH_FAIL_MESSAGE in text for text in rendered), \
+        "取數失敗的訊息原文沒有畫到螢幕上"
+    assert any("訊息原文照印，不改寫成安撫語句。" in text for text in rendered)
+
+
+def test_情境閘門認得的名字就是fixtures那張表():
+    """閘門與 `fixtures.scenario()` 的表**不得漂移**。
+
+    ⚠️ 漂移的後果是靜默的：多出來的名字挑不到（畫面看不見），
+    少掉的名字會讓 `fixtures.scenario()` 丟 `KeyError`。
+    """
+    assert fixtures.ALL_SCENARIO_NAMES, "清單是空的 —— 這一條會變成空掃"
+    for name in fixtures.ALL_SCENARIO_NAMES:
+        assert fixtures.scenario(name), name          # 每一個名字都建得出資料
+    # 那七顆草稿鈕是這份清單的**子集**，而且刻意不等於它（理由見 fixtures 該處註解）。
+    assert set(fixtures.SCENARIO_NAMES) < set(fixtures.ALL_SCENARIO_NAMES)
+    assert set(fixtures.SCENARIO_LABELS) == set(fixtures.SCENARIO_NAMES)

@@ -65,8 +65,48 @@ _TONE_BY_STATE = {
     STATE_BIZ: "黃",
     STATE_ERROR: "紅",
 }
-# 取最差者用的嚴重度。`44` MKT-0 規則把 資料未備 與 業務例外 同列為黃、系統錯誤為紅。
-_SEVERITY = {STATE_OK: 0, STATE_MISSING: 1, STATE_BIZ: 2, STATE_ERROR: 3}
+# ⚠️ **`44` 對這四個狀態只排過一次序，而那一次把中間兩個並列同級。**
+# `44` :310（`MKT-0` 規則欄，全檔唯一明文排過卡片四狀態的地方）逐字：
+#   「三塊狀態取最差者：三塊皆 `ok` → 燈為中性灰，文案「三張卡的資料齊」；
+#     任一塊為 `資料未備` 或 `業務例外` → 燈為黃，文案列出是哪一張卡；
+#     任一塊為 `系統錯誤` → 燈為紅，文案列出失敗的那一段」
+# 也就是 `ok` ＜ {`資料未備`, `業務例外`} ＜ `系統錯誤` —— 這是一個**偏序**，不是全序。
+#
+# ⛔ **舊表述 `_SEVERITY = {ok:0, 資料未備:1, 業務例外:2, 系統錯誤:3}` 把中間兩個排出先後，
+#    那個先後是實作自己發明的，`44` 沒有授權**（客戶 2026-09-24 裁示拆掉）。
+# ⚠️ **本檔這一筆比 `hld` 那一筆尖銳**：舊 `worst_state()` 的 docstring 自陳
+#    「`44` MKT-0 規則逐字」，而 `MKT-0` 的規則欄（`44` :310）**正是全檔唯一把那兩個
+#    並列同級的地方** —— **它引的那一行，恰好否證它自己排出來的先後。**
+#    ⇒ 一個「逐字」標籤不保證引文與結論同向；**引了，就要讀完再對照自己寫了什麼**。
+# 📌 同型的拆除 2026-09-23 已在 `ui_v2/hld/logic.py` 做過一次，本檔照同一套辦
+#    （`_BAND` ／ `_band()` ／ `STATE_UNRANKED` ／ `block_tone()` ／ `tone_for_block()`
+#    五個名字刻意與那一檔逐字相同，方便兩頁互相對讀）。
+_BAND = {STATE_OK: 0, STATE_MISSING: 1, STATE_BIZ: 1, STATE_ERROR: 2}
+
+# `worst_state()` 在「`資料未備` 與 `業務例外` 同時是最差」時回這個哨符。
+# ⛔ 它**不是第五個狀態**（`44` 5.1 的四狀態是封閉列舉），也**不得寫進任何畫面文字**；
+#    它只表示一件事：**`44` 沒有排這兩個的先後，本檔不替它排。**
+# ⚠️ 考慮過、而且刻意**不用** `44` 5.2 的 `未定義` 徽章字面值 —— 那一個在 `44` :1735 逐字是
+#    「某塊的來源欄寫了一個本檔第四節未定義的欄位 → 該欄位單獨列出並掛「未定義」徽章」，
+#    與本處無關，借來用等於替 `44` 造新語意。
+STATE_UNRANKED = None
+
+# ⚠️ **`STATE_UNRANKED` 沒有「名字」，但它有「級」** —— 它只在
+#    `資料未備` 與 `業務例外` 同時最差時產生，而 `44` :310 把那兩個放在**同一級**，
+#    所以「哪一級」是確定的（就是中間那一級），不確定的只有「哪一個名字」。
+#    `_band()` 因此答得出它；`_BAND` 本身**刻意不收這個鍵**，
+#    因為收進去就等於承認它是第五個狀態。
+_UNRANKED_BAND = 1
+
+# 結論燈那一級同時有這兩個成員時，文案要照哪個順序把它們寫出來。
+# ⚠️ **這是書寫順序，不是嚴重度順序** —— 取自 `44` :310 那一行自己把兩者並列時的寫法
+#    （先 `資料未備`、後 `業務例外`）。拿它去推論誰比較嚴重，就是本輪剛拆掉的那個錯。
+_UNRANKED_PAIR = (STATE_MISSING, STATE_BIZ)
+
+
+def _band(state) -> int:
+    """狀態 → `44` :310 那三級。`STATE_UNRANKED` 走上面那條註解說明的路。"""
+    return _UNRANKED_BAND if state is STATE_UNRANKED else _BAND[state]
 
 # 結論燈文案點名一張卡時，狀態要寫成哪一個徽章字面值（`47` D-03／D-04 的樣式）。
 _STATE_IN_LIGHT_TEXT = {
@@ -162,6 +202,38 @@ def tone_for_state(state: str) -> str:
     return _TONE_BY_STATE[state]
 
 
+def block_tone(states) -> str:
+    """一塊的邊框顏色。**只做呈現，不做嚴重度判定。**
+
+    ⚠️ 為什麼要有這一支：`44` 5.1 現行讀法逐字「**四狀態掛在主值上，不掛在整張卡**」，
+    而卡層級本身 `44` **沒有給一個狀態，也沒有給一個顏色**。邊框得有個顏色才畫得出來，
+    這一支就是那個實作必需品，**它不宣稱任何一個狀態比另一個嚴重**。
+    規則：這一塊的主值裡出現過最顯眼的那個顏色。顏色語意逐值取自 `44` 5.1 那張表。
+    ⚠️ 依據是客戶 2026-09-23 的原話「顏色是 UI 顯示，不是嚴重度；兩者正交」
+    （`44` :2344 轉述）—— 本函式站在「顯示」那一邊，所以它可以排顏色；
+    `worst_state()` 站在「嚴重度」那一邊，所以它**不**排 `資料未備` 與 `業務例外`。
+    ⚠️ 「站在哪一邊」是**本組的接法**，不是客戶的字。
+    ⛔ 本函式的輸入是**主值**的狀態（恆為四狀態之一），不是塊的狀態 ——
+       塊的狀態可能是 `STATE_UNRANKED`，那個要走 `_band()`，不走這裡。
+    """
+    tones = {tone_for_state(s) for s in states}
+    for tone in ("紅", "黃", "灰"):
+        if tone in tones:
+            return tone
+    return "中性"
+
+
+def tone_for_block(state, states) -> str:
+    """一塊要畫的顏色。
+
+    狀態排得出來 → 照 `44` 5.1 那張表把那個狀態翻成顏色（本檔既有行為，一格未動）。
+    排不出來（`資料未備` 與 `業務例外` 同級）→ 才退到 `block_tone()` 看主值的顏色。
+    ⚠️ 這樣寫的用意：**拆掉 tie-break 不改變任何一個現行畫面的顏色**，
+    改變的只有「這一塊最差的是哪一個狀態」這句宣稱在同級時不再硬答。
+    """
+    return block_tone(states) if state is STATE_UNRANKED else tone_for_state(state)
+
+
 # ───────────────────────── 斷點 ─────────────────────────
 
 
@@ -246,11 +318,30 @@ def main_value_state(rows, *, expected_unit: str | None = None, error: str | Non
     return STATE_OK
 
 
-def worst_state(states) -> str:
-    """取最差者。`44` MKT-0 規則逐字：三塊狀態取最差者。"""
+def worst_state(states):
+    """最差的那一個狀態；**兩者同級時不替 `44` 排先後**，回 `STATE_UNRANKED`。
+
+    `44` :310 只排到 `ok` ＜ {`資料未備`, `業務例外`} ＜ `系統錯誤`。
+    最差那一級只有一個成員時照回那個成員；最差那一級同時有 `資料未備` 與 `業務例外` 時
+    **沒有答案** —— 回 `STATE_UNRANKED`，不挑一個充數。
+
+    ⚠️ **舊 docstring 寫「`44` MKT-0 規則逐字：三塊狀態取最差者」** ——
+       前半句是真的（`44` :310 確實寫了「三塊狀態取最差者」），**但它只抄了半句**：
+       同一行接下來就把 `資料未備` 與 `業務例外` 並列成同一個結果（都是黃）。
+       **抄前半句、丟掉後半句，抄出來的就是一個 `44` 沒有寫的全序。**
+    ⚠️ **回傳值與輸入順序無關**（同級時回哨符，不回「第一個」）。
+    ⚠️ 空集回 `資料未備`：本檔既有行為，`44` 未訂（一塊的主值集合為空時沒有東西可讀）。
+       **本輪一格未動這條**。
+    ⚠️ **輸入可以含 `STATE_UNRANKED`**（結論燈讀的三塊狀態就可能含它）——
+       見 `_band()`。⛔ 這一條是本輪的當掉點：漏了它，結論燈那一支會 `KeyError: None`。
+    """
     if not states:
         return STATE_MISSING
-    return max(states, key=lambda s: _SEVERITY[s])
+    top = max(_band(s) for s in states)
+    tied = {s for s in states if _band(s) == top}
+    if len(tied) == 1:
+        return next(iter(tied))
+    return STATE_UNRANKED
 
 
 # ───────────────────────── 取數與過濾 ─────────────────────────
@@ -426,7 +517,9 @@ def _build_card(code, dataset, *, window_days, baseline_date, selected_keys):
         "_layer": BLOCK_LAYERS[code],
         "_default_open": True,
         "_state": block_state,
-        "_tone": tone_for_state(block_state),
+        # ⛔ **不是 `tone_for_state(block_state)`** —— `block_state` 現在可能是
+        #    `STATE_UNRANKED`，那個查 `_TONE_BY_STATE` 會 `KeyError: None`。
+        "_tone": tone_for_block(block_state, states),
         "_all_missing": all(s == STATE_MISSING for s in states),
         "answers": _ANSWERS[code],
         "summary_text": "",
@@ -570,14 +663,62 @@ def conclusion_light(cards) -> dict:
     if all(state == STATE_OK for state in states):
         return {"_tone": "灰", "text": "三張卡的資料齊", "buttons": []}
 
-    worst = worst_state(states)
-    named = next(card for card in cards if card["_state"] == worst)
-    tone = "紅" if worst == STATE_ERROR else "黃"
+    # ⛔ **這一段本輪整段改寫，因為舊寫法有兩處都吃不到 `STATE_UNRANKED`（會當掉）**：
+    #   (a) `_STATE_IN_LIGHT_TEXT[worst]` → `KeyError: None`；
+    #   (b) `next(card for card in cards if card["_state"] == worst)` → 沒有一張卡
+    #       的 `_state` 會等於哨符（三塊各自只有一個狀態時，哨符出在**燈**這一層），
+    #       於是 `StopIteration` —— 整頁畫不出來。
+    #
+    # **改寫的原則：凡 `44` 決定得了的，照 `44`；`44` 沒排的，就不排。**
+    #  · **燈色**：`44` :310 把燈色寫成三條**以級為準**的規則（皆 ok → 灰／任一為
+    #    `資料未備` **或** `業務例外` → 黃／任一為 `系統錯誤` → 紅）。
+    #    ⇒ 燈色**從來不需要那個 tie-break**，它只需要「最高的那一級」。
+    #  · **點名哪一張卡**：`44` :310 逐字是「文案**列出**是哪一張卡」——
+    #    它要的是「列出」，不是「從同級的幾張裡挑一張」。
+    #    ⇒ 本檔改成**把最高那一級的卡全部列出來**。
+    # ⚠️ **登記：這是本輪被迫做的一個呈現決定，`44` 沒有寫「同級有好幾張時怎麼辦」。**
+    #    取「全部列出」而不是「挑第一張」的理由：挑第一張**就是**本輪正在拆的那種
+    #    看不見的先後（那一次是按狀態排，這一次是按卡片在清單裡的位置排）。
+    #    **現行三張卡只有一張進最高級時，本函式的輸出與改寫前逐字相同** ——
+    #    差別只在同級有好幾張時，舊寫法會默默吞掉其餘幾張。
+    #
+    # ⚠️ **射程比「拆自創先後」這個框架聽起來大，就地量出來寫明（2026-09-24 稽核指出）**：
+    #    窮舉四狀態 × 三張卡 ＝ **64 種組合**，與 `fd5e41b` 逐一對跑，
+    #    **本塊文案有變的是 30 種**，而且**不是全部都來自同級**：
+    #      · **12 種**是**真的同級**（最高那一級同時有 `資料未備` 與 `業務例外`）；
+    #      · **18 種**是**同一個狀態、好幾張卡** —— 舊碼對「哪一個狀態」本來就不含糊，
+    #        它只是**默默吞掉了其餘幾張卡的名字**。
+    #    ⇒ **本輪在這一塊修掉的是兩件事，不是一件**：一個自創的狀態先後，
+    #      以及一個自創的「只報第一張卡」。上面那句「差別只在同級有好幾張時」
+    #      **措辭本身沒說錯**（那 18 種確實也是「好幾張」），
+    #      但讀的人很容易以為只動到同級那 12 種。**據實寫出數字，免得被低估。**
+    top = max(_band(state) for state in states)
+    tone = "紅" if top == _BAND[STATE_ERROR] else "黃"
+    named = [card for card in cards if _band(card["_state"]) == top]
     return {
         "_tone": tone,
-        "text": f"{named['title']}：{_STATE_IN_LIGHT_TEXT[worst]}",
+        "text": "；".join(f"{card['title']}：{_light_words(card)}" for card in named),
         "buttons": [],
     }
+
+
+def _light_words(card) -> str:
+    """一張被點名的卡，狀態要寫成哪個（或哪幾個）徽章字面值。
+
+    卡的狀態排得出來 → 一個字面值（本檔既有行為，一字未動）。
+    排不出來（這張卡同時有 `資料未備` 與 `業務例外` 的主值）→ **兩個都寫**。
+    ⚠️ **兩個都寫不是「兩個都最嚴重」，是「這張卡上這兩件事都真的發生了」** ——
+       它描述的是卡上的事實，不是排名。⛔ 不得反過來被讀成一個先後。
+    ⚠️ 書寫順序取自 `_UNRANKED_PAIR`（`44` :310 並列兩者時自己的寫法），**不是**嚴重度。
+    """
+    state = card["_state"]
+    if state is not STATE_UNRANKED:
+        return _STATE_IN_LIGHT_TEXT[state]
+    present = {mv["_state"] for mv in card.get("main_values", [])}
+    words = [_STATE_IN_LIGHT_TEXT[s] for s in _UNRANKED_PAIR if s in present]
+    # 哨符按定義就是那兩個同時出現；真的沒撈到（例如卡的形狀日後改了）就照實兩個都寫，
+    # **不靜默挑一個**。
+    return "／".join(words or [_STATE_IN_LIGHT_TEXT[s] for s in _UNRANKED_PAIR])
 
 
 def _build_light(cards) -> dict:

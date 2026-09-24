@@ -501,13 +501,68 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <b>也就是：一列 <code>ok</code> 的紀錄，要在一個只印失敗訊息的欄位裡，印出一句存不進 <code>message</code> 的話。</b>
         而且那句話若由 <code>SET-2</code> 自己生出來，就違反它同一格的「<b>訊息原文照印，不改寫</b>」。
         <b>切第 9 顆狀態就是這個畫面。</b></li>
-      <li><b>S-18　<code>SET-4</code> 是九塊 <code>存檔</code> 類裡唯一沒有宣告寫入對象的一塊。</b>
+      <li><s><b>S-18　<code>SET-4</code> 是九塊 <code>存檔</code> 類裡唯一沒有宣告寫入對象的一塊。</b></s>
+        <b>✓ S-18　44 已於 2026-09-23 補上，這一筆的缺口消失了。</b>&#8195;<span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（裁示本輪併入）〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span><br>
         44 第五節按鈕那一小節第六輪逐字列出 <code>存檔</code> 類的九塊，其中八塊的來源欄都補過
         「<b>寫入對象為……<code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code></b>」；
-        <b><code>SET-4</code> 沒有補</b>，它的來源欄只有三個讀取欄，<b>連 <code>updated_at</code> 都沒宣告</b>，
-        而規則欄逐字要「存檔後寫回 <code>user_setting</code> 並<b>更新 <code>updated_at</code></b>」。
-        它的空狀態也<b>沒有</b>那一句「存檔寫入失敗 → …」（<code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 三塊都有）。</li>
+        <s><b><code>SET-4</code> 沒有補</b>，它的來源欄只有三個讀取欄，<b>連 <code>updated_at</code> 都沒宣告</b>，
+        而規則欄逐字要「存檔後寫回 <code>user_setting</code> 並<b>更新 <code>updated_at</code></b>」。</s>
+        <b><code>SET-4</code> 已於 2026-09-23 補完</b>：來源欄現在逐字寫著
+        「<code>user_setting.setting_key</code>、<code>user_setting.setting_value</code>、
+        <code>user_setting.value_kind</code>、<b><code>user_setting.updated_at</code></b>。
+        <b>寫入對象為被編輯的那一鍵的 <code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code></b>」
+        —— <b>本檔上面那幾句指控的三件事（沒宣告寫入對象、沒宣告 <code>updated_at</code>、九塊裡唯一一塊）現在一件都不成立。</b>
+        <s>它的空狀態也<b>沒有</b>那一句「存檔寫入失敗 → …」（<code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 三塊都有）。</s>
+        <b>空狀態欄也已於 2026-09-23 補上那一句（那是 <code>S-19</code>，見下方那一框）。</b></li>
     </ol>
+  </div>
+
+  <div class="gapstrip" style="margin-top:14px">
+    <h3>⛔ <code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上（2026-09-24 就地更正）</h3>
+    <p class="tiny">〔<b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>（裁示本輪併入）〕
+      本檔多處以「<b><code>SET-4</code> 的來源欄沒有宣告寫入對象</b>」「<b>它的空狀態沒有『存檔寫入失敗』那一句</b>」
+      「<b>九塊裡唯一一塊</b>」的現在式陳述。
+      <b>那在本檔落筆當天為真</b> —— 被推翻的是<b>前提</b>：<b>44 已於 2026-09-23 把兩格都補上了</b>。
+      <b>兩筆的落點不同，分開讀</b>：</p>
+    <table class="wt" style="margin-top:8px">
+      <thead><tr><th>⛔</th><th>本檔原本宣稱</th><th>現行 44 的逐字（本輪實讀 <code>docs/v2/44_fund_ui_ssot.md</code>）</th><th>現況</th></tr></thead>
+      <tbody>
+        <tr><td class="id">S-18</td>
+          <td><code>SET-4</code> 的來源欄<b>沒有宣告寫入對象</b>、<b>連 <code>updated_at</code> 都沒有</b>、
+            <b>九塊 <code>存檔</code> 類裡唯一一塊</b></td>
+          <td><b>來源欄</b>：「<code>user_setting.setting_key</code>、<code>user_setting.setting_value</code>、
+            <code>user_setting.value_kind</code>、<b><code>user_setting.updated_at</code></b>。
+            <b>寫入對象為被編輯的那一鍵的 <code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code></b>」
+            （2026-09-23 連帶補宣告；決策者：<b>AI 總管</b>，44 就地註明客戶裁的那一句落在規則欄、本格是由它推導的連帶）</td>
+          <td><b>✓ 缺口消失。</b> 三件指控現在一件都不成立。<br>
+            <b>畫面不必動</b>：本草稿本來就照規則欄畫了存檔鈕（<code>H-17</code>）</td></tr>
+        <tr><td class="id">S-19</td>
+          <td><code>SET-4</code> 的空狀態<b>沒有「存檔寫入失敗」那一句</b>；
+            「<b>44 沒寫，本草稿不畫那個狀態</b>」</td>
+          <td><b>空狀態欄</b>：「<b>存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，該欄的當下輸入留在畫面上不清掉，
+            <code>SET-3</code> 該列的目前值與最後修改時間不變</b>」（2026-09-23 新增；決策者：<b>AI 總管</b>，同上理由）</td>
+          <td><b>前半句失效、後半句還活著</b>：44 現在寫了，<b>而本草稿仍然沒有畫那個狀態</b>。<br>
+            ⛔ <b>方向反過來</b>：以前是「44 沒寫」，現在是「<b>44 寫了、草稿沒跟上、待重繪</b>」</td></tr>
+      </tbody>
+    </table>
+    <p class="tiny" style="margin-top:9px">
+      <b>本輪的實測（同一條指令重跑，指令與第一次的輸出原樣留在 §H 第二塊，本段只記重跑後的結果）</b>：
+      第五節第六輪列出的那九塊，<b>來源欄的「寫入對象」宣告現在逐塊都在</b> ——
+      <code>SET-4</code> 那一列由 <b>0</b> 變 <b>1</b>，<b>其餘八塊不變</b>。
+      同一組九塊再看空狀態欄的「存檔寫入失敗」，<b>現在也是逐塊都在</b>。
+      ⚠️ <b>量測日 2026-09-24，母體是 44 第五節第六輪逐字列出的那九塊</b>；
+      本段<b>不宣稱</b>那九塊之外沒有同型的塊。</p>
+    <p class="tiny" style="margin-top:6px">
+      ⛔ <b>本輪刻意不動的三樣東西，理由寫明（不是漏改）</b>：
+      <b>(a)</b> §C 那張表 <code>S-18</code> 的<b>類型欄仍是「互斥」</b>、<code>S-19</code> 仍是「缺口」；
+      <b>(b)</b> 上方「<b>互斥 10 筆／射程 4 筆／缺口 30 筆</b>」那三個數；
+      <b>(c)</b> §H 第四塊那一段機器點算的輸出。
+      <b>那三樣是機器數出來的、帶日期的歷史量測值</b>，改掉其中一個就會讓另外兩個對不上，
+      而本輪的裁示是<b>把假話改成誠實，不是重算那張表</b>。
+      <b>本框就是那三樣東西的現況註記</b> —— 讀到它們的人請一併讀這裡。<br>
+      ⚠️ <b>也沒有重繪</b>：<code>S-19</code> 那個「存檔寫入失敗」的畫面<b>本輪仍然沒有畫</b>，
+      重繪屬「改變設計」，要先出草稿給客戶看。<b>標的探索頁走的就是那條路</b>
+      （出草稿 → 客戶 2026-09-24 拍板 → 才搬回線框）。</p>
   </div>
 </header>
 
@@ -669,9 +724,13 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             <span class="tiny">（三張<b>互不相讀</b>，不是鏈；三張都是表格卡，而 44 的「主值」沒有定義）</span></td></tr>
         <tr><td class="src">層 3</td><td>「使用者輸入、切換、匯出」</td><td class="jd">收合</td>
           <td><code>SET-4</code> 參數編輯、<code>SET-5</code> 重新取數
-            <span class="badge mu">⛔ S-18</span> <span class="badge mu">⛔ S-02</span>
+            <span class="badge ok">✓ S-18 已結案</span> <span class="badge mu">⛔ S-02</span>
             <span class="badge mu">⛔ S-19</span>
-            <span class="tiny">（九塊 <code>存檔</code> 類裡唯一沒宣告寫入對象的一塊；取回的列沒地方寫）</span></td></tr>
+            <span class="tiny"><s>（九塊 <code>存檔</code> 類裡唯一沒宣告寫入對象的一塊；取回的列沒地方寫）</s>
+            （<b><code>S-18</code>：44 已於 2026-09-23 補上寫入對象，缺口消失</b>；
+            <code>S-19</code>：44 已寫出失敗態而本草稿沒畫，<b>方向反過來、待重繪</b>；
+            <code>S-02</code>：取回的列沒地方寫，<b>照舊開著</b>）</span>
+            <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span></td></tr>
         <tr><td class="src">層 4</td><td>「原始序列、計算軌跡、來源與新鮮度明細」</td><td class="jd">收合</td>
           <td><code>SET-6</code> 取數紀錄、<code>SET-7</code> 欄位對照表
             <span class="badge mu">⛔ S-17</span> <span class="badge mu">⛔ S-29</span>
@@ -860,16 +919,25 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       必要鍵被清除 → 依賴該鍵的塊改顯示 <code>⬜ 不適用：尚未設定</code>」。</p>
     <p class="note" style="margin-top:6px"><b>回答什麼（逐字）</b>：「我要怎麼改這些門檻，改了會影響哪幾塊」。</p>
     <p class="note" style="margin-top:8px; border-left:3px solid var(--stop); padding-left:11px">
-      <span class="pin">⛔ S-18</span> <b>九塊 <code>存檔</code> 類裡，只有這一塊的來源欄沒有宣告寫入對象</b>
+      <span class="pin ann">✓ S-18 已結案</span> <s><b>九塊 <code>存檔</code> 類裡，只有這一塊的來源欄沒有宣告寫入對象</b>
       （另外八塊：<code>EXP-5</code>／<code>MKT-4</code>／<code>HLD-4</code>／<code>EXP-1</code>／<code>EXP-4</code>／
       <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code>，<b>逐塊實測，指令與輸出在 §H</b>）。
       而且它<b>連 <code>updated_at</code> 都沒有宣告</b>，規則欄卻要更新它 ——
       <b>正是 <code>SET-7</code> 自己登記的那個射程限制：「一塊在規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，
-      本表結構上抓不到」</b>。44 舉的兩個例子是 <code>HLD-2</code> 與 <code>ALO-5</code>，<b>不含這一筆</b>。<br>
-      <span class="pin">⛔ S-19</span> <b>它的空狀態沒有「存檔寫入失敗」那一句。</b>
+      本表結構上抓不到」</b>。44 舉的兩個例子是 <code>HLD-2</code> 與 <code>ALO-5</code>，<b>不含這一筆</b>。</s>
+      <b>44 已於 2026-09-23 把來源欄補完</b>：那一格現在逐字含 <code>user_setting.updated_at</code>，
+      並寫出「<b>寫入對象為被編輯的那一鍵的 <code>user_setting.setting_value</code> 與 <code>user_setting.updated_at</code></b>」
+      —— <b>九塊逐塊重跑，現在每一塊都有，<code>SET-4</code> 不再是例外。</b>
+      ⚠️ <b>但 <code>SET-7</code> 那個射程限制本身沒有被推翻</b>，只是<b>不再以這一筆當例子</b>。
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span><br>
+      <span class="pin">⛔ S-19</span> <s><b>它的空狀態沒有「存檔寫入失敗」那一句。</b></s>
+      <b>它的空狀態已於 2026-09-23 補上那一句</b>，逐字：「<b>存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，
+      該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變</b>」。
       第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／<code>ALO-4</code> 各加了一句
       「存檔寫入失敗 → 卡上顯示失敗訊息原文，……的當下內容留在畫面上不清掉」；
-      <b>這一塊沒有</b>。<b>存檔失敗時這一塊長什麼樣，44 沒寫。本草稿不畫那個狀態。</b><br>
+      <s><b>這一塊沒有</b>。<b>存檔失敗時這一塊長什麼樣，44 沒寫。本草稿不畫那個狀態。</b></s>
+      <b>這一塊現在也有了</b> —— <b>⛔ 沒有拿掉，方向反過來：44 寫了，而本草稿仍然沒有畫那個狀態，待重繪。</b>
+      <span class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。</span><br>
       <span class="pin">⛔ S-22</span> <b>「欄位型態依 <code>value_kind</code> 決定」——六種型別各對應什麼欄位，44 沒寫。</b>
       <code>int</code>／<code>float</code>／<code>date</code>／<code>ratio</code> 還猜得出來，
       <b><code>list</code> 與 <code>rules</code> 完全沒有線索</b>。
@@ -1127,18 +1195,27 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
           <td><code>SET-6</code> 照規則欄用這個鍵，<b>並在 <code>SET-7</code> 那張表上把它畫成
             <code>⬜ 未被任何塊使用</code></b> —— <b>那正是 44 自己說的「畫面上它其實被用了」。</b></td></tr>
 
-        <tr><td class="id">S-18</td><td class="src">SET-4</td>
-          <td><b>九塊 <code>存檔</code> 類裡唯一沒有在來源欄宣告寫入對象的一塊</b>，
+        <tr><td class="id">S-18<div class="tiny"><b>✓ 已結案</b><br>2026-09-24</div></td><td class="src">SET-4</td>
+          <td><s><b>九塊 <code>存檔</code> 類裡唯一沒有在來源欄宣告寫入對象的一塊</b>，
             <b>連 <code>updated_at</code> 都沒宣告</b>，而規則欄逐字要更新它。
-            （另外八塊逐塊實測，指令與輸出在 §H。）</td>
+            （另外八塊逐塊實測，指令與輸出在 §H。）</s>
+            <b>✓ 44 已於 2026-09-23 補完來源欄：那一格現在含 <code>user_setting.updated_at</code>，
+            並寫出「寫入對象為被編輯的那一鍵的 <code>setting_value</code> 與 <code>updated_at</code>」。
+            九塊逐塊重跑，現在每一塊都有 —— 這一筆的缺口消失了。</b><div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。<b>本列的「類型」欄刻意不動</b> —— 它與上方那三個機器點算的數互相扣著，理由寫在那一框。</div></td>
           <td class="jd"><span class="badge mu">互斥</span></td>
-          <td>照規則欄畫存檔鈕，<b>就地標出來源欄缺宣告</b>。</td></tr>
+          <td>照規則欄畫存檔鈕，<s><b>就地標出來源欄缺宣告</b>。</s>
+            <b>那個「缺宣告」的標註已就地撤下；畫面本來就有存檔鈕（<code>H-17</code>），本輪不必動畫面。</b></td></tr>
 
         <tr><td class="id">S-19</td><td class="src">SET-4</td>
-          <td>空狀態<b>沒有「存檔寫入失敗」那一句</b>，而第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／
-            <code>ALO-4</code> 三塊各加了一句。<b>存檔失敗時這一塊長什麼樣，44 沒寫。</b></td>
+          <td><s>空狀態<b>沒有「存檔寫入失敗」那一句</b>，而第六輪給 <code>ALO-1</code>／<code>ALO-3</code>／
+            <code>ALO-4</code> 三塊各加了一句。<b>存檔失敗時這一塊長什麼樣，44 沒寫。</b></s>
+            <b>44 已於 2026-09-23 為本塊補上那一句</b>，逐字：「存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，
+            該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變」。
+            <b>⛔ 沒有拿掉，方向反過來：44 寫了，本草稿仍然沒有畫那個狀態、待重繪。</b><div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> · 決策者：<b>客戶</b>〕見上方「<b><code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上</b>」那一框。<b>本列的「類型」欄刻意不動</b> —— 它與上方那三個機器點算的數互相扣著，理由寫在那一框。</div></td>
           <td class="jd"><span class="badge no">缺口</span></td>
-          <td><b>不畫那個狀態</b>（不自己補），登記在這裡。</td></tr>
+          <td><b>不畫那個狀態</b>（不自己補），登記在這裡。
+            <div class="tiny">〔2026-09-24〕<b>本輪照舊不畫</b> —— 理由換了：以前是 44 沒寫，
+            現在是<b>重繪要先出草稿給客戶看</b>，而客戶本輪的裁示不含重繪。</div></td></tr>
 
         <tr><td class="id">S-20</td><td class="src">SET-3 / SET-4</td>
           <td><code>⬜ 未設定</code> <b>不在第五節空狀態那四個模板裡面</b>
@@ -1377,7 +1454,12 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
             其中就有「<code>SET-4</code> 參數編輯（2026-09-21 原本那兩塊）」。<br>
             <b>標籤字面 ⚠</b> —— 44 沒給。本組用動作本身當標籤（第五節按鈕 <code>可用</code> 態逐字
             「文字按鈕，<b>標籤為動作本身</b>」）。<br>
-            <span class="pin">⛔ S-18</span> <b>它的來源欄沒有宣告寫入對象，九塊裡唯一一塊。</b></td></tr>
+            <span class="pin ann">✓ S-18 已結案</span> <s><b>它的來源欄沒有宣告寫入對象，九塊裡唯一一塊。</b></s>
+            <b>44 已於 2026-09-23 把來源欄補完，九塊現在每一塊都有。</b>
+            <div class="tiny">〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出〕
+            <b>這一處是漏的，不是刻意留的</b> —— 它<b>不在</b>本輪「刻意不動的三樣東西」那份清單裡
+            （那三樣是 §C 的類型欄、三個分類筆數、§H 的機器點算輸出）。
+            <b>同一份 diff 在別處已宣告 <code>S-18</code> 結案，這一句卻還在用現在式講它沒結案。</b></div></td></tr>
 
         <tr><td class="src">3</td><td><code>SET-4</code> 每一鍵（十七處）</td><td>「清除」<b>〔本組擬定〕</b></td>
           <td class="src"><code>清除</code></td><td class="jd"><span class="badge wn">⚠</span></td>
@@ -1631,8 +1713,14 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
       <li><b>按鈕的 <code>執行中</code> 態。</b> 第五節逐字「標籤換成進行式文字，按鈕停用，<b>旁邊顯示已耗時秒數</b>」——
         <b>本草稿是靜態 HTML，沒有真的取數，秒數會是假的</b>。
         <b>本組選擇不演它</b>（演一個會跑的假秒數，比不演更容易被當真）。<span class="pin">⛔ S-41</span></li>
-      <li><b><code>SET-4</code> 的「存檔寫入失敗」。</b> <b>44 這一塊的空狀態沒有這一句</b>（<code>ALO-1</code>／
-        <code>ALO-3</code>／<code>ALO-4</code> 三塊有）。<b>本組不自己補一個狀態出來。</b><span class="pin">⛔ S-19</span></li>
+      <li><b><code>SET-4</code> 的「存檔寫入失敗」。</b> <s><b>44 這一塊的空狀態沒有這一句</b>（<code>ALO-1</code>／
+        <code>ALO-3</code>／<code>ALO-4</code> 三塊有）。<b>本組不自己補一個狀態出來。</b></s>
+        <b>44 已於 2026-09-23 為這一塊補上那一句</b>（逐字：「存檔寫入失敗 → 該鍵的輸入欄下方顯示失敗訊息原文，
+        該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變」）。
+        <b>本草稿仍然沒有畫它</b> —— <b>理由換成：重繪要先出草稿給客戶看，客戶本輪的裁示不含重繪。</b>
+        <span class="pin">⛔ S-19</span>
+        <div class="tiny">〔2026-09-24 就地更正 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>〕
+        <b>⛔ 沒有拿掉，方向反過來了。</b>見上方「<code>S-18</code>／<code>S-19</code>：44 已補、本檔沒跟上」那一框。</div></li>
       <li><b>層 2 三張卡的 <code>系統錯誤</code> 態。</b> 實測：44 第三節第五小節<b>全段「系統錯誤」四個字 0 次</b>，
         「業務例外」也 <b>0 次</b>。<b>44 沒有寫本頁哪一塊、在什麼條件下會進這兩態</b>，本組不畫。
         <span class="pin">⛔ S-30</span><br>
@@ -1813,7 +1901,9 @@ table.ref td.jd{white-space:nowrap; font-size:12px}
         <tr><td class="src">H-14</td><td><code>SET-3</code></td><td>照讀法（乙）畫：<b>十七列都在、目前值欄皆 <code>⬜ 未設定</code></b>（不畫成零列）；<b>每一列的型別也是本組配的</b></td><td class="src">S-15 S-16 S-44</td></tr>
         <tr><td class="src">H-15</td><td><code>SET-3</code></td><td><b>原始字面值印在目前值欄的第二行</b>、等寬字（因為判準說沒有第五欄）</td><td class="src">S-25</td></tr>
         <tr><td class="src">H-16</td><td><code>SET-3</code></td><td><code>updated_at</code> 為空時<b>借 44 <code>ALO-7</code> 那一格的字面</b> <code>⬜ 資料未備：尚未設定過</code></td><td class="src">S-26</td></tr>
-        <tr><td class="src">H-17</td><td><code>SET-4</code></td><td>存檔鈕標籤「<b>存檔</b>」、清除鈕標籤「<b>清除</b>」（照第五節「標籤為動作本身」）</td><td class="src">S-18</td></tr>
+        <tr><td class="src">H-17</td><td><code>SET-4</code></td><td>存檔鈕標籤「<b>存檔</b>」、清除鈕標籤「<b>清除</b>」（照第五節「標籤為動作本身」）
+          <div class="tiny">〔2026-09-24〕<b>44 已於 2026-09-23 把這一塊的規則欄改寫成「本塊掛一枚『存檔』按鈕
+          （<code>action_kind</code> 為 <code>存檔</code>）」</b> —— <b>「有沒有這枚鈕」不再是推導的，標籤字面仍然是本組擬的。</b></div></td><td class="src">S-18</td></tr>
         <tr><td class="src">H-18</td><td><code>SET-4</code></td><td><code>list</code> 與 <code>rules</code> 畫成<b>多行文字框</b>，其餘四種畫成單行輸入欄</td><td class="src">S-22</td></tr>
         <tr><td class="src">H-19</td><td><code>SET-4</code></td><td><b>不標任何一個鍵為「必要」</b>，只在清除時照實寫出哪幾塊會改顯示</td><td class="src">S-23</td></tr>
         <tr><td class="src">H-20</td><td><code>SET-4</code></td><td>每一列下方那一行<b>影響範圍，照 44 各塊「來源」欄的宣告列出</b>（同 <code>SET-7</code> 的母體與射程）</td><td class="src">S-24</td></tr>
@@ -1866,6 +1956,14 @@ ALO-4   寫入對象宣告：1</pre>
       <b>母體封閉、可以逐塊讀完</b>：那九塊<b>不是本組挑的</b>，是 44 第五節第六輪那一段
       <b>逐字列出來的九塊</b>（「到第六輪為止共<b>九塊</b>，逐塊寫出來：……」）。<b>九塊全部讀了。</b>
     </p>
+    <p class="tiny" style="margin-top:6px; border-left:3px solid var(--ok-mark); padding-left:11px">
+      ✓ <b>2026-09-24 續記：同一條指令重跑，<code>SET-4</code> 那一列由 <b>0</b> 變 <b>1</b>，其餘八塊不變。</b>
+      〔<b>有意識的更正，不是漏刪</b> · 決策者：<b>客戶</b>（裁示本輪併入）〕
+      <b>上面那一段輸出一個字元都沒有改</b> —— 它是帶日期的歷史量測值，照本專案體例<b>只續記、不改寫</b>。
+      <b>被推翻的是它上面那個標題所宣稱的現況</b>（「只有 <code>SET-4</code> 的來源欄沒有寫入對象」）：
+      44 已於 2026-09-23 把那一格補完。<b>量測日 2026-09-24。</b><br>
+      ⚠️ <b>本段刻意不重印那條指令</b>（它就在上面幾行），也<b>不宣稱</b>那九塊之外沒有同型的塊 ——
+      母體就是 44 第五節第六輪逐字列出的那九塊。</p>
   </div>
 
   <div class="card" style="margin-bottom:12px">
@@ -2411,9 +2509,17 @@ function renderOps(s){
     + rows
     + '<div class="savebar"><button class="apply" type="button">存檔</button>'
     + '<span class="tiny" style="color:var(--app-muted)">存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>（44 逐字）</span></div>'
-    + '<div class="why"><span class="abadge ph">⛔ S-18</span> <b>本塊的來源欄只宣告了三個讀取欄，'
-    + '沒有宣告寫入對象、連 <code>updated_at</code> 都沒有</b> —— 九塊 <code>存檔</code> 類裡唯一一塊。'
-    + '　<span class="abadge ph">⛔ S-19</span> <b>存檔寫入失敗時這一塊長什麼樣，44 沒寫，本草稿不畫那個狀態。</b></div>'
+    /* 〔2026-09-24 就地更正 · **有意識的更正，不是漏刪** · 決策者：客戶〕
+       這兩句**會被渲染到深色螢幕上**，而兩句都已被 44 推翻（2026-09-23 兩格都補了）。
+       原句照錄於此，改法照本檔體例：**會上畫面的短註記改成直述、不留劃線**：
+         S-18：'<b>本塊的來源欄只宣告了三個讀取欄，沒有宣告寫入對象、連 updated_at 都沒有</b> —— 九塊存檔類裡唯一一塊。'
+         S-19：'<b>存檔寫入失敗時這一塊長什麼樣，44 沒寫，本草稿不畫那個狀態。</b>'
+       S-18 的缺口**已消失**（標記改成 ✓）；S-19 的 ⛔ **沒有拿掉**，只是方向反過來：44 寫了、草稿沒畫。 */
+    + '<div class="why"><span class="abadge ph">✓ S-18 已結案</span> <b>本塊的來源欄已於 2026-09-23 補完</b>'
+    + '（含 <code>updated_at</code>，並寫出寫入對象）—— <b>九塊 <code>存檔</code> 類現在每一塊都有。</b>'
+    + '　<span class="abadge ph">⛔ S-19</span> <b>44 已於 2026-09-23 寫出存檔寫入失敗那一句，'
+    + '本草稿仍然沒有畫那個狀態</b> —— 待重繪。'
+    + '　<span class="tiny" style="color:var(--app-muted)">（重繪要先出草稿給客戶看，本輪的裁示不含重繪。）</span></div>'
     + '</div></details>';
 
   /* SET-5 */
@@ -2510,7 +2616,10 @@ function renderEvi(s){
     { f:"nav.fetched_at",            b:["SET-1"],          note:"來源欄寫全名" },
     { f:"fetch_log.message",         b:["SET-2","SET-6"],  note:"來源欄寫全名" },
     { f:"user_setting.setting_key",  b:["SET-3","SET-4"],  note:"<b>來源欄寫裸欄名</b>（SET-1 那一格）　⛔ S-37" },
-    { f:"user_setting.updated_at",   b:["SET-3","ALO-7"],  note:"<b>SET-4 規則欄用到它，來源欄沒宣告</b>　⛔ S-18" },
+    /* 〔2026-09-24 就地更正〕本列的 note 原為
+       "<b>SET-4 規則欄用到它，來源欄沒宣告</b>　⛔ S-18" —— **已被 44 推翻**（2026-09-23 來源欄補上它）。
+       這一列**會被渲染**，照體例改成直述、不留劃線。 */
+    { f:"user_setting.updated_at",   b:["SET-3","SET-4","ALO-7"],  note:"<b>SET-4 的來源欄已於 2026-09-23 補上它</b>　✓ S-18 已結案" },
     { f:"nav.is_estimated",          b:[],                 note:"本頁不用它" },
     { f:"policy.fee_rate_pct",       b:[],                 note:"本頁不用它" },
     { f:"holding.ccy",               b:[],                 note:"<b>這是欄位<u>名</u>，不是幣別值</b>（§J 第三條）" }

@@ -10,6 +10,7 @@ docs/v2/prototype/ui_prototype_hld.html（客戶已拍板的草稿）。
 本檔不 import streamlit，也不 import 任何舊 repo 模組。
 """
 
+import json
 import math
 import pathlib
 import re
@@ -144,8 +145,15 @@ def test_九塊在全部情境下都建得出來且狀態合法():
                 unranked_seen += 1
             else:
                 assert state in legal, (name, block["code"], state)
-    # 反空掃留給下一條專門驗（本頁現行 12 情境不一定跑得出 `STATE_UNRANKED`）。
-    assert unranked_seen >= 0
+    # ⛔ **2026-09-24 稽核必修 F：這裡原本是一句恆真的斷言。**
+    # ~~舊寫法：`assert unranked_seen >= 0`，註解寫「反空掃留給下一條專門驗」。~~
+    # **實測**：十五個情境產生的哨符塊數是 **0** ⇒ 上面那段「掙來的哨符」契約
+    # **從出生到現在一次都沒有被執行過**，而收尾這一句**任何情況下都成立**。
+    # ⇒ **一段沒跑過的 assert ＋ 一句恆真的收尾 ＝ 這半邊守衛是空的。**
+    # ⚠️ **而同一輪 `mkt` 的孿生版寫的就是 `> 0`，而且真的踩得到** ——
+    #    一份對、一份空轉；本輪補上 `tiedstate` 情境，兩邊口徑一致。
+    assert unranked_seen > 0, (
+        "沒有任何情境產生哨符 —— 上面那段「掙來的哨符」契約等於沒有被執行過")
 
 
 def test_A1回歸_同級主值不得讓整頁建不起來():
@@ -1085,6 +1093,13 @@ def test_nav的source_tier落在44第四節寫的四個值域內():
 
 _ALL_SCENARIOS = tuple(fixtures.SCENARIO_NAMES) + (
     "noexceed", "other_window", "onenav", "badrange", "full_then_badrange",
+    # 2026-09-24 第 2 件新增三組。⚠️ **加在這裡是必要的，不是順手** ——
+    # 上一輪 `KeyError: None` 就是因為「新增了情境、卻沒把全頁守衛一起擴」。
+    "holdfail", "profilefail", "holdfail_nothr",
+    # 2026-09-24 稽核必修 F 再加一組：**唯一會產生哨符的情境**。
+    "tiedstate",
+    # 2026-09-24 稽核必修 G 再加一組：**唯一會同時有兩張表失敗的情境**。
+    "twofail",
 )
 
 
@@ -1775,3 +1790,603 @@ def test_A6控_無任何持倉那一句不在HLD2與HLD3的空狀態欄裡():
     for lineno in (533, 544):
         assert "**空狀態**" in d44[lineno - 1], lineno
         assert phrase not in d44[lineno - 1], lineno
+
+
+# ═══════════ 第 2 件｜失敗訊息補路（客戶 2026-09-24 裁示） ═══════════
+
+
+def test_哪些來源表在有持倉時本來就浮得出來():
+    """**先釘前提，再談補路。**
+
+    `_SURFACED_PER_VALUE` 這張清單如果是憑印象列的，第 2 件整件事就建立在猜測上。
+    這一條用**行為**把它定義出來：逐表注入一個取數失敗，看它**在沒有新路的情況下**
+    會不會經由逐值判定浮出來（＝有值進 `系統錯誤`）。
+
+    ⚠️ 所以這一條**不**呼叫新路，它驗的是「舊路覆蓋到哪裡」；
+       日後 `fund_metrics()` 改讀別的 `errors` 鍵，這一條會紅，
+       `_SURFACED_PER_VALUE` 不會靜默過期。
+    """
+    tables = sorted({t for ts in logic.BLOCK_SOURCE_TABLES.values() for t in ts})
+    assert tables, "一張表也沒掃到 —— 這一條會變成空掃"
+    surfaced = set()
+    for table in tables:
+        dataset = fixtures._dataset(
+            window=(fixtures.WINDOW_START, fixtures.WINDOW_END),
+            rules=fixtures._RULES_DEFAULT,
+            errors={table: fixtures.FETCH_FAIL_MESSAGE},
+        )
+        assert dataset["holding"], "這一條的前提是有持倉"
+        model = logic.build_page_model(dataset)
+        hit = any(
+            node["_state"] == logic.STATE_ERROR
+            for block in logic.all_blocks(model)
+            for node in logic.value_nodes(block)
+        )
+        if hit:
+            surfaced.add(table)
+    assert surfaced == set(logic._SURFACED_PER_VALUE), (
+        sorted(surfaced), sorted(logic._SURFACED_PER_VALUE))
+    # 反向：真的有沒被覆蓋到的，否則第 2 件無事可補。
+    assert set(tables) - surfaced == {"holding", "fund_profile"}, sorted(set(tables) - surfaced)
+
+
+def test_第2件正控_有持倉時holding取數失敗也浮得出來():
+    """**第 2 件的正控。** `holding` 是 `HLD-1` 與 `HLD-3` 來源欄點名的表。
+
+    ⚠️ **拿掉修復**（把 `_build_hld1`／`_build_core_card` 尾端那兩段
+       `if has_holdings and unsurfaced:` 刪掉，或把 `build_page_model` 裡的
+       `unsurfaced=` 拿掉）**本條當場轉紅**。
+    """
+    model = logic.build_page_model(fixtures.dataset_holdfail())
+    for code in ("HLD-1", "HLD-3"):
+        block = logic.find_block(model, code)
+        assert block["_state"] == logic.STATE_ERROR, (code, block["_state"])
+        assert block["_tone"] == "紅", (code, block["_tone"])
+        assert any(fixtures.FETCH_FAIL_MESSAGE in line for line in block["detail_lines"]), code
+        assert "訊息原文照印，不改寫成安撫語句。" in block["detail_lines"], code
+    # `HLD-2` 的來源欄**沒有** `holding` ⇒ 它不該被連坐。
+    assert logic.find_block(model, "HLD-2")["_state"] != logic.STATE_ERROR
+    # 燈跟著紅 —— `44` :489 本來就這樣寫，本件只是讓它進得了 `系統錯誤`。
+    assert logic.find_block(model, "HLD-0")["_tone"] == "紅"
+
+
+def test_第2件正控_有持倉時fund_profile取數失敗也浮得出來():
+    """`fund_profile` 只有 `HLD-2` 的來源欄點名 ⇒ 只有它該紅。"""
+    model = logic.build_page_model(fixtures.dataset_profilefail())
+    block = logic.find_block(model, "HLD-2")
+    assert block["_state"] == logic.STATE_ERROR, block["_state"]
+    assert block["_tone"] == "紅"
+    assert any(fixtures.FETCH_FAIL_MESSAGE in line for line in block["detail_lines"])
+    for code in ("HLD-1", "HLD-3"):
+        assert logic.find_block(model, code)["_state"] != logic.STATE_ERROR, code
+    assert logic.find_block(model, "HLD-0")["_tone"] == "紅"
+
+
+def test_第2件正控_有持倉而門檻未設那一半也要補到():
+    """**最容易漏的那一半。** 「有持倉」不只是最後那個 `else`，
+    `elif not rules`（門檻未設）同樣是有持倉。
+
+    ⚠️ 拿掉修復（把那段 `if has_holdings and unsurfaced:` 從 if/elif/else **之後**
+       搬進 `else` **之內**）本條當場轉紅，而上面那兩條**不會** ——
+       這就是為什麼要單獨有這一條。
+    """
+    model = logic.build_page_model(fixtures.dataset_holdfail_nothr())
+    block = logic.find_block(model, "HLD-1")
+    assert block["_state"] == logic.STATE_ERROR, block["_state"]
+    assert any(fixtures.FETCH_FAIL_MESSAGE in line for line in block["detail_lines"])
+    # 對照組：同樣門檻未設、但沒有取數失敗 → 照舊是 `業務例外`（本件未動）。
+    plain = logic.find_block(logic.build_page_model(**fixtures.scenario("nothr")), "HLD-1")
+    assert plain["_state"] == logic.STATE_BIZ, plain["_state"]
+
+
+def test_第2件_算得出來的東西一個也沒有被失敗訊息蓋掉():
+    """射程：本件只動塊層的 `_state` 與說明區，**不清空已經算出來的內容**。
+
+    空持倉那一支會清空是因為它本來就沒東西可顯示；這裡有。
+    ⛔ 用一個失敗訊息蓋掉還算得出來的事實，是另一種說謊。
+    """
+    failed = logic.build_page_model(fixtures.dataset_holdfail())
+    clean = logic.build_page_model(**fixtures.scenario("full"))
+    # 偏離列與逐值主值，逐格與沒有失敗時相同。
+    assert logic.find_block(failed, "HLD-1")["_rows"] == logic.find_block(clean, "HLD-1")["_rows"]
+    assert logic.find_block(failed, "HLD-1")["_rows"], "一列也沒有 —— 這一條會變成空掃"
+    for code in ("HLD-2", "HLD-3"):
+        a = [(n["label"], n["_state"], n["text"]) for n in logic.value_nodes(logic.find_block(failed, code))]
+        b = [(n["label"], n["_state"], n["text"]) for n in logic.value_nodes(logic.find_block(clean, code))]
+        assert a == b, code
+        assert a, code
+
+
+def test_第2件_同一個失敗不會被印兩次():
+    """`_SURFACED_PER_VALUE` 那兩張表已經逐值印過訊息原文了，新路必須跳過它們，
+    否則同一句會在同一塊出現兩次。"""
+    model = logic.build_page_model(**fixtures.scenario("fetchfail"))  # dividend 失敗
+    block = logic.find_block(model, "HLD-3")
+    hits = [line for line in block["detail_lines"] if fixtures.FETCH_FAIL_MESSAGE in line]
+    assert len(hits) == 1, hits
+    # 而且新路對這張表根本不回東西。
+    assert logic.unsurfaced_source_error(
+        fixtures.scenario("fetchfail")["dataset"], "HLD-3") is None
+
+
+def test_第2件_空持倉那兩支一格未動():
+    """射程：`not has_holdings` 的行為**一格未動**，它們照舊走 `source_error()`。
+
+    ⚠️ **本條的初稿寫錯過一次，就地記下來**：原本斷言 `emptyfail` 會讓 `HLD-1` 進
+    `系統錯誤` —— **那是猜的**。`emptyfail` 的失敗表是 `dividend`，
+    而 `dividend` **不在** `HLD-1` 的來源欄裡（`44` :513 只點名 `holding` 與 `nav`），
+    所以 `HLD-1` 本來就是 `資料未備`、紅的是 `HLD-3`。
+    ⇒ 改成照 `fd5e41b` 逐格 dump 出來的事實寫。**這一條自己就是「不要憑印象寫斷言」的示範。**
+    """
+    # 空持倉 ＋ `dividend` 取數失敗 → 紅的是 `HLD-3`（它的來源欄有 `dividend`），
+    # `HLD-1` 照舊 `資料未備`。兩格都與 `fd5e41b` 相同。
+    model = logic.build_page_model(**fixtures.scenario("emptyfail"))
+    assert logic.find_block(model, "HLD-3")["_state"] == logic.STATE_ERROR
+    assert logic.find_block(model, "HLD-1")["_state"] == logic.STATE_MISSING
+    # 空持倉 ＋ 沒有失敗 → 照舊灰／`資料未備`。
+    model = logic.build_page_model(**fixtures.scenario("empty"))
+    assert logic.find_block(model, "HLD-1")["_state"] == logic.STATE_MISSING
+    assert logic.find_block(model, "HLD-1")["_tone"] == "灰"
+    # 空持倉 ＋ `holding` 取數失敗 → 照舊走 `source_error()` 那一支（2026-09-23 裁的那一種），
+    # **與本件新路無關**：新路的硬前提是 `has_holdings`。
+    ds = fixtures._dataset(
+        holding=[],
+        window=(fixtures.WINDOW_START, fixtures.WINDOW_END),
+        rules=fixtures._RULES_DEFAULT,
+        errors={"holding": fixtures.FETCH_FAIL_MESSAGE},
+    )
+    assert not ds["holding"]
+    assert logic.find_block(logic.build_page_model(ds), "HLD-1")["_state"] == logic.STATE_ERROR
+    # 新路對空持倉不回東西不是因為它沒被呼叫，而是因為 `has_holdings` 擋著 ——
+    # 這一行把那個分工釘住（`unsurfaced_source_error()` 本身照樣回訊息）。
+    assert logic.unsurfaced_source_error(ds, "HLD-1") == fixtures.FETCH_FAIL_MESSAGE
+    # ⭐ **而且訊息只准印一次。**
+    # ⚠️ **這一段是突變測試逼出來的，據實寫下經過**：本條的初版只驗 `_state`，
+    #    於是「把新路的 `has_holdings` 前提拿掉」這個突變**全綠通過** ——
+    #    因為空持倉那一支的 `state` 本來就已經是 `系統錯誤`，狀態看不出差別，
+    #    **差別在說明區裡同一句話被印了兩次**。
+    #    ⇒ 一條只驗狀態的正控，擋不住一個只弄髒文案的射程外溢。
+    lines = logic.find_block(logic.build_page_model(ds), "HLD-1")["detail_lines"]
+    hits = [line for line in lines if fixtures.FETCH_FAIL_MESSAGE in line]
+    assert len(hits) == 1, hits
+    assert lines.count("訊息原文照印，不改寫成安撫語句。") == 1, lines
+
+
+def _cell_digest(block) -> str:
+    """一塊模型的全格摘要。
+
+    ⚠️ **正規化必須與產生期望值時逐字相同**，否則這條守衛會假紅：
+    dict 鍵排序、set 轉排序後的 list、非 JSON 型別轉 `repr`。
+    """
+    import hashlib
+
+    def scrub(obj):
+        if isinstance(obj, dict):
+            return {k: scrub(v) for k, v in sorted(obj.items())}
+        if isinstance(obj, (list, tuple)):
+            return [scrub(v) for v in obj]
+        if isinstance(obj, set):
+            return sorted(scrub(v) for v in obj)
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        return repr(obj)
+
+    blob = json.dumps(scrub(block), ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+
+
+def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
+    """⛔ **反向控制，整張網。**
+
+    第 2 件是**行為擴張**，所以「現行情境一格都不准動」必須用網驗，不是抽驗。
+    這一份期望值是 `fd5e41b`（動手前）逐格 dump 出來的 —— **不是**從現行程式現撈的；
+    從現行程式撈等於拿被測物當期望值，這一條就會變成恆真。
+
+    ⚠️ 十二情境 × 九塊 ＝ **一百零八格**，每一格比三樣：`_tone`、`_state`、
+       以及**整塊模型的摘要**。
+
+    ⛔ **2026-09-24 就地更正：本條 docstring 原本對「摘要那一欄為什麼存在」的說法是錯的，
+       而且錯了兩層（有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）。**
+    ~~原寫：那兩個射程外溢的突變（拿掉 `has_holdings` 前提、清空 `_SURFACED_PER_VALUE`）
+      沒被這張網攔下來，是因為它們不改狀態、只把同一句失敗訊息多印一次。~~
+    **兩層都不成立，實測如下（本組獨立重跑，不是轉述）**：
+      · **第一層（機制錯）**：真正的原因不是「改了文案但沒改狀態」，而是
+        **這十二個情境根本走不到那段新程式碼** ——
+        逐情境呼叫 `unsurfaced_source_error()`，**十二個情境回非 `None` 的是 0 個**。
+        ⇒ **這張網對那條新路結構上是盲的，加不加摘要都一樣。**
+      · **第二層（歸因錯）**：那兩個突變**升級成摘要之後也不是這張網抓到的**。
+        單獨跑本條：兩個突變**都 passed**。真正抓到它們的是
+        `test_第2件_空持倉那兩支一格未動`（2d）與
+        `test_哪些來源表在有持倉時本來就浮得出來` ＋
+        `test_第2件_同一個失敗不會被印兩次`（2e）。
+
+    ✅ **摘要那一欄仍然留著，但理由換成一個真的**：它擋得住
+       **十二個情境之內**「不改狀態、只改文案」的改動 ——
+       實測把 `_build_hld1` 的一句說明文案改一個詞（不動任何狀態顏色），
+       **只比 `_tone`／`_state` 的版本是綠的，加了摘要之後轉紅**。
+    ⚠️ **這張網管不到那三個新情境**（它們在 `fd5e41b` 上不存在，沒有「之前」可比）——
+       那個結構性盲點由下面那一條 `test_第2件_三個新情境的整頁模型逐格釘住()` 補上。
+    ⚠️ 摘要對不上時看不出**哪裡**不同 —— 那是這個做法的代價，就地寫明：
+       重跑一次逐格 dump 再 diff，不要直接改期望值。**期望值改了，這條就廢了。**
+    """
+    expected = {
+        ("full", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
+        ("full", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
+        ("full", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("full", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("full", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
+        ("full", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("full", "HLD-7"): ('中性', 'ok', "0594b2871949"),
+        ("full", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("srcmiss", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
+        ("srcmiss", "HLD-1"): ('中性', 'ok', "36dc9ac49a78"),
+        ("srcmiss", "HLD-2"): ('灰', '資料未備', "9e18e3388c92"),
+        ("srcmiss", "HLD-3"): ('灰', '資料未備', "038877e4c54c"),
+        ("srcmiss", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
+        ("srcmiss", "HLD-5"): ('中性', 'ok', "39affe04cec8"),
+        ("srcmiss", "HLD-6"): ('中性', 'ok', "0fa8eb2d70c6"),
+        ("srcmiss", "HLD-7"): ('中性', 'ok', "697f3caf3268"),
+        ("srcmiss", "HLD-8"): ('灰', '資料未備', "11c8446e411f"),
+        ("bizexc", "HLD-0"): ('灰', '業務例外', "361d526cc96d"),
+        ("bizexc", "HLD-1"): ('中性', 'ok', "54989f40bf94"),
+        ("bizexc", "HLD-2"): ('黃', '業務例外', "10f06cc9db29"),
+        ("bizexc", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("bizexc", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
+        ("bizexc", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("bizexc", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
+        ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
+        ("fetchfail", "HLD-0"): ('紅', '系統錯誤', "b0218512cffb"),
+        ("fetchfail", "HLD-1"): ('中性', 'ok', "743f2560d7cf"),
+        ("fetchfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "443ed34ece36"),
+        ("fetchfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
+        ("fetchfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("fetchfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("fetchfail", "HLD-7"): ('中性', 'ok', "4d0c59266415"),
+        ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "cd533ea39ca5"),
+        ("nothr", "HLD-0"): ('灰', '業務例外', "c9353d4830c6"),
+        ("nothr", "HLD-1"): ('黃', '業務例外', "e1d2c2c2da54"),
+        ("nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("nothr", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
+        ("nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
+        ("nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("empty", "HLD-0"): ('灰', '資料未備', "4562c6ab4995"),
+        ("empty", "HLD-1"): ('灰', '資料未備', "47cf6be0fa49"),
+        ("empty", "HLD-2"): ('灰', '資料未備', "19fe8879556e"),
+        ("empty", "HLD-3"): ('灰', '資料未備', "a17b38e825ef"),
+        ("empty", "HLD-4"): ('中性', 'ok', "2a92af344d78"),
+        ("empty", "HLD-5"): ('灰', '資料未備', "0a56191f5002"),
+        ("empty", "HLD-6"): ('灰', '資料未備', "291f8e96ab83"),
+        ("empty", "HLD-7"): ('灰', '資料未備', "700622874cba"),
+        ("empty", "HLD-8"): ('灰', '資料未備', "642bfc46dc5d"),
+        ("emptyfail", "HLD-0"): ('紅', '系統錯誤', "f78ee5fe7d75"),
+        ("emptyfail", "HLD-1"): ('灰', '資料未備', "47cf6be0fa49"),
+        ("emptyfail", "HLD-2"): ('灰', '資料未備', "19fe8879556e"),
+        ("emptyfail", "HLD-3"): ('紅', '系統錯誤', "ed58d8781cfb"),
+        ("emptyfail", "HLD-4"): ('中性', 'ok', "2a92af344d78"),
+        ("emptyfail", "HLD-5"): ('灰', '資料未備', "0a56191f5002"),
+        ("emptyfail", "HLD-6"): ('灰', '資料未備', "291f8e96ab83"),
+        ("emptyfail", "HLD-7"): ('灰', '資料未備', "700622874cba"),
+        ("emptyfail", "HLD-8"): ('灰', '資料未備', "642bfc46dc5d"),
+        ("noexceed", "HLD-0"): ('灰', 'ok', "5aa16b6c8ace"),
+        ("noexceed", "HLD-1"): ('中性', 'ok', "d6e09a8fff14"),
+        ("noexceed", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("noexceed", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("noexceed", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
+        ("noexceed", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("noexceed", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("noexceed", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
+        ("noexceed", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("other_window", "HLD-0"): ('灰', 'ok', "5aa16b6c8ace"),
+        ("other_window", "HLD-1"): ('中性', 'ok', "d6e09a8fff14"),
+        ("other_window", "HLD-2"): ('中性', 'ok', "5ea8fe7a7d69"),
+        ("other_window", "HLD-3"): ('中性', 'ok', "d5547893ebe0"),
+        ("other_window", "HLD-4"): ('中性', 'ok', "4af1779c6576"),
+        ("other_window", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("other_window", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("other_window", "HLD-7"): ('中性', 'ok', "ad6c5cd4bc32"),
+        ("other_window", "HLD-8"): ('中性', 'ok', "2a28e2a9534f"),
+        ("onenav", "HLD-0"): ('灰', '業務例外', "361d526cc96d"),
+        ("onenav", "HLD-1"): ('中性', 'ok', "51f6d37571ec"),
+        ("onenav", "HLD-2"): ('黃', '業務例外', "eac4b10c9634"),
+        ("onenav", "HLD-3"): ('黃', '業務例外', "a0b4b23b64c4"),
+        ("onenav", "HLD-4"): ('中性', 'ok', "ff7c473013a3"),
+        ("onenav", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("onenav", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("onenav", "HLD-7"): ('灰', '資料未備', "5ac721b1d7cb"),
+        ("onenav", "HLD-8"): ('黃', '業務例外', "6131e0d46dd5"),
+        ("badrange", "HLD-0"): ('灰', '業務例外', "c9353d4830c6"),
+        ("badrange", "HLD-1"): ('黃', '業務例外', "e1d2c2c2da54"),
+        ("badrange", "HLD-2"): ('黃', '業務例外', "4d9d1c56d7e3"),
+        ("badrange", "HLD-3"): ('黃', '業務例外', "56270fe59261"),
+        ("badrange", "HLD-4"): ('中性', 'ok', "14676aae6af8"),
+        ("badrange", "HLD-5"): ('中性', 'ok', "56f4d7c00fa8"),
+        ("badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("badrange", "HLD-7"): ('灰', '資料未備', "15a039bc1d56"),
+        ("badrange", "HLD-8"): ('黃', '業務例外', "2d3de88d51b7"),
+        ("full_then_badrange", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
+        ("full_then_badrange", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
+        ("full_then_badrange", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("full_then_badrange", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("full_then_badrange", "HLD-4"): ('中性', 'ok', "044134dd12f9"),
+        ("full_then_badrange", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full_then_badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("full_then_badrange", "HLD-7"): ('中性', 'ok', "0594b2871949"),
+        ("full_then_badrange", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+    }
+    assert len(expected) == 108, len(expected)
+    old12 = set(fixtures.SCENARIO_NAMES) | {
+        "noexceed", "other_window", "onenav", "badrange", "full_then_badrange"}
+    # 涵蓋度也要驗：動手前就存在的情境，一個都不准從期望值裡漏掉。
+    assert {name for name, _ in expected} == old12, sorted({n for n, _ in expected} ^ old12)
+    # 2026-09-24 新增的三個情境刻意不在期望值裡（它們在 `fd5e41b` 上不存在，
+    # 沒有「之前」可比）；它們的行為由上面那幾條正控釘。
+    assert not (old12 & {"holdfail", "profilefail", "holdfail_nothr"})
+    for (name, code), (tone, state, digest) in expected.items():
+        block = logic.find_block(logic.build_page_model(**fixtures.scenario(name)), code)
+        assert block["_tone"] == tone, (name, code, "tone", block["_tone"], tone)
+        assert block["_state"] == state, (name, code, "state", block["_state"], state)
+        assert _cell_digest(block) == digest, (
+            name, code, "整格內容變了（狀態與顏色沒變，改的是這一塊裡的其他東西）")
+
+
+# ═══════════ 第 3 件｜`46` 第 1 節的新入口（客戶 2026-09-24 裁示） ═══════════
+
+_DOC46 = "docs/v2/46_fund_live_dead.md"
+
+
+def _doc46_lines():
+    return (pathlib.Path(__file__).resolve().parents[2]
+            / _DOC46).read_text(encoding="utf-8").split("\n")
+
+
+def _unstruck(line: str) -> str:
+    """把 `~~…~~` 之間的字挖掉 —— 劃掉的是**已退役的條文**，不是現行規則。
+
+    ⚠️ 與本檔 `44` 行號守衛的 `_strike_spans()` 同一套讀法，刻意不另發明一種。
+    """
+    out, keep, i = [], True, 0
+    while i < len(line):
+        if line.startswith("~~", i):
+            keep = not keep
+            i += 2
+            continue
+        if keep:
+            out.append(line[i])
+        i += 1
+    return "".join(out)
+
+
+def _doc46_registry_rows():
+    """登記表的表頭與資料列（`| 檔案::符號 |` 那一張，不是第 5 節的量測表）。"""
+    lines = _doc46_lines()
+    head = next(i for i, ln in enumerate(lines) if ln.startswith("| 檔案::符號"))
+    rows = []
+    for ln in lines[head + 2:]:
+        if not ln.startswith("|"):
+            break
+        rows.append(ln)
+    return lines[head], rows
+
+
+def test_第3件正控_46登記表的每一列都記了兩個日期():
+    """**第 3 件的正控。**
+
+    客戶 2026-09-24 改的第 1 節帶著**條件**：補登可以，但那一列必須把
+    「確認日」與「登記日」分開記。**條件寫在散文裡、表格卻少一欄的話，
+    那條新條文當場變成一條寫不了的規則** —— 而那正是它要修的那種互斥
+    （`46` 第 5.5 節其三：兩條各自都對，合起來做不到）。
+
+    ⇒ 這一條把散文與表格綁在一起，**不讓它們各自漂移**。
+    ⚠️ 拿掉修復（把表頭那一欄拿掉、或把任何一列的「登記日」那一格清空）本條當場轉紅。
+    """
+    import re
+
+    header, rows = _doc46_registry_rows()
+    cells = [c.strip() for c in header.strip().strip("|").split("|")]
+    assert len(cells) == 5, cells
+    assert cells[-2:] == ["確認日", "登記日"], cells
+    assert rows, "一列也沒掃到 —— 這一條會變成空掃"
+    date = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for row in rows:
+        got = [c.strip() for c in row.strip().strip("|").split("|")]
+        assert len(got) == 5, (row[:60], len(got))
+        assert date.match(got[-2]), ("確認日", row[:60], got[-2])
+        assert date.match(got[-1]), ("登記日", row[:60], got[-1])
+
+
+def test_第3件正控_46第1節的舊禁令劃掉保留而新入口是活的():
+    """**體例的正控**：舊條文**加刪除線保留**，不是真刪；新條文是活的。
+
+    ⚠️ 為什麼這一條值得單獨有：本輪同時做了兩件相反方向的事 ——
+    **廢掉一條禁令**、**立一條帶條件的新規**。
+    兩種失敗模式都會讓 `46` 說謊，而且方向相反：
+      · 把舊禁令**真的刪掉** → 後人看不出這裡曾經有過一條禁令，也看不出它為什麼被換掉；
+      · 舊禁令**忘了劃掉** → 同一節裡一句說「不准補登」、一句說「補登可以」，兩句都像現行。
+    這一條把兩邊都釘住。
+    ⚠️ 拿掉修復（刪掉舊句、或把它的刪除線拿掉）本條當場轉紅。
+    """
+    lines = _doc46_lines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("## 1. 登記時機"))
+    end = next(i for i, ln in enumerate(lines) if ln.startswith("## 2. "))
+    section = lines[start:end]
+    assert section, "第 1 節是空的 —— 這一條會變成空掃"
+
+    ban = "不在登記時機之外補登"
+    # (a) 舊禁令還在檔裡（保留，不是真刪）。
+    assert any(ban in ln for ln in section), "舊禁令不見了 —— 本檔體例是劃掉保留，不是真刪"
+    # (b) 而且它是被劃掉的（挖掉刪除線區段之後就找不到了）。
+    assert not any(ban in _unstruck(ln) for ln in section), \
+        "舊禁令還是活的 —— 同一節裡同時有『不准補登』與『補登可以』兩句"
+    # (c) 新入口是活的，而且帶著那個條件。
+    live = "\n".join(_unstruck(ln) for ln in section)
+    assert "登記日" in live, "新入口沒有提到『登記日』—— 那個條件掉了"
+    assert "確認日" in live
+    # (d) 體例三件套：政策變更的標註、日期、決策者。
+    assert "有意識的政策變更，不是漏刪" in live
+    assert "2026-09-24" in live
+    assert "客戶" in live
+
+
+def test_第3件_46沒有留下指向已被改掉的規則的標籤():
+    """第 5.5 節其二那個標籤原本寫「明知違反第 1 節第一句……待客戶裁」。
+
+    第 1 節改掉之後，那個標籤指向的規則已經不存在了 ⇒ 標籤必須跟著退役。
+    ⚠️ 本條只驗**那個標籤不再是現行標籤**，不驗它被換成了什麼 ——
+    換成什麼是人讀的事，**不假裝這一條守得比實際多**。
+    ⚠️ **這一條的初版寫錯過一次，就地記下來**：它原本掃「整份檔案的活文字裡
+    有沒有那句標籤」，結果**被自己的解說文推翻** —— 那則 2026-09-24 的更正註
+    為了說明「這一句為什麼退役」，**必須逐字引它一次**，而那一次引用是活的。
+    ⇒ 那是 `CLAUDE.md` §-2.A 第 8 款的形狀：**把要掃的字串寫進文件，它就會自己命中。**
+    **現在改成只看有權威性的那一行**（`**現行標籤**：` 開頭的那一行），
+    引用與解說不在射程內。**資訊留著，判定收窄到該收的地方。**
+    """
+    labels = [
+        _unstruck(ln) for ln in _doc46_lines()
+        if _unstruck(ln).lstrip("- ").startswith("**現行標籤**：")
+    ]
+    assert labels, "一行『現行標籤』也沒掃到 —— 這一條會變成空掃"
+    for label in labels:
+        assert "明知違反第 1 節第一句" not in label, ("過期的標籤還是現行標籤", label)
+        assert "待客戶裁" not in label, ("已裁的東西還掛著待裁", label)
+    # 反空掃：那句話確實還留在檔裡（劃掉保留），不是被整段刪掉。
+    raw = "\n".join(_doc46_lines())
+    assert "明知違反第 1 節第一句" in raw, "整句被刪掉了 —— 本檔體例是劃掉保留"
+
+
+def test_第2件_三個新情境的整頁模型逐格釘住():
+    """⭐ **補上那張反向控制網的結構性盲點（2026-09-24 稽核指出）。**
+
+    上面那張 108 格的網對第 2 件的新路**結構上是盲的**（十二個情境沒有一個走得到它）。
+    在它之外，新路只有四條正控在守，而正控只驗**它們各自斷言的那幾格**；
+    新路產出的其餘欄位（說明區其他行、摘要、徽章、按鈕…）**沒有任何東西看著**。
+
+    ⚠️ **這一條刻意不叫「反向控制」** —— 它**不是**拿改動前的值比對
+    （那三個情境在 `fd5e41b` 上不存在，沒有「之前」）。
+    它是**前向釘樁**：把現行行為整頁逐格釘住，往後任何一次無意的改動都會紅。
+    **期望值的正確性由上面那四條正控背書，不由這一條自己背書** —— 據實寫明，不含糊。
+
+    ⚠️ 摘要對不上時看不出**哪裡**不同 —— 代價就地寫明：
+       重跑一次逐格 dump 再 diff，**不要直接改期望值**。期望值改了，這條就廢了。
+    """
+    expected = {
+        ("holdfail", "HLD-0"): ('紅', '系統錯誤', "2d783c243159"),
+        ("holdfail", "HLD-1"): ('紅', '系統錯誤', "b234520b7547"),
+        ("holdfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("holdfail", "HLD-3"): ('紅', '系統錯誤', "78e09b438562"),
+        ("holdfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
+        ("holdfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("holdfail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
+        ("holdfail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("profilefail", "HLD-0"): ('紅', '系統錯誤', "eef7eefa685e"),
+        ("profilefail", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
+        ("profilefail", "HLD-2"): ('紅', '系統錯誤', "032952947efa"),
+        ("profilefail", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
+        ("profilefail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
+        ("profilefail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("profilefail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("profilefail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
+        ("profilefail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("holdfail_nothr", "HLD-0"): ('紅', '系統錯誤', "f6513a3dd465"),
+        ("holdfail_nothr", "HLD-1"): ('紅', '系統錯誤', "39214c923190"),
+        ("holdfail_nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
+        ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "78e09b438562"),
+        ("holdfail_nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
+        ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail_nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
+        ("holdfail_nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
+        ("holdfail_nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+    }
+    assert len(expected) == 27, len(expected)
+    assert {name for name, _ in expected} == {"holdfail", "profilefail", "holdfail_nothr"}
+    for (name, code), (tone, state, digest) in expected.items():
+        block = logic.find_block(logic.build_page_model(**fixtures.scenario(name)), code)
+        assert block["_tone"] == tone, (name, code, "tone", block["_tone"], tone)
+        assert block["_state"] == state, (name, code, "state", block["_state"], state)
+        assert _cell_digest(block) == digest, (
+            name, code, "整格內容變了（狀態與顏色沒變，改的是這一塊裡的其他東西）")
+
+
+# ═══════ 稽核必修 G：兩條自訂約束原本零測試背書（射程外溢突變存活） ═══════
+
+
+def test_G1正控_失敗訊息不得蓋掉算得出來的說明():
+    """⭐ **本檔自己那段註解寫死的條文，原本沒有任何測試背書。**
+
+    `_build_hld1()` 那段的註解逐字寫著：「**算出來的東西一律留著**……
+    把它清掉等於用一個失敗訊息蓋掉還算得出來的事實，**那是另一種說謊**」。
+    **實測（稽核）**：把 `detail_lines = detail_lines + [...]` 改成 `= [...]`，
+    **262 條全綠存活** —— 那句條文當時只是一段散文。
+
+    ⚠️ 既有的 `test_第2件_算得出來的東西一個也沒有被失敗訊息蓋掉` 擋不住它：
+    那一條比的是 `_rows` 與主值，**沒有比說明區**，而被蓋掉的正是說明區。
+    ⚠️ 拿掉修復（把那個 `+` 拿掉）本條當場轉紅。
+    """
+    failed = logic.find_block(logic.build_page_model(**fixtures.scenario("holdfail")), "HLD-1")
+    clean = logic.find_block(logic.build_page_model(**fixtures.scenario("full")), "HLD-1")
+    assert clean["detail_lines"], "對照組說明區是空的 —— 這一條會變成空掃"
+    # 沒有失敗時就有的每一行，失敗之後**一行都不准少、順序不准變**。
+    assert failed["detail_lines"][: len(clean["detail_lines"])] == clean["detail_lines"], (
+        clean["detail_lines"], failed["detail_lines"])
+    # 而且失敗訊息是**加在後面**，不是取而代之。
+    assert len(failed["detail_lines"]) > len(clean["detail_lines"])
+    assert any(fixtures.FETCH_FAIL_MESSAGE in line for line in failed["detail_lines"])
+
+
+def test_G2正控_同一句失敗訊息在同一塊只印一次():
+    """⭐ **`_build_core_card()` 的 `if line not in error_lines` 原本從沒被走過。**
+
+    **實測（稽核）**：拿掉那句去重，**262 條全綠存活** ——
+    因為在 `twofail` 之前，**十六個情境沒有任何一個同時有兩張表失敗**。
+    ⇒ 與稽核必修 B 是同一種結構性盲點：**程式碼裡有一條路，而測試資料走不到它。**
+
+    ⚠️ 拿掉修復（刪掉那句 `if line not in error_lines`）本條當場轉紅。
+    """
+    ds = fixtures.scenario("twofail")["dataset"]
+    # 先釘前提：這一組真的有兩張表同時失敗，而且訊息一模一樣。
+    errs = {k: v for k, v in ds["errors"].items() if v}
+    assert len(errs) == 2, errs
+    assert len(set(errs.values())) == 1, errs
+    # 而且那兩張表真的都在 `HLD-3` 的來源欄裡（否則這一條驗不到去重）。
+    assert set(errs) <= set(logic.BLOCK_SOURCE_TABLES["HLD-3"]), (
+        sorted(errs), logic.BLOCK_SOURCE_TABLES["HLD-3"])
+
+    block = logic.find_block(logic.build_page_model(**fixtures.scenario("twofail")), "HLD-3")
+    lines = block["detail_lines"]
+    hits = [line for line in lines if fixtures.FETCH_FAIL_MESSAGE in line]
+    assert len(hits) == 1, hits
+    assert lines.count("訊息原文照印，不改寫成安撫語句。") == 1, lines
+
+
+def test_第3件_既有六列是補登_兩個日期不同():
+    """⭐ **稽核必修 D 的正控。**
+
+    `46` 第 2 節自己寫死：「**兩者相同 ⇒ 這一列是在登記時機當下寫的；
+    兩者不同 ⇒ 這一列是補登的**」。
+    而那六列**確實是補登的**（查 git：三層確認釘 `a7f8c1b`＝2026-09-23，
+    六列寫進本表是在 `fd5e41b`＝2026-09-24）。
+
+    ⛔ **本條擋的是本輪自己犯過的那個錯**：初版把兩欄都填成 2026-09-23，
+    於是**一份為了讓補登合法而改寫的條文，第一個例子把補登記成了非補登** ——
+    而它當時之所以看起來合理，是因為引了本表自己的一則註記當佐證（**循環引用**）。
+    ⚠️ 拿掉修復（把登記日改回與確認日同值）本條當場轉紅。
+
+    ⚠️ **本條不驗「2026-09-24 是不是正確的那一天」** —— 那取決於 git，
+    而本檔不跑 git。**不假裝這一條守得比實際多。** 它驗的是
+    「這六列被標成補登」這個**表內事實**與第 2 節的定義一致。
+    """
+    _, rows = _doc46_registry_rows()
+    assert len(rows) == 6, len(rows)
+    for row in rows:
+        got = [c.strip() for c in row.strip().strip("|").split("|")]
+        confirmed, registered = got[-2], got[-1]
+        assert confirmed != registered, (
+            "這一列的兩個日期同值 ⇒ 依 `46` 第 2 節就是『在登記時機當下寫的』，"
+            "但這六列是補登的", row[:70])
+        assert confirmed < registered, ("確認日不該晚於登記日", row[:70])

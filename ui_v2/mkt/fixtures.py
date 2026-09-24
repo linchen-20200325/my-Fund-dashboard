@@ -276,6 +276,44 @@ def dataset_mkt3_unit_mismatch() -> dict:
     return _dataset(rows)
 
 
+def dataset_mkt3_tied_in_one_card() -> dict:
+    """**同一張卡上，`資料未備` 與 `業務例外` 同時是最差的那一級。**
+
+    MKT-3 的兩個主值：`policy_rate_pct` 整個抽掉（→ `資料未備`），
+    `fx_twd_per_usd` 的單位換成 `TWD`（→ `業務例外`，單位不符）。
+    `44` :310 把這兩個並列同一級 ⇒ **這張卡的 `_state` 排不出來**。
+
+    ⚠️ **本情境是 2026-09-24 拆掉自創先後那一輪新加的** ——
+    在它之前，全部 14 個情境**沒有一個**踩得到同級，
+    於是那個 tie-break 拆不拆都看不出差別（＝正控是空的）。
+    """
+    rows = []
+    for row in _drop(_base_rows(), ["policy_rate_pct"]):
+        if row["indicator_key"] == "fx_twd_per_usd":
+            row = dict(row, value_unit="TWD")
+        rows.append(row)
+    return _dataset(rows)
+
+
+def dataset_two_cards_tied() -> dict:
+    """**三塊之間**，`資料未備` 與 `業務例外` 同時是最差的那一級（結論燈那一層）。
+
+    MKT-1 兩鍵皆抽掉（→ 整張卡 `資料未備`）、MKT-3 的匯率單位換成 `TWD`
+    （→ 整張卡 `業務例外`）、MKT-2 照常（→ `ok`）。
+    ⇒ 結論燈讀到的三個狀態是 {`資料未備`, `業務例外`, `ok`}，
+      最高的那一級有**兩個成員**，`44` 沒有排它們的先後。
+
+    ⚠️ 這一組是**當掉點的重現資料**：舊寫法在這裡先 `KeyError: None`，
+       就算補掉也還有 `StopIteration`（沒有一張卡的 `_state` 等於哨符）。
+    """
+    rows = []
+    for row in _drop(_base_rows(), ["vol_index", "credit_spread_pct"]):
+        if row["indicator_key"] == "fx_twd_per_usd":
+            row = dict(row, value_unit="TWD")
+        rows.append(row)
+    return _dataset(rows)
+
+
 def dataset_all_empty() -> dict:
     """47 狀態 6：全空（首次開啟）。一列也沒有。"""
     return _dataset([])
@@ -331,6 +369,9 @@ def all_datasets() -> dict:
         "mkt2_one_row_after_baseline": dataset_mkt2_one_row_after_baseline(),
         "mkt2_diverging": dataset_mkt2_diverging(),
         "mkt3_unit_mismatch": dataset_mkt3_unit_mismatch(),
+        # 2026-09-24 新增兩個：同級（卡內）與同級（三塊之間）。理由見各自的 docstring。
+        "mkt3_tied_in_one_card": dataset_mkt3_tied_in_one_card(),
+        "two_cards_tied": dataset_two_cards_tied(),
         "all_empty": dataset_all_empty(),
         "revised_row": dataset_revised_row(),
         "unknown_unit_literal": dataset_unknown_unit_literal(),
