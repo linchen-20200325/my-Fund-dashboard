@@ -343,20 +343,42 @@ def _render_hld4(block: dict) -> None:
         )
 
 
+def _open_fund():
+    """展開中的是哪一檔。鍵名與規則都住在 logic，這裡只負責讀。"""
+    try:
+        return st.session_state.get(logic.HLD5_OPEN_KEY)
+    except Exception:
+        return None
+
+
+def _click_open(fund_code: str) -> None:
+    """按下某一檔的展開鈕。**哪一檔會是開的由 logic 決定**，這裡只寫回 session_state。"""
+    st.session_state[logic.HLD5_OPEN_KEY] = logic.open_fund_after_click(
+        _open_fund(), fund_code
+    )
+
+
 def _render_hld5(block: dict) -> None:
     with _expander(block):
         st.caption(block["answers"])
         _lines(block["detail_lines"])
-        # `44` :707 與 §5.4 逐字「**展開區不巢狀第二層**」—— 上一輪在塊層 expander 裡面
-        # 又開了一層，那就是第二層。本輪退成**純文字列表**：逐檔一行標題，
-        # 展開中的那一檔（`_open`）才接內容。
-        # ⛔ 刻意**不發明一枚展開鈕**：`open_fund` 目前沒有任何呼叫端會傳值，
-        #    那枚鈕按下去畫面不會變 —— `44` :2420「**一枚按了不動的按鈕，比沒有按鈕更誤導**」。
-        #    要讓它真的可點得接 session_state，那超出本輪射程（已登記待裁）。
+        # `44` :707 與 §5.4 逐字「**展開區不巢狀第二層**」—— 本塊是**純文字列表**：
+        # 逐檔一行標題＋一枚展開鈕，展開中的那一檔（`_open`）才接內容。
+        # 上一輪那枚鈕是死的（`open_fund` 沒有任何呼叫端會傳值），本輪接上 `st.session_state`
+        # 之後**真的可點**，不再是 `44` :2420 說的那種「按了不動的按鈕」。
         for item in block["_items"]:
             st.markdown(
                 f'<div class="hld-fh">{_esc(item["head_text"])}</div>',
                 unsafe_allow_html=True,
+            )
+            button = item["_button"]
+            st.button(
+                button["label"],
+                key=f"hld5_open_{item['_fund_code']}",
+                disabled=not button["_enabled"],
+                help=button["disabled_reason"] or None,
+                on_click=_click_open,
+                args=(item["_fund_code"],),
             )
             if not item["_open"]:
                 continue
@@ -505,7 +527,9 @@ def render() -> None:
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     scenario = _pick_scenario()
-    model = logic.build_page_model(**fixtures.scenario(scenario))
+    model = logic.build_page_model(
+        **fixtures.scenario(scenario), open_fund=_open_fund()
+    )
 
     st.markdown(
         f'<div class="hld-title">{_esc(model["title"])}</div>', unsafe_allow_html=True

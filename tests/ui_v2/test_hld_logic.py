@@ -12,6 +12,7 @@ docs/v2/prototype/ui_prototype_hld.html（客戶已拍板的草稿）。
 
 import math
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
@@ -100,16 +101,82 @@ _SCENARIO_BY_STATE = {
 }
 
 
-def test_九塊每一塊在四種情境下都建得出來且狀態合法():
-    """逐塊四狀態：九塊 × 四種情境，每一塊都要給得出一個合法狀態值。"""
+def test_九塊在全部情境下都建得出來且狀態合法():
+    """逐塊四狀態：九塊 × **全部情境**，每一塊都要給得出一個合法狀態值。
+
+    ⚠️ **2026-09-24 擴寫（有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）**：
+    ~~原本只跑六個情境（`full`/`srcmiss`/`bizexc`/`fetchfail`/`nothr`/`empty`）。~~
+    **那正是 `KeyError: None` 溜出去的那道縫** —— 本組加了 `emptyfail` 與五個延伸情境，
+    **卻沒有把這條合法性守衛一起擴**，於是新情境的塊狀態從來沒有被驗過。
+    **舊表述在寫下當時涵蓋得完**（那時本頁就只有六個情境）；**被權衡掉的是它的前提**。
+
+    ⛔ **同輪一併把 `_state` 的契約寫成可檢查的，而不是靠運氣**：
+    `logic.py` 自己寫「`STATE_UNRANKED` **不是第五個狀態**」，但它確實會被寫進塊的 `_state`。
+    `page.py` 剛好不讀塊的 `_state`（只讀 `_tone`），所以今天不會顯示成怪東西 ——
+    **那是運氣，不是設計。** 這一條把它變成契約：
+    `_state` 要嘛是四狀態之一，要嘛是 `STATE_UNRANKED`；**而且 `STATE_UNRANKED` 必須是掙來的**
+    （那一塊真的同時有 `資料未備` 與 `業務例外` 的主值），不是漏接漏出來的 `None`；
+    **無論哪一種，`_tone` 一律要是合法顏色**（那才是真正會被畫出去的東西）。
+    """
     legal = {logic.STATE_OK, logic.STATE_MISSING, logic.STATE_BIZ, logic.STATE_ERROR}
-    for name in ("full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty"):
+    tones = {"中性", "灰", "黃", "紅"}
+    unranked_seen = 0
+    for name in _ALL_SCENARIOS:
         model = logic.build_page_model(**fixtures.scenario(name))
         assert [b["code"] for b in logic.all_blocks(model)] == [
             f"HLD-{i}" for i in range(9)
         ], name
         for block in logic.all_blocks(model):
-            assert block["_state"] in legal, (name, block["code"])
+            state = block["_state"]
+            assert block["_tone"] in tones, (name, block["code"], block["_tone"])
+            if state is logic.STATE_UNRANKED:
+                # 掙來的：這一塊真的同時有那兩種主值，才准是 `STATE_UNRANKED`。
+                value_states = {n["_state"] for n in logic.value_nodes(block)}
+                if block["code"] == "HLD-0":
+                    # 結論燈不自取數，它讀的是三塊的狀態值（`44` :488 來源欄）。
+                    value_states = {
+                        logic.find_block(model, c)["_state"]
+                        for c in ("HLD-1", "HLD-2", "HLD-3")
+                    }
+                assert logic.STATE_UNRANKED in value_states or {
+                    logic.STATE_MISSING, logic.STATE_BIZ
+                } <= value_states, (name, block["code"], sorted(map(str, value_states)))
+                unranked_seen += 1
+            else:
+                assert state in legal, (name, block["code"], state)
+    # 反空掃留給下一條專門驗（本頁現行 12 情境不一定跑得出 `STATE_UNRANKED`）。
+    assert unranked_seen >= 0
+
+
+def test_A1回歸_同級主值不得讓整頁建不起來():
+    """**2026-09-24 稽核必修 A1 的回歸測試。**
+
+    `conclusion_light()` 裡那個 `worst_state(states)` 漏改，而 `states` 現在可以含
+    `STATE_UNRANKED` ⇒ `build_page_model()` 直接 `KeyError: None`，**整頁畫不出來**。
+
+    重現資料（純 fixtures 公開 API）：一檔區間內只有一筆淨值（→ `業務例外`）
+    ＋ 一檔淨值來源整個抽掉（→ `資料未備`）＋ 門檻調到沒有任何一檔超出。
+    **同一組資料在 `a7f8c1b` 上跑得起來**（HLD-0 為灰／`業務例外`）⇒ 這是第 6 件引進的。
+
+    ⚠️ **拿掉修復就會紅**：把 `worst_state()` 裡的 `_band(s)` 改回 `_BAND[s]`，
+    本條當場 `KeyError: None`。
+    """
+    dataset = fixtures._dataset(
+        nav=[row for row in fixtures.navs() if row["fund_code"] != "CCCC"],
+        window=fixtures.ONE_NAV_WINDOW,
+        rules=fixtures._RULES_NOEXCEED,
+    )
+    model = logic.build_page_model(dataset)  # ⛔ 修復前這一行就炸了
+
+    # 真的踩到那個同級情形（否則這一條會退化成「隨便一組資料建得起來」）。
+    card = logic.find_block(model, "HLD-2")
+    assert card["_state"] is logic.STATE_UNRANKED, card["_state"]
+    assert {logic.STATE_MISSING, logic.STATE_BIZ} <= {
+        n["_state"] for n in logic.value_nodes(card)
+    }
+    # 而且整頁九塊都畫得出顏色。
+    for block in logic.all_blocks(model):
+        assert block["_tone"] in {"中性", "灰", "黃", "紅"}, (block["code"], block["_tone"])
 
 
 def test_全空情境_九塊一個數字也不出():
@@ -1016,28 +1083,113 @@ def test_nav的source_tier落在44第四節寫的四個值域內():
     assert seen > 0, "一列也沒掃到 —— 這一條會變成空掃"
 
 
-def test_HLD8的重新取數與核心卡同一套規則():
-    """A3：`44` :762 第一句「**四狀態逐值判定，與核心卡同一套**」。
+_ALL_SCENARIOS = tuple(fixtures.SCENARIO_NAMES) + (
+    "noexceed", "other_window", "onenav", "badrange", "full_then_badrange",
+)
 
-    上一輪曾把 `HLD-8` 收成「只有取數失敗才掛鈕」，同一個缺淨值條件下核心卡掛鈕、
-    本塊零枚 —— 同一套當場破掉，已撤回。釘「同一個規則」而不是「同一個結果」：
-    `fetchfail` 只有配息失敗，`HLD-2` 全部主值正常因而本來就不該掛鈕。
-    ⛔ `HLD-1` 不在射程內（它的鈕綁未列入檔數，不是自己的主值狀態）。
-    ⛔ `empty` 不在射程內：那一態三塊都沒有主值，而現行三張卡各一枚、`HLD-8` 零枚
-       —— **本輪之前就有的不一致**，修哪一邊都是替客戶做那個正在送裁的決定。登記回報。
+
+def test_HLD1與HLD2與HLD3在任何情境下都沒有重新取數按鈕():
+    """**第 3 件的正控**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
+
+    `44` :515（`HLD-1`）／:533（`HLD-2`）／:544（`HLD-3`）三格的空狀態欄
+    **一個按鈕也沒有寫**，而 `44` 5.5「各塊自己寫的優先於本表模板」同輪補的分句逐字：
+    「**一塊的空狀態欄整格為準：那一格沒有寫出按鈕，該塊的那個空狀態畫面上就沒有按鈕，
+    不回退成本表模板裡的那一枚**」。
+    決定性理由（`44` :2420 逐字）：「**一枚按了不動的按鈕，比沒有按鈕更誤導**」——
+    這一頁缺的四張表由 Sheets 維護、本儀表板唯讀，按下去不會有任何效果。
+
+    ~~舊表述：`test_HLD8的重新取數與核心卡同一套規則` 要求三張核心卡與 `HLD-8` 掛鈕條件相同。~~
+    **舊表述在寫下當時撐得住** —— 它引的是 `44` :762 第一句「四狀態逐值判定，**與核心卡同一套**」，
+    在三張卡都掛鈕的前提下，把 `HLD-8` 收窄確實會破掉那個「同一套」。
+    **被權衡掉的是它的前提**：客戶裁掉了三張卡那三枚，「同一套」的那一端不存在了。
+    ⚠️ **那一句「同一套」沒有被推翻，它的射程另有一條測試釘著**
+    （見 `test_同一套指的是逐值判定與三個文案字面值_不是按鈕`）。
+
+    ⚠️ **拿掉修復就會紅**：把任何一枚 `_retry_button()` 加回這三塊，本條當場轉紅。
     """
-    non_ok = {logic.STATE_MISSING, logic.STATE_ERROR}
     checked = 0
-    for name in ("full", "srcmiss", "bizexc", "fetchfail", "nothr"):
+    for name in _ALL_SCENARIOS:
         model = logic.build_page_model(**fixtures.scenario(name))
-        for code in ("HLD-2", "HLD-3", "HLD-8"):
+        for code in ("HLD-1", "HLD-2", "HLD-3"):
             block = logic.find_block(model, code)
-            states = {n["_state"] for n in logic.value_nodes(block)}
-            assert states, (name, code)
-            actual = any(b["label"] == "重新取數" for b in block["buttons"])
-            assert actual == bool(states & non_ok), (name, code, sorted(states))
+            labels = [b["label"] for b in block["buttons"]]
+            assert "重新取數" not in labels, (name, code, labels)
             checked += 1
-    assert checked == 15
+    assert checked == len(_ALL_SCENARIOS) * 3 > 0
+
+
+def test_HLD8是本頁唯一寫出重新取數的塊_而且它真的掛得出來():
+    """`44` :762 本塊空狀態欄**自己寫出了**那枚鈕；`44` :2423 的實測同向 ——
+    四格裡寫出 `來源缺` 的十五塊，同格寫出那枚鈕的只有 `MKT-1` 與 `HLD-8` 兩塊。
+
+    ⚠️ 後半句是**反空掃**：若一枚也掛不出來，前半句會退化成「全頁都沒有鈕」而恆真。
+    """
+    seen = set()
+    for name in _ALL_SCENARIOS:
+        model = logic.build_page_model(**fixtures.scenario(name))
+        for block in logic.all_blocks(model):
+            if any(b["label"] == "重新取數" for b in block["buttons"]):
+                seen.add(block["code"])
+    assert seen == {"HLD-8"}, seen
+
+
+def test_同一套指的是逐值判定與三個文案字面值_不是按鈕():
+    """`44` :762 第一句逐字：「**四狀態逐值判定，與核心卡同一套**：
+    `⬜ 資料未備`／`⬜ 不適用：…`／`⚠ 取數失敗`」。
+
+    「同一套」黏在**逐值判定與那三個文案字面值**上；那一格的按鈕是**後面另一句**
+    （「取數失敗時該欄印出失敗訊息原文並掛『重新取數』按鈕」）自己寫的。
+    ⇒ 拿掉三張核心卡那三枚鈕，**不會**動到這一句 —— 這一條就是在釘這件事。
+    """
+    families = ("⬜ 資料未備", "⬜ 不適用：", "⚠ 取數失敗")
+    seen = {code: set() for code in ("HLD-2", "HLD-3", "HLD-8")}
+    for name in _ALL_SCENARIOS:
+        model = logic.build_page_model(**fixtures.scenario(name))
+        for code in seen:
+            for node in logic.value_nodes(logic.find_block(model, code)):
+                assert node["_state"] in {
+                    logic.STATE_OK, logic.STATE_MISSING,
+                    logic.STATE_BIZ, logic.STATE_ERROR,
+                }, (name, code, node)
+                if node["_state"] != logic.STATE_OK:
+                    assert node["text"].startswith(families), (name, code, node["text"])
+                    seen[code].add(node["text"])
+    for code, texts in seen.items():
+        assert texts, code  # 反空掃：每一塊都真的出過非 ok 的文案
+    # `HLD-8` 承接的是那兩張卡各自的第三個值，所以它的文案是兩張卡的聯集再加上
+    # 「配息類別未知」那一句（`44` :544 把該句連同本金類佔比一起交給 `HLD-8`）。
+    assert seen["HLD-2"] | seen["HLD-3"] <= seen["HLD-8"], (
+        sorted((seen["HLD-2"] | seen["HLD-3"]) - seen["HLD-8"])
+    )
+
+
+def test_登記_HLD8那枚鈕綁得比44的字面寬():
+    """⚠️ **這是一筆登記，不是一條規格** —— 拿掉三枚之後浮出來的新不一致。
+
+    `44` :762 那一格寫按鈕的那一句逐字是「**取數失敗時**該欄印出失敗訊息原文並掛
+    『重新取數』按鈕」——**只綁 `取數失敗`**。
+    而本檔實作把它綁在 `資料未備` ∪ `系統錯誤` 上，於是 `srcmiss`（只有缺淨值、
+    沒有任何一個值進 `取數失敗`）也掛得出鈕。
+
+    ⚠️ **2026-09-24 補上另一邊（原本只寫了「比字面寬」這一邊）**：
+    `44` :762 **同一格的第一句**是「四狀態逐值判定，**與核心卡同一套**」，
+    而核心卡那張表（`44` :2009）給 `資料未備` 那一列**也逐字掛了一枚「重新取數」**。
+    ⇒ **照那條連結讀，現行這個較寬的綁法才是 `44`-compliant，
+    :762 的按鈕子句反而是窄的那一個。**
+    **`44` 在同一格裡給了兩個答案**，本檔不替客戶選。
+
+    **本輪刻意不改 `HLD-8`**：收窄與否是客戶的地盤（收窄＝`srcmiss` 下本頁一枚鈕也沒有）。
+    **登記，不是動工授權；待客戶裁決。**
+
+    這一條把**現況**釘住，好讓將來任何一次改動都是有意識的，不是漂移。
+    """
+    model = logic.build_page_model(**fixtures.scenario("srcmiss"))
+    block = logic.find_block(model, "HLD-8")
+    states = {n["_state"] for n in logic.value_nodes(block)}
+    assert states, "一個主值也沒有 —— 這一條會變成空掃"
+    assert logic.STATE_ERROR not in states, sorted(states)   # 44 字面的條件不成立
+    assert logic.STATE_MISSING in states, sorted(states)
+    assert any(b["label"] == "重新取數" for b in block["buttons"])  # 實作照樣掛
 
 
 def test_HLD6與HLD7沒有重新取數按鈕():
@@ -1108,3 +1260,518 @@ def test_跨幣別偵測器真的偵測得到跨幣別合成值():
     other = "EUR" if group["_ccy"] != "EUR" else "USD"
     group["main_values"][0] = dict(group["main_values"][0], _ccy=other)
     assert logic.cross_currency_nodes(model2), "幣別對不上所在那一檔也沒有被抓到"
+
+
+# ═════════════ 客戶 2026-09-23 裁示：第 4／5／6 件的正控 ═════════════
+
+
+def test_第4件正控_open_fund_after_click_點一檔展開一檔():
+    """`44` HLD-5 規則欄逐字「點一檔展開一檔，**同時最多展開一檔**」。
+
+    ⚠️ 拿掉修復（讓 `open_fund_after_click` 回 `current`）本條轉紅。
+    """
+    assert logic.open_fund_after_click(None, "AAAA") == "AAAA"
+    assert logic.open_fund_after_click("AAAA", "BBBB") == "BBBB"
+    assert logic.open_fund_after_click("BBBB", "BBBB") == "BBBB"
+
+
+def test_第4件正控_同時最多展開一檔且初次載入零檔():
+    """`44` :119／:128／:2315「初次載入展開的只有結論燈 ＋ 3 張核心卡」
+    ＋ `44` :711 判準「同時處於展開狀態的檔數為 1」。"""
+    model = logic.build_page_model(**fixtures.scenario("full"))
+    items = logic.find_block(model, "HLD-5")["_items"]
+    assert items, "一檔也沒有 —— 這一條會變成空掃"
+    assert sum(1 for i in items if i["_open"]) == 0
+    for code in [i["_fund_code"] for i in items]:
+        opened = logic.build_page_model(fixtures.dataset_full(), open_fund=code)
+        rows = logic.find_block(opened, "HLD-5")["_items"]
+        assert [i["_fund_code"] for i in rows if i["_open"]] == [code], code
+        # `44` 5.3：展開中的那一檔，它的鈕停用而且不隱藏，且附一行原因。
+        me = [i for i in rows if i["_fund_code"] == code][0]
+        assert me["_button"]["_enabled"] is False
+        assert me["_button"]["_visible"] is True
+        assert me["_button"]["disabled_reason"]
+
+
+def test_第4件正控_那枚鈕是44五點三的展開類且不寫任何表():
+    """`44` 5.3：八類之外沒有第九類；`導覽`／`展開` 什麼都不寫。"""
+    model = logic.build_page_model(fixtures.dataset_full(), open_fund="AAAA")
+    items = logic.find_block(model, "HLD-5")["_items"]
+    assert len(items) == 3, len(items)
+    for item in items:
+        button = item["_button"]
+        assert button["label"] == logic.HLD5_OPEN_LABEL
+        assert button["_action_kind"] == "展開"
+        assert button["_action_kind"] in logic.BUTTON_KINDS
+        assert button["_writes"] == set()
+    # 走全頁掃描也看得到它（`44` 5.3 元件判準掃的是「介面上全部按鈕」）。
+    # ⚠️ `_build_hld5` 把同一份 list 同時掛在 `_items` 與 `_rows`，
+    #    `_walk` 因此會走到同一個 dict 兩次 —— 這裡用「至少」而不是「剛好」。
+    scanned = [
+        b for b in logic.collect_buttons(model)
+        if b["label"] == logic.HLD5_OPEN_LABEL
+    ]
+    assert len(scanned) >= 3, len(scanned)
+
+
+def test_第5件正控_空持倉而且有一塊取數失敗時燈為紅():
+    """**第 5 件的正控**（客戶 2026-09-23 裁示：改紅）。
+
+    `44` :489 規則欄「任一塊為 `系統錯誤` → 燈為**紅**」與同塊空狀態欄
+    「持倉表為空 → 燈為**灰**」同時命中，`44` 沒有訂先後，客戶裁紅。
+    方向出自 `44` :1620 逐字「**一句把空白報成平安的文案，比沒有文案更誤導**」。
+
+    ⚠️ **拿掉修復就會紅**：把 `conclusion_light` 的 `not has_holdings` 那一段
+    移回 `STATE_ERROR in states` 前面，本條當場轉紅（燈會回到灰）。
+    """
+    model = logic.build_page_model(**fixtures.scenario("emptyfail"))
+    lamp = logic.find_block(model, "HLD-0")
+    assert lamp["_tone"] == "紅", lamp["_tone"]
+    assert lamp["_state"] == logic.STATE_ERROR
+    assert lamp["text"] == "有一塊取數失敗，這一頁的數字先不要照著讀"
+    # 失敗的那一塊被點名。
+    assert any("配息與本金卡" in line for line in lamp["lines"]), lamp["lines"]
+    # 空持倉那一句沒有被吞掉，降級成補述（兩件事都看得到，不是二選一）。
+    assert any(logic.TEXT_NO_HOLDING in line for line in lamp["lines"]), lamp["lines"]
+
+
+def test_第5件正控_只是空持倉而沒有失敗時仍然是灰():
+    """⛔ 反向控制：第 5 件收掉的**只有**「空持倉 ＋ 有一塊失敗」那一種。
+    沒有任何一塊失敗時，`44` :490 空狀態欄那一句一個字未改、照樣回灰。"""
+    lamp = logic.find_block(
+        logic.build_page_model(**fixtures.scenario("empty")), "HLD-0"
+    )
+    assert lamp["_tone"] == "灰"
+    assert lamp["text"] == logic.TEXT_NO_HOLDING
+
+
+def test_第5件正控_emptyfail與empty只差一個取數失敗():
+    """釘住 fixture 本身：兩組資料除了 `errors` 以外逐鍵相同，
+    否則「改紅」可能是別的差異造成的，這條正控就不成立。"""
+    a, b = fixtures.dataset_empty(), fixtures.dataset_emptyfail()
+    assert a["errors"] == {}
+    assert b["errors"] == {"dividend": fixtures.FETCH_FAIL_MESSAGE}
+    assert {k: v for k, v in a.items() if k != "errors"} == {
+        k: v for k, v in b.items() if k != "errors"
+    }
+
+
+def test_第6件正控_worst_state不替44排資料未備與業務例外的先後():
+    """**第 6 件的正控**（客戶 2026-09-23 裁示：拆掉 `_SEVERITY` 的 tie-break）。
+
+    `44` :310（`MKT-0` 規則欄）是全檔唯一明文排過卡片四狀態的地方，
+    它把 `資料未備` 與 `業務例外` **並列同級**（皆 → 黃）。
+    ⇒ 兩者同時是最差時**沒有答案**，回 `STATE_UNRANKED`，不挑一個充數。
+
+    ⚠️ **拿掉修復就會紅**：把 `_BAND` 改回 `{ok:0, 資料未備:1, 業務例外:2, 系統錯誤:3}`，
+    本條第一句當場轉紅（會回 `業務例外`）。
+    """
+    assert logic.worst_state([logic.STATE_MISSING, logic.STATE_BIZ]) is logic.STATE_UNRANKED
+    # 單一成員的那幾級照樣答得出來。
+    assert logic.worst_state([logic.STATE_OK, logic.STATE_MISSING]) == logic.STATE_MISSING
+    assert logic.worst_state([logic.STATE_OK, logic.STATE_BIZ]) == logic.STATE_BIZ
+    assert logic.worst_state([logic.STATE_OK]) == logic.STATE_OK
+    assert logic.worst_state(
+        [logic.STATE_MISSING, logic.STATE_BIZ, logic.STATE_ERROR]
+    ) == logic.STATE_ERROR
+    # `44` :310 的那一級：兩者同級。
+    assert logic._BAND[logic.STATE_MISSING] == logic._BAND[logic.STATE_BIZ]
+
+
+def test_性質_worst_state與輸入順序無關_但這不是第6件的正控():
+    """⚠️ **2026-09-24 就地更正：這一條原本掛著「第 6 件正控」的名字，那是假的**
+    （有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）。
+
+    ~~原 docstring：「舊實作用 `max()`，同級時回『先出現的那一個』——
+    那是一個看不見的 tie-break。」~~
+    **本組實跑推翻**：把四狀態的 **69 組 multiset（size 1~4）× 每組的全部排列**
+    餵進 `a7f8c1b` 的舊 `worst_state`，**order-dependent 的組數 ＝ 0**。
+    原因很簡單：舊 `_SEVERITY` 把那兩個排成**不同級**，`max()` **從來沒遇過平手**。
+    ⇒ 這一條在 `a7f8c1b` 上**一樣會綠**，它**不是**第 6 件修好的東西。
+    **突變 M6 的實測也指向同一件事：紅的是另外兩條，這一條沒紅。**
+
+    ⛔ **這一筆的來歷要寫明**：「舊版 `max()` 同級時回先出現的」出自總管的回修單，
+    本組**照收、沒查證就寫進程式碼與測試名稱**。
+    **總管沒查證就寫進派工單，本組沒查證就寫進會被後人讀的記錄** —— 同一個病的兩端。
+
+    **這一條保留的理由**：性質本身**是真的、而且值得守**（`worst_state` 不得與順序有關），
+    只是它守的是一個**本來就成立**的性質，不是一個新修好的東西。**名字改成誠實的。**
+    ⚠️ 第 6 件真正的正控是 `test_第6件正控_worst_state不替44排資料未備與業務例外的先後`。
+    """
+    import itertools
+
+    states = (logic.STATE_OK, logic.STATE_MISSING, logic.STATE_BIZ, logic.STATE_ERROR)
+    checked = 0
+    for size in (1, 2, 3, 4):
+        for combo in itertools.combinations_with_replacement(states, size):
+            outs = {logic.worst_state(list(perm)) for perm in itertools.permutations(combo)}
+            assert len(outs) == 1, (combo, outs)
+            checked += 1
+    assert checked == 69, checked  # 反空掃：母體真的是那 69 組
+
+
+def test_第6件正控_同級是真的會發生_而且畫面照樣畫得出顏色():
+    """反空掃：證明這一對**真的排得到**，不是一條永遠跑不到的分支。
+
+    構造法：某檔淨值整個抽掉（最大回撤 → `⬜ 資料未備`），
+    而同一檔的配息全是 `unknown`（本金類佔比 → `⬜ 不適用：配息類別未知`）——
+    `HLD-8` 同一塊裡同時有 `資料未備` 與 `業務例外`。
+    （現有的 `srcmiss` 刻意把那一檔的 `unknown` 翻成 `income` 才避開了它。）
+    """
+    dataset = fixtures._dataset(
+        nav=[r for r in fixtures.navs() if r["fund_code"] != "CCCC"],
+        window=(fixtures.WINDOW_START, fixtures.WINDOW_END),
+        rules=fixtures._RULES_DEFAULT,
+    )
+    block = logic.find_block(logic.build_page_model(dataset), "HLD-8")
+    states = {n["_state"] for n in logic.value_nodes(block)}
+    assert {logic.STATE_MISSING, logic.STATE_BIZ} <= states, sorted(states)
+    assert logic.STATE_ERROR not in states, sorted(states)
+    # 狀態排不出來 → 不硬答；但畫面還是要有一個顏色，不能當掉。
+    assert block["_state"] is logic.STATE_UNRANKED
+    assert block["_tone"] == "黃"
+
+
+def test_第6件正控_拆掉tie_break沒有改變任何一個現行畫面的顏色():
+    """⛔ 反向控制：第 6 件動的是「這一塊最差的是哪一個狀態」這句**宣稱**，
+    **不是**畫面。逐情境逐塊比對顏色，與拆之前逐格相同。
+
+    這一份期望值是拆掉 tie-break **之前**跑出來的（量測日 2026-09-23）。
+    """
+    expected = {
+        ("full", "HLD-1"): "中性", ("full", "HLD-2"): "中性",
+        ("full", "HLD-3"): "中性", ("full", "HLD-8"): "黃",
+        ("srcmiss", "HLD-1"): "中性", ("srcmiss", "HLD-2"): "灰",
+        ("srcmiss", "HLD-3"): "灰", ("srcmiss", "HLD-8"): "灰",
+        ("bizexc", "HLD-1"): "中性", ("bizexc", "HLD-2"): "黃",
+        ("bizexc", "HLD-3"): "中性", ("bizexc", "HLD-8"): "黃",
+        ("fetchfail", "HLD-1"): "中性", ("fetchfail", "HLD-2"): "中性",
+        ("fetchfail", "HLD-3"): "紅", ("fetchfail", "HLD-8"): "紅",
+        ("nothr", "HLD-1"): "黃", ("nothr", "HLD-2"): "中性",
+        ("nothr", "HLD-3"): "中性", ("nothr", "HLD-8"): "黃",
+        ("empty", "HLD-1"): "灰", ("empty", "HLD-2"): "灰",
+        ("empty", "HLD-3"): "灰", ("empty", "HLD-8"): "灰",
+        ("onenav", "HLD-2"): "黃", ("onenav", "HLD-8"): "黃",
+        ("badrange", "HLD-1"): "黃", ("badrange", "HLD-8"): "黃",
+        ("other_window", "HLD-8"): "中性",
+    }
+    assert expected, "期望值是空的 —— 這一條會變成空掃"
+    for (name, code), tone in expected.items():
+        block = logic.find_block(logic.build_page_model(**fixtures.scenario(name)), code)
+        assert block["_tone"] == tone, (name, code, block["_tone"], tone)
+
+
+# ═════════════ 進入點 docstring 的情境清單（總管 2026-09-23 指定的正控） ═════════════
+
+# 中文數字，索引即它代表的數（`_CJK_NUM[7]` 就是「七」）。
+# ⚠️ 刻意不寫成 `dict`，也刻意不用索引以外的查法 —— 有人重排就會**靜默**指到別的字。
+_CJK_NUM = ("零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十")
+
+
+def _app_hld_docstring() -> str:
+    """讀進入點的 docstring。
+
+    ⚠️ **用 AST 讀，不 import 那一檔** —— 它 `import streamlit`，而本檔自陳不 import
+    streamlit（系統 python3 也匯入不到）。AST 只解析、不執行，兩個環境都跑得起來。
+    """
+    import ast
+
+    path = pathlib.Path(__file__).resolve().parents[2] / "ui_v2" / "app_hld.py"
+    doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")))
+    assert doc, "進入點沒有 docstring —— 這一條會變成空掃"
+    return doc
+
+
+def test_進入點docstring列的情境集合等於SCENARIO_NAMES():
+    """**總管 2026-09-23 指定的正控。**
+
+    那一行 docstring 原本列六種，而 `emptyfail` 加進來之後它**已經過期** ——
+    一份自陳「用這幾個值切」的說明，少列一個值，讀的人就不知道那個畫面存在。
+    ⚠️ 這一條存在的意義是：**下次再加情境，這裡直接紅燈，不用靠人回頭讀。**
+
+    ⚠️ **拿掉修復就會紅**：把那一行的 `|emptyfail` 刪掉（回到六種），本條當場轉紅。
+    """
+    import re
+
+    doc = _app_hld_docstring()
+    match = re.search(r"\?scenario=([A-Za-z0-9_|]+)", doc)
+    assert match, f"docstring 裡找不到情境清單 —— 這一條會變成空掃：{doc!r}"
+    listed = [token for token in match.group(1).split("|") if token]
+    assert listed, "清單解析出零個情境 —— 這一條會變成空掃"
+
+    # 集合相等（總管指定的那一條）。
+    assert set(listed) == set(fixtures.SCENARIO_NAMES), (
+        f"docstring 列的：{sorted(listed)}\n"
+        f"SCENARIO_NAMES：{sorted(fixtures.SCENARIO_NAMES)}\n"
+        "兩邊對不起來 —— 加了情境要同時補那一行 docstring。"
+    )
+    # 沒有重複列同一個（集合相等擋不住 `full|full|...`）。
+    assert len(listed) == len(set(listed)), listed
+    # 順序也對得上，讀的人照著從左到右試就是 fixtures 的順序。
+    assert tuple(listed) == tuple(fixtures.SCENARIO_NAMES), (listed,
+                                                            fixtures.SCENARIO_NAMES)
+
+
+def test_進入點docstring那個數字與它自己列的個數相符():
+    """同一行上還有一個「N 種」。**清單對了而數字沒改，那一行照樣在說謊。**
+
+    這一條補的是上一條的縫：集合相等擋不住「列了七個、卻寫著六種」。
+    ⚠️ **拿掉修復就會紅**：把那一行的「七種」改回「六種」，本條當場轉紅。
+    """
+    import re
+
+    doc = _app_hld_docstring()
+    match = re.search(r"\?scenario=([A-Za-z0-9_|]+)", doc)
+    assert match, "找不到情境清單 —— 這一條會變成空掃"
+    count = len([t for t in match.group(1).split("|") if t])
+    assert 0 < count < len(_CJK_NUM), count
+    expected = f"{_CJK_NUM[count]}種狀態"
+    assert expected in doc, (
+        f"那一行列了 {count} 個情境，卻找不到「{expected}」這四個字。\n"
+        f"docstring：{doc!r}"
+    )
+
+
+# ═════════════ `44` 行號引用守衛（2026-09-24 稽核抓到一批指錯，改成機器驗） ═════════════
+
+# 本輪之前，`44` 的行號引用**沒有任何機器檢查** —— 稽核一次抓到五組指錯，
+# 其中四處還帶著「逐字」標籤。⇒ 改成「每一個引用都要登記，每一個登記都要對得上」。
+#
+# 鍵 ＝ `44` 的行號；值 ＝ 那一行**必須**出現的字串（我逐行讀出來的錨點）。
+# ⚠️ 錨點刻意取**內容**而不是行號附近的裝飾，這樣 `44` 萬一改版，紅燈會指出「內容不見了」。
+_44_ANCHORS = {
+    119: "初次載入時展開的東西 ＝ 結論燈 ＋ 3 張核心卡",
+    120: "展開狀態不跨頁保留；離開再回來，回到預設",
+    128: "處於展開狀態的塊剛好是 1 枚結論燈與 3 張核心卡",
+    310: "任一塊為 `資料未備` 或 `業務例外` → 燈為黃",
+    400: "按「套用」才算，沒有第三條路",
+    488: "不自取數。只讀 `HLD-1`、`HLD-2`、`HLD-3` 三塊的狀態值",
+    489: "任一塊為 `系統錯誤` → 燈為紅",
+    490: "持倉表為空 → 燈為灰",
+    513: "`holding.fund_code`",
+    515: "無任何持倉 → `來源缺`",
+    531: "`fund_profile.inception_on`",
+    533: "區間內淨值筆數少於 2",
+    542: "`dividend.ex_date`",
+    544: "區間內無配息列",
+    583: "指標名取 `HLD-7` 規則欄已經用過的同一組",
+    707: "點一檔展開一檔，同時最多展開一檔",
+    708: "該檔在區間內無淨值",
+    711: "展開第二檔時第一檔自動收合",
+    719: "無列 → `來源缺`",
+    720: "本頁那四塊用到的原始數字",
+    730: "該列指標名所在那一塊把該指標判為",
+    733: "其輸出欄的字串與該列指標名所在那一塊",
+    762: "四狀態逐值判定，與核心卡同一套",
+    1407: "`ALO-6` 的空狀態逐字是",
+    1457: "某檔缺基準值",
+    1620: "一句把空白報成平安的文案，比沒有文案更誤導",
+    1623: "收掉的只有那一種它原本蓋不住的情形",
+    1735: "該欄位單獨列出並掛「未定義」徽章",
+    1799: "`source_tier`",
+    2009: "主值位置顯示 `⬜ 資料未備`",
+    2315: "`default_open` 為真的區塊剛好是結論燈與 3 張核心卡",
+    2344: "顏色是 UI 顯示，不是嚴重度；兩者正交",
+    2347: "再在句尾標上「逐字」",
+    2420: "一枚按了不動的按鈕，比沒有按鈕更誤導",
+    2423: "其中同在四格裡寫出那枚「重新取數」的只有",
+    2476: "不刪，只標",
+}
+
+_MY_FILES = (
+    "ui_v2/hld/logic.py",
+    "ui_v2/hld/page.py",
+    "ui_v2/hld/fixtures.py",
+    "ui_v2/app_hld.py",
+    "tests/ui_v2/test_hld_logic.py",
+    "tests/ui_v2/test_hld_page.py",
+)
+
+
+def _strike_spans(line: str):
+    """`~~…~~` 之間的區段 —— 被劃掉的是**已退役的紀錄**，不該拿它紅燈。"""
+    spans, start = [], None
+    for m in re.finditer(r"~~", line):
+        if start is None:
+            start = m.end()
+        else:
+            spans.append((start, m.start()))
+            start = None
+    return spans
+
+
+def _live_44_citations():
+    """掃出所有**活的** `44` 行號引用，回 [(檔, 檔內行號, 被引的 44 行號)]。
+
+    只認「這一行寫了那個檔名標記」的行 —— 本 repo 裡另有兩種長得像行號的東西
+    （字串切片的上界、以及時間戳裡的分秒），實測兩者都出現在**沒有**那個標記的行上，
+    因此不會被誤當成引用。
+
+    ⚠️ **刻意不把那兩種東西的字面寫進這段說明** —— 寫進來，這一支就會掃到自己，
+    本段就變成一筆假的引用。（`CLAUDE.md` §-2.A 第 8 款：受測字串寫進文件就會自己命中；
+    ✅ 正例是「資訊留著，字串不留」。**本段初稿正是照字面寫，當場被自己掃出三筆**，
+    留這一筆是因為它是那一款最短的示範。）
+    """
+    out = []
+    for name in _MY_FILES:
+        path = pathlib.Path(__file__).resolve().parents[2] / name
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+            if "`44`" not in line:
+                continue
+            spans = _strike_spans(line)
+            for m in re.finditer(r":(\d{2,4})", line):
+                if any(a <= m.start() < b for a, b in spans):
+                    continue  # 劃掉的舊引用，不驗
+                out.append((name, lineno, int(m.group(1))))
+    return out
+
+
+def test_我引的每一個44行號都真的指到我說的那一行():
+    """**2026-09-24 稽核必修 A5 的機器版。**
+
+    稽核一次抓到五組指錯（`:1616`→`:1620`、`:486`→`:489`/`:490`、
+    來源欄 `:515`/`:529`/`:543`→`:513`/`:531`/`:542`、空狀態欄 `:529`/`:543`→`:533`/`:544`），
+    **其中四處帶著「逐字」標籤** —— 帶標籤的假出處比沒有出處更糟。
+    ⇒ 這一條要求：**每一個活的引用都要登記在 `_44_ANCHORS`，每一個登記都要對得上 `44` 的那一行。**
+
+    ⚠️ 拿掉修復（把任何一個引用改回錯的行號）本條當場轉紅。
+    """
+    d44 = (pathlib.Path(__file__).resolve().parents[2]
+           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
+    citations = _live_44_citations()
+    assert citations, "一個引用也沒掃到 —— 這一條會變成空掃"
+
+    unregistered = sorted({n for _, _, n in citations} - set(_44_ANCHORS))
+    assert not unregistered, (
+        f"這些 `44` 行號有人引用但沒登記進 `_44_ANCHORS`：{unregistered}\n"
+        "怎麼修：自己去讀 `44` 那一行，把它的錨點字串加進表裡。**不要照抄別人給的行號。**"
+    )
+
+    bad = []
+    for name, lineno, n in citations:
+        if not (1 <= n <= len(d44)):
+            bad.append(f"{name}:{lineno} 引的 `44` :{n} 超出檔尾（44 共 {len(d44)} 行）")
+        elif _44_ANCHORS[n] not in d44[n - 1]:
+            bad.append(
+                f"{name}:{lineno} 引的 `44` :{n} 對不上\n"
+                f"    期望那一行含：{_44_ANCHORS[n]!r}\n"
+                f"    實際那一行是：{d44[n - 1][:110]!r}"
+            )
+    assert not bad, "\n".join(bad)
+
+
+def test_44行號錨點表沒有死條目():
+    """`_44_ANCHORS` 裡的每一條都要真的對得上 `44`，**即使暫時沒有人引用它**。
+
+    ⚠️ 沒有這一條，一個從來沒被引用過的錯錨點可以永遠躺在表裡不被發現 ——
+    那正是上一條想防的那個病換一個位置再犯。
+    """
+    d44 = (pathlib.Path(__file__).resolve().parents[2]
+           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
+    assert _44_ANCHORS, "錨點表是空的 —— 這一條會變成空掃"
+    for n, anchor in sorted(_44_ANCHORS.items()):
+        assert 1 <= n <= len(d44), (n, len(d44))
+        assert anchor in d44[n - 1], (n, anchor, d44[n - 1][:110])
+
+
+def test_A2回歸_有持倉而門檻未設而且取數失敗_也是紅():
+    """**2026-09-24 稽核必修 A2 的回歸測試 —— 次序調動收掉的是兩種，不是一種。**
+
+    本組原本在 `conclusion_light()` 上方寫「收掉的**只有**空持倉那一種」，**那句是假的**：
+    早退分支排在 `not has_holdings` **與 `not has_rules` 兩段之前**，
+    所以「有持倉 ＋ 門檻未設 ＋ 有一塊 `系統錯誤`」也被收掉了。
+    **本組實測**：同一組資料在 `a7f8c1b` 上是灰／「尚未設定門檻」，現在是紅。
+
+    **兩種都在客戶裁示的方向上**（`系統錯誤` 不該被空狀態報成平安），故維持行為、改描述。
+    ⚠️ 拿掉修復（把早退分支移回兩段之後）本條轉紅。
+    """
+    dataset = fixtures._dataset(
+        window=(fixtures.WINDOW_START, fixtures.WINDOW_END),
+        rules=None,
+        errors={"dividend": fixtures.FETCH_FAIL_MESSAGE},
+    )
+    model = logic.build_page_model(dataset)
+    lamp = logic.find_block(model, "HLD-0")
+    assert dataset["holding"], "沒有持倉的話驗的就是另一種 —— 這一條會驗錯東西"
+    assert lamp["_tone"] == "紅", lamp["_tone"]
+    assert lamp["_state"] == logic.STATE_ERROR
+    # 門檻那一句沒有被吞掉。
+    assert any(logic.TEXT_NO_RULES in line for line in lamp["lines"]), lamp["lines"]
+    assert any("取數失敗" in line for line in lamp["lines"]), lamp["lines"]
+
+
+def test_A2回歸_紅燈不吞掉空狀態欄的任何一句():
+    """`44` :490 空狀態欄寫了**兩句**（持倉表為空／門檻未設定）。
+    紅燈早退時**兩句都要降級成補述，一句都不准吞掉**。
+
+    ⛔ 本組原本只補了持倉那一句，而 `dataset_emptyfail()` 帶 `rules=None` ⇒
+    三件事（沒持倉／沒門檻／取數失敗）**只活下來兩件，而且零測試涵蓋** ——
+    正是本組在同一段註解裡宣稱避免掉的那件事。
+    ⚠️ 拿掉修復（刪掉 `not has_rules` 那個補述分支）本條轉紅。
+    """
+    lamp = logic.find_block(
+        logic.build_page_model(**fixtures.scenario("emptyfail")), "HLD-0"
+    )
+    joined = "\n".join(lamp["lines"])
+    assert logic.TEXT_NO_HOLDING in joined, lamp["lines"]   # 沒持倉
+    assert logic.TEXT_NO_RULES in joined, lamp["lines"]     # 沒門檻
+    assert "取數失敗" in joined, lamp["lines"]              # 取數失敗
+    assert lamp["_tone"] == "紅"
+
+
+def _tables_named_in_44_source_row(lineno: int) -> set:
+    """把 `44` 某一行「來源」欄裡點名的資料表撈出來（`表.欄` 這種寫法的左半）。"""
+    d44 = (pathlib.Path(__file__).resolve().parents[2]
+           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
+    line = d44[lineno - 1]
+    assert "**來源**" in line, (lineno, line[:80])  # 確認真的是來源欄
+    return set(re.findall(r"`([a-z_]+)\.[a-z_]+`", line))
+
+
+def test_A3控_來源表真的是44來源欄的逐字子集():
+    """**2026-09-24 稽核必修 A3 的機器版。**
+
+    `BLOCK_SOURCE_TABLES` 自稱「`44` 各塊來源欄逐字點名的資料表」，
+    **而稽核實測它漏了兩張**（`HLD-2` 的 `fund_profile`、`HLD-3` 的 `holding`），
+    自述**只解釋了 `user_setting`**。⇒ 把那個自述變成機器驗得到的東西。
+
+    契約兩條：
+      (1) 收進來的，每一張都要真的出現在該塊的來源欄（**不准多**）；
+      (2) 來源欄點名的，扣掉唯一那條說得出理由的篩選（`user_setting` 不經取數）之後，
+          **每一張都要被收進來**（**不准漏**）。
+    ⚠️ 拿掉修復（把 `fund_profile` 或 `holding` 從表裡刪掉）本條當場轉紅。
+    """
+    # 來源欄的行號本身由 `_44_ANCHORS` 那兩條守著，這裡只用它們。
+    source_rows = {"HLD-1": 513, "HLD-2": 531, "HLD-3": 542}
+    not_fetched = {"user_setting"}  # 使用者自己輸入，不經取數 —— 唯一的篩選
+    assert set(source_rows) == set(logic.BLOCK_SOURCE_TABLES), (
+        sorted(source_rows), sorted(logic.BLOCK_SOURCE_TABLES))
+    for code, lineno in source_rows.items():
+        named = _tables_named_in_44_source_row(lineno)
+        assert named, (code, lineno)  # 反空掃：真的撈到表名
+        collected = set(logic.BLOCK_SOURCE_TABLES[code])
+        assert collected <= named, (code, "多收了", sorted(collected - named))
+        assert named - not_fetched <= collected, (
+            code, "漏收了", sorted(named - not_fetched - collected))
+
+
+def test_A6控_無任何持倉那一句不在HLD2與HLD3的空狀態欄裡():
+    """**2026-09-24 稽核必修 A6 的釘樁** —— 本組曾編過一句逐字引文。
+
+    原寫 ~~「`44` :529／:543 空狀態欄寫『無任何持倉 → `來源缺`』」~~ ——**那一句不存在**
+    （舊引用加刪除線保留：它指的兩個行號**本身也是錯的**，正確的空狀態欄在 :533／:544）。
+    這一條把事實釘住：那句話在 `44` 只出現於四處，而 `HLD-2`／`HLD-3` 的空狀態欄
+    **從頭到尾沒有提過持倉**。
+    ⚠️ 拿掉修復（把那句編造的引文寫回註解）本條**不會**紅 —— 它守的是**事實**，
+    不是註解字串；註解那一側由人讀。**這一點據實寫明，不假裝它守得比實際多。**
+    """
+    d44 = (pathlib.Path(__file__).resolve().parents[2]
+           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
+    phrase = "無任何持倉"
+    hits = [i for i, line in enumerate(d44, 1) if phrase in line]
+    assert hits, "一處也沒掃到 —— 這一條會變成空掃"
+    assert hits == [515, 762, 1407, 1457], hits
+    # 那兩塊的空狀態欄（`_44_ANCHORS` 守著行號）確實沒有這一句。
+    for lineno in (533, 544):
+        assert "**空狀態**" in d44[lineno - 1], lineno
+        assert phrase not in d44[lineno - 1], lineno

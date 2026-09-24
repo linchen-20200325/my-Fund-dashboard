@@ -90,7 +90,49 @@ _TONE_BY_STATE = {
     STATE_BIZ: "黃",
     STATE_ERROR: "紅",
 }
-_SEVERITY = {STATE_OK: 0, STATE_MISSING: 1, STATE_BIZ: 2, STATE_ERROR: 3}
+# ⚠️ **`44` 對這四個狀態只排過一次序，而那一次把中間兩個並列同級。**
+# `44` :310（`MKT-0` 規則欄，全檔唯一明文排過卡片四狀態的地方）逐字：
+#   「三塊皆 `ok` → 燈為中性灰；任一塊為 `資料未備` **或** `業務例外` → 燈為黃；
+#     任一塊為 `系統錯誤` → 燈為紅」
+# 也就是 `ok` ＜ {`資料未備`, `業務例外`} ＜ `系統錯誤` —— 這是一個**偏序**，不是全序。
+# 舊表述 `{ok:0, 資料未備:1, 業務例外:2, 系統錯誤:3}` 把中間兩個排出先後，
+# **那個先後是實作自己發明的，`44` 沒有授權**（客戶 2026-09-23 裁示拆掉）。
+_BAND = {STATE_OK: 0, STATE_MISSING: 1, STATE_BIZ: 1, STATE_ERROR: 2}
+
+# 📌 **2026-09-24 登記（本組實測，不處置）：同一個被發明的 tie-break 也住在 `ui_v2/mkt/logic.py`。**
+#    該檔的 `_SEVERITY` 與本檔改掉的舊值**逐字相同**，它的 `worst_state()` 一樣用 `max()` 取。
+#    ⚠️ **而且那一邊更尖銳**：它的 docstring 自陳引的是「`44` MKT-0 規則逐字：三塊狀態取最差者」，
+#    而 `MKT-0` 的規則欄（`44` :310）**正是全檔唯一把那兩個並列同級的地方** ——
+#    也就是它引的那一行，恰好否證它自己排出來的先後。
+#    ⛔ **本輪不動它**：`ui_v2/mkt/**` 不在本輪的檔案邊界內。**登記，待裁。**
+
+# `worst_state()` 在「`資料未備` 與 `業務例外` 同時是最差」時回這個哨符。
+# ⛔ 它**不是第五個狀態**（`44` 5.1 的四狀態是封閉列舉），也**不得寫進任何畫面文字**；
+#    它只表示一件事：**`44` 沒有排這兩個的先後，本檔不替它排。**
+# ⚠️ 考慮過、而且刻意**不用** `44` 5.2 的 `未定義` 徽章字面值 —— 那一個在 `44` :1735 是
+#    「某塊來源欄寫了一個第四節未定義的欄位」，與本處無關，借來用等於替 `44` 造新語意。
+STATE_UNRANKED = None
+
+# 📌 **2026-09-24 登記兩筆同型、但不是本輪造成的（不處置，只寫下來）**：
+#    本輪自查「凡標『逐字』的引號內容，是否真的逐字出現在 `44`」，掃出兩處**先於本任務就存在**
+#    （`a7f8c1b` 上即有）的「把改寫放進引號、旁邊標 `44` 判準」：
+#      (1) 本檔 `fund_metrics()` docstring 的「軌跡與所在那一塊逐字相同」；
+#      (2) `fixtures.py` 檔頭的「軌跡的輸出值與該值所在那一塊上顯示的字串逐字相同」。
+#    `44` :733（`HLD-7` 那一行判準）的實際字面與這兩句**都不相同** —— 它們是**意思對、字不對**的改寫。
+#    ⛔ **本輪不改它們**：兩者皆非本輪產物，也不在本輪那十二項必修之內，
+#       動它們等於在一個「不准長出第十三項」的輪次裡自行擴張射程。**登記，待裁。**
+
+# ⚠️ **`STATE_UNRANKED` 沒有「名字」，但它有「級」** —— 它只在
+#    `資料未備` 與 `業務例外` 同時最差時產生，而 `44` :310 把那兩個放在**同一級**，
+#    所以「哪一級」是確定的（就是中間那一級），不確定的只有「哪一個名字」。
+#    `_band()` 因此答得出它；`_BAND` 本身**刻意不收這個鍵**，
+#    因為收進去就等於承認它是第五個狀態。
+_UNRANKED_BAND = 1
+
+
+def _band(state) -> int:
+    """狀態 → `44` :310 那三級。`STATE_UNRANKED` 走上面那條註解說明的路。"""
+    return _UNRANKED_BAND if state is STATE_UNRANKED else _BAND[state]
 
 # 塊名逐字引 `44` 3.2 的層次表與各塊標題。
 BLOCK_TITLES = {
@@ -200,10 +242,70 @@ def tone_for_state(state: str) -> str:
     return _TONE_BY_STATE[state]
 
 
-def worst_state(states) -> str:
+def worst_state(states):
+    """最差的那一個狀態；**兩者同級時不替 `44` 排先後**，回 `STATE_UNRANKED`。
+
+    `44` :310 只排到 `ok` ＜ {`資料未備`, `業務例外`} ＜ `系統錯誤`。
+    最差那一級只有一個成員時照回那個成員；最差那一級同時有 `資料未備` 與 `業務例外` 時
+    **沒有答案** —— 回 `STATE_UNRANKED`，不挑一個充數。
+
+    ⚠️ **回傳值與輸入順序無關。** ~~舊版 `max()` 在同級時回「第一個」，那是一個看不見的
+       tie-break。~~ → **2026-09-24 就地更正（有意識的更正，不是漏刪；決策者：AI 總管）：
+       劃掉那一句是假的，本組實跑推翻。** 在 `a7f8c1b` 上把四狀態的 **69 組 multiset ×
+       全部排列**餵進舊 `worst_state`，**零個 order-dependent case** —— 因為舊 `_SEVERITY`
+       把那兩個排成不同級，`max()` **從來沒遇過平手**。
+       **成立的是上面 `_BAND` 那段註解自己寫的那句**（那個先後是實作發明的、`44` 沒授權）；
+       「順序相關」是疊上去的假宣稱。**本函式與順序無關仍然為真**，只是它**不是**第 6 件
+       修好的東西，而是本來就這樣。
+    ⚠️ 空集回 `資料未備`：本檔既有行為，`44` 未訂（`_build_core_card` 無持倉時整塊沒有主值）。
+    ⚠️ **輸入可以含 `STATE_UNRANKED`**（結論燈讀的三塊狀態就可能含它）——
+       見 `_band()`。⛔ 這一條是 2026-09-24 稽核抓到的 `KeyError: None` 的修復點。
+    """
     if not states:
         return STATE_MISSING
-    return max(states, key=lambda s: _SEVERITY[s])
+    top = max(_band(s) for s in states)
+    tied = {s for s in states if _band(s) == top}
+    if len(tied) == 1:
+        return next(iter(tied))
+    return STATE_UNRANKED
+
+
+def block_tone(states) -> str:
+    """一塊的邊框顏色。**只做呈現，不做嚴重度判定。**
+
+    ⚠️ 為什麼要有這一支：`44` 5.1 現行讀法逐字「**四狀態掛在主值上，不掛在整張卡**」，
+    而同小節現行參數表的卡層級只有 `title`／`detail_slot`／`partial_badge` 三個 ——
+    **`44` 沒有給卡層級一個狀態，也沒有給卡層級一個顏色**。邊框得有個顏色才畫得出來，
+    這一支就是那個實作必需品，**它不宣稱任何一個狀態比另一個嚴重**。
+    規則：這一塊的主值裡出現過最顯眼的那個顏色。顏色語意逐值取自 `44` 5.1 那張表。
+    ⚠️ **本段的出處，2026-09-24 就地更正（有意識的更正，不是漏刪；決策者：AI 總管）。**
+    ~~原寫：`44` 5.5 客戶 2026-09-23 裁示「顏色是介面呈現，嚴重度是判定，兩者正交」。~~
+    **那個標成「客戶裁示」的字串不是客戶的字。** `44` :2344-2346 自己就更正過這一筆：
+    客戶的原話是「**顏色是 UI 顯示，不是嚴重度；兩者正交**」，而
+    「**介面呈現**」與「**嚴重度是判定**」**都不是客戶的字** ——「介面呈現」是總管派工單裡的改寫。
+    ⛔ 本檔犯的是 `44` :2347 逐字寫下的那個形狀：「**改寫一次、標成逐字一次，
+    兩步各自都小，合起來就是替客戶造話**」。**引了那一段，卻沒讀到它。**
+    **現行表述**：客戶的原話是「顏色是 UI 顯示，不是嚴重度；兩者正交」（`44` :2344 轉述），
+    本檔據此把兩件事分開 —— 本函式站在「顯示」那一邊，所以它可以排顏色；
+    `worst_state()` 站在「嚴重度」那一邊，所以它**不**排 `資料未備` 與 `業務例外`。
+    ⚠️ 「站在哪一邊」是**本組的接法**，不是客戶的字。
+    """
+    tones = {tone_for_state(s) for s in states}
+    for tone in ("紅", "黃", "灰"):
+        if tone in tones:
+            return tone
+    return "中性"
+
+
+def tone_for_block(state, states) -> str:
+    """一塊要畫的顏色。
+
+    狀態排得出來 → 照 `44` 5.1 那張表把那個狀態翻成顏色（本檔既有行為，一格未動）。
+    排不出來（`資料未備` 與 `業務例外` 同級）→ 才退到 `block_tone()` 看主值的顏色。
+    ⚠️ 這樣寫的用意：**拆掉 tie-break 不改變任何一個現行畫面的顏色**，
+    改變的只有「這一塊最差的是哪一個狀態」這句宣稱在同級時不再硬答。
+    """
+    return block_tone(states) if state is STATE_UNRANKED else tone_for_state(state)
 
 
 # ───────────────────────── 斷點 ─────────────────────────
@@ -589,6 +691,51 @@ def _retry_button() -> dict:
     return _button("重新取數", "取數")
 
 
+# `44` 各塊「來源」欄逐字點名的資料表。**來源欄的行號是 `44` :513／:531／:542。**
+#
+# ⚠️ **2026-09-24 就地更正兩件事（有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）**：
+# **(1) 行號指錯。** ~~原寫 `44` :515／:529／:543~~ —— 那三個分別是 `HLD-1` 的**空狀態**欄、
+#     `HLD-2` 的**表頭**、`HLD-3` 的**規則**欄，**沒有一個是來源欄**。已逐行重讀改正。
+# **(2) 自稱「逐字取」卻漏了兩張表。** ~~原本 `HLD-2` 只收 `nav`、`HLD-3` 只收
+#     `dividend`／`nav`~~，而來源欄逐字還列了 `HLD-2` 的 **`fund_profile.inception_on`**
+#     與 `HLD-3` 的 **`holding.units_shares`**。原本的自述**只解釋了 `user_setting`**，
+#     那兩張是**無理由漏掉**的。
+#     **行為後果（稽核實測）**：空持倉 ＋ `errors={"holding"}` 時 `HLD-1` 進 `系統錯誤`
+#     而 `HLD-3` 仍是 `資料未備` —— 兩塊都把 `holding` 寫在來源欄裡，卻不同調。
+#     **本輪補齊，讓自述為真。**
+# ⛔ **不准留一個自稱抄寫、實際是判斷的東西** —— 現在這張表**真的是**來源欄的逐字子集，
+#    唯一的篩選規則寫在下一行，而且那條規則自己說得出理由。
+# ⚠️ **唯一的篩選**：只收「取數取回來的表」。`user_setting` 三塊都列了，但它是**使用者自己
+#    輸入的**，不經取數，所以取數失敗與它無關。**這是本組的判斷，不是 `44` 的字。**
+BLOCK_SOURCE_TABLES = {
+    "HLD-1": ("holding", "nav"),
+    "HLD-2": ("nav", "fund_profile"),
+    "HLD-3": ("dividend", "nav", "holding"),
+}
+
+
+def source_error(dataset, code):
+    """這一塊的來源表有沒有取數失敗；有就回訊息原文，沒有回 None。
+
+    `44` 5.5 `系統錯誤` 觸發條件逐字：「**取數或計算本身失敗**」——
+    來源整張表取數失敗，就是這一種，與這一頁有沒有持倉無關。
+
+    ⚠️ **一筆沒登記的不對稱，2026-09-24 稽核指出，就地登記（不處置）**：
+    本函式的回傳值**只有 `not has_holdings` 那一支用得到**。有持倉時，
+    `nav`／`dividend` 的失敗會經由 `fund_metrics()` 逐值浮出來，但
+    **`holding` 與 `fund_profile` 的失敗沒有任何一條路會浮出來** ——
+    於是同一個來源掛掉，**資料多的時候反而比較不警戒**
+    （有持倉時 `HLD-1` 是 `ok`，空持倉時是 `系統錯誤`）。
+    ⛔ **本輪不處置**：補那條路等於讓有持倉的情境也開始變紅，
+    那是行為擴張，**客戶只裁了空持倉那一種畫面**。**登記，待客戶裁決。**
+    """
+    errors = dataset.get("errors", {})
+    for table in BLOCK_SOURCE_TABLES[code]:
+        if errors.get(table):
+            return errors[table]
+    return None
+
+
 def blocks_recalculated_by(action_kind: str) -> tuple:
     """`44` HLD-4：「套用」重算六塊；「存檔」不重算任何一塊。"""
     return APPLY_RECALC_BLOCKS if action_kind == "套用" else ()
@@ -658,18 +805,47 @@ def deviation_rows(metrics, rules):
     return rows, skipped
 
 
-def _build_hld1(metrics, rules, *, has_holdings):
+def _build_hld1(metrics, rules, *, has_holdings, fail_message=None):
     badges = [_redline_badge("G2†")]
+    # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
+    # `44` :515 本塊空狀態欄**一個按鈕也沒有寫**，而 `44` 5.5「各塊自己寫的優先於本表模板」
+    # 同輪補的分句逐字：「**一塊的空狀態欄整格為準：那一格沒有寫出按鈕，
+    # 該塊的那個空狀態畫面上就沒有按鈕，不回退成本表模板裡的那一枚**」。
+    # 決定性理由（`44` :2420 逐字）：缺的不是來源、是使用者還沒輸入或資料在 Sheets 維護，
+    # 「**一枚按了不動的按鈕，比沒有按鈕更誤導**」。
+    # ⚠️ **反方理由照實寫（兩邊理由並陳）**：`44` 5.1 卡片那張表的 `資料未備` 與
+    #    `系統錯誤` 兩列，**逐字各帶一枚「重新取數」按鈕**，而這三塊都是卡片。
+    #    照那張表讀，這三枚該留。**這個張力不是本輪發現的** —— `44` 5.5 那一條
+    #    「各塊自己寫的優先於本表模板」自己就登記了「**本條的射程限本小節那張表**，
+    #    第五節卡片那一張表的那兩列算不算，本輪不替客戶選」，掛著待裁。
+    #    **客戶 2026-09-23 就這三塊裁了「拿掉」** ⇒ 對這三塊，塊的空狀態欄整格為準。
+    # ⛔ **客戶裁的是這三塊，不是 `44` 5.1 那張表** —— 那張表一個字未動，
+    #    它與 5.5 之間那筆射程待裁**仍然掛著**。本檔不替客戶把它一般化。
+    # ⚠️ `44` :2423 的實測同向：四格裡寫出 `來源缺` 的十五塊，同格寫出那枚鈕的只有兩塊
+    #    （`MKT-1` 與 `HLD-8`）—— 本塊不在那兩塊裡。
     buttons = []
     detail_lines = ["依 fund_code 字面值排列，不排序成優先順序。"]
     tail_lines = []
 
-    if not has_holdings:
+    if not has_holdings and fail_message:
+        # 與 `_build_core_card` 同一筆登記（`44` 沒有訂這一組先後；客戶 2026-09-23 對
+        # `HLD-0` 裁示「改紅」，本輪同向辦並就地登記，待客戶覆核）。
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        state = STATE_ERROR
+        summary = fetch_failed_text(fail_message)
+        detail_lines = [
+            fetch_failed_text(fail_message),
+            "訊息原文照印，不改寫成安撫語句。",
+            TEXT_NO_HOLDING,
+        ]
+        placeholder = _metric(
+            None, text="", ccy="", error=fail_message, label="偏離筆數"
+        )
+    elif not has_holdings:
         rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
         state = STATE_MISSING
         summary = TEXT_NO_HOLDING
         detail_lines = [empty_source_text(["holding"]), TEXT_NO_HOLDING]
-        buttons.append(_retry_button())
         placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
     elif not rules:
         rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
@@ -695,12 +871,10 @@ def _build_hld1(metrics, rules, *, has_holdings):
             tail_lines.append(
                 "未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。"
             )
-            buttons.append(_retry_button())
         if skipped["error"]:
             tail_lines.append(
                 f"⚠ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{HINT}"
             )
-            buttons.append(_retry_button())
         if skipped["na"]:
             tail_lines.append(
                 f"⬜ 另有 {len(skipped['na'])} 檔的門檻指標不適用，未列入{HINT}"
@@ -730,7 +904,9 @@ def _build_hld1(metrics, rules, *, has_holdings):
 # ───────────────────────── HLD-2 / HLD-3 核心卡 ─────────────────────────
 
 
-def _build_core_card(code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note):
+def _build_core_card(
+    code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note, fail_message=None
+):
     groups = []
     for metric in metrics:
         values = [metric[label] for label in labels]
@@ -746,12 +922,58 @@ def _build_core_card(code, metrics, labels, *, has_holdings, has_window, subtitl
     states = [mv["_state"] for group in groups for mv in group["main_values"]]
     badges = []
     detail_lines = [subtitle]
+    # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
+    # `44` :533（`HLD-2`）與 :544（`HLD-3`）空狀態欄**一個按鈕也沒有寫**，
+    # 而 `44` 5.5「各塊自己寫的優先於本表模板」同輪補的分句逐字：
+    # 「**一塊的空狀態欄整格為準：那一格沒有寫出按鈕，該塊的那個空狀態畫面上就沒有按鈕，
+    #   不回退成本表模板裡的那一枚**」。
+    # 決定性理由（`44` :2420 逐字）：這一頁缺的四張表由 Sheets 維護、本儀表板唯讀，
+    # 按下去不會有任何效果 ——「**一枚按了不動的按鈕，比沒有按鈕更誤導**」。
+    # ⚠️ **反方理由照實寫（兩邊理由並陳）**：`44` 5.1 卡片那張表的 `資料未備` 與
+    #    `系統錯誤` 兩列，**逐字各帶一枚「重新取數」按鈕**，而這三塊都是卡片。
+    #    照那張表讀，這三枚該留。**這個張力不是本輪發現的** —— `44` 5.5 那一條
+    #    「各塊自己寫的優先於本表模板」自己就登記了「**本條的射程限本小節那張表**，
+    #    第五節卡片那一張表的那兩列算不算，本輪不替客戶選」，掛著待裁。
+    #    **客戶 2026-09-23 就這三塊裁了「拿掉」** ⇒ 對這三塊，塊的空狀態欄整格為準。
+    # ⛔ **客戶裁的是這三塊，不是 `44` 5.1 那張表** —— 那張表一個字未動，
+    #    它與 5.5 之間那筆射程待裁**仍然掛著**。本檔不替客戶把它一般化。
     buttons = []
 
-    if not has_holdings:
+    if not has_holdings and fail_message:
+        # ⚠️ **登記：這一組先後 `44` 沒有訂，本輪照客戶 2026-09-23 對 `HLD-0` 的裁示同向辦。**
+        # ⛔ **2026-09-24 就地更正：上一版在這裡編了一句逐字引文**
+        #    （有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）。
+        # ~~原寫：`44` :529／:543 空狀態欄寫「無任何持倉 → `來源缺`」。~~
+        # **那一句在 `44` 裡不存在。** 本組實跑 grep：`無任何持倉` 在 `44` 只出現於
+        # :515（`HLD-1`）、:762（`HLD-8`）、:1407、:1457（`ALO-6`）**四處**，
+        # 而 `HLD-2` 的空狀態欄（:533）談的是淨值筆數／成立日／週末假日，
+        # `HLD-3` 的空狀態欄（:544）談的是區間內無配息／`unknown`／區間末無淨值 ——
+        # **這兩塊的空狀態欄從頭到尾沒有提過持倉。**
+        # ⇒ 那個「兩句同時命中、`44` 沒寫誰先」的衝突，**對這兩塊而言在 `44` 裡根本不存在**。
+        # ⚠️ **結論方向不受影響，但理由是編的** —— 編一個看起來可查的出處，
+        #    比沒有出處更糟：下一個人照著翻會翻不到，然後合理懷疑整段。
+        #
+        # **改寫後成立的理由（逐條可查）**：
+        #  (a) `44` 5.5 `系統錯誤` 的觸發條件逐字是「**取數或計算本身失敗**」——
+        #      來源整張表取數失敗就是這一種，這一句與持倉有沒有資料無關。
+        #  (b) 這兩塊的空狀態欄**沒有**替「無任何持倉」寫任何畫面，
+        #      所以本檔原本在該情形下回 `資料未備`，**那是本檔自己的補洞，不是 `44` 的字**。
+        #  (c) 客戶 2026-09-23 就 `HLD-0` 那一組同型衝突裁了「**改紅**」，
+        #      方向出自 `44` :1620 逐字「**一句把空白報成平安的文案，比沒有文案更誤導**」。
+        #  (d) 不同向辦的話，`44` :489「任一塊為 `系統錯誤` → 燈為紅」在空持倉下
+        #      **永遠沒有一塊進得了 `系統錯誤`**（稽核窮舉 256 組確認），
+        #      客戶剛裁的那一條當場變成空條文。
+        # ⚠️ 客戶裁的是燈，這一步是塊；**本輪就地登記，待客戶覆核。**
+        state = STATE_ERROR
+        detail_lines = [
+            fetch_failed_text(fail_message),
+            "訊息原文照印，不改寫成安撫語句。",
+            TEXT_NO_HOLDING,
+        ]
+        summary = fetch_failed_text(fail_message)
+    elif not has_holdings:
         state = STATE_MISSING
         detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT, TEXT_NO_HOLDING]
-        buttons.append(_retry_button())
         summary = TEXT_NO_HOLDING
     else:
         state = worst_state(states)
@@ -763,8 +985,6 @@ def _build_core_card(code, metrics, labels, *, has_holdings, has_window, subtitl
             if STATE_OK in group_states and any(s != STATE_OK for s in group_states):
                 badges.append(status_badge("部分缺"))
                 break
-        if any(s in (STATE_MISSING, STATE_ERROR) for s in states):
-            buttons.append(_retry_button())
         summary = f"{len(groups)} 檔{HINT}"
 
     if moved_note:
@@ -785,7 +1005,7 @@ def _build_core_card(code, metrics, labels, *, has_holdings, has_window, subtitl
         "_layer": 2,
         "_default_open": True,
         "_state": state,
-        "_tone": tone_for_state(state),
+        "_tone": tone_for_block(state, states),
         "fund_groups": groups,
         "answers": ANSWERS[code],
         "summary_text": summary,
@@ -809,6 +1029,48 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
     states = [card["_state"] for card in cards]
     lines = []
 
+    # ⚠️ **2026-09-23 客戶裁示：`系統錯誤` 排在空狀態之前（有意識的政策變更，不是漏刪；
+    #    日期 2026-09-23；決策者：客戶）。**
+    # `44` :489 規則欄逐字「任一塊為 `系統錯誤` → 燈為**紅**」與 `44` :490 空狀態欄逐字
+    # 「持倉表為空 → 燈為灰」「門檻未設定 → 燈為灰」**同時命中，`44` 沒有訂先後**。
+    # ~~舊表述：`not has_holdings` 排在前面，於是空持倉時永遠回灰。~~
+    # **舊表述在寫下當時撐得住** —— 它照 `44` 空狀態欄的字面辦，而空狀態欄本來就是
+    # 「這一塊沒東西可讀時畫什麼」，把它放前面看起來是最保守的一邊。
+    # **被權衡掉的是它會說謊**：取數真的失敗了，燈卻回「尚未建立任何持倉」，
+    # 讀的人會把失敗讀成沒事 —— `44` :1620 逐字
+    # 「**一句把空白報成平安的文案，比沒有文案更誤導**」。
+    #
+    # ⛔ **射程，2026-09-24 就地更正（有意識的更正，不是漏刪；決策者：AI 總管）**：
+    # ~~收掉的**只有**「空持倉而且有一塊進了 `系統錯誤`」這一種。~~
+    # **那一句是假的，稽核實測推翻。** 這個早退分支排在 `not has_holdings` **與
+    # `not has_rules` 兩段之前**，所以收掉的是**兩種**：
+    #   (1) 空持倉 ＋ 有一塊 `系統錯誤`；(2) **有持倉 ＋ 門檻未設 ＋ 有一塊 `系統錯誤`**。
+    # 第 (2) 種在 `a7f8c1b` 上是灰「尚未設定門檻」，現在是紅。
+    # ⚠️ **本組抄了 `44` :1623（`SET-0`）那句「收掉的只有那一種它原本蓋不住的情形」的體例，
+    #    卻沒有去驗自己這一句是不是真的** —— `44` 那句是真的，抄過來的這句不是。
+    # **兩種都在客戶裁示的方向上**（`系統錯誤` 不該被空狀態報成平安），故維持；
+    # **改的是這段描述，不是行為。**
+    if STATE_ERROR in states:
+        # ⚠️ 登記：紅燈的文案字面 `44` 沒有給（草稿 ⛔ H-16）。本句取自草稿。
+        named = [c["title"] for c in cards if c["_state"] == STATE_ERROR]
+        # ⛔ **空狀態欄那兩句都要降級成補述，一句都不准吞掉**
+        #    （2026-09-24 稽核抓到：原本只補了持倉那一句，門檻那一句在
+        #     `emptyfail`〔`rules=None`〕底下整句消失，三件事只活下來兩件）。
+        if not has_holdings:
+            lines.append(f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）")
+        if not has_rules:
+            lines.append(f"（另：{TEXT_NO_RULES}。門檻由你自己輸入，這一頁不提任何候選值）")
+        return {
+            "_tone": "紅",
+            "_state": STATE_ERROR,
+            "text": "有一塊取數失敗，這一頁的數字先不要照著讀",
+            "lines": lines + [f"{'、'.join(named)}：取數失敗。"],
+            "detail_lines": [
+                "紅燈說的是「這一頁的數字能不能照著讀」，不是「你的持倉出事了」。"
+            ],
+            "buttons": [],
+        }
+
     if not has_holdings:
         # ⚠️ 登記：持倉為空與門檻未設兩句同時成立時哪一句出現，`44` 沒有寫（草稿 ⛔ H-17）。
         #    本檔照草稿：取持倉那一句，另一句補在下面括號裡。
@@ -830,20 +1092,6 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             "text": TEXT_NO_RULES,
             "lines": ["門檻由你自己輸入，這一頁不提任何候選值。"],
             "detail_lines": [],
-            "buttons": [],
-        }
-
-    if STATE_ERROR in states:
-        # ⚠️ 登記：紅燈的文案字面 `44` 沒有給（草稿 ⛔ H-16）。本句取自草稿。
-        named = [c["title"] for c in cards if c["_state"] == STATE_ERROR]
-        return {
-            "_tone": "紅",
-            "_state": STATE_ERROR,
-            "text": "有一塊取數失敗，這一頁的數字先不要照著讀",
-            "lines": [f"{'、'.join(named)}：取數失敗。"],
-            "detail_lines": [
-                "紅燈說的是「這一頁的數字能不能照著讀」，不是「你的持倉出事了」。"
-            ],
             "buttons": [],
         }
 
@@ -1006,6 +1254,47 @@ def _build_hld4(*, applied_window, fields, rules):
 # ───────────────────────── HLD-5 單檔展開 ─────────────────────────
 
 
+# `44` HLD-5 規則欄逐字：「**點一檔展開一檔，同時最多展開一檔**」。
+# 展開中的是哪一檔，存在 `st.session_state` 的這個鍵底下；鍵名住在 logic，
+# 好讓「哪一檔是開的」這個判定不散到 page.py 去（page.py 一個判定也不做）。
+HLD5_OPEN_KEY = "hld5_open_fund"
+
+# 這一枚按鈕的類別與標籤。
+# **類別** `展開` 是 `44` 5.3 八類中的一類，不是新發明的第九類。
+# **標籤** `44` 沒有給字面，本檔取 `44` 5.3 狀態表那一句「`可用` | 文字按鈕，
+# **標籤為動作本身**」—— 動作是 `展開`，標籤就寫 `展開`。**登記：字面為本組所取。**
+HLD5_OPEN_LABEL = "展開"
+# `停用` 時滑過顯示的一行原因（`44` 5.3：按鈕停用時不隱藏，停用附原因才說得清楚）。
+HLD5_OPEN_DISABLED_REASON = "這一檔已經展開"
+
+
+def open_fund_after_click(current, clicked):
+    """按下某一檔的展開鈕之後，展開中的是哪一檔。
+
+    `44` HLD-5 規則欄逐字：「點一檔展開一檔，**同時最多展開一檔**」，
+    判準逐字：「展開第二檔時第一檔自動收合，**同時處於展開狀態的檔數為 1**」。
+    ⇒ 按下去就換成它，前一檔自動收合。`current` 只是為了讓這條規則看得見，不影響結果。
+
+    ⚠️ **登記：`44` 沒有寫「怎麼收回到零檔」。** 本檔**不發明一枚收合鈕**
+    —— `44` 5.3 是封閉八類，沒有 `收合` 這一類。展開中的那一檔，它的鈕改為
+    `停用`（`44` 5.3「按鈕停用時不隱藏」），所以按不下去、也不會有一枚按了不動的鈕
+    （`44` :2420）。
+
+    ⛔ **2026-09-24 就地更正：本段原本把一條不存在的出口寫成既有的出口**
+    （有意識的更正，不是漏刪；決策者：AI 總管；稽核抓到）。
+    ~~原寫：回到零檔的路是 `44` 第二節那一句「展開狀態不跨頁保留；離開再回來，回到預設」。~~
+    **那一句本身引得沒錯**（`44` :120 逐字如此），**錯的是把它當成本原型已經有的路**。
+    **本組實測**：展開 `AAAA` → 把查詢參數切到別的情境 → 再切回來，
+    `st.session_state` 裡那個鍵**仍然是 `AAAA`**，那一檔的鈕**仍然是 `停用`** ——
+    `st.session_state` 是**同一個 session 內持久**的，
+    **同一個 session 內沒有任何一條路把它設回 `None`**。
+    `44` :120 講的「離開再回來」指的是**跨頁**，而本原型只有一頁。
+    ⇒ **現行事實：展開之後，在同一個 session 內回不到零檔。**
+    **要不要給一條收合的路，待客戶裁決**（給的話得先解決「`收合` 不在八類裡」那個問題）。
+    """
+    return clicked
+
+
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["fund_code"]: h for h in dataset.get("holding", [])}
@@ -1031,6 +1320,12 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
                 "_ccy": metric["_ccy"],
                 # `44` :119／:128／§5.4「展開區不自動展開」—— 上一輪寫 `index == 0`，三處都撞。
                 "_open": metric["_fund_code"] == open_fund,
+                "_button": _button(
+                    HLD5_OPEN_LABEL,
+                    "展開",
+                    enabled=metric["_fund_code"] != open_fund,
+                    disabled_reason=HLD5_OPEN_DISABLED_REASON,
+                ),
                 "_fields": fields,
                 "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{HINT}",
                 "nav_plot_text": (
@@ -1050,7 +1345,10 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
     else:
         state = STATE_OK
         summary = f"{len(items)} 檔{HINT} · 同時最多展開一檔"
-        detail_lines = ["點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。"]
+        detail_lines = [
+            "點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。",
+            "展開中的那一檔，它的展開鈕停用；初次載入零檔展開。",
+        ]
         if not has_window:
             detail_lines.insert(0, NA_NO_WINDOW)
 
@@ -1175,6 +1473,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。"
     ]
     buttons = []
+    states = []  # 無持倉時本表沒有任何主值；先給空集，`tone_for_block` 才有東西可讀。
     if not has_holdings:
         state = STATE_MISSING
         summary = f"{ND_TEXT}：{TEXT_NO_HOLDING}"
@@ -1194,10 +1493,38 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         if unknown_total:
             # `44` HLD-8 空狀態逐字：並在**表下**寫出未知的筆數。
             detail_lines.append(f"配息類別未知的筆數：{unknown_total} 筆{HINT}")
-        # ⚠️ 上一輪曾收成「只有取數失敗才掛」，**本輪撤回**：`44` :762 第一句逐字
-        #    「四狀態逐值判定，**與核心卡同一套**」，收窄後同一個缺淨值條件下核心卡各一枚、
-        #    本塊零枚，同一套當場破掉；上一輪引的 §5.5「整格為準」自己寫明射程不含核心卡那張表。
-        #    ⛔ 「四塊一起拿掉」是另一邊，**屬客戶地盤，不替客戶選**（登記待裁）。
+        # ~~⚠️ 上一輪曾收成「只有取數失敗才掛」，**本輪撤回**：`44` :762 第一句逐字~~
+        # ~~   「四狀態逐值判定，**與核心卡同一套**」，收窄後同一個缺淨值條件下核心卡各一枚、~~
+        # ~~   本塊零枚，同一套當場破掉；上一輪引的 §5.5「整格為準」自己寫明射程不含核心卡那張表。~~
+        # ~~   ⛔ 「四塊一起拿掉」是另一邊，**屬客戶地盤，不替客戶選**（登記待裁）。~~
+        # → **2026-09-23 就地更正：上面那個理由的另一端已經不存在了**
+        #   （**有意識的更正，不是漏刪** · 日期 2026-09-23 · 決策者：客戶〔裁示拿掉三枚〕）。
+        #   客戶本日裁示拿掉 `HLD-1`／`HLD-2`／`HLD-3` 那三枚，**核心卡現在零枚** ——
+        #   舊理由說的「收窄後核心卡各一枚、本塊零枚，同一套當場破掉」**這個對照組沒有了**。
+        #   **舊表述在寫下當時為真**（那時三張卡確實各掛一枚）；**被權衡掉的是它的前提。**
+        #
+        # ⛔ **本輪刻意不動這個綁法，行為一個位元未改** —— 派工單明寫「若判定會產生新的
+        #   不一致，**登記，不要自己再改 `HLD-8`**」。
+        # ⚠️ **登記（拿掉三枚之後浮出來的張力）—— 2026-09-24 改寫成兩邊並陳**
+        #   （有意識的更正，不是漏刪；決策者：AI 總管，依總管 2026-09-24 裁決）。
+        #   ~~原本只寫一邊：「本行綁得比 `44` 的字面寬」。~~
+        #   **那一半是真的，但把它寫成唯一的一邊，等於把一個張力寫成一個錯誤。**
+        #
+        #   **甲（窄的那一邊）**：`44` :762 寫按鈕那一句逐字是「**取數失敗時**該欄印出
+        #   失敗訊息原文並掛『重新取數』按鈕」——**只綁 `取數失敗`**，
+        #   而下面這一行綁的是 `資料未備` ∪ `系統錯誤`，**比那一句寬**。
+        #   實測：`srcmiss` 情境下本塊沒有任何一個值進 `取數失敗`，卻照樣掛得出鈕。
+        #
+        #   **乙（寬的那一邊，而且它也出自 `44`）**：`44` :762 **同一格的第一句**是
+        #   「四狀態逐值判定，**與核心卡同一套**」，而核心卡那張表（`44` :2009）
+        #   給 `資料未備` 那一列**也逐字掛了一枚「重新取數」按鈕**。
+        #   **照那條連結讀，現行這個較寬的綁法才是 `44`-compliant，
+        #   :762 的按鈕子句反而是窄的那一個。**
+        #
+        #   ⇒ **`44` 在同一格裡給了兩個答案**，本檔不替客戶選。**待客戶裁決。**
+        #   ⚠️ 本組原本在 `_build_hld1`／`_build_core_card` 的註解裡就寫出了 `:2009` 這個
+        #   反方理由，**卻沒有把它接到這一筆登記上** —— 而這裡正是它最有力的地方。
+        #   這個現況由 `test_登記_HLD8那枚鈕綁得比44的字面寬` 釘住，不讓它無聲漂移。
         if any(s in (STATE_MISSING, STATE_ERROR) for s in states):
             buttons.append(_retry_button())
 
@@ -1207,7 +1534,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         "_layer": 4,
         "_default_open": False,
         "_state": state,
-        "_tone": tone_for_state(state),
+        "_tone": tone_for_block(state, states),
         "_rows": rows,
         "column_labels": ["基金名", "幣別", "最大回撤", "本金類配息佔比"],
         "answers": ANSWERS["HLD-8"],
@@ -1351,13 +1678,17 @@ def build_page_model(
         "window_end": applied_window[1],
     }
 
-    hld1 = _build_hld1(metrics, rules, has_holdings=has_holdings)
+    hld1 = _build_hld1(
+        metrics, rules, has_holdings=has_holdings,
+        fail_message=source_error(dataset, "HLD-1"),
+    )
     hld2 = _build_core_card(
         "HLD-2",
         metrics,
         ("區間報酬率", "期間波動"),
         has_holdings=has_holdings,
         has_window=has_window,
+        fail_message=source_error(dataset, "HLD-2"),
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
         moved_note="第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。",
@@ -1368,6 +1699,7 @@ def build_page_model(
         ("期間配息合計", "配息佔淨值比"),
         has_holdings=has_holdings,
         has_window=has_window,
+        fail_message=source_error(dataset, "HLD-3"),
         subtitle="兩個主值，皆為算術結果，卡上不對它們加任何評語。"
         "配息合計以原幣逐檔顯示，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",

@@ -406,6 +406,30 @@ def dataset_empty() -> dict:
     )
 
 
+def dataset_emptyfail() -> dict:
+    """狀態 7｜全空而且有一塊取數失敗（客戶 2026-09-23 裁示「改紅後要補 fixture」）。
+
+    與狀態 6 的差別**只有一個**：配息來源取數失敗。
+    `44` :489 規則欄「任一塊為 `系統錯誤` → 燈為**紅**」與同塊空狀態欄
+    「持倉表為空 → 燈為**灰**」在這一組資料上**同時命中**，客戶裁示取紅。
+    方向出自 `44` :1620 逐字「**一句把空白報成平安的文案，比沒有文案更誤導**」。
+
+    ⚠️ **刻意只讓配息那一源失敗，不讓三源全失敗** —— 這樣畫面上同時看得到
+    「紅燈 ＋ 它點名的那一塊」與「另外兩塊仍然是空的」，
+    驗的是**先後**（紅壓過灰），不是「全部都紅」。
+    """
+    return _dataset(
+        holding=[],
+        nav=[],
+        dividend=[],
+        profiles=[],
+        window=None,
+        rules=None,
+        updated_at=None,
+        errors={"dividend": FETCH_FAIL_MESSAGE},
+    )
+
+
 def dataset_noexceed() -> dict:
     """把門檻調到沒有任何一檔超出（`44` HLD-0 與 HLD-1 判準第一句）。"""
     return _dataset(window=(WINDOW_START, WINDOW_END), rules=_RULES_NOEXCEED)
@@ -438,6 +462,7 @@ def scenario(name: str) -> dict:
         "fetchfail": {"dataset": dataset_fetchfail()},
         "nothr": {"dataset": dataset_nothr()},
         "empty": {"dataset": dataset_empty()},
+        "emptyfail": {"dataset": dataset_emptyfail()},
         "noexceed": {"dataset": dataset_noexceed()},
         "other_window": {"dataset": dataset_other_window()},
         "onenav": {"dataset": dataset_one_nav()},
@@ -452,8 +477,18 @@ def scenario(name: str) -> dict:
     return table[name]
 
 
-# 草稿上方那排狀態鈕的六種（順序照草稿）。
-SCENARIO_NAMES = ("full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty")
+# 草稿上方那排狀態鈕的六種（順序照草稿）＋ 客戶 2026-09-23 裁示補的第七種。
+# ⚠️ ~~**`ui_v2/app_hld.py` 的 docstring 也列了一份情境清單，本輪沒有動它** ——~~
+# ~~   那一檔不在本輪的檔案邊界內。**已停下來回報，未自行修改。**~~
+# → **2026-09-24 就地更正：那一句已經過期（有意識的更正，不是漏刪；決策者：總管）。**
+#   **舊表述在寫下當時為真** —— 那一輪該檔確實不在邊界內，停下來回報是對的處置。
+#   **被權衡掉的是它的前提**：總管其後**授權動那一檔的那一行**，本組已補上 `emptyfail`。
+#   ⚠️ **而且那一句留著會自相矛盾**：本檔新增的兩條 docstring 正控
+#   （`test_進入點docstring列的情境集合等於SCENARIO_NAMES` 與同組那一條）
+#   **必須**靠那個改動才會綠 —— 一邊說沒動，一邊靠它過測試。
+SCENARIO_NAMES = (
+    "full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty", "emptyfail",
+)
 
 SCENARIO_LABELS = {
     "full": "狀態 1｜全齊",
@@ -462,6 +497,7 @@ SCENARIO_LABELS = {
     "fetchfail": "狀態 4｜某塊取數失敗",
     "nothr": "狀態 5｜門檻未設",
     "empty": "狀態 6｜全空（首次開啟）",
+    "emptyfail": "狀態 7｜全空而且有一塊取數失敗",
 }
 
 
