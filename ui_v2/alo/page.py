@@ -173,8 +173,9 @@ def _lines(lines, css="alo-note") -> None:
 
 def _error_lines(block: dict) -> None:
     # `44` 第五節：狀態不靠顏色單獨辨識 —— 失敗框帶一個圖示。
+    # 圖示只住在 logic.SAVE_FAIL_GLYPH（客戶 2026-09-25 裁示 ⛔；⚠ 只留給黃燈），本檔不寫字面。
     for line in block.get("error_lines", ()) or ():
-        _html(f'<div class="alo-errline" role="alert">⚠ {_esc(line)}</div>')
+        _html(f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} {_esc(line)}</div>')
 
 
 def _placeholder(block: dict) -> None:

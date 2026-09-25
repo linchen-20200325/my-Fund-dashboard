@@ -212,6 +212,19 @@ def test_取數失敗圖示是禁止號_黃燈仍是警告號():
     assert _block(_model("full"), "ALO-0")["glyph"] == "⚠"
 
 
+def test_存檔寫入失敗圖示是禁止號_與取數失敗同一個常數_畫面層不寫字面():
+    """客戶 2026-09-25 裁示：存檔寫入失敗 ⚠ → ⛔，⚠ 只留給黃燈。改回 ⚠ 這一條要紅。
+    畫面層的實際渲染由 `test_alo_page.py` 量（slow lane）；本條是 fast lane 上的那一道。"""
+    assert logic.SAVE_FAIL_GLYPH == "⛔"
+    assert logic.SAVE_FAIL_GLYPH == logic.FETCH_FAIL_GLYPH
+    assert logic.SAVE_FAIL_GLYPH != logic.WARN_GLYPH
+    import pathlib as _pl
+
+    page_src = _pl.Path(logic.__file__).with_name("page.py").read_text(encoding="utf-8")
+    assert "{logic.SAVE_FAIL_GLYPH} {_esc(line)}" in page_src
+    assert 'role="alert">⚠' not in page_src
+
+
 def test_holding取數失敗_照44第五節系統錯誤模板畫在受影響的塊_不整頁炸():
     """登記 `ALO-GAP-取數失敗`：`⛔ 取數失敗：<訊息原文>`、紅；不畫重新取數（空狀態欄整格為準）。"""
     model = _model("holdfail")

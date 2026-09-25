@@ -11,6 +11,11 @@ import sys
 
 import pytest
 
+# 整檔標 slow（客戶 2026-09-25 裁示）：畫面測試（AppTest 與真瀏覽器）不進 fast lane
+# （pre-commit 的 `pytest -m "not slow"`），改由 CI slow lane 跑。
+# 守衛：`tests/ui_v2/test_ui_v2_lane_guards.py` —— 拿掉這一行會紅。
+pytestmark = pytest.mark.slow
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")

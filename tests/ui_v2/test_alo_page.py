@@ -12,11 +12,19 @@ import sys
 
 import pytest
 
+# 整檔標 slow（客戶 2026-09-25 裁示）：畫面測試（AppTest 與真瀏覽器）不進 fast lane
+# （pre-commit 的 `pytest -m "not slow"`），改由 CI slow lane 跑。
+# 守衛：`tests/ui_v2/test_ui_v2_lane_guards.py` —— 拿掉這一行會紅。
+pytestmark = pytest.mark.slow
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
 from ui_v2.alo import fixtures, logic, page  # noqa: E402
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # 同目錄的共用模組
+import _ui_v2_chromium  # noqa: E402  瀏覽器解析（CI 找不到要 fail）
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _APP = _ROOT / "ui_v2" / "app_alo.py"
@@ -152,6 +160,18 @@ def test_存檔寫入失敗的訊息原文畫在畫面上():
     assert fixtures.SAVE_FAIL_MESSAGE not in "".join(_rendered(_run("full")))
 
 
+def test_存檔寫入失敗框以禁止號開頭_畫面上不出現警告號配存檔失敗():
+    """客戶 2026-09-25 裁示：存檔寫入失敗 ⛔，⚠ 只留給黃燈。量的是渲染出來的失敗框本身。"""
+    rendered = _rendered(_run("full", save_failed=True))
+    boxes = [s for s in rendered if 'class="alo-errline"' in s]
+    assert len(boxes) == 3, boxes  # ALO-1、ALO-3、ALO-4 各一
+    for box in boxes:
+        assert f'role="alert">⛔ {logic.TEXT_SAVE_FAILED}：' in box, box
+    joined = "".join(rendered)
+    assert "⚠ " + logic.TEXT_SAVE_FAILED not in joined
+    assert "⚠ " + fixtures.SAVE_FAIL_MESSAGE not in joined
+
+
 def test_首次開啟沒有一個輸入欄帶非空值_基準二選一也沒有預選():
     at = _run("first")
     assert at.text_input, "一個輸入欄也沒有 —— 會變成空掃"
@@ -275,44 +295,43 @@ def test_帶色調的alo規則權重高過全域的stApp_span():
 
 # ───────────────────────── 畫面層：真的瀏覽器 ─────────────────────────
 
-_CHROMIUM = pathlib.Path("/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
+# 瀏覽器怎麼找、找不到時 skip 還是 fail：見 `_ui_v2_chromium.py`（CI=true 時 fail，本機 skip）。
 
 
 @pytest.fixture(scope="module")
 def browser_page():
-    playwright_api = pytest.importorskip("playwright.sync_api")
-    if not _CHROMIUM.exists():
-        pytest.skip("本環境沒有 Chromium")
+    playwright_api = _ui_v2_chromium.import_sync_api()
     import socket
     import subprocess
     import time
     import urllib.request
 
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "streamlit", "run", str(_APP), "--server.headless", "true",
-         "--server.port", str(port), "--browser.gatherUsageStats", "false"],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    )
-    base = f"http://127.0.0.1:{port}"
-    try:
-        for _ in range(120):
-            try:
-                if urllib.request.urlopen(base + "/_stcore/health", timeout=1).read() == b"ok":
-                    break
-            except Exception:
-                time.sleep(0.5)
-        else:
-            pytest.fail("streamlit 沒有起來")
-        with playwright_api.sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=str(_CHROMIUM))
+    with playwright_api.sync_playwright() as p:
+        browser = _ui_v2_chromium.launch(p)  # 先確認瀏覽器在，再起 streamlit
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "streamlit", "run", str(_APP), "--server.headless", "true",
+             "--server.port", str(port), "--browser.gatherUsageStats", "false"],
+            # 不讀輸出就不要開 PIPE：管線緩衝塞滿會讓 streamlit 卡住。
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        base = f"http://127.0.0.1:{port}"
+        try:
+            for _ in range(120):
+                try:
+                    if urllib.request.urlopen(base + "/_stcore/health", timeout=1).read() == b"ok":
+                        break
+                except Exception:
+                    time.sleep(0.5)
+            else:
+                pytest.fail("streamlit 沒有起來")
             yield browser, base
+        finally:
             browser.close()
-    finally:
-        proc.terminate()
-        proc.wait(timeout=20)
+            proc.terminate()
+            proc.wait(timeout=20)
 
 
 def _open(browser, base, scenario, width=1400):
