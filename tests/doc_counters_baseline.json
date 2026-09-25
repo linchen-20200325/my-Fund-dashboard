@@ -1,0 +1,1191 @@
+{
+  "_README": [
+    "這是 tests/test_doc_counters.py 的 baseline —— 一份**歷史欠債登記簿**，不是豁免清單。",
+    "每一筆代表：這句話在規則訂立之前就寫在那裡了，本守衛暫時不為它紅燈。",
+    "登記一筆 ＝ 簽名承認「這句話現在不可重現／不可推翻，我知道」。",
+    "",
+    "key ＝ sha256(檔案相對路徑 + NUL + 正規化後的句子)[:16]。**刻意不含行號** ——",
+    "這個 repo 的行號每一輪都在漂，那正是本守衛要治的病之一。",
+    "正規化規則的權威定義在 tests/test_doc_counters.py 的模組 docstring 與 normalize()。",
+    "",
+    "重建：python3 tests/test_doc_counters.py --update-baseline [<rev>]（省略 <rev> ＝ HEAD）",
+    "產生端讀的是 _generated_from_sha 那個 commit，**不是工作樹** —— 所以它可以被原樣重建。",
+    "⛔ 重建等於承認當下**全部**違規。跑完請逐句讀 git diff 再 commit ——",
+    "   那份 diff 就是你在簽名承認的東西。正解一律是先照 _FIX_GUIDE_* 修，修不動才登記。"
+  ],
+  "_generated_from_sha": "6880a2b2084cdfa19c4e695c56133ab623eee253",
+  "_why_safe_notes": [
+    "`why_safe` 欄位：只有少數幾筆帶這個欄位 —— 它記的是「這一筆為什麼是**字面命中、機制無害**」。",
+    "⚠️ 沒有這個欄位的那些筆，意思是「**沒有人逐筆寫過理由**」，**不是**「已經判定無害」。",
+    "⚠️ 這個欄位是**人工註記**，`--update-baseline` 重建 baseline 時**不會保留** ——",
+    "   產生端（_update_baseline）每一筆只寫 file 與 text。重建前請先把理由抄走，否則會無聲消失。",
+    "本輪（2026-09-21）加註 5 筆，全部落在 self_scanning_commands，加註者：V 組（守衛提交組）。"
+  ],
+  "counts_without_sha": {
+    "e9461d34021bacaa": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "git grep \"約 7 成\\|約七成\\|7 成\\|七成\" → 0 命中，「7 成」這個數字全 repo 不存在"
+    },
+    "6a783a540b3b8746": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "repo 端的實測是另一組數字：git grep -c 請先到 -- '*.py' → production 13 行 / 9 檔、tests 33 行 / 7 檔"
+    },
+    "28760a8eba55cf77": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "v2_holdings / v2_transactions 全 repo 0 命中」（中文與英文字面 grep"
+    },
+    "e0da7c9d3b5e6872": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "v2_holdings、v2_transactions 全 repo 0 命中（git grep 兩個字串，無輸出）"
+    },
+    "c893b377487300c1": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "全部 7 個 ia-wireframe 行號與 4 個 empty-state 行號都錯，已於定稿前用 git show … | grep -n（不經任何過濾）重抄"
+    },
+    "b1f8d20f794139f9": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "從 sed -n 'a,bp' 的輸出目測數行取得的，偏移 1~6 行"
+    },
+    "0814db0b3da141c7": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "扣款日」全 repo 0 命中（git grep 無輸出"
+    },
+    "f9f772a9b862a80d": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "正對照：同一把 grep 查 ALL_COLS_V2 → 14 檔命中，指令是活的"
+    },
+    "0ec8e424e249e64b": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "第 13 項最嚴重：docs/wireframes/ 有 10 個 .html ＋ 1 個 .md（⭐ git ls-tree origin/main --name-only docs/wireframes/ 實測）"
+    },
+    "b787a3664809f020": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "＋ 結論層 :1721 另一個 —— 共 7 個（AST 與逐行 grep 兩法一致）"
+    },
+    "0d305c8cbee2a1b3": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "71 個 production .py 含動作詞／其中 29 檔含買進·賣出·出清」（字面 grep"
+    },
+    "065afae2a15f7c7a": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "git grep \"reinvest\\|再投資\" -- 'services/dividend_calendar.py' → 0 命中"
+    },
+    "7e108ee61bec8110": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "它不在 services/dividend_calendar.py，在 services/health/dividend_calc.py —— git grep -n \"reinvest\\|再投資\" -- 'services/dividend_calendar.py' → 0 命中"
+    },
+    "b496e6595bb7d577": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "本組實跑 git grep \"約 3 成\" → 6 行 / 4 檔，其中只有 ui/helpers/fund/checkup.py:613 講同類排名，另 5 處（SPEC.md:712、checkup.py:7／:407／:474、ui/tab6_manual.py:588）講的是同類平均"
+    },
+    "6ecd964b4b06d51c": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "本組實跑過 git grep 找「16 個舊分頁」「不改內容」等字樣，沒有命中任何一份 repo 內文件"
+    },
+    "80f23f51a1a3d465": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "本組第三次獨立重跑，與線框組一致：git grep \"約 3 成\" → 6 行 / 4 檔（SPEC.md:712、ui/helpers/fund/checkup.py:7／:407／:474／:613、ui/tab6_manual.py:588），其中只有 checkup.py:613 講的是「同類排名」，另外 5 處講的是「同類平均」"
+    },
+    "46bc2a7de256e112": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "本組重跑了線框組那句「repo 0 命中」，結論一致：git grep \"更新淨值與配息\" 與放寬後的 git grep \"更新淨值\" 皆 0 命中（正對照：「淨值」在 fund_fetcher.py 單檔 8 行命中）"
+    },
+    "00ea4917166534c1": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "正對照（本組實跑）：全 repo git grep \"追蹤誤差\" -- '*.py' → production 只有這一個檔（另 4 行在 tests/test_review_fixes_v19_347.py）"
+    },
+    "916f49b28ad055ad": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "無 caller 傳 True」成立：git grep -n \"reinvest=\" -- '*.py' → 4 行全部在該檔自己的註解裡，沒有任何呼叫端"
+    },
+    "df989dcd8d775e81": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "a) 載入閘門（8 個，都有具名常數） —— 實測 git grep -nE \"_GATE_LABEL\\s*(:\\s*str\\s*)"
+    },
+    "77ccab95fcf41ef4": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "build_beginner_payload 非測試呼叫端 0 個」是單組實測、未經第二組驗證、取決於有沒有漏看（字面 grep 掃不到動態 import 與 getattr）"
+    },
+    "07676bb5c03714ab": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "本 repo 有 37 個測試檔用 AppTest（本組實測 git grep -ln \"AppTest\" origin/main -- 'tests/*.py' \\| wc -l），執行型斷言可行"
+    },
+    "6182fe6a18e9b441": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "本組實測 git grep -n \"del_pf_\" origin/main -- '*.py' → production 命中恰好 1 處：ui/tab3_portfolio.py:1738 st.button(\"🗑️\", key=f\"del_pf_{i}\", …)"
+    },
+    "aafed9ffc4f2c54d": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "本組實測其可達性：它只被 explain.py:183 呼叫，而 :183 住在 build_beginner_payload，該函式 git grep 到的非測試呼叫端是 0 個"
+    },
+    "261a92df8a2f5807": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "本組實測：git ls-tree -r --name-only origin/main -- docs/wireframes/ → 10 個 .html ＋ 1 個 README.md"
+    },
+    "dd2f3e829cfead5e": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "裁決 1 的理由今天仍然成立：它擋的是「解釋藏在頁尾、新手根本不會捲到那裡」，而同檔第 275 行本組複驗方向一致 —— ui/helpers/chart/metric_explainers.py 的非測試 import 端只有兩個舊分頁（⚠️ 本組未重跑該 grep，未驗）"
+    },
+    "61f93e86773f5542": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "2026-09-16 客戶裁定讀法 A：值在哪：⚠️ 這是 13 列裡唯一「值不在 repo 檔案裡」的一列 —— data_cache/macro_thresholds_global.json 不在 repo（實測 git ls-tree -r --name-only origin/main -- data_cache/ 只有 4 個 parquet ＋ metadata.json），要有人跑過那支手動 CLI 之後本機才會有值（寫入端 scripts/calibrate_macro_score.py:589"
+    },
+    "88a92004b72f5e7a": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "2026-09-16 欄層翻轉：transactions[] 在 ui/ 零消費端 —— git grep -n \"transactions\" origin/main -- '*.py' ':"
+    },
+    "f2a45ecb6a418277": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "52 行「僅舊版有」的逐行去向、兩檔的 md5sum、以及 base/ 那份與舊那份的 cmp"
+    },
+    "7c9b74c6965ca94b": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "AST + grep 窮舉：只有這一行寫、無人讀）—— 它的 3 個 st.metric 消費者已於 v18.169 隨"
+    },
+    "c12f38edd1fd40e7": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "ISO 2026-09-16 欄層翻轉：transactions[] 在 ui/ 零消費端 —— git grep -n \"transactions\" origin/main -- '*.py' ':"
+    },
+    "bc14d365bcc56bfb": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "b) git grep -n 'download_and_store\\|find_fund_candidates' origin/main -- '*.py'（排除 tests）→ 5 行，"
+    },
+    "5e4e7061415f9d44": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "b) git grep -n 'export_preset_funds_json\\|import_from_csv\\|clear_history\\|get_history_df\\|is_preset\\|from services.fund_history' origin/main -- '*.py'（排除 tests）→ 9 行，"
+    },
+    "db6d9126df00404f": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"<負控串>\" origin/main -- . → 0 命中，exit=1（負控為本輪自訂的隨機串，依 §0 方法規則不列出）"
+    },
+    "83e9ee7c492a8cf2": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"accumulate_nav_tw\" origin/main -- '.github/workflows/*' → 無輸出，exit=1（0 命中）"
+    },
+    "b33914ba3c16f6d0": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"calibrate\" origin/main -- '.github/workflows/*' → 0 命中（exit=1），正控 export_fund_db → 命中 export_db.yml:39）"
+    },
+    "b10937d9ea50a1e8": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"compare_inception_years\\|diagnose_ret_3y_fallback\" origin/main -- .github/ → 0 命中"
+    },
+    "7ab6f4abcffc456a": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"fetch_nav_cache\" origin/main -- '.github/workflows/*' → 1 行，而且是註解（update_macro_history.yml:4）"
+    },
+    "860e8d82d6fb7daa": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"fetch_nav_cache\" origin/main -- '.github/workflows/*' → 1 行，而且是註解："
+    },
+    "65e0cb544a2fbb3d": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n \"promote_to_preset\" origin/main -- '*.py' → 只有 :281 的 def＋2 行測試清單字串，production 零 caller"
+    },
+    "d66dccc7e92278cb": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n 'compare_inception_years\\|diagnose_ret_3y_fallback' origin/main -- .github/ → 0 命中（exit=1），沒有任何 workflow 掛它們（正控：同一個目錄下 export_db.yml 等 7 個 workflow 確實掛得到 scripts/）"
+    },
+    "c59dacd11fb0c93b": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -n 'macro_weights_active' origin/main -- .（全檔案類型）共 5 行：ARCHITECTURE.md:104（文件）、"
+    },
+    "d840c140991d9332": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -nE \"data_cache|parquet\" …，那個管線符被當成欄位分隔符，9 列各多出一欄"
+    },
+    "a9bde8af819c2c8e": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git grep -nE \"fund\\.db|FUND_DB|sqlite3|sqlite\" origin/main -- '*.py'（排除 tests/）→ 13 行，"
+    },
+    "36e1716816daf8e8": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git ls-tree -r --name-only origin/main | grep '^.github/workflows/' → 8 個："
+    },
+    "637d466f476295ad": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git ls-tree -r --name-only origin/main | grep '^.github/workflows/' 共 8 個，無此檔）→ 只剩手動觸發"
+    },
+    "9ad076262ef4dffc": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git show origin/main:config/macro_weights_active.json 解析後頂層 11 個 key 全部有值，不是空殼"
+    },
+    "d2a74d11aa12680b": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git show origin/main:repositories/snapshot_repository.py | grep -n '^def ' → 全部 7 個 def："
+    },
+    "6916444174b49ea7": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "git show origin/main:services/macro/weights_store.py \\| grep -n \"^def \" → 11 個 def，無 save_active"
+    },
+    "948ee72c26715976": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "grep -rn 'autosearch' --include=*.py 只剩 4 行歷史註解"
+    },
+    "5c3483dabb4bbfbf": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "一個假的 grep 宣稱（比欄位值錯更嚴重）：§1.8 那 13 列的備註原本套同一句模板，"
+    },
+    "b209673fd9c46b85": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "三條出處全部由本輪重跑，不是照抄上一輪：(1) 實測檔案 11 個 key —— git show origin/main:config/macro_weights_active.json 丟進 json.load 後取 list(d.keys())，長度 ＝ 11，逐字為 version／calibrated_at／calibration_method／horizon_months／drawdown_threshold／indicators／verdict_cutoffs／phase_thresholds／oos_metrics／ai_explanation／notes（該檔實體 13 行 ＝ 11 個 key ＋ 頭尾兩個大括號 —— 13 也不是 12 的來源）"
+    },
+    "cdc6ad7544cda515": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "但 _t3_cur_sheet_title 在本表全檔 0 命中（實測 grep -c ＝ 0）"
+    },
+    "ba6dae6142f6d239": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "全部 50 個引用行號逐一印出核對（無 grep -v）"
+    },
+    "8925f8d0c8fc3110": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "原本含一個沒跳脫的 |（git show … \\| awk 'NR==1'），當場讓那一列變成 6 欄、計數掉到 263"
+    },
+    "a4db4d86cffefc8f": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "只能人手編輯 ＋ git commit —— 實測 git grep -n \"promote_to_preset\" origin/main -- '*.py' → 只有 services/fund_history.py:281 的 def ＋ 2 行測試清單字串，production 零 caller"
+    },
+    "7c89d0e98a9280ea": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "合法值 _TXN_TYPES（models/ledger.py:8） 2026-09-16 欄層翻轉：transactions[] 在 ui/ 零消費端 —— git grep -n \"transactions\" origin/main -- '*.py' ':"
+    },
+    "7e9a785c0c9d7d9a": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "字面 grep 只回 6 列 —— §2.17 那 4 列寫的是 ，括號讓字面 grep 看不見它"
+    },
+    "4487b42b7ea38790": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "宣稱 git grep -n \"\\.<欄名>\\b\" … → 0 行"
+    },
+    "690e0978222e41fe": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "實測 11 個 key：git show origin/main:config/macro_weights_active.json → json.load → len(d.keys()) ＝ 11"
+    },
+    "a37fc4841677380e": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "實測 git grep -n \"macro_weights_active\" origin/main -- . 共 5 行（ARCHITECTURE.md:104、weights_store.py:4,22,240、tests/test_macro_weights_store.py:26），沒有一行指向 repo 根這一份"
+    },
+    "09c9a57faacf4b07": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "實測 git grep -n \"save_active\" origin/main -- '*.py' → 0 命中（exit=1），正控 load_active → 11 命中）"
+    },
+    "0caf36fd261b8199": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "實測 git grep -nE \"data_cache\\|parquet\" origin/main -- 'ui/*'（管線符在 md 表格內須跳脫）→ 1 行，且是註解"
+    },
+    "c61c0651b9ee2d7c": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "已 commit 進 repo（4 檔皆在 git ls-tree origin/main）"
+    },
+    "c3850baa211f7c31": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "本欄的 grep 不是 0 行，是 5 行，逐行判讀後仍成立：git grep -n \"\\.sharpe\\b\" origin/main -- '*.py' ':"
+    },
+    "927f214e0ea1954e": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "本節自陳「沒有任何程式讀它或寫它」—— 值在、但連讀寫路徑都沒有 ⚠️ 2026-09-16 M2 更正（有意識的更正，不是漏刪 · 決策者：客戶，裁示 4）：本格原寫 ，實測 11 個 key —— git show origin/main:config/macro_weights_active.json 丟進 json.load 後 len(d.keys()) ＝ 11（該檔 440 bytes、13 實體行 ＝ 11 個 key ＋ 頭尾兩個大括號，13 也不是 12 的來源）"
+    },
+    "27945542992a5b1d": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "查法：git grep -n 'snap\\.json' origin/main -- . → 6 行，全在那兩支 script 的 docstring／argparse"
+    },
+    "f7538c491b4fba20": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "正對照 ALL_COLS_V2 → 10 個 .py 檔（總管說 14 檔是含 .md 的 git grep 數，兩者不衝突）"
+    },
+    "8bc807f9a7ff1e3f": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "正控同批跑（git grep -n \"load_active\" origin/main -- '*.py' → 11 命中"
+    },
+    "e0b8ea1c3c340e4a": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "正控（同型指令）：git grep -ln \"parquet\" origin/main -- '*.py' → 8 檔，含"
+    },
+    "f1db04fc791b0688": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "正控：git grep -ln \"scripts/\" origin/main -- .github/workflows/ → 7 個 workflow 命中"
+    },
+    "ebd59b5ea13d8f3c": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "決策者：客戶：寫入端是哪一種：④ 人工編輯 ＋ git commit 進 repo 的資料檔 —— 實測 git ls-tree -r --long origin/main -- templates/ → 6 檔全在 repo（本列這個 189 bytes）"
+    },
+    "7558fda39028fe3b": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "為什麼查不到消費端：實測 git grep -n 'snap\\.json' origin/main -- . → 6 行，全部在那兩支 script 的 docstring／argparse"
+    },
+    "5dd4fa2e844a9838": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "為什麼查不到消費端：實測 git grep -nE 'nav_history_sample\\|preset_funds_sample\\|portfolio_backup_sample\\|fund_history_sample' origin/main -- '*.py' → 只有 tests/test_preset_funds_drift.py:13,30 兩行，production .py 0 行（正控：同型指令對 preset_funds 在 .py 命中 20 行）"
+    },
+    "26ede22094050a69": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "為什麼沒有畫面消費者：實測 git grep -n \"nav_fx_cache\" origin/main -- '*.py' → 11 行，逐行判讀後全部是函式參數宣告、docstring／註解，或呼叫時的傳參，沒有任何一行從 scenario dict 取回 _sc[\"nav_fx_cache\"]"
+    },
+    "48888d15f9ebba7b": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "該 script 沒有任何 workflow 掛它：git ls-tree -r --name-only origin/main \\| grep '^.github/workflows/' → 8 個，無 fetch_nav_cache.yml"
+    },
+    "5a1ef68bd2267192": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "負控 git grep -n \"<負控串>\" origin/main -- '.github/workflows/*' → 0 命中（exit=1）"
+    },
+    "84c697a65b83bd73": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "負控：git grep -n \"<負控串>\" origin/main -- '*.py' → 0 命中（exit=1）"
+    },
+    "1efcfa817e20c01f": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "負控：git grep -n \"<負控串>\" origin/main -- . → 0 命中（exit=1）"
+    },
+    "96cf265e3bbb2bb6": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "負控：本輪另跑了一條「應該 0 命中」的假符號掃描（git grep -n \"<負控串>\" origin/main -- . → 0 命中，exit=1），"
+    },
+    "5eeef7652124386e": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "這件事本檔在 §5.4 末尾的自查登記裡已經記過一次（§2.8 那 9 列的備註引 git grep 時"
+    },
+    "0f417234ae2e0d0c": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "git grep -n \"accumulate_nav_tw\" -- '.github/workflows/*' → 0 命中……該腳本在 repo 內被記載為"
+    },
+    "4d8290ae58bb6aa3": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "git ls-tree -r --name-only origin/main | grep '^.github/workflows/' 共 8 個，無此檔）→ 只剩手動觸發」"
+    },
+    "cb0f167aa3acfb13": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "正控 $ git grep -cE \"parquet\" origin/main -- '*.py' → 8 檔命中（含 services/macro/validation.py、"
+    },
+    "3a23ec924c425f8b": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "正控 $ git grep -l \"save_holdings_overview\" origin/main -- . → 8 個檔："
+    },
+    "aeda20749754e62a": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "正控 $ git grep -n \"COPPER\\|PPI\" origin/main -- 'services/macro/us_indicators.py' → 14 行命中（非 0）"
+    },
+    "648ec5f551fd4a1f": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "正控 $ git grep -n \"call_llm\" origin/main -- '*.py'（排除 tests）→ 5 行（app.py:334 註解、infra/llm.py:13,39、"
+    },
+    "0b58716004da0c94": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "正控 $ git grep -n \"preset_funds.json\" origin/main -- '*.py'（排除 tests）→ 15 行"
+    },
+    "2358adbcbdf40b85": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "沒動：現行 6 列的每一格文字逐字沿用 :636-641（本組以 awk 逐行取出後比對）"
+    },
+    "5fb49edff08f34bf": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "1 處是 docs/v2/CONSTITUTION.md 的逐字引用（上面那條 git show 指令回出的第一行）"
+    },
+    "df6d35f64c33c33d": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "2 處是 CLAUDE.md §-2.A 執行條款第 1 款那一句（其一是為驗證它而重印的 grep 指令），"
+    },
+    "143cbfccb728d860": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "SIGNPOST_MARK 在該守衛檔共 5 個位點（本組實測 grep -n '_SIGNPOST_MARK'：:135 定義、:439 X3、:540、:662 註解、:670 切段器）——"
+    },
+    "6135505441d6fe51": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "docs/v2/21_decision_log.md 內 spec/UI_SPEC.md 64 處（另有 spec/PROPOSAL_4a.md／spec/PROPOSAL_4b.md），而 git ls-files | grep -c '^spec/' → 0"
+    },
+    "05eee75a68ee1e48": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git grep -li 'ERP' 「22 檔」"
+    },
+    "2661cf8ca9cd5d09": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git grep -nE 'asset_class.*return\\|資產類別.*報酬\\|BUCKET_RETURN\\|class_return' -- '*.py' → 0 命中（exit=1）"
+    },
+    "e413e15dd3b46c81": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git rev-list origin/main..HEAD → 13 筆」"
+    },
+    "d7983ba8991a409f": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "grep -c '至少 8 項' → 0（exit=1）"
+    },
+    "ca42f94863d1d7d4": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "grep -nE 'with card_row\\(|card_grid\\(' 在 page_03_research.py 回 4 行、page_05_settings.py 回 1 行，"
+    },
+    "f3d69993fd70afa7": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "invest_twd 在該段內 0 命中（實測 sed -n '365,450p' ui/tab3_portfolio.py | grep -n 'invest_twd' → 無輸出、exit=1）"
+    },
+    "573d28fe31897860": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "services/ai_prompts.py:102 build_structured_summary_prompt 的 production import 端恰好 2 個（本組實測 git grep -n 'build_structured_summary_prompt' origin/main -- '*.py'）："
+    },
+    "509a1c2b3c06b0c8": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "spec/UI_SPEC.md 這個路徑出現 64 處（實測 grep -c 'spec/UI_SPEC\\.md' docs/v2/21_decision_log.md → 64），"
+    },
+    "2174f4b5d93ac8e2": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "ui/views/page_04_portfolio.py ∈ 5 個 ui/views/page_0*.py ＝ F2（實測 ls ui/views/page_0*.py \\| wc -l → 5）"
+    },
+    "2fd2d4c7aa7cdc29": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "保留既有 1,091 行 cmp IDENTICAL 的證據"
+    },
+    "ca450d5699b0a846": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "全檔 grep -n '再平衡試算' → 只命中 :830（### ④-2 再平衡試算，屬既有 1–1,091 行，exit=0）"
+    },
+    "1a1a90373100daad": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "同一批行 grep -o 'G[123]†' | wc -l → 0（⇒ 那 45 處一處都沒有 †）"
+    },
+    "891e3d46944196fe": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "它為什麼要寫成明文：實測 三字 這個詞在 repo 全庫 0 命中（git grep -c '三字' origin/main -- '*.py' '*.md' 無輸出"
+    },
+    "9a96007c51a4071f": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "實測（量測日 2026-09-21）：grep -nE '^FRED_[A-Z_0-9]+' shared/fred_series.py → 41 個常數，其中至少四條不是純粋的歷史實績讀數："
+    },
+    "ea0c20ab89dade26": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有「0 命中」都是字面 git grep／grep，動態 getattr／importlib／字串組出的呼叫結構上掃不到"
+    },
+    "66d86ea59f74b485": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有「0 命中」都是字面 grep —— 換一種寫法（全形／半形空白、跨行斷開、「裁示三」這類國字寫法）能不能躲過，本輪沒有窮舉"
+    },
+    "140af4eaf664b14b": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "把它算成時間序列的實作查不到：git grep -nE 'quadrant_(series\\|history\\|hist)\\|historical_quadrant\\|象限.*歷史\\|歷史.*象限\\|quadrant_by_date' -- '*.py' → 0 命中（exit=1，量測日 2026-09-21）"
+    },
+    "a49787744553f2ee": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "改 git grep -nw 'ERP' -- '*.py'（詞界＋大小寫敏感）→ 0 命中（exit=1，量測日 2026-09-21）"
+    },
+    "f5b6934b7def3a6f": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "新頁自己的 session 鍵（v01_*／v04_*／v05_*）在盤點表 0 命中（實測：grep -c \"v01_\"／\"v04_\"／\"v05_\" 皆 0，正控 v03_research_batch_rows → 2）"
+    },
+    "6f1149fe7aa974e2": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "本檔 1–1091 行一個位元組未動（cmp → exit=0）"
+    },
+    "1d13d5939fdf6b4e": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "本檔 1–1091 行一個位元組都沒動（cmp → exit=0）"
+    },
+    "1168e5e89e0b2fda": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "本組實測 git ls-tree -r --name-only origin/main | grep -E '^ui/tab[^/]*\\.py$' → 16 檔，"
+    },
+    "fe634b83a87dae20": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "本輪另以自己的字表重掃仍然是 0 命中（git grep -niE 'fed_funds_futur|fedwatch|dot_"
+    },
+    "6286b31883b4d027": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "查法：對 40 個 commit 的 git ls-tree -r --name-only 聯集掃 終審令|final_order|final_decree|MOTHER|母法 → 0 命中"
+    },
+    "38555a17fd04ac1d": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "正控（刻意不是受測目標本身）git grep -lnE 'asset_class' -- 'services/' → 命中 2 檔（exit=0）"
+    },
+    "763680c2f74da9cc": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "生產端從來沒有寫過那個扁平鍵：grep -rn 'result[\"top_holdings\"]' --include=*.py . → 0 命中（同批正控 result[\"holdings\"] → 7 行、負控 0）"
+    },
+    "8ad96aef45507c1a": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "落在 9 塊」這半句未被推翻，故不劃掉：把 13 處丟回 awk 逐處歸屬，"
+    },
+    "6d968e168c1f9988": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "複驗實測推翻它的完整性 —— DGS5／T10YIE／DFII10／DFII5／real_yield／實質利率 全 repo 0 命中（六個詞逐一 git grep，exit=1，量測日 2026-09-21）"
+    },
+    "63df9ccfaf80c89a": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "負向指令 git grep -nE 'asset_class.*return\\|資產類別.*報酬\\|BUCKET_RETURN\\|class_return' -- '*.py' → 0 命中（exit=1）"
+    },
+    "b6237450f6410a4b": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "這一項出過一次誤報，查法本身要記下來：git grep -li 'ERP' -- '*.py' → → 40 檔（就地更正，見本表下方），看起來遍地都是"
+    },
+    "ad6c5c7ac29d9616": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "這個「2」是收斂出來的，不是寫出來的 —— 初稿寫「1 次」，漏算了自己那條 awk 樣式裡的那一次"
+    },
+    "8979b55424631b3d": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "這條指令會自計：本更正段自己也含那個字串 2 次（上面那條 awk 的樣式裡 1 次、④ 的括號裡 1 次），"
+    },
+    "f4798c96f27ae0f0": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "build_mk_advisor_prompt 沒有第 3 個 import 端」本組不宣稱窮舉 —— 本輪數的是 git grep -n \"build_mk_advisor_prompt\" origin/main 的全部命中（9 行，逐行判讀後"
+    },
+    "ba5ebd134b05eba3": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "docs/v2/20_ui_spec.md 的 1–1091 行一個位元組都沒動（cmp → exit=0）"
+    },
+    "4957a54b4281d5e9": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "docs/v2/20_ui_spec.md 的 1–1091 行一個位元組都沒動（cmp → exit=0，輸出見本輪回報）"
+    },
+    "3ce112ed9b42065e": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "grep -c '至少 8 項' → 0（exit=1）"
+    },
+    "bbe01cf5a5b38416": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "字面掃 grep -n \"safe_section(\" ui/views/page_02_health.py → 命中 15 行，其中 13 行是真的呼叫站點、2 行在 docstring 裡（:1414／:1821）"
+    },
+    "a604766f78a11671": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "所有「0 命中」都是字面 grep —— 換一種寫法能不能躲過，本輪沒有窮舉"
+    },
+    "1aab43fcdb727baf": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "本節以 append 方式加在檔尾：本檔既有 1–560 行一個位元組未動（cmp → exit=0，量測日 2026-09-21）"
+    },
+    "2105bfd112a5b82a": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "本組實測：git ls-tree -r --name-only origin/main \\| grep -E '^ui/tab[^/]*\\.py$' → 16 檔，ui/tab1_macro_midcycle.py 是其中之一（字典序第 5），母法 docs/v2/CONSTITUTION.md:72 現況欄逐字「16 檔，一個位元組都不准動」"
+    },
+    "400895039289cb9c": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "檔案邊界：只動 docs/v2/20_ui_spec.md（只動 :1093 至檔尾，1–1091 行 cmp → exit=0）"
+    },
+    "5bde6c82b97f3414": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "正控例：result[\"holdings\"] → 7 行、grep -c \"規則\" spec/UI_SPEC.md → 53（量測於本輪定稿後"
+    },
+    "0a979d732b8419d2": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "沒做 AST 分析 —— 所有「0 命中」都是字面 git grep，動態 getattr／importlib／字串組出的呼叫結構上掃不到"
+    },
+    "44d4f934c529bd5e": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "與 docs/v2/21_decision_log.md（只 append，既有 1–560 行 cmp → exit=0）"
+    },
+    "be8680dcf8800e22": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "行號一律 git show origin/main:<path> \\| awk 'NR==N' 單獨印出後照抄 —— 本輪 ai_prompts.py 的 7 行引文與 page_04_portfolio.py:1697-1700、"
+    },
+    "86b9bd86640cf6dd": {
+      "file": "docs/v2/24_proposal_4a.md",
+      "text": "它成立的部分（實測）：整條鏈只活在舊 ④ —— git grep -n 'mk_advisor\\|analyze_portfolio_mk' origin/main -- 'ui/views/' → 0 命中"
+    },
+    "8f14f2a68a2f2a99": {
+      "file": "docs/v2/24_proposal_4a.md",
+      "text": "指令：git grep -n 'analyze_portfolio_mk_advisor' origin/main -- '*.py' → 下游 production import 也只有 1 個（ui/tab3_t7_ledger.py:59）"
+    },
+    "442eb0574cb47b0c": {
+      "file": "docs/v2/24_proposal_4a.md",
+      "text": "指令：git grep -n 'build_mk_advisor_prompt' origin/main -- '*.py' → production import 恰好 1 個（services/ai_service.py:23"
+    },
+    "016217aa6c982789": {
+      "file": "docs/v2/25_proposal_4b.md",
+      "text": "指令：git ls-tree -r --name-only origin/main | grep -E '^ui/tab[^/]*\\.py$' → 16 檔，ui/tab3_t7_ledger.py 是其中之一（字典序第 9）"
+    },
+    "06897df1b3f0c990": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "B 說（repo）：git grep -n \"accumulate_nav_tw\" -- '.github/workflows/*' → 0 命中（正對照：同一條指令對 export_fund_db 命中 export_db.yml:39）"
+    },
+    "f3f573e5a4cf7b2a": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "同一個檔案 :843-845 的註解逐字寫著：「本處寫入的 _sheet_stats 全 repo 沒有任何讀取端（AST + grep 窮舉：只有這一行寫、無人讀）—— 它的 3 個 st.metric 消費者已於 v18.169 隨「📋 保單清單」區塊移除」"
+    },
+    "227b0e084d3c16b4": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "本組實測：git ls-tree -r --name-only origin/main | grep '^.github/workflows/' → 8 個 workflow，無 fetch_nav_cache.yml"
+    },
+    "d272479c08d916da": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "稽核用唯讀快照 /home/user/fund-audit-a（git archive origin/main，747 檔，逐檔 md5 抽驗與 git show 相符）"
+    },
+    "5a9202eb23e1d14b": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "第三關（承重項加驗）：另對五條承重宣稱相關的約 120 個引用行逐行 git show origin/main:<path> | awk 'NR==N' 印出核對（v2.py／_helpers.py／ledger_repository.py／snapshot_repository.py／ledger_service.py／infra/cache.py／export_fund_db.py／fred.py／ai_cache.py／batch_checkpoint.py／config.toml／§4 的 21 個檔）"
+    },
+    "13b820fabf6d7b6e": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "grep -hn 'python scripts/' .github/workflows/*.yml 實測該 yml 第 46 行 python scripts/weekly_nav_backfill.py）"
+    },
+    "75124f52030f4e05": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "ls .github/workflows/ 實測 8 檔，grep -hn 'python scripts/' .github/workflows/*.yml 的輸出裡沒有 calibrate —— 這半邊也成立"
+    },
+    "ef6a3dba39c17f45": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "收工時逐條回掃現行版本，10 條命中的關鍵句有 9 條仍在（grep -cF 逐句實測）："
+    },
+    "644b288333518a17": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "本組獨立掃 grep -rn 'templates/' --include='*.py' .（排除 tests）→ 0 行"
+    },
+    "10f53655b254e7fc": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "本輪獨立複驗 workflow 清單：ls .github/workflows/ 實測 8 檔，grep -hn 'python scripts/' *.yml 的輸出沒有 fetch_nav_cache"
+    },
+    "68cafd44369bf380": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "$ grep -rn \"_fund_pool\" --include=*.py . | grep -v ^./tests/ → repositories/pool_repository.py:26 _WS_POOL = \"_fund_pool\" 等 8 行"
+    },
+    "30c233534e81cbf0": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "B2 說（實測）：grep -n \"portfolio_core_pct\" ui/views/page_04_portfolio.py → 2 行，:1294 與 :1476，兩行都是註解，描述的是舊 ④"
+    },
+    "c4bbfd77956e4548": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "grep -rl \"_update_data_registry\" → prod 10 檔 ✓"
+    },
+    "beab92f4531e20bd": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "內容那一層是本組逐行 awk 'NR==N' 印出來人工核對的（app.py 11 行、"
+    },
+    "4e6d5d172bcac93e": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "而且比規格寫的更強：讀 parquet 的 L2 函式 services/macro/validation.py:234 calc_macro_score_series 本身 production 0 caller（grep -rn calc_macro_score_series → 1 個 def ＋ 1 行 scripts 註解 ＋ 11 行 tests）"
+    },
+    "aab499388b608f61": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "2 刻意砍的 7 項 —— 逐條自己 awk 'NR==N' 重印，7 條出處全部逐字成立"
+    },
+    "17d40cb0153b9d31": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "2 的 color／series 判定 —— grep '\\.get(\"color\")'／'\\.get(\"series\")' 對 page_01_macro.py 各 0 命中，"
+    },
+    "ac2c69311249d09c": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "B 說（本組 awk 重印 inv/DB_INVENTORY.md:1103-1110）：那 8 行是"
+    },
+    "14901503c6adfe03": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -c \"^[A-Z_][A-Z_0-9]*\\s*:\" shared/ui_control_labels.py → 6，逐行即規格 :26 所列那六個 ✓（該檔 41 行）"
+    },
+    "dabc5bd00678378d": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -n '^### ' spec/UI_SPEC.md → 38 行（其中 4 行是 甲／乙／丙／丁）"
+    },
+    "7637313f6e4b8e3a": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -oE '[A-Za-z0-9_-]{20,}' spec/DECISION_LOG.md | sort -u → 8 筆，同上"
+    },
+    "4581f80965fbfab8": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -oE '[A-Za-z0-9_-]{20,}' spec/UI_SPEC.md | sort -u → 42 筆，全部是 Python 識別字／session 鍵／測試檔名"
+    },
+    "d0a36c0f425f01d2": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -rn \"calc_holdings_overlap\" --include=*.py . → 48 行"
+    },
+    "442cb08b0ade49d9": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "grep -rn 'result\\[\"top_holdings\"\\]' --include=*.py . → 0 命中（負控同批 0）"
+    },
+    "ac32c54ce239d4a8": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "同一條 grep 在 audit/ inv/ 共 5 檔命中"
+    },
+    "2654e361c9341d7c": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "正控（證明 grep 會命中）: 同一條 grep 在 audit/inv 的 5 個 .md 檔命中"
+    },
+    "d3ae202b25d93557": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "甲 9 項 ＋ 乙 4 項 ＝ 13 ✓（grep -cE '^[0-9]+\\. ' 分段數：9 / 4）"
+    },
+    "97fbde6a293758ed": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "甲 9 項 ／ 乙 4 項 ／ 標題寫 13 —— grep -cE '^[0-9]+\\. ' 分別回 9 與 4 ✓"
+    },
+    "a5b52d1faf939de8": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "登記一件事實：grep -i \"scope\" spec/UI_SPEC.md → 0 命中"
+    },
+    "79116488af79c0a6": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "硬約束 1 —— grep -rn \"load_holdings_overview\" --include=*.py . → 全 repo 0 命中 ✓"
+    },
+    "44a0795703ea2430": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "只 grep 會漏掉 §2.17 那 4 列（它們帶 （production） 括號）"
+    },
+    "f7f521aa7ea31faa": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "這條 grep 只回 6 列，會讓人以為「10 列只翻了 6 列」 —— §2.17 那 4 列寫的是 ，括號讓字面 grep 看不見它們"
+    },
+    "f3fb7ebf6370ad97": {
+      "file": "docs/v2/37_audit_spec_r5.md",
+      "text": "git show origin/main:config/macro_weights_active.json → json.load → 11 個頂層 key，"
+    },
+    "efc09733a828b5e7": {
+      "file": "docs/v2/37_audit_spec_r5.md",
+      "text": "§1.6 的 grep 灌水實例（page_03 4 行/1 真、page_05 1 行/0 真）與點名的三個非呼叫行號"
+    },
+    "9779532850141dc3": {
+      "file": "docs/v2/37_audit_spec_r5.md",
+      "text": "§1.6 的 grep 灌水實證也成立：grep -nE 'with card_row\\(|card_grid\\(' 在 page_03_research.py → 4 行"
+    },
+    "3ec83bed8ba02cdf": {
+      "file": "docs/v2/37_audit_spec_r5.md",
+      "text": "舊盤點表 tail -n +18 與 before 快照 cmp 通過、md5 相同，只多了 17 行檔頭"
+    },
+    "533b033afc38e4a8": {
+      "file": "docs/v2/38_audit_spec_r6.md",
+      "text": "凍結面逐行實印（全部 git show origin/main:<path> | awk 'NR==N'，8 行全部與宣稱相符）："
+    },
+    "a9ac86a8145cec41": {
+      "file": "docs/v2/38_audit_spec_r6.md",
+      "text": "本機 LANG 是空的，預設 wc -m 確實退化成位元組數（下表第 2、3 欄逐檔相同即為證據）"
+    },
+    "147b823957a4c648": {
+      "file": "docs/v2/39_audit_spec_r7.md",
+      "text": "B-4b（PROPOSAL_4b 的四行）：git show origin/main:ui/tab3_t7_ledger.py | awk 'NR==3237||NR==3239||NR==3263||NR==3291' → 四行逐字全對（含 :3263 句尾的半形分號，文件有標）"
+    },
+    "10da486483da3d30": {
+      "file": "docs/v2/39_audit_spec_r7.md",
+      "text": "F1 ✅ —— 實測 git ls-tree 16 檔，tab1_macro_midcycle 字典序第 5，與文件一致"
+    },
+    "dd4ad1882148405a": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "0 行（git diff --numstat origin/main..HEAD -- '*.py' 無輸出）"
+    },
+    "67536510a8938bad": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "grep -i 'wireframe' → 26 檔"
+    },
+    "02b350d780a7fc79": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "整支 PR 對 origin/main：24 檔 +15,126 −2（git diff --shortstat）"
+    },
+    "c8a7692c27a3ed72": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "正控：同一把尺 grep -i 'CONSTITUTION' → 14 檔"
+    },
+    "4779e21d82d146b7": {
+      "file": "docs/v2/41_counters.md",
+      "text": "本檔所有「0 命中」都是字面 grep —— 換一種寫法（全形／半形空白、跨行斷開、"
+    },
+    "7e86434646c8e030": {
+      "file": "docs/v2/41_counters.md",
+      "text": "負控：本組自訂隨機串，未列出 → git ls-files | grep -c <串> → 0 命中 exit=1"
+    },
+    "d505260baeb37f9d": {
+      "file": "docs/v2/README_DRAFT_PACK.md",
+      "text": "v2_holdings / v2_transactions 這兩個名字在 repo 內 0 命中 ✅（本組實測：git grep 兩者皆 exit=1）"
+    }
+  },
+  "self_scanning_commands": {
+    "fa651c31f7cd106e": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "18f5059] grep -c '母法逐字' docs/v2/20_ui_spec.md → 13 exit=0"
+    },
+    "1de0aa916a4d949c": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "18f5059] grep -n '2296a0d' docs/v2/20_ui_spec.md → 6 處（含 :1854） exit=0"
+    },
+    "2a45d14dbc49c95a": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "18f5059] grep -n '再平衡試算' docs/v2/20_ui_spec.md → 只有 :830 exit=0"
+    },
+    "1e1909210b03327f": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "J 組實測：sed -n '1093,$p' docs/v2/20_ui_spec.md | grep -cE '重複|同一個數字' → 0（exit=1）⇒ 全節沒有一處登記這件事"
+    },
+    "1196dd5cea9876b1": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "J 組實測：全檔 grep -n '執行期相依\\|_render_macro_indicator_card\\|_zs_danger_spec_key' docs/v2/20_ui_spec.md → 無輸出（exit=1）⇒ 確實一處都沒登記"
+    },
+    "b4b5bcdbbe946a33": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "fc34c6b] grep -c '母法逐字' docs/v2/20_ui_spec.md → 11 exit=0"
+    },
+    "0316860c86726a6e": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show 06ec061:docs/v2/20_ui_spec.md | grep -c <無空格變體> → 0 exit=1",
+      "why_safe": "**字面命中、機制無害：git show 06ec061:<本檔> 讀的是凍結的 blob**，本檔**現在**長什麼樣**影響不了它的輸出** ⇒ **機制上不可能自計**。它與下一筆（5f0f8dcdb1bb2d89）是同一組前後對照（同一個字串在 06ec061 上 0、在 0d9753f 上 1），拆開看會看不懂，兩筆要一起讀。⚠️ 守衛**判得出**這一形態（find_self_scanning_commands 裡那個 snapshot 分支），**但判定仍然紅燈，而且 baseline 只留 file 與 text、不留那個 note** —— 這正是 射程外 缺口 4 登記的東西。**本組實測**：git cat-file -t 06ec061 → commit。字面上仍違反客戶裁示裡「計數指令不准寫進被計數的檔」那一條，故登記。登記者：V 組（守衛提交組），2026-09-21。"
+    },
+    "5f0f8dcdb1bb2d89": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show 0d9753f:docs/v2/20_ui_spec.md | grep -c <無空格變體> → 1 exit=0",
+      "why_safe": "**字面命中、機制無害：與上一筆（0316860c86726a6e）同一組前後對照的另一端**，形態相同 —— git show 0d9753f:<本檔> 讀的是**凍結的 blob**，本檔現在長什麼樣影響不了它的輸出 ⇒ **機制上不可能自計**。**本組實測**：git cat-file -t 0d9753f → commit。⚠️ 同上，守衛把它與「讀工作樹的自掃」判成同一件事（射程外 缺口 4）。字面上仍違反客戶裁示裡「計數指令不准寫進被計數的檔」那一條，故登記。登記者：V 組（守衛提交組），2026-09-21。"
+    },
+    "3d1b1a20f77d9a60": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show 18f5059:docs/v2/20_ui_spec.md | grep -c '母法逐字' → 13（exit=0）"
+    },
+    "74f638c403d03947": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show 2296a0d:docs/v2/20_ui_spec.md > base.md（該版 1091 行）"
+    },
+    "11f5d80660472c20": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show <sha>:docs/v2/20_ui_spec.md | grep -c '母法逐字' →"
+    },
+    "78aec379dbc4ab2c": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show <sha>:docs/v2/20_ui_spec.md | sed -n '1093,$p' | grep -c '預設收合' →"
+    },
+    "c00ca9e9c3639c5b": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "git show fc34c6b:docs/v2/20_ui_spec.md | grep -c '母法逐字' → 11（exit=0）"
+    },
+    "76f9efcbbbd97a27": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "head -1091 docs/v2/20_ui_spec.md > cur.md"
+    },
+    "f36a99cf18859443": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "sed -n '1,1091p' docs/v2/20_ui_spec.md | grep -o 'G[123]' | wc -l → 45"
+    },
+    "8e19defb1e15b796": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "sed -n '1093,$p' docs/v2/20_ui_spec.md | grep -c 'BLOCK_FORM' → 0（exit=1）"
+    },
+    "a0b19c957996bf5e": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "・本輪動手前（head fc34c6b）：grep -cE '^### ①-' docs/v2/20_ui_spec.md → 19（exit=0）"
+    },
+    "8f18548854d67dcb": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "以 sed -n '1093,$p' docs/v2/20_ui_spec.md 取本節後計算）（原『裁示 3』，改 2026-09-21-01）："
+    },
+    "4a0f50d6d3456e84": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "實測 awk '/^### /{h=$0} /母法逐字/{print NR\"\\t\"h}' docs/v2/20_ui_spec.md，量測日 2026-09-21）"
+    },
+    "9a9dcdc71cbeb7b3": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "實測：awk 'NR>=1111 && NR<=1113' docs/v2/20_ui_spec.md | grep -o 'G[123]' → 只回 G2／G3"
+    },
+    "7b9479fd998f651a": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "實測：awk 'NR>=1111 && NR<=1113' docs/v2/20_ui_spec.md | grep -o 'G[123]' → 只回 G2／G3，exit=0，量測日 2026-09-21），"
+    },
+    "96ac67b542239133": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "工作樹] grep -c '母法逐字' docs/v2/20_ui_spec.md → 13 exit=0"
+    },
+    "48b40f0cf0a33796": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "正控（刻意不是受測目標）：grep -c '母法' docs/v2/20_ui_spec.md 回非 0（exit=0）"
+    },
+    "a8eacc9abbb619d0": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "現有 10 塊」這個被加數沿用舊量測，未被裁示動到（實測 grep -oE '^### ①-[0-9]+' docs/v2/20_ui_spec.md"
+    },
+    "5c526b6847554aef": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "awk 'NR>=11 && NR<=68' docs/v2/21_decision_log.md | grep -c '2026-09-21' → 0（exit=1）⇒ 整張 B 表沒有任何一列是 2026-09-21 開的"
+    },
+    "1fda94f4b8136e42": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "git show <sha>:docs/v2/21_decision_log.md | grep -nE '^\\| (B8|B21|B21-a|B28) \\|' →"
+    },
+    "1a43e1523241d5d2": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "grep -nE '^\\| (B8|B21|B21-a|B28) \\|' docs/v2/21_decision_log.md → 四列的日期欄全部是 2026-09-16（:36 B8／:50 B21／:51 B21-a／:59 B28，exit=0）"
+    },
+    "890367a5560a1608": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "正控（刻意不是受測目標）：grep -c '母法' docs/v2/21_decision_log.md 回非 0（exit=0）"
+    },
+    "44d4f934c529bd5e": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "與 docs/v2/21_decision_log.md（只 append，既有 1–560 行 cmp → exit=0）"
+    },
+    "fbde18a1e415d5c0": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "逐行跑：git show 0d9753f:docs/v2/21_decision_log.md | sed -n '<行號>p' | grep -c ''",
+      "why_safe": "**字面命中、機制無害：同樣是 git show 0d9753f:<本檔> 的凍結 blob**，只是後面多接了逐行取樣（sed 取某一行再數刪除線）—— **取樣的對象仍然是凍結的 blob**，不是工作樹 ⇒ **機制上不可能自計**，本檔之後怎麼改都不會動到那個輸出。**本組實測**：git cat-file -t 0d9753f → commit。⚠️ 同上，守衛把它與「讀工作樹的自掃」判成同一件事（射程外 缺口 4）。字面上仍違反客戶裁示裡「計數指令不准寫進被計數的檔」那一條，故登記。登記者：V 組（守衛提交組），2026-09-21。"
+    },
+    "4021e556dc90aa4c": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "版本：本檔隨分支前進，最新狀態以 git log docs/v2/40_handover_2026-09-17.md 為準"
+    },
+    "62a98881ed9a9b8e": {
+      "file": "docs/v2/41_counters.md",
+      "text": "06ec061..0d9753f] git diff 06ec061..0d9753f -- docs/v2/41_counters.md \\",
+      "why_safe": "**字面命中、機制無害：兩端都釘 SHA**（06ec061..0d9753f），比的是兩個**凍結的 commit**、**不讀工作樹** ⇒ 下一個人照跑會拿到同一個數字，不會因為本檔之後又長了幾行而漂。該行自己也標著「已移出射程，僅列出供對照」。**本組實測**：git cat-file -t 對 06ec061 與 0d9753f 皆回 commit —— 驗的是「這兩個 SHA 真的存在」，**不是**只看它長得像十六進位（守衛只做後者，見 射程外 缺口 2）。字面上仍違反客戶裁示裡「計數指令不准寫進被計數的檔」那一條，故守衛照抓，登記於此。登記者：V 組（守衛提交組），2026-09-21。"
+    },
+    "3d7de74e56a04bed": {
+      "file": "docs/v2/41_counters.md",
+      "text": "06ec061..本輪 commit] git diff -- docs/v2/20_ui_spec.md docs/v2/21_decision_log.md docs/v2/41_counters.md \\"
+    },
+    "adaaea4eabbddd25": {
+      "file": "docs/v2/41_counters.md",
+      "text": "git diff -- docs/v2/20_ui_spec.md docs/v2/21_decision_log.md docs/v2/41_counters.md",
+      "why_safe": "**字面命中、機制無害 —— 但這一筆的無害性來自「它是引文」，不是來自機制，是本輪五筆裡最弱的一筆。** 它是那張「衝突逐字並列」表格裡的一格，逐字引用的是**已被撤下的舊掃描集**，用途是當那份衝突記錄的**物證**；同一份文件下方的逐檔拆解已把本檔標為「已移出射程，僅列出供對照」。⚠️ 它本身**沒有釘 SHA**（那個 git diff 比的是工作樹），所以若有人把它當**活指令**照跑，它**真的會把自己算進去** —— 它安全的唯一理由是「它是引文，沒有人要跑它」，而**守衛看不出引文與活指令的差別**（見 test_doc_counters.py 模組 docstring 射程外 缺口 4）。依據：本組就地讀該表格與其下方逐檔拆解段的上下文 —— **這是人工語意判讀，機器驗不到，也沒有第二組驗過**（CLAUDE.md §-2 規則 6）。登記者：V 組（守衛提交組），2026-09-21。"
+    },
+    "58d67bd30c6b1a8e": {
+      "file": "docs/v2/41_counters.md",
+      "text": "反例 (a)：wc -l docs/v2/41_counters.md、「本檔目前登記 N 條」、「本檔共 N 個全稱句」——"
+    }
+  },
+  "universals_without_reverse_check": {
+    "7c6de3895e0e0d12": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "所有 ⚠️ ⭐ ⛔ 標記、所有 file:line、所有「未複驗」，一律不進畫面"
+    },
+    "b215247c7e66a8c1": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "所有卡片、表格、區塊的「內文」"
+    },
+    "8e854f65bdbb0af9": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "所有會改變我部位的動作都集中在這裡 —— 診斷「哪裡有問題」在 {② 分頁名}，研究「這檔好不好」在 {③ 分頁名}"
+    },
+    "57e2aab2cb63bd8e": {
+      "file": "docs/v2/01_wireframe_grp_S0-S4_Q1-Q12.md",
+      "text": "都沒有]"
+    },
+    "5b9433c1335f5db4": {
+      "file": "docs/v2/02_decision_grp_S5-S8.md",
+      "text": "全部都是」/「都查過了」—— 本組查的是被點名的那幾項"
+    },
+    "8b07edef01b64e12": {
+      "file": "docs/v2/02_decision_grp_S5-S8.md",
+      "text": "都建立在總管的轉述上（同裁示 1 的免責）"
+    },
+    "184dd6b8533952c2": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "全部解禁（撤銷那道裁示）"
+    },
+    "27f17bcc699ec26a": {
+      "file": "docs/v2/03_adjudication_grp_S1-S2-S6-S8.md",
+      "text": "都沒有這些欄位（本組實測，見 2-E／2-F）"
+    },
+    "e226404172559199": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "全部是字串層改動，沒有一處動到計算邏輯 —— 這是本項唯一的好消息：回退成本低、而且可以逐處回退，不必整批"
+    },
+    "f8be04c08b88af28": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "全部標「單組實測、未經第二組驗證、取決於有沒有漏看」"
+    },
+    "dec47e7865984a55": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "所有「畫面上會出現…」一律是讀渲染碼推論，本檔逐條標明"
+    },
+    "44bca2af7ec08a86": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "所有「畫面上會出現…」一律是讀渲染碼推論，逐條標明"
+    },
+    "39523dc62061f41b": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "所有「畫面上會出現…」都是讀渲染碼推論，已逐條標明"
+    },
+    "8adc7d28735d3254": {
+      "file": "docs/v2/04_design_grp_S3-S4-S5-S7.md",
+      "text": "所有全稱句標「單組實測、未經第二組驗證、取決於有沒有漏看」"
+    },
+    "ba6dae6142f6d239": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "全部 50 個引用行號逐一印出核對（無 grep -v）"
+    },
+    "4490ed350cc30caf": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "全部是 def／all／noqa: F401 re-export／註解，沒有一行是呼叫"
+    },
+    "a7c2efe3b8666da8": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "全部是 查不到 → 只寫不讀，全部在 §2，一把尺套到底（§0.4 (1) 的 ①~⑤）"
+    },
+    "470149097c4a4f97": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "全部是定義、all 或註解，沒有一行是呼叫"
+    },
+    "f0417512804118d9": {
+      "file": "docs/v2/10_db_inventory.md",
+      "text": "每一個數字都相同 —— 證明本輪沒有動到「位元組讀回"
+    },
+    "cb47364d46a01c14": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "所有 buy / sell / dividend 事件的流水帳（append-only）"
+    },
+    "d6b02eece6955906": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "所有「走得到／走不到」都是靜態"
+    },
+    "87793dd75d2d486b": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "所有分頁／欄位都是讀程式碼常數推出來的"
+    },
+    "c5e4c61431db168f": {
+      "file": "docs/v2/11_contradictions_resolution.md",
+      "text": "都是本組自己的判讀"
+    },
+    "c8bed9e5b065b879": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "全部現有（fetch_all_indicators 的 10 個鍵）"
+    },
+    "d69f6c1362c0d845": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有「0 命中」仍然取決於有沒有漏看（CLAUDE.md §-2 規則 6）"
+    },
+    "b5f8f3e5d504c02c": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有標的調整與再平衡一律採「偏離提示、客觀對照、情境試算」三種形式之一"
+    },
+    "591d72980da85430": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有裁示寫成 YYYY-MM-DD-N，N 為當日流水號"
+    },
+    "4ef42a11a1bcdb15": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有計數釘 commit SHA，不寫「工作樹」「HEAD」「origin/main..HEAD」"
+    },
+    "4195809ffe773055": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "所有試算參數均由使用者自行輸入"
+    },
+    "6dadba144addb75f": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "都判不動 → 灰態「都判不出」＋明寫「判不出來不等於沒問題」"
+    },
+    "314d3623efc2665a": {
+      "file": "docs/v2/20_ui_spec.md",
+      "text": "都沒有指名金額以外的緩解"
+    },
+    "acad7364bfcc1b5b": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "全部 safe_section／render_cards／card_row／card_grid／st.tabs 的 ast.Call 節點，"
+    },
+    "5c8168f966688e31": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "所有裁示寫成 YYYY-MM-DD-N，N 為當日流水號"
+    },
+    "2261b423eb056773": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "所有計數釘 commit SHA，不寫「工作樹」「HEAD」「origin/main..HEAD」"
+    },
+    "cc9fe5064bf19d81": {
+      "file": "docs/v2/21_decision_log.md",
+      "text": "每一個」與「沒有一個」兩個全稱詞在寫下的當時就已經被同檔推翻，只是沒有人回頭讀"
+    },
+    "4aed656a9ecb6faf": {
+      "file": "docs/v2/23_ui_draft_01_macro.md",
+      "text": "所有「去哪補」引 ui/views/page_01_macro.py::_where_to_load()"
+    },
+    "486d3a6be99d7f77": {
+      "file": "docs/v2/23_ui_draft_01_macro.md",
+      "text": "都是 UI_SPEC 的區塊，而 ① 的同型 Form 不是 —— 差別只在 ②／③ 的 Form 外面包了一層頂層 safe_section"
+    },
+    "40866b3d550628cd": {
+      "file": "docs/v2/24_proposal_4a.md",
+      "text": "所有試算參數均由使用者自行輸入"
+    },
+    "2f2648bf3ab7ebbf": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "全部相符，一個不差"
+    },
+    "8f0ed6ef18406a71": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "所有 Sheets 欄位都是從程式碼常數推出來的"
+    },
+    "9ef68e61907ef722": {
+      "file": "docs/v2/30_audit_inventory.md",
+      "text": "所有「走得到／走不到」都是靜態（import 鏈 ＋ AST／token call site）"
+    },
+    "4317993b6678da1a": {
+      "file": "docs/v2/31_audit_caliber_sweep.md",
+      "text": "所有 Sheets 相關判斷都是從程式碼常數推出來的"
+    },
+    "66cc7830d99e1b13": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "全部「活的」（§1.2b）✓"
+    },
+    "62b9bdf007c27482": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "全部「活的」（§1.6）✓"
+    },
+    "4a0c7dbe5f598f5a": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "全部「活的」（§3.2）✓"
+    },
+    "c1c8707ca5ba812a": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "全部屬實"
+    },
+    "7c0b50690f9903ee": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "所有 file:line 一律 git show origin/main:<path> \\| awk 'NR==N' 單獨印出後照抄"
+    },
+    "ef883c0bc0b4e7f2": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "所有「新 X 頁會呼叫 Y」只代表程式碼路徑存在"
+    },
+    "dfc584f70ac03fb4": {
+      "file": "docs/v2/32_audit_spec_r1.md",
+      "text": "所有「新 ⑤ 會呼叫 X」這類話，只代表程式碼路徑存在"
+    },
+    "579796773252257a": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "全部存在"
+    },
+    "4a3f76e4f645fc47": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "全部存在且 import（:281/286/305/327/2453） ✓"
+    },
+    "f5133471e51df002": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "全部屬實"
+    },
+    "202ad19613dad46e": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "全部屬實（見 §2 (8) 的逐行輸出） ✓"
+    },
+    "226ff847a5a5b4d5": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "全部是真資料」這個沒有但書的版本不成立"
+    },
+    "6f4c0868475bf2a4": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "所有「到得了畫面」都是靜態讀碼推論，"
+    },
+    "eca0a222f0909a44": {
+      "file": "docs/v2/33_audit_spec_r2.md",
+      "text": "所有「線框逐字」的宣稱本組未驗"
+    },
+    "16eec0cd1c0683bb": {
+      "file": "docs/v2/34_audit_spec_r3.md",
+      "text": "所有「到不到得了畫面」都是靜態讀碼"
+    },
+    "13c811c34200773e": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "全部是「本組推薦讀法 A／B」的治理用語，與投資建議無關 ✅"
+    },
+    "7e26d0827159f31f": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "所有「守衛存在」只驗到函式定義存在，沒有驗它會不會轉紅，也沒有做突變驗證"
+    },
+    "bef90beaa0feb74b": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "所有「守衛存在」的斷言只驗函式定義存在，不驗它會不會轉紅"
+    },
+    "7db78911f68795d6": {
+      "file": "docs/v2/36_audit_spec_r4.md",
+      "text": "都是引述禁令 ✅"
+    },
+    "8405fe1597a43f09": {
+      "file": "docs/v2/38_audit_spec_r6.md",
+      "text": "全部 0 命中，唯一例外是 ui/tab3_t7_ledger.py:1990 的 help=\"A 推薦：其他保單已有的基金直接借過來，免抓取"
+    },
+    "44ab7eea83cbcadb": {
+      "file": "docs/v2/39_audit_spec_r7.md",
+      "text": "所有「到得了畫面」都是靜態鏈路推導（AST ＋ 逐行讀），不是實跑渲染"
+    },
+    "be03a1c9c09cbc19": {
+      "file": "docs/v2/40_handover_2026-09-17.md",
+      "text": "全部 0 命中）與 pre-commit 等效檢查（trailing-whitespace 0／merge-conflict 0／"
+    },
+    "312415e981e6568e": {
+      "file": "docs/v2/41_counters.md",
+      "text": "所有計數釘 commit SHA，不寫「工作樹」「HEAD」「origin/main..HEAD」"
+    }
+  }
+}

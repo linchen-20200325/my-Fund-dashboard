@@ -1,0 +1,1306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>今天頁線框原型</title>
+<!-- Google Fonts —— 客戶 2026-09-21 裁示（逐字）：「原型用，正式版改系統字或自架」。
+     本輪處置：下面三行保留不動，就地留這條註解。
+     取的是 IBM Plex Mono 與 Noto Sans TC 兩支字體；頁內同一句話另見 §E 色彩 token 表末。 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   TOKENS —— 全部是佔位色。`docs/v2/UI_TOKENS.md` 不存在（實測），
+   故本檔沒有任何一個顏色是「已拍板的 token」。逐一見頁內 §token 表。
+   兩路主題：@media (prefers-color-scheme) ＋ :root[data-theme]。
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  /* — 註記層（隨主題變） — */
+  --paper:#e6eaf0;          /* 圖紙底 */
+  --sheet:#ffffff;          /* 註記卡底 */
+  --sheet-2:#f2f5f9;        /* 註記卡次層 */
+  --ink:#161c24;            /* 主文字 */
+  --ink-2:#4a5663;          /* 次文字 */
+  --ink-3:#6b7885;          /* 弱文字 */
+  --rule:#c3ccd8;           /* 髮絲線 */
+  --rule-2:#dbe2ea;
+  --draft:#0f6b6c;          /* 註記主色（青，刻意避開 repo 語意色） */
+  --draft-bg:#dff0ef;
+  --stop:#8c1d3f;           /* ⛔ 標記色 */
+  --stop-bg:#fae7ed;
+  --ok-mark:#1d6b3f;        /* ✓ */
+  --warn-mark:#8a5a12;      /* ⚠ */
+  --shadow:0 1px 0 rgba(22,28,36,.06), 0 6px 18px -12px rgba(22,28,36,.35);
+
+  /* — App 螢幕（**兩個主題下都一樣**，理由見 §token 表 T-APP-BG） — */
+  --app-bg:#0e1117;         /* = shared/colors.py STREAMLIT_BG */
+  --app-card:#161b22;       /* = GH_BG_CARD */
+  --app-border:#30363d;     /* = GH_BORDER */
+  --app-fg:#e6edf3;         /* = GH_FG_PRIMARY */
+  --app-fg-2:#c9d1d9;       /* = GH_FG_SECONDARY */
+  --app-muted:#8b949e;      /* = GH_FG_MUTED */
+  --st-ok:#22c55e;          /* = TRAFFIC_GREEN（佔位：綠燈無專屬 SSOT） */
+  --st-biz-fg:#f294b6;      /* = BUSINESS_ALERT_ON_DARK */
+  --st-biz-bg:#2a0a0a;      /* = BG_DARK_RED_1 */
+  --st-biz-rail:6px;        /* = BUSINESS_ALERT_RAIL_PX */
+  --st-err:#ff4b4b;         /* 佔位：Streamlit st.error 紅，repo 無對應常數 */
+  --st-err-bg:#2b1114;
+  --st-gray:#8b949e;
+
+  --maxw:1180px;
+  --gap:16px;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117;        /* 客戶硬要求：深色模式底色 #0e1117 */
+    --sheet:#161b22;
+    --sheet-2:#1b222b;
+    --ink:#e6edf3;
+    --ink-2:#adb7c2;
+    --ink-3:#8b949e;
+    --rule:#30363d;
+    --rule-2:#262c34;
+    --draft:#5fd3d0;
+    --draft-bg:#0f2a2b;
+    --stop:#f294b6;
+    --stop-bg:#2a0a12;
+    --ok-mark:#5fd58a;
+    --warn-mark:#e3b341;
+    --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+  --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+  --rule:#30363d; --rule-2:#262c34;
+  --draft:#5fd3d0; --draft-bg:#0f2a2b;
+  --stop:#f294b6; --stop-bg:#2a0a12;
+  --ok-mark:#5fd58a; --warn-mark:#e3b341;
+  --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",
+              "Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.72;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:16px; padding-block:28px 64px}
+code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,
+  "Cascadia Mono",Consolas,monospace}
+code{font-size:.88em; background:var(--sheet-2); border:1px solid var(--rule-2);
+  border-radius:4px; padding:1px 5px; color:var(--ink)}
+a{color:var(--draft)}
+h1,h2,h3,h4{text-wrap:balance; margin:0; line-height:1.34}
+p{margin:0}
+:focus-visible{outline:2px solid var(--draft); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important; animation:none!important}}
+
+/* ── 圖紙標題塊 ───────────────────────────────────────── */
+.titleblock{border:1px solid var(--rule); background:var(--sheet);
+  border-radius:var(--r); padding:20px 22px; box-shadow:var(--shadow)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--draft); font-weight:600}
+h1{font-size:clamp(24px,4.2vw,34px); font-weight:700; letter-spacing:-.01em; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:16px; padding-top:14px;
+  border-top:1px dashed var(--rule); font-size:12.5px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── 通用區塊 ─────────────────────────────────────────── */
+section{margin-top:34px}
+.sec-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  padding-bottom:8px; border-bottom:2px solid var(--ink); margin-bottom:16px}
+.sec-head h2{font-size:19px; font-weight:700}
+.sec-head .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--draft);
+  font-weight:600; letter-spacing:.08em}
+.sec-head .hint{font-size:12.5px; color:var(--ink-3); margin-left:auto}
+.card{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:16px 18px}
+.note{font-size:13px; color:var(--ink-2)}
+.tiny{font-size:12px; color:var(--ink-3)}
+
+/* ── 落差條（頁首警示） ───────────────────────────────── */
+.gapstrip{margin-top:18px; border:1px solid var(--stop); background:var(--stop-bg);
+  border-radius:var(--r); padding:14px 16px}
+.gapstrip h3{font-size:14px; color:var(--stop); font-weight:700}
+.gapstrip ol{margin:8px 0 0; padding-left:20px; font-size:13.5px; color:var(--ink)}
+.gapstrip li{margin:4px 0}
+.gapstrip li b{color:var(--stop)}
+
+/* ── 控制列 ───────────────────────────────────────────── */
+.controls{margin-top:22px; background:var(--sheet); border:1px solid var(--rule);
+  border-radius:var(--r); padding:12px 14px; display:flex; flex-wrap:wrap; gap:14px 22px}
+.cgroup{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.clab{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.btn{font:inherit; font-size:13px; padding:5px 11px; border-radius:7px; cursor:pointer;
+  border:1px solid var(--rule); background:var(--sheet-2); color:var(--ink-2)}
+.btn:hover{border-color:var(--draft); color:var(--ink)}
+.btn[aria-pressed="true"]{background:var(--draft); border-color:var(--draft);
+  color:var(--paper); font-weight:600}
+.btn .mk{font-size:11px; opacity:.85}
+
+/* ── 舞台：螢幕 + 註記軌 ──────────────────────────────── */
+.stage{display:grid; grid-template-columns:minmax(0,1fr) 316px; gap:20px; align-items:start;
+  margin-top:20px}
+.screenbox{min-width:0}
+.rulerbar{display:flex; align-items:center; gap:10px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; color:var(--ink-3); margin-bottom:6px}
+.rulerbar .tick{flex:1; height:1px; background:repeating-linear-gradient(90deg,
+  var(--rule) 0 1px, transparent 1px 8px)}
+.screen-scroll{overflow-x:auto; padding-bottom:6px; border-radius:var(--r)}
+.screen{
+  width:var(--screen-w,1280px); max-width:100%;
+  container-type:inline-size;
+  background:var(--app-bg); color:var(--app-fg);
+  border:1px solid var(--app-border); border-radius:var(--r);
+  padding:18px 18px 22px; margin:0 auto;
+}
+.screen-chrome{display:flex; align-items:center; gap:8px; padding-bottom:12px;
+  margin-bottom:14px; border-bottom:1px solid var(--app-border);
+  font-size:12px; color:var(--app-muted); font-family:"IBM Plex Mono",monospace}
+.screen-chrome .dot{width:8px; height:8px; border-radius:50%; background:var(--app-border)}
+.screen-chrome .tabs{margin-left:auto; color:var(--app-muted); opacity:.8}
+
+/* 層標 */
+.layer{margin-top:18px}
+.layer:first-of-type{margin-top:0}
+.layer-tag{display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft)}
+.layer-tag .bar{flex:1; height:1px; background:var(--app-border)}
+.layer-tag .role{color:var(--app-muted); letter-spacing:.04em; text-transform:none;
+  font-size:11px}
+
+/* ── 燈（層 1） ───────────────────────────────────────── */
+.lamp{border-radius:8px; padding:14px 16px; border:1px solid var(--app-border);
+  background:var(--app-card)}
+.lamp .top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.lamp .glyph{font-size:17px; line-height:1}
+.lamp .headline{font-size:16px; font-weight:700}
+.lamp .lines{margin-top:8px; font-size:13.5px; color:var(--app-fg-2)}
+.lamp .lines div{margin:3px 0}
+.lamp.ok{border-color:#1d4a30}
+.lamp.ok .headline{color:var(--st-ok)}
+.lamp.biz{background:var(--st-biz-bg); border:1px solid var(--app-border);
+  border-left:var(--st-biz-rail) solid var(--st-biz-fg)}
+.lamp.biz .headline{color:var(--st-biz-fg)}
+.lamp.gray .headline{color:var(--app-muted); font-weight:600}
+.lamp.err{background:var(--st-err-bg); border:1px solid var(--st-err)}
+.lamp.err .headline{color:var(--st-err)}
+.lamp.load .headline{color:var(--app-muted)}
+.lamp .where{margin-top:8px; font-size:12.5px; color:var(--app-muted)}
+
+/* ── 卡（層 2） ───────────────────────────────────────── */
+.cards{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px}
+.cardx{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:13px 14px; min-width:0}
+.cardx .t{font-size:12.5px; color:var(--app-muted); font-weight:500}
+.cardx .v{font-size:23px; font-weight:700; margin-top:3px;
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+.cardx .n{font-size:12.5px; color:var(--app-muted); margin-top:5px}
+.cardx.nr .t{color:var(--app-fg); font-weight:700; font-size:13.5px}
+.cardx.nr .v{color:var(--app-muted); font-size:19px; font-weight:500}
+.cardx.nr .n{color:var(--app-muted)}
+.cardx.biz{background:var(--st-biz-bg); border-left:var(--st-biz-rail) solid var(--st-biz-fg)}
+.cardx.biz .t{color:var(--st-biz-fg); font-weight:700; font-size:14px}
+.cardx.biz .v,.cardx.biz .n{color:var(--app-fg); font-size:13px; font-weight:400; margin-top:3px}
+.cardx.err{background:var(--st-err-bg); border:1px solid var(--st-err)}
+.cardx.err .t{color:var(--st-err); font-weight:700}
+.sk{background:linear-gradient(90deg,#1c232c,#242c36,#1c232c); border-radius:4px;
+  height:11px; margin-top:7px}
+.sk.w1{width:58%} .sk.w2{width:84%} .sk.h{height:22px; width:44%; margin-top:5px}
+
+/* ── 操作列（層 3） ───────────────────────────────────── */
+.formbox{border:1px solid var(--app-border); border-radius:8px; padding:14px;
+  background:var(--app-card)}
+.formbox .cap{font-size:12.5px; color:var(--app-muted); margin-bottom:10px}
+.checks{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
+.chk{display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--app-fg);
+  background:#11161d; border:1px solid var(--app-border); border-radius:6px;
+  padding:8px 10px; cursor:pointer; min-width:0}
+.chk input{accent-color:var(--st-ok); width:15px; height:15px; flex:none; margin:0}
+.submit{margin-top:12px; width:100%; font:inherit; font-size:14px; font-weight:600;
+  padding:9px 14px; border-radius:7px; cursor:pointer;
+  background:#21262d; color:var(--app-fg); border:1px solid #3d444d}
+.submit:hover{border-color:var(--st-ok); color:#fff}
+
+/* ── 佐證（層 4） ─────────────────────────────────────── */
+.exp{border:1px solid var(--app-border); border-radius:8px; background:var(--app-card);
+  margin-top:8px; overflow:hidden}
+.exp summary{cursor:pointer; padding:10px 13px; font-size:13.5px; color:var(--app-fg);
+  list-style:none; display:flex; align-items:center; gap:8px}
+.exp summary::-webkit-details-marker{display:none}
+.exp summary::before{content:"▸"; color:var(--app-muted); font-size:11px}
+.exp[open] summary::before{content:"▾"}
+.exp summary:hover{background:#1b222b}
+.exp .body{padding:0 13px 13px; font-size:13px; color:var(--app-fg-2);
+  border-top:1px solid var(--app-border); padding-top:11px}
+.tscroll{overflow-x:auto; margin-top:8px; border:1px solid var(--app-border); border-radius:6px}
+table.wt{border-collapse:collapse; width:100%; min-width:620px; font-size:12.5px;
+  font-variant-numeric:tabular-nums}
+table.wt th,table.wt td{padding:6px 10px; text-align:left; white-space:nowrap;
+  border-bottom:1px solid var(--app-border)}
+table.wt th{color:var(--app-muted); font-weight:600; background:#11161d}
+table.wt tr:last-child td{border-bottom:0}
+.ministat{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:8px}
+.ministat div{background:#11161d; border:1px solid var(--app-border); border-radius:6px;
+  padding:8px 10px; font-size:12.5px; min-width:0}
+.ministat b{display:block; color:var(--app-fg); font-size:15px;
+  font-variant-numeric:tabular-nums}
+.errdetail{margin-top:8px; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  color:#ffb4b4; background:#1b1114; border:1px solid #4a2029; border-radius:6px;
+  padding:9px 11px; overflow-x:auto; white-space:pre-wrap; word-break:break-word}
+
+/* 整頁空狀態 */
+.emptybox{border:1px dashed var(--app-border); border-radius:8px; padding:18px;
+  background:var(--app-card)}
+.emptybox .et{color:var(--app-muted); font-weight:600; font-size:14px}
+.emptybox .em{color:var(--app-muted); font-size:13px; margin-top:4px}
+.emptybox .ef{color:var(--app-muted); opacity:.75; font-size:12px; margin-top:4px}
+
+/* ── 註記軌 ───────────────────────────────────────────── */
+.rail{display:flex; flex-direction:column; gap:14px; min-width:0}
+.railcard{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:13px 14px}
+.railcard h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); font-weight:600; margin-bottom:8px}
+.chain{display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:12px;
+  font-family:"IBM Plex Mono",monospace}
+.chain span{background:var(--sheet-2); border:1px solid var(--rule-2); border-radius:5px;
+  padding:2px 7px}
+.chain i{color:var(--ink-3); font-style:normal}
+.legend{display:flex; flex-direction:column; gap:7px; font-size:12.5px}
+.legend div{display:flex; gap:8px; align-items:flex-start}
+.legend b{flex:none; width:74px; font-weight:600; font-size:11.5px;
+  font-family:"IBM Plex Mono",monospace}
+
+/* ── 註記標籤（pin）：必須一眼看得出不是 app 的字 ──────── */
+.pin{display:inline-flex; align-items:center; gap:5px; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; font-weight:600; color:var(--stop); background:var(--stop-bg);
+  border:1px dashed var(--stop); border-radius:5px; padding:1px 6px; vertical-align:middle}
+.pin.ann{color:var(--draft); background:var(--draft-bg); border-color:var(--draft)}
+.pinrow{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0}
+.annot{margin-top:7px; font-size:12px; color:var(--ink-2); background:var(--sheet);
+  border:1px dashed var(--draft); border-left:3px solid var(--draft);
+  border-radius:0 6px 6px 0; padding:7px 10px}
+.annot b{color:var(--draft)}
+
+/* ── 表格（註記層） ───────────────────────────────────── */
+.tbl-scroll{overflow-x:auto; border:1px solid var(--rule); border-radius:var(--r);
+  background:var(--sheet)}
+table.ref{border-collapse:collapse; width:100%; min-width:640px; font-size:13px}
+table.ref th,table.ref td{padding:8px 11px; text-align:left; vertical-align:top;
+  border-bottom:1px solid var(--rule-2)}
+table.ref th{background:var(--sheet-2); color:var(--ink-2); font-weight:600;
+  font-size:11.5px; letter-spacing:.04em; white-space:nowrap; position:sticky; top:0}
+table.ref tr:last-child td{border-bottom:0}
+table.ref td.id{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--stop); font-weight:600}
+table.ref td.src{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--ink-3)}
+table.ref td.jd{white-space:nowrap; font-size:12px}
+.badge{display:inline-block; font-size:11px; font-weight:600; border-radius:999px;
+  padding:1px 8px; white-space:nowrap}
+.badge.mu{background:var(--stop-bg); color:var(--stop); border:1px solid var(--stop)}
+.badge.no{background:var(--sheet-2); color:var(--ink-3); border:1px solid var(--rule)}
+.badge.ok{background:var(--sheet-2); color:var(--ok-mark); border:1px solid var(--ok-mark)}
+.badge.wn{background:var(--sheet-2); color:var(--warn-mark); border:1px solid var(--warn-mark)}
+.swatch{display:inline-block; width:13px; height:13px; border-radius:3px; vertical-align:-2px;
+  border:1px solid var(--rule); margin-right:6px}
+
+/* ── 判準框 ───────────────────────────────────────────── */
+.crit{background:var(--draft-bg); border:1px solid var(--draft); border-radius:var(--r);
+  padding:13px 15px; margin-bottom:14px; font-size:13.5px}
+.crit h4{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); margin-bottom:6px}
+.crit ul{margin:6px 0 0; padding-left:19px}
+.crit li{margin:3px 0}
+.tally{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+.tally div{background:var(--sheet); border:1px solid var(--rule); border-radius:7px;
+  padding:6px 11px; font-size:12px; color:var(--ink-2)}
+.tally b{font-family:"IBM Plex Mono",monospace; font-size:17px; color:var(--ink);
+  display:block; font-variant-numeric:tabular-nums}
+
+/* ── 揭露 ─────────────────────────────────────────────── */
+.disclose{border:1px solid var(--rule); border-left:4px solid var(--warn-mark);
+  background:var(--sheet); border-radius:0 var(--r) var(--r) 0; padding:15px 17px}
+.disclose ul{margin:8px 0 0; padding-left:19px; font-size:13.5px}
+.disclose li{margin:5px 0}
+.foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--ink-3)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   響應式：三斷點 1280 / 768 / 375
+   ⚠️ 這是**本原型自己的 CSS**，不是 app 的行為 —— 見 §G2 落差。
+   ════════════════════════════════════════════════════════════════════ */
+@media (min-width:1280px){
+  .stage{grid-template-columns:minmax(0,1fr) 316px}
+}
+@media (max-width:1280px){
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .rail{flex-direction:row; flex-wrap:wrap}
+  .railcard{flex:1 1 260px}
+}
+@media (max-width:768px){
+  .wrap{padding-block:20px 48px}
+  .cards,.checks,.ministat{grid-template-columns:minmax(0,1fr)}
+  .rail{flex-direction:column}
+  .railcard{flex:1 1 auto}
+  .sec-head .hint{margin-left:0; flex-basis:100%}
+  .screen{padding:14px 13px 18px}
+}
+@media (max-width:375px){
+  body{font-size:14px}
+  .wrap{padding-inline:16px}
+  .titleblock{padding:15px 15px}
+  .controls{padding:10px}
+  .cardx .v{font-size:20px}
+  .legend b{width:100%}
+  .legend div{flex-direction:column; gap:1px}
+}
+/* 模擬框自己的寬度反應（讓上方的斷點鈕即使不縮視窗也看得到塌法） */
+@container (max-width:768px){
+  .cards,.checks,.ministat{grid-template-columns:minmax(0,1fr)}
+}
+@container (max-width:375px){
+  .cardx .v{font-size:20px}
+  .lamp .headline{font-size:15px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══════════════ 標題塊 ══════════════ -->
+<header class="titleblock">
+  <div class="eyebrow">母法階段 1 · 文字線框的視覺化 · 草稿先行</div>
+  <h1>「今天」頁線框原型</h1>
+  <p class="sub">
+    這是 <code>docs/v2/22_ui_page_today.md</code> 那份<b>文字</b>線框的可點版本：四層結構、
+    燈的優先序、三格內容、六種狀態、以及規格逐處標的 ⛔ 全部畫出來，讓客戶用眼睛驗收，
+    而不是讀 149 行 Markdown。
+  </p>
+  <div class="meta">
+    <span><b>repo</b> my-Fund-dashboard</span>
+    <span><b>head</b> <code>e1b2c6c</code></span>
+    <span><b>規格</b> <code>docs/v2/22_ui_page_today.md</code></span>
+    <span><b>元件語彙</b> <code>ui/helpers/ia/</code> ＋ <code>ui/helpers/render_state.py</code></span>
+    <span><b>產出</b> Y 組 UI 原型組 · 2026-09-21</span>
+    <span><b>複驗</b> 未經第二組獨立複驗（<code>CLAUDE.md §-2</code> 規則 6）</span>
+  </div>
+
+  <div class="card" style="margin-top:18px; background:var(--sheet-2); border-style:dashed">
+    <h3 style="font-size:14px; font-weight:700; color:var(--draft)">怎麼看這份原型（5 分鐘）：</h3>
+    <ol style="margin:8px 0 0; padding-left:20px; font-size:13.5px; line-height:1.75; color:var(--ink)">
+      <li>先看中間「舞台」——那是 app 的樣子，四層結構。</li>
+      <li>用上方控制列切六種狀態、三個斷點。</li>
+      <li>看完再看 §C 的 ⛔ 清單（24 條，判為 11 處母法衝突）。<br>
+        <span style="color:var(--ink-2)">§A / §B / §D / §E / §F / §G / §H 是給執行組的，可以後看。</span></li>
+    </ol>
+  </div>
+
+  <div class="gapstrip">
+    <h3>⚠ 開始看之前：三個「客戶指令與 repo 實況對不上」的地方</h3>
+    <ol>
+      <li><b>元件庫不是 <code>ui/components/</code>。</b> 規格點名的 10 個元件全在
+        <code>ui/helpers/ia/</code> 與 <code>ui/helpers/render_state.py</code>；本原型以那裡為實質來源。</li>
+      <li><b>⛔ 不是 11 處。</b> 規格實測 <b>24 個 ⛔ 標記</b>（分布 22 行）；
+        本組判為「母法衝突」的是 <b>11 處</b>，判準寫在 §C。</li>
+      <li><b>狀態不是 5 種對 5 種。</b> <code>CARD_STATES</code> 只有 4 種；
+        客戶要的「載入中」<b>規格沒有定義</b>，「缺漏」與「未接線」在規格裡同屬 <code>not_ready</code>。</li>
+    </ol>
+    <p class="tiny" style="margin-top:8px">三條的完整查證與處置見頁尾 <b>§G 三個落差</b>。</p>
+  </div>
+</header>
+
+<!-- ══════════════ 控制列 ══════════════ -->
+<div class="controls" role="group" aria-label="原型控制">
+  <div class="cgroup">
+    <span class="clab">狀態</span>
+    <button class="btn" type="button" data-state="ok" aria-pressed="true">正常 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-state="loading" aria-pressed="false">載入中 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-state="business" aria-pressed="false">業務警訊 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-state="missing" aria-pressed="false">缺漏 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-state="unwired" aria-pressed="false">未接線 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-state="error" aria-pressed="false">錯誤 <span class="mk">⚠</span></button>
+  </div>
+  <div class="cgroup">
+    <span class="clab">斷點</span>
+    <button class="btn" type="button" data-bp="375" aria-pressed="false">375 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-bp="768" aria-pressed="false">768 <span class="mk">⚠</span></button>
+    <button class="btn" type="button" data-bp="1280" aria-pressed="true">1280 <span class="mk">⚠</span></button>
+  </div>
+  <div class="cgroup">
+    <span class="clab">這一輪</span>
+    <button class="btn" type="button" id="btn-fetched" aria-pressed="false">沒取過數 <span class="mk">⚠</span></button>
+  </div>
+  <div class="cgroup" style="margin-left:auto">
+    <span class="clab">主題</span>
+    <button class="btn" type="button" id="btn-theme" aria-pressed="false">跟隨系統 <span class="mk">⚠</span></button>
+  </div>
+</div>
+
+<!-- ══════════════ 舞台 ══════════════ -->
+<div class="stage">
+  <div class="screenbox">
+    <div class="rulerbar">
+      <span id="bp-read">模擬寬度 1280px</span>
+      <span class="tick" aria-hidden="true"></span>
+      <span id="bp-actual">實際渲染 —</span>
+    </div>
+    <div class="screen-scroll">
+      <div class="screen" id="screen" style="--screen-w:1280px">
+        <div class="screen-chrome">
+          <span class="dot" aria-hidden="true"></span>
+          <span>今天</span>
+          <span class="tabs">① 🌐 市場總覽　② 💊 持倉體檢　③ 🔍 標的探索　④ 📊 資產配置　⑤ ⚙️ 設定與診斷</span>
+        </div>
+
+        <!-- 層 1 -->
+        <div class="layer" id="lay1">
+          <div class="layer-tag"><span>層 1</span><span class="role">結論燈 · 全寬 · 不進網格</span><span class="bar"></span></div>
+          <div id="slot-lamp"></div>
+        </div>
+
+        <!-- 層 2 -->
+        <div class="layer" id="lay2">
+          <div class="layer-tag"><span>層 2</span><span class="role">3 格核心卡 · render_cards(cols=GRID_COLS)</span><span class="bar"></span></div>
+          <div id="slot-cards"></div>
+        </div>
+
+        <!-- 層 3 -->
+        <div class="layer">
+          <div class="layer-tag"><span>層 3</span><span class="role">操作列 · applied_form(key="today_refresh")</span><span class="bar"></span></div>
+          <div class="formbox">
+            <div class="cap">取數範圍</div>
+            <div class="checks">
+              <label class="chk" for="scope-macro"><input type="checkbox" id="scope-macro" checked>市場環境</label>
+              <label class="chk" for="scope-holdings"><input type="checkbox" id="scope-holdings" checked>持倉</label>
+              <label class="chk" for="scope-health"><input type="checkbox" id="scope-health" checked>資料健康</label>
+            </div>
+            <button class="submit" type="button" id="submit-btn">📥 取得今天的數字</button>
+          </div>
+        </div>
+
+        <!-- 層 4 -->
+        <div class="layer">
+          <div class="layer-tag"><span>層 4</span><span class="role">展開佐證 · 三塊 · 預設全收合</span><span class="bar"></span></div>
+          <div id="slot-exp"></div>
+        </div>
+      </div>
+    </div>
+    <div class="pinrow">
+      <span class="pin">⛔ 03 · 層 3 沒有再平衡鈕</span>
+      <span class="pin">⛔ 09 · 層 3 只取數、只指路</span>
+      <span class="pin">⛔ 08 · 每格一個讀數＋一句話</span>
+      <span class="pin">⛔ 23 · 三格不補空卡</span>
+      <span class="pin">⛔ 24 · 三格的分母不藏</span>
+      <span class="pin ann">§5.1 · 鈕字與指路字讀同一個變數</span>
+    </div>
+    <div class="annot" id="live-annot"></div>
+  </div>
+
+  <!-- 註記軌 -->
+  <aside class="rail">
+    <div class="railcard">
+      <h3>現在在看什麼</h3>
+      <div class="note" id="state-explain"></div>
+    </div>
+    <div class="railcard">
+      <h3>層 1 燈的優先序</h3>
+      <div class="chain">
+        <span>error</span><i>&gt;</i><span>business</span><i>&gt;</i><span>not_ready</span><i>&gt;</i><span>ok</span>
+      </div>
+      <p class="tiny" style="margin-top:8px">
+        <b>順序不可調。</b>灰壓過紅會讓「沒載入」蓋掉「壞了」—— 那正是
+        2026-08-28 事故的形狀（真失敗穿灰衣服）。
+      </p>
+      <div class="tbl-scroll" style="margin-top:9px; border:0">
+        <table class="ref" style="min-width:0; font-size:11.5px">
+          <tbody>
+            <tr><td class="src">ok · nr · nr</td><td>⬜ 灰</td></tr>
+            <tr><td class="src">ok · biz · nr</td><td>🫐 莓紅</td></tr>
+            <tr><td class="src">err · nr · nr</td><td>🔴 紅</td></tr>
+            <tr><td class="src">err · biz · ok</td><td>🔴 紅</td></tr>
+            <tr><td class="src">ok · ok · ok</td><td>🟢 綠</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="railcard">
+      <h3>狀態語彙（元件真身）</h3>
+      <div class="legend">
+        <div><b>ok</b><span><code>st.metric</code> ＋ <code>st.caption</code></span></div>
+        <div><b>not_ready</b><span>⬜ 灰字 ＋「請先到：…」</span></div>
+        <div><b>business</b><span>莓紅 <code>#f294b6</code>，左軌 6px</span></div>
+        <div><b>error</b><span>紅框，<b>必帶 <code>exc</code></b></span></div>
+        <div><b>loading</b><span class="badge wn">規格未定義</span></div>
+      </div>
+      <p class="tiny" style="margin-top:9px">
+        顏色 SSOT 在 <code>ui/helpers/render_state.py</code>；
+        <code>cards.py</code> 一行顏色都沒有實作。
+      </p>
+    </div>
+  </aside>
+</div>
+
+<!-- ══════════════ §A 四層 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§A</span><h2>四層結構：每層畫什麼、用哪個元件</h2>
+    <span class="hint">對照規格 §3 / §4 / §5 / §6</span></div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>層</th><th>畫什麼</th><th>元件真身（實測簽章）</th><th>本頁特有的硬點</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="src">層 1</td>
+          <td><b>結論燈</b>一顆，全寬、<b>不進網格</b>。一顆燈＋一句計數。</td>
+          <td><code>state_card(title, value, note, *, state, exc, where)</code></td>
+          <td>燈由<b>件數</b>決定，不由市場漲跌方向決定。優先序不可調。<span class="pin">⛔ 07 綠燈不得寫「今天沒事」</span></td>
+        </tr>
+        <tr>
+          <td class="src">層 2</td>
+          <td><b>3 格核心卡</b>：市場環境／持倉警訊／資料可信度，剛好填滿一列。</td>
+          <td><code>render_cards(cards, cols=GRID_COLS)</code>；<code>GRID_COLS = 3</code></td>
+          <td>每格<b>只印一個讀數＋一句話</b>，細節一律下沉層 4。<span class="pin">⛔ 08 不塞第二張表</span></td>
+        </tr>
+        <tr>
+          <td class="src">層 3</td>
+          <td><b>操作列</b>：取數範圍三個勾選＋送出鈕。<b>就這樣。</b></td>
+          <td><code>applied_form(key, *, submit_label, clear_on_submit, border)</code>
+            → <code>FormGate</code>；<code>if gate:</code> 寫在 <code>with</code> <b>之外</b></td>
+          <td>送出鈕只會去取數。<span class="pin">⛔ 09 不放買賣／再平衡／套用建議配置</span></td>
+        </tr>
+        <tr>
+          <td class="src">層 4</td>
+          <td><b>展開佐證</b>三塊，與層 2 <b>一一對應</b>，預設全部收合。</td>
+          <td><code>st.expander</code> ＋
+            <code>wide_table(data, *, empty_title, empty_missing, empty_where)</code></td>
+          <td>塊數不多不少。<span class="pin">⛔ 06 <code>wide_table</code> 不得進 <code>card_row</code></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="annot" style="margin-top:12px">
+    <b>層 3 的位置代價（客戶 2026-09-16 已拍板接受）：</b>
+    第一次進來時層 1 與層 2 全是灰的，而要按的鈕在<b>它們下面</b>。
+    配套是硬要求 —— 灰態指路一律<b>回讀送出鈕的 session 鍵</b>，而且本頁只回
+    <code>本頁下方「{鈕字}」</code>：<b>是「下方」不是「上方」</b>。
+    把「上方」寫上去，等於把使用者推去一個沒有鈕的地方。
+  </div>
+</section>
+
+<!-- ══════════════ §B 六種狀態 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§B</span><h2>狀態覆蓋：六種示範 ↔ 規格的四種</h2>
+    <span class="hint">客戶指定 5 種，本組加 1 種，理由見表下</span></div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>原型上的狀態</th><th>對到規格的哪一個</th><th>層 1 的燈</th><th>要注意的事</th></tr></thead>
+      <tbody>
+        <tr><td class="src">正常</td><td><code>ok</code>（<code>CARD_STATES</code> 之一）</td><td>🟢 綠</td>
+          <td>文案只能說「三格都取到數，且都沒有越過門檻」。<span class="pin">⛔ 07</span></td></tr>
+        <tr><td class="src">載入中</td>
+          <td><span class="badge wn">規格沒有這一個</span> <code>CARD_STATES</code> 無 <code>loading</code></td>
+          <td>⬜ 灰（骨架）</td>
+          <td><b>把 <code>"loading"</code> 傳進 <code>state_card()</code> 會當場 <code>ValueError</code></b>
+            —— 它刻意不預設成 <code>ok</code>。
+            <s>本原型畫的是<b>提案</b>：要嘛新增第五個
+            <code>CARD_STATE</code>（屬客戶 gate），要嘛併進 <code>not_ready</code>。</s>
+            <b>→ 客戶 2026-09-21 裁示（逐字）：標「提案：新增第 5 個 <code>CARD_STATE</code>，待裁」，不進規格。</b>
+            <span class="tiny">（客戶 2026-09-21 裁示，有意識的變更，不是漏刪）</span></td></tr>
+        <tr><td class="src">業務警訊</td><td><code>business</code></td><td>🫐 莓紅左軌</td>
+          <td>只陳述越了哪條線。<span class="pin">⛔ 15 不接動作句</span></td></tr>
+        <tr><td class="src">缺漏</td><td><code>not_ready</code>（之一：已接線、還沒取數）</td><td>⬜ 灰</td>
+          <td><code>value</code> 留空。<span class="pin">⛔ 14 不得填 <code>—</code> 以外的東西</span>
+            兩格的 <code>where=</code> 指到不同地方。<span class="pin">⛔ 21 不得共用一句</span></td></tr>
+        <tr><td class="src">未接線</td>
+          <td><code>not_ready</code>（之二）＋ <b>整頁層級</b> <code>empty_state()</code></td>
+          <td>—（<b>被空狀態取代</b>）</td>
+          <td>規格 §7：整頁空狀態<b>取代層 1 與層 2</b>，層 3 照留、層 4 收起。
+            三要素必填。<span class="pin">⛔ 17 where 不手抄分頁名</span></td></tr>
+        <tr><td class="src">錯誤</td><td><code>error</code></td><td>🔴 紅框</td>
+          <td><b>必帶 <code>exc</code></b>，否則 <code>state_card()</code> 拋 <code>TypeError</code>。
+            <span class="pin">⛔ 16</span> 整頁<b>只印一個</b>紅框。<span class="pin">⛔ 20</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="annot" style="margin-top:12px">
+    <b>為什麼多做第 6 種（業務警訊）：</b>客戶點名的五種裡沒有它，但層 1 的燈有四格
+    （🔴 / 🫐 / ⬜ / 🟢）。不做業務警訊，優先序
+    <code>error &gt; business &gt; not_ready &gt; ok</code> 裡的 <code>business</code>
+    <b>永遠示範不到</b> —— 而那正是規格寫「順序不可調」要保護的那一格。
+    客戶要的五種一個都沒少，這是第六種。
+  </div>
+  <div class="annot">
+    <b>本組發現的一處規格內部張力（未解，登記而不自行拍板）：</b>
+    規格 §4 的表把格 2 / 格 3 的 <code>where=</code> 釘在 <code>where_to_find("pf_add")</code> /
+    <code>where_to_find("diag")</code>；而 §8 Q1（全部資料源都取不到）要求三格
+    <b>一律回讀層 3 送出鈕的 session 鍵</b>。<b>同一個參數，兩處給了不同值。</b>
+    本原型依情境分派（「缺漏」走 §4、「錯誤」走 §8 Q1），
+    但<b>規格沒有明講哪個優先，這是本組的讀法</b>。
+  </div>
+</section>
+
+<!-- ══════════════ §C ⛔ 清單 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§C</span><h2>⛔ 逐處清單</h2>
+    <span class="hint">出處只寫節號，不寫行號</span></div>
+
+  <div class="crit">
+    <h4>先講判準，再講數字</h4>
+    <p><b>「母法衝突」＝ 這一頁本來會做、但被<u>上位規則</u>擋下來的登記。</b>
+      「衝突」兩個字要有兩邊：一邊是 UI 的自然做法，另一邊是擋它的上位規則，
+      而且規格就地指得出後者。上位規則只認三種：<br>
+      ① 客戶紅線「不產生買賣建議／不出執行鈕」（規格 §0 引
+      <code>spec/UI_SPEC.md</code> 乙-2 與 <code>spec/DECISION_LOG.md</code> ④-2）；<br>
+      ② <code>CLAUDE.md §1</code> Fail Loud（禁止捏造、紅燈要帶得出技術細節、
+      過期快取須帶 <code>is_stale</code>）；<br>
+      ③ 客戶 2026-08-28 拍板的顏色五態分離（真失敗不准穿灰衣服）。</p>
+    <p style="margin-top:8px"><b>不算母法衝突的四類：</b></p>
+    <ul>
+      <li><b>示範</b> —— 只是舉一句反例，沒有新增禁止範圍。</li>
+      <li><b>元件契約 / 框架陷阱</b> —— helper 自己就會拋例外，或 Streamlit 偵測不到而落在呼叫端。</li>
+      <li><b>工程紀律</b> —— 不手抄字面、守衛要寫成執行期。</li>
+      <li><b>版面主張</b> —— 規格自己的設計偏好，沒有指回上位來源。</li>
+    </ul>
+    <div class="tally">
+      <div><b id="t-total">24</b>⛔ 標記總數（實測）</div>
+      <div><b>22</b>⛔ 分布行數</div>
+      <div><b id="t-mu">11</b>判為母法衝突</div>
+      <div><b id="t-no">13</b>判為其他四類</div>
+      <div><b>11</b>客戶說的數字</div>
+    </div>
+    <p class="tiny" style="margin-top:10px">
+      ⚠️ <b>本組先定判準、再逐處套用，算出來才是 11 —— 沒有回頭湊。</b>
+      但<b>本組不宣稱這是同一組 11 項</b>：客戶沒有列出他的清單，
+      兩個 11 有可能只是碰巧相等。要對齊請客戶把他的那 11 項列出來比對。
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>ID</th><th>出處</th><th>規格逐處寫的禁止</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td class="id">⛔ 01</td><td class="src">§0</td><td>不產生任何直接買賣建議。禁用詞：建議買進／立即出清／應該加碼／推薦／必漲／目標價。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 02</td><td class="src">§0</td><td>沒踩關鍵字但語意是買賣動作的句子同樣禁止：「今天該加碼」「此時應提高現金水位」「建議先觀望」。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 03</td><td class="src">§0</td><td>本頁<b>沒有</b>一鍵再平衡鈕，也沒有預設的最佳配置推薦。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 04</td><td class="src">§0</td><td>反例：「VIX 偏高，建議減碼」。</td><td class="jd"><span class="badge no">示範</span></td></tr>
+        <tr><td class="id">⛔ 05</td><td class="src">§1</td><td>本頁是第六張，<b>不得併進</b> <code>story_nav._TAB_LABELS</code>（只有五個 key，站號由順序推導）；<code>where_to_find("today")</code> 會 <code>KeyError</code>。</td><td class="jd"><span class="badge no">技術限制</span></td></tr>
+        <tr><td class="id">⛔ 06</td><td class="src">§2</td><td><code>wide_table()</code> 不得放進 <code>card_row()</code> 的欄位裡（Streamlit 偵測不到，是呼叫端責任）。</td><td class="jd"><span class="badge no">元件契約</span></td></tr>
+        <tr><td class="id">⛔ 07</td><td class="src">§3</td><td>綠燈文案<b>不得</b>寫「今天沒事」「可以放心」—— 綠燈量的是「取到數且未越線」，不是「你的部位安全」。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 08</td><td class="src">§4</td><td>不在卡片裡塞第二張表。</td><td class="jd"><span class="badge no">版面主張</span></td></tr>
+        <tr><td class="id">⛔ 09</td><td class="src">§5</td><td>層 3 裡<b>不放</b>任何買進賣出鈕、任何再平衡鈕、任何「套用建議配置」。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 10</td><td class="src">§5.1</td><td>灰態指路<b>不得手抄字面</b>（鈕字是動態的，手抄任一個都會在另一半時間指錯）。</td><td class="jd"><span class="badge no">工程紀律</span></td></tr>
+        <tr><td class="id">⛔ 11</td><td class="src">§5.1</td><td>不得借用 <code>MACRO_LOAD_BTN_*</code> —— 那是 ① 的鈕，在本頁按不到。</td><td class="jd"><span class="badge no">工程紀律</span></td></tr>
+        <tr><td class="id">⛔ 12</td><td class="src">§5.1</td><td>指路函式只讀 session 鍵，<b>不自己重判一次載入狀態</b>（剛按下的那一輪會得到相反的字）。</td><td class="jd"><span class="badge no">工程紀律</span></td></tr>
+        <tr><td class="id">⛔ 13</td><td class="src">§5.1</td><td>守衛不能只靠靜態規則 —— 跨檔規則以 <code>「」</code> 內的字面值 opt-in，<code>where=</code> 改成變數它就看不到；必須另寫<b>執行期</b>守衛。</td><td class="jd"><span class="badge no">工程紀律</span></td></tr>
+        <tr><td class="id">⛔ 14</td><td class="src">§7</td><td><code>not_ready</code> 的 <code>value</code> 留空，<b>不得填 <code>—</code> 以外的東西</b>（§1 禁止捏造）。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 15</td><td class="src">§7</td><td><code>business</code> 只陳述越了哪條線，<b>不接動作句</b>。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 16</td><td class="src">§7</td><td><code>error</code> 沒有 <code>exc</code> 就不准用 —— 紅燈要帶得出技術細節，否則它只是一個紅色的猜測。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 17</td><td class="src">§7</td><td><code>empty_state</code> 的「去哪補」<b>不手抄分頁名</b>。</td><td class="jd"><span class="badge no">工程紀律</span></td></tr>
+        <tr><td class="id">⛔ 18</td><td class="src">§8 Q1</td><td><b>不用上次的值頂著。</b> 真要顯示過期快取，必須帶 <code>is_stale</code> 旗標且明寫資料日期（§1／§2.4）。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 19</td><td class="src">§8 Q1</td><td>不畫空表格外框（<code>wide_table</code> 的空分支已經擋掉）。</td><td class="jd"><span class="badge no">元件契約</span></td></tr>
+        <tr><td class="id">⛔ 20</td><td class="src">§8 Q1</td><td><b>不把整頁灰掉當作沒事</b> —— 取不到是 <code>error</code>，不是 <code>not_ready</code>；兩者穿同一件灰衣服就回到 2026-08-28 那次事故的形狀。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 21</td><td class="src">§8 Q2</td><td>兩格的 <code>where=</code> 可能指到不同地方，<b>不得共用一句</b>。</td><td class="jd"><span class="badge no">版面主張</span></td></tr>
+        <tr><td class="id">⛔ 22</td><td class="src">§8 Q2</td><td>灰燈文案要寫「1 格有數、2 格還沒取」，<b>不得寫成「今天沒事」</b>。</td><td class="jd"><span class="badge mu">母法衝突</span></td></tr>
+        <tr><td class="id">⛔ 23</td><td class="src">§8 Q2</td><td>不補空卡湊滿三欄（<code>card_grid</code> 本來就留白不補）。</td><td class="jd"><span class="badge no">元件契約</span></td></tr>
+        <tr><td class="id">⛔ 24</td><td class="src">§8 Q2</td><td><b>不把三格的分母藏起來</b> —— 使用者要看得出「這一頁本來有三格」。</td><td class="jd"><span class="badge no">版面主張</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════ §D 按鈕字 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§D</span><h2>按鈕字逐顆標 ✓ ／ ⚠</h2>
+    <span class="hint">客戶第 8 點</span></div>
+  <div class="crit">
+    <h4>判準</h4>
+    <ul>
+      <li><b>✓</b> ＝ 這顆鈕的<b>字面</b>可以在 repo 既有 SSOT 或
+        <code>22_ui_page_today.md</code> 裡<b>逐字</b>找到，出處寫在表上。</li>
+      <li><b>⚠</b> ＝ 本組自擬。規格只給了<b>角色</b>（「新增自己的兩個」）沒給<b>字面</b>；
+        或這顆鈕<b>只存在於本原型</b>、不會進 app。</li>
+    </ul>
+    <div class="tally">
+      <div><b>7</b>app 內 ✓</div>
+      <div><b>2</b>app 內 ⚠</div>
+      <div><b>4</b>原型外框 ⚠（不進 app）</div>
+    </div>
+  </div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>記號</th><th>字面</th><th>在哪</th><th>出處／理由</th></tr></thead>
+      <tbody>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td><code>📥 取得今天的數字</code></td><td>層 3 送出鈕（<b>沒取過數</b>版）</td><td><b>本組自擬。</b> §5.1 只規定「本頁新增自己的兩個」常數並<b>不得借用</b> <code>MACRO_LOAD_BTN_*</code>，沒有給字面。</td></tr>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td><code>🔄 重新取得今天的數字</code></td><td>層 3 送出鈕（<b>取過數</b>版）</td><td>同上。兩個一起自擬，因為鈕字必須是<b>一對</b>才有動態切換可言。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>市場環境</code></td><td>層 3 勾選 1</td><td>§5「取數範圍的勾選（市場環境／持倉／資料健康三選項）」逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>持倉</code></td><td>層 3 勾選 2</td><td>同上，逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>資料健康</code></td><td>層 3 勾選 3</td><td>同上，逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>市場環境</code></td><td>層 4 expander 1</td><td>§4 表格 ＋ §6「塊數與層 2 一一對應（市場環境／持倉警訊／資料可信度）」逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>持倉警訊</code></td><td>層 4 expander 2</td><td>同上，逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>資料可信度</code></td><td>層 4 expander 3</td><td>同上，逐字。</td></tr>
+        <tr><td class="jd"><span class="badge ok">✓</span></td><td><code>🔧 技術細節</code></td><td>錯誤態的可展開區塊</td><td><code>ui/helpers/render_state.py::system_error</code> 的 hint 裡逐字（「請展開下方『🔧 技術細節』把 traceback 截圖回報」）。</td></tr>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td>狀態切換 6 顆</td><td><b>原型外框</b></td><td>只為了讓客戶一鍵看六種狀態，<b>不會進 app</b>。</td></tr>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td>斷點 <code>375 / 768 / 1280</code></td><td><b>原型外框</b></td><td>同上。app 沒有任何由本 repo 控制的寬度斷點（§2）。</td></tr>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td><code>沒取過數 / 取過數</code></td><td><b>原型外框</b></td><td>模擬 session 狀態切換，用來示範鈕字與指路字同步變化。</td></tr>
+        <tr><td class="jd"><span class="badge wn">⚠</span></td><td><code>跟隨系統 / 淺色 / 深色</code></td><td><b>原型外框</b></td><td>主題切換；<b>app 釘死深色</b>，這顆鈕只影響本原型的註記層。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="annot" style="margin-top:12px">
+    <b>送出鈕那兩顆為什麼一定要成對自擬：</b>
+    <code>shared/ui_control_labels.py</code> 檔頭記著三則手抄文案<b>全部指錯</b>，
+    其中一則文案寫「📡 載入總經資料」、畫面實際是「🔄 更新總經資料」——
+    <b>那是同一顆鈕的兩個狀態</b>。所以「指路字回讀這一輪實際用過的那個字」
+    才是唯一不會分岔的做法。本原型上方切「取過數／沒取過數」，
+    鈕字與層 1／層 2 的灰態指路字<b>會一起變</b>，就是在示範這件事。
+  </div>
+</section>
+
+<!-- ══════════════ §E Token ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§E</span><h2>色彩 token 表</h2>
+    <span class="hint">全部「待補」—— <code>UI_TOKENS.md</code> 不存在</span></div>
+  <div class="crit">
+    <h4>為什麼每一格都寫「待補」</h4>
+    <p>客戶指名的 <code>UI_TOKENS.md</code> <b>實測不存在</b>（<code>docs/v2/</code> 底下沒有，全 repo 也沒有）。
+      所以本原型的顏色<b>沒有一個是已拍板的 token</b>。
+      但它們不是憑空挑的 —— 下表的「出處」欄分成兩種：
+      <b>A 類</b>有 <code>shared/colors.py</code> 的真實常數可依（照抄其值），
+      <b>B 類</b>是本組自訂佔位。<b>兩類都要補，但補的難度差很多。</b></p>
+  </div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th>變數名</th><th>佔位值</th><th>用途</th><th>出處</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td class="src">--app-bg</td><td><span class="swatch" style="background:#0e1117"></span><code>#0e1117</code></td><td>App 螢幕底色（客戶硬要求）</td><td class="src">A · <code>colors.STREAMLIT_BG</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--app-card</td><td><span class="swatch" style="background:#161b22"></span><code>#161b22</code></td><td>卡片底</td><td class="src">A · <code>GH_BG_CARD</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--app-border</td><td><span class="swatch" style="background:#30363d"></span><code>#30363d</code></td><td>1px 邊框</td><td class="src">A · <code>GH_BORDER</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--app-fg</td><td><span class="swatch" style="background:#e6edf3"></span><code>#e6edf3</code></td><td>主文字</td><td class="src">A · <code>GH_FG_PRIMARY</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--app-muted</td><td><span class="swatch" style="background:#8b949e"></span><code>#8b949e</code></td><td>灰態文字 ⬜</td><td class="src">A · <code>GH_FG_MUTED</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--st-biz-fg</td><td><span class="swatch" style="background:#f294b6"></span><code>#f294b6</code></td><td>業務警訊前景（莓紅）</td><td class="src">A · <code>BUSINESS_ALERT_ON_DARK</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--st-biz-bg</td><td><span class="swatch" style="background:#2a0a0a"></span><code>#2a0a0a</code></td><td>業務警訊卡底</td><td class="src">A · <code>BG_DARK_RED_1</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--st-biz-rail</td><td><code>6px</code></td><td>業務警訊左軌粗細</td><td class="src">A · <code>BUSINESS_ALERT_RAIL_PX</code></td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--st-ok</td><td><span class="swatch" style="background:#22c55e"></span><code>#22c55e</code></td><td>綠燈</td><td class="src">A · <code>TRAFFIC_GREEN</code>（<b>綠燈本身沒有專屬常數</b>，這是借用）</td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--st-err</td><td><span class="swatch" style="background:#ff4b4b"></span><code>#ff4b4b</code></td><td>系統紅框</td><td class="src">B · 本組佔位（Streamlit <code>st.error</code> 預設紅；repo <b>沒有</b>對應常數）</td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--draft</td><td><span class="swatch" style="background:#0f6b6c"></span><code>#0f6b6c</code> / <code>#5fd3d0</code></td><td><b>註記層主色</b>（⚠ 不是 app 的顏色）</td><td class="src">B · 本組自訂。<b>刻意挑青色</b> —— repo 的語意色集是紅／莓紅／橘／黃／綠／灰，青色不在裡面，<b>不可能被誤讀成某個狀態</b>。</td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--stop</td><td><span class="swatch" style="background:#8c1d3f"></span><code>#8c1d3f</code> / <code>#f294b6</code></td><td>⛔ 標記</td><td class="src">B · 本組佔位</td><td class="jd"><span class="badge wn">待補</span></td></tr>
+        <tr><td class="src">--paper / --sheet / --ink / --rule</td><td><span class="swatch" style="background:#e6eaf0"></span>4 組</td><td>註記層底／卡／字／線（<b>隨主題變</b>）</td><td class="src">B · 本組佔位。深色時 <code>--paper</code> = <code>#0e1117</code>（客戶硬要求）</td><td class="jd"><span class="badge wn">待補</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="annot" style="margin-top:12px" id="t-app-bg">
+    <b>T-APP-BG：為什麼「螢幕」在淺色主題下還是深色。</b>
+    <code>shared/colors.py</code> 就地寫著：<code>BUSINESS_ALERT_ON_LIGHT</code>（<code>#96124a</code>，
+    淺色底的業務警訊配對值）<b>已進 SSOT 但 production 用不到</b>，
+    原因是「<b>App 釘死深色 ＋ 本 repo 沒有主題感知機制</b>」。
+    所以把螢幕畫成淺色會是一張<b>不存在的畫面</b>。
+    本原型的處置：<b>註記層跟著主題走（深色時底色正是 <code>#0e1117</code>），螢幕永遠深色。</b>
+  </div>
+  <div class="annot" style="margin-top:12px" id="a-fonts">
+    <b>字體：外部來源，不是 token，客戶已就地裁示。</b>
+    本頁的 <code>IBM Plex Mono</code> 與 <code>Noto Sans TC</code> 由
+    <code>fonts.googleapis.com</code> 供給，<b>不是 repo 內的資產</b>，上表也沒有對應的一列。
+    <b>客戶 2026-09-21 裁示（逐字）：「原型用，正式版改系統字或自架」。</b>
+    本輪處置：<b>保留現狀不動</b>，並在 <code>&lt;head&gt;</code> 的三行 <code>&lt;link&gt;</code>
+    旁邊留了同一句註解 —— 讀原始碼與讀畫面的人看到的是同一句。
+  </div>
+</section>
+
+<!-- ══════════════ §F 響應式 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§F</span><h2>三斷點 375 / 768 / 1280</h2>
+    <span class="hint">兩件事要分開讀</span></div>
+  <div class="card">
+    <p><b>① 本原型自己的響應式是真的。</b> 縮瀏覽器視窗就會看到：
+      <code>≤1280</code> 註記軌移到螢幕下方；<code>≤768</code> 三格核心卡與三個勾選
+      <b>塌成 1 欄</b>；<code>≤375</code> 再收一次字級與內距。
+      上方那三顆斷點鈕另外用 <code>@container</code> 讓<b>模擬框</b>也跟著塌，
+      不必縮視窗就看得到。</p>
+    <p style="margin-top:10px"><b>② 但這不代表 app 會這樣。</b>
+      規格 §2 逐字寫著：<b>這個 app 目前沒有任何由本 repo 控制的寬度斷點。</b>
+      production 只有兩處 <code>@media</code>，都不是寬度斷點（一處在註解裡、
+      一處是 <code>prefers-color-scheme:dark</code>）。
+      「手機塌成 1 欄」由 Streamlit 自己決定，而
+      <code>ui/helpers/ia/layout.py</code> 的模組 docstring <b>自陳「本組沒有實測」</b>。</p>
+    <div class="annot" style="margin-top:12px">
+      <b>所以本原型的三斷點是「提案」，不是「量測」。</b>
+      它示範的是<b>應該長成什麼樣</b>；<b>會不會真的長成那樣，要在真機上開窄視窗看。</b>
+      本組沒有裝置可量（同 §H）。
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ §G 落差 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§G</span><h2>三個落差：客戶指令 vs repo 實況</h2>
+    <span class="hint">逐條附實測</span></div>
+
+  <div class="card">
+    <h3 style="font-size:15px">G1 · 元件庫不是 <code>ui/components/</code></h3>
+    <p class="note" style="margin-top:6px"><b>客戶指令：</b>「<code>UI_COMPONENTS.md</code> 不存在 → 用
+      <code>ui/components/</code> 為實質來源」。</p>
+    <p class="note" style="margin-top:6px"><b>實測：</b>
+      <code>UI_COMPONENTS.md</code> 確實不存在（這半句對）。但規格點名的元件
+      <b>全部</b>住在 <code>ui/helpers/ia/</code>（<code>state_card</code> /
+      <code>render_cards</code> / <code>CARD_STATES</code> / <code>card_row</code> /
+      <code>wide_table</code> / <code>GRID_COLS</code> / <code>empty_state</code> /
+      <code>applied_form</code>）與 <code>ui/helpers/render_state.py</code>
+      （<code>not_ready</code> / <code>system_error</code>）。
+      <code>22_ui_page_today.md</code> 提到 <code>ui/components</code> <b>0 次</b>、
+      提到 <code>ui/helpers/ia</code> <b>2 次</b>；
+      <code>ui/components/cards.py</code> 裡只有一個 <code>gh_card</code>，規格從未提及。</p>
+    <p class="note" style="margin-top:6px"><b>處置：</b>以
+      <code>ui/helpers/ia/</code> ＋ <code>ui/helpers/render_state.py</code> 為實質來源
+      —— 客戶同時指定的「<code>UI_PAGE_TODAY.md</code> 規格說了算」在這裡是決勝的那一句。
+      <b>本原型沒有發明任何這兩處以外的元件。</b></p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3 style="font-size:15px">G2 · ⛔ 不是 11 處，是 24 個標記 / 22 行</h3>
+    <p class="note" style="margin-top:6px"><b>客戶指令：</b>「母法衝突逐處標 ⛔（今天頁已知 11 處）」。</p>
+    <p class="note" style="margin-top:6px"><b>實測：</b>規格全檔 ⛔ <b>24 個</b>，分布在 <b>22 行</b>
+      （其中兩行各有兩個）。多數是<b>設計禁令</b>（「不得放進」「不補空卡」），
+      <b>不是</b>母法衝突登記。</p>
+    <p class="note" style="margin-top:6px"><b>處置：</b>§C 逐處列出實際找到的 24 處，
+      先寫判準再分類，判為母法衝突 <b>11 處</b>。
+      <b>本組沒有硬湊</b> —— 判準（見 §C）是先寫下來再套用的；
+      <b>也不宣稱這 11 項就是客戶心中的那 11 項</b>。</p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3 style="font-size:15px">G3 · 五種狀態 ↔ 規格的四種</h3>
+    <p class="note" style="margin-top:6px"><b>客戶指令：</b>「狀態覆蓋至少 5 種（正常、載入中、缺漏、未接線、錯誤）」。</p>
+    <p class="note" style="margin-top:6px"><b>實測：</b><code>CARD_STATES</code> 只有四個 ——
+      <code>ok</code> / <code>not_ready</code> / <code>business</code> / <code>error</code>。對映：</p>
+    <ul class="note" style="margin:6px 0 0; padding-left:20px">
+      <li><b>正常</b> → <code>ok</code>；<b>錯誤</b> → <code>error</code>（必帶 <code>exc</code>）。</li>
+      <li><b>缺漏</b> 與 <b>未接線</b> 在規格裡<b>同屬 <code>not_ready</code></b>
+        —— 前者是「已接線、還沒取數」，後者本原型畫成規格 §7 的
+        <b>整頁層級空狀態</b>（<code>empty_state</code> 取代層 1 與層 2）。
+        兩者的差別在<b>「去哪補」指到哪</b>，不在顏色。</li>
+      <li><b>載入中</b> —— <span class="badge wn">規格沒有這一個</span>。
+        <code>CARD_STATES</code> 裡沒有 <code>loading</code>，
+        把它傳進 <code>state_card()</code> 會當場 <code>ValueError</code>
+        （該函式<b>刻意不預設成 <code>ok</code></b>：「預設成 OK 是最糟的降級」）。</li>
+      <li><b>本組加的第 6 種：業務警訊</b>（<code>business</code>）—— 不加它，
+        層 1 優先序裡的 <code>business</code> 永遠示範不到。</li>
+    </ul>
+    <p class="note" style="margin-top:8px"><b>處置：</b>六種都畫。
+      「載入中」畫成<b>骨架恆畫、內容留灰</b>的樣子。
+      <s>並就地標明它是<b>提案</b>：
+      要嘛新增第五個 <code>CARD_STATE</code>（改的是客戶拍板過的狀態語彙，
+      屬客戶 gate），要嘛併進 <code>not_ready</code>。
+      <b>本原型不替客戶決定，兩條路都列出來。</b></s></p>
+    <p class="note" style="margin-top:8px"><b>→ 客戶 2026-09-21 裁示（逐字）：</b>
+      標「<b>提案：新增第 5 個 <code>CARD_STATE</code>，待裁</b>」，<b>不進規格</b>。</p>
+    <p class="tiny" style="margin-top:6px">
+      ⚠️ <b>客戶 2026-09-21 裁示，有意識的變更，不是漏刪</b> —— 上一段加刪除線保留。
+      <b>被換掉的是「本原型並列兩條出路」這個做法</b>：客戶的裁示只點名一條出路
+      （新增第 5 個 <code>CARD_STATE</code>），並把它的狀態定為<b>待裁</b>、<b>不進規格</b>。
+      <b>舊表述的事實面一字未改、也沒有被推翻</b> —— <code>CARD_STATES</code> 只有四個、
+      <code>state_card(state="loading")</code> 會 <code>ValueError</code>，兩者都是實測，原樣留在上面那幾行。
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════ §H 未查證 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="n">§H</span><h2>本組沒有查證什麼</h2>
+    <span class="hint">依 <code>CLAUDE.md §-2</code> 規則 6 據實揭露</span></div>
+  <div class="disclose">
+    <p><b>這一節不准空白，也不准美化。以下每一條都是本原型的已知空洞。</b></p>
+    <ul>
+      <li><b>沒有開過真的 Streamlit 畫面。</b> 沙箱沒有瀏覽器、也沒有跑起來的 app。
+        本頁的視覺是本組<b>照元件原始碼推想</b>的樣子，<b>不是 screenshot</b>
+        —— <code>st.metric</code> / <code>st.caption</code> / <code>st.expander</code>
+        真的長什麼樣，本組沒看過。</li>
+      <li><b>沒有量過任何真機斷點。</b> 本原型的 375 / 768 / 1280 是<b>本原型自己的 CSS</b>；
+        <code>layout.py</code> 的 docstring 自陳「手機塌成 1 欄」這件事
+        <b>它自己也沒有實測</b>。兩邊都沒量。</li>
+      <li><b>沒有跑過任何測試。</b> 本頁引用的守衛行為
+        （<code>test_ia_kit.py</code> 的三態／gate 契約、
+        <code>test_ui_rerun_contract.py</code> 的 <code>FORM_SITE_TOTAL == 7</code>、
+        <code>test_every_where_names_something_that_exists_on_screen</code> 的 opt-in 缺口）
+        <b>全部轉述自規格與 docstring</b>，一條都沒有實跑。</li>
+      <li><b>「⛔ 只有 24 處」只掃了 ⛔ 這一個符號。</b>
+        規格裡若有<b>語意上是禁令、但沒有打這個符號</b>的句子，
+        本組的指令<b>結構上就掃不到</b>（同 <code>CLAUDE.md §-1.5.1c</code> 判定 2 的字表教訓：
+        字表選錯，掃再多次都一樣）。</li>
+      <li><b>沒有查證本組這 11 項是不是客戶心中的那 11 項。</b> 客戶沒有列清單，
+        兩個 11 可能只是碰巧相等。</li>
+      <li><b>沒有開過 <code>spec/UI_SPEC.md</code> 乙-2 與 <code>spec/DECISION_LOG.md</code>。</b>
+        §C 判準裡那條「客戶紅線」是<b>規格轉述</b>的，本組未回頭讀原文覆核。</li>
+      <li><b>沒有實跑 <code>where_to_find()</code>。</b> 畫面上的
+        <code>④ 📊 資產配置 → ➕ 加入與管理基金</code> 與
+        <code>⑤ ⚙️ 設定與診斷 → 🔭 資料診斷</code> 是本組讀
+        <code>_TAB_LABELS</code> / <code>_SECTION_LABELS</code> / <code>_SECTION_TO_TAB</code>
+        三張表<b>手算</b>出來的，不是函式輸出。</li>
+      <li><b>沒有查證「送出鈕那兩個字面客戶會不會接受」。</b> 那兩顆是本組自擬（§D ⚠），
+        字面要客戶拍板才算數。</li>
+      <li><b>沒有第二組獨立複驗。</b> 本原型與其上所有判定由 Y 組單組產出。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════ 頁尾 ══════════════ -->
+<footer class="foot">
+  <p><b>它是什麼：</b>一份<b>線框原型</b> —— 把
+    <code>docs/v2/22_ui_page_today.md</code> 的四層結構、六種狀態、⛔ 清單畫成可點的樣子，
+    給客戶在<b>動工寫 UI 代碼之前</b>驗收版面與動線（母法階段 1：草稿先行）。</p>
+  <p style="margin-top:8px"><b>它不是什麼：</b>不是實作，不是 Streamlit，不接任何真實資料
+    —— 畫面上每一個數字都標了「示意」。不畫圖表。不含任何 <code>.py</code>。
+    只做「今天」一頁，其餘四頁不在本次範圍。純 HTML/CSS/JS，沒有引入任何外部框架
+    （只從 Google Fonts 取兩支字體，離線開啟會退回系統字，不影響版面）。</p>
+  <p style="margin-top:8px"><b>元件語彙取自：</b>
+    <code>ui/helpers/ia/cards.py</code>（<code>state_card</code> / <code>render_cards</code> /
+    <code>CARD_STATES</code>）、<code>ui/helpers/ia/layout.py</code>（<code>card_row</code> /
+    <code>card_grid</code> / <code>wide_table</code> / <code>GRID_COLS</code>）、
+    <code>ui/helpers/ia/empty_state.py</code>（<code>empty_state</code>）、
+    <code>ui/helpers/ia/gated_form.py</code>（<code>applied_form</code> / <code>FormGate</code>）、
+    <code>ui/helpers/render_state.py</code>（<code>not_ready</code> / <code>system_error</code> /
+    <code>business_alert</code> / <code>NOT_READY_MARK</code>）。</p>
+  <p style="margin-top:8px" class="tiny">
+    Y 組 UI 原型組 · 2026-09-21 · head <code>e1b2c6c</code> ·
+    <b>本檔未 commit</b>，等客戶看過再決定要不要進 repo。
+  </p>
+</footer>
+
+</div><!-- /.wrap -->
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════
+   §5.1 的四步，照抄 `page_01_macro` 已驗證的 `_SK_BTN` ＋ `_where_to_load()`。
+   本原型用一個 JS 物件模擬 `st.session_state`，形狀刻意一致：
+     步驟 1 鈕字收進常數（SSOT）
+     步驟 2 這一輪的鈕字先算成一個變數
+     步驟 3 存進 session 鍵，再把同一個變數交給表單  ← 同一個變數餵兩邊
+     步驟 4 指路函式只讀那個鍵，不自己重判一次載入狀態
+   ════════════════════════════════════════════════════════════════════ */
+
+/* 步驟 1 —— 本頁新增自己的兩個常數。⛔ 11：不得借用 MACRO_LOAD_BTN_*。 */
+var TODAY_LOAD_BTN_FIRST = "📥 取得今天的數字";
+var TODAY_LOAD_BTN_AGAIN = "🔄 重新取得今天的數字";
+var SK_BTN = "today_submit_label";
+var SESSION = Object.create(null);
+
+/* 步驟 4 —— 只讀鍵，不重判。且本頁只回「本頁下方」，不帶分頁名前綴
+   （where_to_find("today") 會 KeyError，⛔ 05）。是「下方」不是「上方」。 */
+function whereToLoad(){ return '本頁下方「' + SESSION[SK_BTN] + '」'; }
+
+/* where_to_find() 的手算結果（§H 揭露：未實跑該函式） */
+var WHERE_PF_ADD = "④ 📊 資產配置 → ➕ 加入與管理基金";
+var WHERE_DIAG   = "⑤ ⚙️ 設定與診斷 → 🔭 資料診斷";
+
+/* not_ready() 的實際輸出形狀：`⬜ {message}（請先到：{where}）` */
+var NOT_READY_MARK = "⬜";
+function notReady(msg, where){
+  return NOT_READY_MARK + " " + msg + (where ? "（請先到：" + where + "）" : "");
+}
+
+var ui = {
+  state: "ok",
+  bp: 1280,
+  fetched: false,
+  theme: "system"
+};
+
+/* ── 層 2 三格的內容（示意資料，逐筆標「示意」） ──────────── */
+function cardsFor(st){
+  if (st === "loading"){
+    return [
+      {title:"市場環境", kind:"sk"},
+      {title:"持倉警訊", kind:"sk"},
+      {title:"資料可信度", kind:"sk"}
+    ];
+  }
+  if (st === "ok"){
+    return [
+      {title:"市場環境", kind:"ok", value:"VIX 18.6（示意）",
+       note:"未越過 22 黃線。NDC 燈號綠燈（示意）。"},
+      {title:"持倉警訊", kind:"ok", value:"0 檔（示意）",
+       note:"沒有標的的近一年含息報酬低於年化配息率。"},
+      {title:"資料可信度", kind:"ok", value:"全數正常（示意）",
+       note:"FRED release window 內的正常 lag 不列為異常。"}
+    ];
+  }
+  if (st === "business"){
+    return [
+      {title:"市場環境", kind:"biz", value:"VIX 24.1（示意）",
+       note:"已越過 22 黃線，尚未觸及 30 恐慌線。"},
+      {title:"持倉警訊", kind:"biz", value:"3 檔（示意）",
+       note:"近一年含息報酬低於年化配息率。"},
+      {title:"資料可信度", kind:"ok", value:"全數正常（示意）",
+       note:"FRED release window 內的正常 lag 不列為異常。"}
+    ];
+  }
+  if (st === "missing"){
+    /* Q2：只有 1 格有資料。有資料的照常畫，不因為隔壁是空的就一起灰掉。
+       兩格的 where= 指到不同地方（⛔ 21 不得共用一句）。 */
+    return [
+      {title:"市場環境", kind:"ok", value:"VIX 18.6（示意）",
+       note:"未越過 22 黃線。NDC 燈號綠燈（示意）。"},
+      {title:"持倉警訊", kind:"nr",
+       note:"還沒有任何保單或扣款標的，算不出吃本金與影子基金重疊。",
+       where:WHERE_PF_ADD},
+      {title:"資料可信度", kind:"nr",
+       note:"還沒讀取資料來源新鮮度與 nav_history 累積起訖。",
+       where:WHERE_DIAG}
+    ];
+  }
+  /* error（Q1 全滅）：三格全部 not_ready 灰態，where= 一律回讀送出鈕。
+     value 留空 —— ⛔ 14 不得填「—」以外的東西。 */
+  return [
+    {title:"市場環境", kind:"nr", note:"總經指標這一輪一項都沒取到。", where:whereToLoad()},
+    {title:"持倉警訊", kind:"nr", note:"持倉相關數字這一輪一項都沒取到。", where:whereToLoad()},
+    {title:"資料可信度", kind:"nr", note:"資料健康檢查這一輪沒有跑完。", where:whereToLoad()}
+  ];
+}
+
+/* ── 層 1 的燈 ─────────────────────────────────────────── */
+function lampHTML(st){
+  if (st === "loading"){
+    return '<div class="lamp load"><div class="top"><span class="glyph">⬜</span>' +
+      '<span class="headline">取數中…</span></div>' +
+      '<div class="lines"><div class="sk w2"></div><div class="sk w1"></div></div>' +
+      '<div class="where">骨架恆畫、內容留灰 —— 整頁空白會讓「還沒載入」與「這頁壞了」長得一模一樣。</div></div>';
+  }
+  if (st === "ok"){
+    return '<div class="lamp ok"><div class="top"><span class="glyph">🟢</span>' +
+      '<span class="headline">三格都取到數，且都沒有越過門檻。</span></div>' +
+      '<div class="lines"><div>需要你看一眼的件數：0 件（示意）</div></div></div>';
+  }
+  if (st === "business"){
+    return '<div class="lamp biz"><div class="top"><span class="glyph">🫐</span>' +
+      '<span class="headline">今天有 4 件事越過了已設定的門檻。</span></div>' +
+      '<div class="lines">' +
+      '<div>VIX 24.1（示意），已越過 22 黃線、尚未觸及 30。</div>' +
+      '<div>3 檔（示意）的近一年含息報酬低於年化配息率。</div>' +
+      '</div></div>';
+  }
+  if (st === "missing"){
+    return '<div class="lamp gray"><div class="top"><span class="glyph">⬜</span>' +
+      '<span class="headline">1 格有數、2 格還沒取。</span></div>' +
+      '<div class="where">' + notReady("持倉與資料健康這兩類今天還沒有可比對的東西", whereToLoad()) +
+      '</div></div>';
+  }
+  /* error：整頁只印一個紅框（⛔ 20）；必帶 exc（⛔ 16） */
+  return '<div class="lamp err"><div class="top"><span class="glyph">🔴</span>' +
+    '<span class="headline">今天有 3 項數字算不出來，這一頁的結論先不要看。</span></div>' +
+    '<div class="lines"><div>三個上游（FRED／FundClear／Google Sheets）這一輪全部沒有回應。' +
+    '本次沒有用上次的值頂著。</div></div>' +
+    '<details class="exp" style="margin-top:10px"><summary>🔧 技術細節</summary>' +
+    '<div class="body"><div class="errdetail">requests.exceptions.ConnectTimeout: ' +
+    'HTTPSConnectionPool(host=&#39;api.stlouisfed.org&#39;, port=443): ' +
+    'Read timed out. (read timeout=20)\n  File &quot;repositories/macro/fred.py&quot;, line ' +
+    '— , in fetch_fred   （示意 traceback）</div>' +
+    '<div class="note" style="margin-top:8px;color:var(--app-muted)">' +
+    '此區塊已隔離，其他區塊與分頁不受影響；請展開技術細節把 traceback 截圖回報。</div>' +
+    '</div></details></div>';
+}
+
+/* ── 層 2 ─────────────────────────────────────────────── */
+function cardHTML(c){
+  if (c.kind === "sk"){
+    return '<div class="cardx"><div class="t">' + c.title + '</div>' +
+      '<div class="sk h"></div><div class="sk w2"></div></div>';
+  }
+  if (c.kind === "nr"){
+    /* value 留空 —— ⛔ 14 */
+    return '<div class="cardx nr"><div class="t">' + c.title + '</div>' +
+      '<div class="n">' + notReady(c.note, c.where) + '</div></div>';
+  }
+  if (c.kind === "biz"){
+    return '<div class="cardx biz"><div class="t">' + c.title + '</div>' +
+      '<div class="v">' + c.value + '</div><div class="n">' + c.note + '</div></div>';
+  }
+  return '<div class="cardx"><div class="t">' + c.title + '</div>' +
+    '<div class="v">' + c.value + '</div><div class="n">' + c.note + '</div></div>';
+}
+
+/* ── 層 4：三塊，與層 2 一一對應，預設全收合 ──────────── */
+function expHTML(st){
+  var empty = (st === "error" || st === "unwired" || st === "loading");
+  var b1, b2, b3;
+
+  if (empty){
+    b1 = emptyInline("市場環境還沒有可以攤開的東西",
+      "今天這一輪沒有取到任何總經指標序列", whereToLoad(),
+      "取到之後這裡會出現逐指標的讀數、門檻與資料日期");
+    b2 = emptyInline("持倉警訊還沒有可以攤開的東西",
+      "還沒有任何保單或扣款標的", WHERE_PF_ADD,
+      "補完後這裡會自動出現逐檔的吃本金與重疊度");
+    b3 = emptyInline("資料可信度還沒有可以攤開的東西",
+      "還沒讀到資料來源新鮮度與 nav_history 累積起訖", WHERE_DIAG,
+      "讀到之後這裡會出現逐來源的 lag 與異常清單");
+  } else {
+    b1 = '<div class="note" style="color:var(--app-muted)">逐指標讀數與門檻（示意）。' +
+      '這是 <code style="background:#11161d;border-color:#30363d;color:#c9d1d9">wide_table()</code>' +
+      ' 的位置：<b>全寬、橫向捲動，不進欄位</b>（⛔ 06）。</div>' +
+      '<div class="tscroll"><table class="wt"><thead><tr>' +
+      '<th>指標</th><th>讀數</th><th>黃線</th><th>紅線</th><th>資料日期</th><th>來源</th><th>狀態</th>' +
+      '</tr></thead><tbody>' +
+      '<tr><td>VIX</td><td>18.6（示意）</td><td>22.0</td><td>30.0</td><td>2026-09-19（示意）</td><td>Yahoo ^VIX</td><td>未越線</td></tr>' +
+      '<tr><td>US10Y-2Y</td><td>0.42（示意）</td><td>0.00</td><td>-0.50</td><td>2026-09-18（示意）</td><td>FRED</td><td>未越線</td></tr>' +
+      '<tr><td>NDC 景氣對策信號</td><td>綠燈 26（示意）</td><td>黃藍燈</td><td>藍燈</td><td>2026-08（示意）</td><td>FinMind</td><td>未越線</td></tr>' +
+      '<tr><td>CPI YoY</td><td>2.1%（示意）</td><td>3.0%</td><td>5.0%</td><td>2026-08（示意）</td><td>FRED</td><td>未越線</td></tr>' +
+      '</tbody></table></div>';
+    b2 = '<div class="note" style="color:var(--app-muted)">逐檔吃本金與影子基金重疊（示意）。' +
+      '少量條目走 <code style="background:#11161d;border-color:#30363d;color:#c9d1d9">card_row(cols=3)</code>。</div>' +
+      '<div class="ministat">' +
+      '<div>吃本金<b>0 檔（示意）</b></div>' +
+      '<div>無法判定<b>1 檔（示意）</b></div>' +
+      '<div>重疊 &gt; 0.70<b>0 組（示意）</b></div>' +
+      '</div><div class="note" style="margin-top:8px;color:var(--app-muted)">' +
+      '算不出含息報酬或配息率的，歸「<b>無法判定</b>」—— <b>不歸「沒吃本金」</b>。</div>';
+    b3 = '<div class="note" style="color:var(--app-muted)">來源新鮮度與累積起訖（示意）。</div>' +
+      '<div class="ministat">' +
+      '<div>來源全數正常<b>18 / 18（示意）</b></div>' +
+      '<div>nav_history 起<b>2024-03-11（示意）</b></div>' +
+      '<div>nav_history 訖<b>2026-09-19（示意）</b></div>' +
+      '</div><div class="note" style="margin-top:8px;color:var(--app-muted)">' +
+      'FRED release window 內的正常 lag <b>不列進異常</b>；全正常要印得出「全數正常」。</div>';
+  }
+  return block("市場環境", b1) + block("持倉警訊", b2) + block("資料可信度", b3);
+}
+function block(t, body){
+  return '<details class="exp"><summary>' + t + '</summary><div class="body">' + body + '</div></details>';
+}
+function emptyInline(t, m, w, f){
+  return '<div class="emptybox"><div class="et">' + t + '</div>' +
+    '<div class="em">' + notReady(m, w) + '</div>' +
+    '<div class="ef">' + f + '</div></div>';
+}
+
+/* ── 整頁層級空狀態（未接線）：取代層 1 與層 2 ─────────── */
+function pageEmptyHTML(){
+  return '<div class="emptybox">' +
+    '<div class="et">還沒有東西可以比對</div>' +
+    '<div class="em">' + notReady(
+      "還沒有任何保單或扣款標的，也還沒有任何一檔基金的淨值序列", WHERE_PF_ADD) + '</div>' +
+    '<div class="ef">補完後這裡會自動出現今天的結論燈與三格核心卡</div>' +
+    '</div>';
+}
+
+/* ── 說明文（註記軌） ─────────────────────────────────── */
+var EXPLAIN = {
+  ok:'三格皆 <code>ok</code> → 層 1 亮 🟢。文案只說「取到數且未越門檻」，' +
+     '<b>不說「今天沒事」「可以放心」</b>（⛔ 07）—— 綠燈量的不是你的部位安全。',
+  loading:'<b>規格沒有這一個狀態。</b> 本原型畫的是<b>提案</b>：骨架恆畫、內容留灰。' +
+     '<code>state_card(state="loading")</code> 今天會直接 <code>ValueError</code>。' +
+     '<b>客戶 2026-09-21 裁示（逐字）：標「提案：新增第 5 個 <code>CARD_STATE</code>，待裁」，不進規格。</b>' +
+     ' <s>要落地必須二選一：新增第五個 <code>CARD_STATE</code>（客戶 gate），或併進 <code>not_ready</code>。</s>' +
+     ' <span class="tiny">（客戶 2026-09-21 裁示，有意識的變更，不是漏刪）</span>',
+  business:'兩格 <code>business</code>、一格 <code>ok</code> → 依優先序亮 🫐 莓紅左軌。' +
+     '逐行只陳述<b>越了哪條線</b>，<b>不接動作句</b>（⛔ 15）。',
+  missing:'規格 §8 <b>Q2</b> 的場景：只有 1 格有資料。有資料的<b>照常畫</b>，' +
+     '不因為隔壁是空的就一起灰掉；兩格的「去哪補」<b>指到不同地方</b>（⛔ 21）。' +
+     '燈文案逐字是「1 格有數、2 格還沒取」（⛔ 22）。',
+  unwired:'規格 §7 的<b>整頁層級空狀態</b>：<code>empty_state()</code> 三要素' +
+     '<b>取代層 1 與層 2</b>，<b>層 3 操作列照留</b>、層 4 收起。' +
+     '「去哪補」走 <code>where_to_find("pf_add")</code>，<b>不手抄分頁名</b>（⛔ 17）。',
+  error:'規格 §8 <b>Q1</b> 的場景：全部資料源都取不到。' +
+     '層 1 <b>只印一個</b>紅框、<b>必帶 <code>exc</code></b>（⛔ 16）；' +
+     '層 2 三格全灰、<code>value</code> 留空（⛔ 14）、' +
+     '<code>where=</code> <b>回讀送出鈕</b>；層 3 照常可按。' +
+     '<b>不用上次的值頂著</b>（⛔ 18），<b>不把整頁灰掉當作沒事</b>（⛔ 20）。'
+};
+
+/* ── 渲染 ─────────────────────────────────────────────── */
+function render(){
+  /* 步驟 2 —— 這一輪的鈕字先算成一個變數 */
+  var submitLabel = ui.fetched ? TODAY_LOAD_BTN_AGAIN : TODAY_LOAD_BTN_FIRST;
+  /* 步驟 3 —— 存進 session 鍵，再把同一個變數交給表單（同一個變數餵兩邊） */
+  SESSION[SK_BTN] = submitLabel;
+  document.getElementById("submit-btn").textContent = submitLabel;
+
+  var lay1 = document.getElementById("lay1");
+  var lay2 = document.getElementById("lay2");
+  var lamp = document.getElementById("slot-lamp");
+  var cards = document.getElementById("slot-cards");
+
+  if (ui.state === "unwired"){
+    /* 整頁空狀態取代層 1 與層 2 —— 層 1 的標仍在（骨架恆畫），內容換成空狀態 */
+    lay1.hidden = false; lay2.hidden = true;
+    lamp.innerHTML = pageEmptyHTML();
+  } else {
+    lay1.hidden = false; lay2.hidden = false;
+    lamp.innerHTML = lampHTML(ui.state);
+    cards.innerHTML = '<div class="cards">' +
+      cardsFor(ui.state).map(cardHTML).join("") + '</div>';
+  }
+
+  document.getElementById("slot-exp").innerHTML = expHTML(ui.state);
+  document.getElementById("state-explain").innerHTML = EXPLAIN[ui.state];
+
+  document.getElementById("live-annot").innerHTML =
+    '<b>§5.1 現場示範 —— 鈕字與指路字讀同一個變數：</b>' +
+    'session 鍵 <code>' + SK_BTN + '</code> ＝ <code>' + SESSION[SK_BTN] + '</code>；' +
+    '灰態指路字因此是 <code>' + whereToLoad() + '</code>。' +
+    '切換上方「取過數／沒取過數」，<b>兩邊會一起變</b> —— 這就是為什麼不能手抄字面（⛔ 10）。' +
+    '　⚠️ 是「<b>下方</b>」不是「上方」：層 3 在層 1／2 底下。';
+
+  document.getElementById("screen").style.setProperty("--screen-w", ui.bp + "px");
+  document.getElementById("bp-read").textContent = "模擬寬度 " + ui.bp + "px";
+  var w = document.getElementById("screen").getBoundingClientRect().width;
+  document.getElementById("bp-actual").textContent =
+    "實際渲染 " + Math.round(w) + "px" + (Math.round(w) < ui.bp ? "（被視窗夾住）" : "");
+}
+
+/* ── 事件 ─────────────────────────────────────────────── */
+function press(sel, on){
+  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){
+    b.setAttribute("aria-pressed", String(on(b)));
+  });
+}
+Array.prototype.forEach.call(document.querySelectorAll("[data-state]"), function(b){
+  b.addEventListener("click", function(){
+    ui.state = b.dataset.state;
+    press("[data-state]", function(x){ return x.dataset.state === ui.state; });
+    render();
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll("[data-bp]"), function(b){
+  b.addEventListener("click", function(){
+    ui.bp = parseInt(b.dataset.bp, 10);
+    press("[data-bp]", function(x){ return parseInt(x.dataset.bp, 10) === ui.bp; });
+    render();
+  });
+});
+document.getElementById("btn-fetched").addEventListener("click", function(){
+  ui.fetched = !ui.fetched;
+  this.setAttribute("aria-pressed", String(ui.fetched));
+  this.innerHTML = (ui.fetched ? "取過數" : "沒取過數") + ' <span class="mk">⚠</span>';
+  render();
+});
+document.getElementById("btn-theme").addEventListener("click", function(){
+  var order = ["system", "light", "dark"];
+  ui.theme = order[(order.indexOf(ui.theme) + 1) % 3];
+  if (ui.theme === "system"){ document.documentElement.removeAttribute("data-theme"); }
+  else { document.documentElement.setAttribute("data-theme", ui.theme); }
+  var txt = { system:"跟隨系統", light:"淺色", dark:"深色" }[ui.theme];
+  this.setAttribute("aria-pressed", String(ui.theme !== "system"));
+  this.innerHTML = txt + ' <span class="mk">⚠</span>';
+});
+window.addEventListener("resize", function(){
+  var w = document.getElementById("screen").getBoundingClientRect().width;
+  document.getElementById("bp-actual").textContent =
+    "實際渲染 " + Math.round(w) + "px" + (Math.round(w) < ui.bp ? "（被視窗夾住）" : "");
+});
+
+render();
+</script>
+</body>
+</html>
