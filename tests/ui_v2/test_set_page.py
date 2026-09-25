@@ -326,37 +326,14 @@ def test_帶色調的set規則權重高過全域的stApp_span():
 @pytest.fixture(scope="module")
 def browser_page():
     playwright_api = _ui_v2_chromium.import_sync_api()
-    import socket
-    import subprocess
-    import time
-    import urllib.request
-
     with playwright_api.sync_playwright() as p:
         browser = _ui_v2_chromium.launch(p)  # 先確認瀏覽器在，再起 streamlit
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            port = s.getsockname()[1]
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", str(_APP), "--server.headless", "true",
-             "--server.port", str(port), "--browser.gatherUsageStats", "false"],
-            # 不讀輸出就不要開 PIPE：管線緩衝塞滿會讓 streamlit 卡住。
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        base = f"http://127.0.0.1:{port}"
         try:
-            for _ in range(120):
-                try:
-                    if urllib.request.urlopen(base + "/_stcore/health", timeout=1).read() == b"ok":
-                        break
-                except Exception:
-                    time.sleep(0.5)
-            else:
-                pytest.fail("streamlit 沒有起來")
-            yield browser, base
+            # 起 streamlit、等健康檢查、起不來時把子行程輸出尾端放進 fail 訊息：見 `_ui_v2_chromium.streamlit_server`。
+            with _ui_v2_chromium.streamlit_server(_APP) as base:
+                yield browser, base
         finally:
             browser.close()
-            proc.terminate()
-            proc.wait(timeout=20)
 
 
 def _open(browser, base, scenario, width=1400, save_failed=False):

@@ -175,3 +175,71 @@ def test_CI_slow_lane裝chromium_而且pytest指令收得到ui_v2的slow測試()
 def test_playwright在requirements_dev裡():
     lines = (_ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines()
     assert any(re.match(r"^playwright\b", line.strip()) for line in lines)
+
+
+# ───────────────────────── 起 streamlit 子行程（2026-09-25 CI slow lane 7 errors 的根因與可觀測性）─────────────────────────
+
+
+def test_瀏覽器fixture走共用的streamlit_server_不自己起子行程():
+    users = [p for p in _PAGE_TESTS if "browser_page" in p.read_text(encoding="utf-8")]
+    assert len(users) >= 2, users
+    for path in users:
+        text = path.read_text(encoding="utf-8")
+        assert "_ui_v2_chromium.streamlit_server(" in text, path.name
+        assert "subprocess.Popen" not in text, path.name
+        assert "urllib.request.urlopen" not in text, path.name  # 會吃到被別的測試污染的全域 opener
+
+
+def test_streamlit_server的健康檢查不用全域urlopen_子行程輸出不丟DEVNULL():
+    src = (_HERE / "_ui_v2_chromium.py").read_text(encoding="utf-8")
+    body = src[src.index("def streamlit_server("):]
+    code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())  # 只看程式，不看註解
+    assert "urllib.request.urlopen(" not in code
+    assert "ProxyHandler({})" in code
+    assert "DEVNULL" not in code.replace("stdin=subprocess.DEVNULL", "")
+
+
+def _need_streamlit():
+    pytest.importorskip("streamlit", reason="本環境匯入不到 streamlit")
+
+
+@pytest.mark.slow
+def test_全域urllib_opener被污染成死代理時_streamlit_server照樣連得上(monkeypatch):
+    """重現 CI：同行程較早的測試讓 `urllib.request` 快取了一個指向 127.0.0.1:9 的全域 opener。"""
+    import urllib.error
+    import urllib.request
+
+    _need_streamlit()
+    # CI 上沒有 NO_PROXY；本機若有且含 127.0.0.1，ProxyHandler 會繞過代理、污染不生效 → 先清掉。
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    # 環境變數也指到死代理：helper 不只不能吃全域 opener，也不能照環境變數走代理
+    # （拿掉 `ProxyHandler({})`、改成 `build_opener()` 的突變靠這一步轉紅）。
+    for var in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(var, "http://127.0.0.1:9")
+    poisoned = urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": "http://127.0.0.1:9", "https": "http://127.0.0.1:9"})
+    )
+    monkeypatch.setattr(urllib.request, "_opener", poisoned)
+    with _ui_v2_chromium.streamlit_server(_ROOT / "ui_v2" / "app_alo.py") as base:
+        assert urllib.request._opener is poisoned  # helper 沒有偷換全域 opener
+        assert base.startswith("http://127.0.0.1:")
+        # server 活著時：直連（helper 的做法）必須成功……
+        direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        assert direct.open(base + "/_stcore/health", timeout=5).read() == b"ok"
+        # ……同一時刻用被污染的全域 urlopen 必須失敗（反證污染真的生效）。
+        with pytest.raises(urllib.error.URLError):
+            urllib.request.urlopen(base + "/_stcore/health", timeout=2)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("ci", ["true", ""])
+def test_streamlit起不來時fail訊息帶子行程輸出尾端_不論CI與否都是fail(monkeypatch, tmp_path, ci):
+    _need_streamlit()
+    monkeypatch.setenv("CI", ci)
+    exc = _raised_by(lambda: _ui_v2_chromium.streamlit_server(tmp_path / "no_such_app.py").__enter__())
+    _assert_is_fail_not_skip(exc)
+    msg = str(exc)
+    assert "streamlit 沒有起來" in msg and "exit code=" in msg, msg
+    assert "子行程輸出尾端" in msg, msg
+    assert "no_such_app.py" in msg.split("子行程輸出尾端", 1)[1], msg  # streamlit 自己印的錯誤真的被帶出來
