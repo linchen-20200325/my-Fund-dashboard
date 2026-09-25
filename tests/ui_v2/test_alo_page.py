@@ -129,17 +129,16 @@ def test_渲染出來的按鈕標籤零禁詞():
                 assert word not in label, (name, label)
 
 
-def test_ALO4導覽鈕在畫面上只在持倉表為空時出現():
-    """`44` ALO-4 判準新兩步：第一步空持倉時出現、第二步有持倉時不出現。兩個方向都在畫面上驗。"""
+def test_ALO4導覽鈕在畫面上持倉表空或不空都出現():
+    """`44` ALO-4 判準新兩步（2026-09-24 第二十一輪）：第一步空持倉時出現、第二步有持倉時同樣出現。
+    兩種都在畫面上驗（first＝空、full＝有資料），另逐情境掃：每一個情境畫面上都有那一枚（含 holding 取數失敗）。"""
     for name in fixtures.ALL_SCENARIO_NAMES:
         labels = _button_labels(_run(name))
-        dataset = fixtures.scenario(name)
-        # holding 取數失敗不算「持倉表為空」（ALO-GAP-失敗時導覽鈕）。
-        empty = not dataset["holding"] and not dataset["errors"].get("holding")
-        assert (logic.TEXT_GOTO_SHEETS in labels) is empty, (name, labels)
-    joined = "".join(_rendered(_run("first")))
-    assert logic.TEXT_SHEETS_READONLY in joined
-    assert logic.TEXT_SHEETS_READONLY not in "".join(_rendered(_run("full")))
+        assert labels.count(logic.TEXT_GOTO_SHEETS) == 1, (name, labels)
+    for name in ("first", "full"):
+        at = _run(name)
+        assert logic.TEXT_GOTO_SHEETS in _button_labels(at), name
+        assert logic.TEXT_SHEETS_READONLY in "".join(_rendered(at)), name
 
 
 def test_目標合計那一行灰字只在合計不為一時畫出來():
@@ -172,7 +171,10 @@ def test_匯出鈕在畫面上無列時停用且帶停用原因():
 
 def test_燈的狀態有圖示也有文字():
     joined = "".join(_rendered(_run("full")))
-    assert "⚠" in joined and "狀態：要多看一眼" in joined
+    assert 'aria-hidden="true">⚠</div>' in joined and "狀態：要多看一眼" in joined
+    # 取數失敗的燈用 ⛔（客戶 2026-09-24 裁示），不是 ⚠；黃燈仍是 ⚠。量的是燈的圖示格本身。
+    failed = "".join(m.value for m in _run("holdfail").markdown if "alo-lamp" in m.value)
+    assert 'aria-hidden="true">⛔</div>' in failed and "狀態：取數失敗" in failed
     assert f"{fixtures.CORE} 與目標差 6.0 個百分點" in joined
 
 
@@ -189,7 +191,7 @@ def test_頁首示意行與每一塊的示意行真的畫在畫面上():
     assert sum(logic.HINT_NOTE in s for s in strings) == expected
 
 
-_FAIL_TEXT = "⚠ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+_FAIL_TEXT = "⛔ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
 
 
 def _fail_count_by_block(at):

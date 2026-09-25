@@ -197,7 +197,7 @@ def test_取數失敗情境_配息卡進系統錯誤且印出訊息原文():
     card = logic.find_block(model, "HLD-3")
     assert card["_state"] == logic.STATE_ERROR
     joined = "".join(logic.collect_ui_strings(card))
-    assert "⚠ 取數失敗" in joined
+    assert "⛔ 取數失敗" in joined
     assert fixtures.FETCH_FAIL_MESSAGE in joined
 
 
@@ -366,7 +366,7 @@ def test_燈的三種各有自己的圖示與狀態字_不靠顏色單獨辨識(
         seen[light["_tone"]] = (light["glyph"], light["state_word"])
     assert seen["灰"] == ("⬜", "狀態：中性")
     assert seen["黃"] == ("⚠", "狀態：要多看一眼")
-    assert seen["紅"] == ("✖", "狀態：取數失敗")
+    assert seen["紅"] == ("⛔", "狀態：取數失敗")  # 2026-09-24 客戶裁示：取數失敗 ⛔（原 ✖）
     assert len({g for g, _ in seen.values()}) == 3
     assert len({w for _, w in seen.values()}) == 3
 
@@ -685,7 +685,7 @@ def test_空狀態文案模板逐字():
     """`44` 5.5 那張表的四個模板。"""
     assert logic.empty_source_text(["holding"]) == "⬜ 資料未備：holding 尚無資料"
     assert logic.not_applicable_text("區間內無配息") == "⬜ 不適用：區間內無配息"
-    assert logic.fetch_failed_text("HTTP 503") == "⚠ 取數失敗：HTTP 503"
+    assert logic.fetch_failed_text("HTTP 503") == "⛔ 取數失敗：HTTP 503"
     assert logic.partial_range_text("2026-03-01", "2026-04-01") == "缺 2026-03-01 至 2026-04-01"
 
 
@@ -698,7 +698,7 @@ def test_全頁用到的空狀態文案逐字落在SSOT寫下的那幾句之內(
         "⬜ 不適用：成立日晚於區間起點",
         "⬜ 不適用：區間內無配息",
         "⬜ 不適用：配息類別未知",
-        "⚠ 取數失敗",
+        "⛔ 取數失敗",
     }
     seen = set()
     for name in ("full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty", "onenav"):
@@ -1150,13 +1150,13 @@ def test_HLD8是本頁唯一寫出重新取數的塊_而且它真的掛得出來
 
 def test_同一套指的是逐值判定與三個文案字面值_不是按鈕():
     """`44` :762 第一句逐字：「**四狀態逐值判定，與核心卡同一套**：
-    `⬜ 資料未備`／`⬜ 不適用：…`／`⚠ 取數失敗`」。
+    `⬜ 資料未備`／`⬜ 不適用：…`／`⛔ 取數失敗`」（圖示 2026-09-24 客戶裁示由 ⚠ 改 ⛔）。
 
     「同一套」黏在**逐值判定與那三個文案字面值**上；那一格的按鈕是**後面另一句**
     （「取數失敗時該欄印出失敗訊息原文並掛『重新取數』按鈕」）自己寫的。
     ⇒ 拿掉三張核心卡那三枚鈕，**不會**動到這一句 —— 這一條就是在釘這件事。
     """
-    families = ("⬜ 資料未備", "⬜ 不適用：", "⚠ 取數失敗")
+    families = ("⬜ 資料未備", "⬜ 不適用：", "⛔ 取數失敗")
     seen = {code: set() for code in ("HLD-2", "HLD-3", "HLD-8")}
     for name in _ALL_SCENARIOS:
         model = logic.build_page_model(**fixtures.scenario(name))
@@ -2010,6 +2010,9 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
        重跑一次逐格 dump 再 diff，不要直接改期望值。**期望值改了，這條就廢了。**
     """
     expected = {
+        # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
+        #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
+        #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
         ("full", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
         ("full", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
         ("full", "HLD-2"): ('中性', 'ok', "6347d81de348"),
@@ -2037,15 +2040,15 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("bizexc", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
         ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
-        ("fetchfail", "HLD-0"): ('紅', '系統錯誤', "b0218512cffb"),
-        ("fetchfail", "HLD-1"): ('中性', 'ok', "743f2560d7cf"),
+        ("fetchfail", "HLD-0"): ('紅', '系統錯誤', "1cf22225b317"),
+        ("fetchfail", "HLD-1"): ('中性', 'ok', "fe2c96ceefd7"),
         ("fetchfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
-        ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "443ed34ece36"),
+        ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "49dd1baf455f"),
         ("fetchfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
         ("fetchfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
         ("fetchfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
-        ("fetchfail", "HLD-7"): ('中性', 'ok', "4d0c59266415"),
-        ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "cd533ea39ca5"),
+        ("fetchfail", "HLD-7"): ('中性', 'ok', "1f8c41588f98"),
+        ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "5f6082f726fb"),
         ("nothr", "HLD-0"): ('灰', '業務例外', "c9353d4830c6"),
         ("nothr", "HLD-1"): ('黃', '業務例外', "e1d2c2c2da54"),
         ("nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
@@ -2064,10 +2067,10 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("empty", "HLD-6"): ('灰', '資料未備', "291f8e96ab83"),
         ("empty", "HLD-7"): ('灰', '資料未備', "700622874cba"),
         ("empty", "HLD-8"): ('灰', '資料未備', "642bfc46dc5d"),
-        ("emptyfail", "HLD-0"): ('紅', '系統錯誤', "f78ee5fe7d75"),
+        ("emptyfail", "HLD-0"): ('紅', '系統錯誤', "42ebce44a36e"),
         ("emptyfail", "HLD-1"): ('灰', '資料未備', "47cf6be0fa49"),
         ("emptyfail", "HLD-2"): ('灰', '資料未備', "19fe8879556e"),
-        ("emptyfail", "HLD-3"): ('紅', '系統錯誤', "ed58d8781cfb"),
+        ("emptyfail", "HLD-3"): ('紅', '系統錯誤', "6e75fe7f9b61"),
         ("emptyfail", "HLD-4"): ('中性', 'ok', "2a92af344d78"),
         ("emptyfail", "HLD-5"): ('灰', '資料未備', "0a56191f5002"),
         ("emptyfail", "HLD-6"): ('灰', '資料未備', "291f8e96ab83"),
@@ -2275,28 +2278,31 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
        重跑一次逐格 dump 再 diff，**不要直接改期望值**。期望值改了，這條就廢了。
     """
     expected = {
-        ("holdfail", "HLD-0"): ('紅', '系統錯誤', "2d783c243159"),
-        ("holdfail", "HLD-1"): ('紅', '系統錯誤', "b234520b7547"),
+        # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
+        #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
+        #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
+        ("holdfail", "HLD-0"): ('紅', '系統錯誤', "da6f97c35600"),
+        ("holdfail", "HLD-1"): ('紅', '系統錯誤', "6781b2bdacd5"),
         ("holdfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
-        ("holdfail", "HLD-3"): ('紅', '系統錯誤', "78e09b438562"),
+        ("holdfail", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
         ("holdfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
         ("holdfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("holdfail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
-        ("profilefail", "HLD-0"): ('紅', '系統錯誤', "eef7eefa685e"),
+        ("profilefail", "HLD-0"): ('紅', '系統錯誤', "84b033948b7f"),
         ("profilefail", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
-        ("profilefail", "HLD-2"): ('紅', '系統錯誤', "032952947efa"),
+        ("profilefail", "HLD-2"): ('紅', '系統錯誤', "020d64867585"),
         ("profilefail", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("profilefail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
         ("profilefail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
         ("profilefail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("profilefail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("profilefail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
-        ("holdfail_nothr", "HLD-0"): ('紅', '系統錯誤', "f6513a3dd465"),
-        ("holdfail_nothr", "HLD-1"): ('紅', '系統錯誤', "39214c923190"),
+        ("holdfail_nothr", "HLD-0"): ('紅', '系統錯誤', "e2716e8e35a7"),
+        ("holdfail_nothr", "HLD-1"): ('紅', '系統錯誤', "59e8c7ce9c35"),
         ("holdfail_nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
-        ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "78e09b438562"),
+        ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail_nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
         ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
         ("holdfail_nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),

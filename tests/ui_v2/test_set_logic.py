@@ -317,7 +317,7 @@ def test_寫死圖示掃描本身會咬_負控():
 
 
 def test_圖示常數改值之後_全頁每一處取數失敗與紅燈都跟著換_沒有殘留舊圖示(monkeypatch):
-    """驗「改一個常數就全部換」：把常數改成 ⛔，逐情境掃全頁模型，不得殘留「⚠ 取數失敗」。"""
+    """驗「改一個常數就全部換」：把常數換成另一個圖示（現值 ⛔ → ⚠；現值 ⚠ → ⛔），逐情境掃全頁模型，不得殘留「舊圖示 取數失敗」。"""
     old = logic.FETCH_FAIL_GLYPH
     new = "⛔" if old != "⛔" else "⚠"
     monkeypatch.setattr(logic, "FETCH_FAIL_GLYPH", new)
@@ -883,13 +883,17 @@ def test_SET4存檔寫入失敗_失敗框掛在該鍵下方_當下輸入不清�
         assert _rows(failed, "SET-1") == _rows(plain, "SET-1"), name
 
 
-def test_存檔失敗框的圖示與拍板原型相同_而且與取數失敗和黃燈的圖示分開():
-    """客戶 2026-09-24 裁示「失敗框補圖示」；拍板原型 `ui_prototype_set.html` 的失敗框以 ⛔ 開頭。"""
+def test_存檔失敗框的圖示與拍板原型相同_而且與黃燈的圖示分開():
+    """客戶 2026-09-24 裁示「失敗框補圖示」；拍板原型 `ui_prototype_set.html` 的失敗框以 ⛔ 開頭。
+    ⚠️ 2026-09-24 第二十一輪更正（有意識的更正，不是漏刪）：本條原名寫「而且與取數失敗和黃燈的圖示分開」，
+    但斷言從來只驗黃燈那一半；客戶同日另裁取數失敗也用 ⛔，兩種失敗自此同一個圖示（文字不同），
+    故名字只留黃燈那一半，並把「兩種失敗同圖示」釘成事實（見 SET-GAP-取數失敗圖示）。"""
     proto = (_ROOT / "docs" / "v2" / "prototype" / "ui_prototype_set.html").read_text(encoding="utf-8")
     glyphs = set(re.findall(r"'<div class=\"failbox\">(\S+) 存檔寫入失敗：", proto))
     assert glyphs == {logic.SAVE_FAIL_GLYPH}, glyphs
     assert logic.save_failed_text("x") == logic.SAVE_FAIL_GLYPH + " 存檔寫入失敗：x"
     assert logic.SAVE_FAIL_GLYPH != logic.WARN_GLYPH
+    assert logic.SAVE_FAIL_GLYPH == logic.FETCH_FAIL_GLYPH == "⛔"
 
 
 def test_SET4存檔失敗疊在user_setting讀取失敗上_失敗框改掛在塊上():

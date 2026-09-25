@@ -201,13 +201,21 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     import hashlib
 
-    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "3712715503d1b5f9166941e8c08734b5"
+    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "b54020cda7aac68e16850336b0e98c63"
+
+
+def test_取數失敗圖示是禁止號_黃燈仍是警告號():
+    """客戶 2026-09-24 裁示（`44` 第五節第五小節已同步）：取數失敗 ⛔、黃燈 ⚠。改回 ⚠ 這一條要紅。"""
+    assert logic.FETCH_FAIL_GLYPH == "⛔"
+    assert logic.fetch_failed_text("HTTP 503") == "⛔ 取數失敗：HTTP 503"
+    assert _block(_model("holdfail"), "ALO-0")["glyph"] == "⛔"
+    assert _block(_model("full"), "ALO-0")["glyph"] == "⚠"
 
 
 def test_holding取數失敗_照44第五節系統錯誤模板畫在受影響的塊_不整頁炸():
-    """登記 `ALO-GAP-取數失敗`：`⚠ 取數失敗：<訊息原文>`、紅；不畫重新取數（空狀態欄整格為準）。"""
+    """登記 `ALO-GAP-取數失敗`：`⛔ 取數失敗：<訊息原文>`、紅；不畫重新取數（空狀態欄整格為準）。"""
     model = _model("holdfail")
-    text = "⚠ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+    text = "⛔ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
     for code in ("ALO-2", "ALO-6"):
         node = _block(model, code)["placeholder"]
         assert node["text"] == text and node["_empty_kind"] == "系統錯誤" and node["_tone"] == "紅", code
@@ -217,18 +225,21 @@ def test_holding取數失敗_照44第五節系統錯誤模板畫在受影響的�
     assert not [b for b in logic.collect_buttons(model) if b["_action_kind"] == "取數"]
 
 
-def test_holding取數失敗時燈不說尚未建立任何持倉_也不掛導覽鈕():
-    """登記 `ALO-GAP-失敗時導覽鈕`／`ALO-GAP-無紅燈`：取數失敗不等於持倉表為空；燈沒有紅。"""
+def test_holding取數失敗時燈不說尚未建立任何持倉_導覽鈕照掛():
+    """登記 `ALO-GAP-失敗時導覽鈕`／`ALO-GAP-無紅燈`：取數失敗不等於持倉表為空；燈沒有紅。
+    `44` 現行（第二十一輪）空與不空都掛導覽鈕 ⇒ 不知道是哪一種也照掛；但摘要不寫缺 holding。"""
     model = _model("holdfail")
     lamp = _block(model, "ALO-0")
-    assert lamp["text"] == "⚠ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+    assert lamp["text"] == "⛔ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+    assert logic.TEXT_NO_HOLDING not in logic.collect_ui_strings(lamp)
     assert lamp["_tone"] == "灰"
-    assert (logic.TEXT_GOTO_SHEETS, "導覽") not in _buttons_of(model, "ALO-4")
+    assert (logic.TEXT_GOTO_SHEETS, "導覽") in _buttons_of(model, "ALO-4")
+    assert "缺 holding" not in _block(model, "ALO-4")["summary_text"]
 
 
 def test_市值基準下匯率取數失敗_ALO2與ALO6與ALO4照模板_成本基準不受影響():
     model = _model("fxfail")
-    text = "⚠ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+    text = "⛔ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
     assert _block(model, "ALO-2")["placeholder"]["text"] == text
     assert _block(model, "ALO-6")["placeholder"]["text"] == text
     assert _block(model, "ALO-4")["fail_nodes"][0]["text"] == text
@@ -619,7 +630,7 @@ def test_紅只出現在取數失敗的情境_而且燈永遠不紅():
     assert red_cases == {"holdfail", "fxfail", "settingfail", "policyfail"}, red_cases
 
 
-_FAIL_TEXT = "⚠ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
+_FAIL_TEXT = "⛔ 取數失敗：" + fixtures.FETCH_FAIL_MESSAGE
 
 
 def _fail_blocks(model):
@@ -665,7 +676,7 @@ def test_取數失敗時燈的狀態字不寫中性():
         lamp = _block(_model(name), "ALO-0")
         assert lamp["_tone"] == "灰"
         assert "中性" not in lamp["state_word"] and lamp["state_word"] == "狀態：取數失敗", name
-        assert lamp["glyph"] == "⚠"
+        assert lamp["glyph"] == "⛔"
     assert _block(_model("inband"), "ALO-0")["state_word"] == "狀態：中性"
 
 
@@ -1126,29 +1137,28 @@ def _buttons_of(model, code):
     return [(b["label"], b["_action_kind"]) for b in _block(model, code)["buttons"]]
 
 
-def test_ALO4導覽鈕只在持倉表為空時出現():
-    """`44` ALO-4 規則欄（2026-09-24 客戶裁示）與判準新兩步。⚠️ 線框畫的是相反面，照 `44`。"""
+def test_ALO4導覽鈕持倉表空或不空都出現():
+    """`44` ALO-4 規則欄與判準新兩步（2026-09-24 第二十一輪客戶裁示）。⚠️ 線框缺空持倉那一種，照 `44`。
+    holding 取數失敗（空或不空不知道）也照掛（登記 `ALO-GAP-失敗時導覽鈕`）。"""
     goto = (logic.TEXT_GOTO_SHEETS, "導覽")
+    kinds = set()
     for name, save_failed in _every_case():
         model = _model(name, save_failed=save_failed)
         dataset = fixtures.scenario(name)
-        empty = not dataset["holding"] and not dataset["errors"].get("holding")
-        assert (goto in _buttons_of(model, "ALO-4")) is empty, (name, save_failed)
-    # 兩個方向都真的走到：空的情境與非空的情境都存在。
-    empties = {name for name in fixtures.ALL_SCENARIO_NAMES
-               if not fixtures.scenario(name)["holding"] and not fixtures.scenario(name)["errors"]}
-    assert empties and set(fixtures.ALL_SCENARIO_NAMES) - empties
+        assert goto in _buttons_of(model, "ALO-4"), (name, save_failed)
+        kinds.add("fail" if dataset["errors"].get("holding") else ("empty" if not dataset["holding"] else "rows"))
+    # 三種都真的走到：持倉表為空、有資料、holding 取數失敗。
+    assert kinds == {"empty", "rows", "fail"}, kinds
 
 
-def test_ALO4持倉表為空時兩枚並存_不為空時只掛存檔():
-    assert _buttons_of(_model("first"), "ALO-4") == [(logic.TEXT_GOTO_SHEETS, "導覽"), ("存檔", "存檔")]
-    assert _buttons_of(_model("full"), "ALO-4") == [("存檔", "存檔")]
+def test_ALO4持倉表空或不空都兩枚並存():
+    for name in ("first", "full", "holdfail"):
+        assert _buttons_of(_model(name), "ALO-4") == [(logic.TEXT_GOTO_SHEETS, "導覽"), ("存檔", "存檔")], name
 
 
 def test_ALO4導覽鈕下方那一行說明逐字():
-    block = _block(_model("first"), "ALO-4")
-    assert block["goto_note"] == "持倉資料在 Sheets 維護，本儀表板唯讀"
-    assert _block(_model("full"), "ALO-4")["goto_note"] is None
+    for name in ("first", "full"):
+        assert _block(_model(name), "ALO-4")["goto_note"] == "持倉資料在 Sheets 維護，本儀表板唯讀", name
 
 
 def test_ALO4判準_導覽與存檔都不寫holding():
@@ -1156,6 +1166,8 @@ def test_ALO4判準_導覽與存檔都不寫holding():
         assert "holding" not in button["_writes"]
     goto = _block(_model("first"), "ALO-4")["buttons"][0]
     assert goto["_writes"] == set()
+    for button in _block(_model("full"), "ALO-4")["buttons"]:
+        assert "holding" not in button["_writes"]
 
 
 def test_ALO4判準_切換比重基準_ALO2目前比重改變而目標比重不變():

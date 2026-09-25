@@ -154,7 +154,7 @@ def test_不適用文案模板_逐字():
 
 def test_取數失敗文案模板_逐字_且訊息原文不改寫不截斷():
     raw = "HTTPSConnectionPool(host='example.invalid', port=443): Max retries exceeded"
-    assert logic.fetch_failed_text(raw) == "⚠ 取數失敗：" + raw
+    assert logic.fetch_failed_text(raw) == "⛔ 取數失敗：" + raw
 
 
 def test_部分缺的起迄那一行_逐字():
@@ -583,9 +583,9 @@ def test_空狀態不顯示零也不顯示上一期的值():
     for mv in card["main_values"]:
         if mv["_state"] != logic.STATE_OK:
             assert mv["_has_number"] is False
-            assert mv["value_text"] in ("⬜ 資料未備", "⬜ 不適用", "⚠ 取數失敗") or mv[
+            assert mv["value_text"] in ("⬜ 資料未備", "⬜ 不適用", "⛔ 取數失敗") or mv[
                 "value_text"
-            ].startswith(("⬜ ", "⚠ "))
+            ].startswith(("⬜ ", "⛔ "))
 
 
 def test_空狀態不把沒有資料寫成沒有風險():
@@ -1339,6 +1339,9 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
        重跑一次逐格 dump 再 diff，**不要直接改期望值**。期望值改了，這條就廢了。
     """
     expected = {
+        # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪）。
+        #    換之前先證明：把現行模型字串裡的 ⛔ 換回 ⚠ 再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
+        #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
         ("all_ok", "MKT-0"): "cd15f0ceb6da",
         ("all_ok", "MKT-1"): "e156a51bed11",
         ("all_ok", "MKT-2"): "bd304edd8d7a",
@@ -1372,7 +1375,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt1_both_keys_missing", "MKT-6"): "aeb8c9401970",
         ("mkt1_both_keys_missing", "MKT-7"): "9e2a93c22cb1",
         ("mkt1_fetch_failed", "MKT-0"): "344b2d64a392",
-        ("mkt1_fetch_failed", "MKT-1"): "c10f7e76aa01",
+        ("mkt1_fetch_failed", "MKT-1"): "11857b61e9c4",
         ("mkt1_fetch_failed", "MKT-2"): "ad095103c630",
         ("mkt1_fetch_failed", "MKT-3"): "ddef408d6b7c",
         ("mkt1_fetch_failed", "MKT-4"): "f707120cac99",

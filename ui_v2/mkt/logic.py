@@ -274,7 +274,7 @@ def not_applicable_text(reason: str) -> str:
 
 def fetch_failed_text(message: str) -> str:
     """訊息原文照印 —— 不改寫成安撫語句，也不截斷。"""
-    return "⚠ 取數失敗：" + message
+    return "⛔ 取數失敗：" + message
 
 
 def partial_range_text(start: str, end: str) -> str:

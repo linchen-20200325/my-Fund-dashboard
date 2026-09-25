@@ -360,7 +360,7 @@ def not_applicable_text(reason: str) -> str:
 
 def fetch_failed_text(message: str) -> str:
     """訊息原文照印 —— 不改寫成安撫語句，也不截斷。"""
-    return "⚠ 取數失敗：" + message
+    return "⛔ 取數失敗：" + message
 
 
 def partial_range_text(start: str, end: str) -> str:
@@ -386,7 +386,7 @@ NA_LATE_INCEPTION = not_applicable_text("成立日晚於區間起點")
 NA_NO_DIVIDEND = not_applicable_text("區間內無配息")
 NA_UNKNOWN_KIND = not_applicable_text("配息類別未知")
 ND_TEXT = "⬜ 資料未備"
-ERR_TEXT = "⚠ 取數失敗"
+ERR_TEXT = "⛔ 取數失敗"  # 客戶 2026-09-24 裁示：取數失敗 ⛔（44 第五節第五小節已同步），黃燈仍 ⚠
 
 
 # ───────────────────────── 算式（純數學） ─────────────────────────
@@ -944,7 +944,7 @@ def _build_hld1(metrics, rules, *, has_holdings, fail_message=None, unsurfaced=N
             )
         if skipped["error"]:
             tail_lines.append(
-                f"⚠ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{HINT}"
+                f"⛔ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{HINT}"
             )
         if skipped["na"]:
             tail_lines.append(
@@ -1118,7 +1118,8 @@ def _build_core_card(
 _LAMP_LOOK = {
     "灰": ("⬜", "狀態：中性"),
     "黃": ("⚠", "狀態：要多看一眼"),
-    "紅": ("✖", "狀態：取數失敗"),
+    # 紅＝取數失敗：客戶 2026-09-24 裁示取數失敗的圖示用 ⛔（原為 ✖；44 第五節第五小節已同步），黃燈仍 ⚠。
+    "紅": ("⛔", "狀態：取數失敗"),
 }
 
 

@@ -81,7 +81,7 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     """`44` 在 2026-09-24 第二十輪解凍（落 `ALO-4` 那一枚導覽鈕用途改為去 Sheets 維護持倉與指派的裁示（2026-09-24）並把規則欄行末那筆用途矛盾的登記改為已裁結案、在該塊客戶裁示段補一句歷史註、並登記一筆新矛盾，只在既有行內擴寫、行數不變），改完重新凍結，下面的 md5 是那一輪改完後的新值。行號引用全靠內容比對，不靠行號 —— 但檔案本身要是那一份。"""
     digest = hashlib.md5(_D44.read_bytes()).hexdigest()
-    assert digest == "3712715503d1b5f9166941e8c08734b5", digest
+    assert digest == "b54020cda7aac68e16850336b0e98c63", digest
     assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4260  # 4259 行 ＋ 末尾換行
 
 
@@ -922,6 +922,18 @@ def test_EXP0只讀那兩塊_不自取數():
     assert 'read_states=(exp1["_state"], exp2["_state"])' in source
 
 
+def test_取數失敗圖示是禁止號_紅燈也是():
+    """客戶 2026-09-24 裁示（`44` 第五節第五小節已同步）：取數失敗 ⛔、黃燈 ⚠。改回 ⚠ 這一條要紅。"""
+    assert logic.fetch_failed_text("HTTP 503") == "⛔ 取數失敗：HTTP 503"
+    assert logic.ERR_TEXT == "⛔ 取數失敗"
+    reds = [
+        logic.find_block(_model(name, save_failed=s), "EXP-0")
+        for name, s in _every_case()
+        if logic.find_block(_model(name, save_failed=s), "EXP-0")["_tone_override"] == "紅"
+    ]
+    assert reds and all(b["glyph"] == "⛔" for b in reds)
+
+
 def test_EXP0的狀態同時有圖示與文字_不靠顏色單獨辨識():
     """客戶 2026-09-22 設計引導第二條。"""
     seen = set()
@@ -1290,7 +1302,7 @@ def test_上游取數失敗時_沒有一塊把它報成別的東西():
     `EXP-7` 則會印出一串「0 → 0」的軌跡，什麼都不說。
 
     **法源**：`44` 5.5 那張表 `系統錯誤` 一列的觸發條件逐字「取數或計算本身失敗」，
-    文案模板逐字 `⚠ 取數失敗：<訊息原文>`。
+    文案模板逐字 `⛔ 取數失敗：<訊息原文>`（2026-09-24 客戶裁示由 ⚠ 改 ⛔）。
     ⚠️ 本頁八塊只有 `EXP-0` 寫出 `系統錯誤` 這個字面（`E-14`），但 `44` `EXP-0` 塊下方
     已經就地撤回過「塊沒寫種類名 ⇒ 該狀態不會發生」這個推論。**所以這不是本組發明的狀態。**
     """
@@ -2169,6 +2181,9 @@ def test_承重測試一條都不准無聲消失():
 # ⚠️ **這一份是 `_dump_grid()` 現場 dump 出來的**（量測日 2026-09-24，本輪工作樹）。
 # 它釘的是**本輪做出來的現行行為**，正確性由上面那幾十條正控背書。
 # ⛔ 對不上時**重跑一次 `_dump_grid()` 再 diff，不要直接改這一份** —— 改了這一條就廢了。
+# ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪）。
+#    換之前先證明：把現行模型字串裡的 ⛔ 換回 ⚠ 再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
+#    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
 _EXPECTED_GRID = {
     'blankvalue|0|EXP-0': ('黃', 'ok', '1eeeb8fd0977'),
     'blankvalue|0|EXP-1': ('中性', 'ok', '2c52d7f6b340'),
@@ -2234,21 +2249,21 @@ _EXPECTED_GRID = {
     'mixedccy|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
     'mixedccy|1|EXP-6': ('中性', 'ok', 'ae793c0ceae1'),
     'mixedccy|1|EXP-7': ('中性', 'ok', 'c1435d2cd3fd'),
-    'navfail|0|EXP-0': ('紅', '系統錯誤', 'f33da83484cf'),
+    'navfail|0|EXP-0': ('紅', '系統錯誤', '09aad001d7f6'),
     'navfail|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
-    'navfail|0|EXP-2': ('紅', '系統錯誤', 'fd431926e311'),
-    'navfail|0|EXP-3': ('紅', '系統錯誤', 'a3279ba99438'),
+    'navfail|0|EXP-2': ('紅', '系統錯誤', '4080364f16cf'),
+    'navfail|0|EXP-3': ('紅', '系統錯誤', 'a9128de86b07'),
     'navfail|0|EXP-4': ('中性', 'ok', '3f86aebf2140'),
     'navfail|0|EXP-5': ('中性', 'ok', '6691f3aa6866'),
-    'navfail|0|EXP-6': ('紅', '系統錯誤', '70bdefb3a129'),
+    'navfail|0|EXP-6': ('紅', '系統錯誤', '21b787e2b450'),
     'navfail|0|EXP-7': ('中性', 'ok', 'f312c8f27f65'),
-    'navfail|1|EXP-0': ('紅', '系統錯誤', 'f33da83484cf'),
+    'navfail|1|EXP-0': ('紅', '系統錯誤', '09aad001d7f6'),
     'navfail|1|EXP-1': ('中性', 'ok', '4a8d308061ce'),
-    'navfail|1|EXP-2': ('紅', '系統錯誤', 'fd431926e311'),
-    'navfail|1|EXP-3': ('紅', '系統錯誤', 'a3279ba99438'),
+    'navfail|1|EXP-2': ('紅', '系統錯誤', '4080364f16cf'),
+    'navfail|1|EXP-3': ('紅', '系統錯誤', 'a9128de86b07'),
     'navfail|1|EXP-4': ('中性', 'ok', '4559e64b5296'),
     'navfail|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
-    'navfail|1|EXP-6': ('紅', '系統錯誤', '70bdefb3a129'),
+    'navfail|1|EXP-6': ('紅', '系統錯誤', '21b787e2b450'),
     'navfail|1|EXP-7': ('中性', 'ok', 'f312c8f27f65'),
     'nocolumn|0|EXP-0': ('黃', 'ok', '1eeeb8fd0977'),
     'nocolumn|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
@@ -2330,38 +2345,38 @@ _EXPECTED_GRID = {
     'onematch|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
     'onematch|1|EXP-6': ('中性', 'ok', '5d1726c91dad'),
     'onematch|1|EXP-7': ('中性', 'ok', '311431c24b65'),
-    'profilefail_picked|0|EXP-0': ('紅', '系統錯誤', '7582018a90b9'),
+    'profilefail_picked|0|EXP-0': ('紅', '系統錯誤', 'dbbbdc3f545c'),
     'profilefail_picked|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
-    'profilefail_picked|0|EXP-2': ('紅', '系統錯誤', '7fcfd6480b31'),
-    'profilefail_picked|0|EXP-3': ('紅', '系統錯誤', 'e500e658d30b'),
+    'profilefail_picked|0|EXP-2': ('紅', '系統錯誤', '74720652b35f'),
+    'profilefail_picked|0|EXP-3': ('紅', '系統錯誤', '7c1ec4b62003'),
     'profilefail_picked|0|EXP-4': ('中性', 'ok', '3f86aebf2140'),
     'profilefail_picked|0|EXP-5': ('中性', 'ok', 'd5a0a26ab46f'),
-    'profilefail_picked|0|EXP-6': ('紅', '系統錯誤', '83db59844ad9'),
-    'profilefail_picked|0|EXP-7': ('紅', '系統錯誤', '2fab7776512c'),
-    'profilefail_picked|1|EXP-0': ('紅', '系統錯誤', '7582018a90b9'),
+    'profilefail_picked|0|EXP-6': ('紅', '系統錯誤', 'ac23370ab7b1'),
+    'profilefail_picked|0|EXP-7': ('紅', '系統錯誤', '438798d0705b'),
+    'profilefail_picked|1|EXP-0': ('紅', '系統錯誤', 'dbbbdc3f545c'),
     'profilefail_picked|1|EXP-1': ('中性', 'ok', '4a8d308061ce'),
-    'profilefail_picked|1|EXP-2': ('紅', '系統錯誤', '7fcfd6480b31'),
-    'profilefail_picked|1|EXP-3': ('紅', '系統錯誤', 'e500e658d30b'),
+    'profilefail_picked|1|EXP-2': ('紅', '系統錯誤', '74720652b35f'),
+    'profilefail_picked|1|EXP-3': ('紅', '系統錯誤', '7c1ec4b62003'),
     'profilefail_picked|1|EXP-4': ('中性', 'ok', '4559e64b5296'),
     'profilefail_picked|1|EXP-5': ('中性', 'ok', 'bb4a483b5c60'),
-    'profilefail_picked|1|EXP-6': ('紅', '系統錯誤', '83db59844ad9'),
-    'profilefail_picked|1|EXP-7': ('紅', '系統錯誤', '2fab7776512c'),
-    'profilefail|0|EXP-0': ('紅', '系統錯誤', '7582018a90b9'),
+    'profilefail_picked|1|EXP-6': ('紅', '系統錯誤', 'ac23370ab7b1'),
+    'profilefail_picked|1|EXP-7': ('紅', '系統錯誤', '438798d0705b'),
+    'profilefail|0|EXP-0': ('紅', '系統錯誤', 'dbbbdc3f545c'),
     'profilefail|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
-    'profilefail|0|EXP-2': ('紅', '系統錯誤', '7fcfd6480b31'),
-    'profilefail|0|EXP-3': ('紅', '系統錯誤', 'e500e658d30b'),
+    'profilefail|0|EXP-2': ('紅', '系統錯誤', '74720652b35f'),
+    'profilefail|0|EXP-3': ('紅', '系統錯誤', '7c1ec4b62003'),
     'profilefail|0|EXP-4': ('中性', 'ok', '3f86aebf2140'),
     'profilefail|0|EXP-5': ('中性', 'ok', '6691f3aa6866'),
-    'profilefail|0|EXP-6': ('紅', '系統錯誤', '604c5de3823a'),
-    'profilefail|0|EXP-7': ('紅', '系統錯誤', '2fab7776512c'),
-    'profilefail|1|EXP-0': ('紅', '系統錯誤', '7582018a90b9'),
+    'profilefail|0|EXP-6': ('紅', '系統錯誤', 'a569c3abcfef'),
+    'profilefail|0|EXP-7': ('紅', '系統錯誤', '438798d0705b'),
+    'profilefail|1|EXP-0': ('紅', '系統錯誤', 'dbbbdc3f545c'),
     'profilefail|1|EXP-1': ('中性', 'ok', '4a8d308061ce'),
-    'profilefail|1|EXP-2': ('紅', '系統錯誤', '7fcfd6480b31'),
-    'profilefail|1|EXP-3': ('紅', '系統錯誤', 'e500e658d30b'),
+    'profilefail|1|EXP-2': ('紅', '系統錯誤', '74720652b35f'),
+    'profilefail|1|EXP-3': ('紅', '系統錯誤', '7c1ec4b62003'),
     'profilefail|1|EXP-4': ('中性', 'ok', '4559e64b5296'),
     'profilefail|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
-    'profilefail|1|EXP-6': ('紅', '系統錯誤', '604c5de3823a'),
-    'profilefail|1|EXP-7': ('紅', '系統錯誤', '2fab7776512c'),
+    'profilefail|1|EXP-6': ('紅', '系統錯誤', 'a569c3abcfef'),
+    'profilefail|1|EXP-7': ('紅', '系統錯誤', '438798d0705b'),
     'sortccy|0|EXP-0': ('黃', 'ok', '8941caf62a43'),
     'sortccy|0|EXP-1': ('中性', 'ok', '7a3499fd177e'),
     'sortccy|0|EXP-2': ('灰', '資料未備', '3b4af31911ba'),
@@ -2474,21 +2489,21 @@ _EXPECTED_GRID = {
     'tenmatch|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
     'tenmatch|1|EXP-6': ('中性', 'ok', '5d1726c91dad'),
     'tenmatch|1|EXP-7': ('中性', 'ok', '0bd10720cae3'),
-    'twofail|0|EXP-0': ('紅', '系統錯誤', 'ae3bedc95d05'),
+    'twofail|0|EXP-0': ('紅', '系統錯誤', '1b96c328b147'),
     'twofail|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
-    'twofail|0|EXP-2': ('紅', '系統錯誤', '239f93cd775d'),
-    'twofail|0|EXP-3': ('紅', '系統錯誤', '6468cbd2f188'),
+    'twofail|0|EXP-2': ('紅', '系統錯誤', '85e6128bbf2c'),
+    'twofail|0|EXP-3': ('紅', '系統錯誤', '1553cfcaae5d'),
     'twofail|0|EXP-4': ('中性', 'ok', '3f86aebf2140'),
     'twofail|0|EXP-5': ('中性', 'ok', '6691f3aa6866'),
-    'twofail|0|EXP-6': ('紅', '系統錯誤', '79a972f2fa81'),
+    'twofail|0|EXP-6': ('紅', '系統錯誤', '0dc938d43817'),
     'twofail|0|EXP-7': ('中性', 'ok', 'f312c8f27f65'),
-    'twofail|1|EXP-0': ('紅', '系統錯誤', 'ae3bedc95d05'),
+    'twofail|1|EXP-0': ('紅', '系統錯誤', '1b96c328b147'),
     'twofail|1|EXP-1': ('中性', 'ok', '4a8d308061ce'),
-    'twofail|1|EXP-2': ('紅', '系統錯誤', '239f93cd775d'),
-    'twofail|1|EXP-3': ('紅', '系統錯誤', '6468cbd2f188'),
+    'twofail|1|EXP-2': ('紅', '系統錯誤', '85e6128bbf2c'),
+    'twofail|1|EXP-3': ('紅', '系統錯誤', '1553cfcaae5d'),
     'twofail|1|EXP-4': ('中性', 'ok', '4559e64b5296'),
     'twofail|1|EXP-5': ('中性', 'ok', '5121c8ef9f93'),
-    'twofail|1|EXP-6': ('紅', '系統錯誤', '79a972f2fa81'),
+    'twofail|1|EXP-6': ('紅', '系統錯誤', '0dc938d43817'),
     'twofail|1|EXP-7': ('中性', 'ok', 'f312c8f27f65'),
     'unknownfund|0|EXP-0': ('黃', 'ok', '1eeeb8fd0977'),
     'unknownfund|0|EXP-1': ('中性', 'ok', 'a90d80fbd86e'),
