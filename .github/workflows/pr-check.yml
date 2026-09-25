@@ -91,9 +91,11 @@ jobs:
             --tb=short
 
   # ════════════════════════════════════════════════════════════
-  # Slow lane — AppTest（單測約 25s）
+  # Slow lane — AppTest（單測約 25s）＋ tests/ui_v2 畫面測試（AppTest 與真瀏覽器）
   # 非阻擋（continue-on-error），僅作為 informational signal
   # 原因：Streamlit AppTest 可能偶發 timeout / 外部資源故障
+  # ⚠️ 也就是說：tests/ui_v2 的瀏覽器測試在這裡紅了，**不會擋合併** —— 要看這條 job 的結果才知道。
+  #    tests/ui_v2/test_*_page.py 整檔標 slow（2026-09-25 客戶裁示），fast lane 不跑它們。
   # ════════════════════════════════════════════════════════════
   slow-tests:
     name: "Slow tests (AppTest, informational)"
@@ -118,6 +120,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+
+      # tests/ui_v2 的瀏覽器測試用 playwright 預設解析找 Chromium（playwright 由 requirements-dev.txt 裝）。
+      # CI（CI=true，GitHub Actions 自動設定）找不到瀏覽器時測試 fail、不 skip —— 見 tests/ui_v2/_ui_v2_chromium.py。
+      # 守衛：tests/ui_v2/test_ui_v2_lane_guards.py
+      - name: Install Chromium for ui_v2 browser tests
+        run: python -m playwright install --with-deps chromium
 
       - name: Run AppTest (slow lane)
         env:

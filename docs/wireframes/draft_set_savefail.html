@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>設定頁 SET-4 存檔寫入失敗態 · 線框草稿（客戶尚未拍板）</title>
+<!-- 唯一的外連資源：Google Fonts —— 下面三行逐位元組取自 docs/v2/prototype/ui_prototype_set.html。
+     客戶的 HTML 草稿規範逐字：「無外部框架（字體除外）」。其餘 CSS／JS 一律 inline。 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<!-- 〔2026-09-24 同輪回修 · 有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕
+     下面這一整個 <style> 區塊是「逐位元組」複製自 docs/v2/prototype/ui_prototype_set.html，
+     一個位元組都沒有改 —— 這正是「不准自己調色」可以被機器驗證的方式。
+     ⚠️ 代價就地寫明：它裡面有六行註解寫著「見 §J」「見 §J 的分類」，
+        那個 §J 是**來源檔**的章節，**這一份草稿沒有 §J**（本草稿的章節是 §1～§6）。
+        那六行分別掛在 --ink-3 / --rule / --edge / --app-border / --app-edge / --app-ph 上。
+     ⛔ 刻意不改它們：改了就破壞「逐位元組」這個可驗證的性質，而那是這一份最重要的保證。
+        讀到那幾行請當成跨檔引用讀 —— 對比值的逐組計算在來源檔，不在這裡。 -->
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   TOKENS —— 與持倉體檢頁、標的探索頁、資產配置頁三份原型同一套（刻意逐值相同）。
+   兩路主題：@media (prefers-color-scheme) ＋ :root[data-theme]。
+   深色 app 螢幕 #0e1117；淺色註記層在外框；註記主色青 #0f6b6c／#5fd3d0。
+
+   ⚠️ 與資產配置頁那一份**正好相反**：**本檔定義了紅色的 app 狀態色**（--st-err-fg / --st-err-bg）。
+   理由不是加料，是照 44 畫出來的結果 —— `SET-0` 的規則欄**逐字給了紅**
+   （「失敗來源大於零 → 燈為紅，文案列出失敗的來源層級」），
+   它的那一行判準也逐字要求「讓某一個來源取數失敗，**燈轉紅**」。
+   五枚結論燈逐枚實測（母體封閉、五枚都讀了規則欄）：
+   `MKT-0`／`HLD-0`／`EXP-0`／`SET-0` 四枚有紅，`ALO-0` 那一枚沒有。
+   ⚠️ 紅在本頁**不只出現在燈上**：`SET-2` 的 `failed` 列也是紅 —— 但那是**卡片的正常內容**，
+   不是卡片的 `系統錯誤` 狀態（見 §B 的 `SET-2` 與 ⛔ S-27）。
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  /* — 註記層（隨主題變） — */
+  --paper:#e6eaf0;          /* 圖紙底 */
+  --sheet:#ffffff;          /* 註記卡底 */
+  --sheet-2:#f2f5f9;        /* 註記卡次層 */
+  --ink:#161c24;            /* 主文字 */
+  --ink-2:#4a5663;          /* 次文字 */
+  --ink-3:#5f6b78;          /* 弱文字（逐組算過，見 §J —— 這是全檔最低的一組，4.50） */
+  --rule:#c3ccd8;           /* 髮絲線（純裝飾分隔，非 UI 元件，見 §J 的分類） */
+  --rule-2:#dbe2ea;
+  --edge:#7b8694;           /* 可操作控制項的邊界（≥3:1，見 §J） */
+  --draft:#0f6b6c;          /* 註記主色（青） */
+  --draft-bg:#dff0ef;
+  --stop:#8c1d3f;           /* ⛔ 標記色 */
+  --stop-bg:#fae7ed;
+  --ok-mark:#1d6b3f;        /* ✓ */
+  --warn-mark:#8a5a12;      /* ⚠ */
+  --shadow:0 1px 0 rgba(22,28,36,.06), 0 6px 18px -12px rgba(22,28,36,.35);
+
+  /* — App 螢幕（兩個主題下都一樣：app 本身就是深色） — */
+  --app-bg:#0e1117;
+  --app-card:#161b22;
+  --app-inner:#11161d;      /* 卡內次層（表頭、列框） */
+  --app-border:#30363d;     /* 純裝飾分隔（卡框、表列線、格線），非 UI 元件 —— 見 §J 的分類 */
+  --app-edge:#6b7682;       /* 可操作控制項與狀態容器的邊界（≥3:1，見 §J） */
+  --app-ph:#7d858e;         /* 輸入提示字（逐組算過，見 §J） */
+  --app-fg:#e6edf3;
+  --app-fg-2:#c9d1d9;
+  --app-muted:#8b949e;
+  --st-gray:#8b949e;        /* 資料未備：灰（SSOT 第五節卡片表） */
+  --st-warn-fg:#e3b341;     /* 業務例外／不適用：黃（SSOT 第五節卡片表） */
+  --st-warn-bg:#241d07;
+  --st-err-fg:#ff7b72;      /* 系統錯誤／失敗：紅（SSOT 第五節卡片表 ＋ SET-0 規則欄） */
+  --st-err-bg:#2a0d10;
+
+  --maxw:1180px;
+  --gap:16px;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117;
+    --sheet:#161b22;
+    --sheet-2:#1b222b;
+    --ink:#e6edf3;
+    --ink-2:#adb7c2;
+    --ink-3:#8b949e;
+    --rule:#30363d;
+    --rule-2:#262c34;
+    --edge:#6b7682;
+    --draft:#5fd3d0;
+    --draft-bg:#0f2a2b;
+    --stop:#f294b6;
+    --stop-bg:#2a0a12;
+    --ok-mark:#5fd58a;
+    --warn-mark:#e3b341;
+    --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+  --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+  --rule:#30363d; --rule-2:#262c34; --edge:#6b7682;
+  --draft:#5fd3d0; --draft-bg:#0f2a2b;
+  --stop:#f294b6; --stop-bg:#2a0a12;
+  --ok-mark:#5fd58a; --warn-mark:#e3b341;
+  --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",
+              "Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.72;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:16px; padding-block:28px 64px}
+code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,
+  "Cascadia Mono",Consolas,monospace}
+code{font-size:.88em; background:var(--sheet-2); border:1px solid var(--rule-2);
+  border-radius:4px; padding:1px 5px; color:var(--ink)}
+h1,h2,h3,h4{text-wrap:balance; margin:0; line-height:1.34}
+p{margin:0}
+:focus-visible{outline:2px solid var(--draft); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important; animation:none!important}}
+
+/* ── 圖紙標題塊 ───────────────────────────────────────── */
+.titleblock{border:1px solid var(--rule); background:var(--sheet);
+  border-radius:var(--r); padding:20px 22px; box-shadow:var(--shadow)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--draft); font-weight:600}
+h1{font-size:clamp(24px,4.2vw,34px); font-weight:700; letter-spacing:-.01em; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:16px; padding-top:14px;
+  border-top:1px dashed var(--rule); font-size:12.5px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── 通用區塊 ─────────────────────────────────────────── */
+section{margin-top:34px}
+.sec-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  padding-bottom:8px; border-bottom:2px solid var(--ink); margin-bottom:16px}
+.sec-head h2{font-size:19px; font-weight:700}
+.sec-head .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--draft);
+  font-weight:600; letter-spacing:.08em}
+.sec-head .hint{font-size:12.5px; color:var(--ink-3); margin-left:auto}
+.card{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:16px 18px}
+.note{font-size:13px; color:var(--ink-2)}
+.tiny{font-size:12px; color:var(--ink-3)}
+
+/* ── 落差條（頁首警示） ───────────────────────────────── */
+.gapstrip{margin-top:18px; border:1px solid var(--stop); background:var(--stop-bg);
+  border-radius:var(--r); padding:14px 16px}
+.gapstrip h3{font-size:14px; color:var(--stop); font-weight:700}
+.gapstrip ol{margin:8px 0 0; padding-left:20px; font-size:13.5px; color:var(--ink)}
+.gapstrip li{margin:5px 0}
+.gapstrip li b{color:var(--stop)}
+
+/* ── 控制列（註記層，不是 app 的一部分） ─────────────── */
+.ctlwrap{margin-top:22px; border:2px dashed var(--draft); border-radius:var(--r);
+  background:var(--draft-bg); padding:10px 12px 12px}
+.ctlhead{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:9px}
+.ctlhead .tag{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft); font-weight:700;
+  border:1px solid var(--draft); border-radius:5px; padding:1px 7px}
+.ctlhead .say{font-size:12.5px; color:var(--ink-2)}
+.controls{background:var(--sheet); border:1px solid var(--rule);
+  border-radius:8px; padding:11px 13px; display:flex; flex-wrap:wrap; gap:12px 20px}
+.cgroup{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.clab{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.btn{font:inherit; font-size:13px; padding:5px 11px; border-radius:7px; cursor:pointer;
+  border:1px solid var(--edge); background:var(--sheet-2); color:var(--ink-2)}
+.btn:hover{border-color:var(--draft); color:var(--ink)}
+.btn[aria-pressed="true"]{background:var(--draft); border-color:var(--draft);
+  color:var(--paper); font-weight:600}
+
+/* ── 舞台：螢幕 + 註記軌 ──────────────────────────────── */
+.stage{display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start;
+  margin-top:20px}
+.screenbox{min-width:0}
+.rulerbar{display:flex; align-items:center; gap:10px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; color:var(--ink-3); margin-bottom:6px}
+.rulerbar .tick{flex:1; height:1px; background:repeating-linear-gradient(90deg,
+  var(--rule) 0 1px, transparent 1px 8px)}
+.screen-scroll{overflow-x:auto; padding-bottom:6px; border-radius:var(--r)}
+.screen{
+  width:var(--screen-w,1280px); max-width:100%;
+  container-type:inline-size;
+  background:var(--app-bg); color:var(--app-fg);
+  border:1px solid var(--app-border); border-radius:var(--r);
+  padding:18px 18px 22px; margin:0 auto;
+}
+.screen-chrome{display:flex; align-items:center; gap:8px; padding-bottom:12px;
+  margin-bottom:14px; border-bottom:1px solid var(--app-border);
+  font-size:12px; color:var(--app-muted); font-family:"IBM Plex Mono",monospace}
+.screen-chrome .dot{width:8px; height:8px; border-radius:50%; background:var(--app-border)}
+.screen-chrome .tabs{margin-left:auto; color:var(--app-muted); opacity:.8}
+.screen-chrome .tabs b{color:var(--app-fg-2); font-weight:600}
+
+/* 層標 */
+.layer{margin-top:18px}
+.layer:first-of-type{margin-top:0}
+.layer-tag{display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--draft)}
+.layer-tag .bar{flex:1; height:1px; background:var(--app-border)}
+.layer-tag .role{color:var(--app-muted); letter-spacing:.04em; text-transform:none;
+  font-size:11px}
+
+/* ── 結論燈（層 1 · SET-0） ───────────────────────────────
+   44 的 SET-0 規則欄逐字給了三色：灰、黃、紅。
+   左邊的圖示與狀態字是為了客戶 WCAG 第二條（狀態要配圖示＋文字）。 */
+.conc{border-radius:8px; padding:14px 16px; border:1px solid var(--app-border);
+  background:var(--app-card)}
+.conc.warn{border-color:var(--st-warn-fg); background:var(--st-warn-bg)}
+.conc.err{border-color:var(--st-err-fg); background:var(--st-err-bg)}
+.conc .top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.conc .glyph{font-size:17px; line-height:1}
+.conc .headline{font-size:16px; font-weight:700; color:var(--app-fg)}
+.conc.warn .headline{color:var(--st-warn-fg)}
+.conc.err .headline{color:var(--st-err-fg)}
+.conc .stword{display:inline-block; font-size:11px; font-weight:700; border-radius:999px;
+  padding:1px 9px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-fg-2); background:var(--app-inner); flex:none}
+.conc.warn .stword{border-color:var(--st-warn-fg); color:var(--st-warn-fg)}
+.conc.err .stword{border-color:var(--st-err-fg); color:var(--st-err-fg)}
+.conc .lines{margin-top:8px; font-size:13.5px; color:var(--app-fg-2)}
+.conc .lines div{margin:3px 0}
+.conc .where{margin-top:8px; font-size:12.5px; color:var(--app-muted)}
+
+/* ── 核心卡（層 2 · SET-1 / SET-2 / SET-3） ───────────── */
+.cards{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.cardx{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:13px 14px; min-width:0}
+.cardx .t{font-size:13.5px; color:var(--app-fg); font-weight:700;
+  display:flex; align-items:baseline; gap:7px; flex-wrap:wrap}
+.cardx .st{font-size:12.5px; color:var(--app-muted); margin-top:4px}
+.cardx .foot{margin-top:9px; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.cardx .subt{font-size:11.5px; color:var(--app-muted); margin-top:10px; font-weight:600}
+
+/* 表（app 內通用） */
+.tscroll{margin-top:8px; border:1px solid var(--app-border); border-radius:6px}
+table.wt{border-collapse:collapse; width:100%; font-size:12.5px;
+  font-variant-numeric:tabular-nums; table-layout:fixed}
+table.wt th,table.wt td{padding:6px 9px; text-align:left;
+  border-bottom:1px solid var(--app-border); overflow-wrap:anywhere}
+table.wt th{color:var(--app-muted); font-weight:600; background:var(--app-inner)}
+table.wt th .u{display:block; color:var(--app-muted); font-size:10px; font-weight:500}
+table.wt tr:last-child td{border-bottom:0}
+table.wt tfoot td{background:var(--app-inner); color:var(--app-fg-2); font-weight:600;
+  border-top:1px solid var(--app-edge)}
+table.wt td .nd{color:var(--st-gray); font-weight:600}
+table.wt td .na{color:var(--st-warn-fg); font-weight:600}
+table.wt td .er{color:var(--st-err-fg); font-weight:600}
+table.wt td .raw{display:block; color:var(--app-muted); font-size:11px; font-weight:400;
+  margin-top:2px; font-family:"IBM Plex Mono",monospace}
+.msgraw{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--st-err-fg);
+  overflow-wrap:anywhere}
+
+/* ≤768 時把表改成逐列堆疊（本組擬定：44 硬規則禁橫向捲動，見 ⛔ S-43） */
+.stackview{display:none; margin-top:8px}
+.stackview .one{border:1px solid var(--app-border); border-radius:6px;
+  background:var(--app-inner); padding:8px 10px; margin-top:7px}
+.stackview .one .h{font-size:12.5px; color:var(--app-fg); font-weight:600;
+  overflow-wrap:anywhere}
+.stackview .kv{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
+  gap:4px 10px; font-size:12px; margin-top:5px}
+.stackview .kv span{color:var(--app-muted)}
+.stackview .kv b{color:var(--app-fg); font-weight:600; font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere}
+.stackview .kv b.nd{color:var(--st-gray)}
+.stackview .kv b.na{color:var(--st-warn-fg)}
+.stackview .kv b.er{color:var(--st-err-fg)}
+
+/* 徽章（app 內） */
+.abadge{display:inline-block; font-size:10.5px; font-weight:600; border-radius:999px;
+  padding:1px 7px; white-space:nowrap; border:1px solid var(--app-edge);
+  color:var(--app-muted); background:var(--app-inner)}
+.abadge.warn{color:var(--st-warn-fg); border-color:var(--st-warn-fg)}
+.abadge.gray{color:var(--st-gray)}
+.abadge.err{color:var(--st-err-fg); border-color:var(--st-err-fg)}
+.abadge.ph{border-style:dashed; color:var(--app-muted)}
+
+/* ── 操作列（層 3 · SET-4 / SET-5，預設收合） ─────────── */
+.ops{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.exp{border:1px solid var(--app-edge); border-radius:8px; background:var(--app-card);
+  overflow:hidden; min-width:0}
+.exp summary{cursor:pointer; padding:10px 13px; font-size:13.5px; color:var(--app-fg);
+  list-style:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.exp summary::-webkit-details-marker{display:none}
+.exp summary::before{content:"\25B8"; color:var(--app-muted); font-size:11px; flex:none}
+.exp[open] summary::before{content:"\25BE"}
+.exp summary:hover{background:var(--sheet-2)}
+.exp .body{padding:0 13px 13px; font-size:13px; color:var(--app-fg-2);
+  border-top:1px solid var(--app-border); padding-top:11px}
+.exp summary .sm{color:var(--app-muted); font-size:12px; margin-left:auto;
+  overflow-wrap:anywhere}
+.krow{border:1px solid var(--app-edge); border-radius:6px; background:var(--app-inner);
+  margin-top:7px; padding:8px 10px}
+.kgrid{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto;
+  gap:6px 8px; align-items:end}
+.kgrid label{display:block; font-size:10.5px; color:var(--app-muted); margin-bottom:2px}
+.selbox,.inbox{width:100%; font:inherit; font-size:12.5px; padding:5px 8px; border-radius:5px;
+  background:var(--app-bg); color:var(--app-fg); border:1px solid var(--app-edge)}
+.inbox::placeholder{color:var(--app-ph)}
+textarea.inbox{min-height:46px; resize:vertical; font-family:"IBM Plex Mono",monospace;
+  font-size:11.5px}
+.rowbtn{font:inherit; font-size:12px; padding:5px 9px; border-radius:5px; cursor:pointer;
+  background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge); white-space:nowrap}
+.rowbtn:hover{border-color:var(--app-fg-2)}
+.rowtail{margin-top:6px; font-size:12px}
+.rowtail.nd{color:var(--st-gray); font-weight:600}
+.rowtail.na{color:var(--st-warn-fg); font-weight:600}
+.rowtail.er{color:var(--st-err-fg); font-weight:600}
+.savebar{display:flex; gap:8px; flex-wrap:wrap; margin-top:11px; align-items:center}
+.apply{font:inherit; font-size:13.5px; font-weight:600; padding:8px 16px; border-radius:7px;
+  cursor:pointer; background:#21262d; color:var(--app-fg); border:1px solid var(--app-edge)}
+.apply:hover{border-color:var(--app-fg-2)}
+.apply[disabled]{cursor:not-allowed; color:var(--app-muted); border-style:dashed}
+.apply[disabled]:hover{border-color:var(--app-edge)}
+.why{color:var(--app-muted); font-size:12px; margin-top:5px}
+.radiorow{display:flex; gap:14px; flex-wrap:wrap; margin-top:7px}
+.rd{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--app-fg-2)}
+.rd input{accent-color:#5fd3d0; width:14px; height:14px}
+
+/* ── 佐證（層 4 · SET-6 / SET-7，預設收合） ───────────── */
+.evi{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.emptybox{border:1px dashed var(--app-edge); border-radius:8px; padding:16px;
+  background:var(--app-card); margin-top:8px}
+.emptybox .et{color:var(--app-muted); font-weight:600; font-size:14px}
+.emptybox .em{color:var(--app-muted); font-size:13px; margin-top:4px}
+.holebox{border:1px dashed var(--st-warn-fg); border-radius:8px; padding:12px;
+  background:var(--st-warn-bg); margin-top:8px; font-size:12.5px; color:var(--st-warn-fg)}
+
+/* ── 註記軌 ───────────────────────────────────────────── */
+.rail{display:flex; flex-direction:column; gap:14px; min-width:0}
+.railcard{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--r);
+  padding:13px 14px}
+.railcard h3{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); font-weight:600; margin-bottom:8px}
+.legend{display:flex; flex-direction:column; gap:7px; font-size:12.5px}
+.legend div{display:flex; gap:8px; align-items:flex-start}
+.legend b{flex:none; width:80px; font-weight:600; font-size:11.5px;
+  font-family:"IBM Plex Mono",monospace}
+
+/* ── 註記標籤（pin）：一眼看得出不是 app 的字 ─────────── */
+.pin{display:inline-flex; align-items:center; gap:5px; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; font-weight:600; color:var(--stop); background:var(--stop-bg);
+  border:1px dashed var(--stop); border-radius:5px; padding:1px 6px; vertical-align:middle}
+.pin.ann{color:var(--draft); background:var(--draft-bg); border-color:var(--draft)}
+.pinrow{display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 0}
+.annot{margin-top:8px; font-size:12px; color:var(--ink-2); background:var(--sheet);
+  border:1px dashed var(--draft); border-left:3px solid var(--draft);
+  border-radius:0 6px 6px 0; padding:8px 11px}
+.annot b{color:var(--draft)}
+
+/* ── 表格（註記層） ───────────────────────────────────── */
+.tbl-scroll{overflow-x:auto; border:1px solid var(--rule); border-radius:var(--r);
+  background:var(--sheet)}
+table.ref{border-collapse:collapse; width:100%; min-width:660px; font-size:13px}
+table.ref th,table.ref td{padding:8px 11px; text-align:left; vertical-align:top;
+  border-bottom:1px solid var(--rule-2)}
+table.ref th{background:var(--sheet-2); color:var(--ink-2); font-weight:600;
+  font-size:11.5px; letter-spacing:.04em; white-space:nowrap}
+table.ref tr:last-child td{border-bottom:0}
+table.ref td.id{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--stop); font-weight:600}
+table.ref td.src{font-family:"IBM Plex Mono",monospace; font-size:11.5px; white-space:nowrap;
+  color:var(--ink-3)}
+table.ref td.jd{white-space:nowrap; font-size:12px}
+.badge{display:inline-block; font-size:11px; font-weight:600; border-radius:999px;
+  padding:1px 8px; white-space:nowrap}
+.badge.mu{background:var(--stop-bg); color:var(--stop); border:1px solid var(--stop)}
+.badge.no{background:var(--sheet-2); color:var(--ink-3); border:1px solid var(--edge)}
+.badge.ok{background:var(--sheet-2); color:var(--ok-mark); border:1px solid var(--ok-mark)}
+.badge.wn{background:var(--sheet-2); color:var(--warn-mark); border:1px solid var(--warn-mark)}
+
+/* ── 判準框 / 揭露 ────────────────────────────────────── */
+.crit{background:var(--draft-bg); border:1px solid var(--draft); border-radius:var(--r);
+  padding:13px 15px; margin-bottom:14px; font-size:13.5px}
+.crit h4{font-size:12px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--draft); margin-bottom:6px}
+.crit ul{margin:6px 0 0; padding-left:19px}
+.crit li{margin:3px 0}
+.disclose{border:1px solid var(--rule); border-left:4px solid var(--warn-mark);
+  background:var(--sheet); border-radius:0 var(--r) var(--r) 0; padding:15px 17px}
+.disclose ul{margin:8px 0 0; padding-left:19px; font-size:13.5px}
+.disclose li{margin:5px 0}
+.foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--ink-3)}
+.blk{font-size:15px; color:var(--draft); margin-bottom:6px; font-weight:700}
+
+/* ══════════════════════════════════════════════════════════════════════
+   響應式 —— 三個斷點 375 / 768 / 1280，欄數依 SSOT 第二節第一小節最終版：
+     ≤768 單欄　769–1279 兩欄　≥1280 三欄
+   基底寫法就是單欄（＝ ≤768 那一段），兩個 @media 往上加寬。
+   375 是三個斷點值之一，但 SSOT 明寫「它不是欄數的分界」——
+   故 375 那一條只收字級與內距，不動欄數。
+   ════════════════════════════════════════════════════════════════════ */
+@media (min-width:769px) and (max-width:1279px){
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:1280px){
+  .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stage{grid-template-columns:minmax(0,1fr) 316px}
+}
+@media (max-width:1279px){
+  .rail{flex-direction:row; flex-wrap:wrap}
+  .railcard{flex:1 1 260px}
+}
+@media (max-width:768px){
+  .wrap{padding-block:20px 48px}
+  .rail{flex-direction:column}
+  .railcard{flex:1 1 auto}
+  .sec-head .hint{margin-left:0; flex-basis:100%}
+  .screen{padding:14px 13px 18px}
+  .kgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:375px){
+  body{font-size:14px}
+  .legend b{width:100%}
+  .legend div{flex-direction:column; gap:1px}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+  .stackview .kv{grid-template-columns:minmax(0,1fr)}
+}
+/* 模擬螢幕自己的寬度反應：讓上方的斷點鈕即使不縮視窗也看得到塌法。
+   三段與上面的 @media 逐值相同（≤768 / 769–1279 / ≥1280），兩者永遠同時同側。 */
+@container (max-width:768px){
+  .cards,.ops,.evi{grid-template-columns:minmax(0,1fr)}
+  .kgrid{grid-template-columns:minmax(0,1fr)}
+  /* ⛔ S-43：44 沒有寫表格在窄寬度怎麼塌，而硬規則禁橫向捲動。
+     本組把本頁五張表改成逐列堆疊 —— **那是本組擬的**。 */
+  .tscroll{display:none}
+  .stackview{display:block}
+}
+@container (min-width:769px) and (max-width:1279px){
+  .cards,.ops{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container (min-width:1280px){
+  .cards,.ops{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container (max-width:375px){
+  .stackview .kv{grid-template-columns:minmax(0,1fr)}
+  .exp summary .sm{margin-left:0; flex-basis:100%}
+}
+</style>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   本草稿對 TOKENS 的唯一增補 —— 兩段都是**逐位元組取自既有線框**，不是本組調的色。
+
+   (1) --st-gray-bg：取自 docs/v2/prototype/ui_prototype_exp.html 的 :root。
+       它是客戶 2026-09-24 逐字裁示「失敗框改灰」時加的那一個
+       （裁示理由逐字：「黃是業務例外；存檔失敗是系統級」）。
+   (2) .failbox：同樣逐位元組取自該檔。
+
+   ⚠️ 為什麼要增補：設定頁那一份線框有 --st-gray，**沒有** --st-gray-bg
+      （那一個是標的探索頁那一輪才加的）。本草稿若自己配一個底色，就是自己調色。
+      取客戶已經裁過的那一個值，是唯一不用自己拍板的走法。
+   ⚠️ 這一筆本身就是一個**提議**，逐項列在 §3。
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --st-gray-bg:#11161d;     /* 灰態容器底（2026-09-24 新增；客戶裁示「失敗框改灰」）——
+                               既有代號一個位元組未改，本行是**新增**。取值與本檔既有的「格底」
+                               逐值相同（table.wt th／.rulerow／.conc .stword／table.cmp 表頭／
+                               .cmpstack .one 都是這個值）⇒ 全檔**沒有因此多出任何一個新色碼**，
+                               §J 的對比母體只多一組「灰框／卡底」（非文字 UI 元件），見 §J 一。 */
+}
+.failbox{border:1px solid var(--st-gray); background:var(--st-gray-bg); border-radius:6px;
+  padding:9px 11px; margin-top:9px; font-size:12.5px; color:var(--st-gray)}
+
+/* ⛔ 〔2026-09-24 同輪回修 · 有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕
+   上面 --st-gray-bg 那一行的註解是**連同它一起逐位元組複製自 ui_prototype_exp.html 的**，
+   括號裡那一串「取值與本檔既有的『格底』逐值相同（table.wt th／.rulerow／.conc .stword／
+   table.cmp 表頭／.cmpstack .one）」以及結尾的「§J 的對比母體…見 §J 一」，
+   **描述的是那一檔，對這一份草稿為假**。實測：
+     · .rulerow ／ table.cmp ／ .cmpstack .one —— **本檔根本沒有這三條規則**
+       （全檔唯一的命中就是那句註解自己）。
+     · table.wt th 與 .conc .stword —— 本檔有，但它們的底色寫的是 var(--app-inner)，不是字面值。
+     · §J —— **本草稿沒有這一節**（章節是 §1～§6）。
+   ⛔ 刻意不改那一行的內容：它的**取值**（#11161d）正是客戶 2026-09-24 裁示「失敗框改灰」時定的那一個，
+      保留原樣才看得出這個色不是本組配的。**要看那串括號的證據請去來源檔看，不要在這裡看。**
+   ✅ 它原本要撐的結論在本檔仍然成立，而且比原句更強（本組實測，不是轉述）：
+      這一段 <style> **引入的新色碼字面值是 0 個** —— #11161d 早就在上面那份複製回來的 TOKENS 裡
+      （--app-inner，卡內次層／表頭／列框用的就是它），所以新增 --st-gray-bg **連一個新色都沒有帶進來**。
+      量法：兩段 <style> 各自去掉註解後抓 #xxxxxx，第二段的集合**完全被第一段包含**（差集為空）。 */
+
+/* 本草稿自己的版面（只有註記層用，app 螢幕一律走上面那份 TOKENS） */
+.dsec{max-width:1180px; margin:0 auto; padding:0 16px}
+.dhead{border-left:4px solid var(--draft); padding-left:12px; margin:22px 0 10px}
+.dhead h2{font-size:17px; margin:0 0 3px}
+.dhead .sub{font-size:12px; color:var(--ink-2)}
+.swrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0 14px}
+@media (max-width:768px){ .dsec{padding:0 16px} }
+</style>
+</head>
+<body>
+
+<div class="dsec">
+  <header>
+    <div class="dhead">
+      <h2>設定頁 <code>SET-4</code>｜「存檔寫入失敗」那一個狀態長什麼樣</h2>
+      <div class="sub">線框草稿 · 2026-09-24 · <b>客戶尚未拍板</b> · 由架構與前端組提出</div>
+    </div>
+
+    <div class="crit">
+      <h4>這一份要回答的只有一件事</h4>
+      <p class="note" style="margin-bottom:8px">
+        44 的 <code>SET-4</code> 空狀態欄已於 <b>2026-09-23</b> 逐字寫出「存檔寫入失敗」那一句，
+        而 <code>docs/v2/prototype/ui_prototype_set.html</code> <b>至今沒有畫那個狀態</b>
+        （該檔 §C 的 <code>S-19</code> 那一列就是這一筆，現況逐字：「<b>44 寫了，本草稿仍然沒有畫那個狀態、待重繪</b>」）。
+      </p>
+      <p class="note" style="margin-bottom:8px">
+        <b>客戶 2026-09-24 裁示逐字：「先送草稿我看，才重繪。」</b>
+        所以這一份<b>只出草稿</b>：把那個狀態畫出來給客戶看，<b>不動 <code>ui_prototype_set.html</code> 一個位元組</b>。
+      </p>
+      <ul class="note" style="margin:0; padding-left:20px">
+        <li><b>只畫 44 逐字寫出來的東西。</b> 44 那一句寫了三件事，本草稿就畫那三件，見 §1。</li>
+        <li><b>本草稿自己挑的，逐項列在 §3</b>，寫出來就是要給客戶推翻的。</li>
+        <li><b>44 刻意沒答的，本草稿不替它答</b>，見 §4。</li>
+        <li><b>本草稿沒有替 44 補任何一個缺口</b>，也沒有動 44 一個位元組（44 已凍結）。</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="dhead" style="margin-top:20px">
+    <h2>§1　44 原文對照</h2>
+    <div class="sub">左欄逐字引 <code>docs/v2/44_fund_ui_ssot.md</code> 的 <code>SET-4</code>，<b>一個字沒有改寫、沒有濃縮</b></div>
+  </div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th style="width:34%">44 原文逐字</th><th style="width:33%">現況線框畫的</th><th style="width:33%">本草稿提議改成</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b><code>SET-4</code> 空狀態欄</b>：「存檔寫入失敗 → <b>該鍵的輸入欄下方顯示失敗訊息原文</b>，該欄的當下輸入留在畫面上不清掉，<code>SET-3</code> 該列的目前值與最後修改時間不變」</td>
+          <td><b>沒有畫那個狀態。</b> <code>SET-4</code> 的列尾目前只有兩種：
+            「型別說明：…」（值與型別不符）與 <code>⬜ 未設定</code>
+            （十二顆狀態逐顆實測：<code>rowtail nd</code> 十七次、<code>rowtail na</code> 一次，
+            <b><code>failbox</code> 零次</b>）。<br>
+            ⚠️ <b>但螢幕上不是完全沒有「存檔寫入失敗」這六個字</b>：該檔 <code>SET-4</code> 區塊底下有一句
+            ⛔ <code>S-19</code> 的註記逐字寫著「44 已於 2026-09-23 寫出存檔寫入失敗那一句，
+            本草稿仍然沒有畫那個狀態 —— 待重繪」，<b>十二顆狀態每一顆都印得到它</b>。
+            <b>那是一句註記，不是那個狀態。</b></td>
+          <td><b>在「被編輯的那一鍵」那一列的列尾</b>加一個失敗框，框裡第一行逐字是「存檔寫入失敗：」＋<b>〔失敗訊息原文〕佔位</b>。<br>
+            ⚠️ <b>掛在列上，不是掛在卡上</b> —— 44 這一句寫的是「<b>該鍵的輸入欄下方</b>」，
+            與 <code>EXP-1</code>／<code>EXP-4</code>／<code>EXP-5</code> 三句的「<b>卡上</b>顯示」<b>不同</b>。</td></tr>
+        <tr>
+          <td>（同一句）「…<b>該欄的當下輸入留在畫面上不清掉</b>…」</td>
+          <td><b>沒有畫。</b> 現況該欄一律顯示存檔後的值。</td>
+          <td>失敗態下，<b>該鍵的輸入欄裡是使用者剛打進去、還沒存成功的那個值</b>，
+            並在框裡第二行寫明「上面這一欄的當下輸入留在畫面上不清掉」。<br>
+            <b>其餘十六個鍵的輸入欄不受影響</b>（44 只寫「該欄」）。</td></tr>
+        <tr>
+          <td>（同一句）「…<code>SET-3</code> <b>該列的目前值與最後修改時間不變</b>」</td>
+          <td><b>沒有畫。</b>（現況沒有失敗態，自然也沒有「不變」可看。）</td>
+          <td><b><code>SET-3</code> 一個字都不動。</b> 草稿把 <code>SET-3</code> 也畫在同一個螢幕上，
+            開關一開一關<b>對照得出來</b>：該鍵那一列的「目前值」與「最後修改時間」<b>逐格相同</b>。
+            （實測見 §6，開關開與關兩次渲染的 <code>SET-3</code> 輸出<b>逐位元組相同</b>。）</td></tr>
+        <tr>
+          <td><b><code>SET-4</code> 空狀態欄前一句</b>：「輸入值與 <code>value_kind</code> 不符 → 欄位下方顯示型別說明，不存檔，<code>SET-3</code> 的值不變」</td>
+          <td><b>已經畫了</b>（該檔第 10 顆狀態「值與型別不符」）。</td>
+          <td><b>不動。</b> 草稿把它一起畫出來，只是為了讓客戶看見兩種列尾<b>擺在同一個位置</b>、
+            而且<b>分得出來</b>：一個是型別說明，一個是失敗框。</td></tr>
+        <tr>
+          <td><b>44 第五節 <code>5.5 空狀態 EmptyState</code></b>（2026-09-23 新增）：「<b>一塊的空狀態欄整格為準：那一格沒有寫出按鈕，該塊的那個空狀態畫面上就沒有按鈕，不回退成本表模板裡的那一枚</b>」</td>
+          <td>（不適用 —— 現況沒有這個狀態。）</td>
+          <td><b>失敗框裡一枚按鈕都不畫。</b> <code>SET-4</code> 空狀態欄那一句<b>沒有寫出任何按鈕</b>，
+            照這一條就是畫面上沒有 —— <b>不回退成 <code>來源缺</code> 模板那一枚「重新取數」。</b></td></tr>
+        <tr>
+          <td><b><code>SET-4</code> 規則欄</b>（2026-09-23 改寫）：「本塊掛一枚「存檔」按鈕（<code>action_kind</code> 為 <code>存檔</code>）…<b>本頁沒有「套用」類按鈕，本塊因此只掛這一枚</b>」</td>
+          <td><b>已經畫了</b>（存檔鈕在，<code>H-17</code>）。</td>
+          <td><b>不動。</b> 失敗之後那一枚<b>還是那一枚</b> ——
+            44 沒有寫失敗後按鈕要停用、要改字、還是要換一枚，<b>所以草稿什麼都不改</b>（見 §4）。<br>
+            ⚠️ <b>「只掛這一枚」與螢幕上的十八枚按鈕不衝突，就地講清楚</b>
+            〔2026-09-24 同輪回修補上 · <b>有意識的更正，不是漏刪</b> · 決策者：<b>AI 總管</b>；
+            依據：獨立稽核指出〕：44 那一句的主詞是 <b><code>存檔</code> 這一類</b>
+            （原文前半是「<b>本頁沒有「套用」類按鈕</b>，本塊因此只掛這一枚」），
+            <b>指的是「存檔類只有一枚」，不是「整塊只有一枚按鈕」</b>。
+            另外十七枚是 <code>清除</code> 類 —— <b>動作是 44 的字，標籤與「每一鍵各一枚」是本組擬的</b>，
+            <b>已補列在 §3 最後一列</b>。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dhead" style="margin-top:22px">
+    <h2>§2　畫面</h2>
+    <div class="sub">深色 app 螢幕。<b>「存檔寫入失敗」是一枚開關，不是第 N 種狀態</b> —— 理由見 §3 第一項</div>
+  </div>
+  <div class="swrow">
+    <button class="btn" type="button" id="btn-fail" aria-pressed="false">存檔寫入失敗：<b>關</b></button>
+    <button class="btn" type="button" id="btn-keys" aria-pressed="true">十七個鍵：<b>已設定過</b></button>
+    <button class="btn" type="button" id="btn-bad" aria-pressed="false">值與型別不符：<b>關</b></button>
+    <button class="btn" type="button" id="btn-theme" aria-pressed="false">跟隨系統</button>
+    <span class="tiny" style="color:var(--ink-2)">三枚開關互相正交，可以疊著開</span>
+  </div>
+  <div class="screen" id="screen">
+    <div id="slot-cards"></div>
+    <div id="slot-ops"></div>
+  </div>
+  <p class="tiny" style="margin-top:8px; color:var(--ink-2)">
+    ⚠️ <b>螢幕上每一個會隨資料變的數字與內容後面都帶「（示意）」</b> —— 那是客戶的草稿規範逐字要求。
+    <b>本草稿一個真實觀測值也沒有。</b>
+  </p>
+
+  <div class="dhead" style="margin-top:22px">
+    <h2>§3　本草稿挑的、44 沒寫的（逐項，寫出來就是要給客戶推翻）</h2>
+    <div class="sub">每一項都可以裁成另一邊，裁了本組就改</div>
+  </div>
+  <div class="tbl-scroll">
+    <table class="ref">
+      <thead><tr><th style="width:24%">本草稿挑了什麼</th><th style="width:38%">為什麼這樣挑</th><th style="width:38%">另一邊長什麼樣（客戶要的話就走這邊）</th></tr></thead>
+      <tbody>
+        <tr><td><b>做成一枚「開關」，不是多一種狀態</b></td>
+          <td>存檔會不會寫失敗，與「鍵設了沒、值合不合型別」<b>沒有關係</b>；
+            做成互斥的一種狀態，等於宣稱失敗只發生在某一種資料底下，<b>那不是 44 寫的東西</b>。<br>
+            <b>這一條照的是客戶 2026-09-24 已經拍板的那一份標的探索頁草稿</b>（該檔同樣把失敗態做成正交開關）。</td>
+          <td>做成 <code>ui_prototype_set.html</code> 現有十二顆狀態鈕的<b>第十三顆</b>。
+            代價：疊不上「值與型別不符」，兩者的交互作用看不到。</td></tr>
+        <tr><td><b>失敗框走灰色</b>（<code>--st-gray</code> ＋ <code>--st-gray-bg</code>）</td>
+          <td><b>不是本組配的色</b>：客戶 2026-09-24 逐字裁「<b>失敗框改灰</b>」，
+            理由逐字「<b>黃是業務例外；存檔失敗是系統級</b>」。兩個 token 值<b>逐位元組取自標的探索頁那一份</b>。<br>
+            ⚠️ 設定頁的線框<b>沒有</b> <code>--st-gray-bg</code>，落地時要一起加進去 —— <b>那一筆也是提議</b>。</td>
+          <td>若客戶認為設定頁應與標的探索頁分開處理，可改走該頁既有的任一組狀態色。
+            <b>本組不主張</b>，因為那會讓同一個元件在兩頁長不一樣。</td></tr>
+        <tr><td><b>拿 <code>set_max_age_days</code> 當示範的那一鍵</b></td>
+          <td>44 寫的是「<b>該鍵</b>」＝當下被編輯的那一鍵，<b>沒有指定哪一個</b>。
+            要畫出來就得挑一個。挑它的理由：實測十七個鍵裡，<b>它是唯一一個被<u>本頁</u>的塊用到的鍵</b>
+            （<code>SET-1</code>），所以失敗時「<code>SET-3</code> 那一列不變」在同一個螢幕上就看得完。<br>
+            ⚠️ <b>本行不宣稱它是唯一的整數鍵</b> —— <code>mkt_window_days</code> 同樣是 <code>int</code>、
+            同樣有塊在用（<code>MKT-4</code>），只是那一塊不在這一頁。</td>
+          <td>換成任何一個鍵都成立。<b>這一項純粹是示範用的選擇，不影響規格。</b></td></tr>
+        <tr><td><b>失敗框裡寫兩行</b>：第一行「存檔寫入失敗：〔失敗訊息原文〕」，第二行「上面這一欄的當下輸入留在畫面上不清掉」</td>
+          <td>44 那一句把「顯示失敗訊息原文」與「當下輸入不清掉」<b>寫在同一句裡</b>，
+            但<b>沒有寫第二件事要不要讓使用者看見</b>。
+            本草稿選擇寫出來，理由：不寫的話，畫面上看不出「值還在」是刻意的還是忘了清。</td>
+          <td>只留第一行。<b>代價</b>：使用者不知道欄裡那個值是「還沒存成功的」還是「已經存好的」。</td></tr>
+        <tr><td><b>失敗訊息畫成〔佔位〕</b></td>
+          <td>44 寫的是「顯示<b>失敗訊息原文</b>」—— 那是「把上游給的字原樣印出來」，
+            <b>不是一句可以照抄的文案</b>。<b>本組不編造。</b></td>
+          <td>（沒有另一邊。編一句假的失敗訊息會讓客戶把它讀成規格。）</td></tr>
+        <tr><td><b>失敗框裡一枚按鈕都不畫</b></td>
+          <td>44 第五節 <code>5.5 空狀態 EmptyState</code>逐字：「那一格沒有寫出按鈕，該塊的那個空狀態畫面上就沒有按鈕，
+            <b>不回退成本表模板裡的那一枚</b>」，而 <code>SET-4</code> 那一格<b>沒有寫出按鈕</b>。<br>
+            ⚠️ 嚴格說這一項<b>不是本組挑的，是照 44 畫的</b>；列在這裡是因為它看起來像漏畫。</td>
+          <td>（照 44 就是沒有。要加得先改 44，而 44 已凍結。）</td></tr>
+        <tr style="outline:2px solid var(--stop)">
+          <td><b>每一鍵一枚「清除」，共十七枚</b><br>
+            <span class="tiny">〔2026-09-24 同輪回修補列 · <b>有意識的更正，不是漏刪</b> ·
+            日期 <b>2026-09-24</b> · 決策者：<b>AI 總管</b>；依據：獨立稽核指出，本組重跑確認〕</span></td>
+          <td><b>上一版漏了這一列，而它們就畫在螢幕上</b> —— 實測本草稿 app 螢幕的按鈕是
+            <b>「清除」×17 ＋「存檔」×1 ＝ 18 枚</b>。<br>
+            <b>動作有 44 的字，標籤沒有</b>：<code>SET-4</code> 規則欄逐字「<b>清除</b>某鍵的操作把它變回未設定，
+            <b>不變成零</b>」、空狀態欄逐字「必要鍵<b>被清除</b>」——
+            <b>44 寫的是一個動作，不是一個按鈕標籤</b>，更沒有寫「每一鍵各一枚」。<br>
+            <b>這筆登記本來就在 <code>ui_prototype_set.html</code> 的 §D 第 3 列</b>
+            （「<code>SET-4</code> 每一鍵（十七處）『清除』<b>〔本組擬定〕</b>…<b>標籤字面 ⚠</b>」），
+            <b>本草稿把按鈕複製過來了，卻沒有把那筆登記一起帶過來。</b></td>
+          <td><b>不畫「清除」</b>（本草稿的主題是失敗態，清除鈕可以不入鏡）。<br>
+            ⚠️ <b>本組不主張</b>：拿掉它會讓這一份與 <code>ui_prototype_set.html</code> 的
+            <code>SET-4</code> 長得不一樣，客戶就看不出失敗框是插在哪一列的哪個位置。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dhead" style="margin-top:22px">
+    <h2>§4　44 刻意沒答的，本草稿不替它答</h2>
+    <div class="sub">這幾格在畫面上<b>看不到任何東西</b>，不是漏畫</div>
+  </div>
+  <div class="crit">
+    <ul class="note" style="margin:0; padding-left:20px">
+      <li><b>失敗之後那一枚「存檔」按鈕變成什麼樣，44 沒寫。</b>
+        要不要停用、要不要改字、要不要顯示重試 —— 一句都沒有。
+        <b>本草稿因此一個字都不改那一枚</b>，畫面上它與成功時完全相同。</li>
+      <li><b>失敗框要不要能關掉、什麼時候消失，44 沒寫。</b> 本草稿不畫關閉鈕、不畫倒數、不自動消失。</li>
+      <li><b>同時編輯多個鍵、多個鍵一起失敗會怎樣，44 沒寫。</b>
+        44 那一句的主詞是單數的「<b>該鍵</b>」，<b>本草稿只畫一個鍵失敗</b>，不推廣成多個。</li>
+      <li><b>「存檔寫入失敗」算不算 <code>5.5</code> 那四種空狀態（<code>來源缺</code>／<code>部分缺</code>／<code>算不出來</code>／<code>系統錯誤</code>）的哪一種，44 沒有分。</b>
+        <code>系統錯誤</code> 的定義逐字是「<b>取數或計算本身失敗</b>」—— 存檔寫入既不是取數也不是計算。<br>
+        ⚠️ 而 44 同節逐字寫著「<b>本表的顏色與種類名各塊不得自訂</b>」，
+        <b>所以本草稿不替它歸類、不寫任何種類名</b>；框裡只有「存檔寫入失敗」六個字，那是 44 自己的用詞。
+        <b>灰色是客戶裁的，不是本組把它歸進 <code>來源缺</code>。</b></li>
+      <li><b>失敗時 <code>SET-7</code>（影響對照）要不要跟著說什麼，44 沒寫。</b> 本草稿不畫。</li>
+    </ul>
+  </div>
+
+  <div class="dhead" style="margin-top:22px">
+    <h2>§5　這一份沒有動什麼，以及拍板後要改哪裡</h2>
+  </div>
+  <div class="crit">
+    <ul class="note" style="margin:0 0 8px; padding-left:20px">
+      <li><b>沒有動 <code>docs/v2/44_fund_ui_ssot.md</code> 一個位元組</b>（已凍結）。</li>
+      <li><b>沒有動 <code>docs/v2/prototype/ui_prototype_set.html</code> 一個位元組。</b>
+        那一檔的 <code>S-19</code> 現況敘述（「44 寫了、草稿沒畫、待重繪」）<b>仍然是對的</b> —— 本輪只出草稿。</li>
+      <li><b>沒有動其餘四份線框、沒有動 <code>ui_v2/</code>、沒有動 <code>tests/</code>、沒有碰任何 <code>.py</code>。</b></li>
+    </ul>
+    <p class="note" style="margin-bottom:8px">
+      <b>拍板之後要改的是這三處</b>（本草稿<b>不預先改</b>）：
+      <b>(a)</b> <code>ui_prototype_set.html</code> 的 <code>:root</code> 補一個 <code>--st-gray-bg</code> 與一條 <code>.failbox</code>；
+      <b>(b)</b> <code>renderOps()</code> 裡 <code>SET-4</code> 的列尾加失敗框、控制列加一枚開關；
+      <b>(c)</b> 該檔 §C 的 <code>S-19</code> 那一列由「待重繪」改成「已畫」。
+    </p>
+    <p class="note" style="margin-bottom:8px">
+      ⚠️ <b>本草稿的繪製碼是從 <code>ui_prototype_set.html</code> 複製回來的，據實寫明改了哪幾處</b>：
+      <s><code>SET-3</code> 那張卡<b>一個字沒改</b>（整段逐位元組複製，就是為了證明它不變）；</s>
+      <b>2026-09-24 同輪回修：這半句已不成立</b> —— <code>SET-3</code> 那張卡的<b>一句附註</b>本輪被改了
+      （見下方第四處草稿改動）。<b>它的四個欄名、十七列鍵名與型別仍然逐位元組相同</b>，
+      而「<code>SET-3</code> 不變」這個結論<b>本來就不是靠 byte-exact 證的，是靠執行時比對證的</b>
+      （開關開與關兩次渲染逐字元相同，見 §6）—— <b>那個證明不受這次改動影響。</b><br>
+      <code>SET-4</code> 的列迴圈<b>改了兩處</b>（失敗態下那一鍵的輸入值、列尾的失敗框），
+      <code>SET-4</code> 的區塊說明<b>改了一句</b>（原本寫「本草稿仍然沒有畫那個狀態」，在這一份裡已經畫了）。
+      <b>連同下方那三句「（44 逐字）」標籤，本草稿對複製碼的改動一共是「三處 ＋ 三句」，逐處在原始碼裡就地標了註解。</b>
+      其餘（<code>KEYS</code> 十七列、每一列的鍵名與型別、<code>SET-3</code> 四個欄名）<b>一個字都沒有改</b>。
+    </p>
+    <p class="note" style="margin-bottom:8px; border-left:3px solid var(--stop); padding-left:11px">
+      ⛔ <b>上一段只講了「複製到的東西改了哪幾處」，<u>沒有</u>講「哪些東西根本沒複製過來」——
+      2026-09-24 同輪回修補上</b>〔<b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> ·
+      決策者：<b>AI 總管</b>；依據：獨立稽核指出，本組重跑確認〕：<br>
+      <b>本草稿的 app 螢幕只畫兩塊：<code>SET-3</code>（層 2）與 <code>SET-4</code>（層 3）。</b>
+      <code>SET-1</code>／<code>SET-2</code>／<code>SET-5</code> <b>三個區塊整塊沒有複製過來</b>，
+      <code>renderCards()</code> 與 <code>renderOps()</code> 因此各多了一個 <code>return</code>、
+      控制列也換成三枚開關（原檔是十二顆狀態鈕）。<br>
+      <b>所以拿兩檔的 <code>&lt;script&gt;</code> 對 diff，看到的<u>不是</u>三個變更塊</b> ——
+      本組實測（Python <code>difflib.SequenceMatcher</code>，逐行、<code>autojunk=False</code>、
+      母體是兩檔各自的第一個 <code>&lt;script&gt;</code> 區）是 <b>22 個非 equal 變更塊</b>
+      （量測日 <b>2026-09-24</b>、量的是本段定稿後的工作樹；<b>這個數會隨兩邊任一次編輯而漂移，
+      要用請現場重跑，不要引用本行</b>）。
+      ⚠️ <b>獨立稽核報的是 7 個</b> —— <b>本組沒有重現出那個數</b>，差別應該在工具或母體取法；
+      <b>但兩邊指的是同一件事，而且那件事成立</b>：<b>本草稿砍掉了三個區塊而上一版沒有宣告。</b>
+      <b>這一段就是那個宣告。</b><br>
+      ⚠️ <b>繼承來的樣式註解仍寫著沒有畫的那幾塊</b>：<code>「核心卡（層 2 · SET-1 / SET-2 / SET-3）」</code>
+      與 <code>「操作列（層 3 · SET-4 / SET-5）」</code> 兩行<b>刻意不改</b> ——
+      它們是<b>逐位元組複製的一部分</b>，改了就破壞「TOKENS 逐位元組」這個可驗證的性質。
+      <b>讀到它們請以本段為準：那兩行描述的是來源檔，不是這一份草稿。</b>
+    </p>
+    <p class="note" style="margin-bottom:8px; border-left:3px solid var(--stop); padding-left:11px">
+      ⛔ <b>第四處草稿改動：螢幕上三個「（44 逐字）」標籤，其中一個標的是 44 已經劃掉的句子</b>
+      〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> ·
+      決策者：<b>AI 總管</b>；依據：獨立稽核指出，本組逐句對 44 重查確認〕：
+      <table class="wt" style="margin-top:8px">
+        <thead><tr><th>螢幕上原本印的</th><th>44 實際的字</th><th>本草稿改成</th></tr></thead>
+        <tbody>
+          <tr><td>「存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>」<b>（44 逐字）</b></td>
+            <td><b>44 已於 2026-09-23 把這一句就地劃掉</b>，改寫成「把<b>被編輯的那一鍵</b>的當下輸入值
+              寫回 <code>user_setting</code> 的 <code>setting_value</code> 並更新 <code>updated_at</code>」</td>
+            <td>印<b>改寫後的現行逐字</b>，標籤改成「44 <b>現行</b>逐字」</td></tr>
+          <tr><td>「<b>每個鍵</b>一個輸入欄」（44 逐字）</td>
+            <td>44 作「<b>一鍵</b>一個輸入欄」</td><td>改成 44 的字</td></tr>
+          <tr><td>「<b>十七列</b>，依 <code>setting_key</code> 排列」（44 逐字）</td>
+            <td>44 作「<b>全表</b>，依 <code>setting_key</code> 排列」——<b>「十七」是本草稿自己掃出來的鍵數，不是 44 給的</b></td>
+            <td>改成 44 的字，並就地註明那個數是本組的</td></tr>
+        </tbody>
+      </table>
+      ⚠️ <b>三句都是從 <code>ui_prototype_set.html</code> byte-exact 繼承來的，不是這一輪寫壞的</b> ——
+      <b>但本草稿的主題正是 <code>SET-4</code> 的存檔，第一句不在邊陲</b>，
+      而且同一份草稿在 §1 引的是 44 的<b>改寫後</b>版本、螢幕下方卻印<b>被劃掉的舊句</b>，自己打自己。<br>
+      ⛔ <b>登記給下一輪，本輪不動</b>：<b><code>ui_prototype_set.html</code> 那三句原封還在</b>
+      （本輪的裁示是「先送草稿我看，才重繪」，本組<b>沒有動那一檔一個位元組</b>）。
+      <b>拍板搬回去的時候要一起修</b>，否則修好的只有草稿。<br>
+      ✅ <b>本草稿自己新寫的那個逐字標籤是真的逐字</b>：失敗框第二行「<b>留在畫面上不清掉</b>（44 逐字）」，
+      逐字比對過；「上面這一欄」刻意留在粗體外，因為那幾個字是本草稿的指代，不是 44 的。<br>
+      ⚠️ <b>連帶影響上一段的「一個字都沒有改」</b>：那句話現在的正確射程是
+      <b><code>KEYS</code> 十七列、每一列的鍵名與型別、<code>SET-3</code> 的四個欄名</b> ——
+      <b>這三樣仍然逐位元組相同</b>；<b>被改的是三句附註文字，不是任何欄名或鍵名。</b>
+    </p>
+  </div>
+
+  <div class="dhead" style="margin-top:22px">
+    <h2>§6　這一份怎麼被驗過</h2>
+  </div>
+  <div class="crit">
+    <ul class="note" style="margin:0; padding-left:20px">
+      <li><b>三枚開關的組合空間是 2³ ＝ <u>八</u> 種，八種全部跑過，八種輸出兩兩相異。</b>
+        <b>不變量在八種下全部成立</b>：<code>krow</code> 恆 <b>17</b>、<code>&lt;button&gt;</code> 恆 <b>18</b>、
+        <code>&lt;details&gt;</code> 恆 <b>1</b>、<code>&lt;input&gt;</code> 恆 <b>7</b>、
+        <code>SET-3</code> 的 <code>&lt;tr&gt;</code> 恆 <b>18</b>（表頭 1 ＋ 十七列）、
+        <code>failbox</code> 開關關時 <b>0</b>、開時 <b>1</b>。
+        <span class="tiny">〔2026-09-24 同輪回修 · <b>有意識的更正，不是漏刪</b> · 日期 <b>2026-09-24</b> ·
+        決策者：<b>AI 總管</b>；依據：獨立稽核指出，本組跑滿八種確認〕
+        <b>本行上一版寫「六種開關組合」</b> —— 那是本組實際只跑了六種，<b>不是組合空間只有六種</b>。
+        <b>結論沒有變（不變量照舊全部成立），錯的是覆蓋率陳述。</b></span></li>
+      <li><b>開關關 → 畫面與 <code>ui_prototype_set.html</code> 的對應區塊同一組字</b>（除了 §5 寫明的那一句說明）。</li>
+      <li><b>開關開 → 只有「被編輯的那一鍵」那一列多出一個失敗框</b>，其餘十六列逐列相同。</li>
+      <li><b><code>SET-3</code> 在開關開與關兩次渲染下逐位元組相同</b> —— 那就是 44 那一句的第三件事。
+        <span id="proof" class="tiny" style="color:var(--ink-2)"></span></li>
+      <li><b>失敗框裡按鈕數 0</b>（第五節 <code>5.5 空狀態 EmptyState</code>那一條）。<span id="proof2" class="tiny" style="color:var(--ink-2)"></span></li>
+    </ul>
+  </div>
+
+  <p class="tiny" style="margin:22px 0 40px; color:var(--ink-2)">
+    <b>本草稿由架構與前端組單組產出，沒有第二組複驗。</b>
+    §1 左欄是逐字引用，逐句對過 <code>docs/v2/44_fund_ui_ssot.md</code>；
+    §3／§4 的判定是本組的讀法，<b>寫出來就是要給客戶推翻的</b>。<br>
+    ⚠️ <b>「44 沒寫」這幾句取決於有沒有漏看</b> —— 本組讀的是 <code>SET-4</code> 四格、其判準行、
+    第五節 <code>5.5 空狀態 EmptyState</code>那張空狀態表與它下方的兩條補充。<b>四格以外的地方本組沒有逐句讀，也不宣稱沒有。</b>
+  </p>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   無外部框架，全部原生 DOM。三枚開關互相正交。
+   ⚠️ 下面 KEYS / KEY_USED_BY / SET-3 卡 / SET-4 區塊，
+      都是逐位元組複製自 docs/v2/prototype/ui_prototype_set.html，
+      本草稿改動的三處已就地標註（另見註記層 §5）。
+   ════════════════════════════════════════════════════════════════════ */
+var ui = { saveFail:false, keysSet:true, badKind:false, theme:"system" };
+
+/* 示範用的那一鍵與它的當下輸入 —— 44 寫的是單數的「該鍵」，沒有指定哪一個（見 §3）。 */
+var FAIL_KEY   = "set_max_age_days";
+var FAIL_INPUT = "14（示意：剛打進去、還沒存成功）";
+
+var KEYS = [
+  { k:"alo_basis",           kind:"list",  v:"成本（示意）" },
+  { k:"alo_bucket_names",    kind:"list",  v:"核心／衛星／現金（示意）" },
+  { k:"alo_scenario_input",  kind:"rules", v:"（示意：一組類別與金額）" },
+  { k:"alo_target_weights",  kind:"rules", v:"（示意：一組類別與比重）" },
+  { k:"alo_tolerance_pp",    kind:"float", v:"4（示意）" },
+  { k:"exp_filter_rules",    kind:"rules", v:"（示意：一組篩選條件）" },
+  { k:"exp_sort_column",     kind:"list",  v:"fund_code（示意）" },
+  { k:"exp_visible_columns", kind:"list",  v:"（示意：一組欄名）" },
+  { k:"exp_watchlist",       kind:"list",  v:"（示意：三筆）" },
+  { k:"hld_deviation_rules", kind:"rules", v:"（示意：一組門檻）" },
+  { k:"hld_window_end",      kind:"date",  v:"2026-09-21（示意）" },
+  { k:"hld_window_start",    kind:"date",  v:"2026-06-21（示意）" },
+  { k:"mkt_baseline_date",   kind:"date",  v:"2026-08-31（示意）" },
+  { k:"mkt_indicator_keys",  kind:"list",  v:"（示意：四個指標鍵）" },
+  { k:"mkt_window_days",     kind:"int",   v:"90（示意）" },
+  { k:"set_log_keep_rows",   kind:"int",   v:"50（示意）" },
+  { k:"set_max_age_days",    kind:"int",   v:"7（示意）" }
+];
+
+/* 哪些塊會因為某個鍵改掉而改顯示 —— 照 44 各塊「來源」欄的宣告列出（⛔ S-24），
+   與 SET-7 同一份母體、同一個射程限制（來源欄沒宣告的抓不到）。 */
+var KEY_USED_BY = {
+  alo_basis:["ALO-4"], alo_bucket_names:["ALO-4"], alo_scenario_input:["ALO-3"],
+  alo_target_weights:["ALO-1","ALO-7"], alo_tolerance_pp:["ALO-1","ALO-7"],
+  exp_filter_rules:["EXP-1"], exp_sort_column:["EXP-4"], exp_visible_columns:["EXP-4"],
+  exp_watchlist:["EXP-5"], hld_deviation_rules:["HLD-1","HLD-4"],
+  hld_window_end:["HLD-2","HLD-3","HLD-4","HLD-8"], hld_window_start:["HLD-2","HLD-3","HLD-4","HLD-8"],
+  mkt_baseline_date:["MKT-4"], mkt_indicator_keys:["MKT-6"], mkt_window_days:["MKT-4"],
+  set_log_keep_rows:[], set_max_age_days:["SET-1"]
+};
+
+function scene(){
+  return { keysSet: ui.keysSet, badKind: ui.badKind, saveFail: ui.saveFail };
+}
+
+/* ── 逐位元組複製：SET-3 規則參數卡（一個字沒改） ───────── */
+function renderCards(s){
+  /* SET-3 規則參數卡 */
+  var head3 = '<thead><tr><th>鍵名</th><th>目前值</th><th>型別<span class="u">value_kind</span></th>'
+            + '<th>最後修改時間<span class="u">updated_at</span></th></tr></thead>';
+  var b3 = '', st3 = '';
+  KEYS.forEach(function(row, i){
+    var v, vC = '', up, upC = '';
+    if (!s.keysSet){ v = '⬜ 未設定'; vC = 'nd'; up = '⬜ 資料未備：尚未設定過'; upC = 'nd'; }
+    else if (s.badKind && row.k === "mkt_window_days"){
+      v = '⬜ 不適用：值與型別不符<span class="raw">原始字面值：ninety（示意）</span>'; vC = 'na';
+      up = '2026-09-19 11:04 UTC（示意）';
+    } else {
+      v = row.v; up = '2026-09-' + (10 + (i % 9)) + ' 11:0' + (i % 6) + ' UTC（示意）';
+    }
+    b3 += '<tr><td><code>' + row.k + '</code></td>'
+       +  '<td>' + (vC ? '<span class="' + vC + '">' + v + '</span>' : v) + '</td>'
+       +  '<td>' + row.kind + '</td>'
+       +  '<td>' + (upC ? '<span class="' + upC + '">' + up + '</span>' : up) + '</td></tr>';
+    st3 += '<div class="one"><div class="h"><code>' + row.k + '</code></div><div class="kv">'
+        +  '<span>目前值</span><b class="' + vC + '">' + v + '</b>'
+        +  '<span>型別</span><b>' + row.kind + '</b>'
+        +  '<span>最後修改時間</span><b class="' + upC + '">' + up + '</b></div></div>';
+  });
+  var c3 = '<div class="cardx"><div class="t">規則參數 <span class="abadge">層 2 · SET-3</span></div>'
+    + '<div class="st">四頁上那些門檻和區間，現在各是多少、是我什麼時候設的</div>'
+    + '<div class="tscroll"><table class="wt">' + head3 + '<tbody>' + b3 + '</tbody></table></div>'
+    + '<div class="stackview">' + st3 + '</div>'
+    /* 〔2026-09-24 同輪回修 · 有意識的更正，不是漏刪 · 決策者：AI 總管；依據：獨立稽核指出〕
+       這一句繼承自 ui_prototype_set.html，標著「（44 逐字）」但**不逐字**：
+       44 的 SET-3 規則欄寫的是「**全表**，依 setting_key 排列」，不是「十七列」。
+       （十七是本草稿自己從各塊「來源」欄掃出來的鍵數，不是 44 給的數。）
+       原句照錄：'<div class="why"><b>十七列，依 <code>setting_key</code> 排列</b>（44 逐字）；'
+       ⛔ 會上畫面的字一律直述、不留劃線。 */
+    + '<div class="why"><b>全表，依 <code>setting_key</code> 排列</b>（44 逐字）'
+    + '<span style="color:var(--app-muted)">——本草稿掃出十七個鍵，<b>那個數是本組的，不是 44 的</b></span>；'
+    + '<b>沒有第五欄，也沒有任何「內建預設值」欄</b>（44 逐字：未設定的鍵沒有值，G3†）。'
+    + '　⛔ S-15／S-16：「全表為空 → 逐鍵列出」自相矛盾，而<b>那份鍵清單 44 沒有列成表</b> ——'
+    + '這十七個是本組從 44 各塊「來源」欄掃出來的。'
+    + '　⛔ S-44：每一列的 <b>型別</b>是本組配的 —— 44 定義了六種 <code>value_kind</code>，<b>沒有寫哪個鍵是哪一種</b>。'
+    + '　⛔ S-25：值與型別不符時，<b>原始字面值印在同一格第二行</b>（因為判準說沒有第五欄）。'
+    + '　⛔ S-26：<code>updated_at</code> 為空時印什麼 44 沒寫，本草稿借了 <code>ALO-7</code> 那一格的字面。</div>'
+    + '</div>';
+  document.getElementById("slot-cards").innerHTML = '<div class="cards">' + c3 + '</div>';
+  return c3;
+}
+
+/* ── 逐位元組複製 ＋ 三處草稿改動：SET-4 參數編輯 ────────── */
+function renderOps(s){
+  /* SET-4 */
+  var rows = "";
+  KEYS.forEach(function(row){
+    var multi = (row.kind === "list" || row.kind === "rules");
+    var val = s.keysSet ? row.v.replace(/（示意）/,"") : "";
+    /* 草稿改動 1／3：失敗態下，被編輯的那一鍵的輸入欄留著當下輸入（44 逐字「不清掉」）。 */
+    if (s.saveFail && row.k === FAIL_KEY) val = FAIL_INPUT;
+    var bad = (s.badKind && row.k === "mkt_window_days");
+    var used = KEY_USED_BY[row.k];
+    rows += '<div class="krow"><div class="kgrid">'
+      + '<div><label for="f-' + row.k + '">' + row.k + '　<span style="opacity:.8">' + row.kind + '</span></label>'
+      + '<div style="font-size:11px;color:var(--app-muted)">'
+      + (used.length ? '改這個鍵會影響：' + used.join("、") : '<b>來源欄沒有任何一塊宣告用它</b>　⛔ S-17')
+      + '</div></div>'
+      + '<div><label for="f-' + row.k + '">值</label>'
+      + (multi
+          ? '<textarea class="inbox" id="f-' + row.k + '" placeholder="（示意：依 ' + row.kind + ' 輸入）">'
+            + (bad ? "ninety" : val) + '</textarea>'
+          : '<input class="inbox" id="f-' + row.k + '" type="text" value="' + (bad ? "ninety" : val)
+            + '" placeholder="（示意：依 ' + row.kind + ' 輸入）">')
+      + '</div>'
+      + '<div><button class="rowbtn" type="button">清除</button></div>'
+      + '</div>'
+      + (bad ? '<div class="rowtail na">型別說明：這個鍵的 value_kind 是 <b>int</b>，要輸入一個整數。<b>本次不存檔，SET-3 的值不變。</b></div>' : '')
+      + (!s.keysSet ? '<div class="rowtail nd">⬜ 未設定</div>' : '')
+      /* 草稿改動 2／3：44 逐字「該鍵的輸入欄下方顯示失敗訊息原文」——
+         所以失敗框掛在「該鍵那一列」的列尾，不是掛在卡片層級。 */
+      + (s.saveFail && row.k === FAIL_KEY
+          ? '<div class="failbox">存檔寫入失敗：〔失敗訊息原文〕'
+            + '<br>上面這一欄的當下輸入<b>留在畫面上不清掉</b>（44 逐字）。'
+            + '<br><span style="color:var(--app-muted)">〔失敗訊息原文〕是佔位，不是文案 ——'
+            + ' 44 寫的是「顯示失敗訊息原文」，那是把上游給的字原樣印出來。<b>本草稿不編造。</b></span></div>'
+          : '')
+      + '</div>';
+  });
+  var a4 = '<details class="exp"><summary>參數編輯 <span class="abadge">層 3 · SET-4</span>'
+    + '<span class="sm">' + (s.keysSet ? '十七個鍵可編輯（示意）' : '十七個鍵都還沒設定過（示意）') + '</span>'
+    + '</summary><div class="body">'
+    /* 〔2026-09-24 同輪回修 · 同上〕44 作「逐鍵編輯，**一鍵**一個輸入欄，欄位型態依 value_kind 決定」。
+       原句照錄：'<div class="why">逐鍵編輯，<b>每個鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。' */
+    + '<div class="why">逐鍵編輯，<b>一鍵一個輸入欄，欄位型態依 <code>value_kind</code> 決定</b>（44 逐字）。'
+    + '<b>清除某鍵的操作把它變回未設定，不變成零</b>（44 逐字）。'
+    + '<b>本塊不提供還原為系統值之類的動作 —— 沒有系統值可還原（G1†、G3†）。</b>'
+    + '　⛔ S-22：六種 <code>value_kind</code> 各長什麼樣 44 沒寫，'
+    + '<b><code>list</code> 與 <code>rules</code> 本草稿畫成多行框</b>。'
+    + '　⛔ S-23：「必要鍵」44 沒有定義，<b>本草稿不標任何一個鍵為必要</b>。'
+    + '　⛔ S-24：每一列下方那一行「會影響哪幾塊」照 44 各塊「來源」欄列出 ——'
+    + '<b>與 SET-7 同一份母體、同一個射程限制</b>。'
+    + '　⛔ S-31：同一個鍵在別頁也改得到（八塊各自寫自己的鍵），<b>哪一邊贏 44 沒寫</b>。</div>'
+    + rows
+    + '<div class="savebar"><button class="apply" type="button">存檔</button>'
+    /* 〔2026-09-24 同輪回修 · 同上；這一筆最嚴重，因為本草稿的主題就是 SET-4 的存檔〕
+       原句把 44 **已經劃掉的舊句**標成「（44 逐字）」：
+         原句照錄：'…存檔後寫回 <code>user_setting</code> 並更新 <code>updated_at</code>（44 逐字）…'
+       44 的 SET-4 規則欄自 2026-09-23 起，那半句已被 44 就地劃掉（44 原文用刪除線標記，此處不複製那個標記），
+       改寫成「本塊掛一枚「存檔」按鈕（action_kind 為 存檔），把**被編輯的那一鍵**的當下輸入值
+       寫回 user_setting 的 setting_value 並更新 updated_at」。下面印的是**改寫後的現行逐字**。 */
+    + '<span class="tiny" style="color:var(--app-muted)">把<b>被編輯的那一鍵</b>的當下輸入值寫回 '
+    + '<code>user_setting</code> 的 <code>setting_value</code> 並更新 <code>updated_at</code>（44 現行逐字）</span></div>'
+    /* 〔2026-09-24 就地更正 · **有意識的更正，不是漏刪** · 決策者：客戶〕
+       這兩句**會被渲染到深色螢幕上**，而兩句都已被 44 推翻（2026-09-23 兩格都補了）。
+       原句照錄於此，改法照本檔體例：**會上畫面的短註記改成直述、不留劃線**：
+         S-18：'<b>本塊的來源欄只宣告了三個讀取欄，沒有宣告寫入對象、連 updated_at 都沒有</b> —— 九塊存檔類裡唯一一塊。'
+         S-19：'<b>存檔寫入失敗時這一塊長什麼樣，44 沒寫，本草稿不畫那個狀態。</b>'
+       S-18 的缺口**已消失**（標記改成 ✓）；S-19 的 ⛔ **沒有拿掉**，只是方向反過來：44 寫了、草稿沒畫。 */
+    /* ⚠️ 上面那一段註解是**連同繪製碼一起逐位元組複製回來的**，它描述的是
+       docs/v2/prototype/ui_prototype_set.html 的現況（那一檔確實還沒畫）。
+       **在這一份草稿裡，它最後一句已經不成立** —— 本草稿就是去畫那個狀態的，
+       所以下面那一句 S-19 的文字是**草稿改動 3／3**（另兩處在 rows 迴圈裡）。
+       原句照錄：'　<span class="abadge ph">⛔ S-19</span> <b>44 已於 2026-09-23 寫出存檔寫入失敗那一句，'
+                + '本草稿仍然沒有畫那個狀態</b> —— 待重繪。'
+       ⛔ 刻意不刪上面那一段：它是複製來源的一部分，刪了就看不出這一份是從哪一版複製的。 */
+    + '<div class="why"><span class="abadge ph">✓ S-18 已結案</span> <b>本塊的來源欄已於 2026-09-23 補完</b>'
+    + '（含 <code>updated_at</code>，並寫出寫入對象）—— <b>九塊 <code>存檔</code> 類現在每一塊都有。</b>'
+    + '　<span class="abadge ph">S-19</span> <b>這一份草稿畫的就是 44 於 2026-09-23 寫出的那個失敗態</b>'
+    + '（把上面那枚開關打開）。<b>畫的只有 44 那一句寫出來的三件事，其餘一律沒畫。</b>'
+    + '　<span class="tiny" style="color:var(--app-muted)">（草稿，尚未拍板；拍板後才搬回線框。）</span></div>'
+    + '</div></details>';
+  document.getElementById("slot-ops").innerHTML = '<div class="ops">' + a4 + '</div>';
+  return a4;
+}
+
+function render(){
+  var s = scene();
+  renderCards(s);
+  renderOps(s);
+  runProof();
+}
+
+/* ── §6 的兩條實測，在畫面上自己跑一次並把結果印出來 ────── */
+function runProof(){
+  var on  = Object.assign({}, scene(), { saveFail:true  });
+  var off = Object.assign({}, scene(), { saveFail:false });
+  var keep = document.getElementById("slot-cards").innerHTML;
+  var a = renderCards(on), b = renderCards(off);
+  document.getElementById("slot-cards").innerHTML = keep;
+  document.getElementById("proof").textContent =
+    "（本頁自跑：兩次 SET-3 輸出長度 " + a.length + " / " + b.length +
+    "，逐字元相同＝" + (a === b) + "）";
+  var ops = renderOps(on);
+  var box = ops.indexOf('class="failbox"');
+  var seg = box === -1 ? "" : ops.slice(box, ops.indexOf("</div>", ops.indexOf("</span>", box)));
+  document.getElementById("proof2").textContent =
+    "（本頁自跑：失敗框內 <button> 數＝" + (seg.match(/<button/g) || []).length +
+    "；全頁失敗框數＝" + (ops.match(/class="failbox"/g) || []).length + "）";
+  renderOps(scene());
+}
+
+function wire(id, key, onTxt, offTxt){
+  var b = document.getElementById(id);
+  b.addEventListener("click", function(){
+    ui[key] = !ui[key];
+    b.innerHTML = b.innerHTML.replace(/<b>.*<\/b>/, "<b>" + (ui[key] ? onTxt : offTxt) + "</b>");
+    b.setAttribute("aria-pressed", String(!!ui[key]));
+    render();
+  });
+}
+wire("btn-fail", "saveFail", "開", "關");
+wire("btn-keys", "keysSet", "已設定過", "都還沒設定過");
+wire("btn-bad",  "badKind", "開", "關");
+
+var themeBtn = document.getElementById("btn-theme");
+themeBtn.addEventListener("click", function(){
+  ui.theme = ui.theme === "system" ? "dark" : (ui.theme === "dark" ? "light" : "system");
+  if (ui.theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", ui.theme);
+  themeBtn.textContent = ui.theme === "system" ? "跟隨系統" : (ui.theme === "dark" ? "深色" : "淺色");
+  themeBtn.setAttribute("aria-pressed", String(ui.theme !== "system"));
+});
+
+render();
+</script>
+</body>
+</html>
