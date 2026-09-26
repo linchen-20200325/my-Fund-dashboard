@@ -150,6 +150,10 @@ GAPS = {
     "SET-GAP-其他表讀取失敗炸": (
         "本頁沒有任何一塊讀 holding／policy／fund_profile；資料集若帶這幾張表的讀取失敗，本頁不假裝它無關，炸掉（同 SET-GAP-取數失敗）。"
     ),
+    "SET-GAP-同秒平手": (
+        "fetch_log.started_at 以秒計，同一層級兩筆可能同一秒開始，44 沒寫 SET-2 取哪一筆（2026-09-26 總管裁示）。"
+        "本頁平手時非 ok 優先於 ok（Fail Loud），狀態相同再比 finished_at，未記錄結束者視為最新。"
+    ),
     "SET-GAP-耗時格式": "耗時的小數位數 44 沒給（原型 S-42）。本頁寫到小數一位。",
     "SET-GAP-SET7母體": (
         "SET-7 只掃來源欄（44 自己寫的射程限制）。本頁的抽法：去掉刪除線後以反引號寫出的「表.欄位」，"
@@ -500,14 +504,16 @@ def value_matches_kind(value: str, kind) -> bool:
     if kind not in VALUE_KINDS:
         raise ValueError(f"value_kind {kind!r} 不在 `44` 4.5 那六種之內")
     text = value.strip()
+    # 數字一律只收 ASCII 0-9（`re` 的 `\d` 會收全形與其他文字的數字；2026-09-26 總管裁示收緊，
+    # 與 L2 `services/v2_tables/settings_store.py::value_matches_kind` 同步）。
     if kind == "int":
-        return re.fullmatch(r"-?\d+", text) is not None
+        return re.fullmatch(r"-?[0-9]+", text) is not None
     if kind in ("float", "ratio"):
-        if re.fullmatch(r"-?\d+(\.\d+)?", text) is None:
+        if re.fullmatch(r"-?[0-9]+(\.[0-9]+)?", text) is None:
             return False
         return kind == "float" or 0.0 <= float(text) <= 1.0
     if kind == "date":
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text) is None:
+        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text) is None:
             return False
         try:
             date.fromisoformat(text)
@@ -515,10 +521,14 @@ def value_matches_kind(value: str, kind) -> bool:
             return False
         return True
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
     except ValueError:
         return False
     return isinstance(parsed, list)
+
+
+def _reject_constant(name):
+    raise ValueError(f"不收 {name}")
 
 
 def settings_failure(dataset):
@@ -640,9 +650,30 @@ def latest_per_tier(logs) -> dict:
         tier = row["source_tier"]
         if tier not in TIERS:
             raise ValueError(f"fetch_log 的 source_tier {tier!r} 不在 `44` 第四節那四個之內（SET-GAP-fetch_log值域越界）")
-        if tier not in out or row["started_at"] > out[tier]["started_at"]:
+        if tier not in out or _is_newer(row, out[tier]):
             out[tier] = row
     return out
+
+
+def _is_newer(row, current) -> bool:
+    """`row` 是否比 `current` 更能代表該層級的最近一次。
+
+    `started_at` 以秒計，兩筆可能同一秒（SET-GAP-同秒平手）：平手時非 ok（failed／中斷）優先於 ok
+    （§1 Fail Loud：不讓一次失敗被同一秒的成功蓋掉）；狀態相同再比 `finished_at`，None（未記錄結束）視為最新。
+    """
+    if row["started_at"] != current["started_at"]:
+        return row["started_at"] > current["started_at"]
+    row_bad, cur_bad = row["outcome"] != "ok", current["outcome"] != "ok"
+    if row_bad != cur_bad:
+        return row_bad
+    mine, theirs = row["finished_at"], current["finished_at"]
+    if mine == theirs:
+        return False
+    if mine is None:
+        return True
+    if theirs is None:
+        return False
+    return mine > theirs
 
 
 def _build_set2(dataset) -> dict:

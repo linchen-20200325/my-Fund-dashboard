@@ -126,3 +126,35 @@ def test_閘門_冷卻中帶剩餘秒數(env):
     gate = R.gate_status(mask=mask)
     assert gate["state"] == "cooling" and gate["remaining_sec"] > 0
     assert gate["message"].startswith("設定試算表暫停重試，還剩 ")
+
+
+def test_不同sheet_id的標題不串用(env):
+    """標題依試算表 ID 分開記：換一本（ID 改了）要讀新那一本的標題，不得沿用上一本記下的。"""
+    book, secrets = env
+    R.load_user_settings(mask=mask)
+    assert R.load_sheet_title(mask=mask) == "客戶的設定本"
+    secrets["SETTINGS_SHEET_ID"] = SHEET + "-other"
+    book._title = "另一本"
+    assert R.load_sheet_title(mask=mask) == "另一本"
+    secrets["SETTINGS_SHEET_ID"] = SHEET
+    assert R.load_sheet_title(mask=mask) == "客戶的設定本"
+
+
+def test_上游錯誤字串已帶型別名_不重複前綴(env):
+    book, _s = env
+
+    class APIError(Exception):
+        pass
+
+    book.fail_next("open_by_key", APIError("APIError: [500]: backend error"), times=4)
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.load_user_settings(mask=mask)
+    assert str(err.value) == "APIError: [500]: backend error"
+
+
+def test_上游錯誤字串沒帶型別名_照舊加前綴(env):
+    book, _s = env
+    book.fail_next("open_by_key", ConnectionError("reset by peer"), times=4)
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.load_user_settings(mask=mask)
+    assert str(err.value) == "ConnectionError: reset by peer"

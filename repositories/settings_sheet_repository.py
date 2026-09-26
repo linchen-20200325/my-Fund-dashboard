@@ -370,7 +370,9 @@ def _run(op: Callable, *, mask: Mask, write: bool):
         except Exception as exc:  # noqa: BLE001 —— 轉成帶原文的 SettingsSheetError，不吞
             status = http_status_of(exc)
             record_gspread_failure(ACTOR, sheet_id, exc)
-            text = f"{type(exc).__name__}: {exc}"
+            name, raw = type(exc).__name__, str(exc)
+            # gspread 的 APIError 自己的字串已經以「APIError: 」開頭；再加一次型別名會變成「APIError: APIError: …」。
+            text = raw if raw.startswith(f"{name}:") else f"{name}: {raw}"
             email = _client_email(creds)
             # `client_email` 依 ACCEPTANCE 7.2 丙不遮（畫面要據以寫「分享給哪一個服務帳戶」）。
             failure = SettingsSheetError(

@@ -47,6 +47,8 @@ TEXT_SETTING_PENDING = "設定已存，{codes} 接上後生效"  # 客戶 2026-0
 TEXT_TIER_NOT_WIRED = "這一層級的取數尚未接上"
 TEXT_RUNNING = "取數中：{tier}"
 TEXT_DONE = "取數完成：{tier}，取回 {n} 列；結果記在取數紀錄（層 4）"
+# 取數紀錄寫不進去時（開始列或結束列），後半句「結果記在取數紀錄」是假話 → 只印前半（2026-09-26 總管裁示）。
+TEXT_DONE_NOT_LOGGED = "取數完成：{tier}，取回 {n} 列"
 TEXT_DONE_EMPTY = "取數完成：{tier}，" + logic.TEXT_EMPTY_RESPONSE
 TEXT_LOG_WRITE_FAILED = "⛔ 取數紀錄寫入失敗：{message}"
 TEXT_SET5_NOTE = "目前只有市場指標可以重新取數；取回的列存進設定試算表，市場總覽頁不會因此重新整理。"
@@ -59,6 +61,13 @@ TEXT_BAD_ROWS = "⚠ {n} 列格式不符，未採用"
 TEXT_PK_CONFLICT = "⚠ 主鍵矛盾 {n} 組，未採用"
 TEXT_REVISED_MISMATCH = "⚠ is_revised 與重算不符 {n} 列"
 TEXT_DUPLICATE_LOG = "⚠ 重複紀錄 {n} 筆"
+
+# 型別未定的鍵（`alo_basis`，SET-GAP-型別本頁配）存檔時的說明。⚠️ 待客戶核准：草稿沒有這一句，
+# 由本組以既有的型別說明體例組成（2026-09-26 總管裁示：暫緩，先保留現狀、抽成常數）。
+TEXT_KIND_MISSING = "型別說明：這個鍵的 value_kind 未定。" + logic.TEXT_NOT_SAVED
+
+# 存檔失敗但「根本沒寫」的錯誤碼：這些不印「可能其實已寫入」那一行（2026-09-26 總管裁示）。
+_NOT_WRITTEN_CODES = ("cooling", "not_configured", "no_service_account", "header_mismatch")
 
 # ★10
 TEXT_TITLE = "設定試算表：{title}"
@@ -175,6 +184,7 @@ def refetch_result_lines(result, mask_token) -> list:
     failure = result.get("log_message")
     if failure is None and result.get("masked_errors"):
         failure = "\n".join(f"{k}: {v}" for k, v in result["masked_errors"].items())
+    log_failed = result.get("stage") in ("fetch_log_open", "fetch_log")
     lines = []
     if failure:
         lines.append(_node(logic.fetch_failed_text(failure), "紅"))
@@ -183,8 +193,9 @@ def refetch_result_lines(result, mask_token) -> list:
     elif result.get("empty") and not result.get("fetched"):
         lines.append(_node(TEXT_DONE_EMPTY.format(tier=tier)))
     else:
-        lines.append(_node(TEXT_DONE.format(tier=tier, n=result.get("fetched", 0))))
-    if result.get("stage") in ("fetch_log_open", "fetch_log") and result.get("message"):
+        done = TEXT_DONE_NOT_LOGGED if log_failed else TEXT_DONE
+        lines.append(_node(done.format(tier=tier, n=result.get("fetched", 0))))
+    if log_failed and result.get("message"):
         message = result["message"]
         lines.append(_node(TEXT_LOG_WRITE_FAILED.format(message=message), "紅"))
         if _masked(message, mask_token):
@@ -205,7 +216,7 @@ def changed_settings(inputs, current_values) -> list:
         if key not in current_values:
             continue
         raw = current_values[key]
-        value = None if raw is None or raw.strip() == "" else raw
+        value = None if raw is None or raw.strip() == "" else raw.strip()   # 寫進去的是 strip 後的值
         if value != field["_value"]:
             out.append((key, value, field["_kind"]))
     return out
@@ -307,11 +318,16 @@ def _save_fail_lines(result, token) -> list:
     lines = [logic.save_failed_text(message)]
     if _masked(message, token):
         lines.append(MASKED_NOTE)
-    lines += [logic.TEXT_KEEP_INPUT, TEXT_SAVE_MAYBE_WRITTEN]
+    lines.append(logic.TEXT_KEEP_INPUT)
     hint = result.get("hint") or ""
-    if result.get("http_status") == 403 or hint == TEXT_HINT_403:
+    is_403 = result.get("http_status") == 403 or hint == TEXT_HINT_403
+    is_404 = result.get("http_status") == 404 or hint.startswith(TEXT_HINT_404)
+    # 「可能其實已寫入」只限一般失敗：冷卻、缺設定、標頭不符、403／404（打不開或沒有權限）都是根本沒寫。
+    if result.get("code") not in _NOT_WRITTEN_CODES and not is_403 and not is_404:
+        lines.append(TEXT_SAVE_MAYBE_WRITTEN)
+    if is_403:
         lines.append(TEXT_HINT_403)
-    elif result.get("http_status") == 404 or hint.startswith(TEXT_HINT_404):
+    elif is_404:
         email = result.get("client_email") or ""
         lines.append(f"{TEXT_HINT_404} {email}" if email else TEXT_HINT_404)
     return lines
@@ -329,7 +345,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     pending_tables = set(notes["pending_tables"])
     wired_tiers = set(notes["wired_tiers"])
 
-    # ── SET-0：燈的外框與文字照 `44`（含「⛔ 取數失敗：…」模板），只在下一行加 ★5；說明行加 ★1、★3 ──
+    # ── SET-0：燈的外框與文字照 `44`（含 5.5 系統錯誤模板 `logic.fetch_failed_text`），只在下一行加 ★5；說明行加 ★1、★3 ──
     set0 = logic.find_block(out, "SET-0")
     set0["note_lines"] = [MASKED_NOTE] if _masked(set0["text"], token) else []
     if {"nav", "dividend"} <= pending_tables:
@@ -375,6 +391,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         head.append(_node(TEXT_TITLE.format(title=title["text"])))
     elif title["state"] == "not_configured":
         head.append(_node(f"{logic.FETCH_FAIL_GLYPH} {TEXT_NO_SHEET_ID}", "紅"))
+    elif title["state"] == "cooling":
+        # 草稿 B4：設定試算表冷卻是暫停、不是失敗，與 SET-3／SET-4 同一句黃色暫停句。
+        head.append(_node(f"{logic.WARN_GLYPH} " + sheet_cooling_text(title.get("remaining_sec")), "黃"))
     else:
         head.append(_node(TEXT_TITLE_FAILED.format(message=title["text"]), "紅"))
         if _masked(title["text"], token):
@@ -397,10 +416,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set4["fail_nodes"] = [_decorate_placeholder(n, fail_map, notes, "SET-4", dataset) for n in set4["fail_nodes"]]
     top = []
     gate = notes["gate"]
-    if gate["state"] in ("not_configured", "no_service_account"):
-        line = f"{logic.FETCH_FAIL_GLYPH} {gate_reason(gate)}"
-        if line not in [n["text"] for n in set4["fail_nodes"]]:
-            top.append(_node(line, "紅"))
+    setting_code = notes["table_errors"].get("user_setting", {}).get("code")
+    if gate["state"] in ("not_configured", "no_service_account") and setting_code != gate["state"]:
+        # 去重比對錯誤碼、不比對字串：讀設定已因同一個缺設定失敗時，本塊的失敗行就是這件事，不再多印一行。
+        top.append(_node(f"{logic.FETCH_FAIL_GLYPH} {gate_reason(gate)}", "紅"))
     set4["top_lines"] = top
     reading = set(notes["pages_reading_settings"])
     results = save_results or {}
@@ -425,7 +444,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
             field["fail_lines"] = _save_fail_lines(result, token)
         elif result["status"] == "kind_missing":
             # `44` SET-4：不符就不存檔；型別未定的鍵（SET-GAP-型別本頁配）同樣不存，說明照型別說明的體例。
-            field["hint_lines"] = [f"型別說明：這個鍵的 value_kind 未定。{logic.TEXT_NOT_SAVED}"]
+            field["hint_lines"] = [TEXT_KIND_MISSING]
         # kind_mismatch：型別說明由 logic 依當下輸入畫出（`dataset["save_inputs"]`），這裡不另加。
     if not set4["inputs"]:
         # 讀不到設定、畫面上沒有輸入欄（SET-GAP-失敗無輸入欄）：上游失敗後存檔與讀取共用冷卻，所以正式模式下

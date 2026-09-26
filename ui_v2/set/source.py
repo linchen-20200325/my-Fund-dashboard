@@ -19,7 +19,7 @@
   `now_utc` 讀系統時鐘（`49` §2.5）。
 - `notes`：
   `mask_token`（遮蔽記號，L2 那一份）、`pending_tables`、`wired_tiers`、`pages_reading_settings`（L2 的接線旗標，草稿 B7）、
-  `gate`（寫入閘門，不打上游）、`title`（★10：`{"state": ok|not_configured|failed, "text"}`）、
+  `gate`（寫入閘門，不打上游）、`title`（★10：`{"state": ok|not_configured|cooling|failed, "text", "remaining_sec"}`）、
   `table_errors`（`{表: {"code", "remaining_sec", "tab", "expected", "actual"}}`）、
   `structure`（★9 計數）、`source_cooldowns`（市場指標來源的冷卻狀態）。
 
@@ -72,6 +72,13 @@ def _read(loader, values, table, errors, table_errors):
         return None
 
 
+def _title_state(code, message, remaining_sec) -> dict:
+    """★10 的狀態：沒設 ID／冷卻中（暫停，草稿 B4）／其餘讀不到。"""
+    if code in ("not_configured", "cooling"):
+        return {"state": code, "text": message, "remaining_sec": remaining_sec}
+    return {"state": "failed", "text": message, "remaining_sec": None}
+
+
 def load_live() -> dict:
     """給 `page.render(load_live=...)` 用的載入函式。"""
     values = _secret_values()
@@ -100,13 +107,13 @@ def load_live() -> dict:
 
     # ★10：標題取自讀設定那一次打開（L1 記下），讀設定失敗時是同一個失敗的兩處呈現、不另計一次取數。
     if "user_setting" in errors:
-        state = "not_configured" if table_errors["user_setting"]["code"] == "not_configured" else "failed"
-        title = {"state": state, "text": errors["user_setting"]}
+        title = _title_state(table_errors["user_setting"]["code"], errors["user_setting"],
+                             table_errors["user_setting"]["remaining_sec"])
     else:
         try:
             title = {"state": "ok", "text": settings_store.sheet_title(values)}
         except settings_store.SettingsSheetError as exc:
-            title = {"state": "failed", "text": str(exc)}
+            title = _title_state(exc.code, str(exc), exc.remaining_sec)
 
     dataset = {
         "now_utc": _now_utc(),

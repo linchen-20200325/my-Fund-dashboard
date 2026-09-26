@@ -104,9 +104,9 @@ class ValueKindMismatch(ValueError):
 
 
 def _is_int_literal(text: str) -> bool:
-    """`-?\\d+`（`\\d` 為 Unicode 十進位數字，與 `re` 的 `\\d` 同義；本套件的 import 白名單不含 `re`）。"""
+    """`-?[0-9]+`，只收 ASCII 數字（本套件的 import 白名單不含 `re`；2026-09-26 總管裁示不收全形等其他數字）。"""
     digits = text[1:] if text.startswith("-") else text
-    return digits.isdecimal()
+    return digits != "" and all("0" <= ch <= "9" for ch in digits)   # 只收 ASCII 0-9
 
 
 def value_matches_kind(value: str, kind: str) -> bool:
@@ -125,12 +125,12 @@ def value_matches_kind(value: str, kind: str) -> bool:
         return _is_int_literal(text)
     if kind in ("float", "ratio"):
         whole, dot, frac = text.partition(".")
-        if not _is_int_literal(whole) or (dot and not frac.isdecimal()):
+        if not _is_int_literal(whole) or (dot and not _is_int_literal(frac)) or frac.startswith("-"):
             return False
         return kind == "float" or 0.0 <= float(text) <= 1.0
     if kind == "date":
         parts = text.split("-")
-        if [len(p) for p in parts] != [4, 2, 2] or not all(p.isdecimal() for p in parts):
+        if [len(p) for p in parts] != [4, 2, 2] or not all(_is_int_literal(p) and p[0] != "-" for p in parts):
             return False
         try:
             date.fromisoformat(text)
@@ -138,10 +138,14 @@ def value_matches_kind(value: str, kind: str) -> bool:
             return False
         return True
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
     except ValueError:
         return False
     return isinstance(parsed, list)
+
+
+def _reject_constant(name):
+    raise ValueError(f"不收 {name}")
 
 
 def check_setting_value(setting_value: Optional[str], value_kind: Optional[str]) -> None:
@@ -155,7 +159,8 @@ def check_setting_value(setting_value: Optional[str], value_kind: Optional[str])
         raise ValueKindMismatch(f"value_kind 未定（{value_kind!r}），不存檔", code="kind_missing")
     if setting_value is None:
         return
-    if not isinstance(setting_value, str) or not value_matches_kind(setting_value, value_kind):
+    if not isinstance(setting_value, str) or setting_value.strip() == "" \
+            or not value_matches_kind(setting_value, value_kind):
         raise ValueKindMismatch(f"setting_value 與 value_kind 不符（{value_kind}），不存檔",
                                 code="kind_mismatch")
 
@@ -164,6 +169,8 @@ def save_user_setting(setting_key: str, setting_value: Optional[str], value_kind
                       secret_values) -> dict:
     """存一個鍵。**先檢查值與型別**（`check_setting_value`），不符就拋 `ValueKindMismatch`、
     不呼叫 L1（不寫、也不清快取 —— 沒有任何寫入發生）。相符才交 L1（L1 不論成敗都清快取）。"""
+    if isinstance(setting_value, str):
+        setting_value = setting_value.strip()   # 先 strip 再檢查；寫進去的也是 strip 後的值
     check_setting_value(setting_value, value_kind)
     return store.save_user_setting(setting_key, setting_value, value_kind,
                                    mask=masker(secret_values))

@@ -39,7 +39,13 @@ _ALL_SOURCE_FILES = (
     # 2026-09-26：規格快照由 fixtures.py 搬到 spec.py（正式模式也要讀、而正式路徑不得 import fixtures），
     # 納入同一批守衛的母體。放在最後，`[:4]`（不 import streamlit 的那四個）不受影響。
     _SET_DIR / "spec.py",
+    # 2026-09-26 回修（總管裁示）：正式模式三個檔一併納入禁詞、逐字、缺口登記等守衛的母體。
+    _SET_DIR / "live.py",
+    _SET_DIR / "source.py",
+    _ROOT / "ui_v2" / "app_set_live.py",
 )
+# 正式路徑檔：依 tests/ui_v2/test_ui_v2_live_import_guard.py，只有 source.py 可以碰 services.v2_tables。
+_LIVE_SOURCE = _SET_DIR / "source.py"
 
 
 def _model(name="ok", *, save_failed=False):
@@ -112,14 +118,17 @@ def _forbidden_import(target: str) -> bool:
 
 
 def test_六個檔都沒有import舊repo或網路或姊妹頁():
-    """母體＝本頁全部原始碼檔（含 page.py 與 app_set.py；2026-09-26 起加 spec.py，共七個）。AST 換算成絕對模組名再判。"""
-    assert len(_ALL_SOURCE_FILES) == 7
+    """母體＝本頁全部原始碼檔（含 page.py 與 app_set.py；2026-09-26 起加 spec.py 與正式模式三檔，共十個）。
+    AST 換算成絕對模組名再判。唯一例外：source.py 可以 import `services.v2_tables` 的模組（正式資料來源）。"""
+    assert len(_ALL_SOURCE_FILES) == 10
     seen = 0
     for path in _ALL_SOURCE_FILES:
         source = path.read_text(encoding="utf-8")
         targets = _import_targets(source, _module_of(path), is_package=path.name == "__init__.py")
         seen += len(targets)
-        bad = [raw for target, raw in targets if _forbidden_import(target)]
+        bad = [raw for target, raw in targets if _forbidden_import(target)
+               and not (path == _LIVE_SOURCE and (target == "services.v2_tables"
+                                                  or target.startswith("services.v2_tables.")))]
         assert not bad, (path.name, bad)
     assert seen >= 10, seen
 
@@ -429,8 +438,8 @@ def _source_forbidden_words():
 
 
 def test_原始碼六個檔零禁詞_母體含page與app_set():
-    """⛔ 交接檔 §8.1：姊妹頁的禁詞原始碼掃描漏過 page.py。本條的母體數目寫死（2026-09-26 加 spec.py 後為七個）。"""
-    assert len(_ALL_SOURCE_FILES) == 7
+    """⛔ 交接檔 §8.1：姊妹頁的禁詞原始碼掃描漏過 page.py。本條的母體數目寫死（2026-09-26 加 spec.py 與正式模式三檔後為十個）。"""
+    assert len(_ALL_SOURCE_FILES) == 10
     assert _SET_DIR / "page.py" in _ALL_SOURCE_FILES and _APP in _ALL_SOURCE_FILES
     hits = []
     for path in _ALL_SOURCE_FILES:

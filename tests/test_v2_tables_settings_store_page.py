@@ -183,3 +183,40 @@ def test_重新取數_真的清掉fetch_yf_close的快取(monkeypatch):
     monkeypatch.setattr(S, "run_market_indicator_fetch", lambda values, build=None: {"persist": {}, "table": {}})
     S.refetch_market_indicator([SECRET])
     assert (("^VIX", "2y", "1d"), ()) not in yf.fetch_yf_close._cache_dict
+
+
+# ═══════════════════════ 2026-09-26 回修：strip、ASCII 數字、NaN／inf ═══════════════════════
+
+_EDGE = [
+    ("１２", "int"), ("٣", "int"), ("１.５", "float"), ("0.５", "ratio"), ("２０２６-09-26", "date"),
+    ("[NaN]", "list"), ("[Infinity]", "list"), ("[-Infinity]", "rules"), ('[1, "NaN"]', "list"),
+    ("  12  ", "int"), ("\n0.5\t", "ratio"), ("1.", "float"), ("-", "int"), ("", "int"), ("1.-5", "float"),
+]
+
+
+def test_邊界_兩份判定逐一相同():
+    from ui_v2.set import logic
+    for value, kind in _EDGE:
+        assert S.value_matches_kind(value, kind) == logic.value_matches_kind(value, kind), (value, kind)
+
+
+@pytest.mark.parametrize("value, kind", [("１２", "int"), ("٣", "int"), ("0.５", "ratio"),
+                                          ("[NaN]", "list"), ("[Infinity]", "list"), ("[-Infinity]", "rules")])
+def test_非ASCII數字與NaN_inf_拒收_不寫(book, value, kind):
+    out = S.save_setting_for_page("k", value, kind, [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+def test_字串形式的NaN不是常數_照收():
+    assert S.value_matches_kind('[1, "NaN"]', "list") is True
+
+
+def test_先strip再檢查_寫進去的是strip後的值(book):
+    out = S.save_setting_for_page("set_max_age_days", "  21 \n", "int", [SECRET])
+    assert out["status"] == "saved" and out["row"]["setting_value"] == "21"
+    assert S.load_user_settings([SECRET])["rows"]["set_max_age_days"]["setting_value"] == "21"
+
+
+def test_只有空白_不存(book):
+    out = S.save_setting_for_page("set_max_age_days", "   ", "int", [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []

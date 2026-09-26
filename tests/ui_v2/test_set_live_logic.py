@@ -122,11 +122,13 @@ def test_ID未設_說法與L1是同一句():
     assert live.TEXT_NO_SHEET_ID == R.NOT_CONFIGURED_MESSAGE
 
 
-def test_缺服務帳戶_存檔停用_頂端一行(env):
+def test_缺服務帳戶_存檔停用_同一件事只印一行_去重比對錯誤碼(env):
     env.cfg.pop("google_service_account")
     data, model = _page()
     set4 = _b(model, "SET-4")
-    assert [n["text"] for n in set4["top_lines"]] == ["⛔ 未設定服務帳戶"]
+    assert data["notes"]["table_errors"]["user_setting"]["code"] == "no_service_account"
+    assert set4["top_lines"] == []                                  # 讀設定已因同一件事失敗：不再多印
+    assert [n["text"] for n in set4["fail_nodes"]] == ["⛔ 取數失敗：未設定服務帳戶（google_service_account）"]
     assert set4["buttons"][0]["disabled_reason"] == "未設定服務帳戶"
     assert live.refetch_button("市場指標", data["notes"])["disabled_reason"] == "未設定服務帳戶"
 
@@ -169,6 +171,8 @@ def test_設定試算表冷卻中_SET3與SET4改黃燈暫停_存檔停用(env):
         block = _b(model, code)
         node = block["placeholder"] if code == "SET-3" else block["fail_nodes"][0]
         assert node["_tone"] == "黃" and node["text"].startswith("⚠ 設定試算表暫停重試，約剩 ")
+    head = _b(model, "SET-3")["head_lines"]                           # ★10 同一句黃色暫停（B4）
+    assert [(n["text"], n["_tone"]) for n in head] == [(_b(model, "SET-3")["placeholder"]["text"], "黃")]
     reason = _b(model, "SET-4")["buttons"][0]["disabled_reason"]
     assert reason.startswith("設定試算表暫停重試，約剩 ") and reason.endswith(" 秒")
     assert live.refetch_button("市場指標", data["notes"])["disabled_reason"] == reason
@@ -274,8 +278,7 @@ def test_存檔失敗_403_當下讀設定被冷卻擋下_失敗框掛在塊上_�
     assert set4["inputs"] == []
     assert set4["orphan_fail_lines"] == [[
         "⛔ 存檔寫入失敗：" + result["message"], live.MASKED_NOTE,
-        "未存檔。這次可能其實已寫入，請先重新整理本頁確認，再決定要不要重存",
-        "服務帳戶可能只有檢視權限，需要編輯者"]]
+        "服務帳戶可能只有檢視權限，需要編輯者"]]                          # 403：根本沒寫，不印「可能其實已寫入」
 
 
 def test_存檔失敗_403_冷卻過後_失敗框四行加遮蔽註記_輸入留著_SET3不變(env):
@@ -288,7 +291,6 @@ def test_存檔失敗_403_冷卻過後_失敗框四行加遮蔽註記_輸入留�
     field = {f["name"]: f for f in _b(model, "SET-4")["inputs"]}["set_max_age_days"]
     assert field["fail_lines"] == [
         "⛔ 存檔寫入失敗：" + result["message"], live.MASKED_NOTE, logic.TEXT_KEEP_INPUT,
-        "未存檔。這次可能其實已寫入，請先重新整理本頁確認，再決定要不要重存",
         "服務帳戶可能只有檢視權限，需要編輯者"]
     assert field["value_text"] == "21" and field["saved_lines"] == []
     row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "set_max_age_days"][0]
@@ -304,13 +306,36 @@ def test_存檔失敗_404_提示寫出服務帳戶信箱(env):
     assert lines[-1] == f"請確認試算表 ID，以及已分享給服務帳戶 {EMAIL}"
 
 
-def test_存檔_冷卻中_失敗框寫冷卻原文(env):
+def test_存檔_冷卻中_失敗框寫冷卻原文_不印可能已寫入(env):
     env.fail_next("open_by_key", Exception("APIError: [429]: Quota exceeded"), times=4)
     with pytest.raises(S.SettingsSheetError):
         S.load_user_settings([])
     result = _save(env, "set_max_age_days", "21", "int")
     assert result["status"] == "failed" and result["code"] == "cooling"
-    assert live._save_fail_lines(result, MASK)[0].startswith("⛔ 存檔寫入失敗：設定試算表暫停重試")
+    lines = live._save_fail_lines(result, MASK)
+    assert lines[0].startswith("⛔ 存檔寫入失敗：設定試算表暫停重試")
+    assert live.TEXT_SAVE_MAYBE_WRITTEN not in lines
+
+
+def test_存檔_一般失敗才印可能已寫入(env):
+    S.save_setting_for_page("set_max_age_days", "14", "int", [])      # 先有標頭列
+    env.fail_next("append_rows", ConnectionError("reset by peer"), title="user_setting_log", delivered=True)
+    result = _save(env, "set_max_age_days", "21", "int")
+    assert result["status"] == "failed" and result["code"] == "api" and result["http_status"] is None
+    assert live._save_fail_lines(result, MASK) == [
+        "⛔ 存檔寫入失敗：" + result["message"], logic.TEXT_KEEP_INPUT, live.TEXT_SAVE_MAYBE_WRITTEN]
+    assert env.data("user_setting_log")[-1][:2] == ["set_max_age_days", "21"]      # 真的可能已寫入
+
+
+@pytest.mark.parametrize("code, status, hint", [
+    ("not_configured", None, None), ("no_service_account", None, None),
+    ("header_mismatch", None, None), ("cooling", None, None),
+    ("api", 404, None), ("api", 403, None),
+    ("api", None, "服務帳戶可能只有檢視權限，需要編輯者"), ("api", None, "請確認試算表 ID，以及已分享給服務帳戶 `x`"),
+])
+def test_存檔_根本沒寫的失敗不印可能已寫入(code, status, hint):
+    result = {"status": "failed", "message": "m", "code": code, "http_status": status, "hint": hint}
+    assert live.TEXT_SAVE_MAYBE_WRITTEN not in live._save_fail_lines(result, MASK)
 
 
 def test_存檔_型別不符_不存_欄位下方型別說明(env):
@@ -412,6 +437,23 @@ def test_寫表失敗_取數紀錄寫入失敗並列(env, monkeypatch):
     assert lines[2].startswith("⛔ 取數紀錄寫入失敗：") and SHEET not in lines[2]
 
 
+@pytest.mark.parametrize("stage", ["fetch_log_open", "fetch_log"])
+def test_取數紀錄寫不進去_成功行不說結果記在取數紀錄(stage):
+    result = {"tier": "市場指標", "fetched": 3, "log_message": None, "masked_errors": {}, "empty": {},
+              "stage": stage, "message": "boom", "ok": False}
+    assert [n["text"] for n in live.refetch_result_lines(result, MASK)] == [
+        "取數完成：市場指標，取回 3 列", "⛔ 取數紀錄寫入失敗：boom"]
+
+
+def test_開始紀錄寫不進去_真的取數成功時_成功行只印前半(env, monkeypatch):
+    _stub_fetch(monkeypatch, _vix())
+    env.fail_next("append_rows", ConnectionError("boom"), title="fetch_log_open", times=4)
+    result = source.refetch("市場指標")
+    lines = _lines(result)
+    assert lines[0] == "取數完成：市場指標，取回 2 列" and "取數紀錄（層 4）" not in "".join(lines)
+    assert lines[1].startswith("⛔ 取數紀錄寫入失敗：")
+
+
 def test_開始紀錄寫不進去_仍顯示取數結果並列寫入失敗(env, monkeypatch):
     _stub_fetch(monkeypatch, None, "HTTP 503 upstream")
     env.fail_next("append_rows", ConnectionError("boom"), title="fetch_log_open", times=4)
@@ -437,14 +479,56 @@ def test_source交出去的東西沒有未遮蔽的原文(env, monkeypatch):
 # ═══════════════════════ 其他守衛 ═══════════════════════
 
 
-def test_正式模式文案零禁詞():
-    words = ("一鍵", "最佳", "推薦", "最適", "買進", "賣出", "加碼", "減碼") + logic.FORBIDDEN_DIRECTION_WORDS \
-        + logic.FORBIDDEN_ADVICE_WORDS + logic.FORBIDDEN_ARROWS
-    texts = [v for k, v in vars(live).items() if k.startswith("TEXT_") or k == "MASKED_NOTE"]
-    assert len(texts) >= 25
-    for text in texts:
-        for word in words:
-            assert word not in text, (text, word)
+def _full_word_list():
+    """與既有原始碼禁詞守衛同一份完整字表（tests/ui_v2/test_set_logic.py::_source_forbidden_words，
+    含「建議」「目標價」），另加客戶點名的八個詞。「一鍵」只在按鈕標籤禁（`44` 1.1），
+    SET-4 的 `44` 逐字「一鍵一個輸入欄」不是禁詞 —— 故按鈕標籤另掃含「一鍵」的完整按鈕禁詞。"""
+    import test_set_logic as guard
+    return tuple(dict.fromkeys(guard._source_forbidden_words()
+                               + ("最佳", "推薦", "最適", "買進", "賣出", "加碼", "減碼")))
+
+
+def _live_models(env, monkeypatch):
+    """正式模式各狀態的整頁模型（含存檔結果、取數結果行）。"""
+    out = []
+    _stub_fetch(monkeypatch, _vix())
+    source.refetch("市場指標")
+    S.save_setting_for_page("mkt_window_days", "90", "int", [])
+    out.append(_page()[1])
+    _stub_fetch(monkeypatch, None, f"api_key={KEY} refused")
+    source.refetch("市場指標")
+    results = {"set_max_age_days": {**source.save_setting("set_max_age_days", "x", "int"), "attempted": "x"},
+               "alo_basis": {**source.save_setting("alo_basis", "cost", None), "attempted": "cost"}}
+    out.append(_page(results)[1])
+    env.cfg.pop("SETTINGS_SHEET_ID")
+    R.clear_cache()
+    out.append(_page()[1])
+    return out
+
+
+def test_正式模式整頁畫面字串零禁詞_完整字表(env, monkeypatch):
+    words = _full_word_list()
+    assert "建議" in words and "目標價" in words and len(words) >= 20
+    models = _live_models(env, monkeypatch)
+    strings = [s for m in models for s in logic.collect_ui_strings(m)]
+    notes = source.load_live()["notes"]
+    for tier in (None,) + logic.TIERS:
+        strings += logic.collect_ui_strings(live.refetch_button(tier, notes))
+    for result in ({"tier": "市場指標", "fetched": 2, "stage": "done"},
+                   {"tier": "市場指標", "fetched": 0, "empty": {"vol_index": "x"}, "stage": "done"},
+                   {"tier": "市場指標", "fetched": 2, "stage": "fetch_log", "message": "m"}):
+        strings += [n["text"] for n in live.refetch_result_lines(result, MASK)]
+    strings += [v for k, v in vars(live).items() if k.startswith("TEXT_") and isinstance(v, str)]
+    assert len(strings) >= 500
+    hits = [(w, s) for s in strings for w in words if w in s]
+    assert hits == []
+    for button in (b for m in models for b in logic.collect_buttons(m)):
+        assert not any(w in button["label"] for w in logic.FORBIDDEN_BUTTON_WORDS), button
+
+
+def test_禁詞掃描本身會咬_負控():
+    words = _full_word_list()
+    assert {w for w in words if w in "這裡有建議與目標價，最佳加碼"} == {"目標價", "建議", "最佳", "加碼"}
 
 
 def test_不帶任何正式模式鍵的模型_logic照舊_fixture模式不受影響():
@@ -452,3 +536,45 @@ def test_不帶任何正式模式鍵的模型_logic照舊_fixture模式不受影
         model = logic.build_page_model(fixtures.scenario(name))
         for key in ("head_lines", "top_lines", "live_lines", "note_lines", "saved_lines", "cell_notes"):
             assert not any(key in node for node in logic._walk(model)), (name, key)
+
+
+# ═══════════════════════ 2026-09-26 回修：同一秒平手（SET-GAP-同秒平手） ═══════════════════════
+
+def _log(log_id, outcome, finished, started="2026-09-26T03:00:00Z", row_count=None, message=None):
+    return {"log_id": log_id, "source_tier": "市場指標", "started_at": started, "finished_at": finished,
+            "outcome": outcome, "row_count": row_count if outcome == "ok" else None,
+            "message": message if outcome == "failed" else None}
+
+
+@pytest.mark.parametrize("order", [0, 1])
+def test_同一秒平手_失敗優先於成功_不論先後(order):
+    ok = _log("a", "ok", "2026-09-26T03:00:05Z", row_count=2)
+    bad = _log("b", "failed", "2026-09-26T03:00:01Z", message="boom")
+    logs = [ok, bad] if order == 0 else [bad, ok]
+    assert logic.latest_per_tier(logs)["市場指標"]["log_id"] == "b"
+
+
+@pytest.mark.parametrize("order", [0, 1])
+def test_同一秒平手_同狀態比結束時間_None視為最新(order):
+    early = _log("a", "failed", "2026-09-26T03:00:01Z", message="x")
+    late = _log("b", "failed", "2026-09-26T03:00:09Z", message="y")
+    open_ = _log("c", "failed", None, message="取數沒有結束紀錄")
+    pair = [early, late] if order == 0 else [late, early]
+    assert logic.latest_per_tier(pair)["市場指標"]["log_id"] == "b"
+    trio = pair + [open_] if order == 0 else [open_] + pair
+    assert logic.latest_per_tier(trio)["市場指標"]["log_id"] == "c"
+
+
+def test_不同秒照舊取較晚開始的():
+    old_bad = _log("a", "failed", "2026-09-26T03:00:01Z", message="x")
+    new_ok = _log("b", "ok", "2026-09-26T03:00:09Z", started="2026-09-26T03:00:02Z", row_count=1)
+    assert logic.latest_per_tier([old_bad, new_ok])["市場指標"]["log_id"] == "b"
+
+
+def test_同一秒平手_燈照失敗那一筆轉紅():
+    dataset = fixtures.scenario("ok")
+    dataset["fetch_log"] = [_log("a", "ok", "2026-09-22T03:00:05Z", started="2026-09-22T03:00:00Z", row_count=2),
+                            _log("b", "failed", "2026-09-22T03:00:01Z", started="2026-09-22T03:00:00Z",
+                                 message="boom")]
+    model = logic.build_page_model(dataset)
+    assert _b(model, "SET-0")["text"] == "失敗的來源層級：市場指標"
