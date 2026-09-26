@@ -371,7 +371,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 - 在這五條下，本組判斷第 9 條成立；這是讀程式碼推得的，本組沒有實際改一版去跑。
 - 正式模式「真的不碰 fixtures」要有執行期證據，不能只靠 import 掃描：見 4.7 第 4 點。
 
-- 另加一條「整條呼叫鏈」的守衛：`services/v2_tables` 只准 import `repositories.*`、`shared.*`、`infra.*` 與標準函式庫，並納入既有 `tests/test_services_purity_contract.py` 的白名單體系。
+- 另加一條「整條呼叫鏈」的守衛：`services/v2_tables` 只准 import `repositories.*`、`shared.*`、`infra.*` ~~與標準函式庫~~ → 、標準函式庫與 `pandas`，並納入既有 `tests/test_services_purity_contract.py` 的白名單體系。（2026-09-26 補 `pandas`；有意識的更正，不是漏刪；決策者：AI 總管。劃掉的寫法寫下時為真 —— 當時轉換層尚未實作；實作後需要以 `pandas` 處理 L1 回傳的序列與時間戳，`tests/test_services_purity_contract.py` 的白名單本來就含 `pandas`，`services/v2_tables/market_indicator.py` 檔頭已寫明。被權衡掉的是「只准標準函式庫」這個射程；`infra.*` 實際只准純度白名單列名的子模組，冷卻狀態因此改經下表 N-5 的 L1 檔讀取。）
 
 ---
 
@@ -545,6 +545,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 | N-2 | 設定、取數紀錄（與 Q12 裁定落地的 `market_indicator`）的 L1 存取模組 | `user_setting`、`fetch_log`、`market_indicator` 落地 | 「存檔」沒有後端；set 頁沒有取數紀錄；`is_revised` 無從比對 |
 | N-3 | FRED vintage 取數的新 L1 檔（**不動 `fetch_fred` 本體**） | 取公布日與版次（T1） | FRED 三鍵不寫列 |
 | N-4 | Q4 那兩張 `_` 分頁的 L1 讀取模組（含 60 秒手動快取，4.4） | 讀持倉補充與保單資料 | alo、hld 只剩空狀態 |
+| N-5 | `repositories/v2_source_status.py`（2026-09-26 補列；已新增於 `wip/mkt-live-data-2026-09-26` 的 `12f8a9a`） | 以唯讀方式讀 `infra/source_backoff.py::get_backoff_state`，交出本頁來源的冷卻狀態，供 mkt 正式入口「重新取數」的停用原因寫出剩餘秒數 | L2 純度白名單不含 `infra.source_backoff`、ui_v2 不得碰舊樹，冷卻秒數沒有合規的讀取路徑 |
 
 **第二類：既有檔的最小改動**（每項只加旁路輸出或開公開出口，不改既有呼叫端看到的回傳值）
 
@@ -598,6 +599,21 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 - (a) Q4 (a) 的 `invest_twd` 空白時會被讀成 0（`repositories/policy/_helpers.py::parse_invest_twd`），要與 `units`、`avg_nav` 套用同一條「0 或空白視為沒填」的規則；本輪未改 Q4 的文字。
 - (b) 4.7 第 4 點的執行期測試：`page.py` 以 `from . import fixtures` 把模組綁在 page 模組的屬性上，所以替身必須以 monkeypatch 換掉 **page 模組上的 `fixtures` 屬性**；只換 `sys.modules` 裡的 `ui_v2.<頁>.fixtures` 不會影響已綁好的名字，測試會空轉。
 - (c) 6.3 E-8 的「三個主因」沒有量測依據；而且「查無此基金」與「MoneyDJ HTML 改版、解析不到」在回傳上分辨不出來。實作 E-8 時，旁路輸出要據實分類，不得把後兩者合併寫成「查無此基金」。
+  - **狀態更新（2026-09-26，本地 `main` `2cfea07`）**：PR #849 已實作 E-8。`repositories/fund/nav_metrics.py::fetch_nav` 全敗時，逐網址把結果掛到回傳空 Series 的 `attrs["fetch_error"]`，公開讀法 `fetch_nav_with_error`；取數失敗的那一行附 `kind=` 失敗分類（同檔 `_fail_kind_text` 讀 `infra.proxy.pop_last_fail_kind`），所以**子網域 403、代理失效這類連線面的原因已經寫進原文**。**仍然分不出來的**：頁面有取回、解析筆數不足 `NAV_CACHE_MIN_POINTS` 時，原文寫的是「無法分辨查無此基金或頁面改版」—— 據實寫明，沒有合併成「查無此基金」，但兩者**仍分不出來**。「三個主因」沒有量測依據這一點不變。
+
+**2026-09-26 稽核登記的程式小項（只登記，不改程式）**
+
+以下各項都在舊樹的 `.py`（PR #849 新增的錯誤旁路），動它們要客戶另外授權（Q11 的附帶條件是 E-1~E-8 一次做完、一次凍結），本輪只登記。各項本組已在本地 `main` `2cfea07` 讀過程式碼。
+
+- (d) **E-5：子網域失敗、主站有回應但沒有配息列時，子網域的失敗原文被丟掉。** `repositories/fund/nav_metrics.py::fetch_div` 依序試子網域（`PORTAL_CFG` 那一支，或境內的 `tcbbankfund` 子網域）與主站；任一頁面取回且整頁解析跑完就把 `_div_page_ok` 設為真。結尾只在「沒有配息列 **且** `_div_page_ok` 為假」時才把 `_div_failures` 寫進 `_FETCH_DIV_TLS.error`，所以子網域失敗、主站回應但沒有配息列時，`fetch_div_with_error` 回 `([], None)`，子網域的失敗原文不交出去。
+- (e) **`clear_load_all_policies_v2_cache` 沒有呼叫點，也沒有註冊進 `_CACHE_REGISTRY`。** `repositories/policy/v2.py::clear_load_all_policies_v2_cache` 只清模組層的 `_LOAD_ALL_V2_CACHE`；以 `git grep` 查，除定義處與註解外，只有 `tests/test_v2_l1_error_sidecars.py` 呼叫它。它也不是 `infra/cache.py::register_cache` 包過的函式，所以「全域刷新」（`infra/cache.py` 走訪 `_CACHE_REGISTRY`）清不到這層快取。⚠️ 目前 production 沒有任何呼叫端帶 `cache_user`（`load_all_policies_v2_with_error` 的參數），這層快取實際上沒有啟用；接 alo、hld 開始帶 `cache_user` 時，4.4 寫的「存檔或重新取數時清掉」要有人真的呼叫它。
+- (f) **E-3、E-4 要細分 404 與 407，得改 `infra/proxy.py::mark_fetch_failed_if_retryable`。** 該函式以 `pop_last_fail_kind()` 取出（並清掉）失敗分類；分類屬 `_NO_COOLDOWN_KINDS`（`not_found`、`proxy_auth`）時直接回傳、不掛標記，分類值也不交出去。`repositories/macro/fred.py::fetch_fred` 與 `repositories/macro/yf.py::fetch_yf_close` 呼叫它之後已拿不到分類，原文只能寫「404 或 407，本層無法細分兩者」。要分開，須讓該函式交出分類（或改讀取順序），這是 `infra/` 的改動，不在 E-3、E-4 的點名範圍內。
+- (g) **「來源明確回答沒有」三處語意不一致。** `repositories/macro/fred.py::fetch_fred` 回 200、`observations` 為空時，`fetch_fred_with_error` 交出錯誤原文（`repositories/macro/yf.py::fetch_yf_close` 收盤欄全為 null 時同樣交錯誤）；`repositories/fund/nav_metrics.py::fetch_div_with_error` 頁面取回、沒有配息列時回 `None`（不算失敗）；`repositories/ledger_repository.py::load_all_ledgers_with_error` 在 `_Ledgers` 分頁不存在時回 `None`（不算失敗）。同樣是「來源有回應、答案是沒有」，有的當錯誤、有的不當錯誤；ui_v2 接線時各頁要照各函式的實際語意呈現，不能一律套同一條規則。本組只列讀到的這幾處，**不宣稱只有這幾處**。
+- (h) **E-7 跨模組引用私有函式 `_is_worksheet_not_found`。** `repositories/ledger_repository.py` 以 `from repositories.policy._helpers import _is_worksheet_not_found` 引用另一個套件的底線開頭函式（同套件的 `repositories/policy/v2.py` 也引用它，那是套件內部）。改名或改判準時 `ledger_repository` 會跟著受影響；要不要把它改成公開名稱，留待授權時一併處理。
+
+**2026-09-26 第二輪稽核登記：需要連網、留新 session**
+
+- (i) **VIX 的觀測日歸屬要以真實資料驗證。** `services/v2_tables/market_indicator.py::_obs_date` 以世界協調時間取 Yahoo 日線時間戳的日期。VIX 日線時間戳預期落在美東開盤時刻（世界協調時間同一天），照此不會差一天，但**本環境連不到 Yahoo（網路政策擋下），本組沒有實測**。匯率（`USDTWD=X`）同一個問題已由 `FX_OBS_DATE_RULE_VERIFIED = False` 暫停寫列；VIX 照舊寫列。**留新 session，在能連 Yahoo 的環境錄一份真實回應驗證；本輪不動程式。**
 
 **已在本輪直接修正的一筆**：§5 第 9 條原寫「四個條件」，3.5 已是五個條件，本輪改為「五個」；原句見附錄第四輪。
 
@@ -710,3 +726,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 - 6.1 對照表規則 1｜原句：~~1. 接上真資料後，遇到表上沒有的寫法就不寫入，並登記這個新寫法（寫進 `fetch_log` 的訊息，讓 set 頁看得到）。~~
 - 6.1 對照表規則 2｜原句：~~2. 每季回查一次，把實際遇到的寫法補進本表；補表時照本文件體例，舊表劃線保留。~~
 - §8 查證方式｜原句：~~走訪 `calc_metrics` 內的全部 `return`，最後那個 `dict(...)` 的關鍵字參數裡沒有 `div_freq_n`，其餘 `return` 屬巢狀函式或非 dict；~~
+
+### 第六輪（§8 稽核登記回填）
+
+本輪只在第 8 節新增「2026-09-26 稽核登記的程式小項」(d)~(h) 與 (c) 的狀態更新，沒有改掉任何原句，所以沒有舊句可貼。上一輪的 (a) 維持原樣。編號接在既有 (a)~(c) 之後，避免同一節出現兩個 (a)。
