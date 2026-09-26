@@ -287,3 +287,69 @@ def test_大但有限的數字照收():
     from ui_v2.set import logic
     for value in ("[1e300]", '[["a", 0.5]]', '[{"w": 2}]'):
         assert S.value_matches_kind(value, "list") and logic.value_matches_kind(value, "list"), value
+
+
+
+# ═══════════════════════ 2026-09-26 最後一輪回修 ═══════════════════════
+
+
+def test_極深巢狀_兩份判法都判型別不符_不崩():
+    from ui_v2.set import logic
+    deep = "[" * 100000 + "]" * 100000
+    for kind in ("list", "rules"):
+        assert S.value_matches_kind(deep, kind) is False
+        assert logic.value_matches_kind(deep, kind) is False
+    with pytest.raises(S.ValueKindMismatch):
+        S.check_setting_value(deep, "list", setting_key="exp_watchlist")
+
+
+def test_極深巢狀_存檔回型別不符_不寫(book):
+    out = S.save_setting_for_page("exp_watchlist", "[" * 100000 + "]" * 100000, "list", [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+def test_極深巢狀_試算表上已存的值_畫面照印型別不符不崩():
+    from ui_v2.set import fixtures, logic
+    dataset = fixtures.scenario("ok")
+    deep = "[" * 100000 + "]" * 100000
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "exp_watchlist":
+            row["setting_value"] = deep
+    model = logic.build_page_model(dataset)
+    row = [r for r in logic.find_block(model, "SET-3")["_rows"] if r["_key"] == "exp_watchlist"][0]
+    assert row["value_text"] == logic.TEXT_NA_BAD_KIND
+
+
+def test_L1讀取端不解析setting_value():
+    """L1 不 json.loads 設定值（只解析服務帳戶憑證），所以讀取端沒有極深巢狀的崩潰點；值原樣交回。"""
+    import ast
+    import pathlib
+    src = pathlib.Path(R.__file__).read_text(encoding="utf-8")
+    loads = [n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
+             and getattr(n.func, "attr", "") == "loads"]
+    assert len(loads) == 1                                              # 只有 _client_email 那一處
+    assert "def _client_email" in src and "creds = json.loads(creds)" in src
+
+
+def test_極深巢狀_讀回照原值_不崩(book):
+    from _fake_settings_sheet import FakeWorksheet
+    deep = "[" * 100000 + "]" * 100000
+    head = [n for n, _k, _nl in R.USER_SETTING_SPEC]
+    book.tabs["user_setting_log"] = FakeWorksheet(book, "user_setting_log", [
+        head, ["exp_watchlist", deep, "list", "2026-09-20T00:00:00Z"]])
+    assert S.load_user_settings([SECRET])["rows"]["exp_watchlist"]["setting_value"] == deep
+
+
+def test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致():
+    """據實登記的分歧（2026-09-26 稽核 A）：set 頁存「成本／市值」，ui_v2/alo 目前用 cost／mv。
+    alo 還沒有正式入口時，這條只記錄分歧仍在；一旦 `ui_v2/app_alo_live.py` 出現，alo 的比重基準值
+    必須改成 L2 這一份，否則紅。"""
+    import pathlib
+    from ui_v2.alo import logic as alo_logic
+    root = pathlib.Path(__file__).resolve().parents[1]
+    alo_values = (alo_logic.BASIS_COST, alo_logic.BASIS_MV)
+    if (root / "ui_v2" / "app_alo_live.py").exists():
+        assert alo_values == S.ENUM_SETTING_VALUES["alo_basis"], alo_values
+    else:
+        assert alo_values == ("cost", "mv")                            # 分歧仍在：接正式模式前要改
+        assert set(alo_values).isdisjoint(S.ENUM_SETTING_VALUES["alo_basis"])

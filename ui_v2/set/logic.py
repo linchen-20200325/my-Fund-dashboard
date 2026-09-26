@@ -97,6 +97,9 @@ GAPS = {
         "已處理（2026-09-26，決策者：客戶裁示）：alo_basis 在實作層定為 list（枚舉，可選值「成本」「市值」，寫死在 L2 "
         "services/v2_tables/settings_store.py::ENUM_SETTING_VALUES，本檔 ENUM_SETTING_VALUES 為同一份的鏡像），正式模式照此判定與存檔；"
         "44 未改。示範模式的規格快照 alo_basis 仍放空（spec.py 的 IMPLEMENTATION_KINDS 只在正式模式套用），示範畫面因此一字不變。"
+        "⚠️ 跨頁分歧據實登記（2026-09-26 稽核 A）：set 頁以「成本／市值」為存值（客戶 2026-09-26 裁示）；ui_v2/alo 目前用 "
+        "cost／mv，兩者尚未對齊。alo 接正式模式時必須改讀 set 頁這份存值，跨頁守衛見 "
+        "tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致。本輪不碰 ui_v2/alo。"
     ),
     "SET-GAP-型別缺": "某鍵的 value_kind 為空時（alo_basis），型別欄畫 ⬜，本頁不判它的值合不合型別。",
     "SET-GAP-型別判定規則": (
@@ -519,7 +522,7 @@ def value_matches_setting(key, value: str, kind) -> bool:
 def kind_hint(key, kind) -> str:
     """SET-GAP-型別說明文字：枚舉鍵寫出可選值，其餘照 KIND_HINTS。"""
     if kind is not None and key in ENUM_SETTING_VALUES:
-        return "要輸入其中之一：" + "／".join(ENUM_SETTING_VALUES[key])
+        return "可選值：" + "、".join(ENUM_SETTING_VALUES[key])   # 客戶 2026-09-26 核准的字面
     return KIND_HINTS[kind]
 
 
@@ -551,9 +554,10 @@ def value_matches_kind(value: str, kind) -> bool:
         return True
     try:
         parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
-    except ValueError:
+        return isinstance(parsed, list) and _all_finite(parsed)
+    except (ValueError, RecursionError):
+        # 極深巢狀（例如幾千層的 [[[…]]]）會讓解析或有限值檢查遞迴過深 → 判為型別不符，不讓整頁崩潰。
         return False
-    return isinstance(parsed, list) and _all_finite(parsed)
 
 
 def _reject_constant(name):

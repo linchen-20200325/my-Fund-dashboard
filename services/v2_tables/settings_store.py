@@ -97,7 +97,10 @@ def load_user_settings(secret_values) -> dict:
 
 
 # 枚舉型的鍵（客戶 2026-09-26 裁示；44 未改）：value_kind 為 `list`，值只能是下列其中之一。
-# **可選值的唯一真相源在這裡**；`ui_v2/set/logic.py::ENUM_SETTING_VALUES` 是鏡像（由測試比對）。
+# set 頁以「成本／市值」為存值，這是客戶 2026-09-26 裁示；`ui_v2/set/logic.py::ENUM_SETTING_VALUES` 是這份的鏡像（由測試比對）。
+# ⚠️ 據實登記（2026-09-26 稽核 A）：`ui_v2/alo`（示範模式）目前用 `cost`／`mv`，與這份**尚未對齊**，
+#    所以這裡還不是全站的唯一真相源。alo 接正式模式時必須改讀這份值；跨頁守衛見
+#    tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致。
 ENUM_SETTING_VALUES = {"alo_basis": ("成本", "市值")}
 ENUM_KIND = "list"
 
@@ -149,9 +152,10 @@ def value_matches_kind(value: str, kind: str) -> bool:
         return True
     try:
         parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
-    except ValueError:
+        return isinstance(parsed, list) and _all_finite(parsed)
+    except (ValueError, RecursionError):
+        # 極深巢狀（例如幾千層的 [[[…]]]）會讓解析或有限值檢查遞迴過深 → 判為型別不符，不讓整頁崩潰。
         return False
-    return isinstance(parsed, list) and _all_finite(parsed)
 
 
 def _reject_constant(name):

@@ -612,7 +612,8 @@ def test_alo_basis_其他值一律型別不符_不寫_畫可選值說明(env, va
     assert "user_setting_log" not in env.tabs
     _d, model = _page({"alo_basis": result})
     assert _field(model, "alo_basis")["hint_lines"] == [
-        "型別說明：這個鍵的 value_kind 是 list，要輸入其中之一：成本／市值。" + logic.TEXT_NOT_SAVED]
+        "型別說明：這個鍵的 value_kind 是 list，可選值：成本、市值。" + logic.TEXT_NOT_SAVED]
+    assert "要輸入其中之一" not in _strings(model)
 
 
 def test_alo_basis_試算表上已存的舊值不在可選值內_SET3照印型別不符(env):
