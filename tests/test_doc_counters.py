@@ -2378,7 +2378,7 @@ def test_mutation_dropping_one_named_wireframe_turns_the_identity_control_red():
         assert unexpected == [newcomer], f"混進來的 {newcomer} 沒有被咬出來 —— 只驗了一個方向"
 
 
-# ── 射程正控之三：31 個 `.md` 規格文件同樣釘身分（第十二輪客戶裁示第 2 件）──────
+# ── 射程正控之三：32 個 `.md` 規格文件同樣釘身分（第十二輪客戶裁示第 2 件）──────
 # ⚠️ **線框那一側已經釘了身分（`_PROTOTYPE_FILES`），`.md` 這一側在本輪之前只有個數下限**
 #    —— 同一套劇本照樣通得過：**補一個新檔、再搬走一個真的**，檔數一模一樣、
 #    逐 glob 下限不紅，而被搬走的那一份已經整個離開語料，沒有任何人會發現。
@@ -2428,6 +2428,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/45_fund_db_inventory.md",
     "docs/v2/46_fund_live_dead.md",
     "docs/v2/47_fund_wireframe_mkt.md",
+    "docs/v2/49_data_integration_plan.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
 
@@ -2451,7 +2452,7 @@ def _named_md_docs_diff(seen: set[str]) -> tuple[list[str], list[str]]:
 
 
 def test_control_each_named_md_doc_is_still_in_scope_by_name():
-    """正控：31 個 `.md` **逐個具名**都還在受檢清單裡，而且沒有沒登記的檔混進來。"""
+    """正控：32 個 `.md` **逐個具名**都還在受檢清單裡，而且沒有沒登記的檔混進來。"""
     missing, unexpected = _named_md_docs_diff(set(_md_docs_in_scope()))
     assert not missing and not unexpected, (
         "`docs/v2/*.md` 的受檢清單與 `_MD_DOCS` 對不起來：\n"
