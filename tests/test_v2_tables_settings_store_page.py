@@ -340,6 +340,28 @@ def test_極深巢狀_讀回照原值_不崩(book):
     assert S.load_user_settings([SECRET])["rows"]["exp_watchlist"]["setting_value"] == deep
 
 
+def _alo_live_triggered(root, pages_reading) -> bool:
+    """跨頁守衛的觸發條件（2026-09-26 放寬）：L2 宣告 alo 已讀設定，或 ui_v2 底下出現任何 alo 正式模式入口
+    （`app_alo*live*.py`、`alo/source.py`、`alo/live.py`）。"""
+    if "alo" in pages_reading:
+        return True
+    ui_v2 = root / "ui_v2"
+    return any(ui_v2.glob("app_alo*live*.py")) or (ui_v2 / "alo" / "source.py").exists() \
+        or (ui_v2 / "alo" / "live.py").exists()
+
+
+def test_跨頁守衛的觸發條件_正控與負控(tmp_path):
+    (tmp_path / "ui_v2" / "alo").mkdir(parents=True)
+    assert _alo_live_triggered(tmp_path, ("set",)) is False
+    assert _alo_live_triggered(tmp_path, ("set", "alo")) is True
+    # 探針（稽核 A 實測的繞過手法）：入口改名成 app_alo_live_v2.py 也要擋下。
+    for rel in ("ui_v2/app_alo_live.py", "ui_v2/app_alo_live_v2.py", "ui_v2/app_alo_live2.py",
+                "ui_v2/alo/source.py", "ui_v2/alo/live.py"):
+        (tmp_path / rel).write_text("", encoding="utf-8")
+        assert _alo_live_triggered(tmp_path, ("set",)) is True, rel
+        (tmp_path / rel).unlink()
+
+
 def test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致():
     """據實登記的分歧（2026-09-26 稽核 A）：set 頁存「成本／市值」，ui_v2/alo 目前用 cost／mv。
     alo 還沒有正式入口時，這條只記錄分歧仍在；一旦 `ui_v2/app_alo_live.py` 出現，alo 的比重基準值
@@ -348,8 +370,71 @@ def test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致()
     from ui_v2.alo import logic as alo_logic
     root = pathlib.Path(__file__).resolve().parents[1]
     alo_values = (alo_logic.BASIS_COST, alo_logic.BASIS_MV)
-    if (root / "ui_v2" / "app_alo_live.py").exists():
+    if _alo_live_triggered(root, S.PAGES_READING_SETTINGS):
         assert alo_values == S.ENUM_SETTING_VALUES["alo_basis"], alo_values
     else:
         assert alo_values == ("cost", "mv")                            # 分歧仍在：接正式模式前要改
         assert set(alo_values).isdisjoint(S.ENUM_SETTING_VALUES["alo_basis"])
+
+
+
+# ═══════════════════════ 2026-09-26 紅隊最終複驗：超長整數、溢位的浮點 ═══════════════════════
+
+
+def test_int位數上限_兩份相同_18位可_19位與4301位不可():
+    from ui_v2.set import logic
+    assert S.INT_MAX_DIGITS == logic.INT_MAX_DIGITS == 18
+    for value, ok in (("9" * 18, True), ("-" + "9" * 18, True), ("9" * 19, False), ("-" + "9" * 19, False),
+                      ("1" * 4301, False)):
+        assert S.value_matches_kind(value, "int") is ok and logic.value_matches_kind(value, "int") is ok, value
+
+
+def test_超長整數_從頁面存檔_型別不符不寫(book):
+    out = S.save_setting_for_page("set_max_age_days", "1" * 4301, "int", [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+@pytest.mark.parametrize("value", ["1" * 4301, "9" * 19])
+def test_超長整數_試算表裡已經有_頁面不崩_標值與型別不符(book, value):
+    from _fake_settings_sheet import FakeWorksheet
+    from ui_v2.set import fixtures, logic
+    head = [n for n, _k, _nl in R.USER_SETTING_SPEC]
+    book.tabs["user_setting_log"] = FakeWorksheet(book, "user_setting_log", [
+        head, ["set_max_age_days", value, "int", "2026-09-20T00:00:00Z"],
+        ["set_log_keep_rows", value, "int", "2026-09-20T00:00:00Z"]])
+    rows = S.load_user_settings([SECRET])["rows"]
+    dataset = fixtures.scenario("ok")
+    dataset["user_setting"] = [r for r in dataset["user_setting"]
+                               if r["setting_key"] not in ("set_max_age_days", "set_log_keep_rows")]
+    dataset["user_setting"] += [dict(rows["set_max_age_days"]), dict(rows["set_log_keep_rows"])]
+    model = logic.build_page_model(dataset)
+    assert logic.find_block(model, "SET-0")["text"] == logic.TEXT_NA_BAD_KIND
+    assert logic.find_block(model, "SET-1")["_limit_state"] == "bad"
+    assert any(logic.TEXT_NA_BAD_KIND in line for line in logic.find_block(model, "SET-6")["tail_lines"])
+
+
+def test_讀取時的int轉換失敗_也標值與型別不符(monkeypatch):
+    """第二道：即使型別判法放行了（例如日後判法有漏），`_setting_state` 的 int() 失敗也要接住。"""
+    from ui_v2.set import fixtures, logic
+    monkeypatch.setattr(logic, "value_matches_kind", lambda value, kind: True)
+    dataset = fixtures.scenario("ok")
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "set_max_age_days":
+            row["setting_value"] = "1" * 4301
+    model = logic.build_page_model(dataset)
+    assert logic.find_block(model, "SET-1")["_limit_state"] == "bad"
+
+
+@pytest.mark.parametrize("value, kind", [("9" * 400, "float"), ("-" + "9" * 400, "float"),
+                                         ("1" + "0" * 400 + ".5", "ratio")])
+def test_溢位成inf的浮點字面值_兩份拒收_不寫(book, value, kind):
+    from ui_v2.set import logic
+    assert S.value_matches_kind(value, kind) is False and logic.value_matches_kind(value, kind) is False
+    out = S.save_setting_for_page("alo_tolerance_pp", value, kind, [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+def test_很大但有限的浮點照收():
+    from ui_v2.set import logic
+    value = "9" * 300
+    assert S.value_matches_kind(value, "float") and logic.value_matches_kind(value, "float")

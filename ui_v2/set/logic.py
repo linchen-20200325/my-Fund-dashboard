@@ -526,6 +526,10 @@ def kind_hint(key, kind) -> str:
     return KIND_HINTS[kind]
 
 
+# int 的位數上限（去掉正負號）。L2 `services/v2_tables/settings_store.py::INT_MAX_DIGITS` 為同一個數（測試比對）。
+INT_MAX_DIGITS = 18
+
+
 def value_matches_kind(value: str, kind) -> bool:
     """SET-GAP-型別判定規則。`kind` 為 `None` 時不判（SET-GAP-型別缺），回真。"""
     if kind is None:
@@ -539,11 +543,16 @@ def value_matches_kind(value: str, kind) -> bool:
     # 數字一律只收 ASCII 0-9（`re` 的 `\d` 會收全形與其他文字的數字；2026-09-26 總管裁示收緊，
     # 與 L2 `services/v2_tables/settings_store.py::value_matches_kind` 同步）。
     if kind == "int":
-        return re.fullmatch(r"-?[0-9]+", text) is not None
+        # 去掉正負號後最多 INT_MAX_DIGITS 位：超過 4300 位時 int() 會拋錯（Python 的字串轉整數上限），
+        # 存進去之後整頁讀取就崩；這裡直接判不符（2026-09-26 總管裁示）。
+        return re.fullmatch(r"-?[0-9]{1,%d}" % INT_MAX_DIGITS, text) is not None
     if kind in ("float", "ratio"):
         if re.fullmatch(r"-?[0-9]+(\.[0-9]+)?", text) is None:
             return False
-        return kind == "float" or 0.0 <= float(text) <= 1.0
+        number = float(text)
+        if not math.isfinite(number):   # 會溢位成 inf 的字面值，照 list 的規則拒收
+            return False
+        return kind == "float" or 0.0 <= number <= 1.0
     if kind == "date":
         if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text) is None:
             return False
@@ -605,7 +614,11 @@ def _setting_state(dataset, key, known_keys):
                 return "unset", None
             if not value_matches_kind(value, "int"):
                 return "bad", None
-            return "ok", int(value.strip())
+            try:
+                return "ok", int(value.strip())
+            except ValueError:
+                # 讀取時的轉換失敗一律當「值與型別不符」，不讓整頁崩（2026-09-26 總管裁示；不新增文案）。
+                return "bad", None
     raise KeyError(f"user_setting 沒有 {key!r} 這一列")
 
 

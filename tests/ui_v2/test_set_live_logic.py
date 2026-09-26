@@ -657,3 +657,25 @@ def test_存檔_前後帶空白_型別不符不存_型別說明照既有模板(e
     assert field["value_text"] == " 30 "                                          # 輸入欄內容逐字留著
     assert field["hint_lines"] == [
         f"型別說明：這個鍵的 value_kind 是 int，{logic.KIND_HINTS['int']}。{logic.TEXT_NOT_SAVED}"]
+
+
+def test_超長整數_從頁面存檔路徑_不寫_畫型別說明_頁面不崩(env):
+    S.save_setting_for_page("set_max_age_days", "14", "int", [])
+    value = "1" * 4301
+    result = _save(env, "set_max_age_days", value, "int")
+    assert result["status"] == "kind_mismatch"
+    assert env.data("user_setting_log")[-1][:2] == ["set_max_age_days", "14"]
+    _d, model = _page({"set_max_age_days": result})
+    assert _field(model, "set_max_age_days")["hint_lines"][0].startswith("型別說明：")
+    assert _b(model, "SET-1")["_limit_state"] == "ok"
+
+
+def test_超長整數_試算表裡已經有_正式模式整頁不崩(env):
+    from _fake_settings_sheet import FakeWorksheet
+    head = [n for n, _k, _nl in R.USER_SETTING_SPEC]
+    env.tabs["user_setting_log"] = FakeWorksheet(env, "user_setting_log", [
+        head, ["set_max_age_days", "1" * 4301, "int", "2026-09-20T00:00:00Z"]])
+    _d, model = _page()
+    assert _b(model, "SET-1")["_limit_state"] == "bad"
+    row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "set_max_age_days"][0]
+    assert row["value_text"] == logic.TEXT_NA_BAD_KIND

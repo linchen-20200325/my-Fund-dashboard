@@ -113,6 +113,10 @@ class ValueKindMismatch(ValueError):
         self.code = code
 
 
+# int 的位數上限（去掉正負號）：超過 4300 位時 int() 會拋錯，存進去之後 set 頁讀取就崩（2026-09-26 總管裁示）。
+INT_MAX_DIGITS = 18
+
+
 def _is_int_literal(text: str) -> bool:
     """`-?[0-9]+`，只收 ASCII 數字（本套件的 import 白名單不含 `re`；2026-09-26 總管裁示不收全形等其他數字）。"""
     digits = text[1:] if text.startswith("-") else text
@@ -135,12 +139,15 @@ def value_matches_kind(value: str, kind: str) -> bool:
         return False
     text = value
     if kind == "int":
-        return _is_int_literal(text)
+        return _is_int_literal(text) and len(text.lstrip("-")) <= INT_MAX_DIGITS
     if kind in ("float", "ratio"):
         whole, dot, frac = text.partition(".")
         if not _is_int_literal(whole) or (dot and not _is_int_literal(frac)) or frac.startswith("-"):
             return False
-        return kind == "float" or 0.0 <= float(text) <= 1.0
+        number = float(text)
+        if not math.isfinite(number):   # 會溢位成 inf 的字面值，照 list 的規則拒收
+            return False
+        return kind == "float" or 0.0 <= number <= 1.0
     if kind == "date":
         parts = text.split("-")
         if [len(p) for p in parts] != [4, 2, 2] or not all(_is_int_literal(p) and p[0] != "-" for p in parts):
