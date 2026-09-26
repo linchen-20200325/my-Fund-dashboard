@@ -8,6 +8,8 @@
 
 - `contract`：`44` 第四節欄位契約的鏡像（真相源是 `44`，由測試逐欄重抽比對）。
 - `market_indicator`：市場總覽（mkt）的 `market_indicator` 表。
+- `settings_store`：設定與取數紀錄試算表的 L2 入口（遮蔽接到 L1、取數後寫 `market_indicator`／`fetch_log`；
+  docs/v2/50_settings_sheet_design.md）。本檔只呼叫 L1 `repositories/settings_sheet_repository.py`，不碰 gspread。
 
 ⚠️ 本套件不 import `ui_v2`（L2 不得上行 import，`CLAUDE.md` §8.2）；
    ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本套件。
