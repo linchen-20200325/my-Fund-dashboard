@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from . import fixtures, logic, theme
+from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
 # 不在本檔另寫一份數字（同一個事實只准有一個真相源）。
@@ -184,6 +184,9 @@ def _main_value_html(main_value: dict) -> str:
     ]
     if main_value.get("direction_text"):
         lines.append(f'  <div class="mkt-mv-note">{_esc(main_value["direction_text"])}</div>')
+    # 正式模式才有（live.apply_live_notes 加的）：原因、已遮蔽憑證，各另起一行；示範模式沒有這個鍵
+    for note in main_value.get("note_lines", ()):
+        lines.append(f'  <div class="mkt-mv-note">{_esc(note)}</div>')
     if main_value["badges"]:
         lines.append(f'  <div>{_badges_html(main_value["badges"])}</div>')
     lines.append("</div>")
@@ -258,7 +261,7 @@ def _on_save() -> None:
     store["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _render_mkt4(block: dict) -> None:
+def _render_mkt4(block: dict, *, live_mode: bool = False) -> None:
     with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
         st.caption(block["answers"])
         days_field, date_field = block["inputs"]
@@ -294,7 +297,7 @@ def _render_mkt4(block: dict) -> None:
                 help=save_button["disabled_reason"] or None,
             )
 
-        store = st.session_state.get("_user_setting", {})
+        store = {} if live_mode else st.session_state.get("_user_setting", {})
         if store.get("updated_at"):
             st.caption(
                 f"user_setting 已存檔，updated_at ＝ {store['updated_at']}"
@@ -390,10 +393,23 @@ def _pick_dataset() -> tuple[str, dict]:
     return name, datasets[name]
 
 
-def render() -> None:
+def render(*, load_live=None) -> None:
+    """畫整頁。
+
+    load_live：選填的載入函式（無參數，回傳 {"dataset": 與 fixtures 情境同形, "notes": {...}}）。
+    不傳（None）時行為與加這個參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
+    傳入時（正式入口 app_mkt_live.py）改由它取得資料，這一條路徑不讀 fixtures，
+    並套用 live.apply_live_notes 的正式模式調整；頁首副標只印本頁的提問句 ——
+    情境名與示意字樣只屬於示範模式（這一處畫面差異客戶 2026-09-26 已核准）。
+    """
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
-    scenario_name, dataset = _pick_dataset()
+    live_input = None
+    if load_live is None:
+        scenario_name, dataset = _pick_dataset()
+    else:
+        live_input = load_live()
+        scenario_name, dataset = None, live_input["dataset"]
     applied = st.session_state.get("_mkt_applied", {})
     model = logic.build_page_model(
         dataset,
@@ -407,11 +423,20 @@ def render() -> None:
     )
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="mkt-page-sub">{_esc(model["answers"])}　·　'
-        f'資料為假資料（示意值）·　情境 {_esc(scenario_name)}</div>',
-        unsafe_allow_html=True,
-    )
+    if live_input is not None:
+        model = live.apply_live_notes(model, live_input["notes"])
+
+    if load_live is None:
+        st.markdown(
+            f'<div class="mkt-page-sub">{_esc(model["answers"])}　·　'
+            f'資料為假資料（示意值）·　情境 {_esc(scenario_name)}</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div class="mkt-page-sub">{_esc(model["answers"])}</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div class="mkt-layer-label">層 1　結論</div>', unsafe_allow_html=True)
     _render_light(logic.find_block(model, "MKT-0"))
@@ -430,7 +455,7 @@ def render() -> None:
     )
     left, right = st.columns(2)
     with left:
-        _render_mkt4(logic.find_block(model, "MKT-4"))
+        _render_mkt4(logic.find_block(model, "MKT-4"), live_mode=live_input is not None)
     with right:
         _render_mkt5(logic.find_block(model, "MKT-5"))
 

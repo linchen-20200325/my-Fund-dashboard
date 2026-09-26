@@ -44,21 +44,26 @@ export UI_V2_CHROMIUM=<chromium 執行檔路徑>
 UI_V2_CHROMIUM=<chromium 執行檔路徑> <venv>/bin/python -m pytest tests/ui_v2/ -q -p no:cacheprovider -rs
 ```
 
-**2026-09-25 實測（基底 `9950e99`）：`743 passed`，0 skipped，0 failed，耗時 588.61 秒。**
+~~**2026-09-25 實測（基底 `9950e99`）：`743 passed`，0 skipped，0 failed，耗時 588.61 秒。**~~
 （本檔與 alo 線框改完之後又重跑一次，結果記在第 2.3 小節。）
+→ **2026-09-26 實測（基底 `2cfea07` ＋ 工作樹 mkt 正式入口改動，未 commit）：`803 passed`，0 skipped，0 failed，耗時 629.03 秒。**
+變的原因：mkt 接真資料的準備工作新增 4 支測試檔共 60 條（見下方逐檔表）；既有 11 檔條數一條未變。
 
 畫面測試是 `tests/ui_v2/` 裡標了 `slow` 的那一批，可以單獨列出來數。
 CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 ui_v2：2026-09-25 實測（基底 `9950e99`）
-`<venv>/bin/python -m pytest --collect-only -q -m slow -p no:cacheprovider` 回 `155/9451 tests collected`，
-其中 127 條屬於 `tests/ui_v2/`，另 28 條在 repo 其他測試。只數 ui_v2 的那一批：
+`<venv>/bin/python -m pytest --collect-only -q -m slow -p no:cacheprovider` 回 ~~`155/9451 tests collected`~~，
+其中 ~~127~~ 條屬於 `tests/ui_v2/`，另 28 條在 repo 其他測試。
+→ 2026-09-26 實測（基底 `2cfea07` ＋ 工作樹）：`162/9617 tests collected`，其中 134 條屬於 `tests/ui_v2/`，另 28 條不變。
+只數 ui_v2 的那一批：
 
 ```bash
 <venv>/bin/python -m pytest tests/ui_v2/ --collect-only -q -m slow -p no:cacheprovider
 ```
 
-**2026-09-25 實測（基底 `9950e99`）：`127/743 tests collected (616 deselected)`。**
+~~**2026-09-25 實測（基底 `9950e99`）：`127/743 tests collected (616 deselected)`。**~~
+→ **2026-09-26 實測（基底 `2cfea07` ＋ 工作樹）：`134/803 tests collected (669 deselected)`。**
 
-各檔條數（2026-09-25 實測，基底 `9950e99`；「收集」欄用 `--collect-only -q`，「slow」欄再加 `-m slow`）：
+各檔條數（~~2026-09-25 實測，基底 `9950e99`~~ → 2026-09-26 實測，基底 `2cfea07` ＋ 工作樹；「收集」欄用 `--collect-only -q`，「slow」欄再加 `-m slow`；舊合計劃線保留在表下）：
 
 | 檔 | 收集 | 其中 slow |
 |---|---:|---:|
@@ -68,14 +73,20 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 | `tests/ui_v2/test_exp_page.py` | 45 | 45 |
 | `tests/ui_v2/test_hld_logic.py` | 144 | 0 |
 | `tests/ui_v2/test_hld_page.py` | 24 | 24 |
+| `tests/ui_v2/test_mkt_live_logic.py`（新增） | 8 | 0 |
+| `tests/ui_v2/test_mkt_live_page.py`（新增） | 7 | 7 |
 | `tests/ui_v2/test_mkt_logic.py` | 89 | 0 |
 | `tests/ui_v2/test_mkt_page.py` | 9 | 9 |
+| `tests/ui_v2/test_mkt_source.py`（新增） | 5 | 0 |
 | `tests/ui_v2/test_set_logic.py` | 111 | 0 |
 | `tests/ui_v2/test_set_page.py` | 25 | 25 |
 | `tests/ui_v2/test_ui_v2_lane_guards.py` | 15 | 3 |
-| **合計** | **743** | **127** |
+| `tests/ui_v2/test_ui_v2_live_import_guard.py`（新增） | 40 | 0 |
+| **合計** | **803** | **134** |
 
-`*_page.py` 五檔整檔標 slow（檔內 `pytestmark = pytest.mark.slow`）；`test_ui_v2_lane_guards.py` 只有 3 條標 slow。
+~~合計 **743**／**127**（2026-09-25，基底 `9950e99`）~~ —— 變的原因同上：新增四檔 8＋7＋5＋40＝60 條，其中 slow 7 條。
+
+`*_page.py` ~~五檔~~ 六檔（含新增的 `test_mkt_live_page.py`）整檔標 slow（檔內 `pytestmark = pytest.mark.slow`）；`test_ui_v2_lane_guards.py` 只有 3 條標 slow。
 
 ### 2.2 文件守衛
 
@@ -175,7 +186,7 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 - CI 上（`CI=true`）找不到瀏覽器會 fail、不 skip。但 CI 的 slow lane 設了 `continue-on-error: true`
   （`.github/workflows/pr-check.yml`），它紅了也不擋合併，要點進那一條 job 看結果才知道。
 
-**判斷一次跑法有沒有效**：看輸出最後一行。基線是 `743 passed`、0 skipped。出現任何 skipped，或總數不是 743，就不是有效的驗收。
+**判斷一次跑法有沒有效**：看輸出最後一行。基線是 ~~`743 passed`~~ → `803 passed`（2026-09-26，基底 `2cfea07` ＋ 工作樹；見 2.1）、0 skipped。出現任何 skipped，或總數不是 ~~743~~ 803，就不是有效的驗收。
 
 ---
 
@@ -201,7 +212,7 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 
 ## 六、維護規則
 
-1. **每次跑完，基線有變就當場更新本檔。** 包括 743、127、91 三個總數、第 2.1 與 2.2 兩張逐檔表、第四節的實測表。
+1. **每次跑完，基線有變就當場更新本檔。** 包括 ~~743、127~~ 803、134、91 三個總數（2026-09-26 更新，理由見 2.1）、第 2.1 與 2.2 兩張逐檔表、第四節的實測表。
 2. **更新時帶上量測日與 SHA。** 寫「量測日 YYYY-MM-DD，基底 `<SHA>`」；不要寫「目前」「現在」「HEAD」這種會移動的字。
 3. 數字變少時，先查是不是有人把測試刪了或標成 skip，再更新；不要只改數字讓它對上。
 4. 被取代的舊數字不要直接刪掉，劃線保留並寫一句為什麼變（本 repo 的慣例）。
@@ -314,6 +325,20 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 - **畫面**：`SET-2`（來源健康卡，顯示各層級最近一次的 `message`）與 `SET-6`（取數紀錄，顯示 `fetch_log` 全欄，含 `message`）兩處都顯示同一份字串（含記號），並在訊息**旁邊**（不是訊息字串裡面）加一行註記「已遮蔽憑證」。只有字串裡確實含記號時才加；沒有遮任何東西時不加。
 - 沒有秘密值出現的訊息，遮蔽前後逐字相同，也不出現記號與註記。
 
+**7.4-a　延伸到市場總覽（MKT）的正式入口**（2026-09-26；決策者：客戶（核准正式入口文字線框草稿第 2 處）／AI 總管（延伸射程））
+
+上面兩點原本只點名 `SET-2`、`SET-6`。本輪起，同一條規則也套用到市場總覽正式入口 `ui_v2/app_mkt_live.py` 的下列區塊（示範入口 `ui_v2/app_mkt.py` 不套用，它沒有真的取數）：
+
+| 區塊 | 顯示位置 | 註記位置 |
+|---|---|---|
+| `MKT-1` 風險情緒卡 | 主值 `系統錯誤` 那一格：`⛔ 取數失敗：<遮蔽後的訊息>` | 同一格的**下一行**，灰色小字「已遮蔽憑證」 |
+| `MKT-2` 景氣位置卡 | 同上 | 同上 |
+| `MKT-3` 資金與匯率卡 | 同上 | 同上 |
+
+- `MKT-0`（結論燈只寫卡名與狀態字面值）、`MKT-4`～`MKT-7` 不顯示失敗訊息原文，所以不在射程內。
+- 寫出點：`ui_v2/mkt/source.py::load_live` 在交給頁面之前遮一次（秘密值在這一層從 `st.secrets`、環境變數與登入權杖讀出）；遮蔽函式是 `services/v2_tables/masking.py::mask_message`（L2，不讀秘密、不 import streamlit）。
+- `fetch_log` 尚未落地（`49` Q12），所以 MKT 這一條目前只有「畫面」一個寫出點；落地之後，`fetch_log.message` 必須與畫面用同一份遮蔽後的字串。
+
 ### 7.5 驗收：實作時必須有的測試
 
 以下每一條都是**實作時**要寫出來、且要在 CI 跑的測試。它們**不打外部網路**：需要真實例外字串的，一律連本機迴路位址（`127.0.0.1`）。
@@ -332,6 +357,15 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 | M10 | 多次出現 | 同一把假金鑰在訊息裡出現三次 | 三次都被換掉 |
 | M11 | `fetch_log` 與畫面逐字相同 | 以 M1 的例外走完「寫 `fetch_log` → `SET-2` 顯示」與「寫 `fetch_log` → `SET-6` 顯示」兩條路 | 兩處畫面上的訊息字串都與 `fetch_log.message` 逐字相同，且都含 `‹已遮蔽›`；兩處訊息旁都出現「已遮蔽憑證」 |
 | M12 | 突變（正控） | 把遮蔽函式換成「原樣回傳」 | M1～M6、M9～M11 必須轉紅。沒有轉紅就代表測試沒有守到東西 |
+
+**7.5-a　實作狀態（2026-09-26，工作樹，基底 `2cfea07`）**
+
+| # | 在哪裡 | 狀態 |
+|---|---|---|
+| M1～M10 | `tests/test_v2_tables_masking.py` | 已寫、fast lane。M1、M2 只連 `127.0.0.1`（M2 是本機起的回 407 假代理） |
+| M11 | `tests/ui_v2/test_mkt_live_page.py::test_M11_MKT版_畫面上的訊息與遮蔽後字串逐字相同_下一行加註` | **只做了 MKT 版**（畫面字串與遮蔽後字串逐字相同、下一行有「已遮蔽憑證」）。`fetch_log` → `SET-2`／`SET-6` 那兩條路要等 `fetch_log` 落地（`49` Q12）才做得了 |
+| M12 | 突變腳本：把 `mask_message` 換成原樣回傳 | 2026-09-26 已跑：`test_v2_tables_masking.py`、`test_mkt_source.py`、`test_mkt_live_page.py` 三檔合計 11 條轉紅（含 M1～M6、M9、M10、MKT 版 M11）；不是常駐測試 |
+| 鍵名表比對範本 | `tests/test_v2_tables_masking.py::test_兩張範本的每個鍵都落在遮或不遮的表裡` | 已寫 |
 
 - 假金鑰、假帳密一律在測試裡**現場隨機產生**，不寫死成固定字串，也不寫進任何文件（`CLAUDE.md` §-2.A 第 8 款）。
 - M1、M2 要放行本機迴路位址；`49` §4.7 第 3 點的網路阻斷 fixture 同樣要放行 loopback。
