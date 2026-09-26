@@ -26,9 +26,19 @@ def count_unloaded_funds() -> tuple[int, int]:
 
 # fund-info 欄位：只跟 fund_code 有關（NAV 歷史/指標/名稱與保單無關），可跨帳本共用。
 # 與 batch_load_unloaded_funds() broadcast 寫入的鍵對齊（loaded/load_error 另外處理）。
+#
+# ⚠️ **`is_core` 已於 Q8 批次一移出本清單（有意識的變更，不是漏刪）。**
+# 舊清單把它放進來在當時是對的：那時 `is_core` 由 `is_core_fund(基金名稱)` 推出來，
+# **純粹是 fund_code 的函數**，跨帳本沿用不會錯。
+# 被推翻的是它的前提 —— 現在 `is_core` 是**使用者在 Google Sheet 上明示的級別**
+# （`ui/helpers/cloud_io.py` 讀回時由 `tier` 欄映射成三態），
+# 那是 **(policy_id, fund_code) 的函數**，不是 fund_code 的函數：
+# 同一檔基金在 A 保單是核心、在 B 保單是衛星，完全合法。
+# 繼續依 code 沿用，會把 A 保單的級別搬到 B 保單，再由存檔寫回客戶的 Sheet ——
+# 那是本批次要切斷的同一條汙染鏈，只是換了一個入口。
 _FUND_INFO_KEYS = (
     "name", "series", "dividends", "metrics", "moneydj_raw",
-    "risk_metrics", "is_core", "currency",
+    "risk_metrics", "currency",
 )
 
 
@@ -218,7 +228,6 @@ def batch_load_unloaded_funds() -> None:
     ld_label.success(f"✅ 完成 — 抓到 {n_uniq} 個 unique codes")
 
     # Step 2: broadcast 給每個 pf entry
-    from ui.helpers.session import is_core_fund as _is_core
     from ui.helpers.data_registry import _update_data_registry
 
     errors: list[str] = []
@@ -239,7 +248,23 @@ def batch_load_unloaded_funds() -> None:
                 "metrics":      pf_raw.get("metrics", {}),
                 "moneydj_raw":  pf_raw,
                 "risk_metrics": pf_raw.get("risk_metrics", {}),
-                "is_core":      _is_core(pf_raw.get("fund_name") or pf_item["code"]),
+                # ⛔ **這裡刻意沒有 `is_core`（有意識的移除，不是漏刪）。**
+                # 原本這一行是
+                #   `"is_core": _is_core(pf_raw.get("fund_name") or pf_item["code"])`
+                # —— 用**基金名稱關鍵字**猜一個核心/衛星出來，**覆寫掉**上游
+                # `ui/helpers/cloud_io.py` 從客戶 Google Sheet 讀回的值，
+                # 再由下一次「全部寫入」把猜測**寫回客戶的 Sheet**。
+                # 每一次「載入 → 存檔」就再蓋一次 ⇒ 客戶原本的空白與人工設定
+                # 會被不可逆地洗掉。
+                #
+                # 猜測本身結構上必然錯：`ui/helpers/session.py::_CORE_KEYWORDS`
+                # 含「配息」且**先於** `_SAT_KEYWORDS` 被檢查，而台灣基金名稱依法
+                # 幾乎都帶「(基金之配息來源可能為本金)」⇒ 命中「配息」⇒ **一律判成核心**。
+                # （守衛 `tests/test_policy_tier_no_guessing.py` 有實測：同一檔科技基金
+                #  加上那段法定揭露字樣後，判定由衛星翻成核心。）
+                #
+                # 客戶就本題拍板：**空白就是空白，不要猜。**
+                # 這一輪只**取數**，級別一律沿用讀回時的值（Sheet 沒填 → 維持未設定）。
                 "currency":     pf_raw.get("currency", "")
                                   or pf_raw.get("metrics", {}).get("currency", ""),
                 "loaded":       True, "load_error": None,
