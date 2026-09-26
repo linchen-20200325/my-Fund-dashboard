@@ -64,7 +64,6 @@ from services.macro import (
 )
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
-    is_core_fund as _is_core_fund,
 )
 from ui.helpers.tw_time import tw_now_str
 
@@ -1445,8 +1444,6 @@ def render_t7_section() -> None:
                                 "metrics":    _new_raw.get("metrics", {}),
                                 "moneydj_raw":_new_raw,
                                 "risk_metrics":_new_raw.get("risk_metrics", {}),
-                                "is_core":    _is_core_fund(
-                                    _new_raw.get("fund_name") or _new_code_clean),
                                 "currency":   _new_raw.get("currency","")
                                               or _new_raw.get("metrics",{}).get("currency",""),
                                 "loaded":     True, "load_error": None,
