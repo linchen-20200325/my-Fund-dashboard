@@ -29,9 +29,18 @@
 失敗訊息遮蔽（`ACCEPTANCE.md` 七）：本檔是 L1，**不得 import L2 的
 `services/v2_tables/masking.py`**（`CLAUDE.md` §8.2 上行 import）。所以每一個公開函式都要求呼叫端
 以關鍵字傳入 `mask`（字串 → 遮蔽後字串），本檔自己產生的每一句錯誤訊息都先過 `mask`；
-例外一律 `raise ... from None`，不把未遮蔽的原始例外掛在 `__cause__` 上帶出去。
+`SettingsSheetError` 一律在 `except` 區塊**之外**拋出，所以 `__cause__` 與 `__context__` 都是 None，
+不把未遮蔽的原始例外帶出去（2026-09-26 回修第 2 輪：原本只用 `from None`，`__context__` 仍掛著原例外）。
+`details["actual"]`（標頭不符時試算表上的實際標頭）逐格過 `mask`。
 `mask` 沒有預設值：忘了傳就是 TypeError，不會靜靜地不遮。
 ⚠️ 寫進 `fetch_log.message` 的字串由 L2 遮好再交進來（`50` 7.2：讀寫模組不再遮第二次）。
+
+⚠️ **遮蔽的射程只到 `SettingsSheetError` 的訊息與 `details["actual"]`**，下列三處**不遮**，據實寫明：
+- 輸入不合格時拋的 **`ValueError`** 會帶出呼叫端傳入的原值（例如 `setting_value`）——
+  那是呼叫端自己的輸入，屬程式錯誤，不是上游回傳的失敗原文；
+- 讀取結果的 **`bad_rows[*]["cells"]`／`reason`** 是試算表儲存格原文；
+- **`conflicts`** 裡的主鍵與數值是試算表／來源的原值。
+  後兩者要上畫面或寫進 `fetch_log` 前，由 L2 過遮蔽（`settings_store` 寫 `fetch_log` 的矛盾訊息時就是這樣做）。
 """
 
 from __future__ import annotations
@@ -345,19 +354,27 @@ def _run(op: Callable, *, mask: Mask, write: bool):
             raise SettingsSheetError(
                 mask(f"設定試算表暫停重試，還剩 {math.ceil(left)} 秒（上次失敗類別：{kind}）"),
                 code="cooling", remaining_sec=left)
+        failure = None
         try:
             client = _make_client(creds)
             spreadsheet = with_gspread_retry(client.open_by_key, sheet_id)
             result = op(spreadsheet)
-        except SettingsSheetError:
-            raise
+        except SettingsSheetError as exc:
+            failure = exc          # 本檔自己產生的（標頭不符等）：不是上游失敗，不登記冷卻
         except Exception as exc:  # noqa: BLE001 —— 轉成帶原文的 SettingsSheetError，不吞
             status = http_status_of(exc)
             record_gspread_failure(ACTOR, sheet_id, exc)
             text = f"{type(exc).__name__}: {exc}"
-            raise SettingsSheetError(
+            failure = SettingsSheetError(
                 mask(text), code="api", http_status=status,
-                hint=_hint_for(exc, status, _client_email(creds))) from None
+                hint=_hint_for(exc, status, _client_email(creds)))
+            del exc
+        if failure is not None:
+            # 在 except 區塊之外拋：`__context__` 不會掛上原始例外（回修第 2 輪 6）。
+            failure.__cause__ = None
+            failure.__context__ = None
+            failure.__traceback__ = None
+            raise failure
         record_gspread_success(ACTOR, sheet_id)
         return sheet_id, result
     finally:
@@ -397,31 +414,52 @@ def _check_header(name: str, values, *, mask: Mask) -> None:
     while header and header[-1] == "":
         header.pop()
     if header != expected:
+        actual = [mask(c) for c in header]
         raise SettingsSheetError(
             mask(f"標頭與規格不符：分頁 {name}；規格 {expected}；試算表 {header}"),
-            code="header_mismatch", details={"tab": name, "expected": expected, "actual": header})
+            code="header_mismatch", details={"tab": name, "expected": expected, "actual": actual})
 
 
 def _worksheet_for_append(spreadsheet, name: str, tabs: dict, *, mask: Mask):
     """寫入前取分頁：已存在 → 比對標頭；不存在 → 建立並寫一次標頭（`50` 7.1）。"""
-    from infra.gspread_retry import with_gspread_retry
-
     ws, values = tabs[name]
     if ws is not None:
         _check_header(name, values, mask=mask)
         return ws
     header = [n for n, _k, _nl in TAB_SPECS[name]]
+    add_error = None
     try:
         ws = spreadsheet.add_worksheet(title=name, rows=100, cols=len(header))
-    except Exception:  # noqa: BLE001 —— 可能是別的行程剛建好；重讀後再判，判不出就拋原例外
+    except Exception as exc:  # noqa: BLE001 —— 可能是別的行程剛建好；重讀後再判，判不出就拋原例外
+        add_error = exc
+    if add_error is not None:
         again = _read_tabs(spreadsheet, [name])
         if again[name][0] is None:
-            raise
+            raise add_error
+        del add_error
         _check_header(name, again[name][1], mask=mask)
         return again[name][0]
-    with_gspread_retry(ws.append_rows, [header], value_input_option="RAW",
-                       insert_data_option="INSERT_ROWS")
-    return ws
+    # 回修第 2 輪必修 2：寫標頭**不重試**；失敗就刪掉本次剛建的分頁，
+    # 否則留下一張「既有的空分頁」—— 依 `50` 7.1 本檔不代寫標頭，之後每次寫入都會卡在標頭不符。
+    header_error = None
+    try:
+        ws.append_rows([header], value_input_option="RAW", insert_data_option="INSERT_ROWS")
+    except Exception as exc:  # noqa: BLE001 —— 下面照實處理，不吞
+        header_error = exc
+    if header_error is None:
+        return ws
+    delete_error = None
+    try:
+        spreadsheet.del_worksheet(ws)
+    except Exception as exc:  # noqa: BLE001
+        delete_error = exc
+    if delete_error is None:
+        raise header_error      # 由 `_run` 轉成 code="api"（含登記冷卻）
+    text = (f"分頁 {name} 剛建立、寫標頭失敗（{type(header_error).__name__}: {header_error}），"
+            f"刪除該分頁也失敗（{type(delete_error).__name__}: {delete_error}）。"
+            f"請到試算表手動刪除分頁 {name} 後再試；在那之前本分頁不讀不寫（標頭不符）。")
+    del header_error, delete_error
+    raise SettingsSheetError(mask(text), code="header_init_failed", details={"tab": name})
 
 
 def _append(ws, rows: list, *, retry: bool) -> None:
@@ -448,11 +486,16 @@ def _serialize(spec, row: dict) -> list:
 
 _CACHE: dict = {}
 _CACHE_LOCK = threading.Lock()
+# 世代計數（回修第 2 輪 5）：每清一次快取就遞增。一次讀取開始時記下世代，讀完時世代若已改變
+# （讀取期間有人寫入並清了快取），這次讀到的結果可能早於那次寫入 → 不存快取。
+_CACHE_GEN = 0
 
 
 def clear_cache(sheet_id: Optional[str] = None) -> None:
-    """清掉某一本（或全部）的讀取快取。"""
+    """清掉某一本（或全部）的讀取快取，並遞增世代計數。"""
+    global _CACHE_GEN
     with _CACHE_LOCK:
+        _CACHE_GEN += 1
         if sheet_id is None:
             _CACHE.clear()
         else:
@@ -468,6 +511,7 @@ def _cached_read(what: str, names, reducer: Callable, *, mask: Mask) -> dict:
         hit = _CACHE.get((sheet_id, what))
         if hit is not None and now - hit[0] < CACHE_TTL_SEC:
             return hit[1]
+        generation = _CACHE_GEN
 
     def op(spreadsheet):
         tabs = _read_tabs(spreadsheet, names)
@@ -479,8 +523,39 @@ def _cached_read(what: str, names, reducer: Callable, *, mask: Mask) -> dict:
     _sid, tabs = _run(op, mask=mask, write=False)
     result = reducer(tabs)
     with _CACHE_LOCK:
-        _CACHE[(sheet_id, what)] = (_clock(), result)
+        if _CACHE_GEN == generation:
+            _CACHE[(sheet_id, what)] = (_clock(), result)
     return result
+
+
+class _SettingsCacheProxy:
+    """把本檔的讀取快取登記進 `infra.cache._CACHE_REGISTRY`（回修第 2 輪 9）。
+
+    效果：`clear_all_caches()`／「全域刷新」一併清掉本檔的 60 秒快取。
+    ⚠️ `cache_clear` **只清本檔快取、不碰冷卻**（`infra.source_backoff` 另有自己的 proxy）。
+    `cache_info` 照 `infra.cache` 的欄位契約：必備 `name`、`size`；本快取沒有攔截命中統計，
+    所以統計欄**全無**（缺席＝不適用，不是 0）。
+    """
+    __name__ = "_SETTINGS_SHEET_CACHE"
+
+    @staticmethod
+    def cache_clear() -> None:
+        clear_cache()
+
+    @staticmethod
+    def cache_info() -> dict:
+        with _CACHE_LOCK:
+            size = len(_CACHE)
+        return {"name": "_SETTINGS_SHEET_CACHE", "size": size, "ttl_sec": CACHE_TTL_SEC}
+
+
+def _register_cache_proxy() -> None:
+    from infra.cache import _CACHE_REGISTRY, register_cache
+    if not any(getattr(f, "__name__", "") == _SettingsCacheProxy.__name__ for f in _CACHE_REGISTRY):
+        register_cache(_SettingsCacheProxy())
+
+
+_register_cache_proxy()
 
 
 def _data_rows(tabs, name):
@@ -609,6 +684,9 @@ def _reduce_fetch_log(tabs, now: datetime) -> dict:
     recs, bad, blank = _parse_rows(FETCH_LOG_SPEC, closed or [])
     open_recs, open_bad, open_blank = _parse_rows(FETCH_LOG_OPEN_SPEC, opened or [])
     rows, seen, duplicates = [], set(), 0
+    # 回修第 2 輪 7：結束列格式壞了、但 `log_id` 看得出來 → 這次取數**有結束紀錄**（只是那一列不採用、
+    # 計入 bad_rows），不可再合成「取數沒有結束紀錄」。
+    closed_ids = {b["cells"][0] for b in bad if b["cells"] and b["cells"][0] != ""}
     for rec in recs:
         if rec["log_id"] in seen:          # 重試造成的重複：取第一列並計數（`50` 5.3）
             duplicates += 1
@@ -617,7 +695,7 @@ def _reduce_fetch_log(tabs, now: datetime) -> dict:
         rows.append(_public(rec, FETCH_LOG_SPEC))
     in_progress, open_seen = 0, set()
     for rec in open_recs:
-        if rec["log_id"] in seen or rec["log_id"] in open_seen:
+        if rec["log_id"] in seen or rec["log_id"] in closed_ids or rec["log_id"] in open_seen:
             continue
         open_seen.add(rec["log_id"])
         if (now - _parse_stamp(rec["started_at"])).total_seconds() >= OPEN_LOG_STALE_SEC:
@@ -652,11 +730,15 @@ def _mi_pk(rec) -> tuple:
 
 
 # 同一筆的比較欄：排除 `fetched_at` 與 `is_revised`（`50` 5.2 複驗後更正）。
-_MI_SAME_COLUMNS = ("value_num", "value_unit", "source_tier")
+# `value_num` 是浮點，比較用容差（`CLAUDE.md` §4.3 禁止浮點 `==`；回修第 2 輪必修 1）。
+VALUE_REL_TOL = 1e-9
+VALUE_ABS_TOL = 1e-12
 
 
 def _mi_same(a, b) -> bool:
-    return all(a[c] == b[c] for c in _MI_SAME_COLUMNS)
+    return (math.isclose(a["value_num"], b["value_num"],
+                         rel_tol=VALUE_REL_TOL, abs_tol=VALUE_ABS_TOL)
+            and a["value_unit"] == b["value_unit"] and a["source_tier"] == b["source_tier"])
 
 
 def _mi_revised(pk, pks) -> bool:
@@ -710,13 +792,17 @@ def load_market_indicator(*, mask: Mask) -> dict:
 def append_market_indicator(rows: list, *, mask: Mask) -> dict:
     """寫入 `market_indicator`：先讀既有主鍵（盡力而為的寫前去重），只追加沒出現過的主鍵。
 
-    - 同主鍵、同數值（除 `fetched_at`／`is_revised`）→ 不追加，計入 `already_present`。
-    - 同主鍵、不同數值（與既有列，或同一批內互相矛盾）→ **整批都不追加**，回傳 `conflicts`
-      （呼叫端據此把這次取數記為 failed；本檔拍板：failed 的取數不留下半批資料）。
+    - 同主鍵、同數值（除 `fetched_at`／`is_revised`；`value_num` 以容差比較）→ 不追加，
+      計入 `already_present`。
+    - 同主鍵、不同數值（與既有任一列，或同一批內互相矛盾）→ **只擋那些主鍵**，其餘照寫，
+      矛盾列入 `conflicts`（回修第 2 輪必修 1，總管拍板；呼叫端據此把這次取數記為 failed）。
+      ⚠️ 這取代了上一版的「整批不寫」：整批不寫會讓一個永遠矛盾的舊日期卡死之後每一天的寫入。
     - `is_revised` 以「既有列＋本批」的主鍵集合重算後寫入（`50` 5.2）。
     - 追加可重試（`50` 第 6 節）。寫入後不論成敗都清快取。
 
-    回傳 `{"appended": N, "already_present": N, "conflicts": [...]}`。
+    回傳 `{"appended": N, "already_present": N, "conflicts": [...]}`；
+    `conflicts` 每筆 `{"key": 主鍵, "existing_value_num", "new_value_num", "existing_value_unit",
+    "new_value_unit"}`（原值，未遮蔽；見檔頭）。
     """
     incoming = []
     for row in rows:
@@ -736,22 +822,27 @@ def append_market_indicator(rows: list, *, mask: Mask) -> dict:
             existing = []
         known: dict = {}
         for rec in existing:
-            known.setdefault(_mi_pk(rec), rec)
-        conflicts, fresh, present = [], {}, 0
+            known.setdefault(_mi_pk(rec), []).append(rec)
+        batch: dict = {}
         for rec in incoming:
-            pk = _mi_pk(rec)
-            other = known.get(pk) or fresh.get(pk)
-            if other is not None:
-                if _mi_same(other, rec):
-                    present += 1
-                else:
-                    conflicts.append({"key": pk, "existing_value_num": other["value_num"],
-                                      "new_value_num": rec["value_num"],
-                                      "existing_value_unit": other["value_unit"],
-                                      "new_value_unit": rec["value_unit"]})
+            batch.setdefault(_mi_pk(rec), []).append(rec)
+        conflicts, fresh, present = [], {}, 0
+        for pk, recs in batch.items():
+            pool = known.get(pk, []) + recs
+            clash = next(((a, b) for a in pool for b in pool if not _mi_same(a, b)), None)
+            if clash is not None:
+                old, new = clash
+                conflicts.append({"key": pk, "existing_value_num": old["value_num"],
+                                  "new_value_num": new["value_num"],
+                                  "existing_value_unit": old["value_unit"],
+                                  "new_value_unit": new["value_unit"]})
                 continue
-            fresh[pk] = rec
-        if conflicts or not fresh:
+            if pk in known:
+                present += len(recs)
+            else:
+                fresh[pk] = recs[0]
+                present += len(recs) - 1
+        if not fresh:
             return {"appended": 0, "already_present": present, "conflicts": conflicts}
         target = _worksheet_for_append(spreadsheet, TAB_MARKET_INDICATOR, tabs, mask=mask)
         all_pks = set(known) | set(fresh)
@@ -761,7 +852,7 @@ def append_market_indicator(rows: list, *, mask: Mask) -> dict:
             row["is_revised"] = _mi_revised(pk, all_pks)
             out.append(_serialize(MARKET_INDICATOR_SPEC, row))
         _append(target, out, retry=True)
-        return {"appended": len(out), "already_present": present, "conflicts": []}
+        return {"appended": len(out), "already_present": present, "conflicts": conflicts}
 
     _sid, result = _run(op, mask=mask, write=True)
     return result

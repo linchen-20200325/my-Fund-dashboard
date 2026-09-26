@@ -367,10 +367,11 @@ def test_取數紀錄_開始與結束_讀取合併(env):
 
 def test_fetch_log追加可重試(env):
     book, _c, _s = env
+    _put(book, "fetch_log_open", [FO_HEAD])
     book.fail_next("append_rows", ConnectionError("reset"), title="fetch_log_open")
     R.open_fetch_log("市場指標", mask=mask)
-    assert len([c for c in book.calls if c[0] == "append_rows" and c[1] == "fetch_log_open"]) == 3
-    # 3 ＝ 建分頁後寫標頭 1 ＋ 資料列失敗 1 ＋ 重試 1
+    assert len([c for c in book.calls if c[0] == "append_rows" and c[1] == "fetch_log_open"]) == 2
+    # 2 ＝ 資料列失敗 1 ＋ 重試 1
     assert len(book.data("fetch_log_open")) == 2
 
 
@@ -460,16 +461,56 @@ def test_修正值另起一列_is_revised為真_舊列不動(env):
         ("2026-08-02", 17.0, False), ("2026-08-09", 17.5, True)]
 
 
-def test_寫前看到主鍵矛盾_整批不寫(env):
+def test_寫前看到主鍵矛盾_只擋矛盾的主鍵_其餘照寫(env):
     book, _c, _s = env
-    R.append_market_indicator([_mi(value=17.0)], mask=mask)
+    R.append_market_indicator([_mi(value=17.42)], mask=mask)
     before = book.data("market_indicator")
-    out = R.append_market_indicator([_mi(obs="2026-09-02", value=18.0), _mi(value=17.5)], mask=mask)
-    assert out["appended"] == 0 and len(out["conflicts"]) == 1
+    out = R.append_market_indicator([_mi(obs="2026-09-02", value=18.0), _mi(value=17.43)], mask=mask)
+    assert out["appended"] == 1 and len(out["conflicts"]) == 1
     c = out["conflicts"][0]
     assert c["key"] == ("vol_index", "2026-09-01", "2026-09-01")
-    assert (c["existing_value_num"], c["new_value_num"]) == (17.0, 17.5)
-    assert book.data("market_indicator") == before
+    assert (c["existing_value_num"], c["new_value_num"]) == (17.42, 17.43)
+    data = book.data("market_indicator")
+    assert data[:2] == before and [r[1] for r in data[1:]] == ["2026-09-01", "2026-09-02"]
+
+
+def test_矛盾之後新日期照寫_不再卡死(env):
+    book, _c, _s = env
+    R.append_market_indicator([_mi(value=17.42)], mask=mask)
+    for day, value in (("2026-09-02", 18.0), ("2026-09-03", 19.0)):
+        out = R.append_market_indicator([_mi(value=17.43), _mi(obs=day, value=value)], mask=mask)
+        assert out["appended"] == 1 and len(out["conflicts"]) == 1
+    assert [r[1] for r in book.data("market_indicator")[1:]] == [
+        "2026-09-01", "2026-09-02", "2026-09-03"]
+
+
+def test_同批內互相矛盾的主鍵也擋下(env):
+    book, _c, _s = env
+    out = R.append_market_indicator([_mi(value=1.0), _mi(value=2.0), _mi(obs="2026-09-02")],
+                                    mask=mask)
+    assert out["appended"] == 1 and len(out["conflicts"]) == 1
+
+
+def test_極小差視為同一筆_寫入端與讀取端都是(env):
+    book, _c, _s = env
+    R.append_market_indicator([_mi(value=17.42)], mask=mask)
+    out = R.append_market_indicator([_mi(value=17.42 * (1 + 1e-12))], mask=mask)
+    assert out == {"appended": 0, "already_present": 1, "conflicts": []}
+    near = ["vol_index", "2026-09-02", "2026-09-02", "17.42", "index", "市場指標", "FALSE",
+            "2026-09-25T06:00:00Z"]
+    book.tabs["market_indicator"].rows += [near, near[:3] + ["17.420000000000002"] + near[4:]]
+    read = R.load_market_indicator(mask=mask)
+    assert read["conflicts"] == [] and read["duplicates_merged"] == 1
+    assert [r["obs_date"] for r in read["rows"]] == ["2026-09-01", "2026-09-02"]
+
+
+def test_17點42與17點43仍算矛盾_讀取端(env):
+    book, _c, _s = env
+    a = ["vol_index", "2026-09-01", "2026-09-01", "17.42", "index", "市場指標", "FALSE",
+         "2026-09-25T06:00:00Z"]
+    _put(book, "market_indicator", [MI_HEAD, a, a[:3] + ["17.43"] + a[4:]])
+    out = R.load_market_indicator(mask=mask)
+    assert out["rows"] == [] and len(out["conflicts"]) == 1
 
 
 def test_B5a_追加已送達但回報失敗而重試_讀取結果與只追加一次相同(env):
@@ -532,3 +573,109 @@ def test_不合格的輸入列是呼叫端的bug_當場炸且不寫(env):
     with pytest.raises(ValueError):
         R.append_market_indicator([dict(_mi(), extra=1)], mask=mask)
     assert book.calls == []
+
+
+# ═══════════════════════ 回修第 2 輪 ═══════════════════════
+
+def test_建分頁後寫標頭失敗_刪掉剛建的分頁_不重試(env):
+    book, _c, _s = env
+    book.fail_next("append_rows", ConnectionError("reset"), title="user_setting_log")
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
+    assert err.value.code == "api"
+    assert "user_setting_log" not in book.tabs
+    assert [c[0] for c in book.writes()] == ["add_worksheet", "append_rows", "del_worksheet"]
+    SB.reset_all()
+    R.save_user_setting("mkt_window_days", "90", "int", mask=mask)   # 下一次可以重新建
+    assert book.data("user_setting_log")[0] == US_HEAD
+
+
+def test_寫標頭失敗且刪分頁也失敗_專屬錯誤碼_要求手動刪(env):
+    book, _c, _s = env
+    book.fail_next("append_rows", ConnectionError(f"reset {SECRET}"), title="fetch_log_open")
+    book.fail_next("del_worksheet", ConnectionError("nope"))
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.open_fetch_log("市場指標", mask=mask)
+    assert err.value.code == "header_init_failed"
+    assert "手動刪除分頁 fetch_log_open" in str(err.value)
+    assert SECRET not in str(err.value) and MASK in str(err.value)
+
+
+def test_快取世代_讀取期間被清快取就不存(env):
+    book, _c, _s = env
+    _put(book, "user_setting_log", [US_HEAD])
+    book.on_batch_get = lambda: R.clear_cache(SHEET)   # 模擬讀取途中有人寫入並清快取
+    R.load_user_settings(mask=mask)
+    book.on_batch_get = None
+    R.load_user_settings(mask=mask)
+    assert _reads(book) == 2          # 第一次的結果沒進快取
+    R.load_user_settings(mask=mask)
+    assert _reads(book) == 2          # 第二次（世代未變）有進快取
+
+
+@pytest.mark.parametrize("where", ["open_by_key", "header"])
+def test_錯誤不帶原始例外_cause與context都是None(env, where):
+    book, _c, _s = env
+    if where == "open_by_key":
+        book.fail_next("open_by_key", _quota_error(extra=SECRET))
+    else:
+        _put(book, "user_setting_log", [["x"]])
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.load_user_settings(mask=mask)
+    assert err.value.__cause__ is None and err.value.__context__ is None
+
+
+def test_分頁建立競態下的標頭不符也不帶context(env):
+    book, _c, _s = env
+    book.fail_next("add_worksheet", Exception("already exists"))
+    real = book.worksheets
+    state = {"n": 0}
+
+    def worksheets(exclude_hidden=False):      # 第二次列分頁時「別的行程」已建好（標頭壞的）
+        state["n"] += 1
+        if state["n"] == 2:
+            _put(book, "user_setting_log", [["bad"]])
+        return real(exclude_hidden)
+    book.worksheets = worksheets
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
+    assert err.value.code == "header_mismatch"
+    assert err.value.__cause__ is None and err.value.__context__ is None
+
+
+def test_標頭不符的actual過遮蔽(env):
+    book, _c, _s = env
+    _put(book, "user_setting_log", [["setting_key", SECRET]])
+    with pytest.raises(R.SettingsSheetError) as err:
+        R.load_user_settings(mask=mask)
+    assert err.value.details["actual"] == ["setting_key", MASK]
+    assert SECRET not in str(err.value)
+
+
+def test_結束列格式壞但log_id看得出來_算已結束(env):
+    book, _c, _s = env
+    stale = (T0 - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _put(book, "fetch_log_open", [FO_HEAD, ["A", "市場指標", stale]])
+    _put(book, "fetch_log", [FL_HEAD, ["A", "市場指標", stale, "壞時間", "ok", "1", ""]])
+    out = R.load_fetch_log(mask=mask)
+    assert out["rows"] == [] and len(out["bad_rows"]) == 1 and out["in_progress"] == 0
+
+
+def test_快取登記進全域刷新_且不連帶清冷卻(env):
+    from infra import cache as C
+    book, _c, _s = env
+    proxies = [f for f in C._CACHE_REGISTRY if getattr(f, "__name__", "") == "_SETTINGS_SHEET_CACHE"]
+    assert len(proxies) == 1
+    info = proxies[0].cache_info()
+    assert set(C.CACHE_INFO_REQUIRED_KEYS) <= set(info)
+    assert not set(C.CACHE_INFO_STAT_KEYS) & set(info)      # 統計欄全無（不適用）
+    _put(book, "user_setting_log", [US_HEAD])
+    R.load_user_settings(mask=mask)
+    assert proxies[0].cache_info()["size"] == 1
+    SB.record_failure("gspread:sheet:sa:other", "unreachable")
+    proxies[0].cache_clear()
+    assert proxies[0].cache_info()["size"] == 0
+    assert [s["source"] for s in SB.get_backoff_state()] == ["gspread:sheet:sa:other"]
+    R.load_user_settings(mask=mask)
+    C.clear_all_caches()                                    # 全域刷新也清得到
+    assert proxies[0].cache_info()["size"] == 0

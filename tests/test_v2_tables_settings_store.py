@@ -100,17 +100,67 @@ def test_沒設試算表ID_照常取數_不寫任何東西(book, monkeypatch):
     assert book.calls == []
 
 
-def test_主鍵矛盾_整批不寫_記failed(book, monkeypatch):
+def test_主鍵矛盾_只擋那筆_其餘照寫_記failed含筆數與鍵(book, monkeypatch):
     book.tabs["market_indicator"] = FakeWorksheet(book, "market_indicator", [
         MI_HEAD, ["vol_index", "2026-09-22", "2026-09-22", "16", "index", "市場指標", "FALSE",
                   "2026-09-24T06:00:00Z"]])
     _stub(monkeypatch, _vix([17.0, 18.5], ["2026-09-22", "2026-09-23"]))
     out = S.run_market_indicator_fetch([SECRET])
     p = out["persist"]
-    assert p["appended"] == 0 and len(p["conflicts"]) == 1
-    assert len(book.data("market_indicator")) == 2
+    assert p["appended"] == 1 and len(p["conflicts"]) == 1
+    assert [r[1] for r in book.data("market_indicator")[1:]] == ["2026-09-22", "2026-09-23"]
     log = book.data("fetch_log")[1]
-    assert log[4] == "failed" and "主鍵矛盾" in log[6] and "2026-09-22" in log[6]
+    assert log[4] == "failed" and log[5] == ""
+    assert "主鍵矛盾 1 筆" in log[6] and "(vol_index, 2026-09-22, 2026-09-22)" in log[6]
+
+
+def test_row_count是取回的列數_過濾前(book, monkeypatch):
+    # 三列取回；最後一列觀測日不早於取得日（未收盤）被略過 → rows 只有 2，row_count 仍是 3
+    _stub(monkeypatch, _vix([17.0, 18.5, 19.0], ["2026-09-22", "2026-09-23", "2026-09-25"]))
+    out = S.run_market_indicator_fetch([SECRET])
+    assert len(out["table"]["rows"]) == 2 and out["table"]["fetched"] == {"vol_index": 3}
+    assert book.data("fetch_log")[1][4:] == ["ok", "3", ""]
+
+
+def test_取回有列但全部被丟棄_記failed並寫原因(book, monkeypatch):
+    s = _vix([17.0, 18.5], ["2026-09-22", "2026-09-23"])
+    del s.attrs["fetched_at"]
+    _stub(monkeypatch, s)
+    out = S.run_market_indicator_fetch([SECRET])
+    assert out["table"]["rows"] == []
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed" and log[5] == ""
+    assert "vol_index: 取回 2 列，全部未寫入" in log[6] and "fetched_at" in log[6]
+
+
+def test_取數回空且L1沒給原因_記ok_row_count為0(book, monkeypatch):
+    _stub(monkeypatch, _vix([], []))
+    out = S.run_market_indicator_fetch([SECRET])
+    assert out["table"]["errors"] == {"vol_index": mi.EMPTY_WITHOUT_REASON}
+    assert book.data("fetch_log")[1][4:] == ["ok", "0", ""]
+    assert out["persist"]["ok"] is True
+
+
+def test_取數回空但L1有錯誤原文_記failed(book, monkeypatch):
+    _stub(monkeypatch, None, "HTTPError: 500 upstream")
+    S.run_market_indicator_fetch([SECRET])
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed" and log[6] == "vol_index: HTTPError: 500 upstream"
+
+
+def test_masker拒收字串():
+    with pytest.raises(TypeError):
+        S.masker(SECRET)
+    assert S.masker([SECRET])(f"a{SECRET}b") == f"a{MASK}b"
+
+
+def test_SETTINGS_SHEET_ID歸在要遮():
+    from services.v2_tables import masking
+    sheet_id = "1" + _secrets.token_hex(20)
+    values = masking.secret_values([{"SETTINGS_SHEET_ID": sheet_id}])
+    assert values == [sheet_id]
+    assert masking.mask_message(f"404 {sheet_id} not found", values) == f"404 {MASK} not found"
+    assert "SETTINGS_SHEET_ID" not in masking.NOT_MASKED_KEYS
 
 
 def test_寫表失敗_取數結果照常回傳_不遞迴寫紀錄(book, monkeypatch):

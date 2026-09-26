@@ -32,6 +32,7 @@ class FakeSpreadsheet:
         self.calls = []
         self.tabs = {}
         self._failures = []       # [(method, title 或 None, delivered, exc)]
+        self.on_batch_get = None  # 批次讀取回傳前呼叫的鉤子（測試用來模擬「讀取期間有人寫入」）
         for title, rows in (tabs or {}).items():
             self.tabs[title] = FakeWorksheet(self, title, rows)
 
@@ -77,6 +78,8 @@ class FakeSpreadsheet:
             if trimmed:
                 block["values"] = trimmed
             out.append(block)
+        if self.on_batch_get is not None:
+            self.on_batch_get()
         return {"spreadsheetId": "fake", "valueRanges": out}
 
     def add_worksheet(self, title, rows, cols, index=None):
@@ -88,12 +91,17 @@ class FakeSpreadsheet:
         self.tabs[title] = ws
         return ws
 
+    def del_worksheet(self, worksheet):
+        self.calls.append(("del_worksheet", worksheet.title))
+        self._maybe_fail("del_worksheet")
+        del self.tabs[worksheet.title]
+
     def data(self, title):
         """某分頁的全部列（含標頭），給測試斷言用。"""
         return [list(r) for r in self.tabs[title].rows]
 
     def writes(self):
-        return [c for c in self.calls if c[0] in ("append_rows", "add_worksheet")]
+        return [c for c in self.calls if c[0] in ("append_rows", "add_worksheet", "del_worksheet")]
 
 
 class FakeClient:

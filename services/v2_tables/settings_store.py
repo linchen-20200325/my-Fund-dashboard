@@ -21,12 +21,16 @@ L1 `repositories/settings_sheet_repository.py`。本檔做兩件事：
 - 失敗訊息在本層遮一次，同一份字串同時放進 `fetch_log.message` 與回傳值
   （`ACCEPTANCE.md` 7.3 最後一條、7.4）。L1 不再遮第二次。
 
-fetch_log 的 outcome（本檔拍板，理由寫在回報）：
-- `ok`：沒有任何鍵出錯、沒有主鍵矛盾、`market_indicator` 寫入成功；`row_count`＝取回的列數
-  （`44`「取回的列數」，不是新追加的列數）。
-- `failed`：任一鍵有錯誤原文、或寫前看到主鍵矛盾（整批不寫）、或 `market_indicator` 寫入失敗；
-  `row_count` 為空，`message` 為遮蔽後的原因。沒有錯誤的鍵照樣寫入（主鍵矛盾除外）。
-- `pending`／`skipped`（第一階段刻意不取數、逐筆略過）不是錯誤，不影響 outcome。
+fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記在 docs/v2/50 第 10 節）：
+- `ok`：沒有任何失敗原因；`row_count`＝**L1 取回的列數（過濾前）**，取自 `table["fetched"]`
+  （`44`：「取回的列數」—— 不是過濾後的 `rows` 數，也不是新追加的列數）。
+- **取數回空**（`44` SET-5）：L1 沒有給錯誤原文、只回空 → 該鍵不算失敗（`ok`、該鍵取回 0 列）；
+  L1 有錯誤原文 → `failed`。判別方式：`errors[鍵]` 恰為 `market_indicator.EMPTY_WITHOUT_REASON`
+  且取回 0 列，就是「L1 沒給原因的空」。⚠️ 已知限制：L1 失敗但沒交出原因時也會長這樣，分不出來。
+- `failed`：任一鍵有錯誤原文；或某鍵取回 >0 列但**一列都沒寫成**（例如全部缺 `fetched_at`）；
+  或寫前看到主鍵矛盾（**只擋矛盾的主鍵，其餘照寫**）；或 `market_indicator` 寫入失敗。
+  `row_count` 為空，`message` 為遮蔽後的原因（多條以換行分隔）。
+- `pending`（第一階段刻意不取數）與部分列被略過（例如當天未收盤的那一列）不是失敗。
 """
 
 from __future__ import annotations
@@ -41,6 +45,10 @@ SettingsSheetError = store.SettingsSheetError
 
 
 def masker(secret_values) -> Callable[[str], str]:
+    """秘密值清單 → `mask`。**拒收字串**：`list("abc")` 會把一把金鑰拆成單一字元去遮，
+    等於把訊息裡每個出現過的字母都換成記號（回修第 2 輪 8）。"""
+    if isinstance(secret_values, (str, bytes)):
+        raise TypeError("secret_values 須為秘密值的清單，不可直接傳字串")
     values = list(secret_values)
     return lambda message: mask_message(message, values)
 
@@ -68,13 +76,12 @@ def load_market_indicator(secret_values) -> dict:
 # ── 第 2 步：market_indicator 取數後寫表 ─────────────────────────────
 
 def _conflict_text(conflicts) -> str:
-    parts = []
+    parts = [f"主鍵矛盾 {len(conflicts)} 筆（這些主鍵本次不寫入，其餘照寫）："]
     for c in conflicts:
         key, obs, rel = c["key"]
         parts.append(
-            f"主鍵矛盾：({key}, {obs}, {rel}) 既有 value_num={c['existing_value_num']!r}"
-            f"（{c['existing_value_unit']}），本次 {c['new_value_num']!r}（{c['new_value_unit']}），"
-            "本次整批不寫入")
+            f"({key}, {obs}, {rel}) 既有 value_num={c['existing_value_num']!r}"
+            f"（{c['existing_value_unit']}），本次 {c['new_value_num']!r}（{c['new_value_unit']}）")
     return "\n".join(parts)
 
 
@@ -110,7 +117,19 @@ class MarketIndicatorSheetSink:
         self.persist["masked_errors"] = masked
         if self.opened is None:
             return  # begin 失敗或沒呼叫：不寫任何東西（persist 已記原因）
-        reasons = [f"{k}: {v}" for k, v in masked.items()]
+        fetched = table.get("fetched", {})
+        rows_by_key: dict = {}
+        for row in table["rows"]:
+            rows_by_key[row["indicator_key"]] = rows_by_key.get(row["indicator_key"], 0) + 1
+        reasons = []
+        for key, text in masked.items():
+            if table["errors"][key] == mi.EMPTY_WITHOUT_REASON and fetched.get(key, 0) == 0:
+                continue          # `44` SET-5：L1 沒給原因的空 → 不算失敗
+            reasons.append(f"{key}: {text}")
+        for key, count in fetched.items():
+            if count > 0 and rows_by_key.get(key, 0) == 0 and key not in table["errors"]:
+                why = "；".join(table.get("skipped", {}).get(key, [])) or "原因未記錄"
+                reasons.append(self._mask(f"{key}: 取回 {count} 列，全部未寫入（{why}）"))
         write_failed = None
         try:
             result = store.append_market_indicator(table["rows"], mask=self._mask)
@@ -126,7 +145,7 @@ class MarketIndicatorSheetSink:
         if reasons:
             outcome, row_count, message = "failed", None, "\n".join(reasons)
         else:
-            outcome, row_count, message = "ok", len(table["rows"]), None
+            outcome, row_count, message = "ok", sum(fetched.values()), None
         try:
             logged = store.close_fetch_log(self.opened, outcome=outcome, row_count=row_count,
                                            message=message, mask=self._mask)
