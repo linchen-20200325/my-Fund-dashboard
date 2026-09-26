@@ -233,3 +233,136 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 正控：把一個假的識別碼（`session_` 後接 16 個以上英數字）與一個全小寫的模型名寫進 `<暫存目錄>` 裡的暫存檔，用同樣兩條指令掃它，兩條都應該命中；做完刪掉。
 
 **2026-09-25 實測（本版定稿後，稽核回修後重跑）**：禁用詞 0；禁用詞正控 8；識別碼 0、模型名（不分大小寫）0；兩條正控皆命中；暫存檔已刪。
+
+---
+
+## 七、失敗訊息遮蔽規則（客戶 2026-09-26 裁示 Q13）
+
+**量測日 2026-09-26，基底 `main` @ `7f564aa`。** 本節是**實作時的驗收規則**，不是動工授權（`CLAUDE.md` §-1）。
+出處：`docs/v2/49_data_integration_plan.md` §4.9（風險）與 §6.1 Q13（裁示與附帶條件）。
+
+### 7.1 為什麼寫在本檔、不寫進 `44`
+
+`docs/v2/44_fund_ui_ssot.md` 已凍結，不得加附註。`44` 的 `fetch_log` 表（§4.5）規定 `message`「存來源回傳的原始字串，不換成安撫語句，也不截斷」，
+而原始字串可能帶 API 金鑰或代理帳密（見 7.6 的實測）。客戶裁示：**遮蔽規則的落點改為實作時寫進本檔**。
+本節就是那個落點；`44` 一個字都沒有動。
+
+讀法：本節只在「原文」這一條上加一道**替換**，其餘仍照 `44`：不改寫、不換成安撫語句、不截斷。
+
+### 7.2 遮蔽對象：已知 secrets 的值
+
+只遮**值**，不遮鍵名。下表是本組在 `7f564aa` 上查到的**已知讀點**（分類敘述，不是窮舉；查法與沒查到的形態見 7.7）。
+「路徑＋符號」指讀取該值的位置；**本表不寫任何值**。
+
+**甲、App（Streamlit）執行期會讀到的憑證 —— 一律遮蔽**
+
+| 鍵名 | 遮哪些值 | 讀取位置（路徑＋符號） |
+|---|---|---|
+| `FRED_API_KEY` | 整個值 | `app.py::_load_keys`（鏡射到環境變數）；`ui/views/page_01_macro.py::render_market_overview` 讀環境變數（2026-09-26 以 AST 走訪確認：該檔讀 `FRED_API_KEY` 字面值的函式是 `render_market_overview`；同檔 `_load_everything` 讀的是 `FINMIND_TOKEN`）；`mcp_server/tools_macro.py::build_macro_snapshot` |
+| `FINMIND_TOKEN` | 整個值 | `ui/helpers/macro/ndc.py::_fetch_ndc_score`；`ui/tab1_macro.py::_render_top_card_grid`；`ui/tab1_macro_longterm.py::render_long_term_section`；`ui/tab5_data_guard.py::render_data_guard_tab`；`ui/views/page_01_macro.py::_load_everything` |
+| `ALPHAVANTAGE_API_KEY` | 整個值 | `repositories/fund/sources.py::_src_alphavantage_nav` |
+| `GEMINI_API_KEY`、`GEMINI_API_KEYS`（逗號分隔多把）、`GEMINI_API_KEY_1`～`GEMINI_API_KEY_10` | 每一把各自的值（`GEMINI_API_KEYS` 拆開後逐把） | `app.py::_load_keys`；`services/ai_service.py::get_gemini_keys` |
+| `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` | 整個值 | `app.py::_load_keys`；`infra/llm.py::call_llm` |
+| `PROXY_URL` | 網址裡的**帳號**與**密碼**兩段（`http://帳號:密碼@主機:埠` 的 userinfo）；主機與埠不遮 | `infra/proxy.py::get_proxy_config` |
+| `[proxy]` 區段 | `username`、`password` 兩個值；`endpoint` 不遮 | `infra/proxy.py::get_proxy_config`（`PROXY_URL` 不存在時的舊格式） |
+| `[google_service_account]`（TOML 表格或 JSON 字串兩種寫法都收） | `private_key`、`private_key_id` | `repositories/pool_repository.py::_sa_present`；`services/nav_history_gs.py::status`、`services/nav_history_gs.py::_sa_to_dict`；`services/macro/weights_store.py::_gs_enabled`；`ui/helpers/io/oauth_state.py` 模組層的 `_gsa_secret`；`repositories/policy/_helpers.py::get_gspread_client` |
+| `[google_oauth]` 區段，以及同形的 `st.session_state["custom_oauth_cfg"]` | `client_secret` | `ui/helpers/io/oauth_state.py::_resolve_oauth_cfg` |
+| OAuth 執行期權杖（不在 secrets 檔，登入後才有） | `access_token`、`refresh_token`、`id_token` | 產生：`infra/oauth.py::exchange_code_for_tokens`、`infra/oauth.py::refresh_access_token`；存放：`st.session_state["gsheet_tokens"]`（`ui/helpers/io/oauth_state.py` 讀寫） |
+
+**乙、推播與發佈用的憑證 —— 一律遮蔽**（~~只在排程腳本或推播用到的憑證~~：分類名不成立，`ui/tab_manage.py::_sec_notify` 在 App 執行期就會讀 LINE 憑證，見下表第一列；2026-09-26 稽核指出，本組以 AST 確認後更正）
+
+| 鍵名 | 讀取位置（路徑＋符號） |
+|---|---|
+| `LINE_CHANNEL_TOKEN`、`LINE_CHANNEL_ACCESS_TOKEN` | **App 執行期**：`ui/tab_manage.py::_sec_notify`（經 `infra/line_push.py::_resolve`，判斷 LINE 是否已設定）；推播時：`infra/line_push.py::_post_messages`（經同檔 `_resolve`） |
+| `GITHUB_TOKEN` | `infra/asset_publish.py::publish_asset`（經同檔 `_resolve`） |
+
+**乙之二、只在排程腳本讀的憑證 —— 同樣遮蔽（它們若進入同一支遮蔽函式的輸入，也要被遮）**
+
+| 鍵名 | 讀取位置（路徑＋符號） |
+|---|---|
+| `GOOGLE_SERVICE_ACCOUNT_JSON`、`GSPREAD_SA_JSON`（服務帳戶 JSON 字串；遮其中 `private_key`、`private_key_id`） | `scripts/fetch_nav_cache.py::_codes_from_sheet` |
+| `PROXY_URL`（環境變數版） | `scripts/fetch_nav_cache.py` 模組層的 `_PROXY_URL` |
+
+**丙、讀到了、但本規則不遮的值（處置在本檔定案，不另送客戶）**
+
+| 鍵名 | 處置 |
+|---|---|
+| `POLICY_SHEET_ID`、`NAV_SHEET_ID`、`POOL_SHEET_ID`、`macro_weights_sheet_id`、`SHEET_ID` | **建議：不遮，理由：試算表 ID 不是憑證，沒有被分享的人拿到 ID 也打不開；而且 `49` §4.1 要求設定頁顯示「目前讀的是哪一本」，遮掉就無法除錯。** |
+| `google_service_account.client_email`、`client_id`；`google_oauth.client_id`、`redirect_uri` | **建議：不遮，理由：這些不是憑證；「權限不足」時使用者要知道該把試算表分享給哪一個服務帳戶信箱，遮掉 `client_email` 就給不出這個指引。** |
+| `WATCH_CSV_URL` | **不在 Q13 射程內，不送客戶。** 查證：`git grep -n WATCH_CSV_URL 7f564aa -- '*.py' ':!tests/**'` 的命中逐行判讀後，讀值的是 `scripts/watchlist_push.py::main` 與 `scripts/weekly_switch_notify.py::_read_watchlist`（`scripts/dividend_calendar_notify.py` 經匯入後者使用；值由 `.github/workflows/` 的工作流程注入環境變數）；`ui/tab_manage.py` 的命中只在註解與說明字串裡，不讀值（正控：同一條指令命中 `scripts/weekly_switch_notify.py` 讀環境變數的那一行）。App 執行期不讀它，它也不經過 `fetch_log` 與 ui_v2 的畫面 —— Q13 管的是寫進 `fetch_log` 與上畫面的失敗訊息，碰不到它。⚠️ 若日後 App 或 ui_v2 開始讀它，性質接近憑證（公開 CSV 連結，知道網址就讀得到），屆時改列甲類遮蔽。 |
+| `LINE_USER_ID`、`GITHUB_REPOSITORY`、`NAV_GATE0_MODE`、`NAV_CODES`、`US_STOCK_IDS`、`FUND_DB`、`GOOGLE_APPLICATION_CREDENTIALS`（檔案路徑）、`CHROMIUM_EXECUTABLE_PATH`、`GITHUB_STEP_SUMMARY` | 不遮：設定值或路徑，不是可單獨拿去呼叫服務的憑證。 |
+
+~~丙表原版把試算表 ID、`client_email`、`WATCH_CSV_URL` 三項寫成「列為客戶裁示事項」~~ → 2026-09-26 稽核後改為本檔直接定案（決策者：AI 總管；有意識的更正，不是漏刪）。理由：三項都不是 Q13 裁示範圍內的新業務規則 —— 前兩項是「不遮會不會讓憑證外洩」的技術判斷，答案是不會；第三項根本不經過 Q13 管的兩個寫出點。
+
+### 7.3 替換記號與替換規則
+
+- **固定記號**：`‹已遮蔽›`（前後是單書名號 U+2039、U+203A，中間三個字）。一個秘密值被換成**一個**記號，不論原值多長。
+- **其餘字元逐字保留**：不刪、不改寫、不截斷、不調整空白與換行。遮蔽前後，只有秘密值那幾段字元不同。
+- **每一次出現都換**：同一個值在訊息裡出現幾次，就換幾次。
+- **要一併遮的寫法**（同一個值在錯誤訊息裡常以別的形態出現）：
+  1. 原值；
+  2. 網址百分比編碼後的值（`urllib.parse.quote(值, safe="")` 與 `quote_plus(值)` 兩種）——金鑰進了查詢字串，例外訊息印的是編碼後的網址；
+  3. 服務帳戶 `private_key`：原值（含真實換行），以及換行被跳脫成反斜線加 n 的寫法（JSON 字串內的形態）。
+- **由長到短替換**：多個秘密值互為子字串時，先換長的，避免短的先換掉一半、長的就對不上。
+- **空值不參與**：鍵存在但值為空字串的，不拿去替換（否則會在每個字元之間插記號）。
+- **比對大小寫敏感、完全相同才換**：不做模糊比對，不猜「看起來像金鑰的字串」。沒有列在 7.2 的值，本規則不處理。
+- **遮蔽只在寫出點做一次**：寫進 `fetch_log.message` 之前、送上畫面之前。畫面與 `fetch_log` 用**同一份**遮蔽後的字串，不各自遮。
+
+### 7.4 「已遮蔽」要同時進 `fetch_log` 與畫面
+
+- **`fetch_log`**：`message` 欄存**遮蔽後**的字串，記號 `‹已遮蔽›` 本身就留在字串裡。這樣不必在 `44` 的七個欄位之外另加一欄，也保住 `44` §4.5 `fetch_log` 的表判準：把 `message` 與 `SET-2` 畫面上顯示的字串逐字比對，兩者相同。
+- **畫面**：`SET-2`（來源健康卡，顯示各層級最近一次的 `message`）與 `SET-6`（取數紀錄，顯示 `fetch_log` 全欄，含 `message`）兩處都顯示同一份字串（含記號），並在訊息**旁邊**（不是訊息字串裡面）加一行註記「已遮蔽憑證」。只有字串裡確實含記號時才加；沒有遮任何東西時不加。
+- 沒有秘密值出現的訊息，遮蔽前後逐字相同，也不出現記號與註記。
+
+### 7.5 驗收：實作時必須有的測試
+
+以下每一條都是**實作時**要寫出來、且要在 CI 跑的測試。它們**不打外部網路**：需要真實例外字串的，一律連本機迴路位址（`127.0.0.1`）。
+
+| # | 測試 | 輸入 | 通過條件 |
+|---|---|---|---|
+| M1 | 含金鑰的網址，連線失敗的例外字串 | 對本機一個沒有在聽的埠發請求，查詢字串帶一把假金鑰（當作 `FRED_API_KEY` 的值），取 `str(例外)` | 遮蔽後不含假金鑰；含 `‹已遮蔽›`；把記號換回假金鑰後與原字串逐字相同 |
+| M2 | 407 代理驗證失敗 | 在本機起一個一律回 407 的假代理，`PROXY_URL` 帶假帳號與假密碼，經它發 HTTPS 請求（查詢字串帶假金鑰），取 `str(例外)` | 遮蔽後不含假密碼、假帳號、假金鑰；其餘字元逐字保留 |
+| M3 | 代理帳密直接出現在訊息裡 | 一段含完整 `PROXY_URL` 的字串（含帳密的原值與百分比編碼兩種） | 帳號、密碼兩段都被換掉；主機與埠保留 |
+| M4 | 金鑰以百分比編碼出現 | 假金鑰含 `+`、`/`、`=` 等字元，以 `quote` 與 `quote_plus` 各編一次後放進訊息 | 兩種編碼形態都被換掉 |
+| M5 | 服務帳戶私鑰 | 訊息含假 `private_key`（真實換行版與反斜線加 n 版）與假 `private_key_id` | 三者都被換掉 |
+| M6 | OAuth 敏感欄 | 訊息含假 `client_secret`、`access_token`、`refresh_token` | 都被換掉；`client_id`、`redirect_uri` 保留（依 7.2 丙） |
+| M7 | 沒有秘密值的訊息 | 一段不含任何 7.2 值的錯誤字串（含全形字、換行、很長） | 輸出與輸入逐字相同；不出現記號；畫面不出現「已遮蔽憑證」 |
+| M8 | 空值 | 某鍵存在但值為空字串 | 輸出與輸入逐字相同 |
+| M9 | 互為子字串 | 兩把假金鑰，一把是另一把的前綴 | 長的整段被換成一個記號，不殘留尾巴 |
+| M10 | 多次出現 | 同一把假金鑰在訊息裡出現三次 | 三次都被換掉 |
+| M11 | `fetch_log` 與畫面逐字相同 | 以 M1 的例外走完「寫 `fetch_log` → `SET-2` 顯示」與「寫 `fetch_log` → `SET-6` 顯示」兩條路 | 兩處畫面上的訊息字串都與 `fetch_log.message` 逐字相同，且都含 `‹已遮蔽›`；兩處訊息旁都出現「已遮蔽憑證」 |
+| M12 | 突變（正控） | 把遮蔽函式換成「原樣回傳」 | M1～M6、M9～M11 必須轉紅。沒有轉紅就代表測試沒有守到東西 |
+
+- 假金鑰、假帳密一律在測試裡**現場隨機產生**，不寫死成固定字串，也不寫進任何文件（`CLAUDE.md` §-2.A 第 8 款）。
+- M1、M2 要放行本機迴路位址；`49` §4.7 第 3 點的網路阻斷 fixture 同樣要放行 loopback。
+
+### 7.6 實測：金鑰確實會出現在例外字串裡
+
+**2026-09-26 實測**（基底 `7f564aa`；requests 2.34.2、urllib3 2.8.0，驗收用 venv；只連本機迴路位址，不打外部網路）：
+
+| 情境 | 例外型別 | 假金鑰在 `str(例外)` 裡 | 假代理密碼在 `str(例外)` 裡 |
+|---|---|---|---|
+| 對本機沒在聽的埠發請求，查詢字串帶假金鑰 | `ConnectionError` | **在**（例外字串含 `...?api_key=<假金鑰>`） | 不適用 |
+| 經回 407 的本機假代理發 HTTPS 請求 | `ProxyError` | **在** | **不在** |
+| 經同一個假代理發 HTTP 請求 | 沒有例外，回應狀態 407 | 回應物件的 `url` 屬性含假金鑰 | 不適用 |
+
+- 所以 `49` §4.9 原本「依套件行為推論、沒有實測」的那一句，**金鑰那一半已經實測成立**：`infra/proxy.py::fetch_url` 在其他錯誤分支直接印例外物件，而例外字串帶完整查詢字串。
+- **代理密碼那一半在這一版套件、這一種情境下不成立**，但這**不是**不遮的理由：別的套件版本、別的錯誤路徑（例如自己組字串把代理網址印出來）仍可能帶出來，所以 7.2 照樣遮。
+- 另一個已知的外洩形態，本組讀程式碼看到、**沒有實測**：`infra/oauth.py::exchange_code_for_tokens` 在回應缺 `access_token` 時把整個回應內容放進例外訊息。
+
+### 7.7 7.2 是怎麼查的、查不到什麼
+
+在 `7f564aa` 上用兩條指令列出 `*.py`（不含 `tests/`）裡的讀點，再逐一讀上下文判定：
+
+```bash
+git grep -nE 'st\.secrets|os\.environ|os\.getenv|get_secret\(|_secret\(' 7f564aa -- '*.py' ':!tests/**'
+git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
+```
+
+- 第一條在 `7f564aa` 上命中 142 行、39 檔；**正控**：`infra/proxy.py::get_proxy_config` 讀 `PROXY_URL` 的那幾行在命中裡。
+- 第二條補第一條抓不到的間接讀法：`LINE_*` 與 `GITHUB_TOKEN` 是經 `_resolve` 讀的，第一條的字表不含它們的鍵名。第二條在 `7f564aa` 上命中 7 行，其中 3 行在 `ui/tab_manage.py`（它以別名 `_line_resolve` 匯入，字串照樣含 `_resolve("`）。⚠️ 初版把這 3 行漏歸類，於是乙表寫成「只在排程腳本或推播用到」；**指令當時就掃到了，錯在逐行判讀**（2026-09-26 稽核指出，已更正）。
+- 另有兩類是**讀程式碼補上、不是指令掃出來的**：`GEMINI_API_KEY_1`～`_10`（鍵名由 f-string 組出）、`[proxy]` 區段的 `username`／`password`（以下標讀取）。
+- **查不到的形態**（誠實揭露）：鍵名由變數動態組出、經別的包裝函式轉手、或在 `tests/` 以外但不是 `.py` 的檔（例如工作流程 YAML 注入的環境變數）讀取的，這兩條指令都掃不到。**「7.2 就是全部」這句話本組沒有查證，也不宣稱。**
+- 實作時遮蔽函式的輸入**不應**是一份寫死的鍵名表，而應在執行期從 secrets 與環境變數讀出這些鍵的**值**；鍵名表本身要有一條測試比對 `secrets.toml.example` 與 `.streamlit/secrets.toml.example` 的鍵，範本多了新鍵而表沒跟上就紅。
+
+⚠️ **本節由文件組單組產出，未經第二組獨立複驗**（`CLAUDE.md` §-2 規則 6）。7.6 的實測是本組自己跑的；7.2 的分類是本組讀程式碼判定的。
