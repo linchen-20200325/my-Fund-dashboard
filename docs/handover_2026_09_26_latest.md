@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-26 16:39:20 UTC（`date -u` 實測）
+最後更新：2026-09-26 16:44:57 UTC（`date -u` 實測）
 
 ---
 
@@ -22,18 +22,18 @@
 
 - 主工作樹：`/home/user/my-Fund-dashboard`
 - 分支：`feat/set-live-ui`
-- HEAD：`c2e7b37`（`c2e7b376b31f57eabe7e7c77d36673bf3138dc5e`），**落後 origin 1 個 commit**
-- origin：`origin/feat/set-live-ui` = `0062b7f`（`0062b7f703bf696410ef065b5fce7a381ef48662`，ls-remote 實測）；`c2e7b37` 是它的直接祖先，差 1 個 commit
-- 實作組工作樹：`/tmp/claude-0/-home-user-my-Fund-dashboard/5e0d8cf4-c8e6-5f34-83f9-ea9c2747c064/scratchpad/wt_setlive`，detached HEAD 於 `0062b7f`（`git worktree list` 實測）
+- HEAD：`c2e7b37`（`c2e7b376b31f57eabe7e7c77d36673bf3138dc5e`），**落後 origin 2 個 commit**
+- origin：`origin/feat/set-live-ui` = `d652efb`（`d652efb8ec4f8905c0950a3a75fc1bb9d602db72`，ls-remote 實測）；`c2e7b37` → `0062b7f` → `d652efb` 為直線，差 2 個 commit
+- 實作組工作樹：`/tmp/claude-0/-home-user-my-Fund-dashboard/5e0d8cf4-c8e6-5f34-83f9-ea9c2747c064/scratchpad/wt_setlive`，detached HEAD 於 `d652efb`（`git worktree list` 實測）
 - main：`origin/main` = `12cd1ab`（#851 合併點）
 - 未 commit 的改動：無（`git status --short` 實測為空，主工作樹乾淨）
 
 ## 2. 進行中
 
 ### set 頁正式模式 UI
-- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db` → `c2e7b37` → `0062b7f`）
-- 狀態：**實作中**
-- 負責組：前端/UI 組
+- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db` → `c2e7b37` → `0062b7f` → `d652efb`）
+- 狀態：**複驗中**
+- 負責組：稽核 A、稽核 B
 - 經過：
   - 第 1 輪稽核：必修 8 項已修完。
   - 兩組複驗：必修 0。
@@ -49,11 +49,16 @@
   1. 文案改為「可選值：成本、市值」。
   2. RecursionError 判為型別不符。
   3. alo 分歧已照實登記，並加了跨頁守衛。
-- 最終複驗（本輪，針對 `0062b7f`）：
+- 最終複驗（針對 `0062b7f`）：
   - 稽核 B（紅隊）已回報：本輪三項都通過；另有新必修 1 條＝超過 4300 位的整數能存進去，存入後整頁永久崩潰。
   - 稽核 A 已回報：必修 0。建議 1 條（跨頁守衛只認一個檔名），已併入本輪回修。
-- 回修派工：已派前端/UI 組修正，內容為限制整數位數、讀取時接住轉換失敗、float 溢位成 inf 也拒收、跨頁守衛放寬觸發條件。
-- 下一步誰動：實作組交回 → 兩組複驗 → 開 PR。
+- 回修已完成（`d652efb`），依實作組回報：
+  1. 整數限 18 位。
+  2. 讀取時接住轉換失敗。
+  3. float 溢位成 inf 一律拒收。
+  4. 跨頁守衛放寬為四種觸發條件。
+- 複驗：已派工：稽核 A、B 複驗 `d652efb`，等回報。
+- 下一步誰動：稽核 A、B 兩組回報；必修 0 就開 PR。
 
 ### 交接本
 - 狀態：已建立，持續維護
@@ -78,7 +83,7 @@
 ## 3. 已完成（未 merge）
 
 - `feat/set-live-ui`：set 頁正式模式接真資料，照已核准草稿（10 處新文案），重新取數只接市場指標。
-  - 未 merge 原因：稽核 B（紅隊）最終複驗抓到新必修 1 條（超過 4300 位整數存入後整頁崩潰），前端/UI 組修正中；稽核 A 本輪必修 0，其建議 1 條（跨頁守衛只認一個檔名）已併入本輪回修。
+  - 未 merge 原因：回修已完成（`d652efb`），稽核 A、B 複驗尚未回報。
 
 ## 4. 已完成（已 merge）
 
