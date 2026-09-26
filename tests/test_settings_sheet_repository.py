@@ -90,7 +90,8 @@ def test_沒設SETTINGS_SHEET_ID_報未設定且不打上游(env, value):
     with pytest.raises(R.SettingsSheetError) as err:
         R.load_user_settings(mask=mask)
     assert err.value.code == "not_configured"
-    assert "SETTINGS_SHEET_ID" in str(err.value)
+    assert str(err.value) == "未設定試算表 ID，暫停寫入"      # 客戶 2026-09-26 裁示的唯一說法
+    assert err.value.details == {"secret_key": "SETTINGS_SHEET_ID"}
     with pytest.raises(R.SettingsSheetError):
         R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
     assert book.calls == []
@@ -447,6 +448,19 @@ def test_寫入格式_浮點十進位字面_時間截到秒並轉世界協調時
     assert data[2][3] == "0.00001" and data[2][7] == "2026-09-25T06:00:00Z"
     rows = R.load_market_indicator(mask=mask)["rows"]
     assert [r["value_num"] for r in rows] == [17.42, 1e-05]
+
+
+def test_客戶自建零列的market_indicator分頁_先補標頭再追加(env):
+    """回修第 4 輪 2：紅隊實測，把寫前讀主鍵那一段改回 `if ws is not None:` 的突變，
+    原有測試抓不到（零列時 `_check_header` 在那裡就先判成標頭不符）。"""
+    book, _c, _s = env
+    _put(book, "market_indicator", [])
+    out = R.append_market_indicator([_mi()], mask=mask)
+    assert out["appended"] == 1
+    assert book.data("market_indicator") == [MI_HEAD, ["vol_index", "2026-09-01", "2026-09-01",
+                                                      "17.42", "index", "市場指標", "FALSE",
+                                                      "2026-09-25T06:00:00Z"]]
+    assert "add_worksheet" not in [c[0] for c in book.calls]
 
 
 def test_寫前去重_已存在同一筆不再追加(env):

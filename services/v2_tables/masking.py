@@ -29,9 +29,9 @@ MASKED_WHOLE_VALUE_KEYS = (
     "FRED_API_KEY", "FINMIND_TOKEN", "ALPHAVANTAGE_API_KEY",
     "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
     "LINE_CHANNEL_TOKEN", "LINE_CHANNEL_ACCESS_TOKEN", "GITHUB_TOKEN",
-    # 設定與取數紀錄試算表的 ID（總管 2026-09-26 回修第 2 輪裁示：歸「要遮」）。
+    # 設定與取數紀錄試算表的 ID（2026-09-26 歸「要遮」；決策者：總管自決，客戶核准）。
     # 與 7.2 丙其餘試算表 ID 刻意不同：`50` 第 2 節定案這本的 ID 只放 secret、不得公開
-    # （它會被寫入，連錯本就是把設定寫進別人的檔）。⚠️ ACCEPTANCE.md 7.2 的表尚未同步這一列。
+    # （它會被寫入，連錯本就是把設定寫進別人的檔）。ACCEPTANCE.md 7.2 甲表已列（同一決策）。
     "SETTINGS_SHEET_ID",
 ) + tuple(f"GEMINI_API_KEY_{i}" for i in range(1, 11))
 # 逗號分隔多把、逐把遮。

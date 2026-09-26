@@ -91,6 +91,8 @@ class FakeSpreadsheet:
         self.tabs[title] = ws
         return ws
 
+    # 防回歸用：實作不得刪分頁（`50` 第 6 節；回修第 3 輪撤銷了刪分頁路徑）。保留這個假方法，
+    # 讓「加回刪分頁」的突變真的能執行、被 `test_標頭已送達但回報失敗_…` 等測試抓到，而不是先死在 AttributeError。
     def del_worksheet(self, worksheet):
         self.calls.append(("del_worksheet", worksheet.title))
         self._maybe_fail("del_worksheet")

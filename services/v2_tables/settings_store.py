@@ -98,7 +98,7 @@ class MarketIndicatorSheetSink:
         self.persist = {"ok": False, "stage": "not_started", "message": None,
                         "error_code": None, "log_id": None, "fetch_log": None,
                         "appended": 0, "already_present": 0, "conflicts": [],
-                        "masked_errors": {}, "empty": {}}
+                        "masked_errors": {}, "empty": {}, "log_message": None}
 
     def _fail(self, stage: str, exc: store.SettingsSheetError) -> None:
         self.persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
@@ -154,6 +154,8 @@ class MarketIndicatorSheetSink:
             outcome, row_count, message = "failed", None, "\n".join(reasons)
         else:
             outcome, row_count, message = "ok", sum(fetched.values()), None
+        # 回修第 4 輪 3：與要寫進 `fetch_log.message` 的字串逐字相同；不論下面寫入成敗都放。
+        self.persist["log_message"] = message
         try:
             logged = store.close_fetch_log(self.opened, outcome=outcome, row_count=row_count,
                                            message=message, mask=self._mask)

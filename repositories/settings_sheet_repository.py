@@ -121,6 +121,8 @@ OPEN_LOG_STALE_SEC = 3600
 # 最壞情形（約 20 分鐘）時仍有兩倍以上餘裕。代價是真正中斷的取數最多 1 小時後才在讀取端顯示為中斷，
 # 這之前計入 `in_progress`（不偽裝成已結束）。本數字是推算，不是實測。
 INTERRUPTED_MESSAGE = "取數沒有結束紀錄"   # `50` 5.3 的固定系統文字
+# 客戶 2026-09-26 裁示的唯一說法（`50` 第 8 節「沒設 SETTINGS_SHEET_ID」那一列）。
+NOT_CONFIGURED_MESSAGE = "未設定試算表 ID，暫停寫入"
 
 _TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _FLOAT_RE = re.compile(r"^-?\d+(\.\d+)?$")
@@ -293,8 +295,10 @@ def settings_sheet_id(*, mask: Mask) -> str:
     raw = get_secret(SECRET_KEY)
     text = raw.strip() if isinstance(raw, str) else ""
     if not text:
-        raise SettingsSheetError(mask(f"未設定設定試算表的 ID（{SECRET_KEY}）"),
-                                 code="not_configured")
+        # 客戶 2026-09-26 裁示：「ID 未設定」全站只留一種說法（會上畫面：L2 `persist["message"]`、
+        # 存檔與讀設定的錯誤都直接顯示本訊息）。鍵名改放 details，不寫進這句。
+        raise SettingsSheetError(mask(NOT_CONFIGURED_MESSAGE), code="not_configured",
+                                 details={"secret_key": SECRET_KEY})
     return text
 
 
@@ -431,8 +435,9 @@ def _worksheet_for_append(spreadsheet, name: str, tabs: dict, *, mask: Mask):
     轉成 `code="api"` 並照常 `record_gspread_failure`（含 429 → 憑證鍵冷卻）。
     零列時寫標頭不改變任何既有資料的語意，所以 7.1「不代寫標頭」的理由在這裡不成立；
     已有資料時改寫標頭會把每一欄的語意換掉，所以那種情形照舊停下。
-    ⚠️ 已知競態（登記，不處理）：兩個寫入者**同時**看到零列、各寫一次標頭 → 第 2 列會是一列
-    與標頭相同的字串列；讀取端把它當格式不符的列計數、不採用，不會遺失資料。
+    ⚠️ 已知風險，未防護（本輪不處理，登記下一輪；見 `50` 7.1）：兩個寫入者**同時**看到零列、
+    各寫一次標頭 → 第 2 列會是一列與標頭相同的字串列；讀取端把它當格式不符的列計數、不採用，
+    不會遺失資料，但那一列會一直留在試算表裡。
     """
     ws, values = tabs[name]
     if ws is None:

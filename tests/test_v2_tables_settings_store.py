@@ -61,6 +61,7 @@ def test_成功_寫開始紀錄_寫列_寫ok結束紀錄(book, monkeypatch):
     assert [r[0] for r in book.data("market_indicator")[1:]] == ["vol_index", "vol_index"]
     log = book.data("fetch_log")[1]
     assert log[0] == p["log_id"] and log[4:] == ["ok", "2", ""]
+    assert p["log_message"] is None                             # ok：message 為空
     # 讀回：兩列、`44` 形狀
     rows = S.load_market_indicator([SECRET])["rows"]
     assert [(r["obs_date"], r["value_num"]) for r in rows] == [("2026-09-22", 17.0), ("2026-09-23", 18.5)]
@@ -86,6 +87,7 @@ def test_來源失敗_failed_訊息遮蔽後與畫面用的字串相同(book, mo
     log = book.data("fetch_log")[1]
     assert log[4] == "failed" and log[5] == ""
     assert log[6] == f"vol_index: {shown}"                    # fetch_log 與畫面同一份遮蔽後字串
+    assert out["persist"]["log_message"] == log[6]           # persist 與 fetch_log.message 逐字相同
     assert SECRET not in "".join(sum(book.data("fetch_log"), []))
     assert S.load_fetch_log([SECRET])["rows"][0]["message"] == log[6]
 
@@ -183,6 +185,9 @@ def test_寫表失敗_取數結果照常回傳_不遞迴寫紀錄(book, monkeypa
     # 429 記在憑證鍵 → 接著寫 fetch_log 被冷卻擋下（不重打、不遞迴），fetch_log 沒有列
     assert p["stage"] == "fetch_log" and p["error_code"] == "cooling"
     assert "fetch_log" not in book.tabs or len(book.data("fetch_log")) <= 1
+    # fetch_log 沒寫成，但本來要寫的那一份字串照樣交出來（回修第 4 輪 3）
+    lm = p["log_message"]
+    assert lm.startswith("market_indicator 寫入失敗：") and SECRET not in lm and MASK in lm
 
 
 def test_程式錯誤不被吞(book, monkeypatch):
