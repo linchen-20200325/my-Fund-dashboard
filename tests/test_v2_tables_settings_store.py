@@ -190,6 +190,21 @@ def test_寫表失敗_取數結果照常回傳_不遞迴寫紀錄(book, monkeypa
     assert lm.startswith("market_indicator 寫入失敗：") and SECRET not in lm and MASK in lm
 
 
+def test_market_indicator標頭不符_fetch_log照常寫failed且附原因(book, monkeypatch):
+    """第 6 輪：標頭不符不是上游失敗、不登記冷卻 → fetch_log 不會被冷卻擋下（紅隊重現情境）。"""
+    book.tabs["market_indicator"] = FakeWorksheet(book, "market_indicator", [["wrong", "header"]])
+    _stub(monkeypatch, _vix([17.0], ["2026-09-22"]))
+    out = S.run_market_indicator_fetch([SECRET])
+    p = out["persist"]
+    assert p["ok"] is False and p["stage"] == "market_indicator" and p["error_code"] == "header_mismatch"
+    assert book.data("market_indicator") == [["wrong", "header"]]           # 不改寫、不追加
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed" and log[5] == ""
+    assert log[6].startswith("market_indicator 寫入失敗：標頭與規格不符")
+    assert log[6] == p["log_message"]
+    assert SB.get_backoff_state() == []
+
+
 def test_程式錯誤不被吞(book, monkeypatch):
     def broken_build(*, sink):
         sink({"rows": [{"indicator_key": "vol_index"}], "errors": {}})

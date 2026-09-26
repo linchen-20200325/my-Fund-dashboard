@@ -30,12 +30,19 @@ fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記�
 - `failed`：任一鍵有錯誤原文；或某鍵取回 >0 列但**一列都沒寫成**（例如全部缺 `fetched_at`）；
   或寫前看到主鍵矛盾（**只擋矛盾的主鍵，其餘照寫**）；~~或 `market_indicator` 寫入失敗。~~
   `row_count` 為空，`message` 為遮蔽後的原因（多條以換行分隔）。
-  ⚠️ 2026-09-26 更正（有意識的更正，不是漏刪；決策者：AI 總管）：劃掉的那一條**實際寫不出來**。
-  `market_indicator` 寫入失敗時，L1 會登記冷卻（`record_gspread_failure`；試算表鍵或 429 的憑證鍵，
-  冷卻秒數都大於 0），緊接著寫 `fetch_log` 時一定被 `should_skip_gspread` 擋下（`code="cooling"`），
-  所以 `fetch_log` 不會有這一列；`fetch_log_open` 那一列留著，讀取端要等 `OPEN_LOG_STALE_SEC`（1 小時）
-  之後才顯示為「取數沒有結束紀錄」。那一次取數的真正原因只在回傳的 `persist`（`stage="fetch_log"`、
-  `message` 含寫表失敗與冷卻兩段原文、`log_message` 是本來要寫的那一句）裡，**不會進試算表**。
+  ⚠️ 2026-09-26 更正（有意識的更正，不是漏刪；決策者：AI 總管）：劃掉的那一條~~**實際寫不出來**~~
+  → **對「上游（gspread）讀寫失敗、會登記冷卻的那一類」寫不出來**（第 6 輪收窄；上一輪寫成全稱，
+  被紅隊以標頭不符的情形實測推翻）。
+  那一類：`market_indicator` 寫入時 gspread 呼叫失敗，L1 會登記冷卻（`record_gspread_failure`；
+  試算表鍵或 429 的憑證鍵，冷卻秒數都大於 0），緊接著寫 `fetch_log` 時~~一定~~會被 `should_skip_gspread`
+  擋下（`code="cooling"`），所以 `fetch_log` 不會有這一列；`fetch_log_open` 那一列留著，讀取端要等
+  `OPEN_LOG_STALE_SEC`（1 小時）之後才顯示為「取數沒有結束紀錄」。那一次取數的真正原因只在回傳的
+  `persist`（`stage="fetch_log"`、`message` 含寫表失敗與冷卻兩段原文、`log_message` 是本來要寫的那一句）
+  裡，**不會進試算表**。
+  **已知不登記冷卻的有：標頭不符**（L1 拋 `SettingsSheetError(code="header_mismatch")`，不是上游失敗）——
+  這時 `fetch_log` 會照常寫出 `failed`，`message` 含「market_indicator 寫入失敗：標頭與規格不符……」
+  （由 `tests/test_v2_tables_settings_store.py::test_market_indicator標頭不符_fetch_log照常寫failed且附原因`
+  釘住）。⚠️ 這份「不登記冷卻」清單**未窮舉**，只列已知的。
   舊句的用意（寫表失敗要記 `failed`）仍然成立，錯的是它描述的是意圖、不是行為。
   **行為修正已登記下一輪**；本輪只改說明文字，邏輯未動。
 - `pending`（第一階段刻意不取數）與部分列被略過（例如當天未收盤的那一列）不是失敗。
@@ -194,7 +201,8 @@ def run_market_indicator_fetch(secret_values, *,
     回空（`44` SET-5）另列在 `persist["empty"]`，不是錯誤。
     `fetch_log_open` 寫不進去時仍照常取數（`50` 第 8 節：結果照常顯示），只是不寫表；
     此時 `persist["log_message"]` 為 None，錯誤請讀 `persist["masked_errors"]`（見 `MarketIndicatorSheetSink`）。
-    ⚠️ `market_indicator` 寫入失敗時 `fetch_log` 寫不進去（被冷卻擋下），見檔頭 outcome 段的更正。
+    ⚠️ `market_indicator` 寫入時 gspread 上游失敗（會登記冷卻的那一類）時 `fetch_log` 寫不進去（被冷卻擋下）；
+    標頭不符等不登記冷卻的失敗則照常寫出 `failed`。見檔頭 outcome 段的更正。
     """
     sink = MarketIndicatorSheetSink(secret_values)
     sink.begin()
