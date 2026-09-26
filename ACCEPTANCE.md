@@ -195,6 +195,7 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 - 各頁的規格以 `docs/v2/44_fund_ui_ssot.md` 為準；原型與 44 不一致時照 44。
 - 各頁啟動：`<venv>/bin/streamlit run ui_v2/app_<代號小寫>.py`。進入點檔案的第 1 行是編碼宣告，第 2 行是 docstring 的開頭，寫的就是這一條指令（2026-09-25 實測，基底 `9950e99`）。
 - 每頁的邏輯測試是同目錄的 `test_<代號小寫>_logic.py`，第二節的逐檔表裡有條數。
+- 配息頻率對照表：見 `docs/v2/49_data_integration_plan.md` §6.1 Q6 下的「配息頻率對照表（客戶 2026-09-26 定案）」。左欄寫法為推測、未實測（repo 內沒有 MoneyDJ「配息頻率」欄的真實樣本），每季回查一次並補表。
 
 ---
 
