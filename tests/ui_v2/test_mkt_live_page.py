@@ -3,7 +3,7 @@
 
 依據 docs/v2/49_data_integration_plan.md §4.7 第 4 點：
 把 `page` 模組上的 `fixtures` 屬性換成「一存取就拋錯」的替身，再以 stub 載入函式呼叫
-`page.render(load_dataset=...)`。只要正式模式的任何一條路徑讀了 fixtures，這裡就紅。
+`page.render(load_live=...)`。只要正式模式的任何一條路徑讀了 fixtures，這裡就紅。
 這一條補的是 import 掃描抓不到的東西：`page.py` 本來就 import `fixtures`（示範模式要用），
 「有沒有 import」證明不了「正式模式有沒有呼叫」。
 
@@ -142,7 +142,8 @@ def test_草稿3_資料未備下一行寫原因(monkeypatch):
     at = _run(_SCRIPT_LIVE, monkeypatch)
     text = "\n".join(_rendered(at))
     assert "原因：來源不提供公布日" in text
-    assert "原因：觀測日切日規則待以真實資料驗證" in text
+    assert "原因：本指標規則未定，暫不顯示" in text
+    assert "切日" not in text  # 舊文案（技術用語）不上畫面
     assert "原因：公布日尚未接上，暫不寫入" in text
 
 

@@ -127,6 +127,17 @@ def test_M4_金鑰以百分比編碼出現():
     assert masked == f"a={MASK} b={MASK} c={MASK}"
 
 
+def test_M4b_含空白的值_quote_plus形態與quote不同_也要遮():
+    """稽核登記 1：上一條的值沒有空白時，`quote` 與 `quote_plus` 兩種編碼**逐字相同**，
+    於是「只拿掉 quote_plus 形態」的突變照樣綠。含空白時兩者才不同（`%20` 對 `+`）。"""
+    key = _fake(8) + " " + _fake(8)
+    assert quote(key, safe="") != quote_plus(key)  # 前提：兩種形態確實不同
+    msg = f"only_plus={quote_plus(key)} end"
+    assert mask_message(msg, [key]) == f"only_plus={MASK} end"
+    msg = f"only_quote={quote(key, safe='')} end"
+    assert mask_message(msg, [key]) == f"only_quote={MASK} end"
+
+
 # ── M5 ──
 def test_M5_服務帳戶私鑰_真實換行與反斜線n兩種():
     pk = f"-----BEGIN PRIVATE KEY-----\n{_fake(40)}\n{_fake(40)}\n-----END PRIVATE KEY-----\n"

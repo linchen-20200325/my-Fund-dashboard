@@ -45,7 +45,7 @@ def test_草稿3_資料未備的值下一行寫原因_文案逐字():
     model = live.apply_live_notes(logic.build_page_model(_phase1_dataset()), _notes())
     assert _mv(model, "MKT-1", "credit_spread_pct")["note_lines"] == ["原因：公布日尚未接上，暫不寫入"]
     assert _mv(model, "MKT-2", "leading_index")["note_lines"] == ["原因：來源不提供公布日"]
-    assert _mv(model, "MKT-3", "fx_twd_per_usd")["note_lines"] == ["原因：觀測日切日規則待以真實資料驗證"]
+    assert _mv(model, "MKT-3", "fx_twd_per_usd")["note_lines"] == ["原因：本指標規則未定，暫不顯示"]
     assert _mv(model, "MKT-3", "policy_rate_pct")["note_lines"] == ["原因：公布日尚未接上，暫不寫入"]
     assert "note_lines" not in _mv(model, "MKT-1", "vol_index")  # 有值的不加
     mkt7 = logic.find_block(model, "MKT-7")

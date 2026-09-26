@@ -86,8 +86,27 @@ def imports_of(tree: ast.AST, package: str) -> list[str]:
     return out
 
 
+# 經由字串或名稱解析取得模組的屬性名（getattr 第二個引數是這些字串時一律擋）。
+_DYNAMIC_ATTRS = {"modules", "__import__", "import_module", "resolve_name", "run_module", "run_path"}
+# 能執行任意字串或檔案、進而繞過 import 掃描的內建函式。
+_DYNAMIC_CALLS = {"exec", "eval", "compile", "__import__"}
+
+
 def dynamic_import_uses(tree: ast.AST) -> list[str]:
-    """`__import__(...)` 呼叫、`sys.modules` 存取（含 `from sys import modules`）。"""
+    """動態 import 的各種寫法（2026-09-26 兩輪稽核）。
+
+    擋：`__import__(...)`（含 `builtins.__import__`、`from builtins import __import__`）；
+    `sys.modules`（含 `import sys as s; s.modules`、`from sys import modules`）；
+    `getattr(任何物件, "modules" / "__import__" / ...)`；`exec(...)`、`eval(...)`、`compile(...)`。
+    `importlib`、`runpy`、`pkgutil` 三個模組本身在 `violations_for` 以 import 擋。
+    ⚠️ 只擋上列寫法；`sys.path.insert`、一般 `getattr(obj, "text")` 不擋（負控釘住）。
+    """
+    sys_aliases = {"sys"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "sys":
+                    sys_aliases.add(alias.asname or "sys")
     out = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id == "__import__":
@@ -95,11 +114,21 @@ def dynamic_import_uses(tree: ast.AST) -> list[str]:
         elif isinstance(node, ast.Attribute) and node.attr == "__import__":
             out.append("builtins.__import__")
         elif isinstance(node, ast.Attribute) and node.attr == "modules" \
-                and isinstance(node.value, ast.Name) and node.value.id == "sys":
-            out.append("sys.modules")
+                and isinstance(node.value, ast.Name) and node.value.id in sys_aliases:
+            out.append(f"{node.value.id}.modules")
         elif isinstance(node, ast.ImportFrom) and node.module == "sys" \
                 and any(a.name == "modules" for a in node.names):
             out.append("from sys import modules")
+        elif isinstance(node, ast.ImportFrom) and node.module == "builtins" \
+                and any(a.name in _DYNAMIC_CALLS for a in node.names):
+            out.append("from builtins import " + ",".join(a.name for a in node.names))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in _DYNAMIC_CALLS:
+                out.append(f"{node.func.id}(...)")
+            elif node.func.id == "getattr" and len(node.args) >= 2 \
+                    and isinstance(node.args[1], ast.Constant) \
+                    and node.args[1].value in _DYNAMIC_ATTRS:
+                out.append(f"getattr(..., {node.args[1].value!r})")
     return out
 
 
@@ -143,7 +172,7 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
             bad.append(f"正式路徑不得 import {module}")
         if len(parts) >= 2 and parts[0] == "ui_v2" and parts[1].startswith("app_"):
             bad.append(f"不得 import 進入點 {module}")
-        if root == "importlib":
+        if root in ("importlib", "runpy", "pkgutil"):
             bad.append(f"動態 import：{module}")
     if is_source and source_page and any(
             m == "services" for m in imported):
@@ -249,6 +278,20 @@ def _check(rel: str, code: str) -> list[str]:
     ("ui_v2/mkt/page.py", "import builtins\nm = builtins.__import__('x')"),
     ("ui_v2/mkt/page.py", "import sys\nm = sys.modules['ui_v2.mkt.source']"),  # (7) sys.modules
     ("ui_v2/mkt/page.py", "from sys import modules"),
+    # 2026-09-26 第二輪稽核登記 6
+    ("ui_v2/mkt/page.py", "import sys as s\nm = s.modules"),
+    ("ui_v2/mkt/logic.py", "import os, sys as _s\nx = _s.modules.get('a')"),
+    ("ui_v2/mkt/page.py", "import sys\nm = getattr(sys, 'modules')"),
+    ("ui_v2/mkt/page.py", "import builtins\nf = getattr(builtins, '__import__')"),
+    ("ui_v2/mkt/page.py", "from builtins import __import__"),
+    ("ui_v2/mkt/page.py", "from builtins import __import__ as imp\nimp('x')"),
+    ("ui_v2/mkt/page.py", "exec('import requests')"),
+    ("ui_v2/mkt/logic.py", "def f():\n    exec(compile('x=1', 'f', 'exec'))"),
+    ("ui_v2/mkt/page.py", "eval('__builtins__')"),
+    ("ui_v2/mkt/page.py", "import runpy"),
+    ("ui_v2/mkt/page.py", "from runpy import run_module"),
+    ("ui_v2/mkt/page.py", "import pkgutil\nm = pkgutil.resolve_name('ui_v2.mkt.source')"),
+    ("ui_v2/mkt/page.py", "from pkgutil import resolve_name"),
 ])
 def test_正控_每一種違規都被抓到(rel, code):
     assert _check(rel, code), (rel, code)
@@ -260,6 +303,10 @@ def test_正控_每一種違規都被抓到(rel, code):
     ("ui_v2/mkt/page.py", "from . import fixtures, logic, theme"),
     ("ui_v2/app_mkt.py", "from ui_v2.mkt import page"),
     ("ui_v2/app_mkt.py", "import sys\nsys.path.insert(0, 'x')"),     # sys 本身可用，只擋 modules
+    ("ui_v2/app_mkt.py", "import sys as s\ns.path.insert(0, 'x')"),     # 別名的 path 同樣可用
+    ("ui_v2/mkt/page.py", "x = getattr(obj, 'text', None)"),            # 一般 getattr 不擋
+    ("ui_v2/mkt/page.py", "modules = {}\nx = modules.get('a')"),        # 叫 modules 的一般變數不擋
+    ("ui_v2/mkt/page.py", "class A:\n    modules = 1\nA.modules"),     # 非 sys 的 .modules 不擋
     ("ui_v2/mkt/source.py", "import os\nimport streamlit as st\nfrom services.v2_tables import masking"),
 ])
 def test_負控_合規寫法不誤報(rel, code):

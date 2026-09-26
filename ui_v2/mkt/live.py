@@ -29,7 +29,7 @@ RETRY_DISABLED_REASON = "重新取數尚未接上"
 REASON_TEXT = {
     "fred_release_date": "原因：公布日尚未接上，暫不寫入",
     "ndc_no_release_date": "原因：來源不提供公布日",
-    "fx_obs_date_rule": "原因：觀測日切日規則待以真實資料驗證",
+    "fx_obs_date_rule": "原因：本指標規則未定，暫不顯示",  # 客戶 2026-09-26 裁示改白話
 }
 
 _CARD_CODES = ("MKT-1", "MKT-2", "MKT-3")
