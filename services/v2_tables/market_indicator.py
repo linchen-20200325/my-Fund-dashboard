@@ -20,7 +20,11 @@
   (2) 後者的 `attrs["fetched_at"]` 是它在未快取那一層轉換當下寫的時間，不是 L1 真正的取得時間；
   (3) 後者另疊一層 `st.cache_data`，與 49 §4.4「快取只在 L1 一層」相違。
 - `range_` 用 L1 預設的 `"2y"`（兩年日線，約 500 筆／鍵）。49 沒有訂區間；MKT-4 觀察窗由使用者
-  自填、上限不定，取兩年是為了讓常見觀察窗有資料可比，也與 L1 預設值共用同一個快取項。
+  自填、上限不定，取兩年是為了讓常見觀察窗有資料可比。
+  ⚠️ 快取不見得與其他呼叫端共用：`infra/cache.py::_ttl_cache` 的快取鍵是
+  `(args, tuple(sorted(kwargs.items())))`，只看呼叫時實際傳入的引數、不補預設值，所以位置參數
+  與關鍵字參數、有沒有明寫預設值，都會落在不同的快取鍵。本模組經 `fetch_yf_close_with_error`
+  以位置參數 `(ticker, "2y", "1d")` 呼叫 `fetch_yf_close`，只會與同樣三個位置參數的呼叫共用快取。
 
 **import 白名單**：本套件只 import 標準庫、L0（`shared`）、L1（`repositories`）與同套件，
 **另外允許 `pandas`**（處理 L1 回傳的 Series／Timestamp）。docs/v2/49 §3.5 的白名單描述尚未列
