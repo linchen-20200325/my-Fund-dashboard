@@ -211,12 +211,79 @@ def test_字串形式的NaN不是常數_照收():
     assert S.value_matches_kind('[1, "NaN"]', "list") is True
 
 
-def test_先strip再檢查_寫進去的是strip後的值(book):
-    out = S.save_setting_for_page("set_max_age_days", "  21 \n", "int", [SECRET])
+@pytest.mark.parametrize("value, kind", [("  21 \n", "int"), (" 0.5", "ratio"), ("2026-09-26 ", "date"),
+                                         (' ["a"]', "list"), ("1.5\t", "float")])
+def test_前後帶空白_一律型別不符_不寫_不靜默去掉(book, value, kind):
+    from ui_v2.set import logic
+    assert S.value_matches_kind(value, kind) is False and logic.value_matches_kind(value, kind) is False
+    out = S.save_setting_for_page("set_max_age_days", value, kind, [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+def test_寫進去的就是原值(book):
+    out = S.save_setting_for_page("set_max_age_days", "21", "int", [SECRET])
     assert out["status"] == "saved" and out["row"]["setting_value"] == "21"
-    assert S.load_user_settings([SECRET])["rows"]["set_max_age_days"]["setting_value"] == "21"
+    assert book.data("user_setting_log")[-1][:2] == ["set_max_age_days", "21"]
 
 
 def test_只有空白_不存(book):
     out = S.save_setting_for_page("set_max_age_days", "   ", "int", [SECRET])
     assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+# ═══════════════════════ 2026-09-26 客戶裁示：alo_basis 枚舉 ═══════════════════════
+
+
+def test_可選值寫死在L2_畫面那一份是同一份鏡像():
+    from ui_v2.set import logic
+    assert S.ENUM_SETTING_VALUES == {"alo_basis": ("成本", "市值")} and S.ENUM_KIND == "list"
+    assert logic.ENUM_SETTING_VALUES == S.ENUM_SETTING_VALUES and logic.ENUM_KIND == S.ENUM_KIND
+
+
+@pytest.mark.parametrize("value, ok", [("成本", True), ("市值", True), (" 成本\n", False), ("成本 ", False),
+                                       ("cost", False), ("mv", False), ('["成本"]', False), ("市值成本", False),
+                                       ("  ", False)])
+def test_L2與畫面_枚舉判定一致(value, ok):
+    from ui_v2.set import logic
+    assert logic.value_matches_setting("alo_basis", value, "list") is ok
+    if ok:
+        S.check_setting_value(value, "list", setting_key="alo_basis")
+    else:
+        with pytest.raises(S.ValueKindMismatch):
+            S.check_setting_value(value, "list", setting_key="alo_basis")
+
+
+def test_枚舉鍵_value_kind不是list一律不符(book):
+    out = S.save_setting_for_page("alo_basis", "成本", "int", [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+    from ui_v2.set import logic
+    assert logic.value_matches_setting("alo_basis", "成本", "int") is False
+
+
+def test_枚舉鍵_照存_清除也照存(book):
+    assert S.save_setting_for_page("alo_basis", "市值", "list", [SECRET])["status"] == "saved"
+    assert S.load_user_settings([SECRET])["rows"]["alo_basis"]["setting_value"] == "市值"
+    assert S.save_setting_for_page("alo_basis", None, "list", [SECRET])["status"] == "saved"
+    assert S.load_user_settings([SECRET])["rows"]["alo_basis"]["setting_value"] is None
+
+
+def test_非枚舉鍵的list照舊_JSON陣列():
+    S.check_setting_value('["a"]', "list", setting_key="alo_bucket_names")
+    with pytest.raises(S.ValueKindMismatch):
+        S.check_setting_value("成本", "list", setting_key="alo_bucket_names")
+
+
+
+@pytest.mark.parametrize("value, kind", [("[1e999]", "list"), ("[-1e999]", "rules"), ('[["a", 1e400]]', "list"),
+                                         ('[{"w": 1e999}]', "rules")])
+def test_溢位成inf的數字_兩份一律拒收_不寫(book, value, kind):
+    from ui_v2.set import logic
+    assert S.value_matches_kind(value, kind) is False and logic.value_matches_kind(value, kind) is False
+    out = S.save_setting_for_page("exp_watchlist", value, kind, [SECRET])
+    assert out["status"] == "kind_mismatch" and book.calls == []
+
+
+def test_大但有限的數字照收():
+    from ui_v2.set import logic
+    for value in ("[1e300]", '[["a", 0.5]]', '[{"w": 2}]'):
+        assert S.value_matches_kind(value, "list") and logic.value_matches_kind(value, "list"), value

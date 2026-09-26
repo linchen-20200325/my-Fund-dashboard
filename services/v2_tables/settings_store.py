@@ -51,6 +51,7 @@ fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記�
 from __future__ import annotations
 
 import json
+import math
 from datetime import date
 from typing import Callable, Optional
 
@@ -95,6 +96,12 @@ def load_user_settings(secret_values) -> dict:
     return store.load_user_settings(mask=masker(secret_values))
 
 
+# 枚舉型的鍵（客戶 2026-09-26 裁示；44 未改）：value_kind 為 `list`，值只能是下列其中之一。
+# **可選值的唯一真相源在這裡**；`ui_v2/set/logic.py::ENUM_SETTING_VALUES` 是鏡像（由測試比對）。
+ENUM_SETTING_VALUES = {"alo_basis": ("成本", "市值")}
+ENUM_KIND = "list"
+
+
 class ValueKindMismatch(ValueError):
     """`44` SET-4：輸入值與 `value_kind` 不符 → 不存檔。`code`：`kind_mismatch`／`kind_missing`。"""
 
@@ -120,7 +127,10 @@ def value_matches_kind(value: str, kind: str) -> bool:
     """
     if kind not in store.VALUE_KIND_VALUES:
         raise ValueError(f"value_kind {kind!r} 不在 {store.VALUE_KIND_VALUES} 之內")
-    text = value.strip()
+    if value != value.strip():
+        # 前後有空白一律判不符，不靜默去掉（2026-09-26 總管裁示，Fail Loud；44 SET-4 判準：輸入欄內容與存檔前逐字相同）。
+        return False
+    text = value
     if kind == "int":
         return _is_int_literal(text)
     if kind in ("float", "ratio"):
@@ -141,23 +151,43 @@ def value_matches_kind(value: str, kind: str) -> bool:
         parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
     except ValueError:
         return False
-    return isinstance(parsed, list)
+    return isinstance(parsed, list) and _all_finite(parsed)
 
 
 def _reject_constant(name):
     raise ValueError(f"不收 {name}")
 
 
-def check_setting_value(setting_value: Optional[str], value_kind: Optional[str]) -> None:
+def _all_finite(node) -> bool:
+    """解析後遞迴檢查：`[1e999]` 這類字面會溢位成 inf，`parse_constant` 攔不到（它只管 NaN／Infinity 字樣）。"""
+    if isinstance(node, float):
+        return math.isfinite(node)
+    if isinstance(node, list):
+        return all(_all_finite(item) for item in node)
+    if isinstance(node, dict):
+        return all(_all_finite(item) for item in node.values())
+    return True
+
+
+def check_setting_value(setting_value: Optional[str], value_kind: Optional[str], *,
+                        setting_key: Optional[str] = None) -> None:
     """存檔前的型別檢查（`44` SET-4：輸入值與 `value_kind` 不符 → 不存檔）。不符就 `ValueKindMismatch`。
 
     - `setting_value` 為 None（清除該鍵）：不判值，只要 `value_kind` 在值域內就放行。
-    - `value_kind` 為空或不在值域：不存（`44` 4.5 `value_kind` 不可空；`alo_basis` 的型別本頁未配，
-      登記 SET-GAP-型別本頁配）。
+    - `value_kind` 為空或不在值域：不存（`44` 4.5 `value_kind` 不可空）。
+    - 枚舉鍵（`ENUM_SETTING_VALUES`）：`value_kind` 須為 `list`，值只收可選值之一，其他一律型別不符。
     """
     if value_kind not in store.VALUE_KIND_VALUES:
         raise ValueKindMismatch(f"value_kind 未定（{value_kind!r}），不存檔", code="kind_missing")
+    if setting_key in ENUM_SETTING_VALUES and value_kind != ENUM_KIND:
+        raise ValueKindMismatch(f"{setting_key} 的 value_kind 須為 {ENUM_KIND}，不存檔", code="kind_mismatch")
     if setting_value is None:
+        return
+    if setting_key in ENUM_SETTING_VALUES:
+        if setting_value not in ENUM_SETTING_VALUES[setting_key]:
+            raise ValueKindMismatch(
+                f"setting_value 不在 {setting_key} 的可選值 {ENUM_SETTING_VALUES[setting_key]} 之內，不存檔",
+                code="kind_mismatch")
         return
     if not isinstance(setting_value, str) or setting_value.strip() == "" \
             or not value_matches_kind(setting_value, value_kind):
@@ -169,9 +199,8 @@ def save_user_setting(setting_key: str, setting_value: Optional[str], value_kind
                       secret_values) -> dict:
     """存一個鍵。**先檢查值與型別**（`check_setting_value`），不符就拋 `ValueKindMismatch`、
     不呼叫 L1（不寫、也不清快取 —— 沒有任何寫入發生）。相符才交 L1（L1 不論成敗都清快取）。"""
-    if isinstance(setting_value, str):
-        setting_value = setting_value.strip()   # 先 strip 再檢查；寫進去的也是 strip 後的值
-    check_setting_value(setting_value, value_kind)
+    # 寫進去的就是使用者輸入的原值，不做任何轉換；前後帶空白由型別檢查擋下（2026-09-26 總管裁示）。
+    check_setting_value(setting_value, value_kind, setting_key=setting_key)
     return store.save_user_setting(setting_key, setting_value, value_kind,
                                    mask=masker(secret_values))
 

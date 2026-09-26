@@ -125,7 +125,7 @@ def load_live() -> dict:
         "errors": errors,
         "save_errors": {},
         "save_inputs": {},
-        "spec": spec.dataset_spec(),
+        "spec": spec.dataset_spec(live=True),  # alo_basis 用實作層定的型別（客戶 2026-09-26 裁示）
     }
     notes = {
         "mask_token": masking.MASK,

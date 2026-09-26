@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -93,6 +94,9 @@ GAPS = {
     "SET-GAP-型別本頁配": (
         "44 定義了六種 value_kind，沒有寫哪一鍵是哪一種（原型 S-44）。每一鍵的型別是本頁配的；"
         "alo_basis 放空（同 ui_v2/alo 的登記）；alo_target_weights 與 alo_scenario_input 取 ui_v2/alo 的 list，拍板原型寫的是 rules。"
+        "已處理（2026-09-26，決策者：客戶裁示）：alo_basis 在實作層定為 list（枚舉，可選值「成本」「市值」，寫死在 L2 "
+        "services/v2_tables/settings_store.py::ENUM_SETTING_VALUES，本檔 ENUM_SETTING_VALUES 為同一份的鏡像），正式模式照此判定與存檔；"
+        "44 未改。示範模式的規格快照 alo_basis 仍放空（spec.py 的 IMPLEMENTATION_KINDS 只在正式模式套用），示範畫面因此一字不變。"
     ),
     "SET-GAP-型別缺": "某鍵的 value_kind 為空時（alo_basis），型別欄畫 ⬜，本頁不判它的值合不合型別。",
     "SET-GAP-型別判定規則": (
@@ -497,13 +501,38 @@ def _fail_node(message: str) -> dict:
 # ───────────────────────── user_setting ─────────────────────────
 
 
+# 枚舉型的鍵（客戶 2026-09-26 裁示；SET-GAP-型別本頁配）：value_kind 為 list，但值只能是下列其中之一。
+# 真相源是 L2 `services/v2_tables/settings_store.py::ENUM_SETTING_VALUES`（本套件不得 import L2，這裡是鏡像，
+# 由 tests/test_v2_tables_settings_store_page.py 比對兩份相同）。
+ENUM_SETTING_VALUES = {"alo_basis": ("成本", "市值")}
+ENUM_KIND = "list"
+
+
+def value_matches_setting(key, value: str, kind) -> bool:
+    """某一鍵的值合不合它的型別：枚舉鍵只收可選值之一（且 value_kind 須為 list）；其餘照 `value_matches_kind`。
+    `kind` 為 None 時照 SET-GAP-型別缺不判（示範模式的 alo_basis 就是這樣，畫面因此不變）。"""
+    if kind is not None and key in ENUM_SETTING_VALUES:
+        return kind == ENUM_KIND and value in ENUM_SETTING_VALUES[key]   # 逐字相同，前後帶空白不算
+    return value_matches_kind(value, kind)
+
+
+def kind_hint(key, kind) -> str:
+    """SET-GAP-型別說明文字：枚舉鍵寫出可選值，其餘照 KIND_HINTS。"""
+    if kind is not None and key in ENUM_SETTING_VALUES:
+        return "要輸入其中之一：" + "／".join(ENUM_SETTING_VALUES[key])
+    return KIND_HINTS[kind]
+
+
 def value_matches_kind(value: str, kind) -> bool:
     """SET-GAP-型別判定規則。`kind` 為 `None` 時不判（SET-GAP-型別缺），回真。"""
     if kind is None:
         return True
     if kind not in VALUE_KINDS:
         raise ValueError(f"value_kind {kind!r} 不在 `44` 4.5 那六種之內")
-    text = value.strip()
+    if value != value.strip():
+        # 前後有空白一律判不符，不靜默去掉（2026-09-26 總管裁示，Fail Loud；44 SET-4 判準要求輸入欄內容與存檔前逐字相同）。
+        return False
+    text = value
     # 數字一律只收 ASCII 0-9（`re` 的 `\d` 會收全形與其他文字的數字；2026-09-26 總管裁示收緊，
     # 與 L2 `services/v2_tables/settings_store.py::value_matches_kind` 同步）。
     if kind == "int":
@@ -524,11 +553,22 @@ def value_matches_kind(value: str, kind) -> bool:
         parsed = json.loads(text, parse_constant=_reject_constant)  # NaN／Infinity 不是合法值
     except ValueError:
         return False
-    return isinstance(parsed, list)
+    return isinstance(parsed, list) and _all_finite(parsed)
 
 
 def _reject_constant(name):
     raise ValueError(f"不收 {name}")
+
+
+def _all_finite(node) -> bool:
+    """解析後遞迴檢查：`[1e999]` 這類字面會溢位成 inf，`parse_constant` 攔不到（它只管 NaN／Infinity 字樣）。"""
+    if isinstance(node, float):
+        return math.isfinite(node)
+    if isinstance(node, list):
+        return all(_all_finite(item) for item in node)
+    if isinstance(node, dict):
+        return all(_all_finite(item) for item in node.values())
+    return True
 
 
 def settings_failure(dataset):
@@ -788,11 +828,11 @@ def _build_set0(set1, set2) -> dict:
 # ───────────────────────── SET-3 ─────────────────────────
 
 
-def _value_cell(value, kind):
+def _value_cell(key, value, kind):
     """回 (目前值那一格的字串, 第二行原始字面值 或 "")。"""
     if value is None:
         return TEXT_UNSET, ""
-    if not value_matches_kind(value, kind):
+    if not value_matches_setting(key, value, kind):
         # SET-GAP-原始字面值位置
         return TEXT_NA_BAD_KIND, "原始字面值：" + value
     return value, ""
@@ -820,7 +860,7 @@ def _build_set3(dataset, known_keys) -> dict:
         return {**base, "_tone": "紅", "_rows": [], "placeholder": _fail_node(failure)}
     rows = []
     for row in setting_rows(dataset, known_keys):
-        value_text, raw_text = _value_cell(row["setting_value"], row["value_kind"])
+        value_text, raw_text = _value_cell(row["setting_key"], row["setting_value"], row["value_kind"])
         rows.append(
             {
                 "_key": row["setting_key"],
@@ -855,9 +895,9 @@ def _build_set4(dataset, known_keys, key_used_by) -> dict:
         # 44 逐字「該欄的當下輸入留在畫面上不清掉」—— 失敗的那一鍵畫的是當下輸入，不是已存值。
         current = save_inputs.get(key, stored)
         hint_lines = []
-        if current is not None and current != "" and not value_matches_kind(current, kind):
+        if current is not None and current != "" and not value_matches_setting(key, current, kind):
             # SET-GAP-型別說明文字。句尾照拍板原型；其中「不存檔，SET-3 的值不變」是 44 SET-4 空狀態欄的字。
-            hint_lines.append(f"型別說明：這個鍵的 value_kind 是 {kind}，{KIND_HINTS[kind]}。{TEXT_NOT_SAVED}")
+            hint_lines.append(f"型別說明：這個鍵的 value_kind 是 {kind}，{kind_hint(key, kind)}。{TEXT_NOT_SAVED}")
         fail_lines = save_fail_box(save_errors[key]) if save_errors.get(key) else []
         # `44` 4.5：未設定的鍵畫面顯示 ⬜ 未設定，不顯示任何候選值（輸入欄本身留空）。
         unset_lines = [TEXT_UNSET] if stored is None and key not in save_inputs else []
@@ -867,7 +907,7 @@ def _build_set4(dataset, known_keys, key_used_by) -> dict:
                 "name": key,
                 "label": f"{key}（{kind or '⬜'}）",  # SET-GAP-輸入欄型態
                 "_kind": kind,
-                "_multiline": kind in MULTILINE_KINDS,
+                "_multiline": kind in MULTILINE_KINDS and key not in ENUM_SETTING_VALUES,  # 枚舉只填一個詞
                 "_value": stored,
                 "value_text": "" if current is None else current,
                 "used_by_text": _used_by_text(key, key_used_by),

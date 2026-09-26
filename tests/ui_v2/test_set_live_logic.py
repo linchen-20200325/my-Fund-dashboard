@@ -498,7 +498,7 @@ def _live_models(env, monkeypatch):
     _stub_fetch(monkeypatch, None, f"api_key={KEY} refused")
     source.refetch("市場指標")
     results = {"set_max_age_days": {**source.save_setting("set_max_age_days", "x", "int"), "attempted": "x"},
-               "alo_basis": {**source.save_setting("alo_basis", "cost", None), "attempted": "cost"}}
+               "alo_basis": {**source.save_setting("alo_basis", "cost", "list"), "attempted": "cost"}}
     out.append(_page(results)[1])
     env.cfg.pop("SETTINGS_SHEET_ID")
     R.clear_cache()
@@ -578,3 +578,81 @@ def test_同一秒平手_燈照失敗那一筆轉紅():
                                  message="boom")]
     model = logic.build_page_model(dataset)
     assert _b(model, "SET-0")["text"] == "失敗的來源層級：市場指標"
+
+
+# ═══════════════════════ 2026-09-26 客戶裁示：alo_basis 定為 list（枚舉：成本／市值） ═══════════════════════
+
+
+def _field(model, key):
+    return {f["name"]: f for f in _b(model, "SET-4")["inputs"]}[key]
+
+
+def test_alo_basis_正式模式型別為list_單行輸入欄(env):
+    _d, model = _page()
+    field = _field(model, "alo_basis")
+    assert field["_kind"] == "list" and field["_multiline"] is False and field["label"] == "alo_basis（list）"
+    row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
+    assert row["kind_text"] == "list"
+
+
+@pytest.mark.parametrize("value", ["成本", "市值"])
+def test_alo_basis_兩個可選值照存_讀回照印(env, value):
+    result = _save(env, "alo_basis", value, "list")
+    assert result["status"] == "saved" and result["row"]["setting_value"] == value
+    _d, model = _page({"alo_basis": result})
+    assert _field(model, "alo_basis")["saved_lines"] == [live.TEXT_SAVED]
+    row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
+    assert row["value_text"] == value.strip() and row["raw_text"] == ""
+
+
+@pytest.mark.parametrize("value", ["cost", "mv", '["成本"]', "成本、市值", "成 本", "市值 成本", " 市值", "成本\n"])
+def test_alo_basis_其他值一律型別不符_不寫_畫可選值說明(env, value):
+    result = _save(env, "alo_basis", value, "list")
+    assert result["status"] == "kind_mismatch"
+    assert "user_setting_log" not in env.tabs
+    _d, model = _page({"alo_basis": result})
+    assert _field(model, "alo_basis")["hint_lines"] == [
+        "型別說明：這個鍵的 value_kind 是 list，要輸入其中之一：成本／市值。" + logic.TEXT_NOT_SAVED]
+
+
+def test_alo_basis_試算表上已存的舊值不在可選值內_SET3照印型別不符(env):
+    from _fake_settings_sheet import FakeWorksheet
+    head = [n for n, _k, _nl in R.USER_SETTING_SPEC]
+    env.tabs["user_setting_log"] = FakeWorksheet(env, "user_setting_log", [
+        head, ["alo_basis", "cost", "list", "2026-09-20T00:00:00Z"]])
+    _d, model = _page()
+    row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
+    assert row["value_text"] == logic.TEXT_NA_BAD_KIND and row["raw_text"] == "原始字面值：cost"
+
+
+def test_示範模式_alo_basis仍放空_畫面不變():
+    model = logic.build_page_model(fixtures.scenario("ok"))
+    row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
+    assert row["kind_text"] == "⬜" and row["value_text"] == "cost"
+    assert dict(fixtures.SPEC_SETTING_KEYS)["alo_basis"] is None
+
+
+def test_正式模式不再有型別未定的鍵():
+    from ui_v2.set import spec
+    kinds = dict(spec.dataset_spec(live=True)["setting_keys"])
+    assert None not in kinds.values() and kinds["alo_basis"] == "list"
+
+
+
+def test_存檔_比對原值不strip_前後帶空白算改過_只有空白算清除():
+    inputs = [{"name": "a", "_value": "1", "_kind": "int"}, {"name": "b", "_value": "2", "_kind": "int"},
+              {"name": "c", "_value": "3", "_kind": "int"}, {"name": "d", "_value": "4", "_kind": "int"}]
+    got = live.changed_settings(inputs, {"a": " 1 \n", "b": "\t3 ", "c": "   ", "d": "4"})
+    assert got == [("a", " 1 \n", "int"), ("b", "\t3 ", "int"), ("c", None, "int")]
+
+
+def test_存檔_前後帶空白_型別不符不存_型別說明照既有模板(env):
+    S.save_setting_for_page("set_max_age_days", "14", "int", [])
+    result = _save(env, "set_max_age_days", " 30 ", "int")
+    assert result["status"] == "kind_mismatch"
+    assert env.data("user_setting_log")[-1][:2] == ["set_max_age_days", "14"]      # 沒有多寫
+    _d, model = _page({"set_max_age_days": result})
+    field = _field(model, "set_max_age_days")
+    assert field["value_text"] == " 30 "                                          # 輸入欄內容逐字留著
+    assert field["hint_lines"] == [
+        f"型別說明：這個鍵的 value_kind 是 int，{logic.KIND_HINTS['int']}。{logic.TEXT_NOT_SAVED}"]

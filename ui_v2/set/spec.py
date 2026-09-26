@@ -162,6 +162,8 @@ SPEC_BLOCK_SOURCES = (
 # `44` 沒有把鍵列成一張表（登記 SET-GAP-鍵清單）；下面十七個是 `44` 全文以反引號寫出的 `set_`／`mkt_`／`hld_`／
 # `exp_`／`alo_` 開頭的鍵名。`value_kind` 是本頁配的（登記 SET-GAP-型別本頁配），`44` 沒有寫哪一鍵是哪一種。
 # `alo_basis` 放 `None`：它存的是二選一，`44` 4.5 那六種對不上（同 ui_v2/alo 的登記）。
+# ⚠️ 2026-09-26 起 `alo_basis` 在實作層定為 `list`（枚舉），見下方 `IMPLEMENTATION_KINDS`；本表（示範模式讀的那一份）
+#    刻意不改，示範畫面因此一字不變。
 SPEC_SETTING_KEYS = (
     ("alo_basis", None),
     ("alo_bucket_names", "list"),
@@ -204,11 +206,20 @@ SPEC_KEY_USED_BY = (
 )
 
 
-def dataset_spec(extra_sources=()) -> dict:
-    """`dataset["spec"]` 的形狀（`logic.build_page_model` 讀這一份）。"""
+# 實作層定型別，客戶 2026-09-26 裁示；44 未改。
+# `alo_basis`：value_kind 為 `list`（枚舉），可選值「成本」「市值」寫死在 L2
+# `services/v2_tables/settings_store.py::ENUM_SETTING_VALUES`。只在正式模式套用（`dataset_spec(live=True)`）。
+IMPLEMENTATION_KINDS = {"alo_basis": "list"}
+
+
+def dataset_spec(extra_sources=(), *, live=False) -> dict:
+    """`dataset["spec"]` 的形狀（`logic.build_page_model` 讀這一份）。`live=True` 時套用 `IMPLEMENTATION_KINDS`。"""
+    keys = SPEC_SETTING_KEYS
+    if live:
+        keys = tuple((key, IMPLEMENTATION_KINDS.get(key, kind)) for key, kind in SPEC_SETTING_KEYS)
     return {
         "tables": SPEC_TABLES,
         "block_sources": SPEC_BLOCK_SOURCES + tuple(extra_sources),
-        "setting_keys": SPEC_SETTING_KEYS,
+        "setting_keys": keys,
         "key_used_by": SPEC_KEY_USED_BY,
     }

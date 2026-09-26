@@ -62,10 +62,6 @@ TEXT_PK_CONFLICT = "⚠ 主鍵矛盾 {n} 組，未採用"
 TEXT_REVISED_MISMATCH = "⚠ is_revised 與重算不符 {n} 列"
 TEXT_DUPLICATE_LOG = "⚠ 重複紀錄 {n} 筆"
 
-# 型別未定的鍵（`alo_basis`，SET-GAP-型別本頁配）存檔時的說明。⚠️ 待客戶核准：草稿沒有這一句，
-# 由本組以既有的型別說明體例組成（2026-09-26 總管裁示：暫緩，先保留現狀、抽成常數）。
-TEXT_KIND_MISSING = "型別說明：這個鍵的 value_kind 未定。" + logic.TEXT_NOT_SAVED
-
 # 存檔失敗但「根本沒寫」的錯誤碼：這些不印「可能其實已寫入」那一行（2026-09-26 總管裁示）。
 _NOT_WRITTEN_CODES = ("cooling", "not_configured", "no_service_account", "header_mismatch")
 
@@ -216,7 +212,8 @@ def changed_settings(inputs, current_values) -> list:
         if key not in current_values:
             continue
         raw = current_values[key]
-        value = None if raw is None or raw.strip() == "" else raw.strip()   # 寫進去的是 strip 後的值
+        # 只有空白或留空 → 清除這個鍵；其餘照原值比對、照原值寫（前後帶空白由型別檢查擋下，不靜默去掉）。
+        value = None if raw is None or raw.strip() == "" else raw
         if value != field["_value"]:
             out.append((key, value, field["_kind"]))
     return out
@@ -443,8 +440,8 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         elif result["status"] == "failed":
             field["fail_lines"] = _save_fail_lines(result, token)
         elif result["status"] == "kind_missing":
-            # `44` SET-4：不符就不存檔；型別未定的鍵（SET-GAP-型別本頁配）同樣不存，說明照型別說明的體例。
-            field["hint_lines"] = [TEXT_KIND_MISSING]
+            # 客戶 2026-09-26 裁示後每一鍵都有型別（alo_basis 定為 list 枚舉）；走到這裡是本頁的 bug，當場炸（§1）。
+            raise ValueError(f"{key} 的 value_kind 未定，正式模式不該發生（{result.get('message')}）")
         # kind_mismatch：型別說明由 logic 依當下輸入畫出（`dataset["save_inputs"]`），這裡不另加。
     if not set4["inputs"]:
         # 讀不到設定、畫面上沒有輸入欄（SET-GAP-失敗無輸入欄）：上游失敗後存檔與讀取共用冷卻，所以正式模式下
