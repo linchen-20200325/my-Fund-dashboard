@@ -227,13 +227,23 @@ def test_標頭不符_讀寫都停_不改寫標頭(env):
     assert book.data("user_setting_log")[0] == wrong
 
 
-def test_既有的空分頁_不代寫標頭(env):
+def test_既有的空分頁_零列_讀取是尚無資料_寫入時補一次標頭再追加(env):
+    """回修第 3 輪改寫（總管 2026-09-26 更正）。
+
+    舊意圖（原測試名「既有的空分頁_不代寫標頭」）：客戶建的分頁，本檔一律不代寫標頭，
+    以免改寫標頭把既有資料每一欄的語意換掉。那個理由只在「分頁已有列」時成立 ——
+    **零列**時寫標頭不改變任何既有資料的語意，而拒寫只會讓這張分頁永遠卡在標頭不符。
+    現行：零列 → 寫一次標頭（不重試）再追加；已有任何一列但標頭不符 → 照舊停下
+    （見 `test_標頭不符_讀寫都停_不改寫標頭`）。
+    """
     book, _c, _s = env
     _put(book, "fetch_log_open", [])
-    with pytest.raises(R.SettingsSheetError) as err:
-        R.open_fetch_log("市場指標", mask=mask)
-    assert err.value.code == "header_mismatch"
-    assert book.writes() == []
+    _put(book, "fetch_log", [])
+    assert R.load_fetch_log(mask=mask)["rows"] == []
+    opened = R.open_fetch_log("市場指標", mask=mask)
+    assert book.data("fetch_log_open") == [FO_HEAD, [opened["log_id"], "市場指標",
+                                                    opened["started_at"]]]
+    assert [c[0] for c in book.writes()] == ["append_rows", "append_rows"]
 
 
 def test_標頭尾端空儲存格不算不符(env):
@@ -577,28 +587,64 @@ def test_不合格的輸入列是呼叫端的bug_當場炸且不寫(env):
 
 # ═══════════════════════ 回修第 2 輪 ═══════════════════════
 
-def test_建分頁後寫標頭失敗_刪掉剛建的分頁_不重試(env):
+def test_寫標頭失敗_不重試_不刪分頁_下次再補(env):
+    """回修第 3 輪：上一輪的「寫標頭失敗就刪分頁」已撤銷（違反 `50` 第 6 節不刪分頁，
+    且會把另一個寫入者剛追加的列一起刪掉）。"""
     book, _c, _s = env
     book.fail_next("append_rows", ConnectionError("reset"), title="user_setting_log")
     with pytest.raises(R.SettingsSheetError) as err:
         R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
     assert err.value.code == "api"
-    assert "user_setting_log" not in book.tabs
-    assert [c[0] for c in book.writes()] == ["add_worksheet", "append_rows", "del_worksheet"]
+    assert [c[0] for c in book.writes()] == ["add_worksheet", "append_rows"]   # 標頭只試一次
+    assert "user_setting_log" in book.tabs and book.data("user_setting_log") == []
     SB.reset_all()
-    R.save_user_setting("mkt_window_days", "90", "int", mask=mask)   # 下一次可以重新建
-    assert book.data("user_setting_log")[0] == US_HEAD
+    R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
+    assert book.data("user_setting_log") == [US_HEAD, ["mkt_window_days", "90", "int",
+                                                       "2026-09-26T03:00:00Z"]]
 
 
-def test_寫標頭失敗且刪分頁也失敗_專屬錯誤碼_要求手動刪(env):
+def test_寫標頭吃到429_登記冷卻(env):
     book, _c, _s = env
-    book.fail_next("append_rows", ConnectionError(f"reset {SECRET}"), title="fetch_log_open")
-    book.fail_next("del_worksheet", ConnectionError("nope"))
+    _put(book, "fetch_log_open", [])
+    book.fail_next("append_rows", _quota_error(), title="fetch_log_open")
     with pytest.raises(R.SettingsSheetError) as err:
         R.open_fetch_log("市場指標", mask=mask)
-    assert err.value.code == "header_init_failed"
-    assert "手動刪除分頁 fetch_log_open" in str(err.value)
-    assert SECRET not in str(err.value) and MASK in str(err.value)
+    assert err.value.code == "api"
+    assert [s["source"] for s in SB.get_backoff_state()] == [GR.quota_key("sa")]
+    calls = len(book.calls)
+    with pytest.raises(R.SettingsSheetError) as err2:
+        R.open_fetch_log("市場指標", mask=mask)
+    assert err2.value.code == "cooling" and len(book.calls) == calls
+
+
+def test_標頭已送達但回報失敗_另一寫入者已追加_資料不消失_標頭不重複(env):
+    book, _c, _s = env
+    _put(book, "user_setting_log", [])
+    other = ["alo_target_weights", "[]", "list", "2026-09-26T02:59:59Z"]
+
+    book.fail_next("append_rows", ConnectionError("reset after send"), title="user_setting_log")
+    # 標頭那一次追加：已送達試算表、但回報失敗；回報之前另一個寫入者已看到標頭並追加一列。
+    orig = book.pop_failure
+
+    def pop(method, title=None):
+        got = orig(method, title)
+        if got is not None and method == "append_rows":
+            book.tabs["user_setting_log"].rows.append(list(US_HEAD))  # 標頭已送達
+            book.tabs["user_setting_log"].rows.append(list(other))    # 另一寫入者追加
+            return (False, got[1])
+        return got
+    book.pop_failure = pop
+    with pytest.raises(R.SettingsSheetError):
+        R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
+    book.pop_failure = orig
+    SB.reset_all()
+    R.save_user_setting("mkt_window_days", "90", "int", mask=mask)
+    data = book.data("user_setting_log")
+    assert data.count(US_HEAD) == 1 and data[0] == US_HEAD
+    assert other in data and data[-1][0] == "mkt_window_days"
+    rows = R.load_user_settings(mask=mask)["rows"]
+    assert set(rows) == {"alo_target_weights", "mkt_window_days"}
+    assert "del_worksheet" not in [c[0] for c in book.calls]
 
 
 def test_快取世代_讀取期間被清快取就不存(env):

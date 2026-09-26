@@ -139,13 +139,20 @@ def test_取數回空且L1沒給原因_記ok_row_count為0(book, monkeypatch):
     assert out["table"]["errors"] == {"vol_index": mi.EMPTY_WITHOUT_REASON}
     assert book.data("fetch_log")[1][4:] == ["ok", "0", ""]
     assert out["persist"]["ok"] is True
+    # 回修第 3 輪 6：回空與真錯誤分開列；真錯誤那一份就是 fetch_log.message 的字串
+    assert out["persist"]["empty"] == {"vol_index": mi.EMPTY_WITHOUT_REASON}
+    assert out["persist"]["masked_errors"] == {}
 
 
 def test_取數回空但L1有錯誤原文_記failed(book, monkeypatch):
     _stub(monkeypatch, None, "HTTPError: 500 upstream")
-    S.run_market_indicator_fetch([SECRET])
+    out = S.run_market_indicator_fetch([SECRET])
+    assert out["persist"]["empty"] == {}
+    assert out["persist"]["masked_errors"] == {"vol_index": "HTTPError: 500 upstream"}
     log = book.data("fetch_log")[1]
     assert log[4] == "failed" and log[6] == "vol_index: HTTPError: 500 upstream"
+    shown = "\n".join(f"{k}: {v}" for k, v in out["persist"]["masked_errors"].items())
+    assert shown == log[6]              # 畫面與 fetch_log 同一份字串
 
 
 def test_masker拒收字串():

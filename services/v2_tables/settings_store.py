@@ -98,7 +98,7 @@ class MarketIndicatorSheetSink:
         self.persist = {"ok": False, "stage": "not_started", "message": None,
                         "error_code": None, "log_id": None, "fetch_log": None,
                         "appended": 0, "already_present": 0, "conflicts": [],
-                        "masked_errors": {}}
+                        "masked_errors": {}, "empty": {}}
 
     def _fail(self, stage: str, exc: store.SettingsSheetError) -> None:
         self.persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
@@ -113,18 +113,26 @@ class MarketIndicatorSheetSink:
         return True
 
     def __call__(self, table: dict) -> None:
-        masked = {k: self._mask(str(v)) for k, v in table["errors"].items()}
+        fetched = table.get("fetched", {})
+        # 回修第 3 輪 6：「來源回傳空值、原因未提供」（`44` SET-5 的回空）與真錯誤分開列。
+        # `masked_errors` 只放真錯誤，它們就是寫進 `fetch_log.message` 的那幾段字串（同一份）；
+        # 回空放 `empty`（該次 `fetch_log` 記 ok、message 為空，畫面自行顯示「回應為空」）。
+        empty, masked = {}, {}
+        for key, raw in table["errors"].items():
+            text = self._mask(str(raw))
+            if raw == mi.EMPTY_WITHOUT_REASON and fetched.get(key, 0) == 0:
+                empty[key] = text
+            else:
+                masked[key] = text
         self.persist["masked_errors"] = masked
+        self.persist["empty"] = empty
         if self.opened is None:
             return  # begin 失敗或沒呼叫：不寫任何東西（persist 已記原因）
-        fetched = table.get("fetched", {})
         rows_by_key: dict = {}
         for row in table["rows"]:
             rows_by_key[row["indicator_key"]] = rows_by_key.get(row["indicator_key"], 0) + 1
         reasons = []
-        for key, text in masked.items():
-            if table["errors"][key] == mi.EMPTY_WITHOUT_REASON and fetched.get(key, 0) == 0:
-                continue          # `44` SET-5：L1 沒給原因的空 → 不算失敗
+        for key, text in masked.items():   # `empty` 不在這裡：`44` SET-5，L1 沒給原因的空不算失敗
             reasons.append(f"{key}: {text}")
         for key, count in fetched.items():
             if count > 0 and rows_by_key.get(key, 0) == 0 and key not in table["errors"]:
@@ -167,7 +175,8 @@ def run_market_indicator_fetch(secret_values, *,
     """set 頁「取數」：寫 `fetch_log_open` → 取數並寫表 → 寫 `fetch_log`。
 
     回傳 `{"table": build 的回傳（錯誤原文未遮）, "persist": sink.persist}`。
-    畫面顯示錯誤請用 `persist["masked_errors"]`（與 `fetch_log.message` 同一份遮蔽後字串）。
+    畫面顯示錯誤請用 `persist["masked_errors"]`（與 `fetch_log.message` 同一份遮蔽後字串）；
+    回空（`44` SET-5）另列在 `persist["empty"]`，不是錯誤。
     `fetch_log_open` 寫不進去時仍照常取數（`50` 第 8 節：結果照常顯示），只是不寫表。
     """
     sink = MarketIndicatorSheetSink(secret_values)

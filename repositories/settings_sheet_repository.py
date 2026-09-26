@@ -15,11 +15,12 @@
 - 第 5 節：`user_setting_log` 每個鍵取**最後一列**（依列號）；`market_indicator` 讀取端依主鍵去重、
   主鍵矛盾整組不採用、`is_revised` 以列集合重算；`fetch_log` 同一 `log_id` 取第一列並計數，
   與 `fetch_log_open` 合併出「中斷」列。
-- 第 6 節：只做兩種寫入 —— `append_rows` 與「分頁剛由本檔建立時寫一次標頭」。
+- 第 6 節：只做兩種寫入 —— `append_rows` 與「分頁完全零列時寫一次標頭」（含本檔剛建的分頁與
+  客戶自己建的空分頁；回修第 3 輪）。**不刪分頁、不清除、不改寫既有列**。
   `user_setting_log` 的追加**不重試**；`market_indicator`、`fetch_log`、`fetch_log_open` 的追加
   以 `infra.gspread_retry.with_gspread_retry` 重試。
 - 第 7.1 節：每次讀寫都先比對第 1 列標頭，不符 → `SettingsSheetError(code="header_mismatch")`，
-  該分頁不讀不寫，**不自動改寫標頭**。
+  該分頁不讀不寫，**不自動改寫標頭**。唯一例外：分頁完全零列時寫一次標頭（不重試）。
 - 第 8 節：冷卻沿用 `infra.gspread_retry` 的 `should_skip_gspread`／`record_gspread_failure`／
   `record_gspread_success`（actor 固定 `"sa"`）。
 - 第 9.2 節：讀取端 60 秒手動快取（模組層 dict），**只快取成功的讀取**；
@@ -421,45 +422,39 @@ def _check_header(name: str, values, *, mask: Mask) -> None:
 
 
 def _worksheet_for_append(spreadsheet, name: str, tabs: dict, *, mask: Mask):
-    """寫入前取分頁：已存在 → 比對標頭；不存在 → 建立並寫一次標頭（`50` 7.1）。"""
+    """寫入前取分頁（`50` 7.1，2026-09-26 回修第 3 輪改寫）。
+
+    - 分頁**有任何一列**：比對標頭，不符就停（`header_mismatch`），不改寫。
+    - 分頁存在但**完全零列**（連標頭都沒有；客戶自己建的空分頁也算）：寫一次標頭，再照常追加。
+    - 分頁不存在：建立後同上寫一次標頭。
+    標頭寫入**不重試**、**失敗不刪分頁**（`50` 第 6 節：不刪分頁）；失敗原例外往上拋，由 `_run`
+    轉成 `code="api"` 並照常 `record_gspread_failure`（含 429 → 憑證鍵冷卻）。
+    零列時寫標頭不改變任何既有資料的語意，所以 7.1「不代寫標頭」的理由在這裡不成立；
+    已有資料時改寫標頭會把每一欄的語意換掉，所以那種情形照舊停下。
+    ⚠️ 已知競態（登記，不處理）：兩個寫入者**同時**看到零列、各寫一次標頭 → 第 2 列會是一列
+    與標頭相同的字串列；讀取端把它當格式不符的列計數、不採用，不會遺失資料。
+    """
     ws, values = tabs[name]
-    if ws is not None:
+    if ws is None:
+        header = [n for n, _k, _nl in TAB_SPECS[name]]
+        add_error = None
+        try:
+            ws = spreadsheet.add_worksheet(title=name, rows=100, cols=len(header))
+            values = []
+        except Exception as exc:  # noqa: BLE001 —— 可能是別的行程剛建好；重讀後再判，判不出就拋原例外
+            add_error = exc
+        if add_error is not None:
+            again = _read_tabs(spreadsheet, [name])
+            if again[name][0] is None:
+                raise add_error
+            del add_error
+            ws, values = again[name]
+    if values:
         _check_header(name, values, mask=mask)
         return ws
     header = [n for n, _k, _nl in TAB_SPECS[name]]
-    add_error = None
-    try:
-        ws = spreadsheet.add_worksheet(title=name, rows=100, cols=len(header))
-    except Exception as exc:  # noqa: BLE001 —— 可能是別的行程剛建好；重讀後再判，判不出就拋原例外
-        add_error = exc
-    if add_error is not None:
-        again = _read_tabs(spreadsheet, [name])
-        if again[name][0] is None:
-            raise add_error
-        del add_error
-        _check_header(name, again[name][1], mask=mask)
-        return again[name][0]
-    # 回修第 2 輪必修 2：寫標頭**不重試**；失敗就刪掉本次剛建的分頁，
-    # 否則留下一張「既有的空分頁」—— 依 `50` 7.1 本檔不代寫標頭，之後每次寫入都會卡在標頭不符。
-    header_error = None
-    try:
-        ws.append_rows([header], value_input_option="RAW", insert_data_option="INSERT_ROWS")
-    except Exception as exc:  # noqa: BLE001 —— 下面照實處理，不吞
-        header_error = exc
-    if header_error is None:
-        return ws
-    delete_error = None
-    try:
-        spreadsheet.del_worksheet(ws)
-    except Exception as exc:  # noqa: BLE001
-        delete_error = exc
-    if delete_error is None:
-        raise header_error      # 由 `_run` 轉成 code="api"（含登記冷卻）
-    text = (f"分頁 {name} 剛建立、寫標頭失敗（{type(header_error).__name__}: {header_error}），"
-            f"刪除該分頁也失敗（{type(delete_error).__name__}: {delete_error}）。"
-            f"請到試算表手動刪除分頁 {name} 後再試；在那之前本分頁不讀不寫（標頭不符）。")
-    del header_error, delete_error
-    raise SettingsSheetError(mask(text), code="header_init_failed", details={"tab": name})
+    ws.append_rows([header], value_input_option="RAW", insert_data_option="INSERT_ROWS")
+    return ws
 
 
 def _append(ws, rows: list, *, retry: bool) -> None:
@@ -516,7 +511,8 @@ def _cached_read(what: str, names, reducer: Callable, *, mask: Mask) -> dict:
     def op(spreadsheet):
         tabs = _read_tabs(spreadsheet, names)
         for name in names:
-            if tabs[name][0] is not None:
+            # 零列的分頁（連標頭都沒有）＝尚無資料；寫入時才補標頭（回修第 3 輪）。
+            if tabs[name][0] is not None and tabs[name][1]:
                 _check_header(name, tabs[name][1], mask=mask)
         return tabs
 
@@ -815,7 +811,7 @@ def append_market_indicator(rows: list, *, mask: Mask) -> dict:
     def op(spreadsheet):
         tabs = _read_tabs(spreadsheet, [TAB_MARKET_INDICATOR])
         ws, values = tabs[TAB_MARKET_INDICATOR]
-        if ws is not None:
+        if ws is not None and values:
             _check_header(TAB_MARKET_INDICATOR, values, mask=mask)
             existing, _bad, _blank = _parse_rows(MARKET_INDICATOR_SPEC, values[1:])
         else:
