@@ -20,6 +20,47 @@ from shared.regime_fit import (
 
 _EMOJI = "🔵🟢🟡🔴⬜⚪🟠🟦 "
 
+# 段落形狀門檻:公開說明書長描述 ≠ 分類標籤。縱深防禦 —— `category` 不只一個生產者
+# (MoneyDJ rows_map 三處、FundClear FundType…),任一處漏掉清洗,子字串比對就會在
+# 一整段法律文字裡撿到最特定的關鍵字(如「商品ETF」)而判錯桶。
+#
+# ⚠️ 刻意**不沿用** `_pick_fund_category` 的 15:那個 15 回答的是「投資標的 vs 基金類型
+# 哪一欄像標籤」,選錯只是退回另一欄(可回復);本處超標代表**拒絕分類**(⬜ 無法判定),
+# 是不可回復的資訊損失。**同一個數字,錯誤成本不同 ⇒ 門檻不該相同。**
+#
+# 實測(量測日 2026-09-14,語料 = repo 測試 AST 抽出 13 + snap.json 實際值 + 對抗性真實
+# 類別名,共 32 個;毒 = snap.json 4 筆):
+#   最長合法標籤 24 字「全球區塊鏈及金融科技相關產業股票證券投資信託基金」
+#   最短毒段落  266 字(ACCP138)
+#   → 15 誤殺 4/32;40 誤殺 0/32、攔截 4/4,落在 24~266 的空帶內。
+#
+# ⚠️ **兩側的餘裕不對稱,不要讀成「兩邊都很寬」**(2026-09-14 第二輪回修就地更正;
+#    舊表述寫「兩側皆有餘裕」,**高側成立、低側撐不住**):
+#      高側(毒)  40 → 266,**226 字的餘裕**;
+#      低側(合法)24 → 40,**只有 15 字**。而稽核用 repo 內既有詞彙就構造出 **36 / 39 字**
+#      的合理類別名 —— **距離門檻只差 1**。那兩筆是**構造的、不是語料裡觀察到的**,
+#      故**不是反例**;它要說的是:**語料只有 32 個名字,窄到撐不起「低側也有餘裕」這句話。**
+#    ⇒ 低側的保護**不靠餘裕,靠測試**:門檻必須 > `_LEGIT_LONG_LABELS` 裡最長的那個
+#      (`tests/test_fund_category_paragraph_guard.py::test_threshold_window_is_pinned_by_corpus_not_by_itself`)。
+#
+# ⚠️ **已知缺口(門檻 40 放過的那一種毒,誠實寫明,本批刻意不改門檻值)**:
+#    40 只擋得住「整段公開說明書」,擋不住**短但仍是敘述句**的描述。實測 5 個構造樣本
+#    (20~23 字)全部被判成「原物料資源」—— 與本 PR 修的**同一個病徵**,只是短:
+#      「投資於全球具成長潛力之公司所發行之股票及商品。」(23) → 原物料資源
+#      「本基金得投資於股票、債券及商品相關有價證券。」  (22) → 原物料資源
+#    **15 擋得住這 5 個,40 一個都擋不住。**
+#    對 MoneyDJ 路徑無妨(源頭 `_pick_fund_category` 的 ≤15 閘門先擋掉了);
+#    但**本層正是為了「沒有源頭閘門」的生產者而存在**(FundClear `FundType`、
+#    `pool_repository` 的使用者輸入)—— 對那些來源 `asset_bucket` 是**唯一一道**,
+#    而它在 15~39 這一段**比源頭那道更弱**。**不是 by-design,是已知未解,別當它守住了。**
+#
+# ⚠️ 這是會漂移的量測值。**新增更長的合法類別名時,光重跑測試沒有用** ——
+#    合法標籤清單是**硬寫在測試裡**的(`_LEGIT_LONG_LABELS`),不加進去就照樣全綠。
+#    **請先把新標籤加進那個清單,再重跑** tests/test_fund_category_paragraph_guard.py。
+# 📌 本常數的自然歸屬是 `shared/regime_fit.py`(本模組其餘常數的 SSOT),但該檔不在本批
+#    檔案邊界內,故暫置於此並回報總管另批收斂。
+CATEGORY_PARAGRAPH_MIN_LEN: int = 40
+
 
 def normalize_regime(raw) -> "str | None":
     """任意偵測器景氣標籤(可帶 emoji)→ 正規位階(REGIMES 之一)或 None(未知/無法對應)。"""
@@ -44,6 +85,8 @@ def asset_bucket(category):
     _c = str(category or "").strip()
     if not _c:
         return None, None
+    if len(_c) >= CATEGORY_PARAGRAPH_MIN_LEN:
+        return None, None                    # 段落形狀(說明書描述)→ 誠實 None,不在長文裡撿關鍵字(§1)
     for _name, _kws, _aff in ASSET_BUCKETS:
         if any(_kw in _c for _kw in _kws):
             return _name, _aff
