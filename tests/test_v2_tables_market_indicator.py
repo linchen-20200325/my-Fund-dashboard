@@ -383,7 +383,7 @@ def test_落地接縫_預設不寫_傳入時收到同一份結果(monkeypatch, n
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", _stub_yf(_ok_table()))
     got = []
     out = mi.build_market_indicator_table(sink=got.append)
-    assert set(out) == {"rows", "errors", "pending", "skipped"}
+    assert set(out) == {"rows", "errors", "pending", "skipped", "fetched"}
     assert got == [out]
     assert mi.build_market_indicator_table()["rows"] == out["rows"]
 

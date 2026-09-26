@@ -283,6 +283,7 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 | `[google_service_account]`（TOML 表格或 JSON 字串兩種寫法都收） | `private_key`、`private_key_id` | `repositories/pool_repository.py::_sa_present`；`services/nav_history_gs.py::status`、`services/nav_history_gs.py::_sa_to_dict`；`services/macro/weights_store.py::_gs_enabled`；`ui/helpers/io/oauth_state.py` 模組層的 `_gsa_secret`；`repositories/policy/_helpers.py::get_gspread_client` |
 | `[google_oauth]` 區段，以及同形的 `st.session_state["custom_oauth_cfg"]` | `client_secret` | `ui/helpers/io/oauth_state.py::_resolve_oauth_cfg` |
 | OAuth 執行期權杖（不在 secrets 檔，登入後才有） | `access_token`、`refresh_token`、`id_token` | 產生：`infra/oauth.py::exchange_code_for_tokens`、`infra/oauth.py::refresh_access_token`；存放：`st.session_state["gsheet_tokens"]`（`ui/helpers/io/oauth_state.py` 讀寫） |
+| `SETTINGS_SHEET_ID`（設定與取數紀錄試算表的 ID；**2026-09-26 新增列**；決策者：總管自決，客戶核准） | 整個值 | `repositories/settings_sheet_repository.py::settings_sheet_id`；遮蔽鍵表 `services/v2_tables/masking.py::MASKED_WHOLE_VALUE_KEYS`。理由：`docs/v2/50_settings_sheet_design.md` 第 2 節定案這一本的 ID 只放 secret、不寫進 repo（repo 公開，寫出 ID 等於公開客戶會被寫入的那本試算表位址）；它與下方丙類其餘五個試算表 ID 的處置刻意不同 |
 
 **乙、推播與發佈用的憑證 —— 一律遮蔽**（~~只在排程腳本或推播用到的憑證~~：分類名不成立，`ui/tab_manage.py::_sec_notify` 在 App 執行期就會讀 LINE 憑證，見下表第一列；2026-09-26 稽核指出，本組以 AST 確認後更正）
 
@@ -302,12 +303,12 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 
 | 鍵名 | 處置 |
 |---|---|
-| `POLICY_SHEET_ID`、`NAV_SHEET_ID`、`POOL_SHEET_ID`、`macro_weights_sheet_id`、`SHEET_ID` | **建議：不遮，理由：試算表 ID 不是憑證，沒有被分享的人拿到 ID 也打不開；而且 `49` §4.1 要求設定頁顯示「目前讀的是哪一本」，遮掉就無法除錯。** |
+| `POLICY_SHEET_ID`、`NAV_SHEET_ID`、`POOL_SHEET_ID`、`macro_weights_sheet_id`、`SHEET_ID` | ~~**建議：不遮，理由：試算表 ID 不是憑證，沒有被分享的人拿到 ID 也打不開；而且 `49` §4.1 要求設定頁顯示「目前讀的是哪一本」，遮掉就無法除錯。**~~ → **2026-09-26 更正（有意識的更正，不是漏刪；決策者：總管自決，客戶核准）：不遮的範圍只到本列這五個鍵名，不是「試算表 ID 一律不遮」。** `SETTINGS_SHEET_ID` 列在甲表遮蔽（見甲表）。本列五個鍵照舊不遮，理由照舊：它們不是憑證，沒有被分享的人拿到 ID 也打不開；`49` §4.1 要求設定頁顯示「目前讀的是哪一本」，遮掉就無法除錯。**舊句的用意仍然成立**（試算表 ID 本身不是憑證）；**被權衡掉的是它的射程** —— 舊句寫成「試算表 ID」這個類別，而 `SETTINGS_SHEET_ID` 那一本依 `50` 第 2 節刻意不公開，與本列五本的處置不同。⚠️ 本列只涵蓋這五個鍵名；日後新增的試算表 ID 鍵，不得援引本列預設為不遮，要逐鍵決定 |
 | `google_service_account.client_email`、`client_id`；`google_oauth.client_id`、`redirect_uri` | **建議：不遮，理由：這些不是憑證；「權限不足」時使用者要知道該把試算表分享給哪一個服務帳戶信箱，遮掉 `client_email` 就給不出這個指引。** |
 | `WATCH_CSV_URL` | **不在 Q13 射程內，不送客戶。** 查證：`git grep -n WATCH_CSV_URL 7f564aa -- '*.py' ':!tests/**'` 的命中逐行判讀後，讀值的是 `scripts/watchlist_push.py::main` 與 `scripts/weekly_switch_notify.py::_read_watchlist`（`scripts/dividend_calendar_notify.py` 經匯入後者使用；值由 `.github/workflows/` 的工作流程注入環境變數）；`ui/tab_manage.py` 的命中只在註解與說明字串裡，不讀值（正控：同一條指令命中 `scripts/weekly_switch_notify.py` 讀環境變數的那一行）。App 執行期不讀它，它也不經過 `fetch_log` 與 ui_v2 的畫面 —— Q13 管的是寫進 `fetch_log` 與上畫面的失敗訊息，碰不到它。⚠️ 若日後 App 或 ui_v2 開始讀它，性質接近憑證（公開 CSV 連結，知道網址就讀得到），屆時改列甲類遮蔽。 |
 | `LINE_USER_ID`、`GITHUB_REPOSITORY`、`NAV_GATE0_MODE`、`NAV_CODES`、`US_STOCK_IDS`、`FUND_DB`、`GOOGLE_APPLICATION_CREDENTIALS`（檔案路徑）、`CHROMIUM_EXECUTABLE_PATH`、`GITHUB_STEP_SUMMARY` | 不遮：設定值或路徑，不是可單獨拿去呼叫服務的憑證。 |
 
-~~丙表原版把試算表 ID、`client_email`、`WATCH_CSV_URL` 三項寫成「列為客戶裁示事項」~~ → 2026-09-26 稽核後改為本檔直接定案（決策者：AI 總管；有意識的更正，不是漏刪）。理由：三項都不是 Q13 裁示範圍內的新業務規則 —— 前兩項是「不遮會不會讓憑證外洩」的技術判斷，答案是不會；第三項根本不經過 Q13 管的兩個寫出點。
+~~丙表原版把試算表 ID、`client_email`、`WATCH_CSV_URL` 三項寫成「列為客戶裁示事項」~~ → 2026-09-26 稽核後改為本檔直接定案（決策者：AI 總管；有意識的更正，不是漏刪）。理由：三項都不是 Q13 裁示範圍內的新業務規則 —— 前兩項是「不遮會不會讓憑證外洩」的技術判斷，答案是不會；第三項根本不經過 Q13 管的兩個寫出點。⚠️ 2026-09-26 補註：這裡的「試算表 ID」指丙表列出的五個鍵名，不含 `SETTINGS_SHEET_ID`（該鍵要遮；決策者：總管自決，客戶核准。見甲表）。
 
 ### 7.3 替換記號與替換規則
 

@@ -244,13 +244,16 @@ def build_market_indicator_table(*, sink: Optional[Callable[[dict], None]] = Non
     回傳 `{"rows": [...], "errors": {鍵: 原文}, "pending": {鍵: 原因代碼},
            "skipped": {鍵: [不寫列的理由, ...]}}`。
     `pending` 只列「第一階段刻意不取數」的鍵；`skipped` 另含取數後逐筆被略過的理由。
+    `fetched`：`{鍵: L1 取回的列數（過濾前）}`，只列真的取數的鍵；L1 回錯誤或回 None 時為 0。
+    這是 `fetch_log.row_count`（`44`：「取回的列數」）的來源 —— 過濾後的 `rows` 數不是取回的列數
+    （2026-09-26 set 頁回修第 2 輪新增；總管裁示必修 3）。
     `rows` 每一列逐欄照 `44` 的八欄、順序同契約。
 
     `sink`：Q12（`market_indicator` 與 `fetch_log` 落地到設定試算表）的**介面接縫**。
     本批不做落地；傳 None（預設）時什麼都不寫。傳入時以同一份回傳值呼叫一次，
     寫入端拋的例外照樣往上拋（不吞）。
     """
-    rows, errors, pending, skipped = [], {}, {}, {}
+    rows, errors, pending, skipped, fetched = [], {}, {}, {}, {}
     for key, spec in INDICATOR_SPECS.items():
         if _phase1_of(spec) != "write":
             pending[key] = spec["pending_code"]
@@ -258,6 +261,7 @@ def build_market_indicator_table(*, sink: Optional[Callable[[dict], None]] = Non
             continue
         _source, ticker = spec["source"]
         series, error = _call(fetch_yf_close_with_error, ticker)
+        fetched[key] = 0 if (error or series is None) else len(series)
         key_rows, key_error, key_skipped = rows_from_daily_close(
             key, series, error, value_unit=spec["value_unit"])
         rows.extend(key_rows)
@@ -270,7 +274,8 @@ def build_market_indicator_table(*, sink: Optional[Callable[[dict], None]] = Non
     for row in rows:  # 出口前再核一次欄位與順序；不該發生，發生就是本檔的 bug（§1：當場炸）
         if list(row) != names:
             raise AssertionError(f"market_indicator 列的欄位與契約不符：{list(row)}")
-    table = {"rows": rows, "errors": errors, "pending": pending, "skipped": skipped}
+    table = {"rows": rows, "errors": errors, "pending": pending, "skipped": skipped,
+             "fetched": fetched}
     if sink is not None:
         sink(table)
     return table
