@@ -45,6 +45,15 @@ _FILE_ALLOWLIST = {
     "ui_v2/app_mkt_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.mkt.page", "ui_v2.mkt.source",
     },
+    # 2026-09-26 set 頁正式模式（客戶核准的線框草稿）。`spec` 是規格快照（純 tuple），不是 fixtures。
+    "ui_v2/set/source.py": {
+        "__future__", "os", "datetime.datetime", "datetime.timezone", "streamlit",
+        "services.v2_tables.market_indicator", "services.v2_tables.masking",
+        "services.v2_tables.settings_store", "ui_v2.set.spec",
+    },
+    "ui_v2/app_set_live.py": {
+        "__future__", "pathlib", "sys", "streamlit", "ui_v2.set.page", "ui_v2.set.source",
+    },
 }
 
 

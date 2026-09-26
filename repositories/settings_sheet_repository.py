@@ -123,6 +123,7 @@ OPEN_LOG_STALE_SEC = 3600
 INTERRUPTED_MESSAGE = "取數沒有結束紀錄"   # `50` 5.3 的固定系統文字
 # 客戶 2026-09-26 裁示的唯一說法（`50` 第 8 節「沒設 SETTINGS_SHEET_ID」那一列）。
 NOT_CONFIGURED_MESSAGE = "未設定試算表 ID，暫停寫入"
+NO_SERVICE_ACCOUNT_MESSAGE = "未設定服務帳戶（google_service_account）"
 
 _TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _FLOAT_RE = re.compile(r"^-?\d+(\.\d+)?$")
@@ -351,8 +352,7 @@ def _run(op: Callable, *, mask: Mask, write: bool):
     sheet_id = settings_sheet_id(mask=mask)
     creds = _service_account()
     if creds is None:
-        raise SettingsSheetError(mask("未設定服務帳戶（google_service_account）"),
-                                 code="no_service_account")
+        raise SettingsSheetError(mask(NO_SERVICE_ACCOUNT_MESSAGE), code="no_service_account")
     try:
         skip, left, kind = should_skip_gspread(ACTOR, sheet_id)
         if skip:
@@ -363,16 +363,21 @@ def _run(op: Callable, *, mask: Mask, write: bool):
         try:
             client = _make_client(creds)
             spreadsheet = with_gspread_retry(client.open_by_key, sheet_id)
+            _remember_title(sheet_id, spreadsheet)
             result = op(spreadsheet)
         except SettingsSheetError as exc:
             failure = exc          # 本檔自己產生的（標頭不符等）：不是上游失敗，不登記冷卻
         except Exception as exc:  # noqa: BLE001 —— 轉成帶原文的 SettingsSheetError，不吞
             status = http_status_of(exc)
             record_gspread_failure(ACTOR, sheet_id, exc)
-            text = f"{type(exc).__name__}: {exc}"
+            name, raw = type(exc).__name__, str(exc)
+            # gspread 的 APIError 自己的字串已經以「APIError: 」開頭；再加一次型別名會變成「APIError: APIError: …」。
+            text = raw if raw.startswith(f"{name}:") else f"{name}: {raw}"
+            email = _client_email(creds)
+            # `client_email` 依 ACCEPTANCE 7.2 丙不遮（畫面要據以寫「分享給哪一個服務帳戶」）。
             failure = SettingsSheetError(
                 mask(text), code="api", http_status=status,
-                hint=_hint_for(exc, status, _client_email(creds)))
+                hint=_hint_for(exc, status, email), details={"client_email": email})
             del exc
         if failure is not None:
             # 在 except 區塊之外拋：`__context__` 不會掛上原始例外（回修第 2 輪 6）。
@@ -385,6 +390,72 @@ def _run(op: Callable, *, mask: Mask, write: bool):
     finally:
         if write:
             clear_cache(sheet_id)
+
+
+# ════════════════════════ 試算表標題、寫入閘門（set 頁正式模式）════════════════════════
+
+# 試算表標題（set 頁 ★10「設定試算表：‹標題›」）。取自**打開試算表那一次呼叫**（`_run` 裡的
+# `open_by_key`），不另加一次讀取（線框草稿 ★10 細項）；每次打開都覆寫，所以改名最慢在下一次
+# 打開（快取 60 秒到期）後反映。標題不是憑證，本層不遮；要上畫面前由 L2 過遮蔽（若客戶把 ID
+# 取成標題，會被遮成記號 —— 那是遮蔽規則的正常結果）。
+_TITLES: dict = {}
+
+
+def _remember_title(sheet_id: str, spreadsheet) -> None:
+    """記下這一本的標題。拿不到（例如假物件沒有 title）就不記 —— 不是失敗，只是這一次沒順手拿到；
+    要用時 `load_sheet_title` 會自己打開一次，那一次拿不到就照常拋錯。"""
+    try:
+        title = spreadsheet.title
+    except Exception:  # noqa: BLE001 —— 只是順手記標題；拿不到交給 load_sheet_title 以正式讀取處理
+        return
+    if isinstance(title, str) and title:
+        with _CACHE_LOCK:
+            _TITLES[sheet_id] = title
+
+
+def load_sheet_title(*, mask: Mask) -> str:
+    """設定試算表的標題（未遮蔽的原值）。
+
+    先用最近一次打開時記下的標題；沒有才自己打開一次（走 `_run`：冷卻、失敗登記、遮蔽照舊）。
+    讀不到 → `SettingsSheetError`（訊息已過 `mask`）；標題為空 → 同樣視為讀不到。
+    """
+    sheet_id = settings_sheet_id(mask=mask)
+    with _CACHE_LOCK:
+        known = _TITLES.get(sheet_id)
+    if known:
+        return known
+
+    def op(spreadsheet):
+        title = spreadsheet.title
+        if not isinstance(title, str) or not title:
+            raise RuntimeError("試算表標題為空")
+        return title
+
+    _sid, title = _run(op, mask=mask, write=False)
+    return title
+
+
+def gate_status(*, mask: Mask) -> dict:
+    """寫入之前的閘門狀態（**不打上游**）：`{"state", "message", "remaining_sec"}`。
+
+    `state`：`not_configured`（沒設 ID）／`no_service_account`／`cooling`（冷卻中）／`ok`。
+    判讀與 `_run` 開頭同一套（同一個 secret、同一個憑證、同一組冷卻鍵），只是不往下打上游 ——
+    給 set 頁在按鈕畫出來時就寫明停用原因（`50` 第 8 節：缺設定與冷卻期間「存檔」停用）。
+    """
+    from infra.gspread_retry import should_skip_gspread
+
+    try:
+        sheet_id = settings_sheet_id(mask=mask)
+    except SettingsSheetError as exc:
+        return {"state": exc.code, "message": str(exc), "remaining_sec": None}
+    if _service_account() is None:
+        return {"state": "no_service_account", "message": mask(NO_SERVICE_ACCOUNT_MESSAGE),
+                "remaining_sec": None}
+    skip, left, kind = should_skip_gspread(ACTOR, sheet_id)
+    if skip:
+        return {"state": "cooling", "remaining_sec": left,
+                "message": mask(f"設定試算表暫停重試，還剩 {math.ceil(left)} 秒（上次失敗類別：{kind}）")}
+    return {"state": "ok", "message": None, "remaining_sec": None}
 
 
 # ════════════════════════ 分頁讀取、標頭 ════════════════════════
