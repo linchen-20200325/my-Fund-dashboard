@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-26 15:52:19 UTC（`date -u` 實測）
+最後更新：2026-09-26 15:56:06 UTC（`date -u` 實測）
 
 ---
 
@@ -22,33 +22,25 @@
 
 - 主工作樹：`/home/user/my-Fund-dashboard`
 - 分支：`feat/set-live-ui`
-- HEAD：`22564db`（`22564db94b5ecee4db61082ae04f7dde83752b3c`），已推到 origin（`origin/feat/set-live-ui` 同為 `22564db`）
+- HEAD：`c2e7b37`（`c2e7b376b31f57eabe7e7c77d36673bf3138dc5e`），已推到 origin（`origin/feat/set-live-ui` 同為 `c2e7b37`，ls-remote 實測）
 - main：`origin/main` = `12cd1ab`（#851 合併點）
-- 未 commit 的改動（`git status --short` 實測，7 檔，皆為修改、無新增檔）：
-  - `services/v2_tables/settings_store.py`
-  - `tests/test_v2_tables_settings_store_page.py`
-  - `tests/ui_v2/test_set_live_logic.py`
-  - `ui_v2/set/live.py`
-  - `ui_v2/set/logic.py`
-  - `ui_v2/set/source.py`
-  - `ui_v2/set/spec.py`
-- 註：這些未 commit 的改動是前端/UI 組本輪回修，還在進行中。
+- 未 commit 的改動：無（`git status --short` 實測為空，主工作樹乾淨）
 
 ## 2. 進行中
 
 ### set 頁正式模式 UI
-- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db`）
-- 狀態：**實作中**
-- 負責組：前端/UI 組
+- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db` → `c2e7b37`）
+- 狀態：**複驗中**
+- 負責組：稽核 A、稽核 B
 - 經過：
   - 第 1 輪稽核：必修 8 項已修完。
   - 兩組複驗：必修 0。
-- 本輪回修四項：
-  1. `alo_basis` 定型別為 list 枚舉（成本／市值）；客戶已裁示。
-  2. 拒收 `[1e999]`。
-  3. `changed_settings` 補測試。
-  4. 前後帶空白的值判為型別不符、不存檔（依 44 SET-4「逐字相同」）；只有空白＝清除該鍵。
-- 下一步誰動：前端/UI 組交回後，總管送最終複驗（兩組）；通過就開 PR，並依常設授權判斷是否 merge。
+  - 本輪回修已完成（`c2e7b37`）：
+    1. `alo_basis` 定型別為 list 枚舉（成本／市值）。
+    2. 拒收 `[1e999]`。
+    3. 前後帶空白的值判定為型別不符。
+- 最終複驗：已派工：稽核 A、稽核 B，等回報。
+- 下一步誰動：稽核 A、B 兩組回報；必修若為 0，總管開 PR。
 
 ### 交接本
 - 狀態：已建立，持續維護
@@ -65,12 +57,13 @@
 - 取數後會清掉市場總覽共用的 yf 快取
 - 非 SettingsSheetError 的例外會顯示為 Streamlit 錯誤畫面
 - 舊 App 保單頁有兩處「未指定 Sheet ID」
+- alo 頁示範版存的是 "cost"／"mv"，設定頁存的是「成本」／「市值」，兩者不一致；接 alo 真資料時必須處理
 - FX 日期查證、AST 守衛還有 6 種動態 import 漏網等舊登記（見 docs/v2/49 §8）
 
 ## 3. 已完成（未 merge）
 
 - `feat/set-live-ui`：set 頁正式模式接真資料，照已核准草稿（10 處新文案），重新取數只接市場指標。
-  - 未 merge 原因：本輪回修尚未完成、最終複驗尚未跑。
+  - 未 merge 原因：本輪回修已完成（`c2e7b37`），最終複驗（稽核 A、B）尚未回報。
 
 ## 4. 已完成（已 merge）
 
@@ -79,5 +72,11 @@
 
 ## 5. 待客戶裁示
 
-- 目前無新的待裁示題。
+### 5-1 枚舉鍵型別提示的新增文案
+- 問題：枚舉鍵的型別提示多了一句草稿外的文案「要輸入其中之一：成本／市值」。
+- 選項：(a) 核准這句；(b) 改用既有模板，不另加句子；(c) 你另給一句。
+- 建議：(a)。這句只列出可選值，沒有新概念。
+- 代價：選 (b) 時，使用者看不到可選值，只會被告知型別不符。
+
+### 備註
 - 總管判斷不需客戶裁示的技術項，見第 2 節末「登記待辦」。
