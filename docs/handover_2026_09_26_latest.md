@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-26 16:12:05 UTC（`date -u` 實測）
+最後更新：2026-09-26 16:26:01 UTC（`date -u` 實測）
 
 ---
 
@@ -22,16 +22,18 @@
 
 - 主工作樹：`/home/user/my-Fund-dashboard`
 - 分支：`feat/set-live-ui`
-- HEAD：`c2e7b37`（`c2e7b376b31f57eabe7e7c77d36673bf3138dc5e`），已推到 origin（`origin/feat/set-live-ui` 同為 `c2e7b37`，ls-remote 實測）
+- HEAD：`c2e7b37`（`c2e7b376b31f57eabe7e7c77d36673bf3138dc5e`），**落後 origin 1 個 commit**
+- origin：`origin/feat/set-live-ui` = `0062b7f`（`0062b7f703bf696410ef065b5fce7a381ef48662`，ls-remote 實測）；`c2e7b37` 是它的直接祖先，差 1 個 commit
+- 實作組工作樹：`/tmp/claude-0/-home-user-my-Fund-dashboard/5e0d8cf4-c8e6-5f34-83f9-ea9c2747c064/scratchpad/wt_setlive`，detached HEAD 於 `0062b7f`（`git worktree list` 實測）
 - main：`origin/main` = `12cd1ab`（#851 合併點）
 - 未 commit 的改動：無（`git status --short` 實測為空，主工作樹乾淨）
 
 ## 2. 進行中
 
 ### set 頁正式模式 UI
-- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db` → `c2e7b37`）
-- 狀態：**實作中**
-- 負責組：前端/UI 組
+- 分支：`feat/set-live-ui`（已推 `104398d` → `22564db` → `c2e7b37` → `0062b7f`）
+- 狀態：**複驗中**
+- 負責組：稽核 A、稽核 B
 - 經過：
   - 第 1 輪稽核：必修 8 項已修完。
   - 兩組複驗：必修 0。
@@ -40,14 +42,15 @@
     2. 拒收 `[1e999]`。
     3. 前後帶空白＝型別不符、不存檔；合格值照原值寫入（不 strip）。（稽核 A 最終複驗第 (3) 項已實測通過：前後帶空白判為型別不符、寫入 0 列、輸入欄保留原字；純空白、留空照舊清除該鍵；與 44 SET-4「逐字相同」一致）
     4. `changed_settings` 補測試：測試改守新規則；突變 W4（`changed_settings` 改回 strip）會轉紅。（依實作組回報）
-- 最終複驗：
+- 最終複驗（上一輪，針對 `c2e7b37`）：
   - 稽核 B（紅隊）已回報：本輪五項通過；必修 1 條＝alo 值不一致。總管依客戶裁示處理：以「成本／市值」為準，不擋本輪 PR。
   - 稽核 A 已回報：必修 1 條＝`alo_basis` 存值有兩套，需在程式裡照實登記分歧；其餘通過，fixture 模式零變更。
-- 最後一輪回修：已派工前端/UI 組，共三項：
+- 最後一輪回修三項已完成（`0062b7f`），依回報各項突變都已轉紅：
   1. 文案改為「可選值：成本、市值」。
-  2. 修掉 RecursionError 造成的崩潰。
-  3. 據實登記 alo 分歧。
-- 下一步誰動：實作組交回 → 兩組複驗 → 通過後開 PR → 依常設授權判斷能否 merge。
+  2. RecursionError 判為型別不符。
+  3. alo 分歧已照實登記，並加了跨頁守衛。
+- 最終複驗（本輪）：已派工：稽核 A、B 最終複驗，等回報。
+- 下一步誰動：稽核 A、B 兩組回報；必修 0 就開 PR。
 
 ### 交接本
 - 狀態：已建立，持續維護
@@ -72,7 +75,7 @@
 ## 3. 已完成（未 merge）
 
 - `feat/set-live-ui`：set 頁正式模式接真資料，照已核准草稿（10 處新文案），重新取數只接市場指標。
-  - 未 merge 原因：兩組最終複驗已回報，最後一輪回修三項（文案改字、RecursionError 崩潰、登記 alo 分歧）實作中，交回後還要兩組複驗。
+  - 未 merge 原因：最後一輪回修已完成（`0062b7f`），稽核 A、B 最終複驗尚未回報。
 
 ## 4. 已完成（已 merge）
 
