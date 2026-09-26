@@ -27,6 +27,41 @@ from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 from repositories.fund.sources import *  # noqa: F401, F403
 
 
+# ══════════════════════════════════════════════════════════════════
+# 錯誤旁路(docs/v2/49 §6.3 E-5 / E-8,2026-09-26)
+# ══════════════════════════════════════════════════════════════════
+# `fetch_nav` 全敗回空 Series、`fetch_div` 全敗回空 list,原因只 print 到 stdout
+# (49 §1.4 乙類)。兩者都只新增旁路、不改回傳型別與值:
+#   · fetch_nav(Series)→ 原因掛在全敗那一個空 Series 的 `.attrs[_FETCH_ERROR_ATTR]`
+#     (與 repositories/macro/fred.py、yf.py 同名同義;測試釘住三者一致);
+#   · fetch_div(list)→ list 沒有 `.attrs`,改用**本執行緒**的旁路 `_FETCH_DIV_TLS`;
+#     只在「回空 list」時讀 —— 空 list 依 `_daily_cache` 預設判準**永不入快取**,
+#     所以回空 list 的那一次,本體一定在本執行緒剛跑完(測試釘住這個前提)。
+#   公開讀法只有 `fetch_nav_with_error` / `fetch_div_with_error`。
+import threading as _threading_sidecar
+
+_FETCH_ERROR_ATTR = "fetch_error"
+_FETCH_DIV_TLS = _threading_sidecar.local()
+
+
+def _fail_kind_text() -> str:
+    """緊接在 `fetch_url_with_retry(...)` 回 None 之後呼叫:取出本執行緒的失敗分類。
+
+    `fund_fetcher.fetch_url_with_retry` 內部就是 `infra.proxy.fetch_url`,後者失敗時經
+    `_note_failure` 把分類寫進本執行緒(進場先清;退避跳過時沿用冷卻分類)。這裡用
+    `pop_last_fail_kind()`(取出即清掉)讀它,滿足該函式要求的「緊接在自己的 fetch_url
+    之後讀、中間沒有其他分支」。**不影響任何快取判斷**:fetch_nav / fetch_div 走
+    `_daily_cache`,它依回傳值是否為空決定入不入快取,從不讀這個分類。
+    分類為空字串 = `fetch_url` 本身成功(已清掉分類),但 `fetch_url_with_retry`
+    因回應內容為空白而回 None。
+    """
+    from infra.proxy import pop_last_fail_kind
+    _k = pop_last_fail_kind()
+    if _k:
+        return f"kind={_k}"
+    return "kind=(無:fetch_url 有回應,但內容為空白,fetch_url_with_retry 回 None)"
+
+
 def _parse_nav_html(html: str) -> pd.Series:
     """解析 MoneyDJ 淨值 HTML，回傳 pd.Series (date→float)"""
     soup = BeautifulSoup(html, "lxml")
@@ -82,6 +117,8 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             f"https://www.moneydj.com/funddj/yf/yp004001.djhtm?a={full_key}",
             f"https://www.moneydj.com/funddj/yf/yp004001.djhtm?a={mj_short}",
         ]
+    # E-8 旁路:逐一記下每個網址與預存檔的結果,全敗時掛到回傳的空 Series 上。
+    _attempts: list[str] = []
     for url in urls:
         try:
             # v19.346(第九份 review):raw requests.get(無重試/無 403 降級直連/無
@@ -90,6 +127,7 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             r = fetch_url_with_retry(url, headers=HDR, timeout=25, retries=2)
             if r is None:
                 print(f"[fetch_nav] {url[:65]} → 失敗(重試耗盡/非 200)")
+                _attempts.append(f"{url} → 取數失敗({_fail_kind_text()})")
                 continue
             print(f"[fetch_nav] {url[:65]} → {r.status_code}")
             s = _parse_nav_html(r.text)
@@ -98,6 +136,12 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             # shared/data_quality.NAV_CACHE_MIN_POINTS 當 SSOT(§3.3),
             # 行為與原本逐字相同(值就是 10)。
             from shared.data_quality import NAV_CACHE_MIN_POINTS as _MIN_PTS
+            if len(s) < _MIN_PTS:
+                # §8 (c):頁面有回來但解析不到足夠筆數 —— 「查無此基金」與
+                # 「頁面改版、解析不到」在這裡分辨不出來,據實寫明,不替來源下結論。
+                _attempts.append(f"{url} → 頁面已取得(HTTP {r.status_code}),"
+                                 f"解析出 {len(s)} 筆(< {_MIN_PTS});"
+                                 f"無法分辨查無此基金或頁面改版")
             if len(s) >= _MIN_PTS:
                 print(f"[fetch_nav] ✅ {len(s)} 筆")
                 # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs;動態 host:endpoint)
@@ -113,6 +157,7 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 return s
         except Exception as e:
             print(f"[fetch_nav] ERR: {e}")
+            _attempts.append(f"{url} → {type(e).__name__}: {e}")
     # v19.319:全部 live URL 失敗（常見 = Streamlit Cloud IP 被 MoneyDJ 子網域封鎖）→
     # 退回 GitHub Actions 每日預存快取 cache/nav/{code}.json（§4.6 proxy/直連降級的最終保障）。
     # 只在 live 全敗時觸發、不覆蓋任何 live 資料;快取自帶 source/fetched_at provenance（§2.2）。
@@ -129,9 +174,30 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             print(f"[fetch_nav] ⚠️ live 全敗 → 退回 GitHub Actions 快取 {len(_cs)} 筆"
                   + ("" if _sa else " ⛔ 此序列稀疏/過期,年化指標(Sharpe/σ/回撤)不可信"))
             return _cs
+        _attempts.append(f"預存檔 cache/nav/{_cache_code}.json → 無可用序列"
+                         f"(檔案不存在,或未通過 _src_cache_files 的筆數/schema 檢查)")
     except Exception as e:
         print(f"[fetch_nav] cache fallback ERR: {e}")
-    return pd.Series(dtype=float)
+        _attempts.append(f"預存檔 cache/nav/ 讀取失敗 → {type(e).__name__}: {e}")
+    _empty = pd.Series(dtype=float)
+    _empty.attrs[_FETCH_ERROR_ATTR] = (
+        f"fetch_nav({full_key!r}) 即時網址與預存檔皆失敗:\n" + "\n".join(_attempts))
+    return _empty
+
+
+def fetch_nav_with_error(full_key: str, portal: str = "") -> "tuple[pd.Series, str | None]":
+    """同 `fetch_nav`,另外交出全敗原因(docs/v2/49 §6.3 E-8)。
+
+    走同一個 `fetch_nav`(同一層 `_daily_cache`,不另疊快取),回傳 `(Series, error)`:
+    - 即時網址成功 → `(序列, None)`;
+    - 即時網址全敗、退回預存舊序列 → `(預存序列, None)` —— 這一支**不是失敗**,
+      由 `attrs["source"]` / `attrs["nav_quality"]` 辨識(49 §4.3),本旁路不動它;
+    - 即時網址與預存檔**都**失敗 → `(空 Series, 原因)`,原因逐行列出每個網址與預存檔
+      各自的結果(取數失敗 / 解析出 N 筆 / 例外原文)。⚠️「解析出 0 筆」同時涵蓋
+      查無此基金與頁面改版,**本層分辨不出來**,原文據實寫「無法分辨」(49 §8 (c))。
+    """
+    s = fetch_nav(full_key, portal)
+    return s, s.attrs.get(_FETCH_ERROR_ATTR)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -584,6 +650,9 @@ def fetch_nav_history_long(code: str, min_years: int = 10) -> pd.Series:
 @register_cache
 @_daily_cache  # v19.337 review F:配息為歷史型資料(月/季更),日內不變;空 list 不入 cache
 def fetch_div(full_key: str, portal: str = "") -> list:
+    _FETCH_DIV_TLS.error = None          # E-5 旁路:本次呼叫的原因,先清掉
+    _div_failures: list[str] = []        # E-5 旁路:各網址的失敗原文
+    _div_page_ok = False                 # E-5 旁路:至少一個頁面有取回來
     divs = []
     urls = []
     if portal in PORTAL_CFG:
@@ -607,7 +676,9 @@ def fetch_div(full_key: str, portal: str = "") -> list:
             # v19.346(第九份 review):同 fetch_nav — raw requests.get 改走
             # fetch_url_with_retry(重試 + 403 降級 + Big5 解碼),None=失敗跳下一源。
             r = fetch_url_with_retry(url, headers=HDR, timeout=20, retries=2)
-            if r is None: continue
+            if r is None:
+                _div_failures.append(f"{url} → 取數失敗({_fail_kind_text()})")
+                continue
             soup = BeautifulSoup(r.text, "lxml")
             for tbl in soup.find_all("table"):
                 if not any(k in tbl.get_text() for k in ["配息","除息","配發"]): continue
@@ -624,9 +695,13 @@ def fetch_div(full_key: str, portal: str = "") -> list:
                                     if 0.0001 < v < 100: amt=v; break
                             if amt > 0: divs.append({"date":str(d)[:10],"amount":amt})
                         except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
+            # E-5:頁面取回**且整頁解析跑完沒有拋例外**才算「頁面有取回」;
+            # 解析途中拋例外 → 落到下方 except 記原文,不能被當成「不配息」。
+            _div_page_ok = True
             if divs: break
         except Exception as e:
             print(f"[div] {e}")
+            _div_failures.append(f"{url} → {type(e).__name__}: {e}")
     seen=set(); out=[]
     for d in sorted(divs, key=lambda x:x["date"], reverse=True):
         if d["date"] not in seen: seen.add(d["date"]); out.append(d)
@@ -643,7 +718,32 @@ def fetch_div(full_key: str, portal: str = "") -> list:
         for _d in out:
             _d["source"] = f"MoneyDJ:fetch_div:{full_key}"
             _d["fetched_at"] = _fa
+    elif not _div_page_ok:
+        # 沒有任何頁面「取回且解析跑完」→ 是「抓失敗」,不是「這檔沒有配息」(E-5)
+        _FETCH_DIV_TLS.error = (f"fetch_div({full_key!r}) 所有配息網址取數或解析失敗:\n"
+                                + "\n".join(_div_failures))
     return out
+
+
+def fetch_div_with_error(full_key: str, portal: str = "") -> "tuple[list, str | None]":
+    """同 `fetch_div`,另外交出失敗原文(docs/v2/49 §6.3 E-5)。
+
+    走同一個 `fetch_div`(同一層 `_daily_cache`,不另疊快取),回傳 `(list, error)`:
+    - 有配息列 → `(list, None)`(可能來自快取命中);
+    - 所有網址都**取數失敗或解析拋例外**→ `([], 原因)`,逐行列出每個網址
+      (取數失敗附 `kind=` 失敗分類;例外附原文);
+    - 至少一個頁面取回且整頁解析跑完、但沒有任何配息列 → `([], None)`。
+      ⚠️ 這一種同時涵蓋「這檔真的不配息」與「頁面改版、解析不到」,**本層分辨不出來**;
+      `None` 只表示「沒有取數失敗」,不是「確認不配息」。
+
+    讀旁路的前提:空 list 依 `_daily_cache` 預設判準永不入快取,所以回空 list 的
+    那一次,`fetch_div` 本體一定在本執行緒剛跑完,`_FETCH_DIV_TLS` 是這一次的值。
+    """
+    _FETCH_DIV_TLS.error = None          # 先清掉本執行緒殘值,避免讀到上一次的
+    out = fetch_div(full_key, portal)
+    if out:
+        return out, None
+    return out, getattr(_FETCH_DIV_TLS, "error", None)
 
 
 

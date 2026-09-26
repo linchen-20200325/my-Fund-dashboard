@@ -45,6 +45,7 @@ def _finmind_business_indicator(months_back: int = 18,
                                 token: str = "",
                                 *,
                                 error_out: Optional[dict] = None,
+                                keep_coincident: bool = False,
                                 ) -> Optional[pd.DataFrame]:
     """抓 FinMind `TaiwanBusinessIndicator`(國發會景氣指標官方鏡像,寬表)。
 
@@ -61,6 +62,11 @@ def _finmind_business_indicator(months_back: int = 18,
         同 pattern)。傳入 dict 時,失敗原因會寫入 `error_out['error']`,讓上層
         `fetch_ndc_signal_history` 能把「FinMind 402 額度用盡」與「真的沒資料」
         分開報 —— §1:錯誤不可偽裝成缺資料。傳 None 行為與舊版完全一致。
+    keep_coincident : bool
+        2026-09-26(docs/v2/49 §6.3 E-2):True 時多保留 `coincident`(同時指標)欄
+        —— 僅在來源真的有這欄時才保留,沒有就不補(§1)。預設 False,輸出欄位與舊版
+        完全一致(`fetch_ndc_signal_history` 走預設值,不受影響)。公開出口見
+        `fetch_tw_business_indicator_with_error`。
     """
     def _fail(msg: str) -> None:
         """統一收口:print log + 寫入 side-car,回 None。"""
@@ -99,14 +105,46 @@ def _finmind_business_indicator(months_back: int = 18,
     df = pd.DataFrame(rows)
     if 'date' not in df.columns or 'monitoring' not in df.columns:
         return _fail(f'❌ 欄位不符: {list(df.columns)[:8]}')
-    _keep = ['date'] + [c for c in ('monitoring', 'monitoring_color', 'leading')
-                        if c in df.columns]
+    _want = ('monitoring', 'monitoring_color', 'leading')
+    if keep_coincident:
+        _want = _want + ('coincident',)
+    _keep = ['date'] + [c for c in _want if c in df.columns]
     out = df[_keep].copy()
     out['monitoring'] = pd.to_numeric(out['monitoring'], errors='coerce')
     out = out.dropna(subset=['monitoring']).sort_values('date').reset_index(drop=True)
     if out.empty:
         return _fail('⚠️ monitoring 欄全部非數值 → 清空後無可用列')
     return out
+
+
+def fetch_tw_business_indicator_with_error(
+    months_back: int = 18, token: str = "",
+) -> tuple[Optional[pd.DataFrame], Optional[str]]:
+    """國發會景氣指標寬表的**公開出口**(docs/v2/49 §6.3 E-2;Q2 裁定看台灣國發會)。
+
+    與 `_finmind_business_indicator` 同一次 FinMind `TaiwanBusinessIndicator` 取數,
+    差別只有兩點:(1) 保留 `coincident`(同時指標)欄 —— 私有函式為了
+    `fetch_ndc_signal_history` 只留 monitoring / monitoring_color / leading;
+    (2) 失敗原因以第二個回傳值交出(本檔既有 `error_out` side-car 的原文)。
+
+    Returns
+    -------
+    (DataFrame | None, error | None)
+        成功:(寬表, None),欄位 = `date` + 來源實際有的
+        `monitoring` / `monitoring_color` / `leading` / `coincident`;
+        失敗:(None, 失敗原文)。
+
+    ⚠️ **本函式不快取**:私有函式本來就不快取(快取在 `fetch_ndc_signal_history`
+    那一層,且那一層連失敗結果也快取 15 分鐘,§4.4 已登記),而 §6.3 E-2 沒有列
+    快取。呼叫端若會在每次重跑都呼叫,快取該放哪一層須另行決定(不在本批範圍)。
+    """
+    _err: dict = {}
+    df = _finmind_business_indicator(months_back=months_back, token=token,
+                                     error_out=_err, keep_coincident=True)
+    if df is None:
+        # `_fail` 必寫 error_out['error'];取不到 = 契約被改壞 → KeyError 當場炸(§1)
+        return None, _err['error']
+    return df, None
 
 
 # ════════════════════════════════════════════════════════════════════════════

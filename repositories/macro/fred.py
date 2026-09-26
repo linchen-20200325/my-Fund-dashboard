@@ -14,6 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
+from infra.cache import FETCH_FAILED_ATTR
 from infra.proxy import fetch_url, mark_fetch_failed_if_retryable
 from fund_fetcher import _ttl_cache, register_cache
 from shared.macro_thresholds_v2 import (
@@ -205,6 +206,27 @@ MACRO_THRESHOLDS: dict = {
 
 
 # ══════════════════════════════════════════════════════════════
+# 錯誤旁路(docs/v2/49 §6.3 E-3,2026-09-26)
+# ══════════════════════════════════════════════════════════════
+# `fetch_fred` 失敗一律回空 DataFrame,原因只 print 到 stdout(49 §1.4 乙類)。
+# 旁路把原因掛在**失敗那一個回傳物件**的 `.attrs[_FETCH_ERROR_ATTR]` 上:
+#   · 回傳值本身(型別、欄、值)不變,既有 caller 讀 `.empty` 零影響;
+#   · 會被 `_ttl_cache` 照舊快取的失敗(404/407、JSON 壞、observations 空)
+#     **原因跟著快取物件走** —— 快取命中時仍交得出同一句原因,
+#     不會變成「空表但原因未提供」;
+#   · 公開讀法只有 `fetch_fred_with_error`,本鍵名是模組內部細節。
+# 與 `repositories/macro/yf.py`、`repositories/fund/nav_metrics.py` 同名同義
+# (三處各自定義,由 tests/test_v2_l1_error_sidecars.py 釘住三者一致)。
+_FETCH_ERROR_ATTR = "fetch_error"
+
+
+def _with_fetch_error(obj, msg: str):
+    """把失敗原文掛到**當場新建**的失敗物件上(不得對快取來的物件呼叫)。"""
+    obj.attrs[_FETCH_ERROR_ATTR] = msg
+    return obj
+
+
+# ══════════════════════════════════════════════════════════════
 # 資料抓取(全部走 NAS proxy)
 # ══════════════════════════════════════════════════════════════
 
@@ -247,7 +269,8 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         # 缺 key 是設定問題不是抓取失敗,且 api_key 本身是 cache key 的一部分
         # (`fetch_fred(sid, "", n)` 與帶 key 的呼叫是**不同的 entry**),
         # 補上 key 之後不會命中這筆 → 不存在 poisoning,維持原行為不標記。
-        return pd.DataFrame()
+        return _with_fetch_error(pd.DataFrame(),
+                                 f"FRED:{series_id} api_key 為空(未設定 FRED 金鑰)")
     r = fetch_url(
         FRED_BASE,
         params={
@@ -263,20 +286,33 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         # 抓失敗 → **依失敗分類**決定要不要標記(原本無條件快取,一次瞬斷把空
         # DataFrame 鎖住 TTL_30MIN,總經一整批 FRED 全空)。
         # ⚠️ 404/407 走「不標記、照舊快取」那一支,理由見該 helper 的 docstring。
-        return mark_fetch_failed_if_retryable(
+        _fail = mark_fetch_failed_if_retryable(
             pd.DataFrame(), f"fetch_url returned None: FRED:{series_id}")
+        # 旁路原文:有標記 → 直接沿用標記原因(內含失敗分類 kind=...);
+        # 沒標記 → 依 helper 的判準,分類必屬 NO_COOLDOWN_KINDS(404 / 407),
+        # 分類值已被 helper 取走(pop),本層無法再細分兩者,據實寫出。
+        _why = _fail.attrs.get(FETCH_FAILED_ATTR)
+        if not _why:
+            _why = (f"fetch_url returned None: FRED:{series_id} "
+                    f"(kind ∈ not_found/proxy_auth:404 或 407,不重試、照舊快取;"
+                    f"本層無法細分兩者)")
+        return _with_fetch_error(_fail, _why)
     try:
         obs = r.json().get("observations", [])
     except Exception as e:
         print(f"[macro_core/fred] {series_id} JSON 解析失敗: {e}")
         # 刻意不標記(同 yf.py 該處):200 已到手,來源活著且明確回答了,
         # 再要一次還是同樣的壞回應 —— 重抓不會變好,只會多打一次來源。
-        return pd.DataFrame()
+        return _with_fetch_error(pd.DataFrame(),
+                                 f"FRED:{series_id} JSON 解析失敗:{type(e).__name__}: {e}")
     if not obs:
         # ⚠️ **這是「真的沒有」,不是「抓失敗」** —— FRED 回 200 並明說該區間
         # 無觀測。刻意不標記、照常快取:把它當失敗會讓每次呼叫都重打 FRED,
         # 正是 v3 §02 另一半「不連續轟炸來源」要防的事。
-        return pd.DataFrame()
+        # 旁路仍交出原文:對 ui_v2 而言,已設定的 series 沒有任何觀測是異常,
+        # 頁面要能寫出「FRED 回 200 但沒有觀測」,而不是「原因未提供」。
+        return _with_fetch_error(pd.DataFrame(),
+                                 f"FRED:{series_id} 回 200,observations 為空(該區間無觀測)")
     df = pd.DataFrame(obs)
     df = df[df["value"] != "."].copy()
     # v19.172:強制轉 float64(不可只用 pd.to_numeric 後 dtype inference)。
@@ -304,7 +340,27 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         validate_fred(out)
     except ImportError:
         pass  # pandera 不可用(極罕見 — requirements.txt pin >=0.20)
+    if out.empty:
+        # 觀測值全為 FRED 缺值記號 "." → 清掉後無列(E-3 旁路;回傳值不變)
+        _with_fetch_error(out, f"FRED:{series_id} 回 {len(obs)} 筆觀測,值全為缺值記號 '.'")
     return out
+
+
+def fetch_fred_with_error(series_id: str, api_key: str,
+                          n: int = 250) -> tuple[pd.DataFrame, Optional[str]]:
+    """同 `fetch_fred`,另外交出失敗原文(docs/v2/49 §6.3 E-3)。
+
+    走同一個 `fetch_fred`(同一層 `_ttl_cache`,不另疊快取),回傳
+    `(DataFrame, error)`:DataFrame 與 `fetch_fred(series_id, api_key, n)` 相同;
+    `error` 為 None 表示成功,否則為失敗原文,可分辨:
+    缺 api_key / `fetch_url` 回 None(附失敗分類,404 與 407 本層無法細分)/
+    JSON 解析失敗 / 回 200 但 observations 為空 / 觀測值全為 "."。
+
+    ⚠️ 原文未遮蔽:本層的原文不含查詢字串(api_key 走 params、不進訊息),
+    但寫進 `fetch_log` 或上畫面前仍須照 Q13 裁示遮蔽(那是寫入端的事,不在 L1)。
+    """
+    df = fetch_fred(series_id, api_key, n)
+    return df, df.attrs.get(_FETCH_ERROR_ATTR)
 
 
 # v19.65 P1-F1：FRED 批次預熱器

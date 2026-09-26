@@ -11,11 +11,25 @@ from typing import Optional
 
 import pandas as pd
 
+from infra.cache import FETCH_FAILED_ATTR
 from infra.proxy import fetch_url, mark_fetch_failed_if_retryable
 from fund_fetcher import _ttl_cache, register_cache
 from shared.ttls import TTL_5MIN, TTL_10MIN
 
 YF_CHART_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
+
+# 錯誤旁路(docs/v2/49 §6.3 E-4,2026-09-26):失敗原因掛在**失敗那一個回傳物件**的
+# `.attrs[_FETCH_ERROR_ATTR]`,回傳值本身不變;會被 `_ttl_cache` 照舊快取的失敗
+# (404/407、HTTP 200 但解析失敗)原因跟著快取物件走。公開讀法只有
+# `fetch_yf_close_with_error`。與 `repositories/macro/fred.py`、
+# `repositories/fund/nav_metrics.py` 同名同義(測試釘住三者一致)。
+_FETCH_ERROR_ATTR = "fetch_error"
+
+
+def _with_fetch_error(obj, msg: str):
+    """把失敗原文掛到**當場新建**的失敗物件上(不得對快取來的物件呼叫)。"""
+    obj.attrs[_FETCH_ERROR_ATTR] = msg
+    return obj
 
 
 @register_cache
@@ -59,8 +73,16 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         # 抓失敗(非「真的沒有」)→ **依失敗分類**決定要不要標記。原本無條件快取,
         # 一次瞬斷就把空序列鎖住整個 TTL_10MIN,而 VIX/DGS10/USDTWD/DXY/SPY 全走這裡。
         # ⚠️ 404/407 走「不標記、照舊快取」那一支,理由見該 helper 的 docstring。
-        return mark_fetch_failed_if_retryable(
+        _fail = mark_fetch_failed_if_retryable(
             pd.Series(dtype=float, name=ticker), f"fetch_url returned None: {ticker}")
+        # 旁路原文:有標記 → 沿用標記原因(內含 kind=...);沒標記 → 依 helper 判準
+        # 分類必屬 NO_COOLDOWN_KINDS(404 / 407),分類值已被 helper 取走,本層無法細分。
+        _why = _fail.attrs.get(FETCH_FAILED_ATTR)
+        if not _why:
+            _why = (f"fetch_url returned None: {ticker} "
+                    f"(kind ∈ not_found/proxy_auth:404 或 407,不重試、照舊快取;"
+                    f"本層無法細分兩者)")
+        return _with_fetch_error(_fail, _why)
     try:
         d = r.json()
         result = d["chart"]["result"][0]
@@ -80,13 +102,30 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         # 不符預期(壞 ticker 會讓 Yahoo 回 result:null → 這裡 TypeError)。
         # 同一個回應再要一次還是同樣結果 → **重抓不會變好,只會每次呼叫多打一次來源**。
         # 只有「連回應都沒拿到」(上面 r is None)重試才有意義,故只標記那一支。
-        return pd.Series(dtype=float, name=ticker)
+        return _with_fetch_error(pd.Series(dtype=float, name=ticker),
+                                 f"Yahoo:{ticker} 回 200 但解析失敗:{type(e).__name__}: {e}")
     # v19.161 A1 Phase B:pandera schema 驗 final contract(values+index+attrs)
     # 此驗證**故意放在 parse try-except 之外**,schema 違反(values=NaN /
     # close<=0 / source 缺前綴等)為上游 bug,須當場 raise,**不**靜默返回空 Series。
     from shared.schemas import validate_yf_close
     validate_yf_close(s)
+    if s.empty:
+        # 收盤欄全為 null → dropna 後無列(E-4 旁路;回傳值不變)
+        _with_fetch_error(s, f"Yahoo:{ticker} 回 200,收盤序列為空(close 全為 null)")
     return s
+
+
+def fetch_yf_close_with_error(ticker: str, range_: str = "2y",
+                              interval: str = "1d") -> tuple[pd.Series, Optional[str]]:
+    """同 `fetch_yf_close`,另外交出失敗原文(docs/v2/49 §6.3 E-4)。
+
+    走同一個 `fetch_yf_close`(同一層 `_ttl_cache`,不另疊快取),回傳
+    `(Series, error)`:Series 與 `fetch_yf_close(ticker, range_, interval)` 相同;
+    `error` 為 None 表示成功,否則為失敗原文,可分辨:`fetch_url` 回 None
+    (附失敗分類,404 與 407 本層無法細分)/ HTTP 200 但解析失敗 / 收盤欄全為 null。
+    """
+    s = fetch_yf_close(ticker, range_, interval)
+    return s, s.attrs.get(_FETCH_ERROR_ATTR)
 
 
 @register_cache

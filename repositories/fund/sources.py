@@ -3298,8 +3298,15 @@ import threading as _th
 _tdcc_cache = {}
 _tdcc_lock  = _th.Lock()
 
-def _tdcc_get(ep: str) -> list:
-    """GET https://openapi.tdcc.com.tw/v1/opendata/{ep}"""
+def _tdcc_get(ep: str, *, error_out: "dict | None" = None) -> list:
+    """GET https://openapi.tdcc.com.tw/v1/opendata/{ep}
+
+    error_out : dict | None
+        2026-09-26(docs/v2/49 §6.3 E-6):opt-in side-car(同
+        `repositories/macro_tw_local_repository._finmind_business_indicator` 的
+        `error_out` 慣例)。傳入 dict 時,取數例外的原文寫入 `error_out['error']`。
+        傳 None(既有呼叫端)行為與舊版完全一致:照舊回 `[]`、照舊只 print。
+    """
     with _tdcc_lock:
         if ep in _tdcc_cache:
             return _tdcc_cache[ep]
@@ -3319,6 +3326,8 @@ def _tdcc_get(ep: str) -> list:
         return _tdcc_cache[ep]
     except Exception as e:
         print(f"[_tdcc_get] {ep} 失敗:{e}")
+        if error_out is not None:
+            error_out['error'] = f"{type(e).__name__}: {e}"
         return []
 
 
@@ -3376,12 +3385,37 @@ def tdcc_search_fund(keyword: str) -> list:
 
     回傳格式：
     [{"基金名稱": "...", "基金代碼": "...", "總代理": "...", "淨值": "...", "日期": "..."}]
+
+    2026-09-26（docs/v2/49 §6.3 E-6）：本體移到 `tdcc_search_fund_with_error`，
+    本函式只取其第一個值 —— 回傳型別與值與改動前相同（失敗照舊回 `[]`）。
+    """
+    return tdcc_search_fund_with_error(keyword)[0]
+
+
+def tdcc_search_fund_with_error(keyword: str) -> "tuple[list, str | None]":
+    """同 `tdcc_search_fund`，另外交出失敗原文（docs/v2/49 §6.3 E-6）。
+
+    回傳 `(results, error)`：results 與 `tdcc_search_fund(keyword)` 相同；
+    `error` 為 None 表示本次查詢沒有任何資料源失敗，否則逐行列出失敗的資料源與例外原文：
+    - `TDCC 3-2` / `TDCC 3-4`：取數例外（原文），或回傳空清單（這兩個是全市場清單，
+      空清單本身就不正常；若是先前回了非 list 被快取成空清單，原因只在當時的 stdout）；
+    - `TDCC 3-1`：只在有結果、要補總代理時才有影響，照樣列出；
+    - `FundClear 備援搜尋`：只在 TDCC 查無結果時才會打，例外原文。
+    ⚠️ results 非空而 error 也非空 = 結果可能不完整（例如 3-2 失敗、只剩 3-4 或 FundClear 的結果）。
     """
     results = []
     seen    = set()
+    _failures: list[str] = []
+
+    def _get(ep: str) -> list:
+        _box: dict = {}
+        _data = _tdcc_get(ep, error_out=_box)
+        if not _data:
+            _failures.append(f"TDCC {ep}：{_box.get('error') or '回傳空清單（原因未提供）'}")
+        return _data
 
     # ── 3-2 基金基本資料 ──────────────────────────────────
-    basic = _tdcc_get("3-2")
+    basic = _get("3-2")
     if basic:
         for item in basic:
             name = item.get("基金名稱","")
@@ -3400,7 +3434,7 @@ def tdcc_search_fund(keyword: str) -> list:
                     })
 
     # ── 3-4 淨值（補充淨值欄位）────────────────────────────
-    navs = _tdcc_get("3-4")
+    navs = _get("3-4")
     nav_map = {}
     if navs:
         for item in navs:
@@ -3434,7 +3468,7 @@ def tdcc_search_fund(keyword: str) -> list:
                     })
 
     # ── 3-1 總代理（補充機構資訊）──────────────────────────
-    agents = _tdcc_get("3-1")
+    agents = _get("3-1")
     if agents and results:
         agent_map = {a.get("境外基金機構名稱","").upper(): a.get("總代理名稱","")
                      for a in agents}
@@ -3480,10 +3514,12 @@ def tdcc_search_fund(keyword: str) -> list:
                         "日期":     date,
                         "來源":     "FundClear",
                     })
-        except Exception:
-            pass
+        except Exception as _e_fc:
+            # 既有行為：備援失敗不 raise、照舊回已有結果。E-6：原文交出去，
+            # 不再讓「查詢失敗」看起來像「零檔符合」。
+            _failures.append(f"FundClear 備援搜尋：{type(_e_fc).__name__}: {_e_fc}")
 
-    return results
+    return results, ("\n".join(_failures) if _failures else None)
 
 
 def tdcc_get_agents() -> list:

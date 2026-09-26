@@ -27,6 +27,8 @@ import pandas as pd
 
 # 共用 policy_store 的 PolicySheetError 體系，呼叫端只接一個例外
 from repositories.policy_repository import PolicySheetError
+# 2026-09-26（49 §6.3 E-7）：分辨「_Ledgers 分頁不存在」與「打不開」（同層 L1 helper）
+from repositories.policy._helpers import _is_worksheet_not_found
 
 
 LEDGER_TAB = "_Ledgers"
@@ -109,12 +111,35 @@ def ensure_ledger_worksheet(client: Any, sheet_id: str, rows: int = 500) -> Any:
 # Read
 # ──────────────────────────────────────────────────────────────────────
 def load_all_ledgers(client: Any, sheet_id: str) -> pd.DataFrame:
-    """讀 _Ledgers 全表。tab 不存在或空表回空 DataFrame。"""
+    """讀 _Ledgers 全表。tab 不存在或空表回空 DataFrame。
+
+    2026-09-26（docs/v2/49 §6.3 E-7）：本體移到 `load_all_ledgers_with_error`，
+    本函式只取其第一個值 —— 回傳型別與值與改動前相同（打不開試算表照舊回空表）。
+    """
+    return load_all_ledgers_with_error(client, sheet_id)[0]
+
+
+def load_all_ledgers_with_error(client: Any, sheet_id: str) -> "tuple[pd.DataFrame, str | None]":
+    """同 `load_all_ledgers`，另外交出「打不開」的原因（docs/v2/49 §6.3 E-7）。
+
+    回傳 `(DataFrame, error)`：DataFrame 與 `load_all_ledgers` 相同；`error`：
+    - 試算表打不開（權限、ID 錯、配額…）→ 例外原文；
+    - `_Ledgers` 分頁存在但取不到（非「分頁不存在」的例外）→ 例外原文；
+    - `_Ledgers` 分頁**不存在** → None（沒有交易紀錄是這份試算表的真實狀態，不是失敗）；
+    - 空表 → None。
+    讀取列時的例外照舊 raise `PolicySheetError`（甲類，不變）。
+    """
+    _empty = pd.DataFrame(columns=list(LEDGER_COLS))
     try:
         sh = client.open_by_key(sheet_id)
+    except Exception as e:
+        return _empty, f"開啟試算表失敗：{type(e).__name__}: {e}"
+    try:
         ws = sh.worksheet(LEDGER_TAB)
-    except Exception:
-        return pd.DataFrame(columns=list(LEDGER_COLS))
+    except Exception as e:
+        if _is_worksheet_not_found(e):
+            return _empty, None
+        return _empty, f"開啟 {LEDGER_TAB} 分頁失敗：{type(e).__name__}: {e}"
 
     try:
         records = ws.get_all_records()
@@ -122,7 +147,7 @@ def load_all_ledgers(client: Any, sheet_id: str) -> pd.DataFrame:
         raise PolicySheetError(f"讀取 _Ledgers 失敗：{e}") from e
 
     if not records:
-        return pd.DataFrame(columns=list(LEDGER_COLS))
+        return _empty, None
 
     df = pd.DataFrame(records)
     for c in LEDGER_COLS:
@@ -136,7 +161,7 @@ def load_all_ledgers(client: Any, sheet_id: str) -> pd.DataFrame:
     df["date"]          = df["date"].map(_norm_date)
     for c in ("policy_id", "code", "action", "note"):
         df[c] = df[c].fillna("").astype(str).str.strip()
-    return df
+    return df, None
 
 
 def append_ledger_row(client: Any, sheet_id: str, row: dict) -> None:

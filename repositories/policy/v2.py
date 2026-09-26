@@ -31,8 +31,10 @@ from ._helpers import (
     _normalize_float,
     _normalize_fx,
     _normalize_invest_twd,
+    _record_invest_twd_parse_error,
     _row_to_list,
     _with_quota_retry,
+    get_invest_twd_parse_errors,
     normalize_invest_twd_column,
     reset_invest_twd_parse_errors,
 )
@@ -187,12 +189,35 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
     TTL 快取（key=sheet_id），同 sheet 60 秒內第二次呼叫直接回 cached DataFrame
     `.copy()`（防外部 mutate）。`gspread.Client` 物件 unhashable，故走手動 dict
     而非 `infra/cache.py:_ttl_cache`。
+
+    2026-09-26（docs/v2/49 §6.3 E-1 (a)）：本體移到
+    `load_all_policy_worksheets_with_error`，本函式只取其第一個值 —— 回傳型別、
+    值、快取行為（含「缺分頁的結果照舊快取 60 秒」）與改動前逐字相同。
+    """
+    return load_all_policy_worksheets_with_error(client, sheet_id)[0]
+
+
+def load_all_policy_worksheets_with_error(
+    client: Any, sheet_id: str,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """同 `load_all_policy_worksheets`，另外交出**被略過的分頁**（docs/v2/49 §6.3 E-1 (a)）。
+
+    Returns
+    -------
+    (DataFrame, skipped)
+        DataFrame 與 `load_all_policy_worksheets` 完全相同；`skipped` 為
+        `[{"tab": 分頁名, "error": "例外型別: 訊息"}]`（原文，不改寫、不截斷），
+        沒有分頁被略過時為 `[]`。
+
+    ⚠️ 快取語意沿用 v18.248（**缺分頁的結果照舊快取 60 秒**，§4.4 已登記）——
+    本函式不改它，只把「當時略過了哪些分頁」與結果一起存進同一筆快取，
+    所以快取命中時交出的 `skipped` 與當初那次讀取相同，不會變成「沒有略過」。
     """
     import time as _t
     _now = _t.time()
     _hit = _LOAD_ALL_WS_CACHE.get(sheet_id)
     if _hit is not None and (_now - _hit[0]) < _LOAD_ALL_WS_TTL:
-        return _hit[1].copy()
+        return _hit[1].copy(), [dict(_x) for _x in _hit[2]]
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         all_ws = _with_quota_retry(sh.worksheets)
@@ -205,29 +230,34 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
                  and ws.title != DEFAULT_WORKSHEET]
     if not policy_ws:
         _empty = pd.DataFrame(columns=list(ALL_COLS))
-        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty)
-        return _empty.copy()
+        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty, [])
+        return _empty.copy(), []
 
     frames = []
+    skipped: list[dict] = []
     for ws in policy_ws:
         try:
             records = _with_quota_retry(ws.get_all_records)
-        except Exception:
-            continue   # 單一分頁失敗不影響其他
+        except Exception as e:
+            # 單一分頁失敗不影響其他（v18.200 既有行為）；§6.3 E-1 (a)：
+            # 略過歸略過，**分頁名與原因要交出去**，不能讓持倉無聲少一張保單。
+            skipped.append({"tab": ws.title, "error": f"{type(e).__name__}: {e}"})
+            continue
         df = _records_to_policy_df(records)
         if not df.empty:
             df = df.assign(policy_id=ws.title)   # tab 名覆寫 policy_id（保證一致）
             frames.append(df)
     if not frames:
         _empty = pd.DataFrame(columns=list(ALL_COLS))
-        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty)
-        return _empty.copy()
+        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty, skipped)
+        return _empty.copy(), [dict(_x) for _x in skipped]
     _result = pd.concat(frames, ignore_index=True)
-    _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _result)
-    return _result.copy()
+    _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _result, skipped)
+    return _result.copy(), [dict(_x) for _x in skipped]
 
 
 # v18.248: 60 秒 TTL 快取（key=sheet_id）— 配合「🔄 清空快取」按鈕
+# 2026-09-26（49 §6.3 E-1 (a)）：值由 (時間, df) 擴為 (時間, df, 略過的分頁清單)。
 _LOAD_ALL_WS_CACHE: dict = {}
 _LOAD_ALL_WS_TTL = 60
 
@@ -931,12 +961,76 @@ def _v1_frame_to_v2(df_v1: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
+def load_all_policies_v2(client: Any, sheet_id: str, *,
+                         cache_user: "str | None" = None) -> pd.DataFrame:
     """讀整本 Sheet 內所有保單分頁，合併成一張 v2 DataFrame。
 
     v19.432:**混合 schema 相容** —— v2 分頁(item_type/類型)照 v2 讀;v1/英文分頁
     (fund_url/policy_tier)經 `_v1_frame_to_v2` 映射後一併納入,避免混合 Sheet 漏基金。
+
+    2026-09-26（docs/v2/49 §6.3 E-1）：本體移到 `load_all_policies_v2_with_error`，
+    本函式只取其第一個值。`cache_user` 見該函式；**不帶（既有呼叫端）時不快取**，
+    回傳型別、值與改動前逐字相同。
     """
+    return load_all_policies_v2_with_error(client, sheet_id, cache_user=cache_user)[0]
+
+
+# 2026-09-26（49 §6.3 E-1 (b)、§4.4）：load_all_policies_v2 的 60 秒手動快取。
+# 比照上方 `_LOAD_ALL_WS_CACHE`（`gspread.Client` 不可雜湊 → 模組層 dict），但：
+#   ① 鍵是「登入者＋試算表 ID」，不是只有試算表 ID —— OAuth 模式下不同登入者的
+#      讀取權限不同，只用試算表 ID 會把甲看得到的保單交給乙；
+#   ② 只快取成功的結果：**有任何一張分頁被略過就算失敗、不快取**（與上方 v1 讀取
+#      函式刻意不同，它會把缺分頁的結果快取 60 秒，§4.4 已登記）；
+#   ③ 值另存本次載入的本金解析失敗清單，命中時還原到 `_helpers` 的 registry ——
+#      否則命中時 `get_invest_twd_parse_errors()` 會停在「上一個別的 loader」的清單。
+# 值：(時間, DataFrame, 本金解析失敗清單)。「存檔」「重新取數」時呼叫
+# `clear_load_all_policies_v2_cache()` 清掉。
+_LOAD_ALL_V2_CACHE: dict = {}
+_LOAD_ALL_V2_TTL = 60
+
+
+def clear_load_all_policies_v2_cache() -> None:
+    """清空 `load_all_policies_v2` 的 60 秒快取（「存檔」「重新取數」時呼叫）。"""
+    _LOAD_ALL_V2_CACHE.clear()
+
+
+def load_all_policies_v2_with_error(
+    client: Any, sheet_id: str, *, cache_user: "str | None" = None,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """同 `load_all_policies_v2`，另外交出**被略過的分頁**（docs/v2/49 §6.3 E-1）。
+
+    Parameters
+    ----------
+    cache_user : str | None
+        登入者識別（例如 OAuth 登入信箱，或服務帳戶的固定代號）。
+        - `None`（預設，既有呼叫端）→ **不快取**，每次都讀 Sheets（與改動前相同）；
+        - 非空字串 → 以 `(cache_user, sheet_id)` 為鍵快取 60 秒，只快取沒有略過任何分頁的結果；
+        - 空字串／純空白 → `ValueError`：呼叫端認不出登入者時應明說 `None`，
+          不能拿空字串當鍵（那等於所有認不出的人共用一筆快取）。
+
+    Returns
+    -------
+    (DataFrame, skipped)
+        DataFrame 與 `load_all_policies_v2` 完全相同；`skipped` 為
+        `[{"tab": 分頁名, "error": "例外型別: 訊息"}]`（原文，不改寫、不截斷），
+        沒有分頁被略過時為 `[]`。整本打不開時照舊 raise `PolicySheetError`（不快取）。
+    """
+    import time as _t
+    if cache_user is not None:
+        if not isinstance(cache_user, str):
+            raise TypeError(f"cache_user 必須是 str 或 None，收到 {type(cache_user).__name__}")
+        if not cache_user.strip():
+            raise ValueError("cache_user 不可為空字串：認不出登入者時請傳 None（不快取）")
+    _key = (cache_user, sheet_id) if cache_user is not None else None
+    _now = _t.time()
+    if _key is not None:
+        _hit = _LOAD_ALL_V2_CACHE.get(_key)
+        if _hit is not None and (_now - _hit[0]) < _LOAD_ALL_V2_TTL:
+            # 還原本金解析失敗 registry（replace 語意），讓命中與重讀一次的結果一致
+            reset_invest_twd_parse_errors()
+            for _rec in _hit[2]:
+                _record_invest_twd_parse_error(_rec)
+            return _hit[1].copy(), []
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         tabs = [ws for ws in _with_quota_retry(sh.worksheets)
@@ -946,10 +1040,13 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
     # §1：本次載入的本金解析失敗清單為 replace 語意（跨分頁累加），開始逐分頁前清空
     reset_invest_twd_parse_errors()
     frames: list[pd.DataFrame] = []
+    skipped: list[dict] = []
     for ws in tabs:
         try:
             rows = _with_quota_retry(ws.get_all_records) or []
-        except Exception:
+        except Exception as e:
+            # 既有行為：單一分頁失敗略過、不影響其他分頁。§6.3 E-1 (a)：分頁名與原因交出去。
+            skipped.append({"tab": ws.title, "error": f"{type(e).__name__}: {e}"})
             continue
         if not rows:
             continue
@@ -980,8 +1077,14 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         df_one["div_cash_pct"]     = df_one["div_cash_pct"].map(_normalize_div_cash_pct)
         frames.append(df_one)
     if not frames:
-        return pd.DataFrame(columns=list(ALL_COLS_V2))
-    return pd.concat(frames, ignore_index=True)
+        _out = pd.DataFrame(columns=list(ALL_COLS_V2))
+    else:
+        _out = pd.concat(frames, ignore_index=True)
+    if _key is None:
+        return _out, skipped
+    if not skipped:
+        _LOAD_ALL_V2_CACHE[_key] = (_now, _out, get_invest_twd_parse_errors())
+    return _out.copy(), skipped
 
 
 def copy_sheet_as_backup(
