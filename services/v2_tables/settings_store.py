@@ -50,13 +50,34 @@ fetch_log 的 outcome（回修第 2 輪總管裁示必修 1、3、4；定案記�
 
 from __future__ import annotations
 
+import json
+from datetime import date
 from typing import Callable, Optional
 
 from repositories import settings_sheet_repository as store
+from repositories.macro.yf import fetch_yf_close
 from services.v2_tables import market_indicator as mi
 from services.v2_tables.masking import mask_message
 
 SettingsSheetError = store.SettingsSheetError
+
+# ── 接線狀態（線框草稿第 10 節 B7：「尚未接上」由 L2 交給畫面，畫面不自己猜）────────────
+# `49` Q12：第一階段只落地 `user_setting`、`market_indicator`、`fetch_log`；`nav`、`dividend`
+# 等到 hld 階段再裁。這裡的清單就是畫面上 ★1／★2 那幾行的唯一依據。
+WIRED_TABLES = ("user_setting", "market_indicator", "fetch_log")
+PENDING_TABLES = ("nav", "dividend")
+# set 頁「重新取數」目前只接上市場指標那一層（`run_market_indicator_fetch`）。
+WIRED_TIERS = (mi.SOURCE_TIER,)
+# 會讀已存設定（`user_setting`）的頁：目前只有 set 頁自己（`set_` 開頭的鍵）。
+# mkt／hld／exp／alo 四頁尚未讀取已存設定（線框草稿 ★7）；哪一頁接上了，就把它的前綴加進來。
+PAGES_READING_SETTINGS = ("set",)
+
+# 「重新取數」要清的 L1 快取：第一階段真的會取數的來源 → 那個來源的 L1 取數函式本身
+# （`_ttl_cache` 包過、有 `cache_clear()`）。`50` 第 10 節 B9 定案：只清本次會用到的 L1 函式
+# 自己的快取，**不動來源冷卻、不呼叫全域清除**（`clear_all_caches`／`global_refresh_all`
+# 都會經 `_CACHE_REGISTRY` 裡的冷卻代理解除所有來源冷卻）。
+# `market_indicator` 經 `fetch_yf_close_with_error` 取 Yahoo，那一支走的是 `fetch_yf_close` 的快取。
+_CACHED_FETCHER_BY_SOURCE = {"Yahoo": fetch_yf_close}
 
 
 def masker(secret_values) -> Callable[[str], str]:
@@ -74,10 +95,110 @@ def load_user_settings(secret_values) -> dict:
     return store.load_user_settings(mask=masker(secret_values))
 
 
+class ValueKindMismatch(ValueError):
+    """`44` SET-4：輸入值與 `value_kind` 不符 → 不存檔。`code`：`kind_mismatch`／`kind_missing`。"""
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
+
+def _is_int_literal(text: str) -> bool:
+    """`-?\\d+`（`\\d` 為 Unicode 十進位數字，與 `re` 的 `\\d` 同義；本套件的 import 白名單不含 `re`）。"""
+    digits = text[1:] if text.startswith("-") else text
+    return digits.isdecimal()
+
+
+def value_matches_kind(value: str, kind: str) -> bool:
+    """`setting_value` 合不合 `value_kind`（`44` 4.5 那六種）。
+
+    判法與 `ui_v2/set/logic.py::value_matches_kind` 相同（那一份登記為 SET-GAP-型別判定規則）：
+    int 為整數字面、float 為數字字面、ratio 為 0 到 1 的數字、date 為 YYYY-MM-DD、
+    list 與 rules 為 JSON 陣列字面。L2 不得 import ui_v2，所以這裡另寫一份，
+    由 tests/test_v2_tables_settings_store_page.py 以同一批輸入逐一比對兩份結果。
+    `kind` 不在六種之內 → ValueError（呼叫端的 bug）。
+    """
+    if kind not in store.VALUE_KIND_VALUES:
+        raise ValueError(f"value_kind {kind!r} 不在 {store.VALUE_KIND_VALUES} 之內")
+    text = value.strip()
+    if kind == "int":
+        return _is_int_literal(text)
+    if kind in ("float", "ratio"):
+        whole, dot, frac = text.partition(".")
+        if not _is_int_literal(whole) or (dot and not frac.isdecimal()):
+            return False
+        return kind == "float" or 0.0 <= float(text) <= 1.0
+    if kind == "date":
+        parts = text.split("-")
+        if [len(p) for p in parts] != [4, 2, 2] or not all(p.isdecimal() for p in parts):
+            return False
+        try:
+            date.fromisoformat(text)
+        except ValueError:
+            return False
+        return True
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return False
+    return isinstance(parsed, list)
+
+
+def check_setting_value(setting_value: Optional[str], value_kind: Optional[str]) -> None:
+    """存檔前的型別檢查（`44` SET-4：輸入值與 `value_kind` 不符 → 不存檔）。不符就 `ValueKindMismatch`。
+
+    - `setting_value` 為 None（清除該鍵）：不判值，只要 `value_kind` 在值域內就放行。
+    - `value_kind` 為空或不在值域：不存（`44` 4.5 `value_kind` 不可空；`alo_basis` 的型別本頁未配，
+      登記 SET-GAP-型別本頁配）。
+    """
+    if value_kind not in store.VALUE_KIND_VALUES:
+        raise ValueKindMismatch(f"value_kind 未定（{value_kind!r}），不存檔", code="kind_missing")
+    if setting_value is None:
+        return
+    if not isinstance(setting_value, str) or not value_matches_kind(setting_value, value_kind):
+        raise ValueKindMismatch(f"setting_value 與 value_kind 不符（{value_kind}），不存檔",
+                                code="kind_mismatch")
+
+
 def save_user_setting(setting_key: str, setting_value: Optional[str], value_kind: str,
                       secret_values) -> dict:
+    """存一個鍵。**先檢查值與型別**（`check_setting_value`），不符就拋 `ValueKindMismatch`、
+    不呼叫 L1（不寫、也不清快取 —— 沒有任何寫入發生）。相符才交 L1（L1 不論成敗都清快取）。"""
+    check_setting_value(setting_value, value_kind)
     return store.save_user_setting(setting_key, setting_value, value_kind,
                                    mask=masker(secret_values))
+
+
+def save_setting_for_page(setting_key: str, setting_value: Optional[str], value_kind: Optional[str],
+                          secret_values) -> dict:
+    """給 set 頁「存檔」用：把成敗收成一個純 dict（訊息皆已遮蔽），畫面依 `status` 選文案。
+
+    `status`：`saved`／`kind_mismatch`／`kind_missing`（未寫）／`failed`（寫入失敗或冷卻、缺設定）。
+    失敗時帶 `code`、`http_status`、`hint`、`remaining_sec`、`client_email`（`50` 第 8 節的 403／404 提示用；
+    `client_email` 依 ACCEPTANCE 7.2 丙不遮）。寫表以外的例外照樣往上拋，不吞。
+    """
+    try:
+        row = save_user_setting(setting_key, setting_value, value_kind, secret_values)
+    except ValueKindMismatch as exc:
+        return {"status": exc.code, "key": setting_key, "message": str(exc)}
+    except store.SettingsSheetError as exc:
+        return {"status": "failed", "key": setting_key, "message": str(exc), "code": exc.code,
+                "http_status": exc.http_status, "hint": exc.hint,
+                "remaining_sec": exc.remaining_sec,
+                "client_email": exc.details.get("client_email") or ""}
+    return {"status": "saved", "key": setting_key, "row": row}
+
+
+def sheet_gate(secret_values) -> dict:
+    """寫入閘門（不打上游）：`{"state", "message"（已遮蔽）, "remaining_sec"}`。見 L1 `gate_status`。"""
+    return store.gate_status(mask=masker(secret_values))
+
+
+def sheet_title(secret_values) -> str:
+    """設定試算表的標題，**已過遮蔽**（標題不是憑證，但若客戶把 ID 取成標題就會被遮）。
+    讀不到 → `SettingsSheetError`（訊息已遮蔽）。"""
+    mask = masker(secret_values)
+    return mask(store.load_sheet_title(mask=mask))
 
 
 def load_fetch_log(secret_values) -> dict:
@@ -190,6 +311,26 @@ class MarketIndicatorSheetSink:
             self._fail("market_indicator", write_failed)
             return
         self.persist.update(ok=True, stage="done", message=None, error_code=None)
+
+
+def refetch_cached_functions() -> list:
+    """「重新取數」前要清快取的 L1 取數函式（第一階段真的會取數的來源各一支，去重）。
+    來源沒有登記在 `_CACHED_FETCHER_BY_SOURCE` → KeyError（新接一個來源卻忘了登記，當場炸）。"""
+    out = []
+    for spec in mi.INDICATOR_SPECS.values():
+        if mi._phase1_of(spec) == "write":
+            out.append(_CACHED_FETCHER_BY_SOURCE[spec["source"][0]])
+    return list(dict.fromkeys(out))
+
+
+def refetch_market_indicator(secret_values, *,
+                             build: Callable = mi.build_market_indicator_table) -> dict:
+    """set 頁「重新取數」（市場指標）：先清本次會用到的 L1 取數函式自己的快取，再照
+    `run_market_indicator_fetch` 取數寫表。**不動來源冷卻、不呼叫全域清除**（`50` B9）。
+    冷卻中的來源照樣由 L1（`infra.source_backoff`）擋下，不因清了快取就多打一次。"""
+    for fetcher in refetch_cached_functions():
+        fetcher.cache_clear()
+    return run_market_indicator_fetch(secret_values, build=build)
 
 
 def run_market_indicator_fetch(secret_values, *,

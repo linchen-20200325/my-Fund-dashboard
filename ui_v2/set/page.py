@@ -7,8 +7,11 @@
 本檔不 import 舊 repo 任何模組，不發任何網路請求，**不寫任何色碼字面值**
 （每一個顏色都從 theme 取 —— 那一份每一組都算過對比）。
 
-注意：本頁的「存檔」「重新取數」兩種按鈕畫得出來、按得下去，但**本頁沒有後端**：
-   按下去不寫任何東西（SET-GAP-無後端）。這是一個用假資料畫的頁面，不是接上資料的成品。
+注意：示範模式（`ui_v2/app_set.py`，不傳入載入函式）的「存檔」「重新取數」兩種按鈕畫得出來、按得下去，
+   但**沒有後端**：按下去不寫任何東西（SET-GAP-無後端）。
+正式模式（`ui_v2/app_set_live.py`）由呼叫端注入三個函式（`render(load_live=, save_live=, refetch_live=)`），
+   按鈕才真的存檔、取數；正式模式才有的文案與停用原因全部住在 `live.py`，本檔只畫。
+   **不注入時，本檔走的路徑與加入注入參數之前逐字相同。**
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import re
 
 import streamlit as st
 
-from . import fixtures, logic, theme
+from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -185,6 +188,7 @@ def _placeholders(nodes) -> None:
     for node in nodes or ():
         if node:
             _html(_placeholder_markup(node))
+            _tone_lines(node.get("note_lines"))  # 正式模式才有
 
 
 def _failbox(lines) -> None:
@@ -193,14 +197,33 @@ def _failbox(lines) -> None:
     _html(f'<div class="set-failbox" role="alert">{body}</div>')
 
 
-def _cell(text, *, badges=(), tone=None, raw="") -> str:
+def _cell(text, *, badges=(), tone=None, raw="", notes=()) -> str:
     body = _esc(text)
     if tone and tone != "中性":
         body = f'<span class="set-cell-tone" style="--set-tone:{_tone(tone)}">{body}</span>'
     body += "".join(_badge(b) for b in badges)
     if raw:
         body += f'<span class="set-raw">{_esc(raw)}</span>'
+    # 正式模式才有（live.apply_live_notes 加的）：原因行、已遮蔽憑證，各另起一行；示範模式沒有這些鍵
+    for note in notes or ():
+        body += f'<span class="set-raw">{_esc(note)}</span>'
     return body
+
+
+def _tone_lines(nodes) -> None:
+    """正式模式的附加行（`live.py` 產生；每一行 `{"text", "_tone"}` 或純字串）。灰色小字用 set-note。"""
+    for node in nodes or ():
+        if isinstance(node, str):
+            node = {"text": node, "_tone": "中性"}
+        if node["_tone"] == "灰":
+            _html(f'<div class="set-note">{_esc(node["text"])}</div>')
+        elif node["_tone"] == "中性":
+            _html(f'<div class="set-line">{_esc(node["text"])}</div>')
+        else:
+            _html(
+                f'<div class="set-line"><span class="set-cell-tone" style="--set-tone:{_tone(node["_tone"])}">'
+                f'{_esc(node["text"])}</span></div>'
+            )
 
 
 def _table(labels, rows) -> str:
@@ -240,41 +263,44 @@ def _render_set0(block: dict) -> None:
         f'<div class="set-note">{_esc(block["answers"])}</div></div>'
         f'<div class="set-code">{_esc(block["code"])}　{_esc(block["title"])}</div></div>'
     )
+    _lines(block.get("note_lines"))  # 正式模式才有：燈文含遮蔽記號時的下一行（★5）
     _lines(block["detail_lines"])
 
 
 # ───────────────────────── 層 2 ─────────────────────────
 
 
-def _render_set1(block: dict, key: str) -> None:
+def _render_set1(block: dict, key: str, ctx=None) -> None:
     _card_head(block)
     rows = []
     for row in block["_rows"]:
         fail_tone = "紅" if row["_failed"] else None
         rows.append(
             [
-                _cell(row["kind_text"], badges=row["badges"]),
-                _cell(row["at_text"], tone=fail_tone),
+                _cell(row["kind_text"], badges=row["badges"], notes=row.get("note_lines")),
+                _cell(row["at_text"], tone=fail_tone, notes=row.get("at_note_lines")),
                 _cell(row["days_text"]),
                 _cell(row["compare_text"]),
             ]
         )
     _html(_table(block["column_labels"], rows))
     _placeholders(block["fail_nodes"])
+    _tone_lines(block.get("live_lines"))  # 正式模式才有（★9）
     _lines(block["limit_lines"], "set-line")
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_set2(block: dict, key: str) -> None:
+def _render_set2(block: dict, key: str, ctx=None) -> None:
     _card_head(block)
     _placeholders([block["placeholder"]])
     if block["_rows"]:
         rows = [
             [
-                _cell(r["tier_text"], badges=r["badges"]),
+                _cell(r["tier_text"], badges=r["badges"], notes=r.get("note_lines")),
                 _cell(r["result_text"], tone=r["_tone"] if r["_tone"] == "紅" else None),
                 _cell(r["time_text"]),
-                _cell(r["message_text"], tone=r["_tone"] if r["_tone"] == "紅" else None),
+                _cell(r["message_text"], tone=r["_tone"] if r["_tone"] == "紅" else None,
+                      notes=r.get("message_note_lines")),
             ]
             for r in block["_rows"]
         ]
@@ -282,8 +308,9 @@ def _render_set2(block: dict, key: str) -> None:
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_set3(block: dict, key: str) -> None:
+def _render_set3(block: dict, key: str, ctx=None) -> None:
     _card_head(block)
+    _tone_lines(block.get("head_lines"))  # 正式模式才有（★10）
     _placeholders([block["placeholder"]])
     if block["_rows"]:
         rows = [
@@ -291,6 +318,7 @@ def _render_set3(block: dict, key: str) -> None:
             for r in block["_rows"]
         ]
         _html(_table(block["column_labels"], rows))
+    _tone_lines(block.get("live_lines"))  # 正式模式才有（★9）
     _lines([block["answers"]] + block["detail_lines"])
 
 
@@ -304,25 +332,48 @@ def _expander(block: dict):
     )
 
 
-def _render_set4(block: dict, key: str) -> None:
+def _render_set4(block: dict, key: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
+        _tone_lines(block.get("top_lines"))  # 正式模式才有（★6 缺設定那一行）
         _placeholders(block["fail_nodes"])
         for lines in block["orphan_fail_lines"]:
             _failbox(lines)
         for field in block["inputs"]:
             widget = st.text_area if field["_multiline"] else st.text_input  # SET-GAP-輸入欄型態
             widget(field["label"], value=field["value_text"], key=f"{key}_{field['name']}")
-            _lines([field["used_by_text"]])
+            _lines(field.get("saved_lines"), "set-line")  # 正式模式才有（★6「已存檔」）
+            if field["used_by_text"] is not None:  # 正式模式下未設定的非 set_ 鍵不出這一行（草稿 B9）
+                _lines([field["used_by_text"]])
             _lines(field["unset_lines"], "set-line")
             _lines(field["hint_lines"], "set-hint")
             if field["fail_lines"]:
                 _failbox(field["fail_lines"])
-        _buttons(block["buttons"], f"{key}_set4")
+        _tone_lines(block.get("live_lines"))  # 正式模式才有（★9）
+        if ctx is None:
+            _buttons(block["buttons"], f"{key}_set4")
+        else:
+            _live_save(block, key, ctx)
         _lines(block["detail_lines"])
 
 
-def _render_set5(block: dict, key: str) -> None:
+def _live_save(block: dict, key: str, ctx) -> None:
+    """正式模式的「存檔」：寫入被編輯的鍵，結果放進 session 後重跑一次，下一輪畫出「已存檔」或失敗框。
+    停用原因、要存哪幾鍵、結果怎麼寫，全部由 live.py 判定；本函式只收集輸入欄的當下值、呼叫注入的函式。"""
+    button = block["buttons"][0]
+    clicked = st.button(button["label"], key=f"{key}_set4_btn_0", disabled=not button["_enabled"],
+                        help=button["disabled_reason"] or None)
+    if not clicked:
+        return
+    values = {f["name"]: st.session_state.get(f"{key}_{f['name']}") for f in block["inputs"]}
+    results = {}
+    for name, value, kind in live.changed_settings(block["inputs"], values):
+        results[name] = {**ctx["save_live"](name, value, kind), "attempted": value}
+    st.session_state["_set_live_save_results"] = results
+    st.rerun()
+
+
+def _render_set5(block: dict, key: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         picked = st.radio(
@@ -332,25 +383,53 @@ def _render_set5(block: dict, key: str) -> None:
             key=f"{key}_set5_tier",
             horizontal=True,
         )
-        # 停用與否由 logic 依單選的當下值判定；本檔不自己判。
-        _buttons([logic.set5_button(picked)], f"{key}_set5")
+        if ctx is None:
+            # 停用與否由 logic 依單選的當下值判定；本檔不自己判。
+            _buttons([logic.set5_button(picked)], f"{key}_set5")
+        else:
+            _live_refetch(picked, key, ctx)
         _lines(block["detail_lines"])
+
+
+def _live_refetch(picked, key: str, ctx) -> None:
+    """正式模式的「重新取數」：停用原因由 live.refetch_button 判定；按下後先畫「取數中」並停用，
+    取完把結果放進 session 後重跑一次，下一輪在按鈕下方畫結果行（下一次互動後消失；要回頭看，看 SET-6）。"""
+    slot = st.empty()
+    button = live.refetch_button(picked, ctx["notes"])
+    clicked = slot.button(button["label"], key=f"{key}_set5_btn_0", disabled=not button["_enabled"],
+                          help=button["disabled_reason"] or None)
+    result = ctx.get("refetch_result")
+    if result is not None:
+        _tone_lines(live.refetch_result_lines(result, ctx["notes"]["mask_token"]))
+    if not clicked:
+        return
+    running = live.refetch_button(picked, ctx["notes"], running=True)
+    with slot.container():
+        st.button(running["label"], key=f"{key}_set5_btn_running", disabled=True,
+                  help=running["disabled_reason"])
+        _html(f'<div class="set-line">{_esc(running["disabled_reason"])}</div>')
+    st.session_state["_set_live_refetch_result"] = ctx["refetch_live"](picked)
+    st.rerun()
 
 
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _render_set6(block: dict, key: str) -> None:
+def _render_set6(block: dict, key: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         _placeholders([block["placeholder"]])
         if block["_rows"]:
-            _html(_table(block["column_labels"], [[_cell(c) for c in r["cells"]] for r in block["_rows"]]))
+            _html(_table(block["column_labels"], [
+                [_cell(c, notes=r.get("cell_notes", {}).get(i)) for i, c in enumerate(r["cells"])]
+                for r in block["_rows"]
+            ]))
         _lines(block["tail_lines"], "set-line")
+        _tone_lines(block.get("live_lines"))  # 正式模式才有（★9）
         _lines(block["detail_lines"])
 
 
-def _render_set7(block: dict, key: str) -> None:
+def _render_set7(block: dict, key: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         rows = [[_cell(r["field_text"], badges=r["badges"]), _cell(r["blocks_text"])] for r in block["_rows"]]
@@ -389,21 +468,51 @@ _RENDERERS = {
 }
 
 
-def render() -> None:
+def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
+    """畫整頁。
+
+    三個參數都不傳（None）時行為與加這些參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
+    傳入時（正式入口 app_set_live.py）改由 `load_live()` 取得資料，這一條路徑不讀 fixtures，
+    並套用 `live.apply_live_notes` 的正式模式調整；「存檔」呼叫 `save_live(鍵, 值, value_kind)`，
+    「重新取數」呼叫 `refetch_live(層級)`。頁首副標只印本頁的提問句（草稿 ✂1）。
+    三個函式要一起傳：只傳其中一部分就是呼叫端的 bug，當場炸。
+    """
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
-    scenario = _pick_scenario()
-    save_failed = _pick_save_failed()
-    model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
-    # 輸入欄的 key 帶情境與開關：換情境時不沿用上一個情境留在 session 裡的值。
-    key = f"{scenario}_{int(save_failed)}"
+    ctx = None
+    if load_live is None:
+        if save_live is not None or refetch_live is not None:
+            raise ValueError("save_live／refetch_live 要與 load_live 一起傳")
+        scenario = _pick_scenario()
+        save_failed = _pick_save_failed()
+        model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
+        # 輸入欄的 key 帶情境與開關：換情境時不沿用上一個情境留在 session 裡的值。
+        key = f"{scenario}_{int(save_failed)}"
+    else:
+        if save_live is None or refetch_live is None:
+            raise ValueError("正式模式要同時傳 load_live、save_live、refetch_live")
+        live_input = load_live()
+        save_results = st.session_state.pop("_set_live_save_results", None)
+        dataset = live.dataset_with_save_results(live_input["dataset"], save_results)
+        model = live.apply_live_notes(logic.build_page_model(dataset), dataset, live_input["notes"],
+                                      save_results=save_results)
+        ctx = {
+            "notes": live_input["notes"],
+            "save_live": save_live,
+            "refetch_live": refetch_live,
+            "refetch_result": st.session_state.pop("_set_live_refetch_result", None),
+        }
+        key = "live"
 
     _html(f'<div class="set-title">{_esc(model["title"])}</div>')
-    label = fixtures.SCENARIO_LABELS[scenario] + ("　·　存檔寫入失敗" if save_failed else "")
-    _html(
-        f'<div class="set-sub">{_esc(model["answers"])}　·　{_esc(model["hint_note"])}'
-        f"　·　情境 {_esc(label)}</div>"
-    )
+    if ctx is None:
+        label = fixtures.SCENARIO_LABELS[scenario] + ("　·　存檔寫入失敗" if save_failed else "")
+        _html(
+            f'<div class="set-sub">{_esc(model["answers"])}　·　{_esc(model["hint_note"])}'
+            f"　·　情境 {_esc(label)}</div>"
+        )
+    else:
+        _html(f'<div class="set-sub">{_esc(model["answers"])}</div>')  # 草稿 ✂1：只留提問句
 
     _html('<div class="set-layer-label">層 1　結論</div>')
     _render_set0(logic.find_block(model, "SET-0"))
@@ -412,17 +521,17 @@ def render() -> None:
     with st.container(key="set_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html('<div class="set-layer-label">層 3　操作（預設收合）</div>')
     with st.container(key="set_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html('<div class="set-layer-label">層 4　佐證（預設收合）</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key)
+        _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(_badge(b) for b in model["footer_badges"])
