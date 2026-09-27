@@ -143,12 +143,15 @@ def _holding_reasons(row: dict, parse_error=None):
         reasons.append("平均買入單位成本空白或為 0（沒填）")
     invest = row.get("invest_twd")
     cost_twd = None
+    both_note = "；此分頁同時有「淨投資金額」與「invest_twd」兩欄，讀的是 invest_twd 欄"
     if parse_error is not None:
-        reasons.append(f"淨投資金額無法解析：{parse_error.get('raw', '')}")
+        # 第 6 輪 B 組 5：兩欄並存時，解析失敗的原因也寫明讀的是哪一欄
+        reasons.append(f"淨投資金額無法解析：{parse_error.get('raw', '')}"
+                       + (f"（{both_note[1:]}）" if row.get("_invest_both") else ""))
     elif invest is None or invest == "":
         if row.get("_invest_both"):
             # 第 5 輪 A 組 6：同一分頁同時有「淨投資金額」與「invest_twd」，讀的是英文欄（與既有函式同）
-            reasons.append("淨投資金額空白（沒填；此分頁同時有「淨投資金額」與「invest_twd」兩欄，讀的是 invest_twd 欄）")
+            reasons.append(f"淨投資金額空白（沒填{both_note}）")
         else:
             reasons.append("淨投資金額空白（沒填）")   # U10：不補 0
     elif _is_number(invest) and invest == 0:
@@ -163,6 +166,7 @@ def _holding_reasons(row: dict, parse_error=None):
     return fields, reasons
 
 
+UNJUDGED_REASON_PREFIX = "可能屬於讀取失敗的分頁"
 SKIPPED_OWNER_REASON = "對應持倉已被略過（保單分頁該列的鍵不能用，見 skipped_holdings）"
 
 
@@ -224,6 +228,8 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     - `skipped_holdings`：保單分頁上沒寫進 `holding` 的列與原因；
     - `missing_supplement`／`duplicate_supplement`／`orphan_supplement`；
     - `missing_profile`／`duplicate_profile`／`orphan_profile`；
+    - `supplement_unjudged`／`profile_unjudged`：有保單分頁讀取失敗時，本來會報成孤兒的列改列在這裡，
+      原因「可能屬於讀取失敗的分頁（<分頁名>），本次不判定孤兒」（第 6 輪 B 組 2）；
     - `supplement_of_skipped`／`profile_of_skipped`：保單分頁上**有**這組鍵、只是那一列因鍵不能用
       （不是文字、含 `|`）被略過 —— 不報成孤兒，原因寫 `SKIPPED_OWNER_REASON`（第 3 輪裁定 10）；
     - `bad_rows`、`blank_rows`、`tab_missing`（依分頁）；`skipped_tabs`、`invest_twd_parse_errors` 原樣轉交。
@@ -363,13 +369,19 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     if collided:
         raise HoldingIdCollision(f"holding_id 撞號：{collided}")
 
-    orphan_supplement, supplement_of_skipped = [], []
+    orphan_supplement, supplement_of_skipped, supplement_unjudged, profile_unjudged = [], [], [], []
+    # 第 6 輪 B 組 2：有保單分頁讀取失敗時，孤兒判定不可信 —— 那張分頁上可能就有這組鍵。
+    failed_tabs = [t.get("tab") for t in skipped_tabs]
+    unjudged_reason = (f"{UNJUDGED_REASON_PREFIX}（{'、'.join(str(t) for t in failed_tabs)}），本次不判定孤兒"
+                       if failed_tabs else "")
     for k, rec in sorted(supplements.items(), key=lambda item: item[1]["_row"]):
         if k in used_keys:
             continue
         entry = {"tab": TAB_SUPPLEMENT, "row": rec["_row"], "key": k}
         if any((a, b) in hint_pairs for a in _text_forms(k[0]) for b in _text_forms(k[1])):
             supplement_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
+        elif unjudged_reason:
+            supplement_unjudged.append({**entry, "reason": unjudged_reason})
         else:
             orphan_supplement.append(entry)
 
@@ -381,6 +393,8 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
             entry = {"tab": TAB_PROFILE, "row": rec["_row"], "key": pid}
             if _text_forms(pid) & hint_pids:
                 profile_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
+            elif unjudged_reason:
+                profile_unjudged.append({**entry, "reason": unjudged_reason})
             else:
                 orphan_profile.append(entry)
             continue
@@ -408,10 +422,12 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
         "duplicate_supplement": duplicate_supplement,
         "orphan_supplement": orphan_supplement,
         "supplement_of_skipped": supplement_of_skipped,
+        "supplement_unjudged": supplement_unjudged,
         "missing_profile": missing_profile,
         "duplicate_profile": duplicate_profile,
         "orphan_profile": orphan_profile,
         "profile_of_skipped": profile_of_skipped,
+        "profile_unjudged": profile_unjudged,
         "bad_rows": {TAB_SUPPLEMENT: supp_bad, TAB_PROFILE: profile_bad},
         "blank_rows": {TAB_SUPPLEMENT: supp["blank_rows"], TAB_PROFILE: prof["blank_rows"],
                        POLICY_TAB: policy_blank_rows},

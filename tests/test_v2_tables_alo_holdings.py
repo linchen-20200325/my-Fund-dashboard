@@ -577,7 +577,7 @@ def live(monkeypatch):
     monkeypatch.setattr(R, "_make_client", lambda creds: FakeClient(book))
     monkeypatch.setattr(GR.time, "sleep", lambda _s: None)
     rows = [prow(), prow(pid="DIRECT", code="ZZ5555", row=3)]
-    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (rows, [], []))
+    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (rows, [], [], 1))
     R.clear_cache()
     SB.reset_all()
     yield book, secrets
@@ -667,3 +667,44 @@ def test_第5輪A6_L2_沒有兩欄旗標時_空白原因照舊():
     assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額空白（沒填）"]
     out = build([prow(invest=None, _invest_both=True)], tabs([srec(2)], [precd(2)]))
     assert "讀的是 invest_twd 欄" in out["skipped_holdings"][0]["reasons"][0]
+
+
+# ═══════════════════════ 第 6 輪 ═══════════════════════
+
+def test_第6輪B2_有分頁讀取失敗時_本來的孤兒改列不判定並寫明分頁名():
+    skipped = [{"tab": "PX-壞1", "error": "x"}, {"tab": "PX-壞2", "error": "y"}]
+    out = A.build_alo_tables([prow()], tabs([srec(2), srec(3, pid="X", code="Y")], [precd(2), precd(4, pid="Z")]),
+                             skipped_tabs=skipped)
+    assert out["orphan_supplement"] == [] and out["orphan_profile"] == []
+    reason = "可能屬於讀取失敗的分頁（PX-壞1、PX-壞2），本次不判定孤兒"
+    assert out["supplement_unjudged"] == [{"tab": S, "row": 3, "key": ("X", "Y"), "reason": reason}]
+    assert out["profile_unjudged"] == [{"tab": P, "row": 4, "key": "Z", "reason": reason}]
+    assert len(out["holding"]) == 1
+
+
+def test_第6輪B2_反例_沒有分頁失敗時照報孤兒():
+    out = build([prow()], tabs([srec(2), srec(3, pid="X", code="Y")], [precd(2), precd(4, pid="Z")]))
+    assert [e["row"] for e in out["orphan_supplement"]] == [3]
+    assert [e["row"] for e in out["orphan_profile"]] == [4]
+    assert out["supplement_unjudged"] == [] and out["profile_unjudged"] == []
+
+
+def test_第6輪B2_被略過鍵的原因優先於不判定():
+    skipped = [{"tab": "PX-壞1", "error": "x"}]
+    out = A.build_alo_tables([prow(pid="A|B", code="C")], tabs([srec(2, pid="A|B", code="C")], []),
+                             skipped_tabs=skipped)
+    assert len(out["supplement_of_skipped"]) == 1 and out["supplement_unjudged"] == []
+
+
+def test_第6輪B5_兩欄並存_英文欄解析失敗_原因寫明讀的是invest_twd欄():
+    errors = [{"tab": "PX-TEST-001", "row": 2, "raw": "1e3", "reason": "x"}]
+    out = A.build_alo_tables([prow(invest=None, _invest_both=True)], tabs([srec(2)], [precd(2)]),
+                             invest_twd_parse_errors=errors)
+    (reason,) = out["skipped_holdings"][0]["reasons"]
+    assert reason.startswith("淨投資金額無法解析：1e3") and "讀的是 invest_twd 欄" in reason
+
+
+def test_第6輪B5_反例_只有一欄時解析失敗原因不提兩欄():
+    errors = [{"tab": "PX-TEST-001", "row": 2, "raw": "1e3", "reason": "x"}]
+    out = A.build_alo_tables([prow(invest=None)], tabs([srec(2)], [precd(2)]), invest_twd_parse_errors=errors)
+    assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額無法解析：1e3"]

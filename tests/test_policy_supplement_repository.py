@@ -485,6 +485,11 @@ class FakePolicyBook:
         return self.tabs
 
 
+def _good_tab(title="PX-TEST-002"):
+    return FakePolicyTab(title, [POLICY_HEAD,
+        [title, "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])
+
+
 POLICY_HEAD = ["保單編號", "基金代號", "基金名稱", "幣別", "級別", "淨投資金額", "現金給付%",
                "持有單位數", "平均買入單位成本", "平均買入匯率"]
 
@@ -536,22 +541,22 @@ def test_U11_真的讀取函式_純數字保單編號與代號被轉成數字_L2
     assert "前導 0" in skip["reasons"][0]
 
 
-def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘密值遮_部分結果快取60秒(policy_env):
+def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘密值遮_整頁結果不快取(policy_env):
     holder, _c, _s = policy_env
 
     class Broken(FakePolicyTab):
         def get_all_records(self, **_kw):
+            self.calls += 1
             raise ValueError(f"boom {SHEET} {SECRET}")
 
-    holder["book"] = FakePolicyBook([Broken("PX-TEST-009", [])])
+    broken = Broken("PX-TEST-009", [])
+    holder["book"] = FakePolicyBook([broken, _good_tab()])
     out = R.load_policy_holding_rows(mask=mask)
     (sk,) = out["skipped_tabs"]
     assert sk["tab"] == "PX-TEST-009" and SHEET in sk["error"] and SECRET not in sk["error"]
-    holder["book"] = FakePolicyBook([])
-    # 第 5 輪改判：部分結果快取 60 秒，命中時照樣交出被略過的分頁與原因
-    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == out["skipped_tabs"]
-    _c.advance(60)
-    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == []   # 過期才重讀
+    assert len(out["rows"]) == 1
+    again = R.load_policy_holding_rows(mask=mask)          # 第 6 輪：整頁結果不快取，壞分頁每次重讀
+    assert again["skipped_tabs"] == out["skipped_tabs"] and broken.calls == 2
 
 
 def test_保單分頁_整本打不開轉成api錯誤(policy_env, monkeypatch):
@@ -629,7 +634,7 @@ def _assert_equivalent(new_loader):
     book = _eq_book()
     df, old_skipped = load_all_policies_v2_with_error(book, "sid", cache_user=None)
     old = [{k: R._native(v) for k, v in r.items()} for r in df.to_dict(orient="records")]
-    new, new_skipped, parse_errors = new_loader(book, "sid")
+    new, new_skipped, parse_errors, _tab_count = new_loader(book, "sid")
     assert [t["tab"] for t in old_skipped] == [t["tab"] for t in new_skipped] == ["壞分頁"]
     assert len(old) == len(new) == 15
     assert [r["_tab"] for r in new] == ["甲"] * 10 + ["乙", "丙", "戊", "丁", "丁"]
@@ -670,14 +675,14 @@ def test_第3輪裁定1_等價鎖定_新舊兩條讀取路徑逐列逐欄相同_
 @pytest.mark.parametrize("mutate", ["drop_row", "rename_value", "extra_tab_filter"])
 def test_第3輪裁定1_等價鎖定的負控_新路任一處走樣就轉紅(mutate):
     def loader(book, sid):
-        rows, skipped, errors = R._default_policy_loader(book, sid)
+        rows, skipped, errors, count = R._default_policy_loader(book, sid)
         if mutate == "drop_row":
             rows = rows[:-1]
         elif mutate == "rename_value":
             rows[0] = dict(rows[0], fund_name="走樣")
         else:
             rows = [r for r in rows if r["_tab"] != "乙"]
-        return rows, skipped, errors
+        return rows, skipped, errors, count
 
     with pytest.raises(AssertionError):
         _assert_equivalent(loader)
@@ -689,23 +694,24 @@ def test_第3輪裁定3_分頁持續429_連跑會進入冷卻_不會每次都打
     class Quota(FakePolicyTab):
         def get_all_records(self, **_kw):
             self.calls += 1
-            raise Exception("APIError: [429]: Quota exceeded for quota metric 'Read requests'")
+            raise Exception(f"APIError: [429]: Quota exceeded for quota metric 'Read requests' {SECRET}")
 
     tab = Quota("PX-TEST-001", [])
-    holder["book"] = FakePolicyBook([tab])
+    holder["book"] = FakePolicyBook([tab, _good_tab()])
     reached, cooling = 0, 0
     for _ in range(21):
-        _c.advance(61)          # 每次都讓 60 秒快取過期，逼它回到上游那一關
         try:
             R.load_policy_holding_rows(mask=mask)
             reached += 1
         except R.PolicySupplementError as err:
             assert err.code == "cooling"
             cooling += 1
+            # 第 6 輪 B 組 3：冷卻訊息附最後一次被略過的分頁名與原因（經 mask）
+            assert "最後一次被略過的分頁：PX-TEST-001" in str(err) and "429" in str(err)
+            assert SECRET not in str(err) and MASK in str(err)
     assert reached <= 3 and cooling >= 18, (reached, cooling)
-    assert holder["book"].calls.count("open_by_key") == reached
     assert SB.should_skip(GR.quota_key(R.ACTOR))[0]                    # 429 → 配額鑰匙
-    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]          # 不另登記 sheet 短冷卻
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]          # 不另登記 sheet 冷卻
 
 
 def test_第3輪裁定3_部分分頁失敗不解除既有冷卻(policy_env, monkeypatch):
@@ -717,11 +723,11 @@ def test_第3輪裁定3_部分分頁失敗不解除既有冷卻(policy_env, monk
         def get_all_records(self, **_kw):
             raise ValueError("boom")
 
-    holder["book"] = FakePolicyBook([Broken("PX-TEST-009", [])])
+    holder["book"] = FakePolicyBook([Broken("PX-TEST-009", []), _good_tab()])
     R.load_policy_holding_rows(mask=mask)
     assert called == []
-    _c.advance(60)     # 部分結果快取 60 秒（第 5 輪）
-    holder["book"] = FakePolicyBook([])
+    _c.advance(60)     # 分頁清單快取 60 秒
+    holder["book"] = FakePolicyBook([_good_tab()])
     R.load_policy_holding_rows(mask=mask)
     assert len(called) == 1                      # 全部分頁都讀到才算成功
 
@@ -778,7 +784,8 @@ def test_第3輪裁定6_空白列旗標只看每一欄都空白(policy_env):
 
 def test_第3輪裁定7_標頭重複_轉成中文且保留例外類別名稱(policy_env):
     holder, _c, _s = policy_env
-    holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-001", [["保單編號", "保單編號"], ["a", "b"]])])
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-001", [["保單編號", "保單編號"], ["a", "b"]]),
+                                     _good_tab()])
     (sk,) = R.load_policy_holding_rows(mask=mask)["skipped_tabs"]
     assert sk["error"] == "GSpreadException: 第 1 列不是標頭，或標頭有空白或重複的欄位"
     assert "expected_headers" not in sk["error"]
@@ -797,32 +804,123 @@ def _bad_and_good_book():
     return bad, good
 
 
-def test_第5輪改判_壞分頁連跑_每60秒打一輪上游_每次都拿到資料與略過原因(policy_env):
+def test_第6輪_永久壞分頁連跑_每次都有好分頁資料與壞分頁原因_好分頁60秒內不重讀(policy_env):
     holder, clock, _s = policy_env
     bad, good = _bad_and_good_book()
     holder["book"] = FakePolicyBook([bad, good])
     for _ in range(12):                       # 0、20、40 … 220 秒
         out = R.load_policy_holding_rows(mask=mask)
-        assert len(out["rows"]) == 1
+        assert len(out["rows"]) == 1 and out["rows"][0]["_tab"] == "PX-TEST-002"
         assert [t["tab"] for t in out["skipped_tabs"]] == ["PX-TEST-001"]
         assert "第 1 列不是標頭" in out["skipped_tabs"][0]["error"]
         clock.advance(20)
-    assert bad.calls == 4                     # 0、60、120、180 秒各一輪（240 秒前共 4 輪）
-    assert holder["book"].calls.count("open_by_key") == 4
+    assert bad.calls == 12                    # 壞分頁每次呼叫都讀一次（失敗不入快取）
+    assert good.calls == 4                    # 好分頁 0、60、120、180 秒各讀一次
+    assert holder["book"].calls.count("worksheets") == 4    # 分頁清單也是 60 秒快取
 
 
-def test_第5輪改判_快取長度釘住60秒(policy_env):
+def test_第6輪_快取長度釘住60秒(policy_env):
     holder, clock, _s = policy_env
     assert R.CACHE_TTL_SEC == 60.0
-    bad, good = _bad_and_good_book()
-    holder["book"] = FakePolicyBook([bad, good])
+    good = _good_tab()
+    holder["book"] = FakePolicyBook([good])
     R.load_policy_holding_rows(mask=mask)
     clock.advance(59.9)
     R.load_policy_holding_rows(mask=mask)
-    assert bad.calls == 1
+    assert good.calls == 1
     clock.advance(0.1)
     R.load_policy_holding_rows(mask=mask)
-    assert bad.calls == 2
+    assert good.calls == 2
+
+
+def test_第6輪_暫時性5xx_下一次呼叫立即恢復_不必等60秒(policy_env):
+    holder, _c, _s = policy_env
+
+    class Flaky(FakePolicyTab):
+        fail_once = True
+
+        def get(self, *args, **kwargs):
+            if Flaky.fail_once:
+                Flaky.fail_once = False
+                self.calls += 1
+                raise ConnectionError("503 backend unavailable")
+            return super().get(*args, **kwargs)
+
+    flaky = Flaky("PX-TEST-003", [POLICY_HEAD,
+        ["PX-TEST-003", "ZZ1", "測試基金丙", "USD", "", "1", "", "1", "1", ""]])
+    holder["book"] = FakePolicyBook([flaky, _good_tab()])
+    first = R.load_policy_holding_rows(mask=mask)
+    assert [t["tab"] for t in first["skipped_tabs"]] == ["PX-TEST-003"]
+    second = R.load_policy_holding_rows(mask=mask)        # 時鐘沒動
+    assert second["skipped_tabs"] == [] and len(second["rows"]) == 2
+
+
+def test_第6輪_分頁快取命中交副本(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_good_tab()])
+    first = R.load_policy_holding_rows(mask=mask)
+    first["rows"][0]["fund_code"] = "被改掉"
+    first["rows"].clear()
+    second = R.load_policy_holding_rows(mask=mask)        # 快取命中
+    assert second["rows"][0]["fund_code"] == "ZZ9999"
+    second["rows"][0]["fund_code"] = "又被改掉"
+    third = R.load_policy_holding_rows(mask=mask)
+    assert third["rows"][0]["fund_code"] == "ZZ9999"
+
+
+def test_第6輪_換ID_同名分頁不讀舊本的分頁快取(policy_env):
+    holder, _c, secrets = policy_env
+    holder["book"] = FakePolicyBook([_good_tab("PX-SAME")])
+    assert R.load_policy_holding_rows(mask=mask)["rows"][0]["fund_name"] == "測試基金甲"
+    other = FakePolicyTab("PX-SAME", [POLICY_HEAD,
+        ["PX-SAME", "ZZ8888", "另一本的基金", "USD", "", "1", "", "1", "1", ""]])
+    holder["book"] = FakePolicyBook([other])
+    secrets["POLICY_SHEET_ID"] = SHEET + "-second"
+    (row,) = R.load_policy_holding_rows(mask=mask)["rows"]
+    assert row["fund_name"] == "另一本的基金" and other.calls == 1
+
+
+def test_第6輪_全域清除會清掉分頁快取(policy_env):
+    holder, _c, _s = policy_env
+    good = _good_tab()
+    holder["book"] = FakePolicyBook([good])
+    R.load_policy_holding_rows(mask=mask)
+    R.load_policy_holding_rows(mask=mask)
+    assert good.calls == 1
+    C.clear_all_caches()
+    R.load_policy_holding_rows(mask=mask)
+    assert good.calls == 2
+
+
+def test_第6輪_所有分頁都失敗_拋api錯誤帶各分頁原因_不回空表(policy_env):
+    holder, _c, _s = policy_env
+
+    class Broken(FakePolicyTab):
+        def get_all_records(self, **_kw):
+            raise ValueError(f"boom-{self.title} {SECRET}")
+
+    holder["book"] = FakePolicyBook([Broken("PX-A", []), Broken("PX-B", [])])
+    with pytest.raises(R.PolicySupplementError) as err:
+        R.load_policy_holding_rows(mask=mask)
+    text = str(err.value)
+    assert err.value.code == "api"
+    assert "所有保單分頁都讀取失敗" in text and "boom-PX-A" in text and "boom-PX-B" in text
+    assert SECRET not in text
+    assert [t["tab"] for t in err.value.details["skipped_tabs"]] == ["PX-A", "PX-B"]
+
+
+def test_第6輪_反例_沒有保單分頁不算全部失敗_回空表(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([])
+    assert R.load_policy_holding_rows(mask=mask)["rows"] == []
+
+
+def test_第6輪B4_略過原因前綴不重複():
+    class APIError(Exception):
+        pass
+
+    assert R._tab_error_text(APIError("APIError: [500]: boom")) == "APIError: [500]: boom"
+    assert R._tab_error_text(APIError("[500]: boom")) == "APIError: [500]: boom"
 
 
 def test_第5輪改判_反例_非429的部分失敗不登記任何冷卻(policy_env):
