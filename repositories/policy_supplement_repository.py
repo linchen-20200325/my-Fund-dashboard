@@ -523,7 +523,14 @@ def _is_retryable_status(exc: BaseException) -> bool:
     return status == 429 or (isinstance(status, int) and 500 <= status <= 599)
 
 
-def _fetch_policy_tab(ws) -> list:
+PER_CALL_SLEEP_BUDGET_SEC = 10.0
+# 第 9 輪 1：單次呼叫（一次 `load_policy_holding_rows`）的逐分頁重試**總睡眠**上限。
+# 理由：5xx／429 短路之後，最壞情形是「每張分頁都失敗幾次才成功」—— 每張各睡一點、加起來卻很長；
+# 這條上限是第二道保險，讓一次畫面重跑不會卡超過十秒。一張分頁最多睡 1＋2＋4＝7 秒，所以 10 秒
+# 允許一張分頁把重試用完，再多一張就停。超過就拋出最後一次的例外，呼叫端其餘分頁一律不讀。
+
+
+def _fetch_policy_tab(ws, budget=None) -> list:
     """一張分頁的原始紀錄（兩個本金欄保留原文，其餘欄交給下一步 numericise）。失敗就拋。
 
     重試（第 7b 輪總管裁定、第 8 輪 3 擴充）：**不經過**共用的
@@ -532,7 +539,8 @@ def _fetch_policy_tab(ws) -> list:
     重試用完仍失敗 → 拋出原例外（不吞），交給呼叫端：429 → 配額冷卻；其他 → 分頁冷卻（或整本冷卻，見 op）。
 
     ⚠️ 待辦（另開工單，本輪不改共用檔；兩件併成一張）：
-    (1) 共用的 `_with_quota_retry` 以 `is_quota_error` 的**字串比對**（訊息含「429」）判斷要不要重試，
+    (1) 共用的 `_with_quota_retry` 以 `is_quota_error` 的**字串比對**（`429`／`Quota exceeded`／
+        `RATE_LIMIT`／`RESOURCE_EXHAUSTED`）判斷要不要重試，
         舊 App 也受影響。2026-09-27 實測：訊息含 `'PX-429'!A1` 的 400 錯誤、以及內含「429」字樣的
         `ConnectionError`，都被白重試 4 次、睡 2＋4＋8＝14 秒。
     (2) 重試迴圈目前有三份（`infra.gspread_retry` 的兩支＋本函式）；日後收斂為 `with_quota_retry`
@@ -546,7 +554,12 @@ def _fetch_policy_tab(ws) -> list:
         except Exception as exc:  # noqa: BLE001 —— 只有 429／5xx 才重試，其餘原樣拋出
             if not _is_retryable_status(exc) or attempt == len(DEFAULT_QUOTA_BACKOFFS) - 1:
                 raise
+            if budget is not None and budget["slept"] + delay > PER_CALL_SLEEP_BUDGET_SEC:
+                budget["exhausted"] = True       # 第 9 輪 1：總睡眠預算用完 → 不再睡，拋出這一次的例外
+                raise
             del exc
+        if budget is not None:
+            budget["slept"] += delay
         time.sleep(delay)
     return []
 
@@ -621,9 +634,21 @@ TAB_COOLDOWN_KIND = "unreachable"     # 冷卻長度取 `shared/backoff_policy.p
 # 理由：`infra/source_backoff` 全域最多記 `BACKOFF_MAX_TRACKED_HOSTS`（128）把鑰匙，滿了就擠掉最舊的一把 ——
 # 大量壞分頁若也放進去，會把配額鑰匙、整本鑰匙擠掉，讓該冷卻的來源被照打。分頁冷卻只有本檔自己讀，放本檔即可。
 # 時鐘沿用 `infra.source_backoff._clock`（同一個 monotonic；測試注入同一個假時鐘）。
+# 為何不違背 `infra/gspread_retry.py` 排除 per-worksheet 粒度的理由（第 9 輪 6）：那段排除的是「把 403／配額
+# 這類**整本或整把憑證**的錯誤切到分頁去記」—— 那會讓同一本壞掉的試算表每張分頁各被打一次。本 dict 只收
+# **單張分頁自身**的錯誤（例如那一張標頭壞了）；整本錯誤走升級（本次沒有任何分頁產出資料、且至少 2 張實際讀取
+# 失敗都是同一類 HTTP 錯誤 → 改登記整本 sheet 鑰匙），配額錯誤走配額鑰匙。
 _TAB_COOLDOWN: dict = {}
 _TAB_LAST_ERROR: dict = {}            # （試算表 ID, 分頁名）→ 上次失敗原因（**存入前已過 mask**）
 QUOTA_UNREAD_TEXT = "配額冷卻中，未讀"
+UPSTREAM_5XX_UNREAD_TEXT = "上游暫時失敗（5xx），未讀"
+BUDGET_UNREAD_TEXT = "單次讀取的重試等待已達上限（10 秒），未讀"
+
+
+def _is_server_error(exc: BaseException) -> bool:
+    from infra.gspread_retry import http_status_of
+    status = http_status_of(exc)
+    return isinstance(status, int) and 500 <= status <= 599
 
 
 def _tab_clock() -> float:
@@ -646,15 +671,23 @@ def tab_cooling(sheet_id: str, title: str) -> tuple:
         left = until - _tab_clock()
         if left <= 0:
             _TAB_COOLDOWN.pop(key, None)
+            _TAB_LAST_ERROR.pop(key, None)        # 第 9 輪 3：一起移除
             return False, 0.0
         return True, left
 
 
 def _record_tab_cooldown(sheet_id: str, title: str, masked_error: str) -> None:
+    """登記一張分頁的短冷卻；寫入時順手清掉所有已到期的項目（第 9 輪 3：dict 大小有上限）。"""
     from infra.source_backoff import cooldown_for
     key = tab_cooldown_key(sheet_id, title)
     with _CACHE_LOCK:
-        _TAB_COOLDOWN[key] = _tab_clock() + cooldown_for(TAB_COOLDOWN_KIND)
+        now = _tab_clock()
+        for old in [k for k, until in _TAB_COOLDOWN.items() if until <= now]:
+            _TAB_COOLDOWN.pop(old, None)
+            _TAB_LAST_ERROR.pop(old, None)
+        for old in [k for k in _TAB_LAST_ERROR if k not in _TAB_COOLDOWN]:
+            _TAB_LAST_ERROR.pop(old, None)
+        _TAB_COOLDOWN[key] = now + cooldown_for(TAB_COOLDOWN_KIND)
         _TAB_LAST_ERROR[key] = masked_error
 
 
@@ -691,10 +724,12 @@ def _cached_policy_loader(client, sheet_id):
     - 快取的 worksheet 物件綁定建立它的那個 client（快取期間不會換成新 client）。
     - 只要任一分頁**讀取失敗**（不含冷卻中的略過），就順手作廢分頁清單快取，下一次重列。
 
-    配額耗盡（第 8 輪 2，v3 `02`「失敗時退避，不連續轟炸來源」）：任一分頁在重試用完後仍是 429，
-    本次呼叫裡**還需要打上游**的其餘分頁一律不讀（已在分頁快取裡的照用），列入 `skipped_tabs`，
-    原因「配額冷卻中，未讀」；配額冷卻由呼叫端登記。
-    回傳 (rows, skipped_tabs, invest_twd_parse_errors, 分頁數, 本次實際從上游讀成功的分頁數)。
+    短路（v3 `02`「失敗時退避，不連續轟炸來源」）：本次呼叫裡**還需要打上游**的其餘分頁一律不讀
+    （已在分頁快取裡的照用），列入 `skipped_tabs`：
+    - 任一分頁重試用完仍是 429 → 原因「配額冷卻中，未讀」（第 8 輪 2；配額冷卻由呼叫端登記）；
+    - 任一分頁重試用完仍是 5xx → 原因「上游暫時失敗（5xx），未讀」（第 9 輪 1）；
+    - 單次呼叫的逐分頁總睡眠超過 `PER_CALL_SLEEP_BUDGET_SEC` → 原因「單次讀取的重試等待已達上限（10 秒），未讀」。
+    回傳 (rows, skipped_tabs, invest_twd_parse_errors, 分頁數, 本次產出資料的分頁數〔快取命中＋新讀成功〕)。
     """
     list_key = (sheet_id, "policy_tab_list")
     found, tabs, generation = _cache_get(list_key, copy_value=False)
@@ -703,8 +738,9 @@ def _cached_policy_loader(client, sheet_id):
         _cache_put(list_key, tabs, generation, copy_value=False)
     rows, skipped, parse_errors = [], [], []
     read_failed = False
-    quota_exhausted = False
-    read_ok = 0
+    halt_reason = ""          # 第 8 輪 2（429）、第 9 輪 1（5xx、總睡眠預算）：其餘要打上游的分頁不讀
+    served = 0                # 本次產出資料的分頁數（快取命中＋新讀成功）
+    budget = {"slept": 0.0, "exhausted": False}
     for ws in tabs:
         cooling, left = tab_cooling(sheet_id, ws.title)
         if cooling:
@@ -716,27 +752,31 @@ def _cached_policy_loader(client, sheet_id):
         found, cached, generation = _cache_get(key)
         if found:
             tab_rows, tab_errors = cached
-        elif quota_exhausted:
-            skipped.append({"tab": ws.title, "_quota_unread": True, "error": QUOTA_UNREAD_TEXT})
+        elif halt_reason:
+            skipped.append({"tab": ws.title, "_halted": True, "error": halt_reason})
             continue
         else:
             try:
-                raw_records = _fetch_policy_tab(ws)
+                raw_records = _fetch_policy_tab(ws, budget)
             except Exception as exc:  # noqa: BLE001 —— 失敗的分頁不入快取
                 skipped.append({"tab": ws.title, "error": _tab_error_text(exc), "_exc": exc})
                 read_failed = True
-                if is_rate_limited(exc):
-                    quota_exhausted = True       # 第 8 輪 2：其餘要打上游的分頁不讀
+                if budget["exhausted"]:
+                    halt_reason = BUDGET_UNREAD_TEXT
+                elif is_rate_limited(exc):
+                    halt_reason = QUOTA_UNREAD_TEXT          # 第 8 輪 2
+                elif _is_server_error(exc):
+                    halt_reason = UPSTREAM_5XX_UNREAD_TEXT   # 第 9 輪 1：5xx 重試用完 → 短路
                 continue
-            read_ok += 1
             tab_rows, tab_errors = _process_policy_tab(ws.title, raw_records)
             _cache_put(key, (tab_rows, tab_errors), generation)
+        served += 1
         rows.extend(tab_rows)
         parse_errors.extend(tab_errors)
     if read_failed:
         with _CACHE_LOCK:
             _CACHE.pop(list_key, None)      # 第 7 輪 4：有分頁讀失敗 → 分頁清單快取作廢
-    return rows, skipped, parse_errors, len(tabs), read_ok
+    return rows, skipped, parse_errors, len(tabs), served
 
 
 _policy_loader = _cached_policy_loader
@@ -777,13 +817,15 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
     """
     def op(client, _spreadsheet, sid):
         from infra.gspread_retry import http_status_of, kind_for_gspread_error, record_gspread_failure
-        rows, skipped, parse_errors, tab_count, read_ok = _policy_loader(client, sid)
+        rows, skipped, parse_errors, tab_count, served = _policy_loader(client, sid)
         failures = [t for t in skipped if t.get("_exc") is not None]
         non_quota = [t for t in failures if not is_rate_limited(t["_exc"])]
-        # 第 8 輪 4：本次**實際讀取**的分頁全部以同一類 HTTP 錯誤失敗（例如全部 403、全部 5xx），
-        # 改登記整本 sheet 鑰匙，不逐張登記。至少要有 2 張實際讀取的分頁才判斷（只讀 1 張時看不出是整本）。
+        # 第 8 輪 4、第 9 輪 2：改登記整本 sheet 鑰匙（不逐張登記）的條件 ——
+        # 本次**沒有任何分頁產出資料**（快取命中或新讀都沒有），且實際讀取失敗的分頁至少 2 張、
+        # 全部是同一類 HTTP 錯誤、每張都有狀態碼。只要有一張分頁（含快取）產出資料，就證明這一本讀得到。
+        # ⚠️ 已知限制：失敗若在時間上錯開（例如這次只有一張實際讀取、其他在快取或冷卻中），不會升級。
         kinds = {kind_for_gspread_error(t["_exc"]) for t in non_quota}
-        sheet_wide = (read_ok == 0 and len(non_quota) >= 2 and len(non_quota) == len(failures)
+        sheet_wide = (served == 0 and len(non_quota) >= 2 and len(non_quota) == len(failures)
                       and all(http_status_of(t["_exc"]) is not None for t in non_quota)
                       and len(kinds) == 1)
         public, last = [], []
