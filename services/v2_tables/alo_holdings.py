@@ -15,12 +15,15 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A；**�
   孤兒列略過並列出；保單分頁有、補充分頁沒有 → 該持倉（或該保單列）不寫入並列出。
 - DIRECT（出處逐項分開，`ACCEPTANCE.md` 8.2 同此）：
   - **U9 客戶裁示**（交接本 `docs/handover_2026_09_26_latest.md` :129-134）：DIRECT 列照讀；
-    `policy` 的 `issuer`、`ccy`、`opened_on` 三欄不寫入；逐筆警示，字樣逐字為 `DIRECT_WARNING`。
-    「三欄」**不是** `_持倉補充` 的持有起始日、最後核對日、類別 —— 那三欄照常讀（總管 2026-09-27 更正）；
+    「這三欄」不寫入；逐筆警示，字樣逐字為 `DIRECT_WARNING`。
+    「這三欄」＝ `policy` 的 `issuer`、`ccy`、`opened_on` 是**規格組讀法**，`49` 附錄第 9e 輪由總管更正；
+    **不是** `_持倉補充` 的持有起始日、最後核對日、類別 —— 那三欄照常讀；
     `_持倉補充` 裡 DIRECT 鍵的列格式不符時照規格列入 `bad_rows`，不因 DIRECT 而豁免。
     `44` HLD-5「直接持有」與 ALO 的 DIRECT 列不是同一件事、不可混用 —— 這句出自同處 U9 裁示紀錄（:133）。
   - **R2 總管裁定**（交接本 :42）：「DIRECT 列」兩種都算（`_保單資料` 的 DIRECT 列＋保單分頁 `policy_id`
-    為 DIRECT 的持倉列）；DIRECT 不進 ALO-2 的分子與分母；`44` 4.4「DIRECT 固定存在」那條表判準暫停驗收。
+    為 DIRECT 的持倉列）；DIRECT 不進 ALO-2 的分子與分母。
+    `44` 4.4「DIRECT 固定存在」那條表判準暫停驗收 —— **總管依 R2 推導**（規格 6.2 R2 的建議方案 (1)），
+    交接本 :42 沒有逐字這樣寫。
     本檔因此不產生 `policy` 的 DIRECT 列，也不產生任何「直接持有」字樣。
   - **總管暫定**（2026-09-27 第 2 輪；**不是客戶裁示**）：DIRECT 持倉**不產生 `holding` 列**。
     客戶只裁了「不計入配置」；不產生 `holding` 列的連帶後果是 hld 頁看不到 DIRECT 持倉 ——
@@ -156,6 +159,22 @@ def _holding_reasons(row: dict, parse_error=None):
     return fields, reasons
 
 
+SKIPPED_OWNER_REASON = "對應持倉已被略過（保單分頁該列的鍵不能用，見 skipped_holdings）"
+
+
+def _hint_matches(text: str, value) -> bool:
+    """補充分頁的鍵（文字）是不是「保單分頁上被略過那一列」的鍵。**只用來選原因字樣，不拿來比對寫入**。
+
+    文字 → 去前後空白後相同；整數（被 gspread 轉成數字的純數字代號）→ 補充分頁那格是 ASCII 數字
+    且數值相同（例 `0050` 對 `50`）。其餘 → `str(值)` 相同。
+    """
+    if isinstance(value, str):
+        return value.strip() == text
+    if isinstance(value, int) and not isinstance(value, bool):
+        return text != "" and all("0" <= ch <= "9" for ch in text) and int(text) == value
+    return value is not None and str(value) == text
+
+
 def _direct_warning(source: str, **where) -> dict:
     return {"code": "direct_unsupported", "message": DIRECT_WARNING, "source": source, **where}
 
@@ -181,6 +200,8 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     - `skipped_holdings`：保單分頁上沒寫進 `holding` 的列與原因；
     - `missing_supplement`／`duplicate_supplement`／`orphan_supplement`；
     - `missing_profile`／`duplicate_profile`／`orphan_profile`；
+    - `supplement_of_skipped`／`profile_of_skipped`：保單分頁上**有**這組鍵、只是那一列因鍵不能用
+      （不是文字、含 `|`）被略過 —— 不報成孤兒，原因寫 `SKIPPED_OWNER_REASON`（第 3 輪裁定 10）；
     - `bad_rows`、`blank_rows`、`tab_missing`（依分頁）；`skipped_tabs`、`invest_twd_parse_errors` 原樣轉交。
     """
     supp = tabs[TAB_SUPPLEMENT]
@@ -233,11 +254,14 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     occurrence: dict = {}
     parse_errors = {(e.get("tab"), e.get("row")): e for e in invest_twd_parse_errors}
     policy_blank_rows = 0
+    skipped_key_hints: list = []     # 第 3 輪裁定 10：鍵不能用、被略過的保單分頁列
     for row in policy_rows:
         where = {"tab": row.get("_tab"), "row": row.get("_row")}
         raw_pid, raw_code = row.get("policy_id"), row.get("fund_code")
-        if all(row.get(c) in (None, "") for c in ("policy_id", "fund_code", "fund_name", "invest_twd")):
-            policy_blank_rows += 1          # 整列空白（`get_all_records` 保留中間空列）：不是紀錄
+        if row.get("_blank"):
+            # 第 3 輪裁定 6：**每一欄**原始值都空白（L1 判斷）才算空白列；
+            # 有值但沒有鍵的列落到下面「保單編號或基金代號空白」那一條，列入略過並寫明原因。
+            policy_blank_rows += 1
             continue
         pid, code = _key_text(raw_pid), _key_text(raw_code)
         if pid == DIRECT:
@@ -254,10 +278,12 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
                 # U11：純數字代號可能已被讀成數字、前導 0 消失；不拿 str(數字) 去猜原本的字串。
                 reason = "保單編號或基金代號不是文字（可能被試算表轉成數字、前導 0 已遺失），不比對"
             skipped.append({**where, "policy_id": raw_pid, "fund_code": raw_code, "reasons": [reason]})
+            skipped_key_hints.append((raw_pid, raw_code))
             continue
         if ID_SEPARATOR in pid or ID_SEPARATOR in code:
             skipped.append({**where, "policy_id": pid, "fund_code": code,
                             "reasons": [f"保單編號或基金代號含「{ID_SEPARATOR}」，會與持倉識別碼的分隔字元混淆，不寫入"]})
+            skipped_key_hints.append((pid, code))
             continue
         key = (pid, code)
         policy_ids.add(pid)
@@ -302,17 +328,26 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     if collided:
         raise HoldingIdCollision(f"holding_id 撞號：{collided}")
 
-    orphan_supplement = sorted(
-        ({"tab": TAB_SUPPLEMENT, "row": rec["_row"], "key": k}
-         for k, rec in supplements.items() if k not in used_keys),
-        key=lambda item: item["row"])
+    orphan_supplement, supplement_of_skipped = [], []
+    for k, rec in sorted(supplements.items(), key=lambda item: item[1]["_row"]):
+        if k in used_keys:
+            continue
+        entry = {"tab": TAB_SUPPLEMENT, "row": rec["_row"], "key": k}
+        if any(_hint_matches(k[0], hp) and _hint_matches(k[1], hc) for hp, hc in skipped_key_hints):
+            supplement_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
+        else:
+            orphan_supplement.append(entry)
 
     # ── `policy` 表 ──
-    policies, missing_profile, orphan_profile = [], [], []
+    policies, missing_profile, orphan_profile, profile_of_skipped = [], [], [], []
     duplicate_pids = {d["key"] for d in duplicate_profile}
     for pid, rec in sorted(profiles.items(), key=lambda item: item[1]["_row"]):
         if pid not in policy_ids:
-            orphan_profile.append({"tab": TAB_PROFILE, "row": rec["_row"], "key": pid})
+            entry = {"tab": TAB_PROFILE, "row": rec["_row"], "key": pid}
+            if any(_hint_matches(pid, hp) for hp, _hc in skipped_key_hints):
+                profile_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
+            else:
+                orphan_profile.append(entry)
             continue
         out = {"policy_id": pid, "policy_name": rec["policy_name"], "issuer": rec["issuer"],
                "ccy": rec["ccy"], "premium_paid_twd": rec["premium_paid_twd"],
@@ -337,9 +372,11 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
         "missing_supplement": missing_supplement,
         "duplicate_supplement": duplicate_supplement,
         "orphan_supplement": orphan_supplement,
+        "supplement_of_skipped": supplement_of_skipped,
         "missing_profile": missing_profile,
         "duplicate_profile": duplicate_profile,
         "orphan_profile": orphan_profile,
+        "profile_of_skipped": profile_of_skipped,
         "bad_rows": {TAB_SUPPLEMENT: supp_bad, TAB_PROFILE: profile_bad},
         "blank_rows": {TAB_SUPPLEMENT: supp["blank_rows"], TAB_PROFILE: prof["blank_rows"],
                        POLICY_TAB: policy_blank_rows},
@@ -354,6 +391,10 @@ def load_alo_tables(secret_values) -> dict:
 
     L1 失敗（沒設 `POLICY_SHEET_ID`、標頭不符、上游讀取失敗）→ `PolicySupplementError` 往上拋，
     不吞、不退回別本、不回空表冒充成功。
+    `HoldingIdCollision`（`build_alo_tables` 輸出前的唯一性檢查）同樣往上拋 —— **防禦性，正式路徑不可達**：
+    同一組鍵以出現序號區分、鍵含 `|` 的列已先被略過，所以 T2 組法在正式路徑上不會撞號；
+    這道檢查只為了萬一組法日後被改壞時 fail loud（第 3 輪裁定 8）。
+    ⚠️ 已登記、本輪不處理：NBSP 與鍵內部空白的差異（比對只去前後空白）。
     """
     mask = masker(secret_values)
     tabs = repo.load_supplement_tabs(mask=mask)

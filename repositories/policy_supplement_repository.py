@@ -207,7 +207,8 @@ def _make_client(creds):
     return get_gspread_client(creds)
 
 
-def _run(op: Callable, *, mask: Mask, open_sheet: bool = True):
+def _run(op: Callable, *, mask: Mask, open_sheet: bool = True,
+         success_if: Callable = lambda _r: True):
     """開表 → op(client, spreadsheet, sheet_id)（`open_sheet=False` 時 spreadsheet 為 None），外面包冷卻與失敗登記。回傳 (sheet_id, op 的結果)。
 
     - 冷卻中 → 不打上游，`code="cooling"`。
@@ -249,7 +250,8 @@ def _run(op: Callable, *, mask: Mask, open_sheet: bool = True):
         failure.__context__ = None
         failure.__traceback__ = None
         raise failure
-    record_gspread_success(ACTOR, sheet_id)
+    if success_if(result):      # 部分失敗不算成功，不解除冷卻（第 3 輪裁定 3）
+        record_gspread_success(ACTOR, sheet_id)
     return sheet_id, result
 
 
@@ -410,39 +412,89 @@ def load_supplement_tabs(*, mask: Mask) -> dict:
 POLICY_TAB_SOURCE = "保單分頁"
 
 
+INVEST_TWD_HEADERS = ("淨投資金額", "invest_twd")   # v2 中文、v2/v1 英文
+_INVEST_INT_RE = re.compile(r"^-?[0-9]+$")
+HEADER_ERROR_TEXT = "第 1 列不是標頭，或標頭有空白或重複的欄位"
+
+
+def _invest_twd_from_text(raw):
+    """本金欄原始文字 → (值, 問題)。空白 → (None, None)。
+
+    只收整數字面（可含千分位逗號、可帶負號）；**小數與科學記號一律解析失敗，不捨去**
+    （第 3 輪裁定 5：`1,000.7`、`1000.5`、`1e3`）。判斷看原始文字，不經 `numericise`、
+    不改 `_helpers.py`。其餘交給 `parse_invest_twd` 以維持既有的失敗判準。
+    """
+    from repositories.policy import _helpers as H
+
+    text = "" if raw is None else str(raw)
+    if text.strip() == "":
+        return None, None
+    compact = text.replace(",", "").strip()
+    if not _INVEST_INT_RE.match(compact):
+        return None, f"只收整數，不收小數、科學記號或其他字元（原始值：{text}）"
+    value, reason = H.parse_invest_twd(text)
+    return (value, None) if reason is None else (None, reason)
+
+
+def _tab_error_text(exc: BaseException) -> str:
+    """分頁讀取失敗的原因。gspread 的標頭檢查例外改寫成中文（第 3 輪裁定 7），保留例外類別名稱。"""
+    name = type(exc).__name__
+    raw = str(exc)
+    if name == "GSpreadException" and ("header" in raw or "expected_headers" in raw):
+        return f"{name}: {HEADER_ERROR_TEXT}"
+    return f"{name}: {raw}"
+
+
 def _default_policy_loader(client, sheet_id):
     """逐分頁讀保單分頁，每一列帶「分頁名＋試算表列號」。
 
     欄名對映、v1 分頁相容、數值欄的正規化，逐項沿用 `repositories/policy/v2.py::load_all_policies_v2_with_error`
     的做法與常數（`ALL_COLS_V2`、`EN_HEADERS_V2`、`_LEGACY_ZH_ALIASES_V2`、`_v1_frame_to_v2`、
     `_normalize_float`、`_normalize_div_cash_pct`、`parse_invest_twd`）；**不改 `v2.py` 一個字**。
-    自己逐分頁讀的理由（第 2 輪總管裁定 5、6）：既有函式把各分頁 concat 後，列就只剩 concat 之後的 index，
-    看不出是哪一分頁第幾列；本金欄也已經把「空白」「解析失敗」都變成 0。
+    ⚠️ 兩條路重複約 25 行，已登記 `EXCEPTIONS.md` 8.3.P `P-POLICYREADDUPE-1`（總管裁定方案 (b)）；
+    兩路等價（除本金欄）由 `tests/test_policy_supplement_repository.py` 的等價鎖定測試釘住。
 
-    與既有函式不同的三處（刻意）：
-    - 每列多 `_tab`（分頁名）、`_row`（試算表列號；`get_all_records` 保留中間空列，第 1 列是標頭，
-      所以第 k 筆＝第 k+1 列 —— 讀 gspread 6.2.1 原始碼確認，沒有對真表實測）；
-    - `invest_twd`：空白 → None（不是 0）；解析失敗 → None，並列入 `invest_twd_parse_errors`
-      （`{"tab","row","raw","reason"}`）；**不寫** `repositories/policy/_helpers` 的全域登記表；
-    - 沿用 `get_all_records` 的預設（會把純數字字串轉成數字）—— 改它是另一張工單；L2 依 U11 擋下。
+    與既有函式不同之處（刻意）：
+    - 每列多 `_tab`（分頁名）、`_row`（試算表列號；`get_all_records` 保留中間空列、第 1 列是標頭，
+      所以第 k 筆＝第 k+1 列 —— 讀 gspread 6.2.1 原始碼確認，沒有對真表實測）、
+      `_blank`（該列**每一欄**原始值都空白）；
+    - `invest_twd`：以 `numericise_ignore=["all"]` 取原始文字判斷（其餘欄照 gspread 預設逐格
+      `numericise`，與既有函式同）；空白 → None；解析失敗（含小數、科學記號）→ None，
+      並列入 `invest_twd_parse_errors`（`{"tab","row","raw","reason"}`，`raw` 不截斷）；
+      **不寫** `repositories/policy/_helpers` 的全域登記表；
+    - `open_by_key`、`worksheets` 用 `with_gspread_retry`（5xx／連線層重試，與補充分頁同一套）；
+      逐分頁 `get_all_records` 維持既有的 `_with_quota_retry`（429 重試）；
+    - 分頁讀取失敗的例外物件一併交回（`_exc`），由呼叫端決定是否登記冷卻；
+      gspread 的標頭例外改寫成中文（`HEADER_ERROR_TEXT`）。
+    - 仍把純數字字串轉成數字（gspread 預設）—— 改它是另一張工單；L2 依 U11 擋下。
     回傳 (rows, skipped_tabs, invest_twd_parse_errors)。
     """
     import pandas as pd
+    from gspread.utils import numericise
+    from infra.gspread_retry import with_gspread_retry
     from repositories.policy import _helpers as H
     from repositories.policy import v2 as V
 
-    sh = H._with_quota_retry(client.open_by_key, sheet_id)
-    tabs = [ws for ws in H._with_quota_retry(sh.worksheets)
+    sh = with_gspread_retry(client.open_by_key, sheet_id)
+    tabs = [ws for ws in with_gspread_retry(sh.worksheets)
             if not ws.title.startswith("_") and ws.title != H.DEFAULT_WORKSHEET]
     rows, skipped, parse_errors = [], [], []
     for ws in tabs:
         try:
-            records = H._with_quota_retry(ws.get_all_records) or []
+            raw_records = H._with_quota_retry(ws.get_all_records, numericise_ignore=["all"]) or []
         except Exception as exc:  # noqa: BLE001 —— 與既有函式相同：單一分頁失敗略過，但分頁名與原因交出去
-            skipped.append({"tab": ws.title, "error": f"{type(exc).__name__}: {exc}"})
+            skipped.append({"tab": ws.title, "error": _tab_error_text(exc), "_exc": exc})
             continue
-        if not records:
+        if not raw_records:
             continue
+        records = []
+        for raw in raw_records:
+            record = {}
+            for key, value in raw.items():
+                record[key] = value if key in INVEST_TWD_HEADERS else numericise(value)
+            record["_raw_invest"] = next((raw[h] for h in INVEST_TWD_HEADERS if h in raw), "")
+            record["_blank"] = all(str(v).strip() == "" for v in raw.values())
+            records.append(record)
         frame = pd.DataFrame(records)
         frame["_row"] = range(2, len(frame) + 2)
         columns = set(frame.columns)
@@ -455,21 +507,18 @@ def _default_policy_loader(client, sheet_id):
         for col in V.ALL_COLS_V2:
             if col not in frame.columns:
                 frame[col] = ""
-        for record in frame[list(V.ALL_COLS_V2) + ["_row"]].to_dict(orient="records"):
+        keep = list(V.ALL_COLS_V2) + ["_row", "_raw_invest", "_blank"]
+        for record in frame[keep].to_dict(orient="records"):
             row = {k: _native(v) for k, v in record.items()}
             for col in ("units", "avg_nav", "avg_fx"):
                 row[col] = H._normalize_float(row[col])
             row["div_cash_pct"] = V._normalize_div_cash_pct(row["div_cash_pct"])
-            raw = row["invest_twd"]
-            if raw is None or (isinstance(raw, str) and raw.strip() == "") \
-                    or (isinstance(raw, float) and math.isnan(raw)):
-                row["invest_twd"] = None
-            else:
-                value, reason = H.parse_invest_twd(raw)
-                row["invest_twd"] = value
-                if reason is not None:
-                    parse_errors.append({"tab": ws.title, "row": row["_row"], "raw": str(raw),
-                                         "reason": reason})
+            raw_invest = row.pop("_raw_invest")
+            value, reason = _invest_twd_from_text(raw_invest)
+            row["invest_twd"] = value
+            if reason is not None:
+                parse_errors.append({"tab": ws.title, "row": row["_row"], "raw": str(raw_invest),
+                                     "reason": reason})
             row["_tab"] = ws.title
             rows.append(row)
     return rows, skipped, parse_errors
@@ -489,20 +538,30 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
     """同一本（`POLICY_SHEET_ID`）的保單分頁持倉列（`_default_policy_loader`）。
 
     回傳 `{"rows": [dict, ...], "skipped_tabs": [{"tab", "error"}], "invest_twd_parse_errors": [...]}`。
-    `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`。60 秒快取，鍵含試算表 ID；
+    `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`、`_blank`。
+    有分頁被略過時不呼叫 `record_gspread_success`；略過原因是 429 時登記配額冷卻。60 秒快取，鍵含試算表 ID；
     有任何分頁被略過就不快取（比照既有函式）。`skipped_tabs[*]["error"]` 過 `mask`（ID 不遮，7.2 丙）。
     """
     sheet_id = policy_sheet_id(mask=mask)
 
     def loader():
         def op(client, _spreadsheet, sid):
+            from infra.gspread_retry import is_quota_error, record_gspread_failure
             rows, skipped, parse_errors = _policy_loader(client, sid)
+            for item in skipped:
+                exc = item.get("_exc")
+                # 第 3 輪裁定 3：分頁失敗若屬 429，登記配額冷卻（配額是整把憑證共用的）。
+                if exc is not None and is_quota_error(exc):
+                    record_gspread_failure(ACTOR, sid, exc)
             return {"rows": rows,
                     "skipped_tabs": [{"tab": t.get("tab"), "error": mask(str(t.get("error", "")))}
                                      for t in skipped],
                     "invest_twd_parse_errors": parse_errors}
 
-        _sid, result = _run(op, mask=mask, open_sheet=False)
+        # 第 3 輪裁定 3：只要有分頁被略過，就不算整次成功 —— 不呼叫 `record_gspread_success`，
+        # 否則上一步剛登記的冷卻會被當場解除，每次重跑都照打上游。
+        _sid, result = _run(op, mask=mask, open_sheet=False,
+                            success_if=lambda r: not r["skipped_tabs"])
         return result
 
     return _cached("policy_rows", sheet_id, loader, cache_if=lambda r: not r["skipped_tabs"])

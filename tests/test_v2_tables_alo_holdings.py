@@ -172,10 +172,70 @@ def test_裁定6_略過的列以分頁名與列號標示_不用index():
 
 
 def test_裁定6_整列空白的保單分頁列_只計數不列入略過():
-    blank = prow(pid="", code="", name="", invest=None, ccy="", row=3)
+    blank = prow(pid="", code="", name="", invest=None, ccy="", row=3, _blank=True)
     out = build([prow(), blank], tabs([srec(2)], [precd(2)]))
     assert len(out["holding"]) == 1 and out["skipped_holdings"] == []
     assert out["blank_rows"]["保單分頁"] == 1
+
+
+def test_第3輪裁定6_有值但沒有鍵的列_列入略過並寫明原因_不算空白列():
+    keyless = prow(pid="", code="", name="測試基金甲", row=3)          # 只有鍵是空的
+    out = build([prow(), keyless], tabs([srec(2)], [precd(2)]))
+    assert out["blank_rows"]["保單分頁"] == 0
+    (skip,) = out["skipped_holdings"]
+    assert skip["row"] == 3 and skip["reasons"] == ["保單編號或基金代號空白"]
+
+
+def test_第3輪裁定6_鍵與名稱都空_只有本金有值_仍列入略過不算空白列():
+    partial = prow(pid="", code="", name="", ccy="", invest=1000, row=4)   # `_blank` 預設 False
+    out = build([prow(), partial], tabs([srec(2)], [precd(2)]))
+    assert out["blank_rows"]["保單分頁"] == 0
+    assert [s["row"] for s in out["skipped_holdings"]] == [4]
+
+
+def test_第3輪裁定9_兩個分頁同一列號_只有一邊解析失敗_不會串到另一邊():
+    errors = [{"tab": "PX-TEST-002", "row": 2, "raw": "1e3", "reason": "x"}]
+    rows = [prow(tab="PX-TEST-001", row=2, invest=300000),
+            prow(tab="PX-TEST-002", row=2, pid="PX-TEST-002", code="ZZ9999", invest=None)]
+    t = tabs([srec(2), srec(3, pid="PX-TEST-002")], [precd(2), precd(3, pid="PX-TEST-002")])
+    out = A.build_alo_tables(rows, t, invest_twd_parse_errors=errors)
+    assert [h["policy_id"] for h in out["holding"]] == ["PX-TEST-001"]
+    (skip,) = out["skipped_holdings"]
+    assert skip["tab"] == "PX-TEST-002" and skip["reasons"] == ["淨投資金額無法解析：1e3"]
+    rows[1]["invest_twd"] = None
+    errors2 = [{"tab": "PX-TEST-001", "row": 2, "raw": "1e3", "reason": "x"}]
+    out2 = A.build_alo_tables(rows, t, invest_twd_parse_errors=errors2)
+    assert out2["skipped_holdings"][-1]["reasons"] == ["淨投資金額空白（沒填）"]
+
+
+def test_第3輪裁定10_含分隔字元被略過的列_補充與保單資料不報孤兒():
+    rows = [prow(pid="A|B", code="C", row=2)]
+    out = build(rows, tabs([srec(2, pid="A|B", code="C")], [precd(2, pid="A|B")]))
+    assert out["orphan_supplement"] == [] and out["orphan_profile"] == []
+    assert [e["row"] for e in out["supplement_of_skipped"]] == [2]
+    assert out["profile_of_skipped"] == [{"tab": P, "row": 2, "key": "A|B", "reason": A.SKIPPED_OWNER_REASON}]
+
+
+def test_第3輪裁定10_數字鍵被略過的列_保單資料也不報孤兒():
+    out = build([prow(pid=12345, code=50)], tabs([srec(2, pid="12345", code="0050")], [precd(2, pid="12345")]))
+    assert out["orphan_supplement"] == [] and out["orphan_profile"] == []
+    assert len(out["supplement_of_skipped"]) == 1 and len(out["profile_of_skipped"]) == 1
+
+
+def test_第3輪裁定10_反例_真正的孤兒照報孤兒():
+    rows = [prow(pid="A|B", code="C", row=2)]
+    out = build(rows, tabs([srec(3, pid="X", code="Y")], [precd(4, pid="Z")]))
+    assert [e["row"] for e in out["orphan_supplement"]] == [3]
+    assert [e["row"] for e in out["orphan_profile"]] == [4]
+    assert out["supplement_of_skipped"] == [] and out["profile_of_skipped"] == []
+
+
+@pytest.mark.parametrize("text,value,expected", [
+    ("0050", 50, True), ("50", 50, True), ("0051", 50, False), ("A50", 50, False),
+    ("PX", "PX", True), ("PX", " PX ", True), ("px", "PX", False), ("1.5", 1.5, True), ("", 0, False),
+])
+def test_第3輪裁定10_孤兒分類的鍵比對規則(text, value, expected):
+    assert A._hint_matches(text, value) is expected
 
 
 def test_U10_正例_有填就寫入_且照原值不改():
@@ -206,7 +266,9 @@ def test_U11_反例_保單分頁代號被轉成數字_不猜原本字串_不寫�
     out = build([prow(code=50)], tabs([srec(2, code="0050")], [precd(2)]))
     assert out["holding"] == []
     assert "前導 0" in out["skipped_holdings"][0]["reasons"][0]
-    assert out["orphan_supplement"] == [{"tab": S, "row": 2, "key": ("PX-TEST-001", "0050")}]
+    assert out["orphan_supplement"] == []     # 第 3 輪裁定 10：不報孤兒
+    assert out["supplement_of_skipped"] == [{"tab": S, "row": 2, "key": ("PX-TEST-001", "0050"),
+                                             "reason": A.SKIPPED_OWNER_REASON}]
 
 
 def test_U11_反例_即使數字轉回字串相同也不比對():
