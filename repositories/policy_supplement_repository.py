@@ -412,28 +412,39 @@ def load_supplement_tabs(*, mask: Mask) -> dict:
 POLICY_TAB_SOURCE = "保單分頁"
 
 
-INVEST_TWD_HEADERS = ("淨投資金額", "invest_twd")   # v2 中文、v2/v1 英文
-_INVEST_INT_RE = re.compile(r"^-?[0-9]+$")
+INVEST_TWD_HEADERS = ("invest_twd", "淨投資金額")   # v2/v1 英文、v2 中文（兩欄都不經 numericise）
+# 整數部分：不加千分位，或逗號三位一組；小數部分只准全為 0（第 4 輪總管裁定 B-C）。
+_INVEST_TEXT_RE = re.compile(r"^(-?)([0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.0+)?$")
+INVEST_MAX_DIGITS = 18       # 比照 `services/v2_tables/settings_store.py::INT_MAX_DIGITS`（第 4 輪 B-D）
 HEADER_ERROR_TEXT = "第 1 列不是標頭，或標頭有空白或重複的欄位"
+SHORT_COOLDOWN_KIND = "unreachable"    # `shared/backoff_policy.py`：60 秒（第 4 輪 B-A）
 
 
 def _invest_twd_from_text(raw):
-    """本金欄原始文字 → (值, 問題)。空白 → (None, None)。
+    """本金欄原始文字 → (值, 問題)。空白 → (None, None)。判斷看原始文字，只做在本檔，不改 `_helpers.py`。
 
-    只收整數字面（可含千分位逗號、可帶負號）；**小數與科學記號一律解析失敗，不捨去**
-    （第 3 輪裁定 5：`1,000.7`、`1000.5`、`1e3`）。判斷看原始文字，不經 `numericise`、
-    不改 `_helpers.py`。其餘交給 `parse_invest_twd` 以維持既有的失敗判準。
+    收：整數字面，可帶負號；千分位逗號必須三位一組（`1,000`、`12,345,678`）；
+    小數部分**全為 0** 才收（`1000.0`、`1,000.00` → 1000；**第 4 輪總管裁定 B-C**，改寫第 3 輪的全拒）。
+    拒（解析失敗，原因附**完整**原文，不截斷）：
+    - 小數部分不為 0、科學記號（第 3 輪裁定 5：`1,000.7`、`1000.5`、`1e3`）；
+    - 千分位分組不合法（`1,00,0`、`,1000`、`1000,`；第 4 輪 B-D）；
+    - 整數部分超過 `INVEST_MAX_DIGITS`（18）位（第 4 輪 B-D）；
+    - 其他字元（`NT$1,000`、`1000元`、全形數字）。
+    ⚠️ 與既有 `parse_invest_twd` 的刻意差異（等價鎖定測試逐格列出）：它把逗號全刪再 `float()`，
+    所以接受錯誤分組、任意位數、非零小數（捨去）與科學記號。
     """
-    from repositories.policy import _helpers as H
-
     text = "" if raw is None else str(raw)
     if text.strip() == "":
         return None, None
-    compact = text.replace(",", "").strip()
-    if not _INVEST_INT_RE.match(compact):
-        return None, f"只收整數，不收小數、科學記號或其他字元（原始值：{text}）"
-    value, reason = H.parse_invest_twd(text)
-    return (value, None) if reason is None else (None, reason)
+    compact = text.strip()
+    match = _INVEST_TEXT_RE.match(compact)
+    if not match:
+        return None, f"只收整數（千分位須三位一組、小數部分只能是 0、不收科學記號或其他字元）（原始值：{text}）"
+    digits = match.group(2).replace(",", "")
+    if len(digits.lstrip("0") or "0") > INVEST_MAX_DIGITS:
+        return None, f"超過 {INVEST_MAX_DIGITS} 位數（原始值：{text}）"
+    value = int(digits)
+    return (-value if match.group(1) else value), None
 
 
 def _tab_error_text(exc: BaseException) -> str:
@@ -450,7 +461,7 @@ def _default_policy_loader(client, sheet_id):
 
     欄名對映、v1 分頁相容、數值欄的正規化，逐項沿用 `repositories/policy/v2.py::load_all_policies_v2_with_error`
     的做法與常數（`ALL_COLS_V2`、`EN_HEADERS_V2`、`_LEGACY_ZH_ALIASES_V2`、`_v1_frame_to_v2`、
-    `_normalize_float`、`_normalize_div_cash_pct`、`parse_invest_twd`）；**不改 `v2.py` 一個字**。
+    `_normalize_float`、`_normalize_div_cash_pct`）；本金欄改由本檔 `_invest_twd_from_text` 判斷；**不改 `v2.py` 一個字**。
     ⚠️ 兩條路重複約 25 行，已登記 `EXCEPTIONS.md` 8.3.P `P-POLICYREADDUPE-1`（總管裁定方案 (b)）；
     兩路等價（除本金欄）由 `tests/test_policy_supplement_repository.py` 的等價鎖定測試釘住。
 
@@ -459,7 +470,8 @@ def _default_policy_loader(client, sheet_id):
       所以第 k 筆＝第 k+1 列 —— 讀 gspread 6.2.1 原始碼確認，沒有對真表實測）、
       `_blank`（該列**每一欄**原始值都空白）；
     - `invest_twd`：以 `numericise_ignore=["all"]` 取原始文字判斷（其餘欄照 gspread 預設逐格
-      `numericise`，與既有函式同）；空白 → None；解析失敗（含小數、科學記號）→ None，
+      `numericise`，與既有函式同；兩個本金標頭並存時取英文欄，與既有函式同）；空白 → None；
+      解析失敗（非零小數、科學記號、千分位分組錯、超過 18 位）→ None，
       並列入 `invest_twd_parse_errors`（`{"tab","row","raw","reason"}`，`raw` 不截斷）；
       **不寫** `repositories/policy/_helpers` 的全域登記表；
     - `open_by_key`、`worksheets` 用 `with_gspread_retry`（5xx／連線層重試，與補充分頁同一套）；
@@ -491,8 +503,9 @@ def _default_policy_loader(client, sheet_id):
         for raw in raw_records:
             record = {}
             for key, value in raw.items():
+                # 兩個本金標頭都保留原始文字；對映之後落在 `invest_twd` 的那一欄才是本金 ——
+                # 與既有函式同一套規則（兩欄並存時英文欄優先，第 4 輪 B-E）。
                 record[key] = value if key in INVEST_TWD_HEADERS else numericise(value)
-            record["_raw_invest"] = next((raw[h] for h in INVEST_TWD_HEADERS if h in raw), "")
             record["_blank"] = all(str(v).strip() == "" for v in raw.values())
             records.append(record)
         frame = pd.DataFrame(records)
@@ -507,13 +520,13 @@ def _default_policy_loader(client, sheet_id):
         for col in V.ALL_COLS_V2:
             if col not in frame.columns:
                 frame[col] = ""
-        keep = list(V.ALL_COLS_V2) + ["_row", "_raw_invest", "_blank"]
+        keep = list(V.ALL_COLS_V2) + ["_row", "_blank"]
         for record in frame[keep].to_dict(orient="records"):
             row = {k: _native(v) for k, v in record.items()}
             for col in ("units", "avg_nav", "avg_fx"):
                 row[col] = H._normalize_float(row[col])
             row["div_cash_pct"] = V._normalize_div_cash_pct(row["div_cash_pct"])
-            raw_invest = row.pop("_raw_invest")
+            raw_invest = row["invest_twd"]
             value, reason = _invest_twd_from_text(raw_invest)
             row["invest_twd"] = value
             if reason is not None:
@@ -548,11 +561,21 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
         def op(client, _spreadsheet, sid):
             from infra.gspread_retry import is_quota_error, record_gspread_failure
             rows, skipped, parse_errors = _policy_loader(client, sid)
+            from infra import source_backoff
+            from infra.gspread_retry import sheet_key
+            other_failure = False
             for item in skipped:
                 exc = item.get("_exc")
                 # 第 3 輪裁定 3：分頁失敗若屬 429，登記配額冷卻（配額是整把憑證共用的）。
                 if exc is not None and is_quota_error(exc):
                     record_gspread_failure(ACTOR, sid, exc)
+                else:
+                    other_failure = True
+            if other_failure:
+                # 第 4 輪 B-A：分頁錯誤若是永久性的（例如標頭壞了），結果永不快取、每次 rerun 都打整本。
+                # 對**本試算表**的 sheet 鑰匙登記一次短冷卻（`unreachable`，60 秒）；不碰 quota 鑰匙，
+                # 也不快取部分結果。⚠️ 代價：冷卻期間同一本的補充分頁讀取也會回 `cooling`。
+                source_backoff.record_failure(sheet_key(ACTOR, sid), SHORT_COOLDOWN_KIND)
             return {"rows": rows,
                     "skipped_tabs": [{"tab": t.get("tab"), "error": mask(str(t.get("error", "")))}
                                      for t in skipped],

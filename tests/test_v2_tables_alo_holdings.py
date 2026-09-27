@@ -233,6 +233,7 @@ def test_第3輪裁定10_反例_真正的孤兒照報孤兒():
 @pytest.mark.parametrize("text,value,expected", [
     ("0050", 50, True), ("50", 50, True), ("0051", 50, False), ("A50", 50, False),
     ("PX", "PX", True), ("PX", " PX ", True), ("px", "PX", False), ("1.5", 1.5, True), ("", 0, False),
+    ("０５０", 50, False), ("５０", 50, False), ("0", 0, True), ("000", 0, True), ("-5", -5, True),
 ])
 def test_第3輪裁定10_孤兒分類的鍵比對規則(text, value, expected):
     assert A._hint_matches(text, value) is expected
@@ -606,3 +607,46 @@ def test_整條路_反例_未設ID往上拋(live):
 def test_masker拒收字串():
     with pytest.raises(TypeError):
         A.masker("abc")
+
+
+# ═══════════════════════ 第 4 輪 ═══════════════════════
+
+def test_第4輪BF_全形數字的補充鍵_對不上被略過的數字鍵_照報孤兒():
+    out = build([prow(pid="PX-TEST-001", code=50)],
+                tabs([srec(2, code="００５０")], [precd(2)]))
+    assert [e["row"] for e in out["orphan_supplement"]] == [2]
+    assert out["supplement_of_skipped"] == []
+
+
+def test_第4輪BF_正例_ASCII數字的補充鍵對得上():
+    out = build([prow(pid="PX-TEST-001", code=50)], tabs([srec(2, code="0050")], [precd(2)]))
+    assert out["orphan_supplement"] == [] and len(out["supplement_of_skipped"]) == 1
+
+
+def test_第4輪A1_保單編號可用只有代號不可用_保單列照常產生():
+    out = build([prow(pid="PX-TEST-001", code=50)], tabs([srec(2, code="0050")], [precd(3)]))
+    assert out["holding"] == []
+    assert [p["policy_id"] for p in out["policy"]] == ["PX-TEST-001"]
+    assert out["orphan_profile"] == [] and out["profile_of_skipped"] == []
+
+
+def test_第4輪A1_代號含分隔字元_保單編號可用_保單列照常產生():
+    out = build([prow(pid="PX-TEST-001", code="Z|Z")], tabs([], [precd(3)]))
+    assert [p["policy_id"] for p in out["policy"]] == ["PX-TEST-001"]
+
+
+def test_第4輪A1_反例_保單編號本身不可用_不產生保單列():
+    out = build([prow(pid=12345, code="ZZ9999")], tabs([], [precd(3, pid="12345")]))
+    assert out["policy"] == [] and len(out["profile_of_skipped"]) == 1
+
+
+def test_第4輪BB_一萬列被略過加一萬列補充_數秒內完成():
+    import time
+    n = 10_000
+    rows = [prow(pid=f"PX-{i}", code=i, row=i + 2) for i in range(n)]          # 代號被轉成數字 → 全數略過
+    supp = [srec(i + 2, pid=f"PX-{i}", code=f"{i:06d}") for i in range(n)]
+    start = time.perf_counter()
+    out = build(rows, tabs(supp, []))
+    took = time.perf_counter() - start
+    assert len(out["supplement_of_skipped"]) == n and out["orphan_supplement"] == []
+    assert took < 10.0, took     # 門檻刻意寬鬆（本機實測遠低於此），避免 CI 抖動

@@ -60,7 +60,7 @@ PolicySupplementError = repo.PolicySupplementError
 DIRECT = contract.DIRECT_POLICY_ID
 # U9：客戶逐字給出的警示字樣。
 DIRECT_WARNING = "DIRECT 列暫不支援，該筆不計入配置"
-# U9：DIRECT 列不寫的三欄（`44` 4.4 沒有給 DIRECT 值的欄）。
+# U9「這三欄」不寫入；所指為 `44` 4.4 沒有給 DIRECT 值的三欄 —— 規格組讀法（`49` 附錄第 9e 輪由總管更正）。
 DIRECT_UNWRITTEN_COLUMNS = ("issuer", "ccy", "opened_on")
 
 # R1＝B：當日 12:00 台灣時間（UTC+8）。
@@ -162,17 +162,37 @@ def _holding_reasons(row: dict, parse_error=None):
 SKIPPED_OWNER_REASON = "對應持倉已被略過（保單分頁該列的鍵不能用，見 skipped_holdings）"
 
 
-def _hint_matches(text: str, value) -> bool:
-    """補充分頁的鍵（文字）是不是「保單分頁上被略過那一列」的鍵。**只用來選原因字樣，不拿來比對寫入**。
+def _is_ascii_digits(text: str) -> bool:
+    return text != "" and all("0" <= ch <= "9" for ch in text)
 
-    文字 → 去前後空白後相同；整數（被 gspread 轉成數字的純數字代號）→ 補充分頁那格是 ASCII 數字
-    且數值相同（例 `0050` 對 `50`）。其餘 → `str(值)` 相同。
+
+def _value_forms(value) -> set:
+    """保單分頁上被略過那一列的鍵值 → 正規化形式（第 4 輪 B-B：先正規化成 set，查找 O(1)）。
+
+    文字 → `("s", 去前後空白)`；非負整數（被 gspread 轉成數字的純數字代號）→ `("d", 純 ASCII 數字、無前導 0)`；
+    其餘 → `("s", str(值))`。
     """
+    if value is None:
+        return set()
     if isinstance(value, str):
-        return value.strip() == text
-    if isinstance(value, int) and not isinstance(value, bool):
-        return text != "" and all("0" <= ch <= "9" for ch in text) and int(text) == value
-    return value is not None and str(value) == text
+        return {("s", value.strip())}
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return {("d", str(value))}
+    return {("s", str(value))}
+
+
+def _text_forms(text: str) -> set:
+    """補充分頁的鍵（文字）→ 正規化形式。**只有 ASCII 數字**才另加 `("d", 去前導 0)`；
+    全形數字不算（第 4 輪 B-F）。"""
+    forms = {("s", text)}
+    if _is_ascii_digits(text):
+        forms.add(("d", text.lstrip("0") or "0"))
+    return forms
+
+
+def _hint_matches(text: str, value) -> bool:
+    """補充分頁的鍵是不是「保單分頁上被略過那一列」的鍵。**只用來選原因字樣，不拿來比對寫入**（測試用的單點版）。"""
+    return bool(_text_forms(text) & _value_forms(value))
 
 
 def _direct_warning(source: str, **where) -> dict:
@@ -232,7 +252,7 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     supp_records = []
     for rec in supp["records"]:
         if rec["policy_id"].strip() == DIRECT:
-            # U9 的「三欄不寫」指 `policy` 的 issuer／ccy／opened_on，不是本分頁的三欄（總管 2026-09-27 更正）：
+            # U9「這三欄」不寫入；規格組讀法（`49` 第 9e 輪由總管更正）指 `policy` 的三欄，不是本分頁的三欄：
             # DIRECT 持倉的持有起始日、最後核對日、類別照常讀、照常換算；只是不產生 `holding` 列。
             direct.append({"source": TAB_SUPPLEMENT, "tab": TAB_SUPPLEMENT, "row": rec["_row"], "policy_id": DIRECT,
                            "fund_code": rec["fund_code"].strip(), "opened_on": rec["opened_on"],
@@ -254,7 +274,14 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     occurrence: dict = {}
     parse_errors = {(e.get("tab"), e.get("row")): e for e in invest_twd_parse_errors}
     policy_blank_rows = 0
-    skipped_key_hints: list = []     # 第 3 輪裁定 10：鍵不能用、被略過的保單分頁列
+    hint_pairs: set = set()          # 第 3 輪裁定 10：鍵不能用、被略過的保單分頁列（第 4 輪 B-B：正規化成 set）
+    hint_pids: set = set()
+
+    def remember_skipped_key(raw_p, raw_c):
+        p_forms, c_forms = _value_forms(raw_p), _value_forms(raw_c)
+        hint_pids.update(p_forms)
+        hint_pairs.update((fp, fc) for fp in p_forms for fc in c_forms)
+
     for row in policy_rows:
         where = {"tab": row.get("_tab"), "row": row.get("_row")}
         raw_pid, raw_code = row.get("policy_id"), row.get("fund_code")
@@ -278,12 +305,16 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
                 # U11：純數字代號可能已被讀成數字、前導 0 消失；不拿 str(數字) 去猜原本的字串。
                 reason = "保單編號或基金代號不是文字（可能被試算表轉成數字、前導 0 已遺失），不比對"
             skipped.append({**where, "policy_id": raw_pid, "fund_code": raw_code, "reasons": [reason]})
-            skipped_key_hints.append((raw_pid, raw_code))
+            remember_skipped_key(raw_pid, raw_code)
+            if pid is not None:
+                policy_ids.add(pid)    # 第 4 輪 A-1：保單編號可用、只有基金代號不可用時，保單列照常產生
             continue
         if ID_SEPARATOR in pid or ID_SEPARATOR in code:
             skipped.append({**where, "policy_id": pid, "fund_code": code,
                             "reasons": [f"保單編號或基金代號含「{ID_SEPARATOR}」，會與持倉識別碼的分隔字元混淆，不寫入"]})
-            skipped_key_hints.append((pid, code))
+            remember_skipped_key(pid, code)
+            if ID_SEPARATOR not in pid:
+                policy_ids.add(pid)    # 第 4 輪 A-1
             continue
         key = (pid, code)
         policy_ids.add(pid)
@@ -333,7 +364,7 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
         if k in used_keys:
             continue
         entry = {"tab": TAB_SUPPLEMENT, "row": rec["_row"], "key": k}
-        if any(_hint_matches(k[0], hp) and _hint_matches(k[1], hc) for hp, hc in skipped_key_hints):
+        if any((a, b) in hint_pairs for a in _text_forms(k[0]) for b in _text_forms(k[1])):
             supplement_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
         else:
             orphan_supplement.append(entry)
@@ -344,7 +375,7 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     for pid, rec in sorted(profiles.items(), key=lambda item: item[1]["_row"]):
         if pid not in policy_ids:
             entry = {"tab": TAB_PROFILE, "row": rec["_row"], "key": pid}
-            if any(_hint_matches(pid, hp) for hp, _hc in skipped_key_hints):
+            if _text_forms(pid) & hint_pids:
                 profile_of_skipped.append({**entry, "reason": SKIPPED_OWNER_REASON})
             else:
                 orphan_profile.append(entry)
@@ -394,7 +425,7 @@ def load_alo_tables(secret_values) -> dict:
     `HoldingIdCollision`（`build_alo_tables` 輸出前的唯一性檢查）同樣往上拋 —— **防禦性，正式路徑不可達**：
     同一組鍵以出現序號區分、鍵含 `|` 的列已先被略過，所以 T2 組法在正式路徑上不會撞號；
     這道檢查只為了萬一組法日後被改壞時 fail loud（第 3 輪裁定 8）。
-    ⚠️ 已登記、本輪不處理：NBSP 與鍵內部空白的差異（比對只去前後空白）。
+    ⚠️ NBSP 與鍵內部空白的差異（比對只去前後空白）：已登記於交接本登記待辦，本輪不處理。
     """
     mask = masker(secret_values)
     tabs = repo.load_supplement_tabs(mask=mask)

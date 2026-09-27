@@ -445,34 +445,23 @@ def test_快取登記_名稱比對看實例():
 
 # ═══════════════════════ 保單分頁持倉列 ═══════════════════════
 
-class FakePolicyTab:
-    """假保單分頁。`get_all_records` 照 gspread 6.2.1 的語意模擬（讀過其原始碼）：
-    標頭重複 → `GSpreadException`；每列補齊到標頭寬度；`numericise_ignore=["all"]` 時不轉數字，
-    否則逐格用 gspread 真的 `numericise_all`（純數字字串會變數字）。"""
+from gspread.worksheet import Worksheet as _GspreadWorksheet  # noqa: E402
 
-    def __init__(self, title, rows):
-        self.title = title
+
+class FakePolicyTab(_GspreadWorksheet):
+    """假保單分頁：**用 gspread 真的 `Worksheet.get_all_records`**，只替換它底下的 `.get`
+    （第 4 輪 A-5）。`__init__` 沒走 gspread 的（它要真的 HTTP client），只放 `title` 需要的 `_properties`。
+    `.get` 照 `pad_values=True` 的語意把每列補齊到最寬那一列；空表回 `[[]]`（gspread 自己的空表形狀）。"""
+
+    def __init__(self, title, rows):  # noqa: D401 —— 刻意不呼叫 super().__init__
+        self._properties = {"title": title, "sheetId": 0, "index": 0}
         self.rows = rows
         self.calls = 0
 
-    def get_all_records(self, numericise_ignore=None, **_kw):
-        from collections import Counter
-
-        from gspread.exceptions import GSpreadException
-        from gspread.utils import numericise_all, to_records
+    def get(self, *args, **kwargs):
         self.calls += 1
-        keys, values = self.rows[0], self.rows[1:]
-        dupes = [k for k, n in Counter(keys).items() if n > 1]
-        if dupes:
-            raise GSpreadException(
-                f"the header row in the worksheet contains duplicates: {dupes}"
-                "To manually set the header row, use the `expected_headers` "
-                "parameter of `get_all_records()`")
-        width = len(keys)
-        values = [(list(r) + [""] * width)[:width] for r in values]
-        if numericise_ignore != ["all"]:
-            values = [numericise_all(r) for r in values]
-        return to_records(keys, values)
+        width = max((len(r) for r in self.rows), default=0)
+        return [list(r) + [""] * (width - len(r)) for r in self.rows] or [[]]
 
 
 class FakePolicyBook:
@@ -526,7 +515,7 @@ def test_保單分頁_真的讀取函式_每列帶分頁名與列號_本金空�
     assert rows[3]["invest_twd"] is None
     assert out["invest_twd_parse_errors"] == [
         {"tab": "PX-TEST-001", "row": 5, "raw": "NT$1,000",
-         "reason": "只收整數，不收小數、科學記號或其他字元（原始值：NT$1,000）"}]
+         "reason": "只收整數（千分位須三位一組、小數部分只能是 0、不收科學記號或其他字元）（原始值：NT$1,000）"}]
 
 
 def test_U11_真的讀取函式_純數字保單編號與代號被轉成數字_L2擋下並寫明原因(policy_env):
@@ -558,6 +547,7 @@ def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘
     out = R.load_policy_holding_rows(mask=mask)
     (sk,) = out["skipped_tabs"]
     assert sk["tab"] == "PX-TEST-009" and SHEET in sk["error"] and SECRET not in sk["error"]
+    SB.reset_all()     # 第 4 輪 B-A 的短冷卻：這裡只驗「沒被快取」，先把冷卻解除
     holder["book"] = FakePolicyBook([])
     assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == []   # 有略過的結果沒被快取
 
@@ -608,8 +598,13 @@ def _eq_book():
             ["", "", "", "", "", "", "", "", "", ""],
             ["12345678", "ZZ1", "基金丁", "USD", "core", "1000.9", "150", "5", "1", "1"],
             ["PX-1", "ZZ2", "基金戊", "USD", "core", "1e3", "", "1", "1", ""],
-            ["PX-1", "ZZ3", "基金己", "USD", "core", "0", "", "1", "1", ""]]
+            ["PX-1", "ZZ3", "基金己", "USD", "core", "0", "", "1", "1", ""],
+            ["PX-1", "ZZ4", "基金庚", "USD", "core", "1,00,0", "", "1", "1", ""],          # B-D 分組錯
+            ["PX-1", "ZZ5", "基金辛", "USD", "core", "1" + "0" * 18, "", "1", "1", ""],    # B-D 19 位
+            ["PX-1", "ZZ6", "基金壬", "USD", "core", "1,000.00", "", "1", "1", ""]]        # B-C 兩路都 1000
     v2en = [en, ["PX-2", "EN1", "英文基金", "USD", "core", "500", "100", "1", "1", "1"]]
+    both = [zh + ["invest_twd"],                                                          # B-E 兩個本金標頭並存
+            ["PX-5", "BO1", "雙欄基金", "USD", "core", "111", "", "1", "1", "", "222"]]
     legacy = [zh[:4] + ["類型", "平均買入含息單位成本", "金額"] + zh[4:],
               ["PX-3", "LG1", "舊基金", "USD", "fund", "9", "8", "core", "700", "50", "2", "3", "4"]]
     v1 = [["policy_id", "fund_url", "invest_date", "currency", "invest_twd", "policy_tier", "fx_avg",
@@ -620,6 +615,7 @@ def _eq_book():
           ["PX-4", "ZZ7", "2020-01-01", "TWD", "", "satellite", "", "", "", ""]]
     return FakePolicyBook([
         FakePolicyTab("甲", v2zh), FakePolicyTab("乙", v2en), FakePolicyTab("丙", legacy),
+        FakePolicyTab("戊", both),
         FakePolicyTab("丁", v1), Broken("壞分頁", []), FakePolicyTab("_持倉補充", [["x"], ["y"]]),
         FakePolicyTab("Policies", [en, ["PX-9"] + [""] * 9]), FakePolicyTab("空", [en])])
 
@@ -633,8 +629,9 @@ def _assert_equivalent(new_loader):
     old = [{k: R._native(v) for k, v in r.items()} for r in df.to_dict(orient="records")]
     new, new_skipped, parse_errors = new_loader(book, "sid")
     assert [t["tab"] for t in old_skipped] == [t["tab"] for t in new_skipped] == ["壞分頁"]
-    assert len(old) == len(new) == 11
-    assert [r["_tab"] for r in new] == ["甲"] * 7 + ["乙", "丙", "丁", "丁"]
+    assert len(old) == len(new) == 15
+    assert [r["_tab"] for r in new] == ["甲"] * 10 + ["乙", "丙", "戊", "丁", "丁"]
+    assert [r["invest_twd"] for r in new if r["_tab"] == "戊"] == [222]      # B-E：英文欄優先，與舊路同
     assert [r["_row"] for r in new if r["_tab"] == "丁"] == [2, 4]   # 鬼列被濾掉，列號照舊
     failed = {(e["tab"], e["row"]) for e in parse_errors}
     invest_diffs = []
@@ -650,14 +647,21 @@ def _assert_equivalent(new_loader):
             assert b is None, (n["_tab"], n["_row"], a, b)
             assert a == 0 or (n["_tab"], n["_row"]) in failed, (n["_tab"], n["_row"], a)
             invest_diffs.append((n["_tab"], n["_row"]))
-    assert sorted(invest_diffs) == sorted([("甲", 3), ("甲", 4), ("甲", 5), ("甲", 6), ("甲", 7), ("丁", 4)])
-    assert sorted(failed) == [("甲", 4), ("甲", 6), ("甲", 7)]
+    # 刻意差異逐格說明（其餘每一格兩路完全相同）：
+    #   甲3 空白（舊 0 → 新 None）；甲4 `NT$1,000`（兩路都解析失敗，舊記 0 → 新 None）；
+    #   甲5 整列空白（舊 0 → 新 None）；甲6 `1000.9`（舊捨去成 1000 → 新拒收，第 3 輪裁定 5）；
+    #   甲7 `1e3`（舊 1000 → 新拒收，第 3 輪裁定 5）；甲9 `1,00,0`（舊刪逗號成 1000 → 新拒收，第 4 輪 B-D）；
+    #   甲10 19 位數（舊照收 → 新拒收，第 4 輪 B-D）；丁4 空白（舊 0 → 新 None）。
+    #   甲8 `0` 兩路都 0；甲11 `1,000.00` 兩路都 1000（第 4 輪 B-C）；戊2 兩欄並存兩路都取英文欄 222（B-E）。
+    assert sorted(invest_diffs) == sorted([("甲", 3), ("甲", 4), ("甲", 5), ("甲", 6), ("甲", 7),
+                                           ("甲", 9), ("甲", 10), ("丁", 4)])
+    assert sorted(failed) == [("甲", 4), ("甲", 6), ("甲", 7), ("甲", 9), ("甲", 10)]
 
 
 def test_第3輪裁定1_等價鎖定_新舊兩條讀取路徑逐列逐欄相同_只差本金欄的刻意差異():
     """`P-POLICYREADDUPE-1`：兩條路重複約 25 行。任一邊改了欄名對映或分頁過濾而另一邊沒改，這裡轉紅。
-    涵蓋：v2 中文標頭、英文標頭、舊中文別名（13 欄分頁）、v1 分頁、鬼列、讀取失敗分頁、
-    `_` 開頭分頁、`Policies` 分頁、只有標頭的空分頁。"""
+    涵蓋：v2 中文標頭、英文標頭、舊中文別名（13 欄分頁）、兩個本金標頭並存、v1 分頁、鬼列、
+    讀取失敗分頁、`_` 開頭分頁、`Policies` 分頁、只有標頭的空分頁。假分頁用 gspread 真的 `get_all_records`。"""
     _assert_equivalent(R._default_policy_loader)
 
 
@@ -697,6 +701,8 @@ def test_第3輪裁定3_分頁持續429_連跑會進入冷卻_不會每次都打
             cooling += 1
     assert reached <= 3 and cooling >= 18, (reached, cooling)
     assert holder["book"].calls.count("open_by_key") == reached
+    assert SB.should_skip(GR.quota_key(R.ACTOR))[0]                    # 429 → 配額鑰匙
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]          # 不另登記 sheet 短冷卻
 
 
 def test_第3輪裁定3_部分分頁失敗不解除既有冷卻(policy_env, monkeypatch):
@@ -711,6 +717,7 @@ def test_第3輪裁定3_部分分頁失敗不解除既有冷卻(policy_env, monk
     holder["book"] = FakePolicyBook([Broken("PX-TEST-009", [])])
     R.load_policy_holding_rows(mask=mask)
     assert called == []
+    SB.reset_all()     # 第 4 輪 B-A 的短冷卻
     holder["book"] = FakePolicyBook([])
     R.load_policy_holding_rows(mask=mask)
     assert len(called) == 1                      # 全部分頁都讀到才算成功
@@ -727,9 +734,18 @@ def test_第3輪裁定4_open_by_key與worksheets遇5xx會重試(policy_env):
     assert book.calls.count("open_by_key") == 2 and book.calls.count("worksheets") == 2
 
 
+# ⚠️ 第 4 輪總管裁定 B-C 改寫本測試：「小數部分全為 0」（`1000.0`、`1,000.00`）改為接受 → 1000；
+#    其餘小數照舊拒收。第 3 輪原本把 `1000.0` 釘成拒收（有意識的更正，不是漏刪；決策者 AI 總管）。
+# 第 4 輪 B-D 另加：千分位分組不合法、超過 18 位數 → 解析失敗。
 @pytest.mark.parametrize("text,expected", [
-    ("1,000.7", None), ("1000.5", None), ("1e3", None), ("1E3", None), ("1000.0", None),
-    ("1,000", 1000), ("300000", 300000), (" 42 ", 42), ("-5", -5), ("", None), ("   ", None),
+    ("1,000.7", None), ("1000.5", None), ("1e3", None), ("1E3", None), ("1000.01", None),
+    ("1000.0", 1000), ("1,000.00", 1000), ("1000.000", 1000),
+    ("1,000", 1000), ("12,345,678", 12345678), ("300000", 300000), (" 42 ", 42), ("-5", -5),
+    ("", None), ("   ", None),
+    ("1,00,0", None), (",1000", None), ("1000,", None), ("1,0000", None), ("10,00", None),
+    ("1000.", None), (".0", None), ("１０００", None),
+    ("9" * 18, int("9" * 18)), ("9" * 19, None), ("0" + "9" * 18, int("9" * 18)),
+    ("999,999,999,999,999,999", int("9" * 18)), ("1,000,000,000,000,000,000", None),
 ])
 def test_第3輪裁定5_本金小數與科學記號列為解析失敗_不捨去(text, expected):
     value, reason = R._invest_twd_from_text(text)
@@ -767,3 +783,49 @@ def test_第3輪裁定7_標頭重複_轉成中文且保留例外類別名稱(pol
 
 def test_第3輪裁定7_反例_其他例外照原文():
     assert R._tab_error_text(ValueError("x y")) == "ValueError: x y"
+
+
+# ═══════════════════════ 第 4 輪 ═══════════════════════
+
+def test_第4輪BA_分頁標頭錯誤_連跑5次_打上游次數有上限_且不碰配額鑰匙(policy_env):
+    holder, _c, _s = policy_env
+    bad = FakePolicyTab("PX-TEST-001", [["保單編號", "保單編號"], ["a", "b"]])     # 永久性錯誤
+    good = FakePolicyTab("PX-TEST-002", [POLICY_HEAD,
+        ["PX-TEST-002", "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])
+    holder["book"] = FakePolicyBook([bad, good])
+    reached, cooling = 0, 0
+    for _ in range(5):
+        try:
+            out = R.load_policy_holding_rows(mask=mask)
+            reached += 1
+            assert out["skipped_tabs"] and len(out["rows"]) == 1      # 部分結果照交，但沒被快取
+        except R.PolicySupplementError as err:
+            assert err.code == "cooling"
+            cooling += 1
+    assert reached == 1 and cooling == 4
+    assert bad.calls == 1
+    assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]             # 配額鑰匙沒被碰
+    assert SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+
+
+def test_第4輪BA_反例_沒有分頁失敗就不登記冷卻(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-002", [POLICY_HEAD,
+        ["PX-TEST-002", "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])])
+    R.load_policy_holding_rows(mask=mask)
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+
+
+def test_第4輪BE_兩個本金標頭並存時取英文欄_與舊路相同(policy_env):
+    from repositories.policy.v2 import ALL_COLS_V2, ZH_HEADERS_V2
+    holder, _c, _s = policy_env
+    zh = [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-5", [zh + ["invest_twd"],
+        ["PX-5", "BO1", "雙欄基金", "USD", "", "111", "", "1", "1", "", "222"]])])
+    (row,) = R.load_policy_holding_rows(mask=mask)["rows"]
+    assert row["invest_twd"] == 222
+
+
+def test_第4輪A5_假分頁走的是gspread真的get_all_records():
+    from gspread.worksheet import Worksheet
+    assert FakePolicyTab.get_all_records is Worksheet.get_all_records
