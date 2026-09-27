@@ -23,9 +23,11 @@ L2 `services/v2_tables/alo_holdings.py` 做。
   「全域刷新」一併清掉。冷卻沿用 `infra.gspread_retry`（actor 固定 `"sa"`）。
 
 失敗訊息遮蔽：本檔是 L1，不得 import L2 的 `services/v2_tables/masking.py`。每個公開函式要求
-呼叫端以關鍵字傳入 `mask`；本檔自己產生的每一句錯誤訊息先把**試算表 ID**換成記號、再過 `mask`。
-⚠️ 試算表 ID 在這裡遮，是派工單的明文要求；`ACCEPTANCE.md` 7.2 丙把 `POLICY_SHEET_ID` 列為「不遮」，
-兩者不一致（回報列為待裁）。本檔只遮**本檔拋出的錯誤訊息**，不動 7.2 的遮蔽鍵表。
+呼叫端以關鍵字傳入 `mask`；本檔自己產生的每一句錯誤訊息都先過 `mask`（秘密值由呼叫端決定）。
+**試算表 ID 不遮**：依 `ACCEPTANCE.md` 7.2 丙，`POLICY_SHEET_ID` 屬「讀到了、但本規則不遮」的鍵
+（不是憑證；設定頁要能顯示「目前讀的是哪一本」）。
+~~試算表 ID 在這裡遮，是派工單的明文要求~~ → 2026-09-27 第 2 輪撤銷（決策者：AI 總管；有意識的更正，
+不是漏刪）：上一輪派工單要求遮 ID 是總管的錯，與 7.2 丙牴觸，本輪依 7.2 丙改回不遮。
 `PolicySupplementError` 一律在 `except` 區塊之外拋出，`__cause__`／`__context__` 為 None。
 
 ⚠️ 遮蔽射程只到錯誤訊息與 `details["actual"]`：讀取結果的 `bad_rows[*]["cells"]` 是儲存格原文，
@@ -34,6 +36,7 @@ L2 `services/v2_tables/alo_holdings.py` 做。
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 import threading
@@ -81,9 +84,6 @@ ACTOR = "sa"
 CACHE_TTL_SEC = 60.0          # `49` §4.4
 NOT_CONFIGURED_MESSAGE = "未設定保單試算表 ID（POLICY_SHEET_ID），不讀取"
 NO_SERVICE_ACCOUNT_MESSAGE = "未設定服務帳戶（google_service_account）"
-# 本檔自己用的遮蔽記號，與 `services/v2_tables/masking.py::MASK` 逐字相同（L1 不得 import L2；
-# 由測試比對兩者相同）。
-SHEET_ID_MASK = "‹已遮蔽›"
 
 # 只收 ASCII 數字（`\d` 會吃全形數字，規格 R1 第 2 點要拒收全形）。
 _DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -94,7 +94,7 @@ Mask = Callable[[str], str]
 
 
 class PolicySupplementError(Exception):
-    """補充分頁讀取失敗。訊息已先遮試算表 ID、再過呼叫端的 `mask`。
+    """補充分頁讀取失敗。訊息已過呼叫端的 `mask`（試算表 ID 不遮，`ACCEPTANCE.md` 7.2 丙）。
 
     `code`：`not_configured`（沒設 `POLICY_SHEET_ID`）／`no_service_account`／`header_mismatch`／
             `cooling`（冷卻中，未打上游）／`api`（上游讀取失敗）。
@@ -184,17 +184,6 @@ def _parse_rows(spec, values: list):
 
 # ════════════════════════ 設定、連線、冷卻 ════════════════════════
 
-def _hide_id(text: str, sheet_id: Optional[str]) -> str:
-    """把訊息裡的試算表 ID（全文，以及 `describe_sheet_exc` 會印的前 12 字）換成記號。"""
-    if not sheet_id:
-        return text
-    out = text.replace(sheet_id, SHEET_ID_MASK)
-    prefix = sheet_id[:12]
-    if len(prefix) == 12 and prefix != sheet_id:
-        out = out.replace(prefix, SHEET_ID_MASK)
-    return out
-
-
 def policy_sheet_id(*, mask: Mask) -> str:
     """`POLICY_SHEET_ID`：`st.secrets` → 環境變數；沒有預設值、不退回任何別的鍵，缺值 fail loud。"""
     raw = get_secret(SECRET_KEY)
@@ -223,7 +212,7 @@ def _run(op: Callable, *, mask: Mask, open_sheet: bool = True):
 
     - 冷卻中 → 不打上游，`code="cooling"`。
     - `PolicySupplementError`（例如標頭不符）不是上游失敗，不登記冷卻，原樣往上拋。
-    - 其餘例外 → 登記冷卻，轉成 `code="api"`；訊息先遮 ID、再過 `mask`，不帶出原始例外。
+    - 其餘例外 → 登記冷卻，轉成 `code="api"`；訊息過 `mask`（ID 不遮，7.2 丙），不帶出原始例外。
     """
     from infra.gspread_retry import (
         http_status_of, record_gspread_failure, record_gspread_success,
@@ -252,7 +241,7 @@ def _run(op: Callable, *, mask: Mask, open_sheet: bool = True):
         record_gspread_failure(ACTOR, sheet_id, exc)
         name, raw = type(exc).__name__, str(exc)
         text = raw if raw.startswith(f"{name}:") else f"{name}: {raw}"
-        failure = PolicySupplementError(mask(_hide_id(text, sheet_id)), code="api",
+        failure = PolicySupplementError(mask(text), code="api",
                                         http_status=status)
         del exc
     if failure is not None:
@@ -289,7 +278,7 @@ def _read_tabs(spreadsheet, names) -> dict:
     return out
 
 
-def _check_header(name: str, values, *, mask: Mask, sheet_id: str) -> None:
+def _check_header(name: str, values, *, mask: Mask) -> None:
     """第 1 列逐字等於規格標頭（尾端空儲存格不算）；不符就停，不猜、不改寫。"""
     expected = [h for h, _n, _k, _nl in TAB_SPECS[name]]
     header = [str(c) for c in values[0]]
@@ -298,10 +287,10 @@ def _check_header(name: str, values, *, mask: Mask, sheet_id: str) -> None:
     if header != expected:
         missing = [h for h in expected if h not in header]
         extra = [h for h in header if h not in expected]
-        actual = [mask(_hide_id(c, sheet_id)) for c in header]
+        actual = [mask(c) for c in header]
         raise PolicySupplementError(
-            mask(_hide_id(f"標頭與規格不符：分頁 {name}；規格 {expected}；試算表 {header}；"
-                          f"缺 {missing}；多 {extra}", sheet_id)),
+            mask(f"標頭與規格不符：分頁 {name}；規格 {expected}；試算表 {header}；"
+                 f"缺 {missing}；多 {extra}"),
             code="header_mismatch",
             details={"tab": name, "expected": expected, "actual": actual})
 
@@ -334,30 +323,51 @@ class _SupplementCacheProxy:
     def cache_info() -> dict:
         with _CACHE_LOCK:
             size = len(_CACHE)
-        return {"name": "_POLICY_SUPPLEMENT_CACHE", "size": size, "ttl_sec": CACHE_TTL_SEC}
+        return {"name": CACHE_PROXY_NAME, "size": size, "ttl_sec": CACHE_TTL_SEC}
+
+
+CACHE_PROXY_NAME = "_POLICY_SUPPLEMENT_CACHE"
+
+
+def _registry_name(entry) -> str:
+    """登記項的名稱：看**實例**的 `cache_info()["name"]`。
+
+    ⚠️ 2026-09-27 第 2 輪更正：上一版拿 `getattr(實例, "__name__")` 去比 `類別.__name__` ——
+    類別本體寫的 `__name__ = "_POLICY_SUPPLEMENT_CACHE"` 只有**實例**取得到；對**類別**取 `__name__`
+    拿到的是 type 自己的類別名 `_SupplementCacheProxy`，兩邊恆不相等，去重判斷恆為假
+    （實測 reload 一次就登記兩份），是死碼。
+    """
+    try:
+        info = entry.cache_info()
+    except Exception:  # noqa: BLE001 —— 別人的登記項沒有 cache_info 或會拋，就不是本檔的
+        return ""
+    return info.get("name", "") if isinstance(info, dict) else ""
 
 
 def _register_cache_proxy() -> None:
+    """登記一份；已有同名的舊登記（模組 reload 留下的）就**換掉**，
+    否則「全域刷新」清到的是舊模組的快取、新模組的快取清不到。"""
     from infra.cache import _CACHE_REGISTRY, register_cache
-    if not any(getattr(f, "__name__", "") == _SupplementCacheProxy.__name__
-               for f in _CACHE_REGISTRY):
-        register_cache(_SupplementCacheProxy())
+    for entry in [e for e in _CACHE_REGISTRY if _registry_name(e) == CACHE_PROXY_NAME]:
+        _CACHE_REGISTRY.remove(entry)
+    register_cache(_SupplementCacheProxy())
 
 
 _register_cache_proxy()
 
 
-def _cached(what: str, sheet_id: str, loader: Callable):
+def _cached(what: str, sheet_id: str, loader: Callable, *, cache_if: Callable = lambda _r: True):
+    """鍵含試算表 ID：換一本就不會讀到舊本。命中與存入都交**副本**，呼叫端改不到快取內容。"""
     now = _clock()
     with _CACHE_LOCK:
         hit = _CACHE.get((sheet_id, what))
         if hit is not None and now - hit[0] < CACHE_TTL_SEC:
-            return hit[1]
+            return copy.deepcopy(hit[1])
         generation = _CACHE_GEN
     result = loader()
     with _CACHE_LOCK:
-        if _CACHE_GEN == generation:
-            _CACHE[(sheet_id, what)] = (_clock(), result)
+        if _CACHE_GEN == generation and cache_if(result):
+            _CACHE[(sheet_id, what)] = (_clock(), copy.deepcopy(result))
     return result
 
 
@@ -367,6 +377,8 @@ def _reduce(name: str, values) -> dict:
         # 分頁不存在或完全零列 ＝ 尚未建立（不是錯誤，也不代寫標頭）
         return {"records": [], "bad_rows": [], "blank_rows": 0, "tab_missing": True}
     records, bad, blank = _parse_rows(spec, values[1:])
+    for item in bad:
+        item["tab"] = name          # 第 2 輪裁定 6：以「分頁名＋列號」標示
     return {"records": records, "bad_rows": bad, "blank_rows": blank, "tab_missing": False}
 
 
@@ -384,7 +396,7 @@ def load_supplement_tabs(*, mask: Mask) -> dict:
             tabs = _read_tabs(spreadsheet, names)
             for name in names:
                 if tabs[name]:
-                    _check_header(name, tabs[name], mask=mask, sheet_id=sheet_id)
+                    _check_header(name, tabs[name], mask=mask)
             return tabs
 
         _sid, tabs = _run(op, mask=mask)
@@ -395,11 +407,72 @@ def load_supplement_tabs(*, mask: Mask) -> dict:
 
 # ════════════════════════ 保單分頁（既有 10 欄）════════════════════════
 
+POLICY_TAB_SOURCE = "保單分頁"
+
+
 def _default_policy_loader(client, sheet_id):
-    from repositories.policy.v2 import load_all_policies_v2_with_error
-    from repositories.policy._helpers import get_invest_twd_parse_errors
-    df, skipped = load_all_policies_v2_with_error(client, sheet_id, cache_user=ACTOR)
-    return df, skipped, list(get_invest_twd_parse_errors())
+    """逐分頁讀保單分頁，每一列帶「分頁名＋試算表列號」。
+
+    欄名對映、v1 分頁相容、數值欄的正規化，逐項沿用 `repositories/policy/v2.py::load_all_policies_v2_with_error`
+    的做法與常數（`ALL_COLS_V2`、`EN_HEADERS_V2`、`_LEGACY_ZH_ALIASES_V2`、`_v1_frame_to_v2`、
+    `_normalize_float`、`_normalize_div_cash_pct`、`parse_invest_twd`）；**不改 `v2.py` 一個字**。
+    自己逐分頁讀的理由（第 2 輪總管裁定 5、6）：既有函式把各分頁 concat 後，列就只剩 concat 之後的 index，
+    看不出是哪一分頁第幾列；本金欄也已經把「空白」「解析失敗」都變成 0。
+
+    與既有函式不同的三處（刻意）：
+    - 每列多 `_tab`（分頁名）、`_row`（試算表列號；`get_all_records` 保留中間空列，第 1 列是標頭，
+      所以第 k 筆＝第 k+1 列 —— 讀 gspread 6.2.1 原始碼確認，沒有對真表實測）；
+    - `invest_twd`：空白 → None（不是 0）；解析失敗 → None，並列入 `invest_twd_parse_errors`
+      （`{"tab","row","raw","reason"}`）；**不寫** `repositories/policy/_helpers` 的全域登記表；
+    - 沿用 `get_all_records` 的預設（會把純數字字串轉成數字）—— 改它是另一張工單；L2 依 U11 擋下。
+    回傳 (rows, skipped_tabs, invest_twd_parse_errors)。
+    """
+    import pandas as pd
+    from repositories.policy import _helpers as H
+    from repositories.policy import v2 as V
+
+    sh = H._with_quota_retry(client.open_by_key, sheet_id)
+    tabs = [ws for ws in H._with_quota_retry(sh.worksheets)
+            if not ws.title.startswith("_") and ws.title != H.DEFAULT_WORKSHEET]
+    rows, skipped, parse_errors = [], [], []
+    for ws in tabs:
+        try:
+            records = H._with_quota_retry(ws.get_all_records) or []
+        except Exception as exc:  # noqa: BLE001 —— 與既有函式相同：單一分頁失敗略過，但分頁名與原因交出去
+            skipped.append({"tab": ws.title, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        if not records:
+            continue
+        frame = pd.DataFrame(records)
+        frame["_row"] = range(2, len(frame) + 2)
+        columns = set(frame.columns)
+        if "fund_code" in columns or "基金代號" in columns:
+            zh2en = {**V.EN_HEADERS_V2, **V._LEGACY_ZH_ALIASES_V2}
+            frame = frame.rename(columns={zh: en for zh, en in zh2en.items()
+                                          if zh in frame.columns and en not in frame.columns})
+        else:
+            frame = V._v1_frame_to_v2(frame)
+        for col in V.ALL_COLS_V2:
+            if col not in frame.columns:
+                frame[col] = ""
+        for record in frame[list(V.ALL_COLS_V2) + ["_row"]].to_dict(orient="records"):
+            row = {k: _native(v) for k, v in record.items()}
+            for col in ("units", "avg_nav", "avg_fx"):
+                row[col] = H._normalize_float(row[col])
+            row["div_cash_pct"] = V._normalize_div_cash_pct(row["div_cash_pct"])
+            raw = row["invest_twd"]
+            if raw is None or (isinstance(raw, str) and raw.strip() == "") \
+                    or (isinstance(raw, float) and math.isnan(raw)):
+                row["invest_twd"] = None
+            else:
+                value, reason = H.parse_invest_twd(raw)
+                row["invest_twd"] = value
+                if reason is not None:
+                    parse_errors.append({"tab": ws.title, "row": row["_row"], "raw": str(raw),
+                                         "reason": reason})
+            row["_tab"] = ws.title
+            rows.append(row)
+    return rows, skipped, parse_errors
 
 
 _policy_loader = _default_policy_loader
@@ -413,24 +486,23 @@ def _native(value):
 
 
 def load_policy_holding_rows(*, mask: Mask) -> dict:
-    """同一本（`POLICY_SHEET_ID`）的保單分頁持倉列：包一層既有的
-    `repositories/policy/v2.py::load_all_policies_v2_with_error`（該函式自己有 60 秒快取，本層不再疊）。
+    """同一本（`POLICY_SHEET_ID`）的保單分頁持倉列（`_default_policy_loader`）。
 
     回傳 `{"rows": [dict, ...], "skipped_tabs": [{"tab", "error"}], "invest_twd_parse_errors": [...]}`。
-    `rows` 的欄名是 `ALL_COLS_V2`（`policy_id`、`fund_code`、`fund_name`、`currency`、`invest_twd`、
-    `units`、`avg_nav` …），**值照既有讀取函式交回的樣子，不改**：
-    ⚠️ 既有讀取把空白的 `淨投資金額`／`持有單位數`／`平均買入單位成本` 讀成 0（U10 由 L2 處理）；
-    ⚠️ 既有讀取用 `get_all_records`，純數字的代號可能被轉成數字、前導 0 消失（U11 由 L2 擋）。
-    `skipped_tabs[*]["error"]` 與整本打不開時的錯誤訊息，先遮試算表 ID、再過 `mask`。
+    `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`。60 秒快取，鍵含試算表 ID；
+    有任何分頁被略過就不快取（比照既有函式）。`skipped_tabs[*]["error"]` 過 `mask`（ID 不遮，7.2 丙）。
     """
-    def op(client, _spreadsheet, sheet_id):
-        df, skipped, parse_errors = _policy_loader(client, sheet_id)
-        rows = [{k: _native(v) for k, v in r.items()} for r in df.to_dict(orient="records")]
-        return {"rows": rows,
-                "skipped_tabs": [{"tab": s.get("tab"),
-                                  "error": mask(_hide_id(str(s.get("error", "")), sheet_id))}
-                                 for s in skipped],
-                "invest_twd_parse_errors": parse_errors}
+    sheet_id = policy_sheet_id(mask=mask)
 
-    _sid, result = _run(op, mask=mask, open_sheet=False)
-    return result
+    def loader():
+        def op(client, _spreadsheet, sid):
+            rows, skipped, parse_errors = _policy_loader(client, sid)
+            return {"rows": rows,
+                    "skipped_tabs": [{"tab": t.get("tab"), "error": mask(str(t.get("error", "")))}
+                                     for t in skipped],
+                    "invest_twd_parse_errors": parse_errors}
+
+        _sid, result = _run(op, mask=mask, open_sheet=False)
+        return result
+
+    return _cached("policy_rows", sheet_id, loader, cache_if=lambda r: not r["skipped_tabs"])

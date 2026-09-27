@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import secrets as _secrets
 
 import pytest
@@ -286,28 +287,28 @@ def test_保單資料_反例_格式不符該列不收(env, col, cell):
     assert out["records"] == [] and len(out["bad_rows"]) == 1
 
 
-# ═══════════════════════ 失敗處理、遮蔽 ═══════════════════════
+# ═══════════════════════ 失敗處理、遮蔽（第 2 輪：ID 不遮，`ACCEPTANCE.md` 7.2 丙）═══════════════════════
 
-def test_遮蔽_上游失敗訊息裡的試算表ID與秘密值都被遮(env):
+def test_遮蔽_上游失敗訊息_試算表ID原樣保留_秘密值被遮(env):
     book, _c, _s = env
-    book.fail_next("open_by_key", PermissionError(f"no access to {SHEET} (ID {SHEET[:12]}…) key={SECRET}"), times=10)
+    book.fail_next("open_by_key", PermissionError(f"no access to {SHEET} (ID {SHEET[:12]}…) key={SECRET}"),
+                   times=10)
     with pytest.raises(R.PolicySupplementError) as err:
         R.load_supplement_tabs(mask=mask)
     text = str(err.value)
     assert err.value.code == "api"
-    assert SHEET not in text and SHEET[:12] not in text and SECRET not in text
-    assert SHEET[12:] not in text          # 整串一次換掉，不是只遮掉開頭 12 字
-    assert MASK in text
+    assert SHEET in text                        # 7.2 丙：POLICY_SHEET_ID 不遮
+    assert SECRET not in text and MASK in text  # 秘密值照舊交給呼叫端的 mask
     assert err.value.__cause__ is None and err.value.__context__ is None
 
 
-def test_遮蔽_標頭不符訊息裡出現的ID也被遮(env):
+def test_遮蔽_標頭不符訊息_ID原樣保留_秘密值被遮(env):
     book, _c, _s = env
-    _put(book, R.TAB_HOLDING_SUPPLEMENT, [[SHEET, "基金代號"]])
+    _put(book, R.TAB_HOLDING_SUPPLEMENT, [[SHEET, SECRET]])
     with pytest.raises(R.PolicySupplementError) as err:
         R.load_supplement_tabs(mask=mask)
-    assert SHEET not in str(err.value)
-    assert SHEET not in "".join(err.value.details["actual"])
+    assert SHEET in str(err.value) and SECRET not in str(err.value)
+    assert err.value.details["actual"] == [SHEET, MASK]
 
 
 def test_遮蔽_未設ID的訊息不含任何別本ID(env):
@@ -318,9 +319,8 @@ def test_遮蔽_未設ID的訊息不含任何別本ID(env):
     assert "other-book" not in str(err.value)
 
 
-def test_遮蔽記號與L2的MASK逐字相同():
-    from services.v2_tables.masking import MASK as L2_MASK
-    assert R.SHEET_ID_MASK == L2_MASK
+def test_遮蔽_本檔不再自帶ID遮蔽():
+    assert not hasattr(R, "_hide_id") and not hasattr(R, "SHEET_ID_MASK")
 
 
 def test_上游失敗登記冷卻_冷卻中不再打上游(env):
@@ -369,44 +369,196 @@ def test_快取_登記進CACHE_REGISTRY且全域清除會清掉(env):
     assert proxies[0].cache_info()["size"] == 0
 
 
-# ═══════════════════════ 保單分頁持倉列（包既有讀取函式）═══════════════════════
+def test_快取_換一本POLICY_SHEET_ID不會讀到舊本(env, monkeypatch):
+    book, _clock, secrets = env
+    _put(book, R.TAB_HOLDING_SUPPLEMENT, _hs(["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", ""]))
+    assert len(R.load_supplement_tabs(mask=mask)[R.TAB_HOLDING_SUPPLEMENT]["records"]) == 1
+    other = FakeSpreadsheet()                      # 第二本：分頁不存在
+    books = {SHEET: book, SHEET + "-second": other}
 
-def test_保單分頁_讀同一本並轉交略過分頁且遮ID(env, monkeypatch):
-    import pandas as pd
-    book, _c, _s = env
-    seen = {}
+    class Router:
+        def open_by_key(self, key):
+            return FakeClient(books[key]).open_by_key(key)
 
-    def fake_loader(client, sheet_id):
-        seen["sheet_id"] = sheet_id
-        df = pd.DataFrame([{"policy_id": "PX-TEST-001", "fund_code": "0050", "invest_twd": 0}])
-        return df, [{"tab": "PX-TEST-009", "error": f"APIError: boom {SHEET}"}], [{"row": 2}]
+    monkeypatch.setattr(R, "_make_client", lambda creds: Router())
+    secrets["POLICY_SHEET_ID"] = SHEET + "-second"
+    out = R.load_supplement_tabs(mask=mask)[R.TAB_HOLDING_SUPPLEMENT]
+    assert out["tab_missing"] is True and out["records"] == []
+    assert ("open_by_key", SHEET + "-second") in other.calls
 
-    monkeypatch.setattr(R, "_policy_loader", fake_loader)
+
+def test_快取_命中時交副本_呼叫端改不到快取(env):
+    book, _clock, _s = env
+    _put(book, R.TAB_HOLDING_SUPPLEMENT, _hs(["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", "甲"]))
+    first = R.load_supplement_tabs(mask=mask)
+    first[R.TAB_HOLDING_SUPPLEMENT]["records"][0]["bucket"] = "被改掉"
+    first[R.TAB_HOLDING_SUPPLEMENT]["records"].clear()
+    second = R.load_supplement_tabs(mask=mask)
+    second[R.TAB_HOLDING_SUPPLEMENT]["records"][0]["bucket"] = "又被改"
+    third = R.load_supplement_tabs(mask=mask)
+    assert third[R.TAB_HOLDING_SUPPLEMENT]["records"][0]["bucket"] == "甲"
+
+
+def test_快取登記_reload後只有一份且清得到新模組的快取():
+    """在子行程裡真的 reload（同一行程 reload 會換掉例外類別，污染其他測試）。"""
+    import subprocess
+    import sys
+    code = (
+        "import importlib\n"
+        "from infra import cache as C\n"
+        "import repositories.policy_supplement_repository as R\n"
+        "n = lambda m: sum(1 for f in C._CACHE_REGISTRY if m._registry_name(f) == m.CACHE_PROXY_NAME)\n"
+        "assert n(R) == 1, n(R)\n"
+        "M = importlib.reload(R)\n"
+        "assert n(M) == 1, n(M)\n"
+        "M._CACHE[('x', 'y')] = (0.0, {})\n"
+        "C.clear_all_caches()\n"
+        "assert M._CACHE == {}, M._CACHE\n"
+        "print('ok')\n"
+    )
+    root = pathlib.Path(__file__).resolve().parents[1]
+    done = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True)
+    assert done.returncode == 0 and done.stdout.strip().endswith("ok"), done.stderr[-2000:]
+
+
+def test_快取登記_同名舊登記會被換掉(monkeypatch):
+    class Stale:
+        cleared = False
+
+        def cache_clear(self):
+            Stale.cleared = True
+
+        def cache_info(self):
+            return {"name": R.CACHE_PROXY_NAME, "size": 0}
+
+    monkeypatch.setattr(C, "_CACHE_REGISTRY", list(C._CACHE_REGISTRY) + [Stale()])
+    R._register_cache_proxy()
+    entries = [f for f in C._CACHE_REGISTRY if R._registry_name(f) == R.CACHE_PROXY_NAME]
+    assert len(entries) == 1 and not isinstance(entries[0], Stale)
+
+
+def test_快取登記_名稱比對看實例():
+    (entry,) = [f for f in C._CACHE_REGISTRY if R._registry_name(f) == R.CACHE_PROXY_NAME]
+    assert entry.cache_info()["name"] == "_POLICY_SUPPLEMENT_CACHE"
+    assert R._registry_name(object()) == ""
+
+
+# ═══════════════════════ 保單分頁持倉列 ═══════════════════════
+
+class FakePolicyTab:
+    """假保單分頁：`get_all_records` 用 gspread 真的 `numericise_all` 模擬（純數字字串會變數字）。"""
+
+    def __init__(self, title, rows):
+        self.title = title
+        self.rows = rows
+
+    def get_all_records(self):
+        from gspread.utils import numericise_all, to_records
+        keys, values = self.rows[0], self.rows[1:]
+        width = len(keys)
+        values = [numericise_all((list(r) + [""] * width)[:width]) for r in values]
+        return to_records(keys, values)
+
+
+class FakePolicyBook:
+    def __init__(self, tabs):
+        self.tabs = tabs
+
+    def open_by_key(self, key):
+        return self
+
+    def worksheets(self):
+        return self.tabs
+
+
+POLICY_HEAD = ["保單編號", "基金代號", "基金名稱", "幣別", "級別", "淨投資金額", "現金給付%",
+               "持有單位數", "平均買入單位成本", "平均買入匯率"]
+
+
+@pytest.fixture
+def policy_env(env, monkeypatch):
+    book, clock, secrets = env
+    holder = {}
+    monkeypatch.setattr(R, "_make_client", lambda creds: holder["book"])
+    return holder, clock, secrets
+
+
+def test_保單分頁_真的讀取函式_每列帶分頁名與列號_本金空白與解析失敗分開(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([
+        FakePolicyTab("_持倉補充", [["x"]]),                       # 底線分頁不讀
+        FakePolicyTab("PX-TEST-001", [POLICY_HEAD,
+                                     ["PX-TEST-001", "ZZ9999", "測試基金甲", "USD", "", "300,000", "", "1000", "10", "30"],
+                                     ["", "", "", "", "", "", "", "", "", ""],
+                                     ["PX-TEST-001", "ZZ8888", "測試基金乙", "USD", "", "", "", "1", "1", ""],
+                                     ["PX-TEST-001", "ZZ7777", "測試基金丙", "USD", "", "NT$1,000", "", "1", "1", ""]]),
+    ])
     out = R.load_policy_holding_rows(mask=mask)
-    assert seen["sheet_id"] == SHEET
-    assert out["rows"] == [{"policy_id": "PX-TEST-001", "fund_code": "0050", "invest_twd": 0}]
-    assert SHEET not in out["skipped_tabs"][0]["error"] and MASK in out["skipped_tabs"][0]["error"]
-    assert out["invest_twd_parse_errors"] == [{"row": 2}]
-    assert [c for c in book.calls if c[0] == "open_by_key"] == []   # 不多開一次
+    rows = out["rows"]
+    assert [(r["_tab"], r["_row"]) for r in rows] == [("PX-TEST-001", n) for n in (2, 3, 4, 5)]
+    assert rows[0]["invest_twd"] == 300000 and type(rows[0]["invest_twd"]) is int
+    assert rows[2]["invest_twd"] is None                       # 空白 → None，不是 0
+    assert rows[3]["invest_twd"] is None
+    assert out["invest_twd_parse_errors"] == [
+        {"tab": "PX-TEST-001", "row": 5, "raw": "NT$1,000", "reason": "非數值（原始值：NT$1,000）"}]
 
 
-def test_保單分頁_整本打不開轉成api錯誤且遮ID(env, monkeypatch):
-    _book, _c, _s = env
+def test_U11_真的讀取函式_純數字保單編號與代號被轉成數字_L2擋下並寫明原因(policy_env):
+    from services.v2_tables import alo_holdings as A
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([FakePolicyTab("12345", [POLICY_HEAD,
+        ["12345", "0050", "測試基金甲", "TWD", "", "300000", "", "1000", "10", ""]])])
+    rows = R.load_policy_holding_rows(mask=mask)["rows"]
+    assert rows[0]["policy_id"] == 12345 and rows[0]["fund_code"] == 50   # numericise 的結果，前導 0 已失
+    empty = {"records": [], "bad_rows": [], "blank_rows": 0, "tab_missing": False}
+    sup = {"_row": 2, "_raw": (), "policy_id": "12345", "fund_code": "0050", "opened_on": "2001-01-01",
+           "last_checked_on": "2001-02-03", "bucket": None}
+    out = A.build_alo_tables(rows, {R.TAB_HOLDING_SUPPLEMENT: dict(empty, records=[sup]),
+                                    R.TAB_POLICY_PROFILE: empty})
+    assert out["holding"] == []
+    (skip,) = out["skipped_holdings"]
+    assert skip["tab"] == "12345" and skip["row"] == 2
+    assert "前導 0" in skip["reasons"][0]
 
+
+def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘密值遮_且不快取(policy_env):
+    holder, _c, _s = policy_env
+
+    class Broken(FakePolicyTab):
+        def get_all_records(self):
+            raise ValueError(f"boom {SHEET} {SECRET}")
+
+    holder["book"] = FakePolicyBook([Broken("PX-TEST-009", [])])
+    out = R.load_policy_holding_rows(mask=mask)
+    (sk,) = out["skipped_tabs"]
+    assert sk["tab"] == "PX-TEST-009" and SHEET in sk["error"] and SECRET not in sk["error"]
+    holder["book"] = FakePolicyBook([])
+    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == []   # 有略過的結果沒被快取
+
+
+def test_保單分頁_整本打不開轉成api錯誤(policy_env, monkeypatch):
     def boom(client, sheet_id):
-        raise RuntimeError(f"列保單分頁失敗：PermissionError (ID {sheet_id[:12]}…)")
+        raise RuntimeError(f"列保單分頁失敗：PermissionError (ID {sheet_id[:12]}…) {SECRET}")
 
     monkeypatch.setattr(R, "_policy_loader", boom)
     with pytest.raises(R.PolicySupplementError) as err:
         R.load_policy_holding_rows(mask=mask)
-    assert err.value.code == "api" and SHEET[:12] not in str(err.value)
+    assert err.value.code == "api" and SECRET not in str(err.value)
 
 
-def test_保單分頁_numpy整數轉成Python原生型別(env, monkeypatch):
+def test_保單分頁_快取命中交副本_換本不讀舊本(policy_env):
+    holder, _c, secrets = policy_env
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-001", [POLICY_HEAD,
+        ["PX-TEST-001", "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])])
+    first = R.load_policy_holding_rows(mask=mask)
+    first["rows"][0]["fund_code"] = "被改掉"
+    assert R.load_policy_holding_rows(mask=mask)["rows"][0]["fund_code"] == "ZZ9999"
+    holder["book"] = FakePolicyBook([])
+    secrets["POLICY_SHEET_ID"] = SHEET + "-second"
+    assert R.load_policy_holding_rows(mask=mask)["rows"] == []
+
+
+def test_numpy純量轉原生型別():
     import numpy as np
-    import pandas as pd
-    df = pd.DataFrame({"policy_id": ["PX-TEST-001"], "invest_twd": np.array([300000], dtype="int64"),
-                       "units": np.array([1.5])})
-    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (df, [], []))
-    (row,) = R.load_policy_holding_rows(mask=mask)["rows"]
-    assert type(row["invest_twd"]) is int and type(row["units"]) is float
+    assert type(R._native(np.int64(3))) is int and type(R._native(np.float64(1.5))) is float
+    assert R._native("x") == "x"

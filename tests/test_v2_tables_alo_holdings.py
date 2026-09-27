@@ -29,11 +29,11 @@ WARN = "DIRECT 列暫不支援，該筆不計入配置"
 # ─────────────── 假輸入 ───────────────
 
 def prow(pid="PX-TEST-001", code="ZZ9999", name="測試基金甲", ccy="USD", invest=300000,
-         units=1000.0, avg_nav=10.0, **extra):
-    """保單分頁一列（`ALL_COLS_V2` 欄名，值照既有讀取函式的樣子）。"""
+         units=1000.0, avg_nav=10.0, tab="PX-TEST-001", row=2, **extra):
+    """保單分頁一列（L1 `load_policy_holding_rows()["rows"]` 的形狀：`ALL_COLS_V2` ＋ `_tab`、`_row`）。"""
     row = {"policy_id": pid, "fund_code": code, "fund_name": name, "currency": ccy, "tier": "core",
            "invest_twd": invest, "div_cash_pct": 100.0, "units": units, "avg_nav": avg_nav,
-           "avg_fx": 30.0}
+           "avg_fx": 30.0, "_tab": tab, "_row": row}
     row.update(extra)
     return row
 
@@ -137,12 +137,45 @@ def test_U6_正例_契約的時間欄只收世界協調時間():
 
 # ═══════════════════════ U10：淨投資金額空白＝沒填 ═══════════════════════
 
-@pytest.mark.parametrize("invest", [0, None, ""])
+@pytest.mark.parametrize("invest", [None, ""])
 def test_U10_反例_淨投資金額空白不寫入也不補0(invest):
     out = build([prow(invest=invest)], tabs([srec(2)], [precd(2)]))
     assert out["holding"] == []
     (s,) = out["skipped_holdings"]
-    assert "淨投資金額空白（沒填）" in s["reasons"]
+    assert s["reasons"] == ["淨投資金額空白（沒填）"]
+
+
+def test_U10_反例_淨投資金額為0不當成本():
+    out = build([prow(invest=0)], tabs([srec(2)], [precd(2)]))
+    assert out["holding"] == [] and out["skipped_holdings"][0]["reasons"] == ["淨投資金額為 0（不當成本）"]
+
+
+def test_裁定5_本金解析失敗_原因寫無法解析與原文_不寫成空白():
+    errors = [{"tab": "PX-TEST-001", "row": 7, "raw": "NT$1,000", "reason": "非數值（原始值：NT$1,000）"}]
+    out = A.build_alo_tables([prow(invest=None, row=7)], tabs([srec(2)], [precd(2)]),
+                             invest_twd_parse_errors=errors)
+    assert out["holding"] == []
+    assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額無法解析：NT$1,000"]
+
+
+def test_裁定5_反例_解析失敗清單對到別列時_本列仍寫空白():
+    errors = [{"tab": "PX-TEST-001", "row": 8, "raw": "NT$1,000", "reason": "x"}]
+    out = A.build_alo_tables([prow(invest=None, row=7)], tabs([srec(2)], [precd(2)]),
+                             invest_twd_parse_errors=errors)
+    assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額空白（沒填）"]
+
+
+def test_裁定6_略過的列以分頁名與列號標示_不用index():
+    out = build([prow(tab="PX-TEST-002", row=9, invest=None)], tabs([srec(2)], [precd(2)]))
+    (skip,) = out["skipped_holdings"]
+    assert skip["tab"] == "PX-TEST-002" and skip["row"] == 9 and "index" not in skip
+
+
+def test_裁定6_整列空白的保單分頁列_只計數不列入略過():
+    blank = prow(pid="", code="", name="", invest=None, ccy="", row=3)
+    out = build([prow(), blank], tabs([srec(2)], [precd(2)]))
+    assert len(out["holding"]) == 1 and out["skipped_holdings"] == []
+    assert out["blank_rows"]["保單分頁"] == 1
 
 
 def test_U10_正例_有填就寫入_且照原值不改():
@@ -173,7 +206,7 @@ def test_U11_反例_保單分頁代號被轉成數字_不猜原本字串_不寫�
     out = build([prow(code=50)], tabs([srec(2, code="0050")], [precd(2)]))
     assert out["holding"] == []
     assert "前導 0" in out["skipped_holdings"][0]["reasons"][0]
-    assert out["orphan_supplement"] == [{"row": 2, "key": ("PX-TEST-001", "0050")}]
+    assert out["orphan_supplement"] == [{"tab": S, "row": 2, "key": ("PX-TEST-001", "0050")}]
 
 
 def test_U11_反例_即使數字轉回字串相同也不比對():
@@ -204,7 +237,7 @@ def test_鍵只去前後空白_不改大小寫():
 def test_U7_反例_持倉補充同鍵兩列_整組不採用_即使內容相同():
     out = build([prow()], tabs([srec(2), srec(3)], [precd(2)]))
     assert out["holding"] == []
-    assert out["duplicate_supplement"] == [{"key": ("PX-TEST-001", "ZZ9999"), "rows": [2, 3]}]
+    assert out["duplicate_supplement"] == [{"tab": S, "key": ("PX-TEST-001", "ZZ9999"), "rows": [2, 3]}]
     assert out["skipped_holdings"][0]["reasons"] == ["_持倉補充 同一組鍵有兩列以上，整組不採用"]
     assert out["missing_supplement"] == []       # 重複不是缺列
 
@@ -218,14 +251,14 @@ def test_U7_反例_缺持倉補充_該持倉不寫入並列出():
 def test_U7_正例_孤兒列略過並列出列號():
     out = build([prow()], tabs([srec(2), srec(3, code="ZZ7777")], [precd(2), precd(4, pid="PX-TEST-404")]))
     assert len(out["holding"]) == 1
-    assert out["orphan_supplement"] == [{"row": 3, "key": ("PX-TEST-001", "ZZ7777")}]
-    assert out["orphan_profile"] == [{"row": 4, "key": "PX-TEST-404"}]
+    assert out["orphan_supplement"] == [{"tab": S, "row": 3, "key": ("PX-TEST-001", "ZZ7777")}]
+    assert out["orphan_profile"] == [{"tab": P, "row": 4, "key": "PX-TEST-404"}]
 
 
 def test_U7_反例_保單資料同保單編號兩列_整組不採用_持倉不受影響():
     out = build([prow()], tabs([srec(2)], [precd(2), precd(3)]))
     assert out["policy"] == []
-    assert out["duplicate_profile"] == [{"key": "PX-TEST-001", "rows": [2, 3]}]
+    assert out["duplicate_profile"] == [{"tab": P, "key": "PX-TEST-001", "rows": [2, 3]}]
     assert len(out["holding"]) == 1
     assert out["missing_profile"] == []     # 重複不另計缺列
 
@@ -239,7 +272,7 @@ def test_U7_反例_缺保單資料_該保單列不寫入並列出():
 # ═══════════════════════ T2：holding_id 組法寫死、可重現 ═══════════════════════
 
 def test_T2_正例_同鍵多列各自一列_ID依讀取順序編號且可重現():
-    rows = [prow(invest=100), prow(code="ZZ8888"), prow(invest=200)]
+    rows = [prow(invest=100, row=2), prow(code="ZZ8888", row=3), prow(invest=200, row=4)]
     t = tabs([srec(2), srec(3, code="ZZ8888")], [precd(2)])
     ids = [h["holding_id"] for h in build(rows, t)["holding"]]
     assert ids == ["PX-TEST-001|ZZ9999|1", "PX-TEST-001|ZZ8888|1", "PX-TEST-001|ZZ9999|2"]
@@ -247,10 +280,64 @@ def test_T2_正例_同鍵多列各自一列_ID依讀取順序編號且可重現(
     assert len(set(ids)) == 3
 
 
+@pytest.mark.parametrize("pid,code", [("A|B", "C"), ("A", "B|C"), ("A", "C|"), ("|A", "C")])
+def test_裁定1_反例_鍵含分隔字元一律略過並寫明原因(pid, code):
+    out = build([prow(pid=pid, code=code)], tabs([srec(2, pid=pid, code=code)], [precd(2, pid=pid)]))
+    assert out["holding"] == []
+    assert "含「|」" in out["skipped_holdings"][0]["reasons"][0]
+
+
+def test_裁定1_紅隊案例_A豎B_C與A_B豎C不再撞號():
+    rows = [prow(pid="A|B", code="C", row=2), prow(pid="A", code="B|C", row=3)]
+    t = tabs([srec(2, pid="A|B", code="C"), srec(3, pid="A", code="B|C")], [])
+    out = build(rows, t)                       # 不 raise：兩列都在前一關被擋
+    assert out["holding"] == [] and len(out["skipped_holdings"]) == 2
+
+
+def test_裁定1_正例_鍵不含分隔字元照常寫入且ID唯一():
+    rows = [prow(code="ZZ-1", row=2), prow(code="ZZ-2", row=3)]
+    out = build(rows, tabs([srec(2, code="ZZ-1"), srec(3, code="ZZ-2")], [precd(2)]))
+    ids = [h["holding_id"] for h in out["holding"]]
+    assert ids == ["PX-TEST-001|ZZ-1|1", "PX-TEST-001|ZZ-2|1"]
+
+
+def test_裁定1_反例_holding_id撞號就raise不靜默(monkeypatch):
+    monkeypatch.setattr(A, "_holding_id", lambda pid, code, n: "SAME")
+    rows = [prow(code="ZZ-1", row=2), prow(code="ZZ-2", row=3)]
+    with pytest.raises(A.HoldingIdCollision):
+        build(rows, tabs([srec(2, code="ZZ-1"), srec(3, code="ZZ-2")], [precd(2)]))
+
+
+def test_裁定1_正例_只有一列時不會誤報撞號(monkeypatch):
+    monkeypatch.setattr(A, "_holding_id", lambda pid, code, n: "SAME")
+    assert len(build([prow()], tabs([srec(2)], [precd(2)]))["holding"]) == 1
+
+
 # ═══════════════════════ U9：DIRECT ═══════════════════════
 
+
+@pytest.mark.parametrize("pid", ["direct", "Direct", "DIRECt"])
+def test_裁定8_小寫direct不算DIRECT_當一般保單編號(pid):
+    out = build([prow(pid=pid)], tabs([srec(2, pid=pid)], [precd(2, pid=pid)]))
+    assert out["warnings"] == [] and out["direct"] == []
+    assert [h["policy_id"] for h in out["holding"]] == [pid]
+
+
+def test_裁定8_正例_前後空白的DIRECT仍算DIRECT():
+    out = build([prow(pid=" DIRECT ")], tabs([], []))
+    assert out["holding"] == [] and [w["message"] for w in out["warnings"]] == [WARN]
+
+
+def test_裁定4_總管暫定_DIRECT持倉不產生holding列_且不懸空參照():
+    rows = [prow(pid="DIRECT", code="ZZ5555", row=3)]
+    out = build(rows, tabs([srec(2, pid="DIRECT", code="ZZ5555")], [precd(4, pid="DIRECT")]))
+    assert out["holding"] == [] and out["policy"] == []
+    assert {h["policy_id"] for h in out["holding"]} <= {p["policy_id"] for p in out["policy"]}
+    (d,) = [d for d in out["direct"] if d["source"] == "保單分頁"]
+    assert d["tab"] == "PX-TEST-001" and d["row"] == 3
+
 def test_U9_保單分頁的DIRECT持倉_照讀_不計入持倉_逐字警示():
-    rows = [prow(pid="DIRECT", code="ZZ5555", name="測試基金丙"), prow()]
+    rows = [prow(pid="DIRECT", code="ZZ5555", name="測試基金丙", row=3), prow()]
     out = build(rows, tabs([srec(2), srec(3, pid="DIRECT", code="ZZ5555")], [precd(2)]))
     assert [h["policy_id"] for h in out["holding"]] == ["PX-TEST-001"]
     assert any(d["policy_id"] == "DIRECT" and d.get("fund_code") == "ZZ5555"
@@ -291,7 +378,7 @@ def test_U9_保單資料的DIRECT列_照讀但不寫三欄_不產生policy列():
         assert col not in d
     assert d["policy_name"] == "測試保單乙"
     assert out["warnings"] == [{"code": "direct_unsupported", "message": WARN, "source": P,
-                                "row": 3, "policy_id": "DIRECT"}]
+                                "tab": P, "row": 3, "policy_id": "DIRECT"}]
 
 
 def test_U9_保單資料的DIRECT列三欄空白_不算格式不符_照樣警示():
@@ -416,8 +503,8 @@ def live(monkeypatch):
     monkeypatch.setattr(R, "get_secret", lambda key, default=None: secrets.get(key, default))
     monkeypatch.setattr(R, "_make_client", lambda creds: FakeClient(book))
     monkeypatch.setattr(GR.time, "sleep", lambda _s: None)
-    rows = [prow(), prow(pid="DIRECT", code="ZZ5555")]
-    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (pd.DataFrame(rows), [], []))
+    rows = [prow(), prow(pid="DIRECT", code="ZZ5555", row=3)]
+    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (rows, [], []))
     R.clear_cache()
     SB.reset_all()
     yield book, secrets
