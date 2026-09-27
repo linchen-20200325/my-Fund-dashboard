@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-27 04:22:59 UTC（`date -u` 實測）
+最後更新：2026-09-27 06:00:28 UTC（`date -u` 實測）
 
 ---
 
@@ -22,23 +22,34 @@
 
 - 主工作樹：`/home/user/my-Fund-dashboard`
 - 分支：`main`
-- HEAD：`14b10ff`（`14b10ff3749ad6d90674ab2c85d7610c1a6de93d`），**落後 `origin/main` 1 個 commit**
-- `origin/main` = `2ac1394`（`2ac1394d423dd617250a8ab4ee631392e4277747`，ls-remote 實測）：PR #854 的 merge commit，親代為 `14b10ff` 與 `6489572`
+- HEAD：`2ac1394`（`2ac1394d423dd617250a8ab4ee631392e4277747`，PR #854 的 merge commit），與 `origin/main` 相同（ls-remote 實測）
 - 未 commit 的改動：無（`git status --short` 實測為空）
-- 資料工程組工作樹 wt_alo_read（分支 `feat/alo-sheet-read`），HEAD `14b10ff`，**有 7 個未 commit 的檔案**（讀表程式實作中）；遠端尚無此分支（`git worktree list`、ls-remote 實測）
-- 文件組工作樹 wt_doc49（分支 `docs/49-q4-q8-note`）仍在，HEAD `6489572`，無改動；**遠端 `docs/49-q4-q8-note` 已不存在**（ls-remote 實測；總管告知「還沒刪」，實測已刪）
+- 資料工程組工作樹 wt_alo_read（分支 `feat/alo-sheet-read`），HEAD `3405ba2`，無未 commit 改動；`origin/feat/alo-sheet-read` = `3405ba2`（`3405ba299c3b3120f02176734318eec06680569f`，ls-remote 實測）。分支 commit：`ba61c3a` → `56f29a3`（merge origin/main）→ `fd99cfe` → `3405ba2`，與 `origin/main` 的 merge-base 為 `2ac1394`
+- 稽核工作樹：audA_alo3、audB3，皆 detached 於 `3405ba2`，無改動
+- 文件組工作樹 wt_doc49（分支 `docs/49-q4-q8-note`）仍在，HEAD `6489572`，無改動；遠端 `docs/49-q4-q8-note` 已不存在（ls-remote 實測）
 - 實作組工作樹 wt_alo0 已移除
 - 遠端 `feat/alo-basis-align`、`feat/set-live-ui` 都已不存在（ls-remote 實測）
 
 ## 2. 進行中
 
 ### alo 頁接真資料
-- 狀態：**實作中**（alo 讀表程式）
+- 狀態：**複驗中**（alo 讀表程式）
 - 負責組：
   - (a) 規格組：規格已定稿，送交客戶；R1 已裁示選 B（當日 12:00 台灣時間）；欄位可先開表。
     - 規格三份草稿已定稿。未定項：〔擬〕文案（alo1 的 ▲2～▲5、alo4 的 8 句）以及整份草稿，都要等客戶拍板，下一輪做畫面時再送。
   - (b) 草稿組：C2 草稿的 D1～D5 已裁示，全照總管建議（見第 5 節「已裁示（2026-09-27）」）。
-  - (e) 資料工程組：alo 讀表程式（L1／L2），分支 `feat/alo-sheet-read`，只讀不寫，實作中。下一步由該組回報。
+  - (e) 資料工程組：alo 讀表程式（L1／L2），分支 `feat/alo-sheet-read`，只讀不寫。
+    - 輪次：第 1 輪 `ba61c3a` → 第 2 輪 `fd99cfe` → 第 3 輪 `3405ba2`。
+    - 狀態：複驗中，已送稽核 A、B 兩組複驗 `3405ba2`，等回報。PR 尚未開、尚未 merge。
+    - 做法已裁定：
+      - 保單分頁第二份取數實作走方案 (b)，已登記 EXCEPTIONS.md 的 P-POLICYREADDUPE-1。
+      - 依 ACCEPTANCE 7.2 丙，`POLICY_SHEET_ID` 不遮。
+      - 不產生 DIRECT holding 列：屬總管暫定，掛在「hld 頁 DIRECT 顯示」未定題下（見登記待辦）。
+    - 客戶追加要求（逐字）：
+      「已知風險：分頁持續被限流時，冷卻會被清掉。
+      本輪已修，若再現，檢查冷卻清除邏輯。」
+      - 修正在 `feat/alo-sheet-read` @ `3405ba2`，位置 `repositories/policy_supplement_repository.py`，搜尋「第 3 輪裁定 3」即可找到（書記組以 `git show` 唯讀確認該字串存在）。
+      - 附註：尚待 A、B 稽核複驗，PR 還沒 merge。
 - R2（總管裁定）：不動 44，把「DIRECT 列暫不開放、不計入 ALO-2」這兩處與 44 的差異寫進 ACCEPTANCE（比照 Q13 前例），實作時一併處理。「DIRECT 列」兩種都算：`_保單資料` 的 DIRECT 列＋保單分頁 `policy_id` 為 DIRECT 的持倉列。
 - R3：實作組逐頁列出 DIRECT 的顯示點，交稽核驗證。
 - 總管技術裁定：~~兩張 `_` 分頁的 L1 一律讀 secret `POLICY_SHEET_ID`，沒有預設、不退回其他 sheet，未設定時 fail loud。~~
@@ -61,11 +72,12 @@
   1. cost／mv 分歧（alo 示範版存 "cost"／"mv"，設定頁存「成本」／「市值」）
   2. 跨頁守衛：把 alo 列進 `PAGES_READING_SETTINGS`
   3. Q9 非美元匯率
-- 下一步誰動：(e) 資料工程組回報讀表程式進度；〔擬〕文案與整份草稿於下一輪做畫面時送客戶拍板
+- 下一步誰動：(e) 稽核 A、B 複驗 `3405ba2` → 必修 0 → 開 PR → CI → 依常設授權 merge；〔擬〕文案與整份草稿於下一輪做畫面時送客戶拍板
 
 ### 總管錯誤紀錄
 - 9d 派工單把 U9 三欄寫成 `_持倉補充` 三欄，正確是保單的 issuer、ccy、opened_on。稽核抓到，9e 已更正（`0cf895e`），也已通知讀表程式組。
 - 9e 派工單把稽核組的「依 R2」沒查證就照抄，稽核抓到，9f 已更正（`6489572`）。
+- alo 讀表派工單要求遮 `POLICY_SHEET_ID`，與 ACCEPTANCE 7.2 丙「不遮」相牴。稽核 A 抓到，第 2 輪已撤回（`fd99cfe`）。
 
 ### 交接本
 - 狀態：已建立，持續維護
@@ -91,7 +103,7 @@
 - set 頁示範假資料 `alo_basis` 仍是 cost：另案處理，要不要走草稿由總管判定
 - 「正式模式不讀 set fixtures」目前屬實，但 import 守衛只管 app_live 與 source；page 在頂層就 import fixtures，live.py 若讀 fixtures，守衛擋不下（稽核 A 突變 X1、X2 重現）。建議擴大守衛範圍，另案處理
 - hld 的 `_build_hld5` 直接截取 UTC 字串前 10 字當日期，可能不符 44「顯示時才轉當地時區」；+08:00 早上 8 點前的時間會顯示成前一天
-- hld 頁遇到 DIRECT 持倉時怎麼顯示（44 規定顯示「直接持有」），未定
+- hld 頁遇到 DIRECT 持倉時怎麼顯示（44 規定顯示「直接持有」），未定。alo 讀表「不產生 DIRECT holding 列」為總管暫定，掛在此題下
 - U9 與 44 第 4.4 節「DIRECT 固定存在」衝突，待 44 解凍時處理
 - doc guard 不檢查 markdown 渲染，刪除線錯位會照樣綠燈。建議之後改到劃線密集的地方時，稽核一律用渲染器驗一次；可考慮加守衛，另案處理。稽核一律改用符合 GFM 規範的渲染器（scratchpad mdtool）驗證，舊版 remark 會漏抓
 - D4 的列順序不一致（ALO-1 vs ALO-2），本輪不動，ALO-2 接真資料那輪一起處理
@@ -99,6 +111,15 @@
 - HLD-5「直接持有」依賴 DIRECT 保留列，但第一階段不產生該保留列，要另行處理
 - ACCEPTANCE 的 R2 條目
 - 49 :766 措辭建議 S11，不阻擋
+- v2.py 的 numericise 根治（U11），完成時一併收斂為共用逐分頁函式
+- `settings_sheet_repository.py` 快取登記去重死碼
+- 分頁名近似偵測
+- 鍵含 BOM、零寬字元、NBSP 的處理
+- 近似 DIRECT 的警示
+- 兩來源快取週期不同步
+- 一次讀取取兩次 ID
+- EXCEPTIONS 8.3.P 下表計數明細「本段 14」早已過期
+- 交付時提醒客戶：保單分頁幣別要用大寫 ISO 代碼；保單編號若是純數字，目前會被擋下
 - FX 日期查證、AST 守衛還有 6 種動態 import 漏網等舊登記（見 docs/v2/49 §8）
 
 ## 3. 已完成（未 merge）
