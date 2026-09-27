@@ -167,6 +167,8 @@ def _holding_reasons(row: dict, parse_error=None):
 
 
 UNJUDGED_REASON_PREFIX = "可能屬於讀取失敗的分頁"
+UNREAD_REASON_PREFIX = "可能屬於本次未讀的分頁"      # 第 13 輪 5（B 建議 4）：冷卻中、短路或預算而未讀
+UNJUDGED_REASON_SUFFIX = "本次不判定孤兒"
 SKIPPED_OWNER_REASON = "對應持倉已被略過（保單分頁該列的鍵不能用，見 skipped_holdings）"
 
 
@@ -230,8 +232,12 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     - `missing_profile`／`duplicate_profile`／`orphan_profile`；
     - `supplement_unjudged`／`profile_unjudged`：有保單分頁讀取失敗時，本來會報成孤兒的列改列在這裡，
       原因「可能屬於讀取失敗的分頁（<分頁名>），本次不判定孤兒」（第 6 輪 B 組 2）；
+      第 13 輪 5（B 建議 4）：「讀取失敗」與「本次未讀」分開寫 —— 略過清單項 `unread` 為真（冷卻中、短路或預算而
+      未讀）的分頁改列在「可能屬於本次未讀的分頁（<分頁名>）」；兩者都有時以「；」相接，最後寫「本次不判定孤兒」。
+      沒有 `unread` 欄的項一律當「讀取失敗」（與舊輸入相容）。
       ⚠️ 已知限制（第 7 輪 4）：L1 的分頁清單快取 60 秒，這段時間內新增或刪除的保單分頁可能還讀不到／
-      還在讀，孤兒判定可能過早（任一分頁讀失敗時 L1 會作廢分頁清單快取，但單純新增分頁不會觸發）；
+      還在讀，孤兒判定可能過早（~~任一分頁讀失敗時 L1 會作廢分頁清單快取~~ 第 12 輪 2 起只有非 HTTP 錯誤或
+      4xx〔不含 429〕的讀取失敗才作廢；單純新增分頁不會觸發）；
     - `supplement_of_skipped`／`profile_of_skipped`：保單分頁上**有**這組鍵、只是那一列因鍵不能用
       （不是文字、含 `|`）被略過 —— 不報成孤兒，原因寫 `SKIPPED_OWNER_REASON`（第 3 輪裁定 10）；
     - `bad_rows`、`blank_rows`、`tab_missing`（依分頁）；`skipped_tabs`、`invest_twd_parse_errors` 原樣轉交。
@@ -373,9 +379,14 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
 
     orphan_supplement, supplement_of_skipped, supplement_unjudged, profile_unjudged = [], [], [], []
     # 第 6 輪 B 組 2：有保單分頁讀取失敗時，孤兒判定不可信 —— 那張分頁上可能就有這組鍵。
-    failed_tabs = [t.get("tab") for t in skipped_tabs]
-    unjudged_reason = (f"{UNJUDGED_REASON_PREFIX}（{'、'.join(str(t) for t in failed_tabs)}），本次不判定孤兒"
-                       if failed_tabs else "")
+    failed_tabs = [t.get("tab") for t in skipped_tabs if not t.get("unread")]
+    unread_tabs = [t.get("tab") for t in skipped_tabs if t.get("unread")]
+    parts = []
+    if failed_tabs:
+        parts.append(f"{UNJUDGED_REASON_PREFIX}（{'、'.join(str(t) for t in failed_tabs)}）")
+    if unread_tabs:
+        parts.append(f"{UNREAD_REASON_PREFIX}（{'、'.join(str(t) for t in unread_tabs)}）")
+    unjudged_reason = f"{'；'.join(parts)}，{UNJUDGED_REASON_SUFFIX}" if parts else ""
     for k, rec in sorted(supplements.items(), key=lambda item: item[1]["_row"]):
         if k in used_keys:
             continue

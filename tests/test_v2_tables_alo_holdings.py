@@ -708,3 +708,25 @@ def test_第6輪B5_反例_只有一欄時解析失敗原因不提兩欄():
     errors = [{"tab": "PX-TEST-001", "row": 2, "raw": "1e3", "reason": "x"}]
     out = A.build_alo_tables([prow(invest=None)], tabs([srec(2)], [precd(2)]), invest_twd_parse_errors=errors)
     assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額無法解析：1e3"]
+
+
+
+# ═══════════════════════ 第 13 輪 ═══════════════════════
+
+def test_第13輪5_不判定原因_讀取失敗與本次未讀分開寫():
+    skipped = [{"tab": "PX-壞1", "error": "x", "unread": False},
+               {"tab": "PX-冷", "error": "冷卻中", "unread": True},
+               {"tab": "PX-未", "error": "未讀", "unread": True}]
+    out = A.build_alo_tables([prow()], tabs([srec(2), srec(3, pid="X", code="Y")], [precd(2), precd(4, pid="Z")]),
+                             skipped_tabs=skipped)
+    reason = "可能屬於讀取失敗的分頁（PX-壞1）；可能屬於本次未讀的分頁（PX-冷、PX-未），本次不判定孤兒"
+    assert out["supplement_unjudged"][0]["reason"] == reason
+    assert out["profile_unjudged"][0]["reason"] == reason
+
+
+def test_第13輪5_只有本次未讀_不寫讀取失敗():
+    skipped = [{"tab": "PX-未", "error": "未讀", "unread": True}]
+    out = A.build_alo_tables([prow()], tabs([srec(2), srec(3, pid="X", code="Y")], [precd(2)]),
+                             skipped_tabs=skipped)
+    assert out["supplement_unjudged"][0]["reason"] == "可能屬於本次未讀的分頁（PX-未），本次不判定孤兒"
+    assert "讀取失敗" not in out["supplement_unjudged"][0]["reason"]
