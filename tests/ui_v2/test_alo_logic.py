@@ -257,7 +257,7 @@ def test_市值基準下匯率取數失敗_ALO2與ALO6與ALO4照模板_成本基
     assert _block(model, "ALO-6")["placeholder"]["text"] == text
     assert _block(model, "ALO-4")["fail_nodes"][0]["text"] == text
     dataset = fixtures.scenario("fxfail")
-    _setting(dataset, "alo_basis", "cost")
+    _setting(dataset, "alo_basis", logic.BASIS_COST)
     cost = logic.build_page_model(dataset)
     assert _block(cost, "ALO-2")["placeholder"] is None and _block(cost, "ALO-2")["_rows"]
 

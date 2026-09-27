@@ -332,8 +332,11 @@ HINT_NOTE = "本塊數字皆為示意值"  # ALO-GAP-示意標記
 DISPLAY_TZ = timezone(timedelta(hours=8))  # ALO-GAP-時區
 DISPLAY_TZ_LABEL = "UTC+8"
 
-BASIS_COST = "cost"
-BASIS_MV = "mv"
+# 比重基準的存值（2026-09-27 對齊）：與 set 頁 L2 `services/v2_tables/settings_store.py::ENUM_SETTING_VALUES["alo_basis"]`
+# 同一份（客戶 2026-09-26 裁示「成本／市值」）。ui_v2 不得 import services（tests/ui_v2/test_ui_v2_live_import_guard.py），
+# 所以這裡是字面鏡像，由 tests/test_v2_tables_settings_store_page.py 的跨頁守衛逐字比對。畫面文字住在 BASIS_LABELS，一字未動。
+BASIS_COST = "成本"
+BASIS_MV = "市值"
 BASIS_LABELS = {BASIS_COST: "成本（cost_twd）", BASIS_MV: "市值（淨值 × 單位數，美元依 fx_twd_per_usd 換算）"}
 FX_KEY = "fx_twd_per_usd"
 

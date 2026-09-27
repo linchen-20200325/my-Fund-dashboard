@@ -362,19 +362,13 @@ def test_跨頁守衛的觸發條件_正控與負控(tmp_path):
         (tmp_path / rel).unlink()
 
 
-def test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致():
-    """據實登記的分歧（2026-09-26 稽核 A）：set 頁存「成本／市值」，ui_v2/alo 目前用 cost／mv。
-    alo 還沒有正式入口時，這條只記錄分歧仍在；一旦 `ui_v2/app_alo_live.py` 出現，alo 的比重基準值
-    必須改成 L2 這一份，否則紅。"""
-    import pathlib
+def test_跨頁守衛_alo比重基準存值須與L2可選值一致():
+    """2026-09-27 分歧已消除：ui_v2/alo 的比重基準存值改成「成本／市值」，與 L2 同一份。
+    本條不看觸發條件、無條件逐字比對（順序也比）；把 alo 的 `BASIS_COST` 改回 `cost` 這一條要紅。
+    `_alo_live_triggered` 與它的正控、負控保留，留給 alo 接正式模式時讀設定那一步用。"""
     from ui_v2.alo import logic as alo_logic
-    root = pathlib.Path(__file__).resolve().parents[1]
     alo_values = (alo_logic.BASIS_COST, alo_logic.BASIS_MV)
-    if _alo_live_triggered(root, S.PAGES_READING_SETTINGS):
-        assert alo_values == S.ENUM_SETTING_VALUES["alo_basis"], alo_values
-    else:
-        assert alo_values == ("cost", "mv")                            # 分歧仍在：接正式模式前要改
-        assert set(alo_values).isdisjoint(S.ENUM_SETTING_VALUES["alo_basis"])
+    assert alo_values == S.ENUM_SETTING_VALUES["alo_basis"], alo_values
 
 
 
