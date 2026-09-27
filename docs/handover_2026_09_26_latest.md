@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-27 00:36:15 UTC（`date -u` 實測）
+最後更新：2026-09-27 00:36:41 UTC（`date -u` 實測）
 
 ---
 
@@ -25,6 +25,7 @@
 - HEAD：`5eb530e`（`5eb530ee0f8fadaddfc6e3d2dc7cc357a02ecf9a`），與 `origin/main` 相同（ls-remote 實測）
 - `origin/main` = `5eb530e`：PR #852 的 merge commit，第二親代為 `d652efb`
 - 未 commit 的改動：無（`git status --short` 實測為空）
+- 實作組工作樹 wt_alo0（分支 `feat/alo-basis-align`），目前 HEAD `5eb530e`，尚未 commit，遠端尚無此分支（`git worktree list`、ls-remote 實測）
 - 遠端 `feat/set-live-ui` 已不存在（`git fetch` 回報找不到該 ref）
 - 註：總管原先告知主工作樹仍停在 `feat/set-live-ui` 的 `c2e7b37`，須由總管同步到 main。17:26 UTC 實測時，主工作樹已經在 `main` 的 `5eb530e`，本節照實測填寫。
 
