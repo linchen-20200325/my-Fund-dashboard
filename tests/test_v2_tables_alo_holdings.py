@@ -208,12 +208,22 @@ def test_第3輪裁定9_兩個分頁同一列號_只有一邊解析失敗_不會
     assert out2["skipped_holdings"][-1]["reasons"] == ["淨投資金額空白（沒填）"]
 
 
-def test_第3輪裁定10_含分隔字元被略過的列_補充與保單資料不報孤兒():
+def test_第3輪裁定10_含分隔字元被略過的列_補充不報孤兒_保單列照常產生():
     rows = [prow(pid="A|B", code="C", row=2)]
     out = build(rows, tabs([srec(2, pid="A|B", code="C")], [precd(2, pid="A|B")]))
     assert out["orphan_supplement"] == [] and out["orphan_profile"] == []
     assert [e["row"] for e in out["supplement_of_skipped"]] == [2]
-    assert out["profile_of_skipped"] == [{"tab": P, "row": 2, "key": "A|B", "reason": A.SKIPPED_OWNER_REASON}]
+    # 第 5 輪總管改判：pid 是可用文字 → policy 列照常產生，不再標成 profile_of_skipped
+    assert out["profile_of_skipped"] == []
+    assert [p["policy_id"] for p in out["policy"]] == ["A|B"]
+    assert out["holding"] == []
+
+
+@pytest.mark.parametrize("pid,code", [("A|B", "C"), ("A", "B|C"), ("A|B", "C|D")])
+def test_第5輪改判_含分隔字元_兩條分支都產生policy列_holding仍略過(pid, code):
+    out = build([prow(pid=pid, code=code)], tabs([], [precd(3, pid=pid)]))
+    assert [p["policy_id"] for p in out["policy"]] == [pid]
+    assert out["holding"] == [] and out["profile_of_skipped"] == [] and out["missing_profile"] == []
 
 
 def test_第3輪裁定10_數字鍵被略過的列_保單資料也不報孤兒():
@@ -650,3 +660,10 @@ def test_第4輪BB_一萬列被略過加一萬列補充_數秒內完成():
     took = time.perf_counter() - start
     assert len(out["supplement_of_skipped"]) == n and out["orphan_supplement"] == []
     assert took < 10.0, took     # 門檻刻意寬鬆（本機實測遠低於此），避免 CI 抖動
+
+
+def test_第5輪A6_L2_沒有兩欄旗標時_空白原因照舊():
+    out = build([prow(invest=None)], tabs([srec(2)], [precd(2)]))
+    assert out["skipped_holdings"][0]["reasons"] == ["淨投資金額空白（沒填）"]
+    out = build([prow(invest=None, _invest_both=True)], tabs([srec(2)], [precd(2)]))
+    assert "讀的是 invest_twd 欄" in out["skipped_holdings"][0]["reasons"][0]

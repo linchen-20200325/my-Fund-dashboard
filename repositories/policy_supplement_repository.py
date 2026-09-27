@@ -417,7 +417,6 @@ INVEST_TWD_HEADERS = ("invest_twd", "淨投資金額")   # v2/v1 英文、v2 中
 _INVEST_TEXT_RE = re.compile(r"^(-?)([0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.0+)?$")
 INVEST_MAX_DIGITS = 18       # 比照 `services/v2_tables/settings_store.py::INT_MAX_DIGITS`（第 4 輪 B-D）
 HEADER_ERROR_TEXT = "第 1 列不是標頭，或標頭有空白或重複的欄位"
-SHORT_COOLDOWN_KIND = "unreachable"    # `shared/backoff_policy.py`：60 秒（第 4 輪 B-A）
 
 
 def _invest_twd_from_text(raw):
@@ -510,6 +509,8 @@ def _default_policy_loader(client, sheet_id):
             records.append(record)
         frame = pd.DataFrame(records)
         frame["_row"] = range(2, len(frame) + 2)
+        # 第 5 輪 A 組 6：兩個本金標頭並存時，讀的是英文欄 `invest_twd`；記下來讓 L2 在原因裡寫明。
+        frame["_invest_both"] = all(h in frame.columns for h in INVEST_TWD_HEADERS)
         columns = set(frame.columns)
         if "fund_code" in columns or "基金代號" in columns:
             zh2en = {**V.EN_HEADERS_V2, **V._LEGACY_ZH_ALIASES_V2}
@@ -520,7 +521,7 @@ def _default_policy_loader(client, sheet_id):
         for col in V.ALL_COLS_V2:
             if col not in frame.columns:
                 frame[col] = ""
-        keep = list(V.ALL_COLS_V2) + ["_row", "_blank"]
+        keep = list(V.ALL_COLS_V2) + ["_row", "_blank", "_invest_both"]
         for record in frame[keep].to_dict(orient="records"):
             row = {k: _native(v) for k, v in record.items()}
             for col in ("units", "avg_nav", "avg_fx"):
@@ -551,9 +552,18 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
     """同一本（`POLICY_SHEET_ID`）的保單分頁持倉列（`_default_policy_loader`）。
 
     回傳 `{"rows": [dict, ...], "skipped_tabs": [{"tab", "error"}], "invest_twd_parse_errors": [...]}`。
-    `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`、`_blank`。
-    有分頁被略過時不呼叫 `record_gspread_success`；略過原因是 429 時登記配額冷卻。60 秒快取，鍵含試算表 ID；
-    有任何分頁被略過就不快取（比照既有函式）。`skipped_tabs[*]["error"]` 過 `mask`（ID 不遮，7.2 丙）。
+    `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`、`_blank`、`_invest_both`（該分頁兩個本金標頭並存）。`skipped_tabs[*]["error"]` 過 `mask`
+    （ID 不遮，7.2 丙）。60 秒快取，鍵含試算表 ID。
+
+    部分分頁失敗時（第 5 輪總管改判，撤回第 4 輪 B-A 的 60 秒短冷卻）：
+    - **部分結果照樣快取 60 秒**，快取內容帶 `skipped_tabs`；每次命中都照樣交出被略過的分頁與原因。
+    - 非 429 的部分失敗**不登記冷卻**；429 照第 3 輪登記配額冷卻。
+    - 有分頁被略過時仍不呼叫 `record_gspread_success`（第 3 輪裁定 3）。
+    為何不違反 v3 `02`「只快取成功結果」：快取的不是「被當成成功的失敗」—— 失敗資訊（哪一張分頁、
+    什麼原因）隨結果一起交出，沒有被隱藏；而且只快取 60 秒，過期就重讀。
+    撤回理由（紅隊實測）：長期壞一張分頁時，短冷卻讓整頁約 3/4 時間只顯示錯誤、看不到是哪張分頁壞了；
+    一次暫時性 5xx 也會讓整頁冷卻。
+    ⚠️ 本條是**總管判斷，待第二組確認**。
     """
     sheet_id = policy_sheet_id(mask=mask)
 
@@ -561,30 +571,22 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
         def op(client, _spreadsheet, sid):
             from infra.gspread_retry import is_quota_error, record_gspread_failure
             rows, skipped, parse_errors = _policy_loader(client, sid)
-            from infra import source_backoff
-            from infra.gspread_retry import sheet_key
-            other_failure = False
             for item in skipped:
                 exc = item.get("_exc")
                 # 第 3 輪裁定 3：分頁失敗若屬 429，登記配額冷卻（配額是整把憑證共用的）。
+                # 其他原因不登記冷卻（第 5 輪改判）。
                 if exc is not None and is_quota_error(exc):
                     record_gspread_failure(ACTOR, sid, exc)
-                else:
-                    other_failure = True
-            if other_failure:
-                # 第 4 輪 B-A：分頁錯誤若是永久性的（例如標頭壞了），結果永不快取、每次 rerun 都打整本。
-                # 對**本試算表**的 sheet 鑰匙登記一次短冷卻（`unreachable`，60 秒）；不碰 quota 鑰匙，
-                # 也不快取部分結果。⚠️ 代價：冷卻期間同一本的補充分頁讀取也會回 `cooling`。
-                source_backoff.record_failure(sheet_key(ACTOR, sid), SHORT_COOLDOWN_KIND)
             return {"rows": rows,
                     "skipped_tabs": [{"tab": t.get("tab"), "error": mask(str(t.get("error", "")))}
                                      for t in skipped],
                     "invest_twd_parse_errors": parse_errors}
 
         # 第 3 輪裁定 3：只要有分頁被略過，就不算整次成功 —— 不呼叫 `record_gspread_success`，
-        # 否則上一步剛登記的冷卻會被當場解除，每次重跑都照打上游。
+        # 否則剛登記的配額冷卻會被當場解除。
         _sid, result = _run(op, mask=mask, open_sheet=False,
                             success_if=lambda r: not r["skipped_tabs"])
         return result
 
-    return _cached("policy_rows", sheet_id, loader, cache_if=lambda r: not r["skipped_tabs"])
+    # 第 5 輪：部分結果（帶 `skipped_tabs`）也快取 60 秒；上游失敗整批拋錯的不會進快取。
+    return _cached("policy_rows", sheet_id, loader)

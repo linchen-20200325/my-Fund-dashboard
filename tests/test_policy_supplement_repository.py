@@ -536,7 +536,7 @@ def test_U11_真的讀取函式_純數字保單編號與代號被轉成數字_L2
     assert "前導 0" in skip["reasons"][0]
 
 
-def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘密值遮_且不快取(policy_env):
+def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘密值遮_部分結果快取60秒(policy_env):
     holder, _c, _s = policy_env
 
     class Broken(FakePolicyTab):
@@ -547,9 +547,11 @@ def test_保單分頁_單一分頁讀失敗_略過並交出分頁名_ID不遮秘
     out = R.load_policy_holding_rows(mask=mask)
     (sk,) = out["skipped_tabs"]
     assert sk["tab"] == "PX-TEST-009" and SHEET in sk["error"] and SECRET not in sk["error"]
-    SB.reset_all()     # 第 4 輪 B-A 的短冷卻：這裡只驗「沒被快取」，先把冷卻解除
     holder["book"] = FakePolicyBook([])
-    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == []   # 有略過的結果沒被快取
+    # 第 5 輪改判：部分結果快取 60 秒，命中時照樣交出被略過的分頁與原因
+    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == out["skipped_tabs"]
+    _c.advance(60)
+    assert R.load_policy_holding_rows(mask=mask)["skipped_tabs"] == []   # 過期才重讀
 
 
 def test_保單分頁_整本打不開轉成api錯誤(policy_env, monkeypatch):
@@ -693,6 +695,7 @@ def test_第3輪裁定3_分頁持續429_連跑會進入冷卻_不會每次都打
     holder["book"] = FakePolicyBook([tab])
     reached, cooling = 0, 0
     for _ in range(21):
+        _c.advance(61)          # 每次都讓 60 秒快取過期，逼它回到上游那一關
         try:
             R.load_policy_holding_rows(mask=mask)
             reached += 1
@@ -717,7 +720,7 @@ def test_第3輪裁定3_部分分頁失敗不解除既有冷卻(policy_env, monk
     holder["book"] = FakePolicyBook([Broken("PX-TEST-009", [])])
     R.load_policy_holding_rows(mask=mask)
     assert called == []
-    SB.reset_all()     # 第 4 輪 B-A 的短冷卻
+    _c.advance(60)     # 部分結果快取 60 秒（第 5 輪）
     holder["book"] = FakePolicyBook([])
     R.load_policy_holding_rows(mask=mask)
     assert len(called) == 1                      # 全部分頁都讀到才算成功
@@ -787,28 +790,51 @@ def test_第3輪裁定7_反例_其他例外照原文():
 
 # ═══════════════════════ 第 4 輪 ═══════════════════════
 
-def test_第4輪BA_分頁標頭錯誤_連跑5次_打上游次數有上限_且不碰配額鑰匙(policy_env):
-    holder, _c, _s = policy_env
+def _bad_and_good_book():
     bad = FakePolicyTab("PX-TEST-001", [["保單編號", "保單編號"], ["a", "b"]])     # 永久性錯誤
     good = FakePolicyTab("PX-TEST-002", [POLICY_HEAD,
         ["PX-TEST-002", "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])
+    return bad, good
+
+
+def test_第5輪改判_壞分頁連跑_每60秒打一輪上游_每次都拿到資料與略過原因(policy_env):
+    holder, clock, _s = policy_env
+    bad, good = _bad_and_good_book()
     holder["book"] = FakePolicyBook([bad, good])
-    reached, cooling = 0, 0
-    for _ in range(5):
-        try:
-            out = R.load_policy_holding_rows(mask=mask)
-            reached += 1
-            assert out["skipped_tabs"] and len(out["rows"]) == 1      # 部分結果照交，但沒被快取
-        except R.PolicySupplementError as err:
-            assert err.code == "cooling"
-            cooling += 1
-    assert reached == 1 and cooling == 4
+    for _ in range(12):                       # 0、20、40 … 220 秒
+        out = R.load_policy_holding_rows(mask=mask)
+        assert len(out["rows"]) == 1
+        assert [t["tab"] for t in out["skipped_tabs"]] == ["PX-TEST-001"]
+        assert "第 1 列不是標頭" in out["skipped_tabs"][0]["error"]
+        clock.advance(20)
+    assert bad.calls == 4                     # 0、60、120、180 秒各一輪（240 秒前共 4 輪）
+    assert holder["book"].calls.count("open_by_key") == 4
+
+
+def test_第5輪改判_快取長度釘住60秒(policy_env):
+    holder, clock, _s = policy_env
+    assert R.CACHE_TTL_SEC == 60.0
+    bad, good = _bad_and_good_book()
+    holder["book"] = FakePolicyBook([bad, good])
+    R.load_policy_holding_rows(mask=mask)
+    clock.advance(59.9)
+    R.load_policy_holding_rows(mask=mask)
     assert bad.calls == 1
-    assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]             # 配額鑰匙沒被碰
-    assert SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    clock.advance(0.1)
+    R.load_policy_holding_rows(mask=mask)
+    assert bad.calls == 2
 
 
-def test_第4輪BA_反例_沒有分頁失敗就不登記冷卻(policy_env):
+def test_第5輪改判_反例_非429的部分失敗不登記任何冷卻(policy_env):
+    holder, _c, _s = policy_env
+    bad, good = _bad_and_good_book()
+    holder["book"] = FakePolicyBook([bad, good])
+    R.load_policy_holding_rows(mask=mask)
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]
+
+
+def test_第5輪改判_反例_沒有分頁失敗也不登記冷卻(policy_env):
     holder, _c, _s = policy_env
     holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-002", [POLICY_HEAD,
         ["PX-TEST-002", "ZZ9999", "測試基金甲", "USD", "", "1", "", "1", "1", ""]])])
@@ -829,3 +855,29 @@ def test_第4輪BE_兩個本金標頭並存時取英文欄_與舊路相同(polic
 def test_第4輪A5_假分頁走的是gspread真的get_all_records():
     from gspread.worksheet import Worksheet
     assert FakePolicyTab.get_all_records is Worksheet.get_all_records
+
+
+def test_第5輪A6_兩個本金欄並存_英文欄空白_L2原因寫明讀的是invest_twd欄(policy_env):
+    from repositories.policy.v2 import ALL_COLS_V2, ZH_HEADERS_V2
+    from services.v2_tables import alo_holdings as A
+    holder, _c, _s = policy_env
+    zh = [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-5", [zh + ["invest_twd"],
+        ["PX-5", "BO1", "雙欄基金", "USD", "", "111", "", "1", "1", "", ""]])])
+    rows = R.load_policy_holding_rows(mask=mask)["rows"]
+    assert rows[0]["invest_twd"] is None and rows[0]["_invest_both"] is True
+    empty = {"records": [], "bad_rows": [], "blank_rows": 0, "tab_missing": False}
+    sup = {"_row": 2, "_raw": (), "policy_id": "PX-5", "fund_code": "BO1", "opened_on": "2001-01-01",
+           "last_checked_on": "2001-02-03", "bucket": None}
+    out = A.build_alo_tables(rows, {R.TAB_HOLDING_SUPPLEMENT: dict(empty, records=[sup]),
+                                    R.TAB_POLICY_PROFILE: empty})
+    (skip,) = out["skipped_holdings"]
+    assert "讀的是 invest_twd 欄" in skip["reasons"][0]
+
+
+def test_第5輪A6_反例_只有一個本金欄時_原因不提兩欄(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([FakePolicyTab("PX-TEST-001", [POLICY_HEAD,
+        ["PX-TEST-001", "ZZ9999", "測試基金甲", "USD", "", "", "", "1", "1", ""]])])
+    (row,) = R.load_policy_holding_rows(mask=mask)["rows"]
+    assert row["_invest_both"] is False

@@ -146,7 +146,11 @@ def _holding_reasons(row: dict, parse_error=None):
     if parse_error is not None:
         reasons.append(f"淨投資金額無法解析：{parse_error.get('raw', '')}")
     elif invest is None or invest == "":
-        reasons.append("淨投資金額空白（沒填）")   # U10：不補 0
+        if row.get("_invest_both"):
+            # 第 5 輪 A 組 6：同一分頁同時有「淨投資金額」與「invest_twd」，讀的是英文欄（與既有函式同）
+            reasons.append("淨投資金額空白（沒填；此分頁同時有「淨投資金額」與「invest_twd」兩欄，讀的是 invest_twd 欄）")
+        else:
+            reasons.append("淨投資金額空白（沒填）")   # U10：不補 0
     elif _is_number(invest) and invest == 0:
         reasons.append("淨投資金額為 0（不當成本）")   # 規格 3.1
     elif isinstance(invest, int) and not isinstance(invest, bool) and invest > 0:
@@ -313,8 +317,8 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
             skipped.append({**where, "policy_id": pid, "fund_code": code,
                             "reasons": [f"保單編號或基金代號含「{ID_SEPARATOR}」，會與持倉識別碼的分隔字元混淆，不寫入"]})
             remember_skipped_key(pid, code)
-            if ID_SEPARATOR not in pid:
-                policy_ids.add(pid)    # 第 4 輪 A-1
+            # 第 5 輪總管改判：policy 列能不能產生只看 pid 是不是可用文字；`|` 只影響 holding_id。
+            policy_ids.add(pid)
             continue
         key = (pid, code)
         policy_ids.add(pid)
@@ -425,7 +429,8 @@ def load_alo_tables(secret_values) -> dict:
     `HoldingIdCollision`（`build_alo_tables` 輸出前的唯一性檢查）同樣往上拋 —— **防禦性，正式路徑不可達**：
     同一組鍵以出現序號區分、鍵含 `|` 的列已先被略過，所以 T2 組法在正式路徑上不會撞號；
     這道檢查只為了萬一組法日後被改壞時 fail loud（第 3 輪裁定 8）。
-    ⚠️ NBSP 與鍵內部空白的差異（比對只去前後空白）：已登記於交接本登記待辦，本輪不處理。
+    ⚠️ NBSP 與鍵內部空白的差異（比對只去前後空白）：已登記於交接本 `docs/handover_2026_09_26_latest.md`
+    @ `ddc5625` :117（「鍵含 BOM、零寬字元、NBSP 的處理」），本輪不處理。
     """
     mask = masker(secret_values)
     tabs = repo.load_supplement_tabs(mask=mask)
