@@ -311,10 +311,13 @@ _CACHE_GEN = 0
 
 def clear_cache() -> None:
     """清掉讀取快取並遞增世代計數（讀取期間被清過的結果不存快取）；
-    也清掉冷卻訊息用的「最後一次被略過的分頁」（第 7 輪 3）。不碰冷卻本身。"""
+    也清掉冷卻訊息用的「最後一次被略過的分頁」（第 7 輪 3），以及本檔的分頁冷卻與其上次原因（第 8 輪 6）。
+    不碰 `infra.source_backoff` 的冷卻（配額鑰匙、整本鑰匙）。"""
     global _CACHE_GEN
     _LAST_SKIPPED.clear()
     with _CACHE_LOCK:
+        _TAB_COOLDOWN.clear()          # 第 8 輪 6：分頁冷卻住在本檔，清快取時一併清
+        _TAB_LAST_ERROR.clear()
         _CACHE_GEN += 1
         _CACHE.clear()
 
@@ -487,7 +490,7 @@ def _default_policy_loader(client, sheet_id):
     - 分頁讀取失敗的例外物件一併交回（`_exc`），由呼叫端決定是否登記冷卻；
       gspread 的標頭例外改寫成中文（`HEADER_ERROR_TEXT`）。
     - 仍把純數字字串轉成數字（gspread 預設）—— 改它是另一張工單；L2 依 U11 擋下。
-    回傳 (rows, skipped_tabs, invest_twd_parse_errors, 分頁數)。
+    回傳 (rows, skipped_tabs, invest_twd_parse_errors, 分頁數, 讀成功的分頁數)。
     """
     rows, skipped, parse_errors = [], [], []
     tabs = _list_policy_tabs(client, sheet_id)
@@ -500,7 +503,7 @@ def _default_policy_loader(client, sheet_id):
         tab_rows, tab_errors = _process_policy_tab(ws.title, raw_records)
         rows.extend(tab_rows)
         parse_errors.extend(tab_errors)
-    return rows, skipped, parse_errors, len(tabs)
+    return rows, skipped, parse_errors, len(tabs), len(tabs) - len(skipped)
 
 
 def _list_policy_tabs(client, sheet_id) -> list:
@@ -513,25 +516,35 @@ def _list_policy_tabs(client, sheet_id) -> list:
             if not ws.title.startswith("_") and ws.title != H.DEFAULT_WORKSHEET]
 
 
+def _is_retryable_status(exc: BaseException) -> bool:
+    """本檔逐分頁重試的判斷（第 8 輪 3）：**只看狀態碼** —— 429 或 5xx 才重試；拿不到狀態碼的不重試。"""
+    from infra.gspread_retry import http_status_of
+    status = http_status_of(exc)
+    return status == 429 or (isinstance(status, int) and 500 <= status <= 599)
+
+
 def _fetch_policy_tab(ws) -> list:
     """一張分頁的原始紀錄（兩個本金欄保留原文，其餘欄交給下一步 numericise）。失敗就拋。
 
-    重試（第 7b 輪總管裁定）：**不經過**共用的 `repositories/policy/_helpers.py::_with_quota_retry`，
-    改用本檔的判斷 —— 只有 `is_rate_limited(exc)`（HTTP 狀態碼 429）才依
-    `infra.gspread_retry.DEFAULT_QUOTA_BACKOFFS` 退避重試；其他錯誤一律**第一次就拋出**，
-    交給呼叫端的略過與分頁冷卻流程。最後一次仍 429 → 拋出原例外（不吞）。
+    重試（第 7b 輪總管裁定、第 8 輪 3 擴充）：**不經過**共用的
+    `repositories/policy/_helpers.py::_with_quota_retry`，改用本檔的判斷 —— 只有狀態碼 **429 或 5xx**
+    才依 `infra.gspread_retry.DEFAULT_QUOTA_BACKOFFS`（1／2／4／8 秒）退避重試；其他錯誤一律**第一次就拋出**。
+    重試用完仍失敗 → 拋出原例外（不吞），交給呼叫端：429 → 配額冷卻；其他 → 分頁冷卻（或整本冷卻，見 op）。
 
-    ⚠️ 待辦（另開工單，本輪不改共用檔）：共用的 `_with_quota_retry` 以 `is_quota_error` 的**字串比對**
-    （訊息含「429」）判斷要不要重試，舊 App 也受影響。2026-09-27 實測：訊息含 `'PX-429'!A1` 的 400 錯誤、
-    以及內含「429」字樣的 `ConnectionError`，都被白重試 4 次、睡 2＋4＋8＝14 秒。
+    ⚠️ 待辦（另開工單，本輪不改共用檔；兩件併成一張）：
+    (1) 共用的 `_with_quota_retry` 以 `is_quota_error` 的**字串比對**（訊息含「429」）判斷要不要重試，
+        舊 App 也受影響。2026-09-27 實測：訊息含 `'PX-429'!A1` 的 400 錯誤、以及內含「429」字樣的
+        `ConnectionError`，都被白重試 4 次、睡 2＋4＋8＝14 秒。
+    (2) 重試迴圈目前有三份（`infra.gspread_retry` 的兩支＋本函式）；日後收斂為 `with_quota_retry`
+        接受「要不要重試」的判斷函式參數，三處共用。
     """
     from infra.gspread_retry import DEFAULT_QUOTA_BACKOFFS
 
     for attempt, delay in enumerate(DEFAULT_QUOTA_BACKOFFS):
         try:
             return ws.get_all_records(numericise_ignore=["all"]) or []
-        except Exception as exc:  # noqa: BLE001 —— 只有真 429 才重試，其餘原樣拋出
-            if not is_rate_limited(exc) or attempt == len(DEFAULT_QUOTA_BACKOFFS) - 1:
+        except Exception as exc:  # noqa: BLE001 —— 只有 429／5xx 才重試，其餘原樣拋出
+            if not _is_retryable_status(exc) or attempt == len(DEFAULT_QUOTA_BACKOFFS) - 1:
                 raise
             del exc
         time.sleep(delay)
@@ -603,13 +616,46 @@ def _cache_put(key, value, generation, *, copy_value: bool = True) -> None:
             _CACHE[key] = (_clock(), copy.deepcopy(value) if copy_value else value)
 
 
-TAB_COOLDOWN_KIND = "unreachable"     # `shared/backoff_policy.py`：60 秒（第 7 輪 2）
-_TAB_LAST_ERROR: dict = {}            # 分頁冷卻鍵 → 上次失敗原因（**存入前已過 mask**）
+TAB_COOLDOWN_KIND = "unreachable"     # 冷卻長度取 `shared/backoff_policy.py` 的這一類：60 秒（第 7 輪 2）
+# 壞分頁短冷卻（第 8 輪 5 改存本檔）：鍵（試算表 ID, 分頁名）→ 到期時間。
+# 理由：`infra/source_backoff` 全域最多記 `BACKOFF_MAX_TRACKED_HOSTS`（128）把鑰匙，滿了就擠掉最舊的一把 ——
+# 大量壞分頁若也放進去，會把配額鑰匙、整本鑰匙擠掉，讓該冷卻的來源被照打。分頁冷卻只有本檔自己讀，放本檔即可。
+# 時鐘沿用 `infra.source_backoff._clock`（同一個 monotonic；測試注入同一個假時鐘）。
+_TAB_COOLDOWN: dict = {}
+_TAB_LAST_ERROR: dict = {}            # （試算表 ID, 分頁名）→ 上次失敗原因（**存入前已過 mask**）
+QUOTA_UNREAD_TEXT = "配額冷卻中，未讀"
 
 
-def tab_cooldown_key(sheet_id: str, title: str) -> str:
-    """壞分頁短冷卻的鍵（第 7 輪 2）：只管這一張分頁，不碰整本鑰匙、也不碰配額鑰匙。"""
-    return f"gspread:tab:{ACTOR}:{sheet_id}:{title}"
+def _tab_clock() -> float:
+    from infra import source_backoff
+    return source_backoff._clock()
+
+
+def tab_cooldown_key(sheet_id: str, title: str) -> tuple:
+    """壞分頁短冷卻的鍵：只管這一張分頁，不碰整本鑰匙、也不碰配額鑰匙。"""
+    return (sheet_id, title)
+
+
+def tab_cooling(sheet_id: str, title: str) -> tuple:
+    """(是否冷卻中, 剩餘秒數)。到期的當場移除。"""
+    key = tab_cooldown_key(sheet_id, title)
+    with _CACHE_LOCK:
+        until = _TAB_COOLDOWN.get(key)
+        if until is None:
+            return False, 0.0
+        left = until - _tab_clock()
+        if left <= 0:
+            _TAB_COOLDOWN.pop(key, None)
+            return False, 0.0
+        return True, left
+
+
+def _record_tab_cooldown(sheet_id: str, title: str, masked_error: str) -> None:
+    from infra.source_backoff import cooldown_for
+    key = tab_cooldown_key(sheet_id, title)
+    with _CACHE_LOCK:
+        _TAB_COOLDOWN[key] = _tab_clock() + cooldown_for(TAB_COOLDOWN_KIND)
+        _TAB_LAST_ERROR[key] = masked_error
 
 
 def is_rate_limited(exc: BaseException) -> bool:
@@ -634,19 +680,22 @@ def _cached_policy_loader(client, sheet_id):
     - **整頁結果（含 `skipped_tabs`）不快取**；有任何略過就視為失敗（呼叫端不呼叫 `record_gspread_success`）。
     整頁結果不快取；逐分頁快取的每一筆都是成功結果；**此粒度解讀為總管判斷，待第二組確認**。
 
-    壞分頁短冷卻（第 7 輪 2）：非 429 的分頁錯誤（確定性、暫時性都算）由呼叫端登記
-    `tab_cooldown_key(試算表 ID, 分頁名)` 60 秒冷卻；冷卻期間**不重讀**該分頁，但照樣列在
+    壞分頁短冷卻（第 7 輪 2；第 8 輪 5 改存本檔 `_TAB_COOLDOWN`）：非 429 的分頁錯誤（確定性、暫時性都算；
+    5xx 已先經本檔重試）由呼叫端登記（試算表 ID, 分頁名）60 秒冷卻；冷卻期間**不重讀**該分頁，但照樣列在
     `skipped_tabs`，原因「冷卻中（還剩 N 秒），上次失敗：<經 mask 的原因>」。
     ⚠️ 讀取量：分頁約 50 張時，即使沒有壞分頁，每分鐘的讀取數也已接近 Google 試算表 API 的配額
-    （每分鐘 60 次讀取，出自 Google 公開文件，**本組未實測**）。
+    （每分鐘 60 次讀取；據 `infra/gspread_retry.py` 註記，取自官方頁的搜尋摘要，未讀到一手頁面；**本組未實測**）。
 
     ⚠️ 分頁清單快取的已知限制（第 7 輪 4）：
     - 60 秒內新增或刪除的分頁可能還讀不到／還在讀 —— L2 的孤兒判定可能因此過早；
     - 快取的 worksheet 物件綁定建立它的那個 client（快取期間不會換成新 client）。
     - 只要任一分頁**讀取失敗**（不含冷卻中的略過），就順手作廢分頁清單快取，下一次重列。
-    """
-    from infra import source_backoff
 
+    配額耗盡（第 8 輪 2，v3 `02`「失敗時退避，不連續轟炸來源」）：任一分頁在重試用完後仍是 429，
+    本次呼叫裡**還需要打上游**的其餘分頁一律不讀（已在分頁快取裡的照用），列入 `skipped_tabs`，
+    原因「配額冷卻中，未讀」；配額冷卻由呼叫端登記。
+    回傳 (rows, skipped_tabs, invest_twd_parse_errors, 分頁數, 本次實際從上游讀成功的分頁數)。
+    """
     list_key = (sheet_id, "policy_tab_list")
     found, tabs, generation = _cache_get(list_key, copy_value=False)
     if not found:
@@ -654,8 +703,10 @@ def _cached_policy_loader(client, sheet_id):
         _cache_put(list_key, tabs, generation, copy_value=False)
     rows, skipped, parse_errors = [], [], []
     read_failed = False
+    quota_exhausted = False
+    read_ok = 0
     for ws in tabs:
-        cooling, left, _kind = source_backoff.should_skip(tab_cooldown_key(sheet_id, ws.title))
+        cooling, left = tab_cooling(sheet_id, ws.title)
         if cooling:
             last = _TAB_LAST_ERROR.get(tab_cooldown_key(sheet_id, ws.title), "")
             skipped.append({"tab": ws.title, "_cooling": True,
@@ -665,13 +716,19 @@ def _cached_policy_loader(client, sheet_id):
         found, cached, generation = _cache_get(key)
         if found:
             tab_rows, tab_errors = cached
+        elif quota_exhausted:
+            skipped.append({"tab": ws.title, "_quota_unread": True, "error": QUOTA_UNREAD_TEXT})
+            continue
         else:
             try:
                 raw_records = _fetch_policy_tab(ws)
             except Exception as exc:  # noqa: BLE001 —— 失敗的分頁不入快取
                 skipped.append({"tab": ws.title, "error": _tab_error_text(exc), "_exc": exc})
                 read_failed = True
+                if is_rate_limited(exc):
+                    quota_exhausted = True       # 第 8 輪 2：其餘要打上游的分頁不讀
                 continue
+            read_ok += 1
             tab_rows, tab_errors = _process_policy_tab(ws.title, raw_records)
             _cache_put(key, (tab_rows, tab_errors), generation)
         rows.extend(tab_rows)
@@ -679,7 +736,7 @@ def _cached_policy_loader(client, sheet_id):
     if read_failed:
         with _CACHE_LOCK:
             _CACHE.pop(list_key, None)      # 第 7 輪 4：有分頁讀失敗 → 分頁清單快取作廢
-    return rows, skipped, parse_errors, len(tabs)
+    return rows, skipped, parse_errors, len(tabs), read_ok
 
 
 _policy_loader = _cached_policy_loader
@@ -709,16 +766,26 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
     （見 `_cached_policy_loader`）。有任何分頁被略過就視為失敗：不呼叫 `record_gspread_success`。
     整頁結果不快取；逐分頁快取的每一筆都是成功結果；此粒度解讀為總管判斷，待第二組確認。
     - 分頁失敗若屬 429（**只看狀態碼**，`is_rate_limited`）→ 登記配額冷卻（第 3 輪裁定 3）；
-      非 429 → 只對那一張分頁登記 60 秒短冷卻（第 7 輪 2），不碰整本鑰匙與配額鑰匙。
+      非 429 → 只對那一張分頁登記 60 秒短冷卻（第 7 輪 2；存在本檔，第 8 輪 5），不碰整本鑰匙與配額鑰匙；
+      例外：本次**實際讀取**的分頁（至少 2 張）全部以同一類 HTTP 錯誤失敗 → 改登記整本 sheet 鑰匙，
+      類別照 `kind_for_gspread_error`（第 8 輪 4）。
+    - 任一分頁重試用完仍 429 → 其餘要打上游的分頁不讀，原因「配額冷卻中，未讀」（第 8 輪 2）。
     - 冷卻中 → `code="cooling"`，訊息列出最後一次被略過的全部分頁與原因（存入時已過 `mask`），
       造成 429 的那張標「觸發冷卻」（第 6 輪 B 組 3、第 7 輪 3）。
     - 全部分頁都在失敗或冷卻 → `code="api"`。
     - **所有分頁都失敗** → `code="api"`，訊息帶各分頁原因，不回空表（第 6 輪 B 組 2）。
     """
     def op(client, _spreadsheet, sid):
-        from infra import source_backoff
-        from infra.gspread_retry import record_gspread_failure
-        rows, skipped, parse_errors, tab_count = _policy_loader(client, sid)
+        from infra.gspread_retry import http_status_of, kind_for_gspread_error, record_gspread_failure
+        rows, skipped, parse_errors, tab_count, read_ok = _policy_loader(client, sid)
+        failures = [t for t in skipped if t.get("_exc") is not None]
+        non_quota = [t for t in failures if not is_rate_limited(t["_exc"])]
+        # 第 8 輪 4：本次**實際讀取**的分頁全部以同一類 HTTP 錯誤失敗（例如全部 403、全部 5xx），
+        # 改登記整本 sheet 鑰匙，不逐張登記。至少要有 2 張實際讀取的分頁才判斷（只讀 1 張時看不出是整本）。
+        kinds = {kind_for_gspread_error(t["_exc"]) for t in non_quota}
+        sheet_wide = (read_ok == 0 and len(non_quota) >= 2 and len(non_quota) == len(failures)
+                      and all(http_status_of(t["_exc"]) is not None for t in non_quota)
+                      and len(kinds) == 1)
         public, last = [], []
         for item in skipped:
             exc = item.get("_exc")
@@ -726,12 +793,12 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
             trigger = exc is not None and is_rate_limited(exc)
             if trigger:
                 record_gspread_failure(ACTOR, sid, exc)          # 真 429 → 配額冷卻（第 3 輪裁定 3）
-            elif exc is not None:
-                key = tab_cooldown_key(sid, item.get("tab"))    # 非 429 → 只冷卻這一張分頁（第 7 輪 2）
-                _TAB_LAST_ERROR[key] = error
-                source_backoff.record_failure(key, TAB_COOLDOWN_KIND)
+            elif exc is not None and not sheet_wide:
+                _record_tab_cooldown(sid, item.get("tab"), error)   # 非 429 → 只冷卻這一張（第 7 輪 2）
             public.append({"tab": item.get("tab"), "error": error})
             last.append((item.get("tab"), error, trigger))
+        if sheet_wide:
+            record_gspread_failure(ACTOR, sid, non_quota[0]["_exc"])   # 整本 sheet 鑰匙（第 8 輪 4）
         if last:
             _LAST_SKIPPED[sid] = last
         else:

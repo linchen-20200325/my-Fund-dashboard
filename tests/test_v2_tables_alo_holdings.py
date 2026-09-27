@@ -577,7 +577,7 @@ def live(monkeypatch):
     monkeypatch.setattr(R, "_make_client", lambda creds: FakeClient(book))
     monkeypatch.setattr(GR.time, "sleep", lambda _s: None)
     rows = [prow(), prow(pid="DIRECT", code="ZZ5555", row=3)]
-    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (rows, [], [], 1))
+    monkeypatch.setattr(R, "_policy_loader", lambda client, sid: (rows, [], [], 1, 1))
     R.clear_cache()
     SB.reset_all()
     yield book, secrets

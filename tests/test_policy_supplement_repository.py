@@ -656,7 +656,7 @@ def _assert_equivalent(new_loader):
     book = _eq_book()
     df, old_skipped = load_all_policies_v2_with_error(book, "sid", cache_user=None)
     old = [{k: R._native(v) for k, v in r.items()} for r in df.to_dict(orient="records")]
-    new, new_skipped, parse_errors, _tab_count = new_loader(book, "sid")
+    new, new_skipped, parse_errors, _tab_count, _read_ok = new_loader(book, "sid")
     assert [t["tab"] for t in old_skipped] == [t["tab"] for t in new_skipped] == ["壞分頁"]
     assert len(old) == len(new) == 15
     assert [r["_tab"] for r in new] == ["甲"] * 10 + ["乙", "丙", "戊", "丁", "丁"]
@@ -697,14 +697,14 @@ def test_第3輪裁定1_等價鎖定_新舊兩條讀取路徑逐列逐欄相同_
 @pytest.mark.parametrize("mutate", ["drop_row", "rename_value", "extra_tab_filter"])
 def test_第3輪裁定1_等價鎖定的負控_新路任一處走樣就轉紅(mutate):
     def loader(book, sid):
-        rows, skipped, errors, count = R._default_policy_loader(book, sid)
+        rows, skipped, errors, count, read_ok = R._default_policy_loader(book, sid)
         if mutate == "drop_row":
             rows = rows[:-1]
         elif mutate == "rename_value":
             rows[0] = dict(rows[0], fund_name="走樣")
         else:
             rows = [r for r in rows if r["_tab"] != "乙"]
-        return rows, skipped, errors, count
+        return rows, skipped, errors, count, read_ok
 
     with pytest.raises(AssertionError):
         _assert_equivalent(loader)
@@ -719,7 +719,7 @@ def test_第3輪裁定3_分頁持續429_連跑會進入冷卻_不會每次都打
             raise _api_error(429, f"Quota exceeded for quota metric 'Read requests' {SECRET}")
 
     tab = Quota("PX-TEST-001", [])
-    holder["book"] = FakePolicyBook([tab, _good_tab()])
+    holder["book"] = FakePolicyBook([_good_tab(), tab])   # 好分頁先讀；429 之後的分頁不讀（第 8 輪 2）
     reached, cooling = 0, 0
     for _ in range(21):
         try:
@@ -1030,7 +1030,7 @@ def test_第7輪1_分頁名含429_實際回400_不算配額_只冷卻那一張(p
     out = R.load_policy_holding_rows(mask=mask)
     assert [t["tab"] for t in out["skipped_tabs"]] == ["PX-429"]
     assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]
-    assert SB.should_skip(R.tab_cooldown_key(SHEET, "PX-429"))[0]
+    assert R.tab_cooling(SHEET, "PX-429")[0]
     assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
 
 
@@ -1041,16 +1041,16 @@ def test_第7輪1_ID含429的連線錯誤_不登記配額冷卻(policy_env):
     holder["book"] = FakePolicyBook([bad, _good_tab()])
     R.load_policy_holding_rows(mask=mask)
     assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]
-    assert SB.should_skip(R.tab_cooldown_key("sheet-with-429-inside", "PX-A"))[0]
+    assert R.tab_cooling("sheet-with-429-inside", "PX-A")[0]
 
 
 def test_第7輪1_真429照登記配額冷卻_不登記分頁冷卻(policy_env):
     holder, _c, _s = policy_env
     bad = _Raising("PX-A", _api_error(429, "Quota exceeded"))
-    holder["book"] = FakePolicyBook([bad, _good_tab()])
+    holder["book"] = FakePolicyBook([_good_tab(), bad])
     R.load_policy_holding_rows(mask=mask)
     assert SB.should_skip(GR.quota_key(R.ACTOR))[0]
-    assert not SB.should_skip(R.tab_cooldown_key(SHEET, "PX-A"))[0]
+    assert not R.tab_cooling(SHEET, "PX-A")[0]
 
 
 @pytest.mark.parametrize("exc,expected", [
@@ -1106,8 +1106,8 @@ def test_第7輪3_清快取時一併清除最後被略過的分頁(policy_env, h
 
 def test_第7輪3_冷卻訊息列出全部被略過的分頁_標出觸發冷卻的那張(policy_env):
     holder, _c, _s = policy_env
-    holder["book"] = FakePolicyBook([_Raising("PX-A", ValueError(f"a {SECRET}")),
-                                     _Raising("PX-B", _api_error(429, "Quota exceeded")), _good_tab()])
+    holder["book"] = FakePolicyBook([_good_tab(), _Raising("PX-A", ValueError(f"a {SECRET}")),
+                                     _Raising("PX-B", _api_error(429, "Quota exceeded"))])
     R.load_policy_holding_rows(mask=mask)
     with pytest.raises(R.PolicySupplementError) as err:
         R.load_policy_holding_rows(mask=mask)
@@ -1207,3 +1207,148 @@ def test_第7b輪_不再經過共用的_with_quota_retry(monkeypatch):
 
     monkeypatch.setattr(H, "_with_quota_retry", forbidden)
     assert R._fetch_policy_tab(_good_tab()) != []
+
+
+# ═══════════════════════ 第 8 輪 ═══════════════════════
+
+def test_第8輪2_五十張分頁同時429_打上游與睡眠都有上限_其餘分頁不讀(policy_env, slept):
+    holder, _c, _s = policy_env
+    tabs = [_Raising(f"PX-{i:02d}", _api_error(429, "Quota exceeded")) for i in range(50)]
+    holder["book"] = FakePolicyBook(tabs)
+    with pytest.raises(R.PolicySupplementError) as err:
+        R.load_policy_holding_rows(mask=mask)
+    assert err.value.code == "api"                                     # 沒有任何資料 → 不回空表
+    upstream = sum(t.calls for t in tabs) + len(holder["book"].calls)
+    assert upstream <= 6, upstream                                    # 4 次重試＋open_by_key＋worksheets
+    assert sum(slept) <= 7.0, slept                                  # 1＋2＋4
+    skipped = err.value.details["skipped_tabs"]
+    assert len(skipped) == 50
+    assert [t["error"] for t in skipped[1:]] == [R.QUOTA_UNREAD_TEXT] * 49
+    assert SB.should_skip(GR.quota_key(R.ACTOR))[0]
+
+
+def test_第8輪2_配額耗盡後_已在快取的分頁照用_要打上游的才不讀(policy_env, slept):
+    holder, clock, _s = policy_env
+    good, later = _good_tab("PX-GOOD"), _good_tab("PX-LATER")
+    holder["book"] = FakePolicyBook([good])
+    R.load_policy_holding_rows(mask=mask)                             # PX-GOOD 進分頁快取
+    SB.reset_all()
+    quota = _Raising("PX-429", _api_error(429, "Quota exceeded"))
+    R._CACHE.pop((SHEET, "policy_tab_list"), None)
+    holder["book"] = FakePolicyBook([quota, good, later])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert [r["_tab"] for r in out["rows"]] == ["PX-GOOD"] and good.calls == 1
+    assert {t["tab"]: t["error"] for t in out["skipped_tabs"]}["PX-LATER"] == R.QUOTA_UNREAD_TEXT
+    assert later.calls == 0
+
+
+def test_第8輪3_暫時性5xx先用本檔重試吃掉_不進分頁冷卻(policy_env, slept):
+    holder, _c, _s = policy_env
+
+    class Once5xx(FakePolicyTab):
+        attempts = 0
+
+        def get(self, *args, **kwargs):
+            Once5xx.attempts += 1
+            if Once5xx.attempts == 1:
+                raise _api_error(503, "backend unavailable")
+            return super().get(*args, **kwargs)
+
+    tab = Once5xx("PX-B", [POLICY_HEAD, ["PX-B", "ZZ1", "測試基金", "USD", "", "1", "", "1", "1", ""]])
+    holder["book"] = FakePolicyBook([tab])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert out["skipped_tabs"] == [] and len(out["rows"]) == 1
+    assert slept == [GR.DEFAULT_QUOTA_BACKOFFS[0]] and not R.tab_cooling(SHEET, "PX-B")[0]
+
+
+def test_第8輪3_5xx重試用完仍失敗_才登記分頁冷卻(policy_env, slept):
+    holder, _c, _s = policy_env
+    bad = _Raising("PX-B", _api_error(503, "backend unavailable"))
+    holder["book"] = FakePolicyBook([_good_tab(), bad])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert bad.calls == len(GR.DEFAULT_QUOTA_BACKOFFS)
+    assert [t["tab"] for t in out["skipped_tabs"]] == ["PX-B"]
+    assert R.tab_cooling(SHEET, "PX-B")[0]
+
+
+@pytest.mark.parametrize("status", [403, 500])
+def test_第8輪4_實際讀取的分頁全部同一類HTTP錯誤_改登記整本鑰匙(policy_env, slept, status):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(status, "x")),
+                                     _Raising("PX-B", _api_error(status, "y"))])
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    assert SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert not R.tab_cooling(SHEET, "PX-A")[0] and not R.tab_cooling(SHEET, "PX-B")[0]
+    assert not SB.should_skip(GR.quota_key(R.ACTOR))[0]
+
+
+def test_第8輪4_反例_只有部分分頁失敗_仍逐分頁登記(policy_env, slept):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(403, "x")), _good_tab()])
+    R.load_policy_holding_rows(mask=mask)
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert R.tab_cooling(SHEET, "PX-A")[0]
+
+
+def test_第8輪4_反例_錯誤類別不同_仍逐分頁登記(policy_env, slept):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(403, "x")),
+                                     _Raising("PX-B", _api_error(500, "y"))])
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert R.tab_cooling(SHEET, "PX-A")[0] and R.tab_cooling(SHEET, "PX-B")[0]
+
+
+def test_第8輪4_反例_沒有狀態碼的錯誤不升級成整本(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", ValueError("a")), _Raising("PX-B", ValueError("b"))])
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert R.tab_cooling(SHEET, "PX-A")[0]
+
+
+def test_第8輪5_分頁冷卻存在本檔_不佔source_backoff的鑰匙(policy_env):
+    holder, _c, _s = policy_env
+    tabs = [_Raising(f"PX-{i:03d}", ValueError("bad")) for i in range(200)] + [_good_tab()]
+    holder["book"] = FakePolicyBook(tabs)
+    R.load_policy_holding_rows(mask=mask)
+    assert len(R._TAB_COOLDOWN) == 200
+    assert not [s for s in SB.get_backoff_state() if "tab" in s["source"]]
+    SB.record_failure(GR.quota_key(R.ACTOR), "rate_limited")
+    for i in range(300):                                   # 再多的壞分頁也擠不掉配額鑰匙
+        R._record_tab_cooldown(SHEET, f"PX-X{i}", "x")
+    assert SB.should_skip(GR.quota_key(R.ACTOR))[0]
+
+
+@pytest.mark.parametrize("how", ["clear_cache", "clear_all_caches"])
+def test_第8輪6_清快取時一併清掉分頁冷卻與上次原因(policy_env, how):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", ValueError("a")), _good_tab()])
+    R.load_policy_holding_rows(mask=mask)
+    assert R._TAB_COOLDOWN and R._TAB_LAST_ERROR
+    R.clear_cache() if how == "clear_cache" else C.clear_all_caches()
+    assert R._TAB_COOLDOWN == {} and R._TAB_LAST_ERROR == {}
+    assert not R.tab_cooling(SHEET, "PX-A")[0]
+
+
+def test_第8輪7_換一本試算表不繼承同名分頁的冷卻(policy_env):
+    holder, _c, secrets = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", ValueError("a")), _good_tab()])
+    R.load_policy_holding_rows(mask=mask)
+    assert R.tab_cooling(SHEET, "PX-A")[0]
+    same_name = FakePolicyTab("PX-A", [POLICY_HEAD, ["PX-A", "ZZ1", "另一本", "USD", "", "1", "", "1", "1", ""]])
+    holder["book"] = FakePolicyBook([same_name])
+    secrets["POLICY_SHEET_ID"] = SHEET + "-second"
+    out = R.load_policy_holding_rows(mask=mask)
+    assert out["skipped_tabs"] == [] and same_name.calls == 1
+
+
+def test_第8輪7_分頁上次原因存入時不含秘密值(policy_env):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", ValueError(f"boom {SECRET}")), _good_tab()])
+    R.load_policy_holding_rows(mask=mask)
+    stored = R._TAB_LAST_ERROR[R.tab_cooldown_key(SHEET, "PX-A")]
+    assert SECRET not in stored and MASK in stored
