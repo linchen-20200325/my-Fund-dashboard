@@ -2101,12 +2101,8 @@ _R13 = {
     "頭尾各5張壞": (set(range(5)) | set(range(45, 50)), 50),
     "51張單雙交錯": (set(range(0, 51, 2)), 51),
 }
-_R13_SHORT = ("第 13 輪實測未達（30 分鐘、每 3 秒）：330 秒起有資料 388/489＝79.3%。"
-              "機制：降級模式的觸發只看『5xx 短路或整本升級』，而降級模式下本身不短路、不升級，"
-              "於是 900 秒後自動解除；解除時好分頁快取同時到期、頭部壞分頁的冷卻也剛好到期，"
-              "又一次短路＋探測中段壞分頁 → 再升級整本，每 15 分鐘暗 5 分鐘")
-_R13_MISS = {"B-M1 頭2+第20~29張壞", "B-M1 頭3+第15~34張壞", "B-M1 頭5+第20~29張壞",
-             "B-M1 頭10+第25~34張壞", "頭1+第20~29張壞", "51張單雙交錯"}
+# ~~第 13 輪：6 種排列實測 79.3%（降級 900 秒後自動解除 → 再升級，每 15 分鐘暗 5 分鐘），以 xfail(strict) 標記~~
+# → 第 13b 輪總管採用「降級期間 5xx 讀取失敗也延長降級」，6 支 xfail 移除、改一般斷言（門檻維持 0.9）
 
 
 def _r13_run(policy_env, monkeypatch, name):
@@ -2124,9 +2120,7 @@ def test_第13輪1_三十分鐘每3秒_每分鐘讀取不超過60(policy_env, mo
     assert max(per_minute) <= 60, per_minute
 
 
-@pytest.mark.parametrize("name", [
-    pytest.param(n, marks=pytest.mark.xfail(strict=True, reason=_R13_SHORT)) if n in _R13_MISS else n
-    for n in _R13])
+@pytest.mark.parametrize("name", list(_R13))
 def test_第13輪1_三十分鐘每3秒_第一次整本冷卻結束後有資料至少九成(policy_env, monkeypatch, name):
     _per_minute_, ok, total = _r13_run(policy_env, monkeypatch, name)
     assert ok / total >= 0.9, (ok, total)
@@ -2177,3 +2171,37 @@ def test_第13輪5_略過清單區分讀取失敗與本次未讀(policy_env, sle
     assert {t["tab"]: t["unread"] for t in out["skipped_tabs"]} == {"PX-B": False, "PX-C": True}
     again = R.load_policy_holding_rows(mask=mask)                         # PX-B 冷卻中 → 本次未讀
     assert {t["tab"]: t["unread"] for t in again["skipped_tabs"]}["PX-B"] is True
+
+
+
+# ═══════════════════════ 第 13b 輪 ═══════════════════════
+
+def test_第13b輪_持續部分5xx時一直停在降級_5xx停止後900秒解除(policy_env, slept):
+    holder, clock, _s = policy_env
+    bad = _Raising("PX-B", _api_error(503, "down"))
+    holder["book"] = FakePolicyBook([_good_tab("PX-A"), bad, _good_tab("PX-C")])
+    R.load_policy_holding_rows(mask=mask)                       # 非降級：短路 → 進入降級
+    assert R.is_degraded(SHEET)
+    for _ in range(4):                                          # 20 分鐘，每 5 分鐘（PX-B 冷卻到期）重讀一次仍 5xx
+        clock.advance(SB.cooldown_for("server_error"))
+        R.load_policy_holding_rows(mask=mask)
+        assert R.is_degraded(SHEET)                             # 超過 900 秒仍在降級：被延長
+    assert bad.calls == len(GR.DEFAULT_QUOTA_BACKOFFS) + 4      # 降級期間每次只讀 1 次
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]  # 一直不升級整本
+    holder["book"] = FakePolicyBook([_good_tab("PX-A"), _good_tab("PX-B"), _good_tab("PX-C")])
+    clock.advance(SB.cooldown_for("server_error"))
+    R.load_policy_holding_rows(mask=mask)                       # 5xx 停止：這次沒有 5xx，不延長
+    clock.advance(R.degraded_window_sec() - SB.cooldown_for("server_error") - 1)
+    assert R.is_degraded(SHEET)                                 # 距最後一次 5xx 未滿 900 秒
+    clock.advance(1)
+    assert not R.is_degraded(SHEET)                             # 最後一次 5xx 之後滿 900 秒 → 解除
+
+
+def test_第13b輪_反例_降級期間只有非5xx錯誤_不延長(policy_env, slept):
+    holder, clock, _s = policy_env
+    R._mark_degraded(SHEET)
+    start = R._DEGRADED[SHEET]
+    clock.advance(10)
+    holder["book"] = FakePolicyBook([_good_tab("PX-A"), _Raising("PX-B", ValueError("header"))])
+    R.load_policy_holding_rows(mask=mask)
+    assert R._DEGRADED[SHEET] == start
