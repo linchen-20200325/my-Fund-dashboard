@@ -655,6 +655,17 @@ def _cache_put(key, value, generation, *, copy_value: bool = True) -> None:
 
 TAB_COOLDOWN_KIND = "unreachable"     # 冷卻長度取 `shared/backoff_policy.py` 的這一類：60 秒（第 7 輪 2）
 TAB_COOLDOWN_KIND_5XX = "server_error"   # 5xx 造成的分頁冷卻：300 秒（第 10 輪 2）
+SHEET_ESCALATION_KIND = "server_error"   # 5xx 短路升級整本時，整本鑰匙的冷卻類別（第 10 輪 1）
+
+
+def escalated_tab_cooldown_sec() -> float:
+    """升級整本時，觸發短路那張與探測失敗那張的分頁冷卻（第 12 輪 1）：整本冷卻＋分頁 5xx 冷卻（300＋300＝600 秒）。
+
+    理由：整本冷卻結束時這兩張仍在冷卻中，下一輪就跳過它們、改讀別張，打破「每 5 分鐘同兩張觸發升級」的循環。
+    長度取自 `shared/backoff_policy.py`（`cooldown_for`），不寫死秒數。
+    """
+    from infra.source_backoff import cooldown_for
+    return cooldown_for(SHEET_ESCALATION_KIND) + cooldown_for(TAB_COOLDOWN_KIND_5XX)
 # 壞分頁短冷卻（第 8 輪 5 改存本檔）：鍵（試算表 ID, 分頁名）→ 到期時間。
 # 理由：`infra/source_backoff` 全域最多記 `BACKOFF_MAX_TRACKED_HOSTS`（128）把鑰匙，滿了就擠掉最舊的一把 ——
 # 大量壞分頁若也放進去，會把配額鑰匙、整本鑰匙擠掉，讓該冷卻的來源被照打。分頁冷卻只有本檔自己讀，放本檔即可。
@@ -670,6 +681,13 @@ _TAB_LAST_ERROR: dict = {}            # （試算表 ID, 分頁名）→ 上次�
 QUOTA_UNREAD_TEXT = "配額冷卻中，未讀"
 UPSTREAM_5XX_UNREAD_TEXT = "上游暫時失敗（5xx），未讀"
 BUDGET_UNREAD_TEXT = "單次讀取的重試等待已達上限（10 秒），未讀"
+
+
+def _invalidates_tab_list(exc: BaseException) -> bool:
+    """讀取失敗要不要作廢分頁清單快取（第 12 輪 2）：非 HTTP 錯誤（拿不到狀態碼）或 4xx（429 除外）才作廢。"""
+    from infra.gspread_retry import http_status_of
+    status = http_status_of(exc)
+    return status is None or (isinstance(status, int) and 400 <= status <= 499 and status != 429)
 
 
 def _is_server_error(exc: BaseException) -> bool:
@@ -704,7 +722,7 @@ def tab_cooling(sheet_id: str, title: str) -> tuple:
 
 
 def _record_tab_cooldown(sheet_id: str, title: str, masked_error: str,
-                         kind: str = TAB_COOLDOWN_KIND) -> None:
+                         kind: str = TAB_COOLDOWN_KIND, seconds=None) -> None:
     """登記一張分頁的冷卻（長度依 `kind`）；寫入時順手清掉所有已到期的項目（第 9 輪 3）。
 
     第 10 輪 8 更正：本 dict **沒有硬上限**；項目數受限於「冷卻期內失敗過的分頁數」（到期項目在寫入與查詢時移除）。
@@ -718,7 +736,7 @@ def _record_tab_cooldown(sheet_id: str, title: str, masked_error: str,
             _TAB_LAST_ERROR.pop(old, None)
         for old in [k for k in _TAB_LAST_ERROR if k not in _TAB_COOLDOWN]:
             _TAB_LAST_ERROR.pop(old, None)
-        _TAB_COOLDOWN[key] = now + cooldown_for(kind)
+        _TAB_COOLDOWN[key] = now + (cooldown_for(kind) if seconds is None else seconds)
         _TAB_LAST_ERROR[key] = masked_error
 
 
@@ -753,7 +771,8 @@ def _cached_policy_loader(client, sheet_id):
 
     壞分頁冷卻（第 7 輪 2；第 8 輪 5 改存本檔 `_TAB_COOLDOWN`；第 10 輪 2 分長短）：非 429 的分頁錯誤
     （5xx 已先經本檔重試）由呼叫端登記（試算表 ID, 分頁名）冷卻 —— 5xx 300 秒、其他 60 秒；
-    例外：5xx 短路且本次沒有任何分頁產出資料 → 改登記整本（見 `load_policy_holding_rows`），不登記分頁冷卻；
+    例外：5xx 短路且本次沒有任何分頁產出資料 → 改登記整本（見 `load_policy_holding_rows`），
+    ~~不登記分頁冷卻~~ 觸發短路與探測失敗的那兩張改登記 600 秒分頁冷卻（第 12 輪 1）；
     重試等待預算用完的那一張也不登記。冷卻期間**不重讀**該分頁，但照樣列在
     `skipped_tabs`，原因「冷卻中（還剩 N 秒），上次失敗：<經 mask 的原因>」。
     ⚠️ 讀取量：分頁約 50 張時，即使沒有壞分頁，每分鐘的讀取數也已接近 Google 試算表 API 的配額
@@ -762,7 +781,9 @@ def _cached_policy_loader(client, sheet_id):
     ⚠️ 分頁清單快取的已知限制（第 7 輪 4）：
     - 60 秒內新增或刪除的分頁可能還讀不到／還在讀 —— L2 的孤兒判定可能因此過早；
     - 快取的 worksheet 物件綁定建立它的那個 client（快取期間不會換成新 client）。
-    - 只要任一分頁**讀取失敗**（不含冷卻中的略過），就順手作廢分頁清單快取，下一次重列。
+    - ~~只要任一分頁**讀取失敗**（不含冷卻中的略過），就順手作廢分頁清單快取，下一次重列。~~
+      第 12 輪 2 更正（B 建議 2、A 建議 2b）：只有**非 HTTP 錯誤或 4xx（不含 429）**的讀取失敗才作廢 ——
+      那兩類可能代表分頁被刪或改名；5xx 與 429 是上游暫時狀況，與分頁清單無關，作廢只會讓每次重跑多 2 次讀取。
 
     短路（v3 `02`「失敗時退避，不連續轟炸來源」）：本次呼叫裡**還需要打上游**的其餘分頁一律不讀
     （已在分頁快取裡的照用），列入 `skipped_tabs`：
@@ -802,7 +823,8 @@ def _cached_policy_loader(client, sheet_id):
             except Exception as exc:  # noqa: BLE001 —— 失敗的分頁不入快取
                 entry = {"tab": ws.title, "error": _tab_error_text(exc), "_exc": exc}
                 skipped.append(entry)
-                read_failed = True
+                if _invalidates_tab_list(exc):
+                    read_failed = True               # 第 12 輪 2：只有非 HTTP 錯誤或 4xx（非 429）才作廢清單
                 if budget["exhausted"]:
                     halt_reason = BUDGET_UNREAD_TEXT
                     entry["_budget_cut"] = True              # 第 10 輪 5：這一張不登記分頁冷卻
@@ -891,18 +913,27 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
       例外一（第 10 輪 1、第 11 輪 1）：本次發生 5xx 短路、且沒有任何分頁產出資料 → 先探測一張未讀分頁
       （讀一次、不重試）；探測成功就不升級（觸發短路的那張照登記 300 秒分頁冷卻，其餘未讀分頁本次仍不讀）；
       探測失敗（任何錯誤）或沒有可探測的分頁 → 改登記整本 sheet 鑰匙（`server_error`，300 秒），
-      觸發短路與探測的那兩張都不另登記分頁冷卻。
+      ~~觸發短路與探測的那兩張都不另登記分頁冷卻。~~
+      觸發短路與探測失敗的那兩張另登記 `escalated_tab_cooldown_sec()`（300＋300＝600 秒）分頁冷卻（第 12 輪 1）。
       例外二（第 8 輪 4、第 9 輪 2、第 11 輪 2）：本次沒有任何分頁產出資料、且**實際讀取失敗**的分頁
       （不含預算截斷的那張、不含未讀）至少 2 張，全部屬同一類 HTTP 狀態碼（4xx 各碼各自一類、5xx 一類）
       → 改登記整本 sheet 鑰匙，冷卻類別照 `kind_for_gspread_error`。
-    ⚠️ 已知限制（第 10 輪總管裁定甲案、第 11 輪 1 加探測後的取捨；A 組建議 1）：冷啟動（沒有任何分頁快取）
+    ⚠️ 已知限制（第 10 輪總管裁定甲案、第 11 輪 1 加探測後的取捨；A 組建議 1）：~~冷啟動（沒有任何分頁快取）
       且觸發短路的那張與探測的那張（未讀分頁中的最後一張）都壞時，仍會推定整本故障、冷卻 5 分鐘，
-      補充分頁一併擋下（同一把整本鑰匙）；屬總管裁定的取捨，不是 bug。
+      補充分頁一併擋下（同一把整本鑰匙）；屬總管裁定的取捨，不是 bug。~~
+      → 第 12 輪更正：**前提與事實不符，紅隊第 11 輪實測推翻** —— 舊版升級時不登記那兩張的分頁冷卻，
+      整本冷卻一結束，下一輪又從同兩張開始、再升級，形成永久循環，不是「冷卻 5 分鐘」。
+      現行：冷啟動、而且觸發那張和探測那張都壞時，整本先冷卻 300 秒（補充分頁一併擋下，同一把整本鑰匙）；
+      之後這兩張再冷卻 300 秒（分頁冷卻共 600 秒），下一輪改讀別張、改探別張。
+      例（A 組）：分頁總數為奇數、單雙交錯壞（第 1 張與最後一張都壞）時，只壞一半也會先冷卻 5 分鐘。
+      例（本組實測，第 12 輪 1）：前後兩端各有連續 k 張壞時，每輪只消耗頭尾各一張，約要 k 輪（每輪約 5 分鐘）
+      才會讀到中間的好分頁。
     - 任一分頁重試用完仍 429／5xx → 其餘要打上游的分頁不讀（第 8 輪 2、第 9 輪 1）。
     - 冷卻中 → `code="cooling"`，訊息列出最後一次被略過的分頁（存入時已過 `mask`）：造成配額或整本冷卻的
       那張標「觸發冷卻」，再加最多 3 張實際讀取失敗的分頁，其餘寫「另有 N 張未讀或未列出」
       （第 6 輪 B 組 3、第 7 輪 3、第 11 輪 3）。
-    - 全部分頁都在失敗或冷卻 → `code="api"`。
+    - 全部分頁都在失敗或冷卻 → `code="api"`；但只要還有分頁因總睡眠預算用完而沒讀完，就改回傳部分結果
+      （第 12 輪 3）。
     - **所有分頁都失敗** → `code="api"`，訊息帶各分頁原因，不回空表（第 6 輪 B 組 2）。
     """
     def op(client, _spreadsheet, sid):
@@ -942,8 +973,11 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
             trigger = quota or item is cause          # 第 11 輪 3：造成配額或整本冷卻的那張標「觸發冷卻」
             if quota:
                 record_gspread_failure(ACTOR, sid, exc)          # 真 429 → 配額冷卻（第 3 輪裁定 3）
-            elif (exc is not None and not sheet_wide and not item.get("_budget_cut")
-                  and not (escalate_5xx and (item.get("_short_5xx") or item.get("_probe")))):
+            elif cause is not None and (item.get("_short_5xx") or item.get("_probe")):
+                # 第 12 輪 1：5xx 升級整本時，這兩張冷卻「整本＋分頁 5xx」＝ 600 秒，打破循環
+                _record_tab_cooldown(sid, item.get("tab"), error, seconds=escalated_tab_cooldown_sec())
+            elif exc is not None and not sheet_wide and not item.get("_budget_cut"):
+                # （第 12 輪：升級時那兩張已由上一個分支處理，原本排除它們的條件成為死碼，移除）
                 # 非 429 → 只冷卻這一張（第 7 輪 2）；5xx 300 秒、其他 60 秒（第 10 輪 2）
                 _record_tab_cooldown(sid, item.get("tab"), error,
                                      TAB_COOLDOWN_KIND_5XX if _is_server_error(exc) else TAB_COOLDOWN_KIND)
@@ -955,7 +989,10 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
             _LAST_SKIPPED[sid] = last
         else:
             _LAST_SKIPPED.pop(sid, None)                         # 整頁讀取成功 → 清除
-        if skipped and len(skipped) == tab_count:
+        # 第 12 輪 3（B 建議 3）：還有分頁因總睡眠預算用完而沒讀完 → 不算「全部失敗」，回傳部分結果並列出略過清單。
+        # 判斷看預算截斷的那張（`_budget_cut`）：因預算而未讀的分頁一定排在它之後，有它才會有它們。
+        budget_unread = any(t.get("_budget_cut") for t in skipped)
+        if skipped and len(skipped) == tab_count and not budget_unread:
             detail = "；".join(f"{t['tab']}：{t['error']}" for t in public)
             raise PolicySupplementError(mask(f"{ALL_TABS_FAILED_MESSAGE}：{detail}"), code="api",
                                         details={"skipped_tabs": public})
