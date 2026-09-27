@@ -231,6 +231,7 @@ def user_settings(*, targets, tolerance, basis, bucket_names, scenario_rows) -> 
     ⚠️ **登記 `ALO-GAP-value_kind`**：`alo_basis` 存的是「成本或市值」二選一，
     而 `44` 4.5 的 `value_kind` 封閉六種（`int`／`float`／`date`／`ratio`／`list`／`rules`）
     **沒有一種對得上**。本檔不自行補第七種，那一列的 `value_kind` 放 `None`。
+    2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。
     `alo_target_weights` 是「類別＋比重」的一組列，本檔放 `list`（本組判讀）。
     """
     return [

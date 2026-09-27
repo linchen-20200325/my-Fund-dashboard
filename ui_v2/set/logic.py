@@ -97,8 +97,8 @@ GAPS = {
         "已處理（2026-09-26，決策者：客戶裁示）：alo_basis 在實作層定為 list（枚舉，可選值「成本」「市值」，寫死在 L2 "
         "services/v2_tables/settings_store.py::ENUM_SETTING_VALUES，本檔 ENUM_SETTING_VALUES 為同一份的鏡像），正式模式照此判定與存檔；"
         "44 未改。示範模式的規格快照 alo_basis 仍放空（spec.py 的 IMPLEMENTATION_KINDS 只在正式模式套用），示範畫面因此一字不變。"
-        "跨頁存值已對齊（2026-09-27）：2026-09-26 稽核 A 登記的分歧（set 頁存「成本／市值」、ui_v2/alo 用 cost／mv）已消除，"
-        "ui_v2/alo 的比重基準存值改為「成本／市值」，跨頁守衛 tests/test_v2_tables_settings_store_page.py::"
+        "跨頁存值（2026-09-27）：alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（ui_v2/set/fixtures.py）。2026-09-26 稽核 A 登記時 ui_v2/alo 用 cost／mv，"
+        "2026-09-27 已改為「成本／市值」，跨頁守衛 tests/test_v2_tables_settings_store_page.py::"
         "test_跨頁守衛_alo比重基準存值須與L2可選值一致 無條件逐字比對。剩下的一件：alo 接正式模式讀設定時必須用這份值。"
     ),
     "SET-GAP-型別缺": "某鍵的 value_kind 為空時（alo_basis），型別欄畫 ⬜，本頁不判它的值合不合型別。",

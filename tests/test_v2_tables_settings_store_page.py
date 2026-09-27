@@ -362,10 +362,34 @@ def test_跨頁守衛的觸發條件_正控與負控(tmp_path):
         (tmp_path / rel).unlink()
 
 
+def _assert_alo_listed_when_live(root, pages_reading) -> None:
+    """alo 一出現正式模式入口（`_alo_live_triggered`），L2 的 `PAGES_READING_SETTINGS` 就必須列入 "alo"。
+    目前未觸發 → 不紅；alo 接上正式模式那一天，這條逼人把 alo 列進清單（2026-09-27 總管裁示）。"""
+    if _alo_live_triggered(root, pages_reading):
+        assert "alo" in pages_reading, ("alo 已有正式模式入口，PAGES_READING_SETTINGS 卻沒有列 alo", pages_reading)
+
+
+def test_跨頁守衛_alo有正式入口時必須列入PAGES_READING_SETTINGS():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    _assert_alo_listed_when_live(root, S.PAGES_READING_SETTINGS)
+
+
+def test_跨頁守衛_alo列入清單守衛本身_正控與負控(tmp_path):
+    (tmp_path / "ui_v2" / "alo").mkdir(parents=True)
+    # 未觸發：不紅。
+    _assert_alo_listed_when_live(tmp_path, ("set",))
+    (tmp_path / "ui_v2" / "app_alo_live.py").write_text("", encoding="utf-8")
+    # 正控：有 app_alo_live.py、清單不含 alo → 要紅。
+    with pytest.raises(AssertionError):
+        _assert_alo_listed_when_live(tmp_path, ("set",))
+    # 負控：兩者都有 → 綠。
+    _assert_alo_listed_when_live(tmp_path, ("set", "alo"))
+
+
 def test_跨頁守衛_alo比重基準存值須與L2可選值一致():
-    """2026-09-27 分歧已消除：ui_v2/alo 的比重基準存值改成「成本／市值」，與 L2 同一份。
-    本條不看觸發條件、無條件逐字比對（順序也比）；把 alo 的 `BASIS_COST` 改回 `cost` 這一條要紅。
-    `_alo_live_triggered` 與它的正控、負控保留，留給 alo 接正式模式時讀設定那一步用。"""
+    """2026-09-27：ui_v2/alo 的比重基準存值改成「成本／市值」，alo 頁與 L2 已對齊；set 頁示範假資料
+    （ui_v2/set/fixtures.py）仍存 cost，屬示範值，正式模式不讀它，另案處理。
+    本條不看觸發條件、無條件逐字比對（順序也比）；把 alo 的 `BASIS_COST` 改回 `cost` 這一條要紅。"""
     from ui_v2.alo import logic as alo_logic
     alo_values = (alo_logic.BASIS_COST, alo_logic.BASIS_MV)
     assert alo_values == S.ENUM_SETTING_VALUES["alo_basis"], alo_values

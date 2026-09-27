@@ -143,7 +143,8 @@ GAPS = {
         "舊登記「出現時沒有指派可改」寫下時為真；按鈕標籤與下方說明都不變。"
     ),
     "ALO-GAP-缺匯率不帶鍵": "ALO-4 的缺換算匯率沒有帶鍵名、ALO-2 的有（線框 A-27）。本頁兩塊各照各自的字面。",
-    "ALO-GAP-value_kind": "alo_basis 的值在 44 第四節 value_kind 六種裡對不上任何一種。假資料那一列放空，不補第七種。",
+    "ALO-GAP-value_kind": "alo_basis 的值在 44 第四節 value_kind 六種裡對不上任何一種。假資料那一列放空，不補第七種。"
+        "2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。",
     "ALO-GAP-匯出兩組欄名": (
         "ALO-5 匯出「一份」表格檔，而 ALO-2 與 ALO-3 欄名不同（線框 A-23）。本頁一份檔內兩段，各帶自己的欄名列。"
     ),
@@ -335,6 +336,7 @@ DISPLAY_TZ_LABEL = "UTC+8"
 # 比重基準的存值（2026-09-27 對齊）：與 set 頁 L2 `services/v2_tables/settings_store.py::ENUM_SETTING_VALUES["alo_basis"]`
 # 同一份（客戶 2026-09-26 裁示「成本／市值」）。ui_v2 不得 import services（tests/ui_v2/test_ui_v2_live_import_guard.py），
 # 所以這裡是字面鏡像，由 tests/test_v2_tables_settings_store_page.py 的跨頁守衛逐字比對。畫面文字住在 BASIS_LABELS，一字未動。
+# alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（ui_v2/set/fixtures.py）。
 BASIS_COST = "成本"
 BASIS_MV = "市值"
 BASIS_LABELS = {BASIS_COST: "成本（cost_twd）", BASIS_MV: "市值（淨值 × 單位數，美元依 fx_twd_per_usd 換算）"}
