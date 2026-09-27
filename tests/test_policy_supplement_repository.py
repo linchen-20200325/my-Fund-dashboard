@@ -1294,8 +1294,10 @@ def test_第8輪4_反例_只有部分分頁失敗_仍逐分頁登記(policy_env,
 
 def test_第8輪4_反例_錯誤類別不同_仍逐分頁登記(policy_env, slept):
     holder, _c, _s = policy_env
+    # 第 10 輪更正：原用 403＋500，500 會觸發第 10 輪 1 的 5xx 升級；改用 403（blocked）＋404（unreachable），
+    # 仍是「類別不同、沒有 5xx」。
     holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(403, "x")),
-                                     _Raising("PX-B", _api_error(500, "y"))])
+                                     _Raising("PX-B", _api_error(404, "y"))])
     with pytest.raises(R.PolicySupplementError):
         R.load_policy_holding_rows(mask=mask)
     assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
@@ -1383,8 +1385,10 @@ def test_第9輪1_五十張分頁全部5xx_打上游與睡眠有上限_其餘分
     assert sum(slept) <= 7.0, slept
     skipped = err.value.details["skipped_tabs"]
     assert [t["error"] for t in skipped[1:]] == [R.UPSTREAM_5XX_UNREAD_TEXT] * 49
-    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]      # 實際讀取失敗只有 1 張，不升級
-    assert R.tab_cooling(SHEET, "PX-00")[0]
+    # 第 10 輪 1 改判（原斷言「實際讀取失敗只有 1 張，不升級」）：5xx 短路且沒有分頁產出資料 → 升級整本
+    skip, left, kind = SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))
+    assert skip and kind == "server_error" and left == SB.cooldown_for("server_error")
+    assert not R.tab_cooling(SHEET, "PX-00")[0]                      # 升級時不另登記分頁冷卻
 
 
 def test_第9輪1_依序回503_500_429_好_503_第一張用完重試就短路_快取分頁照用(policy_env, slept):
@@ -1500,3 +1504,182 @@ def test_第9輪3_冷卻到期被移除時_上次原因一起移除(policy_env):
     clock.advance(60)
     assert R.tab_cooling(SHEET, "PX-A") == (False, 0.0)
     assert R.tab_cooldown_key(SHEET, "PX-A") not in R._TAB_LAST_ERROR
+
+
+# ═══════════════════════ 第 10 輪 ═══════════════════════
+
+def test_第10輪1_5xx短路且沒有分頁產出資料_升級整本server_error_不登記那張分頁冷卻(policy_env, slept):
+    holder, _c, _s = policy_env
+    header_bad = _Raising("PX-A", ValueError("header broken"))
+    bad = _Raising("PX-B", _api_error(503, "backend unavailable"))
+    later = _good_tab("PX-C")
+    holder["book"] = FakePolicyBook([header_bad, bad, later])
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    skip, left, kind = SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))
+    assert skip and kind == "server_error" and left == SB.cooldown_for("server_error") == 300
+    assert not R.tab_cooling(SHEET, "PX-B")[0]                        # 升級時那一張不另登記
+    assert R.tab_cooling(SHEET, "PX-A") == (True, 60)                 # 分頁自身錯誤照登記 60 秒
+    assert later.calls == 0 and not SB.should_skip(GR.quota_key(R.ACTOR))[0]
+
+
+def test_第10輪1_不設兩張門檻_一張403加一張500_也升級(policy_env, slept):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(403, "x")),
+                                     _Raising("PX-B", _api_error(500, "y"))])
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    assert SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[2] == "server_error"
+    assert R.tab_cooling(SHEET, "PX-A")[0] and not R.tab_cooling(SHEET, "PX-B")[0]
+
+
+def test_第10輪1_反例_有新讀分頁產出資料_不升級_5xx那張冷卻300秒(policy_env, slept):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_good_tab(), _Raising("PX-B", _api_error(503, "x"))])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert len(out["rows"]) == 1
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert R.tab_cooling(SHEET, "PX-B") == (True, 300)
+    again = R.load_policy_holding_rows(mask=mask)
+    assert {t["tab"]: t["error"] for t in again["skipped_tabs"]}["PX-B"].startswith("冷卻中（還剩 300 秒）")
+
+
+def test_第10輪1_反例_快取分頁產出資料也算_不升級(policy_env, slept):
+    holder, _c, _s = policy_env
+    good = _good_tab("PX-GOOD")
+    holder["book"] = FakePolicyBook([good])
+    R.load_policy_holding_rows(mask=mask)
+    R._CACHE.pop((SHEET, "policy_tab_list"), None)
+    holder["book"] = FakePolicyBook([_Raising("PX-A", _api_error(503, "x")), good])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert len(out["rows"]) == 1 and good.calls == 1
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    assert R.tab_cooling(SHEET, "PX-A") == (True, 300)
+
+
+def test_第10輪1_升級之後下一次回冷卻_不打上游(policy_env, slept):
+    holder, _c, _s = policy_env
+    tabs = [_Raising(f"PX-{i}", _api_error(503, "x")) for i in range(3)]
+    holder["book"] = FakePolicyBook(tabs)
+    with pytest.raises(R.PolicySupplementError):
+        R.load_policy_holding_rows(mask=mask)
+    before = (sum(t.calls for t in tabs), len(holder["book"].calls))
+    with pytest.raises(R.PolicySupplementError) as err:
+        R.load_policy_holding_rows(mask=mask)
+    assert err.value.code == "cooling" and "PX-0" in str(err.value)
+    assert (sum(t.calls for t in tabs), len(holder["book"].calls)) == before
+
+
+@pytest.mark.parametrize("exc", [ValueError("header"), _api_error(403, "x"), _api_error(400, "bad range")])
+def test_第10輪2_非5xx的分頁自身錯誤維持60秒(policy_env, slept, exc):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising("PX-A", exc), _good_tab()])
+    R.load_policy_holding_rows(mask=mask)
+    assert R.tab_cooling(SHEET, "PX-A") == (True, 60)
+
+
+def test_第10輪2_分頁冷卻長度取自backoff_policy():
+    assert R.TAB_COOLDOWN_KIND == "unreachable" and R.TAB_COOLDOWN_KIND_5XX == "server_error"
+
+
+def test_第10輪5_預算用完的那一張不登記分頁冷卻_下一次照讀(policy_env, slept):
+    holder, clock, _s = policy_env
+    tabs = [_Sequence(f"PX-{i}", [_api_error(503, "x"), _api_error(503, "y")]) for i in range(6)]
+    holder["book"] = FakePolicyBook(tabs)
+    out = R.load_policy_holding_rows(mask=mask)
+    assert {t["tab"]: t["error"] for t in out["skipped_tabs"]}["PX-4"] == R.BUDGET_UNREAD_TEXT
+    assert not R.tab_cooling(SHEET, "PX-3")[0]
+    assert not SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[0]
+    tried = tabs[3].attempts
+    R.load_policy_holding_rows(mask=mask)
+    assert tabs[3].attempts > tried
+
+
+# ─────────────── 第 10 輪 3：跨呼叫情境（每 1 秒重跑，持續 5 分鐘）───────────────
+
+class _LoggedTab(FakePolicyTab):
+    def __init__(self, title, log, clock, bad):
+        super().__init__(title, [POLICY_HEAD, [title, "ZZ9999", "測試基金", "USD", "", "1", "", "1", "1", ""]])
+        self.log, self.clock, self.bad = log, clock, bad
+
+    def get(self, *args, **kwargs):
+        self.log.append((self.clock.mono, self.title))
+        if self.bad:
+            self.calls += 1
+            raise _api_error(503, "backend unavailable")
+        return super().get(*args, **kwargs)
+
+
+class _WholeBook(FakePolicyBook):
+    """同一本：保單分頁＋兩張補充分頁（`values_batch_get`）。每一次打上游都記下（時間, 名稱）。"""
+
+    def __init__(self, tabs, log, clock):
+        super().__init__(tabs)
+        self.log, self.clock = log, clock
+        self.supplement = {R.TAB_HOLDING_SUPPLEMENT: _hs(), R.TAB_POLICY_PROFILE: _pp()}
+
+    def _maybe_fail(self, name):
+        self.log.append((self.clock.mono, name))
+        super()._maybe_fail(name)
+
+    def worksheets(self):
+        self._maybe_fail("worksheets")
+        return self.tabs + [FakePolicyTab(n, rows) for n, rows in self.supplement.items()]
+
+    def values_batch_get(self, ranges, params=None):
+        self._maybe_fail("values_batch_get")
+        return {"valueRanges": [{"values": self.supplement[r[1:-1]]} for r in ranges]}
+
+
+def _five_minutes(policy_env, monkeypatch, bad_indices):
+    """每 1 秒重跑一次（上一次還沒跑完就接著跑），持續 300 秒。回傳 (每次結果, 打上游紀錄, 起點)。"""
+    holder, clock, _s = policy_env
+    monkeypatch.setattr(GR.time, "sleep", lambda s: clock.advance(s))   # 退避等待也推進時鐘
+    log = []
+    tabs = [_LoggedTab(f"PX-{i:02d}", log, clock, i in bad_indices) for i in range(50)]
+    holder["book"] = _WholeBook(tabs, log, clock)
+    start = clock.mono
+    results = []
+    while clock.mono - start < 300:
+        began = clock.mono
+        try:
+            R.load_supplement_tabs(mask=mask)
+            out = R.load_policy_holding_rows(mask=mask)
+            results.append((began - start, "ok", len(out["rows"])))
+        except R.PolicySupplementError as exc:
+            results.append((began - start, exc.code, 0))
+        if clock.mono < began + 1:
+            clock.advance(began + 1 - clock.mono)
+    return results, log, start
+
+
+def _per_minute(log, start):
+    counts = [0] * 5
+    for t, _name in log:
+        minute = int((t - start) // 60)
+        if minute < 5:
+            counts[minute] += 1
+    return counts
+
+
+def test_第10輪3a_五十張全5xx_補充分頁正常_第2次起回冷卻_5分鐘讀取有上限(policy_env, monkeypatch):
+    results, log, start = _five_minutes(policy_env, monkeypatch, set(range(50)))
+    per_minute = _per_minute(log, start)
+    print(f"\n[3a] 呼叫 {len(results)} 次；5 分鐘總讀取 {sum(per_minute)}；每分鐘 {per_minute}")
+    assert results[0][1] == "api"
+    assert {code for _t, code, _n in results[1:]} == {"cooling"}
+    assert sum(per_minute) <= 12, per_minute
+
+
+@pytest.mark.parametrize("where", ["bad_first", "bad_last"])
+def test_第10輪3b_45好5壞_第2分鐘起每分鐘讀取不超過60(policy_env, monkeypatch, where):
+    bad = set(range(5)) if where == "bad_first" else set(range(45, 50))
+    results, log, start = _five_minutes(policy_env, monkeypatch, bad)
+    per_minute = _per_minute(log, start)
+    codes = {}
+    for _t, code, _n in results:
+        codes[code] = codes.get(code, 0) + 1
+    print(f"\n[3b {where}] 呼叫 {len(results)} 次；結果 {codes}；每分鐘讀取 {per_minute}")
+    assert max(per_minute[1:]) <= 60, per_minute
+    if where == "bad_last":
+        assert all(code == "ok" and n == 45 for _t, code, n in results), results[:10]
