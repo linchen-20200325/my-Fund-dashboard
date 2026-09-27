@@ -230,6 +230,8 @@ def build_alo_tables(policy_rows, tabs: dict, *, skipped_tabs=(), invest_twd_par
     - `missing_profile`／`duplicate_profile`／`orphan_profile`；
     - `supplement_unjudged`／`profile_unjudged`：有保單分頁讀取失敗時，本來會報成孤兒的列改列在這裡，
       原因「可能屬於讀取失敗的分頁（<分頁名>），本次不判定孤兒」（第 6 輪 B 組 2）；
+      ⚠️ 已知限制（第 7 輪 4）：L1 的分頁清單快取 60 秒，這段時間內新增或刪除的保單分頁可能還讀不到／
+      還在讀，孤兒判定可能過早（任一分頁讀失敗時 L1 會作廢分頁清單快取，但單純新增分頁不會觸發）；
     - `supplement_of_skipped`／`profile_of_skipped`：保單分頁上**有**這組鍵、只是那一列因鍵不能用
       （不是文字、含 `|`）被略過 —— 不報成孤兒，原因寫 `SKIPPED_OWNER_REASON`（第 3 輪裁定 10）；
     - `bad_rows`、`blank_rows`、`tab_missing`（依分頁）；`skipped_tabs`、`invest_twd_parse_errors` 原樣轉交。
