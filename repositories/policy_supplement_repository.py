@@ -482,7 +482,8 @@ def _default_policy_loader(client, sheet_id):
       並列入 `invest_twd_parse_errors`（`{"tab","row","raw","reason"}`，`raw` 不截斷）；
       **不寫** `repositories/policy/_helpers` 的全域登記表；
     - `open_by_key`、`worksheets` 用 `with_gspread_retry`（5xx／連線層重試，與補充分頁同一套）；
-      逐分頁 `get_all_records` 維持既有的 `_with_quota_retry`（429 重試）；
+      逐分頁 `get_all_records` 由本檔 `_fetch_policy_tab` 重試：只有狀態碼 429 才重試（第 7b 輪），
+      不經過共用的 `_with_quota_retry`；
     - 分頁讀取失敗的例外物件一併交回（`_exc`），由呼叫端決定是否登記冷卻；
       gspread 的標頭例外改寫成中文（`HEADER_ERROR_TEXT`）。
     - 仍把純數字字串轉成數字（gspread 預設）—— 改它是另一張工單；L2 依 U11 擋下。
@@ -513,9 +514,28 @@ def _list_policy_tabs(client, sheet_id) -> list:
 
 
 def _fetch_policy_tab(ws) -> list:
-    """一張分頁的原始紀錄（兩個本金欄保留原文，其餘欄交給下一步 numericise）。失敗就拋。"""
-    from repositories.policy import _helpers as H
-    return H._with_quota_retry(ws.get_all_records, numericise_ignore=["all"]) or []
+    """一張分頁的原始紀錄（兩個本金欄保留原文，其餘欄交給下一步 numericise）。失敗就拋。
+
+    重試（第 7b 輪總管裁定）：**不經過**共用的 `repositories/policy/_helpers.py::_with_quota_retry`，
+    改用本檔的判斷 —— 只有 `is_rate_limited(exc)`（HTTP 狀態碼 429）才依
+    `infra.gspread_retry.DEFAULT_QUOTA_BACKOFFS` 退避重試；其他錯誤一律**第一次就拋出**，
+    交給呼叫端的略過與分頁冷卻流程。最後一次仍 429 → 拋出原例外（不吞）。
+
+    ⚠️ 待辦（另開工單，本輪不改共用檔）：共用的 `_with_quota_retry` 以 `is_quota_error` 的**字串比對**
+    （訊息含「429」）判斷要不要重試，舊 App 也受影響。2026-09-27 實測：訊息含 `'PX-429'!A1` 的 400 錯誤、
+    以及內含「429」字樣的 `ConnectionError`，都被白重試 4 次、睡 2＋4＋8＝14 秒。
+    """
+    from infra.gspread_retry import DEFAULT_QUOTA_BACKOFFS
+
+    for attempt, delay in enumerate(DEFAULT_QUOTA_BACKOFFS):
+        try:
+            return ws.get_all_records(numericise_ignore=["all"]) or []
+        except Exception as exc:  # noqa: BLE001 —— 只有真 429 才重試，其餘原樣拋出
+            if not is_rate_limited(exc) or attempt == len(DEFAULT_QUOTA_BACKOFFS) - 1:
+                raise
+            del exc
+        time.sleep(delay)
+    return []
 
 
 def _process_policy_tab(title: str, raw_records: list):

@@ -1151,3 +1151,59 @@ def test_第7輪6_等價鎖定_快取版連跑兩次_第二次命中快取_兩�
     finally:
         R.clear_cache()
         SB.reset_all()
+
+
+# ═══════════════════════ 第 7b 輪：本檔自己的 429 重試 ═══════════════════════
+
+@pytest.fixture
+def slept(monkeypatch):
+    record = []
+    monkeypatch.setattr(GR.time, "sleep", lambda s: record.append(s))
+    return record
+
+
+def test_第7b輪_分頁名含429_實際回400_只試1次不睡(slept):
+    tab = _Raising("PX-429", _api_error(400, "Unable to parse range: 'PX-429'!A1"))
+    with pytest.raises(Exception):
+        R._fetch_policy_tab(tab)
+    assert tab.calls == 1 and slept == []
+
+
+def test_第7b輪_連線錯誤含429字樣_只試1次不睡(slept):
+    tab = _Raising("PX-A", ConnectionError("connect to sheet-with-429 failed"))
+    with pytest.raises(ConnectionError):
+        R._fetch_policy_tab(tab)
+    assert tab.calls == 1 and slept == []
+
+
+def test_第7b輪_真429照退避重試_用完才拋(slept):
+    tab = _Raising("PX-A", _api_error(429, "Quota exceeded"))
+    with pytest.raises(Exception):
+        R._fetch_policy_tab(tab)
+    assert tab.calls == len(GR.DEFAULT_QUOTA_BACKOFFS)
+    assert slept == list(GR.DEFAULT_QUOTA_BACKOFFS[:-1])
+
+
+def test_第7b輪_真429後恢復_回傳資料(slept):
+    class Recovering(FakePolicyTab):
+        attempts = 0
+
+        def get(self, *args, **kwargs):
+            Recovering.attempts += 1
+            if Recovering.attempts <= 2:
+                raise _api_error(429, "Quota exceeded")
+            return super().get(*args, **kwargs)
+
+    tab = Recovering("PX-B", [["a"], ["1"]])
+    assert R._fetch_policy_tab(tab) == [{"a": "1"}]
+    assert Recovering.attempts == 3 and slept == list(GR.DEFAULT_QUOTA_BACKOFFS[:2])
+
+
+def test_第7b輪_不再經過共用的_with_quota_retry(monkeypatch):
+    from repositories.policy import _helpers as H
+
+    def forbidden(*_a, **_k):
+        raise AssertionError("不得呼叫共用的 _with_quota_retry")
+
+    monkeypatch.setattr(H, "_with_quota_retry", forbidden)
+    assert R._fetch_policy_tab(_good_tab()) != []
