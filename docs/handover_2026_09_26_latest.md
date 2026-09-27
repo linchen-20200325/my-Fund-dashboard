@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-27 00:41:36 UTC（`date -u` 實測）
+最後更新：2026-09-27 01:02:44 UTC（`date -u` 實測）
 
 ---
 
@@ -25,18 +25,20 @@
 - HEAD：`5eb530e`（`5eb530ee0f8fadaddfc6e3d2dc7cc357a02ecf9a`），與 `origin/main` 相同（ls-remote 實測）
 - `origin/main` = `5eb530e`：PR #852 的 merge commit，第二親代為 `d652efb`
 - 未 commit 的改動：無（`git status --short` 實測為空）
-- 實作組工作樹 wt_alo0（分支 `feat/alo-basis-align`），目前 HEAD `5eb530e`，尚未 commit，遠端尚無此分支（`git worktree list`、ls-remote 實測）
+- 實作組工作樹 wt_alo0（分支 `feat/alo-basis-align`），HEAD `106bc78`，無未 commit 改動（`git status --short` 實測為空）；`origin/feat/alo-basis-align` = `106bc78`（`106bc782d5a45774e5711cefed1f18d5238b26fb`，ls-remote 實測），在 `5eb530e` 之上 1 個 commit
 - 遠端 `feat/set-live-ui` 已不存在（`git fetch` 回報找不到該 ref）
 - 註：總管原先告知主工作樹仍停在 `feat/set-live-ui` 的 `c2e7b37`，須由總管同步到 main。17:26 UTC 實測時，主工作樹已經在 `main` 的 `5eb530e`，本節照實測填寫。
 
 ## 2. 進行中
 
 ### alo 頁接真資料
-- 狀態：**待裁示（規格＋草稿）＋實作中（第 0 步）**
+- 狀態：**待裁示（規格＋草稿）＋稽核中（第 0 步）**
 - 負責組：
   - (a) 規格組：兩張分頁的欄位規格已交稿，已送客戶審（見第 5 節 5-1）。
   - (b) 草稿組：ALO-4 新增類別的補充草稿已交稿，已送客戶審（見第 5 節 5-2）。
-  - (c) 前端/UI 組：第 0 步實作中（alo 基準改成「成本／市值」，同時改跨頁守衛；分支 `feat/alo-basis-align`，畫面零變更）。
+  - (c) 第 0 步（alo 基準改成「成本／市值」，同時改跨頁守衛；分支 `feat/alo-basis-align`，head `106bc78`，畫面零變更）：
+    - 狀態：稽核中。已派工：稽核 A、B，等回報。
+    - 實作組回報：畫面 AppTest 逐字相同；`collect_ui_strings` 有 112 條機器欄差異，屬預期中的改值；總管判斷可接受，交稽核確認。
 - 前置盤點：盤點組 A（從規劃書往下查）、盤點組 B（從程式碼往上查），兩組已回報、結論一致
 - 客戶裁示：見第 5 節「已裁示」(1)～(3)
 - 依據：客戶已裁示選 alo，依規劃書 49 §3.2 的順序 mkt → set → alo → hld → exp
@@ -55,7 +57,7 @@
   1. cost／mv 分歧（alo 示範版存 "cost"／"mv"，設定頁存「成本」／「市值」）
   2. 跨頁守衛：把 alo 列進 `PAGES_READING_SETTINGS`
   3. Q9 非美元匯率
-- 下一步誰動：(a)(b) 客戶裁示第 5 節 5-1、5-2；(c) 前端/UI 組交回 → 稽核通過後依常設授權 merge
+- 下一步誰動：(a)(b) 客戶裁示第 5 節 5-1、5-2；(c) 稽核 A、B 兩組必修都為 0 → 開 PR → CI 綠 → 依常設授權 merge
 
 ### 交接本
 - 狀態：已建立，持續維護
