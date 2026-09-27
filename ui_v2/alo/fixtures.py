@@ -21,6 +21,12 @@ UPDATED_AT = "2026-09-20T06:00:00Z"
 NAV_DATE = "2026-09-23"
 PREV_NAV_DATE = "2026-09-22"
 
+# 比重基準的存值：`logic.BASIS_COST`／`logic.BASIS_MV` 的字面鏡像。
+# 本檔不引入判定層模組（tests/ui_v2/test_alo_logic.py::test_fixtures不import_logic_假資料不依賴判定層），所以寫字面；
+# 兩邊若不一致，logic 的 BASIS_LABELS 查不到 → `full`／`mvbasis` 的基準行斷言當場紅（同檔 test_alo_logic）。
+BASIS_COST = "成本"
+BASIS_MV = "市值"
+
 FETCH_FAIL_MESSAGE = "HTTP 503 upstream unavailable（示意訊息原文，未改寫）"
 SAVE_FAIL_MESSAGE = "write conflict: setting_value rejected（示意訊息原文，未改寫）"
 
@@ -225,6 +231,7 @@ def user_settings(*, targets, tolerance, basis, bucket_names, scenario_rows) -> 
     ⚠️ **登記 `ALO-GAP-value_kind`**：`alo_basis` 存的是「成本或市值」二選一，
     而 `44` 4.5 的 `value_kind` 封閉六種（`int`／`float`／`date`／`ratio`／`list`／`rules`）
     **沒有一種對得上**。本檔不自行補第七種，那一列的 `value_kind` 放 `None`。
+    2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。
     `alo_target_weights` 是「類別＋比重」的一組列，本檔放 `list`（本組判讀）。
     """
     return [
@@ -241,7 +248,7 @@ def _dataset(
     with_holdings=True,
     targets=TARGETS,
     tolerance=TOLERANCE,
-    basis="cost",
+    basis=BASIS_COST,
     bucket_names=BUCKET_NAMES,
     scenario_rows=SCENARIO_ROWS,
     fx=True,
@@ -310,15 +317,15 @@ def scenario(name: str) -> dict:
         "nobasis": lambda: _dataset(basis=None),
         "inband": lambda: _dataset(tolerance=TOLERANCE_WIDE),
         "notol": lambda: _dataset(tolerance=None),
-        "mvbasis": lambda: _dataset(basis="mv"),
-        "nofx": lambda: _dataset(basis="mv", fx=False),
+        "mvbasis": lambda: _dataset(basis=BASIS_MV),
+        "nofx": lambda: _dataset(basis=BASIS_MV, fx=False),
         "unbkt": lambda: _dataset(unbucket=UNBUCKETED_FUND),
         "nobucket": lambda: _dataset(bucket_names=None),
         "partial": lambda: _dataset(targets=TARGETS_PARTIAL, scenario_rows=SCENARIO_ROWS_PARTIAL),
         # holding 取數失敗（持倉表是空是滿不知道）。
         "holdfail": lambda: _dataset(errors={"holding": FETCH_FAIL_MESSAGE}),
         # 市值基準下匯率那張表取數失敗。
-        "fxfail": lambda: _dataset(basis="mv", errors={"market_indicator": FETCH_FAIL_MESSAGE}),
+        "fxfail": lambda: _dataset(basis=BASIS_MV, errors={"market_indicator": FETCH_FAIL_MESSAGE}),
         # user_setting 取數失敗（值取不到，不是沒設定）。
         "settingfail": lambda: _dataset(errors={"user_setting": FETCH_FAIL_MESSAGE}),
         # policy 取數失敗（只有 ALO-6 讀它）。

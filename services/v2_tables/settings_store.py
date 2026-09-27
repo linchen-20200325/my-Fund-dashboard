@@ -98,9 +98,10 @@ def load_user_settings(secret_values) -> dict:
 
 # 枚舉型的鍵（客戶 2026-09-26 裁示；44 未改）：value_kind 為 `list`，值只能是下列其中之一。
 # set 頁以「成本／市值」為存值，這是客戶 2026-09-26 裁示；`ui_v2/set/logic.py::ENUM_SETTING_VALUES` 是這份的鏡像（由測試比對）。
-# ⚠️ 據實登記（2026-09-26 稽核 A）：`ui_v2/alo`（示範模式）目前用 `cost`／`mv`，與這份**尚未對齊**，
-#    所以這裡還不是全站的唯一真相源。alo 接正式模式時必須改讀這份值；跨頁守衛見
-#    tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo接正式模式時比重基準須與L2可選值一致。
+# 2026-09-27：`ui_v2/alo/logic.py` 的 `BASIS_COST`／`BASIS_MV` 已改成同一份存值（原為 `cost`／`mv`）。
+#    alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（`ui_v2/set/fixtures.py`）。
+#    由 tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo比重基準存值須與L2可選值一致 無條件逐字比對。
+#    剩下的一件：alo 接正式模式讀設定時，必須用這份值（alo 目前仍只讀示範假資料，尚未讀 L2）。
 ENUM_SETTING_VALUES = {"alo_basis": ("成本", "市值")}
 ENUM_KIND = "list"
 
