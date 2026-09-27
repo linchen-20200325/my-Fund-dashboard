@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-09-27 02:21:36 UTC（`date -u` 實測）
+最後更新：2026-09-27 02:25:13 UTC（`date -u` 實測）
 
 ---
 
@@ -26,20 +26,21 @@
 - `origin/main` = `9203329`：PR #853 的 merge commit，親代為 `5eb530e` 與 `6addea1`
 - 未 commit 的改動：無（`git status --short` 實測為空）
 - 實作組工作樹 wt_alo0 已移除
-- 文件組工作樹 wt_doc49（分支 `docs/49-q4-q8-note`），HEAD `09870ca`，無未 commit 改動；`origin/docs/49-q4-q8-note` = `09870ca`（`09870ca5524a90fd156fa90a665daaad2f78761c`，ls-remote 實測），在 `9203329` 之上 1 個 commit
+- 文件組工作樹 wt_doc49（分支 `docs/49-q4-q8-note`），HEAD `c8c2fb0`，無未 commit 改動；`origin/docs/49-q4-q8-note` = `c8c2fb0`（`c8c2fb096bc2fc910d5c6b9216f88d054b1fec47`，ls-remote 實測），在 `9203329` 之上 3 個 commit（`09870ca` → `31c045b` → `c8c2fb0`）
 - 遠端 `feat/alo-basis-align`、`feat/set-live-ui` 都已不存在（ls-remote 實測）
 
 ## 2. 進行中
 
 ### alo 頁接真資料
-- 狀態：**待裁示（R1、D1～D5）＋實作中（49 加註回修）**
+- 狀態：**待裁示（R1、D1～D5）＋複驗中（49 加註）**
 - 負責組：
   - (a) 規格組：規格已定稿，送交客戶，剩 R1 待裁（見第 5 節 5-1）；欄位可先開表。
   - (b) 草稿組：C2 草稿已送客戶審（D1～D5 見第 5 節 5-2）。
-  - (d) 文件組：49 加註（分支 `docs/49-q4-q8-note`，首版 `09870ca`）
-    - 狀態：實作中（文件組回修）。
+  - (d) 文件組：49 加註（分支 `docs/49-q4-q8-note`，首版 `09870ca`，現 head `c8c2fb0`）
+    - 狀態：複驗中。已派工：稽核 A、B，等回報。
     - 稽核結果（針對 `09870ca`）：稽核 A 必修 1（2.6 表的 DIRECT 未同步）；稽核 B 必修 2（同一處，另加 U2「讀哪一本」寫錯）。
-    - 已派文件組回修。
+    - 回修已完成（`31c045b` → `c8c2fb0`）。
+    - 據實記錄：文件組中途有一個 commit（`31c045b`）在 doc guard 紅燈時就 push 了，原因是用 `;` 串接指令、失敗沒有擋住後續步驟。已由 `c8c2fb0` 修正，最終 HEAD 三支 guard 全綠（依文件組回報）。沒有 force，`31c045b` 留在分支歷史上。
 - R2（總管裁定）：不動 44，把「DIRECT 列暫不開放、不計入 ALO-2」這兩處與 44 的差異寫進 ACCEPTANCE（比照 Q13 前例），實作時一併處理。「DIRECT 列」兩種都算：`_保單資料` 的 DIRECT 列＋保單分頁 `policy_id` 為 DIRECT 的持倉列。
 - R3：實作組逐頁列出 DIRECT 的顯示點，交稽核驗證。
 - 總管技術裁定：兩張 `_` 分頁的 L1 一律讀 secret `POLICY_SHEET_ID`，沒有預設、不退回其他 sheet，未設定時 fail loud。
@@ -61,7 +62,7 @@
   1. cost／mv 分歧（alo 示範版存 "cost"／"mv"，設定頁存「成本」／「市值」）
   2. 跨頁守衛：把 alo 列進 `PAGES_READING_SETTINGS`
   3. Q9 非美元匯率
-- 下一步誰動：客戶裁示 R1、D1～D5；(d) 文件組回修 → 稽核 A、B 複驗 → 依常設授權 merge；規格與草稿定案後 → 實作組依定稿做 L1／L2 → 稽核 → 依常設授權 merge
+- 下一步誰動：客戶裁示 R1、D1～D5；(d) 稽核 A、B 複驗 `c8c2fb0` → 依常設授權 merge；規格與草稿定案後 → 實作組依定稿做 L1／L2 → 稽核 → 依常設授權 merge
 
 ### 交接本
 - 狀態：已建立，持續維護
