@@ -10,6 +10,8 @@
 `market_indicator_row_problems` 就是那一條的逐列檢查：回傳空清單才可以寫入。
 `user_setting_row_problems`、`fetch_log_row_problems` 同理（2026-09-26 set 頁第 1 步新增）；
 兩張表的欄位鏡像由 `tests/test_v2_tables_contract_settings.py` 從 `44` 逐欄重抽比對。
+`holding`（`44` 4.1）、`policy`（`44` 4.4）兩張表的鏡像與 `holding_row_problems`、`policy_row_problems`
+於 2026-09-27 資產配置頁讀表第 1 步新增；由 `tests/test_v2_tables_alo_holdings.py` 從 `44` 逐欄重抽比對。
 
 ⚠️ L1 `repositories/settings_sheet_repository.py` 另有一份同形的標頭常數（L1 不得 import L2，
    所以不能直接 import 本檔）；那一份由同一支測試與本檔逐欄比對，兩份鏡像都以 `44` 為準。
@@ -57,6 +59,38 @@ FETCH_LOG_FIELDS = (
 )
 # `44` `fetch_log.outcome` 值域。
 OUTCOME_VALUES = ("ok", "failed")
+
+# `44` 4.1 表 `holding`（順序同 `44`）。
+HOLDING_FIELDS = (
+    ("holding_id", "字串", False),
+    ("policy_id", "字串", False),
+    ("fund_code", "字串", False),
+    ("fund_name", "字串", False),
+    ("ccy", "字串", False),
+    ("units_shares", "浮點", False),
+    ("cost_orig_ccy", "浮點", False),
+    ("cost_twd", "整數", False),
+    ("opened_on", "日期", False),
+    ("bucket", "字串", True),
+    ("last_synced_at", "時間", False),
+)
+
+# `44` 4.4 表 `policy`（順序同 `44`）。
+POLICY_FIELDS = (
+    ("policy_id", "字串", False),
+    ("policy_name", "字串", False),
+    ("issuer", "字串", False),
+    ("ccy", "字串", False),
+    ("premium_paid_twd", "整數", False),
+    ("fee_rate_pct", "浮點", True),
+    ("opened_on", "日期", False),
+    ("status", "字串", False),
+)
+# `44` 4.4 `policy.status` 值域。
+POLICY_STATUS_VALUES = ("active", "paid_up", "closed")
+# `44` 4.1／4.4 的保留值：非保單的直接持有。
+DIRECT_POLICY_ID = "DIRECT"
+
 
 
 def _problem_for(column: str, kind: str, value) -> str | None:
@@ -171,4 +205,52 @@ def fetch_log_row_problems(row: dict) -> list:
             problems.append("message：outcome 為 failed 時不可為空")
     if row.get("outcome") == "ok" and row.get("message") is not None:
         problems.append("message：outcome 為 ok 時須為空")
+    return problems
+
+
+def _is_iso_4217(text: str) -> bool:
+    """三個 ASCII 大寫英文字母（本套件的 import 白名單不含 `re`）。"""
+    return len(text) == 3 and all("A" <= ch <= "Z" for ch in text)
+
+
+def _ccy_problem(row: dict, problems: list) -> None:
+    """`44` 單位欄寫 ISO 4217：三個大寫英文字母。型別已錯的不重複報。"""
+    value = row.get("ccy")
+    if isinstance(value, str) and value.strip() != "" and not _is_iso_4217(value):
+        problems.append(f"ccy：須為 ISO 4217 三個大寫英文字母（{value!r}）")
+
+
+def holding_row_problems(row: dict) -> list:
+    """`holding` 一列的契約檢查；空清單＝可以寫入。
+
+    除型別外另核 `44` 4.1 寫明的規則：`units_shares` 大於 0；`ccy` 為 ISO 4217；
+    `cost_orig_ccy` 大於 0、`cost_twd` 大於 0（U10：`cost_twd` 空白＝沒填，不以 0 當成本；
+    `cost_orig_ccy` 由單位數 × 平均成本算出，任一為 0 即沒填，Q4 (a)）；
+    `last_synced_at` 為世界協調時間（`_problem_for` 已核）。
+    """
+    problems = _fields_problems(HOLDING_FIELDS, row)
+    _ccy_problem(row, problems)
+    for column in ("units_shares", "cost_orig_ccy", "cost_twd"):
+        value = row.get(column)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) \
+                and math.isfinite(float(value)) and value <= 0:
+            problems.append(f"{column}：須大於 0（{value!r}）")
+    bucket = row.get("bucket")
+    if isinstance(bucket, str) and bucket.strip() == "":
+        problems.append("bucket：未分類須為空值，不是空字串")
+    return problems
+
+
+def policy_row_problems(row: dict) -> list:
+    """`policy` 一列的契約檢查；空清單＝可以寫入。
+
+    除型別外另核：`status` 在值域內；`ccy` 為 ISO 4217；`premium_paid_twd` 不為負；
+    `fee_rate_pct` 可空（未知時為空，不以 0 代替 —— 本輪恆為空，U4）。
+    """
+    problems = _fields_problems(POLICY_FIELDS, row)
+    _domain_problem(row, "status", POLICY_STATUS_VALUES, problems)
+    _ccy_problem(row, problems)
+    premium = row.get("premium_paid_twd")
+    if isinstance(premium, int) and not isinstance(premium, bool) and premium < 0:
+        problems.append(f"premium_paid_twd：不可為負（{premium!r}）")
     return problems

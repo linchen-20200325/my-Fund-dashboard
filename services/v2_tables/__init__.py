@@ -10,6 +10,9 @@
 - `market_indicator`：市場總覽（mkt）的 `market_indicator` 表。
 - `settings_store`：設定與取數紀錄試算表的 L2 入口（遮蔽接到 L1、取數後寫 `market_indicator`／`fetch_log`；
   docs/v2/50_settings_sheet_design.md）。本檔只呼叫 L1 `repositories/settings_sheet_repository.py`，不碰 gspread。
+- `alo_holdings`：資產配置頁讀表（`POLICY_SHEET_ID` 那一本的保單分頁＋`_持倉補充`＋`_保單資料`
+  → `44` 4.1 `holding`、4.4 `policy`；`49` §6.3 N-4）。只呼叫 L1 `repositories/policy_supplement_repository.py`，
+  本輪只讀、不接 UI。
 
 ⚠️ 本套件不 import `ui_v2`（L2 不得上行 import，`CLAUDE.md` §8.2）；
    ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本套件。
