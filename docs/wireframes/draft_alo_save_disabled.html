@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>資產配置頁 · 存檔鈕停用原因文案草稿（客戶尚未拍板）</title>
+<style>
+:root{
+  --paper:#e9edf2; --sheet:#ffffff; --sheet-2:#f3f6fa;
+  --ink:#161c24; --ink-2:#48545f; --ink-3:#5d6976;
+  --rule:#c6cfda; --accent:#0f6b6c; --warn-bg:#fdf3e3; --warn-fg:#7a4c05;
+  --ok-fg:#155c36; --ok-bg:#e8f5ec; --no-fg:#8a2723; --no-bg:#fbeceb;
+  --code-bg:#eef2f7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117; --sheet:#171c25; --sheet-2:#1e242f;
+    --ink:#e7ecf3; --ink-2:#aab6c4; --ink-3:#8c98a6;
+    --rule:#2d3543; --accent:#5fd3d0; --warn-bg:#2e2410; --warn-fg:#e8c37a;
+    --ok-fg:#7fd8a0; --ok-bg:#12271a; --no-fg:#f0a6a1; --no-bg:#2b1414;
+    --code-bg:#11161e;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#171c25; --sheet-2:#1e242f;
+  --ink:#e7ecf3; --ink-2:#aab6c4; --ink-3:#8c98a6;
+  --rule:#2d3543; --accent:#5fd3d0; --warn-bg:#2e2410; --warn-fg:#e8c37a;
+  --ok-fg:#7fd8a0; --ok-bg:#12271a; --no-fg:#f0a6a1; --no-bg:#2b1414;
+  --code-bg:#11161e;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:28px 16px 64px; background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:15px; line-height:1.72;
+}
+.wrap{max-width:860px; margin:0 auto}
+header{border-bottom:2px solid var(--rule); padding-bottom:14px; margin-bottom:22px}
+h1{font-size:20px; margin:0 0 6px; letter-spacing:.01em}
+.sub{color:var(--ink-2); font-size:13px; margin:0}
+.pill{
+  display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px;
+  background:var(--warn-bg); color:var(--warn-fg); font-weight:700; vertical-align:2px;
+}
+section{background:var(--sheet); border:1px solid var(--rule); border-radius:10px;
+  padding:18px 20px; margin:0 0 16px}
+h2{font-size:15.5px; margin:0 0 10px; color:var(--accent); letter-spacing:.02em}
+p{margin:0 0 10px}
+.quote{
+  background:var(--sheet-2); border-left:4px solid var(--accent); border-radius:0 6px 6px 0;
+  padding:14px 16px; margin:10px 0; font-size:17px; font-weight:700; letter-spacing:.02em;
+}
+.note{color:var(--ink-3); font-size:12.5px; margin:8px 0 0}
+table{border-collapse:collapse; width:100%; margin:10px 0; font-size:13.5px}
+th,td{border:1px solid var(--rule); padding:7px 10px; text-align:left; vertical-align:top}
+th{background:var(--sheet-2); font-weight:700; font-size:12.5px; color:var(--ink-2)}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px; font-size:12.5px}
+pre{background:var(--code-bg); border:1px solid var(--rule); border-radius:8px;
+  padding:12px 14px; overflow-x:auto; font-size:12.5px; line-height:1.6; margin:10px 0}
+pre code{background:none; padding:0}
+.yes{color:var(--ok-fg); font-weight:700}
+.no{color:var(--no-fg); font-weight:700}
+.tag-yes{background:var(--ok-bg); color:var(--ok-fg); padding:1px 7px; border-radius:4px;
+  font-size:11.5px; font-weight:700; white-space:nowrap}
+.tag-no{background:var(--no-bg); color:var(--no-fg); padding:1px 7px; border-radius:4px;
+  font-size:11.5px; font-weight:700; white-space:nowrap}
+.callout{background:var(--warn-bg); color:var(--warn-fg); border-radius:8px;
+  padding:12px 14px; margin:10px 0; font-size:13.5px}
+footer{color:var(--ink-3); font-size:12px; text-align:center; margin-top:26px;
+  padding-top:14px; border-top:1px solid var(--rule)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>資產配置頁 · 存檔鈕停用原因文案 <span class="pill">客戶尚未拍板</span></h1>
+  <p class="sub">
+    一句話的文案草稿 · 基底 <code>176672f</code>（<code>origin/main</code>）· 受檢實作 <code>6c78294</code>（PR #860 分支）· 2026-09-28
+  </p>
+</header>
+
+<section>
+  <h2>一、要拍板的那一句（逐字）</h2>
+  <p>資產配置頁接上真資料後，<b>正式模式</b>三枚「存檔」按鈕停用，停用原因（滑鼠停留時顯示的 <code>help</code>）逐字為：</p>
+  <div class="quote">存檔寫入端尚未接上，這一輪只讀不寫</div>
+  <p class="note">
+    本頁只送這一句。客戶已砍掉原提案的後半句「按了不會存下任何東西」，理由逐字：<br>
+    「後半句在 alo 是誤導 —— alo 根本沒有寫入端，『按了不會存』暗示『有存但不會持久』，實際是<b>沒有存這個動作</b>。」
+  </p>
+</section>
+
+<section>
+  <h2>二、這一句會出現在哪三枚按鈕上</h2>
+  <p>三枚都叫「存檔」（<code>logic.TEXT_SAVE</code>），分屬三個不同的塊，不在同一個地方：</p>
+  <table>
+    <thead><tr><th>塊</th><th>塊名</th><th>層</th><th>同一塊裡的鄰居</th></tr></thead>
+    <tbody>
+      <tr><td><code>ALO-1</code></td><td>目標輸入卡</td><td>層 2</td><td>只有這一枚（不畫新增類別鈕）</td></tr>
+      <tr><td><code>ALO-3</code></td><td>情境試算卡</td><td>層 2</td><td>輸入零列時另有一枚「新增假設」</td></tr>
+      <tr><td><code>ALO-4</code></td><td>分組定義</td><td>層 3</td><td>一枚「前往 Sheets 維護持倉」（恆在）</td></tr>
+    </tbody>
+  </table>
+  <p class="note">
+    出處：<code>ui_v2/alo/logic.py</code> 的 <code>_build_alo1</code> / <code>_build_alo3</code> / <code>_build_alo4</code>，
+    三處都是 <code>_button(TEXT_SAVE, "存檔", keys=keys)</code>。塊名與層別取自同檔
+    <code>BLOCK_TITLES</code> / <code>BLOCK_LAYERS</code>。
+  </p>
+  <p class="note">
+    停用是<b>資料驅動</b>的，不逐枚寫死：<code>ui_v2/alo/live.py::apply_live_notes</code> 走過整棵模型，
+    凡 <code>button["_writes"]</code> 非空就停用並填原因；而
+    <code>logic._BUTTON_WRITES</code> 裡只有「存檔」對到 <code>{"user_setting"}</code>，
+    其餘七種按鈕都是空集合。<b>所以「三枚」是這條規則的結果，不是一份人工清單。</b>
+  </p>
+</section>
+
+<section>
+  <h2>三、為什麼要停用</h2>
+  <p>
+    這一輪接線<b>只接讀、不接寫</b>：資料從 L2 進來畫得出畫面，但存檔的寫入端還沒接上。
+    若按鈕照舊可按，使用者按下去之後<b>畫面不會有任何反應，也不會有任何東西被存起來</b> ——
+    那正是 <code>CLAUDE.md</code> §1 明文禁止的「讓流程<b>看起來</b>成功」。
+    停用並寫出原因，是把「這件事現在做不到」誠實講出來，而不是讓按鈕假裝它還在工作。
+  </p>
+  <p class="note">接上寫入端之後，這段停用邏輯與這一句文案都應該整段拿掉，不是留著改字。</p>
+</section>
+
+<section>
+  <h2>四、為什麼不沿用市場頁那一句（這一段有實測）</h2>
+  <p>
+    市場頁 <code>ui_v2/mkt/live.py</code> 的 <code>SAVE_DISABLED_REASON</code> 是：
+  </p>
+  <div class="quote" style="font-size:15px">設定存檔尚未接上，存了也留不到下次開頁</div>
+  <p>
+    實作時這一句<b>被整句複製到資產配置頁</b>（<code>ui_v2/alo/live.py</code> 的註解逐字寫著
+    「與 <code>ui_v2/mkt/live.py</code> 逐字相同的一句（沿用，不另編一句）」）。
+    <b>但它在市場頁為真、在資產配置頁為假</b>，差別在一個可以量的機制：
+  </p>
+  <pre><code>$ for f in ui_v2/mkt/page.py ui_v2/alo/page.py; do \
+    printf '%s: ' "$f"; git show 6c78294:$f | grep -c "on_click=" || true; done
+ui_v2/mkt/page.py: 2
+ui_v2/alo/page.py: 0</code></pre>
+  <p>
+    市場頁那兩枚按鈕<b>真的掛了寫入函式</b>，而且它真的寫得進去：
+  </p>
+  <pre><code>$ git show 6c78294:ui_v2/mkt/page.py | grep -n "_user_setting"
+258:    store = st.session_state.setdefault("_user_setting", {})
+300:        store = {} if live_mode else st.session_state.get("_user_setting", {})</code></pre>
+  <table>
+    <thead><tr><th></th><th>市場頁</th><th>資產配置頁</th></tr></thead>
+    <tbody>
+      <tr><td>按鈕掛寫入函式</td><td class="yes">有（2 處）</td><td class="no">沒有（0 處）</td></tr>
+      <tr><td>按下去發生什麼</td><td>寫進當次連線的暫存區</td><td><b>沒有這個動作</b></td></tr>
+      <tr><td>關頁再開</td><td>寫過的東西不見了</td><td>本來就沒有寫過</td></tr>
+      <tr><td>「存了也留不到下次開頁」</td><td class="yes">為真</td><td class="no">為假</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>客戶砍掉後半句的理由，正好對上這張表：</b>「存了也留不到下次開頁」與「按了不會存下任何東西」
+    都暗示<b>有一個存的動作、只是留不住</b>。在市場頁確實如此；在資產配置頁
+    <b>連那個動作都不存在</b>。照抄等於把一句在別頁為真的話，搬到這一頁變成假話。
+  </div>
+  <p class="note">
+    ⚠️ 這一處不是讀程式碼讀出來的，是<b>獨立稽核跑了計數才抓到</b> ——
+    複製過來的那一句在字面上完全合理，沒有人在複製的當下發現它換一頁就不成立。
+    <b>下一個要把某一頁的文案搬到另一頁的人，請先量一下那句話依賴的機制在新的那一頁存不存在。</b>
+  </p>
+</section>
+
+<section>
+  <h2>五、哪些按鈕<b>不</b>停用（正例）</h2>
+  <p>依 <code>CLAUDE.md</code> §-2.A 第 3 款，禁令要同時寫出正例，否則會被讀成「全部都不能按」。
+  下列三枚<b>照常可按</b>，因為它們不寫 <code>user_setting</code>：</p>
+  <table>
+    <thead><tr><th>按鈕</th><th>塊</th><th>種類</th><th>本案是否停用</th></tr></thead>
+    <tbody>
+      <tr><td>匯出</td><td><code>ALO-5</code> 試算結果匯出</td><td>匯出</td><td><span class="tag-yes">不停用</span></td></tr>
+      <tr><td>前往 Sheets 維護持倉</td><td><code>ALO-4</code> 分組定義</td><td>導覽</td><td><span class="tag-yes">不停用</span></td></tr>
+      <tr><td>新增假設</td><td><code>ALO-3</code> 情境試算卡</td><td>新增列</td><td><span class="tag-yes">不停用</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    ⚠️ <b>「匯出」另有一條既有的停用規則，與本案無關，兩者不要混為一談。</b><br>
+    畫面上無列時「匯出」本來就會停用，原因是<b>「目前沒有可匯出的列」</b>
+    （<code>logic.TEXT_NO_EXPORT_ROWS</code>）。那是<b>本來就有的行為</b>，
+    在示範模式與正式模式都一樣，<b>不是</b>這一輪因為寫入端沒接上才加的。
+    本案只動會寫 <code>user_setting</code> 的那三枚；「匯出」那一條一個字都沒改。
+  </div>
+</section>
+
+<section>
+  <h2>六、與 §F 第 10 題的張力（據實寫明）</h2>
+  <p>
+    已核准的 <code>docs/wireframes/draft_alo_live.html</code> §F 第 10 題，客戶 2026-09-28 核准的是
+    <b>「不訂停用條件（照現況）」</b>；而本案<b>就是停用</b>。字面上看起來相反，這裡不藏。
+  </p>
+  <p><b>兩者不衝突，因為問的不是同一件事：</b></p>
+  <table>
+    <thead><tr><th></th><th>§F 第 10 題</th><th>本案</th></tr></thead>
+    <tbody>
+      <tr><td>在問什麼</td><td><b>業務上</b>什麼時候該停用<br>（例如沒改過的表單算不算「可存」）</td><td><b>後端還沒接上</b>，所以現在存不了</td></tr>
+      <tr><td>停用的理由屬於</td><td>產品規則</td><td>接線進度</td></tr>
+      <tr><td>會不會消失</td><td>訂了就長期有效</td><td><b>寫入端接上就整段拿掉</b></td></tr>
+    </tbody>
+  </table>
+  <p>
+    §F 第 10 題維持原裁示（<b>不訂業務停用條件</b>）；本案停用是<b>暫時的接線狀態</b>，
+    不是替那一題補訂規則。客戶 2026-09-28 已就本案另行裁示（選停用，並砍掉原提案後半句），
+    兩項裁示並存、互不推翻。
+  </p>
+</section>
+
+<footer>
+  資產配置頁存檔鈕停用原因 · 一句話文案草稿 · 客戶拍板前不寫進實作<br>
+  草稿組製作 · 2026-09-28
+</footer>
+
+</div>
+</body>
+</html>
