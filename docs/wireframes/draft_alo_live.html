@@ -1,0 +1,1475 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>資產配置接真資料草稿</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   TOKENS —— app 層與註記層的色票逐值取自派工單「設計約束（客戶已拍板）」那一段，
+   其餘沿用 docs/v2/prototype/ui_prototype_alo.html。
+
+   ⚠️ 不是「完全同一套」—— 實測兩檔 #RRGGBB 差集，本檔有而原型沒有的共 3 個：
+     --st-red      #ff7b72  客戶指定 token（派工單「紅 #ff7b72」），原型沒有紅是因為
+                            ALO-0 沒有宣告紅燈；本檔要畫「系統錯誤」狀態，所以用得到。
+     --st-red-bg   #2a1110  本檔新造：上面那個紅的底色，原型無對應。
+     （.ainp 的底）#0b0f14  本檔新造：輸入欄底色，比卡片再深一階，
+                            用來讓輸入欄與按鈕在線框上分得開（見 §G 自我檢查那一列）。
+   後兩個是本檔為了畫出原型沒有畫過的東西而新造的 app 層輔助色，就地寫明，不宣稱「刻意不另造」。
+   兩層：外層淺色註記層（圖紙），內層深色 app 螢幕 #0e1117。
+   ⚠️ 顏色只映射「資料狀態與新鮮度」，不映射投資好壞（44 §1.2 禁顏色暗示方向）。
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --paper:#e6eaf0; --sheet:#ffffff; --sheet-2:#f2f5f9;
+  --ink:#161c24; --ink-2:#4a5663; --ink-3:#5f6b78;
+  --rule:#c3ccd8; --rule-2:#dbe2ea; --edge:#7b8694;
+  --draft:#0f6b6c; --draft-bg:#dff0ef;
+  --stop:#8c1d3f; --stop-bg:#fae7ed;
+  --ok-mark:#1d6b3f; --warn-mark:#8a5a12;
+  --shadow:0 1px 0 rgba(22,28,36,.06), 0 6px 18px -12px rgba(22,28,36,.35);
+
+  /* App 螢幕（兩個主題下都一樣：app 本身就是深色） */
+  --app-bg:#0e1117; --app-card:#161b22; --app-border:#30363d;
+  --app-edge:#6b7682; --app-ph:#7d858e;
+  --app-fg:#e6edf3; --app-fg-2:#c9d1d9; --app-muted:#8b949e;
+  --st-gray:#8b949e;          /* 資料未備：灰 */
+  --st-warn:#e3b341;          /* 業務例外／算不出來：黃 */
+  --st-warn-bg:#241d07;
+  --st-red:#ff7b72;           /* 系統錯誤：紅 */
+  --st-red-bg:#2a1110;
+
+  --maxw:1220px; --gap:16px; --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+    --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+    --rule:#30363d; --rule-2:#262c34; --edge:#6b7682;
+    --draft:#5fd3d0; --draft-bg:#0f2a2b;
+    --stop:#f294b6; --stop-bg:#2a0a12;
+    --ok-mark:#5fd58a; --warn-mark:#e3b341;
+    --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1117; --sheet:#161b22; --sheet-2:#1b222b;
+  --ink:#e6edf3; --ink-2:#adb7c2; --ink-3:#8b949e;
+  --rule:#30363d; --rule-2:#262c34; --edge:#6b7682;
+  --draft:#5fd3d0; --draft-bg:#0f2a2b;
+  --stop:#f294b6; --stop-bg:#2a0a12;
+  --ok-mark:#5fd58a; --warn-mark:#e3b341;
+  --shadow:0 0 0 1px rgba(255,255,255,.03), 0 8px 22px -14px #000;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.72; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:16px; padding-block:26px 72px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-size:.86em; background:var(--sheet-2); border:1px solid var(--rule-2);
+  border-radius:4px; padding:1px 5px; color:var(--ink)}
+h1,h2,h3,h4{text-wrap:balance; margin:0; line-height:1.34}
+p{margin:0}
+:focus-visible{outline:2px solid var(--draft); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* ── 圖紙標題 ───────────────────────────────── */
+.titleblock{border:1px solid var(--rule); background:var(--sheet);
+  border-radius:var(--r); padding:20px 22px; box-shadow:var(--shadow)}
+.eyebrow{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--draft); font-weight:600}
+h1{font-size:clamp(23px,4vw,32px); font-weight:700; letter-spacing:-.01em; margin-top:6px}
+.sub{color:var(--ink-2); margin-top:8px; max-width:64ch}
+.meta{display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:16px; padding-top:14px;
+  border-top:1px solid var(--rule-2); font-size:12.5px; color:var(--ink-3)}
+.meta b{color:var(--ink-2); font-weight:600}
+
+/* ── 區段 ──────────────────────────────────── */
+.sec-head{display:flex; gap:12px; align-items:baseline; margin:44px 0 14px;
+  padding-bottom:8px; border-bottom:2px solid var(--draft)}
+.sec-head .n{font-family:ui-monospace,monospace; font-size:12px; font-weight:700;
+  color:var(--draft); background:var(--draft-bg); border-radius:5px; padding:2px 8px}
+.sec-head h2{font-size:19px; font-weight:700}
+.card{border:1px solid var(--rule); background:var(--sheet); border-radius:var(--r);
+  padding:16px 18px; box-shadow:var(--shadow); margin-top:14px}
+.note{color:var(--ink-2); font-size:14px}
+.small{font-size:13px; color:var(--ink-3)}
+
+/* ── 表格 ──────────────────────────────────── */
+table{width:100%; border-collapse:collapse; margin-top:10px; font-size:13.5px}
+th,td{border:1px solid var(--rule-2); padding:7px 9px; text-align:left; vertical-align:top}
+th{background:var(--sheet-2); font-weight:600; color:var(--ink-2); font-size:12.5px}
+td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft); font-weight:600}
+.q44{color:var(--ink-2); font-size:12.5px; line-height:1.6}
+.q44 b{color:var(--ink)}
+
+/* ── 標記 ──────────────────────────────────── */
+.tag{display:inline-block; font-size:11.5px; font-weight:600; border-radius:5px;
+  padding:1px 7px; border:1px solid currentColor; white-space:nowrap}
+.t-44{color:var(--draft); background:var(--draft-bg)}
+.t-new{color:var(--stop); background:var(--stop-bg)}
+.t-ask{color:var(--warn-mark); background:transparent}
+.t-ok{color:var(--ok-mark); background:transparent}
+
+/* ══════════════════════════════════════════════
+   APP 螢幕（內層）
+   ══════════════════════════════════════════════ */
+.screens{display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start; margin-top:16px}
+.bpbox{flex:1 1 320px; min-width:0}
+.bplabel{font-family:ui-monospace,monospace; font-size:12px; color:var(--draft);
+  font-weight:700; margin-bottom:6px}
+.bplabel span{color:var(--ink-3); font-weight:400}
+.screen{background:var(--app-bg); color:var(--app-fg); border:1px solid var(--app-border);
+  border-radius:12px; padding:12px; font-size:12.5px; line-height:1.6; overflow:hidden}
+.screen .l-label{font-family:ui-monospace,monospace; font-size:10.5px; color:var(--app-muted);
+  letter-spacing:.08em; margin:10px 0 5px; text-transform:uppercase}
+.screen .l-label:first-child{margin-top:0}
+
+.pgtop{color:var(--app-muted); font-size:11.5px; border-bottom:1px dashed var(--app-border);
+  padding-bottom:7px; margin-bottom:9px}
+.pgtop .ttl{color:var(--app-fg); font-size:14px; font-weight:700; display:block}
+.grey-total{color:var(--app-muted); font-size:11.5px; margin-top:4px}
+
+.acard{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:9px 10px; margin-bottom:8px}
+.acard:last-child{margin-bottom:0}
+.acard .ch{font-size:11px; color:var(--app-muted); display:flex; justify-content:space-between;
+  gap:8px; align-items:baseline}
+.acard .ch b{color:var(--app-fg-2); font-size:12px; font-weight:600}
+.acard .cv{font-size:15px; font-weight:700; color:var(--app-fg); margin-top:4px; line-height:1.4}
+.acard .cs{font-size:11px; color:var(--app-muted); margin-top:3px}
+
+.lamp{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:11px 12px; display:flex; gap:10px; align-items:flex-start}
+.lamp .g{font-size:17px; line-height:1.2}
+.lamp .txt{font-size:13px; font-weight:600; color:var(--app-fg)}
+.lamp .st{font-size:11px; color:var(--app-muted); margin-top:2px}
+
+.grid1{display:grid; grid-template-columns:1fr; gap:8px}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+.grid2 .acard, .grid3 .acard{margin-bottom:0}
+
+.fold{background:var(--app-card); border:1px solid var(--app-border); border-radius:8px;
+  padding:8px 10px; margin-bottom:8px; display:flex; justify-content:space-between;
+  gap:8px; align-items:center; font-size:12px; color:var(--app-fg-2)}
+.fold:last-child{margin-bottom:0}
+.fold .kk{font-family:ui-monospace,monospace; font-size:10.5px; color:var(--app-muted)}
+.fold .plus{color:var(--app-muted); font-size:14px}
+
+.abtn{display:inline-block; border:1px solid var(--app-edge); border-radius:6px;
+  padding:3px 9px; font-size:11.5px; color:var(--app-fg-2); background:transparent}
+.abtn[data-off]{color:var(--app-ph); border-color:var(--app-border)}
+/* 輸入欄：刻意與按鈕長得不一樣（方框、底線提示），免得被讀成第七顆按鈕 */
+.ainp{display:inline-block; border:1px solid var(--app-edge); border-bottom-width:2px;
+  border-radius:3px; padding:3px 9px; font-size:11.5px; color:var(--app-fg-2);
+  background:#0b0f14; min-width:160px}
+.ahint{font-size:11px; color:var(--app-muted); margin-top:4px}
+.aph{color:var(--app-ph)}
+
+.atab{width:100%; border-collapse:collapse; margin-top:6px; font-size:11.5px}
+.atab th,.atab td{border:1px solid var(--app-border); padding:4px 6px; color:var(--app-fg-2);
+  text-align:left; vertical-align:top; word-break:break-word}
+.atab th{color:var(--app-muted); font-weight:600; font-size:10.5px; background:#11161d}
+.atab tfoot td{color:var(--app-muted)}
+
+.s-gray{color:var(--st-gray)}
+.s-warn{color:var(--st-warn)}
+.s-red{color:var(--st-red)}
+.rowwarn{border:1px solid var(--st-warn); background:var(--st-warn-bg); color:var(--st-warn);
+  border-radius:6px; padding:6px 8px; font-size:11.5px; margin-top:7px}
+.rowfail{border:1px solid var(--st-red); background:var(--st-red-bg); color:var(--st-red);
+  border-radius:6px; padding:6px 8px; font-size:11.5px; margin-top:7px}
+
+/* 44 未宣告的新元件：虛線外框 ＋ 角標，畫出來但一眼看得出不是規格 */
+.unspec{position:relative; border:1.5px dashed var(--st-warn); border-radius:8px;
+  padding:9px 10px 9px; margin-top:8px; background:rgba(227,179,65,.05)}
+.unspec > .flag{position:static; display:inline-block; font-family:ui-monospace,monospace;
+  font-size:9.5px; letter-spacing:.06em; color:#0e1117; background:var(--st-warn);
+  border-radius:4px; padding:0 5px; font-weight:700; margin-bottom:5px}
+.unspec .in{font-size:11.5px; color:var(--app-fg-2)}
+
+/* 三斷點示意：欄數寫死，不靠媒體查詢（螢幕是巢狀的，媒體查詢量的是外層視窗） */
+.w375 .grid2, .w375 .grid3{grid-template-columns:1fr}
+.w1024 .grid3{grid-template-columns:1fr 1fr}
+.w1024 .grid3 .c3{grid-column:1 / -1}
+
+@media (max-width:900px){ .screens{flex-direction:column} }
+@media (max-width:520px){
+  .wrap{padding-inline:16px}
+  table{font-size:12.5px}
+  th,td{padding:6px 7px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="titleblock">
+  <div class="eyebrow">DRAFT / ALO / LIVE DATA</div>
+  <h1>資產配置頁：接真資料後的畫面草稿</h1>
+  <p class="sub">這一份不是規格，是<b>畫面草稿</b>。假資料版的八塊照舊，本檔只處理「接上
+  Sheets 真資料之後多出來的東西要放在哪、用什麼字」。</p>
+  <p class="sub" style="margin-top:8px; padding:9px 12px; background:var(--draft-bg);
+    border:1px solid var(--draft); border-radius:6px; color:var(--ink)">
+  ✅ <b>2026-09-28 客戶已拍板</b>：<b>§F 21 題全數照本組建議核准</b>、<b>§E 的 E1～E14 十四條全數核准</b>、
+  <b>§G 查不到的四件接受</b>（第 4 件另有四條明確化，見該處）。<b>本檔自此是已核准的畫面草稿</b>，實作照它做；要改請另開一輪。<br>
+  ⚠️ <b>核准的是畫面與文案，不是動工授權</b>，也<b>不改 <code>docs/v2/44_fund_ui_ssot.md</code></b>（已凍結）——
+  裁示結果要回寫進 <code>ACCEPTANCE.md</code>，那是另一輪的事。</p>
+  <div class="meta">
+    <span><b>草稿寫成時的 <code>origin/main</code></b> <code>b1ea6be</code>　·　
+      <b>本 PR base</b> <code>6e8d214</code>（44 兩者同 blob <code>9bb5d64</code>，量測值不受影響）</span>
+    <span><b>量測日</b> 2026-09-28</span>
+    <span><b>規格來源</b> <code>docs/v2/44_fund_ui_ssot.md</code> §3.4（已凍結，本檔一個字未動）</span>
+    <span><b>差異登記</b> <code>ACCEPTANCE.md</code> 第八節</span>
+    <span><b>讀表程式</b> <code>services/v2_tables/alo_holdings.py</code>／<code>repositories/policy_supplement_repository.py</code></span>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--draft)">怎麼看這份草稿（三分鐘）</h3>
+  <ol class="note" style="margin:8px 0 0; padding-left:20px">
+    <li><b>§A</b> 一張表看完八塊放什麼、哪幾塊因為接真資料而變了。</li>
+    <li><b>§B</b> 三個斷點各一份線框。<b>先看這裡</b>，看不順眼的地方直接圈。</li>
+    <li><b>§C</b> 逐塊，每一塊右邊有一欄「<b>44 原文對照</b>」—— 左邊是畫面、右邊是規格原字，
+      <b>一眼看得出哪裡是照規格、哪裡是本組新加的</b>。</li>
+    <li><b>§D</b> 接真資料多出來的七件事，逐件寫清楚位置與文案。</li>
+    <li><b>§E</b> 〔擬〕文案：現行字與本組的建議字，請一次拍完。</li>
+    <li><b>§F</b> 待裁示清單，一題一行，回「同意」或改寫即可。</li>
+    <li><b>§G</b> 本組查不到什麼 —— 不美化。</li>
+  </ol>
+  <p class="note" style="margin-top:10px">
+    <span class="tag t-44">44</span> ＝ 逐字照規格畫的。
+    <span class="tag t-new">44 未宣告</span> ＝ 44 沒有這個元件／這句字，<b>本組畫出來只是為了讓客戶看得到選項，不是既成事實</b>。
+    <span class="tag t-ask">待裁示</span> ＝ 兩種畫法都合理，請客戶選。
+  </p>
+</div>
+
+<div class="card" style="border-left:4px solid var(--stop)">
+  <h3 style="font-size:15px;font-weight:700;color:var(--stop)">本檔遵守的四條約束（客戶已拍板，逐條對照）</h3>
+  <table>
+    <tr><th style="width:26%">約束</th><th>本檔怎麼落地</th></tr>
+    <tr><td><b>雙層</b>：淺色註記層在外、深色 app 螢幕在內</td>
+      <td>外層是這張白（或深）圖紙；§B 的每一個 <code>.screen</code> 是 app 螢幕，底色 <code>#0e1117</code>。</td></tr>
+    <tr><td><b>四層八塊</b>：層1×1＋層2×3＋層3×2＋層4×2</td>
+      <td>層1 <code>ALO-0</code>／層2 <code>ALO-1 ALO-2 ALO-3</code>／層3 <code>ALO-4 ALO-5</code>／層4 <code>ALO-6 ALO-7</code>，共八塊。
+        層3、層4 <b>預設收合</b>（44 §2 硬規則），§B 因此畫成收合列，展開後的樣子另見 §B2。</td></tr>
+    <tr><td><b>三斷點</b> ≤768 單欄／769–1279 兩欄／≥1280 三欄</td>
+      <td>§B 三份線框的欄數寫死在 <code>.w375</code>／<code>.w1024</code>／<code>.w1366</code> 三個類別上。</td></tr>
+    <tr><td><b>一張卡最多兩個主值</b>；顏色只映射資料狀態與新鮮度</td>
+      <td>層2 三張卡每張最多兩個主值（<b>「主值」怎麼數、依據在哪，見 §G「本草稿的自我檢查」那張表的同一列</b>；
+        此處只指路、不重述，以免兩處各寫一份而漂移）。本檔只用四種狀態色：灰 <code>#8b949e</code>（資料未備）／黃
+        <code>#e3b341</code>（業務例外、算不出來）／紅 <code>#ff7b72</code>（系統錯誤）／中性文字色（ok）。
+        <b>差額欄不著色、容許帶內外欄不著色</b>（44 ALO-2 規則欄）。</td></tr>
+  </table>
+</div>
+
+<div class="sec-head"><span class="n">§A</span><h2>八塊總表：誰在哪一層、接真資料之後多了什麼</h2></div>
+
+<div class="card">
+<table>
+  <tr>
+    <th style="width:8%">塊</th><th style="width:6%">層</th><th style="width:22%">這塊放什麼</th>
+    <th style="width:30%">接真資料後<b>多出來</b>的東西</th><th>44 有沒有宣告</th>
+  </tr>
+  <tr>
+    <td class="src">ALO-0</td><td>層 1</td>
+    <td>差距結論燈。讀 <code>ALO-2</code> 算出的差距，取絕對值最大者。只有灰與黃兩色。</td>
+    <td>① 取數失敗時圖示 <b>⛔</b>、狀態字改「狀態：取數失敗」（燈仍灰，44 沒給這一句）。
+        ② 讀表警告筆數要不要掛在燈旁。</td>
+    <td>① 圖示 <b>有</b>（44 5.5 第 21 輪已改 ⛔）／狀態字 <b>沒有</b>；② <span class="tag t-new">44 未宣告</span></td>
+  </tr>
+  <tr>
+    <td class="src">ALO-1</td><td>層 2</td>
+    <td>目標輸入卡。一列一個類別的目標比重、容許帶、合計與差額、一枚「存檔」。</td>
+    <td>沒有。本塊只讀寫 <code>user_setting</code>，<b>不碰 Sheets 持倉</b>，接真資料前後長得一樣。</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-2</td><td>層 2</td>
+    <td>目標對照卡。四欄：目前比重、目標比重、差額（帶正負號、單位百分點）、容許帶內外（只寫「內」或「外」）。</td>
+    <td>③ <b>DIRECT 警告</b>（客戶逐字：<code>DIRECT 列暫不支援，該筆不計入配置</code>）。
+        DIRECT 名下持倉不進分子也不進分母。</td>
+    <td><span class="tag t-new">44 未宣告</span>（44 ALO-2 空狀態欄沒有這一種；差異登記在 <code>ACCEPTANCE.md</code> 8.2）</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-3</td><td>層 2</td>
+    <td>情境試算卡。使用者自填「類別＋金額」，算出套用後的比重與新差額。</td>
+    <td>沒有。它吃的是 <code>ALO-2</code> 的結果與 <code>user_setting</code>。</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-4</td><td>層 3<br>收合</td>
+    <td>分組定義。唯讀的指派表、比重基準二選一、類別名稱、一枚「存檔」、一枚「前往 Sheets 維護持倉」。</td>
+    <td>④ <b>讀取量診斷</b>（<code>read_estimate</code>）：分頁數、預估每分鐘讀取數、以及「參考值未經一手查證、不是硬門檻」。
+        ⑤ <b>新增類別元件</b>（客戶 C2 已同意，要先看草稿）。</td>
+    <td>④ <span class="tag t-new">44 未宣告</span>；⑤ <span class="tag t-new">44 未宣告</span>（44 ALO-1 規則欄寫「類別名稱一律由使用者新增與命名」，但沒有宣告新增用的元件）</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-5</td><td>層 3<br>收合</td>
+    <td>試算結果匯出。一枚匯出鈕；畫面無列時停用，停用原因「目前沒有可匯出的列」。</td>
+    <td>沒有。</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-6</td><td>層 4<br>收合</td>
+    <td>歸屬明細。一列一檔：類別、採用的基準值、佔所屬類別比例、佔總體比例；表尾兩個合計。</td>
+    <td>⑥ <b>沒寫進持倉的列</b>（空白值、格式不符、<code>holding_id</code> 撞號、缺補充列、同鍵重複…）逐列列出。
+        ⑦ <b><code>_保單資料</code> 缺列</b>（<code>missing_profile</code>）時保單名那一格怎麼寫。</td>
+    <td>⑥ <span class="tag t-new">44 未宣告</span>（44 表尾只宣告「缺基準值被排除的檔數」，那是另一件事）；
+        ⑦ <span class="tag t-new">44 未宣告</span>（可套 44 5.5「來源缺」模板）</td>
+  </tr>
+  <tr>
+    <td class="src">ALO-7</td><td>層 4<br>收合</td>
+    <td>目標修改紀錄。每個設定鍵各一列，三欄：鍵名、當前值、最後修改時間。固定兩列。</td>
+    <td>沒有。它只讀 <code>user_setting</code> 兩個鍵。</td>
+    <td>—</td>
+  </tr>
+</table>
+<div class="card" style="margin-top:12px; border-left:4px solid var(--warn-mark); box-shadow:none">
+  <h4 style="font-size:14px; font-weight:700; color:var(--warn-mark)">
+    ⚠️ <code>ALO-7</code> 那一格：本檔改寫過 44 的一個詞，原文逐字列在這裡
+  </h4>
+  <p class="small" style="margin-top:6px">
+  客戶 2026-09-28 指示逐字列出，理由逐字：「<b>不列出來我無法判斷改寫是否走味。</b>」照辦。</p>
+
+  <p class="small" style="margin-top:8px"><b>44 原文那一格（逐字，含劃線）</b> ——
+  <code>b1ea6be:docs/v2/44_fund_ui_ssot.md</code> 第 <code>1467</code> 行，§3.4 塊 <code>ALO-7</code> 規則欄整格：</p>
+  <blockquote style="margin:6px 0 0; padding:9px 12px; border-left:3px solid var(--rule);
+    background:var(--sheet-2); border-radius:0 6px 6px 0; font-size:13px; color:var(--ink-2)">
+  | <b>規則</b> | <s>⛔ <b>待客戶裁決。</b></s> <s>一列一次修改，三欄：修改時間、修改前值、修改後值。依時間由新到舊排列。</s>
+  → <b>一鍵一列，三欄：鍵名、當前值、最後修改時間</b>（<code>updated_at</code>）。固定兩列，
+  <code>alo_target_weights</code> 與 <code>alo_tolerance_pp</code> 各一列，不依時間排序（本塊只有一個時間點，沒有先後）。
+  本塊只記錄使用者自己改過什麼，不記錄任何系統代改 —— 系統不改這兩個鍵 |
+  </blockquote>
+  <p class="small" style="margin-top:6px">
+  ⚠️ <b>劃線的部分是 44 自己退役的舊字，不是本檔劃的</b>；本檔引用與改寫的只有箭頭之後的<b>現行字</b>。</p>
+
+  <table style="margin-top:10px">
+    <tr><th style="width:20%">項目</th><th>內容</th></tr>
+    <tr><td><b>被改寫的詞</b></td>
+      <td>現行字開頭那四個字（上面引文裡「三欄：鍵名…」之前的那四個字）
+        → 本檔寫成 <b>「每個設定鍵各一列」</b>。
+        它在 44 裡的意思是「<b>一個設定鍵佔一列</b>」；本檔的改寫把那個意思攤開寫，
+        <b>語意未改、欄數未改、固定兩列未改、排序未改</b>。</td></tr>
+    <tr><td><b>為什麼要改</b></td>
+      <td>那四個字的<b>前兩個字</b>，剛好等於禁詞清單的<b>第 1 個詞</b>。
+        本檔是 UI 草稿，<b>不在自己的畫面文案裡留那個字</b>。</td></tr>
+    <tr><td><b>44 原文有沒有違規</b></td>
+      <td><b>沒有。</b> 44 §1.1 節判準的射程逐字是「把介面上<b>全部按鈕的標籤</b>列成一張表」——
+        射程是<b>按鈕標籤</b>。44 那一句是<b>規則欄的敘述</b>，不是按鈕標籤；
+        本檔此處是<b>引用 44 原文</b>，也不是按鈕標籤。</td></tr>
+    <tr><td><b>還有第二處</b></td>
+      <td><b>有，據實寫明。</b> 44 <code>ALO-7</code> <b>空狀態欄</b>也用了同一個詞（在 44 裡出現兩次），
+        §C 引用時同樣改寫成「某一個鍵的」。<b>字面只留在上面那段引文裡，不在這裡再寫一次</b>
+        —— 體例照 <code>ACCEPTANCE.md</code> 第六節：字面只留在它非留不可的那一句本身。</td></tr>
+    <tr><td><b>同一個詞在 44 裡幾處</b></td>
+      <td>那四個字在 44 全檔 <b>2</b> 處：本檔引的是 <code>:1467</code> 的 <code>ALO-7</code> 規則欄；
+        另一處 <code>:2833</code> 是<b>已劃線退役</b>的句子，語境不同，<b>本檔沒有引它</b>。</td></tr>
+  </table>
+
+  <p class="small" style="margin-top:12px; padding:9px 11px; background:var(--stop-bg);
+    border:1px solid var(--stop); border-radius:6px; color:var(--ink)">
+  ⛔ <b>連帶後果，不迴避：本檔自己的禁詞掃描從 0 變成 1。</b><br>
+  上面那段引文把禁詞清單<b>第 1 個詞</b>逐字寫進了本檔。
+  <b>這是「引用」不是「使用」</b> —— 它是 44 的規格原字，不是本檔在畫面上叫使用者去做的事。
+  <b>但掃描分不出引用與使用，所以數字就是會變。</b>
+  ⛔ 為了讓數字歸零而不逐字列出 ＝ 不照客戶的話做；
+  ⛔ 逐字列出卻讓「禁詞 0」那句自述留著 ＝ 讓本檔自己說謊。<b>兩條都不做，改成下面這套判讀規則。</b><br>
+  ⚠️ <b>本段刻意只在引文裡出現那個詞一次</b>：其餘每一處都用「第 1 個詞」指稱。
+  多寫一次，下面那個實測數字就多一。</p>
+
+  <p class="small" style="margin-top:10px"><b>查法（詞表用 Unicode 跳脫碼，字面不寫進本檔 ——
+  寫進來這條指令就會多命中它自己）</b>，在 repo 根目錄跑：</p>
+  <pre style="margin:6px 0 0; padding:9px 11px; background:var(--sheet-2); border:1px solid var(--rule-2);
+    border-radius:6px; font-size:11.5px; overflow-x:auto"><code>python3 -c "import sys;W=['\u4e00\u9375','\u6700\u4f73','\u63a8\u85a6','\u6700\u9069','\u8cb7\u9032','\u8ce3\u51fa','\u52a0\u78bc','\u6e1b\u78bc'];t=open(sys.argv[1],encoding='utf-8').read();print([(i,t.count(w)) for i,w in enumerate(W) if t.count(w)])" docs/wireframes/draft_alo_live.html</code></pre>
+  <p class="small" style="margin-top:6px">
+  它<b>只印「詞表第幾個、命中幾次」，不印字面</b>（體例照 <code>ACCEPTANCE.md</code> 第六節第 16 輪補的那一條）。<br>
+  <b>2026-09-28 實測（本檔定稿後）：輸出 <code>[(0, 1)]</code></b> —— 只有詞表第 1 個、命中 1 次。</p>
+
+  <p class="small" style="margin-top:10px; padding:9px 11px; border:1px solid var(--edge); border-radius:6px">
+  ⛔ <b>下一次跑這條檢查時，三個條件要同時成立才視同 0</b>（體例逐條照
+  <code>ACCEPTANCE.md</code> 第六節「本檔自身的兩條檢查」）：<br>
+  <b>(1) 數量恰為 1</b>；<br>
+  <b>(2) 命中處只有本段那一則 44 引文</b>（<code>grep -n</code> 找那段 <code>blockquote</code>，不應該有第二處）；<br>
+  <b>(3) 命中的詞是詞表第 1 個</b>（上面那條指令的輸出索引必須是 <code>0</code>）。<br>
+  <b>任一條不成立 → 是真的帶進禁詞，要修文件，不是改指令。</b><br>
+  ⚠️ <b>第 (3) 條為什麼不能省</b>：只綁數量與位置的話，萬一哪天本段裡混進<b>別的</b>禁詞，
+  數量仍是 1、位置仍是本段，<b>照字面會被誤放行</b>。這個窄縫是
+  <code>ACCEPTANCE.md</code> 第六節第 16 輪被稽核抓到的，本檔一開始就補上。</p>
+
+  <p class="small" style="margin-top:10px">
+  ✅ <b>另外七個詞本檔仍是 0</b>，字面一個都沒有寫進來 ——
+  它們沒有任何一個是 44 的規格用語，<b>沒有非引不可的理由</b>。</p>
+</div>
+</div>
+
+<div class="card" style="border-left:4px solid var(--warn-mark)">
+  <h3 style="font-size:15px;font-weight:700;color:var(--warn-mark)">兩件本頁<b>沒有</b>落點的事（誠實寫在前面，不藏到最後）</h3>
+  <table>
+    <tr><th style="width:24%">項目</th><th>本組查到的事實</th><th style="width:26%">本組建議</th></tr>
+    <tr>
+      <td><b><code>fee_rate_pct</code> 顯示 ⬜</b>（U4）</td>
+      <td>44 §3 <b>沒有任何一塊</b>的來源欄含 <code>policy.fee_rate_pct</code>。本頁八塊裡唯一讀
+        <code>policy</code> 的是 <code>ALO-6</code>，它只取 <code>policy.policy_name</code>。
+        44 §4.4 的表判準寫「把某張保單的 <code>fee_rate_pct</code> 清空，畫面該欄顯示 <code>⬜</code> 而不是 0」——
+        <b>那個「該欄」在 44 §3 五頁裡找不到對應的塊</b>（量測日 2026-09-28、母體 44 §3 全節；
+        §3 內唯一的費率欄是 <code>EXP-6</code> 的 <code>fund.mgmt_fee_rate_pct</code>，那是另一張表的另一欄）。</td>
+      <td><b>本頁不發明位置。</b> L2 已經照 U4 把它填成空值（<code>alo_holdings.py</code> 明寫
+        <code>fee_rate_pct: None  # U4：本輪不放</code>），畫面上沒有欄可以顯示它。
+        要不要在 <code>ALO-6</code> 加一欄 → <b>§F 第 6 題</b>。</td>
+    </tr>
+    <tr>
+      <td><b><code>last_synced_at</code> 是推定值</b>（R1）</td>
+      <td>同理：<code>ALO-6</code> 的來源欄沒有 <code>holding.last_synced_at</code>，本頁八塊<b>都不顯示它</b>。
+        <code>ACCEPTANCE.md</code> 8.1 自己寫的畫面落點是
+        <code>ui_v2/hld/logic.py::_build_hld5</code>（持倉體檢頁），不是本頁。</td>
+      <td><b>本頁不發明位置</b>，推定值的揭露留在 hld 頁那一輪處理。
+        若客戶要在本頁也看得見 → <b>§F 第 7 題</b>。</td>
+    </tr>
+  </table>
+</div>
+
+<div class="sec-head"><span class="n">§B</span><h2>三個斷點：預設載入時的畫面</h2></div>
+
+<div class="card">
+  <p class="note">三份的<b>畫面內容相同，欄數依 44 §2.1 不同</b>（≤768 單欄／769–1279 兩欄／≥1280 三欄）。
+  層 3、層 4 依 44 §2 硬規則<b>預設收合</b>，所以這裡畫成收合列；展開後的樣子在 <b>§B2</b>。
+  每一份都是 <b>app 螢幕</b>（底色 <code>#0e1117</code>），外面這張是註記層。</p>
+  <p class="small" style="margin-top:8px; padding:8px 10px; background:var(--sheet-2);
+     border:1px solid var(--rule-2); border-radius:6px">
+  ⚠️ <b>「相同」指的是 app 螢幕裡的內容，不含線框自己的註記。逐行比對後仍有差的，就這兩類，逐項寫出來</b>
+  （量測日 2026-09-28，做法：把三個 <code>.screen</code> 轉純文字逐行 diff）：<br>
+  <b>(1) 層標籤縮寫</b> —— ≥1280 寫「層 1｜結論　ALO-0」「層 3｜操作（預設收合）　ALO-4 / ALO-5」，
+  兩個較窄的斷點縮成「層 1｜ALO-0」「層 3（收合）」。<b>那是線框給讀者看的標籤，不是 app 畫面上的字。</b><br>
+  <b>(2) 頁首灰字旁的那一則註記</b> —— 「〔這一行的落點 44 登記為待裁，見 §F 第 8 題〕」只出現在 ≥1280。
+  <b>同樣是註記</b>；灰字本體「目標合計 90%」三份都在。<br>
+  <b>除這兩類之外，三份逐行相同</b> —— 卡片、表格、每一列、每一個數字、按鈕、⬜ 與警告行都一樣。</p>
+  <p class="small" style="margin-top:8px">⚠️ 畫面上每一個數字都是<b>示意值</b>。示意資料刻意避開兩個邊界：
+  <b>目標合計不等於 1</b>（故意讓「目標合計 90%」那一行灰字出得來）、<b>沒有任何差距剛好等於容許帶</b>
+  （那個端點 44 沒寫，見 §F 第 12 題）。</p>
+</div>
+
+<div class="screens">
+
+<!-- ══════════ ≥1280：三欄 ══════════ -->
+<div class="bpbox" style="flex:1 1 100%">
+  <div class="bplabel">≥1280　<span>三欄（層 2 三張核心卡並排同一列；層 3 兩塊並排，第三欄空著）</span></div>
+  <div class="screen w1366">
+    <div class="pgtop">
+      <span class="ttl">資產配置</span>
+      我目前的分布，和我自己寫下的目標，差多少
+      <div class="grey-total">目標合計 90%　<span class="s-gray">〔這一行的落點 44 登記為待裁，見 §F 第 8 題〕</span></div>
+    </div>
+
+    <div class="l-label">層 1｜結論　ALO-0</div>
+    <div class="lamp">
+      <span class="g">⚠</span>
+      <span><span class="txt">核心 與目標差 6.4 個百分點</span>
+      <span class="st">狀態：要多看一眼　·　燈不指出該往哪個方向調</span></span>
+    </div>
+
+    <div class="l-label">層 2｜核心卡　ALO-1 / ALO-2 / ALO-3</div>
+    <div class="grid3">
+      <div class="acard">
+        <div class="ch"><b>目標輸入卡</b><span>ALO-1</span></div>
+        <div class="cs">以下依序：目標 → 對照 → 試算</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目標比重</th></tr>
+          <tr><td>核心</td><td>0.55</td></tr>
+          <tr><td>衛星</td><td>0.3</td></tr>
+          <tr><td>現金</td><td>0.05</td></tr>
+          <tr><td>環球債</td><td class="s-gray">⬜ 資料未備</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">合計 0.9　差額 −0.1（不自動歸一）</div>
+        <div class="cs">容許帶 5 個百分點</div>
+        <div style="margin-top:6px"><span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+
+      <div class="acard">
+        <div class="ch"><b>目標對照卡</b><span>ALO-2</span></div>
+        <div class="cs">基準：成本（cost_twd）　·　讀 ALO-1 的已存值</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目前</th><th>目標</th><th>差額</th><th>容許帶</th></tr>
+          <tr><td>核心</td><td>61.4%</td><td>55.0%</td><td>+6.4 pp</td><td>外</td></tr>
+          <tr><td>衛星</td><td>24.8%</td><td>30.0%</td><td>−5.2 pp</td><td>外</td></tr>
+          <tr><td>現金</td><td>6.2%</td><td>5.0%</td><td>+1.2 pp</td><td>內</td></tr>
+          <tr><td>未分類</td><td>7.6%</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">未分類 1 檔</div>
+        <div class="unspec">
+          <span class="flag">44 未宣告</span>
+          <div class="in s-warn">⚠ DIRECT 列暫不支援，該筆不計入配置<span class="s-gray">（2 筆）</span></div>
+          <div class="in s-gray" style="margin-top:3px">逐筆位置見 ALO-6</div>
+        </div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+
+      <div class="acard c3">
+        <div class="ch"><b>情境試算卡</b><span>ALO-3</span></div>
+        <div class="cs">假設：衛星　amount_twd　+120,000 TWD</div>
+        <table class="atab">
+          <tr><th>類別</th><th>套用後</th><th>新差額</th></tr>
+          <tr><td>核心</td><td>57.9%</td><td>+2.9 pp</td></tr>
+          <tr><td>衛星</td><td>29.1%</td><td>−0.9 pp</td></tr>
+          <tr><td>現金</td><td>5.8%</td><td>+0.8 pp</td></tr>
+          <tr><td>未分類</td><td>7.2%</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div style="margin-top:6px"><span class="abtn">新增假設</span> <span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+    </div>
+
+    <div class="l-label">層 3｜操作（預設收合）　ALO-4 / ALO-5</div>
+    <div class="grid3">
+      <div class="fold"><span><span class="kk">ALO-4</span>　分組定義</span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-5</span>　試算結果匯出</span><span class="plus">＋</span></div>
+      <div></div>
+    </div>
+
+    <div class="l-label">層 4｜佐證（預設收合）　ALO-6 / ALO-7</div>
+    <div class="grid1">
+      <div class="fold"><span><span class="kk">ALO-6</span>　歸屬明細　<span class="s-warn">·　3 列沒有寫進持倉</span></span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-7</span>　目標修改紀錄</span><span class="plus">＋</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 769–1279：兩欄 ══════════ -->
+<div class="bpbox">
+  <div class="bplabel">769–1279　<span>兩欄（第三張核心卡換到第二列）</span></div>
+  <div class="screen w1024">
+    <div class="pgtop">
+      <span class="ttl">資產配置</span>
+      我目前的分布，和我自己寫下的目標，差多少
+      <div class="grey-total">目標合計 90%</div>
+    </div>
+
+    <div class="l-label">層 1｜ALO-0</div>
+    <div class="lamp"><span class="g">⚠</span>
+      <span><span class="txt">核心 與目標差 6.4 個百分點</span>
+      <span class="st">狀態：要多看一眼　·　燈不指出該往哪個方向調</span></span></div>
+
+    <div class="l-label">層 2｜ALO-1 / ALO-2 / ALO-3</div>
+    <div class="grid3">
+      <div class="acard">
+        <div class="ch"><b>目標輸入卡</b><span>ALO-1</span></div>
+        <div class="cs">以下依序：目標 → 對照 → 試算</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目標比重</th></tr>
+          <tr><td>核心</td><td>0.55</td></tr><tr><td>衛星</td><td>0.3</td></tr>
+          <tr><td>現金</td><td>0.05</td></tr>
+          <tr><td>環球債</td><td class="s-gray">⬜ 資料未備</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">合計 0.9　差額 −0.1（不自動歸一）</div>
+        <div class="cs">容許帶 5 個百分點</div>
+        <div style="margin-top:6px"><span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+      <div class="acard">
+        <div class="ch"><b>目標對照卡</b><span>ALO-2</span></div>
+        <div class="cs">基準：成本（cost_twd）　·　讀 ALO-1 的已存值</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目前</th><th>目標</th><th>差額</th><th>容許帶</th></tr>
+          <tr><td>核心</td><td>61.4%</td><td>55.0%</td><td>+6.4 pp</td><td>外</td></tr>
+          <tr><td>衛星</td><td>24.8%</td><td>30.0%</td><td>−5.2 pp</td><td>外</td></tr>
+          <tr><td>現金</td><td>6.2%</td><td>5.0%</td><td>+1.2 pp</td><td>內</td></tr>
+          <tr><td>未分類</td><td>7.6%</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">未分類 1 檔</div>
+        <div class="unspec"><span class="flag">44 未宣告</span>
+          <div class="in s-warn">⚠ DIRECT 列暫不支援，該筆不計入配置<span class="s-gray">（2 筆）</span></div>
+          <div class="in s-gray" style="margin-top:3px">逐筆位置見 ALO-6</div></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+      <div class="acard c3">
+        <div class="ch"><b>情境試算卡</b><span>ALO-3</span></div>
+        <div class="cs">假設：衛星　amount_twd　+120,000 TWD</div>
+        <table class="atab">
+          <tr><th>類別</th><th>套用後</th><th>新差額</th></tr>
+          <tr><td>核心</td><td>57.9%</td><td>+2.9 pp</td></tr>
+          <tr><td>衛星</td><td>29.1%</td><td>−0.9 pp</td></tr>
+          <tr><td>現金</td><td>5.8%</td><td>+0.8 pp</td></tr>
+          <tr><td>未分類</td><td>7.2%</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div style="margin-top:6px"><span class="abtn">新增假設</span> <span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+    </div>
+
+    <div class="l-label">層 3（收合）</div>
+    <div class="grid3">
+      <div class="fold"><span><span class="kk">ALO-4</span>　分組定義</span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-5</span>　試算結果匯出</span><span class="plus">＋</span></div>
+    </div>
+    <div class="l-label">層 4（收合）</div>
+    <div class="grid1">
+      <div class="fold"><span><span class="kk">ALO-6</span>　歸屬明細　<span class="s-warn">·　3 列沒有寫進持倉</span></span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-7</span>　目標修改紀錄</span><span class="plus">＋</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ ≤768：單欄 ══════════ -->
+<div class="bpbox" style="flex:0 1 380px">
+  <div class="bplabel">≤768　<span>單欄（三張核心卡上下堆疊；不出現橫向捲動）</span></div>
+  <div class="screen w375">
+    <div class="pgtop">
+      <span class="ttl">資產配置</span>
+      我目前的分布，和我自己寫下的目標，差多少
+      <div class="grey-total">目標合計 90%</div>
+    </div>
+
+    <div class="l-label">層 1｜ALO-0</div>
+    <div class="lamp"><span class="g">⚠</span>
+      <span><span class="txt">核心 與目標差 6.4 個百分點</span>
+      <span class="st">狀態：要多看一眼　·　燈不指出該往哪個方向調</span></span></div>
+
+    <div class="l-label">層 2｜ALO-1 / ALO-2 / ALO-3</div>
+    <div class="grid3">
+      <div class="acard">
+        <div class="ch"><b>目標輸入卡</b><span>ALO-1</span></div>
+        <div class="cs">以下依序：目標 → 對照 → 試算</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目標比重</th></tr>
+          <tr><td>核心</td><td>0.55</td></tr><tr><td>衛星</td><td>0.3</td></tr>
+          <tr><td>現金</td><td>0.05</td></tr>
+          <tr><td>環球債</td><td class="s-gray">⬜ 資料未備</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">合計 0.9　差額 −0.1（不自動歸一）</div>
+        <div class="cs">容許帶 5 個百分點</div>
+        <div style="margin-top:6px"><span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+      <div class="acard">
+        <div class="ch"><b>目標對照卡</b><span>ALO-2</span></div>
+        <div class="cs">基準：成本（cost_twd）　·　讀 ALO-1 的已存值</div>
+        <table class="atab">
+          <tr><th>類別</th><th>目前</th><th>目標</th><th>差額</th><th>容許帶</th></tr>
+          <tr><td>核心</td><td>61.4%</td><td>55.0%</td><td>+6.4 pp</td><td>外</td></tr>
+          <tr><td>衛星</td><td>24.8%</td><td>30.0%</td><td>−5.2 pp</td><td>外</td></tr>
+          <tr><td>現金</td><td>6.2%</td><td>5.0%</td><td>+1.2 pp</td><td>內</td></tr>
+          <tr><td>未分類</td><td>7.6%</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div class="cs" style="margin-top:5px">未分類 1 檔</div>
+        <div class="unspec"><span class="flag">44 未宣告</span>
+          <div class="in s-warn">⚠ DIRECT 列暫不支援，該筆不計入配置<span class="s-gray">（2 筆）</span></div>
+          <div class="in s-gray" style="margin-top:3px">逐筆位置見 ALO-6</div></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+      <div class="acard c3">
+        <div class="ch"><b>情境試算卡</b><span>ALO-3</span></div>
+        <div class="cs">假設：衛星　amount_twd　+120,000 TWD</div>
+        <table class="atab">
+          <tr><th>類別</th><th>套用後</th><th>新差額</th></tr>
+          <tr><td>核心</td><td>57.9%</td><td>+2.9 pp</td></tr>
+          <tr><td>衛星</td><td>29.1%</td><td>−0.9 pp</td></tr>
+          <tr><td>現金</td><td>5.8%</td><td>+0.8 pp</td></tr>
+          <tr><td>未分類</td><td>7.2%</td><td class="s-gray">⬜</td></tr>
+        </table>
+        <div style="margin-top:6px"><span class="abtn">新增假設</span> <span class="abtn">存檔</span></div>
+        <div class="ahint">本塊數字皆為示意值</div>
+      </div>
+    </div>
+
+    <div class="l-label">層 3（收合）</div>
+    <div class="grid1">
+      <div class="fold"><span><span class="kk">ALO-4</span>　分組定義</span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-5</span>　試算結果匯出</span><span class="plus">＋</span></div>
+    </div>
+    <div class="l-label">層 4（收合）</div>
+    <div class="grid1">
+      <div class="fold"><span><span class="kk">ALO-6</span>　歸屬明細　<span class="s-warn">·　3 列沒有寫進持倉</span></span><span class="plus">＋</span></div>
+      <div class="fold"><span><span class="kk">ALO-7</span>　目標修改紀錄</span><span class="plus">＋</span></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.screens -->
+
+<div class="card">
+  <p class="small">📌 <b>三份在 app 內容上沒有差別</b>：<b>八塊都在、每一張表的每一欄與每一列都在</b>
+  —— 包括 <code>ALO-2</code> 的「容許帶」欄頭與「未分類 1 檔」、<code>ALO-3</code> 的「未分類」那一列。
+  差別只有上面那兩類<b>線框自己的註記</b>。<br>
+  44 §2.1 逐字：「任何一段都不出現橫向捲動 —— 一塊放不進當前寬度時，它自己換行或改成單欄，不把整頁推寬」。
+  ≤768 的表格靠<b>格內文字換行</b>塌下去，<b>不橫捲、不藏欄</b>。<br>
+  ⚠️ <b>這一段是被稽核抓出來改的，據實寫明</b>：本檔第一版在兩個較窄的斷點<b>確實掉了東西</b> ——
+  <code>ALO-2</code> 的「未分類 1 檔」（44 空狀態欄明文要求「在卡上寫出未分類的檔數」）、
+  「讀 ALO-1 的已存值」（§F 第 9 題客戶已核准要寫在卡上）、「逐筆位置見 ALO-6」、
+  「（不自動歸一）」（§E <code>E3</code> 已核准的字）、燈的「燈不指出該往哪個方向調」、
+  三則「本塊數字皆為示意值」，≤768 還把 <code>ALO-3</code> 的「未分類」<b>整列</b>刪掉、
+  把「容許帶」欄頭縮成一個字。<b>那時候這一段卻寫著「沒有藏掉任何一欄」——
+  一句被自己的畫面推翻的話。</b>本輪把內容全部補回，並把這一段改成現在這個寫法。</p>
+</div>
+
+<div class="sec-head"><span class="n">§B2</span><h2>層 3、層 4 展開後（三個斷點下只有欄數差別，這裡畫一次）</h2></div>
+
+<div class="screens">
+<div class="bpbox" style="flex:1 1 440px">
+  <div class="bplabel">ALO-4｜分組定義（層 3）</div>
+  <div class="screen">
+    <div class="acard">
+      <div class="ch"><b>分組定義</b><span>ALO-4</span></div>
+      <div class="cs">目前用的基準：<b>成本（cost_twd）</b>　·　另一個選項：市值（淨值 × 單位數，美元依 fx_twd_per_usd 換算）</div>
+
+      <table class="atab">
+        <tr><th>基金</th><th>保單</th><th>類別（唯讀）</th></tr>
+        <tr><td>示意基金 A</td><td>示意保單 P1</td><td>核心</td></tr>
+        <tr><td>示意基金 B</td><td>示意保單 P1</td><td>核心</td></tr>
+        <tr><td>示意基金 C</td><td>示意保單 P2</td><td>衛星</td></tr>
+        <tr><td>示意基金 D</td><td>示意保單 P2</td><td>現金</td></tr>
+        <tr><td>示意基金 E</td><td>示意保單 P3</td><td class="s-gray">（未指派）</td></tr>
+      </table>
+      <div class="cs" style="margin-top:5px">未指派：示意基金 E（1 檔）　·　類別名稱有值但不在目標清單內：0 檔</div>
+
+      <div style="margin-top:8px">
+        <span class="abtn">前往 Sheets 維護持倉</span> <span class="abtn">存檔</span>
+      </div>
+      <div class="ahint">持倉資料在 Sheets 維護，本儀表板唯讀</div>
+      <div class="cs" style="margin-top:2px">〔這一枚<b>持倉表為空或不為空都出現</b> —— 44 第 21 輪客戶裁示〕</div>
+
+      <div class="unspec">
+        <span class="flag">44 未宣告　·　C2 客戶已同意，先看草稿</span>
+        <div class="in"><b>新增類別</b>
+          <div style="margin-top:5px">
+            <span class="ainp">類別名稱　<span class="aph">（未填）</span></span>
+            <span class="abtn">＋ 新增類別</span>
+          </div>
+          <div class="s-gray" style="margin-top:4px; font-size:11px">
+            最多 20 個字　·　已存的名稱不可改　·　留空的那一列不會被存下來　·
+            有不合法的值時整批不存
+          </div>
+          <div class="s-gray" style="font-size:11px">
+            八句文案逐句列在 §E 第二張表，請一次拍板。
+          </div>
+        </div>
+      </div>
+
+      <div class="unspec">
+        <span class="flag">44 未宣告　·　建議預設收合</span>
+        <div class="in"><b>讀表診斷</b>　<span class="plus">＋</span>
+          <div class="s-gray" style="margin-top:4px; font-size:11px">展開後逐字印 <code>read_estimate.message</code>：</div>
+          <div style="margin-top:4px; font-size:11px; color:var(--app-fg-2)">
+            保單分頁 52 張；穩態每分鐘預估讀取 57 次（＝分頁數 52 ＋ 固定 5 次：補充分頁
+            open／worksheets／batch_get 各 1，保單分頁清單 open／worksheets 各 1；三者皆 60 秒快取，與重跑頻率無關）。
+            有分頁讀取失敗時會更高（重試與探測另計）。<span class="s-warn">參考值：每使用者每專案每分鐘 60
+            次讀取。<b>未經一手查證，僅供參考</b>（2026-09-28 查證時 egress proxy 擋掉
+            developers.google.com，只取得到搜尋摘要），不是硬門檻，也不是驗收標準。</span>
+          </div>
+        </div>
+      </div>
+      <div class="ahint">本塊數字皆為示意值</div>
+    </div>
+  </div>
+</div>
+
+<div class="bpbox" style="flex:1 1 440px">
+  <div class="bplabel">ALO-6｜歸屬明細（層 4）</div>
+  <div class="screen">
+    <div class="acard">
+      <div class="ch"><b>歸屬明細</b><span>ALO-6</span></div>
+      <div class="cs">基準：成本（cost_twd）　·　跟著 ALO-4 的已存基準</div>
+      <table class="atab">
+        <tr><th>基金</th><th>保單</th><th>類別</th><th>基準值</th><th>佔該類</th><th>佔總體</th></tr>
+        <tr><td>示意基金 A</td><td>示意保單 P1</td><td>核心</td><td>780,000 TWD</td><td>63.5%</td><td>39.0%</td></tr>
+        <tr><td>示意基金 B</td><td>示意保單 P1</td><td>核心</td><td>448,000 TWD</td><td>36.5%</td><td>22.4%</td></tr>
+        <tr><td>示意基金 C</td><td class="s-gray">⬜ 資料未備：_保單資料 尚無資料</td><td>衛星</td><td>496,000 TWD</td><td>100.0%</td><td>24.8%</td></tr>
+        <tr><td>示意基金 D</td><td>示意保單 P2</td><td>現金</td><td>124,000 TWD</td><td>100.0%</td><td>6.2%</td></tr>
+        <tr><td>示意基金 E</td><td>示意保單 P3</td><td>未分類</td><td>152,000 TWD</td><td>100.0%</td><td>7.6%</td></tr>
+        <tr><td>示意基金 F</td><td>示意保單 P3</td><td>衛星</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td><td class="s-gray">⬜</td></tr>
+        <tfoot>
+          <tr><td colspan="4">各類別內佔比合計：核心 1　衛星 1　現金 1　未分類 1</td><td colspan="2">總體合計 1</td></tr>
+          <tr><td colspan="6">被排除（缺基準值）：1 檔　·　<span class="s-gray">缺 <code>_保單資料</code> 列的保單：1 張</span></td></tr>
+        </tfoot>
+      </table>
+
+      <div class="unspec">
+        <span class="flag">44 未宣告</span>
+        <div class="in"><b>本次沒有寫進持倉的列</b>　<span class="s-gray">（3 列）</span>
+          <table class="atab">
+            <tr><th>分頁</th><th>列</th><th>保單／基金</th><th>原因（逐字照程式交出的字串）</th></tr>
+            <tr><td>保單分頁 P2</td><td>14</td><td>P2 ／ 示意基金 G</td><td>淨投資金額空白（沒填）</td></tr>
+            <tr><td>保單分頁 P3</td><td>9</td><td>P3 ／ 示意基金 H</td><td>持有單位數空白或為 0（沒填）；平均買入單位成本空白或為 0（沒填）</td></tr>
+            <tr><td>_持倉補充</td><td>23</td><td>P1 ／ 示意基金 A</td><td>_持倉補充 同一組鍵有兩列以上，整組不採用</td></tr>
+          </table>
+          <div class="s-gray" style="margin-top:4px; font-size:11px">
+            另：空白列 2 列（不列出逐列，只給筆數）　·　<code>_保單資料</code> 有、保單分頁沒有的孤兒列 1 列
+          </div>
+        </div>
+      </div>
+
+      <div class="unspec">
+        <span class="flag">44 未宣告</span>
+        <div class="in"><b>DIRECT 列</b>　<span class="s-warn">⚠ DIRECT 列暫不支援，該筆不計入配置</span>
+          <table class="atab">
+            <tr><th>分頁</th><th>列</th><th>保單編號</th><th>基金代號</th></tr>
+            <tr><td>_保單資料</td><td>7</td><td>DIRECT</td><td>—</td></tr>
+            <tr><td>_持倉補充</td><td>31</td><td>DIRECT</td><td>示意基金 J</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="ahint">本塊數字皆為示意值</div>
+    </div>
+  </div>
+</div>
+
+<div class="bpbox" style="flex:1 1 300px">
+  <div class="bplabel">ALO-5｜試算結果匯出（層 3）</div>
+  <div class="screen">
+    <div class="acard">
+      <div class="ch"><b>試算結果匯出</b><span>ALO-5</span></div>
+      <div class="cs">匯出的欄名與畫面欄名相同，不多任何一欄。</div>
+      <div style="margin-top:7px"><span class="abtn">匯出目前這張對照表</span></div>
+      <div class="ahint">畫面上無列時停用，停用原因「目前沒有可匯出的列」</div>
+      <div class="cs" style="margin-top:5px">ALO-3 未試算時 → 只含 ALO-2 的列，檔首註明「未含試算」</div>
+    </div>
+  </div>
+</div>
+
+<div class="bpbox" style="flex:1 1 300px">
+  <div class="bplabel">ALO-7｜目標修改紀錄（層 4）</div>
+  <div class="screen">
+    <div class="acard">
+      <div class="ch"><b>目標修改紀錄</b><span>ALO-7</span></div>
+      <table class="atab">
+        <tr><th>鍵名</th><th>當前值</th><th>最後修改時間</th></tr>
+        <tr><td>alo_target_weights</td><td>核心 0.55／衛星 0.3／現金 0.05／環球債 ⬜</td><td>2026-09-26 14:08（UTC+8）</td></tr>
+        <tr><td>alo_tolerance_pp</td><td>5</td><td>2026-09-26 14:08（UTC+8）</td></tr>
+      </table>
+      <div class="cs" style="margin-top:5px">固定兩列，不依時間排序（本塊只有一個時間點）</div>
+    </div>
+  </div>
+</div>
+
+<div class="bpbox" style="flex:1 1 300px">
+  <div class="bplabel">兩種失敗態（逐塊都可能出現）</div>
+  <div class="screen">
+    <div class="acard">
+      <div class="ch"><b>取數失敗</b><span>44 5.5 系統錯誤</span></div>
+      <div class="rowfail">⛔ 取數失敗：&lt;訊息原文&gt;</div>
+      <div class="cs" style="margin-top:5px">圖示 <b>⛔</b>，不是 ⚠（44 第 21 輪客戶裁示：⚠ 只留給黃燈）。
+        模板帶的「重新取數」按鈕<b>不畫</b>（ALO-2／ALO-6 的空狀態欄沒有寫那一枚）。</div>
+      <div class="cs">燈仍是灰（ALO-0 沒有宣告紅燈），但狀態字改「狀態：取數失敗」、圖示 ⛔。</div>
+    </div>
+    <div class="acard">
+      <div class="ch"><b>存檔寫入失敗</b><span>ALO-1 / ALO-3 / ALO-4</span></div>
+      <div class="rowfail">⛔ 存檔寫入失敗：&lt;訊息原文&gt;</div>
+      <div class="cs" style="margin-top:5px">卡上的輸入內容<b>留在畫面上不清掉</b>，ALO-2 與 ALO-3 的數值不變（44 空狀態欄逐字）。
+        圖示 ⛔ 為客戶 2026-09-25 裁示。</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sec-head"><span class="n">§C</span><h2>逐塊：畫面 ✕ 44 原文對照</h2></div>
+
+<div class="card">
+  <p class="note">右欄是 <code>docs/v2/44_fund_ui_ssot.md</code> §3.4 的<b>原字</b>（節錄，逐字；刪除線退役的舊字不引）。
+  左欄是本草稿畫的東西。<b>左欄有、右欄沒有 → 就是本組新加的，一律掛
+  <span class="tag t-new">44 未宣告</span>。</b></p>
+</div>
+
+<div class="card">
+<table>
+  <tr><th style="width:9%">塊</th><th style="width:38%">草稿畫了什麼</th><th style="width:38%">44 原文對照（逐字節錄）</th><th style="width:15%">判定</th></tr>
+
+  <tr>
+    <td class="src">ALO-0</td>
+    <td>一枚燈。黃燈 ⚠ ＋「核心 與目標差 6.4 個百分點」＋「狀態：要多看一眼」。
+      <br>差距<b>印絕對值、不帶正負號</b>。
+      <br>取數失敗時 ⛔ ＋「狀態：取數失敗」，燈仍灰。</td>
+    <td class="q44">來源：「<b>不自取數。只讀 <code>ALO-2</code> 算出的各類別差距，取絕對值最大者</b>」<br>
+      規則：「目標未設 → 燈為灰，文案「尚未設定目標」。最大差距在使用者設定的容許帶內 → 燈為灰，文案「各類別皆在容許帶內」。
+      超出容許帶 → 燈為黃，文案「<code>&lt;類別名&gt;</code> 與目標差 <code>N</code> 個百分點」。<b>燈不指出該往哪個方向調（G3†）</b>」<br>
+      空狀態三句先後：「從最上游的那個缺口往下取，依序為「尚未建立任何持倉」、再「尚未設定目標」、再「尚未設定容許帶」，取到第一句就停」</td>
+    <td><span class="tag t-44">44</span> 燈色與文案<br>
+      <span class="tag t-new">44 未宣告</span>「狀態：要多看一眼」「狀態：取數失敗」兩句狀態字<br>
+      <span class="tag t-ask">待裁示</span> 正負號（44 沒寫）</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-1</td>
+    <td>一列一個類別的目標比重（<b>小數</b>）；合計 0.9 與差額 −0.1，<b>各列數值沒有被改寫成合計 1 的版本</b>；
+      容許帶 5 個百分點；留空那一列列尾 <code class="s-gray">⬜ 資料未備</code>；一枚「存檔」；
+      卡上方一行「以下依序：目標 → 對照 → 試算」；頁面頂端灰字「目標合計 90%」。</td>
+    <td class="q44">規則：「一列一個類別，欄位為目標比重（<code>weight_ratio</code>，<b>小數，區間 0 到 1</b>）。
+      類別名稱一律由使用者新增與命名（G3†）。<b>卡片不提供任何預設的目標組合</b>，不提供年齡或風險問卷推算的比重（G1†）。
+      <b>合計不等於 1 時卡上顯示合計值與差額，不自動歸一。</b>本卡上方另有一行說明文字，逐字為「以下依序：目標 → 對照 → 試算」…
+      頁面頂端另出一行灰字，逐字為「目標合計 X%」…本塊掛一枚「存檔」按鈕」<br>
+      空狀態：「某列比重留空 → 該列不計入合計，列尾顯示 <code>⬜ 資料未備</code>」</td>
+    <td><span class="tag t-44">44</span> 全部<br>
+      <span class="tag t-ask">待裁示</span>「目標合計 X%」的<b>落點</b>與 <b>X 的單位</b>（44 自己登記為待裁）</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-2</td>
+    <td>四欄表：目前／目標／差額（<code>+6.4 pp</code>、<code>−5.2 pp</code>）／容許帶（「內」「外」）。
+      <br><b>差額欄沒有箭頭、沒有著色</b>；<b>容許帶欄沒有著色</b>。
+      <br>「未分類」列的目標／差額／容許帶三格都是 <code class="s-gray">⬜</code>，卡上寫「未分類 1 檔」。
+      <br>卡底一行黃字：<b>DIRECT 列暫不支援，該筆不計入配置（2 筆）</b>。</td>
+    <td class="q44">規則：「本塊採 G2† 三形式中的「客觀對照」。一列一個類別，四欄：目前比重、目標比重、
+      差額（目前減目標，帶正負號，單位百分點）、容許帶內外。<b>差額只寫數字與正負號，不配箭頭、不著紅綠。
+      容許帶內外欄只寫「內」或「外」兩個字。</b>…<b>逐列各自相減，不先把目標歸一、也不先把當前歸一</b>」<br>
+      空狀態：「某檔 <code>bucket</code> 為空 → 併入「未分類」一列，並在卡上寫出未分類的檔數。…
+      該類別顯示 <code>⬜ 資料未備：缺換算匯率 fx_twd_per_usd</code>，其餘類別照算並<b>在卡上註明合計未涵蓋該類</b>」<br>
+      <b>44 全塊沒有出現 <code>DIRECT</code> 三個字。</b></td>
+    <td><span class="tag t-44">44</span> 四欄與未分類列<br>
+      <span class="tag t-new">44 未宣告</span> DIRECT 那一行（客戶 U9 逐字核准字串，差異登記在 <code>ACCEPTANCE.md</code> 8.2）<br>
+      <span class="tag t-ask">待裁示</span> 放哪一塊、要不要帶筆數</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-3</td>
+    <td>一列「類別＋<code>amount_twd</code>」假設；套用後比重與新差額；「新增假設」與「存檔」兩枚。
+      <br><b>金額欄的提示字是「（未填）」，不是一個數。</b></td>
+    <td class="q44">規則：「…使用者自行輸入一個或多個「類別＋金額」的假設（G3†），金額欄名為 <code>amount_twd</code>。
+      卡片顯示套用該假設後各類別的比重算術結果，以及與目標的新差額。<b>卡片不產生任何金額的候選值、
+      不排出「先動哪一個」、不標示哪一組假設較好（G1†）</b>」<br>
+      空狀態：「輸入一列也沒有 → 卡片顯示提示文字與一枚「新增假設」按鈕」「假設金額使某類別比重為負 →
+      該列顯示 <code>⬜ 不適用：假設金額超出該類別現值</code>」</td>
+    <td><span class="tag t-44">44</span> 全部<br>
+      <span class="tag t-new">44 未宣告</span> 金額欄的畫面標籤與提示字（44 只給欄名）</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-4</td>
+    <td>唯讀的指派表（<b>按下去不會變，畫面上沒有可以改它的輸入元件</b>）；基準二選一並明寫目前用哪一個；
+      未指派清單；<b>兩枚按鈕並存</b>：「前往 Sheets 維護持倉」＋「存檔」，導覽鈕下方一行
+      「持倉資料在 Sheets 維護，本儀表板唯讀」。
+      <br>另加：新增類別元件、讀表診斷（收合）。</td>
+    <td class="q44">規則：「使用者定義類別名稱，並把每一檔指派到一個類別；<b>這後半句在畫面上是唯讀呈現，
+      指派本身在 Sheets 維護</b>（G3†）。<b>持倉表為空或不為空，本塊都掛一枚「前往 Sheets 維護持倉」按鈕</b>
+      （<code>action_kind</code> 為 <code>導覽</code>；開啟持倉資料所在的 Sheets，並在按鈕下方寫一行
+      「持倉資料在 Sheets 維護，本儀表板唯讀」）…比重基準二選一：以 <code>cost_twd</code> 計，或以市值計…
+      <b>切換基準後 <code>ALO-2</code> 與 <code>ALO-3</code> 重算，卡上明寫目前用的是哪一個基準。</b>
+      …<b>持倉表為空或不為空，本塊都掛兩枚按鈕、兩枚並存</b>」</td>
+    <td><span class="tag t-44">44</span> 唯讀表、基準、兩枚按鈕、那一行說明<br>
+      <span class="tag t-new">44 未宣告</span> 新增類別元件（C2）、讀表診斷（<code>read_estimate</code>）</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-5</td>
+    <td>一枚匯出鈕；無列時停用並寫出停用原因；未試算時檔首註明「未含試算」。</td>
+    <td class="q44">規則：「匯出一份表格檔，內容與畫面上的列逐格相同，欄名沿畫面欄名。<b>匯出檔不新增畫面上沒有的欄，
+      不新增任何評語欄、方向欄或排序欄。</b>匯出動作不寫入任何本檔定義的資料表」<br>
+      空狀態：「畫面上無列 → 按鈕停用，停用原因「目前沒有可匯出的列」」</td>
+    <td><span class="tag t-44">44</span> 全部<br>
+      <span class="tag t-new">44 未宣告</span> 按鈕標籤字面（44 沒給）</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-6</td>
+    <td>一列一檔；類別、基準值、佔該類、佔總體；表尾<b>逐類別各一個合計＋總體一個</b>；
+      缺基準值的列 <code class="s-gray">⬜</code>、不計入合計、表尾寫被排除檔數。
+      <br>另加：保單名缺 <code>_保單資料</code> 列時那一格的字；「本次沒有寫進持倉的列」表；「DIRECT 列」表。</td>
+    <td class="q44">來源：「<code>holding.fund_code</code>、<code>holding.bucket</code>、<code>holding.cost_twd</code>、
+      <code>holding.units_shares</code>；<code>nav.nav_orig_ccy</code> 最近一筆；<b><code>policy.policy_name</code></b>」<br>
+      規則：「一列一檔，顯示該檔的類別、採用的基準值、佔所屬類別的比例、佔總體的比例。
+      <b>各類別內的佔比合計為 1；總體佔比合計為 1。兩個合計皆印在表尾</b>」<br>
+      空狀態：「某檔缺基準值 → 該列基準值格 <code>⬜</code>，且不計入兩個合計，<b>表尾另寫被排除的檔數</b>。
+      無任何持倉 → <code>來源缺</code>」<br>
+      <b>來源欄沒有 <code>last_synced_at</code>，也沒有 <code>fee_rate_pct</code>。</b></td>
+    <td><span class="tag t-44">44</span> 主表與表尾<br>
+      <span class="tag t-new">44 未宣告</span> 兩張附表、保單名缺列的字<br>
+      <span class="tag t-ask">待裁示</span> 表尾「被排除的檔數」與「沒寫進持倉的列」是兩件事，要不要分開寫</td>
+  </tr>
+
+  <tr>
+    <td class="src">ALO-7</td>
+    <td>固定兩列：<code>alo_target_weights</code>／<code>alo_tolerance_pp</code>，三欄。時間顯示 UTC+8 並把時區寫出來。</td>
+    <td class="q44">規則（<b>改寫過一個詞，44 原文逐字列在 §A 那一格的黃框裡</b>）：「每個設定鍵各一列，三欄：鍵名、當前值、最後修改時間（<code>updated_at</code>）。
+      <b>固定兩列</b>，<code>alo_target_weights</code> 與 <code>alo_tolerance_pp</code> 各一列，
+      不依時間排序（本塊只有一個時間點，沒有先後）。<b>本塊只記錄使用者自己改過什麼，不記錄任何系統代改
+      —— 系統不改這兩個鍵</b>」<span class="small">（末句為 2026-09-28 客戶裁示補引；本欄原本停在「排序」那一句）</span><br>
+      空狀態（<b>同一個詞，同一個改寫，見 §A 那一格</b>）：「某一個鍵的 <code>updated_at</code> 為空（從未設定過）→ 該列的時間格顯示
+      <code>⬜ 資料未備：尚未設定過</code>，值格照印」</td>
+    <td><span class="tag t-44">44</span> 全部<br>
+      <span class="tag t-new">44 未宣告</span> 當前值那一格怎麼串（44 沒規定分隔符與順序）</td>
+  </tr>
+</table>
+</div>
+
+<div class="sec-head"><span class="n">§D</span><h2>接真資料多出來的七件事：位置、形狀、文案</h2></div>
+
+<div class="card">
+  <p class="note">每一件都寫三欄：<b>放哪裡</b>、<b>長什麼樣</b>、<b>字面怎麼寫</b>。
+  「本組建議」四個字出現的地方，<b>都是建議，不是規格</b>；44 沒有宣告的地方一律標出來。
+  L2 交出什麼欄位，逐項對過 <code>services/v2_tables/alo_holdings.py</code> 的回傳鍵 ——
+  <b>畫面只顯示它真的拿得到的東西</b>。</p>
+</div>
+
+<div class="card">
+<table>
+  <tr><th style="width:5%">#</th><th style="width:16%">這件事</th><th style="width:20%">放哪裡（本組建議）</th>
+      <th style="width:22%">長什麼樣</th><th style="width:37%">字面與理由</th></tr>
+
+  <tr>
+    <td class="src">D1</td>
+    <td><b>DIRECT 列警告</b><br><span class="small">L2 <code>warnings</code>／<code>direct</code></span></td>
+    <td><b>ALO-2 卡底一行</b>（摘要）＋ <b>ALO-6 一張附表</b>（逐筆分頁名與列號）</td>
+    <td>黃字一行，前綴 <b>⚠</b>（黃＝業務例外）。<b>不套</b> <code>⬜ 不適用：</code> 模板 ——
+      那個模板是 44 5.5 的「算不出來」，而這一筆是「讀到了，但照裁示不計入」，不是算不出來。</td>
+    <td><b>字面（客戶 2026-09-27 U9 逐字核准，一個字不改）</b>：
+      <div class="rowwarn" style="color:var(--warn-mark);border-color:var(--warn-mark);background:transparent">DIRECT 列暫不支援，該筆不計入配置</div>
+      <b>為什麼放 ALO-2</b>：DIRECT 影響的正是 ALO-2 的分子與分母（<code>ACCEPTANCE.md</code> 8.2：
+      「DIRECT 名下的持倉不進 <code>ALO-2</code> 的分子與分母」）。44 ALO-2 空狀態欄已有
+      「其餘類別照算並<b>在卡上註明</b>合計未涵蓋該類」這個<b>同形狀的前例</b> —— 卡上註一行、其餘照算。
+      <br><b>為什麼逐筆放 ALO-6</b>：ALO-6 是本頁唯一「一列一檔」的塊，逐筆位置（<code>tab</code>／<code>row</code>）放在那裡不擠層 2。
+      <br>⚠️ <b>「（2 筆）」這個後綴是本組加的</b>，客戶核准的字串本身沒有它 → <b>§F 第 2 題</b>。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D2</td>
+    <td><b>讀取量診斷</b><br><span class="small">L2 <code>read_estimate</code></span></td>
+    <td><b>ALO-4 內一個子區</b>，<b>預設收合</b></td>
+    <td>收合列「讀表診斷 ＋」。展開後逐字印 <code>read_estimate.message</code>，
+      「未經一手查證」那一段用黃字。<b>不畫任何門檻線、不畫紅燈、不擋。</b></td>
+    <td><b>字面：直接印程式交出的 <code>message</code>，不改寫</b>（它已經把分頁數、每分鐘預估讀取數、
+      以及「參考值未經一手查證，僅供參考…不是硬門檻，也不是驗收標準」寫進同一句）。
+      <br><b>為什麼預設收合</b>：本頁要回答的是「我的分布和目標差多少」，讀取量不是那個問題；
+      44 §2 也把層 3 訂為預設收合。
+      <br><b>為什麼放 ALO-4 而不是層 2</b>：層 2 上限三張卡已滿，且 44 §2 硬規則寫「第 4 個面向落到層 4，不擠進層 2」。
+      <br>⚠️ <b>比較自然的家其實是「設定與診斷」頁的 <code>SET-2</code> 來源健康卡</b>，但那一頁還沒接真資料 → <b>§F 第 3 題</b>。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D3</td>
+    <td><b>沒寫進持倉的列</b><br><span class="small">L2 <code>skipped_holdings</code>／<code>bad_rows</code>／
+      <code>blank_rows</code>／<code>invest_twd_parse_errors</code>／<code>duplicate_supplement</code>／
+      <code>missing_supplement</code>／<code>orphan_*</code></span></td>
+    <td><b>ALO-6 內一張附表</b>，收合狀態的 ALO-6 列上顯示「· N 列沒有寫進持倉」</td>
+    <td>四欄表：<b>分頁 / 列 / 保單與基金 / 原因</b>。原因<b>逐字照程式交出的字串</b>，不改寫、不歸納。
+      <br>空白列<b>只給筆數不逐列</b>（程式只交回數量）。</td>
+    <td><b>原因欄的字面（逐字取自 <code>alo_holdings.py</code>，可自驗）</b>：
+      「基金名稱空白」／「幣別空白」／「持有單位數空白或為 0（沒填）」／「平均買入單位成本空白或為 0（沒填）」／
+      「淨投資金額空白（沒填）」／「淨投資金額為 0（不當成本）」／「淨投資金額無法解析：&lt;原文&gt;」／
+      「缺持倉補充」／「_持倉補充 同一組鍵有兩列以上，整組不採用」／
+      「保單編號或基金代號含「|」，會與持倉識別碼的分隔字元混淆，不寫入」。
+      <br><b>為什麼要有這張表</b>：不做的話，一筆持倉<b>無聲消失</b>，畫面上的比重是錯的而沒有人看得出來。
+      <br>⚠️ <code>holding_id</code> 撞號在<b>正式路徑上不可達</b>（程式先擋掉含分隔字元的列），
+      真撞到時程式直接拋 <code>HoldingIdCollision</code> → 整頁走 <b>D7 取數失敗</b>，不是這張表。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D4</td>
+    <td><b><code>_保單資料</code> 缺列</b><br><span class="small">L2 <code>missing_profile</code></span></td>
+    <td><b>ALO-6 保單那一格</b> ＋ 表尾一行</td>
+    <td>該格顯示灰字 <code>⬜ 資料未備：_保單資料 尚無資料</code>；
+      表尾另寫「缺 <code>_保單資料</code> 列的保單：N 張」。
+      <br><b>那一列的持倉照算、照計入兩個合計</b>。</td>
+    <td><b>字面套 44 5.5「來源缺」模板</b>：模板逐字是 <code>⬜ 資料未備：&lt;來源鍵&gt; 尚無資料</code>，
+      本組把 <code>&lt;來源鍵&gt;</code> 填成 <code>_保單資料</code>。
+      <br><b>模板帶的「重新取數」按鈕不畫</b> —— ALO-6 的空狀態欄沒有寫那一枚（44 5.5：空狀態欄整格為準），
+      而且持倉在 Sheets 維護，按了也沒有用。
+      <br><b>為什麼持倉照算</b>：程式實測行為就是如此（<code>holding</code> 照產生、<code>policy</code> 為空、
+      記進 <code>missing_profile</code>，不擋）；這一點 <code>ACCEPTANCE.md</code> 8.3 已登記過實測。
+      不照算就等於悄悄少算一筆持倉。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D5</td>
+    <td><b><code>fee_rate_pct</code> 顯示 ⬜</b>（U4）</td>
+    <td><b>本頁沒有落點</b></td>
+    <td>不畫。</td>
+    <td>44 §3 沒有任何一塊的來源欄含 <code>policy.fee_rate_pct</code>（詳見 §A 下方那張表）。
+      L2 已照 U4 填空值。<b>本草稿不替它發明一個欄</b> → <b>§F 第 6 題</b>。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D6</td>
+    <td><b><code>last_synced_at</code> 是推定值</b>（R1：當日 12:00 台灣時間）</td>
+    <td><b>本頁沒有落點</b></td>
+    <td>不畫。</td>
+    <td>ALO-6 來源欄沒有 <code>holding.last_synced_at</code>，本頁八塊都不顯示它。
+      44 §4.1 的 <code>holding</code> <b>沒有推估旗標欄</b>，所以「這是推定值」這件事在資料表裡也放不下 ——
+      <code>ACCEPTANCE.md</code> 8.1 就是因此才把它登記在驗收檔裡。
+      該節自己寫的畫面落點是 <b>持倉體檢頁</b>（<code>ui_v2/hld/logic.py::_build_hld5</code>），不是本頁。
+      <br>若客戶要在本頁也看得見 → <b>§F 第 7 題</b>（本組建議的畫法：ALO-6 加一欄「最後核對日」，
+      格內只印日期、欄頭下一行寫「時刻為推定（當日 12:00 台灣時間），非實際核對時刻」）。</td>
+  </tr>
+
+  <tr>
+    <td class="src">D7</td>
+    <td><b>取數失敗</b></td>
+    <td><b>受影響的每一塊</b>（依各塊的來源欄判定）</td>
+    <td>紅框一行 <code>⛔ 取數失敗：&lt;訊息原文&gt;</code>。
+      <br><b>燈仍是灰</b>（ALO-0 沒有宣告紅燈），但圖示改 <b>⛔</b>、狀態字改「狀態：取數失敗」。</td>
+    <td><b>圖示是 ⛔ 不是 ⚠</b> —— 44 第 21 輪客戶裁示，44 5.1 與 5.5 兩處都已同步；<b>⚠ 只代表黃燈</b>。
+      <br><b>訊息原文照印、不改寫、不截斷</b>，但依 <code>ACCEPTANCE.md</code> 7.2～7.4
+      把已知 secret 的值換成固定記號，並在訊息旁註明<b>「已遮蔽憑證」</b>（客戶 Q13 裁示）。
+      <br><b>五張表分別打到哪幾塊</b>：<code>holding</code> → ALO-2／ALO-4／ALO-6（連帶 ALO-0）；
+      <code>market_indicator</code>（匯率）→ 市值基準下的 ALO-2；<code>nav</code> → 市值基準下的 ALO-2／ALO-6；
+      <code>policy</code> → ALO-6；<code>user_setting</code> → ALO-1／ALO-2／ALO-3／ALO-4／ALO-7。
+      <br>⚠️ <b>模板帶的「重新取數」按鈕不畫</b>（同 D4 的理由）。
+      <br>⚠️ <code>holding</code> 取數失敗時「持倉表是空還是有資料」不知道，44 沒寫這一種；
+      本組照 44 現行規則欄（空或不空都掛）<b>照掛導覽鈕</b>，但<b>不</b>把它當成空 → 燈不說「尚未建立任何持倉」→ <b>§F 第 16 題</b>。</td>
+  </tr>
+</table>
+</div>
+
+<div class="sec-head"><span class="n">§E</span><h2>〔擬〕文案：<span style="color:var(--ok-mark)">E1～E14 全數核准</span></h2></div>
+<div class="card" style="border-left:4px solid var(--ok-mark)">
+  <p class="note"><b>2026-09-28 客戶裁示：E1～E14 十四條全數核准。</b>
+  客戶的理由：這些都是「44 沒給字面、但畫得出來就一定要有字」的位置，理由成立、格式一致。<br>
+  <b>下面兩張表因此不再是提案，是已核准的字面</b> —— 實作時逐字照抄，要改請另開一輪。</p>
+</div>
+
+<div class="card" style="border-left:4px solid var(--stop)">
+  <h3 style="font-size:15px;font-weight:700;color:var(--stop)">先講一件查不到的事</h3>
+  <p class="note" style="margin-top:6px">
+  交接本 <code>docs/handover_2026_09_26_latest.md</code> 記著：「未定項：〔擬〕文案（alo1 的第 2～第 5 項、alo4 的 8 句）
+  以及整份草稿，都要等客戶拍板」。<b>那四條與那八條的原字，本組在 repo 裡查不到。</b>
+  它們住在總管工作區的草稿規格 <code>alo_sheet_tabs_spec.md</code>，
+  <b>那個檔不在任何分支上</b>（<code>ACCEPTANCE.md</code> 第八節自己也是這樣登記的：
+  「該規格檔不在 repo 內（總管工作區草稿），repo 內無法查證」）。
+  <b>本組實測（量測日 2026-09-28）</b>：把 <code>refs/remotes</code> 與 <code>refs/heads</code>
+  底下<b>每一個 ref</b> 逐一 <code>git ls-tree -r --name-only</code> 列出檔名，搜
+  <code>alo_sheet_tabs_spec</code> → <b>0 命中</b>；放寬成 <code>sheet_tabs</code>、
+  <code>tabs_spec</code> 兩個較短的字串再掃一次 → 同樣 <b>0 命中</b>。
+  ⚠️ 這只證明那個<b>檔名</b>不在 repo 裡，<b>不證明</b>那些字沒有以別的檔名存在某處。</p>
+  <p class="note" style="margin-top:8px">
+  <b>所以本組換一個做法，不猜原字</b>：直接從 44 的 <code>ALO-1</code>／<code>ALO-4</code> 逐欄盤點出
+  「<b>44 沒給字面、但畫得出來就一定得有字</b>」的位置，逐條給建議字。
+  客戶比對時如果對不上原本那四條或八條，<b>以客戶手上的那一份為準</b>，本表作廢重來。</p>
+  <p class="small" style="margin-top:8px">
+  ⚠️ 交接本用一個三角形箭頭字元當那四條的序號前綴。<b>本檔不複製那個字元</b> ——
+  44 §1.2 禁箭頭，本檔是 UI 草稿，不在自己的檔案裡留箭頭字元。改用「E1～」編號。</p>
+</div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--draft)">一｜<code>ALO-1</code> 目標輸入卡：44 沒給字面的六處</h3>
+  <table>
+    <tr><th style="width:6%">#</th><th style="width:22%">哪一個位置</th><th style="width:26%">現行字（44 有給的部分）</th>
+        <th style="width:28%">本組建議字</th><th style="width:18%">理由</th></tr>
+    <tr><td class="src">E1</td><td>目標比重欄的<b>欄頭與單位</b></td>
+      <td>44 只給欄名 <code>weight_ratio</code>、「小數，區間 0 到 1」</td>
+      <td><b>「目標比重（小數，0 到 1）」</b></td>
+      <td>44 5.1 卡片的邊界是「沒有逐值寫出單位」才該拆卡 —— 把單位寫進欄頭就不觸發。
+        同一頁上比重是小數、差額是百分點，不寫死單位使用者一定會讀錯。</td></tr>
+    <tr><td class="src">E2</td><td><b>容許帶</b>欄的欄頭與單位</td>
+      <td>44 只給鍵名 <code>alo_tolerance_pp</code>；ALO-0 文案用「個百分點」</td>
+      <td><b>「容許帶（個百分點）」</b></td>
+      <td>沿用 ALO-0 規則欄的量詞「個百分點」，同一頁不出現第二種說法。</td></tr>
+    <tr><td class="src">E3</td><td>合計與差額那一行</td>
+      <td>44：「合計不等於 1 時卡上顯示合計值與差額，不自動歸一」（沒給字面）</td>
+      <td><b>「合計 0.9　差額 −0.1（不自動歸一）」</b></td>
+      <td>括號那五個字是本組加的 —— 不寫的話，使用者會以為系統等一下會幫他補到 1。
+        數字用小數，與 E1 同一種單位。</td></tr>
+    <tr><td class="src">E4</td><td>留空那一列的<b>列尾</b></td>
+      <td>44 逐字：<code>⬜ 資料未備</code></td>
+      <td><b>照 44 原字，不加字</b></td>
+      <td>44 給了逐字，沒有空間可擬。列在這裡只是為了讓客戶確認本組沒有偷改。</td></tr>
+    <tr><td class="src">E5</td><td>每一列的<b>刪除</b></td>
+      <td>44 沒寫怎麼刪一列（八類按鈕裡對得上的是「清除」）</td>
+      <td><b>「刪除這一列」</b>（<code>action_kind</code> ＝ <code>清除</code>）</td>
+      <td>使用者能新增就得能刪，否則填錯的類別永遠留著。
+        <b>不叫「重設」「還原」</b> —— 那會讓人以為有一組系統預設值可以還原，撞 G1†。</td></tr>
+    <tr><td class="src">E6</td><td>頁面頂端那一行<b>灰字</b></td>
+      <td>44 逐字：「目標合計 X%」；<b>落點與 X 的單位 44 自己登記為待裁</b></td>
+      <td><b>字面照 44；落點建議掛在層 1 結論燈之上、X 取合計乘以一百（「目標合計 90%」）</b></td>
+      <td>44 規則欄的字面就是「頁面頂端」，層 1 之上是唯一還沒有被別的塊佔掉的位置。
+        <br>⚠️ 這會讓<b>同一個數在同一頁上出現兩種單位</b>（卡上 0.9、頂端 90%）——
+        44 已就地登記這一點，本組不替客戶選 → <b>§F 第 8 題</b>。</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--draft)">二｜<code>ALO-4</code> 新增類別元件：八句</h3>
+  <p class="small">客戶 2026-09-27 已裁 <b>C1／C3／D1／D2／D3／D5</b>，下表每一句都標出它落地的是哪一條。
+  <b>C2</b>（同意加這個元件、但先出草稿）＝ 本表存在的理由。</p>
+  <table>
+    <tr><th style="width:6%">#</th><th style="width:24%">這一句在哪、做什麼</th><th style="width:34%">本組建議字</th>
+        <th style="width:12%">依據</th><th style="width:24%">理由</th></tr>
+    <tr><td class="src">E7</td><td>元件<b>標題</b></td><td><b>「新增類別」</b></td><td>C2</td>
+      <td>與按鈕標籤同字，使用者不必猜兩者是不是同一件事。</td></tr>
+    <tr><td class="src">E8</td><td>輸入欄的<b>欄頭</b></td><td><b>「類別名稱」</b></td><td>C2</td>
+      <td>44 ALO-1 規則欄的用詞就是「類別名稱」，不另造詞。</td></tr>
+    <tr><td class="src">E9</td><td>輸入欄的<b>提示字</b></td><td><b>「（未填）」</b></td><td>G1†／G3†</td>
+      <td>44 §1.1 節判準逐字要求「全部輸入欄……沒有一列帶有非空的預設值」。
+        任何一個看起來合理的示例名稱都是預設值。</td></tr>
+    <tr><td class="src">E10</td><td><b>按鈕標籤</b></td><td><b>「＋ 新增類別」</b>（<code>action_kind</code> ＝ <code>新增列</code>）</td><td>C2</td>
+      <td>八類按鈕裡「新增列」是唯一接得住的。標籤不含 44 §1.1 節判準點名的那四個禁詞。</td></tr>
+    <tr><td class="src">E11</td><td><b>字數上限</b>提示</td><td><b>「最多 20 個字」</b></td><td>C3</td>
+      <td>客戶裁的就是 20 字。寫在輸入欄下方常駐，不要等打超過才跳出來。</td></tr>
+    <tr><td class="src">E12</td><td><b>已存名稱唯讀</b>的說明</td><td><b>「已存的類別名稱不可修改。要改名請在 Sheets 維護。」</b></td><td>C1／D3</td>
+      <td>只寫「不可修改」會變成死路 —— 得同時說出出口在哪（同 44 ALO-4 那一枚導覽鈕的用意）。</td></tr>
+    <tr><td class="src">E13</td><td><b>空白列不存</b>的提示</td><td><b>「留空的那一列不會被存下來。」</b></td><td>D2</td>
+      <td>使用者按了「存檔」以為存進去了、下次回來卻不見了，比當場說清楚更糟。
+        用敘述句、不用驚嘆號，這不是錯誤。</td></tr>
+    <tr><td class="src">E14</td><td><b>整批不存</b>的失敗訊息</td>
+      <td><b>「有 N 列的類別名稱不合規定，這一次整批都沒有存。請修正後再按一次存檔。」</b>
+        <br>下一行逐列列出：<b>「第 N 列：&lt;原因&gt;」</b></td><td>D5</td>
+      <td>D5 裁的是「有不合法值就整批不存」——<b>整批</b>這兩個字一定要寫出來，
+        不然使用者會以為只有壞的那一列沒進去、好的那幾列存好了。
+        逐列原因不寫使用者不知道要改哪一列。<b>圖示用 ⛔</b>（同 D7，⚠ 只留給黃燈）。</td></tr>
+  </table>
+  <p class="small" style="margin-top:10px">
+  📌 <b>D1（孤兒目標列照常顯示並計入合計）在本元件上沒有字要擬</b> ——
+  它講的是「新命名了一個目前沒有任何持倉的類別之後，<code>ALO-1</code>／<code>ALO-2</code> 怎麼算」，
+  落點在 <code>ALO-2</code>（那一列目前比重為 0、差額照算）。本草稿的示意資料裡，
+  <b>「環球債」那一列就是它</b>：<code>ALO-1</code> 有這一列、目前沒有任何持倉。
+  ⚠️ 示意資料把它的目標比重畫成留空（<code>⬜ 資料未備</code>），<b>是為了同時示範 44 的「某列比重留空」那一條</b>；
+  真的填了比重的孤兒列會在 <code>ALO-2</code> 出現「目前 0.0%」那一列 → <b>§F 第 15 題</b>。</p>
+</div>
+
+<div class="sec-head"><span class="n">§F</span><h2>裁示清單：<span style="color:var(--ok-mark)">21 題全數核准</span></h2></div>
+
+<div class="card" style="border-left:4px solid var(--ok-mark)">
+  <p class="note"><b>2026-09-28 客戶裁示：21 題全數照本組建議核准。</b>
+  下表「本組建議」欄自此是<b>已核准的做法</b>，不是提案；每一列末尾都標了核准。<br>
+  <b>第 8～14、18 題原本是 44 自己就地登記為待裁的</b> —— 它們現在有答案了，但 <b>44 已凍結、本輪不動它</b>；
+  照既有體例（同 Q13、U9），裁示結果要回寫進 <code>ACCEPTANCE.md</code>，<b>那是另一輪的事，不是本檔</b>。</p>
+  <table>
+    <tr><th style="width:5%">#</th><th style="width:42%">題目</th><th style="width:30%">本組建議（已核准）</th><th style="width:13%">出處</th><th style="width:10%">裁示</th></tr>
+    <tr><td class="src">1</td><td>DIRECT 警告放哪一塊？</td>
+      <td><b>ALO-2 卡底一行摘要 ＋ ALO-6 一張逐筆附表</b></td><td>新題（U9／R2）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">2</td><td>DIRECT 警告要不要在客戶核准的那句話後面接「（N 筆）」？</td>
+      <td><b>要</b>。原句一個字不改，筆數另接在括號裡</td><td>新題</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">3</td><td>讀取量診斷放 ALO-4（本頁看得到），還是等「設定與診斷」頁的 SET-2 接真資料時一起？</td>
+      <td><b>兩邊都放</b>：本輪先放 ALO-4 收合子區，SET-2 那一輪再放一份</td><td>新題（B-M1）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">4</td><td>「沒寫進持倉的列」附表放 ALO-6 裡面，還是另開層 4 第三塊？</td>
+      <td><b>放 ALO-6 裡面</b>（層 4 還有一個空位，但另開一塊要動 44 的八塊結構）</td><td>新題</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">5</td><td><code>_保單資料</code> 缺列時，保單那一格套 44 5.5「來源缺」模板的字嗎？</td>
+      <td><b>套</b>：<code>⬜ 資料未備：_保單資料 尚無資料</code>；模板帶的「重新取數」鈕不畫</td><td>新題</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">6</td><td><code>fee_rate_pct</code> 在 44 §3 五頁都沒有顯示的欄 —— 要在 ALO-6 加一欄嗎？</td>
+      <td><b>本輪不加</b>。U4 本輪不放，加了也永遠是 ⬜；留到 44 解凍時一併處理</td><td>新題（U4）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">7</td><td><code>last_synced_at</code>（推定值）要在本頁看得見嗎？</td>
+      <td><b>本輪不放</b>。ALO-6 來源欄沒有它；推定值的揭露留給 hld 頁那一輪</td><td>新題（R1）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">8</td><td>「目標合計 X%」那一行灰字掛哪裡？X 印百分比還是小數？</td>
+      <td><b>掛層 1 之上；X 印百分比</b>（同一頁因此會有兩種單位，44 已登記這一點）</td><td>44 ALO-1 就地登記</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">9</td><td>ALO-2 吃 ALO-1 的<b>當下值</b>還是<b>已存值</b>？</td>
+      <td><b>已存值</b>，並在 ALO-2 卡上寫明（不然按存檔之前畫面會先變，使用者分不出存了沒）</td><td>44 ALO-1 就地登記（其二）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">10</td><td>三枚「存檔」什麼時候要停用？</td>
+      <td><b>不訂停用條件</b>（照現況；一訂就得訂「沒改過也算不算」，那是另一題）</td><td>44 ALO-1 就地登記（其一）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">11</td><td>比重或金額留空的那一列，按存檔之後存不存得下來？</td>
+      <td><b>存得下來</b>（與 ALO-4 新增類別那邊的 D2「空白列不存」不同 —— 那是整列空白，這是有類別名、只有值留空）</td><td>44 ALO-1 就地登記（其三）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">12</td><td>差距<b>剛好等於</b>容許帶，算「內」還是「外」？</td>
+      <td><b>算內</b>（44 寫「超出容許帶 → 黃」，相等不算超出）</td><td>44 未寫（線框 A-31）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">13</td><td>客戶當時裁的「差額逐<b>檔</b>算」，在 ALO-2 讀成逐<b>類別</b>對嗎？</td>
+      <td><b>對</b>。44 ALO-2 規則欄是「一列一個類別」，逐檔的顆粒度在 ALO-6</td><td>44 ALO-2 就地登記</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">14</td><td>ALO-0 的「尚未建立任何持倉」要不要也接一枚導覽鈕（HLD-0 有、ALO-0 沒有）？</td>
+      <td><b>不接</b>。ALO-4 已經有一枚、而且空或不空都出現，同一頁兩枚會互相削弱</td><td>44 ALO-0 就地登記</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">15</td><td>孤兒目標列（命名了但目前沒有任何持倉的類別）在 ALO-2 怎麼畫？</td>
+      <td><b>目前比重印 0.0%、差額照算、計入合計</b>（D1 已裁「照常顯示並計入合計」，這裡只是把它畫出來）</td><td>D1 已裁，畫法新題</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">16</td><td><code>holding</code> 取數失敗時，ALO-4 的導覽鈕照掛嗎？燈要不要說「尚未建立任何持倉」？</td>
+      <td><b>照掛；燈不說</b>（失敗不等於空，說了就是造假）</td><td>新題（44 沒寫）</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">17</td><td>44 ALO-4 判準點名了一個「指派欄」，但 44 從沒宣告過這個欄 —— 本草稿畫成唯讀表的一欄，可以嗎？</td>
+      <td><b>可以</b>（按下去不變、畫面上沒有任何可以改它的輸入元件，判準驗得到）</td><td>44 ALO-4 就地登記</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">18</td><td>ALO-6「無任何持倉」走 44 5.5「來源缺」，模板帶的「重新取數」鈕在這一頁按了沒有用 —— 改掛導覽鈕嗎？</td>
+      <td><b>兩枚都不畫</b>（44 5.5：空狀態欄整格為準，而 ALO-6 空狀態欄沒有寫任何一枚）</td><td>44 ALO-4 就地登記</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">19</td><td>讀表警告的總筆數要不要出現在 ALO-0 結論燈旁？</td>
+      <td><b>不要</b>。44 ALO-0 來源欄逐字「不自取數。只讀 ALO-2 算出的各類別差距」，加了就得改那一格</td><td>新題</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">20</td><td>§E 一｜ALO-1 那六條建議字（E1～E6），可以嗎？</td>
+      <td>逐條見 §E 第一張表</td><td>交接本〔擬〕</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+    <tr><td class="src">21</td><td>§E 二｜ALO-4 新增類別那八句（E7～E14），可以嗎？</td>
+      <td>逐條見 §E 第二張表</td><td>C2／C1／C3／D2／D5</td><td style="color:var(--ok-mark);font-size:11.5px;white-space:nowrap">2026-09-28<br>客戶核准（照總管建議）</td></tr>
+  </table>
+</div>
+
+<div class="sec-head"><span class="n">§G</span><h2>本組查不到什麼、沒做什麼（不美化）</h2></div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--stop)">查不到</h3>
+  <ul class="note" style="margin:8px 0 0; padding-left:20px">
+    <li><b>〔擬〕文案的原字</b> —— 交接本記的「alo1 的第 2～第 5 項」與「alo4 的 8 句」，
+      原字住在總管工作區草稿 <code>alo_sheet_tabs_spec.md</code>，<b>不在任何分支上</b>
+      （本組逐一掃過 <code>origin/main</code>、<code>origin/docs/handover-latest</code>、<code>origin/feat/alo-sheet-read</code>）。
+      §E 是<b>重新盤點出來的</b>，不是那兩份原字。</li>
+    <li><b>客戶對 C1～C5、D1～D5 的原話</b> —— 交接本只記結論（「C3 20 字」「D5 有不合法值就整批不存」），
+      沒有記題目本身。§E 第二張表的「依據」欄是本組<b>依那些結論反推</b>的對映，不是客戶逐字。</li>
+    <li><b>真資料長什麼樣</b> —— 三個 secret（<code>SETTINGS_SHEET_ID</code>／<code>FRED_API_KEY</code>／
+      <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>）在本容器讀不到，本組<b>沒有跑過任何一次真的讀表</b>。
+      §B 的示意資料是本組編的，不是從 Sheets 讀出來的。</li>
+    <li><b>「每使用者每專案每分鐘 60 次」的一手出處</b> —— 讀表程式自己就登記了查不到
+      （egress proxy 擋掉 <code>developers.google.com</code>）。本草稿因此<b>不把它畫成門檻線、不畫紅燈</b>，
+      只照程式交出的字原樣印。
+      <div class="small" style="margin-top:6px; padding:8px 10px; background:var(--draft-bg);
+           border:1px solid var(--draft); border-radius:6px">
+        <b>2026-09-28 客戶裁示，把這一條明確化（客戶明說：「你已照做，這條是明確化，不是修正」）</b> ——
+        這個數字在本頁的用法<b>只有一種</b>，四條都不得違反：
+        <b>(1) 不准畫成門檻線</b>；<b>(2) 不准畫紅燈</b>；<b>(3) 不准當驗收標準</b>；
+        <b>(4) 只印程式交出的字</b>，含其中「<b>未經一手查證</b>」那一段，不刪、不改寫、不摘要。<br>
+        ⚠️ 落點就是 §D 的 <b>D2</b>（<code>ALO-4</code> 讀表診斷那個收合子區）——
+        實作時<b>不得</b>在那裡加任何進度條、量表、顏色分級或「超過就變色」的邏輯。
+      </div></li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--warn-mark)">沒做什麼</h3>
+  <ul class="note" style="margin:8px 0 0; padding-left:20px">
+    <li><b>沒有動 <code>docs/v2/44_fund_ui_ssot.md</code> 一個字</b>（已凍結），也沒有動
+      <code>docs/v2/prototype/ui_prototype_alo.html</code>、<code>ui_v2/alo/*</code>、<code>ui/tab*.py</code>。
+      本輪只新增這一個檔。</li>
+    <li><b>草稿組交件當下（2026-09-28，客戶裁示前）：沒有 commit、沒有 push、沒有開 PR。</b>
+      ⚠️ <b>那句話只對交件當下為真</b> —— 客戶裁示核准之後，本檔<b>就是隨 PR 進 repo 的交付物本身</b>，
+      再寫「沒有 commit」會<b>在它自己身上為假</b>。<b>這一條是被稽核抓出來改的</b>，改成帶日期的敘述。</li>
+    <li><b>草稿組交件當下沒有跑任何測試</b>（那一輪是純文件、未進 repo）；
+      <b>送 PR 那一輪有跑</b> —— 文件守衛 <b>91 passed</b>、四支會讀 <code>docs/wireframes/</code>
+      的測試實跑全綠，數字見 PR 說明。
+      ⚠️ <b>本行原寫「沒有跑任何測試」，與同一份 PR 說明的「實跑」正面相反，由稽核抓出，已改。</b><br>
+      本檔是文件，不進 <code>ui_v2</code>。
+      放在 <code>docs/wireframes/</code> 而不是 <code>docs/v2/</code>，是因為
+      <code>tests/test_doc_counters.py</code> 的 <code>DOCS_GLOBS</code> 收的是
+      <code>docs/v2/*.md</code> 與 <code>docs/v2/prototype/*.html</code>；放進去會多一個受檢檔、讓那支守衛轉紅。
+      <div class="small" style="margin-top:6px; padding:8px 10px; background:var(--sheet-2);
+           border:1px solid var(--rule-2); border-radius:6px">
+        <b>那放 <code>docs/wireframes/</code> 會不會撞到別的守衛？</b>（量測日 2026-09-28；查法
+        <code>grep -rn --include=*.py '"wireframes"' tests/</code>）—— <b>分兩類，不寫「只有 N 處」</b>：<br>
+        <b>甲、指名讀一個固定檔名的</b>：<code>test_wf04_portfolio_skeleton.py</code>、
+        <code>test_wf05_settings_skeleton.py</code>、<code>tests/ui_v2/test_set_logic.py</code>。
+        <b>它們讀哪一個檔是寫死的，新增別的檔不影響。</b><br>
+        <b>乙、對目錄下的檔名做樣式斷言的</b>：<code>test_batch2_top_card_grid.py</code>
+        斷言某一類檔名不存在 —— <b>本檔檔名對不上，內文也 0 次出現那個樣式裡的字。</b><br>
+        ⚠️ <b>這一段原本寫「只有三處」，被一條 grep 推翻</b>（實際四處，漏掉
+        <code>tests/ui_v2/test_set_logic.py</code>），由稽核抓出。<b>結論沒有變</b>
+        （那一處讀固定檔名，不會被新增檔弄紅），但寫法改成<b>分類敘述</b> ——
+        <b>能被一條指令推翻的全稱句就不該寫</b>（處方同 <code>CLAUDE.md</code> §-1.5.1c 判定 2）。<br>
+        ✅ <b>本輪已實跑，不再只是讀測試碼</b>：上列四支全綠，數字見 PR 說明。</div></li>
+    <li><b>沒有重新驗證 44 §3.4 那八塊本身對不對</b> —— 本組只讀它、照它畫，
+      裡面既有的就地登記（差額逐檔或逐類別、灰字落點、當下值或已存值…）一條都沒有替客戶裁。</li>
+    <li><b>登記、本輪不做（一）</b>：§B 線框裡「狀態：要多看一眼」「狀態：取數失敗」這類
+      <b>44 未宣告的字句</b>，<b>沒有掛 <span class="tag t-new">44 未宣告</span> 角標</b> ——
+      五個<b>元件</b>都掛了，<b>字句</b>類只在 §A／§C 的表格裡揭露。
+      兩種畫法都說得通（線框上掛滿角標會蓋掉畫面本身），<b>本輪只登記，不改</b>。</li>
+    <li><b>登記、本輪不做（二）</b>：§A 那套<b>三條件判讀規則現在全是散文</b>，
+      <code>tests/</code> 底下<b>沒有任何一條斷言在執行它</b> —— 也就是有人把那個數字改成假的，
+      <b>CI 不會紅</b>。稽核建議加一條機器斷言；<b>本輪是文件 PR、不加 <code>.py</code></b>，
+      已登記進交接本待辦。
+      <div class="small" style="margin-top:6px; padding:8px 10px; background:var(--sheet-2);
+           border:1px solid var(--rule-2); border-radius:6px">
+        <b>由誰</b>：<b>品管與 CI 守衛組（獨立一組）</b>。
+        <b>不得由寫出這套散文規則的草稿組或本輪回修組承接</b>
+        （<code>CLAUDE.md</code> §-2 規則 4：不可自己查自己）；
+        也<b>不得因為「這是稽核建議的」就當成已經驗過</b> —— 建議 ≠ 驗過（§-2.A 第 6 款 (a)）。<br>
+        <b>觸發點（寫成會發生的事，不是日期；任一發生即動工）</b>：<br>
+        (1) <b>下一輪有任務會新增或修改 <code>tests/</code> 底下任何一支檔案</b> ——
+        那一刻「本輪是文件 PR、不加 <code>.py</code>」這個<b>唯一的擋掉理由就不成立了</b>。
+        依交接本〈進度總表〉，接真資料還剩兩頁、收斂 3 步仍是 0，<b>下一輪幾乎一定會動 <code>tests/</code></b>。<br>
+        (2) 有人要<b>動 §A 那一則 44 逐字引文</b> —— 三條件裡的「<b>命中處只有那一段</b>」會跟著變。<br>
+        (3) <code>docs/</code> 底下<b>再出現第二個逐字引 44 禁詞的檔</b> ——
+        那一刻「<b>數量恰為 1</b>」就不再是單一檔案的事，散文規則當場不夠用。<br>
+        (4) 有人要<b>引用這套三條件規則當成「掃描通過」的依據</b>（含 <code>ACCEPTANCE.md</code> 第六節）。<br>
+        (5) 客戶直接點名。<br>
+        ⚠️ <b>本段只補「誰來加、什麼時候加」，不是動工授權</b>（<code>CLAUDE.md</code> §-1）；
+        <b>本輪照舊不加 <code>.py</code>，這個判斷沒有變。</b>
+        <b>為什麼非補不可</b>：<code>CLAUDE.md</code> §8.3.P 前言 ——
+        <b>待查證沒有出口，等於實質永久豁免</b>。原本這一條只寫「已登記進交接本待辦」，
+        <b>沒有由誰、沒有觸發點</b>，正是那個形態。
+      </div></li>
+    <li><b>沒有第二組獨立複驗。</b> 本檔由草稿組單組產出。§A 下方那兩句
+      「44 §3 沒有任何一塊的來源欄含 <code>fee_rate_pct</code>」與
+      「本頁八塊都不顯示 <code>last_synced_at</code>」<b>取決於有沒有漏看</b>，本組是逐塊讀來源欄得到的，
+      <b>沒有第二雙眼睛</b>；要當成事實用之前請再派一組查。
+      <div class="small" style="margin-top:6px; padding:8px 10px; background:var(--sheet-2);
+           border:1px solid var(--rule-2); border-radius:6px">
+        <b>怎麼查的（可自驗，量測日 2026-09-28、44 的 blob <code>9bb5d64</code>，<code>b1ea6be</code> 與 <code>6e8d214</code> 上相同）</b>：把 44 的
+        <code>### 3.4 頁｜資產配置</code> 到 <code>### 3.5</code> 之間切出來（實測 371 行），
+        在那一段內數字串 ——<br>
+        <code>last_synced_at</code> <b>0</b> 命中　·　<code>fee_rate_pct</code> <b>0</b> 命中　·　
+        <code>DIRECT</code> <b>0</b> 命中（<code>ALO-2</code> 那一塊單獨數也是 <b>0</b>）。<br>
+        再把 <code>## 3. 五頁</code> 到 <code>## 4. 資料庫結構</code> 切出來，
+        <code>fee_rate_pct</code> 在整個 §3 只有 <b>1</b> 次命中，而 <code>mgmt_fee_rate_pct</code>
+        也是 <b>1</b> 次 —— <b>兩個數相等，表示那唯一一次命中就是
+        <code>mgmt_fee_rate_pct</code> 的子字串</b>，也就是 <code>policy.fee_rate_pct</code>
+        在 §3 五頁裡<b>一次都沒有出現</b>。<br>
+        ⚠️ 這幾個數<b>會漂移</b>（44 一解凍就變），要用請現場重數，不要引用本行。</div></li>
+  </ul>
+</div>
+
+<div class="card" style="border-left:4px solid var(--draft)">
+  <h3 style="font-size:15px;font-weight:700;color:var(--draft)">本草稿的自我檢查（逐條，可自驗）</h3>
+  <table>
+    <tr><th style="width:34%">檢查</th><th>結果</th></tr>
+    <tr><td>按鈕標籤不含 <b>44 §1.1 節判準點名的那四個詞</b></td>
+      <td><b>通過</b>。<b>§B／§B2 實際畫出來的五個</b>：「存檔」「新增假設」「匯出目前這張對照表」「前往 Sheets 維護持倉」「＋ 新增類別」；<b>另一個只在 §E 核准、沒有畫進線框</b>：「刪除這一列」（E5）。<br>⚠️ ALO-4 新增類別那一格的「類別名稱（未填）」<b>是輸入欄不是按鈕</b>，線框裡刻意畫成方框加底線，與按鈕的圓角外框分開。</td></tr>
+    <tr><td><b>本檔全文</b>的禁詞掃描（八個詞，含上一列那四個）</td>
+      <td><b>實測輸出 <code>[(0, 1)]</code>，不是空的 —— 而且這是對的。</b>
+        命中的是詞表<b>第 1 個</b>，命中處<b>只有 §A 那一段的 44 逐字引文</b>（客戶 2026-09-28 指示逐字列出）。
+        <b>那是引用 44 的規格原字，不是本檔在畫面上叫使用者去做的事。</b><br>
+        ⛔ <b>判讀要三條件同時成立才視同 0</b>：數量恰為 1 ＋ 命中處只有那一段 ＋ 命中的詞是詞表第 1 個。
+        <b>查法指令與實測輸出寫在 §A 那一格的黃框裡。</b><br>
+        ✅ 44 §1.2「禁方向詞」那一列的十個詞仍是 <b>0</b>。</td></tr>
+    <tr><td>文案不含 <b>44 §1.2「禁方向詞」那一列的十個詞</b>（同上，字串不列在本檔）</td>
+      <td><b>通過</b>。持倉日期一律用 44 §4.1 指定的「持有起始日」，不用含方向詞的寫法；
+        差額與比重一律只寫數值，不加任何處置語。</td></tr>
+    <tr><td>不用箭頭標示「該往哪走」</td>
+      <td><b>通過</b>。差額只寫正負號與數字（<code>+6.4 pp</code>／<code>−5.2 pp</code>）。
+        「目標 → 對照 → 試算」那一個是 44 逐字給的流程指向，不是四個被禁的箭頭字元之一。</td></tr>
+    <tr><td>顏色只映射資料狀態與新鮮度</td>
+      <td><b>通過</b>。灰＝資料未備、黃＝業務例外與算不出來、紅＝系統錯誤。
+        <b>差額欄與容許帶內外欄一律不著色</b> —— 那兩欄是本頁最容易被著成紅綠的地方。</td></tr>
+    <tr><td>層 2 最多三張卡、一張卡最多兩個主值</td>
+      <td><b>前半通過</b>。層 2 是 ALO-1／ALO-2／ALO-3 三張；新加的東西全部落在層 3、層 4。<br>
+        <b>後半（主值）也通過，但「怎麼數」必須先寫出來，否則這個勾是空的</b> ——
+        本列原本只論證前半就打勾，等於對後半靜默。逐條依據如下，<b>每一條都可以自己跑一次</b>。<br>
+        ① <b>44 自己沒有定義「主值」。</b> 44 §5.1 逐字寫著「本檔從頭到尾沒有定義『主值』」，
+        並把這一半連同「上限寫成全域、超出客戶逐字裁示射程」那一半<b>一起標為待客戶裁決</b>；
+        同處還寫明「本組不改上限、不改那兩張卡、也不自行替『主值』下定義」——
+        <b>那一句裡的「上限」就是本列在查的這一條</b>。<b>本檔照辦，也不替它下定義。</b><br>
+        ② <b>所以本檔數的時候用客戶自己那把尺。</b> 44 §5.1 記下的客戶逐字裁示是
+        「<b>以塊規則為準</b>，三張核心卡各留兩個主值」。<br>
+        ③ <b>照那把尺數出來的結果</b>：44 §3.4「頁｜資產配置」<b>整節</b>
+        （ALO-0 到 ALO-7 八塊的規則欄都在內）<b>「主值」二字 0 次</b>。
+        ALO-1、ALO-2 的規則欄逐字寫「一列一個類別」，ALO-3 寫的是使用者自行輸入的
+        「類別＋金額」假設列與「各類別的比重算術結果」—— 三塊都是<b>逐類別的表列</b>，
+        44 沒有把其中任何一欄叫做主值。<b>0 ≤ 2，成立。</b><br>
+        <b>自驗（兩條指令，repo 根目錄執行；不必相信本檔看過全部）</b>：<br>
+        <code>awk '/^### 3\.4 /{f=1} /^### 3\.5 /{f=0} f' docs/v2/44_fund_ui_ssot.md | grep -c 主值</code>
+        → 印出 <code>0</code>（量測日 2026-09-28；該區間 371 行。⚠️ <b>0 命中時 <code>grep -c</code> 的
+        離開碼是 1，那是正常的，不是指令失敗</b>）；<br>
+        <code>grep -n 本檔從頭到尾沒有定義 docs/v2/44_fund_ui_ssot.md</code> → 命中 44 §5.1 那一句自陳。<br>
+        ⚠️ <b>換一把尺會得到相反的答案，一併寫出來。</b> 44 §5.1 同處登記的第二種讀法是
+        「把卡上當作答案出的數都算進來」；ALO-2 是一列一個類別、<b>一列四欄</b>的表，
+        照那把尺<b>不只 2</b>。<b>兩把尺哪一把算數，44 標的是待客戶裁決，本檔不替它裁。</b>
+        本列的「通過」<b>只在客戶那把尺下成立</b>，<b>不得</b>被引用成「主值這一條已經查完了」。<br>
+        ⚠️ <b>連帶一句，它是推出來的、不是另外查到的</b>：44 §5.1 那套<b>逐主值</b>的規則
+        （四狀態逐主值判定、兩個主值各掛自己的來源與新鮮度徽章）<b>在本頁沒有掛載點</b>，
+        因為 ③ 數出來是 0。<b>③ 的尺若被客戶換掉，這一句跟著失效。</b></td></tr>
+    <tr><td>不發明 44 沒宣告的元件</td>
+      <td><b>有發明，但每一處都掛了 <span class="tag t-new">44 未宣告</span> 角標</b>：
+        ALO-2 的 DIRECT 行、ALO-4 的新增類別與讀表診斷、ALO-6 的兩張附表，共五處。
+        每一處都在 §F 有一題對應。</td></tr>
+    <tr><td>三個斷點都不出現橫向捲動</td>
+      <td><b>通過</b>（表格靠格內文字換行塌下去）。</td></tr>
+    <tr><td>三個斷點的 app 內容一致</td>
+      <td><b>通過（本輪修好後）</b>。把三個 <code>.screen</code> 轉純文字逐行 diff，
+        <b>剩下的差異只有兩類線框註記</b>：層標籤縮寫、以及頁首灰字旁那一則「見 §F 第 8 題」。
+        <b>app 畫面上的字、表、列、數字、按鈕完全相同。</b><br>
+        ⚠️ <b>第一版不通過</b> —— 兩個較窄的斷點掉了六項內容（含 44 明文要求的「未分類 N 檔」
+        與 §F 第 9 題核准的「讀 ALO-1 的已存值」），而當時本表卻寫著「沒有藏掉任何一欄」。
+        <b>那是本檔自己推翻自己的一句話，由稽核抓出。</b>做法與逐項清單寫在 §B 末。</td></tr>
+  </table>
+  <p class="small" style="margin-top:10px">
+  ⚠️ <b>上表的「檢查」欄刻意不把那些被禁的詞抄進來</b>：抄進來之後，下一個人拿這份檔去掃禁詞
+  <b>會命中本檔自己</b>，那一次掃描當場失效，連帶讓「本檔通過」這個結論一起失效。
+  <b>要查請照 44 §1.1 節判準與 §1.2 的原表現編掃描字串</b>，母體是本檔；
+  或直接用 §A 那一格黃框裡那條<b>只印索引不印字面</b>的指令。
+  兩份現成的字表也在程式裡：<code>ui_v2/alo/logic.py</code> 的
+  <code>FORBIDDEN_BUTTON_WORDS</code>（四個，對按鈕標籤）與
+  <code>FORBIDDEN_DIRECTION_WORDS</code>（十個，對全頁文案）。<br>
+  ⚠️ <b>本檔有一個例外，就是 §A 那一段的 44 逐字引文</b> —— 客戶 2026-09-28 指示逐字列出，
+  理由是「不列出來我無法判斷改寫是否走味」。<b>那一處是唯一的例外，而且它有自己的三條件判讀規則。</b>
+  <b>不要再開第二個例外</b>：要引 44 的字而它含禁詞時，先問這一句「不逐字列出，客戶判不判得了」——
+  判得了就不要抄。<br>
+  📌 <b>已登記、本輪不做</b>：禁詞掃描分不出「44 在禁它」與「字面撞車」
+  （44 全檔那個詞 42 次，多數是「一個鍵」的意思）。<b>已登記進交接本的待辦，本輪不動程式、不改掃描指令。</b></p>
+</div>
+
+<p class="small" style="margin-top:32px; padding-top:14px; border-top:1px solid var(--rule-2)">
+草稿組 · 2026-09-28 · 草稿寫成時的 <code>origin/main</code> 為 <code>b1ea6be</code>，
+<b>本 PR base 為 <code>6e8d214</code></b>（前者是後者的祖先）。
+⚠️ <b>本檔所有 44 的量測值不受這個差別影響</b>：兩個 commit 的
+<code>docs/v2/44_fund_ui_ssot.md</code> 是<b>同一個 blob</b>（<code>9bb5d64</code>），已實測。
+<b>這是草稿，不是規格，也不是動工授權。</b>
+客戶拍板之後才輪到實作；拍板結果要回寫進 <code>ACCEPTANCE.md</code>（44 已凍結，不得加附註）。
+</p>
+
+</div>
+</body>
+</html>
