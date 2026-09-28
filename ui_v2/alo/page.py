@@ -10,6 +10,11 @@
 ⚠️ 本頁的「存檔」「新增假設」「前往 Sheets 維護持倉」三種按鈕畫得出來、按得下去，
    但**本頁沒有後端**：按下去不寫任何東西、也不離開本頁（ALO-GAP-導覽目的地）。
    這是一個用假資料畫的頁面，不是接上資料的成品。
+
+正式模式（`ui_v2/app_alo_live.py`）由呼叫端注入載入函式（`render(load_live=)`），資料改由
+`ui_v2/alo/source.py` 從 L2 取得；正式模式才有的調整（不印示意字樣、寫入端按鈕停用）
+全部住在 `live.py`，本檔只畫。不傳 `load_live` 時（示範入口 `ui_v2/app_alo.py`、既有測試）
+行為與加這個參數之前**逐字相同**。
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ import re
 
 import streamlit as st
 
-from . import fixtures, logic, theme
+from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -439,19 +444,36 @@ _RENDERERS = {
 }
 
 
-def render() -> None:
+def render(*, load_live=None) -> None:
+    """畫整頁。
+
+    load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
+    不傳（None）時行為與加這個參數之前完全相同：照舊以 `?scenario=` 挑 fixtures 情境。
+    傳入時（正式入口 `ui_v2/app_alo_live.py`）改由它取得資料，這一條路徑不讀 fixtures，
+    並套用 `live.apply_live_notes` 的正式模式調整；頁首副標只印本頁的提問句 ——
+    情境名與示意字樣只屬於示範模式（`49` §3.4 第 5、6 項）。
+    """
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
-    scenario = _pick_scenario()
-    save_failed = _pick_save_failed()
-    model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
+    if load_live is None:
+        scenario = _pick_scenario()
+        save_failed = _pick_save_failed()
+        model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
+        # 輸入欄的 key 前綴：示範模式帶情境名（換情境時不沿用上一個情境留在 session 裡的值）。
+        key = scenario
+    else:
+        model = live.apply_live_notes(logic.build_page_model(load_live()["dataset"]))
+        key = "live"
 
     _html(f'<div class="alo-title">{_esc(model["title"])}</div>')
-    label = fixtures.SCENARIO_LABELS[scenario] + ("　·　存檔寫入失敗" if save_failed else "")
-    _html(
-        f'<div class="alo-sub">{_esc(model["answers"])}　·　{_esc(model["hint_note"])}'
-        f"　·　情境 {_esc(label)}</div>"
-    )
+    if load_live is None:
+        label = fixtures.SCENARIO_LABELS[scenario] + ("　·　存檔寫入失敗" if save_failed else "")
+        _html(
+            f'<div class="alo-sub">{_esc(model["answers"])}　·　{_esc(model["hint_note"])}'
+            f"　·　情境 {_esc(label)}</div>"
+        )
+    else:
+        _html(f'<div class="alo-sub">{_esc(model["answers"])}</div>')
     # ALO-GAP-灰字落點：照 ALO-1 規則欄現行字面「頁面頂端」。
     _lines(model["top_lines"], "alo-topline")
 
@@ -462,17 +484,17 @@ def render() -> None:
     with st.container(key="alo_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), scenario)
+                _RENDERERS[code](logic.find_block(model, code), key)
 
     _html('<div class="alo-layer-label">層 3　操作（預設收合）</div>')
     with st.container(key="alo_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), scenario)
+                _RENDERERS[code](logic.find_block(model, code), key)
 
     _html('<div class="alo-layer-label">層 4　佐證（預設收合）</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), scenario)
+        _RENDERERS[code](logic.find_block(model, code), key)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(
