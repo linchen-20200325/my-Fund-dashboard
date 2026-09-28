@@ -21,9 +21,26 @@ from services.v2_tables import contract
 
 _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _D44 = _ROOT / "docs" / "v2" / "44_fund_ui_ssot.md"
+_D49 = _ROOT / "docs" / "v2" / "49_data_integration_plan.md"
 
 S, P = R.TAB_HOLDING_SUPPLEMENT, R.TAB_POLICY_PROFILE
-WARN = "DIRECT 列暫不支援，該筆不計入配置"
+
+
+def _warn_from_49() -> str:
+    """U9 警示字樣的真相源是 `49`（客戶逐字核准），不是本檔手打的複本（第 14 輪稽核 A 建議 3）。
+
+    ~~`WARN = "DIRECT 列暫不支援，該筆不計入配置"`~~ 原本是**手打的第二份**：
+    `test_U9_警示字樣逐字` 只拿它比對 `A.DIRECT_WARNING`，兩邊同時改成同一個錯字也不會轉紅，
+    守衛沒有任何外部錨。改成從 `49` 重抽（體例同本檔既有的 `_table_from_44`）。
+    """
+    text = _D49.read_text(encoding="utf-8")
+    hits = re.findall(r"「(DIRECT 列[^」]*)」（\*{0,2}客戶逐字核准", text)
+    assert hits, "49 找不到標著「客戶逐字核准」的 DIRECT 警示字樣"
+    assert len(set(hits)) == 1, f"49 裡的 DIRECT 警示字樣不只一種：{sorted(set(hits))}"
+    return hits[0]
+
+
+WARN = _warn_from_49()
 
 
 # ─────────────── 假輸入 ───────────────
@@ -401,13 +418,50 @@ def test_裁定8_正例_前後空白的DIRECT仍算DIRECT():
     assert out["holding"] == [] and [w["message"] for w in out["warnings"]] == [WARN]
 
 
-def test_裁定4_總管暫定_DIRECT持倉不產生holding列_且不懸空參照():
+def test_裁定4_總管暫定_DIRECT持倉不產生holding列():
+    """~~原名 `…_且不懸空參照`~~ → 第 14 輪拆條（紅隊：名稱後半是恆真斷言）。
+
+    原本第二行 `{h["policy_id"] for h in out["holding"]} <= {...}` 在上一行已斷言
+    `out["holding"] == []` 之後，左邊恆為 `set()`，而 `set() <= 任何集合` **恆真** ——
+    那一行不論實作怎麼變都不會轉紅。真正會失敗的版本見下一支。
+    """
     rows = [prow(pid="DIRECT", code="ZZ5555", row=3)]
     out = build(rows, tabs([srec(2, pid="DIRECT", code="ZZ5555")], [precd(4, pid="DIRECT")]))
     assert out["holding"] == [] and out["policy"] == []
-    assert {h["policy_id"] for h in out["holding"]} <= {p["policy_id"] for p in out["policy"]}
     (d,) = [d for d in out["direct"] if d["source"] == "保單分頁"]
     assert d["tab"] == "PX-TEST-001" and d["row"] == 3
+
+
+def test_裁定4_DIRECT不混進holding_同時有一般持倉時左邊非空():
+    """第 14 輪新增：把 DIRECT 與一般保單擺在一起，讓子集斷言的左邊**真的有東西**。
+
+    DIRECT 若漏進 `holding`，左邊會變成 `{"PX-TEST-001", "DIRECT"}`、右邊仍是 `{"PX-TEST-001"}`，
+    子集關係不成立 → 轉紅。第一行的非空斷言是**防止本條再度退化成恆真**的那道鎖。
+    """
+    rows = [prow(row=2), prow(pid="DIRECT", code="ZZ5555", row=3)]
+    out = build(rows, tabs([srec(2), srec(3, pid="DIRECT", code="ZZ5555")], [precd(2)]))
+    holding_pids = {h["policy_id"] for h in out["holding"]}
+    assert holding_pids, "左邊是空集就回到恆真了，本條失去意義"
+    assert "DIRECT" not in holding_pids
+    assert holding_pids <= {p["policy_id"] for p in out["policy"]}
+
+
+def test_裁定4_反例_子集斷言真的會不成立_缺保單資料列時就懸空():
+    """上一條的子集斷言**可被證偽**的證明，同時把稽核 A 建議 5 實測到的事實釘住。
+
+    拿掉 `_保單資料` 那一列（一般保單、非 DIRECT）：`holding` **照樣產生**、`policy` 為空，
+    子集關係當場不成立。⇒ 上一條不是另一個恆真句。
+    ⚠️ 這個行為**不違反 `49`**（§2.6：掛在那些保單下的持倉如何顯示由 `logic.py` 既有規則決定），
+    本條只是把它變成看得見的事實 —— 它也正是 `ACCEPTANCE.md` 8.3 舊理由被推翻的依據：
+    **懸空參照不是 DIRECT 獨有的**，所以拿它當「只有 DIRECT 不產生 `holding` 列」的理由不成立。
+    """
+    out = build([prow(pid="P1", code="ZZ9999", tab="P1", row=2)],
+                tabs([srec(2, pid="P1", code="ZZ9999")], []))          # `_保單資料` 空
+    holding_pids = {h["policy_id"] for h in out["holding"]}
+    policy_pids = {p["policy_id"] for p in out["policy"]}
+    assert holding_pids == {"P1"} and policy_pids == set()
+    assert not holding_pids <= policy_pids                              # 懸空：子集關係不成立
+    assert out["missing_profile"] == ["P1"] and out["skipped_holdings"] == []
 
 def test_U9_保單分頁的DIRECT持倉_照讀_不計入持倉_逐字警示():
     rows = [prow(pid="DIRECT", code="ZZ5555", name="測試基金丙", row=3), prow()]
@@ -585,7 +639,27 @@ def live(monkeypatch):
     SB.reset_all()
 
 
-def test_整條路_正例_讀兩張補充分頁與保單分頁_只讀不寫(live):
+POLICY_HEAD = ["保單編號", "基金代號", "基金名稱", "幣別", "級別", "淨投資金額", "現金給付%",
+               "持有單位數", "平均買入單位成本", "平均買入匯率"]
+
+
+class _PolicyWorksheet(FakeWorksheet):
+    """保單分頁：`_fake_settings_sheet.FakeWorksheet` 只實作 `settings_sheet_repository` 用得到的呼叫，
+    保單分頁讀取走的是 `get_all_records`，在這裡補上（往返一樣記進 `book.calls`，才量得到）。"""
+
+    def get_all_records(self, numericise_ignore=None, **_kw):
+        self.book.calls.append(("get_all_records", self.title))
+        self.book._maybe_fail("get_all_records", self.title)
+        head, *body = self.rows
+        return [dict(zip(head, list(r) + [""] * (len(head) - len(r)))) for r in body]
+
+
+def test_整條路_正例_讀兩張補充分頁_只讀不寫_保單分頁以替身代入(live):
+    """⚠️ **本條沒有走保單分頁的讀取路徑**：`live` 把 `R._policy_loader` 換成回固定列的替身。
+
+    ~~原名 `…讀兩張補充分頁與保單分頁_只讀不寫`~~ → 第 14 輪更名（紅隊：名稱宣稱的那一半沒有跑到）。
+    真的走保單分頁讀取路徑的「只讀不寫」在下一支。
+    """
     book, _s = live
     book.tabs[S] = FakeWorksheet(book, S, [HS_HEAD, ["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", ""]])
     book.tabs[P] = FakeWorksheet(book, P, [PP_HEAD, ["PX-TEST-001", "測試保單甲", "測試人壽", "USD",
@@ -596,6 +670,61 @@ def test_整條路_正例_讀兩張補充分頁與保單分頁_只讀不寫(live
     assert [p["policy_id"] for p in out["policy"]] == ["PX-TEST-001"]
     assert [w["message"] for w in out["warnings"]] == [WARN]
     assert book.writes() == []
+
+
+def test_整條路_正例_保單分頁讀取路徑_真的跑過而且只讀不寫(live, monkeypatch):
+    """第 14 輪新增（紅隊假斷言 2）：把 `_policy_loader` 換回真貨，讓保單分頁讀取路徑真的跑一次。
+
+    在本條之前，**沒有任何一條斷言保單分頁的讀取路徑不寫入**：本分支的兩支測試裡
+    `book.writes()` 只出現 4 處（本檔 1 處、`tests/test_policy_supplement_repository.py` 3 處），
+    **4 處全在補充分頁的路徑上**（標頭不符／分頁不存在／分頁零列），而保單分頁那一半一律被替身擋掉。
+    ⚠️ 措辭修正（本組實測，2026-09-28）：派工單寫的是「全 repo 只出現 4 處」，**那是錯的** ——
+    `tests/test_settings_sheet_repository.py` 另有 4 處，全 repo 合計 8 處；
+    那 4 處管的是**設定分頁**，與保單分頁無關，所以**結論不受影響**，錯的只是範圍。
+    """
+    book, _s = live
+    monkeypatch.setattr(R, "_policy_loader", R._cached_policy_loader)      # 換回真的讀取路徑
+    book.tabs[S] = FakeWorksheet(book, S, [HS_HEAD, ["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", ""]])
+    book.tabs[P] = FakeWorksheet(book, P, [PP_HEAD, ["PX-TEST-001", "測試保單甲", "測試人壽", "USD",
+                                                     "123456", "2001-01-01", "active"]])
+    book.tabs["PX-TEST-001"] = _PolicyWorksheet(book, "PX-TEST-001", [
+        POLICY_HEAD,
+        ["PX-TEST-001", "ZZ9999", "測試基金甲", "USD", "core", "300000", "100", "1000", "10", "30"]])
+    out = A.load_alo_tables([])
+    assert [h["holding_id"] for h in out["holding"]] == ["PX-TEST-001|ZZ9999|1"]
+    assert out["holding"][0]["cost_twd"] == 300000                   # 真的是從保單分頁讀出來的
+    assert ("get_all_records", "PX-TEST-001") in book.calls          # 正控：那條路徑真的跑過
+    assert book.writes() == []                                      # 全程零寫入（含 update／clear 等）
+
+
+def test_整條路_反例_保單分頁讀取路徑_有寫入就抓得到(live, monkeypatch):
+    """負控（`CLAUDE.md` §-2.A 第 3 款：禁令要同時寫出正例／反例）——
+    上一條的 `writes() == []` 必須是真的擋得住，不是因為 `writes()` 看不見那些方法。"""
+    book, _s = live
+    monkeypatch.setattr(R, "_policy_loader", R._cached_policy_loader)
+    book.tabs[S] = FakeWorksheet(book, S, [HS_HEAD])
+    book.tabs[P] = FakeWorksheet(book, P, [PP_HEAD])
+    ws = _PolicyWorksheet(book, "PX-TEST-001", [POLICY_HEAD])
+    book.tabs["PX-TEST-001"] = ws
+    A.load_alo_tables([])
+    assert book.writes() == []
+    ws.update("A1", [["x"]])                     # 模擬「實作改用 update 寫入」
+    book.batch_update([{"x": 1}])
+    assert [c[0] for c in book.writes()] == ["update", "batch_update"]
+
+
+def test_第14輪BM1_整條路_讀取量診斷原樣轉交給呼叫端(live, monkeypatch):
+    """L1 算的 `read_estimate` 必須走得到 L2 的出口，否則沒有人看得到那個提醒。"""
+    book, _s = live
+    monkeypatch.setattr(R, "_policy_loader", R._cached_policy_loader)
+    book.tabs[S] = FakeWorksheet(book, S, [HS_HEAD])
+    book.tabs[P] = FakeWorksheet(book, P, [PP_HEAD])
+    for i in range(3):
+        book.tabs[f"PX-{i}"] = _PolicyWorksheet(book, f"PX-{i}", [POLICY_HEAD])
+    est = A.load_alo_tables([])["read_estimate"]
+    assert est["tab_count"] == 3
+    assert est["reads_per_minute"] == 3 + R.FIXED_READS_PER_CYCLE
+    assert est["reference_verified"] is False and "未經一手查證" in est["message"]
 
 
 def test_整條路_反例_標頭不符往上拋_不回空表冒充成功(live):

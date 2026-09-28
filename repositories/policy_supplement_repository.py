@@ -39,6 +39,7 @@ from __future__ import annotations
 import copy
 import math
 import re
+import sys
 import threading
 import time
 from datetime import date
@@ -84,6 +85,64 @@ ACTOR = "sa"
 CACHE_TTL_SEC = 60.0          # `49` §4.4
 NOT_CONFIGURED_MESSAGE = "未設定保單試算表 ID（POLICY_SHEET_ID），不讀取"
 NO_SERVICE_ACCOUNT_MESSAGE = "未設定服務帳戶（google_service_account）"
+
+# ════════════════ 讀取量（第 14 輪 B-M1）════════════════
+# 一個讀取週期（`load_supplement_tabs` ＋ `load_policy_holding_rows` 各一次）裡，
+# **除了逐張保單分頁以外**的固定上游讀取數：
+#   `load_supplement_tabs` ── `open_by_key` 1 ＋ `worksheets` 1 ＋ `values_batch_get` 1 ＝ 3
+#   `load_policy_holding_rows` ── `_list_policy_tabs` 的 `open_by_key` 1 ＋ `worksheets` 1 ＝ 2
+# 三樣東西（補充分頁結果、保單分頁清單、每張保單分頁）都是 60 秒快取，所以**穩態下每分鐘各讀一次**，
+# 與畫面重跑的頻率無關 —— 重跑得再快，快取命中就不打上游。
+# 這個數字由 `tests/test_policy_supplement_repository.py::test_第14輪BM1_穩態每分鐘讀取等於分頁數加固定數`
+# 以 n ∈ {50, 55, 56, 60, 70} 實測釘住（改這裡或改讀取路徑，那支測試都會轉紅）。
+FIXED_READS_PER_CYCLE = 5
+
+# ⚠️ **這個數字未經一手查證，僅供參考，不是硬門檻，也不是驗收標準**（客戶 2026-09-28 裁示）。
+# 出處：二手搜尋摘要稱 Google Sheets API 讀取配額為「每專案每分鐘 300 次」與
+# 「每使用者每專案每分鐘 60 次」。2026-09-28 本 repo 再查一次仍**沒有讀到一手官方頁面** ——
+# 本環境的 egress proxy 擋掉 `developers.google.com`（`CONNECT tunnel failed, response 403`）。
+# 同一則揭露另見 `infra/gspread_retry.py` 的配額維度註記。
+REFERENCE_READ_QUOTA_PER_MINUTE = 60
+REFERENCE_READ_QUOTA_NOTE = (
+    "參考值：每使用者每專案每分鐘 60 次讀取。**未經一手查證，僅供參考**"
+    "（2026-09-28 查證時 egress proxy 擋掉 developers.google.com，只取得到搜尋摘要），"
+    "不是硬門檻，也不是驗收標準。"
+)
+
+
+def estimated_reads_per_minute(tab_count: int) -> int:
+    """穩態（沒有任何分頁讀取失敗）下，這本試算表每分鐘的上游讀取數 ＝ 分頁數 ＋ `FIXED_READS_PER_CYCLE`。
+
+    ⚠️ 這是**下界**，不是上限：有分頁讀取失敗時會更高（逐分頁重試、5xx 之後的探測都另外打上游）。
+    ⚠️ 與重跑頻率無關（三種快取都是 `CACHE_TTL_SEC` ＝ 60 秒）。
+    """
+    return int(tab_count) + FIXED_READS_PER_CYCLE
+
+
+def read_volume_estimate(tab_count: int) -> dict:
+    """交給呼叫端的讀取量診斷（第 14 輪 B-M1）。**只報數字，不擋、不拋**。
+
+    客戶 2026-09-28 明令「每分鐘 60 次」不得當硬門檻、不得當驗收標準，所以這裡**不 raise**；
+    分頁數再多也照讀，只是把「這樣每分鐘會讀幾次」與「參考配額值未經查證」一起交出去。
+    """
+    per_minute = estimated_reads_per_minute(tab_count)
+    message = (
+        f"保單分頁 {tab_count} 張；穩態每分鐘預估讀取 {per_minute} 次"
+        f"（＝分頁數 {tab_count} ＋ 固定 {FIXED_READS_PER_CYCLE} 次："
+        f"補充分頁 open／worksheets／batch_get 各 1，保單分頁清單 open／worksheets 各 1；"
+        f"三者皆 60 秒快取，與重跑頻率無關）。"
+        f"有分頁讀取失敗時會更高（重試與探測另計）。{REFERENCE_READ_QUOTA_NOTE}"
+    )
+    return {
+        "tab_count": int(tab_count),
+        "reads_per_minute": per_minute,
+        "fixed_reads_per_cycle": FIXED_READS_PER_CYCLE,
+        "reference_quota_per_minute": REFERENCE_READ_QUOTA_PER_MINUTE,
+        "over_reference": per_minute > REFERENCE_READ_QUOTA_PER_MINUTE,
+        "reference_verified": False,
+        "message": message,
+    }
+
 
 # 只收 ASCII 數字（`\d` 會吃全形數字，規格 R1 第 2 點要拒收全形）。
 _DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -351,8 +410,16 @@ def clear_cache() -> None:
         raw = get_secret(SECRET_KEY)
         if isinstance(raw, str) and raw.strip():
             sheet_ids.add(raw.strip())
-    except Exception:  # noqa: BLE001 —— 清快取不因讀不到設定而失敗；只是少解一把鑰匙
-        pass
+    except Exception as exc:  # noqa: BLE001 —— 清快取不因讀不到設定而失敗；只是少解一把鑰匙
+        # 第 14 輪 B-M3（`CLAUDE.md` §3.3：`except: pass` 一律違憲，至少要 log）：
+        # **行為不變**（照舊不拋、照舊往下走），只是留痕，否則這一段從來沒有人知道它走過。
+        # 留痕方式照本層既有慣例：`print(f"[模組名] …", file=sys.stderr)`
+        # （同套件的 `repositories/policy/_helpers.py`、`repositories/pool_repository.py`、
+        # `repositories/portfolio_perf_repository.py` 都是這一種；本層沒有人用 `logging`）。
+        # ⚠️ **只印例外型別，不印例外訊息**：本函式沒有 `mask`（它不是公開讀取函式、沒有呼叫端傳進來），
+        # 而設定讀取的例外訊息有可能帶到設定值本身 —— 沒有遮蔽能力時就不要把它印出來。
+        print(f"[policy_supplement_repository] clear_cache 讀不到 {SECRET_KEY}，"
+              f"少解一把整本鑰匙（不影響清快取）：{type(exc).__name__}", file=sys.stderr)
     from infra.gspread_retry import sheet_key
     from infra.source_backoff import record_success
     for sid in sheet_ids:
@@ -571,8 +638,9 @@ PER_CALL_SLEEP_BUDGET_SEC = 10.0
 # 與 `worksheets` 走共用的 `with_gspread_retry`，其重試等待**不計入**本預算 —— 所以單次呼叫的最壞等待
 # 約 24 秒（本預算 10 秒＋那兩支共用重試的等待；本組依原始碼推算，未實測）；補充分頁的 `_run` 另有自己的
 # 重試，也不計入。本輪不改共用的 `with_gspread_retry`。
-# ⚠️ 讀取量（第 10 輪 6）：分頁數約 50 時，每分鐘讀取數本身就貼著配額上限（上限值來源同
-# `_cached_policy_loader` docstring 的註記）—— 本預算只限制等待，不限制讀取數。
+# ⚠️ 讀取量（第 10 輪 6；第 14 輪 B-M1 改寫）：本預算只限制**等待**，不限制**讀取數**。
+# 穩態每分鐘讀取 ＝ 分頁數 ＋ `FIXED_READS_PER_CYCLE`（實測，見該常數）；那個參考配額值
+# **未經一手查證，僅供參考**（見 `REFERENCE_READ_QUOTA_NOTE`），不是硬門檻。
 
 
 def _fetch_policy_tab(ws, budget=None, retry_5xx: bool = True) -> list:
@@ -825,8 +893,14 @@ def _cached_policy_loader(client, sheet_id):
     ~~不登記分頁冷卻~~ 觸發短路與探測失敗的那兩張改登記 600 秒分頁冷卻（第 12 輪 1）；
     重試等待預算用完的那一張也不登記。冷卻期間**不重讀**該分頁，但照樣列在
     `skipped_tabs`，原因「冷卻中（還剩 N 秒），上次失敗：<經 mask 的原因>」。
-    ⚠️ 讀取量：分頁約 50 張時，即使沒有壞分頁，每分鐘的讀取數也已接近 Google 試算表 API 的配額
-    （每分鐘 60 次讀取；據 `infra/gspread_retry.py` 註記，取自官方頁的搜尋摘要，未讀到一手頁面；**本組未實測**）。
+    ⚠️ 讀取量（第 14 輪 B-M1 實測改寫；舊句只寫「約 50 張時已接近配額」、且沒有量過）：
+    穩態（沒有任何分頁讀取失敗）下，**每分鐘上游讀取數 ＝ 分頁數 ＋ `FIXED_READS_PER_CYCLE`（5）**，
+    **與畫面重跑頻率無關**（三種快取都是 60 秒）。2026-09-28 實測 n ∈ {50, 52, 55, 56, 58, 60, 70, 100}
+    → 55／57／60／61／63／65／75／105，逐點吻合。有分頁讀取失敗時更高（重試與探測另計）。
+    這個關係由 `tests/test_policy_supplement_repository.py::test_第14輪BM1_*` 參數化釘住。
+    參考配額值（每使用者每專案每分鐘 60 次）見 `REFERENCE_READ_QUOTA_NOTE` ——
+    **未經一手查證，僅供參考，不是硬門檻，也不是驗收標準**（客戶 2026-09-28 裁示）。
+    本檔**不因分頁數多而拒讀**，只把 `read_estimate` 交給呼叫端（見 `load_policy_holding_rows`）。
 
     ⚠️ 分頁清單快取的已知限制（第 7 輪 4）：
     - 60 秒內新增或刪除的分頁可能還讀不到／還在讀 —— L2 的孤兒判定可能因此過早；
@@ -964,7 +1038,12 @@ BUDGET_UNREAD_COUNT_TEXT = "有 {n} 張因重試等待上限未讀"     # 第 13
 def load_policy_holding_rows(*, mask: Mask) -> dict:
     """同一本（`POLICY_SHEET_ID`）的保單分頁持倉列。
 
-    回傳 `{"rows": [dict, ...], "skipped_tabs": [{"tab", "error", "unread"}], "invest_twd_parse_errors": [...]}`。
+    回傳 `{"rows": [dict, ...], "skipped_tabs": [{"tab", "error", "unread"}], "invest_twd_parse_errors": [...],
+    "read_estimate": {...}}`。
+    `read_estimate`（第 14 輪 B-M1）：本次的**分頁數**與**穩態每分鐘預估讀取數**（＝分頁數 ＋
+    `FIXED_READS_PER_CYCLE`），連同「參考配額值未經一手查證」一起交出去，讓呈現端自己決定要不要提醒。
+    ⛔ **本檔不因分頁數多而拒讀、不拋錯** —— 客戶 2026-09-28 明令「每分鐘 60 次」不得當硬門檻、
+    不得當驗收標準。`code="api"` 的 `details` 也帶同一個欄位。
     `rows` 的欄名是 `ALL_COLS_V2` 加上 `_tab`、`_row`、`_blank`、`_invest_both`（該分頁兩個本金標頭並存）。
     `skipped_tabs[*]["error"]` 過 `mask`（ID 不遮，7.2 丙）；另有 `unread`（第 13 輪 5，見下）。
 
@@ -1006,12 +1085,15 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
       - 降級模式的觸發只看「5xx 短路或整本升級」，而降級模式下本身不短路、不升級，所以 900 秒後自動解除。
         解除那一刻若**好分頁的快取同時到期**（它們是同一次讀進來的，每 60 秒一起過期；A 組建議 1）、
         頭部壞分頁的冷卻也剛好到期，就會再一次短路＋探測中位壞分頁 → 再升級，形成「每 15 分鐘暗 5 分鐘」。
-        實測受影響的排列：B-M1 四種（頭 2／3／5／10 張壞＋中段一塊壞）、頭 1＋中段壞、51 張單雙交錯 ——
+        實測受影響的排列：B-M1 四種（頭 2／3／5／10 張壞＋中段一塊壞）、頭 1＋中段壞、51 張單雙交錯
+        （⚠️ 第 14 輪三-2 補註：**這些排列是實作組自訂的測試排列，`44` 與 `49` 都沒有規定任何一種** ——
+        2026-09-28 實測 `49` 全檔無「排列」字樣，`44` 的 9 處「排列」逐處判讀後全是 UI 欄位排序與狀態列舉）——
         ~~330 秒起有資料 388/489（79.3%），未達總管門檻 90%，以 `xfail(strict)` 標記。~~（第 13b 輪已不成立）
         頭尾各 5 張壞不受影響（489/489）。每分鐘讀取在所有排列下 ≤ 58。
       - 與 2c 工單（冷卻／快取抖動）相關：快取同時到期是成因之一，加抖動可以打散。
       → 第 13b 輪：降級期間 5xx 讀取失敗會延長降級，上述「900 秒後自動解除 → 再升級」在壞分頁持續時不再發生；
-      第 13b 輪實測（同條件，50／51 張、每 3 秒重跑 30 分鐘；`test_第13輪1_三十分鐘每3秒_*`）：上列 7 種排列
+      第 13b 輪實測（同條件，50／51 張、每 3 秒重跑 30 分鐘；`test_第13輪1_三十分鐘每3秒_*`）：上列 7 種
+      **實作組自訂的**排列（非 `44`／`49` 規格，見上一段補註）
       330 秒起有資料全部 490/490；每分鐘讀取最高 58；全部 5xx 時保單分頁讀取每 5 分鐘 ≤ N＋4。
       現行已知限制：冷啟動遇到「頭部壞＋中位也壞」時仍先升級整本 300 秒（第一輪），之後即進入降級模式。
     - 任一分頁重試用完仍 429／5xx → 其餘要打上游的分頁不讀（第 8 輪 2、第 9 輪 1）。
@@ -1096,8 +1178,11 @@ def load_policy_holding_rows(*, mask: Mask) -> dict:
                 detail += f"；{BUDGET_UNREAD_COUNT_TEXT.format(n=unread_by_budget)}"
             raise PolicySupplementError(mask(f"{ALL_TABS_FAILED_MESSAGE}：{detail}"), code="api",
                                         details={"skipped_tabs": public,
-                                                 "unread_by_budget": unread_by_budget})
-        return {"rows": rows, "skipped_tabs": public, "invest_twd_parse_errors": parse_errors}
+                                                 "unread_by_budget": unread_by_budget,
+                                                 "read_estimate": read_volume_estimate(tab_count)})
+        # 第 14 輪 B-M1：讀取量診斷 —— **只報數字，不擋**（客戶 2026-09-28：60 不得當硬門檻）
+        return {"rows": rows, "skipped_tabs": public, "invest_twd_parse_errors": parse_errors,
+                "read_estimate": read_volume_estimate(tab_count)}
 
     # 有分頁被略過時不算整次成功 —— 不呼叫 `record_gspread_success`，否則剛登記的配額冷卻會被當場解除。
     _sid, result = _run(op, mask=mask, open_sheet=False,

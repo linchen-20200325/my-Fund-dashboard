@@ -9,6 +9,55 @@
 from __future__ import annotations
 
 
+# ── 寫入型方法一覽（`FakeSpreadsheet.writes()` 的真相源；第 14 輪假斷言 3）──────────────
+#
+# ⚠️ 為什麼要有這份清單：`writes()` 原本只認 `append_rows`／`add_worksheet`／`del_worksheet`，
+# 名字卻叫「writes」。`update`／`batch_update`／`clear`／`delete_rows` 這些 gspread 的寫入方法
+# **不在清單內** —— 實作若改成用它們寫入，`writes()` 會回 `[]`，「只讀不寫」的斷言當場變成假的。
+# 當時擋住這件事的是「`FakeWorksheet` 沒有這些方法會 `AttributeError`」，**那是運氣，不是設計**：
+# 一旦有人為了別的測試補上其中任何一個方法，這道保護就無聲消失。
+# 現在改成：**明確攔截並記錄**，讓寫入真的走得到、而且一定被 `writes()` 看見。
+# 攔截到的方法一律只記錄、不改資料（回傳 `{}`），這樣測試流程會繼續走到 `writes()` 的斷言，
+# 而不是先死在 `AttributeError` 上、留下一個看不出原因的紅燈。
+WRITE_METHODS_WORKSHEET = (
+    "append_row", "append_rows", "insert_row", "insert_rows",
+    "update", "update_cell", "update_cells", "update_acell", "batch_update",
+    "clear", "batch_clear", "delete_rows", "delete_row", "delete_columns",
+    "resize", "add_rows", "add_cols", "update_title", "sort", "format",
+    "merge_cells", "unmerge_cells", "update_note", "clear_note",
+    "copy_range", "cut_range",
+)
+WRITE_METHODS_SPREADSHEET = (
+    "add_worksheet", "del_worksheet", "duplicate_sheet",
+    "batch_update", "values_update", "values_append", "values_clear",
+    "values_batch_update", "values_batch_clear", "batch_clear", "update_title",
+)
+WRITE_METHODS = tuple(sorted(set(WRITE_METHODS_WORKSHEET) | set(WRITE_METHODS_SPREADSHEET)))
+
+
+def _install_write_interceptors(cls, names):
+    """把 `names` 裡還沒有實作的方法補成「記錄一筆、不改資料」的攔截器。
+
+    已經有真實作的（`append_rows`／`add_worksheet`／`del_worksheet`）**不覆蓋** —— 那幾支要保留
+    原本的行為（含 `fail_next` 注入失敗、真的把列寫進去），既有測試靠它們。
+    """
+    for name in names:
+        if hasattr(cls, name):
+            continue
+
+        def _make(method_name):
+            def _intercept(self, *args, **kwargs):
+                book = getattr(self, "book", self)
+                title = getattr(self, "title", None)
+                book.calls.append((method_name, title, args, tuple(sorted(kwargs))))
+                book._maybe_fail(method_name, title)
+                return {}
+            _intercept.__name__ = method_name
+            return _intercept
+
+        setattr(cls, name, _make(name))
+
+
 class FakeWorksheet:
     def __init__(self, book: "FakeSpreadsheet", title: str, rows=None):
         self.book = book
@@ -103,7 +152,12 @@ class FakeSpreadsheet:
         return [list(r) for r in self.tabs[title].rows]
 
     def writes(self):
-        return [c for c in self.calls if c[0] in ("append_rows", "add_worksheet", "del_worksheet")]
+        """所有寫入型往返。真相源是 `WRITE_METHODS`（第 14 輪假斷言 3：原本只認三個名字）。"""
+        return [c for c in self.calls if c[0] in WRITE_METHODS]
+
+
+_install_write_interceptors(FakeWorksheet, WRITE_METHODS_WORKSHEET)
+_install_write_interceptors(FakeSpreadsheet, WRITE_METHODS_SPREADSHEET)
 
 
 class FakeClient:

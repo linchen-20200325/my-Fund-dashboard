@@ -1658,6 +1658,13 @@ def _five_minutes(policy_env, monkeypatch, bad_indices, *, seconds=300, every=1,
     return results, log, start
 
 
+# ⚠️ **本檔多處寫著 `max(per_minute) <= 60`，那個 60 的性質要先講清楚（客戶 2026-09-28 裁示三-1）**：
+# 它是一個**未經一手查證的參考值**（見 `R.REFERENCE_READ_QUOTA_NOTE`；2026-09-28 再查仍讀不到
+# 一手官方頁面，egress proxy 擋掉 developers.google.com），**不是**已查證的 Google 配額。
+# 那些斷言的作用是「失敗情境下讀取量不得失控」的上限 sanity check，**不是**讀取量的驗收標準；
+# 讀取量真正的驗收標準是第 14 輪 B-M1 的**關係式**（每分鐘 ＝ 分頁數 ＋ `R.FIXED_READS_PER_CYCLE`），
+# 見 `test_第14輪BM1_*`（那幾支刻意不寫任何 `<= 60`）。
+# 📌 **本輪沒有把那些 `<= 60` 改寫成實測 ratchet** —— 那超出第 14 輪派工單的射程，已登記回報總管。
 def _per_minute(log, start, minutes=5):
     counts = [0] * minutes
     for t, _name in log:
@@ -1693,7 +1700,9 @@ def test_第10輪3b_45好5壞_第2分鐘起每分鐘讀取不超過60(policy_env
         later = [(code, n) for t, code, n in results if t >= 60]
         with_data = sum(1 for code, n in later if code == "ok" and n > 0)
         print(f"[3b bad_first] 第 2 分鐘起有資料 {with_data}/{len(later)}")
-        assert later and with_data / len(later) >= 0.9, (with_data, len(later))
+        # ~~`>= 0.9`~~ → 第 14 輪收緊（紅隊：改成 1.0 也不轉紅 ＝ 死餘裕）。
+        # 2026-09-28 實測 240/240（100%）。⚠️ **此處餘裕為 0，實測值一變動即轉紅。**
+        assert later and with_data == len(later), (with_data, len(later))
 
 
 
@@ -1904,7 +1913,9 @@ def test_第12輪1_總管門檻_第7分鐘起有資料比例至少九成(policy_
     results, log, start = _five_minutes(policy_env, monkeypatch, _ENDS[name], seconds=720, every=3)
     ok, total = _data_ratio(results, 360)
     print(f"\n[12b {name}] 每分鐘讀取 {_per_minute(log, start, 12)}；第 7 分鐘起有資料 {ok}/{total}")
-    assert ok / total >= 0.9, (ok, total)
+    # ~~`>= 0.9`（總管原訂門檻）~~ → 第 14 輪收緊：2026-09-28 實測兩種排列皆 120/120（100%）。
+    # ⚠️ **此處餘裕為 0，實測值一變動即轉紅。** 總管門檻 90% 仍然是驗收下限，只是守衛貼著實測值走。
+    assert total and ok == total, (ok, total)
 
 
 def test_第12輪1_全部5xx_十二分鐘每3秒_每輪只多讀固定次數(policy_env, monkeypatch):
@@ -1919,7 +1930,11 @@ def test_第12輪1_全部5xx_十二分鐘每3秒_每輪只多讀固定次數(pol
         if name.startswith("PX-") and int((t - start) // 60) < 12:
             tab_reads[int((t - start) // 60)] += 1
     for i in range(12):
-        assert sum(tab_reads[i:i + 5]) <= 50 + 4, tab_reads     # +4：第一輪觸發短路那張的重試
+        # ~~`<= 50 + 4`（+4：第一輪觸發短路那張的重試）~~ → 第 14 輪收緊（紅隊：那 4 是死餘裕）。
+        # 2026-09-28 實測：12 分鐘內任一 5 分鐘視窗的保單分頁讀取
+        # 為 `[5,0,0,0,0,48,0,0,0,0,50,0]` → 最大恰為 **50 ＝ N**，「+4」從來沒有被用到。
+        # ⚠️ **此處餘裕為 0，實測值一變動就轉紅**（這正是要的：13 輪來沒有人看得見這條線在哪）。
+        assert sum(tab_reads[i:i + 5]) <= 50, tab_reads
     assert max(per_minute) <= 60, per_minute
     assert {code for _t, code, _n in results} <= {"api", "cooling"}
 
@@ -2092,6 +2107,10 @@ def test_第13輪1_非降級模式_冷啟動全部5xx仍升級整本(policy_env,
     assert SB.should_skip(GR.sheet_key(R.ACTOR, SHEET))[2] == "server_error" and R.is_degraded(SHEET)
 
 
+# ⚠️ **這 7 種排列是本組（實作組）自訂的測試排列，`44` 與 `49` 都沒有規定任何一種**
+# （客戶 2026-09-28 裁示三-2）。2026-09-28 實測：`docs/v2/49_data_integration_plan.md` 全檔
+# 無「排列」字樣；`docs/v2/44_fund_ui_ssot.md` 的 9 處「排列」逐處判讀後全是 UI 欄位排序與狀態列舉，
+# 沒有一處在講分頁讀取失敗的排列。⇒ 它們是**回歸用的實測情境**，不是規格判準。
 _R13 = {
     "B-M1 頭2+第20~29張壞": ({0, 1} | set(range(20, 30)), 50),
     "B-M1 頭3+第15~34張壞": ({0, 1, 2} | set(range(15, 35)), 50),
@@ -2121,9 +2140,16 @@ def test_第13輪1_三十分鐘每3秒_每分鐘讀取不超過60(policy_env, mo
 
 
 @pytest.mark.parametrize("name", list(_R13))
-def test_第13輪1_三十分鐘每3秒_第一次整本冷卻結束後有資料至少九成(policy_env, monkeypatch, name):
+def test_第13輪1_三十分鐘每3秒_第一次整本冷卻結束後有資料全部命中(policy_env, monkeypatch, name):
+    """~~原名 `…有資料至少九成`、門檻 `>= 0.9`~~ → 第 14 輪收緊（紅隊：改成 1.0 也不轉紅 ＝ 死餘裕）。
+
+    2026-09-28 實測：7 種排列 330 秒起**全部 490/490（100%）**。
+    ⚠️ **此處餘裕為 0，實測值一變動即轉紅** —— 13b 輪撤掉 6 支 `xfail` 的理由正是
+    「從 79.3% 提到 ≥90%」，而守衛的解析度（90%）比它要守的那個差距還粗。
+    總管門檻 90% 仍然是驗收下限，收緊的是守衛的解析度，不是驗收標準。
+    """
     _per_minute_, ok, total = _r13_run(policy_env, monkeypatch, name)
-    assert ok / total >= 0.9, (ok, total)
+    assert total and ok == total, (ok, total)
 
 
 def test_第13輪1_全部5xx_三十分鐘每3秒_讀取有上限(policy_env, monkeypatch):
@@ -2136,7 +2162,9 @@ def test_第13輪1_全部5xx_三十分鐘每3秒_讀取有上限(policy_env, mon
     print(f"\n[13-1 全部5xx] 每分鐘讀取 {per_minute}")
     assert max(per_minute) <= 60, per_minute
     for i in range(30):
-        assert sum(tab_reads[i:i + 5]) <= 50 + 4, tab_reads     # 每 5 分鐘保單分頁最多 N 次（＋觸發短路那張的重試）
+        # ~~`<= 50 + 4`~~ → 第 14 輪收緊：2026-09-28 實測 30 分鐘內任一 5 分鐘視窗最大恰為 **50 ＝ N**。
+        # ⚠️ **此處餘裕為 0，實測值一變動就轉紅。**
+        assert sum(tab_reads[i:i + 5]) <= 50, tab_reads
     assert {code for _t, code, _n in results} <= {"api", "cooling"}
 
 
@@ -2205,3 +2233,152 @@ def test_第13b輪_反例_降級期間只有非5xx錯誤_不延長(policy_env, s
     holder["book"] = FakePolicyBook([_good_tab("PX-A"), _Raising("PX-B", ValueError("header"))])
     R.load_policy_holding_rows(mask=mask)
     assert R._DEGRADED[SHEET] == start
+
+
+# ═══════════════════════ 第 14 輪 ═══════════════════════
+
+# ── B-M1：讀取量隨分頁數線性成長，前 13 輪的守衛把分頁數寫死在 50／51，結構上掃不到 ──
+#
+# 為什麼要參數化「分頁數」這一軸：前 13 輪把「壞分頁的排列」打得很細（7 種排列 × 30 分鐘），
+# 但**分頁數從頭到尾只有 50 與 51 兩個值**。客戶多開幾張保單分頁就會讓每分鐘讀取超過那個
+# 參考配額值，而 CI 不會有任何反應 —— 那正是「只鎖一個門檻值、不鎖關係」的失效形狀。
+#
+# 本組斷言的是**關係**，不是門檻：穩態每分鐘讀取 ＝ 分頁數 ＋ `R.FIXED_READS_PER_CYCLE`。
+# ⛔ 刻意**不**斷言「≤ 60」：客戶 2026-09-28 明令 60 不得當硬門檻、不得當驗收標準，
+#    而且 60 這個數字本身未經一手查證（見 `R.REFERENCE_READ_QUOTA_NOTE`）。
+_BM1_TAB_COUNTS = [50, 55, 56, 60, 70]
+
+
+@pytest.mark.parametrize("n", _BM1_TAB_COUNTS)
+def test_第14輪BM1_穩態每分鐘讀取等於分頁數加固定數(policy_env, monkeypatch, n):
+    """零壞分頁、每秒重跑 5 分鐘：第 2 分鐘起每分鐘讀取**恰等於** n ＋ `FIXED_READS_PER_CYCLE`。
+
+    同時鎖住三件事必須一致（任一邊改了就轉紅）：
+    (1) 模擬器實際量到的每分鐘讀取；
+    (2) 實作宣告的算式 `R.estimated_reads_per_minute(n)`；
+    (3) `load_policy_holding_rows` 交出去的 `read_estimate["reads_per_minute"]`。
+    """
+    _results, log, start = _five_minutes(policy_env, monkeypatch, set(), seconds=300, every=1, n_tabs=n)
+    per_minute = _per_minute(log, start)
+    expected = n + R.FIXED_READS_PER_CYCLE
+    print(f"\n[14-BM1 n={n}] 每分鐘讀取 {per_minute}；預期 {expected}")
+    assert per_minute[1:] == [expected] * (len(per_minute) - 1), per_minute
+    assert R.estimated_reads_per_minute(n) == expected
+    assert R.load_policy_holding_rows(mask=mask)["read_estimate"]["reads_per_minute"] == expected
+
+
+@pytest.mark.parametrize("n", _BM1_TAB_COUNTS)
+def test_第14輪BM1_診斷欄位把分頁數與預估讀取數交給呼叫端(policy_env, monkeypatch, n):
+    """實作端**不擋、不拋**，只把數字與不確定性交出去（客戶 2026-09-28 裁示：60 不得當硬門檻）。"""
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_good_tab(f"PX-{i:02d}") for i in range(n)])
+    out = R.load_policy_holding_rows(mask=mask)          # n 再大也照讀、不 raise
+    est = out["read_estimate"]
+    assert len(out["rows"]) == n and out["skipped_tabs"] == []
+    assert est["tab_count"] == n
+    assert est["reads_per_minute"] == n + R.FIXED_READS_PER_CYCLE
+    assert est["over_reference"] is (est["reads_per_minute"] > R.REFERENCE_READ_QUOTA_PER_MINUTE)
+    assert est["reference_verified"] is False
+    # 訊息三件事缺一不可：分頁數、預估每分鐘讀取數（附算式出處）、參考配額值未經查證
+    assert f"{n} 張" in est["message"] and f"{est['reads_per_minute']} 次" in est["message"]
+    assert "＝分頁數" in est["message"] and "固定" in est["message"]
+    assert "未經一手查證" in est["message"] and "不是硬門檻" in est["message"]
+
+
+def test_第14輪BM1_反例_分頁數超過參考值時照讀不拋錯_只標記(policy_env):
+    """56 張 → 每分鐘 61 次，超過那個參考值。**不得**因此拒讀（⛔ 反例：raise 擋掉）。"""
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_good_tab(f"PX-{i:02d}") for i in range(56)])
+    est = R.load_policy_holding_rows(mask=mask)["read_estimate"]
+    assert est["reads_per_minute"] == 61 > R.REFERENCE_READ_QUOTA_PER_MINUTE
+    assert est["over_reference"] is True
+
+
+def test_第14輪BM1_預估讀取數與重跑頻率無關(policy_env, monkeypatch):
+    """`CACHE_TTL_SEC` ＝ 60 綁死了它：每 3 秒重跑與每 1 秒重跑，每分鐘讀取相同。"""
+    fast = _per_minute(*_five_minutes(policy_env, monkeypatch, set(), seconds=300, every=1, n_tabs=56)[1:])
+    R.clear_cache()
+    SB.reset_all()
+    slow = _per_minute(*_five_minutes(policy_env, monkeypatch, set(), seconds=300, every=30, n_tabs=56)[1:])
+    print(f"\n[14-BM1 頻率] every=1 {fast}；every=30 {slow}")
+    assert fast[1:] == slow[1:] == [61] * 4
+
+
+def test_第14輪BM1_錯誤路徑的details也帶讀取量(policy_env, slept):
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_Raising(f"PX-{i}", _api_error(503, "x")) for i in range(3)])
+    with pytest.raises(R.PolicySupplementError) as err:
+        R.load_policy_holding_rows(mask=mask)
+    assert err.value.details["read_estimate"]["tab_count"] == 3
+
+
+# ── B-M2：快取世代守衛（讀取途中被清過的結果不得存進快取）──
+#
+# 紅隊第 14 輪實測：`_cached` 與 `_cache_put` 的 `_CACHE_GEN == generation` 兩處各自拿掉，
+# 377 條**一條都不轉紅**。它不是死碼 —— 使用者在讀取途中按「全域刷新」就會走到。
+
+def test_第14輪BM2_補充分頁讀取途中被清快取_結果不得存進快取(env):
+    """`_cached` 的世代守衛。`clear_cache` docstring 明文承諾「讀取期間被清過的結果不存快取」。"""
+    book, _clock, _s = env
+    _put(book, R.TAB_HOLDING_SUPPLEMENT, _hs(["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", "甲"]))
+    book.on_batch_get = R.clear_cache                # 讀取途中有人按全域刷新
+    out = R.load_supplement_tabs(mask=mask)          # 這一次照常交出結果（行為不變）
+    assert out[R.TAB_HOLDING_SUPPLEMENT]["records"][0]["bucket"] == "甲"
+    assert R._CACHE == {}, R._CACHE                  # 但**不得**留在快取裡供應 60 秒
+    book.on_batch_get = None
+    book.calls.clear()
+    R.load_supplement_tabs(mask=mask)                # 下一次必須真的重讀（不是吃到過期快取）
+    assert any(c[0] == "values_batch_get" for c in book.calls), book.calls
+
+
+def test_第14輪BM2_保單分頁讀取途中被清快取_該分頁不得存進快取(policy_env):
+    """`_cache_put` 的世代守衛（逐分頁快取走的是這一支，不是 `_cached`）。"""
+    holder, _c, _s = policy_env
+    good = _good_tab("PX-A")
+    original_get = good.get
+
+    def get_then_clear(*args, **kwargs):
+        value = original_get(*args, **kwargs)
+        R.clear_cache()                              # 讀到一半有人按全域刷新
+        return value
+
+    good.get = get_then_clear
+    holder["book"] = FakePolicyBook([good])
+    out = R.load_policy_holding_rows(mask=mask)
+    assert len(out["rows"]) == 1                     # 這一次照常交出結果（行為不變）
+    assert R._CACHE == {}, R._CACHE                  # 分頁結果與分頁清單都不得留下
+
+
+def test_第14輪BM2_反例_沒有人清快取時照常存入(policy_env):
+    """正例對照（`CLAUDE.md` §-2.A 第 3 款：禁令要同時寫出正例）—— 沒被清過就該進快取。"""
+    holder, _c, _s = policy_env
+    holder["book"] = FakePolicyBook([_good_tab("PX-A")])
+    R.load_policy_holding_rows(mask=mask)
+    assert (SHEET, "policy_tab", "PX-A") in R._CACHE and (SHEET, "policy_tab_list") in R._CACHE
+
+
+# ── B-M3：`clear_cache` 讀不到設定時的 except 分支（零測試、無留痕）──
+
+def test_第14輪BM3_clear_cache讀不到設定時_不拋錯但留痕(env, monkeypatch, capsys):
+    """`CLAUDE.md` §3.3：`except Exception` 至少要 log。**行為不變**：照舊不拋、照舊清完快取。"""
+    book, _clock, _s = env
+    _put(book, R.TAB_HOLDING_SUPPLEMENT, _hs(["PX-TEST-001", "ZZ9999", "2001-01-01", "2001-02-03", ""]))
+    R.load_supplement_tabs(mask=mask)
+    assert R._CACHE                                   # 先讓快取有東西
+
+    def boom(_key, default=None):
+        raise RuntimeError("secrets backend down")
+
+    monkeypatch.setattr(R, "get_secret", boom)
+    R.clear_cache()                                   # 不得拋錯
+    assert R._CACHE == {}                             # 快取照樣清乾淨
+    err = capsys.readouterr().err
+    assert "policy_supplement_repository" in err and R.SECRET_KEY in err
+    assert "RuntimeError" in err                      # 留下例外型別
+    assert "secrets backend down" not in err          # 但不印訊息：這裡沒有 mask 可用
+
+
+def test_第14輪BM3_反例_讀得到設定時不留痕(env, capsys):
+    """正例對照：正常路徑不得因為補了 log 就變成每次清快取都吐一行。"""
+    R.clear_cache()
+    assert capsys.readouterr().err == ""

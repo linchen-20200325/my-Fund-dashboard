@@ -90,8 +90,14 @@ def describe_sheet_exc(e: BaseException, sheet_id: str = "") -> str:
     return f"{_base}{_hint}{_sid}"
 
 
-# v18.152：Google Sheets API 429 配額退避。每 user 每分鐘 60 reads，v2 編輯介面進場
-# 一次就 1 + 2N reads（N=保單數），容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
+# v18.152：Google Sheets API 429 配額退避。v2 編輯介面進場一次就 1 + 2N reads（N=保單數），
+# 容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
+# ⚠️ 2026-09-28 措辭更正（客戶裁示；只改措辭，程式邏輯一個字沒動）：本行原寫
+# ~~「每 user 每分鐘 60 reads」~~，把一個**未經一手查證**的數字寫成了事實。
+# 現行讀法：「每使用者每專案每分鐘 60 次讀取」**未經一手查證，僅供參考**，不是硬門檻、不是驗收標準
+# —— 2026-09-28 再查仍沒讀到一手官方頁面（本環境 egress proxy 擋掉 developers.google.com），
+# 數值取自搜尋摘要。同一則揭露另見 `infra/gspread_retry.py` 的配額維度註記
+# 與 `repositories/policy_supplement_repository.py::REFERENCE_READ_QUOTA_NOTE`。
 # v18.253：起點 1→2s（給 Google quota 視窗多一拍 reset），總等待 15s→30s。
 # v19.385 T2a：偵測 + 迴圈收 infra.gspread_retry；退避節奏 _QUOTA_BACKOFFS 仍本層專屬
 # （30s，snapshot 為 15s，值不同不合併，§8.4）。

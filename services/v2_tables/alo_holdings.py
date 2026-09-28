@@ -28,7 +28,15 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A；**�
   - **總管暫定**（2026-09-27 第 2 輪；**不是客戶裁示**）：DIRECT 持倉**不產生 `holding` 列**。
     客戶只裁了「不計入配置」；不產生 `holding` 列的連帶後果是 hld 頁看不到 DIRECT 持倉 ——
     這件事掛在已登記的未定題「hld 頁遇到 DIRECT 持倉怎麼顯示」（交接本 :94）之下，待 hld 接真資料時送客戶裁示。
-    暫定理由：`policy` 的 DIRECT 列不產生，若產生 `holding` 列，它的 `policy_id` 會懸空參照。
+    ~~暫定理由：`policy` 的 DIRECT 列不產生，若產生 `holding` 列，它的 `policy_id` 會懸空參照。~~
+    → **2026-09-28 第 14 輪更正（有意識的更正，不是漏刪；決策者：AI 總管，稽核 A 指出）：
+    懸空參照不是 DIRECT 獨有的** —— 實測非 DIRECT 的持倉在 `_保單資料` 缺該保單列時，
+    `holding` 照樣產生、`policy` 為空、同樣懸空（`missing_profile` 記下來，不擋）。
+    **現行暫定理由**：`44` HLD-5 的空狀態規則是「`policy_id` 為 `DIRECT` → 保單欄位顯示『直接持有』」
+    （`ui_v2/hld/logic.py::TEXT_DIRECT_HOLD`）。DIRECT 的 `holding` 列一旦產生，HLD-5 就會把它
+    顯示成「直接持有」—— 那正是上一項「**另一件事、不可混用**」禁止的混用，也是本檔自訂的界線。
+    一般保單缺 `_保單資料` 列時不會觸發這條顯示規則，所以這個理由分得出 DIRECT 與一般保單。
+    完整記載見 `ACCEPTANCE.md` 8.3。
   - 大小寫敏感：只有去掉前後空白後恰為 `DIRECT` 才算；`direct`、`Direct` 當一般保單編號（與全系統一致）。
 - U10：`淨投資金額` 空白＝沒填 → 該筆持倉不寫入，不補 0。L1 逐分頁讀，空白交回 None、填 `0` 交回 0、
   解析不了（例 `NT$1,000`）交回 None 並列入 `invest_twd_parse_errors`；本層依該清單把原因寫成
@@ -464,5 +472,10 @@ def load_alo_tables(secret_values) -> dict:
     mask = masker(secret_values)
     tabs = repo.load_supplement_tabs(mask=mask)
     policy = repo.load_policy_holding_rows(mask=mask)
-    return build_alo_tables(policy["rows"], tabs, skipped_tabs=policy["skipped_tabs"],
-                            invest_twd_parse_errors=policy["invest_twd_parse_errors"])
+    out = build_alo_tables(policy["rows"], tabs, skipped_tabs=policy["skipped_tabs"],
+                           invest_twd_parse_errors=policy["invest_twd_parse_errors"])
+    # 第 14 輪 B-M1：L1 的讀取量診斷原樣轉交。**L2 不判斷、不擋、不改寫** ——
+    # 它是給呈現端看的軟性提醒（分頁數、穩態每分鐘預估讀取數、以及「參考配額值未經一手查證」）。
+    # 不放進 `build_alo_tables`：那一支是純函式、拿不到分頁數，診斷只有讀取端算得出來。
+    out["read_estimate"] = policy["read_estimate"]
+    return out
