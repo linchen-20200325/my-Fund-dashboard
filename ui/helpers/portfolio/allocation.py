@@ -156,16 +156,80 @@ def summarize_core_satellite(
 
 
 def format_core_satellite_caption(summary: dict) -> str:
-    """一行說明：分母是什麼、級別哪來的、有幾檔沒填本金（原則 4「多做說明」）。"""
+    """一行說明：分母是什麼、級別哪來的、有幾檔沒填本金（原則 4「多做說明」）。
+
+    ⚠️ **2026 文案更正（有意識的變更，不是漏刪）**：舊文案是
+
+        ``f"{k}/{n} 檔級別來自 Google Sheet `policy_tier`，其餘 {n-k} 檔以基金名稱關鍵字推定"``
+
+    **它在三種情況下對客戶說了假話**（三種都在 `origin/main` @ `9cbf0377` 實測過，
+    與 Q8 批次一 #842 是否合併無關）：
+
+    1. **把 Sheet 明示的說成系統猜的。** ``n_tier_from_sheet`` 只數 ``policy_tier``
+       這個 **v1** 欄位；而 **v2** 讀取路徑（``ui/helpers/cloud_io.py::_load_all_from_sheet_v2``）
+       把客戶在 Sheet ``tier`` 欄親手填的值存進 ``is_core``、**不寫** ``policy_tier``
+       ⇒ 那一檔被歸進「其餘」，文案宣稱它「以基金名稱關鍵字推定」——
+       但它根本沒被猜過，是客戶自己填的。
+    2. **把「還沒決定」說成「猜出來的」。** ``is_core`` 缺鍵 / 為 ``None`` 時
+       ``resolve_core_flag`` 回 ``False``，那筆金額**靜靜併進衛星**；
+       文案同樣說它是名稱推定的結果。
+    3. **「其餘 0 檔以…推定」**：全部級別都明示時，舊文案仍會描述一個不存在的群組。
+
+    **新文案的取捨**：`summary` 裡**沒有**任何欄位能區分「`is_core` 是從 Sheet
+    讀來的」還是「系統推定的」—— 要區分就得在 :func:`summarize_core_satellite`
+    新增欄位，那會動到本模組的回傳契約（超出本批授權：本批**只改文案**，
+    不改任何比例數字）。故新文案**不宣稱來源機制**，只說「系統分不出」。
+
+    **並且補上舊文案完全沒講的那一句**：**未設定一律算進衛星。**
+    那是 :func:`summarize_core_satellite` 的既有行為（二態，本批不改），
+    但畫面上完全看不出來 —— 不講，客戶會把「衛星 X%」讀成「我有 X% 的衛星部位」，
+    實際上裡面混著「我還沒決定的部位」（`CLAUDE.md §1`：寧可少講，不可講錯）。
+
+    ⚠️ **2026 第二輪回修（有意識的更正，不是漏刪）—— 第一版的替代文案自己也有問題**
+
+    第一版把 `k` 那半句寫成 ``"{k}/{n} 檔級別由 Sheet `policy_tier` 欄明示"``。
+    **對 v2 客戶而言那是假的**：``repositories/policy/v2.py`` 寫進客戶分頁的表頭是
+    ``ZH_HEADERS_V2``，``tier`` 那一欄在客戶眼裡叫 **「級別」**；
+    而 ``policy_tier`` 這個字只出現在 ``docs/POLICY_SHEETS_SETUP.md`` 的 **v1** 章節。
+    ⇒ 一個在「級別」欄親手填了 core 的客戶，會看到「**0/n 檔明示**」——
+    文案等於說他沒填。**罪名換了（舊文案說「這是猜的」，第一版說「你沒填」），
+    被否定的事實是同一個。**
+
+    現在 `k` 那半句只講**可觀測的事實**（「帶有 ``policy_tier`` 欄的級別值」），
+    **不再把 `k` 翻譯成「客戶明示的檔數」** —— 那個翻譯正是上面那句假話的來源。
+
+    ⛔ **刻意不寫「v2 的「級別」欄不會寫進 ``policy_tier``」這種話**（草稿寫過，已撤）：
+    **它不是無條件為真。** ``repositories/policy/v2.py::_records_to_policy_df``
+    有一份中文表頭映射 ``{"級別": "policy_tier"}``，走
+    ``load_policy_worksheet`` / ``load_all_policy_worksheets`` 讀回的混合分頁
+    **確實會**把「級別」寫進 ``policy_tier``；只有
+    ``ui.helpers.cloud_io._load_all_from_sheet_v2`` 那條路徑不會（它只寫 ``is_core``）。
+    **同一個欄位在不同讀取路徑下去處不同 —— 所以文案不得對來源下任何斷言。**
+
+    **本輪的驗證方式（不是「我看過了」）**：四條真實讀取路徑各自造一檔（v1 `policy_tier`／
+    v2「級別」／名稱啟發／「➕ 加入組合」留白），兩兩組合共 49 組（涵蓋派工單點名的 36 組），
+    逐組比對文案的每一項原子宣稱與該檔的真實來源。
+    **修復前 4 組通過、45 組不通過；修復後 49 組全數通過。**
+    ⚠️ **該檢查器的已知盲點**：它以「句讀分段 + 不確定性標記」判斷一句話是不是斷言，
+    **一個掛著「可能」卻仍然誤導的句子會被放行**（已用突變 M-E 實測確認）。
+    """
     if not summary or not summary.get("n_funds"):
         return "尚無持倉可統計核心 / 衛星比例。"
     _n = summary["n_funds"]
     _from_sheet = summary.get("n_tier_from_sheet", 0)
-    _src = (f"{_from_sheet}/{_n} 檔級別來自 Google Sheet `policy_tier`，"
-            f"其餘 {_n - _from_sheet} 檔以基金名稱關鍵字推定")
+    _other = _n - _from_sheet
+    _src = f"{_from_sheet}/{_n} 檔帶有 Sheet `policy_tier` 欄的級別值"
+    if _other:
+        _src += (f"；其餘 {_other} 檔沒有這個值，"
+                 f"**系統分不出它們的級別是誰決定的** —— "
+                 f"可能是你在 Sheet 上設定過、"
+                 f"可能是系統依基金名稱代為判定，也可能**未設定**；"
+                 f"規則上**未設定一律算進衛星**")
     if not summary.get("is_amount_weighted"):
         return (f"⚠️ {_n} 檔皆未填投入本金 → 無法算金額比例（{_src}）。"
-                "請在 Sheet 或「編輯初始持倉」填入本金後再看此比例。")
+                "請在 Sheet 的本金欄，或 T7 帳本的"
+                "「✏️ 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）」"
+                "填入本金後再看此比例。")
     _miss = summary.get("n_missing_amount", 0)
     _tail = (f"；⚠️ {_miss} 檔未填本金，未計入分母" if _miss else "")
     return (f"分母 = Σ 投入本金（**金額**加權，非檔數）；"

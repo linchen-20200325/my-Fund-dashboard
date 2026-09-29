@@ -47,6 +47,15 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
 
     if _matched is not None:
         _amt = float(_matched.get("invest_twd", 0) or 0)
+        # ⚠️ **二態，會把「使用者還沒決定」顯示成「衛星(積極)」**（已知限制，本批不修）。
+        # Q8 批次二拿掉本檔下方那個捏造的 `"is_core": True` 之後，剛用「➕ 加入組合」
+        # 加進來的基金在這個 chip 上會由「核心(穩健)」變成「衛星(積極)」——
+        # **兩個都不是事實**，真相是「客戶還沒設定過」。
+        # ⛔ 刻意不在本批修：要正確顯示就得在畫面上新增第三個狀態，
+        # 那是版面／設計變更，依 `CLAUDE.md §-1.5.4` 必須先出線框草稿給客戶拍板。
+        # 同型的二態限制也存在於 `ui/helpers/portfolio/allocation.py`
+        # （未設定的金額併入衛星）—— 那一處本批的處置是**文案誠實揭露、行為不動**。
+        # 已在 PR 描述具名回報，等總管裁決是否另開一批。
         _tag = "核心(穩健)" if _matched.get("is_core") else "衛星(積極)"
         if _total > 0 and _amt > 0:
             _w = _amt / _total * 100.0
@@ -87,7 +96,42 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
                         "code": _add_code,
                         "name": fund_name or _add_code,
                         "loaded": False,
-                        "is_core": True,   # 預設核心，使用者可在 Tab3 調整
+                        # ⛔ **這裡刻意沒有 `is_core`（有意識的移除,不是漏刪）。**
+                        # 原本是 `"is_core": True,   # 預設核心,使用者可在 Tab3 調整`
+                        # —— 一個**憑空捏造的級別**：使用者只是說「把這檔加進我的組合」,
+                        # 從來沒有說過它是核心。而這個捏造值會被下一次「全部寫入」
+                        # **寫回客戶的 Google Sheet**（`ui/helpers/cloud_io.py` 兩處寫回
+                        # 都由 `is_core` 推出 `policy_tier` / `tier` 欄）。
+                        #
+                        # 在名稱猜測時代它看不出來 —— `ui/helpers/portfolio/load.py`
+                        # 每次「📡 載入」都會用基金名稱關鍵字再猜一個值蓋掉它,
+                        # 所以這個 `True` 只有在「加入後直接存檔、中間沒載入」時才會浮現。
+                        # 實測（`origin/main` @ `9cbf0377`,科技型與配息型各一檔）：
+                        #   加入 → 存檔（未載入）  → 兩檔都寫回 `core`   ← 本行造成的
+                        #   加入 → 載入 → 存檔     → 科技型 `satellite` / 配息型 `core`
+                        # 兩個值都不是客戶的值：**客戶根本沒設定過,正確答案是留白。**
+                        #
+                        # 少了這個鍵,**五處**寫回的三元式都會走到 `else ""` 分支
+                        # ⇒ 寫回空字串 ⇒ 客戶 Sheet 上的空白保持空白
+                        # （`CLAUDE.md §1` Fail Loud: 不知道就不要編一個值）。
+                        #
+                        # ⚠️ **2026 第二輪更正（有意識的更正,不是漏刪）**：本行原寫
+                        # ~~「三處」~~。**結論不變（五處行為完全相同：缺鍵 → `""`）,
+                        # 錯的只有計數。** 實測(AST 結構掃描 + 逐處把運算式取出來,
+                        # 餵一個沒有 `is_core` 鍵的 dict 實際執行,五處輸出皆為 `""`)：
+                        #   `ui/helpers/cloud_io.py`          — v2 `tier` 欄寫回
+                        #   `ui/helpers/cloud_io.py`          — v1 `policy_tier` 欄寫回
+                        #   `ui/tab3_portfolio.py`            — Tab3 批次加入寫回
+                        #   `ui/tab3_t7_ledger.py`            — T7 套用起始部位寫回
+                        #   `repositories/snapshot_repository.py` — 快照分頁寫回
+                        # ⚠️ **第五處當初為什麼被漏掉（這比數字本身重要）**：本輪第一版
+                        # 掃描要求運算式裡出現 `"core"` / `"satellite"` 兩個字面值,
+                        # 而快照那一處用的是**中文** `"核心"` / `"衛星"` ——
+                        # **字表選錯,那條掃描結構上就看不到它**,再跑一百次也一樣。
+                        # 改成「只看結構(巢狀三元 + 測試式提到 `is_core` + `""` 兜底),
+                        # 不看 tier 字面值」之後才掃到五處。
+                        # ⚠️ **刻意不寫行號**：行號在任何一次重構後就失效,
+                        # 而重構**不會**觸發本註解更新(`CLAUDE.md` §8.2.A.0 規則 1 同精神)。
                         "invest_twd": 0,
                     })
                     session_state["portfolio_funds"] = _pf
