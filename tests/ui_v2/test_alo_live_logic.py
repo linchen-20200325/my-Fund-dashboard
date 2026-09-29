@@ -221,9 +221,23 @@ def test_會寫user_setting的按鈕停用並寫出原因_其餘不動():
                     for b in _buttons(demo) if not b["_writes"]]
 
 
-def test_停用原因與mkt頁那一句逐字相同_不另編一句():
+def test_停用原因逐字等於客戶核准的那一句():
+    """客戶 2026-09-28 逐字核准（草稿 `docs/wireframes/draft_alo_save_disabled.html`，PR #861）。
+    ⛔ 不准加字、不准補後半句 —— 客戶砍掉「按了不會存下任何東西」，理由是本頁根本沒有存這個動作。"""
+    assert live.SAVE_DISABLED_REASON == "存檔寫入端尚未接上，這一輪只讀不寫"
+
+
+def test_停用原因刻意不沿用mkt那一句_因為那一句在本頁是假的():
+    """`ui_v2/mkt/page.py` 有 2 個 `on_click`（真的寫 `st.session_state`）⇒ mkt 那句字面正確；
+    `ui_v2/alo/page.py` 0 個、`ui_v2/alo/source.py` 沒有 save 函式 ⇒ 同一句在本頁是假的。"""
     mkt_live = pytest.importorskip("ui_v2.mkt.live")
-    assert live.SAVE_DISABLED_REASON == mkt_live.SAVE_DISABLED_REASON
+    assert live.SAVE_DISABLED_REASON != mkt_live.SAVE_DISABLED_REASON
+    for implies_saved in ("存了", "留不到", "下次開頁"):
+        assert implies_saved not in live.SAVE_DISABLED_REASON, implies_saved
+    page_src = (_ROOT / "ui_v2" / "alo" / "page.py").read_text(encoding="utf-8")
+    source_src = (_ROOT / "ui_v2" / "alo" / "source.py").read_text(encoding="utf-8")
+    assert page_src.count("on_click=") == 0
+    assert "def save" not in source_src
 
 
 def test_正式模式的模型零禁詞_零方向詞零箭頭():
@@ -253,3 +267,57 @@ def test_live的import就是那幾個_純函式模組():
             names.add(prefix)
             names.update(prefix + ("." if node.module else "") + a.name for a in node.names)
     assert names == {"__future__", "__future__.annotations", "copy", "json", "math", ".", ".logic"}, names
+
+
+# ═══════════════════════ ALO-GAP-分母全缺：總管 2026-09-28 盯住的那條界線 ═══════════════════════
+#
+# 「只在『每一檔都沒有基準值、而且缺的理由只有一種』時改畫 ⬜，其餘照舊 raise」——
+# 下面四條把界線的兩邊都釘住：放行的那一種要放行，不放行的兩種要照舊炸。
+
+
+def _mv(dataset):
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "alo_basis":
+            row["setting_value"] = logic.BASIS_MV
+    return dataset
+
+
+def test_分母全缺_理由只有一種_改畫來源缺而不是炸掉():
+    """接真資料時真正會走到的那一種：`nav` 在 L2 是 PENDING_TABLES ⇒ 每一檔都沒有基準值。"""
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["nav"] = []
+    block = logic.find_block(logic.build_page_model(dataset), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+    assert block["placeholder"]["_empty_kind"] == "來源缺"
+    assert block["_rows"] == []
+
+
+def test_分母全缺_理由不只一種_照舊raise():
+    """一類缺 `nav`、一類缺匯率 —— `44` 沒有這種情形的畫法，不准自己編一句。"""
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["market_indicator"] = []                                     # 美元那幾類缺匯率
+    dataset["nav"] = [r for r in dataset["nav"] if r["fund_code"] not in ("BBBB", "DDDD")]
+    values = logic._category_values(dataset, logic.BASIS_MV,
+                                    logic.setting_value(dataset, "alo_bucket_names"))
+    assert len({v["reason"] for v in values.values()}) == 2, "前提沒成立：這個資料集沒有兩種理由"
+    with pytest.raises(ValueError, match="分母為零或負"):
+        logic.build_page_model(dataset)
+
+
+def test_有值卻加起來不為正_照舊raise():
+    dataset = fixtures.scenario("full")                                   # 成本基準
+    for holding in dataset["holding"]:
+        holding["cost_twd"] = 0
+    with pytest.raises(ValueError, match="分母為零或負"):
+        logic.build_page_model(dataset)
+
+
+def test_負控_市值基準但有台幣淨值時分母為正_根本不走那個分支():
+    """這一條記的是一次探針失誤：`full` 只拿掉 `market_indicator` 並不會讓分母為 0 ——
+    現金那一類的 DDDD 是台幣、淨值還在，分母 ＝ 50050。**拿它當「界線沒鬆」的證據是錯的。**"""
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["market_indicator"] = []
+    values = logic._category_values(dataset, logic.BASIS_MV,
+                                    logic.setting_value(dataset, "alo_bucket_names"))
+    assert sum(v["value"] for v in values.values() if v["value"] is not None) > 0
+    assert logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]     # 照常出列

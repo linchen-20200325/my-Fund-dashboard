@@ -104,10 +104,21 @@ def _run(script, monkeypatch):
 
 
 def _rendered(at):
+    """⚠️ **radio 一定要收**：正式模式畫面上就有一枚（`live_alo_basis`），而
+    `test_正式模式頁首只留提問句_零示意字樣零情境名` 的三道檢查全部建立在本函式上 ——
+    漏收 radio，三道一起失效（紅隊 2026-09-28 突變 M-V2：只汙染正式模式的 radio 標籤，
+    962 條測試全綠）。收標籤也收選項字面：`format_func` 之後的選項字串同樣會上畫面。"""
     out = [e.value for e in at.markdown] + [e.value for e in at.caption]
     out += [e.label for e in at.button] + [e.label for e in at.expander]
     out += [b.help for b in at.button if b.help]
     out += [e.label for e in at.text_input]
+    for element in at.radio:
+        out.append(element.label)
+        out.extend(str(option) for option in element.options)
+        if element.value is not None:
+            out.append(str(element.value))
+        if getattr(element, "help", None):
+            out.append(element.help)
     return out
 
 

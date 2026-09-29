@@ -72,23 +72,33 @@ def wired(monkeypatch):
     """把 source 模組上的 `st` 與兩個 L2 模組全換成替身；預設全部成功。"""
     st = types.SimpleNamespace(secrets={}, session_state={})
     monkeypatch.setattr(source, "st", st)
+    # ⚠️ 秘密值**逐呼叫點**記下來，不是只記一個。紅隊 2026-09-28 突變 M-S 證明：
+    # 只記其中一個時，另外兩個呼叫點改成不傳秘密值，962 條測試沒有一條會紅 ——
+    # 而那是一次**真的**秘密值外洩回歸（L2 的 `masker([])` 遮不掉任何東西，
+    # 失敗訊息會原樣帶出 `SETTINGS_SHEET_ID`，見 ACCEPTANCE.md 七）。
+    # ⛔ 不要改成「記最後一次」：那只是把 1 換成另一個 1。
     state = {"tables": _tables(), "settings": _settings(**_GOOD_SETTINGS),
-             "indicators": {"rows": [dict(_MI_ROW)]}, "secret_values": None}
+             "indicators": {"rows": [dict(_MI_ROW)]}, "secret_values": {}}
+
+    def _record(name, values):
+        state["secret_values"][name] = values
 
     def _load_alo_tables(values):
-        state["secret_values"] = values
+        _record("alo_holdings.load_alo_tables", values)
         got = state["tables"]
         if isinstance(got, Exception):
             raise got
         return got
 
     def _load_user_settings(values):
+        _record("settings_store.load_user_settings", values)
         got = state["settings"]
         if isinstance(got, Exception):
             raise got
         return got
 
     def _load_market_indicator(values):
+        _record("settings_store.load_market_indicator", values)
         got = state["indicators"]
         if isinstance(got, Exception):
             raise got
@@ -175,13 +185,23 @@ def test_市場指標讀不到_只標market_indicator(wired):
 
 
 def test_設定值壞掉_走取數失敗那條路_不畫成尚未設定(wired):
+    """⚠️ 本條原本寫成 `A or B`，而 B 在這個情境恆為真 ⇒ 整條恆真、A 永遠不被強制
+    （紅隊 2026-09-28 實測：拿掉 `logic.py` 兩處 failure 守衛，本條仍 1 passed）。
+    現改成兩件事各自斷言。"""
     wired["settings"] = _settings(**dict(_GOOD_SETTINGS, alo_tolerance_pp="四"))
     out = source.load_live()
-    assert "alo_tolerance_pp" in out["dataset"]["errors"]["user_setting"]
-    assert out["dataset"]["user_setting"] == []
-    model = logic.build_page_model(out["dataset"])
-    text = "\n".join(str(v) for v in logic.find_block(model, "ALO-1").values())
-    assert logic.TEXT_UNSET not in text or logic.settings_failure(out["dataset"]) is not None
+    dataset = out["dataset"]
+    assert "alo_tolerance_pp" in dataset["errors"]["user_setting"]
+    assert dataset["user_setting"] == []
+    # (1) 它必須被當成「取數失敗」，不是「沒設定」
+    assert logic.settings_failure(dataset) is not None
+    # (2) 讀設定的每一塊都不准出現「未設定」，而且不准畫輸入欄
+    #     （判準同既有的 test_alo_logic.py::test_user_setting取數失敗_不說成未設定_不畫輸入欄）
+    model = logic.build_page_model(dataset)
+    for code in ("ALO-1", "ALO-3", "ALO-4"):
+        block = logic.find_block(model, code)
+        assert logic.TEXT_UNSET not in logic.collect_ui_strings(block), code
+        assert block.get("inputs") == [], code
 
 
 def test_三張表全失敗也畫得完(wired):
@@ -206,7 +226,14 @@ def test_秘密值在L3讀好再傳進L2_本層不自己遮(wired):
     key = _rnd.token_hex(12)
     source.st.secrets = {"SETTINGS_SHEET_ID": key}
     source.load_live()
-    assert key in wired["secret_values"], "秘密值沒有傳進 L2 ⇒ L2 遮不掉它"
+    seen = wired["secret_values"]
+    assert set(seen) == {"alo_holdings.load_alo_tables",
+                         "settings_store.load_user_settings",
+                         "settings_store.load_market_indicator"}, seen
+    # ⭐ 三個呼叫點**逐一**斷言 —— 少驗任何一個，那一個就可以悄悄不傳秘密值而全綠（紅隊 M-S）。
+    for call, values in seen.items():
+        assert values is not None, call
+        assert key in values, f"{call} 沒有把秘密值傳進 L2 ⇒ L2 的 masker 遮不掉它"
 
 
 def test_notes原樣轉交給下一輪_不判讀(wired):
