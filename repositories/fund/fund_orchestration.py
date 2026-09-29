@@ -1073,7 +1073,23 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
                 result["fund_scale"]      = rows_map.get("基金規模", "")
-                result["category"]        = rows_map.get("投資標的", rows_map.get("基金類型", "")).replace(" ","")
+                # v19.419 的修法補到第三個寫入點(另兩處在 sources.py:_src_direct_moneydj_url
+                # 與 _src_tcb_meta)。原式把「投資標的」的公開說明書長描述當類別,污染 UI 與
+                # services/regime_fit.asset_bucket 的子字串比對。
+                #
+                # ⚠️ 拿掉 `.replace(" ","")` **不是等價改寫,是有行為差的**(2026-09-14 第二輪
+                # 回修就地更正)。舊註解寫「helper 自己 strip」——**那句話撐不起等價宣稱**:
+                # `strip()` 只去**頭尾**空白,`replace(" ","")` 去的是**內部**空白。實測差異:
+                #   退步:「高 收益債」舊→高收益債桶、新→**防禦債**(內部空白使「高收益」不成立,
+                #         只剩單字「債」命中防禦債);「平 衡型」舊→平衡多重、新→**None**。
+                #   改善:「投資標的」為空或全空白時,舊式 `.get(a, .get(b))` 因 key **存在**
+                #         而回空字串→ None;新式會正確**退回基金類型**(→ 股票型)。
+                # **真正的理由是「與另兩處寫入點呼叫慣例一致」(SSOT,§2.1),不是「等價」。**
+                # MoneyDJ 該欄內部帶空白屬未觀察到的假設情境;若日後真的出現,請在
+                # `_pick_fund_category` 內收斂(**一處**),不要在三個呼叫點各自 `.replace`。
+                # 本名由檔頭的 `from ...sources import *` 帶入 —— 底線名需列在 sources.__all__
+                # 才過得來,已於同批加入(v19.248 R17 守衛強制此約定,不得改用顯式 import 繞過)。
+                result["category"]        = _pick_fund_category(rows_map)
                 result["fund_region"]     = rows_map.get("投資區域", "").replace(" ","")
                 result["fund_type"]       = rows_map.get("基金類型", "").replace(" ","")
                 result["investment_target"]= rows_map.get("投資標的", "").replace(" ","")
