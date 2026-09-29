@@ -69,9 +69,13 @@ WIRED_TABLES = ("user_setting", "market_indicator", "fetch_log")
 PENDING_TABLES = ("nav", "dividend")
 # set 頁「重新取數」目前只接上市場指標那一層（`run_market_indicator_fetch`）。
 WIRED_TIERS = (mi.SOURCE_TIER,)
-# 會讀已存設定（`user_setting`）的頁：目前只有 set 頁自己（`set_` 開頭的鍵）。
-# mkt／hld／exp／alo 四頁尚未讀取已存設定（線框草稿 ★7）；哪一頁接上了，就把它的前綴加進來。
-PAGES_READING_SETTINGS = ("set",)
+# 會讀已存設定（`user_setting`）的頁：set 頁（`set_` 開頭的鍵）與 alo 頁（`alo_` 開頭的五個鍵）。
+# mkt／hld／exp 三頁尚未讀取已存設定（線框草稿 ★7）；哪一頁接上了，就把它的前綴加進來。
+# 2026-09-28：alo 頁正式入口 `ui_v2/app_alo_live.py` 落地，經 `ui_v2/alo/source.py` 讀
+# `load_user_settings`，故加入 "alo" —— 跨頁守衛
+# `tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo有正式入口時必須列入PAGES_READING_SETTINGS`
+# 在入口出現的那一刻就會要求這一筆。
+PAGES_READING_SETTINGS = ("set", "alo")
 
 # 「重新取數」要清的 L1 快取：第一階段真的會取數的來源 → 那個來源的 L1 取數函式本身
 # （`_ttl_cache` 包過、有 `cache_clear()`）。`50` 第 10 節 B9 定案：只清本次會用到的 L1 函式
@@ -101,7 +105,14 @@ def load_user_settings(secret_values) -> dict:
 # 2026-09-27：`ui_v2/alo/logic.py` 的 `BASIS_COST`／`BASIS_MV` 已改成同一份存值（原為 `cost`／`mv`）。
 #    alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（`ui_v2/set/fixtures.py`）。
 #    由 tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo比重基準存值須與L2可選值一致 無條件逐字比對。
-#    剩下的一件：alo 接正式模式讀設定時，必須用這份值（alo 目前仍只讀示範假資料，尚未讀 L2）。
+#    ~~剩下的一件：alo 接正式模式讀設定時，必須用這份值（alo 目前仍只讀示範假資料，尚未讀 L2）。~~
+#    → **2026-09-28 狀態更新，不是漏刪**（決策者：AI 總管）：**那一件已經做完，括號裡那句已為假。**
+#    `ui_v2/alo/source.py` 經 `load_user_settings` 真的讀 L2 的五個 `alo_` 鍵，並以
+#    `ui_v2/alo/live.py::parse_user_settings` 把 `alo_basis` 解析成這份枚舉值（不是 `cost`／`mv`）；
+#    正式入口 `ui_v2/app_alo_live.py`。**「必須用這份值」這條要求本身一字未改，照舊成立。**
+#    ⚠️ 舊句刻意加刪除線保留、不直接刪：`CLAUDE.md` §2.1「TW 出口 YoY」記載過同型的病 ——
+#    **已被查證為假、卻沒被撤下的記載，比沒查證的更危險，因為它看起來已經有出處**；
+#    而**推翻一條記載的那一輪，必須在同一輪回頭改它**，只寫進別的檔（例如 PR 說明）等於沒改。
 ENUM_SETTING_VALUES = {"alo_basis": ("成本", "市值")}
 ENUM_KIND = "list"
 

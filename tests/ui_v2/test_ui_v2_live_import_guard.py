@@ -54,6 +54,17 @@ _FILE_ALLOWLIST = {
     "ui_v2/app_set_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.set.page", "ui_v2.set.source",
     },
+    # 2026-09-28 alo 頁正式模式接線骨架（客戶 2026-09-28 核准的 docs/wireframes/draft_alo_live.html）。
+    # `ui_v2.alo.live` 是本頁的純函式模組（設定值解析、示意字樣移除、寫入端按鈕停用），
+    # 不是 fixtures —— 它不 import streamlit、不 import 舊樹，體例同 `ui_v2/set/source.py` 之於 `spec`。
+    "ui_v2/alo/source.py": {
+        "__future__", "os", "streamlit",
+        "services.v2_tables.alo_holdings", "services.v2_tables.masking",
+        "services.v2_tables.settings_store", "ui_v2.alo.live",
+    },
+    "ui_v2/app_alo_live.py": {
+        "__future__", "pathlib", "sys", "streamlit", "ui_v2.alo.page", "ui_v2.alo.source",
+    },
 }
 
 

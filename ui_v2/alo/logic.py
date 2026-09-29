@@ -143,6 +143,12 @@ GAPS = {
         "舊登記「出現時沒有指派可改」寫下時為真；按鈕標籤與下方說明都不變。"
     ),
     "ALO-GAP-缺匯率不帶鍵": "ALO-4 的缺換算匯率沒有帶鍵名、ALO-2 的有（線框 A-27）。本頁兩塊各照各自的字面。",
+    "ALO-GAP-分母全缺":
+        "每一檔都缺基準值時 ALO-2 的分母是 0，44 沒有寫這種情形的畫法。"
+        "本頁判讀：缺的理由只有一種時，分母不是「零」而是「沒有」，照 44 5.5「來源缺」模板畫，"
+        "理由字串沿用 basis_value 交出來的那一句，不新編。"
+        "有值卻加起來不為正、或缺值理由不只一種 → 兩者 44 都沒有畫法，照舊 raise。"
+        "2026-09-28 接真資料時才走得到：nav 在 L2 是 PENDING_TABLES，市值基準下每一檔都沒有基準值。",
     "ALO-GAP-value_kind": "alo_basis 的值在 44 第四節 value_kind 六種裡對不上任何一種。假資料那一列放空，不補第七種。"
         "2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。",
     "ALO-GAP-匯出兩組欄名": (
@@ -644,11 +650,22 @@ def _build_alo2(dataset) -> dict:
 
     rows, tail_lines, uncovered = [], [], []
     values = {}
+    denominator = None
     if placeholder is None:
         values = _category_values(dataset, basis, bucket_names)
         denominator = sum(v["value"] for v in values.values() if v["value"] is not None)
         if denominator <= 0:
-            raise ValueError("目前比重的分母為零或負，44 沒有這種情形的畫法（fixtures 不會走到）")
+            # ALO-GAP-分母全缺：每一檔都缺基準值、而且缺的理由是同一個（例：市值基準，
+            # 而 `nav` 這張表在 L2 還沒接上）→ 分母不是「零」，是「沒有」。
+            # 照 `44` 5.5「來源缺」模板走既有的缺值路徑；理由字串由 `basis_value` 產生，這裡不新編。
+            reasons = {v["reason"] for v in values.values()}
+            if len(reasons) == 1 and None not in reasons:
+                placeholder = _placeholder(reasons.pop(), "來源缺")
+                values = {}
+            else:
+                # 有值卻加起來不為正、或缺值的理由不只一種 —— 兩者 `44` 都沒有畫法，照舊炸掉。
+                raise ValueError("目前比重的分母為零或負，44 沒有這種情形的畫法（fixtures 不會走到）")
+    if placeholder is None:
         target_of = {t["bucket"]: t["weight_ratio"] for t in targets}
         for bucket in _row_order(targets, bucket_names, values):
             slot = values.get(bucket, {"value": 0.0, "reason": None, "count": 0})
