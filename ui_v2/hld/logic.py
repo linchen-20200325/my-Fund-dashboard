@@ -447,7 +447,17 @@ def pending_tables(dataset) -> frozenset:
        語意不同，同名會讓人以為可以互換。
     ⚠️ 假資料模式**不設**這個鍵（假資料的每一張表都算接上了）⇒ 回空集合，畫面一格不變。
     """
-    return frozenset(dataset.get("pending_tables") or ())
+    value = dataset.get("pending_tables")
+    if value is None:
+        return frozenset()
+    # ⛔ 字串也是可迭代的：`frozenset("dividend")` 會被拆成單字元，於是「dividend 未備」
+    #    靜默變成「什麼都沒未備」。型別不對一律 raise（§1 Fail Loud），不猜。
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        raise TypeError(f"pending_tables 必須是表名的集合，收到 {type(value).__name__}：{value!r}")
+    bad = [name for name in value if not isinstance(name, str) or not name]
+    if bad:
+        raise TypeError(f"pending_tables 裡每一項都必須是非空字串，收到：{bad!r}")
+    return frozenset(value)
 
 
 def _rows_for(dataset, table, fund_code):
@@ -626,7 +636,7 @@ def fund_metrics(dataset, fund, window):
         # `HLD-5` 用它找回**這一筆**持倉、也用它當展開鍵。`44` 4.1：`holding` 的主鍵是
         # `holding_id`；同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
         # 只拿 `fund_code` 找會讓同基金的兩列互相蓋掉。
-        "_holding_id": fund["holding_id"],
+        "_holding_id": fund.get("holding_id"),
         "_ccy": ccy,
         "fund_name": fund["fund_name"],
         "units_shares": units,
@@ -849,10 +859,6 @@ def blocks_recalculated_by(action_kind: str) -> tuple:
 # ───────────────────────── HLD-1 偏離提示卡 ─────────────────────────
 
 
-# 主值裡會因為缺淨值而進 `資料未備` 的那幾個（`配息佔淨值比` 的分母是區間末淨值）。
-_NAV_FED_INDICATORS = ("區間報酬率", "期間波動", "最大回撤", "配息佔淨值比")
-
-
 def _breaches(rule, value) -> bool:
     if rule["direction"] == "低於":
         return value < rule["value"]
@@ -868,7 +874,7 @@ def deviation_rows(metrics, rules):
     （客戶 `H-01` 裁示；`44` HLD-1 空狀態 2026-09-22 改寫）。
     """
     rows = []
-    skipped = {"missing": set(), "missing_div": set(), "error": set(), "na": set()}
+    skipped = {"missing": set(), "missing_other": set(), "error": set(), "na": set()}
     for metric in metrics:
         for rule in rules:
             name = rule["indicator"]
@@ -882,14 +888,17 @@ def deviation_rows(metrics, rules):
                 skipped["error"].add(metric["_fund_code"])
                 continue
             if node["_state"] == STATE_MISSING:
-                if name in _NAV_FED_INDICATORS and not metric["nav_rows"]:
+                # 「缺淨值」＝這一檔在 `nav` 表裡一列也沒有（`nav_missing`，不限區間）——
+                # `44` HLD-1 判準逐字「把某一檔的淨值整個抽掉」。
+                # ⛔ 不看區間內切片 `nav_rows`：表裡有淨值、只是區間內剛好沒有的檔，
+                #    不是缺淨值（紅隊 2026-10-02 指出）。
+                if metric["nav_missing"]:
                     skipped["missing"].add(metric["_fund_code"])
                 else:
-                    # 缺的是配息、不是淨值 ⇒ 不得算進「另有 N 檔缺淨值」那一行（那會是假話）。
-                    # ⚠️ 登記：`44` HLD-1 空狀態欄只替「缺淨值」寫了畫法，這一種沒有；
-                    #    本檔不發明新文案，只收進一個不上畫面的集合，待裁。
-                    #    該檔照舊不進本表、不計入列數；`HLD-3`／`HLD-7` 上照樣看得到 `⬜ 資料未備`。
-                    skipped["missing_div"].add(metric["_fund_code"])
+                    # 其他原因的 `資料未備`（配息表尚未接上；區間末無淨值使配息佔淨值比無分母）。
+                    # ⚠️ 登記：`44` HLD-1 空狀態欄只替「缺淨值」寫了卡尾那一行，這一種沒有，
+                    #    本檔不發明卡尾文案。它在 `_build_hld1` 裡被讀：零列時不得宣稱「無偏離項」。
+                    skipped["missing_other"].add(metric["_fund_code"])
                 continue
             if node["_state"] == STATE_BIZ:
                 skipped["na"].add(metric["_fund_code"])
@@ -921,7 +930,9 @@ def deviation_rows(metrics, rules):
     return rows, skipped
 
 
-def _build_hld1(metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None):
+def _build_hld1(
+    metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None, pending=frozenset()
+):
     badges = [_redline_badge("G2†")]
     # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
     # `44` :515 本塊空狀態欄**一個按鈕也沒有寫**，而 `44` 5.5「各塊自己寫的優先於本表模板」
@@ -976,7 +987,18 @@ def _build_hld1(metrics, rules, *, has_holdings, fail_message=None, unsurfaced=N
         state = STATE_OK
         placeholder = None
         summary = f"{len(rows)} 列（示意）" if rows else TEXT_NO_DEVIATION
-        if not rows:
+        if not rows and skipped["missing_other"]:
+            # 零列，但有檔的門檻指標是 `資料未備`（而且不是缺淨值那一種）⇒ 「無偏離項」與
+            # 「沒有任何一檔超出」都是假話：那幾檔超不超出，不知道（紅隊 2026-10-02 指出）。
+            # 字樣只用 `44` 已宣告的：主值位置 `⬜ 資料未備`（`44` 5.1 卡片表 `資料未備` 那一列），
+            # 尚未接上的來源用 `44` 5.5 `來源缺` 的模板 `⬜ 資料未備：<來源鍵> 尚無資料`。
+            state = STATE_MISSING
+            summary = ND_TEXT
+            placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
+            keys = sorted(pending & set(BLOCK_SOURCE_TABLES["HLD-3"]))
+            if keys:
+                detail_lines.append(empty_source_text(keys))
+        elif not rows:
             # ⚠️ 登記：零列長什麼樣 `44` 沒有寫（草稿 ⛔ H-06：零筆偏離不屬空狀態四種）。
             #    本檔照草稿的畫法：一句「無偏離項」，不掛任何空狀態徽章。
             detail_lines.append("目前這一組門檻下，沒有任何一檔超出。")
@@ -1239,6 +1261,22 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             "buttons": [],
         }
 
+    hld1_state = next((c["_state"] for c in cards if c.get("code") == "HLD-1"), None)
+    if deviation_count == 0 and hld1_state == STATE_MISSING:
+        # `HLD-1` 零列、而且有檔的門檻指標資料未備 ⇒ 不得說「無偏離項」，
+        # 也不得說「有一塊進了『不適用』」（紅隊 2026-10-02 指出）。
+        # 字樣只用 `44` 已宣告的 `⬜ 資料未備`／`⬜ 資料未備：<來源鍵> 尚無資料`，
+        # 由 `HLD-1` 已經算好的那幾行帶過來，本塊不自取數（`44` HLD-0 來源欄）。
+        hld1 = next(c for c in cards if c.get("code") == "HLD-1")
+        return {
+            "_tone": "灰",
+            "_state": STATE_MISSING,
+            "text": ND_TEXT,
+            "lines": [l for l in hld1["detail_lines"] if l.startswith(ND_TEXT + "：")],
+            "detail_lines": [],
+            "buttons": [],
+        }
+
     if deviation_count > 0:
         return {
             "_tone": "黃",
@@ -1442,8 +1480,31 @@ def open_fund_after_click(current, clicked):
     return clicked
 
 
+class HoldingIdError(ValueError):
+    """`holding_id` 缺、空或重複。體例同 L2 `services/v2_tables/alo_holdings.py` 的
+    `HoldingIdCollision`：一律往上拋，不靜默去重、不靜默補值（§1 Fail Loud）。"""
+
+
+def _check_holding_ids(holdings) -> None:
+    """`44` 4.1：`holding_id` 是主鍵，不可空。展開鍵與欄位對應都靠它。"""
+    ids = [h.get("holding_id") for h in holdings]
+    empty = [h.get("fund_code") for h, i in zip(holdings, ids)
+             if not isinstance(i, str) or not i.strip()]
+    if empty:
+        raise HoldingIdError(f"holding_id 缺或為空：fund_code={empty!r}")
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        raise HoldingIdError(f"holding_id 重複：{dup!r}")
+
+
+def _row_is_open(holding_id, open_fund) -> bool:
+    """這一列是不是展開中。⛔ `None == None` 不算展開 —— 沒有鍵的列絕不自動展開。"""
+    return bool(holding_id) and holding_id == open_fund
+
+
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
+    _check_holding_ids(dataset.get("holding", []))
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
     items = []
     for index, metric in enumerate(metrics):
@@ -1471,11 +1532,11 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
                 "_holding_id": metric["_holding_id"],
                 "_ccy": metric["_ccy"],
                 # `44` :119／:128／§5.4「展開區不自動展開」—— 上一輪寫 `index == 0`，三處都撞。
-                "_open": metric["_holding_id"] == open_fund,
+                "_open": _row_is_open(metric["_holding_id"], open_fund),
                 "_button": _button(
                     HLD5_OPEN_LABEL,
                     "展開",
-                    enabled=metric["_holding_id"] != open_fund,
+                    enabled=not _row_is_open(metric["_holding_id"], open_fund),
                     disabled_reason=HLD5_OPEN_DISABLED_REASON,
                 ),
                 "_fields": fields,
@@ -1836,6 +1897,7 @@ def build_page_model(
         metrics, rules, has_holdings=has_holdings,
         fail_message=source_error(dataset, "HLD-1"),
         unsurfaced=unsurfaced_source_error(dataset, "HLD-1"),
+        pending=pending_tables(dataset),
     )
     hld2 = _build_core_card(
         "HLD-2",
