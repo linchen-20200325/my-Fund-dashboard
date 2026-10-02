@@ -896,7 +896,7 @@ def deviation_rows(metrics, rules):
                 if metric["nav_missing"]:
                     skipped["missing"].add(metric["_fund_code"])
                 else:
-                    # 其他原因的 `資料未備`（配息表尚未接上；區間末無淨值使配息佔淨值比無分母）。
+                    # 其他原因的 `資料未備`（配息表尚未接上；區間內一筆淨值都沒有，配息佔淨值比沒有分母）。
                     # ⚠️ 登記：`44` HLD-1 空狀態欄只替「缺淨值」寫了卡尾那一行，這一種沒有，
                     #    本檔不發明卡尾文案。它在 `_build_hld1` 裡被讀：零列時不得宣稱「無偏離項」。
                     skipped["missing_other"].add(metric["_fund_code"])
@@ -931,28 +931,24 @@ def deviation_rows(metrics, rules):
     return rows, skipped
 
 
-# `44` HLD-3 空狀態欄逐字「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」裡的那個條件。
-TEXT_NO_NAV_AT_END = "區間末無淨值"
-
-
 def _missing_other_lines(metrics, missing_other, pending) -> list:
-    """門檻指標 `資料未備`（不是缺淨值）的原因，只用 `44` 已有的字樣。
+    """門檻指標 `資料未備`（不是缺淨值）的原因，只用 `44` 已宣告的顯示文案。
 
-    - 配息表尚未接上 → `44` 5.5 `來源缺` 模板 `⬜ 資料未備：<來源鍵> 尚無資料`；
-    - 否則唯一剩下的原因是配息佔淨值比沒有分母 → `44` HLD-3 空狀態欄的「區間末無淨值」。
+    唯一寫得出的原因：配息表尚未接上 → `44` 5.5 `來源缺` 模板
+    `⬜ 資料未備：<來源鍵> 尚無資料`，**來源鍵只列 `dividend`**。
+    ⛔ 不取 `pending` 與 `HLD-3` 全部來源的交集：`pending` 也點名 `nav` 時，那一句會變成
+       「dividend 與 nav 尚無資料」，而這裡的資料未備跟 `nav` 無關（紅隊 2026-10-02 重現）。
+    ⚠️ 另一種原因（配息佔淨值比在區間內一筆淨值都沒有、沒有分母）`44` 沒有宣告顯示文案，
+       這一支不寫原因，只留主值的 `⬜ 資料未備`（總管 2026-10-02 第五輪裁定；原因句另案改 `44`）。
     """
-    lines = []
     hit = [m for m in metrics if m["_fund_code"] in missing_other]
-    keys = sorted(pending & set(BLOCK_SOURCE_TABLES["HLD-3"]))
-    if keys and any(m["div_missing"] for m in hit):
-        lines.append(empty_source_text(keys))
-    if any(not m["div_missing"] for m in hit):
-        lines.append(TEXT_NO_NAV_AT_END)
-    return lines
+    if "dividend" in pending and any(m["div_missing"] for m in hit):
+        return [empty_source_text(["dividend"])]
+    return []
 
 
 def _is_missing_reason_line(line) -> bool:
-    return line.startswith(ND_TEXT + "：") or line == TEXT_NO_NAV_AT_END
+    return line.startswith(ND_TEXT + "：")
 
 
 def _build_hld1(

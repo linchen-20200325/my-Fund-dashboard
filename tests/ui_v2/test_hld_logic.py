@@ -2792,7 +2792,6 @@ def test_第四輪必修1反例_配息表已接上_HLD1與HLD0都沒有資料未
     for code in ("HLD-1", "HLD-0"):
         joined = "\n".join(_strings(logic.find_block(model, code)))
         assert logic.ND_TEXT not in joined, code
-        assert logic.TEXT_NO_NAV_AT_END not in joined, code
 
 
 def _no_nav_at_end(rule_value):
@@ -2805,36 +2804,48 @@ def _no_nav_at_end(rule_value):
     return _with_window(ds, window, rules)
 
 
-def test_第四輪必修2正控_資料未備只因區間末無淨值_卡上寫出44的原因字樣():
-    """`44` :544（HLD-3 空狀態欄）逐字「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」。
-    ⚠️ 拿掉 `_missing_other_lines` 的「區間末無淨值」那一支，本條轉紅。
+def test_第五輪_資料未備只因區間內無淨值_只顯示資料未備_不寫原因():
+    """總管第五輪裁定：這一種 `44` 沒有宣告顯示文案 ⇒ 回到第三輪的行為：
+    主值與摘要寫 `⬜ 資料未備`，說明區與燈下都**不寫**任何原因句（不是假話）。
     """
     ds = _no_nav_at_end(20.0)
     assert "pending_tables" not in ds
-    model = logic.build_page_model(ds)
     metric = next(m for m in logic.all_metrics(ds, logic.saved_window(ds))
                   if m["_fund_code"] == "CCCC")
     assert not metric["nav_missing"] and not metric["nav_rows"] and metric["div_rows"]
+    model = logic.build_page_model(ds)
     hld1 = logic.find_block(model, "HLD-1")
     hld0 = logic.find_block(model, "HLD-0")
     assert hld1["summary_text"] == logic.ND_TEXT
-    assert logic.TEXT_NO_NAV_AT_END in hld1["detail_lines"], hld1["detail_lines"]
-    assert _SRC_DIV not in hld1["detail_lines"]  # 沒有尚未接上的表，就不寫來源句
     assert hld0["text"] == logic.ND_TEXT
-    assert hld0["lines"] == [logic.TEXT_NO_NAV_AT_END], hld0["lines"]
-    # 有偏離列時同樣寫（BBBB 8.40% 高於 6）。
+    assert hld0["lines"] == [], hld0["lines"]
+    assert not any(logic._is_missing_reason_line(l) for l in hld1["detail_lines"])
+    assert logic.TEXT_NO_DEVIATION not in "\n".join(_strings(hld1))
+    # 有偏離列時：不寫原因、照舊黃燈。
     model = logic.build_page_model(_no_nav_at_end(6.0))
     assert logic.find_block(model, "HLD-1")["_rows"]
-    assert logic.TEXT_NO_NAV_AT_END in logic.find_block(model, "HLD-1")["detail_lines"]
-    assert logic.TEXT_NO_NAV_AT_END in logic.find_block(model, "HLD-0")["lines"]
+    assert logic.find_block(model, "HLD-0")["lines"] == [
+        "哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"]
 
 
-def test_第四輪必修2_字樣真的是44逐字():
-    d44 = (pathlib.Path(__file__).resolve().parents[2]
-           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
-    assert "區間末無淨值 → 佔比顯示 `⬜ 資料未備`" in d44[544 - 1]
-    assert logic.TEXT_NO_NAV_AT_END == "區間末無淨值"
-    assert "`⬜ 資料未備：<來源鍵> 尚無資料`" in d44[2323 - 1]
+def test_第五輪反例_pending也點名nav而nav有資料_來源句只列dividend():
+    """紅隊重現：`pending=["nav","dividend"]`、nav 有資料、dividend=[] ⇒
+    修回之前印「⬜ 資料未備：dividend 與 nav 尚無資料」，nav 那一半是假的。
+    ⚠️ 改回取交集，本條轉紅。
+    """
+    ds = _dividend_pending(fixtures.dataset_noexceed())
+    ds["pending_tables"] = ["nav", "dividend"]
+    assert ds["nav"]
+    model = logic.build_page_model(ds)
+    for code, key in (("HLD-1", "detail_lines"), ("HLD-0", "lines")):
+        lines = logic.find_block(model, code)[key]
+        assert _SRC_DIV in lines, (code, lines)
+        assert not any("nav" in l for l in lines if logic._is_missing_reason_line(l)), lines
+    # 有偏離列那一支也一樣。
+    ds = _dividend_pending(fixtures.dataset_full())
+    ds["pending_tables"] = ["nav", "dividend"]
+    lines = logic.find_block(logic.build_page_model(ds), "HLD-0")["lines"]
+    assert _SRC_DIV in lines and not any("dividend 與 nav" in l for l in lines), lines
 
 
 def test_第四輪建議3正控_holding取數失敗時摘要讓位給取數失敗():
