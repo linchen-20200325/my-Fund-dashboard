@@ -212,7 +212,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   有四件事 44 沒有寫、要客戶決定」：<b>舊淨值怎麼標</b>、<b>示意字樣怎麼拿</b>、<b>DIRECT 持倉怎麼顯示</b>、<b>推定的核對日期怎麼揭露</b>（第 4 件是 2026-10-02 同日第二個 commit 補的）。</p>
   <p class="sub" style="margin-top:8px; padding:9px 12px; background:var(--stop-bg);
     border:1px solid var(--stop); border-radius:6px; color:var(--ink)">
-  ⛔ <b>狀態：待客戶裁示。</b>本檔每一個選項都還沒有人核准。§G 的「總管建議」欄：第 1～3 題由總管 2026-10-02 填入；第 1a、4 題仍空著。<br>
+  ⛔ <b>狀態：待客戶裁示。</b>本檔每一個選項都還沒有人核准。§G 的「總管建議」欄：第 1～4 題由總管 2026-10-02 填入；第 1a 題仍空著。<br>
   ⚠️ <b>核准的會是畫面與文案，不是動工授權</b>；也<b>不改 <code>docs/v2/44_fund_ui_ssot.md</code></b>（已凍結）。</p>
   <div class="meta">
     <span><b>草稿寫成時的 <code>origin/main</code></b> <code>b23b5b2</code></span>
@@ -938,7 +938,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 <div class="sec-head"><span class="n">§G</span><h2>裁示清單：四題</h2></div>
 
 <div class="card" style="border-left:4px solid var(--warn-mark)">
-  <p class="note">一題一行。請在「裁示」欄回選項代號，或改寫。「總管建議」欄第 1～3 題為總管 2026-10-02 填入，理由只引本檔各節已附出處的事實；第 1a、4 題仍空著。</p>
+  <p class="note">一題一行。請在「裁示」欄回選項代號，或改寫。「總管建議」欄第 1～4 題為總管 2026-10-02 填入，理由只引本檔各節已附出處的事實；第 1a 題仍空著。</p>
   <table>
     <tr><th style="width:5%">#</th><th style="width:30%">題目</th><th style="width:30%">選項</th><th style="width:15%">總管建議</th><th style="width:10%">出處</th><th style="width:10%">裁示</th></tr>
     <tr><td class="src">1</td><td>淨值退回預存舊序列時，畫面怎麼標？</td>
@@ -959,7 +959,9 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
       <td>(ii)，見第 3 題。</td><td>U9</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">4</td><td>HLD-5「最後對帳」的日期，背後的時刻是推定的（當日 12:00 台灣時間），畫面要不要揭露？</td>
       <td>4-A 照現行只印日期／4-B 改欄名＋欄下一行時刻說明／4-C 改欄名「最後核對日（只記日期）」</td>
-      <td class="blank">（待總管填）</td><td>alo 草稿 §F 第 7 題；ACCEPTANCE.md §8.1；49 §8 (l)</td><td class="blank">待裁示</td></tr>
+      <td><b>4-C。</b>畫面原本就只印客戶自己填的日期，沒有印任何時刻（出處：<code>ui_v2/hld/logic.py::_build_hld5</code> 只印 <code>last_synced_at</code> 的前 10 個字）；
+        欄名改成與 Sheets 的「最後核對日」一致，並註明「只記日期」，不會把 12:00 這個推定的時刻印出來（出處：§F2 現況表）。
+        若客戶要求畫面上出現「推定」二字，改選 4-B。</td><td>alo 草稿 §F 第 7 題；ACCEPTANCE.md §8.1；49 §8 (l)</td><td class="blank">待裁示</td></tr>
   </table>
 </div>
 
