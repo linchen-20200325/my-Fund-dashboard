@@ -2804,9 +2804,21 @@ def _no_nav_at_end(rule_value):
     return _with_window(ds, window, rules)
 
 
+_HLD1_ORDER_LINE = "依 fund_code 字面值排列，不排序成優先順序。"
+_HLD0_ROWS_LINE = "哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"
+_FORBIDDEN_REASON = "區間末無淨值"
+
+
+def _all_text(model):
+    return "\n".join(s for s in logic.collect_ui_strings(model) if isinstance(s, str))
+
+
 def test_第五輪_資料未備只因區間內無淨值_只顯示資料未備_不寫原因():
     """總管第五輪裁定：這一種 `44` 沒有宣告顯示文案 ⇒ 回到第三輪的行為：
     主值與摘要寫 `⬜ 資料未備`，說明區與燈下都**不寫**任何原因句（不是假話）。
+
+    ⛔ 第六輪：**整份清單逐字相等**，不先經 `_is_missing_reason_line` 篩選 ——
+       篩過再斷言，一句不帶 ⬜ 的原因句會被篩掉而漏網（紅隊突變 Q2 實測存活）。
     """
     ds = _no_nav_at_end(20.0)
     assert "pending_tables" not in ds
@@ -2817,35 +2829,50 @@ def test_第五輪_資料未備只因區間內無淨值_只顯示資料未備_�
     hld1 = logic.find_block(model, "HLD-1")
     hld0 = logic.find_block(model, "HLD-0")
     assert hld1["summary_text"] == logic.ND_TEXT
+    assert hld1["detail_lines"] == [_HLD1_ORDER_LINE], hld1["detail_lines"]
+    assert hld1["tail_lines"] == [], hld1["tail_lines"]
     assert hld0["text"] == logic.ND_TEXT
     assert hld0["lines"] == [], hld0["lines"]
-    assert not any(logic._is_missing_reason_line(l) for l in hld1["detail_lines"])
     assert logic.TEXT_NO_DEVIATION not in "\n".join(_strings(hld1))
+    assert _FORBIDDEN_REASON not in _all_text(model)
     # 有偏離列時：不寫原因、照舊黃燈。
     model = logic.build_page_model(_no_nav_at_end(6.0))
-    assert logic.find_block(model, "HLD-1")["_rows"]
-    assert logic.find_block(model, "HLD-0")["lines"] == [
-        "哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"]
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["_rows"]
+    assert hld1["detail_lines"] == [_HLD1_ORDER_LINE], hld1["detail_lines"]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_HLD0_ROWS_LINE]
+    assert _FORBIDDEN_REASON not in _all_text(model)
 
 
 def test_第五輪反例_pending也點名nav而nav有資料_來源句只列dividend():
     """紅隊重現：`pending=["nav","dividend"]`、nav 有資料、dividend=[] ⇒
     修回之前印「⬜ 資料未備：dividend 與 nav 尚無資料」，nav 那一半是假的。
-    ⚠️ 改回取交集，本條轉紅。
+    ⚠️ 改回取交集，本條轉紅。⛔ 第六輪：整份清單逐字相等，不先篩選。
     """
     ds = _dividend_pending(fixtures.dataset_noexceed())
     ds["pending_tables"] = ["nav", "dividend"]
     assert ds["nav"]
     model = logic.build_page_model(ds)
-    for code, key in (("HLD-1", "detail_lines"), ("HLD-0", "lines")):
-        lines = logic.find_block(model, code)[key]
-        assert _SRC_DIV in lines, (code, lines)
-        assert not any("nav" in l for l in lines if logic._is_missing_reason_line(l)), lines
+    assert logic.find_block(model, "HLD-1")["detail_lines"] == [_HLD1_ORDER_LINE, _SRC_DIV]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_SRC_DIV]
+    assert _FORBIDDEN_REASON not in _all_text(model)
     # 有偏離列那一支也一樣。
     ds = _dividend_pending(fixtures.dataset_full())
     ds["pending_tables"] = ["nav", "dividend"]
-    lines = logic.find_block(logic.build_page_model(ds), "HLD-0")["lines"]
-    assert _SRC_DIV in lines and not any("dividend 與 nav" in l for l in lines), lines
+    model = logic.build_page_model(ds)
+    assert logic.find_block(model, "HLD-1")["detail_lines"] == [_HLD1_ORDER_LINE, _SRC_DIV]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_HLD0_ROWS_LINE, _SRC_DIV]
+    assert _FORBIDDEN_REASON not in _all_text(model)
+
+
+def test_第六輪_任何情境的整頁模型都不含區間末無淨值():
+    """總管第五輪已撤掉那句；這一條掃整頁模型的每一個字串，不只說明區。"""
+    datasets = [fixtures.scenario(n)["dataset"] for n in fixtures.ALL_SCENARIO_NAMES]
+    datasets += [_no_nav_at_end(20.0), _no_nav_at_end(6.0),
+                 _dividend_pending(fixtures.dataset_full()),
+                 _dividend_pending(fixtures.dataset_noexceed())]
+    for ds in datasets:
+        assert _FORBIDDEN_REASON not in _all_text(logic.build_page_model(ds))
 
 
 def test_第四輪建議3正控_holding取數失敗時摘要讓位給取數失敗():
