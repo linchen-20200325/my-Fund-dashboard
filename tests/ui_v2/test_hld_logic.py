@@ -2762,3 +2762,117 @@ def test_建議6_沒有鍵的列不得自動展開():
     assert logic._row_is_open("", "") is False
     assert logic._row_is_open("H-AAAA", None) is False
     assert logic._row_is_open("H-AAAA", "H-AAAA") is True
+
+
+# ═══════ 第四輪回修（2026-10-02） ═══════
+
+_SRC_DIV = "⬜ 資料未備：dividend 尚無資料"
+
+
+def test_第四輪必修1正控_有偏離列而配息門檻沒評估_HLD1與HLD0都帶來源句():
+    """重現：full、配息表未備、門檻「最大回撤 低於 -10」＋「配息佔淨值比 高於 6」。
+    修回之前 HLD-0 只說「有 1 檔超出」，那個 1 只是下限，卡上隻字未提配息門檻沒評估。
+    ⚠️ 拿掉「有偏離列也要寫」那一行，本條轉紅。
+    """
+    ds = _dividend_pending(fixtures.dataset_full())
+    rules = logic.saved_rules(ds)
+    assert {r["indicator"] for r in rules} == {"最大回撤", "配息佔淨值比"}
+    model = logic.build_page_model(ds)
+    hld1 = logic.find_block(model, "HLD-1")
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld1["_rows"], "這一條要的是有偏離列的那一種"
+    assert hld1["_state"] == logic.STATE_OK
+    assert _SRC_DIV in hld1["detail_lines"], hld1["detail_lines"]
+    assert hld0["_tone"] == "黃"
+    assert _SRC_DIV in hld0["lines"], hld0["lines"]
+
+
+def test_第四輪必修1反例_配息表已接上_HLD1與HLD0都沒有資料未備的句子():
+    model = logic.build_page_model(fixtures.dataset_full())
+    for code in ("HLD-1", "HLD-0"):
+        joined = "\n".join(_strings(logic.find_block(model, code)))
+        assert logic.ND_TEXT not in joined, code
+        assert logic.TEXT_NO_NAV_AT_END not in joined, code
+
+
+def _no_nav_at_end(rule_value):
+    """CCCC 區間內的淨值全拿掉（區間外的留著，所以不是缺淨值），配息表照常接上。"""
+    window = (fixtures.WINDOW_START, fixtures.WINDOW_END)
+    ds = fixtures.dataset_full()
+    ds["nav"] = [r for r in ds["nav"]
+                 if not (r["fund_code"] == "CCCC" and window[0] <= r["nav_date"] <= window[1])]
+    rules = ({"indicator": "配息佔淨值比", "direction": "高於", "value": rule_value},)
+    return _with_window(ds, window, rules)
+
+
+def test_第四輪必修2正控_資料未備只因區間末無淨值_卡上寫出44的原因字樣():
+    """`44` :544（HLD-3 空狀態欄）逐字「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」。
+    ⚠️ 拿掉 `_missing_other_lines` 的「區間末無淨值」那一支，本條轉紅。
+    """
+    ds = _no_nav_at_end(20.0)
+    assert "pending_tables" not in ds
+    model = logic.build_page_model(ds)
+    metric = next(m for m in logic.all_metrics(ds, logic.saved_window(ds))
+                  if m["_fund_code"] == "CCCC")
+    assert not metric["nav_missing"] and not metric["nav_rows"] and metric["div_rows"]
+    hld1 = logic.find_block(model, "HLD-1")
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld1["summary_text"] == logic.ND_TEXT
+    assert logic.TEXT_NO_NAV_AT_END in hld1["detail_lines"], hld1["detail_lines"]
+    assert _SRC_DIV not in hld1["detail_lines"]  # 沒有尚未接上的表，就不寫來源句
+    assert hld0["text"] == logic.ND_TEXT
+    assert hld0["lines"] == [logic.TEXT_NO_NAV_AT_END], hld0["lines"]
+    # 有偏離列時同樣寫（BBBB 8.40% 高於 6）。
+    model = logic.build_page_model(_no_nav_at_end(6.0))
+    assert logic.find_block(model, "HLD-1")["_rows"]
+    assert logic.TEXT_NO_NAV_AT_END in logic.find_block(model, "HLD-1")["detail_lines"]
+    assert logic.TEXT_NO_NAV_AT_END in logic.find_block(model, "HLD-0")["lines"]
+
+
+def test_第四輪必修2_字樣真的是44逐字():
+    d44 = (pathlib.Path(__file__).resolve().parents[2]
+           / "docs" / "v2" / "44_fund_ui_ssot.md").read_text(encoding="utf-8").split("\n")
+    assert "區間末無淨值 → 佔比顯示 `⬜ 資料未備`" in d44[544 - 1]
+    assert logic.TEXT_NO_NAV_AT_END == "區間末無淨值"
+    assert "`⬜ 資料未備：<來源鍵> 尚無資料`" in d44[2323 - 1]
+
+
+def test_第四輪建議3正控_holding取數失敗時摘要讓位給取數失敗():
+    import pytest  # noqa: F401
+
+    ds = _dividend_pending(fixtures.dataset_noexceed())
+    ds["errors"] = {"holding": fixtures.FETCH_FAIL_MESSAGE}
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert hld1["_state"] == logic.STATE_ERROR
+    assert hld1["summary_text"] == logic.fetch_failed_text(fixtures.FETCH_FAIL_MESSAGE)
+    assert hld1["_placeholder"]["_state"] == logic.STATE_ERROR
+    assert hld1["_placeholder"]["text"] != logic.ND_TEXT
+    # 資料未備的原因照留。
+    assert _SRC_DIV in hld1["detail_lines"]
+    # 反向：沒有資料未備時，holdfail 的摘要一格未動（算出來的東西一律留著）。
+    hld1 = logic.find_block(logic.build_page_model(**fixtures.scenario("holdfail")), "HLD-1")
+    assert hld1["summary_text"] != logic.fetch_failed_text(fixtures.FETCH_FAIL_MESSAGE)
+
+
+def test_第四輪建議5_holding_id錯誤訊息分得出型別不對與前後空白():
+    import pytest
+
+    cases = [
+        (None, "缺或為空"), ("", "缺或為空"), (7, "型別不對"), (b"H-X", "型別不對"),
+        (" H-AAAA", "前後帶空白"), ("H-AAAA ", "前後帶空白"), ("   ", "前後帶空白"),
+    ]
+    for value, words in cases:
+        ds = fixtures.dataset_full()
+        ds["holding"][0]["holding_id"] = value
+        with pytest.raises(logic.HoldingIdError, match=words):
+            logic.build_page_model(ds)
+
+
+def test_第四輪建議4_holding_id檢查排在任何取鍵之前():
+    """缺鍵時丟的是 `HoldingIdError`，不是 `fund_metrics()` 的 `KeyError`。"""
+    import pytest
+
+    ds = fixtures.dataset_full()
+    del ds["holding"][2]["holding_id"]
+    with pytest.raises(logic.HoldingIdError):
+        logic.build_page_model(ds)

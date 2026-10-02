@@ -636,7 +636,8 @@ def fund_metrics(dataset, fund, window):
         # `HLD-5` 用它找回**這一筆**持倉、也用它當展開鍵。`44` 4.1：`holding` 的主鍵是
         # `holding_id`；同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
         # 只拿 `fund_code` 找會讓同基金的兩列互相蓋掉。
-        "_holding_id": fund.get("holding_id"),
+        # ⚠️ 依賴 `build_page_model()` 開頭的 `_check_holding_ids()`：走到這裡它已經是非空字串。
+        "_holding_id": fund["holding_id"],
         "_ccy": ccy,
         "fund_name": fund["fund_name"],
         "units_shares": units,
@@ -930,6 +931,30 @@ def deviation_rows(metrics, rules):
     return rows, skipped
 
 
+# `44` HLD-3 空狀態欄逐字「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」裡的那個條件。
+TEXT_NO_NAV_AT_END = "區間末無淨值"
+
+
+def _missing_other_lines(metrics, missing_other, pending) -> list:
+    """門檻指標 `資料未備`（不是缺淨值）的原因，只用 `44` 已有的字樣。
+
+    - 配息表尚未接上 → `44` 5.5 `來源缺` 模板 `⬜ 資料未備：<來源鍵> 尚無資料`；
+    - 否則唯一剩下的原因是配息佔淨值比沒有分母 → `44` HLD-3 空狀態欄的「區間末無淨值」。
+    """
+    lines = []
+    hit = [m for m in metrics if m["_fund_code"] in missing_other]
+    keys = sorted(pending & set(BLOCK_SOURCE_TABLES["HLD-3"]))
+    if keys and any(m["div_missing"] for m in hit):
+        lines.append(empty_source_text(keys))
+    if any(not m["div_missing"] for m in hit):
+        lines.append(TEXT_NO_NAV_AT_END)
+    return lines
+
+
+def _is_missing_reason_line(line) -> bool:
+    return line.startswith(ND_TEXT + "：") or line == TEXT_NO_NAV_AT_END
+
+
 def _build_hld1(
     metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None, pending=frozenset()
 ):
@@ -995,13 +1020,12 @@ def _build_hld1(
             state = STATE_MISSING
             summary = ND_TEXT
             placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
-            keys = sorted(pending & set(BLOCK_SOURCE_TABLES["HLD-3"]))
-            if keys:
-                detail_lines.append(empty_source_text(keys))
         elif not rows:
             # ⚠️ 登記：零列長什麼樣 `44` 沒有寫（草稿 ⛔ H-06：零筆偏離不屬空狀態四種）。
             #    本檔照草稿的畫法：一句「無偏離項」，不掛任何空狀態徽章。
             detail_lines.append("目前這一組門檻下，沒有任何一檔超出。")
+        # 有偏離列也要寫：那幾檔的門檻指標沒有評估，燈上的 N 只是下限（紅隊 2026-10-02 指出）。
+        detail_lines.extend(_missing_other_lines(metrics, skipped["missing_other"], pending))
         if skipped["missing"]:
             tail_lines.append(
                 f"⬜ 另有 {len(skipped['missing'])} 檔缺淨值，未列入{HINT}"
@@ -1027,6 +1051,13 @@ def _build_hld1(
     #    空持倉那一支會清空是因為它本來就沒東西可顯示；這裡有，
     #    把它清掉等於用一個失敗訊息蓋掉還算得出來的事實，那是另一種說謊。
     if has_holdings and unsurfaced:
+        if state == STATE_MISSING:
+            # 摘要與主值讓位給取數失敗：塊態是 `系統錯誤`，主值不能還寫 `⬜ 資料未備`。
+            # 說明區原有的資料未備原因照留（算出來的東西一律留著）。
+            summary = fetch_failed_text(unsurfaced)
+            placeholder = _metric(
+                None, text="", ccy="", error=unsurfaced, label="偏離筆數"
+            )
         state = STATE_ERROR
         detail_lines = detail_lines + [
             fetch_failed_text(unsurfaced),
@@ -1272,17 +1303,20 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             "_tone": "灰",
             "_state": STATE_MISSING,
             "text": ND_TEXT,
-            "lines": [l for l in hld1["detail_lines"] if l.startswith(ND_TEXT + "：")],
+            "lines": [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)],
             "detail_lines": [],
             "buttons": [],
         }
 
     if deviation_count > 0:
+        hld1 = next((c for c in cards if c.get("code") == "HLD-1"), {"detail_lines": []})
         return {
             "_tone": "黃",
             "_state": STATE_OK,
             "text": f"有 {deviation_count} 檔超出你設定的門檻{HINT}",
-            "lines": ["哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"],
+            # 有檔的門檻指標資料未備時，把原因帶上來：N 只是下限。
+            "lines": ["哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"]
+            + [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)],
             "detail_lines": ["黃燈說的是「要不要多看一眼」，不是「該調整了」。"],
             "buttons": [],
         }
@@ -1488,10 +1522,17 @@ class HoldingIdError(ValueError):
 def _check_holding_ids(holdings) -> None:
     """`44` 4.1：`holding_id` 是主鍵，不可空。展開鍵與欄位對應都靠它。"""
     ids = [h.get("holding_id") for h in holdings]
-    empty = [h.get("fund_code") for h, i in zip(holdings, ids)
-             if not isinstance(i, str) or not i.strip()]
+    empty = [h.get("fund_code") for h, i in zip(holdings, ids) if i is None or i == ""]
     if empty:
         raise HoldingIdError(f"holding_id 缺或為空：fund_code={empty!r}")
+    wrong = [(h.get("fund_code"), type(i).__name__) for h, i in zip(holdings, ids)
+             if not isinstance(i, str)]
+    if wrong:
+        raise HoldingIdError(f"holding_id 型別不對（要字串）：{wrong!r}")
+    # ⛔ 不偷偷 strip：前後帶空白的 id 與不帶空白的是兩個不同的鍵，悄悄修掉會讓兩邊對不上。
+    padded = [i for i in ids if i != i.strip() or not i.strip()]
+    if padded:
+        raise HoldingIdError(f"holding_id 前後帶空白或只有空白：{padded!r}")
     dup = sorted({i for i in ids if ids.count(i) > 1})
     if dup:
         raise HoldingIdError(f"holding_id 重複：{dup!r}")
@@ -1504,7 +1545,6 @@ def _row_is_open(holding_id, open_fund) -> bool:
 
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
-    _check_holding_ids(dataset.get("holding", []))
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
     items = []
     for index, metric in enumerate(metrics):
@@ -1884,6 +1924,8 @@ def build_page_model(
     """
     applied_window = saved_window(dataset)
     rules = saved_rules(dataset)
+    # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
+    _check_holding_ids(dataset.get("holding", []))
     metrics = all_metrics(dataset, applied_window)
     has_holdings = bool(dataset.get("holding"))
     has_window = window_is_valid(applied_window)
