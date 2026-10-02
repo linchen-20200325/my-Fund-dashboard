@@ -520,6 +520,9 @@ def fund_metrics(dataset, fund, window):
     code = fund["fund_code"]
     ccy = fund["ccy"]
     errors = dataset.get("errors", {})
+    # `HLD-5` 用它找回**這一筆**持倉。`44` 4.1：`holding` 的主鍵是 `holding_id`；
+    # 同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
+    # 只拿 `fund_code` 找會讓同基金的兩列互相蓋掉。
     nav_error = errors.get("nav")
     div_error = errors.get("dividend")
 
@@ -554,7 +557,8 @@ def fund_metrics(dataset, fund, window):
     vol = vol_pct(navs)
     draw = drawdown_pct(navs)
 
-    div_rows = _in_window(_rows_for(dataset, "dividend", code), "ex_date", window)
+    all_div_rows = _rows_for(dataset, "dividend", code)
+    div_rows = _in_window(all_div_rows, "ex_date", window)
     per_unit_total = sum(row["div_per_unit_orig_ccy"] for row in div_rows)
     units = fund["units_shares"]
     div_total = per_unit_total * units
@@ -571,7 +575,17 @@ def fund_metrics(dataset, fund, window):
             return "區間內無配息"
         return None
 
-    na_div = div_na()
+    # 這一檔在 `dividend` 表裡**一列也沒有**（不限區間）＝ 配息資料沒來或沒接上，
+    # 不是「區間內無配息」。判法與上面 `nav_missing` 同一個形狀（那一支是缺淨值）。
+    # 依據：`44` 5.5 `來源缺` 的觸發條件「這一塊依賴的來源一筆資料也沒有」，主值位置顯示
+    # `⬜ 資料未備`（與 `HLD-3` 空狀態欄「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」同一個字面值）；
+    # `49` 2.6 `dividend.ccy` 那一列：走 MoneyDJ 的基金配息一列都寫不進去
+    # ⇒ `HLD-3` 期間配息顯示資料未備。
+    # ⚠️ 只看 `dividend` 這一張表 —— 它是 `HLD-3` 來源欄點名的表；不另外拿 `fund_profile`
+    #    （`HLD-3` 來源欄沒有點名它）去猜這一檔是不是累積型。
+    # ⚠️ 取數失敗不走這一支：`errors["dividend"]` 由 `main_value_state()` 先判成 `系統錯誤`。
+    div_missing = bool(has_window and not all_div_rows)
+    na_div = None if div_missing else div_na()
     na_div_text = not_applicable_text(na_div) if na_div else None
 
     # 配息佔淨值比：`44` 寫「期間配息除以區間末 `nav_orig_ccy`」。
@@ -596,6 +610,7 @@ def fund_metrics(dataset, fund, window):
 
     return {
         "_fund_code": code,
+        "_holding_id": fund["holding_id"],
         "_ccy": ccy,
         "fund_name": fund["fund_name"],
         "units_shares": units,
@@ -603,6 +618,7 @@ def fund_metrics(dataset, fund, window):
         "div_rows": div_rows,
         "unknown_count": len(unknown_rows),
         "nav_missing": nav_missing,
+        "div_missing": div_missing,
         "區間報酬率": _metric(
             ret,
             text=hinted(format_pct(ret, signed=True)) if ret is not None else "",
@@ -635,7 +651,7 @@ def fund_metrics(dataset, fund, window):
             text=hinted(format_amount(div_total, ccy)),
             ccy=ccy,
             error=div_error,
-            missing=False,
+            missing=div_missing,
             na_reason=na_div_text,
             label="期間配息合計",
         ),
@@ -644,7 +660,9 @@ def fund_metrics(dataset, fund, window):
             text=hinted(format_pct(yield_value)) if yield_value is not None else "",
             ccy=ccy,
             error=div_error,
-            missing=bool(nav_missing or (na_div is None and nav_last is None)),
+            missing=bool(
+                nav_missing or div_missing or (na_div is None and nav_last is None)
+            ),
             na_reason=na_div_text,
             label="配息佔淨值比",
         ),
@@ -653,7 +671,7 @@ def fund_metrics(dataset, fund, window):
             text=hinted(format_pct(principal_value)) if principal_value is not None else "",
             ccy=ccy,
             error=div_error,
-            missing=False,
+            missing=div_missing,
             na_reason=not_applicable_text(principal_na) if principal_na else None,
             label="本金類配息佔比",
         ),
@@ -815,6 +833,10 @@ def blocks_recalculated_by(action_kind: str) -> tuple:
 # ───────────────────────── HLD-1 偏離提示卡 ─────────────────────────
 
 
+# 主值裡會因為缺淨值而進 `資料未備` 的那幾個（`配息佔淨值比` 的分母是區間末淨值）。
+_NAV_FED_INDICATORS = ("區間報酬率", "期間波動", "最大回撤", "配息佔淨值比")
+
+
 def _breaches(rule, value) -> bool:
     if rule["direction"] == "低於":
         return value < rule["value"]
@@ -830,7 +852,7 @@ def deviation_rows(metrics, rules):
     （客戶 `H-01` 裁示；`44` HLD-1 空狀態 2026-09-22 改寫）。
     """
     rows = []
-    skipped = {"missing": set(), "error": set(), "na": set()}
+    skipped = {"missing": set(), "missing_div": set(), "error": set(), "na": set()}
     for metric in metrics:
         for rule in rules:
             name = rule["indicator"]
@@ -844,7 +866,14 @@ def deviation_rows(metrics, rules):
                 skipped["error"].add(metric["_fund_code"])
                 continue
             if node["_state"] == STATE_MISSING:
-                skipped["missing"].add(metric["_fund_code"])
+                if name in _NAV_FED_INDICATORS and not metric["nav_rows"]:
+                    skipped["missing"].add(metric["_fund_code"])
+                else:
+                    # 缺的是配息、不是淨值 ⇒ 不得算進「另有 N 檔缺淨值」那一行（那會是假話）。
+                    # ⚠️ 登記：`44` HLD-1 空狀態欄只替「缺淨值」寫了畫法，這一種沒有；
+                    #    本檔不發明新文案，只收進一個不上畫面的集合，待裁。
+                    #    該檔照舊不進本表、不計入列數；`HLD-3`／`HLD-7` 上照樣看得到 `⬜ 資料未備`。
+                    skipped["missing_div"].add(metric["_fund_code"])
                 continue
             if node["_state"] == STATE_BIZ:
                 skipped["na"].add(metric["_fund_code"])
@@ -1396,10 +1425,10 @@ def open_fund_after_click(current, clicked):
 
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
-    holdings = {h["fund_code"]: h for h in dataset.get("holding", [])}
+    holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
     items = []
     for index, metric in enumerate(metrics):
-        holding = holdings[metric["_fund_code"]]
+        holding = holdings[metric["_holding_id"]]
         policy = policies.get(holding["policy_id"])
         is_direct = holding["policy_id"] == "DIRECT"
         fields = [

@@ -2396,3 +2396,162 @@ def test_第3件_既有六列是補登_兩個日期不同():
             "這一列的兩個日期同值 ⇒ 依 `46` 第 2 節就是『在登記時機當下寫的』，"
             "但這六列是補登的", row[:70])
         assert confirmed < registered, ("確認日不該晚於登記日", row[:70])
+
+
+# ═══════ 兩個既有 bug 的修回（2026-10-02） ═══════
+#
+# A：同一檔基金掛在兩張保單下時，`HLD-5` 兩列都印第二筆持倉的保單與單位數。
+# B：一檔的配息資料沒來／沒接上時，`HLD-3` 印「⬜ 不適用：區間內無配息」——
+#    那是把「不知道」報成「沒有」。
+
+
+def _two_policy_bbbb():
+    """`BBBB` 另掛一筆在 `DIRECT` 下：兩筆持倉，同 `fund_code`、不同 `policy_id`。
+
+    `44` 4.1：業務唯一鍵是（`policy_id`, `fund_code`）⇒ 這是兩組不同的鍵，各自一列。
+    """
+    ds = fixtures.dataset_full()
+    base = next(h for h in ds["holding"] if h["fund_code"] == "BBBB")
+    assert base["policy_id"] == "P-001"
+    second = dict(base)
+    second.update(
+        holding_id="H-BBBB-DIRECT",
+        policy_id="DIRECT",
+        units_shares=10.0,
+        cost_orig_ccy=80.0,
+        cost_twd=2500,
+        opened_on="2025-01-02",
+        bucket="衛星（示意）",
+        last_synced_at="2026-09-18T01:00:00Z",
+    )
+    ds["holding"].append(second)
+    return ds, base, second
+
+
+def _expected_hld5_fields(holding, policy_name):
+    return {
+        "保單": policy_name,
+        "持有起始日": holding["opened_on"] + logic.HINT,
+        "單位數": f"{holding['units_shares']:,.3f}{logic.HINT}",
+        "成本（新臺幣）": f"{holding['cost_twd']:,} 元{logic.HINT}",
+        "類別": holding["bucket"],
+        "最後對帳": holding["last_synced_at"][:10] + logic.HINT,
+    }
+
+
+def test_A正控_同基金兩張保單_HLD5每一列印的是它自己那一筆持倉():
+    """修回之前：兩列 `BBBB` 都印 `DIRECT` 那一筆（`直接持有`／`10.000`）。"""
+    ds, base, second = _two_policy_bbbb()
+    items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+    bbbb = [dict(it["_fields"]) for it in items if it["_fund_code"] == "BBBB"]
+    assert len(bbbb) == 2, bbbb
+    want = [
+        _expected_hld5_fields(base, "某某投資型保單（示意）"),
+        _expected_hld5_fields(second, logic.TEXT_DIRECT_HOLD),
+    ]
+    got = [{k: f[k] for k in want[0]} for f in bbbb]
+    assert sorted(got, key=repr) == sorted(want, key=repr), got
+    # 兩列不得是同一筆的兩份拷貝。
+    assert got[0] != got[1], got
+
+
+def test_A反例_每檔一筆持倉時_HLD5逐列對上自己那一筆_其他檔不受另一檔多一筆影響():
+    """反例：沒有同基金多持倉時行為不變；多出來的那一筆也不會蓋到別檔。"""
+    for ds in (fixtures.dataset_full(), _two_policy_bbbb()[0]):
+        policies = {p["policy_id"]: p["policy_name"] for p in ds["policy"]}
+        items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+        for code in ("AAAA", "CCCC"):
+            (holding,) = [h for h in ds["holding"] if h["fund_code"] == code]
+            (item,) = [it for it in items if it["_fund_code"] == code]
+            name = (logic.TEXT_DIRECT_HOLD if holding["policy_id"] == "DIRECT"
+                    else policies[holding["policy_id"]])
+            want = _expected_hld5_fields(holding, name)
+            fields = dict(item["_fields"])
+            assert {k: fields[k] for k in want} == want, (code, fields)
+
+
+def _drop_dividends(ds, code=None):
+    ds["dividend"] = [] if code is None else [
+        r for r in ds["dividend"] if r["fund_code"] != code]
+    return ds
+
+
+def test_B正控_某檔配息一列都沒有_HLD3兩個主值顯示資料未備而不是不適用():
+    """`49` 2.6 `dividend.ccy` 列：走 MoneyDJ 的基金配息一列都寫不進去 ⇒ `HLD-3` 顯示資料未備。"""
+    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full(), "CCCC"))
+    group = logic.fund_group(logic.find_block(model, "HLD-3"), "CCCC")
+    for mv in group["main_values"]:
+        assert mv["_state"] == logic.STATE_MISSING, mv
+        assert mv["text"] == logic.ND_TEXT, mv
+        assert "不適用" not in mv["text"], mv
+    # 另兩檔照出數。
+    for code in ("AAAA", "BBBB"):
+        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
+    # `HLD-8` 的本金類配息佔比同一套；同一列的最大回撤照出數。
+    row = logic.find_row(logic.find_block(model, "HLD-8"), "CCCC")
+    assert row["principal"]["_state"] == logic.STATE_MISSING
+    assert row["principal"]["text"] == logic.ND_TEXT
+    assert row["drawdown"]["_state"] == logic.STATE_OK
+    # `HLD-7` 軌跡的輸出欄與所在那一塊逐字相同（構造保證，這裡驗它沒被這次改動打破）。
+    trace = {r["_indicator"]: r["output_text"]
+             for r in logic.find_block(model, "HLD-7")["_rows"] if r["_fund_code"] == "CCCC"}
+    for indicator in ("期間配息合計", "配息佔淨值比", "本金類配息佔比"):
+        shown = logic.value_shown_in_block(model, logic.INDICATOR_OWNER[indicator],
+                                           "CCCC", indicator)
+        assert shown == logic.ND_TEXT, (indicator, shown)
+        assert trace[indicator] == shown, (indicator, trace[indicator])
+
+
+def test_B正控_整張配息表沒接上_三檔的配息值全是資料未備():
+    """`dividend` 尚未接上（L2 `PENDING_TABLES`）時交來的是空列表、不進 `errors`。"""
+    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full()))
+    for code in ("AAAA", "BBBB", "CCCC"):
+        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+        assert [mv["text"] for mv in group["main_values"]] == [logic.ND_TEXT] * 2, code
+    assert logic.find_block(model, "HLD-3")["_state"] == logic.STATE_MISSING
+    # 淨值那一側不受影響。
+    for code in ("AAAA", "BBBB", "CCCC"):
+        group = logic.fund_group(logic.find_block(model, "HLD-2"), code)
+        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
+
+
+def test_B反例_有配息列只是不落在區間內_仍是不適用區間內無配息():
+    """`44` HLD-3 空狀態欄：區間內無配息列 → `⬜ 不適用：區間內無配息`。這一句不能被這次改掉。"""
+    model = logic.build_page_model(fixtures.dataset_one_nav())
+    for code in ("AAAA", "BBBB", "CCCC"):
+        assert any(r["fund_code"] == code for r in fixtures.dividends()), code
+        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+        texts = [mv["text"] for mv in group["main_values"]]
+        assert texts == [logic.not_applicable_text("區間內無配息")] * 2, (code, texts)
+
+
+def test_B反例_配息取數失敗仍是取數失敗_區間未設仍是尚未設定區間():
+    """沒有配息列的時候，`errors` 與「尚未設定區間」的優先序一格未動。"""
+    ds = _drop_dividends(fixtures.dataset_full(), "CCCC")
+    ds["errors"] = {"dividend": fixtures.FETCH_FAIL_MESSAGE}
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
+    assert [mv["_state"] for mv in group["main_values"]] == [logic.STATE_ERROR] * 2
+
+    ds = _drop_dividends(fixtures.dataset_badrange(), "CCCC")
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
+    assert [mv["text"] for mv in group["main_values"]] == [logic.NA_NO_WINDOW] * 2
+
+
+def test_B連帶_缺配息的檔不得被算進HLD1卡尾的缺淨值():
+    """門檻用的是「配息佔淨值比」，而 `CCCC` 缺的是配息、淨值是齊的。
+
+    卡尾那一行說「另有 N 檔**缺淨值**」—— 把缺配息的檔算進去就是一句假話。
+    反向：淨值真的被抽掉時，那一行照舊數得到它。
+    """
+    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full(), "CCCC"))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["missing_nav_count"] == 0, hld1["tail_lines"]
+    assert not any("缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
+    assert not any(row["_fund_code"] == "CCCC" for row in hld1["_rows"])
+    # `HLD-0` 的 N 仍等於 `HLD-1` 列數。
+    assert logic.find_block(model, "HLD-0")["_deviation_count"] == len(hld1["_rows"])
+
+    srcmiss = logic.find_block(logic.build_page_model(fixtures.dataset_srcmiss()), "HLD-1")
+    assert srcmiss["missing_nav_count"] == 1
+    assert any("缺淨值" in line for line in srcmiss["tail_lines"])
