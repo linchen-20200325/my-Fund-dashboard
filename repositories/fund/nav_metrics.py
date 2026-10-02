@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+import datetime as _dt_mod
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -62,11 +63,17 @@ def _fail_kind_text() -> str:
     return "kind=(無:fetch_url 有回應,但內容為空白,fetch_url_with_retry 回 None)"
 
 
+# MM/DD 條目以今年組出的候選日期若比台灣今天晚 1～此天數 → 不寫(不推回去年)。
+# 理由:淨值為 T+1 公布,頁面不應出現未來日期;近期的未來日期視為時鐘或來源異常。
+# 若照跨年規則推回去年,會變成一筆「看起來合理」的假歷史值靜默入庫並被快取(§1)。
+# 晚超過此天數者才視為跨年(例:1 月頁面上的 12 月條目)→ 推回去年。
+_MMDD_NEAR_FUTURE_REJECT_DAYS = 31
+
+
 def _tw_today():
     """台灣日期(UTC+8)的今天 — 與 sources.py `_src_nav_30day` /
     fund_orchestration legacy 近30日取法一致(§4.5)。獨立成函式以便測試固定日期。"""
-    import datetime as _dt
-    return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date()
+    return _dt_mod.datetime.now(_dt_mod.timezone(_dt_mod.timedelta(hours=8))).date()
 
 
 def _parse_nav_html(html: str) -> pd.Series:
@@ -75,6 +82,8 @@ def _parse_nav_html(html: str) -> pd.Series:
     MM/DD 條目的年份由 SSOT `_infer_year_for_mmdd`(sources.py,經上方
     `import *` 取得)推斷:晚於台灣今天 → 去年。原本一律補今年,1 月時會把
     12 月條目補成今年 12 月(未來日期),排序後最後一筆變成假的 12 月值。
+    例外:以今年組出的日期只晚 1～`_MMDD_NEAR_FUTURE_REJECT_DAYS` 天 → 不寫並 print 原因
+    (不推回去年,以免變成假歷史值)。
     YYYY/MM/DD 條目不經此推斷,行為不變。
     """
     soup = BeautifulSoup(html, "lxml")
@@ -93,6 +102,16 @@ def _parse_nav_html(html: str) -> pd.Series:
                     if _today is None:
                         _today = _tw_today()
                     _mo, _da = int(ds[:2]), int(ds[3:])
+                    try:
+                        _cand = _dt_mod.date(_today.year, _mo, _da)
+                    except ValueError:
+                        _cand = None  # 例:非閏年的 02/29 → 交給跨年規則
+                    if _cand is not None:
+                        _ahead = (_cand - _today).days
+                        if 1 <= _ahead <= _MMDD_NEAR_FUTURE_REJECT_DAYS:
+                            print(f"[nav_html] MM/DD {ds} 比台灣今天 {_today} 晚 "
+                                  f"{_ahead} 天,疑時鐘或來源異常 → 此筆不寫")
+                            continue
                     ds = f"{_infer_year_for_mmdd(_mo, _da, _today)}/{ds}"
                 d = pd.to_datetime(ds)
                 v = float(cols[1].replace(",", ""))

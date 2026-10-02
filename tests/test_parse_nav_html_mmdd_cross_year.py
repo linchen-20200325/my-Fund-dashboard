@@ -75,7 +75,74 @@ def test_yyyy_mm_dd_unaffected(monkeypatch):
         dt.date(2026, 12, 30), dt.date(2027, 1, 4), dt.date(2027, 12, 30)]
 
 
-def test_tw_today_is_utc_plus_8():
-    # _tw_today 取台灣日期,與 sources.py 近30日路徑一致
-    expect = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
-    assert nav_metrics._tw_today() in (expect, expect + dt.timedelta(days=1))
+class _FixedUtcClock:
+    """把 `nav_metrics._dt_mod` 換成固定 UTC 時刻的假 datetime 模組。"""
+
+    def __init__(self, utc_instant):
+        real = dt
+        fixed = utc_instant
+
+        class _FakeDT(real.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return fixed if tz is None else fixed.astimezone(tz)
+
+            @classmethod
+            def utcnow(cls):
+                return fixed.replace(tzinfo=None)
+
+        class _FakeDate(real.date):
+            @classmethod
+            def today(cls):
+                return fixed.date()  # 刻意回 UTC 日期:誤用 date.today() 的突變會轉紅
+
+        self.datetime = _FakeDT
+        self.date = _FakeDate
+        self.timezone = real.timezone
+        self.timedelta = real.timedelta
+
+
+_UTC_1630_NYE = dt.datetime(2026, 12, 31, 16, 30, tzinfo=dt.timezone.utc)  # 台灣 2027-01-01 00:30
+
+
+def test_tw_today_is_next_day_at_utc_1630(monkeypatch):
+    # UTC 16:30 = 台灣隔天 00:30 → `_tw_today()` 必須回隔天(UTC 或 date.today() 會回當天)
+    monkeypatch.setattr(nav_metrics, "_dt_mod", _FixedUtcClock(_UTC_1630_NYE))
+    assert nav_metrics._tw_today() == dt.date(2027, 1, 1)
+
+
+def test_end_to_end_utc_1630_new_year_page_0101(monkeypatch):
+    # 端到端:UTC 2026-12-31 16:30,頁面 01/01 → 2027-01-01(不是被擋、也不是 2026-01-01)
+    monkeypatch.setattr(nav_metrics, "_dt_mod", _FixedUtcClock(_UTC_1630_NYE))
+    s = nav_metrics._parse_nav_html(_html([("12/30", "10.0"), ("12/31", "10.1"), ("01/01", "10.2")]))
+    assert [d.date() for d in s.index] == [
+        dt.date(2026, 12, 30), dt.date(2026, 12, 31), dt.date(2027, 1, 1)]
+
+
+# ── 近期未來日期(晚 1～31 天)→ 不寫,不推回去年 ───────────────────────
+
+def test_near_future_jan6_on_jan5_not_written(monkeypatch, capsys):
+    today = dt.date(2027, 1, 5)
+    s = _parse(monkeypatch, today, [("01/04", "10.0"), ("01/05", "10.1"), ("01/06", "10.2")])
+    assert [d.date() for d in s.index] == [dt.date(2027, 1, 4), dt.date(2027, 1, 5)]
+    assert dt.date(2026, 1, 6) not in [d.date() for d in s.index]
+    assert "01/06" in capsys.readouterr().out
+
+
+def test_near_future_jul2_on_jul1_not_written(monkeypatch):
+    today = dt.date(2026, 7, 1)
+    s = _parse(monkeypatch, today, [("06/30", "10.0"), ("07/01", "10.1"), ("07/02", "10.2")])
+    assert [d.date() for d in s.index] == [dt.date(2026, 6, 30), dt.date(2026, 7, 1)]
+
+
+def test_near_future_31_days_boundary_not_written(monkeypatch):
+    today = dt.date(2026, 7, 1)  # 08/01 晚 31 天 → 仍在拒收區
+    s = _parse(monkeypatch, today, [("07/01", "10.1"), ("08/01", "10.2")])
+    assert [d.date() for d in s.index] == [dt.date(2026, 7, 1)]
+
+
+def test_32_days_ahead_goes_to_last_year(monkeypatch):
+    # 正控:晚 32 天 → 視為跨年,推回去年
+    today = dt.date(2026, 7, 1)  # 08/02 晚 32 天
+    s = _parse(monkeypatch, today, [("07/01", "10.1"), ("08/02", "10.2")])
+    assert [d.date() for d in s.index] == [dt.date(2025, 8, 2), dt.date(2026, 7, 1)]
