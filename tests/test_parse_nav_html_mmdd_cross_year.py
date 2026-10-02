@@ -102,6 +102,16 @@ def test_yyyy_mm_dd_unaffected(monkeypatch):
     assert s.attrs["mmdd_rejected"] == 0
 
 
+def test_half_year_old_entry_rejected_and_counted(monkeypatch):
+    # 已知代價:today 2026-07-15,01/10 的最近候選是 2027-01-10(晚 179 天)
+    # 而非 2026-01-10(早 186 天)→ 落在未來,拒收並計數(少列,不造假)
+    today = dt.date(2026, 7, 15)
+    s = _parse(monkeypatch, today, [("01/10", "10.0"), ("07/15", "10.1")])
+    assert _dates(s) == [today]
+    assert dt.date(2026, 1, 10) not in _dates(s)
+    assert s.attrs["mmdd_rejected"] == 1
+
+
 def test_tie_picks_earlier_candidate(monkeypatch):
     # today 2027-08-31:03/01 的候選 2027-03-01(早 183 天)與 2028-03-01(晚 183 天)平手
     # → 取較早者,照收為 2027-03-01
