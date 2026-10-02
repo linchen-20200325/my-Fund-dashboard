@@ -67,8 +67,12 @@ MIN_VALID_DATE = date(1900, 1, 1)
 # 「未來日期」以台灣的日曆日判定：L1 以台灣日期建索引，台灣日期可能比世界協調時間的日期早一天進位。
 # 晚於「當下的台灣日期」→ 不寫。
 MARKET_DATE_TZ = timezone(timedelta(hours=8))
-# `fetched_at` 晚於當下超過此秒數 → 不寫（取得時間不可能在未來）。0 ＝ 晚於當下即拒收。
-FETCHED_AT_MAX_FUTURE_SEC = 0
+# `fetched_at`／`cache_updated_at` 晚於當下超過此秒數 → 不寫（取得時間不可能在未來）。
+# 容差 300 秒（第三輪小修）：預存舊序列的 `cache_updated_at` 由另一台機器（GitHub Actions）寫入，
+# 兩台機器的時鐘可能有偏差；L1 即時那一支的 `fetched_at` 也可能與本機時鐘有些微落差。
+# 剛好晚 300 秒 → 收（邊界含在容差內）；晚 301 秒 → 拒收。nav 與 dividend 共用。
+# ⚠️ 只放寬取得時間；`nav_date`／`ex_date` 的「晚於當下的台灣日期」判斷不受影響。
+FETCHED_AT_MAX_FUTURE_SEC = 300
 
 # 整檔不寫列的原因代碼（`withheld`）；L3 依代碼對照畫面文案（文案未定，屬草稿事項）。
 WITHHELD_CCY_MISSING = "ccy_missing"                       # nav：來源沒自報、持倉也沒填
@@ -164,6 +168,19 @@ def _call(fetch, *args):
     return result
 
 
+def _is_blank_ccy(value) -> bool:
+    """持倉幣別「沒有填」：None、float nan、`pd.NA`、`pd.NaT` 這類缺值（第三輪小修 2）。
+    不參與衝突判斷、不參與去重（NaN != NaN，放進清單會去重失敗）。字串一律不算缺值。"""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return False
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):   # 陣列等非純量：不是「沒填」，留給 resolve 判成衝突或缺
+        return False
+
+
 def _group_funds(funds):
     """輸入 → `{fund_code: {"full_key", "portal", "holding_ccys": list}}` 與 `{fund_code: 矛盾說明}`。
 
@@ -186,7 +203,7 @@ def _group_funds(funds):
         if entry["full_key"] != full_key or entry["portal"] != portal:
             conflicts[code] = (f"同一檔基金給了不同的 full_key／portal："
                                f"({entry['full_key']!r}, {entry['portal']!r}) vs ({full_key!r}, {portal!r})")
-        if "holding_ccy" in item and item["holding_ccy"] is not None:
+        if "holding_ccy" in item and not _is_blank_ccy(item["holding_ccy"]):
             if item["holding_ccy"] not in entry["holding_ccys"]:
                 entry["holding_ccys"].append(item["holding_ccy"])
     return grouped, conflicts
@@ -269,7 +286,10 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
     provided = []
     if source_ccy is not None:
         provided.append(("source", source_ccy))
-    provided.extend(("holding", c) for c in holding_ccys if c is not None)
+    holding_ccys = [c for c in holding_ccys if not _is_blank_ccy(c)]   # 缺值＝沒填（第三輪小修 2）
+    if _is_blank_ccy(source_ccy):
+        source_ccy = None
+    provided.extend(("holding", c) for c in holding_ccys)
     meanings = {_ccy_meaning(v) for _side, v in provided} - {None}
     if len(meanings) > 1:
         shown = ", ".join(f"{side}:{v!r}" for side, v in provided)
@@ -283,7 +303,7 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
     detail = []
     if source_ccy is not None:
         detail.append(f"來源自報值不合 ISO 4217：{source_ccy!r}")
-    bad = [repr(c) for c in holding_ccys if c is not None and not _iso_ccy(c)]
+    bad = [repr(c) for c in holding_ccys if not _iso_ccy(c)]
     if bad:
         detail.append(f"持倉列幣別不合 ISO 4217：{', '.join(bad)}")
     reason = "來源未自報幣別、持倉列也沒有可用的幣別" + (f"（{'；'.join(detail)}）" if detail else "")
@@ -292,7 +312,17 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
 
 def _empty_out():
     return {"rows": [], "error": None, "withheld": None, "skipped": [], "fetched": 0,
-            "provenance": None}
+            "skipped_rows": 0, "provenance": None}
+
+
+def _reconcile(out, skipped_rows: int, table: str):
+    """核帳（第三輪小修 3）：寫出的列數＋略過與合併的筆數＝L1 取回的筆數。
+    對不上就是本檔的計數 bug（§1：當場炸，不交出一份帳對不上的結果）。"""
+    out["skipped_rows"] = skipped_rows
+    if len(out["rows"]) + skipped_rows != out["fetched"]:
+        raise AssertionError(f"{table} 核帳不平：rows {len(out['rows'])} ＋ skipped {skipped_rows}"
+                             f" ≠ fetched {out['fetched']}")
+    return out
 
 
 def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=None) -> dict:
@@ -329,12 +359,12 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
     if withheld:
         out["withheld"] = withheld
         out["skipped"].append(f"{why}，{len(series)} 筆全部不寫")
-        return out
+        return _reconcile(out, len(series), "nav")
     if fetched_at is None:
         out["withheld"] = at_code
         lead = "退回預存舊序列，但 cache_updated_at " if fallback else "L1 回傳的 fetched_at "
         out["skipped"].append(f"{lead}{at_why}，{len(series)} 筆全部不寫（不以當下時間補）")
-        return out
+        return _reconcile(out, len(series), "nav")
 
     date_bad: dict = {}
     by_day: dict = {}
@@ -346,7 +376,7 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
         by_day.setdefault(day, []).append(value)
 
     value_bad: dict = {}
-    collateral = conflicting = not_positive = contract_bad = 0
+    collateral = conflicting = not_positive = contract_bad = merged = 0
     for day in sorted(by_day):
         valid = []
         invalid = 0
@@ -386,8 +416,9 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
             "fetched_at": fetched_at,
         }
         if contract.nav_row_problems(row):
-            contract_bad += 1
+            contract_bad += len(valid)
             continue
+        merged += len(valid) - 1          # 同日同值：主鍵只留一列
         out["rows"].append(row)
 
     out["skipped"].extend(_tally_lines(date_bad, "日期："))
@@ -400,12 +431,17 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
         out["skipped"].append(f"同一日期出現不同淨值 {conflicting} 筆不寫")
     if contract_bad:
         out["skipped"].append(f"不符欄位契約 {contract_bad} 筆不寫")
-    return out
+    if merged:
+        out["skipped"].append(f"同日同值合併 {merged} 筆")
+    total = (sum(date_bad.values()) + sum(value_bad.values()) + collateral + not_positive
+             + conflicting + contract_bad + merged)
+    return _reconcile(out, total, "nav")
 
 
 def _merge_one(code, one, acc):
     acc["rows"].extend(one["rows"])
     acc["fetched"][code] = one["fetched"]
+    acc["skipped_rows"][code] = one["skipped_rows"]
     if one["error"] is not None:
         acc["errors"][code] = one["error"]
     if one["withheld"]:
@@ -420,15 +456,17 @@ def build_nav_table(funds, *, now=None) -> dict:
     """組出 `nav` 表的列。`funds`：可迭代的 dict，每個帶 `fund_code`、`full_key`，選填 `portal`、
     `holding_ccy`（持倉列使用者手填的幣別；同一檔多列持倉可重複出現）。
 
-    回傳 `{"rows", "errors", "withheld", "skipped", "fetched", "provenance"}`，皆以 `fund_code` 為鍵
+    回傳 `{"rows", "errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"}`，皆以 `fund_code` 為鍵
     （`rows` 除外）：
     - `errors`：L1 失敗原文（未遮蔽）或型別錯誤；
     - `withheld`：整檔不寫列的原因代碼；`skipped`：不寫列的文字理由（整檔或逐列）；
     - `fetched`：L1 取回的筆數（過濾前）；L1 回錯誤或型別不對時為 0；
+    - `skipped_rows`：略過與合併的筆數；每一檔恆有 `len(該檔 rows) + skipped_rows == fetched`（核帳）；
     - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale}`。
     """
     grouped, conflicts = _group_funds(funds)
-    acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "provenance": {}}
+    acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
+           "provenance": {}}
     for code, entry in grouped.items():
         if code in conflicts:
             acc["withheld"][code] = WITHHELD_INPUT_CONFLICT
@@ -472,7 +510,7 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
     out["fetched"] = len(items)
     sources = sorted({str(it.get("source")) for it in items if isinstance(it, dict) and it.get("source")})
 
-    no_ccy = negative = conflicting = contract_bad = not_dict = 0
+    no_ccy = negative = conflicting = contract_bad = not_dict = merged = 0
     date_bad: dict = {}
     amount_bad: dict = {}
     time_bad: dict = {}
@@ -532,8 +570,9 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
             "fetched_at": fetched_at,
         }
         if contract.dividend_row_problems(row):
-            contract_bad += 1
+            contract_bad += len(entries)
             continue
+        merged += len(entries) - 1        # 同日同額：主鍵只留一列
         out["rows"].append(row)
 
     out["provenance"] = {"source": sources[0] if len(sources) == 1 else (sources or None),
@@ -544,7 +583,7 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
     if no_ccy and no_ccy == len(items) - not_dict:
         out["withheld"] = WITHHELD_CCY_NOT_SOURCE_REPORTED
         out["skipped"].append(f"來源未自報配息幣別（49 T3：不沿用持倉幣別），{no_ccy} 筆全部不寫")
-        return out
+        return _reconcile(out, not_dict + no_ccy, "dividend")
     if no_ccy:
         out["skipped"].append(f"來源未自報配息幣別 {no_ccy} 筆不寫")
     out["skipped"].extend(_tally_lines(date_bad, "日期："))
@@ -559,19 +598,24 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
         out["skipped"].append(f"同一日期出現不同配息 {conflicting} 筆不寫")
     if contract_bad:
         out["skipped"].append(f"不符欄位契約 {contract_bad} 筆不寫")
-    return out
+    if merged:
+        out["skipped"].append(f"同日同值合併 {merged} 筆")
+    total = (not_dict + no_ccy + sum(date_bad.values()) + sum(amount_bad.values()) + negative
+             + sum(time_bad.values()) + conflicting + contract_bad + merged)
+    return _reconcile(out, total, "dividend")
 
 
 def build_dividend_table(funds, *, now=None) -> dict:
     """組出 `dividend` 表的列。`funds` 同 `build_nav_table`（`holding_ccy` 在本表**不使用**，T3）。
 
-    回傳 `{"rows", "errors", "pending", "withheld", "skipped", "fetched", "provenance"}`。
+    回傳 `{"rows", "errors", "pending", "withheld", "skipped", "fetched", "skipped_rows", "provenance"}`
+    （`skipped_rows` 與核帳同 `build_nav_table`）。
     `DIV_DATE_IS_EX_DATE_VERIFIED` 為假時：每一檔都列在 `pending`（代碼 `PENDING_DIV_DATE_SEMANTICS`）、
     **不呼叫 L1**、不寫列。
     """
     grouped, conflicts = _group_funds(funds)
     acc = {"rows": [], "errors": {}, "pending": {}, "withheld": {}, "skipped": {}, "fetched": {},
-           "provenance": {}}
+           "skipped_rows": {}, "provenance": {}}
     for code, entry in grouped.items():
         if code in conflicts:
             acc["withheld"][code] = WITHHELD_INPUT_CONFLICT

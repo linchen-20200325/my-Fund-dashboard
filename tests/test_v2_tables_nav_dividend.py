@@ -15,6 +15,7 @@ import math
 import pathlib
 import re
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -575,7 +576,7 @@ def test_3_ex_date未來或1900以前不寫_fetched_at未來不寫():
 
 def test_3_門檻是具名常數():
     assert ND.MIN_VALID_DATE == dt.date(1900, 1, 1)
-    assert ND.FETCHED_AT_MAX_FUTURE_SEC == 0
+    assert ND.FETCHED_AT_MAX_FUTURE_SEC == 300   # 第三輪小修 1 由 0 改為 300
 
 
 # 4：L1 回傳型別不對
@@ -650,3 +651,117 @@ def test_7_full_key前後帶空白就raise(key):
         ND.build_nav_table([fund(full_key=key)])
     with pytest.raises(ValueError):
         ND.build_dividend_table([fund(full_key=key)])
+
+
+
+# ═══════════════════════ 第三輪小修 ═══════════════════════
+# 1：取得時間的未來容差 300 秒（nav 與 dividend 共用；日期判斷不動）。剛好 300 秒 → 收。
+
+def _later(sec: float) -> str:
+    return (NOW + dt.timedelta(seconds=sec)).isoformat()
+
+
+@pytest.mark.parametrize("sec, accepted", [(1, True), (299, True), (300, True), (301, False)])
+def test_小修1_nav即時那一支_fetched_at未來容差(sec, accepted):
+    out = ND.rows_from_nav_series("ZZ9999", _series([("2026-09-01", 10.0)], fetched_at=_later(sec)),
+                                  None, holding_ccys={"USD"}, now=NOW)
+    assert bool(out["rows"]) is accepted, sec
+    if not accepted:
+        assert out["withheld"] == ND.WITHHELD_FETCHED_AT_FUTURE
+
+
+@pytest.mark.parametrize("sec, accepted", [(1, True), (299, True), (300, True), (301, False)])
+def test_小修1_預存舊序列_cache_updated_at未來容差(sec, accepted):
+    s = _series([("2026-04-23", 8.8)], source="GitHubActions:cache/nav/TLZF9.json",
+                fetched_at=NOW.isoformat(), cache_updated_at=_later(sec), nav_quality={"stale": True})
+    out = ND.rows_from_nav_series("TLZF9", s, None, holding_ccys={"USD"}, now=NOW)
+    assert bool(out["rows"]) is accepted, sec
+    if not accepted:
+        assert out["withheld"] == ND.WITHHELD_FETCHED_AT_FUTURE
+
+
+@pytest.mark.parametrize("sec, accepted", [(1, True), (299, True), (300, True), (301, False)])
+def test_小修1_dividend_fetched_at未來容差(sec, accepted):
+    items = _divs(("2026-09-01", 0.1), currency="USD", fetched=_later(sec))
+    out = ND.rows_from_dividends("ZZ9999", items, None, now=NOW)
+    assert bool(out["rows"]) is accepted, sec
+
+
+def test_小修1_容差常數與日期判斷無關():
+    assert ND.FETCHED_AT_MAX_FUTURE_SEC == 300
+    # NOW 的台灣日期是 2026-10-01；容差不得讓隔天的日期混進來
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([1.0], ["2026-10-02"]), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert out["rows"] == []
+
+
+# 2：持倉幣別的缺值當成沒填
+
+@pytest.mark.parametrize("blank", [float("nan"), pd.NA, None, np.nan])
+def test_小修2_缺值加USD寫USD_單獨缺值判ccy_missing(blank, monkeypatch):
+    s = _series([("2026-09-01", 10.0)])
+    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=[blank, "USD"], now=NOW)
+    assert [r["ccy"] for r in out["rows"]] == ["USD"]
+    alone = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=[blank], now=NOW)
+    assert alone["withheld"] == ND.WITHHELD_CCY_MISSING
+    # 經 build_nav_table：多列持倉、缺值重複出現，去重後只剩 USD
+    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    built = ND.build_nav_table([fund(ccy=blank), fund(ccy="USD"), fund(ccy=blank)], now=NOW)
+    assert [r["ccy"] for r in built["rows"]] == ["USD"] and built["withheld"] == {}
+    only_blank = ND.build_nav_table([fund(ccy=blank), fund(ccy=blank)], now=NOW)
+    assert only_blank["withheld"] == {"ZZ9999": ND.WITHHELD_CCY_MISSING}
+
+
+# 3：核帳 —— rows ＋ skipped 的筆數 ＝ fetched
+
+def _counted(skipped) -> int:
+    return sum(int(n) for line in skipped for n in re.findall(r"(\d+) 筆", line))
+
+
+def test_小修3_nav混合異常值_核帳成立():
+    idx = ["2026-09-01", "2026-09-01",                  # 同日同值 → 合併 1
+           "2026-09-02", "2026-09-02",                  # NaN ＋ 有效 → 1 非有限、1 連帶
+           "2026-09-03", "2026-09-03",                  # 不同值 → 2
+           "2026-09-04", "2026-09-05",                  # 0、負數 → 2
+           "Sep 18", "1899-01-01", "2026-10-02",        # 日期三種 → 3
+           "2026-09-08", "2026-09-09"]                  # bool、有效
+    vals = [10.0, 10.0, float("nan"), 10.1, 10.2, 10.3, 0.0, -1.0, 9.0, 9.0, 9.0, True, 10.4]
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series(vals, idx), None, holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-01", "2026-09-09"]
+    assert "同日同值合併 1 筆" in out["skipped"]
+    assert out["fetched"] == len(vals)
+    assert len(out["rows"]) + out["skipped_rows"] == out["fetched"]
+    assert _counted(out["skipped"]) == out["skipped_rows"]
+
+
+def test_小修3_dividend混合異常值_核帳成立():
+    items = (_divs(("2026-09-01", 0.1), ("2026-09-01", 0.1),            # 合併 1
+                   ("2026-08-01", 0.1), ("2026-08-01", 0.2),            # 不同 2
+                   ("2026-07-01", float("nan")), ("2026-06-01", True),  # 金額 2
+                   ("2026/05/01", 0.1), ("2026-10-02", 0.1),            # 日期 2
+                   ("2026-04-01", -0.1), ("2026-03-01", 0.0), currency="USD")   # 負 1、零照寫
+             + _divs(("2026-02-01", 0.1))                               # 沒幣別 1
+             + _divs(("2026-01-01", 0.1), currency="USD", fetched="2026-01-01T00:00:00")  # 沒時區 1
+             + ["not-a-dict"])                                           # 不是 dict 1
+    out = ND.rows_from_dividends("ZZ9999", items, None, now=NOW)
+    assert [r["ex_date"] for r in out["rows"]] == ["2026-03-01", "2026-09-01"]
+    assert "同日同值合併 1 筆" in out["skipped"]
+    assert len(out["rows"]) + out["skipped_rows"] == out["fetched"] == len(items)
+    assert _counted(out["skipped"]) == out["skipped_rows"]
+
+
+def test_小修3_整檔不寫的幾條路徑也核帳成立():
+    s = _series([("2026-09-01", 10.0), ("2026-09-02", 10.1)])
+    for out in (ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=(), now=NOW),
+                ND.rows_from_dividends("ZZ9999", _divs(("2026-09-01", 0.1), ("2026-08-01", 0.1)),
+                                       None, now=NOW)):
+        assert out["rows"] == [] and out["skipped_rows"] == out["fetched"] == 2
+        assert _counted(out["skipped"]) == 2
+
+
+def test_小修3_build回傳帶skipped_rows(monkeypatch):
+    s = _raw_series([10.0, 10.0], ["2026-09-01", "2026-09-01"])
+    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    out = ND.build_nav_table([fund()], now=NOW)
+    assert out["fetched"] == {"ZZ9999": 2} and out["skipped_rows"] == {"ZZ9999": 1}
+    assert len(out["rows"]) == 1
