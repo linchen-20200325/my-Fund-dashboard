@@ -12,6 +12,8 @@
 兩張表的欄位鏡像由 `tests/test_v2_tables_contract_settings.py` 從 `44` 逐欄重抽比對。
 `holding`（`44` 4.1）、`policy`（`44` 4.4）兩張表的鏡像與 `holding_row_problems`、`policy_row_problems`
 於 2026-09-27 資產配置頁讀表第 1 步新增；由 `tests/test_v2_tables_alo_holdings.py` 從 `44` 逐欄重抽比對。
+`nav`（`44` 4.2）、`dividend`（`44` 4.3）兩張表的鏡像與 `nav_row_problems`、`dividend_row_problems`
+於 2026-10-02 轉換層新增；由 `tests/test_v2_tables_nav_dividend.py` 從 `44` 逐欄重抽比對。
 
 ⚠️ L1 `repositories/settings_sheet_repository.py` 另有一份同形的標頭常數（L1 不得 import L2，
    所以不能直接 import 本檔）；那一份由同一支測試與本檔逐欄比對，兩份鏡像都以 `44` 為準。
@@ -86,6 +88,30 @@ POLICY_FIELDS = (
     ("opened_on", "日期", False),
     ("status", "字串", False),
 )
+# `44` 4.2 表 `nav`（順序同 `44`）。`source_tier` 值域同 `SOURCE_TIER_VALUES`。
+NAV_FIELDS = (
+    ("fund_code", "字串", False),
+    ("nav_date", "日期", False),
+    ("nav_orig_ccy", "浮點", False),
+    ("ccy", "字串", False),
+    ("source_tier", "字串", False),
+    ("is_estimated", "布林", False),
+    ("fetched_at", "時間", False),
+)
+
+# `44` 4.3 表 `dividend`（順序同 `44`）。
+DIVIDEND_FIELDS = (
+    ("fund_code", "字串", False),
+    ("ex_date", "日期", False),
+    ("pay_date", "日期", True),
+    ("div_per_unit_orig_ccy", "浮點", False),
+    ("ccy", "字串", False),
+    ("div_kind", "字串", False),
+    ("fetched_at", "時間", False),
+)
+# `44` 4.3 `dividend.div_kind` 值域。
+DIV_KIND_VALUES = ("income", "principal", "unknown")
+
 # `44` 4.4 `policy.status` 值域。
 POLICY_STATUS_VALUES = ("active", "paid_up", "closed")
 # `44` 4.1／4.4 的保留值：非保單的直接持有。
@@ -253,4 +279,37 @@ def policy_row_problems(row: dict) -> list:
     premium = row.get("premium_paid_twd")
     if isinstance(premium, int) and not isinstance(premium, bool) and premium < 0:
         problems.append(f"premium_paid_twd：不可為負（{premium!r}）")
+    return problems
+
+
+def nav_row_problems(row: dict) -> list:
+    """`nav` 一列的契約檢查；空清單＝可以寫入。
+
+    除型別外另核 `44` 4.2 寫明的規則：`nav_orig_ccy` 大於 0；`ccy` 為 ISO 4217；
+    `source_tier` 在值域內。
+    """
+    problems = _fields_problems(NAV_FIELDS, row)
+    _domain_problem(row, "source_tier", SOURCE_TIER_VALUES, problems)
+    _ccy_problem(row, problems)
+    value = row.get("nav_orig_ccy")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and math.isfinite(float(value)) and value <= 0:
+        problems.append(f"nav_orig_ccy：須大於 0（{value!r}）")
+    return problems
+
+
+def dividend_row_problems(row: dict) -> list:
+    """`dividend` 一列的契約檢查；空清單＝可以寫入。
+
+    除型別外另核 `44` 4.3 寫明的規則：`div_per_unit_orig_ccy` 不小於 0
+    （表判準「寫成負數，該筆寫入被拒絕」）；`ccy` 為 ISO 4217；`div_kind` 在值域內。
+    `pay_date` 可空（尚未公布時為空）。
+    """
+    problems = _fields_problems(DIVIDEND_FIELDS, row)
+    _domain_problem(row, "div_kind", DIV_KIND_VALUES, problems)
+    _ccy_problem(row, problems)
+    value = row.get("div_per_unit_orig_ccy")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and math.isfinite(float(value)) and value < 0:
+        problems.append(f"div_per_unit_orig_ccy：不可小於 0（{value!r}）")
     return problems
