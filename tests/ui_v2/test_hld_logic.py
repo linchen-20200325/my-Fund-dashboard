@@ -630,7 +630,7 @@ def test_同時最多展開一檔_而且初次載入一檔也不展開():
     items = logic.find_block(model, "HLD-5")["_items"]
     assert sum(1 for item in items if item["_open"]) == 0
 
-    picked = logic.build_page_model(fixtures.dataset_full(), open_fund="BBBB")
+    picked = logic.build_page_model(fixtures.dataset_full(), open_fund="H-BBBB")
     opened = [i for i in logic.find_block(picked, "HLD-5")["_items"] if i["_open"]]
     assert len(opened) == 1 and opened[0]["_fund_code"] == "BBBB"
 
@@ -1297,8 +1297,8 @@ def test_第4件正控_同時最多展開一檔且初次載入零檔():
     items = logic.find_block(model, "HLD-5")["_items"]
     assert items, "一檔也沒有 —— 這一條會變成空掃"
     assert sum(1 for i in items if i["_open"]) == 0
-    for code in [i["_fund_code"] for i in items]:
-        opened = logic.build_page_model(fixtures.dataset_full(), open_fund=code)
+    for code, hid in [(i["_fund_code"], i["_holding_id"]) for i in items]:
+        opened = logic.build_page_model(fixtures.dataset_full(), open_fund=hid)
         rows = logic.find_block(opened, "HLD-5")["_items"]
         assert [i["_fund_code"] for i in rows if i["_open"]] == [code], code
         # `44` 5.3：展開中的那一檔，它的鈕停用而且不隱藏，且附一行原因。
@@ -1310,7 +1310,7 @@ def test_第4件正控_同時最多展開一檔且初次載入零檔():
 
 def test_第4件正控_那枚鈕是44五點三的展開類且不寫任何表():
     """`44` 5.3：八類之外沒有第九類；`導覽`／`展開` 什麼都不寫。"""
-    model = logic.build_page_model(fixtures.dataset_full(), open_fund="AAAA")
+    model = logic.build_page_model(fixtures.dataset_full(), open_fund="H-AAAA")
     items = logic.find_block(model, "HLD-5")["_items"]
     assert len(items) == 3, len(items)
     for item in items:
@@ -2013,12 +2013,16 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
+        # ⚠️ 2026-10-02（總管第 2 輪裁定：HLD-5 展開鍵改用 `holding_id`）：`HLD-5` 有持倉的格摘要換新值
+        #    （有意識的更正，不是漏刪）。每一列多一個機器鍵 `_holding_id`，畫面文字一格未動。
+        #    換之前先證明：把現行模型 `_items` 每一列的 `_holding_id` 拿掉再算摘要，本表舊值逐格全數重現
+        #    （量測日 2026-10-02）；其餘八塊一格未動。
         ("full", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
         ("full", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
         ("full", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("full", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("full", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("full", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("full", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2027,7 +2031,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("srcmiss", "HLD-2"): ('灰', '資料未備', "9e18e3388c92"),
         ("srcmiss", "HLD-3"): ('灰', '資料未備', "038877e4c54c"),
         ("srcmiss", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("srcmiss", "HLD-5"): ('中性', 'ok', "39affe04cec8"),
+        ("srcmiss", "HLD-5"): ('中性', 'ok', "0b1bb728a6ae"),
         ("srcmiss", "HLD-6"): ('中性', 'ok', "0fa8eb2d70c6"),
         ("srcmiss", "HLD-7"): ('中性', 'ok', "697f3caf3268"),
         ("srcmiss", "HLD-8"): ('灰', '資料未備', "11c8446e411f"),
@@ -2036,7 +2040,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("bizexc", "HLD-2"): ('黃', '業務例外', "10f06cc9db29"),
         ("bizexc", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("bizexc", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
-        ("bizexc", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("bizexc", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("bizexc", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
         ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
@@ -2045,7 +2049,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("fetchfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "49dd1baf455f"),
         ("fetchfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("fetchfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("fetchfail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("fetchfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("fetchfail", "HLD-7"): ('中性', 'ok', "1f8c41588f98"),
         ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "5f6082f726fb"),
@@ -2054,7 +2058,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("nothr", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
-        ("nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2081,7 +2085,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("noexceed", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("noexceed", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("noexceed", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
-        ("noexceed", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("noexceed", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("noexceed", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("noexceed", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("noexceed", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2090,7 +2094,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("other_window", "HLD-2"): ('中性', 'ok', "5ea8fe7a7d69"),
         ("other_window", "HLD-3"): ('中性', 'ok', "d5547893ebe0"),
         ("other_window", "HLD-4"): ('中性', 'ok', "4af1779c6576"),
-        ("other_window", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("other_window", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("other_window", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("other_window", "HLD-7"): ('中性', 'ok', "ad6c5cd4bc32"),
         ("other_window", "HLD-8"): ('中性', 'ok', "2a28e2a9534f"),
@@ -2099,7 +2103,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("onenav", "HLD-2"): ('黃', '業務例外', "eac4b10c9634"),
         ("onenav", "HLD-3"): ('黃', '業務例外', "a0b4b23b64c4"),
         ("onenav", "HLD-4"): ('中性', 'ok', "ff7c473013a3"),
-        ("onenav", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("onenav", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("onenav", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("onenav", "HLD-7"): ('灰', '資料未備', "5ac721b1d7cb"),
         ("onenav", "HLD-8"): ('黃', '業務例外', "6131e0d46dd5"),
@@ -2108,7 +2112,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("badrange", "HLD-2"): ('黃', '業務例外', "4d9d1c56d7e3"),
         ("badrange", "HLD-3"): ('黃', '業務例外', "56270fe59261"),
         ("badrange", "HLD-4"): ('中性', 'ok', "14676aae6af8"),
-        ("badrange", "HLD-5"): ('中性', 'ok', "56f4d7c00fa8"),
+        ("badrange", "HLD-5"): ('中性', 'ok', "206e13e2de2d"),
         ("badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("badrange", "HLD-7"): ('灰', '資料未備', "15a039bc1d56"),
         ("badrange", "HLD-8"): ('黃', '業務例外', "2d3de88d51b7"),
@@ -2117,7 +2121,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("full_then_badrange", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("full_then_badrange", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("full_then_badrange", "HLD-4"): ('中性', 'ok', "044134dd12f9"),
-        ("full_then_badrange", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full_then_badrange", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full_then_badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full_then_badrange", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("full_then_badrange", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2281,12 +2285,16 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
+        # ⚠️ 2026-10-02（總管第 2 輪裁定：HLD-5 展開鍵改用 `holding_id`）：`HLD-5` 有持倉的格摘要換新值
+        #    （有意識的更正，不是漏刪）。每一列多一個機器鍵 `_holding_id`，畫面文字一格未動。
+        #    換之前先證明：把現行模型 `_items` 每一列的 `_holding_id` 拿掉再算摘要，本表舊值逐格全數重現
+        #    （量測日 2026-10-02）；其餘八塊一格未動。
         ("holdfail", "HLD-0"): ('紅', '系統錯誤', "da6f97c35600"),
         ("holdfail", "HLD-1"): ('紅', '系統錯誤', "6781b2bdacd5"),
         ("holdfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("holdfail", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("holdfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("holdfail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2295,7 +2303,7 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("profilefail", "HLD-2"): ('紅', '系統錯誤', "020d64867585"),
         ("profilefail", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("profilefail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("profilefail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("profilefail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("profilefail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("profilefail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("profilefail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2304,7 +2312,7 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("holdfail_nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail_nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
-        ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail_nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail_nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("holdfail_nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2396,3 +2404,513 @@ def test_第3件_既有六列是補登_兩個日期不同():
             "這一列的兩個日期同值 ⇒ 依 `46` 第 2 節就是『在登記時機當下寫的』，"
             "但這六列是補登的", row[:70])
         assert confirmed < registered, ("確認日不該晚於登記日", row[:70])
+
+
+# ═══════ 兩個既有 bug 的修回（2026-10-02） ═══════
+#
+# A：同一檔基金掛在兩張保單下時，`HLD-5` 兩列都印第二筆持倉的保單與單位數。
+# B：一檔的配息資料沒來／沒接上時，`HLD-3` 印「⬜ 不適用：區間內無配息」——
+#    那是把「不知道」報成「沒有」。
+
+
+def _two_policy_bbbb():
+    """`BBBB` 另掛一筆在 `DIRECT` 下：兩筆持倉，同 `fund_code`、不同 `policy_id`。
+
+    `44` 4.1：業務唯一鍵是（`policy_id`, `fund_code`）⇒ 這是兩組不同的鍵，各自一列。
+    """
+    ds = fixtures.dataset_full()
+    base = next(h for h in ds["holding"] if h["fund_code"] == "BBBB")
+    assert base["policy_id"] == "P-001"
+    second = dict(base)
+    second.update(
+        holding_id="H-BBBB-DIRECT",
+        policy_id="DIRECT",
+        units_shares=10.0,
+        cost_orig_ccy=80.0,
+        cost_twd=2500,
+        opened_on="2025-01-02",
+        bucket="衛星（示意）",
+        last_synced_at="2026-09-18T01:00:00Z",
+    )
+    ds["holding"].append(second)
+    return ds, base, second
+
+
+def _expected_hld5_fields(holding, policy_name):
+    return {
+        "保單": policy_name,
+        "持有起始日": holding["opened_on"] + logic.HINT,
+        "單位數": f"{holding['units_shares']:,.3f}{logic.HINT}",
+        "成本（新臺幣）": f"{holding['cost_twd']:,} 元{logic.HINT}",
+        "類別": holding["bucket"],
+        "最後對帳": holding["last_synced_at"][:10] + logic.HINT,
+    }
+
+
+def test_A正控_同基金兩張保單_HLD5每一列印的是它自己那一筆持倉():
+    """修回之前：兩列 `BBBB` 都印 `DIRECT` 那一筆（`直接持有`／`10.000`）。"""
+    ds, base, second = _two_policy_bbbb()
+    items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+    bbbb = [dict(it["_fields"]) for it in items if it["_fund_code"] == "BBBB"]
+    assert len(bbbb) == 2, bbbb
+    want = [
+        _expected_hld5_fields(base, "某某投資型保單（示意）"),
+        _expected_hld5_fields(second, logic.TEXT_DIRECT_HOLD),
+    ]
+    got = [{k: f[k] for k in want[0]} for f in bbbb]
+    assert sorted(got, key=repr) == sorted(want, key=repr), got
+    # 兩列不得是同一筆的兩份拷貝。
+    assert got[0] != got[1], got
+
+
+def test_A反例_每檔一筆持倉時_HLD5逐列對上自己那一筆_其他檔不受另一檔多一筆影響():
+    """反例：沒有同基金多持倉時行為不變；多出來的那一筆也不會蓋到別檔。"""
+    for ds in (fixtures.dataset_full(), _two_policy_bbbb()[0]):
+        policies = {p["policy_id"]: p["policy_name"] for p in ds["policy"]}
+        items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+        for code in ("AAAA", "CCCC"):
+            (holding,) = [h for h in ds["holding"] if h["fund_code"] == code]
+            (item,) = [it for it in items if it["_fund_code"] == code]
+            name = (logic.TEXT_DIRECT_HOLD if holding["policy_id"] == "DIRECT"
+                    else policies[holding["policy_id"]])
+            want = _expected_hld5_fields(holding, name)
+            fields = dict(item["_fields"])
+            assert {k: fields[k] for k in want} == want, (code, fields)
+
+
+def _drop_dividends(ds, code=None):
+    ds["dividend"] = [] if code is None else [
+        r for r in ds["dividend"] if r["fund_code"] != code]
+    return ds
+
+
+def _dividend_pending(ds):
+    """配息表**尚未接上**：資料來源層交空列表、不進 `errors`，並在 `pending_tables` 點名它。
+
+    體例同 `ui_v2/alo/source.py`（L2 `settings_store.PENDING_TABLES` 列了 `dividend`）。
+    """
+    ds["dividend"] = []
+    ds["pending_tables"] = ["dividend"]
+    return ds
+
+
+def test_B正控_配息表尚未接上_三檔的配息值全是資料未備而不是不適用():
+    """`44` 5.5 `來源缺`：這一塊依賴的來源一筆資料也沒有 → 主值位置 `⬜ 資料未備`。
+
+    修回之前：三檔都印「⬜ 不適用：區間內無配息」—— 把「還沒接上」報成「沒有配息」。
+    ⚠️ 拿掉修復（`div_missing` 寫死 False）本條轉紅。
+    """
+    model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
+    hld3 = logic.find_block(model, "HLD-3")
+    trace = logic.find_block(model, "HLD-7")["_rows"]
+    for code in ("AAAA", "BBBB", "CCCC"):
+        group = logic.fund_group(hld3, code)
+        for mv in group["main_values"]:
+            assert mv["_state"] == logic.STATE_MISSING, (code, mv)
+            assert mv["text"] == logic.ND_TEXT, (code, mv)
+        # `HLD-8` 的本金類配息佔比同一套；同一列的最大回撤照出數。
+        row = logic.find_row(logic.find_block(model, "HLD-8"), code)
+        assert row["principal"]["text"] == logic.ND_TEXT, (code, row["principal"])
+        assert row["drawdown"]["_state"] == logic.STATE_OK, code
+        # `HLD-7` 軌跡輸出欄與所在那一塊逐字相同（`44` HLD-7 判準）。
+        mine = {r["_indicator"]: r["output_text"] for r in trace if r["_fund_code"] == code}
+        for indicator in ("期間配息合計", "配息佔淨值比", "本金類配息佔比"):
+            shown = logic.value_shown_in_block(
+                model, logic.INDICATOR_OWNER[indicator], code, indicator)
+            assert shown == logic.ND_TEXT, (code, indicator, shown)
+            assert mine[indicator] == shown, (code, indicator, mine[indicator])
+        # 淨值那一側不受影響。
+        group = logic.fund_group(logic.find_block(model, "HLD-2"), code)
+        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
+    assert hld3["_state"] == logic.STATE_MISSING
+
+
+def test_B反例_表已接上而某一檔一列配息都沒有_仍是不適用區間內無配息():
+    """累積型基金本來就不配息：表已接上時，它在配息表裡一列也沒有。
+
+    `44` HLD-3 空狀態欄：區間內無配息列 → `⬜ 不適用：區間內無配息`。
+    ⛔ 逐檔用「零列」判成資料未備，就是把累積型基金報成資料未備（總管第 2 輪裁定）。
+    ⚠️ 拿掉修復、改回逐檔判法（`div_missing = 這一檔零列`）本條轉紅。
+    """
+    ds = _drop_dividends(fixtures.dataset_full(), "CCCC")
+    assert "pending_tables" not in ds
+    model = logic.build_page_model(ds)
+    na = logic.not_applicable_text("區間內無配息")
+    group = logic.fund_group(logic.find_block(model, "HLD-3"), "CCCC")
+    assert [mv["text"] for mv in group["main_values"]] == [na] * 2, group
+    assert all(mv["_state"] == logic.STATE_BIZ for mv in group["main_values"])
+    row = logic.find_row(logic.find_block(model, "HLD-8"), "CCCC")
+    assert row["principal"]["text"] == na, row["principal"]
+    # 另兩檔照出數。
+    for code in ("AAAA", "BBBB"):
+        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
+
+
+def test_B反例_有配息列只是不落在區間內_仍是不適用區間內無配息():
+    """`44` HLD-3 空狀態欄那一句不能被這次改掉。"""
+    model = logic.build_page_model(fixtures.dataset_one_nav())
+    for code in ("AAAA", "BBBB", "CCCC"):
+        assert any(r["fund_code"] == code for r in fixtures.dividends()), code
+        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+        texts = [mv["text"] for mv in group["main_values"]]
+        assert texts == [logic.not_applicable_text("區間內無配息")] * 2, (code, texts)
+
+
+def test_B反例_表尚未接上時_取數失敗仍是取數失敗_區間未設仍是尚未設定區間():
+    """優先序一格未動：失敗 → 缺 → 不適用。區間沒設時「尚未設定區間」是真話，照印。"""
+    ds = _dividend_pending(fixtures.dataset_full())
+    ds["errors"] = {"dividend": fixtures.FETCH_FAIL_MESSAGE}
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
+    assert [mv["_state"] for mv in group["main_values"]] == [logic.STATE_ERROR] * 2
+
+    ds = _dividend_pending(fixtures.dataset_badrange())
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
+    assert [mv["text"] for mv in group["main_values"]] == [logic.NA_NO_WINDOW] * 2
+
+
+def test_B反例_假資料模式不設pending_tables_畫面一格不變():
+    """總管第 2 輪裁定：這個鍵假資料模式不設。"""
+    for name in fixtures.ALL_SCENARIO_NAMES:
+        ds = fixtures.scenario(name)["dataset"]
+        assert "pending_tables" not in ds, name
+        assert logic.pending_tables(ds) == frozenset(), name
+
+
+def test_B連帶_缺配息的檔不得被算進HLD1卡尾的缺淨值():
+    """門檻用的是「配息佔淨值比」，配息表尚未接上而淨值是齊的。
+
+    卡尾那一行說「另有 N 檔**缺淨值**」—— 把缺配息的檔算進去就是一句假話。
+    反向：淨值真的被抽掉時，那一行照舊數得到它。
+    ⚠️ 拿掉 `deviation_rows` 裡「缺淨值只看 `nav_missing`」那一支（缺什麼都算進缺淨值）本條轉紅。
+    """
+    model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["missing_nav_count"] == 0, hld1["tail_lines"]
+    assert not any("缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
+    # `HLD-0` 的 N 仍等於 `HLD-1` 列數。
+    assert logic.find_block(model, "HLD-0")["_deviation_count"] == len(hld1["_rows"])
+
+    srcmiss = logic.find_block(logic.build_page_model(fixtures.dataset_srcmiss()), "HLD-1")
+    assert srcmiss["missing_nav_count"] == 1
+    assert any("缺淨值" in line for line in srcmiss["tail_lines"])
+
+
+def test_A正控_同基金兩張保單_展開一列只開那一列_鈕鍵不撞號():
+    """總管第 2 輪裁定：`44` 4.1 畫面上一列＝一組（`policy_id`, `fund_code`），
+    「點一檔展開一檔」的「檔」是畫面上那一列 ⇒ 展開鍵用 `holding_id`。
+
+    修回之前：展開鍵是 `fund_code`，兩列 `BBBB` 一起開、兩枚鈕一起停用。
+    ⚠️ 拿掉修復（`_open` 改回比 `fund_code`）本條轉紅。
+    """
+    ds, base, second = _two_policy_bbbb()
+    items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+    ids = [it["_holding_id"] for it in items]
+    assert len(ids) == len(set(ids)) == 4, ids
+    for hid in (base["holding_id"], second["holding_id"]):
+        rows = logic.find_block(logic.build_page_model(ds, open_fund=hid), "HLD-5")["_items"]
+        opened = [it for it in rows if it["_open"]]
+        assert [it["_holding_id"] for it in opened] == [hid], [i["_holding_id"] for i in opened]
+        disabled = [it["_holding_id"] for it in rows if not it["_button"]["_enabled"]]
+        assert disabled == [hid], disabled
+
+
+# ═══════ 第三輪回修（紅隊 2026-10-02） ═══════
+
+_WEEKEND = ("2026-09-19", "2026-09-20")  # 週六、週日：淨值表有列，區間內一筆淨值也沒有
+_RULE_YIELD = ({"indicator": "配息佔淨值比", "direction": "高於", "value": 6.00},)
+
+
+def _with_window(ds, window, rules):
+    ds["user_setting"] = fixtures.user_settings(window=window, rules=rules)
+    return ds
+
+
+def test_必修1正控_淨值表有資料而區間內沒有淨值_不得算成缺淨值():
+    """修回之前用區間內切片 `nav_rows` 判缺淨值 ⇒ 卡尾印出假的「另有 3 檔缺淨值」。
+
+    ⚠️ 拿掉修復（改回看 `nav_rows`）本條轉紅。
+    """
+    ds = _with_window(_dividend_pending(fixtures.dataset_full()), _WEEKEND, _RULE_YIELD)
+    for code in ("AAAA", "BBBB", "CCCC"):
+        assert any(r["fund_code"] == code for r in ds["nav"]), code
+    metrics = logic.all_metrics(ds, _WEEKEND)
+    assert all(not m["nav_rows"] and not m["nav_missing"] for m in metrics)
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert hld1["missing_nav_count"] == 0, hld1["tail_lines"]
+    assert not any("缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
+
+
+def test_必修1反例_淨值整個抽掉_吃配息的指標資料未備也照算缺淨值():
+    """`44` HLD-1 判準：把某一檔的淨值整個抽掉 → 卡尾那一行數得到它。
+
+    門檻只有「配息佔淨值比」也一樣（它的分母是淨值）—— 對應上一輪突變 N6 存活的那條路。
+    """
+    ds = _with_window(fixtures.dataset_srcmiss(), (fixtures.WINDOW_START, fixtures.WINDOW_END),
+                      _RULE_YIELD)
+    _, skipped = logic.deviation_rows(
+        logic.all_metrics(ds, (fixtures.WINDOW_START, fixtures.WINDOW_END)), list(_RULE_YIELD))
+    assert skipped["missing"] == {"CCCC"}, skipped
+    assert skipped["missing_other"] == set(), skipped
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert hld1["missing_nav_count"] == 1
+    assert any("另有 1 檔缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
+
+
+def test_建議4_missing_other收的是缺淨值以外的資料未備():
+    """`skipped["missing_other"]` 有人讀（`_build_hld1`），這裡把它的內容釘住。"""
+    window = (fixtures.WINDOW_START, fixtures.WINDOW_END)
+    ds = _dividend_pending(fixtures.dataset_full())
+    _, skipped = logic.deviation_rows(logic.all_metrics(ds, window), list(_RULE_YIELD))
+    assert skipped["missing_other"] == {"AAAA", "BBBB", "CCCC"}, skipped
+    assert skipped["missing"] == set(), skipped
+    # 反向：配息表接上時這個集合是空的。
+    _, skipped = logic.deviation_rows(
+        logic.all_metrics(fixtures.dataset_full(), window), list(_RULE_YIELD))
+    assert skipped["missing_other"] == set(), skipped
+
+
+def _strings(block):
+    return [s for s in logic.collect_ui_strings(block) if isinstance(s, str)]
+
+
+def test_必修2正控_配息表未備而門檻吃配息_零列時不得說無偏離項也不得說進了不適用():
+    """修回之前：`HLD-1` 印「無偏離項／目前這一組門檻下，沒有任何一檔超出」，
+    `HLD-0` 印「無偏離項」＋「有一塊進了「不適用」，偏離筆數為零」——全是假話。
+
+    ⚠️ 拿掉 `_build_hld1` 那一支或 `conclusion_light` 那一支，本條轉紅。
+    """
+    for ds in (_dividend_pending(fixtures.dataset_noexceed()),
+               _dividend_pending(fixtures.dataset_one_nav())):
+        model = logic.build_page_model(ds)
+        hld1 = logic.find_block(model, "HLD-1")
+        hld0 = logic.find_block(model, "HLD-0")
+        assert hld1["_rows"] == []
+        for block in (hld1, hld0):
+            joined = "\n".join(_strings(block))
+            assert logic.TEXT_NO_DEVIATION not in joined, block["code"]
+            assert "沒有任何一檔超出" not in joined, block["code"]
+            assert "進了「不適用」" not in joined, block["code"]
+        # 用的字樣只有 `44` 已宣告的那兩種。
+        source_line = logic.empty_source_text(["dividend"])
+        assert source_line == "⬜ 資料未備：dividend 尚無資料"
+        assert hld1["summary_text"] == logic.ND_TEXT
+        assert hld1["_state"] == logic.STATE_MISSING
+        assert hld1["_placeholder"]["text"] == logic.ND_TEXT
+        assert source_line in hld1["detail_lines"]
+        assert hld0["text"] == logic.ND_TEXT
+        assert hld0["lines"] == [source_line], hld0["lines"]
+        assert hld0["_tone"] == "灰"
+
+
+def test_必修2反例_有資料時零列照舊無偏離項_缺淨值照舊無偏離項_有列照舊黃燈():
+    """反向：沒有未備的配息時，44 HLD-0／HLD-1 判準那兩句照舊出現。"""
+    model = logic.build_page_model(fixtures.dataset_noexceed())
+    assert logic.find_block(model, "HLD-1")["summary_text"] == logic.TEXT_NO_DEVIATION
+    assert logic.find_block(model, "HLD-0")["text"] == logic.TEXT_NO_DEVIATION
+    # 缺淨值（整個抽掉）照客戶 H-01 裁示：不進表、卡尾一行，零列照舊「無偏離項」。
+    model = logic.build_page_model(**fixtures.scenario("tiedstate"))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["summary_text"] == logic.TEXT_NO_DEVIATION
+    assert hld1["missing_nav_count"] == 1
+    # 配息表未備、但仍有一檔超出：黃燈照舊。
+    model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
+    assert logic.find_block(model, "HLD-0")["_tone"] == "黃"
+    assert logic.find_block(model, "HLD-1")["_state"] == logic.STATE_OK
+
+
+def test_建議5_pending_tables型別不對一律raise():
+    import pytest
+
+    assert logic.pending_tables({}) == frozenset()
+    assert logic.pending_tables({"pending_tables": None}) == frozenset()
+    assert logic.pending_tables({"pending_tables": ["dividend"]}) == {"dividend"}
+    assert logic.pending_tables({"pending_tables": ("nav", "dividend")}) == {"nav", "dividend"}
+    for bad in ("dividend", b"dividend", {"dividend": 1}, 7, [""], [None], ["dividend", 3]):
+        with pytest.raises(TypeError):
+            logic.pending_tables({"pending_tables": bad})
+    # 走整頁也一樣炸，不把字串拆成單字元。
+    ds = fixtures.dataset_full()
+    ds["pending_tables"] = "dividend"
+    with pytest.raises(TypeError):
+        logic.build_page_model(ds)
+
+
+def test_建議6_holding_id缺_空_重複一律raise():
+    import pytest
+
+    for value in (None, "", "   "):
+        ds = fixtures.dataset_full()
+        ds["holding"][0]["holding_id"] = value
+        with pytest.raises(logic.HoldingIdError):
+            logic.build_page_model(ds)
+    ds = fixtures.dataset_full()
+    del ds["holding"][0]["holding_id"]
+    with pytest.raises(logic.HoldingIdError):
+        logic.build_page_model(ds)
+    ds = fixtures.dataset_full()
+    ds["holding"][1]["holding_id"] = ds["holding"][0]["holding_id"]
+    with pytest.raises(logic.HoldingIdError):
+        logic.build_page_model(ds)
+    # 正向：兩張保單同一檔基金、holding_id 不同 ⇒ 不炸。
+    logic.build_page_model(_two_policy_bbbb()[0])
+
+
+def test_建議6_沒有鍵的列不得自動展開():
+    """`None == None` 為真：沒有這一道，`holding_id` 為 None 的列會在 `open_fund=None` 時自己打開。"""
+    assert logic._row_is_open(None, None) is False
+    assert logic._row_is_open("", "") is False
+    assert logic._row_is_open("H-AAAA", None) is False
+    assert logic._row_is_open("H-AAAA", "H-AAAA") is True
+
+
+# ═══════ 第四輪回修（2026-10-02） ═══════
+
+_SRC_DIV = "⬜ 資料未備：dividend 尚無資料"
+
+
+def test_第四輪必修1正控_有偏離列而配息門檻沒評估_HLD1與HLD0都帶來源句():
+    """重現：full、配息表未備、門檻「最大回撤 低於 -10」＋「配息佔淨值比 高於 6」。
+    修回之前 HLD-0 只說「有 1 檔超出」，那個 1 只是下限，卡上隻字未提配息門檻沒評估。
+    ⚠️ 拿掉「有偏離列也要寫」那一行，本條轉紅。
+    """
+    ds = _dividend_pending(fixtures.dataset_full())
+    rules = logic.saved_rules(ds)
+    assert {r["indicator"] for r in rules} == {"最大回撤", "配息佔淨值比"}
+    model = logic.build_page_model(ds)
+    hld1 = logic.find_block(model, "HLD-1")
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld1["_rows"], "這一條要的是有偏離列的那一種"
+    assert hld1["_state"] == logic.STATE_OK
+    assert _SRC_DIV in hld1["detail_lines"], hld1["detail_lines"]
+    assert hld0["_tone"] == "黃"
+    assert _SRC_DIV in hld0["lines"], hld0["lines"]
+
+
+def test_第四輪必修1反例_配息表已接上_HLD1與HLD0都沒有資料未備的句子():
+    model = logic.build_page_model(fixtures.dataset_full())
+    for code in ("HLD-1", "HLD-0"):
+        joined = "\n".join(_strings(logic.find_block(model, code)))
+        assert logic.ND_TEXT not in joined, code
+
+
+def _no_nav_at_end(rule_value):
+    """CCCC 區間內的淨值全拿掉（區間外的留著，所以不是缺淨值），配息表照常接上。"""
+    window = (fixtures.WINDOW_START, fixtures.WINDOW_END)
+    ds = fixtures.dataset_full()
+    ds["nav"] = [r for r in ds["nav"]
+                 if not (r["fund_code"] == "CCCC" and window[0] <= r["nav_date"] <= window[1])]
+    rules = ({"indicator": "配息佔淨值比", "direction": "高於", "value": rule_value},)
+    return _with_window(ds, window, rules)
+
+
+_HLD1_ORDER_LINE = "依 fund_code 字面值排列，不排序成優先順序。"
+_HLD0_ROWS_LINE = "哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"
+_FORBIDDEN_REASON = "區間末無淨值"
+
+
+def _all_text(model):
+    return "\n".join(s for s in logic.collect_ui_strings(model) if isinstance(s, str))
+
+
+def test_第五輪_資料未備只因區間內無淨值_只顯示資料未備_不寫原因():
+    """總管第五輪裁定：這一種 `44` 沒有宣告顯示文案 ⇒ 回到第三輪的行為：
+    主值與摘要寫 `⬜ 資料未備`，說明區與燈下都**不寫**任何原因句（不是假話）。
+
+    ⛔ 第六輪：**整份清單逐字相等**，不先經 `_is_missing_reason_line` 篩選 ——
+       篩過再斷言，一句不帶 ⬜ 的原因句會被篩掉而漏網（紅隊突變 Q2 實測存活）。
+    """
+    ds = _no_nav_at_end(20.0)
+    assert "pending_tables" not in ds
+    metric = next(m for m in logic.all_metrics(ds, logic.saved_window(ds))
+                  if m["_fund_code"] == "CCCC")
+    assert not metric["nav_missing"] and not metric["nav_rows"] and metric["div_rows"]
+    model = logic.build_page_model(ds)
+    hld1 = logic.find_block(model, "HLD-1")
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld1["summary_text"] == logic.ND_TEXT
+    assert hld1["detail_lines"] == [_HLD1_ORDER_LINE], hld1["detail_lines"]
+    assert hld1["tail_lines"] == [], hld1["tail_lines"]
+    assert hld0["text"] == logic.ND_TEXT
+    assert hld0["lines"] == [], hld0["lines"]
+    assert logic.TEXT_NO_DEVIATION not in "\n".join(_strings(hld1))
+    assert _FORBIDDEN_REASON not in _all_text(model)
+    # 有偏離列時：不寫原因、照舊黃燈。
+    model = logic.build_page_model(_no_nav_at_end(6.0))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["_rows"]
+    assert hld1["detail_lines"] == [_HLD1_ORDER_LINE], hld1["detail_lines"]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_HLD0_ROWS_LINE]
+    assert _FORBIDDEN_REASON not in _all_text(model)
+
+
+def test_第五輪反例_pending也點名nav而nav有資料_來源句只列dividend():
+    """紅隊重現：`pending=["nav","dividend"]`、nav 有資料、dividend=[] ⇒
+    修回之前印「⬜ 資料未備：dividend 與 nav 尚無資料」，nav 那一半是假的。
+    ⚠️ 改回取交集，本條轉紅。⛔ 第六輪：整份清單逐字相等，不先篩選。
+    """
+    ds = _dividend_pending(fixtures.dataset_noexceed())
+    ds["pending_tables"] = ["nav", "dividend"]
+    assert ds["nav"]
+    model = logic.build_page_model(ds)
+    assert logic.find_block(model, "HLD-1")["detail_lines"] == [_HLD1_ORDER_LINE, _SRC_DIV]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_SRC_DIV]
+    assert _FORBIDDEN_REASON not in _all_text(model)
+    # 有偏離列那一支也一樣。
+    ds = _dividend_pending(fixtures.dataset_full())
+    ds["pending_tables"] = ["nav", "dividend"]
+    model = logic.build_page_model(ds)
+    assert logic.find_block(model, "HLD-1")["detail_lines"] == [_HLD1_ORDER_LINE, _SRC_DIV]
+    assert logic.find_block(model, "HLD-0")["lines"] == [_HLD0_ROWS_LINE, _SRC_DIV]
+    assert _FORBIDDEN_REASON not in _all_text(model)
+
+
+def test_第六輪_任何情境的整頁模型都不含區間末無淨值():
+    """總管第五輪已撤掉那句；這一條掃整頁模型的每一個字串，不只說明區。"""
+    datasets = [fixtures.scenario(n)["dataset"] for n in fixtures.ALL_SCENARIO_NAMES]
+    datasets += [_no_nav_at_end(20.0), _no_nav_at_end(6.0),
+                 _dividend_pending(fixtures.dataset_full()),
+                 _dividend_pending(fixtures.dataset_noexceed())]
+    for ds in datasets:
+        assert _FORBIDDEN_REASON not in _all_text(logic.build_page_model(ds))
+
+
+def test_第四輪建議3正控_holding取數失敗時摘要讓位給取數失敗():
+    import pytest  # noqa: F401
+
+    ds = _dividend_pending(fixtures.dataset_noexceed())
+    ds["errors"] = {"holding": fixtures.FETCH_FAIL_MESSAGE}
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert hld1["_state"] == logic.STATE_ERROR
+    assert hld1["summary_text"] == logic.fetch_failed_text(fixtures.FETCH_FAIL_MESSAGE)
+    assert hld1["_placeholder"]["_state"] == logic.STATE_ERROR
+    assert hld1["_placeholder"]["text"] != logic.ND_TEXT
+    # 資料未備的原因照留。
+    assert _SRC_DIV in hld1["detail_lines"]
+    # 反向：沒有資料未備時，holdfail 的摘要一格未動（算出來的東西一律留著）。
+    hld1 = logic.find_block(logic.build_page_model(**fixtures.scenario("holdfail")), "HLD-1")
+    assert hld1["summary_text"] != logic.fetch_failed_text(fixtures.FETCH_FAIL_MESSAGE)
+
+
+def test_第四輪建議5_holding_id錯誤訊息分得出型別不對與前後空白():
+    import pytest
+
+    cases = [
+        (None, "缺或為空"), ("", "缺或為空"), (7, "型別不對"), (b"H-X", "型別不對"),
+        (" H-AAAA", "前後帶空白"), ("H-AAAA ", "前後帶空白"), ("   ", "前後帶空白"),
+    ]
+    for value, words in cases:
+        ds = fixtures.dataset_full()
+        ds["holding"][0]["holding_id"] = value
+        with pytest.raises(logic.HoldingIdError, match=words):
+            logic.build_page_model(ds)
+
+
+def test_第四輪建議4_holding_id檢查排在任何取鍵之前():
+    """缺鍵時丟的是 `HoldingIdError`，不是 `fund_metrics()` 的 `KeyError`。"""
+    import pytest
+
+    ds = fixtures.dataset_full()
+    del ds["holding"][2]["holding_id"]
+    with pytest.raises(logic.HoldingIdError):
+        logic.build_page_model(ds)

@@ -351,10 +351,13 @@ def _open_fund():
         return None
 
 
-def _click_open(fund_code: str) -> None:
-    """按下某一檔的展開鈕。**哪一檔會是開的由 logic 決定**，這裡只寫回 session_state。"""
+def _click_open(holding_id: str) -> None:
+    """按下某一列的展開鈕。**哪一列會是開的由 logic 決定**，這裡只寫回 session_state。
+
+    鍵是持倉的 `holding_id`，不是 `fund_code`：同一檔基金掛在兩張保單下是兩列（`44` 4.1）。
+    """
     st.session_state[logic.HLD5_OPEN_KEY] = logic.open_fund_after_click(
-        _open_fund(), fund_code
+        _open_fund(), holding_id
     )
 
 
@@ -374,11 +377,11 @@ def _render_hld5(block: dict) -> None:
             button = item["_button"]
             st.button(
                 button["label"],
-                key=f"hld5_open_{item['_fund_code']}",
+                key=f"hld5_open_{item['_holding_id']}",
                 disabled=not button["_enabled"],
                 help=button["disabled_reason"] or None,
                 on_click=_click_open,
-                args=(item["_fund_code"],),
+                args=(item["_holding_id"],),
             )
             if not item["_open"]:
                 continue
