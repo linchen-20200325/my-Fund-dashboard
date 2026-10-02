@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-02 09:48:41 UTC（`date -u` 實測）
+最後更新：2026-10-02 11:22:26 UTC（`date -u` 實測）
 
 ---
 
@@ -160,12 +160,14 @@
 |---|---|---|
 | 兩個 bug（HLD-5 改依 `holding_id` 配對與展開；配息表未備時顯示資料未備，不說無偏離項） | 已完成 | #865，merge commit `ae563ab` |
 | `nav`／`dividend` L2 轉換層 | 已完成 | #867，merge commit `bba15e4` |
+| L1 `_parse_nav_html` 的 MM/DD 跨年補年份（〈登記待辦〉「接 hld 頁盤點」第 7 條） | 已完成 | #870，merge commit `b23b5b2`（2026-10-02 增列；出處：`git show --stat b23b5b2`，本組實查） |
 | 接 hld 頁 | 待做（**下一步**） | 前提見〈登記待辦〉2026-10-02 兩組（轉換層 5 條；hld 頁／轉換層 12 條） |
 
-- #1 狀態 ~~待做~~ → **進行中**（**狀態更新，不是漏刪** · 日期 **2026-10-02**）：上表兩小步已 merge。
+- #1 狀態 ~~待做~~ → **進行中**（**狀態更新，不是漏刪** · 日期 **2026-10-02**）：上表兩小步已 merge。→ **狀態更新（2026-10-02，尾端加註，原句未改）**：#870（`b23b5b2`）merge 後，上表已完成的是三列（#865、#867、#870）；「接 hld 頁」仍待做。
 - ⚠️ **「完成」欄維持 `0%`，刻意不改**：#1 底下總共幾個小步，沒有客戶給的基準，**不自己發明分母**。
 - ⚠️ #867 是 `nav`／`dividend` 的 L2 轉換層，它算不算 #3／#4（兩表接來源）的進度，**本組未判定**，#3／#4 兩列一字未動。
 - SHA 實查（2026-10-02）：`git log --oneline -5 origin/main`、`git show --stat ae563ab`／`bba15e4`。
+- `b23b5b2` 那一列（2026-10-02 增列）：出處：本組以 `git log --merges --oneline -6 origin/main` 與 `git show --stat --format='%H %P' b23b5b2` 實查。#870 只動 L1（`repositories/fund/nav_metrics.py`）與一支測試，「接 hld 頁」仍是下一步；〈登記待辦〉2026-10-02「#870 後續 7 條」是它留下的待辦。
 
 #### 依賴欄逐格來歷（分不出「查過的」與「我判的」，就等於沒查）
 
@@ -200,8 +202,12 @@
 
 ## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ 2026-10-02 更新）
 
-- `origin/main` ＝ **`bba15e4`**（PR #867 的 merge commit；**一般 merge commit、2 parents，非 squash**；
-  2026-10-02 實測 `git log --oneline -5 origin/main` 與 `git show --stat --format='%H %P' bba15e4`）
+- `origin/main` ＝ **`b23b5b2`**（PR #870 的 merge commit；一般 merge commit、2 parents（`110a395`、`43844f5`），非 squash；
+  出處：本組 2026-10-02 `git fetch` 後實測 `git rev-parse --short origin/main` 與 `git show --stat --format='%H %P' b23b5b2`）
+  ~~- `origin/main` ＝ **`bba15e4`**（PR #867 的 merge commit；**一般 merge commit、2 parents，非 squash**；~~
+  ~~2026-10-02 實測 `git log --oneline -5 origin/main` 與 `git show --stat --format='%H %P' bba15e4`）~~
+  → **2026-10-02 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #868（`fd5dc09`）、#869（`110a395`）、
+  #870（`b23b5b2`）相繼 merge（出處：`git log --merges --oneline -6 origin/main`，本組實查）；#868／#869／#870 三列見第 4 節。
   ~~- `origin/main` ＝ **`0cf4d5b`**（PR #863 的 merge commit；**一般 merge commit、2 parents，非 squash**；~~
   ~~2026-10-01 實測 `git log origin/main --merges -3` 與 `git rev-list --parents -n1 0cf4d5b`）~~
   → **2026-10-02 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #864（`e87181d`）、#865（`ae563ab`）、
@@ -562,6 +568,11 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   - 出處：交接本稽核（1d3f0b6、528a152、740b1cf 三輪）。
   - 歸屬：總管 2026-10-02 自陳；派工單原文不在 repo，無法實查。
   - 互指（四處，皆回指本筆）：〈登記待辦〉2026-10-02「#865／#867 稽核與實作組回報的 12 條」第 6、10、11 條；〈登記待辦〉2026-10-02「接 hld 頁前的 5 條」（#866）第 1 條。
+- **（2026-10-02，#870）派工單替成員寫好要落地的句子，兩句未查證的內容進了程式碼 docstring**：
+  - 「已登記待辦」：#870 第三顆 `a94c332` 的 `_parse_nav_html` docstring 寫著 legacy 兩條路徑「仍用那條規則,有同樣風險,**已登記待辦**、本處未動」。本組在 `110a395`（#870 合併前的 main）的交接本 `git grep` 查 `_src_nav_30day`／`_infer_year_for_mmdd`：2 行命中，都是在描述 `_infer_year_for_mmdd` 有跨年判斷，沒有把這兩條路徑登記為待辦。出處：本組 2026-10-02 `git show a94c332` 實查該句存在，`git log -S'已登記待辦' 110a395..b23b5b2 -- repositories` 顯示 `159cd34` 再改掉它（現行字為「待登記(尚未寫入交接本)」）。這一筆登記直到本輪才補上，見〈登記待辦〉2026-10-02「#870 後續 7 條」第 1 條。
+  - 「12/30 讀到 01/02 → 去年 01/02」：`a94c332` 的同一份 docstring 以此為例；但被批評的那條規則只比月日，12/30 讀到 01/02 時補成今年 01/02（約一年前），不是「去年」（本組讀 `sources.py::_infer_year_for_mmdd` 實查：`(mo, da) <= (today.month, today.day)` 時回今年）。出處：本組 2026-10-02 `git log -S'12/30 讀到 01/02 → 去年 01/02' 110a395..b23b5b2` 實查，該句出現於 `a94c332`、由 `43844f5`（「更正 12/30 讀 01/02 例子並補舉例」）改掉；現行 docstring 已寫成「12/30 讀到 01/02 時不認為 01/02 晚於今天,於是補成今年 01/02(約一年前)」。
+  - 歸屬：兩句都是總管派工單給的內容、實作組照寫，由紅隊與實作組事後抓到 —— 此歸屬為總管 2026-10-02 自陳；派工單原文不在 repo，本組無法實查。
+  - **改善方式**：派工單只寫要改什麼、出處在哪裡，不再替成員寫好要落地的句子。出處：總管 2026-10-02 自陳的做法（內部流程，未經第二組驗證）。
 
 ### 〈驗證〉敘述的寫法（2026-09-28 #858 後新增的硬規矩；**本輪唯一的制度產出**）
 
@@ -718,12 +729,25 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
     5. **`fund_profile` 沒有 L2**。A 組、B 組盤點（2026-10-02，`fd5dc09`）：兩組在 `services/` 底下 grep 皆為 0 命中。兩組指出的後果：HLD-2 的「成立日晚於區間起點」判斷沒有資料可觸發；另外 hld logic 沒有讀 `fund_profile` 的 pending。
     6. **錯誤彙總**。A 組、B 組盤點（2026-10-02，`fd5dc09`）：hld logic 讀的是表層級的 `errors["nav"]`。若把逐檔錯誤併成一個，併入的各檔會顯示成系統錯誤；若丟掉，失敗的那一檔會被誤判為資料未備。兩組判斷，要照實呈現，需要改 `ui_v2/hld/logic.py`。兩組另指出 `withheld`、`skipped`、`provenance` 在畫面上沒有出口。
     7. **MM/DD 跨年補年份**。B 組盤點（2026-10-02，`fd5dc09`）以探針重現：today 設為 2027-01-05 時，12 月的 7 筆被補成未來日期而遭拒收，L1 序列的最後一筆變成假的 12/31（轉換層之後的最後一列是 01-05），且沒有錯誤訊號（探針檔：scratchpad 的 `hldB_probe_mmdd.py`，不在 repo 內）。總管告知已派工修 L1，分支 `fix/nav-mmdd-cross-year`（此句出自總管，本組未查證該分支）。互指：本節「#865／#867 稽核與實作組回報的 12 條」第 10 條。
+       → **狀態更新（2026-10-02，尾端加註，上文未改）**：已由 #870（merge commit `b23b5b2`，分支 `fix/nav-mmdd-cross-year`）修正 `repositories/fund/nav_metrics.py::_parse_nav_html`：MM/DD 改取離台灣今天最近的候選年，晚於今天者不寫並計入 `attrs["mmdd_rejected"]`。出處：本組實查 `git show --stat b23b5b2` 與該函式 docstring；同檔測試 `test_jan5_cross_year_dec_goes_to_last_year`（today 2027-01-05，斷言 12 月 7 筆補成前一年、最後一列為 01-05）本組以 civenv 實跑通過。B 組的探針本組未重跑。同一條補年份問題在其他路徑上仍存在，見本節「#870 後續 7 條」第 1 條。
     8. **`PENDING_TABLES`／`PAGES_READING_SETTINGS`**。A 組盤點（2026-10-02，`fd5dc09`）：
        - 把 `nav` 移出 `PENDING_TABLES`，會讓 set 頁 SET-0 那句「淨值、配息尚未接取數來源」整句消失（即使 dividend 仍未接），也會影響 alo 的前提與守衛 `test_alo_source.py`。
        - hld 開始讀 `user_setting` 時，就該在 `PAGES_READING_SETTINGS` 加 `"hld"`，set 頁 SET-4 的 ★7 判斷會隨之改變。
        - 照 alo 的體例，需要新增一條跨頁守衛。
 
   ⛔ 以上 8 條皆為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
+
+- **（2026-10-02 新增）#870 後續 7 條** —— 出處：#870 規格組／紅隊稽核（第 6 條為紅隊第二輪實測，第 7 條為 #870 實作組回報）。每條末尾另寫本組 2026-10-02 在 `b23b5b2` 上的查證結果；查不到的寫「未查」。
+
+  1. **同一條補年份規則在另外兩條路徑上仍在用**。出處：#870 規格組／紅隊稽核。本組實查（`git grep -n _infer_year_for_mmdd b23b5b2 -- '*.py'`）：`repositories/fund/sources.py::_src_nav_30day` 內呼叫 `_infer_year_for_mmdd`；`repositories/fund/fund_orchestration.py::fetch_fund_from_moneydj_url` 內 legacy 近 30 日段落也呼叫它。`repositories/fund/nav_metrics.py::_parse_nav_html` 的 docstring 寫著這兩條路徑「仍用那條規則,有同樣風險,待登記(尚未寫入交接本)、本處未動」；本條就是那一筆登記。**下一輪要把 docstring 那一句改成指向本條**（本輪只動交接本，docstring 未改）。
+  2. **MoneyDJ MM/DD 頁實際涵蓋多少天，未查證**。出處：#870 規格組／紅隊稽核。本組實查：`_parse_nav_html` 的 docstring 寫「條目若早於今天約半年以上,最近候選會落在下一年(未來)而被拒收」與「MoneyDJ 的 MM/DD 頁實際涵蓋多少天,未查證」；`tests/test_parse_nav_html_mmdd_cross_year.py::test_half_year_old_entry_rejected_and_counted` 以 today 2026-07-15、頁面 01/10 斷言該筆被拒收、`mmdd_rejected` 為 1。頁面若涵蓋超過約半年，較舊的條目會少列（不會造假）。實際涵蓋天數本組也未查。
+  3. **拒收筆數沒有呼叫端讀**。出處：#870 規格組／紅隊稽核。本組實查（`git grep -n mmdd_rejected b23b5b2 -- repositories services ui ui_v2`）：命中只在 `repositories/fund/nav_metrics.py`（`_parse_nav_html` 寫入；`fetch_nav` 寫進 `_attempts` 與 print）。`sources.py` 裡三個以 lazy import 呼叫 `_parse_nav_html` 的函式（`_src_bank_platform_nav`、`_src_tcb_nav`、`_src_insurance_subdomain_nav`）與 L2 `services/v2_tables/nav_dividend.py` 皆 0 命中。
+  4. **不合法的 MM/DD 略過、不計數**。出處：#870 規格組／紅隊稽核。本組實查：`_parse_nav_html` 的 docstring 寫「其他不合法的 MM/DD（例如 13/45、04/31）照舊略過、不計數」；程式碼在三個候選年都沒有該日期、且不是 02/29 時拋 `ValueError`，由同一迴圈的 `except` 接住後略過；測試 `test_invalid_mmdd_not_counted` 守這個行為。計入拒收的只有 02/29。
+  5. **「取台灣今天日期」有多份同樣寫法的實作**。出處：#870 規格組（列了 `sources.py`、`fund_orchestration.py`、`infra/cache.py`、`nav_metrics.py::_tw_today`）。本組實查：掃描指令 `git grep -n 'timedelta(hours=8)' b23b5b2 -- '*.py' ':!tests'`（範圍：`b23b5b2` 上全部 `.py`，排除 `tests/`；2026-10-02 實跑輸出 27 行，人工判讀）。以 `datetime.now(timezone(timedelta(hours=8))).date()` 取台灣今天日期的寫法，**例如**：`nav_metrics.py::_tw_today`、`sources.py::_src_nav_30day` 內、`fund_orchestration.py::fetch_fund_from_moneydj_url` 內、`services/nav_history_gs.py` 內、`services/nav_history_store.py` 內（再包成 `pd.Timestamp`）、`ui/tab5_data_guard.py` 內（跨三行寫）；同樣寫法再接 `.isoformat()` 回字串的，例如 `infra/cache.py::_daily_cache` 內的 `_default_today`、`repositories/pool_repository.py`、`services/portfolio_tracking.py`、`ui/tab_manage.py`；另有先定義台灣時區常數再在別處取日期的（例如 `ui/helpers/tw_time.py` 的 `TW_TZ`／`tw_now()`），這類取日期的呼叫點本組未追。**以上是例子，不是完整清單**：份數取決於怎麼算「相同」，本組不給總數；只掃了 `timedelta(hours=8)` 這個字樣，其他寫法（例如 `ZoneInfo`）未掃。（2026-10-02 稽核 M6 指出上一版漏列 `services/nav_history_store.py` 與 `ui/tab5_data_guard.py` 兩處，本版補入並改成例舉；上一版尚未進 main，直接改寫、未劃線。）
+  6. **一條測試在特定子集與順序下失敗**。出處：#870 紅隊第二輪實測：`tests/test_readonly_query_paths.py::TestReadFailureStillFeedsTheBackoffAndTheCache::test_the_nav_supplement_chain_is_still_not_blocked` 在某個 26 檔子集、照特定順序跑時失敗；在 `fd5dc09` 與 `ccdddb6` 上都重現；單獨跑則通過；完整快速 lane 在預設順序下沒有失敗。本組實查：該測試存在（同檔 class 第 720 行、函式第 798 行）；`fd5dc09` 是 #868 的 merge commit，`ccdddb6` 是 #870 分支上的一顆。那個 26 檔子集與順序本組沒有取得，未重跑。
+  7. **配息頁遇到 MM/DD 或民國年，整列被靜默丟掉**。出處：#870 實作組回報。本組實查：`repositories/fund/nav_metrics.py::fetch_div` 對每列做 `pd.to_datetime(cols[0])`，外層 `except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass`；本組以 scratchpad civenv（pandas 2.3.3）實跑 `pd.to_datetime`：`12/30`、`01/02`、`113/12/30`、`113/01/02` 皆拋 `OutOfBoundsDatetime`（`ValueError` 的子類），`2024/12/30` 正常解析。這類列因此被略過，不計數、不 print。上述拋例外的行為依 pandas 版本而定，本組實測為 2.3.3；其他版本未測。MoneyDJ 配息頁實際會不會出現 MM/DD 或民國年，本組未查；與上方 #866「接 hld 頁前的 5 條」第 1 條（配息表 0 列）的關係，本組未判定。
+
+  ⛔ 以上 7 條皆為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
 
 
 ## 3. 已完成（未 merge）
@@ -811,6 +835,11 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **#866（merge commit `d9ac70c`，head `f060e16`）：交接本登記 nav／dividend 轉換層 5 條待辦**。1 檔 **+9／−1**。
 - **#867（merge commit `bba15e4`，head `9b14996`）：`nav`／`dividend` L2 轉換層**（`services/v2_tables/nav_dividend.py`、`contract.py`）。4 檔 **+1517／−0**；只讀、不接 UI。
   （以上三列 2026-10-02 以 `git log --oneline -5 origin/main` 與 `git show --stat --format='%H %P'` 實測 SHA、2 parents 與檔案統計；**PR 內容摘要取自 merge commit 標題與分支 commit 訊息，CI 結果本組未查**。）
+- **#868（merge commit `fd5dc09`，head `423a7a4`）：交接本 #865／#866／#867 後更新**（分支 `docs/handover-865-867`；六顆：`e4e53f3` 歸位與登記 12 條待辦 → `528a152` → `740b1cf` → `a71e285` → `f6c26ca` → `423a7a4` 稽核回修）。1 檔 **+71／−9**。
+  （出處：本組 2026-10-02 以 `git show --stat --format='%H %P' fd5dc09` 與 `git log bba15e4..fd5dc09^2` 實查 SHA、2 parents（`bba15e4`、`423a7a4`）、檔案統計與分支 commit；內容摘要取自 merge commit 標題與分支 commit 訊息；**CI 結果本組未查**。）
+- **#869（merge commit `110a395`，head `d5b4eff`）：交接本登記接 hld 頁盤點 8 條**（分支 `docs/handover-hld-inventory`；兩顆：`07dbc49` 登記、`d5b4eff` 稽核回修 M5、S10～S13）。1 檔 **+24／−2**。
+- **#870（merge commit `b23b5b2`，head `43844f5`）：L1 `_parse_nav_html` 的 MM/DD 改取最近候選年**（分支 `fix/nav-mmdd-cross-year`）：以台灣今天的前一年／今年／下一年組三個候選、取最近者；晚於台灣今天者不寫，筆數記在 `attrs["mmdd_rejected"]`，`fetch_nav` 的 `_attempts` 帶出拒收筆數。2 檔 **+302／−7**（`repositories/fund/nav_metrics.py`、`tests/test_parse_nav_html_mmdd_cross_year.py`）；分支共六顆（`72b6143` → `ccdddb6` → `a94c332` → `159cd34` → `96fd61c` → `43844f5`）。
+  （以上兩列出處：本組 2026-10-02 以 `git show --stat --format='%H %P'` 與 `git log 110a395..b23b5b2^2`、`git log fd5dc09..110a395^2` 實查 SHA、2 parents、檔案統計與分支 commit；內容摘要取自 merge commit 標題、分支 commit 訊息與 `nav_metrics.py` docstring；**CI 結果本組未查**。本組另以 scratchpad civenv 在 `b23b5b2` 實跑 `tests/test_parse_nav_html_mmdd_cross_year.py` → 21 passed。）
 
 ## 5. 待客戶裁示
 
@@ -1069,6 +1098,8 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-02 | 稽核回修（起點 `4769dc5`）：M6 「#870 後續 7 條」第 5 條改為例舉，補入 `services/nav_history_store.py`、`ui/tab5_data_guard.py` 兩處，寫明不是完整清單並附掃描指令與範圍；S15 hld 小步表下「上表兩小步已 merge」尾端加狀態更新（三列已完成，原句未改）；S16 〈總管錯誤紀錄〉#870 那筆改善方式的出處改為「總管 2026-10-02 自陳的做法（內部流程，未經第二組驗證）」；S17 第 7 條補 pandas 版本（本組實測 2.3.3）。第 5 條、S16 那一句與第 7 條尚未進 main，直接改寫、未劃線。 |
+| 2026-10-02 | #870 後更新（起點 `b23b5b2`）：`origin/main` 改 `b23b5b2`（舊句劃線保留）；第 4 節補 #868（`fd5dc09`）、#869（`110a395`）與 #870（`b23b5b2`）三列（#868 為總管同日追加派工；三列 SHA、parents、檔案統計皆以 git 實查）；hld 小步表增列 #870 一列；〈登記待辦〉「接 hld 頁盤點」第 7 條尾端加狀態更新（上文未改）；〈登記待辦〉新增「#870 後續 7 條」（出處：#870 規格組／紅隊稽核；第 6 條紅隊第二輪實測、第 7 條 #870 實作組回報），每條附本組在 `b23b5b2` 的查證結果；〈總管錯誤紀錄〉新增「（2026-10-02，#870）派工單替成員寫好要落地的句子」一筆（`a94c332` 兩句，本組以 `git show`／`git log -S` 實查）。 |
 | 2026-10-02 | 〈登記待辦〉新增「接 hld 頁盤點：客戶關卡 3 條、資料缺口與內部決定 5 條」（出處：A 組、B 組盤點，2026-10-02，`fd5dc09`）；每條寫成具名歸屬句；第 4 條（`fund_code` → `full_key`）兩組結論不一致，兩邊並陳、標「待總管裁」；第 7 條與 12 條那組的第 10 條互指（同日稽核 M5：第 10 條尾端補回指，原文未動）。同日稽核 S10～S13 回修：開頭補「第 1～3 條屬客戶關卡」說明；第 3 條拆成「49 §8 (k) 原文」與「A 組判斷」兩句；第 7 條改寫為「L1 序列的最後一筆」並補轉換層後的最後一列；第 2 條補 A 組掃描範圍與原型檔說明。這幾處尚未進 main，直接改寫、未劃線。本組只登記，未逐條查證。 |
 | 2026-10-02 | 稽核回修（起點 `f6c26ca`）：〈總管錯誤紀錄〉「三份派工單…」一筆出處改為「交接本稽核（1d3f0b6、528a152、740b1cf 三輪）」，拿掉「與轉換層稽核」；補「歸屬：總管 2026-10-02 自陳；派工單原文不在 repo，無法實查」；互指改為四處（12 條的第 6、10、11 條與 #866 那組 5 條的第 1 條），第 6、11 條與 #866 第 1 條只在尾端加回指，原文未改。 |
 | 2026-10-02 | 稽核回修（起點 `740b1cf`）：M3 第 10 條括號整段換成稽核實查 bba15e4 的結果（`_parse_nav_html` 補今年、`_infer_year_for_mmdd` 有跨年判斷、`fetch_div` 未查、少列為推論未重現），出處改為「#867 紅隊／規格稽核；交接本稽核實查 bba15e4」；〈總管錯誤紀錄〉新增「（2026-10-02）三份派工單把未查證的斷言寫成事實」一筆（標題原寫「兩度」，同日改為「三份」並逐句標 commit；尚未進 main，直接改寫、未劃線），與第 10 條互指。**第 6、10、11、12 條這幾輪的改寫：這幾條尚未進 main，直接改寫、未劃線。** |
