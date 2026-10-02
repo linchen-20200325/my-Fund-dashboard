@@ -41,9 +41,36 @@ def _scrub(node):
     return node
 
 
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _module_constant(rel, name):
+    """用 AST 從舊樹原始檔讀出一個常數（本檔不 import 舊樹，也不另抄一份字面）。"""
+    path = _REPO_ROOT / rel
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} 不在 {rel}")
+
+
+# L2 `contract.DIRECT_POLICY_ID`（S4 第二輪 M2：正式模式一律要給）。
+_DIRECT_ID = _module_constant("services/v2_tables/contract.py", "DIRECT_POLICY_ID")
+# 假資料裡掛在 DIRECT 下的持倉，正式模式的測試改掛到這張既有保單（S4 第二輪 M2：
+# L2 不為 DIRECT 產生 `holding` 列，正式模式拿到 DIRECT 持倉會 raise）。示範模式照用同一份，比對才對得上。
+_REHOME_POLICY = "P-001"
+
+
 def _scenario_args(name, *, scrub=True):
     args = copy.deepcopy(fixtures.scenario(name))
+    for holding in args["dataset"].get("holding") or ():
+        if holding["policy_id"] == _DIRECT_ID:
+            holding["policy_id"] = _REHOME_POLICY
     return _scrub(args) if scrub else args
+
+
+def _build(*args, **kw):
+    """正式模式的 `build_live_model`，帶上 `direct_policy_id`。"""
+    return live.build_live_model(*args, direct_policy_id=_DIRECT_ID, **kw)
 
 
 def _first_holding(dataset):
@@ -52,7 +79,7 @@ def _first_holding(dataset):
 
 
 def _live(name, **kw):
-    return live.build_live_model(**_scenario_args(name), **kw)
+    return _build(**_scenario_args(name), **kw)
 
 
 def _demo(name, **kw):
@@ -68,7 +95,7 @@ _ALL = fixtures.ALL_SCENARIO_NAMES
 @pytest.mark.parametrize("name", _ALL)
 def test_正式模式_全頁模型沒有任何一個示意字樣(name):
     args = _scenario_args(name)
-    model = live.build_live_model(**args, open_fund=_first_holding(args["dataset"]))
+    model = _build(**args, open_fund=_first_holding(args["dataset"]))
     hits = [s for s in logic.collect_ui_strings(model) if "示意" in s]
     assert hits == []
 
@@ -124,7 +151,7 @@ def test_正式模式只差三件事_其餘逐字與示範模式相同(name):
     open_fund = _first_holding(args["dataset"])
     demo = logic.build_page_model(**copy.deepcopy(args), open_fund=open_fund)
     expected = live.apply_live_notes(_scrub(demo))
-    got = live.build_live_model(**args, open_fund=open_fund)
+    got = _build(**args, open_fund=open_fund)
     assert got == expected
 
 
@@ -138,7 +165,7 @@ def _hld5_fields(model):
 def test_正式模式_HLD5欄名改為最後核對日只記日期_值只有日期():
     args = _scenario_args("full")
     holdings = {h["holding_id"]: h for h in args["dataset"]["holding"]}
-    block = logic.find_block(live.build_live_model(**args, today=TODAY), "HLD-5")
+    block = logic.find_block(_build(**args, today=TODAY), "HLD-5")
     assert block["_items"]
     for item in block["_items"]:
         labels = [label for label, _ in item["_fields"]]
@@ -228,7 +255,7 @@ def test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤(ra
     bad_id = args["dataset"]["holding"][1]["holding_id"]
     code = args["dataset"]["holding"][1]["fund_code"]
     open_fund = bad_id if opened else None
-    model = live.build_live_model(**args, open_fund=open_fund, today=TODAY)
+    model = _build(**args, open_fund=open_fund, today=TODAY)
     cell = _sync_cell(model, bad_id)
     assert cell["_value_node"] is True
     assert cell["_state"] == logic.STATE_ERROR
@@ -243,7 +270,7 @@ def test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤(ra
     assert want_line in hld5["detail_lines"]
 
     # 其他照常：拿同一檔換成合格值的那一份對照，除了 HLD-5 這一格與說明區那兩行，整頁逐字相同。
-    good = live.build_live_model(**_with_sync("2026-09-19"), open_fund=open_fund, today=TODAY)
+    good = _build(**_with_sync("2026-09-19"), open_fund=open_fund, today=TODAY)
     good_hld5 = logic.find_block(good, "HLD-5")
     assert [b for b in model["blocks"] if b["code"] != "HLD-5"] == [
         b for b in good["blocks"] if b["code"] != "HLD-5"
@@ -263,7 +290,7 @@ def test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤(ra
 def test_紅隊J2_帶時區的值_正式版顯示台灣日期():
     args = _with_sync("2026-09-18T20:30:00Z")
     bad_id = args["dataset"]["holding"][1]["holding_id"]
-    assert _sync_cell(live.build_live_model(**args, today=TODAY), bad_id) == "2026-09-19"
+    assert _sync_cell(_build(**args, today=TODAY), bad_id) == "2026-09-19"
 
 
 def test_只有日期_今天合格_明天不合格():
@@ -273,16 +300,16 @@ def test_只有日期_今天合格_明天不合格():
     assert live.sync_date("2026-10-03", today=TODAY) is None
     args = _with_sync("2026-10-03")
     hid = args["dataset"]["holding"][1]["holding_id"]
-    cell = _sync_cell(live.build_live_model(**copy.deepcopy(args), today=TODAY), hid)
+    cell = _sync_cell(_build(**copy.deepcopy(args), today=TODAY), hid)
     assert cell["_state"] == logic.STATE_ERROR
-    assert _sync_cell(live.build_live_model(**args, today=date(2026, 10, 3)), hid) == "2026-10-03"
+    assert _sync_cell(_build(**args, today=date(2026, 10, 3)), hid) == "2026-10-03"
 
 
 def test_今天可以注入_同一個值換一天就變不合格():
     args = _with_sync("2026-09-20T01:00:00Z")
     hid = args["dataset"]["holding"][1]["holding_id"]
-    assert _sync_cell(live.build_live_model(**copy.deepcopy(args), today=date(2026, 9, 20)), hid) == "2026-09-20"
-    cell = _sync_cell(live.build_live_model(**args, today=date(2026, 9, 19)), hid)
+    assert _sync_cell(_build(**copy.deepcopy(args), today=date(2026, 9, 20)), hid) == "2026-09-20"
+    cell = _sync_cell(_build(**args, today=date(2026, 9, 19)), hid)
     assert cell["_state"] == logic.STATE_ERROR
 
 
@@ -293,7 +320,7 @@ def test_不傳今天_取台灣的今天():
     for raw, bad in ((tomorrow_tw.isoformat(), True), (today_tw.isoformat(), False)):
         args = _with_sync(raw)
         hid = args["dataset"]["holding"][1]["holding_id"]
-        cell = _sync_cell(live.build_live_model(**args), hid)
+        cell = _sync_cell(_build(**args), hid)
         assert isinstance(cell, dict) is bad, raw
 
 
@@ -318,7 +345,7 @@ def test_紅隊M1_極端年份帶時區_不拋OverflowError():
         assert live.sync_date(raw, today=TODAY) is None
         args = _with_sync(raw)
         hid = args["dataset"]["holding"][1]["holding_id"]
-        assert _sync_cell(live.build_live_model(**args, today=TODAY), hid)["_state"] == logic.STATE_ERROR
+        assert _sync_cell(_build(**args, today=TODAY), hid)["_state"] == logic.STATE_ERROR
 
 
 def test_日期正則只認ASCII數字():
@@ -375,7 +402,7 @@ def test_紅隊J2_同一代碼掛兩張保單_原因行各一行_寫明保單():
     raw = "2026/09/19"
     args, name1, name2 = _two_policy_args(raw, same_name=False)
     assert name1 != name2
-    hld5 = logic.find_block(live.build_live_model(**args, today=TODAY), "HLD-5")
+    hld5 = logic.find_block(_build(**args, today=TODAY), "HLD-5")
     fail_lines = [line for line in hld5["detail_lines"] if line.startswith("⛔")]
     assert fail_lines == [
         logic.fund_fetch_failed_text("AAAA", f"{name1}：{live.bad_sync_message(raw)}"),
@@ -388,7 +415,7 @@ def test_紅隊J2_兩張保單名稱也相同_仍是兩行不合併():
     raw = "2026/09/19"
     args, name1, name2 = _two_policy_args(raw, same_name=True)
     assert name1 == name2
-    hld5 = logic.find_block(live.build_live_model(**args, today=TODAY), "HLD-5")
+    hld5 = logic.find_block(_build(**args, today=TODAY), "HLD-5")
     assert len([line for line in hld5["detail_lines"] if line.startswith("⛔")]) == 2
 
 
@@ -422,7 +449,7 @@ def test_已經套過一次的模型_再套一次報錯():
 
 
 def test_沒有展開項目時_不報錯():
-    hld5 = logic.find_block(live.build_live_model(**_scenario_args("empty"), today=TODAY), "HLD-5")
+    hld5 = logic.find_block(_build(**_scenario_args("empty"), today=TODAY), "HLD-5")
     assert hld5["_items"] == []
 
 
@@ -442,7 +469,7 @@ def test_兩條執行緒同時組示範與正式_輸出逐字與單獨組的相�
     """
     args = _scenario_args("full")
     want_demo = logic.build_page_model(**copy.deepcopy(args))
-    want_live = live.build_live_model(**copy.deepcopy(args), today=TODAY)
+    want_live = _build(**copy.deepcopy(args), today=TODAY)
 
     demo_paused = threading.Event()
     live_paused = threading.Event()
@@ -477,7 +504,7 @@ def test_兩條執行緒同時組示範與正式_輸出逐字與單獨組的相�
     def run_live():
         try:
             assert demo_paused.wait(10)
-            out["live"] = live.build_live_model(**copy.deepcopy(args), today=TODAY)
+            out["live"] = _build(**copy.deepcopy(args), today=TODAY)
         except Exception as exc:  # pragma: no cover
             errors.append(exc)
         finally:
@@ -627,57 +654,70 @@ def test_live模組不import_streamlit_也不import_fixtures():
     assert not [n for n in names if "streamlit" in n or "fixtures" in n]
 
 
-# ───────────────────────── 5. DIRECT 持倉另列（S4，裁示 3-B (ii)） ─────────────────────────
-# 出處：`docs/wireframes/draft_hld_live.html` §F 選項 3-B、§G 第 3／3a 題。
-# L2 `direct` 清單三種來源的字面，用 AST 從 L1 讀出來（本檔不 import 舊樹，也不另抄一份）。
+# ───────────────────────── 5. DIRECT 持倉另列（S4，裁示 3-B (ii)；S4 第二輪 M1／M2／J1／J2） ─────────────────────────
+# 出處：`docs/wireframes/draft_hld_live.html` §F 選項 3-B、§G 第 3／3a 題；第二輪為總管裁定。
+# L2 `direct` 清單三種來源的字面，用 AST 從 L1 讀出來。
 
-_REPO_PY = pathlib.Path(__file__).resolve().parents[2] / "repositories" / "policy_supplement_repository.py"
-
-
-def _l1_constant(name):
-    for node in ast.parse(_REPO_PY.read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
-            return ast.literal_eval(node.value)
-    raise AssertionError(f"{name} 不在 {_REPO_PY.name}")
-
-
-_POLICY_TAB = _l1_constant("POLICY_TAB_SOURCE")
-_TAB_PROFILE = _l1_constant("TAB_POLICY_PROFILE")
-_TAB_SUPPLEMENT = _l1_constant("TAB_HOLDING_SUPPLEMENT")
+_L1 = "repositories/policy_supplement_repository.py"
+_POLICY_TAB = _module_constant(_L1, "POLICY_TAB_SOURCE")
+_TAB_PROFILE = _module_constant(_L1, "TAB_POLICY_PROFILE")
+_TAB_SUPPLEMENT = _module_constant(_L1, "TAB_HOLDING_SUPPLEMENT")
+_SOURCES = frozenset({_POLICY_TAB, _TAB_PROFILE, _TAB_SUPPLEMENT})
+_WARN = "⚠ DIRECT 列暫不支援，該筆不計入體檢（{n} 筆）"
 
 
 def _l2_direct():
     """形狀照 `services/v2_tables/alo_holdings.py::load_alo_tables` 三處 `direct.append(...)`。"""
     return [
-        {"source": _TAB_PROFILE, "tab": _TAB_PROFILE, "row": 7, "policy_id": "DIRECT"},
-        {"source": _TAB_SUPPLEMENT, "tab": _TAB_SUPPLEMENT, "row": 31, "policy_id": "DIRECT"},
-        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 3, "policy_id": "DIRECT", "fund_code": "J1", "fund_name": "J"},
-        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 5, "policy_id": "DIRECT", "fund_code": "K1", "fund_name": "K"},
+        {"source": _TAB_PROFILE, "tab": _TAB_PROFILE, "row": 7, "policy_id": _DIRECT_ID},
+        {"source": _TAB_SUPPLEMENT, "tab": _TAB_SUPPLEMENT, "row": 31, "policy_id": _DIRECT_ID},
+        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 3, "policy_id": _DIRECT_ID, "fund_code": "J1", "fund_name": "J"},
+        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 5, "policy_id": _DIRECT_ID, "fund_code": "K1", "fund_name": "K"},
     ]
 
 
+def _direct_kw(direct=None):
+    return {
+        "direct": _l2_direct() if direct is None else direct,
+        "policy_tab_source": _POLICY_TAB,
+        "direct_sources": _SOURCES,
+    }
+
+
 def _live_direct(name, direct=None):
-    return live.build_live_model(
-        **_scenario_args(name),
-        today=TODAY,
-        direct=_l2_direct() if direct is None else direct,
-        policy_tab_source=_POLICY_TAB,
-    )
+    return _build(**_scenario_args(name), today=TODAY, **_direct_kw(direct))
+
+
+def _empty_args():
+    """紅隊 M1 重現情境：`full` 的資料，持倉清空（＝全部持倉都是 DIRECT，L2 一列都不交）。"""
+    args = _scenario_args("full")
+    args["dataset"]["holding"] = []
+    return args
+
+
+def _three_policy_tab():
+    return [{"source": _POLICY_TAB, "tab": "DIRECT", "row": r} for r in (3, 5, 9)]
+
+
+def _all_text_hits(model, needle):
+    return sum(s.count(needle) for s in logic.collect_ui_strings(model))
 
 
 def test_DIRECT_字面逐字照裁示3B_ii():
     assert live.DIRECT_EXCLUDED_TEXT.format(n=2) == "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）"
     assert live.DIRECT_LOCATION_TEXT.format(tab="DIRECT", row=3) == "DIRECT 第 3 列"
     assert live.DIRECT_SUMMARY_SUFFIX.format(n=2) == " · DIRECT 2 筆未列入"
+    assert live.DIRECT_SUMMARY_ONLY.format(n=2) == "DIRECT 2 筆未列入"
 
 
 def test_DIRECT_N只數保單分頁那一種():
     block = logic.find_block(_live_direct("full"), "HLD-5")
-    assert block["tail_lines"] == [
-        {"text": "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）", "_tone": "黃"},
+    assert block["tail_notes"] == [
+        {"text": _WARN.format(n=2), "_tone": "黃"},
         {"text": "DIRECT 第 3 列", "_tone": "灰"},
         {"text": "DIRECT 第 5 列", "_tone": "灰"},
     ]
+    assert "tail_lines" not in block   # 規格組建議 1：不與 HLD-1 的 `tail_lines` 同名
 
 
 def test_DIRECT_摘要只在原摘要尾端加一段():
@@ -690,7 +730,7 @@ def test_DIRECT_不進任何計算_除HLD5兩處外整頁模型不變():
     base = _live("full", today=TODAY)
     got = _live_direct("full")
     b5, g5 = logic.find_block(base, "HLD-5"), dict(logic.find_block(got, "HLD-5"))
-    g5.pop("tail_lines")
+    g5.pop("tail_notes")
     g5["summary_text"] = b5["summary_text"]
     assert g5 == b5
     for code in ("HLD-0", "HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-6", "HLD-7", "HLD-8"):
@@ -703,33 +743,177 @@ def test_DIRECT_N為0_什麼都不加():
     only_other_sources = [d for d in _l2_direct() if d["source"] != _POLICY_TAB]
     assert _live_direct("full", direct=only_other_sources) == base
     assert _live_direct("full", direct=[]) == base
-    assert "tail_lines" not in logic.find_block(base, "HLD-5")
+    assert "tail_notes" not in logic.find_block(base, "HLD-5")
 
 
-def test_DIRECT_全部持倉都是DIRECT_走既有空持倉規則再加卡尾():
-    """L2 不為 DIRECT 產生 `holding` 列 ⇒ 全部都是 DIRECT 時，hld 收到的就是空持倉。"""
-    base = _live("empty", today=TODAY)
-    got = _live_direct("empty")
-    b5, g5 = logic.find_block(base, "HLD-5"), logic.find_block(got, "HLD-5")
-    assert b5["summary_text"] == logic.TEXT_NO_HOLDING
-    assert g5["summary_text"] == logic.TEXT_NO_HOLDING + " · DIRECT 2 筆未列入"
-    assert (g5["_state"], g5["_tone"], g5["detail_lines"]) == (b5["_state"], b5["_tone"], b5["detail_lines"])
-    assert g5["tail_lines"][0]["text"] == "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）"
-    for code in ("HLD-0", "HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-6", "HLD-7", "HLD-8"):
-        assert logic.find_block(got, code) == logic.find_block(base, code), code
+# ── 紅隊 M1：持倉全空而 N＞0 ──
+
+
+def test_紅隊M1_重現情境_尚未建立任何持倉出現0次():
+    model = _build(**_empty_args(), today=TODAY, **_direct_kw(_three_policy_tab()))
+    assert _all_text_hits(model, logic.TEXT_NO_HOLDING) == 0
+
+
+def test_紅隊M1_各出口逐一換成客戶那一句():
+    warn = _WARN.format(n=3)
+    base = _build(**_empty_args(), today=TODAY)
+    model = _build(**_empty_args(), today=TODAY, **_direct_kw(_three_policy_tab()))
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld0["text"] == warn and hld0["summary_text"] == warn
+    for code in ("HLD-1", "HLD-2", "HLD-3"):
+        block, before = logic.find_block(model, code), logic.find_block(base, code)
+        assert before["summary_text"] == logic.TEXT_NO_HOLDING, code
+        assert block["summary_text"] == warn, code
+        assert block["detail_lines"] == [warn if x == logic.TEXT_NO_HOLDING else x for x in before["detail_lines"]], code
+    hld8 = logic.find_block(model, "HLD-8")
+    assert hld8["summary_text"] == f"{logic.ND_TEXT}：{warn}"
+    assert warn in hld8["detail_lines"]
+
+
+def test_紅隊M1_HLD5摘要只剩筆數_空持倉那一句拿掉_卡尾照舊():
+    base5 = logic.find_block(_build(**_empty_args(), today=TODAY), "HLD-5")
+    g5 = logic.find_block(_build(**_empty_args(), today=TODAY, **_direct_kw(_three_policy_tab())), "HLD-5")
+    assert g5["summary_text"] == "DIRECT 3 筆未列入"
+    assert "尚未建立任何持倉，沒有可以展開的檔。" in base5["detail_lines"]
+    assert g5["detail_lines"] == [x for x in base5["detail_lines"] if x != "尚未建立任何持倉，沒有可以展開的檔。"]
+    assert g5["tail_notes"] == [{"text": _WARN.format(n=3), "_tone": "黃"}] + [
+        {"text": f"DIRECT 第 {r} 列", "_tone": "灰"} for r in (3, 5, 9)
+    ]
+
+
+def test_紅隊M1_各塊state與tone與按鈕都不動():
+    base = _build(**_empty_args(), today=TODAY)
+    model = _build(**_empty_args(), today=TODAY, **_direct_kw(_three_policy_tab()))
+    for b, g in zip(logic.all_blocks(base), logic.all_blocks(model)):
+        assert (g["code"], g["_state"], g["_tone"]) == (b["code"], b["_state"], b["_tone"])
+        assert logic.collect_buttons(g) == logic.collect_buttons(b), g["code"]
+
+
+def test_紅隊M1_紅燈時括號補述那一句也換掉():
+    """`emptyfail`：持倉為空且有一塊取數失敗 → HLD-0 是紅燈，「尚未建立任何持倉」躲在括號補述裡。"""
+    args = _scenario_args("emptyfail")
+    assert not args["dataset"].get("holding")
+    warn = _WARN.format(n=3)
+    model = _build(**args, today=TODAY, **_direct_kw(_three_policy_tab()))
+    assert _all_text_hits(model, logic.TEXT_NO_HOLDING) == 0
+    assert f"（另：{warn}。{logic.TEXT_SHEETS_READONLY}）" in logic.find_block(model, "HLD-0")["lines"]
+
+
+def test_紅隊M1_反向_持倉為空而N為0_與S3一模一樣():
+    base = _build(**_empty_args(), today=TODAY)
+    assert _build(**_empty_args(), today=TODAY, **_direct_kw([])) == base
+    only_other = [d for d in _l2_direct() if d["source"] != _POLICY_TAB]
+    assert _build(**_empty_args(), today=TODAY, **_direct_kw(only_other)) == base
+    assert _all_text_hits(base, logic.TEXT_NO_HOLDING) > 0     # 正控：S3 畫面上確實有那一句
+
+
+def test_紅隊M1_有持倉時不換字():
+    model = _live_direct("full")
+    assert logic.find_block(model, "HLD-0")["text"] != _WARN.format(n=2)
+    assert _all_text_hits(model, _WARN.format(n=2)) == 1       # 只有 HLD-5 卡尾那一行
+
+
+# ── 紅隊 M2：holding 裡有 DIRECT 列 ──
+
+
+@pytest.mark.parametrize("pid", [_DIRECT_ID, f" {_DIRECT_ID} "])
+def test_紅隊M2_holding有DIRECT列_raise(pid):
+    args = _scenario_args("full")
+    args["dataset"]["holding"][0]["policy_id"] = pid
+    with pytest.raises(ValueError):
+        _build(**args, today=TODAY)
+
+
+def test_紅隊M2_沒給direct_policy_id_raise():
+    with pytest.raises(ValueError):
+        live.build_live_model(**_scenario_args("full"), today=TODAY)
+    with pytest.raises(ValueError):
+        live.build_live_model(**_scenario_args("full"), today=TODAY, direct_policy_id="  ")
+
+
+def test_紅隊M2_大小寫不同不算DIRECT():
+    args = _scenario_args("full")
+    args["dataset"]["holding"][0]["policy_id"] = _DIRECT_ID.lower()
+    _build(**args, today=TODAY)   # 與 L2 一致：大小寫敏感，`direct` 當一般保單編號
+
+
+# ── 紅隊 J1／J2：清單不合格一律 raise ──
 
 
 def test_DIRECT_有清單卻沒給來源值_raise():
     with pytest.raises(ValueError):
-        live.build_live_model(**_scenario_args("full"), today=TODAY, direct=_l2_direct())
+        _build(**_scenario_args("full"), today=TODAY, direct=_l2_direct())
+    with pytest.raises(ValueError):
+        _build(**_scenario_args("full"), today=TODAY, direct=_l2_direct(), policy_tab_source=_POLICY_TAB)
 
 
-@pytest.mark.parametrize("bad", [{"row": None}, {"tab": ""}, {"tab": None}, {"row": True}, {"row": "3"}])
-def test_DIRECT_缺分頁名或列號_raise(bad):
+def test_紅隊J1_認不得的source_raise():
+    direct = _l2_direct() + [{"source": "別的分頁", "tab": "X", "row": 2}]
+    with pytest.raises(ValueError, match="source"):
+        _live_direct("full", direct=direct)
+
+
+def test_紅隊J1_缺source鍵_raise():
+    direct = _l2_direct()
+    del direct[0]["source"]
+    with pytest.raises(ValueError, match="source"):
+        _live_direct("full", direct=direct)
+
+
+@pytest.mark.parametrize("bad", ["not a list", {"a": 1}, 42, {_POLICY_TAB}])
+def test_紅隊J2_direct不是list或tuple_TypeError(bad):
+    with pytest.raises(TypeError, match="list 或 tuple"):
+        _live_direct("full", direct=bad)
+    with pytest.raises(TypeError, match="list 或 tuple"):
+        live.direct_holding_rows(bad, policy_tab_source=_POLICY_TAB, direct_sources=_SOURCES)
+
+
+def test_紅隊J2_direct可以是tuple():
+    assert _live_direct("full", direct=tuple(_l2_direct())) == _live_direct("full")
+
+
+@pytest.mark.parametrize("bad", ["x", 3, None, ["source"]])
+def test_紅隊J2_元素不是dict_TypeError(bad):
+    with pytest.raises(TypeError):
+        _live_direct("full", direct=_l2_direct() + [bad])
+
+
+def test_紅隊J2_policy_tab_source空字串_ValueError():
+    with pytest.raises(ValueError, match="policy_tab_source 是空字串"):
+        _build(**_scenario_args("full"), today=TODAY, direct=_l2_direct(), policy_tab_source="",
+               direct_sources=_SOURCES)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"tab": ""}, {"tab": "   "}, {"row": None}, {"row": True}, {"row": "3"}, {"row": 0}, {"row": -1}, {"row": 2.0}],
+)
+def test_紅隊J2_分頁名空白或列號不是正整數_ValueError(bad):
     direct = _l2_direct()
     direct[2].update(bad)
     with pytest.raises(ValueError):
         _live_direct("full", direct=direct)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+def test_紅隊J2_非保單分頁那幾筆也驗(index):
+    direct = _l2_direct()
+    direct[index]["row"] = 0
+    with pytest.raises(ValueError):
+        _live_direct("full", direct=direct)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+def test_紅隊J2_同一筆重複出現_ValueError_不去重(index):
+    direct = _l2_direct()
+    direct.append(dict(direct[index]))
+    with pytest.raises(ValueError, match="重複"):
+        _live_direct("full", direct=direct)
+
+
+def test_紅隊J2_只有列號相同而分頁不同_不算重複():
+    direct = _l2_direct() + [{"source": _POLICY_TAB, "tab": "P-001", "row": 3}]
+    assert logic.find_block(_live_direct("full", direct=direct), "HLD-5")["summary_text"].endswith(" · DIRECT 3 筆未列入")
 
 
 def test_DIRECT_不改呼叫端手上的清單():
@@ -741,21 +925,22 @@ def test_DIRECT_不改呼叫端手上的清單():
 
 @pytest.mark.parametrize("name", _ALL)
 def test_DIRECT_示範模式不帶卡尾(name):
-    assert "tail_lines" not in logic.find_block(_demo(name), "HLD-5")
+    block = logic.find_block(_demo(name), "HLD-5")
+    assert "tail_notes" not in block and "tail_lines" not in block
 
 
 def test_DIRECT_live不另寫一份DIRECT判定():
-    """判定住在 L2（`contract.DIRECT_POLICY_ID`）；本檔只照呼叫端給的來源值篩，不比對 `policy_id`。"""
+    """DIRECT 的值、來源字面都由呼叫端傳；本檔不寫 `"DIRECT"`、`"保單分頁"` 這類字面。"""
     tree = ast.parse(_LIVE_PY.read_text(encoding="utf-8"))
     literals = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
-    assert _POLICY_TAB not in literals
-    assert "policy_id" not in literals
-    assert not [s for s in literals if s.strip() == "DIRECT"]
+    assert not [s for s in literals if s in _SOURCES]
+    assert not [s for s in literals if s.strip() == _DIRECT_ID]
 
 
 @pytest.mark.parametrize("name", _ALL)
 def test_DIRECT_全頁禁詞與識別碼零命中(name):
-    strings = logic.collect_ui_strings(_live_direct(name))
-    assert logic.scan_forbidden(strings) == {}
-    assert [s for s in strings if any(w in s for w in _BANNED)] == []
-    assert [s for s in strings if re.search(r"session_[0-9A-Za-z]{16,}|claude\.ai/code", s)] == []
+    for model in (_live_direct(name), _build(**_empty_args(), today=TODAY, **_direct_kw(_three_policy_tab()))):
+        strings = logic.collect_ui_strings(model)
+        assert logic.scan_forbidden(strings) == {}
+        assert [s for s in strings if any(w in s for w in _BANNED)] == []
+        assert [s for s in strings if re.search(r"session_[0-9A-Za-z]{16,}|claude\.ai/code", s)] == []
