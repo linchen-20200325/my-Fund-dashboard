@@ -375,6 +375,20 @@ def test_url_query_edge_cases_are_error(no_csv, url):
     assert r["ok"] is False and r["full_key"] is None
 
 
+def test_bare_a_alone_error_branch(no_csv):
+    # L1 也抽不到代碼 → 「抽不出」那一支
+    url1 = "https://x/y?a"
+    assert SRC.parse_moneydj_input(url1.upper())["code"] == ""
+    r1, _ = _one(url1)
+    assert r1["ok"] is False and "抽不出" in r1["error"]
+    # L1 從查詢字串以外抽到代碼 → 「值與 L1 的 code 不同」那一支
+    url2 = "https://x/p&a=FOO123?a"
+    assert SRC.parse_moneydj_input(url2.upper())["code"] == "FOO123"
+    r2, _ = _one(url2)
+    assert r2["ok"] is False and "與 parse_moneydj_input 抽出的 'FOO123' 不同" in r2["error"]
+    assert "None" in r2["error"]  # 查詢字串裡的值是「無值」
+
+
 def test_mapping_hit_on_failure_is_truthful(no_csv):
     m = {"ABC123": {"public_code": "acti71"}}
     r_hit, _ = _one("ABC123", mapping=m)
