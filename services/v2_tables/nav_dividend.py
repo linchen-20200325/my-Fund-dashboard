@@ -283,12 +283,14 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
     - 意思相同時取合格的那一個（例 `usd` 與 `USD` 並存 → `USD`，出處記合格值那一方）。
     - 只有不合格式的值、沒有合格值 → `ccy_missing`（維持原判法：不改大小寫、不猜）。
     """
+    # 缺值＝沒填（第三輪小修 2）。來源那一側的缺值必須在 append 之前先歸成 None（第四輪小修 1），
+    # 否則 NaN 會帶著 ("?", 'nan') 的意思進衝突判斷。
+    if _is_blank_ccy(source_ccy):
+        source_ccy = None
+    holding_ccys = [c for c in holding_ccys if not _is_blank_ccy(c)]
     provided = []
     if source_ccy is not None:
         provided.append(("source", source_ccy))
-    holding_ccys = [c for c in holding_ccys if not _is_blank_ccy(c)]   # 缺值＝沒填（第三輪小修 2）
-    if _is_blank_ccy(source_ccy):
-        source_ccy = None
     provided.extend(("holding", c) for c in holding_ccys)
     meanings = {_ccy_meaning(v) for _side, v in provided} - {None}
     if len(meanings) > 1:
@@ -315,12 +317,16 @@ def _empty_out():
             "skipped_rows": 0, "provenance": None}
 
 
+class ReconcileError(AssertionError):
+    """核帳不平：本檔計數的 bug（不是資料問題）。"""
+
+
 def _reconcile(out, skipped_rows: int, table: str):
     """核帳（第三輪小修 3）：寫出的列數＋略過與合併的筆數＝L1 取回的筆數。
     對不上就是本檔的計數 bug（§1：當場炸，不交出一份帳對不上的結果）。"""
     out["skipped_rows"] = skipped_rows
     if len(out["rows"]) + skipped_rows != out["fetched"]:
-        raise AssertionError(f"{table} 核帳不平：rows {len(out['rows'])} ＋ skipped {skipped_rows}"
+        raise ReconcileError(f"{table} 核帳不平：rows {len(out['rows'])} ＋ skipped {skipped_rows}"
                              f" ≠ fetched {out['fetched']}")
     return out
 
@@ -387,6 +393,10 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
                 continue
             try:
                 number = float(value)
+            except OverflowError:
+                _tally(value_bad, "數值溢位（超出浮點範圍）")
+                invalid += 1
+                continue
             except (TypeError, ValueError):
                 _tally(value_bad, "無法轉成數字")
                 invalid += 1
@@ -461,7 +471,9 @@ def build_nav_table(funds, *, now=None) -> dict:
     - `errors`：L1 失敗原文（未遮蔽）或型別錯誤；
     - `withheld`：整檔不寫列的原因代碼；`skipped`：不寫列的文字理由（整檔或逐列）；
     - `fetched`：L1 取回的筆數（過濾前）；L1 回錯誤或型別不對時為 0；
-    - `skipped_rows`：略過與合併的筆數；每一檔恆有 `len(該檔 rows) + skipped_rows == fetched`（核帳）；
+    - `skipped_rows`：略過與合併的筆數；有這兩個鍵的檔恆有 `len(該檔 rows) + skipped_rows == fetched`（核帳）；
+    - ⚠️ **射程**：`fetched`／`skipped_rows` 只列**真的呼叫過 L1 的檔**（含取數失敗、型別錯誤，此時兩者為 0）。
+      `withheld` 為 `input_conflict` 的檔**沒有呼叫 L1，也就沒有這兩個鍵** —— 不補 0（補 0 會讓它看起來像「取回 0 筆」）；
     - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale}`。
     """
     grouped, conflicts = _group_funds(funds)
@@ -536,6 +548,9 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
             continue
         try:
             amount = float(raw)
+        except OverflowError:
+            _tally(amount_bad, "數值溢位（超出浮點範圍）")
+            continue
         except (TypeError, ValueError):
             _tally(amount_bad, "無法轉成數字")
             continue
@@ -610,6 +625,8 @@ def build_dividend_table(funds, *, now=None) -> dict:
 
     回傳 `{"rows", "errors", "pending", "withheld", "skipped", "fetched", "skipped_rows", "provenance"}`
     （`skipped_rows` 與核帳同 `build_nav_table`）。
+    ⚠️ 射程：`fetched`／`skipped_rows` 只列真的呼叫過 L1 的檔；`input_conflict` 的檔與語意閘未開而列在
+    `pending` 的檔**沒有呼叫 L1，也沒有這兩個鍵**，不補 0。
     `DIV_DATE_IS_EX_DATE_VERIFIED` 為假時：每一檔都列在 `pending`（代碼 `PENDING_DIV_DATE_SEMANTICS`）、
     **不呼叫 L1**、不寫列。
     """

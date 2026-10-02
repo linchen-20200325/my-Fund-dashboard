@@ -765,3 +765,44 @@ def test_小修3_build回傳帶skipped_rows(monkeypatch):
     out = ND.build_nav_table([fund()], now=NOW)
     assert out["fetched"] == {"ZZ9999": 2} and out["skipped_rows"] == {"ZZ9999": 1}
     assert len(out["rows"]) == 1
+
+
+
+# ═══════════════════════ 第四輪小修 ═══════════════════════
+
+@pytest.mark.parametrize("blank", [float("nan"), pd.NA])
+def test_小修4_1_來源幣別是缺值_持倉USD_取USD(blank):
+    s = _series([("2026-09-01", 10.0)])
+    s.attrs["currency"] = blank
+    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=["USD"], now=NOW)
+    assert [r["ccy"] for r in out["rows"]] == ["USD"]
+    assert out["provenance"]["ccy_source"] == "holding_user_input"
+
+
+def test_小修4_2_核帳不平會raise具名例外():
+    with pytest.raises(ND.ReconcileError):
+        ND._reconcile({"rows": [{"x": 1}], "fetched": 3}, 1, "nav")
+    assert issubclass(ND.ReconcileError, AssertionError)
+    assert ND._reconcile({"rows": [{"x": 1}], "fetched": 2}, 1, "nav")["skipped_rows"] == 1
+
+
+def test_小修4_3_input_conflict與pending的檔沒有fetched與skipped_rows鍵(monkeypatch):
+    monkeypatch.setattr(ND, "fetch_nav_with_error", _forbid("fetch_nav_with_error"))
+    out = ND.build_nav_table([fund(full_key="A1"), fund(full_key="A2")], now=NOW)
+    assert "ZZ9999" not in out["fetched"] and "ZZ9999" not in out["skipped_rows"]
+    monkeypatch.setattr(ND, "fetch_div_with_error", _forbid("fetch_div_with_error"))
+    div = ND.build_dividend_table([fund()], now=NOW)
+    assert div["pending"] and "ZZ9999" not in div["fetched"] and "ZZ9999" not in div["skipped_rows"]
+
+
+def test_小修4_4_溢位數值不寫_理由寫明():
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([10 ** 400, 10.0], ["2026-09-01", "2026-09-02"]),
+                                  None, holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-02"]
+    assert "淨值數值溢位（超出浮點範圍） 1 筆不寫" in out["skipped"]
+    assert len(out["rows"]) + out["skipped_rows"] == out["fetched"]
+    div = ND.rows_from_dividends("ZZ9999", _divs(("2026-09-01", 10 ** 400), ("2026-08-01", 0.1),
+                                                 currency="USD"), None, now=NOW)
+    assert [r["ex_date"] for r in div["rows"]] == ["2026-08-01"]
+    assert "配息金額數值溢位（超出浮點範圍） 1 筆不寫" in div["skipped"]
+    assert len(div["rows"]) + div["skipped_rows"] == div["fetched"]
