@@ -33,10 +33,14 @@
 2. **非 ASCII**：`actı171` 舊頁經 `upper()` 變成 `ACTI171`，再查表得 `ACTI71`。
 3. **網址 `a=` 核對**：`?a=ACTI71%20X` 舊頁用 `ACTI71`；`a=` 超過 30 字元舊頁截成前 30；
    兩個 `a=` 值不同時舊頁取 L1 正則先碰到的那一個；`?a=AB`、`?a=A-` 舊頁照用。
-4. **查詢字串限定**：`https://x/p1&a=FOO123`、`https://x/#&a=FOO123` 這類 `a=` 不在查詢字串裡的，
+4. **查詢字串限定**：`https://x/p1&a=FOO123`、`https://x/#&a=FOO123`、`https://x/?x=1?a=FOO123`
+   （第二個 `?` 不是參數分隔，`a=` 落在 `x` 的值裡）這類 `a=` 不在查詢字串參數裡的，
    舊頁照用 L1 抽到的 `FOO123`。
 5. **對照表值**：`public_code` 是 `NAN` 或空字串時，舊頁照用該值（`code = _m.get("public_code", code)`）。
-   舊頁只讀 L1 的表，L1 已 `upper().strip()`，所以小寫、含空白的值只會出現在本檔的注入表，舊頁碰不到。
+   舊頁只讀 L1 的表，L1 對值做的是 `upper().strip()`：
+   - 小寫、**前後**空白 → 舊頁碰不到（L1 已轉大寫、去掉前後空白），只會出現在本檔的注入表；
+   - **中間**空白 → L1 不處理，舊頁照用。本組 2026-10-02 實測：csv 的 `public_code` 填 `acti 71`，
+     L1 讀出 `'ACTI 71'`，舊頁的 `full_key` 就是 `ACTI 71`；本檔由第 5 步最終關卡擋下。
 其他輸入兩邊是否一致，本組沒有逐一比對。
 
 **兜底判法（`parse_moneydj_input` 的 `_raw[:30]` 那一支）**：
@@ -51,7 +55,10 @@ L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規�
 有三個漏洞，本檔分別擋：
 - 不分位置：`#` 之後、或根本沒有 `?` 的路徑裡的 `&a=` 也會被抽出來（例 `https://x/p1&a=FOO123`）。
   本檔只看**查詢字串**：先在第一個 `#` 處切掉片段，再取剩下那段裡第一個 `?` 之後的部分；
-  其中以 `&` 分隔、名稱為 `A`（已轉大寫，故 `a=`／`A=` 混用都算）的參數才算數。
+  其中以 `&` 分隔（`;` 不當分隔）、名稱為 `A`（已轉大寫，故 `a=`／`A=` 混用都算）的參數才算數。
+  名稱是 `A` 但沒有等號的參數（例 `?a=FOO123&a`、`?a&a=FOO123`）也算一個 `a`，其值記為「無值」，
+  與任何代碼都不同 → 判失敗（與另一個 `a=` 並存時走下面「多個 `a=` 值不同」，
+  單獨出現時走「值與 L1 的 `code` 不同」）。
   查詢字串裡一個 `a=` 都沒有 → 判失敗，**即使 L1 抽到了代碼也一樣**。
   ⚠️ 百分比編碼不解碼：`%3F` 不當 `?`（例 `https://x/p%3FBAR456+&A=…` 判失敗）。
 - 值後面接什麼都收 → 例 `?a=ACTI71%20X` L1 給 `ACTI71`、`?a=` 超過 30 字元靜默截斷。
@@ -166,6 +173,8 @@ def _url_a_values(text: str) -> list:
     for param in query.split("&"):
         if param.startswith("A="):
             values.append(param[2:])
+        elif param == "A":
+            values.append(None)  # 名稱是 a、沒有等號：無值，與任何代碼都不同
     return values
 
 
@@ -194,8 +203,8 @@ def _resolve_one(raw, mapping: dict) -> dict:
         if len(set(values)) > 1:
             return _fail(raw, f"網址裡有多個 a= 且值不同（{values!r}）；不猜取哪一個", code)
         if values[0] != code:
-            return _fail(raw, f"網址的 a= 值 {values[0]!r} 與 parse_moneydj_input 抽出的 {code!r} 不同"
-                              "（值後面只能接 &、# 或結尾；超過 30 字元會被截）；不截斷、不猜", code)
+            return _fail(raw, f"網址查詢字串裡 a= 的值 {values[0]!r}（取到下一個 & 或查詢字串結尾為止的整段）"
+                              f"與 parse_moneydj_input 抽出的 {code!r} 不同；不截斷、不猜", code)
     else:
         if code != text or not _is_pure_code(text):
             return _fail(raw, f"代碼格式不符 {PURE_CODE_PATTERN}，parse_moneydj_input 會走 30 字元兜底"
@@ -228,7 +237,8 @@ def resolve_full_keys(fund_codes, *, mapping=None) -> dict:
             {"input": 原值, "ok": bool,
              "full_key": str | None, "portal": "" | None,
              "parsed_code": parse_moneydj_input 給的 code（失敗時可能為 None）,
-             "mapping_hit": bool | None（None ＝ 還沒走到查表那一步就失敗）,
+             "mapping_hit": bool | None（None ＝ 還沒走到查表那一步就失敗；
+                            要判斷「查了但沒命中」請用 `is False`，不要用 `not`——`not None` 也為真）,
              "error": str | None},
             ...
           ],

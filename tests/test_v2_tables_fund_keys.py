@@ -351,6 +351,30 @@ def test_csv_whitespace_public_code_fails_at_final_check(no_csv):
     assert r["mapping_hit"] is True
 
 
+def test_csv_inner_space_public_code_fails_at_final_check(no_csv):
+    (no_csv / "fund_code_mapping.csv").write_text(
+        "input_code,public_code,page_type,note\nqqq111,acti 71,yp010001,中間空白\n", encoding="utf-8")
+    assert SRC.load_fund_code_mapping()["QQQ111"]["public_code"] == "ACTI 71"  # L1 只 strip，中間空白保留
+    r, prov = _one("QQQ111")
+    assert prov["mapping_source"] == FK.MAPPING_SOURCE_CSV
+    assert r["ok"] is False and r["full_key"] is None
+    assert "不符" in r["error"]  # 最終關卡 `_is_pure_code`
+    assert r["mapping_hit"] is True
+
+
+@pytest.mark.parametrize("url", [
+    "https://x/?a=FOO123;b=2",        # `;` 不當參數分隔（擋 Z3）
+    "https://u:p?w@x/?a=FOO123",      # 第一個 `?` 在帳密裡，查詢字串從那裡起算（擋 Z5）
+    "https://x/?x=1?a=FOO123",        # 第二個 `?` 不是參數分隔
+    "https://x/?a=FOO123&a",          # 沒等號的 a
+    "https://x/?a&a=FOO123",          # 沒等號的 a
+])
+def test_url_query_edge_cases_are_error(no_csv, url):
+    assert SRC.parse_moneydj_input(url.upper())["code"] == "FOO123"  # L1 都抽得到
+    r, _ = _one(url)
+    assert r["ok"] is False and r["full_key"] is None
+
+
 def test_mapping_hit_on_failure_is_truthful(no_csv):
     m = {"ABC123": {"public_code": "acti71"}}
     r_hit, _ = _one("ABC123", mapping=m)
