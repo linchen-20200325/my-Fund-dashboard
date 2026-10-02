@@ -10,6 +10,7 @@ L1 一律以替身函式注入（monkeypatch 模組屬性），不打真網路�
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 import pathlib
 import re
@@ -24,6 +25,8 @@ _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _D44 = _ROOT / "docs" / "v2" / "44_fund_ui_ssot.md"
 
 _FETCHED = "2026-09-25T06:00:00.123456+00:00"
+# 判「未來」用的固定當下（測試不依賴機器時鐘）。台灣日期 2026-10-01。
+NOW = dt.datetime(2026, 9, 30, 20, 0, tzinfo=dt.timezone.utc)
 _LIVE_SOURCE = "MoneyDJ:tcbbankfund.moneydj.com:wb02.djhtm:fetch_nav"
 
 
@@ -166,10 +169,11 @@ def test_nav_週末與假日沒有列_不補列(monkeypatch):
     assert [r["nav_date"] for r in rows] == ["2026-09-04", "2026-09-07"]
 
 
-def test_nav_fetched_at換成世界協調時間_同一瞬間():
-    s = _series([("2026-09-01", 10.0)], fetched_at="2026-09-25T14:00:00+08:00")
-    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys={"USD"})
-    assert out["rows"][0]["fetched_at"] == "2026-09-25T06:00:00+00:00"
+def test_nav_fetched_at換成世界協調時間_同一瞬間_一律加00冒號00形式():
+    for given in ("2026-09-25T14:00:00+08:00", "2026-09-25T06:00:00Z", "2026-09-25T06:00:00+00:00"):
+        s = _series([("2026-09-01", 10.0)], fetched_at=given)
+        out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys={"USD"}, now=NOW)
+        assert out["rows"][0]["fetched_at"] == "2026-09-25T06:00:00+00:00", given
 
 
 def test_nav_單筆照寫():
@@ -259,7 +263,7 @@ def test_nav_索引帶時區_不猜日期():
     s = pd.Series([10.0], index=[pd.Timestamp("2026-09-01T23:00:00", tz="UTC")])
     s.attrs.update({"source": _LIVE_SOURCE, "fetched_at": _FETCHED})
     out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys={"USD"})
-    assert out["rows"] == [] and any("索引不是無時區的日期" in t for t in out["skipped"])
+    assert out["rows"] == [] and any("帶時區" in t for t in out["skipped"])
 
 
 # ═══════════════════════ nav：幣別（T3）═══════════════════════
@@ -461,3 +465,188 @@ def test_數值_淨值保留原精度不四捨五入():
     out = ND.rows_from_nav_series("ZZ9999", _series([("2026-09-01", 8.80051234)]), None,
                                   holding_ccys={"USD"})
     assert math.isclose(out["rows"][0]["nav_orig_ccy"], 8.80051234, rel_tol=0, abs_tol=0)
+
+
+
+# ═══════════════════════ 第二輪回修 ═══════════════════════
+# 必修 1：非日期的索引不得被寫成假日期
+
+def _raw_series(values, index, **attrs):
+    s = pd.Series(values, index=index, dtype=object)
+    s.attrs.update({"source": _LIVE_SOURCE, "fetched_at": _FETCHED})
+    s.attrs.update(attrs)
+    return s
+
+
+@pytest.mark.parametrize("index, reason", [
+    (pd.RangeIndex(2), "型別不是日期"),
+    ([0, 1], "型別不是日期"),
+    (["Sep 18", "Sep 19"], "字串不是 YYYY-MM-DD"),
+    (["09/10/2026", "09/11/2026"], "字串不是 YYYY-MM-DD"),
+    (["2026-9-1", "2026-09-1"], "字串不是 YYYY-MM-DD"),
+    ([1.5, 2.5], "型別不是日期"),
+])
+def test_必修1_非日期索引一律不寫_理由寫明(index, reason):
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([10.0, 10.1], index), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert out["rows"] == [], index
+    assert any(reason in t and "2 筆" in t for t in out["skipped"]), out["skipped"]
+    assert not [r for r in out["rows"] if r["nav_date"] in ("1970-01-01", "0001-09-18")]
+
+
+def test_必修1_三種合格日期都收():
+    idx = [pd.Timestamp("2026-09-01"), dt.date(2026, 9, 2), "2026-09-03"]
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([10.0, 10.1, 10.2], idx), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-01", "2026-09-02", "2026-09-03"]
+    assert out["skipped"] == []
+
+
+def test_必修1_單一datetime值不收_pd把datetime索引轉成Timestamp則照收():
+    # 單點檢查：`_date_value` 對 datetime.datetime（非 pd.Timestamp）不收。
+    assert ND._date_value(dt.datetime(2026, 9, 1))[0] is None
+    # pandas 建索引時會把 datetime 轉成 Timestamp —— 那是 L1 的真實形狀，照收。
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([10.0], [dt.datetime(2026, 9, 1)]), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-01"]
+
+
+def test_必修1_NaT不寫():
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([10.0], [pd.NaT]), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert out["rows"] == [] and any("NaT" in t for t in out["skipped"])
+
+
+# 必修 2：幣別衝突不得被格式不對的值藏掉
+
+@pytest.mark.parametrize("source, holdings", [
+    (None, ["twd", "USD"]),
+    ("eur", ["USD"]),
+    ("EUR ", ["USD"]),
+    (None, [840, "USD"]),
+])
+def test_必修2_格式不對但意思不同_判衝突(source, holdings):
+    s = _series([("2026-09-01", 10.0)], currency=source)
+    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=holdings, now=NOW)
+    assert out["rows"] == []
+    assert out["withheld"] == ND.WITHHELD_CCY_CONFLICT
+
+
+def test_必修2_意思相同時用合格原值_不改寫():
+    s = _series([("2026-09-01", 10.0)], currency="usd ")
+    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=["USD", "usd"], now=NOW)
+    assert [r["ccy"] for r in out["rows"]] == ["USD"]
+    assert out["provenance"]["ccy_source"] == "holding_user_input"
+
+
+def test_必修2_格式不對的值單獨出現_維持缺():
+    for alone in (["twd"], ["Usd "]):
+        out = ND.rows_from_nav_series("ZZ9999", _series([("2026-09-01", 10.0)]), None,
+                                      holding_ccys=alone, now=NOW)
+        assert out["withheld"] == ND.WITHHELD_CCY_MISSING, alone
+
+
+# 3：未來與過舊
+
+def test_3_fetched_at晚於當下_整批不寫_代碼與理由正確():
+    s = _series([("2026-09-01", 10.0)], fetched_at="2026-10-05T00:00:00+00:00")
+    out = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys={"USD"}, now=NOW)
+    assert out["rows"] == [] and out["withheld"] == ND.WITHHELD_FETCHED_AT_FUTURE
+    assert any("晚於當下" in t for t in out["skipped"])
+
+
+def test_3_nav_date未來或1900以前不寫_台灣當日照收():
+    idx = ["1899-12-31", "1900-01-01", "2026-10-01", "2026-10-02"]   # NOW 的台灣日期是 2026-10-01
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([1.0, 2.0, 3.0, 4.0], idx), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["1900-01-01", "2026-10-01"]
+    assert any("早於 1900-01-01 1 筆" in t for t in out["skipped"])
+    assert any("晚於當下的台灣日期 2026-10-01 1 筆" in t for t in out["skipped"])
+
+
+def test_3_ex_date未來或1900以前不寫_fetched_at未來不寫():
+    items = _divs(("1899-01-01", 0.1), ("2026-10-02", 0.1), ("2026-09-01", 0.1), currency="USD")
+    out = ND.rows_from_dividends("ZZ9999", items, None, now=NOW)
+    assert [r["ex_date"] for r in out["rows"]] == ["2026-09-01"]
+    future = _divs(("2026-09-01", 0.1), currency="USD", fetched="2027-01-01T00:00:00+00:00")
+    out2 = ND.rows_from_dividends("ZZ9999", future, None, now=NOW)
+    assert out2["rows"] == [] and out2["withheld"] == ND.WITHHELD_FETCHED_AT_FUTURE
+
+
+def test_3_門檻是具名常數():
+    assert ND.MIN_VALID_DATE == dt.date(1900, 1, 1)
+    assert ND.FETCHED_AT_MAX_FUTURE_SEC == 0
+
+
+# 4：L1 回傳型別不對
+
+@pytest.mark.parametrize("bad", [None, "2026-09-01", [10.0, 10.1], {"2026-09-01": 10.0}])
+def test_4_nav型別不對_進errors_不是fetched_at_missing(bad):
+    out = ND.rows_from_nav_series("ZZ9999", bad, None, holding_ccys={"USD"}, now=NOW)
+    assert out["error"].startswith(ND.TYPE_ERROR_PREFIX)
+    assert out["withheld"] is None and out["fetched"] == 0
+
+
+@pytest.mark.parametrize("bad", [None, "abcdef", {"date": "2026-09-01"}, ("x",)])
+def test_4_dividend型別不對_進errors_字串不逐字元計數(bad):
+    out = ND.rows_from_dividends("ZZ9999", bad, None, now=NOW)
+    assert out["error"].startswith(ND.TYPE_ERROR_PREFIX)
+    assert out["fetched"] == 0 and out["withheld"] is None
+
+
+def test_4_某一檔回非二元組_只有那一檔進errors_其他照跑(monkeypatch):
+    ok = _series([("2026-09-01", 10.0)])
+
+    def fake(full_key, portal=""):
+        return {"BAD": ok, "BAD3": (ok, None, "x"), "ZZ9999": (ok, None)}[full_key]
+    monkeypatch.setattr(ND, "fetch_nav_with_error", fake)
+    out = ND.build_nav_table([fund(code="BAD", full_key="BAD"), fund(code="BAD3", full_key="BAD3"),
+                              fund()], now=NOW)
+    assert set(out["errors"]) == {"BAD", "BAD3"}
+    assert all(v.startswith(ND.TYPE_ERROR_PREFIX) for v in out["errors"].values())
+    assert [r["fund_code"] for r in out["rows"]] == ["ZZ9999"]
+
+
+def test_4_dividend某一檔回非二元組_只有那一檔進errors(monkeypatch):
+    monkeypatch.setattr(ND, "DIV_DATE_IS_EX_DATE_VERIFIED", True)
+    good = _divs(("2026-09-01", 0.1), currency="USD")
+
+    def fake(full_key, portal=""):
+        return good if full_key == "BAD" else (good, None)
+    monkeypatch.setattr(ND, "fetch_div_with_error", fake)
+    out = ND.build_dividend_table([fund(code="BAD", full_key="BAD"), fund()], now=NOW)
+    assert list(out["errors"]) == ["BAD"] and [r["fund_code"] for r in out["rows"]] == ["ZZ9999"]
+
+
+# 5：bool 不算數字
+
+def test_5_bool淨值與bool配息不寫():
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([True, 10.0], ["2026-09-01", "2026-09-02"]),
+                                  None, holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-02"]
+    assert any("布林值" in t and "1 筆" in t for t in out["skipped"])
+    divs = _divs(("2026-09-01", True), ("2026-08-01", 0.1), currency="USD")
+    out2 = ND.rows_from_dividends("ZZ9999", divs, None, now=NOW)
+    assert [r["ex_date"] for r in out2["rows"]] == ["2026-08-01"]
+    assert any("布林值" in t for t in out2["skipped"])
+
+
+# 6：skipped 計數正確
+
+def test_6_同日一筆NaN一筆有效_計數分開寫():
+    idx = ["2026-09-01", "2026-09-01", "2026-09-02"]
+    out = ND.rows_from_nav_series("ZZ9999", _raw_series([float("nan"), 10.0, 10.5], idx), None,
+                                  holding_ccys={"USD"}, now=NOW)
+    assert [r["nav_date"] for r in out["rows"]] == ["2026-09-02"]     # 丟不丟照原規則：該日整天不寫
+    assert "淨值非有限數值 1 筆不寫" in out["skipped"]
+    assert "同一日期另有無效淨值，連帶 1 筆有效值不寫" in out["skipped"]
+
+
+# 7：full_key 前後帶空白就 raise
+
+@pytest.mark.parametrize("key", [" ZZ9999", "ZZ9999 ", "ZZ9999\n"])
+def test_7_full_key前後帶空白就raise(key):
+    with pytest.raises(ValueError):
+        ND.build_nav_table([fund(full_key=key)])
+    with pytest.raises(ValueError):
+        ND.build_dividend_table([fund(full_key=key)])
