@@ -195,6 +195,10 @@ _BAD_SYNC = [
     "2026-10-31",
     "20260919T010000Z", "2026-W38-6",
     "九月十五日中午十二點",
+    # 紅隊 M1：換算到台灣時間會跑出公元 1～9999 年之外（`astimezone` 拋 OverflowError）
+    "0001-01-01T00:00:00+14:00", "0001-01-01T07:00:00+08:00", "9999-12-31T23:00:00-08:00",
+    # 非 ASCII 數字（規格組建議 1）
+    "２０２６-09-19", "2026-09-1٩", "2026-09-19T１２:00:00Z",
 ]
 
 
@@ -233,7 +237,10 @@ def test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤(ra
     assert repr(raw) in cell["reason_text"]
     assert cell in logic.non_ok_value_nodes(model)
     hld5 = logic.find_block(model, "HLD-5")
-    assert logic.fund_fetch_failed_text(code, live.bad_sync_message(raw)) in hld5["detail_lines"]
+    policy_id = args["dataset"]["holding"][1]["policy_id"]
+    policy_name = {p["policy_id"]: p["policy_name"] for p in args["dataset"]["policy"]}[policy_id]
+    want_line = logic.fund_fetch_failed_text(code, f"{policy_name}：{live.bad_sync_message(raw)}")
+    assert want_line in hld5["detail_lines"]
 
     # 其他照常：拿同一檔換成合格值的那一份對照，除了 HLD-5 這一格與說明區那兩行，整頁逐字相同。
     good = live.build_live_model(**_with_sync("2026-09-19"), open_fund=open_fund, today=TODAY)
@@ -241,13 +248,11 @@ def test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤(ra
     assert [b for b in model["blocks"] if b["code"] != "HLD-5"] == [
         b for b in good["blocks"] if b["code"] != "HLD-5"
     ]
-    assert (hld5["_state"], hld5["_tone"], hld5["summary_text"]) == (
-        good_hld5["_state"], good_hld5["_tone"], good_hld5["summary_text"]
-    )
-    assert hld5["detail_lines"] == good_hld5["detail_lines"] + [
-        logic.fund_fetch_failed_text(code, live.bad_sync_message(raw)),
-        logic.PRINT_AS_IS_LINE,
-    ]
+    # 塊態與摘要不動；色調比照 S2 裁定 7 變紅（S3 第三輪，紅隊 J3）。
+    assert (hld5["_state"], hld5["summary_text"]) == (good_hld5["_state"], good_hld5["summary_text"])
+    assert good_hld5["_tone"] == logic.tone_for_state(good_hld5["_state"])
+    assert hld5["_tone"] == "紅"
+    assert hld5["detail_lines"] == good_hld5["detail_lines"] + [want_line, logic.PRINT_AS_IS_LINE]
     for got, ok in zip(hld5["_items"], good_hld5["_items"]):
         if got["_holding_id"] == bad_id:
             got = dict(got, _fields=[f for f in got["_fields"] if f[0] != "最後核對日（只記日期）"])
@@ -306,6 +311,85 @@ def test_示範模式遇到不合格值_行為與base相同():
     assert dict(item["_fields"])["最後對帳"] == "2026/09/19" + logic.HINT
     with pytest.raises(TypeError):
         logic.build_page_model(**_with_sync(None))
+
+
+def test_紅隊M1_極端年份帶時區_不拋OverflowError():
+    for raw in ("0001-01-01T00:00:00+14:00", "0001-01-01T07:00:00+08:00", "9999-12-31T23:00:00-08:00"):
+        assert live.sync_date(raw, today=TODAY) is None
+        args = _with_sync(raw)
+        hid = args["dataset"]["holding"][1]["holding_id"]
+        assert _sync_cell(live.build_live_model(**args, today=TODAY), hid)["_state"] == logic.STATE_ERROR
+
+
+def test_日期正則只認ASCII數字():
+    for text in ("２０２６-09-19", "2026-09-1٩", "２０２６-０９-１９"):
+        assert live._DATE_ONLY.fullmatch(text) is None
+    for text in ("2026-09-19T１２:00", "２０２６-09-19T12:00", "2026-09-19 12:0٩"):
+        assert live._DATETIME_HEAD.match(text) is None
+    assert live._DATE_ONLY.fullmatch("2026-09-19")
+    assert live._DATETIME_HEAD.match("2026-09-19T12:00")
+
+
+def test_非ASCII數字_是正則擋下的_不是解析擋下的(monkeypatch):
+    """把後面的解析換成「什麼都收」：若擋下非 ASCII 數字的是解析而不是正則，這一條就會放行。"""
+
+    class _AnyDate(date):
+        @classmethod
+        def fromisoformat(cls, text):
+            return date(2026, 9, 19)
+
+    class _AnyDateTime(datetime):
+        @classmethod
+        def fromisoformat(cls, text):
+            return datetime(2026, 9, 19, 4, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(live, "date", _AnyDate)
+    monkeypatch.setattr(live, "datetime", _AnyDateTime)
+    assert live.sync_date("2026-09-19", today=TODAY) == "2026-09-19"            # 正控：ASCII 照收
+    assert live.sync_date("2026-09-19T04:00:00Z", today=TODAY) == "2026-09-19"  # 正控
+    assert live.sync_date("２０２６-09-19", today=TODAY) is None
+    assert live.sync_date("2026-09-19T１２:00:00Z", today=TODAY) is None
+
+
+def test_台灣的今天_now沒帶時區就報錯():
+    with pytest.raises(ValueError):
+        live.taiwan_today(datetime(2026, 10, 2, 17, 0))
+
+
+def _two_policy_args(raw, *, same_name):
+    """AAAA 掛在兩張保單下（`44` 4.1 一列＝一組 policy_id＋fund_code），兩列的最後核對日都填 `raw`。"""
+    args = _scenario_args("full")
+    ds = args["dataset"]
+    base = next(h for h in ds["holding"] if h["fund_code"] == "AAAA")
+    first_policy = next(p for p in ds["policy"] if p["policy_id"] == base["policy_id"])
+    second = dict(first_policy, policy_id="P-002",
+                  policy_name=first_policy["policy_name"] if same_name else "另一張投資型保單")
+    ds["policy"].append(second)
+    ds["holding"].append(dict(base, holding_id="H-AAAA-2", policy_id="P-002"))
+    base["last_synced_at"] = raw
+    ds["holding"][-1]["last_synced_at"] = raw
+    return args, first_policy["policy_name"], second["policy_name"]
+
+
+def test_紅隊J2_同一代碼掛兩張保單_原因行各一行_寫明保單():
+    raw = "2026/09/19"
+    args, name1, name2 = _two_policy_args(raw, same_name=False)
+    assert name1 != name2
+    hld5 = logic.find_block(live.build_live_model(**args, today=TODAY), "HLD-5")
+    fail_lines = [line for line in hld5["detail_lines"] if line.startswith("⛔")]
+    assert fail_lines == [
+        logic.fund_fetch_failed_text("AAAA", f"{name1}：{live.bad_sync_message(raw)}"),
+        logic.fund_fetch_failed_text("AAAA", f"{name2}：{live.bad_sync_message(raw)}"),
+    ]
+    assert hld5["detail_lines"].count(logic.PRINT_AS_IS_LINE) == 1
+
+
+def test_紅隊J2_兩張保單名稱也相同_仍是兩行不合併():
+    raw = "2026/09/19"
+    args, name1, name2 = _two_policy_args(raw, same_name=True)
+    assert name1 == name2
+    hld5 = logic.find_block(live.build_live_model(**args, today=TODAY), "HLD-5")
+    assert len([line for line in hld5["detail_lines"] if line.startswith("⛔")]) == 2
 
 
 # ───────────────────────── 舊欄名找不到（總管裁定 4） ─────────────────────────

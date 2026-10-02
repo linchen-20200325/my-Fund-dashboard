@@ -52,15 +52,23 @@ SYNC_LABEL = "最後核對日（只記日期）"
 #    同型的另兩份是 `ui_v2/alo/logic.py::DISPLAY_TZ` 與 `ui_v2/set/logic.py::DISPLAY_TZ`。
 MARKET_DATE_TZ = timezone(timedelta(hours=8))
 
-_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
+# `re.ASCII`：`\d` 只認 0～9。不加的話全形數字、阿拉伯-印度數字也算 `\d`，
+# 擋不擋得下就變成看後面的 `fromisoformat` 收不收（S3 第三輪，規格組建議 1：讓正則自己負責）。
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 # 日期時間：前 10 個字是 `YYYY-MM-DD`，第 11 個字是 `T` 或空白，接著至少到「時:分」。
 # 先過這一關再交給 `datetime.fromisoformat` —— 3.11 的 `fromisoformat` 也收 `20260919`、`2026-W38-6`
 # 這類寫法，那些不是本欄約定的形狀，一律不收。
-_DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+_DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", re.ASCII)
 
 
 def taiwan_today(now: datetime | None = None) -> date:
-    """台灣的今天。`now`：帶時區的當下（測試注入用）；不傳就取當下。"""
+    """台灣的今天。`now`：帶時區的當下（測試注入用）；不傳就取當下。
+
+    沒帶時區的 `now` 直接 raise（S3 第三輪，規格組建議 2）：`astimezone` 會把它當成本機時區，
+    本機時區是什麼就換算出什麼，等於讓「今天」看機器設定。
+    """
+    if now is not None and (now.tzinfo is None or now.utcoffset() is None):
+        raise ValueError(f"taiwan_today 的 now 沒有時區：{now!r}")
     moment = datetime.now(MARKET_DATE_TZ) if now is None else now
     return moment.astimezone(MARKET_DATE_TZ).date()
 
@@ -94,7 +102,11 @@ def sync_date(raw, *, today: date):
         return None
     if moment.tzinfo is None or moment.utcoffset() is None:
         return None
-    local = moment.astimezone(MARKET_DATE_TZ).date()
+    try:
+        local = moment.astimezone(MARKET_DATE_TZ).date()
+    except OverflowError:
+        # 0001-01-01 帶正時差、9999-12-31 帶負時差，換算後跑出公元 1～9999 年之外（紅隊 M1）。
+        return None
     if local > today:
         return None
     return local.isoformat()
@@ -121,8 +133,15 @@ def _relabel_sync_field(block: dict, *, today: date) -> None:
     """HLD-5「最後對帳」→「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格改成 `系統錯誤` 值節點。
 
     - 不合格只影響那一格：用 `logic._metric(error=...)` 做成值節點（走既有的值狀態機制，
-      `logic.non_ok_value_nodes` 撈得到），訊息本文同時以既有的逐檔錯誤行寫進本塊說明區
-      （`logic._fund_error_lines`，與核心卡同一個寫法）。塊層的 `_state`／`_tone` 一格不動。
+      `logic.non_ok_value_nodes` 撈得到），原因行用既有模板 `logic.fund_fetch_failed_text` 寫進本塊說明區，
+      尾端補一次 `logic.PRINT_AS_IS_LINE`（與核心卡同一個寫法）。
+    - 原因行寫出是哪一張保單（S3 第三輪，紅隊 J2）：同一代碼可以掛在兩張保單下（`44` 4.1 一列＝一組
+      `policy_id`＋`fund_code`），只寫代碼就分不出是哪一列。保單取**同一列展開欄位「保單」那一格的字**
+      （保單名稱；`DIRECT` 為「直接持有」）—— 那是使用者在同一列上看得到的字，不另造一個識別碼。
+      ⚠️ **一列一行、不去重**：`logic._fund_error_lines` 依字串去重，兩張保單的值與保單名都一樣時會合成一行，
+      所以這裡不用它。
+    - 塊層 `_state` 不動；`_tone` 在有 ⛔ 的值時為紅（比照 S2 裁定 7，`logic._block_tone_with_errors`；
+      S3 第三輪，紅隊 J3）。⚠️ 現行 `page.py::_render_hld5` 只畫收合列，**沒有畫本塊的邊框**，所以這一項只改模型。
     - 找不到舊欄名就 raise（總管裁定 4）：那表示 `logic._build_hld5` 改了欄名、本檔沒跟上，
       靜默略過的話，正式畫面上會留一格沒驗過、沒換算的原值。
     - `_items` 與 `_rows` 在 `logic._build_hld5` 是同一份清單，但本檔不靠這個巧合：
@@ -146,12 +165,20 @@ def _relabel_sync_field(block: dict, *, today: date) -> None:
             node = logic._metric(
                 None, text="", ccy=None, error=bad_sync_message(raw), label=SYNC_LABEL, fund_scoped=True
             )
-            error_nodes.append((item["_fund_code"], node))
+            policy_text = dict(item["_fields"])["保單"]
+            error_nodes.append((item["_fund_code"], policy_text, node))
             fields[hits[0]] = (SYNC_LABEL, node)
         else:
             fields[hits[0]] = (SYNC_LABEL, shown)
         item["_fields"] = fields
-    block["detail_lines"] = list(block["detail_lines"]) + logic._fund_error_lines(error_nodes)
+    lines = [
+        logic.fund_fetch_failed_text(code, f"{policy_text}：{node['reason_text']}")
+        for code, policy_text, node in error_nodes
+    ]
+    if lines:
+        lines.append(logic.PRINT_AS_IS_LINE)
+        block["_tone"] = logic._block_tone_with_errors(block["_state"], [node["_state"] for *_, node in error_nodes])
+    block["detail_lines"] = list(block["detail_lines"]) + lines
 
 
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
