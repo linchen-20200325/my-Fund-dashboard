@@ -93,7 +93,7 @@ def _parse_nav_html(html: str) -> pd.Series:
     以台灣今天的前一年／今年／下一年組三個候選,取離台灣今天最近的那個;
     若它晚於今天 → 此筆不寫、print 一行原因並計數,計數放在回傳 Series 的
     `attrs["mmdd_rejected"]`。淨值為 T+1 公布,頁面不應出現未來日期。
-    三個候選年都沒有該日期(只有 02/29 會如此)→ 同樣不寫、print 並計數。
+    三個候選年都沒有該日期時，只有 02/29 計入拒收；其他不合法的 MM/DD（例如 13/45、04/31）照舊略過、不計數。
     YYYY/MM/DD 條目不經此推斷,行為不變:值不變;回傳的 Series 一律多帶
     attrs['mmdd_rejected'](YYYY/MM/DD 時為 0)。
 
