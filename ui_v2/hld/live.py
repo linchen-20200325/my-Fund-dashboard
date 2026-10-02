@@ -17,6 +17,8 @@
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
 
+S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
+
 ⚠️ 文案逐字照裁示；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
 """
 
@@ -59,6 +61,54 @@ _DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 # 先過這一關再交給 `datetime.fromisoformat` —— 3.11 的 `fromisoformat` 也收 `20260919`、`2026-W38-6`
 # 這類寫法，那些不是本欄約定的形狀，一律不收。
 _DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", re.ASCII)
+
+
+# ───────────────────────── 裁示 3-B (ii)：DIRECT 持倉另列 ─────────────────────────
+# 出處：`docs/wireframes/draft_hld_live.html` §F 選項 3-B（文案原文、放在哪、什麼顏色、先定義 N）
+#       與 §G 第 3 題、第 3a 題（客戶 2026-10-02 裁示：3-B，字面用 (ii)）。字面逐字，改字先回草稿。
+#
+# ⛔ **本檔不判定誰是 DIRECT。** 判定只有一處：L2 `services/v2_tables/alo_holdings.py::load_alo_tables`
+#    （`_key_text(policy_id) == contract.DIRECT_POLICY_ID`）—— alo 頁吃的就是同一次判定的產物：
+#    DIRECT 持倉**不產生 `holding` 列**（所以本頁每一塊的數字本來就不含它），另交一份 `direct` 清單。
+#    本頁依 `tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (2)(5) 條不得 import `services`，
+#    所以「哪一種來源算 N」的那個值（`alo_holdings.POLICY_TAB`）由呼叫端（S6 的 `source.py`）
+#    以 `policy_tab_source` 傳進來，本檔不另寫一份字面。
+DIRECT_EXCLUDED_TEXT = "⚠ DIRECT 列暫不支援，該筆不計入體檢（{n} 筆）"   # 黃
+DIRECT_LOCATION_TEXT = "{tab} 第 {row} 列"                                # 灰，一行一筆
+DIRECT_SUMMARY_SUFFIX = " · DIRECT {n} 筆未列入"                          # 收合時摘要尾端
+
+
+def direct_holding_rows(direct, *, policy_tab_source) -> list:
+    """L2 `direct` 清單 → 只留保單分頁那一種（草稿 §F 3-B「先定義 N」：N 只數 `source` 為 `POLICY_TAB` 的列）。
+
+    `_保單資料` 的 DIRECT 列是保單資料、不是持倉；`_持倉補充` 的 DIRECT 列與保單分頁那一列可能是
+    同一筆持倉，一起數會數兩次 —— 兩種一律不數。每一筆都要有分頁名與列號（逐筆位置要印），
+    缺了就 raise：靜默略過會讓畫面上的 N 與逐筆位置對不起來。
+    """
+    rows = []
+    for entry in direct or ():
+        if entry.get("source") != policy_tab_source:
+            continue
+        tab, row = entry.get("tab"), entry.get("row")
+        if not isinstance(tab, str) or not tab or isinstance(row, bool) or not isinstance(row, int):
+            raise ValueError(f"DIRECT 列缺分頁名或列號：{entry!r}")
+        rows.append({"tab": tab, "row": row})
+    return rows
+
+
+def _apply_direct(block: dict, rows: list) -> None:
+    """HLD-5 卡尾一行黃字＋逐筆位置（灰），收合摘要尾端加「 · DIRECT N 筆未列入」。
+
+    N＝0 時什麼都不加（草稿與 alo 都沒寫 N＝0 的畫法；這是本組的處理，已回報待裁）。
+    塊的 `_state`／`_tone` 不動：這幾筆是「讀到了、照裁示不計入」，不是本塊算不出來。
+    """
+    if not rows:
+        return
+    n = len(rows)
+    block["summary_text"] = block["summary_text"] + DIRECT_SUMMARY_SUFFIX.format(n=n)
+    block["tail_lines"] = [{"text": DIRECT_EXCLUDED_TEXT.format(n=n), "_tone": "黃"}] + [
+        {"text": DIRECT_LOCATION_TEXT.format(tab=r["tab"], row=r["row"]), "_tone": "灰"} for r in rows
+    ]
 
 
 def taiwan_today(now: datetime | None = None) -> date:
@@ -202,12 +252,24 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
 
 
 def build_live_model(
-    dataset: dict, *, fields=None, viewport_width: int = 1280, open_fund=None, today: date | None = None
+    dataset: dict,
+    *,
+    fields=None,
+    viewport_width: int = 1280,
+    open_fund=None,
+    today: date | None = None,
+    direct=(),
+    policy_tab_source=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
     本輪 `dataset` 由呼叫端給（測試用假資料的 dataset）；S6 由 `source.py` 取數後給。
+    `direct`：L2 `load_alo_tables` 交出的 `direct` 清單原樣；`policy_tab_source`：`alo_holdings.POLICY_TAB`
+    （見 `direct_holding_rows`）。`direct` 非空卻沒給 `policy_tab_source` → raise，不猜。
     """
+    if direct and policy_tab_source is None:
+        raise ValueError("有 DIRECT 清單卻沒有給 policy_tab_source，無法決定哪些列算進 N")
+    rows = direct_holding_rows(direct, policy_tab_source=policy_tab_source)
     model = logic.build_page_model(
         dataset,
         fields=fields,
@@ -215,4 +277,6 @@ def build_live_model(
         open_fund=open_fund,
         demo_hint=False,
     )
-    return apply_live_notes(model, today=today)
+    out = apply_live_notes(model, today=today)
+    _apply_direct(logic.find_block(out, "HLD-5"), rows)
+    return out

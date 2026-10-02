@@ -625,3 +625,137 @@ def test_live模組不import_streamlit_也不import_fixtures():
         elif isinstance(node, ast.ImportFrom):
             names += [f"{node.module or ''}.{a.name}" for a in node.names]
     assert not [n for n in names if "streamlit" in n or "fixtures" in n]
+
+
+# ───────────────────────── 5. DIRECT 持倉另列（S4，裁示 3-B (ii)） ─────────────────────────
+# 出處：`docs/wireframes/draft_hld_live.html` §F 選項 3-B、§G 第 3／3a 題。
+# L2 `direct` 清單三種來源的字面，用 AST 從 L1 讀出來（本檔不 import 舊樹，也不另抄一份）。
+
+_REPO_PY = pathlib.Path(__file__).resolve().parents[2] / "repositories" / "policy_supplement_repository.py"
+
+
+def _l1_constant(name):
+    for node in ast.parse(_REPO_PY.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} 不在 {_REPO_PY.name}")
+
+
+_POLICY_TAB = _l1_constant("POLICY_TAB_SOURCE")
+_TAB_PROFILE = _l1_constant("TAB_POLICY_PROFILE")
+_TAB_SUPPLEMENT = _l1_constant("TAB_HOLDING_SUPPLEMENT")
+
+
+def _l2_direct():
+    """形狀照 `services/v2_tables/alo_holdings.py::load_alo_tables` 三處 `direct.append(...)`。"""
+    return [
+        {"source": _TAB_PROFILE, "tab": _TAB_PROFILE, "row": 7, "policy_id": "DIRECT"},
+        {"source": _TAB_SUPPLEMENT, "tab": _TAB_SUPPLEMENT, "row": 31, "policy_id": "DIRECT"},
+        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 3, "policy_id": "DIRECT", "fund_code": "J1", "fund_name": "J"},
+        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 5, "policy_id": "DIRECT", "fund_code": "K1", "fund_name": "K"},
+    ]
+
+
+def _live_direct(name, direct=None):
+    return live.build_live_model(
+        **_scenario_args(name),
+        today=TODAY,
+        direct=_l2_direct() if direct is None else direct,
+        policy_tab_source=_POLICY_TAB,
+    )
+
+
+def test_DIRECT_字面逐字照裁示3B_ii():
+    assert live.DIRECT_EXCLUDED_TEXT.format(n=2) == "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）"
+    assert live.DIRECT_LOCATION_TEXT.format(tab="DIRECT", row=3) == "DIRECT 第 3 列"
+    assert live.DIRECT_SUMMARY_SUFFIX.format(n=2) == " · DIRECT 2 筆未列入"
+
+
+def test_DIRECT_N只數保單分頁那一種():
+    block = logic.find_block(_live_direct("full"), "HLD-5")
+    assert block["tail_lines"] == [
+        {"text": "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）", "_tone": "黃"},
+        {"text": "DIRECT 第 3 列", "_tone": "灰"},
+        {"text": "DIRECT 第 5 列", "_tone": "灰"},
+    ]
+
+
+def test_DIRECT_摘要只在原摘要尾端加一段():
+    want = logic.find_block(_live("full", today=TODAY), "HLD-5")["summary_text"]
+    got = logic.find_block(_live_direct("full"), "HLD-5")["summary_text"]
+    assert got == want + " · DIRECT 2 筆未列入"
+
+
+def test_DIRECT_不進任何計算_除HLD5兩處外整頁模型不變():
+    base = _live("full", today=TODAY)
+    got = _live_direct("full")
+    b5, g5 = logic.find_block(base, "HLD-5"), dict(logic.find_block(got, "HLD-5"))
+    g5.pop("tail_lines")
+    g5["summary_text"] = b5["summary_text"]
+    assert g5 == b5
+    for code in ("HLD-0", "HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-6", "HLD-7", "HLD-8"):
+        assert logic.find_block(got, code) == logic.find_block(base, code), code
+    assert {k: v for k, v in got.items() if k != "blocks"} == {k: v for k, v in base.items() if k != "blocks"}
+
+
+def test_DIRECT_N為0_什麼都不加():
+    base = _live("full", today=TODAY)
+    only_other_sources = [d for d in _l2_direct() if d["source"] != _POLICY_TAB]
+    assert _live_direct("full", direct=only_other_sources) == base
+    assert _live_direct("full", direct=[]) == base
+    assert "tail_lines" not in logic.find_block(base, "HLD-5")
+
+
+def test_DIRECT_全部持倉都是DIRECT_走既有空持倉規則再加卡尾():
+    """L2 不為 DIRECT 產生 `holding` 列 ⇒ 全部都是 DIRECT 時，hld 收到的就是空持倉。"""
+    base = _live("empty", today=TODAY)
+    got = _live_direct("empty")
+    b5, g5 = logic.find_block(base, "HLD-5"), logic.find_block(got, "HLD-5")
+    assert b5["summary_text"] == logic.TEXT_NO_HOLDING
+    assert g5["summary_text"] == logic.TEXT_NO_HOLDING + " · DIRECT 2 筆未列入"
+    assert (g5["_state"], g5["_tone"], g5["detail_lines"]) == (b5["_state"], b5["_tone"], b5["detail_lines"])
+    assert g5["tail_lines"][0]["text"] == "⚠ DIRECT 列暫不支援，該筆不計入體檢（2 筆）"
+    for code in ("HLD-0", "HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-6", "HLD-7", "HLD-8"):
+        assert logic.find_block(got, code) == logic.find_block(base, code), code
+
+
+def test_DIRECT_有清單卻沒給來源值_raise():
+    with pytest.raises(ValueError):
+        live.build_live_model(**_scenario_args("full"), today=TODAY, direct=_l2_direct())
+
+
+@pytest.mark.parametrize("bad", [{"row": None}, {"tab": ""}, {"tab": None}, {"row": True}, {"row": "3"}])
+def test_DIRECT_缺分頁名或列號_raise(bad):
+    direct = _l2_direct()
+    direct[2].update(bad)
+    with pytest.raises(ValueError):
+        _live_direct("full", direct=direct)
+
+
+def test_DIRECT_不改呼叫端手上的清單():
+    direct = _l2_direct()
+    snapshot = copy.deepcopy(direct)
+    _live_direct("full", direct=direct)
+    assert direct == snapshot
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_DIRECT_示範模式不帶卡尾(name):
+    assert "tail_lines" not in logic.find_block(_demo(name), "HLD-5")
+
+
+def test_DIRECT_live不另寫一份DIRECT判定():
+    """判定住在 L2（`contract.DIRECT_POLICY_ID`）；本檔只照呼叫端給的來源值篩，不比對 `policy_id`。"""
+    tree = ast.parse(_LIVE_PY.read_text(encoding="utf-8"))
+    literals = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    assert _POLICY_TAB not in literals
+    assert "policy_id" not in literals
+    assert not [s for s in literals if s.strip() == "DIRECT"]
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_DIRECT_全頁禁詞與識別碼零命中(name):
+    strings = logic.collect_ui_strings(_live_direct(name))
+    assert logic.scan_forbidden(strings) == {}
+    assert [s for s in strings if any(w in s for w in _BANNED)] == []
+    assert [s for s in strings if re.search(r"session_[0-9A-Za-z]{16,}|claude\.ai/code", s)] == []
