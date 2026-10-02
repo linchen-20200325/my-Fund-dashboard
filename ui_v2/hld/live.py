@@ -7,7 +7,8 @@
 本輪（hld 接真資料 S3）只做呈現層骨架，**不接任何取數**：
 1. **「（示意）」全部拿掉**（裁示 2-A）—— 由 `logic.build_page_model(demo_hint=False)` 組模型時就不接，
    不是事後去字串裡刪（事後刪會連資料本身的字一起刪，那是改資料）。
-2. **對帳時間欄**（裁示 4-C）—— HLD-5 展開欄位「最後對帳」改名「最後核對日（只記日期）」，值只留日期。
+2. **對帳時間欄**（裁示 4-C）—— HLD-5 展開欄位「最後對帳」改名「最後核對日（只記日期）」，值只留台灣日期；
+   值不合格的那一格進 `系統錯誤`，整頁照常（S3 第二輪）。
 3. **按鈕停用**（裁示 A，文案逐字）—— 「存檔」與「重新取數」停用並寫出原因。
    按鈕**出現在哪幾塊**一格不動，沿用 `logic` 既有規則（HLD-1／2／3 不掛重新取數；HLD-8 在任一值為
    `資料未備` 或 `系統錯誤` 時掛）；本檔只改已經在那裡的按鈕的啟用狀態，不新增、不拿掉任何一枚。
@@ -22,7 +23,8 @@
 from __future__ import annotations
 
 import copy
-from datetime import date
+import re
+from datetime import date, datetime, timedelta, timezone
 
 from . import logic
 
@@ -43,19 +45,61 @@ OLD_SYNC_LABEL = "最後對帳"
 SYNC_LABEL = "最後核對日（只記日期）"
 
 
-def _date_only(value: str) -> str:
-    """只收 `YYYY-MM-DD`。值是推定的（當日 12:00），所以畫面只記日期（裁示 4-C 客戶理由）。
+# 台灣日期用的時區（UTC+8）。
+# ⚠️ 本套件不得 import `services`（`tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (5) 條：
+#    舊樹只准 `source.py` import），也不 import 別頁的 `ui_v2.alo`／`ui_v2.set`（各頁自足），
+#    所以這裡另寫一份。出處：`services/v2_tables/nav_dividend.py::MARKET_DATE_TZ`（同值，L2 判未來日期用）；
+#    同型的另兩份是 `ui_v2/alo/logic.py::DISPLAY_TZ` 與 `ui_v2/set/logic.py::DISPLAY_TZ`。
+MARKET_DATE_TZ = timezone(timedelta(hours=8))
 
-    `logic._build_hld5` 已經只取 `last_synced_at` 的前 10 個字；這裡再驗一次那 10 個字真的是日期 ——
-    不是的話，前 10 個字可能是任何東西，照印就是把一段不知道是什麼的字當日期給人看（§1：寧可炸掉）。
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
+# 日期時間：前 10 個字是 `YYYY-MM-DD`，第 11 個字是 `T` 或空白，接著至少到「時:分」。
+# 先過這一關再交給 `datetime.fromisoformat` —— 3.11 的 `fromisoformat` 也收 `20260919`、`2026-W38-6`
+# 這類寫法，那些不是本欄約定的形狀，一律不收。
+_DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+
+
+def taiwan_today(now: datetime | None = None) -> date:
+    """台灣的今天。`now`：帶時區的當下（測試注入用）；不傳就取當下。"""
+    moment = datetime.now(MARKET_DATE_TZ) if now is None else now
+    return moment.astimezone(MARKET_DATE_TZ).date()
+
+
+def sync_date(raw, *, today: date):
+    """`last_synced_at` 原值 → 台灣日期字串 `YYYY-MM-DD`；不合格回 None（S3 第二輪，總管裁定 2）。
+
+    - 只有日期（`YYYY-MM-DD`，且是真的日期）→ 照原樣；
+    - 帶時區的 ISO 日期時間 → 換算成台灣時間（UTC+8）後取日期；
+      換算後晚於 `today`（台灣日期）→ 不合格（核對時刻不可能在未來）；
+    - 其餘（`None`、非字串、前後有空白、`2026/09/19`、`2026-02-30`、沒帶時區的日期時間、
+      前 10 個字合格但後面接了別的東西）→ 不合格。
+    ⚠️ 「晚於今天」只檢查換算過的日期時間 —— 裁定只寫了那一支；只有日期的值照原樣顯示。
     """
-    if not isinstance(value, str) or len(value) != 10:
-        raise ValueError(f"最後核對日不是 YYYY-MM-DD：{value!r}")
+    if not isinstance(raw, str):
+        return None
+    if _DATE_ONLY.fullmatch(raw):
+        try:
+            return date.fromisoformat(raw).isoformat()
+        except ValueError:
+            return None
+    if not _DATETIME_HEAD.match(raw):
+        return None
     try:
-        date.fromisoformat(value)
+        moment = datetime.fromisoformat(raw)
     except ValueError:
-        raise ValueError(f"最後核對日不是 YYYY-MM-DD：{value!r}") from None
-    return value
+        return None
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        return None
+    local = moment.astimezone(MARKET_DATE_TZ).date()
+    if local > today:
+        return None
+    return local.isoformat()
+
+
+def bad_sync_message(raw) -> str:
+    """不合格那一格的訊息本文。外框沿用 `logic.fund_fetch_failed_text`（「⛔ 取數失敗：<代碼>：<訊息>」），
+    這裡只寫出是哪一個值不合格，原值照印（`repr`，前後空白看得見）。"""
+    return f"{SYNC_LABEL}的值不合格：{raw!r}"
 
 
 def _walk_buttons(node):
@@ -69,30 +113,55 @@ def _walk_buttons(node):
             yield from _walk_buttons(value)
 
 
-def _relabel_sync_field(block: dict) -> None:
-    # `_items` 與 `_rows` 在 `logic._build_hld5` 是同一份清單，但本檔不靠這個巧合：
-    # 兩個鍵都走一次（已改過的那一格不再含舊欄名，第二次走是空轉）。
+def _relabel_sync_field(block: dict, *, today: date) -> None:
+    """HLD-5「最後對帳」→「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格改成 `系統錯誤` 值節點。
+
+    - 不合格只影響那一格：用 `logic._metric(error=...)` 做成值節點（走既有的值狀態機制，
+      `logic.non_ok_value_nodes` 撈得到），訊息本文同時以既有的逐檔錯誤行寫進本塊說明區
+      （`logic._fund_error_lines`，與核心卡同一個寫法）。塊層的 `_state`／`_tone` 一格不動。
+    - 找不到舊欄名就 raise（總管裁定 4）：那表示 `logic._build_hld5` 改了欄名、本檔沒跟上，
+      靜默略過的話，正式畫面上會留一格沒驗過、沒換算的原值。
+    - `_items` 與 `_rows` 在 `logic._build_hld5` 是同一份清單，但本檔不靠這個巧合：
+      兩個鍵都走，以物件身分去重，同一列只處理一次。
+    """
+    seen = set()
+    error_nodes = []
     for item in [*block.get("_items", []), *block.get("_rows", [])]:
-        fields = []
-        for label, value in item["_fields"]:
-            if label == OLD_SYNC_LABEL:
-                fields.append((SYNC_LABEL, _date_only(value)))
-            else:
-                fields.append((label, value))
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        hits = [i for i, (label, _) in enumerate(item["_fields"]) if label == OLD_SYNC_LABEL]
+        if len(hits) != 1:
+            raise ValueError(
+                f"HLD-5 {item.get('_holding_id')!r} 的展開欄位裡「{OLD_SYNC_LABEL}」有 {len(hits)} 格，應為 1 格"
+            )
+        fields = list(item["_fields"])
+        raw = fields[hits[0]][1]
+        shown = sync_date(raw, today=today)
+        if shown is None:
+            node = logic._metric(
+                None, text="", ccy=None, error=bad_sync_message(raw), label=SYNC_LABEL, fund_scoped=True
+            )
+            error_nodes.append((item["_fund_code"], node))
+            fields[hits[0]] = (SYNC_LABEL, node)
+        else:
+            fields[hits[0]] = (SYNC_LABEL, shown)
         item["_fields"] = fields
+    block["detail_lines"] = list(block["detail_lines"]) + logic._fund_error_lines(error_nodes)
 
 
-def apply_live_notes(model: dict) -> dict:
+def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的兩件事：
 
-    1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值驗過是日期；
+    1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
+       （`today`：台灣的今天，可注入；不傳就取當下）；
     2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
     """
     out = copy.deepcopy(model)
-    _relabel_sync_field(logic.find_block(out, "HLD-5"))
+    _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])
         if reason is not None:
@@ -101,7 +170,9 @@ def apply_live_notes(model: dict) -> dict:
     return out
 
 
-def build_live_model(dataset: dict, *, fields=None, viewport_width: int = 1280, open_fund=None) -> dict:
+def build_live_model(
+    dataset: dict, *, fields=None, viewport_width: int = 1280, open_fund=None, today: date | None = None
+) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
     本輪 `dataset` 由呼叫端給（測試用假資料的 dataset）；S6 由 `source.py` 取數後給。
@@ -113,4 +184,4 @@ def build_live_model(dataset: dict, *, fields=None, viewport_width: int = 1280, 
         open_fund=open_fund,
         demo_hint=False,
     )
-    return apply_live_notes(model)
+    return apply_live_notes(model, today=today)

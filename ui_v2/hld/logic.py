@@ -1811,6 +1811,21 @@ def _row_is_open(holding_id, open_fund) -> bool:
     return bool(holding_id) and holding_id == open_fund
 
 
+def _sync_field_value(raw):
+    """HLD-5「最後對帳」那一格的值。
+
+    示範模式：照 base 逐字 —— 取前 10 個字再接示意字尾（`None` 照舊在 `[:10]` 炸掉，那是 base 就有的行為）。
+    正式模式（`demo_hint=False`）：**原值照交**，由 `ui_v2/hld/live.py` 驗格式、換算台灣日期、
+    不合格時改成 `系統錯誤` 的值節點（S3 第二輪，總管裁定 1／2）。
+    ⚠️ 在這裡先截 10 個字，帶時區的值就換算不了（`…T20:30:00Z` 的台灣日期是隔天），所以正式模式不截。
+    ⚠️ 正式模式的這一格**一定要經過** `live.apply_live_notes`，否則畫面上印的是未驗的原值；
+       正式入口一律走 `live.build_live_model`。
+    """
+    if _hint():
+        return raw[:10] + _hint()
+    return raw
+
+
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
@@ -1827,7 +1842,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
             ("成本（原幣）", hinted(format_amount(holding["cost_orig_ccy"], holding["ccy"]))),
             ("成本（新臺幣）", f"{holding['cost_twd']:,} 元{_hint()}"),
             ("類別", holding["bucket"] or "⬜"),
-            ("最後對帳", holding["last_synced_at"][:10] + _hint()),
+            ("最後對帳", _sync_field_value(holding["last_synced_at"])),
         ]
         has_nav = bool(metric["nav_rows"])
         items.append(
@@ -2204,6 +2219,8 @@ def build_page_model(
 
     `demo_hint`：數字後面要不要接「（示意）」（2026-10-02 S3；客戶裁示 2-A）。
     預設 `True` ＝ 示範模式，輸出逐字同前；正式模式（`ui_v2/hld/live.py`）傳 `False`。
+    ⚠️ S3 第二輪起它也是 HLD-5「最後對帳」那一格的模式開關：`False` 時那一格交原值，
+       由 live 層驗與換算（見 `_sync_field_value`）。
     ⚠️ 只管本檔自己接上去的字尾；資料本身的字（例如假資料的基金名）不在射程內 ——
        正式模式不讀 fixtures，那些字本來就不會出現（草稿 §E P16）。
 
