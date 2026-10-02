@@ -15,6 +15,8 @@
   本輪只讀、不接 UI。
 - `nav_dividend`：持倉體檢頁要讀的 `44` 4.2 `nav`、4.3 `dividend`（L1 `fetch_nav_with_error`／
   `fetch_div_with_error` → 表列；Q12＝A 即時抓、快取只在 L1）。本輪只讀、不接 UI。
+- `fund_keys`：試算表 `fund_code` → MoneyDJ `full_key`／`portal` 的決定性對照（hld 接真資料 S1；
+  strip → upper → L1 `parse_moneydj_input` → `load_fund_code_mapping`，對不上回錯誤、不截斷不猜）。不接 UI。
 
 ⚠️ 本套件不 import `ui_v2`（L2 不得上行 import，`CLAUDE.md` §8.2）；
    ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本套件。
