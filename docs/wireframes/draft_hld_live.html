@@ -241,7 +241,9 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <p class="note" style="margin-top:10px">
     <span class="tag t-44">44</span> ＝ 照 44 原字。
     <span class="tag t-new">新增，44 未宣告</span> ＝ 44 沒有這個元件／這句字／這個落點，<b>畫出來只為讓客戶看得到選項，不是既成事實</b>。
-    <span class="tag t-ask">待裁示</span> ＝ 請客戶選。</p>
+    <span class="tag t-ask">待裁示</span> ＝ 請客戶選（裁示後只留在 §B 的中性線框裡）。
+    <span class="tag t-ok">客戶已選（2026-10-02）</span> ＝ 客戶裁示選中的選項。
+    <span class="tag" style="color:var(--ink-3)">未選</span> ＝ 列出過、客戶沒有選的選項（保留供追溯）。</p>
   <p class="small" style="margin-top:8px">⚠️ <b>螢幕裡的每一個數字都是本草稿的示意值</b>（基金 A／B／C、金額、日期都是編的）。
   這一句寫在註記層、<b>不寫進螢幕</b> —— 因為決定 2 要裁的正是「正式畫面上要不要出現示意字樣」，
   螢幕裡若自己帶著它，會先替客戶選了答案。</p>
@@ -307,7 +309,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 <div class="sec-head"><span class="n">§B</span><h2>三個斷點：正式模式預設載入時的畫面</h2></div>
 
 <div class="card">
-  <p class="note">三份<b>螢幕內容相同，欄數依 44 §2.1 不同</b>。層 3、層 4 預設收合。
+  <p class="note"><b>§B 為裁示前的中性線框</b>，原樣保留：框裡的「待裁示」是裁示前的落點標記，裁示結果見 §G 與 §D～§F2 各選項的標籤。<br>三份<b>螢幕內容相同，欄數依 44 §2.1 不同</b>。層 3、層 4 預設收合。
   <b>黃色虛線框與「〔決定 N〕」是「待裁示的落點」</b>，只寫是哪一個決定，不填任何一個選項的字。</p>
   <p class="small" style="margin-top:6px">⚠️ 螢幕裡的字照現行程式的實際字面畫（正式模式拿掉「（示意）」之後的樣子）：
   層標籤取自 <code>ui_v2/hld/page.py::render</code>（「層 1　結論」等四行）；HLD-0 黃燈取自 <code>ui_v2/hld/logic.py</code> 的
@@ -675,7 +677,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 1-A｜每一檔掛新鮮度徽章「延遲 N 日」<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 1-A｜每一檔掛新鮮度徽章「延遲 N 日」<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td><code>延遲 N 日</code>（N 為整數，算法見上表）；<b>N ＝ 0 時印 <code>當日</code></b>。
       <span class="tag t-44">44</span> 兩個字面都取自 §5.2 新鮮度那一列，原文逐字「<code>即時</code>／<code>當日</code>／<code>延遲 N 日</code>」。
@@ -703,7 +705,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 1-B｜新的狀態徽章「預存序列」<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 1-B｜新的狀態徽章「預存序列」<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td><code>預存序列</code>（徽章，<code>kind</code> 為 <code>狀態</code>）。<span class="tag t-new">新增，44 未宣告</span></td></tr>
     <tr><th>放在哪</th><td>只掛在 <code>cache_fallback</code> 為真的那幾檔：HLD-2、HLD-3、HLD-8 該檔標頭旁；HLD-5 該檔展開標頭旁；HLD-6 淨值表該檔分組標頭旁。<b>不逐列掛</b>（<code>provenance</code> 是一檔一份）。</td></tr>
@@ -725,7 +727,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 1-C｜預存那幾檔加副標一行 ＋ HLD-1 卡尾一行<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 1-C｜預存那幾檔加副標一行 ＋ HLD-1 卡尾一行<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td><span class="tag t-new">新增，44 未宣告</span>（三句；新舊依上表的 N 判，<b>不依 <code>stale</code></b>）：<br>
       ① <code>cache_fallback</code> 為真、N &gt; 10：<code>⚠ 淨值取自預存序列，不是本次取得；最近一筆 YYYY-MM-DD，已超過 10 日</code>
@@ -766,7 +768,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 1-D｜不寫：預存那一支整批不寫入，畫面顯示 ⬜ 資料未備<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 1-D｜不寫：預存那一支整批不寫入，畫面顯示 ⬜ 資料未備<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td><code>⬜ 資料未備</code>（<span class="tag t-44">44</span> §5.1 <code>資料未備</code> 狀態的主值字）。<br>
       <b>按鈕分開寫</b>：<br>
@@ -883,10 +885,10 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>三個選項<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>三個選項：客戶選 2-A（2026-10-02），2-B、2-C 未選</h4>
   <table>
     <tr><th style="width:14%">選項</th><th style="width:30%">頁首（P1、P2）</th><th style="width:22%">數字後的「（示意）」（P4～P15）</th><th>後果</th></tr>
-    <tr><td><b>2-A</b>｜全拿掉</td>
+    <tr><td><b>2-A</b>｜全拿掉<br><span class="tag t-ok">客戶已選（2026-10-02）</span></td>
       <td>只印本頁提問句「我手上這些基金，哪幾檔偏離了我自己設的門檻」。<span class="tag t-44">44</span></td>
       <td>全部拿掉</td>
       <td>✅ 與兩個已上線正式頁同一種做法：<code>ui_v2/mkt/page.py::render</code> 的程式說明寫「頁首副標只印本頁的提問句 ——
@@ -894,14 +896,14 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
         原始核准紀錄本組未在 repo 查到（<code>ACCEPTANCE.md</code> §7.4-a 記有 2026-09-26 客戶核准 mkt 正式入口草稿「第 2 處」，但那一處講的是憑證遮蔽註記，不是示意字樣）；
         <code>ui_v2/alo/page.py::render</code> 與 <code>ui_v2/alo/live.py::apply_live_notes</code> 同樣做法。<br>
         ✅ 不加任何新字。<br>⚠️ 示範入口（<code>ui_v2/app_hld.py</code>）照舊帶示意字樣；兩個入口畫面會不同，這是刻意的。</td></tr>
-    <tr><td><b>2-B</b>｜拿掉並在頁首放唯讀說明</td>
+    <tr><td><b>2-B</b>｜拿掉並在頁首放唯讀說明<br><span class="tag" style="color:var(--ink-3)">未選</span></td>
       <td>提問句之後接「　·　持倉資料在 Sheets 維護，本儀表板唯讀」，中性色。
         <span class="tag t-44">44</span> 字面取自 HLD-0 空狀態欄；<span class="tag t-new">新增，44 未宣告</span>：放在頁首這個<b>落點</b></td>
       <td>全部拿掉</td>
       <td>✅ 使用者一進頁就知道持倉從哪來。<br>
         ⚠️ 同一句在持倉表為空時會在 HLD-0 再出現一次（那是 44 的空狀態），畫面上會重複。<br>
         ⚠️ 與 mkt、alo 兩頁的頁首不一致。</td></tr>
-    <tr><td><b>2-C</b>｜拿掉並在頁首標試行</td>
+    <tr><td><b>2-C</b>｜拿掉並在頁首標試行<br><span class="tag" style="color:var(--ink-3)">未選</span></td>
       <td>提問句之後接「　·　試行中：數字取自實際來源，驗收尚未完成」，中性色。<span class="tag t-new">新增，44 未宣告</span></td>
       <td>全部拿掉</td>
       <td>✅ 給驗收期一個明說。<br>
@@ -941,7 +943,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 3-A｜不顯示（維持現行 L2 暫定）<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 3-A｜不顯示（維持現行 L2 暫定）<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td>無。</td></tr>
     <tr><th>放在哪</th><td>不出現在本頁任何一塊。</td></tr>
@@ -999,7 +1001,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 3-C｜併入：DIRECT 持倉照一般持倉進本頁每一塊<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 3-C｜併入：DIRECT 持倉照一般持倉進本頁每一塊<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td>只有 44 已有的一句：HLD-5 保單欄「<code>直接持有</code>」。<span class="tag t-44">44</span></td></tr>
     <tr><th>放在哪</th><td>DIRECT 持倉和其他持倉一樣出現在 HLD-1～HLD-8；HLD-5 展開時保單欄印「直接持有」。</td></tr>
@@ -1042,7 +1044,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 4-A｜照現行：只印日期，不加任何揭露<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 4-A｜照現行：只印日期，不加任何揭露<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td>欄名 <code>最後對帳</code>，值 <code>YYYY-MM-DD</code>。（現行程式字面，非 44 逐字）</td></tr>
     <tr><th>放在哪</th><td>HLD-5 展開欄位，不變。</td></tr>
@@ -1054,7 +1056,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 </div>
 
 <div class="opt">
-  <h4>選項 4-B｜改欄名，欄下加一行時刻說明<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <h4>選項 4-B｜改欄名，欄下加一行時刻說明<span class="tag" style="margin-left:6px;color:var(--ink-3)">未選</span></h4>
   <table>
     <tr><th style="width:18%">文案原文</th><td><span class="tag t-new">新增，44 未宣告</span>：欄名 <code>最後核對日</code>；
       值的下一行 <code>時刻為推定（當日 12:00 台灣時間），非實際核對時刻</code>。<br>
@@ -1096,7 +1098,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <p class="note">一題一行。<b>「裁示」欄為客戶 2026-10-02 的裁示</b>：選了哪一項、客戶的理由、日期。
   「總管建議」欄為總管同日填入、<b>保留不刪</b>；第 1a 題總管原建議的 7 天已劃線保留，客戶改為 10 天。</p>
   <table>
-    <tr><th style="width:5%">#</th><th style="width:30%">題目</th><th style="width:30%">選項</th><th style="width:15%">總管建議</th><th style="width:10%">出處</th><th style="width:15%">裁示（客戶）</th></tr>
+    <tr><th style="width:5%">#</th><th style="width:22%">題目</th><th style="width:23%">選項</th><th style="width:20%">總管建議</th><th style="width:10%">出處</th><th style="width:20%">裁示（客戶）</th></tr>
     <tr><td class="src">1</td><td>淨值退回預存舊序列時，畫面怎麼標？</td>
       <td>1-A 每檔新鮮度徽章「延遲 N 日」／1-B 新狀態徽章「預存序列」／1-C 預存那幾檔加副標＋HLD-1 卡尾一行／1-D 不寫（整批 ⬜ 資料未備）／1-A＋1-C</td>
       <td><b>1-A＋1-C。</b>
