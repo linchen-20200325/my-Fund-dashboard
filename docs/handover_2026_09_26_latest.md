@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-02 11:17:09 UTC（`date -u` 實測）
+最後更新：2026-10-02 11:19:02 UTC（`date -u` 實測）
 
 ---
 
@@ -207,7 +207,7 @@
   ~~- `origin/main` ＝ **`bba15e4`**（PR #867 的 merge commit；**一般 merge commit、2 parents，非 squash**；~~
   ~~2026-10-02 實測 `git log --oneline -5 origin/main` 與 `git show --stat --format='%H %P' bba15e4`）~~
   → **2026-10-02 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #868（`fd5dc09`）、#869（`110a395`）、
-  #870（`b23b5b2`）相繼 merge（出處：`git log --merges --oneline -6 origin/main`，本組實查）；#869／#870 兩列見第 4 節。
+  #870（`b23b5b2`）相繼 merge（出處：`git log --merges --oneline -6 origin/main`，本組實查）；#868／#869／#870 三列見第 4 節。
   ~~- `origin/main` ＝ **`0cf4d5b`**（PR #863 的 merge commit；**一般 merge commit、2 parents，非 squash**；~~
   ~~2026-10-01 實測 `git log origin/main --merges -3` 與 `git rev-list --parents -n1 0cf4d5b`）~~
   → **2026-10-02 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #864（`e87181d`）、#865（`ae563ab`）、
@@ -835,10 +835,11 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **#866（merge commit `d9ac70c`，head `f060e16`）：交接本登記 nav／dividend 轉換層 5 條待辦**。1 檔 **+9／−1**。
 - **#867（merge commit `bba15e4`，head `9b14996`）：`nav`／`dividend` L2 轉換層**（`services/v2_tables/nav_dividend.py`、`contract.py`）。4 檔 **+1517／−0**；只讀、不接 UI。
   （以上三列 2026-10-02 以 `git log --oneline -5 origin/main` 與 `git show --stat --format='%H %P'` 實測 SHA、2 parents 與檔案統計；**PR 內容摘要取自 merge commit 標題與分支 commit 訊息，CI 結果本組未查**。）
+- **#868（merge commit `fd5dc09`，head `423a7a4`）：交接本 #865／#866／#867 後更新**（分支 `docs/handover-865-867`；六顆：`e4e53f3` 歸位與登記 12 條待辦 → `528a152` → `740b1cf` → `a71e285` → `f6c26ca` → `423a7a4` 稽核回修）。1 檔 **+71／−9**。
+  （出處：本組 2026-10-02 以 `git show --stat --format='%H %P' fd5dc09` 與 `git log bba15e4..fd5dc09^2` 實查 SHA、2 parents（`bba15e4`、`423a7a4`）、檔案統計與分支 commit；內容摘要取自 merge commit 標題與分支 commit 訊息；**CI 結果本組未查**。）
 - **#869（merge commit `110a395`，head `d5b4eff`）：交接本登記接 hld 頁盤點 8 條**（分支 `docs/handover-hld-inventory`；兩顆：`07dbc49` 登記、`d5b4eff` 稽核回修 M5、S10～S13）。1 檔 **+24／−2**。
 - **#870（merge commit `b23b5b2`，head `43844f5`）：L1 `_parse_nav_html` 的 MM/DD 改取最近候選年**（分支 `fix/nav-mmdd-cross-year`）：以台灣今天的前一年／今年／下一年組三個候選、取最近者；晚於台灣今天者不寫，筆數記在 `attrs["mmdd_rejected"]`，`fetch_nav` 的 `_attempts` 帶出拒收筆數。2 檔 **+302／−7**（`repositories/fund/nav_metrics.py`、`tests/test_parse_nav_html_mmdd_cross_year.py`）；分支共六顆（`72b6143` → `ccdddb6` → `a94c332` → `159cd34` → `96fd61c` → `43844f5`）。
   （以上兩列出處：本組 2026-10-02 以 `git show --stat --format='%H %P'` 與 `git log 110a395..b23b5b2^2`、`git log fd5dc09..110a395^2` 實查 SHA、2 parents、檔案統計與分支 commit；內容摘要取自 merge commit 標題、分支 commit 訊息與 `nav_metrics.py` docstring；**CI 結果本組未查**。本組另以 scratchpad civenv 在 `b23b5b2` 實跑 `tests/test_parse_nav_html_mmdd_cross_year.py` → 21 passed。）
-- ⚠️ **#868（merge commit `fd5dc09`）本節沒有列**：本組 2026-10-02 發現，派工範圍只到 #869／#870，未補，留給總管決定。
 
 ## 5. 待客戶裁示
 
@@ -1097,7 +1098,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
-| 2026-10-02 | #870 後更新（起點 `b23b5b2`）：`origin/main` 改 `b23b5b2`（舊句劃線保留）；第 4 節補 #869（`110a395`）與 #870（`b23b5b2`），並註明 #868 未列；hld 小步表增列 #870 一列；〈登記待辦〉「接 hld 頁盤點」第 7 條尾端加狀態更新（上文未改）；〈登記待辦〉新增「#870 後續 7 條」（出處：#870 規格組／紅隊稽核；第 6 條紅隊第二輪實測、第 7 條 #870 實作組回報），每條附本組在 `b23b5b2` 的查證結果；〈總管錯誤紀錄〉新增「（2026-10-02，#870）派工單替成員寫好要落地的句子」一筆（`a94c332` 兩句，本組以 `git show`／`git log -S` 實查）。 |
+| 2026-10-02 | #870 後更新（起點 `b23b5b2`）：`origin/main` 改 `b23b5b2`（舊句劃線保留）；第 4 節補 #868（`fd5dc09`）、#869（`110a395`）與 #870（`b23b5b2`）三列（#868 為總管同日追加派工；三列 SHA、parents、檔案統計皆以 git 實查）；hld 小步表增列 #870 一列；〈登記待辦〉「接 hld 頁盤點」第 7 條尾端加狀態更新（上文未改）；〈登記待辦〉新增「#870 後續 7 條」（出處：#870 規格組／紅隊稽核；第 6 條紅隊第二輪實測、第 7 條 #870 實作組回報），每條附本組在 `b23b5b2` 的查證結果；〈總管錯誤紀錄〉新增「（2026-10-02，#870）派工單替成員寫好要落地的句子」一筆（`a94c332` 兩句，本組以 `git show`／`git log -S` 實查）。 |
 | 2026-10-02 | 〈登記待辦〉新增「接 hld 頁盤點：客戶關卡 3 條、資料缺口與內部決定 5 條」（出處：A 組、B 組盤點，2026-10-02，`fd5dc09`）；每條寫成具名歸屬句；第 4 條（`fund_code` → `full_key`）兩組結論不一致，兩邊並陳、標「待總管裁」；第 7 條與 12 條那組的第 10 條互指（同日稽核 M5：第 10 條尾端補回指，原文未動）。同日稽核 S10～S13 回修：開頭補「第 1～3 條屬客戶關卡」說明；第 3 條拆成「49 §8 (k) 原文」與「A 組判斷」兩句；第 7 條改寫為「L1 序列的最後一筆」並補轉換層後的最後一列；第 2 條補 A 組掃描範圍與原型檔說明。這幾處尚未進 main，直接改寫、未劃線。本組只登記，未逐條查證。 |
 | 2026-10-02 | 稽核回修（起點 `f6c26ca`）：〈總管錯誤紀錄〉「三份派工單…」一筆出處改為「交接本稽核（1d3f0b6、528a152、740b1cf 三輪）」，拿掉「與轉換層稽核」；補「歸屬：總管 2026-10-02 自陳；派工單原文不在 repo，無法實查」；互指改為四處（12 條的第 6、10、11 條與 #866 那組 5 條的第 1 條），第 6、11 條與 #866 第 1 條只在尾端加回指，原文未改。 |
 | 2026-10-02 | 稽核回修（起點 `740b1cf`）：M3 第 10 條括號整段換成稽核實查 bba15e4 的結果（`_parse_nav_html` 補今年、`_infer_year_for_mmdd` 有跨年判斷、`fetch_div` 未查、少列為推論未重現），出處改為「#867 紅隊／規格稽核；交接本稽核實查 bba15e4」；〈總管錯誤紀錄〉新增「（2026-10-02）三份派工單把未查證的斷言寫成事實」一筆（標題原寫「兩度」，同日改為「三份」並逐句標 commit；尚未進 main，直接改寫、未劃線），與第 10 條互指。**第 6、10、11、12 條這幾輪的改寫：這幾條尚未進 main，直接改寫、未劃線。** |
