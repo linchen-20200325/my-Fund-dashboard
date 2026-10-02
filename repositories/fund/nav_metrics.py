@@ -62,10 +62,24 @@ def _fail_kind_text() -> str:
     return "kind=(無:fetch_url 有回應,但內容為空白,fetch_url_with_retry 回 None)"
 
 
+def _tw_today():
+    """台灣日期(UTC+8)的今天 — 與 sources.py `_src_nav_30day` /
+    fund_orchestration legacy 近30日取法一致(§4.5)。獨立成函式以便測試固定日期。"""
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date()
+
+
 def _parse_nav_html(html: str) -> pd.Series:
-    """解析 MoneyDJ 淨值 HTML，回傳 pd.Series (date→float)"""
+    """解析 MoneyDJ 淨值 HTML，回傳 pd.Series (date→float)
+
+    MM/DD 條目的年份由 SSOT `_infer_year_for_mmdd`(sources.py,經上方
+    `import *` 取得)推斷:晚於台灣今天 → 去年。原本一律補今年,1 月時會把
+    12 月條目補成今年 12 月(未來日期),排序後最後一筆變成假的 12 月值。
+    YYYY/MM/DD 條目不經此推斷,行為不變。
+    """
     soup = BeautifulSoup(html, "lxml")
     rows_data = []
+    _today = None
     for tbl in soup.find_all("table"):
         txt = tbl.get_text()
         if not re.search(r"\d{2}/\d{2}", txt):
@@ -76,8 +90,10 @@ def _parse_nav_html(html: str) -> pd.Series:
             try:
                 ds = cols[0].strip()
                 if re.match(r"^\d{2}/\d{2}$", ds):
-                    import datetime
-                    ds = f"{datetime.date.today().year}/{ds}"
+                    if _today is None:
+                        _today = _tw_today()
+                    _mo, _da = int(ds[:2]), int(ds[3:])
+                    ds = f"{_infer_year_for_mmdd(_mo, _da, _today)}/{ds}"
                 d = pd.to_datetime(ds)
                 v = float(cols[1].replace(",", ""))
                 if 0.01 < v < 100000:
