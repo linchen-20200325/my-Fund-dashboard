@@ -944,3 +944,154 @@ def test_DIRECT_全頁禁詞與識別碼零命中(name):
         assert logic.scan_forbidden(strings) == {}
         assert [s for s in strings if any(w in s for w in _BANNED)] == []
         assert [s for s in strings if re.search(r"session_[0-9A-Za-z]{16,}|claude\.ai/code", s)] == []
+
+
+# ───────────────────────── S4 第三輪（總管裁定） ─────────────────────────
+# 1. 換字依位置：組合測試守「出口表沒漏列」，注入測試守「上游原文不碰、不崩」。
+
+_TABLE_ERRORS = (None, "holding", "policy", "nav", "dividend", "fund_profile", "user_setting")   # 7 種
+_PENDINGS = (
+    frozenset(),
+    frozenset({"dividend"}),
+    frozenset({"fund_profile"}),
+    frozenset({"nav", "dividend", "fund_profile"}),
+)
+_UPSTREAM_PLAIN = "ConnectionError: upstream timeout"
+
+
+def _empty_dataset(*, table=None, message=_UPSTREAM_PLAIN, pending=frozenset(), rules=True, window=True):
+    ds = fixtures._dataset(
+        holding=[],
+        window=(fixtures.WINDOW_START, fixtures.WINDOW_END) if window else None,
+        rules=fixtures._RULES_DEFAULT if rules else None,
+        errors={table: message} if table else None,
+    )
+    if pending:
+        ds["pending_tables"] = pending
+    return ds
+
+
+_COMBOS = [
+    (t, p, r, w) for t in _TABLE_ERRORS for p in _PENDINGS for r in (True, False) for w in (True, False)
+]
+
+
+@pytest.mark.parametrize("table,pending,rules,window", _COMBOS)
+def test_第三輪1_空持倉組合_N大於0_本檔產生的字串不殘留尚未建立任何持倉(table, pending, rules, window):
+    """上游訊息刻意不含那幾個字 ⇒ 模型裡任何一處殘留，都是本頁自己產生而沒換到的出口。"""
+    ds = _empty_dataset(table=table, pending=pending, rules=rules, window=window)
+    base = _build(copy.deepcopy(ds), today=TODAY)
+    assert _all_text_hits(base, logic.TEXT_NO_HOLDING) > 0          # 正控：S3 畫面上確實有
+    model = _build(ds, today=TODAY, **_direct_kw(_three_policy_tab()))
+    assert _all_text_hits(model, logic.TEXT_NO_HOLDING) == 0
+    for b, g in zip(logic.all_blocks(base), logic.all_blocks(model)):
+        assert (g["_state"], g["_tone"]) == (b["_state"], b["_tone"]), g["code"]
+
+
+def test_第三輪1_組合涵蓋紅燈與灰燈兩種HLD0():
+    """組合裡要真的走到 HLD-0 的兩條分支（紅燈的括號補述、灰燈的標題），組合測試才有意義。"""
+    tones = {logic.find_block(_build(_empty_dataset(table=t), today=TODAY), "HLD-0")["_tone"] for t in _TABLE_ERRORS}
+    assert {"紅", "灰"} <= tones
+
+
+_UPSTREAM_WITH_PHRASE = (logic.TEXT_NO_HOLDING, f"上游說：{logic.TEXT_NO_HOLDING}")
+
+
+def _string_paths(node, path=()):
+    """（路徑, 字串）逐一列出；HLD-5 那一塊除外（它的說明行依裁示會拿掉一行，位置會位移）。"""
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
+        if node.get("code") == "HLD-5":
+            return
+        for k, v in node.items():
+            yield from _string_paths(v, path + (k,))
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            yield from _string_paths(v, path + (i,))
+
+
+def _at(node, path):
+    for key in path:
+        node = node[key]
+    return node
+
+
+@pytest.mark.parametrize("message", _UPSTREAM_WITH_PHRASE)
+@pytest.mark.parametrize("table", [t for t in _TABLE_ERRORS if t])
+def test_第三輪1_上游原文含那幾個字_不崩且照印(table, message):
+    ds = _empty_dataset(table=table, message=message)
+    base = _build(copy.deepcopy(ds), today=TODAY)
+    model = _build(ds, today=TODAY, **_direct_kw(_three_policy_tab()))
+    # 本頁自己產生、依裁示要換掉（或拿掉）的字串，不算上游原文。
+    templates = set(live._empty_replacements("").keys()) | {live._HLD5_EMPTY_LINE}
+
+
+    def is_exit(path, s):
+        """出口表的位置上、而且是模板字串 ⇒ 本頁自己產生的；其餘含原文的一律算上游。"""
+        if s not in templates or len(path) < 3 or path[0] != "blocks":
+            return False
+        return (base["blocks"][path[1]]["code"], path[2]) in live._EMPTY_EXITS
+
+    upstream = [(path, s) for path, s in _string_paths(base) if message in s and not is_exit(path, s)]
+    # 正控：上游原文真的印上畫面了。`policy`／`user_setting` 的表層級錯誤在空持倉時 S3 本來就不印，
+    # 那兩種只驗「不崩」（上面兩次 `_build` 沒 raise 就是）。
+    assert bool(upstream) == (table not in ("policy", "user_setting")), table
+    for path, s in upstream:                         # 同一個位置、同一個字串，一個字都不換
+        assert _at(model, path) == s, path
+    if table == "holding":
+        hld1 = logic.find_block(model, "HLD-1")
+        assert hld1["_placeholder"]["reason_text"] == message     # 原文本體：一個字都不換
+
+
+def test_第三輪1_上游原文整串等於那幾個字_原文本體不被換():
+    """第二輪的「值相等就換」會把 `errors["holding"]` 的原文本體換成警告句（紅隊 J1 後半）。"""
+    ds = _empty_dataset(table="holding", message=logic.TEXT_NO_HOLDING)
+    model = _build(ds, today=TODAY, **_direct_kw(_three_policy_tab()))
+    assert logic.find_block(model, "HLD-1")["_placeholder"]["reason_text"] == logic.TEXT_NO_HOLDING
+    assert logic.fetch_failed_text(logic.TEXT_NO_HOLDING) in logic.collect_ui_strings(model)
+
+
+def test_第三輪1_分頁名含那幾個字_照印():
+    direct = [{"source": _POLICY_TAB, "tab": logic.TEXT_NO_HOLDING, "row": 3}]
+    model = _build(**_empty_args(), today=TODAY, **_direct_kw(direct))
+    notes = logic.find_block(model, "HLD-5")["tail_notes"]
+    assert notes[1]["text"] == f"{logic.TEXT_NO_HOLDING} 第 3 列"
+
+
+def test_第三輪1_出口表就是那些位置():
+    assert live._EMPTY_EXITS == (
+        ("HLD-0", "text"), ("HLD-0", "summary_text"), ("HLD-0", "lines"),
+        ("HLD-1", "summary_text"), ("HLD-1", "detail_lines"),
+        ("HLD-2", "summary_text"), ("HLD-2", "detail_lines"),
+        ("HLD-3", "summary_text"), ("HLD-3", "detail_lines"),
+        ("HLD-8", "summary_text"), ("HLD-8", "detail_lines"),
+    )
+
+
+# 2. 規格組 V8
+
+def test_第三輪2_policy_tab_source不在direct_sources裡_raise():
+    with pytest.raises(ValueError, match="不在 direct_sources 裡"):
+        _build(**_scenario_args("full"), today=TODAY, direct=_l2_direct(), policy_tab_source=_POLICY_TAB,
+               direct_sources=_SOURCES - {_POLICY_TAB})
+
+
+# 3. 紅隊建議 2：分頁名前後空白、含換行 → ValueError，不 strip
+
+@pytest.mark.parametrize("tab", [" DIRECT", "DIRECT ", "\tDIRECT", "DI\nRECT", "DIRECT\r", "DI\rRECT"])
+def test_第三輪3_分頁名前後空白或含換行_ValueError(tab):
+    direct = _l2_direct()
+    direct[2]["tab"] = tab
+    with pytest.raises(ValueError, match="第 2 筆的 tab"):
+        _live_direct("full", direct=direct)
+
+
+# 4. 紅隊建議 3：source 不可雜湊 → TypeError，寫明哪一筆、哪個欄位
+
+@pytest.mark.parametrize("bad", [[_POLICY_TAB], {"a": 1}, {_POLICY_TAB}, 3])
+def test_第三輪4_source型別不對_TypeError寫明位置(bad):
+    direct = _l2_direct()
+    direct[1]["source"] = bad
+    with pytest.raises(TypeError, match="第 1 筆的 source"):
+        _live_direct("full", direct=direct)

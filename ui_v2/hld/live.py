@@ -80,14 +80,29 @@ DIRECT_LOCATION_TEXT = "{tab} 第 {row} 列"                                # �
 DIRECT_SUMMARY_SUFFIX = " · DIRECT {n} 筆未列入"                          # 收合時摘要尾端（有持倉時）
 DIRECT_SUMMARY_ONLY = "DIRECT {n} 筆未列入"                               # HLD-5 摘要（持倉全空時，S4 第二輪 M1）
 
-# 持倉全空而 N＞0 時（S4 第二輪 M1，總管裁定）：`logic` 寫出「尚未建立任何持倉」的出口，逐一列名。
-# 只認這幾個**完整字串**；`_apply_direct` 換完之後，模型裡若還找得到那幾個字就 raise ——
-# 那表示 `logic` 多了一個本表沒列到的出口（寧可整頁失敗，不讓畫面一邊說 N 筆、一邊說沒有持倉）。
-#   1. 恰為 `TEXT_NO_HOLDING`：HLD-0 `text`／`summary_text`；HLD-1、HLD-2、HLD-3 `summary_text` 與 `detail_lines`；
-#      HLD-8 `detail_lines`。
-#   2. `f"{ND_TEXT}：{TEXT_NO_HOLDING}"`：HLD-8 `summary_text`。
-#   3. `f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）"`：HLD-0 紅燈時的 `lines`。
-#   4. HLD-5：摘要整句換成 `DIRECT_SUMMARY_ONLY`，`_HLD5_EMPTY_LINE` 那一行拿掉（不是換字）。
+# 持倉全空而 N＞0 時（S4 第二輪 M1、第三輪 1，總管裁定）：`logic` 寫出「尚未建立任何持倉」的出口，**依位置**列名。
+# 只換下表點名的（塊、欄位）；欄位是 list 時，只換那一欄裡**整行等於** `logic` 模板的那幾行。
+# 上游的錯誤原文、保單名、分頁名一律不碰 —— 它們不住在這些位置（`HLD-1` 的上游原文住在
+# `_placeholder.reason_text`，不在表內），即使剛好含那幾個字也照印。
+# ⚠️ 第二輪是「整個模型裡值相等就換」＋「換完還找得到就 raise」：前者會連上游原文一起換，
+#    後者會因上游原文含那幾個字而整頁失敗（第三輪紅隊 J1）。兩者都已拿掉，改由測試守住
+#    「表沒漏列出口」（`test_hld_live_logic.py` 的組合測試）。
+#   模板 A 恰為 `TEXT_NO_HOLDING`；模板 B `f"{ND_TEXT}：{TEXT_NO_HOLDING}"`；
+#   模板 C `f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）"`。
+_EMPTY_EXITS = (
+    ("HLD-0", "text"),            # A
+    ("HLD-0", "summary_text"),    # A
+    ("HLD-0", "lines"),           # C（紅燈時的括號補述）
+    ("HLD-1", "summary_text"),    # A
+    ("HLD-1", "detail_lines"),    # A
+    ("HLD-2", "summary_text"),    # A
+    ("HLD-2", "detail_lines"),    # A
+    ("HLD-3", "summary_text"),    # A
+    ("HLD-3", "detail_lines"),    # A
+    ("HLD-8", "summary_text"),    # B
+    ("HLD-8", "detail_lines"),    # A
+)
+# HLD-5 另辦：摘要整句換成 `DIRECT_SUMMARY_ONLY`，`_HLD5_EMPTY_LINE` 那一行拿掉（不是換字）。
 _HLD5_EMPTY_LINE = f"{logic.TEXT_NO_HOLDING}，沒有可以展開的檔。"
 
 
@@ -100,27 +115,15 @@ def _empty_replacements(warning: str) -> dict:
     }
 
 
-def _replace_strings(node, table: dict):
-    if isinstance(node, str):
-        return table.get(node, node)
-    if isinstance(node, dict):
-        return {k: _replace_strings(v, table) for k, v in node.items()}
-    if isinstance(node, list):
-        return [_replace_strings(v, table) for v in node]
-    if isinstance(node, tuple):
-        return tuple(_replace_strings(v, table) for v in node)
-    return node
-
-
-def _strings(node):
-    if isinstance(node, str):
-        yield node
-    elif isinstance(node, dict):
-        for v in node.values():
-            yield from _strings(v)
-    elif isinstance(node, (list, tuple)):
-        for v in node:
-            yield from _strings(v)
+def _replace_exits(model: dict, warning: str) -> None:
+    table = _empty_replacements(warning)
+    for code, field in _EMPTY_EXITS:
+        block = logic.find_block(model, code)
+        value = block.get(field)
+        if isinstance(value, str):
+            block[field] = table.get(value, value)
+        elif isinstance(value, list):
+            block[field] = [table.get(line, line) if isinstance(line, str) else line for line in value]
 
 
 def _require_text(value, name: str) -> str:
@@ -139,7 +142,9 @@ def direct_holding_rows(direct, *, policy_tab_source, direct_sources) -> list:
     **每一筆都驗，不只保單分頁那一種**（S4 第二輪 J1／J2）；不合格一律 raise，不略過、不去重：
     - `direct` 不是 list／tuple、元素不是 dict → TypeError；
     - 缺 `source` 鍵、`source` 不在 `direct_sources` 裡 → ValueError（認不得的來源不能默默不數）；
-    - `tab` 不是字串 → TypeError；只有空白 → ValueError；`row` 不是正整數（含 `bool`）→ ValueError；
+      `source` 不是字串（含 list、dict 這類不可雜湊的）→ TypeError，先驗型別再查集合（第三輪建議 3）；
+    - `tab` 不是字串 → TypeError；空白、前後有空白、含換行 → ValueError，不 strip（第三輪建議 2）；
+      `row` 不是正整數（含 `bool`）→ ValueError；
     - 同一筆（`source`、`tab`、`row` 都相同）出現兩次 → ValueError。
     """
     if not isinstance(direct, (list, tuple)):
@@ -151,24 +156,29 @@ def direct_holding_rows(direct, *, policy_tab_source, direct_sources) -> list:
     if policy_tab_source not in sources:
         raise ValueError(f"policy_tab_source {policy_tab_source!r} 不在 direct_sources 裡")
     rows, seen = [], set()
-    for entry in direct:
+    for index, entry in enumerate(direct):
+        where = f"DIRECT 清單第 {index} 筆"
         if not isinstance(entry, dict):
-            raise TypeError(f"DIRECT 清單的元素應為 dict：{entry!r}")
+            raise TypeError(f"{where}應為 dict：{entry!r}")
         if "source" not in entry:
-            raise ValueError(f"DIRECT 列缺 source：{entry!r}")
+            raise ValueError(f"{where}缺 source：{entry!r}")
         source = entry["source"]
+        if not isinstance(source, str):
+            raise TypeError(f"{where}的 source 應為字串，收到 {type(source).__name__}：{entry!r}")
         if source not in sources:
-            raise ValueError(f"DIRECT 列的 source 認不得：{entry!r}")
+            raise ValueError(f"{where}的 source 認不得：{entry!r}")
         tab, row = entry.get("tab"), entry.get("row")
         if not isinstance(tab, str):
-            raise TypeError(f"DIRECT 列的分頁名應為字串：{entry!r}")
+            raise TypeError(f"{where}的 tab 應為字串，收到 {type(tab).__name__}：{entry!r}")
         if not tab.strip():
-            raise ValueError(f"DIRECT 列的分頁名是空白：{entry!r}")
+            raise ValueError(f"{where}的 tab 是空白：{entry!r}")
+        if tab != tab.strip() or "\n" in tab or "\r" in tab:
+            raise ValueError(f"{where}的 tab 前後有空白或含換行：{entry!r}")
         if isinstance(row, bool) or not isinstance(row, int) or row <= 0:
-            raise ValueError(f"DIRECT 列的列號不是正整數：{entry!r}")
+            raise ValueError(f"{where}的 row 不是正整數：{entry!r}")
         key = (source, tab, row)
         if key in seen:
-            raise ValueError(f"DIRECT 列重複（同一來源、分頁、列號）：{entry!r}")
+            raise ValueError(f"{where}重複（同一 source、tab、row）：{entry!r}")
         seen.add(key)
         if source == policy_tab_source:
             rows.append({"tab": tab, "row": row})
@@ -210,10 +220,7 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
     ]
     if has_holdings:
         return model
-    model = _replace_strings(model, _empty_replacements(warning))
-    left = [text for text in _strings(model) if logic.TEXT_NO_HOLDING in text]
-    if left:
-        raise ValueError(f"「{logic.TEXT_NO_HOLDING}」還有沒換到的出口：{left!r}")
+    _replace_exits(model, warning)
     return model
 
 
