@@ -435,6 +435,21 @@ def vol_pct(navs) -> float | None:
 # ───────────────────────── 取數與切片 ─────────────────────────
 
 
+def pending_tables(dataset) -> frozenset:
+    """這一份 dataset 裡**尚未接上**的表名。
+
+    「尚未接上」≠「讀失敗」：接線狀態由資料來源層交給畫面，畫面不自己猜。
+    體例同 `ui_v2/alo/source.py`：尚未接上的表給空列表、**不進 `errors`**
+    （它把清單放在 `notes["pending_tables"]`，清單來自 L2 `settings_store.PENDING_TABLES`）。
+    本頁沒有 `notes` 這一層，`build_page_model()` 只吃 dataset，所以把同一個名字的鍵
+    放進 dataset —— 這是本頁 dataset **唯一新增的鍵**。
+    ⚠️ 不叫 `pending`：`ui_v2/mkt/source.py` 的 `notes["pending"]` 是「鍵 → 原因代碼」，
+       語意不同，同名會讓人以為可以互換。
+    ⚠️ 假資料模式**不設**這個鍵（假資料的每一張表都算接上了）⇒ 回空集合，畫面一格不變。
+    """
+    return frozenset(dataset.get("pending_tables") or ())
+
+
 def _rows_for(dataset, table, fund_code):
     return [row for row in dataset.get(table, []) if row["fund_code"] == fund_code]
 
@@ -520,9 +535,6 @@ def fund_metrics(dataset, fund, window):
     code = fund["fund_code"]
     ccy = fund["ccy"]
     errors = dataset.get("errors", {})
-    # `HLD-5` 用它找回**這一筆**持倉。`44` 4.1：`holding` 的主鍵是 `holding_id`；
-    # 同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
-    # 只拿 `fund_code` 找會讓同基金的兩列互相蓋掉。
     nav_error = errors.get("nav")
     div_error = errors.get("dividend")
 
@@ -557,8 +569,7 @@ def fund_metrics(dataset, fund, window):
     vol = vol_pct(navs)
     draw = drawdown_pct(navs)
 
-    all_div_rows = _rows_for(dataset, "dividend", code)
-    div_rows = _in_window(all_div_rows, "ex_date", window)
+    div_rows = _in_window(_rows_for(dataset, "dividend", code), "ex_date", window)
     per_unit_total = sum(row["div_per_unit_orig_ccy"] for row in div_rows)
     units = fund["units_shares"]
     div_total = per_unit_total * units
@@ -575,16 +586,18 @@ def fund_metrics(dataset, fund, window):
             return "區間內無配息"
         return None
 
-    # 這一檔在 `dividend` 表裡**一列也沒有**（不限區間）＝ 配息資料沒來或沒接上，
-    # 不是「區間內無配息」。判法與上面 `nav_missing` 同一個形狀（那一支是缺淨值）。
+    # 整張 `dividend` 表**尚未接上** ⇒ 每一檔的配息值都是 `⬜ 資料未備`，不是「區間內無配息」。
+    # 訊號是 dataset 的 `pending_tables`（表層級，見 `pending_tables()`）。
+    # ⛔ **不看「這一檔在表裡有沒有列」**：累積型基金本來就不配息，表已接上時它一列也沒有，
+    #    `44` HLD-3 空狀態欄給它的就是「⬜ 不適用：區間內無配息」。逐檔用「零列」判缺，
+    #    會把累積型基金報成資料未備（總管 2026-10-02 第 2 輪裁定）。
+    #    「某一檔的配息列被轉換規則丟掉」這種逐檔情形本輪不處理 —— 要等 L2 能交出
+    #    「被略過的列」才分得出來，登記到轉換層那一輪。
     # 依據：`44` 5.5 `來源缺` 的觸發條件「這一塊依賴的來源一筆資料也沒有」，主值位置顯示
-    # `⬜ 資料未備`（與 `HLD-3` 空狀態欄「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」同一個字面值）；
-    # `49` 2.6 `dividend.ccy` 那一列：走 MoneyDJ 的基金配息一列都寫不進去
-    # ⇒ `HLD-3` 期間配息顯示資料未備。
-    # ⚠️ 只看 `dividend` 這一張表 —— 它是 `HLD-3` 來源欄點名的表；不另外拿 `fund_profile`
-    #    （`HLD-3` 來源欄沒有點名它）去猜這一檔是不是累積型。
-    # ⚠️ 取數失敗不走這一支：`errors["dividend"]` 由 `main_value_state()` 先判成 `系統錯誤`。
-    div_missing = bool(has_window and not all_div_rows)
+    # `⬜ 資料未備`（與 `HLD-3` 空狀態欄「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」同一個字面值）。
+    # ⚠️ 區間未設時照舊「尚未設定區間」（與 `nav_missing` 同一個形狀）；
+    #    取數失敗照舊由 `main_value_state()` 先判成 `系統錯誤`。
+    div_missing = bool(has_window and "dividend" in pending_tables(dataset))
     na_div = None if div_missing else div_na()
     na_div_text = not_applicable_text(na_div) if na_div else None
 
@@ -610,6 +623,9 @@ def fund_metrics(dataset, fund, window):
 
     return {
         "_fund_code": code,
+        # `HLD-5` 用它找回**這一筆**持倉、也用它當展開鍵。`44` 4.1：`holding` 的主鍵是
+        # `holding_id`；同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
+        # 只拿 `fund_code` 找會讓同基金的兩列互相蓋掉。
         "_holding_id": fund["holding_id"],
         "_ccy": ccy,
         "fund_name": fund["fund_name"],
@@ -1399,6 +1415,9 @@ HLD5_OPEN_DISABLED_REASON = "這一檔已經展開"
 def open_fund_after_click(current, clicked):
     """按下某一檔的展開鈕之後，展開中的是哪一檔。
 
+    ⚠️ 2026-10-02 起兩個參數與回傳值都是**持倉的 `holding_id`**，不是 `fund_code`
+       （理由見 `_build_hld5` 的 `_holding_id` 那一行）。函式名與 session 鍵名沿用舊名，不改。
+
     `44` HLD-5 規則欄逐字：「點一檔展開一檔，**同時最多展開一檔**」，
     判準逐字：「展開第二檔時第一檔自動收合，**同時處於展開狀態的檔數為 1**」。
     ⇒ 按下去就換成它，前一檔自動收合。`current` 只是為了讓這條規則看得見，不影響結果。
@@ -1445,13 +1464,18 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
         items.append(
             {
                 "_fund_code": metric["_fund_code"],
+                # 展開鍵（總管 2026-10-02 第 2 輪裁定）：`44` 4.1 畫面上一列＝一組
+                # （`policy_id`, `fund_code`），所以「點一檔展開一檔」的「檔」是畫面上那一列。
+                # 用 `fund_code` 當鍵，同一檔基金掛在兩張保單下時兩列會一起展開，
+                # 頁面的按鈕鍵也會撞號（`StreamlitDuplicateElementKey`）。
+                "_holding_id": metric["_holding_id"],
                 "_ccy": metric["_ccy"],
                 # `44` :119／:128／§5.4「展開區不自動展開」—— 上一輪寫 `index == 0`，三處都撞。
-                "_open": metric["_fund_code"] == open_fund,
+                "_open": metric["_holding_id"] == open_fund,
                 "_button": _button(
                     HLD5_OPEN_LABEL,
                     "展開",
-                    enabled=metric["_fund_code"] != open_fund,
+                    enabled=metric["_holding_id"] != open_fund,
                     disabled_reason=HLD5_OPEN_DISABLED_REASON,
                 ),
                 "_fields": fields,
@@ -1787,6 +1811,8 @@ def build_page_model(
     open_fund=None,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
+
+    `open_fund`：展開中那一列持倉的 `holding_id`（2026-10-02 起；之前是 `fund_code`）。
 
     ⚠️ **登記（`44` HLD-4 自己登記為待客戶裁決的那一個缺口）**：
     使用者按了「存檔」、沒按「套用」，然後重新載入 —— 此時三張核心卡顯示什麼，`44` 沒有訂。

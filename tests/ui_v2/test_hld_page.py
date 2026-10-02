@@ -296,8 +296,9 @@ def test_A9_hld_kv類別名在樣式表裡_所以舊那個條件恆真():
 
     # (4) 兩個 token 的分辨力真的不同 —— 展開一檔之後逐一數給它看。
     model = logic.build_page_model(**fixtures.scenario("full"))
-    code = logic.find_block(model, "HLD-5")["_items"][0]["_fund_code"]
-    at.button(key=f"hld5_open_{code}").click().run()
+    first = logic.find_block(model, "HLD-5")["_items"][0]
+    code = first["_fund_code"]
+    at.button(key=f"hld5_open_{first['_holding_id']}").click().run()
     whole = "\n".join(e.value for e in at.markdown)
     assert whole.count(_KV_OPEN_TAG) == 1, whole.count(_KV_OPEN_TAG)
     assert whole.count("hld-kv") > 1, whole.count("hld-kv")   # 樣式表那幾筆把它灌爆
@@ -363,23 +364,26 @@ def test_HLD5那枚展開鈕是活的_按下去真的展開一檔():
     """
     at = _run("full")
     model = logic.build_page_model(**fixtures.scenario("full"))
-    codes = [i["_fund_code"] for i in logic.find_block(model, "HLD-5")["_items"]]
+    items = logic.find_block(model, "HLD-5")["_items"]
+    codes = [i["_fund_code"] for i in items]
+    # 展開鍵是持倉的 `holding_id`（總管 2026-10-02 第 2 輪裁定，`44` 4.1）。
+    hids = [i["_holding_id"] for i in items]
     assert len(codes) >= 2, "少於兩檔就驗不到「展開第二檔時第一檔自動收合」"
 
     # 初次載入：零檔展開（`44` :119／:128／:2315）。
     assert not any(_expanded_fields(at)), "初次載入就有一檔展開了"
 
     # 點第一檔 → 只有它展開。
-    at.button(key=f"hld5_open_{codes[0]}").click().run()
-    assert at.session_state[logic.HLD5_OPEN_KEY] == codes[0]
+    at.button(key=f"hld5_open_{hids[0]}").click().run()
+    assert at.session_state[logic.HLD5_OPEN_KEY] == hids[0]
     assert _expanded_fields(at) == [codes[0]], _expanded_fields(at)
     # `44` 5.3：展開中的那一檔，它的鈕停用而且**不隱藏**。
-    assert at.button(key=f"hld5_open_{codes[0]}").disabled is True
+    assert at.button(key=f"hld5_open_{hids[0]}").disabled is True
 
     # 點第二檔 → 第一檔自動收合，同時處於展開狀態的檔數為 1（`44` :711 判準逐字）。
-    at.button(key=f"hld5_open_{codes[1]}").click().run()
+    at.button(key=f"hld5_open_{hids[1]}").click().run()
     assert _expanded_fields(at) == [codes[1]], _expanded_fields(at)
-    assert at.button(key=f"hld5_open_{codes[0]}").disabled is False
+    assert at.button(key=f"hld5_open_{hids[0]}").disabled is False
 
 
 def test_HLD5展開之後仍然不巢狀第二層():
@@ -387,8 +391,8 @@ def test_HLD5展開之後仍然不巢狀第二層():
     at = _run("full")
     before = len(at.expander)
     model = logic.build_page_model(**fixtures.scenario("full"))
-    code = logic.find_block(model, "HLD-5")["_items"][0]["_fund_code"]
-    at.button(key=f"hld5_open_{code}").click().run()
+    hid = logic.find_block(model, "HLD-5")["_items"][0]["_holding_id"]
+    at.button(key=f"hld5_open_{hid}").click().run()
     assert before == 5, before
     assert len(at.expander) == before, [e.label for e in at.expander]
 
@@ -447,18 +451,19 @@ def test_A11_展開之後在同一個session內回不到零檔():
     """
     at = _run("full")
     model = logic.build_page_model(**fixtures.scenario("full"))
-    code = logic.find_block(model, "HLD-5")["_items"][0]["_fund_code"]
-    at.button(key=f"hld5_open_{code}").click().run()
-    assert at.session_state[logic.HLD5_OPEN_KEY] == code
+    first = logic.find_block(model, "HLD-5")["_items"][0]
+    code, hid = first["_fund_code"], first["_holding_id"]
+    at.button(key=f"hld5_open_{hid}").click().run()
+    assert at.session_state[logic.HLD5_OPEN_KEY] == hid
 
     at.query_params["scenario"] = "empty"
     at.run()
-    assert at.session_state[logic.HLD5_OPEN_KEY] == code, "切到別的情境就被清掉了？"
+    assert at.session_state[logic.HLD5_OPEN_KEY] == hid, "切到別的情境就被清掉了？"
 
     at.query_params["scenario"] = "full"
     at.run()
-    assert at.session_state[logic.HLD5_OPEN_KEY] == code
-    assert at.button(key=f"hld5_open_{code}").disabled is True
+    assert at.session_state[logic.HLD5_OPEN_KEY] == hid
+    assert at.button(key=f"hld5_open_{hid}").disabled is True
     assert _expanded_fields(at) == [code]
 
 
@@ -522,3 +527,65 @@ def test_情境閘門認得的名字就是fixtures那張表():
     # 那七顆草稿鈕是這份清單的**子集**，而且刻意不等於它（理由見 fixtures 該處註解）。
     assert set(fixtures.SCENARIO_NAMES) < set(fixtures.ALL_SCENARIO_NAMES)
     assert set(fixtures.SCENARIO_LABELS) == set(fixtures.SCENARIO_NAMES)
+
+
+# ═══════ 同一檔基金掛在兩張保單下（總管 2026-10-02 第 2 輪裁定） ═══════
+
+
+def _two_policy_app(root):
+    """`full` 情境再加一筆 `BBBB`，掛在 `DIRECT` 下：兩列同 `fund_code`、不同 `holding_id`。
+
+    ⚠️ 只在這一次 rerun 內換掉 `fixtures.scenario`，畫完就換回來 ——
+       AppTest 與其他測試共用同一個行程，不還原會汙染別的測試。
+    """
+    import sys
+
+    sys.path.insert(0, root)
+    from ui_v2.hld import fixtures, page
+
+    original = fixtures.scenario
+
+    def patched(name):
+        out = original(name)
+        ds = out["dataset"]
+        base = next(h for h in ds["holding"] if h["fund_code"] == "BBBB")
+        second = dict(base)
+        second.update(holding_id="H-BBBB-DIRECT", policy_id="DIRECT", units_shares=10.0)
+        ds["holding"].append(second)
+        return out
+
+    fixtures.scenario = patched
+    try:
+        page.render()
+    finally:
+        fixtures.scenario = original
+
+
+def test_A正控_同基金兩張保單_頁面不崩潰_展開一列只開那一列():
+    """修回之前：展開鈕的鍵是 `hld5_open_<fund_code>`，兩列 `BBBB` 撞號 ⇒
+    `StreamlitDuplicateElementKey`，整頁畫不出來。
+
+    ⚠️ 拿掉修復（`page.py` 的鍵改回 `_fund_code`）本條轉紅。
+    """
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_function(_two_policy_app, args=(str(_ROOT),), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    keys = [b.key for b in at.button if (b.key or "").startswith("hld5_open_")]
+    assert len(keys) == len(set(keys)) == 4, keys
+
+    def opened_blocks():
+        body = "\n".join(e.value for e in at.markdown if "<style>" not in e.value)
+        return [chunk for chunk in body.split(_KV_OPEN_TAG)[1:]]
+
+    for hid, units in (("H-BBBB", "2,080.000"), ("H-BBBB-DIRECT", "10.000")):
+        at.button(key=f"hld5_open_{hid}").click().run()
+        assert not at.exception, [e.value for e in at.exception]
+        assert at.session_state[logic.HLD5_OPEN_KEY] == hid
+        blocks = opened_blocks()
+        assert len(blocks) == 1, len(blocks)
+        assert units in blocks[0], (hid, blocks[0][:300])
+        assert at.button(key=f"hld5_open_{hid}").disabled is True
+        other = "H-BBBB-DIRECT" if hid == "H-BBBB" else "H-BBBB"
+        assert at.button(key=f"hld5_open_{other}").disabled is False

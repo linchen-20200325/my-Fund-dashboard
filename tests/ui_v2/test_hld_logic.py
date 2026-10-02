@@ -630,7 +630,7 @@ def test_同時最多展開一檔_而且初次載入一檔也不展開():
     items = logic.find_block(model, "HLD-5")["_items"]
     assert sum(1 for item in items if item["_open"]) == 0
 
-    picked = logic.build_page_model(fixtures.dataset_full(), open_fund="BBBB")
+    picked = logic.build_page_model(fixtures.dataset_full(), open_fund="H-BBBB")
     opened = [i for i in logic.find_block(picked, "HLD-5")["_items"] if i["_open"]]
     assert len(opened) == 1 and opened[0]["_fund_code"] == "BBBB"
 
@@ -1297,8 +1297,8 @@ def test_第4件正控_同時最多展開一檔且初次載入零檔():
     items = logic.find_block(model, "HLD-5")["_items"]
     assert items, "一檔也沒有 —— 這一條會變成空掃"
     assert sum(1 for i in items if i["_open"]) == 0
-    for code in [i["_fund_code"] for i in items]:
-        opened = logic.build_page_model(fixtures.dataset_full(), open_fund=code)
+    for code, hid in [(i["_fund_code"], i["_holding_id"]) for i in items]:
+        opened = logic.build_page_model(fixtures.dataset_full(), open_fund=hid)
         rows = logic.find_block(opened, "HLD-5")["_items"]
         assert [i["_fund_code"] for i in rows if i["_open"]] == [code], code
         # `44` 5.3：展開中的那一檔，它的鈕停用而且不隱藏，且附一行原因。
@@ -1310,7 +1310,7 @@ def test_第4件正控_同時最多展開一檔且初次載入零檔():
 
 def test_第4件正控_那枚鈕是44五點三的展開類且不寫任何表():
     """`44` 5.3：八類之外沒有第九類；`導覽`／`展開` 什麼都不寫。"""
-    model = logic.build_page_model(fixtures.dataset_full(), open_fund="AAAA")
+    model = logic.build_page_model(fixtures.dataset_full(), open_fund="H-AAAA")
     items = logic.find_block(model, "HLD-5")["_items"]
     assert len(items) == 3, len(items)
     for item in items:
@@ -2013,12 +2013,16 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
+        # ⚠️ 2026-10-02（總管第 2 輪裁定：HLD-5 展開鍵改用 `holding_id`）：`HLD-5` 有持倉的格摘要換新值
+        #    （有意識的更正，不是漏刪）。每一列多一個機器鍵 `_holding_id`，畫面文字一格未動。
+        #    換之前先證明：把現行模型 `_items` 每一列的 `_holding_id` 拿掉再算摘要，本表舊值逐格全數重現
+        #    （量測日 2026-10-02）；其餘八塊一格未動。
         ("full", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
         ("full", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
         ("full", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("full", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("full", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("full", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("full", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2027,7 +2031,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("srcmiss", "HLD-2"): ('灰', '資料未備', "9e18e3388c92"),
         ("srcmiss", "HLD-3"): ('灰', '資料未備', "038877e4c54c"),
         ("srcmiss", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("srcmiss", "HLD-5"): ('中性', 'ok', "39affe04cec8"),
+        ("srcmiss", "HLD-5"): ('中性', 'ok', "0b1bb728a6ae"),
         ("srcmiss", "HLD-6"): ('中性', 'ok', "0fa8eb2d70c6"),
         ("srcmiss", "HLD-7"): ('中性', 'ok', "697f3caf3268"),
         ("srcmiss", "HLD-8"): ('灰', '資料未備', "11c8446e411f"),
@@ -2036,7 +2040,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("bizexc", "HLD-2"): ('黃', '業務例外', "10f06cc9db29"),
         ("bizexc", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("bizexc", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
-        ("bizexc", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("bizexc", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("bizexc", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
         ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
@@ -2045,7 +2049,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("fetchfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "49dd1baf455f"),
         ("fetchfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("fetchfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("fetchfail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("fetchfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("fetchfail", "HLD-7"): ('中性', 'ok', "1f8c41588f98"),
         ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "5f6082f726fb"),
@@ -2054,7 +2058,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("nothr", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
-        ("nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2081,7 +2085,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("noexceed", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("noexceed", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("noexceed", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
-        ("noexceed", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("noexceed", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("noexceed", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("noexceed", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("noexceed", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2090,7 +2094,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("other_window", "HLD-2"): ('中性', 'ok', "5ea8fe7a7d69"),
         ("other_window", "HLD-3"): ('中性', 'ok', "d5547893ebe0"),
         ("other_window", "HLD-4"): ('中性', 'ok', "4af1779c6576"),
-        ("other_window", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("other_window", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("other_window", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("other_window", "HLD-7"): ('中性', 'ok', "ad6c5cd4bc32"),
         ("other_window", "HLD-8"): ('中性', 'ok', "2a28e2a9534f"),
@@ -2099,7 +2103,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("onenav", "HLD-2"): ('黃', '業務例外', "eac4b10c9634"),
         ("onenav", "HLD-3"): ('黃', '業務例外', "a0b4b23b64c4"),
         ("onenav", "HLD-4"): ('中性', 'ok', "ff7c473013a3"),
-        ("onenav", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("onenav", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("onenav", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("onenav", "HLD-7"): ('灰', '資料未備', "5ac721b1d7cb"),
         ("onenav", "HLD-8"): ('黃', '業務例外', "6131e0d46dd5"),
@@ -2108,7 +2112,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("badrange", "HLD-2"): ('黃', '業務例外', "4d9d1c56d7e3"),
         ("badrange", "HLD-3"): ('黃', '業務例外', "56270fe59261"),
         ("badrange", "HLD-4"): ('中性', 'ok', "14676aae6af8"),
-        ("badrange", "HLD-5"): ('中性', 'ok', "56f4d7c00fa8"),
+        ("badrange", "HLD-5"): ('中性', 'ok', "206e13e2de2d"),
         ("badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("badrange", "HLD-7"): ('灰', '資料未備', "15a039bc1d56"),
         ("badrange", "HLD-8"): ('黃', '業務例外', "2d3de88d51b7"),
@@ -2117,7 +2121,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("full_then_badrange", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("full_then_badrange", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("full_then_badrange", "HLD-4"): ('中性', 'ok', "044134dd12f9"),
-        ("full_then_badrange", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("full_then_badrange", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full_then_badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full_then_badrange", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("full_then_badrange", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2281,12 +2285,16 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
+        # ⚠️ 2026-10-02（總管第 2 輪裁定：HLD-5 展開鍵改用 `holding_id`）：`HLD-5` 有持倉的格摘要換新值
+        #    （有意識的更正，不是漏刪）。每一列多一個機器鍵 `_holding_id`，畫面文字一格未動。
+        #    換之前先證明：把現行模型 `_items` 每一列的 `_holding_id` 拿掉再算摘要，本表舊值逐格全數重現
+        #    （量測日 2026-10-02）；其餘八塊一格未動。
         ("holdfail", "HLD-0"): ('紅', '系統錯誤', "da6f97c35600"),
         ("holdfail", "HLD-1"): ('紅', '系統錯誤', "6781b2bdacd5"),
         ("holdfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("holdfail", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("holdfail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("holdfail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2295,7 +2303,7 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("profilefail", "HLD-2"): ('紅', '系統錯誤', "020d64867585"),
         ("profilefail", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("profilefail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
-        ("profilefail", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("profilefail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("profilefail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("profilefail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
         ("profilefail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2304,7 +2312,7 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("holdfail_nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail_nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
-        ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "77305900bc65"),
+        ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail_nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail_nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
         ("holdfail_nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
@@ -2476,48 +2484,71 @@ def _drop_dividends(ds, code=None):
     return ds
 
 
-def test_B正控_某檔配息一列都沒有_HLD3兩個主值顯示資料未備而不是不適用():
-    """`49` 2.6 `dividend.ccy` 列：走 MoneyDJ 的基金配息一列都寫不進去 ⇒ `HLD-3` 顯示資料未備。"""
-    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full(), "CCCC"))
+def _dividend_pending(ds):
+    """配息表**尚未接上**：資料來源層交空列表、不進 `errors`，並在 `pending_tables` 點名它。
+
+    體例同 `ui_v2/alo/source.py`（L2 `settings_store.PENDING_TABLES` 列了 `dividend`）。
+    """
+    ds["dividend"] = []
+    ds["pending_tables"] = ["dividend"]
+    return ds
+
+
+def test_B正控_配息表尚未接上_三檔的配息值全是資料未備而不是不適用():
+    """`44` 5.5 `來源缺`：這一塊依賴的來源一筆資料也沒有 → 主值位置 `⬜ 資料未備`。
+
+    修回之前：三檔都印「⬜ 不適用：區間內無配息」—— 把「還沒接上」報成「沒有配息」。
+    ⚠️ 拿掉修復（`div_missing` 寫死 False）本條轉紅。
+    """
+    model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
+    hld3 = logic.find_block(model, "HLD-3")
+    trace = logic.find_block(model, "HLD-7")["_rows"]
+    for code in ("AAAA", "BBBB", "CCCC"):
+        group = logic.fund_group(hld3, code)
+        for mv in group["main_values"]:
+            assert mv["_state"] == logic.STATE_MISSING, (code, mv)
+            assert mv["text"] == logic.ND_TEXT, (code, mv)
+        # `HLD-8` 的本金類配息佔比同一套；同一列的最大回撤照出數。
+        row = logic.find_row(logic.find_block(model, "HLD-8"), code)
+        assert row["principal"]["text"] == logic.ND_TEXT, (code, row["principal"])
+        assert row["drawdown"]["_state"] == logic.STATE_OK, code
+        # `HLD-7` 軌跡輸出欄與所在那一塊逐字相同（`44` HLD-7 判準）。
+        mine = {r["_indicator"]: r["output_text"] for r in trace if r["_fund_code"] == code}
+        for indicator in ("期間配息合計", "配息佔淨值比", "本金類配息佔比"):
+            shown = logic.value_shown_in_block(
+                model, logic.INDICATOR_OWNER[indicator], code, indicator)
+            assert shown == logic.ND_TEXT, (code, indicator, shown)
+            assert mine[indicator] == shown, (code, indicator, mine[indicator])
+        # 淨值那一側不受影響。
+        group = logic.fund_group(logic.find_block(model, "HLD-2"), code)
+        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
+    assert hld3["_state"] == logic.STATE_MISSING
+
+
+def test_B反例_表已接上而某一檔一列配息都沒有_仍是不適用區間內無配息():
+    """累積型基金本來就不配息：表已接上時，它在配息表裡一列也沒有。
+
+    `44` HLD-3 空狀態欄：區間內無配息列 → `⬜ 不適用：區間內無配息`。
+    ⛔ 逐檔用「零列」判成資料未備，就是把累積型基金報成資料未備（總管第 2 輪裁定）。
+    ⚠️ 拿掉修復、改回逐檔判法（`div_missing = 這一檔零列`）本條轉紅。
+    """
+    ds = _drop_dividends(fixtures.dataset_full(), "CCCC")
+    assert "pending_tables" not in ds
+    model = logic.build_page_model(ds)
+    na = logic.not_applicable_text("區間內無配息")
     group = logic.fund_group(logic.find_block(model, "HLD-3"), "CCCC")
-    for mv in group["main_values"]:
-        assert mv["_state"] == logic.STATE_MISSING, mv
-        assert mv["text"] == logic.ND_TEXT, mv
-        assert "不適用" not in mv["text"], mv
+    assert [mv["text"] for mv in group["main_values"]] == [na] * 2, group
+    assert all(mv["_state"] == logic.STATE_BIZ for mv in group["main_values"])
+    row = logic.find_row(logic.find_block(model, "HLD-8"), "CCCC")
+    assert row["principal"]["text"] == na, row["principal"]
     # 另兩檔照出數。
     for code in ("AAAA", "BBBB"):
         group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
         assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
-    # `HLD-8` 的本金類配息佔比同一套；同一列的最大回撤照出數。
-    row = logic.find_row(logic.find_block(model, "HLD-8"), "CCCC")
-    assert row["principal"]["_state"] == logic.STATE_MISSING
-    assert row["principal"]["text"] == logic.ND_TEXT
-    assert row["drawdown"]["_state"] == logic.STATE_OK
-    # `HLD-7` 軌跡的輸出欄與所在那一塊逐字相同（構造保證，這裡驗它沒被這次改動打破）。
-    trace = {r["_indicator"]: r["output_text"]
-             for r in logic.find_block(model, "HLD-7")["_rows"] if r["_fund_code"] == "CCCC"}
-    for indicator in ("期間配息合計", "配息佔淨值比", "本金類配息佔比"):
-        shown = logic.value_shown_in_block(model, logic.INDICATOR_OWNER[indicator],
-                                           "CCCC", indicator)
-        assert shown == logic.ND_TEXT, (indicator, shown)
-        assert trace[indicator] == shown, (indicator, trace[indicator])
-
-
-def test_B正控_整張配息表沒接上_三檔的配息值全是資料未備():
-    """`dividend` 尚未接上（L2 `PENDING_TABLES`）時交來的是空列表、不進 `errors`。"""
-    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full()))
-    for code in ("AAAA", "BBBB", "CCCC"):
-        group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
-        assert [mv["text"] for mv in group["main_values"]] == [logic.ND_TEXT] * 2, code
-    assert logic.find_block(model, "HLD-3")["_state"] == logic.STATE_MISSING
-    # 淨值那一側不受影響。
-    for code in ("AAAA", "BBBB", "CCCC"):
-        group = logic.fund_group(logic.find_block(model, "HLD-2"), code)
-        assert all(mv["_state"] == logic.STATE_OK for mv in group["main_values"]), code
 
 
 def test_B反例_有配息列只是不落在區間內_仍是不適用區間內無配息():
-    """`44` HLD-3 空狀態欄：區間內無配息列 → `⬜ 不適用：區間內無配息`。這一句不能被這次改掉。"""
+    """`44` HLD-3 空狀態欄那一句不能被這次改掉。"""
     model = logic.build_page_model(fixtures.dataset_one_nav())
     for code in ("AAAA", "BBBB", "CCCC"):
         assert any(r["fund_code"] == code for r in fixtures.dividends()), code
@@ -2526,32 +2557,59 @@ def test_B反例_有配息列只是不落在區間內_仍是不適用區間內�
         assert texts == [logic.not_applicable_text("區間內無配息")] * 2, (code, texts)
 
 
-def test_B反例_配息取數失敗仍是取數失敗_區間未設仍是尚未設定區間():
-    """沒有配息列的時候，`errors` 與「尚未設定區間」的優先序一格未動。"""
-    ds = _drop_dividends(fixtures.dataset_full(), "CCCC")
+def test_B反例_表尚未接上時_取數失敗仍是取數失敗_區間未設仍是尚未設定區間():
+    """優先序一格未動：失敗 → 缺 → 不適用。區間沒設時「尚未設定區間」是真話，照印。"""
+    ds = _dividend_pending(fixtures.dataset_full())
     ds["errors"] = {"dividend": fixtures.FETCH_FAIL_MESSAGE}
     group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
     assert [mv["_state"] for mv in group["main_values"]] == [logic.STATE_ERROR] * 2
 
-    ds = _drop_dividends(fixtures.dataset_badrange(), "CCCC")
+    ds = _dividend_pending(fixtures.dataset_badrange())
     group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "CCCC")
     assert [mv["text"] for mv in group["main_values"]] == [logic.NA_NO_WINDOW] * 2
 
 
+def test_B反例_假資料模式不設pending_tables_畫面一格不變():
+    """總管第 2 輪裁定：這個鍵假資料模式不設。"""
+    for name in fixtures.ALL_SCENARIO_NAMES:
+        ds = fixtures.scenario(name)["dataset"]
+        assert "pending_tables" not in ds, name
+        assert logic.pending_tables(ds) == frozenset(), name
+
+
 def test_B連帶_缺配息的檔不得被算進HLD1卡尾的缺淨值():
-    """門檻用的是「配息佔淨值比」，而 `CCCC` 缺的是配息、淨值是齊的。
+    """門檻用的是「配息佔淨值比」，配息表尚未接上而淨值是齊的。
 
     卡尾那一行說「另有 N 檔**缺淨值**」—— 把缺配息的檔算進去就是一句假話。
     反向：淨值真的被抽掉時，那一行照舊數得到它。
+    ⚠️ 拿掉 `_NAV_FED_INDICATORS` 那一段（缺什麼都算進缺淨值）本條轉紅。
     """
-    model = logic.build_page_model(_drop_dividends(fixtures.dataset_full(), "CCCC"))
+    model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
     hld1 = logic.find_block(model, "HLD-1")
     assert hld1["missing_nav_count"] == 0, hld1["tail_lines"]
     assert not any("缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
-    assert not any(row["_fund_code"] == "CCCC" for row in hld1["_rows"])
     # `HLD-0` 的 N 仍等於 `HLD-1` 列數。
     assert logic.find_block(model, "HLD-0")["_deviation_count"] == len(hld1["_rows"])
 
     srcmiss = logic.find_block(logic.build_page_model(fixtures.dataset_srcmiss()), "HLD-1")
     assert srcmiss["missing_nav_count"] == 1
     assert any("缺淨值" in line for line in srcmiss["tail_lines"])
+
+
+def test_A正控_同基金兩張保單_展開一列只開那一列_鈕鍵不撞號():
+    """總管第 2 輪裁定：`44` 4.1 畫面上一列＝一組（`policy_id`, `fund_code`），
+    「點一檔展開一檔」的「檔」是畫面上那一列 ⇒ 展開鍵用 `holding_id`。
+
+    修回之前：展開鍵是 `fund_code`，兩列 `BBBB` 一起開、兩枚鈕一起停用。
+    ⚠️ 拿掉修復（`_open` 改回比 `fund_code`）本條轉紅。
+    """
+    ds, base, second = _two_policy_bbbb()
+    items = logic.find_block(logic.build_page_model(ds), "HLD-5")["_items"]
+    ids = [it["_holding_id"] for it in items]
+    assert len(ids) == len(set(ids)) == 4, ids
+    for hid in (base["holding_id"], second["holding_id"]):
+        rows = logic.find_block(logic.build_page_model(ds, open_fund=hid), "HLD-5")["_items"]
+        opened = [it for it in rows if it["_open"]]
+        assert [it["_holding_id"] for it in opened] == [hid], [i["_holding_id"] for i in opened]
+        disabled = [it["_holding_id"] for it in rows if not it["_button"]["_enabled"]]
+        assert disabled == [hid], disabled
