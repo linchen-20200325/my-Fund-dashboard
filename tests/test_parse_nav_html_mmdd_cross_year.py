@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""`_parse_nav_html` 的 MM/DD 補年份必須跨年判斷(重用 SSOT `_infer_year_for_mmdd`)。
+"""`_parse_nav_html` 的 MM/DD 補年份:最近候選年規則。
 
-原 bug:一律補今年 → today 為 1 月時,12 月條目被補成今年 12 月(未來日期),
-排序後最後一筆變成假的 12 月值,轉換層再把這些列當未來日期拒收。
-不連網;today 以 monkeypatch `nav_metrics._tw_today` 固定。
+以台灣今天的前一年／今年／下一年組三個候選,取離今天最近者;
+最近者晚於今天 → 此筆不寫、計數於 `attrs["mmdd_rejected"]`。
+原 bug:一律補今年 → 1 月時 12 月條目變成未來日期;改用「晚於今天推回去年」
+又會把近期未來條目變成去年的假歷史值。本檔兩種都守。
+不連網;today 以 monkeypatch `nav_metrics._tw_today`(或 `_dt_mod`)固定。
 """
 import datetime as dt
 
@@ -22,6 +24,16 @@ def _parse(monkeypatch, today, rows):
     return nav_metrics._parse_nav_html(_html(rows))
 
 
+def _dates(s):
+    return [d.date() for d in s.index]
+
+
+def _mmdd(d):
+    return f"{d.month:02d}/{d.day:02d}"
+
+
+# ── 跨年正控:1/5 讀到 12 月條目 → 去年,照收 ─────────────────────────
+
 CROSS_ROWS = [("12/22", "10.10"), ("12/23", "10.11"), ("12/24", "10.12"), ("12/26", "10.13"),
               ("12/29", "10.14"), ("12/30", "10.15"), ("12/31", "10.16"),
               ("01/02", "10.20"), ("01/04", "10.21"), ("01/05", "10.22")]
@@ -30,50 +42,74 @@ CROSS_ROWS = [("12/22", "10.10"), ("12/23", "10.11"), ("12/24", "10.12"), ("12/2
 def test_jan5_cross_year_dec_goes_to_last_year(monkeypatch):
     today = dt.date(2027, 1, 5)
     s = _parse(monkeypatch, today, CROSS_ROWS)
-    dates = [d.date() for d in s.index]
+    dates = _dates(s)
     assert len(s) == 10
-    assert all(d <= today for d in dates), dates
     assert [d for d in dates if d.month == 12] == [
         dt.date(2026, 12, x) for x in (22, 23, 24, 26, 29, 30, 31)]
-    assert [d for d in dates if d.month == 1] == [
-        dt.date(2027, 1, x) for x in (2, 4, 5)]
-    assert s.index[-1].date() == dt.date(2027, 1, 5)
+    assert [d for d in dates if d.month == 1] == [dt.date(2027, 1, x) for x in (2, 4, 5)]
+    assert s.index[-1].date() == today
     assert s.iloc[-1] == pytest.approx(10.22)
-    assert s.index.is_monotonic_increasing and s.index.is_unique
+    assert s.attrs["mmdd_rejected"] == 0
 
 
-def test_midyear_positive_control_same_year(monkeypatch):
-    # 正控:年中、條目皆不晚於今天 → 與修改前相同(全部補今年)
-    today = dt.date(2027, 7, 15)
-    rows = [("06/20", "9.9"), ("07/01", "10.0"), ("07/14", "10.1"), ("07/15", "10.2")]
-    s = _parse(monkeypatch, today, rows)
-    assert [d.date() for d in s.index] == [
-        dt.date(2027, 6, 20), dt.date(2027, 7, 1), dt.date(2027, 7, 14), dt.date(2027, 7, 15)]
+# ── 未來條目:不寫(紅隊三例 + 規格組例 + 上一輪兩例)────────────────
+
+@pytest.mark.parametrize("today, page, wrong", [
+    (dt.date(2026, 12, 30), "01/02", dt.date(2026, 1, 2)),   # 紅隊
+    (dt.date(2026, 12, 31), "01/01", dt.date(2026, 1, 1)),   # 紅隊
+    (dt.date(2026, 12, 15), "01/10", dt.date(2026, 1, 10)),  # 紅隊
+    (dt.date(2026, 10, 2), "11/03", dt.date(2025, 11, 3)),   # 規格組(晚 32 天)
+    (dt.date(2027, 1, 5), "01/06", dt.date(2026, 1, 6)),
+    (dt.date(2026, 7, 1), "07/02", dt.date(2025, 7, 2)),
+])
+def test_future_entry_not_written(monkeypatch, capsys, today, page, wrong):
+    ok = _mmdd(today)
+    s = _parse(monkeypatch, today, [(ok, "10.0"), (page, "10.5")])
+    assert _dates(s) == [today], f"{page} 不應被寫成 {wrong} 或任何日期"
+    assert wrong not in _dates(s)
+    assert s.attrs["mmdd_rejected"] == 1
+    assert page in capsys.readouterr().out
 
 
-def test_boundary_today_dec31(monkeypatch):
-    # today = 12/31:12/31 是今天 → 今年;12/01 → 今年
+# ── 正控:T+1 頁面前 1～30 天全收(年中/跨年/閏年)──────────────────
+
+@pytest.mark.parametrize("today", [
+    dt.date(2026, 7, 15),   # 年中
+    dt.date(2027, 1, 10),   # 跨年:前 30 天跨進去年 12 月
+    dt.date(2028, 3, 15),   # 閏年:前 30 天含 2028-02-29
+])
+def test_past_1_to_30_days_all_written(monkeypatch, today):
+    past = [today - dt.timedelta(days=k) for k in range(30, 0, -1)]
+    s = _parse(monkeypatch, today, [(_mmdd(d), f"{10 + i / 100:.2f}") for i, d in enumerate(past)])
+    assert _dates(s) == past
+    assert s.attrs["mmdd_rejected"] == 0
+    if today.year == 2028:
+        assert dt.date(2028, 2, 29) in _dates(s)
+
+
+def test_today_itself_written(monkeypatch):
     today = dt.date(2026, 12, 31)
-    s = _parse(monkeypatch, today, [("12/01", "9.5"), ("12/31", "10.0")])
-    assert [d.date() for d in s.index] == [dt.date(2026, 12, 1), dt.date(2026, 12, 31)]
-
-
-def test_boundary_today_jan1(monkeypatch):
-    # today = 01/01:12/31 晚於今天 → 去年;01/01 → 今年;最後一筆為 01/01
-    today = dt.date(2027, 1, 1)
-    s = _parse(monkeypatch, today, [("12/31", "10.0"), ("01/01", "10.5")])
-    assert [d.date() for d in s.index] == [dt.date(2026, 12, 31), dt.date(2027, 1, 1)]
-    assert s.iloc[-1] == pytest.approx(10.5)
+    s = _parse(monkeypatch, today, [("12/30", "9.9"), ("12/31", "10.0")])
+    assert _dates(s) == [dt.date(2026, 12, 30), today]
 
 
 def test_yyyy_mm_dd_unaffected(monkeypatch):
-    # 完整年份不經推斷:即使晚於 today 也照原樣(行為不變)
+    # 完整年份不經推斷:即使晚於 today 也照原樣(行為不變),不計入拒收
     today = dt.date(2027, 1, 5)
     rows = [("2026/12/30", "10.0"), ("2027/01/04", "10.1"), ("2027/12/30", "10.2")]
     s = _parse(monkeypatch, today, rows)
-    assert [d.date() for d in s.index] == [
-        dt.date(2026, 12, 30), dt.date(2027, 1, 4), dt.date(2027, 12, 30)]
+    assert _dates(s) == [dt.date(2026, 12, 30), dt.date(2027, 1, 4), dt.date(2027, 12, 30)]
+    assert s.attrs["mmdd_rejected"] == 0
 
+
+def test_attrs_count_multiple_and_empty(monkeypatch):
+    today = dt.date(2026, 12, 30)
+    s = _parse(monkeypatch, today, [("01/01", "1.0"), ("01/02", "1.1"), ("01/03", "1.2")])
+    assert s.empty
+    assert s.attrs["mmdd_rejected"] == 3
+
+
+# ── 台灣日期守衛:固定 UTC 16:30 ─────────────────────────────────────
 
 class _FixedUtcClock:
     """把 `nav_metrics._dt_mod` 換成固定 UTC 時刻的假 datetime 模組。"""
@@ -106,43 +142,48 @@ _UTC_1630_NYE = dt.datetime(2026, 12, 31, 16, 30, tzinfo=dt.timezone.utc)  # 台
 
 
 def test_tw_today_is_next_day_at_utc_1630(monkeypatch):
-    # UTC 16:30 = 台灣隔天 00:30 → `_tw_today()` 必須回隔天(UTC 或 date.today() 會回當天)
     monkeypatch.setattr(nav_metrics, "_dt_mod", _FixedUtcClock(_UTC_1630_NYE))
     assert nav_metrics._tw_today() == dt.date(2027, 1, 1)
 
 
 def test_end_to_end_utc_1630_new_year_page_0101(monkeypatch):
-    # 端到端:UTC 2026-12-31 16:30,頁面 01/01 → 2027-01-01(不是被擋、也不是 2026-01-01)
     monkeypatch.setattr(nav_metrics, "_dt_mod", _FixedUtcClock(_UTC_1630_NYE))
     s = nav_metrics._parse_nav_html(_html([("12/30", "10.0"), ("12/31", "10.1"), ("01/01", "10.2")]))
-    assert [d.date() for d in s.index] == [
-        dt.date(2026, 12, 30), dt.date(2026, 12, 31), dt.date(2027, 1, 1)]
+    assert _dates(s) == [dt.date(2026, 12, 30), dt.date(2026, 12, 31), dt.date(2027, 1, 1)]
+    assert s.attrs["mmdd_rejected"] == 0
 
 
-# ── 近期未來日期(晚 1～31 天)→ 不寫,不推回去年 ───────────────────────
+# ── fetch_nav:拒收筆數帶進 _attempts / attrs(stub L1 HTTP,繞過快取)──
 
-def test_near_future_jan6_on_jan5_not_written(monkeypatch, capsys):
-    today = dt.date(2027, 1, 5)
-    s = _parse(monkeypatch, today, [("01/04", "10.0"), ("01/05", "10.1"), ("01/06", "10.2")])
-    assert [d.date() for d in s.index] == [dt.date(2027, 1, 4), dt.date(2027, 1, 5)]
-    assert dt.date(2026, 1, 6) not in [d.date() for d in s.index]
-    assert "01/06" in capsys.readouterr().out
+class _FakeResp:
+    def __init__(self, text):
+        self.text = text
+        self.status_code = 200
 
 
-def test_near_future_jul2_on_jul1_not_written(monkeypatch):
-    today = dt.date(2026, 7, 1)
-    s = _parse(monkeypatch, today, [("06/30", "10.0"), ("07/01", "10.1"), ("07/02", "10.2")])
-    assert [d.date() for d in s.index] == [dt.date(2026, 6, 30), dt.date(2026, 7, 1)]
+def _stub_fetch(monkeypatch, today, rows):
+    monkeypatch.setattr(nav_metrics, "_tw_today", lambda: today)
+    page = _html(rows)
+    monkeypatch.setattr(nav_metrics, "fetch_url_with_retry", lambda *a, **k: _FakeResp(page))
+    monkeypatch.setattr(nav_metrics, "_src_cache_files", lambda code: None)
 
 
-def test_near_future_31_days_boundary_not_written(monkeypatch):
-    today = dt.date(2026, 7, 1)  # 08/01 晚 31 天 → 仍在拒收區
-    s = _parse(monkeypatch, today, [("07/01", "10.1"), ("08/01", "10.2")])
-    assert [d.date() for d in s.index] == [dt.date(2026, 7, 1)]
+def test_fetch_nav_attempts_carry_rejected_count(monkeypatch):
+    today = dt.date(2026, 12, 30)
+    _stub_fetch(monkeypatch, today,
+                [("12/28", "10.0"), ("12/29", "10.1"), ("01/01", "10.2"), ("01/02", "10.3")])
+    # __wrapped__:繞過 @_daily_cache — 測試資料不得流入 production cache
+    s = nav_metrics.fetch_nav.__wrapped__("TEST99")
+    assert s.empty
+    err = s.attrs[nav_metrics._FETCH_ERROR_ATTR]
+    assert "拒收 2 筆" in err
 
 
-def test_32_days_ahead_goes_to_last_year(monkeypatch):
-    # 正控:晚 32 天 → 視為跨年,推回去年
-    today = dt.date(2026, 7, 1)  # 08/02 晚 32 天
-    s = _parse(monkeypatch, today, [("07/01", "10.1"), ("08/02", "10.2")])
-    assert [d.date() for d in s.index] == [dt.date(2025, 8, 2), dt.date(2026, 7, 1)]
+def test_fetch_nav_success_keeps_rejected_attr(monkeypatch):
+    today = dt.date(2026, 12, 30)
+    past = [today - dt.timedelta(days=k) for k in range(12, -1, -1)]
+    rows = [(_mmdd(d), "10.0") for d in past] + [("01/02", "10.3")]
+    _stub_fetch(monkeypatch, today, rows)
+    s = nav_metrics.fetch_nav.__wrapped__("TEST99")
+    assert _dates(s) == past
+    assert s.attrs["mmdd_rejected"] == 1
