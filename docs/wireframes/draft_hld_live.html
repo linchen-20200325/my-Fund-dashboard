@@ -209,10 +209,10 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <div class="eyebrow">DRAFT / HLD / LIVE MODE</div>
   <h1>持倉體檢頁：正式模式的畫面草稿</h1>
   <p class="sub">這一份不是規格，是<b>畫面草稿</b>，送客戶審。假資料版的九塊照舊，本檔只處理「hld 頁改吃真資料之後，
-  有三件事 44 沒有寫、要客戶決定」：<b>舊淨值怎麼標</b>、<b>示意字樣怎麼拿</b>、<b>DIRECT 持倉怎麼顯示</b>。</p>
+  有四件事 44 沒有寫、要客戶決定」：<b>舊淨值怎麼標</b>、<b>示意字樣怎麼拿</b>、<b>DIRECT 持倉怎麼顯示</b>、<b>推定的核對日期怎麼揭露</b>（第 4 件是 2026-10-02 同日第二個 commit 補的）。</p>
   <p class="sub" style="margin-top:8px; padding:9px 12px; background:var(--stop-bg);
     border:1px solid var(--stop); border-radius:6px; color:var(--ink)">
-  ⛔ <b>狀態：待客戶裁示。</b>本檔每一個選項都還沒有人核准；§G 的「總管建議」欄刻意空著，由總管另填。<br>
+  ⛔ <b>狀態：待客戶裁示。</b>本檔每一個選項都還沒有人核准。§G 的「總管建議」欄：第 1～3 題由總管 2026-10-02 填入；第 1a、4 題仍空著。<br>
   ⚠️ <b>核准的會是畫面與文案，不是動工授權</b>；也<b>不改 <code>docs/v2/44_fund_ui_ssot.md</code></b>（已凍結）。</p>
   <div class="meta">
     <span><b>草稿寫成時的 <code>origin/main</code></b> <code>b23b5b2</code></span>
@@ -227,12 +227,13 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 <div class="card">
   <h3 style="font-size:15px;font-weight:700;color:var(--draft)">怎麼看這份草稿（三分鐘）</h3>
   <ol class="note" style="margin:8px 0 0; padding-left:20px">
-    <li><b>§A</b> 一張表看完九塊，三個決定各落在哪幾塊。</li>
-    <li><b>§B</b> 三個斷點各一份線框。三個決定的落點畫成<b>黃色虛線框</b>，框裡不先填任何一個選項 —— 選項在 §D～§F。</li>
+    <li><b>§A</b> 一張表看完九塊，四個決定各落在哪幾塊。</li>
+    <li><b>§B</b> 三個斷點各一份線框。各決定的落點畫成<b>黃色虛線框</b>，框裡不先填任何一個選項 —— 選項在 §D～§F。</li>
     <li><b>§C</b> 落點那幾塊的 44 原文對照。</li>
     <li><b>§D</b> 決定 1：淨值退回預存舊序列時怎麼標（三個選項）。</li>
     <li><b>§E</b> 決定 2：「（示意）」與情境標籤，先逐處列出程式裡現有的每一處，再給三個選項。</li>
     <li><b>§F</b> 決定 3：DIRECT 持倉在本頁怎麼顯示（三個選項）。</li>
+    <li><b>§F2</b> 決定 4：HLD-5「最後對帳」那個日期背後的時刻是推定的，要不要揭露（三個選項）。</li>
     <li><b>§G</b> 裁示清單，一題一行。<b>§H</b> 本組查不到什麼、沒做什麼。</li>
   </ol>
   <p class="note" style="margin-top:10px">
@@ -271,7 +272,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   </table>
 </div>
 
-<div class="sec-head"><span class="n">§A</span><h2>九塊總表：三個決定各落在哪</h2></div>
+<div class="sec-head"><span class="n">§A</span><h2>九塊總表：四個決定各落在哪</h2></div>
 
 <div class="card">
 <table>
@@ -289,7 +290,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <tr><td class="src">HLD-4</td><td>層 3 收合</td><td>檢視區間與門檻輸入。</td>
     <td>決定 2（收合列摘要帶「（示意）」）。</td></tr>
   <tr><td class="src">HLD-5</td><td>層 3 收合</td><td>單檔展開。保單欄遇 <code>policy_id</code> 為 <code>DIRECT</code> 顯示「直接持有」。</td>
-    <td>決定 1、決定 2、<b>決定 3 的主落點</b>。</td></tr>
+    <td>決定 1、決定 2、<b>決定 3 的主落點</b>、<b>決定 4 的唯一落點</b>（展開欄位「最後對帳」）。</td></tr>
   <tr><td class="src">HLD-6</td><td>層 4 收合</td><td>淨值與配息序列。<code>is_estimated</code> 為真的列掛「推估」徽章。</td>
     <td>決定 1（逐檔分組標頭）、決定 2。</td></tr>
   <tr><td class="src">HLD-7</td><td>層 4 收合</td><td>計算軌跡。逐檔逐指標一列，四欄。</td>
@@ -377,7 +378,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <div class="grid3">
       <div class="fold"><span><span class="kk">HLD-4</span>　檢視區間與門檻輸入　<span class="s-gray">· 區間 2026-04-01 至 2026-09-30 · 門檻 2 列</span></span><span class="plus">＋</span></div>
       <div class="fold"><span><span class="kk">HLD-5</span>　單檔展開　<span class="s-gray">· 3 檔 · 同時最多展開一檔</span>
-        <span class="s-warn">〔決定 3〕</span></span><span class="plus">＋</span></div>
+        <span class="s-warn">〔決定 3／決定 4〕</span></span><span class="plus">＋</span></div>
       <div></div>
     </div>
 
@@ -444,7 +445,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <div class="grid2">
       <div class="fold"><span><span class="kk">HLD-4</span>　檢視區間與門檻輸入　<span class="s-gray">· 區間 2026-04-01 至 2026-09-30 · 門檻 2 列</span></span><span class="plus">＋</span></div>
       <div class="fold"><span><span class="kk">HLD-5</span>　單檔展開　<span class="s-gray">· 3 檔 · 同時最多展開一檔</span>
-        <span class="s-warn">〔決定 3〕</span></span><span class="plus">＋</span></div>
+        <span class="s-warn">〔決定 3／決定 4〕</span></span><span class="plus">＋</span></div>
     </div>
     <div class="l-label">層 4（收合）</div>
     <div class="grid1">
@@ -509,7 +510,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <div class="grid2">
       <div class="fold"><span><span class="kk">HLD-4</span>　檢視區間與門檻輸入　<span class="s-gray">· 區間 2026-04-01 至 2026-09-30 · 門檻 2 列</span></span><span class="plus">＋</span></div>
       <div class="fold"><span><span class="kk">HLD-5</span>　單檔展開　<span class="s-gray">· 3 檔 · 同時最多展開一檔</span>
-        <span class="s-warn">〔決定 3〕</span></span><span class="plus">＋</span></div>
+        <span class="s-warn">〔決定 3／決定 4〕</span></span><span class="plus">＋</span></div>
     </div>
     <div class="l-label">層 4（收合）</div>
     <div class="grid1">
@@ -535,7 +536,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 
 <div class="card">
 <table>
-  <tr><th style="width:9%">塊</th><th style="width:40%">44 原文（逐字節錄，只取與三個決定有關的句子）</th><th>和三個決定的關係</th></tr>
+  <tr><th style="width:9%">塊</th><th style="width:40%">44 原文（逐字節錄，只取與決定 1～3 有關的句子；決定 4 的出處寫在 §F2）</th><th>和決定 1～3 的關係</th></tr>
   <tr><td class="src">HLD-0</td>
     <td class="q44">來源：「<b>不自取數。只讀 <code>HLD-1</code>、<code>HLD-2</code>、<code>HLD-3</code> 三塊的狀態值與 <code>HLD-1</code> 的偏離筆數</b>」<br>
       規則：「偏離筆數大於零 → 燈為黃，文案「<b>有 N 檔超出你設定的門檻</b>」」</td>
@@ -857,25 +858,108 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   </table>
 </div>
 
-<div class="sec-head"><span class="n">§G</span><h2>裁示清單：三題</h2></div>
+<div class="sec-head"><span class="n">§F2</span><h2>決定 4｜「最後對帳」那個日期是推定的，畫面要不要揭露、怎麼揭露</h2></div>
+
+<div class="card">
+  <h3 style="font-size:15px;font-weight:700;color:var(--draft)">先講清楚它怎麼「推定」（事實，附出處）</h3>
+  <table>
+    <tr><th style="width:36%">事實</th><th>出處</th></tr>
+    <tr><td>這一題是 alo 草稿留下來的：§F 第 7 題核准「本輪不放……推定值的揭露留給 hld 頁那一輪」。</td>
+      <td><code>docs/wireframes/draft_alo_live.html</code> §F 第 7 題（2026-09-28 客戶核准）；同檔 §D 的 D6 那一列</td></tr>
+    <tr><td>客戶在 Sheets 的 <code>_持倉補充</code> 分頁手填的是<b>日期</b>，欄名「最後核對日」，只收 <code>YYYY-MM-DD</code>。</td>
+      <td><code>repositories/policy_supplement_repository.py</code> 欄位表（「最後核對日」→ <code>last_checked_on</code>，型別「日期」）；
+        <code>services/v2_tables/alo_holdings.py::last_synced_at_from_check_date</code></td></tr>
+    <tr><td>44 的 <code>holding.last_synced_at</code> 是<b>時間</b>（世界協調時間）。讀表時把那個日期換成<b>當日 12:00 台灣時間</b>，
+      存成 <code>YYYY-MM-DDT04:00:00Z</code>。12:00 是規則補上的，<b>不是客戶實際核對的時刻</b>。</td>
+      <td><code>alo_holdings.py</code> 檔頭 docstring「R1＝B」那一段與常數 <code>CHECK_DATE_LOCAL_HOUR = 12</code>；
+        44 §4.1 <code>last_synced_at</code> 那一列；<code>ACCEPTANCE.md</code> §8.1</td></tr>
+    <tr><td>44 的 <code>holding</code> 表沒有推估旗標欄，所以「這是推定值」在資料表裡放不下，只登記在驗收檔。</td>
+      <td><code>ACCEPTANCE.md</code> §8.1（「<code>44</code> 的 <code>holding</code> 沒有推估旗標欄，所以登記在這裡」）</td></tr>
+    <tr><td>現行 hld 畫面：HLD-5 展開欄位「最後對帳」印 <code>last_synced_at</code> 的前 10 個字，也就是客戶填的那個日期；12:00 不會出現在畫面上。</td>
+      <td><code>ui_v2/hld/logic.py::_build_hld5</code>（<code>("最後對帳", holding["last_synced_at"][:10] + HINT)</code>）；<code>ACCEPTANCE.md</code> §8.1 末條</td></tr>
+    <tr><td>本頁只有 HLD-5 這一處顯示它。</td>
+      <td>本組以 <code>last_synced_at</code> 搜 <code>ui_v2/hld/logic.py</code>，<code>b23b5b2</code> 上只有 <code>_build_hld5</code> 那一行把它放進畫面欄位。⚠️ 單組判讀</td></tr>
+    <tr><td>待補的驗收條件是「畫面不把它當成實際核對時刻呈現」。</td>
+      <td><code>49</code> §8 (l)（該條自陳為文件組推導，非客戶裁示）</td></tr>
+  </table>
+  <p class="small" style="margin-top:8px">⚠️ 三個選項共同的部分：只動 HLD-5 的那一個欄位；日期本身照印（它就是客戶填的日期，不是推出來的）；不借「推估」徽章（理由同決定 1）。
+  ⚠️ 欄名「最後對帳」是現行程式的字，44 HLD-5 只寫「展開內容為該檔的持倉欄位」，沒有逐字給欄名。</p>
+</div>
+
+<div class="opt">
+  <h4>選項 4-A｜照現行：只印日期，不加任何揭露<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <table>
+    <tr><th style="width:18%">文案原文</th><td>欄名 <code>最後對帳</code>，值 <code>YYYY-MM-DD</code>。（現行程式字面，非 44 逐字）</td></tr>
+    <tr><th>放在哪</th><td>HLD-5 展開欄位，不變。</td></tr>
+    <tr><th>什麼顏色</th><td>中性。</td></tr>
+    <tr><th>後果</th><td>✅ 不加字。畫面上沒有任何時刻，所以也沒有印出那個推定的 12:00。<br>
+      ⚠️ 「推定」這件事在畫面上完全看不到，只留在 <code>ACCEPTANCE.md</code>；alo 草稿留給本輪的那一題等於答「不揭露」。<br>
+      ⚠️ 欄名「最後對帳」與客戶在 Sheets 填的欄名「最後核對日」不同。</td></tr>
+  </table>
+</div>
+
+<div class="opt">
+  <h4>選項 4-B｜改欄名，欄下加一行時刻說明<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <table>
+    <tr><th style="width:18%">文案原文</th><td><span class="tag t-new">新增，44 未宣告</span>：欄名 <code>最後核對日</code>；
+      值的下一行 <code>時刻為推定（當日 12:00 台灣時間），非實際核對時刻</code>。<br>
+      這句字面取自 alo 草稿 D6 當時寫的畫法（那一題最後核准的是「本輪不放」，所以這句字<b>沒有被核准過</b>）。</td></tr>
+    <tr><th>放在哪</th><td>HLD-5 展開欄位：欄名換掉，說明行放在日期正下方。</td></tr>
+    <tr><th>什麼顏色</th><td>說明行用灰（與副標同一層級的說明字）。⚠️ 灰在 44 §5.1 是「資料未備」的色，這裡借用灰只因為它是說明字；若客戶認為會被讀成未備，可改中性。</td></tr>
+    <tr><th>後果</th><td>✅ 揭露最完整，直接對上 <code>ACCEPTANCE.md</code> §8.1 那句話。<br>
+      ⚠️ 畫面上本來就沒有印任何時刻，這一行反而是<b>第一次</b>讓使用者看到「12:00」；可能讓人以為畫面某處用到了這個時刻。<br>
+      ⚠️ 每展開一檔就多一行字。</td></tr>
+  </table>
+</div>
+
+<div class="opt">
+  <h4>選項 4-C｜改欄名，標明只記日期<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
+  <table>
+    <tr><th style="width:18%">文案原文</th><td><span class="tag t-new">新增，44 未宣告</span>：欄名 <code>最後核對日（只記日期）</code>，值 <code>YYYY-MM-DD</code>。</td></tr>
+    <tr><th>放在哪</th><td>HLD-5 展開欄位，只換欄名。</td></tr>
+    <tr><th>什麼顏色</th><td>中性。</td></tr>
+    <tr><th>後果</th><td>✅ 欄名與客戶在 Sheets 填的欄名一致；「只記日期」講明了沒有時刻，不另外印出 12:00。<br>
+      ⚠️ 沒有寫「推定」二字：12:00 這個規則只在資料表裡、不在畫面上，本選項讓它繼續留在驗收檔。<br>
+      ⚠️ 若之後別的畫面（例如設定頁）要顯示 <code>last_synced_at</code> 的完整時間，這一句就不夠，要另題處理。</td></tr>
+  </table>
+  <div class="screen mini">
+    <div class="acard">
+      <div class="ch"><b>單檔展開</b><span>HLD-5</span></div>
+      <table class="atab">
+        <tr><th>欄位</th><th>4-A</th><th>4-B</th><th>4-C</th></tr>
+        <tr><td>欄名</td><td>最後對帳</td><td>最後核對日</td><td>最後核對日（只記日期）</td></tr>
+        <tr><td>值</td><td>2026-09-15</td><td>2026-09-15<br><span class="s-gray">時刻為推定（當日 12:00 台灣時間），非實際核對時刻</span></td><td>2026-09-15</td></tr>
+      </table>
+    </div>
+  </div>
+  <p class="small">⚠️ 小螢幕裡把三個選項並排成一張表只是為了對照，正式畫面只會出現其中一欄的樣子；日期是本草稿編的。</p>
+</div>
+
+<div class="sec-head"><span class="n">§G</span><h2>裁示清單：四題</h2></div>
 
 <div class="card" style="border-left:4px solid var(--warn-mark)">
-  <p class="note">一題一行。請在「裁示」欄回選項代號，或改寫。「總管建議」欄由總管另填，本組<b>刻意空著</b>。</p>
+  <p class="note">一題一行。請在「裁示」欄回選項代號，或改寫。「總管建議」欄第 1～3 題為總管 2026-10-02 填入，理由只引本檔各節已附出處的事實；第 1a、4 題仍空著。</p>
   <table>
     <tr><th style="width:5%">#</th><th style="width:30%">題目</th><th style="width:30%">選項</th><th style="width:15%">總管建議</th><th style="width:10%">出處</th><th style="width:10%">裁示</th></tr>
     <tr><td class="src">1</td><td>淨值退回預存舊序列時，畫面怎麼標？</td>
       <td>1-A 新鮮度徽章「延遲 N 日」／1-B 新狀態徽章「預存序列」／1-C 逐檔副標一行＋HLD-1 卡尾一行</td>
-      <td class="blank">（待總管填）</td><td>49 §2.6 T3；交接本 hld 盤點第 1 條</td><td class="blank">待裁示</td></tr>
+      <td><b>1-C。</b>只有它同時分得出預存與即時、新與舊，又不違反 44 §5.2 的封閉清單（出處：49 §2.6 T3「另行標示」；§D 各選項後果欄）。
+        代價：超過 44 §5.1 寫的「一行副標」。</td><td>49 §2.6 T3；交接本 hld 盤點第 1 條</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">1a</td><td>（選 1-A 時）幾日轉黃？</td><td>7 日（沿用 <code>MJ_FRESH_DAYS_YELLOW</code>）或客戶另訂</td>
       <td class="blank">（待總管填）</td><td>44 §5.2 未寫</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">2</td><td>正式模式下，「（示意）」與情境標籤怎麼處理？</td>
       <td>2-A 全拿掉／2-B 拿掉並在頁首放唯讀說明／2-C 拿掉並在頁首標試行</td>
-      <td class="blank">（待總管填）</td><td>49 §3.4 第 5、6 項；交接本 hld 盤點第 2 條</td><td class="blank">待裁示</td></tr>
+      <td><b>2-A。</b>mkt、alo 已有前例，mkt 有客戶 2026-09-26 的核准紀錄（出處：<code>ui_v2/mkt/page.py::render</code> 說明；
+        <code>ui_v2/alo/page.py::render</code>）；不新增文字。</td><td>49 §3.4 第 5、6 項；交接本 hld 盤點第 2 條</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">3</td><td>DIRECT 持倉在 hld 頁怎麼顯示？</td>
       <td>3-A 不顯示／3-B 另列（HLD-5 卡尾警告＋逐筆位置）／3-C 併入</td>
-      <td class="blank">（待總管填）</td><td>49 §8 (k)；交接本 hld 盤點第 3 條</td><td class="blank">待裁示</td></tr>
+      <td><b>3-B，字面用 (ii)「不計入體檢」。</b>與 alo 口徑一致（都不計入），不會無聲少掉一筆，也不必推翻 L2
+        （出處：§F 現況表 <code>alo_holdings.py</code> 總管暫定與 <code>direct</code> 清單）。(ii) 是新文案，要客戶點頭。</td><td>49 §8 (k)；交接本 hld 盤點第 3 條</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">3a</td><td>（選 3-B 時）警告字面用「不計入配置」還是「不計入體檢」？</td><td>(i) 逐字沿用 U9／(ii) 改一個詞</td>
-      <td class="blank">（待總管填）</td><td>U9</td><td class="blank">待裁示</td></tr>
+      <td>(ii)，見第 3 題。</td><td>U9</td><td class="blank">待裁示</td></tr>
+    <tr><td class="src">4</td><td>HLD-5「最後對帳」的日期，背後的時刻是推定的（當日 12:00 台灣時間），畫面要不要揭露？</td>
+      <td>4-A 照現行只印日期／4-B 改欄名＋欄下一行時刻說明／4-C 改欄名「最後核對日（只記日期）」</td>
+      <td class="blank">（待總管填）</td><td>alo 草稿 §F 第 7 題；ACCEPTANCE.md §8.1；49 §8 (l)</td><td class="blank">待裁示</td></tr>
   </table>
 </div>
 
@@ -898,7 +982,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <ul class="note" style="margin:6px 0 0; padding-left:20px">
     <li><b>沒有改任何程式、沒有改 44／46／49／交接本。</b>本輪只動本檔與 <code>docs/wireframes/README.md</code>。</li>
     <li><b>HLD-5「最後對帳」（<code>last_synced_at</code>）是推定值</b>（R1：固定取當日 12:00 台灣時間）——
-      alo 草稿 §F 第 7 題核准「推定值的揭露留給 hld 頁那一輪」。<b>本草稿沒有處理它</b>，因為派工只點了三題；登記在這裡，請總管決定要不要另出一題。
+      alo 草稿 §F 第 7 題核准「推定值的揭露留給 hld 頁那一輪」。<b>第一個 commit 沒有處理它</b>（當時派工只點了三題）；<b>同日第二個 commit 已補成 §F2 第 4 題</b>。
       出處：<code>docs/wireframes/draft_alo_live.html</code> §F 第 7 題；<code>49</code> §8 (l)。</li>
     <li><b>HLD-5「持有起始日」在正式資料下大概率是空的</b>：<code>49</code> §2.2 表 <code>opened_on</code> 那一列，保單分頁沒有這一欄。本草稿沒有展開它的畫法（44 HLD-5 沒寫空的時候印什麼，那是另一題）。</li>
     <li>沒有處理交接本 hld 盤點第 4～8 條（基金代碼對應、<code>fund_profile</code>、錯誤彙總、跨年補年份、<code>PENDING_TABLES</code>）：那些是技術題，不送客戶。</li>
@@ -923,7 +1007,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <tr><td>不發明 44 沒宣告的元件</td>
       <td><b>有新增，每一處都標了 <span class="tag t-new">新增，44 未宣告</span></b>，清單：
         1-A 的轉黃日數與 N 的算法；1-B 的「預存序列」狀態徽章；1-C 的四句副標與 HLD-7 輸入欄加註；
-        2-B 的頁首落點；2-C 的頁首句；3-B 的警告字面 (ii)、逐筆位置行、HLD-5 卡尾落點。</td></tr>
+        2-B 的頁首落點；2-C 的頁首句；3-B 的警告字面 (ii)、逐筆位置行、HLD-5 卡尾落點；4-B 的欄名與時刻說明行；4-C 的欄名。</td></tr>
   </table>
 </div>
 
