@@ -302,3 +302,62 @@ def test_deterministic_and_order_preserved(no_csv):
     assert a == b
     assert [r["input"] for r in a["results"]] == codes
     assert a["results"][0] == {**a["results"][5], "input": "tlzf9"}
+
+
+# ═══════════════════════ 第三輪：查詢字串限定、空白格、mapping_hit ═══════════════════════
+
+@pytest.mark.parametrize("url", [
+    "https://x/#&a=FOO123",
+    "https://x/#?a=FOO123",
+    "https://x/p1&a=FOO123",
+    "https://x/p%3FBAR456+&A=ACDD01-EQTAL005",
+])
+def test_url_a_outside_query_is_error(no_csv, url):
+    assert SRC.parse_moneydj_input(url.upper())["code"] != ""  # L1 確實抽到了代碼
+    r, _ = _one(url)
+    assert r["ok"] is False and r["full_key"] is None
+    assert "查詢字串" in r["error"]  # 走的是「查詢字串裡沒有 a=」那一支
+
+
+def test_url_fragment_a_ignored(no_csv):
+    r, _ = _one("https://x/?a=FOO#frag&a=FOO")
+    assert r["ok"] is True and r["full_key"] == "FOO"
+
+
+def test_url_fragment_a_with_other_value_ignored(no_csv):
+    r, _ = _one("https://x/?a=FOO123#frag&a=BAR456")
+    assert r["ok"] is True and r["full_key"] == "FOO123"
+
+
+def test_url_query_without_a_param_is_error(no_csv):
+    # L1 從片段裡抽到 FOO123，但查詢字串（?x=1）裡沒有 a=
+    r, _ = _one("https://x/p?x=1#&a=FOO123")
+    assert r["ok"] is False and "查詢字串" in r["error"]
+
+
+def test_url_a_param_name_must_be_exact(no_csv):
+    # `ba=` 不是 a=；L1 的 `[?&][aA]=` 也抽不到，走「抽不出代碼」
+    r, _ = _one("https://x/?ba=FOO123")
+    assert r["ok"] is False and r["full_key"] is None
+
+
+def test_csv_whitespace_public_code_fails_at_final_check(no_csv):
+    (no_csv / "fund_code_mapping.csv").write_text(
+        "input_code,public_code,page_type,note\nqqq111,  ,yp010001,只有空白\n", encoding="utf-8")
+    assert SRC.load_fund_code_mapping()["QQQ111"]["public_code"] == ""  # L1 strip 後是空字串
+    r, _ = _one("QQQ111")
+    assert r["ok"] is False and r["full_key"] is None
+    assert "不符" in r["error"]  # 由最終關卡 `_is_pure_code` 擋下，不是 public_code 讀值那一關
+    assert r["mapping_hit"] is True
+
+
+def test_mapping_hit_on_failure_is_truthful(no_csv):
+    m = {"ABC123": {"public_code": "acti71"}}
+    r_hit, _ = _one("ABC123", mapping=m)
+    assert r_hit["ok"] is False and r_hit["mapping_hit"] is True       # 查了、命中、值不合格
+    r_nan, _ = _one("ABC123", mapping={"ABC123": {"public_code": "NAN"}})
+    assert r_nan["ok"] is False and r_nan["mapping_hit"] is True
+    r_pre, _ = _one("AB C", mapping=m)
+    assert r_pre["ok"] is False and r_pre["mapping_hit"] is None       # 沒走到查表
+    r_url, _ = _one("https://x/?a=AB", mapping=m)
+    assert r_url["ok"] is False and r_url["mapping_hit"] is False      # 查了、沒命中、最終關卡擋

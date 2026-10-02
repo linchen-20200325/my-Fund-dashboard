@@ -22,8 +22,22 @@
    只對 `http` 開頭、且符合四種行動版樣式（`://m.moneydj.com/`、`.moneydj.com/mobile/`、`/a1.aspx`、
    `/mobile/b1.aspx`）的網址動手，把 `a=` 的值截到第一個 `-` 之前（去平台後綴）。所以**少掉這一步，
    只影響「行動版網址＋平台後綴」的輸入**：舊頁得到主碼（例 `ACDD01`），本檔得到含後綴的整段
-   （例 `ACDD01-EQTAL005`）。純代碼、桌面版網址、沒有後綴的行動版網址，兩邊的 `full_key` 一樣
-   （`page_type` 會不同，但本檔不用）。
+   （例 `ACDD01-EQTAL005`）。這一句只講 canonicalize 這一步的差別；**兩邊結果還有其他不同之處**，
+   集中列在下一段，不得把本段讀成「其餘輸入兩邊都一樣」。
+
+**⚠️ 本檔比舊頁嚴的地方（本組逐項讀 `fund_orchestration.py` 核對過的；不是窮舉）**：
+舊頁在**代碼解析這一步**只在 `code` 為空時才報錯，其餘照用（第 5 步那種最終複驗舊頁沒有）。
+下列輸入舊頁會給出 `full_key`，本檔判失敗：
+1. **兜底**：`TLZF9 X`（中間空白）舊頁用 `TLZF9 X`；31 個 `A` 舊頁截成 30 個 `A`；`AB`、`AB-CD`
+   （主碼 2 字元）舊頁原樣用。
+2. **非 ASCII**：`actı171` 舊頁經 `upper()` 變成 `ACTI171`，再查表得 `ACTI71`。
+3. **網址 `a=` 核對**：`?a=ACTI71%20X` 舊頁用 `ACTI71`；`a=` 超過 30 字元舊頁截成前 30；
+   兩個 `a=` 值不同時舊頁取 L1 正則先碰到的那一個；`?a=AB`、`?a=A-` 舊頁照用。
+4. **查詢字串限定**：`https://x/p1&a=FOO123`、`https://x/#&a=FOO123` 這類 `a=` 不在查詢字串裡的，
+   舊頁照用 L1 抽到的 `FOO123`。
+5. **對照表值**：`public_code` 是 `NAN` 或空字串時，舊頁照用該值（`code = _m.get("public_code", code)`）。
+   舊頁只讀 L1 的表，L1 已 `upper().strip()`，所以小寫、含空白的值只會出現在本檔的注入表，舊頁碰不到。
+其他輸入兩邊是否一致，本組沒有逐一比對。
 
 **兜底判法（`parse_moneydj_input` 的 `_raw[:30]` 那一支）**：
 讀 L1 原始碼（非網址分支）：先 `_raw = text.upper().strip()`，再以
@@ -31,16 +45,20 @@
 **不合 → `code = _raw[:30]`**（兜底，可能截斷，也可能把空白、標點原樣留著）。
 L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規則重判一次（`_is_pure_code`）：
 非網址輸入符合該規則**且** L1 給的 `code` 與它逐字相同 → 成功；否則一律判為「走到兜底」→ 錯誤。
-⚠️ **這比舊頁嚴**：舊頁（`fund_orchestration.py`）只在 `code` 為空時才報錯，兜底給的值照用。
-   例：`TLZF9 X`（中間空白）舊頁的 `full_key` 是 `TLZF9 X`；31 個 `A` 舊頁會截成 30 個 `A`；
-   `AB`（主碼只有 2 字元）舊頁原樣用 `AB`。這三個本檔都判失敗。
+（比舊頁嚴，見上一段第 1 項。）
 
 **網址輸入**：L1 以 `[?&][aA]=([A-Z0-9a-z][A-Z0-9a-z\\-]{1,29})` 做**未錨定**的 `search`，
 有三個漏洞，本檔分別擋：
+- 不分位置：`#` 之後、或根本沒有 `?` 的路徑裡的 `&a=` 也會被抽出來（例 `https://x/p1&a=FOO123`）。
+  本檔只看**查詢字串**：先在第一個 `#` 處切掉片段，再取剩下那段裡第一個 `?` 之後的部分；
+  其中以 `&` 分隔、名稱為 `A`（已轉大寫，故 `a=`／`A=` 混用都算）的參數才算數。
+  查詢字串裡一個 `a=` 都沒有 → 判失敗，**即使 L1 抽到了代碼也一樣**。
+  ⚠️ 百分比編碼不解碼：`%3F` 不當 `?`（例 `https://x/p%3FBAR456+&A=…` 判失敗）。
 - 值後面接什麼都收 → 例 `?a=ACTI71%20X` L1 給 `ACTI71`、`?a=` 超過 30 字元靜默截斷。
-  本檔把每個 `?A=`／`&A=`（已轉大寫，故 `a=`／`A=` 混用都算）的值取到下一個 `&`、`#` 或字串結尾，
-  **該值必須與 L1 的 `code` 逐字相同**，否則判失敗。
-- 網址裡出現兩個以上的 `a=`：值都相同 → 照收；任一不同 → 判失敗（不猜 L1 取了哪一個）。
+  本檔取的值是該參數到下一個 `&`（或查詢字串結尾）為止的整段，**必須與 L1 的 `code` 逐字相同**，
+  否則判失敗。
+- 查詢字串裡出現兩個以上的 `a=`：值都相同 → 照收；任一不同 → 判失敗（不猜 L1 取了哪一個）。
+  片段裡的 `a=` 不算（例 `?a=FOO#frag&a=BAR` 只看到 `FOO`）。
 - L1 的字元類允許 `-` 任意出現、長度下限 2 → `AB`、`A-`、`A--------` 都能被抽出來。由第 5 步擋。
 抽不出代碼 → 錯誤。
 
@@ -49,7 +67,8 @@ L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規�
 本組 2026-10-02 實測：csv 的 `public_code` 格留空 → pandas 讀成 NaN → `str(nan)` ＝ `"nan"` →
 `"NAN"`，而 `NAN` 本身符合代碼字元規則，`_is_pure_code` 擋不下。`NONE` 是同一條路徑上
 `str(None)` 的產物；本組實測 `read_csv` 留空格得到的是 NaN 而不是 None，`NONE` 是防禦性一併擋下。
-（只有空白的格經 `.strip()` 會變成 `""`，由「非空」那一關擋。）
+（只有空白的格經 L1 的 `.strip()` 會變成 `""`；本檔在讀 `public_code` 那一步**沒有**另設非空檢查，
+`""` 是由第 5 步最終關卡 `_is_pure_code` 擋下的。）
 
 **注入的對照表**：鍵必須是字串（否則 `TypeError`）且通過 `_is_pure_code`（否則 `ValueError`）。
 查表用的 `code` 一定是大寫且合格，鍵若是小寫或帶空白就永遠對不到 —— 不讓它靜默對不到。
@@ -89,8 +108,6 @@ _CODE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 # L1 讀 csv 時 `str(NaN)`／`str(None)` 的產物，形狀合格但不是代碼（見檔頭）。
 _STRINGIFIED_MISSING = frozenset({"NAN", "NONE"})
 
-# 網址裡 `a=` 的值只能以這些字元（或字串結尾）收尾。
-_URL_VALUE_TERMINATORS = ("&", "#")
 
 PORTAL_DEFAULT = ""  # 總管裁定：portal 一律空字串
 
@@ -133,23 +150,22 @@ def _check_injected_mapping(mapping) -> None:
                              "查表用的代碼一定是大寫合格碼，這個鍵永遠對不到")
 
 
-def _fail(raw, reason: str, code: Optional[str] = None) -> dict:
+def _fail(raw, reason: str, code: Optional[str] = None, hit: Optional[bool] = None) -> dict:
+    """`hit`：None ＝ 還沒走到查表那一步；True／False ＝ 查了，命中與否照實寫。"""
     return {"input": raw, "ok": False, "full_key": None, "portal": None,
-            "parsed_code": code, "mapping_hit": False, "error": reason}
+            "parsed_code": code, "mapping_hit": hit, "error": reason}
 
 
 def _url_a_values(text: str) -> list:
-    """`text` 已轉大寫。回傳每個 `?A=`／`&A=` 的值（取到下一個 `&`、`#` 或字串結尾），依出現順序。"""
+    """`text` 已轉大寫。只看查詢字串（第一個 `#` 之前、第一個 `?` 之後），回傳名稱為 `A` 的參數值，依出現順序。"""
+    before_fragment = text.split("#", 1)[0]
+    _path, sep, query = before_fragment.partition("?")
+    if not sep:
+        return []
     values = []
-    for i in range(len(text) - 2):
-        if text[i] in "?&" and text[i + 1:i + 3] == "A=":
-            start = i + 3
-            end = len(text)
-            for term in _URL_VALUE_TERMINATORS:
-                pos = text.find(term, start)
-                if pos != -1 and pos < end:
-                    end = pos
-            values.append(text[start:end])
+    for param in query.split("&"):
+        if param.startswith("A="):
+            values.append(param[2:])
     return values
 
 
@@ -172,13 +188,14 @@ def _resolve_one(raw, mapping: dict) -> dict:
         if not code:
             return _fail(raw, "網址中抽不出 MoneyDJ 代碼（找不到 ?a= 或 &a= 參數）")
         values = _url_a_values(text)
+        if not values:
+            return _fail(raw, f"網址的查詢字串（? 之後、# 之前）裡沒有 a= 參數；parse_moneydj_input 抽到的"
+                              f" {code!r} 不在查詢字串裡，不收", code)
         if len(set(values)) > 1:
             return _fail(raw, f"網址裡有多個 a= 且值不同（{values!r}）；不猜取哪一個", code)
-        if values != [] and values[0] != code:
+        if values[0] != code:
             return _fail(raw, f"網址的 a= 值 {values[0]!r} 與 parse_moneydj_input 抽出的 {code!r} 不同"
                               "（值後面只能接 &、# 或結尾；超過 30 字元會被截）；不截斷、不猜", code)
-        if not values:
-            return _fail(raw, f"網址裡找不到 ?a=／&a=，無法核對 parse_moneydj_input 抽出的 {code!r}", code)
     else:
         if code != text or not _is_pure_code(text):
             return _fail(raw, f"代碼格式不符 {PURE_CODE_PATTERN}，parse_moneydj_input 會走 30 字元兜底"
@@ -189,14 +206,14 @@ def _resolve_one(raw, mapping: dict) -> dict:
         entry = mapping[code]
         pub = entry.get("public_code") if isinstance(entry, dict) else None
         if not isinstance(pub, str) or pub in _STRINGIFIED_MISSING:
-            return _fail(raw, f"對照表 {code!r} 的 public_code 不合格（{pub!r}）；不補值", code)
+            return _fail(raw, f"對照表 {code!r} 的 public_code 不合格（{pub!r}）；不補值", code, hit)
         full_key = pub
     else:
         full_key = code
 
     if not _is_pure_code(full_key):  # 最終關卡：三條路徑一律再驗
         source = f"對照表 {code!r} 的 public_code" if hit else "抽出的代碼"
-        return _fail(raw, f"{source} {full_key!r} 不符 {PURE_CODE_PATTERN}；不補值、不猜", code)
+        return _fail(raw, f"{source} {full_key!r} 不符 {PURE_CODE_PATTERN}；不補值、不猜", code, hit)
     return {"input": raw, "ok": True, "full_key": full_key, "portal": PORTAL_DEFAULT,
             "parsed_code": code, "mapping_hit": hit, "error": None}
 
@@ -211,7 +228,8 @@ def resolve_full_keys(fund_codes, *, mapping=None) -> dict:
             {"input": 原值, "ok": bool,
              "full_key": str | None, "portal": "" | None,
              "parsed_code": parse_moneydj_input 給的 code（失敗時可能為 None）,
-             "mapping_hit": bool, "error": str | None},
+             "mapping_hit": bool | None（None ＝ 還沒走到查表那一步就失敗）,
+             "error": str | None},
             ...
           ],
           "provenance": {
