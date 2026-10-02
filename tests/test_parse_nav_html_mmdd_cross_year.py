@@ -102,6 +102,33 @@ def test_yyyy_mm_dd_unaffected(monkeypatch):
     assert s.attrs["mmdd_rejected"] == 0
 
 
+def test_tie_picks_earlier_candidate(monkeypatch):
+    # today 2027-08-31:03/01 的候選 2027-03-01(早 183 天)與 2028-03-01(晚 183 天)平手
+    # → 取較早者,照收為 2027-03-01
+    today = dt.date(2027, 8, 31)
+    assert (today - dt.date(2027, 3, 1)).days == (dt.date(2028, 3, 1) - today).days
+    s = _parse(monkeypatch, today, [("03/01", "10.0"), ("08/31", "10.1")])
+    assert _dates(s) == [dt.date(2027, 3, 1), today]
+    assert s.attrs["mmdd_rejected"] == 0
+
+
+def test_feb29_without_leap_candidate_is_counted(monkeypatch, capsys):
+    # today 2026-06-01:2025/2026/2027 皆非閏年 → 02/29 不寫、計數 1、有 print
+    today = dt.date(2026, 6, 1)
+    s = _parse(monkeypatch, today, [("02/29", "10.0"), ("06/01", "10.1")])
+    assert _dates(s) == [today]
+    assert s.attrs["mmdd_rejected"] == 1
+    assert "02/29" in capsys.readouterr().out
+
+
+def test_invalid_mmdd_not_counted(monkeypatch):
+    # 非 02/29 的不合法 MM/DD(如 13/45)仍照原本略過,不算進「拒收」
+    today = dt.date(2026, 6, 1)
+    s = _parse(monkeypatch, today, [("13/45", "10.0"), ("06/01", "10.1")])
+    assert _dates(s) == [today]
+    assert s.attrs["mmdd_rejected"] == 0
+
+
 def test_attrs_count_multiple_and_empty(monkeypatch):
     today = dt.date(2026, 12, 30)
     s = _parse(monkeypatch, today, [("01/01", "1.0"), ("01/02", "1.1"), ("01/03", "1.2")])

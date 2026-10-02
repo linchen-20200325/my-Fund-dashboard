@@ -93,13 +93,16 @@ def _parse_nav_html(html: str) -> pd.Series:
     以台灣今天的前一年／今年／下一年組三個候選,取離台灣今天最近的那個;
     若它晚於今天 → 此筆不寫、print 一行原因並計數,計數放在回傳 Series 的
     `attrs["mmdd_rejected"]`。淨值為 T+1 公布,頁面不應出現未來日期。
-    YYYY/MM/DD 條目不經此推斷,行為不變。
+    三個候選年都沒有該日期(只有 02/29 會如此)→ 同樣不寫、print 並計數。
+    YYYY/MM/DD 條目不經此推斷,行為不變:值不變;回傳的 Series 一律多帶
+    attrs['mmdd_rejected'](YYYY/MM/DD 時為 0)。
 
     為什麼不再重用 sources.py 的 `_infer_year_for_mmdd`:那條規則把「晚於今天」
-    一律推回去年,於是比今天晚 1～330 天左右的條目會變成一筆看起來合理的
+    一律推回去年,於是比今天晚的條目(最多可晚到「今天到年底的天數」,
+    例如 1 月 1 日時為 364 天)會變成一筆看起來合理的
     去年假歷史值(例:12/30 讀到 01/02 → 去年 01/02;10/02 讀到 11/03 → 去年 11/03)。
     `sources.py::_src_nav_30day` 與 fund_orchestration 的 legacy 近30日路徑
-    仍用那條規則,有同樣風險,已登記待辦、本處未動。
+    仍用那條規則,有同樣風險,待登記(尚未寫入交接本)、本處未動。
 
     已知代價:條目若早於今天約半年以上,最近候選會落在下一年(未來)而被拒收 ——
     那筆會少列,但不會造假。MoneyDJ 的 MM/DD 頁實際涵蓋多少天,未查證。
@@ -122,7 +125,13 @@ def _parse_nav_html(html: str) -> pd.Series:
                         _today = _tw_today()
                     _cand = _mmdd_nearest_candidate(int(ds[:2]), int(ds[3:]), _today)
                     if _cand is None:
-                        raise ValueError(f"MM/DD {ds} 無合法日期")
+                        if ds != "02/29":
+                            raise ValueError(f"MM/DD {ds} 無合法日期")
+                        # 三個候選年都不是閏年:不靜默略過,計入拒收(§1)
+                        _rejected += 1
+                        print(f"[nav_html] MM/DD {ds} 在 {_today.year - 1}～"
+                              f"{_today.year + 1} 皆無此日期 → 此筆不寫")
+                        continue
                     if _cand > _today:
                         _rejected += 1
                         print(f"[nav_html] MM/DD {ds} 最近候選 {_cand} 晚於台灣今天 "
@@ -196,12 +205,12 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 # 「頁面改版、解析不到」在這裡分辨不出來,據實寫明,不替來源下結論。
                 _attempts.append(f"{url} → 頁面已取得(HTTP {r.status_code}),"
                                  f"解析出 {len(s)} 筆(< {_MIN_PTS});"
-                                 f"MM/DD 晚於台灣今天拒收 "
+                                 f"MM/DD 晚於台灣今天或無合法年份拒收 "
                                  f"{s.attrs.get('mmdd_rejected', 0)} 筆;"
                                  f"無法分辨查無此基金或頁面改版")
             if len(s) >= _MIN_PTS:
                 print(f"[fetch_nav] ✅ {len(s)} 筆"
-                      f"(MM/DD 未來日期拒收 {s.attrs.get('mmdd_rejected', 0)} 筆)")
+                      f"(MM/DD 未來或無合法年份拒收 {s.attrs.get('mmdd_rejected', 0)} 筆)")
                 # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs;動態 host:endpoint)
                 _host_fn = url.split("/")[2] if "://" in url else "moneydj"
                 _ep_fn = url.split("?")[0].rsplit("/", 1)[-1]
