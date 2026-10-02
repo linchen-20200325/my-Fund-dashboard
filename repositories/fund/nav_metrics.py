@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+import datetime as _dt_mod
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -62,10 +63,56 @@ def _fail_kind_text() -> str:
     return "kind=(無:fetch_url 有回應,但內容為空白,fetch_url_with_retry 回 None)"
 
 
+def _tw_today():
+    """台灣日期(UTC+8)的今天 — 與 sources.py `_src_nav_30day` /
+    fund_orchestration legacy 近30日取法一致(§4.5)。獨立成函式以便測試固定日期。"""
+    return _dt_mod.datetime.now(_dt_mod.timezone(_dt_mod.timedelta(hours=8))).date()
+
+
+def _mmdd_nearest_candidate(mo: int, da: int, today):
+    """MM/DD 以 today.year−1 / today.year / today.year+1 組三個候選,取離 today 最近者。
+
+    不存在的日期(例如非閏年的 02/29、04/31)略過該候選;三個都不存在 → None。
+    距離相同時(理論上只在相隔整整半年附近才可能)取較早的候選。
+    """
+    cands = []
+    for y in (today.year - 1, today.year, today.year + 1):
+        try:
+            cands.append(_dt_mod.date(y, mo, da))
+        except ValueError:
+            continue
+    if not cands:
+        return None
+    return min(cands, key=lambda c: (abs((c - today).days), c))
+
+
 def _parse_nav_html(html: str) -> pd.Series:
-    """解析 MoneyDJ 淨值 HTML，回傳 pd.Series (date→float)"""
+    """解析 MoneyDJ 淨值 HTML，回傳 pd.Series (date→float)
+
+    MM/DD 條目補年份採「最近候選」規則(`_mmdd_nearest_candidate`):
+    以台灣今天的前一年／今年／下一年組三個候選,取離台灣今天最近的那個;
+    若它晚於今天 → 此筆不寫、print 一行原因並計數,計數放在回傳 Series 的
+    `attrs["mmdd_rejected"]`。淨值為 T+1 公布,頁面不應出現未來日期。
+    三個候選年都沒有該日期時，只有 02/29 計入拒收；其他不合法的 MM/DD（例如 13/45、04/31）照舊略過、不計數。
+    YYYY/MM/DD 條目不經此推斷,行為不變:值不變;回傳的 Series 一律多帶
+    attrs['mmdd_rejected'](YYYY/MM/DD 時為 0)。
+
+    為什麼不再重用 sources.py 的 `_infer_year_for_mmdd`:那條規則把「晚於今天」
+    一律推回去年,於是比今天晚的條目(最多可晚到「今天到年底的天數」,
+    例如 1 月 1 日時為 364 天)會變成一筆看起來合理的
+    去年假歷史值(例:10/02 讀到 11/03 → 去年 11/03)。
+    同一條規則還有另一種跨年失效,不是「推回去年」造成的:它只比月日,
+    12/30 讀到 01/02 時不認為 01/02 晚於今天,於是補成今年 01/02(約一年前)。
+    `sources.py::_src_nav_30day` 與 fund_orchestration 的 legacy 近30日路徑
+    仍用那條規則,有同樣風險,待登記(尚未寫入交接本)、本處未動。
+
+    已知代價:條目若早於今天約半年以上,最近候選會落在下一年(未來)而被拒收 ——
+    那筆會少列,但不會造假。MoneyDJ 的 MM/DD 頁實際涵蓋多少天,未查證。
+    """
     soup = BeautifulSoup(html, "lxml")
     rows_data = []
+    _today = None
+    _rejected = 0
     for tbl in soup.find_all("table"):
         txt = tbl.get_text()
         if not re.search(r"\d{2}/\d{2}", txt):
@@ -76,16 +123,35 @@ def _parse_nav_html(html: str) -> pd.Series:
             try:
                 ds = cols[0].strip()
                 if re.match(r"^\d{2}/\d{2}$", ds):
-                    import datetime
-                    ds = f"{datetime.date.today().year}/{ds}"
-                d = pd.to_datetime(ds)
+                    if _today is None:
+                        _today = _tw_today()
+                    _cand = _mmdd_nearest_candidate(int(ds[:2]), int(ds[3:]), _today)
+                    if _cand is None:
+                        if ds != "02/29":
+                            raise ValueError(f"MM/DD {ds} 無合法日期")
+                        # 三個候選年都不是閏年:不靜默略過,計入拒收(§1)
+                        _rejected += 1
+                        print(f"[nav_html] MM/DD {ds} 在 {_today.year - 1}～"
+                              f"{_today.year + 1} 皆無此日期 → 此筆不寫")
+                        continue
+                    if _cand > _today:
+                        _rejected += 1
+                        print(f"[nav_html] MM/DD {ds} 最近候選 {_cand} 晚於台灣今天 "
+                              f"{_today},頁面不應有未來日期 → 此筆不寫")
+                        continue
+                    d = pd.Timestamp(_cand)
+                else:
+                    d = pd.to_datetime(ds)
                 v = float(cols[1].replace(",", ""))
                 if 0.01 < v < 100000:
                     rows_data.append((d, v))
             except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
     if rows_data:
-        return pd.Series({r[0]: r[1] for r in rows_data}).sort_index().dropna()
-    return pd.Series(dtype=float)
+        out = pd.Series({r[0]: r[1] for r in rows_data}).sort_index().dropna()
+    else:
+        out = pd.Series(dtype=float)
+    out.attrs["mmdd_rejected"] = _rejected
+    return out
 
 
 @register_cache
@@ -141,9 +207,12 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 # 「頁面改版、解析不到」在這裡分辨不出來,據實寫明,不替來源下結論。
                 _attempts.append(f"{url} → 頁面已取得(HTTP {r.status_code}),"
                                  f"解析出 {len(s)} 筆(< {_MIN_PTS});"
+                                 f"MM/DD 晚於台灣今天或無合法年份拒收 "
+                                 f"{s.attrs.get('mmdd_rejected', 0)} 筆;"
                                  f"無法分辨查無此基金或頁面改版")
             if len(s) >= _MIN_PTS:
-                print(f"[fetch_nav] ✅ {len(s)} 筆")
+                print(f"[fetch_nav] ✅ {len(s)} 筆"
+                      f"(MM/DD 未來或無合法年份拒收 {s.attrs.get('mmdd_rejected', 0)} 筆)")
                 # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs;動態 host:endpoint)
                 _host_fn = url.split("/")[2] if "://" in url else "moneydj"
                 _ep_fn = url.split("?")[0].rsplit("/", 1)[-1]
