@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import html
+import re
 
 import streamlit as st
 
@@ -94,6 +94,7 @@ def _base_css() -> str:
     .hld-card {{
       border: 1px solid var(--hld-tone); background: {theme.SURFACE};
       border-radius: 8px; padding: .9rem 1rem; height: 100%;
+      min-width: 0; overflow-wrap: anywhere;
     }}
     .hld-card-head {{
       display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
@@ -109,10 +110,14 @@ def _base_css() -> str:
     .hld-mv {{ display: flex; justify-content: space-between; gap: .6rem; margin: .22rem 0; }}
     .hld-mv-label {{ color: {theme.TEXT_MUTED}; font-size: .76rem; }}
     .hld-mv-value {{ font-size: .98rem; font-weight: 600; color: var(--hld-tone); text-align: right; }}
-    .hld-note {{ font-size: .75rem; color: {theme.TEXT_MUTED}; }}
+    .hld-note {{ font-size: .75rem; color: {theme.TEXT_MUTED}; overflow-wrap: anywhere; }}
+    .hld-line {{
+      font-size: .8rem; color: {theme.TEXT_MUTED}; margin: .15rem 0;
+      overflow-wrap: anywhere; word-break: break-word;
+    }}
     .hld-detail {{
       border-top: 1px dashed {theme.BORDER}; margin-top: .6rem; padding-top: .5rem;
-      font-size: .78rem; color: {theme.TEXT_MUTED};
+      font-size: .78rem; color: {theme.TEXT_MUTED}; overflow-wrap: anywhere;
     }}
     .hld-errline {{ color: {theme.STATE_ERR}; font-weight: 700; font-size: .95rem; }}
     .hld-errdetail {{
@@ -161,8 +166,40 @@ def _base_css() -> str:
     """
 
 
+# 換行與連續空白（只認 ASCII 空白；全形空白「　」是版面用字，不折）。
+_WS_RUN = re.compile(r"[ \t\r\n\f\v]+")
+# 會被 Streamlit 的 Markdown 讀成語法的 ASCII 字元：粗體／斜體、連結、程式碼、刪除線、
+# 標題、表格、數學 `$`、`:red[...]` 指令與 `:emoji:`。一律改寫成數字字元參照 ——
+# CommonMark 規定字元參照只當**字面文字**，不能拿來組語法。
+_MD_ACTIVE = "\\`*_{}[]()#!|~$:"
+# ⚠️ 一張表、一次走完：先 `html.escape` 再換字會把它產出的 `&#x27;` 裡的 `#` 再換一次；
+#    反過來先換字再 `html.escape` 會把 `&#36;` 的 `&` 換成 `&amp;`。兩步都會壞，所以合成一步。
+_MD_ENTITY = {ord(ch): f"&#{ord(ch)};" for ch in _MD_ACTIVE + "&<>\"'"}
+
+
 def _esc(value) -> str:
-    return html.escape(str(value), quote=True)
+    """任何字串上畫面前一律走這裡（總管 2026-10-02 M1 裁定）。
+
+    上游錯誤訊息原文會經這裡上畫面，它可以是任何東西。三步：
+      1. 換行與連續空白折成一個空格 —— Markdown 遇到空行會跳出 HTML 區塊，
+         之後的字就被當成 Markdown 解析（第一輪 `\\n\\n# 標題行` 就這樣變成 `<h1>`）；
+      2. HTML 特殊字元（`& < > " '`）改寫成字元參照 —— 標籤以純文字呈現（與 `html.escape` 同效）；
+      3. Markdown 語法字元改寫成字元參照 —— 萬一某一行落在 HTML 區塊之外也不會被解析。
+    不截斷：長字串靠樣式表的 `overflow-wrap: anywhere` 折行。
+    """
+    return _WS_RUN.sub(" ", str(value)).translate(_MD_ENTITY)
+
+
+def _one_line(markup: str) -> str:
+    """把多行的 HTML 樣板壓成一行，交給 `st.markdown` 之前一律走這裡（S2 第二輪 M1）。
+
+    ⚠️ **第一輪就存在的病，本輪實測才發現**：卡片樣板裡 `{_badges_html(...)}` 那一行在沒有徽章時
+    只剩縮排空白 ＝ 一個空行 ⇒ Markdown 在那裡結束 HTML 區塊，後面縮排四格以上的行被當成
+    **程式碼區塊**，整張卡的下半部以原始 HTML 字樣印在畫面上（`full` 情境的 `HLD-2` 就是這樣，
+    瀏覽器實測抓到 `<code>`）。換行一律不留，空行就不可能出現。
+    ⚠️ 只用在本檔自己寫的樣板上 —— 上游字串已經由 `_esc()` 折掉換行。
+    """
+    return "".join(line.strip() for line in markup.splitlines())
 
 
 def _tone(value) -> str:
@@ -191,8 +228,11 @@ def _buttons(block, prefix) -> None:
 
 
 def _lines(lines) -> None:
+    """說明行。⚠️ 第一輪走 `st.caption(line)` —— 那是 Markdown，**一個字也沒跳脫**，
+    上游訊息原文裡的 `**`、`[..](..)`、`$`、`:red[]` 全被解析（總管 2026-10-02 M1）。
+    現改為包在 HTML 區塊裡、內容走 `_esc()`。"""
     for line in lines:
-        st.caption(line)
+        st.markdown(f'<div class="hld-line">{_esc(line)}</div>', unsafe_allow_html=True)
 
 
 # ───────────────────────── 層 1 ─────────────────────────
@@ -201,7 +241,7 @@ def _lines(lines) -> None:
 def _render_lamp(block: dict) -> None:
     tone = _tone(block["_tone"])
     st.markdown(
-        f"""<div class="hld-lamp" style="--hld-tone:{tone}">
+        _one_line(f"""<div class="hld-lamp" style="--hld-tone:{tone}">
           <div class="hld-glyph" aria-hidden="true">{_esc(block["glyph"])}</div>
           <div>
             <div><span class="hld-stword">{_esc(block["state_word"])}</span>
@@ -209,7 +249,7 @@ def _render_lamp(block: dict) -> None:
             <div class="hld-note">{_esc(block["answers"])}</div>
           </div>
           <div class="hld-code">{_esc(block["code"])}　{_esc(block["title"])}</div>
-        </div>""",
+        </div>"""),
         unsafe_allow_html=True,
     )
     _lines(block["lines"])
@@ -222,7 +262,7 @@ def _render_lamp(block: dict) -> None:
 
 def _card_shell(block: dict, body_html: str) -> None:
     st.markdown(
-        f"""<div class="hld-card" style="--hld-tone:{_tone(block["_tone"])}">
+        _one_line(f"""<div class="hld-card" style="--hld-tone:{_tone(block["_tone"])}">
           <div class="hld-card-head">
             <span class="hld-card-code">{_esc(block["code"])}</span>
             <span class="hld-card-title">{_esc(block["title"])}</span>
@@ -230,7 +270,7 @@ def _card_shell(block: dict, body_html: str) -> None:
           </div>
           {body_html}
           <div class="hld-note">{_esc(block["answers"])}</div>
-        </div>""",
+        </div>"""),
         unsafe_allow_html=True,
     )
 
