@@ -435,6 +435,13 @@ def _render_hld5(block: dict) -> None:
                 f'<div class="hld-plot">{_esc(item["div_plot_text"])}</div>',
                 unsafe_allow_html=True,
             )
+        # 正式模式才有的卡尾（裁示 3-B (ii)，`ui_v2/hld/live.py::_apply_direct`；鍵名 `tail_notes`，與 HLD-1 的 `tail_lines` 不同形狀）。示範模式的模型沒有這個鍵，
+        # 一行都不畫 —— 示範畫面不變。顏色走既有的四色（`theme.tone_hex`），不另立樣式。
+        for line in block.get("tail_notes", ()):
+            st.markdown(
+                f'<div class="hld-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ───────────────────────── 層 4 ─────────────────────────

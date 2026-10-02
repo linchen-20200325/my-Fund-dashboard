@@ -17,6 +17,8 @@
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
 
+S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
+
 ⚠️ 文案逐字照裁示；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
 """
 
@@ -59,6 +61,167 @@ _DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 # 先過這一關再交給 `datetime.fromisoformat` —— 3.11 的 `fromisoformat` 也收 `20260919`、`2026-W38-6`
 # 這類寫法，那些不是本欄約定的形狀，一律不收。
 _DATETIME_HEAD = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", re.ASCII)
+
+
+# ───────────────────────── 裁示 3-B (ii)：DIRECT 持倉另列 ─────────────────────────
+# 出處：`docs/wireframes/draft_hld_live.html` §F 選項 3-B（文案原文、放在哪、什麼顏色、先定義 N）
+#       與 §G 第 3 題、第 3a 題（客戶 2026-10-02 裁示：3-B，字面用 (ii)）。字面逐字，改字先回草稿。
+#
+# ⛔ **本檔不判定誰是 DIRECT。** 判定只有一處：L2 `services/v2_tables/alo_holdings.py::load_alo_tables`
+#    （`_key_text(policy_id) == contract.DIRECT_POLICY_ID`）—— alo 頁吃的就是同一次判定的產物：
+#    DIRECT 持倉**不產生 `holding` 列**（所以本頁每一塊的數字本來就不含它），另交一份 `direct` 清單。
+#    本頁依 `tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (2)(5) 條不得 import `services`，
+#    所以 L2 的三個值由呼叫端（S6 的 `source.py`）以參數傳進來，本檔不另寫一份字面：
+#    - `direct_policy_id`：`contract.DIRECT_POLICY_ID` —— 只拿來**驗** `holding` 裡沒有 DIRECT 列（S4 第二輪 M2）；
+#    - `direct_sources`：L2 `direct` 清單合法的三種 `source`（`TAB_PROFILE`、`TAB_SUPPLEMENT`、`POLICY_TAB`）；
+#    - `policy_tab_source`：`alo_holdings.POLICY_TAB` —— N 只數這一種。
+DIRECT_EXCLUDED_TEXT = "⚠ DIRECT 列暫不支援，該筆不計入體檢（{n} 筆）"   # 黃
+DIRECT_LOCATION_TEXT = "{tab} 第 {row} 列"                                # 灰，一行一筆
+DIRECT_SUMMARY_SUFFIX = " · DIRECT {n} 筆未列入"                          # 收合時摘要尾端（有持倉時）
+DIRECT_SUMMARY_ONLY = "DIRECT {n} 筆未列入"                               # HLD-5 摘要（持倉全空時，S4 第二輪 M1）
+
+# 持倉全空而 N＞0 時（S4 第二輪 M1、第三輪 1，總管裁定）：`logic` 寫出「尚未建立任何持倉」的出口，**依位置**列名。
+# 只換下表點名的（塊、欄位）；欄位是 list 時，只換那一欄裡**整行等於** `logic` 模板的那幾行。
+# 上游的錯誤原文、保單名、分頁名一律不碰 —— 它們不住在這些位置（`HLD-1` 的上游原文住在
+# `_placeholder.reason_text`，不在表內），即使剛好含那幾個字也照印。
+# ⚠️ 第二輪是「整個模型裡值相等就換」＋「換完還找得到就 raise」：前者會連上游原文一起換，
+#    後者會因上游原文含那幾個字而整頁失敗（第三輪紅隊 J1）。兩者都已拿掉，改由測試守住
+#    「表沒漏列出口」（`test_hld_live_logic.py` 的組合測試）。
+#   模板 A 恰為 `TEXT_NO_HOLDING`；模板 B `f"{ND_TEXT}：{TEXT_NO_HOLDING}"`；
+#   模板 C `f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）"`。
+_EMPTY_EXITS = (
+    ("HLD-0", "text"),            # A
+    ("HLD-0", "summary_text"),    # A
+    ("HLD-0", "lines"),           # C（紅燈時的括號補述）
+    ("HLD-1", "summary_text"),    # A
+    ("HLD-1", "detail_lines"),    # A
+    ("HLD-2", "summary_text"),    # A
+    ("HLD-2", "detail_lines"),    # A
+    ("HLD-3", "summary_text"),    # A
+    ("HLD-3", "detail_lines"),    # A
+    ("HLD-8", "summary_text"),    # B
+    ("HLD-8", "detail_lines"),    # A
+)
+# HLD-5 另辦：摘要整句換成 `DIRECT_SUMMARY_ONLY`，`_HLD5_EMPTY_LINE` 那一行拿掉（不是換字）。
+_HLD5_EMPTY_LINE = f"{logic.TEXT_NO_HOLDING}，沒有可以展開的檔。"
+
+
+def _empty_replacements(warning: str) -> dict:
+    nh = logic.TEXT_NO_HOLDING
+    return {
+        nh: warning,
+        f"{logic.ND_TEXT}：{nh}": f"{logic.ND_TEXT}：{warning}",
+        f"（另：{nh}。{logic.TEXT_SHEETS_READONLY}）": f"（另：{warning}。{logic.TEXT_SHEETS_READONLY}）",
+    }
+
+
+def _replace_exits(model: dict, warning: str) -> None:
+    table = _empty_replacements(warning)
+    for code, field in _EMPTY_EXITS:
+        block = logic.find_block(model, code)
+        value = block.get(field)
+        if isinstance(value, str):
+            block[field] = table.get(value, value)
+        elif isinstance(value, list):
+            block[field] = [table.get(line, line) if isinstance(line, str) else line for line in value]
+
+
+def _require_text(value, name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{name} 應為字串：{value!r}")
+    if not value.strip():
+        raise ValueError(f"{name} 是空字串：{value!r}")
+    return value
+
+
+def direct_holding_rows(direct, *, policy_tab_source, direct_sources) -> list:
+    """L2 `direct` 清單 → 只留保單分頁那一種（草稿 §F 3-B「先定義 N」：N 只數 `source` 為 `POLICY_TAB` 的列）。
+
+    `_保單資料` 的 DIRECT 列是保單資料、不是持倉；`_持倉補充` 的 DIRECT 列與保單分頁那一列可能是
+    同一筆持倉，一起數會數兩次 —— 兩種一律不數。
+    **每一筆都驗，不只保單分頁那一種**（S4 第二輪 J1／J2）；不合格一律 raise，不略過、不去重：
+    - `direct` 不是 list／tuple、元素不是 dict → TypeError；
+    - 缺 `source` 鍵、`source` 不在 `direct_sources` 裡 → ValueError（認不得的來源不能默默不數）；
+      `source` 不是字串（含 list、dict 這類不可雜湊的）→ TypeError，先驗型別再查集合（第三輪建議 3）；
+    - `tab` 不是字串 → TypeError；空白、前後有空白、含換行 → ValueError，不 strip（第三輪建議 2）；
+      `row` 不是正整數（含 `bool`）→ ValueError；
+    - 同一筆（`source`、`tab`、`row` 都相同）出現兩次 → ValueError。
+    """
+    if not isinstance(direct, (list, tuple)):
+        raise TypeError(f"direct 應為 list 或 tuple：{type(direct).__name__}")
+    _require_text(policy_tab_source, "policy_tab_source")
+    if not isinstance(direct_sources, (set, frozenset, list, tuple)):
+        raise TypeError(f"direct_sources 應為集合：{type(direct_sources).__name__}")
+    sources = {_require_text(v, "direct_sources 的元素") for v in direct_sources}
+    if policy_tab_source not in sources:
+        raise ValueError(f"policy_tab_source {policy_tab_source!r} 不在 direct_sources 裡")
+    rows, seen = [], set()
+    for index, entry in enumerate(direct):
+        where = f"DIRECT 清單第 {index} 筆"
+        if not isinstance(entry, dict):
+            raise TypeError(f"{where}應為 dict：{entry!r}")
+        if "source" not in entry:
+            raise ValueError(f"{where}缺 source：{entry!r}")
+        source = entry["source"]
+        if not isinstance(source, str):
+            raise TypeError(f"{where}的 source 應為字串，收到 {type(source).__name__}：{entry!r}")
+        if source not in sources:
+            raise ValueError(f"{where}的 source 認不得：{entry!r}")
+        tab, row = entry.get("tab"), entry.get("row")
+        if not isinstance(tab, str):
+            raise TypeError(f"{where}的 tab 應為字串，收到 {type(tab).__name__}：{entry!r}")
+        if not tab.strip():
+            raise ValueError(f"{where}的 tab 是空白：{entry!r}")
+        if tab != tab.strip() or "\n" in tab or "\r" in tab:
+            raise ValueError(f"{where}的 tab 前後有空白或含換行：{entry!r}")
+        if isinstance(row, bool) or not isinstance(row, int) or row <= 0:
+            raise ValueError(f"{where}的 row 不是正整數：{entry!r}")
+        key = (source, tab, row)
+        if key in seen:
+            raise ValueError(f"{where}重複（同一 source、tab、row）：{entry!r}")
+        seen.add(key)
+        if source == policy_tab_source:
+            rows.append({"tab": tab, "row": row})
+    return rows
+
+
+def _check_no_direct_holding(dataset: dict, direct_policy_id: str) -> None:
+    """`holding` 裡出現 DIRECT 列 → raise（S4 第二輪 M2，總管裁定）。
+
+    L2 不為 DIRECT 產生 `holding` 列；真出現了，表示上游壞了 —— 照畫的話，同一筆會一邊被算進各塊、
+    一邊在卡尾被說「不計入」。比對時去掉前後空白（與 L2 `_key_text` 同向，寧嚴勿寬）。
+    """
+    for holding in dataset.get("holding") or ():
+        pid = holding.get("policy_id")
+        if isinstance(pid, str) and pid.strip() == direct_policy_id:
+            raise ValueError(f"holding 裡有 DIRECT 列（應由 L2 排除）：{holding.get('holding_id')!r}")
+
+
+def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
+    """HLD-5 卡尾一行黃字＋逐筆位置（灰），收合摘要加 DIRECT 筆數；持倉全空時另把「尚未建立任何持倉」換掉。
+
+    N＝0 時什麼都不加（草稿與 alo 都沒寫 N＝0 的畫法；本組的處理，已回報待裁）。
+    各塊的 `_state`／`_tone`、按鈕都不動：這幾筆是「讀到了、照裁示不計入」，不是哪一塊算不出來。
+    """
+    if not rows:
+        return model
+    n = len(rows)
+    warning = DIRECT_EXCLUDED_TEXT.format(n=n)
+    hld5 = logic.find_block(model, "HLD-5")
+    if has_holdings:
+        hld5["summary_text"] = hld5["summary_text"] + DIRECT_SUMMARY_SUFFIX.format(n=n)
+    else:
+        if _HLD5_EMPTY_LINE not in hld5["detail_lines"]:
+            raise ValueError(f"HLD-5 空持倉的說明行「{_HLD5_EMPTY_LINE}」不在，logic 改了而本檔沒跟上")
+        hld5["summary_text"] = DIRECT_SUMMARY_ONLY.format(n=n)
+        hld5["detail_lines"] = [line for line in hld5["detail_lines"] if line != _HLD5_EMPTY_LINE]
+    hld5["tail_notes"] = [{"text": warning, "_tone": "黃"}] + [
+        {"text": DIRECT_LOCATION_TEXT.format(tab=r["tab"], row=r["row"]), "_tone": "灰"} for r in rows
+    ]
+    if has_holdings:
+        return model
+    _replace_exits(model, warning)
+    return model
 
 
 def taiwan_today(now: datetime | None = None) -> date:
@@ -202,12 +365,38 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
 
 
 def build_live_model(
-    dataset: dict, *, fields=None, viewport_width: int = 1280, open_fund=None, today: date | None = None
+    dataset: dict,
+    *,
+    fields=None,
+    viewport_width: int = 1280,
+    open_fund=None,
+    today: date | None = None,
+    direct_policy_id=None,
+    direct=(),
+    policy_tab_source=None,
+    direct_sources=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
     本輪 `dataset` 由呼叫端給（測試用假資料的 dataset）；S6 由 `source.py` 取數後給。
+    L2 的三個值與 `direct` 清單由呼叫端傳（見本檔「裁示 3-B (ii)」那一段）：
+    - `direct_policy_id`：**一律要給**，沒給就 raise（S4 第二輪 M2）；
+    - `direct`：L2 `load_alo_tables` 交出的 `direct` 清單原樣；
+    - `policy_tab_source`、`direct_sources`：`direct` 非空時要給，沒給就 raise，不猜。
     """
+    if direct_policy_id is None:
+        raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
+    _require_text(direct_policy_id, "direct_policy_id")
+    _check_no_direct_holding(dataset, direct_policy_id)
+    if not isinstance(direct, (list, tuple)):
+        raise TypeError(f"direct 應為 list 或 tuple：{type(direct).__name__}")
+    if direct and (policy_tab_source is None or direct_sources is None):
+        raise ValueError("有 DIRECT 清單卻沒有給 policy_tab_source／direct_sources，無法決定哪些列算進 N")
+    rows = (
+        direct_holding_rows(direct, policy_tab_source=policy_tab_source, direct_sources=direct_sources)
+        if direct
+        else []
+    )
     model = logic.build_page_model(
         dataset,
         fields=fields,
@@ -215,4 +404,5 @@ def build_live_model(
         open_fund=open_fund,
         demo_hint=False,
     )
-    return apply_live_notes(model, today=today)
+    out = apply_live_notes(model, today=today)
+    return _apply_direct(out, rows, has_holdings=bool(dataset.get("holding")))
