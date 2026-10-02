@@ -60,7 +60,11 @@ def _rendered(at):
     for group in (at.title, at.text, at.error, at.warning, at.info, at.success):
         for element in group:
             out.append(element.value)
-    return out
+    # ⚠️ 2026-10-02（S2 第二輪 M1）：`page._esc()` 把 Markdown／HTML 語法字元改寫成字元參照，
+    #    畫面上看到的是還原後的字。這裡還原一次，比的才是畫面字串，不是原始碼。
+    import html as _html
+
+    return [_html.unescape(text) if isinstance(text, str) else text for text in out]
 
 
 # ───────────────────────── 分離 ─────────────────────────
@@ -589,3 +593,96 @@ def test_A正控_同基金兩張保單_頁面不崩潰_展開一列只開那一�
         assert at.button(key=f"hld5_open_{hid}").disabled is True
         other = "H-BBBB-DIRECT" if hid == "H-BBBB" else "H-BBBB"
         assert at.button(key=f"hld5_open_{other}").disabled is False
+
+
+# ═══════ S2 第二輪 M1：上游錯誤訊息原文一律以純文字上畫面（總管 2026-10-02 裁定） ═══════
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # 同目錄的共用模組
+import _ui_v2_chromium  # noqa: E402  瀏覽器解析（CI 找不到要 fail）
+
+# 紅隊重現用的那一句：HTML、Markdown 粗體、連結、數學 `$`、`:red[]`、空行後的標題、超長不斷行字串。
+_HOSTILE_MSG = (
+    "HTTPError 503 **粗體** [點我](https://evil.example) <b>tag</b> $5 and $6 :red[紅] \n\n"
+    "# 標題行\n" + "X" * 300
+)
+# 換行與連續空白折成一個空格之後，畫面上應該逐字看得到的樣子。
+_HOSTILE_SHOWN = " ".join(_HOSTILE_MSG.split())
+
+_HOSTILE_APP = '''
+import sys
+sys.path.insert(0, {root!r})
+import streamlit as st
+from ui_v2.hld import fixtures, page
+
+MSG = {msg!r}
+_original = fixtures.scenario
+
+
+def _patched(name):
+    out = _original(name)
+    out["dataset"]["fund_errors"] = {{"nav": {{"AAAA": MSG}}, "dividend": {{"BBBB": MSG}}}}
+    return out
+
+
+fixtures.scenario = _patched
+st.set_page_config(page_title="hostile", layout="wide")
+try:
+    page.render()
+finally:
+    fixtures.scenario = _original
+'''
+
+
+def test_S2_M1_esc把換行折成一個空格_而且不留任何會被解析的字元():
+    """純函式層的正控（瀏覽器那一條在下面）。⚠️ 拿掉 `_esc()` 的折行或換字，本條轉紅。"""
+    out = page._esc(_HOSTILE_MSG)
+    assert "\n" not in out
+    bare = re.sub(r"&#\d+;", "", out)  # 字元參照本身帶 `&` `#` `;`，先拿掉再查
+    for ch in "<>*[]()$:#`_~|!\\&":
+        assert ch not in bare, (ch, bare[:120])
+    import html as _html
+
+    assert _html.unescape(out) == _HOSTILE_SHOWN
+    # 全形空白是版面用字，不折。
+    assert page._esc("甲　　乙") == "甲　　乙"
+
+
+def test_S2_M1_瀏覽器_錯誤訊息原文以純文字呈現_不出h1不出連結不出粗體(tmp_path):
+    """紅隊 M1 重現：`fund_errors` 帶一句含 Markdown／HTML 的訊息原文，
+    第一輪瀏覽器裡出現 `<h1>`、可點連結、粗體，`$` 被吃掉。
+
+    兩條渲染路徑都要擋：`_lines()`（HLD-0 的 lines、HLD-8 的 detail_lines，第一輪走 `st.caption`
+    完全沒跳脫）與卡片的 HTML 路徑（只做了 `html.escape`，但空行讓 Markdown 跳出 HTML 區塊）。
+    ⚠️ 拿掉修復（`_lines` 改回 `st.caption`，或 `_esc` 不折換行）本條轉紅。
+    """
+    app = tmp_path / "hostile_hld.py"
+    app.write_text(
+        _HOSTILE_APP.format(root=str(_ROOT), msg=_HOSTILE_MSG), encoding="utf-8")
+    playwright_api = _ui_v2_chromium.import_sync_api()
+    with playwright_api.sync_playwright() as p:
+        browser = _ui_v2_chromium.launch(p)  # 先確認瀏覽器在，再起 streamlit
+        try:
+            with _ui_v2_chromium.streamlit_server(app) as base:
+                for width in (1400, 390):
+                    tab = browser.new_page(viewport={"width": width, "height": 1200})
+                    tab.goto(base, wait_until="networkidle")
+                    tab.wait_for_selector("text=體檢結論燈", timeout=60000)
+                    tab.wait_for_timeout(1500)
+                    for summary in tab.locator("summary").all():
+                        summary.click()
+                    tab.wait_for_timeout(1000)
+                    main = tab.locator("[data-testid=stMain]")
+                    for tag in ("h1", "h2", "a", "strong", "em", "code"):
+                        assert main.locator(tag).count() == 0, (width, tag)
+                    text = " ".join(main.inner_text().split())
+                    # 原文字面逐字可見，而且至少落在三個地方：HLD-0 帶上去的那幾行（`_lines`）、
+                    # 核心卡說明區（HTML 路徑）、HLD-8 說明區（`_lines`）。
+                    assert _HOSTILE_SHOWN in text, (width, text[:300])
+                    assert text.count(_HOSTILE_SHOWN) >= 3, (width, text.count(_HOSTILE_SHOWN))
+                    # 長字串折行，不撐破版面。
+                    overflow = tab.evaluate(
+                        "() => document.documentElement.scrollWidth - window.innerWidth")
+                    assert overflow <= 1, (width, overflow)
+                    tab.close()
+        finally:
+            browser.close()

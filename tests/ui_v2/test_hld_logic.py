@@ -2045,7 +2045,11 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
         ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
         ("fetchfail", "HLD-0"): ('紅', '系統錯誤', "1cf22225b317"),
-        ("fetchfail", "HLD-1"): ('中性', 'ok', "fe2c96ceefd7"),
+        # ⚠️ 2026-10-02（總管 S2 第二輪，紅隊建議 3）：`HLD-1` 卡尾在「⛔ 另有 3 檔…取數失敗」底下
+        #    逐檔列出原因（表層級錯誤也列），本格摘要換新值（有意識的更正，不是漏刪）。
+        #    換之前先證明：把 `tail_lines` 截回第一行再算摘要，舊值 `fe2c96ceefd7` 原樣重現
+        #    （量測日 2026-10-02）；狀態與顏色一格未動，其餘 107 格一格未動。
+        ("fetchfail", "HLD-1"): ('中性', 'ok', "fbbc102b8454"),
         ("fetchfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("fetchfail", "HLD-3"): ('紅', '系統錯誤', "49dd1baf455f"),
         ("fetchfail", "HLD-4"): ('中性', 'ok', "dffae81c35eb"),
@@ -2937,6 +2941,7 @@ def test_S2_1正控_一檔淨值逐檔失敗_只有那一檔進系統錯誤_塊�
 
     ⚠️ 拿掉修復（核心卡與 `HLD-8` 的 `block_states` 改回讀全部 `states`）本條轉紅：
        塊態會變成 `系統錯誤`、燈會變紅。
+    ⚠️ 第二輪（總管規格組裁定 5）：塊態不變紅，但**邊框要紅**（塊裡有 ⛔ 的值）。
     """
     ds = _with_fund_errors(fixtures.dataset_full(), {"nav": {"AAAA": _FUND_MSG}})
     model = logic.build_page_model(ds)
@@ -2953,7 +2958,7 @@ def test_S2_1正控_一檔淨值逐檔失敗_只有那一檔進系統錯誤_塊�
         b = logic.fund_group(logic.find_block(clean, "HLD-2"), code)["main_values"]
         assert a == b, code
     assert hld2["_state"] == logic.STATE_OK, hld2["_state"]
-    assert hld2["_tone"] != "紅"
+    assert hld2["_tone"] == "紅", hld2["_tone"]  # 規格組裁定 5：有 ⛔ 的值，邊框就要反映
     # 說明區寫出是哪一檔，訊息原文照印。
     expected = logic.fund_fetch_failed_text("AAAA", _FUND_MSG)
     assert expected == f"⛔ 取數失敗：AAAA：{_FUND_MSG}"
@@ -2966,6 +2971,7 @@ def test_S2_1正控_一檔淨值逐檔失敗_只有那一檔進系統錯誤_塊�
     assert logic.find_row(hld8, "AAAA")["drawdown"]["_state"] == logic.STATE_ERROR
     assert logic.find_row(hld8, "BBBB")["drawdown"]["_state"] == logic.STATE_OK
     assert hld8["_state"] != logic.STATE_ERROR, hld8["_state"]
+    assert hld8["_tone"] == "紅", hld8["_tone"]
     assert expected in hld8["detail_lines"], hld8["detail_lines"]
     assert hld8["summary_text"].endswith("有值取不到或不適用"), hld8["summary_text"]
 
@@ -3038,9 +3044,27 @@ def test_S2_1_沒有fund_errors鍵或為空時_整頁模型逐鍵相同():
             assert logic.build_page_model(**again) == base, (name, empty)
 
 
-def test_S2_1_逐檔錯誤只點名持倉以外的檔_畫面一格不變():
-    ds = _with_fund_errors(fixtures.dataset_full(), {"nav": {"ZZZZ": _FUND_MSG}})
-    assert logic.build_page_model(ds) == logic.build_page_model(fixtures.dataset_full())
+def test_S2_1_逐檔錯誤點名持倉以外的代碼_raise並列出那些代碼():
+    """總管 2026-10-02 J2 裁定（客戶已確認）：上游與持倉對不上，靜默略過等於吞掉一筆失敗。
+    比對用持倉 `fund_code` 的原值，不做大小寫或空白正規化。
+
+    ⚠️ 第一輪本條斷言的是「畫面一格不變」—— 已依裁定改成斷言 raise。
+    ⚠️ 拿掉修復（不比對持倉）本條轉紅。
+    """
+    import pytest
+
+    for codes in (["ZZZZ"], ["aaaa"], [" AAAA"], ["AAAA ", "ZZZZ"]):
+        ds = _with_fund_errors(
+            fixtures.dataset_full(), {"nav": {c: _FUND_MSG for c in codes}})
+        with pytest.raises(ValueError) as info:
+            logic.build_page_model(ds)
+        for code in codes:
+            if code != "AAAA":
+                assert repr(code) in str(info.value), (code, str(info.value))
+    # 空持倉時點名任何代碼都對不上。
+    with pytest.raises(ValueError, match="AAAA"):
+        logic.build_page_model(
+            _with_fund_errors(fixtures.dataset_empty(), {"dividend": {"AAAA": _FUND_MSG}}))
 
 
 def test_S2_1_fund_errors形狀不對一律raise():
@@ -3058,6 +3082,9 @@ def test_S2_1_fund_errors形狀不對一律raise():
         ({"nav": {"AAAA": ""}}, TypeError),
         ({"nav": {"AAAA": None}}, TypeError),
         ({"dividend": {"AAAA": 503}}, TypeError),
+        # 只有空白的訊息等於沒有訊息（總管 2026-10-02 裁定：先 strip）。
+        ({"nav": {"AAAA": "   "}}, TypeError),
+        ({"nav": {"AAAA": "\n\t"}}, TypeError),
     ]
     for value, exc in bad:
         with pytest.raises(exc):
@@ -3069,32 +3096,38 @@ def test_S2_1_fund_errors形狀不對一律raise():
             logic.build_page_model(_with_fund_errors(fixtures.dataset_empty(), value))
 
 
-def test_S2_1_HLD1_逐檔失敗的檔不列入_卡尾寫出是哪一檔_零列時不說沒有任何一檔超出():
-    """門檻全沒超出（`noexceed`），而 `AAAA` 的淨值逐檔失敗 ⇒ `AAAA` 的最大回撤沒評估。
+def test_S2_M2_零列偏離而有檔取數失敗_HLD1進系統錯誤_燈為紅():
+    """總管 2026-10-02 M2 裁定：HLD-1 零列，而且有任何一檔因取數失敗沒列入（逐檔或表層級都算）
+    ⇒ HLD-1 進 `系統錯誤`（比照 `missing_other` 零列進 `資料未備` 的先例），HLD-0 依既有對應走。
 
-    ⛔「目前這一組門檻下，沒有任何一檔超出」在這裡是假話：`AAAA` 超不超出，不知道。
-    ⚠️ 拿掉修復（`_build_hld1` 與 `conclusion_light()` 的 `fund_lines` 條件）本條轉紅。
+    第一輪的畫面：HLD-0 灰燈「無偏離項」、HLD-1 摘要「無偏離項」—— `AAAA` 超不超出，不知道。
+    ⚠️ 拿掉修復（`_build_hld1` 的 `if not rows and skipped["error"]` 那一支）本條轉紅。
     """
-    ds = _with_fund_errors(fixtures.dataset_noexceed(), {"nav": {"AAAA": _FUND_MSG}})
-    model = logic.build_page_model(ds)
-    hld1 = logic.find_block(model, "HLD-1")
-    line = logic.fund_fetch_failed_text("AAAA", _FUND_MSG)
-    assert hld1["_rows"] == []
-    assert hld1["_state"] == logic.STATE_OK
-    assert any("1 檔的門檻指標取數失敗" in t for t in hld1["tail_lines"]), hld1["tail_lines"]
-    assert line in hld1["tail_lines"], hld1["tail_lines"]
-    assert "目前這一組門檻下，沒有任何一檔超出。" not in hld1["detail_lines"]
+    no_exceed_line = "目前這一組門檻下，沒有任何一檔超出。"
+    for label, mutate in (
+        ("逐檔", lambda ds: _with_fund_errors(ds, {"nav": {"AAAA": _FUND_MSG}})),
+        ("表層級", lambda ds: ds.update(errors={"nav": _FUND_MSG}) or ds),
+    ):
+        model = logic.build_page_model(mutate(fixtures.dataset_noexceed()))
+        hld1 = logic.find_block(model, "HLD-1")
+        assert hld1["_rows"] == [], label
+        assert hld1["_state"] == logic.STATE_ERROR, (label, hld1["_state"])
+        assert hld1["_tone"] == "紅", label
+        assert hld1["summary_text"] == logic.ERR_TEXT, (label, hld1["summary_text"])
+        assert hld1["_placeholder"]["_state"] == logic.STATE_ERROR, label
+        # 紅隊 J3：表層級錯誤時這一句同樣要抑制。
+        assert no_exceed_line not in logic.collect_ui_strings(model), label
+        assert logic.fund_fetch_failed_text("AAAA", _FUND_MSG) in hld1["tail_lines"], label
+        light = logic.find_block(model, "HLD-0")
+        assert light["_tone"] == "紅", (label, light["_tone"])
+        assert logic.TEXT_NO_DEVIATION not in light["text"], label
+        assert any("偏離提示卡" in line for line in light["lines"]), (label, light["lines"])
 
-    light = logic.find_block(model, "HLD-0")
-    assert light["_tone"] == "灰"
-    assert light["_deviation_count"] == 0
-    assert line in light["lines"], light["lines"]
-    assert "目前這一組門檻下，沒有任何一檔超出。" not in light["lines"]
-
-    # 對照組：沒有逐檔失敗時照舊說那一句。
+    # 對照組：沒有任何取數失敗時照舊「無偏離項」與那一句。
     plain = logic.build_page_model(fixtures.dataset_noexceed())
-    assert "目前這一組門檻下，沒有任何一檔超出。" in logic.find_block(plain, "HLD-0")["lines"]
-    assert "目前這一組門檻下，沒有任何一檔超出。" in logic.find_block(plain, "HLD-1")["detail_lines"]
+    assert logic.find_block(plain, "HLD-1")["_state"] == logic.STATE_OK
+    assert no_exceed_line in logic.find_block(plain, "HLD-0")["lines"]
+    assert no_exceed_line in logic.find_block(plain, "HLD-1")["detail_lines"]
 
 
 def test_S2_1_HLD1_有偏離列時燈的N照列數_並帶上逐檔失敗那一行():
@@ -3108,6 +3141,13 @@ def test_S2_1_HLD1_有偏離列時燈的N照列數_並帶上逐檔失敗那一�
     assert line in hld1["tail_lines"]
     assert line in light["lines"]
     assert light["_tone"] == "黃"
+    # 有偏離列時 HLD-1 維持 ok，燈不紅（S2 原則）。
+    assert hld1["_state"] == logic.STATE_OK
+    # 紅隊建議 2：燈帶上去的要包含前導句，說明 N 只是下限。
+    lead = "⛔ 另有 1 檔的門檻指標取數失敗，未列入（示意）"
+    assert lead in hld1["tail_lines"], hld1["tail_lines"]
+    assert lead in light["lines"], light["lines"]
+    assert light["lines"].index(lead) < light["lines"].index(line)
 
 
 def test_S2_1_同基金兩張保單_一起失敗_說明區只寫一次():
@@ -3274,3 +3314,155 @@ def test_S2_1_HLD8_其他值都出數而一檔逐檔失敗時_摘要不得說兩
     assert logic.fund_fetch_failed_text("CCCC", _FUND_MSG) in hld8["detail_lines"]
     # 「重新取數」照掛：有值是 `系統錯誤`。
     assert [b["label"] for b in hld8["buttons"]] == ["重新取數"]
+
+
+# ═══════ S2 第二輪（兩組稽核未通過後的修正；總管 2026-10-02 裁定） ═══════
+
+_ALL_CODES = ("AAAA", "BBBB", "CCCC")
+
+
+def _block_look(model, code):
+    block = logic.find_block(model, code)
+    return block["_state"], block["_tone"]
+
+
+def test_S2_M3_一欄全檔逐檔失敗與整表失敗_三塊的狀態與色調相同():
+    """總管 2026-10-02 M3 裁定：某張表的逐檔錯誤涵蓋全部持倉 ⇒ 塊態視同表層級錯誤。
+
+    第一輪：`dividend=[]` ＋ 三檔配息逐檔失敗 → HLD-8 是 ok／中性，整表失敗卻是系統錯誤／紅；
+    三檔淨值逐檔失敗 → HLD-8 是黃，整表失敗是紅。
+    ⚠️ 拿掉修復（`_counts_for_block_state` 不看 `_fund_error_table_wide`）本條轉紅。
+    """
+    cases = []
+    for table in ("nav", "dividend"):
+        for empty_rows in (False, True):
+            def base(table=table, empty_rows=empty_rows):
+                ds = fixtures.dataset_full()
+                if empty_rows:
+                    ds[table] = []
+                return ds
+            cases.append((table, empty_rows, base))
+    for table, empty_rows, base in cases:
+        per_fund = _with_fund_errors(base(), {table: {c: _FUND_MSG for c in _ALL_CODES}})
+        whole = base()
+        whole["errors"] = {table: _FUND_MSG}
+        a = logic.build_page_model(per_fund)
+        b = logic.build_page_model(whole)
+        for code in ("HLD-2", "HLD-3", "HLD-8"):
+            assert _block_look(a, code) == _block_look(b, code), (
+                table, empty_rows, code, _block_look(a, code), _block_look(b, code))
+        # 這條要真的碰得到 `系統錯誤`，不然會退化成兩邊都 ok 的空比。
+        assert any(_block_look(b, c)[0] == logic.STATE_ERROR for c in ("HLD-2", "HLD-3", "HLD-8"))
+    # 反向：只有兩檔失敗時不算全欄，塊態照 S2 原則不進 `系統錯誤`。
+    two = _with_fund_errors(fixtures.dataset_full(), {"nav": {"AAAA": _FUND_MSG, "BBBB": _FUND_MSG}})
+    assert logic.find_block(logic.build_page_model(two), "HLD-2")["_state"] == logic.STATE_OK
+
+
+def test_S2_J1_淨值取數失敗的檔只算取數失敗_配息佔淨值比也進系統錯誤():
+    """總管 2026-10-02 J1 裁定。
+
+    第一輪：三檔淨值都逐檔失敗（淨值表也就沒有它們的列）→ HLD-1 卡尾同時寫
+    「另有 3 檔缺淨值」與「另有 3 檔…取數失敗」，加起來 6 檔，而持倉只有 3 檔；
+    配息佔淨值比印的是 `資料未備`，不是 `系統錯誤`。
+    ⚠️ 拿掉修復（`deviation_rows` 尾端的扣除，或配息佔淨值比改回只看 `div_error`）本條轉紅。
+    """
+    for label, ds in (
+        ("逐檔", _with_fund_errors(
+            dict(fixtures.dataset_full(), nav=[]), {"nav": {c: _FUND_MSG for c in _ALL_CODES}})),
+        ("表層級", dict(fixtures.dataset_full(), nav=[], errors={"nav": _FUND_MSG})),
+    ):
+        model = logic.build_page_model(ds)
+        hld1 = logic.find_block(model, "HLD-1")
+        assert hld1["missing_nav_count"] == 0, (label, hld1["tail_lines"])
+        assert not any("缺淨值" in line for line in hld1["tail_lines"]), (label, hld1["tail_lines"])
+        counts = [int(m.group(1)) for line in hld1["tail_lines"]
+                  for m in [re.match(r"[⬜⛔] 另有 (\d+) 檔", line)] if m]
+        assert counts and sum(counts) <= len(_ALL_CODES), (label, counts)
+        for code in _ALL_CODES:
+            group = logic.fund_group(logic.find_block(model, "HLD-3"), code)
+            yield_node = next(mv for mv in group["main_values"] if mv["label"] == "配息佔淨值比")
+            assert yield_node["_state"] == logic.STATE_ERROR, (label, code, yield_node)
+            assert yield_node["reason_text"] == _FUND_MSG
+    # 淨值表有列、只是淨值整表取數失敗：配息佔淨值比同樣不得照算。
+    ds = fixtures.dataset_full()
+    ds["errors"] = {"nav": _FUND_MSG}
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "AAAA")
+    assert [mv["_state"] for mv in group["main_values"]] == [logic.STATE_OK, logic.STATE_ERROR]
+    # 配息也失敗時印配息那一句（本值掛在配息卡上）。
+    ds = _with_fund_errors(fixtures.dataset_full(), {"nav": {"AAAA": "N"}, "dividend": {"AAAA": "D"}})
+    group = logic.fund_group(logic.find_block(logic.build_page_model(ds), "HLD-3"), "AAAA")
+    assert [mv["reason_text"] for mv in group["main_values"]] == ["D", "D"]
+
+
+def test_S2_紅隊建議3_計數算進幾檔_原因就列得出幾檔():
+    """整表配息失敗 ＋ `AAAA` 淨值逐檔失敗：第一輪卡尾寫「另有 3 檔…取數失敗」，底下卻只列 1 行。
+
+    ⚠️ 拿掉修復（`HLD-1` 的原因行改回只收逐檔錯誤）本條轉紅。
+    """
+    ds = _with_fund_errors(fixtures.dataset_full(), {"nav": {"AAAA": "nav-x"}})
+    ds["errors"] = {"dividend": _FUND_MSG}
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert "⛔ 另有 3 檔的門檻指標取數失敗，未列入（示意）" in hld1["tail_lines"], hld1["tail_lines"]
+    listed = {
+        line.split("：")[1] for line in hld1["tail_lines"]
+        if line.startswith(logic.ERR_TEXT + "：")
+    }
+    assert listed == set(_ALL_CODES), (listed, hld1["tail_lines"])
+    assert logic.fund_fetch_failed_text("AAAA", "nav-x") in hld1["tail_lines"]
+    for code in _ALL_CODES:
+        assert logic.fund_fetch_failed_text(code, _FUND_MSG) in hld1["tail_lines"], code
+
+
+def test_S2_必修1_區間起點那天沒有淨值但更早還有_不觸發推定():
+    """「不限區間」：起點設在 2026-01-03（週六，沒有淨值列），淨值表更早就有列。
+
+    ⚠️ 拿掉修復（推定規則改讀區間內的 `nav_rows`）本條轉紅：區間內最早一筆是 01-05，晚於起點。
+    """
+    ds = _profile_pending(fixtures.dataset_full())
+    start = "2026-01-03"
+    assert not any(r["nav_date"] == start for r in ds["nav"])
+    for code in _ALL_CODES:
+        assert min(r["nav_date"] for r in ds["nav"] if r["fund_code"] == code) < start, code
+    ds["user_setting"] = fixtures.user_settings(
+        window=(start, fixtures.WINDOW_END), rules=fixtures._RULES_DEFAULT)
+    model = logic.build_page_model(ds)
+    for code in _ALL_CODES:
+        assert _states(logic.find_block(model, "HLD-2"), code) == [logic.STATE_OK] * 2, code
+        assert logic.find_row(logic.find_block(model, "HLD-8"), code)["drawdown"]["_state"] == \
+            logic.STATE_OK, code
+    assert logic.empty_source_text(["fund_profile"]) not in logic.collect_ui_strings(model)
+
+
+def test_S2_必修1_最早淨值等於區間起點_不觸發推定():
+    """邊界：最早淨值「等於」區間起點不算晚。⚠️ 突變成 `>=` 本條轉紅。"""
+    ds = _profile_pending(fixtures.dataset_full(), late_code="CCCC", late_from="2026-04-08")
+    earliest = min(r["nav_date"] for r in ds["nav"] if r["fund_code"] == "CCCC")
+    ds["user_setting"] = fixtures.user_settings(
+        window=(earliest, fixtures.WINDOW_END), rules=fixtures._RULES_DEFAULT)
+    model = logic.build_page_model(ds)
+    assert _states(logic.find_block(model, "HLD-2"), "CCCC") == [logic.STATE_OK] * 2
+    assert logic.empty_source_text(["fund_profile"]) not in logic.collect_ui_strings(model)
+    # 往後一天就觸發（證明這條不是空比）。
+    ds["user_setting"] = fixtures.user_settings(
+        window=("2026-04-07", fixtures.WINDOW_END), rules=fixtures._RULES_DEFAULT)
+    model = logic.build_page_model(ds)
+    assert _states(logic.find_block(model, "HLD-2"), "CCCC") == [logic.STATE_MISSING] * 2
+
+
+def test_S2_J1_同一檔又缺淨值又配息失敗_只算取數失敗():
+    """J1 的另一個入口：`AAAA` 淨值表一列都沒有（沒有淨值取數錯誤），配息逐檔失敗。
+    門檻有最大回撤（→ 缺淨值）與配息佔淨值比（→ 取數失敗）兩條，同一檔會被兩類各算一次。
+
+    ⚠️ 拿掉修復（`deviation_rows` 尾端的扣除）本條轉紅：卡尾會同時寫「另有 1 檔缺淨值」。
+    """
+    ds = fixtures.dataset_full()
+    ds["nav"] = [r for r in ds["nav"] if r["fund_code"] != "AAAA"]
+    _with_fund_errors(ds, {"dividend": {"AAAA": _FUND_MSG}})
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert "⛔ 另有 1 檔的門檻指標取數失敗，未列入（示意）" in hld1["tail_lines"], hld1["tail_lines"]
+    assert hld1["missing_nav_count"] == 0, hld1["tail_lines"]
+    assert not any("缺淨值" in line for line in hld1["tail_lines"]), hld1["tail_lines"]
+    # 對照組：沒有配息失敗時，同一檔照舊算缺淨值。
+    plain = fixtures.dataset_full()
+    plain["nav"] = [r for r in plain["nav"] if r["fund_code"] != "AAAA"]
+    assert logic.find_block(logic.build_page_model(plain), "HLD-1")["missing_nav_count"] == 1

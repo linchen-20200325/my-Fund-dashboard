@@ -325,6 +325,26 @@ def tone_for_block(state, states) -> str:
     return block_tone(states) if state is STATE_UNRANKED else tone_for_state(state)
 
 
+def _counts_for_block_state(node) -> bool:
+    """這一個主值算不算進塊態。
+
+    只屬於某一檔的取數失敗**不算**（S2 原則：一檔失敗不得讓整塊進 `系統錯誤`）；
+    但那張表的逐檔錯誤涵蓋了全部持倉時**照算**，視同表層級（總管 2026-10-02 M3 裁定）。
+    ⚠️ 沒有 `fund_errors` 時每一個值都算 ⇒ 塊態與先前逐格相同。
+    """
+    return not node.get("_fund_scoped_error") or bool(node.get("_fund_error_table_wide"))
+
+
+def _block_tone_with_errors(state, states) -> str:
+    """塊的邊框色。塊裡只要有一個 ⛔ 的值，邊框就是紅（總管 2026-10-02 規格組裁定 5）——
+    即使塊態因為「只有一檔失敗」而不是 `系統錯誤`。其餘照 `tone_for_block()`。
+    ⚠️ 沒有逐檔錯誤時：有 ⛔ 的值 ⇒ 塊態本來就是 `系統錯誤` ⇒ 本來就是紅，結果一格不變。
+    """
+    if STATE_ERROR in states:
+        return tone_for_state(STATE_ERROR)
+    return tone_for_block(state, states)
+
+
 # ───────────────────────── 斷點 ─────────────────────────
 
 
@@ -364,11 +384,11 @@ def fetch_failed_text(message: str) -> str:
 
 
 def fund_fetch_failed_text(fund_code: str, message: str) -> str:
-    """**逐檔**取數失敗（`fund_errors`）：同一個模板，訊息前面寫出是哪一檔。
+    """某一檔的取數失敗：同一個模板，訊息前面寫出是哪一檔。
 
-    ⚠️ 本組的寫法，不是 `44` 的字：`44` 5.5 的模板只有「⛔ 取數失敗：<訊息>」，
-       沒有替「只有一檔失敗」訂寫法。訊息原文照印、不截斷，只在它前面加 `<fund_code>：`
-       （總管 S2 原則「錯誤原因要看得到是哪一檔」）。
+    ⚠️ **總管 2026-10-02 裁定的寫法，不是 `44` 的字**：`44` 5.5 的模板只有
+       「⛔ 取數失敗：<訊息>」，沒有替「只有一檔失敗」訂寫法。
+       訊息原文照印、不截斷，只在它前面加 `<fund_code>：`。
     """
     return fetch_failed_text(f"{fund_code}：{message}")
 
@@ -376,14 +396,18 @@ def fund_fetch_failed_text(fund_code: str, message: str) -> str:
 PRINT_AS_IS_LINE = "訊息原文照印，不改寫成安撫語句。"
 
 
-def _fund_error_lines(pairs) -> list:
-    """`(fund_code, 主值節點)` 裡**只屬於某一檔**的取數失敗，逐檔寫成一行（去重）。
+def _fund_error_lines(pairs, *, include_table=False) -> list:
+    """`(fund_code, 主值節點)` 裡的取數失敗，逐檔寫成一行（去重）。
 
-    有任何一行時，尾端補一次「訊息原文照印」。沒有逐檔錯誤時回空清單 ⇒ 版面一格不變。
+    預設只收**只屬於某一檔**的（`fund_errors`）；`include_table=True` 連表層級的也收
+    （`HLD-1` 卡尾用：計數算進了幾檔，就要列得出幾檔的原因 —— 紅隊建議 3）。
+    有任何一行時，尾端補一次「訊息原文照印」。沒有時回空清單 ⇒ 版面一格不變。
     """
     lines = []
     for fund_code, node in pairs:
-        if node.get("_fund_scoped_error"):
+        if node.get("_fund_scoped_error") or (
+            include_table and node["_state"] == STATE_ERROR and node["reason_text"]
+        ):
             line = fund_fetch_failed_text(fund_code, node["reason_text"])
             if line not in lines:
                 lines.append(line)
@@ -392,10 +416,11 @@ def _fund_error_lines(pairs) -> list:
     return lines
 
 
-def _is_fund_error_line(line) -> bool:
-    """只用在 `HLD-1` 的 `tail_lines` 上：那裡以「⛔ 取數失敗：」開頭的只有逐檔那幾行
-    （表層級的寫成「⛔ 另有 N 檔…」）。⚠️ 別處的說明區不適用 —— 表層級的那一行也是這個開頭。"""
-    return line.startswith(ERR_TEXT + "：")
+def _is_fail_tail_line(line) -> bool:
+    """只用在 `HLD-1` 的 `tail_lines` 上：取數失敗那一類的卡尾行 ——
+    前導句「⛔ 另有 N 檔…取數失敗，未列入」與其下逐檔的「⛔ 取數失敗：<code>：<原文>」。
+    （紅隊建議 2：燈帶上去時要連前導句一起帶，說明燈上的 N 只是下限。）"""
+    return line.startswith("⛔")
 
 
 def partial_range_text(start: str, end: str) -> str:
@@ -517,6 +542,8 @@ def fund_errors(dataset) -> dict:
         raise TypeError(
             f"fund_errors 必須是 {{表名: {{fund_code: 訊息}}}}，收到 {type(value).__name__}：{value!r}"
         )
+    # 比對用持倉 `fund_code` 的**原值**，不做大小寫或空白正規化（總管 2026-10-02 J2 裁定）。
+    held = {h["fund_code"] for h in dataset.get("holding", [])}
     out = {}
     for table, per_fund in value.items():
         if table not in FUND_ERROR_TABLES:
@@ -532,11 +559,19 @@ def fund_errors(dataset) -> dict:
             (code, message)
             for code, message in per_fund.items()
             if not isinstance(code, str) or not code
-            or not isinstance(message, str) or not message
+            # 只有空白的訊息（例如 "   "）等於沒有訊息：先 strip 再判（總管 2026-10-02 裁定）。
+            or not isinstance(message, str) or not message.strip()
         ]
         if bad:
             raise TypeError(
                 f"fund_errors[{table!r}] 的 fund_code 與訊息都必須是非空字串，收到：{bad!r}"
+            )
+        # 點名持倉以外的代碼 ⇒ raise（總管 2026-10-02 J2 裁定，客戶已確認）：
+        # 上游與持倉對不上，靜默略過等於把一筆失敗吞掉（§1）。
+        stray = sorted(code for code in per_fund if code not in held)
+        if stray:
+            raise ValueError(
+                f"fund_errors[{table!r}] 點名了持倉裡沒有的 fund_code：{stray!r}"
             )
         out[table] = dict(per_fund)
     return out
@@ -598,7 +633,8 @@ def main_value_state(*, error=None, missing=False, na_reason=None) -> str:
 
 
 def _metric(
-    value, *, text, ccy, error=None, missing=False, na_reason=None, label="", fund_scoped=False
+    value, *, text, ccy, error=None, missing=False, na_reason=None, label="",
+    fund_scoped=False, table_wide=False,
 ):
     state = main_value_state(error=error, missing=missing, na_reason=na_reason)
     if state == STATE_OK:
@@ -626,6 +662,10 @@ def _metric(
     # ⚠️ 只在真的是逐檔錯誤時才放這個鍵 —— 沒有 `fund_errors` 時，節點與先前逐鍵相同。
     if fund_scoped and state == STATE_ERROR:
         node["_fund_scoped_error"] = True
+        # 這張表的逐檔錯誤涵蓋了**全部持倉**：塊態一律視同表層級錯誤（總管 2026-10-02 M3 裁定），
+        # 免得「一欄全失敗」與「整表失敗」畫出不同的燈。
+        if table_wide:
+            node["_fund_error_table_wide"] = True
     return node
 
 
@@ -648,6 +688,10 @@ def fund_metrics(dataset, fund, window):
     if not div_error:
         div_error = per_fund.get("dividend", {}).get(code)
         div_fund_scoped = bool(div_error)
+    held = {h["fund_code"] for h in dataset.get("holding", [])}
+    table_wide = {t for t, codes in per_fund.items() if held and held <= set(codes)}
+    nav_wide = nav_fund_scoped and "nav" in table_wide
+    div_wide = div_fund_scoped and "dividend" in table_wide
 
     pending = pending_tables(dataset)
     # `fund_profile` 尚未接上 ⇒ **不讀**它（總管 2026-10-02 S2 裁定）。改用下面的
@@ -740,6 +784,11 @@ def fund_metrics(dataset, fund, window):
     else:
         yield_value = (per_unit_total / nav_last * 100.0) if nav_last else None
 
+    if div_error:
+        yield_error, yield_fund_scoped, yield_wide = div_error, div_fund_scoped, div_wide
+    else:
+        yield_error, yield_fund_scoped, yield_wide = nav_error, nav_fund_scoped, nav_wide
+
     principal_na = na_div
     if principal_na is None and unknown_rows:
         principal_na = "配息類別未知"
@@ -774,6 +823,7 @@ def fund_metrics(dataset, fund, window):
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
+            table_wide=nav_wide,
             label="區間報酬率",
         ),
         "期間波動": _metric(
@@ -784,6 +834,7 @@ def fund_metrics(dataset, fund, window):
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
+            table_wide=nav_wide,
             label="期間波動",
         ),
         "最大回撤": _metric(
@@ -794,6 +845,7 @@ def fund_metrics(dataset, fund, window):
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
+            table_wide=nav_wide,
             label="最大回撤",
         ),
         "期間配息合計": _metric(
@@ -805,18 +857,22 @@ def fund_metrics(dataset, fund, window):
             na_reason=na_div_text,
             label="期間配息合計",
             fund_scoped=div_fund_scoped,
+            table_wide=div_wide,
         ),
         "配息佔淨值比": _metric(
             yield_value,
             text=hinted(format_pct(yield_value)) if yield_value is not None else "",
             ccy=ccy,
-            error=div_error,
+            # 分母是區間末淨值 ⇒ `nav` 取數失敗也讓它進 `系統錯誤`，不是 `資料未備`
+            # （總管 2026-10-02 J1 裁定）。兩張都失敗時印配息那一句（本值掛在配息卡上）。
+            error=yield_error,
             missing=bool(
                 nav_missing or div_missing or (na_div is None and nav_last is None)
             ),
             na_reason=na_div_text,
             label="配息佔淨值比",
-            fund_scoped=div_fund_scoped,
+            fund_scoped=yield_fund_scoped,
+            table_wide=yield_wide,
         ),
         "本金類配息佔比": _metric(
             principal_value,
@@ -827,6 +883,7 @@ def fund_metrics(dataset, fund, window):
             na_reason=not_applicable_text(principal_na) if principal_na else None,
             label="本金類配息佔比",
             fund_scoped=div_fund_scoped,
+            table_wide=div_wide,
         ),
     }
 
@@ -1058,6 +1115,10 @@ def deviation_rows(metrics, rules):
                 }
             )
     rows.sort(key=lambda row: (row["_fund_code"], row["_indicator"]))
+    # 取數失敗的那一檔**只算「取數失敗」**，不再同時算進缺淨值／其他缺漏／不適用
+    # （總管 2026-10-02 J1 裁定）：同一檔進兩類，卡尾的計數會加總超過持倉檔數。
+    for kind in ("missing", "missing_other", "na"):
+        skipped[kind] -= skipped["error"]
     return rows, skipped
 
 
@@ -1144,19 +1205,32 @@ def _build_hld1(
         rows, skipped = deviation_rows(metrics, rules)
         state = STATE_OK
         placeholder = None
-        # 逐檔取數失敗（`fund_errors`）的檔：照 `H-01` 缺淨值那一套，**不進本表、不計入列數**，
-        # 塊態**不**因此進 `系統錯誤`（總管 S2 原則：一檔失敗不得讓整塊進 `系統錯誤`）；
-        # 卡尾逐檔寫出是哪一檔、訊息原文（原則：錯誤原因要看得到是哪一檔）。
-        # ⚠️ 沒有 `fund_errors` 時這一份恆為空 ⇒ 下面每一處都與先前逐字相同。
-        fund_lines = _fund_error_lines(
+        # 門檻指標取數失敗而沒列入的檔（逐檔或表層級都算）：不進本表、不計入列數；
+        # 卡尾逐檔寫出是哪一檔、訊息原文。**計數算進了幾檔，就列得出幾檔的原因**
+        # （紅隊建議 3：表層級錯誤也逐檔列一行，免得「3 檔」底下只列 1 行）。
+        error_nodes = [
             (metric["_fund_code"], metric[rule["indicator"]])
             for metric in metrics
             if metric["_fund_code"] in skipped["error"]
             for rule in rules
             if rule["indicator"] in RULE_INDICATOR_NAMES
-        )
+        ]
+        fail_lines = _fund_error_lines(error_nodes, include_table=True)
         summary = f"{len(rows)} 列（示意）" if rows else TEXT_NO_DEVIATION
-        if not rows and skipped["missing_other"]:
+        if not rows and skipped["error"]:
+            # ⭐ 零列偏離，而且有檔因取數失敗沒列入 ⇒ 本塊進 `系統錯誤`
+            #    （總管 2026-10-02 M2 裁定；比照下一支 `missing_other` 零列進 `資料未備` 的先例）。
+            #    「無偏離項」在這裡是假話：那幾檔超不超出，不知道。`HLD-0` 依既有對應走（紅燈）。
+            # ⚠️ 有偏離列時**不**走這一支：塊維持 `ok`，卡尾說明 N 只是下限（S2 原則：
+            #    一檔失敗不得讓整塊進 `系統錯誤`）。排在 `missing_other` 前面：失敗比缺更該說出來。
+            reason = next(
+                node["reason_text"] for _code, node in error_nodes
+                if node["_state"] == STATE_ERROR and node["reason_text"]
+            )
+            state = STATE_ERROR
+            summary = ERR_TEXT
+            placeholder = _metric(None, text="", ccy="", error=reason, label="偏離筆數")
+        elif not rows and skipped["missing_other"]:
             # 零列，但有檔的門檻指標是 `資料未備`（而且不是缺淨值那一種）⇒ 「無偏離項」與
             # 「沒有任何一檔超出」都是假話：那幾檔超不超出，不知道（紅隊 2026-10-02 指出）。
             # 字樣只用 `44` 已宣告的：主值位置 `⬜ 資料未備`（`44` 5.1 卡片表 `資料未備` 那一列），
@@ -1164,10 +1238,11 @@ def _build_hld1(
             state = STATE_MISSING
             summary = ND_TEXT
             placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
-        elif not rows and not fund_lines:
+        elif not rows:
             # ⚠️ 登記：零列長什麼樣 `44` 沒有寫（草稿 ⛔ H-06：零筆偏離不屬空狀態四種）。
             #    本檔照草稿的畫法：一句「無偏離項」，不掛任何空狀態徽章。
-            # ⛔ 有檔逐檔取數失敗時不寫這一句：那幾檔超不超出，不知道（S2）。
+            # ⚠️ 有檔取數失敗（逐檔或表層級）時走不到這裡 —— 上面第一支先接走，
+            #    「沒有任何一檔超出」那一句因此不會出現（紅隊 J3：條件看 `skipped["error"]`）。
             detail_lines.append("目前這一組門檻下，沒有任何一檔超出。")
         # 有偏離列也要寫：那幾檔的門檻指標沒有評估，燈上的 N 只是下限（紅隊 2026-10-02 指出）。
         detail_lines.extend(_missing_other_lines(metrics, skipped["missing_other"], pending))
@@ -1182,7 +1257,7 @@ def _build_hld1(
             tail_lines.append(
                 f"⛔ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{HINT}"
             )
-            tail_lines.extend(fund_lines)
+            tail_lines.extend(fail_lines)
         if skipped["na"]:
             tail_lines.append(
                 f"⬜ 另有 {len(skipped['na'])} 檔的門檻指標不適用，未列入{HINT}"
@@ -1259,7 +1334,7 @@ def _build_core_card(
         mv["_state"]
         for group in groups
         for mv in group["main_values"]
-        if not mv.get("_fund_scoped_error")
+        if _counts_for_block_state(mv)
     ]
     badges = []
     detail_lines = [subtitle]
@@ -1364,7 +1439,7 @@ def _build_core_card(
         "_layer": 2,
         "_default_open": True,
         "_state": state,
-        "_tone": tone_for_block(state, block_states or states),
+        "_tone": _block_tone_with_errors(state, states),
         "fund_groups": groups,
         "answers": ANSWERS[code],
         "summary_text": summary,
@@ -1456,15 +1531,18 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
         }
 
     hld1_state = next((c["_state"] for c in cards if c.get("code") == "HLD-1"), None)
-    # 逐檔取數失敗（`fund_errors`）而沒列入 `HLD-1` 的檔：由 `HLD-1` 卡尾已經寫好的那幾行帶上來
-    # （本塊不自取數）。有這幾行時 N 只是下限，也不得說「沒有任何一檔超出」（S2）。
-    # ⚠️ 沒有 `fund_errors` 時這一份恆為空 ⇒ 下面各支與先前逐字相同。
-    fund_lines = [
+    # 門檻指標取數失敗而沒列入 `HLD-1` 的檔：由 `HLD-1` 卡尾已經寫好的那幾行帶上來
+    # （本塊不自取數），**連「⛔ 另有 N 檔…取數失敗，未列入」前導句一起帶**，
+    # 說明燈上的 N 只是下限（紅隊建議 2）。
+    # ⚠️ 只有「有偏離列」那一支用得到：零列偏離而有檔取數失敗時，`HLD-1` 自己就進
+    #    `系統錯誤`（M2 裁定），燈在上面那一支已經紅了。所以零列的那三支**刻意不帶**
+    #    —— 帶了也走不到（上一輪帶過，總管 M11／M12 指出無測試守住，本輪查明是走不到的路，拿掉）。
+    fail_lines = [
         line
         for card in cards
         if card.get("code") == "HLD-1"
         for line in card.get("tail_lines", ())
-        if _is_fund_error_line(line)
+        if _is_fail_tail_line(line)
     ]
     if deviation_count == 0 and hld1_state == STATE_MISSING:
         # `HLD-1` 零列、而且有檔的門檻指標資料未備 ⇒ 不得說「無偏離項」，
@@ -1476,8 +1554,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             "_tone": "灰",
             "_state": STATE_MISSING,
             "text": ND_TEXT,
-            "lines": [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)]
-            + fund_lines,
+            "lines": [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)],
             "detail_lines": [],
             "buttons": [],
         }
@@ -1491,7 +1568,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             # 有檔的門檻指標資料未備時，把原因帶上來：N 只是下限。
             "lines": ["哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"]
             + [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)]
-            + fund_lines,
+            + fail_lines,
             "detail_lines": ["黃燈說的是「要不要多看一眼」，不是「該調整了」。"],
             "buttons": [],
         }
@@ -1501,8 +1578,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
             "_tone": "灰",
             "_state": STATE_OK,
             "text": TEXT_NO_DEVIATION,
-            # ⛔ 有檔逐檔取數失敗時不說「沒有任何一檔超出」—— 那幾檔超不超出，不知道（S2）。
-            "lines": fund_lines or ["目前這一組門檻下，沒有任何一檔超出。"],
+            "lines": ["目前這一組門檻下，沒有任何一檔超出。"],
             "detail_lines": [],
             "buttons": [],
         }
@@ -1514,7 +1590,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
         "_tone": "灰",
         "_state": worst_state(states),
         "text": TEXT_NO_DEVIATION,
-        "lines": ["有一塊進了「不適用」，偏離筆數為零。"] + fund_lines,
+        "lines": ["有一塊進了「不適用」，偏離筆數為零。"],
         "detail_lines": [
             "這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"
         ],
@@ -1918,7 +1994,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
             row[key]["_state"]
             for key in ("drawdown", "principal")
             for row in rows
-            if not row[key].get("_fund_scoped_error")
+            if _counts_for_block_state(row[key])
         ]
         state = worst_state(block_states) if block_states else STATE_ERROR
         # 摘要讀**全部**的值：有一檔逐檔失敗時，「兩個值皆出數」是假話。
@@ -1981,7 +2057,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         "_layer": 4,
         "_default_open": False,
         "_state": state,
-        "_tone": tone_for_block(state, block_states or states),
+        "_tone": _block_tone_with_errors(state, states),
         "_rows": rows,
         "column_labels": ["基金名", "幣別", "最大回撤", "本金類配息佔比"],
         "answers": ANSWERS["HLD-8"],
