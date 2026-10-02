@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import math
 from datetime import date
 
@@ -201,6 +202,20 @@ TRADING_DAYS_PER_YEAR = 252
 # 理由寫在草稿 §A：填一個看起來合理的數字、客戶會把它讀成真的，那是線框最容易犯的一種造假。
 HINT = "（示意）"
 
+# ⭐ **2026-10-02 hld 接真資料 S3：示意字樣的模式開關**（客戶 2026-10-02 裁示 2-A：正式版全部拿掉，
+#    假資料版照舊保留；草稿 `docs/wireframes/draft_hld_live.html` §E P4「由一個模式開關控制」）。
+#    開關只有一個入口：`build_page_model(..., demo_hint=)`。本檔每一處接示意字尾的地方一律走 `_hint()`，
+#    不直接讀 `HINT` —— 直接讀的那一處，在正式模式下就會漏一個「（示意）」上畫面。
+#    ⚠️ 用 `contextvars` 而不是模組層變數：streamlit 每個連線各跑一條執行緒，模組層的全域旗標會互相污染；
+#       `ContextVar` 每條執行緒各一份，`build_page_model` 結束時一定還原（`finally`）。
+#    預設值是 `HINT` ⇒ 不傳 `demo_hint` 的呼叫端（示範入口、既有測試）輸出逐字不變。
+_HINT_SUFFIX = contextvars.ContextVar("hld_hint_suffix", default=HINT)
+
+
+def _hint() -> str:
+    """目前這一次組模型該接的示意字尾：示範模式為 `HINT`，正式模式為空字串。"""
+    return _HINT_SUFFIX.get()
+
 # 指標名 → 它住在哪一塊（`44` HLD-7 規則欄：輸出值與該列指標名所在那一塊上顯示的值逐字相同）。
 INDICATOR_OWNER = {
     "區間報酬率": "HLD-2",
@@ -251,7 +266,7 @@ def format_signed_pp(value: float) -> str:
 
 
 def hinted(text: str) -> str:
-    return text + HINT
+    return text + _hint()
 
 
 def tone_for_state(state: str) -> str:
@@ -1216,7 +1231,8 @@ def _build_hld1(
             if rule["indicator"] in RULE_INDICATOR_NAMES
         ]
         fail_lines = _fund_error_lines(error_nodes, include_table=True)
-        summary = f"{len(rows)} 列（示意）" if rows else TEXT_NO_DEVIATION
+        # S3：原為寫死的「（示意）」字面，沒有走 `HINT`（草稿 §E P7 點名「只把 HINT 改空，這一處會漏」）。
+        summary = f"{len(rows)} 列{_hint()}" if rows else TEXT_NO_DEVIATION
         if not rows and skipped["error"]:
             # ⭐ 零列偏離，而且有檔因取數失敗沒列入 ⇒ 本塊進 `系統錯誤`
             #    （總管 2026-10-02 M2 裁定；比照下一支 `missing_other` 零列進 `資料未備` 的先例）。
@@ -1248,19 +1264,19 @@ def _build_hld1(
         detail_lines.extend(_missing_other_lines(metrics, skipped["missing_other"], pending))
         if skipped["missing"]:
             tail_lines.append(
-                f"⬜ 另有 {len(skipped['missing'])} 檔缺淨值，未列入{HINT}"
+                f"⬜ 另有 {len(skipped['missing'])} 檔缺淨值，未列入{_hint()}"
             )
             tail_lines.append(
                 "未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。"
             )
         if skipped["error"]:
             tail_lines.append(
-                f"⛔ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{HINT}"
+                f"⛔ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{_hint()}"
             )
             tail_lines.extend(fail_lines)
         if skipped["na"]:
             tail_lines.append(
-                f"⬜ 另有 {len(skipped['na'])} 檔的門檻指標不適用，未列入{HINT}"
+                f"⬜ 另有 {len(skipped['na'])} 檔的門檻指標不適用，未列入{_hint()}"
             )
 
     # ⭐ **第 2 件（客戶 2026-09-24 裁示）：有持倉時的來源取數失敗也要浮得出來。**
@@ -1320,7 +1336,7 @@ def _build_core_card(
             {
                 "_fund_code": metric["_fund_code"],
                 "_ccy": metric["_ccy"],
-                "head_text": f"{metric['fund_name']} · 幣別 {metric['_ccy']}{HINT}",
+                "head_text": f"{metric['fund_name']} · 幣別 {metric['_ccy']}{_hint()}",
                 "main_values": values,
             }
         )
@@ -1401,7 +1417,7 @@ def _build_core_card(
             if STATE_OK in group_states and any(s != STATE_OK for s in group_states):
                 badges.append(status_badge("部分缺"))
                 break
-        summary = f"{len(groups)} 檔{HINT}"
+        summary = f"{len(groups)} 檔{_hint()}"
 
     if moved_note:
         detail_lines.append(moved_note)
@@ -1564,7 +1580,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
         return {
             "_tone": "黃",
             "_state": STATE_OK,
-            "text": f"有 {deviation_count} 檔超出你設定的門檻{HINT}",
+            "text": f"有 {deviation_count} 檔超出你設定的門檻{_hint()}",
             # 有檔的門檻指標資料未備時，把原因帶上來：N 只是下限。
             "lines": ["哪幾檔分別超出的是哪一條線，看下面的偏離提示卡。"]
             + [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)]
@@ -1685,7 +1701,7 @@ def _build_hld4(*, applied_window, fields, rules):
         summary = "輸入尚未通過檢查"
     else:
         rule_count = len(rules or ())
-        summary = f"區間 {field_start}{HINT} 至 {field_end}{HINT} · 門檻 {rule_count} 列{HINT}"
+        summary = f"區間 {field_start}{_hint()} 至 {field_end}{_hint()} · 門檻 {rule_count} 列{_hint()}"
 
     return {
         "code": "HLD-4",
@@ -1795,6 +1811,21 @@ def _row_is_open(holding_id, open_fund) -> bool:
     return bool(holding_id) and holding_id == open_fund
 
 
+def _sync_field_value(raw):
+    """HLD-5「最後對帳」那一格的值。
+
+    示範模式：照 base 逐字 —— 取前 10 個字再接示意字尾（`None` 照舊在 `[:10]` 炸掉，那是 base 就有的行為）。
+    正式模式（`demo_hint=False`）：**原值照交**，由 `ui_v2/hld/live.py` 驗格式、換算台灣日期、
+    不合格時改成 `系統錯誤` 的值節點（S3 第二輪，總管裁定 1／2）。
+    ⚠️ 在這裡先截 10 個字，帶時區的值就換算不了（`…T20:30:00Z` 的台灣日期是隔天），所以正式模式不截。
+    ⚠️ 正式模式的這一格**一定要經過** `live.apply_live_notes`，否則畫面上印的是未驗的原值；
+       正式入口一律走 `live.build_live_model`。
+    """
+    if _hint():
+        return raw[:10] + _hint()
+    return raw
+
+
 def _build_hld5(dataset, metrics, *, open_fund, has_window):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
@@ -1806,12 +1837,12 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
         fields = [
             ("保單", TEXT_DIRECT_HOLD if is_direct else (policy or {}).get("policy_name", "⬜")),
             ("發行單位", "—" if is_direct else (policy or {}).get("issuer", "⬜")),
-            ("持有起始日", holding["opened_on"] + HINT),
-            ("單位數", f"{holding['units_shares']:,.3f}{HINT}"),
+            ("持有起始日", holding["opened_on"] + _hint()),
+            ("單位數", f"{holding['units_shares']:,.3f}{_hint()}"),
             ("成本（原幣）", hinted(format_amount(holding["cost_orig_ccy"], holding["ccy"]))),
-            ("成本（新臺幣）", f"{holding['cost_twd']:,} 元{HINT}"),
+            ("成本（新臺幣）", f"{holding['cost_twd']:,} 元{_hint()}"),
             ("類別", holding["bucket"] or "⬜"),
-            ("最後對帳", holding["last_synced_at"][:10] + HINT),
+            ("最後對帳", _sync_field_value(holding["last_synced_at"])),
         ]
         has_nav = bool(metric["nav_rows"])
         items.append(
@@ -1832,7 +1863,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
                     disabled_reason=HLD5_OPEN_DISABLED_REASON,
                 ),
                 "_fields": fields,
-                "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{HINT}",
+                "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{_hint()}",
                 "nav_plot_text": (
                     "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
                     if has_nav
@@ -1849,7 +1880,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
         detail_lines = [ND_TEXT, "尚未建立任何持倉，沒有可以展開的檔。"]
     else:
         state = STATE_OK
-        summary = f"{len(items)} 檔{HINT} · 同時最多展開一檔"
+        summary = f"{len(items)} 檔{_hint()} · 同時最多展開一檔"
         detail_lines = [
             "點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。",
             "展開中的那一檔，它的展開鈕停用；初次載入零檔展開。",
@@ -1897,7 +1928,7 @@ def _build_hld6(dataset):
                 ),
                 "fund_code": row["fund_code"],
                 "nav_date": row["nav_date"],
-                "nav_text": f"{row['nav_orig_ccy']:.4f}{HINT}",
+                "nav_text": f"{row['nav_orig_ccy']:.4f}{_hint()}",
                 "ccy": row["ccy"],
                 "source_tier": row["source_tier"],
             }
@@ -1913,7 +1944,7 @@ def _build_hld6(dataset):
                 "ex_date": row["ex_date"],
                 # `44` 4.3：`pay_date` 是兩張表裡唯一「可空」為是的欄位；空的時候顯示 ⬜。
                 "pay_date": row["pay_date"] or "⬜",
-                "div_text": f"{row['div_per_unit_orig_ccy']:.4f}{HINT}",
+                "div_text": f"{row['div_per_unit_orig_ccy']:.4f}{_hint()}",
                 "ccy": row["ccy"],
                 "div_kind": _DIV_KIND_TEXT.get(row["div_kind"], row["div_kind"]),
             }
@@ -1921,7 +1952,7 @@ def _build_hld6(dataset):
 
     state = STATE_OK if (nav_rows or div_rows) else STATE_MISSING
     summary = (
-        f"淨值 {len(nav_rows)} 列{HINT} · 配息 {len(div_rows)} 列{HINT}"
+        f"淨值 {len(nav_rows)} 列{_hint()} · 配息 {len(div_rows)} 列{_hint()}"
         if state == STATE_OK
         else f"{ND_TEXT}：兩張表都沒有列"
     )
@@ -1966,7 +1997,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
                 "_fund_code": metric["_fund_code"],
                 "_ccy": metric["_ccy"],
                 "fund_name": metric["fund_name"],
-                "ccy_text": f"{metric['_ccy']}{HINT}",
+                "ccy_text": f"{metric['_ccy']}{_hint()}",
                 "drawdown": metric["最大回撤"],
                 "principal": metric["本金類配息佔比"],
             }
@@ -1999,15 +2030,15 @@ def _build_hld8(metrics, *, has_holdings, has_window):
         state = worst_state(block_states) if block_states else STATE_ERROR
         # 摘要讀**全部**的值：有一檔逐檔失敗時，「兩個值皆出數」是假話。
         summary = (
-            f"{len(rows)} 檔{HINT} · 兩個值皆出數"
+            f"{len(rows)} 檔{_hint()} · 兩個值皆出數"
             if all(s == STATE_OK for s in states)
-            else f"{len(rows)} 檔{HINT} · 有值取不到或不適用"
+            else f"{len(rows)} 檔{_hint()} · 有值取不到或不適用"
         )
         if not has_window:
             detail_lines.insert(0, NA_NO_WINDOW)
         if unknown_total:
             # `44` HLD-8 空狀態逐字：並在**表下**寫出未知的筆數。
-            detail_lines.append(f"配息類別未知的筆數：{unknown_total} 筆{HINT}")
+            detail_lines.append(f"配息類別未知的筆數：{unknown_total} 筆{_hint()}")
         # ~~⚠️ 上一輪曾收成「只有取數失敗才掛」，**本輪撤回**：`44` :762 第一句逐字~~
         # ~~   「四狀態逐值判定，**與核心卡同一套**」，收窄後同一個缺淨值條件下核心卡各一枚、~~
         # ~~   本塊零枚，同一套當場破掉；上一輪引的 §5.5「整格為準」自己寫明射程不含核心卡那張表。~~
@@ -2075,17 +2106,17 @@ def _inputs_text(metric, indicator):
     if indicator in ("區間報酬率", "期間波動", "最大回撤"):
         rows = metric["nav_rows"]
         if not rows:
-            return f"0 筆{HINT}"
+            return f"0 筆{_hint()}"
         return (
-            f"{len(rows)} 筆{HINT} · {rows[0]['nav_date']}{HINT}"
-            f" 至 {rows[-1]['nav_date']}{HINT}"
+            f"{len(rows)} 筆{_hint()} · {rows[0]['nav_date']}{_hint()}"
+            f" 至 {rows[-1]['nav_date']}{_hint()}"
         )
     rows = metric["div_rows"]
     if not rows:
-        return f"0 筆{HINT}"
+        return f"0 筆{_hint()}"
     return (
-        f"{len(rows)} 筆{HINT} · {rows[0]['ex_date']}{HINT}"
-        f" 至 {rows[-1]['ex_date']}{HINT}"
+        f"{len(rows)} 筆{_hint()} · {rows[0]['ex_date']}{_hint()}"
+        f" 至 {rows[-1]['ex_date']}{_hint()}"
     )
 
 
@@ -2114,7 +2145,7 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings):
                 "_owner_code": "HLD-1",
                 "_ccy": row["_ccy"],
                 "indicator_text": f"{row['trace_indicator']}（{row['fund_name']}）",
-                "inputs_text": f"1 條門檻{HINT} · 門檻值 {row['threshold_text']}",
+                "inputs_text": f"1 條門檻{_hint()} · 門檻值 {row['threshold_text']}",
                 "formula_text": _DEVIATION_FORMULA,
                 "output_text": row["delta_text"],
             }
@@ -2137,7 +2168,7 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings):
             "四塊沒有一塊出數；下面各列的輸入筆數與不適用原因照列。",
         ]
         summary = (
-            f"{ND_TEXT}：四塊沒有一塊出數 · {len(rows)} 列{HINT}"
+            f"{ND_TEXT}：四塊沒有一塊出數 · {len(rows)} 列{_hint()}"
             if rows
             else f"{ND_TEXT}：四塊沒有一塊出數"
         )
@@ -2147,7 +2178,7 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings):
             "算式以文字寫出，不寫任何實作語言的語法。"
             "該塊把該指標判為不適用時，輸出欄顯示同一句不適用文案，輸入欄照列。"
         ]
-        summary = f"逐檔逐指標 {len(rows)} 列{HINT}"
+        summary = f"逐檔逐指標 {len(rows)} 列{_hint()}"
 
     return {
         "code": "HLD-7",
@@ -2180,10 +2211,18 @@ def build_page_model(
     fields=None,
     viewport_width: int = 1280,
     open_fund=None,
+    demo_hint: bool = True,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
 
     `open_fund`：展開中那一列持倉的 `holding_id`（2026-10-02 起；之前是 `fund_code`）。
+
+    `demo_hint`：數字後面要不要接「（示意）」（2026-10-02 S3；客戶裁示 2-A）。
+    預設 `True` ＝ 示範模式，輸出逐字同前；正式模式（`ui_v2/hld/live.py`）傳 `False`。
+    ⚠️ S3 第二輪起它也是 HLD-5「最後對帳」那一格的模式開關：`False` 時那一格交原值，
+       由 live 層驗與換算（見 `_sync_field_value`）。
+    ⚠️ 只管本檔自己接上去的字尾；資料本身的字（例如假資料的基金名）不在射程內 ——
+       正式模式不讀 fixtures，那些字本來就不會出現（草稿 §E P16）。
 
     ⚠️ **登記（`44` HLD-4 自己登記為待客戶裁決的那一個缺口）**：
     使用者按了「存檔」、沒按「套用」，然後重新載入 —— 此時三張核心卡顯示什麼，`44` 沒有訂。
@@ -2192,6 +2231,16 @@ def build_page_model(
     而那句話在區間明明已經設過的情況下**是假的** —— 印一句假的比多算一次危險（§1）。
     **這不是規格，是被迫挑的一邊；客戶裁哪一邊，改的只有這一行。**
     """
+    token = _HINT_SUFFIX.set(HINT if demo_hint else "")
+    try:
+        return _build_page_model(
+            dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund
+        )
+    finally:
+        _HINT_SUFFIX.reset(token)
+
+
+def _build_page_model(dataset, *, fields, viewport_width, open_fund) -> dict:
     applied_window = saved_window(dataset)
     rules = saved_rules(dataset)
     # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
