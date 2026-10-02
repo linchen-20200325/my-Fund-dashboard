@@ -279,7 +279,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <tr><th style="width:8%">塊</th><th style="width:6%">層</th><th style="width:24%">這塊放什麼（44）</th>
     <th>正式模式下受哪個決定影響</th></tr>
   <tr><td class="src">HLD-0</td><td>層 1</td><td>體檢結論燈。只讀 HLD-1～3 的狀態與 HLD-1 的偏離筆數。</td>
-    <td>決定 2（燈的文案目前帶「（示意）」）。<b>決定 1 不碰這一塊</b>：44 HLD-0 來源欄只讀三塊狀態與偏離筆數，
+    <td>決定 2（燈的文案目前帶「（示意）」）。<b>決定 1 除 1-D 以外的選項都不碰這一塊</b>（1-D 會讓燈的文案與 N 跟著變，見 §D 選項 1-D）：44 HLD-0 來源欄只讀三塊狀態與偏離筆數，
       要讓燈對舊淨值有反應就得改那一格，本草稿不提。決定 3 只在選項 3-C 會改變 N。</td></tr>
   <tr><td class="src">HLD-1</td><td>層 2</td><td>偏離提示卡。只列超出門檻的檔，四欄。</td>
     <td>決定 1（選項 1-C、1-A＋1-C 有卡尾一行；1-D 會把缺淨值的檔移到既有的卡尾那一行）、決定 2、決定 3（選項 3-C 會多出列）。</td></tr>
@@ -649,11 +649,15 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <tr><td>⇒ <b><code>stale</code> 為假，不等於「不舊」</b>（也可能是算不出來）；<b><code>stale</code> 為空，不等於「判不出」</b>（多數是「不是預存的」）。
       所以下面各選項的新舊判斷<b>一律不吃 <code>stale</code></b>，改由畫面依該檔最後一筆 <code>nav_date</code> 自己算天數 N（算法見下一列）。</td>
       <td>由上一列推得</td></tr>
-    <tr><td><b>N 的算法（本草稿統一用一種）</b>：N ＝ 今天的日期減該檔最後一筆 <code>nav_date</code>，<b>兩者都以世界協調時間的日期計</b>，單位日曆日；N &gt; 7 為「舊」。
-      這與 <code>assess_nav_cache_quality</code> 算 <code>newest_age_days</code> 的方式相同（現在的世界協調時間減最後一筆、最後一筆沒有時區時視為世界協調時間午夜、取整日），
-      門檻與不等號也相同。⚠️ 餘下的差別：台灣時間 00:00～08:00 之間，台灣的日曆已是隔天、世界協調時間還是前一天，
-      這段時間畫面上的 N 會比使用者用台灣日曆數的少 1。</td>
-      <td><code>shared/data_quality.py::assess_nav_cache_quality</code>「最新資料點年齡」那一段；
+    <tr><td><b>N 的算法（本草稿統一用一種）</b>：N ＝ <b>台灣今天的日期</b>減該檔最後一筆 <code>nav_date</code>，單位日曆日；N &gt; 7 為「舊」；N ＝ 0 時印「當日」（見下方說明）。<br>
+      為什麼用台灣日期：淨值日期本身就是台灣的日期 —— L1 判 MM/DD 補年份用台灣今天，L2 判「未來日期」用台灣今天，兩層都不是世界協調時間。
+      ⚠️ <b>上一版改用世界協調時間日期是錯的</b>：台灣時間 00:00～08:00 會少算 1 日，連帶 N 剛好跨過 7 的那一天顏色也會錯；
+      當初改它的理由是「對齊 <code>stale</code>」，而本版各選項已經<b>不吃 <code>stale</code></b>，那個理由不再成立。<br>
+      ⚠️ 因此 <b>N 與 <code>stale</code> 不是同一把尺</b>：7 日這個數字沿用 <code>MJ_FRESH_DAYS_YELLOW</code>，但 <code>stale</code> 是用世界協調時間的「現在」減最後一筆算的
+      （<code>shared/data_quality.py::assess_nav_cache_quality</code>「最新資料點年齡」那一段），兩者在台灣時間 00:00～08:00 可能差 1 日。</td>
+      <td><code>repositories/fund/nav_metrics.py::_tw_today</code>（「台灣日期(UTC+8)的今天」）；
+        <code>services/v2_tables/nav_dividend.py</code>：<code>MARKET_DATE_TZ = timezone(timedelta(hours=8))</code> 與 <code>rows_from_nav_series</code> 裡的
+        <code>today_market = now_utc.astimezone(MARKET_DATE_TZ).date()</code>；
         <span class="tag t-new">新增，44 未宣告</span>（44 只在 MKT-7 定義過延遲，算法是「<code>fetched_at</code> 的日期減 <code>obs_date</code>」，照搬到淨值時，預存那一支的 <code>fetched_at</code> 是預存檔寫入時間、會讓 N 偏小）</td></tr>
     <tr><td>預存序列的列，<code>is_estimated</code> 一律寫否。</td><td><code>nav_dividend.py</code> 檔頭 docstring（「不寫進 <code>is_estimated</code>」）與 <code>rows_from_nav_series</code> 的 <code>"is_estimated": False</code></td></tr>
     <tr><td>這件事是接 hld 頁的<b>硬前提</b>：「退回舊序列那一支不得寫成一般即時值，<b>須另行標示或不寫</b>」。</td>
@@ -661,18 +665,20 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <tr><td>現行 hld 畫面沒有任何地方吃得到 <code>provenance</code>，也沒有掛任何新鮮度徽章。</td>
       <td>本組以 <code>provenance</code>、「新鮮度」、<code>freshness</code> 搜 <code>ui_v2/hld/</code>，<code>b23b5b2</code> 上皆 0 命中；交接本 hld 盤點第 6 條</td></tr>
   </table>
-  <p class="small" style="margin-top:8px">⚠️ <b>各選項共同的部分</b>：HLD-0 燈不動（44 HLD-0 來源欄）；HLD-6 的「推估」欄對預存列照舊空著；不碰「推估」二字。
+  <p class="small" style="margin-top:8px">⚠️ <b>各選項共同的部分</b>：<b>1-D 以外的選項，HLD-0 燈不動</b>（44 HLD-0 來源欄；1-D 見該選項後果欄）；HLD-6 的「推估」欄對預存列照舊空著；不碰「推估」二字。
   選項 1-A／1-B／1-C／1-A＋1-C 的數值照算、照印；只有 1-D 不印。</p>
 </div>
 
 <div class="opt">
   <h4>選項 1-A｜每一檔掛新鮮度徽章「延遲 N 日」<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
   <table>
-    <tr><th style="width:18%">文案原文</th><td><code>延遲 N 日</code>（N 為整數，算法見上表）。<span class="tag t-44">44</span> 字面取自 §5.2 新鮮度那一列。</td></tr>
+    <tr><th style="width:18%">文案原文</th><td><code>延遲 N 日</code>（N 為整數，算法見上表）；<b>N ＝ 0 時印 <code>當日</code></b>。
+      <span class="tag t-44">44</span> 兩個字面都取自 §5.2 新鮮度那一列，原文逐字「<code>即時</code>／<code>當日</code>／<code>延遲 N 日</code>」。
+      ⚠️ 44 <b>沒有寫</b>「當日」在什麼條件下用；「N ＝ 0 就印當日」是本草稿的讀法。<code>即時</code> 本草稿不用（淨值是 T+1 以後才公布，見 <code>CLAUDE.md</code> §2.3）。</td></tr>
     <tr><th>放在哪</th><td>HLD-2、HLD-3 每一檔的標頭旁（44 §5.1 卡片 <code>ok</code> 狀態列有新鮮度徽章）；
       HLD-6 淨值表每一檔的分組標頭旁、HLD-8 表內每一列 —— <span class="tag t-new">新增，44 未宣告</span>（這兩塊是表，44 §5.1 的徽章位置寫在卡片上）。
       <b>每一檔都掛</b>，不只預存那幾檔。</td></tr>
-    <tr><th>什麼顏色</th><td>N ≤ 7：中性；N &gt; 7：黃。<span class="tag t-new">新增，44 未宣告</span>：44 只寫「中性至黃，只映射日數」，沒有寫幾日轉黃（見 §G 第 1a 題）。</td></tr>
+    <tr><th>什麼顏色</th><td>「當日」與 N ≤ 7：中性；N &gt; 7：黃。<span class="tag t-new">新增，44 未宣告</span>：44 只寫「中性至黃，只映射日數」，沒有寫幾日轉黃（見 §G 第 1a 題）。</td></tr>
     <tr><th>後果</th><td>✅ 用的是 44 已宣告的元件類型，不撞 §5.2 的七個狀態字。<br>
       ✅ <b>標得出「即時取回但已經舊」</b>（即時那一支沒有新舊檢查，見上表），因為每一檔都掛。<br>
       ⚠️ <b>它只說「多舊」，不說「是不是預存的」</b>：預存但只舊 2 日的序列，與即時取回、也舊 2 日的序列，畫面長得一樣 —— 49 §2.6 T3 要的「另行標示」在這種情形下標不出來。<br>
@@ -755,15 +761,33 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
 <div class="opt">
   <h4>選項 1-D｜不寫：預存那一支整批不寫入，畫面顯示 ⬜ 資料未備<span class="tag t-ask" style="margin-left:6px">待裁示</span></h4>
   <table>
-    <tr><th style="width:18%">文案原文</th><td><code>⬜ 資料未備</code>（<span class="tag t-44">44</span> §5.1 <code>資料未備</code> 狀態的主值字；副標寫缺的是哪一個來源鍵，並掛「重新取數」按鈕，照 §5.1 那一列）。</td></tr>
+    <tr><th style="width:18%">文案原文</th><td><code>⬜ 資料未備</code>（<span class="tag t-44">44</span> §5.1 <code>資料未備</code> 狀態的主值字）。<br>
+      <b>按鈕分開寫</b>：<br>
+      · <b>HLD-1／HLD-2／HLD-3 不掛「重新取數」</b>（客戶 2026-09-23 裁示）。出處：<code>ui_v2/hld/logic.py</code> 的 <code>_build_hld1</code>
+        開頭註解「本塊不掛『重新取數』按鈕（客戶 2026-09-23 裁示……）」、<code>_build_core_card</code> 同一句註解（<code>HLD-2</code>、<code>HLD-3</code>），
+        以及同檔另一處「那三塊照舊不掛『重新取數』按鈕（客戶 2026-09-23 裁示）」—— 派工單點名的 <code>:958</code>、<code>:1106</code>、<code>:835</code> 本組在 <code>b23b5b2</code> 上核對過，就是這三句。<br>
+      · <b>HLD-8 照現行會掛一枚「重新取數」</b>：<code>_build_hld8</code> 在任一值為 <code>資料未備</code> 或 <code>系統錯誤</code> 時掛鈕（同處註解登記這個綁法與 44 :762 的字面有張力、待客戶裁決）。
+        本組用 fixtures 重跑（見後果欄）確實看到 HLD-8 掛著這一枚。<b>本選項不改這個現行行為</b>，只據實寫出。</td></tr>
     <tr><th>放在哪</th><td>該檔在 HLD-2、HLD-3（配息佔淨值比）、HLD-8（最大回撤）吃淨值的主值位置；HLD-1 照 44 現行規則把該檔移到卡尾「另有 N 檔缺淨值，未列入」；HLD-6 該檔沒有淨值列。</td></tr>
     <tr><th>什麼顏色</th><td>灰（§5.1 <code>資料未備</code>）。</td></tr>
     <tr><th>後果</th><td>✅ 這是 49 §2.6 T3 原文「須另行標示<b>或不寫</b>」的那一支；不加任何新字，44 已宣告。<br>
       ⛔ <b>即時全敗時，淨值整片顯示未備</b>：預存那一支只在即時網址全敗時才會被用到（見上表），選 1-D 等於把那時唯一拿得到的淨值丟掉。
       <code>repositories/fund/sources.py</code> 讀快取檔那一段的註解寫，這個來源是「Streamlit Cloud 美國 IP 被上游封鎖時唯一還吐得出 NAV 的來源」——
       若部署環境正是那種情形，本頁所有吃淨值的數字都會是 ⬜（⚠️ 部署環境實際會不會被封鎖，本組<b>未查</b>）。<br>
+      ⛔ <b>燈的文案與 N 會跟著變</b>：預存那幾檔從 HLD-1 移到卡尾「缺淨值」那一行，不再算進偏離筆數。
+        本組以 <code>ui_v2/hld/fixtures.py</code> 的 <code>full</code> 情境重跑（把超出門檻的其中一檔的淨值列全部拿掉）：
+        燈由「有 2 檔超出你設定的門檻」變成「<b>有 1 檔超出你設定的門檻</b>」，HLD-1 由 2 列變 1 列，卡尾出現「⬜ 另有 1 檔缺淨值，未列入」。<br>
+      ⛔ <b>所有檔都走預存時，燈會說「無偏離項」</b>：同一情境把淨值列全部拿掉重跑，畫面字是 ——<br>
+        　HLD-0：灰燈「狀態：中性　無偏離項」，下一行「有一塊進了「不適用」，偏離筆數為零。」，再下一行「這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。」；<br>
+        　HLD-1：「無偏離項」、「目前這一組門檻下，沒有任何一檔超出。」、卡尾「⬜ 另有 3 檔缺淨值，未列入」與「未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。」；<br>
+        　HLD-2：三檔共六個主值全是「⬜ 資料未備」；HLD-8：掛一枚「重新取數」。<br>
+        也就是說，<b>一頁的淨值全部沒有了，燈卻是「無偏離項」</b>；而燈下那句「有一塊進了『不適用』」也不符實情（那三塊是 <code>資料未備</code>，不是不適用）——
+        那是現行 <code>conclusion_light</code> 最後一支的既有行為（同處註解登記為 H-03「三條規則一條也沒命中」），本草稿不改它，只寫出 1-D 會把它帶出來。<br>
+      ⛔ <b>「nav 尚無資料」和「被規則拒寫」在畫面上分不出來</b>：兩種情形 hld 收到的都是「該檔沒有淨值列」，畫面一模一樣；
+        使用者看不出這一檔是來源真的沒給，還是有給、只是因為走預存而被本選項拒寫。<br>
       ⚠️ 要改 L2：<code>rows_from_nav_series</code> 現行會寫入預存那一支的列，改成整批不寫（<code>withheld</code>）是程式變更。<br>
-      ⚠️ 標不出「即時取回但已經舊」（同 1-C）。</td></tr>
+      ⚠️ 標不出「即時取回但已經舊」（同 1-C）。<br>
+      ⚠️ 上面的畫面字是本組拿 fixtures 模擬「淨值列被拿掉」跑出來的，<b>不是</b>跑 1-D 的實作（1-D 還沒有實作）；畫面字去掉了現行程式附的「（示意）」。</td></tr>
   </table>
 </div>
 
@@ -772,11 +796,12 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
   <table>
     <tr><th style="width:18%">文案原文</th><td>1-A 的 <code>延遲 N 日</code>（44 §5.2 字面）＋ 1-C 的三句（<span class="tag t-new">新增，44 未宣告</span>），字面不改。</td></tr>
     <tr><th>放在哪</th><td>徽章照 1-A（每一檔；HLD-6 分組標頭與 HLD-8 表內那部分 <span class="tag t-new">新增，44 未宣告</span>）；副標照 1-C（只在預存那幾檔）；HLD-1 卡尾第③句照 1-C。</td></tr>
-    <tr><th>什麼顏色</th><td>徽章：N ≤ 7 中性、N &gt; 7 黃；副標：照 1-C。兩者用<b>同一個 N</b>，所以同一檔不會出現「徽章中性、副標黃」這種互相矛盾。</td></tr>
+    <tr><th>什麼顏色</th><td>徽章：「當日」與 N ≤ 7 中性、N &gt; 7 黃；副標：照 1-C。兩者用<b>同一個 N</b>，所以同一檔不會出現「徽章中性、副標黃」這種互相矛盾。</td></tr>
     <tr><th>後果</th><td>✅ 分得出預存與即時（副標）；✅ 標得出即時但舊（徽章每一檔都掛）。<br>
       ✅ 兩種字都屬 44 已宣告的元件類型（新鮮度徽章、副標），不撞 §5.2 的七個狀態字。<br>
       ⚠️ 1-A 的 N 算法與 7 日門檻是 44 未宣告的；副標會超過 §5.1 的「一行」。<br>
-      ⚠️ 字最多：預存且舊的那一檔，同時有一枚黃徽章和一行黃副標，「最近一筆」的日期與「延遲 N 日」講的是同一件事、出現兩次。</td></tr>
+      ⚠️ 字最多：預存且舊的那一檔，同時有一枚黃徽章和一行黃副標，「最近一筆」的日期與「延遲 N 日」講的是同一件事、出現兩次。<br>
+      ⚠️ 預存但不舊的那一檔，徽章與副標<b>都是中性色</b>，客戶可能分不出哪一個代表「預存」—— 只能靠副標的字面分辨。</td></tr>
   </table>
   <div class="screen mini">
     <div class="acard">
@@ -1069,12 +1094,14 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
         分得出預存與即時（1-C 的副標；出處：49 §2.6 T3「須另行標示」）；
         標得出即時但舊（1-A 每檔都掛；出處：§D 事實表「即時取回那一支沒有新舊檢查」，<code>repositories/fund/nav_metrics.py::fetch_nav</code>）；
         兩種字都屬 44 已宣告的元件類型 —— 新鮮度徽章（44 §5.2）、副標（44 §5.1）—— 不撞 §5.2 狀態徽章的七字清單。<br>
-        代價：1-A 的 N 算法與 7 日門檻是 44 未宣告的（44 §5.2 只寫「中性至黃，只映射日數」）；副標會超過 44 §5.1 的「一行副標」。</td><td>49 §2.6 T3；交接本 hld 盤點第 1 條</td><td class="blank">待裁示</td></tr>
+        代價：1-A 的 N 算法與 7 日門檻是 44 未宣告的（44 §5.2 只寫「中性至黃，只映射日數」）；
+        1-A 在 HLD-6 分組標頭與 HLD-8 表內的徽章位置是 44 未宣告的（44 §5.1 的徽章位置寫在卡片上）；副標會超過 44 §5.1 的「一行副標」。</td><td>49 §2.6 T3；交接本 hld 盤點第 1 條</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">1a</td><td>（選 1-A 或 1-A＋1-C 時）幾日轉黃？</td><td>7 日（沿用 <code>MJ_FRESH_DAYS_YELLOW</code>）或客戶另訂</td>
       <td><b>7 日</b>，同 <code>MJ_FRESH_DAYS_YELLOW</code>（<code>shared/signal_thresholds.py</code>）。<br>
-        ⚠️ 紅隊指出兩把尺可能差 1 日：上一版 N 用台灣日期算，<code>stale</code> 用世界協調時間算。本版已把 N 統一成與
-        <code>shared/data_quality.py::assess_nav_cache_quality</code> 同一種算法（見 §D 事實表 N 那一列）；
-        剩下的差別是台灣時間 00:00～08:00 之間，畫面的 N 會比使用者用台灣日曆數的少 1。</td><td>44 §5.2 未寫</td><td class="blank">待裁示</td></tr>
+        ⚠️ <b>7 這個數字沿用 <code>MJ_FRESH_DAYS_YELLOW</code>，但算法不同於 <code>stale</code></b>：N 用台灣今天的日期減最後一筆 <code>nav_date</code>
+        （出處：<code>repositories/fund/nav_metrics.py::_tw_today</code>、<code>services/v2_tables/nav_dividend.py</code> 的 <code>today_market</code>，兩層都用台灣日期）；
+        <code>stale</code> 用世界協調時間的現在減最後一筆（出處：<code>shared/data_quality.py::assess_nav_cache_quality</code>）。兩者在台灣時間 00:00～08:00 可能差 1 日。
+        本草稿各選項不吃 <code>stale</code>，所以這個差別不影響畫面；寫出來是為了不讓人以為「N &gt; 7」與「<code>stale</code> 為真」永遠同時成立。</td><td>44 §5.2 未寫</td><td class="blank">待裁示</td></tr>
     <tr><td class="src">2</td><td>正式模式下，「（示意）」與情境標籤怎麼處理？</td>
       <td>2-A 全拿掉／2-B 拿掉並在頁首放唯讀說明／2-C 拿掉並在頁首標試行</td>
       <td><b>2-A。</b>mkt、alo 已有前例（出處：<code>ui_v2/mkt/page.py::render</code>、<code>ui_v2/alo/page.py::render</code> 與
@@ -1143,7 +1170,7 @@ td.src{font-family:ui-monospace,monospace; white-space:nowrap; color:var(--draft
     <tr><td>選項名稱不含派工單點名的那個「第三個詞」</td><td>通過（含在上一列的八詞掃描裡）。</td></tr>
     <tr><td>不借用「推估」徽章</td><td>通過。本檔裡「推估」只出現在說明文字（為什麼不借它、1-B 與哪些徽章同色）與 44 原文引文裡，沒有一處是畫在螢幕上的徽章。</td></tr>
     <tr><td>顏色只映射資料狀態與新鮮度</td><td>通過。報酬率、差額、回撤欄不著色；黃只用在業務例外與「多舊」。<br>
-      ⚠️ 但說明字（虛線框裡的落點說明、逐筆位置行、4-B 的時刻說明行）沿用與「資料未備」同色的灰 —— 這是借色，不是說它們未備。</td></tr>
+      ⚠️ 但說明字（虛線框裡的落點說明、逐筆位置行、4-B 的時刻說明行、層 3／層 4 收合列的摘要）沿用與「資料未備」同色的灰 —— 這是借色，不是說它們未備。</td></tr>
     <tr><td>三個斷點的螢幕內容一致</td>
       <td><b>通過</b>。把 §B 三個 <code>.screen</code> 轉純文字逐行比對（以標準函式庫 <code>html.parser</code> 取出螢幕內文字、每個 <code>div</code>／<code>tr</code> 換行、壓縮空白後用 <code>difflib</code> 比）：
         三份各 50 行，兩兩差異 0 行（2026-10-02 本檔定稿後實跑）。線框標籤 <code>.bplabel</code> 在螢幕外，不在比對範圍。</td></tr>
