@@ -32,12 +32,11 @@
    （主碼 2 字元）舊頁原樣用。
 2. **非 ASCII**：`actı171` 舊頁經 `upper()` 變成 `ACTI171`，再查表得 `ACTI71`。
 3. **網址 `a=` 核對**：`?a=ACTI71%20X` 舊頁用 `ACTI71`；`a=` 超過 30 字元舊頁截成前 30；
-   兩個 `a=` 值不同時舊頁取 L1 正則先碰到的那一個；`?a=AB`、`?a=A-` 舊頁照用。
+   兩個 `a=` 值不同時舊頁取 L1 正則第一個符合的那一個；`?a=AB`、`?a=A-` 舊頁照用。
 4. **查詢字串限定**：`https://x/p1&a=FOO123`、`https://x/#&a=FOO123`、`https://x/?x=1?a=FOO123`
    （第二個 `?` 不是參數分隔，`a=` 落在 `x` 的值裡）、`https://u:p?w@x/?a=FOO123`
    （第一個 `?` 在帳密裡，查詢字串從那裡起算，`a` 成了第一個參數名稱 `w@x/?a` 的一部分）
-   這類 `a=` 不是查詢字串裡名稱為 `a` 的參數的，
-   舊頁照用 L1 抽到的 `FOO123`。
+   這幾例的 `a=` 都不屬於查詢字串裡名稱為 `a` 的參數，舊頁照用 L1 抽到的 `FOO123`。
 5. **對照表值**：`public_code` 是 `NAN` 或空字串時，舊頁照用該值（`code = _m.get("public_code", code)`）。
    舊頁只讀 L1 的表，L1 對值做的是 `upper().strip()`：
    - 小寫、**前後**空白 → 舊頁碰不到（L1 已轉大寫、去掉前後空白），只會出現在本檔的注入表；
@@ -55,8 +54,9 @@ L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規�
 
 **網址輸入**：L1 以 `[?&][aA]=([A-Z0-9a-z][A-Z0-9a-z\\-]{1,29})` 做**未錨定**的 `search`，
 有下列漏洞，本檔分別擋：
-- 不分位置：任何 `?` 或 `&` 後面接 `a=` 都會被抽出來，包括 `#` 之後、根本沒有 `?` 的路徑裡
-  （例 `https://x/p1&a=FOO123`）。
+- 不分位置：`?` 或 `&` 後面接 `a=`、且值以英數字開頭的，L1 取第一個符合的，不論它在路徑、
+  查詢字串或 `#` 之後（例 `https://x/p1&a=FOO123`）。值以 `-` 或 `%` 開頭的不符合
+  （`?a=-FOO123`、`?a=%20FOO123` 抽不到）；`?a=-X&a=FOO123` 會跳過第一個、取到 `FOO123`。
   本檔只看**查詢字串**：先在第一個 `#` 處切掉片段，再取剩下那段裡第一個 `?` 之後的部分；
   其中以 `&` 分隔（`;` 不當分隔）、名稱為 `A`（已轉大寫，故 `a=`／`A=` 混用都算）的參數才算數。
   名稱是 `A` 但沒有等號的參數（例 `?a=FOO123&a`、`?a&a=FOO123`）也算一個 `a`，其值記為「無值」，
@@ -70,7 +70,8 @@ L1 的回傳字典**沒有**標記走了哪一支，所以本檔照同一條規�
   否則判失敗。
 - 查詢字串裡出現兩個以上的 `a=`：值都相同 → 照收；任一不同 → 判失敗（不猜 L1 取了哪一個）。
   片段裡的 `a=` 不算（例 `?a=FOO#frag&a=BAR` 只看到 `FOO`）。
-- L1 的字元類允許 `-` 任意出現、長度下限 2 → `AB`、`A-`、`A--------` 都能被抽出來。由第 5 步擋。
+- L1 的字元類除第一個字元外允許 `-` 任意出現、長度下限 2 → `AB`、`A-`、`A--------` 都能被抽出來。
+  由第 5 步擋。
 抽不出代碼 → 錯誤。
 
 **對照表的值**：`public_code` 須為字串、通過 `_is_pure_code`，且不是 `NAN`／`NONE`。
@@ -168,7 +169,10 @@ def _fail(raw, reason: str, code: Optional[str] = None, hit: Optional[bool] = No
 
 
 def _url_a_values(text: str) -> list:
-    """`text` 已轉大寫。只看查詢字串（第一個 `#` 之前、第一個 `?` 之後），回傳名稱為 `A` 的參數值，依出現順序。"""
+    """回傳查詢字串裡名稱為 `A` 的參數值，依出現順序；沒有等號者回 `None`。
+
+    `text` 已轉大寫。查詢字串＝第一個 `#` 之前、第一個 `?` 之後的那一段。
+    """
     before_fragment = text.split("#", 1)[0]
     _path, sep, query = before_fragment.partition("?")
     if not sep:
@@ -199,7 +203,7 @@ def _resolve_one(raw, mapping: dict) -> dict:
 
     if info.get("is_url"):
         if not code:
-            return _fail(raw, "網址中抽不出 MoneyDJ 代碼（找不到 ?a= 或 &a= 參數）")
+            return _fail(raw, "網址中抽不出 MoneyDJ 代碼（parse_moneydj_input 找不到以英數字開頭的 ?a=／&a= 值）")
         values = _url_a_values(text)
         if not values:
             return _fail(raw, f"網址的查詢字串（? 之後、# 之前）裡沒有 a= 參數；parse_moneydj_input 抽到的"
@@ -254,7 +258,8 @@ def resolve_full_keys(fund_codes, *, mapping=None) -> dict:
         }
 
     `mapping`：注入的對照表（`{代碼: {"public_code": ...}}`，形狀同 `load_fund_code_mapping`）；
-    給了就不呼叫 L1；鍵不合格 → `TypeError`／`ValueError`。對照表在單次呼叫內只讀一次。
+    給了就不呼叫 L1；鍵不合格 → `TypeError`／`ValueError`。csv 在單次呼叫內只讀一次
+    （另以 `path=""` 呼叫 L1 一次取內建表做比對，那一次不讀檔）。
     """
     if not isinstance(fund_codes, (list, tuple)):
         raise TypeError(f"fund_codes 須為 list 或 tuple（收到 {type(fund_codes).__name__}）")

@@ -389,6 +389,23 @@ def test_bare_a_alone_error_branch(no_csv):
     assert "None" in r2["error"]  # 查詢字串裡的值是「無值」
 
 
+@pytest.mark.parametrize("url", ["https://x/?a=-FOO123", "https://x/?a=%20FOO123"])
+def test_url_a_value_not_alnum_start_message(no_csv, url):
+    # 網址裡有 ?a=，但值不以英數字開頭，L1 抽不到；訊息不得說「找不到 ?a=」
+    assert SRC.parse_moneydj_input(url.upper())["code"] == ""
+    r, _ = _one(url)
+    assert r["ok"] is False and r["full_key"] is None
+    assert r["error"] == "網址中抽不出 MoneyDJ 代碼（parse_moneydj_input 找不到以英數字開頭的 ?a=／&a= 值）"
+
+
+def test_url_l1_skips_non_alnum_first_a(no_csv):
+    # L1 跳過以 `-` 開頭的第一個 a=、取到 FOO123；本檔看到查詢字串裡兩個值不同 → 判失敗
+    url = "https://x/?a=-X&a=FOO123"
+    assert SRC.parse_moneydj_input(url.upper())["code"] == "FOO123"
+    r, _ = _one(url)
+    assert r["ok"] is False and "多個 a=" in r["error"]
+
+
 def test_mapping_hit_on_failure_is_truthful(no_csv):
     m = {"ABC123": {"public_code": "acti71"}}
     r_hit, _ = _one("ABC123", mapping=m)
