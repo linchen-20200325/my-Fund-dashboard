@@ -68,20 +68,24 @@ def taiwan_today(now: datetime | None = None) -> date:
 def sync_date(raw, *, today: date):
     """`last_synced_at` 原值 → 台灣日期字串 `YYYY-MM-DD`；不合格回 None（S3 第二輪，總管裁定 2）。
 
-    - 只有日期（`YYYY-MM-DD`，且是真的日期）→ 照原樣；
+    - 只有日期（`YYYY-MM-DD`，且是真的日期，且不晚於 `today`）→ 照原樣；
     - 帶時區的 ISO 日期時間 → 換算成台灣時間（UTC+8）後取日期；
       換算後晚於 `today`（台灣日期）→ 不合格（核對時刻不可能在未來）；
     - 其餘（`None`、非字串、前後有空白、`2026/09/19`、`2026-02-30`、沒帶時區的日期時間、
       前 10 個字合格但後面接了別的東西）→ 不合格。
-    ⚠️ 「晚於今天」只檢查換算過的日期時間 —— 裁定只寫了那一支；只有日期的值照原樣顯示。
+    - 只有日期而晚於 `today` → 同樣不合格（總管 S3 第二輪補充裁定：同步日不可能在未來）。
+    ⚠️ ~~「晚於今天」只檢查換算過的日期時間 —— 裁定只寫了那一支；只有日期的值照原樣顯示。~~
+       → 2026-10-02 補充裁定後兩支一致（有意識的更正，不是漏刪；決策者：總管）。
     """
     if not isinstance(raw, str):
         return None
     if _DATE_ONLY.fullmatch(raw):
         try:
-            return date.fromisoformat(raw).isoformat()
+            day = date.fromisoformat(raw)
         except ValueError:
             return None
+        # 同步日不可能在未來；今天當天照樣合格（總管 S3 第二輪補充裁定）。
+        return None if day > today else day.isoformat()
     if not _DATETIME_HEAD.match(raw):
         return None
     try:

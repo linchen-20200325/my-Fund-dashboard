@@ -178,7 +178,7 @@ TODAY = date(2026, 10, 2)
         ("2026-09-19T08:00:00+08:00", "2026-09-19"),
         ("2026-09-19 04:00:00+00:00", "2026-09-19"),       # 空白分隔也是 ISO
         ("2026-10-02T15:59:00Z", "2026-10-02"),            # 換算後恰好是今天 → 合格
-        ("2026-10-31", "2026-10-31"),                      # 只有日期不做「晚於今天」檢查（裁定只寫了換算那一支）
+        ("2026-10-02", "2026-10-02"),                      # 只有日期、恰好是今天 → 合格
     ],
 )
 def test_最後核對日_合格值換成台灣日期(raw, want):
@@ -191,6 +191,8 @@ _BAD_SYNC = [
     "2026-09-19xyz",             # 前 10 個字合格、後面接了別的
     "2026-09-19T",
     "2026-10-02T16:00:00Z",      # 換算後是台灣 10-03，晚於今天
+    "2026-10-03",                # 只有日期、晚於今天（總管 S3 第二輪補充裁定）
+    "2026-10-31",
     "20260919T010000Z", "2026-W38-6",
     "九月十五日中午十二點",
 ]
@@ -257,6 +259,18 @@ def test_紅隊J2_帶時區的值_正式版顯示台灣日期():
     args = _with_sync("2026-09-18T20:30:00Z")
     bad_id = args["dataset"]["holding"][1]["holding_id"]
     assert _sync_cell(live.build_live_model(**args, today=TODAY), bad_id) == "2026-09-19"
+
+
+def test_只有日期_今天合格_明天不合格():
+    """總管 S3 第二輪補充裁定：只有日期而晚於台灣的今天 → 不合格；今天當天照樣合格。"""
+    assert live.sync_date("2026-10-02", today=TODAY) == "2026-10-02"
+    assert live.sync_date("2026-10-01", today=TODAY) == "2026-10-01"
+    assert live.sync_date("2026-10-03", today=TODAY) is None
+    args = _with_sync("2026-10-03")
+    hid = args["dataset"]["holding"][1]["holding_id"]
+    cell = _sync_cell(live.build_live_model(**copy.deepcopy(args), today=TODAY), hid)
+    assert cell["_state"] == logic.STATE_ERROR
+    assert _sync_cell(live.build_live_model(**args, today=date(2026, 10, 3)), hid) == "2026-10-03"
 
 
 def test_今天可以注入_同一個值換一天就變不合格():
