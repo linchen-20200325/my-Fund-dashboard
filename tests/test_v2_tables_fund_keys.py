@@ -43,9 +43,46 @@ _PARITY_CASES = [
 ]
 
 
-@pytest.mark.parametrize("text", _PARITY_CASES)
+@pytest.mark.parametrize("text", _PARITY_CASES + ["AB-CD", "A", "AB-C"])
 def test_is_pure_code_parity_with_l1_regex(text):
+    # 用 fullmatch 不用 re.match：L1 的 `^…$` 配 re.match 時 `$` 會匹配結尾 `\n` 之前，
+    # "ABC\n" 會算符合；本檔進 L1 前已 strip()，等價判準是「整段完全符合」。
     assert FK._is_pure_code(text) is bool(re.fullmatch(FK.PURE_CODE_PATTERN, text))
+
+
+def test_why_fullmatch_not_match():
+    assert re.match(FK.PURE_CODE_PATTERN, "ABC\n") is not None
+    assert re.fullmatch(FK.PURE_CODE_PATTERN, "ABC\n") is None
+    assert FK._is_pure_code("ABC\n") is False
+
+
+def test_l1_empty_path_returns_builtin_silently(capsys, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fund_code_mapping.csv").write_text(
+        "input_code,public_code,page_type,note\nQQQ111,QQQ222,yp010001,x\n", encoding="utf-8")
+    m = SRC.load_fund_code_mapping(path="")
+    assert m == SRC._DEFAULT_MAPPING
+    assert capsys.readouterr().out == ""
+
+
+# ═══════════════════════ 非 ASCII（Unicode 大小寫展開）═══════════════════════
+
+@pytest.mark.parametrize("raw,expanded", [
+    ("maß01", "MASS01"),      # ß → SS
+    ("actı171", "ACTI171"),   # 無點 ı → I（展開後會命中內建表）
+    ("ﬀ123", "FF123"),        # 合字 ﬀ → FF
+    ("ſab12", "SAB12"),       # 長 s ſ → S
+])
+def test_non_ascii_is_error(no_csv, raw, expanded):
+    assert raw.upper() == expanded and FK._is_pure_code(expanded)  # 不擋的話會被判成功
+    r, _ = _one(raw)
+    assert r["ok"] is False and r["full_key"] is None
+    assert "ASCII" in r["error"]
+
+
+def test_non_ascii_chinese(no_csv):
+    r, _ = _one("安聯台灣科技")
+    assert r["ok"] is False and "ASCII" in r["error"]
 
 
 # ═══════════════════════ 正規化 ═══════════════════════
@@ -100,6 +137,28 @@ def test_injected_mapping_bad_value_is_error(no_csv):
         assert r["ok"] is False and r["full_key"] is None and "public_code" in r["error"]
 
 
+@pytest.mark.parametrize("pub", ["acti71", "ACTI 71", "A" * 200, "NAN", "NONE", "AB", "A-"])
+def test_injected_mapping_public_code_rechecked(no_csv, pub):
+    r, _ = _one("ABC123", mapping={"ABC123": {"public_code": pub}})
+    assert r["ok"] is False and r["full_key"] is None and "public_code" in r["error"]
+
+
+@pytest.mark.parametrize("key,exc", [("abc123", ValueError), (" ABC123", ValueError),
+                                     ("AB", ValueError), (123, TypeError)])
+def test_injected_mapping_bad_key_raises(key, exc):
+    with pytest.raises(exc):
+        FK.resolve_full_keys(["ABC123"], mapping={key: {"public_code": "XYZ789"}})
+
+
+def test_csv_blank_public_code_becomes_nan_and_fails(no_csv):
+    (no_csv / "fund_code_mapping.csv").write_text(
+        "input_code,public_code,page_type,note\nqqq111,,yp010001,留空\n", encoding="utf-8")
+    assert SRC.load_fund_code_mapping()["QQQ111"]["public_code"] == "NAN"  # L1 的實際行為
+    r, prov = _one("QQQ111")
+    assert prov["mapping_source"] == FK.MAPPING_SOURCE_CSV
+    assert r["ok"] is False and r["full_key"] is None and "NAN" in r["error"]
+
+
 def test_injected_mapping_must_be_dict():
     with pytest.raises(TypeError):
         FK.resolve_full_keys(["ABC123"], mapping=[("ABC123", "X")])
@@ -145,8 +204,8 @@ def test_empty_string(no_csv, raw):
     "AB C",            # 中間有空白
     "A" * 31,          # 超過 30 字元 → L1 兜底會截成 30
     "TLZF9!",          # 標點
-    "安聯台灣科技",      # 非英數
-    "AB",              # 少於 3 字元
+    "AB",              # 主碼 2 字元（少於 3）
+    "AB-CD",           # 主碼 2 字元＋後綴
 ])
 def test_fallback_is_error(no_csv, raw):
     info = SRC.parse_moneydj_input(raw.strip().upper())
@@ -200,6 +259,33 @@ def test_url_overlong_code_is_error(no_csv):
     assert SRC.parse_moneydj_input(url)["code"] == "B" * 30  # L1 會靜默截斷
     r, _ = _one(url)
     assert r["ok"] is False and r["full_key"] is None and "截" in r["error"]
+
+
+@pytest.mark.parametrize("value", ["AB", "A-", "A--------", "ACTI71%20X", "ACTI71/X", "ACTI71?X", "ACTI71 X"])
+def test_url_bad_a_value_is_error(no_csv, value):
+    r, _ = _one(f"https://www.moneydj.com/funddj/ya/yp010001.djhtm?a={value}")
+    assert r["ok"] is False and r["full_key"] is None
+
+
+@pytest.mark.parametrize("url,expected", [
+    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9#top", "TLZF9"),
+    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm?x=1&a=tlzf9", "TLZF9"),
+    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9&a=TLZF9", "TLZF9"),
+    ("https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=tlzf9&A=TLZF9", "TLZF9"),
+])
+def test_url_ok_variants(no_csv, url, expected):
+    r, _ = _one(url)
+    assert r["ok"] is True and r["full_key"] == expected
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9&a=ACTI71",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZF9&A=ACTI71",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=%41CTI71&a=ACTI71",
+])
+def test_url_conflicting_a_values_is_error(no_csv, url):
+    r, _ = _one(url)
+    assert r["ok"] is False and r["full_key"] is None
 
 
 def test_url_code_followed_by_other_param_ok(no_csv):
