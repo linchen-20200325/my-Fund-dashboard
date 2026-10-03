@@ -48,18 +48,19 @@ def _app(kind):
     elif kind == "type_secret":
         def load():
             raise type(f"Err{secret}", (Exception,), {})("型別名裡藏了秘密")
-    elif kind == "open_fund_bug":
-        def boom():
+    elif kind in ("open_fund_bug", "current_fields_bug"):
+        def boom(*_args, **_kwargs):
             raise ZeroDivisionError("page 自己的 bug")
 
         # ⚠️ AppTest 與 pytest 同一個行程、共用同一個 `page` 模組物件：換掉之後一定要換回來，
         #    否則之後每一支 hld 畫面測試都會撞到這個 boom（第一次跑全套就這樣紅了 56 支）。
-        original = page._open_fund
-        page._open_fund = boom
+        name = "_open_fund" if kind == "open_fund_bug" else "_current_fields"
+        original = getattr(page, name)
+        setattr(page, name, boom)
         try:
             page.render(load_live=lambda: {"dataset": {}, "live_args": {}}, mask_error=mask)
         finally:
-            page._open_fund = original
+            setattr(page, name, original)
         return
     elif kind in ("load_raises", "mask_raises", "mask_nonstr"):
         def load():
@@ -197,8 +198,10 @@ def test_S6b1_例外型別名也經遮蔽():
     assert "⛔ 取數失敗：Err‹已遮蔽›：型別名裡藏了秘密" in blob
 
 
-def test_S6b1_try範圍最小_page自己的bug照常浮出_不畫成取數失敗():
-    at = _run("open_fund_bug")
+@pytest.mark.parametrize("kind", ["open_fund_bug", "current_fields_bug"])
+def test_S6b1_try範圍最小_page自己的bug照常浮出_不畫成取數失敗(kind):
+    # `_open_fund` 與 `_current_fields` 兩支都在 try 外先算；任一支拋例外都要照常冒出。
+    at = _run(kind)
     assert len(at.exception) == 1
     assert "ZeroDivisionError" in at.exception[0].value or "page 自己的 bug" in at.exception[0].value
     assert "⛔ 取數失敗" not in "\n".join(m.value for m in at.markdown)
