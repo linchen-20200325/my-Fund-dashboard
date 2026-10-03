@@ -804,11 +804,22 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
       ~~（本頁每一處取數失敗行之後都接這一句）~~ → ~~**S6b-1 第二輪更正（有意識的更正，不是漏刪；
       決策者：總管）**：說過頭了。實況是核心卡與 `HLD-8` 在同一組取數失敗行的**最後接一次**，
       `HLD-1` 卡尾的逐檔失敗行也是整組最後接一次（`logic._fund_error_lines`）；本畫面只有一行錯誤，接一次；~~
-      → **S6b-1 第三輪更正（有意識的更正，不是漏刪；決策者：總管；規格組 2026-10-03 指出）**：
+      → ~~**S6b-1 第三輪更正（有意識的更正，不是漏刪；決策者：總管；規格組 2026-10-03 指出）**：
       第二輪那句同樣不符實況，改成分類敘述 ——
       表層級錯誤與 unsurfaced 錯誤（`logic._build_core_card`、`logic._build_hld1` 內那幾支）是**每條錯誤行之後各接一次**；
       逐檔錯誤（`logic._fund_error_lines`、`HLD-5` 的 `live._relabel_sync_field`）是**整組最後接一次**；
-      本畫面只有一行錯誤，接一次；
+      本畫面只有一行錯誤，接一次；~~
+      → **S6b-1 第四輪更正（有意識的更正，不是漏刪；決策者：總管；規格組與紅隊 2026-10-03 各自獨立指出）**：
+      第三輪依錯誤層級分類，在 `logic._build_hld1` 卡尾不成立（那裡的表層級錯誤經
+      `logic._fund_error_lines(..., include_table=True)` 寫出，整組最後只接一次）。改為**依寫法**分類 ——
+      (1) 直接以 `logic.fetch_failed_text` 寫出的行，每條之後各接一次：`logic._build_core_card` 的
+          fail_message、表層級、unsurfaced 三支；`logic._build_hld1` 的 fail_message、unsurfaced 兩支。
+      (2) 經 `logic._fund_error_lines` 寫出的行，整組最後接一次：核心卡與 `HLD-8` 的逐檔錯誤，
+          以及 `HLD-1` 卡尾以 `include_table=True` 帶入的表層級錯誤；另 `HLD-5`
+          （`live._relabel_sync_field`）亦整組最後接一次。
+      (3) `HLD-8`（`logic._build_hld8`）只走 `logic._fund_error_lines`，其表層級錯誤只改塊狀態、不寫錯誤行。
+      (4) 本錯誤畫面只有一行錯誤，接一次。
+      以上為 165ec03 時的寫法分類，logic.py 改動時須重核；
     - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
       （裁示 A，逐字）。
     顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
