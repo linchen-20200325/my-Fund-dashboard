@@ -333,6 +333,9 @@ def nav_freshness(dataset: dict, nav_provenance, *, today: date) -> dict:
                 if old
                 else {"text": CACHE_NOTE_FRESH.format(day=day_text), "_tone": "中性"}
             )
+            # S5 第二輪（紅隊建議 3）：375px 寬時日期被折成兩行。字面不變，只標出「這一段不斷行」，
+            # 由 `page.py::_fresh_note_html` 包成不斷行的一段。
+            note["_nowrap"] = [day_text]
         out[code] = {
             "days": days,
             "last": last[code],
@@ -353,7 +356,7 @@ def _apply_freshness(model: dict, fresh: dict) -> dict:
     - HLD-8：每一列同上（1-A「表內每一列」；1-C「該檔標頭下一行」）；
     - HLD-5：每一檔加 `freshness_note`（1-C「該檔展開標頭下」；1-A 不掛在 HLD-5）；
     - HLD-6：`nav_groups` 逐檔分組，分組標頭帶徽章與副標（1-A／1-C「分組標頭」）；
-    - HLD-7：預存那幾檔的各列，輸入欄尾端加 `CACHE_INPUT_SUFFIX`；
+    - HLD-7：預存那幾檔**以淨值為輸入**的列（`logic.NAV_INPUT_INDICATORS`），輸入欄尾端加 `CACHE_INPUT_SUFFIX`；
     - HLD-1：`freshness_tail`（1-C ③），只數出現在本卡列上的檔，排在既有卡尾之後。
     HLD-0 一格不動（草稿 §D「1-D 以外的選項，HLD-0 燈不動」）。
     """
@@ -392,9 +395,12 @@ def _apply_freshness(model: dict, fresh: dict) -> dict:
             )
         groups[-1]["rows"].append(row)
     hld6["nav_groups"] = groups
+    # S5 第二輪（紅隊必修 M1，總管裁定）：尾巴只掛在**以淨值為輸入**的列。
+    # 依據是 `logic.NAV_INPUT_INDICATORS` —— `logic._inputs_text` 就是拿它決定輸入欄讀淨值列還是配息列。
+    # 配息類三列（含「配息佔淨值比」）與 HLD-1 帶來的「…與門檻的差額」列（`_indicator` 不在名單內）一律不掛。
     for row in logic.find_block(model, "HLD-7")["_rows"]:
         entry = fresh.get(row["_fund_code"])
-        if entry and entry["cache_fallback"]:
+        if entry and entry["cache_fallback"] and row["_indicator"] in logic.NAV_INPUT_INDICATORS:
             row["inputs_text"] = row["inputs_text"] + CACHE_INPUT_SUFFIX
     hld1 = logic.find_block(model, "HLD-1")
     listed = {row["_fund_code"] for row in hld1["_rows"]}

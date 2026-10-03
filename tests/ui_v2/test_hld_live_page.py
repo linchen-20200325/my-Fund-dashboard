@@ -167,6 +167,9 @@ def test_S5_徽章畫在HLD2_HLD3標頭旁_HLD8每一列_HLD6分組標頭(days, 
 def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, text, tone):
     md = _run_fresh(days)
     color = theme.tone_hex(tone)
+    # S5 第二輪（紅隊建議 3）：日期整段包在不斷行的一段裡，字面不變。
+    day = "2026-09-18"
+    text = text.replace(day, f'<span style="white-space:nowrap">{day}</span>')
     note = f'style="color:{color}">{text}</div>'
     # HLD-2、HLD-3、HLD-8（儲存格內）、HLD-6（分組標頭下一列）各 1；HLD-5 該檔展開標頭下 1
     assert md.count(note) == 5

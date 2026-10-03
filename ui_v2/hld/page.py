@@ -231,7 +231,13 @@ def _fresh_note_html(node, css="hld-note") -> str:
     note = node.get("freshness_note")
     if not note:
         return ""
-    return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{_esc(note["text"])}</div>'
+    body = _esc(note["text"])
+    # S5 第二輪（紅隊建議 3）：日期 `YYYY-MM-DD` 整段不斷行（375px 實測原本被折成兩行）。
+    # ⚠️ 用行內樣式、不在 `_base_css` 加新 class：`_base_css` 示範模式也會印，加一條規則
+    #    示範畫面就不再逐位元組相同。行內 `style` 與這一行的顏色、S4 卡尾的寫法同一個體例。
+    for piece in note.get("_nowrap", ()):
+        body = body.replace(_esc(piece), f'<span style="white-space:nowrap">{_esc(piece)}</span>')
+    return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{body}</div>'
 
 
 def _buttons(block, prefix) -> None:

@@ -89,8 +89,9 @@ def _group(model, block, code):
     return next(g for g in logic.find_block(model, block)["fund_groups"] if g["_fund_code"] == code)
 
 
-_OLD = {"text": "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "_tone": "黃"}
-_FRESH = {"text": "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "_tone": "中性"}
+_OLD = {"text": "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "_tone": "黃",
+        "_nowrap": ["2026-09-18"]}
+_FRESH = {"text": "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "_tone": "中性", "_nowrap": ["2026-09-18"]}
 
 
 # ───────────────────────── 常數與字面 ─────────────────────────
@@ -204,13 +205,46 @@ def test_同一檔徽章與副標同一個N_顏色一致():
         assert group["freshness_badge"]["_tone"] == group["freshness_note"]["_tone"]
 
 
-def test_HLD7_預存那一檔各列輸入欄尾端加預存序列_其他檔不加():
+# S5 第二輪（紅隊必修 M1，總管裁定）：尾巴只掛在以淨值為輸入的三列；配息類三列、門檻差額列不掛。
+# 期望值逐列寫死，不從 `logic.NAV_INPUT_INDICATORS` 推（被測的就是那一份）。
+_HLD7_SUFFIX_WANT = {
+    "區間報酬率": True,
+    "期間波動": True,
+    "最大回撤": True,
+    "期間配息合計": False,
+    "配息佔淨值比": False,
+    "本金類配息佔比": False,
+    "最大回撤 與門檻的差額": False,   # HLD-1 帶過來的那一列（`full` 情境 AAAA 超出最大回撤門檻）
+}
+
+
+def test_HLD7_淨值為輸入的三列掛尾巴_配息三列與門檻差額列不掛():
     rows = logic.find_block(_model(today=TODAY, fallback={"AAAA"}), "HLD-7")["_rows"]
     base = logic.find_block(_model(today=TODAY), "HLD-7")["_rows"]
-    assert len(rows) == len(base) and [r["_fund_code"] for r in rows].count("AAAA") > 0
+    assert len(rows) == len(base)
+    got = {}
     for row, b in zip(rows, base):
-        want = b["inputs_text"] + " · 預存序列" if row["_fund_code"] == "AAAA" else b["inputs_text"]
-        assert row["inputs_text"] == want
+        assert (row["_fund_code"], row["_indicator"]) == (b["_fund_code"], b["_indicator"])
+        if row["_fund_code"] != "AAAA":
+            assert row["inputs_text"] == b["inputs_text"]          # 不是預存的檔，一列都不掛
+            continue
+        assert not b["inputs_text"].endswith("預存序列")
+        if row["inputs_text"] == b["inputs_text"] + " · 預存序列":
+            got[row["_indicator"]] = True
+        else:
+            assert row["inputs_text"] == b["inputs_text"]
+            got[row["_indicator"]] = False
+    assert got == _HLD7_SUFFIX_WANT
+
+
+def test_HLD7_判定淨值列的名單就是logic輸入欄讀淨值列的那一份():
+    """依據是 `logic._inputs_text`：名單內的指標，輸入欄讀 `nav_rows`；名單外讀 `div_rows`。"""
+    assert logic.NAV_INPUT_INDICATORS == ("區間報酬率", "期間波動", "最大回撤")
+    metric = {"nav_rows": [{"nav_date": "N1"}, {"nav_date": "N2"}], "div_rows": [{"ex_date": "D1"}]}
+    for indicator in logic.INDICATOR_OWNER:
+        text = logic._inputs_text(metric, indicator)
+        assert ("N1" in text) == (indicator in logic.NAV_INPUT_INDICATORS)
+        assert ("D1" in text) == (indicator not in logic.NAV_INPUT_INDICATORS)
 
 
 def test_HLD1卡尾第3句_只數本卡列上的檔_顏色跟著N():
