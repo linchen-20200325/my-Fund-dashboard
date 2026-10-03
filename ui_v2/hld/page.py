@@ -14,7 +14,7 @@ import re
 
 import streamlit as st
 
-from . import fixtures, logic, theme
+from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -432,6 +432,15 @@ def _click_open(holding_id: str) -> None:
     )
 
 
+def _kv_value_html(value) -> str:
+    """展開欄位的值。多半是字串；正式模式「最後核對日」不合格的那一格是值節點（`live._relabel_sync_field`），
+    印它的 `text`、顏色照狀態（S6a；同 `_render_hld8` 表格內值節點的行內 `color` 寫法）。
+    字串照舊 —— 示範模式逐位元組不變。"""
+    if isinstance(value, dict):
+        return f'<b style="color:{_tone(value["_tone"])}">{_esc(value["text"])}</b>'
+    return f"<b>{_esc(value)}</b>"
+
+
 def _render_hld5(block: dict) -> None:
     with _expander(block):
         st.caption(block["answers"])
@@ -454,14 +463,16 @@ def _render_hld5(block: dict) -> None:
                 button["label"],
                 key=f"hld5_open_{item['_holding_id']}",
                 disabled=not button["_enabled"],
-                help=button["disabled_reason"] or None,
+                # S6a：提示「這一檔已經展開」只在停用時帶（`logic` 不論開關都放了原因句；
+                # 啟用中的鈕帶著它，滑過去就讀到一句假話）。示範模式同受影響，是修 bug。
+                help=(button["disabled_reason"] or None) if not button["_enabled"] else None,
                 on_click=_click_open,
                 args=(item["_holding_id"],),
             )
             if not item["_open"]:
                 continue
             kv = "".join(
-                f"<span>{_esc(label)}</span><b>{_esc(value)}</b>"
+                f"<span>{_esc(label)}</span>{_kv_value_html(value)}"
                 for label, value in item["_fields"]
             )
             st.markdown(
@@ -643,25 +654,43 @@ _RENDERERS = {
 }
 
 
-def render() -> None:
+def render(*, load_live=None) -> None:
+    """畫整頁。
+
+    load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
+    `live_args` 原樣轉給 `live.build_live_model`：`direct_policy_id`、`direct`、`policy_tab_source`、
+    `direct_sources`、`nav_provenance`）。⚠️ 這個形狀是 S6a 暫定的，S6 後半寫 `source.py` 時可改。
+    不傳（None）時行為與加這個參數之前**逐字相同**：照舊以 `?scenario=` 挑 fixtures 情境。
+    傳入時改走 `live.build_live_model`，這一條路徑不讀 fixtures；頁首副標只印本頁的提問句 ——
+    示意字樣與情境名只屬於示範模式（體例：`ui_v2/alo/page.py::render`）。
+    """
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
-    scenario = _pick_scenario()
-    model = logic.build_page_model(
-        **fixtures.scenario(scenario), open_fund=_open_fund()
-    )
+    if load_live is None:
+        scenario = _pick_scenario()
+        model = logic.build_page_model(
+            **fixtures.scenario(scenario), open_fund=_open_fund()
+        )
+    else:
+        loaded = load_live()
+        model = live.build_live_model(
+            loaded["dataset"], open_fund=_open_fund(), **loaded["live_args"]
+        )
 
     st.markdown(
         f'<div class="hld-title">{_esc(model["title"])}</div>', unsafe_allow_html=True
     )
-    st.markdown(
-        f'<div class="hld-sub">{_esc(model["answers"])}　·　'
-        f'資料為假資料，每一個數字都帶「示意」二字　·　'
-        # 不在那七個之內的情境沒有草稿標籤，就印它自己的名字（同 `mkt` 那一頁的做法）。
-        # ⛔ 用 `.get` 而不是 `[...]`：閘門放寬之後，`[...]` 會在那三個新情境上 `KeyError`。
-        f'情境 {_esc(fixtures.SCENARIO_LABELS.get(scenario, scenario))}</div>',
-        unsafe_allow_html=True,
-    )
+    if load_live is None:
+        st.markdown(
+            f'<div class="hld-sub">{_esc(model["answers"])}　·　'
+            f'資料為假資料，每一個數字都帶「示意」二字　·　'
+            # 不在那七個之內的情境沒有草稿標籤，就印它自己的名字（同 `mkt` 那一頁的做法）。
+            # ⛔ 用 `.get` 而不是 `[...]`：閘門放寬之後，`[...]` 會在那三個新情境上 `KeyError`。
+            f'情境 {_esc(fixtures.SCENARIO_LABELS.get(scenario, scenario))}</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(f'<div class="hld-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="hld-layer-label">層 1　結論</div>', unsafe_allow_html=True)
     _render_lamp(logic.find_block(model, "HLD-0"))

@@ -16,6 +16,7 @@
 ⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
+   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` 仍是 S6 後半的工作）。
 
 S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
 
@@ -533,17 +534,39 @@ def _relabel_sync_field(block: dict, *, today: date) -> None:
     block["detail_lines"] = list(block["detail_lines"]) + lines
 
 
+# S6a：畫面上寫開發過程的句子，正式模式不顯示（體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`，
+# 逐字比對整行拿掉、不改字、不補新句子）。只收「拿掉之後該處不空、語意不斷」的那幾行；
+# 其餘同類字句（HLD-3、HLD-8 說明區、HLD-5 佔位框、HLD-0 空持倉那一句）拿掉會斷語意，留待總管裁定，本表不收。
+_DEV_LINES = {
+    # HLD-2 說明區：前面一定還有「兩個主值。…」那一行（`logic._build_core_card` 的 subtitle 或空狀態行）。
+    "HLD-2": (logic.HLD2_MOVED_NOTE,),
+}
+
+
+def _strip_dev_lines(model: dict) -> None:
+    """找不到就 raise（同 `_apply_direct` 對 `_HLD5_EMPTY_LINE` 的做法）：那表示 `logic` 改了字面而本檔沒跟上，
+    靜默略過的話，那一行會原封留在正式畫面上。"""
+    for code, lines in _DEV_LINES.items():
+        block = logic.find_block(model, code)
+        for line in lines:
+            if line not in block["detail_lines"]:
+                raise ValueError(f"{code} 說明區沒有「{line}」，logic 改了而本檔沒跟上")
+        block["detail_lines"] = [line for line in block["detail_lines"] if line not in lines]
+
+
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
-    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的兩件事：
+    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
-    2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A。
+    2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
+    3. 畫面上寫開發過程的句子拿掉（S6a，`_DEV_LINES`）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
     """
     out = copy.deepcopy(model)
+    _strip_dev_lines(out)
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])

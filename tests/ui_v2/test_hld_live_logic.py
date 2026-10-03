@@ -1116,3 +1116,39 @@ def test_第三輪4_source型別不對_TypeError寫明位置(bad):
     direct[1]["source"] = bad
     with pytest.raises(TypeError, match="第 1 筆的 source"):
         _live_direct("full", direct=direct)
+
+
+# ───────────────────────── S6a：畫面上的開發過程字句（正式模式不顯示） ─────────────────────────
+# 體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`（逐字比對整行拿掉，不改字、不補新句子）。
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a_正式模式_HLD2說明區沒有開發過程那一行_其餘行照舊(name):
+    args = _scenario_args(name)
+    demo = logic.find_block(_demo(name), "HLD-2")["detail_lines"]
+    got = logic.find_block(_build(**args, today=TODAY), "HLD-2")["detail_lines"]
+    # 正控：示範模式照印（否則下面那條只是因為本來就沒有才過）。
+    assert logic.HLD2_MOVED_NOTE in demo
+    assert logic.HLD2_MOVED_NOTE not in got
+    # 拿掉之後不空，而且剩下的行與示範模式同序（示範模式的示意字尾另計：HLD-2 說明區本來就不接示意字尾）。
+    assert got and got == [line for line in demo if line != logic.HLD2_MOVED_NOTE]
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a_正式模式_全頁模型沒有HLD2那一句(name):
+    args = _scenario_args(name)
+    model = _build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))
+    assert logic.HLD2_MOVED_NOTE not in logic.collect_ui_strings(model)
+
+
+def test_S6a_logic改了字面而live沒跟上_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-2")
+    block["detail_lines"] = [line for line in block["detail_lines"] if line != logic.HLD2_MOVED_NOTE]
+    with pytest.raises(ValueError, match="HLD-2 說明區沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+def test_S6a_HLD2那一句的字面與抽常數之前相同():
+    """抽成常數只是為了讓 live 能逐字比對；字面一字未改（示範畫面逐位元組不變）。"""
+    assert logic.HLD2_MOVED_NOTE == "第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"

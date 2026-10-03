@@ -189,3 +189,148 @@ def test_S5_示範模式_一個新鮮度字樣都不畫():
     md = _run_fresh(30, live_mode=False)
     for word in ("延遲", "當日", "預存序列", "colspan"):
         assert word not in md
+
+
+# ───────────────────────── S6a：上線前的呈現層清理 ─────────────────────────
+
+
+def _bad_sync_app(raw):
+    from datetime import date
+
+    import streamlit as st
+
+    from ui_v2.hld import fixtures, live, logic, page
+
+    args = fixtures.scenario("full")
+    for holding in args["dataset"]["holding"]:
+        if holding["policy_id"] == "DIRECT":
+            holding["policy_id"] = "P-001"
+    target = args["dataset"]["holding"][0]
+    target["last_synced_at"] = raw
+    kw = {
+        "direct_policy_id": "DIRECT",
+        "nav_provenance": {
+            row["fund_code"]: {"cache_fallback": False, "stale": None} for row in args["dataset"]["nav"]
+        },
+    }
+    st.session_state[logic.HLD5_OPEN_KEY] = target["holding_id"]
+    model = live.build_live_model(**args, today=date(2026, 10, 2), open_fund=target["holding_id"], **kw)
+    page._render_hld5(logic.find_block(model, "HLD-5"))
+
+
+def _run_bad_sync(raw):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_function(_bad_sync_app, args=(raw,), default_timeout=60)
+    at.run()
+    assert not at.exception
+    return "\n".join(m.value for m in at.markdown)
+
+
+def test_S6a_最後核對日不合格那一格_印值節點的字_顏色照狀態():
+    """S3 讓那一格變成值節點，`_render_hld5` 原本把它當字串 `_esc(dict)` 印出來。"""
+    from ui_v2.hld import logic
+
+    md = _run_bad_sync("2026/09/19")
+    cell = f'<span>最後核對日（只記日期）</span><b style="color:{theme.tone_hex("紅")}">{logic.ERR_TEXT}</b>'
+    assert cell in md
+    # dict 的字樣一個都不能上畫面（`_esc(dict)` 會印出 `&#123;&#39;_value_node&#39;…`）。
+    for leak in ("_value_node", "value_text", "reason_text", "&#123;"):
+        assert leak not in md, leak
+
+
+def test_S6a_最後核對日合格時_照舊印字串_不帶顏色():
+    md = _run_bad_sync("2026-09-19")
+    assert "<span>最後核對日（只記日期）</span><b>2026-09-19</b>" in md
+
+
+def _demo_full_app():
+    import streamlit as st
+
+    from ui_v2.hld import page
+
+    st.query_params["scenario"] = "full"
+    page.render()
+
+
+def test_S6a_展開鈕_沒展開時不帶提示_展開中的那一枚才帶():
+    """提示「這一檔已經展開」原本無條件傳給 `help`，啟用中的鈕滑過去就讀到一句假話。示範模式同樣修。"""
+    from streamlit.testing.v1 import AppTest
+
+    from ui_v2.hld import fixtures, logic
+
+    at = AppTest.from_function(_demo_full_app, default_timeout=60)
+    at.run()
+    assert not at.exception
+    hids = [h["holding_id"] for h in fixtures.scenario("full")["dataset"]["holding"]]
+    assert len(hids) >= 2
+    for hid in hids:
+        button = at.button(key=f"hld5_open_{hid}")
+        assert button.disabled is False and not button.help, (hid, button.help)
+    at.button(key=f"hld5_open_{hids[0]}").click().run()
+    opened = at.button(key=f"hld5_open_{hids[0]}")
+    assert opened.disabled is True and opened.help == logic.HLD5_OPEN_DISABLED_REASON
+    for hid in hids[1:]:
+        assert not at.button(key=f"hld5_open_{hid}").help, hid
+
+
+def _render_app(live_mode):
+    from ui_v2.hld import fixtures, logic, page
+
+    if not live_mode:
+        page.render()
+        return
+
+    def scrub(node):
+        if isinstance(node, str):
+            return node.replace(logic.HINT, "")
+        if isinstance(node, dict):
+            return {k: scrub(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [scrub(v) for v in node]
+        return node
+
+    dataset = scrub(fixtures.scenario("full")["dataset"])
+    for holding in dataset["holding"]:
+        if holding["policy_id"] == "DIRECT":
+            holding["policy_id"] = "P-001"
+    live_args = {
+        "direct_policy_id": "DIRECT",
+        "nav_provenance": {
+            row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
+        },
+    }
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args})
+
+
+def _run_render(live_mode):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_function(_render_app, args=(live_mode,), default_timeout=60)
+    at.run()
+    assert not at.exception
+    return [m.value for m in at.markdown]
+
+
+def test_S6a_正式模式頁首副標只印提問句():
+    from ui_v2.hld import fixtures, logic
+
+    md = _run_render(True)
+    answers = logic.build_page_model(**fixtures.scenario("full"))["answers"]
+    assert [m for m in md if 'class="hld-sub"' in m] == [f'<div class="hld-sub">{answers}</div>']
+    blob = "\n".join(md)
+    for word in ("假資料", "示意", "情境 "):
+        assert word not in blob, word
+
+
+def test_S6a_示範模式頁首副標照舊():
+    """正控：不傳 `load_live` 時副標與加這個參數之前逐字相同。"""
+    from ui_v2.hld import fixtures, logic
+
+    md = _run_render(False)
+    answers = logic.build_page_model(**fixtures.scenario("full"))["answers"]
+    expected = (
+        f'<div class="hld-sub">{answers}　·　資料為假資料，每一個數字都帶「示意」二字　·　'
+        f'情境 {fixtures.SCENARIO_LABELS["full"]}</div>'
+    )
+    assert [m for m in md if 'class="hld-sub"' in m] == [expected]

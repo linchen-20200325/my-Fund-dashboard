@@ -455,6 +455,9 @@ TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_BAD_RANGE = "起日不晚於迄日"
 TEXT_BOTH_EMPTY = "區間兩個欄位皆未填"
 TEXT_DIRECT_HOLD = "直接持有"
+# HLD-2 說明區的最後一行（示範模式照印）。抽成常數只為了讓 `live.py` 正式模式能逐字比對拿掉它
+# （S6a：畫面上的開發過程字句，比照 `ui_v2/set/live.py::_strip_demo` 的體例）；字面一字未改。
+HLD2_MOVED_NOTE = "第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
 
 NA_NO_WINDOW = not_applicable_text("尚未設定區間")
 NA_NO_RULES = not_applicable_text(TEXT_NO_RULES)
@@ -2277,7 +2280,7 @@ def _build_page_model(dataset, *, fields, viewport_width, open_fund) -> dict:
         unsurfaced=unsurfaced_source_error(dataset, "HLD-2"),
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
-        moved_note="第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。",
+        moved_note=HLD2_MOVED_NOTE,
     )
     hld3 = _build_core_card(
         "HLD-3",
