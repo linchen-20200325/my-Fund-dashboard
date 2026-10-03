@@ -769,7 +769,38 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None) -> None:
+def _render_live_error(exc: Exception, mask_error) -> None:
+    """正式模式取數或組模型失敗時的整頁畫面（S6b-1）。字面全部沿用既有的，不新寫句子：
+
+    - 頁名與提問句：`logic.PAGE_TITLE`、`logic.PAGE_ANSWERS`（與正式模式正常時的頁首同一組）；
+    - 錯誤行：`logic.fetch_failed_text` ＝ `44` 5.5 `系統錯誤` 那一列的模板「⛔ 取數失敗：<訊息原文>」
+      （觸發條件逐字「取數或計算本身失敗」，兩步都在射程內）。訊息原文 ＝「例外型別：遮蔽後的訊息」，
+      型別與訊息的分隔沿用 `logic.fund_fetch_failed_text` 的「：」；
+    - 其下一行：`logic.PRINT_AS_IS_LINE`（本頁每一處取數失敗行之後都接這一句）；
+    - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
+      （裁示 A，逐字）。
+    顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
+    """
+    masked = mask_error(str(exc))
+    if not isinstance(masked, str):
+        raise TypeError(f"mask_error 應回傳字串：{type(masked).__name__}")
+    st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
+    red = _tone("紅")
+    for line in (
+        logic.fetch_failed_text(f"{type(exc).__name__}：{masked}"),
+        logic.PRINT_AS_IS_LINE,
+    ):
+        st.markdown(
+            f'<div class="hld-line" style="color:{red}">{_esc(line)}</div>', unsafe_allow_html=True
+        )
+    button = logic._retry_button()
+    button["_enabled"] = False
+    button["disabled_reason"] = live.REFETCH_DISABLED_REASON
+    _buttons({"buttons": [button]}, "hld_live_error")
+
+
+def render(*, load_live=None, mask_error=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
@@ -778,7 +809,17 @@ def render(*, load_live=None) -> None:
     不傳（None）時行為與加這個參數之前**逐字相同**：照舊以 `?scenario=` 挑 fixtures 情境。
     傳入時改走 `live.build_live_model`，這一條路徑不讀 fixtures；頁首副標只印本頁的提問句 ——
     示意字樣與情境名只屬於示範模式（體例：`ui_v2/alo/page.py::render`）。
+
+    mask_error（S6b-1）：正式模式**一定要給**、示範模式**不得給**（體例：`ui_v2/set/page.py::render`
+    「`load_live`、`save_live`、`refetch_live` 要一起傳」）。字串 → 遮蔽後的字串，由呼叫端注入 ——
+    本套件不得 import `services`（`tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (5) 條），
+    遮蔽（`services.v2_tables.masking.mask_message` ＋ 讀好的秘密值）住在之後的 `source.py`，
+    由 `app_hld_live.py` 一併傳進來。
+    正式模式下 `load_live()` 或 `live.build_live_model(...)` 拋例外 → 不印 Traceback、也不吞：
+    畫出錯誤畫面（`_render_live_error`），寫出例外型別與遮蔽後的訊息原文，整頁其餘塊不畫。
     """
+    if (load_live is None) != (mask_error is None):
+        raise ValueError("load_live 與 mask_error 要一起傳（正式模式兩個都要，示範模式兩個都不傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     applied = _applied()
@@ -791,12 +832,17 @@ def render(*, load_live=None) -> None:
             applied_rules=applied.get("rules"),
         )
     else:
-        loaded = load_live()
-        model = live.build_live_model(
-            loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
-            applied_window=applied.get("window"), applied_rules=applied.get("rules"),
-            **loaded["live_args"]
-        )
+        # S6b-1：只包「去拿」與「組模型」兩步；畫面渲染不在 try 裡（那是本檔自己的 bug，照常浮出來）。
+        try:
+            loaded = load_live()
+            model = live.build_live_model(
+                loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
+                applied_window=applied.get("window"), applied_rules=applied.get("rules"),
+                **loaded["live_args"]
+            )
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印
+            _render_live_error(exc, mask_error)
+            return
 
     st.markdown(
         f'<div class="hld-title">{_esc(model["title"])}</div>', unsafe_allow_html=True
