@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-03 01:43:42 UTC（`date -u` 實測）
+最後更新：2026-10-03 02:21:59 UTC（`date -u` 實測）
 
 ---
 
@@ -137,12 +137,12 @@
 | UI 設計 | 5 頁 | 5/5 ✅ |
 | 假資料版 | 5 頁 | 5/5 ✅ |
 | 接真資料 | 5 頁 | 3/5（mkt、set、alo） |
-| hld 分階段 | S1-S6 | ~~S1/S2/S3 完成、S4 稽核通過待 merge~~ S1/S2/S3/S4 完成 |
+| hld 分階段 | S1-S6 | ~~S1/S2/S3 完成、S4 稽核通過待 merge~~ ~~S1/S2/S3/S4 完成~~ S1~S5 完成 |
 | 圖表 | — | 0 |
 | 收斂 | 4 件 | 0 |
 | 上線 | 1 次 | 0 |
 
-- 出處：客戶 2026-10-02 指示給定的版本；「hld 分階段」那一格依第 2 節 S4 的實況填寫。
+- 出處：客戶 2026-10-02 指示給定的版本；「hld 分階段」那一格依第 2 節 S4 的實況填寫。→ **2026-10-03 狀態更新，不是漏刪**：#879（`2aa90c3`）merge 後改為「S1~S5 完成」，舊值劃線保留。出處：總管 2026-10-03 指示；`git log --oneline --first-parent origin/main` 本組實查。
 - S1／S2／S3 完成：出處：`git log --oneline --first-parent origin/main`（本組 2026-10-02 實查）—— #873 `d24e776`、#874 `c96b9c0`、#875 `777a7c9`。
 - S4 完成（2026-10-02 第三輪更新，舊值「S4 稽核通過待 merge」劃線保留於上表，**狀態更新，不是漏刪**）：PR #876 已 merge，merge commit `318e631`（2 parents `777a7c9`、`3f0fc7a`）。出處：PR #876 說明；本組 2026-10-02 `git fetch origin main` 後 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 318e631` 實查。
 - ~~S4 稽核通過待 merge：~~ 以下為 merge 前的原文：出處：`git ls-remote origin feat/v2-hld-s4` → `3f0fc7a`；PR #876 狀態 open、未 merge（本組 2026-10-02 以 GitHub API 實查）。~~「兩組三輪複驗都通過」出處：總管轉述，本組未查證。~~ → 「兩組三輪複驗都通過」出處：PR #876 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo）。（2026-10-02 總管裁定改寫，不是漏刪）
@@ -178,7 +178,7 @@
 
 | # | 階段 | 依賴 | 誰做 | 狀態 | 完成 |
 |---|---|---|---|---|---|
-| 1 | hld 接真資料 | 無 | AI | ~~待做~~ ~~進行中（S1/S2/S3 完成）~~ 進行中（S1~S4 完成） | 0%（% 未重算：S1～S7 尚未訂權重，以小步表為準） |
+| 1 | hld 接真資料 | 無 | AI | ~~待做~~ ~~進行中（S1/S2/S3 完成）~~ ~~進行中（S1~S4 完成）~~ 進行中（S1~S5 完成） | 0%（% 未重算：S1～S7 尚未訂權重，以小步表為準） |
 | 2 | exp 接真資料 | 無 | AI | 待做 | 0% |
 | 3 | `nav` 表接來源（「重新取數」淨值層） | 卡在 #1 | AI | 待做 | 0% |
 | 4 | `dividend` 表接來源（「重新取數」配息層） | 卡在 #1 | AI | 待做 | 0% |
@@ -204,7 +204,7 @@
 | S2：逐檔取數錯誤 `fund_errors` ＋ `fund_profile` 未接時的推定 | 已完成 | #874，merge commit `c96b9c0` |
 | S3：正式版呈現層骨架（`ui_v2/hld/live.py`） | 已完成 | #875，merge commit `777a7c9` |
 | S4：DIRECT 持倉另列 | ~~待稽核（PR 與 CI 階段，未 merge）~~ ~~進行中（稽核通過（兩組三輪，必修 0）、待 merge）~~ 已完成 | #876，merge commit `318e631`（~~PR #876，分支 `feat/v2-hld-s4` head `3f0fc7a`~~ → head `3f0fc7a` 已併入） |
-| S5：新鮮度 1-A＋1-C，門檻 10 天 | ~~待做~~ 進行中（第二輪：紅隊複驗通過、規格組複驗中） | ~~客戶 2026-10-02 指示的計畫~~ 分支 `feat/v2-hld-s5`（本機，未 push），head `8f043ee`；見第 2 節 S5 |
+| S5：新鮮度 1-A＋1-C，門檻 10 天 | ~~待做~~ ~~進行中（第二輪：紅隊複驗通過、規格組複驗中）~~ 已完成 | ~~客戶 2026-10-02 指示的計畫~~ ~~分支 `feat/v2-hld-s5`（本機，未 push），head `8f043ee`；見第 2 節 S5~~ #879，merge commit `2aa90c3` |
 | S6：`source.py`、`app_hld_live.py`、`PAGES_READING_SETTINGS` 加入 hld、守衛 | 待做 | 客戶 2026-10-02 指示的計畫 |
 | S7：文件 | 待做 | 客戶 2026-10-02 指示的計畫 |
 
@@ -217,6 +217,7 @@
 - S4 一列：出處：`git ls-remote origin feat/v2-hld-s4` → `3f0fc7a`；PR #876 open、未 merge（本組 2026-10-02 以 GitHub API 實查）。~~狀態填「待稽核」是本組依五種狀態值選的最接近者；總管轉述「兩組三輪複驗都通過，目前在 PR 與 CI 階段」，本組未查證稽核結論與 CI 結果。~~
   → **2026-10-02 稽核 M1 更正，不是漏刪**（決策者：總管）：原寫「待稽核」與〈進度總表〉「S4 稽核通過待 merge」互相矛盾；狀態改為「進行中」，補述「稽核通過（兩組三輪，必修 0）、待 merge」，與進度總表一致。稽核通過的出處：PR #876 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo）。CI 結果本組未查。
   → **2026-10-02 第三輪狀態更新，不是漏刪**：S4 已 merge（#876，merge commit `318e631`），小步表該列改「已完成」，舊值劃線保留。出處：PR #876 說明；本組 `git log --oneline --first-parent origin/main` 實查（`318e631 Merge #876：hld DIRECT 持倉另列、不計入體檢（hld 接真資料 S4）`）。
+- S5 一列 2026-10-03 第二次更新（**狀態更新，不是漏刪**，舊值劃線保留）：#879 已 merge，merge commit `2aa90c3`（2 parents `5b315d2`、`8f043ee`）。出處：PR #879 說明；本組 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 2aa90c3` 實查。#1 一列同步改為「進行中（S1~S5 完成）」，出處：總管 2026-10-03 指示。
 - S5 一列（2026-10-03 更新，**狀態更新，不是漏刪**，舊值劃線保留）：出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）；SHA 以 `git log --oneline -3 feat/v2-hld-s5` 本組實查，`git ls-remote origin feat/v2-hld-s5` 無輸出。
 - S5～S7 三列：出處：客戶 2026-10-02 指示。
 - #1 狀態欄寫「進行中（S1/S2/S3 完成）」：出處：客戶 2026-10-02 指示；狀態值仍是五種之一的「進行中」，括號只是補述。→ **2026-10-02 第三輪狀態更新，不是漏刪**：#876 merge 後改為「進行中（S1~S4 完成）」，舊值劃線保留。出處：總管 2026-10-02 第三輪指示。
@@ -255,8 +256,11 @@
 
 ## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ 2026-10-02 更新）
 
-- `origin/main` ＝ **`031d2aa`**（PR #877 的 merge commit；一般 merge commit、2 parents（`318e631`、`fa31b01`），非 squash；
-  出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 031d2aa`）
+- `origin/main` ＝ **`2aa90c3`**（PR #879 的 merge commit；一般 merge commit、2 parents（`5b315d2`、`8f043ee`），非 squash；
+  出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 2aa90c3`）
+  ~~- `origin/main` ＝ **`031d2aa`**（PR #877 的 merge commit；一般 merge commit、2 parents（`318e631`、`fa31b01`），非 squash；~~
+  ~~出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 031d2aa`）~~
+  → **2026-10-03 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #878（`5b315d2`）、#879（`2aa90c3`）相繼 merge，見第 4 節。
   ~~- `origin/main` ＝ **`318e631`**（PR #876 的 merge commit；一般 merge commit、2 parents（`777a7c9`、`3f0fc7a`），非 squash；~~
   ~~出處：本組 2026-10-02 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 318e631`）~~
   → **2026-10-03 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #877（`031d2aa`，交接本補齊）merge，見第 4 節。
@@ -304,13 +308,15 @@
 - ~~分支 `feat/v2-hld-s4`，head `3f0fc7a`。出處：本組 2026-10-02 `git ls-remote origin feat/v2-hld-s4` 實查。~~
 - ~~PR #876「hld：DIRECT 持倉另列、不計入體檢（hld 接真資料 S4）」，open、非 draft、未 merge。出處：本組 2026-10-02 以 GitHub API 實查。~~
 - ~~稽核：兩組三輪複驗都通過，目前在 PR 與 CI 階段。~~ ~~出處：總管 2026-10-02 轉述；本組未查證稽核結論，CI 結果本組未查。~~ ~~→ 出處：PR #876 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo）；CI 結果本組未查。（2026-10-02 總管裁定改寫，不是漏刪）~~
-- ~~S4 稽核留下的 10 條待辦見〈登記待辦〉「hld 接真資料 S1～S4 稽核留下的待辦」S4 那一組。~~
+- S4 稽核留下的 10 條待辦見〈登記待辦〉「hld 接真資料 S1～S4 稽核留下的待辦」S4 那一組。（仍有效，見第 19～28 條；2026-10-03 依文件稽核建議撤掉刪除線，因為這一句仍然成立。）
 
-### hld 接真資料 S5：新鮮度徽章與預存序列副標 —— **本機分支，未 push（2026-10-03 登記）**
+### ~~hld 接真資料 S5：新鮮度徽章與預存序列副標 —— **本機分支，未 push（2026-10-03 登記）**~~
 
-- 分支 `feat/v2-hld-s5`，**只在本機、尚未 push**：兩顆 commit 的 SHA 只存在本機分支。出處：本組 2026-10-03 實查 `git log --oneline -3 feat/v2-hld-s5`（`8f043ee` → `47b1b6b` → `318e631`）；`git ls-remote origin feat/v2-hld-s5` 無輸出。
-- **第一輪 head `47b1b6b`**：規格組通過；紅隊不通過，必修 M1「HLD-7 的『預存序列』尾巴掛到配息列與門檻差額列」。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）。
-- **第二輪 head `8f043ee`**：尾巴只掛淨值三列，依據 logic `NAV_INPUT_INDICATORS`；副標裡的日期改為不斷行。紅隊複驗通過，必修 0；規格組複驗中。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）；本組實查 `git grep -n NAV_INPUT_INDICATORS 8f043ee -- ui_v2`，命中 `ui_v2/hld/live.py`（以 `logic.NAV_INPUT_INDICATORS` 判斷）。
+→ **2026-10-03 狀態更新，不是漏刪：#879 已 merge（`2aa90c3`），見第 4 節。** 下方前三行在寫下當天為真，劃線保留；「S5 總管裁定」六條與最後一行指向待辦的句子仍然成立，不劃線。出處：`git log --oneline --first-parent origin/main` 本組實查。
+
+- ~~分支 `feat/v2-hld-s5`，**只在本機、尚未 push**：兩顆 commit 的 SHA 只存在本機分支。出處：本組 2026-10-03 實查 `git log --oneline -3 feat/v2-hld-s5`（`8f043ee` → `47b1b6b` → `318e631`）；`git ls-remote origin feat/v2-hld-s5` 無輸出。~~
+- ~~**第一輪 head `47b1b6b`**：規格組通過；紅隊不通過，必修 M1「HLD-7 的『預存序列』尾巴掛到配息列與門檻差額列」。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）。~~
+- ~~**第二輪 head `8f043ee`**：尾巴只掛淨值三列，依據 logic `NAV_INPUT_INDICATORS`；副標裡的日期改為不斷行。紅隊複驗通過，必修 0；規格組複驗中。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）；本組實查 `git grep -n NAV_INPUT_INDICATORS 8f043ee -- ui_v2`，命中 `ui_v2/hld/live.py`（以 `logic.NAV_INPUT_INDICATORS` 判斷）。~~
 - **S5 總管裁定（接受、不改）**，出處：總管 2026-10-03 指示：
   - 取數失敗、或淨值表沒有列的檔，不掛徽章。
   - HLD-6 加表內分組列（草稿隱含）。
@@ -318,7 +324,7 @@
   - 不讀 `stale`（照草稿）。
   - 未來日期或 provenance 缺漏時 raise。
   - 日期不斷行用行內樣式，不新增 class，以維持示範版逐位元組不變。
-- S5 稽核留下的 7 條待辦見〈登記待辦〉「hld 接真資料 S5 稽核留下的待辦」。
+- S5 稽核留下的 7 條待辦見〈登記待辦〉「hld 接真資料 S5 稽核留下的待辦」。（仍有效，不劃線。）
 
 ### set 頁 SET-0 說明句改寫（客戶裁示 B）—— **本機分支，未 push（2026-10-02 登記）**
 
@@ -1014,6 +1020,9 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   - 出處：本組 2026-10-02 以 `git show -s --format='%h %p | %s' 318e631`、`git diff --stat 777a7c9 318e631` 與 `git log --oneline 777a7c9..318e631^2` 實查；CI 結果本組未查。
   - S4 總管裁定（接受）：持倉全是 DIRECT 時，換上去的句子放在灰色塊；N=0 時什麼都不加。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）。
 - **#877（merge commit `031d2aa`，2 parents `318e631`、`fa31b01`）：交接本補齊 `b3baa54` 之後的進度**（分支 `docs/handover-catchup-1002`；`1089775` → `29226a5` → `220a53f`（併入 `318e631` 的 merge）→ `fa31b01`）。對 `318e631` 為 1 檔 **+164／−13**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 031d2aa`、`git log --oneline 318e631..031d2aa^2` 與 `git diff --shortstat 318e631 031d2aa` 實查；CI 結果本組未查。
+- **#878（merge commit `5b315d2`，2 parents `031d2aa`、`e7d8a52`）：交接本 main 更新為 `031d2aa`、S5 兩輪稽核、新增規則第 5 條**（分支 `docs/handover-1003-s5`，一顆 `e7d8a52`）。1 檔 **+46／−10**。稽核：文件稽核組一輪通過，必修 0。出處：PR #878 說明；本組 2026-10-03 以 `git show -s --format='%h %p | %s' 5b315d2`、`git diff --shortstat 031d2aa 5b315d2` 實查；CI 結果本組未查。
+- **#879（merge commit `2aa90c3`，2 parents `5b315d2`、`8f043ee`）：hld S5，舊淨值新鮮度標示（客戶裁示 1-A＋1-C，黃燈門檻 10 天）**（分支 `feat/v2-hld-s5`，兩顆 `47b1b6b` → `8f043ee`）。6 檔 **+797／−23**（`ui_v2/hld/live.py`、`ui_v2/hld/logic.py`、`ui_v2/hld/page.py`、`tests/ui_v2/test_hld_live_logic.py`、`tests/ui_v2/test_hld_live_page.py`、`tests/ui_v2/test_hld_live_freshness.py`）。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 2aa90c3`、`git diff --stat 5b315d2 2aa90c3` 與 `git log --oneline 5b315d2..2aa90c3^2` 實查；CI 結果本組未查。
+  - 稽核：規格組與紅隊兩組，兩輪複驗都通過，必修 0。出處：PR #879 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo）。
 
 ## 5. 待客戶裁示
 
@@ -1281,6 +1290,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-03 | 第五次更新（起點 `2aa90c3`）：`origin/main` 改 `2aa90c3`（舊句劃線保留）；第 4 節補 #878（`5b315d2`）、#879（`2aa90c3`）兩列；進度總表 hld 改「S1~S5 完成」、小步表 S5 改「已完成」（`2aa90c3`）、總藍圖 #1 改「進行中（S1~S5 完成）」，舊值皆劃線保留；第 2 節 S5 小節標題與前三行劃線並標明已 merge（裁定六條與指向待辦那一行不劃線）；S4 小節第 4 行撤掉刪除線並補「仍有效，見第 19～28 條」。出處：總管 2026-10-03 指示；PR #878／#879 說明；`git log --oneline --first-parent origin/main`。 |
 | 2026-10-03 | 第四次更新（客戶 2026-10-03 指示，起點 `031d2aa`）：`origin/main` 改 `031d2aa`（舊句劃線保留）；第 4 節補 #877 一列、#876 列補 S4 總管裁定兩條、「#873～#875 三列」收尾說明移到 #876 之前；小步表 S5 改「進行中」；第 2 節新增 S5 小節（兩輪 head、M1、總管裁定 6 條），S4 小節內文劃線並刪多餘空行；〈登記待辦〉新增 S5 7 條，S4 五條確認已在未重複；0.5 新增第 5 條；〈總管錯誤紀錄〉新增一條。出處：客戶 2026-10-03 指示；總管 2026-10-03 指示。 |
 | 2026-10-02 | 第三輪（起點 `29226a5`，併入 origin/main `318e631`）：`origin/main` 改 `318e631`（舊句劃線保留）；進度總表 hld 改「S1/S2/S3/S4 完成」、小步表 S4 改「已完成」（merge `318e631`）、總藍圖 #1 改「進行中（S1~S4 完成）」、第 2 節 S4 標題劃線，舊值皆劃線保留；第 4 節補 #876 一列；S1 出處拿掉「兩組」（PR #873 只寫「第六輪稽核通過」）；稽核建議三條：第二輪日誌補「`1089775` 尚未進 main，直接改寫」、註明三句原話核對對象（`777a7c9:ui_v2/hld/live.py:34-35`、`e7f05bd:ui_v2/set/live.py:28`）、待辦 7 補原文限定語「目前沒有路徑能觸發」。出處：總管 2026-10-02 第三輪指示；PR #876 說明；`git log --oneline --first-parent origin/main`。 |
 | 2026-10-02 | 第二輪稽核回修（起點 `1089775`）：M1 小步表 S4 狀態「待稽核」劃線，改「進行中（稽核通過（兩組三輪，必修 0）、待 merge）」，與進度總表一致；「稽核通過」的出處改為 PR #873／#874／#875／#876 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo），舊出處劃線保留，#874 列補稽核一行；總藍圖 #1 去掉多一層刪除線（`1089775` 尚未進 main，直接改寫），`0%` 旁補「% 未重算」；49 秒那一行補出處；#874 既有問題那一行與待辦 7、8、12 補 PR 說明出處。A、B、存檔三句已逐字核對。出處：總管 2026-10-02 第二輪稽核裁定。 |
