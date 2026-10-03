@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-03 10:37:44 UTC（`date -u` 實測）
+最後更新：2026-10-03 10:40:01 UTC（`date -u` 實測）
 
 ---
 
@@ -1066,13 +1066,13 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 - **（2026-10-03 新增）hld S6b 開工前盤點** —— 出處（13 條共同）：盤點組 A、B 2026-10-03，兩組獨立，總管轉達；單組判讀未經互驗。本組只登記，下列「本組實查」之外未逐條查證。
 
-  1. **B-T1（高）**：`live.py::_strip_dev_lines` 檢查 HLD-2／3／8 `detail_lines` 是否殘留「2026-09-22」，但該欄也放上游錯誤原文；錯誤訊息含該字串即拋 ValueError、整頁 Traceback（B 組實跑重現）。HLD-0 lines 含「規格沒有寫」同型。歸 S6b-1。（本組實查：`ui_v2/hld/live.py` 有 `def _strip_dev_lines`。）
+  1. **B-T1（高）**：`live.py::_strip_dev_lines` 檢查 HLD-2／3／8 `detail_lines` 是否殘留「2026-09-22」，但該欄也放上游錯誤原文；錯誤訊息含該字串即拋 ValueError、整頁 Traceback（B 組實跑重現）。HLD-0 lines 含「規格沒有寫」同型。歸 S6b-1。（本組實查：`ui_v2/hld/live.py` 有 `def _strip_dev_lines`。）佐證：`ui_v2/hld/logic.py` 約 :1564 把 `error_lines` 併入 `detail_lines`；`live.py::_strip_dev_lines` 的 docstring 稱「上游錯誤原文不住在這些位置」，與程式不符（文件稽核組 2026-10-03 實查；本組於 `b9cf44c` 重查 `logic.py:1564`、`live.py:571` 相符）。S6b-1 修 T1 時一併更正該 docstring。
   2. **B**：Streamlit 預設 showErrorDetails=full，正式版路徑無 try，任何例外印完整 Traceback（T2～T5 列舉見盤點 B）。歸 S6b-1。
   3. **B**：`hld_deviation_rules` 存值格式在 44／49／50 皆未定義；`logic.saved_rules` 假設已解析的 dict 串列，Sheets 存 JSON 字串會 TypeError；`ui_v2/set/fixtures.py:41` 存 `'["示意門檻一"]'`，與 hld 假設衝突。格式已由總管裁定（見第 2 節 S6b）；set fixture 示意值另登記。（本組實查：`ui_v2/set/fixtures.py:41` 確為該值。）
   4. **B**：`fund_keys` 解析失敗與 nav withheld（ccy_missing／ccy_conflict）的檔在 hld dataset 無位置：塞 `fund_errors` 會誤稱「取數失敗」，不塞則原因消失。歸 S6b-2。
   5. **B**：ACCEPTANCE 8.3 引用測試名不存在（實為 `tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列`），且「待 hld 接真資料送客戶裁示」已過期（客戶 2026-10-02 已裁 3-B (ii)）；8.1 末段對正式版過期；7.4-a 射程只列 MKT 未含 HLD。歸 S6b-4。（本組實查：該測試函式在該檔存在。）
   6. **B**：ACCEPTANCE 未登記的 hld 正式版對 44 偏離：存檔停用、重新取數停用、fund_profile 推定、HLD-5 佔位圖、前往 Sheets 鈕不動、44 §4.1 同保單同基金未加總。歸 S6b-4。
-  7. **B-T6**：`alo/source.py` 只攔 PolicySupplementError，未攔 HoldingIdCollision（alo 同洞，不在 hld 範圍，登記另議）。
+  7. **B-T6**：`alo/source.py` holding／policy 那一段只攔 PolicySupplementError（同函式另攔 SettingsSheetError 兩處：user_setting、market_indicator），未攔 HoldingIdCollision（alo 同洞，不在 hld 範圍，登記另議）。
   8. **B**：正式版畫面有 HLD-* 塊代號、英文來源鍵（holding／nav／dividend／fund_profile）、「依 fund_code 字面值排列」—— 改字屬客戶裁示，列入上線前文案批次。
   9. **A**：`settings_store.PENDING_TABLES` 不可移除 nav（`alo/source.py` 寫死 `nav: []`，`test_alo_source.py` 會紅）；總管裁定 hld 的 source 自交 `pending_tables` 只放 dividend。歸 S6b-3。
   10. **A／B**：hld 跨頁守衛一建立即觸發（`hld/live.py` 已存在），`PAGES_READING_SETTINGS` 加 hld 與守衛必須同一 commit。歸 S6b-3。（本組實查：`services/v2_tables/settings_store.py` 目前為 `PAGES_READING_SETTINGS = ("set", "alo")`。）
@@ -1206,7 +1206,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **#885（merge commit `4c7aa76`，2 parents `9b05676`、`eab4ca2`）：交接本 S6a-1 完成、main 更新為 `9b05676`、S6a-2 範圍**（分支 `docs/handover-1003-s6a1done`；兩顆 `05b74dd` → `eab4ca2`）。1 檔 **+38／−13**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 4c7aa76`、`git log --oneline 9b05676..4c7aa76^2` 與 `git diff --shortstat 9b05676 4c7aa76` 實查；CI 結果本組未查。
 - **#886（merge commit `b3f940a`，2 parents `4c7aa76`、`53eea79`）：交接本 S6a-2 第一輪稽核、客戶燈號與 44 裁示、登記 13～18**（分支 `docs/handover-1003-s6a2-audit`，一顆 `53eea79`）。1 檔 **+27／−6**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' b3f940a`、`git log --oneline 4c7aa76..b3f940a^2` 與 `git diff --shortstat 4c7aa76 b3f940a` 實查；三條 check run 皆 success（文件稽核組 2026-10-03 以 GitHub API 實查）。
 - **#887（merge commit `d6cd736`，2 parents `b3f940a`、`a673e4c`）：hld S6a-2 套用接線、燈數改數檔、方向檢查、停用原因、新增與清除列；ACCEPTANCE 第九節**（分支 `feat/v2-hld-s6a2`；8 顆 `b28c784` → `79ae5e6` → `48501f2` → `e3b2a9f` → `a5fc092` → `51e205f` → `d59245e` → `a673e4c`）。7 檔 **+1254／−33**（`ACCEPTANCE.md`、`ui_v2/hld/live.py`、`ui_v2/hld/logic.py`、`ui_v2/hld/page.py`、`tests/ui_v2/test_hld_live_logic.py`、`tests/ui_v2/test_hld_live_page.py`、`tests/ui_v2/test_hld_logic.py`）。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' d6cd736`、`git log --oneline b3f940a..d6cd736^2` 與 `git diff --stat b3f940a d6cd736` 實查；三條 check run 皆 success（文件稽核組 2026-10-03 以 GitHub API 實查）。稽核歷程見第 2 節 S6a-2。
-- **#888（merge commit `b9cf44c`，2 parents `d6cd736`、`30af59c`）：交接本 S6a-2 完成、main 更新為 `d6cd736`、稽核歷程、錯誤紀錄三筆、登記 19～21**（分支 `docs/handover-1003-s6a2-done`；兩顆 `1d4d503` → `30af59c`）。1 檔 **+35／−10**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' b9cf44c`、`git log --oneline d6cd736..b9cf44c^2` 與 `git diff --shortstat d6cd736 b9cf44c` 實查；CI 結果本組未查。
+- **#888（merge commit `b9cf44c`，2 parents `d6cd736`、`30af59c`）：交接本 S6a-2 完成、main 更新為 `d6cd736`、稽核歷程、錯誤紀錄三筆、登記 19～21**（分支 `docs/handover-1003-s6a2-done`；兩顆 `1d4d503` → `30af59c`）。1 檔 **+35／−10**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' b9cf44c`、`git log --oneline d6cd736..b9cf44c^2` 與 `git diff --shortstat d6cd736 b9cf44c` 實查；三條 check run 皆 success（文件稽核組 2026-10-03 以 GitHub API 實查）。
 
 ## 5. 待客戶裁示
 
@@ -1474,7 +1474,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
-| 2026-10-03 | 第十二次更新（起點 `b9cf44c`，依 0.5 第 4 條停下補齊）：`origin/main` 改 `b9cf44c`（舊句劃線保留）、第 4 節補 #888；小步表 S6b 整列劃線、拆為 S6b-1～S6b-4；第 2 節新增 S6b 小節（盤點、切段、`hld_deviation_rules` 格式裁定）；〈登記待辦〉新增「hld S6b 開工前盤點」13 條。出處：盤點組 A、B 2026-10-03（總管轉達）；總管 2026-10-03 裁定。 |
+| 2026-10-03 | 第十二次更新（起點 `b9cf44c`，依 0.5 第 4 條停下補齊）：`origin/main` 改 `b9cf44c`（舊句劃線保留）、第 4 節補 #888；小步表 S6b 整列劃線、拆為 S6b-1～S6b-4；第 2 節新增 S6b 小節（盤點、切段、`hld_deviation_rules` 格式裁定）；〈登記待辦〉新增「hld S6b 開工前盤點」13 條。出處：盤點組 A、B 2026-10-03（總管轉達）；總管 2026-10-03 裁定。稽核建議回修（起點 `f551a75`，未進 main，直接改寫）：#888 CI 改為三條 check run 皆 success（文件稽核組實查）；B-T1 補 `logic.py:1564`／`live.py:571` 佐證與 docstring 待更正；第 7 條改寫射程（holding／policy 那一段只攔 PolicySupplementError，另攔 SettingsSheetError 兩處）。 |
 | 2026-10-03 | 第十一次更新（起點 `d6cd736`）：`origin/main` 改 `d6cd736`（經 #886 `b3f940a`；舊句劃線保留）、第 4 節補 #886、#887；進度總表 hld 改「S1～S5、S6a 完成」、總藍圖 #1 改「進行中（S1～S5、S6a 完成；下一步 S6b）」、小步表 S6a-2 改「已完成」、S6b 補範圍與「下一步」（舊值皆劃線）；第 2 節 S6a-2 標題劃線並補稽核歷程與下一步；〈總管錯誤紀錄〉新增三筆與規格組自查；〈登記待辦〉S6a 新增第 19～21 條（計數 18→21）。出處：總管 2026-10-03 指示；`git log`／`git show` 本組實查。稽核回修（起點 `1d4d503`，未進 main，直接改寫）：錯誤紀錄 (a) 的 `4c7aa76` 改標 #885（更正隨 #886 合入）；#886、#887 兩列 CI 改為三條 check run 皆 success（文件稽核組實查）；第 21 條處數改為文件稽核組實查結果。全檔「SHA（#編號）」配對以 `git log --merges --first-parent` 對照掃描，其餘無誤。 |
 | 2026-10-03 | 第十次更新（起點 `4c7aa76`）：`origin/main` 改 `4c7aa76`（舊句劃線保留）、第 4 節補 #885；小步表 S6a-2 更新為第一輪 `e3b2a9f` 兩組通過、`a5fc092` 增量稽核中（舊值劃線保留）；第 2 節 S6a-2 小節新增第一輪稽核結果、客戶裁示（燈號與 44 牴觸）、`a5fc092` 修正內容；〈登記待辦〉S6a 新增第 13～18 條（計數 12→18，舊值劃線）、第 7 條補「兩組再提」。出處：兩組 2026-10-03 回報；客戶 2026-10-03 裁示；實作組回報；總管 2026-10-03 指示。 |
 | 2026-10-03 | 第九次更新稽核回修（起點 `05b74dd`）：S6a-2 分支描述兩處（小步表註、第 2 節 S6a-2）改寫為「由 main `9b05676` 開出、成果來源 `e597820`、`0d5d702` 以 cherry-pick 帶入」，小步表 S6a-2 狀態格「起點」改「成果來源」（未進 main，直接改寫）；S6a 待辦第 11 條「歸 S6a-2」劃線，改「不在 S6a-2 範圍，另議」。出處：總管 2026-10-03 指示與裁定。 |
