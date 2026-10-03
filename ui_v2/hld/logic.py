@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextvars
 import math
+import re
 from datetime import date
 
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事。
@@ -654,14 +655,68 @@ def saved_rules(dataset):
     return list(_setting(dataset, "hld_deviation_rules") or ())
 
 
+# S6a 第四輪（紅隊 M4）：區間只收嚴格的 `YYYY-MM-DD`（`re.ASCII`：`\d` 只認 0～9）。
+# 3.11 的 `date.fromisoformat` 也收 `20260601`、`2026-W23-1` 這類寫法 —— 原本 `20260601` 被當成合法，
+# 結果算出「區間內淨值筆數不足」這種錯的結論。先過這一關再交給 `fromisoformat`（同 `live._DATE_ONLY` 的寫法）。
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+
+
 def window_is_valid(window) -> bool:
     start, end = window
     if not start or not end:
+        return False
+    if not all(isinstance(v, str) and _ISO_DATE.fullmatch(v) for v in (start, end)):
         return False
     try:
         return date.fromisoformat(start) <= date.fromisoformat(end)
     except ValueError:
         return False
+
+
+# ── 「套用」讀欄位當下值（S6a 第三、四輪；`44` HLD-4：「套用」只讀這些欄位的當下值、重算六塊）──
+# 門檻列的數值欄只收十進位寫法（可帶正負號、可帶小數），前後不得有空白；不收 `1e3`、`inf`、`1_0`。
+_RULE_NUMBER = re.compile(r"[+-]?\d+(\.\d+)?", re.ASCII)
+
+
+def rules_from_inputs(rows):
+    """門檻列欄位的當下值 `[(指標名, 比較方向, 數值), ...]` → `[{"indicator", "direction", "value"}, ...]`。
+
+    只用既有規則，不新增任何判定：
+    - 三格全空的列 ＝ 沒有這一列（`_build_hld4` 本來就用一列空白列表示「門檻一列也沒有」）；
+    - 指標名、比較方向照原字收 —— 母體之外的指標名與方向，照 `deviation_rows`／`_breaches` 既有的處理；
+    - 數值轉成數（存過的門檻就是數，`_breaches` 拿它直接比大小）。
+    其餘（只填了一兩格、數值不是十進位數字）**既有規則處理不了** → 回 None，由呼叫端讓「套用」不可按。
+    """
+    out = []
+    for row in rows:
+        indicator, direction, value = ("" if v is None else v for v in row)
+        if not isinstance(indicator, str) or not isinstance(direction, str) or not isinstance(value, str):
+            return None
+        if indicator == "" and direction == "" and value == "":
+            continue
+        if indicator == "" or direction == "" or not _RULE_NUMBER.fullmatch(value):
+            return None
+        out.append({"indicator": indicator, "direction": direction, "value": float(value)})
+    return out
+
+
+def window_input_blocked(start, end) -> bool:
+    """區間兩格的當下值能不能拿去「套用」：兩格都空 → 可以（＝尚未設定區間，既有行為）；
+    只填一格、格式不是 `YYYY-MM-DD`、起日晚於迄日 → 不可以（S6a 第四輪，紅隊 M4 與建議 2）。"""
+    if not start and not end:
+        return False
+    return not window_is_valid((start, end))
+
+
+def applied_from_inputs(start, end, rule_rows):
+    """按「套用」時欄位的當下值 → `{"window": (起, 迄), "rules": [...]}`；不可套用回 None。
+    `page.py` 的「套用」回呼與 `_build_hld4` 的停用判定**讀同一支**，兩邊不會各說各話。"""
+    if window_input_blocked(start, end):
+        return None
+    rules = rules_from_inputs(rule_rows)
+    if rules is None:
+        return None
+    return {"window": (start or None, end or None), "rules": rules}
 
 
 # ───────────────────────── 逐檔指標 ─────────────────────────
@@ -1722,20 +1777,34 @@ def _build_hld4(*, applied_window, fields, rules):
 
     enabled_save = not both_empty and not bad_range
     reason = TEXT_BOTH_EMPTY if both_empty else (TEXT_BAD_RANGE if bad_range else "")
+    # 「套用」能不能按：讀**欄位的當下值**，與 `page.py` 的回呼同一支（`applied_from_inputs`）。
+    # 區間不可套用（顛倒、格式不是 `YYYY-MM-DD`、只填一格）→ 沿用既有原因句 `TEXT_BAD_RANGE`
+    #   （⚠️ 登記：格式錯與只填一格時這一句不是真正的原因；總管 S6a 第四輪裁定先不修）。
+    # 門檻列既有規則處理不了（`rules_from_inputs` 回 None）→ 停用；**沒有既有原因句可用，原因留空**
+    #   （⚠️ 待補文案，已回報；不自己寫新句子）。欄位裡沒有門檻列的當下值（首次渲染、情境自帶的 `fields`）→ 不判。
+    window_blocked = window_input_blocked(field_start, field_end)
+    rules_blocked = "rule_rows" in fields and rules_from_inputs(fields["rule_rows"]) is None
+    apply_reason = TEXT_BAD_RANGE if window_blocked else ""
     buttons = [
         _button("新增一列", "新增列"),
-        _button("套用", "套用", enabled=not bad_range, disabled_reason=TEXT_BAD_RANGE if bad_range else ""),
+        _button("套用", "套用", enabled=not (window_blocked or rules_blocked), disabled_reason=apply_reason),
         _button("存檔", "存檔", enabled=enabled_save, disabled_reason=reason),
     ]
     row_buttons = [_button("清除這一列", "清除") for _ in threshold_rows]
 
-    if both_empty:
+    # S6a 第四輪（紅隊 M1）：摘要的區間與門檻列數讀**已套用**的那一組（`applied_window`／`rules`），
+    # 不讀欄位當下值 —— 只改欄位、還沒按「套用」時，摘要與下面各塊的數字對得上。
+    # 欄位當下值只用在「輸入尚未通過檢查」那一句（`bad_range`，既有寫法；首次渲染逐字同前）。
+    applied_start, applied_end = applied_window
+    if bad_range:
+        summary = "輸入尚未通過檢查"
+    elif not applied_start and not applied_end:
         summary = "尚未設定區間；門檻一列也沒有；存檔停用" if not rules else "尚未設定區間"
-    elif bad_range:
+    elif not window_is_valid(applied_window):
         summary = "輸入尚未通過檢查"
     else:
         rule_count = len(rules or ())
-        summary = f"區間 {field_start}{_hint()} 至 {field_end}{_hint()} · 門檻 {rule_count} 列{_hint()}"
+        summary = f"區間 {applied_start}{_hint()} 至 {applied_end}{_hint()} · 門檻 {rule_count} 列{_hint()}"
 
     return {
         "code": "HLD-4",
@@ -2239,13 +2308,15 @@ def build_page_model(
     open_fund=None,
     demo_hint: bool = True,
     applied_window=None,
+    applied_rules=None,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
 
     `applied_window`：使用者按「套用」時欄位的當下值 `(起日, 迄日)`（S6a 第三輪，紅隊 M1）。
     `44` HLD-4：「套用」只讀這些欄位的當下值、重算六塊（`APPLY_RECALC_BLOCKS`），不寫任何資料表。
     `None`（還沒按過「套用」）＝ 照舊用存過的區間（`saved_window`），輸出逐字同前。
-    ⚠️ 只換「拿哪一段區間去算」；門檻列不在這一個參數裡（見 S6a 第三輪回報）。
+    `applied_rules`：同一次「套用」時門檻列的當下值（`rules_from_inputs` 的結果；S6a 第四輪，紅隊 M3）。
+    `None` ＝ 照舊用存過的門檻（`saved_rules`）。
 
     `open_fund`：展開中那一列持倉的 `holding_id`（2026-10-02 起；之前是 `fund_code`）。
 
@@ -2267,15 +2338,17 @@ def build_page_model(
     try:
         return _build_page_model(
             dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund,
-            applied_window=applied_window,
+            applied_window=applied_window, applied_rules=applied_rules,
         )
     finally:
         _HINT_SUFFIX.reset(token)
 
 
-def _build_page_model(dataset, *, fields, viewport_width, open_fund, applied_window=None) -> dict:
+def _build_page_model(
+    dataset, *, fields, viewport_width, open_fund, applied_window=None, applied_rules=None
+) -> dict:
     applied_window = saved_window(dataset) if applied_window is None else tuple(applied_window)
-    rules = saved_rules(dataset)
+    rules = saved_rules(dataset) if applied_rules is None else list(applied_rules)
     # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
     _check_holding_ids(dataset.get("holding", []))
     # `fund_errors` 形狀先驗：空持倉時 `fund_metrics()` 一次也不會跑，壞形狀不得因此靜默通過（§1）。

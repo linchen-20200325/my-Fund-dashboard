@@ -1128,12 +1128,16 @@ _TRIMMED = {
     "HLD-8": "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
     "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。",
     "HLD-0": "（另：尚未設定門檻。）",
+    # S6a 第四輪（規格組必修 2／紅隊 J1）：不是開發過程字句，同一體例只刪不加。
+    "HLD-4": "「套用」只讀這些欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，"
+    "不寫任何資料表、不改欄位的內容。",
 }
 _ORIGINAL = {
     "HLD-2": logic.HLD2_MOVED_NOTE,
     "HLD-3": logic.HLD3_MOVED_NOTE,
     "HLD-8": logic.HLD8_DETAIL_NOTE,
     "HLD-0": logic.HLD0_NO_RULES_ASIDE,
+    "HLD-4": logic.HLD4_APPLY_NOTE,
 }
 _FIELD = {"HLD-2": "detail_lines", "HLD-3": "detail_lines", "HLD-8": "detail_lines", "HLD-0": "lines"}
 # 被刪掉的子句（逐字），一個都不能留在正式畫面上。
@@ -1141,6 +1145,8 @@ _DELETED = (
     "已依客戶 2026-09-22 裁定",
     "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層",
     "兩句同時成立時哪一句出現，規格沒有寫",
+    "兩枚按鈕並存，各做一件事。",
+    logic.HLD4_SAVE_SCOPE_NOTE,
 )
 
 
@@ -1295,10 +1301,15 @@ def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
 
 @pytest.mark.parametrize("name", _ALL)
 def test_S6a第三輪_正式版HLD4不印存檔那一句_示範版照印_其餘照舊(name):
+    """第四輪起同一區另外兩處：「兩枚按鈕並存，各做一件事。」刪掉、講存檔只寫什麼的那一句整句不印。"""
     demo = logic.find_block(_demo(name), "HLD-4")["notes"]
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
-    assert logic.HLD4_SAVE_NOTE in demo
-    assert got == [line for line in demo if line != logic.HLD4_SAVE_NOTE]
+    for line in (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE, logic.HLD4_APPLY_NOTE):
+        assert line in demo
+    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+    assert got == [
+        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
+    ]
 
 
 def test_S6a第三輪_logic改了存檔那一句而live沒跟上_raise():
@@ -1327,3 +1338,153 @@ def test_S6a第三輪_套用的區間取代存過的區間_正式版照轉():
         a = [mv["text"].replace(logic.HINT, "") for g in logic.find_block(demo, code)["fund_groups"] for mv in g["main_values"]]
         b = [mv["text"] for g in logic.find_block(got, code)["fund_groups"] for mv in g["main_values"]]
         assert a == b, code
+
+
+# ───────────────────────── S6a 第四輪 ─────────────────────────
+
+
+def test_S6a第四輪_HLD4另兩句_原字面與抽常數之前相同():
+    assert logic.HLD4_APPLY_NOTE == (
+        "兩枚按鈕並存，各做一件事。「套用」只讀這些欄位的當下值、"
+        "重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，不寫任何資料表、不改欄位的內容。"
+    )
+    assert logic.HLD4_SAVE_SCOPE_NOTE == (
+        "「存檔」只寫使用者設定，不寫持倉、保單、淨值、配息四張表任何一張，"
+        "也不代你填任何值、不把空欄補成任何候選值。"
+    )
+
+
+def test_S6a第四輪_正式版HLD4存檔範圍那一句找不到_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_SAVE_SCOPE_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+# 紅隊 M4：區間只收嚴格的 YYYY-MM-DD
+
+
+@pytest.mark.parametrize("start", ["20260601", "2026-6-1", "2026/06/01", " 2026-06-01", "2026-06-01 ",
+                                   "２０２６-06-01", "2026-W23-1", "2026-06-01T00:00", "2026-02-30"])
+def test_S6a第四輪_區間格式不是YYYY_MM_DD_不合法(start):
+    assert logic.window_is_valid((start, "2026-09-19")) is False
+    assert logic.window_is_valid(("2026-01-01", start)) is False
+    assert logic.window_input_blocked(start, "2026-09-19") is True
+
+
+def test_S6a第四輪_合法區間照舊():
+    assert logic.window_is_valid(("2026-06-01", "2026-09-19")) is True
+    assert logic.window_is_valid(("2026-09-19", "2026-09-19")) is True
+    assert logic.window_is_valid(("2026-09-20", "2026-09-19")) is False
+
+
+@pytest.mark.parametrize("start, end, blocked", [
+    ("", "", False), (None, None, False),            # 兩格都空：照舊可以套用（＝尚未設定區間）
+    ("2026-06-01", "", True), ("", "2026-09-19", True),   # 只填一格（紅隊建議 2）
+    ("2026-06-01", None, True),
+    ("2026-06-01", "2026-09-19", False),
+])
+def test_S6a第四輪_只填一格不可套用(start, end, blocked):
+    assert logic.window_input_blocked(start, end) is blocked
+
+
+# 紅隊 M3：門檻列接上「套用」，只用既有規則
+
+
+def test_S6a第四輪_門檻列當下值_轉成門檻():
+    rows = [("最大回撤", "低於", "-1"), ("", "", ""), ("配息佔淨值比", "高於", "+6.50")]
+    assert logic.rules_from_inputs(rows) == [
+        {"indicator": "最大回撤", "direction": "低於", "value": -1.0},
+        {"indicator": "配息佔淨值比", "direction": "高於", "value": 6.5},
+    ]
+    assert logic.rules_from_inputs([("", "", ""), (None, None, None)]) == []
+
+
+@pytest.mark.parametrize("row", [
+    ("最大回撤", "低於", ""), ("最大回撤", "", "-1"), ("", "低於", "-1"),     # 只填一兩格
+    ("最大回撤", "低於", "abc"), ("最大回撤", "低於", "1e3"), ("最大回撤", "低於", "inf"),
+    ("最大回撤", "低於", "nan"), ("最大回撤", "低於", " -1"), ("最大回撤", "低於", "1_0"),
+    ("最大回撤", "低於", "-1."), ("最大回撤", "低於", "１"),
+])
+def test_S6a第四輪_門檻列既有規則處理不了_回None(row):
+    assert logic.rules_from_inputs([row]) is None
+    assert logic.applied_from_inputs("2026-01-01", "2026-09-19", [row]) is None
+
+
+def test_S6a第四輪_母體外的指標名與方向照既有規則收():
+    """既有規則：母體外的指標名 → 未列入（`deviation_rows`）；方向不是低於／高於 → 不算超出（`_breaches`）。"""
+    rules = logic.rules_from_inputs([("不存在的指標", "低於", "1"), ("最大回撤", "等於", "1")])
+    assert [r["indicator"] for r in rules] == ["不存在的指標", "最大回撤"]
+
+
+def test_S6a第四輪_applied_from_inputs_區間空白存成None():
+    assert logic.applied_from_inputs("", "", []) == {"window": (None, None), "rules": []}
+    assert logic.applied_from_inputs("2026-06-01", "2026-09-19", [("最大回撤", "低於", "-1")]) == {
+        "window": ("2026-06-01", "2026-09-19"),
+        "rules": [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}],
+    }
+    assert logic.applied_from_inputs("20260601", "2026-09-19", []) is None
+
+
+def _hld4(**kw):
+    return logic.find_block(logic.build_page_model(**_scenario_args("full"), **kw), "HLD-4")
+
+
+def test_S6a第四輪_HLD4摘要讀已套用那一組_不讀欄位當下值():
+    """紅隊 M1：只改欄位、還沒按「套用」，摘要不變（與下面各塊的數字對得上）。"""
+    base = _hld4()
+    typed = _hld4(fields={"window_start": "2026-06-01", "window_end": "2026-09-19"})
+    assert typed["summary_text"] == base["summary_text"]
+    assert "2026-01-01" in base["summary_text"]
+    applied = _hld4(
+        fields={"window_start": "2026-06-01", "window_end": "2026-09-19"},
+        applied_window=("2026-06-01", "2026-09-19"),
+    )
+    assert "2026-06-01" in applied["summary_text"] and "2026-01-01" not in applied["summary_text"]
+    one_rule = _hld4(applied_rules=[{"indicator": "最大回撤", "direction": "低於", "value": -1.0}])
+    assert "門檻 1 列" in one_rule["summary_text"]
+
+
+def _apply_button(block):
+    return next(b for b in block["buttons"] if b["_action_kind"] == "套用")
+
+
+@pytest.mark.parametrize("fields, enabled, reason", [
+    ({"window_start": "20260601", "window_end": "2026-09-19"}, False, logic.TEXT_BAD_RANGE),
+    ({"window_start": "2026-06-01", "window_end": ""}, False, logic.TEXT_BAD_RANGE),
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19"}, True, ""),
+    ({"window_start": "", "window_end": ""}, True, ""),
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "x")]},
+     False, ""),
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "-1")]},
+     True, ""),
+])
+def test_S6a第四輪_套用能不能按_與回呼同一支判定(fields, enabled, reason):
+    button = _apply_button(_hld4(fields=fields))
+    assert button["_enabled"] is enabled and button["disabled_reason"] == reason
+    rows = fields.get("rule_rows", [])
+    appliable = logic.applied_from_inputs(fields["window_start"], fields["window_end"], rows) is not None
+    assert appliable is enabled
+
+
+def test_S6a第四輪_套用的門檻取代存過的門檻_正式版照轉():
+    rules = [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}]
+    args = _scenario_args("full")
+    demo = logic.build_page_model(**args, applied_rules=rules)
+    got = _build(**args, today=TODAY, applied_rules=rules)
+    base = logic.build_page_model(**args)
+    assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] != [
+        r["_fund_code"] for r in logic.find_block(base, "HLD-1")["_rows"]
+    ]
+    assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] == [
+        r["_fund_code"] for r in logic.find_block(got, "HLD-1")["_rows"]
+    ]
+
+
+def test_S6a第四輪_HLD4兩枚按鈕並存那一句_logic改了字面而live沒跟上_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_APPLY_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)

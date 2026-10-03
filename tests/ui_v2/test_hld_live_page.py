@@ -424,11 +424,27 @@ def _models(live_mode):
     return old, new
 
 
-def _diff_texts(old_block, new_block):
-    from ui_v2.hld import logic
+def _shown_strings(node, skip=()) -> set:
+    """塊裡會上畫面的字。底線開頭的鍵直接掛著的字串是機器用的（例如 `_fund_code`），不收；
+    底線開頭的鍵底下若是清單或 dict（例如 `_rows`），裡面的列照樣會畫出來，照收。`skip`：這一塊不畫的鍵。"""
+    out = set()
+    if isinstance(node, str):
+        out.add(node)
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            if key in skip or (str(key).startswith("_") and not isinstance(value, (dict, list, tuple))):
+                continue
+            out |= _shown_strings(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            out |= _shown_strings(value)
+    return out
 
-    a = set(logic.collect_ui_strings({"b": old_block}))
-    b = set(logic.collect_ui_strings({"b": new_block}))
+
+def _diff_texts(old_block, new_block):
+    # 層 2 的卡沒有收合列，`summary_text` 不上畫面。
+    skip = ("summary_text",) if old_block.get("_layer") == 2 else ()
+    a, b = _shown_strings(old_block, skip), _shown_strings(new_block, skip)
     return a - b, b - a
 
 
@@ -498,3 +514,176 @@ def test_S6a_起迄日顛倒_套用照既有規則停用_卡上維持上一次�
     button = at.button(key=apply_key)
     assert button.disabled is True and button.help == logic.TEXT_BAD_RANGE
     assert _block_blob(at, "HLD-2") == applied
+
+
+# ───────────────────────── S6a 第四輪 ─────────────────────────
+
+
+def _apply_key(live_mode):
+    from ui_v2.hld import logic
+
+    hld4 = logic.find_block(_models(live_mode)[0], "HLD-4")
+    return next(f"hld4_btn_{i}" for i, b in enumerate(hld4["buttons"]) if b["_action_kind"] == "套用")
+
+
+def _hld4_expander(at):
+    return next(e for e in at.expander if e.label.startswith("HLD-4　"))
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a第四輪_門檻改了按套用_HLD1跟著新門檻重算(live_mode):
+    """紅隊 M3／規格組必修 1：門檻列也接上「套用」。"""
+    from datetime import date
+
+    from ui_v2.hld import fixtures, live, logic, page
+
+    at = _apply_run(live_mode)
+    before = _block_blob(at, "HLD-1")
+    at.text_input(key="hld4_rule_0_value").input("-1")
+    button = at.button(key=_apply_key(live_mode))
+    assert button.disabled is False
+    button.click().run()
+    assert not at.exception
+    rules = [
+        {"indicator": "最大回撤", "direction": "低於", "value": -1.0},
+        {"indicator": "配息佔淨值比", "direction": "高於", "value": 6.0},
+    ]
+    args = fixtures.scenario("full")
+    if live_mode:
+        for holding in args["dataset"]["holding"]:
+            if holding["policy_id"] == "DIRECT":
+                holding["policy_id"] = "P-001"
+        kw = {
+            "direct_policy_id": "DIRECT", "today": date(2026, 10, 2),
+            "nav_provenance": {r["fund_code"]: {"cache_fallback": False, "stale": None} for r in args["dataset"]["nav"]},
+        }
+        old, new = live.build_live_model(**args, **kw), live.build_live_model(**args, **kw, applied_rules=rules)
+    else:
+        old, new = logic.build_page_model(**args), logic.build_page_model(**args, applied_rules=rules)
+    gone, came = _diff_texts(logic.find_block(old, "HLD-1"), logic.find_block(new, "HLD-1"))
+    assert came, "新門檻算不出任何不同的字 —— 這一條會變成空掃"
+    if live_mode:
+        # 正式模式的畫面吃的是去掉「（示意）」的假資料（`_apply_app`），對照的模型這裡用原假資料，比對前同樣去掉。
+        came = {t.replace(logic.HINT, "") for t in came}
+        gone = {t.replace(logic.HINT, "") for t in gone}
+    blob = _block_blob(at, "HLD-1")
+    assert blob != before
+    for text in came:
+        assert page._esc(text) in blob, text
+    for text in gone:
+        assert page._esc(text) not in blob, text
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a第四輪_只改欄位不按套用_摘要與各塊都不動(live_mode):
+    """紅隊 M1：只改日期（與門檻）、還沒按「套用」，HLD-4 摘要不能先變成新區間。"""
+    at = _apply_run(live_mode)
+    codes = ("HLD-1", "HLD-2", "HLD-3", "HLD-7", "HLD-8")
+    before = {code: _block_blob(at, code) for code in codes}
+    label = _hld4_expander(at).label
+    at.text_input(key="hld4_window_start").input(_NEW_START).run()
+    at.text_input(key="hld4_rule_0_value").input("-1").run()
+    assert not at.exception
+    assert _hld4_expander(at).label == label
+    for code in codes:
+        assert _block_blob(at, code) == before[code], code
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+@pytest.mark.parametrize("key, value", [
+    ("hld4_window_start", "20260601"),     # 紅隊 M4：格式不是 YYYY-MM-DD
+    ("hld4_window_start", "2026/06/01"),
+    ("hld4_window_end", ""),               # 紅隊建議 2：只填一格
+])
+def test_S6a第四輪_區間格式錯或只填一格_套用停用_沿用既有原因句(live_mode, key, value):
+    from ui_v2.hld import logic
+
+    at = _apply_run(live_mode)
+    # 先以合法的新區間套用一次，之後的壞輸入不得把它洗掉（也不得退回存過的區間）。
+    at.text_input(key="hld4_window_start").input(_NEW_START)
+    at.button(key=_apply_key(live_mode)).click().run()
+    before = _block_blob(at, "HLD-2")
+    at.text_input(key=key).input(value).run()
+    button = at.button(key=_apply_key(live_mode))
+    # ⚠️ AppTest 對停用的鈕 `.click()` 照樣觸發 `on_click`，所以先斷言停用（畫面上按不下去），
+    #    再點一次確認回呼本身也不寫入（同一支 `logic.applied_from_inputs` 判定）。
+    assert button.disabled is True and button.help == logic.TEXT_BAD_RANGE
+    button.click().run()
+    assert not at.exception
+    assert _block_blob(at, "HLD-2") == before
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+@pytest.mark.parametrize("value", ["abc", "", "1e3"])
+def test_S6a第四輪_門檻值既有規則處理不了_套用停用_沒有原因句(live_mode, value):
+    """沒有既有原因句可用 —— 停用、原因留空（待補文案，已回報）。"""
+    at = _apply_run(live_mode)
+    at.text_input(key="hld4_rule_0_value").input("-1")
+    at.button(key=_apply_key(live_mode)).click().run()
+    before = _block_blob(at, "HLD-1")
+    at.text_input(key="hld4_rule_0_value").input(value).run()
+    button = at.button(key=_apply_key(live_mode))
+    assert button.disabled is True and not button.help
+    button.click().run()
+    assert not at.exception
+    assert _block_blob(at, "HLD-1") == before
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a第四輪_按完套用HLD4以展開狀態重建(live_mode):
+    """紅隊 M2：標題列一變 Streamlit 就重建這一枚 expander；按完「套用」要以展開狀態重建。"""
+    at = _apply_run(live_mode)
+    assert _hld4_expander(at).proto.expanded is False   # 首次渲染照舊收合
+    at.text_input(key="hld4_window_start").input(_NEW_START).run()
+    assert _hld4_expander(at).proto.expanded is True
+    at.button(key=_apply_key(live_mode)).click().run()
+    exp = _hld4_expander(at)
+    assert _NEW_START in exp.label and exp.proto.expanded is True
+
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # 同目錄的共用模組
+import _ui_v2_chromium  # noqa: E402  瀏覽器解析（CI 找不到要 fail）
+
+
+def test_S6a第四輪_瀏覽器_改日期與按套用之後_HLD4都維持展開_摘要讀已套用值():
+    """紅隊 M1＋M2 的瀏覽器重現：改日期（不按套用）HLD-4 收起來、摘要先變；按完「套用」也收起來。"""
+    app = _ROOT / "ui_v2" / "app_hld.py"
+    api = _ui_v2_chromium.import_sync_api()
+
+    def hld4(tab):
+        det = tab.locator("details", has=tab.locator("summary", has_text="HLD-4")).first
+        return det.evaluate("d => d.open"), " ".join(det.locator("summary").inner_text().split())
+
+    with api.sync_playwright() as p:
+        browser = _ui_v2_chromium.launch(p)
+        try:
+            with _ui_v2_chromium.streamlit_server(app) as base:
+                tab = browser.new_page(viewport={"width": 1400, "height": 1400})
+                tab.goto(base + "/?scenario=full", wait_until="networkidle")
+                tab.wait_for_selector("text=體檢結論燈", timeout=60000)
+                tab.wait_for_timeout(1500)
+                tab.locator("summary", has_text="HLD-4").first.click()
+                tab.wait_for_timeout(800)
+                opened, label = hld4(tab)
+                assert opened and "2026-01-01" in label
+                box = tab.get_by_label("區間起日")
+                box.fill(_NEW_START)
+                box.press("Enter")
+                tab.wait_for_timeout(2500)
+                opened, label = hld4(tab)
+                assert opened, "只改日期，HLD-4 自己收起來了"
+                assert "2026-01-01" in label and _NEW_START not in label, label
+                tab.get_by_role("button", name="套用").click()
+                tab.wait_for_timeout(2500)
+                opened, label = hld4(tab)
+                assert opened, "按完套用，HLD-4 收起來了"
+                assert _NEW_START in label, label
+                # 停用時真的按不下去（瀏覽器驗；AppTest 對停用鈕 click 照樣觸發回呼）。
+                box = tab.get_by_label("區間起日")
+                box.fill("20260601")
+                box.press("Enter")
+                tab.wait_for_timeout(2500)
+                assert tab.get_by_role("button", name="套用").is_disabled()
+                tab.close()
+        finally:
+            browser.close()

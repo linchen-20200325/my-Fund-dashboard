@@ -555,6 +555,11 @@ _DEV_TRIMS = (
      "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。", False, "2026-09-22"),
     # e：刪「兩句同時成立時哪一句出現，規格沒有寫」。只有空持倉且門檻未設時才出現。
     ("HLD-0", "lines", logic.HLD0_NO_RULES_ASIDE, "（另：尚未設定門檻。）", False, "規格沒有寫"),
+    # S6a 第四輪（規格組必修 2／紅隊 J1，總管裁定）：不是開發過程字句，但同一體例（只刪不加）。
+    # 正式版「存檔」停用，「兩枚按鈕並存，各做一件事。」這一句是假的 ⇒ 只刪這一句，後面講「套用」的照留。
+    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE,
+     "「套用」只讀這些欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，"
+     "不寫任何資料表、不改欄位的內容。", True, "兩枚按鈕並存"),
 )
 
 
@@ -577,15 +582,14 @@ def _strip_dev_lines(model: dict) -> None:
         block[field] = lines
 
 
-# S6a-1（客戶 2026-10-03 裁示，總管派工）：HLD-4 說明區三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範模式照印。
-# - `HLD4_APPLY_NOTE`：「兩枚按鈕並存，各做一件事。」（正式版「存檔」停用）與「「套用」只讀這些欄位的當下值、
-#   重算…六塊…」（「套用」尚未接線，按了不重算）兩個子句住在**同一個字串**裡，兩個子句都要拿掉 ⇒ 整句不印。
-#   ⚠️ S6a-2 把「套用」接好之後，後一個子句要恢復（只刪「兩枚按鈕並存，各做一件事。」）。
-# - `HLD4_SAVE_NOTE`、`HLD4_SAVE_SCOPE_NOTE`：正式版「存檔」停用（裁示 A），講存檔做什麼的兩句不成立。
+# S6a-1（客戶 2026-10-03 裁示，總管派工）：HLD-4 說明區講「存檔」的兩句在正式版不成立（「存檔」停用，裁示 A）
+# ⇒ 整句不印（只刪不加）；示範模式照印。
+# ~~`HLD4_APPLY_NOTE` 也整句不印（S6a-1：「套用」尚未接線）~~ → S6a-2 把「套用」接好了（有意識的更正，不是漏刪；
+# 決策者：總管，依客戶 2026-10-03 範圍裁示第 1 項）：那一句改走 `_DEV_TRIMS`，只刪「兩枚按鈕並存，各做一件事。」，
+# 「「套用」只讀這些欄位的當下值、重算…六塊…」恢復。
 # 每一列：（塊、欄位、整句）。找不到就 raise（同 `_strip_dev_lines`）：logic 改了字面而本檔沒跟上時，
 # 靜默略過的話那一句會原封上正式畫面。
 _LIVE_DROPS = (
-    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE),
     ("HLD-4", "notes", logic.HLD4_SAVE_NOTE),
     ("HLD-4", "notes", logic.HLD4_SAVE_SCOPE_NOTE),
 )
@@ -606,7 +610,7 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
        （`today`：台灣的今天，可注入；不傳就取當下）；
     2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
     3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）；
-    4. HLD-4 講兩枚按鈕的三句整句不印（S6a-1，`_LIVE_DROPS`）。
+    4. HLD-4 講「存檔」的兩句整句不印（S6a-1，`_LIVE_DROPS`）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
@@ -636,6 +640,7 @@ def build_live_model(
     direct_sources=None,
     nav_provenance=None,
     applied_window=None,
+    applied_rules=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
@@ -648,7 +653,7 @@ def build_live_model(
       （`{fund_code: {..., "cache_fallback", "stale"}}`）；**一律要給**，沒給或形狀不對就 raise。
       每檔最後一筆 `nav_date` 取自同一份 `dataset["nav"]`（畫面上 HLD-6 印的就是那幾列）。
     - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
-    - `applied_window`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三輪）。
+    - `applied_window`、`applied_rules`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三、四輪）。
     """
     if direct_policy_id is None:
         raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
@@ -672,6 +677,7 @@ def build_live_model(
         open_fund=open_fund,
         demo_hint=False,
         applied_window=applied_window,
+        applied_rules=applied_rules,
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)

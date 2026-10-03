@@ -373,31 +373,55 @@ def _render_core_card(block: dict) -> None:
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _expander(block: dict):
+def _expander(block: dict, *, keep_open: bool = False):
     return st.expander(
         f"{block['code']}　{block['title']}　—　{block['summary_text']}",
-        expanded=block["_default_open"],
+        expanded=block["_default_open"] or keep_open,
     )
 
 
-# ── 「套用」（S6a 第三輪，紅隊 M1）──
+# ── 「套用」（S6a 第三、四輪）──
 # 體例照 `ui_v2/mkt/page.py::_on_apply`（:243-248）與 `render`（:413-423）：
-# 按下「套用」時把欄位的當下值存進 `st.session_state`，下一次渲染拿那一組去算；
-# 欄位的當下值另外交給 logic 決定按鈕能不能按（起迄日顛倒 → 「套用」停用，既有規則）。
+# 按下「套用」時把欄位的當下值存進 `st.session_state`，之後的渲染拿**已套用**那一組去算（含 HLD-4 摘要）；
+# 欄位的當下值只交給 logic 決定「套用」能不能按（S6a 第四輪，紅隊 M1）。
+# 可不可以套用、門檻列怎麼解析，一律由 `logic.applied_from_inputs` 判（page 不做判定）。
 # 不寫任何資料表、不改欄位內容（`44` HLD-4）。
-_APPLIED_KEY = "_hld_applied_window"
+_APPLIED_KEY = "_hld_applied"
 _WINDOW_KEYS = ("hld4_window_start", "hld4_window_end")
+_RULE_PARTS = ("indicator", "direction", "value")
+# HLD-4 的展開狀態（S6a 第四輪，紅隊 M2）：expander 的標題列一變，Streamlit 就把它當成新的一枚重建，
+# 預設收合。欄位一改或按下「套用」就記一筆，之後 HLD-4 以展開狀態重建。首次渲染沒有這一筆，逐字同前。
+_HLD4_KEEP_OPEN_KEY = "_hld4_keep_open"
+
+
+def _keep_hld4_open() -> None:
+    st.session_state[_HLD4_KEEP_OPEN_KEY] = True
+
+
+def _rule_rows_now(state) -> list:
+    rows, index = [], 0
+    while f"hld4_rule_{index}_indicator" in state:
+        rows.append(tuple(state.get(f"hld4_rule_{index}_{part}") for part in _RULE_PARTS))
+        index += 1
+    return rows
 
 
 def _on_apply() -> None:
-    st.session_state[_APPLIED_KEY] = tuple(st.session_state.get(k) for k in _WINDOW_KEYS)
+    _keep_hld4_open()
+    state = st.session_state
+    applied = logic.applied_from_inputs(
+        state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
+    )
+    # 不可套用時什麼都不存：按鈕本來就停用（同一支判定），這一行只是不讓停用的鈕被觸發時寫進壞值。
+    if applied is not None:
+        state[_APPLIED_KEY] = applied
 
 
-def _applied_window():
+def _applied() -> dict:
     try:
-        return st.session_state.get(_APPLIED_KEY)
+        return st.session_state.get(_APPLIED_KEY) or {}
     except Exception:
-        return None
+        return {}
 
 
 def _current_fields(default):
@@ -406,13 +430,24 @@ def _current_fields(default):
         state = st.session_state
         if not any(k in state for k in _WINDOW_KEYS):
             return default
-        return {"window_start": state.get(_WINDOW_KEYS[0]), "window_end": state.get(_WINDOW_KEYS[1])}
+        return {
+            "window_start": state.get(_WINDOW_KEYS[0]),
+            "window_end": state.get(_WINDOW_KEYS[1]),
+            "rule_rows": _rule_rows_now(state),
+        }
     except Exception:
         return default
 
 
+def _hld4_keep_open() -> bool:
+    try:
+        return bool(st.session_state.get(_HLD4_KEEP_OPEN_KEY))
+    except Exception:
+        return False
+
+
 def _render_hld4(block: dict) -> None:
-    with _expander(block):
+    with _expander(block, keep_open=_hld4_keep_open()):
         st.caption(block["answers"])
         columns = st.columns(2)
         for column, field in zip(columns, block["inputs"]):
@@ -422,6 +457,7 @@ def _render_hld4(block: dict) -> None:
                     value=field["_value"] or "",
                     placeholder=field["placeholder"],
                     key=f"hld4_{field['name']}",
+                    on_change=_keep_hld4_open,
                 )
         st.caption(block["threshold_caption"])
         for index, row in enumerate(block["threshold_rows"]):
@@ -433,6 +469,7 @@ def _render_hld4(block: dict) -> None:
                         value="" if field["_value"] == "" else str(field["_value"]),
                         placeholder=field["placeholder"],
                         key=f"hld4_{field['name']}",
+                        on_change=_keep_hld4_open,
                     )
             with cells[3]:
                 button = block["row_buttons"][index]
@@ -699,18 +736,21 @@ def render(*, load_live=None) -> None:
     """
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
+    applied = _applied()
     if load_live is None:
         scenario = _pick_scenario()
         args = dict(fixtures.scenario(scenario))
         args["fields"] = _current_fields(args.get("fields"))
         model = logic.build_page_model(
-            **args, open_fund=_open_fund(), applied_window=_applied_window()
+            **args, open_fund=_open_fund(), applied_window=applied.get("window"),
+            applied_rules=applied.get("rules"),
         )
     else:
         loaded = load_live()
         model = live.build_live_model(
             loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
-            applied_window=_applied_window(), **loaded["live_args"]
+            applied_window=applied.get("window"), applied_rules=applied.get("rules"),
+            **loaded["live_args"]
         )
 
     st.markdown(
