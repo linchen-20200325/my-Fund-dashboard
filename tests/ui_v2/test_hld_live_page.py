@@ -300,7 +300,7 @@ def _render_app(live_mode):
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
     }
-    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args})
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str)
 
 
 def _run_render(live_mode):
@@ -374,7 +374,7 @@ def _apply_app(live_mode):
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
     }
-    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args})
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str)
 
 
 def _apply_run(live_mode):

@@ -1247,6 +1247,45 @@ def test_S6a_條件出現的那幾句字面漂移_殘留檢查raise(name, code, 
         live.apply_live_notes(model, today=TODAY)
 
 
+# ───────────────────────── S6b-1（T1）：殘留檢查不得因資料內容而 raise ─────────────────────────
+# 上游錯誤原文經 `logic.fetch_failed_text` 進 HLD-0／HLD-2／HLD-3／HLD-8 的說明區；原文碰巧含
+# 殘留檢查那一小段（「2026-09-22」「規格沒有寫」…）時，舊寫法把資料當成開發字句而 raise。
+
+
+@pytest.mark.parametrize("table", logic.FUND_ERROR_TABLES)
+@pytest.mark.parametrize("marker", sorted({m for *_x, m in live._DEV_TRIMS}))
+def test_S6b1_T1_錯誤訊息含殘留檢查字串_不raise_原文照印(table, marker):
+    args = _scenario_args("full")
+    code = args["dataset"]["holding"][0]["fund_code"]
+    message = f"上游回應含「{marker}」字樣"
+    args["dataset"]["fund_errors"] = {table: {code: message}}
+    model = _build(**args, today=TODAY)
+    line = logic.fund_fetch_failed_text(code, message)
+    hits = [
+        c for c in ("HLD-0", "HLD-2", "HLD-3", "HLD-8")
+        if line in (logic.find_block(model, c).get("detail_lines", []) + logic.find_block(model, c).get("lines", []))
+    ]
+    assert hits, "錯誤行沒上任何一塊 —— 這一條會變成空掃"
+
+
+def test_S6b1_T1_範本行含殘留字串照樣raise_即使旁邊有錯誤行():
+    """保護作用保留：錯誤行被略過，不代表同一欄位的範本行也被略過。"""
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-2")
+    block["detail_lines"] = list(block["detail_lines"]) + [
+        logic.fetch_failed_text("上游 2026-09-22"),
+        "第三個值已依客戶 2026-09-22 裁定移走。",
+    ]
+    with pytest.raises(ValueError, match="HLD-2 的 detail_lines 還有開發過程字句"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+def test_S6b1_T1_錯誤行前綴取自logic本身():
+    assert live._ERROR_LINE_PREFIX == logic.fetch_failed_text("")
+    assert live._is_upstream_error_line(logic.fund_fetch_failed_text("AAAA", "x"))
+    assert not live._is_upstream_error_line(logic.HLD2_MOVED_NOTE)
+
+
 # ───────────────────────── S6a-1：HLD-4 講兩枚按鈕的三句，正式版不印 ─────────────────────────
 # 客戶 2026-10-03 裁示：「套用」尚未接線、「存檔」停用，三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範版照舊。
 

@@ -769,7 +769,81 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None) -> None:
+def _live_error_line(exc: BaseException, mask_error) -> str:
+    """錯誤畫面的那一行（S6b-1 第二輪）。
+
+    ⚠️ **組法是總管 2026-10-03 裁定的，不是 `44` 的字**：`44` 5.5 `系統錯誤` 的模板只有
+       「⛔ 取數失敗：<訊息原文>」；這裡的 <訊息原文> 組成「<例外型別>：<遮蔽後訊息>」。
+       理由：訊息為空的例外仍要說出是什麼錯（§1 Fail Loud）；體例比照 2026-10-02
+       `logic.fund_fetch_failed_text` 的裁定（前面多一段、用「：」接）。
+    - 正常路徑：型別名與訊息**都**經 `mask_error`（型別名也可能被上游塞進東西）。
+    - 後備路徑：`str(exc)` 本身拋、`mask_error` 拋、或回傳非字串 ⇒ 不往外拋（往外拋就是整段 Traceback，
+      含伺服器路徑），只印 `fetch_failed_text(<例外型別>)`，**不帶任何訊息內容**
+      （這個「只印型別」的退路組法，決策者：總管 2026-10-03 裁定）。
+      ⚠️ 殘餘風險（總管 2026-10-03 接受）：遮蔽本身壞了時，型別名沒有經過遮蔽就上畫面。
+         型別名是類別定義上的識別字，不是上游傳進來的字串；把秘密值塞進類別名的機率視為可接受。
+    """
+    type_name = type(exc).__name__
+    try:
+        masked_type = mask_error(type_name)
+        masked = mask_error(str(exc))
+        if not isinstance(masked_type, str) or not isinstance(masked, str):
+            raise TypeError("mask_error 應回傳字串")
+    except Exception:  # noqa: BLE001 —— 不是吞：下一行照樣畫錯誤畫面，只是不帶訊息內容
+        return logic.fetch_failed_text(type_name)
+    return logic.fetch_failed_text(f"{masked_type}：{masked}")
+
+
+def _render_live_error(exc: BaseException, mask_error) -> None:
+    """正式模式取數或組模型失敗時的整頁畫面（S6b-1）。字面全部沿用既有的，不新寫句子：
+
+    - 頁名與提問句：`logic.PAGE_TITLE`、`logic.PAGE_ANSWERS`（與正式模式正常時的頁首同一組）；
+    - 錯誤行：`_live_error_line`（`logic.fetch_failed_text` ＝ `44` 5.5 `系統錯誤` 那一列的模板
+      「⛔ 取數失敗：<訊息原文>」，`44` :2326；觸發條件逐字「取數或計算本身失敗」，兩步都在射程內）；
+    - 其下一行：`logic.PRINT_AS_IS_LINE`，逐字出自 `44` :1641（`SET-2` 來源健康卡規則欄），hld 沿用。
+      ~~（本頁每一處取數失敗行之後都接這一句）~~ → ~~**S6b-1 第二輪更正（有意識的更正，不是漏刪；
+      決策者：總管）**：說過頭了。實況是核心卡與 `HLD-8` 在同一組取數失敗行的**最後接一次**，
+      `HLD-1` 卡尾的逐檔失敗行也是整組最後接一次（`logic._fund_error_lines`）；本畫面只有一行錯誤，接一次；~~
+      → ~~**S6b-1 第三輪更正（有意識的更正，不是漏刪；決策者：總管；規格組 2026-10-03 指出）**：
+      第二輪那句同樣不符實況，改成分類敘述 ——
+      表層級錯誤與 unsurfaced 錯誤（`logic._build_core_card`、`logic._build_hld1` 內那幾支）是**每條錯誤行之後各接一次**；
+      逐檔錯誤（`logic._fund_error_lines`、`HLD-5` 的 `live._relabel_sync_field`）是**整組最後接一次**；
+      本畫面只有一行錯誤，接一次；~~
+      → **S6b-1 第四輪更正（有意識的更正，不是漏刪；決策者：總管；規格組與紅隊 2026-10-03 各自獨立指出；
+      第 (3) 條措辭依紅隊 2026-10-03 指出更正）**：
+      第三輪依錯誤層級分類，在 `logic._build_hld1` 卡尾不成立（那裡的表層級錯誤經
+      `logic._fund_error_lines(..., include_table=True)` 寫出，整組最後只接一次）。改為**依寫法**分類 ——
+      (1) 直接以 `logic.fetch_failed_text` 寫出的行，每條之後各接一次：`logic._build_core_card` 的
+          fail_message、表層級、unsurfaced 三支；`logic._build_hld1` 的 fail_message、unsurfaced 兩支。
+          指說明區的行；摘要（`summary_text`，同樣以 `logic.fetch_failed_text` 寫成）不接照印句、不在此列
+          （本頁 `_card_shell` 不畫 `summary_text`；摘要只當 `_expander` 的標題，用在 `HLD-4`～`HLD-8`）。
+      (2) 經 `logic._fund_error_lines` 寫出的行，整組最後接一次：核心卡與 `HLD-8` 的逐檔錯誤，
+          以及 `HLD-1` 卡尾以 `include_table=True` 帶入的表層級錯誤；另 `HLD-5`
+          （`live._relabel_sync_field`）亦整組最後接一次。
+      (3) `HLD-8`（`logic._build_hld8`）只走 `logic._fund_error_lines`，表層級錯誤不寫說明區錯誤行：
+          格內只顯示 `logic.ERR_TEXT`、不帶訊息原文；塊狀態與「重新取數」鈕照常改變。
+      (4) 本錯誤畫面只有一行錯誤，接一次。
+      (5) `HLD-0` 以 `logic._is_fail_tail_line`（「⛔」開頭）帶上 `HLD-1` 卡尾的失敗行，照印句不跟上。
+      以上為 165ec03 時的寫法分類，logic.py 改動時須重核；
+    - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
+      （裁示 A，逐字）。
+    顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
+    """
+    error_line = _live_error_line(exc, mask_error)
+    st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
+    red = _tone("紅")
+    for line in (error_line, logic.PRINT_AS_IS_LINE):
+        st.markdown(
+            f'<div class="hld-line" style="color:{red}">{_esc(line)}</div>', unsafe_allow_html=True
+        )
+    button = logic._retry_button()
+    button["_enabled"] = False
+    button["disabled_reason"] = live.REFETCH_DISABLED_REASON
+    _buttons({"buttons": [button]}, "hld_live_error")
+
+
+def render(*, load_live=None, mask_error=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
@@ -778,7 +852,18 @@ def render(*, load_live=None) -> None:
     不傳（None）時行為與加這個參數之前**逐字相同**：照舊以 `?scenario=` 挑 fixtures 情境。
     傳入時改走 `live.build_live_model`，這一條路徑不讀 fixtures；頁首副標只印本頁的提問句 ——
     示意字樣與情境名只屬於示範模式（體例：`ui_v2/alo/page.py::render`）。
+
+    mask_error（S6b-1）：正式模式**一定要給**、示範模式**不得給**（體例：`ui_v2/set/page.py::render`
+    「`load_live`、`save_live`、`refetch_live` 要一起傳」）。字串 → 遮蔽後的字串，由呼叫端注入 ——
+    本套件不得 import `services`（`tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (5) 條），
+    遮蔽（`services.v2_tables.masking.mask_message` ＋ 讀好的秘密值）住在之後的 `source.py`，
+    由 `app_hld_live.py` 一併傳進來。
+    正式模式下 `load_live()` 或 `live.build_live_model(...)` 拋例外 → 不印 Traceback、也不吞：
+    畫出錯誤畫面（`_render_live_error`），寫出例外型別與遮蔽後的訊息原文，整頁其餘塊不畫。
+    遮蔽或取字串失敗時，退路只印例外型別、不帶訊息內容（見 `_live_error_line`）。
     """
+    if (load_live is None) != (mask_error is None):
+        raise ValueError("load_live 與 mask_error 要一起傳（正式模式兩個都要，示範模式兩個都不傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     applied = _applied()
@@ -791,12 +876,20 @@ def render(*, load_live=None) -> None:
             applied_rules=applied.get("rules"),
         )
     else:
-        loaded = load_live()
-        model = live.build_live_model(
-            loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
-            applied_window=applied.get("window"), applied_rules=applied.get("rules"),
-            **loaded["live_args"]
-        )
+        # S6b-1：只包「去拿」與「組模型」兩步；本檔自己的東西（讀 session 的兩支、畫面渲染）在 try 外先算好，
+        # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
+        open_fund = _open_fund()
+        fields = _current_fields(None)
+        try:
+            loaded = load_live()
+            model = live.build_live_model(
+                loaded["dataset"], open_fund=open_fund, fields=fields,
+                applied_window=applied.get("window"), applied_rules=applied.get("rules"),
+                **loaded["live_args"]
+            )
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印
+            _render_live_error(exc, mask_error)
+            return
 
     st.markdown(
         f'<div class="hld-title">{_esc(model["title"])}</div>', unsafe_allow_html=True

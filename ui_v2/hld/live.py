@@ -563,12 +563,35 @@ _DEV_TRIMS = (
 )
 
 
+# S6b-1（T1）：上游錯誤原文進說明區的唯一入口是 `logic.fetch_failed_text`，以這一段開頭。
+# 取自 logic 本身（不另抄字面）：logic 改模板時這裡跟著變。
+_ERROR_LINE_PREFIX = logic.fetch_failed_text("")
+
+
+def _is_upstream_error_line(line: str) -> bool:
+    """這一行是 logic 用 `fetch_failed_text` 包起來的上游錯誤原文（資料，不是範本）。"""
+    return line.startswith(_ERROR_LINE_PREFIX)
+
+
 def _strip_dev_lines(model: dict) -> None:
     """把 `_DEV_TRIMS` 的原字串整行換成刪減後的版本（逐字比對，其餘行不碰）。
 
     - 一定出現的那幾句找不到 → raise：`logic` 改了字面而本檔沒跟上，靜默略過的話那一句會原封上正式畫面；
-    - 換完之後該欄位還有任何一行含殘留檢查那一小段 → raise（條件出現的那一句也靠這一條防字面漂移）。
-      只查本表點名的（塊、欄位），不掃整個模型 —— 上游錯誤原文不住在這些位置（同 `_EMPTY_EXITS` 的理由）。
+    - 換完之後該欄位還有任何一行**範本行**含殘留檢查那一小段 → raise（條件出現的那一句也靠這一條防字面漂移）。
+      只查本表點名的（塊、欄位），不掃整個模型。
+      ~~上游錯誤原文不住在這些位置（同 `_EMPTY_EXITS` 的理由）。~~
+      → **S6b-1 更正（有意識的更正，不是漏刪；決策者：總管）**：上句是假的 —— `logic._build_core_card`
+        回 `"detail_lines": detail_lines + error_lines`、`_build_hld8` 接 `_fund_error_lines`、
+        `conclusion_light` 的 `lines` 帶 `HLD-1` 卡尾的逐檔失敗行，**上游錯誤原文就住在這些位置**；
+        錯誤訊息裡碰巧有「2026-09-22」「規格沒有寫」時，舊寫法會把資料當成殘留而 raise（T1）。
+      ⇒ 殘留檢查**只看 logic 自己產生的範本行**：上游**錯誤原文**只經 `logic.fetch_failed_text` 進這些欄位
+        （`fund_fetch_failed_text` 也走它），那種行以 `_ERROR_LINE_PREFIX` 開頭，略過不查。
+        其餘行照查 —— logic 改了字面而本檔沒跟上時照樣 raise。
+        ⚠️ 第二輪補精確：「其餘行」不全是純範本字面 —— `HLD-0` 的 `lines` 另會從 `HLD-1` 帶進
+        `⬜ 資料未備：<來源鍵> 尚無資料` 行（`logic._missing_other_lines`，無 `⛔` 前綴，內容是來源鍵）
+        與「⛔ 另有 N 檔…取數失敗，未列入」行（只帶檔數），以及紅燈分支的「<塊名>：取數失敗。」。
+        這幾種帶進的是**資料（來源鍵、檔數、塊名）**，不是上游錯誤原文；它們也照查，
+        與殘留字串（日期、開發字句）撞上的機率視為可接受（本組逐一讀建構處判斷，單組未經第二組驗證）。
     """
     for code, field, original, trimmed, always, marker in _DEV_TRIMS:
         block = logic.find_block(model, code)
@@ -576,7 +599,10 @@ def _strip_dev_lines(model: dict) -> None:
         if always and original not in lines:
             raise ValueError(f"{code} 的 {field} 沒有「{original}」，logic 改了而本檔沒跟上")
         lines = [trimmed if line == original else line for line in lines]
-        left = [line for line in lines if isinstance(line, str) and marker in line]
+        left = [
+            line for line in lines
+            if isinstance(line, str) and not _is_upstream_error_line(line) and marker in line
+        ]
         if left:
             raise ValueError(f"{code} 的 {field} 還有開發過程字句：{left!r}")
         block[field] = lines
