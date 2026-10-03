@@ -1118,37 +1118,124 @@ def test_第三輪4_source型別不對_TypeError寫明位置(bad):
         _live_direct("full", direct=direct)
 
 
-# ───────────────────────── S6a：畫面上的開發過程字句（正式模式不顯示） ─────────────────────────
-# 體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`（逐字比對整行拿掉，不改字、不補新句子）。
+# ───────────────────────── S6a：畫面上交代開發過程的子句（正式模式只刪不加） ─────────────────────────
+# 總管 S6a 第二輪裁定：只刪「交代開發過程」的子句，留下的字不改、不新增；標點只做最小調整。
+
+# 刪減後的實際字面（逐字；改字要先回總管）。
+_TRIMMED = {
+    "HLD-2": "第三個值「最大回撤」移到層 4 的 HLD-8。",
+    "HLD-3": "第三個值「本金類配息佔比」移到層 4 的 HLD-8。配息類別未知的列仍計入期間配息合計。",
+    "HLD-8": "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
+    "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。",
+    "HLD-0": "（另：尚未設定門檻。）",
+}
+_ORIGINAL = {
+    "HLD-2": logic.HLD2_MOVED_NOTE,
+    "HLD-3": logic.HLD3_MOVED_NOTE,
+    "HLD-8": logic.HLD8_DETAIL_NOTE,
+    "HLD-0": logic.HLD0_NO_RULES_ASIDE,
+}
+_FIELD = {"HLD-2": "detail_lines", "HLD-3": "detail_lines", "HLD-8": "detail_lines", "HLD-0": "lines"}
+# 被刪掉的子句（逐字），一個都不能留在正式畫面上。
+_DELETED = (
+    "已依客戶 2026-09-22 裁定",
+    "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層",
+    "兩句同時成立時哪一句出現，規格沒有寫",
+)
+
+
+def _is_subsequence(short: str, long: str) -> bool:
+    it = iter(long)
+    return all(ch in it for ch in short)
+
+
+def test_S6a_子序列判斷本身會分辨():
+    """正控：下一條若只是因為判斷式恆真才過，這一條會紅。"""
+    assert _is_subsequence("ac", "abc")
+    assert not _is_subsequence("ca", "abc")
+    assert not _is_subsequence("（另：尚未設定門檻；）", logic.HLD0_NO_RULES_ASIDE)
+
+
+def test_S6a_刪減後的字串是原字串的子序列_只刪不加():
+    table = {code: (original, trimmed) for code, _f, original, trimmed, *_ in live._DEV_TRIMS}
+    assert set(table) == set(_TRIMMED)
+    for code, (original, trimmed) in table.items():
+        assert original == _ORIGINAL[code], code
+        assert trimmed == _TRIMMED[code], code
+        assert _is_subsequence(trimmed, original), code
+        assert len(trimmed) < len(original), code
+
+
+def test_S6a_原字串與抽常數之前相同():
+    """抽成常數只是為了讓 live 能逐字比對；字面一字未改（示範畫面逐位元組不變）。"""
+    assert logic.HLD2_MOVED_NOTE == "第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
+    assert logic.HLD3_MOVED_NOTE == (
+        "第三個值「本金類配息佔比」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。配息類別未知的列仍計入期間配息合計。"
+    )
+    assert logic.HLD8_DETAIL_NOTE == (
+        "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值；客戶 2026-09-22 裁定核心卡各留兩個主值，"
+        "第三個值移到這一層。兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。"
+    )
+    assert logic.HLD0_NO_RULES_ASIDE == "（另：尚未設定門檻。兩句同時成立時哪一句出現，規格沒有寫）"
 
 
 @pytest.mark.parametrize("name", _ALL)
-def test_S6a_正式模式_HLD2說明區沒有開發過程那一行_其餘行照舊(name):
+def test_S6a_正式模式_四處換成刪減版_其餘行照舊(name):
     args = _scenario_args(name)
-    demo = logic.find_block(_demo(name), "HLD-2")["detail_lines"]
-    got = logic.find_block(_build(**args, today=TODAY), "HLD-2")["detail_lines"]
-    # 正控：示範模式照印（否則下面那條只是因為本來就沒有才過）。
-    assert logic.HLD2_MOVED_NOTE in demo
-    assert logic.HLD2_MOVED_NOTE not in got
-    # 拿掉之後不空，而且剩下的行與示範模式同序（示範模式的示意字尾另計：HLD-2 說明區本來就不接示意字尾）。
-    assert got and got == [line for line in demo if line != logic.HLD2_MOVED_NOTE]
+    demo = _demo(name)
+    got = _build(**args, today=TODAY)
+    for code, field in _FIELD.items():
+        before = logic.find_block(demo, code)[field]
+        after = logic.find_block(got, code)[field]
+        if code in ("HLD-2", "HLD-3") or (code == "HLD-8" and args["dataset"].get("holding")):
+            # 正控：示範模式照印原句（否則下面那條只是因為本來就沒有才過）。
+            assert _ORIGINAL[code] in before, (name, code)
+        # 示範模式的示意字尾是程式接上去的（正式模式本來就不接），比對前拿掉。
+        expected = [
+            _TRIMMED[code] if line == _ORIGINAL[code] else line.replace(logic.HINT, "") for line in before
+        ]
+        assert after == expected, (name, code)
+
+
+def test_S6a_HLD0那一句只在空持倉且門檻未設時出現_正式版換成刪減版():
+    assert logic.HLD0_NO_RULES_ASIDE in logic.find_block(_demo("empty"), "HLD-0")["lines"]
+    lines = logic.find_block(_build(**_scenario_args("empty"), today=TODAY), "HLD-0")["lines"]
+    assert lines == [_TRIMMED["HLD-0"]]
 
 
 @pytest.mark.parametrize("name", _ALL)
-def test_S6a_正式模式_全頁模型沒有HLD2那一句(name):
+def test_S6a_正式模式_全頁模型沒有任何被刪的子句(name):
     args = _scenario_args(name)
     model = _build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))
-    assert logic.HLD2_MOVED_NOTE not in logic.collect_ui_strings(model)
+    blob = "\n".join(logic.collect_ui_strings(model))
+    for piece in _DELETED:
+        assert piece not in blob, (name, piece)
 
 
-def test_S6a_logic改了字面而live沒跟上_raise():
+def test_S6a_HLD5佔位框照留():
+    """總管裁定 d 保留：圖表確實還沒做，是真實資訊。"""
+    args = _scenario_args("full")
+    model = _build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))
+    assert "〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖" in logic.collect_ui_strings(model)
+
+
+@pytest.mark.parametrize("code", ["HLD-2", "HLD-3"])
+def test_S6a_一定出現的那幾句_logic改了字面而live沒跟上_raise(code):
     model = _demo("full")
-    block = logic.find_block(model, "HLD-2")
-    block["detail_lines"] = [line for line in block["detail_lines"] if line != logic.HLD2_MOVED_NOTE]
-    with pytest.raises(ValueError, match="HLD-2 說明區沒有"):
+    block = logic.find_block(model, code)
+    block["detail_lines"] = [line for line in block["detail_lines"] if line != _ORIGINAL[code]]
+    with pytest.raises(ValueError, match=f"{code} 的 detail_lines 沒有"):
         live.apply_live_notes(model, today=TODAY)
 
 
-def test_S6a_HLD2那一句的字面與抽常數之前相同():
-    """抽成常數只是為了讓 live 能逐字比對；字面一字未改（示範畫面逐位元組不變）。"""
-    assert logic.HLD2_MOVED_NOTE == "第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
+@pytest.mark.parametrize("name, code, field, old, new", [
+    ("empty", "HLD-0", "lines", "（另：", "（另外："),
+    ("full", "HLD-8", "detail_lines", "；客戶", "，客戶"),
+])
+def test_S6a_條件出現的那幾句字面漂移_殘留檢查raise(name, code, field, old, new):
+    model = _demo(name)
+    block = logic.find_block(model, code)
+    assert any(old in line for line in block[field]), "沒有可改的字 —— 這一條會變成空掃"
+    block[field] = [line.replace(old, new) for line in block[field]]
+    with pytest.raises(ValueError, match=f"{code} 的 {field} 還有開發過程字句"):
+        live.apply_live_notes(model, today=TODAY)

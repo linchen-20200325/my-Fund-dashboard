@@ -534,24 +534,47 @@ def _relabel_sync_field(block: dict, *, today: date) -> None:
     block["detail_lines"] = list(block["detail_lines"]) + lines
 
 
-# S6a：畫面上寫開發過程的句子，正式模式不顯示（體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`，
-# 逐字比對整行拿掉、不改字、不補新句子）。只收「拿掉之後該處不空、語意不斷」的那幾行；
-# 其餘同類字句（HLD-3、HLD-8 說明區、HLD-5 佔位框、HLD-0 空持倉那一句）拿掉會斷語意，留待總管裁定，本表不收。
-_DEV_LINES = {
-    # HLD-2 說明區：前面一定還有「兩個主值。…」那一行（`logic._build_core_card` 的 subtitle 或空狀態行）。
-    "HLD-2": (logic.HLD2_MOVED_NOTE,),
-}
+# S6a：畫面上交代開發過程的子句，正式模式不顯示（總管 S6a 第二輪裁定：**只刪不加**）。
+# 每一列：（塊、欄位、原字串、刪減後的字串、是否一定出現、刪掉的那一段裡挑一小段當殘留檢查）。
+# - 只刪「交代開發過程」的子句，留下的字一律不改、不新增；標點只做讓句子成立的最小調整。
+#   ⇒ 刪減後的字串必須是原字串的**子序列**（`tests/ui_v2/test_hld_live_logic.py` 守住）。
+# - 體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`（逐字比對整行，比對不到就不碰），
+#   再加上本檔 `_apply_direct` 對 `_HLD5_EMPTY_LINE` 的做法（該在而不在就 raise）。
+# - 「〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖」（HLD-5 佔位框）總管裁定**保留**：圖表確實還沒做，是真實資訊。
+_DEV_TRIMS = (
+    # a：只刪「已依客戶 2026-09-22 裁定」。
+    ("HLD-2", "detail_lines", logic.HLD2_MOVED_NOTE,
+     "第三個值「最大回撤」移到層 4 的 HLD-8。", True, "2026-09-22"),
+    # b：同 a。
+    ("HLD-3", "detail_lines", logic.HLD3_MOVED_NOTE,
+     "第三個值「本金類配息佔比」移到層 4 的 HLD-8。配息類別未知的列仍計入期間配息合計。", True, "2026-09-22"),
+    # c：刪「客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層」；前面的「；」與後面的「。」併成一個「。」。
+    #    沒有持倉時 `logic._build_hld8` 整組說明區換掉、不印這一句 ⇒ 不是一定出現，字面漂移靠殘留檢查擋。
+    ("HLD-8", "detail_lines", logic.HLD8_DETAIL_NOTE,
+     "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
+     "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。", False, "2026-09-22"),
+    # e：刪「兩句同時成立時哪一句出現，規格沒有寫」。只有空持倉且門檻未設時才出現。
+    ("HLD-0", "lines", logic.HLD0_NO_RULES_ASIDE, "（另：尚未設定門檻。）", False, "規格沒有寫"),
+)
 
 
 def _strip_dev_lines(model: dict) -> None:
-    """找不到就 raise（同 `_apply_direct` 對 `_HLD5_EMPTY_LINE` 的做法）：那表示 `logic` 改了字面而本檔沒跟上，
-    靜默略過的話，那一行會原封留在正式畫面上。"""
-    for code, lines in _DEV_LINES.items():
+    """把 `_DEV_TRIMS` 的原字串整行換成刪減後的版本（逐字比對，其餘行不碰）。
+
+    - 一定出現的那幾句找不到 → raise：`logic` 改了字面而本檔沒跟上，靜默略過的話那一句會原封上正式畫面；
+    - 換完之後該欄位還有任何一行含殘留檢查那一小段 → raise（條件出現的那一句也靠這一條防字面漂移）。
+      只查本表點名的（塊、欄位），不掃整個模型 —— 上游錯誤原文不住在這些位置（同 `_EMPTY_EXITS` 的理由）。
+    """
+    for code, field, original, trimmed, always, marker in _DEV_TRIMS:
         block = logic.find_block(model, code)
-        for line in lines:
-            if line not in block["detail_lines"]:
-                raise ValueError(f"{code} 說明區沒有「{line}」，logic 改了而本檔沒跟上")
-        block["detail_lines"] = [line for line in block["detail_lines"] if line not in lines]
+        lines = list(block[field])
+        if always and original not in lines:
+            raise ValueError(f"{code} 的 {field} 沒有「{original}」，logic 改了而本檔沒跟上")
+        lines = [trimmed if line == original else line for line in lines]
+        left = [line for line in lines if isinstance(line, str) and marker in line]
+        if left:
+            raise ValueError(f"{code} 的 {field} 還有開發過程字句：{left!r}")
+        block[field] = lines
 
 
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
@@ -560,7 +583,7 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
     2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
-    3. 畫面上寫開發過程的句子拿掉（S6a，`_DEV_LINES`）。
+    3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。

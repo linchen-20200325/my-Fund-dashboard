@@ -458,6 +458,17 @@ TEXT_DIRECT_HOLD = "直接持有"
 # HLD-2 說明區的最後一行（示範模式照印）。抽成常數只為了讓 `live.py` 正式模式能逐字比對拿掉它
 # （S6a：畫面上的開發過程字句，比照 `ui_v2/set/live.py::_strip_demo` 的體例）；字面一字未改。
 HLD2_MOVED_NOTE = "第三個值「最大回撤」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
+# 以下三句同理（S6a 第二輪）：抽成常數只為了讓 `live.py` 逐字比對；字面一字未改，示範模式照印。
+HLD3_MOVED_NOTE = (
+    "第三個值「本金類配息佔比」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
+    "配息類別未知的列仍計入期間配息合計。"
+)
+HLD8_DETAIL_NOTE = (
+    "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值；"
+    "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層。"
+    "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。"
+)
+HLD0_NO_RULES_ASIDE = "（另：尚未設定門檻。兩句同時成立時哪一句出現，規格沒有寫）"
 
 NA_NO_WINDOW = not_applicable_text("尚未設定區間")
 NA_NO_RULES = not_applicable_text(TEXT_NO_RULES)
@@ -1534,7 +1545,7 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
         # ⚠️ 登記：持倉為空與門檻未設兩句同時成立時哪一句出現，`44` 沒有寫（草稿 ⛔ H-17）。
         #    本檔照草稿：取持倉那一句，另一句補在下面括號裡。
         if not has_rules:
-            lines.append("（另：尚未設定門檻。兩句同時成立時哪一句出現，規格沒有寫）")
+            lines.append(HLD0_NO_RULES_ASIDE)
         return {
             "_tone": "灰",
             "_state": STATE_MISSING,
@@ -2011,11 +2022,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
             }
         )
 
-    detail_lines = [
-        "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值；"
-        "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層。"
-        "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。"
-    ]
+    detail_lines = [HLD8_DETAIL_NOTE]
     buttons = []
     states = []  # 無持倉時本表沒有任何主值；先給空集，`tone_for_block` 才有東西可讀。
     block_states = []
@@ -2293,8 +2300,7 @@ def _build_page_model(dataset, *, fields, viewport_width, open_fund) -> dict:
         subtitle="兩個主值，皆為算術結果，卡上不對它們加任何評語。"
         "配息合計以原幣逐檔顯示，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
-        moved_note="第三個值「本金類配息佔比」已依客戶 2026-09-22 裁定移到層 4 的 HLD-8。"
-        "配息類別未知的列仍計入期間配息合計。",
+        moved_note=HLD3_MOVED_NOTE,
     )
     cards = [hld1, hld2, hld3]
     hld0 = _build_hld0(
