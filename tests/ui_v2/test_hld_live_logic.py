@@ -1532,7 +1532,10 @@ def test_S6a2_第2項_N1_結論燈數不重複的檔_偏離表列數不變():
 
 
 def test_S6a2_第2項_N1_一檔一列時燈數仍與列數相等():
-    """正控：每一檔只超出一條時，燈數照舊等於列數（既有 `test_結論燈的N等於HLD1的列數` 的情境）。"""
+    """只驗假資料 `full` 這一組的現況（燈數與列數剛好相等），不是相等條件的保證（同 `ACCEPTANCE.md` 9.3）。"""
+    # ~~正控：每一檔只超出一條時，燈數照舊等於列數（既有 `test_結論燈的N等於HLD1的列數` 的情境）。~~
+    # → 2026-10-03 更正（有意識的更正，不是漏刪）：「每一檔只超出一條時照舊相等」已被紅隊反例推翻
+    #   （同一檔掛兩張保單時，每一檔只超出一條，列數仍是 2、燈數 1；見 `ACCEPTANCE.md` 9.2）。
     model = logic.build_page_model(**_scenario_args("full"))
     rows = logic.find_block(model, "HLD-1")["_rows"]
     assert len({r["_fund_code"] for r in rows}) == len(rows)
