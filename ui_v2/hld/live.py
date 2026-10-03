@@ -16,6 +16,7 @@
 ⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
+   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` 仍是 S6 後半的工作）。
 
 S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
 
@@ -533,17 +534,86 @@ def _relabel_sync_field(block: dict, *, today: date) -> None:
     block["detail_lines"] = list(block["detail_lines"]) + lines
 
 
+# S6a：畫面上交代開發過程的子句，正式模式不顯示（總管 S6a 第二輪裁定：**只刪不加**）。
+# 每一列：（塊、欄位、原字串、刪減後的字串、是否一定出現、刪掉的那一段裡挑一小段當殘留檢查）。
+# - 只刪「交代開發過程」的子句，留下的字一律不改、不新增；標點只做讓句子成立的最小調整。
+#   ⇒ 刪減後的字串必須是原字串的**子序列**（`tests/ui_v2/test_hld_live_logic.py` 守住）。
+# - 體例：`ui_v2/set/live.py` 的 `_DEMO_LINES`／`_strip_demo`（逐字比對整行，比對不到就不碰），
+#   再加上本檔 `_apply_direct` 對 `_HLD5_EMPTY_LINE` 的做法（該在而不在就 raise）。
+# - 「〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖」（HLD-5 佔位框）總管裁定**保留**：圖表確實還沒做，是真實資訊。
+_DEV_TRIMS = (
+    # a：只刪「已依客戶 2026-09-22 裁定」。
+    ("HLD-2", "detail_lines", logic.HLD2_MOVED_NOTE,
+     "第三個值「最大回撤」移到層 4 的 HLD-8。", True, "2026-09-22"),
+    # b：同 a。
+    ("HLD-3", "detail_lines", logic.HLD3_MOVED_NOTE,
+     "第三個值「本金類配息佔比」移到層 4 的 HLD-8。配息類別未知的列仍計入期間配息合計。", True, "2026-09-22"),
+    # c：刪「客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層」；前面的「；」與後面的「。」併成一個「。」。
+    #    沒有持倉時 `logic._build_hld8` 整組說明區換掉、不印這一句 ⇒ 不是一定出現，字面漂移靠殘留檢查擋。
+    ("HLD-8", "detail_lines", logic.HLD8_DETAIL_NOTE,
+     "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
+     "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。", False, "2026-09-22"),
+    # e：刪「兩句同時成立時哪一句出現，規格沒有寫」。只有空持倉且門檻未設時才出現。
+    ("HLD-0", "lines", logic.HLD0_NO_RULES_ASIDE, "（另：尚未設定門檻。）", False, "規格沒有寫"),
+)
+
+
+def _strip_dev_lines(model: dict) -> None:
+    """把 `_DEV_TRIMS` 的原字串整行換成刪減後的版本（逐字比對，其餘行不碰）。
+
+    - 一定出現的那幾句找不到 → raise：`logic` 改了字面而本檔沒跟上，靜默略過的話那一句會原封上正式畫面；
+    - 換完之後該欄位還有任何一行含殘留檢查那一小段 → raise（條件出現的那一句也靠這一條防字面漂移）。
+      只查本表點名的（塊、欄位），不掃整個模型 —— 上游錯誤原文不住在這些位置（同 `_EMPTY_EXITS` 的理由）。
+    """
+    for code, field, original, trimmed, always, marker in _DEV_TRIMS:
+        block = logic.find_block(model, code)
+        lines = list(block[field])
+        if always and original not in lines:
+            raise ValueError(f"{code} 的 {field} 沒有「{original}」，logic 改了而本檔沒跟上")
+        lines = [trimmed if line == original else line for line in lines]
+        left = [line for line in lines if isinstance(line, str) and marker in line]
+        if left:
+            raise ValueError(f"{code} 的 {field} 還有開發過程字句：{left!r}")
+        block[field] = lines
+
+
+# S6a-1（客戶 2026-10-03 裁示，總管派工）：HLD-4 說明區三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範模式照印。
+# - `HLD4_APPLY_NOTE`：「兩枚按鈕並存，各做一件事。」（正式版「存檔」停用）與「「套用」只讀這些欄位的當下值、
+#   重算…六塊…」（「套用」尚未接線，按了不重算）兩個子句住在**同一個字串**裡，兩個子句都要拿掉 ⇒ 整句不印。
+#   ⚠️ S6a-2 把「套用」接好之後，後一個子句要恢復（只刪「兩枚按鈕並存，各做一件事。」）。
+# - `HLD4_SAVE_NOTE`、`HLD4_SAVE_SCOPE_NOTE`：正式版「存檔」停用（裁示 A），講存檔做什麼的兩句不成立。
+# 每一列：（塊、欄位、整句）。找不到就 raise（同 `_strip_dev_lines`）：logic 改了字面而本檔沒跟上時，
+# 靜默略過的話那一句會原封上正式畫面。
+_LIVE_DROPS = (
+    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE),
+    ("HLD-4", "notes", logic.HLD4_SAVE_NOTE),
+    ("HLD-4", "notes", logic.HLD4_SAVE_SCOPE_NOTE),
+)
+
+
+def _drop_live_lines(model: dict) -> None:
+    for code, field, line in _LIVE_DROPS:
+        block = logic.find_block(model, code)
+        if line not in block[field]:
+            raise ValueError(f"{code} 的 {field} 沒有「{line}」，logic 改了而本檔沒跟上")
+        block[field] = [item for item in block[field] if item != line]
+
+
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
-    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的兩件事：
+    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的四件事：
 
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
-    2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A。
+    2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
+    3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）；
+    4. HLD-4 講兩枚按鈕的三句整句不印（S6a-1，`_LIVE_DROPS`）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
     """
     out = copy.deepcopy(model)
+    _strip_dev_lines(out)
+    _drop_live_lines(out)
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])
