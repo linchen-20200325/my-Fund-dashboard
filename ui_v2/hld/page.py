@@ -217,6 +217,29 @@ def _badges_html(badges) -> str:
     return "".join(_badge_html(b) for b in badges)
 
 
+# ── 正式模式才有的新鮮度標示（裁示 1-A＋1-C，`ui_v2/hld/live.py::_apply_freshness`）──
+# 示範模式的模型沒有這幾個鍵（`freshness_badge`／`freshness_note`／`freshness_tail`／`nav_groups`），
+# 下面兩支一律回空字串 —— 示範畫面逐位元組不變。顏色走既有的四色（`theme.tone_hex`），不另立樣式。
+
+
+def _fresh_badge_html(node) -> str:
+    badge = node.get("freshness_badge")
+    return " " + _badge_html(badge) if badge else ""
+
+
+def _fresh_note_html(node, css="hld-note") -> str:
+    note = node.get("freshness_note")
+    if not note:
+        return ""
+    body = _esc(note["text"])
+    # S5 第二輪（紅隊建議 3）：日期 `YYYY-MM-DD` 整段不斷行（375px 實測原本被折成兩行）。
+    # ⚠️ 用行內樣式、不在 `_base_css` 加新 class：`_base_css` 示範模式也會印，加一條規則
+    #    示範畫面就不再逐位元組相同。行內 `style` 與這一行的顏色、S4 卡尾的寫法同一個體例。
+    for piece in note.get("_nowrap", ()):
+        body = body.replace(_esc(piece), f'<span style="white-space:nowrap">{_esc(piece)}</span>')
+    return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{body}</div>'
+
+
 def _buttons(block, prefix) -> None:
     for index, button in enumerate(block.get("buttons", [])):
         st.button(
@@ -305,6 +328,12 @@ def _render_hld1(block: dict) -> None:
         )
     for line in block["tail_lines"]:
         parts.append(f'<div class="hld-note">{_esc(line)}</div>')
+    # 1-C ③：排在既有卡尾之後（正式模式才有）。
+    tail = block.get("freshness_tail")
+    if tail:
+        parts.append(
+            f'<div class="hld-note" style="color:{_tone(tail["_tone"])}">{_esc(tail["text"])}</div>'
+        )
     detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"])
     if detail:
         parts.append(f'<div class="hld-detail">{detail}</div>')
@@ -326,8 +355,10 @@ def _render_core_card(block: dict) -> None:
             f'{_esc(mv["text"])}</span></div>'
             for mv in group["main_values"]
         )
+        # 1-A 徽章在標頭旁、1-C 副標在標頭下一行（正式模式才有；示範模式兩者皆為空字串）。
         parts.append(
-            f'<div class="hld-fgrp"><div class="hld-fh">{_esc(group["head_text"])}</div>'
+            f'<div class="hld-fgrp"><div class="hld-fh">{_esc(group["head_text"])}'
+            f"{_fresh_badge_html(group)}</div>{_fresh_note_html(group)}"
             f"{rows}</div>"
         )
     detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"])
@@ -414,6 +445,10 @@ def _render_hld5(block: dict) -> None:
                 f'<div class="hld-fh">{_esc(item["head_text"])}</div>',
                 unsafe_allow_html=True,
             )
+            # 1-C ①②：該檔展開標頭下（正式模式、預存那幾檔才有）。
+            note_html = _fresh_note_html(item, "hld-line")
+            if note_html:
+                st.markdown(note_html, unsafe_allow_html=True)
             button = item["_button"]
             st.button(
                 button["label"],
@@ -462,23 +497,46 @@ def _table_html(labels, rows, cells) -> str:
 def _render_hld6(block: dict) -> None:
     with _expander(block):
         st.caption(block["answers"])
-        if block["nav_rows"]:
+        def nav_cells(row):
+            return [
+                _esc(row["fund_code"]),
+                _esc(row["nav_date"]),
+                _esc(row["nav_text"]),
+                _esc(row["ccy"]),
+                _badge_html(row["_source_badge"]),
+                _badge_html(row["_estimated_badge_node"])
+                if row["_estimated_badge_node"]
+                else "—",
+            ]
+
+        if block["nav_rows"] and "nav_groups" in block:
+            # 正式模式（裁示 1-A＋1-C）：同一張表逐檔分組，分組標頭＝基金代碼＋新鮮度徽章，
+            # 預存那幾檔的副標排在分組標頭下一列。欄位與每一列的內容與示範模式相同。
+            st.caption("淨值表")
+            span = len(block["nav_labels"])
+            head = "".join(f"<th>{_esc(label)}</th>" for label in block["nav_labels"])
+            body = []
+            for group in block["nav_groups"]:
+                body.append(
+                    f'<tr><td colspan="{span}"><b>{_esc(group["fund_code"])}</b>'
+                    f"{_fresh_badge_html(group)}</td></tr>"
+                )
+                note = _fresh_note_html(group)
+                if note:
+                    body.append(f'<tr><td colspan="{span}">{note}</td></tr>')
+                body.extend(
+                    "<tr>" + "".join(f"<td>{cell}</td>" for cell in nav_cells(row)) + "</tr>"
+                    for row in group["rows"]
+                )
+            st.markdown(
+                '<div class="hld-scroll"><table class="hld-table">'
+                f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>",
+                unsafe_allow_html=True,
+            )
+        elif block["nav_rows"]:
             st.caption("淨值表")
             st.markdown(
-                _table_html(
-                    block["nav_labels"],
-                    block["nav_rows"],
-                    lambda row: [
-                        _esc(row["fund_code"]),
-                        _esc(row["nav_date"]),
-                        _esc(row["nav_text"]),
-                        _esc(row["ccy"]),
-                        _badge_html(row["_source_badge"]),
-                        _badge_html(row["_estimated_badge_node"])
-                        if row["_estimated_badge_node"]
-                        else "—",
-                    ],
-                ),
+                _table_html(block["nav_labels"], block["nav_rows"], nav_cells),
                 unsafe_allow_html=True,
             )
         if block["div_rows"]:
@@ -530,7 +588,8 @@ def _render_hld8(block: dict) -> None:
                     block["column_labels"],
                     block["_rows"],
                     lambda row: [
-                        _esc(row["fund_name"]),
+                        # 1-A 徽章在該列、1-C 副標在該檔名下一行（正式模式才有；示範模式兩者皆為空字串）。
+                        _esc(row["fund_name"]) + _fresh_badge_html(row) + _fresh_note_html(row),
                         _esc(row["ccy_text"]),
                         f'<span style="color:{_tone(row["drawdown"]["_tone"])}">'
                         f'{_esc(row["drawdown"]["text"])}</span>',

@@ -19,6 +19,9 @@
 
 S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
 
+S5（裁示 1-A＋1-C）：舊淨值的新鮮度標示 —— 見 `NAV_FRESH_DAYS_YELLOW`、`nav_freshness` 與 `_apply_freshness`。
+本輪仍不接取數：`nav_provenance` 由呼叫端傳入。
+
 ⚠️ 文案逐字照裁示；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
 """
 
@@ -224,6 +227,192 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
     return model
 
 
+# ───────────────────────── 裁示 1-A＋1-C：舊淨值的新鮮度標示（S5） ─────────────────────────
+# 出處：`docs/wireframes/draft_hld_live.html` §D（「N 的算法」那一列、選項 1-A、選項 1-C、選項 1-A＋1-C）
+#       與 §G 第 1 題、第 1a 題（客戶 2026-10-02 裁示：1-A＋1-C，黃燈門檻 10 天）。字面逐字，改字先回草稿。
+#
+# 黃燈門檻：N（台灣今天的日期減該檔最後一筆 `nav_date`，日曆日）大於這個數 → 黃；小於或等於 → 中性。
+# 客戶 2026-10-02 裁示（草稿 §G 第 1a 題），客戶要求註明的原話：
+#   「門檻 10 天，非 44 規定，是本輪依長假實況訂的」
+# 客戶理由（同處）：7 天遇到春節等長假，所有基金都會被誤標黃燈；使用者習慣忽略黃燈後，真正落後的反而看不到。
+# ⛔ 不沿用 `shared/signal_thresholds.py::MJ_FRESH_DAYS_YELLOW`（那是 7，管的是 L2 `stale`，算法也不同）——
+#    草稿 §D：「實作時要另設一個常數放 10，不要沿用 MJ_FRESH_DAYS_YELLOW」。
+NAV_FRESH_DAYS_YELLOW = 10
+
+FRESHNESS_TODAY_TEXT = "當日"                      # 1-A：N＝0（`44` §5.2 新鮮度字面）
+FRESHNESS_DELAY_TEXT = "延遲 {n} 日"               # 1-A：N≥1（`44` §5.2 新鮮度字面）
+CACHE_NOTE_OLD = "⚠ 淨值取自預存序列，不是本次取得；最近一筆 {day}，已超過 {limit} 日"   # 1-C ①，黃
+CACHE_NOTE_FRESH = "淨值取自預存序列，不是本次取得；最近一筆 {day}"                       # 1-C ②，中性
+CACHE_TAIL_TEXT = "本卡所列的檔中，{n} 檔的淨值取自預存序列，逐檔見 HLD-6"               # 1-C ③
+CACHE_INPUT_SUFFIX = " · 預存序列"                                                       # 1-C：HLD-7 輸入欄尾端
+
+# L2 `services/v2_tables/nav_dividend.py::rows_from_nav_series` 的 `provenance` 鍵（`build_nav_table` 回傳的
+# `provenance[fund_code]`）。本頁不得 import `services`，所以由呼叫端原樣傳進來，本檔只驗形狀、只讀這兩個鍵。
+_PROVENANCE_KEYS = ("cache_fallback", "stale")
+
+
+def _nav_day(value, where: str) -> date:
+    """`nav_date` → `date`。只收 `YYYY-MM-DD` 字串（假資料與 `logic` 的寫法）或 `date`（L2 的寫法）；
+    `datetime`、其他字串、其他型別一律 raise —— 不交給誰去猜。"""
+    if isinstance(value, datetime):
+        raise TypeError(f"{where}的 nav_date 是 datetime，日期語意不明：{value!r}")
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and _DATE_ONLY.fullmatch(value):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ValueError(f"{where}的 nav_date 不是 YYYY-MM-DD：{value!r}")
+
+
+def _check_provenance(code: str, entry) -> dict:
+    where = f"nav_provenance[{code!r}]"
+    if not isinstance(entry, dict):
+        raise TypeError(f"{where} 應為 dict：{entry!r}")
+    missing = [k for k in _PROVENANCE_KEYS if k not in entry]
+    if missing:
+        raise ValueError(f"{where} 缺 {missing!r}：{entry!r}")
+    fallback, stale = entry["cache_fallback"], entry["stale"]
+    if not isinstance(fallback, bool):
+        raise TypeError(f"{where} 的 cache_fallback 應為 bool：{fallback!r}")
+    # L2：不是預存那一支 → `stale` 為 None；是預存那一支 → 取 `nav_quality["stale"]`（bool）或 None。
+    if stale is not None and not isinstance(stale, bool):
+        raise TypeError(f"{where} 的 stale 應為 bool 或 None：{stale!r}")
+    if not fallback and stale is not None:
+        raise ValueError(f"{where} 不是預存那一支，stale 卻不是 None（與 L2 不符）：{entry!r}")
+    return entry
+
+
+def nav_freshness(dataset: dict, nav_provenance, *, today: date) -> dict:
+    """每一檔 → `{"days", "last", "cache_fallback", "badge", "note"}`（草稿 §D 1-A＋1-C）。
+
+    - 只算**淨值表裡有列、而且淨值沒有取數失敗**的檔（表層級 `errors["nav"]` 或逐檔 `fund_errors["nav"]`）：
+      那幾檔的值已經是 ⛔，再掛「延遲 N 日」等於說淨值還在（S2 的 ⛔ 與本輪的徽章不得打架）。
+      沒有列的檔 N 算不出來，草稿沒寫畫法 —— 不掛、不補字（已回報）。
+    - N ＝ `today`（台灣今天的日期）減該檔最後一筆 `nav_date`，日曆日；**不讀 `stale`**（草稿 §D：
+      `stale` 為假不等於不舊、為空不等於判不出，各選項一律不吃它）。`stale` 只驗形狀。
+    - 最後一筆晚於 `today`（N＜0）→ raise：L2 不寫未來日期，真出現了是上游或時鐘壞了。
+    - 要算的檔在 `nav_provenance` 裡沒有一筆 → raise（判不出是不是預存的，不猜）。
+    """
+    if nav_provenance is None:
+        raise ValueError("沒有給 nav_provenance，無法判定淨值是否取自預存序列")
+    if not isinstance(nav_provenance, dict):
+        raise TypeError(f"nav_provenance 應為 {{fund_code: provenance}}：{type(nav_provenance).__name__}")
+    if isinstance(today, datetime) or not isinstance(today, date):
+        raise TypeError(f"today 應為 date：{today!r}")
+    for code in nav_provenance:
+        if not isinstance(code, str) or not code:
+            raise TypeError(f"nav_provenance 的鍵應為非空字串：{code!r}")
+    if dataset.get("errors", {}).get("nav"):
+        return {}
+    failed = set(logic.fund_errors(dataset).get("nav", {}))
+    last: dict = {}
+    for index, row in enumerate(dataset.get("nav") or ()):
+        code = row["fund_code"]
+        day = _nav_day(row["nav_date"], f"nav 第 {index} 列（{code!r}）")
+        if code not in last or day > last[code]:
+            last[code] = day
+    out = {}
+    for code in sorted(last):
+        if code in failed:
+            continue
+        if code not in nav_provenance:
+            raise ValueError(f"{code!r} 有淨值列，nav_provenance 卻沒有這一檔")
+        fallback = _check_provenance(code, nav_provenance[code])["cache_fallback"]
+        days = (today - last[code]).days
+        if days < 0:
+            raise ValueError(f"{code!r} 最後一筆 nav_date {last[code].isoformat()} 晚於今天 {today.isoformat()}")
+        old = days > NAV_FRESH_DAYS_YELLOW
+        text = FRESHNESS_TODAY_TEXT if days == 0 else FRESHNESS_DELAY_TEXT.format(n=days)
+        note = None
+        if fallback:
+            day_text = last[code].isoformat()
+            note = (
+                {"text": CACHE_NOTE_OLD.format(day=day_text, limit=NAV_FRESH_DAYS_YELLOW), "_tone": "黃"}
+                if old
+                else {"text": CACHE_NOTE_FRESH.format(day=day_text), "_tone": "中性"}
+            )
+            # S5 第二輪（紅隊建議 3）：375px 寬時日期被折成兩行。字面不變，只標出「這一段不斷行」，
+            # 由 `page.py::_fresh_note_html` 包成不斷行的一段。
+            note["_nowrap"] = [day_text]
+        out[code] = {
+            "days": days,
+            "last": last[code],
+            "cache_fallback": fallback,
+            "old": old,
+            # `44` §5.2 新鮮度徽章：「中性至黃，只映射日數」。
+            "badge": {"_kind": "新鮮度", "_tone": "黃" if old else "中性", "text": text},
+            "note": note,
+        }
+    return out
+
+
+def _apply_freshness(model: dict, fresh: dict) -> dict:
+    """把 `nav_freshness` 的結果掛到各塊（草稿 §D 1-A＋1-C「放在哪」）。各塊的 `_state`／`_tone`、按鈕、
+    數值都不動：徽章與副標只說「多舊」「是不是預存的」，不改任何一個數（草稿 §D：數值照算、照印）。
+
+    - HLD-2、HLD-3：每一檔分組加 `freshness_badge`（1-A）與 `freshness_note`（1-C ①②，只有預存那幾檔）；
+    - HLD-8：每一列同上（1-A「表內每一列」；1-C「該檔標頭下一行」）；
+    - HLD-5：每一檔加 `freshness_note`（1-C「該檔展開標頭下」；1-A 不掛在 HLD-5）；
+    - HLD-6：`nav_groups` 逐檔分組，分組標頭帶徽章與副標（1-A／1-C「分組標頭」）；
+    - HLD-7：預存那幾檔**以淨值為輸入**的列（`logic.NAV_INPUT_INDICATORS`），輸入欄尾端加 `CACHE_INPUT_SUFFIX`；
+    - HLD-1：`freshness_tail`（1-C ③），只數出現在本卡列上的檔，排在既有卡尾之後。
+    HLD-0 一格不動（草稿 §D「1-D 以外的選項，HLD-0 燈不動」）。
+    """
+    def badge(code):
+        entry = fresh.get(code)
+        return copy.deepcopy(entry["badge"]) if entry else None
+
+    def note(code):
+        entry = fresh.get(code)
+        return copy.deepcopy(entry["note"]) if entry and entry["note"] else None
+
+    for code in ("HLD-2", "HLD-3"):
+        for group in logic.find_block(model, code)["fund_groups"]:
+            group["freshness_badge"] = badge(group["_fund_code"])
+            group["freshness_note"] = note(group["_fund_code"])
+    for row in logic.find_block(model, "HLD-8")["_rows"]:
+        row["freshness_badge"] = badge(row["_fund_code"])
+        row["freshness_note"] = note(row["_fund_code"])
+    hld5 = logic.find_block(model, "HLD-5")
+    seen = set()
+    for item in [*hld5.get("_items", []), *hld5.get("_rows", [])]:
+        if id(item) not in seen:
+            seen.add(id(item))
+            item["freshness_note"] = note(item["_fund_code"])
+    hld6 = logic.find_block(model, "HLD-6")
+    groups = []
+    for row in hld6["nav_rows"]:
+        if not groups or groups[-1]["fund_code"] != row["_fund_code"]:
+            groups.append(
+                {
+                    "fund_code": row["_fund_code"],
+                    "freshness_badge": badge(row["_fund_code"]),
+                    "freshness_note": note(row["_fund_code"]),
+                    "rows": [],
+                }
+            )
+        groups[-1]["rows"].append(row)
+    hld6["nav_groups"] = groups
+    # S5 第二輪（紅隊必修 M1，總管裁定）：尾巴只掛在**以淨值為輸入**的列。
+    # 依據是 `logic.NAV_INPUT_INDICATORS` —— `logic._inputs_text` 就是拿它決定輸入欄讀淨值列還是配息列。
+    # 配息類三列（含「配息佔淨值比」）與 HLD-1 帶來的「…與門檻的差額」列（`_indicator` 不在名單內）一律不掛。
+    for row in logic.find_block(model, "HLD-7")["_rows"]:
+        entry = fresh.get(row["_fund_code"])
+        if entry and entry["cache_fallback"] and row["_indicator"] in logic.NAV_INPUT_INDICATORS:
+            row["inputs_text"] = row["inputs_text"] + CACHE_INPUT_SUFFIX
+    hld1 = logic.find_block(model, "HLD-1")
+    listed = {row["_fund_code"] for row in hld1["_rows"]}
+    cached = sorted(c for c in listed if c in fresh and fresh[c]["cache_fallback"])
+    if cached:
+        hld1["freshness_tail"] = {
+            "text": CACHE_TAIL_TEXT.format(n=len(cached)),
+            "_tone": "黃" if any(fresh[c]["old"] for c in cached) else "中性",
+        }
+    return model
+
+
 def taiwan_today(now: datetime | None = None) -> date:
     """台灣的今天。`now`：帶時區的當下（測試注入用）；不傳就取當下。
 
@@ -375,6 +564,7 @@ def build_live_model(
     direct=(),
     policy_tab_source=None,
     direct_sources=None,
+    nav_provenance=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
@@ -383,6 +573,10 @@ def build_live_model(
     - `direct_policy_id`：**一律要給**，沒給就 raise（S4 第二輪 M2）；
     - `direct`：L2 `load_alo_tables` 交出的 `direct` 清單原樣；
     - `policy_tab_source`、`direct_sources`：`direct` 非空時要給，沒給就 raise，不猜。
+    - `nav_provenance`（S5，裁示 1-A＋1-C）：L2 `build_nav_table` 回傳的 `provenance` 原樣
+      （`{fund_code: {..., "cache_fallback", "stale"}}`）；**一律要給**，沒給或形狀不對就 raise。
+      每檔最後一筆 `nav_date` 取自同一份 `dataset["nav"]`（畫面上 HLD-6 印的就是那幾列）。
+    - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
     """
     if direct_policy_id is None:
         raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
@@ -397,6 +591,8 @@ def build_live_model(
         if direct
         else []
     )
+    today = taiwan_today() if today is None else today
+    fresh = nav_freshness(dataset, nav_provenance, today=today)
     model = logic.build_page_model(
         dataset,
         fields=fields,
@@ -405,4 +601,5 @@ def build_live_model(
         demo_hint=False,
     )
     out = apply_live_notes(model, today=today)
+    out = _apply_freshness(out, fresh)
     return _apply_direct(out, rows, has_holdings=bool(dataset.get("holding")))

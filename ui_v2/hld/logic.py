@@ -246,6 +246,11 @@ FORMULA_TEXT = {
 }
 _DEVIATION_FORMULA = "該檔的實際值減門檻值"
 
+# `HLD-7` 輸入欄取自淨值列（`metric["nav_rows"]`）的指標；其餘三個指標的輸入欄取自配息列。
+# 原本是 `_inputs_text` 裡的一個字面 tuple，S5 第二輪（紅隊必修 M1）原封提出來成具名常數，
+# 讓正式模式判斷「哪幾列以淨值為輸入」時讀同一份，不另寫一份清單。值與順序一字未改。
+NAV_INPUT_INDICATORS = ("區間報酬率", "期間波動", "最大回撤")
+
 
 # ───────────────────────── 格式 ─────────────────────────
 
@@ -2103,7 +2108,7 @@ def _build_hld8(metrics, *, has_holdings, has_window):
 
 
 def _inputs_text(metric, indicator):
-    if indicator in ("區間報酬率", "期間波動", "最大回撤"):
+    if indicator in NAV_INPUT_INDICATORS:
         rows = metric["nav_rows"]
         if not rows:
             return f"0 筆{_hint()}"
