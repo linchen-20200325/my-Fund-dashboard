@@ -68,8 +68,27 @@ def _scenario_args(name, *, scrub=True):
     return _scrub(args) if scrub else args
 
 
+def _prov(dataset, *, fallback=(), stale=None):
+    """L2 `build_nav_table` 的 `provenance` 形狀（`services/v2_tables/nav_dividend.py::rows_from_nav_series`）：
+    淨值表裡每一檔一筆；`fallback` 裡的檔走預存那一支。"""
+    out = {}
+    for row in dataset.get("nav") or ():
+        code = row["fund_code"]
+        is_fb = code in fallback
+        out[code] = {
+            "source": "GitHubActions:cache/nav/x" if is_fb else "MoneyDJ:x",
+            "fetched_at": "2026-09-19T02:00:00+00:00",
+            "ccy_source": "holding",
+            "cache_fallback": is_fb,
+            "stale": stale if is_fb else None,
+        }
+    return out
+
+
 def _build(*args, **kw):
-    """正式模式的 `build_live_model`，帶上 `direct_policy_id`。"""
+    """正式模式的 `build_live_model`，帶上 `direct_policy_id`；`nav_provenance` 沒給就補「全部即時取回」（S5）。"""
+    if "nav_provenance" not in kw:
+        kw["nav_provenance"] = _prov(args[0] if args else kw["dataset"])
     return live.build_live_model(*args, direct_policy_id=_DIRECT_ID, **kw)
 
 
@@ -145,13 +164,15 @@ def test_組模型中途炸掉_開關照樣還原():
 
 @pytest.mark.parametrize("name", _ALL)
 def test_正式模式只差三件事_其餘逐字與示範模式相同(name):
-    """示範模型 → 去示意字尾 → 改欄名 → 停用兩類按鈕，必須恰好等於正式模型。
+    """示範模型 → 去示意字尾 → 改欄名 → 停用兩類按鈕 → 掛新鮮度標示（S5），必須恰好等於正式模型。
     正式模式若多改了任何一格（新增按鈕、改了別的字），這一條會紅。"""
     args = _scenario_args(name)
     open_fund = _first_holding(args["dataset"])
+    today = date(2026, 10, 2)
     demo = logic.build_page_model(**copy.deepcopy(args), open_fund=open_fund)
-    expected = live.apply_live_notes(_scrub(demo))
-    got = _build(**args, open_fund=open_fund)
+    fresh = live.nav_freshness(args["dataset"], _prov(args["dataset"]), today=today)
+    expected = live._apply_freshness(live.apply_live_notes(_scrub(demo), today=today), fresh)
+    got = _build(**args, open_fund=open_fund, today=today)
     assert got == expected
 
 
