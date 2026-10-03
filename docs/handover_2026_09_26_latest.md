@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-03 04:49:00 UTC（`date -u` 實測）
+最後更新：2026-10-03 05:38:08 UTC（`date -u` 實測）
 
 ---
 
@@ -206,7 +206,7 @@
 | S4：DIRECT 持倉另列 | ~~待稽核（PR 與 CI 階段，未 merge）~~ ~~進行中（稽核通過（兩組三輪，必修 0）、待 merge）~~ 已完成 | #876，merge commit `318e631`（~~PR #876，分支 `feat/v2-hld-s4` head `3f0fc7a`~~ → head `3f0fc7a` 已併入） |
 | S5：新鮮度 1-A＋1-C，門檻 10 天 | ~~待做~~ ~~進行中（第二輪：紅隊複驗通過、規格組複驗中）~~ 已完成 | ~~客戶 2026-10-02 指示的計畫~~ ~~分支 `feat/v2-hld-s5`（本機，未 push），head `8f043ee`；見第 2 節 S5~~ #879，merge commit `2aa90c3` |
 | ~~S6：`source.py`、`app_hld_live.py`、`PAGES_READING_SETTINGS` 加入 hld、守衛~~ | ~~待做~~ | ~~客戶 2026-10-02 指示的計畫~~ |
-| S6a：上線前的呈現層清理 | 進行中（第三輪 `e597820` 複驗中） | 分支 `feat/v2-hld-s6a`（本機，未 push）；見第 2 節 S6a |
+| S6a：上線前的呈現層清理 | ~~進行中（第三輪 `e597820` 複驗中）~~ 進行中（第三輪 `e597820` 不通過，第四輪修改中） | 分支 `feat/v2-hld-s6a`（本機，未 push）；見第 2 節 S6a |
 | S6b：`source.py`、`app_hld_live.py`、`PAGES_READING_SETTINGS`、守衛，以及 B 句一起合併 | 待做 | 總管 2026-10-03 指示的計畫 |
 | S7：文件 | 待做 | 客戶 2026-10-02 指示的計畫 |
 
@@ -222,6 +222,7 @@
 - S5 一列（2026-10-03 更新，**狀態更新，不是漏刪**，舊值劃線保留）：出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）；SHA 以 `git log --oneline -3 feat/v2-hld-s5` 本組實查，`git ls-remote origin feat/v2-hld-s5` 無輸出。
 - S5 一列 2026-10-03 第二次更新（**狀態更新，不是漏刪**，舊值劃線保留）：#879 已 merge，merge commit `2aa90c3`（2 parents `5b315d2`、`8f043ee`）。出處：PR #879 說明；本組 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 2aa90c3` 實查。#1 一列同步改為「進行中（S1～S5 完成）」，出處：總管 2026-10-03 指示。
 - S5～S7 三列：出處：客戶 2026-10-02 指示。
+- S6a 一列 2026-10-03 更新（**狀態更新，不是漏刪**，舊值劃線保留）：第三輪 `e597820` 不通過，第四輪修改中。出處：總管依稽核報告寫入，稽核報告原文不在 repo；`e597820` 仍是本機 `feat/v2-hld-s6a` 的 head（本組 `git log --oneline -1 feat/v2-hld-s6a` 實查）。
 - S6 拆成 S6a／S6b（2026-10-03，**狀態更新，不是漏刪**，原 S6 一列整列劃線保留）：出處：總管 2026-10-03 指示。S6a 的三顆 commit 只在本機分支 `feat/v2-hld-s6a`：本組 2026-10-03 實查 `git log --oneline -4 feat/v2-hld-s6a`（`e597820` → `c791758` → `fc95147` → `2aa90c3`），`git ls-remote origin feat/v2-hld-s6a` 無輸出。
 - #1 狀態欄寫「進行中（S1/S2/S3 完成）」：出處：客戶 2026-10-02 指示；狀態值仍是五種之一的「進行中」，括號只是補述。→ **2026-10-02 第三輪狀態更新，不是漏刪**：#876 merge 後改為「進行中（S1～S4 完成）」，舊值劃線保留。出處：總管 2026-10-02 第三輪指示。
 - `b23b5b2` 那一列（2026-10-02 增列）：出處：本組以 `git log --merges --oneline -6 origin/main` 與 `git show --stat --format='%H %P' b23b5b2` 實查。#870 只動 L1（`repositories/fund/nav_metrics.py`）與一支測試，「接 hld 頁」仍是下一步；〈登記待辦〉2026-10-02「#870 後續 7 條」是它留下的待辦。
@@ -259,8 +260,11 @@
 
 ## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ 2026-10-02 更新）
 
-- `origin/main` ＝ **`4ad3b92`**（PR #880 的 merge commit；一般 merge commit、2 parents（`2aa90c3`、`d3091dd`），非 squash；
-  出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 4ad3b92`）
+- `origin/main` ＝ **`62df1a3`**（PR #881 的 merge commit；一般 merge commit、2 parents（`4ad3b92`、`b6614cb`），非 squash；
+  出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 62df1a3`）
+  ~~- `origin/main` ＝ **`4ad3b92`**（PR #880 的 merge commit；一般 merge commit、2 parents（`2aa90c3`、`d3091dd`），非 squash；~~
+  ~~出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 4ad3b92`）~~
+  → **2026-10-03 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #881（`62df1a3`，交接本）merge，見第 4 節。
   ~~- `origin/main` ＝ **`2aa90c3`**（PR #879 的 merge commit；一般 merge commit、2 parents（`5b315d2`、`8f043ee`），非 squash；~~
   ~~出處：本組 2026-10-03 `git fetch origin main` 後實測 `git log --oneline --first-parent origin/main` 與 `git show -s --format='%h %p | %s' 2aa90c3`）~~
   → **2026-10-03 狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #880（`4ad3b92`，交接本）merge，見第 4 節。
@@ -343,7 +347,23 @@
   - 開發過程字句只刪不加；佔位框那句保留。
   - 「展開」提示只在停用時出現，示範版因此改了幾處，屬於修 bug。
   - `load_live()` 回傳暫定為 `{"dataset","live_args"}`。
-- S6a 稽核留下的 6 條待辦見〈登記待辦〉「hld 接真資料 S6a 稽核留下的待辦」。
+- **第三輪 `e597820` 稽核結果：不通過**。出處：總管依稽核報告寫入，稽核報告原文不在 repo。
+  - 紅隊必修 4 條：
+    - M1：只改日期、還沒按「套用」，HLD-4 摘要就先換成新區間，和下面的數字對不上。
+    - M2：改日期時 HLD-4 展開區會自己收起來（expander 標籤變了就重建）。
+    - M3：門檻三格改了再按「套用」沒有反應，但說明寫「只讀這些欄位的當下值」。
+    - M4：起日填 `20260601` 會被當成合法區間，算出「區間內淨值筆數不足」這種錯誤結論。
+  - 規格組必修 2 條：
+    - (1) 「套用只讀這些欄位的當下值」現況下不成立，因為門檻欄位沒被讀。
+    - (2) 正式版另外兩句存檔說明（「兩枚按鈕並存，各做一件事」「「存檔」只寫使用者設定…」）描述的是畫面上不存在的行為。
+  - 總管裁定（出處：總管依稽核報告寫入，稽核報告原文不在 repo）：
+    - 摘要一律讀「已套用」的值。
+    - 按「套用」後 HLD-4 維持展開。
+    - 門檻也接上「套用」：只用現有的驗證規則；遇到需要新文案的情況就停下來回報。
+    - 日期只收嚴格的 YYYY-MM-DD，只填一格視為不可套用。
+    - 正式版那兩句存檔說明只刪不加。
+- **客戶 2026-10-03 指示（逐字）**：「若第四輪仍不過，停下回報，重新評估是不是該拆更細。」出處：客戶 2026-10-03 指示（總管轉達）。
+- S6a 稽核留下的 6 條待辦見〈登記待辦〉「hld 接真資料 S6a 稽核留下的待辦」。（2026-10-03 第三輪後增為 9 條，見該處第 7～9 條）
 
 ### set 頁 SET-0 說明句改寫（客戶裁示 B）—— **本機分支，未 push（2026-10-02 登記）**
 
@@ -937,7 +957,11 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   5. 「套用」目前只讀起迄日，沒套用門檻。出處：hld S6a 稽核。
   6. 已套用的區間存在 session，換情境時會沿用（mkt 也是這樣）。出處：hld S6a 稽核。
   - ⚠️ 各條出自規格組或紅隊、第幾輪，總管指示未寫明，本組未查證。
-  ⛔ 以上 6 條皆為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
+
+  7. 「欄位一律無預設值：首次開啟四個欄位全是空的」與實況不符。出處：hld S6a 第 3 輪稽核（總管依稽核報告寫入，稽核報告原文不在 repo）。
+  8. 日期格式錯時，停用原因句寫的不是真正的原因。出處：hld S6a 第 3 輪稽核（總管依稽核報告寫入，稽核報告原文不在 repo）。
+  9. AppTest 對停用的按鈕仍會觸發 on_click，測試要另外驗證。出處：hld S6a 第 3 輪稽核（總管依稽核報告寫入，稽核報告原文不在 repo）。
+  ⛔ ~~以上 6 條皆為登記~~ 以上 9 條皆為登記，**不構成動工授權**（`CLAUDE.md` §-1）。（2026-10-03 第三輪後新增第 7～9 條，計數同步更新，**不是漏刪**）
 
 - **（2026-10-02 新增）B 句等 S6 一起合；set 頁一項測試單跑約 49 秒** —— 「配息尚未接取數來源；淨值即時取得」在本機分支 `fix/v2-set-source-note`（`e7f05bd`，未 push），要等 S6 持倉頁真的即時取淨值之後才成立，所以和 S6 一起合。另外 set 頁有一項測試單跑要 49 秒，接近 60 秒的逾時上限，CI 可能會碰到。出處：客戶 2026-10-02 指示；49 秒為總管轉述，本組未實跑、未查是哪一項測試。
 - **（2026-10-02 新增）`nav_metrics.py` 的 docstring 要回頭改** —— `repositories/fund/nav_metrics.py::_parse_nav_html` 的 docstring 寫「待登記(尚未寫入交接本)」，其實已登記在〈登記待辦〉「#870 後續 7 條」第 1 條，要回頭改 docstring。出處：客戶 2026-10-02 指示；本組 2026-10-02 在 `777a7c9` 上以 `grep -n '待登記' repositories/fund/nav_metrics.py` 實查該句仍在。⛔ 本條為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
@@ -1056,6 +1080,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **#879（merge commit `2aa90c3`，2 parents `5b315d2`、`8f043ee`）：hld S5，舊淨值新鮮度標示（客戶裁示 1-A＋1-C，黃燈門檻 10 天）**（分支 `feat/v2-hld-s5`，兩顆 `47b1b6b` → `8f043ee`）。6 檔 **+797／−23**（`ui_v2/hld/live.py`、`ui_v2/hld/logic.py`、`ui_v2/hld/page.py`、`tests/ui_v2/test_hld_live_logic.py`、`tests/ui_v2/test_hld_live_page.py`、`tests/ui_v2/test_hld_live_freshness.py`）。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 2aa90c3`、`git diff --stat 5b315d2 2aa90c3` 與 `git log --oneline 5b315d2..2aa90c3^2` 實查；CI 結果本組未查。
   - 稽核：規格組與紅隊兩組，兩輪複驗都通過，必修 0。出處：PR #879 說明（總管依兩組獨立稽核報告寫入；稽核報告原文不在 repo）。
 - **#880（merge commit `4ad3b92`，2 parents `2aa90c3`、`d3091dd`）：交接本 main 更新為 `2aa90c3`、S1～S5 完成**（分支 `docs/handover-1003-s5done`；三顆 `7f47da9` → `d55d70d` → `d3091dd`）。1 檔 **+29／−16**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 4ad3b92`、`git log --oneline 2aa90c3..4ad3b92^2` 與 `git diff --shortstat 2aa90c3 4ad3b92` 實查；CI 結果本組未查。
+- **#881（merge commit `62df1a3`，2 parents `4ad3b92`、`b6614cb`）：交接本 main 更新為 `4ad3b92`、S6 拆為 S6a／S6b、S6a 三輪紀錄**（分支 `docs/handover-1003-s6a`；兩顆 `a03941d` → `b6614cb`）。1 檔 **+46／−12**。出處：本組 2026-10-03 以 `git show -s --format='%h %p | %s' 62df1a3`、`git log --oneline 4ad3b92..62df1a3^2` 與 `git diff --shortstat 4ad3b92 62df1a3` 實查；CI 結果本組未查。
 
 ## 5. 待客戶裁示
 
@@ -1323,6 +1348,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-03 | 第七次更新（起點 `62df1a3`）：`origin/main` 改 `62df1a3`（舊句劃線保留）；第 4 節補 #881 一列；小步表 S6a 改「進行中（第三輪 `e597820` 不通過，第四輪修改中）」（舊值劃線保留）；第 2 節 S6a 小節新增第三輪稽核結果（紅隊必修 4 條、規格組必修 2 條、總管裁定 5 條）與客戶 2026-10-03 逐字指示；〈登記待辦〉S6a 新增第 7～9 條。出處：總管 2026-10-03 指示（總管依稽核報告寫入，稽核報告原文不在 repo）。 |
 | 2026-10-03 | 第六次更新開 PR 前補改（起點 `a03941d`）：S6a 裁定「四顆」句尾補註現剩三顆；worktree 名稱改為 `git worktree list` 實查（未進 main，直接改寫）；第 2 節 B 句兩行與 S2 待辦第 4 條、S3 待辦第 17 條的「S6」句尾補「（2026-10-03 起為 S6b）」；S3 待辦第 9～12 條補註「S6a 處理中」。原句皆未動。出處：總管 2026-10-03 指示。 |
 | 2026-10-03 | 第六次更新（起點 `4ad3b92`）：`origin/main` 改 `4ad3b92`（舊句劃線保留）；第 4 節補 #880 一列；小步表 S6 整列劃線，拆成 S6a（進行中，第三輪 `e597820` 複驗中）與 S6b（待做）；第 2 節新增 S6a 小節（三輪、紅隊 M1、總管裁定 4 條）；〈登記待辦〉新增 S6a 6 條，S5「第③句」一條確認已在未重複。出處：總管 2026-10-03 指示；`git log`／`git show` 本組實查。 |
 | 2026-10-03 | 第五次更新第三輪（起點 `d55d70d`）：第二輪日誌那一列「皆為 2026-10-03 寫入」改為 6／3 分法（`git blame 7f47da9` 核對相符）；〈總管錯誤紀錄〉新增一條（派工單未查證就寫成「皆為 2026-10-03 寫入」）。出處：交接本第五次更新第二輪稽核。 |
