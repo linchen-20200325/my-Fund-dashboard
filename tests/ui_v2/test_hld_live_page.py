@@ -334,3 +334,167 @@ def test_S6a_示範模式頁首副標照舊():
         f'情境 {fixtures.SCENARIO_LABELS["full"]}</div>'
     )
     assert [m for m in md if 'class="hld-sub"' in m] == [expected]
+
+
+# ───────────────────────── S6a 第三輪：「套用」真的生效（紅隊 M1） ─────────────────────────
+# `44` HLD-4：「套用」只讀欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，
+# 不寫任何資料表、不改欄位的內容。原本 `page.render` 從來沒把欄位值交給 logic，按了什麼都不變。
+
+_NEW_START = "2026-06-01"
+_SAVED_END = "2026-09-19"   # 假資料 `full` 存過的迄日
+
+
+def _apply_app(live_mode):
+    from ui_v2.hld import fixtures, logic, page
+
+    if not live_mode:
+        import streamlit as st
+
+        st.query_params["scenario"] = "full"
+        page.render()
+        return
+
+    def scrub(node):
+        if isinstance(node, str):
+            return node.replace(logic.HINT, "")
+        if isinstance(node, dict):
+            return {k: scrub(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [scrub(v) for v in node]
+        return node
+
+    dataset = scrub(fixtures.scenario("full")["dataset"])
+    for holding in dataset["holding"]:
+        if holding["policy_id"] == "DIRECT":
+            holding["policy_id"] = "P-001"
+    live_args = {
+        "direct_policy_id": "DIRECT",
+        "today": __import__("datetime").date(2026, 10, 2),
+        "nav_provenance": {
+            row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
+        },
+    }
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args})
+
+
+def _apply_run(live_mode):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_function(_apply_app, args=(live_mode,), default_timeout=60)
+    at.run()
+    assert not at.exception
+    return at
+
+
+def _block_blob(at, code) -> str:
+    """一塊在畫面上的全部文字。層 2 的卡是一整段 markdown；層 3、層 4 是一枚 expander（含標題列）。"""
+    for m in at.markdown:
+        if f'<span class="hld-card-code">{code}</span>' in m.value:
+            return m.value
+    for exp in at.expander:
+        if exp.label.startswith(f"{code}　"):
+            parts = [exp.label] + [m.value for m in exp.markdown] + [c.value for c in exp.caption]
+            return "\n".join(parts)
+    raise AssertionError(f"畫面上找不到 {code}")
+
+
+def _models(live_mode):
+    """沒按「套用」與以新區間按過「套用」的兩份模型（同一支 logic 算的，當對照）。"""
+    from datetime import date
+
+    from ui_v2.hld import fixtures, live, logic
+
+    args = fixtures.scenario("full")
+    if live_mode:
+        for holding in args["dataset"]["holding"]:
+            if holding["policy_id"] == "DIRECT":
+                holding["policy_id"] = "P-001"
+        kw = {
+            "direct_policy_id": "DIRECT",
+            "today": date(2026, 10, 2),
+            "nav_provenance": {
+                row["fund_code"]: {"cache_fallback": False, "stale": None} for row in args["dataset"]["nav"]
+            },
+        }
+        old = live.build_live_model(**args, **kw)
+        new = live.build_live_model(**args, **kw, applied_window=(_NEW_START, _SAVED_END))
+    else:
+        old = logic.build_page_model(**args)
+        new = logic.build_page_model(**args, applied_window=(_NEW_START, _SAVED_END))
+    return old, new
+
+
+def _diff_texts(old_block, new_block):
+    from ui_v2.hld import logic
+
+    a = set(logic.collect_ui_strings({"b": old_block}))
+    b = set(logic.collect_ui_strings({"b": new_block}))
+    return a - b, b - a
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a_套用_六塊跟著新區間重算_HLD6不變(live_mode):
+    from ui_v2.hld import logic, page
+
+    at = _apply_run(live_mode)
+    before = {code: _block_blob(at, code) for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-5", "HLD-6", "HLD-7", "HLD-8")}
+    at.text_input(key="hld4_window_start").input(_NEW_START)
+    apply_key = next(
+        f"hld4_btn_{i}" for i, b in enumerate(logic.find_block(_models(live_mode)[0], "HLD-4")["buttons"])
+        if b["_action_kind"] == "套用"
+    )
+    at.button(key=apply_key).click().run()
+    assert not at.exception
+    old, new = _models(live_mode)
+    changed_any = []
+    for code in logic.APPLY_RECALC_BLOCKS:
+        gone, came = _diff_texts(logic.find_block(old, code), logic.find_block(new, code))
+        blob = _block_blob(at, code)
+        # 新區間算出來、舊區間沒有的字，畫面上都在；反過來，舊區間才有的字都不在。
+        for text in came:
+            assert page._esc(text) in blob, (code, text)
+        for text in gone:
+            assert page._esc(text) not in blob, (code, text)
+        if came or gone:
+            changed_any.append(code)
+            assert blob != before[code], code
+    # 驗的不是空集合：數字真的跟著區間動的那幾塊（HLD-5 的內容與區間無關，不會動）。
+    assert {"HLD-2", "HLD-3", "HLD-7", "HLD-8"} <= set(changed_any), changed_any
+    # 不在六塊之內的 HLD-6（原始序列）一字不動。
+    assert _block_blob(at, "HLD-6") == before["HLD-6"]
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a_套用_不改欄位內容_改了沒按套用就不重算(live_mode):
+    from ui_v2.hld import logic
+
+    at = _apply_run(live_mode)
+    before = _block_blob(at, "HLD-2")
+    at.text_input(key="hld4_window_start").input(_NEW_START).run()
+    assert not at.exception
+    # 只改欄位、沒按「套用」：卡上的數字照舊（`44` HLD-4：重算只由「套用」觸發）。
+    assert _block_blob(at, "HLD-2") == before
+    apply_key = next(
+        f"hld4_btn_{i}" for i, b in enumerate(logic.find_block(_models(live_mode)[0], "HLD-4")["buttons"])
+        if b["_action_kind"] == "套用"
+    )
+    at.button(key=apply_key).click().run()
+    assert at.text_input(key="hld4_window_start").value == _NEW_START
+    assert at.text_input(key="hld4_window_end").value == _SAVED_END
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a_起迄日顛倒_套用照既有規則停用_卡上維持上一次套用的結果(live_mode):
+    from ui_v2.hld import logic
+
+    at = _apply_run(live_mode)
+    hld4 = logic.find_block(_models(live_mode)[0], "HLD-4")
+    apply_key = next(f"hld4_btn_{i}" for i, b in enumerate(hld4["buttons"]) if b["_action_kind"] == "套用")
+    at.text_input(key="hld4_window_start").input(_NEW_START)
+    at.button(key=apply_key).click().run()
+    applied = _block_blob(at, "HLD-2")
+    at.text_input(key="hld4_window_start").input("2026-12-31").run()
+    assert not at.exception
+    button = at.button(key=apply_key)
+    assert button.disabled is True and button.help == logic.TEXT_BAD_RANGE
+    assert _block_blob(at, "HLD-2") == applied

@@ -635,6 +635,7 @@ def build_live_model(
     policy_tab_source=None,
     direct_sources=None,
     nav_provenance=None,
+    applied_window=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
@@ -647,6 +648,7 @@ def build_live_model(
       （`{fund_code: {..., "cache_fallback", "stale"}}`）；**一律要給**，沒給或形狀不對就 raise。
       每檔最後一筆 `nav_date` 取自同一份 `dataset["nav"]`（畫面上 HLD-6 印的就是那幾列）。
     - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
+    - `applied_window`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三輪）。
     """
     if direct_policy_id is None:
         raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
@@ -669,6 +671,7 @@ def build_live_model(
         viewport_width=viewport_width,
         open_fund=open_fund,
         demo_hint=False,
+        applied_window=applied_window,
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)

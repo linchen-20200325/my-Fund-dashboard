@@ -2238,8 +2238,14 @@ def build_page_model(
     viewport_width: int = 1280,
     open_fund=None,
     demo_hint: bool = True,
+    applied_window=None,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
+
+    `applied_window`：使用者按「套用」時欄位的當下值 `(起日, 迄日)`（S6a 第三輪，紅隊 M1）。
+    `44` HLD-4：「套用」只讀這些欄位的當下值、重算六塊（`APPLY_RECALC_BLOCKS`），不寫任何資料表。
+    `None`（還沒按過「套用」）＝ 照舊用存過的區間（`saved_window`），輸出逐字同前。
+    ⚠️ 只換「拿哪一段區間去算」；門檻列不在這一個參數裡（見 S6a 第三輪回報）。
 
     `open_fund`：展開中那一列持倉的 `holding_id`（2026-10-02 起；之前是 `fund_code`）。
 
@@ -2260,14 +2266,15 @@ def build_page_model(
     token = _HINT_SUFFIX.set(HINT if demo_hint else "")
     try:
         return _build_page_model(
-            dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund
+            dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund,
+            applied_window=applied_window,
         )
     finally:
         _HINT_SUFFIX.reset(token)
 
 
-def _build_page_model(dataset, *, fields, viewport_width, open_fund) -> dict:
-    applied_window = saved_window(dataset)
+def _build_page_model(dataset, *, fields, viewport_width, open_fund, applied_window=None) -> dict:
+    applied_window = saved_window(dataset) if applied_window is None else tuple(applied_window)
     rules = saved_rules(dataset)
     # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
     _check_holding_ids(dataset.get("holding", []))

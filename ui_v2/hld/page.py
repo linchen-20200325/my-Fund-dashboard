@@ -240,13 +240,15 @@ def _fresh_note_html(node, css="hld-note") -> str:
     return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{body}</div>'
 
 
-def _buttons(block, prefix) -> None:
+def _buttons(block, prefix, on_click=None) -> None:
+    """`on_click`：{按鈕類別: 回呼}。沒列到的類別照舊不接任何動作（S6a 第三輪只接「套用」）。"""
     for index, button in enumerate(block.get("buttons", [])):
         st.button(
             button["label"],
             key=f"{prefix}_btn_{index}",
             disabled=not button["_enabled"],
             help=button["disabled_reason"] or None,
+            on_click=(on_click or {}).get(button["_action_kind"]),
         )
 
 
@@ -378,6 +380,37 @@ def _expander(block: dict):
     )
 
 
+# ── 「套用」（S6a 第三輪，紅隊 M1）──
+# 體例照 `ui_v2/mkt/page.py::_on_apply`（:243-248）與 `render`（:413-423）：
+# 按下「套用」時把欄位的當下值存進 `st.session_state`，下一次渲染拿那一組去算；
+# 欄位的當下值另外交給 logic 決定按鈕能不能按（起迄日顛倒 → 「套用」停用，既有規則）。
+# 不寫任何資料表、不改欄位內容（`44` HLD-4）。
+_APPLIED_KEY = "_hld_applied_window"
+_WINDOW_KEYS = ("hld4_window_start", "hld4_window_end")
+
+
+def _on_apply() -> None:
+    st.session_state[_APPLIED_KEY] = tuple(st.session_state.get(k) for k in _WINDOW_KEYS)
+
+
+def _applied_window():
+    try:
+        return st.session_state.get(_APPLIED_KEY)
+    except Exception:
+        return None
+
+
+def _current_fields(default):
+    """欄位的當下值。欄位還沒畫過（首次渲染）→ 回 `default`（情境自帶的 `fields` 或 None），輸出逐字同前。"""
+    try:
+        state = st.session_state
+        if not any(k in state for k in _WINDOW_KEYS):
+            return default
+        return {"window_start": state.get(_WINDOW_KEYS[0]), "window_end": state.get(_WINDOW_KEYS[1])}
+    except Exception:
+        return default
+
+
 def _render_hld4(block: dict) -> None:
     with _expander(block):
         st.caption(block["answers"])
@@ -405,7 +438,7 @@ def _render_hld4(block: dict) -> None:
                 button = block["row_buttons"][index]
                 st.button(button["label"], key=f"hld4_row_{index}")
         _lines(block["detail_lines"])
-        _buttons(block, "hld4")
+        _buttons(block, "hld4", on_click={"套用": _on_apply})
         _lines(block["notes"])
         st.markdown(
             f'<div class="hld-detail">{_badges_html(block["badges"])}'
@@ -668,13 +701,16 @@ def render(*, load_live=None) -> None:
 
     if load_live is None:
         scenario = _pick_scenario()
+        args = dict(fixtures.scenario(scenario))
+        args["fields"] = _current_fields(args.get("fields"))
         model = logic.build_page_model(
-            **fixtures.scenario(scenario), open_fund=_open_fund()
+            **args, open_fund=_open_fund(), applied_window=_applied_window()
         )
     else:
         loaded = load_live()
         model = live.build_live_model(
-            loaded["dataset"], open_fund=_open_fund(), **loaded["live_args"]
+            loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
+            applied_window=_applied_window(), **loaded["live_args"]
         )
 
     st.markdown(

@@ -1252,6 +1252,10 @@ def test_S6a1_HLD4三句_原字面與抽常數之前相同():
         "兩枚按鈕並存，各做一件事。「套用」只讀這些欄位的當下值、"
         "重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，不寫任何資料表、不改欄位的內容。"
     )
+# ───────────────────────── S6a 第三輪 ─────────────────────────
+
+
+def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
     assert logic.HLD4_SAVE_NOTE == (
         "「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算任何一塊。"
         "要兩件事都發生就兩枚都按；兩枚的先後不影響結果。"
@@ -1287,3 +1291,39 @@ def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
     block["notes"] = [line for line in block["notes"] if line != _HLD4_DROPPED[index]]
     with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
         live.apply_live_notes(model, today=TODAY)
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a第三輪_正式版HLD4不印存檔那一句_示範版照印_其餘照舊(name):
+    demo = logic.find_block(_demo(name), "HLD-4")["notes"]
+    got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
+    assert logic.HLD4_SAVE_NOTE in demo
+    assert got == [line for line in demo if line != logic.HLD4_SAVE_NOTE]
+
+
+def test_S6a第三輪_logic改了存檔那一句而live沒跟上_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_SAVE_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a第三輪_沒按套用時_模型與加參數之前相同(name):
+    args = _scenario_args(name)
+    assert logic.build_page_model(**args) == logic.build_page_model(**args, applied_window=None)
+
+
+def test_S6a第三輪_套用的區間取代存過的區間_正式版照轉():
+    args = _scenario_args("full")
+    window = ("2026-06-01", "2026-09-19")
+    demo = logic.build_page_model(**args, applied_window=window)
+    got = _build(**args, today=TODAY, applied_window=window)
+    assert demo["_window"] == got["_window"] == window
+    assert logic.build_page_model(**args)["_window"] != window
+    # 六塊裡會隨區間動的那幾塊，正式版與示範版拿到同一組數（示意字尾除外）。
+    for code in ("HLD-2", "HLD-3"):
+        a = [mv["text"].replace(logic.HINT, "") for g in logic.find_block(demo, code)["fund_groups"] for mv in g["main_values"]]
+        b = [mv["text"] for g in logic.find_block(got, code)["fund_groups"] for mv in g["main_values"]]
+        assert a == b, code
