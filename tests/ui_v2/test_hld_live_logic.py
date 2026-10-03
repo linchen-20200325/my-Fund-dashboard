@@ -1274,11 +1274,17 @@ def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
 
 @pytest.mark.parametrize("name", _ALL)
 def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
+    """~~三句整句不印~~ → S6a-2（客戶 2026-10-03 範圍裁示第 1 項；有意識的更正，不是漏刪）：
+    「套用」接好了，`HLD4_APPLY_NOTE` 只刪「兩枚按鈕並存，各做一件事。」，講「套用」的那一段恢復；
+    講「存檔」的兩句照舊整句不印。"""
     demo = logic.find_block(_demo(name), "HLD-4")["notes"]
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
     for line in _HLD4_DROPPED:
         assert line in demo, line          # 正控：示範版照印
-    assert got == [line for line in demo if line not in _HLD4_DROPPED]
+    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+    assert got == [
+        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
+    ]
     assert got, "拿掉之後 HLD-4 說明區不得變空"
 
 
@@ -1286,7 +1292,8 @@ def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
 def test_S6a1_正式版全頁模型沒有那三句的任何一段(name):
     args = _scenario_args(name)
     blob = "\n".join(logic.collect_ui_strings(_build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))))
-    for piece in ("兩枚按鈕並存", "只讀這些欄位的當下值", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
+    # S6a-2：「只讀這些欄位的當下值」那一段恢復（「套用」接好了），不再列在這裡。
+    for piece in ("兩枚按鈕並存", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
         assert piece not in blob, (name, piece)
 
 
