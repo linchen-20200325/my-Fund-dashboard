@@ -769,28 +769,49 @@ _RENDERERS = {
 }
 
 
-def _render_live_error(exc: Exception, mask_error) -> None:
+def _live_error_line(exc: BaseException, mask_error) -> str:
+    """錯誤畫面的那一行（S6b-1 第二輪）。
+
+    ⚠️ **組法是總管 2026-10-03 裁定的，不是 `44` 的字**：`44` 5.5 `系統錯誤` 的模板只有
+       「⛔ 取數失敗：<訊息原文>」；這裡的 <訊息原文> 組成「<例外型別>：<遮蔽後訊息>」。
+       理由：訊息為空的例外仍要說出是什麼錯（§1 Fail Loud）；體例比照 2026-10-02
+       `logic.fund_fetch_failed_text` 的裁定（前面多一段、用「：」接）。
+    - 正常路徑：型別名與訊息**都**經 `mask_error`（型別名也可能被上游塞進東西）。
+    - 後備路徑：`str(exc)` 本身拋、`mask_error` 拋、或回傳非字串 ⇒ 不往外拋（往外拋就是整段 Traceback，
+      含伺服器路徑），只印 `fetch_failed_text(<例外型別>)`，**不帶任何訊息內容**。
+      ⚠️ 殘餘風險（總管 2026-10-03 接受）：遮蔽本身壞了時，型別名沒有經過遮蔽就上畫面。
+         型別名是類別定義上的識別字，不是上游傳進來的字串；把秘密值塞進類別名的機率視為可接受。
+    """
+    type_name = type(exc).__name__
+    try:
+        masked_type = mask_error(type_name)
+        masked = mask_error(str(exc))
+        if not isinstance(masked_type, str) or not isinstance(masked, str):
+            raise TypeError("mask_error 應回傳字串")
+    except Exception:  # noqa: BLE001 —— 不是吞：下一行照樣畫錯誤畫面，只是不帶訊息內容
+        return logic.fetch_failed_text(type_name)
+    return logic.fetch_failed_text(f"{masked_type}：{masked}")
+
+
+def _render_live_error(exc: BaseException, mask_error) -> None:
     """正式模式取數或組模型失敗時的整頁畫面（S6b-1）。字面全部沿用既有的，不新寫句子：
 
     - 頁名與提問句：`logic.PAGE_TITLE`、`logic.PAGE_ANSWERS`（與正式模式正常時的頁首同一組）；
-    - 錯誤行：`logic.fetch_failed_text` ＝ `44` 5.5 `系統錯誤` 那一列的模板「⛔ 取數失敗：<訊息原文>」
-      （觸發條件逐字「取數或計算本身失敗」，兩步都在射程內）。訊息原文 ＝「例外型別：遮蔽後的訊息」，
-      型別與訊息的分隔沿用 `logic.fund_fetch_failed_text` 的「：」；
-    - 其下一行：`logic.PRINT_AS_IS_LINE`（本頁每一處取數失敗行之後都接這一句）；
+    - 錯誤行：`_live_error_line`（`logic.fetch_failed_text` ＝ `44` 5.5 `系統錯誤` 那一列的模板
+      「⛔ 取數失敗：<訊息原文>」，`44` :2326；觸發條件逐字「取數或計算本身失敗」，兩步都在射程內）；
+    - 其下一行：`logic.PRINT_AS_IS_LINE`，逐字出自 `44` :1641（`SET-2` 來源健康卡規則欄），hld 沿用。
+      ~~（本頁每一處取數失敗行之後都接這一句）~~ → **S6b-1 第二輪更正（有意識的更正，不是漏刪；
+      決策者：總管）**：說過頭了。實況是核心卡與 `HLD-8` 在同一組取數失敗行的**最後接一次**，
+      `HLD-1` 卡尾的逐檔失敗行也是整組最後接一次（`logic._fund_error_lines`）；本畫面只有一行錯誤，接一次；
     - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
       （裁示 A，逐字）。
     顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
     """
-    masked = mask_error(str(exc))
-    if not isinstance(masked, str):
-        raise TypeError(f"mask_error 應回傳字串：{type(masked).__name__}")
+    error_line = _live_error_line(exc, mask_error)
     st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
     red = _tone("紅")
-    for line in (
-        logic.fetch_failed_text(f"{type(exc).__name__}：{masked}"),
-        logic.PRINT_AS_IS_LINE,
-    ):
+    for line in (error_line, logic.PRINT_AS_IS_LINE):
         st.markdown(
             f'<div class="hld-line" style="color:{red}">{_esc(line)}</div>', unsafe_allow_html=True
         )
@@ -832,11 +853,14 @@ def render(*, load_live=None, mask_error=None) -> None:
             applied_rules=applied.get("rules"),
         )
     else:
-        # S6b-1：只包「去拿」與「組模型」兩步；畫面渲染不在 try 裡（那是本檔自己的 bug，照常浮出來）。
+        # S6b-1：只包「去拿」與「組模型」兩步；本檔自己的東西（讀 session 的兩支、畫面渲染）在 try 外先算好，
+        # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
+        open_fund = _open_fund()
+        fields = _current_fields(None)
         try:
             loaded = load_live()
             model = live.build_live_model(
-                loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
+                loaded["dataset"], open_fund=open_fund, fields=fields,
                 applied_window=applied.get("window"), applied_rules=applied.get("rules"),
                 **loaded["live_args"]
             )

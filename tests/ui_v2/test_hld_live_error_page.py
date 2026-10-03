@@ -31,7 +31,37 @@ def _app(kind):
     def mask(message):
         return message.replace(secret, "‹已遮蔽›")
 
-    if kind == "load_raises":
+    if kind == "mask_raises":
+        def mask(message):  # noqa: F811
+            raise KeyError(f"遮蔽壞了 {secret}")
+    elif kind == "mask_nonstr":
+        def mask(message):  # noqa: F811
+            return None
+
+    if kind == "str_raises":
+        class BadStr(Exception):
+            def __str__(self):
+                raise RuntimeError(f"str 也壞了 {secret}")
+
+        def load():
+            raise BadStr()
+    elif kind == "type_secret":
+        def load():
+            raise type(f"Err{secret}", (Exception,), {})("型別名裡藏了秘密")
+    elif kind == "open_fund_bug":
+        def boom():
+            raise ZeroDivisionError("page 自己的 bug")
+
+        # ⚠️ AppTest 與 pytest 同一個行程、共用同一個 `page` 模組物件：換掉之後一定要換回來，
+        #    否則之後每一支 hld 畫面測試都會撞到這個 boom（第一次跑全套就這樣紅了 56 支）。
+        original = page._open_fund
+        page._open_fund = boom
+        try:
+            page.render(load_live=lambda: {"dataset": {}, "live_args": {}}, mask_error=mask)
+        finally:
+            page._open_fund = original
+        return
+    elif kind in ("load_raises", "mask_raises", "mask_nonstr"):
         def load():
             raise RuntimeError(f"上游讀取失敗 token={secret} 請求逾時")
     else:
@@ -121,3 +151,54 @@ def test_S6b1_mask_error與load_live要一起傳():
         page.render(load_live=lambda: {}, mask_error=None)
     with pytest.raises(ValueError, match="要一起傳"):
         page.render(mask_error=str)
+
+
+# ───────────────────────── S6b-1 第二輪（總管 2026-10-03 裁定） ─────────────────────────
+
+
+@pytest.mark.parametrize("kind, type_name", [
+    ("mask_raises", "RuntimeError"),   # 遮蔽函式本身拋例外
+    ("mask_nonstr", "RuntimeError"),   # 遮蔽函式回傳非字串
+    ("str_raises", "BadStr"),          # str(exc) 本身拋例外
+])
+def test_S6b1_後備_遮蔽或str壞了_只印型別_不帶訊息_不印Traceback(kind, type_name):
+    from ui_v2.hld import live, logic
+
+    at = _run(kind)
+    assert len(at.exception) == 0, [x.value for x in at.exception]
+    blob = _texts(at)
+    assert "Traceback" not in blob
+    assert _FAKE_SECRET not in blob
+    md = [m.value for m in at.markdown]
+    errs = [v for v in md if "⛔ 取數失敗" in v]
+    # 只有型別、不帶任何訊息內容（逐字整行比對）。
+    assert errs == [f'<div class="hld-line" style="color:{_red()}">{logic.fetch_failed_text(type_name)}</div>'], errs
+    for piece in ("上游讀取失敗", "請求逾時", "遮蔽壞了", "str 也壞了"):
+        assert piece not in blob, piece
+    # 其餘畫面照錯誤畫面原樣。
+    assert any(logic.PRINT_AS_IS_LINE in v for v in md)
+    assert f'<div class="hld-title">{logic.PAGE_TITLE}</div>' in md
+    assert [b.label for b in at.button] == ["重新取數"] and at.button[0].disabled
+    assert at.button[0].help == live.REFETCH_DISABLED_REASON
+    assert not any('class="hld-layer-label' in v for v in md)
+
+
+def _red():
+    from ui_v2.hld import theme
+
+    return theme.tone_hex("紅")
+
+
+def test_S6b1_例外型別名也經遮蔽():
+    at = _run("type_secret")
+    assert len(at.exception) == 0
+    blob = _texts(at)
+    assert _FAKE_SECRET not in blob
+    assert "⛔ 取數失敗：Err‹已遮蔽›：型別名裡藏了秘密" in blob
+
+
+def test_S6b1_try範圍最小_page自己的bug照常浮出_不畫成取數失敗():
+    at = _run("open_fund_bug")
+    assert len(at.exception) == 1
+    assert "ZeroDivisionError" in at.exception[0].value or "page 自己的 bug" in at.exception[0].value
+    assert "⛔ 取數失敗" not in "\n".join(m.value for m in at.markdown)

@@ -584,9 +584,14 @@ def _strip_dev_lines(model: dict) -> None:
         回 `"detail_lines": detail_lines + error_lines`、`_build_hld8` 接 `_fund_error_lines`、
         `conclusion_light` 的 `lines` 帶 `HLD-1` 卡尾的逐檔失敗行，**上游錯誤原文就住在這些位置**；
         錯誤訊息裡碰巧有「2026-09-22」「規格沒有寫」時，舊寫法會把資料當成殘留而 raise（T1）。
-      ⇒ 殘留檢查**只看 logic 自己產生的範本行**：上游原文只經 `logic.fetch_failed_text` 進這些欄位
+      ⇒ 殘留檢查**只看 logic 自己產生的範本行**：上游**錯誤原文**只經 `logic.fetch_failed_text` 進這些欄位
         （`fund_fetch_failed_text` 也走它），那種行以 `_ERROR_LINE_PREFIX` 開頭，略過不查。
-        其餘行全是 logic 的範本字面，照查 —— logic 改了字面而本檔沒跟上時照樣 raise。
+        其餘行照查 —— logic 改了字面而本檔沒跟上時照樣 raise。
+        ⚠️ 第二輪補精確：「其餘行」不全是純範本字面 —— `HLD-0` 的 `lines` 另會從 `HLD-1` 帶進
+        `⬜ 資料未備：<來源鍵> 尚無資料` 行（`logic._missing_other_lines`，無 `⛔` 前綴，內容是來源鍵）
+        與「⛔ 另有 N 檔…取數失敗，未列入」行（只帶檔數），以及紅燈分支的「<塊名>：取數失敗。」。
+        這幾種帶進的是**資料（來源鍵、檔數、塊名）**，不是上游錯誤原文；它們也照查，
+        與殘留字串（日期、開發字句）撞上的機率視為可接受（本組逐一讀建構處判斷，單組未經第二組驗證）。
     """
     for code, field, original, trimmed, always, marker in _DEV_TRIMS:
         block = logic.find_block(model, code)
