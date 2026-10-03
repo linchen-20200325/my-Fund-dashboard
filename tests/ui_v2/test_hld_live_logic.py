@@ -1239,3 +1239,51 @@ def test_S6a_條件出現的那幾句字面漂移_殘留檢查raise(name, code, 
     block[field] = [line.replace(old, new) for line in block[field]]
     with pytest.raises(ValueError, match=f"{code} 的 {field} 還有開發過程字句"):
         live.apply_live_notes(model, today=TODAY)
+
+
+# ───────────────────────── S6a-1：HLD-4 講兩枚按鈕的三句，正式版不印 ─────────────────────────
+# 客戶 2026-10-03 裁示：「套用」尚未接線、「存檔」停用，三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範版照舊。
+
+_HLD4_DROPPED = (logic.HLD4_APPLY_NOTE, logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+
+
+def test_S6a1_HLD4三句_原字面與抽常數之前相同():
+    assert logic.HLD4_APPLY_NOTE == (
+        "兩枚按鈕並存，各做一件事。「套用」只讀這些欄位的當下值、"
+        "重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，不寫任何資料表、不改欄位的內容。"
+    )
+    assert logic.HLD4_SAVE_NOTE == (
+        "「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算任何一塊。"
+        "要兩件事都發生就兩枚都按；兩枚的先後不影響結果。"
+    )
+    assert logic.HLD4_SAVE_SCOPE_NOTE == (
+        "「存檔」只寫使用者設定，不寫持倉、保單、淨值、配息四張表任何一張，"
+        "也不代你填任何值、不把空欄補成任何候選值。"
+    )
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
+    demo = logic.find_block(_demo(name), "HLD-4")["notes"]
+    got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
+    for line in _HLD4_DROPPED:
+        assert line in demo, line          # 正控：示範版照印
+    assert got == [line for line in demo if line not in _HLD4_DROPPED]
+    assert got, "拿掉之後 HLD-4 說明區不得變空"
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a1_正式版全頁模型沒有那三句的任何一段(name):
+    args = _scenario_args(name)
+    blob = "\n".join(logic.collect_ui_strings(_build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))))
+    for piece in ("兩枚按鈕並存", "只讀這些欄位的當下值", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
+        assert piece not in blob, (name, piece)
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != _HLD4_DROPPED[index]]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)

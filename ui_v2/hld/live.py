@@ -577,19 +577,43 @@ def _strip_dev_lines(model: dict) -> None:
         block[field] = lines
 
 
+# S6a-1（客戶 2026-10-03 裁示，總管派工）：HLD-4 說明區三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範模式照印。
+# - `HLD4_APPLY_NOTE`：「兩枚按鈕並存，各做一件事。」（正式版「存檔」停用）與「「套用」只讀這些欄位的當下值、
+#   重算…六塊…」（「套用」尚未接線，按了不重算）兩個子句住在**同一個字串**裡，兩個子句都要拿掉 ⇒ 整句不印。
+#   ⚠️ S6a-2 把「套用」接好之後，後一個子句要恢復（只刪「兩枚按鈕並存，各做一件事。」）。
+# - `HLD4_SAVE_NOTE`、`HLD4_SAVE_SCOPE_NOTE`：正式版「存檔」停用（裁示 A），講存檔做什麼的兩句不成立。
+# 每一列：（塊、欄位、整句）。找不到就 raise（同 `_strip_dev_lines`）：logic 改了字面而本檔沒跟上時，
+# 靜默略過的話那一句會原封上正式畫面。
+_LIVE_DROPS = (
+    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE),
+    ("HLD-4", "notes", logic.HLD4_SAVE_NOTE),
+    ("HLD-4", "notes", logic.HLD4_SAVE_SCOPE_NOTE),
+)
+
+
+def _drop_live_lines(model: dict) -> None:
+    for code, field, line in _LIVE_DROPS:
+        block = logic.find_block(model, code)
+        if line not in block[field]:
+            raise ValueError(f"{code} 的 {field} 沒有「{line}」，logic 改了而本檔沒跟上")
+        block[field] = [item for item in block[field] if item != line]
+
+
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
-    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
+    """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的四件事：
 
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
     2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
-    3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）。
+    3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）；
+    4. HLD-4 講兩枚按鈕的三句整句不印（S6a-1，`_LIVE_DROPS`）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
     """
     out = copy.deepcopy(model)
     _strip_dev_lines(out)
+    _drop_live_lines(out)
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])
