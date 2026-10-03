@@ -439,6 +439,40 @@ def _current_fields(default):
         return default
 
 
+# ── 「新增一列」「清除這一列」（S6a-2 第 5 項）──
+# 只改門檻列的**欄位**（`st.session_state` 裡那幾格的值），不重算任何一塊、不寫任何資料表 ——
+# 要重算照舊按「套用」。格子畫幾列由 logic 依欄位當下值決定（`_build_hld4` 的 `grid`）。
+# 在回呼裡改 widget 的值是 Streamlit 允許的寫法（回呼在下一次渲染之前執行）。
+
+
+def _rule_key(index, part) -> str:
+    return f"hld4_rule_{index}_{part}"
+
+
+def _write_rule_rows(rows) -> None:
+    state = st.session_state
+    old = len(_rule_rows_now(state))
+    for index, row in enumerate(rows):
+        for part, value in zip(_RULE_PARTS, row):
+            state[_rule_key(index, part)] = "" if value is None else value
+    for index in range(len(rows), old):
+        for part in _RULE_PARTS:
+            del state[_rule_key(index, part)]
+
+
+def _on_add_row() -> None:
+    _keep_hld4_open()
+    _write_rule_rows(_rule_rows_now(st.session_state) + [("", "", "")])
+
+
+def _on_clear_row(index: int) -> None:
+    """拿掉第 `index` 列，後面的列往上補；只剩這一列時清空它（格子至少一列，同 `_build_hld4`）。"""
+    _keep_hld4_open()
+    rows = _rule_rows_now(st.session_state)
+    rows = rows[:index] + rows[index + 1:]
+    _write_rule_rows(rows or [("", "", "")])
+
+
 def _hld4_keep_open() -> bool:
     try:
         return bool(st.session_state.get(_HLD4_KEEP_OPEN_KEY))
@@ -464,18 +498,29 @@ def _render_hld4(block: dict) -> None:
             cells = st.columns([3, 2, 2, 2])
             for cell, field in zip(cells, row):
                 with cell:
+                    key = f"hld4_{field['name']}"
                     st.text_input(
                         field["label"],
-                        value="" if field["_value"] == "" else str(field["_value"]),
+                        # 這一格已經有值（使用者輸入過，或「新增一列」「清除這一列」寫進去的）→ 不再給預設值，
+                        # 免得 Streamlit 記一筆「預設值與 Session State 同時設定」的警告；首次渲染照舊。
+                        value=None if key in st.session_state
+                        else ("" if field["_value"] == "" else str(field["_value"])),
                         placeholder=field["placeholder"],
-                        key=f"hld4_{field['name']}",
+                        key=key,
                         on_change=_keep_hld4_open,
                     )
             with cells[3]:
                 button = block["row_buttons"][index]
-                st.button(button["label"], key=f"hld4_row_{index}")
+                st.button(
+                    button["label"],
+                    key=f"hld4_row_{index}",
+                    disabled=not button["_enabled"],
+                    help=button["disabled_reason"] or None,
+                    on_click=_on_clear_row,
+                    args=(index,),
+                )
         _lines(block["detail_lines"])
-        _buttons(block, "hld4", on_click={"套用": _on_apply})
+        _buttons(block, "hld4", on_click={"套用": _on_apply, "新增列": _on_add_row})
         _lines(block["notes"])
         st.markdown(
             f'<div class="hld-detail">{_badges_html(block["badges"])}'

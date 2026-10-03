@@ -614,16 +614,20 @@ def test_S6a第四輪_區間格式錯或只填一格_套用停用_沿用既有�
 
 
 @pytest.mark.parametrize("live_mode", [False, True])
-@pytest.mark.parametrize("value", ["abc", "", "1e3"])
+@pytest.mark.parametrize("value", ["abc", "", "1e3", "9" * 400])
 def test_S6a第四輪_門檻值既有規則處理不了_套用停用_沒有原因句(live_mode, value):
-    """沒有既有原因句可用 —— 停用、原因留空（待補文案，已回報）。"""
+    """~~沒有既有原因句可用 —— 停用、原因留空（待補文案，已回報）~~ → S6a-2 第 4 項：停用，原因句是客戶
+    2026-10-03 核准的「門檻列未填齊，或格式不符」（有意識的更正，不是漏刪）。函式名沿用，免得斷掉既有引用。
+    `"9" * 400`：十進位寫法合格，但 `float()` 之後是 inf（第 4 項：拒收非有限數）。"""
+    from ui_v2.hld import logic
+
     at = _apply_run(live_mode)
     at.text_input(key="hld4_rule_0_value").input("-1")
     at.button(key=_apply_key(live_mode)).click().run()
     before = _block_blob(at, "HLD-1")
     at.text_input(key="hld4_rule_0_value").input(value).run()
     button = at.button(key=_apply_key(live_mode))
-    assert button.disabled is True and not button.help
+    assert button.disabled is True and button.help == logic.TEXT_RULES_BAD
     button.click().run()
     assert not at.exception
     assert _block_blob(at, "HLD-1") == before
@@ -684,6 +688,137 @@ def test_S6a第四輪_瀏覽器_改日期與按套用之後_HLD4都維持展開_
                 box.press("Enter")
                 tab.wait_for_timeout(2500)
                 assert tab.get_by_role("button", name="套用").is_disabled()
+                tab.close()
+        finally:
+            browser.close()
+
+
+# ───────────────────────── S6a-2（客戶 2026-10-03 範圍裁示第 2～5 項） ─────────────────────────
+
+
+def _key_of(live_mode, kind):
+    from ui_v2.hld import logic
+
+    hld4 = logic.find_block(_models(live_mode)[0], "HLD-4")
+    return next(f"hld4_btn_{i}" for i, b in enumerate(hld4["buttons"]) if b["_action_kind"] == kind)
+
+
+def _rule_values(at, index):
+    return tuple(at.text_input(key=f"hld4_rule_{index}_{part}").value for part in ("indicator", "direction", "value"))
+
+
+def _rule_count(at):
+    return sum(1 for t in at.text_input if t.key and t.key.startswith("hld4_rule_") and t.key.endswith("_indicator"))
+
+
+def _lamp(at):
+    return next(m.value for m in at.markdown if 'class="hld-lamp"' in m.value)
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a2_第2項_N1_畫面上燈寫不重複的檔數_偏離表照列數(live_mode):
+    """門檻改成每一檔都超出兩條 → 偏離表 6 列，燈寫「有 3 檔超出」。"""
+    at = _apply_run(live_mode)
+    at.text_input(key="hld4_rule_0_value").input("1")      # 最大回撤 低於 1 → 三檔都超出
+    at.text_input(key="hld4_rule_1_value").input("-1")     # 配息佔淨值比 高於 -1 → 三檔都超出
+    button = at.button(key=_key_of(live_mode, "套用"))
+    assert button.disabled is False
+    button.click().run()
+    assert not at.exception
+    assert "有 3 檔超出你設定的門檻" in _lamp(at)
+    assert "有 6 檔" not in _lamp(at)
+    assert _block_blob(at, "HLD-1").count("<tr><td>") == 6
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+@pytest.mark.parametrize("direction", ["大於", "低於 "])
+def test_S6a2_第3項_N2_方向填錯_套用停用_原因句是客戶核准字面(live_mode, direction):
+    from ui_v2.hld import logic
+
+    at = _apply_run(live_mode)
+    before = _block_blob(at, "HLD-1")
+    at.text_input(key="hld4_rule_0_direction").input(direction).run()
+    button = at.button(key=_key_of(live_mode, "套用"))
+    # AppTest 對停用的鈕 `.click()` 照樣觸發 `on_click` —— 先斷言停用，再確認回呼也不寫入。
+    assert button.disabled is True and button.help == logic.TEXT_RULES_BAD == "門檻列未填齊，或格式不符"
+    button.click().run()
+    assert not at.exception
+    assert _block_blob(at, "HLD-1") == before
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a2_第5項_新增一列_多一列空白格_不重算_填好按套用才算(live_mode):
+    at = _apply_run(live_mode)
+    before = {code: _block_blob(at, code) for code in ("HLD-1", "HLD-2")}
+    assert _rule_count(at) == 2
+    add = at.button(key=_key_of(live_mode, "新增列"))
+    assert add.disabled is False
+    add.click().run()
+    assert not at.exception
+    assert _rule_count(at) == 3
+    assert _rule_values(at, 2) == ("", "", "")
+    assert {code: _block_blob(at, code) for code in before} == before       # 只改欄位，不重算
+    assert _hld4_expander(at).proto.expanded is True                          # 按完維持展開
+    # 第三列全空 → 照舊可以套用（全空的列＝沒有這一列）。
+    assert at.button(key=_key_of(live_mode, "套用")).disabled is False
+    at.text_input(key="hld4_rule_2_indicator").input("區間報酬率")
+    at.text_input(key="hld4_rule_2_direction").input("低於")
+    at.text_input(key="hld4_rule_2_value").input("100")
+    at.button(key=_key_of(live_mode, "套用")).click().run()
+    assert not at.exception
+    assert "門檻 3 列" in _hld4_expander(at).label
+    assert _block_blob(at, "HLD-1") != before["HLD-1"]
+
+
+@pytest.mark.parametrize("live_mode", [False, True])
+def test_S6a2_第5項_清除這一列_後面的列往上補_只剩一列時清空(live_mode):
+    at = _apply_run(live_mode)
+    second = _rule_values(at, 1)
+    assert second[0], "第二列是空的 —— 這一條會變成空掃"
+    at.button(key="hld4_row_0").click().run()
+    assert not at.exception
+    assert _rule_count(at) == 1
+    assert _rule_values(at, 0) == second
+    assert _hld4_expander(at).proto.expanded is True
+    at.button(key="hld4_row_0").click().run()
+    assert _rule_count(at) == 1
+    assert _rule_values(at, 0) == ("", "", "")
+    # 清空之後按「套用」→ 門檻一列也沒有。
+    at.button(key=_key_of(live_mode, "套用")).click().run()
+    assert not at.exception
+    assert "門檻 0 列" in _hld4_expander(at).label
+
+
+def test_S6a2_瀏覽器_新增一列與方向填錯時套用真的按不下去():
+    """「停用時按了沒反應」用瀏覽器驗（AppTest 對停用鈕 click 照樣觸發回呼）。"""
+    app = _ROOT / "ui_v2" / "app_hld.py"
+    api = _ui_v2_chromium.import_sync_api()
+    with api.sync_playwright() as p:
+        browser = _ui_v2_chromium.launch(p)
+        try:
+            with _ui_v2_chromium.streamlit_server(app) as base:
+                tab = browser.new_page(viewport={"width": 1400, "height": 1600})
+                tab.goto(base + "/?scenario=full", wait_until="networkidle")
+                tab.wait_for_selector("text=體檢結論燈", timeout=60000)
+                tab.wait_for_timeout(1500)
+                tab.locator("summary", has_text="HLD-4").first.click()
+                tab.wait_for_timeout(800)
+                assert tab.get_by_label("比較方向").count() == 2
+                tab.get_by_role("button", name="新增一列").click()
+                tab.wait_for_timeout(2500)
+                assert tab.get_by_label("比較方向").count() == 3
+                det = tab.locator("details", has=tab.locator("summary", has_text="HLD-4")).first
+                assert det.evaluate("d => d.open"), "按完新增一列，HLD-4 收起來了"
+                box = tab.get_by_label("比較方向").first
+                box.fill("大於")
+                box.press("Enter")
+                tab.wait_for_timeout(2500)
+                apply_button = tab.get_by_role("button", name="套用")
+                assert apply_button.is_disabled()
+                lamp = " ".join(tab.locator(".hld-lamp").first.inner_text().split())
+                apply_button.click(force=True)       # 停用的鈕硬點：畫面不得有任何變化
+                tab.wait_for_timeout(2000)
+                assert " ".join(tab.locator(".hld-lamp").first.inner_text().split()) == lamp
                 tab.close()
         finally:
             browser.close()

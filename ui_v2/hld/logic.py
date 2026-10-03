@@ -454,6 +454,10 @@ TEXT_NO_DEVIATION = "無偏離項"
 TEXT_SHEETS_READONLY = "持倉資料在 Sheets 維護，本儀表板唯讀"
 TEXT_GOTO_SHEETS = "前往 Sheets 維護持倉"
 TEXT_BAD_RANGE = "起日不晚於迄日"
+# S6a-2 第 4 項：門檻列不可套用時「套用」的停用原因。**客戶 2026-10-03 核准的字面，逐字**；改字先回客戶。
+TEXT_RULES_BAD = "門檻列未填齊，或格式不符"
+# S6a-2 第 3 項：比較方向只收這兩個（`_breaches` 認得的就是這兩個；其他寫法原本被默默當成「沒有超出」，N2）。
+RULE_DIRECTIONS = ("低於", "高於")
 TEXT_BOTH_EMPTY = "區間兩個欄位皆未填"
 TEXT_DIRECT_HOLD = "直接持有"
 # HLD-2 說明區的最後一行（示範模式照印）。抽成常數只為了讓 `live.py` 正式模式能逐字比對拿掉它
@@ -681,11 +685,13 @@ _RULE_NUMBER = re.compile(r"[+-]?\d+(\.\d+)?", re.ASCII)
 def rules_from_inputs(rows):
     """門檻列欄位的當下值 `[(指標名, 比較方向, 數值), ...]` → `[{"indicator", "direction", "value"}, ...]`。
 
-    只用既有規則，不新增任何判定：
     - 三格全空的列 ＝ 沒有這一列（`_build_hld4` 本來就用一列空白列表示「門檻一列也沒有」）；
-    - 指標名、比較方向照原字收 —— 母體之外的指標名與方向，照 `deviation_rows`／`_breaches` 既有的處理；
-    - 數值轉成數（存過的門檻就是數，`_breaches` 拿它直接比大小）。
-    其餘（只填了一兩格、數值不是十進位數字）**既有規則處理不了** → 回 None，由呼叫端讓「套用」不可按。
+    - 指標名照原字收 —— 母體之外的指標名照 `deviation_rows` 既有的處理（未列入）；
+    - 比較方向只收 `RULE_DIRECTIONS`（S6a-2 第 3 項，N2：其他寫法原本被 `_breaches` 默默當成沒有超出）；
+    - 數值轉成數（存過的門檻就是數，`_breaches` 拿它直接比大小），只收有限的數
+      （S6a-2 第 4 項：位數超長的十進位寫法 `float()` 之後是 inf，一律不收）。
+    其餘（只填了一兩格、方向不是那兩個、數值不合格）→ 回 None，由呼叫端讓「套用」不可按，
+    原因句 `TEXT_RULES_BAD`。
     """
     out = []
     for row in rows:
@@ -694,9 +700,12 @@ def rules_from_inputs(rows):
             return None
         if indicator == "" and direction == "" and value == "":
             continue
-        if indicator == "" or direction == "" or not _RULE_NUMBER.fullmatch(value):
+        if indicator == "" or direction not in RULE_DIRECTIONS or not _RULE_NUMBER.fullmatch(value):
             return None
-        out.append({"indicator": indicator, "direction": direction, "value": float(value)})
+        number = float(value)
+        if not math.isfinite(number):
+            return None
+        out.append({"indicator": indicator, "direction": direction, "value": number})
     return out
 
 
@@ -1766,7 +1775,15 @@ def _build_hld4(*, applied_window, fields, rules):
         _field("window_end", "區間迄日", "請選擇日期（YYYY-MM-DD）", field_end),
     ]
     threshold_rows = []
-    for index, rule in enumerate(rules or [{"indicator": "", "direction": "", "value": ""}]):
+    # 門檻列的格子（S6a-2 第 5 項）：欄位已經畫過（`fields` 帶著門檻列的當下值）→ 照當下值的列數畫，
+    # 「新增一列」「清除這一列」改的就是這一份；還沒畫過（首次渲染、情境自帶的 `fields`）→ 照已套用的門檻畫，
+    # 輸出逐字同前。摘要的門檻列數照舊讀已套用的 `rules`。
+    grid = (
+        [dict(zip(("indicator", "direction", "value"), row)) for row in fields["rule_rows"]]
+        if fields.get("rule_rows")
+        else rules
+    )
+    for index, rule in enumerate(grid or [{"indicator": "", "direction": "", "value": ""}]):
         threshold_rows.append(
             [
                 _field(f"rule_{index}_indicator", "指標名", "請輸入指標名", rule["indicator"]),
@@ -1780,11 +1797,13 @@ def _build_hld4(*, applied_window, fields, rules):
     # 「套用」能不能按：讀**欄位的當下值**，與 `page.py` 的回呼同一支（`applied_from_inputs`）。
     # 區間不可套用（顛倒、格式不是 `YYYY-MM-DD`、只填一格）→ 沿用既有原因句 `TEXT_BAD_RANGE`
     #   （⚠️ 登記：格式錯與只填一格時這一句不是真正的原因；總管 S6a 第四輪裁定先不修）。
-    # 門檻列既有規則處理不了（`rules_from_inputs` 回 None）→ 停用；**沒有既有原因句可用，原因留空**
-    #   （⚠️ 待補文案，已回報；不自己寫新句子）。欄位裡沒有門檻列的當下值（首次渲染、情境自帶的 `fields`）→ 不判。
+    # 門檻列不可套用（`rules_from_inputs` 回 None）→ 停用，原因句 `TEXT_RULES_BAD`（S6a-2 第 4 項，客戶核准字面）。
+    # ~~原因留空（待補文案）~~ → 客戶 2026-10-03 核准字面後補上（有意識的更正，不是漏刪；決策者：客戶）。
+    # 兩者同時不可套用時寫區間那一句（區間先判，既有順序）。
+    # 欄位裡沒有門檻列的當下值（首次渲染、情境自帶的 `fields`）→ 不判。
     window_blocked = window_input_blocked(field_start, field_end)
     rules_blocked = "rule_rows" in fields and rules_from_inputs(fields["rule_rows"]) is None
-    apply_reason = TEXT_BAD_RANGE if window_blocked else ""
+    apply_reason = TEXT_BAD_RANGE if window_blocked else (TEXT_RULES_BAD if rules_blocked else "")
     buttons = [
         _button("新增一列", "新增列"),
         _button("套用", "套用", enabled=not (window_blocked or rules_blocked), disabled_reason=apply_reason),
@@ -2398,7 +2417,10 @@ def _build_page_model(
         cards,
         has_holdings=has_holdings,
         has_rules=bool(rules),
-        deviation_count=len(hld1["_rows"]),
+        # S6a-2 第 2 項（N1，客戶 2026-10-03）：文案字面是「有 N 檔超出」，N 數**不重複的 fund_code**。
+        # ~~`len(hld1["_rows"])`~~（列數：同一檔超出兩條門檻會算兩次，持倉 3 檔卻寫「有 4 檔超出」）。
+        # HLD-1 偏離表的列數不變。⚠️ `44` HLD-0 規則欄、判準與 HLD-1 判準，以及 HLD-1 卡尾那一句，寫的都是「N 與列數相等」，已回報。
+        deviation_count=len({row["_fund_code"] for row in hld1["_rows"]}),
     )
     blocks = [
         hld0,

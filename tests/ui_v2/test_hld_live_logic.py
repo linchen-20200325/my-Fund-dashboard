@@ -1258,10 +1258,6 @@ def test_S6a1_HLD4三句_原字面與抽常數之前相同():
         "兩枚按鈕並存，各做一件事。「套用」只讀這些欄位的當下值、"
         "重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，不寫任何資料表、不改欄位的內容。"
     )
-# ───────────────────────── S6a 第三輪 ─────────────────────────
-
-
-def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
     assert logic.HLD4_SAVE_NOTE == (
         "「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算任何一塊。"
         "要兩件事都發生就兩枚都按；兩枚的先後不影響結果。"
@@ -1269,6 +1265,16 @@ def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
     assert logic.HLD4_SAVE_SCOPE_NOTE == (
         "「存檔」只寫使用者設定，不寫持倉、保單、淨值、配息四張表任何一張，"
         "也不代你填任何值、不把空欄補成任何候選值。"
+    )
+
+
+# ───────────────────────── S6a 第三輪 ─────────────────────────
+
+
+def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
+    assert logic.HLD4_SAVE_NOTE == (
+        "「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算任何一塊。"
+        "要兩件事都發生就兩枚都按；兩枚的先後不影響結果。"
     )
 
 
@@ -1419,10 +1425,13 @@ def test_S6a第四輪_門檻列既有規則處理不了_回None(row):
     assert logic.applied_from_inputs("2026-01-01", "2026-09-19", [row]) is None
 
 
-def test_S6a第四輪_母體外的指標名與方向照既有規則收():
-    """既有規則：母體外的指標名 → 未列入（`deviation_rows`）；方向不是低於／高於 → 不算超出（`_breaches`）。"""
-    rules = logic.rules_from_inputs([("不存在的指標", "低於", "1"), ("最大回撤", "等於", "1")])
-    assert [r["indicator"] for r in rules] == ["不存在的指標", "最大回撤"]
+def test_S6a第四輪_母體外的指標名照既有規則收_方向只收高於低於():
+    """既有規則：母體外的指標名 → 未列入（`deviation_rows`），照收。
+    ~~方向不是低於／高於 → 照收、不算超出（`_breaches`）~~ → S6a-2 第 3 項（N2，客戶 2026-10-03；
+    有意識的更正，不是漏刪）：那就是「那一列被默默略過」，改成不可套用。"""
+    rules = logic.rules_from_inputs([("不存在的指標", "低於", "1")])
+    assert [r["indicator"] for r in rules] == ["不存在的指標"]
+    assert logic.rules_from_inputs([("不存在的指標", "低於", "1"), ("最大回撤", "等於", "1")]) is None
 
 
 def test_S6a第四輪_applied_from_inputs_區間空白存成None():
@@ -1463,7 +1472,7 @@ def _apply_button(block):
     ({"window_start": "2026-06-01", "window_end": "2026-09-19"}, True, ""),
     ({"window_start": "", "window_end": ""}, True, ""),
     ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "x")]},
-     False, ""),
+     False, logic.TEXT_RULES_BAD),   # S6a-2 第 4 項：~~原因留空~~ → 客戶核准字面
     ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "-1")]},
      True, ""),
 ])
@@ -1495,3 +1504,87 @@ def test_S6a第四輪_HLD4兩枚按鈕並存那一句_logic改了字面而live�
     block["notes"] = [line for line in block["notes"] if line != logic.HLD4_APPLY_NOTE]
     with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
         live.apply_live_notes(model, today=TODAY)
+
+
+# ───────────────────────── S6a-2（客戶 2026-10-03 範圍裁示第 2～5 項） ─────────────────────────
+
+# 每一檔都同時超出兩條門檻：最大回撤一定 ≤ 0，配息佔淨值比一定 ≥ 0（假資料三檔都有淨值與配息）。
+_TWO_BREACH_RULES = [
+    {"indicator": "最大回撤", "direction": "低於", "value": 1.0},
+    {"indicator": "配息佔淨值比", "direction": "高於", "value": -1.0},
+]
+
+
+def test_S6a2_第2項_N1_結論燈數不重複的檔_偏離表列數不變():
+    """持倉 3 檔，每一檔都超出兩條門檻：偏離表 6 列（照舊），燈寫「有 3 檔超出」（不是 4、不是 6）。"""
+    args = _scenario_args("full")
+    held = {h["fund_code"] for h in args["dataset"]["holding"]}
+    for model in (
+        logic.build_page_model(**args, applied_rules=_TWO_BREACH_RULES),
+        _build(**args, today=TODAY, applied_rules=_TWO_BREACH_RULES),
+    ):
+        rows = logic.find_block(model, "HLD-1")["_rows"]
+        light = logic.find_block(model, "HLD-0")
+        assert len(rows) == 2 * len(held) == 6, rows          # 偏離表列數不變：一檔一條門檻一列
+        assert {r["_fund_code"] for r in rows} == held
+        assert light["_deviation_count"] == len(held) == 3
+        assert f"有 {len(held)} 檔超出你設定的門檻" in light["text"], light["text"]
+
+
+def test_S6a2_第2項_N1_一檔一列時燈數仍與列數相等():
+    """正控：每一檔只超出一條時，燈數照舊等於列數（既有 `test_結論燈的N等於HLD1的列數` 的情境）。"""
+    model = logic.build_page_model(**_scenario_args("full"))
+    rows = logic.find_block(model, "HLD-1")["_rows"]
+    assert len({r["_fund_code"] for r in rows}) == len(rows)
+    assert logic.find_block(model, "HLD-0")["_deviation_count"] == len(rows)
+
+
+@pytest.mark.parametrize("direction", ["大於", "小於", "等於", "低於 ", " 高於", "<", "高于", "低於高於"])
+def test_S6a2_第3項_N2_方向不是高於低於_不可套用(direction):
+    row = ("最大回撤", direction, "-1")
+    assert logic.rules_from_inputs([row]) is None
+    hld4 = _hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": [row]})
+    button = _apply_button(hld4)
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_RULES_BAD
+
+
+@pytest.mark.parametrize("direction", logic.RULE_DIRECTIONS)
+def test_S6a2_第3項_高於低於照收(direction):
+    assert logic.rules_from_inputs([("最大回撤", direction, "-1")]) == [
+        {"indicator": "最大回撤", "direction": direction, "value": -1.0}
+    ]
+
+
+def test_S6a2_第3項_方向母體與_breaches認得的一致():
+    assert set(logic.RULE_DIRECTIONS) == {"低於", "高於"}
+    assert logic._breaches({"direction": "低於", "value": 0.0}, -1.0) is True
+    assert logic._breaches({"direction": "高於", "value": 0.0}, 1.0) is True
+
+
+def test_S6a2_第4項_停用原因句是客戶核准的字面():
+    assert logic.TEXT_RULES_BAD == "門檻列未填齊，或格式不符"
+
+
+@pytest.mark.parametrize("value", ["9" * 400, "-" + "9" * 400, "1" + "0" * 310 + ".5"])
+def test_S6a2_第4項_數值超長變成inf_不可套用(value):
+    row = ("最大回撤", "低於", value)
+    assert logic.rules_from_inputs([row]) is None
+    button = _apply_button(_hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": [row]}))
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_RULES_BAD
+
+
+def test_S6a2_第4項_區間與門檻都不可套用時_寫區間那一句():
+    button = _apply_button(_hld4(fields={
+        "window_start": "20260101", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "大於", "-1")],
+    }))
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_BAD_RANGE
+
+
+def test_S6a2_第5項_門檻格子照欄位當下值的列數畫_首次照已套用門檻():
+    first = _hld4()
+    assert len(first["threshold_rows"]) == 2 and len(first["row_buttons"]) == 2
+    rows = [("最大回撤", "低於", "-1"), ("", "", ""), ("配息佔淨值比", "高於", "6")]
+    grown = _hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": rows})
+    assert [[f["_value"] for f in row] for row in grown["threshold_rows"]] == [list(r) for r in rows]
+    assert len(grown["row_buttons"]) == 3
+    assert "門檻 2 列" in grown["summary_text"]      # 摘要照舊讀已套用的門檻
