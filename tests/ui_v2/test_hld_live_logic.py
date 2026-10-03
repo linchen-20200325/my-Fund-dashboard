@@ -1588,3 +1588,35 @@ def test_S6a2_第5項_門檻格子照欄位當下值的列數畫_首次照已套
     assert [[f["_value"] for f in row] for row in grown["threshold_rows"]] == [list(r) for r in rows]
     assert len(grown["row_buttons"]) == 3
     assert "門檻 2 列" in grown["summary_text"]      # 摘要照舊讀已套用的門檻
+
+
+# ───────────────────────── S6a-2 追加（客戶 2026-10-03）：刪「N 與列數相等」子句 ─────────────────────────
+
+# `srcmiss`：CCCC 缺淨值（卡尾會出那一句）；這組門檻下只有 AAAA 同時超出兩條（最大回撤 -11.20%、配息佔淨值比 4.10%）。
+_ONE_FUND_TWO_RULES = [
+    {"indicator": "最大回撤", "direction": "低於", "value": -10.0},
+    {"indicator": "配息佔淨值比", "direction": "低於", "value": 5.0},
+]
+
+
+def test_S6a2追加_HLD1卡尾那一句_只刪後半子句_前半句一字不改():
+    assert logic.HLD1_SKIPPED_NOTE == "未列入的檔不進上表、也不進偏離筆數。"
+    for model in (logic.build_page_model(**_scenario_args("srcmiss")),
+                  _build(**_scenario_args("srcmiss"), today=TODAY)):
+        tail = logic.find_block(model, "HLD-1")["tail_lines"]
+        assert logic.HLD1_SKIPPED_NOTE in tail
+        blob = "\n".join(logic.collect_ui_strings(model))
+        assert "列數相等" not in blob and "燈上的 N" not in blob
+
+
+def test_S6a2追加_一檔超出兩條門檻_燈寫1檔_表2列_畫面沒有列數相等():
+    args = _scenario_args("srcmiss")
+    for model in (logic.build_page_model(**args, applied_rules=_ONE_FUND_TWO_RULES),
+                  _build(**args, today=TODAY, applied_rules=_ONE_FUND_TWO_RULES)):
+        rows = logic.find_block(model, "HLD-1")["_rows"]
+        light = logic.find_block(model, "HLD-0")
+        assert [r["_fund_code"] for r in rows] == ["AAAA", "AAAA"]
+        assert light["_deviation_count"] == 1
+        assert "有 1 檔超出你設定的門檻" in light["text"]
+        assert logic.HLD1_SKIPPED_NOTE in logic.find_block(model, "HLD-1")["tail_lines"]
+        assert "列數相等" not in "\n".join(logic.collect_ui_strings(model))

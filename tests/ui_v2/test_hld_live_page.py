@@ -822,3 +822,44 @@ def test_S6a2_瀏覽器_新增一列與方向填錯時套用真的按不下去()
                 tab.close()
         finally:
             browser.close()
+
+
+# ───────────────────────── S6a-2 追加（客戶 2026-10-03）：刪「N 與列數相等」子句 ─────────────────────────
+
+
+def _srcmiss_app():
+    import streamlit as st
+
+    from ui_v2.hld import page
+
+    st.query_params["scenario"] = "srcmiss"
+    page.render()
+
+
+def test_S6a2追加_畫面_一檔超出兩條門檻_燈寫1檔_表2列_沒有列數相等():
+    """`srcmiss`（CCCC 缺淨值，卡尾那一句會出現）；門檻改成只有 AAAA 同時超出兩條。"""
+    from streamlit.testing.v1 import AppTest
+
+    from ui_v2.hld import logic
+
+    at = AppTest.from_function(_srcmiss_app, default_timeout=60)
+    at.run()
+    assert not at.exception
+    at.text_input(key="hld4_rule_0_indicator").input("最大回撤")
+    at.text_input(key="hld4_rule_0_direction").input("低於")
+    at.text_input(key="hld4_rule_0_value").input("-10")
+    at.text_input(key="hld4_rule_1_indicator").input("配息佔淨值比")
+    at.text_input(key="hld4_rule_1_direction").input("低於")
+    at.text_input(key="hld4_rule_1_value").input("5")
+    hld4 = logic.find_block(logic.build_page_model(**__import__("ui_v2.hld.fixtures", fromlist=["x"]).scenario("srcmiss")), "HLD-4")
+    key = next(f"hld4_btn_{i}" for i, b in enumerate(hld4["buttons"]) if b["_action_kind"] == "套用")
+    assert at.button(key=key).disabled is False
+    at.button(key=key).click().run()
+    assert not at.exception
+    lamp = next(m.value for m in at.markdown if 'class="hld-lamp"' in m.value)
+    assert "有 1 檔超出你設定的門檻" in lamp
+    card = next(m.value for m in at.markdown if '<span class="hld-card-code">HLD-1</span>' in m.value)
+    assert card.count("<tr><td>") == 2
+    assert f'<div class="hld-note">{logic.HLD1_SKIPPED_NOTE}</div>' in card
+    screen = "\n".join([m.value for m in at.markdown] + [c.value for c in at.caption] + [e.label for e in at.expander])
+    assert "列數相等" not in screen and "燈上的 N" not in screen

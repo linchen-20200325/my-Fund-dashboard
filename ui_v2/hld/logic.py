@@ -458,6 +458,8 @@ TEXT_BAD_RANGE = "起日不晚於迄日"
 TEXT_RULES_BAD = "門檻列未填齊，或格式不符"
 # S6a-2 第 3 項：比較方向只收這兩個（`_breaches` 認得的就是這兩個；其他寫法原本被默默當成「沒有超出」，N2）。
 RULE_DIRECTIONS = ("低於", "高於")
+# HLD-1 卡尾，有檔因缺淨值未列入時的說明行（客戶 2026-10-03 裁示刪去後半句，見 `deviation_rows` 下方 `_build_hld1`）。
+HLD1_SKIPPED_NOTE = "未列入的檔不進上表、也不進偏離筆數。"
 TEXT_BOTH_EMPTY = "區間兩個欄位皆未填"
 TEXT_DIRECT_HOLD = "直接持有"
 # HLD-2 說明區的最後一行（示範模式照印）。抽成常數只為了讓 `live.py` 正式模式能逐字比對拿掉它
@@ -1364,9 +1366,11 @@ def _build_hld1(
             tail_lines.append(
                 f"⬜ 另有 {len(skipped['missing'])} 檔缺淨值，未列入{_hint()}"
             )
-            tail_lines.append(
-                "未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。"
-            )
+            # ~~「未列入的檔不進上表、也不進偏離筆數；燈上的 N 與本卡列數因此相等。」~~
+            # → 客戶 2026-10-03 裁示（有意識的更正，不是漏刪）：燈改數不重複的檔（N1）之後，
+            #   同一檔超出兩條門檻時 N 小於列數，後半句不再成立 ⇒ 只刪「；燈上的 N 與本卡列數因此相等」，
+            #   前半句一字不改。與 `44` 的偏離登記在 `ACCEPTANCE.md` 第九節。
+            tail_lines.append(HLD1_SKIPPED_NOTE)
         if skipped["error"]:
             tail_lines.append(
                 f"⛔ 另有 {len(skipped['error'])} 檔的門檻指標取數失敗，未列入{_hint()}"
@@ -2419,7 +2423,8 @@ def _build_page_model(
         has_rules=bool(rules),
         # S6a-2 第 2 項（N1，客戶 2026-10-03）：文案字面是「有 N 檔超出」，N 數**不重複的 fund_code**。
         # ~~`len(hld1["_rows"])`~~（列數：同一檔超出兩條門檻會算兩次，持倉 3 檔卻寫「有 4 檔超出」）。
-        # HLD-1 偏離表的列數不變。⚠️ `44` HLD-0 規則欄、判準與 HLD-1 判準，以及 HLD-1 卡尾那一句，寫的都是「N 與列數相等」，已回報。
+        # HLD-1 偏離表的列數不變。與 `44` HLD-0 規則欄、判準與 HLD-1 判準（「N 與列數相等」）的偏離，
+        # 客戶 2026-10-03 裁示登記在 `ACCEPTANCE.md` 第九節；HLD-1 卡尾那一句的後半句同日刪去。
         deviation_count=len({row["_fund_code"] for row in hld1["_rows"]}),
     )
     blocks = [
