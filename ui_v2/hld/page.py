@@ -240,13 +240,15 @@ def _fresh_note_html(node, css="hld-note") -> str:
     return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{body}</div>'
 
 
-def _buttons(block, prefix) -> None:
+def _buttons(block, prefix, on_click=None) -> None:
+    """`on_click`：{按鈕類別: 回呼}。沒列到的類別照舊不接任何動作（S6a 第三輪只接「套用」）。"""
     for index, button in enumerate(block.get("buttons", [])):
         st.button(
             button["label"],
             key=f"{prefix}_btn_{index}",
             disabled=not button["_enabled"],
             help=button["disabled_reason"] or None,
+            on_click=(on_click or {}).get(button["_action_kind"]),
         )
 
 
@@ -371,15 +373,115 @@ def _render_core_card(block: dict) -> None:
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _expander(block: dict):
+def _expander(block: dict, *, keep_open: bool = False):
     return st.expander(
         f"{block['code']}　{block['title']}　—　{block['summary_text']}",
-        expanded=block["_default_open"],
+        expanded=block["_default_open"] or keep_open,
     )
 
 
+# ── 「套用」（S6a 第三、四輪）──
+# 體例照 `ui_v2/mkt/page.py::_on_apply`（:243-248）與 `render`（:413-423）：
+# 按下「套用」時把欄位的當下值存進 `st.session_state`，之後的渲染拿**已套用**那一組去算（含 HLD-4 摘要）；
+# 欄位的當下值只交給 logic 決定「套用」能不能按（S6a 第四輪，紅隊 M1）。
+# 可不可以套用、門檻列怎麼解析，一律由 `logic.applied_from_inputs` 判（page 不做判定）。
+# 不寫任何資料表、不改欄位內容（`44` HLD-4）。
+_APPLIED_KEY = "_hld_applied"
+_WINDOW_KEYS = ("hld4_window_start", "hld4_window_end")
+_RULE_PARTS = ("indicator", "direction", "value")
+# HLD-4 的展開狀態（S6a 第四輪，紅隊 M2）：expander 的標題列一變，Streamlit 就把它當成新的一枚重建，
+# 預設收合。欄位一改或按下「套用」就記一筆，之後 HLD-4 以展開狀態重建。首次渲染沒有這一筆，逐字同前。
+_HLD4_KEEP_OPEN_KEY = "_hld4_keep_open"
+
+
+def _keep_hld4_open() -> None:
+    st.session_state[_HLD4_KEEP_OPEN_KEY] = True
+
+
+def _rule_rows_now(state) -> list:
+    rows, index = [], 0
+    while f"hld4_rule_{index}_indicator" in state:
+        rows.append(tuple(state.get(f"hld4_rule_{index}_{part}") for part in _RULE_PARTS))
+        index += 1
+    return rows
+
+
+def _on_apply() -> None:
+    _keep_hld4_open()
+    state = st.session_state
+    applied = logic.applied_from_inputs(
+        state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
+    )
+    # 不可套用時什麼都不存：按鈕本來就停用（同一支判定），這一行只是不讓停用的鈕被觸發時寫進壞值。
+    if applied is not None:
+        state[_APPLIED_KEY] = applied
+
+
+def _applied() -> dict:
+    try:
+        return st.session_state.get(_APPLIED_KEY) or {}
+    except Exception:
+        return {}
+
+
+def _current_fields(default):
+    """欄位的當下值。欄位還沒畫過（首次渲染）→ 回 `default`（情境自帶的 `fields` 或 None），輸出逐字同前。"""
+    try:
+        state = st.session_state
+        if not any(k in state for k in _WINDOW_KEYS):
+            return default
+        return {
+            "window_start": state.get(_WINDOW_KEYS[0]),
+            "window_end": state.get(_WINDOW_KEYS[1]),
+            "rule_rows": _rule_rows_now(state),
+        }
+    except Exception:
+        return default
+
+
+# ── 「新增一列」「清除這一列」（S6a-2 第 5 項）──
+# 只改門檻列的**欄位**（`st.session_state` 裡那幾格的值），不重算任何一塊、不寫任何資料表 ——
+# 要重算照舊按「套用」。格子畫幾列由 logic 依欄位當下值決定（`_build_hld4` 的 `grid`）。
+# 在回呼裡改 widget 的值是 Streamlit 允許的寫法（回呼在下一次渲染之前執行）。
+
+
+def _rule_key(index, part) -> str:
+    return f"hld4_rule_{index}_{part}"
+
+
+def _write_rule_rows(rows) -> None:
+    state = st.session_state
+    old = len(_rule_rows_now(state))
+    for index, row in enumerate(rows):
+        for part, value in zip(_RULE_PARTS, row):
+            state[_rule_key(index, part)] = "" if value is None else value
+    for index in range(len(rows), old):
+        for part in _RULE_PARTS:
+            del state[_rule_key(index, part)]
+
+
+def _on_add_row() -> None:
+    _keep_hld4_open()
+    _write_rule_rows(_rule_rows_now(st.session_state) + [("", "", "")])
+
+
+def _on_clear_row(index: int) -> None:
+    """拿掉第 `index` 列，後面的列往上補；只剩這一列時清空它（格子至少一列，同 `_build_hld4`）。"""
+    _keep_hld4_open()
+    rows = _rule_rows_now(st.session_state)
+    rows = rows[:index] + rows[index + 1:]
+    _write_rule_rows(rows or [("", "", "")])
+
+
+def _hld4_keep_open() -> bool:
+    try:
+        return bool(st.session_state.get(_HLD4_KEEP_OPEN_KEY))
+    except Exception:
+        return False
+
+
 def _render_hld4(block: dict) -> None:
-    with _expander(block):
+    with _expander(block, keep_open=_hld4_keep_open()):
         st.caption(block["answers"])
         columns = st.columns(2)
         for column, field in zip(columns, block["inputs"]):
@@ -389,23 +491,36 @@ def _render_hld4(block: dict) -> None:
                     value=field["_value"] or "",
                     placeholder=field["placeholder"],
                     key=f"hld4_{field['name']}",
+                    on_change=_keep_hld4_open,
                 )
         st.caption(block["threshold_caption"])
         for index, row in enumerate(block["threshold_rows"]):
             cells = st.columns([3, 2, 2, 2])
             for cell, field in zip(cells, row):
                 with cell:
+                    key = f"hld4_{field['name']}"
                     st.text_input(
                         field["label"],
-                        value="" if field["_value"] == "" else str(field["_value"]),
+                        # 這一格已經有值（使用者輸入過，或「新增一列」「清除這一列」寫進去的）→ 不再給預設值，
+                        # 免得 Streamlit 記一筆「預設值與 Session State 同時設定」的警告；首次渲染照舊。
+                        value=None if key in st.session_state
+                        else ("" if field["_value"] == "" else str(field["_value"])),
                         placeholder=field["placeholder"],
-                        key=f"hld4_{field['name']}",
+                        key=key,
+                        on_change=_keep_hld4_open,
                     )
             with cells[3]:
                 button = block["row_buttons"][index]
-                st.button(button["label"], key=f"hld4_row_{index}")
+                st.button(
+                    button["label"],
+                    key=f"hld4_row_{index}",
+                    disabled=not button["_enabled"],
+                    help=button["disabled_reason"] or None,
+                    on_click=_on_clear_row,
+                    args=(index,),
+                )
         _lines(block["detail_lines"])
-        _buttons(block, "hld4")
+        _buttons(block, "hld4", on_click={"套用": _on_apply, "新增列": _on_add_row})
         _lines(block["notes"])
         st.markdown(
             f'<div class="hld-detail">{_badges_html(block["badges"])}'
@@ -666,15 +781,21 @@ def render(*, load_live=None) -> None:
     """
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
+    applied = _applied()
     if load_live is None:
         scenario = _pick_scenario()
+        args = dict(fixtures.scenario(scenario))
+        args["fields"] = _current_fields(args.get("fields"))
         model = logic.build_page_model(
-            **fixtures.scenario(scenario), open_fund=_open_fund()
+            **args, open_fund=_open_fund(), applied_window=applied.get("window"),
+            applied_rules=applied.get("rules"),
         )
     else:
         loaded = load_live()
         model = live.build_live_model(
-            loaded["dataset"], open_fund=_open_fund(), **loaded["live_args"]
+            loaded["dataset"], open_fund=_open_fund(), fields=_current_fields(None),
+            applied_window=applied.get("window"), applied_rules=applied.get("rules"),
+            **loaded["live_args"]
         )
 
     st.markdown(

@@ -1128,12 +1128,16 @@ _TRIMMED = {
     "HLD-8": "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
     "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。",
     "HLD-0": "（另：尚未設定門檻。）",
+    # S6a 第四輪（規格組必修 2／紅隊 J1）：不是開發過程字句，同一體例只刪不加。
+    "HLD-4": "「套用」只讀這些欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，"
+    "不寫任何資料表、不改欄位的內容。",
 }
 _ORIGINAL = {
     "HLD-2": logic.HLD2_MOVED_NOTE,
     "HLD-3": logic.HLD3_MOVED_NOTE,
     "HLD-8": logic.HLD8_DETAIL_NOTE,
     "HLD-0": logic.HLD0_NO_RULES_ASIDE,
+    "HLD-4": logic.HLD4_APPLY_NOTE,
 }
 _FIELD = {"HLD-2": "detail_lines", "HLD-3": "detail_lines", "HLD-8": "detail_lines", "HLD-0": "lines"}
 # 被刪掉的子句（逐字），一個都不能留在正式畫面上。
@@ -1141,6 +1145,8 @@ _DELETED = (
     "已依客戶 2026-09-22 裁定",
     "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層",
     "兩句同時成立時哪一句出現，規格沒有寫",
+    "兩枚按鈕並存，各做一件事。",
+    logic.HLD4_SAVE_SCOPE_NOTE,
 )
 
 
@@ -1262,13 +1268,29 @@ def test_S6a1_HLD4三句_原字面與抽常數之前相同():
     )
 
 
+# ───────────────────────── S6a 第三輪 ─────────────────────────
+
+
+def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
+    assert logic.HLD4_SAVE_NOTE == (
+        "「存檔」把當下值寫回使用者設定並更新最後修改時間，不重算任何一塊。"
+        "要兩件事都發生就兩枚都按；兩枚的先後不影響結果。"
+    )
+
+
 @pytest.mark.parametrize("name", _ALL)
 def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
+    """~~三句整句不印~~ → S6a-2（客戶 2026-10-03 範圍裁示第 1 項；有意識的更正，不是漏刪）：
+    「套用」接好了，`HLD4_APPLY_NOTE` 只刪「兩枚按鈕並存，各做一件事。」，講「套用」的那一段恢復；
+    講「存檔」的兩句照舊整句不印。"""
     demo = logic.find_block(_demo(name), "HLD-4")["notes"]
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
     for line in _HLD4_DROPPED:
         assert line in demo, line          # 正控：示範版照印
-    assert got == [line for line in demo if line not in _HLD4_DROPPED]
+    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+    assert got == [
+        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
+    ]
     assert got, "拿掉之後 HLD-4 說明區不得變空"
 
 
@@ -1276,7 +1298,8 @@ def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
 def test_S6a1_正式版全頁模型沒有那三句的任何一段(name):
     args = _scenario_args(name)
     blob = "\n".join(logic.collect_ui_strings(_build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))))
-    for piece in ("兩枚按鈕並存", "只讀這些欄位的當下值", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
+    # S6a-2：「只讀這些欄位的當下值」那一段恢復（「套用」接好了），不再列在這裡。
+    for piece in ("兩枚按鈕並存", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
         assert piece not in blob, (name, piece)
 
 
@@ -1287,3 +1310,316 @@ def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
     block["notes"] = [line for line in block["notes"] if line != _HLD4_DROPPED[index]]
     with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
         live.apply_live_notes(model, today=TODAY)
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a第三輪_正式版HLD4不印存檔那一句_示範版照印_其餘照舊(name):
+    """第四輪起同一區另外兩處：「兩枚按鈕並存，各做一件事。」刪掉、講存檔只寫什麼的那一句整句不印。"""
+    demo = logic.find_block(_demo(name), "HLD-4")["notes"]
+    got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
+    for line in (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE, logic.HLD4_APPLY_NOTE):
+        assert line in demo
+    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+    assert got == [
+        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
+    ]
+
+
+def test_S6a第三輪_logic改了存檔那一句而live沒跟上_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_SAVE_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+@pytest.mark.parametrize("name", _ALL)
+def test_S6a第三輪_沒按套用時_模型與加參數之前相同(name):
+    args = _scenario_args(name)
+    assert logic.build_page_model(**args) == logic.build_page_model(**args, applied_window=None)
+
+
+def test_S6a第三輪_套用的區間取代存過的區間_正式版照轉():
+    args = _scenario_args("full")
+    window = ("2026-06-01", "2026-09-19")
+    demo = logic.build_page_model(**args, applied_window=window)
+    got = _build(**args, today=TODAY, applied_window=window)
+    assert demo["_window"] == got["_window"] == window
+    assert logic.build_page_model(**args)["_window"] != window
+    # 六塊裡會隨區間動的那幾塊，正式版與示範版拿到同一組數（示意字尾除外）。
+    for code in ("HLD-2", "HLD-3"):
+        a = [mv["text"].replace(logic.HINT, "") for g in logic.find_block(demo, code)["fund_groups"] for mv in g["main_values"]]
+        b = [mv["text"] for g in logic.find_block(got, code)["fund_groups"] for mv in g["main_values"]]
+        assert a == b, code
+
+
+# ───────────────────────── S6a 第四輪 ─────────────────────────
+
+
+def test_S6a第四輪_HLD4另兩句_原字面與抽常數之前相同():
+    assert logic.HLD4_APPLY_NOTE == (
+        "兩枚按鈕並存，各做一件事。「套用」只讀這些欄位的當下值、"
+        "重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，不寫任何資料表、不改欄位的內容。"
+    )
+    assert logic.HLD4_SAVE_SCOPE_NOTE == (
+        "「存檔」只寫使用者設定，不寫持倉、保單、淨值、配息四張表任何一張，"
+        "也不代你填任何值、不把空欄補成任何候選值。"
+    )
+
+
+def test_S6a第四輪_正式版HLD4存檔範圍那一句找不到_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_SAVE_SCOPE_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+# 紅隊 M4：區間只收嚴格的 YYYY-MM-DD
+
+
+@pytest.mark.parametrize("start", ["20260601", "2026-6-1", "2026/06/01", " 2026-06-01", "2026-06-01 ",
+                                   "２０２６-06-01", "2026-W23-1", "2026-06-01T00:00", "2026-02-30"])
+def test_S6a第四輪_區間格式不是YYYY_MM_DD_不合法(start):
+    assert logic.window_is_valid((start, "2026-09-19")) is False
+    assert logic.window_is_valid(("2026-01-01", start)) is False
+    assert logic.window_input_blocked(start, "2026-09-19") is True
+
+
+def test_S6a第四輪_合法區間照舊():
+    assert logic.window_is_valid(("2026-06-01", "2026-09-19")) is True
+    assert logic.window_is_valid(("2026-09-19", "2026-09-19")) is True
+    assert logic.window_is_valid(("2026-09-20", "2026-09-19")) is False
+
+
+@pytest.mark.parametrize("start, end, blocked", [
+    ("", "", False), (None, None, False),            # 兩格都空：照舊可以套用（＝尚未設定區間）
+    ("2026-06-01", "", True), ("", "2026-09-19", True),   # 只填一格（紅隊建議 2）
+    ("2026-06-01", None, True),
+    ("2026-06-01", "2026-09-19", False),
+])
+def test_S6a第四輪_只填一格不可套用(start, end, blocked):
+    assert logic.window_input_blocked(start, end) is blocked
+
+
+# 紅隊 M3：門檻列接上「套用」，只用既有規則
+
+
+def test_S6a第四輪_門檻列當下值_轉成門檻():
+    rows = [("最大回撤", "低於", "-1"), ("", "", ""), ("配息佔淨值比", "高於", "+6.50")]
+    assert logic.rules_from_inputs(rows) == [
+        {"indicator": "最大回撤", "direction": "低於", "value": -1.0},
+        {"indicator": "配息佔淨值比", "direction": "高於", "value": 6.5},
+    ]
+    assert logic.rules_from_inputs([("", "", ""), (None, None, None)]) == []
+
+
+@pytest.mark.parametrize("row", [
+    ("最大回撤", "低於", ""), ("最大回撤", "", "-1"), ("", "低於", "-1"),     # 只填一兩格
+    ("最大回撤", "低於", "abc"), ("最大回撤", "低於", "1e3"), ("最大回撤", "低於", "inf"),
+    ("最大回撤", "低於", "nan"), ("最大回撤", "低於", " -1"), ("最大回撤", "低於", "1_0"),
+    ("最大回撤", "低於", "-1."), ("最大回撤", "低於", "１"),
+])
+def test_S6a第四輪_門檻列既有規則處理不了_回None(row):
+    assert logic.rules_from_inputs([row]) is None
+    assert logic.applied_from_inputs("2026-01-01", "2026-09-19", [row]) is None
+
+
+def test_S6a第四輪_母體外的指標名照既有規則收_方向只收高於低於():
+    """既有規則：母體外的指標名 → 未列入（`deviation_rows`），照收。
+    ~~方向不是低於／高於 → 照收、不算超出（`_breaches`）~~ → S6a-2 第 3 項（N2，客戶 2026-10-03；
+    有意識的更正，不是漏刪）：那就是「那一列被默默略過」，改成不可套用。"""
+    rules = logic.rules_from_inputs([("不存在的指標", "低於", "1")])
+    assert [r["indicator"] for r in rules] == ["不存在的指標"]
+    assert logic.rules_from_inputs([("不存在的指標", "低於", "1"), ("最大回撤", "等於", "1")]) is None
+
+
+def test_S6a第四輪_applied_from_inputs_區間空白存成None():
+    assert logic.applied_from_inputs("", "", []) == {"window": (None, None), "rules": []}
+    assert logic.applied_from_inputs("2026-06-01", "2026-09-19", [("最大回撤", "低於", "-1")]) == {
+        "window": ("2026-06-01", "2026-09-19"),
+        "rules": [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}],
+    }
+    assert logic.applied_from_inputs("20260601", "2026-09-19", []) is None
+
+
+def _hld4(**kw):
+    return logic.find_block(logic.build_page_model(**_scenario_args("full"), **kw), "HLD-4")
+
+
+def test_S6a第四輪_HLD4摘要讀已套用那一組_不讀欄位當下值():
+    """紅隊 M1：只改欄位、還沒按「套用」，摘要不變（與下面各塊的數字對得上）。"""
+    base = _hld4()
+    typed = _hld4(fields={"window_start": "2026-06-01", "window_end": "2026-09-19"})
+    assert typed["summary_text"] == base["summary_text"]
+    assert "2026-01-01" in base["summary_text"]
+    applied = _hld4(
+        fields={"window_start": "2026-06-01", "window_end": "2026-09-19"},
+        applied_window=("2026-06-01", "2026-09-19"),
+    )
+    assert "2026-06-01" in applied["summary_text"] and "2026-01-01" not in applied["summary_text"]
+    one_rule = _hld4(applied_rules=[{"indicator": "最大回撤", "direction": "低於", "value": -1.0}])
+    assert "門檻 1 列" in one_rule["summary_text"]
+
+
+def _apply_button(block):
+    return next(b for b in block["buttons"] if b["_action_kind"] == "套用")
+
+
+@pytest.mark.parametrize("fields, enabled, reason", [
+    ({"window_start": "20260601", "window_end": "2026-09-19"}, False, logic.TEXT_BAD_RANGE),
+    ({"window_start": "2026-06-01", "window_end": ""}, False, logic.TEXT_BAD_RANGE),
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19"}, True, ""),
+    ({"window_start": "", "window_end": ""}, True, ""),
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "x")]},
+     False, logic.TEXT_RULES_BAD),   # S6a-2 第 4 項：~~原因留空~~ → 客戶核准字面
+    ({"window_start": "2026-06-01", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "低於", "-1")]},
+     True, ""),
+])
+def test_S6a第四輪_套用能不能按_與回呼同一支判定(fields, enabled, reason):
+    button = _apply_button(_hld4(fields=fields))
+    assert button["_enabled"] is enabled and button["disabled_reason"] == reason
+    rows = fields.get("rule_rows", [])
+    appliable = logic.applied_from_inputs(fields["window_start"], fields["window_end"], rows) is not None
+    assert appliable is enabled
+
+
+def test_S6a第四輪_套用的門檻取代存過的門檻_正式版照轉():
+    rules = [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}]
+    args = _scenario_args("full")
+    demo = logic.build_page_model(**args, applied_rules=rules)
+    got = _build(**args, today=TODAY, applied_rules=rules)
+    base = logic.build_page_model(**args)
+    assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] != [
+        r["_fund_code"] for r in logic.find_block(base, "HLD-1")["_rows"]
+    ]
+    assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] == [
+        r["_fund_code"] for r in logic.find_block(got, "HLD-1")["_rows"]
+    ]
+
+
+def test_S6a第四輪_HLD4兩枚按鈕並存那一句_logic改了字面而live沒跟上_raise():
+    model = _demo("full")
+    block = logic.find_block(model, "HLD-4")
+    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_APPLY_NOTE]
+    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
+        live.apply_live_notes(model, today=TODAY)
+
+
+# ───────────────────────── S6a-2（客戶 2026-10-03 範圍裁示第 2～5 項） ─────────────────────────
+
+# 每一檔都同時超出兩條門檻：最大回撤一定 ≤ 0，配息佔淨值比一定 ≥ 0（假資料三檔都有淨值與配息）。
+_TWO_BREACH_RULES = [
+    {"indicator": "最大回撤", "direction": "低於", "value": 1.0},
+    {"indicator": "配息佔淨值比", "direction": "高於", "value": -1.0},
+]
+
+
+def test_S6a2_第2項_N1_結論燈數不重複的檔_偏離表列數不變():
+    """持倉 3 檔，每一檔都超出兩條門檻：偏離表 6 列（照舊），燈寫「有 3 檔超出」（不是 4、不是 6）。"""
+    args = _scenario_args("full")
+    held = {h["fund_code"] for h in args["dataset"]["holding"]}
+    for model in (
+        logic.build_page_model(**args, applied_rules=_TWO_BREACH_RULES),
+        _build(**args, today=TODAY, applied_rules=_TWO_BREACH_RULES),
+    ):
+        rows = logic.find_block(model, "HLD-1")["_rows"]
+        light = logic.find_block(model, "HLD-0")
+        assert len(rows) == 2 * len(held) == 6, rows          # 偏離表列數不變：一檔一條門檻一列
+        assert {r["_fund_code"] for r in rows} == held
+        assert light["_deviation_count"] == len(held) == 3
+        assert f"有 {len(held)} 檔超出你設定的門檻" in light["text"], light["text"]
+
+
+def test_S6a2_第2項_N1_一檔一列時燈數仍與列數相等():
+    """只驗假資料 `full` 這一組的現況（燈數與列數剛好相等），不是相等條件的保證（同 `ACCEPTANCE.md` 9.3）。"""
+    # ~~正控：每一檔只超出一條時，燈數照舊等於列數（既有 `test_結論燈的N等於HLD1的列數` 的情境）。~~
+    # → 2026-10-03 更正（有意識的更正，不是漏刪）：「每一檔只超出一條時照舊相等」已被紅隊反例推翻
+    #   （同一檔掛兩張保單時，每一檔只超出一條，列數仍是 2、燈數 1；見 `ACCEPTANCE.md` 9.2）。
+    model = logic.build_page_model(**_scenario_args("full"))
+    rows = logic.find_block(model, "HLD-1")["_rows"]
+    assert len({r["_fund_code"] for r in rows}) == len(rows)
+    assert logic.find_block(model, "HLD-0")["_deviation_count"] == len(rows)
+
+
+@pytest.mark.parametrize("direction", ["大於", "小於", "等於", "低於 ", " 高於", "<", "高于", "低於高於"])
+def test_S6a2_第3項_N2_方向不是高於低於_不可套用(direction):
+    row = ("最大回撤", direction, "-1")
+    assert logic.rules_from_inputs([row]) is None
+    hld4 = _hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": [row]})
+    button = _apply_button(hld4)
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_RULES_BAD
+
+
+@pytest.mark.parametrize("direction", logic.RULE_DIRECTIONS)
+def test_S6a2_第3項_高於低於照收(direction):
+    assert logic.rules_from_inputs([("最大回撤", direction, "-1")]) == [
+        {"indicator": "最大回撤", "direction": direction, "value": -1.0}
+    ]
+
+
+def test_S6a2_第3項_方向母體與_breaches認得的一致():
+    assert set(logic.RULE_DIRECTIONS) == {"低於", "高於"}
+    assert logic._breaches({"direction": "低於", "value": 0.0}, -1.0) is True
+    assert logic._breaches({"direction": "高於", "value": 0.0}, 1.0) is True
+
+
+def test_S6a2_第4項_停用原因句是客戶核准的字面():
+    assert logic.TEXT_RULES_BAD == "門檻列未填齊，或格式不符"
+
+
+@pytest.mark.parametrize("value", ["9" * 400, "-" + "9" * 400, "1" + "0" * 310 + ".5"])
+def test_S6a2_第4項_數值超長變成inf_不可套用(value):
+    row = ("最大回撤", "低於", value)
+    assert logic.rules_from_inputs([row]) is None
+    button = _apply_button(_hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": [row]}))
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_RULES_BAD
+
+
+def test_S6a2_第4項_區間與門檻都不可套用時_寫區間那一句():
+    button = _apply_button(_hld4(fields={
+        "window_start": "20260101", "window_end": "2026-09-19", "rule_rows": [("最大回撤", "大於", "-1")],
+    }))
+    assert button["_enabled"] is False and button["disabled_reason"] == logic.TEXT_BAD_RANGE
+
+
+def test_S6a2_第5項_門檻格子照欄位當下值的列數畫_首次照已套用門檻():
+    first = _hld4()
+    assert len(first["threshold_rows"]) == 2 and len(first["row_buttons"]) == 2
+    rows = [("最大回撤", "低於", "-1"), ("", "", ""), ("配息佔淨值比", "高於", "6")]
+    grown = _hld4(fields={"window_start": "2026-01-01", "window_end": "2026-09-19", "rule_rows": rows})
+    assert [[f["_value"] for f in row] for row in grown["threshold_rows"]] == [list(r) for r in rows]
+    assert len(grown["row_buttons"]) == 3
+    assert "門檻 2 列" in grown["summary_text"]      # 摘要照舊讀已套用的門檻
+
+
+# ───────────────────────── S6a-2 追加（客戶 2026-10-03）：刪「N 與列數相等」子句 ─────────────────────────
+
+# `srcmiss`：CCCC 缺淨值（卡尾會出那一句）；這組門檻下只有 AAAA 同時超出兩條（最大回撤 -11.20%、配息佔淨值比 4.10%）。
+_ONE_FUND_TWO_RULES = [
+    {"indicator": "最大回撤", "direction": "低於", "value": -10.0},
+    {"indicator": "配息佔淨值比", "direction": "低於", "value": 5.0},
+]
+
+
+def test_S6a2追加_HLD1卡尾那一句_只刪後半子句_前半句一字不改():
+    assert logic.HLD1_SKIPPED_NOTE == "未列入的檔不進上表、也不進偏離筆數。"
+    for model in (logic.build_page_model(**_scenario_args("srcmiss")),
+                  _build(**_scenario_args("srcmiss"), today=TODAY)):
+        tail = logic.find_block(model, "HLD-1")["tail_lines"]
+        assert logic.HLD1_SKIPPED_NOTE in tail
+        blob = "\n".join(logic.collect_ui_strings(model))
+        assert "列數相等" not in blob and "燈上的 N" not in blob
+
+
+def test_S6a2追加_一檔超出兩條門檻_燈寫1檔_表2列_畫面沒有列數相等():
+    args = _scenario_args("srcmiss")
+    for model in (logic.build_page_model(**args, applied_rules=_ONE_FUND_TWO_RULES),
+                  _build(**args, today=TODAY, applied_rules=_ONE_FUND_TWO_RULES)):
+        rows = logic.find_block(model, "HLD-1")["_rows"]
+        light = logic.find_block(model, "HLD-0")
+        assert [r["_fund_code"] for r in rows] == ["AAAA", "AAAA"]
+        assert light["_deviation_count"] == 1
+        assert "有 1 檔超出你設定的門檻" in light["text"]
+        assert logic.HLD1_SKIPPED_NOTE in logic.find_block(model, "HLD-1")["tail_lines"]
+        assert "列數相等" not in "\n".join(logic.collect_ui_strings(model))
