@@ -206,11 +206,15 @@ def _check_no_direct_holding(dataset: dict, direct_policy_id: str) -> None:
             raise ValueError(f"holding 裡有 DIRECT 列（應由 L2 排除）：{holding.get('holding_id')!r}")
 
 
-def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
+def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed: bool = False) -> dict:
     """HLD-5 卡尾一行黃字＋逐筆位置（灰），收合摘要加 DIRECT 筆數；持倉全空時另把「尚未建立任何持倉」換掉。
 
     N＝0 時什麼都不加（草稿與 alo 都沒寫 N＝0 的畫法；本組的處理，已回報待裁）。
     各塊的 `_state`／`_tone`、按鈕都不動：這幾筆是「讀到了、照裁示不計入」，不是哪一塊算不出來。
+    📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定：不 raise，只加卡尾）：`holding_failed`
+    ＝持倉表有取數失敗、而且一列也沒有讀到（例：部分分頁讀不到，見 `assemble_live_load`）。
+    這時只加卡尾 —— HLD-5 的摘要與說明區是讀取失敗的原文，不換；`logic` 也不會寫出「尚未建立任何持倉」，
+    沒有出口可換，所以不呼叫 `_replace_exits`。
     """
     if not rows:
         return model
@@ -219,7 +223,7 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
     hld5 = logic.find_block(model, "HLD-5")
     if has_holdings:
         hld5["summary_text"] = hld5["summary_text"] + DIRECT_SUMMARY_SUFFIX.format(n=n)
-    else:
+    elif not holding_failed:
         if _HLD5_EMPTY_LINE not in hld5["detail_lines"]:
             raise ValueError(f"HLD-5 空持倉的說明行「{_HLD5_EMPTY_LINE}」不在，logic 改了而本檔沒跟上")
         hld5["summary_text"] = DIRECT_SUMMARY_ONLY.format(n=n)
@@ -227,7 +231,7 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool) -> dict:
     hld5["tail_notes"] = [{"text": warning, "_tone": "黃"}] + [
         {"text": DIRECT_LOCATION_TEXT.format(tab=r["tab"], row=r["row"]), "_tone": "灰"} for r in rows
     ]
-    if has_holdings:
+    if has_holdings or holding_failed:
         return model
     _replace_exits(model, warning)
     return model
@@ -712,7 +716,11 @@ def build_live_model(
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)
-    return _apply_direct(out, rows, has_holdings=bool(dataset.get("holding")))
+    return _apply_direct(
+        out, rows, has_holdings=bool(dataset.get("holding")),
+        # 與 `logic._build_page_model` 的 `holding_unknown` 同一個判定（「讀取失敗不說空」，2026-10-05）。
+        holding_failed=bool(dataset.get("errors", {}).get("holding")) and not dataset.get("holding"),
+    )
 
 
 # ───────────────────────── S6b-2：user_setting 解析 ─────────────────────────
@@ -916,7 +924,7 @@ def assemble_live_load(
       畫面由 logic 既有路徑印「⬜ 資料未備」（區間已設時；未設區間時與健康的檔同樣印「⬜ 不適用：尚未設定區間」），不新增字句。扣下代碼不在清單內 → raise。
     - L1 有回資料、但 L2 全數拒收（沒有淨值列、沒有錯誤、沒有扣下代碼）的檔，同樣不放任何東西。
     - 呼叫端**必須**只交幣別兩碼與取得時間兩碼；同一檔被給了互相矛盾輸入的那一碼只會因呼叫端組錯而出現，刻意不在清單內 → raise（契約被破壞不畫成 ⬜）。⚠️ 本函式不檢查清單內容：呼叫端若連那一碼也交進來，該檔會畫成 ⬜、不會 raise；「清單恰為四碼」列為 S6b-3 的驗收項。
-    - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法，但 HLD-1 在零偏離時仍印「無偏離項」與「沒有任何一檔超出」—— 屬「結論燈兩句」那一塊，待修；讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬「讀取失敗不說空」那一塊，待修。
+    - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法，但 HLD-1 在零偏離時仍印「無偏離項」與「沒有任何一檔超出」—— 屬「結論燈兩句」那一塊，待修；~~讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬「讀取失敗不說空」那一塊，待修。~~ → 📌 2026-10-05 修好（有意識的更正，不是漏刪；「讀取失敗不說空」）：讀到的持倉為空時，logic 把它當成讀取失敗畫、不說空；`direct` 清單照交時 HLD-5 只加卡尾（見 `_apply_direct`）。
     - `pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。
     - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
     - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。

@@ -987,13 +987,21 @@ def _empty_dataset(*, table=None, message=_UPSTREAM_PLAIN, pending=frozenset(), 
         rules=fixtures._RULES_DEFAULT if rules else None,
         errors={table: message} if table else None,
     )
+    if table == "user_setting":
+        # 呼叫端契約（客戶 2026-10-05 裁示）：設定讀取失敗時交空列表，不交部分結果；
+        # 帶著列又帶著失敗，`logic` 會 raise（「讀取失敗不說空」，2026-10-05）。
+        ds["user_setting"] = []
     if pending:
         ds["pending_tables"] = pending
     return ds
 
 
+# 📌 2026-10-05「讀取失敗不說空」：`holding` 不在這一組 —— 持倉表讀取失敗時本頁不再印「尚未建立任何持倉」，
+#    下面那一條的正控（S3 畫面上確實有）不成立。那一種改由
+#    `test_hld_read_failure_logic.py::test_T3組合_持倉讀取失敗乘pending乘門檻乘區間_帶不帶direct清單都不說空` 守。
 _COMBOS = [
-    (t, p, r, w) for t in _TABLE_ERRORS for p in _PENDINGS for r in (True, False) for w in (True, False)
+    (t, p, r, w) for t in _TABLE_ERRORS if t != "holding"
+    for p in _PENDINGS for r in (True, False) for w in (True, False)
 ]
 
 
@@ -1055,9 +1063,11 @@ def test_第三輪1_上游原文含那幾個字_不崩且照印(table, message):
         return (base["blocks"][path[1]]["code"], path[2]) in live._EMPTY_EXITS
 
     upstream = [(path, s) for path, s in _string_paths(base) if message in s and not is_exit(path, s)]
-    # 正控：上游原文真的印上畫面了。`policy`／`user_setting` 的表層級錯誤在空持倉時 S3 本來就不印，
-    # 那兩種只驗「不崩」（上面兩次 `_build` 沒 raise 就是）。
-    assert bool(upstream) == (table not in ("policy", "user_setting")), table
+    # 正控：上游原文真的印上畫面了。~~`policy`／`user_setting` 的表層級錯誤在空持倉時 S3 本來就不印，
+    # 那兩種只驗「不崩」（上面兩次 `_build` 沒 raise 就是）。~~
+    # → 2026-10-05「讀取失敗不說空」：`user_setting` 收進來源表之後，空持倉時也會印出原文；
+    #   只剩 `policy` 的表層級錯誤在空持倉時不印，那一種只驗「不崩」（上面兩次 `_build` 沒 raise 就是）。
+    assert bool(upstream) == (table not in ("policy",)), table
     for path, s in upstream:                         # 同一個位置、同一個字串，一個字都不換
         assert _at(model, path) == s, path
     if table == "holding":

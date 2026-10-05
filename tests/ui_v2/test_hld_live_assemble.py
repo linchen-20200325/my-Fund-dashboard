@@ -1221,7 +1221,9 @@ def test_T8_快樂路徑輸出的holding_policy_nav_每一列都過列契約():
 # L1 `load_policy_holding_rows` 在部分分頁讀不到（含冷卻中沒讀）時，照回其餘分頁的列，另列 `skipped_tabs`
 # （每筆 `{"tab", "error", "unread"}`）；L2 `load_alo_tables` 原樣交出。組裝時把各分頁的原因（以全形分號相連）
 # 過 `mask` 放進 `errors["holding"]`。讀到的持倉不為空時，由 logic 既有的「有持倉時來源取數失敗」畫法接手；
-# 讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」（屬「讀取失敗不說空」那一塊，見 `test_登記_讀取失敗不說空未修前_…` 那一條）；
+# ~~讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」（屬「讀取失敗不說空」那一塊，見 `test_登記_讀取失敗不說空未修前_…` 那一條）；~~
+# → 📌 2026-10-05「讀取失敗不說空」修好（有意識的更正，不是漏刪）：讀到的持倉為空時不說空，
+#   見 `test_讀取失敗不說空_持倉零列又有略過分頁時_沒有任何一塊印尚未建立任何持倉` 與其後兩條；
 # 讀到的持倉不為空、這組門檻下零偏離時，HLD-1 仍印「無偏離項」與「沒有任何一檔超出」（屬「結論燈兩句」那一塊，見 `test_登記_結論燈兩句未修前_…` 那一條）。
 
 
@@ -1310,15 +1312,24 @@ def test_P5_端到端_持倉零列又有略過的分頁_燈為系統錯誤_全�
     assert [s for s in _strings(model) if masked in s]
 
 
-def test_登記_讀取失敗不說空未修前_持倉零列又有略過分頁時_正好六塊印尚未建立任何持倉():
-    """⚠️ **這是一筆登記，不是一條規格** —— 把現況逐塊釘住：印這句的是哪幾塊，多一塊、少一塊都會紅。
+def test_讀取失敗不說空_持倉零列又有略過分頁時_沒有任何一塊印尚未建立任何持倉():
+    """持倉零列、另有略過的分頁：HLD-0～HLD-8 沒有任何一塊印「尚未建立任何持倉」—— 讀不到不是空。
 
-    輸入同上一條（持倉零列、另有略過的分頁）：HLD-0 已是系統錯誤，讀不到的原因也已印在 HLD-1 與 HLD-3；
-    但 HLD-0（補述）、HLD-1、HLD-2、HLD-3、HLD-5、HLD-8 這六塊仍印「尚未建立任何持倉」——
-    把讀取失敗報成「空」。
-    **本 PR 不修**（`logic` 一格不動）。已知缺口，屬「讀取失敗不說空」那一塊（S6b-3 之前必修）。
-    修好時這條會紅 —— 屆時改成反向斷言，不得刪除。
-    ⚠️ HLD-5 那一句「尚未建立任何持倉，沒有可以展開的檔。」在 `logic` 裡是寫死的字面、沒有經過常數，修的時候別漏。
+    📌 **2026-10-05 改名並改成反向斷言**（有意識的更正，不是漏刪；決策者：總管 2026-10-05；
+    「讀取失敗不說空」那一塊修好）。原名
+    ~~`test_登記_讀取失敗不說空未修前_持倉零列又有略過分頁時_正好六塊印尚未建立任何持倉`~~，原文劃線保留：
+
+    ~~⚠️ **這是一筆登記，不是一條規格** —— 把現況逐塊釘住：印這句的是哪幾塊，多一塊、少一塊都會紅。~~
+
+    ~~輸入同上一條（持倉零列、另有略過的分頁）：HLD-0 已是系統錯誤，讀不到的原因也已印在 HLD-1 與 HLD-3；~~
+    ~~但 HLD-0（補述）、HLD-1、HLD-2、HLD-3、HLD-5、HLD-8 這六塊仍印「尚未建立任何持倉」——~~
+    ~~把讀取失敗報成「空」。~~
+    ~~**本 PR 不修**（`logic` 一格不動）。已知缺口，屬「讀取失敗不說空」那一塊（S6b-3 之前必修）。~~
+    ~~修好時這條會紅 —— 屆時改成反向斷言，不得刪除。~~
+    ~~⚠️ HLD-5 那一句「尚未建立任何持倉，沒有可以展開的檔。」在 `logic` 裡是寫死的字面、沒有經過常數，修的時候別漏。~~
+
+    **舊表述在寫下當時為真**（那時六塊確實印這一句）；被權衡掉的是它的前提 —— 那個缺口已經修好。
+    ⚠️ HLD-5 那一句字面不經過常數：本條比的是「含 `TEXT_NO_HOLDING`」，那一句也含，照樣抓得到。
     """
     loaded, _masked = _empty_holding_with_skipped_tab()
     model = _build_model(loaded)
@@ -1326,7 +1337,59 @@ def test_登記_讀取失敗不說空未修前_持倉零列又有略過分頁時
         code for code in (f"HLD-{i}" for i in range(9))
         if [s for s in _strings(logic.find_block(model, code)) if logic.TEXT_NO_HOLDING in s]
     }
-    assert hit == {"HLD-0", "HLD-1", "HLD-2", "HLD-3", "HLD-5", "HLD-8"}
+    assert hit == set()
+    # 正控：同樣組裝、只是沒有略過的分頁（真的沒有持倉）時，這一句照舊出現 —— 掃描抓得到它。
+    truly_empty = _build_model(_assemble(
+        holding_tables={"holding": [], "policy": [], "direct": [], "skipped_tabs": []},
+        key_results=[],
+        nav_table=_empty_nav_table(),
+    ))
+    assert [s for s in _strings(truly_empty) if logic.TEXT_NO_HOLDING in s]
+
+
+def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_HLD5只加卡尾_每一句都是真話():
+    """正式資料會出現的合法狀態（總管 2026-10-05 指出）：部分分頁讀不到時持倉照交（零列）、`direct` 清單照交。
+
+    總管 2026-10-05 裁定：不 raise，只加卡尾。HLD-5 的摘要與說明區是遮蔽後的原因；卡尾照列 `direct` 那幾筆；
+    沒有任何一塊印「尚未建立任何持倉」，也沒有任何一塊把空白換成卡尾那一句。
+    """
+    mask = _wrapped_mask(_unique("標記"))
+    skipped = _skipped_tab(unread=False)
+    model = _build_model(_assemble(
+        holding_tables={"holding": [], "policy": [], "direct": _l2_direct(), "skipped_tabs": [skipped]},
+        key_results=[],
+        nav_table=_empty_nav_table(),
+        mask=mask,
+    ))
+    failed = logic.fetch_failed_text(mask(f"{skipped['tab']}{_COLON}{skipped['error']}"))
+    hld5 = logic.find_block(model, "HLD-5")
+    assert (hld5["_state"], hld5["summary_text"]) == (logic.STATE_ERROR, failed)
+    assert hld5["detail_lines"] == [failed, logic.PRINT_AS_IS_LINE]
+    warning = live.DIRECT_EXCLUDED_TEXT.format(n=2)
+    assert [note["text"] for note in hld5["tail_notes"]] == [warning] + [
+        live.DIRECT_LOCATION_TEXT.format(tab=_DIRECT_ID, row=row) for row in (3, 5)
+    ]
+    for code in (f"HLD-{i}" for i in range(9)):
+        strings = _strings(logic.find_block(model, code))
+        assert not [s for s in strings if logic.TEXT_NO_HOLDING in s], code
+        if code != "HLD-5":
+            assert not [s for s in strings if warning in s], code
+    for code in ("HLD-1", "HLD-3", "HLD-5", "HLD-8"):
+        assert failed in logic.find_block(model, code)["detail_lines"], code
+    assert logic.find_block(model, "HLD-8")["buttons"] == []
+    hld2 = logic.find_block(model, "HLD-2")
+    assert (hld2["_state"], hld2["summary_text"]) == (logic.STATE_MISSING, logic.ND_TEXT)
+
+
+def test_讀取失敗不說空_設定讀取失敗而且沒按過套用_全頁沒有未設定字句_原文照印():
+    """設定讀取失敗（`settings_error`）經組裝交進來、使用者還沒按「套用」（`applied_window` 為 None）。"""
+    message = _unique("設定讀取失敗")
+    model = _build_model(_assemble(settings=None, settings_error=message), window=None)
+    strings = _strings(model)
+    assert not [s for s in strings if any(p in s for p in ("尚未設定區間", "尚未設定門檻", "門檻一列也沒有"))]
+    failed = logic.fetch_failed_text(message)
+    for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-5", "HLD-8"):
+        assert failed in logic.find_block(model, code)["detail_lines"], code
 
 
 def test_登記_結論燈兩句未修前_有持倉零偏離又有略過分頁時_HLD1仍印無偏離項與沒有任何一檔超出():

@@ -784,7 +784,10 @@ def _metric(
     return node
 
 
-def fund_metrics(dataset, fund, window):
+# 📌 2026-10-05「讀取失敗不說空」：`window_error` ＝ 設定讀取失敗的原文，只在區間取自存過的設定時才給
+#    （見 `_build_page_model`）。六個值一律排在表層級與逐檔錯誤之後判成 `系統錯誤`，不判成「⬜ 不適用：尚未設定區間」。
+#    六個都要改：`HLD-7` 的輸出欄要與值所在那一塊上的字串相同（`44` :733）。
+def fund_metrics(dataset, fund, window, *, window_error=None):
     """一檔在一段區間內的六個指標。**所有卡與所有表都讀這一份**，
     這樣 `44` HLD-7 判準要的「軌跡與所在那一塊逐字相同」才是由構造保證的。"""
     code = fund["fund_code"]
@@ -934,7 +937,7 @@ def fund_metrics(dataset, fund, window):
             ret,
             text=hinted(format_pct(ret, signed=True)) if ret is not None else "",
             ccy=ccy,
-            error=nav_error,
+            error=nav_error or window_error,
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
@@ -945,7 +948,7 @@ def fund_metrics(dataset, fund, window):
             vol,
             text=hinted(format_pct(vol)) if vol is not None else "",
             ccy=ccy,
-            error=nav_error,
+            error=nav_error or window_error,
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
@@ -956,7 +959,7 @@ def fund_metrics(dataset, fund, window):
             draw,
             text=hinted(format_pct(draw)) if draw is not None else "",
             ccy=ccy,
-            error=nav_error,
+            error=nav_error or window_error,
             missing=nav_value_missing,
             na_reason=na_nav_text,
             fund_scoped=nav_fund_scoped,
@@ -967,7 +970,7 @@ def fund_metrics(dataset, fund, window):
             div_total,
             text=hinted(format_amount(div_total, ccy)),
             ccy=ccy,
-            error=div_error,
+            error=div_error or window_error,
             missing=div_missing,
             na_reason=na_div_text,
             label="期間配息合計",
@@ -980,7 +983,7 @@ def fund_metrics(dataset, fund, window):
             ccy=ccy,
             # 分母是區間末淨值 ⇒ `nav` 取數失敗也讓它進 `系統錯誤`，不是 `資料未備`
             # （總管 2026-10-02 J1 裁定）。兩張都失敗時印配息那一句（本值掛在配息卡上）。
-            error=yield_error,
+            error=yield_error or window_error,
             missing=bool(
                 nav_missing or div_missing or (na_div is None and nav_last is None)
             ),
@@ -993,7 +996,7 @@ def fund_metrics(dataset, fund, window):
             principal_value,
             text=hinted(format_pct(principal_value)) if principal_value is not None else "",
             ccy=ccy,
-            error=div_error,
+            error=div_error or window_error,
             missing=div_missing,
             na_reason=not_applicable_text(principal_na) if principal_na else None,
             label="本金類配息佔比",
@@ -1003,9 +1006,9 @@ def fund_metrics(dataset, fund, window):
     }
 
 
-def all_metrics(dataset, window):
+def all_metrics(dataset, window, *, window_error=None):
     funds = sorted(dataset.get("holding", []), key=lambda h: h["fund_code"])
-    return [fund_metrics(dataset, fund, window) for fund in funds]
+    return [fund_metrics(dataset, fund, window, window_error=window_error) for fund in funds]
 
 
 # ───────────────────────── 徽章與按鈕 ─────────────────────────
@@ -1065,12 +1068,20 @@ def _retry_button() -> dict:
 #     **本輪補齊，讓自述為真。**
 # ⛔ **不准留一個自稱抄寫、實際是判斷的東西** —— 現在這張表**真的是**來源欄的逐字子集，
 #    唯一的篩選規則寫在下一行，而且那條規則自己說得出理由。
-# ⚠️ **唯一的篩選**：只收「取數取回來的表」。`user_setting` 三塊都列了，但它是**使用者自己
-#    輸入的**，不經取數，所以取數失敗與它無關。**這是本組的判斷，不是 `44` 的字。**
+# ⚠️ ~~**唯一的篩選**：只收「取數取回來的表」。`user_setting` 三塊都列了，但它是**使用者自己
+#    輸入的**，不經取數，所以取數失敗與它無關。**這是本組的判斷，不是 `44` 的字。**~~
+# → 📌 **2026-10-05「讀取失敗不說空」：篩選拿掉，三塊各收 `user_setting`，排在最後**
+#    （有意識的政策變更，不是漏刪；決策者：客戶 2026-10-05 裁示「設定讀取失敗顯示『⛔ 取數失敗：<原文>』」
+#    與「`BLOCK_SOURCE_TABLES` 加 `user_setting`」）。
+#    **舊表述在寫下當時撐得住**：設定值確實是使用者自己輸入的。**被權衡掉的是「不經取數」**：
+#    正式模式的設定是讀表讀回來的，讀不到時 `errors["user_setting"]` 帶原文
+#    （`live.assemble_live_load`、`live.parse_user_settings`），與其他來源表一樣會取數失敗。
+#    現在這張表與來源欄點名的表相同、沒有篩選（A3 守衛那一條測試守著）。
+#    排在最後：來源欄三格都把 `user_setting` 列在最後；`source_error()` 依這個次序回第一個失敗。
 BLOCK_SOURCE_TABLES = {
-    "HLD-1": ("holding", "nav"),
-    "HLD-2": ("nav", "fund_profile"),
-    "HLD-3": ("dividend", "nav", "holding"),
+    "HLD-1": ("holding", "nav", "user_setting"),
+    "HLD-2": ("nav", "fund_profile", "user_setting"),
+    "HLD-3": ("dividend", "nav", "holding", "user_setting"),
 }
 
 
@@ -1137,6 +1148,13 @@ def unsurfaced_source_error(dataset, code):
       · 那三塊照舊**不掛**「重新取數」按鈕（客戶 2026-09-23 裁示）；
       · `HLD-7`／`HLD-8` 不在本件射程 —— `BLOCK_SOURCE_TABLES` 沒有它們的來源表，
         替它們編一組就是造規格。**登記，不處置。**
+
+    📌 **2026-10-05「讀取失敗不說空」改了上面三項**（客戶 2026-10-05 核准開工）。上面各句說的是
+    2026-09-24 那一件，在當時為真，一字未改：
+      · `not has_holdings` 那兩支：持倉表讀取失敗時不再接「尚未建立任何持倉」；
+      · `BLOCK_SOURCE_TABLES` 三塊各收 `user_setting`，A3 守衛的篩選拿掉；
+      · 主值層：設定讀取失敗、區間取自存過的設定時，六個值一律判成 `系統錯誤`（`fund_metrics()` 的 `window_error`）。
+    `user_setting` 不在 `_SURFACED_PER_VALUE`：按過「套用」之後主值照算，本支照樣把設定讀取失敗印進說明區。
 
     **`系統錯誤` 這個狀態的依據**：`44` 5.5 該狀態的觸發條件逐字是
     「**取數或計算本身失敗**」—— 來源整張表取數失敗就是這一種，
@@ -1265,7 +1283,8 @@ def _is_missing_reason_line(line) -> bool:
 
 
 def _build_hld1(
-    metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None, pending=frozenset()
+    metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None, pending=frozenset(),
+    settings_error=None, rules_unknown=False, holding_unknown=False,
 ):
     badges = [_redline_badge("G2†")]
     # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
@@ -1297,8 +1316,11 @@ def _build_hld1(
         detail_lines = [
             fetch_failed_text(fail_message),
             "訊息原文照印，不改寫成安撫語句。",
-            TEXT_NO_HOLDING,
         ]
+        # 📌 2026-10-05「讀取失敗不說空」：失敗的正是持倉表時，「持倉為空」不成立，不接下一句。
+        #    上面那筆待客戶覆核的先後（紅壓過灰）一格未動；本件只改這一句接不接。
+        if not holding_unknown:
+            detail_lines.append(TEXT_NO_HOLDING)
         placeholder = _metric(
             None, text="", ccy="", error=fail_message, label="偏離筆數"
         )
@@ -1308,6 +1330,15 @@ def _build_hld1(
         summary = TEXT_NO_HOLDING
         detail_lines = [empty_source_text(["holding"]), TEXT_NO_HOLDING]
         placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
+    elif rules_unknown:
+        # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定：「未設定」字句全面拿掉）：
+        #    門檻是讀不到，不是沒設定 —— 不畫「⬜ 不適用：尚未設定門檻」。主值走 `44` 5.5 `系統錯誤`，
+        #    原因是設定讀取失敗的原文。只有有持倉時走得到這一支（空持倉時上面兩支先接走）。
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        state = STATE_ERROR
+        summary = fetch_failed_text(settings_error)
+        detail_lines = [fetch_failed_text(settings_error), PRINT_AS_IS_LINE]
+        placeholder = _metric(None, text="", ccy="", error=settings_error, label="偏離筆數")
     elif not rules:
         rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
         state = STATE_BIZ
@@ -1398,10 +1429,13 @@ def _build_hld1(
                 None, text="", ccy="", error=unsurfaced, label="偏離筆數"
             )
         state = STATE_ERROR
-        detail_lines = detail_lines + [
-            fetch_failed_text(unsurfaced),
-            "訊息原文照印，不改寫成安撫語句。",
-        ]
+        # 📌 2026-10-05「讀取失敗不說空」：門檻讀不到那一支已經寫了同一句時不再寫一次
+        #    （與 `_build_core_card` 的 `error_lines` 同一條去重）。
+        if fetch_failed_text(unsurfaced) not in detail_lines:
+            detail_lines = detail_lines + [
+                fetch_failed_text(unsurfaced),
+                "訊息原文照印，不改寫成安撫語句。",
+            ]
 
     return {
         "code": "HLD-1",
@@ -1429,7 +1463,7 @@ def _build_hld1(
 
 def _build_core_card(
     code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note,
-    fail_message=None, unsurfaced=None,
+    fail_message=None, unsurfaced=None, window_unknown=False, holding_unknown=False,
 ):
     groups = []
     for metric in metrics:
@@ -1502,16 +1536,28 @@ def _build_core_card(
         detail_lines = [
             fetch_failed_text(fail_message),
             "訊息原文照印，不改寫成安撫語句。",
-            TEXT_NO_HOLDING,
         ]
+        # 📌 2026-10-05「讀取失敗不說空」：失敗的正是持倉表時，「持倉為空」不成立，不接下一句。
+        #    上面那筆待客戶覆核的先後（紅壓過灰）一格未動；本件只改這一句接不接。
+        if not holding_unknown:
+            detail_lines.append(TEXT_NO_HOLDING)
         summary = fetch_failed_text(fail_message)
+    elif not has_holdings and holding_unknown:
+        # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定）：持倉表讀不到，不是空 ——
+        #    不印「尚未建立任何持倉」。只有 `HLD-2` 走得到這一支：`holding` 不在它的來源表裡（`44` :531），
+        #    `HLD-3` 的來源表有 `holding`，先進上面那一支。本塊照自己的來源欄畫：灰、「⬜ 資料未備」，
+        #    不進 `系統錯誤`；讀取失敗的原文由 `HLD-1`（持倉表是它來源表的第一張）、`HLD-5`、`HLD-8` 印出。
+        state = STATE_MISSING
+        detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT]
+        summary = ND_TEXT
     elif not has_holdings:
         state = STATE_MISSING
         detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT, TEXT_NO_HOLDING]
         summary = TEXT_NO_HOLDING
     else:
         state = worst_state(block_states) if block_states else STATE_ERROR
-        if not has_window:
+        # 📌 2026-10-05「讀取失敗不說空」：區間是讀不到時不寫「⬜ 不適用：尚未設定區間」，原因已在主值與說明區。
+        if not has_window and not window_unknown:
             detail_lines.insert(0, NA_NO_WINDOW)
         # `44` 5.1：一組主值為 ok 而另一組不是時，標題掛「部分缺」徽章。
         for group in groups:
@@ -1577,7 +1623,8 @@ _LAMP_LOOK = {
 }
 
 
-def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
+def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
+                     holding_unknown=False, rules_unknown=False):
     """`44` HLD-0 規則與空狀態逐字。本塊不自取數，只讀三塊已經算出來的值。"""
     states = [card["_state"] for card in cards]
     lines = []
@@ -1609,9 +1656,11 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
         # ⛔ **空狀態欄那兩句都要降級成補述，一句都不准吞掉**
         #    （2026-09-24 稽核抓到：原本只補了持倉那一句，門檻那一句在
         #     `emptyfail`〔`rules=None`〕底下整句消失，三件事只活下來兩件）。
-        if not has_holdings:
+        # 📌 2026-10-05「讀取失敗不說空」（燈不說：失敗不等於空，說了就是造假 —— 客戶 2026-09-28 核准，
+        #    alo 草稿第 16 題）：持倉表或設定讀不到時，那一句補述不成立，不寫；真的空、真的沒設定照舊寫。
+        if not has_holdings and not holding_unknown:
             lines.append(f"（另：{TEXT_NO_HOLDING}。{TEXT_SHEETS_READONLY}）")
-        if not has_rules:
+        if not has_rules and not rules_unknown:
             lines.append(f"（另：{TEXT_NO_RULES}。門檻由你自己輸入，這一頁不提任何候選值）")
         return {
             "_tone": "紅",
@@ -1716,12 +1765,15 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count):
     }
 
 
-def _build_hld0(cards, *, has_holdings, has_rules, deviation_count):
+def _build_hld0(cards, *, has_holdings, has_rules, deviation_count,
+                holding_unknown=False, rules_unknown=False):
     light = conclusion_light(
         cards,
         has_holdings=has_holdings,
         has_rules=has_rules,
         deviation_count=deviation_count,
+        holding_unknown=holding_unknown,
+        rules_unknown=rules_unknown,
     )
     glyph, state_word = _LAMP_LOOK[light["_tone"]]
     return {
@@ -1760,7 +1812,8 @@ def _field(name, label, placeholder, value):
     }
 
 
-def _build_hld4(*, applied_window, fields, rules):
+def _build_hld4(*, applied_window, fields, rules, settings_error=None, window_unknown=False,
+                rules_unknown=False):
     field_start = fields.get("window_start")
     field_end = fields.get("window_end")
     both_empty = not field_start and not field_end
@@ -1771,8 +1824,12 @@ def _build_hld4(*, applied_window, fields, rules):
     detail_lines = []
     if bad_range:
         detail_lines.append(TEXT_BAD_RANGE)
-    if both_empty:
+    # 📌 2026-10-05「讀取失敗不說空」（客戶裁示：HLD-4 不得畫成「未設定」）：區間是讀不到時不寫「尚未設定區間」，
+    #    改寫設定讀取失敗的原文（`44` 5.5 `系統錯誤` 的模板，`44` :2326）。按過「套用」之後照樣寫：設定仍然讀不到。
+    if both_empty and not window_unknown:
         detail_lines.append(NA_NO_WINDOW)
+    if settings_error:
+        detail_lines.extend([fetch_failed_text(settings_error), PRINT_AS_IS_LINE])
 
     inputs = [
         _field("window_start", "區間起日", "請選擇日期（YYYY-MM-DD）", field_start),
@@ -1821,6 +1878,9 @@ def _build_hld4(*, applied_window, fields, rules):
     applied_start, applied_end = applied_window
     if bad_range:
         summary = "輸入尚未通過檢查"
+    elif window_unknown or rules_unknown:
+        # 📌 2026-10-05「讀取失敗不說空」：不寫「尚未設定區間；門檻一列也沒有；存檔停用」—— 是讀不到，不是沒設定。
+        summary = fetch_failed_text(settings_error)
     elif not applied_start and not applied_end:
         summary = "尚未設定區間；門檻一列也沒有；存檔停用" if not rules else "尚未設定區間"
     elif not window_is_valid(applied_window):
@@ -1948,7 +2008,8 @@ def _sync_field_value(raw):
     return raw
 
 
-def _build_hld5(dataset, metrics, *, open_fund, has_window):
+def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False,
+                settings_error=None, holding_error=None, holding_unknown=False):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
     items = []
@@ -1986,8 +2047,12 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
                 ),
                 "_fields": fields,
                 "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{_hint()}",
+                # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定）：區間是讀不到時，「該檔在區間內無淨值」
+                #    無從判斷，不印「⬜ 資料未備：nav 尚無資料」，改印設定讀取失敗的原文。
                 "nav_plot_text": (
-                    "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
+                    fetch_failed_text(settings_error)
+                    if window_unknown
+                    else "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
                     if has_nav
                     # `44` :708 明文回指 §5.5 模板，不是自己寫一句散文。
                     else empty_source_text(["nav"])
@@ -1996,7 +2061,13 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
             }
         )
 
-    if not items:
+    if not items and holding_unknown:
+        # 📌 2026-10-05「讀取失敗不說空」：持倉表讀不到，不是沒有持倉 —— 不印「尚未建立任何持倉」，
+        #    走 `44` 5.5 `系統錯誤`（本塊的來源有 `holding`）。本塊向來沒有塊層級的按鈕，這裡也不加。
+        state = STATE_ERROR
+        summary = fetch_failed_text(holding_error)
+        detail_lines = [fetch_failed_text(holding_error), PRINT_AS_IS_LINE]
+    elif not items:
         state = STATE_MISSING
         summary = TEXT_NO_HOLDING
         detail_lines = [ND_TEXT, "尚未建立任何持倉，沒有可以展開的檔。"]
@@ -2007,7 +2078,11 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window):
             "點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。",
             "展開中的那一檔，它的展開鈕停用；初次載入零檔展開。",
         ]
-        if not has_window:
+        if window_unknown:
+            # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定）：與下一支同一個位置，換成真話 ——
+            #    區間是讀不到，不是沒設定。
+            detail_lines[0:0] = [fetch_failed_text(settings_error), PRINT_AS_IS_LINE]
+        elif not has_window:
             detail_lines.insert(0, NA_NO_WINDOW)
 
     return {
@@ -2109,7 +2184,8 @@ def _build_hld6(dataset):
 # ───────────────────────── HLD-8 ─────────────────────────
 
 
-def _build_hld8(metrics, *, has_holdings, has_window):
+def _build_hld8(metrics, *, has_holdings, has_window, window_unknown=False,
+                settings_error=None, holding_error=None, holding_unknown=False):
     rows = []
     unknown_total = 0
     for metric in metrics:
@@ -2129,7 +2205,14 @@ def _build_hld8(metrics, *, has_holdings, has_window):
     buttons = []
     states = []  # 無持倉時本表沒有任何主值；先給空集，`tone_for_block` 才有東西可讀。
     block_states = []
-    if not has_holdings:
+    if not has_holdings and holding_unknown:
+        # 📌 2026-10-05「讀取失敗不說空」：持倉表讀不到，不是沒有持倉 —— 不印「尚未建立任何持倉」，
+        #    也不印「⬜ 資料未備：holding 尚無資料」，走 `44` 5.5 `系統錯誤`。表內一欄也沒有，
+        #    不掛「重新取數」（總管 2026-10-05 裁定；`44` :762 把那枚按鈕綁在「該欄」）。
+        state = STATE_ERROR
+        summary = fetch_failed_text(holding_error)
+        detail_lines = [fetch_failed_text(holding_error), PRINT_AS_IS_LINE]
+    elif not has_holdings:
         state = STATE_MISSING
         summary = f"{ND_TEXT}：{TEXT_NO_HOLDING}"
         detail_lines = [empty_source_text(["holding"]), TEXT_NO_HOLDING]
@@ -2152,7 +2235,8 @@ def _build_hld8(metrics, *, has_holdings, has_window):
             if all(s == STATE_OK for s in states)
             else f"{len(rows)} 檔{_hint()} · 有值取不到或不適用"
         )
-        if not has_window:
+        # 📌 2026-10-05「讀取失敗不說空」：區間是讀不到時不寫「⬜ 不適用：尚未設定區間」，原文寫在表下（見下）。
+        if not has_window and not window_unknown:
             detail_lines.insert(0, NA_NO_WINDOW)
         if unknown_total:
             # `44` HLD-8 空狀態逐字：並在**表下**寫出未知的筆數。
@@ -2199,6 +2283,10 @@ def _build_hld8(metrics, *, has_holdings, has_window):
                 for key in ("drawdown", "principal")
             )
         )
+        if window_unknown:
+            # 📌 2026-10-05「讀取失敗不說空」：區間取自存過的設定而設定讀不到，兩欄無從計算；
+            #    設定讀取失敗的原文印在表下（`44` :762）。
+            detail_lines.extend([fetch_failed_text(settings_error), PRINT_AS_IS_LINE])
 
     return {
         "code": "HLD-8",
@@ -2370,13 +2458,29 @@ def build_page_model(
 def _build_page_model(
     dataset, *, fields, viewport_width, open_fund, applied_window=None, applied_rules=None
 ) -> dict:
+    # 📌 2026-10-05「讀取失敗不說空」（客戶 2026-10-05 核准開工）：讀不到不等於空。
+    #    設定或持倉表讀取失敗時，不從空列表推出「未設定」或「尚未建立任何持倉」。
+    errors = dataset.get("errors", {})
+    settings_error = errors.get("user_setting")
+    holding_error = errors.get("holding")
+    if settings_error and dataset.get("user_setting"):
+        # 呼叫端契約（客戶 2026-10-05 裁示）：解析器回傳問題訊息時交空列表，不交部分結果。
+        # 帶著列又帶著失敗，是上游組錯；不猜要信哪一邊（§1，體例同 `fund_errors()` 點名持倉以外的代碼就 raise）。
+        raise ValueError(
+            f"errors 帶 user_setting 時，user_setting 必須是空列表，收到：{dataset['user_setting']!r}"
+        )
+    # 「未知」只在值取自存過的設定時成立；按過「套用」的那一份是欄位當下值，照用。
+    window_unknown = bool(settings_error) and applied_window is None
+    rules_unknown = bool(settings_error) and applied_rules is None
+    # 持倉表有取數失敗、而且一列也沒有讀到：這時不能說「尚未建立任何持倉」。
+    holding_unknown = bool(holding_error) and not dataset.get("holding")
     applied_window = saved_window(dataset) if applied_window is None else tuple(applied_window)
     rules = saved_rules(dataset) if applied_rules is None else list(applied_rules)
     # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
     _check_holding_ids(dataset.get("holding", []))
     # `fund_errors` 形狀先驗：空持倉時 `fund_metrics()` 一次也不會跑，壞形狀不得因此靜默通過（§1）。
     fund_errors(dataset)
-    metrics = all_metrics(dataset, applied_window)
+    metrics = all_metrics(dataset, applied_window, window_error=settings_error if window_unknown else None)
     has_holdings = bool(dataset.get("holding"))
     has_window = window_is_valid(applied_window)
 
@@ -2390,6 +2494,9 @@ def _build_page_model(
         fail_message=source_error(dataset, "HLD-1"),
         unsurfaced=unsurfaced_source_error(dataset, "HLD-1"),
         pending=pending_tables(dataset),
+        settings_error=settings_error,
+        rules_unknown=rules_unknown,
+        holding_unknown=holding_unknown,
     )
     hld2 = _build_core_card(
         "HLD-2",
@@ -2399,6 +2506,8 @@ def _build_page_model(
         has_window=has_window,
         fail_message=source_error(dataset, "HLD-2"),
         unsurfaced=unsurfaced_source_error(dataset, "HLD-2"),
+        window_unknown=window_unknown,
+        holding_unknown=holding_unknown,
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
         moved_note=HLD2_MOVED_NOTE,
@@ -2411,6 +2520,8 @@ def _build_page_model(
         has_window=has_window,
         fail_message=source_error(dataset, "HLD-3"),
         unsurfaced=unsurfaced_source_error(dataset, "HLD-3"),
+        window_unknown=window_unknown,
+        holding_unknown=holding_unknown,
         subtitle="兩個主值，皆為算術結果，卡上不對它們加任何評語。"
         "配息合計以原幣逐檔顯示，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
@@ -2426,17 +2537,30 @@ def _build_page_model(
         # HLD-1 偏離表的列數不變。與 `44` HLD-0 規則欄、判準與 HLD-1 判準（「N 與列數相等」）的偏離，
         # 客戶 2026-10-03 裁示登記在 `ACCEPTANCE.md` 第九節；HLD-1 卡尾那一句的後半句同日刪去。
         deviation_count=len({row["_fund_code"] for row in hld1["_rows"]}),
+        holding_unknown=holding_unknown,
+        rules_unknown=rules_unknown,
     )
     blocks = [
         hld0,
         hld1,
         hld2,
         hld3,
-        _build_hld4(applied_window=applied_window, fields=fields, rules=rules),
-        _build_hld5(dataset, metrics, open_fund=open_fund, has_window=has_window),
+        _build_hld4(
+            applied_window=applied_window, fields=fields, rules=rules,
+            settings_error=settings_error, window_unknown=window_unknown, rules_unknown=rules_unknown,
+        ),
+        _build_hld5(
+            dataset, metrics, open_fund=open_fund, has_window=has_window,
+            window_unknown=window_unknown, settings_error=settings_error,
+            holding_error=holding_error, holding_unknown=holding_unknown,
+        ),
         _build_hld6(dataset),
         _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings),
-        _build_hld8(metrics, has_holdings=has_holdings, has_window=has_window),
+        _build_hld8(
+            metrics, has_holdings=has_holdings, has_window=has_window,
+            window_unknown=window_unknown, settings_error=settings_error,
+            holding_error=holding_error, holding_unknown=holding_unknown,
+        ),
     ]
 
     return {
