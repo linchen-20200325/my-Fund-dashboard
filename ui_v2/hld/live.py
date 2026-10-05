@@ -23,12 +23,16 @@ S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見
 S5（裁示 1-A＋1-C）：舊淨值的新鮮度標示 —— 見 `NAV_FRESH_DAYS_YELLOW`、`nav_freshness` 與 `_apply_freshness`。
 本輪仍不接取數：`nav_provenance` 由呼叫端傳入。
 
+S6b-2（第一塊）：`user_setting` 三個鍵的解析 —— 見 `parse_user_settings`（體例照 `ui_v2/alo/live.py`）。
+
 ⚠️ 文案逐字照裁示；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
 """
 
 from __future__ import annotations
 
 import copy
+import json
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -708,3 +712,175 @@ def build_live_model(
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)
     return _apply_direct(out, rows, has_holdings=bool(dataset.get("holding")))
+
+
+# ───────────────────────── S6b-2：user_setting 解析 ─────────────────────────
+# 體例照 `ui_v2/alo/live.py::parse_user_settings`（`_PARSERS`、`BadSettingValue`）。本套件不 import
+# `ui_v2.alo`（各頁自足），所以另寫一份；錯誤字句的**模板逐字沿用 alo 那一份**，不另造：
+#   - 總前綴「設定值讀不到可用的形狀：」、`broken_keys` 的「{key} 這一列解析不了」；
+#   - JSON 那幾句（不是字串／前後有空白／值裡有 NaN／不是 JSON（例外型別）／不是 JSON 陣列）。
+# ⚠️ 日期格式不符、門檻元素形狀不符，alo 沒有逐字相同的句子（alo 的元素句寫死 `bucket` 欄名，套不上），
+#    這兩類一律用「{key} 這一列解析不了」—— 是 alo 既有的字面，意思也成立（那一列確實解析不了）；
+#    代價是訊息看不出是哪一個元素壞掉。要更細的字句得先送客戶，本輪不造。
+#
+# `hld_deviation_rules` 的線上格式：總管 2026-10-03 裁定（`docs/handover_2026_09_26_latest.md` S6b 小節）——
+#   JSON 陣列，元素 `{"indicator": 字串, "direction": RULE_DIRECTIONS 之一, "value": 數}`。
+#   `docs/v2/50_settings_sheet_design.md:86` 把 `rules` 的字串格式交給各頁序列化決定。
+
+# 順序同 `ui_v2/hld/fixtures.py::user_settings`。`logic._setting` 找不到鍵就回 None，所以三列不必都在，
+# 但這裡一律三列都給，沒設定的那一列值放 None（同 fixtures 的形狀）。
+SETTING_KEYS = ("hld_window_start", "hld_window_end", "hld_deviation_rules")
+
+_RULE_FIELDS = frozenset({"indicator", "direction", "value"})
+
+
+class BadSettingValue(ValueError):
+    """試算表上的設定字串不是本頁約定的形狀。訊息拿去填 `errors["user_setting"]`。"""
+
+
+def _reject_constant(name):
+    # `json.loads` 預設吃 NaN／Infinity；一律不收（同 alo、同 L2 `settings_store.value_matches_kind`）。
+    raise BadSettingValue(f"值裡有 {name}")
+
+
+def _row_unparsable(key: str) -> BadSettingValue:
+    return BadSettingValue(f"{key} 這一列解析不了")
+
+
+class _DuplicateJsonKey(ValueError):
+    """JSON 物件裡同一個鍵出現兩次。`json.loads` 預設留後一個、默默丟掉前一個 —— 本頁不猜哪一個才對。"""
+
+
+def _no_duplicate_keys(pairs):
+    out = {}
+    for name, value in pairs:
+        if name in out:
+            raise _DuplicateJsonKey(name)
+        out[name] = value
+    return out
+
+
+def _parse_date(text: str, key: str) -> str:
+    """只收嚴格的 `YYYY-MM-DD`（`_DATE_ONLY`，`re.ASCII`）且是真的日期；回原字串（`logic` 吃字串）。
+
+    `date.fromisoformat` 在 3.11 也收 `20260601`、`2026-W23-1`，所以先過正則（同 `logic._ISO_DATE` 的理由）。
+    起日晚於迄日、只設一端**不在這裡擋** —— 那是 `logic.window_is_valid` 既有的判定，各自畫各自的狀態。
+    """
+    if not isinstance(text, str) or not _DATE_ONLY.fullmatch(text):
+        raise _row_unparsable(key)
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise _row_unparsable(key) from None
+    return text
+
+
+def _json_array(text: str, key: str) -> list:
+    if not isinstance(text, str):
+        raise BadSettingValue(f"{key} 的值不是字串")
+    if text != text.strip():
+        raise BadSettingValue(f"{key} 的值前後有空白")
+    try:
+        data = json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+    except _DuplicateJsonKey:
+        # alo 沒有「重複鍵」的字句；沿用既有的「這一列解析不了」，不另造。
+        raise _row_unparsable(key) from None
+    except BadSettingValue as exc:
+        raise BadSettingValue(f"{key} 的{exc}") from None
+    except (ValueError, RecursionError) as exc:
+        raise BadSettingValue(f"{key} 的值不是 JSON（{type(exc).__name__}）") from None
+    if not isinstance(data, list):
+        raise BadSettingValue(f"{key} 的值不是 JSON 陣列")
+    return data
+
+
+def _parse_rules(text: str, key: str) -> list:
+    """JSON 陣列 → `[{"indicator", "direction", "value"}, ...]`（`logic.saved_rules` 吃的形狀）。
+
+    與 `logic.rules_from_inputs` 對同一列的要求一致：指標名非空字串（照原字收，不去空白）、
+    比較方向只收 `logic.RULE_DIRECTIONS`、數值是有限的數。差別只在輸入：那一支吃欄位的字串、
+    這裡吃 JSON 的數，所以數值這一格不能直接交給它（`_RULE_NUMBER` 只認字串）。
+    元素必須**恰好**這三個欄位；多一個少一個都不猜、不補。`bool` 在 Python 是 int，不當數字。
+    """
+    out = []
+    for item in _json_array(text, key):
+        if not isinstance(item, dict) or set(item) != _RULE_FIELDS:
+            raise _row_unparsable(key)
+        indicator, direction, value = item["indicator"], item["direction"], item["value"]
+        if not isinstance(indicator, str) or indicator == "":
+            raise _row_unparsable(key)
+        if not isinstance(direction, str) or direction not in logic.RULE_DIRECTIONS:
+            raise _row_unparsable(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise _row_unparsable(key)
+        # 先轉 float 再驗有限：超長整數（例如 400 個 9）是合法 JSON，`json.loads` 讀成 int，
+        # 直接丟給 `math.isfinite` 會拋 OverflowError，接不住就變成整頁錯誤（稽核 M-1）。
+        try:
+            number = float(value)
+        except OverflowError:
+            raise _row_unparsable(key) from None
+        if not math.isfinite(number):
+            raise _row_unparsable(key)
+        out.append({"indicator": indicator, "direction": direction, "value": number})
+    return out
+
+
+_PARSERS = {
+    "hld_window_start": _parse_date,
+    "hld_window_end": _parse_date,
+    "hld_deviation_rules": _parse_rules,
+}
+
+
+def parse_user_settings(rows, broken_keys=()) -> tuple:
+    """L2 `load_user_settings()` 的 `rows`／`broken_keys` → (本頁三列, 失敗訊息或 None)。
+
+    - `setting_value` 為 None 或空字串 → 未設定（值放 None，交給 `logic` 既有的「未設定」畫法）；
+    - 解析不了、或鍵在 `broken_keys` → 回訊息，**不把它當成「尚未設定」**
+      （L1 `load_user_settings` 的 docstring：`broken_keys` 的鍵「畫面應顯示錯誤狀態，不是 ⬜ 未設定」）；
+    - 本頁三鍵之外的列一律忽略（同一張表也住著 alo、set 的鍵）。
+
+    - `rows` 不是 dict → 三鍵一律解析不了（不靜默當成未設定）；
+    - 某鍵那一列在 `rows` 裡、卻是 None／不是 dict／缺 `setting_value` 鍵 → 該鍵解析不了（不是未設定）；
+    - `broken_keys` 是字串 → TypeError（呼叫端寫錯；字串會被拆成一個個字元，等於沒傳）。
+
+    ⚠️ **呼叫端契約：有訊息時，回傳的三列不得交給 `logic`，要交空列表。** 有失敗時三列裡
+    仍可能留著解析成功的那幾個值（例如起日壞、迄日好 → 迄日照樣在）；交出部分結果會讓
+    `logic` 只看到一半的設定。比照 `ui_v2/alo/source.py`：
+
+        rows_out, problem = parse_user_settings(settings["rows"], settings["broken_keys"])
+        if problem is not None:
+            errors["user_setting"] = problem
+            rows_out = []
+    """
+    if isinstance(broken_keys, (str, bytes)):
+        raise TypeError(f"broken_keys 應為鍵的集合，不是字串：{broken_keys!r}")
+    broken = set(broken_keys or ())
+    rows_ok = isinstance(rows, dict)
+    if not rows_ok:
+        rows = {}
+    problems = [f"{key} 這一列解析不了" for key in SETTING_KEYS if key in broken or not rows_ok]
+    out = []
+    for key in SETTING_KEYS:
+        source = rows.get(key, {})
+        if key in rows and (not isinstance(source, dict) or "setting_value" not in source):
+            if key not in broken:
+                problems.append(f"{key} 這一列解析不了")
+            source = {}
+            broken.add(key)
+        raw = source.get("setting_value")
+        value = None
+        if raw is not None and raw != "" and key not in broken:
+            try:
+                value = _PARSERS[key](raw, key)
+            except BadSettingValue as exc:
+                problems.append(str(exc))
+        out.append({
+            "setting_key": key,
+            "setting_value": value,
+            "value_kind": source.get("value_kind"),
+            "updated_at": source.get("updated_at"),
+        })
+    if problems:
+        return out, "設定值讀不到可用的形狀：" + "；".join(problems)
+    return out, None
