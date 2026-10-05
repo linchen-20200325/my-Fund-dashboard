@@ -24,6 +24,7 @@ S5（裁示 1-A＋1-C）：舊淨值的新鮮度標示 —— 見 `NAV_FRESH_DAY
 本輪仍不接取數：`nav_provenance` 由呼叫端傳入。
 
 S6b-2（第一塊）：`user_setting` 三個鍵的解析 —— 見 `parse_user_settings`（體例照 `ui_v2/alo/live.py`）。
+S6b-2（第二塊）：L2 輸出 → `load_live` 回傳值的組裝 —— 見 `assemble_live_load`。
 
 ⚠️ 文案逐字照裁示；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
 """
@@ -884,3 +885,151 @@ def parse_user_settings(rows, broken_keys=()) -> tuple:
     if problems:
         return out, "設定值讀不到可用的形狀：" + "；".join(problems)
     return out, None
+
+
+# ── S6b-2（第二塊）：L2 輸出 → load_live 回傳值的組裝 ──
+def assemble_live_load(
+    *,
+    holding_tables,
+    holding_error,
+    settings,
+    settings_error,
+    key_results,
+    nav_table,
+    direct_policy_id,
+    policy_tab_source,
+    direct_sources,
+    empty_without_reason,
+    nav_unavailable_withheld,
+    dividend_gate_open,
+    mask,
+) -> dict:
+    """S6b-2：把 L2 的輸出組成 `page.render(load_live=...)` 要的回傳值 `{"dataset", "live_args"}`。
+
+    純函式：不讀時鐘、不 import 任何新模組、不改輸入。L2 的常數一律由參數交進來，本檔不寫它們的字面值。
+
+    - `holding_error`、`settings_error` 由呼叫端傳入時必須已經遮蔽；本函式不再遮。
+    - 淨值的取數失敗：`nav_table["errors"]` 裡，除了「訊息恰為 `empty_without_reason` 且未取到任何列」的那幾檔，
+      其餘一律以 `mask(原文)` 放進 `fund_errors["nav"]`；判斷用原文，只遮放進 `fund_errors` 的那幾筆；`skipped_tabs` 組出的 `errors["holding"]` 也由本函式遮（見下）。
+    - 淨值被扣下（代碼在 `nav_unavailable_withheld` 裡）、代碼對照查不到（`ok is False`）、來源回空，
+      三種一律不放任何東西 —— 那一檔在 dataset 裡就只是「沒有淨值列、也不在 `fund_errors`」，
+      畫面由 logic 既有路徑印「⬜ 資料未備」（區間已設時；未設區間時與健康的檔同樣印「⬜ 不適用：尚未設定區間」），不新增字句。扣下代碼不在清單內 → raise。
+    - L1 有回資料、但 L2 全數拒收（沒有淨值列、沒有錯誤、沒有扣下代碼）的檔，同樣不放任何東西。
+    - 呼叫端**必須**只交幣別兩碼與取得時間兩碼；同一檔被給了互相矛盾輸入的那一碼只會因呼叫端組錯而出現，刻意不在清單內 → raise（契約被破壞不畫成 ⬜）。⚠️ 本函式不檢查清單內容：呼叫端若連那一碼也交進來，該檔會畫成 ⬜、不會 raise；「清單恰為四碼」列為 S6b-3 的驗收項。
+    - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法，但 HLD-1 在零偏離時仍印「無偏離項」與「沒有任何一檔超出」—— 屬「結論燈兩句」那一塊，待修；讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬「讀取失敗不說空」那一塊，待修。
+    - `pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。
+    - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
+    - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。
+    """
+    if (holding_tables is None) == (holding_error is None):   # R-1
+        raise ValueError("holding_tables 與 holding_error 要恰好給一個")
+    if (settings is None) == (settings_error is None):   # R-2
+        raise ValueError("settings 與 settings_error 要恰好給一個")
+    if holding_error is not None:   # R-3
+        _require_text(holding_error, "holding_error")
+    if settings_error is not None:   # R-3
+        _require_text(settings_error, "settings_error")
+    if holding_tables is None and (key_results is not None or nav_table is not None):   # R-4
+        raise ValueError("持倉表讀取失敗時，key_results、nav_table 一律不得給")
+    if holding_tables is not None and (key_results is None or nav_table is None):   # R-5
+        raise ValueError("持倉表讀取成功時，key_results、nav_table 一律要給")
+    if type(dividend_gate_open) is not bool:   # R-6
+        raise TypeError(f"dividend_gate_open 應為 bool：{dividend_gate_open!r}")
+    _require_text(empty_without_reason, "empty_without_reason")   # R-7
+    if isinstance(nav_unavailable_withheld, (str, bytes)) or not isinstance(   # R-8
+        nav_unavailable_withheld, (list, tuple, set, frozenset)
+    ):
+        raise TypeError(f"nav_unavailable_withheld 應為集合：{type(nav_unavailable_withheld).__name__}")
+    for reason in nav_unavailable_withheld:
+        _require_text(reason, "nav_unavailable_withheld 的元素")
+    if not callable(mask):   # R-12
+        raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")
+    if dividend_gate_open is True:   # R-9
+        raise ValueError("配息閘門已打開，本頁尚未規定配息怎麼組")
+
+    if holding_tables is not None:
+        if not isinstance(key_results, (list, tuple)):
+            raise TypeError(f"key_results 應為 list：{type(key_results).__name__}")
+        codes_held = {h["fund_code"] for h in holding_tables["holding"]}
+        nav_codes = {r["fund_code"] for r in nav_table["rows"]}
+        for name in ("errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"):
+            nav_codes |= set(nav_table[name])
+        if nav_codes - codes_held:   # R-13
+            raise ValueError(f"淨值表出現持倉裡沒有的代碼：{sorted(nav_codes - codes_held)!r}")
+        for r in key_results:   # R-14
+            if type(r["ok"]) is not bool:
+                raise TypeError(f"代碼對照的 ok 應為 bool：{r['input']!r}")
+        inputs = {r["input"] for r in key_results}
+        if inputs != codes_held:   # R-14
+            raise ValueError(
+                f"代碼對照的輸入與持倉代碼不一致：多 {sorted(inputs - codes_held)!r}、少 {sorted(codes_held - inputs)!r}"
+            )
+        key_failed = {r["input"] for r in key_results if r["ok"] is False}
+        if key_failed & nav_codes:   # R-15
+            raise ValueError(f"代碼對照失敗的代碼不得出現在淨值表：{sorted(key_failed & nav_codes)!r}")
+        key_ok = {r["input"] for r in key_results if r["ok"] is True}
+        not_handed = {c for c in key_ok if c not in nav_table["fetched"] and c not in nav_table["withheld"]}
+        if not_handed:   # R-16
+            raise ValueError(f"代碼對照成功、卻沒有交給淨值表的代碼：{sorted(not_handed)!r}")
+
+    errors = {}
+    if holding_tables is None:
+        holding, policy, direct = [], [], []
+        errors["holding"] = holding_error
+    else:
+        holding = [dict(r) for r in holding_tables["holding"]]
+        policy = [dict(r) for r in holding_tables["policy"]]
+        direct = list(holding_tables["direct"])
+        skipped_tabs = holding_tables["skipped_tabs"]
+        if skipped_tabs:
+            parts = []
+            for tab_entry in skipped_tabs:
+                tab = _require_text(tab_entry["tab"], "skipped_tabs 的 tab")
+                error = tab_entry["error"]
+                if isinstance(error, str) and error.strip():
+                    parts.append(f"{tab}：{error}")
+                else:
+                    parts.append(tab)
+            errors["holding"] = mask("；".join(parts))
+
+    if settings is None:
+        user_setting = []
+        errors["user_setting"] = settings_error
+    else:
+        user_setting, problem = parse_user_settings(settings["rows"], settings["broken_keys"])
+        if problem is not None:
+            errors["user_setting"] = problem
+            user_setting = []
+
+    nav, failures, provenance = [], {}, {}
+    if holding_tables is not None:
+        for code, message in nav_table["errors"].items():
+            if message == empty_without_reason and nav_table["fetched"].get(code, 0) == 0:
+                continue
+            failures[code] = mask(message)
+        for code, reason in nav_table["withheld"].items():
+            if reason not in nav_unavailable_withheld:
+                raise ValueError(f"淨值扣下原因 {reason!r} 不在本頁約定的清單內：{code!r}")   # R-10
+        nav = [dict(r) for r in nav_table["rows"]]
+        provenance = dict(nav_table["provenance"])
+
+    return {
+        "dataset": {
+            "holding": holding,
+            "nav": nav,
+            "dividend": [],
+            "policy": policy,
+            "fund_profile": [],
+            "user_setting": user_setting,
+            "errors": errors,
+            "pending_tables": ["fund_profile", "dividend"],
+            "fund_errors": {"nav": failures} if failures else {},
+        },
+        "live_args": {
+            "direct_policy_id": direct_policy_id,
+            "direct": direct,
+            "policy_tab_source": policy_tab_source,
+            "direct_sources": direct_sources,
+            "nav_provenance": provenance,
+        },
+    }
