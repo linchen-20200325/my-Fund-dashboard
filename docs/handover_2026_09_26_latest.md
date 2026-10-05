@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-05 12:11:51 UTC（`date -u` 實測）
+最後更新：2026-10-05 13:04:50 UTC（`date -u` 實測）
 
 ---
 
@@ -420,7 +420,8 @@
 **a′. 提交狀態與缺件（2026-10-05）**（標題 2026-10-05 稽核回修，**不是漏刪**，舊標題劃線保留）
 - ~~設定解析器（`ui_v2/hld/live.py`、`tests/ui_v2/test_hld_live_settings.py`）與本交接本**已併入本 PR（#894）**（解析器兩檔由 worktree `.claude/worktrees/agent-a9ad1ac39bd7a7697` 逐位元組複製過來；交接本改動來源為 worktree `.claude/worktrees/agent-affc87d8ccb3a6041`）。出處：客戶 2026-10-05 裁示。~~
   → **2026-10-05 第十八次更新，狀態更新，不是漏刪**：設定解析器兩檔與交接本已合併（#894，main `760995f`）（兩個來源工作區見〈登記待辦〉「本機殘留分支與工作區可清」一條）。出處：合併本身為總管 2026-10-05 依常設授權；本組 2026-10-05 `git diff --shortstat 1f3a658 760995f` 實查 3 檔。
-- `docs/v2/52_ui_design_spec.md` **尚未撰寫** —— 客戶指定合併的兩份 UI 設計規格原稿不在 repo，待客戶提供原稿。出處：客戶 2026-10-05 裁示。
+- ~~`docs/v2/52_ui_design_spec.md` **尚未撰寫** —— 客戶指定合併的兩份 UI 設計規格原稿不在 repo，待客戶提供原稿。出處：客戶 2026-10-05 裁示。~~
+  → **2026-10-05 狀態更新，不是漏刪**：客戶已提供原稿，52 已建立（中譯合併版；英文原稿原文存證於本檔末節附錄）。見第 2 節〈未來待辦〉「圖表設計階段 — 儲備規格」。出處：客戶 2026-10-05 任務原文與裁示（總管轉達）。
   - 實查：本組 2026-10-05 實跑 `git grep -lE "Switching Engine|X-Ray|Quartile" origin/main -- docs`，**無輸出、exit 1（0 命中）**（`origin/main` ＝ `1f3a658`）（實查時點；此後 main 為 `760995f`）。
 
 **b′. 已裁示三件（2026-10-05）**
@@ -1274,26 +1275,29 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 #### 圖表設計階段 — 儲備規格
 
-- **檔案**：`docs/v2/52_ui_design_spec.md`（待原稿，**尚未建立**）。出處：客戶 2026-10-05 裁示。
+- ~~**檔案**：`docs/v2/52_ui_design_spec.md`（待原稿，**尚未建立**）。出處：客戶 2026-10-05 裁示。~~
+  → **2026-10-05 狀態更新，不是漏刪**：`docs/v2/52_ui_design_spec.md` 已建立（2026-10-05，依客戶貼上的兩份原稿合併）。依客戶 2026-10-05 追加規則「52 規格檔內，所有畫面會出現的文字一律中文」，52 為中譯合併版；英文原稿原文存證於本檔末節〈附錄：52 原稿原文（存證）〉，不進 52 本體。出處：客戶 2026-10-05 任務原文與裁示（總管轉達）。
+- **狀態**：原稿已由客戶提供（2026-10-05）；52 待客戶複核。出處：客戶 2026-10-05 任務原文（總管轉達）。
 - **內容規劃**：出處：客戶 2026-10-05 裁示。
   - Part A 全局架構：8:4 金格＋4 象限總表。
   - Part B 元件庫：terminal 主題、Radar、Quartile、Overlap、X-Ray、Sticky 說明欄。
   - Part C 禁用清單（兩份合併）。
   - 附註：「必須改造」清單（含 Switching Engine）。
-    - Quadrant 2 台股戰情室 → 砍（已移除台股）
-    - Switching Engine → 改「同類對照」
-    - AI Decision Core / Safety Score → 改資料狀態
-    - 原稿的配置比例區塊 → 改歷史中位數
-    - Before/After 預估 → 改差距對照
-    - 紅綠語意 → 資料狀態色
-    - React + Chart.js → Streamlit + Plotly
-    - （上列七項 2026-10-05 第十九次更新補入，逐字照錄。出處：客戶 2026-10-05 第二次裁示（總管轉達，repo 內無原文）。第四項是描述性寫法：原稿那一區的名稱含禁詞，本檔不寫原名。）
+    - 附件二 Quadrant 2 台股戰情室 → 砍（已移除台股）
+    - 兩份 Switching Engine → 改「同類對照」
+    - 附件二 AI Decision Core / Safety Score → 改資料狀態
+    - 附件一配置比例區塊 → 改歷史中位數
+    - 兩份 Before/After 預估 → 改差距對照
+    - 兩份紅綠語意 → 資料狀態色
+    - 附件一 React+Chart.js、附件二 React+ECharts → Streamlit+Plotly
+    - （上列七項 2026-10-05 第十九次更新補入，依客戶 2026-10-05 任務原文〈寫 docs/v2/52_ui_design_spec.md〉的 Part D 逐字照錄。出處：客戶 2026-10-05 任務原文（總管逐字轉交，repo 內無原文）。同一次更新的第一顆 commit 曾依總管轉達的較短版本寫入，未進 main，直接改寫。各項在 52 裡的標註位置見 52 的 Part D。）
   - 技術棧：Streamlit＋Plotly。
 - ~~**時機**：五頁接完真資料後。出處：客戶 2026-10-05 裁示。~~
   → **2026-10-05 狀態更新，不是漏刪**：客戶指示改為現在做，原稿到手即寫。出處：客戶 2026-10-05 裁示。
-- **前提**：客戶指定合併的兩份 UI 設計規格原稿不在 repo，待客戶提供（實查見第 1 節〈未提交清單與待裁示（2026-10-04）〉a′ 段）。出處：客戶 2026-10-05 裁示。
+- ~~**前提**：客戶指定合併的兩份 UI 設計規格原稿不在 repo，待客戶提供（實查見第 1 節〈未提交清單與待裁示（2026-10-04）〉a′ 段）。出處：客戶 2026-10-05 裁示。~~
+  → **2026-10-05 狀態更新，不是漏刪**：客戶已提供原稿，52 已建立。出處：客戶 2026-10-05 任務原文（總管轉達）。
   - 2026-10-05 實查：兩份原稿從未進過 repo —— `git log --all -S "<字串>"`：`Switching Engine`、`X-Ray`、`Quartile`、`Sticky` 各只有 `8b8a361`（本檔第十七次更新寫入的大綱）一筆；`Decision Core`、`Safety Score` 0 筆；`git log --all -- 'docs/v2/52*'` 0 筆。出處：總管 2026-10-05 實查。
-  - 本組 2026-10-05 11:52 UTC 於 `cfd0c97`（本次更新寫入前）逐條重跑上列七條指令，輸出與上句相同（`8b8a361` 那一筆的標題為「交接本第十七次更新：客戶 2026-10-05 三件裁示、main 1f3a658、圖表設計儲備規格」）。⚠️ 會漂移：本次更新把 `Decision Core`、`Safety Score` 等字面寫進本檔，此後同一組指令也會列出第十九次更新那一顆 —— 那是本檔自己的字面，不是原稿；`git log --all` 的射程只到本機 clone 的 ref。
+  - 本組 2026-10-05 11:52 UTC 於 `cfd0c97`（本次更新寫入前）逐條重跑上列七條指令，輸出與上句相同（`8b8a361` 那一筆的標題為「交接本第十七次更新：客戶 2026-10-05 三件裁示、main 1f3a658、圖表設計儲備規格」）。⚠️ 會漂移：本次更新把 `Decision Core`、`Safety Score` 等字面寫進本檔，此後同一組指令也會列出第十九次更新的 commit —— 那是本檔自己的字面；同一次更新的第二顆 commit 又把英文原稿原文存證於本檔末節附錄，此後這幾條指令也會命中原稿原文。上句與本句都是原稿提供前的量測，「從未進過 repo」只對量測當時成立。`git log --all` 的射程只到本機 clone 的 ref。
 - ⛔ 本節為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
 
 ## 3. 已完成（未 merge）
@@ -1709,7 +1713,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 | 日期 | 內容 |
 |---|---|
-| 2026-10-05 | 第十九次更新（起點 `cfd0c97`）：第 1 節 `origin/main` 改 `cfd0c97`（#895 合併；舊值 `760995f` 劃線保留）、第 4 節補 #895；〈圖表設計階段 — 儲備規格〉「必須改造」清單補七項（客戶 2026-10-05 第二次裁示，逐字；第四項為描述性寫法，原名含禁詞不寫）、「時機」一行劃線改「現在做，原稿到手即寫」、補兩份原稿不在 repo 的 `git log --all -S` 實查（本組重跑相同）；〈總管錯誤紀錄〉新增兩筆（`ls` 輸出被 `head` 截斷卻當成完整事實、`settings_store.py:322` 行號錯）；第 1 節 c 段 alo `_finite_number` 溢位與 `broken.add(key)` 死寫入補程式組 C 實測（原句未改）；第 2 節 S6b 小節新增〈S6b-2 資料組裝（2026-10-05）〉（G1／G2 互核兩點、客戶規則六條、總管裁定含同輪改判、順序硬條件、G1 一處錯、PR #896 實作與稽核狀態）；S6b-3 那一行與〈登記待辦〉S6b 盤點第 9 條的「`pending_tables` 只交 dividend」劃線更正；小步表 S6b-2、總藍圖 #1 改「資料組裝 PR #896（`1b4f50d`）稽核中」（舊值劃線，表後補註）；〈現在接手要做的事〉第 1 項與 c 段的資料組裝狀態同步（舊句劃線；派工單未列，本組依同一把尺補改）、c 段讀取失敗一行補互見；〈登記待辦〉新增「S6b-2 開工前盤點與規格留下的登記」11 條、本機殘留一條補 2026-10-05 補充；第 1 節主工作樹一行舊敘述劃線，補記 `git checkout -f -B main origin/main` 後為 `main` ＝ `cfd0c97`；`:3` 由「最後更新：2026-10-05 07:47:38 UTC（`date -u` 實測）」改為 commit 前 `date -u` 實測時間（直接替換，同歷次慣例）。出處：客戶 2026-10-05 裁示；總管 2026-10-05 指示；`git`／`gh api`／`sed` 本組實查。 |
+| 2026-10-05 | 第十九次更新（起點 `cfd0c97`）：第 1 節 `origin/main` 改 `cfd0c97`（#895 合併；舊值 `760995f` 劃線保留）、第 4 節補 #895；〈圖表設計階段 — 儲備規格〉「必須改造」清單補七項（客戶 2026-10-05 第二次裁示，逐字；第四項為描述性寫法，原名含禁詞不寫）、「時機」一行劃線改「現在做，原稿到手即寫」、補兩份原稿不在 repo 的 `git log --all -S` 實查（本組重跑相同）；〈總管錯誤紀錄〉新增兩筆（`ls` 輸出被 `head` 截斷卻當成完整事實、`settings_store.py:322` 行號錯）；第 1 節 c 段 alo `_finite_number` 溢位與 `broken.add(key)` 死寫入補程式組 C 實測（原句未改）；第 2 節 S6b 小節新增〈S6b-2 資料組裝（2026-10-05）〉（G1／G2 互核兩點、客戶規則六條、總管裁定含同輪改判、順序硬條件、G1 一處錯、PR #896 實作與稽核狀態）；S6b-3 那一行與〈登記待辦〉S6b 盤點第 9 條的「`pending_tables` 只交 dividend」劃線更正；小步表 S6b-2、總藍圖 #1 改「資料組裝 PR #896（`1b4f50d`）稽核中」（舊值劃線，表後補註）；〈現在接手要做的事〉第 1 項與 c 段的資料組裝狀態同步（舊句劃線；派工單未列，本組依同一把尺補改）、c 段讀取失敗一行補互見；〈登記待辦〉新增「S6b-2 開工前盤點與規格留下的登記」11 條、本機殘留一條補 2026-10-05 補充；第 1 節主工作樹一行舊敘述劃線，補記 `git checkout -f -B main origin/main` 後為 `main` ＝ `cfd0c97`；`:3` 由「最後更新：2026-10-05 07:47:38 UTC（`date -u` 實測）」改為 commit 前 `date -u` 實測時間（直接替換，同歷次慣例）。出處：客戶 2026-10-05 裁示；總管 2026-10-05 指示；`git`／`gh api`／`sed` 本組實查。第二顆（起點 `4b6a867`，第一顆未進 main，本列直接續寫）：新增 `docs/v2/52_ui_design_spec.md`（兩份英文原稿的中譯合併版：Part A 全文中譯、Part B 15 項元件、Part C、Part D、技術對應、待客戶確認 8 條）、儲備規格子節同步（「檔案」劃線改「已建立」、新增「狀態」一行、七項改為客戶任務原文 Part D 逐字、「前提」劃線）、a′ 段「尚未撰寫」劃線；`tests/test_doc_counters.py` 的 `_MD_DOCS` 加 52 一行（客戶 2026-10-05 授權）；新增附錄：52 原稿原文（存證）；`:3` 再更新為第二顆 commit 前實測時間。出處：客戶 2026-10-05 任務原文與兩件裁示（總管轉達）；總管 2026-10-05 指示。 |
 | 2026-10-05 | 第十八次更新（起點 `760995f`）：第 1 節 `origin/main` 改 `760995f`（#894 合併；舊值 `1f3a658` 劃線保留）；第 4 節補 #894；小步表 S6b-2、總藍圖 #1、〈現在接手要做的事〉第 1、8 項、〈提交狀態與缺件（2026-10-05）〉、b′ 第 3 項、c 段改「已合併（#894，main `760995f`）」（舊字劃線保留）；小步表 S6b-2 被劃線的前值補成「本 PR（#894）」與表後註記引文一致；上一列「表後註記改回時間順序」收窄為「10-03 註記移到 10-04 之前」；〈登記待辦〉新增本機殘留分支與工作區一條。出處：合併本身為總管 2026-10-05 依常設授權；總管 2026-10-05 指示；`git`／`gh api` 本組實查。 |
 | 2026-10-05 | 第十七次更新（起點 `1f3a658`；與設定解析器合成一個 PR：#894）：第 1 節 `origin/main` 改 `1f3a658`（舊句劃線保留）；〈未提交清單與待裁示（2026-10-04）〉a、b 兩段劃線，新增 a′（解析器與交接本已併入本 PR；`docs/v2/52_ui_design_spec.md` 尚未撰寫、原稿不在 repo）與 b′（三件已裁示），c 段解析器一行劃線更新；〈現在接手要做的事〉第 1 項補「從資料組裝開工」「讀取失敗顯示要接」、第 8 項劃線；〈登記待辦〉新增「⬜ 資料未備」顯示原因排文案批一條；新增〈未來待辦〉節與「圖表設計階段 — 儲備規格」子節；小步表 S6b-2、第 5 節同步（舊值劃線）。出處：客戶 2026-10-05 裁示。稽核回修（起點 `8b8a361`）：已劃線兩條的禁詞改為「總管建議」（劃線保留）；總藍圖 #1 改「S6b-2 解析器隨 #894 提交，資料組裝未開工」（舊值劃線，表後補註）；a′ 標題改「提交狀態與缺件（2026-10-05）」（舊標題劃線）並寫明 #894 與交接本來源 worktree；第 5 節 `live.py:41` 補行號基準；主工作樹落後數補 2026-10-05 實查；~~表後註記改回時間順序~~ 10-03 註記移到 10-04 之前（第十八次更新收窄敘述，**不是漏刪**）。出處：總管 2026-10-05 指示（依 #894 稽核）。 |
 | 2026-10-03 | 第十六次更新（起點 `aead271`）：`origin/main` 改 `aead271`（#893；舊句劃線保留）、第 4 節補 #893；客戶 2026-10-03 裁示 2420 張力結案（「重新取數」維持停用＋寫出原因，附 (a) 文案只描述狀態不指示動作、(b) S6b-3 接後端時改成能按或拿掉）：第 5 節該項劃線移入新增的「已裁示（2026-10-03）」、〈登記待辦〉S6b-1 第 4 條補已裁示、新增「客戶裁示 2420 張力結案後的待辦」一條、〈現在接手要做的事〉第 6 項劃線並新增第 7 項；小步表 S6b-2 改「進行中（開工前盤點）」、總藍圖 #1 改「S6b-2 開工前盤點中」（舊值皆劃線）。出處：客戶 2026-10-03 裁示（總管轉達）；總管 2026-10-03 指示；文案以 `grep` 實查。2026-10-04 補記：第 1 節新增〈未提交清單與待裁示（2026-10-04）〉（未提交清單、待客戶裁示三件、S6b-2 進度），小步表 S6b-2、〈現在接手要做的事〉第 8 項、第 5 節「目前無其他待裁示項」（劃線）同步指向。出處：總管 2026-10-04。 |
@@ -1761,3 +1765,155 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 | 2026-09-28 | #858 後更新：#857／#858 歸位已 merge（**#857 的 Slow lane 實測為 `failure`，被 `continue-on-error` 滾成綠，據實寫明**）；第 2 節補本輪經過（**同型錯誤四次**：`e820f64` 七項在檔案裡、PR 說明三次）；總管錯誤紀錄新增兩條（未查證就轉述回修組宣稱、〈驗證〉節抬高複驗者背書射程）；**新增硬規矩「〈驗證〉敘述一律逐列標明誰跑過」**並就地寫死它與既有那條的分工。 |
 | 2026-09-28 | 同輪回修（**總管擋下**）：**#857 那一列的歸因不成立** —— 它**不是走常設授權 merge**，是**客戶親自裁示**（裁兩次，理由逐條寫明 Slow lane）。**CI 事實全部保留、一字未改，換掉的只有因果框架**；舊歸因加刪除線保留。就地記下它的形狀：**查證扎實的事實 ＋ 沒查證的因果框架**，而**擋下它的不是任何檢查，是總管剛好記得** —— ~~記為本輪同型錯誤的**第五次**~~ → **記為同型、又一次（序數已於同日稽核 M4 拿掉：「五」是合併計數）**。 |
 | 2026-09-28 | 獨立稽核回修（最後一輪）：**M4 拿掉「第五次」序數**（四處，「五」＝ 4＋1 的合併計數，與同段「分開計數、不合併」自相矛盾；兩條先例 base `:264`／`CLAUDE.md` `:185` 均已實測）。**總管錯誤紀錄新增兩條**：(1) 把 `CLAUDE.md` §-2.A **#9** 的教訓移植到不適用處 —— #9 講的是**不含模型名的 PR 頁尾署名**，commit message 的署名行**含**，**本 PR 三顆各 1 個模型名命中、違反客戶「識別碼 0」規矩，且無任何關卡會擋**；**規則就地更新：commit message 不得出現模型名，署名可留但改用通稱**，舊 commit **不得 amend／force**；(2) **M3 登記一句改不掉的假敘述**（`bc4b929` 的「那兩行都是加刪除線保留」對時間戳那一行為假，檔案內 0 命中）。**B2 採納**：補上 `CLAUDE.md` §-2 規則 6 本來就蓋得到，新規矩非冗餘的理由改為「**規則 6 是義務、本條是形式**」。 |
+
+## 附錄：52 原稿原文（存證）
+
+客戶 2026-10-05 於對話提供；存證用，不是規格。
+規格見 `docs/v2/52_ui_design_spec.md`（中譯合併版）。
+
+### 原稿一
+
+````text
+# Role & Architecture Directive: Institutional-Grade Long-Term Mutual Fund & Wealth Allocation Dashboard
+
+You are an Elite Fintech UI/UX Architect and Senior Quantitative Wealth Management Engineer. Your task is to design and implement a comprehensive, institutional-grade Long-Term Mutual Fund Investment & Portfolio Rebalancing Dashboard.
+
+## 1. Core Architecture & Layout Rules (8:4 Golden Grid)
+
+The entire dashboard uses a 12-column responsive layout with an ultra-dark slate theme:
+- Base Canvas: `#0b0e14`
+- Surface Layers: `#131924` to `#18202c`
+- Semantic Accents:
+  - Emerald (`#10b981`): Alpha generation, Top Quartile rank, Bullish macro cycle
+  - Rose (`#f43f5e`): Underperformance, High drawdown, Style drift alert
+  - Amber (`#f59e0b`): Switching/Rebalancing trigger, Downside alert, Fee warning
+  - Cyan (`#06b6d4`): Macro clock quadrant, Benchmark baseline, Correlation metrics
+
+### Grid Division:
+1. Top Global Navigation (Full 12 cols): Global Macro Cycle Status (Merrill Lynch Clock quadrant), Total Portfolio AUM, Weighted Expense Ratio, and 3-Year Annualized Return.
+2. Left Workspace (8 cols): Interactive workflow canvas containing 4 functional tabs:
+   - Tab 1: Macro Cycle & Asset Class Allocation
+   - Tab 2: Single Fund Deep-Dive (Alpha/Beta/Drawdown/Morningstar)
+   - Tab 3: Peer Group Comparison & Holdings Overlap
+   - Tab 4: Portfolio Health X-Ray & Dynamic Switching Engine
+3. Right Sticky Contextual Drawer (4 cols): A permanent, non-modal explanation sidebar. Clicking ANY fund metric, macro indicator, X-ray bar, or switching recommendation instantly displays its quantitative theory, exact formula, and decision rules.
+
+## 2. Harmonized Visual Styles (Style-as-a-Function)
+
+Blend four distinct UI styles functionally:
+1. Layer 1 (Macro Clock): WSJ Financial Magazine Style — Warm dark slate, serif accents, dual-axis economic indicators (PMI, Real Yields, Equity Risk Premium).
+2. Layer 2 (Single Fund Analytics): Glassmorphism — Semi-transparent frosted cards (`backdrop-blur-md`, `bg-white/5`), 5-axis Radar Chart (Alpha, Sortino, Downside Capture, Expense Ratio, Manager Tenure).
+3. Layer 3 (Peer Comparison & Overlap): Enterprise Fintech Matrix — Data-dense clean comparison tables with inline quartile heatmaps and Venn/overlap indicators.
+4. Layer 4 & 5 (Portfolio X-Ray & Switching Engine): Modern Minimalist & Terminal Accents — Donut asset breakdown, Core-Satellite progress bars, and high-contrast switching cards showing (From Fund A -> To Fund B) with projected alpha gain.
+
+## 3. Comprehensive Information Architecture & Content Schema
+
+### Module A: Macro Cycle & Equity Risk Premium (ERP)
+- Merrill Lynch Investment Clock Quadrant: Recovery, Overheat, Stagflation, or Recession.
+- Equity Risk Premium (ERP): Earnings Yield (1/PE of S&P 500) minus 10Y US Treasury Yield.
+- Recommended Macro Allocation: e.g., Equities 60% (Overweight Developed Markets) / Bonds 35% (Core Investment Grade) / Cash 5%.
+
+### Module B: Single Fund Deep-Dive & Manager Alpha
+- Primary Metrics:
+  - Jensen's Alpha (α) & Beta (β) relative to category benchmark.
+  - Information Ratio (IR = Active Return / Tracking Error).
+  - Risk Metrics: 3Y/5Y Sharpe Ratio, Sortino Ratio, Max Drawdown (MDD), and Recovery Period (months).
+  - Downside Capture Ratio (< 80% preferred for defensive equity funds).
+  - Fund Hygiene: Morningstar Star Rating, AUM size (flag if < $50M), Total Expense Ratio (TER/Management Fee).
+
+### Module C: Peer Group Comparison & Holdings Overlap
+- Quartile Ranking Matrix: Relative performance over 1Y, 3Y, 5Y, and 10Y against peers (highlighting Q1, Q2, Q3, Q4).
+- 3-Year Rolling Return consistency chart.
+- Top 10 Holdings Overlap Analyzer: Detect portfolio duplication between two candidate funds.
+
+### Module D: Portfolio Look-Through X-Ray
+- Core-Satellite Allocation Gauge: Target 70% Core (Global Index/Balanced) vs. 30% Satellite (Sector/Thematic).
+- Look-Through Geographic & Sector Exposure: Aggregated underlying exposure to prevent accidental tech or emerging market over-concentration.
+- Portfolio Weighted Metrics: Blended Sharpe Ratio, Weighted TER, and Aggregate MDD.
+
+### Module E: Fund Switching & Replacement Engine (汰弱留強機制)
+- Underperformance Triggers:
+  - Ranked in Quartile 3 or 4 for 2+ consecutive quarters.
+  - Key Lead Manager departure.
+  - Significant Style Drift detected.
+  - Expense Ratio > 30% higher than category median with negative Alpha.
+- Switching Recommendation Card (Before vs. After):
+  - Displays [Target to Sell] -> [Target to Buy].
+  - Quantifies improvement: e.g., "Projected Sharpe +0.35, Annual Expense Savings 0.45%, Lower 3Y MDD by 4.2%".
+  - Intra-family switch indicator (同基金公司轉換零手續費提醒).
+
+## 4. Sticky Contextual Explanation Drawer (Right 4 Columns)
+
+Clicking any fund card, metric, or switching recommendation loads a 3-part breakdown:
+1. 【Financial Mechanism & Theory】: Why this metric matters for long-term fund compound interest.
+2. 【Exact Mathematical Formula】: Precise formulas in LaTeX / clean monospace code.
+3. 【Long-Term Asset Allocation Rules】:
+   - Green criteria for retaining/buying.
+   - Yellow/Red thresholds for pruning or initiating fund switches.
+   - Edge cases (market inflection points, recency bias).
+
+## 5. Technical Stack & Deliverables
+
+- Clean, production-ready React (or modern HTML5), Tailwind CSS, Chart.js / ECharts.
+- Fully semantic components, responsive layout, and responsive state handling.
+````
+
+### 原稿二
+
+````text
+# Role: Elite Quantitative Fintech UI/UX Designer & Dashboard Developer
+
+Task: Design and build a dense, dark-mode "Quantitative Executive Master Dashboard" integrating Macroeconomics, Taiwan Stock Market (Equities), Long-term Mutual Funds, and Portfolio Rebalancing, matching the aesthetic and density of high-end quant trading terminals (e.g., Bloomberg, ECF Quant Terminal).
+
+## 1. Visual Aesthetics & Styling Guide
+
+- Theme & Canvas: Ultra-dense dark terminal theme. Background `#0b0f19` to `#111827`, card surfaces `#151d2c` with thin hairline borders (`border-slate-800` or `border-cyan-500/20`).
+- Color Palette:
+  - Long / Bullish / Growth: Electric Emerald (`#10b981`)
+  - Short / Bearish / Drawdown: Crimson Rose (`#f43f5e`)
+  - Warning / Neutral / Hold: Amber Gold (`#f59e0b`)
+  - Macro / Accent Lines: Cyan (`#06b6d4`) and Neon Purple (`#8b5cf6`)
+- Typography: High-contrast sans-serif for UI labels paired with monospace fonts for prices, percentages, ratios, and formulas.
+
+## 2. Page Layout: 4-Quadrant Information Architecture
+
+### Header Bar (Global Dynamic Ticker):
+- Real-time Macro Regime: [Merrill Lynch Clock: Early Expansion]
+- Market Status: [Taiwan Taiex Breadth: Bullish 78% above 20MA]
+- Active Portfolio Value, Day P&L (+1.45%), and AI Global Safety Score.
+
+### Quadrant 1: Macro & Market Regime (Upper Left)
+- Dynamic gauges (semi-circular needles): VIX Volatility Gauge, 10Y US Treasury Yield, and DXY Currency meter.
+- Market Breadth Progress: Circular progress rings showing percentage of stocks above 20MA and Advance-Decline Line (ADL) trend.
+- Macro Cycle Quadrant Pill.
+
+### Quadrant 2: Individual Stock Tactical Terminal (Upper Right - Taiwan Equity)
+- AI Decision Core Card (centered badge): AI Sentiment (Bullish/Bearish/Caution), Primary Driver (Institutional Accumulation), Key Support/Resistance levels.
+- Main Price Chart: Interactive Candlestick + 20MA Band + Volume profile horizontal bars.
+- Factor Radar Chart: 5-axis rating (Technicals, Chip Concentration, 3-3-3 Growth, Valuation, Momentum).
+- Institutional Flow Bar: Foreign, Investment Trust (投信), and Dealer net buy/sell stacked bars.
+- Bottom Ring Gauges: Retail financing balance, 400-share big-hand ratio, and 2-3-5 tiered entry progress.
+
+### Quadrant 3: Long-term Mutual Fund Analytics (Lower Left)
+- Fund Alpha Radar: Jensen's Alpha, Sortino Ratio, Downside Capture (<80%), Expense Ratio (TER), and Manager Tenure.
+- Quartile Heatmap: 1Y / 3Y / 5Y / 10Y performance ranking against Morningstar category peers (highlighting Q1 green).
+- Downside Risk Meter: Max Drawdown (MDD) vs. Category benchmark.
+
+### Quadrant 4: Portfolio Allocation & Smart Switching Engine (Lower Right)
+- Look-Through Asset Breakdown (Donut Chart): Aggregated underlying asset exposure (Tech Equities, Long-Term Bonds, Cash).
+- Rebalancing Drift Alert: Flags assets deviating > ±5% from target weights.
+- "Fund Switching / 汰弱留強" Action Card:
+  - From: [Lagging Fund - dropped to Quartile 3, rising fee]
+  - To: [Recommended Target - Top Quartile, positive Jensen's Alpha, intra-family free switch]
+  - Net Benefit Badge: [Expected Sharpe +0.32, Fee saving 0.40%].
+
+## 3. Interactive Explainability Mechanism (Drawer-in-Place)
+
+- Every card, gauge, and metric has an onClick event.
+- Clicking any module smoothly updates a dynamic right-hand contextual drawer displaying:
+  [1] Financial / Quant Theory
+  [2] Mathematical Formula (LaTeX or monospace)
+  [3] Explicit Action Thresholds (Buy trigger, Sell warning, Switching threshold).
+
+Deliver clean, production-ready React / HTML5 with Tailwind CSS and Chart.js / ECharts integration matching this dark quant terminal layout.
+````
