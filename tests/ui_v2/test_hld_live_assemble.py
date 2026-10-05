@@ -5,9 +5,12 @@
 組成 `ui_v2/hld/page.py::render(load_live=)` 要的 `{"dataset", "live_args"}`。本輪不建 `source.py`、不接取數。
 
 ⚠️ 本檔不 import `services`，唯一例外是 `contract`（T8 要呼叫三個列契約檢查）。
-   L2／L1 的常數（空來源訊息、扣下原因代碼、`DIRECT` 字面……）一律用 AST 從原始檔讀，
-   不另抄一份字面；讀不到就紅，不退回寫死。
-⚠️ 「測試內現編」的值（標記字串、自訂訊息）一律在執行期產生，不寫成固定字面。
+   L2／L1 的**字串常數**（空來源訊息、型別錯誤前綴、扣下原因代碼、`DIRECT` 保單編號、三種 `direct` 來源）
+   一律用 AST 從原始檔讀，不另抄一份字面；讀不到就紅，不退回寫死。
+   `test_本檔自己的字串常數沒有任何一個整串等於L2或L1的常數值` 守住這一點。
+   假資料的值（基金代碼、保單編號、分頁名、provenance 的來源字串、錯誤訊息文字）不是常數，寫在本檔。
+⚠️ 拿來做「不得出現」斷言的現編字串（秘密、標記、對照失敗原因、不認得的原因代碼、持倉沒有的代碼）
+   一律在執行期產生，不寫成固定字面。
 """
 
 import ast
@@ -60,7 +63,10 @@ _W_CCY_CONFLICT = _module_constant(_ND, "WITHHELD_CCY_CONFLICT")
 _W_AT_MISSING = _module_constant(_ND, "WITHHELD_FETCHED_AT_MISSING")
 _W_AT_FUTURE = _module_constant(_ND, "WITHHELD_FETCHED_AT_FUTURE")
 _W_INPUT_CONFLICT = _module_constant(_ND, "WITHHELD_INPUT_CONFLICT")
-_NAV_UNAVAILABLE = (_W_CCY_MISSING, _W_CCY_CONFLICT, _W_AT_MISSING, _W_AT_FUTURE, _W_INPUT_CONFLICT)
+# 呼叫端交給 `assemble_live_load` 的扣下清單：幣別兩碼與取得時間兩碼。
+# ⛔ 不含 `_W_INPUT_CONFLICT`：同一檔被給了互相矛盾的輸入，只會因呼叫端組錯而出現，不畫成 ⬜、要 raise
+#    （R-10；總管回修裁定）。
+_NAV_UNAVAILABLE = (_W_CCY_MISSING, _W_CCY_CONFLICT, _W_AT_MISSING, _W_AT_FUTURE)
 _PENDING_TABLES = _module_constant(_V2 + "settings_store.py", "PENDING_TABLES")
 
 # 整串比對用：本檔掃 `live.py` 的字串常數時，這些值一個都不能出現（T2a）。
@@ -81,6 +87,10 @@ _L2_STRINGS = {
 
 # ───────────────────────── 假輸入：L2／L1 的回傳形狀 ─────────────────────────
 
+# 全形冒號、分號：以碼位寫（U+FF1A、U+FF1B），免得鍵盤打成別的字。
+_COLON = chr(0xFF1A)
+_SEMICOLON = chr(0xFF1B)
+
 _TODAY = date(2026, 10, 2)
 _WINDOW = (fixtures.WINDOW_START, fixtures.WINDOW_END)
 _UPDATED_AT = "2026-10-01T09:00:00+08:00"
@@ -99,31 +109,53 @@ _OK_CODE, _MID_CODE, _BAD_CODE = _CODES   # 健康檔、另一檔、被測的那
 _STRAY_CODE = "ZZ" + uuid.uuid4().hex[:6].upper()
 
 
-def _l2_holding_tables(*, direct=()):
-    """L2 `load_alo_tables` 回傳形狀（只放本檔用到的三個鍵）。
-    policy 濾掉 DIRECT 的列（L2 不產生 DIRECT 的 policy 列）；DIRECT 持倉改掛既有保單。"""
+def _l2_holding_tables(*, direct=(), skipped_tabs=()):
+    """L2 `load_alo_tables` 回傳形狀（只放本檔用到的四個鍵）：`holding`、`policy`、`direct`、`skipped_tabs`。
+    policy 濾掉 DIRECT 的列（L2 不產生 DIRECT 的 policy 列）；DIRECT 持倉改掛既有保單。
+    `skipped_tabs`：L1 讀不到（或本次未讀）的保單分頁，L2 原樣轉交；預設沒有。"""
     holding = copy.deepcopy(_FULL["holding"])
     for row in holding:
         if row["policy_id"] == _DIRECT_ID:
             row["policy_id"] = _REHOME_POLICY
     policy = [copy.deepcopy(p) for p in _FULL["policy"] if p["policy_id"] != _DIRECT_ID]
-    return {"holding": holding, "policy": policy, "direct": list(direct)}
+    return {"holding": holding, "policy": policy, "direct": list(direct), "skipped_tabs": list(skipped_tabs)}
+
+
+_UNSET = object()
+
+
+def _skipped_tab(tab=_UNSET, error=_UNSET, unread=False):
+    """L1 `load_policy_holding_rows` 的 `skipped_tabs[*]` 形狀：`{"tab", "error", "unread"}`（`error` 已由 L1 遮蔽）。
+    沒給 `tab`、`error` 就在執行期現編；明確傳 `None` 或空字串則照傳。"""
+    return {
+        "tab": _unique("分頁") if tab is _UNSET else tab,
+        "error": _unique("讀取失敗") if error is _UNSET else error,
+        "unread": unread,
+    }
+
+
+def _wrapped_mask(marker):
+    """前後各加同一個標記的遮蔽函式（看得出有沒有被套過）。"""
+    def mask(text):
+        return marker + text + marker
+
+    return mask
 
 
 def _l2_direct():
-    """L2 `direct` 清單三種來源的形狀（同 `test_hld_live_logic.py::_l2_direct`）。"""
+    """L2 `direct` 清單三種來源的形狀（同 `test_hld_live_logic.py::_l2_direct`；分頁名用 `DIRECT` 保單編號那個常數）。"""
     return [
         {"source": _TAB_PROFILE, "tab": _TAB_PROFILE, "row": 7, "policy_id": _DIRECT_ID},
         {"source": _TAB_SUPPLEMENT, "tab": _TAB_SUPPLEMENT, "row": 31, "policy_id": _DIRECT_ID},
-        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 3, "policy_id": _DIRECT_ID,
+        {"source": _POLICY_TAB, "tab": _DIRECT_ID, "row": 3, "policy_id": _DIRECT_ID,
          "fund_code": "J1", "fund_name": "J"},
-        {"source": _POLICY_TAB, "tab": "DIRECT", "row": 5, "policy_id": _DIRECT_ID,
+        {"source": _POLICY_TAB, "tab": _DIRECT_ID, "row": 5, "policy_id": _DIRECT_ID,
          "fund_code": "K1", "fund_name": "K"},
     ]
 
 
 def _key_results(holdings, *, fail=None):
-    """L1 `resolve_full_keys(...)["results"]` 的形狀：與持倉同序、同長度，重複代碼各自一筆。
+    """L2 `resolve_full_keys(...)["results"]`（`services/v2_tables/fund_keys.py`）的形狀：與持倉同序、同長度，重複代碼各自一筆。
     `fail`：`{代碼: 錯誤文字}`，列在裡面的代碼 `ok` 為 False。"""
     fail = fail or {}
     out = []
@@ -164,8 +196,10 @@ def _nav_table(*, healthy=_CODES, failed=None, empty=(), withheld=None, rows_ove
     - `healthy`：取得淨值的檔（有列、有 fetched、有 provenance）；`rows_override` 可換掉某檔的列；
     - `failed`：`{代碼: L1 失敗原文}`；`empty`：來源回空的檔（訊息是 `EMPTY_WITHOUT_REASON`）。
       兩者都沒有列、`fetched` 為 0、沒有 provenance；
-    - `withheld`：`{代碼: 原因代碼}`，整檔不寫列。`input_conflict` 沒有呼叫 L1，所以沒有
-      `fetched`／`skipped_rows`／`provenance`（L2 `build_nav_table` 的 docstring 寫明）；其餘四種都有。
+    - `withheld`：`{代碼: 原因代碼}`，整檔不寫列。呼叫過 L1 的四碼（幣別兩碼、取得時間兩碼）有
+      `fetched`／`skipped_rows`／`provenance`；沒呼叫過 L1 的那一碼（同一檔被給了矛盾輸入）三者都沒有
+      （L2 `build_nav_table` 的 docstring 寫明）。取得時間的兩碼是「取不到真的取得時間」才扣下，
+      所以那兩碼的 provenance 其 `fetched_at` 是 None。
     """
     all_rows = _FULL["nav"]
     table = _empty_nav_table()
@@ -190,12 +224,17 @@ def _nav_table(*, healthy=_CODES, failed=None, empty=(), withheld=None, rows_ove
             n = sum(1 for r in all_rows if r["fund_code"] == code)
             table["fetched"][code] = n
             table["skipped_rows"][code] = n
-            table["provenance"][code] = _prov_entry()
+            entry = _prov_entry()
+            if reason in (_W_AT_MISSING, _W_AT_FUTURE):
+                entry["fetched_at"] = None
+            table["provenance"][code] = entry
     return table
 
 
 def _settings(*, window=_WINDOW, rules=_RULES, broken=()):
-    """L1 `load_user_settings()` 的形狀：`rows` 是 `{鍵: 列}`，`setting_value` 一律是 L1 讀回來的原字串。"""
+    """L2 `load_user_settings(...)`（`services/v2_tables/settings_store.py`，原樣交出 L1 的回傳）的形狀，
+    只放 `assemble_live_load` 讀的兩個鍵：`rows` 是 `{鍵: 列}`，`setting_value` 一律是原字串；
+    `broken_keys` 是排序過的 list（L1 回的就是 list）。"""
     def row(key, value, kind):
         return {"setting_key": key, "setting_value": value, "value_kind": kind, "updated_at": _UPDATED_AT}
 
@@ -208,7 +247,7 @@ def _settings(*, window=_WINDOW, rules=_RULES, broken=()):
                 "hld_deviation_rules", json.dumps(rules, ensure_ascii=False) if rules is not None else None, "rules"
             ),
         },
-        "broken_keys": set(broken),
+        "broken_keys": sorted(broken),
     }
 
 
@@ -300,9 +339,10 @@ def _unique(prefix):
     return prefix + "-" + uuid.uuid4().hex
 
 
-# ───────────────────────── 六種輸入情形（T1a、T7c 共用） ─────────────────────────
+# ───────────────────────── 七種輸入情形（T1a、T3c、T7c 共用） ─────────────────────────
 
-_CASE_NAMES = ("快樂路徑", "持倉讀取失敗", "設定讀取失敗", "設定解析失敗", "持倉零列", "有DIRECT清單")
+_CASE_NAMES = ("快樂路徑", "持倉讀取失敗", "設定讀取失敗", "設定解析失敗", "持倉零列", "有DIRECT清單",
+               "部分分頁讀取失敗")
 
 
 def _case_kwargs(name):
@@ -316,10 +356,15 @@ def _case_kwargs(name):
         return _kwargs(settings=_settings(window=("2026-02-30", fixtures.WINDOW_END)))
     if name == "持倉零列":
         return _kwargs(
-            holding_tables={"holding": [], "policy": [], "direct": []}, key_results=[], nav_table=_empty_nav_table()
+            holding_tables={"holding": [], "policy": [], "direct": [], "skipped_tabs": []},
+            key_results=[],
+            nav_table=_empty_nav_table(),
         )
     if name == "有DIRECT清單":
         tables = _l2_holding_tables(direct=_l2_direct())
+        return _kwargs(holding_tables=tables, key_results=_key_results(tables["holding"]))
+    if name == "部分分頁讀取失敗":
+        tables = _l2_holding_tables(skipped_tabs=[_skipped_tab(unread=False), _skipped_tab(unread=True)])
         return _kwargs(holding_tables=tables, key_results=_key_results(tables["holding"]))
     raise AssertionError(name)
 
@@ -396,6 +441,32 @@ def test_T2a_正控_掃描方法抓得到整串相等的字串():
         assert value in _string_literals(f"x = {value!r}\n"), name
     # 只是「包含」不算整串相等：掃描不得因此誤報。
     assert _EMPTY not in _string_literals(f"x = {(_EMPTY + '。')!r}\n")
+
+
+def _function_literals(source, name):
+    """`source` 裡頂層函式 `name` 的全部字串常數（含 docstring）。"""
+    func = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return [n.value for n in ast.walk(func) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def test_T2a_assemble_live_load本體連docstring都不含任何L2或L1的常數值():
+    """比 `test_T2a_live_py的字串常數…` 嚴一級：整串相等不算，**包含**也不行（docstring 不寫 L2 代碼字面）。"""
+    literals = _function_literals(_LIVE_PY.read_text(encoding="utf-8"), "assemble_live_load")
+    assert len(literals) > 50, len(literals)   # 空掃防呆（含 docstring；量測日 2026-10-05 為 80）
+    assert {name: value for name, value in _L2_STRINGS.items() if any(value in s for s in literals)} == {}
+
+
+def test_T2a_正控_函式內的字串掃描抓得到包含():
+    for name, value in _L2_STRINGS.items():
+        source = f"def f():\n    '''前{value}後'''\n"
+        assert any(value in s for s in _function_literals(source, "f")), name
+
+
+def test_本檔自己的字串常數沒有任何一個整串等於L2或L1的常數值():
+    """本檔的 docstring 說「L2／L1 的字串常數一律用 AST 讀、不另抄字面」——這一條讓那句話不能默默變假。"""
+    literals = _string_literals(pathlib.Path(__file__).read_text(encoding="utf-8"))
+    assert len(literals) > 300, len(literals)   # 空掃防呆
+    assert {name: value for name, value in _L2_STRINGS.items() if value in literals} == {}
 
 
 def test_T2b_empty_without_reason由參數決定_不是寫死在live_py裡():
@@ -502,6 +573,33 @@ def test_T4d_來源回空_訊息恰為EMPTY_而且沒取到任何列_不放進fu
     assert out["dataset"]["fund_errors"] == {}
 
 
+def _empty_lookalike(kind):
+    """長得像「來源回空」、但不是恰為那一句的訊息：前後多一點東西就是別的訊息。"""
+    if kind == "後面接一段執行期現編的字":
+        return _EMPTY + _unique("後綴")
+    if kind == "前面接一段執行期現編的字":
+        return _unique("前綴") + _EMPTY
+    if kind == "後面多一個半形空白":
+        return _EMPTY + " "
+    if kind == "前面多一個半形空白":
+        return " " + _EMPTY
+    raise AssertionError(kind)
+
+
+_EMPTY_LOOKALIKES = ("後面接一段執行期現編的字", "前面接一段執行期現編的字", "後面多一個半形空白", "前面多一個半形空白")
+
+
+@pytest.mark.parametrize("kind", _EMPTY_LOOKALIKES)
+def test_R3_來源回空必須是恰為_前後多一點東西的訊息是真的失敗_進fund_errors(kind):
+    message = _empty_lookalike(kind)
+    assert message != _EMPTY
+    mask = _wrapped_mask(_unique("標記"))
+    table = _nav_table(healthy=(_OK_CODE, _MID_CODE), failed={_BAD_CODE: message})
+    assert table["fetched"][_BAD_CODE] == 0   # 沒取到任何列：差別只在訊息不是恰為 EMPTY
+    out = _assemble(nav_table=table, mask=mask)
+    assert out["dataset"]["fund_errors"] == {"nav": {_BAD_CODE: mask(message)}}
+
+
 @pytest.mark.parametrize("kind", ("扣下", "代碼對照失敗"))
 def test_T4e_被扣下的檔與代碼對照失敗的檔_都不在fund_errors(kind):
     if kind == "扣下":
@@ -535,8 +633,13 @@ def test_T4h_mask只套在放進fund_errors的那一筆_其餘的錯誤訊息不
         return marker + text + marker
 
     originals = {_MID_CODE: _unique("ConnectionError"), _BAD_CODE: _unique("Timeout")}
-    out = _assemble(nav_table=_nav_table(healthy=(_OK_CODE,), failed=originals), mask=wrapped)
+    tables = _l2_holding_tables()
+    assert tables["skipped_tabs"] == []   # 沒有略過的分頁：`errors["holding"]` 那一支（會遮）不在這一條的射程內
+    out = _assemble(
+        holding_tables=tables, nav_table=_nav_table(healthy=(_OK_CODE,), failed=originals), mask=wrapped
+    )
     assert out["dataset"]["fund_errors"] == {"nav": {code: marker + text + marker for code, text in originals.items()}}
+    assert "holding" not in out["dataset"]["errors"]
 
     # 呼叫端傳進來的兩則（持倉、設定讀取失敗）本來就已遮蔽，本函式不再遮。
     holding_error, settings_error = _unique("持倉讀取失敗"), _unique("設定讀取失敗")
@@ -564,6 +667,30 @@ def test_T4i_判斷用原文_遮蔽只影響放進去的那一筆():
         mask=lambda text: _EMPTY,
     )
     assert out["dataset"]["fund_errors"] == {"nav": {_BAD_CODE: _EMPTY}}
+
+
+@pytest.mark.parametrize("failing", ((_MID_CODE,), (_MID_CODE, _BAD_CODE)), ids=("N為1", "N為2"))
+def test_R7_mask只呼叫在放進去的那幾筆_N筆失敗加一筆略過分頁就恰好N加1次_回空那筆從未交給mask(failing):
+    marker = _unique("標記")
+    calls = []
+
+    def counting_mask(text):
+        calls.append(text)
+        return marker + text
+
+    messages = {code: _unique("ConnectionError") for code in failing}
+    skipped = _skipped_tab()
+    tables = _l2_holding_tables(skipped_tabs=[skipped])
+    table = _nav_table(healthy=tuple(c for c in _CODES if c not in failing and c != _OK_CODE),
+                       failed=messages, empty=(_OK_CODE,))
+    assert table["errors"][_OK_CODE] == _EMPTY and table["fetched"][_OK_CODE] == 0   # 另有一筆恰為 EMPTY、沒取到列
+    out = _assemble(holding_tables=tables, nav_table=table, mask=counting_mask)
+    skipped_message = f"{skipped['tab']}{_COLON}{skipped['error']}"
+    assert len(calls) == len(failing) + 1
+    assert _EMPTY not in calls
+    assert sorted(calls) == sorted([*messages.values(), skipped_message])
+    assert out["dataset"]["fund_errors"] == {"nav": {code: marker + text for code, text in messages.items()}}
+    assert out["dataset"]["errors"] == {"holding": marker + skipped_message}
 
 
 # ═════════════════════════ T5　被扣下、代碼對照失敗、來源回空：一律只是「沒有淨值列、也不在 fund_errors」 ═════════════════════════
@@ -627,7 +754,7 @@ def _hand_written_model(omit_code):
 
 
 def _loaded_without_nav(kind, *, code=_BAD_CODE, reason=_W_CCY_CONFLICT, **over):
-    """同一檔的三種沒有淨值：被扣下、代碼對照失敗、來源回空。其餘各檔都取得淨值。"""
+    """同一檔的四種沒有淨值：被扣下、代碼對照失敗、來源回空、L1 有回資料但 L2 全數拒收。其餘各檔都取得淨值。"""
     others = tuple(c for c in _CODES if c != code)
     if kind == "被扣下":
         return _assemble(nav_table=_nav_table(healthy=others, withheld={code: reason}), **over)
@@ -637,16 +764,23 @@ def _loaded_without_nav(kind, *, code=_BAD_CODE, reason=_W_CCY_CONFLICT, **over)
         return _assemble(holding_tables=tables, key_results=results, nav_table=_nav_table(healthy=others), **over)
     if kind == "來源回空":
         return _assemble(nav_table=_nav_table(healthy=others, empty=(code,)), **over)
+    if kind == "L2全數拒收":
+        table = _nav_table(healthy=others)
+        table["fetched"][code] = 15   # L1 回了 15 筆、L2 全數拒收：沒有列、不在 errors、不在 withheld
+        return _assemble(nav_table=table, **over)
     raise AssertionError(kind)
 
 
-@pytest.mark.parametrize("kind", ("被扣下", "代碼對照失敗", "來源回空"))
-def test_T5d_三種沒有淨值的組裝結果_與手寫的沒淨值dataset算出同一份模型(kind):
+_NO_NAV_KINDS = ("被扣下", "代碼對照失敗", "來源回空", "L2全數拒收")
+
+
+@pytest.mark.parametrize("kind", _NO_NAV_KINDS)
+def test_T5d_四種沒有淨值的組裝結果_與手寫的沒淨值dataset算出同一份模型(kind):
     assert _build_model(_loaded_without_nav(kind)) == _hand_written_model(_BAD_CODE)
 
 
 @pytest.mark.parametrize("reason", _NAV_UNAVAILABLE)
-def test_T5d_五種扣下原因各自的組裝結果_也與手寫的沒淨值dataset算出同一份模型(reason):
+def test_T5d_四種扣下原因各自的組裝結果_也與手寫的沒淨值dataset算出同一份模型(reason):
     loaded = _assemble(nav_table=_nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: reason}))
     assert _build_model(loaded) == _hand_written_model(_BAD_CODE)
 
@@ -661,21 +795,51 @@ def test_T5e_同一檔改成真的取數失敗_全頁印出取數失敗_而且�
 
 
 @pytest.mark.parametrize("reason", _NAV_UNAVAILABLE)
-def test_T5f_五個扣下原因各一_三個值都是資料未備(reason):
+def test_T5f_四個扣下原因各一_三個值都是資料未備(reason):
     loaded = _assemble(nav_table=_nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: reason}))
     model = _build_model(loaded)
     _assert_nav_unavailable(model, _BAD_CODE)
     assert not [s for s in _strings(model) if reason in s]
 
 
-def test_T5g_扣下原因不在五碼內_raise():
+def test_T5g_扣下原因不在清單內_raise():
     stray = _unique("not_a_known_reason")
     assert stray not in _NAV_UNAVAILABLE
     kw = _kwargs(nav_table=_nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: stray}))
     _raises(kw, ValueError, f"淨值扣下原因 {stray!r} 不在本頁約定的清單內：{_BAD_CODE!r}")
 
 
-@pytest.mark.parametrize("kind", ("被扣下", "代碼對照失敗", "來源回空"))
+def test_R2_同一檔被給了矛盾輸入的那一碼不在扣下清單內_raise_不畫成資料未備():
+    """同一次 `resolve_full_keys` 是決定性的，那一碼只會因呼叫端組錯而出現；畫成「⬜ 資料未備」
+    等於把 bug 偽裝成資料未備。所以清單只有幣別兩碼與取得時間兩碼，那一碼走 R-10。"""
+    assert len(_NAV_UNAVAILABLE) == 4 and _W_INPUT_CONFLICT not in _NAV_UNAVAILABLE
+    table = _nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: _W_INPUT_CONFLICT})
+    assert _BAD_CODE not in table["fetched"] and _BAD_CODE not in table["provenance"]   # L2 的真實形狀：沒呼叫過 L1
+    _raises(_kwargs(nav_table=table), ValueError,
+            f"淨值扣下原因 {_W_INPUT_CONFLICT!r} 不在本頁約定的清單內：{_BAD_CODE!r}")
+
+
+@pytest.mark.parametrize("full_bookkeeping", (False, True), ids=("只有fetched", "連skipped_rows與provenance與略過理由都有"))
+def test_R5_L1有回資料但L2全數拒收_比照扣下_不放任何東西_畫面印資料未備(full_bookkeeping):
+    """該檔 `fetched` 大於 0、沒有淨值列、不在 `errors`、不在 `withheld`。沒有 L1 原文，能放上畫面的只有
+    L2 自寫的句子（＝新文案），所以比照扣下：不放任何東西，畫面印 ⬜（原因併入文案批）。"""
+    skipped_text = _unique("略過理由")
+    table = _nav_table(healthy=(_OK_CODE, _MID_CODE))
+    table["fetched"][_BAD_CODE] = 15
+    if full_bookkeeping:
+        table["skipped_rows"][_BAD_CODE] = 15
+        table["provenance"][_BAD_CODE] = _prov_entry()
+        table["skipped"][_BAD_CODE] = [skipped_text]
+    assert _BAD_CODE not in table["errors"] and _BAD_CODE not in table["withheld"]
+    out = _assemble(nav_table=table)   # R-16 通過：它在 fetched 裡
+    assert out["dataset"]["fund_errors"] == {}
+    assert [r for r in out["dataset"]["nav"] if r["fund_code"] == _BAD_CODE] == []
+    model = _build_model(out)
+    _assert_nav_unavailable(model, _BAD_CODE)
+    assert not [s for s in _strings(model) if skipped_text in s]
+
+
+@pytest.mark.parametrize("kind", _NO_NAV_KINDS)
 def test_T5h_未設區間時_沒有淨值的那一檔與健康檔的兩個主值逐字相同(kind):
     loaded = _loaded_without_nav(kind, settings=_settings(window=None, rules=None))
     model = _build_model(loaded, window=None)
@@ -762,20 +926,15 @@ def test_T7e_持倉讀取失敗_四張表都是空的_direct與provenance也是�
     assert dataset["errors"] == {"holding": holding_error}
 
 
-def test_T7f_有被扣下的檔_nav_provenance等於傳入的provenance_含被扣下那一檔():
-    table = _nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: _W_CCY_CONFLICT})
+@pytest.mark.parametrize("reason", (_W_AT_MISSING, _W_AT_FUTURE), ids=("取得時間取不到", "取得時間晚於當下"))
+def test_T7f_有被扣下的檔_nav_provenance等於傳入的provenance_含被扣下那一檔(reason):
+    table = _nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: reason})
     assert _BAD_CODE in table["provenance"]
+    assert table["provenance"][_BAD_CODE]["fetched_at"] is None   # L2：取不到真的取得時間才扣下
     out = _assemble(nav_table=table)
     assert out["live_args"]["nav_provenance"] == table["provenance"]
     assert _BAD_CODE in out["live_args"]["nav_provenance"]
     assert out["live_args"]["nav_provenance"] is not table["provenance"]   # 複本：之後怎麼改都碰不到 L2 的那一份
-
-
-def test_T7f_input_conflict沒有呼叫L1_沒有fetched與provenance_照樣組得出來():
-    table = _nav_table(healthy=(_OK_CODE, _MID_CODE), withheld={_BAD_CODE: _W_INPUT_CONFLICT})
-    assert _BAD_CODE not in table["fetched"] and _BAD_CODE not in table["provenance"]
-    out = _assemble(nav_table=table)
-    assert _BAD_CODE not in out["live_args"]["nav_provenance"]
     _assert_nav_unavailable(_build_model(out), _BAD_CODE)
 
 
@@ -786,7 +945,7 @@ def test_T7f_同一檔基金掛在兩張保單下_key_results有重複代碼_照
     extra["policy_id"] = "P-002"
     tables["holding"].append(extra)
     results = _key_results(tables["holding"])
-    assert [r["input"] for r in results].count(extra["fund_code"]) == 2   # 重複輸入各自一筆（L1 的規定）
+    assert [r["input"] for r in results].count(extra["fund_code"]) == 2   # 重複輸入各自一筆（L2 `resolve_full_keys` 的規定）
     out = _assemble(holding_tables=tables, key_results=results)
     assert [r["fund_code"] for r in out["dataset"]["holding"]].count(extra["fund_code"]) == 2
     assert _build_model(out)["blocks"]
@@ -828,7 +987,7 @@ _PARAM_CASES = [
      TypeError, "empty_without_reason 應為字串：None"),
     ("R7 empty_without_reason 是空白", dict(empty_without_reason=" "),
      ValueError, "empty_without_reason 是空字串：' '"),
-    ("R8 nav_unavailable_withheld 是字串", dict(nav_unavailable_withheld="ccy_conflict"),
+    ("R8 nav_unavailable_withheld 是字串", dict(nav_unavailable_withheld=_W_CCY_CONFLICT),
      TypeError, "nav_unavailable_withheld 應為集合：str"),
     ("R8 nav_unavailable_withheld 是 bytes", dict(nav_unavailable_withheld=b"x"),
      TypeError, "nav_unavailable_withheld 應為集合：bytes"),
@@ -836,9 +995,9 @@ _PARAM_CASES = [
      TypeError, "nav_unavailable_withheld 應為集合：dict"),
     ("R8 nav_unavailable_withheld 是 None", dict(nav_unavailable_withheld=None),
      TypeError, "nav_unavailable_withheld 應為集合：NoneType"),
-    ("R8 元素不是字串", dict(nav_unavailable_withheld=("ccy_missing", 5)),
+    ("R8 元素不是字串", dict(nav_unavailable_withheld=(_W_CCY_MISSING, 5)),
      TypeError, "nav_unavailable_withheld 的元素 應為字串：5"),
-    ("R8 元素是空字串", dict(nav_unavailable_withheld=("ccy_missing", "")),
+    ("R8 元素是空字串", dict(nav_unavailable_withheld=(_W_CCY_MISSING, "")),
      ValueError, "nav_unavailable_withheld 的元素 是空字串：''"),
     ("R12 mask 是字串", dict(mask="x"), TypeError, "mask 應為可呼叫：str"),
     ("R12 mask 是 None", dict(mask=None), TypeError, "mask 應為可呼叫：NoneType"),
@@ -940,6 +1099,20 @@ def test_T7h_R14_代碼對照多了一檔_raise():
             f"代碼對照的輸入與持倉代碼不一致：多 {[_STRAY_CODE]!r}、少 {[]!r}")
 
 
+def test_R4_R14是集合相等_不是只比筆數():
+    """持倉代碼 {A, B}；代碼對照的輸入 {A, C}（C 執行期現編、ok 為 True）；淨值表只含 A（讓 R-13 通過）。
+    兩邊都是兩個代碼，筆數相等、內容不同：只比筆數的寫法會放過它。"""
+    stray = "ZZ" + uuid.uuid4().hex[:6].upper()
+    tables = _l2_holding_tables()
+    tables["holding"] = [r for r in tables["holding"] if r["fund_code"] in (_OK_CODE, _MID_CODE)]
+    results = _key_results([{"fund_code": _OK_CODE}, {"fund_code": stray}])
+    table = _nav_table(healthy=(_OK_CODE,))
+    assert [r["input"] for r in results] == [_OK_CODE, stray] and all(r["ok"] is True for r in results)
+    assert len(results) == len(tables["holding"])
+    _raises(_kwargs(holding_tables=tables, key_results=results, nav_table=table), ValueError,
+            f"代碼對照的輸入與持倉代碼不一致：多 {[stray]!r}、少 {[_MID_CODE]!r}")
+
+
 def test_T7h_key_results不是list也不是tuple_TypeError():
     for value in ({}, "abc", iter(())):
         _raises(_kwargs(key_results=value), TypeError, f"key_results 應為 list：{type(value).__name__}")
@@ -983,7 +1156,7 @@ def test_T7h_R16_只要在fetched或withheld其中一處就算交給了(handover
     if handover == "fetched":
         table["fetched"][_BAD_CODE] = 0
     else:
-        table["withheld"][_BAD_CODE] = _W_INPUT_CONFLICT
+        table["withheld"][_BAD_CODE] = _W_CCY_MISSING   # 清單內的原因；只在 withheld、不在 fetched
     out = _assemble(nav_table=table)
     assert list(out) == ["dataset", "live_args"]
 
@@ -1036,3 +1209,106 @@ def test_T8_快樂路徑輸出的holding_policy_nav_每一列都過列契約():
         assert dataset[table], table   # 空掃防呆：假輸入真的有列
         for index, row in enumerate(dataset[table]):
             assert check(row) == [], (table, index, row)
+
+
+# ═════════════════════════ T9　部分分頁讀取失敗：持倉照交，原因浮出來（總管回修裁定 R1） ═════════════════════════
+# L1 `load_policy_holding_rows` 在部分分頁讀不到（含冷卻中沒讀）時，照回其餘分頁的列，另列 `skipped_tabs`
+# （每筆 `{"tab", "error", "unread"}`）；L2 `load_alo_tables` 原樣交出。組裝時把各分頁的原因（以全形分號相連）
+# 過 `mask` 放進 `errors["holding"]`，讓 logic 既有的「有持倉時來源取數失敗」畫法接手。
+
+
+def test_P1_部分分頁讀取失敗_持倉照交_原因遮蔽後放進errors_holding():
+    mask = _wrapped_mask(_unique("標記"))
+    skipped = _skipped_tab(unread=False)
+    base = _assemble()
+    out = _assemble(holding_tables=_l2_holding_tables(skipped_tabs=[skipped]), mask=mask)
+    assert out["dataset"]["errors"] == {"holding": mask(f"{skipped['tab']}{_COLON}{skipped['error']}")}
+    assert out["dataset"]["holding"] and out["dataset"]["nav"]   # 空掃防呆
+    # 持倉、保單、direct、淨值照常組：與沒有略過分頁時逐一相同。
+    for key in ("holding", "policy", "nav", "dividend", "fund_profile", "user_setting", "pending_tables",
+                "fund_errors"):
+        assert out["dataset"][key] == base["dataset"][key], key
+    assert out["live_args"] == base["live_args"]
+
+
+def test_P2_兩筆略過的分頁_依給的次序以全形分號相連_未讀的那一筆寫法相同():
+    mask = _wrapped_mask(_unique("標記"))
+    first, second = _skipped_tab(unread=False), _skipped_tab(unread=True)
+    expected = f"{first['tab']}{_COLON}{first['error']}{_SEMICOLON}{second['tab']}{_COLON}{second['error']}"
+    out = _assemble(holding_tables=_l2_holding_tables(skipped_tabs=[first, second]), mask=mask)
+    assert out["dataset"]["errors"] == {"holding": mask(expected)}
+    # 次序照 L1 給的次序，不排序：兩種次序各自照給的次序相連。
+    swapped = f"{second['tab']}{_COLON}{second['error']}{_SEMICOLON}{first['tab']}{_COLON}{first['error']}"
+    out = _assemble(holding_tables=_l2_holding_tables(skipped_tabs=[second, first]), mask=mask)
+    assert out["dataset"]["errors"] == {"holding": mask(swapped)}
+
+
+@pytest.mark.parametrize("error", ("", "   ", None), ids=("空字串", "只有空白", "None"))
+def test_P3_某筆error沒有內容_那一段只寫分頁名(error):
+    mask = _wrapped_mask(_unique("標記"))
+    bare, other = _skipped_tab(error=error), _skipped_tab(unread=True)
+    out = _assemble(holding_tables=_l2_holding_tables(skipped_tabs=[bare]), mask=mask)
+    assert out["dataset"]["errors"] == {"holding": mask(bare["tab"])}
+    out = _assemble(holding_tables=_l2_holding_tables(skipped_tabs=[bare, other]), mask=mask)
+    expected = f"{bare['tab']}{_SEMICOLON}{other['tab']}{_COLON}{other['error']}"
+    assert out["dataset"]["errors"] == {"holding": mask(expected)}
+
+
+@pytest.mark.parametrize("tab, exc_type, message", [
+    (None, TypeError, "skipped_tabs 的 tab 應為字串：None"),
+    (123, TypeError, "skipped_tabs 的 tab 應為字串：123"),
+    ("", ValueError, "skipped_tabs 的 tab 是空字串：''"),
+    ("  ", ValueError, "skipped_tabs 的 tab 是空字串：'  '"),
+], ids=("None", "整數", "空字串", "只有空白"))
+def test_P4_略過分頁的分頁名不是非空字串_raise(tab, exc_type, message):
+    tables = _l2_holding_tables(skipped_tabs=[_skipped_tab(tab=tab)])
+    _raises(_kwargs(holding_tables=tables), exc_type, message)
+
+
+def test_P5_端到端_部分分頁讀取失敗_HLD0_HLD1_HLD3進系統錯誤_全頁印出遮蔽後的原因():
+    mask = _wrapped_mask(_unique("標記"))
+    skipped = _skipped_tab(unread=False)
+    model = _build_model(_assemble(holding_tables=_l2_holding_tables(skipped_tabs=[skipped]), mask=mask))
+    # 同樣的輸入，只是沒有略過的分頁。
+    base_model = _build_model(_assemble(holding_tables=_l2_holding_tables(skipped_tabs=[]), mask=mask))
+    masked = mask(f"{skipped['tab']}{_COLON}{skipped['error']}")
+    for code in ("HLD-0", "HLD-1", "HLD-3"):
+        assert logic.find_block(model, code)["_state"] == logic.STATE_ERROR, code
+        assert logic.find_block(base_model, code)["_state"] != logic.STATE_ERROR, code
+    strings = _strings(model)
+    assert logic.fetch_failed_text(masked) in strings
+    assert [s for s in strings if masked in s]
+    assert not [s for s in _strings(base_model) if masked in s]
+    assert model != base_model
+
+
+def test_P5_端到端_持倉零列又有略過的分頁_燈也是系統錯誤_不是報成沒有持倉():
+    mask = _wrapped_mask(_unique("標記"))
+    skipped = _skipped_tab(unread=True)
+    loaded = _assemble(
+        holding_tables={"holding": [], "policy": [], "direct": [], "skipped_tabs": [skipped]},
+        key_results=[],
+        nav_table=_empty_nav_table(),
+        mask=mask,
+    )
+    model = _build_model(loaded)
+    masked = mask(f"{skipped['tab']}{_COLON}{skipped['error']}")
+    assert logic.find_block(model, "HLD-0")["_state"] == logic.STATE_ERROR
+    assert [s for s in _strings(model) if masked in s]
+
+
+def test_P6_沒有略過的分頁_errors沒有holding():
+    for empty in ([], ()):
+        tables = _l2_holding_tables()
+        tables["skipped_tabs"] = empty
+        out = _assemble(holding_tables=tables)
+        assert "holding" not in out["dataset"]["errors"]
+        assert out["dataset"]["errors"] == {}
+
+
+def test_P7_缺skipped_tabs這個鍵_KeyError_不當成沒有略過():
+    """L2 `load_alo_tables` 一定交出這個鍵；缺了是契約壞掉，不能靜默當成「沒有分頁被略過」。"""
+    tables = _l2_holding_tables()
+    del tables["skipped_tabs"]
+    with pytest.raises(KeyError):
+        _assemble(holding_tables=tables)
