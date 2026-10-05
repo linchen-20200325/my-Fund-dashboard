@@ -784,9 +784,11 @@ def _metric(
     return node
 
 
-# 📌 2026-10-05「讀取失敗不說空」：`window_error` ＝ 設定讀取失敗的原文，只在區間取自存過的設定時才給
+# 📌 2026-10-05「讀取失敗不說空」：`window_error` ＝ 設定讀取失敗的原文，~~只在區間取自存過的設定時才給~~
+#    → 只在區間未知時才給：區間取自存過的設定，或套用的區間兩格都空
 #    （見 `_build_page_model`）。六個值一律排在表層級與逐檔錯誤之後判成 `系統錯誤`，不判成「⬜ 不適用：尚未設定區間」。
 #    六個都要改：`HLD-7` 的輸出欄要與值所在那一塊上的字串相同（`44` :733）。
+#    劃線那一處是 2026-10-05 的更正（有意識的更正，不是漏刪；決策者：總管；稽核乙 M-1：設定讀取失敗時，空白套用仍算未知）。
 def fund_metrics(dataset, fund, window, *, window_error=None):
     """一檔在一段區間內的六個指標。**所有卡與所有表都讀這一份**，
     這樣 `44` HLD-7 判準要的「軌跡與所在那一塊逐字相同」才是由構造保證的。"""
@@ -1153,8 +1155,11 @@ def unsurfaced_source_error(dataset, code):
     2026-09-24 那一件，在當時為真，一字未改：
       · `not has_holdings` 那兩支：持倉表讀取失敗時不再接「尚未建立任何持倉」；
       · `BLOCK_SOURCE_TABLES` 三塊各收 `user_setting`，A3 守衛的篩選拿掉；
-      · 主值層：設定讀取失敗、區間取自存過的設定時，六個值一律判成 `系統錯誤`（`fund_metrics()` 的 `window_error`）。
-    `user_setting` 不在 `_SURFACED_PER_VALUE`：按過「套用」之後主值照算，本支照樣把設定讀取失敗印進說明區。
+      · 主值層：設定讀取失敗、~~區間取自存過的設定時~~ → 區間未知時（區間取自存過的設定，或套用的區間兩格都空），
+        六個值一律判成 `系統錯誤`（`fund_metrics()` 的 `window_error`）。
+    `user_setting` 不在 `_SURFACED_PER_VALUE`：~~按過「套用」之後主值照算~~ → 套用的區間有值時主值照算，
+    本支照樣把設定讀取失敗印進說明區。
+    （兩處劃線：2026-10-05 更正，有意識的更正，不是漏刪；決策者：總管；稽核乙 M-1 —— 設定讀取失敗時，空白套用仍算未知。）
 
     **`系統錯誤` 這個狀態的依據**：`44` 5.5 該狀態的觸發條件逐字是
     「**取數或計算本身失敗**」—— 來源整張表取數失敗就是這一種，
@@ -1546,7 +1551,8 @@ def _build_core_card(
         # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定）：持倉表讀不到，不是空 ——
         #    不印「尚未建立任何持倉」。只有 `HLD-2` 走得到這一支：`holding` 不在它的來源表裡（`44` :531），
         #    `HLD-3` 的來源表有 `holding`，先進上面那一支。本塊照自己的來源欄畫：灰、「⬜ 資料未備」，
-        #    不進 `系統錯誤`；讀取失敗的原文由 `HLD-1`（持倉表是它來源表的第一張）、`HLD-5`、`HLD-8` 印出。
+        #    不進 `系統錯誤`；讀取失敗的原文由 `HLD-1`（持倉表是它來源表的第一張）、`HLD-3`（上面那一支）、
+        #    `HLD-5`、`HLD-8` 印出（`HLD-3` 原本漏列，2026-10-05 補上；稽核甲指出）。
         state = STATE_MISSING
         detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT]
         summary = ND_TEXT
@@ -2284,8 +2290,15 @@ def _build_hld8(metrics, *, has_holdings, has_window, window_unknown=False,
             )
         )
         if window_unknown:
-            # 📌 2026-10-05「讀取失敗不說空」：區間取自存過的設定而設定讀不到，兩欄無從計算；
-            #    設定讀取失敗的原文印在表下（`44` :762）。
+            # 📌 2026-10-05「讀取失敗不說空」：~~區間取自存過的設定而設定讀不到~~ → 區間未知（設定讀不到，
+            #    而區間取自存過的設定、或套用的區間兩格都空），兩欄無從計算；
+            #    設定讀取失敗的原文印在表下（~~`44` :762~~ → 依 S2 的先例：逐檔取數失敗的原文經 `_fund_error_lines`
+            #    寫進說明區、畫在表下，格內只顯示 `ERR_TEXT`；見 `page.py::_render_live_error` 說明第 (2)、(3) 條
+            #    與 `page.py::_render_hld8`）。
+            #    兩處劃線是 2026-10-05 的更正（有意識的更正，不是漏刪；決策者：總管）：前一處是稽核乙 M-1；
+            #    後一處是稽核甲指出 `44` :762 寫失敗訊息的那一句是「取數失敗時該欄印出失敗訊息原文」，
+            #    位置是該欄、不是表下（同一格寫到表下的是未知的筆數）。
+            #    ⚠️ 登記既有差距（不是本件造成的）：格內不帶原文，與 `44` :762 那一句的字面不同。
             detail_lines.extend([fetch_failed_text(settings_error), PRINT_AS_IS_LINE])
 
     return {
@@ -2469,9 +2482,16 @@ def _build_page_model(
         raise ValueError(
             f"errors 帶 user_setting 時，user_setting 必須是空列表，收到：{dataset['user_setting']!r}"
         )
-    # 「未知」只在值取自存過的設定時成立；按過「套用」的那一份是欄位當下值，照用。
-    window_unknown = bool(settings_error) and applied_window is None
-    rules_unknown = bool(settings_error) and applied_rules is None
+    # ~~「未知」只在值取自存過的設定時成立；按過「套用」的那一份是欄位當下值，照用。~~
+    # → 📌 2026-10-05 更正（有意識的更正，不是漏刪；決策者：總管 2026-10-05 裁定；稽核乙 M-1 指出）：
+    #    設定讀取失敗時，空白套用仍算未知。套用的區間兩格都空、或門檻一列也沒有，與沒按過「套用」一樣算未知；
+    #    有值的那一半照用欄位當下值。理由：設定讀不到時 HLD-4 的欄位帶不出存過的值，本來就是空的，
+    #    按「套用」交出的空白不表示使用者沒有設定。
+    #    舊表述在寫下當時撐得住（按過「套用」的那一份確實是欄位當下值）；被權衡掉的是它沒有分有值與空白 ——
+    #    空白套用之後「未設定」字句又回到畫面上，與「⛔ 取數失敗：<原文>」同時出現。
+    #    設定讀得到時照舊：清空再套用說「尚未設定」，那是真的沒設定。
+    window_unknown = bool(settings_error) and (applied_window is None or not any(applied_window))
+    rules_unknown = bool(settings_error) and not applied_rules
     # 持倉表有取數失敗、而且一列也沒有讀到：這時不能說「尚未建立任何持倉」。
     holding_unknown = bool(holding_error) and not dataset.get("holding")
     applied_window = saved_window(dataset) if applied_window is None else tuple(applied_window)

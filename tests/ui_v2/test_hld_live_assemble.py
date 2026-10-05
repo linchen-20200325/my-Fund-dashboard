@@ -302,8 +302,15 @@ def _assemble(**over):
 
 
 def _build_model(loaded, *, window=_WINDOW):
-    """`ui_v2/hld/page.py::render` 正式模式呼叫 `live.build_live_model` 的形狀（`**loaded["live_args"]`），
-    另帶固定的 `today`，結果不隨時鐘變。"""
+    """~~`ui_v2/hld/page.py::render` 正式模式呼叫 `live.build_live_model` 的形狀（`**loaded["live_args"]`），~~
+    ~~另帶固定的 `today`，結果不隨時鐘變。~~
+    → 📌 2026-10-05 更正（有意識的更正，不是漏刪；決策者：總管；稽核甲指出上一句說得比實際多）：
+    呼叫 `live.build_live_model`：`**loaded["live_args"]` 與 `ui_v2/hld/page.py::render` 正式模式交的相同；
+    `open_fund`、`fields` 為 None（首次渲染、沒有展開任何一檔）；另帶固定的 `today`，結果不隨時鐘變。
+    ⚠️ `applied_window=window`（預設 `_WINDOW`）配 `applied_rules=None` 這一組，頁面產生不了：頁面上兩個值取自
+    同一次「套用」（`page.py::_applied`；值由 `logic.applied_from_inputs` 一次交出），沒按過時兩者皆為 None，
+    按過時兩者皆不是 None。本支的預設等於「區間照帶、門檻照用存過的」。預設值不改，以免牽動其他測試。
+    """
     return live.build_live_model(
         loaded["dataset"],
         open_fund=None,
@@ -1347,11 +1354,17 @@ def test_讀取失敗不說空_持倉零列又有略過分頁時_沒有任何一
     assert [s for s in _strings(truly_empty) if logic.TEXT_NO_HOLDING in s]
 
 
-def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_HLD5只加卡尾_每一句都是真話():
+def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_HLD5只加卡尾_九塊都不印尚未建立任何持倉():
     """正式資料會出現的合法狀態（總管 2026-10-05 指出）：部分分頁讀不到時持倉照交（零列）、`direct` 清單照交。
 
     總管 2026-10-05 裁定：不 raise，只加卡尾。HLD-5 的摘要與說明區是遮蔽後的原因；卡尾照列 `direct` 那幾筆；
     沒有任何一塊印「尚未建立任何持倉」，也沒有任何一塊把空白換成卡尾那一句。
+
+    📌 2026-10-05 改名（有意識的更正，不是漏刪；決策者：總管；稽核甲指出原名說得比斷言多）。原名
+    ~~`test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_HLD5只加卡尾_每一句都是真話`~~。
+    本條查的是：HLD-5 的狀態、摘要、說明區、卡尾；九塊都不印「尚未建立任何持倉」；卡尾那一句只在 HLD-5；
+    HLD-1／3／5／8 的說明區有原因；HLD-8 不掛鈕；HLD-2 是「⬜ 資料未備」。
+    HLD-0 的 lines、HLD-4、HLD-6、HLD-7 除了上面兩項掃描之外的字句，本條沒有逐句查。
     """
     mask = _wrapped_mask(_unique("標記"))
     skipped = _skipped_tab(unread=False)

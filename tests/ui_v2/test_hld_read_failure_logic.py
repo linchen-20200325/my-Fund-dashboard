@@ -509,7 +509,9 @@ def test_T4反_掃描抓得到一句新字句():
     assert sorted(set(_strings(model)) - known) == [fresh]
 
 
-# ═══════════ 「未知」只在值取自存過的設定時成立；套用之後仍是紅（總管 2026-10-05 裁定） ═══════════
+# ═══════════ ~~「未知」只在值取自存過的設定時成立；~~套用之後仍是紅（總管 2026-10-05 裁定） ═══════════
+# 📌 劃線那半句是 2026-10-05 的更正（有意識的更正，不是漏刪；決策者：總管；稽核乙 M-1）：設定讀取失敗時，
+#    空白套用仍算未知，見「設定讀取失敗時，空白套用仍算未知」那一節。下面兩條一條兩半都有值、一條沒按過「套用」，不受影響。
 
 
 def test_套用正_設定讀取失敗後按套用_主值照套用的值算_三張卡仍是紅的():
@@ -559,3 +561,189 @@ def test_有持倉又有兩種讀取失敗_HLD1兩句原文都印_各一次():
     hld1 = _block(_build(ds), "HLD-1")
     assert hld1["_state"] == logic.STATE_ERROR
     assert hld1["detail_lines"] == [_FF_S, logic.PRINT_AS_IS_LINE, _FF_H, logic.PRINT_AS_IS_LINE]
+
+
+# ═══════════ 設定讀取失敗時，空白套用仍算未知（總管 2026-10-05 裁定；稽核乙 M-1） ═══════════
+# 設定讀不到時 HLD-4 的欄位帶不出存過的值，本來就是空的；按「套用」交出的空白不表示使用者沒有設定。
+# 套用值一律經 `logic.applied_from_inputs` 產生（`page.py` 的「套用」回呼呼叫的就是它），
+# 只用頁面產生得出來的形狀：區間兩格同空或同有值，門檻是列表（一列也沒有時是空列表）。
+
+_BLANK_APPLY = logic.applied_from_inputs("", "", [("", "", "")])
+_WINDOW_ONLY_APPLY = logic.applied_from_inputs(fixtures.WINDOW_START, fixtures.WINDOW_END, [("", "", "")])
+_RULES_ONLY_APPLY = logic.applied_from_inputs("", "", [("最大回撤", "低於", "-10")])
+
+
+def _apply(applied):
+    return {"applied_window": applied["window"], "applied_rules": applied["rules"]}
+
+
+def _assert_blank_apply_reads_as_unknown(model, failed):
+    """(a) 的斷言：全頁沒有「未設定」字句；HLD-1、2、3、4、8 的說明區有原文；HLD-4 的摘要是原文。"""
+    assert _hits(model, _UNSET_PHRASES) == []
+    for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-8"):
+        assert failed in _block(model, code)["detail_lines"], code
+    assert _block(model, "HLD-4")["summary_text"] == failed
+
+
+def test_空白套用a_設定讀取失敗_區間門檻都空白套用_全頁沒有未設定字句_五塊印出原文():
+    assert _BLANK_APPLY == {"window": (None, None), "rules": []}, "頁面的空白套用不是這個形狀 —— 這一條會測錯東西"
+    model = _build(_s1(), **_apply(_BLANK_APPLY))
+    _assert_blank_apply_reads_as_unknown(model, _FF_S)
+    # 空白套用與沒按過「套用」畫出同一頁（兩者都是讀不到）；兩種讀取失敗同時發生時也一樣。
+    assert model == _build(_s1())
+    assert _build(_s3(), **_apply(_BLANK_APPLY)) == _build(_s3())
+
+
+def test_空白套用b_設定讀取失敗_只填區間_核心卡照區間出數_門檻那一半印原文():
+    assert _WINDOW_ONLY_APPLY["rules"] == [] and all(_WINDOW_ONLY_APPLY["window"])
+    model = _build(_s1(), **_apply(_WINDOW_ONLY_APPLY))
+    assert _hits(model, _UNSET_PHRASES) == []
+    hld1 = _block(model, "HLD-1")
+    assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_ERROR, _FF_S)
+    assert hld1["detail_lines"] == [_FF_S, logic.PRINT_AS_IS_LINE]
+    # 核心卡照區間出數：主值與「設定讀得到、同一組套用」時相同，而且都出數。
+    same_apply = _build(_full(), **_apply(_WINDOW_ONLY_APPLY))
+    for code in ("HLD-2", "HLD-3"):
+        nodes = [mv for g in _block(model, code)["fund_groups"] for mv in g["main_values"]]
+        expected = [mv for g in _block(same_apply, code)["fund_groups"] for mv in g["main_values"]]
+        assert [mv["text"] for mv in nodes] == [mv["text"] for mv in expected], code
+        assert {mv["_state"] for mv in nodes} == {logic.STATE_OK}, code
+    # 摘要只看區間時（稽核甲的突變 K15b），這裡會寫成「區間 … · 門檻 0 列」。
+    assert _block(model, "HLD-4")["summary_text"] == _FF_S
+
+
+def test_空白套用c_設定讀取失敗_只填門檻_核心卡印原文_不說尚未設定區間():
+    assert _RULES_ONLY_APPLY["window"] == (None, None) and _RULES_ONLY_APPLY["rules"]
+    model = _build(_s1(), **_apply(_RULES_ONLY_APPLY))
+    assert _hits(model, _UNSET_PHRASES) == []
+    for code in ("HLD-2", "HLD-3"):
+        block = _block(model, code)
+        assert _FF_S in block["detail_lines"], code
+        nodes = [mv for g in block["fund_groups"] for mv in g["main_values"]]
+        assert {(mv["text"], mv["reason_text"]) for mv in nodes} == {(logic.ERR_TEXT, _S)}, code
+    # 門檻照用；區間讀不到，沒有一檔評估得了 —— 不說「無偏離項」。
+    hld1 = _block(model, "HLD-1")
+    assert hld1["_state"] == logic.STATE_ERROR
+    assert hld1["summary_text"] != logic.TEXT_NO_DEVIATION
+    assert "目前這一組門檻下，沒有任何一檔超出。" not in hld1["detail_lines"]
+    assert _block(model, "HLD-4")["summary_text"] == _FF_S
+
+
+# (d) 的期望值在本條修正之前的程式（`6aa3c57`）上產生，不從被測程式現撈；換 `PYTHONHASHSEED` 重算不變。
+_NO_SETTINGS_FAILURE_BASELINE = {
+    ("真的沒設定", "空白套用"): "4abd24a85466",
+    ("真的沒設定", "只填區間"): "e0491f48a746",
+    ("真的沒設定", "只填門檻"): "e7e24687badb",
+    ("設定照讀", "空白套用"): "4abd24a85466",
+    ("設定照讀", "只填區間"): "e0491f48a746",
+    ("設定照讀", "只填門檻"): "e7e24687badb",
+    ("真的沒有持倉", "空白套用"): "047e6bb321bf",
+    ("真的沒有持倉", "只填區間"): "bf8542264b76",
+    ("真的沒有持倉", "只填門檻"): "c99430bc7652",
+    ("只有持倉讀取失敗", "空白套用"): "0211dc640591",
+    ("只有持倉讀取失敗", "只填區間"): "7510a3ded358",
+    ("只有持倉讀取失敗", "只填門檻"): "b4adfbfda7ad",
+}
+
+
+def test_空白套用d反_設定讀得到_清空再套用照舊說未設定_本條修正不改這些頁面():
+    makes = {"真的沒設定": _unset, "設定照讀": _full, "真的沒有持倉": _empty, "只有持倉讀取失敗": _s2}
+    applies = {"空白套用": _BLANK_APPLY, "只填區間": _WINDOW_ONLY_APPLY, "只填門檻": _RULES_ONLY_APPLY}
+    assert set(_NO_SETTINGS_FAILURE_BASELINE) == {(m, a) for m in makes for a in applies}
+    for (make, applied), expected in _NO_SETTINGS_FAILURE_BASELINE.items():
+        assert _digest(_build(makes[make](), **_apply(applies[applied]))) == expected, (make, applied)
+    # 正控：清空再套用時「未設定」字句真的在畫面上，上面的比對不是空比。
+    for make in (_unset, _full):
+        model = _build(make(), **_apply(_BLANK_APPLY))
+        assert _block(model, "HLD-4")["summary_text"] == "尚未設定區間；門檻一列也沒有；存檔停用"
+        assert _hits(model, ("尚未設定區間",)) and _hits(model, ("尚未設定門檻",))
+
+
+# (e) 經 `live.assemble_live_load` 組出的設定讀取失敗形狀。L2 的常數照本檔體例用 AST 讀。
+_EMPTY_WITHOUT_REASON = _module_constant("services/v2_tables/market_indicator.py", "EMPTY_WITHOUT_REASON")
+_NAV_UNAVAILABLE = tuple(
+    _module_constant("services/v2_tables/nav_dividend.py", name)
+    for name in (
+        "WITHHELD_CCY_MISSING", "WITHHELD_CCY_CONFLICT", "WITHHELD_FETCHED_AT_MISSING", "WITHHELD_FETCHED_AT_FUTURE",
+    )
+)
+
+
+def _l2_settings(*, start=fixtures.WINDOW_START, broken=(), rows_override=None):
+    """L2 `load_user_settings(...)` 的形狀，只放 `assemble_live_load` 讀的兩個鍵（同 `test_hld_live_assemble.py::_settings`）。"""
+    def row(key, value, kind):
+        return {"setting_key": key, "setting_value": value, "value_kind": kind, "updated_at": "2026-10-01T09:00:00+08:00"}
+
+    rows = {
+        "hld_window_start": row("hld_window_start", start, "date"),
+        "hld_window_end": row("hld_window_end", fixtures.WINDOW_END, "date"),
+        "hld_deviation_rules": row(
+            "hld_deviation_rules", json.dumps(fixtures._RULES_DEFAULT, ensure_ascii=False), "rules"
+        ),
+    }
+    return {"rows": rows if rows_override is None else rows_override, "broken_keys": sorted(broken)}
+
+
+def _assembled(**settings_kw):
+    """`live.assemble_live_load` 的回傳值：持倉、代碼對照、淨值表照 `full` 情境讀成功，設定照 `settings_kw`。
+    形狀照 `test_hld_live_assemble.py` 的 `_l2_holding_tables`、`_key_results`、`_nav_table`（本檔不 import 它）。"""
+    ds = _full()
+    holding = ds["holding"]
+    codes = sorted({h["fund_code"] for h in holding})
+    nav = ds["nav"]
+    return live.assemble_live_load(
+        holding_tables={
+            "holding": holding,
+            "policy": [p for p in ds["policy"] if p["policy_id"] != _DIRECT_ID],
+            "direct": [],
+            "skipped_tabs": [],
+        },
+        holding_error=None,
+        key_results=[
+            {
+                "input": h["fund_code"], "ok": True, "full_key": "FK-" + h["fund_code"], "portal": "",
+                "parsed_code": h["fund_code"], "mapping_hit": True, "error": None,
+            }
+            for h in holding
+        ],
+        nav_table={
+            "rows": nav,
+            "errors": {},
+            "withheld": {},
+            "skipped": {},
+            "fetched": {code: sum(1 for r in nav if r["fund_code"] == code) for code in codes},
+            "skipped_rows": {code: 0 for code in codes},
+            "provenance": _prov(ds),
+        },
+        direct_policy_id=_DIRECT_ID,
+        policy_tab_source=_POLICY_TAB,
+        direct_sources=_SOURCES,
+        empty_without_reason=_EMPTY_WITHOUT_REASON,
+        nav_unavailable_withheld=_NAV_UNAVAILABLE,
+        dividend_gate_open=False,
+        mask=lambda text: text,
+        **settings_kw,
+    )
+
+
+# `assemble_live_load` 寫進 `errors["user_setting"]` 的路：呼叫端交來設定讀取失敗；或設定照交、解析不了
+# （L1 標為壞鍵、值的形狀不對、`rows` 不是 dict）。
+_SETTINGS_FAILURES = {
+    "設定表讀取失敗": dict(settings=None, settings_error="ConnectionError: 設定表讀取逾時（測試用原文）"),
+    "L1標為壞鍵": dict(settings=_l2_settings(broken=("hld_window_start",)), settings_error=None),
+    "值的形狀不對": dict(settings=_l2_settings(start="2026/06/01"), settings_error=None),
+    "rows不是dict": dict(settings=_l2_settings(rows_override=[]), settings_error=None),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_SETTINGS_FAILURES))
+def test_空白套用e_經assemble組出的設定讀取失敗形狀_空白套用照樣不說未設定(shape):
+    loaded = _assembled(**copy.deepcopy(_SETTINGS_FAILURES[shape]))
+    dataset = loaded["dataset"]
+    message = dataset["errors"].get("user_setting")
+    assert isinstance(message, str) and message, "組裝沒有交出設定讀取失敗 —— 這一組會變成空掃"
+    assert dataset["user_setting"] == []
+    model = live.build_live_model(
+        dataset, open_fund=None, fields=None, today=_TODAY, **_apply(_BLANK_APPLY), **loaded["live_args"]
+    )
+    _assert_blank_apply_reads_as_unknown(model, logic.fetch_failed_text(message))

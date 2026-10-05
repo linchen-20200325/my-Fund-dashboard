@@ -820,11 +820,15 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
       (2) 經 `logic._fund_error_lines` 寫出的行，整組最後接一次：核心卡與 `HLD-8` 的逐檔錯誤，
           以及 `HLD-1` 卡尾以 `include_table=True` 帶入的表層級錯誤；另 `HLD-5`
           （`live._relabel_sync_field`）亦整組最後接一次。
-      (3) `HLD-8`（`logic._build_hld8`）只走 `logic._fund_error_lines`，表層級錯誤不寫說明區錯誤行：
+      (3) `HLD-8`（`logic._build_hld8`）~~只走 `logic._fund_error_lines`，表層級錯誤不寫說明區錯誤行~~：
           格內只顯示 `logic.ERR_TEXT`、不帶訊息原文；塊狀態與「重新取數」鈕照常改變。
       (4) 本錯誤畫面只有一行錯誤，接一次。
       (5) `HLD-0` 以 `logic._is_fail_tail_line`（「⛔」開頭）帶上 `HLD-1` 卡尾的失敗行，照印句不跟上。
       以上為 165ec03 時的寫法分類，logic.py 改動時須重核；
+      → 📌 2026-10-05 重核（「讀取失敗不說空」；有意識的更正，不是漏刪；決策者：總管；稽核甲指出）：
+      (1) 多了這幾支 —— `logic._build_hld1` 門檻未知那一支；`logic._build_hld4` 設定讀取失敗時；
+      `logic._build_hld5`、`logic._build_hld8` 持倉表讀不到與區間未知各一支。(3) 劃線那半句因此不成立，
+      其他表層級錯誤照舊不寫說明區錯誤行；`HLD-8` 持倉表讀不到那一支沒有格子，也不掛「重新取數」。
     - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
       （裁示 A，逐字）。
     顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
