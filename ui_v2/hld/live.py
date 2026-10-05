@@ -910,13 +910,13 @@ def assemble_live_load(
 
     - `holding_error`、`settings_error` 由呼叫端傳入時必須已經遮蔽；本函式不再遮。
     - 淨值的取數失敗：`nav_table["errors"]` 裡，除了「訊息恰為 `empty_without_reason` 且未取到任何列」的那幾檔，
-      其餘一律以 `mask(原文)` 放進 `fund_errors["nav"]`；判斷用原文，只遮放進去的那一筆。
+      其餘一律以 `mask(原文)` 放進 `fund_errors["nav"]`；判斷用原文，只遮放進 `fund_errors` 的那幾筆；`skipped_tabs` 組出的 `errors["holding"]` 也由本函式遮（見下）。
     - 淨值被扣下（代碼在 `nav_unavailable_withheld` 裡）、代碼對照查不到（`ok is False`）、來源回空，
       三種一律不放任何東西 —— 那一檔在 dataset 裡就只是「沒有淨值列、也不在 `fund_errors`」，
       畫面由 logic 既有路徑印「⬜ 資料未備」（區間已設時；未設區間時與健康的檔同樣印「⬜ 不適用：尚未設定區間」），不新增字句。扣下代碼不在清單內 → raise。
     - L1 有回資料、但 L2 全數拒收（沒有淨值列、沒有錯誤、沒有扣下代碼）的檔，同樣不放任何東西。
-    - 呼叫端交的扣下清單只含幣別兩碼與取得時間兩碼；同一檔被給了互相矛盾輸入的那一碼只會因呼叫端組錯而出現，刻意不在清單內 → raise（契約被破壞不畫成 ⬜）。
-    - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`，沿用 logic 既有的「有持倉時來源取數失敗」畫法。
+    - 呼叫端**必須**只交幣別兩碼與取得時間兩碼；同一檔被給了互相矛盾輸入的那一碼只會因呼叫端組錯而出現，刻意不在清單內 → raise（契約被破壞不畫成 ⬜）。
+    - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法；讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬閘門①，待修。
     - `pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。
     - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
     - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。

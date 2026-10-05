@@ -175,11 +175,13 @@ def _key_results(holdings, *, fail=None):
 
 
 def _prov_entry(*, fallback=False, stale=None):
-    """L2 `build_nav_table` 的 `provenance[code]` 形狀。"""
+    """L2 `build_nav_table` 的 `provenance[code]` 形狀。
+    `ccy_source`：L2 `resolve_nav_ccy` 實際寫的只有兩種字面，`source_reported`（來源自報）與
+    `holding_user_input`（持倉手填）；扣下幣別時是 None。它們是該函式裡的字面、不是模組層常數，所以這裡照實寫字面。"""
     return {
         "source": "GitHubActions:cache/nav/x" if fallback else "MoneyDJ:x",
         "fetched_at": "2026-09-19T02:00:00+00:00",
-        "ccy_source": "holding",
+        "ccy_source": "source_reported",
         "cache_fallback": fallback,
         "stale": stale if fallback else None,
     }
@@ -199,7 +201,8 @@ def _nav_table(*, healthy=_CODES, failed=None, empty=(), withheld=None, rows_ove
     - `withheld`：`{代碼: 原因代碼}`，整檔不寫列。呼叫過 L1 的四碼（幣別兩碼、取得時間兩碼）有
       `fetched`／`skipped_rows`／`provenance`；沒呼叫過 L1 的那一碼（同一檔被給了矛盾輸入）三者都沒有
       （L2 `build_nav_table` 的 docstring 寫明）。取得時間的兩碼是「取不到真的取得時間」才扣下，
-      所以那兩碼的 provenance 其 `fetched_at` 是 None。
+      所以那兩碼的 provenance 其 `fetched_at` 是 None；幣別的兩碼是幣別判不出來才扣下，
+      所以那兩碼的 provenance 其 `ccy_source` 是 None。
     """
     all_rows = _FULL["nav"]
     table = _empty_nav_table()
@@ -227,6 +230,8 @@ def _nav_table(*, healthy=_CODES, failed=None, empty=(), withheld=None, rows_ove
             entry = _prov_entry()
             if reason in (_W_AT_MISSING, _W_AT_FUTURE):
                 entry["fetched_at"] = None
+            if reason in (_W_CCY_MISSING, _W_CCY_CONFLICT):
+                entry["ccy_source"] = None
             table["provenance"][code] = entry
     return table
 
@@ -626,7 +631,7 @@ def test_T4g_持倉讀取失敗_fund_errors是空的():
     assert out["dataset"]["fund_errors"] == {}
 
 
-def test_T4h_mask只套在放進fund_errors的那一筆_其餘的錯誤訊息不再遮():
+def test_T4h_fund_errors逐筆遮蔽_holding_error與settings_error不再遮():
     marker = _unique("標記")
 
     def wrapped(text):
@@ -1214,7 +1219,8 @@ def test_T8_快樂路徑輸出的holding_policy_nav_每一列都過列契約():
 # ═════════════════════════ T9　部分分頁讀取失敗：持倉照交，原因浮出來（總管回修裁定 R1） ═════════════════════════
 # L1 `load_policy_holding_rows` 在部分分頁讀不到（含冷卻中沒讀）時，照回其餘分頁的列，另列 `skipped_tabs`
 # （每筆 `{"tab", "error", "unread"}`）；L2 `load_alo_tables` 原樣交出。組裝時把各分頁的原因（以全形分號相連）
-# 過 `mask` 放進 `errors["holding"]`，讓 logic 既有的「有持倉時來源取數失敗」畫法接手。
+# 過 `mask` 放進 `errors["holding"]`。讀到的持倉不為空時，由 logic 既有的「有持倉時來源取數失敗」畫法接手；
+# 讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」（屬閘門①，見 `test_登記_…` 那一條）。
 
 
 def test_P1_部分分頁讀取失敗_持倉照交_原因遮蔽後放進errors_holding():
@@ -1282,7 +1288,8 @@ def test_P5_端到端_部分分頁讀取失敗_HLD0_HLD1_HLD3進系統錯誤_全
     assert model != base_model
 
 
-def test_P5_端到端_持倉零列又有略過的分頁_燈也是系統錯誤_不是報成沒有持倉():
+def _empty_holding_with_skipped_tab():
+    """持倉零列、另有一個本次未讀的分頁。回 `(組好的回傳值, 遮蔽後的原因)`。"""
     mask = _wrapped_mask(_unique("標記"))
     skipped = _skipped_tab(unread=True)
     loaded = _assemble(
@@ -1291,10 +1298,27 @@ def test_P5_端到端_持倉零列又有略過的分頁_燈也是系統錯誤_�
         nav_table=_empty_nav_table(),
         mask=mask,
     )
+    return loaded, mask(f"{skipped['tab']}{_COLON}{skipped['error']}")
+
+
+def test_P5_端到端_持倉零列又有略過的分頁_燈為系統錯誤且印出遮蔽後原因():
+    loaded, masked = _empty_holding_with_skipped_tab()
     model = _build_model(loaded)
-    masked = mask(f"{skipped['tab']}{_COLON}{skipped['error']}")
     assert logic.find_block(model, "HLD-0")["_state"] == logic.STATE_ERROR
     assert [s for s in _strings(model) if masked in s]
+
+
+def test_登記_閘門一未完成前_持倉零列又有略過分頁時仍印尚未建立任何持倉():
+    """⚠️ **這是一筆登記，不是一條規格** —— 把現況釘住，好讓將來任何一次改動都是有意識的，不是漂移。
+
+    輸入同上一條（持倉零列、另有略過的分頁）：HLD-0 已是系統錯誤，讀不到的原因也印出來了；
+    但 HLD-0 的補述與 HLD-1、2、3、5、8 仍印「尚未建立任何持倉」—— 把讀取失敗報成「空」。
+    **本 PR 不修**（`logic` 一格不動）。
+    已知缺口，屬閘門①（讀取失敗不說空）。閘門①完成時這條會紅 —— 屆時改成反向斷言，不得刪除。
+    """
+    loaded, _masked = _empty_holding_with_skipped_tab()
+    strings = _strings(_build_model(loaded))
+    assert [s for s in strings if logic.TEXT_NO_HOLDING in s]
 
 
 def test_P6_沒有略過的分頁_errors沒有holding():
