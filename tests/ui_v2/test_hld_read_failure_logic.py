@@ -334,15 +334,21 @@ def _live_models(name):
 _BASELINE = {
     "full": ("ce1fa071388d", "480956eb73ea"),
     "srcmiss": ("98c3aa0a5846", "0557ba93e77b"),
-    "bizexc": ("0bc089371169", "632657e86044"),
+    # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("0bc089371169", "632657e86044")~~。
+    #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
+    "bizexc": ("ab666d722ee3", "be0d6f62850b"),
     "fetchfail": ("e7fe488a14e1", "0803dd5d4def"),
     "nothr": ("1b35a61c8e15", "4fd09632f697"),
     "empty": ("9fed2f3a1d0a", "de19a6aaee05"),
     "emptyfail": ("87d83bb69775", "3231755732ce"),
     "noexceed": ("7be62e779b20", "7a6b9977ea59"),
     "other_window": ("ec72c9f259f7", "a54793d3f167"),
-    "onenav": ("dcc5c9a80f00", "fbf120f7d7a3"),
-    "tiedstate": ("ade666d29a29", "83911f05520d"),
+    # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("dcc5c9a80f00", "fbf120f7d7a3")~~。
+    #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
+    "onenav": ("b2ad83d33463", "afc63319f5ec"),
+    # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("ade666d29a29", "83911f05520d")~~。
+    #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
+    "tiedstate": ("740b22c594de", "20a402ef0d16"),
     "twofail": ("c85fc20996ce", "fdc3c45c05f8"),
     "holdfail": ("414bbcd0de89", "6294a2551be9"),
     "profilefail": ("6908d62183c9", "b28c4f76b50c"),
@@ -633,10 +639,16 @@ def test_空白套用c_設定讀取失敗_只填門檻_核心卡印原文_不說
 _NO_SETTINGS_FAILURE_BASELINE = {
     ("真的沒設定", "空白套用"): "4abd24a85466",
     ("真的沒設定", "只填區間"): "e0491f48a746",
-    ("真的沒設定", "只填門檻"): "e7e24687badb",
+    # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：只填門檻、區間未設 ⇒ 各檔門檻指標「⬜ 不適用：尚未設定區間」，
+    #    HLD-1 零列改進 `業務例外`（主值 `⬜ 不適用`）、燈改印它。舊值 ~~e7e24687badb~~（有意識的更正，不是漏刪）；
+    #    以 `1384e1b` 的 logic 重算舊值原樣重現，本表 12 格只有這兩格不同（3.11）。
+    ("真的沒設定", "只填門檻"): "2194cd857604",
     ("設定照讀", "空白套用"): "4abd24a85466",
     ("設定照讀", "只填區間"): "e0491f48a746",
-    ("設定照讀", "只填門檻"): "e7e24687badb",
+    # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：只填門檻、區間未設 ⇒ 各檔門檻指標「⬜ 不適用：尚未設定區間」，
+    #    HLD-1 零列改進 `業務例外`（主值 `⬜ 不適用`）、燈改印它。舊值 ~~e7e24687badb~~（有意識的更正，不是漏刪）；
+    #    以 `1384e1b` 的 logic 重算舊值原樣重現，本表 12 格只有這兩格不同（3.11）。
+    ("設定照讀", "只填門檻"): "2194cd857604",
     ("真的沒有持倉", "空白套用"): "047e6bb321bf",
     ("真的沒有持倉", "只填區間"): "bf8542264b76",
     ("真的沒有持倉", "只填門檻"): "c99430bc7652",
@@ -772,3 +784,39 @@ def test_M2反_設定讀得到_套用過有值的區間後清空欄位_HLD4照�
     assert [f["_value"] for f in hld4["inputs"]] == ["", ""]
     assert logic.NA_NO_WINDOW in hld4["detail_lines"]
     assert [s for s in _strings(hld4) if "⛔" in s] == []
+
+
+# ═══════════ 第②塊「結論燈兩句」：設定讀取失敗後套用（客戶 2026-10-08 裁示） ═══════════
+# 設定讀不到、使用者套用了區間與門檻、這組門檻下零偏離 ⇒ HLD-1 已是系統錯誤，不得印「無偏離項」或
+# 「沒有任何一檔超出」；主值比照 #898 M2 那一支：摘要印原文、主值 `⛔ 取數失敗`。燈照舊紅。
+# （部分分頁讀取失敗那一種見 `test_hld_live_assemble.py::test_結論燈兩句_有持倉零偏離又有略過分頁時_…`。）
+
+_NO_EXCEED_APPLY = logic.applied_from_inputs(fixtures.WINDOW_START, fixtures.WINDOW_END, [("最大回撤", "低於", "-99")])
+_UNKNOWN_INDICATOR_APPLY = logic.applied_from_inputs(
+    fixtures.WINDOW_START, fixtures.WINDOW_END, [("夏普值", "低於", "-99")]
+)
+
+
+def test_結論燈兩句_設定讀取失敗後套用_零偏離_HLD1不說無偏離項_主值取數失敗_燈照舊紅():
+    # 正控：設定讀得到、同一組套用時，零偏離而兩句都是真話。
+    ok_model = _build(_full(), **_apply(_NO_EXCEED_APPLY))
+    ok1 = _block(ok_model, "HLD-1")
+    assert (ok1["_state"], ok1["_rows"], ok1["summary_text"]) == (logic.STATE_OK, [], logic.TEXT_NO_DEVIATION)
+    assert "目前這一組門檻下，沒有任何一檔超出。" in ok1["detail_lines"]
+    model = _build(_s1(), **_apply(_NO_EXCEED_APPLY))
+    hld1 = _block(model, "HLD-1")
+    assert (hld1["_state"], hld1["_rows"], hld1["summary_text"]) == (logic.STATE_ERROR, [], _FF_S)
+    assert hld1["_placeholder"]["text"] == logic.ERR_TEXT
+    assert hld1["detail_lines"] == ["依 fund_code 字面值排列，不排序成優先順序。", _FF_S, logic.PRINT_AS_IS_LINE]
+    assert _hits(hld1, (logic.TEXT_NO_DEVIATION, "沒有任何一檔超出")) == []
+    hld0 = _block(model, "HLD-0")
+    assert hld0["_tone"] == "紅"
+    assert _hits(hld0, (logic.TEXT_NO_DEVIATION, "沒有任何一檔超出")) == []
+
+
+def test_結論燈兩句_設定讀取失敗後套用_指標名不在清單內_HLD1主值取數失敗不是不適用():
+    # 正控：設定讀得到時，同一組套用是 `業務例外`、主值 `⬜ 不適用`。
+    assert _block(_build(_full(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")["summary_text"] == logic.NA_TEXT
+    hld1 = _block(_build(_s1(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")
+    assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_ERROR, _FF_S)
+    assert hld1["_placeholder"]["text"] == logic.ERR_TEXT
