@@ -1832,7 +1832,8 @@ def _build_hld4(*, applied_window, fields, rules, settings_error=None, window_un
         detail_lines.append(TEXT_BAD_RANGE)
     # 📌 2026-10-05「讀取失敗不說空」（客戶裁示：HLD-4 不得畫成「未設定」）：區間是讀不到時不寫「尚未設定區間」，
     #    改寫設定讀取失敗的原文（`44` 5.5 `系統錯誤` 的模板，`44` :2326）。按過「套用」之後照樣寫：設定仍然讀不到。
-    if both_empty and not window_unknown:
+    #    M-2：判斷改看 `settings_error` 而不是 `window_unknown` —— 套用過有值的區間後再清空欄位，設定照樣讀不到，空白不是沒設定。
+    if both_empty and not settings_error:
         detail_lines.append(NA_NO_WINDOW)
     if settings_error:
         detail_lines.extend([fetch_failed_text(settings_error), PRINT_AS_IS_LINE])

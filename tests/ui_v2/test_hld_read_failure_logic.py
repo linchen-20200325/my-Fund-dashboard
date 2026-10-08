@@ -747,3 +747,28 @@ def test_空白套用e_經assemble組出的設定讀取失敗形狀_空白套用
         dataset, open_fund=None, fields=None, today=_TODAY, **_apply(_BLANK_APPLY), **loaded["live_args"]
     )
     _assert_blank_apply_reads_as_unknown(model, logic.fetch_failed_text(message))
+
+
+# ═══════════ 設定讀取失敗時，套用過有值的區間後再清空欄位（總管裁定改法 (A)；M-2） ═══════════
+# 套用過有值的區間之後 `window_unknown` 是 False；這時把區間兩格清空、還沒再按「套用」，
+# 設定照樣讀不到，欄位空白不代表沒有設定 —— HLD-4 說明區不得印「尚未設定區間」。
+# 走整頁模型的路（`live.build_live_model` → `logic.build_page_model` → `_build_hld4`），欄位的當下值經 `fields` 帶進去。
+
+_CLEARED_WINDOW_FIELDS = {"window_start": "", "window_end": ""}
+
+
+def test_M2正_設定讀取失敗_套用過有值的區間後清空欄位_HLD4不印尚未設定區間_印原文():
+    assert all(_WINDOW_ONLY_APPLY["window"]), "套用的區間沒有值 —— window_unknown 不會是 False，這一條會測錯東西"
+    model = _build(_s1(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
+    hld4 = _block(model, "HLD-4")
+    assert [f["_value"] for f in hld4["inputs"]] == ["", ""], "欄位沒有清空 —— 這一條會變成空掃"
+    assert logic.NA_NO_WINDOW not in hld4["detail_lines"]
+    assert _FF_S in hld4["detail_lines"]
+
+
+def test_M2反_設定讀得到_套用過有值的區間後清空欄位_HLD4照舊印尚未設定區間():
+    model = _build(_full(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
+    hld4 = _block(model, "HLD-4")
+    assert [f["_value"] for f in hld4["inputs"]] == ["", ""]
+    assert logic.NA_NO_WINDOW in hld4["detail_lines"]
+    assert [s for s in _strings(hld4) if "⛔" in s] == []
