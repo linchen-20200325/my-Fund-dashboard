@@ -954,7 +954,9 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
             ccy=ccy,
             error=nav_error or window_error,
             missing=nav_value_missing,
-            na_reason=na_nav_text,
+            # 期間波動要 2 個以上日報酬 ＝ 3 筆以上淨值；恰 2 筆時 `vol_pct` 回 None，
+            # 印既有「筆數不足」而不是空白 ok —— 空白 ok 會讓 `deviation_rows` 拿 None 比大小而崩（客戶 2026-10-08 裁示）。
+            na_reason=na_nav_text or (NA_FEW_NAV if len(navs) < 3 else None),
             fund_scoped=nav_fund_scoped,
             table_wide=nav_wide,
             label="期間波動",
