@@ -3622,13 +3622,10 @@ _TWO_NAV_WINDOW = ("2026-09-17", "2026-09-18")     # 示範資料每檔恰 2 筆
 _THREE_NAV_WINDOW = ("2026-09-16", "2026-09-18")   # 示範資料每檔恰 3 筆淨值
 
 
-def _three_metrics(window):
-    ds = fixtures.dataset_full()
-    return [logic.fund_metrics(ds, fund, window) for fund in ds["holding"]]
-
-
 def test_期間波動_恰2筆淨值_印筆數不足_報酬與回撤照出數():
-    for m in _three_metrics(_TWO_NAV_WINDOW):
+    metrics = logic.all_metrics(fixtures.dataset_full(), _TWO_NAV_WINDOW)
+    assert metrics   # 前提：持倉不為空，免得下面的迴圈空掃
+    for m in metrics:
         assert len(m["nav_rows"]) == 2, m["_fund_code"]   # 前提
         vol = m["期間波動"]
         assert (vol["_state"], vol["text"]) == (logic.STATE_BIZ, logic.NA_FEW_NAV), m["_fund_code"]
@@ -3637,10 +3634,29 @@ def test_期間波動_恰2筆淨值_印筆數不足_報酬與回撤照出數():
             node = m[name]
             assert node["_state"] == logic.STATE_OK and node["_raw"] is not None, (m["_fund_code"], name)
             assert node["text"], (m["_fund_code"], name)
+    # 優先序：恰 2 筆＋淨值取數失敗 → ⛔ 取數失敗，不是筆數不足。
+    ds = fixtures.dataset_full()
+    ds["errors"] = {"nav": fixtures.FETCH_FAIL_MESSAGE}
+    failed = logic.all_metrics(ds, _TWO_NAV_WINDOW)
+    assert failed
+    for m in failed:
+        assert len(m["nav_rows"]) == 2, m["_fund_code"]   # 前提
+        vol = m["期間波動"]
+        assert (vol["_state"], vol["text"]) == (logic.STATE_ERROR, logic.ERR_TEXT), m["_fund_code"]
+    # 優先序：恰 2 筆＋成立日晚於區間起點 → 與區間報酬率同一個不適用原因，不是筆數不足。
+    ds = fixtures.dataset_full()
+    ds["fund_profile"] = fixtures.fund_profiles(inception_override={"CCCC": "2026-09-18"})
+    late = [m for m in logic.all_metrics(ds, _TWO_NAV_WINDOW) if m["_fund_code"] == "CCCC"]
+    assert late and len(late[0]["nav_rows"]) == 2   # 前提
+    vol = late[0]["期間波動"]
+    assert vol["_state"] == logic.STATE_BIZ and vol["text"] != logic.NA_FEW_NAV
+    assert vol["text"] == late[0]["區間報酬率"]["text"]
 
 
 def test_期間波動_3筆淨值_照出數():
-    for m in _three_metrics(_THREE_NAV_WINDOW):
+    metrics = logic.all_metrics(fixtures.dataset_full(), _THREE_NAV_WINDOW)
+    assert metrics   # 前提：持倉不為空，免得下面的迴圈空掃
+    for m in metrics:
         assert len(m["nav_rows"]) == 3, m["_fund_code"]   # 前提
         vol = m["期間波動"]
         assert vol["_state"] == logic.STATE_OK and vol["_raw"] is not None, m["_fund_code"]
@@ -3654,3 +3670,7 @@ def test_期間波動_恰2筆淨值_加期間波動門檻_整頁不崩():
     )
     hld1 = logic.find_block(model, "HLD-1")
     assert hld1["_rows"] == []
+    assert hld1["_state"] == logic.STATE_BIZ
+    assert logic.NA_TEXT in (hld1["summary_text"], hld1["_placeholder"]["text"])
+    assert logic.NA_FEW_NAV in hld1["detail_lines"]
+    assert logic.find_block(model, "HLD-0")["text"] != logic.TEXT_NO_DEVIATION

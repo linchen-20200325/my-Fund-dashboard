@@ -494,8 +494,9 @@ HLD4_SAVE_SCOPE_NOTE = (
 
 NA_NO_WINDOW = not_applicable_text("尚未設定區間")
 NA_NO_RULES = not_applicable_text(TEXT_NO_RULES)
-# ⚠️ 下列四個 0 caller，依 `44` §6「不刪，只標」保留：字面值與 `fund_metrics` 裡
+# ⚠️ ~~下列四個 0 caller~~ → 下列後三個 0 caller，依 `44` §6「不刪，只標」保留：字面值與 `fund_metrics` 裡
 #    `not_applicable_text(...)` 是同一句話的第二份來源。**登記待裁。**
+#    `NA_FEW_NAV` 自 2026-10-08 起由期間波動使用（客戶裁示）。
 #    （`NA_NO_WINDOW`／`NA_NO_RULES` 是 live 的，不在此列。）
 NA_FEW_NAV = not_applicable_text("區間內淨值筆數不足")
 NA_LATE_INCEPTION = not_applicable_text("成立日晚於區間起點")
