@@ -3674,3 +3674,77 @@ def test_期間波動_恰2筆淨值_加期間波動門檻_整頁不崩():
     assert logic.NA_TEXT in (hld1["summary_text"], hld1["_placeholder"]["text"])
     assert logic.NA_FEW_NAV in hld1["detail_lines"]
     assert logic.find_block(model, "HLD-0")["text"] != logic.TEXT_NO_DEVIATION
+
+
+# ───────────────────────── 本金類配息佔比：區間內每單位配息全為 0（客戶 2026-10-08 裁示） ─────────────────────────
+
+_ZERO_DIV_WINDOW = ("2026-01-01", "2026-09-19")
+
+
+def _zero_div_dataset(code="AAAA", *, kind=None, errors=None):
+    """`code` 的配息列全改成每單位 0（L2 允許 0 元配息列）；`kind` 給定時一併改配息類別。"""
+    ds = fixtures._dataset(window=_ZERO_DIV_WINDOW, errors=errors)
+    for row in ds["dividend"]:
+        if row["fund_code"] == code:
+            row["div_per_unit_orig_ccy"] = 0.0
+            if kind is not None:
+                row["div_kind"] = kind
+    return ds
+
+
+def _metric_of(dataset, code, window=_ZERO_DIV_WINDOW):
+    found = [m for m in logic.all_metrics(dataset, window) if m["_fund_code"] == code]
+    assert len(found) == 1, code   # 前提
+    return found[0]
+
+
+def test_本金類配息佔比_配息全為0_印區間內無配息():
+    m = _metric_of(_zero_div_dataset(), "AAAA")
+    assert m["div_rows"] and all(r["div_per_unit_orig_ccy"] == 0 for r in m["div_rows"])   # 前提：有列、全 0
+    node = m["本金類配息佔比"]
+    assert (node["_state"], node["text"]) == (logic.STATE_BIZ, logic.NA_NO_DIVIDEND)
+    assert node["text"] == "⬜ 不適用：區間內無配息"
+    # 同一卡上另兩個配息值照舊出數（0），不受影響。
+    for name in ("期間配息合計", "配息佔淨值比"):
+        assert m[name]["_state"] == logic.STATE_OK and m[name]["text"], name
+
+
+def test_本金類配息佔比_有正值配息_照出數():
+    m = _metric_of(fixtures._dataset(window=_ZERO_DIV_WINDOW), "AAAA")
+    assert any(r["div_per_unit_orig_ccy"] > 0 for r in m["div_rows"])   # 前提
+    node = m["本金類配息佔比"]
+    assert node["_state"] == logic.STATE_OK and node["_raw"] is not None
+    assert node["text"] and node["text"] != logic.NA_NO_DIVIDEND
+
+
+def test_本金類配息佔比_配息全為0_加門檻_整頁不崩():
+    model = logic.build_page_model(
+        _zero_div_dataset(), applied_window=_ZERO_DIV_WINDOW,
+        applied_rules=[{"indicator": "本金類配息佔比", "direction": "高於", "value": 50.0}],
+    )
+    hld1 = logic.find_block(model, "HLD-1")
+    assert logic.NA_NO_DIVIDEND in hld1["detail_lines"]
+    assert logic.find_block(model, "HLD-0")["text"] != logic.TEXT_NO_DEVIATION
+
+
+def test_本金類配息佔比_配息全為0_優先序():
+    # 取數失敗優先：印取數失敗，不印無配息。
+    failed = _metric_of(
+        _zero_div_dataset(errors={"dividend": fixtures.FETCH_FAIL_MESSAGE}), "AAAA"
+    )["本金類配息佔比"]
+    assert (failed["_state"], failed["text"]) == (logic.STATE_ERROR, logic.ERR_TEXT)
+    # 既有不適用原因優先：配息類別未知（列全為 unknown 且全 0）。
+    unknown = _metric_of(_zero_div_dataset(kind="unknown"), "AAAA")["本金類配息佔比"]
+    assert unknown["_state"] == logic.STATE_BIZ
+    assert unknown["text"] == logic.not_applicable_text("配息類別未知")
+    # 既有不適用原因優先：區間未設（此時沒有列，每單位合計也是 0）。
+    no_window = _metric_of(_zero_div_dataset(), "AAAA", window=(None, None))["本金類配息佔比"]
+    assert (no_window["_state"], no_window["text"]) == (logic.STATE_BIZ, logic.NA_NO_WINDOW)
+    # 配息表尚未接上：資料未備，不是無配息（缺資料優先於不適用）。
+    ds = _zero_div_dataset()
+    ds["pending_tables"] = ["dividend"]
+    pending = _metric_of(ds, "AAAA")
+    assert pending["div_missing"]   # 前提
+    assert (pending["本金類配息佔比"]["_state"], pending["本金類配息佔比"]["text"]) == (
+        logic.STATE_MISSING, logic.ND_TEXT,
+    )
