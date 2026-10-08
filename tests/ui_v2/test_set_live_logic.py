@@ -192,6 +192,8 @@ def test_標頭不符_塊上寫出分頁與兩邊差異(env):
 
 
 def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
+    # 「現在」固定在假資料 fetched_at（2026-09-25 14:00 UTC+8）的隔天，不讀牆上時鐘，避免過了 14 天上限後轉紅
+    monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")      # = 2026-09-26 12:00 UTC+8
     _stub_fetch(monkeypatch, _vix())
     source.refetch("市場指標")
     S.save_setting_for_page("mkt_window_days", "90", "int", [])

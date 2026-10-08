@@ -101,7 +101,7 @@
 | 檔案::符號 | live/dead/已退役/未確認 | 依據 | 確認日 | 登記日 |
 |---|---|---|---|---|
 | `ui_v2/hld/logic.py::_RULE_INDICATORS` | dead | 三層確認於 `a7f8c1b`，逐層輸出見第 5 節。符號參照 2 筆，兩筆同在 `tests/ui_v2/test_hld_logic.py`，那是測試，不是 production caller | 2026-09-23 | 2026-09-24 |
-| `ui_v2/hld/logic.py::NA_FEW_NAV` | dead | 三層確認於 `a7f8c1b`，逐層輸出見第 5 節。定義處以外零筆符號參照；測試只用字串名走 `hasattr`，沒有讀到這個值 | 2026-09-23 | 2026-09-24 |
+| `ui_v2/hld/logic.py::NA_FEW_NAV` | ~~dead~~ live | ~~三層確認於 `a7f8c1b`，逐層輸出見第 5 節。定義處以外零筆符號參照；測試只用字串名走 `hasattr`，沒有讀到這個值~~ → 2026-10-08 `29d40ed` 起由 `fund_metrics` 期間波動讀取；有意識的更正，不是漏刪 | 2026-09-23 | 2026-09-24 |
 | `ui_v2/hld/logic.py::NA_LATE_INCEPTION` | dead | 同上一列，依據與量測同一次，釘 `a7f8c1b` | 2026-09-23 | 2026-09-24 |
 | `ui_v2/hld/logic.py::NA_NO_DIVIDEND` | dead | 同上一列，依據與量測同一次，釘 `a7f8c1b` | 2026-09-23 | 2026-09-24 |
 | `ui_v2/hld/logic.py::NA_UNKNOWN_KIND` | dead | 同上一列，依據與量測同一次，釘 `a7f8c1b` | 2026-09-23 | 2026-09-24 |

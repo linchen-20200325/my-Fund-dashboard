@@ -494,8 +494,9 @@ HLD4_SAVE_SCOPE_NOTE = (
 
 NA_NO_WINDOW = not_applicable_text("尚未設定區間")
 NA_NO_RULES = not_applicable_text(TEXT_NO_RULES)
-# ⚠️ 下列四個 0 caller，依 `44` §6「不刪，只標」保留：字面值與 `fund_metrics` 裡
+# ⚠️ ~~下列四個 0 caller~~ → 下列後三個 0 caller，依 `44` §6「不刪，只標」保留：字面值與 `fund_metrics` 裡
 #    `not_applicable_text(...)` 是同一句話的第二份來源。**登記待裁。**
+#    `NA_FEW_NAV` 自 2026-10-08 起由期間波動使用（客戶裁示）。
 #    （`NA_NO_WINDOW`／`NA_NO_RULES` 是 live 的，不在此列。）
 NA_FEW_NAV = not_applicable_text("區間內淨值筆數不足")
 NA_LATE_INCEPTION = not_applicable_text("成立日晚於區間起點")
@@ -954,7 +955,9 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
             ccy=ccy,
             error=nav_error or window_error,
             missing=nav_value_missing,
-            na_reason=na_nav_text,
+            # 期間波動要 2 個以上日報酬 ＝ 3 筆以上淨值；恰 2 筆時 `vol_pct` 回 None，
+            # 印既有「筆數不足」而不是空白 ok —— 空白 ok 會讓 `deviation_rows` 拿 None 比大小而崩（客戶 2026-10-08 裁示）。
+            na_reason=na_nav_text or (NA_FEW_NAV if len(navs) < 3 else None),
             fund_scoped=nav_fund_scoped,
             table_wide=nav_wide,
             label="期間波動",
