@@ -502,6 +502,8 @@ NA_LATE_INCEPTION = not_applicable_text("成立日晚於區間起點")
 NA_NO_DIVIDEND = not_applicable_text("區間內無配息")
 NA_UNKNOWN_KIND = not_applicable_text("配息類別未知")
 ND_TEXT = "⬜ 資料未備"
+# `44` 5.1 卡片表 `業務例外` 那一列的主值字面（`44` :2010）。HLD-1 零列而有檔不適用時用（客戶 2026-10-08 裁示）。
+NA_TEXT = "⬜ 不適用"
 ERR_TEXT = "⛔ 取數失敗"  # 客戶 2026-09-24 裁示：取數失敗 ⛔（44 第五節第五小節已同步），黃燈仍 ⚠
 
 
@@ -1382,19 +1384,38 @@ def _build_hld1(
             state = STATE_ERROR
             summary = ERR_TEXT
             placeholder = _metric(None, text="", ccy="", error=reason, label="偏離筆數")
-        elif not rows and skipped["missing_other"]:
+        elif not rows and (skipped["missing_other"] or skipped["missing"]):
             # 零列，但有檔的門檻指標是 `資料未備`（而且不是缺淨值那一種）⇒ 「無偏離項」與
             # 「沒有任何一檔超出」都是假話：那幾檔超不超出，不知道（紅隊 2026-10-02 指出）。
             # 字樣只用 `44` 已宣告的：主值位置 `⬜ 資料未備`（`44` 5.1 卡片表 `資料未備` 那一列），
             # 尚未接上的來源用 `44` 5.5 `來源缺` 的模板 `⬜ 資料未備：<來源鍵> 尚無資料`。
+            # 📌 客戶 2026-10-08 裁示：缺淨值零列＝未評估，同一支（卡尾「另有 N 檔缺淨值」照留）。
+            #    ~~原本只看 `missing_other`：缺淨值的檔零列時照印「無偏離項」~~（有意識的更正，不是漏刪）。
             state = STATE_MISSING
             summary = ND_TEXT
             placeholder = _metric(None, text="", ccy="", missing=True, label="偏離筆數")
-        elif not rows:
+        elif not rows and skipped["na"]:
+            # 📌 客戶 2026-10-08 裁示：零列而有檔的門檻指標不適用 ⇒ 那幾檔沒有評估，「無偏離項」是假話。
+            #    主值 `⬜ 不適用`；原因句只用各檔節點上既有的 `⬜ 不適用：<原因>`，
+            #    指標名不在清單內的那一種沒有現成句，只留主值。
+            state = STATE_BIZ
+            summary = NA_TEXT
+            placeholder = _metric(None, text="", ccy="", na_reason=NA_TEXT, label="偏離筆數")
+            detail_lines.extend(dict.fromkeys(
+                metric[rule["indicator"]]["text"]
+                for metric in metrics
+                if metric["_fund_code"] in skipped["na"]
+                for rule in rules
+                if rule["indicator"] in RULE_INDICATOR_NAMES
+                and metric[rule["indicator"]]["_state"] == STATE_BIZ
+            ))
+        elif not rows and not unsurfaced:
             # ⚠️ 登記：零列長什麼樣 `44` 沒有寫（草稿 ⛔ H-06：零筆偏離不屬空狀態四種）。
             #    本檔照草稿的畫法：一句「無偏離項」，不掛任何空狀態徽章。
             # ⚠️ 有檔取數失敗（逐檔或表層級）時走不到這裡 —— 上面第一支先接走，
             #    「沒有任何一檔超出」那一句因此不會出現（紅隊 J3：條件看 `skipped["error"]`）。
+            # 📌 客戶 2026-10-08 裁示：只剩「每一檔都評估過」走得到這裡；有來源讀取失敗（`unsurfaced`）時
+            #    讀不到的那幾檔沒有評估，這一句不寫，摘要與主值由下方 `unsurfaced` 那一段改成取數失敗。
             detail_lines.append("目前這一組門檻下，沒有任何一檔超出。")
         # 有偏離列也要寫：那幾檔的門檻指標沒有評估，燈上的 N 只是下限（紅隊 2026-10-02 指出）。
         detail_lines.extend(_missing_other_lines(metrics, skipped["missing_other"], pending))
@@ -1426,7 +1447,10 @@ def _build_hld1(
     #    空持倉那一支會清空是因為它本來就沒東西可顯示；這裡有，
     #    把它清掉等於用一個失敗訊息蓋掉還算得出來的事實，那是另一種說謊。
     if has_holdings and unsurfaced:
-        if state == STATE_MISSING:
+        # 📌 客戶 2026-10-08 裁示：~~`if state == STATE_MISSING:`~~ → 有門檻、零列、尚未是系統錯誤的都算
+        #    （原本是 ok 零列時，摘要「無偏離項」留著；有意識的更正，不是漏刪）。
+        #    門檻未設那一支（`rules` 為空）不在射程內，照舊。
+        if rules and not rows and state != STATE_ERROR:
             # 摘要與主值讓位給取數失敗：塊態是 `系統錯誤`，主值不能還寫 `⬜ 資料未備`。
             # 說明區原有的資料未備原因照留（算出來的東西一律留著）。
             summary = fetch_failed_text(unsurfaced)
@@ -1717,16 +1741,19 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
         for line in card.get("tail_lines", ())
         if _is_fail_tail_line(line)
     ]
-    if deviation_count == 0 and hld1_state == STATE_MISSING:
+    if deviation_count == 0 and hld1_state in (STATE_MISSING, STATE_BIZ):
         # `HLD-1` 零列、而且有檔的門檻指標資料未備 ⇒ 不得說「無偏離項」，
         # 也不得說「有一塊進了『不適用』」（紅隊 2026-10-02 指出）。
         # 字樣只用 `44` 已宣告的 `⬜ 資料未備`／`⬜ 資料未備：<來源鍵> 尚無資料`，
         # 由 `HLD-1` 已經算好的那幾行帶過來，本塊不自取數（`44` HLD-0 來源欄）。
+        # 📌 客戶 2026-10-08 裁示：`HLD-1` 零列而有檔不適用（業務例外）同一支 —— 燈印 `HLD-1` 的既有主值
+        #    （`⬜ 資料未備` 或 `⬜ 不適用`），不新增第二套判斷、不寫新字句。
+        #    ~~`hld1_state == STATE_MISSING`、`"text": ND_TEXT`~~（有意識的更正，不是漏刪）。
         hld1 = next(c for c in cards if c.get("code") == "HLD-1")
         return {
             "_tone": "灰",
-            "_state": STATE_MISSING,
-            "text": ND_TEXT,
+            "_state": hld1_state,
+            "text": hld1["_placeholder"]["text"],
             "lines": [l for l in hld1["detail_lines"] if _is_missing_reason_line(l)],
             "detail_lines": [],
             "buttons": [],
@@ -1759,11 +1786,14 @@ def conclusion_light(cards, *, has_holdings, has_rules, deviation_count,
     # ⚠️ 登記：三塊不全是 ok、偏離筆數為零、又沒有系統錯誤時，
     #    `44` HLD-0 三條規則**一條也沒命中**（草稿 ⛔ H-03）。
     #    本檔照草稿被迫挑的那一邊：灰燈，文案沿用「無偏離項」。**這不是規格。**
+    # 📌 客戶 2026-10-08 裁示：走得到這裡時 `HLD-1` 每一檔都已評估且零偏離（未完整評估的已被上面那一支接走），
+    #    維持灰燈「無偏離項」，只刪掉 ~~「有一塊進了「不適用」，偏離筆數為零。」~~ 那一句
+    #    （不實：走到這裡的那一塊常是 `資料未備`，不是「不適用」；有意識的更正，不是漏刪）。不加任何新字句。
     return {
         "_tone": "灰",
         "_state": worst_state(states),
         "text": TEXT_NO_DEVIATION,
-        "lines": ["有一塊進了「不適用」，偏離筆數為零。"],
+        "lines": [],
         "detail_lines": [
             "這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"
         ],

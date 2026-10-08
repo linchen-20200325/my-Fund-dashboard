@@ -1231,7 +1231,10 @@ def test_T8_快樂路徑輸出的holding_policy_nav_每一列都過列契約():
 # ~~讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」（屬「讀取失敗不說空」那一塊，見 `test_登記_讀取失敗不說空未修前_…` 那一條）；~~
 # → 📌 2026-10-05「讀取失敗不說空」修好（有意識的更正，不是漏刪）：讀到的持倉為空時不說空，
 #   見 `test_讀取失敗不說空_持倉零列又有略過分頁時_沒有任何一塊印尚未建立任何持倉` 與其後兩條；
-# 讀到的持倉不為空、這組門檻下零偏離時，HLD-1 仍印「無偏離項」與「沒有任何一檔超出」（屬「結論燈兩句」那一塊，見 `test_登記_結論燈兩句未修前_…` 那一條）。
+# ~~讀到的持倉不為空、這組門檻下零偏離時，HLD-1 仍印「無偏離項」與「沒有任何一檔超出」（屬「結論燈兩句」那一塊，見 `test_登記_結論燈兩句未修前_…` 那一條）。~~
+# → 📌 2026-10-08「結論燈兩句」修好（客戶裁示；有意識的更正，不是漏刪）：讀到的持倉不為空、這組門檻下零偏離時，
+#   HLD-1 主值改印「⛔ 取數失敗」、摘要印原文，不再說「無偏離項」與「沒有任何一檔超出」，
+#   見 `test_結論燈兩句_有持倉零偏離又有略過分頁時_HLD1不說無偏離項也不說沒有任何一檔超出` 那一條。
 
 
 def test_P1_部分分頁讀取失敗_持倉照交_原因遮蔽後放進errors_holding():
@@ -1405,15 +1408,17 @@ def test_讀取失敗不說空_設定讀取失敗而且沒按過套用_全頁沒
         assert failed in logic.find_block(model, code)["detail_lines"], code
 
 
-def test_登記_結論燈兩句未修前_有持倉零偏離又有略過分頁時_HLD1仍印無偏離項與沒有任何一檔超出():
-    """⚠️ **這是一筆登記，不是一條規格** —— 把現況釘住，好讓修它的那一次改動是有意識的。
+def test_結論燈兩句_有持倉零偏離又有略過分頁時_HLD1不說無偏離項也不說沒有任何一檔超出():
+    """📌 **2026-10-08 由登記改成反向斷言（客戶裁示「結論燈兩句」；有意識的更正，不是漏刪）。**
+
+    ~~⚠️ **這是一筆登記，不是一條規格** —— 把現況釘住，好讓修它的那一次改動是有意識的。~~
+    ~~HLD-1 已是系統錯誤，讀不到的原因也已印在 HLD-1 與 HLD-3；但摘要仍是「無偏離項」，說明行仍有「目前這一組門檻下，~~
+    ~~沒有任何一檔超出。」—— 讀不到的分頁上的持倉沒有被評估，這兩句是假話。~~
+    ~~**本 PR 不修**（`logic` 一格不動）。…修好時這條會紅 —— 屆時改成反向斷言，不得刪除。~~
 
     輸入：有持倉、這組門檻下零偏離（正控先證明）、另有一個讀取失敗的分頁。
-    HLD-1 已是系統錯誤，讀不到的原因也已印在 HLD-1 與 HLD-3；但摘要仍是「無偏離項」，說明行仍有「目前這一組門檻下，
-    沒有任何一檔超出。」—— 讀不到的分頁上的持倉沒有被評估，這兩句是假話。
-    **本 PR 不修**（`logic` 一格不動）。已知缺口，屬「結論燈兩句」那一塊（S6b-3 之前必修；
-    總管 2026-10-05 判定歸入此塊，依據是客戶同日裁示的理由：有檔未評估不能說「無偏離項」）。
-    修好時這條會紅 —— 屆時改成反向斷言，不得刪除。
+    現行：HLD-1 是系統錯誤，摘要印讀取失敗原文、主值「⛔ 取數失敗」（比照 #898 M2 那一支），
+    不說「無偏離項」、不說「沒有任何一檔超出」；燈照舊紅。
     """
     rules = [{"indicator": "最大回撤", "direction": "低於", "value": -99.0}]   # 這組門檻下沒有任何一檔超出
     settings = _settings(rules=rules)
@@ -1421,16 +1426,23 @@ def test_登記_結論燈兩句未修前_有持倉零偏離又有略過分頁時
     model = _build_model(_assemble(settings=settings,
                                    holding_tables=_l2_holding_tables(skipped_tabs=[_skipped_tab(unread=False)])))
     no_exceed = "目前這一組門檻下，沒有任何一檔超出。"
-    # 正控：沒有略過的分頁時，這組門檻下確實零偏離，兩句都是真話。
+    # 正控：沒有略過的分頁時，這組門檻下確實零偏離，兩句都是真話（不變的那一邊）。
     before = logic.find_block(base, "HLD-1")
     assert before["_state"] == logic.STATE_OK
     assert before["summary_text"] == logic.TEXT_NO_DEVIATION
     assert no_exceed in before["detail_lines"]
-    # 登記：有略過的分頁時，HLD-1 已是系統錯誤，卻仍印這兩句。
+    assert logic.find_block(base, "HLD-0")["text"] == logic.TEXT_NO_DEVIATION
+    # 反向斷言：有略過的分頁時，HLD-1 是系統錯誤，兩句都不印。
     after = logic.find_block(model, "HLD-1")
     assert after["_state"] == logic.STATE_ERROR
-    assert after["summary_text"] == logic.TEXT_NO_DEVIATION
-    assert no_exceed in after["detail_lines"]
+    assert after["summary_text"] != logic.TEXT_NO_DEVIATION
+    assert after["summary_text"].startswith("⛔ 取數失敗：")
+    assert after["summary_text"] in after["detail_lines"]
+    assert after["_placeholder"]["text"] == logic.ERR_TEXT
+    assert no_exceed not in after["detail_lines"]
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld0["_tone"] == "紅"
+    assert logic.TEXT_NO_DEVIATION not in _strings(hld0)
 
 
 def test_P6_沒有略過的分頁_errors沒有holding():

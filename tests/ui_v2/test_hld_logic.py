@@ -692,6 +692,8 @@ def test_空狀態文案模板逐字():
 def test_全頁用到的空狀態文案逐字落在SSOT寫下的那幾句之內():
     expected = {
         "⬜ 資料未備",
+        # 客戶 2026-10-08 裁示：HLD-1 零列而有檔不適用時，主值只印 `44` 5.1 卡片表 `業務例外` 那一列的字面。
+        "⬜ 不適用",
         "⬜ 不適用：尚未設定區間",
         "⬜ 不適用：尚未設定門檻",
         "⬜ 不適用：區間內淨值筆數不足",
@@ -1458,7 +1460,10 @@ def test_第6件正控_拆掉tie_break沒有改變任何一個現行畫面的顏
         ("full", "HLD-3"): "中性", ("full", "HLD-8"): "黃",
         ("srcmiss", "HLD-1"): "中性", ("srcmiss", "HLD-2"): "灰",
         ("srcmiss", "HLD-3"): "灰", ("srcmiss", "HLD-8"): "灰",
-        ("bizexc", "HLD-1"): "中性", ("bizexc", "HLD-2"): "黃",
+        # ~~("bizexc", "HLD-1"): "中性"~~ → "黃"：客戶 2026-10-08 裁示（結論燈兩句）——
+        # 零列而有檔的門檻指標不適用時，HLD-1 進 `業務例外`（主值 `⬜ 不適用`），色照 `44` 5.1 卡片表那一列。
+        # 這是本條期望值唯一一格有意識的更正（不是漏刪），與第 6 件無關。
+        ("bizexc", "HLD-1"): "黃", ("bizexc", "HLD-2"): "黃",
         ("bizexc", "HLD-3"): "中性", ("bizexc", "HLD-8"): "黃",
         ("fetchfail", "HLD-1"): "中性", ("fetchfail", "HLD-2"): "中性",
         ("fetchfail", "HLD-3"): "紅", ("fetchfail", "HLD-8"): "紅",
@@ -1586,6 +1591,7 @@ _44_ANCHORS = {
     1735: "該欄位單獨列出並掛「未定義」徽章",
     1799: "`source_tier`",
     2009: "主值位置顯示 `⬜ 資料未備`",
+    2010: "主值位置顯示 `⬜ 不適用`",  # 客戶 2026-10-08 裁示：HLD-1 零列而有檔不適用時的主值
     2315: "`default_open` 為真的區塊剛好是結論燈與 3 張核心卡",
     2326: "取數或計算本身失敗",  # S6b-1：5.5 `系統錯誤` 那一列（page.py 錯誤畫面）
     2344: "顏色是 UI 顯示，不是嚴重度；兩者正交",
@@ -2049,8 +2055,12 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("srcmiss", "HLD-6"): ('中性', 'ok', "0fa8eb2d70c6"),
         ("srcmiss", "HLD-7"): ('中性', 'ok', "697f3caf3268"),
         ("srcmiss", "HLD-8"): ('灰', '資料未備', "11c8446e411f"),
-        ("bizexc", "HLD-0"): ('灰', '業務例外', "361d526cc96d"),
-        ("bizexc", "HLD-1"): ('中性', 'ok', "54989f40bf94"),
+        # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：零列而有檔的門檻指標不適用 ⇒ HLD-1 進 `業務例外`（主值 `⬜ 不適用`），
+        #    燈印 HLD-1 的既有主值、刪去「有一塊進了「不適用」，偏離筆數為零。」。本格與下一格換新值（有意識的更正，不是漏刪）；
+        #    舊值 ~~361d526cc96d~~／~~54989f40bf94~~（HLD-1 舊為 中性／ok）。換之前先證明：以 `1384e1b` 的 logic 與本次 logic 對 17 個情境逐塊算摘要，
+        #    只有 bizexc、onenav、tiedstate 三情境的 HLD-0／HLD-1 共 6 格不同（量測日 2026-10-08，3.11）；其餘格一格未動。
+        ("bizexc", "HLD-0"): ('灰', '業務例外', "e2963a70a875"),
+        ("bizexc", "HLD-1"): ('黃', '業務例外', "bb03512252ba"),
         ("bizexc", "HLD-2"): ('黃', '業務例外', "10f06cc9db29"),
         ("bizexc", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("bizexc", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
@@ -2116,8 +2126,12 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("other_window", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("other_window", "HLD-7"): ('中性', 'ok', "ad6c5cd4bc32"),
         ("other_window", "HLD-8"): ('中性', 'ok', "2a28e2a9534f"),
-        ("onenav", "HLD-0"): ('灰', '業務例外', "361d526cc96d"),
-        ("onenav", "HLD-1"): ('中性', 'ok', "51f6d37571ec"),
+        # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：零列而有檔的門檻指標不適用 ⇒ HLD-1 進 `業務例外`（主值 `⬜ 不適用`），
+        #    燈印 HLD-1 的既有主值、刪去「有一塊進了「不適用」，偏離筆數為零。」。本格與下一格換新值（有意識的更正，不是漏刪）；
+        #    舊值 ~~361d526cc96d~~／~~51f6d37571ec~~（HLD-1 舊為 中性／ok）。換之前先證明：以 `1384e1b` 的 logic 與本次 logic 對 17 個情境逐塊算摘要，
+        #    只有 bizexc、onenav、tiedstate 三情境的 HLD-0／HLD-1 共 6 格不同（量測日 2026-10-08，3.11）；其餘格一格未動。
+        ("onenav", "HLD-0"): ('灰', '業務例外', "e2963a70a875"),
+        ("onenav", "HLD-1"): ('黃', '業務例外', "746de379cbf2"),
         ("onenav", "HLD-2"): ('黃', '業務例外', "eac4b10c9634"),
         ("onenav", "HLD-3"): ('黃', '業務例外', "a0b4b23b64c4"),
         ("onenav", "HLD-4"): ('中性', 'ok', "ff7c473013a3"),
@@ -2721,16 +2735,20 @@ def test_必修2正控_配息表未備而門檻吃配息_零列時不得說無�
         assert hld0["_tone"] == "灰"
 
 
-def test_必修2反例_有資料時零列照舊無偏離項_缺淨值照舊無偏離項_有列照舊黃燈():
+def test_必修2反例_有資料時零列照舊無偏離項_缺淨值零列改資料未備_有列照舊黃燈():
     """反向：沒有未備的配息時，44 HLD-0／HLD-1 判準那兩句照舊出現。"""
     model = logic.build_page_model(fixtures.dataset_noexceed())
     assert logic.find_block(model, "HLD-1")["summary_text"] == logic.TEXT_NO_DEVIATION
     assert logic.find_block(model, "HLD-0")["text"] == logic.TEXT_NO_DEVIATION
-    # 缺淨值（整個抽掉）照客戶 H-01 裁示：不進表、卡尾一行，零列照舊「無偏離項」。
+    # 缺淨值（整個抽掉）照客戶 H-01 裁示：不進表、卡尾一行。
+    # ~~零列照舊「無偏離項」~~ → 客戶 2026-10-08 裁示（結論燈兩句；有意識的更正，不是漏刪）：
+    #   缺淨值零列＝未評估，HLD-1 改印既有的「⬜ 資料未備」（照 `missing_other` 先例），卡尾那一行照留。
     model = logic.build_page_model(**fixtures.scenario("tiedstate"))
     hld1 = logic.find_block(model, "HLD-1")
-    assert hld1["summary_text"] == logic.TEXT_NO_DEVIATION
+    assert hld1["summary_text"] == logic.ND_TEXT
+    assert hld1["summary_text"] != logic.TEXT_NO_DEVIATION
     assert hld1["missing_nav_count"] == 1
+    assert any("檔缺淨值，未列入" in line for line in hld1["tail_lines"])
     # 配息表未備、但仍有一檔超出：黃燈照舊。
     model = logic.build_page_model(_dividend_pending(fixtures.dataset_full()))
     assert logic.find_block(model, "HLD-0")["_tone"] == "黃"
@@ -3480,3 +3498,119 @@ def test_S2_J1_同一檔又缺淨值又配息失敗_只算取數失敗():
     plain = fixtures.dataset_full()
     plain["nav"] = [r for r in plain["nav"] if r["fund_code"] != "AAAA"]
     assert logic.find_block(logic.build_page_model(plain), "HLD-1")["missing_nav_count"] == 1
+
+
+# ═══════════ 第②塊「結論燈兩句」（客戶 2026-10-08 裁示） ═══════════
+# 有檔沒有評估（缺淨值、不適用、指標名不在清單內、來源讀取失敗）時，HLD-1 與燈都不得說「無偏離項」；
+# 燈的「有一塊進了「不適用」，偏離筆數為零。」那一句刪去。字樣只用既有的：`⬜ 資料未備`、`⬜ 不適用`
+# （`44` 5.1 卡片表 `業務例外` 那一列）、各檔節點上既有的 `⬜ 不適用：<原因>`。
+
+_WINDOW = (fixtures.WINDOW_START, fixtures.WINDOW_END)
+_NO_EXCEED_LINE = "目前這一組門檻下，沒有任何一檔超出。"
+_REMOVED_NA_LINE = "有一塊進了「不適用」，偏離筆數為零。"
+
+
+def _hld10(model):
+    return logic.find_block(model, "HLD-1"), logic.find_block(model, "HLD-0")
+
+
+def test_結論燈兩句_閘門3_HLD1每檔都評估過而零偏離_他塊不全ok_灰燈照印無偏離項_只刪不適用那一句():
+    ds = _dividend_pending(fixtures.dataset_noexceed())   # HLD-3 進 `資料未備`
+    model = logic.build_page_model(
+        ds, applied_window=_WINDOW,
+        applied_rules=[{"indicator": "最大回撤", "direction": "低於", "value": -30.0}],   # 不吃配息：每一檔都評估得了
+    )
+    hld1, hld0 = _hld10(model)
+    # 前提：HLD-1 每一檔都評估過、零偏離；三塊不全是 ok。
+    assert (hld1["_state"], hld1["_rows"], hld1["tail_lines"]) == (logic.STATE_OK, [], [])
+    assert logic.find_block(model, "HLD-3")["_state"] == logic.STATE_MISSING
+    assert (hld0["_tone"], hld0["text"]) == ("灰", logic.TEXT_NO_DEVIATION)
+    assert hld0["lines"] == []
+    assert _REMOVED_NA_LINE not in _strings(model)
+    # 說明區那一句（既有字句）照留，不加任何新字句。
+    assert hld0["detail_lines"] == ["這一頁的燈色描述的是「要不要多看一眼」，不描述持倉好壞。"]
+
+
+def test_結論燈兩句_閘門4_缺淨值零列_HLD1印資料未備_卡尾照留_燈印資料未備():
+    model = logic.build_page_model(**fixtures.scenario("tiedstate"))
+    hld1, hld0 = _hld10(model)
+    assert hld1["_rows"] == [] and hld1["missing_nav_count"] == 1
+    assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_MISSING, logic.ND_TEXT)
+    assert hld1["_placeholder"]["text"] == logic.ND_TEXT
+    assert _NO_EXCEED_LINE not in hld1["detail_lines"]
+    assert hld1["tail_lines"][:2] == ["⬜ 另有 1 檔缺淨值，未列入（示意）", logic.HLD1_SKIPPED_NOTE]
+    assert (hld0["_tone"], hld0["_state"], hld0["text"]) == ("灰", logic.STATE_MISSING, logic.ND_TEXT)
+    for block in (hld1, hld0):
+        joined = "\n".join(_strings(block))
+        assert logic.TEXT_NO_DEVIATION not in joined, block["code"]
+        assert "沒有任何一檔超出" not in joined, block["code"]
+        assert _REMOVED_NA_LINE not in joined, block["code"]
+
+
+def test_結論燈兩句_閘門4_不適用零列_HLD1印不適用_原因句只用節點上既有的字句_燈印不適用():
+    for name, reasons in (
+        ("bizexc", ["⬜ 不適用：成立日晚於區間起點"]),
+        ("onenav", ["⬜ 不適用：區間內淨值筆數不足", "⬜ 不適用：區間內無配息"]),
+    ):
+        model = logic.build_page_model(**fixtures.scenario(name))
+        hld1, hld0 = _hld10(model)
+        assert hld1["_rows"] == [], name
+        assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_BIZ, logic.NA_TEXT), name
+        assert hld1["_placeholder"]["text"] == "⬜ 不適用", name
+        assert hld1["detail_lines"][1:] == reasons, name
+        # 原因句沒有一句是新的：每一句都是某一檔某個值上已經在畫面上的字。
+        node_texts = {n["text"] for n in logic.value_nodes(model)}
+        assert set(reasons) <= node_texts, name
+        assert (hld0["_tone"], hld0["_state"], hld0["text"], hld0["lines"]) == (
+            "灰", logic.STATE_BIZ, logic.NA_TEXT, []), name
+        for block in (hld1, hld0):
+            joined = "\n".join(_strings(block))
+            assert logic.TEXT_NO_DEVIATION not in joined, (name, block["code"])
+            assert "沒有任何一檔超出" not in joined, (name, block["code"])
+            assert _REMOVED_NA_LINE not in joined, (name, block["code"])
+
+
+def test_結論燈兩句_閘門4_指標名不在清單內_只印主值不適用_不寫原因句():
+    model = logic.build_page_model(
+        fixtures.dataset_noexceed(), applied_window=_WINDOW,
+        applied_rules=[{"indicator": "夏普值", "direction": "低於", "value": -30.0}],
+    )
+    assert "夏普值" not in logic.RULE_INDICATOR_NAMES   # 前提：真的不在清單內
+    hld1, hld0 = _hld10(model)
+    assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_BIZ, logic.NA_TEXT)
+    assert hld1["_placeholder"]["text"] == logic.NA_TEXT
+    assert hld1["detail_lines"] == ["依 fund_code 字面值排列，不排序成優先順序。"]
+    assert not [s for s in _strings(hld1) if s.startswith("⬜ 不適用：")]
+    assert (hld0["_tone"], hld0["text"], hld0["lines"]) == ("灰", logic.NA_TEXT, [])
+
+
+def test_結論燈兩句_不變_每檔都評估過而三塊都ok_照印無偏離項與沒有任何一檔超出():
+    model = logic.build_page_model(**fixtures.scenario("noexceed"))
+    hld1, hld0 = _hld10(model)
+    assert (hld1["_state"], hld1["summary_text"], hld1["_placeholder"]) == (
+        logic.STATE_OK, logic.TEXT_NO_DEVIATION, None)
+    assert _NO_EXCEED_LINE in hld1["detail_lines"]
+    assert (hld0["_tone"], hld0["text"], hld0["lines"]) == ("灰", logic.TEXT_NO_DEVIATION, [_NO_EXCEED_LINE])
+
+
+def test_結論燈兩句_不變_有偏離照舊黃燈有N檔():
+    model = logic.build_page_model(**fixtures.scenario("full"))
+    hld1, hld0 = _hld10(model)
+    n = len({row["_fund_code"] for row in hld1["_rows"]})
+    assert n > 0
+    assert (hld1["_state"], hld0["_tone"]) == (logic.STATE_OK, "黃")
+    assert hld0["text"] == f"有 {n} 檔超出你設定的門檻（示意）"
+
+
+def test_結論燈兩句_讀取失敗那一段不蓋掉M2那一支_零列已是系統錯誤時摘要與主值照舊():
+    """`unsurfaced` 那一段只改「零列、尚未是系統錯誤」的；#898 M2 那一支（門檻指標取數失敗、零列）
+    已經是系統錯誤，摘要 `⛔ 取數失敗`、主值帶的是門檻指標那一個原文，不被持倉表的原文蓋掉。"""
+    nav_msg, holding_msg = "淨值表讀取逾時（測試用原文）", "持倉表某分頁讀不到（測試用原文）"
+    ds = fixtures.dataset_noexceed()
+    ds["errors"] = {"nav": nav_msg, "holding": holding_msg}
+    assert ds["holding"]   # 前提：有持倉（部分讀取）
+    hld1 = logic.find_block(logic.build_page_model(ds), "HLD-1")
+    assert (hld1["_state"], hld1["_rows"], hld1["summary_text"]) == (logic.STATE_ERROR, [], logic.ERR_TEXT)
+    assert hld1["_placeholder"]["reason_text"] == nav_msg
+    assert logic.fetch_failed_text(holding_msg) in hld1["detail_lines"]
+    assert logic.TEXT_NO_DEVIATION not in _strings(hld1)
