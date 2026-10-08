@@ -1754,13 +1754,18 @@ def test_A3控_來源表真的是44來源欄的逐字子集():
 
     契約兩條：
       (1) 收進來的，每一張都要真的出現在該塊的來源欄（**不准多**）；
-      (2) 來源欄點名的，扣掉唯一那條說得出理由的篩選（`user_setting` 不經取數）之後，
+      (2) 來源欄點名的，~~扣掉唯一那條說得出理由的篩選（`user_setting` 不經取數）之後，~~
           **每一張都要被收進來**（**不准漏**）。
+    📌 2026-10-05「讀取失敗不說空」：篩選拿掉（有意識的更正，不是漏刪；客戶 2026-10-05 裁示
+    `BLOCK_SOURCE_TABLES` 加 `user_setting`）。舊句在寫下當時為真；被權衡掉的是「設定不經取數」——
+    正式模式的設定是讀表讀回來的，讀不到時 `errors["user_setting"]` 帶原文。
     ⚠️ 拿掉修復（把 `fund_profile` 或 `holding` 從表裡刪掉）本條當場轉紅。
     """
     # 來源欄的行號本身由 `_44_ANCHORS` 那兩條守著，這裡只用它們。
     source_rows = {"HLD-1": 513, "HLD-2": 531, "HLD-3": 542}
-    not_fetched = {"user_setting"}  # 使用者自己輸入，不經取數 —— 唯一的篩選
+    # ~~`not_fetched = {"user_setting"}`：使用者自己輸入，不經取數 —— 唯一的篩選~~
+    # → 2026-10-05「讀取失敗不說空」：篩選拿掉（見 docstring）。
+    not_fetched = set()
     assert set(source_rows) == set(logic.BLOCK_SOURCE_TABLES), (
         sorted(source_rows), sorted(logic.BLOCK_SOURCE_TABLES))
     for code, lineno in source_rows.items():
@@ -1808,7 +1813,10 @@ def test_哪些來源表在有持倉時本來就浮得出來():
        日後 `fund_metrics()` 改讀別的 `errors` 鍵，這一條會紅，
        `_SURFACED_PER_VALUE` 不會靜默過期。
     """
-    tables = sorted({t for ts in logic.BLOCK_SOURCE_TABLES.values() for t in ts})
+    # 📌 2026-10-05「讀取失敗不說空」：`user_setting` 收進來源表之後不在本條射程 ——
+    #    設定讀不到時，值是經由「區間未知」那一條路判成 `系統錯誤`（`fund_metrics()` 的 `window_error`），
+    #    不是 `_SURFACED_PER_VALUE` 那一種；而且這裡的 dataset 帶著設定列，注入它會依呼叫端契約 raise。
+    tables = sorted({t for ts in logic.BLOCK_SOURCE_TABLES.values() for t in ts if t != "user_setting"})
     assert tables, "一張表也沒掃到 —— 這一條會變成空掃"
     surfaced = set()
     for table in tables:
