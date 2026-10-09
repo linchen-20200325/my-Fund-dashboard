@@ -682,7 +682,7 @@ _NAV_UNAVAILABLE = tuple(
 
 
 def _l2_settings(*, start=fixtures.WINDOW_START, broken=(), rows_override=None):
-    """L2 `load_user_settings(...)` 的形狀，只放 `assemble_live_load` 讀的兩個鍵（同 `test_hld_live_assemble.py::_settings`）。"""
+    """L2 `load_user_settings(...)` 的形狀，只放 `assemble_live_load` 讀的四個鍵（同 `test_hld_live_assemble.py::_settings`；R-7 加 `tab_missing`、`bad_rows`）。"""
     def row(key, value, kind):
         return {"setting_key": key, "setting_value": value, "value_kind": kind, "updated_at": "2026-10-01T09:00:00+08:00"}
 
@@ -693,7 +693,8 @@ def _l2_settings(*, start=fixtures.WINDOW_START, broken=(), rows_override=None):
             "hld_deviation_rules", json.dumps(fixtures._RULES_DEFAULT, ensure_ascii=False), "rules"
         ),
     }
-    return {"rows": rows if rows_override is None else rows_override, "broken_keys": sorted(broken)}
+    return {"rows": rows if rows_override is None else rows_override, "broken_keys": sorted(broken),
+            "tab_missing": False, "bad_rows": []}
 
 
 def _assembled(**settings_kw):

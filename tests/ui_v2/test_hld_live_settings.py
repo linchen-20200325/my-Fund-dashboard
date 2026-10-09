@@ -299,3 +299,74 @@ def test_契約_沒有失敗時三列照交():
     handed, problem = _what_caller_hands_to_logic(rows)
     assert problem is None
     assert logic.saved_window({"user_setting": handed}) == ("2026-06-01", "2026-09-30")
+
+
+# ───────────────────────── R-7（客戶 2026-10-09 裁示）：讀不到的三種情形不說「尚未設定」─────────────────────────
+# L1 `_reduce_user_settings` 的 `bad_rows` 一列的形狀（`_parse_rows`）：{"row", "reason", "cells"}。
+_BLANK_KEY_BAD_ROW = {"row": 2, "reason": "setting_key：不可空", "cells": ["", "2026-06-01", "date", ""]}
+
+
+def test_R7_分頁不存在_讀取失敗():
+    rows, problem = live.parse_user_settings({}, [], tab_missing=True, bad_rows=[])
+    assert problem == f"{_PREFIX}找不到設定分頁"
+    assert _by_key(rows) == dict.fromkeys(live.SETTING_KEYS)
+
+
+@pytest.mark.parametrize("form", ["bad_rows鍵欄空", "rows鍵只有空白", "broken_keys鍵只有空白"])
+def test_R7_設定鍵空白_讀取失敗(form):
+    rows = _rows(hld_window_start="2026-06-01", hld_window_end="2026-09-30")
+    broken, bad = [], []
+    if form == "bad_rows鍵欄空":
+        bad = [_BLANK_KEY_BAD_ROW]
+    elif form == "rows鍵只有空白":
+        rows["  "] = {"setting_key": "  ", "setting_value": "x", "value_kind": "str", "updated_at": None}
+    else:
+        broken = ["　"]
+    _out, problem = live.parse_user_settings(rows, broken, bad_rows=bad)
+    assert problem == f"{_PREFIX}有一列設定鍵空白"
+
+
+@pytest.mark.parametrize("key", live.SETTING_KEYS)
+@pytest.mark.parametrize("pad", [" {} ", "{} ", " {}", "\t{}"])
+def test_R7_鍵前後帶空白_讀取失敗_值不被拿去用(key, pad):
+    good = {"hld_window_start": "2026-06-01", "hld_window_end": "2026-09-30",
+            "hld_deviation_rules": json.dumps(_RULES, ensure_ascii=False)}
+    rows = _rows(**{k: v for k, v in good.items() if k != key})
+    padded = pad.format(key)
+    rows[padded] = {"setting_key": padded, "setting_value": good[key], "value_kind": _KINDS[key], "updated_at": None}
+    out, problem = live.parse_user_settings(rows)
+    assert problem == f"{_PREFIX}{key} 前後帶空白"
+    assert _by_key(out)[key] is None   # 不 strip 後照用
+
+
+def test_R7_鍵前後帶空白_鍵在broken_keys裡也要報():
+    _out, problem = live.parse_user_settings({}, [" hld_window_end"])
+    assert problem == f"{_PREFIX}hld_window_end 前後帶空白"
+
+
+def test_R7_別頁的鍵前後帶空白_忽略():
+    rows = _rows(hld_window_start="2026-06-01")
+    rows[" alo_basis"] = {"setting_key": " alo_basis", "setting_value": "成本", "value_kind": "list", "updated_at": None}
+    _out, problem = live.parse_user_settings(rows, [" set_max_age_days"])
+    assert problem is None
+
+
+def test_R7_多種同時發生_全部列出_次序固定():
+    rows = {" hld_window_start": {"setting_key": " hld_window_start", "setting_value": "2026-06-01",
+                                  "value_kind": "date", "updated_at": None}}
+    _out, problem = live.parse_user_settings(rows, ["hld_window_end"], tab_missing=True,
+                                             bad_rows=[_BLANK_KEY_BAD_ROW])
+    assert problem == (f"{_PREFIX}找不到設定分頁；有一列設定鍵空白；hld_window_start 前後帶空白；"
+                       "hld_window_end 這一列解析不了")
+
+
+def test_R7_反向_只有標頭零筆資料_仍是尚未設定():
+    rows, problem = live.parse_user_settings({}, [], tab_missing=False, bad_rows=[])
+    assert problem is None
+    assert _by_key(rows) == dict.fromkeys(live.SETTING_KEYS)
+
+
+def test_R7_反向_bad_rows鍵欄有值_不算鍵空白():
+    bad = [{"row": 3, "reason": "value_kind：不可空", "cells": ["alo_basis", "成本", "", ""]}]
+    _out, problem = live.parse_user_settings(_rows(hld_window_start="2026-06-01"), [], bad_rows=bad)
+    assert problem is None
