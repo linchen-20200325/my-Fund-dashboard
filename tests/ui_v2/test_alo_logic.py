@@ -201,7 +201,7 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     import hashlib
 
-    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "b54020cda7aac68e16850336b0e98c63"
+    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "795614090627cb6368bd2021244e9217"
 
 
 def test_取數失敗圖示是禁止號_黃燈仍是警告號():

@@ -227,7 +227,7 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     # ~~assert fields["hld_window_start"]["used_by_text"] is None                          # 未設定：不出 ★7~~
     # → S6b-3 hld 列入讀設定的頁（客戶已核准計畫）：hld_ 鍵改印 logic 原行（同 alo 自 09-28 列入後）；
     #   「未設定：不出 ★7」改由不在 PAGES_READING_SETTINGS 的 mkt 鍵測（有意識的更正，不是漏刪）。
-    assert fields["hld_window_start"]["used_by_text"] == "改這個鍵會影響：HLD-2、HLD-3、HLD-4、HLD-8"
+    assert fields["hld_window_start"]["used_by_text"] == "改這個鍵會影響：HLD-1、HLD-2、HLD-3、HLD-4、HLD-8"
     assert fields["hld_window_start"]["unset_lines"] == [logic.TEXT_UNSET]
     assert "mkt" not in S.PAGES_READING_SETTINGS
     assert fields["mkt_baseline_date"]["used_by_text"] is None                         # 未設定：不出 ★7
@@ -242,7 +242,7 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
 def test_星7_多塊以頓號串():
     blocks = dict(fixtures.SPEC_KEY_USED_BY)
     assert live.TEXT_SETTING_PENDING.format(codes="、".join(blocks["hld_window_start"])) == \
-        "設定已存，HLD-2、HLD-3、HLD-4、HLD-8 接上後生效"
+        "設定已存，HLD-1、HLD-2、HLD-3、HLD-4、HLD-8 接上後生效"
     assert live.TEXT_SETTING_PENDING.format(codes="、".join(blocks["alo_target_weights"])) == \
         "設定已存，ALO-1、ALO-7 接上後生效"
 
