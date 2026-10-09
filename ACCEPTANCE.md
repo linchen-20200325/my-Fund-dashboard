@@ -810,8 +810,9 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 
 > **2026-10-09 狀態更新（不是漏刪；下列三點在寫下當時為真）**：#3 淨值層已接上（客戶 2026-10-09 裁示 Q1～Q4、文案依 `docs/v2/53_nav_source_plan.md` §7 核准），`SET-0`／`SET-1`／`SET-2`／`SET-5` 一次一致處理，`47406e2`：
 > - `SET-0` 改印「配息尚未接取數來源；淨值即時取得」（`TEXT_PENDING_DIVIDEND`；配息仍待接就印，不再看 `nav`）；舊常數 `TEXT_PENDING_NAV_DIVIDEND` 已移除。
-> - `SET-1` 淨值列不再印「尚未接上」原因；時間取 `fetch_log` 淨值層最近一次 `ok` 的 `started_at`，有時間時下一行印「這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間」；從未成功 → 「⬜ 資料未備」。
+> - `SET-1` 淨值列不再印「尚未接上」原因；時間取 ~~`fetch_log` 淨值層最近一次 `ok` 的 `started_at`~~ → `fetch_log` 淨值層最近一次 `ok` **且 `row_count` 大於 0** 的 `started_at`（2026-10-09 稽核回修更正，狀態更新，不是漏刪：0 列的 `ok` 沒有取得任何淨值；之後的失敗紀錄不覆蓋這個時間。出處：`e40d8e1` 的 `ui_v2/set/logic.py::latest_ok_started_at`、`docs/v2/53_nav_source_plan.md` §7），有時間時下一行印「這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間」；從未成功 → 「⬜ 資料未備」。
 > - `SET-2` 淨值層不再印「尚未接上」原因；配息、其他層照舊。`SET-5` 說明行換句、淨值層可按。
+> - ⚠️ **已知缺口（2026-10-09 稽核紅隊 M-1，未修）**：L1 `fetch_nav` 即時網址全敗、退回 `cache/nav` 預存序列時，不交出即時網址的失敗原文（只有連預存檔也失敗才交出），L2 `refetch_nav` 因此把該次記成 `ok`；`SET-1` 會把預存資料的取得時間顯示成本次重新取數的時間。待客戶裁示（見交接本第 5 節〈待裁示〉M-1）。出處：`services/v2_tables/settings_store.py` 的 `refetch_nav` docstring、`ui_v2/set/logic.py::latest_ok_started_at` docstring（`e40d8e1`）。
 > - 驗收：`tests/ui_v2/test_set_live_logic.py` 以 `test_淨值` 開頭的測試、`tests/ui_v2/test_set_live_page.py::test_重新取數_淨值層按下後只記一筆fetch_log_SET1淨值列印時間與新句`、`tests/test_v2_tables_settings_store.py` 以 `test_淨值層_` 開頭的測試。
 
 - **現況**（基底 `51ae661`）：`ui_v2/set/live.py` 的 `TEXT_PENDING_NAV_DIVIDEND`（「淨值、配息尚未接取數來源」，客戶 2026-09-26 定稿）在 `pending_tables` 同時含 `nav` 與 `dividend` 時印在 `SET-0` 說明區；set 頁的 `pending_tables` 來自 `settings_store.PENDING_TABLES`，目前仍含 `nav`，所以這一句照印。
