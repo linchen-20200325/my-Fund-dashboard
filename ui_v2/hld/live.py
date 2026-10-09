@@ -9,14 +9,18 @@
    不是事後去字串裡刪（事後刪會連資料本身的字一起刪，那是改資料）。
 2. **對帳時間欄**（裁示 4-C）—— HLD-5 展開欄位「最後對帳」改名「最後核對日（只記日期）」，值只留台灣日期；
    值不合格的那一格進 `系統錯誤`，整頁照常（S3 第二輪）。
-3. **按鈕停用**（裁示 A，文案逐字）—— 「存檔」與「重新取數」停用並寫出原因。
+3. ~~**按鈕停用**（裁示 A，文案逐字）—— 「存檔」與「重新取數」停用並寫出原因。
    按鈕**出現在哪幾塊**一格不動，沿用 `logic` 既有規則（HLD-1／2／3 不掛重新取數；HLD-8 在任一值為
-   `資料未備` 或 `系統錯誤` 時掛）；本檔只改已經在那裡的按鈕的啟用狀態，不新增、不拿掉任何一枚。
+   `資料未備` 或 `系統錯誤` 時掛）；本檔只改已經在那裡的按鈕的啟用狀態，不新增、不拿掉任何一枚。~~
+   → **客戶 2026-10-09 裁示（S6b-3），有意識的更正，不是漏刪**：「存檔」照舊停用並寫出原因（裁示 A，文案逐字）；
+   「取數」類按鈕（「重新取數」）在正式模式**拿掉**，不再停用＋原因。該不該掛仍由 `logic` 判斷
+   （HLD-8 在任一值為 `資料未備` 或 `系統錯誤` 時掛），本檔只負責正式模式不呈現；示範模式不經過本檔，照掛。
 
-⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。
+~~⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。~~
+   → S6b-3 已建（狀態更新，不是漏刪；上句在 S3 寫下時為真）：入口 `ui_v2/app_hld_live.py`、取數 `ui_v2/hld/source.py`。
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
-   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` 仍是 S6 後半的工作）。
+   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` ~~仍是 S6 後半的工作~~ S6b-3 已建）。
 
 S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
 
@@ -43,12 +47,11 @@ from . import logic
 # 「存檔」那一句與 `ui_v2/alo/live.py::SAVE_DISABLED_REASON` 逐字相同（本套件不 import ui_v2.alo，
 # 兩份由 tests/ui_v2/test_hld_live_logic.py 逐字比對）。
 SAVE_DISABLED_REASON = "存檔寫入端尚未接上，這一輪只讀不寫"
-REFETCH_DISABLED_REASON = "重新取數尚未接上"
 
 # 哪一類按鈕停用、原因是哪一句。以 `logic` 的按鈕類別（`44` 5.3）判，不以標籤字面判。
+# 「取數」類不在此：客戶 2026-10-09 裁示正式模式拿掉，見 `apply_live_notes`。
 _DISABLED_BY_KIND = {
     "存檔": SAVE_DISABLED_REASON,
-    "取數": REFETCH_DISABLED_REASON,
 }
 
 # 裁示 4-C：欄名逐字。舊欄名是 `logic._build_hld5` 的字面。
@@ -643,7 +646,8 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
 
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
-    2. 「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；
+    2. ~~「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；~~ → 「存檔」停用，原因逐字照裁示 A；
+       「取數」類按鈕從各塊的 `buttons` 拿掉（客戶 2026-10-09 裁示，有意識的更正，不是漏刪）；
     3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）；
     4. HLD-4 講「存檔」的兩句整句不印（S6a-1，`_LIVE_DROPS`）。
 
@@ -654,6 +658,8 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     _strip_dev_lines(out)
     _drop_live_lines(out)
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
+    for block in out["blocks"]:
+        block["buttons"] = [b for b in block["buttons"] if b["_action_kind"] != "取數"]
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])
         if reason is not None:

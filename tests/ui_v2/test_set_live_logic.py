@@ -224,8 +224,14 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     # ★7
     fields = {f["name"]: f for f in _b(model, "SET-4")["inputs"]}
     assert fields["mkt_window_days"]["used_by_text"] == "設定已存，MKT-4 接上後生效"
-    assert fields["hld_window_start"]["used_by_text"] is None                          # 未設定：不出 ★7
+    # ~~assert fields["hld_window_start"]["used_by_text"] is None                          # 未設定：不出 ★7~~
+    # → S6b-3 hld 列入讀設定的頁（客戶已核准計畫）：hld_ 鍵改印 logic 原行（同 alo 自 09-28 列入後）；
+    #   「未設定：不出 ★7」改由不在 PAGES_READING_SETTINGS 的 mkt 鍵測（有意識的更正，不是漏刪）。
+    assert fields["hld_window_start"]["used_by_text"] == "改這個鍵會影響：HLD-2、HLD-3、HLD-4、HLD-8"
     assert fields["hld_window_start"]["unset_lines"] == [logic.TEXT_UNSET]
+    assert "mkt" not in S.PAGES_READING_SETTINGS
+    assert fields["mkt_baseline_date"]["used_by_text"] is None                         # 未設定：不出 ★7
+    assert fields["mkt_baseline_date"]["unset_lines"] == [logic.TEXT_UNSET]
     assert fields["set_max_age_days"]["used_by_text"] == "改這個鍵會影響：SET-1"          # set_ 鍵維持原行
     # ★8 說明行
     assert _b(model, "SET-5")["detail_lines"][-1] == live.TEXT_SET5_NOTE

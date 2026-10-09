@@ -65,6 +65,16 @@ _FILE_ALLOWLIST = {
     "ui_v2/app_alo_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.alo.page", "ui_v2.alo.source",
     },
+    # 2026-10-09 hld 頁正式模式（S6b-3）。`ui_v2.hld.live` 是本頁的純函式模組，體例同 alo。
+    "ui_v2/hld/source.py": {
+        "__future__", "os", "streamlit",
+        "services.v2_tables.alo_holdings", "services.v2_tables.contract", "services.v2_tables.fund_keys",
+        "services.v2_tables.masking", "services.v2_tables.nav_dividend", "services.v2_tables.settings_store",
+        "ui_v2.hld.live",
+    },
+    "ui_v2/app_hld_live.py": {
+        "__future__", "pathlib", "sys", "streamlit", "ui_v2.hld.page", "ui_v2.hld.source",
+    },
 }
 
 
