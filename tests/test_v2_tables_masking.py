@@ -9,7 +9,10 @@ M1、M2 只連本機迴路位址。
 
 from __future__ import annotations
 
+import importlib
+import json
 import pathlib
+import re
 import secrets as _rnd
 import socket
 import string
@@ -246,3 +249,91 @@ def test_遮與不遮兩張表不重疊():
     masked = set(masking.MASKED_WHOLE_VALUE_KEYS) | {
         f"{s}.{f}" for s, fs in masking.MASKED_SECTION_FIELDS.items() for f in fs}
     assert not masked & set(masking.NOT_MASKED_KEYS)
+
+
+# ── repr 系與 JSON 跳脫形態（2026-10-09：值含特殊字元時，以 repr／list／多參數例外帶入訊息） ──
+def _special_cases():
+    a, b, c = _fake(12), _fake(12), _fake(12)
+    pk_crlf = f"-----BEGIN PRIVATE KEY-----\r\n{a}\r\n{b}\r\n-----END PRIVATE KEY-----\r\n"
+    return {
+        "反斜線": {"PROXY_URL": f"http://u{c}:{a}\\{b}@h.test:3128"},
+        "單雙引號並存": {"FRED_API_KEY": f"{a}'{b}\"{c}"},
+        "只含單引號": {"FRED_API_KEY": f"{a}'{b}"},
+        "只含雙引號": {"FRED_API_KEY": f'{a}"{b}'},
+        "tab": {"PROXY_URL": f"http://u{c}:{a}\t{b}@h.test:3128"},
+        "private_key_CRLF": {"google_service_account": {"private_key": pk_crlf}},
+        "x7f": {"FRED_API_KEY": f"{a}\x7f{b}"},
+        # 只有 Python 原生 repr 對得上的組合：雙引號定界、`'` 不跳脫、`\x7f` 寫成 `\x7f`
+        # （json 寫成 `\u007f`、強制單引號的 repr 寫成 `\'`）
+        "單引號與x7f": {"FRED_API_KEY": f"{a}'{b}\x7f{c}"},
+    }
+
+
+_SHAPES = {
+    "repr": repr,
+    "str_list": lambda v: str([v]),
+    "str_tuple": lambda v: str((v, 1)),
+    "str_多參數例外": lambda v: str(Exception(v, 1)),
+    "json_dumps": json.dumps,
+    "試算表_list": lambda v: f"試算表 {[v, 'x']}",
+}
+
+
+def _assert_no_leak(masked, value, fragment_of_shape):
+    assert value not in masked
+    assert fragment_of_shape not in masked
+    longest = max(re.findall(r"[A-Za-z0-9]+", value), key=len)
+    assert len(longest) >= 8  # 前提：片段夠長，0 命中才有意義
+    assert longest not in masked
+    assert MASK in masked
+
+
+@pytest.mark.parametrize("shape", list(_SHAPES))
+@pytest.mark.parametrize("case", list(_special_cases()))
+def test_特殊字元秘密值_repr與json形態都遮(case, shape):
+    values = secret_values([_special_cases()[case]])
+    # 取含特殊字元最多的那一個值（代理網址是密碼段；其餘是整個值）
+    value = max(values, key=lambda v: sum(not ch.isalnum() for ch in v))
+    msg = f"失敗：{_SHAPES[shape](value)} 結束"
+    masked = mask_message(msg, values)
+    fragment = json.dumps(value)[1:-1] if shape == "json_dumps" else repr(value)[1:-1]
+    _assert_no_leak(masked, value, fragment)
+    assert masked.startswith("失敗：") and masked.endswith(" 結束")
+
+
+def test_強制單引號定界的repr形態也遮():
+    """值只含 `'` 時 Python 的 repr 改用雙引號、不跳脫 `'`；別處以單引號定界時寫成 `\\'`。"""
+    value = f"{_fake(12)}'{_fake(12)}"
+    forced = value.replace("\\", "\\\\").replace("'", "\\'")
+    assert forced != repr(value)[1:-1]  # 前提：兩種形態確實不同
+    assert mask_message(f"x='{forced}'", [value]) == f"x='{MASK}'"
+
+
+def test_換行歸位與tab跳脫形態():
+    # 含反斜線：只跳脫換行與 tab 的寫法（反斜線不加倍）才與 repr／json 形態不同
+    value = f"{_fake(10)}\r\n{_fake(10)}\\{_fake(10)}\t{_fake(10)}"
+    assert "\\\\" in repr(value) and "\\\\" in json.dumps(value)  # 前提
+    escaped = value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    assert mask_message(f"[{escaped}]", [value]) == f"[{MASK}]"
+    only_lf = value.replace("\n", "\\n")  # 7.3 原有形態仍遮
+    assert mask_message(f"[{only_lf}]", [value]) == f"[{MASK}]"
+
+
+def test_遮蔽冪等_記號本身不再被改():
+    value = f"{_fake(12)}\\'\"\t{_fake(12)}"
+    once = mask_message(f"a {[value]} b {value}", [value])
+    assert mask_message(once, [value]) == once
+
+
+@pytest.mark.parametrize("repo", ["settings_sheet_repository", "policy_supplement_repository"])
+def test_端到端_check_header的list訊息經正式masker遮住(repo):
+    from services.v2_tables import settings_store
+
+    mod = importlib.import_module(f"repositories.{repo}")
+    password = f"{_fake(12)}\\'\"\t{_fake(12)}"
+    values = secret_values([{"PROXY_URL": f"http://u{_fake(8)}:{password}@h.test:3128"}])
+    with pytest.raises(Exception) as info:
+        mod._check_header(next(iter(mod.TAB_SPECS)), [[password, "x"]],
+                          mask=settings_store.masker(values))
+    _assert_no_leak(str(info.value), password, repr(password)[1:-1])
+    assert all(password not in cell for cell in info.value.details["actual"])
