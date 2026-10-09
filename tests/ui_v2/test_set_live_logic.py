@@ -857,3 +857,98 @@ def test_淨值層_先有列的ok_後來0列的ok_SET1保留有列那筆時間(e
     _d, model = _page()
     nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
     assert nav["at_text"] == "2026-09-25 10:00" and nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE]
+
+
+# ── 2026-10-09 客戶裁示 M-1 採 A：走真的 L1 `fetch_nav`，只換掉它往外的兩個出口 ──
+
+from repositories.fund import nav_metrics as NM  # noqa: E402
+
+
+class _HtmlResp:
+    status_code = 200
+
+    def __init__(self, text):
+        self.text = text
+
+
+def _nav_page(n=12):
+    rows = "".join(f"<tr><td>2026/09/{i + 1:02d}</td><td>{10 + i * 0.1:.2f}</td></tr>" for i in range(n))
+    return f"<html><body><table>{rows}</table></body></html>"
+
+
+def _l1(monkeypatch, live_ok=(), cached=(), holding=None, secret=""):
+    """真的 L1 `fetch_nav`：代碼在 `live_ok` → 即時網址回一頁 12 筆；否則即時全敗（原文帶 `secret`）。
+    代碼在 `cached` → 預存檔回一份舊序列（`cache_updated_at` 2026-09-20）；否則預存檔無。不打網路。"""
+    codes = list(holding if holding is not None else dict.fromkeys(list(live_ok) + list(cached)))
+    monkeypatch.setattr(S.alo_holdings, "load_alo_tables",
+                        lambda values: {"holding": [{"fund_code": c, "ccy": "USD"} for c in codes]})
+
+    def fake_url(url, *a, **k):
+        if any(f"a={c}" in url for c in live_ok):
+            return _HtmlResp(_nav_page())
+        if secret:
+            raise ConnectionError(f"proxy {secret} refused")
+        return None
+
+    def fake_cache(code):
+        if code not in cached:
+            return None
+        s = pd.Series([9.0, 9.1], index=pd.to_datetime(["2026-09-18", "2026-09-19"]), dtype=float)
+        s.attrs.update(source=f"GitHubActions:cache/nav/{code}.json", cache_updated_at="2026-09-20T06:00:00+00:00")
+        return s
+
+    monkeypatch.setattr(NM, "fetch_url_with_retry", fake_url)
+    monkeypatch.setattr(NM, "_src_cache_files", fake_cache)
+
+
+def _set1_nav(monkeypatch):
+    monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")
+    return {r["_kind_label"]: r for r in _b(_page()[1], "SET-1")["_rows"]}["淨值"]
+
+
+def test_M1_1_即時成功_記ok_SET1顯示該時間(env, monkeypatch):
+    _l1(monkeypatch, live_ok=[_NAV_A])
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    result = source.refetch("淨值")
+    assert _lines(result) == ["取數完成：淨值，取回 12 列；結果記在取數紀錄（層 4）"]
+    nav = _set1_nav(monkeypatch)
+    assert nav["at_text"] == "2026-09-25 10:00" and nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE]
+
+
+def test_M1_2_即時失敗退回預存_舊值照交_本次failed含原文已遮蔽_SET1不前進(env, monkeypatch):
+    _l1(monkeypatch, live_ok=[_NAV_A])
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")                                          # 先有一次真正成功
+    _l1(monkeypatch, cached=[_NAV_A], secret=KEY)
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    out = S.refetch_nav([KEY])
+    assert len(out["table"]["rows"]) == 2                            # 舊值照常交給呼叫端（hld 用的同一支）
+    assert out["table"]["provenance"][_NAV_A]["cache_fallback"] is True
+    log = S.load_fetch_log([])["rows"][-1]
+    assert log["outcome"] == "failed" and log["row_count"] is None
+    assert log["message"].startswith(f"{_NAV_A}: ") and "ConnectionError: proxy" in log["message"]
+    assert KEY not in log["message"] and MASK in log["message"]
+    assert log["message"] == out["persist"]["log_message"]
+    nav = _set1_nav(monkeypatch)
+    assert nav["at_text"] == "2026-09-25 10:00"                      # 停在上一次真正成功，不前進到 13:00
+
+
+def test_M1_3_部分基金失敗_整筆failed_逐檔原文(env, monkeypatch):
+    _l1(monkeypatch, live_ok=[_NAV_A], cached=[_NAV_B], holding=[_NAV_A, _NAV_B, "ZZNAVTESTC3"])
+    S.refetch_nav([])
+    log = S.load_fetch_log([])["rows"][-1]
+    assert log["outcome"] == "failed"
+    msg = log["message"]
+    assert f"{_NAV_A}: " not in msg                                  # 即時成功那一檔不列
+    assert msg.startswith(f"{_NAV_B}: ")                             # 退回預存：即時網址失敗原文
+    assert "\nZZNAVTESTC3: fetch_nav('ZZNAVTESTC3') 即時網址與預存檔皆失敗:" in msg   # 全敗：L1 既有原文
+
+
+def test_M1_4_全部即時失敗_不產生假的最新成功時間(env, monkeypatch):
+    _l1(monkeypatch, cached=[_NAV_A], holding=[_NAV_A, _NAV_B])     # A 退回預存、B 連預存都沒有
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    result = source.refetch("淨值")
+    assert _lines(result)[0].startswith("⛔ 取數失敗：")
+    assert [r["outcome"] for r in S.load_fetch_log([])["rows"]] == ["failed"]
+    nav = _set1_nav(monkeypatch)
+    assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備" and nav["note_lines"] == []

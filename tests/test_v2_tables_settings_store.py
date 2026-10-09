@@ -380,7 +380,12 @@ def test_淨值層_清掉fetch_nav的快取_第二次真的再取_不動冷卻_�
     S.refetch_nav([SECRET])
     assert calls["cache_file"] == 3                                      # 兩次重新取數都真的再取
     assert SB.should_skip("some.nav.host")[0] is True                    # 冷卻原封不動
-    assert [r[4:6] for r in _nav_logs(book)] == [["ok", "12"], ["ok", "12"]]
+    # ~~assert [r[4:6] for r in _nav_logs(book)] == [["ok", "12"], ["ok", "12"]]~~
+    # → 2026-10-09 客戶裁示 M-1 採 A（有意識的更正，不是漏刪）：本條的替身走的是「即時全敗、退回預存檔」，
+    #   自此算本次失敗；本條要守的「清快取、不動冷卻、不呼叫全域清除」不變。
+    logs = _nav_logs(book)
+    assert [r[4:6] for r in logs] == [["failed", ""], ["failed", ""]]
+    assert all(r[6].startswith(f"{_A}: ") and "取數失敗" in r[6] for r in logs)
     NM.fetch_nav.cache_clear()
 
 

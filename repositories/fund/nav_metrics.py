@@ -43,6 +43,10 @@ import threading as _threading_sidecar
 
 _FETCH_ERROR_ATTR = "fetch_error"
 _FETCH_DIV_TLS = _threading_sidecar.local()
+# 2026-10-09 客戶裁示（M-1 採 A）：即時網址全敗、退回預存舊序列時，本次即時取得的失敗原文
+# （`_attempts` 逐網址那幾行，原樣）掛在回傳序列的這個鍵上。**刻意不用 `_FETCH_ERROR_ATTR`**：
+# 那個鍵一有值，`fetch_nav_with_error` 就會回錯誤、下游當成整檔失敗而丟掉舊值；舊值仍要照常交出。
+LIVE_FETCH_ERROR_ATTR = "live_fetch_error"
 
 
 def _fail_kind_text() -> str:
@@ -242,6 +246,7 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             _sa = _cs.attrs.get("supports_annualized", True)
             print(f"[fetch_nav] ⚠️ live 全敗 → 退回 GitHub Actions 快取 {len(_cs)} 筆"
                   + ("" if _sa else " ⛔ 此序列稀疏/過期,年化指標(Sharpe/σ/回撤)不可信"))
+            _cs.attrs[LIVE_FETCH_ERROR_ATTR] = "\n".join(_attempts)   # 2026-10-09:見 LIVE_FETCH_ERROR_ATTR
             return _cs
         _attempts.append(f"預存檔 cache/nav/{_cache_code}.json → 無可用序列"
                          f"(檔案不存在,或未通過 _src_cache_files 的筆數/schema 檢查)")
@@ -261,6 +266,7 @@ def fetch_nav_with_error(full_key: str, portal: str = "") -> "tuple[pd.Series, s
     - 即時網址成功 → `(序列, None)`;
     - 即時網址全敗、退回預存舊序列 → `(預存序列, None)` —— 這一支**不是失敗**,
       由 `attrs["source"]` / `attrs["nav_quality"]` 辨識(49 §4.3),本旁路不動它;
+      本次即時網址的失敗原文掛在 `attrs[LIVE_FETCH_ERROR_ATTR]`(2026-10-09),本函式不讀它;
     - 即時網址與預存檔**都**失敗 → `(空 Series, 原因)`,原因逐行列出每個網址與預存檔
       各自的結果(取數失敗 / 解析出 N 筆 / 例外原文)。⚠️「解析出 0 筆」同時涵蓋
       查無此基金與頁面改版,**本層分辨不出來**,原文據實寫「無法分辨」(49 §8 (c))。

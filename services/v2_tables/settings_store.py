@@ -447,13 +447,16 @@ def refetch_nav(secret_values) -> dict:
     `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
     - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
     - `failed`：持倉讀不到；或持倉有分頁讀取失敗／未讀（`skipped_tabs`，持倉不完整）；或任一檔代碼解析失敗、
-      L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）。
+      L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）；或**即時網址全敗、L1 退回預存舊序列**
+      （`provenance[代碼]["live_error"]` 非 None；2026-10-09 客戶裁示 M-1 採 A）—— 舊值照樣交給 `build_nav_table`
+      的呼叫端，但不冒充本次即時取數成功，該檔原文用 L1 交出的即時網址失敗原文。
       ~~`message` 逐檔一行「鍵: 值」~~ → `message` 每個原因一段「鍵: 值」、段與段以換行分隔（2026-10-09 回修更正，
       不是漏刪：值是 L1／L2 原文，**一段可能自己就有多行**，例如 `fetch_nav` 逐網址列出的失敗原文）。
       鍵為基金代碼；持倉讀不到時為 `holding`；分頁讀取失敗時為分頁名。鍵與值皆經遮蔽。
-    - ⚠️ **已知缺口（2026-10-09 稽核紅隊 M-1，未修，待總管裁示）**：即時網址全敗、L1 退回預存舊序列
+    - ~~⚠️ **已知缺口（2026-10-09 稽核紅隊 M-1，未修，待總管裁示）**：即時網址全敗、L1 退回預存舊序列
       （`cache/nav/*.json`）的那一檔，本函式目前**仍算成功**。L1 在那一支不交出即時網址的失敗原文
-      （`fetch_nav` 只在連預存檔也失敗時才把 attempts 掛到回傳值上），本層不自編說明，故未處理。
+      （`fetch_nav` 只在連預存檔也失敗時才把 attempts 掛到回傳值上），本層不自編說明，故未處理。~~
+      → 2026-10-09 狀態更新（不是漏刪）：客戶裁示 M-1 採 A、授權 L1 最小修改，已修（見上一條 `failed`）。
       L1 回空又沒給原因（`EMPTY_WITHOUT_REASON` 且取回 0 列）不算失敗，記在 `empty`（同市場指標）。
 
     回傳 `{"table": build_nav_table 的回傳（錯誤原文未遮；持倉讀不到時為 None）, "persist": {...}}`；
@@ -506,13 +509,17 @@ def refetch_nav(secret_values) -> dict:
         for row in table["rows"]:
             rows_by_code[row["fund_code"]] = rows_by_code.get(row["fund_code"], 0) + 1
         fetched = table["fetched"]
+        # 退回預存舊序列的那一檔：本次即時取得失敗（M-1 採 A）。原文是 L1 的即時網址失敗原文，不另編。
+        for code, prov in table["provenance"].items():
+            if prov.get("live_error") is not None and code not in table["errors"]:
+                masked[mask(code)] = mask(prov["live_error"])
         for code, raw in table["errors"].items():
             if raw == nav_dividend.EMPTY_WITHOUT_REASON and fetched.get(code, 0) == 0:
                 empty[mask(code)] = mask(str(raw))
             else:
                 masked[mask(code)] = mask(str(raw))
         for code in list(table["withheld"]) + [c for c in fetched if c not in table["withheld"]]:
-            if code in table["errors"] or rows_by_code.get(code, 0) > 0:
+            if code in table["errors"] or rows_by_code.get(code, 0) > 0 or mask(code) in masked:
                 continue
             if code in table["withheld"] or fetched.get(code, 0) > 0:
                 why = "；".join(table["skipped"].get(code, [])) or "原因未記錄"
