@@ -1073,7 +1073,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
                 result["fund_scale"]      = rows_map.get("基金規模", "")
-                result["category"]        = rows_map.get("投資標的", rows_map.get("基金類型", "")).replace(" ","")
+                # 與 sources.py 另兩個寫入點(_src_direct_moneydj_url / _src_tcb_meta)同用
+                # _pick_fund_category:「投資標的」若是說明書長描述就退回「基金類型」,
+                # 避免長文寫進 category、讓 asset_bucket 子字串誤命中(如股票型→原物料資源)。
+                # 不再 .replace(" ",""):與另兩處行為一致(只去頭尾空白,不去內部空白)。
+                result["category"]        = _pick_fund_category(rows_map)
                 result["fund_region"]     = rows_map.get("投資區域", "").replace(" ","")
                 result["fund_type"]       = rows_map.get("基金類型", "").replace(" ","")
                 result["investment_target"]= rows_map.get("投資標的", "").replace(" ","")
