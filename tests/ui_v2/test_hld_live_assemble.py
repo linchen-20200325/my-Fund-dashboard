@@ -239,8 +239,8 @@ def _nav_table(*, healthy=_CODES, failed=None, empty=(), withheld=None, rows_ove
 
 def _settings(*, window=_WINDOW, rules=_RULES, broken=()):
     """L2 `load_user_settings(...)`（`services/v2_tables/settings_store.py`，原樣交出 L1 的回傳）的形狀，
-    只放 `assemble_live_load` 讀的兩個鍵：`rows` 是 `{鍵: 列}`，`setting_value` 一律是原字串；
-    `broken_keys` 是排序過的 list（L1 回的就是 list）。"""
+    只放 `assemble_live_load` 讀的四個鍵：`rows` 是 `{鍵: 列}`，`setting_value` 一律是原字串；
+    `broken_keys` 是排序過的 list（L1 回的就是 list）；`tab_missing`、`bad_rows` 為 R-7 讀的兩個鍵（L1 原樣）。"""
     def row(key, value, kind):
         return {"setting_key": key, "setting_value": value, "value_kind": kind, "updated_at": _UPDATED_AT}
 
@@ -254,6 +254,8 @@ def _settings(*, window=_WINDOW, rules=_RULES, broken=()):
             ),
         },
         "broken_keys": sorted(broken),
+        "tab_missing": False,
+        "bad_rows": [],
     }
 
 
@@ -1460,3 +1462,72 @@ def test_P7_缺skipped_tabs這個鍵_KeyError_不當成沒有略過():
     del tables["skipped_tabs"]
     with pytest.raises(KeyError):
         _assemble(holding_tables=tables)
+
+
+# ═════════════════════════ R-7（客戶 2026-10-09 裁示）：讀不到的三種情形改判讀取失敗 ═════════════════════════
+
+
+def _r7_settings(form):
+    settings = _settings()
+    if form == "分頁不存在":
+        settings.update(rows={}, broken_keys=[], tab_missing=True, bad_rows=[])
+    elif form == "鍵空白_bad_rows":
+        settings["bad_rows"] = [{"row": 5, "reason": "setting_key：不可空", "cells": ["", "x", "str", ""]}]
+    elif form == "鍵空白_rows":
+        settings["rows"][" "] = {"setting_key": " ", "setting_value": "x", "value_kind": "str", "updated_at": None}
+    elif form == "鍵前後帶空白":
+        settings["rows"]["hld_window_start "] = settings["rows"].pop("hld_window_start")
+    return settings
+
+
+_R7_MESSAGES = {
+    "分頁不存在": "設定值讀不到可用的形狀：找不到設定分頁",
+    "鍵空白_bad_rows": "設定值讀不到可用的形狀：有一列設定鍵空白",
+    "鍵空白_rows": "設定值讀不到可用的形狀：有一列設定鍵空白",
+    "鍵前後帶空白": "設定值讀不到可用的形狀：hld_window_start 前後帶空白",
+}
+
+
+@pytest.mark.parametrize("form", list(_R7_MESSAGES))
+@pytest.mark.parametrize("window", [None, _WINDOW])
+def test_R7_讀不到改判讀取失敗_交空列表_全頁印取數失敗_不說尚未設定(form, window):
+    out = _assemble(settings=_r7_settings(form))
+    message = _R7_MESSAGES[form]
+    assert out["dataset"]["errors"] == {"user_setting": message}
+    assert out["dataset"]["user_setting"] == []
+    model = _build_model(out, window=window)
+    strings = _strings(model)
+    assert not [s for s in strings if logic.NA_NO_WINDOW in s or logic.TEXT_NO_RULES in s]
+    failed = logic.fetch_failed_text(message)
+    assert failed in strings
+    if window is None:   # 沒按過套用：比照既有「設定讀取失敗而且沒按過套用」那一條，六塊都印
+        for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-5", "HLD-8"):
+            assert failed in logic.find_block(model, code)["detail_lines"], code
+    # 沒有新字串：與「同一句原文經既有的 settings_error 路徑交進來」的整頁字串完全相同。
+    same = _build_model(_assemble(settings=None, settings_error=message), window=window)
+    assert set(strings) == set(_strings(same))
+
+
+def test_R7_鍵前後帶空白_那個值沒有被拿去用():
+    settings = _r7_settings("鍵前後帶空白")
+    out = _assemble(settings=settings)
+    assert out["dataset"]["user_setting"] == []
+    assert logic.saved_window(out["dataset"]) != (_WINDOW[0], _WINDOW[1])
+
+
+def test_R7_反向_只有標頭零筆資料_仍是尚未設定():
+    settings = _settings()
+    settings.update(rows={}, broken_keys=[], tab_missing=False, bad_rows=[])
+    out = _assemble(settings=settings)
+    assert "user_setting" not in out["dataset"]["errors"]
+    strings = _strings(_build_model(out, window=None))
+    assert [s for s in strings if logic.NA_NO_WINDOW in s]
+    assert not [s for s in strings if s.startswith(logic.ERR_TEXT)]
+
+
+@pytest.mark.parametrize("name", ["tab_missing", "bad_rows"])
+def test_R7_settings缺tab_missing或bad_rows_KeyError_不當成沒有(name):
+    settings = _settings()
+    del settings[name]
+    with pytest.raises(KeyError):
+        _assemble(settings=settings)

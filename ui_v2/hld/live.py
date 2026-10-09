@@ -841,7 +841,7 @@ _PARSERS = {
 }
 
 
-def parse_user_settings(rows, broken_keys=()) -> tuple:
+def parse_user_settings(rows, broken_keys=(), *, tab_missing=False, bad_rows=()) -> tuple:
     """L2 `load_user_settings()` 的 `rows`／`broken_keys` → (本頁三列, 失敗訊息或 None)。
 
     - `setting_value` 為 None 或空字串 → 未設定（值放 None，交給 `logic` 既有的「未設定」畫法）；
@@ -852,6 +852,14 @@ def parse_user_settings(rows, broken_keys=()) -> tuple:
     - `rows` 不是 dict → 三鍵一律解析不了（不靜默當成未設定）；
     - 某鍵那一列在 `rows` 裡、卻是 None／不是 dict／缺 `setting_value` 鍵 → 該鍵解析不了（不是未設定）；
     - `broken_keys` 是字串 → TypeError（呼叫端寫錯；字串會被拆成一個個字元，等於沒傳）。
+
+    R-7（客戶 2026-10-09 裁示）：下列三種情形實際上讀不到，一律回訊息，**不說「尚未設定」**：
+    - `tab_missing`（L1 找不到設定分頁）→「找不到設定分頁」。hld 頁面級例外：設定是本頁的必要輸入；
+      50 §7.1 對 alo、set 維持原規則（分頁不存在＝尚無資料），不得據此改其他頁。
+    - 設定鍵空白：`bad_rows` 有一列鍵欄是空的、或 `rows`／`broken_keys` 有只由空白組成的鍵 →「有一列設定鍵空白」。
+    - 鍵前後帶空白、去掉空白後是本頁的鍵 →「{鍵} 前後帶空白」。**判錯，不 strip 後照用。**
+    三種同時發生時，照本函式既有慣例全部列出、以「；」串接，次序同上，排在逐鍵的訊息之前。
+    只有標頭、零筆資料（`rows`、`bad_rows` 皆空、`tab_missing` 為 False）仍是「尚未設定」（50 §4.1）。
 
     ⚠️ **呼叫端契約：有訊息時，回傳的三列不得交給 `logic`，要交空列表。** 有失敗時三列裡
     仍可能留著解析成功的那幾個值（例如起日壞、迄日好 → 迄日照樣在）；交出部分結果會讓
@@ -868,7 +876,16 @@ def parse_user_settings(rows, broken_keys=()) -> tuple:
     rows_ok = isinstance(rows, dict)
     if not rows_ok:
         rows = {}
-    problems = [f"{key} 這一列解析不了" for key in SETTING_KEYS if key in broken or not rows_ok]
+    problems = ["找不到設定分頁"] if tab_missing else []   # R-7
+    keys_seen = [k for k in list(rows) + sorted(broken, key=str) if isinstance(k, str)]
+    if any(k.strip() == "" for k in keys_seen) or any(   # R-7：鍵欄空白（L1 判成 bad_rows，或只有空白）
+        str((item["cells"] or [""])[0]).strip() == "" for item in bad_rows
+    ):
+        problems.append("有一列設定鍵空白")
+    problems += [   # R-7：鍵前後帶空白，不 strip 後照用
+        f"{key} 前後帶空白" for key in SETTING_KEYS if any(k != k.strip() and k.strip() == key for k in keys_seen)
+    ]
+    problems += [f"{key} 這一列解析不了" for key in SETTING_KEYS if key in broken or not rows_ok]
     out = []
     for key in SETTING_KEYS:
         source = rows.get(key, {})
@@ -927,6 +944,7 @@ def assemble_live_load(
     - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法，~~但 HLD-1 在零偏離時仍印「無偏離項」與「沒有任何一檔超出」—— 屬「結論燈兩句」那一塊，待修；~~ → 📌 2026-10-08 修好（有意識的更正，不是漏刪；「結論燈兩句」）：有持倉、零偏離又有略過分頁時，HLD-1 印「⛔ 取數失敗：<原文>」，不再印這兩句。~~讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬「讀取失敗不說空」那一塊，待修。~~ → 📌 2026-10-05 修好（有意識的更正，不是漏刪；「讀取失敗不說空」）：讀到的持倉為空時，logic 把它當成讀取失敗畫、不說空；`direct` 清單照交時 HLD-5 只加卡尾（見 `_apply_direct`）。
     - `pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。
     - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
+      R-7：`settings["tab_missing"]`、`settings["bad_rows"]` 一併交給 `parse_user_settings`（缺鍵 → KeyError，不當成沒有）。
     - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。
     """
     if (holding_tables is None) == (holding_error is None):   # R-1
@@ -1004,7 +1022,10 @@ def assemble_live_load(
         user_setting = []
         errors["user_setting"] = settings_error
     else:
-        user_setting, problem = parse_user_settings(settings["rows"], settings["broken_keys"])
+        user_setting, problem = parse_user_settings(
+            settings["rows"], settings["broken_keys"],
+            tab_missing=settings["tab_missing"], bad_rows=settings["bad_rows"],
+        )
         if problem is not None:
             errors["user_setting"] = problem
             user_setting = []
