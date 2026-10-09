@@ -16,10 +16,11 @@
    「取數」類按鈕（「重新取數」）在正式模式**拿掉**，不再停用＋原因。該不該掛仍由 `logic` 判斷
    （HLD-8 在任一值為 `資料未備` 或 `系統錯誤` 時掛），本檔只負責正式模式不呈現；示範模式不經過本檔，照掛。
 
-⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。
+~~⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。~~
+   → S6b-3 已建（狀態更新，不是漏刪；上句在 S3 寫下時為真）：入口 `ui_v2/app_hld_live.py`、取數 `ui_v2/hld/source.py`。
 ⛔ 頁首副標（草稿 §E P1／P2：「資料為假資料…」「情境 …」）住在 `page.py::render`，那是入口接線的一部分，
    本輪不動；S6 接 `render(load_live=)` 時照 `ui_v2/alo/page.py` 的做法處理。
-   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` 仍是 S6 後半的工作）。
+   → S6a 已照做：`page.render(load_live=)` 傳入時頁首只印提問句（入口 `app_hld_live.py` ~~仍是 S6 後半的工作~~ S6b-3 已建）。
 
 S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見 `direct_holding_rows` 與 `_apply_direct`。
 

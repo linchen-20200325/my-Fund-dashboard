@@ -232,3 +232,82 @@ def test_代碼對照拋L1例外_正式入口畫錯誤畫面_不印Traceback_不
     assert "Traceback" not in md and _SECRET not in md
     assert "RuntimeError：對照表讀不到 " + source.masking.MASK in md
     assert [b.label for b in at.button] == []
+
+
+# ═══════════════════════ 正式入口 `ui_v2/app_hld_live.py`（S6b-3 稽核②必修 1） ═══════════════════════
+# 上一條用 `AppTest.from_function` 自己組 `page.render(...)`，沒有跑到入口檔本身；
+# 入口若改成不遮蔽（`mask_error=lambda s: s`）或改走示範模式（`page.render()`），上一條照綠。
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("where", ["resolve_full_keys", "load_alo_tables"])
+def test_正式入口_讀取拋例外_畫錯誤畫面_秘密值經遮蔽_不是示範模式(wired, where):
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    exc = RuntimeError(f"讀不到 {_SECRET}")
+    if where == "resolve_full_keys":
+        wired["fail"] = exc
+    else:
+        wired["tables"] = exc   # 非 PolicySupplementError：source 不攔，交給 page 的 try
+    at = AppTest.from_file(str(_ROOT / "ui_v2" / "app_hld_live.py"), default_timeout=60)
+    at.run()
+    assert len(at.exception) == 0
+    md = "\n".join(m.value for m in at.markdown)
+    assert "RuntimeError：讀不到 " + source.masking.MASK in md
+    assert _SECRET not in md and "Traceback" not in md
+    assert "資料為假資料" not in md and "示意" not in md   # 示範模式的頁首副標與假資料字樣
+    assert [b.label for b in at.button] == []
+
+
+# ═══════════════════════ 稽核②建議 3 的測試缺口 ═══════════════════════
+
+
+@pytest.mark.slow
+def test_空持倉_仍交出nav_table_畫面印尚未建立任何持倉_不是整頁錯誤(wired):
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    wired["tables"] = _tables(holding=[])
+    at = AppTest.from_file(str(_ROOT / "ui_v2" / "app_hld_live.py"), default_timeout=60)
+    at.run()
+    assert len(at.exception) == 0
+    assert wired["funds"] == [] and wired["nav_table"] is not None
+    md = "\n".join(m.value for m in at.markdown)
+    assert logic.TEXT_NO_HOLDING in md
+    assert "⛔ 取數失敗" not in md
+
+
+@pytest.mark.parametrize("where", ["tables", "settings"])
+@pytest.mark.parametrize("make", [
+    lambda: source.alo_holdings.HoldingIdCollision(f"holding_id 撞號 {_SECRET}"),
+    lambda: RuntimeError(f"非預期 {_SECRET}"),
+], ids=["HoldingIdCollision", "RuntimeError"])
+def test_撞號與非預期例外_source不攔_整頁上拋(wired, where, make):
+    exc = make()
+    wired[where] = exc
+    with pytest.raises(type(exc)) as got:
+        source.load_live()
+    assert got.value is exc
+
+
+_OTHER_SOURCES = {
+    "os.environ": "env-fake-secret-71aa",
+    "gsheet_tokens": "tok-fake-secret-82bb",
+    "custom_oauth_cfg": "cfg-fake-secret-93cc",
+}
+
+
+@pytest.mark.parametrize("where", list(_OTHER_SOURCES))
+def test_秘密值來源_st_secrets以外三處也收進遮蔽(monkeypatch, wired, where):
+    value = _OTHER_SOURCES[where]
+    if where == "os.environ":
+        monkeypatch.setenv("FINMIND_TOKEN", value)
+    elif where == "gsheet_tokens":
+        source.st.session_state["gsheet_tokens"] = {"access_token": value}
+    else:
+        source.st.session_state["custom_oauth_cfg"] = {"client_secret": value}
+    assert source.mask_error(f"x {value} y") == f"x {source.masking.MASK} y"
+    source.load_live()
+    for call, values in wired["secret_values"].items():
+        assert value in values, call

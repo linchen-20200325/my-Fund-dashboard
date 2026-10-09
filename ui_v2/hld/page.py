@@ -821,7 +821,9 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
           以及 `HLD-1` 卡尾以 `include_table=True` 帶入的表層級錯誤；另 `HLD-5`
           （`live._relabel_sync_field`）亦整組最後接一次。
       (3) `HLD-8`（`logic._build_hld8`）~~只走 `logic._fund_error_lines`，表層級錯誤不寫說明區錯誤行~~：
-          格內只顯示 `logic.ERR_TEXT`、不帶訊息原文；塊狀態與「重新取數」鈕照常改變。
+          格內只顯示 `logic.ERR_TEXT`、不帶訊息原文；塊狀態~~與「重新取數」鈕~~照常改變。
+          （S6b-3 更正，有意識的更正，不是漏刪：「重新取數」鈕 `logic` 照常判斷要不要掛，
+          正式模式由 `live.apply_live_notes` 拿掉、不呈現 —— 客戶 2026-10-09 裁示。）
       (4) 本錯誤畫面只有一行錯誤，接一次。
       (5) `HLD-0` 以 `logic._is_fail_tail_line`（「⛔」開頭）帶上 `HLD-1` 卡尾的失敗行，照印句不跟上。
       以上為 165ec03 時的寫法分類，logic.py 改動時須重核；
@@ -849,7 +851,8 @@ def render(*, load_live=None, mask_error=None) -> None:
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
     `live_args` 原樣轉給 `live.build_live_model`：`direct_policy_id`、`direct`、`policy_tab_source`、
-    `direct_sources`、`nav_provenance`）。⚠️ 這個形狀是 S6a 暫定的，S6 後半寫 `source.py` 時可改。
+    `direct_sources`、`nav_provenance`）。~~⚠️ 這個形狀是 S6a 暫定的，S6 後半寫 `source.py` 時可改。~~
+    → S6b-3 已由 `ui_v2/hld/source.py::load_live`（經 `live.assemble_live_load`）照這個形狀交出（狀態更新，不是漏刪）。
     不傳（None）時行為與加這個參數之前**逐字相同**：照舊以 `?scenario=` 挑 fixtures 情境。
     傳入時改走 `live.build_live_model`，這一條路徑不讀 fixtures；頁首副標只印本頁的提問句 ——
     示意字樣與情境名只屬於示範模式（體例：`ui_v2/alo/page.py::render`）。
@@ -857,8 +860,10 @@ def render(*, load_live=None, mask_error=None) -> None:
     mask_error（S6b-1）：正式模式**一定要給**、示範模式**不得給**（體例：`ui_v2/set/page.py::render`
     「`load_live`、`save_live`、`refetch_live` 要一起傳」）。字串 → 遮蔽後的字串，由呼叫端注入 ——
     本套件不得 import `services`（`tests/ui_v2/test_ui_v2_live_import_guard.py` 第 (5) 條），
-    遮蔽（`services.v2_tables.masking.mask_message` ＋ 讀好的秘密值）住在之後的 `source.py`，
-    由 `app_hld_live.py` 一併傳進來。
+    遮蔽（`services.v2_tables.masking.mask_message` ＋ 讀好的秘密值）住在 ~~之後的~~ `source.py`
+    （`source.mask_error`，S6b-3 已建；狀態更新，不是漏刪），由 `app_hld_live.py` 一併傳進來。
+    正式模式不畫「重新取數」鈕（客戶 2026-10-09 裁示拿掉：正常畫面由 `live.apply_live_notes` 拿掉，
+    錯誤畫面 `_render_live_error` 不建按鈕；示範模式照掛）。
     正式模式下 `load_live()` 或 `live.build_live_model(...)` 拋例外 → 不印 Traceback、也不吞：
     畫出錯誤畫面（`_render_live_error`），寫出例外型別與遮蔽後的訊息原文，整頁其餘塊不畫。
     遮蔽或取字串失敗時，退路只印例外型別、不帶訊息內容（見 `_live_error_line`）。
