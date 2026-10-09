@@ -31,6 +31,8 @@
   `mask_token`、`pending_tables`、`pages_reading_settings`、`read_estimate`（L1 的讀取量診斷）、
   `direct`／`warnings`（U9 的 DIRECT 列與逐筆警示）、`skipped`（沒寫進持倉的各種原因）、
   `setting_structure`（`user_setting` 的壞列與解析不了的鍵）。
+  - 例外：`setting_raw`（`{鍵: 試算表上的原字串或 None}`）**存檔要用** —— 使用者沒動過的欄位寫回這個原字串，
+    不寫畫面上格式化過的顯示字串（2026-10-09 稽核回修）。讀失敗時為空 dict。
 
 `save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）；
 體例與 `ui_v2/set/source.py::save_setting` 相同（同一個 L2 函式、同一份秘密值）。
@@ -102,8 +104,9 @@ def load_live() -> dict:
         indicators = None
         errors["market_indicator"] = str(exc)
 
-    setting_rows = []
+    setting_rows, setting_raw = [], {}
     if settings is not None:
+        setting_raw = {key: (settings["rows"].get(key) or {}).get("setting_value") for key in live.SETTING_KEYS}
         setting_rows, problem = live.parse_user_settings(settings["rows"], settings["broken_keys"])
         if problem is not None:
             # 讀得到表、值卻不是本頁吃得下的形狀 → 當成 user_setting 這張表沒能交出可用的值。
@@ -130,6 +133,7 @@ def load_live() -> dict:
         pending_tables=list(settings_store.PENDING_TABLES),
         pages_reading_settings=list(settings_store.PAGES_READING_SETTINGS),
         read_estimate=(tables or {}).get("read_estimate"),
+        setting_raw=setting_raw,
         direct=list((tables or {}).get("direct") or ()),
         warnings=list((tables or {}).get("warnings") or ()),
         skipped={name: (tables or {}).get(name) for name in _SKIP_GROUPS} if tables else {},

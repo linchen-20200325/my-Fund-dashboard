@@ -274,15 +274,15 @@ def _strip_hint(node):
     return node
 
 
-def apply_live_notes(model: dict, *, wired_keys=SAVE_WIRED_KEYS) -> dict:
+def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
     1. 頁首的示意行不印（`hint_note` 清空；`page.py` 正式模式那一支也不印它）；
     2. 每一塊的示意行拿掉（`logic.HINT_NOTE`）；
     3. 會寫 `user_setting`、但要寫的鍵還沒接上的按鈕停用並寫出原因（見 `SAVE_DISABLED_REASON`）。
 
-    wired_keys：已接上寫入的鍵。預設 `SAVE_WIRED_KEYS`；呼叫端沒有寫入函式可用時（`page.render`
-    沒拿到 `save_live`）要傳空的 —— 那時每一枚存檔都按了不會存，一律照舊停用。
+    wired_keys：已接上寫入的鍵。**預設空（fail-closed）**：沒明講就當沒接上，三枚存檔一律停用。
+    `page.render` 拿到 `save_live` 時才明確傳 `SAVE_WIRED_KEYS`。
 
     **本輪不動任何既有文案**：這裡只做「拿掉」與「停用」，沒有新增任何一句話上畫面
     （停用原因顯示在按鈕的 tooltip）。
@@ -308,6 +308,11 @@ def apply_live_notes(model: dict, *, wired_keys=SAVE_WIRED_KEYS) -> dict:
 # → 每鍵的成敗交給 `merge_save_results` 記帳 → 下一輪 `dataset_with_save_errors` 併進 `save_errors`。
 # ⛔ 一律不改寫使用者打的字：不 strip、不補 0、不把非數字當 null（`CLAUDE.md` §1）。
 #    寫進去的就是畫面上的原字；形狀不對就由解析器擋下來，訊息照原文上畫面。
+# ⛔ 2026-10-09 稽核回修：**使用者沒動過的欄位，寫回已存的原值，不寫顯示字串。**
+#    輸入欄的初值是 `logic._field` 經 `format_number` 格式化過的顯示字串（最多四位小數），
+#    把它寫回去會把 0.333333 存成 0.3333、0.00001 存成 0 —— 使用者一個字都沒改，真值卻被覆蓋
+#    （`44` ALO-1「不代使用者填任何值」、判準「與存檔前逐字相同」）。判斷「沒動過」：當下字串 ＝ 該欄的 `value_text`。
+#    比重寫回已存 float 的 JSON 表示；容許帶寫回試算表上的原字串（`source` 經 `notes["setting_raw"]` 交出）。
 
 # JSON 數字的文法（RFC 8259）。比重欄的字串**整段**符合才原樣嵌進 JSON 當數字；
 # 其餘（含前後空白、`.6`、`nan`、`六成`）一律當 JSON 字串嵌入，交給解析器以「不是有限的數」擋下。
@@ -321,7 +326,13 @@ def _row_count(values, name_of) -> int:
     return count
 
 
-def _target_weights_text(values):
+def _unchanged(name, values, fields) -> bool:
+    """這一欄的當下字串等於它畫上去時的 `value_text` ⇒ 使用者沒動過。畫面上沒有這一欄 ⇒ 不算沒動過。"""
+    field = fields.get(name)
+    return field is not None and values[name] == field["value_text"]
+
+
+def _target_weights_text(values, fields, raw):
     """目標列 → `[{"bucket": 字串, "weight_ratio": 數或 null}, ...]`，順序同畫面列序；一列也沒有 → None。"""
     count = _row_count(values, lambda i: f"alo_target_{i}_bucket")
     if count == 0:
@@ -330,7 +341,12 @@ def _target_weights_text(values):
     for index in range(count):
         bucket = values[f"alo_target_{index}_bucket"]
         weight = values[f"alo_target_{index}_weight"]
-        if weight == "":
+        weight_name = f"alo_target_{index}_weight"
+        if _unchanged(weight_name, values, fields):
+            stored = fields[weight_name]["_value"]
+            # 沒動過 ⇒ 寫回已存值（已存 float 的 JSON 表示），不寫四捨五入過的顯示字串。
+            token = "null" if stored is None else json.dumps(stored)
+        elif weight == "":
             token = "null"                                  # `44` ALO-1：比重可以留空
         elif isinstance(weight, str) and _JSON_NUMBER.fullmatch(weight):
             token = weight                                  # 原字照嵌，不經 float 轉一手
@@ -341,7 +357,7 @@ def _target_weights_text(values):
     return "[" + ", ".join(items) + "]"
 
 
-def _bucket_names_text(values):
+def _bucket_names_text(values, fields, raw):
     count = _row_count(values, lambda i: f"alo_bucket_name_{i}")
     if count == 0:
         return None
@@ -352,29 +368,43 @@ def _blank_is_none(value):
     return None if value is None or value == "" else value
 
 
+def _tolerance_text(values, fields, raw):
+    if _unchanged("alo_tolerance_pp", values, fields):
+        # 沒動過 ⇒ 寫回試算表上的原字串（`raw` 裡沒有這個鍵就是呼叫端漏傳，當場 KeyError，不猜）。
+        return raw["alo_tolerance_pp"]
+    return _blank_is_none(values["alo_tolerance_pp"])
+
+
+# 類別與類別名稱是字串、基準是 radio 的原值：畫上去就是原字，沒有格式化，不必另走「沒動過」那一支。
 _COMPOSERS = {
     "alo_target_weights": _target_weights_text,
-    "alo_tolerance_pp": lambda values: _blank_is_none(values["alo_tolerance_pp"]),
-    "alo_basis": lambda values: values["alo_basis"],          # radio 未選 → None
+    "alo_tolerance_pp": _tolerance_text,
+    "alo_basis": lambda values, fields, raw: values["alo_basis"],          # radio 未選 → None
     "alo_bucket_names": _bucket_names_text,
 }
 
 
-def save_entries(keys, values, *, settings_failed=False) -> list:
+def save_entries(keys, values, *, fields=(), raw=None, settings_error=None) -> list:
     """一枚存檔要寫的鍵 → `[{"key", "value"（試算表字串或 None）, "value_kind", "error"}, ...]`。
 
     values：`{輸入欄 name（如 alo_target_0_bucket、alo_basis）: 畫面上的當下值}`。
-    `error` 非 None ⇒ 解析不過，**不寫**，訊息是 `BadSettingValue` 原文。
-    settings_failed：`user_setting` 讀失敗時畫面上沒有已存值可編（`logic` 那時不畫輸入欄），
-    此時一律不寫（回空清單）—— 寫了就是拿空白去蓋掉讀不到的真值（`CLAUDE.md` §1）。
+    fields：該塊畫上去的輸入欄節點（`logic._field`；帶 `_value` 已存值與 `value_text` 顯示字串）。
+    raw：`{鍵: 試算表上的原字串或 None}`（`source.load_live` 的 `notes["setting_raw"]`）。
+    `error` 非 None ⇒ **不寫**：解析不過時是 `BadSettingValue` 原文。
+    settings_error：`user_setting` 讀失敗的訊息原文（`logic.settings_failure`）。讀失敗時畫面上沒有已存值可編，
+    寫了就是拿空白去蓋掉讀不到的真值 ⇒ 每一鍵都不寫、`error` 填這個原文，交 `run_saves` 記成存檔失敗
+    （卡片層既有的「存檔寫入失敗：…」）—— 不讓「按了沒反應」看起來像成功（`CLAUDE.md` §1）。
     """
-    if settings_failed:
-        return []
-    out = []
     for key in keys:
         if key not in SAVE_WIRED_KEYS:
             raise ValueError(f"{key} 的寫入尚未接上")
-        text = _COMPOSERS[key](values)
+    if settings_error is not None:
+        return [{"key": key, "value": None, "value_kind": VALUE_KINDS[key], "error": settings_error}
+                for key in keys]
+    by_name = {field["name"]: field for field in fields}
+    out = []
+    for key in keys:
+        text = _COMPOSERS[key](values, by_name, raw if raw is not None else {})
         error = None
         if text is not None:
             try:

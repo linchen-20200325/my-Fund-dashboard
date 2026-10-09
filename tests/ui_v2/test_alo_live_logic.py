@@ -161,7 +161,9 @@ def test_holding與policy一起標失敗():
 
 
 def _live_model(name="full"):
-    return live.apply_live_notes(logic.build_page_model(fixtures.scenario(name)))
+    # 正式路徑（page 拿到 save_live 時）明確傳已接上的鍵；預設值是空（fail-closed）。
+    return live.apply_live_notes(logic.build_page_model(fixtures.scenario(name)),
+                                 wired_keys=live.SAVE_WIRED_KEYS)
 
 
 def _all_strings(node):
@@ -228,10 +230,12 @@ def test_只有尚未接上寫入的存檔停用並寫出原因_其餘不動():
 
 def test_沒有寫入函式時_三枚存檔照舊全部停用():
     """`page.render` 沒拿到 `save_live` 時傳 `wired_keys=()`：那時按了不會存，一律停用（與接寫入之前相同）。"""
-    model = live.apply_live_notes(logic.build_page_model(fixtures.scenario("full")), wired_keys=())
-    saves = [b for b in _buttons(model) if b["_writes"]]
-    assert len(saves) == 3
-    assert all(not b["_enabled"] and b["disabled_reason"] == live.SAVE_DISABLED_REASON for b in saves)
+    for kwargs in ({"wired_keys": ()}, {}):          # 2026-10-09 稽核回修：預設值就是空（fail-closed）
+        model = live.apply_live_notes(logic.build_page_model(fixtures.scenario("full")), **kwargs)
+        saves = [b for b in _buttons(model) if b["_writes"]]
+        assert len(saves) == 3, kwargs
+        assert all(not b["_enabled"] and b["disabled_reason"] == live.SAVE_DISABLED_REASON
+                   for b in saves), kwargs
 
 
 def test_停用判斷看按鈕的鍵_不看塊代碼():
@@ -241,7 +245,7 @@ def test_停用判斷看按鈕的鍵_不看塊代碼():
     alo1_save["_keys"] = ("alo_target_weights", "alo_scenario_input")
     alo4_save = [b for b in logic.find_block(model, "ALO-4")["buttons"] if b["_writes"]][0]
     alo4_save["_keys"] = ()
-    out = live.apply_live_notes(model)
+    out = live.apply_live_notes(model, wired_keys=live.SAVE_WIRED_KEYS)
     for code in ("ALO-1", "ALO-4"):
         save = [b for b in logic.find_block(out, code)["buttons"] if b["_writes"]][0]
         assert save["_enabled"] is False and save["disabled_reason"] == live.SAVE_DISABLED_REASON, code
@@ -444,10 +448,26 @@ def test_組值_ALO4_基準未選寫None_類別名稱空白不寫():
     assert out["alo_bucket_names"]["error"] == "alo_bucket_names 第 1 個元素不是非空字串"
 
 
-def test_組值_設定讀失敗時一律不寫():
-    """讀不到真值時畫面上沒有可編的已存值；寫了就是拿空白蓋掉讀不到的真值。"""
-    assert live.save_entries(_ALO1_KEYS, {}, settings_failed=True) == []
-    assert live.save_entries(_ALO4_KEYS, {}, settings_failed=True) == []
+def test_組值_設定讀失敗時一律不寫_兩鍵都記為存檔失敗_訊息是讀取失敗原文():
+    """2026-10-09 稽核回修（舊版斷言回空清單 ⇒ 按了沒反應，§1 讓流程看起來成功）：
+    讀不到真值時畫面上沒有可編的已存值，寫了就是拿空白蓋掉讀不到的真值 ⇒ 不寫；
+    兩鍵都帶讀取失敗原文 ⇒ `run_saves` 記兩鍵皆失敗 ⇒ logic 走卡片層既有「存檔寫入失敗：…」。"""
+    dataset = fixtures.scenario("settingfail")
+    message = logic.settings_failure(dataset)
+    assert message
+    calls = []
+    for keys in (_ALO1_KEYS, _ALO4_KEYS):
+        entries = live.save_entries(keys, {}, settings_error=message)
+        assert [(e["key"], e["value"], e["error"]) for e in entries] == [(k, None, message) for k in keys]
+        results = live.run_saves(entries, lambda *a: calls.append(a))
+        assert results == {k: message for k in keys}
+    assert calls == []                                          # 寫入函式 0 次呼叫
+    dataset["save_errors"] = {k: message for k in _ALO1_KEYS + _ALO4_KEYS}
+    model = logic.build_page_model(dataset)
+    for code in ("ALO-1", "ALO-4"):
+        card = logic.find_block(model, code)
+        assert card["error_lines"] == [logic.TEXT_SAVE_FAILED + "：" + message], code
+        assert card["key_error_lines"] == {}, code
 
 
 def test_組值_沒接上的鍵當場炸():
@@ -518,3 +538,65 @@ def test_併進save_errors_不改呼叫端那一份():
     out = live.dataset_with_save_errors(dataset, {"alo_basis": "x"})
     assert out["save_errors"] == {"alo_basis": "x"} and dataset["save_errors"] == {}
     assert live.dataset_with_save_errors(dataset, None)["save_errors"] == {}
+
+
+
+# ═══════════════════════ 沒動過的欄位寫回原值（2026-10-09 稽核回修）═══════════════════════
+#
+# 輸入欄初值是 `format_number` 的顯示字串（最多四位小數）；沒動過就按存檔，必須寫回已存的原值，
+# 不得把 0.333333 寫成 0.3333、0.00001 寫成 0、"2.55555" 寫成 "2.5556"。
+
+_RAW_WEIGHTS = '[{"bucket": "%s", "weight_ratio": 0.333333}, {"bucket": "%s", "weight_ratio": 0.00001}]' % (
+    _CORE, _SAT)
+
+
+def _precise():
+    """已存值帶四位以上小數的 ALO-1：回 (塊的輸入欄節點, 畫面當下值＝顯示字串, 原字串表)。"""
+    raw = {"alo_target_weights": _RAW_WEIGHTS, "alo_tolerance_pp": "2.55555"}
+    rows, problem = live.parse_user_settings(_rows(**raw))
+    assert problem is None
+    dataset = dict(fixtures.scenario("full"), user_setting=rows)
+    card = logic.find_block(logic.build_page_model(dataset), "ALO-1")
+    values = {field["name"]: field["value_text"] for field in card["inputs"]}
+    # 前提：顯示字串確實被四捨五入過 —— 不成立的話下面幾條就是空測。
+    assert values["alo_target_0_weight"] == "0.3333" and values["alo_target_1_weight"] == "0"
+    assert values["alo_tolerance_pp"] == "2.5556"
+    return card["inputs"], values, raw
+
+
+def test_沒動過的欄位按存檔_寫出值與原值相同():
+    fields, values, raw = _precise()
+    out = _entries(_ALO1_KEYS, values, fields=fields, raw=raw)
+    assert out["alo_tolerance_pp"]["value"] == "2.55555" and out["alo_tolerance_pp"]["error"] is None
+    assert out["alo_target_weights"]["error"] is None
+    assert live._PARSERS["alo_target_weights"](out["alo_target_weights"]["value"], "k") == \
+        live._PARSERS["alo_target_weights"](_RAW_WEIGHTS, "k")
+    assert json.loads(out["alo_target_weights"]["value"]) == json.loads(_RAW_WEIGHTS)
+
+
+def test_改動其中一列_只有那一列換成新輸入():
+    fields, values, raw = _precise()
+    values["alo_target_1_weight"] = "0.2"
+    out = _entries(_ALO1_KEYS, values, fields=fields, raw=raw)
+    assert json.loads(out["alo_target_weights"]["value"]) == [
+        {"bucket": _CORE, "weight_ratio": 0.333333}, {"bucket": _SAT, "weight_ratio": 0.2}]
+    assert out["alo_tolerance_pp"]["value"] == "2.55555"
+    values["alo_tolerance_pp"] = "3"
+    assert _entries(_ALO1_KEYS, values, fields=fields, raw=raw)["alo_tolerance_pp"]["value"] == "3"
+
+
+def test_沒動過的留空列與未設定容許帶_照舊寫null與None():
+    rows, _ = live.parse_user_settings(_rows(alo_target_weights=_weights([(_CORE, None)])))
+    dataset = dict(fixtures.scenario("full"), user_setting=rows)
+    card = logic.find_block(logic.build_page_model(dataset), "ALO-1")
+    values = {field["name"]: field["value_text"] for field in card["inputs"]}
+    out = _entries(_ALO1_KEYS, values, fields=card["inputs"],
+                   raw={"alo_target_weights": _weights([(_CORE, None)]), "alo_tolerance_pp": None})
+    assert json.loads(out["alo_target_weights"]["value"]) == [{"bucket": _CORE, "weight_ratio": None}]
+    assert out["alo_tolerance_pp"]["value"] is None
+
+
+def test_沒動過但原字串表漏了那一鍵_當場炸不猜():
+    fields, values, _raw = _precise()
+    with pytest.raises(KeyError):
+        live.save_entries(_ALO1_KEYS, values, fields=fields, raw={})

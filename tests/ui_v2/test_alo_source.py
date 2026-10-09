@@ -249,7 +249,8 @@ def test_load_live的save_errors恆空_存檔只接ALO1與ALO4(wired):
     那正是客戶 2026-10-09 裁示要改掉的行為（ALO-1／ALO-4 接上寫入）。`save_errors` 仍由本函式回空：
     存檔成敗是按鈕那一次的事，由 page.py 記在 session 再併進來，不是讀表的結果。"""
     assert source.load_live()["dataset"]["save_errors"] == {}
-    model = live.apply_live_notes(logic.build_page_model(source.load_live()["dataset"]))
+    model = live.apply_live_notes(logic.build_page_model(source.load_live()["dataset"]),
+                                  wired_keys=live.SAVE_WIRED_KEYS)
     saves = {b["_keys"]: b for block in model["blocks"] for b in (block.get("buttons") or ()) if b["_writes"]}
     assert set(saves) == {("alo_target_weights", "alo_tolerance_pp"), ("alo_basis", "alo_bucket_names"),
                           ("alo_scenario_input",)}
@@ -257,6 +258,14 @@ def test_load_live的save_errors恆空_存檔只接ALO1與ALO4(wired):
     assert saves[("alo_basis", "alo_bucket_names")]["_enabled"]
     assert not saves[("alo_scenario_input",)]["_enabled"]
     assert saves[("alo_scenario_input",)]["disabled_reason"] == live.SAVE_DISABLED_REASON
+
+
+def test_notes交出各鍵的試算表原字串_讀失敗時為空(wired):
+    """存檔時沒動過的欄位寫回這個原字串（2026-10-09 稽核回修）。"""
+    raw = source.load_live()["notes"]["setting_raw"]
+    assert raw == {**{k: None for k in live.SETTING_KEYS}, **_GOOD_SETTINGS}
+    wired["settings"] = source.settings_store.SettingsSheetError("讀不到設定", code="api")
+    assert source.load_live()["notes"]["setting_raw"] == {}
 
 
 def test_save_setting_呼叫同一個L2函式_帶秘密值_回傳原樣交出(wired, monkeypatch):

@@ -210,7 +210,8 @@ def _on_save(keys, fields, prefix, ctx) -> None:
     只收集輸入欄的當下值、呼叫注入的寫入函式；要寫什麼、成敗怎麼記，全部由 live.py 判定。
     不 `st.rerun()`、不清掉輸入欄的值（`44`：存檔失敗時當下內容留在畫面上不清掉）。"""
     values = {field["name"]: st.session_state[f"{prefix}_{field['name']}"] for field in fields}
-    entries = live.save_entries(keys, values, settings_failed=ctx["settings_failed"])
+    entries = live.save_entries(keys, values, fields=fields, raw=ctx["setting_raw"],
+                                settings_error=ctx["settings_error"])
     results = live.run_saves(entries, ctx["save_live"])
     st.session_state[_SAVE_ERRORS_STATE] = live.merge_save_results(
         st.session_state.get(_SAVE_ERRORS_STATE), results
@@ -508,11 +509,17 @@ def render(*, load_live=None, save_live=None) -> None:
         # 輸入欄的 key 前綴：示範模式帶情境名（換情境時不沿用上一個情境留在 session 裡的值）。
         key = scenario
     else:
-        dataset = load_live()["dataset"]
+        live_input = load_live()
+        dataset = live_input["dataset"]
         if save_live is not None:
             # 上一次按存檔留下的逐鍵失敗併進 save_errors，交給 logic 決定畫在卡片層還是該鍵原位。
             dataset = live.dataset_with_save_errors(dataset, st.session_state.get(_SAVE_ERRORS_STATE))
-            ctx = {"save_live": save_live, "settings_failed": logic.settings_failure(dataset) is not None}
+            ctx = {
+                "save_live": save_live,
+                "settings_error": logic.settings_failure(dataset),
+                # 試算表上的原字串：沒動過的欄位寫回它（見 live.py「存檔」段）。
+                "setting_raw": dict(live_input["notes"].get("setting_raw") or {}),
+            }
         model = live.apply_live_notes(
             logic.build_page_model(dataset),
             wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
