@@ -96,7 +96,10 @@ def real(monkeypatch):
     monkeypatch.setattr(R, "get_secret", lambda key, default=None: cfg.get(key, default))
     monkeypatch.setattr(R, "_make_client", lambda creds: FakeClient(book))
     monkeypatch.setattr(R, "_TITLES", {})
-    monkeypatch.setattr(GR.time, "sleep", lambda _s: None)
+    # 只換掉 gspread_retry 看到的 `time`（該檔只用 `time.sleep`），不動全域 `time.sleep`：
+    # 全域換成空函式時，AppTest 主執行緒每 1ms 一次的輪詢（`require_widgets_deltas`）會變成不睡的忙迴圈、
+    # 一直搶 GIL，腳本執行緒首次元素輸出時 streamlit 走 `inspect.stack()` 的大量 lstat 就被拖到 20～50 秒。
+    monkeypatch.setattr(GR, "time", types.SimpleNamespace(sleep=lambda _s: None))
     monkeypatch.setattr(source, "st", types.SimpleNamespace(secrets=cfg, session_state={}))
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
     monkeypatch.setattr(page, "fixtures", _FixturesThatBite())

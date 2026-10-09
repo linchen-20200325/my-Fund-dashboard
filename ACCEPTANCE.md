@@ -371,6 +371,20 @@ grep -ciE 'O[p]us|S[o]nnet|H[a]iku' ACCEPTANCE.md   # 模型名，不分大小�
 - 寫出點：`ui_v2/mkt/source.py::load_live` 在交給頁面之前遮一次（秘密值在這一層從 `st.secrets`、環境變數與登入權杖讀出）；遮蔽函式是 `services/v2_tables/masking.py::mask_message`（L2，不讀秘密、不 import streamlit）。
 - `fetch_log` 尚未落地（`49` Q12），所以 MKT 這一條目前只有「畫面」一個寫出點；落地之後，`fetch_log.message` 必須與畫面用同一份遮蔽後的字串。
 
+**7.4-a 續　射程補含持倉體檢（HLD）的正式入口**（2026-10-09 登記，基底 `main` @ `51ae661`；決策者：AI 總管（S6b-4 派工，延伸射程）；出處：交接本〈登記待辦〉「hld S6b 開工前盤點」第 5 條）
+
+上面只寫到 MKT。持倉體檢正式入口 `ui_v2/app_hld_live.py`（PR #905 合併後上線）同樣把失敗訊息原文印上畫面，本條起一併套用 7.3 的遮蔽規則（示範入口 `ui_v2/app_hld.py` 不套用，它沒有真的取數）。
+
+- **畫面上印原文的地方**：`ui_v2/hld/logic.py` 以「⛔ 取數失敗：<訊息原文>」模板寫出的各處（表層級、逐檔、設定讀取失敗），以及入口層例外的整頁錯誤畫面（`ui_v2/hld/page.py::_render_live_error`）。
+- **寫出點（本組 2026-10-09 讀碼核對）**：
+  - `ui_v2/hld/source.py::load_live`：持倉讀表失敗（`holding_error`）、設定讀表失敗（`settings_error`）在本層以 `alo_holdings.masker(秘密值)` 遮過再交出；
+  - `ui_v2/hld/live.py::assemble_live_load`：逐檔淨值取數失敗（放進 `fund_errors["nav"]` 的那幾筆）與部分分頁讀不到（`skipped_tabs` → `errors["holding"]`）由本函式以同一個 `mask` 遮；
+  - `ui_v2/hld/source.py::mask_error`：整頁錯誤畫面的例外型別名與訊息，經 `page.render(mask_error=...)` 遮過才上畫面。
+  - 秘密值來源與 alo 相同（`masking.secret_values`：`st.secrets`、環境變數、`gsheet_tokens`、`custom_oauth_cfg`）。
+- ⚠️ **與 7.4 第二點的差距，據實登記（本輪不改）**：7.4 要求訊息含記號時在**旁邊**加一行「已遮蔽憑證」；hld 正式版目前**沒有**這一行（`ui_v2/hld/` 底下 0 處出現該字串，本組 2026-10-09 實查）。加這一行屬新增畫面元素，依客戶 2026-10-09 裁示（S6b-4 只做不改畫面文案的收尾）本輪不做，待另送客戶。
+- 驗收（現有）：`tests/ui_v2/test_hld_source.py` 的 `test_持倉與設定讀取失敗_各進對應錯誤_訊息經遮蔽`、`test_淨值取數失敗訊息經遮蔽`、`test_mask_error遮掉秘密值`、`test_正式入口_讀取拋例外_畫錯誤畫面_秘密值經遮蔽_不是示範模式`、`test_秘密值來源_st_secrets以外三處也收進遮蔽`；`tests/ui_v2/test_hld_live_assemble.py::test_T4a_某檔取數失敗_fund_errors放遮蔽後的原文_端到端全頁印出同一句且不含原文`。
+- `fetch_log` 尚未落地，hld 這一條同樣只有「畫面」一個寫出點。
+
 ### 7.5 驗收：實作時必須有的測試
 
 以下每一條都是**實作時**要寫出來、且要在 CI 跑的測試。它們**不打外部網路**：需要真實例外字串的，一律連本機迴路位址（`127.0.0.1`）。
@@ -444,7 +458,8 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 ## 八、資產配置頁讀表：推定值與已知差異（R1 客戶裁示；U9 客戶裁示；R2 總管裁定；總管推導；規格組讀法；另有總管暫定一項）
 
 **量測日 2026-09-27，基底 `main` @ `2ac1394`**（8.1～8.3）；
-**8.4／8.5 為 2026-09-28 新增，基底 `41ca5de`**；**8.4／8.5 的回修為 2026-09-28，基底 `60ff5cd`**
+**8.4／8.5 為 2026-09-28 新增，基底 `41ca5de`**；**8.4／8.5 的回修為 2026-09-28，基底 `60ff5cd`**；
+**8.1 末段與 8.3 的更正為 2026-10-09（S6b-4），基底 `51ae661`**
 （依第六節第 2 條：更新時帶上量測日與 SHA）。
 本節是**讀表程式的驗收規則**，不是動工授權（`CLAUDE.md` §-1）。
 程式：`repositories/policy_supplement_repository.py`（L1）、`services/v2_tables/alo_holdings.py`（L2）。
@@ -485,6 +500,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 - 不以讀取時間冒充（`49` 2.6）。
 - 驗收：`tests/test_v2_tables_alo_holdings.py` 以 `test_R1_` 開頭的測試（換算邊界：月底、年底、閏年 2/29、非閏年 2/29、帶時間）；`tests/test_policy_supplement_repository.py` 以 `test_R1_` 開頭的測試（格式錯的列不收）。
 - 畫面顯示：`ui_v2/hld/logic.py::_build_hld5` 以 `last_synced_at` 的前 10 個字顯示「最後對帳」，換算後與客戶填的日期相同。12:00 這個時刻不會出現在畫面上，但它仍是推定值。
+  → **2026-10-09 補（S6b-4；原句未改，它對示範入口 `ui_v2/app_hld.py` 仍然為真，對正式版不完整）**：正式入口 `ui_v2/app_hld_live.py`（PR #905 合併後上線）另經 `ui_v2/hld/live.py::_relabel_sync_field`（客戶 2026-10-02 裁示 4-C）——欄名改為「最後核對日（只記日期）」，值由 `live.sync_date` 換算成**台灣日期**（帶時區的時間先轉 UTC+8 再取日期，不是截前 10 個字）；值不合格或晚於台灣的今天 → 那一格進 `系統錯誤`，整頁照常。R1 換算出的 `T04:00:00Z` 在台灣仍是同一天，所以畫面上的日期仍與客戶填的相同，12:00 仍是推定值。驗收：`tests/ui_v2/test_hld_live_logic.py::test_正式模式_HLD5欄名改為最後核對日只記日期_值只有日期`、`test_最後核對日_合格值換成台灣日期`、`test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤`。
 
 ### 8.2 R2：U9 與 `44` 4.4／ALO-2 的差異
 
@@ -515,8 +531,9 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
   也是 `services/v2_tables/alo_holdings.py` 檔頭自訂的界線（「本檔不產生任何『直接持有』字樣」）。
   一般保單缺 `_保單資料` 列時**不會**觸發這條顯示規則，所以這個理由分得出 DIRECT 與一般保單。
 - ⚠️ **這仍然是總管暫定，不是客戶裁示** —— 換的是理由，不是決定；客戶只裁了「不計入配置」（U9）。
-- 連帶後果：hld 頁看不到 DIRECT 持倉。這件事掛在已登記的未定題「hld 頁遇到 DIRECT 持倉時怎麼顯示」（交接本 :94）之下，**待 hld 接真資料時送客戶裁示**。
-- 驗收：`tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列_且不懸空參照`。
+- ~~連帶後果：hld 頁看不到 DIRECT 持倉。這件事掛在已登記的未定題「hld 頁遇到 DIRECT 持倉時怎麼顯示」（交接本 :94）之下，**待 hld 接真資料時送客戶裁示**。~~
+  → **2026-10-09 更正（S6b-4；狀態更新，不是漏刪，上句在寫下時為真）**：客戶 2026-10-02 已裁 **3-B (ii)**（出處：`docs/wireframes/draft_hld_live.html` §G；交接本第 5 節〈已裁示（2026-10-02）〉）——正式版的 DIRECT 持倉**另外列出、不計入體檢**：仍不產生 `holding` 列、不進任何計算；HLD-5 卡尾一行「⚠ DIRECT 列暫不支援，該筆不計入體檢（N 筆）」加逐筆位置，收合摘要尾端加「DIRECT N 筆未列入」；N 只數保單分頁的 DIRECT 持倉列（`ui_v2/hld/live.py::direct_holding_rows`、`_apply_direct`）。示範入口不經過這一段。驗收：`tests/ui_v2/test_hld_live_logic.py` 以 `test_DIRECT_` 開頭的測試。本節「不產生 `holding` 列」仍是總管暫定，客戶這次裁的是 hld 畫面怎麼呈現，不是讀表要不要產生該列。
+- 驗收：~~`tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列_且不懸空參照`~~ → **`tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列`**（2026-10-09 更正，不是漏刪：劃掉的名字在該檔不存在；本組以 `grep -n 'def test_裁定4' tests/test_v2_tables_alo_holdings.py` 在 `51ae661` 實查，只有新名字與另外兩條 `test_裁定4_` 開頭的測試；出處：交接本〈登記待辦〉「hld S6b 開工前盤點」第 5 條）。
 
 ### 8.4 `44` 4.1「同鍵分多列時顯示時才加總」：本輪**沒有做**，接 UI 的那一輪要補
 
@@ -705,3 +722,49 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
   舊句劃線保留。出處：紅隊 2026-10-03 指出舊句與 9.2 自相矛盾。
 
 ⚠️ **本節由架構與前端組單組產出，未經第二組獨立複驗**（`CLAUDE.md` §-2 規則 6）。
+
+---
+
+## 十、持倉體檢頁正式版（`app_hld_live.py`）與 `44` 的偏離（2026-10-09 登記）
+
+**量測日 2026-10-09，基底 `main` @ `51ae661`**（PR #905 合併之後）。本節是**驗收規則與現況登記**，不是動工授權（`CLAUDE.md` §-1）。
+寫在本檔而不寫進 `44` 的理由同 7.1：`docs/v2/44_fund_ui_ssot.md` 已凍結，不得加附註。
+出處：交接本〈登記待辦〉「hld S6b 開工前盤點」第 6 條列出這些偏離；第 2 節 S6b 小節〈S6b-4 開工資格盤點〉第 3 點指出「重新取數」那一項已過期。
+下表每一列由本組在 `51ae661` 上讀碼核對；`44` 行號同一基底，會漂移，要用請現場重讀。示範入口 `ui_v2/app_hld.py` 不經過 `ui_v2/hld/live.py`，下列偏離只屬正式版，另標者除外。
+
+### 10.1 偏離清單
+
+| # | 項目 | `44` 的規定 | 正式版現況 | 決策 | 程式出處 | 驗收 |
+|---|---|---|---|---|---|---|
+| 1 | HLD-4「存檔」停用 | :583 `HLD-4` 規則欄：本塊掛「存檔」，寫回 `user_setting` | 按鈕照掛、**停用**，停用原因「存檔寫入端尚未接上，這一輪只讀不寫」（與 alo 逐字相同）；HLD-4 說明區講「存檔」的兩句正式版不印 | 客戶 2026-10-02 裁示 A（文案逐字）；S6a-1 | `ui_v2/hld/live.py`：`SAVE_DISABLED_REASON`、`_DISABLED_BY_KIND`、`apply_live_notes`、`_LIVE_DROPS` | `tests/ui_v2/test_hld_live_logic.py::test_存檔一律停用_原因逐字`、`test_存檔停用原因_與alo頁逐字相同`、`test_S6a第三輪_正式版HLD4不印存檔那一句_示範版照印_其餘照舊` |
+| 2 | 「重新取數」按鈕：**正式畫面拿掉** | :2009、:2011、:2323、:2326 的空狀態與錯誤模板都掛「重新取數」；:762 `HLD-8` 取數失敗時掛 | 正式版各塊的「取數」類按鈕一律不呈現，整頁錯誤畫面也不建這顆按鈕；該不該掛仍由 `logic` 判斷，示範版照掛。**不是停用＋原因**（舊說法已過期，見下方註） | 客戶 2026-10-09 裁示（PR #905） | `ui_v2/hld/live.py::apply_live_notes`（把 `_action_kind` 為「取數」的按鈕從各塊移除）；`ui_v2/hld/page.py::_render_live_error` | `tests/ui_v2/test_hld_live_logic.py::test_HLD1到3不掛重新取數_HLD8依值狀態掛_正式模式不呈現`、`test_示範模式_srcmiss與fetchfail仍掛重新取數`；`tests/ui_v2/test_hld_source.py::test_代碼對照拋L1例外_正式入口畫錯誤畫面_不印Traceback_不帶秘密值_沒有按鈕` |
+| 3 | `fund_profile` 未接，成立日改用推定 | :531 `HLD-2`、:760 `HLD-8` 來源欄宣告 `fund_profile.inception_on`；:533 成立日晚於區間起點 → `⬜ 不適用：成立日晚於區間起點` | `fund_profile` 列在 `pending_tables`，`logic` **不讀**它；改用推定：該檔在 `nav` 表裡（不限區間）最早的 `nav_date` 晚於區間起點 → 區間報酬率、期間波動、最大回撤判 `⬜ 資料未備`，**不寫**「不適用：成立日晚於區間起點」（分不出是成立日晚、還是來源只給到那麼舊） | 總管 2026-10-02 S2 裁定 | `ui_v2/hld/logic.py::fund_metrics`（`nav_starts_late`）；`ui_v2/hld/live.py::assemble_live_load`（`pending_tables`） | `tests/ui_v2/test_hld_live_assemble.py::test_T3a_配息閘門是關的_pending_tables固定為fund_profile與dividend` |
+| 4 | HLD-5 展開區的圖是佔位 | :707 `HLD-5` 規則欄：展開內容為持倉欄位、淨值折線、配息長條，共用同一條時間軸 | 兩格都是文字框（`hld-plot`），不畫真圖：淨值那一格寫「〔淨值折線〕與〔配息長條〕共用同一條時間軸」（無淨值或設定讀取失敗時改印對應訊息），配息那一格寫「〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖」。**示範版相同** | 總管 S6a 第二輪裁定：佔位框那一句保留（圖表確實還沒做，是真實資訊） | `ui_v2/hld/logic.py::_build_hld5`（`nav_plot_text`、`div_plot_text`）；`ui_v2/hld/page.py`（`hld-plot`）；`ui_v2/hld/live.py`（`_DEV_TRIMS` 上方註解） | 無專屬測試（本組未找到斷言「不畫真圖」的測試） |
+| 5 | HLD-0「前往 Sheets 維護持倉」按了不動 | :490 持倉表為空時掛這一枚（`導覽` 類）；:493 判準「按下那枚按鈕，畫面離開本儀表板前往 Sheets」 | 按鈕照掛、**可按**，但沒有接任何動作（`page.py` 畫 HLD-0 時不給 `on_click`），按下只重跑本頁，不離開。正式版未另做處理（「不動」＝沿用示範版現況）。**示範版相同** | 尚無裁示；交接本列為偏離登記 | `ui_v2/hld/logic.py`（`TEXT_GOTO_SHEETS`，`導覽` 類）；`ui_v2/hld/page.py::_render_lamp` → `_buttons(block, block["code"])`（無 `on_click`） | 無（`44` :493 那一步目前驗不到） |
+| 6 | 同保單同基金分多列時未加總 | :1771 `44` 4.1：來源端分多次投入而登記成多列時，顯示時把金額與單位數加總成一列 | 每一筆持倉列各算一列（逐 `holding_id`），不合併、不加總；`source.py` 組 L2 輸入時也刻意不去重（去重會吃掉 `ccy_conflict`）。與 8.4（alo 讀表）是同一件事在 hld 的落點 | 未裁（8.4 已登記「接 UI 的那一輪要補」，合併後各欄取哪一列尚未裁示） | `ui_v2/hld/logic.py::all_metrics`、`_build_hld5`（展開鍵用 `holding_id`）；`ui_v2/hld/source.py` 檔頭第 2 條 | `tests/ui_v2/test_hld_source.py::test_每一筆持倉列對應一筆fund_帶holding_ccy_不去重`（驗的是不去重，不是驗 `44` 4.1 的加總判準） |
+
+⚠️ **第 2 列的舊說法已過期**：交接本〈登記待辦〉「hld S6b 開工前盤點」第 6 條把它寫成「重新取數停用」——那是 2026-10-03 客戶裁示 A（停用＋寫出原因）時的狀態；客戶 2026-10-09 改裁為**正式畫面拿掉**，已隨 PR #905 落地（`926800d`；merge `5d12223`）。本表以現況為準。
+⚠️ 「12:00 推定」「DIRECT 另列」兩項另見 8.1、8.3，不重複列入本表；「結論燈的 N 數檔」見第九節。
+
+### 10.2 資料格式登記（內部自決，非畫面文案）
+
+1. **`user_setting` 的 `hld_deviation_rules`**（總管 2026-10-03 裁定；`docs/v2/50_settings_sheet_design.md` :86 把字串格式交給各頁序列化決定）：
+   - 值是 **JSON 陣列**，每個元素是**恰好**三個欄位的物件 `{"indicator", "direction", "value"}`：`indicator` 非空字串（照原字收，不去空白）；`direction` 只收「低於」「高於」（`logic.RULE_DIRECTIONS`）；`value` 是有限的數（`bool` 不算數；讀進來一律轉 `float`）。空陣列＝零條門檻，不是錯誤。
+   - 值前後有空白、不是 JSON、不是陣列、元素欄位多一個少一個、JSON 物件裡同一個鍵出現兩次、`NaN`／`Infinity` → **讀取失敗**（畫面走設定讀取失敗那一支，不說「尚未設定門檻」）。
+   - 寫入端停用（見 10.1 第 1 列），本頁只讀。
+   - 程式：`ui_v2/hld/live.py::_parse_rules`、`_json_array`、`parse_user_settings`。驗收：`tests/ui_v2/test_hld_live_settings.py`。
+   - ⚠️ `ui_v2/set/fixtures.py` 裡那筆示意值與此格式不符，屬示範資料，交接本另登記，本節不處理。
+2. **hld `dataset["pending_tables"]`**：正式版**固定**為 `["fund_profile", "dividend"]`（客戶 2026-10-05 S6b-2 規則：至少列 `fund_profile`，配息閘門關閉時也列 `dividend`）；配息閘門（`nav_dividend.DIV_DATE_IS_EX_DATE_VERIFIED`）被打開 → 整頁報錯。程式：`ui_v2/hld/live.py::assemble_live_load`。
+   - ⚠️ **同名不同物**：`services/v2_tables/settings_store.py` 的 `PENDING_TABLES = ("nav", "dividend")` 是 set 頁與 alo 頁用的，**仍含 `nav`**，不可移除（alo 頁寫死 `nav: []`，移除會讓 `tests/ui_v2/test_alo_source.py` 轉紅；交接本〈登記待辦〉「hld S6b 開工前盤點」第 9 條，本組未實跑）。hld 的那一份不讀它。
+3. **hld `dataset["fund_errors"]`**：形狀 `{"nav": {fund_code: 遮蔽後的訊息原文}}`；沒有失敗時是空字典。**只放真正的取數失敗**：淨值被扣下（`ccy_missing`、`ccy_conflict`、`fetched_at_missing`、`fetched_at_in_future` 四碼）、代碼對照查不到、來源回空（訊息恰為 `EMPTY_WITHOUT_REASON` 且未取到任何列）、L1 有回但 L2 全數拒收 —— 這幾種一律**不放**，畫面印「⬜ 資料未備」；扣下代碼不在四碼內（含 `input_conflict`）→ raise。程式：`ui_v2/hld/live.py::assemble_live_load`；四碼清單：`ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD`。驗收：`tests/ui_v2/test_hld_live_assemble.py` 以 `test_T4` 開頭的測試、`tests/ui_v2/test_hld_source.py::test_常數注入_扣下清單恰為四碼_不含input_conflict_其餘照L2`。
+
+---
+
+## 十一、設定與診斷頁 SET-0：「淨值、配息尚未接取數來源」暫留（2026-10-09 登記）
+
+- **現況**（基底 `51ae661`）：`ui_v2/set/live.py` 的 `TEXT_PENDING_NAV_DIVIDEND`（「淨值、配息尚未接取數來源」，客戶 2026-09-26 定稿）在 `pending_tables` 同時含 `nav` 與 `dividend` 時印在 `SET-0` 說明區；set 頁的 `pending_tables` 來自 `settings_store.PENDING_TABLES`，目前仍含 `nav`，所以這一句照印。
+- **與現況的落差**：持倉體檢正式版自 PR #905 起即時取淨值，「淨值……尚未接取數來源」對 hld 而言已不完整；同頁 `SET-1` 淨值列（該類沒有資料時）與 `SET-2` 淨值層（沒有紀錄時）也仍印「原因：……尚未接上」（`TEXT_REASON_KIND_PENDING`、`TEXT_REASON_TIER_PENDING`，條件同樣看 `pending_tables`）。
+- **處置**：客戶 2026-10-09 裁示（甲）——**暫留不改**；等 #3 `nav` 表接上來源之後，`SET-0` 與 `SET-1`／`SET-2` 一起一致處理，避免同一頁互相矛盾。本輪不改任何 `ui_v2/` 文案常數。
+- 出處：交接本第 5 節「S6b-4 的 SET-0／SET-1／SET-2 一致性」；〈登記待辦〉「S6b-3 留給 S6b-4 的登記」第 2 條。
+
+⚠️ **第十、十一節由執行組單組產出，未經第二組獨立複驗**（`CLAUDE.md` §-2 規則 6）。
