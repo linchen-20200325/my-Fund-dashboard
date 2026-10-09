@@ -497,3 +497,21 @@ def test_很大但有限的浮點照收():
     from ui_v2.set import logic
     value = "9" * 300
     assert S.value_matches_kind(value, "float") and logic.value_matches_kind(value, "float")
+
+
+def test_跨頁守衛_alo存檔的value_kind須與L2一致():
+    """2026-10-09 alo 正式模式接上 ALO-1／ALO-4 存檔。`ui_v2/alo/live.py` 不得 import services，
+    所以 `VALUE_KINDS["alo_basis"]` 是 L2 `ENUM_KIND` 的鏡像 —— 本條無條件比對；
+    其餘三鍵的型別也逐一過 L2 `check_setting_value`（拿一個合法值存檔前檢查，不打上游）。"""
+    from ui_v2.alo import live as alo_live
+    assert alo_live.VALUE_KINDS["alo_basis"] == S.ENUM_KIND
+    assert set(alo_live.VALUE_KINDS) == set(alo_live.SAVE_WIRED_KEYS)
+    samples = {
+        "alo_target_weights": '[{"bucket": "核心", "weight_ratio": 0.6}]',
+        "alo_tolerance_pp": "4",
+        "alo_basis": "成本",
+        "alo_bucket_names": '["核心"]',
+    }
+    for key, kind in alo_live.VALUE_KINDS.items():
+        S.check_setting_value(samples[key], kind, setting_key=key)
+        S.check_setting_value(None, kind, setting_key=key)          # 清除那一鍵也放行

@@ -24,11 +24,16 @@
     不觸發任何取數 —— 本頁是消費端，不是取數端。本頁只用得到 `fx_twd_per_usd` 那一個鍵，
     而它目前在 L2 是暫停取數的（`market_indicator.FX_OBS_DATE_RULE_VERIFIED` 為假），
     所以表上通常沒有那一列 ⇒ 市值基準會缺匯率，同樣照實顯示。
-  - `save_errors` 恆為空 dict：**本輪只接讀、不接寫**（寫入端按鈕由 `live.apply_live_notes` 停用）。
-- `notes`：本輪畫面**都用不到**，原樣轉交給下一輪（草稿 §D 的七件新東西）用 ——
+  - `save_errors` 本函式一律回空 dict：~~本輪只接讀、不接寫~~ → 2026-10-09 起 ALO-1／ALO-4 接上寫入
+    （`save_setting`），但存檔成敗是**按鈕那一次**的事、不是讀表的結果，由 `page.py` 記在 session、
+    重繪時再併進 `save_errors`；本函式不碰它。
+- `notes`：畫面**都用不到**，原樣轉交給下一輪（草稿 §D 的七件新東西）用 ——
   `mask_token`、`pending_tables`、`pages_reading_settings`、`read_estimate`（L1 的讀取量診斷）、
   `direct`／`warnings`（U9 的 DIRECT 列與逐筆警示）、`skipped`（沒寫進持倉的各種原因）、
   `setting_structure`（`user_setting` 的壞列與解析不了的鍵）。
+
+`save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）；
+體例與 `ui_v2/set/source.py::save_setting` 相同（同一個 L2 函式、同一份秘密值）。
 """
 
 from __future__ import annotations
@@ -118,7 +123,7 @@ def load_live() -> dict:
         "market_indicator": [dict(row) for row in indicators["rows"]] if indicators else [],
         "user_setting": setting_rows,
         "errors": errors,
-        "save_errors": {},              # 本輪不接寫
+        "save_errors": {},              # 存檔成敗由 page.py 併進來，不是讀表的結果
     }
     notes.update(
         mask_token=masking.MASK,
@@ -130,3 +135,8 @@ def load_live() -> dict:
         skipped={name: (tables or {}).get(name) for name in _SKIP_GROUPS} if tables else {},
     )
     return {"dataset": dataset, "notes": notes}
+
+
+def save_setting(setting_key, setting_value, value_kind) -> dict:
+    """給 `page.render(save_live=...)` 用：存一個鍵（L2 先檢查值與型別，不符不存；寫表以外的例外照樣往上拋）。"""
+    return settings_store.save_setting_for_page(setting_key, setting_value, value_kind, _secret_values())

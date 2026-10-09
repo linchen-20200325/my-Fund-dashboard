@@ -827,6 +827,20 @@ def _save_error_lines(dataset, keys) -> list:
     return []
 
 
+def _save_error_parts(dataset, keys) -> tuple:
+    """一枚存檔寫兩鍵的塊（ALO-1、ALO-4）用：回 `(卡片層 error_lines, 逐鍵 key_error_lines)`。
+
+    客戶 2026-10-09 裁示：兩鍵**恰好一鍵**寫失敗 → 已成功的那一鍵保留（不 rollback），
+    失敗的那一鍵在**它自己的輸入欄原位**顯示 `44` 既有的「⛔ 取數失敗：<訊息原文>」（`fetch_failed_text`），
+    卡片層不再印一次（同一件事不印兩次）。兩鍵都失敗 → 照舊只走卡片層 `_save_error_lines`，一字不變。
+    """
+    errors = dataset.get("save_errors") or {}
+    failed = [key for key in keys if errors.get(key)]
+    if len(keys) == 2 and len(failed) == 1:
+        return [], {failed[0]: [fetch_failed_text(errors[failed[0]])]}
+    return _save_error_lines(dataset, keys), {}
+
+
 def target_sum(targets):
     """`44` ALO-1：留空的那一列不計入合計。"""
     return sum(t["weight_ratio"] for t in targets or () if t["weight_ratio"] is not None)
@@ -867,6 +881,7 @@ def _build_alo1(dataset) -> dict:
         tolerance_text = ""  # 值取不到，不寫「未設定」（ALO-GAP-設定取數失敗）
     else:
         tolerance_text = TEXT_UNSET if tolerance is None else format_number(tolerance)
+    error_lines, key_error_lines = _save_error_parts(dataset, keys)
     return {
         "code": "ALO-1",
         "title": BLOCK_TITLES["ALO-1"],
@@ -884,7 +899,8 @@ def _build_alo1(dataset) -> dict:
         "tolerance_lines": [] if failure is not None else ["容許帶：" + tolerance_text],
         "sum_lines": sum_lines,
         "unset_lines": unset_lines,
-        "error_lines": _save_error_lines(dataset, keys),
+        "error_lines": error_lines,
+        "key_error_lines": key_error_lines,
         # ALO-GAP-存檔停用：不宣告停用條件。ALO-GAP-新增類別：不畫新增鈕。
         "buttons": [_button(TEXT_SAVE, "存檔", keys=keys)],
         "detail_lines": [HINT_NOTE],
@@ -1093,6 +1109,7 @@ def _build_alo4(dataset) -> dict:
         summary += "；缺 " + "、".join(missing)
     if failure is not None:
         summary += "；取數失敗"
+    error_lines, key_error_lines = _save_error_parts(dataset, keys)
     return {
         "code": "ALO-4",
         "title": BLOCK_TITLES["ALO-4"],
@@ -1111,7 +1128,8 @@ def _build_alo4(dataset) -> dict:
         "unassigned_lines": unassigned,
         "mismatch_lines": mismatched,
         "goto_note": goto_note,
-        "error_lines": _save_error_lines(dataset, keys),
+        "error_lines": error_lines,
+        "key_error_lines": key_error_lines,
         "buttons": buttons,
         "detail_lines": detail_lines,
         "badges": [],

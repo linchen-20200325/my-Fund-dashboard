@@ -244,8 +244,44 @@ def test_notes原樣轉交給下一輪_不判讀(wired):
     assert set(notes["skipped"]) == set(source._SKIP_GROUPS)
 
 
-def test_本輪不接寫_save_errors恆空(wired):
+def test_load_live的save_errors恆空_存檔只接ALO1與ALO4(wired):
+    """2026-10-09 更正（舊名 `test_本輪不接寫_save_errors恆空`）：舊版另斷言「三枚存檔全部停用」——
+    那正是客戶 2026-10-09 裁示要改掉的行為（ALO-1／ALO-4 接上寫入）。`save_errors` 仍由本函式回空：
+    存檔成敗是按鈕那一次的事，由 page.py 記在 session 再併進來，不是讀表的結果。"""
     assert source.load_live()["dataset"]["save_errors"] == {}
     model = live.apply_live_notes(logic.build_page_model(source.load_live()["dataset"]))
-    saves = [b for block in model["blocks"] for b in (block.get("buttons") or ()) if b["_writes"]]
-    assert saves and all(not b["_enabled"] for b in saves)
+    saves = {b["_keys"]: b for block in model["blocks"] for b in (block.get("buttons") or ()) if b["_writes"]}
+    assert set(saves) == {("alo_target_weights", "alo_tolerance_pp"), ("alo_basis", "alo_bucket_names"),
+                          ("alo_scenario_input",)}
+    assert saves[("alo_target_weights", "alo_tolerance_pp")]["_enabled"]
+    assert saves[("alo_basis", "alo_bucket_names")]["_enabled"]
+    assert not saves[("alo_scenario_input",)]["_enabled"]
+    assert saves[("alo_scenario_input",)]["disabled_reason"] == live.SAVE_DISABLED_REASON
+
+
+def test_save_setting_呼叫同一個L2函式_帶秘密值_回傳原樣交出(wired, monkeypatch):
+    """體例同 `ui_v2/set/source.py::save_setting`：同一個 L2 `save_setting_for_page`、同一份秘密值。"""
+    import secrets as _rnd
+
+    key = _rnd.token_hex(12)
+    monkeypatch.setattr(source.st, "secrets", {"SETTINGS_SHEET_ID": key})
+    calls = []
+
+    def _save(setting_key, setting_value, value_kind, values):
+        calls.append((setting_key, setting_value, value_kind, values))
+        return {"status": "failed", "key": setting_key, "message": "（已遮蔽的原文）"}
+
+    monkeypatch.setattr(source.settings_store, "save_setting_for_page", _save)
+    out = source.save_setting("alo_basis", logic.BASIS_MV, "list")
+    assert out == {"status": "failed", "key": "alo_basis", "message": "（已遮蔽的原文）"}
+    assert [c[:3] for c in calls] == [("alo_basis", logic.BASIS_MV, "list")]
+    assert key in calls[0][3], "沒有把秘密值傳進 L2 ⇒ L2 的 masker 遮不掉它"
+
+
+def test_save_setting_寫表以外的例外照樣往上拋(wired, monkeypatch):
+    def _boom(*args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(source.settings_store, "save_setting_for_page", _boom)
+    with pytest.raises(RuntimeError, match="boom"):
+        source.save_setting("alo_tolerance_pp", "4", "float")

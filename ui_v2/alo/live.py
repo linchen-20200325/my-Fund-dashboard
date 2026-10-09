@@ -8,7 +8,9 @@
   的直譯器裡單獨測（守衛：tests/ui_v2/test_ui_v2_live_import_guard.py）。
 - 本檔只做兩件事：(1) 把試算表上的設定字串解析成 `logic` 吃得下的原生值；
   (2) 把 `logic.build_page_model` 產出的模型調整成正式模式該有的樣子。
-- **本輪（接線骨架）只接讀，不接寫。** 草稿 §D 的七件新東西（DIRECT 警示、讀取量診斷、
+- ~~本輪（接線骨架）只接讀，不接寫。~~ → 2026-10-09 起 ALO-1／ALO-4 兩枚「存檔」接上寫入
+  （本檔放組值與判讀成敗的純函式，寫入本身在 `source.py`、呼叫在 `page.py`）；ALO-3 的存檔
+  客戶仍未授權，照舊停用。草稿 §D 的七件新東西（DIRECT 警示、讀取量診斷、
   沒寫進持倉的附表、`_保單資料` 缺列、E1～E14 文案、新增類別元件）**不在本檔**，下一輪再做。
 
 ⚠️ 文案逐字照草稿；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
@@ -19,10 +21,13 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 
 from . import logic
 
-# 本輪只接讀不接寫 ⇒ 會寫 `user_setting` 的按鈕一律停用並寫出原因：
+# ~~本輪只接讀不接寫 ⇒ 會寫 `user_setting` 的按鈕一律停用並寫出原因：~~
+# → 2026-10-09 更正：ALO-1／ALO-4 的存檔已接上寫入（`SAVE_WIRED_KEYS`），停用只剩**還沒接上的那一類** ——
+#    實質就是 ALO-3（`alo_scenario_input`，客戶 2026-10-09 仍未授權其存檔）。以下理由對那一枚照舊成立：
 # 一枚按得下去、按了卻什麼都不會被存下來的「存檔」，就是 `CLAUDE.md` §1 禁止的「讓流程看起來成功」。
 #
 # 文案由**客戶 2026-09-28 逐字核准**（草稿 `docs/wireframes/draft_alo_save_disabled.html`，PR #861 已 merge）。
@@ -35,7 +40,8 @@ from . import logic
 # ✅ 正例（`CLAUDE.md` §-2.A 第 3 款：禁令要同時寫出正例）：**只停用會寫的那一類**。
 #    「匯出」（真的能下載）、「前往 Sheets 維護持倉」、「新增假設」三枚 `_writes` 為空，**一律不停用**；
 #    「匯出」自己那條「目前沒有可匯出的列」是另一回事，不歸本檔管、一個字不碰。
-# 接上寫入之後這一段就該整段拿掉。
+# ~~接上寫入之後這一段就該整段拿掉。~~ → 2026-10-09：只接上了四個鍵，ALO-3 那一枚仍要這一句，所以留著；
+#    本句對 ALO-3 仍為真（該鍵在本頁沒有寫入路徑）。等 ALO-3 也接上，這一段才整段拿掉。
 SAVE_DISABLED_REASON = "存檔寫入端尚未接上，這一輪只讀不寫"
 
 # `44` 4.5 `user_setting` 裡屬於本頁的五個鍵（順序同 `ui_v2/alo/fixtures.py::user_settings`）。
@@ -47,6 +53,26 @@ SETTING_KEYS = (
     "alo_bucket_names",
     "alo_scenario_input",
 )
+
+
+# 已接上寫入的四個鍵（ALO-1 兩鍵、ALO-4 兩鍵）。`apply_live_notes` 依按鈕的 `_keys` 判斷要不要停用：
+# 一枚按鈕要寫的鍵**全部**在這裡才放行，否則照舊停用（fail-closed；不認塊代碼字串）。
+SAVE_WIRED_KEYS = frozenset({
+    "alo_target_weights",
+    "alo_tolerance_pp",
+    "alo_basis",
+    "alo_bucket_names",
+})
+
+# 寫入時交給 L2 的 `value_kind`。`alo_basis` 的 "list" 是 L2 `settings_store.ENUM_KIND` 的鏡像
+# （本檔不得 import services），由 tests/test_v2_tables_settings_store_page.py 無條件比對；
+# 就算鏡像漂移，L2 `check_setting_value` 也會回 `kind_mismatch` 不存 —— 寫不進去，不會寫錯。
+VALUE_KINDS = {
+    "alo_target_weights": "list",
+    "alo_tolerance_pp": "float",
+    "alo_basis": "list",
+    "alo_bucket_names": "list",
+}
 
 
 class BadSettingValue(ValueError):
@@ -248,20 +274,151 @@ def _strip_hint(node):
     return node
 
 
-def apply_live_notes(model: dict) -> dict:
+def apply_live_notes(model: dict, *, wired_keys=SAVE_WIRED_KEYS) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
     1. 頁首的示意行不印（`hint_note` 清空；`page.py` 正式模式那一支也不印它）；
     2. 每一塊的示意行拿掉（`logic.HINT_NOTE`）；
-    3. 會寫 `user_setting` 的按鈕停用並寫出原因（本輪只接讀，見 `SAVE_DISABLED_REASON`）。
+    3. 會寫 `user_setting`、但要寫的鍵還沒接上的按鈕停用並寫出原因（見 `SAVE_DISABLED_REASON`）。
+
+    wired_keys：已接上寫入的鍵。預設 `SAVE_WIRED_KEYS`；呼叫端沒有寫入函式可用時（`page.render`
+    沒拿到 `save_live`）要傳空的 —— 那時每一枚存檔都按了不會存，一律照舊停用。
 
     **本輪不動任何既有文案**：這裡只做「拿掉」與「停用」，沒有新增任何一句話上畫面
-    （停用原因顯示在按鈕的 tooltip，沿用 `ui_v2/mkt/live.py` 的同一句）。
+    （停用原因顯示在按鈕的 tooltip）。
     """
+    wired = frozenset(wired_keys)
     out = _strip_hint(copy.deepcopy(model))
     out["hint_note"] = ""
     for button in _walk_buttons(out["blocks"]):
-        if button["_writes"]:          # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting
-            button["_enabled"] = False
-            button["disabled_reason"] = SAVE_DISABLED_REASON
+        if not button["_writes"]:      # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting
+            continue
+        keys = set(button["_keys"])
+        if keys and keys <= wired:
+            continue                   # 要寫的鍵全部接上了 ⇒ 照 logic 原樣（可按）
+        button["_enabled"] = False
+        button["disabled_reason"] = SAVE_DISABLED_REASON
+    return out
+
+
+# ───────────────────────── 存檔（ALO-1／ALO-4）─────────────────────────
+#
+# 流程：畫面輸入欄的當下字串 → `save_entries` 組出每一鍵要寫的試算表字串
+# → **先丟回 `_PARSERS` 解析一次**（解析不過不寫，訊息用解析器原文）→ `run_saves` 逐鍵呼叫寫入函式
+# → 每鍵的成敗交給 `merge_save_results` 記帳 → 下一輪 `dataset_with_save_errors` 併進 `save_errors`。
+# ⛔ 一律不改寫使用者打的字：不 strip、不補 0、不把非數字當 null（`CLAUDE.md` §1）。
+#    寫進去的就是畫面上的原字；形狀不對就由解析器擋下來，訊息照原文上畫面。
+
+# JSON 數字的文法（RFC 8259）。比重欄的字串**整段**符合才原樣嵌進 JSON 當數字；
+# 其餘（含前後空白、`.6`、`nan`、`六成`）一律當 JSON 字串嵌入，交給解析器以「不是有限的數」擋下。
+_JSON_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
+
+
+def _row_count(values, name_of) -> int:
+    count = 0
+    while name_of(count) in values:
+        count += 1
+    return count
+
+
+def _target_weights_text(values):
+    """目標列 → `[{"bucket": 字串, "weight_ratio": 數或 null}, ...]`，順序同畫面列序；一列也沒有 → None。"""
+    count = _row_count(values, lambda i: f"alo_target_{i}_bucket")
+    if count == 0:
+        return None
+    items = []
+    for index in range(count):
+        bucket = values[f"alo_target_{index}_bucket"]
+        weight = values[f"alo_target_{index}_weight"]
+        if weight == "":
+            token = "null"                                  # `44` ALO-1：比重可以留空
+        elif isinstance(weight, str) and _JSON_NUMBER.fullmatch(weight):
+            token = weight                                  # 原字照嵌，不經 float 轉一手
+        else:
+            token = json.dumps(weight, ensure_ascii=False)  # 不是數字 ⇒ 當字串嵌，讓解析器擋
+        items.append('{"bucket": ' + json.dumps(bucket, ensure_ascii=False)
+                     + ', "weight_ratio": ' + token + "}")
+    return "[" + ", ".join(items) + "]"
+
+
+def _bucket_names_text(values):
+    count = _row_count(values, lambda i: f"alo_bucket_name_{i}")
+    if count == 0:
+        return None
+    return json.dumps([values[f"alo_bucket_name_{i}"] for i in range(count)], ensure_ascii=False)
+
+
+def _blank_is_none(value):
+    return None if value is None or value == "" else value
+
+
+_COMPOSERS = {
+    "alo_target_weights": _target_weights_text,
+    "alo_tolerance_pp": lambda values: _blank_is_none(values["alo_tolerance_pp"]),
+    "alo_basis": lambda values: values["alo_basis"],          # radio 未選 → None
+    "alo_bucket_names": _bucket_names_text,
+}
+
+
+def save_entries(keys, values, *, settings_failed=False) -> list:
+    """一枚存檔要寫的鍵 → `[{"key", "value"（試算表字串或 None）, "value_kind", "error"}, ...]`。
+
+    values：`{輸入欄 name（如 alo_target_0_bucket、alo_basis）: 畫面上的當下值}`。
+    `error` 非 None ⇒ 解析不過，**不寫**，訊息是 `BadSettingValue` 原文。
+    settings_failed：`user_setting` 讀失敗時畫面上沒有已存值可編（`logic` 那時不畫輸入欄），
+    此時一律不寫（回空清單）—— 寫了就是拿空白去蓋掉讀不到的真值（`CLAUDE.md` §1）。
+    """
+    if settings_failed:
+        return []
+    out = []
+    for key in keys:
+        if key not in SAVE_WIRED_KEYS:
+            raise ValueError(f"{key} 的寫入尚未接上")
+        text = _COMPOSERS[key](values)
+        error = None
+        if text is not None:
+            try:
+                _PARSERS[key](text, key)
+            except BadSettingValue as exc:
+                error = str(exc)
+        out.append({"key": key, "value": text, "value_kind": VALUE_KINDS[key], "error": error})
+    return out
+
+
+def run_saves(entries, save) -> dict:
+    """逐鍵寫入。回 `{鍵: None（已存）或失敗訊息原文}`。
+
+    save：`source.save_setting(鍵, 值或 None, value_kind)`，回 L2 `save_setting_for_page` 的 dict。
+    一鍵失敗不擋另一鍵（客戶 2026-10-09 裁示：已成功的鍵保留，不 rollback）。
+    寫入以外的例外照樣往上拋，不吞。
+    """
+    results = {}
+    for entry in entries:
+        if entry["error"] is not None:
+            results[entry["key"]] = entry["error"]
+            continue
+        out = save(entry["key"], entry["value"], entry["value_kind"])
+        if out["status"] == "saved":
+            results[entry["key"]] = None
+        else:
+            # 訊息已由 L2 遮蔽；萬一是空字串，退回 L2 的狀態碼原文，不讓失敗變成「看起來成功」。
+            results[entry["key"]] = out.get("message") or out["status"]
+    return results
+
+
+def merge_save_results(previous, results) -> dict:
+    """把這一次的逐鍵結果併進累積的失敗字典（不改呼叫端那一份）：成功的鍵移除、失敗的鍵寫入訊息。"""
+    out = dict(previous or {})
+    for key, message in results.items():
+        if message is None:
+            out.pop(key, None)
+        else:
+            out[key] = message
+    return out
+
+
+def dataset_with_save_errors(dataset, errors) -> dict:
+    """把累積的存檔失敗併進 `dataset["save_errors"]`（淺複本，不改呼叫端那一份）。"""
+    out = dict(dataset)
+    out["save_errors"] = {**(dataset.get("save_errors") or {}), **dict(errors or {})}
     return out
