@@ -1005,7 +1005,10 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
             ccy=ccy,
             error=div_error or window_error,
             missing=div_missing,
-            na_reason=not_applicable_text(principal_na) if principal_na else None,
+            # 區間內每單位配息全為 0（L2 允許 0 元配息列）時沒有分母，與「區間內沒有配息列」
+            # 印同一個既有字句，而不是空白 ok —— 空白 ok 會讓 `_breaches` 拿 None 比大小而崩（客戶 2026-10-08 裁示）。
+            na_reason=(not_applicable_text(principal_na) if principal_na else None)
+            or (NA_NO_DIVIDEND if not per_unit_total else None),
             label="本金類配息佔比",
             fund_scoped=div_fund_scoped,
             table_wide=div_wide,
