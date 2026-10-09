@@ -1477,3 +1477,64 @@ def test_fixtures的欄位照44第四節():
     assert set(dataset["user_setting"][0]) == {"setting_key", "setting_value", "value_kind", "updated_at"}
     for row in fixtures.scenario("first")["user_setting"]:
         assert row["setting_value"] is None and row["updated_at"] is None
+
+
+# ═════════════════════ 兩鍵存檔恰好一鍵失敗（客戶 2026-10-09 裁示）═════════════════════
+#
+# 恰好一鍵失敗 → 該鍵原位印 `44` 既有的「⛔ 取數失敗：<原文>」（`fetch_failed_text`），卡片層不再印；
+# 兩鍵都失敗、或單鍵卡（ALO-3）失敗 → 卡片層「存檔寫入失敗：…」一字不變。
+
+_PARTIAL_MSG = "HTTP 503 upstream unavailable（已遮蔽）"
+
+
+def _partial(*failed_keys):
+    return _model("full", save_errors={key: _PARTIAL_MSG for key in failed_keys})
+
+
+@pytest.mark.parametrize("code,keys", [
+    ("ALO-1", ("alo_target_weights", "alo_tolerance_pp")),
+    ("ALO-4", ("alo_basis", "alo_bucket_names")),
+])
+def test_恰好一鍵失敗_該鍵原位印取數失敗原文_卡片層不印(code, keys):
+    ok = _block(_model("full"), code)
+    for failed_key in keys:
+        card = _block(_partial(failed_key), code)
+        assert card["key_error_lines"] == {failed_key: [logic.fetch_failed_text(_PARTIAL_MSG)]}, failed_key
+        assert card["key_error_lines"][failed_key] == ["⛔ 取數失敗：" + _PARTIAL_MSG]
+        assert card["error_lines"] == [], failed_key
+        # 失敗的鍵維持可重新儲存：按鈕照舊可按、照舊一枚寫兩鍵（`44`：不拆成兩枚）。
+        save = [b for b in card["buttons"] if b["_writes"]]
+        assert len(save) == 1 and save[0]["_enabled"] and save[0]["_keys"] == keys
+        assert [f["_value"] for f in card["inputs"]] == [f["_value"] for f in ok["inputs"]]
+    for other in ("ALO-2", "ALO-3"):
+        assert _block(_partial(keys[0]), other)["_rows"] == _block(_model("full"), other)["_rows"], other
+
+
+@pytest.mark.parametrize("code,keys", [
+    ("ALO-1", ("alo_target_weights", "alo_tolerance_pp")),
+    ("ALO-4", ("alo_basis", "alo_bucket_names")),
+])
+def test_兩鍵皆失敗_維持卡片層存檔寫入失敗_不走逐鍵(code, keys):
+    card = _block(_partial(*keys), code)
+    assert card["error_lines"] == [logic.TEXT_SAVE_FAILED + "：" + _PARTIAL_MSG]
+    assert card["key_error_lines"] == {}
+
+
+def test_另一張卡的鍵失敗_不影響這一張卡():
+    alo1 = _block(_partial("alo_basis"), "ALO-1")
+    assert alo1["error_lines"] == [] and alo1["key_error_lines"] == {}
+
+
+def test_單鍵卡ALO3失敗_照舊卡片層_沒有逐鍵欄位():
+    card = _block(_partial("alo_scenario_input"), "ALO-3")
+    assert card["error_lines"] == [logic.TEXT_SAVE_FAILED + "：" + _PARTIAL_MSG]
+    assert "key_error_lines" not in card
+
+
+def test_示範模式savefail_五鍵全失敗_畫面行為不變():
+    """`?savefail=1` 五鍵全失敗 ⇒ 兩鍵卡都是「兩鍵皆失敗」，逐鍵一行都不出、卡片層照舊。"""
+    model = _model("full", save_failed=True)
+    for code in ("ALO-1", "ALO-3", "ALO-4"):
+        card = _block(model, code)
+        assert card["error_lines"] == ["存檔寫入失敗：" + fixtures.SAVE_FAIL_MESSAGE], code
+        assert not card.get("key_error_lines"), code

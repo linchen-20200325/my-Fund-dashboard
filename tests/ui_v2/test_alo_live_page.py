@@ -11,6 +11,7 @@
 stub 只回一份最小的合法資料，不呼叫 `source`、不打任何網路。
 """
 
+import json
 import pathlib
 import sys
 
@@ -205,3 +206,191 @@ def test_不傳載入函式時_render的預設值就是None():
     param = inspect.signature(page.render).parameters["load_live"]
     assert param.default is None
     assert param.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+# ═══════════════════════ 存檔接上寫入（ALO-1／ALO-4，客戶 2026-10-09 裁示）═══════════════════════
+#
+# 寫入函式以替身注入：腳本經 `sys.modules` 裡的探針模組呼叫它，測試端讀它記下的呼叫。
+# 不呼叫 `source`、不打任何網路。
+
+_PROBE = "_alo_live_save_probe"
+_FAIL_MSG = "HTTP 503 upstream unavailable（已遮蔽）"
+
+# 試算表上的原字串（`source.load_live` 的 `notes["setting_raw"]`）：沒動過的欄位寫回它。
+_RAW = {
+    "alo_target_weights": f'[{{"bucket": "{_CORE}", "weight_ratio": 0.6}}, {{"bucket": "{_SAT}", "weight_ratio": 0.4}}]',
+    "alo_tolerance_pp": "4",
+    "alo_basis": "成本",
+    "alo_bucket_names": f'["{_CORE}", "{_SAT}"]',
+    "alo_scenario_input": None,
+}
+
+
+def _save_script(dataset=None, raw=None):
+    dataset = _DATASET if dataset is None else dataset
+    notes = {"setting_raw": _RAW if raw is None else raw}
+    return f"""
+import sys
+sys.path.insert(0, {str(_ROOT)!r})
+from ui_v2.alo import page
+import {_PROBE} as probe
+
+def _stub_loader():
+    return {{"dataset": {dataset!r}, "notes": {notes!r}}}
+
+page.render(load_live=_stub_loader, save_live=probe.save)
+"""
+
+
+_SCRIPT_SAVE = _save_script()
+
+
+@pytest.fixture
+def probe(monkeypatch):
+    import types
+
+    module = types.ModuleType(_PROBE)
+    module.calls = []
+    module.failing = set()
+
+    def save(key, value, kind):
+        module.calls.append((key, value, kind))
+        if key in module.failing:
+            return {"status": "failed", "key": key, "message": _FAIL_MSG}
+        return {"status": "saved", "key": key, "row": {}}
+
+    module.save = save
+    monkeypatch.setitem(sys.modules, _PROBE, module)
+    return module
+
+
+def _markdown_values(at):
+    return [e.value for e in at.markdown]
+
+
+def _fail_line_index(at):
+    error = f'<div class="alo-errline" role="alert">{logic.fetch_failed_text(_FAIL_MSG)}</div>'
+    values = _markdown_values(at)
+    assert values.count(error) == 1, values
+    return values.index(error)
+
+
+def test_ALO1存檔_一鍵成功一鍵失敗_失敗鍵原位出現取數失敗原文_輸入不清_再按兩鍵都再寫(monkeypatch, probe):
+    probe.failing = {"alo_tolerance_pp"}
+    at = _run(_SCRIPT_SAVE, monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    save = at.button(key="live_alo1_btn_0")
+    assert not save.disabled                                   # 正式模式拿到寫入函式 ⇒ 可按
+    at.text_input(key="live_alo_target_0_weight").set_value("0.65")
+    at.text_input(key="live_alo_tolerance_pp").set_value("5")
+    save.click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert probe.calls == [
+        ("alo_target_weights",
+         f'[{{"bucket": "{_CORE}", "weight_ratio": 0.65}}, {{"bucket": "{_SAT}", "weight_ratio": 0.4}}]', "list"),
+        ("alo_tolerance_pp", "5", "float"),
+    ]
+    # 失敗的那一鍵：在容許帶那一段之後（緊接「容許帶：…」那一行）；卡片層不印第二次。
+    values = _markdown_values(at)
+    index = _fail_line_index(at)
+    assert values[index - 1].startswith('<div class="alo-line">容許帶：'), values[index - 1]
+    assert not any(logic.TEXT_SAVE_FAILED in v for v in values)
+    # 當下內容留在畫面上不清掉（`44` ALO-1 空狀態）。
+    assert at.text_input(key="live_alo_target_0_weight").value == "0.65"
+    assert at.text_input(key="live_alo_tolerance_pp").value == "5"
+    # 失敗的鍵維持可重新儲存：再按一次，照樣兩鍵都寫（一枚按鈕寫兩鍵，不拆）。
+    assert not at.button(key="live_alo1_btn_0").disabled
+    at.button(key="live_alo1_btn_0").click().run()
+    assert [c[0] for c in probe.calls] == ["alo_target_weights", "alo_tolerance_pp"] * 2
+    # 這一次都成功 ⇒ 逐鍵那一行消失。
+    probe.failing = set()
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not any("取數失敗" in v for v in _markdown_values(at))
+
+
+def test_ALO1存檔_目標列失敗_印在目標列那一段之後_容許帶之前(monkeypatch, probe):
+    probe.failing = {"alo_target_weights"}
+    at = _run(_SCRIPT_SAVE, monkeypatch)
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    values = _markdown_values(at)
+    index = _fail_line_index(at)
+    tolerance = [i for i, v in enumerate(values) if v.startswith('<div class="alo-line">容許帶：')]
+    assert tolerance and index < tolerance[0]
+
+
+def test_ALO4存檔_類別名稱失敗_基準照寫_失敗鍵原位(monkeypatch, probe):
+    probe.failing = {"alo_bucket_names"}
+    at = _run(_SCRIPT_SAVE, monkeypatch)
+    at.radio(key="live_alo_basis").set_value(logic.BASIS_MV)
+    at.button(key="live_alo4_btn_1").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert probe.calls == [
+        ("alo_basis", logic.BASIS_MV, "list"),
+        ("alo_bucket_names", f'["{_CORE}", "{_SAT}"]', "list"),
+    ]
+    values = _markdown_values(at)
+    index = _fail_line_index(at)
+    basis = [i for i, v in enumerate(values) if v.startswith('<div class="alo-line">目前基準：')]
+    assert basis and index > basis[0]
+    assert not any(logic.TEXT_SAVE_FAILED in v for v in values)
+    assert at.radio(key="live_alo_basis").value == logic.BASIS_MV          # 當下選的值不清掉
+
+
+def test_有寫入函式時_ALO3存檔照舊停用_其餘兩枚可按(monkeypatch, probe):
+    at = _run(_SCRIPT_SAVE, monkeypatch)
+    assert not at.button(key="live_alo1_btn_0").disabled
+    assert not at.button(key="live_alo4_btn_1").disabled
+    alo3 = [b for b in at.button if b.label == logic.TEXT_SAVE and b.key.startswith("live_alo3")]
+    assert len(alo3) == 1 and alo3[0].disabled and alo3[0].help == live.SAVE_DISABLED_REASON
+    assert probe.calls == []                                   # 沒按就沒寫
+
+
+def test_只傳save_live不傳load_live_當場炸():
+    with pytest.raises(ValueError, match="save_live"):
+        page.render(save_live=lambda *a: None)
+
+
+
+def test_設定讀取失敗時按存檔_卡上出現存檔寫入失敗行_寫入0次(monkeypatch, probe):
+    """2026-10-09 稽核回修：讀失敗時不寫（寫了就是拿空白蓋掉讀不到的真值），但不能按了沒反應 ——
+    兩鍵都記為存檔失敗、走卡片層既有「存檔寫入失敗：<讀取失敗原文>」。按鈕不停用。"""
+    import copy as _copy
+
+    message = "HTTP 429 quota exceeded（已遮蔽）"
+    dataset = _copy.deepcopy(_DATASET)
+    dataset["errors"] = {"user_setting": message}
+    dataset["user_setting"] = []
+    at = _run(_save_script(dataset, raw={}), monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    for button_key in ("live_alo1_btn_0", "live_alo4_btn_1"):
+        assert not at.button(key=button_key).disabled
+        at.button(key=button_key).click().run()
+        assert not at.exception, [e.value for e in at.exception]
+    assert probe.calls == []
+    failed = (f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} '
+              f'{logic.TEXT_SAVE_FAILED}：{message}</div>')
+    assert _markdown_values(at).count(failed) == 2                # ALO-1、ALO-4 各一行
+
+
+def test_已存值帶四位以上小數_沒動就按存檔_寫回原值不寫顯示字串(monkeypatch, probe):
+    import copy as _copy
+
+    dataset = _copy.deepcopy(_DATASET)
+    raw = dict(_RAW, alo_target_weights=(f'[{{"bucket": "{_CORE}", "weight_ratio": 0.333333}}, '
+                                         f'{{"bucket": "{_SAT}", "weight_ratio": 0.00001}}]'),
+               alo_tolerance_pp="2.55555")
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "alo_target_weights":
+            row["setting_value"] = [{"bucket": _CORE, "weight_ratio": 0.333333},
+                                    {"bucket": _SAT, "weight_ratio": 0.00001}]
+        if row["setting_key"] == "alo_tolerance_pp":
+            row["setting_value"] = 2.55555
+    at = _run(_save_script(dataset, raw), monkeypatch)
+    assert at.text_input(key="live_alo_target_0_weight").value == "0.3333"   # 前提：顯示字串被四捨五入過
+    assert at.text_input(key="live_alo_tolerance_pp").value == "2.5556"
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    written = dict((key, value) for key, value, _kind in probe.calls)
+    assert written["alo_tolerance_pp"] == "2.55555"
+    assert json.loads(written["alo_target_weights"]) == json.loads(raw["alo_target_weights"])

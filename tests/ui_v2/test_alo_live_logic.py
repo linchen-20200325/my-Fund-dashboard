@@ -161,7 +161,9 @@ def test_holding與policy一起標失敗():
 
 
 def _live_model(name="full"):
-    return live.apply_live_notes(logic.build_page_model(fixtures.scenario(name)))
+    # 正式路徑（page 拿到 save_live 時）明確傳已接上的鍵；預設值是空（fail-closed）。
+    return live.apply_live_notes(logic.build_page_model(fixtures.scenario(name)),
+                                 wired_keys=live.SAVE_WIRED_KEYS)
 
 
 def _all_strings(node):
@@ -205,20 +207,48 @@ def _buttons(model):
     return out
 
 
-def test_會寫user_setting的按鈕停用並寫出原因_其餘不動():
+def test_只有尚未接上寫入的存檔停用並寫出原因_其餘不動():
+    """2026-10-09 更正（舊名 `test_會寫user_setting的按鈕停用並寫出原因_其餘不動`）：
+    舊版斷言「凡是 `_writes` 非空的按鈕一律停用」—— 那正是客戶 2026-10-09 裁示要改掉的行為
+    （ALO-1／ALO-4 的存檔接上寫入）。現行：只有要寫的鍵不全在 `SAVE_WIRED_KEYS` 的那一枚停用，
+    實質就是 ALO-3（`alo_scenario_input`，存檔仍未授權）。匯出、導覽、新增列三類的比對一字未改。"""
     demo = logic.build_page_model(fixtures.scenario("full"))
     model = _live_model("full")
-    kinds = {b["_action_kind"] for b in _buttons(model) if not b["_enabled"]}
-    assert kinds == {"存檔"}, kinds
-    for button in _buttons(model):
-        if button["_writes"]:
-            assert button["_enabled"] is False
-            assert button["disabled_reason"] == live.SAVE_DISABLED_REASON
+    disabled = [b for b in _buttons(model) if not b["_enabled"]]
+    assert [b["_keys"] for b in disabled] == [("alo_scenario_input",)], disabled
+    assert disabled[0]["disabled_reason"] == live.SAVE_DISABLED_REASON
+    for code in ("ALO-1", "ALO-4"):
+        save = [b for b in logic.find_block(model, code)["buttons"] if b["_writes"]]
+        assert len(save) == 1 and save[0]["_enabled"] is True, code
+        assert save[0]["disabled_reason"] == "", code
     # 匯出、導覽、新增列三類一字未動（連標籤與停用原因都與示範模式相同）。
     same = [(b["label"], b["_enabled"], b["disabled_reason"])
             for b in _buttons(model) if not b["_writes"]]
     assert same == [(b["label"], b["_enabled"], b["disabled_reason"])
                     for b in _buttons(demo) if not b["_writes"]]
+
+
+def test_沒有寫入函式時_三枚存檔照舊全部停用():
+    """`page.render` 沒拿到 `save_live` 時傳 `wired_keys=()`：那時按了不會存，一律停用（與接寫入之前相同）。"""
+    for kwargs in ({"wired_keys": ()}, {}):          # 2026-10-09 稽核回修：預設值就是空（fail-closed）
+        model = live.apply_live_notes(logic.build_page_model(fixtures.scenario("full")), **kwargs)
+        saves = [b for b in _buttons(model) if b["_writes"]]
+        assert len(saves) == 3, kwargs
+        assert all(not b["_enabled"] and b["disabled_reason"] == live.SAVE_DISABLED_REASON
+                   for b in saves), kwargs
+
+
+def test_停用判斷看按鈕的鍵_不看塊代碼():
+    """fail-closed：一枚會寫的按鈕只要有一個鍵沒接上（或根本沒帶鍵）就停用。"""
+    model = logic.build_page_model(fixtures.scenario("full"))
+    alo1_save = logic.find_block(model, "ALO-1")["buttons"][0]
+    alo1_save["_keys"] = ("alo_target_weights", "alo_scenario_input")
+    alo4_save = [b for b in logic.find_block(model, "ALO-4")["buttons"] if b["_writes"]][0]
+    alo4_save["_keys"] = ()
+    out = live.apply_live_notes(model, wired_keys=live.SAVE_WIRED_KEYS)
+    for code in ("ALO-1", "ALO-4"):
+        save = [b for b in logic.find_block(out, code)["buttons"] if b["_writes"]][0]
+        assert save["_enabled"] is False and save["disabled_reason"] == live.SAVE_DISABLED_REASON, code
 
 
 def test_停用原因逐字等於客戶核准的那一句():
@@ -229,15 +259,17 @@ def test_停用原因逐字等於客戶核准的那一句():
 
 def test_停用原因刻意不沿用mkt那一句_因為那一句在本頁是假的():
     """`ui_v2/mkt/page.py` 有 2 個 `on_click`（真的寫 `st.session_state`）⇒ mkt 那句字面正確；
-    `ui_v2/alo/page.py` 0 個、`ui_v2/alo/source.py` 沒有 save 函式 ⇒ 同一句在本頁是假的。"""
+    同一句在本頁的 ALO-3 是假的 —— 它的鍵 `alo_scenario_input` 在本頁沒有任何寫入路徑。
+    2026-10-09 更正：舊版另斷言 `ui_v2/alo/page.py` 的 `on_click` 為 0、`source.py` 沒有 save 函式；
+    ALO-1／ALO-4 接上寫入後兩者都不再成立（那正是本次裁示要改的行為）。本句現在只停用在 ALO-3 上，
+    所以改釘「ALO-3 的鍵不在已接上的集合裡」—— 那才是這一句仍然為真的前提。"""
     mkt_live = pytest.importorskip("ui_v2.mkt.live")
     assert live.SAVE_DISABLED_REASON != mkt_live.SAVE_DISABLED_REASON
     for implies_saved in ("存了", "留不到", "下次開頁"):
         assert implies_saved not in live.SAVE_DISABLED_REASON, implies_saved
-    page_src = (_ROOT / "ui_v2" / "alo" / "page.py").read_text(encoding="utf-8")
-    source_src = (_ROOT / "ui_v2" / "alo" / "source.py").read_text(encoding="utf-8")
-    assert page_src.count("on_click=") == 0
-    assert "def save" not in source_src
+    assert "alo_scenario_input" not in live.SAVE_WIRED_KEYS
+    assert set(live.SAVE_WIRED_KEYS) == {"alo_target_weights", "alo_tolerance_pp",
+                                         "alo_basis", "alo_bucket_names"}
 
 
 def test_正式模式的模型零禁詞_零方向詞零箭頭():
@@ -266,7 +298,7 @@ def test_live的import就是那幾個_純函式模組():
             prefix = ("." * node.level) + (node.module or "")
             names.add(prefix)
             names.update(prefix + ("." if node.module else "") + a.name for a in node.names)
-    assert names == {"__future__", "__future__.annotations", "copy", "json", "math", ".", ".logic"}, names
+    assert names == {"__future__", "__future__.annotations", "copy", "json", "math", "re", ".", ".logic"}, names
 
 
 # ═══════════════════════ ALO-GAP-分母全缺：總管 2026-09-28 盯住的那條界線 ═══════════════════════
@@ -321,3 +353,250 @@ def test_負控_市值基準但有台幣淨值時分母為正_根本不走那個
                                     logic.setting_value(dataset, "alo_bucket_names"))
     assert sum(v["value"] for v in values.values() if v["value"] is not None) > 0
     assert logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]     # 照常出列
+
+
+# ═══════════════════════ 存檔組值（ALO-1／ALO-4，客戶 2026-10-09 裁示）═══════════════════════
+#
+# 畫面上的當下字串 → 要寫的試算表字串；寫之前先丟回 `_PARSERS` 解析，解析不過不寫、訊息用解析器原文。
+# ⛔ 不 strip、不補 0、不把非數字當 null（`CLAUDE.md` §1）。
+
+_ALO1_KEYS = ("alo_target_weights", "alo_tolerance_pp")
+_ALO4_KEYS = ("alo_basis", "alo_bucket_names")
+
+
+def _alo1_values(rows, tolerance):
+    out = {"alo_tolerance_pp": tolerance}
+    for index, (bucket, weight) in enumerate(rows):
+        out[f"alo_target_{index}_bucket"] = bucket
+        out[f"alo_target_{index}_weight"] = weight
+    return out
+
+
+def _entries(keys, values, **kw):
+    return {e["key"]: e for e in live.save_entries(keys, values, **kw)}
+
+
+def test_組值_ALO1正常_順序同畫面列序_原字照寫():
+    out = _entries(_ALO1_KEYS, _alo1_values([(_CORE, "0.60"), (_SAT, "0.4")], "4"))
+    assert out["alo_target_weights"] == {
+        "key": "alo_target_weights", "value_kind": "list", "error": None,
+        "value": '[{"bucket": "%s", "weight_ratio": 0.60}, {"bucket": "%s", "weight_ratio": 0.4}]' % (_CORE, _SAT),
+    }
+    assert out["alo_tolerance_pp"] == {"key": "alo_tolerance_pp", "value": "4", "value_kind": "float",
+                                       "error": None}
+    # 寫出去的字串讀回來就是原值（與讀取端同一支解析器）。
+    assert live._PARSERS["alo_target_weights"](out["alo_target_weights"]["value"], "k") == [
+        {"bucket": _CORE, "weight_ratio": 0.6}, {"bucket": _SAT, "weight_ratio": 0.4}]
+
+
+def test_組值_比重留空寫成null():
+    out = _entries(_ALO1_KEYS, _alo1_values([(_CORE, "0.6"), (_SAT, "")], "4"))
+    assert out["alo_target_weights"]["error"] is None
+    assert json.loads(out["alo_target_weights"]["value"])[1] == {"bucket": _SAT, "weight_ratio": None}
+
+
+@pytest.mark.parametrize("weight", ["六成", "nan", ".6", "0,6", "1e999"])
+def test_組值_比重不是有限的數_不寫_訊息是解析器原文(weight):
+    out = _entries(_ALO1_KEYS, _alo1_values([(_CORE, weight)], "4"))
+    entry = out["alo_target_weights"]
+    with pytest.raises(live.BadSettingValue) as caught:
+        live._PARSERS["alo_target_weights"](entry["value"], "alo_target_weights")
+    assert entry["error"] == str(caught.value)
+    assert "weight_ratio 不是有限的數" in entry["error"]
+    assert out["alo_tolerance_pp"]["error"] is None             # 另一鍵不受牽連
+
+
+def test_組值_比重寫成60而不是0點6_不寫():
+    entry = _entries(_ALO1_KEYS, _alo1_values([(_CORE, "60")], "4"))["alo_target_weights"]
+    assert entry["error"] == "alo_target_weights 第 1 個元素的 weight_ratio 不在 0 到 1（60.0）"
+
+
+@pytest.mark.parametrize("weight", [" 0.6", "0.6 ", "\t0.6"])
+def test_組值_比重前後有空白_不strip_不寫(weight):
+    entry = _entries(_ALO1_KEYS, _alo1_values([(_CORE, weight)], "4"))["alo_target_weights"]
+    assert entry["error"] is not None and "不是有限的數" in entry["error"]
+    assert json.dumps(weight) in entry["value"]                 # 原字照嵌，沒有被修掉
+
+
+def test_組值_容許帶空字串寫None_前後空白不寫():
+    assert _entries(_ALO1_KEYS, _alo1_values([], ""))["alo_tolerance_pp"]["value"] is None
+    entry = _entries(_ALO1_KEYS, _alo1_values([], " 4"))["alo_tolerance_pp"]
+    assert entry["value"] == " 4"
+    assert entry["error"] == "alo_tolerance_pp 的值不是前後無空白的字串"
+    entry = _entries(_ALO1_KEYS, _alo1_values([], "四"))["alo_tolerance_pp"]
+    assert entry["error"] == "alo_tolerance_pp 的值不是數（alo_tolerance_pp）"
+
+
+def test_組值_一列也沒有_寫None清除():
+    entry = _entries(_ALO1_KEYS, _alo1_values([], "4"))["alo_target_weights"]
+    assert entry["value"] is None and entry["error"] is None
+
+
+def test_組值_ALO4_比重基準與類別名稱():
+    values = {"alo_basis": logic.BASIS_MV, "alo_bucket_name_0": _CORE, "alo_bucket_name_1": _SAT}
+    out = _entries(_ALO4_KEYS, values)
+    assert out["alo_basis"] == {"key": "alo_basis", "value": logic.BASIS_MV, "value_kind": "list",
+                                "error": None}
+    assert out["alo_bucket_names"]["value"] == json.dumps([_CORE, _SAT], ensure_ascii=False)
+    assert json.loads(out["alo_bucket_names"]["value"]) == [_CORE, _SAT]
+    assert out["alo_bucket_names"]["value_kind"] == "list" and out["alo_bucket_names"]["error"] is None
+
+
+def test_組值_ALO4_基準未選寫None_類別名稱空白不寫():
+    out = _entries(_ALO4_KEYS, {"alo_basis": None, "alo_bucket_name_0": ""})
+    assert out["alo_basis"]["value"] is None and out["alo_basis"]["error"] is None
+    assert out["alo_bucket_names"]["error"] == "alo_bucket_names 第 1 個元素不是非空字串"
+
+
+def test_組值_設定讀失敗時一律不寫_兩鍵都記為存檔失敗_訊息是讀取失敗原文():
+    """2026-10-09 稽核回修（舊版斷言回空清單 ⇒ 按了沒反應，§1 讓流程看起來成功）：
+    讀不到真值時畫面上沒有可編的已存值，寫了就是拿空白蓋掉讀不到的真值 ⇒ 不寫；
+    兩鍵都帶讀取失敗原文 ⇒ `run_saves` 記兩鍵皆失敗 ⇒ logic 走卡片層既有「存檔寫入失敗：…」。"""
+    dataset = fixtures.scenario("settingfail")
+    message = logic.settings_failure(dataset)
+    assert message
+    calls = []
+    for keys in (_ALO1_KEYS, _ALO4_KEYS):
+        entries = live.save_entries(keys, {}, settings_error=message)
+        assert [(e["key"], e["value"], e["error"]) for e in entries] == [(k, None, message) for k in keys]
+        results = live.run_saves(entries, lambda *a: calls.append(a))
+        assert results == {k: message for k in keys}
+    assert calls == []                                          # 寫入函式 0 次呼叫
+    dataset["save_errors"] = {k: message for k in _ALO1_KEYS + _ALO4_KEYS}
+    model = logic.build_page_model(dataset)
+    for code in ("ALO-1", "ALO-4"):
+        card = logic.find_block(model, code)
+        assert card["error_lines"] == [logic.TEXT_SAVE_FAILED + "：" + message], code
+        assert card["key_error_lines"] == {}, code
+
+
+def test_組值_沒接上的鍵當場炸():
+    with pytest.raises(ValueError, match="尚未接上"):
+        live.save_entries(("alo_scenario_input",), {})
+
+
+# ═══════════════════════ 逐鍵寫入與記帳 ═══════════════════════
+
+
+def test_寫入_一鍵成功一鍵失敗_不rollback_訊息原文():
+    calls = []
+
+    def save(key, value, kind):
+        calls.append((key, value, kind))
+        if key == "alo_tolerance_pp":
+            return {"status": "failed", "key": key, "message": "HTTP 503（已遮蔽）"}
+        return {"status": "saved", "key": key, "row": {}}
+
+    entries = live.save_entries(_ALO1_KEYS, _alo1_values([(_CORE, "1")], "4"))
+    results = live.run_saves(entries, save)
+    assert results == {"alo_target_weights": None, "alo_tolerance_pp": "HTTP 503（已遮蔽）"}
+    assert [c[0] for c in calls] == list(_ALO1_KEYS)
+    assert calls[1] == ("alo_tolerance_pp", "4", "float")
+
+
+def test_寫入_解析不過的鍵不呼叫寫入_另一鍵照寫():
+    calls = []
+
+    def save(key, value, kind):
+        calls.append(key)
+        return {"status": "saved", "key": key}
+
+    entries = live.save_entries(_ALO1_KEYS, _alo1_values([(_CORE, "abc")], "4"))
+    results = live.run_saves(entries, save)
+    assert calls == ["alo_tolerance_pp"]
+    assert "不是有限的數" in results["alo_target_weights"] and results["alo_tolerance_pp"] is None
+
+
+@pytest.mark.parametrize("status", ["kind_mismatch", "kind_missing", "failed"])
+def test_寫入_非saved一律記為失敗(status):
+    results = live.run_saves(
+        [{"key": "alo_basis", "value": logic.BASIS_COST, "value_kind": "list", "error": None}],
+        lambda *a: {"status": status, "key": "alo_basis", "message": f"（{status} 原文）"},
+    )
+    assert results == {"alo_basis": f"（{status} 原文）"}
+
+
+def test_寫入_寫入以外的例外照樣往上拋():
+    def save(*args):
+        raise RuntimeError("boom")
+
+    entries = live.save_entries(_ALO4_KEYS, {"alo_basis": logic.BASIS_COST})
+    with pytest.raises(RuntimeError, match="boom"):
+        live.run_saves(entries, save)
+
+
+def test_記帳_成功移除_失敗寫入_不改呼叫端那一份():
+    before = {"alo_basis": "舊的失敗", "alo_tolerance_pp": "舊的"}
+    after = live.merge_save_results(before, {"alo_basis": None, "alo_bucket_names": "新的失敗"})
+    assert after == {"alo_tolerance_pp": "舊的", "alo_bucket_names": "新的失敗"}
+    assert before == {"alo_basis": "舊的失敗", "alo_tolerance_pp": "舊的"}
+    assert live.merge_save_results(None, {}) == {}
+
+
+def test_併進save_errors_不改呼叫端那一份():
+    dataset = fixtures.scenario("full")
+    out = live.dataset_with_save_errors(dataset, {"alo_basis": "x"})
+    assert out["save_errors"] == {"alo_basis": "x"} and dataset["save_errors"] == {}
+    assert live.dataset_with_save_errors(dataset, None)["save_errors"] == {}
+
+
+
+# ═══════════════════════ 沒動過的欄位寫回原值（2026-10-09 稽核回修）═══════════════════════
+#
+# 輸入欄初值是 `format_number` 的顯示字串（最多四位小數）；沒動過就按存檔，必須寫回已存的原值，
+# 不得把 0.333333 寫成 0.3333、0.00001 寫成 0、"2.55555" 寫成 "2.5556"。
+
+_RAW_WEIGHTS = '[{"bucket": "%s", "weight_ratio": 0.333333}, {"bucket": "%s", "weight_ratio": 0.00001}]' % (
+    _CORE, _SAT)
+
+
+def _precise():
+    """已存值帶四位以上小數的 ALO-1：回 (塊的輸入欄節點, 畫面當下值＝顯示字串, 原字串表)。"""
+    raw = {"alo_target_weights": _RAW_WEIGHTS, "alo_tolerance_pp": "2.55555"}
+    rows, problem = live.parse_user_settings(_rows(**raw))
+    assert problem is None
+    dataset = dict(fixtures.scenario("full"), user_setting=rows)
+    card = logic.find_block(logic.build_page_model(dataset), "ALO-1")
+    values = {field["name"]: field["value_text"] for field in card["inputs"]}
+    # 前提：顯示字串確實被四捨五入過 —— 不成立的話下面幾條就是空測。
+    assert values["alo_target_0_weight"] == "0.3333" and values["alo_target_1_weight"] == "0"
+    assert values["alo_tolerance_pp"] == "2.5556"
+    return card["inputs"], values, raw
+
+
+def test_沒動過的欄位按存檔_寫出值與原值相同():
+    fields, values, raw = _precise()
+    out = _entries(_ALO1_KEYS, values, fields=fields, raw=raw)
+    assert out["alo_tolerance_pp"]["value"] == "2.55555" and out["alo_tolerance_pp"]["error"] is None
+    assert out["alo_target_weights"]["error"] is None
+    assert live._PARSERS["alo_target_weights"](out["alo_target_weights"]["value"], "k") == \
+        live._PARSERS["alo_target_weights"](_RAW_WEIGHTS, "k")
+    assert json.loads(out["alo_target_weights"]["value"]) == json.loads(_RAW_WEIGHTS)
+
+
+def test_改動其中一列_只有那一列換成新輸入():
+    fields, values, raw = _precise()
+    values["alo_target_1_weight"] = "0.2"
+    out = _entries(_ALO1_KEYS, values, fields=fields, raw=raw)
+    assert json.loads(out["alo_target_weights"]["value"]) == [
+        {"bucket": _CORE, "weight_ratio": 0.333333}, {"bucket": _SAT, "weight_ratio": 0.2}]
+    assert out["alo_tolerance_pp"]["value"] == "2.55555"
+    values["alo_tolerance_pp"] = "3"
+    assert _entries(_ALO1_KEYS, values, fields=fields, raw=raw)["alo_tolerance_pp"]["value"] == "3"
+
+
+def test_沒動過的留空列與未設定容許帶_照舊寫null與None():
+    rows, _ = live.parse_user_settings(_rows(alo_target_weights=_weights([(_CORE, None)])))
+    dataset = dict(fixtures.scenario("full"), user_setting=rows)
+    card = logic.find_block(logic.build_page_model(dataset), "ALO-1")
+    values = {field["name"]: field["value_text"] for field in card["inputs"]}
+    out = _entries(_ALO1_KEYS, values, fields=card["inputs"],
+                   raw={"alo_target_weights": _weights([(_CORE, None)]), "alo_tolerance_pp": None})
+    assert json.loads(out["alo_target_weights"]["value"]) == [{"bucket": _CORE, "weight_ratio": None}]
+    assert out["alo_tolerance_pp"]["value"] is None
+
+
+def test_沒動過但原字串表漏了那一鍵_當場炸不猜():
+    fields, values, _raw = _precise()
+    with pytest.raises(KeyError):
+        live.save_entries(_ALO1_KEYS, values, fields=fields, raw={})

@@ -11,10 +11,12 @@
    但**本頁沒有後端**：按下去不寫任何東西、也不離開本頁（ALO-GAP-導覽目的地）。
    這是一個用假資料畫的頁面，不是接上資料的成品。
 
-正式模式（`ui_v2/app_alo_live.py`）由呼叫端注入載入函式（`render(load_live=)`），資料改由
-`ui_v2/alo/source.py` 從 L2 取得；正式模式才有的調整（不印示意字樣、寫入端按鈕停用）
-全部住在 `live.py`，本檔只畫。不傳 `load_live` 時（示範入口 `ui_v2/app_alo.py`、既有測試）
-行為與加這個參數之前**逐字相同**。
+正式模式（`ui_v2/app_alo_live.py`）由呼叫端注入載入函式與寫入函式（`render(load_live=, save_live=)`），
+資料改由 `ui_v2/alo/source.py` 從 L2 取得；正式模式才有的調整（不印示意字樣、尚未接上的寫入端按鈕停用、
+存檔要寫什麼與成敗怎麼記）全部住在 `live.py`，本檔只畫、只在按鈕上掛 callback。
+2026-10-09 起正式模式的 ALO-1／ALO-4「存檔」真的寫入（上面那段「本頁沒有後端」只對示範模式成立）；
+ALO-3 的存檔客戶仍未授權，照舊停用。不傳 `load_live`／`save_live` 時（示範入口 `ui_v2/app_alo.py`、
+既有測試）行為與加這兩個參數之前**逐字相同**。
 """
 
 from __future__ import annotations
@@ -183,6 +185,13 @@ def _error_lines(block: dict) -> None:
         _html(f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} {_esc(line)}</div>')
 
 
+def _key_error_lines(block: dict, setting_key: str) -> None:
+    """一枚存檔寫兩鍵、恰好一鍵寫失敗時，畫在那一鍵自己的輸入欄原位（客戶 2026-10-09 裁示）。
+    字串由 logic.fetch_failed_text 產生，圖示 ⛔ 已在字串裡，本檔不另加圖示、不寫字面。"""
+    for line in (block.get("key_error_lines") or {}).get(setting_key, ()):
+        _html(f'<div class="alo-errline" role="alert">{_esc(line)}</div>')
+
+
 def _placeholder(block: dict) -> None:
     node = block.get("placeholder")
     if not node:
@@ -192,13 +201,39 @@ def _placeholder(block: dict) -> None:
     _html(f'<div class="alo-empty" style="--alo-tone:{_tone(node["_tone"])}">{_esc(text)}</div>')
 
 
-def _buttons(block: dict, prefix: str) -> None:
+# 正式模式存檔失敗的累積帳（`{鍵: 失敗訊息}`）。成功的鍵由 `live.merge_save_results` 移除。
+_SAVE_ERRORS_STATE = "_alo_live_save_errors"
+
+
+def _on_save(keys, fields, prefix, ctx) -> None:
+    """「存檔」的 on_click：在重繪之前跑，所以重繪時 `load_live()` 讀到的是存完的值（L1 存檔後自己清快取）。
+    只收集輸入欄的當下值、呼叫注入的寫入函式；要寫什麼、成敗怎麼記，全部由 live.py 判定。
+    不 `st.rerun()`、不清掉輸入欄的值（`44`：存檔失敗時當下內容留在畫面上不清掉）。"""
+    values = {field["name"]: st.session_state[f"{prefix}_{field['name']}"] for field in fields}
+    entries = live.save_entries(keys, values, fields=fields, raw=ctx["setting_raw"],
+                                settings_error=ctx["settings_error"])
+    results = live.run_saves(entries, ctx["save_live"])
+    st.session_state[_SAVE_ERRORS_STATE] = live.merge_save_results(
+        st.session_state.get(_SAVE_ERRORS_STATE), results
+    )
+
+
+def _save_kwargs(block: dict, button: dict, input_prefix: str, ctx) -> dict:
+    """只有正式模式拿到寫入函式、且這一枚「存檔」可按時才掛 callback；其餘一律不帶任何額外參數。
+    input_prefix：輸入欄 key 的前綴（正式模式為 `live`），與按鈕 key 的前綴不同。"""
+    if ctx is None or not button["_writes"] or not button["_enabled"]:
+        return {}
+    return {"on_click": _on_save, "args": (button["_keys"], block["inputs"], input_prefix, ctx)}
+
+
+def _buttons(block: dict, prefix: str, ctx=None, input_prefix: str = "") -> None:
     for index, button in enumerate(block.get("buttons", ()) or ()):
         st.button(
             button["label"],
             key=f"{prefix}_btn_{index}",
             disabled=not button["_enabled"],
             help=button["disabled_reason"] or None,
+            **_save_kwargs(block, button, input_prefix, ctx),
         )
 
 
@@ -239,7 +274,7 @@ def _render_alo0(block: dict) -> None:
 # ───────────────────────── 層 2 ─────────────────────────
 
 
-def _render_alo1(block: dict, scenario: str) -> None:
+def _render_alo1(block: dict, scenario: str, ctx=None) -> None:
     _html(f'<div class="alo-intro">{_esc(block["intro_line"])}</div>')
     _card_head(block)
     _placeholder(block)
@@ -254,16 +289,18 @@ def _render_alo1(block: dict, scenario: str) -> None:
         if row["tail_text"]:
             _lines([row["tail_text"]], "alo-line")
     _lines(block["unset_lines"], "alo-line")
+    _key_error_lines(block, "alo_target_weights")
     for field in fields[2 * len(block["_rows"]) :]:
         _text_input(field, f"{scenario}_{field['name']}")
     _lines(block["tolerance_lines"], "alo-line")
+    _key_error_lines(block, "alo_tolerance_pp")
     _lines(block["sum_lines"], "alo-line")
     _error_lines(block)
-    _buttons(block, f"{scenario}_alo1")
+    _buttons(block, f"{scenario}_alo1", ctx, scenario)
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo2(block: dict, scenario: str) -> None:
+def _render_alo2(block: dict, scenario: str, ctx=None) -> None:
     _card_head(block)
     _placeholder(block)
     if block["_rows"]:
@@ -280,7 +317,7 @@ def _render_alo2(block: dict, scenario: str) -> None:
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo3(block: dict, scenario: str) -> None:
+def _render_alo3(block: dict, scenario: str, ctx=None) -> None:
     _card_head(block)
     fields = block["inputs"]
     for index, row in enumerate(block["input_rows"]):
@@ -315,7 +352,7 @@ def _expander(block: dict):
     )
 
 
-def _render_alo4(block: dict, scenario: str) -> None:
+def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         for field in block["inputs"][:1]:
@@ -329,9 +366,11 @@ def _render_alo4(block: dict, scenario: str) -> None:
                 horizontal=True,
             )
         _lines([block["basis_line"]] if block["basis_line"] else [], "alo-line")
+        _key_error_lines(block, "alo_basis")
         for field in block["inputs"][1:]:
             _text_input(field, f"{scenario}_{field['name']}")
         _lines(block["bucket_unset_lines"], "alo-line")
+        _key_error_lines(block, "alo_bucket_names")
         if block["_assign_rows"]:
             _html(
                 _table(
@@ -350,13 +389,14 @@ def _render_alo4(block: dict, scenario: str) -> None:
                 key=f"{scenario}_alo4_btn_{index}",
                 disabled=not button["_enabled"],
                 help=button["disabled_reason"] or None,
+                **_save_kwargs(block, button, scenario, ctx),
             )
             if button["_action_kind"] == "導覽" and block["goto_note"]:
                 # 44 逐字「並在按鈕下方寫一行「持倉資料在 Sheets 維護，本儀表板唯讀」」
                 _lines([block["goto_note"]], "alo-line")
 
 
-def _render_alo5(block: dict, scenario: str) -> None:
+def _render_alo5(block: dict, scenario: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         button = block["buttons"][0]
@@ -375,7 +415,7 @@ def _render_alo5(block: dict, scenario: str) -> None:
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _render_alo6(block: dict, scenario: str) -> None:
+def _render_alo6(block: dict, scenario: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         _placeholder(block)
@@ -400,7 +440,7 @@ def _render_alo6(block: dict, scenario: str) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_alo7(block: dict, scenario: str) -> None:
+def _render_alo7(block: dict, scenario: str, ctx=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
         _placeholder(block)
@@ -444,7 +484,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None) -> None:
+def render(*, load_live=None, save_live=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
@@ -452,17 +492,38 @@ def render(*, load_live=None) -> None:
     傳入時（正式入口 `ui_v2/app_alo_live.py`）改由它取得資料，這一條路徑不讀 fixtures，
     並套用 `live.apply_live_notes` 的正式模式調整；頁首副標只印本頁的提問句 ——
     情境名與示意字樣只屬於示範模式（`49` §3.4 第 5、6 項）。
+
+    save_live：選填的寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`），
+    只在正式模式有意義。傳入時 ALO-1／ALO-4 的「存檔」掛 callback 真的寫入；不傳時正式模式的
+    三枚存檔照舊停用，與加這個參數之前逐字相同。只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
     """
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
+    ctx = None
     if load_live is None:
+        if save_live is not None:
+            raise ValueError("save_live 要與 load_live 一起傳")
         scenario = _pick_scenario()
         save_failed = _pick_save_failed()
         model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
         # 輸入欄的 key 前綴：示範模式帶情境名（換情境時不沿用上一個情境留在 session 裡的值）。
         key = scenario
     else:
-        model = live.apply_live_notes(logic.build_page_model(load_live()["dataset"]))
+        live_input = load_live()
+        dataset = live_input["dataset"]
+        if save_live is not None:
+            # 上一次按存檔留下的逐鍵失敗併進 save_errors，交給 logic 決定畫在卡片層還是該鍵原位。
+            dataset = live.dataset_with_save_errors(dataset, st.session_state.get(_SAVE_ERRORS_STATE))
+            ctx = {
+                "save_live": save_live,
+                "settings_error": logic.settings_failure(dataset),
+                # 試算表上的原字串：沒動過的欄位寫回它（見 live.py「存檔」段）。
+                "setting_raw": dict(live_input["notes"].get("setting_raw") or {}),
+            }
+        model = live.apply_live_notes(
+            logic.build_page_model(dataset),
+            wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
+        )
         key = "live"
 
     _html(f'<div class="alo-title">{_esc(model["title"])}</div>')
@@ -484,17 +545,17 @@ def render(*, load_live=None) -> None:
     with st.container(key="alo_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html('<div class="alo-layer-label">層 3　操作（預設收合）</div>')
     with st.container(key="alo_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html('<div class="alo-layer-label">層 4　佐證（預設收合）</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key)
+        _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(
