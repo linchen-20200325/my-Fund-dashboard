@@ -829,8 +829,9 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
       (1) 多了這幾支 —— `logic._build_hld1` 門檻未知那一支；`logic._build_hld4` 設定讀取失敗時；
       `logic._build_hld5`、`logic._build_hld8` 持倉表讀不到與區間未知各一支。(3) 劃線那半句因此不成立，
       其他表層級錯誤照舊不寫說明區錯誤行；`HLD-8` 持倉表讀不到那一支沒有格子，也不掛「重新取數」。
-    - 「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
-      （裁示 A，逐字）。
+    - ~~「重新取數」按鈕：`44` 5.5 同一列「＋『重新取數』按鈕」；正式版停用、原因 `live.REFETCH_DISABLED_REASON`
+      （裁示 A，逐字）。~~ → 不掛「重新取數」：客戶 2026-10-09 裁示正式畫面拿掉這顆按鈕
+      （不保留停用＋原因；有意識的更正，不是漏刪）。
     顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
     """
     error_line = _live_error_line(exc, mask_error)
@@ -841,10 +842,6 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
         st.markdown(
             f'<div class="hld-line" style="color:{red}">{_esc(line)}</div>', unsafe_allow_html=True
         )
-    button = logic._retry_button()
-    button["_enabled"] = False
-    button["disabled_reason"] = live.REFETCH_DISABLED_REASON
-    _buttons({"buttons": [button]}, "hld_live_error")
 
 
 def render(*, load_live=None, mask_error=None) -> None:

@@ -547,7 +547,6 @@ def test_兩條執行緒同時組示範與正式_輸出逐字與單獨組的相�
 
 def test_停用原因逐字照裁示A():
     assert live.SAVE_DISABLED_REASON == "存檔寫入端尚未接上，這一輪只讀不寫"
-    assert live.REFETCH_DISABLED_REASON == "重新取數尚未接上"
 
 
 def test_存檔停用原因_與alo頁逐字相同():
@@ -557,8 +556,7 @@ def test_存檔停用原因_與alo頁逐字相同():
 
 
 def test_停用原因沒有指示動作的句子():
-    for reason in (live.SAVE_DISABLED_REASON, live.REFETCH_DISABLED_REASON):
-        assert "請" not in reason
+    assert "請" not in live.SAVE_DISABLED_REASON
 
 
 def _buttons_by_block(model):
@@ -577,37 +575,41 @@ def test_存檔一律停用_原因逐字(name):
     assert saves[0]["disabled_reason"] == live.SAVE_DISABLED_REASON
 
 
+# 客戶 2026-10-09 裁示：正式畫面拿掉「重新取數」（不保留停用＋原因）。
+# ~~原本兩條：「重新取數一律停用_原因逐字」與「重新取數有出現的情境_確實停用了」~~ → 改驗正式模式 0 枚、
+# 示範模式照掛（有意識的更正，不是漏刪）。
+
+
 @pytest.mark.parametrize("name", _ALL)
-def test_重新取數一律停用_原因逐字(name):
-    for button in logic.collect_buttons(_live(name)):
-        if button["_action_kind"] == "取數":
-            assert button["label"] == "重新取數"
-            assert button["_enabled"] is False
-            assert button["_visible"] is True
-            assert button["disabled_reason"] == live.REFETCH_DISABLED_REASON
+def test_正式模式_取數類按鈕0枚(name):
+    assert [b for b in logic.collect_buttons(_live(name)) if b["_action_kind"] == "取數"] == []
 
 
-def test_重新取數有出現的情境_確實停用了():
-    """正控：上一條在沒有任何一枚重新取數的情境下會空轉過關；這裡釘住至少一個情境真的有。"""
+def test_示範模式_srcmiss與fetchfail仍掛重新取數():
+    """正控：上一條在示範模式本來就沒有任何一枚重新取數時會空轉過關；這裡釘住至少兩個情境示範模式真的有。"""
     found = [
         name for name in _ALL
-        if any(b["_action_kind"] == "取數" for b in logic.collect_buttons(_live(name)))
+        if any(b["_action_kind"] == "取數" for b in logic.collect_buttons(_demo(name)))
     ]
     assert "srcmiss" in found and "fetchfail" in found
 
 
+def _without_refetch(buttons):
+    return [b for b in buttons if b["_action_kind"] != "取數"]
+
+
 @pytest.mark.parametrize("name", _ALL)
-def test_按鈕出現在哪幾塊_正式與示範一枚不差(name):
+def test_按鈕出現在哪幾塊_正式與示範只差取數類(name):
     demo = _buttons_by_block(_demo(name))
     got = _buttons_by_block(_live(name))
     assert {k: [b["label"] for b in v] for k, v in got.items()} == {
-        k: [b["label"] for b in v] for k, v in demo.items()
+        k: [b["label"] for b in _without_refetch(v)] for k, v in demo.items()
     }
 
 
 @pytest.mark.parametrize("name", _ALL)
-def test_HLD1到3不掛重新取數_HLD8依值狀態掛(name):
-    model = _live(name)
+def test_HLD1到3不掛重新取數_HLD8依值狀態掛_正式模式不呈現(name):
+    model = _demo(name)
     for code in ("HLD-1", "HLD-2", "HLD-3"):
         assert not [
             b for b in logic.collect_buttons(logic.find_block(model, code)) if b["_action_kind"] == "取數"
@@ -618,11 +620,13 @@ def test_HLD1到3不掛重新取數_HLD8依值狀態掛(name):
     ]
     has_retry = any(b["_action_kind"] == "取數" for b in logic.collect_buttons(hld8))
     assert has_retry == any(s in (logic.STATE_MISSING, logic.STATE_ERROR) for s in states)
+    live_hld8 = logic.find_block(_live(name), "HLD-8")
+    assert not [b for b in logic.collect_buttons(live_hld8) if b["_action_kind"] == "取數"]
 
 
 @pytest.mark.parametrize("name", _ALL)
 def test_其他類按鈕的啟用狀態_一格不動(name):
-    demo = logic.collect_buttons(_demo(name))
+    demo = _without_refetch(logic.collect_buttons(_demo(name)))
     got = logic.collect_buttons(_live(name))
     assert len(demo) == len(got)
     for d, g in zip(demo, got):

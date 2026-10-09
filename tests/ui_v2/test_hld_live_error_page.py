@@ -115,7 +115,7 @@ def _texts(at) -> str:
     ("build_raises", "ValueError"),
 ])
 def test_S6b1_正式模式拋例外_畫錯誤畫面_不印Traceback_訊息經遮蔽(kind, type_name):
-    from ui_v2.hld import live, logic
+    from ui_v2.hld import logic
 
     at = _run(kind)
     # 不印 Traceback：沒有 st.exception 元素、任何文字裡都沒有 "Traceback"。
@@ -131,10 +131,9 @@ def test_S6b1_正式模式拋例外_畫錯誤畫面_不印Traceback_訊息經遮
     assert f'<div class="hld-title">{logic.PAGE_TITLE}</div>' in md
     # 假秘密值不得出現在畫面任何地方。
     assert _FAKE_SECRET not in blob
-    # 「重新取數」照 `44` 5.5 掛上、正式版停用、原因逐字（裁示 A）。
-    assert [b.label for b in at.button] == ["重新取數"]
-    assert at.button[0].disabled
-    assert at.button[0].help == live.REFETCH_DISABLED_REASON
+    # ~~「重新取數」照 `44` 5.5 掛上、正式版停用、原因逐字（裁示 A）。~~
+    # → 客戶 2026-10-09 裁示：正式畫面拿掉「重新取數」，錯誤畫面一枚按鈕都沒有（有意識的更正，不是漏刪）。
+    assert [b.label for b in at.button] == []
     # 整頁其餘塊不畫（例外之後沒有任何一塊被畫出半截）。
     assert not any('class="hld-layer-label' in v for v in md)
 
@@ -163,7 +162,7 @@ def test_S6b1_mask_error與load_live要一起傳():
     ("str_raises", "BadStr"),          # str(exc) 本身拋例外
 ])
 def test_S6b1_後備_遮蔽或str壞了_只印型別_不帶訊息_不印Traceback(kind, type_name):
-    from ui_v2.hld import live, logic
+    from ui_v2.hld import logic
 
     at = _run(kind)
     assert len(at.exception) == 0, [x.value for x in at.exception]
@@ -179,8 +178,7 @@ def test_S6b1_後備_遮蔽或str壞了_只印型別_不帶訊息_不印Tracebac
     # 其餘畫面照錯誤畫面原樣。
     assert any(logic.PRINT_AS_IS_LINE in v for v in md)
     assert f'<div class="hld-title">{logic.PAGE_TITLE}</div>' in md
-    assert [b.label for b in at.button] == ["重新取數"] and at.button[0].disabled
-    assert at.button[0].help == live.REFETCH_DISABLED_REASON
+    assert [b.label for b in at.button] == []  # 客戶 2026-10-09 裁示：不掛「重新取數」
     assert not any('class="hld-layer-label' in v for v in md)
 
 
@@ -196,6 +194,7 @@ def test_S6b1_例外型別名也經遮蔽():
     blob = _texts(at)
     assert _FAKE_SECRET not in blob
     assert "⛔ 取數失敗：Err‹已遮蔽›：型別名裡藏了秘密" in blob
+    assert [b.label for b in at.button] == []  # 客戶 2026-10-09 裁示：不掛「重新取數」
 
 
 @pytest.mark.parametrize("kind", ["open_fund_bug", "current_fields_bug"])
