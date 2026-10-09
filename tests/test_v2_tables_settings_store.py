@@ -468,7 +468,10 @@ def test_淨值層_例外路徑補記結束列又失敗_兩段原文皆遮蔽後
         S.refetch_nav([SECRET])
     text = str(info.value)
     assert len(calls) == 1
-    assert text.startswith("ValueError: 甲 ") and "\n補記取數紀錄失敗：SettingsSheetError: 寫入失敗 " in text
+    # ~~assert ... and "\n補記取數紀錄失敗：SettingsSheetError: 寫入失敗 " in text~~
+    # → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：不新增中文前綴，補記失敗只以換行接上「例外類別: 原文」。
+    assert text.startswith("ValueError: 甲 ") and "\nSettingsSheetError: 寫入失敗 " in text
+    assert "補記取數紀錄失敗" not in text
     assert text.count(MASK) == 2
     _no_secret_anywhere(info.value)
 
@@ -495,13 +498,20 @@ def test_淨值層_正常成功與正常failed_close恰呼叫一次(book, monkey
     assert [r[4] for r in _nav_logs(book)] == ["ok", "failed"]
 
 
-def test_淨值層_正常路徑close拋非SettingsSheetError_只呼叫一次_拋遮蔽後例外(book, monkeypatch):
+# ~~def test_淨值層_正常路徑close拋非SettingsSheetError_只呼叫一次_拋遮蔽後例外~~
+# → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：旗標改為「結束列已確定」才設，正常路徑 close 拋
+#   SettingsSheetError 以外的例外時要補記一次 failed —— 最多兩次、第二次為 failed。
+def test_淨值層_正常路徑close拋非SettingsSheetError_最多兩次_第二次為failed_拋遮蔽後例外(book, monkeypatch):
     _stub_nav(monkeypatch, {_A: (_nav(2), None)})
     calls = _spy_close(monkeypatch, fail_with=TypeError(f"序列化失敗 {SECRET}"))
     with pytest.raises(S.NavRefetchError) as info:
         S.refetch_nav([SECRET])
-    assert len(calls) == 1 and calls[0]["outcome"] == "ok"
-    assert str(info.value).startswith("TypeError: 序列化失敗 ") and MASK in str(info.value)
+    # ~~assert len(calls) == 1 and calls[0]["outcome"] == "ok"~~
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    assert calls[1]["row_count"] is None and calls[1]["message"].startswith("TypeError: 序列化失敗 ")
+    assert SECRET not in calls[1]["message"]
+    text = str(info.value)
+    assert text.startswith("TypeError: 序列化失敗 ") and "\nTypeError: 序列化失敗 " in text and text.count(MASK) == 2
     _no_secret_anywhere(info.value)
 
 
@@ -519,6 +529,111 @@ def test_淨值層_KeyboardInterrupt_先收斂為failed_再原樣拋出(book, mo
     assert len(calls) == 1 and calls[0]["outcome"] == "failed" and calls[0]["row_count"] is None
     assert calls[0]["message"].startswith("KeyboardInterrupt: 中斷 ") and SECRET not in calls[0]["message"]
     assert len(_nav_logs(book)) == 1
+
+
+# ── 2026-10-09 第二輪小修：open 也納入包裝、`str(exc)` 防呆、結束列「已確定」才標記、補記失敗不加前綴 ──
+
+def _spy_close_seq(monkeypatch, actions):
+    """依序對每次呼叫採取動作："write"＝真的寫；"raise_before"＝不寫、拋 TypeError；
+    "write_then_raise"＝真的寫完再拋 TypeError。回傳每次呼叫的參數。"""
+    calls, real = [], R.close_fetch_log
+
+    def spy(opened, **kw):
+        action = actions[len(calls)]
+        calls.append(kw)
+        if action == "raise_before":
+            raise TypeError(f"寫入前驗證失敗 {SECRET}")
+        row = real(opened, **kw)
+        if action == "write_then_raise":
+            raise TypeError(f"寫完才失敗 {SECRET}")
+        return row
+
+    monkeypatch.setattr(R, "close_fetch_log", spy)
+    return calls
+
+
+def _nav_reader(book):
+    R.clear_cache()
+    out = S.load_fetch_log([])
+    return [r for r in out["rows"] if r["source_tier"] == "淨值"], out
+
+
+def test_淨值層_open拋非SettingsSheetError_遮蔽後拋NavRefetchError_不帶原例外鏈_0筆紀錄(book, monkeypatch):
+    def boom(tier, *, mask):
+        try:
+            raise RuntimeError(f"內層 {SECRET}")
+        except RuntimeError:
+            raise ValueError(f"helper 失敗 {SECRET}")               # 自帶含秘密值的 __context__
+    monkeypatch.setattr(R, "open_fetch_log", boom)
+    monkeypatch.setattr(AH, "load_alo_tables", lambda values: pytest.fail("open 拋錯後不得往下取數"))
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert str(info.value).startswith("ValueError: helper 失敗 ") and MASK in str(info.value)
+    _no_secret_anywhere(info.value)
+    assert calls == [] and "fetch_log" not in book.tabs and "fetch_log_open" not in book.tabs
+
+
+class _StrRaises(Exception):
+    def __str__(self):
+        raise RuntimeError(f"str 也壞 {SECRET}")
+
+
+def test_淨值層_例外的str本身拋錯_仍補記failed_拋NavRefetchError(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+
+    def boom(items):
+        raise _StrRaises()
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert len(calls) == 1 and calls[0]["outcome"] == "failed" and calls[0]["message"] == "_StrRaises"
+    assert str(info.value) == "_StrRaises"
+    _no_secret_anywhere(info.value)
+    assert _nav_logs(book)[0][4:] == ["failed", "", "_StrRaises"]
+
+
+def test_淨值層_KeyboardInterrupt補記又失敗_note已遮蔽_原例外原樣拋出(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    original = KeyboardInterrupt("中斷")
+
+    def boom(items):
+        raise original
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch, fail_with=R.SettingsSheetError(f"寫入失敗 {SECRET}", code="api"))
+    with pytest.raises(KeyboardInterrupt) as info:
+        S.refetch_nav([SECRET])
+    assert info.value is original and len(calls) == 1
+    notes = info.value.__notes__
+    assert len(notes) == 1 and notes[0].startswith("SettingsSheetError: 寫入失敗 ")
+    assert SECRET not in notes[0] and MASK in notes[0] and "補記取數紀錄失敗" not in notes[0]
+
+
+def test_淨值層_正常close寫入前拋非SettingsSheetError_最終恰一筆failed_in_progress為0(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    calls = _spy_close_seq(monkeypatch, ["raise_before", "write"])
+    with pytest.raises(S.NavRefetchError):
+        S.refetch_nav([SECRET])
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    rows, out = _nav_reader(book)
+    assert len(rows) == 1 and rows[0]["outcome"] == "failed" and rows[0]["row_count"] is None
+    assert rows[0]["message"].startswith("TypeError: 寫入前驗證失敗 ") and SECRET not in rows[0]["message"]
+    assert out["in_progress"] == 0 and out["duplicate_log_ids"] == 0
+
+
+def test_淨值層_正常close已寫入才拋錯_同log_id兩列_讀取端取第一列ok_in_progress為0(book, monkeypatch):
+    """第二筆同 `log_id` 的 failed 由讀取端 `_reduce_fetch_log` 去重（取第一列）。"""
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    calls = _spy_close_seq(monkeypatch, ["write_then_raise", "write"])
+    with pytest.raises(S.NavRefetchError):
+        S.refetch_nav([SECRET])
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    raw = _nav_logs(book)
+    assert [r[4] for r in raw] == ["ok", "failed"] and raw[0][0] == raw[1][0]   # 同一 log_id 兩列
+    rows, out = _nav_reader(book)
+    assert len(rows) == 1 and rows[0]["outcome"] == "ok" and rows[0]["row_count"] == 2
+    assert out["in_progress"] == 0 and out["duplicate_log_ids"] == 1
 
 
 # ── 2026-10-09 稽核回修 ──

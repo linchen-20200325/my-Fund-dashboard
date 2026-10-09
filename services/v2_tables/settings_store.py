@@ -465,11 +465,17 @@ def refetch_nav(secret_values) -> dict:
     ~~寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）照樣往上拋，不吞。~~
     → 2026-10-09 協作助手複驗必修（狀態更新，不是漏刪）：寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）
     照樣往上拋，不吞；但離開前先收斂、再遮蔽：
-    - 本次 `fetch_log_open` 已寫成、且還沒嘗試寫結束列 → 先用 `close_fetch_log` 補記一筆 `failed`
-      （`row_count` 空、`message`＝遮蔽後的「例外類別: 原文」），不留沒有結束的紀錄。正常路徑在呼叫
-      `close_fetch_log` **之前**就標記「已嘗試結束」，所以 close 本身拋錯時不會再補第二筆。
+    - 本次 `fetch_log_open` 已寫成、且結束列還沒確定 → 先用 `close_fetch_log` 補記一筆 `failed`
+      （`row_count` 空、`message`＝遮蔽後的「例外類別: 原文」），不留沒有結束的紀錄。
+      ~~正常路徑在呼叫 `close_fetch_log` **之前**就標記「已嘗試結束」，所以 close 本身拋錯時不會再補第二筆。~~
+      → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：「結束列已確定」＝`close_fetch_log` 正常回傳，或捕到
+      `SettingsSheetError`（確定寫不進，不遞迴）；只在這兩種情形之後才標記。正常路徑的 close 拋其他例外
+      （例如寫入前的 `fetch_log_row` 驗證錯）→ 未標記，照上面補記一筆 `failed`。若第一次 close 其實已寫入才
+      拋錯，同一 `log_id` 會有兩列，讀取端（`_reduce_fetch_log`）取第一列、計入 `duplicate_log_ids`。
     - `Exception` → 改拋 `NavRefetchError`，訊息＝遮蔽後的「例外類別: 原文」（補記結束列又失敗時，該失敗的
-      遮蔽後原文接在後面一併拋出，不吞）；保留原本的堆疊位置，但不帶出未遮蔽的原例外鏈。
+      遮蔽後「例外類別: 原文」以換行接在後面一併拋出，不吞）；保留原本的堆疊位置，但不帶出未遮蔽的原例外鏈。
+      開頭 `open_fetch_log` 拋 `SettingsSheetError` 以外的例外也一樣（沒有開始紀錄，不補記）。
+      `str(例外)` 本身拋錯時只用例外類別名。
     - `Exception` 以外的 `BaseException`（例如 `KeyboardInterrupt`）→ 一樣先補記 `failed`，再原樣往上拋、不包裝。
     - `fetch_log_open` 沒寫成 → 不寫任何紀錄，例外照樣遮蔽後往上拋。
     """
@@ -478,34 +484,32 @@ def refetch_nav(secret_values) -> dict:
                "log_id": None, "fetch_log": None, "masked_errors": {}, "empty": {}, "log_message": None}
 
     opened = None
-    try:
-        opened = store.open_fetch_log(nav_dividend.SOURCE_TIER_NAV, mask=mask)
-    except store.SettingsSheetError as exc:
-        _nav_fail(persist, "fetch_log_open", exc)   # `50` 第 8 節：照常取數，只是不寫紀錄
-    else:
-        persist.update(stage="started", log_id=opened["log_id"])
-
-    closing = {"attempted": False}   # 本次是否已嘗試寫結束列（正常路徑在呼叫 close 之前就設）
+    # 結束列是否已確定（close 正常回傳，或捕到 SettingsSheetError＝確定寫不進）；未確定就由下面補記。
+    closing = {"settled": False}
     pending = None
     try:
+        try:
+            opened = store.open_fetch_log(nav_dividend.SOURCE_TIER_NAV, mask=mask)
+        except store.SettingsSheetError as exc:
+            _nav_fail(persist, "fetch_log_open", exc)   # `50` 第 8 節：照常取數，只是不寫紀錄
+        else:
+            persist.update(stage="started", log_id=opened["log_id"])
         return _refetch_nav_run(secret_values, mask, persist, opened, closing)
     except Exception as exc:
         text = mask(_exc_text(exc))
-        if opened is not None and not closing["attempted"]:
-            closing["attempted"] = True
+        if opened is not None and not closing["settled"]:
             try:
                 store.close_fetch_log(opened, outcome="failed", row_count=None, message=text, mask=mask)
-            except Exception as close_exc:   # 補記也失敗：不吞，遮蔽後接在後面一併拋出
-                text = f"{text}\n補記取數紀錄失敗：{mask(_exc_text(close_exc))}"
+            except Exception as close_exc:   # 補記也失敗：不吞，遮蔽後以換行接在後面一併拋出
+                text = f"{text}\n{mask(_exc_text(close_exc))}"
         pending = (NavRefetchError(text), exc.__traceback__)
     except BaseException as exc:
-        if opened is not None and not closing["attempted"]:
-            closing["attempted"] = True
+        if opened is not None and not closing["settled"]:
             try:
                 store.close_fetch_log(opened, outcome="failed", row_count=None,
                                       message=mask(_exc_text(exc)), mask=mask)
             except Exception as close_exc:   # 不吞：遮蔽後掛在原例外上，原例外照樣原樣拋出
-                exc.add_note(f"補記取數紀錄失敗：{mask(_exc_text(close_exc))}")
+                exc.add_note(mask(_exc_text(close_exc)))
         raise
     # 在 except 區塊之外拋：新例外不帶 `__context__`（未遮蔽的原例外）；`from None` 再擋 `__cause__`。
     err, tb = pending
@@ -521,7 +525,12 @@ class NavRefetchError(RuntimeError):
 
 
 def _exc_text(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"
+    """「例外類別: 原文」；`str(exc)` 本身拋錯時退回只用類別名（不得讓 except 區塊再拋錯而跳過補記／遮蔽）。"""
+    name = type(exc).__name__
+    try:
+        return f"{name}: {exc}"
+    except Exception:   # 原文取不到就只留類別名；原例外照樣由呼叫端往上拋
+        return name
 
 
 def _nav_fail(persist: dict, stage: str, exc) -> None:
@@ -586,13 +595,14 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
     else:
         outcome, row_count, message = "ok", sum((table or {}).get("fetched", {}).values()), None
     persist["log_message"] = message   # 與寫進 `fetch_log.message` 的字串逐字相同，不論下面寫入成敗
-    closing["attempted"] = True        # 先標記再呼叫：close 本身拋什麼都不再補第二筆
     try:
         logged = store.close_fetch_log(opened, outcome=outcome, row_count=row_count,
                                        message=message, mask=mask)
     except store.SettingsSheetError as exc:
+        closing["settled"] = True              # 確定寫不進：不補記
         _nav_fail(persist, "fetch_log", exc)   # 不遞迴：不為「寫 fetch_log 失敗」再寫一筆 fetch_log
         return {"table": table, "persist": persist}
+    closing["settled"] = True                  # 已寫成；之後再拋錯也不補記第二筆
     persist.update(ok=True, stage="done", message=None, error_code=None, fetch_log=logged)
     return {"table": table, "persist": persist}
 
