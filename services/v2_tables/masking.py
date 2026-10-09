@@ -8,7 +8,12 @@
 規則（ACCEPTANCE 7.3，逐條對應）：
 - 固定記號 `‹已遮蔽›`；一個秘密值換成一個記號；其餘字元逐字保留。
 - 每一次出現都換；同一個值另外遮 `quote(值, safe="")`、`quote_plus(值)` 兩種編碼形態；
-  服務帳戶 `private_key` 另外遮「換行被跳脫成反斜線加 n」的寫法。
+  ~~服務帳戶 `private_key` 另外遮「換行被跳脫成反斜線加 n」的寫法。~~
+  → 2026-10-09 更正（有意識的更正，不是漏刪；ACCEPTANCE 7.3 第 3 點同日更正）：
+  換行跳脫不再只限 `private_key`，**所有秘密值**都另遮「只跳脫換行」與「`\\n` `\\r` `\\t` 一起跳脫」
+  兩種寫法。舊句在只有私鑰會帶換行時是對的；被權衡掉的是射程。
+  另外遮 repr 系與 JSON 字串內的跳脫形態（見 `_forms`）：值含反斜線、引號、`\\t` `\\r`、
+  不可印字元時，以 `repr`／list 字串化／多參數例外帶進訊息就不再等於原值。
 - 由長到短替換；空值不參與；大小寫敏感、完全相同才換；不猜「像金鑰的字串」。
 - 遮蔽只在寫出點做一次（本批的寫出點是 mkt 正式入口的畫面；`fetch_log` 尚未落地，Q12）。
 
@@ -161,10 +166,24 @@ def secret_values(sources: Iterable[Mapping], *, oauth_tokens=None, custom_oauth
 
 
 def _forms(value: str) -> list:
-    forms = [value, _quote(value, plus=False), _quote(value, plus=True)]
-    if "\n" in value:
-        forms.append(value.replace("\n", "\\n"))
-    return forms
+    """一個秘密值在訊息裡可能出現的寫法（去重後回傳；不含它的值與原值相同時自動併掉）。
+
+    repr 系：`repr(v)`、`str([v])`、`str((v, 1))`、多參數例外的 `str(e)` 都用 Python 的字串 repr，
+    反斜線、所選定界引號、`\\t` `\\n` `\\r`、其他不可印字元（如 `\\x7f`）會被跳脫，原值對不上。
+    Python 只有在值含 `'` 且不含 `"` 時改用雙引號定界；`repr(v + '"')` 逼它用單引號
+    （值本身的跳脫不受尾端多一個字元影響），`[1:-2]` 去掉開頭引號與尾端 `"'`。
+    """
+    forms = [
+        value,
+        _quote(value, plus=False),
+        _quote(value, plus=True),
+        value.replace("\n", "\\n"),  # 7.3 第 3 點原有形態（只跳脫換行）
+        value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t"),
+        repr(value)[1:-1],
+        repr(value + '"')[1:-2],  # 強制單引號定界的 repr
+        json.dumps(value)[1:-1],
+    ]
+    return list(dict.fromkeys(forms))
 
 
 def mask_message(message: str, secrets: Iterable[str]) -> str:
