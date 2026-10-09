@@ -510,7 +510,7 @@
 
 | 四件事 | 內容 |
 |---|---|
-| **來源** | `holding.fund_code`、`holding.units_shares`、`holding.cost_twd`、`holding.bucket`；`nav.nav_orig_ccy`、`nav.nav_date`；門檻取 `user_setting.setting_value`，`setting_key` 為 `hld_deviation_rules` |
+| **來源** | `holding.fund_code`、`holding.units_shares`、`holding.cost_twd`、`holding.bucket`；`nav.nav_orig_ccy`、`nav.nav_date`；門檻取 `user_setting.setting_value`，`setting_key` 為 `hld_deviation_rules`；**區間取 `user_setting.setting_value`，`setting_key` 為 `hld_window_start` 與 `hld_window_end`**（2026-10-09 補宣告；有意識的政策變更，不是漏刪；日期 2026-10-09；決策者：客戶，出處：客戶 2026-10-09 核准；體例同 `HLD-2`：吃區間的塊在來源欄寫出那兩個鍵，本句逐字沿用 `HLD-2` 來源欄原文。補的是它缺的那一句宣告，**本塊的規則欄、空狀態欄與那一行判準一個字未改**） |
 | **規則** | 本塊採 G2† 三形式中的「偏離提示」。逐檔算出使用者門檻所指的值，與門檻比較，只列出超出門檻的檔。每一列顯示四件事：基金名、實際值、門檻值、兩者差額。差額寫成帶正負號的數字。列不排序成優先順序，依 `fund_code` 字面值排列。列上不出現任何處置方向的字眼（G3†） |
 | **空狀態** | 無任何持倉 → `來源缺`，文案「尚未建立任何持倉」。門檻未設定 → `⬜ 不適用：尚未設定門檻`，不以任何內建值代替。~~某檔缺淨值 → 該檔單獨列出並標 `⬜ 資料未備`，不併入偏離筆數~~ → **2026-09-22 改寫（有意識的政策變更，不是漏刪；日期 2026-09-22；決策者：客戶）：某檔缺淨值 → 該檔不進本表、不佔一列、不計入列數，於是 `HLD-0` 文案裡的 N 等於本卡的列數。那些檔在卡尾另寫一行「另有 N 檔缺淨值，未列入」，不另開區塊**（⚠️ 卡尾那一行是本組依裁示**推得**的畫法，**客戶未逐字點名，可推翻**；決策者：AI 總管） |
 | **回答什麼** | 哪幾檔現在超出了我自己寫下的那條線，超出多少 |
