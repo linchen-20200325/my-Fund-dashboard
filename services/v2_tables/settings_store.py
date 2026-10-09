@@ -446,8 +446,14 @@ def refetch_nav(secret_values) -> dict:
 
     `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
     - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
-    - `failed`：持倉讀不到；或任一檔代碼解析失敗、L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）。
-      `message` 逐檔一行「鍵: 值」（鍵為基金代碼，持倉讀不到時為 `holding`），整句經遮蔽。
+    - `failed`：持倉讀不到；或持倉有分頁讀取失敗／未讀（`skipped_tabs`，持倉不完整）；或任一檔代碼解析失敗、
+      L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）。
+      ~~`message` 逐檔一行「鍵: 值」~~ → `message` 每個原因一段「鍵: 值」、段與段以換行分隔（2026-10-09 回修更正，
+      不是漏刪：值是 L1／L2 原文，**一段可能自己就有多行**，例如 `fetch_nav` 逐網址列出的失敗原文）。
+      鍵為基金代碼；持倉讀不到時為 `holding`；分頁讀取失敗時為分頁名。鍵與值皆經遮蔽。
+    - ⚠️ **已知缺口（2026-10-09 稽核紅隊 M-1，未修，待總管裁示）**：即時網址全敗、L1 退回預存舊序列
+      （`cache/nav/*.json`）的那一檔，本函式目前**仍算成功**。L1 在那一支不交出即時網址的失敗原文
+      （`fetch_nav` 只在連預存檔也失敗時才把 attempts 掛到回傳值上），本層不自編說明，故未處理。
       L1 回空又沒給原因（`EMPTY_WITHOUT_REASON` 且取回 0 列）不算失敗，記在 `empty`（同市場指標）。
 
     回傳 `{"table": build_nav_table 的回傳（錯誤原文未遮；持倉讀不到時為 None）, "persist": {...}}`；
@@ -472,10 +478,15 @@ def refetch_nav(secret_values) -> dict:
 
     masked, empty, table = {}, {}, None
     try:
-        holding = alo_holdings.load_alo_tables(secret_values)["holding"]
+        tables = alo_holdings.load_alo_tables(secret_values)
     except alo_holdings.PolicySupplementError as exc:
         masked["holding"] = mask(str(exc))   # 已由 L1 遮過；再遮一次無害
     else:
+        holding = tables["holding"]
+        # 部分分頁讀取失敗或未讀（冷卻、預算）→ 持倉不完整，本次不算成功（稽核紅隊 S-1）。
+        # 每張一段「分頁名: L1 原文」（L1 已遮過；再遮一次無害）。
+        for tab in tables.get("skipped_tabs") or ():
+            masked[mask(str(tab.get("tab")))] = mask(str(tab.get("error")))
         key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
         resolved = {}
         for r in key_results:

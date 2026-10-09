@@ -818,3 +818,42 @@ def test_淨值層_source交出去的東西沒有未遮蔽的原文(env, monkeyp
     result = source.refetch("淨值")
     assert KEY not in repr(result)
     assert set(result) == {"tier", "fetched", "log_message", "masked_errors", "empty", "stage", "message", "ok"}
+
+
+# ── 2026-10-09 稽核回修（紅隊 S-2、測試缺口） ──
+
+
+def _nav_log(started, outcome="ok", row_count=1, tier="淨值"):
+    return {"log_id": started, "source_tier": tier, "started_at": started, "finished_at": started,
+            "outcome": outcome, "row_count": row_count if outcome == "ok" else None,
+            "message": None if outcome == "ok" else "x"}
+
+
+def test_淨值時間_兩筆ok取較新_0列的ok與失敗都不算():
+    logs = [_nav_log("2026-09-25T01:00:00Z", row_count=3), _nav_log("2026-09-25T05:00:00Z", row_count=2),
+            _nav_log("2026-09-25T06:00:00Z", row_count=0), _nav_log("2026-09-25T07:00:00Z", outcome="failed"),
+            _nav_log("2026-09-25T08:00:00Z", row_count=9, tier="市場指標")]
+    assert logic.latest_ok_started_at(logs, "淨值") == "2026-09-25T05:00:00Z"
+    assert logic.latest_ok_started_at(logs[2:4], "淨值") is None
+
+
+def test_淨值層_持倉為空的ok_SET1不印時間也不印新句(env, monkeypatch):
+    _stub_nav(monkeypatch, {})
+    source.refetch("淨值")
+    assert S.load_fetch_log([])["rows"][-1]["row_count"] == 0
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備" and nav["note_lines"] == []
+
+
+def test_淨值層_先有列的ok_後來0列的ok_SET1保留有列那筆時間(env, monkeypatch):
+    _stub_nav(monkeypatch, {_NAV_A: (_nav_series(), None)})
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")
+    _stub_nav(monkeypatch, {})
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    source.refetch("淨值")
+    monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["at_text"] == "2026-09-25 10:00" and nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE]

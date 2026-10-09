@@ -148,7 +148,9 @@ GAPS = {
         "本頁判讀：缺的理由只有一種時，分母不是「零」而是「沒有」，照 44 5.5「來源缺」模板畫，"
         "理由字串沿用 basis_value 交出來的那一句，不新編。"
         "有值卻加起來不為正、或缺值理由不只一種 → 兩者 44 都沒有畫法，照舊 raise。"
-        "2026-09-28 接真資料時才走得到：nav 在 L2 是 PENDING_TABLES，市值基準下每一檔都沒有基準值。",
+        "2026-09-28 接真資料時才走得到：~~nav 在 L2 是 PENDING_TABLES~~，市值基準下每一檔都沒有基準值。"
+        "→ 2026-10-09 狀態更新（不是漏刪）：L2 已把 nav 移出 PENDING_TABLES，但本頁不取淨值（未獲授權），"
+        "所以照樣走得到。",
     "ALO-GAP-value_kind": "alo_basis 的值在 44 第四節 value_kind 六種裡對不上任何一種。假資料那一列放空，不補第七種。"
         "2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。",
     "ALO-GAP-匯出兩組欄名": (
@@ -656,7 +658,8 @@ def _build_alo2(dataset) -> dict:
         denominator = sum(v["value"] for v in values.values() if v["value"] is not None)
         if denominator <= 0:
             # ALO-GAP-分母全缺：每一檔都缺基準值、而且缺的理由是同一個（例：市值基準，
-            # 而 `nav` 這張表在 L2 還沒接上）→ 分母不是「零」，是「沒有」。
+            # 而 ~~`nav` 這張表在 L2 還沒接上~~ 本頁不取淨值〔2026-10-09 狀態更新：L2 已把 nav 移出
+            # PENDING_TABLES，但 alo 取淨值未獲授權〕）→ 分母不是「零」，是「沒有」。
             # 照 `44` 5.5「來源缺」模板走既有的缺值路徑；理由字串由 `basis_value` 產生，這裡不新編。
             reasons = {v["reason"] for v in values.values()}
             if len(reasons) == 1 and None not in reasons:

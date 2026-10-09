@@ -388,3 +388,32 @@ def test_淨值層_程式錯誤不被吞(book, monkeypatch):
     _holdings(monkeypatch, [{"fund_code": _A}])                          # 少了 ccy：本檔的呼叫契約被破壞
     with pytest.raises(KeyError):
         S.refetch_nav([SECRET])
+
+
+# ── 2026-10-09 稽核回修 ──
+
+def test_淨值層_持倉部分分頁讀取失敗_記failed_每張一段分頁名與L1原文_已遮蔽(book, monkeypatch):
+    """稽核紅隊 S-1：持倉不完整時不得記 ok、不得沒痕跡。"""
+    monkeypatch.setattr(AH, "load_alo_tables", lambda values: {
+        "holding": [{"fund_code": _A, "ccy": "USD"}],
+        "skipped_tabs": [{"tab": "保單甲", "error": f"APIError 500 https://x/{SECRET}", "unread": False},
+                         {"tab": "保單乙", "error": "冷卻中（還剩 30 秒）", "unread": True}]})
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda key, portal="": (_nav(2), None))
+    out = S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[5] == ""
+    lines = log[6].split("\n")
+    assert lines[0].startswith("保單甲: APIError 500") and MASK in lines[0] and SECRET not in log[6]
+    assert lines[1] == "保單乙: 冷卻中（還剩 30 秒）"
+    assert out["persist"]["log_message"] == log[6]
+
+
+def test_淨值層_代碼解析失敗_鍵與原文都經遮蔽(book, monkeypatch):
+    """持倉代碼本身帶秘密值、錯誤原文也引用了它：鍵與值兩處都要遮（拿掉任一處 mask 就紅）。"""
+    bad = (SECRET,)                                                    # 非字串：錯誤原文會 repr 出輸入
+    _holdings(monkeypatch, [{"fund_code": bad, "ccy": "USD"}])
+    out = S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and SECRET not in log[6] and log[6].count(MASK) == 2
+    assert "fund_code 須為字串" in log[6]
+    assert SECRET not in repr(out["persist"])

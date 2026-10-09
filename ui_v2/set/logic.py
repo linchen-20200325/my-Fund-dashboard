@@ -626,16 +626,23 @@ def _setting_state(dataset, key, known_keys):
 
 
 def latest_ok_started_at(logs, tier):
-    """`fetch_log` 裡該層級最近一次**成功**（`ok`）那一筆的 `started_at`；從未成功回 None。
+    """`fetch_log` 裡該層級最近一次**成功且有取回列**（`ok` 且 `row_count` > 0）那一筆的 `started_at`；沒有回 None。
 
     客戶 2026-10-09 裁示（Q-C）：淨值不存表，SET-1 淨值列的最近取得時間用 set 頁重新取數的時間。
     只看 `ok`：之後再失敗的紀錄**不覆蓋**這個時間（失敗那一次沒有取得任何淨值）；失敗由 SET-2 顯示。
-    取 `started_at`（不取 `finished_at`）：與 SET-2 該層級「最近一次時間」同一欄（`44` SET-2 來源欄），
-    且不晚於該次任何一筆淨值的實際取得時間 —— 寧可把新鮮度算舊一點，不算新（§1）。
+    `row_count` 為 0 的 `ok`（持倉 0 列或來源回空，`44` SET-5 的取數回空）也不算：那一次沒有取得任何淨值
+    （2026-10-09 稽核紅隊 S-2 回修）。
+    取 `started_at`（不取 `finished_at`）：與 SET-2 該層級「最近一次時間」同一欄（`44` SET-2 來源欄）。
+    ~~且不晚於該次任何一筆淨值的實際取得時間 —— 寧可把新鮮度算舊一點，不算新（§1）。~~
+    → 2026-10-09 稽核推翻（紅隊 M-1；有意識的更正，不是漏刪）：L1 即時網址全敗時會退回預存舊序列，
+    那一檔的淨值可能遠早於 `started_at`，而 L2 目前仍把那一次記成 `ok`（L1 不交出失敗原文，待總管裁示）。
+    在那個缺口補上之前，這個時間**只代表「set 頁那一次重新取數的時間」**（客戶核准的那句話），
+    不保證每一檔淨值都是那時候取得的。
     """
     if tier not in TIERS:
         raise ValueError(f"來源層級 {tier!r} 不在 `44` 第四節那四個之內")
-    stamps = [r["started_at"] for r in logs if r["source_tier"] == tier and r["outcome"] == "ok"]
+    stamps = [r["started_at"] for r in logs
+              if r["source_tier"] == tier and r["outcome"] == "ok" and (r["row_count"] or 0) > 0]
     return max(stamps) if stamps else None   # 字面格式固定（秒＋Z），字串比較＝時間比較
 
 
