@@ -952,3 +952,29 @@ def test_M1_4_全部即時失敗_不產生假的最新成功時間(env, monkeypa
     assert [r["outcome"] for r in S.load_fetch_log([])["rows"]] == ["failed"]
     nav = _set1_nav(monkeypatch)
     assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備" and nav["note_lines"] == []
+
+
+def test_M1_5_兩檔以上即時全敗退回預存_整筆failed_每檔各一段原文_SET1不前進(env, monkeypatch):
+    # 2026-10-09 紅隊：在 `refetch_nav` 的退回預存迴圈裡 `masked[...] = mask(prov["live_error"])` 之後加 `break`，
+    # 既有 M1_1～M1_4 全綠（它們每次最多只有一檔退回預存）。本條守「每一檔各一段」，不是只守「整筆 failed」。
+    _l1(monkeypatch, live_ok=[_NAV_A])
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")                                          # 先有一次真正成功
+    _l1(monkeypatch, cached=[_NAV_A, _NAV_B], secret=KEY)           # 兩檔皆即時全敗、皆退回預存
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    out = S.refetch_nav([KEY])
+    prov = out["table"]["provenance"]
+    assert prov[_NAV_A]["cache_fallback"] is True and prov[_NAV_B]["cache_fallback"] is True
+    assert len(out["table"]["rows"]) == 4                            # 兩檔舊值照常交給呼叫端
+    log = S.load_fetch_log([])["rows"][-1]
+    assert log["outcome"] == "failed" and log["row_count"] is None
+    msg = log["message"]
+    assert msg == out["persist"]["log_message"]
+    assert set(out["persist"]["masked_errors"]) == {_NAV_A, _NAV_B}
+    assert msg.startswith(f"{_NAV_A}: ") and f"\n{_NAV_B}: " in msg  # 每一檔各一段
+    for code in (_NAV_A, _NAV_B):
+        seg = msg.split(f"{code}: ", 1)[1].split(f"\n{_NAV_B}: ", 1)[0]
+        assert "ConnectionError: proxy" in seg and MASK in seg       # 各段都是該檔的即時原文，已遮蔽
+    assert KEY not in msg
+    nav = _set1_nav(monkeypatch)
+    assert nav["at_text"] == "2026-09-25 10:00"                      # 停在上一次真正成功，不前進到 13:00
