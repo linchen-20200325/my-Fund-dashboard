@@ -129,7 +129,8 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 | `tests/ui_v2/test_ui_v2_live_import_guard.py` | 57 | 0 |
 | **合計** | **2210** | **225** |
 
-⚠️ 第四節 4.3 末段與第六節第 1 條裡的「820」「134」本輪**沒有改字**：那幾處是 2026-09-26 的判斷基準，換成新數字屬改寫判斷句，留給下一次專門更新基線的那一輪；要用請照本段現場重跑。
+~~⚠️ 第四節 4.3 末段與第六節第 1 條裡的「820」「134」本輪**沒有改字**：那幾處是 2026-09-26 的判斷基準，換成新數字屬改寫判斷句，留給下一次專門更新基線的那一輪；要用請照本段現場重跑。~~
+→ **2026-10-09 同日更正（S7 獨立稽核 B 必修 2，有意識的更正，不是漏刪）**：第六節第 1 條明文要求基線變了就當場更新這幾個總數，上句的「留給下一輪」與它牴觸。4.3 末段與第六節第 1 條的「820」「134」已依本段實測就地改為 2208／2210 與 225（舊值劃線保留）；4.3「出現任何 skipped」那半句判準文字未改，2 個 skipped 是否違反待協作助手確認（見 4.3 末段補註與 12.8）。
 
 ### 2.2 文件守衛
 
@@ -229,7 +230,8 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 - CI 上（`CI=true`）找不到瀏覽器會 fail、不 skip。但 CI 的 slow lane 設了 `continue-on-error: true`
   （`.github/workflows/pr-check.yml`），它紅了也不擋合併，要點進那一條 job 看結果才知道。
 
-**判斷一次跑法有沒有效**：看輸出最後一行。基線是 ~~`743 passed`~~ → ~~`803 passed`~~ → `820 passed`（2026-09-26 第二輪，基底 `12f8a9a` ＋ 工作樹；見 2.1）、0 skipped。出現任何 skipped，或總數不是 ~~743~~ ~~803~~ 820，就不是有效的驗收。
+**判斷一次跑法有沒有效**：看輸出最後一行。基線是 ~~`743 passed`~~ → ~~`803 passed`~~ → ~~`820 passed`（2026-09-26 第二輪，基底 `12f8a9a` ＋ 工作樹；見 2.1）~~ → `2208 passed`（2026-10-09，基底 `369628f`；出處：2.1 的 2026-10-09 實測與 12.8）、0 skipped。出現任何 skipped，或總數不是 ~~743~~ ~~803~~ ~~820~~ 2210，就不是有效的驗收。
+（2026-10-09 補註，上句判準文字未改：該次實跑另有 2 個 skipped，都在 `tests/ui_v2/test_hld_live_logic.py:128`，是測試內依參數排除空持倉情境（`[empty]`、`[emptyfail]` 兩組），不是缺 streamlit／playwright 的環境跳過；是否違反本條判準，待協作助手確認。見 12.8 第 1 點。）
 
 ---
 
@@ -255,7 +257,7 @@ CI 的 slow lane 跑的是全 repo 的 `python -m pytest -v -m "slow"`，不只 
 
 ## 六、維護規則
 
-1. **每次跑完，基線有變就當場更新本檔。** 包括 ~~743、127~~ ~~803~~ 820、134、91 三個總數（2026-09-26 更新，理由見 2.1）、第 2.1 與 2.2 兩張逐檔表、第四節的實測表。
+1. **每次跑完，基線有變就當場更新本檔。** 包括 ~~743、127~~ ~~803~~ ~~820、134~~ 2210、225、91 三個總數（2026-09-26 更新，理由見 2.1；2026-10-09 依 2.1 當日實測改為 2210、225，基底 `369628f`，舊值劃線保留）、第 2.1 與 2.2 兩張逐檔表、第四節的實測表。
 2. **更新時帶上量測日與 SHA。** 寫「量測日 YYYY-MM-DD，基底 `<SHA>`」；不要寫「目前」「現在」「HEAD」這種會移動的字。
 3. 數字變少時，先查是不是有人把測試刪了或標成 skip，再更新；不要只改數字讓它對上。
 4. 被取代的舊數字不要直接刪掉，劃線保留並寫一句為什麼變（本 repo 的慣例）。
@@ -841,6 +843,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 ### 12.1 狀態用語
 
 - **通過**：本節 12.8 那一次實跑該測試通過。只代表「在 `369628f` 上這條測試是綠的」，不代表 `44` 該塊判準整條成立。
+- **通過‡**：同「通過」，另帶一個條件 —— 該列引用 `tests/ui_v2/test_hld_live_logic.py` 的測試，而 12.8 那一次實跑在該檔 :128 有 2 個 skipped（測試內依參數排除空持倉情境）。這 2 個 skip 是否違反 4.3「出現任何 skipped 就不是有效的驗收」，待協作助手確認；確認前，這幾列的「通過」以該條件成立為前提。
 - **通過（既有記錄）**：本輪沒有重跑，依原節記載的實跑結果。
 - **偏離已登記**：與 `44` 不同、已有裁示或裁定並登記在原節。
 - **待辦**：原節或交接本登記為尚未做。
@@ -861,18 +864,18 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 | # | 驗收項目（原節） | 對應測試 | 狀態 |
 |---|---|---|---|
 | 1 | 示範入口 `ui_v2/app_hld.py`（第五節） | `tests/ui_v2/test_hld_logic.py`、`tests/ui_v2/test_hld_page.py` 整檔 | 通過 |
-| 2 | 正式入口 `ui_v2/app_hld_live.py`：S1～S6b-4、三小塊、R-7（交接本總藍圖 #1 小步表，各列「依據」欄的合併提交） | `tests/ui_v2/` 底下 `test_hld_live_*.py` 六檔、`test_hld_read_failure_logic.py`、`test_hld_source.py` 整檔 | 通過（測試）；合併與協作助手複驗以交接本小步表為準 |
+| 2 | 正式入口 `ui_v2/app_hld_live.py`：S1～S6b-4、三小塊、R-7（交接本總藍圖 #1 小步表，各列「依據」欄的合併提交） | `tests/ui_v2/` 底下 `test_hld_live_*.py` 六檔、`test_hld_read_failure_logic.py`、`test_hld_source.py` 整檔 | 通過‡（測試）；合併與協作助手複驗以交接本小步表為準 |
 | 3 | 失敗訊息遮蔽（7.4-a 續） | `tests/ui_v2/test_hld_source.py` 的 `test_持倉與設定讀取失敗_各進對應錯誤_訊息經遮蔽`、`test_淨值取數失敗訊息經遮蔽`、`test_mask_error遮掉秘密值`、`test_正式入口_讀取拋例外_畫錯誤畫面_秘密值經遮蔽_不是示範模式`、`test_秘密值來源_st_secrets以外三處也收進遮蔽`；`tests/ui_v2/test_hld_live_assemble.py::test_T4a_某檔取數失敗_fund_errors放遮蔽後的原文_端到端全頁印出同一句且不含原文` | 通過 |
 | 4 | 訊息旁「已遮蔽憑證」那一行（7.4-a 續，與 7.4 第二點的差距） | 無 | 偏離已登記；待辦（客戶 2026-10-09 裁示維持待辦；交接本第 5 節〈已裁示（2026-10-09）〉第 10 點） |
-| 5 | 正式版「最後核對日」換算台灣日期（8.1 末段） | `tests/ui_v2/test_hld_live_logic.py` 的 `test_正式模式_HLD5欄名改為最後核對日只記日期_值只有日期`、`test_最後核對日_合格值換成台灣日期`、`test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤` | 通過 |
+| 5 | 正式版「最後核對日」換算台灣日期（8.1 末段） | `tests/ui_v2/test_hld_live_logic.py` 的 `test_正式模式_HLD5欄名改為最後核對日只記日期_值只有日期`、`test_最後核對日_合格值換成台灣日期`、`test_最後核對日一格不合格_整頁不崩_那一格進系統錯誤` | 通過‡ |
 | 6 | `HLD-5` 保單欄 DIRECT 顯示「直接持有」（8.2 末段） | `tests/ui_v2/test_hld_logic.py::test_DIRECT保單欄位顯示直接持有而不是空白` | 通過 |
-| 7 | DIRECT 持倉另列、不計入體檢（8.3 更正段，客戶 2026-10-02 裁示 3-B (ii)） | `tests/ui_v2/test_hld_live_logic.py` 以 `test_DIRECT_` 開頭的測試 | 通過 |
-| 8 | 結論燈 N 數不重複的檔（9.2、9.3） | 9.3 所列六條（`test_hld_live_logic.py` 四條、`test_hld_live_page.py` 兩條） | 通過；偏離已登記（9.2：`44` :493、:515、:518 的「N 與列數相等」不驗收） |
+| 7 | DIRECT 持倉另列、不計入體檢（8.3 更正段，客戶 2026-10-02 裁示 3-B (ii)） | `tests/ui_v2/test_hld_live_logic.py` 以 `test_DIRECT_` 開頭的測試 | 通過‡ |
+| 8 | 結論燈 N 數不重複的檔（9.2、9.3） | 9.3 所列六條（`test_hld_live_logic.py` 四條、`test_hld_live_page.py` 兩條） | 通過‡；偏離已登記（9.2：`44` :493、:515、:518 的「N 與列數相等」不驗收） |
 | 9 | 草稿與原型仍寫「N 與列數相等」（9.4） | — | 待辦（只登記、不改字；改字要先回客戶） |
-| 10 | `HLD-4`「存檔」停用（10.1 第 1 列） | 10.1 第 1 列所列三條 | 通過；偏離已登記 |
-| 11 | 「重新取數」正式畫面拿掉（10.1 第 2 列） | 10.1 第 2 列所列三條 | 通過；偏離已登記 |
+| 10 | `HLD-4`「存檔」停用（10.1 第 1 列） | 10.1 第 1 列所列三條 | 通過‡；偏離已登記 |
+| 11 | 「重新取數」正式畫面拿掉（10.1 第 2 列） | 10.1 第 2 列所列三條 | 通過‡；偏離已登記 |
 | 12 | `fund_profile` 未接、成立日推定（10.1 第 3 列） | 10.1 第 3 列所列三條 | 通過；偏離已登記 |
-| 13 | `HLD-5` 展開區圖是佔位（10.1 第 4 列） | `tests/ui_v2/test_hld_live_logic.py::test_S6a_HLD5佔位框照留` | 通過；偏離已登記（淨值那一格的字句沒有專屬斷言，同 10.1） |
+| 13 | `HLD-5` 展開區圖是佔位（10.1 第 4 列） | `tests/ui_v2/test_hld_live_logic.py::test_S6a_HLD5佔位框照留` | 通過‡；偏離已登記（淨值那一格的字句沒有專屬斷言，同 10.1） |
 | 14 | `HLD-0`「前往 Sheets 維護持倉」按了不動（10.1 第 5 列） | 無（`44` :493 那一步目前驗不到） | 未查證；偏離已登記（尚無裁示） |
 | 15 | 同保單同基金分多列未加總（10.1 第 6 列；與 8.4 同一件事） | `tests/ui_v2/test_hld_source.py::test_每一筆持倉列對應一筆fund_帶holding_ccy_不去重`（驗的是不去重，不是 `44` 4.1 的加總判準） | 偏離已登記；待辦（未裁） |
 | 16 | 資料格式：`hld_deviation_rules`、`pending_tables`、`fund_errors`（10.2） | `tests/ui_v2/test_hld_live_settings.py` 整檔；`tests/ui_v2/test_hld_live_assemble.py::test_T3a_配息閘門是關的_pending_tables固定為fund_profile與dividend`；同檔以 `test_T4` 開頭的測試；`tests/ui_v2/test_hld_source.py::test_常數注入_扣下清單恰為四碼_不含input_conflict_其餘照L2` | 通過 |
@@ -891,25 +894,27 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 | # | 驗收項目（原節） | 對應測試 | 狀態 |
 |---|---|---|---|
 | 1 | 示範入口 `ui_v2/app_alo.py`（第五節） | `tests/ui_v2/test_alo_logic.py`、`tests/ui_v2/test_alo_page.py` 整檔 | 通過 |
-| 2 | 讀表：最後核對日換成當日 12:00 台灣時間，推定值（8.1） | `tests/test_v2_tables_alo_holdings.py`、`tests/test_policy_supplement_repository.py` 以 `test_R1_` 開頭的測試 | 通過 |
-| 3 | 讀表：DIRECT 列照讀、逐筆警示、大小寫敏感（8.2） | `tests/test_v2_tables_alo_holdings.py` 以 `test_U9_`、`test_裁定8_` 開頭的測試 | 通過 |
-| 4 | `44` 4.4「`DIRECT` 這一列固定存在」表判準（8.2 表） | — | 偏離已登記（暫停驗收，總管依 R2 推導） |
-| 5 | DIRECT 持倉不產生 `holding` 列（8.3） | `tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列` | 通過；總管暫定，不是客戶裁示 |
-| 6 | 同鍵分多列時顯示才加總（8.4） | — | 待辦（接 UI 的那一輪要補；合併後各欄取哪一列未裁） |
-| 7 | 讀取量是關係不是門檻（8.5） | `tests/test_policy_supplement_repository.py` 以 `test_第14輪BM1_` 開頭的測試、`tests/test_v2_tables_alo_holdings.py` 以 `test_第14輪BM1_整條路_` 開頭的測試 | 通過 |
-| 8 | 其他檔把「60 reads/min」寫成事實（8.5 登記二） | — | 待辦 |
-| 9 | 讀表秘密值在 L3 讀、遮蔽在寫出點做一次（7.2 丙；10.2 第 2 點引用） | `tests/ui_v2/test_alo_source.py` 整檔 | 通過 |
-| 10 | `ALO-1`／`ALO-4` 存檔（總藍圖 #5） | — | 待辦（客戶 2026-10-09 已裁兩鍵部分失敗的處理，待實作；交接本第 5 節〈已裁示（2026-10-09）〉） |
-| 11 | `44` §3.4 `ALO-0`～`ALO-7` 各塊判準 | — | 未查證（逐條對照本輪沒做） |
+| 2 | 正式入口 `ui_v2/app_alo_live.py`（#860，`651bd77`；交接本總藍圖依賴欄 #1 那一格） | `tests/ui_v2/test_alo_live_logic.py`、`tests/ui_v2/test_alo_live_page.py` 整檔 | 通過 |
+| 3 | 讀表：最後核對日換成當日 12:00 台灣時間，推定值（8.1） | `tests/test_v2_tables_alo_holdings.py`、`tests/test_policy_supplement_repository.py` 以 `test_R1_` 開頭的測試 | 通過 |
+| 4 | 讀表：DIRECT 列照讀、逐筆警示、大小寫敏感（8.2） | `tests/test_v2_tables_alo_holdings.py` 以 `test_U9_`、`test_裁定8_` 開頭的測試 | 通過 |
+| 5 | `44` 4.4「`DIRECT` 這一列固定存在」表判準（8.2 表） | — | 偏離已登記（暫停驗收，總管依 R2 推導） |
+| 6 | DIRECT 持倉不產生 `holding` 列（8.3） | `tests/test_v2_tables_alo_holdings.py::test_裁定4_總管暫定_DIRECT持倉不產生holding列` | 通過；總管暫定，不是客戶裁示 |
+| 7 | 同鍵分多列時顯示才加總（8.4） | — | 待辦（接 UI 的那一輪要補；合併後各欄取哪一列未裁） |
+| 8 | 讀取量是關係不是門檻（8.5） | `tests/test_policy_supplement_repository.py` 以 `test_第14輪BM1_` 開頭的測試、`tests/test_v2_tables_alo_holdings.py` 以 `test_第14輪BM1_整條路_` 開頭的測試 | 通過 |
+| 9 | 其他檔把「60 reads/min」寫成事實（8.5 登記二） | — | 待辦 |
+| 10 | 讀表秘密值在 L3 讀、遮蔽在寫出點做一次（7.3 末條「遮蔽只在寫出點做一次」） | `tests/ui_v2/test_alo_source.py` 整檔 | 通過 |
+| 11 | `ALO-1`／`ALO-4` 存檔（總藍圖 #5） | — | 待辦（客戶 2026-10-09 已裁兩鍵部分失敗的處理，待實作；交接本第 5 節〈已裁示（2026-10-09）〉） |
+| 12 | `44` §3.4 `ALO-0`～`ALO-7` 各塊判準 | — | 未查證（逐條對照本輪沒做） |
 
 ### 12.6 設定與診斷（SET）
 
 | # | 驗收項目（原節） | 對應測試 | 狀態 |
 |---|---|---|---|
 | 1 | 示範入口 `ui_v2/app_set.py`（第五節） | `tests/ui_v2/test_set_logic.py`、`tests/ui_v2/test_set_page.py` 整檔 | 通過 |
-| 2 | `SET-2`／`SET-6` 失敗訊息遮蔽、下一行「已遮蔽憑證」，與 `fetch_log.message` 逐字相同（7.4、7.5 M11） | `tests/ui_v2/test_set_live_page.py::test_M11_SET版_取數失敗訊息與fetch_log逐字相同_SET2與SET6下一行加註`；`tests/ui_v2/test_set_live_logic.py::test_讀取失敗_訊息遮蔽_各處下一行加已遮蔽憑證` | 通過（7.5-a 原記「只做了 MKT 版」，見該處 2026-10-09 補註） |
-| 3 | `SET-0`「淨值、配息尚未接取數來源」暫留（十一） | — | 偏離已登記；待辦（等 #3 淨值來源完成後與 `SET-1`、`SET-2` 一起處理） |
-| 4 | `44` §3.5 `SET-0`～`SET-7` 各塊判準 | — | 未查證（逐條對照本輪沒做） |
+| 2 | 正式入口 `ui_v2/app_set_live.py`（該檔於 `0062b7f` 加入；對應 PR 本組未查） | `tests/ui_v2/test_set_live_logic.py`、`tests/ui_v2/test_set_live_page.py` 整檔 | 通過 |
+| 3 | `SET-2`／`SET-6` 失敗訊息遮蔽、下一行「已遮蔽憑證」，與 `fetch_log.message` 逐字相同（7.4、7.5 M11） | `tests/ui_v2/test_set_live_page.py::test_M11_SET版_取數失敗訊息與fetch_log逐字相同_SET2與SET6下一行加註`；`tests/ui_v2/test_set_live_logic.py::test_讀取失敗_訊息遮蔽_各處下一行加已遮蔽憑證` | 通過（7.5-a 原記「只做了 MKT 版」，見該處 2026-10-09 補註） |
+| 4 | `SET-0`「淨值、配息尚未接取數來源」暫留（十一） | — | 偏離已登記；待辦（等 #3 淨值來源完成後與 `SET-1`、`SET-2` 一起處理） |
+| 5 | `44` §3.5 `SET-0`～`SET-7` 各塊判準 | — | 未查證（逐條對照本輪沒做） |
 
 ### 12.7 跨頁
 
@@ -932,7 +937,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
    UI_V2_CHROMIUM=<chromium 執行檔路徑> <venv>/bin/python -m pytest tests/ui_v2/ tests/test_v2_tables_masking.py tests/test_v2_tables_alo_holdings.py tests/test_policy_supplement_repository.py -q -p no:cacheprovider -rs
    ```
    結果：`2679 passed, 2 skipped`，0 failed，耗時 870.70 秒，結束碼 0。逐段：`tests/ui_v2/` 2208 passed、2 skipped；`tests/test_v2_tables_masking.py` 71 passed；`tests/test_v2_tables_alo_holdings.py` 129 passed；`tests/test_policy_supplement_repository.py` 271 passed。
-   - 2 個 skipped 都在 `tests/ui_v2/test_hld_live_logic.py:128`，原因字串「空持倉：畫面上沒有數字，示範模式本來就沒有字尾」—— 是測試內依參數跳過，不是缺 streamlit／playwright 的環境跳過（第四節那一種）。⚠️ 4.3 末段寫「出現任何 skipped … 就不是有效的驗收」，那一句寫於 2026-09-26、當時 0 skipped；這 2 個算不算違反該句，本組不判，登記給協作助手確認。
+   - 2 個 skipped 都在 `tests/ui_v2/test_hld_live_logic.py:128`（`test_示範模式_同一份去字資料_照舊帶示意字樣` 的 `[empty]`、`[emptyfail]` 兩組參數），原因字串「空持倉：畫面上沒有數字，示範模式本來就沒有字尾」—— 是測試內依參數排除空持倉情境，不是缺 streamlit／playwright 的環境跳過（第四節那一種）。⚠️ 4.3 末段寫「出現任何 skipped … 就不是有效的驗收」；這 2 個算不算違反該句，待協作助手確認，4.3 判準文字不改。依這一次實跑標「通過」、且引用該檔測試的列，一律標「通過‡」（定義見 12.1）。
 2. **文件守衛**（第 2.2 指令）：`91 passed`（66／7／18），與 2026-09-25 相同。
 3. **本節引用的測試名**：12.2～12.6 與它們引用的 7.4-a 續、8.1～8.5、9.3、10.1、10.2 所列具名測試與「以 `test_…` 開頭」的測試，本組以腳本逐一對照 `tests/` 的 `def` 與這一次的 JUnit 結果：**全部存在，全部通過**。劃線保留的舊名（8.3 那一個）不在對照範圍。
 4. **第六節自檢**（本節定稿後跑）：禁用詞只命中 8.4 那一句、詞表第 1 個，第六節三條件齊備，視同 0；識別碼 0、模型名（不分大小寫）0。本節不寫指令輸出的原始計數（寫下就會被本節自己改變，同 8.4 那一則）。
@@ -944,9 +949,9 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 | MKT | 5 | 3 ＋ 1（既有記錄） | 0 | 0 | 1 |
 | HLD | 17 | 12 | 8 | 3 | 2 |
 | EXP | 3 | 1 | 0 | 1 | 1 |
-| ALO | 11 | 6 | 1 | 3 | 1 |
-| SET | 4 | 2 | 1 | 1 | 1 |
+| ALO | 12 | 7 | 1 | 3 | 1 |
+| SET | 5 | 3 | 1 | 1 | 1 |
 
-一列可同時算進兩欄（例：「通過；偏離已登記」），所以各欄相加不等於條目數。另有跨頁 7 條（12.7）不計入上表。
+HLD 的 12 條「通過」中有 7 條是「通過‡」（12.1）。一列可同時算進兩欄（例：「通過；偏離已登記」），所以各欄相加不等於條目數。另有跨頁 7 條（12.7）不計入上表。
 
 ⚠️ **第十二節由執行組單組產出，未經第二組獨立複驗**（`CLAUDE.md` §-2 規則 6）。「通過」只指 12.8 那一次實跑；`44` 各塊判準的逐條對照沒有做，所以本節**不宣稱**任何一頁的規格已全部驗收。
