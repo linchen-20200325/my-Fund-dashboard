@@ -15,13 +15,16 @@
 
 `load_live()` 回傳 `{"dataset": ..., "notes": ...}`：
 - `dataset`：與 `fixtures.scenario()` 同形（`now_utc`、五張表、`errors`、`save_errors`、`save_inputs`、`spec`）。
-  `nav`、`dividend` 兩表尚未接上（`49` Q12）→ 空列表、不進 `errors`（那是「還沒接」，不是「讀失敗」）。
+  ~~`nav`、`dividend` 兩表尚未接上（`49` Q12）→ 空列表、不進 `errors`（那是「還沒接」，不是「讀失敗」）。~~
+  → 2026-10-09 狀態更新（不是漏刪）：`dividend` 仍尚未接上 → 空列表、不進 `errors`（「還沒接」，不是「讀失敗」）。
+  `nav` 不存表（客戶裁示 Q1）→ 也是空列表；SET-1 淨值列的最近取得時間改由 `kind_time_from_log`
+  （L2 `LOG_TIMED_TABLES`，`{"nav": "淨值"}`）指給 `logic`：取 `fetch_log` 淨值層最近一次 `ok` 那一筆的 `started_at`（見 `logic._build_set1`）。
   `now_utc` 讀系統時鐘（`49` §2.5）。
 - `notes`：
   `mask_token`（遮蔽記號，L2 那一份）、`pending_tables`、`wired_tiers`、`pages_reading_settings`（L2 的接線旗標，草稿 B7）、
   `gate`（寫入閘門，不打上游）、`title`（★10：`{"state": ok|not_configured|cooling|failed, "text", "remaining_sec"}`）、
   `table_errors`（`{表: {"code", "remaining_sec", "tab", "expected", "actual"}}`）、
-  `structure`（★9 計數）、`source_cooldowns`（市場指標來源的冷卻狀態）。
+  `structure`（★9 計數）、`source_cooldowns`（市場指標來源的冷卻狀態；只用在市場指標層，見 `live.refetch_button`）。
 
 `save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）。
 `refetch(層級)` → `{"tier", "fetched", "log_message", "masked_errors", "empty", "stage", "message", "ok"}`
@@ -118,6 +121,7 @@ def load_live() -> dict:
     dataset = {
         "now_utc": _now_utc(),
         "nav": [],
+        "kind_time_from_log": dict(settings_store.LOG_TIMED_TABLES),   # 淨值不存表：時間讀 fetch_log
         "dividend": [],
         "market_indicator": mi_rows,
         "fetch_log": fetch_log,
@@ -147,14 +151,16 @@ def save_setting(setting_key, setting_value, value_kind) -> dict:
 
 
 def refetch(tier) -> dict:
-    """給 `page.render(refetch_live=...)` 用：重新取數（目前只接上市場指標那一層）。"""
+    """給 `page.render(refetch_live=...)` 用：重新取數。~~目前只接上市場指標那一層~~ → 2026-10-09 再接上淨值層
+    （客戶裁示 Q2～Q4；狀態更新，不是漏刪）。入口由 L2 `REFETCH_BY_TIER` 分派（與 `WIRED_TIERS` 同一組鍵）。"""
     if tier not in settings_store.WIRED_TIERS:
         raise ValueError(f"層級 {tier!r} 的取數尚未接上")
-    out = settings_store.refetch_market_indicator(_secret_values())
+    out = settings_store.REFETCH_BY_TIER[tier](_secret_values())
     persist = out["persist"]
     return {
         "tier": tier,
-        "fetched": sum(out["table"].get("fetched", {}).values()),
+        # 淨值層持倉讀不到時 L2 沒有組表（`table` 為 None）→ 取回 0 列。
+        "fetched": sum((out["table"] or {}).get("fetched", {}).values()),
         "log_message": persist["log_message"],
         "masked_errors": dict(persist["masked_errors"]),
         "empty": dict(persist["empty"]),

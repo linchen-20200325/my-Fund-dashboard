@@ -625,24 +625,48 @@ def _setting_state(dataset, key, known_keys):
 # ───────────────────────── SET-1 ─────────────────────────
 
 
+def latest_ok_started_at(logs, tier):
+    """`fetch_log` 裡該層級最近一次**成功**（`ok`）那一筆的 `started_at`；從未成功回 None。
+
+    客戶 2026-10-09 裁示（Q-C）：淨值不存表，SET-1 淨值列的最近取得時間用 set 頁重新取數的時間。
+    只看 `ok`：之後再失敗的紀錄**不覆蓋**這個時間（失敗那一次沒有取得任何淨值）；失敗由 SET-2 顯示。
+    取 `started_at`（不取 `finished_at`）：與 SET-2 該層級「最近一次時間」同一欄（`44` SET-2 來源欄），
+    且不晚於該次任何一筆淨值的實際取得時間 —— 寧可把新鮮度算舊一點，不算新（§1）。
+    """
+    if tier not in TIERS:
+        raise ValueError(f"來源層級 {tier!r} 不在 `44` 第四節那四個之內")
+    stamps = [r["started_at"] for r in logs if r["source_tier"] == tier and r["outcome"] == "ok"]
+    return max(stamps) if stamps else None   # 字面格式固定（秒＋Z），字串比較＝時間比較
+
+
 def _build_set1(dataset, known_keys) -> dict:
-    """SET-GAP-觀測日欄：不畫觀測日欄。SET-GAP-來源徽章：不另掛來源與新鮮度徽章。"""
+    """SET-GAP-觀測日欄：不畫觀測日欄。SET-GAP-來源徽章：不另掛來源與新鮮度徽章。
+
+    `dataset["kind_time_from_log"]`（選填，`{表: 層級}`；只有正式模式會給）：該類資料不存表，
+    最近取得時間改讀 `fetch_log`（`latest_ok_started_at`）；`fetch_log` 讀不到 → 該列走讀取失敗。
+    """
     now = dataset["now_utc"]
     limit_state, limit = _setting_state(dataset, MAX_AGE_KEY, known_keys)
-    rows = []
+    from_log = dataset.get("kind_time_from_log") or {}
+    rows, failures = [], []
     for label, table in KIND_TABLES:
-        failure = fetch_error(dataset, table)
+        if table in from_log:
+            failure = fetch_error(dataset, "fetch_log")
+            latest = None if failure is not None else latest_ok_started_at(dataset["fetch_log"], from_log[table])
+        else:
+            failure = fetch_error(dataset, table)
+            latest = max(r["fetched_at"] for r in dataset[table]) if failure is None and dataset[table] else None
+        failures.append(failure)
         row = {"_kind_label": label, "kind_text": label, "badges": [], "_failed": False, "_empty": False}
         if failure is not None:
             # SET-GAP-讀取失敗逐列
             row.update(_failed=True, at_text=fetch_failed_text(failure), days_text="⬜", compare_text="⬜")
             row["_days"] = None
-        elif not dataset[table]:
+        elif latest is None:
             # 44 逐字「某類無任何列 → 三欄皆 `⬜` 並掛 `資料未備` 徽章」
             row.update(_empty=True, at_text="⬜", days_text="⬜", compare_text="⬜", _days=None)
             row["badges"] = [status_badge("資料未備")]
         else:
-            latest = max(r["fetched_at"] for r in dataset[table])
             days = days_since(latest, now)
             row.update(at_text=format_time(latest), days_text=str(days), _days=days)
             if limit_state == "failed":
@@ -659,7 +683,7 @@ def _build_set1(dataset, known_keys) -> dict:
     if limit_state == "failed":
         fail_nodes.append(_fail_node(settings_failure(dataset)))
     overdue = sum(1 for r in rows if r["compare_text"] == TEXT_OUT)
-    read_failure = next((fetch_error(dataset, t) for _l, t in KIND_TABLES if fetch_error(dataset, t)), None)
+    read_failure = next((f for f in failures if f), None)
     if read_failure is None and limit_state == "failed":
         read_failure = settings_failure(dataset)
     if read_failure is not None:

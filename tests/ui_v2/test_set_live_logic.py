@@ -204,19 +204,26 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     for demo in (logic.HINT_NOTE, "本頁沒有後端"):
         assert demo not in text, demo
     # ★1、★3（三處）
-    assert live.TEXT_PENDING_NAV_DIVIDEND in _b(model, "SET-0")["detail_lines"]
+    # ~~assert live.TEXT_PENDING_NAV_DIVIDEND in _b(model, "SET-0")["detail_lines"]~~
+    # → 2026-10-09 客戶裁示 Q1（不存 NAV、即時取得）＋ 53 §7 第 1 列核准：★1 換成 B 句（有意識的更正，不是漏刪）。
+    assert live.TEXT_PENDING_DIVIDEND in _b(model, "SET-0")["detail_lines"]
+    assert "淨值、配息尚未接取數來源" not in text
     for code in ("SET-0", "SET-2", "SET-6"):
         assert live.TEXT_LOG_SCOPE in _b(model, code)["detail_lines"], code
     # ★2、★4
     set1 = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}
     for kind in ("淨值", "配息"):
         assert set1[kind]["badges"][0]["text"] == "資料未備" and set1[kind]["at_text"] == "⬜"
-        assert set1[kind]["note_lines"] == [live.TEXT_REASON_KIND_PENDING]
+    # ~~淨值列也印 ★2~~ → 2026-10-09（53 §7 第 2 列）：淨值列不再印「尚未接上」；從未成功取過 → 44 既有空狀態。
+    assert set1["配息"]["note_lines"] == [live.TEXT_REASON_KIND_PENDING]
+    assert set1["淨值"]["note_lines"] == []
     assert set1["市場指標"]["note_lines"] == [live.TEXT_MI_TIME_SCOPE]
     assert set1["市場指標"]["at_text"] == "2026-09-25 14:00"                          # fetched_at 轉 UTC+8
     set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}
-    for tier in ("淨值", "配息", "其他"):
+    # ~~淨值層也印 ★2~~ → 2026-10-09（53 §7 第 5 列）：淨值層已接上，不再印「尚未接上」。
+    for tier in ("配息", "其他"):
         assert set2[tier]["note_lines"] == [live.TEXT_REASON_TIER_PENDING], tier
+    assert set2["淨值"]["note_lines"] == [] and set2["淨值"]["result_text"] == "⬜"
     assert set2["市場指標"]["result_text"] == "ok" and set2["市場指標"]["note_lines"] == []
     # ★10
     assert [n["text"] for n in _b(model, "SET-3")["head_lines"]] == ["設定試算表：客戶的設定本"]
@@ -372,9 +379,11 @@ def test_存檔_要寫的只有被改的那幾鍵_清空為None():
 def test_重新取數按鈕_各狀態停用原因(env, monkeypatch):
     notes = source.load_live()["notes"]
     assert live.refetch_button(None, notes)["disabled_reason"] == "尚未選定來源層級"
-    for tier in ("淨值", "配息", "其他"):
+    # ~~淨值也是「尚未接上」~~ → 2026-10-09 淨值層接上（客戶裁示 Q2～Q4）。
+    for tier in ("配息", "其他"):
         assert live.refetch_button(tier, notes)["disabled_reason"] == "這一層級的取數尚未接上"
     assert live.refetch_button("市場指標", notes)["_enabled"] is True
+    assert live.refetch_button("淨值", notes)["_enabled"] is True
     cool = dict(notes, source_cooldowns=[{"source": "query1.finance.yahoo.com", "remaining_sec": 41.2},
                                          {"source": "b", "remaining_sec": 3}])
     assert live.refetch_button("市場指標", cool)["disabled_reason"] == \
@@ -473,8 +482,10 @@ def test_開始紀錄寫不進去_仍顯示取數結果並列寫入失敗(env, m
 
 
 def test_未接上的層級_source直接拒絕():
-    with pytest.raises(ValueError):
-        source.refetch("淨值")
+    # ~~source.refetch("淨值")~~ → 2026-10-09 淨值層接上，改以仍未接上的兩層驗（有意識的更正，不是漏刪）。
+    for tier in ("配息", "其他"):
+        with pytest.raises(ValueError):
+            source.refetch(tier)
 
 
 def test_source交出去的東西沒有未遮蔽的原文(env, monkeypatch):
@@ -687,3 +698,123 @@ def test_超長整數_試算表裡已經有_正式模式整頁不崩(env):
     assert _b(model, "SET-1")["_limit_state"] == "bad"
     row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "set_max_age_days"][0]
     assert row["value_text"] == logic.TEXT_NA_BAD_KIND
+
+
+# ═══════════════════════ 淨值層重新取數（客戶 2026-10-09 裁示 Q1～Q4；53 §7） ═══════════════════════
+
+from datetime import datetime  # noqa: E402
+
+from services.v2_tables import nav_dividend as ND  # noqa: E402
+
+_NAV_A, _NAV_B = "ZZNAVTESTA1", "ZZNAVTESTB2"
+
+
+def _nav_series():
+    s = pd.Series([10.0, 10.5], index=pd.to_datetime(["2026-09-23", "2026-09-24"]), dtype=float)
+    s.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
+    return s
+
+
+def _stub_nav(monkeypatch, by_code):
+    """持倉＝`by_code` 的鍵（幣別 USD）；L1 `fetch_nav_with_error` 依代碼回 `(序列, 錯誤)`。不打網路。"""
+    monkeypatch.setattr(S.alo_holdings, "load_alo_tables",
+                        lambda values: {"holding": [{"fund_code": c, "ccy": "USD"} for c in by_code]})
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": by_code[full_key])
+
+
+def _clock(monkeypatch, text):
+    monkeypatch.setattr(R, "_utcnow", lambda: datetime.fromisoformat(text.replace("Z", "+00:00")))
+
+
+def test_淨值文案逐字_客戶2026_10_09核准():
+    assert live.TEXT_PENDING_DIVIDEND == "配息尚未接取數來源；淨值即時取得"
+    assert live.TEXT_NAV_TIME_SCOPE == "這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
+    assert live.TEXT_SET5_NOTE == ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，"
+                                   "市場總覽頁不會因此重新整理；淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")
+    assert not hasattr(live, "TEXT_PENDING_NAV_DIVIDEND")      # 舊句不再有任何地方印
+
+
+def test_淨值層_接線旗標_L2與source一致():
+    assert "淨值" in S.WIRED_TIERS and "nav" not in S.PENDING_TABLES and S.PENDING_TABLES == ("dividend",)
+    assert set(S.REFETCH_BY_TIER) == set(S.WIRED_TIERS)
+    assert S.LOG_TIMED_TABLES == {"nav": "淨值"}
+
+
+def test_淨值層_重新取數成功_結果行_SET1印本次時間與新句(env, monkeypatch):
+    _stub_nav(monkeypatch, {_NAV_A: (_nav_series(), None), _NAV_B: (_nav_series(), None)})
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    result = source.refetch("淨值")
+    assert _lines(result) == ["取數完成：淨值，取回 4 列；結果記在取數紀錄（層 4）"]
+    monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["at_text"] == "2026-09-25 10:00" and nav["days_text"] == "1"
+    assert nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE] and nav["badges"] == []
+    set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}["淨值"]
+    assert set2["result_text"] == "ok" and set2["note_lines"] == []
+    assert live.TEXT_REASON_KIND_PENDING not in nav["note_lines"]
+
+
+def test_淨值層_ok之後再失敗_SET1仍顯示ok那筆時間_SET2顯示失敗(env, monkeypatch):
+    _stub_nav(monkeypatch, {_NAV_A: (_nav_series(), None)})
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")
+    _stub_nav(monkeypatch, {_NAV_A: (None, f"HTTP 503 /nav?api_key={KEY}")})
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    result = source.refetch("淨值")
+    stored = S.load_fetch_log([])["rows"][-1]["message"]
+    assert _lines(result) == ["⛔ 取數失敗：" + stored, live.MASKED_NOTE]
+    assert stored.startswith(f"{_NAV_A}: HTTP 503") and KEY not in stored and MASK in stored
+    monkeypatch.setattr(source, "_now_utc", lambda: "2026-09-26T04:00:00Z")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["at_text"] == "2026-09-25 10:00"                      # ok 那筆；後來的失敗不覆蓋
+    assert nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE]
+    set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}["淨值"]
+    assert set2["result_text"] == "failed" and set2["time_text"] == "2026-09-25 13:00"
+    assert set2["message_text"] == stored
+    assert _b(model, "SET-0")["text"] == "失敗的來源層級：淨值"
+
+
+def test_淨值層_只有失敗紀錄_SET1為資料未備_不印新句也不印尚未接上(env, monkeypatch):
+    _stub_nav(monkeypatch, {_NAV_A: (None, "HTTP 503 upstream")})
+    source.refetch("淨值")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備"
+    assert nav["note_lines"] == []
+
+
+def test_淨值層_fetch_log讀不到_SET1淨值列照讀取失敗_不說成資料未備(env):
+    env.cfg.pop("SETTINGS_SHEET_ID")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["_failed"] is True and nav["at_text"] == "⛔ 未設定試算表 ID，暫停寫入"
+    assert nav["badges"] == [] and nav["note_lines"] == []
+
+
+def test_淨值層_持倉為空_結果行回應為空_fetch_log記ok_0列(env, monkeypatch):
+    _stub_nav(monkeypatch, {})
+    result = source.refetch("淨值")
+    assert _lines(result) == ["取數完成：淨值，回應為空"]
+    log = S.load_fetch_log([])["rows"][-1]
+    assert log["source_tier"] == "淨值" and log["outcome"] == "ok" and log["row_count"] == 0
+
+
+def test_淨值層_來源冷卻清單只屬市場指標_淨值不印冷卻原因(env):
+    notes = source.load_live()["notes"]
+    cool = dict(notes, source_cooldowns=[{"source": "query1.finance.yahoo.com", "remaining_sec": 41.2}])
+    assert live.refetch_button("淨值", cool)["_enabled"] is True
+    assert live.refetch_button("市場指標", cool)["disabled_reason"].startswith("來源冷卻中：")
+
+
+def test_淨值層_設定試算表冷卻照樣停用(env):
+    notes = dict(source.load_live()["notes"], gate={"state": "cooling", "remaining_sec": 12})
+    assert live.refetch_button("淨值", notes)["disabled_reason"] == "設定試算表暫停重試，約剩 12 秒"
+
+
+def test_淨值層_source交出去的東西沒有未遮蔽的原文(env, monkeypatch):
+    _stub_nav(monkeypatch, {_NAV_A: (None, f"api_key={KEY}")})
+    result = source.refetch("淨值")
+    assert KEY not in repr(result)
+    assert set(result) == {"tier", "fetched", "log_message", "masked_errors", "empty", "stage", "message", "ok"}
