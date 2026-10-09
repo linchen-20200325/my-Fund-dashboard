@@ -801,12 +801,18 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
    - 程式：`ui_v2/hld/live.py::_parse_rules`、`_json_array`、`parse_user_settings`。驗收：`tests/ui_v2/test_hld_live_settings.py`。
    - ⚠️ `ui_v2/set/fixtures.py` 裡那筆示意值與此格式不符，屬示範資料，交接本另登記，本節不處理。
 2. **hld `dataset["pending_tables"]`**：正式版**固定**為 `["fund_profile", "dividend"]`（客戶 2026-10-05 S6b-2 規則：至少列 `fund_profile`，配息閘門關閉時也列 `dividend`）；配息閘門（`nav_dividend.DIV_DATE_IS_EX_DATE_VERIFIED`）被打開 → 整頁報錯。程式：`ui_v2/hld/live.py::assemble_live_load`。
-   - ⚠️ **同名不同物**：`services/v2_tables/settings_store.py` 的 `PENDING_TABLES = ("nav", "dividend")` 是 set 頁與 alo 頁用的，**仍含 `nav`**，不可移除（alo 頁寫死 `nav: []`，移除會讓 `tests/ui_v2/test_alo_source.py` 轉紅；交接本〈登記待辦〉「hld S6b 開工前盤點」第 9 條，本組未實跑）。hld 的那一份不讀它。
+   - ⚠️ **同名不同物**：`services/v2_tables/settings_store.py` 的 ~~`PENDING_TABLES = ("nav", "dividend")` 是 set 頁與 alo 頁用的，**仍含 `nav`**，不可移除（alo 頁寫死 `nav: []`，移除會讓 `tests/ui_v2/test_alo_source.py` 轉紅；交接本〈登記待辦〉「hld S6b 開工前盤點」第 9 條，本組未實跑）~~ → **2026-10-09 狀態更新（不是漏刪）**：`PENDING_TABLES` 已改為 `("dividend",)`（客戶裁示 Q1 不存 NAV，`47406e2`）；alo 頁仍寫死 `nav: []`（alo 取淨值未獲授權），該測試已改驗新狀態。`PENDING_TABLES` 是 set 頁與 alo 頁用的。hld 的那一份不讀它。
 3. **hld `dataset["fund_errors"]`**：形狀 `{"nav": {fund_code: 遮蔽後的訊息原文}}`；沒有失敗時是空字典。**放進去的**：L1 淨值取數真的失敗的那幾檔，訊息原文以 `mask` 遮過後放入（含 L1 回傳型別不符）。**不放進去的**（畫面印「⬜ 資料未備」）：淨值被扣下（`ccy_missing`、`ccy_conflict`、`fetched_at_missing`、`fetched_at_in_future` 四碼）、代碼對照查不到、來源回空（訊息恰為 `EMPTY_WITHOUT_REASON` 且未取到任何列）、L1 有回但 L2 全數拒收。扣下代碼不在四碼內（含 `input_conflict`）→ raise。程式：`ui_v2/hld/live.py::assemble_live_load`；四碼清單：`ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD`。驗收：`tests/ui_v2/test_hld_live_assemble.py` 以 `test_T4` 開頭的測試、`tests/ui_v2/test_hld_source.py::test_常數注入_扣下清單恰為四碼_不含input_conflict_其餘照L2`。
 
 ---
 
-## 十一、設定與診斷頁 SET-0：「淨值、配息尚未接取數來源」暫留（2026-10-09 登記）
+## 十一、設定與診斷頁 SET-0：「淨值、配息尚未接取數來源」~~暫留（2026-10-09 登記）~~ → 已處理（2026-10-09，`47406e2`）
+
+> **2026-10-09 狀態更新（不是漏刪；下列三點在寫下當時為真）**：#3 淨值層已接上（客戶 2026-10-09 裁示 Q1～Q4、文案依 `docs/v2/53_nav_source_plan.md` §7 核准），`SET-0`／`SET-1`／`SET-2`／`SET-5` 一次一致處理，`47406e2`：
+> - `SET-0` 改印「配息尚未接取數來源；淨值即時取得」（`TEXT_PENDING_DIVIDEND`；配息仍待接就印，不再看 `nav`）；舊常數 `TEXT_PENDING_NAV_DIVIDEND` 已移除。
+> - `SET-1` 淨值列不再印「尚未接上」原因；時間取 `fetch_log` 淨值層最近一次 `ok` 的 `started_at`，有時間時下一行印「這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間」；從未成功 → 「⬜ 資料未備」。
+> - `SET-2` 淨值層不再印「尚未接上」原因；配息、其他層照舊。`SET-5` 說明行換句、淨值層可按。
+> - 驗收：`tests/ui_v2/test_set_live_logic.py` 以 `test_淨值` 開頭的測試、`tests/ui_v2/test_set_live_page.py::test_重新取數_淨值層按下後只記一筆fetch_log_SET1淨值列印時間與新句`、`tests/test_v2_tables_settings_store.py` 以 `test_淨值層_` 開頭的測試。
 
 - **現況**（基底 `51ae661`）：`ui_v2/set/live.py` 的 `TEXT_PENDING_NAV_DIVIDEND`（「淨值、配息尚未接取數來源」，客戶 2026-09-26 定稿）在 `pending_tables` 同時含 `nav` 與 `dividend` 時印在 `SET-0` 說明區；set 頁的 `pending_tables` 來自 `settings_store.PENDING_TABLES`，目前仍含 `nav`，所以這一句照印。
 - **與現況的落差**：持倉體檢正式版自 PR #905 起即時取淨值，「淨值……尚未接取數來源」對 hld 而言已不完整；同頁 `SET-1` 淨值列（該類沒有資料時）與 `SET-2` 淨值層（沒有紀錄時）也仍印「原因：……尚未接上」（`TEXT_REASON_KIND_PENDING` 條件看 `pending_tables`；`TEXT_REASON_TIER_PENDING` 另看 `wired_tiers`：該層沒有紀錄、不在 `settings_store.WIRED_TIERS` 裡（目前只有市場指標在內），且該層無對應表或對應表在 `pending_tables` 裡才印；`ui_v2/set/live.py` 的 SET-2 那一段）。
@@ -913,7 +919,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 | 1 | 示範入口 `ui_v2/app_set.py`（第五節） | `tests/ui_v2/test_set_logic.py`、`tests/ui_v2/test_set_page.py` 整檔 | 通過 |
 | 2 | 正式入口 `ui_v2/app_set_live.py`（該檔於 `0062b7f` 加入；對應 PR 本組未查） | `tests/ui_v2/test_set_live_logic.py`、`tests/ui_v2/test_set_live_page.py` 整檔 | 通過 |
 | 3 | `SET-2`／`SET-6` 失敗訊息遮蔽、下一行「已遮蔽憑證」，與 `fetch_log.message` 逐字相同（7.4、7.5 M11） | `tests/ui_v2/test_set_live_page.py::test_M11_SET版_取數失敗訊息與fetch_log逐字相同_SET2與SET6下一行加註`；`tests/ui_v2/test_set_live_logic.py::test_讀取失敗_訊息遮蔽_各處下一行加已遮蔽憑證` | 通過（7.5-a 原記「只做了 MKT 版」，見該處 2026-10-09 補註） |
-| 4 | `SET-0`「淨值、配息尚未接取數來源」暫留（十一） | — | 偏離已登記；待辦（等 #3 淨值來源完成後與 `SET-1`、`SET-2` 一起處理） |
+| 4 | `SET-0`「淨值、配息尚未接取數來源」暫留（十一） | 見第十一節 2026-10-09 狀態更新 | ~~偏離已登記；待辦（等 #3 淨值來源完成後與 `SET-1`、`SET-2` 一起處理）~~ → 已處理（2026-10-09，`47406e2`；狀態更新，不是漏刪） |
 | 5 | `44` §3.5 `SET-0`～`SET-7` 各塊判準 | — | 未查證（逐條對照本輪沒做） |
 
 ### 12.7 跨頁
