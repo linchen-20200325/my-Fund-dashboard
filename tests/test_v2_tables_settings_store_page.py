@@ -386,6 +386,47 @@ def test_跨頁守衛_alo列入清單守衛本身_正控與負控(tmp_path):
     _assert_alo_listed_when_live(tmp_path, ("set", "alo"))
 
 
+def _hld_live_triggered(root, pages_reading) -> bool:
+    """hld 版觸發條件（同 alo）：L2 宣告 hld 已讀設定，或 ui_v2 底下出現任何 hld 正式模式入口
+    （`app_hld*live*.py`、`hld/source.py`、`hld/live.py`）。"""
+    if "hld" in pages_reading:
+        return True
+    ui_v2 = root / "ui_v2"
+    return any(ui_v2.glob("app_hld*live*.py")) or (ui_v2 / "hld" / "source.py").exists() \
+        or (ui_v2 / "hld" / "live.py").exists()
+
+
+def test_跨頁守衛的觸發條件_hld_正控與負控(tmp_path):
+    (tmp_path / "ui_v2" / "hld").mkdir(parents=True)
+    assert _hld_live_triggered(tmp_path, ("set", "alo")) is False
+    assert _hld_live_triggered(tmp_path, ("set", "alo", "hld")) is True
+    for rel in ("ui_v2/app_hld_live.py", "ui_v2/app_hld_live_v2.py", "ui_v2/app_hld_live2.py",
+                "ui_v2/hld/source.py", "ui_v2/hld/live.py"):
+        (tmp_path / rel).write_text("", encoding="utf-8")
+        assert _hld_live_triggered(tmp_path, ("set", "alo")) is True, rel
+        (tmp_path / rel).unlink()
+
+
+def _assert_hld_listed_when_live(root, pages_reading) -> None:
+    """hld 一出現正式模式入口（`_hld_live_triggered`），L2 的 `PAGES_READING_SETTINGS` 就必須列入 "hld"。"""
+    if _hld_live_triggered(root, pages_reading):
+        assert "hld" in pages_reading, ("hld 已有正式模式入口，PAGES_READING_SETTINGS 卻沒有列 hld", pages_reading)
+
+
+def test_跨頁守衛_hld有正式入口時必須列入PAGES_READING_SETTINGS():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    _assert_hld_listed_when_live(root, S.PAGES_READING_SETTINGS)
+
+
+def test_跨頁守衛_hld列入清單守衛本身_正控與負控(tmp_path):
+    (tmp_path / "ui_v2" / "hld").mkdir(parents=True)
+    _assert_hld_listed_when_live(tmp_path, ("set", "alo"))
+    (tmp_path / "ui_v2" / "app_hld_live.py").write_text("", encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _assert_hld_listed_when_live(tmp_path, ("set", "alo"))
+    _assert_hld_listed_when_live(tmp_path, ("set", "alo", "hld"))
+
+
 def test_跨頁守衛_alo比重基準存值須與L2可選值一致():
     """2026-09-27：ui_v2/alo 的比重基準存值改成「成本／市值」，alo 頁與 L2 已對齊；set 頁示範假資料
     （ui_v2/set/fixtures.py）仍存 cost，屬示範值，正式模式不讀它，另案處理。

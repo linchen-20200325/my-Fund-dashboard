@@ -70,12 +70,16 @@ PENDING_TABLES = ("nav", "dividend")
 # set 頁「重新取數」目前只接上市場指標那一層（`run_market_indicator_fetch`）。
 WIRED_TIERS = (mi.SOURCE_TIER,)
 # 會讀已存設定（`user_setting`）的頁：set 頁（`set_` 開頭的鍵）與 alo 頁（`alo_` 開頭的五個鍵）。
-# mkt／hld／exp 三頁尚未讀取已存設定（線框草稿 ★7）；哪一頁接上了，就把它的前綴加進來。
+# ~~mkt／hld／exp 三頁尚未讀取已存設定（線框草稿 ★7）~~ → mkt／exp 兩頁尚未讀取（hld 2026-10-09 接上，見下；
+# 狀態更新，不是漏刪）；哪一頁接上了，就把它的前綴加進來。
 # 2026-09-28：alo 頁正式入口 `ui_v2/app_alo_live.py` 落地，經 `ui_v2/alo/source.py` 讀
 # `load_user_settings`，故加入 "alo" —— 跨頁守衛
 # `tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_alo有正式入口時必須列入PAGES_READING_SETTINGS`
 # 在入口出現的那一刻就會要求這一筆。
-PAGES_READING_SETTINGS = ("set", "alo")
+# 2026-10-09：hld 頁正式入口 `ui_v2/app_hld_live.py` 落地（S6b-3），經 `ui_v2/hld/source.py` 讀
+# `load_user_settings`（`hld_` 開頭的三個鍵），故加入 "hld"；跨頁守衛
+# `tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_hld有正式入口時必須列入PAGES_READING_SETTINGS`。
+PAGES_READING_SETTINGS = ("set", "alo", "hld")
 
 # 「重新取數」要清的 L1 快取：第一階段真的會取數的來源 → 那個來源的 L1 取數函式本身
 # （`_ttl_cache` 包過、有 `cache_clear()`）。`50` 第 10 節 B9 定案：只清本次會用到的 L1 函式
