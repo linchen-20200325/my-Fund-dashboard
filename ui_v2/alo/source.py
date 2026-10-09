@@ -15,8 +15,11 @@
 
 - `dataset`：與 `fixtures.scenario()` 同形（`holding`、`nav`、`policy`、`market_indicator`、
   `user_setting`、`errors`、`save_errors`）。
-  - `nav` **尚未接上**（L2 `settings_store.PENDING_TABLES` 列了 `nav`、`dividend`）→ 空列表、
-    **不進 `errors`**（那是「還沒接」，不是「讀失敗」；體例同 `ui_v2/set/source.py`）。
+  - ~~`nav` **尚未接上**（L2 `settings_store.PENDING_TABLES` 列了 `nav`、`dividend`）→ 空列表、
+    **不進 `errors`**（那是「還沒接」，不是「讀失敗」；體例同 `ui_v2/set/source.py`）。~~
+    → 2026-10-09 狀態更新（不是漏刪）：客戶裁示 Q1 不存 NAV、各頁需要時即時抓取，L2 已把 `nav` 移出
+    `PENDING_TABLES`；但**本頁取淨值未獲授權**（裁示只到 hld 與 set），所以 `nav` 照舊是空列表、
+    **不進 `errors`**（本頁沒有去取，不是讀失敗）。
     ⇒ 使用者在 ALO-4 把比重基準切到「市值」時，每一檔都缺基準值，畫面照 `44` 5.5 顯示
     `⬜ 資料未備`、ALO-6 表尾照算「缺基準值被排除的檔數」。**這是 `CLAUDE.md` §1 Fail Loud，不是 bug**：
     不把市值選項灰掉、不填 0、不拿成本值頂替、不靜默退回成本。
@@ -121,7 +124,7 @@ def load_live() -> dict:
 
     dataset = {
         "holding": [dict(row) for row in tables["holding"]] if tables else [],
-        "nav": [],                      # PENDING_TABLES：還沒接上，不是讀失敗
+        "nav": [],                      # 本頁不取淨值（2026-10-09 裁示只到 hld、set），不是讀失敗
         "policy": [dict(row) for row in tables["policy"]] if tables else [],
         "market_indicator": [dict(row) for row in indicators["rows"]] if indicators else [],
         "user_setting": setting_rows,

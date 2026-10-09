@@ -46,7 +46,7 @@ from typing import Optional
 
 import pandas as pd
 
-from repositories.fund.nav_metrics import fetch_div_with_error, fetch_nav_with_error
+from repositories.fund.nav_metrics import LIVE_FETCH_ERROR_ATTR, fetch_div_with_error, fetch_nav_with_error
 from services.v2_tables import contract
 from services.v2_tables.market_indicator import EMPTY_WITHOUT_REASON
 
@@ -360,8 +360,12 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
     fetched_at, at_code, at_why = _fetched_at_check(attrs.get(at_field), now_utc)
 
     ccy, ccy_source, withheld, why = resolve_nav_ccy(attrs.get("currency"), holding_ccys)
+    # `live_error`（2026-10-09 客戶裁示 M-1 採 A）：退回預存舊序列時，L1 交出的本次即時網址失敗原文
+    # （未遮蔽）；不是預存那一支 → None。只供 set 頁淨值層重新取數判失敗用；hld 不讀它，列照常寫。
+    live_error = attrs.get(LIVE_FETCH_ERROR_ATTR) if fallback else None
     out["provenance"] = {"source": source, "fetched_at": fetched_at, "ccy_source": ccy_source,
-                         "cache_fallback": bool(fallback), "stale": stale}
+                         "cache_fallback": bool(fallback), "stale": stale,
+                         "live_error": None if live_error is None else str(live_error)}
     if withheld:
         out["withheld"] = withheld
         out["skipped"].append(f"{why}，{len(series)} 筆全部不寫")
@@ -474,7 +478,7 @@ def build_nav_table(funds, *, now=None) -> dict:
     - `skipped_rows`：略過與合併的筆數；有這兩個鍵的檔恆有 `len(該檔 rows) + skipped_rows == fetched`（核帳）；
     - ⚠️ **射程**：`fetched`／`skipped_rows` 只列**真的呼叫過 L1 的檔**（含取數失敗、型別錯誤，此時兩者為 0）。
       `withheld` 為 `input_conflict` 的檔**沒有呼叫 L1，也就沒有這兩個鍵** —— 不補 0（補 0 會讓它看起來像「取回 0 筆」）；
-    - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale}`。
+    - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale, live_error}`（`live_error` 2026-10-09 加）。
     """
     grouped, conflicts = _group_funds(funds)
     acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},

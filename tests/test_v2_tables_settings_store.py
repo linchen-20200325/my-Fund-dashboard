@@ -221,3 +221,445 @@ def test_存檔與讀設定經L2遮蔽(book, monkeypatch):
     with pytest.raises(S.SettingsSheetError) as err:
         S.load_user_settings([SECRET])
     assert SECRET not in str(err.value) and MASK in str(err.value)
+
+
+# ═══════════════════════ 淨值層重新取數（客戶 2026-10-09 裁示 Q1～Q4） ═══════════════════════
+
+from repositories.fund import nav_metrics as NM  # noqa: E402
+from services.v2_tables import alo_holdings as AH  # noqa: E402
+from services.v2_tables import nav_dividend as ND  # noqa: E402
+
+_A, _B = "ZZNAVTESTA1", "ZZNAVTESTB2"
+
+
+def _nav(n=2, fetched_at="2026-09-25T06:00:00+00:00"):
+    days = pd.date_range("2026-09-10", periods=n, freq="D")
+    s = pd.Series([10.0 + i for i in range(n)], index=days, dtype=float)
+    s.attrs["fetched_at"] = fetched_at
+    return s
+
+
+def _holdings(monkeypatch, rows):
+    monkeypatch.setattr(AH, "load_alo_tables", lambda values: {"holding": rows})
+
+
+def _stub_nav(monkeypatch, by_code, ccy="USD"):
+    _holdings(monkeypatch, [{"fund_code": c, "ccy": ccy} for c in by_code])
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": by_code[full_key])
+
+
+def _nav_logs(book):
+    return [r for r in book.data("fetch_log")[1:] if r[1] == "淨值"]
+
+
+def test_淨值層_全部成功_一筆ok_row_count為取回列數_不寫任何表(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (_nav(3), None), _B: (_nav(2), None)})
+    out = S.refetch_nav([SECRET])
+    p = out["persist"]
+    assert p["ok"] is True and p["stage"] == "done" and p["log_message"] is None
+    assert len(out["table"]["rows"]) == 5
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4:] == ["ok", "5", ""]
+    assert set(book.tabs) == {"fetch_log", "fetch_log_open"}          # 沒有 nav 分頁，也沒寫市場指標
+    assert len(book.data("fetch_log_open")) == 2                       # 標頭＋本次一列
+
+
+def test_淨值層_row_count是過濾前的取回列數(book, monkeypatch):
+    s = _nav(3)
+    s.iloc[1] = -1.0                                                   # 一列不合理（不大於 0），被略過
+    _stub_nav(monkeypatch, {_A: (s, None)})
+    out = S.refetch_nav([SECRET])
+    assert len(out["table"]["rows"]) == 2
+    assert _nav_logs(book)[0][4:] == ["ok", "3", ""]
+
+
+def test_淨值層_一檔失敗_整筆failed_逐檔原文_已遮蔽(book, monkeypatch):
+    raw = f"fetch_nav('{_B}') 即時網址與預存檔皆失敗:\nhttps://x.invalid/q?apikey={SECRET} → 取數失敗(kind=cooling)"
+    _stub_nav(monkeypatch, {_A: (_nav(2), None), _B: (pd.Series(dtype=float), raw)})
+    out = S.refetch_nav([SECRET])
+    p = out["persist"]
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4] == "failed" and logs[0][5] == ""
+    message = logs[0][6]
+    assert message == p["log_message"] == f"{_B}: " + p["masked_errors"][_B]
+    assert SECRET not in message and MASK in message and "kind=cooling" in message
+    assert SECRET not in repr(p)
+    assert out["table"]["errors"][_B] == raw                           # 表本身不遮（L2 轉換層原文）
+
+
+def test_淨值層_兩檔都失敗_逐行列出(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (None, "HTTP 503 a"), _B: (None, "HTTP 503 b")})
+    S.refetch_nav([SECRET])
+    assert _nav_logs(book)[0][6] == f"{_A}: HTTP 503 a\n{_B}: HTTP 503 b"
+
+
+def test_淨值層_整檔扣下_幣別缺_記failed附L2原因(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)}, ccy=None)
+    S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[6].startswith(f"{_A}: 來源未自報幣別") and "2 筆全部不寫" in log[6]
+
+
+def test_淨值層_代碼解析失敗_記failed(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": "壞 代碼", "ccy": "USD"}])
+    S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[6].startswith("壞 代碼: fund_code 含非 ASCII")
+
+
+def test_淨值層_L1回空沒給原因_不算失敗_記ok_0列(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (pd.Series(dtype=float), None)})
+    out = S.refetch_nav([SECRET])
+    assert _nav_logs(book)[0][4:] == ["ok", "0", ""]
+    assert out["persist"]["empty"] == {_A: mi.EMPTY_WITHOUT_REASON} and out["persist"]["masked_errors"] == {}
+
+
+def test_淨值層_持倉讀不到_記failed_原文已遮蔽_不取數(book, monkeypatch):
+    def boom(values):
+        raise AH.PolicySupplementError(f"讀取失敗 https://x/{SECRET}", code="api")
+    monkeypatch.setattr(AH, "load_alo_tables", boom)
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    out = S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[6].startswith("holding: 讀取失敗") and SECRET not in log[6]
+    assert out["table"] is None and out["persist"]["log_message"] == log[6]
+
+
+def test_淨值層_持倉為空_取數回空_記ok_0列(book, monkeypatch):
+    _holdings(monkeypatch, [])
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda *a, **k: pytest.fail("沒有持倉不得取數"))
+    out = S.refetch_nav([SECRET])
+    assert _nav_logs(book)[0][4:] == ["ok", "0", ""]
+    assert out["persist"]["empty"] and out["persist"]["masked_errors"] == {}
+
+
+def test_淨值層_同一檔多張保單_取一次_每列持倉都交出幣別(book, monkeypatch):
+    calls = []
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}, {"fund_code": _A, "ccy": "USD"}])
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda key, portal="": (calls.append(key) or (_nav(2), None)))
+    S.refetch_nav([SECRET])
+    assert calls == [_A] and _nav_logs(book)[0][4:] == ["ok", "2", ""]
+
+
+def test_淨值層_沒設試算表ID_照常取數_不寫任何東西(book, monkeypatch):
+    book.cfg.pop("SETTINGS_SHEET_ID")
+    _stub_nav(monkeypatch, {_A: (None, f"x {SECRET}")})
+    out = S.refetch_nav([SECRET])
+    p = out["persist"]
+    assert p["stage"] == "fetch_log_open" and p["error_code"] == "not_configured" and p["log_message"] is None
+    assert SECRET not in p["masked_errors"][_A] and book.calls == []
+
+
+def test_淨值層_清掉fetch_nav的快取_第二次真的再取_不動冷卻_不呼叫全域清除(book, monkeypatch):
+    """走真的 `fetch_nav`（`_daily_cache`）；只把它往外的兩個出口換成替身：即時網址一律失敗、預存檔回一份序列。"""
+    import infra.cache as IC
+    calls = {"url": 0, "cache_file": 0}
+
+    def fake_url(*a, **k):
+        calls["url"] += 1
+        return None
+
+    def fake_cache_file(code):
+        calls["cache_file"] += 1
+        s = _nav(12)
+        s.attrs.update(source=f"GitHubActions:cache/nav/{code}.json", cache_updated_at="2026-09-25T06:00:00+00:00")
+        return s
+
+    monkeypatch.setattr(NM, "fetch_url_with_retry", fake_url)
+    monkeypatch.setattr(NM, "_src_cache_files", fake_cache_file)
+    monkeypatch.setattr(IC, "clear_all_caches", lambda *a, **k: pytest.fail("不得呼叫全域清除"))
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    NM.fetch_nav.cache_clear()
+    # 負控：不清快取時，同一天第二次呼叫打到快取，不再往外取。
+    NM.fetch_nav(_A, "")
+    NM.fetch_nav(_A, "")
+    assert calls["cache_file"] == 1
+    SB.record_failure("some.nav.host", "server_error")
+    assert SB.should_skip("some.nav.host")[0] is True
+    S.refetch_nav([SECRET])
+    S.refetch_nav([SECRET])
+    assert calls["cache_file"] == 3                                      # 兩次重新取數都真的再取
+    assert SB.should_skip("some.nav.host")[0] is True                    # 冷卻原封不動
+    # ~~assert [r[4:6] for r in _nav_logs(book)] == [["ok", "12"], ["ok", "12"]]~~
+    # → 2026-10-09 客戶裁示 M-1 採 A（有意識的更正，不是漏刪）：本條的替身走的是「即時全敗、退回預存檔」，
+    #   自此算本次失敗；本條要守的「清快取、不動冷卻、不呼叫全域清除」不變。
+    logs = _nav_logs(book)
+    assert [r[4:6] for r in logs] == [["failed", ""], ["failed", ""]]
+    assert all(r[6].startswith(f"{_A}: ") and "取數失敗" in r[6] for r in logs)
+    NM.fetch_nav.cache_clear()
+
+
+def test_淨值層_程式錯誤不被吞(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A}])                          # 少了 ccy：本檔的呼叫契約被破壞
+    # ~~with pytest.raises(KeyError):~~ → 2026-10-09 協作助手複驗必修（狀態更新，不是漏刪）：
+    #   例外改包成 `NavRefetchError`（訊息遮蔽、原類別名留在訊息開頭），照樣往上拋、不吞。
+    with pytest.raises(S.NavRefetchError, match=r"^KeyError: "):
+        S.refetch_nav([SECRET])
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4:6] == ["failed", ""] and logs[0][6].startswith("KeyError: ")
+
+
+# ── 2026-10-09 協作助手複驗必修：寫表以外的例外 → 先收斂 fetch_log 為 failed，再遮蔽後往上拋 ──
+
+import traceback as _traceback  # noqa: E402
+
+
+def _spy_close(monkeypatch, *, fail_with=None):
+    """包住真的 `close_fetch_log`：記下每次呼叫的參數；`fail_with` 給了就改拋它（不寫）。"""
+    calls, real = [], R.close_fetch_log
+
+    def spy(opened, **kw):
+        calls.append(kw)
+        if fail_with is not None:
+            raise fail_with
+        return real(opened, **kw)
+
+    monkeypatch.setattr(R, "close_fetch_log", spy)
+    return calls
+
+
+def _no_secret_anywhere(exc):
+    assert SECRET not in str(exc)
+    assert SECRET not in "".join(_traceback.format_exception(exc))
+    assert exc.__cause__ is None and exc.__context__ is None
+
+
+def test_淨值層_build_nav_table拋錯_收斂為failed_訊息遮蔽_拋NavRefetchError(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+
+    def boom(items):
+        raise RuntimeError(f"轉換失敗 https://x.invalid/?key={SECRET}")
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert len(calls) == 1
+    kw = calls[0]
+    assert kw["outcome"] == "failed" and kw["row_count"] is None
+    assert SECRET not in kw["message"] and MASK in kw["message"] and kw["message"].startswith("RuntimeError: 轉換失敗")
+    assert str(info.value) == kw["message"]
+    _no_secret_anywhere(info.value)
+    assert any(f.name == "boom" for f in _traceback.extract_tb(info.value.__traceback__))   # 堆疊位置保留
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4:] == ["failed", "", kw["message"]]
+
+
+def test_淨值層_resolve_full_keys拋錯_收斂為failed_訊息遮蔽(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    from services.v2_tables import fund_keys as FK
+
+    def boom(codes):
+        raise OSError(f"代碼對照表讀不到 {SECRET}")
+    monkeypatch.setattr(FK, "resolve_full_keys", boom)
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert len(calls) == 1 and calls[0]["outcome"] == "failed" and calls[0]["row_count"] is None
+    assert calls[0]["message"].startswith("OSError: 代碼對照表讀不到") and MASK in calls[0]["message"]
+    _no_secret_anywhere(info.value)
+    assert len(_nav_logs(book)) == 1
+
+
+def test_淨值層_例外路徑補記結束列又失敗_兩段原文皆遮蔽後一併拋出(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    monkeypatch.setattr(ND, "build_nav_table", lambda items: (_ for _ in ()).throw(ValueError(f"甲 {SECRET}")))
+    calls = _spy_close(monkeypatch, fail_with=R.SettingsSheetError(f"寫入失敗 {SECRET}", code="api"))
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    text = str(info.value)
+    assert len(calls) == 1
+    # ~~assert ... and "\n補記取數紀錄失敗：SettingsSheetError: 寫入失敗 " in text~~
+    # → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：不新增中文前綴，補記失敗只以換行接上「例外類別: 原文」。
+    assert text.startswith("ValueError: 甲 ") and "\nSettingsSheetError: 寫入失敗 " in text
+    assert "補記取數紀錄失敗" not in text
+    assert text.count(MASK) == 2
+    _no_secret_anywhere(info.value)
+
+
+def test_淨值層_open失敗加後續例外_不寫任何紀錄_仍拋遮蔽後例外(book, monkeypatch):
+    book.cfg.pop("SETTINGS_SHEET_ID")
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    monkeypatch.setattr(ND, "build_nav_table", lambda items: (_ for _ in ()).throw(RuntimeError(f"乙 {SECRET}")))
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert calls == [] and book.calls == []
+    assert str(info.value).startswith("RuntimeError: 乙 ") and MASK in str(info.value)
+    _no_secret_anywhere(info.value)
+
+
+def test_淨值層_正常成功與正常failed_close恰呼叫一次(book, monkeypatch):
+    calls = _spy_close(monkeypatch)
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    S.refetch_nav([SECRET])
+    _stub_nav(monkeypatch, {_A: (None, "HTTP 503 a")})
+    S.refetch_nav([SECRET])
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    assert [r[4] for r in _nav_logs(book)] == ["ok", "failed"]
+
+
+# ~~def test_淨值層_正常路徑close拋非SettingsSheetError_只呼叫一次_拋遮蔽後例外~~
+# → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：旗標改為「結束列已確定」才設，正常路徑 close 拋
+#   SettingsSheetError 以外的例外時要補記一次 failed —— 最多兩次、第二次為 failed。
+def test_淨值層_正常路徑close拋非SettingsSheetError_最多兩次_第二次為failed_拋遮蔽後例外(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    calls = _spy_close(monkeypatch, fail_with=TypeError(f"序列化失敗 {SECRET}"))
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    # ~~assert len(calls) == 1 and calls[0]["outcome"] == "ok"~~
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    assert calls[1]["row_count"] is None and calls[1]["message"].startswith("TypeError: 序列化失敗 ")
+    assert SECRET not in calls[1]["message"]
+    text = str(info.value)
+    assert text.startswith("TypeError: 序列化失敗 ") and "\nTypeError: 序列化失敗 " in text and text.count(MASK) == 2
+    _no_secret_anywhere(info.value)
+
+
+def test_淨值層_KeyboardInterrupt_先收斂為failed_再原樣拋出(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    original = KeyboardInterrupt(f"中斷 {SECRET}")
+
+    def boom(items):
+        raise original
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(KeyboardInterrupt) as info:
+        S.refetch_nav([SECRET])
+    assert info.value is original                                       # 原樣拋，不包裝
+    assert len(calls) == 1 and calls[0]["outcome"] == "failed" and calls[0]["row_count"] is None
+    assert calls[0]["message"].startswith("KeyboardInterrupt: 中斷 ") and SECRET not in calls[0]["message"]
+    assert len(_nav_logs(book)) == 1
+
+
+# ── 2026-10-09 第二輪小修：open 也納入包裝、`str(exc)` 防呆、結束列「已確定」才標記、補記失敗不加前綴 ──
+
+def _spy_close_seq(monkeypatch, actions):
+    """依序對每次呼叫採取動作："write"＝真的寫；"raise_before"＝不寫、拋 TypeError；
+    "write_then_raise"＝真的寫完再拋 TypeError。回傳每次呼叫的參數。"""
+    calls, real = [], R.close_fetch_log
+
+    def spy(opened, **kw):
+        action = actions[len(calls)]
+        calls.append(kw)
+        if action == "raise_before":
+            raise TypeError(f"寫入前驗證失敗 {SECRET}")
+        row = real(opened, **kw)
+        if action == "write_then_raise":
+            raise TypeError(f"寫完才失敗 {SECRET}")
+        return row
+
+    monkeypatch.setattr(R, "close_fetch_log", spy)
+    return calls
+
+
+def _nav_reader(book):
+    R.clear_cache()
+    out = S.load_fetch_log([])
+    return [r for r in out["rows"] if r["source_tier"] == "淨值"], out
+
+
+def test_淨值層_open拋非SettingsSheetError_遮蔽後拋NavRefetchError_不帶原例外鏈_0筆紀錄(book, monkeypatch):
+    def boom(tier, *, mask):
+        try:
+            raise RuntimeError(f"內層 {SECRET}")
+        except RuntimeError:
+            raise ValueError(f"helper 失敗 {SECRET}")               # 自帶含秘密值的 __context__
+    monkeypatch.setattr(R, "open_fetch_log", boom)
+    monkeypatch.setattr(AH, "load_alo_tables", lambda values: pytest.fail("open 拋錯後不得往下取數"))
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert str(info.value).startswith("ValueError: helper 失敗 ") and MASK in str(info.value)
+    _no_secret_anywhere(info.value)
+    assert calls == [] and "fetch_log" not in book.tabs and "fetch_log_open" not in book.tabs
+
+
+class _StrRaises(Exception):
+    def __str__(self):
+        raise RuntimeError(f"str 也壞 {SECRET}")
+
+
+def test_淨值層_例外的str本身拋錯_仍補記failed_拋NavRefetchError(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+
+    def boom(items):
+        raise _StrRaises()
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch)
+    with pytest.raises(S.NavRefetchError) as info:
+        S.refetch_nav([SECRET])
+    assert len(calls) == 1 and calls[0]["outcome"] == "failed" and calls[0]["message"] == "_StrRaises"
+    assert str(info.value) == "_StrRaises"
+    _no_secret_anywhere(info.value)
+    assert _nav_logs(book)[0][4:] == ["failed", "", "_StrRaises"]
+
+
+def test_淨值層_KeyboardInterrupt補記又失敗_note已遮蔽_原例外原樣拋出(book, monkeypatch):
+    _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}])
+    original = KeyboardInterrupt("中斷")
+
+    def boom(items):
+        raise original
+    monkeypatch.setattr(ND, "build_nav_table", boom)
+    calls = _spy_close(monkeypatch, fail_with=R.SettingsSheetError(f"寫入失敗 {SECRET}", code="api"))
+    with pytest.raises(KeyboardInterrupt) as info:
+        S.refetch_nav([SECRET])
+    assert info.value is original and len(calls) == 1
+    notes = info.value.__notes__
+    assert len(notes) == 1 and notes[0].startswith("SettingsSheetError: 寫入失敗 ")
+    assert SECRET not in notes[0] and MASK in notes[0] and "補記取數紀錄失敗" not in notes[0]
+
+
+def test_淨值層_正常close寫入前拋非SettingsSheetError_最終恰一筆failed_in_progress為0(book, monkeypatch):
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    calls = _spy_close_seq(monkeypatch, ["raise_before", "write"])
+    with pytest.raises(S.NavRefetchError):
+        S.refetch_nav([SECRET])
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    rows, out = _nav_reader(book)
+    assert len(rows) == 1 and rows[0]["outcome"] == "failed" and rows[0]["row_count"] is None
+    assert rows[0]["message"].startswith("TypeError: 寫入前驗證失敗 ") and SECRET not in rows[0]["message"]
+    assert out["in_progress"] == 0 and out["duplicate_log_ids"] == 0
+
+
+def test_淨值層_正常close已寫入才拋錯_同log_id兩列_讀取端取第一列ok_in_progress為0(book, monkeypatch):
+    """第二筆同 `log_id` 的 failed 由讀取端 `_reduce_fetch_log` 去重（取第一列）。"""
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    calls = _spy_close_seq(monkeypatch, ["write_then_raise", "write"])
+    with pytest.raises(S.NavRefetchError):
+        S.refetch_nav([SECRET])
+    assert [c["outcome"] for c in calls] == ["ok", "failed"]
+    raw = _nav_logs(book)
+    assert [r[4] for r in raw] == ["ok", "failed"] and raw[0][0] == raw[1][0]   # 同一 log_id 兩列
+    rows, out = _nav_reader(book)
+    assert len(rows) == 1 and rows[0]["outcome"] == "ok" and rows[0]["row_count"] == 2
+    assert out["in_progress"] == 0 and out["duplicate_log_ids"] == 1
+
+
+# ── 2026-10-09 稽核回修 ──
+
+def test_淨值層_持倉部分分頁讀取失敗_記failed_每張一段分頁名與L1原文_已遮蔽(book, monkeypatch):
+    """稽核紅隊 S-1：持倉不完整時不得記 ok、不得沒痕跡。"""
+    monkeypatch.setattr(AH, "load_alo_tables", lambda values: {
+        "holding": [{"fund_code": _A, "ccy": "USD"}],
+        "skipped_tabs": [{"tab": "保單甲", "error": f"APIError 500 https://x/{SECRET}", "unread": False},
+                         {"tab": "保單乙", "error": "冷卻中（還剩 30 秒）", "unread": True}]})
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda key, portal="": (_nav(2), None))
+    out = S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[5] == ""
+    lines = log[6].split("\n")
+    assert lines[0].startswith("保單甲: APIError 500") and MASK in lines[0] and SECRET not in log[6]
+    assert lines[1] == "保單乙: 冷卻中（還剩 30 秒）"
+    assert out["persist"]["log_message"] == log[6]
+
+
+def test_淨值層_代碼解析失敗_鍵與原文都經遮蔽(book, monkeypatch):
+    """持倉代碼本身帶秘密值、錯誤原文也引用了它：鍵與值兩處都要遮（拿掉任一處 mask 就紅）。"""
+    bad = (SECRET,)                                                    # 非字串：錯誤原文會 repr 出輸入
+    _holdings(monkeypatch, [{"fund_code": bad, "ccy": "USD"}])
+    out = S.refetch_nav([SECRET])
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and SECRET not in log[6] and log[6].count(MASK) == 2
+    assert "fund_code 須為字串" in log[6]
+    assert SECRET not in repr(out["persist"])

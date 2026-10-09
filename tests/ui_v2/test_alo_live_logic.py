@@ -315,7 +315,8 @@ def _mv(dataset):
 
 
 def test_分母全缺_理由只有一種_改畫來源缺而不是炸掉():
-    """接真資料時真正會走到的那一種：`nav` 在 L2 是 PENDING_TABLES ⇒ 每一檔都沒有基準值。"""
+    """接真資料時真正會走到的那一種：~~`nav` 在 L2 是 PENDING_TABLES~~ 本頁不取淨值
+    （2026-10-09：L2 已把 nav 移出 PENDING_TABLES，但 alo 取淨值未獲授權；狀態更新，不是漏刪）⇒ 每一檔都沒有基準值。"""
     dataset = _mv(fixtures.scenario("full"))
     dataset["nav"] = []
     block = logic.find_block(logic.build_page_model(dataset), "ALO-2")

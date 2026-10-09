@@ -165,7 +165,8 @@ def test_星1至星4星8星10_正常狀態都畫出來(real, monkeypatch):
     source.refetch("市場指標")
     at = _run()
     text = "\n".join(_rendered(at))
-    for line in (live.TEXT_PENDING_NAV_DIVIDEND, live.TEXT_LOG_SCOPE, live.TEXT_REASON_KIND_PENDING,
+    # ~~live.TEXT_PENDING_NAV_DIVIDEND~~ → 2026-10-09 ★1 換成 B 句（53 §7 第 1 列；有意識的更正，不是漏刪）。
+    for line in (live.TEXT_PENDING_DIVIDEND, live.TEXT_LOG_SCOPE, live.TEXT_REASON_KIND_PENDING,
                  live.TEXT_REASON_TIER_PENDING, live.TEXT_MI_TIME_SCOPE, live.TEXT_SET5_NOTE,
                  "設定試算表：客戶的設定本", "資料未備"):
         assert line in text, line
@@ -205,10 +206,11 @@ def test_存檔_型別不符_不寫_畫型別說明(real):
     assert "user_setting_log" not in real.tabs
 
 
-def test_重新取數_淨值停用_市場指標按下後寫紀錄並畫結果行(real, monkeypatch):
+def test_重新取數_配息停用_市場指標按下後寫紀錄並畫結果行(real, monkeypatch):
+    # ~~淨值停用~~ → 2026-10-09 淨值層接上（客戶裁示 Q2～Q4）；「尚未接上」改以仍未接上的配息驗（有意識的更正，不是漏刪）。
     _stub_fetch(monkeypatch, _vix())
     at = _run()
-    at.radio(key="live_set5_tier").set_value("淨值").run()
+    at.radio(key="live_set5_tier").set_value("配息").run()
     btn = [b for b in at.button if b.label == "重新取數"][0]
     assert btn.disabled and btn.help == "這一層級的取數尚未接上"
     at.radio(key="live_set5_tier").set_value("市場指標").run()
@@ -221,6 +223,32 @@ def test_重新取數_淨值停用_市場指標按下後寫紀錄並畫結果行
     assert "取數完成：市場指標，取回 2 列；結果記在取數紀錄（層 4）" in text
     assert [r[4] for r in real.data("fetch_log")[1:]] == ["ok"]
 
+
+
+def test_重新取數_淨值層按下後只記一筆fetch_log_SET1淨值列印時間與新句(real, monkeypatch):
+    """客戶 2026-10-09 裁示 Q2～Q4 ＋ 53 §7 第 4 列：淨值層可按；按下後只記一筆 `淨值` 層 `fetch_log`、
+    不寫任何其他分頁；重新整理後 SET-1 淨值列印時間並在下一行印新句。"""
+    import pandas as pd
+    from services.v2_tables import nav_dividend as ND
+    from services.v2_tables import settings_store as S
+
+    series = pd.Series([10.0, 10.5], index=pd.to_datetime(["2026-09-23", "2026-09-24"]), dtype=float)
+    series.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
+    monkeypatch.setattr(S.alo_holdings, "load_alo_tables",
+                        lambda values: {"holding": [{"fund_code": "ZZNAVTESTA1", "ccy": "USD"}]})
+    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": (series, None))
+    at = _run()
+    at.radio(key="live_set5_tier").set_value("淨值").run()
+    btn = [b for b in at.button if b.label == "重新取數"][0]
+    assert not btn.disabled
+    btn.click()
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    text = "\n".join(_rendered(at))
+    assert "取數完成：淨值，取回 2 列；結果記在取數紀錄（層 4）" in text
+    assert [r[1] for r in real.data("fetch_log")[1:]] == ["淨值"]
+    assert set(real.tabs) <= {"fetch_log", "fetch_log_open"}       # 不寫 nav、不寫任何其他分頁
+    assert live.TEXT_NAV_TIME_SCOPE in "\n".join(_rendered(_run()))
 
 def test_M11_SET版_取數失敗訊息與fetch_log逐字相同_SET2與SET6下一行加註(real, monkeypatch):
     from services.v2_tables import settings_store as S
@@ -247,5 +275,6 @@ def test_示範模式_沒有任何正式模式文案_示意字樣照舊():
     at.run()
     text = "\n".join(_rendered(at))
     assert "資料為假資料" in text and "本頁沒有後端" in text
-    for line in (live.TEXT_LOG_SCOPE, live.TEXT_PENDING_NAV_DIVIDEND, live.TEXT_SET5_NOTE, "設定試算表："):
+    for line in (live.TEXT_LOG_SCOPE, live.TEXT_PENDING_DIVIDEND, live.TEXT_NAV_TIME_SCOPE, live.TEXT_SET5_NOTE,
+                 "設定試算表："):
         assert line not in text, line

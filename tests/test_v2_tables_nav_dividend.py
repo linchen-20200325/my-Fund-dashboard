@@ -159,7 +159,8 @@ def test_nav正例_逐欄照44_幣別取持倉手填_provenance記來源(monkeyp
     assert out["errors"] == {} and out["withheld"] == {} and out["fetched"] == {"ZZ9999": 2}
     assert out["provenance"]["ZZ9999"] == {
         "source": _LIVE_SOURCE, "fetched_at": _FETCHED, "ccy_source": "holding_user_input",
-        "cache_fallback": False, "stale": None}
+        "cache_fallback": False, "stale": None,
+        "live_error": None}   # 2026-10-09 加（客戶裁示 M-1 採 A；有意識的更正，不是漏刪）：非預存那一支恆為 None
 
 
 def test_nav_週末與假日沒有列_不補列(monkeypatch):

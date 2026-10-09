@@ -815,3 +815,34 @@ def test_e8_empty_body_without_kind_is_labelled(_nm, monkeypatch):
     monkeypatch.setattr(_nm, "_src_cache_files", lambda code: None)
     _s, err = _nm.fetch_nav_with_error("FUND01")
     assert "內容為空白" in err
+
+
+# ══════════════════════════════════════════════════════════════
+# 2026-10-09 客戶裁示 M-1 採 A：退回預存舊序列時交出本次即時失敗原文（另一個 attrs 鍵）
+# ══════════════════════════════════════════════════════════════
+
+def test_m1_fallback_carries_live_failure_text_on_separate_attr(_nm, monkeypatch):
+    cached = pd.Series([1.0, 2.0], index=pd.to_datetime(["2025-01-01", "2025-01-02"]))
+    cached.attrs["source"] = "GitHubActions:cache/nav/FUND01.json"
+    monkeypatch.setattr(_nm, "fetch_url_with_retry", lambda *a, **k: None)
+    monkeypatch.setattr(_nm, "_src_cache_files", lambda code: cached)
+    s, err = _nm.fetch_nav_with_error("FUND01")
+    assert err is None and s is cached                          # 既有呼叫端拿到的回傳不變：舊值照交、沒有錯誤
+    live = s.attrs[_nm.LIVE_FETCH_ERROR_ATTR]
+    lines = live.split("\n")
+    assert len(lines) >= 2 and all("FUND01" in ln and "取數失敗" in ln for ln in lines)   # 每個即時網址各一行
+    assert _nm._FETCH_ERROR_ATTR not in s.attrs
+
+
+def test_m1_live_success_has_no_live_failure_attr(_nm, monkeypatch):
+    monkeypatch.setattr(_nm, "fetch_url_with_retry", lambda *a, **k: _Resp(text=_nav_html(12)))
+    s, err = _nm.fetch_nav_with_error("FUND01")
+    assert err is None and len(s) == 12 and _nm.LIVE_FETCH_ERROR_ATTR not in s.attrs
+
+
+def test_m1_all_failed_unchanged_no_live_attr(_nm, monkeypatch):
+    monkeypatch.setattr(_nm, "fetch_url_with_retry", lambda *a, **k: None)
+    monkeypatch.setattr(_nm, "_src_cache_files", lambda code: None)
+    s, err = _nm.fetch_nav_with_error("FUND01")
+    assert s.empty and err and err.startswith("fetch_nav('FUND01') 即時網址與預存檔皆失敗:")
+    assert _nm.LIVE_FETCH_ERROR_ATTR not in s.attrs

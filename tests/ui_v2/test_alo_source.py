@@ -125,12 +125,15 @@ def test_dataset與fixtures同形_而且build_page_model吃得下(wired):
     assert out["dataset"]["errors"] == {} and out["dataset"]["save_errors"] == {}
 
 
-def test_nav尚未接上_空列表而且不進errors(wired):
-    """`settings_store.PENDING_TABLES` 列了 `nav` —— 那是「還沒接」，不是「讀失敗」。"""
+def test_本頁不取淨值_空列表而且不進errors(wired):
+    """~~`settings_store.PENDING_TABLES` 列了 `nav` —— 那是「還沒接」，不是「讀失敗」。~~
+    → 2026-10-09 客戶裁示 Q1（不存 NAV、各頁需要時即時抓取）：L2 已把 `nav` 移出 `PENDING_TABLES`；
+    但本頁取淨值未獲授權（裁示只到 hld、set），`nav` 照舊空列表、不進 `errors`（有意識的更正，不是漏刪）。"""
     out = source.load_live()
     assert out["dataset"]["nav"] == []
     assert "nav" not in out["dataset"]["errors"]
-    assert "nav" in out["notes"]["pending_tables"]
+    # ~~assert "nav" in out["notes"]["pending_tables"]~~
+    assert out["notes"]["pending_tables"] == ["dividend"]
 
 
 def test_市值基準下整片資料未備_不偽造不退回成本(wired):

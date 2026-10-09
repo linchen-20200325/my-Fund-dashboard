@@ -158,7 +158,8 @@ def test_存檔停用並寫出原因_匯出與導覽照舊(monkeypatch):
 
 
 def test_市值基準下每一檔都資料未備_不偽造不隱藏(monkeypatch):
-    """`nav` 是 `settings_store.PENDING_TABLES` 的一員 ⇒ 市值基準沒有基準值。
+    """~~`nav` 是 `settings_store.PENDING_TABLES` 的一員~~ 本頁不取淨值（2026-10-09：L2 已把 nav 移出
+    `PENDING_TABLES`，但 alo 取淨值未獲授權；狀態更新，不是漏刪）⇒ 市值基準沒有基準值。
     照 `CLAUDE.md` §1 顯示 `⬜ 資料未備`，不填 0、不拿成本頂替、不把選項灰掉。"""
     import copy as _copy
 

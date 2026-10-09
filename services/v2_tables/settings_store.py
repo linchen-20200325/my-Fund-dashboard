@@ -10,7 +10,10 @@ L1 `repositories/settings_sheet_repository.py`。本檔做兩件事：
 2. **第 2 步：取數後寫表**（`market_indicator` ＋ `fetch_log`）：
    `run_market_indicator_fetch` 先寫 `fetch_log_open`，再以 `MarketIndicatorSheetSink` 當
    `build_market_indicator_table(sink=...)` 的 sink 呼叫；sink 寫 `market_indicator`、再寫 `fetch_log`。
-   **本輪只給 set 頁觸發用，不接任何 UI。**
+   ~~**本輪只給 set 頁觸發用，不接任何 UI。**~~ → 狀態更新，不是漏刪：set 頁「重新取數」已接上（`ui_v2/set/source.py`）。
+3. **淨值層重新取數**（`refetch_nav`；客戶 2026-10-09 裁示 Q1～Q4，`docs/v2/53_nav_source_plan.md` §4）：
+   只取持倉基金的淨值、**不寫任何資料表**（不存 NAV），只記**一筆** `fetch_log`（`source_tier`＝`淨值`）；
+   任一檔失敗 → 該筆 `failed`，`message` 逐檔保留原文（經遮蔽，「鍵: 值」逐行）。
 
 失敗處理（`50` 第 8 節）：
 - 寫表失敗**不讓取數結果消失**：sink 不往上拋寫表的 `SettingsSheetError`，改記在
@@ -56,7 +59,9 @@ from datetime import date
 from typing import Callable, Optional
 
 from repositories import settings_sheet_repository as store
+from repositories.fund import nav_metrics
 from repositories.macro.yf import fetch_yf_close
+from services.v2_tables import alo_holdings, fund_keys, nav_dividend
 from services.v2_tables import market_indicator as mi
 from services.v2_tables.masking import mask_message
 
@@ -65,10 +70,17 @@ SettingsSheetError = store.SettingsSheetError
 # ── 接線狀態（線框草稿第 10 節 B7：「尚未接上」由 L2 交給畫面，畫面不自己猜）────────────
 # `49` Q12：第一階段只落地 `user_setting`、`market_indicator`、`fetch_log`；`nav`、`dividend`
 # 等到 hld 階段再裁。這裡的清單就是畫面上 ★1／★2 那幾行的唯一依據。
+# 2026-10-09 狀態更新（客戶裁示 Q1：不存 NAV，各頁需要時即時抓取）：`nav` 不再是「尚未接上」——
+# 它不落地，是即時取得，所以移出 `PENDING_TABLES`；也**不**加進 `WIRED_TABLES`（那是會落地的表）。
 WIRED_TABLES = ("user_setting", "market_indicator", "fetch_log")
-PENDING_TABLES = ("nav", "dividend")
-# set 頁「重新取數」目前只接上市場指標那一層（`run_market_indicator_fetch`）。
-WIRED_TIERS = (mi.SOURCE_TIER,)
+# ~~PENDING_TABLES = ("nav", "dividend")~~ → 2026-10-09 拿掉 `nav`（狀態更新，不是漏刪）。
+PENDING_TABLES = ("dividend",)
+# ~~set 頁「重新取數」目前只接上市場指標那一層（`run_market_indicator_fetch`）。~~
+# → 2026-10-09 狀態更新：再接上淨值層（`refetch_nav`；客戶裁示 Q2～Q4）。
+WIRED_TIERS = (mi.SOURCE_TIER, nav_dividend.SOURCE_TIER_NAV)
+# 不存表、最近取得時間改讀 `fetch_log` 的表 → 它的層級（客戶 2026-10-09 裁示 Q-C：SET-1 淨值列用
+# set 頁重新取數的時間）。畫面據此讀 `fetch_log`，不自己猜（同 B7）。
+LOG_TIMED_TABLES = {"nav": nav_dividend.SOURCE_TIER_NAV}
 # 會讀已存設定（`user_setting`）的頁：set 頁（`set_` 開頭的鍵）與 alo 頁（`alo_` 開頭的五個鍵）。
 # ~~mkt／hld／exp 三頁尚未讀取已存設定（線框草稿 ★7）~~ → mkt／exp 兩頁尚未讀取（hld 2026-10-09 接上，見下；
 # 狀態更新，不是漏刪）；哪一頁接上了，就把它的前綴加進來。
@@ -412,3 +424,191 @@ def run_market_indicator_fetch(secret_values, *,
     sink.begin()
     table = build(sink=sink)
     return {"table": table, "persist": sink.persist}
+
+
+# ── 淨值層重新取數（客戶 2026-10-09 裁示 Q1～Q4；`docs/v2/53_nav_source_plan.md` §3 步 2、3）──────
+
+# 持倉為 0 列時放進 `empty` 的內部說明（畫面只看 `empty` 有沒有東西，不印這一句；結果行用既有的「回應為空」）。
+NAV_EMPTY_HOLDING = "持倉 0 列，沒有要取淨值的基金"
+
+
+def refetch_nav(secret_values) -> dict:
+    """set 頁「重新取數」（淨值層）：寫 `fetch_log_open` → 讀持倉 → 解代碼 → 清 `fetch_nav` 的日快取
+    → `nav_dividend.build_nav_table` → 寫**一筆** `fetch_log`。**不寫任何資料表**（Q1、Q2：不存 NAV）。
+
+    對象只有持倉基金（Q3），讀法與 hld 頁相同（`ui_v2/hld/source.py`：`alo_holdings.load_alo_tables`
+    → `fund_keys.resolve_full_keys` → `build_nav_table`，每筆持倉列一筆、帶 `holding_ccy`、不去重）。
+
+    快取：`fetch_nav` 掛的是 `infra/cache.py::_daily_cache`，**只有整批清除（`cache_clear()`），沒有單鍵清除**
+    ⇒ 這裡清的是本行程裡 `fetch_nav` 的**全部**當日快取（含持倉以外的基金；舊樹頁面同行程內下次會重抓）。
+    五個 app 各是獨立行程（`49` §4.8），清不到別的 app。**不動來源冷卻、不呼叫全域清除**（`50` B9，同
+    `refetch_market_indicator`）：冷卻中的來源照樣由 L1（`infra.source_backoff`）擋下，那一檔照實記失敗原文。
+
+    `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
+    - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
+    - `failed`：持倉讀不到；或持倉有分頁讀取失敗／未讀（`skipped_tabs`，持倉不完整）；或任一檔代碼解析失敗、
+      L1 有錯誤原文、取回 >0 列卻一列都不能用（整檔扣下）；或**即時網址全敗、L1 退回預存舊序列**
+      （`provenance[代碼]["live_error"]` 非 None；2026-10-09 客戶裁示 M-1 採 A）—— 舊值照樣交給 `build_nav_table`
+      的呼叫端，但不冒充本次即時取數成功，該檔原文用 L1 交出的即時網址失敗原文。
+      ~~`message` 逐檔一行「鍵: 值」~~ → `message` 每個原因一段「鍵: 值」、段與段以換行分隔（2026-10-09 回修更正，
+      不是漏刪：值是 L1／L2 原文，**一段可能自己就有多行**，例如 `fetch_nav` 逐網址列出的失敗原文）。
+      鍵為基金代碼；持倉讀不到時為 `holding`；分頁讀取失敗時為分頁名。鍵與值皆經遮蔽。
+    - ~~⚠️ **已知缺口（2026-10-09 稽核紅隊 M-1，未修，待總管裁示）**：即時網址全敗、L1 退回預存舊序列
+      （`cache/nav/*.json`）的那一檔，本函式目前**仍算成功**。L1 在那一支不交出即時網址的失敗原文
+      （`fetch_nav` 只在連預存檔也失敗時才把 attempts 掛到回傳值上），本層不自編說明，故未處理。~~
+      → 2026-10-09 狀態更新（不是漏刪）：客戶裁示 M-1 採 A、授權 L1 最小修改，已修（見上一條 `failed`）。
+      L1 回空又沒給原因（`EMPTY_WITHOUT_REASON` 且取回 0 列）不算失敗，記在 `empty`（同市場指標）。
+
+    回傳 `{"table": build_nav_table 的回傳（錯誤原文未遮；持倉讀不到時為 None）, "persist": {...}}`；
+    `persist` 的鍵與 `MarketIndicatorSheetSink.persist` 中畫面會讀的那幾個相同
+    （`ok`、`stage`、`message`、`error_code`、`log_id`、`fetch_log`、`masked_errors`、`empty`、`log_message`）。
+    ~~寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）照樣往上拋，不吞。~~
+    → 2026-10-09 協作助手複驗必修（狀態更新，不是漏刪）：寫表以外的例外（程式錯誤、L1 讀代碼對照表失敗）
+    照樣往上拋，不吞；但離開前先收斂、再遮蔽：
+    - 本次 `fetch_log_open` 已寫成、且結束列還沒確定 → 先用 `close_fetch_log` 補記一筆 `failed`
+      （`row_count` 空、`message`＝遮蔽後的「例外類別: 原文」），不留沒有結束的紀錄。
+      ~~正常路徑在呼叫 `close_fetch_log` **之前**就標記「已嘗試結束」，所以 close 本身拋錯時不會再補第二筆。~~
+      → 2026-10-09 第二輪小修（狀態更新，不是漏刪）：「結束列已確定」＝`close_fetch_log` 正常回傳，或捕到
+      `SettingsSheetError`（確定寫不進，不遞迴）；只在這兩種情形之後才標記。正常路徑的 close 拋其他例外
+      （例如寫入前的 `fetch_log_row` 驗證錯）→ 未標記，照上面補記一筆 `failed`。若第一次 close 其實已寫入才
+      拋錯，同一 `log_id` 會有兩列，讀取端（`_reduce_fetch_log`）取第一列、計入 `duplicate_log_ids`。
+    - `Exception` → 改拋 `NavRefetchError`，訊息＝遮蔽後的「例外類別: 原文」（補記結束列又失敗時，該失敗的
+      遮蔽後「例外類別: 原文」以換行接在後面一併拋出，不吞）；保留原本的堆疊位置，但不帶出未遮蔽的原例外鏈。
+      開頭 `open_fetch_log` 拋 `SettingsSheetError` 以外的例外也一樣（沒有開始紀錄，不補記）。
+      `str(例外)` 本身拋錯時只用例外類別名。
+    - `Exception` 以外的 `BaseException`（例如 `KeyboardInterrupt`）→ 一樣先補記 `failed`，再原樣往上拋、不包裝。
+    - `fetch_log_open` 沒寫成 → 不寫任何紀錄，例外照樣遮蔽後往上拋。
+    """
+    mask = masker(secret_values)
+    persist = {"ok": False, "stage": "not_started", "message": None, "error_code": None,
+               "log_id": None, "fetch_log": None, "masked_errors": {}, "empty": {}, "log_message": None}
+
+    opened = None
+    # 結束列是否已確定（close 正常回傳，或捕到 SettingsSheetError＝確定寫不進）；未確定就由下面補記。
+    closing = {"settled": False}
+    pending = None
+    try:
+        try:
+            opened = store.open_fetch_log(nav_dividend.SOURCE_TIER_NAV, mask=mask)
+        except store.SettingsSheetError as exc:
+            _nav_fail(persist, "fetch_log_open", exc)   # `50` 第 8 節：照常取數，只是不寫紀錄
+        else:
+            persist.update(stage="started", log_id=opened["log_id"])
+        return _refetch_nav_run(secret_values, mask, persist, opened, closing)
+    except Exception as exc:
+        text = mask(_exc_text(exc))
+        if opened is not None and not closing["settled"]:
+            try:
+                store.close_fetch_log(opened, outcome="failed", row_count=None, message=text, mask=mask)
+            except Exception as close_exc:   # 補記也失敗：不吞，遮蔽後以換行接在後面一併拋出
+                text = f"{text}\n{mask(_exc_text(close_exc))}"
+        pending = (NavRefetchError(text), exc.__traceback__)
+    except BaseException as exc:
+        if opened is not None and not closing["settled"]:
+            try:
+                store.close_fetch_log(opened, outcome="failed", row_count=None,
+                                      message=mask(_exc_text(exc)), mask=mask)
+            except Exception as close_exc:   # 不吞：遮蔽後掛在原例外上，原例外照樣原樣拋出
+                exc.add_note(mask(_exc_text(close_exc)))
+        raise
+    # 在 except 區塊之外拋：新例外不帶 `__context__`（未遮蔽的原例外）；`from None` 再擋 `__cause__`。
+    err, tb = pending
+    try:
+        raise err.with_traceback(tb) from None
+    finally:
+        del err, tb, pending
+
+
+class NavRefetchError(RuntimeError):
+    """`refetch_nav` 寫表以外的例外，改包成本類別往上拋：訊息為遮蔽後的「原例外類別: 原文」，
+    不帶原例外鏈（原文未遮）。2026-10-09 協作助手複驗必修。"""
+
+
+def _exc_text(exc: BaseException) -> str:
+    """「例外類別: 原文」；`str(exc)` 本身拋錯時退回只用類別名（不得讓 except 區塊再拋錯而跳過補記／遮蔽）。"""
+    name = type(exc).__name__
+    try:
+        return f"{name}: {exc}"
+    except Exception:   # 原文取不到就只留類別名；原例外照樣由呼叫端往上拋
+        return name
+
+
+def _nav_fail(persist: dict, stage: str, exc) -> None:
+    persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
+
+
+def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) -> dict:
+    """`refetch_nav` 的本體（取數、組 message、寫結束列）；例外由 `refetch_nav` 收斂。"""
+    masked, empty, table = {}, {}, None
+    try:
+        tables = alo_holdings.load_alo_tables(secret_values)
+    except alo_holdings.PolicySupplementError as exc:
+        masked["holding"] = mask(str(exc))   # 已由 L1 遮過；再遮一次無害
+    else:
+        holding = tables["holding"]
+        # 部分分頁讀取失敗或未讀（冷卻、預算）→ 持倉不完整，本次不算成功（稽核紅隊 S-1）。
+        # 每張一段「分頁名: L1 原文」（L1 已遮過；再遮一次無害）。
+        for tab in tables.get("skipped_tabs") or ():
+            masked[mask(str(tab.get("tab")))] = mask(str(tab.get("error")))
+        key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
+        resolved = {}
+        for r in key_results:
+            if r["ok"] is True:
+                resolved[r["input"]] = r
+            else:
+                masked.setdefault(mask(str(r["input"])), mask(str(r["error"])))
+        nav_metrics.fetch_nav.cache_clear()   # 整批清（見 docstring）；冷卻不動
+        table = nav_dividend.build_nav_table([
+            {"fund_code": h["fund_code"], "full_key": resolved[h["fund_code"]]["full_key"],
+             "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"]}
+            for h in holding if h["fund_code"] in resolved
+        ])
+        if not holding:
+            empty["holding"] = NAV_EMPTY_HOLDING
+        rows_by_code: dict = {}
+        for row in table["rows"]:
+            rows_by_code[row["fund_code"]] = rows_by_code.get(row["fund_code"], 0) + 1
+        fetched = table["fetched"]
+        # 退回預存舊序列的那一檔：本次即時取得失敗（M-1 採 A）。原文是 L1 的即時網址失敗原文，不另編。
+        for code, prov in table["provenance"].items():
+            if prov.get("live_error") is not None and code not in table["errors"]:
+                masked[mask(code)] = mask(prov["live_error"])
+        for code, raw in table["errors"].items():
+            if raw == nav_dividend.EMPTY_WITHOUT_REASON and fetched.get(code, 0) == 0:
+                empty[mask(code)] = mask(str(raw))
+            else:
+                masked[mask(code)] = mask(str(raw))
+        for code in list(table["withheld"]) + [c for c in fetched if c not in table["withheld"]]:
+            if code in table["errors"] or rows_by_code.get(code, 0) > 0 or mask(code) in masked:
+                continue
+            if code in table["withheld"] or fetched.get(code, 0) > 0:
+                why = "；".join(table["skipped"].get(code, [])) or "原因未記錄"
+                masked[mask(code)] = mask(why)
+    persist["masked_errors"] = masked
+    persist["empty"] = empty
+    if opened is None:
+        return {"table": table, "persist": persist}
+
+    if masked:
+        outcome, row_count = "failed", None
+        message = "\n".join(f"{k}: {v}" for k, v in masked.items())
+    else:
+        outcome, row_count, message = "ok", sum((table or {}).get("fetched", {}).values()), None
+    persist["log_message"] = message   # 與寫進 `fetch_log.message` 的字串逐字相同，不論下面寫入成敗
+    try:
+        logged = store.close_fetch_log(opened, outcome=outcome, row_count=row_count,
+                                       message=message, mask=mask)
+    except store.SettingsSheetError as exc:
+        closing["settled"] = True              # 確定寫不進：不補記
+        _nav_fail(persist, "fetch_log", exc)   # 不遞迴：不為「寫 fetch_log 失敗」再寫一筆 fetch_log
+        return {"table": table, "persist": persist}
+    closing["settled"] = True                  # 已寫成；之後再拋錯也不補記第二筆
+    persist.update(ok=True, stage="done", message=None, error_code=None, fetch_log=logged)
+    return {"table": table, "persist": persist}
+
+
+# 層級 → 重新取數入口（set 頁 `ui_v2/set/source.py::refetch` 依此分派）。鍵必須與 `WIRED_TIERS` 相同，
+# 不同就在 import 時當場炸（宣告接上卻沒有入口，或有入口卻沒宣告）。
+REFETCH_BY_TIER = {mi.SOURCE_TIER: refetch_market_indicator, nav_dividend.SOURCE_TIER_NAV: refetch_nav}
+if set(REFETCH_BY_TIER) != set(WIRED_TIERS):
+    raise RuntimeError(f"REFETCH_BY_TIER {sorted(REFETCH_BY_TIER)} 與 WIRED_TIERS {sorted(WIRED_TIERS)} 不一致")

@@ -25,11 +25,16 @@ from . import logic
 # ───────────────────────── 草稿文案（逐字；出處見各行註解） ─────────────────────────
 
 MASKED_NOTE = "已遮蔽憑證"  # ★5，ACCEPTANCE.md 7.4 逐字
-TEXT_PENDING_NAV_DIVIDEND = "淨值、配息尚未接取數來源"  # ★1，客戶 2026-09-26 定稿
+# ~~TEXT_PENDING_NAV_DIVIDEND = "淨值、配息尚未接取數來源"  # ★1，客戶 2026-09-26 定稿~~
+# → 2026-10-09 換句（狀態更新，不是漏刪）：客戶裁示 Q1 不存 NAV、即時取得，「淨值尚未接」自此為假；
+#   新句為客戶 2026-10-02 核准的 B 句，2026-10-09 再核准（`docs/v2/53_nav_source_plan.md` §7 第 1 列）。
+TEXT_PENDING_DIVIDEND = "配息尚未接取數來源；淨值即時取得"  # ★1（SET-0），配息仍待接就印、不再看 nav
 TEXT_REASON_KIND_PENDING = "原因：這一類的存放處尚未接上，暫無取得時間"  # ★2（SET-1）
 TEXT_REASON_TIER_PENDING = "原因：這一層級的取數尚未接上"  # ★2（SET-2）
 TEXT_LOG_SCOPE = "取數紀錄只記從 set 頁觸發的取數；市場總覽頁開頁時自己的取數不記在這裡。"  # ★3
 TEXT_MI_TIME_SCOPE = "這個時間是 set 頁最近一次取數存入的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
+# SET-1 淨值列有時間時才印（客戶 2026-10-09 核准，`docs/v2/53_nav_source_plan.md` §7 第 4 列）。
+TEXT_NAV_TIME_SCOPE = "這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
 
 # ★6（草稿 6.1）
 TEXT_SAVED = "已存檔"  # 客戶 2026-09-26 定稿
@@ -51,7 +56,10 @@ TEXT_DONE = "取數完成：{tier}，取回 {n} 列；結果記在取數紀錄�
 TEXT_DONE_NOT_LOGGED = "取數完成：{tier}，取回 {n} 列"
 TEXT_DONE_EMPTY = "取數完成：{tier}，" + logic.TEXT_EMPTY_RESPONSE
 TEXT_LOG_WRITE_FAILED = "⛔ 取數紀錄寫入失敗：{message}"
-TEXT_SET5_NOTE = "目前只有市場指標可以重新取數；取回的列存進設定試算表，市場總覽頁不會因此重新整理。"
+# ~~TEXT_SET5_NOTE = "目前只有市場指標可以重新取數；取回的列存進設定試算表，市場總覽頁不會因此重新整理。"~~
+# → 2026-10-09 換句（狀態更新，不是漏刪；客戶核准，`docs/v2/53_nav_source_plan.md` §7 第 9 列）。
+TEXT_SET5_NOTE = ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，市場總覽頁不會因此重新整理；"
+                  "淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")
 
 # ★9（草稿 ★9 細項；`50` 5.2／5.3／7.1／第 8 節，🟡 統一改成本頁的 ⚠，草稿 B3）
 TEXT_HEADER_MISMATCH = "⛔ 標頭與規格不符：{tab}"
@@ -84,6 +92,9 @@ _DEMO_LINES = (
 # `SET-1` 資料類 → 表；`SET-2` 層級 → 表（★2 判斷「尚未接上」用）。
 _KIND_TABLE = dict(logic.KIND_TABLES)
 _TIER_TABLE = {"淨值": "nav", "配息": "dividend", "市場指標": "market_indicator", "其他": None}
+# `notes["source_cooldowns"]` 是哪一層的來源（`source.load_live` 放的是 `market_indicator.source_cooldowns()`）。
+# 其他層沒有對應的冷卻清單 → 不印冷卻原因（2026-10-09 總管裁示：不自創新句）。
+_COOLDOWN_TIER = "市場指標"
 
 # 哪一塊讀哪一張分頁（★9 標頭不符、格式不符出在哪；草稿 ★9「以讀到該分頁的塊為準」）。
 _BLOCKS_READING = {
@@ -146,7 +157,7 @@ def save_button(notes) -> dict:
 
 
 def refetch_button(picked, notes, *, running=False) -> dict:
-    """SET-5「重新取數」（草稿 6.2）。判定順序：未選 → 層級未接上 → 缺設定 → 來源冷卻 → 設定試算表冷卻。"""
+    """SET-5「重新取數」（草稿 6.2）。判定順序：未選 → 層級未接上 → 缺設定 → 來源冷卻（只看市場指標層，見 `_COOLDOWN_TIER`）→ 設定試算表冷卻。"""
     if picked is not None and picked not in logic.TIERS:
         raise ValueError(f"來源層級 {picked!r} 不在 `44` 第四節那四個之內")
     if running:
@@ -160,7 +171,7 @@ def refetch_button(picked, notes, *, running=False) -> dict:
         reason = None
         if gate.get("state") in ("not_configured", "no_service_account"):
             reason = gate_reason(gate)
-        if reason is None:
+        if reason is None and picked == _COOLDOWN_TIER:
             reason = cooldown_reason(notes.get("source_cooldowns"))
         if reason is None and gate.get("state") == "cooling":
             reason = gate_reason(gate)
@@ -345,8 +356,8 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     # ── SET-0：燈的外框與文字照 `44`（含 5.5 系統錯誤模板 `logic.fetch_failed_text`），只在下一行加 ★5；說明行加 ★1、★3 ──
     set0 = logic.find_block(out, "SET-0")
     set0["note_lines"] = [MASKED_NOTE] if _masked(set0["text"], token) else []
-    if {"nav", "dividend"} <= pending_tables:
-        set0["detail_lines"].append(TEXT_PENDING_NAV_DIVIDEND)
+    if "dividend" in pending_tables:
+        set0["detail_lines"].append(TEXT_PENDING_DIVIDEND)
     set0["detail_lines"].append(TEXT_LOG_SCOPE)
 
     # ── SET-1 ──
@@ -362,6 +373,8 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
             row["at_note_lines"] = [n["text"] for n in extra]
         if table == "market_indicator" and not row["_failed"] and not row["_empty"]:
             row["note_lines"].append(TEXT_MI_TIME_SCOPE)  # ★4
+        if table == "nav" and not row["_failed"] and not row["_empty"]:
+            row["note_lines"].append(TEXT_NAV_TIME_SCOPE)  # 2026-10-09 核准
     set1["fail_nodes"] = [_decorate_placeholder(n, fail_map, notes, "SET-1") for n in set1["fail_nodes"]]
     set1["live_lines"] = _structure_lines(notes, "SET-1")
     set1["detail_lines"] = _strip_demo(set1["detail_lines"])  # ✂2

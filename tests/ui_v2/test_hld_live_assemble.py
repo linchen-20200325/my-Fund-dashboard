@@ -523,7 +523,10 @@ def test_T3b_持倉讀取失敗或持倉零列_pending_tables一樣固定(name):
 
 @pytest.mark.parametrize("name", _CASE_NAMES)
 def test_T3c_pending_tables不含nav_淨值已經接上(name):
-    assert "nav" in _PENDING_TABLES   # L2 的清單還含 nav；本頁的清單不含，是因為本輪把 nav 接上了
+    # ~~assert "nav" in _PENDING_TABLES   # L2 的清單還含 nav；本頁的清單不含，是因為本輪把 nav 接上了~~
+    # → 2026-10-09 客戶裁示 Q1（不存 NAV、即時取得）：L2 也拿掉 nav（有意識的更正，不是漏刪）。本條要守的
+    #   「本頁的清單不含 nav」不變；L2 那一份改成同樣不含。
+    assert "nav" not in _PENDING_TABLES
     out = live.assemble_live_load(**_case_kwargs(name))
     assert "nav" not in out["dataset"]["pending_tables"]
 
