@@ -814,9 +814,11 @@ def render_portfolio_tab() -> None:
                 # 讓保單級與全組合級用同一把尺（見該檔 docstring 的 4 處差異表）。
                 from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
                     get_core_target_pct as _get_core_target_p,
-                    resolve_core_flag as _is_core_in_policy,
                     summarize_core_satellite as _sum_cs_p,
                 )
+                # 2026-10-10（級別三態）：~~`resolve_core_flag as _is_core_in_policy`~~（二態，
+                # 未設定被當非核心送進保單建議）→ 三態；未設定傳 None，不進核心／衛星比例。
+                from shared.policy_tier import resolve_tier as _tier_in_policy  # noqa: PLC0415
 
                 _policy_target = _get_core_target_p(st.session_state)
 
@@ -825,8 +827,13 @@ def render_portfolio_tab() -> None:
                     _cs_p  = _sum_cs_p(_funds, target_pct=_policy_target)
                     _ptot  = _cs_p["total_twd"]
                     _p_core_amt = _cs_p["core_twd"]
+                    # 2026-10-10（級別三態）：~~None → 0~~（全部未設定的保單會印「核心 0%」）。
+                    # 比例算不出來就顯示「—」；未設定檔數另列。
                     _p_core_pct = (round(_cs_p["core_pct"], 1)
-                                   if _cs_p["core_pct"] is not None else 0)
+                                   if _cs_p["core_pct"] is not None else None)
+                    _p_core_txt = (f"{_p_core_pct}%" if _p_core_pct is not None else "—")
+                    _p_unset_n = int(_cs_p.get("n_tier_unset") or 0)
+                    _p_unset_txt = (f" · ⬜ 未設定 {_p_unset_n} 檔" if _p_unset_n else "")
 
                     st.markdown(
                         f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
@@ -834,24 +841,29 @@ def render_portfolio_tab() -> None:
                         f"<span style='color:{MD_BLUE_300};font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
                         f"<span style='color:{GRAY_AA};font-size:11px;margin-left:8px'>({_pid})</span>"
                         f"<span style='color:{WHITE};font-size:13px;margin-left:auto;float:right'>"
-                        f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
+                        f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_txt}{_p_unset_txt}</span>"
                         f"</div>", unsafe_allow_html=True)
 
                     # ── P3: 保單級核心/衛星 mini donut ────────────────────
                     if _ptot > 0:
                         _dn_p_col, _dn_p_msg = st.columns([1, 2])
                         with _dn_p_col:
-                            _dn_pv = [_p_core_amt, _ptot - _p_core_amt]
-                            _dn_pl = [f"🛡️ 核心 {_p_core_pct}%",
-                                      f"⚡ 衛星 {100 - _p_core_pct:.1f}%"]
-                            fig_p_dn = go.Figure(go.Pie(
-                                labels=_dn_pl, values=_dn_pv,
-                                hole=0.65,
-                                marker=dict(colors=[MD_BLUE_300, MATERIAL_ORANGE],
-                                            line=dict(color=STREAMLIT_BG, width=1)),
-                                textinfo="percent", textfont=dict(size=9),
-                                hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
-                            ))
+                            # 2026-10-10（級別三態）：~~第二片 = `_ptot - _p_core_amt`~~（含未設定、
+                            # 卻標「⚡ 衛星」）→ 第二片只放明確衛星；比例算不出來（整張保單
+                            # 都未設定）就不加 pie trace，不畫一個空圓環（比照 Hero 的寫法）。
+                            fig_p_dn = go.Figure()
+                            if _p_core_pct is not None:
+                                _dn_pv = [_p_core_amt, _cs_p["sat_twd"]]
+                                _dn_pl = [f"🛡️ 核心 {_p_core_pct}%",
+                                          f"⚡ 衛星 {100 - _p_core_pct:.1f}%"]
+                                fig_p_dn.add_trace(go.Pie(
+                                    labels=_dn_pl, values=_dn_pv,
+                                    hole=0.65,
+                                    marker=dict(colors=[MD_BLUE_300, MATERIAL_ORANGE],
+                                                line=dict(color=STREAMLIT_BG, width=1)),
+                                    textinfo="percent", textfont=dict(size=9),
+                                    hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
+                                ))
                             fig_p_dn.update_layout(
                                 paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
                                 font_color=GH_FG_PRIMARY,
@@ -859,7 +871,7 @@ def render_portfolio_tab() -> None:
                                 margin=dict(t=4, b=4, l=4, r=4),
                                 showlegend=False,
                                 annotations=[dict(
-                                    text=f"<b>{_p_core_pct}%</b>",
+                                    text=f"<b>{_p_core_txt}</b>",
                                     x=0.5, y=0.5, font_size=12, showarrow=False,
                                     font=dict(color=MD_BLUE_300))],
                             )
@@ -894,7 +906,8 @@ def render_portfolio_tab() -> None:
                                 _div_e = None  # smoke-allow-pass
                             _funds_enriched.append({
                                 "invest_twd": _f.get("invest_twd", 0) or 0,
-                                "is_core":    _is_core_in_policy(_f),
+                                "is_core":    {"core": True, "satellite": False}.get(
+                                    _tier_in_policy(_f)),
                                 "sigma_info": _sig_e,
                                 "dividend_info": _div_e,
                             })
@@ -1107,8 +1120,12 @@ def render_portfolio_tab() -> None:
             _cs_kpi = _sum_cs(_pf_loaded,
                               target_pct=_get_core_target(st.session_state))
             _tot_kpi  = _cs_kpi["total_twd"]
+            # 2026-10-10（級別三態）：~~None → 0.0~~（全部未設定時會印「衛星 100.0%」、
+            # 總經聯動會說「僅 0.0% → 降衛星曝險」）。算不出比例就保留 None、畫面顯示「—」。
             _core_pct_kpi = (round(_cs_kpi["core_pct"], 1)
-                             if _cs_kpi["core_pct"] is not None else 0.0)
+                             if _cs_kpi["core_pct"] is not None else None)
+            _core_pct_kpi_txt = (f"{_core_pct_kpi:.1f}%" if _core_pct_kpi is not None else "—")
+            _sat_pct_kpi_txt = (f"{100-_core_pct_kpi:.1f}%" if _core_pct_kpi is not None else "—")
             # 累計報酬：以各基金 series 起點 → 當前點，按投資額加權
             _cum_ret_pct = None
             try:
@@ -1160,9 +1177,9 @@ def render_portfolio_tab() -> None:
                 f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
                 f"border-radius:12px;padding:16px 18px'>"
                 f"<div style='color:{GRAY_AA};font-size:11px'>🛡️ 核心資產比例</div>"
-                f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
+                f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi_txt}</div>"
                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
-                f"衛星 {100-_core_pct_kpi:.1f}% · 金額加權</div></div>"
+                f"衛星 {_sat_pct_kpi_txt} · 金額加權</div></div>"
                 f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
                 f"border-radius:12px;padding:16px 18px'>"
                 f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
@@ -1346,17 +1363,24 @@ def render_portfolio_tab() -> None:
             _target   = _get_core_target2(st.session_state)
             _cs_hero  = _sum_cs2(_pf_loaded, target_pct=_target)
             _tot  = _cs_hero["total_twd"]
+            # 2026-10-10（級別三態）：~~None → 0.0~~ → 算不出比例（沒填本金，或有本金但
+            # 級別全未設定）就保留 None，三個數與圓環中心一律顯示「—」，偏差色用中性灰
+            # （沒有證據就不亮「健康」綠燈）。
             _core_pct = (round(_cs_hero["core_pct"], 1)
-                         if _cs_hero["core_pct"] is not None else 0.0)
-            _diff     = round(_cs_hero["diff_pct"], 1) if _cs_hero["diff_pct"] is not None else 0.0
-            _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
+                         if _cs_hero["core_pct"] is not None else None)
+            _diff     = round(_cs_hero["diff_pct"], 1) if _cs_hero["diff_pct"] is not None else None
+            _dc       = (TRAFFIC_NEUTRAL if _diff is None else
+                         MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN))
+            _core_pct_txt = (f"{_core_pct}%" if _core_pct is not None else "—")
+            _sat_pct_txt  = (f"{100-_core_pct:.1f}%" if _core_pct is not None else "—")
+            _diff_txt     = (f"{_diff:+.1f}%" if _diff is not None else "—")
             st.markdown(
                 f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
                 f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · 投入本金 {fmt_twd(_tot)}" if _tot else "") + "</div>"
                 f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
-                f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
-                f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
-                f"<div><div style='color:{_dc};font-size:11px'>目標偏差（目標核心 {_target:.0f}%）</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
+                f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct_txt}</div></div>"
+                f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{_sat_pct_txt}</div></div>"
+                f"<div><div style='color:{_dc};font-size:11px'>目標偏差（目標核心 {_target:.0f}%）</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff_txt}</div></div>"
                 f"</div></div>", unsafe_allow_html=True)
 
             # ── 核心/衛星甜甜圈（P1.3 縮成單列 mini chart）──────────────
@@ -1369,7 +1393,7 @@ def render_portfolio_tab() -> None:
             _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {_cs_hero['n_sat']} 檔"]
             _dn_values = [_core_amt, _sat_amt]
             _dn_colors = [MD_BLUE_300, MATERIAL_ORANGE]
-            _alert     = abs(_diff) > 10
+            _alert     = _diff is not None and abs(_diff) > 10
             _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
             fig_dn = go.Figure()
             if sum(_dn_values) > 0:
@@ -1389,16 +1413,21 @@ def render_portfolio_tab() -> None:
                 margin        = dict(t=4, b=4, l=4, r=4),
                 showlegend    = False,
                 annotations   = [dict(
-                    text  = f"<b>{_core_pct}%</b><br><span style='font-size:9px'>核心</span>",
+                    text  = f"<b>{_core_pct_txt}</b><br><span style='font-size:9px'>核心</span>",
                     x=0.5, y=0.5, font_size=14, showarrow=False,
                     font=dict(color=MD_BLUE_300))],
             )
             st.plotly_chart(fig_dn, use_container_width=True)
-            if not _cs_hero["is_amount_weighted"]:
-                st.caption(
-                    "⬜ 全部 %d 檔都沒填投入本金 → 無法算金額比例，上方 0%% 不代表真的沒有核心資產。"
-                    % _cs_hero["n_funds"]
-                )
+            if _cs_hero["core_pct"] is None:
+                # 2026-10-10（級別三態）：~~`if not is_amount_weighted:` 印
+                # 「⬜ 全部 %d 檔都沒填投入本金 → 無法算金額比例，上方 0% 不代表真的沒有核心資產。」~~
+                # —— 上方已不再印 0%（改「—」），那句話不再成立；且「有本金但級別全未設定」
+                # 舊碼會掉進下面的「✅ 配置健康（核心 0.0% / 衛星 100.0%）」。
+                # 算不出比例時這裡**不印任何判斷**：原因（S4／S3／S3b）已由上方「💡 這四格的基數」
+                # 第 2 點的 SSOT caption 講，下方 📐 那行也指向那裡 —— 不重印同一句
+                # （守衛：`tests/test_core_satellite_single_verdict.py::`
+                # `test_core_satellite_caption_printed_exactly_once`）。
+                pass
             elif _alert:
                 st.caption(
                     f"⚠️ 配置偏離 {_diff:+.1f}%（核心 {_core_pct}% vs 目標 {_target:.0f}%）— "
@@ -1695,9 +1724,8 @@ def render_portfolio_tab() -> None:
             # 預設 **展開**（原則 1）：這一區是「我的持倉現況」主資料 —— 每檔的 NAV /
             # 配息率 / Sharpe / σ / 建議都在裡面，收起來等於把主角藏在摺疊層後面。
             from collections import defaultdict as _dd_pf_main
-            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
-                resolve_core_flag as _core_flag_card,
-            )
+            # 2026-10-10（級別三態）：~~`resolve_core_flag as _core_flag_card`~~（二態：未設定印「⚡衛星」）
+            from shared.policy_tier import resolve_tier as _tier_card  # noqa: PLC0415
             _pf_by_pid: dict = _dd_pf_main(list)
             for i, pf_item in enumerate(pf):
                 _pid_main = str(pf_item.get("policy_id", "") or "").strip() or "(未綁保單)"
@@ -1712,7 +1740,10 @@ def render_portfolio_tab() -> None:
                     rt_i   = rm_i.get("risk_table",{})
                     # 走全站唯一真相（policy_tier 優先），否則同一檔會「卡片寫衛星、
                     # KPI 卻把它算進核心」——原本這裡只讀 is_core，無視 Sheet 的 policy_tier。
-                    role_i = "🛡️核心" if _core_flag_card(pf_item) else "⚡衛星"
+                    # ~~`role_i = "🛡️核心" if _core_flag_card(pf_item) else "⚡衛星"`~~
+                    # → 三態（客戶 2026-10-10）：未設定是第三種狀態，不印成衛星。
+                    role_i = {"core": "🛡️核心", "satellite": "⚡衛星"}.get(
+                        _tier_card(pf_item), "⬜未設定")
                     _nav_i  = m_i.get("nav") or (pf_item.get("moneydj_raw") or {}).get("nav_latest","")
                     _adr_i  = (pf_item.get("moneydj_raw") or {}).get("moneydj_div_yield") or m_i.get("annual_div_rate","")
                     _sh_i   = (rt_i.get("一年") or {}).get("Sharpe","")
@@ -2266,6 +2297,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     # 不改 render_ai_summary_widget 的介面（它被 Tab2 等共用，且它自己的
     # 磁碟快取仍需要完整 snapshot 當 key material）。
     _ai_fp_parts = []
+    from shared.policy_tier import resolve_tier as _tier_fp  # noqa: PLC0415
     for _f_fp in loaded:
         _s_fp = _f_fp.get("series")
         try:
@@ -2276,6 +2308,9 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             f"{str(_f_fp.get('code', '') or '').upper()}"
             f"|{_f_fp.get('invest_twd') or 0}|{_n_fp}"
             f"|{str(_f_fp.get('currency', '') or '')}"
+            # 2026-10-10（級別三態）：快照內容依級別而變（核心／衛星／未設定），
+            # 指紋不含級別會讓只改級別的 session 沿用舊快照。
+            f"|{_tier_fp(_f_fp) or ''}"
         )
     _news_fp = st.session_state.get("news_items", []) or []
     # 獨立稽核 額-2：以下兩項也會改變 snapshot 內容，不進指紋會讓 AI 拿舊快照講話：
@@ -2317,22 +2352,33 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     # 原本這裡是「檔數比例 + 寫死 80%」，與畫面上的金額版兩套數字，AI 會照著錯的講。
     from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
         get_core_target_pct as _get_core_target_ai,
-        resolve_core_flag as _core_flag_ai,
         summarize_core_satellite as _sum_cs_ai,
     )
+    # 2026-10-10（級別三態）：~~`resolve_core_flag as _core_flag_ai`~~（逐檔行把未設定告訴 AI 是「衛星」）
+    from shared.policy_tier import resolve_tier as _tier_ai  # noqa: PLC0415
     n_total = len(loaded)
     _target_ai = _get_core_target_ai(st.session_state)
     _cs_ai = _sum_cs_ai(loaded, target_pct=_target_ai)
     n_core = _cs_ai["n_core"]
     n_sat = _cs_ai["n_sat"]
     core_pct = _cs_ai["core_pct"]
-    _core_pct_txt = (f"{core_pct:.0f}%（金額加權）"
-                     if core_pct is not None else "—（未填投入本金，無法算金額比例）")
+    # 2026-10-10（級別三態）：比例只算已設定級別的資金；`core_pct is None` 有兩種原因，
+    # ~~一律寫「未填投入本金」~~（有本金但級別全未設定時那是假話）→ 依原因二選一。
+    if core_pct is not None:
+        _core_pct_txt = f"{core_pct:.0f}%（金額加權）"
+    elif not _cs_ai["is_amount_weighted"]:
+        _core_pct_txt = "—（未填投入本金，無法算金額比例）"
+    else:
+        _core_pct_txt = "—（目前沒有「已設定級別且已填本金」的基金，無法算核心／衛星比例）"
     _sat_pct_txt = (f"{100 - core_pct:.0f}%" if core_pct is not None else "—")
+    _n_unset_ai = int(_cs_ai.get("n_tier_unset") or 0)
+    _unset_ai_txt = (f"｜⬜ 未設定 {_n_unset_ai} 檔（不計入比例）" if _n_unset_ai else "")
 
     lines = [
         f"## 組合快照（{n_total} 檔）",
-        f"- 核心 {n_core} 檔 · 佔資金 {_core_pct_txt}｜衛星 {n_sat} 檔 · 佔資金 {_sat_pct_txt}",
+        # ~~`- 核心 {n_core} 檔 · 佔資金 …｜衛星 {n_sat} 檔 · 佔資金 …`~~ → S12（客戶 2026-10-10 核准）
+        f"- 核心 {n_core} 檔 · 佔已設定資金 {_core_pct_txt}｜衛星 {n_sat} 檔 · 佔已設定資金 {_sat_pct_txt}"
+        f"{_unset_ai_txt}",
         f"- 使用者設定的核心目標：{_target_ai:.0f}%",
     ]
     _shown = 0
@@ -2343,7 +2389,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         sharpe = m.get("sharpe", "—")
         std_1y = m.get("std_1y", "—")
         lines.append(
-            f"- {name}（{'核心' if _core_flag_ai(f) else '衛星'}）："
+            f"- {name}（{ {'core': '核心', 'satellite': '衛星'}.get(_tier_ai(f), '未設定') }）："
             f"1Y 報酬 {ret_1y}%　|　Sharpe {sharpe}　|　波動 {std_1y}%"
         )
         _shown += 1

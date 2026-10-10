@@ -172,7 +172,11 @@ def test_caption_states_amount_denominator_and_tier_source():
     ]
     cap = format_core_satellite_caption(summarize_core_satellite(funds))
     assert "金額" in cap
-    assert "policy_tier" in cap
+    # ~~`assert "policy_tier" in cap`~~ —— 2026-10-10（客戶裁示：不猜級別、級別三態）：
+    # 舊 caption 的級別來源句是「k/n 檔來自 `policy_tier`，其餘以基金名稱關鍵字推定」；
+    # 系統已不推定，全部已設定時改說「級別已設定 n 檔」（S2）。
+    assert "級別已設定 2 檔" in cap
+    assert "推定" not in cap and "關鍵字" not in cap
 
 
 def test_caption_warns_when_no_amount_filled():

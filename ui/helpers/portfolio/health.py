@@ -85,6 +85,10 @@ def compute_health_kpis(portfolio_funds: list | None,
             out["pct_sat"] = round(n_sat / n_classed * 100)
             # 標題明寫「檔數」：這格是「幾檔核心 / 幾檔衛星」，不是資金配置比例。
             out["ratio_label"] = f"核心 {n_core} 檔 / 衛星 {n_sat} 檔"
+            # 2026-10-10（級別三態，S15）：未設定不進核心／衛星，另列檔數。
+            n_unset = int((mk_df["MK_Class"] == "Unset").sum())
+            if n_unset:
+                out["ratio_label"] += f" / ⬜ 未設定 {n_unset} 檔"
             # 目標比較刻意留空：目標值（portfolio_core_pct）是對**金額**的，
             # 拿來比檔數會給出與「① 配置總覽」相反的再平衡結論。
             out["ratio_delta"] = None

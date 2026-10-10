@@ -66,6 +66,7 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     is_core_fund as _is_core_fund,
 )
+from shared.policy_tier import resolve_tier as _resolve_tier
 from ui.helpers.tw_time import tw_now_str
 
 
@@ -2973,10 +2974,14 @@ def render_t7_section() -> None:
                     # v19.466 衛星停利:每檔用 resolve_core_flag 判衛星 + T7 未實現%(從成本)→ 停利燈。
                     # 邏輯在 L2 satellite_stop_gain(§1:核心不判、未填成本誠實留白不當 0%)。
                     from services.satellite import satellite_stop_gain as _sat_sg
-                    from ui.helpers.portfolio.allocation import resolve_core_flag as _resolve_core
+                    # 2026-10-10（級別三態）：~~`is_satellite=(not resolve_core_flag(fund))`~~ ——
+                    # 二態把「未設定」當衛星，未設定的部位會亮停利燈。只有明確衛星才判燈；
+                    # 未設定印「⬜ 未設定」。
 
                     def _sat_stop_label(fund, pct):
-                        _r = _sat_sg(pct, is_satellite=(not _resolve_core(fund)))
+                        if _resolve_tier(fund) is None:
+                            return "⬜ 未設定"
+                        _r = _sat_sg(pct, is_satellite=(_resolve_tier(fund) == "satellite"))
                         _stt = _r["status"]
                         if _stt in ("force", "batch"):
                             return f"{_r['emoji']} {_r['lamp']}"
