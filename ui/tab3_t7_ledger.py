@@ -64,8 +64,9 @@ from services.macro import (
 )
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
-    is_core_fund as _is_core_fund,
 )
+# 2026-10-10（客戶裁示：不猜級別）：~~`is_core_fund as _is_core_fund`~~ 已無呼叫點，移除。
+from shared.policy_tier import fund_tier_sheet_value as _fund_tier_sheet_value
 from shared.policy_tier import resolve_tier as _resolve_tier
 from ui.helpers.tw_time import tw_now_str
 
@@ -1051,10 +1052,10 @@ def render_t7_section() -> None:
                                             "notes":        ("T7 pid migrate"
                                                              if (_pid_w3, _code_w3) in _changed_codes
                                                              else "T7 套用起始部位"),
-                                            "policy_tier":  ("core" if _fobj_w3.get("is_core")
-                                                             else "satellite"
-                                                             if _fobj_w3.get("is_core") is False
-                                                             else ""),
+                                            # 2026-10-10：~~只讀 `is_core` 的三元式~~ ——
+                                            # v1 讀回只寫 `policy_tier`，停猜後 `is_core` 為空，
+                                            # 舊式會把客戶在 Sheet 明示的級別寫成空白。改走 L0 SSOT。
+                                            "policy_tier":  _fund_tier_sheet_value(_fobj_w3),
                                             # v18.183：現金給付% + 含息成本也寫進保單分頁
                                             "div_cash_pct":     float(_fobj_w3.get("div_cash_pct", 100) or 0),
                                             "avg_nav_with_div": float(_fobj_w3.get("avg_nav_with_div", 0) or 0),
@@ -1446,8 +1447,8 @@ def render_t7_section() -> None:
                                 "metrics":    _new_raw.get("metrics", {}),
                                 "moneydj_raw":_new_raw,
                                 "risk_metrics":_new_raw.get("risk_metrics", {}),
-                                "is_core":    _is_core_fund(
-                                    _new_raw.get("fund_name") or _new_code_clean),
+                                # ~~`"is_core"` ＝ 以基金名稱關鍵字猜核心／衛星~~
+                                # 2026-10-10（客戶裁示：不猜級別）：新基金一律「未設定」。
                                 "currency":   _new_raw.get("currency","")
                                               or _new_raw.get("metrics",{}).get("currency",""),
                                 "loaded":     True, "load_error": None,

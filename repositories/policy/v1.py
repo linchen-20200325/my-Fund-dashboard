@@ -252,7 +252,7 @@ def sync_policies_to_portfolio_funds(
                     "currency": str(row.get("currency", "")).strip(),
                     "invest_date": str(row.get("invest_date", "")).strip(),
                     "fx_at_buy": _normalize_fx(row.get("fx_at_buy")),
-                    "policy_tier": _tier,    # P3：空字串 → 呼叫端 fallback heuristic
+                    "policy_tier": _tier,    # P3：空字串 ＝ 級別未設定（2026-10-10 起不再以名稱猜；~~呼叫端 fallback heuristic~~）
                 }
                 target_pks.append(pk)
                 # v18.183：div_cash_pct / avg_nav_with_div 有值才帶回，避免空欄

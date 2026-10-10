@@ -27,6 +27,8 @@ from repositories.snapshot_repository import (
     save_holdings_overview,
 )
 from infra.oauth import OAuthError
+# 寫回 Sheet 的「級別」一律走 L0 SSOT（`policy_tier` → `is_core` 三態 → 未設定寫空白）。
+from shared.policy_tier import fund_tier_sheet_value
 
 
 def _dump_all_to_sheet_v2(client: object,
@@ -67,9 +69,8 @@ def _dump_all_to_sheet_v2(client: object,
                 "fund_code":        _code,
                 "fund_name":        str(_f.get("name", "") or ""),
                 "currency":         str(_f.get("currency", "")),
-                "tier":             ("core" if _f.get("is_core") else
-                                     "satellite" if _f.get("is_core") is False
-                                     else ""),
+                # 2026-10-10：~~只讀 `is_core` 的三元式~~ → L0 SSOT（v1 明示的 `policy_tier` 也算數）。
+                "tier":             fund_tier_sheet_value(_f),
                 "invest_twd":       int(_f.get("invest_twd", 0) or 0),
                 "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                 "units":            _units,
@@ -248,10 +249,9 @@ def dump_all_to_sheet(client: object,
                     "currency":     str(_f.get("currency", "")),
                     "fx_at_buy":    0.0,
                     "notes":        "v18.162 全部寫入",
-                    "policy_tier":  ("core" if _f.get("is_core")
-                                     else "satellite"
-                                     if _f.get("is_core") is False
-                                     else ""),
+                    # 2026-10-10：~~只讀 `is_core` 的三元式~~ —— v1 讀回只寫 `policy_tier`，
+                    # 舊式會拿名稱猜測覆寫（停猜後則清空）客戶在 Sheet 明示的級別。改走 L0 SSOT。
+                    "policy_tier":  fund_tier_sheet_value(_f),
                     # v18.183：現金給付% + 含息成本也寫進保單分頁
                     "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                     "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
@@ -367,6 +367,11 @@ def _load_all_from_sheet_v2(client: object,
                 "div_cash_pct":     float(_row.get("div_cash_pct", 100) or 0),
                 "is_core":          (True if _tier == "core" else
                                      False if _tier == "satellite" else None),
+                # 2026-10-10：v2 分頁的 `tier` 是本路徑唯一的級別權威；`**_prev` 可能帶進
+                # 過期的 v1 `policy_tier`（同 session 先走過 v1 讀回，或還原過 JSON 備份），
+                # 而 `resolve_tier` 讓 `policy_tier` 優先 —— 不清掉，舊值會蓋過這次讀回的級別，
+                # 並在下次寫入時寫回 Sheet。寫空字串與「沒有這個鍵」對所有讀取端等價。
+                "policy_tier":      "",
             })
         ss["portfolio_funds"] = _new_funds
         out["added"]   = sorted(_new_codes - _prev_codes)

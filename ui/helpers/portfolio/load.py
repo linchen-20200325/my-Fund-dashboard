@@ -26,9 +26,14 @@ def count_unloaded_funds() -> tuple[int, int]:
 
 # fund-info 欄位：只跟 fund_code 有關（NAV 歷史/指標/名稱與保單無關），可跨帳本共用。
 # 與 batch_load_unloaded_funds() broadcast 寫入的鍵對齊（loaded/load_error 另外處理）。
+#
+# ⚠️ 2026-10-10 移出 ~~`"is_core"`~~（有意識的變更，不是漏刪）：舊清單放它在當時是對的 ——
+# 那時 `is_core` 由基金名稱推出，純粹是 fund_code 的函數。現在級別是客戶在 Sheet 上的設定，
+# 是 (policy_id, fund_code) 的屬性：依 code 跨保單沿用會把 A 保單的級別搬到 B 保單，
+# 再由「全部寫入」寫回 Sheet。
 _FUND_INFO_KEYS = (
     "name", "series", "dividends", "metrics", "moneydj_raw",
-    "risk_metrics", "is_core", "currency",
+    "risk_metrics", "currency",
 )
 
 
@@ -218,7 +223,6 @@ def batch_load_unloaded_funds() -> None:
     ld_label.success(f"✅ 完成 — 抓到 {n_uniq} 個 unique codes")
 
     # Step 2: broadcast 給每個 pf entry
-    from ui.helpers.session import is_core_fund as _is_core
     from ui.helpers.data_registry import _update_data_registry
 
     errors: list[str] = []
@@ -239,7 +243,11 @@ def batch_load_unloaded_funds() -> None:
                 "metrics":      pf_raw.get("metrics", {}),
                 "moneydj_raw":  pf_raw,
                 "risk_metrics": pf_raw.get("risk_metrics", {}),
-                "is_core":      _is_core(pf_raw.get("fund_name") or pf_item["code"]),
+                # ⛔ 2026-10-10（客戶裁示：不猜級別）：刻意沒有 `is_core`（有意識的移除，不是漏刪）。
+                # 原本這一行用基金名稱關鍵字猜核心／衛星，覆寫從 Sheet 讀回的值，再由「全部寫入」
+                # 把猜測寫回 Sheet；且 `_CORE_KEYWORDS` 含「配息」，法定揭露字樣
+                # 「(基金之配息來源可能為本金)」會讓幾乎所有基金被猜成核心。
+                # 這一輪只取數，級別一律沿用讀回時的值（Sheet 沒填 → 維持未設定）。
                 "currency":     pf_raw.get("currency", "")
                                   or pf_raw.get("metrics", {}).get("currency", ""),
                 "loaded":       True, "load_error": None,

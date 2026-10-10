@@ -27,6 +27,7 @@ import streamlit as st
 from ui.helpers.render_state import system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
+from shared.policy_tier import fund_tier_sheet_value as _fund_tier_sheet_value
 from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, BG_DARK_RED_3, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
 
 from infra.oauth import (
@@ -73,7 +74,7 @@ from ui.components.mk_dashboard import render_mk_war_room
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
-    is_core_fund as _is_core_fund,
+    is_core_fund as _is_core_fund,  # noqa: F401 — 2026-10-10 起本檔不再呼叫（不猜級別）；別名保留供既有測試
 )
 from ui.tab3_t7_ledger import T7InputAbort, render_t7_section
 
@@ -1583,8 +1584,9 @@ def render_portfolio_tab() -> None:
                                 "metrics":     _raw_b.get("metrics", {}),
                                 "moneydj_raw": _raw_b,
                                 "risk_metrics":_raw_b.get("risk_metrics", {}),
-                                "is_core":     _is_core_fund(
-                                    _raw_b.get("fund_name") or _code_b),
+                                # ~~`"is_core"` ＝ 以基金名稱關鍵字猜核心／衛星~~
+                                # 2026-10-10（客戶裁示：不猜級別）：新加入的基金一律「未設定」，
+                                # 下方寫進 Sheet 的 policy_tier 因此是空白。
                                 "currency":    _raw_b.get("currency", "")
                                                 or _raw_b.get("metrics", {}).get("currency", ""),
                             })
@@ -1609,10 +1611,8 @@ def render_portfolio_tab() -> None:
                                         "currency":     _new_item_b.get("currency", ""),
                                         "fx_at_buy":    0.0,
                                         "notes":        "Tab3 batch add",
-                                        "policy_tier":  ("core" if _new_item_b.get("is_core")
-                                                         else "satellite"
-                                                         if _new_item_b.get("is_core") is False
-                                                         else ""),
+                                        # 走 L0 SSOT；新條目沒有級別 → 寫空白（不寫猜測）。
+                                        "policy_tier":  _fund_tier_sheet_value(_new_item_b),
                                     })
                                     _sheet_synced.append(_code_b)
                                 except (PolicySheetError, OAuthError) as _e_ws:

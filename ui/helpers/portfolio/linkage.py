@@ -91,7 +91,8 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
                         "code": _add_code,
                         "name": fund_name or _add_code,
                         "loaded": False,
-                        "is_core": True,   # 預設核心，使用者可在 Tab3 調整
+                        # ~~`"is_core": True,   # 預設核心`~~ —— 2026-10-10（客戶裁示：系統不替客戶
+                        # 決定級別）：不寫級別鍵，新條目即「未設定」，下次寫入 Sheet 也是空白。
                         "invest_twd": 0,
                     })
                     session_state["portfolio_funds"] = _pf
