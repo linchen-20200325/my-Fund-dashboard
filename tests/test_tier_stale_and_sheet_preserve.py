@@ -436,7 +436,7 @@ def test_manual_has_no_unapproved_parenthetical():
 
 
 # ══════════════════════════════════════════════════════════════════
-# 稽核 C（M-1）：同代號多列 —— 以 (代號, 第 k 次出現) 對齊，不得把 A 列的級別滲到 B 列
+# 稽核 C（M-1）：同代號多列 —— 只保留單列代號；多列代號照寫 df 值，不得把別列的級別搬過來
 # ══════════════════════════════════════════════════════════════════
 def _v2_tab_rows(rows: list) -> list:
     """rows: [(代號, 級別, 本金), ...] → 中文表頭 v2 分頁的 get_all_values。"""
@@ -453,8 +453,12 @@ def _v2_tab_rows(rows: list) -> list:
     return out
 
 
-def _sheet_round_trip(monkeypatch, sheet_rows: list) -> list:
-    """Sheet 分頁 → `_load_all_from_sheet_v2` → v2 全部寫入（真 write_policy_v2、假 gspread）。"""
+def _sheet_round_trip(monkeypatch, sheet_rows: list, sheet_at_write: list | None = None) -> list:
+    """Sheet 分頁 → `_load_all_from_sheet_v2` → v2 全部寫入（真 write_policy_v2、假 gspread）。
+
+    sheet_at_write：寫入當下 Sheet 的內容（模擬讀回之後客戶在 Sheet 上調過列序）；
+    省略 ＝ 與讀回時相同。
+    """
     from repositories.policy.v2 import ALL_COLS_V2
     from ui.helpers import cloud_io
     _c = list(ALL_COLS_V2)
@@ -463,7 +467,7 @@ def _sheet_round_trip(monkeypatch, sheet_rows: list) -> list:
     monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: _df)
     ss: dict = {"portfolio_funds": []}
     assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
-    ws = _FakeWS(_v2_tab_rows(sheet_rows))
+    ws = _FakeWS(_v2_tab_rows(sheet_rows if sheet_at_write is None else sheet_at_write))
     monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
     import time as _time
     monkeypatch.setattr(_time, "sleep", lambda s: None)
@@ -472,45 +476,63 @@ def _sheet_round_trip(monkeypatch, sheet_rows: list) -> list:
     return _written_rows(ws)
 
 
-@pytest.mark.parametrize("first_tier", ["core", "foo"])
-def test_v2_same_code_two_rows_tier_does_not_leak(monkeypatch, first_tier):
+@pytest.mark.parametrize("first_tier, expect_first", [
+    ("core", "core"),   # session 本身就讀到 core → 照寫
+    ("foo", ""),        # 認不得 → session 未設定；多列代號不保留 → 空白（刻意取捨，同 e6b4702）
+])
+def test_v2_same_code_two_rows_tier_does_not_leak(monkeypatch, first_tier, expect_first):
     """稽核 C 重現：[F1 core 100] + [F1 '' 200] → 56f135c 寫出 ('F1','core',200)。
-    突變：對齊改成「最後一列優先」或「只取第一列」→ 本條轉紅。"""
+    第二列（未設定）一律不得拿到第一列的級別。"""
     assert _sheet_round_trip(monkeypatch, [("F1", first_tier, 100), ("F1", "", 200)]) == [
-        ("F1", first_tier, 100), ("F1", "", 200)]
+        ("F1", expect_first, 100), ("F1", "", 200)]
 
 
-def test_v2_same_code_two_rows_reverse_order(monkeypatch):
-    """空白列在前、核心列在後：各自保留自己的值。"""
+def test_v2_same_code_rows_reordered_in_sheet_before_write_does_not_fabricate(monkeypatch):
+    """稽核 C 剩餘風險：讀回 [F1 '' 100, F1 core 200]，寫入前客戶在 Sheet 上把列序調成
+    [F1 core 200, F1 '' 100] → 不得把 core 寫到 100 那一列（未設定）。
+    突變：恢復「代號＋第 k 次出現」對齊 → 本條轉紅（寫出 ('F1','core',100)）。"""
+    assert _sheet_round_trip(
+        monkeypatch,
+        [("F1", "", 100), ("F1", "core", 200)],
+        sheet_at_write=[("F1", "core", 200), ("F1", "", 100)],
+    ) == [("F1", "", 100), ("F1", "core", 200)]
+
+
+def test_v2_same_code_two_rows_blank_first(monkeypatch):
+    """空白列在前、核心列在後：照寫各自的 session 值。"""
     assert _sheet_round_trip(monkeypatch, [("F1", "", 100), ("F1", "core", 200)]) == [
         ("F1", "", 100), ("F1", "core", 200)]
 
 
-def test_v2_rows_reordered_across_codes_align_per_code():
-    """列序改變（不同代號交錯、df 順序與 Sheet 不同）：每個代號各自依出現次序對齊。"""
+def test_v2_single_row_codes_still_preserved_when_rows_reordered():
+    """單列代號照常保留，不受其他代號多列、或 df 與 Sheet 列序不同影響。
+    突變：保留條件放寬成「Sheet 有該代號就取第一列」→ 本條轉紅（F1 寫出 core）。"""
     from repositories.policy.v2 import write_policy_v2
     ws = _FakeWS(_v2_tab_rows([("F1", "core", 1), ("F2", "foo", 2), ("F1", "", 3),
-                               ("F2", "satellite", 4)]))
+                               ("F3", "satellite", 4)]))
     df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": "", "invest_twd": a}
-                       for c, a in (("F2", 2), ("F2", 4), ("F1", 1), ("F1", 3))])
+                       for c, a in (("F3", 4), ("F2", 2), ("F1", 3), ("F1", 1))])
     write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
-    assert _written_rows(ws) == [("F2", "foo", 2), ("F2", "satellite", 4),
-                                 ("F1", "core", 1), ("F1", "", 3)]
+    assert _written_rows(ws) == [("F3", "satellite", 4), ("F2", "foo", 2),
+                                 ("F1", "", 3), ("F1", "", 1)]
 
 
 @pytest.mark.parametrize("sheet_rows, df_rows, expect", [
-    # Sheet 2 列、df 1 列 → 出現次數不同 → 不保留、照寫 df 值（空 → 空白，刻意取捨）
+    # Sheet 2 列、df 1 列 → 多列代號 → 不保留、照寫 df 值（空 → 空白，刻意取捨）
     ([("F1", "core", 1), ("F1", "", 2)], [("F1", "", 1)], [("F1", "", 1)]),
     # Sheet 1 列、df 2 列 → 同上
     ([("F1", "core", 1)], [("F1", "", 1), ("F1", "", 2)], [("F1", "", 1), ("F1", "", 2)]),
-    # 次數不同但 df 有明確級別 → 照寫 df 值
+    # Sheet 2 列、df 2 列（次數一致）→ 一樣不保留
+    ([("F1", "core", 1), ("F1", "foo", 2)], [("F1", "", 1), ("F1", "", 2)],
+     [("F1", "", 1), ("F1", "", 2)]),
+    # 多列但 df 有明確級別 → 照寫 df 值
     ([("F1", "core", 1)], [("F1", "satellite", 1), ("F1", "", 2)],
      [("F1", "satellite", 1), ("F1", "", 2)]),
-    # 其他代號次數一致 → 不受影響、照常保留
+    # 其他單列代號不受影響、照常保留
     ([("F1", "core", 1), ("F2", "foo", 2)], [("F1", "", 1), ("F1", "", 9), ("F2", "", 2)],
      [("F1", "", 1), ("F1", "", 9), ("F2", "foo", 2)]),
 ])
-def test_v2_occurrence_count_mismatch_skips_preservation(sheet_rows, df_rows, expect):
+def test_v2_multi_row_code_skips_preservation(sheet_rows, df_rows, expect):
     from repositories.policy.v2 import write_policy_v2
     ws = _FakeWS(_v2_tab_rows(sheet_rows))
     df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
