@@ -80,18 +80,22 @@ def compute_health_kpis(portfolio_funds: list | None,
         n_sat = int((mk_df["MK_Class"] == "Satellite").sum())
         n_classed = n_core + n_sat
         out["n_classed"] = n_classed
+        # 2026-10-10（級別三態，S15）：未設定不進核心／衛星，另列檔數。
+        n_unset = int((mk_df["MK_Class"] == "Unset").sum())
         if n_classed > 0:
             out["pct_core"] = round(n_core / n_classed * 100)
             out["pct_sat"] = round(n_sat / n_classed * 100)
             # 標題明寫「檔數」：這格是「幾檔核心 / 幾檔衛星」，不是資金配置比例。
             out["ratio_label"] = f"核心 {n_core} 檔 / 衛星 {n_sat} 檔"
-            # 2026-10-10（級別三態，S15）：未設定不進核心／衛星，另列檔數。
-            n_unset = int((mk_df["MK_Class"] == "Unset").sum())
             if n_unset:
                 out["ratio_label"] += f" / ⬜ 未設定 {n_unset} 檔"
             # 目標比較刻意留空：目標值（portfolio_core_pct）是對**金額**的，
             # 拿來比檔數會給出與「① 配置總覽」相反的再平衡結論。
             out["ratio_delta"] = None
+        elif n_unset:
+            # 全部未設定：原本只剩「—」，看不出那幾檔去哪了。沿用上面同一段 S15 字串
+            # （去掉前導「 / 」分隔），不新增文案；百分比照舊不算（沒有已設定的檔）。
+            out["ratio_label"] = f"⬜ 未設定 {n_unset} 檔"
 
     try:
         from ui.helpers.macro_helpers import compute_1y_total_return

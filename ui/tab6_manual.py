@@ -502,10 +502,7 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
     # 關鍵字表**不刪**（刪表＝刪元件＝草稿先行），表前加一句「已停用」。
     st.markdown("**級別來源：只認 Google Sheet 級別欄（`tier`／`policy_tier`）的值（core／satellite）；"
                 "沒設定 → ⬜ 未設定（不算核心、也不算衛星）**")
-    # 分頁名一律走 story_nav SSOT（不寫死；`tests/test_wpf_five_tab_wiring.py` 守）。
-    st.markdown("下表為舊版名稱關鍵字規則，**已停用**，組合的核心／衛星級別不再用基金名稱推定"
-                f"（{_where_to_find('fund')} 與 {_where_to_find('health')} 的「資產屬性」"
-                "仍以基金名稱判斷）。")
+    st.markdown("下表為舊版名稱關鍵字規則，**已停用**，組合的核心／衛星級別不再用基金名稱推定。")
     st.dataframe(pd.DataFrame([
         ["🛡️ 核心", "債、收益、配息、平衡、高息、公用、多元、income、bond、dividend、balanced"],
         ["⚡ 衛星", "AI、科技、半導體、成長、主題、印度、越南、生技、醫療、能源、tech、growth"],

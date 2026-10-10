@@ -2,12 +2,17 @@
 
 **為什麼要這一支**：同一頁原本有 4 處各算各的核心/衛星，3 種定義、2 種目標值 ——
 
-| 位置 | 分母 | 分類依據 | 目標 |
+| 位置 | 分母 | 分類依據（當時） | 目標 |
 |---|---|---|---|
 | 組合健康儀表 | 檔數 | `mk_df["MK_Class"]` | 寫死 80 |
 | ① 配置總覽 KPI 卡 | 金額 | `is_core` | 無 |
 | Hero 卡 + 甜甜圈 | 金額 | `is_core` | `portfolio_core_pct`（預設 75）|
 | 保單分組 | 金額 | `policy_tier` → `is_core` | `portfolio_core_pct` |
+
+（上表是統一前的舊狀況。**現況**：分類依據改為 `shared/policy_tier.resolve_tier`
+三態（`policy_tier` → `is_core` 嚴格布林 → 未設定）；組合健康儀表的 `MK_Class` 也由它推得
+（`ui/components/mk_dashboard.py::tag_mk_class`，未設定 → `"Unset"`）。
+`is_core` 只由 Sheet 的級別欄設定，不再由基金名稱推得。見下方規則 2。）
 
 3 檔核心佔 5 檔 = 60%，但核心若持有 90% 的錢 → 同一頁同時出現「核心 60%」與
 「核心 90%」，目標值又 80 vs 75 打架，使用者無從判斷該不該再平衡。
