@@ -52,8 +52,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-CORE_TIER = "core"
-SATELLITE_TIER = "satellite"
+# 級別詞彙與三態判定的 SSOT 住在 **L0** `shared/policy_tier.py`（`CLAUDE.md §8.2`：
+# `repositories/snapshot_repository.py`（L1）也要用同一把尺，而 L1 不得 import L3）。
+# 這裡只做轉引用，**禁止**在本檔另寫一份字串常數或另一套判定。
+from shared.policy_tier import (      # noqa: F401 — 轉引用，供既有 import 路徑沿用
+    CORE_TIER,
+    SATELLITE_TIER,
+    resolve_tier,
+)
 
 # 核心目標 % 的 session key 與其預設值 —— 預設值 SSOT 在
 # `ui/helpers/session.INITIAL_SESSION_STATE`，這裡只做轉引用，禁止另寫常數。
@@ -74,18 +80,24 @@ def get_core_target_pct(session_state) -> float:
 
 
 def resolve_core_flag(fund: dict | None) -> bool:
-    """核心 / 衛星判定：Sheet `policy_tier` 優先，缺則退既有 `is_core` 啟發式。
+    """核心 / 衛星的**二態**判定：是核心嗎？（`resolve_tier` 的薄包裝）
 
     與 Tab3 保單分組視圖原本的 `_is_core_in_policy` 同語意（該處已收斂為呼叫本函式），
     差別只在這裡是全頁共用、不再各處各寫一份。
+
+    ⚠️ **二態會把「使用者還沒決定」壓成 `False`（衛星）** —— 這是本函式
+    **回傳型別本身**的限制，不是判定邏輯的 bug。要區分「明示衛星」與「還沒決定」，
+    請直接用 :func:`shared.policy_tier.resolve_tier`（三態，`None` ＝ 未設定）。
+
+    ⛔ **凡是會把結果寫回客戶 Google Sheet 的路徑，一律不得用本函式** ——
+    二態在寫回時會把未設定的持倉寫成 `satellite`，那是**不可逆的資料汙染**
+    （客戶的空白被蓋掉，而且每存一次再蓋一次）。
+    寫回一律走 :func:`shared.policy_tier.fund_tier_sheet_value`。
+
+    ⚠️ 本函式**不做任何基金名稱關鍵字啟發式**（歷史上曾經有，見
+    `shared/policy_tier.py` 的 module docstring）。它只讀使用者明示的值。
     """
-    _f = fund or {}
-    _tier = str(_f.get("policy_tier") or "").strip().lower()
-    if _tier == CORE_TIER:
-        return True
-    if _tier == SATELLITE_TIER:
-        return False
-    return bool(_f.get("is_core"))
+    return resolve_tier(fund) == CORE_TIER
 
 
 def summarize_core_satellite(
