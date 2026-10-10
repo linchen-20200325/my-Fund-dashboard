@@ -1488,8 +1488,14 @@ def render_t7_section() -> None:
                         else:
                             _aamt_effective = float(_aamt)
                             _mode_note_new = f"TWD {_aamt_effective:,.0f}"
-                        if _anav <= 0 or _afx <= 0:
-                            st.error("❌ 無法取得最新 NAV 或 FX，請確認網路。")
+                        # 2026-10-10 客戶裁示:幣別未知(或 Sheet/來源衝突)時 FX 恆為 0,
+                        # 舊訊息會誤導成「請確認網路」→ 分流原因,準確說明幣別未知、不執行加碼。
+                        # (沿用同一個既有紅框,只換訊息 —— 不新增紅框。)
+                        _ccy_ok_a = bool(_ccy_calc_t7(_afund))
+                        if not _ccy_ok_a or _anav <= 0 or _afx <= 0:
+                            st.error(f"❌ 幣別未知：{_label_for_pk(_apk)}，不執行加碼。"
+                                     if not _ccy_ok_a
+                                     else "❌ 無法取得最新 NAV 或 FX，請確認網路。")
                         elif _aamt_effective <= 0:
                             st.error("❌ 投入金額（或單位數）必須大於 0。")
                         else:

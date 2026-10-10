@@ -1577,3 +1577,75 @@ def test_t7_b_row_unknown_value_and_ccy_column():
     ns["_b_book"]("K1", 1000.0, "📊 %")
     assert rows[0]["目前市值 TWD"] == "⬜ 無法計算"
     assert "應買 幣別未知" in rows[0] and "應買 " not in rows[0]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 19) 客戶 2026-10-10 裁示 C1-2:T7 A 段(新增基金加碼)
+#     幣別未知 → 準確說明「幣別未知」、不執行加碼;抓不到 NAV/FX 的原句保留。
+# ════════════════════════════════════════════════════════════════════════════
+def _t7_a_new_block():
+    """`_anav, _afx = _latest_nav_fx_t7(_afund)` 起,到錯誤分流那個 if(含)為止。"""
+    for n in ast.walk(_T7_TREE):
+        for field in ("body", "orelse"):
+            body = getattr(n, field, None)
+            if not isinstance(body, list):
+                continue
+            for i, st_ in enumerate(body):
+                if (isinstance(st_, ast.Assign)
+                        and ast.unparse(st_.targets[0]) == "(_anav, _afx)"):
+                    for j in range(i + 1, len(body)):
+                        if (isinstance(body[j], ast.If)
+                                and "_afx <= 0" in ast.unparse(body[j].test)):
+                            return body[i:j + 1]
+    raise AssertionError("A 段新增基金片段找不到")
+
+
+class _Booked(Exception):
+    pass
+
+
+def _run_t7_a(fund, nav, fx, *, mode="twd", amt=30000.0):
+    from ui.helpers.portfolio.load import fund_currency_for_calc
+    errs, books = [], []
+
+    def _sub(*a):
+        books.append(a)
+        raise _Booked()
+
+    ns = {
+        "_afund": fund, "_apk": "P1::X1", "_a_new_mode_key": mode,
+        "_aamt": amt, "_aamt_unit_new": 100.0,
+        "_latest_nav_fx_t7": lambda f: (nav, fx),
+        "_ccy_calc_t7": fund_currency_for_calc,
+        "_label_for_pk": lambda pk: pk.split("::")[-1],
+        "_t7_units_to_twd": lambda u, n, x: u * n * x,
+        "_ledger_for": lambda pk: types.SimpleNamespace(subscribe=_sub),
+        "_d_t7": _dt.date,
+        "st": types.SimpleNamespace(error=errs.append),
+    }
+    mod = ast.Module(body=_t7_a_new_block(), type_ignores=[])
+    try:
+        exec(compile(mod, "t7_a_new", "exec"), ns)  # noqa: S102 — 實跑凍結 Tab 原樣程式碼
+    except _Booked:
+        pass
+    return errs, books
+
+
+@pytest.mark.parametrize("fund", [
+    {"code": "X1", "currency": ""},                                        # 幣別未知
+    {"code": "X1", "currency": "TWD", "moneydj_raw": {"currency": "USD"}},  # Sheet/來源衝突
+])
+@pytest.mark.parametrize("mode", ["twd", "units"])
+def test_t7_a_unknown_currency_precise_message_no_booking(fund, mode):
+    errs, books = _run_t7_a(fund, 10.0, 0.0, mode=mode)
+    assert errs == ["❌ 幣別未知：X1，不執行加碼。"] and books == []
+
+
+def test_t7_a_known_ccy_missing_nav_keeps_original_message():
+    errs, books = _run_t7_a({"code": "X1", "currency": "USD"}, 0.0, 32.0)
+    assert errs == ["❌ 無法取得最新 NAV 或 FX，請確認網路。"] and books == []
+
+
+def test_t7_a_known_ccy_books_unchanged():
+    errs, books = _run_t7_a({"code": "X1", "currency": "USD"}, 10.0, 32.0)
+    assert errs == [] and len(books) == 1 and books[0][:3] == (30000.0, 32.0, 10.0)
