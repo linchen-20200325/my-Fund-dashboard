@@ -2542,6 +2542,16 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - ⚠️ 系統 pytest（`/root/.local/bin/pytest`）**不可用**：畫面測試整檔跳過、報表照綠
 - CI 三條 lane（**逐字，取自 `git show 41ca5de:.github/workflows/pr-check.yml`；名字對不上就沒法逐條比對 `conclusion`**）：`Fast checks (pre-commit + pytest, ~30s)`、`Schema gate (pandera contracts, ~5s)`、`Slow tests (AppTest, informational)`
   - ⚠️ **第三條標了 `continue-on-error: true`，它紅了 PR 照樣顯示 clean**，必須**逐條讀 `conclusion`**
+- 共用環境的操作注意事項（自未合併 #799 `HANDOVER.md` 第二節遷入，原文 2026-09-06；依客戶 2026-10-09 裁示 B，2026-10-10 第四十四次更新寫入。只收已實測成立或標「未重驗」的條目；括號內是查證結果）：
+  - 工作檔放自己 session 的 scratchpad 子目錄，不要寫 `/tmp` 根目錄或其他共用路徑（實查：`/tmp/claude-0/venv311` 是多個 session 共用的 venv；2026-10-09 遷移規劃組另見 `/tmp` 下同時有多個 session 的目錄與別組正在跑的程序。不同容器之間是否共用：無法驗證）。#799 原文「目錄名不得含 scratchpad」那半句不遷：與現行做法（每個 session 用自己隔離的 scratchpad 子目錄）衝突。
+  - 清程序用 PID，不要用 `pkill -f <pattern>`（2026-10-09 遷移規劃組實查：同一個 PID 命名空間看得到別組的 pytest 程序，`pkill -f pytest` 會一起殺掉）。
+  - 不要同時跑兩份完整 pytest（#799 原文記載會 OOM；未重驗）。
+  - `pre-commit run --files <檔>` 不只檢查那個檔：`pytest-smoke` hook 的 entry 是 `python -m pytest -q -m "not slow"`，且 `pass_filenames: false`、`always_run: true`，每次都跑整套非 slow 測試（2026-10-10 實查 `.pre-commit-config.yaml`）。#799 原文附的測試總數是 2026-09-06 的量測值，已漂移，不遷。
+  - 用 `--no-checkout` clone 出來的目錄，`git status` 會把每個檔都列成刪除（`D`）；不要照提示 commit，那會把整個 repo 刪掉（2026-10-10 實查：本組 scratchpad 的 `--no-checkout --depth 1` clone 上全部列為 `D`）。
+  - single-branch clone 上 `git fetch origin <分支>` 會成功結束（exit 0），卻不建立 `origin/<分支>`；跨分支一律用明確 refspec：`git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`（2026-10-10 實查：fetch `main` 後 `git branch -r` 沒有 `origin/main`，改用明確 refspec 後才出現）。
+  - MCP（`pull_request_read`）讀回的 PR 說明是 JSON 字串，`<`、`>` 以 `\u003c`、`\u003e` 跳脫形式出現（不是 `&lt;`）；要回寫時先解回原字元，不可原樣貼回（2026-10-10 實查：讀 #799 說明，`<merge-base>` 回傳為 `\u003cmerge-base\u003e`；`&` 這次沒有出現，未觀察到其形態）。#799 原文「拿它回寫會無聲毀掉整份描述」未重現。掃 commit message 用本機 `git log --format='%H%n%B'` 的原始輸出，不用 API 渲染內容。
+  - 掃描結論為「0 命中」時，同時附上輸入不是空的證據（例：commit 數、位元組數）；對空輸入，任何掃描都是 0 命中（例：上一條 single-branch clone 的 fetch 沒拿到東西，對 `origin/<分支>` 的掃描會是空的）。
+  - 未遷移的 #799 內容與理由：`pytest-randomly`（`requirements.txt`、`requirements-dev.txt`、`pytest.ini`、`.github/**` 皆無宣告，本環境未安裝）；名字像讀取的函式把寫入藏在底層（已由 `EXCEPTIONS.md` `P-WSTOREWRITE-1` 與守衛測試涵蓋）；署名、分支名與 merge 授權（已被第 7 節較新裁示取代）；不用 `grep session_`、不用固定行數窗（`CLAUDE.md` §-2.A 第 6 款 (c)、第 4 款已有）。出處：遷移規劃組 2026-10-09（scratchpad，不入 repo）；客戶 2026-10-09 裁示 B，經總管轉達（對話中，repo 內無原文）。
 
 ## 7. 常設規矩
 
@@ -2871,6 +2881,7 @@ B. 到達必須交給協作助手複驗、而且沒有其他可自主執行工�
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-10 | #838／#840／#799 有效內容遷移（客戶 2026-10-09 裁示 B；本顆只動 `EXCEPTIONS.md` 與本交接本；本輪屬 C 級：因為只改文件）：#840 母法修正提案單 #B-4（`P-WHEREGREYTARGET-1`）以續記併入 `EXCEPTIONS.md` 既有 `P-WHERECONTENT-1` 列第 2 欄尾，不另開新列，註明 W-3 未經客戶採納、#840 自承 repo 內無實例、出處 #840 head `e38c7dd`；第 6 節末尾新增 #799 仍有效的共用環境操作注意事項 8 條，逐條附查證結果或標「未重驗」，未遷移項與理由同列。未動 44。 |
 | 2026-10-09 | 第四十三次更新（main `b900ecb`，分支 `ccr-99c3296a-jgoapn`，PR #917；本顆只動本交接本；本輪屬 C 級：因為只改交接本）：檔頭時間更新；寫入客戶 2026-10-09 舊 draft PR 處置裁示（#841 採 A、#842＋#843 採 A、#838／#840／#799 採 B、PR #917 不急著合併、C 類 4 條維持可刪）；★ 進度總表「目前等客戶答的」改為 0 件、「下一步」改為 #841 修復 PR → #842＋#843（先提文案草稿待核准）→ #838／#840／#799 遷移，新增 PR #917 一列與〈舊 draft PR 處置裁示（第四十三次更新）〉，分支清理、保留、D 類三列與程序障礙補註；第 1 節新增第四十三次更新存檔點；第 5 節「舊 draft PR 處置」移為已裁示第 33～37 點；第 7 節「11 個舊 draft PR 一律不動」補註六個已個別放行；舊句一律劃線保留或加狀態更新註記。 |
 | 2026-10-09 | 第四十二次更新（main `b900ecb`，分支 `ccr-99c3296a-jgoapn`；本顆只動本交接本；本輪屬 C 級：因為只改交接本）：檔頭時間更新；#916 協作助手複驗通過、一般 merge 合入 main（`b900ecb`，head `edc8f7e`），main 上 CI 三條皆 success，#916 與 #3 淨值層標正式完成；第 1 節 `origin/main` 更新為 `b900ecb`、新增第四十二次更新存檔點；★ 進度總表「目前等客戶答的」改為舊 draft PR 處置裁示 1 件、「下一步」改為等客戶裁示，#3 列、PR #916 列、分支清理列、保留列、D 類列與總藍圖 #3 補登，新增〈分支第二組驗證（第四十二次更新）〉（#841／#842／#843／#838／#840／#799）；第 3 節 #916 移到第 4 節；第 5 節新增「舊 draft PR 處置」待裁示；舊句一律劃線保留或加狀態更新註記。 |
 | 2026-10-09 | 第四十一次更新（起點 main `5902470`，分支 `ccr-99c3296a-jgoapn`，PR #916；本顆只動本交接本）：檔頭時間更新；★ 進度總表「目前等客戶答的」改為「等客戶／協作助手答的：2 件」（D 類分支裁示、C 類 4 條分支待客戶手動刪除），「下一步」改為 #916 第二輪 delta 獨立安全稽核已通過（無必修）→ CI 綠 → 協作助手再次複驗 → 一般 merge，PR #916 列補登 `cd6ea87`、`63c161b`，#3 列補指向，新增「分支清理」一列與〈分支清理盤點（第四十一次更新）〉小表；第 1 節新增第四十一次更新存檔點；第 3 節 #916 補登兩顆補修；第 5 節補註分支清理兩件不是裁示題；〈登記待辦〉新增「PR #916 必修補修留下（不擋）」；舊句一律劃線保留或加狀態更新註記。 |
