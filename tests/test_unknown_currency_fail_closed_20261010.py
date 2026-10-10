@@ -1470,3 +1470,110 @@ def test_span_extend_declared_only(monkeypatch, code, declared, raw, name, want)
                                   is_insurance_code=True, declared_ccy=declared,
                                   raw_declared_ccy=raw, declared_only=True)
     assert hints == ([] if want is None else [want])
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 18) 客戶 2026-10-10 裁示 C1-1:T7 B 段(再平衡分配)—— 未知 ≠ 0
+#     幣別未知 / NAV-FX 抓不到 → 目前市值不顯示 0、不計入再平衡總額;
+#     % 模式需要缺口時任一檔市值未知 → 在任何落帳之前停止分配並說明是哪幾檔。
+#     (B 段深嵌於凍結 Tab:以 AST 取出**原樣**的程式片段,注入替身後實跑。)
+# ════════════════════════════════════════════════════════════════════════════
+def _t7_b_gap_block():
+    """從 `_navfx = {}` 到 `if _pct_pks_b:`(缺口計算)為止的原樣片段。"""
+    for n in ast.walk(_T7_TREE):
+        for field in ("body", "orelse"):
+            body = getattr(n, field, None)
+            if not isinstance(body, list):
+                continue
+            for i, st_ in enumerate(body):
+                if (isinstance(st_, ast.Assign) and len(st_.targets) == 1
+                        and isinstance(st_.targets[0], ast.Name)
+                        and st_.targets[0].id == "_navfx"):
+                    for j in range(i, len(body)):
+                        if (isinstance(body[j], ast.If)
+                                and ast.unparse(body[j].test) == "_pct_pks_b"):
+                            return body[i:j + 1]
+    raise AssertionError("B 段缺口片段找不到")
+
+
+class _Abort(Exception):
+    pass
+
+
+def _run_t7_b(funds, entries, *, btot=100000.0, value_twd=50000.0):
+    from ui.helpers.portfolio.load import fund_currency_for_calc
+    msgs = {"abort": [], "warning": [], "caption": []}
+
+    def _abort(m):
+        msgs["abort"].append(m)
+        raise _Abort(m)
+
+    pos = types.SimpleNamespace(value_twd=lambda n, x: value_twd)
+    pct = [pk for pk, (m, _) in entries.items() if m == "pct"]
+    ns = {
+        "_pf_t7": funds, "_b_entries": entries, "_btot": btot,
+        "_pct_pks_b": pct,
+        "_units_pks_b": [pk for pk, (m, _) in entries.items() if m == "units"],
+        "_wsum": sum(entries[pk][1] for pk in pct),
+        "fund_pk_str": lambda f: f["code"],
+        "_latest_nav_fx_t7": lambda f: (f["nav"], f["fx"]),
+        "_ccy_calc_t7": fund_currency_for_calc,
+        "_ledger_for": lambda pk: types.SimpleNamespace(position=pos),
+        "_label_for_pk": lambda pk: pk,
+        "parse_pk": lambda pk: ("", pk),
+        "_t7_units_to_twd": lambda u, n, x: u * n * x,
+        "fmt_twd": lambda v: f"{v:,.0f}",
+        "t7_abort": _abort,
+        "st": types.SimpleNamespace(warning=msgs["warning"].append,
+                                    caption=msgs["caption"].append),
+    }
+    mod = ast.Module(body=_t7_b_gap_block(), type_ignores=[])
+    try:
+        exec(compile(mod, "t7_b_gap", "exec"), ns)  # noqa: S102 — 實跑凍結 Tab 原樣程式碼
+    except _Abort:
+        pass
+    return ns, msgs
+
+
+_B_USD = {"code": "U1", "currency": "USD", "nav": 10.0, "fx": 32.0}
+_B_UNK = {"code": "K1", "currency": "", "nav": 10.0, "fx": 0.0}          # 幣別未知 → fx=0
+_B_NOPX = {"code": "N1", "currency": "USD", "nav": 0.0, "fx": 32.0}      # NAV 抓不到
+
+
+def test_t7_b_unknown_market_value_not_zero():
+    ns, _m = _run_t7_b([_B_USD, _B_UNK], {"U1": ("units", 10.0)})
+    assert ns["_v_curr"] == {"U1": 50000.0, "K1": None}     # 未知 ≠ 0
+    assert ns["_gaps"] == {}                                # 無 % 模式 → 不算缺口
+
+
+def test_t7_b_pct_mode_unknown_value_aborts_before_gaps():
+    ns, m = _run_t7_b([_B_USD, _B_UNK, _B_NOPX], {"U1": ("pct", 100.0)})
+    assert m["abort"] == ["❌ 幣別未知：K1；NAV/FX 抓不到：N1，無法計算缺口，不執行分配。"]
+    assert "_gaps" not in ns and "_v_post" not in ns        # 停在缺口計算之前
+
+
+def test_t7_b_pct_mode_all_known_unchanged():
+    """回歸:全部市值已知 → 照舊算缺口(總額 = 目前市值合計 + 投入)。"""
+    ns, m = _run_t7_b([_B_USD, dict(_B_USD, code="U2")],
+                      {"U1": ("pct", 50.0), "U2": ("pct", 50.0)})
+    assert m["abort"] == []
+    assert ns["_v_post"] == pytest.approx(200000.0)
+    assert ns["_gaps"] == {"U1": pytest.approx(50000.0), "U2": pytest.approx(50000.0)}
+
+
+def test_t7_b_row_unknown_value_and_ccy_column():
+    """結果列:目前市值未知顯示既有缺值字樣「⬜ 無法計算」(不是 0);
+    幣別為空時欄名不再是「應買 」(沿用檔內既有「幣別未知」字樣)。"""
+    rows = []
+    ns = {
+        "_navfx": {"K1": (0.0, 0.0, "")}, "_v_curr": {"K1": None},
+        "_b_skipped": [], "_b_rows_by_pid": {}, "_dy_lookup_t7": {}, "_rows": rows,
+        "_ann_acc": {"ann_total": 0.0, "booked_twd": 0.0},
+        "_wn": {"K1": 100.0}, "_gaps": {}, "_b_entries": {"K1": ("pct", 100.0)},
+        "parse_pk": lambda pk: ("", pk), "fmt_twd": lambda v: f"{v:,.0f}",
+    }
+    mod = ast.Module(body=[_t7_func("_b_book")], type_ignores=[])
+    exec(compile(mod, "t7_b_book", "exec"), ns)  # noqa: S102 — 同上
+    ns["_b_book"]("K1", 1000.0, "📊 %")
+    assert rows[0]["目前市值 TWD"] == "⬜ 無法計算"
+    assert "應買 幣別未知" in rows[0] and "應買 " not in rows[0]

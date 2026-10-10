@@ -1718,14 +1718,21 @@ def render_t7_section() -> None:
                         # 抓全部基金的 NAV/FX 與目前市值
                         _navfx = {}
                         _v_curr = {}
+                        _v_unk_ccy_b: list = []   # 2026-10-10 客戶裁示:未知 ≠ 0(幣別未知)
+                        _v_unk_px_b: list = []    # 同上(NAV/FX 抓不到)
                         for _f in _pf_t7:
                             _pk_f = fund_pk_str(_f)
                             _n, _x = _latest_nav_fx_t7(_f)
                             _navfx[_pk_f] = (_n, _x, _ccy_calc_t7(_f))   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                             _l = _ledger_for(_pk_f)
+                            # ~~`... if (_n and _x) else 0.0`~~ —— 2026-10-10 客戶裁示:未知 ≠ 0。
+                            # 市值未知 → None(畫面不顯示 0、不計入再平衡總額)。
                             _v_curr[_pk_f] = (
-                                _l.position.value_twd(_n, _x) if (_n and _x) else 0.0
+                                _l.position.value_twd(_n, _x) if (_n and _x) else None
                             )
+                            if _v_curr[_pk_f] is None:
+                                (_v_unk_ccy_b if not _navfx[_pk_f][2]
+                                 else _v_unk_px_b).append(_label_for_pk(_pk_f))
 
                         # 單位模式檔：固定金額 = units × NAV × FX（先吃投入額）
                         _units_fixed: dict = {}
@@ -1760,6 +1767,19 @@ def render_t7_section() -> None:
                         # % 模式檔：按缺口比例分配 _remaining
                         _wn = {pk: _b_entries[pk][1] for pk in _pct_pks_b}
                         if _pct_pks_b:
+                            # 2026-10-10 客戶裁示:缺口 = 再平衡後總額 × 權重 − 目前市值;
+                            # 任一檔目前市值未知 → 總額與缺口都不可靠 → fail closed,
+                            # 在任何落帳之前停止分配,並說明是哪幾檔、為什麼。
+                            if _v_unk_ccy_b or _v_unk_px_b:
+                                t7_abort(
+                                    "❌ "
+                                    + "；".join(
+                                        ([f"幣別未知：{'、'.join(_v_unk_ccy_b)}"]
+                                         if _v_unk_ccy_b else [])
+                                        + ([f"NAV/FX 抓不到：{'、'.join(_v_unk_px_b)}"]
+                                           if _v_unk_px_b else []))
+                                    + "，無法計算缺口，不執行分配。"
+                                )
                             _last = _pct_pks_b[-1]
                             # 容忍帶（±0.5%）內的權重零頭一律補到最後一檔。
                             # §1：這是「顯式填補」，必須讓使用者看見補了多少、補給誰
@@ -1773,7 +1793,9 @@ def render_t7_section() -> None:
                                     f"**{_label_for_pk(_last)}**，該檔實際採用 "
                                     f"{_wn[_last]:.2f}%。"
                                 )
-                            _v_post = sum(_v_curr.values()) + float(_btot)
+                            # 未知市值不計入總額(上方守門已確保此處皆為已知;仍顯式排除 None)
+                            _v_post = sum(_v for _v in _v_curr.values()
+                                          if _v is not None) + float(_btot)
                             _gaps = {
                                 pk: max(_v_post * _wn[pk] / 100.0 - _v_curr[pk], 0.0)
                                 for pk in _pct_pks_b
@@ -1837,13 +1859,14 @@ def render_t7_section() -> None:
                                 "配置": (f"{_wn.get(pk, 0):.2f}%"
                                          if pk in _wn else
                                          f"🎯 {_b_entries[pk][1]:,.2f} U"),
-                                "目前市值 TWD": f"{_v_curr[pk]:,.0f}",
+                                "目前市值 TWD": ("⬜ 無法計算" if _v_curr[pk] is None
+                                                 else f"{_v_curr[pk]:,.0f}"),   # 未知 ≠ 0
                                 "缺口 TWD": (f"{_gaps.get(pk, 0):,.0f}"
                                              if pk in _gaps else "—"),
                                 # 稽核 A9:沒落帳就不要印一個像是已經配出去的金額
                                 "應買 TWD": (f"{share_twd:,.0f}" if _booked
                                              else "⛔ 未落帳"),
-                                f"應買 {_ccy}": (f"{_orig:,.2f}" if _booked else "—"),
+                                f"應買 {_ccy or '幣別未知'}": (f"{_orig:,.2f}" if _booked else "—"),
                                 "預估單位": (f"{_units:,.4f}" if _booked else "—"),
                                 "配息率": f"{_dy_b:.2f}%",
                                 "本次加碼年配息(TWD)": (fmt_twd(_ann_b) if _booked else "—"),
