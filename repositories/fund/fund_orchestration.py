@@ -294,6 +294,21 @@ def _span_extend_insurance_nav(
             ("cnyes", lambda: _src_cnyes_nav(_code)),
         )
         for _long_src, _long_fn in _long_candidates:
+            # 2026-10-10 稽核回修 R2(客戶裁示:幣別衝突 fail closed):守門原本只比
+            # 「預期幣別 vs 候選序列」,沒看**現有序列自己宣告的幣別**。現有序列已宣告幣別
+            # 且與預期不一致 → 衝突 → 一律不換源(也不發請求;候選若與預期一致,
+            # 就必然與現有序列不一致)。現有序列未宣告 → 照舊只比預期 vs 候選。
+            try:
+                from shared.data_quality import nav_series_currency as _cur_series_ccy
+                _cur_decl = _cur_series_ccy(nav_s)
+            except Exception as _ce2:  # noqa: BLE001 — 讀不出 → 當未宣告(仍有下方預期/候選守門)
+                print(f"[orchestrator] {_code} 讀現有序列幣別失敗:{type(_ce2).__name__}: {_ce2}")
+                _cur_decl = ""
+            if _cur_decl and _cur_decl != _expect_ccy:
+                print(f"[orchestrator] ⛔ {_code} span-extend 拒絕換源:現有序列"
+                      f"({nav_source})宣告 {_cur_decl}、預期 {_expect_ccy or '未知'}"
+                      f" —— 幣別衝突,不換源、不發請求({_long_src})")
+                continue
             # 2026-10-10 稽核 S1:候選**必然**被幣別守門拒絕時不發請求(結果相同,只省一趟外部往返):
             #   (a) 預期幣別未知 → 任何候選的 verdict 都是 unknown(Q3 擋);
             #   (b) cnyes 不宣告幣別(`sources.fetch_nav_cnyes` / `_src_cnyes_nav` 從不設

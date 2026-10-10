@@ -1967,3 +1967,46 @@ def test_r1_no_contradicting_reasons_for_same_fund():
     assert m["abort"] == ["❌ 幣別未知：K1，無法計算缺口，不執行分配。"]
     assert m["warning"] == []
 
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 24) 稽核回修 R2:span-extend 守門要看**現有序列自己宣告的幣別**
+#     現有序列已宣告且與預期不一致 → 衝突 → 不換源、不發請求(fail closed)。
+# ════════════════════════════════════════════════════════════════════════════
+def _span_ext_cur(monkeypatch, code, *, cur_ccy, ms_ccy, declared=""):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: None)
+    calls = []
+
+    def _ms(code, fund_name="", **_k):
+        calls.append(code)
+        return _ms_long(ms_ccy)
+
+    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
+    monkeypatch.setattr(fo, "_src_cnyes_nav", lambda c: pd.Series(dtype=float))
+    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
+                      index=pd.date_range("2026-08-01", periods=20))
+    if cur_ccy is not None:
+        short.attrs["currency"] = cur_ccy
+    out = fo._span_extend_insurance_nav(code, short, "moneydj", is_insurance_code=True,
+                                        declared_ccy=declared)
+    return out, calls
+
+
+def test_r2_current_series_ccy_conflict_refuses_and_no_request(monkeypatch):
+    """重現(稽核):現有序列宣告 TWD、硬編表 TLZF9 = USD、無 meta 宣告 → 不換源、不請求。"""
+    (s, src, _), calls = _span_ext_cur(monkeypatch, "TLZF9", cur_ccy="TWD", ms_ccy="USD")
+    assert src == "moneydj" and len(s) == 20 and calls == []
+
+
+@pytest.mark.parametrize("cur, declared, ms_ccy", [
+    ("USD", "", "USD"),      # 現有宣告與硬編表一致 → 照舊換源
+    (None, "", "USD"),       # 現有序列未宣告 → 照舊只比預期 vs 候選
+    ("TWD", "TWD", "TWD"),   # 現有、宣告、候選一致 → 換源
+])
+def test_r2_consistent_currency_still_swaps(monkeypatch, cur, declared, ms_ccy):
+    code = "TLZF9" if not declared else "ZZZR2"
+    (s, src, _), calls = _span_ext_cur(monkeypatch, code, cur_ccy=cur, ms_ccy=ms_ccy,
+                                       declared=declared)
+    assert src == "morningstar(span-extend)" and len(s) == 800 and len(calls) == 1

@@ -220,16 +220,22 @@ def _wire_l1(monkeypatch, *, ms, pool_ccy=None):
     return O
 
 
-def test_span_extend_refuses_currency_swap(monkeypatch, capsys):
-    """台幣基金 + 晨星回美元長歷史 → **拒絕換源**,保留原本(正確幣別)的短序列。"""
+@pytest.mark.parametrize("decl_kw", [
+    {},                         # 原始情境:現有序列宣告 TWD、無 meta 宣告(硬編表 TLZF9 = USD)
+    {"declared_ccy": "TWD"},    # C1-3 補的情境:來源頁明確宣告 TWD
+])
+def test_span_extend_refuses_currency_swap(monkeypatch, capsys, decl_kw):
+    """台幣基金 + 晨星回美元長歷史 → **拒絕換源**,保留原本(正確幣別)的短序列。
+
+    2026-10-10 稽核回修 R2:原始情境(不帶 declared_ccy)在 C1-3 之後一度會換成晨星 USD
+    (預期幣別只剩硬編表 USD,守門沒看現有序列自己宣告的 TWD)—— 現有序列宣告的幣別與
+    預期不一致即為衝突 → 拒絕。"""
     O = _wire_l1(monkeypatch, ms=_long(1200, ccy="USD"))
     _short_twd = _long(30, ccy="TWD")
 
-    # 2026-10-10 客戶裁示 C1-3:名稱「台幣」推定不算證據(TLZF9 硬編表宣告 USD)→
-    #   本情境的「台幣基金」改由來源頁明確宣告(declared_ccy)表達
     s, src, span = O._span_extend_insurance_nav(
         "TLZF9", _short_twd, "moneydj_legacy_scrape", fund_name="安聯台幣計價基金",
-        declared_ccy="TWD")
+        **decl_kw)
 
     assert len(s) == 30 and src == "moneydj_legacy_scrape", (
         "台幣序列被美元序列整條換掉 —— 這正是每天 20:00 的排程會做的事")
