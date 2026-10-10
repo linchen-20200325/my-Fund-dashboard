@@ -1717,3 +1717,102 @@ def test_c13_latest_nav_pool_ccy_not_expected(monkeypatch):
     v = _latest_nav(monkeypatch, "ZZZC3", pool_ccy="USD",
                     ms=_nav_s(9.9, "Morningstar:UK:timeseries:X", "USD"))
     assert v is None
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 21) 客戶 2026-10-10 裁示二 A(C2-2):剩餘的缺幣別預設值
+#     (a) Tab2「💰 投資試算」缺幣別不得預設 TWD → 既有字樣「⬜ 缺幣別」,不查匯率、
+#         不出手動匯率輸入、不試算;(b) AI 提示不寫成「(USD)」;
+#     (c) `_src_allianzgi_meta` 缺「計價幣別」欄 → 空白,不預設 TWD。
+# ════════════════════════════════════════════════════════════════════════════
+_TAB2_TREE = ast.parse((ROOT / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8"))
+
+
+def _tab2_calc_block():
+    for n in ast.walk(_TAB2_TREE):
+        body = getattr(n, "body", None)
+        if not isinstance(body, list):
+            continue
+        for i, st_ in enumerate(body):
+            if (isinstance(st_, ast.Assign) and isinstance(st_.targets[0], ast.Name)
+                    and st_.targets[0].id == "_ccy_raw"):
+                for j in range(i, len(body)):
+                    if (isinstance(body[j], ast.If)
+                            and "not _fx_ready" in ast.unparse(body[j].test)):
+                        return body[i:j + 1]
+    raise AssertionError("Tab2 投資試算片段找不到")
+
+
+class _Ctx:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _run_tab2_calc(monkeypatch, ccy):
+    import services.fund_service as FS
+    calls = {"fx": [], "caption": [], "number_input": [], "warning": [], "info": []}
+    monkeypatch.setattr(FS, "get_latest_fx",
+                        lambda pair, fred_api_key="": calls["fx"].append(pair) or 32.0)
+
+    def _num(label, **k):
+        calls["number_input"].append(label)
+        return k.get("value")
+
+    st_ = types.SimpleNamespace(
+        markdown=lambda *a, **k: None, columns=lambda spec: (_Ctx(), _Ctx()),
+        number_input=_num, caption=calls["caption"].append,
+        warning=calls["warning"].append, info=calls["info"].append,
+        secrets={})
+    ns = {"st": st_, "mj_raw": ({"currency": ccy} if ccy is not None else {}),
+          "m": {"nav": 10.0}, "divs": [], "fk": "k", "_ADR_SRC_ZH": {}}
+    mod = ast.Module(body=_tab2_calc_block(), type_ignores=[])
+    exec(compile(mod, "tab2_calc", "exec"), ns)  # noqa: S102 — 實跑凍結頁原樣程式碼
+    return ns, calls
+
+
+@pytest.mark.parametrize("ccy", [None, "", "美元累積"])
+def test_tab2_calc_unknown_currency_no_twd_default(monkeypatch, ccy):
+    ns, calls = _run_tab2_calc(monkeypatch, ccy)
+    assert ns["_ccy"] == ""
+    assert "⬜ 缺幣別" in calls["caption"]
+    assert calls["fx"] == [] and calls["number_input"] == ["投入金額（新台幣 TWD）"]   # 無手動匯率
+    assert calls["warning"] == [] and ns["_fx_ready"] is False      # 不試算、不印「**** 計價」
+
+
+@pytest.mark.parametrize("ccy, fx_calls, cap", [
+    ("USD", ["USDTWD=X"], "💱 1 USD = **32.0000** TWD（即時匯率）"),
+    ("台幣", [], "💰 此基金以新台幣計價（FX = 1）"),
+])
+def test_tab2_calc_known_currency_unchanged(monkeypatch, ccy, fx_calls, cap):
+    ns, calls = _run_tab2_calc(monkeypatch, ccy)
+    assert calls["fx"] == fx_calls and cap in calls["caption"] and ns["_fx_ready"] is True
+
+
+@pytest.mark.parametrize("fund, want, bad", [
+    ({"code": "X1", "name": "某基金", "invest_twd": 100}, "(N/A)", "(USD)"),
+    ({"code": "X1", "name": "某基金", "invest_twd": 100, "currency": ""}, "(N/A)", "()"),
+    ({"code": "X1", "name": "某基金", "invest_twd": 100, "currency": "TWD"}, "(TWD)", "(N/A)"),
+])
+def test_ai_prompt_unknown_currency_not_usd(monkeypatch, fund, want, bad):
+    import services.ai_service as AI
+    seen = {}
+    monkeypatch.setattr(AI, "call_llm", lambda prompt, **k: seen.setdefault("p", prompt) or "")
+    AI.analyze_portfolio_mk_advisor("k", [dict(fund, loaded=True)], {"phase": "x", "score": 0})
+    line = [ln for ln in seen["p"].splitlines() if "`X1`" in ln][0]
+    assert want in line and bad not in line
+
+
+@pytest.mark.parametrize("page, want", [
+    ("<table><tr><td>基金名稱</td><td>某基金 ACDD19</td></tr></table>", ""),
+    ("<table><tr><td>基金名稱</td><td>某基金 ACDD19</td></tr>"
+     "<tr><td>計價幣別</td><td>新臺幣</td></tr></table>", "新臺幣"),
+])
+def test_allianzgi_meta_missing_currency_blank(monkeypatch, page, want):
+    monkeypatch.setattr(S, "fetch_url_with_retry",
+                        lambda *a, **k: _Resp("ACDD19 淨值 基金 " + page))
+    monkeypatch.setattr(S, "is_valid_moneydj_page", lambda t: True)
+    meta = S._src_allianzgi_meta("ACDD19")
+    assert meta.get("currency") == want

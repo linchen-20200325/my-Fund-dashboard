@@ -179,7 +179,9 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
         mj = f.get("moneydj_raw") or {}
         perf = mj.get("perf") or {}
         nm = (f.get("name") or _c)[:16]
-        ccy = f.get("currency", "USD")
+        # ~~ccy = f.get("currency", "USD")~~ —— 2026-10-10 客戶裁示二 A:缺幣別不得在
+        # AI 提示寫成「(USD)」;未知沿用本檔既有缺值寫法 'N/A'。
+        ccy = str(f.get("currency") or "").strip() or "N/A"
         inv = _agg["total_inv"]
         pct = round(inv / tot_inv_twd * 100, 1) if tot_inv_twd > 0 else 0
         adr = m.get("annual_div_rate") or mj.get("moneydj_div_yield") or 0

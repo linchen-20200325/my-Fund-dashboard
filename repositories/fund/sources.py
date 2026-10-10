@@ -506,7 +506,9 @@ def _src_allianzgi_meta(code: str) -> dict:
                 if rows_map:
                     meta["fund_name"] = rows_map.get("基金名稱", "")
                     meta["nav_latest"] = safe_float(rows_map.get("最新淨值") or rows_map.get("淨值"))
-                    meta["currency"] = rows_map.get("計價幣別", "TWD")
+                    # ~~rows_map.get("計價幣別", "TWD")~~ —— 2026-10-10 客戶裁示二 A:
+                    # 缺欄 → 空白(未知 ≠ 台幣)
+                    meta["currency"] = rows_map.get("計價幣別", "")
                     # 成立日期（多個可能標籤）
                     import re as _re_m
                     _inc_raw = (rows_map.get("成立日期") or rows_map.get("設立日期") or
