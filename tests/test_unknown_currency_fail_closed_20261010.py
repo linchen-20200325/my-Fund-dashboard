@@ -1816,3 +1816,121 @@ def test_allianzgi_meta_missing_currency_blank(monkeypatch, page, want):
     monkeypatch.setattr(S, "is_valid_moneydj_page", lambda t: True)
     meta = S._src_allianzgi_meta("ACDD19")
     assert meta.get("currency") == want
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 22) 客戶 2026-10-10 裁示二 B(C2-3):組合頁 Sheet 幣別一路傳下去
+#     `_funds_extra` 由抓取結果重組(`_build_fund_dict` 只帶來源幣別)→ Sheet 衝突看不見。
+#     改為以**全部**持倉列建 code→Sheet 幣別表,套到重組的 dict 上;
+#     同 code 多保單設了不同幣別 → 衝突標記 → `fund_currency_for_calc` 回 ""。
+# ════════════════════════════════════════════════════════════════════════════
+_T3_TREE = ast.parse((ROOT / "ui" / "tab3_portfolio.py").read_text(encoding="utf-8"))
+
+#: 全部持倉列:C1 兩張保單設了不同幣別(Sheet 衝突);C2 Sheet TWD vs 來源 USD;
+#: C3 Sheet 與來源皆 USD;C4 Sheet 未填、來源 EUR。
+_PF_ALL = [
+    {"code": "C1", "policy_id": "P1", "currency": "USD"},
+    {"code": "C1", "policy_id": "P2", "currency": "TWD"},
+    {"code": "C2", "policy_id": "P1", "currency": "TWD"},
+    {"code": "C3", "policy_id": "P1", "currency": "美元"},
+    {"code": "C4", "policy_id": "P1", "currency": ""},
+]
+_SRC_CCY = {"C1": "USD", "C2": "USD", "C3": "USD", "C4": "EUR"}
+
+
+def _t3_funds_extra_block():
+    for n in ast.walk(_T3_TREE):
+        body = getattr(n, "body", None)
+        if not isinstance(body, list):
+            continue
+        for i, st_ in enumerate(body):
+            if (isinstance(st_, ast.Assign) and isinstance(st_.targets[0], ast.Name)
+                    and st_.targets[0].id == "_funds_extra"):
+                j = i
+                while j > 0 and not (isinstance(body[j - 1], ast.ImportFrom)
+                                     and any(a.name == "_build_fund_dict"
+                                             for a in body[j - 1].names)):
+                    j -= 1
+                return body[j - 1:i + 1]
+    raise AssertionError("_funds_extra 指派找不到")
+
+
+def _run_t3_funds_extra():
+    ok = [{"ok": True, "code": c, "_fund_raw": {"fund_name": c, "currency": s}}
+          for c, s in _SRC_CCY.items()]
+    ns = {"st": types.SimpleNamespace(session_state={"portfolio_funds": _PF_ALL}),
+          "_ok_health": ok, "_DEFAULT_PRINC": 0.0,
+          # 依 code 去重後的清單(只留第一列)—— 若誤用它建表,C1 的衝突會被藏掉
+          "_loaded_pf": [_PF_ALL[0], _PF_ALL[2], _PF_ALL[3], _PF_ALL[4]]}
+    mod = ast.Module(body=_t3_funds_extra_block(), type_ignores=[])
+    exec(compile(mod, "t3_funds_extra", "exec"), ns)  # noqa: S102 — 實跑凍結頁原樣程式碼
+    return {f["code"]: f for f in ns["_funds_extra"]}
+
+
+def test_c23_funds_extra_carries_sheet_currency():
+    from ui.helpers.portfolio.load import fund_currency_for_calc as calc
+    fx = _run_t3_funds_extra()
+    assert calc(fx["C1"]) == ""        # Sheet 同 code 多幣別 → 衝突
+    assert calc(fx["C2"]) == ""        # Sheet TWD vs 來源 USD → 衝突(修前看不見,回 USD)
+    assert calc(fx["C3"]) == "USD"     # 一致 → 照舊
+    assert calc(fx["C4"]) == "EUR"     # Sheet 未填 → 保留來源值(既有行為)
+
+
+def test_c23_sheet_currency_by_code_and_marker():
+    from ui.helpers.portfolio.load import (
+        SHEET_CCY_CONFLICT_KEY,
+        fund_currency_for_calc,
+        sheet_currency_by_code,
+        with_sheet_currency,
+    )
+    m = sheet_currency_by_code(_PF_ALL)
+    assert m == {"C1": ("TWD", "USD"), "C2": ("TWD",), "C3": ("USD",), "C4": ()}
+    f = with_sheet_currency({"code": "c1", "currency": "USD",
+                             "moneydj_raw": {"currency": "USD"}}, m)
+    assert f[SHEET_CCY_CONFLICT_KEY] is True and fund_currency_for_calc(f) == ""
+    assert fund_currency_for_calc({SHEET_CCY_CONFLICT_KEY: True, "currency": "USD",
+                                   "moneydj_raw": {"currency": "USD"}}) == ""
+
+
+def test_c23_rotation_passes_calc_currency(monkeypatch):
+    import services.fx_regime_service as FXR
+    import services.health.report as HR
+    import ui.helpers.fund_grp_health.unified as UN
+    from ui.helpers.fund_grp_health import rotation as ROT
+    seen = {}
+    def _row(fd, code, **k):
+        seen[code] = fd.get("currency")
+        return {}
+
+    monkeypatch.setattr(HR, "build_health_analysis_row", _row)
+    monkeypatch.setattr(UN, "build_merged_extra_columns", lambda *a, **k: (None, {}))
+    monkeypatch.setattr(FXR, "fx_regime_by_ccy", lambda: {})
+    monkeypatch.setattr(ROT, "st", types.SimpleNamespace(session_state={}))
+    fx = _run_t3_funds_extra()
+    rows = ROT._assemble_rows([fx["C2"], fx["C3"]])
+    assert seen == {"C2": "", "C3": "USD"}            # 匯率風險維度吃 Sheet／來源一致的幣別
+    assert [r["currency"] for r in rows] == ["", "USD"]
+
+
+def test_c23_capture_conflict_is_missing_currency(monkeypatch):
+    import ui.helpers.fund_grp_health.capture as CAP
+    monkeypatch.setattr(CAP, "_benchmark_nav", lambda mkt: None)
+    s = pd.Series([10.0 + i for i in range(40)],
+                  index=pd.date_range("2023-01-31", periods=40, freq="ME"))
+    fx = _run_t3_funds_extra()
+    out = CAP.capture_by_code([dict(fx["C2"], series=s), dict(fx["C3"], series=s)])
+    assert out["C2"]["捕捉樣本"] == "⬜ 缺幣別"           # Sheet／來源衝突 → 缺幣別
+    assert out["C3"]["捕捉樣本"] == "⬜ 基準抓取失敗"      # 已知 USD → 照舊往下(基準被隔離)
+
+
+def test_c23_tab3_ai_summary_uses_calc_currency():
+    """`_render_tab3_ai_summary` 的回撤輸入與配息估算改吃 fund_currency_for_calc;
+    幣別未知時配息估算沿用既有 `continue` 跳過(不再以空字串 → 匯率 0 → 當台幣估)。"""
+    fn = [n for n in ast.walk(_T3_TREE)
+          if isinstance(n, ast.FunctionDef) and n.name == "_render_tab3_ai_summary"][0]
+    src = ast.unparse(fn)
+    assert "'currency': _ccy_calc_dd(f)" in src
+    assert "_ccy_est = _ccy_calc_est(_pf)" in src
+    ifs = [n for n in ast.walk(fn) if isinstance(n, ast.If)
+           and ast.unparse(n.test) == "not _ccy_est"]
+    assert ifs and isinstance(ifs[0].body[0], ast.Continue)

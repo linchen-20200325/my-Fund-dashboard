@@ -38,7 +38,9 @@ def _assemble_rows(funds: list) -> list:
     rows = []
     for _f in funds:
         _code = _f.get("code", "?")
-        _fd = _f.get("moneydj_raw") or _f
+        # ~~_fd = _f.get("moneydj_raw") or _f~~(只帶來源幣別,Sheet 衝突看不見)
+        # 2026-10-10 客戶裁示二 B(C2-3):匯率風險維度改吃 Sheet 與來源一致的幣別
+        _fd = {**(_f.get("moneydj_raw") or _f), "currency": _ccy_calc_rot(_f)}
         try:
             _h = build_health_analysis_row(_fd, _code, fx_cv_by_ccy=_fx_map_rot)
         except Exception:  # noqa: BLE001

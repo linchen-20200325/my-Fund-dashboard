@@ -29,6 +29,50 @@ def source_currency_of(fund: dict) -> str:
     return str(_mj.get("currency") or (_mj.get("metrics") or {}).get("currency") or "").strip()
 
 
+#: 2026-10-10 客戶裁示二 B(C2-3):同一 code 在客戶 Sheet 上被設成 ≥2 種幣別時,
+#: 由 `with_sheet_currency` 掛在**記憶體內**的 fund dict 上的衝突標記(不寫回 Sheet、
+#: 不是資料欄位);`fund_currency_for_calc` 見到它一律回 `""`(fail closed)。
+SHEET_CCY_CONFLICT_KEY = "_sheet_ccy_conflict"
+
+
+def sheet_currency_by_code(funds) -> dict:
+    """客戶 Sheet 上每個 code 被設定的幣別 → `{CODE: (ISO, ...)}`(去重排序;空值不計)。
+
+    ⚠️ 必須傳**全部** `portfolio_funds`(同 code 跨多保單各一列),不得傳依 code 去重後的
+    清單 —— 去重會只留第一列,把「不同保單設了不同幣別」的衝突藏起來。
+    """
+    _acc: dict = {}
+    for _f in funds or []:
+        if not isinstance(_f, dict):
+            continue
+        _c = str(_f.get("code") or "").strip().upper()
+        if not _c:
+            continue
+        _set = _acc.setdefault(_c, set())
+        _iso = _iso_ccy(_f.get("currency"))
+        if _iso:
+            _set.add(_iso)
+    return {_c: tuple(sorted(_s)) for _c, _s in _acc.items()}
+
+
+def with_sheet_currency(extra: dict, ccy_map: dict) -> dict:
+    """把客戶 Sheet 的幣別帶進「由抓取結果重組」的 fund dict(原地修改並回傳同一個 dict)。
+
+    該 code 的 Sheet 幣別:0 個 → 保留抓取結果的值(既有行為);1 個 → `currency` 設為它
+    (之後 `fund_currency_for_calc` 會與 `moneydj_raw` 的來源宣告比對,不一致即衝突);
+    ≥2 個 → `currency` 清空並掛 `SHEET_CCY_CONFLICT_KEY`(衝突,不挑一個)。
+    """
+    if not isinstance(extra, dict) or not extra:
+        return extra
+    _vals = (ccy_map or {}).get(str(extra.get("code") or "").strip().upper(), ())
+    if len(_vals) == 1:
+        extra["currency"] = _vals[0]
+    elif len(_vals) >= 2:
+        extra["currency"] = ""
+        extra[SHEET_CCY_CONFLICT_KEY] = True
+    return extra
+
+
 def fund_currency_for_calc(fund: dict) -> str:
     """需要「正確幣別」的正式計算(換匯 / 單位數 / 換股)該用的幣別 → ISO 三碼或 `""`。
 
@@ -38,6 +82,8 @@ def fund_currency_for_calc(fund: dict) -> str:
         都有值但不一致 → `""`(不得靜默選一個繼續算;呼叫端 fail closed)。
         衝突狀態**不另存欄位**(現有 schema 無處保存出處),每次由這兩個既有值即時判定。
     """
+    if (fund or {}).get(SHEET_CCY_CONFLICT_KEY):   # 2026-10-10 C2-3:Sheet 同 code 多幣別
+        return ""
     _sheet = _iso_ccy((fund or {}).get("currency"))
     _src = _iso_ccy(source_currency_of(fund))
     if _sheet and _src and _sheet != _src:
