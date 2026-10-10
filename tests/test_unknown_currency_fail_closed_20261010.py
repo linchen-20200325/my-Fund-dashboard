@@ -1151,3 +1151,118 @@ def test_single_pipeline_name_inferred_ccy_not_sent_to_morningstar(monkeypatch, 
     assert ts == []                                   # 但不發晨星請求
     assert r["data_source"] == "FundClear"
 
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 14) 第五輪複驗必修 (b):`get_latest_nav`(T7 市值 / fee_deduction 直接用)
+#     非原生報價來源(Yahoo 代碼、`{secId}.F`、晨星)須與預期幣別 match 才採用;
+#     幣別未知或衝突 → 不採用(None,不回 0、不估值)。原生來源(鉅亨)照舊。
+# ════════════════════════════════════════════════════════════════════════════
+def _nav_s(v, source, ccy=None):
+    s = pd.Series([v - 0.2, v], index=pd.date_range("2026-10-01", periods=2))
+    s.attrs["source"] = source
+    if ccy is not None:
+        s.attrs["currency"] = ccy
+    return s
+
+
+def _latest_nav(monkeypatch, code, *, yf=None, yh=None, cnyes=None, ms=None,
+                pool_ccy=None, **kw):
+    import repositories.fund.fx_and_main as FM
+    import repositories.macro_repository as MRP
+    import repositories.pool_repository as P
+    _empty = pd.Series(dtype=float)
+    monkeypatch.setattr(P, "resolve_currency", lambda c: pool_ccy)
+    monkeypatch.setattr(MRP, "fetch_yf_close",
+                        lambda *a, **k: yf if yf is not None else _empty)
+    monkeypatch.setattr(FM, "_src_yahoo_finance_nav",
+                        lambda c: yh if yh is not None else _empty)
+    monkeypatch.setattr(FM, "_src_cnyes_nav",
+                        lambda c: cnyes if cnyes is not None else _empty)
+    monkeypatch.setattr(FM, "_src_morningstar_nav",
+                        lambda c, **_k: ms if ms is not None else _empty)
+    FM.get_latest_nav.cache_clear()
+    try:
+        return FM.get_latest_nav(code, **kw)
+    finally:
+        FM.get_latest_nav.cache_clear()
+
+
+def test_latest_nav_yahoo_ticker_unknown_ccy_not_used(monkeypatch):
+    """Yahoo 代碼報價不宣告幣別 → 未知 → 不採用(舊行為:直接回 12.3)。"""
+    assert _latest_nav(monkeypatch, "TLZF9", yf=_nav_s(12.3, "Yahoo:TLZF9")) is None
+
+
+def test_latest_nav_frankfurt_mismatch_falls_through_to_native(monkeypatch):
+    """`.F` 宣告 EUR、硬編表宣告 USD → 不一致 → 不採用;換下一個(鉅亨,原生)。"""
+    v = _latest_nav(monkeypatch, "TLZF9", yh=_nav_s(8.8, "Yahoo:chart:0P0001J5YG.F", "EUR"),
+                    cnyes=_nav_s(10.5, "Cnyes:fund_nav_api"))
+    assert v == pytest.approx(10.5)
+
+
+@pytest.mark.parametrize("code, ms_ccy, kw", [
+    ("ZZZN1", "USD", {}),                       # 預期幣別未知(不在硬編表、池未填)
+    ("TLZF9", "EUR", {}),                       # 晨星宣告 EUR vs 硬編表 USD → 衝突
+    ("TLZF9", "USD", {"expected_ccy": ""}),     # 呼叫端明示未知 / 衝突
+    ("TLZF9", "USD", {"expected_ccy": "TWD"}),  # 呼叫端已確認 TWD → 衝突
+])
+def test_latest_nav_morningstar_unknown_or_conflict_fails_closed(monkeypatch, code, ms_ccy, kw):
+    v = _latest_nav(monkeypatch, code, ms=_nav_s(9.9, "Morningstar:UK:timeseries:X", ms_ccy),
+                    **kw)
+    assert v is None                             # 不是 0、不是 9.9
+
+
+@pytest.mark.parametrize("code, src, ccy, kw", [
+    ("TLZF9", "Morningstar:UK:timeseries:0P0001J5YG", "USD", {}),        # 硬編表 USD
+    ("ZZZN2", "Morningstar:UK:timeseries:X", "TWD", {"pool_ccy": "TWD"}),  # 選股池 TWD
+    ("ZZZN3", "Yahoo:chart:X.F", "EUR", {"expected_ccy": "EUR"}),         # 呼叫端給 EUR
+])
+def test_latest_nav_known_matching_ccy_unchanged(monkeypatch, code, src, ccy, kw):
+    """回歸:幣別一致(match)→ 照舊採用。"""
+    if src.startswith("Yahoo"):
+        v = _latest_nav(monkeypatch, code, yh=_nav_s(7.7, src, ccy), **kw)
+    else:
+        v = _latest_nav(monkeypatch, code, ms=_nav_s(7.7, src, ccy), **kw)
+    assert v == pytest.approx(7.7)
+
+
+def test_latest_nav_native_source_not_rechecked(monkeypatch):
+    """原生來源(鉅亨)不回驗(分類見 `_NAV_NON_NATIVE_PREFIXES` 註解)——預期幣別未知也照用。"""
+    assert _latest_nav(monkeypatch, "ZZZN4",
+                       cnyes=_nav_s(15.0, "Cnyes:fund_nav_api")) == pytest.approx(15.0)
+
+
+def test_latest_nav_non_native_step_checked_even_without_source_attrs(monkeypatch):
+    """Yahoo / 晨星步驟依來源構造即為非原生:序列 `attrs` 掉失(無 source)也照樣回驗。"""
+    s = pd.Series([9.7, 9.9], index=pd.date_range("2026-10-01", periods=2))
+    assert _latest_nav(monkeypatch, "ZZZN5", yf=s) is None
+    assert _latest_nav(monkeypatch, "ZZZN5", ms=s.copy()) is None
+
+
+def test_latest_nav_guard_failure_does_not_pass(monkeypatch):
+    """判定本身壞掉 → 不放行(§1)。"""
+    import shared.data_quality as DQ
+
+    def _boom(**_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(DQ, "assess_nav_series_swap", _boom)
+    assert _latest_nav(monkeypatch, "TLZF9",
+                       ms=_nav_s(9.9, "Morningstar:UK:timeseries:X", "USD")) is None
+
+
+def test_fee_deduction_latest_nav_none_is_excluded_not_zero(monkeypatch):
+    """下游:L2 回 None(幣別守門拒用)→ 退基金自身序列;沒有序列 → 排除「抓不到目前淨值」,不當 0。"""
+    import services.fund_service as FS
+    from models.policy import fund_pk_str
+    from ui.helpers.portfolio.fee_deduction import _make_nav_fx_fn, build_fee_inputs
+    monkeypatch.setattr(FS, "get_latest_nav", lambda code: None)
+    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: 32.0)
+    _r = _make_nav_fx_fn()
+    assert _r(_KNOWN_USD)[0] == pytest.approx(10.29)      # 序列末值
+    _no_series = dict(_KNOWN_USD, series=None)
+    assert _r(_no_series) == (None, 32.0)
+    led = types.SimpleNamespace(position=types.SimpleNamespace(units=100.0, cost_unit=10.0,
+                                                               fx_avg=31.0))
+    eng, exc, _rm = build_fee_inputs([_no_series], {fund_pk_str(_no_series): led}, _r)
+    assert eng == [] and [e["reason"] for e in exc] == ["抓不到目前淨值"]
