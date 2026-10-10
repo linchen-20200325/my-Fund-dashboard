@@ -411,7 +411,7 @@ def test_span_extend_unknown_expected_ccy_does_not_swap(monkeypatch):
                      index=pd.date_range("2024-01-01", periods=800))
     long.attrs["currency"] = "USD"
     monkeypatch.setattr(fo, "_correct_currency", lambda c, n, code: "")   # 預期幣別判不出
-    monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="": long)
+    monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="", **_k: long)
     monkeypatch.setattr(fo, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
     # 代碼刻意不在晨星硬編表內(TLZF9 在表內宣告 USD → 那是「已知」,見下方回歸)
     s, src, _span = fo._span_extend_insurance_nav("ZZZF9", short, "moneydj",
@@ -689,7 +689,7 @@ def _span_ext(monkeypatch, code, *, declared="", fund_name="", ms=None, cnyes=No
     monkeypatch.setattr(P, "resolve_currency", lambda c: None)        # 選股池讀不到
     calls = {"ms": 0, "cnyes": 0}
 
-    def _ms(code, fund_name=""):
+    def _ms(code, fund_name="", **_k):
         calls["ms"] += 1
         return ms if ms is not None else pd.Series(dtype=float)
 
@@ -909,20 +909,30 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
     IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
     assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics
 
-
 # ════════════════════════════════════════════════════════════════════════════
-# 12) 複驗 M1(2026-10-10):`_fetch_fund_single` 整條鏈端到端(全替身、不連網)
-#     第一趟 span-extend 在 meta 之前、result.currency 恆空;meta 宣告幣別之後須補第二趟。
+# 12) 複驗 M1 / Q4(2026-10-10):`_fetch_fund_single` 整條鏈端到端,不連網。
+#     ⚠️ **晨星取數函式本身不替身** —— 只替身最底層的 HTTP(`urllib.request.urlopen`),
+#     證明真實 `_src_morningstar_nav` 會以正確幣別發請求、序列真的被換進來或被丟掉。
+#     其餘非晨星的 `_src_*` 一律回空(或指定),選股池以 `pool_repository` 替身。
 # ════════════════════════════════════════════════════════════════════════════
 def _const(v):
     return lambda *a, **k: v
 
 
-def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
+def _ms_payload(n=800):
+    days = pd.date_range("2024-01-01", periods=n)
+    return {"TimeSeries": {"Security": [{"HistoryDetail": [
+        {"EndDate": d.strftime("%Y-%m-%d"), "Value": f"{9.0 + i * 0.001:.4f}"}
+        for i, d in enumerate(days)]}]}}
+
+
+def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_ccy=None,
+                native=True, yahoo=None, ms_n=800):
     import repositories.fund.fund_orchestration as fo
     import repositories.pool_repository as P
-    for _n in dir(fo):                              # 所有取數源先一律回空
-        if _n.startswith("_src_") and callable(getattr(fo, _n)):
+    for _n in dir(fo):                              # 非晨星的取數源先一律回空
+        if (_n.startswith("_src_") and _n != "_src_morningstar_nav"
+                and callable(getattr(fo, _n))):
             _empty = ([] if _n.endswith("_div") else
                       {} if _n.endswith("_meta") else pd.Series(dtype=float))
             monkeypatch.setattr(fo, _n, _const(_empty))
@@ -930,50 +940,136 @@ def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
     monkeypatch.setattr(fo, "fetch_risk_metrics", lambda *a, **k: {})
     monkeypatch.setattr(fo, "fetch_performance_wb01", lambda *a, **k: {})
     monkeypatch.setattr(fo, "_pool_secid_or_isin", lambda c: True)
-    monkeypatch.setattr(P, "resolve_currency", lambda c: None)       # 選股池未填幣別
-    # 30 筆、跨度 145 天:≥20 筆 → FundClear 勝出;≥90 天 → 不是「近30日短窗」;<300 天 → 觸發 span-extend
-    short = pd.Series([10.0 + i * 0.01 for i in range(30)],
-                      index=pd.date_range("2026-03-01", periods=30, freq="5D"))
-    monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
+    monkeypatch.setattr(P, "resolve_secid", lambda c: pool_secid)
+    monkeypatch.setattr(P, "resolve_isin", lambda c: None)
+    monkeypatch.setattr(P, "resolve_currency", lambda c: pool_ccy)
+    if native:
+        # 30 筆、跨度 145 天:≥20 筆 → FundClear;≥90 天 → 不是近30日短窗;<300 天 → 觸發 span-extend
+        short = pd.Series([10.0 + i * 0.01 for i in range(30)],
+                          index=pd.date_range("2026-03-01", periods=30, freq="5D"))
+        short.attrs["source"] = "FundClear:GetFundNAV"
+        monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
+    if yahoo is not None:
+        monkeypatch.setattr(fo, "_src_yahoo_finance_nav", lambda c: yahoo)
     monkeypatch.setattr(fo, "_src_tcb_meta",
-                        lambda c: {"fund_name": "安聯收益成長基金", "currency": meta_ccy})
-    ms_calls = []
+                        lambda c: {"fund_name": "某某收益成長基金", "currency": meta_ccy})
+    ts_urls = []
+    import urllib.request as UR
 
-    def _ms(c, fund_name=""):
-        ms_calls.append(c)
-        return ms_series if ms_series is not None else _ms_long(ms_ccy)
+    class _R(io.BytesIO):
+        def __enter__(self):
+            return self
 
-    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
-    if ms_series is None:
-        assert code not in S._MORNINGSTAR_SECID_MAP  # 前提:不在硬編表
-    return fo._fetch_fund_single(code), ms_calls
+        def __exit__(self, *a):
+            return False
+
+    def _open(req, timeout=None):
+        url = getattr(req, "full_url", str(req))
+        if "timeseries_price" in url:
+            ts_urls.append(url)
+            return _R(json.dumps(_ms_payload(ms_n)).encode())
+        raise OSError(f"unexpected request {url[:80]}")
+
+    monkeypatch.setattr(UR, "urlopen", _open)
+    return fo._fetch_fund_single(code), ts_urls
 
 
 def test_single_pipeline_meta_declared_usd_swaps_to_long_history(monkeypatch):
-    r, ms_calls = _run_single(monkeypatch, meta_ccy="美元", ms_ccy="USD")
+    """ALZF9:不在硬編表、選股池有 secId 但沒填幣別;meta 宣告「美元」→ 經**真實**晨星函式換源。"""
+    assert "ALZF9" not in S._MORNINGSTAR_SECID_MAP
+    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", ""))
     assert r["data_source"] == "morningstar(span-extend)"
     assert len(r["series"]) == 800 and r["nav_span_days"] > 300
-    assert ms_calls == ["ALZF9"]                    # 第一趟幣別未知不發請求(S1),第二趟才發
-    assert any(t.get("source") == "morningstar(span-extend)" for t in r["source_trace"])
+    assert r["series"].attrs.get("currency") == "USD"
+    assert len(ts) == 1 and "currencyId=USD" in ts[0]   # 第一趟未知不發(S1/3c),第二趟以 hint 發
 
 
-def test_single_pipeline_meta_ccy_differs_from_morningstar_blocks(monkeypatch):
-    r, _ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD")
-    assert r["data_source"] == "FundClear" and len(r["series"]) == 30
+def test_single_pipeline_meta_differs_from_morningstar_discarded(monkeypatch):
+    """選股池宣告 USD(第一趟以 USD 換源成功),meta 宣告 EUR → Q4 回驗丟棄,回退原生序列。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="EUR", pool_secid=("F0ALZF9", "USD"),
+                        pool_ccy="USD")
+    assert len(ts) == 1 and "currencyId=USD" in ts[0]
+    assert r["data_source"] == "FundClear(best-of-waterfall)" and len(r["series"]) == 30
+    assert any(t.get("discarded") for t in r["source_trace"])
 
 
-def test_single_pipeline_meta_unknown_stays_short(monkeypatch):
-    r, ms_calls = _run_single(monkeypatch, meta_ccy="", ms_ccy="USD")
-    assert r["data_source"] == "FundClear" and ms_calls == []
+def test_single_pipeline_meta_unknown_no_request(monkeypatch):
+    r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", ""))
+    assert r["data_source"] == "FundClear" and ts == []      # 連一個晨星請求都沒有
 
 
-def test_single_pipeline_first_pass_swapped_no_second_request(monkeypatch):
-    """第一趟(硬編表宣告 USD)已換源 → 不再跑第二趟(不重複請求、不被 meta 的宣告改判)。
-    候選跨度刻意 <300 天,讓 span-extend 自身的跨度閘門擋不住第二趟 —— 守門只能靠 `_se_swapped`。"""
-    mid = pd.Series([9.0 + i * 0.01 for i in range(60)],
-                    index=pd.date_range("2025-12-01", periods=60, freq="4D"))   # 跨度 236 天
-    mid.attrs["currency"] = "USD"
-    r, ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD", code="TLZF9",
-                              ms_series=mid)
-    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 60
-    assert ms_calls == ["TLZF9"]
+def test_single_pipeline_first_pass_known_no_second_request(monkeypatch):
+    """選股池宣告 USD、meta 也是美元 → 第一趟換源;3a:第一趟已知幣別 → 不跑第二趟。
+    晨星序列刻意只給 60 筆(跨度 <300 天),讓 span-extend 自身的跨度閘門擋不住第二趟。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "USD"),
+                        pool_ccy="USD", ms_n=200)
+    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 200
+    assert len(ts) == 1
+
+
+def test_q4_waterfall_morningstar_usd_vs_meta_twd_discarded(monkeypatch):
+    """重現(複驗):原生來源全空 → 2g 採用晨星 USD(選股池 USD);meta 宣告新台幣 →
+    舊版 `series` 是 USD、`currency` 是新台幣。Q4:丟棄,序列清空(走既有「無淨值序列」)。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="新台幣", pool_secid=("F0ALZF9", "USD"),
+                        pool_ccy="USD", native=False)
+    assert len(ts) == 1                                       # 2g 確實抓了晨星
+    assert r["series"] is None and r["data_source"] == ""
+    assert any(t.get("discarded") and "TWD" in t.get("error", "")
+               for t in r["source_trace"])
+
+
+def test_q4_waterfall_yahoo_f_eur_vs_meta_usd_discarded(monkeypatch):
+    """重現(複驗):TLZF9 原生來源全空、晨星回空 → 2g2 採用 Yahoo `{secId}.F`(宣告 EUR);
+    meta 宣告美元 → Q4:丟棄。"""
+    yf = pd.Series([20.0 + i * 0.01 for i in range(400)],
+                   index=pd.date_range("2025-01-01", periods=400))
+    yf.attrs.update({"source": "Yahoo:chart:0P0001J5YG.F", "currency": "EUR"})
+    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False,
+                         yahoo=yf, ms_n=0)
+    assert r["series"] is None and r["data_source"] == ""
+    assert any(t.get("discarded") and t.get("source") == "yahoo_finance"
+               for t in r["source_trace"])
+
+
+def test_q4_waterfall_yahoo_matching_currency_kept(monkeypatch):
+    """回歸:Yahoo 宣告與 meta 一致(USD)→ 保留。"""
+    yf = pd.Series([20.0 + i * 0.01 for i in range(400)],
+                   index=pd.date_range("2025-01-01", periods=400))
+    yf.attrs.update({"source": "Yahoo:chart:0P0001J5YG.F", "currency": "USD"})
+    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False,
+                         yahoo=yf, ms_n=0)
+    assert r["data_source"] == "yahoo_finance" and len(r["series"]) == 400
+
+
+# ── `_src_morningstar_nav(currency_hint=)`:只在池與硬編表都沒有幣別時才用(複驗 M1)──
+@pytest.mark.parametrize("code,pool_secid,pool_ccy,hint,want", [
+    ("TLZF9", None, None, "EUR", "USD"),           # 硬編表宣告 USD 優先
+    ("ZZZ3", ("F0Z3", ""), "EUR", "USD", "EUR"),     # 池使用者幣別優先
+    ("ZZZ3", ("F0Z3", ""), None, "美元", "USD"),     # 兩者皆無 → hint(中文別名正規化)
+    ("ZZZ3", ("F0Z3", "TWD"), None, "USD", "TWD"),   # 池 secId 列宣告 TWD 優先
+])
+def test_morningstar_currency_hint_priority(monkeypatch, code, pool_secid, pool_ccy, hint, want):
+    _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    s = S._src_morningstar_nav(code, currency_hint=hint)
+    assert s.attrs["currency"] == want and f"currencyId={want}" in seen[0]
+
+
+def test_morningstar_unknown_ccy_no_secid_search(monkeypatch):
+    """複驗建議 3c:幣別未知 → 連 secId 搜尋(SecuritySearch / screener)都不發。"""
+    _isolate_ms(monkeypatch, isin="LU0000000005")
+    monkeypatch.setattr(S, "_morningstar_search_secid",
+                        lambda *a, **k: pytest.fail("幣別未知不應發 secId 搜尋"))
+    monkeypatch.setattr(S, "_morningstar_screener_secid",
+                        lambda *a, **k: pytest.fail("幣別未知不應發 screener"))
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    assert S._src_morningstar_nav("ZZZ2", fund_name="某基金").empty and seen == []
+
+
+def test_single_pipeline_first_pass_known_rejected_no_repeat(monkeypatch):
+    """複驗建議 3a:第一趟預期幣別已知(池 TWD)而沒換成(晨星只回 5 筆)→ meta 宣告美元也
+    不再跑第二趟(舊條件「預期不同就重跑」會重複發一個必被拒的請求)。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "TWD"),
+                        pool_ccy="TWD", ms_n=5)
+    assert r["data_source"] == "FundClear"
+    assert len(ts) == 1 and "currencyId=TWD" in ts[0]

@@ -158,6 +158,15 @@ def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str 
         return ""
 
 
+# 2026-10-10 客戶裁示 Q4:**非原生報價**的 NAV 來源(依序列 `attrs["source"]` 前綴判定)。
+#   晨星 timeseries 依 `currencyId` 換算;Yahoo `{secId}.F` 是法蘭克福掛牌(多為 EUR);
+#   AlphaVantage 同為交易所掛牌報價 —— 三者都可能不是基金的計價幣別。
+#   ⚠️ 未列入者(FundClear / TDCC / MoneyDJ 各子網域 / SITCA / 鉅亨 / 安聯 / 銀行平台 /
+#   保單子網域 / 富蘭克林、摩根官網直連 / GitHub 快取)視為**原生**,不回驗 ——
+#   那是本組依來源性質的判讀,未逐一實測其回傳幣別。
+_NAV_NON_NATIVE_PREFIXES: "tuple[str, ...]" = ("Morningstar:", "Yahoo:", "AlphaVantage:")
+
+
 # 2026-10-10 稽核 S1:不宣告 `attrs["currency"]` 的長歷史候選來源(換源時幣別恆未知 → 必被拒)。
 _SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
 
@@ -202,7 +211,8 @@ def _span_extend_insurance_nav(
         _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
         _long_candidates = (
             ("morningstar",
-             lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
+             lambda: _src_morningstar_nav(_code, fund_name=fund_name or "",
+                                          currency_hint=_expect_ccy)),   # 2026-10-10 複驗 M1
             ("cnyes", lambda: _src_cnyes_nav(_code)),
         )
         for _long_src, _long_fn in _long_candidates:
@@ -632,6 +642,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # ⚠️ 2026-10-10 複驗更正:此處在 meta 鏈(Step 3)**之前**,`result` 的 fund_name /
     #    currency 恆為空 —— 上一輪「傳入抓取結果的幣別」在這條主管線不成立。
     #    本呼叫保留原位(順序與欄位語意不變);meta 宣告幣別後由下方「第二趟」補做。
+    # Q4 回驗的回退候選(側車最長原生序列)有效筆數 —— 在 span-extend 之前先量好
+    # (側車此後不再變動;放這裡也讓「收尾救援在 span-extend 之前」的結構守衛維持原意)。
+    _best_fallback_len = _effective_nav_len(_best_s)
     _se_name0 = result.get("fund_name") or ""
     _se_ccy0 = result.get("currency") or ""
     _se_src0 = nav_source
@@ -710,6 +723,52 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         print(f"[orchestrator] 幣別修正 {_code}: {_cur_ccy0 or '空'} → {_new_ccy}")
         result["currency"] = _new_ccy
 
+    # ── 2026-10-10 客戶裁示 Q4:跨來源 NAV 幣別回驗(meta 宣告幣別之後)──────────────
+    # 2g 晨星 / 2g2 Yahoo `.F` / 2g3 AlphaVantage,以及 2h 富蘭克林、摩根經 ISIN 退晨星、
+    # 第一趟 span-extend 換來的晨星序列 —— 採用時都沒有(或只以 meta 前的預期幣別)比對幣別。
+    # 判定依「序列自己的出處」(`attrs["source"]`),不依標籤:非原生報價來源一律以
+    # meta 之後的預期幣別回驗;不是 match(含未知)→ 丟棄,fail closed。
+    # 丟棄後回退到 waterfall 側車裡最長的原生序列(≥10 筆);沒有 → 序列清空,
+    # 走既有「無淨值序列」呈現。⚠️ 未比對的原生來源見 `_NAV_NON_NATIVE_PREFIXES` 註解。
+    if result.get("series") is not None and len(result["series"]) > 0:
+        _xs = result["series"]
+        _xs_prov = str((getattr(_xs, "attrs", None) or {}).get("source") or "")
+        if _xs_prov.startswith(_NAV_NON_NATIVE_PREFIXES):
+            from shared.data_quality import (
+                assess_nav_series_swap as _assess_x,
+                nav_series_currency as _series_ccy_x,
+            )
+            _xv = _assess_x(
+                expected_ccy=_span_extend_expected_ccy(
+                    _code, result.get("fund_name") or "", result.get("currency") or ""),
+                candidate_ccy=_series_ccy_x(_xs),
+                candidate_source=nav_source, current_source="")
+            if not _xv["safe"]:
+                import sys as _sys_x
+                print(f"[orchestrator] ⛔ {_code} 丟棄跨來源 NAV({nav_source}):"
+                      f"{_xv['reason']}", file=_sys_x.stderr)
+                result.setdefault("source_trace", []).append(
+                    {"source": nav_source, "success": False, "discarded": True,
+                     "error": _xv["reason"]})
+                _fb_prov = str((getattr(_best_s, "attrs", None) or {}).get("source") or "")
+                if (_best_fallback_len >= 10
+                        and not _fb_prov.startswith(_NAV_NON_NATIVE_PREFIXES)):
+                    nav_s, nav_source = _best_s, f"{_best_src}(best-of-waterfall)"
+                    _span_days = _nav_span_days(nav_s)
+                    result["series"] = nav_s
+                    result["data_source"] = nav_source
+                    result["nav_span_days"] = _span_days
+                    result["source_trace"].append(
+                        {"source": nav_source, "success": True, "nav_count": len(nav_s),
+                         "span_days": _span_days})
+                else:
+                    nav_s, nav_source, _span_days = pd.Series(dtype=float), "", 0
+                    result["series"] = None
+                    result["data_source"] = ""
+                    result.pop("nav_span_days", None)
+                # 第二趟照常判定(3a:只在第一趟幣別未知時跑):回退到原生序列後,
+                # 若幣別此時已知,仍可依 meta 的幣別合法延長。
+
     # ── 2026-10-10 複驗 M1:span-extend 第二趟(meta 宣告幣別之後)──────────────
     # 第一趟在 meta 之前,預期幣別只剩選股池 / 硬編表 → 不在硬編表、池未填幣別、
     # 但 meta 會宣告幣別的基金(例:ALZF9 →「美元」)長歷史被擋。只在**第一趟沒換源**、
@@ -719,7 +778,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         _se_exp0 = _span_extend_expected_ccy(_code, _se_name0, _se_ccy0)
         _se_exp1 = _span_extend_expected_ccy(_code, result.get("fund_name") or "",
                                              result.get("currency") or "")
-        if _se_exp1 and _se_exp1 != _se_exp0:
+        # 2026-10-10 複驗建議 3a:只在第一趟「因預期幣別未知而沒發請求」時補跑
+        # (~~`_se_exp1 and _se_exp1 != _se_exp0`~~ 會重複發必被拒的請求)。
+        if _se_exp1 and not _se_exp0:
             _ns2, _src2, _span2 = _span_extend_insurance_nav(
                 _code, nav_s, nav_source,
                 fund_name=result.get("fund_name") or "",

@@ -82,7 +82,7 @@ def test_extract_rows_tolerant(data, expect_len):
 
 
 # ── _morningstar_screener_secid:命中 / 回填快取 ──────────────────────────
-def test_hit_returns_secid_and_fills_caches(monkeypatch):
+def test_hit_returns_secid_and_fills_caches(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{
         "rows": [{"SecId": "F00000P8WB", "Name": "Allianz Income and Growth AMg7 USD",
                   "ISIN": "LU2023250330", "Currency": "USD"}],
@@ -94,6 +94,8 @@ def test_hit_returns_secid_and_fills_caches(monkeypatch):
     # ~~assert S._ms_ccy_cache["LU2023250330"] == "USD" # screener 直接回幣別~~
     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
     assert "LU2023250330" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", USD)" in capsys.readouterr().out
 
 
 def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatch):
@@ -297,15 +299,17 @@ def test_secid_key_casing_tolerated(monkeypatch):
     assert S._morningstar_screener_secid("LU5", currency="USD") == "Flower"
 
 
-def test_pricecurrency_read_when_currency_absent(monkeypatch):
+def test_pricecurrency_read_when_currency_absent(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
     assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
     # ~~assert S._ms_ccy_cache["LU5"] == "EUR" # 讀 PriceCurrency datapoint~~
     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
     assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
-def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+def test_screener_ccy_wins_over_name_suffix(monkeypatch, capsys):
     # 名稱後綴說 USD,但 PriceCurrency 說 EUR → screener 直接回的贏(§4.1 準確優先)
     _patch_urlopen_seq(monkeypatch, [{"rows": [
         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
@@ -313,14 +317,18 @@ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
     # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
     assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
-def test_lowercase_currency_uppercased(monkeypatch):
+def test_lowercase_currency_uppercased(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
     S._morningstar_screener_secid("LU5", currency="USD")
     # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
     assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
 def test_first_valid_row_taken_skipping_invalid(monkeypatch):

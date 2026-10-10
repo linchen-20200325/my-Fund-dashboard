@@ -1692,9 +1692,14 @@ def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
     return ""
 
 
-def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+def _src_morningstar_nav(code: str, fund_name: str = "",
+                         currency_hint: str = "") -> "pd.Series":
     """
     v6.19: 從 Morningstar 全球 API 取歷史淨值。
+
+    `currency_hint`(2026-10-10 複驗 M1):呼叫端**已確認**的幣別(例:span-extend 以 meta
+    宣告算出的預期幣別)。**只在選股池與硬編表都查不到幣別時**才拿它當 `currencyId`;
+    三者皆無 → 幣別未知 → fail closed(Q2),**連 secId 搜尋都不發**。
     改進：
     1. 優先使用 _MORNINGSTAR_SECID_MAP 硬編碼（跳過搜尋，避免 lt.morningstar.com 封鎖）
     2. 使用正確 currencyId（USD vs TWD）
@@ -1716,6 +1721,23 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
     # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
     sec_id, currency_id = _mapped[0], str(_mapped[1] or "").strip().upper()
+    # 2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。
+    if not currency_id:
+        try:
+            from repositories.pool_repository import resolve_currency as _rc_pre
+            currency_id = str(_rc_pre(_code) or "").strip()
+        except Exception:  # noqa: BLE001 — 池不可用 → 退 hint
+            currency_id = ""
+    if not currency_id and currency_hint:
+        _h = str(currency_hint).strip()
+        _h = _CCY_FROM_NAME.get(_h.upper(), _CCY_FROM_NAME.get(_h, _h))
+        _h = _h.upper() if (len(_h) == 3 and _h.isascii() and _h.isalpha()) else ""
+        currency_id = _h
+    if not currency_id:
+        # 幣別未知 → 後段的 timeseries 必然 fail closed;secId 搜尋(screener /
+        # SecuritySearch)的結果用不到,提早結束、不發任何晨星請求(複驗建議 3c)。
+        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不發晨星請求(fail closed)")
+        return pd.Series(dtype=float)
 
     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。

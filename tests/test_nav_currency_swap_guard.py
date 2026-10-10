@@ -212,7 +212,7 @@ def _wire_l1(monkeypatch, *, ms, pool_ccy=None):
     import repositories.fund.fund_orchestration as O
     import repositories.pool_repository as POOL
     monkeypatch.setattr(O, "_src_morningstar_nav",
-                        lambda code, fund_name="": ms)
+                        lambda code, fund_name="", **_k: ms)   # 2026-10-10:+currency_hint
     monkeypatch.setattr(O, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
     monkeypatch.setattr(POOL, "resolve_currency", lambda code: pool_ccy)
     return O
