@@ -1533,7 +1533,7 @@ def _run_t7_b(funds, entries, *, btot=100000.0, value_twd=50000.0):
         msgs["abort"].append(m)
         raise _Abort(m)
 
-    pos = types.SimpleNamespace(value_twd=lambda n, x: value_twd)
+    _units = {f["code"]: f.get("units", 1000.0) for f in funds}   # 預設有持倉
     pct = [pk for pk, (m, _) in entries.items() if m == "pct"]
     ns = {
         "_pf_t7": funds, "_b_entries": entries, "_btot": btot,
@@ -1543,7 +1543,8 @@ def _run_t7_b(funds, entries, *, btot=100000.0, value_twd=50000.0):
         "fund_pk_str": lambda f: f["code"],
         "_latest_nav_fx_t7": lambda f: (f["nav"], f["fx"]),
         "_ccy_calc_t7": fund_currency_for_calc,
-        "_ledger_for": lambda pk: types.SimpleNamespace(position=pos),
+        "_ledger_for": lambda pk: types.SimpleNamespace(position=types.SimpleNamespace(
+            units=_units[pk], value_twd=lambda n, x: value_twd)),
         "_label_for_pk": lambda pk: pk,
         "parse_pk": lambda pk: ("", pk),
         "_t7_units_to_twd": lambda u, n, x: u * n * x,
@@ -1934,3 +1935,35 @@ def test_c23_tab3_ai_summary_uses_calc_currency():
     ifs = [n for n in ast.walk(fn) if isinstance(n, ast.If)
            and ast.unparse(n.test) == "not _ccy_est"]
     assert ifs and isinstance(ifs[0].body[0], ast.Continue)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 23) 稽核回修 R1:零持倉的市值是確定的 0,不是未知 —— 不得中止整筆 % 分配;
+#     同一檔不得同時出現「單位模式跳過：X（NAV/FX 抓不到）」與「幣別未知：X」。
+# ════════════════════════════════════════════════════════════════════════════
+def test_r1_zero_holding_unknown_ccy_does_not_abort():
+    """重現(稽核):U1 有 1000 單位走 % 模式;NEW 0 單位、單位模式、幣別未知 →
+    NEW 市值為 0、不中止,U1 照常算缺口(NEW 依既有規則在單位模式被跳過)。"""
+    new = {"code": "NEW", "currency": "", "nav": 10.0, "fx": 0.0, "units": 0.0}
+    ns, m = _run_t7_b([_B_USD, new], {"U1": ("pct", 100.0), "NEW": ("units", 10.0)})
+    assert m["abort"] == []
+    assert ns["_v_curr"] == {"U1": 50000.0, "NEW": 0.0}
+    assert ns["_gaps"] == {"U1": pytest.approx(100000.0)}   # (50000 + 0 + 100000) − 50000
+    assert m["warning"] == ["⚠️ 單位模式跳過：NEW（NAV/FX 抓不到）"]
+
+
+def test_r1_held_unknown_ccy_still_aborts():
+    """反向:有持倉(5 單位)且幣別未知 → 市值仍是未知 → 照樣中止。"""
+    k1 = dict(_B_UNK, units=5.0)
+    ns, m = _run_t7_b([_B_USD, k1], {"U1": ("pct", 100.0)})
+    assert m["abort"] == ["❌ 幣別未知：K1，無法計算缺口，不執行分配。"]
+    assert ns["_v_curr"]["K1"] is None
+
+
+def test_r1_no_contradicting_reasons_for_same_fund():
+    """有持倉、幣別未知、走單位模式,且另有 % 模式 → 只出現「幣別未知：K1」中止,
+    不會先印「單位模式跳過：K1（NAV/FX 抓不到）」。"""
+    ns, m = _run_t7_b([_B_USD, _B_UNK], {"U1": ("pct", 100.0), "K1": ("units", 10.0)})
+    assert m["abort"] == ["❌ 幣別未知：K1，無法計算缺口，不執行分配。"]
+    assert m["warning"] == []
+

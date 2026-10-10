@@ -1733,12 +1733,33 @@ def render_t7_section() -> None:
                             _l = _ledger_for(_pk_f)
                             # ~~`... if (_n and _x) else 0.0`~~ —— 2026-10-10 客戶裁示:未知 ≠ 0。
                             # 市值未知 → None(畫面不顯示 0、不計入再平衡總額)。
-                            _v_curr[_pk_f] = (
-                                _l.position.value_twd(_n, _x) if (_n and _x) else None
-                            )
+                            # 2026-10-10 稽核回修 R1:**沒有持倉**(單位數 0)的市值是確定的 0,
+                            # 不是未知 —— 不列入未知名單、不觸發中止(例:B 段新加碼的檔)。
+                            if float(getattr(_l.position, "units", 0) or 0) == 0:
+                                _v_curr[_pk_f] = 0.0
+                            else:
+                                _v_curr[_pk_f] = (
+                                    _l.position.value_twd(_n, _x) if (_n and _x) else None
+                                )
                             if _v_curr[_pk_f] is None:
                                 (_v_unk_ccy_b if not _navfx[_pk_f][2]
                                  else _v_unk_px_b).append(_label_for_pk(_pk_f))
+
+                        # 2026-10-10 客戶裁示:缺口 = 再平衡後總額 × 權重 − 目前市值;
+                        # 任一檔目前市值未知 → 總額與缺口都不可靠 → fail closed,
+                        # 在任何落帳之前停止分配,並說明是哪幾檔、為什麼。
+                        # 稽核回修 R1:移到單位模式檢查**之前** —— 否則同一檔會先被
+                        # 「單位模式跳過：X（NAV/FX 抓不到）」、再被「幣別未知：X」各說一次原因。
+                        if _pct_pks_b and (_v_unk_ccy_b or _v_unk_px_b):
+                            t7_abort(
+                                "❌ "
+                                + "；".join(
+                                    ([f"幣別未知：{'、'.join(_v_unk_ccy_b)}"]
+                                     if _v_unk_ccy_b else [])
+                                    + ([f"NAV/FX 抓不到：{'、'.join(_v_unk_px_b)}"]
+                                       if _v_unk_px_b else []))
+                                + "，無法計算缺口，不執行分配。"
+                            )
 
                         # 單位模式檔：固定金額 = units × NAV × FX（先吃投入額）
                         _units_fixed: dict = {}
@@ -1773,19 +1794,7 @@ def render_t7_section() -> None:
                         # % 模式檔：按缺口比例分配 _remaining
                         _wn = {pk: _b_entries[pk][1] for pk in _pct_pks_b}
                         if _pct_pks_b:
-                            # 2026-10-10 客戶裁示:缺口 = 再平衡後總額 × 權重 − 目前市值;
-                            # 任一檔目前市值未知 → 總額與缺口都不可靠 → fail closed,
-                            # 在任何落帳之前停止分配,並說明是哪幾檔、為什麼。
-                            if _v_unk_ccy_b or _v_unk_px_b:
-                                t7_abort(
-                                    "❌ "
-                                    + "；".join(
-                                        ([f"幣別未知：{'、'.join(_v_unk_ccy_b)}"]
-                                         if _v_unk_ccy_b else [])
-                                        + ([f"NAV/FX 抓不到：{'、'.join(_v_unk_px_b)}"]
-                                           if _v_unk_px_b else []))
-                                    + "，無法計算缺口，不執行分配。"
-                                )
+                            # (市值未知的中止守門已移到單位模式檢查之前,見上方 R1 註解)
                             _last = _pct_pks_b[-1]
                             # 容忍帶（±0.5%）內的權重零頭一律補到最後一檔。
                             # §1：這是「顯式填補」，必須讓使用者看見補了多少、補給誰
