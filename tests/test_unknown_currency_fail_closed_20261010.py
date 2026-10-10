@@ -1304,3 +1304,89 @@ def test_q4_waterfall_alphavantage_undeclared_currency_discarded(monkeypatch):
     assert r["series"] is None and r["data_source"] == ""
     assert any(t.get("discarded") and t.get("source") == "alphavantage"
                and "幣別未知" in t.get("error", "") for t in r["source_trace"])
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 16) 批次二:選股池幣別正規化(「美元」→ USD)
+#     晨星請求、預期幣別判定、span-extend hint 走同一套 `sources._normalize_declared_ccy`;
+#     無法正規化(不在別名表、也不是 ISO 三碼)→ 未知,不發晨星請求、不猜 USD。
+# ════════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("raw, want", [
+    ("美元", "USD"), ("美金", "USD"), ("usd", "USD"), (" 新臺幣 ", "TWD"),
+    ("RMB", "CNY"), ("EUR", "EUR"),
+    ("美元累積", ""), ("USD 累積級別", ""), ("台", ""), ("", ""), (None, ""), ("12$", ""),
+])
+def test_normalize_declared_ccy(raw, want):
+    assert S._normalize_declared_ccy(raw) == want
+
+
+@pytest.mark.parametrize("pool_secid, pool_ccy", [
+    (("F0Z6", "美元"), None),        # 池 secId 列宣告中文幣別
+    (("F0Z6", ""), "美元"),          # 池使用者幣別欄是中文
+])
+def test_morningstar_pool_chinese_ccy_normalized(monkeypatch, pool_secid, pool_ccy):
+    _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    s = S._src_morningstar_nav("ZZZ6")
+    assert s.attrs["currency"] == "USD"
+    assert "currencyId=USD" in seen[0] and not any("美元" in str(u) for u in seen)
+
+
+@pytest.mark.parametrize("pool_secid, pool_ccy", [
+    (("F0Z7", "美元累積"), None), (("F0Z7", ""), "美元累積"),
+])
+def test_morningstar_pool_unnormalizable_ccy_no_request(monkeypatch, pool_secid, pool_ccy):
+    """反向:無法正規化 → 未知 → 不發任何晨星請求(不猜 USD)。"""
+    _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    assert S._src_morningstar_nav("ZZZ7").empty and seen == []
+
+
+def test_morningstar_isin_path_pool_chinese_ccy_normalized(monkeypatch):
+    """ISIN 路徑:screener 的 currency 參數也用正規化後的值。"""
+    _isolate_ms(monkeypatch, isin="LU0000000008", ccy="美元", search="")
+    got = []
+    monkeypatch.setattr(S, "_morningstar_screener_secid",
+                        lambda isin, currency="": got.append(currency) or "F0SCR8")
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    s = S._src_morningstar_nav("ZZZ8")
+    assert got == ["USD"] and "currencyId=USD" in seen[0] and s.attrs["currency"] == "USD"
+
+
+@pytest.mark.parametrize("pool_ccy, want", [("美元", ["USD"]), ("美元累積", [])])
+def test_pool_secid_lookup_screener_ccy_normalized(monkeypatch, pool_ccy, want):
+    """持股備源 `_pool_secid_lookup`:池 ISIN → screener 的幣別同樣正規化;無法正規化不呼叫。"""
+    _isolate_ms(monkeypatch, isin="LU0000000009", ccy=pool_ccy)
+    got = []
+    monkeypatch.setattr(S, "_morningstar_screener_secid",
+                        lambda isin, currency="": got.append(currency) or "F0SCR9")
+    S._pool_secid_lookup("ZZZ9")
+    assert got == want
+
+
+def test_expected_ccy_and_hint_share_normalization(monkeypatch):
+    """預期幣別判定與 hint 用同一套:池「美元」→ 預期 USD;宣告「美金」→ hint USD。"""
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: "美元")
+    assert fo._span_extend_expected_ccy("ZZZH9", "", "") == "USD"
+    assert fo._span_extend_ms_hint("ZZZH9", "", "美金") == "USD"
+    monkeypatch.setattr(P, "resolve_currency", lambda c: "美元累積")
+    assert fo._span_extend_expected_ccy("ZZZH9", "", "") == ""
+    assert fo._span_extend_ms_hint("ZZZH9", "", "美元累積") == ""
+
+
+def test_single_pipeline_pool_chinese_ccy_swaps_with_usd(monkeypatch):
+    """端到端:池 secId 列與幣別欄都是「美元」、meta 沒宣告 → 第一趟預期 USD、
+    晨星以 `currencyId=USD` 請求、序列 USD → 換源(舊行為:預期未知,不換、不請求)。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", "美元"),
+                        pool_ccy="美元")
+    assert r["data_source"] == "morningstar(span-extend)"
+    assert len(ts) == 1 and "currencyId=USD" in ts[0]
+    assert not any("美元" in u for u in ts)
+
+
+def test_single_pipeline_pool_unnormalizable_ccy_no_request(monkeypatch):
+    r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", "美元累積"),
+                        pool_ccy="美元累積")
+    assert r["data_source"] == "FundClear" and ts == []

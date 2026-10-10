@@ -975,7 +975,8 @@ def _pool_secid_lookup(code: str) -> str:
         if _isin:
             # 2026-10-10 客戶裁示 Q2:未知幣別 ≠ USD —— screener 請求必帶 currencyId,
             # 池幣別空白 → 不以 USD 猜測呼叫(fail closed),跳過本備源。
-            _ccy = str(resolve_currency(_code) or "").strip().upper()
+            # 2026-10-10 批次二:池幣別先正規化(「美元」→ USD;無法正規化 → 未知)
+            _ccy = _normalize_declared_ccy(resolve_currency(_code))
             if not _ccy:
                 print(f"[ms_secid_pool] {_code} ISIN={_isin} 幣別未知 → 不以 USD 猜測呼叫晨星"
                       f" screener(fail closed)", file=_sys_p.stderr)
@@ -1444,6 +1445,26 @@ _CCY_FROM_NAME = {
 }
 
 
+def _normalize_declared_ccy(raw) -> str:
+    """**宣告型**幣別欄位(選股池 / meta / 硬編表 / 呼叫端 hint)→ ISO 三碼或 `""`(未知)。
+
+    2026-10-10 批次二(選股池幣別正規化):選股池幣別欄可能是「美元」這類中文,
+    原本照原字串當 `currencyId` 送晨星(`currencyId=美元`),而預期幣別判定那一側
+    又把同一個值當成未知 —— 兩邊各用各的規則。本函式是 L1 唯一一套宣告欄正規化:
+      1. 整欄**精確**對照本檔 `_CCY_FROM_NAME`(大寫或原字,例「美元」/「usd」/「RMB」);
+      2. 不在表內 → `shared.data_quality.normalize_iso_ccy`(本身已是 ISO 三碼英文字母才收);
+      3. 其餘(「美元累積」、空白、亂碼)→ `""` = 未知,由呼叫端 fail closed,不猜 USD。
+    ⚠️ 不做子字串掃描(那是 `_ccy_from_fund_name` 的名稱推定,不算可靠宣告)。
+    ⚠️ 別名表為何不用 L2 `services.currency.CCY_NORMALIZE`:L1 不得 import L2(§8.2)。
+    """
+    from shared.data_quality import normalize_iso_ccy as _iso
+    _s = str(raw or "").strip()
+    if not _s:
+        return ""
+    _alias = _CCY_FROM_NAME.get(_s.upper()) or _CCY_FROM_NAME.get(_s)
+    return _alias or _iso(_s)
+
+
 def _ccy_from_fund_name(name: str) -> str:
     """從晨星基金名稱抓計價幣別(如 "…AMg7 USD" → USD);抓不到回 ""(§1 不猜,由呼叫端退 USD)。
 
@@ -1720,19 +1741,18 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
     _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
     # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
     # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
-    sec_id, currency_id = _mapped[0], str(_mapped[1] or "").strip().upper()
+    # ~~currency_id = str(_mapped[1] or "").strip().upper()~~(「美元」會原樣送出)
+    # 2026-10-10 批次二:池 / 硬編表宣告值一律過 `_normalize_declared_ccy`。
+    sec_id, currency_id = _mapped[0], _normalize_declared_ccy(_mapped[1])
     # 2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。
     if not currency_id:
         try:
             from repositories.pool_repository import resolve_currency as _rc_pre
-            currency_id = str(_rc_pre(_code) or "").strip()
+            currency_id = _normalize_declared_ccy(_rc_pre(_code))   # 2026-10-10 批次二
         except Exception:  # noqa: BLE001 — 池不可用 → 退 hint
             currency_id = ""
     if not currency_id and currency_hint:
-        _h = str(currency_hint).strip()
-        _h = _CCY_FROM_NAME.get(_h.upper(), _CCY_FROM_NAME.get(_h, _h))
-        _h = _h.upper() if (len(_h) == 3 and _h.isascii() and _h.isalpha()) else ""
-        currency_id = _h
+        currency_id = _normalize_declared_ccy(currency_hint)   # 2026-10-10 批次二:同一套
     if not currency_id:
         # 幣別未知 → 後段的 timeseries 必然 fail closed;secId 搜尋(screener /
         # SecuritySearch)的結果用不到,提早結束、不發任何晨星請求(複驗建議 3c)。
@@ -1755,7 +1775,7 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
             )
             _isin = _resolve_user_isin(_code)
             if _isin:
-                _u_ccy = _resolve_user_ccy(_code)
+                _u_ccy = _normalize_declared_ccy(_resolve_user_ccy(_code))   # 批次二
                 if _u_ccy:
                     currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
                 # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),

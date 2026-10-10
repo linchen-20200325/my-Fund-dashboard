@@ -142,12 +142,11 @@ def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str 
     """
     _code = (code or "").upper().strip()
     try:
-        from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
         from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
-        from shared.data_quality import normalize_iso_ccy as _iso_ccy
-        _decl = str(declared_ccy or "").strip()
-        _decl = _ccy_alias.get(_decl.upper(), _ccy_alias.get(_decl, _decl))
-        _exp = (_iso_ccy(_decl)
+        # 2026-10-10 批次二:宣告欄正規化與晨星請求同一套(`sources._normalize_declared_ccy`),
+        # 選股池「美元」→ USD;~~`_iso_ccy`~~ 會把它當未知。
+        from repositories.fund.sources import _normalize_declared_ccy as _iso_ccy
+        _exp = (_iso_ccy(declared_ccy)
                 or _iso_ccy(_correct_currency("", fund_name or "", _code)))
         if not _exp:
             _exp = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
@@ -176,12 +175,10 @@ def _span_extend_ms_hint(code: str, fund_name: str = "", declared_ccy: str = "")
     """
     _code = (code or "").upper().strip()
     try:
-        from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
         from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
-        from shared.data_quality import normalize_iso_ccy as _iso_ccy
-        _raw = str(declared_ccy or "").strip()
-        _raw = _ccy_alias.get(_raw.upper(), _ccy_alias.get(_raw, _raw))
-        _decl = _iso_ccy(_raw)
+        # 2026-10-10 批次二:與預期幣別判定、晨星請求同一套正規化
+        from repositories.fund.sources import _normalize_declared_ccy as _iso_ccy
+        _decl = _iso_ccy(declared_ccy)
         _corrected = _iso_ccy(_correct_currency(_decl, fund_name or "", _code))
         if _corrected != _decl:
             print(f"[orchestrator] {_code} 晨星 hint 不給:宣告 {_decl or '空'} 會被"
