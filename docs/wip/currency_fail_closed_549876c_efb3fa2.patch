@@ -1,0 +1,3517 @@
+From ae3a218008ea54cd11c8c0d26566879d6cd6a4c3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 07:59:53 +0000
+Subject: [PATCH 1/5] =?UTF-8?q?=E5=B9=A3=E5=88=A5=E6=9C=AA=E7=9F=A5?=
+ =?UTF-8?q?=E4=B8=8D=E7=AD=89=E6=96=BC=20USD=EF=BC=88=E4=B8=80=EF=BC=89?=
+ =?UTF-8?q?=EF=BC=9A=E5=8F=96=E6=95=B8=E6=BA=90=E9=A0=AD=E3=80=81=E6=99=A8?=
+ =?UTF-8?q?=E6=98=9F=E8=AB=8B=E6=B1=82=E8=88=87=E6=8F=9B=E6=BA=90=E9=98=B2?=
+ =?UTF-8?q?=E8=AD=B7?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+客戶裁示 2026-10-10（A 級資料正確性缺陷）：unknown currency ≠ USD。
+
+- L1 取數源頭缺幣別一律回空白，不再填 "USD"：
+  MoneyDJ 直抓（初值與「計價幣別」缺欄）、合庫子網域 meta、TDCC 3-2、
+  FundClear meta 與逐筆配息、合庫配息表境外分支、legacy 直爬與其配息。
+- 選股池 resolve_secid：幣別空白回空白，不再回 USD。
+- 晨星（Q2）：請求必帶 currencyId → 幣別未知 fail closed，不以 USD 猜測。
+  screener 預設幣別改空白且未知時不發請求、不入負快取；池 ISIN 備源同；
+  timeseries 在幣別未知時不發請求、回空序列。硬編表手工宣告的幣別照舊保留。
+- get_latest_fx 中央守門：幣對不足 6 碼（ccy 為空時 f"{ccy}TWD" 只剩 "TWD"，
+  Yahoo 的 TWD=X 即 USD/TWD）視為幣別未知，不查匯率、回 None。
+- 換源防護（Q3）：assess_nav_series_swap 只放行 match；unknown 改為擋下並附理由。
+  span-extend 與 backfill 長歷史救援因此在幣別未知時不換源、不補寫。
+- 測試：把「缺值退 USD」「未知放行」寫成規格的舊斷言以刪除線註解保留並反轉；
+  只驗解析／救援機制的測試改為明示已知幣別，原斷言不變。
+---
+ repositories/fund/fund_orchestration.py       |  7 ++-
+ repositories/fund/fx_and_main.py              |  6 ++
+ repositories/fund/sources.py                  | 48 ++++++++++-----
+ repositories/pool_repository.py               |  5 +-
+ services/nav_history_store.py                 |  5 +-
+ shared/data_quality.py                        | 30 +++++++---
+ tests/test_backfill_to_gs_gate0.py            | 16 +++--
+ tests/test_backfill_to_gs_v19474.py           | 15 ++++-
+ .../test_morningstar_screener_secid_v19491.py | 60 +++++++++++--------
+ tests/test_ms_secid_pool_backup_v19498.py     | 16 +++--
+ tests/test_nav_currency_swap_guard.py         | 47 +++++++++------
+ tests/test_nav_history_currency_column.py     | 48 ++++++++++-----
+ tests/test_nav_history_window.py              |  8 ++-
+ tests/test_pool_repository.py                 |  5 +-
+ 14 files changed, 217 insertions(+), 99 deletions(-)
+
+diff --git a/repositories/fund/fund_orchestration.py b/repositories/fund/fund_orchestration.py
+index 457d3ab..03f3de2 100644
+--- a/repositories/fund/fund_orchestration.py
++++ b/repositories/fund/fund_orchestration.py
+@@ -162,7 +162,8 @@ def _span_extend_insurance_nav(
+         # 只看「筆數 × 跨度」—— 晨星是拿 `currencyId` 要換算後的淨值(查不到就死預設 USD),
+         # 跨度更長就會把台幣序列整條換成美元序列,下游報酬/Sharpe/σ 照算、畫面無異狀。
+         # 預期幣別在此只取「不需額外網路」的既有來源(基金名 → 選股池 → 台灣字樣推定),
+-        # 取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。
++        # ~~取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。~~
++        # → 2026-10-10 客戶裁示 Q3:取不到就是未知 → **擋下**(assess_nav_series_swap 只放行 match)。
+         _expect_ccy = ""
+         try:
+             from shared.data_quality import normalize_iso_ccy as _iso_ccy
+@@ -1069,7 +1070,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
+                             v = cells[i+1].get_text(strip=True)
+                             if k: rows_map[k] = v
+                 result["fund_name"]       = rows_map.get("基金名稱", "")
+-                result["currency"]        = rows_map.get("計價幣別", "USD").replace(" ","")
++                result["currency"]        = rows_map.get("計價幣別", "").replace(" ","")  # 缺欄→空白(未知≠USD)
+                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
+                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
+                 result["fund_scale"]      = rows_map.get("基金規模", "")
+@@ -1356,7 +1357,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
+                         if _amt is None or _amt <= 0 or _amt > 1000: continue
+                         _yld = safe_float(cols[5]) or 0.0 if len(cols) > 5 else 0.0
+                         _cur = (cols[6].strip() if len(cols) > 6 and cols[6].strip()
+-                                else result.get("currency", "USD"))
++                                else (result.get("currency") or ""))  # 未知≠USD
+                         result["dividends"].append({
+                             "date":      cols[0],
+                             "ex_date":   cols[1],
+diff --git a/repositories/fund/fx_and_main.py b/repositories/fund/fx_and_main.py
+index 38bbd0e..f4f8ed1 100644
+--- a/repositories/fund/fx_and_main.py
++++ b/repositories/fund/fx_and_main.py
+@@ -171,6 +171,12 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
+     pair = str(currency_pair).strip().upper()
+     if not pair.endswith("=X"):
+         pair = pair + "=X"
++    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):呼叫端以 f"{ccy}TWD" 組幣對時 ccy 為空
++    # → 只剩 "TWD=X",而 Yahoo 慣例 `TWD=X` 是 USD/TWD —— 會靜默拿到美元匯率。
++    # 不足 6 碼的幣對一律視為「幣別未知」:不查匯率,回 None(fail closed)。
++    if len(pair.replace("=X", "")) < 6:
++        print(f"[get_latest_fx] ⛔ 幣對 {currency_pair!r} 不完整(幣別未知)→ 不查匯率")
++        return None
+
+     # positive-only cache 查詢
+     _cache_key = (pair, fred_api_key or "")
+diff --git a/repositories/fund/sources.py b/repositories/fund/sources.py
+index ac96f81..e338b2d 100644
+--- a/repositories/fund/sources.py
++++ b/repositories/fund/sources.py
+@@ -168,7 +168,7 @@ def _src_fundclear_meta(code: str) -> dict:
+         if isinstance(info, dict):
+             meta["fund_name"]   = (info.get("FundName") or info.get("fundName") or
+                                     info.get("ChtName") or "")
+-            meta["currency"]    = (info.get("Currency") or info.get("currency") or "USD")
++            meta["currency"]    = (info.get("Currency") or info.get("currency") or "")  # 2026-10-10 缺幣別→空白(未知≠USD)
+             meta["risk_level"]  = str(info.get("RiskLevel") or info.get("riskLevel") or "")
+             meta["category"]    = (info.get("FundType") or info.get("fundType") or "")
+             meta["nav_latest"]  = safe_float(info.get("LatestNAV") or info.get("latestNav"))
+@@ -235,7 +235,7 @@ def _src_fundclear_div(code: str) -> list:
+                 "amount":    amt,
+                 "yield_pct": safe_float(
+                     item.get("DividendRate") or item.get("dividendRate"), 0) or 0,
+-                "currency":  item.get("Currency") or item.get("currency") or "USD",
++                "currency":  item.get("Currency") or item.get("currency") or "",  # 2026-10-10 未知≠USD
+             })
+         if divs:
+             print(f"[src_fundclear_div] ✅ {code} {len(divs)} 筆配息")
+@@ -973,7 +973,13 @@ def _pool_secid_lookup(code: str) -> str:
+     try:
+         _isin = resolve_isin(_code) or ""
+         if _isin:
+-            _ccy = (resolve_currency(_code) or "USD").upper() or "USD"
++            # 2026-10-10 客戶裁示 Q2:未知幣別 ≠ USD —— screener 請求必帶 currencyId,
++            # 池幣別空白 → 不以 USD 猜測呼叫(fail closed),跳過本備源。
++            _ccy = str(resolve_currency(_code) or "").strip().upper()
++            if not _ccy:
++                print(f"[ms_secid_pool] {_code} ISIN={_isin} 幣別未知 → 不以 USD 猜測呼叫晨星"
++                      f" screener(fail closed)", file=_sys_p.stderr)
++                return ""
+             _sid = _morningstar_screener_secid(_isin, _ccy)
+             if _sid:
+                 print(f"[ms_secid_pool] {_code} ISIN={_isin}({_ccy})→secId={_sid}",
+@@ -1575,7 +1581,7 @@ def _screener_row_get(row: dict, keys) -> str:
+     return ""
+
+
+-def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
++def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
+     """用 Morningstar **screener** 以精確 `filters=ISIN:IN:<isin>` 解析 secId(比 SecuritySearch
+     模糊名稱搜尋準;保單平台基金常是後者查不到才卡住)。回傳晨星 **F 型 secId**(可直接餵
+     `_MS_TOOLS_REST/timeseries_price`,與本檔 3a NAV 主路徑同 host + 同 token),查無 / 失敗回 ""。
+@@ -1596,6 +1602,12 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
+     _isin = str(isin or "").strip().upper()
+     if not _isin:
+         return ""
++    # 2026-10-10 客戶裁示 Q2:請求必帶 `currencyId`;幣別未知 → fail closed,
++    # 不以 USD 猜測發請求(不入負快取 —— 這不是「查無」,是「不知道該用哪個幣別問」)。
++    _ccy = str(currency or "").strip().upper()
++    if not _ccy:
++        print(f"[ms_screener] {_isin} 幣別未知 → 不以 USD 猜測呼叫 screener(fail closed)")
++        return ""
+     if _isin in _ms_screener_cache:
+         return _ms_screener_cache[_isin]
+
+@@ -1607,7 +1619,6 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
+         "Referer": "https://tools.morningstar.co.uk/",
+     }
+     _dp = _up.quote("SecId|Name|ISIN|PriceCurrency|BaseCurrency")
+-    _ccy = str(currency or "USD").strip().upper() or "USD"
+     _transient = False       # timeout/連線/JSON 壞 → 可重試,不負快取
+     _anomaly = False         # 形狀非預期 / 有 rows 抽不到 SecId → 疑欄位錯,不負快取 + 現形
+     _logged_sample = False
+@@ -1698,8 +1709,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+         _user_mapped = _resolve_user_secid(_code)
+     except Exception:  # noqa: BLE001 — 選股池不可用不阻斷抓取鏈(退硬編/搜尋)
+         _user_mapped = None
+-    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
+-    sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
++    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
++    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
++    # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
++    sec_id, currency_id = _mapped[0], str(_mapped[1] or "").strip().upper()
+
+     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
+     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
+@@ -1722,8 +1735,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+                     currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
+                 # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),
+                 #   查無 / 端點不可用才退回既有 SecuritySearch(純附加、零回歸)。
+-                sec_id = (_morningstar_screener_secid(_isin, currency_id or "USD")
+-                          or _morningstar_search_secid(_isin, currency_id or "USD"))
++                # 2026-10-10 Q2:幣別未知 → 不以 USD 猜測呼叫 screener(函式內 fail closed);
++                #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
++                sec_id = (_morningstar_screener_secid(_isin, currency_id)
++                          or _morningstar_search_secid(_isin, currency_id))
+                 # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
+                 _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
+                 if _auto_ccy:
+@@ -1806,6 +1821,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+     if not sec_id:
+         print(f"[src_morningstar] {_code}: 無 secId（未在映射表且搜尋失敗）")
+         return pd.Series(dtype=float)
++    # 2026-10-10 客戶裁示 Q2:timeseries 請求必帶 `currencyId`(回的是換算後淨值)。
++    # 幣別未知 → fail closed:不以 USD 猜測抓取,也不把猜出來的序列送進正式資料流。
++    if not currency_id:
++        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不以 USD 猜測向晨星要淨值(fail closed)")
++        return pd.Series(dtype=float)
+
+     end_d   = _dt2.date.today()
+     # v19.281:400d → 2000d(~5.5 年),讓 3Y/5Y 指標可算(保單代碼如 TLZF9
+@@ -2699,7 +2719,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
+         "nav_date":     "",
+         "year_high_nav": None,
+         "year_low_nav":  None,
+-        "currency":     "USD",
++        "currency":     "",   # 2026-10-10:未解析到幣別 = 未知(空白),不得預設 USD
+         "risk_level":   "",
+         "dividend_freq": "",
+         "fund_scale":   "",
+@@ -2736,7 +2756,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
+             # 基本資料
+             if rows_map.get("基金名稱"):
+                 out["fund_name"]    = rows_map.get("基金名稱", "")
+-                out["currency"]     = rows_map.get("計價幣別", "USD").replace(" ", "")
++                out["currency"]     = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
+                 out["risk_level"]   = rows_map.get("風險報酬等級", "").replace(" ", "")
+                 out["dividend_freq"]= rows_map.get("配息頻率", "").replace(" ", "")
+                 out["fund_scale"]   = rows_map.get("基金規模", "")
+@@ -3073,7 +3093,7 @@ def _src_tcb_meta(code: str) -> dict:
+                                 if k: rows_map[k] = cells[i+1].get_text(strip=True)
+                     if rows_map.get("基金名稱"):
+                         meta["fund_name"]   = rows_map.get("基金名稱", "")
+-                        meta["currency"]    = rows_map.get("計價幣別", "USD").replace(" ", "")
++                        meta["currency"]    = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
+                         meta["risk_level"]  = rows_map.get("風險報酬等級", "").replace(" ", "")
+                         meta["dividend_freq"] = rows_map.get("配息頻率", "").replace(" ", "")
+                         meta["fund_scale"]  = rows_map.get("基金規模", "")
+@@ -3166,7 +3186,7 @@ def _src_tcb_div(code: str) -> list:
+                         continue
+                     _yld = safe_float(_cols[5]) or 0
+                     _cur = (_cols[6].strip() if len(_cols) > 6 and _cols[6].strip()
+-                            else ("TWD" if _is_dom else "USD"))
++                            else ("TWD" if _is_dom else ""))  # 境外缺幣別→空白(未知≠USD)
+                     _out.append({
+                         "date": _cols[0], "ex_date": _cols[1], "pay_date": _cols[2],
+                         "amount": _amt, "yield_pct": _yld, "currency": _cur,
+@@ -3348,7 +3368,7 @@ def _src_tdcc_meta(code: str) -> dict:
+             item_code = (item.get("基金代碼") or item.get("境外基金代碼") or "").upper()
+             if item_code == _c:
+                 meta["fund_name"] = item.get("基金名稱", "")
+-                meta["currency"]  = item.get("計價幣別", "USD")
++                meta["currency"]  = item.get("計價幣別", "")  # 缺鍵→空白(未知≠USD)
+                 print(f"[src_tdcc_meta] 3-2 ✅ {_c}: {meta['fund_name'][:25]}")
+                 break
+     except Exception as _e:
+diff --git a/repositories/pool_repository.py b/repositories/pool_repository.py
+index c41962b..dc12dbc 100644
+--- a/repositories/pool_repository.py
++++ b/repositories/pool_repository.py
+@@ -656,10 +656,11 @@ def _pool_entry_of(code) -> "PoolEntry | None":
+ def resolve_secid(code) -> "tuple[str, str] | None":
+     """選股池有該 code 的**非空 secId** → (secId, currency);否則 None(退 ISIN 搜尋/硬編)。
+
+-    currency 空(未知)→ 回 USD 當抓取預設(§4.1:只在真的不知道時才退 USD,不寫回)。
++    ~~currency 空(未知)→ 回 USD 當抓取預設(§4.1:只在真的不知道時才退 USD,不寫回)。~~
++    → 2026-10-10 客戶裁示(未知幣別 ≠ USD):currency 空 → 回 `""`(未知),由呼叫端 fail closed。
+     """
+     e = _pool_entry_of(code)
+-    return (e.morningstar_secid, e.currency or "USD") if (e and e.morningstar_secid) else None
++    return (e.morningstar_secid, e.currency or "") if (e and e.morningstar_secid) else None
+
+
+ def resolve_isin(code) -> "str | None":
+diff --git a/services/nav_history_store.py b/services/nav_history_store.py
+index d47e278..fdbb0ac 100644
+--- a/services/nav_history_store.py
++++ b/services/nav_history_store.py
+@@ -768,8 +768,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
+         而候選來源正是最會換幣別的兩個(晨星 `currencyId` 換算後淨值、Yahoo `{secId}.F`
+         法蘭克福掛牌)。候選宣告的幣別與本檔預期幣別**明確不一致** → **拒絕採用**
+         (顯式拒寫 + log,**絕不換算**:在寫入端偷偷換匯會做出一條「看起來連續、
+-        實際混過兩種幣別」的序列,比拒絕替換危險得多)。幣別未知 → 照舊採用,
+-        由 Gate 0 當第二道 —— 理由與已知破口見 `shared/data_quality.py` 該節。
++        實際混過兩種幣別」的序列,比拒絕替換危險得多)。~~幣別未知 → 照舊採用,
++        由 Gate 0 當第二道~~ → 2026-10-10 客戶裁示 Q3:幣別未知 → 同樣拒絕換源
++        (fail closed)—— 理由與已知破口見 `shared/data_quality.py` 該節。
+
+         Returns:
+             `(series, source, ccy_notes, adopted_ccy)` —— `adopted_ccy` 是**最後被採用的
+diff --git a/shared/data_quality.py b/shared/data_quality.py
+index c123067..47dfa2a 100644
+--- a/shared/data_quality.py
++++ b/shared/data_quality.py
+@@ -294,10 +294,13 @@ def assess_nav_cache_quality(
+ # 實際上混過兩種幣別」的序列,比拒寫更危險(拒寫至少留下正確的短序列 + 一行 log)。
+ #
+ # ⚠️ **這道判定保護不到什麼(已知分類,不是窮舉)**
+-#   a) **候選幣別不明**:來源沒宣告幣別(如 cnyes)→ verdict `unknown`,**不擋**。
+-#      擋掉會讓「補到 5 年」對所有未宣告幣別的來源整個失效,那是拿一個確定的
+-#      功能損失去換一個不確定的風險;此處選擇**照舊採用 + 誠實揭露**,並保留
+-#      `backfill_to_gs` 的 Gate 0(與既有 nav_history 對帳)當第二道。
++#   a) ~~**候選幣別不明**:來源沒宣告幣別(如 cnyes)→ verdict `unknown`,**不擋**。~~
++#      ~~擋掉會讓「補到 5 年」對所有未宣告幣別的來源整個失效,那是拿一個確定的~~
++#      ~~功能損失去換一個不確定的風險;此處選擇**照舊採用 + 誠實揭露**,並保留~~
++#      ~~`backfill_to_gs` 的 Gate 0(與既有 nav_history 對帳)當第二道。~~
++#      → **2026-10-10 客戶裁示 Q3(有意識的政策變更,不是漏刪)**:任一邊幣別未知
++#      (verdict `unknown`)→ **擋下**,禁止換源 / 補寫。舊理由(「補到 5 年」涵蓋率)
++#      仍然成立,被權衡掉的是:歷史變短可補救,混幣別寫進 nav_history 補救不了。
+ #   b) **預期幣別本身就是錯的**:上游 meta 的「計價幣別」欄若被死預設成 USD
+ #      (見 `fund_orchestration._correct_currency` 修的那個病),兩邊都說 USD →
+ #      verdict `match` → 放行。本判定證明的是「**兩邊宣告一致**」,不是「宣告正確」。
+@@ -389,9 +392,11 @@ def assess_nav_series_swap(*, expected_ccy, candidate_ccy,
+
+     Returns:
+         `{"verdict", "safe", "expected_ccy", "candidate_ccy", "reason"}`
+-        - `safe` **是呼叫端唯一該看的旗標**:`False` 只在 `verdict == "mismatch"` 時出現。
+-        - `reason` 在 `safe=True` 時為 `""`(無話可說),`unknown` 時為 `""` ——
+-          未知不是拒絕理由,呼叫端若要揭露請自行讀 `verdict`。
++        - `safe` **是呼叫端唯一該看的旗標**:~~`False` 只在 `verdict == "mismatch"` 時出現。~~
++          → 2026-10-10 客戶裁示 Q3:**只有 `verdict == "match"` 才是 `True`**;
++          `mismatch` 與 `unknown`(幣別未知)一律 `False`(fail closed)。
++        - `reason` 在 `safe=True` 時為 `""`(無話可說);~~`unknown` 時為 `""`~~
++          → `unknown` 時為「幣別未知」的拒絕理由(2026-10-10 起未知即拒絕理由)。
+
+     ⚠️ 本函式**不回傳「換算後的序列」,也永遠不會有那個選項** —— 見本節開頭:
+     在寫入端偷偷換匯會製造混幣別的連續序列,那比拒絕替換危險得多。
+@@ -408,9 +413,18 @@ def assess_nav_series_swap(*, expected_ccy, candidate_ccy,
+             f"{('現有 ' + current_source + ' ') if current_source else '現有'}序列"
+             f"(§1:不換算、不混寫;錯幣別一旦寫進 nav_history 就永遠改不掉)"
+         )
++    elif _v == NAV_CCY_UNKNOWN:
++        # 2026-10-10 客戶裁示 Q3:幣別未知 → 禁止換源 / 補寫(fail closed)。
++        _reason = (
++            f"幣別未知:預期 {_e or '未知'}、候選序列"
++            f"{('(' + candidate_source + ')') if candidate_source else ''}"
++            f"宣告 {_c or '未知'} —— 無法確認一致,拒絕用它換掉"
++            f"{('現有 ' + current_source + ' ') if current_source else '現有'}序列"
++        )
+     return {
+         "verdict": _v,
+-        "safe": _v != NAV_CCY_MISMATCH,
++        # ~~"safe": _v != NAV_CCY_MISMATCH,~~ → 2026-10-10 Q3:未知也擋(只放行 match)
++        "safe": _v == NAV_CCY_MATCH,
+         "expected_ccy": _e,
+         "candidate_ccy": _c,
+         "reason": _reason,
+diff --git a/tests/test_backfill_to_gs_gate0.py b/tests/test_backfill_to_gs_gate0.py
+index 226ee8f..cdde8d4 100644
+--- a/tests/test_backfill_to_gs_gate0.py
++++ b/tests/test_backfill_to_gs_gate0.py
+@@ -108,10 +108,14 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
+     """端到端重現紅隊路徑:MoneyDJ 短窗(對的幣別)→ ISIN 救援換到跨度更長的**別的幣別**。
+
+     `_rescue_by_isin` 只比「筆數 × 跨度」,一定會採用長的那條;Gate 0 是最後一道。
+-    ⚠️ 2026-09-01:本則刻意**不讓候選宣告幣別**(`attrs["currency"]` 空)—— 那正是新加的
+-    幣別守門**擋不到**的情形,所以這條端到端路徑仍然會換源、仍然由 Gate 0 收尾,
+-    本則因此仍在測它原本要測的東西。幣別守門自己的覆蓋在
+-    `tests/test_nav_currency_swap_guard.py`。
++    ~~⚠️ 2026-09-01:本則刻意**不讓候選宣告幣別**(`attrs["currency"]` 空)—— 那正是新加的~~
++    ~~幣別守門**擋不到**的情形,所以這條端到端路徑仍然會換源、仍然由 Gate 0 收尾,~~
++    ~~本則因此仍在測它原本要測的東西。~~
++    → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。「候選不宣告」現在已被幣別守門擋下,
++      Gate 0 走不到。改用幣別守門**仍然擋不到**的另一種情形 —— **兩邊宣告一致、但宣告本身是錯的**
++      (`shared/data_quality.py` 開頭「保護不到什麼」b 項):預期 USD、候選也宣告 USD,
++      但數值其實是另一種幣別 → 守門放行、仍由 Gate 0 收尾。本則因此仍在測它原本要測的東西。
++      幣別守門自己的覆蓋在 `tests/test_nav_currency_swap_guard.py`。
+     """
+     import repositories.fund.sources as SRC
+     import repositories.pool_repository as POOL
+@@ -122,6 +126,7 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
+                    + ["2025-01-02", "2025-01-03"])
+     _long_other_ccy = pd.Series([33.0 + i * 0.01 for i in range(len(_long_dates))],
+                                 index=pd.to_datetime(_long_dates), dtype=float)
++    _long_other_ccy.attrs["currency"] = "USD"   # 宣告與預期一致(但數值是別的幣別)— 見 docstring
+
+     monkeypatch.setattr(POOL, "resolve_isin", lambda code: "LU0000000001")
+     monkeypatch.setattr(SRC, "_src_yahoo_finance_nav", lambda code: _long_other_ccy)
+@@ -129,7 +134,8 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
+                         lambda code, fund_name="": pd.Series(dtype=float))
+     monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+
+-    written = _wire(monkeypatch, fetch=lambda c: {"series": _short_usd, "fund_name": "F"},
++    written = _wire(monkeypatch, fetch=lambda c: {"series": _short_usd, "fund_name": "F",
++                                                  "currency": "USD"},
+                     existing=_existing("SWAP", [("2025-01-02", 10.00),
+                                                 ("2025-01-03", 10.01)]))
+     out = NS.backfill_to_gs(["SWAP"])
+diff --git a/tests/test_backfill_to_gs_v19474.py b/tests/test_backfill_to_gs_v19474.py
+index 13bf01f..67b1cfc 100644
+--- a/tests/test_backfill_to_gs_v19474.py
++++ b/tests/test_backfill_to_gs_v19474.py
+@@ -249,7 +249,19 @@ def test_backfill_empty_codes(monkeypatch):
+ def _long(n_days, end="2025-01-01"):
+     """n_days 筆日資料的長序列(span ≈ n_days-1 天)。"""
+     idx = pd.date_range(end=end, periods=n_days, freq="D")
+-    return pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
++    _s = pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
++    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
++    # 本節驗的是**跨度救援機制**(門檻 / 順位 / 隔離),不是幣別 —— 故候選宣告 USD、
++    # 預期幣別也固定為 USD(見下方 autouse fixture)。舊版候選不宣告幣別、預期幣別未知,
++    # 在 Q3 之後會被擋下;未知幣別的擋下覆蓋見 test_nav_currency_swap_guard.py。
++    _s.attrs["currency"] = "USD"
++    return _s
++
++
++@pytest.fixture(autouse=True)
++def _expected_ccy_usd(monkeypatch):
++    """2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。本檔的救援案例一律以「預期幣別 USD」驅動(見 `_long`)。"""
++    monkeypatch.setattr(NS, "_expected_currency", lambda code, fd: "USD")
+
+
+ def _wire_rescue(monkeypatch, *, isin="LU123", ms=None, cnyes=None, yahoo=None):
+@@ -378,6 +390,7 @@ def test_rescue_tz_aware_candidate_handled(monkeypatch):
+     short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])
+     _idx = pd.date_range(end="2025-01-01", periods=800, freq="D", tz="UTC")
+     tz_series = pd.Series([10.0 + i / 100.0 for i in range(800)], index=_idx, dtype=float)
++    tz_series.attrs["currency"] = "USD"   # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(見 `_long`)
+     _wire(monkeypatch, fetch=lambda c: {"series": short})
+     _wire_rescue(monkeypatch, ms=tz_series)
+     r = NS.backfill_to_gs(["X"])["results"][0]
+diff --git a/tests/test_morningstar_screener_secid_v19491.py b/tests/test_morningstar_screener_secid_v19491.py
+index 8e85adb..0e7f713 100644
+--- a/tests/test_morningstar_screener_secid_v19491.py
++++ b/tests/test_morningstar_screener_secid_v19491.py
+@@ -18,6 +18,12 @@ import pytest
+
+ from repositories.fund import sources as S
+
++# 2026-10-10 客戶裁示 Q2(未知幣別 ≠ USD;**有意識的政策變更,不是漏刪**):
++#   `_morningstar_screener_secid` 的 `currency` 預設 ~~"USD"~~ → `""`,且幣別未知時 fail closed
++#   (不發請求)。本檔的直接呼叫原本靠那個 USD 預設 —— 它們驗的是**回應解析**,不是幣別,
++#   故一律改為**明示** `currency="USD"`;解析斷言一字未改。未知幣別的反例見
++#   `tests/test_unknown_currency_fail_closed_20261010.py`。
++
+
+ def _patch_urlopen_seq(monkeypatch, payloads):
+     """依呼叫序回傳 payloads 內每一筆(dict→JSON;Exception 實例→拋出)。用於多宇宙 fallthrough。"""
+@@ -81,7 +87,7 @@ def test_hit_returns_secid_and_fills_caches(monkeypatch):
+         "rows": [{"SecId": "F00000P8WB", "Name": "Allianz Income and Growth AMg7 USD",
+                   "ISIN": "LU2023250330", "Currency": "USD"}],
+     }])
+-    assert S._morningstar_screener_secid("LU2023250330") == "F00000P8WB"
++    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == "F00000P8WB"
+     assert S._ms_screener_cache["LU2023250330"] == "F00000P8WB"      # 正快取
+     assert S._ms_secid_cache["LU2023250330"] == "F00000P8WB"         # 與 SecuritySearch 共用
+     assert S._ms_name_cache["LU2023250330"] == "Allianz Income and Growth AMg7 USD"
+@@ -92,7 +98,7 @@ def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatc
+     _patch_urlopen_seq(monkeypatch, [{
+         "rows": [{"SecId": "F1", "Name": "Some Fund EUR Hedged", "ISIN": "LU9", "Currency": ""}],
+     }])
+-    assert S._morningstar_screener_secid("LU9") == "F1"
++    assert S._morningstar_screener_secid("LU9", currency="USD") == "F1"
+     assert S._ms_ccy_cache["LU9"] == "EUR"                           # Currency 空 → 從名稱猜
+
+
+@@ -100,13 +106,13 @@ def test_empty_isin_returns_empty(monkeypatch):
+     # 不該打網路
+     monkeypatch.setattr("urllib.request.urlopen",
+                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("空 ISIN 不該連外")))
+-    assert S._morningstar_screener_secid("") == ""
+-    assert S._morningstar_screener_secid("   ") == ""
++    assert S._morningstar_screener_secid("", currency="USD") == ""
++    assert S._morningstar_screener_secid("   ", currency="USD") == ""
+
+
+ def test_isin_normalized_upper(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "FX", "ISIN": "LU2023250330"}]}])
+-    assert S._morningstar_screener_secid(" lu2023250330 ") == "FX"
++    assert S._morningstar_screener_secid(" lu2023250330 ", currency="USD") == "FX"
+     assert "LU2023250330" in S._ms_screener_cache                    # key 正規化為大寫
+
+
+@@ -116,14 +122,14 @@ def test_multi_universe_fallthrough_first_empty_second_hits(monkeypatch):
+         {"total": 0, "rows": []},
+         {"rows": [{"SecId": "FTWN", "Name": "台灣某基金 台幣", "ISIN": "TW000T3619Y1"}]},
+     ])
+-    assert S._morningstar_screener_secid("TW000T3619Y1") == "FTWN"
++    assert S._morningstar_screener_secid("TW000T3619Y1", currency="USD") == "FTWN"
+     assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD"                  # 名稱含「台幣」→ TWD
+
+
+ def test_all_universes_empty_negative_cached(monkeypatch):
+     # 全宇宙皆 HTTP 200 但查無 → 確定性負快取
+     _patch_urlopen_seq(monkeypatch, [{"total": 0, "rows": []}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
+-    assert S._morningstar_screener_secid("LU9999999999") == ""
++    assert S._morningstar_screener_secid("LU9999999999", currency="USD") == ""
+     assert S._ms_screener_cache["LU9999999999"] == ""               # 負快取
+
+
+@@ -131,7 +137,7 @@ def test_transient_failure_not_negative_cached(monkeypatch):
+     # 全宇宙都拋(timeout)→ 暫時性失敗 → **不入負快取**(可重試)
+     _patch_urlopen_seq(monkeypatch,
+                        [TimeoutError("boom")] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
+-    assert S._morningstar_screener_secid("LU2023250330") == ""
++    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == ""
+     assert "LU2023250330" not in S._ms_screener_cache               # 未負快取
+
+
+@@ -141,7 +147,7 @@ def test_mixed_transient_then_hit_returns_secid(monkeypatch):
+         TimeoutError("boom"),
+         {"rows": [{"SecId": "FHIT", "ISIN": "LU5"}]},
+     ])
+-    assert S._morningstar_screener_secid("LU5") == "FHIT"
++    assert S._morningstar_screener_secid("LU5", currency="USD") == "FHIT"
+
+
+ def test_isin_mismatch_row_skipped(monkeypatch):
+@@ -149,7 +155,7 @@ def test_isin_mismatch_row_skipped(monkeypatch):
+     _payloads = [{"rows": [{"SecId": "FWRONG", "ISIN": "XX0000000000"}]}] \
+         * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
+     _patch_urlopen_seq(monkeypatch, _payloads)
+-    assert S._morningstar_screener_secid("LU2023250330") == ""
++    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == ""
+
+
+ def test_host_fallback_second_host_hits(monkeypatch):
+@@ -158,7 +164,7 @@ def test_host_fallback_second_host_hits(monkeypatch):
+         OSError("nxdomain"),                            # host1/uni1 → 連線失敗 → 跳 host2
+         {"rows": [{"SecId": "FH2", "ISIN": "LU5"}]},    # host2/uni1 → 命中
+     ])
+-    assert S._morningstar_screener_secid("LU5") == "FH2"
++    assert S._morningstar_screener_secid("LU5", currency="USD") == "FH2"
+
+
+ def test_connection_error_breaks_host_not_all_universes(monkeypatch):
+@@ -169,7 +175,7 @@ def test_connection_error_breaks_host_not_all_universes(monkeypatch):
+         _calls["n"] += 1
+         raise OSError("nxdomain")
+     monkeypatch.setattr("urllib.request.urlopen", _boom)
+-    assert S._morningstar_screener_secid("LU5") == ""
++    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
+     assert _calls["n"] == len(S._MS_SCREENER_HOSTS)     # 每 host 只打 1 次(連線死不硬試宇宙)
+     assert "LU5" not in S._ms_screener_cache            # 連線層 = 暫時 → 不負快取
+
+@@ -178,7 +184,7 @@ def test_cache_hit_skips_network(monkeypatch):
+     S._ms_screener_cache["LU2023250330"] = "FCACHED"
+     monkeypatch.setattr("urllib.request.urlopen",
+                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("cache 命中不該連外")))
+-    assert S._morningstar_screener_secid("LU2023250330") == "FCACHED"
++    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == "FCACHED"
+
+
+ # ── 接線:_src_morningstar_nav 先走 screener,再退 SecuritySearch ──────────
+@@ -216,7 +222,10 @@ def test_src_morningstar_prefers_screener(monkeypatch):
+     import repositories.pool_repository as PR
+     monkeypatch.setattr(PR, "resolve_secid", lambda code: None)      # 池中無 secId → 走 ISIN 解析
+     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
+-    monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
++    # ~~monkeypatch.setattr(PR, "resolve_currency", lambda code: None)~~
++    # 2026-10-10 Q2:幣別未知時晨星 fail closed(不以 USD 猜測)→ 本測試驗的是
++    # screener / 搜尋的接線,故改為池幣別**明示** USD;其餘斷言一字未改。
++    monkeypatch.setattr(PR, "resolve_currency", lambda code: "USD")
+     _wb = {}
+     def _must_not_be_called(code, secid, **k):        # noqa: ANN001 — 哨兵
+         _wb.update({"code": code, "secid": secid, **k})
+@@ -246,7 +255,10 @@ def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):
+     import repositories.pool_repository as PR
+     monkeypatch.setattr(PR, "resolve_secid", lambda code: None)
+     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
+-    monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
++    # ~~monkeypatch.setattr(PR, "resolve_currency", lambda code: None)~~
++    # 2026-10-10 Q2:幣別未知時晨星 fail closed(不以 USD 猜測)→ 本測試驗的是
++    # screener / 搜尋的接線,故改為池幣別**明示** USD;其餘斷言一字未改。
++    monkeypatch.setattr(PR, "resolve_currency", lambda code: "USD")
+     monkeypatch.setattr(PR, "set_secid", lambda code, secid, **k: None)
+     monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, ccy="USD": "")   # screener 空
+     _called = {"search": False}
+@@ -276,12 +288,12 @@ def test_shape_recognized():
+ def test_secid_key_casing_tolerated(monkeypatch):
+     # 回傳用小寫 secId 鍵 → 仍抽得到(唯一載重欄位大小寫容錯,防永久靜默空)
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"secId": "Flower", "ISIN": "LU5"}]}])
+-    assert S._morningstar_screener_secid("LU5") == "Flower"
++    assert S._morningstar_screener_secid("LU5", currency="USD") == "Flower"
+
+
+ def test_pricecurrency_read_when_currency_absent(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
+-    assert S._morningstar_screener_secid("LU5") == "F1"
++    assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
+     assert S._ms_ccy_cache["LU5"] == "EUR"                 # 讀 PriceCurrency datapoint
+
+
+@@ -289,13 +301,13 @@ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+     # 名稱後綴說 USD,但 PriceCurrency 說 EUR → screener 直接回的贏(§4.1 準確優先)
+     _patch_urlopen_seq(monkeypatch, [{"rows": [
+         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
+-    S._morningstar_screener_secid("LU5")
++    S._morningstar_screener_secid("LU5", currency="USD")
+     assert S._ms_ccy_cache["LU5"] == "EUR"
+
+
+ def test_lowercase_currency_uppercased(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
+-    S._morningstar_screener_secid("LU5")
++    S._morningstar_screener_secid("LU5", currency="USD")
+     assert S._ms_ccy_cache["LU5"] == "EUR"
+
+
+@@ -307,7 +319,7 @@ def test_first_valid_row_taken_skipping_invalid(monkeypatch):
+         {"SecId": "FGOOD", "ISIN": "LU5"},        # 第一個合格 → 取這個
+         {"SecId": "FLATER", "ISIN": "LU5"},       # 不該取到
+     ]}])
+-    assert S._morningstar_screener_secid("LU5") == "FGOOD"
++    assert S._morningstar_screener_secid("LU5", currency="USD") == "FGOOD"
+
+
+ def test_negative_cache_hit_skips_network(monkeypatch):
+@@ -315,14 +327,14 @@ def test_negative_cache_hit_skips_network(monkeypatch):
+     S._ms_screener_cache["LU9999999999"] = ""
+     monkeypatch.setattr("urllib.request.urlopen",
+                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("負快取命中不該連外")))
+-    assert S._morningstar_screener_secid("LU9999999999") == ""
++    assert S._morningstar_screener_secid("LU9999999999", currency="USD") == ""
+
+
+ def test_empty_then_transient_not_negative_cached(monkeypatch):
+     # 前宇宙乾淨查無、後宇宙暫時失敗、全程無命中 → 不負快取(可重試;§1 混合序不誤鎖)
+     _seq = [{"total": 0, "rows": []}] + [TimeoutError("boom")] * ((len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)) - 1)
+     _patch_urlopen_seq(monkeypatch, _seq)
+-    assert S._morningstar_screener_secid("LU5") == ""
++    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
+     assert "LU5" not in S._ms_screener_cache
+
+
+@@ -330,7 +342,7 @@ def test_rows_present_no_secid_is_anomaly_not_cached(monkeypatch):
+     # 全宇宙都「有 rows 卻抽不到 SecId」(疑欄位名不符)→ 異常 → **不負快取**(讓錯誤現形)
+     _payloads = [{"rows": [{"WrongKey": "F1", "ISIN": "LU5"}]}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
+     _patch_urlopen_seq(monkeypatch, _payloads)
+-    assert S._morningstar_screener_secid("LU5") == ""
++    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
+     assert "LU5" not in S._ms_screener_cache               # 異常 → 未負快取
+
+
+@@ -338,7 +350,7 @@ def test_unrecognized_shape_is_anomaly_not_cached(monkeypatch):
+     # 全宇宙都回非 screener 形狀(軟錯誤 body)→ 異常 → 不負快取(§1 不當「確定查無」)
+     _payloads = [{"error": "rate limited"}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
+     _patch_urlopen_seq(monkeypatch, _payloads)
+-    assert S._morningstar_screener_secid("LU5") == ""
++    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
+     assert "LU5" not in S._ms_screener_cache
+
+
+diff --git a/tests/test_ms_secid_pool_backup_v19498.py b/tests/test_ms_secid_pool_backup_v19498.py
+index 3e25ff9..dc78653 100644
+--- a/tests/test_ms_secid_pool_backup_v19498.py
++++ b/tests/test_ms_secid_pool_backup_v19498.py
+@@ -50,17 +50,25 @@ def test_pool_isin_to_screener(monkeypatch, _no_name_search):
+     assert _seen == {"isin": "LU0766462157", "ccy": "EUR"}
+
+
+-def test_pool_isin_default_usd_when_no_ccy(monkeypatch, _no_name_search):
++def test_pool_isin_unknown_ccy_fails_closed(monkeypatch, _no_name_search):
++    """池幣別空 → **不以 USD 猜測呼叫 screener**(fail closed)。
++
++    ~~def test_pool_isin_default_usd_when_no_ccy(...)~~
++    ~~assert S._resolve_ms_secid("XXXX") == "SID"~~
++    ~~assert _seen["ccy"] == "USD"   # 池幣別空 → 退 USD(§4.1)~~
++    → 2026-10-10 客戶裁示 Q2:不採「未知幣別仍用 USD 抓晨星」;舊斷言把 USD 猜測寫成規格,
++      依裁示反轉(**有意識的政策變更,不是漏刪**)。下游仍可退硬編表 / 名稱搜尋(本測試皆隔離為空)。
++    """
+     _patch_pool(monkeypatch, secid=None, isin="LU0766462157", ccy=None)
+     _seen = {}
+
+-    def _scr(isin, currency="USD"):
++    def _scr(isin, currency=""):
+         _seen["ccy"] = currency
+         return "SID"
+
+     monkeypatch.setattr(S, "_morningstar_screener_secid", _scr)
+-    assert S._resolve_ms_secid("XXXX") == "SID"
+-    assert _seen["ccy"] == "USD"                                # 池幣別空 → 退 USD(§4.1)
++    assert S._resolve_ms_secid("XXXX") == ""
++    assert _seen == {}                                          # screener 沒被呼叫
+
+
+ # ── 3) 池全空 → 退硬編表(不呼叫 screener)───────────────────────────────────
+diff --git a/tests/test_nav_currency_swap_guard.py b/tests/test_nav_currency_swap_guard.py
+index 48c14e0..b29b371 100644
+--- a/tests/test_nav_currency_swap_guard.py
++++ b/tests/test_nav_currency_swap_guard.py
+@@ -96,10 +96,17 @@ def test_assess_swap_blocks_only_on_explicit_mismatch():
+     assert "TWD" in bad["reason"] and "USD" in bad["reason"]
+     assert "morningstar(ISIN)" in bad["reason"]
+
+-    for ok in (assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD"),
+-               assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),
+-               assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):
+-        assert ok["safe"] is True and ok["reason"] == ""
++    # ~~for ok in (assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD"),~~
++    # ~~           assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),~~
++    # ~~           assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):~~
++    # ~~    assert ok["safe"] is True and ok["reason"] == ""~~
++    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(只放行 match)。
++    ok = assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD")
++    assert ok["safe"] is True and ok["reason"] == ""
++    for unk in (assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),
++                assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):
++        assert unk["safe"] is False and unk["verdict"] == NAV_CCY_UNKNOWN
++        assert "幣別未知" in unk["reason"]
+
+
+ def test_assess_swap_has_no_conversion_escape_hatch():
+@@ -235,18 +242,21 @@ def test_span_extend_still_adopts_when_currency_matches(monkeypatch):
+     assert len(s) == 1200 and src == "morningstar(span-extend)" and span > 300
+
+
+-def test_span_extend_adopts_when_currency_unknown(monkeypatch):
+-    """**已知破口,刻意釘住**:候選沒宣告幣別 → 仍然換源。
+-
+-    擋掉會讓「補到 5 年」對所有未宣告幣別的來源(cnyes)整個失效 —— 拿一個確定的
+-    功能損失換一個不確定的風險。此處選擇照舊採用,由 `backfill_to_gs` 的 Gate 0
+-    當第二道。⛔ 這**不是**「已經補完了」,只是這個權衡是**有意識**做的。
+-    """
++# ~~def test_span_extend_adopts_when_currency_unknown(monkeypatch):~~
++# ~~    """**已知破口,刻意釘住**:候選沒宣告幣別 → 仍然換源。~~
++# ~~    擋掉會讓「補到 5 年」對所有未宣告幣別的來源(cnyes)整個失效 —— 拿一個確定的~~
++# ~~    功能損失換一個不確定的風險。此處選擇照舊採用,由 `backfill_to_gs` 的 Gate 0~~
++# ~~    當第二道。⛔ 這**不是**「已經補完了」,只是這個權衡是**有意識**做的。"""~~
++# ~~    assert len(s) == 1200 and src == "morningstar(span-extend)"~~
++# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
++#   舊理由(「補到 5 年」涵蓋率)仍然成立,被權衡掉的是:歷史變短可補救,
++#   混幣別寫進 nav_history 補救不了。故本則由「釘住破口」反轉為「釘住擋下」。
++def test_span_extend_blocks_when_candidate_currency_unknown(monkeypatch):
+     O = _wire_l1(monkeypatch, ms=_long(1200))          # 候選無 attrs["currency"]
+     s, src, _ = O._span_extend_insurance_nav(
+         "TLZF9", _long(30, ccy="TWD"), "moneydj_legacy_scrape",
+         fund_name="安聯台幣計價基金")
+-    assert len(s) == 1200 and src == "morningstar(span-extend)"
++    assert len(s) == 30 and src == "moneydj_legacy_scrape"
+
+
+ # ══════════════════════════════════════════════════════════════════════════
+@@ -376,12 +386,11 @@ def test_backfill_still_rescues_when_currency_matches(monkeypatch, cache_store):
+     assert r["ccy_refused"] is None
+
+
+-def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_store):
+-    """**已知破口,刻意釘住**(同 L1 那則):候選沒宣告幣別 → 仍然換源。
+-
+-    ⛔ 不要把這則測試讀成「這樣是對的」——它釘的是「這個權衡是有意識做的」。
+-    這一格底下還有 `backfill_to_gs` 的 Gate 0 當第二道(與既有 nav_history 對帳)。
+-    """
++# ~~def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_store):~~
++# ~~    """**已知破口,刻意釘住**(同 L1 那則):候選沒宣告幣別 → 仍然換源。"""~~
++# ~~    assert r["source"] == "yahoo(ISIN)" and r["ccy_refused"] is None~~
++# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(同 L1 那則,由「釘住破口」反轉為「釘住擋下」)。
++def test_backfill_blocks_when_candidate_currency_unknown(monkeypatch, cache_store):
+     import services.nav_history_store as NS
+
+     _wire_l2(monkeypatch,
+@@ -389,4 +398,4 @@ def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_stor
+                  "fund_name": "F", "currency": "TWD"},
+              yahoo=_long(1900))                      # 無 attrs["currency"]
+     r = NS.backfill_to_gs(["TLZF9"])["results"][0]
+-    assert r["source"] == "yahoo(ISIN)" and r["ccy_refused"] is None
++    assert r["source"] == "moneydj" and r["ccy_refused"] and "幣別未知" in r["ccy_refused"]
+diff --git a/tests/test_nav_history_currency_column.py b/tests/test_nav_history_currency_column.py
+index 757de9e..e745e25 100644
+--- a/tests/test_nav_history_currency_column.py
++++ b/tests/test_nav_history_currency_column.py
+@@ -632,18 +632,31 @@ def _spec_series(spec):
+     return _daily(_n, _start, ccy=_ccy)
+
+
+-@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy", [
+-    # 單次換源(只有 yahoo 夠長)
+-    ("單次換源 / 採用者有宣告", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR"),
+-    ("單次換源 / 採用者不宣告", (600, "2020-01-01", None), None, "yahoo", ""),
+-    # 連續換源(yahoo 先被採用,morningstar 更長 → 再被採用)
+-    ("連續換源 / 最後採用者有宣告",
+-     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "JPY"), "morningstar", "JPY"),
+-    ("連續換源 / 最後採用者不宣告",          # ← 本輪補的那一格,原本零驅動
+-     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "morningstar", ""),
++# ~~@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy", [~~
++# ~~    ("單次換源 / 採用者有宣告", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR"),~~
++# ~~    ("單次換源 / 採用者不宣告", (600, "2020-01-01", None), None, "yahoo", ""),~~
++# ~~    ("連續換源 / 最後採用者有宣告",~~
++# ~~     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "JPY"), "morningstar", "JPY"),~~
++# ~~    ("連續換源 / 最後採用者不宣告",~~
++# ~~     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "morningstar", ""),~~
++# ~~])~~
++# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
++#   舊表四格都在「預期幣別未知」下換源;Q3 之後那四格一律被擋,表就什麼都沒測到。
++#   新表改以**預期幣別 EUR**(選股池)驅動,四格對應:
++#     採用者宣告一致 → 換源、幣別跟著換;採用者不宣告 → **擋下**、幣別停在上一條
++#     (MoneyDJ 量到的 USD,或連續換源時前一個被採用的 EUR)。
++#   「被丟棄序列的宣告不得掛上去」這條出口 (6) 的語意一條沒少。
++@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy,want_refused", [
++    ("單次換源 / 採用者宣告一致", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR", False),
++    ("單次換源 / 採用者不宣告 → 擋下", (600, "2020-01-01", None), None, "moneydj", "USD", True),
++    ("連續換源 / 皆宣告一致",
++     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "EUR"), "morningstar", "EUR", False),
++    ("連續換源 / 最後採用者不宣告 → 停在前一條",
++     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "yahoo", "EUR", True),
+ ])
+ def test_adopted_rows_carry_the_last_adopted_series_own_currency(
+-        monkeypatch, _cache_store, case_id, yahoo_spec, ms_spec, want_src, want_ccy):
++        monkeypatch, _cache_store, case_id, yahoo_spec, ms_spec, want_src, want_ccy,
++        want_refused):
+     """出口 (6):被寫入的每一列都來自**最後被採用**那條序列 → 幣別必須是**它自己**宣告的。
+
+     掛上任何**已經被丟棄**那條序列的宣告 = §1 明令禁止的憑空編造,
+@@ -656,20 +669,25 @@ def test_adopted_rows_carry_the_last_adopted_series_own_currency(
+         monkeypatch,
+         fd={"series": _daily(_n, _start, ccy=_ccy), "fund_name": "F"},
+         yahoo=_spec_series(yahoo_spec),
+-        morningstar=_spec_series(ms_spec))
++        morningstar=_spec_series(ms_spec),
++        pool_ccy="EUR")                     # 預期幣別(Q3:未知會被擋,故明示)
+     r = NS.backfill_to_gs(["X"])["results"][0]
+
+     # ── fixture 對準檢查:換源真的發生、而且停在預期那一個來源 ──────────────
+-    _last_spec = ms_spec or yahoo_spec
++    # ~~_last_spec = ms_spec or yahoo_spec~~(Q3:不宣告的候選不會被採用)
++    _last_spec = {"moneydj": _MDJ_SPEC, "yahoo": yahoo_spec,
++                  "morningstar": ms_spec}[want_src]
+     assert want_src in (r["source"] or ""), (
+         f"[{case_id}] 沒有換到 {want_src} → 本格沒測到出口 (6);"
+         f"實得 source={r['source']!r}")
+     assert r["fetched"] == _last_spec[0], (
+         f"[{case_id}] 採用的不是最後那條候選 → fixture 沒對準;"
+         f"實得 fetched={r['fetched']!r},預期 {_last_spec[0]}")
+-    assert not r["ccy_refused"], (
+-        f"[{case_id}] 不該有候選因幣別被拒(unknown ≠ mismatch);"
+-        f"實得 {r['ccy_refused']!r}")
++    # ~~assert not r["ccy_refused"], (~~
++    # ~~    f"[{case_id}] 不該有候選因幣別被拒(unknown ≠ mismatch);"~~
++    # ~~    f"實得 {r['ccy_refused']!r}")~~
++    assert bool(r["ccy_refused"]) is want_refused, (
++        f"[{case_id}] 幣別拒絕旗標不符(Q3:unknown 也擋);實得 {r['ccy_refused']!r}")
+     assert written, f"[{case_id}] 沒有任何點被寫進雲端 → 本格什麼都沒測到"
+
+     # ── ⭐ 行為斷言:看**實際寫進那一欄的值**,不是字串比對、不是旗標 ────────
+diff --git a/tests/test_nav_history_window.py b/tests/test_nav_history_window.py
+index 6e4ee87..8a1bdd0 100644
+--- a/tests/test_nav_history_window.py
++++ b/tests/test_nav_history_window.py
+@@ -129,10 +129,16 @@ def test_span_extend_insurance_nav_rescues_short_series():
+
+     _short = _mk_series(30)     # 保單代碼常見的「近30日」legacy fallback
+     _long = _mk_series(1200)    # Morningstar 長歷史
++    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
++    # 本則驗的是「跨度救援」本身,故讓預期幣別(基金名「(美元)」)與候選宣告一致;
++    # ~~fund_name="安聯收益成長"~~(名稱無幣別線索、候選不宣告 → 現在會被擋下,見
++    # tests/test_unknown_currency_fail_closed_20261010.py)。
++    _long.attrs["currency"] = "USD"
+
+     with patch.object(O, "_src_morningstar_nav", return_value=_long):
+         s, src, span = O._span_extend_insurance_nav(
+-            "TLZF9", _short, "moneydj_legacy_scrape", fund_name="安聯收益成長",
++            "TLZF9", _short, "moneydj_legacy_scrape",
++            fund_name="安聯收益成長基金-AMg7月收總收益類股(美元)",
+         )
+     assert len(s) == 1200
+     assert src == "morningstar(span-extend)"
+diff --git a/tests/test_pool_repository.py b/tests/test_pool_repository.py
+index b6c9f63..cca956d 100644
+--- a/tests/test_pool_repository.py
++++ b/tests/test_pool_repository.py
+@@ -126,7 +126,10 @@ def test_resolve_secid_hits_and_currency(monkeypatch):
+     _patch_pool_cache(monkeypatch, [PoolEntry(code="ALZF9", morningstar_secid="SEC1", currency="TWD")])
+     assert P.resolve_secid("alzf9") == ("SEC1", "TWD")            # 大小寫不分 + 帶幣別
+     _patch_pool_cache(monkeypatch, [PoolEntry(code="X", morningstar_secid="SEC2")])
+-    assert P.resolve_secid("X") == ("SEC2", "USD")               # 幣別空 → 抓取退 USD
++    # ~~assert P.resolve_secid("X") == ("SEC2", "USD")               # 幣別空 → 抓取退 USD~~
++    # 2026-10-10 客戶裁示(未知幣別 ≠ USD;有意識的政策變更,不是漏刪):幣別空 → 回空白,
++    # 由呼叫端(晨星請求)fail closed。
++    assert P.resolve_secid("X") == ("SEC2", "")
+
+
+ def test_resolve_secid_none_when_no_secid(monkeypatch):
+--
+2.43.0
+
+
+From a1ac91ddea82c20b12a5474eca9f3f21e98c67b5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 08:00:05 +0000
+Subject: [PATCH 2/5] =?UTF-8?q?=E5=B9=A3=E5=88=A5=E6=9C=AA=E7=9F=A5?=
+ =?UTF-8?q?=E4=B8=8D=E7=AD=89=E6=96=BC=20USD=EF=BC=88=E4=BA=8C=EF=BC=89?=
+ =?UTF-8?q?=EF=BC=9A=E8=BC=89=E5=85=A5=E4=B8=8D=E8=A6=86=E8=93=8B=20Sheet?=
+ =?UTF-8?q?=E3=80=81=E5=B9=A3=E5=88=A5=E8=A1=9D=E7=AA=81=E8=88=87=20T7=20f?=
+ =?UTF-8?q?ail=20closed?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+客戶裁示 2026-10-10（A 級資料正確性缺陷）：unknown currency ≠ USD。
+
+非凍結面：
+- batch load：Sheet 已填幣別一律保留（抓回空值或不同值都不覆蓋，不會經 dump 寫回）；
+  來源事實留在 moneydj_raw。跨帳本沿用基金資訊時同樣不覆蓋已填幣別。
+- 新增 fund_currency_for_calc：Sheet 與來源皆未知、或兩者不一致（Q4 currency conflict）
+  → 回空白，供換匯／單位數路徑 fail closed。衝突不另存欄位，由兩個既有值即時判定。
+- cloud_io v2 載入（D1/D2）：Sheet 空白且無舊值 → 空白，帳本幣別同。
+- d_mode（D3）：幣別未知或衝突 → ok=False「幣別未知」，不查匯率、不用 31.0 保底。
+- checkup：幣別改走 fund_currency_for_calc，衝突時「—」、不換匯。
+
+凍結面（Q1 最小解凍，只動幣別必要行）：
+- services/currency.normalize_ccy：default "USD" → ""。
+- services/ledger_service：Ledger 預設與 from_dict 缺鍵改空白；換股兩邊任一幣別未知
+  → raise「幣別未知」，帳本不動。
+- ui/tab3_t7_ledger：幣別改走 fund_currency_for_calc；未知／衝突時
+  _latest_nav_fx_t7 不組幣對、不查匯率、不用保底匯率（fx=0 走既有「抓不到」呈現）；
+  自動估算在取價前就跳過（不估單位數、不自動存檔）；C 換股在任何帳本異動前整批擋下；
+  起始部位表單標籤與快照表幣別欄不再顯示 USD。
+
+測試：新增 tests/test_unknown_currency_fail_closed_20261010.py（正反例＋已知 USD／TWD 回歸，
+T7 以 AST 取出凍結 Tab 原樣程式碼實跑）；test_t7d_fetch_meta 的「缺值退 USD」舊斷言
+以刪除線註解保留並反轉。
+---
+ services/currency.py                          |   6 +-
+ services/ledger_service.py                    |  12 +-
+ tests/test_t7d_fetch_meta.py                  |  19 +-
+ ...t_unknown_currency_fail_closed_20261010.py | 675 ++++++++++++++++++
+ ui/helpers/cloud_io.py                        |   5 +-
+ ui/helpers/d_mode.py                          |  18 +-
+ ui/helpers/fund/checkup.py                    |   5 +-
+ ui/helpers/portfolio/load.py                  |  48 +-
+ ui/tab3_t7_ledger.py                          |  44 +-
+ 9 files changed, 798 insertions(+), 34 deletions(-)
+ create mode 100644 tests/test_unknown_currency_fail_closed_20261010.py
+
+diff --git a/services/currency.py b/services/currency.py
+index 48ff6a6..4016b23 100644
+--- a/services/currency.py
++++ b/services/currency.py
+@@ -37,12 +37,14 @@ _CCY_YF_OVERRIDES: dict[str, str] = {
+ }
+
+
+-def normalize_ccy(raw, default: str = "USD", mode: str = "iso") -> str:
++# ~~def normalize_ccy(raw, default: str = "USD", mode: str = "iso") -> str:~~
++# 2026-10-10 客戶裁示(A 級資料正確性缺陷,Q1 最小解凍 F4):未知幣別 ≠ USD —— 預設改 `""`。
++def normalize_ccy(raw, default: str = "", mode: str = "iso") -> str:
+     """幣別正規化：中文/ISO 都統一回 ISO 3 碼。
+
+     Args:
+         raw: 任意輸入（「美元」/「USD」/None/空字串/亂碼）。
+-        default: raw 為空時的預設值（預設 USD — 保單最常見）。
++        default: raw 為空時的預設值（~~預設 USD — 保單最常見~~ → 2026-10-10 預設 `""`＝未知）。
+         mode: "iso"（預設）→ ISO 4217 標準（人民幣→CNY）；
+               "yf" → yfinance 報價偏好（人民幣→CNH，CNHTWD=X 更可靠）。
+
+diff --git a/services/ledger_service.py b/services/ledger_service.py
+index 2b971ac..a83cab9 100644
+--- a/services/ledger_service.py
++++ b/services/ledger_service.py
+@@ -55,7 +55,7 @@ class Ledger:
+     """
+
+     fund_code: str
+-    currency: str = "USD"
++    currency: str = ""   # ~~"USD"~~ 2026-10-10 客戶裁示:未知幣別 ≠ USD
+     transactions: list[Transaction] = field(default_factory=list)
+     position: FundPosition = field(init=False)
+
+@@ -188,7 +188,7 @@ class Ledger:
+
+         注意：不重 replay 計算，直接還原 position 快照（避免浮點累積誤差）。
+         """
+-        led = cls(fund_code=data["fund_code"], currency=data.get("currency", "USD"))
++        led = cls(fund_code=data["fund_code"], currency=data.get("currency", ""))  # 未知≠USD
+         for raw in data.get("transactions", []):
+             led.transactions.append(Transaction(
+                 txn_type=raw["txn_type"],
+@@ -291,6 +291,10 @@ class Switch:
+         # ledger.currency + position.currency 避免後續 transactions 殘留舊值。
+         _a = _norm_ccy_pure(ledger_from.currency)
+         _b = _norm_ccy_pure(ledger_to.currency)
++        if not _a or not _b:   # 2026-10-10 客戶裁示:未知幣別 → fail closed,不猜同/跨幣別
++            raise ValueError(
++                f"switch_same_currency: 幣別未知 "
++                f"({ledger_from.currency!r} / {ledger_to.currency!r})，不執行換股")
+         if _a != _b:
+             raise ValueError(
+                 f"switch_same_currency: 幣別不符 "
+@@ -326,6 +330,10 @@ class Switch:
+         # v18.245: 對稱對待 — normalize 後再比對 + 同步寫回
+         _a = _norm_ccy_pure(ledger_from.currency)
+         _b = _norm_ccy_pure(ledger_to.currency)
++        if not _a or not _b:   # 2026-10-10 客戶裁示:未知幣別 → fail closed,不猜同/跨幣別
++            raise ValueError(
++                f"switch_cross_currency: 幣別未知 "
++                f"({ledger_from.currency!r} / {ledger_to.currency!r})，不執行換股")
+         if _a == _b:
+             raise ValueError(
+                 f"switch_cross_currency: 幣別相同 "
+diff --git a/tests/test_t7d_fetch_meta.py b/tests/test_t7d_fetch_meta.py
+index 861a127..ec80401 100644
+--- a/tests/test_t7d_fetch_meta.py
++++ b/tests/test_t7d_fetch_meta.py
+@@ -187,16 +187,25 @@ def test_fund_name_fallback_to_code_when_missing():
+     assert out["fund_name"] == "MYSTERY"
+
+
+-def test_currency_missing_defaults_to_usd():
+-    """缺 currency → 預設 USD（會走 FX 查詢）。"""
++# ~~def test_currency_missing_defaults_to_usd():~~
++# ~~    """缺 currency → 預設 USD（會走 FX 查詢）。"""~~
++# ~~    assert out["ok"] is True~~
++# ~~    assert out["currency"] == "USD"~~
++# → 2026-10-10 客戶裁示(A 級資料正確性缺陷):未知幣別 ≠ USD。舊斷言把死預設寫成規格,
++#   依裁示反轉(**有意識的政策變更,不是漏刪**)。
++def test_currency_missing_fails_closed_not_usd():
++    """缺 currency → **幣別未知、fail closed**(不查 FX、不用保底匯率)。"""
++    _fx_calls = []
+     out = fetch_fund_meta_safe("X",
+         _fetch=_fake_fetch({
+             "fund_name": "X",
+             "series": pd.Series([10.0]), "dividends": [],
+         }),
+-        _fx_lookup=lambda _pair: 31.5)
+-    assert out["ok"] is True
+-    assert out["currency"] == "USD"
++        _fx_lookup=lambda _pair: _fx_calls.append(_pair) or 31.5)
++    assert out["ok"] is False
++    assert out["error"] == "幣別未知"
++    assert out["currency"] == ""
++    assert _fx_calls == []
+
+
+ def test_dividends_missing_returns_empty_list():
+diff --git a/tests/test_unknown_currency_fail_closed_20261010.py b/tests/test_unknown_currency_fail_closed_20261010.py
+new file mode 100644
+index 0000000..42d6671
+--- /dev/null
++++ b/tests/test_unknown_currency_fail_closed_20261010.py
+@@ -0,0 +1,675 @@
++"""2026-10-10 客戶裁示(A 級資料正確性缺陷):**未知幣別 ≠ USD**。
++
++正式原則與本檔守住的面向(正反例並列;已知 USD / TWD 的既有行為列為回歸):
++
++- 取數源頭缺幣別 → 空白,不再填 "USD"(L1 `sources` / `fund_orchestration`)。
++- batch load:抓回空值不得覆蓋 Sheet 已填幣別;抓回不同值(Q4 currency conflict)
++  也不得覆蓋、不自動寫回,換匯 / 單位數路徑 fail closed。
++- 未知幣別不組 FX symbol、不查匯率(`get_latest_fx` 中央守門 + `d_mode`)。
++- `normalize_ccy` 預設不再是 USD;`Ledger` 換股遇未知幣別 fail closed(Q1,F4 最小解凍)。
++- T7 自動估算:幣別未知 → 不估算單位數、不自動存檔(Q1,F1 最小解凍)。
++- 晨星請求必帶 `currencyId` → 幣別未知 fail closed,不以 USD 猜測(Q2)。
++- 換源防護:幣別未知 → 擋下(Q3)。
++
++全部離線:任何對外連線一律以 monkeypatch 攔截;斷言「沒有發出請求」用錄製器。
++"""
++from __future__ import annotations
++
++import ast
++import datetime as _dt
++import io
++import json
++import pathlib
++import types
++
++import pandas as pd
++import pytest
++
++import repositories.fund.sources as S
++
++ROOT = pathlib.Path(__file__).resolve().parents[1]
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 1) L1 取數源頭:缺幣別 → 空白(不再是 USD)
++# ════════════════════════════════════════════════════════════════════════════
++class _Resp:
++    def __init__(self, text="", payload=None):
++        self.text = text
++        self._payload = payload
++
++    def json(self):
++        return self._payload
++
++
++_PAGE_NO_CCY = ("<html><table><tr><td>基金名稱</td><td>某境內基金A</td></tr>"
++                "<tr><td>風險報酬等級</td><td>RR4</td></tr></table>" + "x" * 600 + "</html>")
++_PAGE_EUR = ("<html><table><tr><td>基金名稱</td><td>某基金E</td></tr>"
++             "<tr><td>計價幣別</td><td>歐元</td></tr></table>" + "x" * 600 + "</html>")
++
++
++def test_direct_url_missing_currency_is_blank(monkeypatch):
++    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(_PAGE_NO_CCY))
++    monkeypatch.setattr(S, "is_valid_moneydj_page", lambda t: True)
++    out = S._src_direct_moneydj_url("https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=XX01")
++    assert out["fund_name"] == "某境內基金A"
++    assert out["currency"] == ""                 # 未知 ≠ USD
++
++
++def test_direct_url_fetch_failure_currency_is_blank(monkeypatch):
++    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: None)
++    out = S._src_direct_moneydj_url("https://x")
++    assert out["error"] == "direct_url_invalid"
++    assert out["currency"] == ""
++
++
++def test_direct_url_declared_currency_kept(monkeypatch):
++    """回歸:頁面有「計價幣別」→ 照實帶回(不被本修正改寫)。"""
++    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(_PAGE_EUR))
++    monkeypatch.setattr(S, "is_valid_moneydj_page", lambda t: True)
++    assert S._src_direct_moneydj_url("https://x")["currency"] == "歐元"
++
++
++def test_fundclear_meta_missing_currency_is_blank(monkeypatch):
++    monkeypatch.setattr(S, "fetch_url_with_retry",
++                        lambda *a, **k: _Resp(payload={"Data": {"FundName": "F"}}))
++    assert S._src_fundclear_meta("ZZ01").get("currency") == ""
++
++
++def test_fundclear_meta_declared_usd_kept(monkeypatch):
++    monkeypatch.setattr(S, "fetch_url_with_retry",
++                        lambda *a, **k: _Resp(payload={"Data": {"FundName": "F",
++                                                                "Currency": "USD"}}))
++    assert S._src_fundclear_meta("ZZ01")["currency"] == "USD"
++
++
++def test_fundclear_div_missing_currency_is_blank(monkeypatch):
++    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(payload={
++        "Data": [{"DividendAmount": 0.05, "ExDividendDate": "2026-09-01"}]}))
++    divs = S._src_fundclear_div("ZZ01")
++    assert len(divs) == 1 and divs[0]["currency"] == ""
++
++
++def test_tdcc_meta_missing_currency_key_is_blank(monkeypatch):
++    monkeypatch.setattr(S, "_tdcc_get",
++                        lambda ep, *a, **k: ([{"基金代碼": "ZZ01", "基金名稱": "某基金"}]
++                                             if ep == "3-2" else []))
++    assert S._src_tdcc_meta("ZZ01").get("currency") == ""
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 2) normalize_ccy:未知 → "",已知不變(Q1)
++# ════════════════════════════════════════════════════════════════════════════
++def test_normalize_ccy_unknown_is_blank_not_usd():
++    from services.currency import normalize_ccy
++    for raw in ("", None, "   "):
++        assert normalize_ccy(raw) == ""          # ~~"USD"~~(2026-10-10 前的死預設)
++
++
++@pytest.mark.parametrize("raw,iso", [("USD", "USD"), ("美元", "USD"),
++                                     ("TWD", "TWD"), ("台幣", "TWD"), ("usd", "USD")])
++def test_normalize_ccy_known_unchanged(raw, iso):
++    from services.currency import normalize_ccy
++    assert normalize_ccy(raw) == iso
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 3) FX:未知幣別不組幣對、不查匯率(中央守門)
++# ════════════════════════════════════════════════════════════════════════════
++def _patch_yf(monkeypatch, rate=31.5):
++    calls = []
++
++    def _yf(pair, **k):
++        calls.append(pair)
++        return pd.Series([rate])
++
++    import repositories.macro_repository as MR
++    monkeypatch.setattr(MR, "fetch_yf_close", _yf)
++    from repositories.fund import fx_and_main as FX
++    FX._clear_fx_cache()
++    return calls
++
++
++@pytest.mark.parametrize("pair", ["TWD", "TWD=X", "TWD=x", "XTWD"])
++def test_get_latest_fx_incomplete_pair_not_queried(monkeypatch, pair):
++    calls = _patch_yf(monkeypatch)
++    from repositories.fund.fx_and_main import get_latest_fx
++    assert get_latest_fx(pair) is None
++    assert calls == []                           # 一個請求都沒有發
++
++
++def test_get_latest_fx_empty_ccy_fstring_not_queried(monkeypatch):
++    """呼叫端 f"{ccy}TWD" 且 ccy 為空 → 不得拿到 Yahoo `TWD=X`(≈USD/TWD)。"""
++    calls = _patch_yf(monkeypatch)
++    from services.fund_service import get_latest_fx
++    ccy = ""
++    assert get_latest_fx(f"{ccy}TWD") is None
++    assert calls == []
++
++
++def test_get_latest_fx_usd_still_works(monkeypatch):
++    """回歸:已知 USD 照常查。"""
++    calls = _patch_yf(monkeypatch, rate=32.1)
++    from repositories.fund.fx_and_main import get_latest_fx
++    assert get_latest_fx("USDTWD") == 32.1
++    assert calls == ["USDTWD=X"]
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 4) d_mode(D3):未知 → ok=False「幣別未知」,不查匯率、不用 31.0
++# ════════════════════════════════════════════════════════════════════════════
++def _fake_fetch(payload):
++    return lambda code: payload
++
++
++def test_d_mode_missing_currency_fails_closed():
++    from ui.helpers.d_mode import fetch_fund_meta_safe
++    _fx_calls = []
++    out = fetch_fund_meta_safe(
++        "X", _fetch=_fake_fetch({"fund_name": "X", "series": pd.Series([10.0]),
++                                 "dividends": []}),
++        _fx_lookup=lambda pair: _fx_calls.append(pair) or 31.5)
++    assert out["ok"] is False
++    assert out["error"] == "幣別未知"
++    assert out["currency"] == ""
++    assert _fx_calls == []
++
++
++def test_d_mode_cache_hit_conflict_fails_closed():
++    """Q4:session 快取命中,但 Sheet(TWD)與來源(USD)幣別衝突 → fail closed。"""
++    from ui.helpers.d_mode import fetch_fund_meta_safe
++    _hit = {"name": "某台幣基金", "currency": "TWD", "series": pd.Series([300.0]),
++            "moneydj_raw": {"currency": "USD"}, "fx_avg": 32.0}
++    out = fetch_fund_meta_safe("ACDD01", _existing={"ACDD01": _hit},
++                               _fetch=lambda c: pytest.fail("不應再抓網路"),
++                               _fx_lookup=lambda p: pytest.fail("不應查匯率"))
++    assert out["ok"] is False and out["error"] == "幣別未知"
++
++
++def test_d_mode_known_usd_and_twd_unchanged():
++    """回歸:已知 USD 照查匯率;TWD fx=1。"""
++    from ui.helpers.d_mode import fetch_fund_meta_safe
++    o_usd = fetch_fund_meta_safe(
++        "U", _fetch=_fake_fetch({"fund_name": "U", "currency": "USD",
++                                 "series": pd.Series([10.0])}),
++        _fx_lookup=lambda pair: 31.5 if pair == "USDTWD" else None)
++    assert o_usd["ok"] is True and o_usd["fx"] == 31.5 and o_usd["currency"] == "USD"
++    o_twd = fetch_fund_meta_safe(
++        "T", _fetch=_fake_fetch({"fund_name": "T", "currency": "TWD",
++                                 "series": pd.Series([10.0])}),
++        _fx_lookup=lambda pair: pytest.fail("TWD 不應查匯率"))
++    assert o_twd["ok"] is True and o_twd["fx"] == 1.0
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 5) cloud_io v2 loader(D1/D2):Sheet 空白 + 無舊值 → 空白,不是 USD
++# ════════════════════════════════════════════════════════════════════════════
++def _v2_df(ccy):
++    return pd.DataFrame([{
++        "policy_id": "P1", "fund_code": "ACDD01", "fund_name": "安聯台灣大壩",
++        "currency": ccy, "tier": "", "invest_twd": 294904, "div_cash_pct": 100,
++        "units": 907.8, "avg_nav": 324.85, "avg_fx": 1.0}])
++
++
++@pytest.mark.parametrize("sheet_ccy,expect", [("", ""), ("TWD", "TWD"), ("USD", "USD")])
++def test_cloud_io_v2_loader_currency(monkeypatch, sheet_ccy, expect):
++    import ui.helpers.cloud_io as cio
++    monkeypatch.setattr(cio, "load_all_policies_v2", lambda client, sid: _v2_df(sheet_ccy))
++    ss: dict = {}
++    out = cio._load_all_from_sheet_v2(object(), "sid", ss)
++    assert out["ok"] is True
++    assert ss["portfolio_funds"][0]["currency"] == expect
++    led = next(iter(ss["t7_ledgers"].values()))
++    assert led.currency == expect
++
++
++def test_j1_path_checkup_no_longer_divides_by_usd(monkeypatch):
++    """J1 重現路徑(第二組 r1 第 3 段):Sheet 幣別空白 + 首次載入 → checkup
++    舊行為算出 95.86 單位(多除一次 USDTWD);修正後誠實留白,不算錯。"""
++    import ui.helpers.cloud_io as cio
++    import ui.helpers.fund.checkup as ck
++    monkeypatch.setattr(cio, "load_all_policies_v2", lambda client, sid: _v2_df(""))
++    monkeypatch.setattr(ck, "_safe_fx",
++                        lambda c: None if not c else (1.0 if c == "TWD" else 32.112))
++    ss: dict = {}
++    cio._load_all_from_sheet_v2(object(), "sid", ss)
++    pf = dict(ss["portfolio_funds"][0], loaded=True, metrics={"nav": 324.85},
++              moneydj_raw={"currency": ""})
++    r = ck.build_checkup_dataframe([pf]).iloc[0]
++    assert r["計價幣別"] == "—"
++    assert r["可申購單位數"] is None or pd.isna(r["可申購單位數"])
++    assert r["可申購單位數"] != 95.86
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 6) Q4 currency conflict:不覆蓋 Sheet、不自動寫回、換匯 / 單位數 fail closed
++# ════════════════════════════════════════════════════════════════════════════
++@pytest.mark.parametrize("sheet,src,expect", [
++    ("TWD", "", "TWD"),       # 來源未知 → 用 Sheet
++    ("", "USD", "USD"),       # Sheet 空白 → 用來源
++    ("TWD", "台幣", "TWD"),   # 別名一致 → 不算衝突
++    ("TWD", "USD", ""),       # 衝突 → 未知(fail closed)
++    ("", "", ""),             # 兩邊都未知
++    ("美元", "USD", "USD"),
++])
++def test_fund_currency_for_calc(sheet, src, expect):
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    f = {"currency": sheet, "moneydj_raw": {"currency": src}}
++    assert fund_currency_for_calc(f) == expect
++
++
++def test_checkup_conflict_fails_closed(monkeypatch):
++    import ui.helpers.fund.checkup as ck
++    monkeypatch.setattr(ck, "_safe_fx",
++                        lambda c: pytest.fail(f"衝突時不應查匯率({c})"))
++    f = {"loaded": True, "code": "ACDD01", "name": "安聯台灣大壩基金-A累積型(台幣)",
++         "currency": "TWD", "invest_twd": 294904, "metrics": {"nav": 324.85},
++         "moneydj_raw": {"currency": "USD"}}
++    r = ck.build_checkup_dataframe([f]).iloc[0]
++    assert r["計價幣別"] == "—"
++
++
++def test_checkup_known_twd_unchanged(monkeypatch):
++    """回歸:Sheet 與來源皆 TWD → 照算(1M / 324.85)。"""
++    import ui.helpers.fund.checkup as ck
++    monkeypatch.setattr(ck, "_safe_fx", lambda c: 1.0 if c == "TWD" else None)
++    f = {"loaded": True, "code": "ACDD01", "name": "安聯台灣大壩", "currency": "TWD",
++         "invest_twd": 294904, "metrics": {"nav": 324.85}, "moneydj_raw": {"currency": "TWD"}}
++    r = ck.build_checkup_dataframe([f]).iloc[0]
++    assert r["計價幣別"] == "TWD" and r["可申購單位數"] == pytest.approx(3078.34, abs=0.01)
++
++
++class _FakeSt:
++    """batch_load_unloaded_funds 用到的 streamlit 最小替身(不渲染、不 rerun)。"""
++
++    def __init__(self, funds):
++        self.session_state = types.SimpleNamespace(portfolio_funds=funds)
++        self.session_state.get = lambda k, d=None: getattr(self.session_state, k, d)
++        self.reruns = 0
++
++    def empty(self):
++        return types.SimpleNamespace(info=lambda *a, **k: None,
++                                     success=lambda *a, **k: None)
++
++    def progress(self, *a, **k):
++        return types.SimpleNamespace(progress=lambda *a, **k: None)
++
++    def write(self, *a, **k):
++        pass
++
++    def warning(self, *a, **k):
++        pass
++
++    def rerun(self):
++        self.reruns += 1
++
++
++def _run_batch_load(monkeypatch, funds, fetched_by_code):
++    import services.fund_service as FS
++    import ui.helpers.data_registry as DR
++    import ui.helpers.portfolio.load as L
++    fake = _FakeSt(funds)
++    monkeypatch.setattr(L, "st", fake)
++    monkeypatch.setattr(FS, "fetch_fund_from_moneydj_url_enriched",
++                        lambda code: dict(fetched_by_code[code]))
++    monkeypatch.setattr(DR, "_update_data_registry", lambda: None)
++    L.batch_load_unloaded_funds()
++    return fake.session_state.portfolio_funds
++
++
++def test_batch_load_blank_fetch_keeps_sheet_currency(monkeypatch):
++    funds = [{"code": "ACDD01", "policy_id": "P1", "currency": "TWD", "loaded": False}]
++    out = _run_batch_load(monkeypatch, funds,
++                          {"ACDD01": {"fund_name": "安聯台灣大壩", "currency": ""}})
++    assert out[0]["currency"] == "TWD"           # 抓回空值不得覆蓋 Sheet
++
++
++def test_batch_load_conflict_keeps_sheet_and_fails_closed(monkeypatch):
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    funds = [{"code": "ACDD01", "policy_id": "P1", "currency": "TWD", "loaded": False}]
++    out = _run_batch_load(monkeypatch, funds,
++                          {"ACDD01": {"fund_name": "安聯台灣大壩", "currency": "USD"}})
++    assert out[0]["currency"] == "TWD"           # 不以來源覆蓋 Sheet(不會被 dump 寫回)
++    assert out[0]["moneydj_raw"]["currency"] == "USD"   # 也不以 Sheet 覆蓋來源事實
++    assert fund_currency_for_calc(out[0]) == ""  # 正式計算 fail closed
++
++
++def test_batch_load_blank_sheet_takes_source(monkeypatch):
++    """回歸:Sheet 空白 → 採用來源宣告值(與修正前相同)。"""
++    funds = [{"code": "TLZF9", "policy_id": "P1", "currency": "", "loaded": False}]
++    out = _run_batch_load(monkeypatch, funds,
++                          {"TLZF9": {"fund_name": "安聯收益成長", "currency": "USD"}})
++    assert out[0]["currency"] == "USD"
++
++
++def test_reuse_across_ledgers_does_not_overwrite_sheet_currency():
++    from ui.helpers.portfolio.load import reuse_fund_info_by_code
++    prev = [{"code": "AAA", "loaded": True, "series": [1], "currency": "USD"}]
++    merged = [{"code": "AAA", "loaded": False, "currency": "TWD"}]
++    reuse_fund_info_by_code(merged, prev)
++    assert merged[0]["currency"] == "TWD"
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 7) Ledger(Q1,F4):缺幣別 → ""、換股遇未知 fail closed;已知照舊
++# ════════════════════════════════════════════════════════════════════════════
++def test_ledger_from_dict_missing_currency_is_blank():
++    from services.ledger_service import Ledger
++    assert Ledger.from_dict({"fund_code": "A", "transactions": []}).currency == ""
++
++
++@pytest.mark.parametrize("fn", ["switch_same_currency", "switch_cross_currency"])
++def test_switch_unknown_currency_fails_closed(fn):
++    from services.ledger_service import Ledger, Switch
++    a = Ledger(fund_code="TWDFUND", currency="")
++    a.subscribe(amount_twd=300000, fx_rate=1.0, nav=300.0, txn_date=_dt.date(2026, 1, 2))
++    b = Ledger(fund_code="USDFUND", currency="USD")
++    kw = {"units_to_redeem": None, "nav_from_redeem": 300.0, "nav_to_buy": 10.0,
++          "fee_orig": 0.0, "txn_date": _dt.date(2026, 2, 2)}
++    if fn == "switch_cross_currency":
++        kw.update(cross_rate=1 / 32.1, fx_to_at_switch_twd=32.1)
++    units_before = a.position.units
++    with pytest.raises(ValueError, match="幣別未知"):
++        getattr(Switch, fn)(a, b, **kw)
++    assert a.currency == ""                      # ~~被改寫成 "USD"~~(修正前)
++    assert a.position.units == units_before      # 帳本完全沒動
++
++
++def test_switch_known_same_currency_unchanged():
++    from services.ledger_service import Ledger, Switch
++    a = Ledger(fund_code="A", currency="USD")
++    a.subscribe(amount_twd=32000, fx_rate=32.0, nav=10.0, txn_date=_dt.date(2026, 1, 2))
++    b = Ledger(fund_code="B", currency="美元")
++    r = Switch.switch_same_currency(a, b, units_to_redeem=None, nav_from_redeem=10.0,
++                                    nav_to_buy=20.0, fee_orig=0.0,
++                                    txn_date=_dt.date(2026, 2, 2))
++    assert r.units_added_to == pytest.approx(50.0)
++    assert b.currency == "USD"
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 8) 換源防護(Q3):幣別未知 → 擋下
++# ════════════════════════════════════════════════════════════════════════════
++@pytest.mark.parametrize("exp,cand,safe", [
++    ("TWD", "TWD", True), ("USD", "USD", True),       # match → 放行(回歸)
++    ("TWD", "USD", False),                            # mismatch → 擋(回歸)
++    ("", "USD", False), ("TWD", "", False), ("", "", False),   # unknown → 擋(新)
++])
++def test_swap_guard_unknown_blocks(exp, cand, safe):
++    from shared.data_quality import assess_nav_series_swap
++    r = assess_nav_series_swap(expected_ccy=exp, candidate_ccy=cand)
++    assert r["safe"] is safe
++    if not safe:
++        assert r["reason"]                       # 擋下一定有理由可記 log
++
++
++def test_span_extend_unknown_expected_ccy_does_not_swap(monkeypatch):
++    import repositories.fund.fund_orchestration as fo
++    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
++                      index=pd.date_range("2026-08-01", periods=20))
++    long = pd.Series([9.0 + i * 0.001 for i in range(800)],
++                     index=pd.date_range("2024-01-01", periods=800))
++    long.attrs["currency"] = "USD"
++    monkeypatch.setattr(fo, "_correct_currency", lambda c, n, code: "")   # 預期幣別判不出
++    monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="": long)
++    monkeypatch.setattr(fo, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
++    s, src, _span = fo._span_extend_insurance_nav("TLZF9", short, "moneydj",
++                                                  fund_name="X", is_insurance_code=True)
++    assert src == "moneydj" and len(s) == 20     # 未換源
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 9) 晨星(Q2):請求必帶 currencyId → 幣別未知 fail closed,不以 USD 猜測
++# ════════════════════════════════════════════════════════════════════════════
++def _record_urlopen(monkeypatch, payload):
++    import urllib.request as UR
++    seen = []
++
++    class _R(io.BytesIO):
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *a):
++            return False
++
++    def _open(req, timeout=None):
++        seen.append(getattr(req, "full_url", req))
++        return _R(json.dumps(payload).encode())
++
++    monkeypatch.setattr(UR, "urlopen", _open)
++    return seen
++
++
++def test_screener_unknown_currency_no_request(monkeypatch):
++    seen = _record_urlopen(monkeypatch, {"rows": []})
++    S._ms_screener_cache.pop("LU0000000001", None)
++    assert S._morningstar_screener_secid("LU0000000001") == ""
++    assert S._morningstar_screener_secid("LU0000000001", currency="  ") == ""
++    assert seen == []
++    assert "LU0000000001" not in S._ms_screener_cache   # 不是「查無」,不入負快取
++
++
++def test_pool_isin_unknown_ccy_does_not_call_screener(monkeypatch):
++    import repositories.pool_repository as P
++    monkeypatch.setattr(P, "resolve_secid", lambda c: None)
++    monkeypatch.setattr(P, "resolve_isin", lambda c: "LU0766462157")
++    monkeypatch.setattr(P, "resolve_currency", lambda c: None)
++    monkeypatch.setattr(S, "_morningstar_screener_secid",
++                        lambda *a, **k: pytest.fail("幣別未知不應呼叫 screener"))
++    assert S._pool_secid_lookup("XXXX") == ""
++
++
++def test_resolve_secid_blank_currency_not_usd(monkeypatch):
++    import repositories.pool_repository as P
++    entry = types.SimpleNamespace(morningstar_secid="F0X", currency="")
++    monkeypatch.setattr(P, "_pool_entry_of", lambda code: entry)
++    assert P.resolve_secid("X") == ("F0X", "")   # ~~("F0X", "USD")~~
++
++
++def _isolate_ms(monkeypatch, *, secid=None, isin=None, ccy=None, search="F0SEARCH"):
++    import repositories.pool_repository as P
++    monkeypatch.setattr(P, "resolve_secid", lambda c: secid)
++    monkeypatch.setattr(P, "resolve_isin", lambda c: isin)
++    monkeypatch.setattr(P, "resolve_currency", lambda c: ccy)
++    monkeypatch.setattr(S, "_morningstar_search_secid", lambda *a, **k: search)
++
++
++def test_morningstar_nav_unknown_currency_fails_closed(monkeypatch):
++    _isolate_ms(monkeypatch)
++    seen = _record_urlopen(monkeypatch, {})
++    s = S._src_morningstar_nav("ZZZ9", fund_name="某基金")
++    assert s.empty
++    assert seen == []                            # 沒有任何晨星 timeseries 請求
++
++
++def test_morningstar_nav_isin_unknown_currency_fails_closed(monkeypatch):
++    _isolate_ms(monkeypatch, isin="LU0000000002")
++    S._ms_ccy_cache.pop("LU0000000002", None)
++    seen = _record_urlopen(monkeypatch, {})
++    s = S._src_morningstar_nav("ZZZ8")
++    assert s.empty and seen == []                # screener 與 timeseries 都沒有發
++
++
++def test_morningstar_nav_pool_secid_blank_currency_fails_closed(monkeypatch):
++    _isolate_ms(monkeypatch, secid=("F0POOL", ""))
++    seen = _record_urlopen(monkeypatch, {})
++    assert S._src_morningstar_nav("ZZZ7").empty and seen == []
++
++
++_MS_TS = {"TimeSeries": {"Security": [{"HistoryDetail": [
++    {"EndDate": "2026-09-01", "Value": "10.1"}, {"EndDate": "2026-09-02", "Value": "10.2"}]}]}}
++
++
++def test_morningstar_nav_known_usd_unchanged(monkeypatch):
++    """回歸:硬編表手工宣告 USD(TLZF9)→ 照常以 USD 請求、序列標 USD。"""
++    _isolate_ms(monkeypatch)
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    s = S._src_morningstar_nav("TLZF9")
++    assert len(s) == 2 and s.attrs["currency"] == "USD"
++    assert len(seen) == 1 and "currencyId=USD" in seen[0]
++
++
++def test_morningstar_nav_pool_known_twd_uses_twd(monkeypatch):
++    _isolate_ms(monkeypatch, secid=("F0POOLT", "TWD"))
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    s = S._src_morningstar_nav("ZZZ6")
++    assert s.attrs["currency"] == "TWD" and "currencyId=TWD" in seen[0]
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 10) T7(Q1,F1 最小解凍):幣別未知 → 不查匯率、不估算單位數、不自動存檔
++#     T7 是凍結 Tab 內的巢狀程式碼 —— 以 AST 取出**原樣**的函式 / 迴圈,注入替身後實跑。
++# ════════════════════════════════════════════════════════════════════════════
++_T7_SRC = (ROOT / "ui" / "tab3_t7_ledger.py").read_text(encoding="utf-8")
++_T7_TREE = ast.parse(_T7_SRC)
++
++
++def _t7_func(name):
++    for n in ast.walk(_T7_TREE):
++        if isinstance(n, ast.FunctionDef) and n.name == name:
++            return n
++    raise AssertionError(name)
++
++
++def _t7_auto_est_block():
++    for n in ast.walk(_T7_TREE):
++        for field in ("body", "orelse"):
++            body = getattr(n, field, None)
++            if not isinstance(body, list):
++                continue
++            for i, st_ in enumerate(body):
++                if (isinstance(st_, ast.For) and isinstance(st_.target, ast.Name)
++                        and st_.target.id == "_f_ae"):
++                    return body[i - 3:i + 2]     # 三個計數器 + 迴圈 + 存檔 if
++    raise AssertionError("auto-estimate loop not found")
++
++
++class _T7St:
++    def __init__(self):
++        self.session_state = types.SimpleNamespace(t7_ledgers={})
++        self.session_state.setdefault = lambda k, d: d
++        self.msgs = []
++
++    def success(self, m):
++        self.msgs.append(m)
++
++    warning = info = success
++
++
++def _t7_namespace(fx_calls, saves, nav_calls=None):
++    from services.ledger_service import Ledger
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    ns = {
++        "st": _T7St(), "pd": pd, "_d_t7": _dt.date,
++        "_ccy_calc_t7": fund_currency_for_calc,
++        "_nav_now": lambda code: (nav_calls.append(code) if nav_calls is not None else None) or 10.0,
++        "_fx_now": lambda pair: fx_calls.append(pair) or 32.0,
++        "_FX_FALLBACK": {"USD": 32.0},
++        "fund_pk_str": lambda f: f"{f.get('policy_id', '')}::{f.get('code', '')}",
++        "_LedT7": Ledger,
++        "_nav_at_date_t7": lambda f, d: 0.0,
++        "_sync_invest_twd_from_ledgers": lambda: None,
++        "_t7_save_snapshot_to_sheets": lambda: saves.append(1) or "",
++    }
++    mod = ast.Module(body=[_t7_func("_latest_nav_fx_t7")], type_ignores=[])
++    exec(compile(mod, "t7_latest_nav_fx", "exec"), ns)  # noqa: S102 — 實跑凍結 Tab 原樣程式碼
++    return ns
++
++
++def test_t7_latest_nav_fx_unknown_currency_no_fx_query():
++    fx_calls, saves = [], []
++    ns = _t7_namespace(fx_calls, saves)
++    nav, fx = ns["_latest_nav_fx_t7"]({"code": "X", "currency": ""})
++    assert (nav, fx) == (10.0, 0.0)
++    assert fx_calls == []                        # 不組 "TWD"、不查匯率、不用保底匯率
++    nav, fx = ns["_latest_nav_fx_t7"]({"code": "X", "currency": "TWD",
++                                       "moneydj_raw": {"currency": "USD"}})
++    assert fx == 0.0 and fx_calls == []          # Q4 衝突同樣 fail closed
++
++
++def test_t7_latest_nav_fx_known_usd_unchanged():
++    fx_calls, saves = [], []
++    ns = _t7_namespace(fx_calls, saves)
++    assert ns["_latest_nav_fx_t7"]({"code": "U", "currency": "USD"}) == (10.0, 32.0)
++    assert fx_calls == ["USDTWD"]
++
++
++def _run_auto_est(funds, nav_calls=None):
++    fx_calls, saves = [], []
++    ns = _t7_namespace(fx_calls, saves, nav_calls)
++    ns["_pf_t7"] = funds
++    mod = ast.Module(body=_t7_auto_est_block(), type_ignores=[])
++    exec(compile(mod, "t7_auto_est", "exec"), ns)  # noqa: S102 — 同上
++    return ns["st"].session_state.t7_ledgers, saves, fx_calls
++
++
++def test_t7_auto_estimate_unknown_currency_no_units_no_save():
++    nav_calls = []
++    leds, saves, fx_calls = _run_auto_est(
++        [{"code": "ACDD01", "policy_id": "P1", "currency": "", "invest_twd": 294904}],
++        nav_calls)
++    assert leds == {} and saves == [] and fx_calls == []
++    assert nav_calls == []        # 幣別未知在進入取價之前就擋下(不被誤計成「NAV 抓不到」)
++
++
++def test_t7_auto_estimate_conflict_no_units_no_save():
++    leds, saves, _ = _run_auto_est(
++        [{"code": "ACDD01", "policy_id": "P1", "currency": "TWD", "invest_twd": 294904,
++          "moneydj_raw": {"currency": "USD"}}])
++    assert leds == {} and saves == []
++
++
++def test_t7_auto_estimate_known_usd_unchanged():
++    leds, saves, fx_calls = _run_auto_est(
++        [{"code": "TLZF9", "policy_id": "P1", "currency": "USD", "invest_twd": 32000}])
++    led = leds["P1::TLZF9"]
++    assert led.currency == "USD"
++    assert led.position.units == pytest.approx(32000 / (10.0 * 32.0))
++    assert saves == [1] and fx_calls == ["USDTWD"]
++
++
++def test_t7_auto_estimate_known_twd_unchanged():
++    leds, saves, fx_calls = _run_auto_est(
++        [{"code": "ACDD01", "policy_id": "P1", "currency": "TWD", "invest_twd": 3000}])
++    assert leds["P1::ACDD01"].position.units == pytest.approx(300.0)
++    assert fx_calls == [] and saves == [1]
++
++
++def test_t7_no_literal_usd_currency_fallback():
++    """凍結 Tab 內不得再有「缺幣別 → USD」的字面預設(.get("currency","USD") / or "USD")。"""
++    bad = []
++    for n in ast.walk(_T7_TREE):
++        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
++                and n.func.attr == "get" and len(n.args) >= 2
++                and isinstance(n.args[0], ast.Constant) and n.args[0].value == "currency"
++                and isinstance(n.args[1], ast.Constant) and n.args[1].value == "USD"):
++            bad.append(n.lineno)
++        if (isinstance(n, ast.BoolOp) and isinstance(n.op, ast.Or)
++                and any(isinstance(v, ast.Constant) and v.value == "USD" for v in n.values)):
++            bad.append(n.lineno)
++    assert bad == []
++
++
++def test_t7_c_switch_prechecks_currency_before_any_ledger_mutation():
++    """C 換股:任一檔幣別未知 → 在**任何帳本異動之前**整批擋下。
++
++    非情境模式下,迴圈中途 raise 不會回滾先前已成交的配對;故守門必須在迴圈之前。
++    (C 區塊深嵌於凍結 Tab,無法單獨實跑 —— 以 AST 釘住「守門在 for 之前、且會 raise」。)
++    """
++    for n in ast.walk(_T7_TREE):
++        if not isinstance(n, ast.Try):
++            continue
++        idx = [i for i, st_ in enumerate(n.body)
++               if isinstance(st_, ast.For) and isinstance(st_.target, ast.Tuple)
++               and [e.id for e in st_.target.elts if isinstance(e, ast.Name)] == ["_spk", "_cfg"]]
++        if not idx:
++            continue
++        before = n.body[:idx[0]]
++        guards = [st_ for st_ in before if isinstance(st_, ast.If)
++                  and any(isinstance(x, ast.Raise) for x in ast.walk(st_))
++                  and "_ccy_unk_c" in ast.unparse(st_.test)]
++        assert guards, "C 換股迴圈之前沒有幣別未知守門"
++        _calc = [st_ for st_ in before if "_ccy_calc_t7" in ast.unparse(st_)]
++        assert _calc, "守門沒有用 fund_currency_for_calc(未知 / 衝突)判定"
++        return
++    raise AssertionError("找不到 C 換股的 try/for 區塊")
+diff --git a/ui/helpers/cloud_io.py b/ui/helpers/cloud_io.py
+index c7de97c..b82d96d 100644
+--- a/ui/helpers/cloud_io.py
++++ b/ui/helpers/cloud_io.py
+@@ -356,8 +356,9 @@ def _load_all_from_sheet_v2(client: object,
+                 "policy_id":        _pid,
+                 "name":             (str(_row.get("fund_name", "") or "").strip()
+                                        or _prev.get("name", "") or _code),
++                # 2026-10-10 客戶裁示:未知幣別 ≠ USD —— Sheet 空白且無舊值 → 空白(未知)。
+                 "currency":         (str(_row.get("currency", "") or "").strip()
+-                                       or _prev.get("currency", "USD")),
++                                       or str(_prev.get("currency") or "").strip()),
+                 "units":            float(_row.get("units", 0) or 0),
+                 "avg_nav":          float(_row.get("avg_nav", 0) or 0),
+                 # v19.436:avg_nav_with_div 已非 v2 欄 → 不在此強寫 0(否則會蓋掉 `**_prev`
+@@ -383,7 +384,7 @@ def _load_all_from_sheet_v2(client: object,
+                 _fx = float(_f.get("fx_avg") or 0)
+                 if _u > 0 and _n > 0 and _fx > 0:
+                     _led = _Ledger(fund_code=_f["code"],
+-                                    currency=_f.get("currency", "USD"))
++                                    currency=str(_f.get("currency") or "").strip())  # 未知≠USD
+                     try:
+                         _led.subscribe(amount_twd=_u * _n * _fx,
+                                         fx_rate=_fx, nav=_n,
+diff --git a/ui/helpers/d_mode.py b/ui/helpers/d_mode.py
+index e62054c..41fab22 100644
+--- a/ui/helpers/d_mode.py
++++ b/ui/helpers/d_mode.py
+@@ -34,7 +34,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
+         {
+           "ok":         bool,
+           "fund_name":  str,
+-          "currency":   str (upper, default "USD"),
++          "currency":   str (upper;~~default "USD"~~ → 2026-10-10 未知為 "" 且 ok=False),
+           "nav":        float (series.iloc[-1]),
+           "fx":         float (currency→TWD; TWD=1.0; 查失敗 fallback 31.0),
+           "series":     pd.Series (dropna 後；ok=False 時為空 series),
+@@ -48,7 +48,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
+     import pandas as pd  # noqa: PLC0415
+
+     out: dict = {
+-        "ok": False, "fund_name": "", "currency": "USD",
++        "ok": False, "fund_name": "", "currency": "",
+         "nav": 0.0, "fx": 31.0,
+         "series": pd.Series(dtype=float), "dividends": [],
+         "error": "",
+@@ -67,7 +67,13 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
+                 if _hs is not None and hasattr(_hs, "dropna"):
+                     _hs = _hs.dropna()
+                     if len(_hs) > 0:
+-                        _ccy = str(_hit.get("currency") or "USD").upper().strip()
++                        # 2026-10-10 客戶裁示:未知幣別 ≠ USD;Sheet 與來源衝突(Q4)
++                        # 同樣視為未知 → fail closed,不查匯率、不用保底匯率。
++                        from ui.helpers.portfolio.load import fund_currency_for_calc
++                        _ccy = fund_currency_for_calc(_hit)
++                        if not _ccy:
++                            out["error"] = "幣別未知"
++                            return out
+                         _fx = _hit.get("fx_avg") or _hit.get("fx_rate") or 0
+                         out.update({
+                             "ok": True,
+@@ -139,7 +145,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
+         return out
+     out["fund_name"] = (str(_r.get("fund_name") or _r.get("name") or "").strip()
+                           or _code)
+-    out["currency"] = str(_r.get("currency") or "USD").strip().upper()
++    out["currency"] = str(_r.get("currency") or "").strip().upper()
+     out["dividends"] = list(_r.get("dividends") or [])
+     # v18.246: 帶 metrics + moneydj_raw 給 _get_dy_t7（沒這兩個 key → dy = 0）
+     out["metrics"] = dict(_r.get("metrics") or {})
+@@ -147,6 +153,10 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
+            or {"moneydj_div_yield": _r.get("moneydj_div_yield")})
+     out["moneydj_raw"] = dict(_mj or {})
+
++    if not out["currency"]:
++        # 2026-10-10 客戶裁示:未知幣別 ≠ USD → fail closed(不組 FX symbol、不查匯率)。
++        out["error"] = "幣別未知"
++        return out
+     if out["currency"] == "TWD":
+         out["fx"] = 1.0
+     else:
+diff --git a/ui/helpers/fund/checkup.py b/ui/helpers/fund/checkup.py
+index ed55894..52431c1 100644
+--- a/ui/helpers/fund/checkup.py
++++ b/ui/helpers/fund/checkup.py
+@@ -323,7 +323,10 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
+         _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
+         _mdiv_1m = (10000.0 * _adr / 12.0) if (_adr and _adr > 0) else None
+         # v19.59：從 fund_grp_health_extras._render_investment_calc L194-283 上抽同源欄位到比較表
+-        _ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()
++        # ~~_ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()~~
++        # 2026-10-10 客戶裁示 Q4:Sheet 與來源幣別衝突 → 不得靜默選一個換匯 → 未知(fail closed)。
++        from ui.helpers.portfolio.load import fund_currency_for_calc
++        _ccy_raw = fund_currency_for_calc(f)
+         _ccy = _norm_ccy(_ccy_raw, default="", mode="yf") if _ccy_raw else ""
+         _nav = _safe_num(m.get("nav") or mj.get("nav_latest"))
+         _fx = _safe_fx(_ccy) if _ccy else None
+diff --git a/ui/helpers/portfolio/load.py b/ui/helpers/portfolio/load.py
+index 88ba5e4..e803e99 100644
+--- a/ui/helpers/portfolio/load.py
++++ b/ui/helpers/portfolio/load.py
+@@ -14,6 +14,37 @@ from __future__ import annotations
+ import streamlit as st
+
+
++def _iso_ccy(raw) -> str:
++    """幣別 → ISO 三碼;空 / 非三碼 → `""`(未知)。中文別名先過 L2 正規化。"""
++    from services.currency import normalize_ccy
++    from shared.data_quality import normalize_iso_ccy
++    return normalize_iso_ccy(normalize_ccy(raw, default=""))
++
++
++def source_currency_of(fund: dict) -> str:
++    """抓取結果(`moneydj_raw`)宣告的幣別(原字串,未正規化);沒有 → `""`。"""
++    _mj = (fund or {}).get("moneydj_raw")
++    if not isinstance(_mj, dict):
++        return ""
++    return str(_mj.get("currency") or (_mj.get("metrics") or {}).get("currency") or "").strip()
++
++
++def fund_currency_for_calc(fund: dict) -> str:
++    """需要「正確幣別」的正式計算(換匯 / 單位數 / 換股)該用的幣別 → ISO 三碼或 `""`。
++
++    2026-10-10 客戶裁示(A 級資料正確性缺陷):
++      - **未知幣別 ≠ USD**:Sheet 與來源都沒有可辨識的幣別 → `""`(呼叫端 fail closed)。
++      - **Q4 currency conflict**:Sheet(`fund["currency"]`)與來源(`moneydj_raw`)
++        都有值但不一致 → `""`(不得靜默選一個繼續算;呼叫端 fail closed)。
++        衝突狀態**不另存欄位**(現有 schema 無處保存出處),每次由這兩個既有值即時判定。
++    """
++    _sheet = _iso_ccy((fund or {}).get("currency"))
++    _src = _iso_ccy(source_currency_of(fund))
++    if _sheet and _src and _sheet != _src:
++        return ""
++    return _sheet or _src
++
++
+ def count_unloaded_funds() -> tuple[int, int]:
+     """回傳 (未載入 entry 數, 去重 code 數)。給 caller 決定要不要顯示按鈕。"""
+     pf = st.session_state.get("portfolio_funds", []) or []
+@@ -72,6 +103,9 @@ def reuse_fund_info_by_code(
+                 continue
+             if isinstance(v, str) and v == "":
+                 continue
++            # 2026-10-10 客戶裁示 Q4:本帳本(Sheet)已填幣別 → 不得被別處沿用的值覆蓋。
++            if k == "currency" and str(entry.get("currency") or "").strip():
++                continue
+             entry[k] = v
+         entry["loaded"] = True
+         entry["load_error"] = None
+@@ -232,6 +266,17 @@ def batch_load_unloaded_funds() -> None:
+                 "loaded": True, "load_error": pf_raw["error"],
+             })
+         else:
++            # 2026-10-10 客戶裁示:未知幣別 ≠ USD / Q4 currency conflict ——
++            #   Sheet 已填幣別 → **一律保留**(抓回空值不得覆蓋;抓回不同值也不得覆蓋);
++            #   來源事實照舊留在 `moneydj_raw`,衝突由 `fund_currency_for_calc` 即時判定、
++            #   換匯 / 單位數路徑 fail closed。Sheet 空白才採用來源宣告值。
++            _sheet_ccy = str(pf_item.get("currency") or "").strip()
++            _src_ccy = (pf_raw.get("currency", "")
++                        or pf_raw.get("metrics", {}).get("currency", ""))
++            if (_sheet_ccy and _iso_ccy(_src_ccy)
++                    and _iso_ccy(_sheet_ccy) != _iso_ccy(_src_ccy)):
++                print(f"[portfolio_load] ⚠️ currency conflict {c_pf}: Sheet={_sheet_ccy} "
++                      f"來源={_src_ccy} → 保留 Sheet 值、不寫回;換匯/單位數 fail closed")
+             st.session_state.portfolio_funds[i].update({
+                 "name":         pf_raw.get("fund_name") or pf_item["code"],
+                 "series":       pf_raw.get("series"),
+@@ -240,8 +285,7 @@ def batch_load_unloaded_funds() -> None:
+                 "moneydj_raw":  pf_raw,
+                 "risk_metrics": pf_raw.get("risk_metrics", {}),
+                 "is_core":      _is_core(pf_raw.get("fund_name") or pf_item["code"]),
+-                "currency":     pf_raw.get("currency", "")
+-                                  or pf_raw.get("metrics", {}).get("currency", ""),
++                "currency":     _sheet_ccy or _src_ccy,
+                 "loaded":       True, "load_error": None,
+             })
+
+diff --git a/ui/tab3_t7_ledger.py b/ui/tab3_t7_ledger.py
+index 323ca66..9b28690 100644
+--- a/ui/tab3_t7_ledger.py
++++ b/ui/tab3_t7_ledger.py
+@@ -513,15 +513,19 @@ def render_t7_section() -> None:
+             #         中文名也能命中保底匯率。
+             # v19.75 K2：遷移到 services/currency SSOT（mode="iso" 保留 T7 ledger 用 ISO 標準）。
+             from services.currency import normalize_ccy as _norm_ccy
++            from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_t7
+
+             def _latest_nav_fx_t7(_fund: dict) -> tuple:
+                 _code = str(_fund.get("code", "")).strip()
+-                _ccy  = _norm_ccy(_fund.get("currency", "USD"))
++                _ccy  = _ccy_calc_t7(_fund)   # ~~_norm_ccy(_fund.get("currency", "USD"))~~ # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                 _nav  = _nav_now(_code)
+                 if _nav is None:
+                     _s = _fund.get("series")
+                     if _s is not None and len(_s.dropna()):
+                         _nav = float(_s.dropna().iloc[-1])
++                if not _ccy:   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 不組幣對、不查匯率、不用保底匯率(fx=0 走既有「抓不到」呈現)
++                    print(f"[t7/fx] {_code or '?'} 幣別未知(或 Sheet/來源衝突)→ 不查匯率")
++                    return float(_nav or 0.0), 0.0
+                 _fx = _fx_now(f"{_ccy}TWD") if _ccy != "TWD" else 1.0
+                 if _fx is None or _fx <= 0:
+                     _fx = float(_fund.get("fx_rate", 0) or 0) or 0.0
+@@ -567,14 +571,14 @@ def render_t7_section() -> None:
+                 if _led is None:
+                     _f = _fund_by_pk.get(_pk)
+                     _, _code = parse_pk(_pk)
+-                    _ccy = _norm_ccy((_f or {}).get("currency", "USD"))
++                    _ccy = _ccy_calc_t7(_f or {})   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                     _led = _LedT7(fund_code=_code, currency=_ccy)
+                     st.session_state.t7_ledgers[_pk] = _led
+                 else:
+                     # v18.243: 舊 ledger 可能殘留中文幣別（「美元」），與 fund 端
+                     # normalize 後的「USD」不一致 → Switch 引擎 same/cross 兩條路
+                     # 都會誤判幣別不符。每次取 ledger 時補 normalize 一次（mutate）。
+-                    _norm = _norm_ccy(getattr(_led, "currency", "") or "USD")
++                    _norm = _norm_ccy(getattr(_led, "currency", "") or "")   # 未知≠USD
+                     if _led.currency != _norm:
+                         _led.currency = _norm
+                 return _led
+@@ -620,6 +624,9 @@ def render_t7_section() -> None:
+                 if _twd_ae <= 0:
+                     _auto_est_skip_no_twd += 1
+                     continue
++                if not _ccy_calc_t7(_f_ae):   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 不估算單位數、不自動存檔
++                    print(f"[t7/auto_est] {_f_ae.get('code', '?')} 幣別未知 → 不自動估算")
++                    continue
+                 _nav_today, _fx_ae = _latest_nav_fx_t7(_f_ae)
+                 # v18.81: 優先用投資日期當天 NAV 做 cost；缺則 fallback 今天
+                 _invest_date_ae = str(_f_ae.get("invest_date", "") or "").strip()
+@@ -640,7 +647,7 @@ def render_t7_section() -> None:
+                 if _u_ae <= 0:
+                     continue
+                 _c_ae = _f_ae.get("code", "?")
+-                _ccy_ae = _norm_ccy(_f_ae.get("currency", "USD"))
++                _ccy_ae = _ccy_calc_t7(_f_ae)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                 _new_led_ae = _LedT7(fund_code=_c_ae, currency=_ccy_ae)
+                 _amt_ae = _u_ae * _nav_for_cost * _fx_ae
+                 _new_led_ae.subscribe(_amt_ae, _fx_ae, _nav_for_cost, _date_for_buy)
+@@ -821,7 +828,7 @@ def render_t7_section() -> None:
+                                      use_container_width=True):
+                             for _pk_e, _f_e, _u_e, _nav_e, _fx_e in _t7_can_estimate:
+                                 _c_e = _f_e.get("code", "?")
+-                                _ccy_e = _norm_ccy(_f_e.get("currency", "USD"))
++                                _ccy_e = _ccy_calc_t7(_f_e)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                                 _new_led_e = _LedT7(fund_code=_c_e, currency=_ccy_e)
+                                 _amt_e = _u_e * _nav_e * _fx_e
+                                 _new_led_e.subscribe(_amt_e, _fx_e, _nav_e, _d_t7.today())
+@@ -846,7 +853,7 @@ def render_t7_section() -> None:
+                         _pk_f = fund_pk_str(_f)
+                         _c = _f.get("code", "?")
+                         _name = _name_lookup_t7.get(_pk_f, _c)
+-                        _ccy = str(_f.get("currency", "USD")).upper()
++                        _ccy = _ccy_calc_t7(_f)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                         _pid_cur = _f.get("policy_id") or ""
+                         _pid_disp = _pid_cur or "(未綁)"
+                         _exist = st.session_state.t7_ledgers.get(_pk_f)
+@@ -868,13 +875,13 @@ def render_t7_section() -> None:
+                             help="對帳單欄(4) — 系統會用此值自動算「持有單位數」"
+                         )
+                         _cu = ic2.number_input(
+-                            f"🟨 平均買入淨值 ({_ccy})", min_value=0.0, max_value=10000.0,
++                            f"🟨 平均買入淨值 ({_ccy or '幣別未知'})", min_value=0.0, max_value=10000.0,
+                             value=_cu_default,
+                             step=0.01, format="%.4f", key=f"t7_init_cu_{_pk_f}",
+                             help="對帳單欄(1) — 平均買入單位成本"
+                         )
+                         _fx = ic3.number_input(
+-                            f"🟨 平均買入匯率 ({_ccy}→TWD)", min_value=0.0, max_value=200.0,
++                            f"🟨 平均買入匯率 ({_ccy or '幣別未知'}→TWD)", min_value=0.0, max_value=200.0,
+                             value=_fx_default,
+                             step=0.01, format="%.4f", key=f"t7_init_fx_{_pk_f}",
+                             help="對帳單欄(3)"
+@@ -888,7 +895,7 @@ def render_t7_section() -> None:
+                         )
+                         if _div_mode.startswith("A"):
+                             _anw = ic4.number_input(
+-                                f"🟨 平均買入含息單位成本 ({_ccy})",
++                                f"🟨 平均買入含息單位成本 ({_ccy or '幣別未知'})",
+                                 min_value=0.0, max_value=10000.0,
+                                 value=_anw_default,
+                                 step=0.01, format="%.4f",
+@@ -1714,7 +1721,7 @@ def render_t7_section() -> None:
+                         for _f in _pf_t7:
+                             _pk_f = fund_pk_str(_f)
+                             _n, _x = _latest_nav_fx_t7(_f)
+-                            _navfx[_pk_f] = (_n, _x, str(_f.get("currency", "USD")).upper())
++                            _navfx[_pk_f] = (_n, _x, _ccy_calc_t7(_f))   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                             _l = _ledger_for(_pk_f)
+                             _v_curr[_pk_f] = (
+                                 _l.position.value_twd(_n, _x) if (_n and _x) else 0.0
+@@ -2487,6 +2494,13 @@ def render_t7_section() -> None:
+                                 _stock_total_twd = 0.0   # v18.232：配股總額累計
+                                 _income_total_twd = 0.0  # v18.232：配息總額累計
+                                 try:
++                                    # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 任一檔幣別未知,
++                                    # 在**任何帳本異動之前**整批擋下(不猜同/跨幣別、不查匯率)。
++                                    _ccy_unk_c = [_label_for_pk(_pk_u) for _pk_u in sorted(_all_pks_c)
++                                                  if not _ccy_calc_t7(_fund_by_pk.get(_pk_u) or {})]
++                                    if _ccy_unk_c:
++                                        raise ValueError(
++                                            f"幣別未知：{'、'.join(_ccy_unk_c)}，不執行換股")
+                                     for _spk, _cfg in _sell_configs.items():
+                                         _Sf = _fund_by_pk.get(_spk)
+                                         _na, _xa = _navfx_cache_c.get(
+@@ -2494,8 +2508,7 @@ def render_t7_section() -> None:
+                                         )
+                                         _S = {
+                                             "nav": _na, "fx": _xa,
+-                                            "ccy": _norm_ccy(
+-                                                _Sf.get("currency", "USD")),
++                                            "ccy": _ccy_calc_t7(_Sf),   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                                             "ledger": _ledger_for(_spk),
+                                         }
+                                         # v18.232：純 % — 賣方按 sell_pct 算贖回單位
+@@ -2555,8 +2568,7 @@ def render_t7_section() -> None:
+                                                 )
+                                             _Bd = {
+                                                 "nav": _nb, "fx": _xb,
+-                                                "ccy": _norm_ccy(
+-                                                    _Bf.get("currency", "USD")),
++                                                "ccy": _ccy_calc_t7(_Bf),   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                                                 "ledger": _ledger_for(_bpk),
+                                             }
+                                             # v18.244: Switch 引擎內部會 strict 比對
+@@ -2999,7 +3011,7 @@ def render_t7_section() -> None:
+                             _snap_rows.append({
+                                 "保單": _pid_disp,
+                                 "代碼": _c, "基金名稱": _name_short,
+-                                "幣別": _f.get("currency", "USD"),
++                                "幣別": _f.get("currency", ""),   # 未知≠USD
+                                 "持有單位": "—",
+                                 "平均買入淨值 NAV": "—", "含息成本": "—",
+                                 "平均買入匯率": "—",
+@@ -3033,7 +3045,7 @@ def render_t7_section() -> None:
+                             _snap_rows.append({
+                                 "保單": _pid_disp,
+                                 "代碼": _c, "基金名稱": _name_short,
+-                                "幣別": _f.get("currency", "USD"),
++                                "幣別": _f.get("currency", ""),   # 未知≠USD
+                                 "持有單位": f"{_l.position.units:,.4f}",
+                                 "平均買入淨值 NAV": f"{_l.position.cost_unit:.4f}",
+                                 "含息成本": "—",
+--
+2.43.0
+
+
+From 88e76883f659d21c60e3a53429ed86a04718f4d4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 09:09:39 +0000
+Subject: [PATCH 3/5] =?UTF-8?q?=E5=B9=A3=E5=88=A5=E6=9C=AA=E7=9F=A5?=
+ =?UTF-8?q?=E4=B8=8D=E7=AD=89=E6=96=BC=20USD=EF=BC=88=E4=B8=89=EF=BC=89?=
+ =?UTF-8?q?=EF=BC=9A=E7=A8=BD=E6=A0=B8=E5=9B=9E=E4=BF=AE=E2=80=94=E2=80=94?=
+ =?UTF-8?q?span-extend=20=E9=A0=90=E6=9C=9F=E5=B9=A3=E5=88=A5=E3=80=81?=
+ =?UTF-8?q?=E6=99=A8=E6=98=9F=E5=90=8D=E7=A8=B1=E6=8E=A8=E5=AE=9A=E3=80=81?=
+ =?UTF-8?q?=E9=9D=9E=E5=87=8D=E7=B5=90=E6=B6=88=E8=B2=BB=E7=AB=AF=E8=A1=9D?=
+ =?UTF-8?q?=E7=AA=81?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- 必修 M1（回歸）：_fetch_fund_single 呼叫 span-extend 時 meta 鏈尚未跑、fund_name 恆空，
+  預期幣別只剩選股池 → 已知 USD 的 TLZF9 晨星長歷史被擋。_span_extend_insurance_nav
+  新增 declared_ccy，預期幣別依序取：抓取結果已宣告的幣別 → 名稱／選股池／台灣字樣 →
+  晨星硬編表手工宣告值。兩個呼叫點都帶入抓取結果的幣別。中文別名以同層 _CCY_FROM_NAME
+  整欄精確比對（L1 不 import L2）。test_nav_history_window 的基金名稱改回原名
+  「安聯收益成長」，證明修正有效。
+- Q2 一致性：晨星 ISIN 路徑在幣別未知時不再拿 SecuritySearch 名稱推定的幣別發 timeseries
+  請求（名稱推定有順序陷阱，不屬可靠確認）→ fail closed；只限晨星請求這條。
+- 必修 M2（非凍結部分）：Q4 衝突時以 fund_currency_for_calc 判定、fail closed：
+  換扣款標的決策（建構引擎輸入、現價匯率解析）、配置回測、組合績效、
+  換股建議的組合追蹤幣別與大盤基準、輪動配對的幣別、投資試算
+  （順帶拿掉「未知 → TWD、FX=1」的預設）。沿用既有呈現：「缺計價幣別」、引擎既有排除、
+  「⬜ 幣別未知」。凍結消費端未動。
+- 建議 S1：span-extend 在候選必被拒時不發請求（預期幣別未知；cnyes 不宣告幣別）。
+  backfill 救援未比照（會改變 ccy_refused 與 cron 計數）。
+---
+ repositories/fund/fund_orchestration.py       |  31 ++-
+ repositories/fund/sources.py                  |  10 +-
+ tests/test_nav_history_window.py              |  10 +-
+ tests/test_portfolio_perf_render_no_writes.py |   2 +
+ ...t_unknown_currency_fail_closed_20261010.py | 236 +++++++++++++++++-
+ .../fund_grp_health/backtest_section.py       |   5 +-
+ ui/helpers/fund_grp_health/investment.py      |  18 +-
+ ui/helpers/fund_grp_health/rotation.py        |   5 +-
+ .../fund_grp_health/switch_advisor_section.py |  12 +-
+ ui/helpers/portfolio/fee_deduction.py         |  12 +-
+ ui/helpers/portfolio_perf.py                  |   5 +-
+ 11 files changed, 322 insertions(+), 24 deletions(-)
+
+diff --git a/repositories/fund/fund_orchestration.py b/repositories/fund/fund_orchestration.py
+index 03f3de2..85ef8db 100644
+--- a/repositories/fund/fund_orchestration.py
++++ b/repositories/fund/fund_orchestration.py
+@@ -132,9 +132,14 @@ def _ensure_currency(result: dict, code: str) -> None:
+         print(f"[orchestrator] _ensure_currency {code}: {type(_e).__name__}: {_e}")
+
+
++# 2026-10-10 稽核 S1:不宣告 `attrs["currency"]` 的長歷史候選來源(換源時幣別恆未知 → 必被拒)。
++_SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
++
++
+ def _span_extend_insurance_nav(
+     code: str, nav_s: pd.Series, nav_source: str,
+     fund_name: str = "", is_insurance_code: "bool | None" = None,
++    declared_ccy: str = "",
+ ) -> "tuple[pd.Series, str, int]":
+     """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
+
+@@ -164,10 +169,24 @@ def _span_extend_insurance_nav(
+         # 預期幣別在此只取「不需額外網路」的既有來源(基金名 → 選股池 → 台灣字樣推定),
+         # ~~取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。~~
+         # → 2026-10-10 客戶裁示 Q3:取不到就是未知 → **擋下**(assess_nav_series_swap 只放行 match)。
++        # 2026-10-10 稽核 M1:`_fetch_fund_single` 呼叫本函式時 meta 鏈尚未跑,
++        # `fund_name` 恆空 → 預期幣別只剩選股池 → 已知 USD 的 TLZF9 長歷史被擋(回歸)。
++        # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
++        # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
+         _expect_ccy = ""
+         try:
++            # L1 不得 import L2(§8.2)→ 中文別名用同層 `sources._CCY_FROM_NAME` **整欄精確比對**
++            # (不是名稱掃描;宣告欄的值本身就是幣別)。
++            from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
++            from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
+             from shared.data_quality import normalize_iso_ccy as _iso_ccy
+-            _expect_ccy = _iso_ccy(_correct_currency("", fund_name or "", _code))
++            _decl = str(declared_ccy or "").strip()
++            _decl = _ccy_alias.get(_decl.upper(), _ccy_alias.get(_decl, _decl))
++            _expect_ccy = (
++                _iso_ccy(_decl)
++                or _iso_ccy(_correct_currency("", fund_name or "", _code)))
++            if not _expect_ccy:
++                _expect_ccy = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
+         except Exception as _ce:  # noqa: BLE001 — 判不出幣別不得擋抓取,退「未知」
+             print(f"[orchestrator] span-extend 預期幣別判定失敗 {_code}: "
+                   f"{type(_ce).__name__}: {_ce}")
+@@ -177,6 +196,14 @@ def _span_extend_insurance_nav(
+             ("cnyes", lambda: _src_cnyes_nav(_code)),
+         )
+         for _long_src, _long_fn in _long_candidates:
++            # 2026-10-10 稽核 S1:候選**必然**被幣別守門拒絕時不發請求(結果相同,只省一趟外部往返):
++            #   (a) 預期幣別未知 → 任何候選的 verdict 都是 unknown(Q3 擋);
++            #   (b) cnyes 不宣告幣別(`sources.fetch_nav_cnyes` / `_src_cnyes_nav` 從不設
++            #       `attrs["currency"]`)→ 候選幣別恆未知。若日後 cnyes 開始宣告幣別,刪掉 (b)。
++            if not _expect_ccy or _long_src in _SPAN_EXTEND_SRC_NO_CCY:
++                print(f"[orchestrator] ⛔ {_code} span-extend 跳過 {_long_src}:"
++                      f"幣別未知(預期 {_expect_ccy or '未知'})→ 必被拒,不發請求")
++                continue
+             try:
+                 _cand = _long_fn()
+             except Exception as _le:
+@@ -595,6 +622,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+     nav_s, nav_source, _span_days = _span_extend_insurance_nav(
+         _code, nav_s, nav_source,
+         fund_name=result.get("fund_name") or "", is_insurance_code=_is_insurance_code,
++        declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
+     )
+
+     if len(nav_s) >= 10:
+@@ -1399,6 +1427,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
+         _ext_s, _ext_src, _ext_span = _span_extend_insurance_nav(
+             code, result["series"], result.get("data_source") or "moneydj_legacy_scrape",
+             fund_name=result.get("fund_name") or "",
++            declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
+         )
+         result["series"]        = _ext_s
+         result["data_source"]   = _ext_src
+diff --git a/repositories/fund/sources.py b/repositories/fund/sources.py
+index e338b2d..eb7096d 100644
+--- a/repositories/fund/sources.py
++++ b/repositories/fund/sources.py
+@@ -1739,8 +1739,14 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+                 #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
+                 sec_id = (_morningstar_screener_secid(_isin, currency_id)
+                           or _morningstar_search_secid(_isin, currency_id))
+-                # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
+-                _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
++                # ~~使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)~~
++                # ~~_auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")~~
++                # 2026-10-10 客戶裁示 Q2(稽核一致性修正;有意識的政策變更,不是漏刪):
++                # 幣別未知時 screener 不發請求,`_ms_ccy_cache` 只剩 SecuritySearch 的**名稱推定**
++                # (`_ccy_from_fund_name`,已知順序陷阱:「AUD Hedged USD」→ USD)——不屬可靠確認,
++                # 不得拿它決定晨星 `currencyId` → 留空,由下方 timeseries 守門 fail closed。
++                # 只限晨星請求這條;其他名稱推定不動。
++                _auto_ccy = ""
+                 if _auto_ccy:
+                     currency_id = _auto_ccy
+                 # ── 2026-09-06:查一檔基金**不再**把 secId 回寫進使用者的 Google Sheet ──
+diff --git a/tests/test_nav_history_window.py b/tests/test_nav_history_window.py
+index 8a1bdd0..7d3d503 100644
+--- a/tests/test_nav_history_window.py
++++ b/tests/test_nav_history_window.py
+@@ -129,16 +129,14 @@ def test_span_extend_insurance_nav_rescues_short_series():
+
+     _short = _mk_series(30)     # 保單代碼常見的「近30日」legacy fallback
+     _long = _mk_series(1200)    # Morningstar 長歷史
+-    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
+-    # 本則驗的是「跨度救援」本身,故讓預期幣別(基金名「(美元)」)與候選宣告一致;
+-    # ~~fund_name="安聯收益成長"~~(名稱無幣別線索、候選不宣告 → 現在會被擋下,見
+-    # tests/test_unknown_currency_fail_closed_20261010.py)。
++    # 2026-10-10 客戶裁示 Q3:換源前比幣別,未知擋下。真實晨星序列一律在 attrs 宣告
++    # 它請求用的幣別(`_src_morningstar_nav`),故替身照實宣告 USD。名稱維持原樣(不含幣別字樣):
++    # 預期幣別由晨星硬編表對 TLZF9 的手工宣告(USD)取得(稽核 M1 修正),本則因此照舊換源。
+     _long.attrs["currency"] = "USD"
+
+     with patch.object(O, "_src_morningstar_nav", return_value=_long):
+         s, src, span = O._span_extend_insurance_nav(
+-            "TLZF9", _short, "moneydj_legacy_scrape",
+-            fund_name="安聯收益成長基金-AMg7月收總收益類股(美元)",
++            "TLZF9", _short, "moneydj_legacy_scrape", fund_name="安聯收益成長",
+         )
+     assert len(s) == 1200
+     assert src == "morningstar(span-extend)"
+diff --git a/tests/test_portfolio_perf_render_no_writes.py b/tests/test_portfolio_perf_render_no_writes.py
+index 3a50e71..3294519 100644
+--- a/tests/test_portfolio_perf_render_no_writes.py
++++ b/tests/test_portfolio_perf_render_no_writes.py
+@@ -494,6 +494,8 @@ _LAZY_ON_RENDER_PATH = (
+     "ui.helpers.render_state",
+     "shared.signal_thresholds",
+     "services.hot_money_service",
++    # 2026-10-10 稽核 M2:`_ccy_fx_for` 改走 fund_currency_for_calc(Sheet/來源幣別一致才算已知)
++    "ui.helpers.portfolio.load",
+     "pandas",
+ )
+
+diff --git a/tests/test_unknown_currency_fail_closed_20261010.py b/tests/test_unknown_currency_fail_closed_20261010.py
+index 42d6671..2594135 100644
+--- a/tests/test_unknown_currency_fail_closed_20261010.py
++++ b/tests/test_unknown_currency_fail_closed_20261010.py
+@@ -413,7 +413,8 @@ def test_span_extend_unknown_expected_ccy_does_not_swap(monkeypatch):
+     monkeypatch.setattr(fo, "_correct_currency", lambda c, n, code: "")   # 預期幣別判不出
+     monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="": long)
+     monkeypatch.setattr(fo, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+-    s, src, _span = fo._span_extend_insurance_nav("TLZF9", short, "moneydj",
++    # 代碼刻意不在晨星硬編表內(TLZF9 在表內宣告 USD → 那是「已知」,見下方回歸)
++    s, src, _span = fo._span_extend_insurance_nav("ZZZF9", short, "moneydj",
+                                                   fund_name="X", is_insurance_code=True)
+     assert src == "moneydj" and len(s) == 20     # 未換源
+
+@@ -673,3 +674,236 @@ def test_t7_c_switch_prechecks_currency_before_any_ledger_mutation():
+         assert _calc, "守門沒有用 fund_currency_for_calc(未知 / 衝突)判定"
+         return
+     raise AssertionError("找不到 C 換股的 try/for 區塊")
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 11) 稽核第二輪(2026-10-10)
++#     M1:span-extend 預期幣別不得只剩選股池(已知 USD 的 TLZF9 長歷史被擋 = 回歸)
++#     Q2:晨星 ISIN 路徑不得以 SecuritySearch 名稱推定的幣別發 timeseries 請求
++#     S1:候選必被拒時不發請求
++#     M2:非凍結消費端遇 Q4 衝突 fail closed
++# ════════════════════════════════════════════════════════════════════════════
++def _span_ext(monkeypatch, code, *, declared="", fund_name="", ms=None, cnyes=None):
++    import repositories.fund.fund_orchestration as fo
++    import repositories.pool_repository as P
++    monkeypatch.setattr(P, "resolve_currency", lambda c: None)        # 選股池讀不到
++    calls = {"ms": 0, "cnyes": 0}
++
++    def _ms(code, fund_name=""):
++        calls["ms"] += 1
++        return ms if ms is not None else pd.Series(dtype=float)
++
++    def _cn(code):
++        calls["cnyes"] += 1
++        return cnyes if cnyes is not None else pd.Series(dtype=float)
++
++    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
++    monkeypatch.setattr(fo, "_src_cnyes_nav", _cn)
++    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
++                      index=pd.date_range("2026-08-01", periods=20))
++    out = fo._span_extend_insurance_nav(code, short, "moneydj", fund_name=fund_name,
++                                        is_insurance_code=True, declared_ccy=declared)
++    return out, calls
++
++
++def _ms_long(ccy):
++    s = pd.Series([9.0 + i * 0.001 for i in range(800)],
++                  index=pd.date_range("2024-01-01", periods=800))
++    s.attrs["currency"] = ccy
++    return s
++
++
++def test_span_extend_known_usd_hardcoded_name_without_ccy_still_swaps(monkeypatch):
++    """回歸(M1):`_fetch_fund_single` 呼叫時 fund_name 恆空;TLZF9 晨星硬編表宣告 USD
++    → 預期幣別 USD,與晨星 USD 序列一致 → 照舊換源(基底行為)。"""
++    (s, src, _), calls = _span_ext(monkeypatch, "TLZF9", fund_name="", ms=_ms_long("USD"))
++    assert src == "morningstar(span-extend)" and len(s) == 800
++    assert calls["ms"] == 1
++
++
++def test_span_extend_declared_ccy_from_fetch_result(monkeypatch):
++    """回歸(M1):不在硬編表、名稱無幣別字樣,但抓取結果已宣告 EUR → 預期 EUR。"""
++    (_s, src, _), _c = _span_ext(monkeypatch, "ZZZF8", declared="歐元",
++                                fund_name="某某全球收益基金A", ms=_ms_long("EUR"))
++    assert src == "morningstar(span-extend)"
++    (s2, src2, _), _c2 = _span_ext(monkeypatch, "ZZZF8", declared="EUR",
++                                   fund_name="", ms=_ms_long("USD"))
++    assert src2 == "moneydj" and len(s2) == 20          # 宣告 EUR、候選 USD → 不一致照擋
++
++
++def test_span_extend_call_sites_pass_declared_ccy():
++    """兩條 pipeline 呼叫 span-extend 都要把抓取結果的幣別帶進來(M1)。"""
++    src = (ROOT / "repositories" / "fund" / "fund_orchestration.py").read_text(encoding="utf-8")
++    tree = ast.parse(src)
++    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
++             and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
++    assert len(calls) == 2
++    for c in calls:
++        assert any(k.arg == "declared_ccy" for k in c.keywords), ast.unparse(c)
++
++
++def test_span_extend_skips_requests_when_rejection_certain(monkeypatch):
++    """S1:預期幣別未知 → 晨星、cnyes 都不發請求;已知時 cnyes(不宣告幣別)仍不發。"""
++    (_s, src, _), calls = _span_ext(monkeypatch, "ZZZF7", ms=_ms_long("USD"))
++    assert src == "moneydj" and calls == {"ms": 0, "cnyes": 0}
++    (_s, src, _), calls = _span_ext(monkeypatch, "TLZF9", ms=pd.Series(dtype=float),
++                                    cnyes=_ms_long(""))
++    assert src == "moneydj" and calls == {"ms": 1, "cnyes": 0}
++
++
++def test_morningstar_isin_name_inferred_ccy_not_used(monkeypatch):
++    """Q2:幣別未知 → 不得拿 SecuritySearch 名稱推定的幣別(順序陷阱)去發 timeseries。"""
++    _isolate_ms(monkeypatch, isin="LU0000000003", search="F0NAME")
++
++    def _search(q, *a, **k):
++        S._ms_ccy_cache[q] = "USD"                 # 名稱「… AUD Hedged USD」→ 推定 USD
++        return "F0NAME"
++
++    monkeypatch.setattr(S, "_morningstar_search_secid", _search)
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    try:
++        assert S._src_morningstar_nav("ZZZ5").empty
++        assert seen == []
++    finally:
++        S._ms_ccy_cache.pop("LU0000000003", None)
++
++
++def test_morningstar_isin_user_ccy_still_used(monkeypatch):
++    """回歸:池幣別已填(使用者宣告)→ 照舊以它請求。"""
++    _isolate_ms(monkeypatch, isin="LU0000000004", ccy="EUR", search="")
++    monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, currency="": "F0SCR")
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    s = S._src_morningstar_nav("ZZZ4")
++    assert s.attrs["currency"] == "EUR" and "currencyId=EUR" in seen[0]
++
++
++_CONFLICT = {"code": "ACDD01", "name": "安聯台灣大壩", "currency": "TWD",
++             "moneydj_raw": {"currency": "USD"}, "invest_twd": 300000,
++             "series": pd.Series([300.0 + i for i in range(30)],
++                                 index=pd.date_range("2026-08-01", periods=30))}
++_KNOWN_USD = {"code": "TLZF9", "name": "安聯收益成長", "currency": "USD",
++              "moneydj_raw": {"currency": "USD"}, "invest_twd": 300000,
++              "series": pd.Series([10.0 + i * 0.01 for i in range(30)],
++                                  index=pd.date_range("2026-08-01", periods=30))}
++
++
++def test_fee_deduction_conflict_excluded_and_no_fx(monkeypatch):
++    import services.fund_service as FS
++    from ui.helpers.portfolio.fee_deduction import _make_nav_fx_fn, build_fee_inputs
++    led = types.SimpleNamespace(position=types.SimpleNamespace(units=100.0, cost_unit=300.0,
++                                                               fx_avg=1.0))
++    from models.policy import fund_pk_str
++    eng, exc, _rm = build_fee_inputs([_CONFLICT, _KNOWN_USD],
++                                     {fund_pk_str(_CONFLICT): led, fund_pk_str(_KNOWN_USD): led},
++                                     lambda f: (10.0, 32.0))
++    assert [e["reason"] for e in exc] == ["缺計價幣別"]          # 衝突 → 既有「缺計價幣別」
++    assert [e["currency"] for e in eng] == ["USD"]              # 已知 USD 照舊
++    fx_calls = []
++    monkeypatch.setattr(FS, "get_latest_nav", lambda code: 10.0)
++    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: fx_calls.append(pair) or 32.0)
++    _r = _make_nav_fx_fn()
++    assert _r(_CONFLICT) == (10.0, None) and fx_calls == []
++    assert _r(_KNOWN_USD) == (10.0, 32.0) and fx_calls == ["USDTWD"]
++
++
++def test_switch_advisor_ccy_fx_for_conflict_blank(monkeypatch):
++    import services.hot_money_service as HM
++    from ui.helpers.fund_grp_health.switch_advisor_section import (
++        _benchmark_label_for,
++        _ccy_fx_for,
++    )
++    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
++    ccy, _fx = _ccy_fx_for([_CONFLICT, _KNOWN_USD])
++    assert ccy == {"ACDD01": "", "TLZF9": "USD"}
++    assert _benchmark_label_for(_CONFLICT) is None
++    assert _benchmark_label_for(_KNOWN_USD) is not None
++
++
++class _Stop(Exception):
++    pass
++
++
++def _fake_st_mod(monkeypatch, mod):
++    fake = types.SimpleNamespace(divider=lambda *a, **k: None, markdown=lambda *a, **k: None,
++                                 caption=lambda *a, **k: None, info=lambda *a, **k: None)
++    monkeypatch.setattr(mod, "st", fake)
++
++
++def test_portfolio_perf_conflict_blank_ccy(monkeypatch):
++    import services.hot_money_service as HM
++    import services.portfolio_performance as PPF
++    import ui.helpers.portfolio_perf as PP
++    seen = {}
++
++    def _pm(nav, w, ccy_by_code=None, fx_series=None):
++        seen.update(ccy_by_code)
++        raise _Stop
++
++    monkeypatch.setattr(PPF, "performance_metrics", _pm)
++    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
++    _fake_st_mod(monkeypatch, PP)
++    with pytest.raises(_Stop):
++        PP.render_portfolio_performance([_CONFLICT, _KNOWN_USD])
++    assert seen == {"ACDD01": "", "TLZF9": "USD"}
++
++
++def test_backtest_section_conflict_blank_ccy(monkeypatch):
++    import services.allocation_backtest as AB
++    import services.hot_money_service as HM
++    import ui.helpers.fund_grp_health.backtest_section as BS
++    seen = {}
++
++    def _bt(nav, ccy, fx_series=None):
++        seen.update(ccy)
++        raise _Stop
++
++    monkeypatch.setattr(AB, "backtest_allocations", _bt)
++    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
++    monkeypatch.setattr(BS, "system_error", lambda *a, **k: None)
++    _fake_st_mod(monkeypatch, BS)
++    with pytest.raises(_Stop):
++        BS.render_allocation_backtest_section([_CONFLICT, _KNOWN_USD])
++    assert seen == {"ACDD01": "", "TLZF9": "USD"}
++
++
++def test_rotation_rows_conflict_blank_ccy(monkeypatch):
++    import ui.helpers.fund_grp_health.rotation as RO
++    import ui.helpers.fund_grp_health.unified as UN
++    monkeypatch.setattr(UN, "build_merged_extra_columns", lambda *a, **k: (None, {}))
++    monkeypatch.setattr(RO, "st", types.SimpleNamespace(session_state={}))
++    rows = RO._assemble_rows([_CONFLICT, _KNOWN_USD])
++    assert [r["currency"] for r in rows] == ["", "USD"]
++
++
++def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
++    import services.fund_service as FS
++    import ui.helpers.fund_grp_health.investment as IV
++    fx_calls, metrics, captions = [], [], []
++
++    class _Col:
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *a):
++            return False
++
++        def metric(self, label, value, *a, **k):
++            metrics.append(label)
++
++    fake = types.SimpleNamespace(
++        markdown=lambda *a, **k: None, caption=lambda m, *a, **k: captions.append(m),
++        metric=lambda label, *a, **k: metrics.append(label),
++        columns=lambda spec: [_Col() for _ in (spec if isinstance(spec, list) else range(spec))])
++    monkeypatch.setattr(IV, "st", fake)
++    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: fx_calls.append(pair) or 32.0)
++    f = dict(_CONFLICT, metrics={"nav": 300.0})
++    IV._render_investment_calc(f, 1_000_000)
++    assert fx_calls == [] and "可申購單位數" not in metrics
++    assert "⬜ 幣別未知" in captions
++    assert not any("FX 缺失" in c for c in captions)   # 是幣別未知,不是匯率缺失
++    # ~~未知 → 退 TWD(FX=1)照算~~ —— 未知也不算
++    IV._render_investment_calc(dict(f, currency="", moneydj_raw={}), 1_000_000)
++    assert "可申購單位數" not in metrics
++    # 回歸:已知 USD 照算
++    IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
++    assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics
+diff --git a/ui/helpers/fund_grp_health/backtest_section.py b/ui/helpers/fund_grp_health/backtest_section.py
+index d335cdc..0ee3aa8 100644
+--- a/ui/helpers/fund_grp_health/backtest_section.py
++++ b/ui/helpers/fund_grp_health/backtest_section.py
+@@ -72,7 +72,10 @@ def render_allocation_backtest_section(funds: list) -> None:
+             f"配置回測要比較至少 2 檔的淨值走勢,本次只有 {len(_nav)} 檔可用",
+             where="本頁上方「基金代號」欄位(多貼幾檔後重按 🩺 開始健診)")
+         return
+-    _ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}
++    # ~~_ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}~~
++    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 回測引擎誠實排除)
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in funds if f.get("code")}
+     _name = {f.get("code"): (f.get("name") or f.get("code")) for f in funds if f.get("code")}
+
+     # USDTWD 歷史(L2 facade;失敗 → 美元計價基金被排除,誠實提示,§1)
+diff --git a/ui/helpers/fund_grp_health/investment.py b/ui/helpers/fund_grp_health/investment.py
+index 76942d9..3809efe 100644
+--- a/ui/helpers/fund_grp_health/investment.py
++++ b/ui/helpers/fund_grp_health/investment.py
+@@ -17,10 +17,14 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
+     _mj = fund.get("moneydj_raw") or {}
+     _m = fund.get("metrics") or {}
+     _code = fund.get("code", "—")
+-    _ccy_raw = (_mj.get("currency") or fund.get("currency") or "TWD").strip() or "TWD"
++    # ~~_ccy_raw = (_mj.get("currency") or fund.get("currency") or "TWD").strip() or "TWD"~~
++    # ~~_ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")~~
++    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)。
++    # 舊寫法「未知 → TWD(FX=1)」同樣是把未知幣別等同某個具體幣別。
++    from ui.helpers.portfolio.load import fund_currency_for_calc
+     # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 health_extras 既有人民幣→CNH 行為）。
+     from services.currency import normalize_ccy as _norm_ccy
+-    _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
++    _ccy = _norm_ccy(fund_currency_for_calc(fund), default="", mode="yf")
+     # §1:`a or b` 會把**合法的 0.0** 當成缺值往下一層退(0 是 falsy)。
+     # NAV 不可能是 0(§3.2 NAV > 0),但 annual_div_rate 為 0 是「不配息」的真實值,
+     # 用 `or` 會退成 metrics 版甚至變 None,把「確定不配息」講成「不知道」。
+@@ -30,7 +34,9 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
+                      else _m.get("annual_div_rate"))
+
+     _fx = None
+-    if _ccy == "TWD":
++    if not _ccy:
++        pass    # 幣別未知 → 不組幣對、不查匯率(下方 fail closed)
++    elif _ccy == "TWD":
+         _fx = 1.0
+     else:
+         try:
+@@ -55,7 +61,9 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
+     with _ic2:
+         st.caption(f"NAV：{_nav if _nav is not None else '—'} {_ccy}")
+         st.caption(f"年化配息率：{_adr if _adr is not None else '—'} %")
+-        if _ccy == "TWD":
++        if not _ccy:
++            st.caption("⬜ 幣別未知")
++        elif _ccy == "TWD":
+             st.caption("💰 此基金以新台幣計價（FX = 1）")
+         elif _fx:
+             st.caption(f"💱 1 {_ccy} = **{_fx:.4f}** TWD（即時匯率）")
+@@ -65,6 +73,8 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
+     if not _nav or _nav <= 0:
+         st.caption("⬜ NAV 缺失，無法試算")
+         return
++    if not _ccy:    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
++        return
+     if _ccy != "TWD" and not _fx:
+         st.caption("⬜ FX 缺失，無法試算")
+         return
+diff --git a/ui/helpers/fund_grp_health/rotation.py b/ui/helpers/fund_grp_health/rotation.py
+index 650a372..370c035 100644
+--- a/ui/helpers/fund_grp_health/rotation.py
++++ b/ui/helpers/fund_grp_health/rotation.py
+@@ -33,6 +33,8 @@ def _assemble_rows(funds: list) -> list:
+     from services.fx_regime_service import fx_regime_by_ccy as _fxr_rot
+     _fx_map_rot = _fxr_rot() or {}
+
++    from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_rot
++
+     rows = []
+     for _f in funds:
+         _code = _f.get("code", "?")
+@@ -52,7 +54,8 @@ def _assemble_rows(funds: list) -> list:
+             "基金類別": _h.get("基金類別"), "4D Grade": _h.get("4D Grade"),
+             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
+             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
+-            "currency": _f.get("currency"),   # v19.484:跨幣別換股標註(§4.1)用
++            # ~~"currency": _f.get("currency"),~~   # v19.484:跨幣別換股標註(§4.1)用
++            "currency": _ccy_calc_rot(_f),   # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
+         })
+     return rows
+
+diff --git a/ui/helpers/fund_grp_health/switch_advisor_section.py b/ui/helpers/fund_grp_health/switch_advisor_section.py
+index f31b4ed..e98c4f5 100644
+--- a/ui/helpers/fund_grp_health/switch_advisor_section.py
++++ b/ui/helpers/fund_grp_health/switch_advisor_section.py
+@@ -182,8 +182,11 @@ def _benchmark_label_for(f: dict) -> "str | None":
+     """依幣別選對應大盤(TWD→TWII / USD→SPX / 其餘→None,§4.1 不錯配)。"""
+     try:
+         from services.capture_ratio import benchmark_for_currency
+-        from services.currency import normalize_ccy
+-        return benchmark_for_currency(normalize_ccy(f.get("currency"), default=""))
++        # ~~from services.currency import normalize_ccy~~
++        # ~~return benchmark_for_currency(normalize_ccy(f.get("currency"), default=""))~~
++        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
++        from ui.helpers.portfolio.load import fund_currency_for_calc
++        return benchmark_for_currency(fund_currency_for_calc(f))
+     except Exception:  # noqa: BLE001
+         return None
+
+@@ -263,7 +266,10 @@ def _ccy_fx_for(funds: list):
+     v19.449 稽核 HIGH:組合走勢/快照原本用原幣報酬加權、漏匯率損益;此處備妥 ccy+fx 供換算。
+     匯率抓取失敗 → fx=None(美元基金會被 L2 誠實排除,不靜默造假,§1)。
+     """
+-    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
++    # ~~_ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}~~
++    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 換 TWD 時誠實排除)
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in (funds or []) if f.get("code")}
+     _fx = None
+     try:
+         from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
+diff --git a/ui/helpers/portfolio/fee_deduction.py b/ui/helpers/portfolio/fee_deduction.py
+index c1d74cd..b81d643 100644
+--- a/ui/helpers/portfolio/fee_deduction.py
++++ b/ui/helpers/portfolio/fee_deduction.py
+@@ -51,7 +51,6 @@ def build_fee_inputs(funds: list, ledgers_by_pk: dict,
+           rate_map:     {CCY: fx}——組引擎 exchange_rates(TWD 恆 1.0)。
+     """
+     from models.policy import fund_pk_str
+-    from services.currency import normalize_ccy
+
+     engine_funds: list = []
+     excluded: list = []
+@@ -68,7 +67,10 @@ def build_fee_inputs(funds: list, ledgers_by_pk: dict,
+                              "reason": "需 T7 帳本(無持有單位/成本基礎)"})
+             continue
+
+-        _ccy = normalize_ccy(f.get("currency", ""), default="")
++        # ~~_ccy = normalize_ccy(f.get("currency", ""), default="")~~
++        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
++        from ui.helpers.portfolio.load import fund_currency_for_calc
++        _ccy = fund_currency_for_calc(f)
+         if not _ccy:
+             excluded.append({"id": _pk, "name": _name, "reason": "缺計價幣別"})
+             continue
+@@ -164,12 +166,14 @@ def _make_nav_fx_fn():
+          **抓不到即期匯率 → None**(§1:上層誠實排除,**不**用歷史買入匯率冒充現價 —— 這是
+          與 T7 `_latest_nav_fx_t7` 刻意的分歧,避免把 avg buy-rate 當 spot 產生假市值)。
+     """
+-    from services.currency import normalize_ccy
+     from services.fund_service import get_latest_fx, get_latest_nav
+
+     def _resolve(fund: dict) -> tuple:
+         _code = str(fund.get("code", "")).strip()
+-        _ccy = normalize_ccy(fund.get("currency", ""), default="")
++        # ~~_ccy = normalize_ccy(fund.get("currency", ""), default="")~~
++        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
++        from ui.helpers.portfolio.load import fund_currency_for_calc
++        _ccy = fund_currency_for_calc(fund)
+         _nav = None
+         try:
+             _nav = get_latest_nav(_code)
+diff --git a/ui/helpers/portfolio_perf.py b/ui/helpers/portfolio_perf.py
+index fa1521f..9930070 100644
+--- a/ui/helpers/portfolio_perf.py
++++ b/ui/helpers/portfolio_perf.py
+@@ -29,7 +29,10 @@ def render_portfolio_performance(funds: list) -> None:
+
+     # v19.449 稽核 HIGH:跨幣別組合須換 TWD basis(含匯率損益),否則美元基金匯率被漏掉。
+     # 抓 USDTWD 歷史(L2 facade,不直呼 L1,§8.2);失敗 → 美元基金被排除、誠實提示(§1)。
+-    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
++    # ~~_ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}~~
++    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 績效引擎誠實排除)
++    from ui.helpers.portfolio.load import fund_currency_for_calc
++    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in (funds or []) if f.get("code")}
+     _fx = None
+     try:
+         from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
+--
+2.43.0
+
+
+From 1bd216f1031338fac0499c0b10cc75c770cbc47c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 09:51:27 +0000
+Subject: [PATCH 4/5] =?UTF-8?q?=E5=B9=A3=E5=88=A5=E6=9C=AA=E7=9F=A5?=
+ =?UTF-8?q?=E4=B8=8D=E7=AD=89=E6=96=BC=20USD=EF=BC=88=E5=9B=9B=EF=BC=89?=
+ =?UTF-8?q?=EF=BC=9A=E8=A4=87=E9=A9=97=E5=9B=9E=E4=BF=AE=E2=80=94=E2=80=94?=
+ =?UTF-8?q?=E4=B8=BB=E7=AE=A1=E7=B7=9A=20span-extend=20=E5=9C=A8=20meta=20?=
+ =?UTF-8?q?=E5=AE=A3=E5=91=8A=E5=B9=A3=E5=88=A5=E5=BE=8C=E8=A3=9C=E8=B7=91?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+更正上一個 commit：其訊息寫「兩個呼叫點都帶入抓取結果的幣別」，對主管線不成立。
+_fetch_fund_single 的 span-extend 位在 meta 鏈（Step 3）之前，result 的 fund_name 與
+currency 此時恆為空，傳進去的 declared_ccy 永遠是空字串；TLZF9 能過只是剛好命中晨星
+硬編表。不在硬編表、選股池未填幣別、但 meta 會宣告幣別的基金（例：ALZF9）仍被擋。
+
+- 主管線：原位的 span-extend 保留（順序與欄位語意不變）；在 meta 鏈與幣別修正之後補
+  「第二趟」：僅在第一趟沒換源、且 meta 之後的預期幣別與第一趟不同時才跑；換源成功才
+  改寫 series／data_source／nav_span_days 並追加一筆 source_trace。
+- 預期幣別判定抽成 _span_extend_expected_ccy（行為與上一版相同）。
+- 端到端測試：以替身走完 _fetch_fund_single 整條鏈，涵蓋「不在硬編表、meta 宣告美元 →
+  換源」「meta 宣告與晨星不同 → 擋」「meta 未知 → 不發請求」「第一趟已換源 → 不跑第二趟」。
+- 小修：_CCY_FROM_NAME 補「新臺幣」；投資試算改用既有字樣「⬜ 缺幣別」；移除晨星幣別快取
+  只寫不讀的兩處寫入（Q2 之後已無讀取端），相關測試舊斷言以刪除線保留並改為斷言未寫入。
+---
+ repositories/fund/fund_orchestration.py       | 80 ++++++++++++++-----
+ repositories/fund/sources.py                  | 13 +--
+ .../test_morningstar_screener_secid_v19491.py | 24 ++++--
+ ...t_unknown_currency_fail_closed_20261010.py | 74 ++++++++++++++++-
+ ui/helpers/fund_grp_health/investment.py      |  2 +-
+ 5 files changed, 160 insertions(+), 33 deletions(-)
+
+diff --git a/repositories/fund/fund_orchestration.py b/repositories/fund/fund_orchestration.py
+index 85ef8db..d541590 100644
+--- a/repositories/fund/fund_orchestration.py
++++ b/repositories/fund/fund_orchestration.py
+@@ -132,6 +132,32 @@ def _ensure_currency(result: dict, code: str) -> None:
+         print(f"[orchestrator] _ensure_currency {code}: {type(_e).__name__}: {_e}")
+
+
++def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str = "") -> str:
++    """span-extend 換源前比對用的**預期幣別** → ISO 三碼或 `""`(未知)。
++
++    2026-10-10 稽核 M1:依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 /
++    選股池 / 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
++    L1 不得 import L2(§8.2)→ 中文別名用同層 `sources._CCY_FROM_NAME` **整欄精確比對**
++    (不是名稱掃描;宣告欄的值本身就是幣別)。純讀(選股池走既有快取)。
++    """
++    _code = (code or "").upper().strip()
++    try:
++        from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
++        from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
++        from shared.data_quality import normalize_iso_ccy as _iso_ccy
++        _decl = str(declared_ccy or "").strip()
++        _decl = _ccy_alias.get(_decl.upper(), _ccy_alias.get(_decl, _decl))
++        _exp = (_iso_ccy(_decl)
++                or _iso_ccy(_correct_currency("", fund_name or "", _code)))
++        if not _exp:
++            _exp = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
++        return _exp
++    except Exception as _ce:  # noqa: BLE001 — 判不出幣別不得擋抓取,退「未知」
++        print(f"[orchestrator] span-extend 預期幣別判定失敗 {_code}: "
++              f"{type(_ce).__name__}: {_ce}")
++        return ""
++
++
+ # 2026-10-10 稽核 S1:不宣告 `attrs["currency"]` 的長歷史候選來源(換源時幣別恆未知 → 必被拒)。
+ _SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
+
+@@ -173,23 +199,7 @@ def _span_extend_insurance_nav(
+         # `fund_name` 恆空 → 預期幣別只剩選股池 → 已知 USD 的 TLZF9 長歷史被擋(回歸)。
+         # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
+         # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
+-        _expect_ccy = ""
+-        try:
+-            # L1 不得 import L2(§8.2)→ 中文別名用同層 `sources._CCY_FROM_NAME` **整欄精確比對**
+-            # (不是名稱掃描;宣告欄的值本身就是幣別)。
+-            from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
+-            from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
+-            from shared.data_quality import normalize_iso_ccy as _iso_ccy
+-            _decl = str(declared_ccy or "").strip()
+-            _decl = _ccy_alias.get(_decl.upper(), _ccy_alias.get(_decl, _decl))
+-            _expect_ccy = (
+-                _iso_ccy(_decl)
+-                or _iso_ccy(_correct_currency("", fund_name or "", _code)))
+-            if not _expect_ccy:
+-                _expect_ccy = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
+-        except Exception as _ce:  # noqa: BLE001 — 判不出幣別不得擋抓取,退「未知」
+-            print(f"[orchestrator] span-extend 預期幣別判定失敗 {_code}: "
+-                  f"{type(_ce).__name__}: {_ce}")
++        _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
+         _long_candidates = (
+             ("morningstar",
+              lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
+@@ -619,11 +629,18 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+         nav_s, nav_source = _best_s, _best_src
+
+     # v19.281/v19.284 span-extend(共用 _span_extend_insurance_nav,見檔頭 SSOT 說明)
++    # ⚠️ 2026-10-10 複驗更正:此處在 meta 鏈(Step 3)**之前**,`result` 的 fund_name /
++    #    currency 恆為空 —— 上一輪「傳入抓取結果的幣別」在這條主管線不成立。
++    #    本呼叫保留原位(順序與欄位語意不變);meta 宣告幣別後由下方「第二趟」補做。
++    _se_name0 = result.get("fund_name") or ""
++    _se_ccy0 = result.get("currency") or ""
++    _se_src0 = nav_source
+     nav_s, nav_source, _span_days = _span_extend_insurance_nav(
+         _code, nav_s, nav_source,
+-        fund_name=result.get("fund_name") or "", is_insurance_code=_is_insurance_code,
+-        declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
++        fund_name=_se_name0, is_insurance_code=_is_insurance_code,
++        declared_ccy=_se_ccy0,
+     )
++    _se_swapped = nav_source != _se_src0
+
+     if len(nav_s) >= 10:
+         result["series"]      = nav_s
+@@ -693,6 +710,31 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+         print(f"[orchestrator] 幣別修正 {_code}: {_cur_ccy0 or '空'} → {_new_ccy}")
+         result["currency"] = _new_ccy
+
++    # ── 2026-10-10 複驗 M1:span-extend 第二趟(meta 宣告幣別之後)──────────────
++    # 第一趟在 meta 之前,預期幣別只剩選股池 / 硬編表 → 不在硬編表、池未填幣別、
++    # 但 meta 會宣告幣別的基金(例:ALZF9 →「美元」)長歷史被擋。只在**第一趟沒換源**、
++    # 且 meta 之後的預期幣別**與第一趟不同**時補跑一次(不重複請求同一個判定)。
++    # 換源成功才改寫 series / data_source / nav_span_days 並追加一筆 source_trace。
++    if not _se_swapped:
++        _se_exp0 = _span_extend_expected_ccy(_code, _se_name0, _se_ccy0)
++        _se_exp1 = _span_extend_expected_ccy(_code, result.get("fund_name") or "",
++                                             result.get("currency") or "")
++        if _se_exp1 and _se_exp1 != _se_exp0:
++            _ns2, _src2, _span2 = _span_extend_insurance_nav(
++                _code, nav_s, nav_source,
++                fund_name=result.get("fund_name") or "",
++                is_insurance_code=_is_insurance_code,
++                declared_ccy=result.get("currency") or "",
++            )
++            if _src2 != nav_source and len(_ns2) >= 10:
++                nav_s, nav_source, _span_days = _ns2, _src2, _span2
++                result["series"] = nav_s
++                result["data_source"] = nav_source
++                result["nav_span_days"] = _span_days
++                result.setdefault("source_trace", []).append(
++                    {"source": nav_source, "success": True, "nav_count": len(nav_s),
++                     "span_days": _span_days})
++
+     # ── Step 4: 配息資料 ───────────────────────────────────────────
+     divs = result.get("dividends") or []
+     if not divs:
+diff --git a/repositories/fund/sources.py b/repositories/fund/sources.py
+index eb7096d..bd57e22 100644
+--- a/repositories/fund/sources.py
++++ b/repositories/fund/sources.py
+@@ -1421,7 +1421,7 @@ _ms_secid_cache: dict = {}
+ # v19.473:同一次搜尋順手記下晨星回傳的**基金名稱 / 幣別**（供「只填代號+ISIN,其餘自動」）。
+ #   幣別藏在晨星基金名稱後綴（如 "…AMg7 USD"）—— 用它自動判幣別,免使用者填(§4.1 不硬給 USD)。
+ _ms_name_cache: dict = {}
+-_ms_ccy_cache: dict = {}
++_ms_ccy_cache: dict = {}   # ⚠️ 2026-10-10 起不再寫入、亦無讀取端;保留名稱供既有測試 fixture 清理
+ # v19.491:ISIN → secId 走 Morningstar **screener**(精確 ISIN filter)的正/負快取。
+ #   與 SecuritySearch(_ms_secid_cache)分開,鍵一律大寫 ISIN。
+ _ms_screener_cache: dict = {}
+@@ -1429,7 +1429,7 @@ _ms_screener_cache: dict = {}
+ # 幣別 token（英文碼 + 常見中文詞）→ ISO 幣別。掃描晨星基金名稱命中第一個即用。
+ _CCY_FROM_NAME = {
+     "USD": "USD", "美元": "USD", "美金": "USD",
+-    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD",
++    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD", "新臺幣": "TWD",  # 2026-10-10 +新臺幣
+     "EUR": "EUR", "歐元": "EUR",
+     "HKD": "HKD", "港幣": "HKD", "港元": "HKD",
+     "AUD": "AUD", "澳幣": "AUD", "澳元": "AUD",
+@@ -1507,7 +1507,8 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
+             _ms_secid_cache[query] = sec_id
+             # v19.473:順手記名稱 + 從名稱判幣別(供 ISIN 驅動路徑自動回填,免使用者填)
+             _ms_name_cache[query] = fund_name_ms
+-            _ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)
++            # ~~_ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)~~
++            # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪)
+             return sec_id
+     except Exception as _e:
+         # v19.339(第五份 review Bug 5):暫時性失敗(timeout/403/JSON 壞)原本也落到
+@@ -1672,8 +1673,10 @@ def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
+                     _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
+                     if _name:
+                         _ms_name_cache[_isin] = _name
+-                    # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
+-                    _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
++                    # ~~screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)~~
++                    # ~~_ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)~~
++                    # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪);
++                    # screener 回的幣別仍印在上方 log。
+                     return _sec
+             # 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
+             if _rows:
+diff --git a/tests/test_morningstar_screener_secid_v19491.py b/tests/test_morningstar_screener_secid_v19491.py
+index 0e7f713..142cd56 100644
+--- a/tests/test_morningstar_screener_secid_v19491.py
++++ b/tests/test_morningstar_screener_secid_v19491.py
+@@ -91,7 +91,9 @@ def test_hit_returns_secid_and_fills_caches(monkeypatch):
+     assert S._ms_screener_cache["LU2023250330"] == "F00000P8WB"      # 正快取
+     assert S._ms_secid_cache["LU2023250330"] == "F00000P8WB"         # 與 SecuritySearch 共用
+     assert S._ms_name_cache["LU2023250330"] == "Allianz Income and Growth AMg7 USD"
+-    assert S._ms_ccy_cache["LU2023250330"] == "USD"                  # screener 直接回幣別
++    # ~~assert S._ms_ccy_cache["LU2023250330"] == "USD" # screener 直接回幣別~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "LU2023250330" not in S._ms_ccy_cache
+
+
+ def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatch):
+@@ -99,7 +101,9 @@ def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatc
+         "rows": [{"SecId": "F1", "Name": "Some Fund EUR Hedged", "ISIN": "LU9", "Currency": ""}],
+     }])
+     assert S._morningstar_screener_secid("LU9", currency="USD") == "F1"
+-    assert S._ms_ccy_cache["LU9"] == "EUR"                           # Currency 空 → 從名稱猜
++    # ~~assert S._ms_ccy_cache["LU9"] == "EUR" # Currency 空 → 從名稱猜~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "LU9" not in S._ms_ccy_cache
+
+
+ def test_empty_isin_returns_empty(monkeypatch):
+@@ -123,7 +127,9 @@ def test_multi_universe_fallthrough_first_empty_second_hits(monkeypatch):
+         {"rows": [{"SecId": "FTWN", "Name": "台灣某基金 台幣", "ISIN": "TW000T3619Y1"}]},
+     ])
+     assert S._morningstar_screener_secid("TW000T3619Y1", currency="USD") == "FTWN"
+-    assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD"                  # 名稱含「台幣」→ TWD
++    # ~~assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD" # 名稱含「台幣」→ TWD~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "TW000T3619Y1" not in S._ms_ccy_cache
+
+
+ def test_all_universes_empty_negative_cached(monkeypatch):
+@@ -294,7 +300,9 @@ def test_secid_key_casing_tolerated(monkeypatch):
+ def test_pricecurrency_read_when_currency_absent(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
+     assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
+-    assert S._ms_ccy_cache["LU5"] == "EUR"                 # 讀 PriceCurrency datapoint
++    # ~~assert S._ms_ccy_cache["LU5"] == "EUR" # 讀 PriceCurrency datapoint~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "LU5" not in S._ms_ccy_cache
+
+
+ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+@@ -302,13 +310,17 @@ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [
+         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
+     S._morningstar_screener_secid("LU5", currency="USD")
+-    assert S._ms_ccy_cache["LU5"] == "EUR"
++    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "LU5" not in S._ms_ccy_cache
+
+
+ def test_lowercase_currency_uppercased(monkeypatch):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
+     S._morningstar_screener_secid("LU5", currency="USD")
+-    assert S._ms_ccy_cache["LU5"] == "EUR"
++    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
++    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
++    assert "LU5" not in S._ms_ccy_cache
+
+
+ def test_first_valid_row_taken_skipping_invalid(monkeypatch):
+diff --git a/tests/test_unknown_currency_fail_closed_20261010.py b/tests/test_unknown_currency_fail_closed_20261010.py
+index 2594135..e356486 100644
+--- a/tests/test_unknown_currency_fail_closed_20261010.py
++++ b/tests/test_unknown_currency_fail_closed_20261010.py
+@@ -737,7 +737,8 @@ def test_span_extend_call_sites_pass_declared_ccy():
+     tree = ast.parse(src)
+     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+              and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
+-    assert len(calls) == 2
++    # 2026-10-10 複驗:主管線第一趟(meta 前)+ 第二趟(meta 後)+ legacy = 3
++    assert len(calls) == 3
+     for c in calls:
+         assert any(k.arg == "declared_ccy" for k in c.keywords), ast.unparse(c)
+
+@@ -899,7 +900,7 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
+     f = dict(_CONFLICT, metrics={"nav": 300.0})
+     IV._render_investment_calc(f, 1_000_000)
+     assert fx_calls == [] and "可申購單位數" not in metrics
+-    assert "⬜ 幣別未知" in captions
++    assert "⬜ 缺幣別" in captions
+     assert not any("FX 缺失" in c for c in captions)   # 是幣別未知,不是匯率缺失
+     # ~~未知 → 退 TWD(FX=1)照算~~ —— 未知也不算
+     IV._render_investment_calc(dict(f, currency="", moneydj_raw={}), 1_000_000)
+@@ -907,3 +908,72 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
+     # 回歸:已知 USD 照算
+     IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
+     assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics
++
++
++# ════════════════════════════════════════════════════════════════════════════
++# 12) 複驗 M1(2026-10-10):`_fetch_fund_single` 整條鏈端到端(全替身、不連網)
++#     第一趟 span-extend 在 meta 之前、result.currency 恆空;meta 宣告幣別之後須補第二趟。
++# ════════════════════════════════════════════════════════════════════════════
++def _const(v):
++    return lambda *a, **k: v
++
++
++def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
++    import repositories.fund.fund_orchestration as fo
++    import repositories.pool_repository as P
++    for _n in dir(fo):                              # 所有取數源先一律回空
++        if _n.startswith("_src_") and callable(getattr(fo, _n)):
++            _empty = ([] if _n.endswith("_div") else
++                      {} if _n.endswith("_meta") else pd.Series(dtype=float))
++            monkeypatch.setattr(fo, _n, _const(_empty))
++    monkeypatch.setattr(fo, "fetch_url_with_retry", lambda *a, **k: None)
++    monkeypatch.setattr(fo, "fetch_risk_metrics", lambda *a, **k: {})
++    monkeypatch.setattr(fo, "fetch_performance_wb01", lambda *a, **k: {})
++    monkeypatch.setattr(fo, "_pool_secid_or_isin", lambda c: True)
++    monkeypatch.setattr(P, "resolve_currency", lambda c: None)       # 選股池未填幣別
++    # 30 筆、跨度 145 天:≥20 筆 → FundClear 勝出;≥90 天 → 不是「近30日短窗」;<300 天 → 觸發 span-extend
++    short = pd.Series([10.0 + i * 0.01 for i in range(30)],
++                      index=pd.date_range("2026-03-01", periods=30, freq="5D"))
++    monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
++    monkeypatch.setattr(fo, "_src_tcb_meta",
++                        lambda c: {"fund_name": "安聯收益成長基金", "currency": meta_ccy})
++    ms_calls = []
++
++    def _ms(c, fund_name=""):
++        ms_calls.append(c)
++        return ms_series if ms_series is not None else _ms_long(ms_ccy)
++
++    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
++    if ms_series is None:
++        assert code not in S._MORNINGSTAR_SECID_MAP  # 前提:不在硬編表
++    return fo._fetch_fund_single(code), ms_calls
++
++
++def test_single_pipeline_meta_declared_usd_swaps_to_long_history(monkeypatch):
++    r, ms_calls = _run_single(monkeypatch, meta_ccy="美元", ms_ccy="USD")
++    assert r["data_source"] == "morningstar(span-extend)"
++    assert len(r["series"]) == 800 and r["nav_span_days"] > 300
++    assert ms_calls == ["ALZF9"]                    # 第一趟幣別未知不發請求(S1),第二趟才發
++    assert any(t.get("source") == "morningstar(span-extend)" for t in r["source_trace"])
++
++
++def test_single_pipeline_meta_ccy_differs_from_morningstar_blocks(monkeypatch):
++    r, _ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD")
++    assert r["data_source"] == "FundClear" and len(r["series"]) == 30
++
++
++def test_single_pipeline_meta_unknown_stays_short(monkeypatch):
++    r, ms_calls = _run_single(monkeypatch, meta_ccy="", ms_ccy="USD")
++    assert r["data_source"] == "FundClear" and ms_calls == []
++
++
++def test_single_pipeline_first_pass_swapped_no_second_request(monkeypatch):
++    """第一趟(硬編表宣告 USD)已換源 → 不再跑第二趟(不重複請求、不被 meta 的宣告改判)。
++    候選跨度刻意 <300 天,讓 span-extend 自身的跨度閘門擋不住第二趟 —— 守門只能靠 `_se_swapped`。"""
++    mid = pd.Series([9.0 + i * 0.01 for i in range(60)],
++                    index=pd.date_range("2025-12-01", periods=60, freq="4D"))   # 跨度 236 天
++    mid.attrs["currency"] = "USD"
++    r, ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD", code="TLZF9",
++                              ms_series=mid)
++    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 60
++    assert ms_calls == ["TLZF9"]
+diff --git a/ui/helpers/fund_grp_health/investment.py b/ui/helpers/fund_grp_health/investment.py
+index 3809efe..3eaca4d 100644
+--- a/ui/helpers/fund_grp_health/investment.py
++++ b/ui/helpers/fund_grp_health/investment.py
+@@ -62,7 +62,7 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
+         st.caption(f"NAV：{_nav if _nav is not None else '—'} {_ccy}")
+         st.caption(f"年化配息率：{_adr if _adr is not None else '—'} %")
+         if not _ccy:
+-            st.caption("⬜ 幣別未知")
++            st.caption("⬜ 缺幣別")   # 沿用既有字樣(capture.py)
+         elif _ccy == "TWD":
+             st.caption("💰 此基金以新台幣計價（FX = 1）")
+         elif _fx:
+--
+2.43.0
+
+
+From efb3fa2e4f7830bf7f39b6b104c16bdacb8da1f9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 10:47:07 +0000
+Subject: [PATCH 5/5] =?UTF-8?q?=E5=B9=A3=E5=88=A5=E6=9C=AA=E7=9F=A5?=
+ =?UTF-8?q?=E4=B8=8D=E7=AD=89=E6=96=BC=20USD=EF=BC=88=E4=BA=94=EF=BC=89?=
+ =?UTF-8?q?=EF=BC=9A=E6=99=A8=E6=98=9F=E6=8E=A5=E5=8F=97=E5=B7=B2=E7=A2=BA?=
+ =?UTF-8?q?=E8=AA=8D=E5=B9=A3=E5=88=A5=E3=80=81=E8=B7=A8=E4=BE=86=E6=BA=90?=
+ =?UTF-8?q?=20NAV=20=E5=9C=A8=20meta=20=E4=B9=8B=E5=BE=8C=E5=9B=9E?=
+ =?UTF-8?q?=E9=A9=97=E5=B9=A3=E5=88=A5?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+更正上一個 commit 的端到端測試：它把 _src_morningstar_nav 換成替身，而真實函式不接受
+外部幣別，只讀選股池／硬編表／ISIN 使用者幣別。ALZF9 第二趟在晨星內部就被擋下，
+0 個 timeseries 請求，結果仍是 FundClear 30 筆；上一輪「M1 主管線已修好」不成立。
+
+- 晨星（M1）：_src_morningstar_nav 新增 currency_hint，只在硬編表／池 secId 列與選股池
+  使用者幣別都查不到時才採用（中文別名正規化）。span-extend 對晨星的候選一律傳入預期
+  幣別（主管線兩趟與 legacy 路徑共用同一個 lambda）。三者皆無 → 不發任何晨星請求
+  （連 secId 搜尋都不發；建議 3c）。
+- 跨來源 NAV（Q4，客戶裁示）：在 meta 與幣別修正之後回驗。依序列自己的出處
+  （attrs["source"] 前綴 Morningstar:/Yahoo:/AlphaVantage:，涵蓋 2g、2g2、2g3、2h 經 ISIN
+  退晨星、以及第一趟 span-extend 換來的晨星序列）以 meta 之後的預期幣別比對；不是 match
+  （含未知）就丟棄並寫入 source_trace，回退到 waterfall 側車最長的原生序列（≥10 筆），
+  沒有就清空序列，沿用既有「無淨值序列」呈現。
+- 第二趟只在第一趟「因預期幣別未知而沒發請求」時才跑（建議 3a）。
+- 端到端測試改為只替身 HTTP（urllib.request.urlopen），經真實晨星函式證明 ALZF9 換源；
+  另補 Q4 重現（晨星 USD 對 meta 新台幣、Yahoo .F EUR 對 meta 美元）與 hint 優先序。
+- 晨星 screener 的 PriceCurrency 解析補「解析正確」斷言（只看 log，不寫快取、不改行為）。
+---
+ repositories/fund/fund_orchestration.py       |  65 ++++++-
+ repositories/fund/sources.py                  |  24 ++-
+ .../test_morningstar_screener_secid_v19491.py |  16 +-
+ tests/test_nav_currency_swap_guard.py         |   2 +-
+ ...t_unknown_currency_fail_closed_20261010.py | 182 +++++++++++++-----
+ 5 files changed, 238 insertions(+), 51 deletions(-)
+
+diff --git a/repositories/fund/fund_orchestration.py b/repositories/fund/fund_orchestration.py
+index d541590..6b5a2e6 100644
+--- a/repositories/fund/fund_orchestration.py
++++ b/repositories/fund/fund_orchestration.py
+@@ -158,6 +158,15 @@ def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str
+         return ""
+
+
++# 2026-10-10 客戶裁示 Q4:**非原生報價**的 NAV 來源(依序列 `attrs["source"]` 前綴判定)。
++#   晨星 timeseries 依 `currencyId` 換算;Yahoo `{secId}.F` 是法蘭克福掛牌(多為 EUR);
++#   AlphaVantage 同為交易所掛牌報價 —— 三者都可能不是基金的計價幣別。
++#   ⚠️ 未列入者(FundClear / TDCC / MoneyDJ 各子網域 / SITCA / 鉅亨 / 安聯 / 銀行平台 /
++#   保單子網域 / 富蘭克林、摩根官網直連 / GitHub 快取)視為**原生**,不回驗 ——
++#   那是本組依來源性質的判讀,未逐一實測其回傳幣別。
++_NAV_NON_NATIVE_PREFIXES: "tuple[str, ...]" = ("Morningstar:", "Yahoo:", "AlphaVantage:")
++
++
+ # 2026-10-10 稽核 S1:不宣告 `attrs["currency"]` 的長歷史候選來源(換源時幣別恆未知 → 必被拒)。
+ _SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
+
+@@ -202,7 +211,8 @@ def _span_extend_insurance_nav(
+         _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
+         _long_candidates = (
+             ("morningstar",
+-             lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
++             lambda: _src_morningstar_nav(_code, fund_name=fund_name or "",
++                                          currency_hint=_expect_ccy)),   # 2026-10-10 複驗 M1
+             ("cnyes", lambda: _src_cnyes_nav(_code)),
+         )
+         for _long_src, _long_fn in _long_candidates:
+@@ -632,6 +642,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+     # ⚠️ 2026-10-10 複驗更正:此處在 meta 鏈(Step 3)**之前**,`result` 的 fund_name /
+     #    currency 恆為空 —— 上一輪「傳入抓取結果的幣別」在這條主管線不成立。
+     #    本呼叫保留原位(順序與欄位語意不變);meta 宣告幣別後由下方「第二趟」補做。
++    # Q4 回驗的回退候選(側車最長原生序列)有效筆數 —— 在 span-extend 之前先量好
++    # (側車此後不再變動;放這裡也讓「收尾救援在 span-extend 之前」的結構守衛維持原意)。
++    _best_fallback_len = _effective_nav_len(_best_s)
+     _se_name0 = result.get("fund_name") or ""
+     _se_ccy0 = result.get("currency") or ""
+     _se_src0 = nav_source
+@@ -710,6 +723,52 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+         print(f"[orchestrator] 幣別修正 {_code}: {_cur_ccy0 or '空'} → {_new_ccy}")
+         result["currency"] = _new_ccy
+
++    # ── 2026-10-10 客戶裁示 Q4:跨來源 NAV 幣別回驗(meta 宣告幣別之後)──────────────
++    # 2g 晨星 / 2g2 Yahoo `.F` / 2g3 AlphaVantage,以及 2h 富蘭克林、摩根經 ISIN 退晨星、
++    # 第一趟 span-extend 換來的晨星序列 —— 採用時都沒有(或只以 meta 前的預期幣別)比對幣別。
++    # 判定依「序列自己的出處」(`attrs["source"]`),不依標籤:非原生報價來源一律以
++    # meta 之後的預期幣別回驗;不是 match(含未知)→ 丟棄,fail closed。
++    # 丟棄後回退到 waterfall 側車裡最長的原生序列(≥10 筆);沒有 → 序列清空,
++    # 走既有「無淨值序列」呈現。⚠️ 未比對的原生來源見 `_NAV_NON_NATIVE_PREFIXES` 註解。
++    if result.get("series") is not None and len(result["series"]) > 0:
++        _xs = result["series"]
++        _xs_prov = str((getattr(_xs, "attrs", None) or {}).get("source") or "")
++        if _xs_prov.startswith(_NAV_NON_NATIVE_PREFIXES):
++            from shared.data_quality import (
++                assess_nav_series_swap as _assess_x,
++                nav_series_currency as _series_ccy_x,
++            )
++            _xv = _assess_x(
++                expected_ccy=_span_extend_expected_ccy(
++                    _code, result.get("fund_name") or "", result.get("currency") or ""),
++                candidate_ccy=_series_ccy_x(_xs),
++                candidate_source=nav_source, current_source="")
++            if not _xv["safe"]:
++                import sys as _sys_x
++                print(f"[orchestrator] ⛔ {_code} 丟棄跨來源 NAV({nav_source}):"
++                      f"{_xv['reason']}", file=_sys_x.stderr)
++                result.setdefault("source_trace", []).append(
++                    {"source": nav_source, "success": False, "discarded": True,
++                     "error": _xv["reason"]})
++                _fb_prov = str((getattr(_best_s, "attrs", None) or {}).get("source") or "")
++                if (_best_fallback_len >= 10
++                        and not _fb_prov.startswith(_NAV_NON_NATIVE_PREFIXES)):
++                    nav_s, nav_source = _best_s, f"{_best_src}(best-of-waterfall)"
++                    _span_days = _nav_span_days(nav_s)
++                    result["series"] = nav_s
++                    result["data_source"] = nav_source
++                    result["nav_span_days"] = _span_days
++                    result["source_trace"].append(
++                        {"source": nav_source, "success": True, "nav_count": len(nav_s),
++                         "span_days": _span_days})
++                else:
++                    nav_s, nav_source, _span_days = pd.Series(dtype=float), "", 0
++                    result["series"] = None
++                    result["data_source"] = ""
++                    result.pop("nav_span_days", None)
++                # 第二趟照常判定(3a:只在第一趟幣別未知時跑):回退到原生序列後,
++                # 若幣別此時已知,仍可依 meta 的幣別合法延長。
++
+     # ── 2026-10-10 複驗 M1:span-extend 第二趟(meta 宣告幣別之後)──────────────
+     # 第一趟在 meta 之前,預期幣別只剩選股池 / 硬編表 → 不在硬編表、池未填幣別、
+     # 但 meta 會宣告幣別的基金(例:ALZF9 →「美元」)長歷史被擋。只在**第一趟沒換源**、
+@@ -719,7 +778,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
+         _se_exp0 = _span_extend_expected_ccy(_code, _se_name0, _se_ccy0)
+         _se_exp1 = _span_extend_expected_ccy(_code, result.get("fund_name") or "",
+                                              result.get("currency") or "")
+-        if _se_exp1 and _se_exp1 != _se_exp0:
++        # 2026-10-10 複驗建議 3a:只在第一趟「因預期幣別未知而沒發請求」時補跑
++        # (~~`_se_exp1 and _se_exp1 != _se_exp0`~~ 會重複發必被拒的請求)。
++        if _se_exp1 and not _se_exp0:
+             _ns2, _src2, _span2 = _span_extend_insurance_nav(
+                 _code, nav_s, nav_source,
+                 fund_name=result.get("fund_name") or "",
+diff --git a/repositories/fund/sources.py b/repositories/fund/sources.py
+index bd57e22..148a696 100644
+--- a/repositories/fund/sources.py
++++ b/repositories/fund/sources.py
+@@ -1692,9 +1692,14 @@ def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
+     return ""
+
+
+-def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
++def _src_morningstar_nav(code: str, fund_name: str = "",
++                         currency_hint: str = "") -> "pd.Series":
+     """
+     v6.19: 從 Morningstar 全球 API 取歷史淨值。
++
++    `currency_hint`(2026-10-10 複驗 M1):呼叫端**已確認**的幣別(例:span-extend 以 meta
++    宣告算出的預期幣別)。**只在選股池與硬編表都查不到幣別時**才拿它當 `currencyId`;
++    三者皆無 → 幣別未知 → fail closed(Q2),**連 secId 搜尋都不發**。
+     改進：
+     1. 優先使用 _MORNINGSTAR_SECID_MAP 硬編碼（跳過搜尋，避免 lt.morningstar.com 封鎖）
+     2. 使用正確 currencyId（USD vs TWD）
+@@ -1716,6 +1721,23 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+     # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
+     # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
+     sec_id, currency_id = _mapped[0], str(_mapped[1] or "").strip().upper()
++    # 2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。
++    if not currency_id:
++        try:
++            from repositories.pool_repository import resolve_currency as _rc_pre
++            currency_id = str(_rc_pre(_code) or "").strip()
++        except Exception:  # noqa: BLE001 — 池不可用 → 退 hint
++            currency_id = ""
++    if not currency_id and currency_hint:
++        _h = str(currency_hint).strip()
++        _h = _CCY_FROM_NAME.get(_h.upper(), _CCY_FROM_NAME.get(_h, _h))
++        _h = _h.upper() if (len(_h) == 3 and _h.isascii() and _h.isalpha()) else ""
++        currency_id = _h
++    if not currency_id:
++        # 幣別未知 → 後段的 timeseries 必然 fail closed;secId 搜尋(screener /
++        # SecuritySearch)的結果用不到,提早結束、不發任何晨星請求(複驗建議 3c)。
++        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不發晨星請求(fail closed)")
++        return pd.Series(dtype=float)
+
+     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
+     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
+diff --git a/tests/test_morningstar_screener_secid_v19491.py b/tests/test_morningstar_screener_secid_v19491.py
+index 142cd56..cec5dba 100644
+--- a/tests/test_morningstar_screener_secid_v19491.py
++++ b/tests/test_morningstar_screener_secid_v19491.py
+@@ -82,7 +82,7 @@ def test_extract_rows_tolerant(data, expect_len):
+
+
+ # ── _morningstar_screener_secid:命中 / 回填快取 ──────────────────────────
+-def test_hit_returns_secid_and_fills_caches(monkeypatch):
++def test_hit_returns_secid_and_fills_caches(monkeypatch, capsys):
+     _patch_urlopen_seq(monkeypatch, [{
+         "rows": [{"SecId": "F00000P8WB", "Name": "Allianz Income and Growth AMg7 USD",
+                   "ISIN": "LU2023250330", "Currency": "USD"}],
+@@ -94,6 +94,8 @@ def test_hit_returns_secid_and_fills_caches(monkeypatch):
+     # ~~assert S._ms_ccy_cache["LU2023250330"] == "USD" # screener 直接回幣別~~
+     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+     assert "LU2023250330" not in S._ms_ccy_cache
++    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
++    assert ", USD)" in capsys.readouterr().out
+
+
+ def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatch):
+@@ -297,15 +299,17 @@ def test_secid_key_casing_tolerated(monkeypatch):
+     assert S._morningstar_screener_secid("LU5", currency="USD") == "Flower"
+
+
+-def test_pricecurrency_read_when_currency_absent(monkeypatch):
++def test_pricecurrency_read_when_currency_absent(monkeypatch, capsys):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
+     assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
+     # ~~assert S._ms_ccy_cache["LU5"] == "EUR" # 讀 PriceCurrency datapoint~~
+     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+     assert "LU5" not in S._ms_ccy_cache
++    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
++    assert ", EUR)" in capsys.readouterr().out
+
+
+-def test_screener_ccy_wins_over_name_suffix(monkeypatch):
++def test_screener_ccy_wins_over_name_suffix(monkeypatch, capsys):
+     # 名稱後綴說 USD,但 PriceCurrency 說 EUR → screener 直接回的贏(§4.1 準確優先)
+     _patch_urlopen_seq(monkeypatch, [{"rows": [
+         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
+@@ -313,14 +317,18 @@ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+     # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+     assert "LU5" not in S._ms_ccy_cache
++    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
++    assert ", EUR)" in capsys.readouterr().out
+
+
+-def test_lowercase_currency_uppercased(monkeypatch):
++def test_lowercase_currency_uppercased(monkeypatch, capsys):
+     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
+     S._morningstar_screener_secid("LU5", currency="USD")
+     # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+     # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+     assert "LU5" not in S._ms_ccy_cache
++    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
++    assert ", EUR)" in capsys.readouterr().out
+
+
+ def test_first_valid_row_taken_skipping_invalid(monkeypatch):
+diff --git a/tests/test_nav_currency_swap_guard.py b/tests/test_nav_currency_swap_guard.py
+index b29b371..2fa2c15 100644
+--- a/tests/test_nav_currency_swap_guard.py
++++ b/tests/test_nav_currency_swap_guard.py
+@@ -212,7 +212,7 @@ def _wire_l1(monkeypatch, *, ms, pool_ccy=None):
+     import repositories.fund.fund_orchestration as O
+     import repositories.pool_repository as POOL
+     monkeypatch.setattr(O, "_src_morningstar_nav",
+-                        lambda code, fund_name="": ms)
++                        lambda code, fund_name="", **_k: ms)   # 2026-10-10:+currency_hint
+     monkeypatch.setattr(O, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+     monkeypatch.setattr(POOL, "resolve_currency", lambda code: pool_ccy)
+     return O
+diff --git a/tests/test_unknown_currency_fail_closed_20261010.py b/tests/test_unknown_currency_fail_closed_20261010.py
+index e356486..e84a8ef 100644
+--- a/tests/test_unknown_currency_fail_closed_20261010.py
++++ b/tests/test_unknown_currency_fail_closed_20261010.py
+@@ -411,7 +411,7 @@ def test_span_extend_unknown_expected_ccy_does_not_swap(monkeypatch):
+                      index=pd.date_range("2024-01-01", periods=800))
+     long.attrs["currency"] = "USD"
+     monkeypatch.setattr(fo, "_correct_currency", lambda c, n, code: "")   # 預期幣別判不出
+-    monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="": long)
++    monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="", **_k: long)
+     monkeypatch.setattr(fo, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+     # 代碼刻意不在晨星硬編表內(TLZF9 在表內宣告 USD → 那是「已知」,見下方回歸)
+     s, src, _span = fo._span_extend_insurance_nav("ZZZF9", short, "moneydj",
+@@ -689,7 +689,7 @@ def _span_ext(monkeypatch, code, *, declared="", fund_name="", ms=None, cnyes=No
+     monkeypatch.setattr(P, "resolve_currency", lambda c: None)        # 選股池讀不到
+     calls = {"ms": 0, "cnyes": 0}
+
+-    def _ms(code, fund_name=""):
++    def _ms(code, fund_name="", **_k):
+         calls["ms"] += 1
+         return ms if ms is not None else pd.Series(dtype=float)
+
+@@ -909,20 +909,30 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
+     IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
+     assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics
+
+-
+ # ════════════════════════════════════════════════════════════════════════════
+-# 12) 複驗 M1(2026-10-10):`_fetch_fund_single` 整條鏈端到端(全替身、不連網)
+-#     第一趟 span-extend 在 meta 之前、result.currency 恆空;meta 宣告幣別之後須補第二趟。
++# 12) 複驗 M1 / Q4(2026-10-10):`_fetch_fund_single` 整條鏈端到端,不連網。
++#     ⚠️ **晨星取數函式本身不替身** —— 只替身最底層的 HTTP(`urllib.request.urlopen`),
++#     證明真實 `_src_morningstar_nav` 會以正確幣別發請求、序列真的被換進來或被丟掉。
++#     其餘非晨星的 `_src_*` 一律回空(或指定),選股池以 `pool_repository` 替身。
+ # ════════════════════════════════════════════════════════════════════════════
+ def _const(v):
+     return lambda *a, **k: v
+
+
+-def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
++def _ms_payload(n=800):
++    days = pd.date_range("2024-01-01", periods=n)
++    return {"TimeSeries": {"Security": [{"HistoryDetail": [
++        {"EndDate": d.strftime("%Y-%m-%d"), "Value": f"{9.0 + i * 0.001:.4f}"}
++        for i, d in enumerate(days)]}]}}
++
++
++def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_ccy=None,
++                native=True, yahoo=None, ms_n=800):
+     import repositories.fund.fund_orchestration as fo
+     import repositories.pool_repository as P
+-    for _n in dir(fo):                              # 所有取數源先一律回空
+-        if _n.startswith("_src_") and callable(getattr(fo, _n)):
++    for _n in dir(fo):                              # 非晨星的取數源先一律回空
++        if (_n.startswith("_src_") and _n != "_src_morningstar_nav"
++                and callable(getattr(fo, _n))):
+             _empty = ([] if _n.endswith("_div") else
+                       {} if _n.endswith("_meta") else pd.Series(dtype=float))
+             monkeypatch.setattr(fo, _n, _const(_empty))
+@@ -930,50 +940,136 @@ def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
+     monkeypatch.setattr(fo, "fetch_risk_metrics", lambda *a, **k: {})
+     monkeypatch.setattr(fo, "fetch_performance_wb01", lambda *a, **k: {})
+     monkeypatch.setattr(fo, "_pool_secid_or_isin", lambda c: True)
+-    monkeypatch.setattr(P, "resolve_currency", lambda c: None)       # 選股池未填幣別
+-    # 30 筆、跨度 145 天:≥20 筆 → FundClear 勝出;≥90 天 → 不是「近30日短窗」;<300 天 → 觸發 span-extend
+-    short = pd.Series([10.0 + i * 0.01 for i in range(30)],
+-                      index=pd.date_range("2026-03-01", periods=30, freq="5D"))
+-    monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
++    monkeypatch.setattr(P, "resolve_secid", lambda c: pool_secid)
++    monkeypatch.setattr(P, "resolve_isin", lambda c: None)
++    monkeypatch.setattr(P, "resolve_currency", lambda c: pool_ccy)
++    if native:
++        # 30 筆、跨度 145 天:≥20 筆 → FundClear;≥90 天 → 不是近30日短窗;<300 天 → 觸發 span-extend
++        short = pd.Series([10.0 + i * 0.01 for i in range(30)],
++                          index=pd.date_range("2026-03-01", periods=30, freq="5D"))
++        short.attrs["source"] = "FundClear:GetFundNAV"
++        monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
++    if yahoo is not None:
++        monkeypatch.setattr(fo, "_src_yahoo_finance_nav", lambda c: yahoo)
+     monkeypatch.setattr(fo, "_src_tcb_meta",
+-                        lambda c: {"fund_name": "安聯收益成長基金", "currency": meta_ccy})
+-    ms_calls = []
++                        lambda c: {"fund_name": "某某收益成長基金", "currency": meta_ccy})
++    ts_urls = []
++    import urllib.request as UR
+
+-    def _ms(c, fund_name=""):
+-        ms_calls.append(c)
+-        return ms_series if ms_series is not None else _ms_long(ms_ccy)
++    class _R(io.BytesIO):
++        def __enter__(self):
++            return self
+
+-    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
+-    if ms_series is None:
+-        assert code not in S._MORNINGSTAR_SECID_MAP  # 前提:不在硬編表
+-    return fo._fetch_fund_single(code), ms_calls
++        def __exit__(self, *a):
++            return False
++
++    def _open(req, timeout=None):
++        url = getattr(req, "full_url", str(req))
++        if "timeseries_price" in url:
++            ts_urls.append(url)
++            return _R(json.dumps(_ms_payload(ms_n)).encode())
++        raise OSError(f"unexpected request {url[:80]}")
++
++    monkeypatch.setattr(UR, "urlopen", _open)
++    return fo._fetch_fund_single(code), ts_urls
+
+
+ def test_single_pipeline_meta_declared_usd_swaps_to_long_history(monkeypatch):
+-    r, ms_calls = _run_single(monkeypatch, meta_ccy="美元", ms_ccy="USD")
++    """ALZF9:不在硬編表、選股池有 secId 但沒填幣別;meta 宣告「美元」→ 經**真實**晨星函式換源。"""
++    assert "ALZF9" not in S._MORNINGSTAR_SECID_MAP
++    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", ""))
+     assert r["data_source"] == "morningstar(span-extend)"
+     assert len(r["series"]) == 800 and r["nav_span_days"] > 300
+-    assert ms_calls == ["ALZF9"]                    # 第一趟幣別未知不發請求(S1),第二趟才發
+-    assert any(t.get("source") == "morningstar(span-extend)" for t in r["source_trace"])
+-
+-
+-def test_single_pipeline_meta_ccy_differs_from_morningstar_blocks(monkeypatch):
+-    r, _ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD")
+-    assert r["data_source"] == "FundClear" and len(r["series"]) == 30
++    assert r["series"].attrs.get("currency") == "USD"
++    assert len(ts) == 1 and "currencyId=USD" in ts[0]   # 第一趟未知不發(S1/3c),第二趟以 hint 發
++
++
++def test_single_pipeline_meta_differs_from_morningstar_discarded(monkeypatch):
++    """選股池宣告 USD(第一趟以 USD 換源成功),meta 宣告 EUR → Q4 回驗丟棄,回退原生序列。"""
++    r, ts = _run_single(monkeypatch, meta_ccy="EUR", pool_secid=("F0ALZF9", "USD"),
++                        pool_ccy="USD")
++    assert len(ts) == 1 and "currencyId=USD" in ts[0]
++    assert r["data_source"] == "FundClear(best-of-waterfall)" and len(r["series"]) == 30
++    assert any(t.get("discarded") for t in r["source_trace"])
++
++
++def test_single_pipeline_meta_unknown_no_request(monkeypatch):
++    r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", ""))
++    assert r["data_source"] == "FundClear" and ts == []      # 連一個晨星請求都沒有
++
++
++def test_single_pipeline_first_pass_known_no_second_request(monkeypatch):
++    """選股池宣告 USD、meta 也是美元 → 第一趟換源;3a:第一趟已知幣別 → 不跑第二趟。
++    晨星序列刻意只給 60 筆(跨度 <300 天),讓 span-extend 自身的跨度閘門擋不住第二趟。"""
++    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "USD"),
++                        pool_ccy="USD", ms_n=200)
++    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 200
++    assert len(ts) == 1
++
++
++def test_q4_waterfall_morningstar_usd_vs_meta_twd_discarded(monkeypatch):
++    """重現(複驗):原生來源全空 → 2g 採用晨星 USD(選股池 USD);meta 宣告新台幣 →
++    舊版 `series` 是 USD、`currency` 是新台幣。Q4:丟棄,序列清空(走既有「無淨值序列」)。"""
++    r, ts = _run_single(monkeypatch, meta_ccy="新台幣", pool_secid=("F0ALZF9", "USD"),
++                        pool_ccy="USD", native=False)
++    assert len(ts) == 1                                       # 2g 確實抓了晨星
++    assert r["series"] is None and r["data_source"] == ""
++    assert any(t.get("discarded") and "TWD" in t.get("error", "")
++               for t in r["source_trace"])
++
++
++def test_q4_waterfall_yahoo_f_eur_vs_meta_usd_discarded(monkeypatch):
++    """重現(複驗):TLZF9 原生來源全空、晨星回空 → 2g2 採用 Yahoo `{secId}.F`(宣告 EUR);
++    meta 宣告美元 → Q4:丟棄。"""
++    yf = pd.Series([20.0 + i * 0.01 for i in range(400)],
++                   index=pd.date_range("2025-01-01", periods=400))
++    yf.attrs.update({"source": "Yahoo:chart:0P0001J5YG.F", "currency": "EUR"})
++    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False,
++                         yahoo=yf, ms_n=0)
++    assert r["series"] is None and r["data_source"] == ""
++    assert any(t.get("discarded") and t.get("source") == "yahoo_finance"
++               for t in r["source_trace"])
++
++
++def test_q4_waterfall_yahoo_matching_currency_kept(monkeypatch):
++    """回歸:Yahoo 宣告與 meta 一致(USD)→ 保留。"""
++    yf = pd.Series([20.0 + i * 0.01 for i in range(400)],
++                   index=pd.date_range("2025-01-01", periods=400))
++    yf.attrs.update({"source": "Yahoo:chart:0P0001J5YG.F", "currency": "USD"})
++    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False,
++                         yahoo=yf, ms_n=0)
++    assert r["data_source"] == "yahoo_finance" and len(r["series"]) == 400
++
++
++# ── `_src_morningstar_nav(currency_hint=)`:只在池與硬編表都沒有幣別時才用(複驗 M1)──
++@pytest.mark.parametrize("code,pool_secid,pool_ccy,hint,want", [
++    ("TLZF9", None, None, "EUR", "USD"),           # 硬編表宣告 USD 優先
++    ("ZZZ3", ("F0Z3", ""), "EUR", "USD", "EUR"),     # 池使用者幣別優先
++    ("ZZZ3", ("F0Z3", ""), None, "美元", "USD"),     # 兩者皆無 → hint(中文別名正規化)
++    ("ZZZ3", ("F0Z3", "TWD"), None, "USD", "TWD"),   # 池 secId 列宣告 TWD 優先
++])
++def test_morningstar_currency_hint_priority(monkeypatch, code, pool_secid, pool_ccy, hint, want):
++    _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    s = S._src_morningstar_nav(code, currency_hint=hint)
++    assert s.attrs["currency"] == want and f"currencyId={want}" in seen[0]
+
+
+-def test_single_pipeline_meta_unknown_stays_short(monkeypatch):
+-    r, ms_calls = _run_single(monkeypatch, meta_ccy="", ms_ccy="USD")
+-    assert r["data_source"] == "FundClear" and ms_calls == []
++def test_morningstar_unknown_ccy_no_secid_search(monkeypatch):
++    """複驗建議 3c:幣別未知 → 連 secId 搜尋(SecuritySearch / screener)都不發。"""
++    _isolate_ms(monkeypatch, isin="LU0000000005")
++    monkeypatch.setattr(S, "_morningstar_search_secid",
++                        lambda *a, **k: pytest.fail("幣別未知不應發 secId 搜尋"))
++    monkeypatch.setattr(S, "_morningstar_screener_secid",
++                        lambda *a, **k: pytest.fail("幣別未知不應發 screener"))
++    seen = _record_urlopen(monkeypatch, _MS_TS)
++    assert S._src_morningstar_nav("ZZZ2", fund_name="某基金").empty and seen == []
+
+
+-def test_single_pipeline_first_pass_swapped_no_second_request(monkeypatch):
+-    """第一趟(硬編表宣告 USD)已換源 → 不再跑第二趟(不重複請求、不被 meta 的宣告改判)。
+-    候選跨度刻意 <300 天,讓 span-extend 自身的跨度閘門擋不住第二趟 —— 守門只能靠 `_se_swapped`。"""
+-    mid = pd.Series([9.0 + i * 0.01 for i in range(60)],
+-                    index=pd.date_range("2025-12-01", periods=60, freq="4D"))   # 跨度 236 天
+-    mid.attrs["currency"] = "USD"
+-    r, ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD", code="TLZF9",
+-                              ms_series=mid)
+-    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 60
+-    assert ms_calls == ["TLZF9"]
++def test_single_pipeline_first_pass_known_rejected_no_repeat(monkeypatch):
++    """複驗建議 3a:第一趟預期幣別已知(池 TWD)而沒換成(晨星只回 5 筆)→ meta 宣告美元也
++    不再跑第二趟(舊條件「預期不同就重跑」會重複發一個必被拒的請求)。"""
++    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "TWD"),
++                        pool_ccy="TWD", ms_n=5)
++    assert r["data_source"] == "FundClear"
++    assert len(ts) == 1 and "currencyId=TWD" in ts[0]
+--
+2.43.0
