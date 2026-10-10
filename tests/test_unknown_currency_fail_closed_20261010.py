@@ -737,7 +737,8 @@ def test_span_extend_call_sites_pass_declared_ccy():
     tree = ast.parse(src)
     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
-    assert len(calls) == 2
+    # 2026-10-10 複驗:主管線第一趟(meta 前)+ 第二趟(meta 後)+ legacy = 3
+    assert len(calls) == 3
     for c in calls:
         assert any(k.arg == "declared_ccy" for k in c.keywords), ast.unparse(c)
 
@@ -899,7 +900,7 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
     f = dict(_CONFLICT, metrics={"nav": 300.0})
     IV._render_investment_calc(f, 1_000_000)
     assert fx_calls == [] and "可申購單位數" not in metrics
-    assert "⬜ 幣別未知" in captions
+    assert "⬜ 缺幣別" in captions
     assert not any("FX 缺失" in c for c in captions)   # 是幣別未知,不是匯率缺失
     # ~~未知 → 退 TWD(FX=1)照算~~ —— 未知也不算
     IV._render_investment_calc(dict(f, currency="", moneydj_raw={}), 1_000_000)
@@ -907,3 +908,72 @@ def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
     # 回歸:已知 USD 照算
     IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
     assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 12) 複驗 M1(2026-10-10):`_fetch_fund_single` 整條鏈端到端(全替身、不連網)
+#     第一趟 span-extend 在 meta 之前、result.currency 恆空;meta 宣告幣別之後須補第二趟。
+# ════════════════════════════════════════════════════════════════════════════
+def _const(v):
+    return lambda *a, **k: v
+
+
+def _run_single(monkeypatch, *, meta_ccy, ms_ccy, code="ALZF9", ms_series=None):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    for _n in dir(fo):                              # 所有取數源先一律回空
+        if _n.startswith("_src_") and callable(getattr(fo, _n)):
+            _empty = ([] if _n.endswith("_div") else
+                      {} if _n.endswith("_meta") else pd.Series(dtype=float))
+            monkeypatch.setattr(fo, _n, _const(_empty))
+    monkeypatch.setattr(fo, "fetch_url_with_retry", lambda *a, **k: None)
+    monkeypatch.setattr(fo, "fetch_risk_metrics", lambda *a, **k: {})
+    monkeypatch.setattr(fo, "fetch_performance_wb01", lambda *a, **k: {})
+    monkeypatch.setattr(fo, "_pool_secid_or_isin", lambda c: True)
+    monkeypatch.setattr(P, "resolve_currency", lambda c: None)       # 選股池未填幣別
+    # 30 筆、跨度 145 天:≥20 筆 → FundClear 勝出;≥90 天 → 不是「近30日短窗」;<300 天 → 觸發 span-extend
+    short = pd.Series([10.0 + i * 0.01 for i in range(30)],
+                      index=pd.date_range("2026-03-01", periods=30, freq="5D"))
+    monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
+    monkeypatch.setattr(fo, "_src_tcb_meta",
+                        lambda c: {"fund_name": "安聯收益成長基金", "currency": meta_ccy})
+    ms_calls = []
+
+    def _ms(c, fund_name=""):
+        ms_calls.append(c)
+        return ms_series if ms_series is not None else _ms_long(ms_ccy)
+
+    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
+    if ms_series is None:
+        assert code not in S._MORNINGSTAR_SECID_MAP  # 前提:不在硬編表
+    return fo._fetch_fund_single(code), ms_calls
+
+
+def test_single_pipeline_meta_declared_usd_swaps_to_long_history(monkeypatch):
+    r, ms_calls = _run_single(monkeypatch, meta_ccy="美元", ms_ccy="USD")
+    assert r["data_source"] == "morningstar(span-extend)"
+    assert len(r["series"]) == 800 and r["nav_span_days"] > 300
+    assert ms_calls == ["ALZF9"]                    # 第一趟幣別未知不發請求(S1),第二趟才發
+    assert any(t.get("source") == "morningstar(span-extend)" for t in r["source_trace"])
+
+
+def test_single_pipeline_meta_ccy_differs_from_morningstar_blocks(monkeypatch):
+    r, _ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD")
+    assert r["data_source"] == "FundClear" and len(r["series"]) == 30
+
+
+def test_single_pipeline_meta_unknown_stays_short(monkeypatch):
+    r, ms_calls = _run_single(monkeypatch, meta_ccy="", ms_ccy="USD")
+    assert r["data_source"] == "FundClear" and ms_calls == []
+
+
+def test_single_pipeline_first_pass_swapped_no_second_request(monkeypatch):
+    """第一趟(硬編表宣告 USD)已換源 → 不再跑第二趟(不重複請求、不被 meta 的宣告改判)。
+    候選跨度刻意 <300 天,讓 span-extend 自身的跨度閘門擋不住第二趟 —— 守門只能靠 `_se_swapped`。"""
+    mid = pd.Series([9.0 + i * 0.01 for i in range(60)],
+                    index=pd.date_range("2025-12-01", periods=60, freq="4D"))   # 跨度 236 天
+    mid.attrs["currency"] = "USD"
+    r, ms_calls = _run_single(monkeypatch, meta_ccy="EUR", ms_ccy="USD", code="TLZF9",
+                              ms_series=mid)
+    assert r["data_source"] == "morningstar(span-extend)" and len(r["series"]) == 60
+    assert ms_calls == ["TLZF9"]

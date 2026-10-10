@@ -91,7 +91,9 @@ def test_hit_returns_secid_and_fills_caches(monkeypatch):
     assert S._ms_screener_cache["LU2023250330"] == "F00000P8WB"      # 正快取
     assert S._ms_secid_cache["LU2023250330"] == "F00000P8WB"         # 與 SecuritySearch 共用
     assert S._ms_name_cache["LU2023250330"] == "Allianz Income and Growth AMg7 USD"
-    assert S._ms_ccy_cache["LU2023250330"] == "USD"                  # screener 直接回幣別
+    # ~~assert S._ms_ccy_cache["LU2023250330"] == "USD" # screener 直接回幣別~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU2023250330" not in S._ms_ccy_cache
 
 
 def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatch):
@@ -99,7 +101,9 @@ def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatc
         "rows": [{"SecId": "F1", "Name": "Some Fund EUR Hedged", "ISIN": "LU9", "Currency": ""}],
     }])
     assert S._morningstar_screener_secid("LU9", currency="USD") == "F1"
-    assert S._ms_ccy_cache["LU9"] == "EUR"                           # Currency 空 → 從名稱猜
+    # ~~assert S._ms_ccy_cache["LU9"] == "EUR" # Currency 空 → 從名稱猜~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU9" not in S._ms_ccy_cache
 
 
 def test_empty_isin_returns_empty(monkeypatch):
@@ -123,7 +127,9 @@ def test_multi_universe_fallthrough_first_empty_second_hits(monkeypatch):
         {"rows": [{"SecId": "FTWN", "Name": "台灣某基金 台幣", "ISIN": "TW000T3619Y1"}]},
     ])
     assert S._morningstar_screener_secid("TW000T3619Y1", currency="USD") == "FTWN"
-    assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD"                  # 名稱含「台幣」→ TWD
+    # ~~assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD" # 名稱含「台幣」→ TWD~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "TW000T3619Y1" not in S._ms_ccy_cache
 
 
 def test_all_universes_empty_negative_cached(monkeypatch):
@@ -294,7 +300,9 @@ def test_secid_key_casing_tolerated(monkeypatch):
 def test_pricecurrency_read_when_currency_absent(monkeypatch):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
     assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
-    assert S._ms_ccy_cache["LU5"] == "EUR"                 # 讀 PriceCurrency datapoint
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR" # 讀 PriceCurrency datapoint~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
 
 
 def test_screener_ccy_wins_over_name_suffix(monkeypatch):
@@ -302,13 +310,17 @@ def test_screener_ccy_wins_over_name_suffix(monkeypatch):
     _patch_urlopen_seq(monkeypatch, [{"rows": [
         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
     S._morningstar_screener_secid("LU5", currency="USD")
-    assert S._ms_ccy_cache["LU5"] == "EUR"
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
 
 
 def test_lowercase_currency_uppercased(monkeypatch):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
     S._morningstar_screener_secid("LU5", currency="USD")
-    assert S._ms_ccy_cache["LU5"] == "EUR"
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
 
 
 def test_first_valid_row_taken_skipping_invalid(monkeypatch):

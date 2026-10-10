@@ -1421,7 +1421,7 @@ _ms_secid_cache: dict = {}
 # v19.473:同一次搜尋順手記下晨星回傳的**基金名稱 / 幣別**（供「只填代號+ISIN,其餘自動」）。
 #   幣別藏在晨星基金名稱後綴（如 "…AMg7 USD"）—— 用它自動判幣別,免使用者填(§4.1 不硬給 USD)。
 _ms_name_cache: dict = {}
-_ms_ccy_cache: dict = {}
+_ms_ccy_cache: dict = {}   # ⚠️ 2026-10-10 起不再寫入、亦無讀取端;保留名稱供既有測試 fixture 清理
 # v19.491:ISIN → secId 走 Morningstar **screener**(精確 ISIN filter)的正/負快取。
 #   與 SecuritySearch(_ms_secid_cache)分開,鍵一律大寫 ISIN。
 _ms_screener_cache: dict = {}
@@ -1429,7 +1429,7 @@ _ms_screener_cache: dict = {}
 # 幣別 token（英文碼 + 常見中文詞）→ ISO 幣別。掃描晨星基金名稱命中第一個即用。
 _CCY_FROM_NAME = {
     "USD": "USD", "美元": "USD", "美金": "USD",
-    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD",
+    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD", "新臺幣": "TWD",  # 2026-10-10 +新臺幣
     "EUR": "EUR", "歐元": "EUR",
     "HKD": "HKD", "港幣": "HKD", "港元": "HKD",
     "AUD": "AUD", "澳幣": "AUD", "澳元": "AUD",
@@ -1507,7 +1507,8 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
             _ms_secid_cache[query] = sec_id
             # v19.473:順手記名稱 + 從名稱判幣別(供 ISIN 驅動路徑自動回填,免使用者填)
             _ms_name_cache[query] = fund_name_ms
-            _ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)
+            # ~~_ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)~~
+            # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪)
             return sec_id
     except Exception as _e:
         # v19.339(第五份 review Bug 5):暫時性失敗(timeout/403/JSON 壞)原本也落到
@@ -1672,8 +1673,10 @@ def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
                     _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
                     if _name:
                         _ms_name_cache[_isin] = _name
-                    # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
-                    _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
+                    # ~~screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)~~
+                    # ~~_ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)~~
+                    # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪);
+                    # screener 回的幣別仍印在上方 log。
                     return _sec
             # 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
             if _rows:

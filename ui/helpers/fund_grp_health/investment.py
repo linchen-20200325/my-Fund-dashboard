@@ -62,7 +62,7 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
         st.caption(f"NAV：{_nav if _nav is not None else '—'} {_ccy}")
         st.caption(f"年化配息率：{_adr if _adr is not None else '—'} %")
         if not _ccy:
-            st.caption("⬜ 幣別未知")
+            st.caption("⬜ 缺幣別")   # 沿用既有字樣(capture.py)
         elif _ccy == "TWD":
             st.caption("💰 此基金以新台幣計價（FX = 1）")
         elif _fx:
