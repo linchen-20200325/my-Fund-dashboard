@@ -1110,7 +1110,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
 
     # 2026-10-10 稽核回修必修-1:legacy 段 span-extend 用的「meta 原始宣告幣別」。
     # 只收 Step 1 直連頁與 legacy yp011001 頁**自己解析出來**的值;Step 2 合併進來的
-    # `_fetch_fund_single` 結果已被 v19.505 `_correct_currency` 改寫過,不算原值。
+    # ~~`_fetch_fund_single` 結果已被 v19.505 `_correct_currency` 改寫過,不算原值。~~
+    # → 2026-10-10 稽核回修 R3(註解對齊現況,行為不變):自 C2-1 起 `_fetch_fund_single`
+    # 與 `_ensure_currency` 只寫「來源宣告值(格式正規化)或晨星硬編表值」,不再寫名稱 /
+    # 選股池推定;但 Step 2 合併進來的值仍可能是**硬編表補的**而非本頁原值,故這裡
+    # 仍只收本函式自己解析出的原值。
     _legacy_raw_ccy = ""
 
     # ── Step 1: 直接抓使用者提供的原始 URL（最高優先）───────────────

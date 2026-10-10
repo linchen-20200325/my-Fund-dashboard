@@ -36,7 +36,16 @@ SHEET_CCY_CONFLICT_KEY = "_sheet_ccy_conflict"
 
 
 def sheet_currency_by_code(funds) -> dict:
-    """客戶 Sheet 上每個 code 被設定的幣別 → `{CODE: (ISO, ...)}`(去重排序;空值不計)。
+    """`portfolio_funds` 每列的 `currency` 依 code 彙整 → `{CODE: (ISO, ...)}`(去重排序;空值不計)。
+
+    ~~客戶 Sheet 上每個 code 被設定的幣別~~ → 2026-10-10 稽核回修 R3(敘述對齊現況):
+    `portfolio_funds[i]["currency"]` **主要**是客戶 Sheet 那一列的幣別,但不全是。
+    已知的其他來源(非窮舉):
+    (1) 批次載入時 Sheet 該列留白,補上抓取結果的幣別(`_sheet_ccy or _src_ccy`);
+    (2) `reuse_fund_info_by_code` 從同 code 的其他列補空白幣別;
+    (3) `reconcile_funds_with_ledgers` 為只存在於 T7 帳本的部位補的列,幣別取自帳本;
+    (4) Tab3 批次新增 / T7 新增基金建立的新列,幣別取自抓取結果。
+    (1)(2) 只在該列原本空白時補,不會蓋掉 Sheet 已設的值。
 
     ⚠️ 必須傳**全部** `portfolio_funds`(同 code 跨多保單各一列),不得傳依 code 去重後的
     清單 —— 去重會只留第一列,把「不同保單設了不同幣別」的衝突藏起來。
@@ -80,7 +89,12 @@ def fund_currency_for_calc(fund: dict) -> str:
       - **未知幣別 ≠ USD**:Sheet 與來源都沒有可辨識的幣別 → `""`(呼叫端 fail closed)。
       - **Q4 currency conflict**:Sheet(`fund["currency"]`)與來源(`moneydj_raw`)
         都有值但不一致 → `""`(不得靜默選一個繼續算;呼叫端 fail closed)。
-        衝突狀態**不另存欄位**(現有 schema 無處保存出處),每次由這兩個既有值即時判定。
+        ~~衝突狀態**不另存欄位**(現有 schema 無處保存出處),每次由這兩個既有值即時判定。~~
+        → 2026-10-10 稽核回修 R3(敘述對齊現況,行為不變):Sheet／來源衝突仍是每次由這兩個
+        既有值即時判定,**不寫進 Sheet、不另存欄位**;另有一種衝突(同一 code 在不同保單列
+        被設成不同幣別)無法由單一 dict 判定,由 `with_sheet_currency` 在重組出的**記憶體內**
+        dict 上掛 `SHEET_CCY_CONFLICT_KEY`,本函式見到即回 `""`。該標記不是 Sheet 欄位,
+        `with_sheet_currency` 與本函式都不會把它寫回 Sheet 或備份。
     """
     if (fund or {}).get(SHEET_CCY_CONFLICT_KEY):   # 2026-10-10 C2-3:Sheet 同 code 多幣別
         return ""
