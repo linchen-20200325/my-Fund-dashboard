@@ -927,7 +927,8 @@ def _ms_payload(n=800):
 
 
 def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_ccy=None,
-                native=True, yahoo=None, ms_n=800, meta_name="某某收益成長基金"):
+                native=True, yahoo=None, ms_n=800, meta_name="某某收益成長基金",
+                srcs=None):
     import repositories.fund.fund_orchestration as fo
     import repositories.pool_repository as P
     for _n in dir(fo):                              # 非晨星的取數源先一律回空
@@ -951,6 +952,8 @@ def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_cc
         monkeypatch.setattr(fo, "_src_fundclear_nav", lambda c: short)
     if yahoo is not None:
         monkeypatch.setattr(fo, "_src_yahoo_finance_nav", lambda c: yahoo)
+    for _n, _fn in (srcs or {}).items():            # 個別取數源覆寫(在「先一律回空」之後)
+        monkeypatch.setattr(fo, _n, _fn)
     monkeypatch.setattr(fo, "_src_tcb_meta",
                         lambda c: {"fund_name": meta_name, "currency": meta_ccy})
     ts_urls = []
@@ -1266,3 +1269,38 @@ def test_fee_deduction_latest_nav_none_is_excluded_not_zero(monkeypatch):
                                                                fx_avg=31.0))
     eng, exc, _rm = build_fee_inputs([_no_series], {fund_pk_str(_no_series): led}, _r)
     assert eng == [] and [e["reason"] for e in exc] == ["抓不到目前淨值"]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 15) Q4 回驗「unknown 也丟棄」(客戶裁示 Q3/Q4:只有 match 放行)
+#     既有測試只守 mismatch(EUR vs USD、USD vs TWD);候選序列幣別**未知**時同樣要丟棄,
+#     不得因為「沒有證據不一致」就保留(舊語意 `safe = verdict != mismatch`)。
+# ════════════════════════════════════════════════════════════════════════════
+def _long_nav(start=20.0, n=400):
+    return pd.Series([start + i * 0.01 for i in range(n)],
+                     index=pd.date_range("2025-01-01", periods=n))
+
+
+def test_q4_waterfall_yahoo_f_unknown_currency_discarded(monkeypatch):
+    """TLZF9 原生來源全空、晨星回空 → 2g2 採用 Yahoo `{secId}.F`,但 Yahoo meta 沒給幣別
+    (`attrs["currency"] == ""`);meta 宣告美元 → verdict unknown → 丟棄,序列清空。"""
+    yf = _long_nav()
+    yf.attrs.update({"source": "Yahoo:chart:0P0001J5YG.F", "currency": ""})
+    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False,
+                         yahoo=yf, ms_n=0)
+    assert r["series"] is None and r["data_source"] == ""
+    assert any(t.get("discarded") and t.get("source") == "yahoo_finance"
+               and "幣別未知" in t.get("error", "") for t in r["source_trace"])
+
+
+def test_q4_waterfall_alphavantage_undeclared_currency_discarded(monkeypatch):
+    """2g3 AlphaVantage 序列不宣告幣別(無 `attrs["currency"]`)→ unknown → 丟棄。"""
+    av = _long_nav(30.0)
+    av.attrs["source"] = "AlphaVantage:TIME_SERIES_DAILY_ADJUSTED:XXXX"
+    r, _ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", native=False, ms_n=0,
+                         srcs={"_src_alphavantage_nav": lambda c: av})
+    assert any(t.get("source") == "alphavantage" and t.get("success")
+               for t in r["source_trace"])           # 確認 2g3 真的採用過(不是根本沒走到)
+    assert r["series"] is None and r["data_source"] == ""
+    assert any(t.get("discarded") and t.get("source") == "alphavantage"
+               and "幣別未知" in t.get("error", "") for t in r["source_trace"])
