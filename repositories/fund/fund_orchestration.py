@@ -207,6 +207,7 @@ def _span_extend_insurance_nav(
     code: str, nav_s: pd.Series, nav_source: str,
     fund_name: str = "", is_insurance_code: "bool | None" = None,
     declared_ccy: str = "", raw_declared_ccy: "str | None" = None,
+    declared_only: bool = False,
 ) -> "tuple[pd.Series, str, int]":
     """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
 
@@ -225,6 +226,12 @@ def _span_extend_insurance_nav(
     `raw_declared_ccy`(2026-10-10 必修 (a)):meta **未經** `_correct_currency` 修正的
     原始宣告幣別,只用來決定晨星請求的 `currency_hint`(見 `_span_extend_ms_hint`)。
     `None` → 與 `declared_ccy` 相同(呼叫端傳入的 `declared_ccy` 本來就是原值時)。
+
+    `declared_only`(2026-10-10 稽核回修必修-1):True → 比對用的預期幣別**只**取
+    meta 原始宣告值(`raw_declared_ccy`,未經 `_correct_currency`)或晨星硬編表,
+    不做名稱 / 選股池 / 台灣字樣推定;取不到 → 未知 → 不換源(fail closed)。
+    給拿不到「修正前原值」保證的呼叫端用(legacy 段:`result` 已合併過
+    `_fetch_fund_single` 修正後的幣別,而 `_correct_currency` 冪等,看不出上游推定過)。
     """
     _code = (code or "").upper().strip()
     if is_insurance_code is None:
@@ -244,7 +251,13 @@ def _span_extend_insurance_nav(
         # `fund_name` 恆空 → 預期幣別只剩選股池 → 已知 USD 的 TLZF9 長歷史被擋(回歸)。
         # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
         # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
-        _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
+        if declared_only:
+            # 稽核回修必修-1:只信原始宣告值或硬編表(不經 `_correct_currency`)。
+            from repositories.fund.sources import _normalize_declared_ccy as _ndc
+            _expect_ccy = (_ndc(declared_ccy if raw_declared_ccy is None else raw_declared_ccy)
+                           or _ndc((_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1]))
+        else:
+            _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
         # 2026-10-10 必修 (a):晨星請求的 hint 與比對用的預期幣別**分開** ——
         # ~~currency_hint=_expect_ccy~~(預期幣別含名稱 /「台灣」推定,會回流成 currencyId)
         _ms_hint = _span_extend_ms_hint(
@@ -1053,10 +1066,16 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     result["full_key"]  = code
     result["fund_code"] = code
 
+    # 2026-10-10 稽核回修必修-1:legacy 段 span-extend 用的「meta 原始宣告幣別」。
+    # 只收 Step 1 直連頁與 legacy yp011001 頁**自己解析出來**的值;Step 2 合併進來的
+    # `_fetch_fund_single` 結果已被 v19.505 `_correct_currency` 改寫過,不算原值。
+    _legacy_raw_ccy = ""
+
     # ── Step 1: 直接抓使用者提供的原始 URL（最高優先）───────────────
     if _input_info.get("is_url") and _input_info.get("full_url"):
         _direct = _src_direct_moneydj_url(_input_info["full_url"])
         if _direct.get("fund_name") or _direct.get("nav_latest"):
+            _legacy_raw_ccy = str(_direct.get("currency") or "")   # 稽核回修必修-1
             # ── 2026-08-11 兩項修正 ────────────────────────────────────
             # (1) §2.2 血緣：Step 1 只抓 **meta**（名稱 / 最新淨值 / 幣別 / 費用率），
             #     **完全不抓 NAV 序列** —— 它沒有資格為 `data_source` 背書。
@@ -1246,6 +1265,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                             if k: rows_map[k] = v
                 result["fund_name"]       = rows_map.get("基金名稱", "")
                 result["currency"]        = rows_map.get("計價幣別", "").replace(" ","")  # 缺欄→空白(未知≠USD)
+                _legacy_raw_ccy = result["currency"] or _legacy_raw_ccy   # 稽核回修必修-1:頁面原值
                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
                 result["fund_scale"]      = rows_map.get("基金規模", "")
@@ -1574,7 +1594,12 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         _ext_s, _ext_src, _ext_span = _span_extend_insurance_nav(
             code, result["series"], result.get("data_source") or "moneydj_legacy_scrape",
             fund_name=result.get("fund_name") or "",
-            declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
+            # ~~declared_ccy=result.get("currency") or "",~~(2026-10-10 稽核 M1)
+            # 稽核回修必修-1:`result["currency"]` 可能是 Step 2 合併進來的推定值 →
+            # hint 與預期幣別都只取本函式自己解析的原始宣告值(或硬編表)。
+            declared_ccy=_legacy_raw_ccy,
+            raw_declared_ccy=_legacy_raw_ccy,
+            declared_only=True,
         )
         result["series"]        = _ext_s
         result["data_source"]   = _ext_src

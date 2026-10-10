@@ -1135,13 +1135,18 @@ def test_ms_hint_uses_raw_not_corrected_declared(monkeypatch):
 
 
 def test_second_pass_passes_pre_correction_currency():
-    """主管線第二趟必須把 v19.505 修正**前**的原值(`_cur_ccy0`)帶給晨星 hint。"""
+    """meta 之後的兩個呼叫點都必須把**修正前**的原值帶給晨星 hint:
+    主管線第二趟傳 `_cur_ccy0`;legacy 段傳 `_legacy_raw_ccy`,且預期幣別也只信原值
+    (`declared_only=True`、`declared_ccy` 同為原值 —— 稽核回修必修-1)。"""
     src = (ROOT / "repositories" / "fund" / "fund_orchestration.py").read_text(encoding="utf-8")
     calls = [n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
-    raw = [ast.unparse(k.value) for c in calls for k in c.keywords
-           if k.arg == "raw_declared_ccy"]
-    assert raw == ["_cur_ccy0"]
+    kws = [{k.arg: ast.unparse(k.value) for k in c.keywords} for c in calls]
+    raw = sorted(k["raw_declared_ccy"] for k in kws if "raw_declared_ccy" in k)
+    assert raw == ["_cur_ccy0", "_legacy_raw_ccy"]
+    legacy = [k for k in kws if k.get("raw_declared_ccy") == "_legacy_raw_ccy"][0]
+    assert legacy["declared_ccy"] == "_legacy_raw_ccy"
+    assert legacy["declared_only"] == "True"
 
 
 @pytest.mark.parametrize("meta_ccy", ["", "USD"])
@@ -1390,3 +1395,79 @@ def test_single_pipeline_pool_unnormalizable_ccy_no_request(monkeypatch):
     r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", "美元累積"),
                         pool_ccy="美元累積")
     assert r["data_source"] == "FundClear" and ts == []
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 17) 稽核回修必修-1:legacy 段(`fetch_fund_from_moneydj_url` Step 3+ 收尾)的
+#     span-extend —— `result["currency"]` 已合併過 `_fetch_fund_single` 被名稱推定改寫
+#     的值,`_correct_currency` 冪等看不出來 → hint 與預期幣別都只能取本函式自己解析的
+#     原始宣告值或晨星硬編表;拿不到就不給 hint、不換源。
+#     (改寫自獨立稽核的重現測試)
+# ════════════════════════════════════════════════════════════════════════════
+def _run_legacy(monkeypatch, *, meta_ccy, meta_name, url="ALZF9", direct=None,
+                pool_secid=("F0ALZF9", "")):
+    import repositories.fund.fund_orchestration as fo
+    _srcs = {} if direct is None else {"_src_direct_moneydj_url": lambda u: direct}
+    _r0, ts0 = _run_single(monkeypatch, meta_ccy=meta_ccy, pool_secid=pool_secid,
+                           native=False, meta_name=meta_name, srcs=_srcs)
+    assert ts0 == []                                  # 主管線自己沒發晨星請求
+    short = pd.Series([10.0 + i * 0.01 for i in range(30)],
+                      index=pd.date_range("2026-03-01", periods=30, freq="5D"))
+    monkeypatch.setattr(fo, "fetch_nav", lambda *a, **k: short)   # legacy 最終備援 30 筆
+    monkeypatch.setattr(fo, "fetch_holdings", lambda *a, **k: {})
+    import urllib.request as UR
+    urls, _orig = [], UR.urlopen
+
+    def _open(req, timeout=None):
+        urls.append(getattr(req, "full_url", str(req)))
+        return _orig(req, timeout=timeout)
+
+    monkeypatch.setattr(UR, "urlopen", _open)
+    res = fo.fetch_fund_from_moneydj_url(url)
+    return res, [u for u in urls if "timeseries_price" in u]
+
+
+@pytest.mark.parametrize("meta_ccy", ["", "USD"])
+def test_legacy_name_inferred_ccy_not_sent_to_morningstar(monkeypatch, meta_ccy):
+    """反向:主管線推定成 TWD(名稱含「台灣」)、legacy 頁抓不到 → 不得以
+    `currencyId=TWD` 發晨星請求,也不得換掉 legacy 序列。"""
+    res, ms = _run_legacy(monkeypatch, meta_ccy=meta_ccy, meta_name="某某台灣科技基金")
+    assert res["currency"] == "TWD"                   # 推定照舊用於呈現(本修不動)
+    assert ms == []
+    assert res["data_source"] == "moneydj_legacy_scrape" and len(res["series"]) == 30
+
+
+def test_legacy_direct_url_declared_ccy_still_swaps(monkeypatch):
+    """正向:Step 1 直連頁原始宣告「美元」→ legacy 段預期與 hint 皆 USD → 照舊換長歷史。"""
+    res, ms = _run_legacy(
+        monkeypatch, meta_ccy="", meta_name="某某收益成長基金",
+        url="https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=ALZF9",
+        direct={"fund_name": "某某收益成長基金", "currency": "美元"})
+    assert len(ms) == 1 and "currencyId=USD" in ms[0]
+    assert res["data_source"] == "morningstar(span-extend)" and len(res["series"]) == 800
+
+
+@pytest.mark.parametrize("code, declared, raw, name, want", [
+    ("ZZZL1", "TWD", "", "某某台灣科技基金", None),   # 傳入值是推定、原值空 → 不請求
+    ("ZZZL1", "", "", "某某美元收益基金", None),      # 名稱幣別不算宣告 → 不請求
+    ("ZZZL1", "", "美元", "某某台灣科技基金", "USD"),  # 原值宣告 → 預期與 hint 皆 USD
+    # 硬編表手工宣告 USD → 預期 USD、照常請求;hint 不給(池有值 → `_correct_currency`
+    # 會改動空的原值 → 依必修 (a) 不給),晨星端自行用池 / 硬編表的幣別
+    ("TLZF9", "", "", "", ""),
+])
+def test_span_extend_declared_only(monkeypatch, code, declared, raw, name, want):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: "USD")   # 池有值也不採(只信原值/硬編表)
+    hints = []
+    monkeypatch.setattr(fo, "_src_morningstar_nav",
+                        lambda c, fund_name="", currency_hint="": hints.append(currency_hint)
+                        or pd.Series(dtype=float))
+    monkeypatch.setattr(fo, "_src_cnyes_nav", lambda c: pd.Series(dtype=float))
+    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
+                      index=pd.date_range("2026-08-01", periods=20))
+    fo._span_extend_insurance_nav(code, short, "moneydj", fund_name=name,
+                                  is_insurance_code=True, declared_ccy=declared,
+                                  raw_declared_ccy=raw, declared_only=True)
+    assert hints == ([] if want is None else [want])
+
