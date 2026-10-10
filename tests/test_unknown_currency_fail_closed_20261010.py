@@ -927,7 +927,7 @@ def _ms_payload(n=800):
 
 
 def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_ccy=None,
-                native=True, yahoo=None, ms_n=800):
+                native=True, yahoo=None, ms_n=800, meta_name="某某收益成長基金"):
     import repositories.fund.fund_orchestration as fo
     import repositories.pool_repository as P
     for _n in dir(fo):                              # 非晨星的取數源先一律回空
@@ -952,7 +952,7 @@ def _run_single(monkeypatch, *, meta_ccy, code="ALZF9", pool_secid=None, pool_cc
     if yahoo is not None:
         monkeypatch.setattr(fo, "_src_yahoo_finance_nav", lambda c: yahoo)
     monkeypatch.setattr(fo, "_src_tcb_meta",
-                        lambda c: {"fund_name": "某某收益成長基金", "currency": meta_ccy})
+                        lambda c: {"fund_name": meta_name, "currency": meta_ccy})
     ts_urls = []
     import urllib.request as UR
 
@@ -1073,3 +1073,81 @@ def test_single_pipeline_first_pass_known_rejected_no_repeat(monkeypatch):
                         pool_ccy="TWD", ms_n=5)
     assert r["data_source"] == "FundClear"
     assert len(ts) == 1 and "currencyId=TWD" in ts[0]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 13) 第五輪複驗必修 (a):名稱 /「台灣」推定不得經 currency_hint 回流到晨星請求
+#     hint 只能是 meta 原始宣告值或硬編表的值;`_correct_currency` 改過值 → 不給 hint。
+# ════════════════════════════════════════════════════════════════════════════
+def _span_ext_hint(monkeypatch, code, *, declared="", raw=None, fund_name=""):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: None)        # 選股池讀不到
+    hints = []
+
+    def _ms(code, fund_name="", currency_hint=""):
+        hints.append(currency_hint)
+        return pd.Series(dtype=float)
+
+    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
+    monkeypatch.setattr(fo, "_src_cnyes_nav", lambda c: pd.Series(dtype=float))
+    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
+                      index=pd.date_range("2026-08-01", periods=20))
+    kw = {} if raw is None else {"raw_declared_ccy": raw}
+    fo._span_extend_insurance_nav(code, short, "moneydj", fund_name=fund_name,
+                                  is_insurance_code=True, declared_ccy=declared, **kw)
+    return hints
+
+
+@pytest.mark.parametrize("declared, fund_name, want", [
+    ("USD", "某某收益成長基金", "USD"),        # 正向:meta 原始宣告 → 照給
+    ("美元", "某某收益成長基金", "USD"),       # 正向:中文別名整欄精確對照
+    ("EUR", "某某台灣科技基金", "EUR"),        # 正向:非 USD 宣告不受名稱推定影響
+])
+def test_ms_hint_takes_raw_declared(monkeypatch, declared, fund_name, want):
+    assert _span_ext_hint(monkeypatch, "ZZZH1", declared=declared,
+                          fund_name=fund_name) == [want]
+
+
+def test_ms_hint_hardcoded_table_when_nothing_declared(monkeypatch):
+    """正向:未宣告、名稱無推定 → 晨星硬編表手工宣告(TLZF9 → USD)可當 hint。"""
+    assert _span_ext_hint(monkeypatch, "TLZF9", declared="", fund_name="") == ["USD"]
+
+
+@pytest.mark.parametrize("declared, fund_name, expect", [
+    ("", "某某台灣科技基金", "TWD"),     # 反向:未宣告,「台灣」字樣推定 TWD → 可當比對用預期,不得當 hint
+    ("USD", "某某台灣科技基金", "USD"),  # 反向:宣告 USD 會被「台灣」推定改成 TWD → 改過值 → 不給
+])
+def test_ms_hint_not_from_name_inference(monkeypatch, declared, fund_name, expect):
+    import repositories.fund.fund_orchestration as fo
+    assert fo._span_extend_expected_ccy("ZZZH2", fund_name, declared) == expect   # 比對照舊
+    assert _span_ext_hint(monkeypatch, "ZZZH2", declared=declared,
+                          fund_name=fund_name) == [""]
+
+
+def test_ms_hint_uses_raw_not_corrected_declared(monkeypatch):
+    """反向:呼叫端傳入的 `declared_ccy` 已被名稱推定修正成 TWD,原始宣告是空 → 不給 hint。"""
+    assert _span_ext_hint(monkeypatch, "ZZZH3", declared="TWD", raw="",
+                          fund_name="某某台灣科技基金") == [""]
+
+
+def test_second_pass_passes_pre_correction_currency():
+    """主管線第二趟必須把 v19.505 修正**前**的原值(`_cur_ccy0`)帶給晨星 hint。"""
+    src = (ROOT / "repositories" / "fund" / "fund_orchestration.py").read_text(encoding="utf-8")
+    calls = [n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
+    raw = [ast.unparse(k.value) for c in calls for k in c.keywords
+           if k.arg == "raw_declared_ccy"]
+    assert raw == ["_cur_ccy0"]
+
+
+@pytest.mark.parametrize("meta_ccy", ["", "USD"])
+def test_single_pipeline_name_inferred_ccy_not_sent_to_morningstar(monkeypatch, meta_ccy):
+    """反向(端到端):meta 未宣告或宣告 USD、名稱含「台灣」→ v19.505 推定成 TWD;
+    第二趟 span-extend 的預期幣別是 TWD,但晨星**不得**以 `currencyId=TWD` 發請求。"""
+    r, ts = _run_single(monkeypatch, meta_ccy=meta_ccy, pool_secid=("F0ALZF9", ""),
+                        meta_name="某某台灣科技基金")
+    assert r["currency"] == "TWD"                     # 推定照舊用於比對 / 呈現(本修不動)
+    assert ts == []                                   # 但不發晨星請求
+    assert r["data_source"] == "FundClear"
+

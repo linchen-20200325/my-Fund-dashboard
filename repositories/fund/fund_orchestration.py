@@ -158,6 +158,41 @@ def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str 
         return ""
 
 
+def _span_extend_ms_hint(code: str, fund_name: str = "", declared_ccy: str = "") -> str:
+    """span-extend 傳給晨星請求的 `currency_hint` → ISO 三碼或 `""`(不給)。
+
+    2026-10-10 第五輪複驗必修 (a):`_span_extend_expected_ccy` 會用基金名稱 / 「台灣」字樣
+    推定幣別(`_correct_currency`)—— 那是**比對用的預期幣別**,可以;但它若直接當
+    `currency_hint` 回流到晨星請求,名稱推定就變成了 `currencyId`,違反客戶裁示
+    「晨星在幣別無法可靠確認時不得假裝 USD(名稱推定不算可靠確認)」。
+
+    本函式只放行兩種值:
+      1. **meta 原始宣告值**(`declared_ccy`,呼叫端須傳**未經** `_correct_currency`
+         修正的原值);中文別名(例「美元」)以 `sources._CCY_FROM_NAME` 整欄精確對照;
+      2. 宣告為空時,晨星**硬編表手工宣告**的幣別。
+    `_correct_currency` 會改動這個值(名稱 / 選股池 / 台灣字樣推定介入)→ **不給 hint**,
+    由 `_src_morningstar_nav` 自己的選股池 / 硬編表決定,查不到就 fail closed(Q2)。
+    純讀;判定失敗 → 不給 hint(§1:寧可不發請求,不猜幣別)。
+    """
+    _code = (code or "").upper().strip()
+    try:
+        from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
+        from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
+        from shared.data_quality import normalize_iso_ccy as _iso_ccy
+        _raw = str(declared_ccy or "").strip()
+        _raw = _ccy_alias.get(_raw.upper(), _ccy_alias.get(_raw, _raw))
+        _decl = _iso_ccy(_raw)
+        _corrected = _iso_ccy(_correct_currency(_decl, fund_name or "", _code))
+        if _corrected != _decl:
+            print(f"[orchestrator] {_code} 晨星 hint 不給:宣告 {_decl or '空'} 會被"
+                  f"名稱/選股池/台灣字樣推定改成 {_corrected or '空'}(推定不算可靠確認)")
+            return ""
+        return _decl or _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
+    except Exception as _he:  # noqa: BLE001 — 判不出就不給 hint(晨星端自行 fail closed)
+        print(f"[orchestrator] 晨星 hint 判定失敗 {_code}: {type(_he).__name__}: {_he}")
+        return ""
+
+
 # 2026-10-10 客戶裁示 Q4:**非原生報價**的 NAV 來源(依序列 `attrs["source"]` 前綴判定)。
 #   晨星 timeseries 依 `currencyId` 換算;Yahoo `{secId}.F` 是法蘭克福掛牌(多為 EUR);
 #   AlphaVantage 同為交易所掛牌報價 —— 三者都可能不是基金的計價幣別。
@@ -174,7 +209,7 @@ _SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
 def _span_extend_insurance_nav(
     code: str, nav_s: pd.Series, nav_source: str,
     fund_name: str = "", is_insurance_code: "bool | None" = None,
-    declared_ccy: str = "",
+    declared_ccy: str = "", raw_declared_ccy: "str | None" = None,
 ) -> "tuple[pd.Series, str, int]":
     """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
 
@@ -189,6 +224,10 @@ def _span_extend_insurance_nav(
     不影響其餘 case。
 
     回傳 (nav_s, nav_source, span_days) — 未觸發時原樣回傳(nav_source 不變)。
+
+    `raw_declared_ccy`(2026-10-10 必修 (a)):meta **未經** `_correct_currency` 修正的
+    原始宣告幣別,只用來決定晨星請求的 `currency_hint`(見 `_span_extend_ms_hint`)。
+    `None` → 與 `declared_ccy` 相同(呼叫端傳入的 `declared_ccy` 本來就是原值時)。
     """
     _code = (code or "").upper().strip()
     if is_insurance_code is None:
@@ -209,10 +248,15 @@ def _span_extend_insurance_nav(
         # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
         # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
         _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
+        # 2026-10-10 必修 (a):晨星請求的 hint 與比對用的預期幣別**分開** ——
+        # ~~currency_hint=_expect_ccy~~(預期幣別含名稱 /「台灣」推定,會回流成 currencyId)
+        _ms_hint = _span_extend_ms_hint(
+            _code, fund_name,
+            declared_ccy if raw_declared_ccy is None else raw_declared_ccy)
         _long_candidates = (
             ("morningstar",
              lambda: _src_morningstar_nav(_code, fund_name=fund_name or "",
-                                          currency_hint=_expect_ccy)),   # 2026-10-10 複驗 M1
+                                          currency_hint=_ms_hint)),   # 2026-10-10 必修 (a)
             ("cnyes", lambda: _src_cnyes_nav(_code)),
         )
         for _long_src, _long_fn in _long_candidates:
@@ -786,6 +830,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 fund_name=result.get("fund_name") or "",
                 is_insurance_code=_is_insurance_code,
                 declared_ccy=result.get("currency") or "",
+                # 2026-10-10 必修 (a):上方 v19.505 幣別修正可能已用名稱推定改寫
+                # result["currency"] → 晨星 hint 只能看修正**前**的 meta 原始宣告值。
+                raw_declared_ccy=_cur_ccy0,
             )
             if _src2 != nav_source and len(_ns2) >= 10:
                 nav_s, nav_source, _span_days = _ns2, _src2, _span2
