@@ -1470,4 +1470,3 @@ def test_span_extend_declared_only(monkeypatch, code, declared, raw, name, want)
                                   is_insurance_code=True, declared_ccy=declared,
                                   raw_declared_ccy=raw, declared_only=True)
     assert hints == ([] if want is None else [want])
-
