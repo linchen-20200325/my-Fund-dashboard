@@ -510,11 +510,14 @@ def test_morningstar_nav_known_usd_unchanged(monkeypatch):
     assert len(seen) == 1 and "currencyId=USD" in seen[0]
 
 
-def test_morningstar_nav_pool_known_twd_uses_twd(monkeypatch):
-    _isolate_ms(monkeypatch, secid=("F0POOLT", "TWD"))
+def test_morningstar_nav_pool_secid_row_ccy_not_trusted(monkeypatch):
+    """~~池 secId 列宣告 TWD → 以 TWD 請求~~ → (2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據):
+    池 secId 仍可用來找基金,但它那一列的幣別不得當 currencyId → 無硬編表、無 hint → 不請求。"""
+    _isolate_ms(monkeypatch, secid=("F0POOLT", "TWD"), ccy="TWD")
     seen = _record_urlopen(monkeypatch, _MS_TS)
-    s = S._src_morningstar_nav("ZZZ6")
-    assert s.attrs["currency"] == "TWD" and "currencyId=TWD" in seen[0]
+    assert S._src_morningstar_nav("ZZZ6").empty and seen == []
+    s = S._src_morningstar_nav("ZZZ6", currency_hint="TWD")      # 可信宣告(hint)→ 照用池 secId
+    assert s.attrs["currency"] == "TWD" and "F0POOLT" in seen[0] and "currencyId=TWD" in seen[0]
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -769,12 +772,14 @@ def test_morningstar_isin_name_inferred_ccy_not_used(monkeypatch):
         S._ms_ccy_cache.pop("LU0000000003", None)
 
 
-def test_morningstar_isin_user_ccy_still_used(monkeypatch):
-    """回歸:池幣別已填(使用者宣告)→ 照舊以它請求。"""
+def test_morningstar_isin_pool_ccy_not_trusted(monkeypatch):
+    """~~回歸:池幣別已填 → 照舊以它請求~~ → (2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據):池 EUR 不採 → 不請求;
+    呼叫端給可信 hint(原始宣告值)時,池 ISIN 仍可用來解析 secId。"""
     _isolate_ms(monkeypatch, isin="LU0000000004", ccy="EUR", search="")
     monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, currency="": "F0SCR")
     seen = _record_urlopen(monkeypatch, _MS_TS)
-    s = S._src_morningstar_nav("ZZZ4")
+    assert S._src_morningstar_nav("ZZZ4").empty and seen == []
+    s = S._src_morningstar_nav("ZZZ4", currency_hint="EUR")
     assert s.attrs["currency"] == "EUR" and "currencyId=EUR" in seen[0]
 
 
@@ -989,8 +994,8 @@ def test_single_pipeline_meta_declared_usd_swaps_to_long_history(monkeypatch):
 
 def test_single_pipeline_meta_differs_from_morningstar_discarded(monkeypatch):
     """選股池宣告 USD(第一趟以 USD 換源成功),meta 宣告 EUR → Q4 回驗丟棄,回退原生序列。"""
-    r, ts = _run_single(monkeypatch, meta_ccy="EUR", pool_secid=("F0ALZF9", "USD"),
-                        pool_ccy="USD")
+    # C1-3:選股池幣別不算證據 → 改用晨星硬編表宣告 USD 的 TLZF9 觸發第一趟換源
+    r, ts = _run_single(monkeypatch, meta_ccy="EUR", code="TLZF9")
     assert len(ts) == 1 and "currencyId=USD" in ts[0]
     assert r["data_source"] == "FundClear(best-of-waterfall)" and len(r["series"]) == 30
     assert any(t.get("discarded") for t in r["source_trace"])
@@ -1013,8 +1018,8 @@ def test_single_pipeline_first_pass_known_no_second_request(monkeypatch):
 def test_q4_waterfall_morningstar_usd_vs_meta_twd_discarded(monkeypatch):
     """重現(複驗):原生來源全空 → 2g 採用晨星 USD(選股池 USD);meta 宣告新台幣 →
     舊版 `series` 是 USD、`currency` 是新台幣。Q4:丟棄,序列清空(走既有「無淨值序列」)。"""
-    r, ts = _run_single(monkeypatch, meta_ccy="新台幣", pool_secid=("F0ALZF9", "USD"),
-                        pool_ccy="USD", native=False)
+    # C1-3:選股池幣別不算證據 → 改用晨星硬編表宣告 USD 的 TLZF9 讓 2g 發請求
+    r, ts = _run_single(monkeypatch, meta_ccy="新台幣", code="TLZF9", native=False)
     assert len(ts) == 1                                       # 2g 確實抓了晨星
     assert r["series"] is None and r["data_source"] == ""
     assert any(t.get("discarded") and "TWD" in t.get("error", "")
@@ -1047,9 +1052,9 @@ def test_q4_waterfall_yahoo_matching_currency_kept(monkeypatch):
 # ── `_src_morningstar_nav(currency_hint=)`:只在池與硬編表都沒有幣別時才用(複驗 M1)──
 @pytest.mark.parametrize("code,pool_secid,pool_ccy,hint,want", [
     ("TLZF9", None, None, "EUR", "USD"),           # 硬編表宣告 USD 優先
-    ("ZZZ3", ("F0Z3", ""), "EUR", "USD", "EUR"),     # 池使用者幣別優先
+    ("ZZZ3", ("F0Z3", ""), "EUR", "USD", "USD"),     # ~~池使用者幣別優先(EUR)~~ C1-3:池不採 → hint
     ("ZZZ3", ("F0Z3", ""), None, "美元", "USD"),     # 兩者皆無 → hint(中文別名正規化)
-    ("ZZZ3", ("F0Z3", "TWD"), None, "USD", "TWD"),   # 池 secId 列宣告 TWD 優先
+    ("ZZZ3", ("F0Z3", "TWD"), None, "USD", "USD"),   # ~~池 secId 列 TWD 優先~~ C1-3:池不採 → hint
 ])
 def test_morningstar_currency_hint_priority(monkeypatch, code, pool_secid, pool_ccy, hint, want):
     _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
@@ -1072,10 +1077,10 @@ def test_morningstar_unknown_ccy_no_secid_search(monkeypatch):
 def test_single_pipeline_first_pass_known_rejected_no_repeat(monkeypatch):
     """複驗建議 3a:第一趟預期幣別已知(池 TWD)而沒換成(晨星只回 5 筆)→ meta 宣告美元也
     不再跑第二趟(舊條件「預期不同就重跑」會重複發一個必被拒的請求)。"""
-    r, ts = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "TWD"),
-                        pool_ccy="TWD", ms_n=5)
+    # C1-3:選股池幣別不算證據 → 改用硬編表宣告 USD 的 TLZF9 讓第一趟預期幣別已知
+    r, ts = _run_single(monkeypatch, meta_ccy="美元", code="TLZF9", ms_n=5)
     assert r["data_source"] == "FundClear"
-    assert len(ts) == 1 and "currencyId=TWD" in ts[0]
+    assert len(ts) == 1 and "currencyId=USD" in ts[0]
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1118,20 +1123,23 @@ def test_ms_hint_hardcoded_table_when_nothing_declared(monkeypatch):
 
 
 @pytest.mark.parametrize("declared, fund_name, expect", [
-    ("", "某某台灣科技基金", "TWD"),     # 反向:未宣告,「台灣」字樣推定 TWD → 可當比對用預期,不得當 hint
+    # ~~「台灣」推定 TWD 可當比對用預期~~ → C1-3:名稱推定也不算證據 → 預期未知
+    ("", "某某台灣科技基金", ""),
     ("USD", "某某台灣科技基金", "USD"),  # 反向:宣告 USD 會被「台灣」推定改成 TWD → 改過值 → 不給
 ])
 def test_ms_hint_not_from_name_inference(monkeypatch, declared, fund_name, expect):
     import repositories.fund.fund_orchestration as fo
-    assert fo._span_extend_expected_ccy("ZZZH2", fund_name, declared) == expect   # 比對照舊
+    assert fo._span_extend_expected_ccy("ZZZH2", fund_name, declared) == expect
+    # 預期未知 → 晨星根本不呼叫(C1-3);預期已知 → 呼叫但不給 hint
     assert _span_ext_hint(monkeypatch, "ZZZH2", declared=declared,
-                          fund_name=fund_name) == [""]
+                          fund_name=fund_name) == ([""] if expect else [])
 
 
 def test_ms_hint_uses_raw_not_corrected_declared(monkeypatch):
     """反向:呼叫端傳入的 `declared_ccy` 已被名稱推定修正成 TWD,原始宣告是空 → 不給 hint。"""
+    # C1-3:預期幣別也只看原值(空)→ 未知 → 連晨星都不呼叫(比「不給 hint」更早擋)
     assert _span_ext_hint(monkeypatch, "ZZZH3", declared="TWD", raw="",
-                          fund_name="某某台灣科技基金") == [""]
+                          fund_name="某某台灣科技基金") == []
 
 
 def test_second_pass_passes_pre_correction_currency():
@@ -1146,7 +1154,8 @@ def test_second_pass_passes_pre_correction_currency():
     assert raw == ["_cur_ccy0", "_legacy_raw_ccy"]
     legacy = [k for k in kws if k.get("raw_declared_ccy") == "_legacy_raw_ccy"][0]
     assert legacy["declared_ccy"] == "_legacy_raw_ccy"
-    assert legacy["declared_only"] == "True"
+    # ~~legacy 點 declared_only=True~~ → C1-3:只信原值已是所有呼叫端的唯一行為,參數移除
+    assert all("declared_only" not in k for k in kws)
 
 
 @pytest.mark.parametrize("meta_ccy", ["", "USD"])
@@ -1213,6 +1222,7 @@ def test_latest_nav_frankfurt_mismatch_falls_through_to_native(monkeypatch):
     ("TLZF9", "EUR", {}),                       # 晨星宣告 EUR vs 硬編表 USD → 衝突
     ("TLZF9", "USD", {"expected_ccy": ""}),     # 呼叫端明示未知 / 衝突
     ("TLZF9", "USD", {"expected_ccy": "TWD"}),  # 呼叫端已確認 TWD → 衝突
+    ("ZZZN2", "TWD", {"pool_ccy": "TWD"}),      # ~~選股池 TWD → 採用~~ C1-3:池不算證據 → 未知
 ])
 def test_latest_nav_morningstar_unknown_or_conflict_fails_closed(monkeypatch, code, ms_ccy, kw):
     v = _latest_nav(monkeypatch, code, ms=_nav_s(9.9, "Morningstar:UK:timeseries:X", ms_ccy),
@@ -1222,7 +1232,6 @@ def test_latest_nav_morningstar_unknown_or_conflict_fails_closed(monkeypatch, co
 
 @pytest.mark.parametrize("code, src, ccy, kw", [
     ("TLZF9", "Morningstar:UK:timeseries:0P0001J5YG", "USD", {}),        # 硬編表 USD
-    ("ZZZN2", "Morningstar:UK:timeseries:X", "TWD", {"pool_ccy": "TWD"}),  # 選股池 TWD
     ("ZZZN3", "Yahoo:chart:X.F", "EUR", {"expected_ccy": "EUR"}),         # 呼叫端給 EUR
 ])
 def test_latest_nav_known_matching_ccy_unchanged(monkeypatch, code, src, ccy, kw):
@@ -1330,9 +1339,12 @@ def test_normalize_declared_ccy(raw, want):
     (("F0Z6", ""), "美元"),          # 池使用者幣別欄是中文
 ])
 def test_morningstar_pool_chinese_ccy_normalized(monkeypatch, pool_secid, pool_ccy):
+    """~~池「美元」→ 正規化後以 USD 請求~~ → (2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據):池幣別不採 → 不請求;
+    可信的中文宣告(hint「美元」)照樣正規化成 USD,URL 不含「美元」。"""
     _isolate_ms(monkeypatch, secid=pool_secid, ccy=pool_ccy)
     seen = _record_urlopen(monkeypatch, _MS_TS)
-    s = S._src_morningstar_nav("ZZZ6")
+    assert S._src_morningstar_nav("ZZZ6").empty and seen == []
+    s = S._src_morningstar_nav("ZZZ6", currency_hint="美元")
     assert s.attrs["currency"] == "USD"
     assert "currencyId=USD" in seen[0] and not any("美元" in str(u) for u in seen)
 
@@ -1349,23 +1361,29 @@ def test_morningstar_pool_unnormalizable_ccy_no_request(monkeypatch, pool_secid,
 
 def test_morningstar_isin_path_pool_chinese_ccy_normalized(monkeypatch):
     """ISIN 路徑:screener 的 currency 參數也用正規化後的值。"""
+    # C1-3:池「美元」不採;幣別改由可信 hint(「美金」)提供,同樣正規化成 USD
     _isolate_ms(monkeypatch, isin="LU0000000008", ccy="美元", search="")
     got = []
     monkeypatch.setattr(S, "_morningstar_screener_secid",
                         lambda isin, currency="": got.append(currency) or "F0SCR8")
     seen = _record_urlopen(monkeypatch, _MS_TS)
-    s = S._src_morningstar_nav("ZZZ8")
+    assert S._src_morningstar_nav("ZZZ8").empty and got == [] and seen == []
+    s = S._src_morningstar_nav("ZZZ8", currency_hint="美金")
     assert got == ["USD"] and "currencyId=USD" in seen[0] and s.attrs["currency"] == "USD"
 
 
-@pytest.mark.parametrize("pool_ccy, want", [("美元", ["USD"]), ("美元累積", [])])
-def test_pool_secid_lookup_screener_ccy_normalized(monkeypatch, pool_ccy, want):
-    """持股備源 `_pool_secid_lookup`:池 ISIN → screener 的幣別同樣正規化;無法正規化不呼叫。"""
+@pytest.mark.parametrize("code, pool_ccy, want", [
+    ("ZZZ9", "美元", []),       # ~~池「美元」→ USD 呼叫~~ (2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據) → 不呼叫
+    ("ZZZ9", "美元累積", []),
+    ("TLZF9", "TWD", ["USD"]),  # 硬編表宣告 USD → 以 USD 呼叫(池 TWD 不影響)
+])
+def test_pool_secid_lookup_screener_ccy_normalized(monkeypatch, code, pool_ccy, want):
+    """持股備源 `_pool_secid_lookup`:池 ISIN 可用;screener 幣別只取硬編表。"""
     _isolate_ms(monkeypatch, isin="LU0000000009", ccy=pool_ccy)
     got = []
     monkeypatch.setattr(S, "_morningstar_screener_secid",
                         lambda isin, currency="": got.append(currency) or "F0SCR9")
-    S._pool_secid_lookup("ZZZ9")
+    S._pool_secid_lookup(code)
     assert got == want
 
 
@@ -1374,7 +1392,9 @@ def test_expected_ccy_and_hint_share_normalization(monkeypatch):
     import repositories.fund.fund_orchestration as fo
     import repositories.pool_repository as P
     monkeypatch.setattr(P, "resolve_currency", lambda c: "美元")
-    assert fo._span_extend_expected_ccy("ZZZH9", "", "") == "USD"
+    # ~~池「美元」→ 預期 USD~~ → C1-3:選股池幣別不算證據 → 預期未知
+    assert fo._span_extend_expected_ccy("ZZZH9", "", "") == ""
+    assert fo._span_extend_expected_ccy("ZZZH9", "", "美金") == "USD"   # 原始宣告值照收
     assert fo._span_extend_ms_hint("ZZZH9", "", "美金") == "USD"
     monkeypatch.setattr(P, "resolve_currency", lambda c: "美元累積")
     assert fo._span_extend_expected_ccy("ZZZH9", "", "") == ""
@@ -1384,11 +1404,10 @@ def test_expected_ccy_and_hint_share_normalization(monkeypatch):
 def test_single_pipeline_pool_chinese_ccy_swaps_with_usd(monkeypatch):
     """端到端:池 secId 列與幣別欄都是「美元」、meta 沒宣告 → 第一趟預期 USD、
     晨星以 `currencyId=USD` 請求、序列 USD → 換源(舊行為:預期未知,不換、不請求)。"""
+    # ~~換源、以 currencyId=USD 請求~~ → C1-3:選股池幣別不算證據 → 不請求、不換源
     r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", "美元"),
                         pool_ccy="美元")
-    assert r["data_source"] == "morningstar(span-extend)"
-    assert len(ts) == 1 and "currencyId=USD" in ts[0]
-    assert not any("美元" in u for u in ts)
+    assert r["data_source"] == "FundClear" and ts == []
 
 
 def test_single_pipeline_pool_unnormalizable_ccy_no_request(monkeypatch):
@@ -1450,10 +1469,13 @@ def test_legacy_direct_url_declared_ccy_still_swaps(monkeypatch):
 @pytest.mark.parametrize("code, declared, raw, name, want", [
     ("ZZZL1", "TWD", "", "某某台灣科技基金", None),   # 傳入值是推定、原值空 → 不請求
     ("ZZZL1", "", "", "某某美元收益基金", None),      # 名稱幣別不算宣告 → 不請求
-    ("ZZZL1", "", "美元", "某某台灣科技基金", "USD"),  # 原值宣告 → 預期與 hint 皆 USD
+    # 原值宣告 USD → 預期 USD;但名稱「台灣」會把它推定改成 TWD → 依必修 (a) 不給 hint
+    # (C1-3 前因選股池 USD 掩蓋了這個推定;池不再參與後如實呈現)
+    ("ZZZL1", "", "美元", "某某台灣科技基金", ""),
+    ("ZZZL1", "", "美元", "某某收益成長基金", "USD"),  # 原值宣告、無推定 → 預期與 hint 皆 USD
     # 硬編表手工宣告 USD → 預期 USD、照常請求;hint 不給(池有值 → `_correct_currency`
     # 會改動空的原值 → 依必修 (a) 不給),晨星端自行用池 / 硬編表的幣別
-    ("TLZF9", "", "", "", ""),
+    ("TLZF9", "", "", "", "USD"),   # ~~池有值 → 不給 hint~~ C1-3:池不參與 → hint 取硬編表 USD
 ])
 def test_span_extend_declared_only(monkeypatch, code, declared, raw, name, want):
     import repositories.fund.fund_orchestration as fo
@@ -1468,7 +1490,7 @@ def test_span_extend_declared_only(monkeypatch, code, declared, raw, name, want)
                       index=pd.date_range("2026-08-01", periods=20))
     fo._span_extend_insurance_nav(code, short, "moneydj", fund_name=name,
                                   is_insurance_code=True, declared_ccy=declared,
-                                  raw_declared_ccy=raw, declared_only=True)
+                                  raw_declared_ccy=raw)
     assert hints == ([] if want is None else [want])
 
 
@@ -1649,3 +1671,46 @@ def test_t7_a_known_ccy_missing_nav_keeps_original_message():
 def test_t7_a_known_ccy_books_unchanged():
     errs, books = _run_t7_a({"code": "X1", "currency": "USD"}, 10.0, 32.0)
     assert errs == [] and len(books) == 1 and books[0][:3] == (30000.0, 32.0, 10.0)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 20) 客戶 2026-10-10 裁示 C1-3:選股池幣別不算可信證據
+#     可信幣別只限:來源基金頁明確宣告、晨星硬編表、客戶 Sheet 明確設定。
+#     池 secId / ISIN 仍可用來找基金;池幣別不得當預期幣別或 currencyId。
+# ════════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("pool_ccy", ["USD", "TWD"])
+def test_c13_pool_ccy_not_expected_ccy(monkeypatch, pool_ccy):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: pool_ccy)
+    assert fo._span_extend_expected_ccy("ZZZC1", "某某收益成長基金", "") == ""
+    assert fo._span_extend_expected_ccy("TLZF9", "", "") == "USD"          # 硬編表照收
+    assert fo._span_extend_expected_ccy("ZZZC1", "", "EUR") == "EUR"       # 來源宣告照收
+    # 池幣別也不得否決來源宣告的 hint(偵測推定時不讀池)
+    assert fo._span_extend_ms_hint("ZZZC1", "某某收益成長基金", "EUR") == "EUR"
+
+
+def test_c13_pool_ccy_not_morningstar_currency_id(monkeypatch):
+    _isolate_ms(monkeypatch, secid=("F0C13", "USD"), ccy="USD")
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    assert S._src_morningstar_nav("ZZZC2").empty and seen == []            # 池幣別不採 → 不請求
+    s = S._src_morningstar_nav("TLZF9")                                     # 硬編表 → 照請求
+    assert s.attrs["currency"] == "USD" and "currencyId=USD" in seen[0]
+
+
+def test_c13_single_pipeline_pool_usd_no_swap_source_declared_swaps(monkeypatch):
+    """端到端:池 secId 列與幣別欄皆 USD、meta 未宣告 → 不請求、不換源;
+    meta(來源頁)明確宣告「美元」→ 以 USD 換源(池 secId 照用)。"""
+    r, ts = _run_single(monkeypatch, meta_ccy="", pool_secid=("F0ALZF9", "USD"),
+                        pool_ccy="USD")
+    assert r["data_source"] == "FundClear" and ts == []
+    r2, ts2 = _run_single(monkeypatch, meta_ccy="美元", pool_secid=("F0ALZF9", "USD"),
+                          pool_ccy="USD")
+    assert r2["data_source"] == "morningstar(span-extend)"
+    assert len(ts2) == 1 and "F0ALZF9" in ts2[0] and "currencyId=USD" in ts2[0]
+
+
+def test_c13_latest_nav_pool_ccy_not_expected(monkeypatch):
+    v = _latest_nav(monkeypatch, "ZZZC3", pool_ccy="USD",
+                    ms=_nav_s(9.9, "Morningstar:UK:timeseries:X", "USD"))
+    assert v is None

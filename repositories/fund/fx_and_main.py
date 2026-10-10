@@ -467,10 +467,10 @@ def _latest_nav_ccy_ok(code: str, s, expected_ccy: str, step: str,
 
 
 def _latest_nav_expected_ccy(code: str) -> str:
-    """`get_latest_nav` 呼叫端沒給預期幣別時,L1 自己判:選股池使用者幣別 → 晨星硬編表。
+    """`get_latest_nav` 呼叫端沒給預期幣別時,L1 自己判:~~選股池使用者幣別 →~~ 晨星硬編表。
 
-    沿用 `fund_orchestration._span_extend_expected_ccy`(不帶基金名稱 → 不做名稱 /「台灣」
-    推定)。⚠️ L1 讀不到客戶 Sheet 上的幣別(已登記待裁示事項),故 Sheet 與選股池 /
+    沿用 `fund_orchestration._span_extend_expected_ccy`(不帶宣告值 → 只剩晨星硬編表)。
+    2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據,不再作為預期幣別。⚠️ L1 讀不到客戶 Sheet 上的幣別(已登記待裁示事項),故 Sheet 與選股池 /
     硬編表不一致時,本層偵測不到。判定失敗 → `""`(未知 → 非原生來源一律拒用)。
     """
     try:

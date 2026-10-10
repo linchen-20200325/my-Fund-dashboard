@@ -153,12 +153,14 @@ def test_morningstar_series_declares_the_currency_it_asked_for(monkeypatch):
         seen.append(getattr(req, "full_url", str(req)))
         return _FakeUrlResp(payload)
 
-    # 選股池填了 TWD → `_src_morningstar_nav` 應該用 TWD 去要,序列也應該宣告 TWD
+    # ~~選股池填了 TWD → 用 TWD 去要~~
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    #   池 secId 仍用來找基金;以可信宣告 TWD 去要,序列也應該宣告 TWD
     monkeypatch.setattr("repositories.pool_repository.resolve_secid",
                         lambda code: ("0PFAKE00001", "TWD"))
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
 
-    s = S._src_morningstar_nav("ZZZZ9")
+    s = S._src_morningstar_nav("ZZZZ9", currency_hint="TWD")
     assert len(s) == 2
     assert "currencyId=TWD" in seen[0], "前提沒成立:沒有用池中幣別去要"
     assert s.attrs.get("currency") == "TWD"
@@ -223,8 +225,11 @@ def test_span_extend_refuses_currency_swap(monkeypatch, capsys):
     O = _wire_l1(monkeypatch, ms=_long(1200, ccy="USD"))
     _short_twd = _long(30, ccy="TWD")
 
+    # 2026-10-10 客戶裁示 C1-3:名稱「台幣」推定不算證據(TLZF9 硬編表宣告 USD)→
+    #   本情境的「台幣基金」改由來源頁明確宣告(declared_ccy)表達
     s, src, span = O._span_extend_insurance_nav(
-        "TLZF9", _short_twd, "moneydj_legacy_scrape", fund_name="安聯台幣計價基金")
+        "TLZF9", _short_twd, "moneydj_legacy_scrape", fund_name="安聯台幣計價基金",
+        declared_ccy="TWD")
 
     assert len(s) == 30 and src == "moneydj_legacy_scrape", (
         "台幣序列被美元序列整條換掉 —— 這正是每天 20:00 的排程會做的事")
@@ -238,7 +243,7 @@ def test_span_extend_still_adopts_when_currency_matches(monkeypatch):
     O = _wire_l1(monkeypatch, ms=_long(1200, ccy="TWD"))
     s, src, span = O._span_extend_insurance_nav(
         "TLZF9", _long(30, ccy="TWD"), "moneydj_legacy_scrape",
-        fund_name="安聯台幣計價基金")
+        fund_name="安聯台幣計價基金", declared_ccy="TWD")   # C1-3:同上,改由明確宣告
     assert len(s) == 1200 and src == "morningstar(span-extend)" and span > 300
 
 

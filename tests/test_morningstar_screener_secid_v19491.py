@@ -252,7 +252,9 @@ def test_src_morningstar_prefers_screener(monkeypatch):
             {"EndDate": "2024-01-03", "Value": 11.0},
         ]}]},
     }))
-    out = S._src_morningstar_nav("ZZZZ9")
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    #   (上方池幣別 USD 的 monkeypatch 已不影響 currencyId,保留以示原情境)
+    out = S._src_morningstar_nav("ZZZZ9", currency_hint="USD")
     # ⭐ 功能沒有消失:screener 解析出來的 secId **本次抓取照舊使用**
     assert len(out) == 2, "切掉回寫之後連 NAV 都抓不到了 → 那是砍功能,不是切副作用"
     # ⭐ 但一格都沒有寫回使用者的表
@@ -278,7 +280,8 @@ def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _MSResp({
         "TimeSeries": {"Security": [{"HistoryDetail": [{"EndDate": "2024-01-02", "Value": 9.9}]}]},
     }))
-    out = S._src_morningstar_nav("ZZZZ9")
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    out = S._src_morningstar_nav("ZZZZ9", currency_hint="USD")
     assert _called["search"] is True                               # screener 空 → 退回搜尋
     assert len(out) == 1
 
@@ -415,8 +418,11 @@ def test_user_currency_threaded_into_screener(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _MSResp({
         "TimeSeries": {"Security": [{"HistoryDetail": [{"EndDate": "2024-01-02", "Value": 9.9}]}]},
     }))
+    # ~~池幣別 EUR → screener~~ → 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
     S._src_morningstar_nav("ZZZZ9")
-    assert _seen == {"isin": "LU2023250330", "ccy": "EUR"}   # 使用者幣別 → screener
+    assert _seen == {}                                       # 池 EUR 不採 → 不呼叫
+    S._src_morningstar_nav("ZZZZ9", currency_hint="EUR")
+    assert _seen == {"isin": "LU2023250330", "ccy": "EUR"}   # 可信宣告 → screener
 
 
 def test_no_isin_screener_not_called(monkeypatch):

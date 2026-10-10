@@ -38,6 +38,8 @@ def test_pool_secid_wins_no_screener_no_search(monkeypatch, _no_name_search):
 
 # ── 2) 池無 secId、有 ISIN → screener 精確解析(帶對池幣別)──────────────────
 def test_pool_isin_to_screener(monkeypatch, _no_name_search):
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    #   ~~池幣別 EUR → screener 帶 EUR~~;池 ISIN 仍可用,screener 幣別只取晨星硬編表。
     _patch_pool(monkeypatch, secid=None, isin="LU0766462157", ccy="EUR")
     _seen = {}
 
@@ -46,8 +48,11 @@ def test_pool_isin_to_screener(monkeypatch, _no_name_search):
         return "F00000EUR9"
 
     monkeypatch.setattr(S, "_morningstar_screener_secid", _scr)
-    assert S._resolve_ms_secid("XXXX") == "F00000EUR9"
-    assert _seen == {"isin": "LU0766462157", "ccy": "EUR"}
+    assert S._pool_secid_lookup("XXXX") == "" and _seen == {}      # 不在硬編表 → 不呼叫
+    # 硬編表只手工宣告幣別(secId 待補)→ screener 帶硬編表幣別
+    monkeypatch.setattr(S, "_MORNINGSTAR_SECID_MAP", {"YYYY": ("", "USD")}, raising=False)
+    assert S._pool_secid_lookup("YYYY") == "F00000EUR9"
+    assert _seen == {"isin": "LU0766462157", "ccy": "USD"}
 
 
 def test_pool_isin_unknown_ccy_fails_closed(monkeypatch, _no_name_search):

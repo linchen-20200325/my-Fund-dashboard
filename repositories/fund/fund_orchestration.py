@@ -82,7 +82,8 @@ def _pool_secid_or_isin(code: str) -> bool:
         return False
 
 
-def _correct_currency(cur_ccy: str, fund_name: str, code: str) -> str:
+def _correct_currency(cur_ccy: str, fund_name: str, code: str,
+                      use_pool: bool = True) -> str:
     """v19.505:境內基金頁常缺「計價幣別」欄 → 各 meta 源 `.get("計價幣別","USD")` 一路矇
     USD 死預設,把台幣基金當美元換匯(user 2026-08-21 回報 安聯台灣智慧/大壩)。健診幣別
     路徑原本完全沒用名稱「台幣/台灣」也沒用池 currency。本 helper 修正,回傳修正後幣別:
@@ -93,6 +94,9 @@ def _correct_currency(cur_ccy: str, fund_name: str, code: str) -> str:
     只在 cur 為**空或 USD**(可能死預設)時修;名稱明確「美元」的組合基金(ACCP138)→
     名稱幣別=USD、與 cur 相同不動,不會誤判台幣;真 EUR / 其他明確幣別(非空非 USD)完全
     不動。找不到正向修正 → 原樣回傳(空 cur 交給 fund_row 誠實報「幣別未知」§1)。純讀。
+
+    `use_pool=False`(2026-10-10 客戶裁示 C1-3):不讀選股池幣別 —— 給「判斷宣告值會不會
+    被推定改掉」的呼叫端用(`_span_extend_ms_hint`);選股池幣別不算可信證據。
     """
     _cur = (cur_ccy or "").upper()
     if _cur not in ("", "USD"):
@@ -105,8 +109,9 @@ def _correct_currency(cur_ccy: str, fund_name: str, code: str) -> str:
         _name_ccy = ""
     _pool_ccy = ""
     try:
-        from repositories.pool_repository import resolve_currency as _rc
-        _pool_ccy = (_rc(code) or "").upper()
+        if use_pool:
+            from repositories.pool_repository import resolve_currency as _rc
+            _pool_ccy = (_rc(code) or "").upper()
     except Exception:  # noqa: BLE001 — 池不可用不得擋抓取
         _pool_ccy = ""
     _twn = "TWD" if ("台灣" in _nm or "臺灣" in _nm) else ""
@@ -146,8 +151,11 @@ def _span_extend_expected_ccy(code: str, fund_name: str = "", declared_ccy: str 
         # 2026-10-10 批次二:宣告欄正規化與晨星請求同一套(`sources._normalize_declared_ccy`),
         # 選股池「美元」→ USD;~~`_iso_ccy`~~ 會把它當未知。
         from repositories.fund.sources import _normalize_declared_ccy as _iso_ccy
-        _exp = (_iso_ccy(declared_ccy)
-                or _iso_ccy(_correct_currency("", fund_name or "", _code)))
+        # ~~`or _iso_ccy(_correct_currency("", fund_name or "", _code))`~~
+        # 2026-10-10 客戶裁示 C1-3:可信幣別只限來源頁明確宣告、晨星硬編表、客戶 Sheet;
+        # 名稱 /「台灣」字樣推定與選股池幣別都不算證據 → 不再經 `_correct_currency`
+        # (與 legacy 段同規則)。`fund_name` 參數保留以相容既有呼叫端,不再參與判定。
+        _exp = _iso_ccy(declared_ccy)
         if not _exp:
             _exp = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
         return _exp
@@ -179,7 +187,9 @@ def _span_extend_ms_hint(code: str, fund_name: str = "", declared_ccy: str = "")
         # 2026-10-10 批次二:與預期幣別判定、晨星請求同一套正規化
         from repositories.fund.sources import _normalize_declared_ccy as _iso_ccy
         _decl = _iso_ccy(declared_ccy)
-        _corrected = _iso_ccy(_correct_currency(_decl, fund_name or "", _code))
+        # 2026-10-10 客戶裁示 C1-3:選股池不算證據 → 偵測推定時不讀池(use_pool=False)
+        _corrected = _iso_ccy(_correct_currency(_decl, fund_name or "", _code,
+                                                use_pool=False))
         if _corrected != _decl:
             print(f"[orchestrator] {_code} 晨星 hint 不給:宣告 {_decl or '空'} 會被"
                   f"名稱/選股池/台灣字樣推定改成 {_corrected or '空'}(推定不算可靠確認)")
@@ -207,7 +217,6 @@ def _span_extend_insurance_nav(
     code: str, nav_s: pd.Series, nav_source: str,
     fund_name: str = "", is_insurance_code: "bool | None" = None,
     declared_ccy: str = "", raw_declared_ccy: "str | None" = None,
-    declared_only: bool = False,
 ) -> "tuple[pd.Series, str, int]":
     """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
 
@@ -227,11 +236,11 @@ def _span_extend_insurance_nav(
     原始宣告幣別,只用來決定晨星請求的 `currency_hint`(見 `_span_extend_ms_hint`)。
     `None` → 與 `declared_ccy` 相同(呼叫端傳入的 `declared_ccy` 本來就是原值時)。
 
-    `declared_only`(2026-10-10 稽核回修必修-1):True → 比對用的預期幣別**只**取
-    meta 原始宣告值(`raw_declared_ccy`,未經 `_correct_currency`)或晨星硬編表,
+    ~~`declared_only`(2026-10-10 稽核回修必修-1):True → 比對用的預期幣別只取原值或硬編表~~
+    → 2026-10-10 客戶裁示 C1-3:**所有呼叫端**的預期幣別一律只取 meta 原始宣告值
+    (`raw_declared_ccy`,未經 `_correct_currency`;`None` → `declared_ccy`)或晨星硬編表,
     不做名稱 / 選股池 / 台灣字樣推定;取不到 → 未知 → 不換源(fail closed)。
-    給拿不到「修正前原值」保證的呼叫端用(legacy 段:`result` 已合併過
-    `_fetch_fund_single` 修正後的幣別,而 `_correct_currency` 冪等,看不出上游推定過)。
+    原本只有 legacy 段開啟的 `declared_only` 因此成為唯一行為,參數移除。
     """
     _code = (code or "").upper().strip()
     if is_insurance_code is None:
@@ -251,13 +260,9 @@ def _span_extend_insurance_nav(
         # `fund_name` 恆空 → 預期幣別只剩選股池 → 已知 USD 的 TLZF9 長歷史被擋(回歸)。
         # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
         # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
-        if declared_only:
-            # 稽核回修必修-1:只信原始宣告值或硬編表(不經 `_correct_currency`)。
-            from repositories.fund.sources import _normalize_declared_ccy as _ndc
-            _expect_ccy = (_ndc(declared_ccy if raw_declared_ccy is None else raw_declared_ccy)
-                           or _ndc((_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1]))
-        else:
-            _expect_ccy = _span_extend_expected_ccy(_code, fund_name, declared_ccy)
+        # 2026-10-10 客戶裁示 C1-3:只信原始宣告值或硬編表(與 legacy 段同規則)
+        _expect_ccy = _span_extend_expected_ccy(
+            _code, "", declared_ccy if raw_declared_ccy is None else raw_declared_ccy)
         # 2026-10-10 必修 (a):晨星請求的 hint 與比對用的預期幣別**分開** ——
         # ~~currency_hint=_expect_ccy~~(預期幣別含名稱 /「台灣」推定,會回流成 currencyId)
         _ms_hint = _span_extend_ms_hint(
@@ -793,8 +798,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 nav_series_currency as _series_ccy_x,
             )
             _xv = _assess_x(
-                expected_ccy=_span_extend_expected_ccy(
-                    _code, result.get("fund_name") or "", result.get("currency") or ""),
+                # ~~`result.get("currency")`~~(已被 v19.505 推定改寫)→ 2026-10-10 客戶裁示
+                # C1-3:預期幣別只取 meta 原始宣告值(`_cur_ccy0`)或硬編表。
+                expected_ccy=_span_extend_expected_ccy(_code, "", _cur_ccy0),
                 candidate_ccy=_series_ccy_x(_xs),
                 candidate_source=nav_source, current_source="")
             if not _xv["safe"]:
@@ -830,8 +836,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 換源成功才改寫 series / data_source / nav_span_days 並追加一筆 source_trace。
     if not _se_swapped:
         _se_exp0 = _span_extend_expected_ccy(_code, _se_name0, _se_ccy0)
-        _se_exp1 = _span_extend_expected_ccy(_code, result.get("fund_name") or "",
-                                             result.get("currency") or "")
+        # 2026-10-10 客戶裁示 C1-3:meta 之後的預期幣別也只看原始宣告值(`_cur_ccy0`)
+        _se_exp1 = _span_extend_expected_ccy(_code, "", _cur_ccy0)
         # 2026-10-10 複驗建議 3a:只在第一趟「因預期幣別未知而沒發請求」時補跑
         # (~~`_se_exp1 and _se_exp1 != _se_exp0`~~ 會重複發必被拒的請求)。
         if _se_exp1 and not _se_exp0:
@@ -1599,7 +1605,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             # hint 與預期幣別都只取本函式自己解析的原始宣告值(或硬編表)。
             declared_ccy=_legacy_raw_ccy,
             raw_declared_ccy=_legacy_raw_ccy,
-            declared_only=True,
+            # ~~declared_only=True,~~(2026-10-10 C1-3:已成為唯一行為,參數移除)
         )
         result["series"]        = _ext_s
         result["data_source"]   = _ext_src

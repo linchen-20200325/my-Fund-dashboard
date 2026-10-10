@@ -954,7 +954,7 @@ def _pool_secid_lookup(code: str) -> str:
     import sys as _sys_p
     try:
         from repositories.pool_repository import (
-            resolve_currency, resolve_isin, resolve_secid,
+            resolve_isin, resolve_secid,   # ~~resolve_currency~~(C1-3:池幣別不採)
         )
     except Exception:  # noqa: BLE001 — 池模組不可用(理論上不會)→ 跳過備源
         return ""
@@ -975,8 +975,11 @@ def _pool_secid_lookup(code: str) -> str:
         if _isin:
             # 2026-10-10 客戶裁示 Q2:未知幣別 ≠ USD —— screener 請求必帶 currencyId,
             # 池幣別空白 → 不以 USD 猜測呼叫(fail closed),跳過本備源。
-            # 2026-10-10 批次二:池幣別先正規化(「美元」→ USD;無法正規化 → 未知)
-            _ccy = _normalize_declared_ccy(resolve_currency(_code))
+            # ~~_ccy = _normalize_declared_ccy(resolve_currency(_code))~~(批次二:池幣別)
+            # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → screener 的幣別只取
+            # 晨星硬編表手工宣告值;沒有 → 未知 → 不呼叫(fail closed)。
+            _ccy = _normalize_declared_ccy(
+                (_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1])
             if not _ccy:
                 print(f"[ms_secid_pool] {_code} ISIN={_isin} 幣別未知 → 不以 USD 猜測呼叫晨星"
                       f" screener(fail closed)", file=_sys_p.stderr)
@@ -1742,15 +1745,15 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
     # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
     # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
     # ~~currency_id = str(_mapped[1] or "").strip().upper()~~(「美元」會原樣送出)
-    # 2026-10-10 批次二:池 / 硬編表宣告值一律過 `_normalize_declared_ccy`。
-    sec_id, currency_id = _mapped[0], _normalize_declared_ccy(_mapped[1])
-    # 2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。
-    if not currency_id:
-        try:
-            from repositories.pool_repository import resolve_currency as _rc_pre
-            currency_id = _normalize_declared_ccy(_rc_pre(_code))   # 2026-10-10 批次二
-        except Exception:  # noqa: BLE001 — 池不可用 → 退 hint
-            currency_id = ""
+    # ~~currency_id = _normalize_declared_ccy(_mapped[1])~~(批次二;`_mapped` 可能是池 secId 列)
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 —— 池 secId 仍可用來找基金,
+    # 但 `currencyId` 只取晨星硬編表手工宣告的幣別,其次才是呼叫端 hint(原始宣告值)。
+    sec_id = _mapped[0]
+    currency_id = _normalize_declared_ccy(
+        (_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1])
+    # ~~2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。~~
+    # ~~(池使用者幣別 `resolve_currency` 那一段已移除)~~
+    # 2026-10-10 客戶裁示 C1-3:幣別來源 = 晨星硬編表 → 呼叫端 hint;選股池幣別不採。
     if not currency_id and currency_hint:
         currency_id = _normalize_declared_ccy(currency_hint)   # 2026-10-10 批次二:同一套
     if not currency_id:
@@ -1770,14 +1773,13 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
             # ⛔ 2026-09-06:`set_secid as _cache_secid` **已移除,不是漏刪**。
             #    只留讀取(`resolve_*`);回存 secId 的那一行見下方切除註。
             from repositories.pool_repository import (  # noqa: PLC0415
-                resolve_currency as _resolve_user_ccy,
-                resolve_isin as _resolve_user_isin,
+                resolve_isin as _resolve_user_isin,   # ~~resolve_currency~~(C1-3)
             )
             _isin = _resolve_user_isin(_code)
             if _isin:
-                _u_ccy = _normalize_declared_ccy(_resolve_user_ccy(_code))   # 批次二
-                if _u_ccy:
-                    currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
+                # ~~_u_ccy = _normalize_declared_ccy(_resolve_user_ccy(_code))~~
+                # ~~if _u_ccy: currency_id = _u_ccy~~(選股池幣別覆寫 currencyId)
+                # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據,不覆寫 currencyId。
                 # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),
                 #   查無 / 端點不可用才退回既有 SecuritySearch(純附加、零回歸)。
                 # 2026-10-10 Q2:幣別未知 → 不以 USD 猜測呼叫 screener(函式內 fail closed);
