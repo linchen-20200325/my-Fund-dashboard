@@ -6,7 +6,9 @@
 是子字串首命中,於是台股股票型基金被判成「原物料資源」。
 修法:改用同套件既有的 `_pick_fund_category`(另兩個寫入點早已使用)。
 
-毒樣本從 repo 內 `snap.json` 讀取(真實資料,不手抄);全程替身,不打網路。
+毒樣本讀自固定 fixture `tests/fixtures/moneydj_investment_target_acdd01.json`
+(真實資料,出處與抽出日見該檔 `_出處`);不讀根目錄 `snap.json` —— 那是診斷快照,
+重新 dump 就會變。全程替身,不打網路。
 """
 from __future__ import annotations
 
@@ -20,13 +22,14 @@ import fund_fetcher  # noqa: F401 — conftest 同款 prime(循環 import)
 from repositories.fund.sources import _pick_fund_category
 from services.regime_fit import asset_bucket
 
-_SNAP = pathlib.Path(__file__).resolve().parent.parent / "snap.json"
+_FIXTURE = (pathlib.Path(__file__).resolve().parent / "fixtures"
+            / "moneydj_investment_target_acdd01.json")
 
 
 def _poison() -> str:
-    """snap.json 中 ACDD01(台股股票基金)被寫進 category 的說明書長描述。"""
-    data = json.loads(_SNAP.read_text(encoding="utf-8"))
-    text = data["funds"]["ACDD01"]["category"]
+    """ACDD01(台股股票基金)「投資標的」欄的說明書長描述(固定 fixture)。"""
+    data = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    text = data["investment_target_long"]
     assert len(text) > 15, "毒樣本不是長描述,本檔的正例會空轉"
     return text
 
@@ -122,3 +125,19 @@ def test_empty_fund_type(monkeypatch, target, expected):
     t = _poison() if target is None else target
     res = _run(monkeypatch, [("投資標的", t), ("基金類型", "")])
     assert res["category"] == expected
+
+
+# ── 釘住與舊寫法的行為差異(與 `_pick_fund_category` 一致)──
+
+@pytest.mark.parametrize("rows,expected", [
+    # (a) 「投資標的」key 存在但為空 → 退回基金類型(舊式 .get 命中空值會得 "")
+    ([("投資標的", ""), ("基金類型", "股票型")], "股票型"),
+    # (b) 內部空白原樣保留(helper 只去頭尾;舊式 .replace(" ","") 會刪掉)
+    ([("投資標的", "高 收益債")], "高 收益債"),
+    ([("投資標的", None), ("基金類型", "高 收益債")], "高 收益債"),
+])
+def test_behavior_differences_vs_old_expression(monkeypatch, rows, expected):
+    rows = [(k, _poison() if v is None else v) for k, v in rows]
+    res = _run(monkeypatch, rows)
+    assert res["category"] == expected
+    assert res["category"] == _pick_fund_category(dict(rows))
