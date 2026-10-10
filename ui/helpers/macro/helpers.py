@@ -103,7 +103,13 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
         "高峰": {True:("🟡 持有減碼","switch","景氣高峰，核心資產可適度減碼增加防禦性債券"),False:("🔴 賣出獲利","sell","高峰期衛星資產應積極獲利了結，避免高基期風險")},
         "衰退": {True:("🟢 逢低買進","buy","衰退末期優先佈局核心配息資產，等待景氣拐點"),False:("⏸️ 觀望等待","hold","衰退期衛星資產避免進場，等待PMI落底確認訊號")},
     }
-    label, sig_type, reason = RECS.get(phase, RECS["擴張"])[is_core]
+    # 2026-10-10（客戶裁示 V5／Q5 止血）：~~判不出核心或衛星的「混合型」走 `RECS[phase][False]`~~
+    # —— 等於名稱沒猜中核心就拿衛星專屬的動作句（例：高峰「🔴 賣出獲利」）。
+    # 無法確認核心或衛星 → 不給任何核心／衛星專屬動作句（操作訊號「—」）。只擋這一條，不改訊號系統。
+    if not is_core and not is_sat:
+        label, sig_type, reason = "—", "none", ""
+    else:
+        label, sig_type, reason = RECS.get(phase, RECS["擴張"])[is_core]
     # v19.252 Phase 4A:sell 走 TRAFFIC_RED SSOT(原 inline #f85149)
     SIG = {"buy":"background:#1a3328;color:{MATERIAL_GREEN};border:1px solid {MATERIAL_GREEN}","sell":f"background:#3a1a1a;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED}","hold":"background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE}","switch":"background:#3a2a10;color:#f0a500;border:1px solid #f0a500"}
     sig_style = SIG.get(sig_type, SIG["hold"])
