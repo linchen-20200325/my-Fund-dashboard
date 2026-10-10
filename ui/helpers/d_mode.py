@@ -34,7 +34,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
         {
           "ok":         bool,
           "fund_name":  str,
-          "currency":   str (upper, default "USD"),
+          "currency":   str (upper;~~default "USD"~~ → 2026-10-10 未知為 "" 且 ok=False),
           "nav":        float (series.iloc[-1]),
           "fx":         float (currency→TWD; TWD=1.0; 查失敗 fallback 31.0),
           "series":     pd.Series (dropna 後；ok=False 時為空 series),
@@ -48,7 +48,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
     import pandas as pd  # noqa: PLC0415
 
     out: dict = {
-        "ok": False, "fund_name": "", "currency": "USD",
+        "ok": False, "fund_name": "", "currency": "",
         "nav": 0.0, "fx": 31.0,
         "series": pd.Series(dtype=float), "dividends": [],
         "error": "",
@@ -67,7 +67,13 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
                 if _hs is not None and hasattr(_hs, "dropna"):
                     _hs = _hs.dropna()
                     if len(_hs) > 0:
-                        _ccy = str(_hit.get("currency") or "USD").upper().strip()
+                        # 2026-10-10 客戶裁示:未知幣別 ≠ USD;Sheet 與來源衝突(Q4)
+                        # 同樣視為未知 → fail closed,不查匯率、不用保底匯率。
+                        from ui.helpers.portfolio.load import fund_currency_for_calc
+                        _ccy = fund_currency_for_calc(_hit)
+                        if not _ccy:
+                            out["error"] = "幣別未知"
+                            return out
                         _fx = _hit.get("fx_avg") or _hit.get("fx_rate") or 0
                         out.update({
                             "ok": True,
@@ -139,7 +145,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
         return out
     out["fund_name"] = (str(_r.get("fund_name") or _r.get("name") or "").strip()
                           or _code)
-    out["currency"] = str(_r.get("currency") or "USD").strip().upper()
+    out["currency"] = str(_r.get("currency") or "").strip().upper()
     out["dividends"] = list(_r.get("dividends") or [])
     # v18.246: 帶 metrics + moneydj_raw 給 _get_dy_t7（沒這兩個 key → dy = 0）
     out["metrics"] = dict(_r.get("metrics") or {})
@@ -147,6 +153,10 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
            or {"moneydj_div_yield": _r.get("moneydj_div_yield")})
     out["moneydj_raw"] = dict(_mj or {})
 
+    if not out["currency"]:
+        # 2026-10-10 客戶裁示:未知幣別 ≠ USD → fail closed(不組 FX symbol、不查匯率)。
+        out["error"] = "幣別未知"
+        return out
     if out["currency"] == "TWD":
         out["fx"] = 1.0
     else:
