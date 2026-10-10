@@ -1164,7 +1164,9 @@ def test_single_pipeline_name_inferred_ccy_not_sent_to_morningstar(monkeypatch, 
     第二趟 span-extend 的預期幣別是 TWD,但晨星**不得**以 `currencyId=TWD` 發請求。"""
     r, ts = _run_single(monkeypatch, meta_ccy=meta_ccy, pool_secid=("F0ALZF9", ""),
                         meta_name="某某台灣科技基金")
-    assert r["currency"] == "TWD"                     # 推定照舊用於比對 / 呈現(本修不動)
+    # ~~assert r["currency"] == "TWD"  # 推定照舊用於比對 / 呈現~~
+    # 2026-10-10 客戶裁示 C2-1:名稱推定不寫進 L1 `currency` → 只留來源原值(空 / USD)
+    assert r["currency"] == meta_ccy
     assert ts == []                                   # 但不發晨星請求
     assert r["data_source"] == "FundClear"
 
@@ -1451,7 +1453,8 @@ def test_legacy_name_inferred_ccy_not_sent_to_morningstar(monkeypatch, meta_ccy)
     """反向:主管線推定成 TWD(名稱含「台灣」)、legacy 頁抓不到 → 不得以
     `currencyId=TWD` 發晨星請求,也不得換掉 legacy 序列。"""
     res, ms = _run_legacy(monkeypatch, meta_ccy=meta_ccy, meta_name="某某台灣科技基金")
-    assert res["currency"] == "TWD"                   # 推定照舊用於呈現(本修不動)
+    # ~~assert res["currency"] == "TWD"  # 推定照舊用於呈現~~ → C2-1:推定不寫入 currency
+    assert res["currency"] == meta_ccy
     assert ms == []
     assert res["data_source"] == "moneydj_legacy_scrape" and len(res["series"]) == 30
 

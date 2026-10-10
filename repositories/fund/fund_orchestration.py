@@ -119,6 +119,21 @@ def _correct_currency(cur_ccy: str, fund_name: str, code: str,
     return _fix if (_fix and _fix != _cur) else _cur
 
 
+def _declared_or_table_ccy(raw, code: str) -> str:
+    """L1 結果 `currency` 欄可放的值(2026-10-10 客戶裁示 C2-1)。
+
+    只放 (1) 來源頁明確宣告值 —— 經 `sources._normalize_declared_ccy` 做**格式正規化**
+    (「美元」→ USD);L1 別名表沒收的寫法(例「日幣」)保留原字,交下游 L2 正規化,
+    不因 L1 表不全而丟掉來源宣告;(2) 宣告為空時,晨星硬編表手工宣告的幣別。
+    名稱 /「台灣」字樣推定與選股池幣別**一律不寫入**(不算可信證據)。都沒有 → `""`。
+    """
+    from repositories.fund.sources import _normalize_declared_ccy as _ndc
+    _raw = str(raw or "").strip()
+    return (_ndc(_raw) or _raw
+            or _ndc((_MORNINGSTAR_SECID_MAP.get((code or "").upper().strip())
+                     or ("", ""))[1]))
+
+
 def _ensure_currency(result: dict, code: str) -> None:
     """v19.505 稽核修:外層 `fetch_fund_from_moneydj_url` 每個 return 前對**最終 result**
     再套一次 _correct_currency。根因(對抗式稽核 High):純代碼經 auto_fetch_moneydj 會被
@@ -126,10 +141,14 @@ def _ensure_currency(result: dict, code: str) -> None:
     被 protect loop(_saved_meta)存回,蓋掉 _fetch_fund_single 已修好的 TWD。此處在收口
     再修一次,不管假 USD 來自 direct_url / legacy / protect loop 哪條路都收掉。冪等
     (已是 TWD/明確幣別 → _correct_currency 早退不動)。§1:池/名稱不可用不擋回傳。"""
+    # ~~_new = _correct_currency(_cur, fund_name, code)~~(名稱 / 選股池 / 台灣推定寫回 currency)
+    # 2026-10-10 客戶裁示 C2-1:推定值不得寫進 L1 結果 `currency`(下游會把它當來源宣告,
+    # Tab3 批次新增還會寫回客戶 Sheet)→ 只做格式正規化 / 硬編表補空。
+    # 舊理由(direct_url「計價幣別」缺欄 USD 死預設)已由 2026-10-10 取數源頭修正
+    # (缺欄 → 空白)處理;此處不再需要以推定覆蓋。
     try:
-        _cur = (result.get("currency") or "").upper()
-        _new = _correct_currency(_cur, result.get("fund_name", "") or "",
-                                 (code or "").upper().strip())
+        _cur = str(result.get("currency") or "").strip()
+        _new = _declared_or_table_ccy(_cur, code)
         if _new != _cur:
             print(f"[orchestrator] 幣別收尾修 {code}: {_cur or '空'} → {_new}")
             result["currency"] = _new
@@ -776,8 +795,10 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         result = merge_non_empty(result, meta)
 
     # ── v19.505 幣別修正(§1,見 _correct_currency docstring)───────────────
+    # ~~_new_ccy = _correct_currency(_cur_ccy0, fund_name, _code)~~ → 2026-10-10 客戶裁示 C2-1:
+    # 名稱 / 選股池推定不寫入 `currency`;只做格式正規化或硬編表補空(`_declared_or_table_ccy`)。
     _cur_ccy0 = (result.get("currency") or "").upper()
-    _new_ccy = _correct_currency(_cur_ccy0, result.get("fund_name", "") or "", _code)
+    _new_ccy = _declared_or_table_ccy(_cur_ccy0, _code)
     if _new_ccy != _cur_ccy0:
         print(f"[orchestrator] 幣別修正 {_code}: {_cur_ccy0 or '空'} → {_new_ccy}")
         result["currency"] = _new_ccy
