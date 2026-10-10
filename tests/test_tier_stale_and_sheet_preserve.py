@@ -4,7 +4,8 @@
 守的是三件事（兩組獨立稽核 2026-10-10 指出）：
 1. **過期 `is_core`**：v1 讀回（`sync_policies_to_portfolio_funds`）與 JSON 還原
    （`restore_from_json_bytes`）都只讓 Sheet 的級別決定 `is_core` —— 舊備份裡的 `is_core`
-   是改動前批次載入用基金名稱猜的，不得被 `resolve_tier` 撿回去、再由「全部寫入」寫回。
+   可能是名稱猜測、也可能是 Sheet 設定，無法分辨，一律不採；不得被 `resolve_tier` 撿回去、
+   再由「全部寫入」寫回。
 2. **寫回保留 Sheet 原值**：session 沒有客戶級別（例如剛還原備份）時，v1 的
    `upsert_fund_in_policy` 與 v2「全部寫入」（`write_policy_v2(keep_sheet_tier=True)`）
    保留該格 Sheet 現值，不寫空白。
@@ -113,7 +114,7 @@ def test_v2_session_switching_to_v1_does_not_carry_tier(monkeypatch):
 # 1. 過期 is_core：JSON 還原
 # ══════════════════════════════════════════════════════════════════
 def _old_backup(policy_tier: str = "", is_core=True) -> bytes:
-    """改動前匯出的備份：is_core 是名稱猜的。"""
+    """改動前匯出的備份；本 fixture 模擬 is_core 是名稱猜測的那一種（無法與 Sheet 設定分辨）。"""
     return json.dumps({
         "schema_version": "1.0",
         "portfolio_funds": [{
@@ -212,6 +213,13 @@ class _FakeWS:
             raise RuntimeError("read boom")
         return [list(r) for r in self.values]
 
+    def get_all_records(self):
+        hdr = self.values[0]
+        return [dict(zip(hdr, r)) for r in self.values[1:]]
+
+    def row_values(self, i):
+        return list(self.values[i - 1]) if len(self.values) >= i else []
+
     def update(self, rng, rows):
         self.updates.append((rng, rows))
 
@@ -301,6 +309,15 @@ def _df_v2(tiers: dict) -> pd.DataFrame:
                          for c, t in tiers.items()], columns=list(ALL_COLS_V2))
 
 
+def _written_rows(ws) -> list:
+    """寫出的 (代號, 級別, 本金) 依列序。"""
+    from repositories.policy.v2 import ALL_COLS_V2
+    _c = list(ALL_COLS_V2)
+    _rng, rows = ws.updates[0]
+    return [(r[_c.index("fund_code")], r[_c.index("tier")], r[_c.index("invest_twd")])
+            for r in rows[1:]]
+
+
 def _written_tiers(ws) -> dict:
     from repositories.policy.v2 import ALL_COLS_V2
     _rng, rows = ws.updates[0]
@@ -341,7 +358,7 @@ def test_v2_write_v1_headers_in_v2_sheet():
     """混合 Sheet：v1 英文分頁（fund_url／policy_tier）也能定位既有級別。"""
     from repositories.policy.v2 import _tier_by_code_from_values
     assert _tier_by_code_from_values(_v1_tab_values({"F1": "core", "F2": "x"})) == {
-        "F1": "core", "F2": "x"}
+        "F1": ["core"], "F2": ["x"]}
     assert _tier_by_code_from_values([]) == {}
     assert _tier_by_code_from_values([["a", "b"], ["1", "2"]]) == {}
 
@@ -416,3 +433,177 @@ def test_manual_has_no_unapproved_parenthetical():
         encoding="utf-8")
     assert "仍以基金名稱判斷" not in src
     assert "組合的核心／衛星級別不再用基金名稱推定。" in src
+
+
+# ══════════════════════════════════════════════════════════════════
+# 稽核 C（M-1）：同代號多列 —— 以 (代號, 第 k 次出現) 對齊，不得把 A 列的級別滲到 B 列
+# ══════════════════════════════════════════════════════════════════
+def _v2_tab_rows(rows: list) -> list:
+    """rows: [(代號, 級別, 本金), ...] → 中文表頭 v2 分頁的 get_all_values。"""
+    from repositories.policy.v2 import ALL_COLS_V2, ZH_HEADERS_V2
+    _c = list(ALL_COLS_V2)
+    out = [[ZH_HEADERS_V2[c] for c in _c]]
+    for code, tier, amt in rows:
+        r = [""] * len(_c)
+        r[_c.index("policy_id")] = "P1"
+        r[_c.index("fund_code")] = code
+        r[_c.index("tier")] = tier
+        r[_c.index("invest_twd")] = str(amt)
+        out.append(r)
+    return out
+
+
+def _sheet_round_trip(monkeypatch, sheet_rows: list) -> list:
+    """Sheet 分頁 → `_load_all_from_sheet_v2` → v2 全部寫入（真 write_policy_v2、假 gspread）。"""
+    from repositories.policy.v2 import ALL_COLS_V2
+    from ui.helpers import cloud_io
+    _c = list(ALL_COLS_V2)
+    _df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
+                        for c, t, a in sheet_rows], columns=_c).fillna("")
+    monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: _df)
+    ss: dict = {"portfolio_funds": []}
+    assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
+    ws = _FakeWS(_v2_tab_rows(sheet_rows))
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
+    assert out["ok"] and not out["warnings"], out
+    return _written_rows(ws)
+
+
+@pytest.mark.parametrize("first_tier", ["core", "foo"])
+def test_v2_same_code_two_rows_tier_does_not_leak(monkeypatch, first_tier):
+    """稽核 C 重現：[F1 core 100] + [F1 '' 200] → 56f135c 寫出 ('F1','core',200)。
+    突變：對齊改成「最後一列優先」或「只取第一列」→ 本條轉紅。"""
+    assert _sheet_round_trip(monkeypatch, [("F1", first_tier, 100), ("F1", "", 200)]) == [
+        ("F1", first_tier, 100), ("F1", "", 200)]
+
+
+def test_v2_same_code_two_rows_reverse_order(monkeypatch):
+    """空白列在前、核心列在後：各自保留自己的值。"""
+    assert _sheet_round_trip(monkeypatch, [("F1", "", 100), ("F1", "core", 200)]) == [
+        ("F1", "", 100), ("F1", "core", 200)]
+
+
+def test_v2_rows_reordered_across_codes_align_per_code():
+    """列序改變（不同代號交錯、df 順序與 Sheet 不同）：每個代號各自依出現次序對齊。"""
+    from repositories.policy.v2 import write_policy_v2
+    ws = _FakeWS(_v2_tab_rows([("F1", "core", 1), ("F2", "foo", 2), ("F1", "", 3),
+                               ("F2", "satellite", 4)]))
+    df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": "", "invest_twd": a}
+                       for c, a in (("F2", 2), ("F2", 4), ("F1", 1), ("F1", 3))])
+    write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
+    assert _written_rows(ws) == [("F2", "foo", 2), ("F2", "satellite", 4),
+                                 ("F1", "core", 1), ("F1", "", 3)]
+
+
+@pytest.mark.parametrize("sheet_rows, df_rows, expect", [
+    # Sheet 2 列、df 1 列 → 出現次數不同 → 不保留、照寫 df 值（空 → 空白，刻意取捨）
+    ([("F1", "core", 1), ("F1", "", 2)], [("F1", "", 1)], [("F1", "", 1)]),
+    # Sheet 1 列、df 2 列 → 同上
+    ([("F1", "core", 1)], [("F1", "", 1), ("F1", "", 2)], [("F1", "", 1), ("F1", "", 2)]),
+    # 次數不同但 df 有明確級別 → 照寫 df 值
+    ([("F1", "core", 1)], [("F1", "satellite", 1), ("F1", "", 2)],
+     [("F1", "satellite", 1), ("F1", "", 2)]),
+    # 其他代號次數一致 → 不受影響、照常保留
+    ([("F1", "core", 1), ("F2", "foo", 2)], [("F1", "", 1), ("F1", "", 9), ("F2", "", 2)],
+     [("F1", "", 1), ("F1", "", 9), ("F2", "foo", 2)]),
+])
+def test_v2_occurrence_count_mismatch_skips_preservation(sheet_rows, df_rows, expect):
+    from repositories.policy.v2 import write_policy_v2
+    ws = _FakeWS(_v2_tab_rows(sheet_rows))
+    df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
+                       for c, t, a in df_rows])
+    write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
+    assert _written_rows(ws) == expect
+
+
+def test_tier_by_code_keeps_all_occurrences_in_order():
+    from repositories.policy.v2 import _tier_by_code_from_values
+    assert _tier_by_code_from_values(_v2_tab_rows([("f1", "core", 1), ("F2", "x", 2),
+                                                   ("F1", "", 3)])) == {
+        "F1": ["core", ""], "F2": ["x"]}
+
+
+@pytest.mark.parametrize("cells, expect_first, expect_second", [
+    (["core", ""], "core", ""),
+    (["", "core"], "", "core"),
+])
+def test_v1_upsert_same_url_two_rows_no_leak(monkeypatch, cells, expect_first, expect_second):
+    """v1 分頁同 fund_url 兩列：upsert 只改第一列、級別取自第一列本身；第二列不被動到。"""
+    from repositories.policy import v2 as V2
+    from repositories.policy._helpers import ALL_COLS
+    vals = _v1_tab_values({"F1": cells[0]})
+    second = list(vals[1])
+    second[list(ALL_COLS).index("policy_tier")] = cells[1]
+    vals.append(second)
+    ws = _FakeWS(vals)
+    monkeypatch.setattr(V2, "ensure_policy_worksheet", lambda c, s, p: ws)
+    V2.upsert_fund_in_policy("c", "s", "P1", {"fund_url": "F1", "policy_tier": ""})
+    assert len(ws.updates) == 1
+    _rng, _rows = ws.updates[0]
+    assert _rng.startswith("A2:")
+    assert _rows[0][list(ALL_COLS).index("policy_tier")] == expect_first
+    assert ws.values[2][list(ALL_COLS).index("policy_tier")] == expect_second
+
+
+# ══════════════════════════════════════════════════════════════════
+# 稽核 C：直接打 v1.load_policies 的中文辨識
+# ══════════════════════════════════════════════════════════════════
+def test_v1_load_policies_recognizes_chinese(monkeypatch):
+    """突變：load_policies 改回 `.str.lower().where(isin(["core","satellite"]))` → 本條轉紅。"""
+    from repositories.policy import v1 as V1
+    ws = _FakeWS(_v1_tab_values({"F1": "核心", "F2": "衛星", "F3": "foo", "F4": "Core"}))
+    monkeypatch.setattr(V1, "_open_worksheet", lambda c, s, w="Policies": ws)
+    df = V1.load_policies("c", "s")
+    assert df["policy_tier"].tolist() == ["core", "satellite", "", "core"]
+
+
+# ══════════════════════════════════════════════════════════════════
+# 稽核 C：舊 SA 表單（upsert_policy_row）更新既有列不清空級別
+# ══════════════════════════════════════════════════════════════════
+def _sa_form_row(code: str = "F1") -> dict:
+    """舊 SA 表單送出的列：沒有 policy_tier 鍵（ui/helpers/portfolio/policy_admin_section.py）。"""
+    return {"policy_id": "P1", "policy_name": "新名稱", "fund_url": code,
+            "invest_twd": 500, "invest_date": "", "currency": "USD",
+            "fx_at_buy": 0.0, "notes": "改"}
+
+
+@pytest.mark.parametrize("sheet_tier", ["core", "foo", "核心", ""])
+def test_legacy_upsert_policy_row_keeps_sheet_tier(monkeypatch, sheet_tier):
+    """突變：upsert_policy_row 拿掉 merge 段 → core／foo／核心三列轉紅（寫成空白）。"""
+    from repositories.policy import v1 as V1
+    from repositories.policy._helpers import ALL_COLS
+    ws = _FakeWS(_v1_tab_values({"F1": sheet_tier}))
+    monkeypatch.setattr(V1, "_open_worksheet", lambda c, s, w="Policies": ws)
+    assert V1.upsert_policy_row("c", "s", _sa_form_row()) == "updated"
+    _rng, _rows = ws.updates[-1]
+    _c = list(ALL_COLS)
+    assert _rows[0][_c.index("policy_tier")] == sheet_tier
+    # 其他欄照舊整列覆寫（語意不變）
+    assert _rows[0][_c.index("policy_name")] == "新名稱"
+    assert _rows[0][_c.index("invest_twd")] == 500
+
+
+def test_legacy_upsert_policy_row_explicit_tier_and_insert(monkeypatch):
+    from repositories.policy import v1 as V1
+    from repositories.policy._helpers import ALL_COLS
+    _c = list(ALL_COLS)
+    ws = _FakeWS(_v1_tab_values({"F1": "core"}))
+    monkeypatch.setattr(V1, "_open_worksheet", lambda c, s, w="Policies": ws)
+    V1.upsert_policy_row("c", "s", {**_sa_form_row(), "policy_tier": "satellite"})
+    assert ws.updates[-1][1][0][_c.index("policy_tier")] == "satellite"
+    assert V1.upsert_policy_row("c", "s", _sa_form_row("F9")) == "inserted"
+    assert ws.appended[-1][_c.index("policy_tier")] == ""
+
+
+def test_legacy_upsert_policy_row_header_without_tier_column(monkeypatch):
+    """舊 8 欄表頭（沒有 policy_tier 欄）→ 寫入寬度不變、不碰級別。"""
+    from repositories.policy import v1 as V1
+    from repositories.policy._helpers import REQUIRED_COLS
+    ws = _FakeWS([list(REQUIRED_COLS),
+                  ["P1", "", "F1", "1", "", "USD", "0", ""]])
+    monkeypatch.setattr(V1, "_open_worksheet", lambda c, s, w="Policies": ws)
+    V1.upsert_policy_row("c", "s", _sa_form_row())
+    assert len(ws.updates[-1][1][0]) == len(REQUIRED_COLS)

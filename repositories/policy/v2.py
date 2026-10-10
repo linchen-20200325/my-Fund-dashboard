@@ -866,8 +866,9 @@ def write_policy_v2(
     except Exception as e:
         raise PolicySheetError(f"開啟/建立保單分頁失敗：{e}") from e
 
-    # 現有級別：fund_code（大寫）→ Sheet 原字串。只在 keep_sheet_tier 且分頁原本就存在時讀。
-    _sheet_tier_by_code: dict[str, str] = {}
+    # 現有級別：fund_code（大寫）→ 該代號在分頁中**依出現順序**的 Sheet 原字串清單。
+    # 只在 keep_sheet_tier 且分頁原本就存在時讀。
+    _sheet_tier_by_code: dict[str, list[str]] = {}
     if keep_sheet_tier and not _ws_created:
         try:
             _existing = _with_quota_retry(ws.get_all_values) or []
@@ -895,10 +896,30 @@ def write_policy_v2(
     rows_out: list[list] = [
         [ZH_HEADERS_V2[c] for c in ALL_COLS_V2],   # 中文 header 列
     ]
+    # keep_sheet_tier 的對齊鍵是 (代號, 該代號第 k 次出現)，不是只有代號：同一張分頁可能有
+    # 同代號多列（例如分批買進），只用代號會把 A 列的級別保留到 B 列 —— 憑空捏造客戶沒設的級別。
+    # 某代號在 Sheet 與 df 的出現次數不同（列被增刪，第 k 列已對不上）→ 該代號整個不做保留，
+    # 照舊寫 df 值；df 值為空就寫成空白。⚠️ 這是刻意取捨：與 e6b4702 之前的既有行為相同，
+    # 寧可在對不上時寫空白，也不把別列的級別搬過來。
+    _df_count_by_code: dict[str, int] = {}
+    if keep_sheet_tier:
+        for _c in norm["fund_code"]:
+            _cu = str(_c or "").strip().upper()
+            if _cu:
+                _df_count_by_code[_cu] = _df_count_by_code.get(_cu, 0) + 1
+    _df_seen_by_code: dict[str, int] = {}
     for _, r in norm.iterrows():
         _code = str(r.get("fund_code", "") or "").strip()
         if not _code:
             continue   # 跳過無代號列(舊現金列 / 空列)
+        _tier_out = str(r.get("tier", "") or "")
+        if keep_sheet_tier:
+            _cu = _code.upper()
+            _k = _df_seen_by_code.get(_cu, 0)
+            _df_seen_by_code[_cu] = _k + 1
+            _sheet_list = _sheet_tier_by_code.get(_cu, [])
+            if len(_sheet_list) == _df_count_by_code.get(_cu, 0):
+                _tier_out = merge_sheet_tier(r.get("tier"), _sheet_list[_k])
         _avg_nav = _normalize_float(r.get("avg_nav", 0))
         _avg_fx  = _normalize_float(r.get("avg_fx", 0))
         _inv_twd = _normalize_invest_twd(r.get("invest_twd", 0))
@@ -910,8 +931,7 @@ def write_policy_v2(
             _code,
             str(r.get("fund_name", "") or ""),
             str(r.get("currency", "") or ""),
-            (merge_sheet_tier(r.get("tier"), _sheet_tier_by_code.get(_code.upper(), ""))
-             if keep_sheet_tier else str(r.get("tier", "") or "")),
+            _tier_out,
             _inv_twd,
             _normalize_div_cash_pct(r.get("div_cash_pct", "")),
             _u_final,
@@ -928,11 +948,12 @@ def write_policy_v2(
     return len(rows_out) - 1
 
 
-def _tier_by_code_from_values(values: list) -> dict[str, str]:
-    """`ws.get_all_values()` → {基金代號(大寫): 級別格原字串}。
+def _tier_by_code_from_values(values: list) -> dict[str, list[str]]:
+    """`ws.get_all_values()` → {基金代號(大寫): [第 1 次出現那列的級別格原字串, 第 2 次, …]}。
 
     表頭可為 v2 中文（基金代號／級別）、v2 英文（fund_code／tier），或混在 v2 Sheet 裡的
-    v1 分頁（fund_url／policy_tier）。同代號出現多列取第一列。認不出表頭 → 空 dict。
+    v1 分頁（fund_url／policy_tier）。同代號多列**依出現順序全部保留**（呼叫端以第 k 次出現對齊，
+    不可只取第一列 —— 見 `write_policy_v2` 的說明）。認不出表頭 → 空 dict。
     """
     if not values:
         return {}
@@ -948,7 +969,7 @@ def _tier_by_code_from_values(values: list) -> dict[str, str]:
     if _code_idx is None and _url_idx is None:
         return {}
     from repositories.policy.v1 import _extract_code_from_url  # noqa: PLC0415
-    out: dict[str, str] = {}
+    out: dict[str, list[str]] = {}
     for _line in values[1:]:
         if _code_idx is not None:
             _c = str(_line[_code_idx]).strip() if len(_line) > _code_idx else ""
@@ -956,9 +977,10 @@ def _tier_by_code_from_values(values: list) -> dict[str, str]:
             _c = (_extract_code_from_url(str(_line[_url_idx]))
                   if len(_line) > _url_idx else "")
         _c = str(_c or "").strip().upper()
-        if not _c or _c in out:
+        if not _c:
             continue
-        out[_c] = str(_line[_tier_idx]) if len(_line) > _tier_idx else ""
+        out.setdefault(_c, []).append(
+            str(_line[_tier_idx]) if len(_line) > _tier_idx else "")
     return out
 
 

@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from shared.policy_tier import CORE_TIER, SATELLITE_TIER, normalize_tier
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, merge_sheet_tier, normalize_tier
 
 from ._helpers import (
     ALL_COLS,
@@ -90,14 +90,14 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
 # ──────────────────────────────────────────────────────────────────────
 # Write：upsert / delete（以 (policy_id, fund_url) 為主鍵）
 # ──────────────────────────────────────────────────────────────────────
-def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
-    """1-based 列號（含表頭，header 為第 1 列）；找不到回 None。"""
+def _find_row(ws: Any, policy_id: str, fund_url: str) -> tuple[Optional[int], list, list]:
+    """回 (1-based 列號或 None, 表頭, 該列現值)。找不到 → (None, 表頭, [])。"""
     try:
         all_values = ws.get_all_values()
     except Exception as e:
         raise PolicySheetError(f"讀取 sheet 全表失敗：{e}") from e
     if not all_values:
-        return None
+        return None, [], []
     header = all_values[0]
     try:
         pid_idx = header.index("policy_id")
@@ -107,8 +107,13 @@ def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
 
     for r, row in enumerate(all_values[1:], start=2):
         if len(row) > max(pid_idx, url_idx) and row[pid_idx] == policy_id and row[url_idx] == fund_url:
-            return r
-    return None
+            return r, header, row
+    return None, header, []
+
+
+def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
+    """1-based 列號（含表頭，header 為第 1 列）；找不到回 None。"""
+    return _find_row(ws, policy_id, fund_url)[0]
 
 
 def upsert_policy_row(
@@ -148,10 +153,17 @@ def upsert_policy_row(
     # 舊 8/9 欄表維持原寬度向後相容（此為 legacy「Policies」單表路徑；per-policy
     # 分頁的 upsert_fund_in_policy 才會主動升級表頭以持久化新欄）。
     cols = tuple(c for c in ALL_COLS if c in header) or REQUIRED_COLS
-    values = _row_to_list(row, cols)
     last_col_letter = chr(ord("A") + len(cols) - 1)
 
-    idx = _find_row_index(ws, pid, url)
+    idx, _cur_header, _cur_line = _find_row(ws, pid, url)
+    # 更新既有列時，級別格走 `merge_sheet_tier`：這次沒有明確級別（舊 SA 表單根本沒有級別欄）
+    # → 保留該格 Sheet 原值，不寫空白。其他欄位照舊整列覆寫，語意不變。
+    if idx is not None and "policy_tier" in cols:
+        _ti = _cur_header.index("policy_tier") if "policy_tier" in _cur_header else None
+        _existing = (_cur_line[_ti] if _ti is not None and len(_cur_line) > _ti else "")
+        row = dict(row)
+        row["policy_tier"] = merge_sheet_tier(row.get("policy_tier"), _existing)
+    values = _row_to_list(row, cols)
     try:
         if idx is None:
             ws.append_row(values)

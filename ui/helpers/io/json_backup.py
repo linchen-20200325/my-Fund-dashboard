@@ -76,10 +76,10 @@ def restore_from_json_bytes(raw: bytes,
     _restored_funds = []
     for _f in _data.get("portfolio_funds", []) or []:
         _f.update({"loaded": False, "load_error": None})
-        # 2026-10-10（級別三態）：備份裡的 `is_core` 一律不採 —— 本次改動之前，每次批次載入
-        # 都用基金名稱猜測覆寫 `is_core`，舊備份裡的值是猜的，不是客戶設定。級別只由備份裡的
-        # `policy_tier`（從 Sheet 讀來的客戶設定）推得；沒有可辨識的值 ＝ 未設定。
-        # 未設定不會把 Sheet 寫成空白：「全部寫入」對未設定的列保留 Sheet 原值。
+        # 2026-10-10（級別三態）：備份裡的 `is_core` 一律不採 —— 舊備份的 `is_core` 可能是
+        # 基金名稱猜測（改動前批次載入會覆寫未載入的基金），也可能是 Sheet 設定（已載入的基金
+        # 經 v2 讀回後即為 Sheet 值），無法分辨。級別以備份裡的 `policy_tier` 為準；取不到時
+        # 顯示未設定，重新從雲端讀取即可恢復。「全部寫入」時以 keep_sheet_tier 保留 Sheet 原值。
         _tier = normalize_tier(_f.get("policy_tier"))
         _f["policy_tier"] = _tier or ""
         _f["is_core"] = _IS_CORE_BY_TIER.get(_tier)
