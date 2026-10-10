@@ -27,8 +27,9 @@ from repositories.snapshot_repository import (
     save_holdings_overview,
 )
 from infra.oauth import OAuthError
-# 寫回 Sheet 的「級別」一律走 L0 SSOT（`policy_tier` → `is_core` 三態 → 未設定寫空白）。
-from shared.policy_tier import fund_tier_sheet_value
+# 寫回 Sheet 的「級別」一律走 L0 SSOT（`policy_tier` → `is_core` 三態 → 未設定給空白）；
+# 真正寫進格子前，repository 端再走 `merge_sheet_tier`：未設定的列保留 Sheet 原值。
+from shared.policy_tier import fund_tier_sheet_value, normalize_tier
 
 
 def _dump_all_to_sheet_v2(client: object,
@@ -86,7 +87,9 @@ def _dump_all_to_sheet_v2(client: object,
         for _i, (_pid, _rows) in enumerate(_pids):
             try:
                 _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
-                _n = write_policy_v2(client, sheet_id, _pid, _df)
+                # keep_sheet_tier：session 沒有客戶級別的列保留 Sheet 原值（例如剛還原
+                # JSON 備份、或 Sheet 上的值認不得）—— 整張覆寫不可把客戶設定洗成空白。
+                _n = write_policy_v2(client, sheet_id, _pid, _df, keep_sheet_tier=True)
                 _written += int(_n)
             except (PolicySheetError, OAuthError) as _e:
                 _errors.append(f"{_pid}: {str(_e)[:80]}")
@@ -349,7 +352,8 @@ def _load_all_from_sheet_v2(client: object,
             _pk = f"{_pid}::{_code}"
             _new_codes.add(_pk)
             _prev = _prev_by_pk.get(_pk) or {}
-            _tier = str(_row.get("tier", "") or "").strip().lower()
+            # 含中文「核心／衛星」；認不得的值 → None（未設定；寫回時保留 Sheet 原值）。
+            _tier = normalize_tier(_row.get("tier"))
             _new_funds.append({
                 **_prev,   # 保留 name / series / dividends / metrics / moneydj_raw 等
                 "code":             _code,

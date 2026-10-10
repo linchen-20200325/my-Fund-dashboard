@@ -164,7 +164,7 @@ def _v2_written_tier(monkeypatch, ss) -> str:
     from ui.helpers import cloud_io
     _seen: list = []
     monkeypatch.setattr(cloud_io, "write_policy_v2",
-                        lambda c, s, pid, df: (_seen.append(df), 1)[1])
+                        lambda c, s, pid, df, **k: (_seen.append(df), 1)[1])
     out = cloud_io._dump_all_to_sheet_v2("fake_client", "sheet_x", ss)
     assert out["error"] is None, out["error"]
     assert len(_seen) == 1

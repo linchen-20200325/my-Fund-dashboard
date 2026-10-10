@@ -18,6 +18,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, normalize_tier
+
 from ._helpers import (
     ALL_COLS,
     DEFAULT_WORKSHEET,
@@ -68,10 +70,10 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
     for c in ("policy_id", "policy_name", "fund_url", "invest_date",
               "currency", "notes", "policy_tier"):
         df[c] = df[c].fillna("").astype(str).str.strip()
-    # policy_tier 統一小寫；非 core/satellite 一律視為 ""
-    df["policy_tier"] = df["policy_tier"].str.lower().where(
-        df["policy_tier"].str.lower().isin(["core", "satellite"]), ""
-    )
+    # policy_tier 統一成 core/satellite（含中文「核心／衛星」，見 shared.policy_tier）；
+    # 其他值一律視為 ""（未設定）。⚠️ 這只是 session 端的讀法：寫回 Sheet 時，未設定的列
+    # 保留 Sheet 原值（`upsert_fund_in_policy` → `merge_sheet_tier`），不會把認不得的值洗成空白。
+    df["policy_tier"] = df["policy_tier"].map(lambda v: normalize_tier(v) or "")
     # v18.159：過濾「value 剛好等於 column 名」的 schema-leak 列。
     # 已知 user 部署有 sheet 出現 policy_name="policy_name" / fund_url="fund_url"
     # 這種 header 字串被誤寫成 data row 的情況（v1→v2 schema 遷移殘留 / JSON 還原
@@ -242,8 +244,7 @@ def sync_policies_to_portfolio_funds(
             if pk in aggregated:
                 aggregated[pk]["invest_twd"] += invest
             else:
-                _tier_raw = str(row.get("policy_tier", "") or "").strip().lower()
-                _tier = _tier_raw if _tier_raw in ("core", "satellite") else ""
+                _tier = normalize_tier(row.get("policy_tier")) or ""
                 aggregated[pk] = {
                     "code": code,
                     "invest_twd": invest,
@@ -253,6 +254,11 @@ def sync_policies_to_portfolio_funds(
                     "invest_date": str(row.get("invest_date", "")).strip(),
                     "fx_at_buy": _normalize_fx(row.get("fx_at_buy")),
                     "policy_tier": _tier,    # P3：空字串 ＝ 級別未設定（2026-10-10 起不再以名稱猜；~~呼叫端 fallback heuristic~~）
+                    # 級別只由這次讀回的 Sheet 決定（與 v2 讀回清 `policy_tier` 對稱）：
+                    # 既存條目走 `base.update(...)`，不在這裡覆寫 `is_core` 的話，session 殘留的
+                    # `is_core`（舊 JSON 備份、或 v2 session 的值）會留下來，`policy_tier` 為空時
+                    # 被 `resolve_tier` 撿回去，再由「全部寫入」寫回 Sheet。
+                    "is_core": {CORE_TIER: True, SATELLITE_TIER: False}.get(_tier),
                 }
                 target_pks.append(pk)
                 # v18.183：div_cash_pct / avg_nav_with_div 有值才帶回，避免空欄

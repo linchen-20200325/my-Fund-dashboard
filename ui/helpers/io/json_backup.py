@@ -9,9 +9,12 @@ from __future__ import annotations
 import json as _json
 from typing import Any, MutableMapping
 
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, normalize_tier, resolve_tier
 from ui.helpers.tw_time import tw_now
 
 SCHEMA_VERSION = "1.0"
+
+_IS_CORE_BY_TIER = {CORE_TIER: True, SATELLITE_TIER: False}
 
 
 def build_export_payload(ss: MutableMapping[str, Any]) -> dict:
@@ -21,15 +24,18 @@ def build_export_payload(ss: MutableMapping[str, Any]) -> dict:
     """
     _slim_funds = []
     for _f in ss.get("portfolio_funds", []) or []:
+        # 級別一律以 `policy_tier` 承載（v2 session 的級別住在 `is_core`，也收進來），
+        # `is_core` 由它推得 —— 還原端只信 `policy_tier`（見 `restore_from_json_bytes`）。
+        _tier = resolve_tier(_f)
         _slim_funds.append({
             "code":         _f.get("code", ""),
             "name":         _f.get("name", ""),
             "invest_twd":   _f.get("invest_twd", 0),
             "policy_id":    _f.get("policy_id", ""),
             "policy_name":  _f.get("policy_name", ""),
-            "policy_tier":  _f.get("policy_tier", ""),
+            "policy_tier":  _tier or "",
             "currency":     _f.get("currency", ""),
-            "is_core":      _f.get("is_core"),
+            "is_core":      _IS_CORE_BY_TIER.get(_tier),
             "invest_date":  _f.get("invest_date", ""),
             "fx_at_buy":    _f.get("fx_at_buy"),
             # v18.180：含息成本 + 現金給付% 一併備份。v1 保單分頁 schema 無此兩欄，
@@ -70,6 +76,13 @@ def restore_from_json_bytes(raw: bytes,
     _restored_funds = []
     for _f in _data.get("portfolio_funds", []) or []:
         _f.update({"loaded": False, "load_error": None})
+        # 2026-10-10（級別三態）：備份裡的 `is_core` 一律不採 —— 本次改動之前，每次批次載入
+        # 都用基金名稱猜測覆寫 `is_core`，舊備份裡的值是猜的，不是客戶設定。級別只由備份裡的
+        # `policy_tier`（從 Sheet 讀來的客戶設定）推得；沒有可辨識的值 ＝ 未設定。
+        # 未設定不會把 Sheet 寫成空白：「全部寫入」對未設定的列保留 Sheet 原值。
+        _tier = normalize_tier(_f.get("policy_tier"))
+        _f["policy_tier"] = _tier or ""
+        _f["is_core"] = _IS_CORE_BY_TIER.get(_tier)
         _restored_funds.append(_f)
     ss["portfolio_funds"] = _restored_funds
 

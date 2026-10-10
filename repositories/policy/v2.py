@@ -22,6 +22,8 @@ from typing import Any
 
 import pandas as pd
 
+from shared.policy_tier import merge_sheet_tier, normalize_tier
+
 from ._helpers import (
     ALL_COLS,
     DEFAULT_WORKSHEET,
@@ -143,9 +145,9 @@ def _records_to_policy_df(records: list) -> pd.DataFrame:
     for c in ("policy_id", "policy_name", "fund_url", "invest_date",
               "currency", "notes", "policy_tier"):
         df[c] = df[c].fillna("").astype(str).str.strip()
-    df["policy_tier"] = df["policy_tier"].str.lower().where(
-        df["policy_tier"].str.lower().isin(["core", "satellite"]), ""
-    )
+    # 同 v1.load_policies：core/satellite（含中文「核心／衛星」）以外視為 ""（未設定）；
+    # 寫回時未設定的列保留 Sheet 原值（`upsert_fund_in_policy` → `merge_sheet_tier`）。
+    df["policy_tier"] = df["policy_tier"].map(lambda v: normalize_tier(v) or "")
     # v18.171/172：防禦性過濾 schema 鬼列（fund_url/invest_date/currency 三欄都是
     # 字面 schema key 的明顯鬼列；case-insensitive 擋大小寫兩種）。
     _fu_low = df["fund_url"].astype(str).str.lower()
@@ -274,6 +276,10 @@ def upsert_fund_in_policy(
     在指定保單 tab 內 upsert 一檔基金（以 fund_url 為主鍵）。
     回傳 "inserted" / "updated"。
     自動 ensure tab 存在。
+
+    級別欄（`policy_tier`）：更新既有列時走 `merge_sheet_tier` —— 這次沒有明確級別
+    （空白／缺鍵）就**保留該格的 Sheet 原值**，不寫空白蓋掉客戶的設定；語意相同時也保留原拼法。
+    本函式的呼叫端（全部寫入、批次加入、T7 套用起始部位）都沒有「客戶要清空級別」的語意。
     """
     tab = _sanitize_tab_name(policy_id)
     url = str(row.get("fund_url", "")).strip()
@@ -295,6 +301,8 @@ def upsert_fund_in_policy(
         url_idx = header.index("fund_url")
     except ValueError as e:
         raise PolicySheetError(f"'{tab}' 表頭缺 fund_url：{e}") from e
+    # 升級表頭只在尾端追加欄位、不搬動既有欄 → 用升級前的表頭定位既有列的級別格。
+    _tier_idx = header.index("policy_tier") if "policy_tier" in header else None
 
     # v18.183：表頭缺 ALL_COLS 任一欄（如舊表沒有 div_cash_pct/avg_nav_with_div）→
     # 升級表頭。OPTIONAL_COLS 接在尾端、純追加，既有欄位位置不變、既有資料列只是尾端
@@ -310,14 +318,17 @@ def upsert_fund_in_policy(
             all_values[0] = list(ALL_COLS)
 
     cols = ALL_COLS
-    values = _row_to_list(row, cols)
     last_col_letter = chr(ord("A") + len(cols) - 1)
 
     found_row = None
     for r, line in enumerate(all_values[1:], start=2):
         if len(line) > url_idx and line[url_idx] == url:
             found_row = r
+            _existing_tier = (line[_tier_idx]
+                              if _tier_idx is not None and len(line) > _tier_idx else "")
+            row["policy_tier"] = merge_sheet_tier(row.get("policy_tier"), _existing_tier)
             break
+    values = _row_to_list(row, cols)
 
     try:
         if found_row is None:
@@ -823,12 +834,19 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
 
 def write_policy_v2(
     client: Any, sheet_id: str, policy_id: str, df: pd.DataFrame,
+    *, keep_sheet_tier: bool = False,
 ) -> int:
     """整 tab 覆寫單張 v2 保單分頁（user 點「💾 存到雲端」時呼叫）。
 
     df 缺欄會自動補空字串；多餘欄會被丟掉（只寫 ALL_COLS_V2 10 欄,v19.436）。
     回傳寫入列數（不含 header）。
+
+    keep_sheet_tier=True（「全部寫入」用）：覆寫前先讀該分頁現有的級別欄，每列走
+    `merge_sheet_tier` —— df 沒有明確級別的列**保留 Sheet 原值**（不寫空白、不洗掉認不得的值）。
+    讀不到現有分頁 → 丟 `PolicySheetError`，**不清空分頁**（讀在 clear 之前）。
+    預設 False：編輯器等「df 就是使用者要的整張表」的呼叫端行為不變。
     """
+    _ws_created = False
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         title = _sanitize_tab_name(policy_id)
@@ -844,8 +862,18 @@ def write_policy_v2(
                 sh.add_worksheet, title=title,
                 rows=max(len(df) + 5, 20),
                 cols=len(ALL_COLS_V2) + 2)
+            _ws_created = True
     except Exception as e:
         raise PolicySheetError(f"開啟/建立保單分頁失敗：{e}") from e
+
+    # 現有級別：fund_code（大寫）→ Sheet 原字串。只在 keep_sheet_tier 且分頁原本就存在時讀。
+    _sheet_tier_by_code: dict[str, str] = {}
+    if keep_sheet_tier and not _ws_created:
+        try:
+            _existing = _with_quota_retry(ws.get_all_values) or []
+        except Exception as e:
+            raise PolicySheetError(f"讀取 '{title}' 失敗：{e}") from e
+        _sheet_tier_by_code = _tier_by_code_from_values(_existing)
 
     norm = df.copy()
     for c in ALL_COLS_V2:
@@ -882,7 +910,8 @@ def write_policy_v2(
             _code,
             str(r.get("fund_name", "") or ""),
             str(r.get("currency", "") or ""),
-            str(r.get("tier", "") or ""),
+            (merge_sheet_tier(r.get("tier"), _sheet_tier_by_code.get(_code.upper(), ""))
+             if keep_sheet_tier else str(r.get("tier", "") or "")),
             _inv_twd,
             _normalize_div_cash_pct(r.get("div_cash_pct", "")),
             _u_final,
@@ -897,6 +926,40 @@ def write_policy_v2(
     except Exception as e:
         raise PolicySheetError(f"寫入 v2 保單分頁失敗：{e}") from e
     return len(rows_out) - 1
+
+
+def _tier_by_code_from_values(values: list) -> dict[str, str]:
+    """`ws.get_all_values()` → {基金代號(大寫): 級別格原字串}。
+
+    表頭可為 v2 中文（基金代號／級別）、v2 英文（fund_code／tier），或混在 v2 Sheet 裡的
+    v1 分頁（fund_url／policy_tier）。同代號出現多列取第一列。認不出表頭 → 空 dict。
+    """
+    if not values:
+        return {}
+    _hdr = [_normalize_header_to_en(h) for h in values[0]]
+    _code_idx = _hdr.index("fund_code") if "fund_code" in _hdr else None
+    _url_idx = _hdr.index("fund_url") if "fund_url" in _hdr else None
+    if "tier" in _hdr:
+        _tier_idx = _hdr.index("tier")
+    elif "policy_tier" in _hdr:
+        _tier_idx = _hdr.index("policy_tier")
+    else:
+        return {}
+    if _code_idx is None and _url_idx is None:
+        return {}
+    from repositories.policy.v1 import _extract_code_from_url  # noqa: PLC0415
+    out: dict[str, str] = {}
+    for _line in values[1:]:
+        if _code_idx is not None:
+            _c = str(_line[_code_idx]).strip() if len(_line) > _code_idx else ""
+        else:
+            _c = (_extract_code_from_url(str(_line[_url_idx]))
+                  if len(_line) > _url_idx else "")
+        _c = str(_c or "").strip().upper()
+        if not _c or _c in out:
+            continue
+        out[_c] = str(_line[_tier_idx]) if len(_line) > _tier_idx else ""
+    return out
 
 
 def _apply_v2_header_format(ws: Any) -> None:
