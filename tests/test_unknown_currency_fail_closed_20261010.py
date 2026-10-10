@@ -413,7 +413,8 @@ def test_span_extend_unknown_expected_ccy_does_not_swap(monkeypatch):
     monkeypatch.setattr(fo, "_correct_currency", lambda c, n, code: "")   # 預期幣別判不出
     monkeypatch.setattr(fo, "_src_morningstar_nav", lambda code, fund_name="": long)
     monkeypatch.setattr(fo, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
-    s, src, _span = fo._span_extend_insurance_nav("TLZF9", short, "moneydj",
+    # 代碼刻意不在晨星硬編表內(TLZF9 在表內宣告 USD → 那是「已知」,見下方回歸)
+    s, src, _span = fo._span_extend_insurance_nav("ZZZF9", short, "moneydj",
                                                   fund_name="X", is_insurance_code=True)
     assert src == "moneydj" and len(s) == 20     # 未換源
 
@@ -673,3 +674,236 @@ def test_t7_c_switch_prechecks_currency_before_any_ledger_mutation():
         assert _calc, "守門沒有用 fund_currency_for_calc(未知 / 衝突)判定"
         return
     raise AssertionError("找不到 C 換股的 try/for 區塊")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 11) 稽核第二輪(2026-10-10)
+#     M1:span-extend 預期幣別不得只剩選股池(已知 USD 的 TLZF9 長歷史被擋 = 回歸)
+#     Q2:晨星 ISIN 路徑不得以 SecuritySearch 名稱推定的幣別發 timeseries 請求
+#     S1:候選必被拒時不發請求
+#     M2:非凍結消費端遇 Q4 衝突 fail closed
+# ════════════════════════════════════════════════════════════════════════════
+def _span_ext(monkeypatch, code, *, declared="", fund_name="", ms=None, cnyes=None):
+    import repositories.fund.fund_orchestration as fo
+    import repositories.pool_repository as P
+    monkeypatch.setattr(P, "resolve_currency", lambda c: None)        # 選股池讀不到
+    calls = {"ms": 0, "cnyes": 0}
+
+    def _ms(code, fund_name=""):
+        calls["ms"] += 1
+        return ms if ms is not None else pd.Series(dtype=float)
+
+    def _cn(code):
+        calls["cnyes"] += 1
+        return cnyes if cnyes is not None else pd.Series(dtype=float)
+
+    monkeypatch.setattr(fo, "_src_morningstar_nav", _ms)
+    monkeypatch.setattr(fo, "_src_cnyes_nav", _cn)
+    short = pd.Series([10.0 + i * 0.01 for i in range(20)],
+                      index=pd.date_range("2026-08-01", periods=20))
+    out = fo._span_extend_insurance_nav(code, short, "moneydj", fund_name=fund_name,
+                                        is_insurance_code=True, declared_ccy=declared)
+    return out, calls
+
+
+def _ms_long(ccy):
+    s = pd.Series([9.0 + i * 0.001 for i in range(800)],
+                  index=pd.date_range("2024-01-01", periods=800))
+    s.attrs["currency"] = ccy
+    return s
+
+
+def test_span_extend_known_usd_hardcoded_name_without_ccy_still_swaps(monkeypatch):
+    """回歸(M1):`_fetch_fund_single` 呼叫時 fund_name 恆空;TLZF9 晨星硬編表宣告 USD
+    → 預期幣別 USD,與晨星 USD 序列一致 → 照舊換源(基底行為)。"""
+    (s, src, _), calls = _span_ext(monkeypatch, "TLZF9", fund_name="", ms=_ms_long("USD"))
+    assert src == "morningstar(span-extend)" and len(s) == 800
+    assert calls["ms"] == 1
+
+
+def test_span_extend_declared_ccy_from_fetch_result(monkeypatch):
+    """回歸(M1):不在硬編表、名稱無幣別字樣,但抓取結果已宣告 EUR → 預期 EUR。"""
+    (_s, src, _), _c = _span_ext(monkeypatch, "ZZZF8", declared="歐元",
+                                fund_name="某某全球收益基金A", ms=_ms_long("EUR"))
+    assert src == "morningstar(span-extend)"
+    (s2, src2, _), _c2 = _span_ext(monkeypatch, "ZZZF8", declared="EUR",
+                                   fund_name="", ms=_ms_long("USD"))
+    assert src2 == "moneydj" and len(s2) == 20          # 宣告 EUR、候選 USD → 不一致照擋
+
+
+def test_span_extend_call_sites_pass_declared_ccy():
+    """兩條 pipeline 呼叫 span-extend 都要把抓取結果的幣別帶進來(M1)。"""
+    src = (ROOT / "repositories" / "fund" / "fund_orchestration.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "_span_extend_insurance_nav"]
+    assert len(calls) == 2
+    for c in calls:
+        assert any(k.arg == "declared_ccy" for k in c.keywords), ast.unparse(c)
+
+
+def test_span_extend_skips_requests_when_rejection_certain(monkeypatch):
+    """S1:預期幣別未知 → 晨星、cnyes 都不發請求;已知時 cnyes(不宣告幣別)仍不發。"""
+    (_s, src, _), calls = _span_ext(monkeypatch, "ZZZF7", ms=_ms_long("USD"))
+    assert src == "moneydj" and calls == {"ms": 0, "cnyes": 0}
+    (_s, src, _), calls = _span_ext(monkeypatch, "TLZF9", ms=pd.Series(dtype=float),
+                                    cnyes=_ms_long(""))
+    assert src == "moneydj" and calls == {"ms": 1, "cnyes": 0}
+
+
+def test_morningstar_isin_name_inferred_ccy_not_used(monkeypatch):
+    """Q2:幣別未知 → 不得拿 SecuritySearch 名稱推定的幣別(順序陷阱)去發 timeseries。"""
+    _isolate_ms(monkeypatch, isin="LU0000000003", search="F0NAME")
+
+    def _search(q, *a, **k):
+        S._ms_ccy_cache[q] = "USD"                 # 名稱「… AUD Hedged USD」→ 推定 USD
+        return "F0NAME"
+
+    monkeypatch.setattr(S, "_morningstar_search_secid", _search)
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    try:
+        assert S._src_morningstar_nav("ZZZ5").empty
+        assert seen == []
+    finally:
+        S._ms_ccy_cache.pop("LU0000000003", None)
+
+
+def test_morningstar_isin_user_ccy_still_used(monkeypatch):
+    """回歸:池幣別已填(使用者宣告)→ 照舊以它請求。"""
+    _isolate_ms(monkeypatch, isin="LU0000000004", ccy="EUR", search="")
+    monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, currency="": "F0SCR")
+    seen = _record_urlopen(monkeypatch, _MS_TS)
+    s = S._src_morningstar_nav("ZZZ4")
+    assert s.attrs["currency"] == "EUR" and "currencyId=EUR" in seen[0]
+
+
+_CONFLICT = {"code": "ACDD01", "name": "安聯台灣大壩", "currency": "TWD",
+             "moneydj_raw": {"currency": "USD"}, "invest_twd": 300000,
+             "series": pd.Series([300.0 + i for i in range(30)],
+                                 index=pd.date_range("2026-08-01", periods=30))}
+_KNOWN_USD = {"code": "TLZF9", "name": "安聯收益成長", "currency": "USD",
+              "moneydj_raw": {"currency": "USD"}, "invest_twd": 300000,
+              "series": pd.Series([10.0 + i * 0.01 for i in range(30)],
+                                  index=pd.date_range("2026-08-01", periods=30))}
+
+
+def test_fee_deduction_conflict_excluded_and_no_fx(monkeypatch):
+    import services.fund_service as FS
+    from ui.helpers.portfolio.fee_deduction import _make_nav_fx_fn, build_fee_inputs
+    led = types.SimpleNamespace(position=types.SimpleNamespace(units=100.0, cost_unit=300.0,
+                                                               fx_avg=1.0))
+    from models.policy import fund_pk_str
+    eng, exc, _rm = build_fee_inputs([_CONFLICT, _KNOWN_USD],
+                                     {fund_pk_str(_CONFLICT): led, fund_pk_str(_KNOWN_USD): led},
+                                     lambda f: (10.0, 32.0))
+    assert [e["reason"] for e in exc] == ["缺計價幣別"]          # 衝突 → 既有「缺計價幣別」
+    assert [e["currency"] for e in eng] == ["USD"]              # 已知 USD 照舊
+    fx_calls = []
+    monkeypatch.setattr(FS, "get_latest_nav", lambda code: 10.0)
+    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: fx_calls.append(pair) or 32.0)
+    _r = _make_nav_fx_fn()
+    assert _r(_CONFLICT) == (10.0, None) and fx_calls == []
+    assert _r(_KNOWN_USD) == (10.0, 32.0) and fx_calls == ["USDTWD"]
+
+
+def test_switch_advisor_ccy_fx_for_conflict_blank(monkeypatch):
+    import services.hot_money_service as HM
+    from ui.helpers.fund_grp_health.switch_advisor_section import (
+        _benchmark_label_for,
+        _ccy_fx_for,
+    )
+    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
+    ccy, _fx = _ccy_fx_for([_CONFLICT, _KNOWN_USD])
+    assert ccy == {"ACDD01": "", "TLZF9": "USD"}
+    assert _benchmark_label_for(_CONFLICT) is None
+    assert _benchmark_label_for(_KNOWN_USD) is not None
+
+
+class _Stop(Exception):
+    pass
+
+
+def _fake_st_mod(monkeypatch, mod):
+    fake = types.SimpleNamespace(divider=lambda *a, **k: None, markdown=lambda *a, **k: None,
+                                 caption=lambda *a, **k: None, info=lambda *a, **k: None)
+    monkeypatch.setattr(mod, "st", fake)
+
+
+def test_portfolio_perf_conflict_blank_ccy(monkeypatch):
+    import services.hot_money_service as HM
+    import services.portfolio_performance as PPF
+    import ui.helpers.portfolio_perf as PP
+    seen = {}
+
+    def _pm(nav, w, ccy_by_code=None, fx_series=None):
+        seen.update(ccy_by_code)
+        raise _Stop
+
+    monkeypatch.setattr(PPF, "performance_metrics", _pm)
+    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
+    _fake_st_mod(monkeypatch, PP)
+    with pytest.raises(_Stop):
+        PP.render_portfolio_performance([_CONFLICT, _KNOWN_USD])
+    assert seen == {"ACDD01": "", "TLZF9": "USD"}
+
+
+def test_backtest_section_conflict_blank_ccy(monkeypatch):
+    import services.allocation_backtest as AB
+    import services.hot_money_service as HM
+    import ui.helpers.fund_grp_health.backtest_section as BS
+    seen = {}
+
+    def _bt(nav, ccy, fx_series=None):
+        seen.update(ccy)
+        raise _Stop
+
+    monkeypatch.setattr(AB, "backtest_allocations", _bt)
+    monkeypatch.setattr(HM, "fetch_usdtwd_frame", lambda days: (None, "offline"))
+    monkeypatch.setattr(BS, "system_error", lambda *a, **k: None)
+    _fake_st_mod(monkeypatch, BS)
+    with pytest.raises(_Stop):
+        BS.render_allocation_backtest_section([_CONFLICT, _KNOWN_USD])
+    assert seen == {"ACDD01": "", "TLZF9": "USD"}
+
+
+def test_rotation_rows_conflict_blank_ccy(monkeypatch):
+    import ui.helpers.fund_grp_health.rotation as RO
+    import ui.helpers.fund_grp_health.unified as UN
+    monkeypatch.setattr(UN, "build_merged_extra_columns", lambda *a, **k: (None, {}))
+    monkeypatch.setattr(RO, "st", types.SimpleNamespace(session_state={}))
+    rows = RO._assemble_rows([_CONFLICT, _KNOWN_USD])
+    assert [r["currency"] for r in rows] == ["", "USD"]
+
+
+def test_investment_calc_conflict_no_fx_no_units(monkeypatch):
+    import services.fund_service as FS
+    import ui.helpers.fund_grp_health.investment as IV
+    fx_calls, metrics, captions = [], [], []
+
+    class _Col:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def metric(self, label, value, *a, **k):
+            metrics.append(label)
+
+    fake = types.SimpleNamespace(
+        markdown=lambda *a, **k: None, caption=lambda m, *a, **k: captions.append(m),
+        metric=lambda label, *a, **k: metrics.append(label),
+        columns=lambda spec: [_Col() for _ in (spec if isinstance(spec, list) else range(spec))])
+    monkeypatch.setattr(IV, "st", fake)
+    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: fx_calls.append(pair) or 32.0)
+    f = dict(_CONFLICT, metrics={"nav": 300.0})
+    IV._render_investment_calc(f, 1_000_000)
+    assert fx_calls == [] and "可申購單位數" not in metrics
+    assert "⬜ 幣別未知" in captions
+    assert not any("FX 缺失" in c for c in captions)   # 是幣別未知,不是匯率缺失
+    # ~~未知 → 退 TWD(FX=1)照算~~ —— 未知也不算
+    IV._render_investment_calc(dict(f, currency="", moneydj_raw={}), 1_000_000)
+    assert "可申購單位數" not in metrics
+    # 回歸:已知 USD 照算
+    IV._render_investment_calc(dict(_KNOWN_USD, metrics={"nav": 10.0}), 1_000_000)
+    assert fx_calls == ["USDTWD=X"] and "可申購單位數" in metrics

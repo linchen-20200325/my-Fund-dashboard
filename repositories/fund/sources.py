@@ -1739,8 +1739,14 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
                 #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
                 sec_id = (_morningstar_screener_secid(_isin, currency_id)
                           or _morningstar_search_secid(_isin, currency_id))
-                # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
-                _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
+                # ~~使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)~~
+                # ~~_auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")~~
+                # 2026-10-10 客戶裁示 Q2(稽核一致性修正;有意識的政策變更,不是漏刪):
+                # 幣別未知時 screener 不發請求,`_ms_ccy_cache` 只剩 SecuritySearch 的**名稱推定**
+                # (`_ccy_from_fund_name`,已知順序陷阱:「AUD Hedged USD」→ USD)——不屬可靠確認,
+                # 不得拿它決定晨星 `currencyId` → 留空,由下方 timeseries 守門 fail closed。
+                # 只限晨星請求這條;其他名稱推定不動。
+                _auto_ccy = ""
                 if _auto_ccy:
                     currency_id = _auto_ccy
                 # ── 2026-09-06:查一檔基金**不再**把 secId 回寫進使用者的 Google Sheet ──

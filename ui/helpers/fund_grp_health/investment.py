@@ -17,10 +17,14 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     _mj = fund.get("moneydj_raw") or {}
     _m = fund.get("metrics") or {}
     _code = fund.get("code", "—")
-    _ccy_raw = (_mj.get("currency") or fund.get("currency") or "TWD").strip() or "TWD"
+    # ~~_ccy_raw = (_mj.get("currency") or fund.get("currency") or "TWD").strip() or "TWD"~~
+    # ~~_ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")~~
+    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)。
+    # 舊寫法「未知 → TWD(FX=1)」同樣是把未知幣別等同某個具體幣別。
+    from ui.helpers.portfolio.load import fund_currency_for_calc
     # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 health_extras 既有人民幣→CNH 行為）。
     from services.currency import normalize_ccy as _norm_ccy
-    _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
+    _ccy = _norm_ccy(fund_currency_for_calc(fund), default="", mode="yf")
     # §1:`a or b` 會把**合法的 0.0** 當成缺值往下一層退(0 是 falsy)。
     # NAV 不可能是 0(§3.2 NAV > 0),但 annual_div_rate 為 0 是「不配息」的真實值,
     # 用 `or` 會退成 metrics 版甚至變 None,把「確定不配息」講成「不知道」。
@@ -30,7 +34,9 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
                      else _m.get("annual_div_rate"))
 
     _fx = None
-    if _ccy == "TWD":
+    if not _ccy:
+        pass    # 幣別未知 → 不組幣對、不查匯率(下方 fail closed)
+    elif _ccy == "TWD":
         _fx = 1.0
     else:
         try:
@@ -55,7 +61,9 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     with _ic2:
         st.caption(f"NAV：{_nav if _nav is not None else '—'} {_ccy}")
         st.caption(f"年化配息率：{_adr if _adr is not None else '—'} %")
-        if _ccy == "TWD":
+        if not _ccy:
+            st.caption("⬜ 幣別未知")
+        elif _ccy == "TWD":
             st.caption("💰 此基金以新台幣計價（FX = 1）")
         elif _fx:
             st.caption(f"💱 1 {_ccy} = **{_fx:.4f}** TWD（即時匯率）")
@@ -64,6 +72,8 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
 
     if not _nav or _nav <= 0:
         st.caption("⬜ NAV 缺失，無法試算")
+        return
+    if not _ccy:    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
         return
     if _ccy != "TWD" and not _fx:
         st.caption("⬜ FX 缺失，無法試算")

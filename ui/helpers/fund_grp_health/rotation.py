@@ -33,6 +33,8 @@ def _assemble_rows(funds: list) -> list:
     from services.fx_regime_service import fx_regime_by_ccy as _fxr_rot
     _fx_map_rot = _fxr_rot() or {}
 
+    from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_rot
+
     rows = []
     for _f in funds:
         _code = _f.get("code", "?")
@@ -52,7 +54,8 @@ def _assemble_rows(funds: list) -> list:
             "基金類別": _h.get("基金類別"), "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
-            "currency": _f.get("currency"),   # v19.484:跨幣別換股標註(§4.1)用
+            # ~~"currency": _f.get("currency"),~~   # v19.484:跨幣別換股標註(§4.1)用
+            "currency": _ccy_calc_rot(_f),   # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
         })
     return rows
 

@@ -72,7 +72,10 @@ def render_allocation_backtest_section(funds: list) -> None:
             f"配置回測要比較至少 2 檔的淨值走勢,本次只有 {len(_nav)} 檔可用",
             where="本頁上方「基金代號」欄位(多貼幾檔後重按 🩺 開始健診)")
         return
-    _ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}
+    # ~~_ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}~~
+    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 回測引擎誠實排除)
+    from ui.helpers.portfolio.load import fund_currency_for_calc
+    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in funds if f.get("code")}
     _name = {f.get("code"): (f.get("name") or f.get("code")) for f in funds if f.get("code")}
 
     # USDTWD 歷史(L2 facade;失敗 → 美元計價基金被排除,誠實提示,§1)

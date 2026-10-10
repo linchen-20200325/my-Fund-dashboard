@@ -51,7 +51,6 @@ def build_fee_inputs(funds: list, ledgers_by_pk: dict,
           rate_map:     {CCY: fx}——組引擎 exchange_rates(TWD 恆 1.0)。
     """
     from models.policy import fund_pk_str
-    from services.currency import normalize_ccy
 
     engine_funds: list = []
     excluded: list = []
@@ -68,7 +67,10 @@ def build_fee_inputs(funds: list, ledgers_by_pk: dict,
                              "reason": "需 T7 帳本(無持有單位/成本基礎)"})
             continue
 
-        _ccy = normalize_ccy(f.get("currency", ""), default="")
+        # ~~_ccy = normalize_ccy(f.get("currency", ""), default="")~~
+        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
+        from ui.helpers.portfolio.load import fund_currency_for_calc
+        _ccy = fund_currency_for_calc(f)
         if not _ccy:
             excluded.append({"id": _pk, "name": _name, "reason": "缺計價幣別"})
             continue
@@ -164,12 +166,14 @@ def _make_nav_fx_fn():
          **抓不到即期匯率 → None**(§1:上層誠實排除,**不**用歷史買入匯率冒充現價 —— 這是
          與 T7 `_latest_nav_fx_t7` 刻意的分歧,避免把 avg buy-rate 當 spot 產生假市值)。
     """
-    from services.currency import normalize_ccy
     from services.fund_service import get_latest_fx, get_latest_nav
 
     def _resolve(fund: dict) -> tuple:
         _code = str(fund.get("code", "")).strip()
-        _ccy = normalize_ccy(fund.get("currency", ""), default="")
+        # ~~_ccy = normalize_ccy(fund.get("currency", ""), default="")~~
+        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
+        from ui.helpers.portfolio.load import fund_currency_for_calc
+        _ccy = fund_currency_for_calc(fund)
         _nav = None
         try:
             _nav = get_latest_nav(_code)

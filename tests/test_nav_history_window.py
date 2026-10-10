@@ -129,16 +129,14 @@ def test_span_extend_insurance_nav_rescues_short_series():
 
     _short = _mk_series(30)     # 保單代碼常見的「近30日」legacy fallback
     _long = _mk_series(1200)    # Morningstar 長歷史
-    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
-    # 本則驗的是「跨度救援」本身,故讓預期幣別(基金名「(美元)」)與候選宣告一致;
-    # ~~fund_name="安聯收益成長"~~(名稱無幣別線索、候選不宣告 → 現在會被擋下,見
-    # tests/test_unknown_currency_fail_closed_20261010.py)。
+    # 2026-10-10 客戶裁示 Q3:換源前比幣別,未知擋下。真實晨星序列一律在 attrs 宣告
+    # 它請求用的幣別(`_src_morningstar_nav`),故替身照實宣告 USD。名稱維持原樣(不含幣別字樣):
+    # 預期幣別由晨星硬編表對 TLZF9 的手工宣告(USD)取得(稽核 M1 修正),本則因此照舊換源。
     _long.attrs["currency"] = "USD"
 
     with patch.object(O, "_src_morningstar_nav", return_value=_long):
         s, src, span = O._span_extend_insurance_nav(
-            "TLZF9", _short, "moneydj_legacy_scrape",
-            fund_name="安聯收益成長基金-AMg7月收總收益類股(美元)",
+            "TLZF9", _short, "moneydj_legacy_scrape", fund_name="安聯收益成長",
         )
     assert len(s) == 1200
     assert src == "morningstar(span-extend)"

@@ -29,7 +29,10 @@ def render_portfolio_performance(funds: list) -> None:
 
     # v19.449 稽核 HIGH:跨幣別組合須換 TWD basis(含匯率損益),否則美元基金匯率被漏掉。
     # 抓 USDTWD 歷史(L2 facade,不直呼 L1,§8.2);失敗 → 美元基金被排除、誠實提示(§1)。
-    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
+    # ~~_ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}~~
+    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 績效引擎誠實排除)
+    from ui.helpers.portfolio.load import fund_currency_for_calc
+    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in (funds or []) if f.get("code")}
     _fx = None
     try:
         from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS

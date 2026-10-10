@@ -132,9 +132,14 @@ def _ensure_currency(result: dict, code: str) -> None:
         print(f"[orchestrator] _ensure_currency {code}: {type(_e).__name__}: {_e}")
 
 
+# 2026-10-10 稽核 S1:不宣告 `attrs["currency"]` 的長歷史候選來源(換源時幣別恆未知 → 必被拒)。
+_SPAN_EXTEND_SRC_NO_CCY: "tuple[str, ...]" = ("cnyes",)
+
+
 def _span_extend_insurance_nav(
     code: str, nav_s: pd.Series, nav_source: str,
     fund_name: str = "", is_insurance_code: "bool | None" = None,
+    declared_ccy: str = "",
 ) -> "tuple[pd.Series, str, int]":
     """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
 
@@ -164,10 +169,24 @@ def _span_extend_insurance_nav(
         # 預期幣別在此只取「不需額外網路」的既有來源(基金名 → 選股池 → 台灣字樣推定),
         # ~~取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。~~
         # → 2026-10-10 客戶裁示 Q3:取不到就是未知 → **擋下**(assess_nav_series_swap 只放行 match)。
+        # 2026-10-10 稽核 M1:`_fetch_fund_single` 呼叫本函式時 meta 鏈尚未跑,
+        # `fund_name` 恆空 → 預期幣別只剩選股池 → 已知 USD 的 TLZF9 長歷史被擋(回歸)。
+        # 改為依序取:呼叫端已宣告的幣別(`declared_ccy`,抓取結果)→ 名稱 / 選股池 /
+        # 台灣字樣(`_correct_currency`)→ 晨星硬編表**手工宣告**的幣別。皆無 → 未知(擋)。
         _expect_ccy = ""
         try:
+            # L1 不得 import L2(§8.2)→ 中文別名用同層 `sources._CCY_FROM_NAME` **整欄精確比對**
+            # (不是名稱掃描;宣告欄的值本身就是幣別)。
+            from repositories.fund.sources import _CCY_FROM_NAME as _ccy_alias
+            from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _ms_map
             from shared.data_quality import normalize_iso_ccy as _iso_ccy
-            _expect_ccy = _iso_ccy(_correct_currency("", fund_name or "", _code))
+            _decl = str(declared_ccy or "").strip()
+            _decl = _ccy_alias.get(_decl.upper(), _ccy_alias.get(_decl, _decl))
+            _expect_ccy = (
+                _iso_ccy(_decl)
+                or _iso_ccy(_correct_currency("", fund_name or "", _code)))
+            if not _expect_ccy:
+                _expect_ccy = _iso_ccy((_ms_map.get(_code) or ("", ""))[1])
         except Exception as _ce:  # noqa: BLE001 — 判不出幣別不得擋抓取,退「未知」
             print(f"[orchestrator] span-extend 預期幣別判定失敗 {_code}: "
                   f"{type(_ce).__name__}: {_ce}")
@@ -177,6 +196,14 @@ def _span_extend_insurance_nav(
             ("cnyes", lambda: _src_cnyes_nav(_code)),
         )
         for _long_src, _long_fn in _long_candidates:
+            # 2026-10-10 稽核 S1:候選**必然**被幣別守門拒絕時不發請求(結果相同,只省一趟外部往返):
+            #   (a) 預期幣別未知 → 任何候選的 verdict 都是 unknown(Q3 擋);
+            #   (b) cnyes 不宣告幣別(`sources.fetch_nav_cnyes` / `_src_cnyes_nav` 從不設
+            #       `attrs["currency"]`)→ 候選幣別恆未知。若日後 cnyes 開始宣告幣別,刪掉 (b)。
+            if not _expect_ccy or _long_src in _SPAN_EXTEND_SRC_NO_CCY:
+                print(f"[orchestrator] ⛔ {_code} span-extend 跳過 {_long_src}:"
+                      f"幣別未知(預期 {_expect_ccy or '未知'})→ 必被拒,不發請求")
+                continue
             try:
                 _cand = _long_fn()
             except Exception as _le:
@@ -595,6 +622,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     nav_s, nav_source, _span_days = _span_extend_insurance_nav(
         _code, nav_s, nav_source,
         fund_name=result.get("fund_name") or "", is_insurance_code=_is_insurance_code,
+        declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
     )
 
     if len(nav_s) >= 10:
@@ -1399,6 +1427,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         _ext_s, _ext_src, _ext_span = _span_extend_insurance_nav(
             code, result["series"], result.get("data_source") or "moneydj_legacy_scrape",
             fund_name=result.get("fund_name") or "",
+            declared_ccy=result.get("currency") or "",   # 2026-10-10 稽核 M1
         )
         result["series"]        = _ext_s
         result["data_source"]   = _ext_src
