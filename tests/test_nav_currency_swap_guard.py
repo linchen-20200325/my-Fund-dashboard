@@ -96,10 +96,17 @@ def test_assess_swap_blocks_only_on_explicit_mismatch():
     assert "TWD" in bad["reason"] and "USD" in bad["reason"]
     assert "morningstar(ISIN)" in bad["reason"]
 
-    for ok in (assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD"),
-               assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),
-               assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):
-        assert ok["safe"] is True and ok["reason"] == ""
+    # ~~for ok in (assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD"),~~
+    # ~~           assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),~~
+    # ~~           assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):~~
+    # ~~    assert ok["safe"] is True and ok["reason"] == ""~~
+    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(只放行 match)。
+    ok = assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="TWD")
+    assert ok["safe"] is True and ok["reason"] == ""
+    for unk in (assess_nav_series_swap(expected_ccy="", candidate_ccy="USD"),
+                assess_nav_series_swap(expected_ccy="TWD", candidate_ccy="")):
+        assert unk["safe"] is False and unk["verdict"] == NAV_CCY_UNKNOWN
+        assert "幣別未知" in unk["reason"]
 
 
 def test_assess_swap_has_no_conversion_escape_hatch():
@@ -235,18 +242,21 @@ def test_span_extend_still_adopts_when_currency_matches(monkeypatch):
     assert len(s) == 1200 and src == "morningstar(span-extend)" and span > 300
 
 
-def test_span_extend_adopts_when_currency_unknown(monkeypatch):
-    """**已知破口,刻意釘住**:候選沒宣告幣別 → 仍然換源。
-
-    擋掉會讓「補到 5 年」對所有未宣告幣別的來源(cnyes)整個失效 —— 拿一個確定的
-    功能損失換一個不確定的風險。此處選擇照舊採用,由 `backfill_to_gs` 的 Gate 0
-    當第二道。⛔ 這**不是**「已經補完了」,只是這個權衡是**有意識**做的。
-    """
+# ~~def test_span_extend_adopts_when_currency_unknown(monkeypatch):~~
+# ~~    """**已知破口,刻意釘住**:候選沒宣告幣別 → 仍然換源。~~
+# ~~    擋掉會讓「補到 5 年」對所有未宣告幣別的來源(cnyes)整個失效 —— 拿一個確定的~~
+# ~~    功能損失換一個不確定的風險。此處選擇照舊採用,由 `backfill_to_gs` 的 Gate 0~~
+# ~~    當第二道。⛔ 這**不是**「已經補完了」,只是這個權衡是**有意識**做的。"""~~
+# ~~    assert len(s) == 1200 and src == "morningstar(span-extend)"~~
+# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
+#   舊理由(「補到 5 年」涵蓋率)仍然成立,被權衡掉的是:歷史變短可補救,
+#   混幣別寫進 nav_history 補救不了。故本則由「釘住破口」反轉為「釘住擋下」。
+def test_span_extend_blocks_when_candidate_currency_unknown(monkeypatch):
     O = _wire_l1(monkeypatch, ms=_long(1200))          # 候選無 attrs["currency"]
     s, src, _ = O._span_extend_insurance_nav(
         "TLZF9", _long(30, ccy="TWD"), "moneydj_legacy_scrape",
         fund_name="安聯台幣計價基金")
-    assert len(s) == 1200 and src == "morningstar(span-extend)"
+    assert len(s) == 30 and src == "moneydj_legacy_scrape"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -376,12 +386,11 @@ def test_backfill_still_rescues_when_currency_matches(monkeypatch, cache_store):
     assert r["ccy_refused"] is None
 
 
-def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_store):
-    """**已知破口,刻意釘住**(同 L1 那則):候選沒宣告幣別 → 仍然換源。
-
-    ⛔ 不要把這則測試讀成「這樣是對的」——它釘的是「這個權衡是有意識做的」。
-    這一格底下還有 `backfill_to_gs` 的 Gate 0 當第二道(與既有 nav_history 對帳)。
-    """
+# ~~def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_store):~~
+# ~~    """**已知破口,刻意釘住**(同 L1 那則):候選沒宣告幣別 → 仍然換源。"""~~
+# ~~    assert r["source"] == "yahoo(ISIN)" and r["ccy_refused"] is None~~
+# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(同 L1 那則,由「釘住破口」反轉為「釘住擋下」)。
+def test_backfill_blocks_when_candidate_currency_unknown(monkeypatch, cache_store):
     import services.nav_history_store as NS
 
     _wire_l2(monkeypatch,
@@ -389,4 +398,4 @@ def test_backfill_adopts_when_candidate_currency_unknown(monkeypatch, cache_stor
                  "fund_name": "F", "currency": "TWD"},
              yahoo=_long(1900))                      # 無 attrs["currency"]
     r = NS.backfill_to_gs(["TLZF9"])["results"][0]
-    assert r["source"] == "yahoo(ISIN)" and r["ccy_refused"] is None
+    assert r["source"] == "moneydj" and r["ccy_refused"] and "幣別未知" in r["ccy_refused"]

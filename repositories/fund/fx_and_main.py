@@ -171,6 +171,12 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     pair = str(currency_pair).strip().upper()
     if not pair.endswith("=X"):
         pair = pair + "=X"
+    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):呼叫端以 f"{ccy}TWD" 組幣對時 ccy 為空
+    # → 只剩 "TWD=X",而 Yahoo 慣例 `TWD=X` 是 USD/TWD —— 會靜默拿到美元匯率。
+    # 不足 6 碼的幣對一律視為「幣別未知」:不查匯率,回 None(fail closed)。
+    if len(pair.replace("=X", "")) < 6:
+        print(f"[get_latest_fx] ⛔ 幣對 {currency_pair!r} 不完整(幣別未知)→ 不查匯率")
+        return None
 
     # positive-only cache 查詢
     _cache_key = (pair, fred_api_key or "")

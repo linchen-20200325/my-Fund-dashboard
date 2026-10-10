@@ -126,7 +126,10 @@ def test_resolve_secid_hits_and_currency(monkeypatch):
     _patch_pool_cache(monkeypatch, [PoolEntry(code="ALZF9", morningstar_secid="SEC1", currency="TWD")])
     assert P.resolve_secid("alzf9") == ("SEC1", "TWD")            # 大小寫不分 + 帶幣別
     _patch_pool_cache(monkeypatch, [PoolEntry(code="X", morningstar_secid="SEC2")])
-    assert P.resolve_secid("X") == ("SEC2", "USD")               # 幣別空 → 抓取退 USD
+    # ~~assert P.resolve_secid("X") == ("SEC2", "USD")               # 幣別空 → 抓取退 USD~~
+    # 2026-10-10 客戶裁示(未知幣別 ≠ USD;有意識的政策變更,不是漏刪):幣別空 → 回空白,
+    # 由呼叫端(晨星請求)fail closed。
+    assert P.resolve_secid("X") == ("SEC2", "")
 
 
 def test_resolve_secid_none_when_no_secid(monkeypatch):

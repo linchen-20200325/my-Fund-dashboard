@@ -656,10 +656,11 @@ def _pool_entry_of(code) -> "PoolEntry | None":
 def resolve_secid(code) -> "tuple[str, str] | None":
     """選股池有該 code 的**非空 secId** → (secId, currency);否則 None(退 ISIN 搜尋/硬編)。
 
-    currency 空(未知)→ 回 USD 當抓取預設(§4.1:只在真的不知道時才退 USD,不寫回)。
+    ~~currency 空(未知)→ 回 USD 當抓取預設(§4.1:只在真的不知道時才退 USD,不寫回)。~~
+    → 2026-10-10 客戶裁示(未知幣別 ≠ USD):currency 空 → 回 `""`(未知),由呼叫端 fail closed。
     """
     e = _pool_entry_of(code)
-    return (e.morningstar_secid, e.currency or "USD") if (e and e.morningstar_secid) else None
+    return (e.morningstar_secid, e.currency or "") if (e and e.morningstar_secid) else None
 
 
 def resolve_isin(code) -> "str | None":

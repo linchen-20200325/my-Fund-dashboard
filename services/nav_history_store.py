@@ -768,8 +768,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         而候選來源正是最會換幣別的兩個(晨星 `currencyId` 換算後淨值、Yahoo `{secId}.F`
         法蘭克福掛牌)。候選宣告的幣別與本檔預期幣別**明確不一致** → **拒絕採用**
         (顯式拒寫 + log,**絕不換算**:在寫入端偷偷換匯會做出一條「看起來連續、
-        實際混過兩種幣別」的序列,比拒絕替換危險得多)。幣別未知 → 照舊採用,
-        由 Gate 0 當第二道 —— 理由與已知破口見 `shared/data_quality.py` 該節。
+        實際混過兩種幣別」的序列,比拒絕替換危險得多)。~~幣別未知 → 照舊採用,
+        由 Gate 0 當第二道~~ → 2026-10-10 客戶裁示 Q3:幣別未知 → 同樣拒絕換源
+        (fail closed)—— 理由與已知破口見 `shared/data_quality.py` 該節。
 
         Returns:
             `(series, source, ccy_notes, adopted_ccy)` —— `adopted_ccy` 是**最後被採用的

@@ -632,18 +632,31 @@ def _spec_series(spec):
     return _daily(_n, _start, ccy=_ccy)
 
 
-@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy", [
-    # 單次換源(只有 yahoo 夠長)
-    ("單次換源 / 採用者有宣告", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR"),
-    ("單次換源 / 採用者不宣告", (600, "2020-01-01", None), None, "yahoo", ""),
-    # 連續換源(yahoo 先被採用,morningstar 更長 → 再被採用)
-    ("連續換源 / 最後採用者有宣告",
-     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "JPY"), "morningstar", "JPY"),
-    ("連續換源 / 最後採用者不宣告",          # ← 本輪補的那一格,原本零驅動
-     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "morningstar", ""),
+# ~~@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy", [~~
+# ~~    ("單次換源 / 採用者有宣告", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR"),~~
+# ~~    ("單次換源 / 採用者不宣告", (600, "2020-01-01", None), None, "yahoo", ""),~~
+# ~~    ("連續換源 / 最後採用者有宣告",~~
+# ~~     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "JPY"), "morningstar", "JPY"),~~
+# ~~    ("連續換源 / 最後採用者不宣告",~~
+# ~~     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "morningstar", ""),~~
+# ~~])~~
+# → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
+#   舊表四格都在「預期幣別未知」下換源;Q3 之後那四格一律被擋,表就什麼都沒測到。
+#   新表改以**預期幣別 EUR**(選股池)驅動,四格對應:
+#     採用者宣告一致 → 換源、幣別跟著換;採用者不宣告 → **擋下**、幣別停在上一條
+#     (MoneyDJ 量到的 USD,或連續換源時前一個被採用的 EUR)。
+#   「被丟棄序列的宣告不得掛上去」這條出口 (6) 的語意一條沒少。
+@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy,want_refused", [
+    ("單次換源 / 採用者宣告一致", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR", False),
+    ("單次換源 / 採用者不宣告 → 擋下", (600, "2020-01-01", None), None, "moneydj", "USD", True),
+    ("連續換源 / 皆宣告一致",
+     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "EUR"), "morningstar", "EUR", False),
+    ("連續換源 / 最後採用者不宣告 → 停在前一條",
+     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "yahoo", "EUR", True),
 ])
 def test_adopted_rows_carry_the_last_adopted_series_own_currency(
-        monkeypatch, _cache_store, case_id, yahoo_spec, ms_spec, want_src, want_ccy):
+        monkeypatch, _cache_store, case_id, yahoo_spec, ms_spec, want_src, want_ccy,
+        want_refused):
     """出口 (6):被寫入的每一列都來自**最後被採用**那條序列 → 幣別必須是**它自己**宣告的。
 
     掛上任何**已經被丟棄**那條序列的宣告 = §1 明令禁止的憑空編造,
@@ -656,20 +669,25 @@ def test_adopted_rows_carry_the_last_adopted_series_own_currency(
         monkeypatch,
         fd={"series": _daily(_n, _start, ccy=_ccy), "fund_name": "F"},
         yahoo=_spec_series(yahoo_spec),
-        morningstar=_spec_series(ms_spec))
+        morningstar=_spec_series(ms_spec),
+        pool_ccy="EUR")                     # 預期幣別(Q3:未知會被擋,故明示)
     r = NS.backfill_to_gs(["X"])["results"][0]
 
     # ── fixture 對準檢查:換源真的發生、而且停在預期那一個來源 ──────────────
-    _last_spec = ms_spec or yahoo_spec
+    # ~~_last_spec = ms_spec or yahoo_spec~~(Q3:不宣告的候選不會被採用)
+    _last_spec = {"moneydj": _MDJ_SPEC, "yahoo": yahoo_spec,
+                  "morningstar": ms_spec}[want_src]
     assert want_src in (r["source"] or ""), (
         f"[{case_id}] 沒有換到 {want_src} → 本格沒測到出口 (6);"
         f"實得 source={r['source']!r}")
     assert r["fetched"] == _last_spec[0], (
         f"[{case_id}] 採用的不是最後那條候選 → fixture 沒對準;"
         f"實得 fetched={r['fetched']!r},預期 {_last_spec[0]}")
-    assert not r["ccy_refused"], (
-        f"[{case_id}] 不該有候選因幣別被拒(unknown ≠ mismatch);"
-        f"實得 {r['ccy_refused']!r}")
+    # ~~assert not r["ccy_refused"], (~~
+    # ~~    f"[{case_id}] 不該有候選因幣別被拒(unknown ≠ mismatch);"~~
+    # ~~    f"實得 {r['ccy_refused']!r}")~~
+    assert bool(r["ccy_refused"]) is want_refused, (
+        f"[{case_id}] 幣別拒絕旗標不符(Q3:unknown 也擋);實得 {r['ccy_refused']!r}")
     assert written, f"[{case_id}] 沒有任何點被寫進雲端 → 本格什麼都沒測到"
 
     # ── ⭐ 行為斷言:看**實際寫進那一欄的值**,不是字串比對、不是旗標 ────────

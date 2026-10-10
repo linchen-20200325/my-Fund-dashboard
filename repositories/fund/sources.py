@@ -168,7 +168,7 @@ def _src_fundclear_meta(code: str) -> dict:
         if isinstance(info, dict):
             meta["fund_name"]   = (info.get("FundName") or info.get("fundName") or
                                     info.get("ChtName") or "")
-            meta["currency"]    = (info.get("Currency") or info.get("currency") or "USD")
+            meta["currency"]    = (info.get("Currency") or info.get("currency") or "")  # 2026-10-10 缺幣別→空白(未知≠USD)
             meta["risk_level"]  = str(info.get("RiskLevel") or info.get("riskLevel") or "")
             meta["category"]    = (info.get("FundType") or info.get("fundType") or "")
             meta["nav_latest"]  = safe_float(info.get("LatestNAV") or info.get("latestNav"))
@@ -235,7 +235,7 @@ def _src_fundclear_div(code: str) -> list:
                 "amount":    amt,
                 "yield_pct": safe_float(
                     item.get("DividendRate") or item.get("dividendRate"), 0) or 0,
-                "currency":  item.get("Currency") or item.get("currency") or "USD",
+                "currency":  item.get("Currency") or item.get("currency") or "",  # 2026-10-10 未知≠USD
             })
         if divs:
             print(f"[src_fundclear_div] ✅ {code} {len(divs)} 筆配息")
@@ -973,7 +973,13 @@ def _pool_secid_lookup(code: str) -> str:
     try:
         _isin = resolve_isin(_code) or ""
         if _isin:
-            _ccy = (resolve_currency(_code) or "USD").upper() or "USD"
+            # 2026-10-10 客戶裁示 Q2:未知幣別 ≠ USD —— screener 請求必帶 currencyId,
+            # 池幣別空白 → 不以 USD 猜測呼叫(fail closed),跳過本備源。
+            _ccy = str(resolve_currency(_code) or "").strip().upper()
+            if not _ccy:
+                print(f"[ms_secid_pool] {_code} ISIN={_isin} 幣別未知 → 不以 USD 猜測呼叫晨星"
+                      f" screener(fail closed)", file=_sys_p.stderr)
+                return ""
             _sid = _morningstar_screener_secid(_isin, _ccy)
             if _sid:
                 print(f"[ms_secid_pool] {_code} ISIN={_isin}({_ccy})→secId={_sid}",
@@ -1575,7 +1581,7 @@ def _screener_row_get(row: dict, keys) -> str:
     return ""
 
 
-def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
+def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
     """用 Morningstar **screener** 以精確 `filters=ISIN:IN:<isin>` 解析 secId(比 SecuritySearch
     模糊名稱搜尋準;保單平台基金常是後者查不到才卡住)。回傳晨星 **F 型 secId**(可直接餵
     `_MS_TOOLS_REST/timeseries_price`,與本檔 3a NAV 主路徑同 host + 同 token),查無 / 失敗回 ""。
@@ -1596,6 +1602,12 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
     _isin = str(isin or "").strip().upper()
     if not _isin:
         return ""
+    # 2026-10-10 客戶裁示 Q2:請求必帶 `currencyId`;幣別未知 → fail closed,
+    # 不以 USD 猜測發請求(不入負快取 —— 這不是「查無」,是「不知道該用哪個幣別問」)。
+    _ccy = str(currency or "").strip().upper()
+    if not _ccy:
+        print(f"[ms_screener] {_isin} 幣別未知 → 不以 USD 猜測呼叫 screener(fail closed)")
+        return ""
     if _isin in _ms_screener_cache:
         return _ms_screener_cache[_isin]
 
@@ -1607,7 +1619,6 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
         "Referer": "https://tools.morningstar.co.uk/",
     }
     _dp = _up.quote("SecId|Name|ISIN|PriceCurrency|BaseCurrency")
-    _ccy = str(currency or "USD").strip().upper() or "USD"
     _transient = False       # timeout/連線/JSON 壞 → 可重試,不負快取
     _anomaly = False         # 形狀非預期 / 有 rows 抽不到 SecId → 疑欄位錯,不負快取 + 現形
     _logged_sample = False
@@ -1698,8 +1709,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
         _user_mapped = _resolve_user_secid(_code)
     except Exception:  # noqa: BLE001 — 選股池不可用不阻斷抓取鏈(退硬編/搜尋)
         _user_mapped = None
-    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
-    sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
+    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
+    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
+    # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
+    sec_id, currency_id = _mapped[0], str(_mapped[1] or "").strip().upper()
 
     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
@@ -1722,8 +1735,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
                     currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
                 # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),
                 #   查無 / 端點不可用才退回既有 SecuritySearch(純附加、零回歸)。
-                sec_id = (_morningstar_screener_secid(_isin, currency_id or "USD")
-                          or _morningstar_search_secid(_isin, currency_id or "USD"))
+                # 2026-10-10 Q2:幣別未知 → 不以 USD 猜測呼叫 screener(函式內 fail closed);
+                #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
+                sec_id = (_morningstar_screener_secid(_isin, currency_id)
+                          or _morningstar_search_secid(_isin, currency_id))
                 # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
                 _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
                 if _auto_ccy:
@@ -1805,6 +1820,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
 
     if not sec_id:
         print(f"[src_morningstar] {_code}: 無 secId（未在映射表且搜尋失敗）")
+        return pd.Series(dtype=float)
+    # 2026-10-10 客戶裁示 Q2:timeseries 請求必帶 `currencyId`(回的是換算後淨值)。
+    # 幣別未知 → fail closed:不以 USD 猜測抓取,也不把猜出來的序列送進正式資料流。
+    if not currency_id:
+        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不以 USD 猜測向晨星要淨值(fail closed)")
         return pd.Series(dtype=float)
 
     end_d   = _dt2.date.today()
@@ -2699,7 +2719,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
         "nav_date":     "",
         "year_high_nav": None,
         "year_low_nav":  None,
-        "currency":     "USD",
+        "currency":     "",   # 2026-10-10:未解析到幣別 = 未知(空白),不得預設 USD
         "risk_level":   "",
         "dividend_freq": "",
         "fund_scale":   "",
@@ -2736,7 +2756,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
             # 基本資料
             if rows_map.get("基金名稱"):
                 out["fund_name"]    = rows_map.get("基金名稱", "")
-                out["currency"]     = rows_map.get("計價幣別", "USD").replace(" ", "")
+                out["currency"]     = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
                 out["risk_level"]   = rows_map.get("風險報酬等級", "").replace(" ", "")
                 out["dividend_freq"]= rows_map.get("配息頻率", "").replace(" ", "")
                 out["fund_scale"]   = rows_map.get("基金規模", "")
@@ -3073,7 +3093,7 @@ def _src_tcb_meta(code: str) -> dict:
                                 if k: rows_map[k] = cells[i+1].get_text(strip=True)
                     if rows_map.get("基金名稱"):
                         meta["fund_name"]   = rows_map.get("基金名稱", "")
-                        meta["currency"]    = rows_map.get("計價幣別", "USD").replace(" ", "")
+                        meta["currency"]    = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
                         meta["risk_level"]  = rows_map.get("風險報酬等級", "").replace(" ", "")
                         meta["dividend_freq"] = rows_map.get("配息頻率", "").replace(" ", "")
                         meta["fund_scale"]  = rows_map.get("基金規模", "")
@@ -3166,7 +3186,7 @@ def _src_tcb_div(code: str) -> list:
                         continue
                     _yld = safe_float(_cols[5]) or 0
                     _cur = (_cols[6].strip() if len(_cols) > 6 and _cols[6].strip()
-                            else ("TWD" if _is_dom else "USD"))
+                            else ("TWD" if _is_dom else ""))  # 境外缺幣別→空白(未知≠USD)
                     _out.append({
                         "date": _cols[0], "ex_date": _cols[1], "pay_date": _cols[2],
                         "amount": _amt, "yield_pct": _yld, "currency": _cur,
@@ -3348,7 +3368,7 @@ def _src_tdcc_meta(code: str) -> dict:
             item_code = (item.get("基金代碼") or item.get("境外基金代碼") or "").upper()
             if item_code == _c:
                 meta["fund_name"] = item.get("基金名稱", "")
-                meta["currency"]  = item.get("計價幣別", "USD")
+                meta["currency"]  = item.get("計價幣別", "")  # 缺鍵→空白(未知≠USD)
                 print(f"[src_tdcc_meta] 3-2 ✅ {_c}: {meta['fund_name'][:25]}")
                 break
     except Exception as _e:

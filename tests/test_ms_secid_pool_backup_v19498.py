@@ -50,17 +50,25 @@ def test_pool_isin_to_screener(monkeypatch, _no_name_search):
     assert _seen == {"isin": "LU0766462157", "ccy": "EUR"}
 
 
-def test_pool_isin_default_usd_when_no_ccy(monkeypatch, _no_name_search):
+def test_pool_isin_unknown_ccy_fails_closed(monkeypatch, _no_name_search):
+    """池幣別空 → **不以 USD 猜測呼叫 screener**(fail closed)。
+
+    ~~def test_pool_isin_default_usd_when_no_ccy(...)~~
+    ~~assert S._resolve_ms_secid("XXXX") == "SID"~~
+    ~~assert _seen["ccy"] == "USD"   # 池幣別空 → 退 USD(§4.1)~~
+    → 2026-10-10 客戶裁示 Q2:不採「未知幣別仍用 USD 抓晨星」;舊斷言把 USD 猜測寫成規格,
+      依裁示反轉(**有意識的政策變更,不是漏刪**)。下游仍可退硬編表 / 名稱搜尋(本測試皆隔離為空)。
+    """
     _patch_pool(monkeypatch, secid=None, isin="LU0766462157", ccy=None)
     _seen = {}
 
-    def _scr(isin, currency="USD"):
+    def _scr(isin, currency=""):
         _seen["ccy"] = currency
         return "SID"
 
     monkeypatch.setattr(S, "_morningstar_screener_secid", _scr)
-    assert S._resolve_ms_secid("XXXX") == "SID"
-    assert _seen["ccy"] == "USD"                                # 池幣別空 → 退 USD(§4.1)
+    assert S._resolve_ms_secid("XXXX") == ""
+    assert _seen == {}                                          # screener 沒被呼叫
 
 
 # ── 3) 池全空 → 退硬編表(不呼叫 screener)───────────────────────────────────

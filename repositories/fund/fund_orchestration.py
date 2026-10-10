@@ -162,7 +162,8 @@ def _span_extend_insurance_nav(
         # 只看「筆數 × 跨度」—— 晨星是拿 `currencyId` 要換算後的淨值(查不到就死預設 USD),
         # 跨度更長就會把台幣序列整條換成美元序列,下游報酬/Sharpe/σ 照算、畫面無異狀。
         # 預期幣別在此只取「不需額外網路」的既有來源(基金名 → 選股池 → 台灣字樣推定),
-        # 取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。
+        # ~~取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。~~
+        # → 2026-10-10 客戶裁示 Q3:取不到就是未知 → **擋下**(assess_nav_series_swap 只放行 match)。
         _expect_ccy = ""
         try:
             from shared.data_quality import normalize_iso_ccy as _iso_ccy
@@ -1069,7 +1070,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                             v = cells[i+1].get_text(strip=True)
                             if k: rows_map[k] = v
                 result["fund_name"]       = rows_map.get("基金名稱", "")
-                result["currency"]        = rows_map.get("計價幣別", "USD").replace(" ","")
+                result["currency"]        = rows_map.get("計價幣別", "").replace(" ","")  # 缺欄→空白(未知≠USD)
                 result["risk_level"]      = rows_map.get("風險報酬等級", "").replace(" ","")
                 result["dividend_freq"]   = rows_map.get("配息頻率", "").replace(" ","")
                 result["fund_scale"]      = rows_map.get("基金規模", "")
@@ -1356,7 +1357,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         if _amt is None or _amt <= 0 or _amt > 1000: continue
                         _yld = safe_float(cols[5]) or 0.0 if len(cols) > 5 else 0.0
                         _cur = (cols[6].strip() if len(cols) > 6 and cols[6].strip()
-                                else result.get("currency", "USD"))
+                                else (result.get("currency") or ""))  # 未知≠USD
                         result["dividends"].append({
                             "date":      cols[0],
                             "ex_date":   cols[1],
