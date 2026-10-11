@@ -12,6 +12,7 @@ from models.policy import fund_pk_str
 from repositories.policy_repository import (
     ALL_COLS_V2,
     PolicySheetError,
+    PolicyTierConflictError,
     _is_quota_error,
     detect_sheet_schema_version,
     load_all_policies_v2,
@@ -27,6 +28,12 @@ from repositories.snapshot_repository import (
     save_holdings_overview,
 )
 from infra.oauth import OAuthError
+# 寫回 Sheet 的「級別」一律走 L0 SSOT（`policy_tier` → `is_core` 三態 → 未設定給空白）；
+# ~~真正寫進格子前，repository 端再走 `merge_sheet_tier`：未設定的列保留 Sheet 原值。~~
+# （2026-10-11 更正：上句只對單列代號成立。）現行：v2「全部寫入」單列代號走 `merge_sheet_tier`；
+# 同代號多列走 `_multi_row_tier_out` —— Sheet 級別同一語意才保留，衝突則該保單整張不寫
+# （`PolicyTierConflictError`，見下方 `_dump_all_to_sheet_v2`）。
+from shared.policy_tier import fund_tier_sheet_value, normalize_tier
 
 
 def _dump_all_to_sheet_v2(client: object,
@@ -67,9 +74,8 @@ def _dump_all_to_sheet_v2(client: object,
                 "fund_code":        _code,
                 "fund_name":        str(_f.get("name", "") or ""),
                 "currency":         str(_f.get("currency", "")),
-                "tier":             ("core" if _f.get("is_core") else
-                                     "satellite" if _f.get("is_core") is False
-                                     else ""),
+                # 2026-10-10：~~只讀 `is_core` 的三元式~~ → L0 SSOT（v1 明示的 `policy_tier` 也算數）。
+                "tier":             fund_tier_sheet_value(_f),
                 "invest_twd":       int(_f.get("invest_twd", 0) or 0),
                 "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                 "units":            _units,
@@ -85,8 +91,52 @@ def _dump_all_to_sheet_v2(client: object,
         for _i, (_pid, _rows) in enumerate(_pids):
             try:
                 _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
-                _n = write_policy_v2(client, sheet_id, _pid, _df)
+                # ── N1 寫入閘門（客戶 2026-10-11）：同代號 ≥2 列且有未設定列時，寫入前重讀該分頁
+                # 各代號的逐列級別序列，與讀回快照「逐項相等」才放行（比對，不是配對；細節見
+                # shared/tier_write_gate.py）。不一致／沒有可靠快照（JSON 還原後）／認不得的字串
+                # → 丟 PolicyTierConflictError，這張保單整張不寫、其他保單照常。
+                from shared.tier_write_gate import (  # noqa: PLC0415
+                    evaluate_tier_gate, needs_gate, snapshot_for_policy)
+                _keep = True
+                _codes, _tiers = _df["fund_code"].tolist(), _df["tier"].tolist()
+                if needs_gate(_codes, _tiers):
+                    from repositories.policy_repository import (  # noqa: PLC0415
+                        _is_worksheet_not_found, _multi_row_tier_out,
+                        _sanitize_tab_name, _tier_by_code_from_values,
+                        _with_quota_retry)
+                    try:
+                        _sh = _with_quota_retry(client.open_by_key, sheet_id)
+                        try:
+                            _ws = _with_quota_retry(_sh.worksheet, _sanitize_tab_name(_pid))
+                        except Exception as _e_ws:
+                            if not _is_worksheet_not_found(_e_ws):
+                                raise
+                            _ws = None   # 分頁還不存在：沒有 Sheet 級別可比對，write_policy_v2 會建立
+                        _sheet_levels = _tier_by_code_from_values(
+                            (_with_quota_retry(_ws.get_all_values) or []) if _ws is not None else [])
+                    except PolicySheetError:
+                        raise
+                    except Exception as _e_rd:
+                        raise PolicySheetError(f"讀取 '{_pid}' 級別失敗：{_e_rd}") from _e_rd
+                    _gate = evaluate_tier_gate(
+                        _codes, _tiers, _sheet_levels,
+                        snapshot_for_policy(ss, _pid), _multi_row_tier_out)
+                    if _gate.conflicts:
+                        raise PolicyTierConflictError(list(_gate.conflicts))
+                    if _gate.uses_snapshot:
+                        # 靠快照一致放行：級別欄由閘門定案（session 值原樣，留白維持留白），
+                        # 不再交給 keep_sheet_tier（它看不到快照，會把 [核心,衛星,留白] 誤判衝突）。
+                        _df["tier"] = list(_gate.tiers)
+                        _keep = False
+                # keep_sheet_tier：session 沒有客戶級別的列保留 Sheet 原值（例如剛還原
+                # JSON 備份、或 Sheet 上的值認不得）—— 整張覆寫不可把客戶設定洗成空白。
+                # 同代號多列的 Sheet 級別互相衝突 → 該保單整張不寫（PolicyTierConflictError），
+                # 其他保單照常寫入。
+                _n = write_policy_v2(client, sheet_id, _pid, _df, keep_sheet_tier=_keep)
                 _written += int(_n)
+            except PolicyTierConflictError as _e_tc:
+                # 客戶裁示字句不截斷（下方通用分支截 80 字，代號多時會切掉「未寫入此保單」）
+                _errors.append(f"{_pid}: {_e_tc}")
             except (PolicySheetError, OAuthError) as _e:
                 _errors.append(f"{_pid}: {str(_e)[:80]}")
             if _i < len(_pids) - 1:
@@ -248,10 +298,9 @@ def dump_all_to_sheet(client: object,
                     "currency":     str(_f.get("currency", "")),
                     "fx_at_buy":    0.0,
                     "notes":        "v18.162 全部寫入",
-                    "policy_tier":  ("core" if _f.get("is_core")
-                                     else "satellite"
-                                     if _f.get("is_core") is False
-                                     else ""),
+                    # 2026-10-10：~~只讀 `is_core` 的三元式~~ —— v1 讀回只寫 `policy_tier`，
+                    # 舊式會拿名稱猜測覆寫（停猜後則清空）客戶在 Sheet 明示的級別。改走 L0 SSOT。
+                    "policy_tier":  fund_tier_sheet_value(_f),
                     # v18.183：現金給付% + 含息成本也寫進保單分頁
                     "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
                     "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
@@ -349,7 +398,8 @@ def _load_all_from_sheet_v2(client: object,
             _pk = f"{_pid}::{_code}"
             _new_codes.add(_pk)
             _prev = _prev_by_pk.get(_pk) or {}
-            _tier = str(_row.get("tier", "") or "").strip().lower()
+            # 含中文「核心／衛星」；認不得的值 → None（未設定；寫回時保留 Sheet 原值）。
+            _tier = normalize_tier(_row.get("tier"))
             _new_funds.append({
                 **_prev,   # 保留 name / series / dividends / metrics / moneydj_raw 等
                 "code":             _code,
@@ -367,6 +417,11 @@ def _load_all_from_sheet_v2(client: object,
                 "div_cash_pct":     float(_row.get("div_cash_pct", 100) or 0),
                 "is_core":          (True if _tier == "core" else
                                      False if _tier == "satellite" else None),
+                # 2026-10-10：v2 分頁的 `tier` 是本路徑唯一的級別權威；`**_prev` 可能帶進
+                # 過期的 v1 `policy_tier`（同 session 先走過 v1 讀回，或還原過 JSON 備份），
+                # 而 `resolve_tier` 讓 `policy_tier` 優先 —— 不清掉，舊值會蓋過這次讀回的級別，
+                # 並在下次寫入時寫回 Sheet。寫空字串與「沒有這個鍵」對所有讀取端等價。
+                "policy_tier":      "",
             })
         ss["portfolio_funds"] = _new_funds
         out["added"]   = sorted(_new_codes - _prev_codes)

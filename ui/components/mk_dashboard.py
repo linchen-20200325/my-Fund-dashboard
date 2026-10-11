@@ -31,10 +31,13 @@ import streamlit as st
 # §1 數據標籤化 (Data Tagging)
 # ════════════════════════════════════════════════════════════
 def tag_mk_class(fund: dict) -> str:
-    """MK_Class：Core（核心）/ Satellite（衛星）。
+    """MK_Class：Core（核心）/ Satellite（衛星）/ **Unset（級別未設定）**。
 
-    走全站唯一真相 `ui.helpers.portfolio.allocation.resolve_core_flag`
-    （Google Sheet `policy_tier` 優先 → 缺才退 `is_core` 名稱關鍵字啟發式）。
+    ~~走全站唯一真相 `ui.helpers.portfolio.allocation.resolve_core_flag`
+    （Google Sheet `policy_tier` 優先 → 缺才退 `is_core` 名稱關鍵字啟發式）。~~
+    → 2026-10-10（客戶裁示：級別三態）：走 `shared.policy_tier.resolve_tier`。
+    未設定是第三種獨立狀態 —— 不進核心戰情室、不進波段觀測站，也不吃任何
+    核心／衛星專屬的判斷（「連續兩季落後大盤」「1M+3M 雙負」「衛星健康」「停利提醒」等）。
 
     原本這裡只讀 `is_core`、完全無視 `policy_tier`：使用者在 Sheet 標了 `core`
     的基金，在保單卡片顯示「🛡️核心」（那裡走 resolve_core_flag）、在檔數 KPI 與
@@ -44,11 +47,20 @@ def tag_mk_class(fund: dict) -> str:
     （`ui/helpers/portfolio/health.py` 的核心 / 衛星檔數、本檔核心戰情室與波段
     觀測站兩個 sub-tab）都是用 `== "Core"` / `== "Satellite"` 過濾 —— 沒有
     `is_core` 欄位的基金會**同時從兩張表消失**，使用者看不到它去哪了。
-    `resolve_core_flag` 是二態（判不出來歸衛星），與全站金額版 KPI
-    （`summarize_core_satellite`）同一套規則，不會再有無主的第三態。
+    ~~`resolve_core_flag` 是二態（判不出來歸衛星），與全站金額版 KPI
+    （`summarize_core_satellite`）同一套規則，不會再有無主的第三態。~~
+    → 2026-10-10：第三態**刻意**回來了（`Unset`），但這次不是「無主」：
+    舊坑的理由（兩張表都看不到它、使用者不知道它去哪）仍然成立，所以兩個子分頁的
+    空狀態與選單說明都會講「⬜ 未設定 N 檔：不列入…」；被權衡掉的是「判不出來就歸衛星」
+    ——那會把客戶沒設定的部位套上衛星專屬的判斷與建議。
     """
-    from ui.helpers.portfolio.allocation import resolve_core_flag
-    return "Core" if resolve_core_flag(fund) else "Satellite"
+    from shared.policy_tier import resolve_tier
+    _t = resolve_tier(fund)
+    if _t == "core":
+        return "Core"
+    if _t == "satellite":
+        return "Satellite"
+    return "Unset"
 
 
 def tag_health_check(fund: dict) -> str:
@@ -484,6 +496,15 @@ _COL_CONFIG = {
 }
 
 
+def _unset_note(df: pd.DataFrame) -> str:
+    """級別未設定的檔數說明（S14；客戶 2026-10-10 核准、改放在既有空狀態與選單說明裡）。"""
+    _k = int((df["MK_Class"] == "Unset").sum()) if "MK_Class" in df.columns else 0
+    if not _k:
+        return ""
+    return (f"⬜ 未設定 {_k} 檔：不列入核心戰情室與波段觀測站"
+            "（設定級別後才會出現；仍計入 3-3-3 的基金池）。")
+
+
 def _render_core_tab(df: pd.DataFrame) -> None:
     """Sub-Tab 1：核心戰情室（以息養股）。"""
     # 三個 sub-tab 的白話文說明原本標題逐字相同（內容不同）→ 加後綴區分，
@@ -499,7 +520,9 @@ def _render_core_tab(df: pd.DataFrame) -> None:
         )
     core_df = df[df["MK_Class"] == "Core"].copy()
     if core_df.empty:
-        st.info("組合內目前沒有被分類為「核心」的標的。可在 Tab3 上方加入高股息／債券／平衡型基金。")
+        # 2026-10-10（客戶裁示 V3）：~~「可在 Tab3 上方加入高股息／債券／平衡型基金。」~~
+        # 移除方向性建議（級別未設定時它會叫人去買核心型基金）；有未設定的檔時補說明。
+        st.info("組合內目前沒有被分類為「核心」的標的。" + _unset_note(df))
         return
     core_df = core_df.sort_values(
         by=["Health_Check", "代碼"],
@@ -527,7 +550,8 @@ def _render_satellite_tab(df: pd.DataFrame,
         )
     sat_df = df[df["MK_Class"] == "Satellite"].copy()
     if sat_df.empty:
-        st.info("組合內目前沒有被分類為「衛星」的標的。可加入科技／半導體／生技等成長型基金。")
+        # 2026-10-10（客戶裁示 V3）：~~「可加入科技／半導體／生技等成長型基金。」~~ 同上。
+        st.info("組合內目前沒有被分類為「衛星」的標的。" + _unset_note(df))
         return
     sat_df = sat_df.sort_values(
         by="Price_Zone",
@@ -688,7 +712,10 @@ def render_mk_war_room(portfolio_funds: Optional[list] = None) -> None:
         st.info("尚未載入任何基金。請在下方加入基金代碼後，戰情室會自動上線。")
         return
 
-    has_sat = any((not f.get("is_core", True)) for f in loaded)
+    # 2026-10-10（級別三態）：~~`any(not f.get("is_core", True) ...)`~~ —— 未設定(None) 會被當成
+    # 有衛星、v1 明示衛星反而當沒有。改看明確衛星。
+    from shared.policy_tier import resolve_tier as _resolve_tier_ws
+    has_sat = any(_resolve_tier_ws(f) == "satellite" for f in loaded)
     bench_ticker = st.session_state.get("mk_bench_ticker", "SPY")
     if has_sat:
         cols = st.columns([1, 3])
@@ -730,7 +757,8 @@ def render_mk_war_room(portfolio_funds: Optional[list] = None) -> None:
         index=0,
         key="mk_view_pick",
         horizontal=True,
-        help="三個視角共用同一份基金池：核心/衛星按 MK_Class 篩選；3-3-3 篩 3 年資 + 年化報酬 + 標準差。",
+        help="三個視角共用同一份基金池：核心/衛星按 MK_Class 篩選；3-3-3 篩 3 年資 + 年化報酬 + 標準差。"
+             + (("；" + _unset_note(df)) if _unset_note(df) else ""),
     )
     if _view_pick == _view_options[0]:
         _render_core_tab(df)

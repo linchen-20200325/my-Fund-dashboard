@@ -1431,7 +1431,11 @@ def _gap_action_text(summary: dict[str, Any]) -> str:
     #    或替它單獨接一個更窄的 except，不要靠這一個把所有東西一起蓋掉（§1）。
     try:
         _diff = float(_diff)
-        _total = float(summary.get("total_twd") or 0.0)
+        # ~~`_total = float(summary.get("total_twd") or 0.0)`~~ → 2026-10-10 客戶裁示（級別三態、
+        # 方案 B）：比例的分母是「已設定級別」的本金，搬移金額必須乘同一個分母；
+        # 乘全部本金會把未設定那份錢也算進來（等於叫客戶搬動沒有設定級別的部位）。
+        # 全部已設定時 classified_twd 與 total_twd 逐位元相同，金額不變。
+        _total = float(summary.get("classified_twd") or 0.0)
         if abs(_diff) < _ON_TARGET_TOL_PCT:
             return ""
         _need_twd = -_diff / 100.0 * _total
@@ -1453,7 +1457,10 @@ def _gap_action_text(summary: dict[str, Any]) -> str:
              else f"從核心移 {_amount} 到衛星")
     _missing = int(summary.get("n_missing_amount") or 0)
     _scope = ""
-    if _missing:
+    if int(summary.get("n_tier_unset") or 0):
+        # 2026-10-10（級別三態）：有未設定的檔時，這筆金額只涵蓋「已設定級別且已填本金」的那幾檔。
+        _scope = f"（只算已設定級別且已填本金的 {int(summary.get('n_in_ratio') or 0)} 檔）"
+    elif _missing:
         _n_priced = int(summary.get("n_funds") or 0) - _missing
         _scope = f"（只算已填本金的 {_n_priced} 檔）"
     return f"{_move}{MIX_MOVE_TAIL}{_scope}"
@@ -1554,6 +1561,11 @@ def _render_mix() -> None:
         #    漂移鎖：`tests/test_wf04_portfolio_skeleton.py::`
         #    `test_the_mix_block_never_prints_a_zero_when_it_cannot_compute`
         #    （同時釘「指到 `pf_ledger`」與「**不**指到 `pf_add`」兩條）。
+        # ⚠️ 2026-10-10（級別三態）：`_core is None` 現在也涵蓋「有本金但級別全未設定」。
+        #    那個狀態缺的是級別不是本金，`pf_ledger` 指錯地方；但實查 App 內**沒有任何
+        #    能設定 core／satellite 的入口**（`pf_policy_admin` 的保單清單是唯讀 dataframe、
+        #    v2 編輯器 `disabled=True`、SA 表單沒有級別欄），客戶裁示「沒有正確入口就不發明」
+        #    ⇒ 指路維持原狀，由 caption（S3）講「到 Google Sheet 的級別欄填」。
         not_ready(format_core_satellite_caption(_summary),
                   where=where_to_find("pf_ledger"))
         return

@@ -394,9 +394,10 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                 "currency":         st.column_config.TextColumn(
                                         "⬜ 幣別（自動）", disabled=True,
                                         help="存檔時從 MoneyDJ 帶入"),
+                # 2026-10-10：~~help="存檔時自動判斷，可手動修正"~~ —— 系統不再自動判斷級別
+                # （且本表唯讀），那句說明已不成立，移除（不另寫新文案）。
                 "tier":             st.column_config.SelectboxColumn(
-                                        "級別", options=["", "core", "satellite"],
-                                        help="存檔時自動判斷，可手動修正"),
+                                        "級別", options=["", "core", "satellite"]),
                 # v18.160：配息「現金給付 %」（單位數% = 100 - 該值）
                 "div_cash_pct":     st.column_config.NumberColumn(
                                         "🟨 現金給付 %",
@@ -474,7 +475,8 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
 
     # Step 1：保單名
     # v18.153：wizard 只露 user-input 欄位
-    # 自動帶：fund_name、currency（MoneyDJ）｜ units（公式算）｜ tier（_is_core_fund）
+    # 自動帶：fund_name、currency（MoneyDJ）｜ units（公式算）｜ ~~tier（_is_core_fund）~~
+    # 2026-10-10（客戶裁示：不猜級別）：tier 不再自動帶，寫進 Sheet 的是空白（未設定）。
     st.markdown("**Step 1 / 2：保單名稱**")
     pid = st.text_input("🟨 保單名稱", key="wiz_pid",
                           placeholder="例：富邦人壽-001").strip()
@@ -506,7 +508,7 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
                     disabled=not (pid and fcode and inv_twd > 0)):
         try:
             sanitized = _sanitize_tab_name(pid)
-            # 自動：MoneyDJ 抓 fund_name + currency；_is_core_fund 判 tier
+            # 自動：MoneyDJ 抓 fund_name + currency（~~_is_core_fund 判 tier~~ 已停用，tier 恆為空白）
             _fname, _ccy, _tier = _autofill_from_moneydj(fcode)
             rows = [{
                 "policy_id":        sanitized,
@@ -548,7 +550,10 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
 
 
 def _autofill_from_moneydj(fund_code: str) -> tuple[str, str, str]:
-    """v18.153：從 MoneyDJ 抓 fund_name / currency；用 _is_core_fund 判 tier。
+    """v18.153：從 MoneyDJ 抓 fund_name / currency。
+
+    ~~用 _is_core_fund 判 tier~~ —— 2026-10-10（客戶裁示：系統不以基金名稱猜核心／衛星，
+    也不把猜測寫進 Sheet）：第三個回傳值 tier **恆為空字串**（未設定），保留位置只為不改簽章。
 
     抓失敗 → 回 ("", "", "")，caller 再 fallback default。
     """
@@ -563,10 +568,4 @@ def _autofill_from_moneydj(fund_code: str) -> tuple[str, str, str]:
         ccy = raw.get("currency", "") or raw.get("metrics", {}).get("currency", "")
     except Exception:
         pass   # smoke-allow-pass — MoneyDJ 抓失敗，user 之後可手動補
-    if fname:
-        try:
-            from ui.helpers.session import is_core_fund
-            tier = "core" if is_core_fund(fname) else "satellite"
-        except Exception:
-            pass   # smoke-allow-pass
     return fname, ccy, tier
