@@ -101,11 +101,11 @@ Streamlit Cloud：到 Settings → Secrets，貼上同樣內容即可。
 | `currency` | str | 選填 | `USD` / `TWD` | 顯示用 |
 | `fx_at_buy` | float | 選填 | `31.5` | 進場匯率，未來算未實現匯損用 |
 | `notes` | str | 選填 | `第一年` | 備註 |
-| `policy_tier` | str | 選填 (P3) | `core` / `satellite` | 該基金在保單內定位；空白 fallback 為既有基金名啟發。大小寫不分，非法值視為空。|
+| `policy_tier` | str | 選填 (P3) | `core` / `satellite` | 該基金在保單內定位；空白＝級別未設定，系統**不**依基金名稱推定，該檔不計入核心/衛星比例。大小寫不分，非法值視為空。|
 
 **(policy_id, fund_url)** 是這張表的主鍵 — 即「同一張保單下不會有兩筆同檔基金的重複列」，但「同檔基金可以在不同保單裡各出現一次」。
 
-**向後相容**：舊 8 欄 Sheet 不需立即加 `policy_tier`；儀表板會自動降級為空字串並使用既有基金名啟發判定核心/衛星。新建 Sheet 建議直接寫 9 欄完整 schema。
+**向後相容**：舊 8 欄 Sheet 不需立即加 `policy_tier`；儀表板仍可讀取，缺欄或值為空時降級為空字串＝級別未設定（不依基金名稱推定、不計入核心/衛星比例）。「向後相容」僅指舊 Sheet 仍可讀。新建 Sheet 建議直接寫 9 欄完整 schema。
 
 ---
 
