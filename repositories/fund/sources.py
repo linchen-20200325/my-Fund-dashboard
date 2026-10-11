@@ -3240,8 +3240,10 @@ def _src_tcb_div(code: str) -> list:
                     if _amt is None or _amt <= 0 or _amt > 1000:
                         continue
                     _yld = safe_float(_cols[5]) or 0
+                    # ~~else ("TWD" if _is_dom else "")~~ —— 2026-10-11 客戶裁示 5:「境內 → TWD」
+                    # 是推定、不是幣別證據 → 缺幣別欄一律空白(未知),境內外同。
                     _cur = (_cols[6].strip() if len(_cols) > 6 and _cols[6].strip()
-                            else ("TWD" if _is_dom else ""))  # 境外缺幣別→空白(未知≠USD)
+                            else "")  # 缺幣別→空白(未知≠USD、≠TWD)
                     _out.append({
                         "date": _cols[0], "ex_date": _cols[1], "pay_date": _cols[2],
                         "amount": _amt, "yield_pct": _yld, "currency": _cur,

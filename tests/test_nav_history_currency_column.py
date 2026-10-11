@@ -667,10 +667,12 @@ def test_adopted_rows_carry_the_last_adopted_series_own_currency(
     _n, _start, _ccy = _MDJ_SPEC
     written = _wire_backfill(
         monkeypatch,
-        fd={"series": _daily(_n, _start, ccy=_ccy), "fund_name": "F"},
+        # ~~fd 無 currency + pool_ccy="EUR"(以選股池當預期幣別)~~ → 2026-10-11 客戶裁示 5:
+        #   選股池幣別不算可信預期幣別 → 改由抓取結果的來源宣告(fd["currency"])提供 EUR。
+        fd={"series": _daily(_n, _start, ccy=_ccy), "fund_name": "F", "currency": "EUR"},
         yahoo=_spec_series(yahoo_spec),
         morningstar=_spec_series(ms_spec),
-        pool_ccy="EUR")                     # 預期幣別(Q3:未知會被擋,故明示)
+        pool_ccy=None)                      # 預期幣別(Q3:未知會被擋,故明示)
     r = NS.backfill_to_gs(["X"])["results"][0]
 
     # ── fixture 對準檢查:換源真的發生、而且停在預期那一個來源 ──────────────

@@ -2078,3 +2078,42 @@ def test_d2_t7_call_carries_expected_ccy_keyword():
              and isinstance(n.func, ast.Name) and n.func.id == "_nav_now"]
     assert calls and all(any(k.arg == "expected_ccy" for k in c.keywords) for c in calls)
 
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 26) 客戶 2026-10-11 裁示 5(D3):
+#     (a) backfill `_expected_currency`:選股池幣別不算可信預期幣別 —— 只信來源明示(fd)
+#         或晨星硬編表,無則未知(→ 既有拒絕換源路徑);
+#     (b) `_src_tcb_div`:「境內 → TWD」推定取消,缺幣別欄 → 空白。
+# ════════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("code, fd, pool, want", [
+    ("ZZZD3", {}, "USD", ""),                     # 選股池 USD 不採 → 未知
+    ("ZZZD3", {}, "美元", ""),
+    ("TLZF9", {}, "TWD", "USD"),                  # 硬編表 → USD(池 TWD 不影響)
+    ("ZZZD3", {"currency": "美元"}, "TWD", "USD"),  # 來源明示 → 照收
+])
+def test_d3a_backfill_expected_ccy_not_from_pool(monkeypatch, code, fd, pool, want):
+    import repositories.pool_repository as P
+    import services.nav_history_store as NS
+    monkeypatch.setattr(P, "resolve_currency", lambda c: pool)
+    assert NS._expected_currency(code, fd) == want
+
+
+_TCB_DIV_HTML = (
+    "<table><tr><td>配息基準日</td><td>除息日</td><td>發放日</td><td>類別</td>"
+    "<td>每單位</td><td>年化</td><td>幣別</td></tr>"
+    "<tr><td>2026/09/01</td><td>2026/09/02</td><td>2026/09/10</td><td>配息</td>"
+    "<td>0.05</td><td>6.1</td>{ccy}</tr></table>")
+
+
+@pytest.mark.parametrize("code, ccy_cell, want", [
+    ("ACDD01", "", ""),                    # 境內、缺幣別欄 → 空白(舊:推定 TWD)
+    ("ACDD01", "<td></td>", ""),           # 境內、幣別欄空白 → 空白
+    ("TLZF9", "", ""),                     # 境外、缺欄 → 空白(既有)
+    ("ACDD01", "<td>新台幣</td>", "新台幣"),  # 頁面明示 → 照收
+])
+def test_d3b_tcb_div_no_domestic_twd_inference(monkeypatch, code, ccy_cell, want):
+    html = _TCB_DIV_HTML.format(ccy=ccy_cell)
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(html))
+    divs = S._src_tcb_div(code)
+    assert len(divs) == 1 and divs[0]["currency"] == want
