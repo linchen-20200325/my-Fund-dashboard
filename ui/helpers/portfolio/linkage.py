@@ -47,7 +47,11 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
 
     if _matched is not None:
         _amt = float(_matched.get("invest_twd", 0) or 0)
-        _tag = "核心(穩健)" if _matched.get("is_core") else "衛星(積極)"
+        # 2026-10-10（級別三態）：~~`"核心(穩健)" if is_core else "衛星(積極)"`~~ —— 只讀 is_core，
+        # 未設定與 v1 明示核心都被印成「衛星(積極)」。改走 L0 SSOT；未設定 → D3「⬜ 未設定」。
+        from shared.policy_tier import resolve_tier as _resolve_tier_lk
+        _tag = {"core": "核心(穩健)", "satellite": "衛星(積極)"}.get(
+            _resolve_tier_lk(_matched), "⬜ 未設定")
         if _total > 0 and _amt > 0:
             _w = _amt / _total * 100.0
             _msg = (f"✅ <b>此基金已在你的組合</b>：權重 <b style='color:{INFO_BLUE}'>"
@@ -87,7 +91,8 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
                         "code": _add_code,
                         "name": fund_name or _add_code,
                         "loaded": False,
-                        "is_core": True,   # 預設核心，使用者可在 Tab3 調整
+                        # ~~`"is_core": True,   # 預設核心`~~ —— 2026-10-10（客戶裁示：系統不替客戶
+                        # 決定級別）：不寫級別鍵，新條目即「未設定」，下次寫入 Sheet 也是空白。
                         "invest_twd": 0,
                     })
                     session_state["portfolio_funds"] = _pf

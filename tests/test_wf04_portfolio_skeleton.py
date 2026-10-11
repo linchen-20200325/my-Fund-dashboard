@@ -1874,7 +1874,11 @@ def test_a_portfolio_already_on_target_is_never_told_to_move_money():
     # 兩支**共用同一個容差**這件事，直接在邊界上驗一次 —— 不是靠「兩邊都寫 0.05」。
     # ⛔ 若哪天有人把其中一支改成別的數字，這裡就會出現「剛好落在目標上」
     #    與一句搬錢指令並存的畫面，而上面那兩條斷言在**那一組**參數下未必抓得到。
-    _base = {"total_twd": 1_000_000.0, "is_amount_weighted": True,
+    # ~~`_base = {"total_twd": 1_000_000.0, ...}`~~ —— 2026-10-10（級別三態、方案 B）：
+    # 搬移金額改乘 `classified_twd`（已設定級別的本金）。手寫摘要要帶上這個鍵，
+    # 否則分母是 0、本條就變成在測「沒有分母」而不是「容差」。全部已設定 ⇒ 兩鍵相等。
+    _base = {"total_twd": 1_000_000.0, "classified_twd": 1_000_000.0,
+             "is_amount_weighted": True,
              "n_funds": 2, "n_missing_amount": 0}
     assert _gap_action_text({**_base, "diff_pct": -_ON_TARGET_TOL_PCT / 2}) == "", (
         f"差距落在容差（{_ON_TARGET_TOL_PCT}）之內時，畫面說的是「剛好落在目標上」，"
@@ -1925,7 +1929,7 @@ def test_the_money_helper_refuses_an_untrustworthy_ratio():
     `or not summary.get("is_amount_weighted")` 拿掉 → **本條轉紅**
     （它會拿一個不可信的 `diff_pct` 算出一筆錢）。
     """
-    _fake = {"diff_pct": -13.0, "total_twd": 1_000_000.0,
+    _fake = {"diff_pct": -13.0, "total_twd": 1_000_000.0, "classified_twd": 1_000_000.0,
              "is_amount_weighted": False, "n_funds": 2, "n_missing_amount": 2}
     assert _gap_action_text(_fake) == "", (
         "`is_amount_weighted=False` 代表比例本身不可信（SSOT docstring 逐字），"
@@ -1940,12 +1944,14 @@ def test_the_money_helper_refuses_an_untrustworthy_ratio():
     # ⛔ 這不是「吞例外」：百分比那一半照樣會畫，消失的只有這句衍生結論 ——
     #    而它本來就算不出來（§1：寧可少講，不可講錯）。
     for _bad in (float("nan"), float("inf"), float("-inf")):
-        _dirty = {"diff_pct": -13.0, "total_twd": _bad,
+        # ~~`_dirty = {"diff_pct": -13.0, "total_twd": _bad, ...}`~~ —— 2026-10-10：分母改讀
+        # `classified_twd`；壞值要放在**被讀的那個鍵**上，本條才仍然在測 NaN／inf。
+        _dirty = {"diff_pct": -13.0, "total_twd": _bad, "classified_twd": _bad,
                   "is_amount_weighted": True, "n_funds": 2, "n_missing_amount": 0}
         assert _gap_action_text(_dirty) == "", (
             f"`total_twd={_bad}` 時應該安靜回空字串，實際回了："
             f"{_gap_action_text(_dirty)!r}")
-        _dirty2 = {"diff_pct": _bad, "total_twd": 1_000_000.0,
+        _dirty2 = {"diff_pct": _bad, "total_twd": 1_000_000.0, "classified_twd": 1_000_000.0,
                    "is_amount_weighted": True, "n_funds": 2, "n_missing_amount": 0}
         assert _gap_action_text(_dirty2) == "", (
             f"`diff_pct={_bad}` 時應該安靜回空字串，實際回了："
@@ -3537,3 +3543,51 @@ def test_the_button_assertion_is_still_an_exact_equality():
         "按鈕斷言的右邊不是 `_expected_button_labels()` —— "
         f"實際：{ast.unparse(_right)[:120]}\n"
         "⛔ 就地拼一份預期清單會繞過 `_ALLOWED_EXTRA_BUTTONS` 那道關卡。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-10-10｜級別三態（客戶裁示方案 B）—— ⑨ 這一格的未設定行為（真渲染）
+# ══════════════════════════════════════════════════════════════════
+#: 有本金、但**級別全未設定**的兩檔（沒有 `policy_tier`、沒有 `is_core`）。
+FAKE_HOLDINGS_PRICED_UNSET: list[dict[str, Any]] = [
+    {"code": "TESTCODE1", "name": "測試標的一", "loaded": True, "invest_twd": 600000},
+    {"code": "TESTCODE2", "name": "測試標的二", "loaded": True, "invest_twd": 500000},
+]
+
+#: 核心 60 萬、衛星 10 萬、未設定 50 萬（第一組規格的示範數字）。
+FAKE_HOLDINGS_PARTLY_UNSET: list[dict[str, Any]] = [
+    {"code": "TESTCODE1", "name": "測試標的一", "loaded": True,
+     "invest_twd": 600000, "policy_tier": "core"},
+    {"code": "TESTCODE2", "name": "測試標的二", "loaded": True,
+     "invest_twd": 100000, "policy_tier": "satellite"},
+    {"code": "TESTCODE3", "name": "測試標的三", "loaded": True, "invest_twd": 500000},
+]
+
+
+def test_g3_all_unset_with_money_shows_no_ratio_and_no_move():
+    """⭐ 全部未設定（有本金）→ 不算比例：灰態 ＋ S3，畫面任何地方不得出現
+    「衛星 100」「從衛星移」與任何金額指令。
+
+    突變：helper 的比例分母改回 `total_twd`（未設定算衛星）→ 現況印「核心 0.0% 衛星 100.0%」
+    並叫人「從衛星移 NT$825,000 到核心」，本條紅。
+    """
+    _body = "\n".join(_segments(tuple(_flat(_app(FAKE_HOLDINGS_PRICED_UNSET).main)))
+                      .get(BLOCK_MIX, []))
+    assert _body.strip(), f"單位「{BLOCK_MIX}」不見了。"
+    assert NOT_READY_MARK in _body, f"算不出比例就該是灰態：\n{_body}"
+    assert "⬜ 2 檔級別皆未設定 → 無法算核心／衛星比例" in _body, _body
+    for _bad in ("衛星 100", "從衛星移", "從核心移", "NT$", MIX_MOVE_TAIL):
+        assert _bad not in _body, (_bad, _body)
+
+
+def test_g1_partly_unset_moves_only_classified_money():
+    """⭐ 核心 60 萬、衛星 10 萬、未設定 50 萬、目標 75% →
+    現況 核心 85.7% ／ 衛星 14.3%；差距一行要說「從核心移 NT$75,000 到衛星」與射程句。
+
+    突變：⑨ `_gap_action_text` 的分母改回 `total_twd` → 印 NT$128,571，本條紅。
+    """
+    _line = _mix_gap_paragraph(funds=FAKE_HOLDINGS_PARTLY_UNSET,
+                               session={"portfolio_core_pct": 75})
+    assert "核心比目標多 10.7%" in _line, _line
+    assert "從核心移 NT$75,000 到衛星" in _line, _line
+    assert "（只算已設定級別且已填本金的 2 檔）" in _line, _line

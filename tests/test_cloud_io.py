@@ -322,7 +322,7 @@ def test_dump_routes_to_v2_when_detected(monkeypatch):
     monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
                          lambda c, s: "v2")
     monkeypatch.setattr(cloud_io, "write_policy_v2",
-                         lambda c, s, pid, df: (_v2_calls.append((pid, len(df))),
+                         lambda c, s, pid, df, **k: (_v2_calls.append((pid, len(df))),
                                                   len(df))[1])
     monkeypatch.setattr(cloud_io, "upsert_fund_in_policy",
                          lambda *a, **k: _v1_calls.append(a))
@@ -441,7 +441,7 @@ def test_v2_round_trip_keeps_10_cols(monkeypatch):
     _captured_df = {}
     monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
                          lambda c, s: "v2")
-    def _capture(c, s, pid, df):
+    def _capture(c, s, pid, df, **k):
         _captured_df[pid] = df.copy()
         return len(df)
     monkeypatch.setattr(cloud_io, "write_policy_v2", _capture)
