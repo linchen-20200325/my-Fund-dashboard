@@ -18,8 +18,8 @@ def _render_mk_signal_table(funds: list) -> None:
     """⑩ 買賣點表(跨檔對比)。
 
     每檔基金顯示:
-      - 資產屬性(核心/衛星/混合)
-      - 操作訊號(依目前景氣階段)
+      - 基金屬性(2026-10-11 起恆「—」:無可追溯的原始分類來源前不顯示,不依名稱推定)
+      - 操作訊號(2026-10-11 起恆「—」:名稱推定的買賣訊號已停用)
       - 自動配比建議(股/債%)
       - 買賣水平線(buy1~3 / sell1~3,sourced from precision metrics)
       - 現價在哪一段(用顏色暗示)
@@ -140,7 +140,7 @@ def mk_signal_by_code(funds: list, phase: str, score) -> dict:
             _zone = "⚪ 區間內"
 
         out[_code] = {
-            "資產屬性": _asset_class,
+            "基金屬性": _asset_class,
             "操作訊號": _sig_label,
             "買 3 (深跌)": f"{_b3:.2f}" if _b3 is not None else "—",
             "買 1 (小跌)": f"{_b1:.2f}" if _b1 is not None else "—",

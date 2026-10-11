@@ -308,6 +308,12 @@ _NO_GUESS_FILES = (
     "ui/helpers/v2_editor.py",
     "ui/tab3_portfolio.py",
     "ui/tab3_t7_ledger.py",
+    # 2026-10-11（客戶裁示）：單檔頁卡片／② 健診大表／③ 批次大表的「基金屬性」「操作訊號」
+    # 路徑也不得呼叫名稱啟發式（行為面與 mk_fund_signal 本體的結構守衛見 test_tier_q6_asset_attr_retired.py）。
+    "ui/tab2_single_fund.py",
+    "ui/helpers/macro/helpers.py",
+    "ui/helpers/fund_grp_health/signals.py",
+    "ui/helpers/fund_grp_health/unified.py",
 )
 
 

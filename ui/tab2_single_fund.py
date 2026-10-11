@@ -4,7 +4,7 @@
 
 設計：
 - render_single_fund_tab() -> None **零閉包依賴**（與 Tab4/5/6 同設計）
-- 外部 helper 從 ui.helpers.session import（_friendly_error / _is_core_fund / calc_data_health）
+- 外部 helper 從 ui.helpers.session import（_friendly_error / calc_data_health；2026-10-11 起不再 import is_core_fund，不依名稱猜級別）
 
 對外 API:
 - render_single_fund_tab() -> None
@@ -83,7 +83,6 @@ from ui.helpers.macro_helpers import (
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.session import (
     friendly_error as _friendly_error,  # noqa: F401 — re-export for tests / external import
-    is_core_fund as _is_core_fund,
     calc_data_health as _calc_data_health_pure,
 )
 
@@ -375,7 +374,6 @@ def render_single_fund_tab() -> None:
                 "moneydj_raw": fd_raw,
                 "page_type":   _t2_page_type,
                 # v18.18: 補上 metadata 讓 Tab5 「資料診斷」footer 顯示完整
-                "is_core":     _is_core_fund(fd_raw.get("fund_name","") or fd_raw.get("full_key","")),
                 "currency":    fd_raw.get("currency","") or fd_raw.get("metrics",{}).get("currency",""),
             }
             # v18.272：記錄到「曾經查過的基金清單」（Tab6 說明書顯示）
@@ -684,7 +682,7 @@ def render_single_fund_tab() -> None:
                     from ui.components.cards import gh_card
                     from ui.helpers.macro_helpers import format_phase_score  # v19.403 景氣位階 SSOT
                     st.markdown(gh_card(
-                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:{INFO_BLUE}'>{sig['asset_class']}</div></div>"
+                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>基金屬性</div><div style='font-size:14px;font-weight:700;color:{INFO_BLUE}'>{sig['asset_class']}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>策略3 操作訊號</div><span style='{_sig_style};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;display:inline-block'>{sig['label']}</span></div>"
                         f"<div style='flex:1'><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>景氣位階（{format_phase_score(phase_info_s)}）</div>"
                         f"<div style='font-size:12px;color:{GH_FG_SECONDARY}'>{sig['reason']}</div></div>",

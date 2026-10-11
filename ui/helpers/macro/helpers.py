@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.269 D8 Phase 4 (#3):CPI bull_high SSOT(SPEC §16.2 inflection_detection)
 from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as _CPI_THR
 
@@ -89,30 +89,27 @@ def format_phase_score(phase_info: dict | None) -> str:
 # ══════════════════════════════════════════════════════
 # HELPER: mk_fund_signal
 # ══════════════════════════════════════════════════════
+# 2026-10-11（客戶裁示：停用依基金名稱推定核心／衛星）：
+# 本函式原以「基金名稱／基金種類」關鍵字猜核心資產／衛星資產／混合型，並據此從
+# `RECS[phase][is_core]` 給買進／賣出類操作句。名稱不是級別的可追溯來源 ——
+#   (1) 客戶設定的「核心／衛星級別」只來自 Google Sheet 的 policy_tier
+#       （SSOT：`shared/policy_tier.py::resolve_tier`），不得由名稱、AI 或其他推測補值；
+#   (2)「基金屬性」（舊稱「資產屬性」）是基金本身的客觀分類，只有取得 MoneyDJ／FundClear
+#       等可追溯的原始分類資料時才可顯示。**目前沒有這樣的來源 ⇒ 一律「—」**。
+# 因此 `asset_class`／`label` 恆為「—」、`sig_type` 恆為 "none"、`reason` 恆為空；
+# 不論景氣位階（phase／score）是否接回，都不得重新啟用名稱推定。
+# 簽名與回傳鍵刻意不變（caller 不連動修改）；`auto_alloc`（PMI／VIX／失業率／CPI 的
+# 股債配比）與基金名稱無關，原封保留。
+# 守衛：tests/test_tier_q6_asset_attr_retired.py。
+_NO_FUND_ATTR = "—"
+# 與停用前 sig_type="none" 實際落到的樣式（原 SIG["hold"]）逐字相同，不改畫面。
+_NO_SIGNAL_STYLE = "background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE}"
+
+
 def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
-    name  = (fund_info.get("基金名稱","") or fund_info.get("name","") or fund_info.get("fund_name","")).lower()
-    ftype = (fund_info.get("基金種類","") or "").lower()
-    core_kw = ["收益","配息","債","高股息","均衡","平衡","公債","income","bond","fixed"]
-    sat_kw  = ["科技","ai","半導體","新興","生技","成長","tech","equity","growth","theme"]
-    is_core = any(k in name or k in ftype for k in core_kw)
-    is_sat  = any(k in name or k in ftype for k in sat_kw) and not is_core
-    asset_class = "核心資產 🛡️" if is_core else ("衛星資產 ⚡" if is_sat else "混合型 ⚖️")
-    RECS = {
-        "復甦": {True:("🟢 買進加碼","buy","復甦期景氣反轉，核心配息資產為最高勝率佈局"),False:("🟢 積極買進","buy","復甦期是衛星資產最佳進場點，成長基金爆發力強")},
-        "擴張": {True:("⚪ 持有核心","hold","擴張期繼續持有核心配息資產，定期收息再投入"),False:("🟡 持有設停利","hold","擴張期衛星資產保持持有，設停利點 +10~15%")},
-        "高峰": {True:("🟡 持有減碼","switch","景氣高峰，核心資產可適度減碼增加防禦性債券"),False:("🔴 賣出獲利","sell","高峰期衛星資產應積極獲利了結，避免高基期風險")},
-        "衰退": {True:("🟢 逢低買進","buy","衰退末期優先佈局核心配息資產，等待景氣拐點"),False:("⏸️ 觀望等待","hold","衰退期衛星資產避免進場，等待PMI落底確認訊號")},
-    }
-    # 2026-10-10（客戶裁示 V5／Q5 止血）：~~判不出核心或衛星的「混合型」走 `RECS[phase][False]`~~
-    # —— 等於名稱沒猜中核心就拿衛星專屬的動作句（例：高峰「🔴 賣出獲利」）。
-    # 無法確認核心或衛星 → 不給任何核心／衛星專屬動作句（操作訊號「—」）。只擋這一條，不改訊號系統。
-    if not is_core and not is_sat:
-        label, sig_type, reason = "—", "none", ""
-    else:
-        label, sig_type, reason = RECS.get(phase, RECS["擴張"])[is_core]
-    # v19.252 Phase 4A:sell 走 TRAFFIC_RED SSOT(原 inline #f85149)
-    SIG = {"buy":"background:#1a3328;color:{MATERIAL_GREEN};border:1px solid {MATERIAL_GREEN}","sell":f"background:#3a1a1a;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED}","hold":"background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE}","switch":"background:#3a2a10;color:#f0a500;border:1px solid #f0a500"}
-    sig_style = SIG.get(sig_type, SIG["hold"])
+    # fund_info / phase / score 僅為相容舊簽名而保留：基金屬性與操作訊號都不依它們推定。
+    asset_class, label, sig_type, reason = _NO_FUND_ATTR, _NO_FUND_ATTR, "none", ""
+    sig_style = _NO_SIGNAL_STYLE
     _ind  = st.session_state.get("indicators", {})
     _pmi  = _ind.get("PMI",{}).get("value"); _vix = _ind.get("VIX",{}).get("value")
     _ue   = _ind.get("UNEMPLOYMENT",{}).get("value")
