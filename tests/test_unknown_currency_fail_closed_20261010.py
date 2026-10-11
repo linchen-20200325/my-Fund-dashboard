@@ -566,7 +566,9 @@ def _t7_namespace(fx_calls, saves, nav_calls=None):
     ns = {
         "st": _T7St(), "pd": pd, "_d_t7": _dt.date,
         "_ccy_calc_t7": fund_currency_for_calc,
-        "_nav_now": lambda code: (nav_calls.append(code) if nav_calls is not None else None) or 10.0,
+        # 2026-10-10 客戶裁示 4(D2):T7 呼叫帶 expected_ccy= → 替身同步收這個參數
+        "_nav_now": lambda code, expected_ccy=None: (
+            nav_calls.append(code) if nav_calls is not None else None) or 10.0,
         "_fx_now": lambda pair: fx_calls.append(pair) or 32.0,
         "_FX_FALLBACK": {"USD": 32.0},
         "fund_pk_str": lambda f: f"{f.get('policy_id', '')}::{f.get('code', '')}",
@@ -805,7 +807,7 @@ def test_fee_deduction_conflict_excluded_and_no_fx(monkeypatch):
     assert [e["reason"] for e in exc] == ["缺計價幣別"]          # 衝突 → 既有「缺計價幣別」
     assert [e["currency"] for e in eng] == ["USD"]              # 已知 USD 照舊
     fx_calls = []
-    monkeypatch.setattr(FS, "get_latest_nav", lambda code: 10.0)
+    monkeypatch.setattr(FS, "get_latest_nav", lambda code, expected_ccy=None: 10.0)   # D2
     monkeypatch.setattr(FS, "get_latest_fx", lambda pair: fx_calls.append(pair) or 32.0)
     _r = _make_nav_fx_fn()
     assert _r(_CONFLICT) == (10.0, None) and fx_calls == []
@@ -1275,7 +1277,7 @@ def test_fee_deduction_latest_nav_none_is_excluded_not_zero(monkeypatch):
     import services.fund_service as FS
     from models.policy import fund_pk_str
     from ui.helpers.portfolio.fee_deduction import _make_nav_fx_fn, build_fee_inputs
-    monkeypatch.setattr(FS, "get_latest_nav", lambda code: None)
+    monkeypatch.setattr(FS, "get_latest_nav", lambda code, expected_ccy=None: None)   # D2
     monkeypatch.setattr(FS, "get_latest_fx", lambda pair: 32.0)
     _r = _make_nav_fx_fn()
     assert _r(_KNOWN_USD)[0] == pytest.approx(10.29)      # 序列末值
@@ -2002,3 +2004,77 @@ def test_r2_consistent_currency_still_swaps(monkeypatch, cur, declared, ms_ccy):
     (s, src, _), calls = _span_ext_cur(monkeypatch, code, cur_ccy=cur, ms_ccy=ms_ccy,
                                        declared=declared)
     assert src == "morningstar(span-extend)" and len(s) == 800 and len(calls) == 1
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 25) 客戶 2026-10-11 裁示 4(D2):Sheet 幣別 → 最新淨值最小路徑
+#     L2 facade `services.fund_service.get_latest_nav` 透傳 `expected_ccy`;
+#     fee_deduction 與 T7 `_latest_nav_fx_t7` 把已算好的 calc 幣別帶進去。
+# ════════════════════════════════════════════════════════════════════════════
+def test_d2_facade_passes_expected_ccy(monkeypatch):
+    import repositories.fund as RF
+    import services.fund_service as FS
+    seen = []
+
+    def _l1(code, expected_ccy=None):
+        seen.append((code, expected_ccy))
+        return 1.0
+
+    monkeypatch.setattr(RF, "get_latest_nav", _l1)
+    FS.get_latest_nav("X1")                          # None → 行為不變(不帶參數)
+    FS.get_latest_nav("X1", "USD")                   # 位置參數
+    FS.get_latest_nav("X1", expected_ccy="")         # 關鍵字;"" = 明示未知
+    assert seen == [("X1", None), ("X1", "USD"), ("X1", "")]
+
+
+def test_d2_conflict_empty_rejects_non_native_and_cache_not_polluted(monkeypatch):
+    """同 code 先 "USD"(晨星 USD → 採用)再 ""(明示未知 → 非原生拒用):快取鍵不互相汙染。"""
+    ms = _nav_s(9.9, "Morningstar:UK:timeseries:X", "USD")
+    import repositories.fund.fx_and_main as FM
+    import repositories.macro_repository as MRP
+    import repositories.pool_repository as P
+    _empty = pd.Series(dtype=float)
+    monkeypatch.setattr(P, "resolve_currency", lambda c: None)
+    monkeypatch.setattr(MRP, "fetch_yf_close", lambda *a, **k: _empty)
+    monkeypatch.setattr(FM, "_src_yahoo_finance_nav", lambda c: _empty)
+    monkeypatch.setattr(FM, "_src_cnyes_nav", lambda c: _empty)
+    monkeypatch.setattr(FM, "_src_morningstar_nav", lambda c, **_k: ms)
+    import services.fund_service as FS
+    FM.get_latest_nav.cache_clear()
+    try:
+        assert FS.get_latest_nav("ZZZD2", expected_ccy="USD") == pytest.approx(9.9)
+        assert FS.get_latest_nav("ZZZD2", expected_ccy="") is None
+        assert FS.get_latest_nav("ZZZD2", expected_ccy="USD") == pytest.approx(9.9)
+    finally:
+        FM.get_latest_nav.cache_clear()
+
+
+def test_d2_fee_deduction_passes_calc_currency(monkeypatch):
+    import services.fund_service as FS
+    from ui.helpers.portfolio.fee_deduction import _make_nav_fx_fn
+    seen = []
+    monkeypatch.setattr(FS, "get_latest_nav",
+                        lambda code, expected_ccy=None: seen.append((code, expected_ccy)) or 10.0)
+    monkeypatch.setattr(FS, "get_latest_fx", lambda pair: 32.0)
+    _r = _make_nav_fx_fn()
+    _r(_KNOWN_USD)
+    _r(_CONFLICT)
+    assert seen == [("TLZF9", "USD"), ("ACDD01", "")]     # 衝突 → 明示未知
+
+
+def test_d2_t7_latest_nav_passes_calc_currency():
+    seen = []
+    ns = _t7_namespace([], [])
+    ns["_nav_now"] = lambda code, expected_ccy=None: seen.append((code, expected_ccy)) or 10.0
+    ns["_latest_nav_fx_t7"]({"code": "U", "currency": "USD"})
+    ns["_latest_nav_fx_t7"]({"code": "C", "currency": "TWD", "moneydj_raw": {"currency": "USD"}})
+    assert seen == [("U", "USD"), ("C", "")]
+
+
+def test_d2_t7_call_carries_expected_ccy_keyword():
+    """AST 守衛:T7 `_latest_nav_fx_t7` 呼叫 `_nav_now` 必須帶 `expected_ccy=`。"""
+    fn = _t7_func("_latest_nav_fx_t7")
+    calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "_nav_now"]
+    assert calls and all(any(k.arg == "expected_ccy" for k in c.keywords) for c in calls)
+

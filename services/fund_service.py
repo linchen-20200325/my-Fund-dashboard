@@ -1413,12 +1413,18 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     return _l1_impl(currency_pair, fred_api_key)
 
 
-def get_latest_nav(fund_ticker: str) -> "float | None":
+def get_latest_nav(fund_ticker: str, expected_ccy: "str | None" = None) -> "float | None":
     """v19.511 L2 facade — 包 L1 `repositories.fund.get_latest_nav`(mirror get_latest_fx R16
     EX-PASSTHRU-1 升級)。UI(L3)不直呼 L1 fetcher,走本 thin wrapper 取最新淨值(§8.2)。
-    抓不到 → None(§1;呼叫端誠實排除,不硬給)。"""
+    抓不到 → None(§1;呼叫端誠實排除,不硬給)。
+
+    `expected_ccy`(2026-10-10 客戶裁示 4,選填):呼叫端已確認的計價幣別(Sheet 與來源一致),
+    原樣傳給 L1 作非原生報價來源的幣別守門;`None` → 行為不變(L1 自行判定);
+    `""` → 呼叫端明示未知 / 衝突。"""
     from repositories.fund import get_latest_nav as _l1_impl
-    return _l1_impl(fund_ticker)
+    if expected_ccy is None:
+        return _l1_impl(fund_ticker)
+    return _l1_impl(fund_ticker, expected_ccy=expected_ccy)
 
 
 def get_latest_vix() -> "float | None":

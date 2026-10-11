@@ -176,7 +176,8 @@ def _make_nav_fx_fn():
         _ccy = fund_currency_for_calc(fund)
         _nav = None
         try:
-            _nav = get_latest_nav(_code)
+            # 2026-10-10 客戶裁示 4:把已算好的 Sheet／來源一致幣別帶給最新淨值的幣別守門
+            _nav = get_latest_nav(_code, expected_ccy=_ccy)
         except Exception:  # noqa: BLE001 — 抓不到 → 退 series(§1 由上層排除,不假值)
             _nav = None
         if _nav is None:

@@ -518,7 +518,7 @@ def render_t7_section() -> None:
             def _latest_nav_fx_t7(_fund: dict) -> tuple:
                 _code = str(_fund.get("code", "")).strip()
                 _ccy  = _ccy_calc_t7(_fund)   # ~~_norm_ccy(_fund.get("currency", "USD"))~~ # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
-                _nav  = _nav_now(_code)
+                _nav  = _nav_now(_code, expected_ccy=_ccy)   # 2026-10-10 客戶裁示 4:Sheet 幣別 → 最新淨值守門
                 if _nav is None:
                     _s = _fund.get("series")
                     if _s is not None and len(_s.dropna()):
