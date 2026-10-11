@@ -2345,7 +2345,10 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
     "fund_url":     str,                      # ┘ (policy_id, fund_url)
     "fund_code":    str (6 digits or alpha-prefixed insurance code),
     "invest_twd":   int (TWD **金額**,非權重;解析失敗須顯式回報不可靜默歸零),
-    "policy_tier":  str ∈ {"core","satellite",""} (選填,大小寫不分;空 → 退基金名啟發),
+    "policy_tier":  str ∈ {"core","satellite",""} (選填,大小寫不分;~~空 → 退基金名啟發~~ → 空 = 未設定,不猜、不進比例;三態 core/satellite/未設定,見 `shared/policy_tier.py::resolve_tier`),
+    # ⚠️ 2026-10-11 有意識的更正,不是漏刪(決策者:客戶授權 2026-10-11;出處 #922 / 客戶 2026-10-10 裁示「不猜級別」)。
+    #    舊表述「空 → 退基金名啟發」在寫下當時為真;被推翻的是它的前提——系統已不以基金名稱猜級別。
+    #    只更正這一註,條文其餘語意未動。
     # 其餘欄位見 docs/POLICY_SHEETS_SETUP.md
 }
 # 權重是**算出來的**不是存的:核心/衛星比例 = Σ invest_twd 加權
