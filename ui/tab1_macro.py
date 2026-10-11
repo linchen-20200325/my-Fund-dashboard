@@ -1550,7 +1550,7 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     code = _f.get("code", "?") or "?"
     name = (_f.get("name") or code)[:30]
 
-    # 核心 / 衛星判定走全站唯一那支（Sheet `policy_tier` 優先，缺則退基金名啟發）。
+    # 核心 / 衛星判定走全站唯一那支 resolve_core_flag（只認 `policy_tier`／嚴格布林 `is_core`，未設定回 False，不依基金名稱推定）。
     # 2026-08-07：本處原本 inline 了一份同語意的 if/elif —— 那是「全站一把尺」
     # 收斂時的第 4 個漏網點（前三處在 tab3 已收）。決策矩陣的逐檔行動建議吃的就是
     # 這個 is_core，兩份實作只要有一份沒跟上 Sheet 的改動，同一檔基金在保單卡片與
