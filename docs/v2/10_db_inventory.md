@@ -1711,7 +1711,7 @@ key ＝ `f"{tab_key}:{sha1(snapshot)[:16]}"`（`:31,32`）；路徑 `:24`；上�
 | `portfolio_funds[].metrics` | **未落地** | **UI** | `ui/helpers/portfolio/load.py:239` | |
 | `portfolio_funds[].moneydj_raw` | **未落地** | **UI** | `ui/helpers/portfolio/load.py:240` | 整包原始回應；`json_backup.py:22` 明文剝掉 |
 | `portfolio_funds[].risk_metrics` | **未落地** | **UI** | `ui/helpers/portfolio/load.py:241` | |
-| `portfolio_funds[].is_core` | 活的 | **UI** | `ui/helpers/portfolio/load.py:242` | 由基金名啟發式推（`_is_core`）；落地時轉成 `_持倉總覽.級別` 中文（`repositories/snapshot_repository.py:250`） |
+| `portfolio_funds[].is_core` | 活的 | **UI** | `ui/helpers/portfolio/load.py:242` | ~~由基金名啟發式推（`_is_core`）~~（**2026-10-11 更正，出處 #922／客戶 2026-10-10 裁示「不猜級別」**：`load.py` 已不再以基金名稱寫入 `is_core`，級別只沿用從 Sheet 讀回的三態〔核心／衛星／未設定〕，見 `shared/policy_tier.py::resolve_tier`；舊行號 `:242` 亦已不指該欄）；落地時轉成 `_持倉總覽.級別` 中文（`repositories/snapshot_repository.py:250`） |
 | `portfolio_funds[].loaded` | **未落地** | **UI** | `ui/helpers/portfolio/load.py:245`；`ui/helpers/portfolio/add_entry.py:146` | |
 | `portfolio_funds[].load_error` | **未落地** | **UI** | `ui/helpers/portfolio/load.py:232,245`；`add_entry.py:147` | |
 
