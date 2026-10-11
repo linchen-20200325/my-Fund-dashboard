@@ -37,7 +37,7 @@ def render_regime_fit_section(rows: list, *, show_current_regime: bool = True) -
     st.markdown("### 🧭 景氣位階適配")
     _lead = (f"當前景氣位階:**{_rc or '未偵測(請先看總經 Tab)'}**。"
              if show_current_regime else "當前景氣位階見本頁最上方的市場環境橫幅。")
-    st.caption(_lead + "依各標的資產屬性 + 抗跌/追漲"
+    st.caption(_lead + "依各標的基金類別(系統依關鍵字歸類的系統分類)+ 抗跌/追漲"
                "對照當前景氣 → 參考傾向(**非買賣建議、非 % 配置**)。詳細理由見大表「景氣適配 / 適配傾向」欄。")
 
     def _has(_r, _kw):
@@ -55,6 +55,6 @@ def render_regime_fit_section(rows: list, *, show_current_regime: bool = True) -
     c4.metric("⬜ 無法判定", len(_na))
 
     if _head:
-        st.caption("⚠️ **逆風**(資產屬性與當前景氣相左,可留意 —— 非賣出訊號):"
+        st.caption("⚠️ **逆風**(基金類別的系統分類與當前景氣相左,可留意 —— 非賣出訊號):"
                    + "、".join(f"{(r.get('基金名') or r.get('code'))}"
                               f"（適合 {r.get('適配傾向') or '—'}）" for r in _head[:10]))

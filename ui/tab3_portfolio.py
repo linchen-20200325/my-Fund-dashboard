@@ -240,7 +240,7 @@ def render_portfolio_tab() -> None:
     render_story_nav("portfolio")
     # 「六因子評分」自 v19.177 起已不再用於評等（改 4 維健診），標題不再這樣寫，
     # 免得使用者去說明書查一個退役模型（2026-08 稽核必修 8 同型）。
-    st.caption("加入多檔基金，即時計算核心/衛星配比（金額加權）、4 維健診評等、現金流估算")
+    st.caption("加入多檔基金，依你在 Google Sheet 設定的配置級別，即時加總核心／衛星配比（金額加權）、4 維健診評等、現金流估算")
 
     if "portfolio_funds" not in st.session_state:
         st.session_state.portfolio_funds = []

@@ -118,7 +118,7 @@ def render_fetch_diag_section(fd: dict, status_fd: str, fund_name: str) -> None:
             f"風險指標 (wb07):     {'✅' if _has_risk    else '❌'}\n"
             f"配息歷史 (wb05):     {'✅' if _has_div     else '❌'}\n"
             f"最新淨值: {_mj_raw.get('nav_latest', '—')}\n"
-            f"基金類別: {_mj_raw.get('fund_type',  '—')}\n"
+            f"基金類型（MoneyDJ）: {_mj_raw.get('fund_type',  '—')}\n"
             f"page_type: {fd.get('page_type', '—')}\n"
             f"────────────────────────\n"
             f"📊 進階指標(對齊 calc_fund_factor_score SSOT):\n"
