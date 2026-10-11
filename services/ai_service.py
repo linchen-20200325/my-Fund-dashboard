@@ -20,6 +20,7 @@ build_stale_flags / event_impact_analysis 4 fn(共 ~214 LOC, 0 production caller
 2 dead helper。
 """
 from infra.llm import _call_gemini, call_llm
+from shared.policy_tier import resolve_tier  # L2→L0（級別三態 SSOT）
 from services.ai_prompts import build_mk_advisor_prompt
 
 # ── 核心/衛星關鍵字分類 ──────────────────────────────────────
@@ -158,22 +159,26 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
     tot_inv_twd = sum(int(f.get("invest_twd", 0) or 0) for f in loaded)
 
     # 按 code 聚合：同 code 多保單合併 invest_twd，policies 列表保留
+    # 2026-10-10（級別三態）：聚合鍵 ~~`code`~~ → `(code, 級別)`。只依 code 聚合會拿第一筆的
+    # 級別當整組的級別 —— 同一檔在 A 保單設衛星、B 保單未設定，合併金額（含未設定的錢）
+    # 會被標成「[衛星]」。級別相同時與舊行為一致。
     _by_code: dict = {}
     for f in loaded:
         _c = str(f.get("code", "?")).strip() or "?"
-        if _c not in _by_code:
-            _by_code[_c] = {
+        _key = (_c, resolve_tier(f))
+        if _key not in _by_code:
+            _by_code[_key] = {
                 "fund": f,   # 取第一個樣本當代表（NAV/配息等同 code 都一樣）
                 "total_inv": 0,
                 "policies": [],
             }
-        _by_code[_c]["total_inv"] += int(f.get("invest_twd", 0) or 0)
+        _by_code[_key]["total_inv"] += int(f.get("invest_twd", 0) or 0)
         _pid = str(f.get("policy_id") or "(未綁)").strip()
-        if _pid not in _by_code[_c]["policies"]:
-            _by_code[_c]["policies"].append(_pid)
+        if _pid not in _by_code[_key]["policies"]:
+            _by_code[_key]["policies"].append(_pid)
 
     _lines = []
-    for _c, _agg in list(_by_code.items())[:20]:   # cap 20 unique codes
+    for (_c, _tier_k), _agg in list(_by_code.items())[:20]:   # cap 20 unique (code, 級別)
         f = _agg["fund"]
         m = f.get("metrics") or {}
         mj = f.get("moneydj_raw") or {}
@@ -196,7 +201,8 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
         if tr1y_f is not None and adr_f > 0 and tr1y_f < adr_f:
             eating = f" ⚠️吃本金({adr_f-tr1y_f:.1f}pp)"
         sharpe = m.get("sharpe", "—")
-        is_core = "核心" if f.get("is_core") else "衛星"
+        # ~~`"核心" if f.get("is_core") else "衛星"`~~（只讀 is_core：未設定與 v1 明示核心都成了「衛星」）
+        is_core = {"core": "核心", "satellite": "衛星"}.get(_tier_k, "未設定")
         _n_pol = len(_agg["policies"])
         _pol_tag = f"｜跨 {_n_pol} 保單" if _n_pol > 1 else ""
         _lines.append(

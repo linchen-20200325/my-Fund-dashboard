@@ -25,6 +25,8 @@ import json as _json
 import pandas as pd
 
 from repositories.policy_repository import PolicySheetError
+# 級別判定 SSOT 在 L0（本檔 L1 不得 import L3，`CLAUDE.md §8.2`）。
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, resolve_tier
 # v19.385 T2a:gspread 429 偵測 + 退避收 L0 infra(與 policy/_helpers 去重)。
 from infra.gspread_retry import (
     with_quota_retry as _shared_quota_retry,
@@ -247,8 +249,11 @@ def save_holdings_overview(
         pid = str(f.get("policy_id", "") or "")
         if not pid and "::" in pk_str:
             pid = pk_str.split("::", 1)[0]
-        tier = ("核心" if f.get("is_core")
-                else "衛星" if f.get("is_core") is False else "")
+        # 2026-10-10：~~只讀 `is_core`~~ —— v1 明示的 `policy_tier` 在這張表上看不到。
+        # 改走 L0 SSOT；未設定一律留空白（不印成衛星）。
+        _tier = resolve_tier(f)
+        tier = ("核心" if _tier == CORE_TIER
+                else "衛星" if _tier == SATELLITE_TIER else "")
         rows.append([
             pid,
             d.get("fund_code", ""),

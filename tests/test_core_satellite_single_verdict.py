@@ -128,10 +128,18 @@ def test_core_target_always_from_ssot_helper(tab3_tree) -> None:
 
 
 def test_core_flag_always_from_ssot_helper(tab3_tree) -> None:
-    """級別判定（policy_tier → is_core）不得在 Tab3 各處各寫一份。"""
-    _calls = _calls_to_ssot(tab3_tree, "resolve_core_flag")
+    """級別判定（policy_tier → is_core）不得在 Tab3 各處各寫一份。
+
+    2026-10-10（客戶裁示：級別三態）：三個消費點由二態 `resolve_core_flag` 改走
+    三態 `shared.policy_tier.resolve_tier`（二態把「未設定」當衛星）。本條守的仍是
+    「走同一把尺、不各寫一份」，只是那把尺換成三態那一支。
+    """
+    # ~~`_calls = _calls_to_ssot(tab3_tree, "resolve_core_flag")`~~
+    # ~~`assert len(_calls) >= _MIN_RESOLVE_FLAG_CALLS`~~（二態那一支；三個消費點已換成三態）
+    _calls = _calls_named(tab3_tree, _aliases_of(tab3_tree, "resolve_tier",
+                                                 module="shared.policy_tier"))
     assert len(_calls) >= _MIN_RESOLVE_FLAG_CALLS, (
-        f"只剩 {len(_calls)} 處走 `resolve_core_flag`（應 ≥ {_MIN_RESOLVE_FLAG_CALLS}）"
+        f"只剩 {len(_calls)} 處走 `resolve_tier`（應 ≥ {_MIN_RESOLVE_FLAG_CALLS}）"
         " —— 少一處就會出現「卡片寫核心、KPI 算衛星」。")
 
 
@@ -175,16 +183,24 @@ class TestMkClassUsesTheSameRuler:
         下游三處（`ui/helpers/portfolio/health.py` 檔數 KPI、核心戰情室、
         波段觀測站）都用 `== "Core"` / `== "Satellite"` 過濾，"Unknown" 的基金
         會**同時從兩張表消失**，使用者看不到它去哪了。
+
+        ⚠️ **2026-10-10 改寫（客戶裁示：級別三態；有意識的更正，不是漏刪）**：
+        舊斷言「只能是 Core / Satellite」的前提是「判不出來就歸衛星」——
+        那會把客戶沒設定級別的部位套上衛星專屬的判斷與建議，現已被客戶推翻。
+        **舊坑的理由仍然成立**（不能讓它無聲消失），所以第三態 `Unset` 回來的同時，
+        兩個子分頁的空狀態與選單說明都會講「⬜ 未設定 N 檔：不列入…」
+        （由 `tests/test_tier_three_state.py` 的戰情室測試守）。
         """
         from ui.components.mk_dashboard import tag_mk_class
         for _f in ({}, {"is_core": None}, {"policy_tier": "中性"}):
-            assert tag_mk_class(_f) in ("Core", "Satellite"), (
-                f"{_f} 產生了第三態，該檔會在核心 / 衛星兩張表都不見")
+            # ~~`assert tag_mk_class(_f) in ("Core", "Satellite")`~~
+            assert tag_mk_class(_f) == "Unset", (
+                f"{_f} 級別未設定，卻被分類成 {tag_mk_class(_f)}")
 
     def test_matches_the_amount_weighted_classifier_exactly(self):
         """漂移鎖：檔數版與金額版必須同一套規則，否則同頁兩個核心%又會打架。"""
         from ui.components.mk_dashboard import tag_mk_class
-        from ui.helpers.portfolio.allocation import resolve_core_flag
+        from shared.policy_tier import resolve_tier
         _cases = [
             {"policy_tier": "core", "is_core": False},
             {"policy_tier": "SATELLITE", "is_core": True},
@@ -194,7 +210,8 @@ class TestMkClassUsesTheSameRuler:
             {},
         ]
         for _f in _cases:
-            _expect = "Core" if resolve_core_flag(_f) else "Satellite"
+            # ~~`_expect = "Core" if resolve_core_flag(_f) else "Satellite"`~~（二態；`{}` 會被期待成衛星）
+            _expect = {"core": "Core", "satellite": "Satellite"}.get(resolve_tier(_f), "Unset")
             assert tag_mk_class(_f) == _expect, f"{_f} 兩把尺結論不一致"
 
 

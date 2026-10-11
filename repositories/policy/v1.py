@@ -18,6 +18,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, merge_sheet_tier, normalize_tier
+
 from ._helpers import (
     ALL_COLS,
     DEFAULT_WORKSHEET,
@@ -68,10 +70,10 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
     for c in ("policy_id", "policy_name", "fund_url", "invest_date",
               "currency", "notes", "policy_tier"):
         df[c] = df[c].fillna("").astype(str).str.strip()
-    # policy_tier 統一小寫；非 core/satellite 一律視為 ""
-    df["policy_tier"] = df["policy_tier"].str.lower().where(
-        df["policy_tier"].str.lower().isin(["core", "satellite"]), ""
-    )
+    # policy_tier 統一成 core/satellite（含中文「核心／衛星」，見 shared.policy_tier）；
+    # 其他值一律視為 ""（未設定）。⚠️ 這只是 session 端的讀法：寫回 Sheet 時，未設定的列
+    # 保留 Sheet 原值（`upsert_fund_in_policy` → `merge_sheet_tier`），不會把認不得的值洗成空白。
+    df["policy_tier"] = df["policy_tier"].map(lambda v: normalize_tier(v) or "")
     # v18.159：過濾「value 剛好等於 column 名」的 schema-leak 列。
     # 已知 user 部署有 sheet 出現 policy_name="policy_name" / fund_url="fund_url"
     # 這種 header 字串被誤寫成 data row 的情況（v1→v2 schema 遷移殘留 / JSON 還原
@@ -88,14 +90,14 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
 # ──────────────────────────────────────────────────────────────────────
 # Write：upsert / delete（以 (policy_id, fund_url) 為主鍵）
 # ──────────────────────────────────────────────────────────────────────
-def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
-    """1-based 列號（含表頭，header 為第 1 列）；找不到回 None。"""
+def _find_row(ws: Any, policy_id: str, fund_url: str) -> tuple[Optional[int], list, list]:
+    """回 (1-based 列號或 None, 表頭, 該列現值)。找不到 → (None, 表頭, [])。"""
     try:
         all_values = ws.get_all_values()
     except Exception as e:
         raise PolicySheetError(f"讀取 sheet 全表失敗：{e}") from e
     if not all_values:
-        return None
+        return None, [], []
     header = all_values[0]
     try:
         pid_idx = header.index("policy_id")
@@ -105,8 +107,13 @@ def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
 
     for r, row in enumerate(all_values[1:], start=2):
         if len(row) > max(pid_idx, url_idx) and row[pid_idx] == policy_id and row[url_idx] == fund_url:
-            return r
-    return None
+            return r, header, row
+    return None, header, []
+
+
+def _find_row_index(ws: Any, policy_id: str, fund_url: str) -> Optional[int]:
+    """1-based 列號（含表頭，header 為第 1 列）；找不到回 None。"""
+    return _find_row(ws, policy_id, fund_url)[0]
 
 
 def upsert_policy_row(
@@ -146,10 +153,17 @@ def upsert_policy_row(
     # 舊 8/9 欄表維持原寬度向後相容（此為 legacy「Policies」單表路徑；per-policy
     # 分頁的 upsert_fund_in_policy 才會主動升級表頭以持久化新欄）。
     cols = tuple(c for c in ALL_COLS if c in header) or REQUIRED_COLS
-    values = _row_to_list(row, cols)
     last_col_letter = chr(ord("A") + len(cols) - 1)
 
-    idx = _find_row_index(ws, pid, url)
+    idx, _cur_header, _cur_line = _find_row(ws, pid, url)
+    # 更新既有列時，級別格走 `merge_sheet_tier`：這次沒有明確級別（舊 SA 表單根本沒有級別欄）
+    # → 保留該格 Sheet 原值，不寫空白。其他欄位照舊整列覆寫，語意不變。
+    if idx is not None and "policy_tier" in cols:
+        _ti = _cur_header.index("policy_tier") if "policy_tier" in _cur_header else None
+        _existing = (_cur_line[_ti] if _ti is not None and len(_cur_line) > _ti else "")
+        row = dict(row)
+        row["policy_tier"] = merge_sheet_tier(row.get("policy_tier"), _existing)
+    values = _row_to_list(row, cols)
     try:
         if idx is None:
             ws.append_row(values)
@@ -242,8 +256,7 @@ def sync_policies_to_portfolio_funds(
             if pk in aggregated:
                 aggregated[pk]["invest_twd"] += invest
             else:
-                _tier_raw = str(row.get("policy_tier", "") or "").strip().lower()
-                _tier = _tier_raw if _tier_raw in ("core", "satellite") else ""
+                _tier = normalize_tier(row.get("policy_tier")) or ""
                 aggregated[pk] = {
                     "code": code,
                     "invest_twd": invest,
@@ -252,7 +265,12 @@ def sync_policies_to_portfolio_funds(
                     "currency": str(row.get("currency", "")).strip(),
                     "invest_date": str(row.get("invest_date", "")).strip(),
                     "fx_at_buy": _normalize_fx(row.get("fx_at_buy")),
-                    "policy_tier": _tier,    # P3：空字串 → 呼叫端 fallback heuristic
+                    "policy_tier": _tier,    # P3：空字串 ＝ 級別未設定（2026-10-10 起不再以名稱猜；~~呼叫端 fallback heuristic~~）
+                    # 級別只由這次讀回的 Sheet 決定（與 v2 讀回清 `policy_tier` 對稱）：
+                    # 既存條目走 `base.update(...)`，不在這裡覆寫 `is_core` 的話，session 殘留的
+                    # `is_core`（舊 JSON 備份、或 v2 session 的值）會留下來，`policy_tier` 為空時
+                    # 被 `resolve_tier` 撿回去，再由「全部寫入」寫回 Sheet。
+                    "is_core": {CORE_TIER: True, SATELLITE_TIER: False}.get(_tier),
                 }
                 target_pks.append(pk)
                 # v18.183：div_cash_pct / avg_nav_with_div 有值才帶回，避免空欄

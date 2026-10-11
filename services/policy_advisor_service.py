@@ -49,6 +49,7 @@ POLICY_CORE_UNDER            = "POLICY_CORE_UNDER"         # 核心過輕
 POLICY_RISK_HEAVY_DROP       = "POLICY_RISK_HEAVY_DROP"    # 多檔深度超跌
 POLICY_RISK_HEAVY_RED        = "POLICY_RISK_HEAVY_RED"     # 多檔吃本金
 POLICY_HEALTHY               = "POLICY_HEALTHY"            # 配置健康
+POLICY_TIER_UNSET            = "POLICY_TIER_UNSET"         # 無已設定級別且已填本金的基金 → 未判斷配置（2026-10-10）
 
 
 def _coverage_str(div: dict | None) -> str:
@@ -169,7 +170,10 @@ def recommend_policy(
 
     每個 fund 預期欄位：
       invest_twd (int|float)
-      is_core (bool)         ← Tab3 已用既有 _is_core_fund heuristic 填好
+      is_core (True/False/None) ← 2026-10-10 起為**三態**：True＝明確核心、False＝明確衛星、
+                                None／缺鍵＝級別未設定。~~(bool) ← Tab3 已用既有 _is_core_fund heuristic 填好~~
+                                （系統已不以基金名稱猜級別）。未設定不進核心／衛星比例的分子與分母；
+                                P3／P4（深跌、吃本金）照舊含未設定。
       sigma_info (dict?)     ← optional；若 None / 缺 sigma_rank 視為不計
       dividend_info (dict?)  ← optional；若 None / 無 alert_level 視為不計
 
@@ -185,12 +189,21 @@ def recommend_policy(
             "color": "grey",
         }
 
-    core_amt = sum(float(f.get("invest_twd", 0) or 0) for f in funds if f.get("is_core"))
-    core_pct = round(core_amt / total_amt * 100.0, 1)
-    diff = round(core_pct - float(target_core_pct), 1)
+    # 2026-10-10（客戶裁示：級別三態、方案 B）：~~`core_amt / total_amt`（未設定算非核心、進分母）~~
+    # → 分母只算已設定級別（is_core 嚴格 True/False）的本金。全部已設定時 classified_amt 與
+    # total_amt 以同序加總，結果逐位元相同。分母為 0 → 不算比例、不給 P1/P2/P5。
+    core_amt = sum(float(f.get("invest_twd", 0) or 0) for f in funds if f.get("is_core") is True)
+    classified_amt = sum(float(f.get("invest_twd", 0) or 0) for f in funds
+                         if f.get("is_core") is True or f.get("is_core") is False)
+    if classified_amt > 0:
+        core_pct = round(core_amt / classified_amt * 100.0, 1)
+        diff = round(core_pct - float(target_core_pct), 1)
+    else:
+        core_pct = None
+        diff = None
 
     # ── 規則 P1：核心過重（>target + 10%） ────────────────────────────
-    if diff > 10.0:
+    if diff is not None and diff > 10.0:
         return {
             "text": (
                 f"核心配置 {core_pct}% 高於目標 {target_core_pct:.0f}%（+{diff:.1f}%）"
@@ -201,7 +214,7 @@ def recommend_policy(
         }
 
     # ── 規則 P2：核心過輕（<target - 10%） ────────────────────────────
-    if diff < -10.0:
+    if diff is not None and diff < -10.0:
         return {
             "text": (
                 f"核心配置 {core_pct}% 低於目標 {target_core_pct:.0f}%（{diff:+.1f}%）"
@@ -242,6 +255,14 @@ def recommend_policy(
             ),
             "code": POLICY_RISK_HEAVY_RED,
             "color": "red",
+        }
+
+    # ── 未設定（無已設定級別且已填本金）：只陳述未判斷，不給動作、不亮綠燈 ──
+    if core_pct is None:
+        return {
+            "text": "此保單沒有已設定級別且已填本金的基金，未判斷核心／衛星配置",
+            "code": POLICY_TIER_UNSET,
+            "color": "grey",
         }
 
     # ── 規則 P5：其餘 → 健康 ─────────────────────────────────────────
