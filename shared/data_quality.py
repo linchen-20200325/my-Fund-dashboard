@@ -294,10 +294,13 @@ def assess_nav_cache_quality(
 # 實際上混過兩種幣別」的序列,比拒寫更危險(拒寫至少留下正確的短序列 + 一行 log)。
 #
 # ⚠️ **這道判定保護不到什麼(已知分類,不是窮舉)**
-#   a) **候選幣別不明**:來源沒宣告幣別(如 cnyes)→ verdict `unknown`,**不擋**。
-#      擋掉會讓「補到 5 年」對所有未宣告幣別的來源整個失效,那是拿一個確定的
-#      功能損失去換一個不確定的風險;此處選擇**照舊採用 + 誠實揭露**,並保留
-#      `backfill_to_gs` 的 Gate 0(與既有 nav_history 對帳)當第二道。
+#   a) ~~**候選幣別不明**:來源沒宣告幣別(如 cnyes)→ verdict `unknown`,**不擋**。~~
+#      ~~擋掉會讓「補到 5 年」對所有未宣告幣別的來源整個失效,那是拿一個確定的~~
+#      ~~功能損失去換一個不確定的風險;此處選擇**照舊採用 + 誠實揭露**,並保留~~
+#      ~~`backfill_to_gs` 的 Gate 0(與既有 nav_history 對帳)當第二道。~~
+#      → **2026-10-10 客戶裁示 Q3(有意識的政策變更,不是漏刪)**:任一邊幣別未知
+#      (verdict `unknown`)→ **擋下**,禁止換源 / 補寫。舊理由(「補到 5 年」涵蓋率)
+#      仍然成立,被權衡掉的是:歷史變短可補救,混幣別寫進 nav_history 補救不了。
 #   b) **預期幣別本身就是錯的**:上游 meta 的「計價幣別」欄若被死預設成 USD
 #      (見 `fund_orchestration._correct_currency` 修的那個病),兩邊都說 USD →
 #      verdict `match` → 放行。本判定證明的是「**兩邊宣告一致**」,不是「宣告正確」。
@@ -389,9 +392,11 @@ def assess_nav_series_swap(*, expected_ccy, candidate_ccy,
 
     Returns:
         `{"verdict", "safe", "expected_ccy", "candidate_ccy", "reason"}`
-        - `safe` **是呼叫端唯一該看的旗標**:`False` 只在 `verdict == "mismatch"` 時出現。
-        - `reason` 在 `safe=True` 時為 `""`(無話可說),`unknown` 時為 `""` ——
-          未知不是拒絕理由,呼叫端若要揭露請自行讀 `verdict`。
+        - `safe` **是呼叫端唯一該看的旗標**:~~`False` 只在 `verdict == "mismatch"` 時出現。~~
+          → 2026-10-10 客戶裁示 Q3:**只有 `verdict == "match"` 才是 `True`**;
+          `mismatch` 與 `unknown`(幣別未知)一律 `False`(fail closed)。
+        - `reason` 在 `safe=True` 時為 `""`(無話可說);~~`unknown` 時為 `""`~~
+          → `unknown` 時為「幣別未知」的拒絕理由(2026-10-10 起未知即拒絕理由)。
 
     ⚠️ 本函式**不回傳「換算後的序列」,也永遠不會有那個選項** —— 見本節開頭:
     在寫入端偷偷換匯會製造混幣別的連續序列,那比拒絕替換危險得多。
@@ -408,9 +413,18 @@ def assess_nav_series_swap(*, expected_ccy, candidate_ccy,
             f"{('現有 ' + current_source + ' ') if current_source else '現有'}序列"
             f"(§1:不換算、不混寫;錯幣別一旦寫進 nav_history 就永遠改不掉)"
         )
+    elif _v == NAV_CCY_UNKNOWN:
+        # 2026-10-10 客戶裁示 Q3:幣別未知 → 禁止換源 / 補寫(fail closed)。
+        _reason = (
+            f"幣別未知:預期 {_e or '未知'}、候選序列"
+            f"{('(' + candidate_source + ')') if candidate_source else ''}"
+            f"宣告 {_c or '未知'} —— 無法確認一致,拒絕用它換掉"
+            f"{('現有 ' + current_source + ' ') if current_source else '現有'}序列"
+        )
     return {
         "verdict": _v,
-        "safe": _v != NAV_CCY_MISMATCH,
+        # ~~"safe": _v != NAV_CCY_MISMATCH,~~ → 2026-10-10 Q3:未知也擋(只放行 match)
+        "safe": _v == NAV_CCY_MATCH,
         "expected_ccy": _e,
         "candidate_ccy": _c,
         "reason": _reason,

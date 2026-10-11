@@ -2054,8 +2054,17 @@ def render_portfolio_tab() -> None:
                     # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
                     # 用實際持倉重組 rich fund dict 傳入;show_screener 維持 False(不與健檢 Tab 撞 widget key)。
                     from ui.helpers.fund_grp_health._utils import _build_fund_dict
+                    # 2026-10-10 客戶裁示二 B(C2-3):Sheet 幣別一路傳下去 —— 以**全部**持倉列
+                    # 建 code→Sheet 幣別表(不用依 code 去重後的 `_loaded_pf`),套到重組的 dict 上。
+                    from ui.helpers.portfolio.load import (
+                        sheet_currency_by_code as _sheet_ccy_by_code,
+                        with_sheet_currency as _with_sheet_ccy,
+                    )
+                    _ccy_map = _sheet_ccy_by_code(st.session_state.get("portfolio_funds") or [])
                     _funds_extra = [
-                        _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
+                        _with_sheet_ccy(
+                            _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC),
+                            _ccy_map)
                         for _r in _ok_health
                         if _r.get("ok") and _r.get("_fund_raw")
                     ]
@@ -2389,8 +2398,11 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             compute_max_drawdown as _mdd_fn,
             calc_correlation_matrix as _corr_fn,
         )
+        # ~~"currency": f.get("currency", "") or ""~~ → 2026-10-10 客戶裁示二 B(C2-3):
+        # Sheet 與來源一致才算已知(未知 / 衝突 → "",下游換 TWD 時誠實排除)
+        from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_dd
         _fd_for_dd = [{"code": f.get("code"), "series": f.get("series"),
-                       "currency": f.get("currency", "") or ""}
+                       "currency": _ccy_calc_dd(f)}
                       for f in loaded if f.get("series") is not None]
         # 權重 = sidebar 實際投入本金 invest_twd(缺則 0,函式內歸一;全缺 → 等權)
         _weights = {f.get("code"): (f.get("invest_twd", 0) or 0) for f in loaded}
@@ -2497,8 +2509,13 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             _ccy_est = ""
             for _pf in loaded:
                 if str(_pf.get("code", "") or "").upper() == _code.upper():
-                    _ccy_est = str(_pf.get("currency", "") or "")
+                    # ~~str(_pf.get("currency", "") or "")~~(空 → 匯率 0 → 被當台幣估算)
+                    # 2026-10-10 客戶裁示二 B(C2-3):Sheet 與來源一致才算已知
+                    from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_est
+                    _ccy_est = _ccy_calc_est(_pf)
                     break
+            if not _ccy_est:
+                continue   # 幣別未知 / 衝突 → 沿用既有「跳過估算」
             _est = estimate_dividend_split(
                 invest_twd=_inv, annual_div_rate_pct=_adr,
                 div_cash_pct=float(_r.get("div_cash_pct", 100) or 100),

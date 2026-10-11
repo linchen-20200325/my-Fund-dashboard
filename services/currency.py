@@ -37,12 +37,14 @@ _CCY_YF_OVERRIDES: dict[str, str] = {
 }
 
 
-def normalize_ccy(raw, default: str = "USD", mode: str = "iso") -> str:
+# ~~def normalize_ccy(raw, default: str = "USD", mode: str = "iso") -> str:~~
+# 2026-10-10 客戶裁示(A 級資料正確性缺陷,Q1 最小解凍 F4):未知幣別 ≠ USD —— 預設改 `""`。
+def normalize_ccy(raw, default: str = "", mode: str = "iso") -> str:
     """幣別正規化：中文/ISO 都統一回 ISO 3 碼。
 
     Args:
         raw: 任意輸入（「美元」/「USD」/None/空字串/亂碼）。
-        default: raw 為空時的預設值（預設 USD — 保單最常見）。
+        default: raw 為空時的預設值（~~預設 USD — 保單最常見~~ → 2026-10-10 預設 `""`＝未知）。
         mode: "iso"（預設）→ ISO 4217 標準（人民幣→CNY）；
               "yf" → yfinance 報價偏好（人民幣→CNH，CNHTWD=X 更可靠）。
 

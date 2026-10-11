@@ -14,6 +14,97 @@ from __future__ import annotations
 import streamlit as st
 
 
+def _iso_ccy(raw) -> str:
+    """幣別 → ISO 三碼;空 / 非三碼 → `""`(未知)。中文別名先過 L2 正規化。"""
+    from services.currency import normalize_ccy
+    from shared.data_quality import normalize_iso_ccy
+    return normalize_iso_ccy(normalize_ccy(raw, default=""))
+
+
+def source_currency_of(fund: dict) -> str:
+    """抓取結果(`moneydj_raw`)宣告的幣別(原字串,未正規化);沒有 → `""`。"""
+    _mj = (fund or {}).get("moneydj_raw")
+    if not isinstance(_mj, dict):
+        return ""
+    return str(_mj.get("currency") or (_mj.get("metrics") or {}).get("currency") or "").strip()
+
+
+#: 2026-10-10 客戶裁示二 B(C2-3):同一 code 在客戶 Sheet 上被設成 ≥2 種幣別時,
+#: 由 `with_sheet_currency` 掛在**記憶體內**的 fund dict 上的衝突標記(不寫回 Sheet、
+#: 不是資料欄位);`fund_currency_for_calc` 見到它一律回 `""`(fail closed)。
+SHEET_CCY_CONFLICT_KEY = "_sheet_ccy_conflict"
+
+
+def sheet_currency_by_code(funds) -> dict:
+    """`portfolio_funds` 每列的 `currency` 依 code 彙整 → `{CODE: (ISO, ...)}`(去重排序;空值不計)。
+
+    ~~客戶 Sheet 上每個 code 被設定的幣別~~ → 2026-10-10 稽核回修 R3(敘述對齊現況):
+    `portfolio_funds[i]["currency"]` **主要**是客戶 Sheet 那一列的幣別,但不全是。
+    已知的其他來源(非窮舉):
+    (1) 批次載入時 Sheet 該列留白,補上抓取結果的幣別(`_sheet_ccy or _src_ccy`);
+    (2) `reuse_fund_info_by_code` 從同 code 的其他列補空白幣別;
+    (3) `reconcile_funds_with_ledgers` 為只存在於 T7 帳本的部位補的列,幣別取自帳本;
+    (4) Tab3 批次新增 / T7 新增基金建立的新列,幣別取自抓取結果。
+    (1)(2) 只在該列原本空白時補,不會蓋掉 Sheet 已設的值。
+
+    ⚠️ 必須傳**全部** `portfolio_funds`(同 code 跨多保單各一列),不得傳依 code 去重後的
+    清單 —— 去重會只留第一列,把「不同保單設了不同幣別」的衝突藏起來。
+    """
+    _acc: dict = {}
+    for _f in funds or []:
+        if not isinstance(_f, dict):
+            continue
+        _c = str(_f.get("code") or "").strip().upper()
+        if not _c:
+            continue
+        _set = _acc.setdefault(_c, set())
+        _iso = _iso_ccy(_f.get("currency"))
+        if _iso:
+            _set.add(_iso)
+    return {_c: tuple(sorted(_s)) for _c, _s in _acc.items()}
+
+
+def with_sheet_currency(extra: dict, ccy_map: dict) -> dict:
+    """把客戶 Sheet 的幣別帶進「由抓取結果重組」的 fund dict(原地修改並回傳同一個 dict)。
+
+    該 code 的 Sheet 幣別:0 個 → 保留抓取結果的值(既有行為);1 個 → `currency` 設為它
+    (之後 `fund_currency_for_calc` 會與 `moneydj_raw` 的來源宣告比對,不一致即衝突);
+    ≥2 個 → `currency` 清空並掛 `SHEET_CCY_CONFLICT_KEY`(衝突,不挑一個)。
+    """
+    if not isinstance(extra, dict) or not extra:
+        return extra
+    _vals = (ccy_map or {}).get(str(extra.get("code") or "").strip().upper(), ())
+    if len(_vals) == 1:
+        extra["currency"] = _vals[0]
+    elif len(_vals) >= 2:
+        extra["currency"] = ""
+        extra[SHEET_CCY_CONFLICT_KEY] = True
+    return extra
+
+
+def fund_currency_for_calc(fund: dict) -> str:
+    """需要「正確幣別」的正式計算(換匯 / 單位數 / 換股)該用的幣別 → ISO 三碼或 `""`。
+
+    2026-10-10 客戶裁示(A 級資料正確性缺陷):
+      - **未知幣別 ≠ USD**:Sheet 與來源都沒有可辨識的幣別 → `""`(呼叫端 fail closed)。
+      - **Q4 currency conflict**:Sheet(`fund["currency"]`)與來源(`moneydj_raw`)
+        都有值但不一致 → `""`(不得靜默選一個繼續算;呼叫端 fail closed)。
+        ~~衝突狀態**不另存欄位**(現有 schema 無處保存出處),每次由這兩個既有值即時判定。~~
+        → 2026-10-10 稽核回修 R3(敘述對齊現況,行為不變):Sheet／來源衝突仍是每次由這兩個
+        既有值即時判定,**不寫進 Sheet、不另存欄位**;另有一種衝突(同一 code 在不同保單列
+        被設成不同幣別)無法由單一 dict 判定,由 `with_sheet_currency` 在重組出的**記憶體內**
+        dict 上掛 `SHEET_CCY_CONFLICT_KEY`,本函式見到即回 `""`。該標記不是 Sheet 欄位,
+        `with_sheet_currency` 與本函式都不會把它寫回 Sheet 或備份。
+    """
+    if (fund or {}).get(SHEET_CCY_CONFLICT_KEY):   # 2026-10-10 C2-3:Sheet 同 code 多幣別
+        return ""
+    _sheet = _iso_ccy((fund or {}).get("currency"))
+    _src = _iso_ccy(source_currency_of(fund))
+    if _sheet and _src and _sheet != _src:
+        return ""
+    return _sheet or _src
+
+
 def count_unloaded_funds() -> tuple[int, int]:
     """回傳 (未載入 entry 數, 去重 code 數)。給 caller 決定要不要顯示按鈕。"""
     pf = st.session_state.get("portfolio_funds", []) or []
@@ -71,6 +162,9 @@ def reuse_fund_info_by_code(
             if v is None:
                 continue
             if isinstance(v, str) and v == "":
+                continue
+            # 2026-10-10 客戶裁示 Q4:本帳本(Sheet)已填幣別 → 不得被別處沿用的值覆蓋。
+            if k == "currency" and str(entry.get("currency") or "").strip():
                 continue
             entry[k] = v
         entry["loaded"] = True
@@ -232,6 +326,17 @@ def batch_load_unloaded_funds() -> None:
                 "loaded": True, "load_error": pf_raw["error"],
             })
         else:
+            # 2026-10-10 客戶裁示:未知幣別 ≠ USD / Q4 currency conflict ——
+            #   Sheet 已填幣別 → **一律保留**(抓回空值不得覆蓋;抓回不同值也不得覆蓋);
+            #   來源事實照舊留在 `moneydj_raw`,衝突由 `fund_currency_for_calc` 即時判定、
+            #   換匯 / 單位數路徑 fail closed。Sheet 空白才採用來源宣告值。
+            _sheet_ccy = str(pf_item.get("currency") or "").strip()
+            _src_ccy = (pf_raw.get("currency", "")
+                        or pf_raw.get("metrics", {}).get("currency", ""))
+            if (_sheet_ccy and _iso_ccy(_src_ccy)
+                    and _iso_ccy(_sheet_ccy) != _iso_ccy(_src_ccy)):
+                print(f"[portfolio_load] ⚠️ currency conflict {c_pf}: Sheet={_sheet_ccy} "
+                      f"來源={_src_ccy} → 保留 Sheet 值、不寫回;換匯/單位數 fail closed")
             st.session_state.portfolio_funds[i].update({
                 "name":         pf_raw.get("fund_name") or pf_item["code"],
                 "series":       pf_raw.get("series"),
@@ -240,8 +345,7 @@ def batch_load_unloaded_funds() -> None:
                 "moneydj_raw":  pf_raw,
                 "risk_metrics": pf_raw.get("risk_metrics", {}),
                 "is_core":      _is_core(pf_raw.get("fund_name") or pf_item["code"]),
-                "currency":     pf_raw.get("currency", "")
-                                  or pf_raw.get("metrics", {}).get("currency", ""),
+                "currency":     _sheet_ccy or _src_ccy,
                 "loaded":       True, "load_error": None,
             })
 

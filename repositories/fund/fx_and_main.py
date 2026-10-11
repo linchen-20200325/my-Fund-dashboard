@@ -171,6 +171,12 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     pair = str(currency_pair).strip().upper()
     if not pair.endswith("=X"):
         pair = pair + "=X"
+    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):呼叫端以 f"{ccy}TWD" 組幣對時 ccy 為空
+    # → 只剩 "TWD=X",而 Yahoo 慣例 `TWD=X` 是 USD/TWD —— 會靜默拿到美元匯率。
+    # 不足 6 碼的幣對一律視為「幣別未知」:不查匯率,回 None(fail closed)。
+    if len(pair.replace("=X", "")) < 6:
+        print(f"[get_latest_fx] ⛔ 幣對 {currency_pair!r} 不完整(幣別未知)→ 不查匯率")
+        return None
 
     # positive-only cache 查詢
     _cache_key = (pair, fred_api_key or "")
@@ -427,23 +433,82 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
     return out
 
 
+def _latest_nav_ccy_ok(code: str, s, expected_ccy: str, step: str,
+                       non_native: bool) -> bool:
+    """`get_latest_nav` 單一來源結果的幣別守門(2026-10-10 第五輪複驗必修 (b))。
+
+    依序列自己的出處(`attrs["source"]`)判定是不是**非原生報價**
+    (SSOT:`fund_orchestration._NAV_NON_NATIVE_PREFIXES`,Yahoo 代碼 / `{secId}.F` /
+    晨星 / AlphaVantage):
+      - `non_native=True`(呼叫端依來源**構造**即知是非原生:Yahoo 代碼、`{secId}.F`、
+        晨星)→ 不論 attrs 一律回驗 —— 防 `attrs` 在快取 / 複製中掉失而被誤判成原生;
+      - 原生來源 → 放行(不回驗;分類與其限制見該常數註解);
+      - 非原生 → `shared.data_quality.assess_nav_series_swap`,**只有 match 放行**;
+        幣別未知(任一邊)或不一致 → 拒用這個值(fail closed,不換算、不估值)。
+    判定本身失敗 → 拒用(§1:判不出來不得靜默放行)。
+    """
+    try:
+        from repositories.fund.fund_orchestration import _NAV_NON_NATIVE_PREFIXES
+        from shared.data_quality import assess_nav_series_swap, nav_series_currency
+        _prov = str((getattr(s, "attrs", None) or {}).get("source") or "")
+        if not (non_native or _prov.startswith(_NAV_NON_NATIVE_PREFIXES)):
+            return True
+        _v = assess_nav_series_swap(expected_ccy=expected_ccy,
+                                    candidate_ccy=nav_series_currency(s),
+                                    candidate_source=_prov)
+    except Exception as _ge:  # noqa: BLE001 — 判定壞掉 → 不放行
+        print(f"[get_latest_nav/{step}] ⛔ {code}: 幣別判定失敗,不採用:"
+              f"{type(_ge).__name__}: {_ge}")
+        return False
+    if not _v["safe"]:
+        print(f"[get_latest_nav/{step}] ⛔ {code}: 不採用 —— {_v['reason']}")
+        return False
+    return True
+
+
+def _latest_nav_expected_ccy(code: str) -> str:
+    """`get_latest_nav` 呼叫端沒給預期幣別時,L1 自己判:~~選股池使用者幣別 →~~ 晨星硬編表。
+
+    沿用 `fund_orchestration._span_extend_expected_ccy`(不帶宣告值 → 只剩晨星硬編表)。
+    2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據,不再作為預期幣別。⚠️ L1 讀不到客戶 Sheet 上的幣別(已登記待裁示事項),故 Sheet 與選股池 /
+    硬編表不一致時,本層偵測不到。判定失敗 → `""`(未知 → 非原生來源一律拒用)。
+    """
+    try:
+        from repositories.fund.fund_orchestration import _span_extend_expected_ccy
+        return _span_extend_expected_ccy(code)
+    except Exception as _ee:  # noqa: BLE001
+        print(f"[get_latest_nav] {code}: 預期幣別判定失敗 → 未知:"
+              f"{type(_ee).__name__}: {_ee}")
+        return ""
+
+
 @register_cache
 @_ttl_cache(ttl_sec=TTL_5MIN, maxsize=128)   # v18.58: T7 每 fund render 一次
-def get_latest_nav(fund_ticker: str) -> "float | None":
+def get_latest_nav(fund_ticker: str, expected_ccy: "str | None" = None) -> "float | None":
     """抓基金最新淨值。yfinance 為主，本檔既有 Morningstar / Cnyes 來源 fallback。
 
     回傳：最新淨值 (float)，全部失敗回 None。呼叫端不得自行偽造。
+
+    2026-10-10 第五輪複驗必修 (b)(客戶裁示 Q4:跨來源 NAV 遇幣別未知 / 衝突 fail closed):
+    本函式直接用於 T7 市值與 fee_deduction,而 Yahoo 代碼、`{secId}.F`、晨星都可能不是
+    基金的計價幣別。非原生報價來源的值須與預期幣別一致(match)才採用,否則換下一個來源;
+    全部不採用 → None(呼叫端既有「抓不到」路徑)。
+    `expected_ccy`:呼叫端已確認的計價幣別;`None` → L1 自行判定(`_latest_nav_expected_ccy`);
+    `""` → 呼叫端明示未知 / 衝突 → 非原生來源一律不採用。
     """
     if not fund_ticker:
         return None
     code = str(fund_ticker).strip().upper()
+    _exp = (_latest_nav_expected_ccy(code) if expected_ccy is None
+            else str(expected_ccy or "").strip().upper())
 
     # 1) [Auto-Fixed v18.201] Yahoo Chart REST API + NAS proxy（取代直連 yfinance，
     #    避免 Cloud IP 403/限流）；lazy import 避免循環依賴。
     try:
         from repositories.macro_repository import fetch_yf_close as _yf_close
         _s = _yf_close(code, range_="5d", interval="1d")
-        if _s is not None and not _s.empty:
+        if (_s is not None and not _s.empty
+                and _latest_nav_ccy_ok(code, _s, _exp, "yf", True)):
             v = float(_s.dropna().iloc[-1])
             if v > 0:
                 return v
@@ -453,7 +518,8 @@ def get_latest_nav(fund_ticker: str) -> "float | None":
     # 2) Yahoo chart（_MORNINGSTAR_SECID_MAP 有 secId 才會命中）
     try:
         s = _src_yahoo_finance_nav(code)
-        if s is not None and len(s.dropna()) > 0:
+        if (s is not None and len(s.dropna()) > 0
+                and _latest_nav_ccy_ok(code, s, _exp, "yh", True)):
             return float(s.dropna().iloc[-1])
     except Exception as _e:
         print(f"[get_latest_nav/yh] {code}: {_e}")
@@ -461,7 +527,8 @@ def get_latest_nav(fund_ticker: str) -> "float | None":
     # 3) Cnyes（台灣境外/境內基金）
     try:
         s = _src_cnyes_nav(code)
-        if s is not None and len(s.dropna()) > 0:
+        if (s is not None and len(s.dropna()) > 0
+                and _latest_nav_ccy_ok(code, s, _exp, "cnyes", False)):
             return float(s.dropna().iloc[-1])
     except Exception as _e:
         print(f"[get_latest_nav/cnyes] {code}: {_e}")
@@ -469,7 +536,8 @@ def get_latest_nav(fund_ticker: str) -> "float | None":
     # 4) Morningstar（最後一路）
     try:
         s = _src_morningstar_nav(code)
-        if s is not None and len(s.dropna()) > 0:
+        if (s is not None and len(s.dropna()) > 0
+                and _latest_nav_ccy_ok(code, s, _exp, "ms", True)):
             return float(s.dropna().iloc[-1])
     except Exception as _e:
         print(f"[get_latest_nav/ms] {code}: {_e}")

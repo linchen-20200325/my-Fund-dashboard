@@ -108,10 +108,14 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
     """端到端重現紅隊路徑:MoneyDJ 短窗(對的幣別)→ ISIN 救援換到跨度更長的**別的幣別**。
 
     `_rescue_by_isin` 只比「筆數 × 跨度」,一定會採用長的那條;Gate 0 是最後一道。
-    ⚠️ 2026-09-01:本則刻意**不讓候選宣告幣別**(`attrs["currency"]` 空)—— 那正是新加的
-    幣別守門**擋不到**的情形,所以這條端到端路徑仍然會換源、仍然由 Gate 0 收尾,
-    本則因此仍在測它原本要測的東西。幣別守門自己的覆蓋在
-    `tests/test_nav_currency_swap_guard.py`。
+    ~~⚠️ 2026-09-01:本則刻意**不讓候選宣告幣別**(`attrs["currency"]` 空)—— 那正是新加的~~
+    ~~幣別守門**擋不到**的情形,所以這條端到端路徑仍然會換源、仍然由 Gate 0 收尾,~~
+    ~~本則因此仍在測它原本要測的東西。~~
+    → 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。「候選不宣告」現在已被幣別守門擋下,
+      Gate 0 走不到。改用幣別守門**仍然擋不到**的另一種情形 —— **兩邊宣告一致、但宣告本身是錯的**
+      (`shared/data_quality.py` 開頭「保護不到什麼」b 項):預期 USD、候選也宣告 USD,
+      但數值其實是另一種幣別 → 守門放行、仍由 Gate 0 收尾。本則因此仍在測它原本要測的東西。
+      幣別守門自己的覆蓋在 `tests/test_nav_currency_swap_guard.py`。
     """
     import repositories.fund.sources as SRC
     import repositories.pool_repository as POOL
@@ -122,6 +126,7 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
                    + ["2025-01-02", "2025-01-03"])
     _long_other_ccy = pd.Series([33.0 + i * 0.01 for i in range(len(_long_dates))],
                                 index=pd.to_datetime(_long_dates), dtype=float)
+    _long_other_ccy.attrs["currency"] = "USD"   # 宣告與預期一致(但數值是別的幣別)— 見 docstring
 
     monkeypatch.setattr(POOL, "resolve_isin", lambda code: "LU0000000001")
     monkeypatch.setattr(SRC, "_src_yahoo_finance_nav", lambda code: _long_other_ccy)
@@ -129,7 +134,8 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
                         lambda code, fund_name="": pd.Series(dtype=float))
     monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
 
-    written = _wire(monkeypatch, fetch=lambda c: {"series": _short_usd, "fund_name": "F"},
+    written = _wire(monkeypatch, fetch=lambda c: {"series": _short_usd, "fund_name": "F",
+                                                  "currency": "USD"},
                     existing=_existing("SWAP", [("2025-01-02", 10.00),
                                                 ("2025-01-03", 10.01)]))
     out = NS.backfill_to_gs(["SWAP"])

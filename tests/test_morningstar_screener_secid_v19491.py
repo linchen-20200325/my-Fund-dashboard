@@ -18,6 +18,12 @@ import pytest
 
 from repositories.fund import sources as S
 
+# 2026-10-10 客戶裁示 Q2(未知幣別 ≠ USD;**有意識的政策變更,不是漏刪**):
+#   `_morningstar_screener_secid` 的 `currency` 預設 ~~"USD"~~ → `""`,且幣別未知時 fail closed
+#   (不發請求)。本檔的直接呼叫原本靠那個 USD 預設 —— 它們驗的是**回應解析**,不是幣別,
+#   故一律改為**明示** `currency="USD"`;解析斷言一字未改。未知幣別的反例見
+#   `tests/test_unknown_currency_fail_closed_20261010.py`。
+
 
 def _patch_urlopen_seq(monkeypatch, payloads):
     """依呼叫序回傳 payloads 內每一筆(dict→JSON;Exception 實例→拋出)。用於多宇宙 fallthrough。"""
@@ -76,37 +82,43 @@ def test_extract_rows_tolerant(data, expect_len):
 
 
 # ── _morningstar_screener_secid:命中 / 回填快取 ──────────────────────────
-def test_hit_returns_secid_and_fills_caches(monkeypatch):
+def test_hit_returns_secid_and_fills_caches(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{
         "rows": [{"SecId": "F00000P8WB", "Name": "Allianz Income and Growth AMg7 USD",
                   "ISIN": "LU2023250330", "Currency": "USD"}],
     }])
-    assert S._morningstar_screener_secid("LU2023250330") == "F00000P8WB"
+    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == "F00000P8WB"
     assert S._ms_screener_cache["LU2023250330"] == "F00000P8WB"      # 正快取
     assert S._ms_secid_cache["LU2023250330"] == "F00000P8WB"         # 與 SecuritySearch 共用
     assert S._ms_name_cache["LU2023250330"] == "Allianz Income and Growth AMg7 USD"
-    assert S._ms_ccy_cache["LU2023250330"] == "USD"                  # screener 直接回幣別
+    # ~~assert S._ms_ccy_cache["LU2023250330"] == "USD" # screener 直接回幣別~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU2023250330" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", USD)" in capsys.readouterr().out
 
 
 def test_currency_falls_back_to_name_suffix_when_screener_ccy_missing(monkeypatch):
     _patch_urlopen_seq(monkeypatch, [{
         "rows": [{"SecId": "F1", "Name": "Some Fund EUR Hedged", "ISIN": "LU9", "Currency": ""}],
     }])
-    assert S._morningstar_screener_secid("LU9") == "F1"
-    assert S._ms_ccy_cache["LU9"] == "EUR"                           # Currency 空 → 從名稱猜
+    assert S._morningstar_screener_secid("LU9", currency="USD") == "F1"
+    # ~~assert S._ms_ccy_cache["LU9"] == "EUR" # Currency 空 → 從名稱猜~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU9" not in S._ms_ccy_cache
 
 
 def test_empty_isin_returns_empty(monkeypatch):
     # 不該打網路
     monkeypatch.setattr("urllib.request.urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("空 ISIN 不該連外")))
-    assert S._morningstar_screener_secid("") == ""
-    assert S._morningstar_screener_secid("   ") == ""
+    assert S._morningstar_screener_secid("", currency="USD") == ""
+    assert S._morningstar_screener_secid("   ", currency="USD") == ""
 
 
 def test_isin_normalized_upper(monkeypatch):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "FX", "ISIN": "LU2023250330"}]}])
-    assert S._morningstar_screener_secid(" lu2023250330 ") == "FX"
+    assert S._morningstar_screener_secid(" lu2023250330 ", currency="USD") == "FX"
     assert "LU2023250330" in S._ms_screener_cache                    # key 正規化為大寫
 
 
@@ -116,14 +128,16 @@ def test_multi_universe_fallthrough_first_empty_second_hits(monkeypatch):
         {"total": 0, "rows": []},
         {"rows": [{"SecId": "FTWN", "Name": "台灣某基金 台幣", "ISIN": "TW000T3619Y1"}]},
     ])
-    assert S._morningstar_screener_secid("TW000T3619Y1") == "FTWN"
-    assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD"                  # 名稱含「台幣」→ TWD
+    assert S._morningstar_screener_secid("TW000T3619Y1", currency="USD") == "FTWN"
+    # ~~assert S._ms_ccy_cache["TW000T3619Y1"] == "TWD" # 名稱含「台幣」→ TWD~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "TW000T3619Y1" not in S._ms_ccy_cache
 
 
 def test_all_universes_empty_negative_cached(monkeypatch):
     # 全宇宙皆 HTTP 200 但查無 → 確定性負快取
     _patch_urlopen_seq(monkeypatch, [{"total": 0, "rows": []}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
-    assert S._morningstar_screener_secid("LU9999999999") == ""
+    assert S._morningstar_screener_secid("LU9999999999", currency="USD") == ""
     assert S._ms_screener_cache["LU9999999999"] == ""               # 負快取
 
 
@@ -131,7 +145,7 @@ def test_transient_failure_not_negative_cached(monkeypatch):
     # 全宇宙都拋(timeout)→ 暫時性失敗 → **不入負快取**(可重試)
     _patch_urlopen_seq(monkeypatch,
                        [TimeoutError("boom")] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
-    assert S._morningstar_screener_secid("LU2023250330") == ""
+    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == ""
     assert "LU2023250330" not in S._ms_screener_cache               # 未負快取
 
 
@@ -141,7 +155,7 @@ def test_mixed_transient_then_hit_returns_secid(monkeypatch):
         TimeoutError("boom"),
         {"rows": [{"SecId": "FHIT", "ISIN": "LU5"}]},
     ])
-    assert S._morningstar_screener_secid("LU5") == "FHIT"
+    assert S._morningstar_screener_secid("LU5", currency="USD") == "FHIT"
 
 
 def test_isin_mismatch_row_skipped(monkeypatch):
@@ -149,7 +163,7 @@ def test_isin_mismatch_row_skipped(monkeypatch):
     _payloads = [{"rows": [{"SecId": "FWRONG", "ISIN": "XX0000000000"}]}] \
         * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
-    assert S._morningstar_screener_secid("LU2023250330") == ""
+    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == ""
 
 
 def test_host_fallback_second_host_hits(monkeypatch):
@@ -158,7 +172,7 @@ def test_host_fallback_second_host_hits(monkeypatch):
         OSError("nxdomain"),                            # host1/uni1 → 連線失敗 → 跳 host2
         {"rows": [{"SecId": "FH2", "ISIN": "LU5"}]},    # host2/uni1 → 命中
     ])
-    assert S._morningstar_screener_secid("LU5") == "FH2"
+    assert S._morningstar_screener_secid("LU5", currency="USD") == "FH2"
 
 
 def test_connection_error_breaks_host_not_all_universes(monkeypatch):
@@ -169,7 +183,7 @@ def test_connection_error_breaks_host_not_all_universes(monkeypatch):
         _calls["n"] += 1
         raise OSError("nxdomain")
     monkeypatch.setattr("urllib.request.urlopen", _boom)
-    assert S._morningstar_screener_secid("LU5") == ""
+    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
     assert _calls["n"] == len(S._MS_SCREENER_HOSTS)     # 每 host 只打 1 次(連線死不硬試宇宙)
     assert "LU5" not in S._ms_screener_cache            # 連線層 = 暫時 → 不負快取
 
@@ -178,7 +192,7 @@ def test_cache_hit_skips_network(monkeypatch):
     S._ms_screener_cache["LU2023250330"] = "FCACHED"
     monkeypatch.setattr("urllib.request.urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("cache 命中不該連外")))
-    assert S._morningstar_screener_secid("LU2023250330") == "FCACHED"
+    assert S._morningstar_screener_secid("LU2023250330", currency="USD") == "FCACHED"
 
 
 # ── 接線:_src_morningstar_nav 先走 screener,再退 SecuritySearch ──────────
@@ -216,7 +230,10 @@ def test_src_morningstar_prefers_screener(monkeypatch):
     import repositories.pool_repository as PR
     monkeypatch.setattr(PR, "resolve_secid", lambda code: None)      # 池中無 secId → 走 ISIN 解析
     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
-    monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
+    # ~~monkeypatch.setattr(PR, "resolve_currency", lambda code: None)~~
+    # 2026-10-10 Q2:幣別未知時晨星 fail closed(不以 USD 猜測)→ 本測試驗的是
+    # screener / 搜尋的接線,故改為池幣別**明示** USD;其餘斷言一字未改。
+    monkeypatch.setattr(PR, "resolve_currency", lambda code: "USD")
     _wb = {}
     def _must_not_be_called(code, secid, **k):        # noqa: ANN001 — 哨兵
         _wb.update({"code": code, "secid": secid, **k})
@@ -235,7 +252,9 @@ def test_src_morningstar_prefers_screener(monkeypatch):
             {"EndDate": "2024-01-03", "Value": 11.0},
         ]}]},
     }))
-    out = S._src_morningstar_nav("ZZZZ9")
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    #   (上方池幣別 USD 的 monkeypatch 已不影響 currencyId,保留以示原情境)
+    out = S._src_morningstar_nav("ZZZZ9", currency_hint="USD")
     # ⭐ 功能沒有消失:screener 解析出來的 secId **本次抓取照舊使用**
     assert len(out) == 2, "切掉回寫之後連 NAV 都抓不到了 → 那是砍功能,不是切副作用"
     # ⭐ 但一格都沒有寫回使用者的表
@@ -246,7 +265,10 @@ def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):
     import repositories.pool_repository as PR
     monkeypatch.setattr(PR, "resolve_secid", lambda code: None)
     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
-    monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
+    # ~~monkeypatch.setattr(PR, "resolve_currency", lambda code: None)~~
+    # 2026-10-10 Q2:幣別未知時晨星 fail closed(不以 USD 猜測)→ 本測試驗的是
+    # screener / 搜尋的接線,故改為池幣別**明示** USD;其餘斷言一字未改。
+    monkeypatch.setattr(PR, "resolve_currency", lambda code: "USD")
     monkeypatch.setattr(PR, "set_secid", lambda code, secid, **k: None)
     monkeypatch.setattr(S, "_morningstar_screener_secid", lambda isin, ccy="USD": "")   # screener 空
     _called = {"search": False}
@@ -258,7 +280,8 @@ def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _MSResp({
         "TimeSeries": {"Security": [{"HistoryDetail": [{"EndDate": "2024-01-02", "Value": 9.9}]}]},
     }))
-    out = S._src_morningstar_nav("ZZZZ9")
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
+    out = S._src_morningstar_nav("ZZZZ9", currency_hint="USD")
     assert _called["search"] is True                               # screener 空 → 退回搜尋
     assert len(out) == 1
 
@@ -276,27 +299,39 @@ def test_shape_recognized():
 def test_secid_key_casing_tolerated(monkeypatch):
     # 回傳用小寫 secId 鍵 → 仍抽得到(唯一載重欄位大小寫容錯,防永久靜默空)
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"secId": "Flower", "ISIN": "LU5"}]}])
-    assert S._morningstar_screener_secid("LU5") == "Flower"
+    assert S._morningstar_screener_secid("LU5", currency="USD") == "Flower"
 
 
-def test_pricecurrency_read_when_currency_absent(monkeypatch):
+def test_pricecurrency_read_when_currency_absent(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
-    assert S._morningstar_screener_secid("LU5") == "F1"
-    assert S._ms_ccy_cache["LU5"] == "EUR"                 # 讀 PriceCurrency datapoint
+    assert S._morningstar_screener_secid("LU5", currency="USD") == "F1"
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR" # 讀 PriceCurrency datapoint~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
-def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+def test_screener_ccy_wins_over_name_suffix(monkeypatch, capsys):
     # 名稱後綴說 USD,但 PriceCurrency 說 EUR → screener 直接回的贏(§4.1 準確優先)
     _patch_urlopen_seq(monkeypatch, [{"rows": [
         {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
-    S._morningstar_screener_secid("LU5")
-    assert S._ms_ccy_cache["LU5"] == "EUR"
+    S._morningstar_screener_secid("LU5", currency="USD")
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
-def test_lowercase_currency_uppercased(monkeypatch):
+def test_lowercase_currency_uppercased(monkeypatch, capsys):
     _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
-    S._morningstar_screener_secid("LU5")
-    assert S._ms_ccy_cache["LU5"] == "EUR"
+    S._morningstar_screener_secid("LU5", currency="USD")
+    # ~~assert S._ms_ccy_cache["LU5"] == "EUR"~~
+    # 2026-10-10 複驗:幣別快取寫入已移除(晨星請求不再讀它,有意識的清理,不是漏刪)
+    assert "LU5" not in S._ms_ccy_cache
+    # 2026-10-10 複驗建議 3b:PriceCurrency/Currency 解析仍正確(只印在 log,不寫快取、不改行為)
+    assert ", EUR)" in capsys.readouterr().out
 
 
 def test_first_valid_row_taken_skipping_invalid(monkeypatch):
@@ -307,7 +342,7 @@ def test_first_valid_row_taken_skipping_invalid(monkeypatch):
         {"SecId": "FGOOD", "ISIN": "LU5"},        # 第一個合格 → 取這個
         {"SecId": "FLATER", "ISIN": "LU5"},       # 不該取到
     ]}])
-    assert S._morningstar_screener_secid("LU5") == "FGOOD"
+    assert S._morningstar_screener_secid("LU5", currency="USD") == "FGOOD"
 
 
 def test_negative_cache_hit_skips_network(monkeypatch):
@@ -315,14 +350,14 @@ def test_negative_cache_hit_skips_network(monkeypatch):
     S._ms_screener_cache["LU9999999999"] = ""
     monkeypatch.setattr("urllib.request.urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("負快取命中不該連外")))
-    assert S._morningstar_screener_secid("LU9999999999") == ""
+    assert S._morningstar_screener_secid("LU9999999999", currency="USD") == ""
 
 
 def test_empty_then_transient_not_negative_cached(monkeypatch):
     # 前宇宙乾淨查無、後宇宙暫時失敗、全程無命中 → 不負快取(可重試;§1 混合序不誤鎖)
     _seq = [{"total": 0, "rows": []}] + [TimeoutError("boom")] * ((len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)) - 1)
     _patch_urlopen_seq(monkeypatch, _seq)
-    assert S._morningstar_screener_secid("LU5") == ""
+    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
     assert "LU5" not in S._ms_screener_cache
 
 
@@ -330,7 +365,7 @@ def test_rows_present_no_secid_is_anomaly_not_cached(monkeypatch):
     # 全宇宙都「有 rows 卻抽不到 SecId」(疑欄位名不符)→ 異常 → **不負快取**(讓錯誤現形)
     _payloads = [{"rows": [{"WrongKey": "F1", "ISIN": "LU5"}]}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
-    assert S._morningstar_screener_secid("LU5") == ""
+    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
     assert "LU5" not in S._ms_screener_cache               # 異常 → 未負快取
 
 
@@ -338,7 +373,7 @@ def test_unrecognized_shape_is_anomaly_not_cached(monkeypatch):
     # 全宇宙都回非 screener 形狀(軟錯誤 body)→ 異常 → 不負快取(§1 不當「確定查無」)
     _payloads = [{"error": "rate limited"}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
-    assert S._morningstar_screener_secid("LU5") == ""
+    assert S._morningstar_screener_secid("LU5", currency="USD") == ""
     assert "LU5" not in S._ms_screener_cache
 
 
@@ -383,8 +418,11 @@ def test_user_currency_threaded_into_screener(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _MSResp({
         "TimeSeries": {"Security": [{"HistoryDetail": [{"EndDate": "2024-01-02", "Value": 9.9}]}]},
     }))
+    # ~~池幣別 EUR → screener~~ → 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → 幣別改由可信來源(呼叫端 hint / 原始宣告值)提供
     S._src_morningstar_nav("ZZZZ9")
-    assert _seen == {"isin": "LU2023250330", "ccy": "EUR"}   # 使用者幣別 → screener
+    assert _seen == {}                                       # 池 EUR 不採 → 不呼叫
+    S._src_morningstar_nav("ZZZZ9", currency_hint="EUR")
+    assert _seen == {"isin": "LU2023250330", "ccy": "EUR"}   # 可信宣告 → screener
 
 
 def test_no_isin_screener_not_called(monkeypatch):

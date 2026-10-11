@@ -55,7 +55,7 @@ class Ledger:
     """
 
     fund_code: str
-    currency: str = "USD"
+    currency: str = ""   # ~~"USD"~~ 2026-10-10 客戶裁示:未知幣別 ≠ USD
     transactions: list[Transaction] = field(default_factory=list)
     position: FundPosition = field(init=False)
 
@@ -188,7 +188,7 @@ class Ledger:
 
         注意：不重 replay 計算，直接還原 position 快照（避免浮點累積誤差）。
         """
-        led = cls(fund_code=data["fund_code"], currency=data.get("currency", "USD"))
+        led = cls(fund_code=data["fund_code"], currency=data.get("currency", ""))  # 未知≠USD
         for raw in data.get("transactions", []):
             led.transactions.append(Transaction(
                 txn_type=raw["txn_type"],
@@ -291,6 +291,10 @@ class Switch:
         # ledger.currency + position.currency 避免後續 transactions 殘留舊值。
         _a = _norm_ccy_pure(ledger_from.currency)
         _b = _norm_ccy_pure(ledger_to.currency)
+        if not _a or not _b:   # 2026-10-10 客戶裁示:未知幣別 → fail closed,不猜同/跨幣別
+            raise ValueError(
+                f"switch_same_currency: 幣別未知 "
+                f"({ledger_from.currency!r} / {ledger_to.currency!r})，不執行換股")
         if _a != _b:
             raise ValueError(
                 f"switch_same_currency: 幣別不符 "
@@ -326,6 +330,10 @@ class Switch:
         # v18.245: 對稱對待 — normalize 後再比對 + 同步寫回
         _a = _norm_ccy_pure(ledger_from.currency)
         _b = _norm_ccy_pure(ledger_to.currency)
+        if not _a or not _b:   # 2026-10-10 客戶裁示:未知幣別 → fail closed,不猜同/跨幣別
+            raise ValueError(
+                f"switch_cross_currency: 幣別未知 "
+                f"({ledger_from.currency!r} / {ledger_to.currency!r})，不執行換股")
         if _a == _b:
             raise ValueError(
                 f"switch_cross_currency: 幣別相同 "

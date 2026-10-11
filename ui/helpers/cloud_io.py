@@ -356,8 +356,9 @@ def _load_all_from_sheet_v2(client: object,
                 "policy_id":        _pid,
                 "name":             (str(_row.get("fund_name", "") or "").strip()
                                        or _prev.get("name", "") or _code),
+                # 2026-10-10 客戶裁示:未知幣別 ≠ USD —— Sheet 空白且無舊值 → 空白(未知)。
                 "currency":         (str(_row.get("currency", "") or "").strip()
-                                       or _prev.get("currency", "USD")),
+                                       or str(_prev.get("currency") or "").strip()),
                 "units":            float(_row.get("units", 0) or 0),
                 "avg_nav":          float(_row.get("avg_nav", 0) or 0),
                 # v19.436:avg_nav_with_div 已非 v2 欄 → 不在此強寫 0(否則會蓋掉 `**_prev`
@@ -383,7 +384,7 @@ def _load_all_from_sheet_v2(client: object,
                 _fx = float(_f.get("fx_avg") or 0)
                 if _u > 0 and _n > 0 and _fx > 0:
                     _led = _Ledger(fund_code=_f["code"],
-                                    currency=_f.get("currency", "USD"))
+                                    currency=str(_f.get("currency") or "").strip())  # 未知≠USD
                     try:
                         _led.subscribe(amount_twd=_u * _n * _fx,
                                         fx_rate=_fx, nav=_n,

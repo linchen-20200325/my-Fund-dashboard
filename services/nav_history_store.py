@@ -524,7 +524,8 @@ def _expected_currency(code: str, fd) -> str:
     """這檔基金**應該**是哪一種計價幣別 → ISO 三碼;判不出來回 `""`(未知,§1 不猜)。
 
     順序:抓取結果自帶的 `currency`(已經過 `fund_orchestration._ensure_currency` 修過
-    死預設 USD 的那一層)→ 選股池使用者填的 `currency`。中文別名先過 L2
+    死預設 USD 的那一層)→ ~~選股池使用者填的 `currency`~~ 晨星硬編表手工宣告的幣別
+    (2026-10-11 客戶裁示 5:選股池幣別不算可信證據)。中文別名先過 L2
     `services.currency.normalize_ccy`(本層是 L2,可以用),再由 L0 收成 ISO 三碼。
 
     ⚠️ 這個值證明的是「上游**宣告**的幣別」,不是「宣告正確」——
@@ -546,11 +547,14 @@ def _expected_currency(code: str, fd) -> str:
     _c = _norm((fd or {}).get("currency") if isinstance(fd, dict) else "")
     if _c:
         return _c
+    # ~~from repositories.pool_repository import resolve_currency~~
+    # ~~return _norm(resolve_currency(code) or "")~~ —— 2026-10-11 客戶裁示 5:選股池(含名稱推定)
+    # 幣別不算可信預期幣別;只信來源明示(上方 fd)或已核准內建對照表(晨星硬編表),無則未知。
     try:
-        from repositories.pool_repository import resolve_currency
-        return _norm(resolve_currency(code) or "")
-    except Exception as _e:  # noqa: BLE001 — 讀不到選股池 → 未知(不擋、不猜)
-        print(f"[backfill_to_gs] {code} 讀選股池幣別失敗:{type(_e).__name__}: {_e}",
+        from repositories.fund.sources import _MORNINGSTAR_SECID_MAP as _msm
+        return _norm((_msm.get(str(code or "").upper().strip()) or ("", ""))[1])
+    except Exception as _e:  # noqa: BLE001 — 讀不到對照表 → 未知(不擋、不猜)
+        print(f"[backfill_to_gs] {code} 讀晨星對照表幣別失敗:{type(_e).__name__}: {_e}",
               file=_sys.stderr)
         return ""
 
@@ -768,8 +772,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         而候選來源正是最會換幣別的兩個(晨星 `currencyId` 換算後淨值、Yahoo `{secId}.F`
         法蘭克福掛牌)。候選宣告的幣別與本檔預期幣別**明確不一致** → **拒絕採用**
         (顯式拒寫 + log,**絕不換算**:在寫入端偷偷換匯會做出一條「看起來連續、
-        實際混過兩種幣別」的序列,比拒絕替換危險得多)。幣別未知 → 照舊採用,
-        由 Gate 0 當第二道 —— 理由與已知破口見 `shared/data_quality.py` 該節。
+        實際混過兩種幣別」的序列,比拒絕替換危險得多)。~~幣別未知 → 照舊採用,
+        由 Gate 0 當第二道~~ → 2026-10-10 客戶裁示 Q3:幣別未知 → 同樣拒絕換源
+        (fail closed)—— 理由與已知破口見 `shared/data_quality.py` 該節。
 
         Returns:
             `(series, source, ccy_notes, adopted_ccy)` —— `adopted_ccy` 是**最後被採用的

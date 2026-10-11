@@ -513,15 +513,19 @@ def render_t7_section() -> None:
             #         中文名也能命中保底匯率。
             # v19.75 K2：遷移到 services/currency SSOT（mode="iso" 保留 T7 ledger 用 ISO 標準）。
             from services.currency import normalize_ccy as _norm_ccy
+            from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_t7
 
             def _latest_nav_fx_t7(_fund: dict) -> tuple:
                 _code = str(_fund.get("code", "")).strip()
-                _ccy  = _norm_ccy(_fund.get("currency", "USD"))
-                _nav  = _nav_now(_code)
+                _ccy  = _ccy_calc_t7(_fund)   # ~~_norm_ccy(_fund.get("currency", "USD"))~~ # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
+                _nav  = _nav_now(_code, expected_ccy=_ccy)   # 2026-10-10 客戶裁示 4:Sheet 幣別 → 最新淨值守門
                 if _nav is None:
                     _s = _fund.get("series")
                     if _s is not None and len(_s.dropna()):
                         _nav = float(_s.dropna().iloc[-1])
+                if not _ccy:   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 不組幣對、不查匯率、不用保底匯率(fx=0 走既有「抓不到」呈現)
+                    print(f"[t7/fx] {_code or '?'} 幣別未知(或 Sheet/來源衝突)→ 不查匯率")
+                    return float(_nav or 0.0), 0.0
                 _fx = _fx_now(f"{_ccy}TWD") if _ccy != "TWD" else 1.0
                 if _fx is None or _fx <= 0:
                     _fx = float(_fund.get("fx_rate", 0) or 0) or 0.0
@@ -567,14 +571,14 @@ def render_t7_section() -> None:
                 if _led is None:
                     _f = _fund_by_pk.get(_pk)
                     _, _code = parse_pk(_pk)
-                    _ccy = _norm_ccy((_f or {}).get("currency", "USD"))
+                    _ccy = _ccy_calc_t7(_f or {})   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                     _led = _LedT7(fund_code=_code, currency=_ccy)
                     st.session_state.t7_ledgers[_pk] = _led
                 else:
                     # v18.243: 舊 ledger 可能殘留中文幣別（「美元」），與 fund 端
                     # normalize 後的「USD」不一致 → Switch 引擎 same/cross 兩條路
                     # 都會誤判幣別不符。每次取 ledger 時補 normalize 一次（mutate）。
-                    _norm = _norm_ccy(getattr(_led, "currency", "") or "USD")
+                    _norm = _norm_ccy(getattr(_led, "currency", "") or "")   # 未知≠USD
                     if _led.currency != _norm:
                         _led.currency = _norm
                 return _led
@@ -620,6 +624,9 @@ def render_t7_section() -> None:
                 if _twd_ae <= 0:
                     _auto_est_skip_no_twd += 1
                     continue
+                if not _ccy_calc_t7(_f_ae):   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 不估算單位數、不自動存檔
+                    print(f"[t7/auto_est] {_f_ae.get('code', '?')} 幣別未知 → 不自動估算")
+                    continue
                 _nav_today, _fx_ae = _latest_nav_fx_t7(_f_ae)
                 # v18.81: 優先用投資日期當天 NAV 做 cost；缺則 fallback 今天
                 _invest_date_ae = str(_f_ae.get("invest_date", "") or "").strip()
@@ -640,7 +647,7 @@ def render_t7_section() -> None:
                 if _u_ae <= 0:
                     continue
                 _c_ae = _f_ae.get("code", "?")
-                _ccy_ae = _norm_ccy(_f_ae.get("currency", "USD"))
+                _ccy_ae = _ccy_calc_t7(_f_ae)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                 _new_led_ae = _LedT7(fund_code=_c_ae, currency=_ccy_ae)
                 _amt_ae = _u_ae * _nav_for_cost * _fx_ae
                 _new_led_ae.subscribe(_amt_ae, _fx_ae, _nav_for_cost, _date_for_buy)
@@ -821,7 +828,7 @@ def render_t7_section() -> None:
                                      use_container_width=True):
                             for _pk_e, _f_e, _u_e, _nav_e, _fx_e in _t7_can_estimate:
                                 _c_e = _f_e.get("code", "?")
-                                _ccy_e = _norm_ccy(_f_e.get("currency", "USD"))
+                                _ccy_e = _ccy_calc_t7(_f_e)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                                 _new_led_e = _LedT7(fund_code=_c_e, currency=_ccy_e)
                                 _amt_e = _u_e * _nav_e * _fx_e
                                 _new_led_e.subscribe(_amt_e, _fx_e, _nav_e, _d_t7.today())
@@ -846,7 +853,7 @@ def render_t7_section() -> None:
                         _pk_f = fund_pk_str(_f)
                         _c = _f.get("code", "?")
                         _name = _name_lookup_t7.get(_pk_f, _c)
-                        _ccy = str(_f.get("currency", "USD")).upper()
+                        _ccy = _ccy_calc_t7(_f)   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                         _pid_cur = _f.get("policy_id") or ""
                         _pid_disp = _pid_cur or "(未綁)"
                         _exist = st.session_state.t7_ledgers.get(_pk_f)
@@ -868,13 +875,13 @@ def render_t7_section() -> None:
                             help="對帳單欄(4) — 系統會用此值自動算「持有單位數」"
                         )
                         _cu = ic2.number_input(
-                            f"🟨 平均買入淨值 ({_ccy})", min_value=0.0, max_value=10000.0,
+                            f"🟨 平均買入淨值 ({_ccy or '幣別未知'})", min_value=0.0, max_value=10000.0,
                             value=_cu_default,
                             step=0.01, format="%.4f", key=f"t7_init_cu_{_pk_f}",
                             help="對帳單欄(1) — 平均買入單位成本"
                         )
                         _fx = ic3.number_input(
-                            f"🟨 平均買入匯率 ({_ccy}→TWD)", min_value=0.0, max_value=200.0,
+                            f"🟨 平均買入匯率 ({_ccy or '幣別未知'}→TWD)", min_value=0.0, max_value=200.0,
                             value=_fx_default,
                             step=0.01, format="%.4f", key=f"t7_init_fx_{_pk_f}",
                             help="對帳單欄(3)"
@@ -888,7 +895,7 @@ def render_t7_section() -> None:
                         )
                         if _div_mode.startswith("A"):
                             _anw = ic4.number_input(
-                                f"🟨 平均買入含息單位成本 ({_ccy})",
+                                f"🟨 平均買入含息單位成本 ({_ccy or '幣別未知'})",
                                 min_value=0.0, max_value=10000.0,
                                 value=_anw_default,
                                 step=0.01, format="%.4f",
@@ -1481,8 +1488,14 @@ def render_t7_section() -> None:
                         else:
                             _aamt_effective = float(_aamt)
                             _mode_note_new = f"TWD {_aamt_effective:,.0f}"
-                        if _anav <= 0 or _afx <= 0:
-                            st.error("❌ 無法取得最新 NAV 或 FX，請確認網路。")
+                        # 2026-10-10 客戶裁示:幣別未知(或 Sheet/來源衝突)時 FX 恆為 0,
+                        # 舊訊息會誤導成「請確認網路」→ 分流原因,準確說明幣別未知、不執行加碼。
+                        # (沿用同一個既有紅框,只換訊息 —— 不新增紅框。)
+                        _ccy_ok_a = bool(_ccy_calc_t7(_afund))
+                        if not _ccy_ok_a or _anav <= 0 or _afx <= 0:
+                            st.error(f"❌ 幣別未知：{_label_for_pk(_apk)}，不執行加碼。"
+                                     if not _ccy_ok_a
+                                     else "❌ 無法取得最新 NAV 或 FX，請確認網路。")
                         elif _aamt_effective <= 0:
                             st.error("❌ 投入金額（或單位數）必須大於 0。")
                         else:
@@ -1711,14 +1724,21 @@ def render_t7_section() -> None:
                         # 抓全部基金的 NAV/FX 與目前市值
                         _navfx = {}
                         _v_curr = {}
+                        _v_unk_ccy_b: list = []   # 2026-10-10 客戶裁示:未知 ≠ 0(幣別未知)
+                        _v_unk_px_b: list = []    # 同上(NAV/FX 抓不到)
                         for _f in _pf_t7:
                             _pk_f = fund_pk_str(_f)
                             _n, _x = _latest_nav_fx_t7(_f)
-                            _navfx[_pk_f] = (_n, _x, str(_f.get("currency", "USD")).upper())
+                            _navfx[_pk_f] = (_n, _x, _ccy_calc_t7(_f))   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                             _l = _ledger_for(_pk_f)
+                            # ~~`... if (_n and _x) else 0.0`~~ —— 2026-10-10 客戶裁示:未知 ≠ 0。
+                            # 市值未知 → None(畫面不顯示 0、不計入再平衡總額)。
                             _v_curr[_pk_f] = (
-                                _l.position.value_twd(_n, _x) if (_n and _x) else 0.0
+                                _l.position.value_twd(_n, _x) if (_n and _x) else None
                             )
+                            if _v_curr[_pk_f] is None:
+                                (_v_unk_ccy_b if not _navfx[_pk_f][2]
+                                 else _v_unk_px_b).append(_label_for_pk(_pk_f))
 
                         # 單位模式檔：固定金額 = units × NAV × FX（先吃投入額）
                         _units_fixed: dict = {}
@@ -1753,6 +1773,19 @@ def render_t7_section() -> None:
                         # % 模式檔：按缺口比例分配 _remaining
                         _wn = {pk: _b_entries[pk][1] for pk in _pct_pks_b}
                         if _pct_pks_b:
+                            # 2026-10-10 客戶裁示:缺口 = 再平衡後總額 × 權重 − 目前市值;
+                            # 任一檔目前市值未知 → 總額與缺口都不可靠 → fail closed,
+                            # 在任何落帳之前停止分配,並說明是哪幾檔、為什麼。
+                            if _v_unk_ccy_b or _v_unk_px_b:
+                                t7_abort(
+                                    "❌ "
+                                    + "；".join(
+                                        ([f"幣別未知：{'、'.join(_v_unk_ccy_b)}"]
+                                         if _v_unk_ccy_b else [])
+                                        + ([f"NAV/FX 抓不到：{'、'.join(_v_unk_px_b)}"]
+                                           if _v_unk_px_b else []))
+                                    + "，無法計算缺口，不執行分配。"
+                                )
                             _last = _pct_pks_b[-1]
                             # 容忍帶（±0.5%）內的權重零頭一律補到最後一檔。
                             # §1：這是「顯式填補」，必須讓使用者看見補了多少、補給誰
@@ -1766,7 +1799,9 @@ def render_t7_section() -> None:
                                     f"**{_label_for_pk(_last)}**，該檔實際採用 "
                                     f"{_wn[_last]:.2f}%。"
                                 )
-                            _v_post = sum(_v_curr.values()) + float(_btot)
+                            # 未知市值不計入總額(上方守門已確保此處皆為已知;仍顯式排除 None)
+                            _v_post = sum(_v for _v in _v_curr.values()
+                                          if _v is not None) + float(_btot)
                             _gaps = {
                                 pk: max(_v_post * _wn[pk] / 100.0 - _v_curr[pk], 0.0)
                                 for pk in _pct_pks_b
@@ -1830,13 +1865,14 @@ def render_t7_section() -> None:
                                 "配置": (f"{_wn.get(pk, 0):.2f}%"
                                          if pk in _wn else
                                          f"🎯 {_b_entries[pk][1]:,.2f} U"),
-                                "目前市值 TWD": f"{_v_curr[pk]:,.0f}",
+                                "目前市值 TWD": ("⬜ 無法計算" if _v_curr[pk] is None
+                                                 else f"{_v_curr[pk]:,.0f}"),   # 未知 ≠ 0
                                 "缺口 TWD": (f"{_gaps.get(pk, 0):,.0f}"
                                              if pk in _gaps else "—"),
                                 # 稽核 A9:沒落帳就不要印一個像是已經配出去的金額
                                 "應買 TWD": (f"{share_twd:,.0f}" if _booked
                                              else "⛔ 未落帳"),
-                                f"應買 {_ccy}": (f"{_orig:,.2f}" if _booked else "—"),
+                                f"應買 {_ccy or '幣別未知'}": (f"{_orig:,.2f}" if _booked else "—"),
                                 "預估單位": (f"{_units:,.4f}" if _booked else "—"),
                                 "配息率": f"{_dy_b:.2f}%",
                                 "本次加碼年配息(TWD)": (fmt_twd(_ann_b) if _booked else "—"),
@@ -2487,6 +2523,13 @@ def render_t7_section() -> None:
                                 _stock_total_twd = 0.0   # v18.232：配股總額累計
                                 _income_total_twd = 0.0  # v18.232：配息總額累計
                                 try:
+                                    # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD → 任一檔幣別未知,
+                                    # 在**任何帳本異動之前**整批擋下(不猜同/跨幣別、不查匯率)。
+                                    _ccy_unk_c = [_label_for_pk(_pk_u) for _pk_u in sorted(_all_pks_c)
+                                                  if not _ccy_calc_t7(_fund_by_pk.get(_pk_u) or {})]
+                                    if _ccy_unk_c:
+                                        raise ValueError(
+                                            f"幣別未知：{'、'.join(_ccy_unk_c)}，不執行換股")
                                     for _spk, _cfg in _sell_configs.items():
                                         _Sf = _fund_by_pk.get(_spk)
                                         _na, _xa = _navfx_cache_c.get(
@@ -2494,8 +2537,7 @@ def render_t7_section() -> None:
                                         )
                                         _S = {
                                             "nav": _na, "fx": _xa,
-                                            "ccy": _norm_ccy(
-                                                _Sf.get("currency", "USD")),
+                                            "ccy": _ccy_calc_t7(_Sf),   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                                             "ledger": _ledger_for(_spk),
                                         }
                                         # v18.232：純 % — 賣方按 sell_pct 算贖回單位
@@ -2555,8 +2597,7 @@ def render_t7_section() -> None:
                                                 )
                                             _Bd = {
                                                 "nav": _nb, "fx": _xb,
-                                                "ccy": _norm_ccy(
-                                                    _Bf.get("currency", "USD")),
+                                                "ccy": _ccy_calc_t7(_Bf),   # 2026-10-10 客戶裁示 Q1/Q4:未知或衝突幣別 ≠ USD
                                                 "ledger": _ledger_for(_bpk),
                                             }
                                             # v18.244: Switch 引擎內部會 strict 比對
@@ -2999,7 +3040,7 @@ def render_t7_section() -> None:
                             _snap_rows.append({
                                 "保單": _pid_disp,
                                 "代碼": _c, "基金名稱": _name_short,
-                                "幣別": _f.get("currency", "USD"),
+                                "幣別": _f.get("currency", ""),   # 未知≠USD
                                 "持有單位": "—",
                                 "平均買入淨值 NAV": "—", "含息成本": "—",
                                 "平均買入匯率": "—",
@@ -3033,7 +3074,7 @@ def render_t7_section() -> None:
                             _snap_rows.append({
                                 "保單": _pid_disp,
                                 "代碼": _c, "基金名稱": _name_short,
-                                "幣別": _f.get("currency", "USD"),
+                                "幣別": _f.get("currency", ""),   # 未知≠USD
                                 "持有單位": f"{_l.position.units:,.4f}",
                                 "平均買入淨值 NAV": f"{_l.position.cost_unit:.4f}",
                                 "含息成本": "—",
