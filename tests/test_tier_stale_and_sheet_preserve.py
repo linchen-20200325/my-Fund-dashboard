@@ -478,7 +478,9 @@ def _sheet_round_trip(monkeypatch, sheet_rows: list, sheet_at_write: list | None
 
 @pytest.mark.parametrize("first_tier, expect_first", [
     ("core", "core"),   # session 本身就讀到 core → 照寫
-    ("foo", ""),        # 認不得 → session 未設定；多列代號不保留 → 空白（刻意取捨，同 e6b4702）
+    # ~~("foo", ""),  # 認不得 → session 未設定；多列代號不保留 → 空白（刻意取捨，同 e6b4702）~~
+    # 2026-10-11 客戶裁示：不得把 Sheet 明示級別清成空白 → 「foo＋留白」改為衝突、整張不寫，
+    # 移至 `test_round_trip_unrecognized_plus_blank_fails_closed`。
 ])
 def test_v2_same_code_two_rows_tier_does_not_leak(monkeypatch, first_tier, expect_first):
     """稽核 C 重現：[F1 core 100] + [F1 '' 200] → 56f135c 寫出 ('F1','core',200)。
@@ -506,39 +508,51 @@ def test_v2_same_code_two_rows_blank_first(monkeypatch):
 
 def test_v2_single_row_codes_still_preserved_when_rows_reordered():
     """單列代號照常保留，不受其他代號多列、或 df 與 Sheet 列序不同影響。
-    突變：保留條件放寬成「Sheet 有該代號就取第一列」→ 本條轉紅（F1 寫出 core）。"""
+    ~~突變：保留條件放寬成「Sheet 有該代號就取第一列」→ 本條轉紅（F1 寫出 core）。~~
+    2026-10-11：F1 原為 Sheet [core, 留白]＋session 全未設定 —— 客戶裁示後屬「對不上哪一列是
+    留白」→ 整張不寫，無法再拿來測單列代號；F1 改為 [satellite, satellite]（同語意 → 保留），
+    本條只守 F2／F3（單列）與 F1（多列同語意）。"""
     from repositories.policy.v2 import write_policy_v2
-    ws = _FakeWS(_v2_tab_rows([("F1", "core", 1), ("F2", "foo", 2), ("F1", "", 3),
+    ws = _FakeWS(_v2_tab_rows([("F1", "satellite", 1), ("F2", "foo", 2), ("F1", "satellite", 3),
                                ("F3", "satellite", 4)]))
     df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": "", "invest_twd": a}
                        for c, a in (("F3", 4), ("F2", 2), ("F1", 3), ("F1", 1))])
     write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
+    # ~~[("F3","satellite",4), ("F2","foo",2), ("F1","",3), ("F1","",1)]~~（舊 F1 [core, 留白]）
     assert _written_rows(ws) == [("F3", "satellite", 4), ("F2", "foo", 2),
-                                 ("F1", "", 3), ("F1", "", 1)]
+                                 ("F1", "satellite", 3), ("F1", "satellite", 1)]
 
 
-@pytest.mark.parametrize("sheet_rows, df_rows, expect", [
-    # Sheet 2 列、df 1 列 → 多列代號 → 不保留、照寫 df 值（空 → 空白，刻意取捨）
-    ([("F1", "core", 1), ("F1", "", 2)], [("F1", "", 1)], [("F1", "", 1)]),
-    # Sheet 1 列、df 2 列 → 同上
-    ([("F1", "core", 1)], [("F1", "", 1), ("F1", "", 2)], [("F1", "", 1), ("F1", "", 2)]),
-    # Sheet 2 列、df 2 列（次數一致）→ 一樣不保留
-    ([("F1", "core", 1), ("F1", "foo", 2)], [("F1", "", 1), ("F1", "", 2)],
-     [("F1", "", 1), ("F1", "", 2)]),
-    # 多列但 df 有明確級別 → 照寫 df 值
-    ([("F1", "core", 1)], [("F1", "satellite", 1), ("F1", "", 2)],
-     [("F1", "satellite", 1), ("F1", "", 2)]),
-    # 其他單列代號不受影響、照常保留
-    ([("F1", "core", 1), ("F2", "foo", 2)], [("F1", "", 1), ("F1", "", 9), ("F2", "", 2)],
-     [("F1", "", 1), ("F1", "", 9), ("F2", "foo", 2)]),
+# ~~expect 欄（b8aa0ec「多列代號不保留、照寫 df 值」的舊斷言，2026-10-11 客戶裁示推翻 ——~~
+# ~~這五組舊斷言全都會把 Sheet 上的 core／foo 寫成空白）：~~
+#   ~~0: [("F1", "", 1)]~~
+#   ~~1: [("F1", "", 1), ("F1", "", 2)]~~
+#   ~~2: [("F1", "", 1), ("F1", "", 2)]~~
+#   ~~3: [("F1", "satellite", 1), ("F1", "", 2)]~~
+#   ~~4: [("F1", "", 1), ("F1", "", 9), ("F2", "foo", 2)]~~
+# 現行：五組都是「Sheet 能給未設定列的值不只一種」（core＋留白／core＋foo／df 明確列取代了
+# 哪一格不可知）→ 整張分頁不寫（含第 4 組的單列代號 F2：裁示為整張保單不寫，不是只跳過 F1）。
+@pytest.mark.parametrize("sheet_rows, df_rows", [
+    # Sheet 2 列（core＋留白）、df 1 列未設定 → 對不上哪一列
+    ([("F1", "core", 1), ("F1", "", 2)], [("F1", "", 1)]),
+    # Sheet 1 列、df 2 列未設定 → 多出的那列 Sheet 上沒有 → 候選 core＋留白
+    ([("F1", "core", 1)], [("F1", "", 1), ("F1", "", 2)]),
+    # Sheet 2 列（core＋認不得）
+    ([("F1", "core", 1), ("F1", "foo", 2)], [("F1", "", 1), ("F1", "", 2)]),
+    # df 有一列明確 satellite（Sheet 沒有 satellite → 取代了哪一格不可知）＋一列未設定
+    ([("F1", "core", 1)], [("F1", "satellite", 1), ("F1", "", 2)]),
+    # 其他單列代號 F2 一樣不寫（整張保單）
+    ([("F1", "core", 1), ("F2", "foo", 2)], [("F1", "", 1), ("F1", "", 9), ("F2", "", 2)]),
 ])
-def test_v2_multi_row_code_skips_preservation(sheet_rows, df_rows, expect):
-    from repositories.policy.v2 import write_policy_v2
+def test_v2_multi_row_code_skips_preservation(sheet_rows, df_rows):
+    from repositories.policy.v2 import PolicyTierConflictError, write_policy_v2
     ws = _FakeWS(_v2_tab_rows(sheet_rows))
     df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
                        for c, t, a in df_rows])
-    write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
-    assert _written_rows(ws) == expect
+    with pytest.raises(PolicyTierConflictError) as ei:
+        write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
+    assert str(ei.value) == "❌ 級別設定衝突：F1，未寫入此保單。"
+    assert ws.cleared is False and ws.updates == []
 
 
 def test_tier_by_code_keeps_all_occurrences_in_order():
@@ -629,3 +643,165 @@ def test_legacy_upsert_policy_row_header_without_tier_column(monkeypatch):
     monkeypatch.setattr(V1, "_open_worksheet", lambda c, s, w="Policies": ws)
     V1.upsert_policy_row("c", "s", _sa_form_row())
     assert len(ws.updates[-1][1][0]) == len(REQUIRED_COLS)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 客戶 2026-10-11 裁示：同代號多列 —— 同語意保留 Sheet 原值；互相衝突 → 整張保單不寫
+# （獨立稽核重現：b8aa0ec 在 JSON 還原後「全部寫入」把 [F1 core, F1 satellite]、
+#  [核心, 衛星]、[核心資產, 留白] 全寫成空白，且無任何提示）
+# ══════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("df_tiers, sheet_raws, expect", [
+    # 全部未設定、Sheet 同一語意 → 保留，拼法依剩餘 Sheet 格出現序（大小寫／中文／空白原樣）
+    (["", ""], ["core", "Core"], ["core", "Core"]),
+    (["", "", ""], ["核心", " CORE ", "core"], ["核心", " CORE ", "core"]),
+    (["", ""], ["衛星", "satellite"], ["衛星", "satellite"]),
+    (["", ""], ["", ""], ["", ""]),
+    # Sheet 多、df 少（session 刪掉一列）→ 同語意照樣保留
+    ([""], ["core", "核心"], ["core"]),
+    # df 明確列用掉同語意那一格（保留拼法）→ 剩下的給未設定列
+    (["core", ""], ["", "核心"], ["核心", ""]),
+    (["", "satellite"], ["satellite", "core"], ["core", "satellite"]),
+    # df 明確列在 Sheet 找不到同語意格，但剩下全同語意 → 不論它取代哪一格，未設定列都是 core
+    (["satellite", ""], ["core", "core"], ["satellite", "core"]),
+    # df 全部明確 → 不需要 Sheet 值，不判衝突（session 明示優先，照舊）
+    (["satellite", "core"], ["core", "satellite"], ["satellite", "core"]),
+    (["core", "core"], ["核心資產", "foo"], ["core", "core"]),
+    # 衝突 → None
+    (["", ""], ["core", "satellite"], None),
+    (["", ""], ["核心", "衛星"], None),
+    (["", ""], ["核心資產", ""], None),          # 認不得 → 無法判定語意相同
+    (["", ""], ["核心資產", "核心資產"], None),  # 同上（總管建議規則；見回報）
+    (["", ""], ["core", ""], None),              # 有設有留白 → 對不上哪一列是留白
+    (["", ""], ["core"], None),                  # session 多一列：候選 core＋留白
+    (["satellite", ""], ["core", ""], None),     # 明確列取代了哪一格不可知 → 候選 core＋留白
+])
+def test_multi_row_tier_out_table(df_tiers, sheet_raws, expect):
+    """突變 A：拿掉「同語意保留」（未設定列一律寫空白）→ 保留非空白值的各列轉紅（實跑 6 列）。
+    突變 B2：拿掉 `len(kinds) > 1 → None` → 衝突類中非「認不得」的 5 列轉紅（實跑）。"""
+    from repositories.policy.v2 import _multi_row_tier_out
+    assert _multi_row_tier_out(df_tiers, sheet_raws) == expect
+
+
+class _MultiSH:
+    def __init__(self, tabs: dict):
+        self.tabs = tabs
+
+    def worksheet(self, title):
+        return self.tabs[title]
+
+
+class _MultiClient:
+    def __init__(self, tabs: dict):
+        self.sh = _MultiSH(tabs)
+
+    def open_by_key(self, sid):
+        return self.sh
+
+
+def _backup_funds(funds: list) -> bytes:
+    """funds: [(policy_id, code, invest_twd), ...] → 舊備份（級別一律還原成未設定）。"""
+    return json.dumps({
+        "schema_version": "1.0",
+        "portfolio_funds": [{"code": c, "name": c, "invest_twd": a, "policy_id": p,
+                             "policy_name": p, "policy_tier": "", "currency": "USD",
+                             "is_core": True} for p, c, a in funds],
+        "t7_ledgers": {},
+    }, ensure_ascii=False).encode("utf-8")
+
+
+def _restore_and_dump(monkeypatch, funds: list, tabs: dict) -> dict:
+    from ui.helpers import cloud_io
+    from ui.helpers.io.json_backup import restore_from_json_bytes
+    ss: dict = {}
+    assert restore_from_json_bytes(_backup_funds(funds), ss)["ok"]
+    assert all(resolve_tier(f) is None for f in ss["portfolio_funds"])
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    return cloud_io.dump_all_to_sheet(_MultiClient(tabs), "s", ss)
+
+
+@pytest.mark.parametrize("sheet_rows", [
+    [("F1", "core", 100), ("F1", "satellite", 200)],   # 稽核重現 1
+    [("F1", "核心", 100), ("F1", "衛星", 200)],         # 稽核重現 2
+    [("F1", "核心資產", 100), ("F1", "", 200)],         # 稽核重現 3
+])
+def test_restore_then_dump_conflict_fails_closed_other_policy_written(monkeypatch, sheet_rows):
+    """JSON 還原 → 全部寫入：衝突保單整張不動、提示含代號；其他保單照常寫入（含保留級別）。
+    突變 B（拿掉衝突中止）→ 本條轉紅（P1 被清空重寫）。"""
+    p1 = _FakeWS(_v2_tab_rows(sheet_rows))
+    p2 = _FakeWS(_v2_tab_rows([("F9", "核心", 300)]))
+    out = _restore_and_dump(
+        monkeypatch, [("P1", "F1", 100), ("P1", "F1", 200), ("P2", "F9", 300)],
+        {"P1": p1, "P2": p2})
+    assert out["ok"] and out["error"] is None, out
+    assert p1.cleared is False and p1.updates == []
+    assert _written_rows(p2) == [("F9", "核心", 300)]
+    assert out["written"] == 1
+    assert len(out["warnings"]) == 1
+    assert "P1: ❌ 級別設定衝突：F1，未寫入此保單。" in out["warnings"][0]
+
+
+def test_restore_then_dump_same_semantic_multi_row_keeps_sheet_spelling(monkeypatch):
+    """同代號多列同語意（大小寫／中文／原拼法）→ 保留每列 Sheet 原值，不清成空白。
+    突變 A（拿掉同語意保留）→ 本條轉紅（寫出空白，即 b8aa0ec 的行為）。"""
+    p1 = _FakeWS(_v2_tab_rows([("F1", "核心", 100), ("F1", "Core", 200),
+                               ("F2", "衛星", 50), ("F2", "satellite", 60)]))
+    out = _restore_and_dump(
+        monkeypatch, [("P1", "F1", 100), ("P1", "F1", 200), ("P1", "F2", 50), ("P1", "F2", 60)],
+        {"P1": p1})
+    assert out["ok"] and not out["warnings"], out
+    assert _written_rows(p1) == [("F1", "核心", 100), ("F1", "Core", 200),
+                                 ("F2", "衛星", 50), ("F2", "satellite", 60)]
+
+
+def test_conflict_message_lists_all_codes_untruncated(monkeypatch):
+    """多個衝突代號以「、」連接；cloud_io 不截斷（通用分支會截 80 字）。"""
+    codes = [f"ABCDEFGH{i:02d}" for i in range(10)]
+    rows = []
+    for c in codes:
+        rows += [(c, "core", 1), (c, "satellite", 2)]
+    p1 = _FakeWS(_v2_tab_rows(rows))
+    out = _restore_and_dump(monkeypatch, [("P1", c, a) for c, _t, a in rows], {"P1": p1})
+    _msg = f"❌ 級別設定衝突：{'、'.join(codes)}，未寫入此保單。"
+    assert len(_msg) > 80
+    assert f"P1: {_msg}" in out["warnings"][0]
+    assert p1.updates == []
+
+
+def test_normal_round_trip_multi_row_different_tiers_not_blocked(monkeypatch):
+    """一般流程（讀回後 session 每列都有明確級別）→ session 明示優先，不判衝突、照常寫入。"""
+    assert _sheet_round_trip(monkeypatch, [("F1", "core", 1), ("F1", "satellite", 2)]) == [
+        ("F1", "core", 1), ("F1", "satellite", 2)]
+    assert _sheet_round_trip(monkeypatch, [("F1", "核心", 1), ("F1", "", 2)]) == [
+        ("F1", "核心", 1), ("F1", "", 2)]
+
+
+def test_single_row_and_session_explicit_unchanged_under_conflict_rule():
+    """單列代號仍走 merge_sheet_tier（認不得的值原樣保留，不判衝突）；session 明示值優先。"""
+    from repositories.policy.v2 import write_policy_v2
+    ws = _FakeWS(_v2_tab_rows([("F1", "核心資產", 1), ("F2", "core", 2), ("F2", "core", 3)]))
+    df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
+                       for c, t, a in (("F1", "", 1), ("F2", "satellite", 2), ("F2", "", 3))])
+    write_policy_v2(_FakeClient(ws), "s", "P1", df, keep_sheet_tier=True)
+    assert _written_rows(ws) == [("F1", "核心資產", 1), ("F2", "satellite", 2), ("F2", "core", 3)]
+
+
+def test_round_trip_unrecognized_plus_blank_fails_closed(monkeypatch):
+    """（原 `test_v2_same_code_two_rows_tier_does_not_leak` 的 ("foo", "") 那組）一般讀回 →
+    全部寫入：[F1 foo, F1 留白] 兩列 session 皆未設定 → 不得把 foo 清成空白 → 整張不寫。"""
+    from repositories.policy.v2 import ALL_COLS_V2
+    from ui.helpers import cloud_io
+    rows = [("F1", "foo", 100), ("F1", "", 200)]
+    _df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
+                        for c, t, a in rows], columns=list(ALL_COLS_V2)).fillna("")
+    monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: _df)
+    ss: dict = {"portfolio_funds": []}
+    assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
+    ws = _FakeWS(_v2_tab_rows(rows))
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
+    assert ws.cleared is False and ws.updates == []
+    assert "P1: ❌ 級別設定衝突：F1，未寫入此保單。" in out["warnings"][0]

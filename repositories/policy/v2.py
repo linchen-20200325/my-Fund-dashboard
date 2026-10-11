@@ -841,9 +841,16 @@ def write_policy_v2(
     df 缺欄會自動補空字串；多餘欄會被丟掉（只寫 ALL_COLS_V2 10 欄,v19.436）。
     回傳寫入列數（不含 header）。
 
-    keep_sheet_tier=True（「全部寫入」用）：覆寫前先讀該分頁現有的級別欄，每列走
-    `merge_sheet_tier` —— df 沒有明確級別的列**保留 Sheet 原值**（不寫空白、不洗掉認不得的值）。
-    讀不到現有分頁 → 丟 `PolicySheetError`，**不清空分頁**（讀在 clear 之前）。
+    keep_sheet_tier=True（「全部寫入」用）：覆寫前先讀該分頁現有的級別欄。
+    ~~每列走 `merge_sheet_tier` —— df 沒有明確級別的列**保留 Sheet 原值**（不寫空白、不洗掉認不得的值）。~~
+    （2026-10-11 更正：b8aa0ec 起只有「單列代號」走 `merge_sheet_tier`，同代號多列會被寫成空白，
+    上句已不符現況。）現行：
+    - 單列代號 → `merge_sheet_tier`：df 沒有明確級別 → 保留 Sheet 原值（含認不得的值）。
+    - 同代號多列 → `_multi_row_tier_out`：df 沒有明確級別的列，Sheet 上能給它的值只有一種語意
+      → 保留 Sheet 原拼法；有兩種以上（core／satellite 互衝、認不得的字串、或有的設定有的留白
+      而對不上是哪一列）→ 丟 `PolicyTierConflictError`，**整張分頁不寫**（客戶 2026-10-11 裁示）。
+    - df 有明確級別的列照舊以 df 為準。
+    讀不到現有分頁 → 丟 `PolicySheetError`，**不清空分頁**（讀與衝突判定都在 clear 之前）。
     預設 False：編輯器等「df 就是使用者要的整張表」的呼叫端行為不變。
     """
     _ws_created = False
@@ -896,26 +903,50 @@ def write_policy_v2(
     rows_out: list[list] = [
         [ZH_HEADERS_V2[c] for c in ALL_COLS_V2],   # 中文 header 列
     ]
-    # keep_sheet_tier 只保留「單列代號」的級別：某代號在這張分頁的 Sheet 或 df 裡出現多於一次
-    # （例如分批買進）→ 該代號一律不做保留，照寫 df 值。同代號多列之間沒有可靠的對齊鍵 ——
-    # 只用代號會把 A 列的級別保留到 B 列；依「第 k 次出現」對齊，客戶在 Sheet 上調換列序
-    # （或備份後調過再還原）時一樣會把 core 寫到未設定的那一列。兩者都是捏造客戶沒設的級別。
-    # ⚠️ 刻意取捨：同代號多列、且 session 判為未設定的列，若 Sheet 上原本有值會被寫成空白
-    # —— 與 e6b4702 之前的既有行為相同；寧可寫空白，也不把別列的級別搬過來。
-    _df_count_by_code: dict[str, int] = {}
+    # keep_sheet_tier：單列代號走 `merge_sheet_tier`；某代號在這張分頁的 Sheet 或 df 裡出現多於
+    # 一次（例如分批買進）→ 走 `_multi_row_tier_out`。同代號多列之間沒有可靠的對齊鍵 —— 只用代號
+    # 會把 A 列的級別保留到 B 列；依「第 k 次出現」對齊，客戶在 Sheet 上調換列序（或備份後調過再
+    # 還原）時一樣會把 core 寫到未設定的那一列。兩者都是捏造客戶沒設的級別，所以不做列對列對齊。
+    # ~~⚠️ 刻意取捨：同代號多列、且 session 判為未設定的列，若 Sheet 上原本有值會被寫成空白~~
+    # ~~—— 與 e6b4702 之前的既有行為相同；寧可寫空白，也不把別列的級別搬過來。~~
+    # 2026-10-11 客戶裁示推翻上面的取捨：寫成空白會把客戶明示的級別無聲清掉（JSON 還原後最明顯）。
+    # 現行：Sheet 能給未設定列的值只有一種語意 → 保留；不只一種 → 該保單整張不寫、丟衝突。
+    _df_tiers_by_code: dict[str, list] = {}
+    _code_disp: dict[str, str] = {}
+    _multi_out: dict[str, list[str]] = {}
+    _conflict_codes: list[str] = []
     if keep_sheet_tier:
-        for _c in norm["fund_code"]:
+        for _c, _t in zip(norm["fund_code"], norm["tier"]):
             _cu = str(_c or "").strip().upper()
             if _cu:
-                _df_count_by_code[_cu] = _df_count_by_code.get(_cu, 0) + 1
+                _df_tiers_by_code.setdefault(_cu, []).append(_t)
+                _code_disp.setdefault(_cu, str(_c).strip())
+        for _cu, _tiers in _df_tiers_by_code.items():
+            _sheet_list = _sheet_tier_by_code.get(_cu, [])
+            if _sheet_list and (len(_sheet_list) > 1 or len(_tiers) > 1):
+                _plan = _multi_row_tier_out(_tiers, _sheet_list)
+                if _plan is None:
+                    _conflict_codes.append(_code_disp[_cu])
+                else:
+                    _multi_out[_cu] = _plan
+        if _conflict_codes:
+            # 讀在 clear 之前、這裡也在 clear 之前 → 衝突時整張分頁一格都不動。
+            raise PolicyTierConflictError(_conflict_codes)
+    _multi_pos: dict[str, int] = {}
     for _, r in norm.iterrows():
         _code = str(r.get("fund_code", "") or "").strip()
         if not _code:
             continue   # 跳過無代號列(舊現金列 / 空列)
         _tier_out = str(r.get("tier", "") or "")
         if keep_sheet_tier:
-            _sheet_list = _sheet_tier_by_code.get(_code.upper(), [])
-            if len(_sheet_list) == 1 and _df_count_by_code.get(_code.upper(), 0) == 1:
+            _cu = _code.upper()
+            _sheet_list = _sheet_tier_by_code.get(_cu, [])
+            if _cu in _multi_out:
+                # 依該代號在 df 中的列序取用（不是對齊 Sheet 列序 —— 見 `_multi_row_tier_out`）
+                _k = _multi_pos.get(_cu, 0)
+                _multi_pos[_cu] = _k + 1
+                _tier_out = _multi_out[_cu][_k]
+            elif len(_sheet_list) == 1 and len(_df_tiers_by_code.get(_cu, [])) == 1:
                 _tier_out = merge_sheet_tier(r.get("tier"), _sheet_list[0])
         _avg_nav = _normalize_float(r.get("avg_nav", 0))
         _avg_fx  = _normalize_float(r.get("avg_fx", 0))
@@ -945,12 +976,73 @@ def write_policy_v2(
     return len(rows_out) - 1
 
 
+class PolicyTierConflictError(PolicySheetError):
+    """「全部寫入」時同代號多列的 Sheet 級別無法判定為同一語意 → 該保單分頁整張不寫。
+
+    `str(e)` 即客戶裁示（2026-10-11）的提示字句；`codes` 為衝突代號（依 df 首次出現序）。
+    """
+
+    def __init__(self, codes: list[str]):
+        self.codes = list(codes)
+        super().__init__(f"❌ 級別設定衝突：{'、'.join(self.codes)}，未寫入此保單。")
+
+
+def _multi_row_tier_out(df_tiers: list, sheet_raws: list) -> list[str] | None:
+    """同代號多列（客戶 2026-10-11 裁示）：回傳該代號每一 df 列要寫的級別字串（依 df 列序）；
+    Sheet 上能給「未設定列」的值不只一種語意 → 回 `None`（衝突，呼叫端整張保單不寫）。
+
+    不做列對列對齊（列序不可靠，見 `write_policy_v2`）。做法：
+    1. df 有明確級別的列 → 以 df 為準；Sheet 上若還有一格語意相同 → 寫那一格的原拼法並「用掉」它
+       （與 `merge_sheet_tier` 的保留原拼法一致），沒有 → 寫 `core` / `satellite`。
+    2. 剩下沒被用掉的 Sheet 格，就是能給 df 未設定列的全部候選。候選只有一種語意 → 保留
+       （拼法依剩餘 Sheet 格的出現序取用 —— 語意全同，列序只影響拼法、不決定級別）。
+       - 留白算一種（「未設定」）；df 未設定列多於剩餘 Sheet 格（session 多出的列）→ 候選含留白。
+       - 認不得的字串（如「核心資產」）→ 無法判定與其他列語意相同 → 衝突。
+       - core 與 satellite 並存、或某語意與留白並存（對不上哪一列是留白）→ 衝突。
+    """
+    out: list = [None] * len(df_tiers)
+    left = list(sheet_raws)          # 尚未被 df 明確列用掉的 Sheet 原字串
+    unset_idx: list[int] = []
+    n_unmatched = 0                  # df 明確列在 Sheet 上找不到同語意格 → 取代了哪一格不可知
+    for i, t in enumerate(df_tiers):
+        want = normalize_tier(t)
+        if want is None:
+            unset_idx.append(i)
+            continue
+        j = next((j for j, raw in enumerate(left) if normalize_tier(raw) == want), None)
+        if j is None:
+            out[i] = want
+            n_unmatched += 1
+        else:
+            out[i] = str(left.pop(j))
+    if not unset_idx:
+        return out
+    kinds: set = set()
+    for raw in left:
+        s = str(raw).strip()
+        if not s:
+            kinds.add("")
+            continue
+        n = normalize_tier(s)
+        if n is None:
+            return None
+        kinds.add(n)
+    if len(left) - n_unmatched < len(unset_idx):
+        kinds.add("")
+    if len(kinds) > 1:
+        return None
+    for k, i in enumerate(unset_idx):
+        out[i] = str(left[k]) if k < len(left) else ""
+    return out
+
+
 def _tier_by_code_from_values(values: list) -> dict[str, list[str]]:
     """`ws.get_all_values()` → {基金代號(大寫): [該代號每一列的級別格原字串, …]}。
 
     表頭可為 v2 中文（基金代號／級別）、v2 英文（fund_code／tier），或混在 v2 Sheet 裡的
     v1 分頁（fund_url／policy_tier）。同代號多列**全部列出**，讓呼叫端知道出現次數
-    （`write_policy_v2` 只保留單列代號 —— 見該處說明）。認不出表頭 → 空 dict。
+    與每一格的值（~~`write_policy_v2` 只保留單列代號~~ → 2026-10-11 起多列代號走
+    `_multi_row_tier_out` —— 見 `write_policy_v2` 的說明）。認不出表頭 → 空 dict。
     """
     if not values:
         return {}

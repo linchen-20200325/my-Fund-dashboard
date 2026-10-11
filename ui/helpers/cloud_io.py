@@ -12,6 +12,7 @@ from models.policy import fund_pk_str
 from repositories.policy_repository import (
     ALL_COLS_V2,
     PolicySheetError,
+    PolicyTierConflictError,
     _is_quota_error,
     detect_sheet_schema_version,
     load_all_policies_v2,
@@ -89,8 +90,13 @@ def _dump_all_to_sheet_v2(client: object,
                 _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
                 # keep_sheet_tier：session 沒有客戶級別的列保留 Sheet 原值（例如剛還原
                 # JSON 備份、或 Sheet 上的值認不得）—— 整張覆寫不可把客戶設定洗成空白。
+                # 同代號多列的 Sheet 級別互相衝突 → 該保單整張不寫（PolicyTierConflictError），
+                # 其他保單照常寫入。
                 _n = write_policy_v2(client, sheet_id, _pid, _df, keep_sheet_tier=True)
                 _written += int(_n)
+            except PolicyTierConflictError as _e_tc:
+                # 客戶裁示字句不截斷（下方通用分支截 80 字，代號多時會切掉「未寫入此保單」）
+                _errors.append(f"{_pid}: {_e_tc}")
             except (PolicySheetError, OAuthError) as _e:
                 _errors.append(f"{_pid}: {str(_e)[:80]}")
             if _i < len(_pids) - 1:

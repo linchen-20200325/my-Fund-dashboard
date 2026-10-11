@@ -79,7 +79,10 @@ def restore_from_json_bytes(raw: bytes,
         # 2026-10-10（級別三態）：備份裡的 `is_core` 一律不採 —— 舊備份的 `is_core` 可能是
         # 基金名稱猜測（改動前批次載入會覆寫未載入的基金），也可能是 Sheet 設定（已載入的基金
         # 經 v2 讀回後即為 Sheet 值），無法分辨。級別以備份裡的 `policy_tier` 為準；取不到時
-        # 顯示未設定，重新從雲端讀取即可恢復。「全部寫入」時以 keep_sheet_tier 保留 Sheet 原值。
+        # 顯示未設定，重新從雲端讀取即可恢復。~~「全部寫入」時以 keep_sheet_tier 保留 Sheet 原值。~~
+        # （2026-10-11 更正：b8aa0ec 起同代號多列會被寫成空白，上句已不符現況。）現行「全部寫入」
+        # （v2，keep_sheet_tier）：單列代號保留 Sheet 原值；同代號多列的 Sheet 級別同一語意 → 保留
+        # 原拼法，互相衝突／認不得／有設有留白而對不上 → 該保單整張不寫並提示衝突代號。
         _tier = normalize_tier(_f.get("policy_tier"))
         _f["policy_tier"] = _tier or ""
         _f["is_core"] = _IS_CORE_BY_TIER.get(_tier)

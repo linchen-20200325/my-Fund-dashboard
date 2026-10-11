@@ -15,8 +15,12 @@
 Sheet 字串辨識（`normalize_tier`）：`core` / `satellite`（大小寫不計）＋ 中文「核心」「衛星」。
 
 寫回 Sheet：session 端的值由 `fund_tier_sheet_value` 給（未設定 → 空字串）；
-真正寫進格子之前，寫回路徑再走 `merge_sheet_tier` —— 未設定的列**保留 Sheet 原值**
-（不把客戶的設定、或本程式認不得的值洗成空白）。
+~~真正寫進格子之前，寫回路徑再走 `merge_sheet_tier` —— 未設定的列**保留 Sheet 原值**~~
+~~（不把客戶的設定、或本程式認不得的值洗成空白）。~~
+（2026-10-11 更正：b8aa0ec 起 v2「全部寫入」只有單列代號走 `merge_sheet_tier`，同代號多列
+會寫成空白，上句已不符現況。）現行：v1 upsert 與 v2 單列代號走 `merge_sheet_tier`（未設定 →
+保留 Sheet 原值）；v2 同代號多列走 `repositories/policy/v2.py::_multi_row_tier_out` —— Sheet
+級別同一語意才保留，否則該保單整張不寫（客戶 2026-10-11 裁示）。
 
 ⛔ 本模組不得加入任何基金名稱關鍵字邏輯：猜不出來就是 `None`。
 """
