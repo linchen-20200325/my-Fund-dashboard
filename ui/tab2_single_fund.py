@@ -4,7 +4,7 @@
 
 設計：
 - render_single_fund_tab() -> None **零閉包依賴**（與 Tab4/5/6 同設計）
-- 外部 helper 從 ui.helpers.session import（_friendly_error / calc_data_health；2026-10-11 起不再 import is_core_fund，不依名稱猜級別）
+- 外部 helper 從 ui.helpers.session import（_friendly_error / calc_data_health）
 
 對外 API:
 - render_single_fund_tab() -> None

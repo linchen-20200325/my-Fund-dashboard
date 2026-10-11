@@ -165,6 +165,7 @@ def test_unified_column_name_and_help_are_renamed():
     assert "股票 / 債券 / 平衡" not in _help, "舊 help 與實際行為不符的敘述不得殘留"
     _sig_help = cfg["操作訊號"]["help"]
     assert "已停用" in _sig_help and "—" in _sig_help
+    assert "景氣位階" not in _sig_help, "操作訊號 help 不得帶裁示外的新語意（全表沒有叫「景氣位階」的欄）"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -281,3 +282,53 @@ def test_tab2_card_stays_dash_when_macro_phase_is_wired(
         assert _v not in _card, f"卡片仍出現舊字樣 {_v!r}"
     assert "資產屬性" not in _card
     assert any("總經自動配比建議" in b for b in _blobs), "auto_alloc 配比卡應照常渲染（與名稱無關）"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 4. 合併點（② 健診／③ 批次共用）：景氣位階非空時仍為「—」
+# ══════════════════════════════════════════════════════════════════
+@pytest.fixture
+def _seed_benchmark(monkeypatch):
+    """種入基準快取 → capture_by_code 不連網（同 tests/test_grp_health_unified_merge.py）。"""
+    import time as _t
+
+    import numpy as np
+    import pandas as pd
+
+    import ui.helpers.fund_grp_health.capture as _cap
+    _d = pd.date_range("2020-01-31", periods=60, freq="ME")
+    _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
+    _now = _t.monotonic()
+    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", (_now, _b))
+    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", (_now, _b))
+
+
+@pytest.mark.parametrize("phase", _PHASES)
+def test_merged_extra_columns_keep_attribute_and_signal_dash(_seed_benchmark, phase):
+    """`build_merged_extra_columns(funds, phase, score)`：名稱像核心／像衛星／中性、景氣位階非空 →
+    「基金屬性」「操作訊號」皆「—」，且欄名是「基金屬性」、沒有「資產屬性」。
+
+    突變：在 `unified.build_merged_extra_columns` 合併後依名稱覆寫「基金屬性」→ 本條紅。
+    """
+    from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+    funds = [
+        {"code": "C1", "name": "摩根多重收益債券基金", "series": None, "metrics": {},
+         "risk_metrics": {}, "moneydj_raw": {}},
+        {"code": "S1", "name": "全球科技成長基金", "series": None, "metrics": {},
+         "risk_metrics": {}, "moneydj_raw": {}},
+        {"code": "N1", "name": "某某全球基金", "series": None, "metrics": {},
+         "risk_metrics": {}, "moneydj_raw": {}},
+    ]
+    cols, combined = build_merged_extra_columns(funds, phase, 6.5)
+    assert "基金屬性" in cols and "資產屬性" not in cols
+    for code in ("C1", "S1", "N1"):
+        assert combined[code]["基金屬性"] == "—", (code, combined[code])
+        assert combined[code]["操作訊號"] == "—", (code, combined[code])
+        assert "資產屬性" not in combined[code]
+
+
+def test_batch_row_skeleton_uses_new_column_name():
+    """批次建列的欄骨架（`build_batch_unified_row` 輸出的鍵集合）用「基金屬性」，不含「資產屬性」。
+    （`build_batch_unified_row` 本體需連網取基金資料，故這裡只守欄骨架 SSOT；合併點行為由上一條守。）"""
+    from ui.helpers.fund_grp_health.unified import BATCH_UNIFIED_COLUMNS
+    assert "基金屬性" in BATCH_UNIFIED_COLUMNS and "資產屬性" not in BATCH_UNIFIED_COLUMNS

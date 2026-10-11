@@ -444,8 +444,7 @@ def extra_column_config() -> dict:
                  "目前尚無可靠來源,一律顯示「—」。這**不是**你在 Google Sheet 設定的核心／衛星級別,"
                  "系統也不會依基金名稱推測。"),
         "操作訊號": cc.TextColumn("操作訊號", width="medium",
-            help="依基金名稱推定的買賣訊號已停用,目前一律顯示「—」"
-                 "(景氣位階仍照常顯示於其他欄)。"),
+            help="依基金名稱推定的買賣訊號已停用,目前一律顯示「—」。"),
         "買 3 (深跌)": cc.TextColumn("買 3 (深跌)", width="small",
             help="第 3 段(最深)的分批買進參考價 —— 跌到這裡才進場的那一段。"),
         "買 1 (小跌)": cc.TextColumn("買 1 (小跌)", width="small",
