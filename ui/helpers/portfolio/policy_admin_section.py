@@ -81,6 +81,9 @@ from repositories.snapshot_repository import get_state_metadata  # EX-CRUD-1
 from ui.helpers.render_state import not_ready
 from ui.helpers.tw_time import tw_now_str
 
+#: 「📦 立即全部寫入」的警告跨一次 st.rerun() 暫存用（顯示後即清除）。
+_SAVE_WARNINGS_KEY = "_t3_io_panel_save_warnings"
+
 
 def render_policy_admin_section(
     *,
@@ -405,7 +408,15 @@ def render_policy_admin_section(
                             st.success("📦 已寫入 Sheet：" + "、".join(_msg))
                             for _w in _res["warnings"]:
                                 st.warning(f"⚠️ {_w}")
+                            # 2026-10-11：緊接的 st.rerun() 會讓上面的警告在重跑完成時被清掉
+                            # （例如「❌ 級別設定衝突：…，未寫入此保單。」使用者看不到）。
+                            # 不能改成不 rerun —— 上方「上次寫入」caption 會停在舊值；
+                            # 改為存進 session_state，重跑後由下方同一個 st.warning 再顯示一次並清除。
+                            if _res["warnings"]:
+                                st.session_state[_SAVE_WARNINGS_KEY] = list(_res["warnings"])
                             st.rerun()
+                    for _w in st.session_state.pop(_SAVE_WARNINGS_KEY, None) or []:
+                        st.warning(f"⚠️ {_w}")
             elif _io_panel == "new":
                 # v18.166：「✨ 新增帳本」只剩「自動建立新 Sheet」；
                 # 「從 Drive 挑」已移到「📥 雲端讀取」面板（user 截圖反饋）

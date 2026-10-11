@@ -29,7 +29,10 @@ from repositories.snapshot_repository import (
 )
 from infra.oauth import OAuthError
 # 寫回 Sheet 的「級別」一律走 L0 SSOT（`policy_tier` → `is_core` 三態 → 未設定給空白）；
-# 真正寫進格子前，repository 端再走 `merge_sheet_tier`：未設定的列保留 Sheet 原值。
+# ~~真正寫進格子前，repository 端再走 `merge_sheet_tier`：未設定的列保留 Sheet 原值。~~
+# （2026-10-11 更正：上句只對單列代號成立。）現行：v2「全部寫入」單列代號走 `merge_sheet_tier`；
+# 同代號多列走 `_multi_row_tier_out` —— Sheet 級別同一語意才保留，衝突則該保單整張不寫
+# （`PolicyTierConflictError`，見下方 `_dump_all_to_sheet_v2`）。
 from shared.policy_tier import fund_tier_sheet_value, normalize_tier
 
 

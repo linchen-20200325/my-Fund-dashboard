@@ -999,6 +999,9 @@ def _multi_row_tier_out(df_tiers: list, sheet_raws: list) -> list[str] | None:
        - 留白算一種（「未設定」）；df 未設定列多於剩餘 Sheet 格（session 多出的列）→ 候選含留白。
        - 認不得的字串（如「核心資產」）→ 無法判定與其他列語意相同 → 衝突。
        - core 與 satellite 並存、或某語意與留白並存（對不上哪一列是留白）→ 衝突。
+    3. 只要有未設定列，Sheet **全部格子**（含已被第 1 步用掉的）的非空明示級別超過一種語意、
+       或有認不得的字串 → 衝突（2026-10-11 稽核必修 1：只看剩下的格會依列序配對捏造級別）。
+       df 每列都明確時不判衝突（session 明示優先，例如讀回後 [core, satellite] 照常寫入）。
     """
     out: list = [None] * len(df_tiers)
     left = list(sheet_raws)          # 尚未被 df 明確列用掉的 Sheet 原字串
@@ -1017,6 +1020,20 @@ def _multi_row_tier_out(df_tiers: list, sheet_raws: list) -> list[str] | None:
             out[i] = str(left.pop(j))
     if not unset_idx:
         return out
+    # 2026-10-11 稽核必修 1：先看 Sheet 上「全部格子」（不扣掉被 df 明確列用掉的）的非空明示級別。
+    # 只看剩下的格會出事：Sheet [core, satellite]、df [satellite, 未設定] → satellite 被用掉後
+    # 剩下只有 core → 判無衝突 → 把 core 寫進未設定列 ＝ 依列序配對＋捏造。
+    # 有任何未設定列、且全部格子出現兩種以上語意（或有認不得的字串）→ 衝突。
+    all_kinds: set = set()
+    for raw in sheet_raws:
+        s = str(raw).strip()
+        if s:
+            n = normalize_tier(s)
+            if n is None:
+                return None
+            all_kinds.add(n)
+    if len(all_kinds) > 1:
+        return None
     kinds: set = set()
     for raw in left:
         s = str(raw).strip()

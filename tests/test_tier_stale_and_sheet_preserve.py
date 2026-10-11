@@ -660,7 +660,10 @@ def test_legacy_upsert_policy_row_header_without_tier_column(monkeypatch):
     ([""], ["core", "核心"], ["core"]),
     # df 明確列用掉同語意那一格（保留拼法）→ 剩下的給未設定列
     (["core", ""], ["", "核心"], ["核心", ""]),
-    (["", "satellite"], ["satellite", "core"], ["core", "satellite"]),
+    # ~~(["", "satellite"], ["satellite", "core"], ["core", "satellite"]),~~
+    # 2026-10-11 稽核必修 1：上列把「satellite 被明確列用掉、剩下 core」當成無衝突 → 把 core 寫進
+    # 未設定列 ＝ 依列序配對＋捏造。Sheet 全部格子 core／satellite 並存 → 改為衝突（見下方衝突類）。
+    (["", "satellite"], ["satellite", "core"], None),
     # df 明確列在 Sheet 找不到同語意格，但剩下全同語意 → 不論它取代哪一格，未設定列都是 core
     (["satellite", ""], ["core", "core"], ["satellite", "core"]),
     # df 全部明確 → 不需要 Sheet 值，不判衝突（session 明示優先，照舊）
@@ -676,8 +679,9 @@ def test_legacy_upsert_policy_row_header_without_tier_column(monkeypatch):
     (["satellite", ""], ["core", ""], None),     # 明確列取代了哪一格不可知 → 候選 core＋留白
 ])
 def test_multi_row_tier_out_table(df_tiers, sheet_raws, expect):
-    """突變 A：拿掉「同語意保留」（未設定列一律寫空白）→ 保留非空白值的各列轉紅（實跑 6 列）。
-    突變 B2：拿掉 `len(kinds) > 1 → None` → 衝突類中非「認不得」的 5 列轉紅（實跑）。"""
+    """突變 A：拿掉「同語意保留」（未設定列一律寫空白）→ 保留非空白值的各列轉紅（實跑 6 列；必修 1 後該類剩 5 列，實跑 5 列）。
+    突變 B2：拿掉 `len(kinds) > 1 → None` → 衝突類中「留白混合」的 3 列轉紅（必修 1 後實跑；core／satellite 互衝改由「全部格子」判定擋下）。
+    突變 C：拿掉「全部格子」判定（必修 1）→ `(["", "satellite"], ["satellite", "core"])` 轉紅。"""
     from repositories.policy.v2 import _multi_row_tier_out
     assert _multi_row_tier_out(df_tiers, sheet_raws) == expect
 
@@ -805,3 +809,143 @@ def test_round_trip_unrecognized_plus_blank_fails_closed(monkeypatch):
     out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
     assert ws.cleared is False and ws.updates == []
     assert "P1: ❌ 級別設定衝突：F1，未寫入此保單。" in out["warnings"][0]
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-10-11 稽核必修 1：Sheet 全部格子 core／satellite 並存 → 不得因明確列「用掉」一種就判無衝突
+# ══════════════════════════════════════════════════════════════════
+def test_round_trip_then_customer_edits_sheet_conflict_fails_closed(monkeypatch):
+    """重現 A：讀回 [F1 satellite 100, F1 留白 200]，寫入前客戶在 Sheet 改成
+    [F1 core 100, F1 satellite 200] → 4e0845e 寫出 [satellite 100, core 200]（捏造）。
+    突變 C（拿掉「全部格子」判定）→ 本條轉紅。"""
+    from repositories.policy.v2 import ALL_COLS_V2
+    from ui.helpers import cloud_io
+    read_rows = [("F1", "satellite", 100), ("F1", "", 200)]
+    _df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
+                        for c, t, a in read_rows], columns=list(ALL_COLS_V2)).fillna("")
+    monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: _df)
+    ss: dict = {"portfolio_funds": []}
+    assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
+    ws = _FakeWS(_v2_tab_rows([("F1", "core", 100), ("F1", "satellite", 200)]))
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
+    assert ws.cleared is False and ws.updates == []
+    assert "P1: ❌ 級別設定衝突：F1，未寫入此保單。" in out["warnings"][0]
+
+
+def _backup_with_tiers(funds: list) -> bytes:
+    """funds: [(policy_id, code, invest_twd, policy_tier), ...]（備份裡的 policy_tier 會被採用）。"""
+    return json.dumps({
+        "schema_version": "1.0",
+        "portfolio_funds": [{"code": c, "name": c, "invest_twd": a, "policy_id": p,
+                             "policy_name": p, "policy_tier": t, "currency": "USD"}
+                            for p, c, a, t in funds],
+        "t7_ledgers": {},
+    }, ensure_ascii=False).encode("utf-8")
+
+
+@pytest.mark.parametrize("backup, sheet_rows", [
+    # CE3：備份 [satellite 100, 未設定 200]、Sheet [core 100, satellite 200] → 舊版寫出 [satellite, core]
+    ([("P1", "F1", 100, "satellite"), ("P1", "F1", 200, "")],
+     [("F1", "core", 100), ("F1", "satellite", 200)]),
+    # CE1：備份 [core 100, 未設定 200]、Sheet [satellite 100, core 200] → 舊版寫出 [core, satellite]
+    ([("P1", "F1", 100, "core"), ("P1", "F1", 200, "")],
+     [("F1", "satellite", 100), ("F1", "core", 200)]),
+])
+def test_restore_partial_explicit_with_sheet_conflict_fails_closed(monkeypatch, backup, sheet_rows):
+    """突變 C（拿掉「全部格子」判定）→ 兩組皆轉紅。"""
+    from ui.helpers import cloud_io
+    from ui.helpers.io.json_backup import restore_from_json_bytes
+    ss: dict = {}
+    assert restore_from_json_bytes(_backup_with_tiers(backup), ss)["ok"]
+    assert [resolve_tier(f) for f in ss["portfolio_funds"]][1] is None
+    ws = _FakeWS(_v2_tab_rows(sheet_rows))
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
+    assert ws.cleared is False and ws.updates == []
+    assert "P1: ❌ 級別設定衝突：F1，未寫入此保單。" in out["warnings"][0]
+
+
+# ══════════════════════════════════════════════════════════════════
+# 2026-10-11 稽核必修 2：「全部寫入」的警告不得被緊接的 st.rerun() 清掉
+# ══════════════════════════════════════════════════════════════════
+_SAVE_PANEL_APP = """
+import sys
+sys.path.insert(0, {repo!r})
+import streamlit as st
+from ui.helpers import cloud_io
+
+_MSG = "⚠️ 1 個保單分頁寫入失敗：P1: ❌ 級別設定衝突：F1，未寫入此保單。"
+# AppTest 與 pytest 同一個 process：替身只在本輪 render 期間生效，finally 一律還原（不得洩漏到其他測試）
+_orig_dump = cloud_io.dump_all_to_sheet
+_fake_dump = lambda client, sid, ss: {{
+    "ok": True, "written": 1, "skipped_no_pid": 0, "n_state": 0, "n_overview": 0,
+    "warnings": [_MSG] if ss.get("_with_warning", True) else [], "error": None}}
+ss = st.session_state
+ss.setdefault("policy_sheet_id", "SID123")
+ss.setdefault("gsheet_tokens", {{"x": 1}})
+ss.setdefault("_last_loaded_sheet_id", "SID123")
+ss.setdefault("_t3_cur_sheet_title", "帳本")
+ss.setdefault("t3_io_panel", "save")
+ss.setdefault("portfolio_funds", [{{"code": "F1", "policy_id": "P1", "name": "x"}}])
+ss["_runs"] = ss.get("_runs", 0) + 1
+_orig_warning = st.warning
+def _rec(body, *a, **k):
+    ss.setdefault("_warn_log", []).append((ss["_runs"], str(body)))
+    return _orig_warning(body, *a, **k)
+from ui.helpers.portfolio.policy_admin_section import render_policy_admin_section
+class _C:
+    def __getattr__(self, n):
+        raise RuntimeError("no net")
+st.warning = _rec
+cloud_io.dump_all_to_sheet = _fake_dump
+try:
+    render_policy_admin_section(
+        oauth_configured=True, resolve_oauth_cfg=lambda: None,
+        get_oauth_client=lambda: _C(), gsa_secret=None, sheet_id_secret=None,
+        get_login_state=lambda: {{}}, sheet_client=lambda: _C())
+finally:
+    st.warning = _orig_warning
+    cloud_io.dump_all_to_sheet = _orig_dump
+"""
+
+
+def _save_panel_click(tmp_path, with_warning: bool):
+    import pathlib as _pl
+    from streamlit.testing.v1 import AppTest
+    _app = tmp_path / "save_panel_app.py"
+    _app.write_text(_SAVE_PANEL_APP.format(repo=str(_pl.Path(__file__).resolve().parents[1])),
+                    encoding="utf-8")
+    at = AppTest.from_file(str(_app), default_timeout=60)
+    at.session_state["_with_warning"] = with_warning
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    at.button(key="t3_io_panel_save_run").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def test_save_warning_survives_rerun(tmp_path):
+    """按「📦 立即全部寫入」→ st.rerun() 之後的那一輪（最後一輪）仍以 st.warning 顯示衝突字句，
+    顯示後即清除。突變 D（恢復無條件 rerun、不暫存）→ 本條轉紅（最後一輪沒有任何警告）。"""
+    at = _save_panel_click(tmp_path, True)
+    _runs = at.session_state["_runs"]
+    assert _runs >= 3   # 初次 → 點擊 → rerun
+    _last = [b for r, b in at.session_state["_warn_log"] if r == _runs]
+    assert _last == ["⚠️ ⚠️ 1 個保單分頁寫入失敗：P1: ❌ 級別設定衝突：F1，未寫入此保單。"]
+    assert "_t3_io_panel_save_warnings" not in at.session_state
+    at.run()   # 再一輪：已清除，不重複顯示
+    assert [b for r, b in at.session_state["_warn_log"]
+            if r == at.session_state["_runs"]] == []
+
+
+def test_save_without_warning_behaviour_unchanged(tmp_path):
+    """無警告：仍 rerun（上次寫入更新），不暫存、不顯示警告。"""
+    at = _save_panel_click(tmp_path, False)
+    assert at.session_state["_runs"] >= 3
+    assert "_warn_log" not in at.session_state
+    assert "_t3_io_panel_save_warnings" not in at.session_state
