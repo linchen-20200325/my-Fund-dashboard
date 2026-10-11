@@ -824,7 +824,7 @@ _CS_WHERE_PORTFOLIO = (
 _CS_WHERE_HEALTH = (
     f"看「{_tab_label('portfolio')}」的「🛡️ 核心資產比例 / 目標偏差」那一格"
     "（那裡吃你在 Google Sheet 標的 `policy_tier`）—— "
-    "本 Tab 只有代號與單一本金，讀不到你標的配置定位。"
+    "本 Tab 只有代號與單一本金，讀不到你標的配置級別。"
 )
 
 

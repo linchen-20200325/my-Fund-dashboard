@@ -925,7 +925,7 @@ def render_policy_admin_section(
                             "invest_date":  st.column_config.TextColumn("投資日期"),
                             "fx_at_buy":    st.column_config.NumberColumn("買入匯率"),
                             "notes":        st.column_config.TextColumn("備註"),
-                            "policy_tier":  st.column_config.TextColumn("配置定位"),
+                            "policy_tier":  st.column_config.TextColumn("配置級別"),
                         },
                     )
 
