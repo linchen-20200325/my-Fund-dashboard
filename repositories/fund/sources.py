@@ -168,7 +168,7 @@ def _src_fundclear_meta(code: str) -> dict:
         if isinstance(info, dict):
             meta["fund_name"]   = (info.get("FundName") or info.get("fundName") or
                                     info.get("ChtName") or "")
-            meta["currency"]    = (info.get("Currency") or info.get("currency") or "USD")
+            meta["currency"]    = (info.get("Currency") or info.get("currency") or "")  # 2026-10-10 缺幣別→空白(未知≠USD)
             meta["risk_level"]  = str(info.get("RiskLevel") or info.get("riskLevel") or "")
             meta["category"]    = (info.get("FundType") or info.get("fundType") or "")
             meta["nav_latest"]  = safe_float(info.get("LatestNAV") or info.get("latestNav"))
@@ -235,7 +235,7 @@ def _src_fundclear_div(code: str) -> list:
                 "amount":    amt,
                 "yield_pct": safe_float(
                     item.get("DividendRate") or item.get("dividendRate"), 0) or 0,
-                "currency":  item.get("Currency") or item.get("currency") or "USD",
+                "currency":  item.get("Currency") or item.get("currency") or "",  # 2026-10-10 未知≠USD
             })
         if divs:
             print(f"[src_fundclear_div] ✅ {code} {len(divs)} 筆配息")
@@ -506,7 +506,9 @@ def _src_allianzgi_meta(code: str) -> dict:
                 if rows_map:
                     meta["fund_name"] = rows_map.get("基金名稱", "")
                     meta["nav_latest"] = safe_float(rows_map.get("最新淨值") or rows_map.get("淨值"))
-                    meta["currency"] = rows_map.get("計價幣別", "TWD")
+                    # ~~rows_map.get("計價幣別", "TWD")~~ —— 2026-10-10 客戶裁示二 A:
+                    # 缺欄 → 空白(未知 ≠ 台幣)
+                    meta["currency"] = rows_map.get("計價幣別", "")
                     # 成立日期（多個可能標籤）
                     import re as _re_m
                     _inc_raw = (rows_map.get("成立日期") or rows_map.get("設立日期") or
@@ -954,7 +956,7 @@ def _pool_secid_lookup(code: str) -> str:
     import sys as _sys_p
     try:
         from repositories.pool_repository import (
-            resolve_currency, resolve_isin, resolve_secid,
+            resolve_isin, resolve_secid,   # ~~resolve_currency~~(C1-3:池幣別不採)
         )
     except Exception:  # noqa: BLE001 — 池模組不可用(理論上不會)→ 跳過備源
         return ""
@@ -973,7 +975,17 @@ def _pool_secid_lookup(code: str) -> str:
     try:
         _isin = resolve_isin(_code) or ""
         if _isin:
-            _ccy = (resolve_currency(_code) or "USD").upper() or "USD"
+            # 2026-10-10 客戶裁示 Q2:未知幣別 ≠ USD —— screener 請求必帶 currencyId,
+            # 池幣別空白 → 不以 USD 猜測呼叫(fail closed),跳過本備源。
+            # ~~_ccy = _normalize_declared_ccy(resolve_currency(_code))~~(批次二:池幣別)
+            # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 → screener 的幣別只取
+            # 晨星硬編表手工宣告值;沒有 → 未知 → 不呼叫(fail closed)。
+            _ccy = _normalize_declared_ccy(
+                (_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1])
+            if not _ccy:
+                print(f"[ms_secid_pool] {_code} ISIN={_isin} 幣別未知 → 不以 USD 猜測呼叫晨星"
+                      f" screener(fail closed)", file=_sys_p.stderr)
+                return ""
             _sid = _morningstar_screener_secid(_isin, _ccy)
             if _sid:
                 print(f"[ms_secid_pool] {_code} ISIN={_isin}({_ccy})→secId={_sid}",
@@ -1415,7 +1427,7 @@ _ms_secid_cache: dict = {}
 # v19.473:同一次搜尋順手記下晨星回傳的**基金名稱 / 幣別**（供「只填代號+ISIN,其餘自動」）。
 #   幣別藏在晨星基金名稱後綴（如 "…AMg7 USD"）—— 用它自動判幣別,免使用者填(§4.1 不硬給 USD)。
 _ms_name_cache: dict = {}
-_ms_ccy_cache: dict = {}
+_ms_ccy_cache: dict = {}   # ⚠️ 2026-10-10 起不再寫入、亦無讀取端;保留名稱供既有測試 fixture 清理
 # v19.491:ISIN → secId 走 Morningstar **screener**(精確 ISIN filter)的正/負快取。
 #   與 SecuritySearch(_ms_secid_cache)分開,鍵一律大寫 ISIN。
 _ms_screener_cache: dict = {}
@@ -1423,7 +1435,7 @@ _ms_screener_cache: dict = {}
 # 幣別 token（英文碼 + 常見中文詞）→ ISO 幣別。掃描晨星基金名稱命中第一個即用。
 _CCY_FROM_NAME = {
     "USD": "USD", "美元": "USD", "美金": "USD",
-    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD",
+    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD", "新臺幣": "TWD",  # 2026-10-10 +新臺幣
     "EUR": "EUR", "歐元": "EUR",
     "HKD": "HKD", "港幣": "HKD", "港元": "HKD",
     "AUD": "AUD", "澳幣": "AUD", "澳元": "AUD",
@@ -1436,6 +1448,26 @@ _CCY_FROM_NAME = {
     "NZD": "NZD", "紐幣": "NZD",
     "CHF": "CHF", "瑞郎": "CHF", "瑞士法郎": "CHF",
 }
+
+
+def _normalize_declared_ccy(raw) -> str:
+    """**宣告型**幣別欄位(選股池 / meta / 硬編表 / 呼叫端 hint)→ ISO 三碼或 `""`(未知)。
+
+    2026-10-10 批次二(選股池幣別正規化):選股池幣別欄可能是「美元」這類中文,
+    原本照原字串當 `currencyId` 送晨星(`currencyId=美元`),而預期幣別判定那一側
+    又把同一個值當成未知 —— 兩邊各用各的規則。本函式是 L1 唯一一套宣告欄正規化:
+      1. 整欄**精確**對照本檔 `_CCY_FROM_NAME`(大寫或原字,例「美元」/「usd」/「RMB」);
+      2. 不在表內 → `shared.data_quality.normalize_iso_ccy`(本身已是 ISO 三碼英文字母才收);
+      3. 其餘(「美元累積」、空白、亂碼)→ `""` = 未知,由呼叫端 fail closed,不猜 USD。
+    ⚠️ 不做子字串掃描(那是 `_ccy_from_fund_name` 的名稱推定,不算可靠宣告)。
+    ⚠️ 別名表為何不用 L2 `services.currency.CCY_NORMALIZE`:L1 不得 import L2(§8.2)。
+    """
+    from shared.data_quality import normalize_iso_ccy as _iso
+    _s = str(raw or "").strip()
+    if not _s:
+        return ""
+    _alias = _CCY_FROM_NAME.get(_s.upper()) or _CCY_FROM_NAME.get(_s)
+    return _alias or _iso(_s)
 
 
 def _ccy_from_fund_name(name: str) -> str:
@@ -1501,7 +1533,8 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
             _ms_secid_cache[query] = sec_id
             # v19.473:順手記名稱 + 從名稱判幣別(供 ISIN 驅動路徑自動回填,免使用者填)
             _ms_name_cache[query] = fund_name_ms
-            _ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)
+            # ~~_ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)~~
+            # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪)
             return sec_id
     except Exception as _e:
         # v19.339(第五份 review Bug 5):暫時性失敗(timeout/403/JSON 壞)原本也落到
@@ -1575,7 +1608,7 @@ def _screener_row_get(row: dict, keys) -> str:
     return ""
 
 
-def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
+def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
     """用 Morningstar **screener** 以精確 `filters=ISIN:IN:<isin>` 解析 secId(比 SecuritySearch
     模糊名稱搜尋準;保單平台基金常是後者查不到才卡住)。回傳晨星 **F 型 secId**(可直接餵
     `_MS_TOOLS_REST/timeseries_price`,與本檔 3a NAV 主路徑同 host + 同 token),查無 / 失敗回 ""。
@@ -1596,6 +1629,12 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
     _isin = str(isin or "").strip().upper()
     if not _isin:
         return ""
+    # 2026-10-10 客戶裁示 Q2:請求必帶 `currencyId`;幣別未知 → fail closed,
+    # 不以 USD 猜測發請求(不入負快取 —— 這不是「查無」,是「不知道該用哪個幣別問」)。
+    _ccy = str(currency or "").strip().upper()
+    if not _ccy:
+        print(f"[ms_screener] {_isin} 幣別未知 → 不以 USD 猜測呼叫 screener(fail closed)")
+        return ""
     if _isin in _ms_screener_cache:
         return _ms_screener_cache[_isin]
 
@@ -1607,7 +1646,6 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
         "Referer": "https://tools.morningstar.co.uk/",
     }
     _dp = _up.quote("SecId|Name|ISIN|PriceCurrency|BaseCurrency")
-    _ccy = str(currency or "USD").strip().upper() or "USD"
     _transient = False       # timeout/連線/JSON 壞 → 可重試,不負快取
     _anomaly = False         # 形狀非預期 / 有 rows 抽不到 SecId → 疑欄位錯,不負快取 + 現形
     _logged_sample = False
@@ -1661,8 +1699,10 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
                     _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
                     if _name:
                         _ms_name_cache[_isin] = _name
-                    # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
-                    _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
+                    # ~~screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)~~
+                    # ~~_ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)~~
+                    # 2026-10-10 複驗:晨星幣別快取已無任何讀取端(Q2 不再以名稱推定幣別發請求)→ 移除只寫不讀的寫入(有意識的清理,不是漏刪);
+                    # screener 回的幣別仍印在上方 log。
                     return _sec
             # 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
             if _rows:
@@ -1678,9 +1718,14 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
     return ""
 
 
-def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
+def _src_morningstar_nav(code: str, fund_name: str = "",
+                         currency_hint: str = "") -> "pd.Series":
     """
     v6.19: 從 Morningstar 全球 API 取歷史淨值。
+
+    `currency_hint`(2026-10-10 複驗 M1):呼叫端**已確認**的幣別(例:span-extend 以 meta
+    宣告算出的預期幣別)。**只在選股池與硬編表都查不到幣別時**才拿它當 `currencyId`;
+    三者皆無 → 幣別未知 → fail closed(Q2),**連 secId 搜尋都不發**。
     改進：
     1. 優先使用 _MORNINGSTAR_SECID_MAP 硬編碼（跳過搜尋，避免 lt.morningstar.com 封鎖）
     2. 使用正確 currencyId（USD vs TWD）
@@ -1698,8 +1743,26 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
         _user_mapped = _resolve_user_secid(_code)
     except Exception:  # noqa: BLE001 — 選股池不可用不阻斷抓取鏈(退硬編/搜尋)
         _user_mapped = None
-    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
-    sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
+    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
+    # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
+    # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
+    # ~~currency_id = str(_mapped[1] or "").strip().upper()~~(「美元」會原樣送出)
+    # ~~currency_id = _normalize_declared_ccy(_mapped[1])~~(批次二;`_mapped` 可能是池 secId 列)
+    # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據 —— 池 secId 仍可用來找基金,
+    # 但 `currencyId` 只取晨星硬編表手工宣告的幣別,其次才是呼叫端 hint(原始宣告值)。
+    sec_id = _mapped[0]
+    currency_id = _normalize_declared_ccy(
+        (_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1])
+    # ~~2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。~~
+    # ~~(池使用者幣別 `resolve_currency` 那一段已移除)~~
+    # 2026-10-10 客戶裁示 C1-3:幣別來源 = 晨星硬編表 → 呼叫端 hint;選股池幣別不採。
+    if not currency_id and currency_hint:
+        currency_id = _normalize_declared_ccy(currency_hint)   # 2026-10-10 批次二:同一套
+    if not currency_id:
+        # 幣別未知 → 後段的 timeseries 必然 fail closed;secId 搜尋(screener /
+        # SecuritySearch)的結果用不到,提早結束、不發任何晨星請求(複驗建議 3c)。
+        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不發晨星請求(fail closed)")
+        return pd.Series(dtype=float)
 
     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
@@ -1712,20 +1775,27 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
             # ⛔ 2026-09-06:`set_secid as _cache_secid` **已移除,不是漏刪**。
             #    只留讀取(`resolve_*`);回存 secId 的那一行見下方切除註。
             from repositories.pool_repository import (  # noqa: PLC0415
-                resolve_currency as _resolve_user_ccy,
-                resolve_isin as _resolve_user_isin,
+                resolve_isin as _resolve_user_isin,   # ~~resolve_currency~~(C1-3)
             )
             _isin = _resolve_user_isin(_code)
             if _isin:
-                _u_ccy = _resolve_user_ccy(_code)
-                if _u_ccy:
-                    currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
+                # ~~_u_ccy = _normalize_declared_ccy(_resolve_user_ccy(_code))~~
+                # ~~if _u_ccy: currency_id = _u_ccy~~(選股池幣別覆寫 currencyId)
+                # 2026-10-10 客戶裁示 C1-3:選股池幣別不算可信證據,不覆寫 currencyId。
                 # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),
                 #   查無 / 端點不可用才退回既有 SecuritySearch(純附加、零回歸)。
-                sec_id = (_morningstar_screener_secid(_isin, currency_id or "USD")
-                          or _morningstar_search_secid(_isin, currency_id or "USD"))
-                # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
-                _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
+                # 2026-10-10 Q2:幣別未知 → 不以 USD 猜測呼叫 screener(函式內 fail closed);
+                #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
+                sec_id = (_morningstar_screener_secid(_isin, currency_id)
+                          or _morningstar_search_secid(_isin, currency_id))
+                # ~~使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)~~
+                # ~~_auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")~~
+                # 2026-10-10 客戶裁示 Q2(稽核一致性修正;有意識的政策變更,不是漏刪):
+                # 幣別未知時 screener 不發請求,`_ms_ccy_cache` 只剩 SecuritySearch 的**名稱推定**
+                # (`_ccy_from_fund_name`,已知順序陷阱:「AUD Hedged USD」→ USD)——不屬可靠確認,
+                # 不得拿它決定晨星 `currencyId` → 留空,由下方 timeseries 守門 fail closed。
+                # 只限晨星請求這條;其他名稱推定不動。
+                _auto_ccy = ""
                 if _auto_ccy:
                     currency_id = _auto_ccy
                 # ── 2026-09-06:查一檔基金**不再**把 secId 回寫進使用者的 Google Sheet ──
@@ -1805,6 +1875,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
 
     if not sec_id:
         print(f"[src_morningstar] {_code}: 無 secId（未在映射表且搜尋失敗）")
+        return pd.Series(dtype=float)
+    # 2026-10-10 客戶裁示 Q2:timeseries 請求必帶 `currencyId`(回的是換算後淨值)。
+    # 幣別未知 → fail closed:不以 USD 猜測抓取,也不把猜出來的序列送進正式資料流。
+    if not currency_id:
+        print(f"[src_morningstar] ⛔ {_code}: 幣別未知 → 不以 USD 猜測向晨星要淨值(fail closed)")
         return pd.Series(dtype=float)
 
     end_d   = _dt2.date.today()
@@ -2699,7 +2774,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
         "nav_date":     "",
         "year_high_nav": None,
         "year_low_nav":  None,
-        "currency":     "USD",
+        "currency":     "",   # 2026-10-10:未解析到幣別 = 未知(空白),不得預設 USD
         "risk_level":   "",
         "dividend_freq": "",
         "fund_scale":   "",
@@ -2736,7 +2811,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
             # 基本資料
             if rows_map.get("基金名稱"):
                 out["fund_name"]    = rows_map.get("基金名稱", "")
-                out["currency"]     = rows_map.get("計價幣別", "USD").replace(" ", "")
+                out["currency"]     = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
                 out["risk_level"]   = rows_map.get("風險報酬等級", "").replace(" ", "")
                 out["dividend_freq"]= rows_map.get("配息頻率", "").replace(" ", "")
                 out["fund_scale"]   = rows_map.get("基金規模", "")
@@ -3073,7 +3148,7 @@ def _src_tcb_meta(code: str) -> dict:
                                 if k: rows_map[k] = cells[i+1].get_text(strip=True)
                     if rows_map.get("基金名稱"):
                         meta["fund_name"]   = rows_map.get("基金名稱", "")
-                        meta["currency"]    = rows_map.get("計價幣別", "USD").replace(" ", "")
+                        meta["currency"]    = rows_map.get("計價幣別", "").replace(" ", "")  # 缺欄→空白(未知≠USD)
                         meta["risk_level"]  = rows_map.get("風險報酬等級", "").replace(" ", "")
                         meta["dividend_freq"] = rows_map.get("配息頻率", "").replace(" ", "")
                         meta["fund_scale"]  = rows_map.get("基金規模", "")
@@ -3165,8 +3240,10 @@ def _src_tcb_div(code: str) -> list:
                     if _amt is None or _amt <= 0 or _amt > 1000:
                         continue
                     _yld = safe_float(_cols[5]) or 0
+                    # ~~else ("TWD" if _is_dom else "")~~ —— 2026-10-11 客戶裁示 5:「境內 → TWD」
+                    # 是推定、不是幣別證據 → 缺幣別欄一律空白(未知),境內外同。
                     _cur = (_cols[6].strip() if len(_cols) > 6 and _cols[6].strip()
-                            else ("TWD" if _is_dom else "USD"))
+                            else "")  # 缺幣別→空白(未知≠USD、≠TWD)
                     _out.append({
                         "date": _cols[0], "ex_date": _cols[1], "pay_date": _cols[2],
                         "amount": _amt, "yield_pct": _yld, "currency": _cur,
@@ -3348,7 +3425,7 @@ def _src_tdcc_meta(code: str) -> dict:
             item_code = (item.get("基金代碼") or item.get("境外基金代碼") or "").upper()
             if item_code == _c:
                 meta["fund_name"] = item.get("基金名稱", "")
-                meta["currency"]  = item.get("計價幣別", "USD")
+                meta["currency"]  = item.get("計價幣別", "")  # 缺鍵→空白(未知≠USD)
                 print(f"[src_tdcc_meta] 3-2 ✅ {_c}: {meta['fund_name'][:25]}")
                 break
     except Exception as _e:

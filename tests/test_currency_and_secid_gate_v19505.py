@@ -3,6 +3,7 @@
 A:_pool_secid_or_isin —— 池有 secid/isin → 開 Morningstar 全歷史閘門(不限保單前綴)。
 B:_correct_currency —— 境內基金矇 USD 死預設 → 用名稱/池/台灣推定修回台幣;真美元/EUR 不動。
 """
+import pytest
 import repositories.fund.fund_orchestration as O
 import repositories.pool_repository as PR
 
@@ -96,11 +97,32 @@ def test_pool_read_raises_currency_degrades(monkeypatch):
 
 # ── B2:_ensure_currency 外層收口(稽核 High 盲點:protect loop 蓋回假 USD 後再修)──
 def test_ensure_currency_corrects_usd_taiwan_on_final_result(monkeypatch):
-    """模擬:direct_url 注入 USD → protect loop 存回 → 收口 _ensure_currency 修成 TWD。"""
-    monkeypatch.setattr(PR, "resolve_currency", lambda c: "")
-    r = {"currency": "USD", "fund_name": "安聯台灣智慧基金"}   # 台灣基金被矇 USD
+    """~~模擬:direct_url 注入 USD → protect loop 存回 → 收口 _ensure_currency 修成 TWD。~~
+
+    → 2026-10-10 客戶裁示 C2-1(**有意識的政策變更,不是漏刪**):名稱 /「台灣」推定與
+    選股池幣別不算可信證據,不得寫進 L1 結果 `currency`(下游當來源宣告、Tab3 會寫回 Sheet)。
+    舊理由(direct_url 缺欄 USD 死預設)仍然成立,但已由取數源頭「缺欄 → 空白」處理;
+    被權衡掉的是「用推定覆蓋宣告值」這個手段。來源宣告 USD → 保留 USD。"""
+    monkeypatch.setattr(PR, "resolve_currency", lambda c: "TWD")       # 池有值也不採
+    r = {"currency": "USD", "fund_name": "安聯台灣智慧基金"}
     O._ensure_currency(r, "ACDD19")
-    assert r["currency"] == "TWD"
+    assert r["currency"] == "USD"
+    r2 = {"currency": "", "fund_name": "安聯台灣智慧基金"}               # 宣告空 → 不推定
+    O._ensure_currency(r2, "ACDD19")
+    assert r2["currency"] == ""
+
+
+@pytest.mark.parametrize("raw, code, want", [
+    ("美元", "ZZZE1", "USD"),     # 格式正規化
+    ("日幣", "ZZZE1", "日幣"),     # L1 別名表沒收 → 保留來源原字(交 L2 正規化)
+    ("", "TLZF9", "USD"),         # 宣告空 → 晨星硬編表
+    ("", "ZZZE1", ""),            # 皆無 → 未知
+])
+def test_ensure_currency_declared_or_table_only(monkeypatch, raw, code, want):
+    monkeypatch.setattr(PR, "resolve_currency", lambda c: "TWD")
+    r = {"currency": raw, "fund_name": "某某台灣基金"}
+    O._ensure_currency(r, code)
+    assert r["currency"] == want
 
 
 def test_ensure_currency_leaves_real_usd_untouched(monkeypatch):
@@ -123,4 +145,5 @@ def test_ensure_currency_pool_read_raises_no_crash(monkeypatch):
     monkeypatch.setattr(PR, "resolve_currency", _boom)
     r = {"currency": "USD", "fund_name": "安聯台灣智慧基金"}
     O._ensure_currency(r, "ACDD19")     # 不得拋
-    assert r["currency"] == "TWD"       # 名稱台灣推定仍生效
+    # ~~assert r["currency"] == "TWD"  # 名稱台灣推定仍生效~~ → C2-1:不推定,來源 USD 保留
+    assert r["currency"] == "USD"

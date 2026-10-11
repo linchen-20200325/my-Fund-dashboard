@@ -323,7 +323,10 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
         _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
         _mdiv_1m = (10000.0 * _adr / 12.0) if (_adr and _adr > 0) else None
         # v19.59：從 fund_grp_health_extras._render_investment_calc L194-283 上抽同源欄位到比較表
-        _ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()
+        # ~~_ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()~~
+        # 2026-10-10 客戶裁示 Q4:Sheet 與來源幣別衝突 → 不得靜默選一個換匯 → 未知(fail closed)。
+        from ui.helpers.portfolio.load import fund_currency_for_calc
+        _ccy_raw = fund_currency_for_calc(f)
         _ccy = _norm_ccy(_ccy_raw, default="", mode="yf") if _ccy_raw else ""
         _nav = _safe_num(m.get("nav") or mj.get("nav_latest"))
         _fx = _safe_fx(_ccy) if _ccy else None

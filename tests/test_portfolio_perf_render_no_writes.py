@@ -494,6 +494,8 @@ _LAZY_ON_RENDER_PATH = (
     "ui.helpers.render_state",
     "shared.signal_thresholds",
     "services.hot_money_service",
+    # 2026-10-10 稽核 M2:`_ccy_fx_for` 改走 fund_currency_for_calc(Sheet/來源幣別一致才算已知)
+    "ui.helpers.portfolio.load",
     "pandas",
 )
 

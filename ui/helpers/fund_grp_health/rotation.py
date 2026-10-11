@@ -33,10 +33,14 @@ def _assemble_rows(funds: list) -> list:
     from services.fx_regime_service import fx_regime_by_ccy as _fxr_rot
     _fx_map_rot = _fxr_rot() or {}
 
+    from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_rot
+
     rows = []
     for _f in funds:
         _code = _f.get("code", "?")
-        _fd = _f.get("moneydj_raw") or _f
+        # ~~_fd = _f.get("moneydj_raw") or _f~~(只帶來源幣別,Sheet 衝突看不見)
+        # 2026-10-10 客戶裁示二 B(C2-3):匯率風險維度改吃 Sheet 與來源一致的幣別
+        _fd = {**(_f.get("moneydj_raw") or _f), "currency": _ccy_calc_rot(_f)}
         try:
             _h = build_health_analysis_row(_fd, _code, fx_cv_by_ccy=_fx_map_rot)
         except Exception:  # noqa: BLE001
@@ -52,7 +56,8 @@ def _assemble_rows(funds: list) -> list:
             "基金類別": _h.get("基金類別"), "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
-            "currency": _f.get("currency"),   # v19.484:跨幣別換股標註(§4.1)用
+            # ~~"currency": _f.get("currency"),~~   # v19.484:跨幣別換股標註(§4.1)用
+            "currency": _ccy_calc_rot(_f),   # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
         })
     return rows
 

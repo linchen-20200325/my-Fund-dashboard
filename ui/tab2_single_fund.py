@@ -2054,11 +2054,16 @@ def render_single_fund_tab() -> None:
                 # v18.260p6：💰 投資試算 — 投入 TWD → 換原幣 → 單位數 / 月配息 TWD / 月配股
                 with st.container(border=True):
                     st.markdown("#### 💰 投資試算 — 投入金額 → 單位數 / 配息估算")
-                    _ccy_raw = (mj_raw.get("currency") or "TWD").strip() or "TWD"
+                    # ~~_ccy_raw = (mj_raw.get("currency") or "TWD").strip() or "TWD"~~
+                    # 2026-10-10 客戶裁示二 A:缺幣別不得預設成 TWD(未知 ≠ 台幣)。
+                    _ccy_raw = (mj_raw.get("currency") or "").strip()
                     # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 Tab2 既有
                     # 行為：人民幣→CNH 以走 yfinance 較可靠的 CNHTWD=X 報價）。
                     from services.currency import normalize_ccy as _norm_ccy
-                    _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
+                    # ~~_ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")~~ → 未知 = 空白;
+                    # 正規化後不是 ISO 三碼(認不得的寫法)同樣視為未知,不拿它組 FX 代碼。
+                    from shared.data_quality import normalize_iso_ccy as _iso_ccy_calc
+                    _ccy = _iso_ccy_calc(_norm_ccy(_ccy_raw, default="", mode="yf"))
                     _nav_calc = m.get("nav")
                     # 年化配息率:本區塊原本自己刻了一份兩層 fallback,和上方「近期配息」
                     # 區塊、「吃本金檢查」橫幅各走各的 —— 同一頁三個年化配息率可能是
@@ -2089,7 +2094,7 @@ def render_single_fund_tab() -> None:
                     _fx_source = ""  # "Yahoo" / "FRED" / "手動"
                     if _ccy == "TWD":
                         _fx_to_twd = 1.0   # TWD 基金不需換匯
-                    elif _ccy != "TWD":
+                    elif _ccy:   # ~~elif _ccy != "TWD":~~ 幣別未知 → 不組幣對、不查匯率
                         # 先讀 FRED key（讀失敗只是少了 fallback，不該擋 Yahoo）
                         import os as _os
                         _fred_k = ""
@@ -2128,7 +2133,10 @@ def render_single_fund_tab() -> None:
                         else:
                             st.caption("年化配息率：— （三層來源皆無值，下方不做配息試算）")
                         # v18.278：normalize 後 _ccy 已是 ISO，TWD 基金 _fx_to_twd=1.0 不顯示 FX caption
-                        if _ccy == "TWD":
+                        if not _ccy:
+                            # 2026-10-10 客戶裁示二 A:幣別未知 → 沿用既有字樣,不進手動匯率輸入
+                            st.caption("⬜ 缺幣別")   # 沿用既有字樣(capture.py / investment.py)
+                        elif _ccy == "TWD":
                             st.caption("💰 此基金以新台幣計價（FX = 1）")
                         elif _fx_to_twd:
                             # 自動換匯成功 — user 要求「移除設定匯率的按鈕」
@@ -2179,7 +2187,7 @@ def render_single_fund_tab() -> None:
                     # 把「有沒有換匯依據」納入 gate：台幣基金不需要匯率；非台幣基金
                     # 沒有匯率就整塊不算（§1 寧可留白）。
                     _fx_ready = (_ccy == "TWD") or bool(_fx_to_twd)
-                    if _nav_calc and _nav_calc > 0 and not _fx_ready:
+                    if _nav_calc and _nav_calc > 0 and not _fx_ready and _ccy:   # 未知 → 只顯示「⬜ 缺幣別」
                         st.warning(
                             f"⛔ 這是 **{_ccy}** 計價的基金，沒有匯率就換算不出原幣本金 —— "
                             "上方填入匯率後，可申購單位數 / 月配息 / 1Y 預估市值才會出現。"

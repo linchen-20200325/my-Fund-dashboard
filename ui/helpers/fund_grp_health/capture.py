@@ -96,7 +96,8 @@ def capture_by_code(funds: list) -> dict:
     """
     from services.benchmark_compare import excess_return
     from services.capture_ratio import benchmark_for_currency, compute_capture
-    from services.currency import normalize_ccy
+    # ~~from services.currency import normalize_ccy~~(2026-10-10 C2-3:改用 Sheet／來源一致判定)
+    from ui.helpers.portfolio.load import fund_currency_for_calc as _ccy_calc_cap
 
     import sys
 
@@ -112,7 +113,9 @@ def capture_by_code(funds: list) -> dict:
             if _series is None or len(_series) < 3:      # 基本 sanity;有效性交給下游月數/共同日把關
                 out[_code] = _blank("⬜ NAV 太短")
                 continue
-            _ccy = normalize_ccy(_f.get("currency"), default="")
+            # ~~_ccy = normalize_ccy(_f.get("currency"), default="")~~(只看單邊)
+            # 2026-10-10 客戶裁示二 B(C2-3):Sheet 與來源一致才算已知(未知 / 衝突 → 缺幣別)
+            _ccy = _ccy_calc_cap(_f)
             if not _ccy:            # 無幣別 → 無法選基準 → None(不默認 SPX 錯配 TWD 基金,§1)
                 out[_code] = _blank("⬜ 缺幣別")
                 continue

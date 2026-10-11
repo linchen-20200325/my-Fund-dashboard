@@ -187,16 +187,25 @@ def test_fund_name_fallback_to_code_when_missing():
     assert out["fund_name"] == "MYSTERY"
 
 
-def test_currency_missing_defaults_to_usd():
-    """缺 currency → 預設 USD（會走 FX 查詢）。"""
+# ~~def test_currency_missing_defaults_to_usd():~~
+# ~~    """缺 currency → 預設 USD（會走 FX 查詢）。"""~~
+# ~~    assert out["ok"] is True~~
+# ~~    assert out["currency"] == "USD"~~
+# → 2026-10-10 客戶裁示(A 級資料正確性缺陷):未知幣別 ≠ USD。舊斷言把死預設寫成規格,
+#   依裁示反轉(**有意識的政策變更,不是漏刪**)。
+def test_currency_missing_fails_closed_not_usd():
+    """缺 currency → **幣別未知、fail closed**(不查 FX、不用保底匯率)。"""
+    _fx_calls = []
     out = fetch_fund_meta_safe("X",
         _fetch=_fake_fetch({
             "fund_name": "X",
             "series": pd.Series([10.0]), "dividends": [],
         }),
-        _fx_lookup=lambda _pair: 31.5)
-    assert out["ok"] is True
-    assert out["currency"] == "USD"
+        _fx_lookup=lambda _pair: _fx_calls.append(_pair) or 31.5)
+    assert out["ok"] is False
+    assert out["error"] == "幣別未知"
+    assert out["currency"] == ""
+    assert _fx_calls == []
 
 
 def test_dividends_missing_returns_empty_list():

@@ -182,8 +182,11 @@ def _benchmark_label_for(f: dict) -> "str | None":
     """依幣別選對應大盤(TWD→TWII / USD→SPX / 其餘→None,§4.1 不錯配)。"""
     try:
         from services.capture_ratio import benchmark_for_currency
-        from services.currency import normalize_ccy
-        return benchmark_for_currency(normalize_ccy(f.get("currency"), default=""))
+        # ~~from services.currency import normalize_ccy~~
+        # ~~return benchmark_for_currency(normalize_ccy(f.get("currency"), default=""))~~
+        # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)
+        from ui.helpers.portfolio.load import fund_currency_for_calc
+        return benchmark_for_currency(fund_currency_for_calc(f))
     except Exception:  # noqa: BLE001
         return None
 
@@ -263,7 +266,10 @@ def _ccy_fx_for(funds: list):
     v19.449 稽核 HIGH:組合走勢/快照原本用原幣報酬加權、漏匯率損益;此處備妥 ccy+fx 供換算。
     匯率抓取失敗 → fx=None(美元基金會被 L2 誠實排除,不靜默造假,§1)。
     """
-    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
+    # ~~_ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}~~
+    # 2026-10-10 稽核 M2 / 客戶裁示 Q4:Sheet 與來源幣別一致才算已知(未知 / 衝突 → fail closed)(空 → 換 TWD 時誠實排除)
+    from ui.helpers.portfolio.load import fund_currency_for_calc
+    _ccy = {f.get("code"): fund_currency_for_calc(f) for f in (funds or []) if f.get("code")}
     _fx = None
     try:
         from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS

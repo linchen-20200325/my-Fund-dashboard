@@ -249,7 +249,19 @@ def test_backfill_empty_codes(monkeypatch):
 def _long(n_days, end="2025-01-01"):
     """n_days 筆日資料的長序列(span ≈ n_days-1 天)。"""
     idx = pd.date_range(end=end, periods=n_days, freq="D")
-    return pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
+    _s = pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
+    # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。
+    # 本節驗的是**跨度救援機制**(門檻 / 順位 / 隔離),不是幣別 —— 故候選宣告 USD、
+    # 預期幣別也固定為 USD(見下方 autouse fixture)。舊版候選不宣告幣別、預期幣別未知,
+    # 在 Q3 之後會被擋下;未知幣別的擋下覆蓋見 test_nav_currency_swap_guard.py。
+    _s.attrs["currency"] = "USD"
+    return _s
+
+
+@pytest.fixture(autouse=True)
+def _expected_ccy_usd(monkeypatch):
+    """2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下。本檔的救援案例一律以「預期幣別 USD」驅動(見 `_long`)。"""
+    monkeypatch.setattr(NS, "_expected_currency", lambda code, fd: "USD")
 
 
 def _wire_rescue(monkeypatch, *, isin="LU123", ms=None, cnyes=None, yahoo=None):
@@ -378,6 +390,7 @@ def test_rescue_tz_aware_candidate_handled(monkeypatch):
     short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])
     _idx = pd.date_range(end="2025-01-01", periods=800, freq="D", tz="UTC")
     tz_series = pd.Series([10.0 + i / 100.0 for i in range(800)], index=_idx, dtype=float)
+    tz_series.attrs["currency"] = "USD"   # 2026-10-10 客戶裁示 Q3(**有意識的政策變更,不是漏刪**):幣別未知 → 換源防護擋下(見 `_long`)
     _wire(monkeypatch, fetch=lambda c: {"series": short})
     _wire_rescue(monkeypatch, ms=tz_series)
     r = NS.backfill_to_gs(["X"])["results"][0]
