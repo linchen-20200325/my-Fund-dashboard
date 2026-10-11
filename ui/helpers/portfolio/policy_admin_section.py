@@ -79,6 +79,7 @@ from repositories.policy_repository import (  # EX-CRUD-1（EXCEPTIONS.md §8.2.
 )
 from repositories.snapshot_repository import get_state_metadata  # EX-CRUD-1
 from ui.helpers.render_state import not_ready
+from shared.tier_write_gate import capture_snapshot, invalidate_snapshot
 from ui.helpers.tw_time import tw_now_str
 
 #: 「📦 立即全部寫入」的警告跨一次 st.rerun() 暫存用（顯示後即清除）。
@@ -209,6 +210,7 @@ def render_policy_admin_section(
             if _ares.get("_skipped"):
                 pass   # 首次進入保留本地持倉，不自動讀回
             elif _ares.get("ok"):
+                capture_snapshot(st.session_state)   # N1：讀回當下的逐列級別快照
                 st.session_state["t3_last_load_at"] = tw_now_str()
                 _reused_n = len(_ares.get("reused", []))
                 _, _new_codes = count_unloaded_funds()
@@ -354,6 +356,7 @@ def render_policy_admin_section(
                             if not _res["ok"]:
                                 st.error(f"❌ {_res['error']}")
                             else:
+                                capture_snapshot(st.session_state)   # N1：讀回當下的逐列級別快照
                                 st.session_state["t3_last_load_at"] = tw_now_str()
                                 _msg = [f"新增 {len(_res['added'])} 檔",
                                         f"保留 {len(_res['kept'])} 檔",
@@ -519,6 +522,10 @@ def render_policy_admin_section(
                 if _up is not None:
                     _result = restore_from_json_bytes(_up.read(), st.session_state)
                     if _result["ok"]:
+                        # N1：還原後 session 級別來自備份、不再是讀回當下的 Sheet → 快照作廢；
+                        # 冪等（上傳檔留在畫面時每次重跑都會再還原，也就再作廢），
+                        # 只有下一次成功的「全部讀回」才會重建。
+                        invalidate_snapshot(st.session_state)
                         st.success(
                             f"✅ 已還原 {_result['n_funds']} 檔基金 + "
                             f"{_result['n_ledgers']} 筆 ledger。"

@@ -453,13 +453,19 @@ def _v2_tab_rows(rows: list) -> list:
     return out
 
 
-def _sheet_round_trip(monkeypatch, sheet_rows: list, sheet_at_write: list | None = None) -> list:
+def _sheet_round_trip(monkeypatch, sheet_rows: list, sheet_at_write: list | None = None,
+                      expect_conflict: bool = False) -> list | None:
     """Sheet 分頁 → `_load_all_from_sheet_v2` → v2 全部寫入（真 write_policy_v2、假 gspread）。
 
     sheet_at_write：寫入當下 Sheet 的內容（模擬讀回之後客戶在 Sheet 上調過列序）；
     省略 ＝ 與讀回時相同。
+
+    2026-10-11 N1：讀回成功後補 `capture_snapshot(ss)` —— 真實流程由 policy_admin_section 在
+    「全部讀回」成功後擷取讀回快照；沒有快照時同代號多列級別不一致會 fail closed。
+    expect_conflict=True：預期這張保單被擋（回傳 None；斷言分頁沒被清、沒被寫、警告含衝突字句）。
     """
     from repositories.policy.v2 import ALL_COLS_V2
+    from shared.tier_write_gate import capture_snapshot
     from ui.helpers import cloud_io
     _c = list(ALL_COLS_V2)
     _df = pd.DataFrame([{"policy_id": "P1", "fund_code": c, "tier": t, "invest_twd": a}
@@ -467,11 +473,16 @@ def _sheet_round_trip(monkeypatch, sheet_rows: list, sheet_at_write: list | None
     monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: _df)
     ss: dict = {"portfolio_funds": []}
     assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
+    capture_snapshot(ss)
     ws = _FakeWS(_v2_tab_rows(sheet_rows if sheet_at_write is None else sheet_at_write))
     monkeypatch.setattr(cloud_io, "detect_sheet_schema_version", lambda c, s: "v2")
     import time as _time
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     out = cloud_io.dump_all_to_sheet(_FakeClient(ws), "s", ss)
+    if expect_conflict:
+        assert ws.cleared is False and ws.updates == []
+        assert any("P1: ❌ 級別設定衝突：F1，未寫入此保單。" in w for w in out["warnings"]), out
+        return None
     assert out["ok"] and not out["warnings"], out
     return _written_rows(ws)
 
@@ -492,12 +503,15 @@ def test_v2_same_code_two_rows_tier_does_not_leak(monkeypatch, first_tier, expec
 def test_v2_same_code_rows_reordered_in_sheet_before_write_does_not_fabricate(monkeypatch):
     """稽核 C 剩餘風險：讀回 [F1 '' 100, F1 core 200]，寫入前客戶在 Sheet 上把列序調成
     [F1 core 200, F1 '' 100] → 不得把 core 寫到 100 那一列（未設定）。
-    突變：恢復「代號＋第 k 次出現」對齊 → 本條轉紅（寫出 ('F1','core',100)）。"""
+    突變：恢復「代號＋第 k 次出現」對齊 → 本條轉紅（寫出 ('F1','core',100)）。
+    2026-10-11 N1：Sheet 讀回後已被改（列序與讀回快照不同）→ 同代號多列級別不完全一致一律 fail closed，
+    整張不寫（不再照寫 session 值）；~~舊預期 [("F1","",100),("F1","core",200)]~~。"""
     assert _sheet_round_trip(
         monkeypatch,
         [("F1", "", 100), ("F1", "core", 200)],
         sheet_at_write=[("F1", "core", 200), ("F1", "", 100)],
-    ) == [("F1", "", 100), ("F1", "core", 200)]
+        expect_conflict=True,
+    ) is None
 
 
 def test_v2_same_code_two_rows_blank_first(monkeypatch):
@@ -777,8 +791,10 @@ def test_normal_round_trip_multi_row_different_tiers_not_blocked(monkeypatch):
     """一般流程（讀回後 session 每列都有明確級別）→ session 明示優先，不判衝突、照常寫入。"""
     assert _sheet_round_trip(monkeypatch, [("F1", "core", 1), ("F1", "satellite", 2)]) == [
         ("F1", "core", 1), ("F1", "satellite", 2)]
+    # 2026-10-11 N1：混合群組靠『讀回快照一致』放行時，級別欄由閘門定案、以 session 值為準，
+    # 「核心」寫成語意等價的 `core`（客戶核准的正規化）；~~舊預期保留原拼法「核心」~~。留白仍是留白。
     assert _sheet_round_trip(monkeypatch, [("F1", "核心", 1), ("F1", "", 2)]) == [
-        ("F1", "核心", 1), ("F1", "", 2)]
+        ("F1", "core", 1), ("F1", "", 2)]
 
 
 def test_single_row_and_session_explicit_unchanged_under_conflict_rule():

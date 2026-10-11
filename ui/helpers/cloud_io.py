@@ -91,11 +91,48 @@ def _dump_all_to_sheet_v2(client: object,
         for _i, (_pid, _rows) in enumerate(_pids):
             try:
                 _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
+                # ── N1 寫入閘門（客戶 2026-10-11）：同代號 ≥2 列且有未設定列時，寫入前重讀該分頁
+                # 各代號的逐列級別序列，與讀回快照「逐項相等」才放行（比對，不是配對；細節見
+                # shared/tier_write_gate.py）。不一致／沒有可靠快照（JSON 還原後）／認不得的字串
+                # → 丟 PolicyTierConflictError，這張保單整張不寫、其他保單照常。
+                from shared.tier_write_gate import (  # noqa: PLC0415
+                    evaluate_tier_gate, needs_gate, snapshot_for_policy)
+                _keep = True
+                _codes, _tiers = _df["fund_code"].tolist(), _df["tier"].tolist()
+                if needs_gate(_codes, _tiers):
+                    from repositories.policy_repository import (  # noqa: PLC0415
+                        _is_worksheet_not_found, _multi_row_tier_out,
+                        _sanitize_tab_name, _tier_by_code_from_values,
+                        _with_quota_retry)
+                    try:
+                        _sh = _with_quota_retry(client.open_by_key, sheet_id)
+                        try:
+                            _ws = _with_quota_retry(_sh.worksheet, _sanitize_tab_name(_pid))
+                        except Exception as _e_ws:
+                            if not _is_worksheet_not_found(_e_ws):
+                                raise
+                            _ws = None   # 分頁還不存在：沒有 Sheet 級別可比對，write_policy_v2 會建立
+                        _sheet_levels = _tier_by_code_from_values(
+                            (_with_quota_retry(_ws.get_all_values) or []) if _ws is not None else [])
+                    except PolicySheetError:
+                        raise
+                    except Exception as _e_rd:
+                        raise PolicySheetError(f"讀取 '{_pid}' 級別失敗：{_e_rd}") from _e_rd
+                    _gate = evaluate_tier_gate(
+                        _codes, _tiers, _sheet_levels,
+                        snapshot_for_policy(ss, _pid), _multi_row_tier_out)
+                    if _gate.conflicts:
+                        raise PolicyTierConflictError(list(_gate.conflicts))
+                    if _gate.uses_snapshot:
+                        # 靠快照一致放行：級別欄由閘門定案（session 值原樣，留白維持留白），
+                        # 不再交給 keep_sheet_tier（它看不到快照，會把 [核心,衛星,留白] 誤判衝突）。
+                        _df["tier"] = list(_gate.tiers)
+                        _keep = False
                 # keep_sheet_tier：session 沒有客戶級別的列保留 Sheet 原值（例如剛還原
                 # JSON 備份、或 Sheet 上的值認不得）—— 整張覆寫不可把客戶設定洗成空白。
                 # 同代號多列的 Sheet 級別互相衝突 → 該保單整張不寫（PolicyTierConflictError），
                 # 其他保單照常寫入。
-                _n = write_policy_v2(client, sheet_id, _pid, _df, keep_sheet_tier=True)
+                _n = write_policy_v2(client, sheet_id, _pid, _df, keep_sheet_tier=_keep)
                 _written += int(_n)
             except PolicyTierConflictError as _e_tc:
                 # 客戶裁示字句不截斷（下方通用分支截 80 字，代號多時會切掉「未寫入此保單」）
