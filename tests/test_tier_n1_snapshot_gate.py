@@ -423,3 +423,100 @@ def test_wiring_load_button_captures_snapshot_behaviorally(tmp_path):
     at.button(key="t3_io_panel_load_run").click().run()
     assert not at.exception, [e.value for e in at.exception]
     assert at.session_state[SNAPSHOT_SESSION_KEY] == {"P1": {"F1": ["core", ""]}}
+
+
+# ══════════════════════════════════════════════════════════════════
+# 稽核必修 1：純數字且帶前導零的代號（"007712"）不得繞過閘門
+# 讀回走 get_all_records，gspread 把 "007712" 數字化成整數 7712 → session 代號 "7712"；
+# 寫入前重讀走 get_all_values，保留 "007712"。Sheet 側與 session 側必須用同一把尺（code_key）。
+# ══════════════════════════════════════════════════════════════════
+def _readback_numericised(monkeypatch, sheet: dict) -> dict:
+    """同 `_readback`，但數字代號以 gspread 數字化後的整數進 policies_df（"007712" → 7712）。"""
+    from ui.helpers import cloud_io
+    recs = [{"policy_id": p, "fund_code": (int(c) if str(c).isdigit() else c), "tier": t,
+             "invest_twd": a} for p, rows in sheet.items() for c, t, a in rows]
+    df = pd.DataFrame(recs, columns=list(ALL_COLS_V2)).fillna("")
+    assert any(isinstance(v, int) for v in df["fund_code"].tolist())   # 確實模擬了數字化
+    monkeypatch.setattr(cloud_io, "load_all_policies_v2", lambda c, s: df)
+    ss: dict = {"portfolio_funds": []}
+    assert cloud_io._load_all_from_sheet_v2("c", "s", ss)["error"] is None
+    capture_snapshot(ss)
+    return ss
+
+
+def test_leading_zero_code_n1_original_case_restore_fails_closed(monkeypatch):
+    """備份 [("7712", core 100), ("7712", 未設 200)]、Sheet 分頁 [("007712", 留白 100), ("007712", core 200)]
+    → 舊行為無聲對調寫出 [(7712,core,100),(7712,'',200)]；現在 fail closed，分頁不動。
+    突變 M13（Sheet 側不走 code_key）→ 本條轉紅。"""
+    ss: dict = {}
+    _restore(ss, [("P1", "7712", 100, "core"), ("P1", "7712", 200, "")])
+    tab = _tab("P1", [("007712", "", 100), ("007712", "core", 200)])
+    before = [list(r) for r in tab.values]
+    out = _dump(monkeypatch, ss, {"P1": tab})
+    assert tab.cleared is False and tab.updates == [] and tab.values == before
+    assert _conflict_warning(out, "P1", "7712"), out["warnings"]
+
+
+@pytest.mark.parametrize("changed", [
+    [("007712", "衛星", 100), ("007712", "核心", 200), ("007712", "", 300)],   # 讀回後列序被調換
+    [("007712", "核心", 100), ("007712", "衛星", 200), ("007712", "衛星", 300)],  # 留白格被填
+])
+def test_leading_zero_code_sheet_changed_after_readback_fails_closed(monkeypatch, changed):
+    """讀回後 Sheet 被改（讀回側數字化、重讀側保留前導零）也必須擋。突變 M13 → 轉紅。"""
+    ss = _readback_numericised(monkeypatch, {"P1": [("007712", "核心", 100), ("007712", "衛星", 200),
+                                                    ("007712", "", 300)]})
+    tab = _tab("P1", changed)
+    out = _dump(monkeypatch, ss, {"P1": tab})
+    assert tab.cleared is False and tab.updates == []
+    assert _conflict_warning(out, "P1", "7712"), out["warnings"]
+
+
+def test_leading_zero_code_unchanged_readback_passes_and_blank_stays_blank(monkeypatch):
+    """快照可靠（讀回側數字化 vs 重讀側 "007712"，code_key 對得上）→ 通過，留白維持留白。
+    突變 M9（code_key 不去前導零）→ 本條轉紅（快照鍵對不上而誤擋）。"""
+    rows = [("007712", "核心", 100), ("007712", "衛星", 200), ("007712", "", 300)]
+    ss = _readback_numericised(monkeypatch, {"P1": rows})
+    tab = _tab("P1", rows)
+    out = _dump(monkeypatch, ss, {"P1": tab})
+    assert out["ok"] and not out["warnings"], out
+    assert _written(tab) == [("7712", "core", 100), ("7712", "satellite", 200), ("7712", "", 300)]
+
+
+def test_leading_zero_single_row_code_keeps_sheet_level_on_snapshot_pass_path(monkeypatch):
+    """放行路徑（keep_sheet_tier=False）上，單列前導零代號仍保留客戶 Sheet 級別，不被洗成空白。
+    突變 M13 → 本條轉紅（單列代號查不到 Sheet 格、寫成空白）。"""
+    rows = [("F1", "核心", 100), ("F1", "衛星", 200), ("F1", "", 300), ("000050", "satellite", 7)]
+    ss = _readback_numericised(monkeypatch, {"P1": rows})
+    for f in ss["portfolio_funds"]:
+        if f["code"] == "50":
+            f["is_core"], f["policy_tier"] = None, ""      # session 端未設定
+    tab = _tab("P1", rows)
+    out = _dump(monkeypatch, ss, {"P1": tab})
+    assert out["ok"] and not out["warnings"], out
+    assert _written(tab)[-1] == ("50", "satellite", 7)
+
+
+def test_leading_zero_identical_levels_group_is_preserved_not_cleared(monkeypatch):
+    """Sheet 同代號多列級別完全一致（"007712" × core）、session 全未設定：閘門判定可保留，
+    且必須由閘門定案寫入 —— v2 自己的代號查找對不上 "7712"↔"007712"，會把它當新持倉而洗成空白。
+    突變 M14（只靠 code_key 對上時不改走閘門定案）→ 本條轉紅。"""
+    ss: dict = {}
+    _restore(ss, [("P1", "7712", 100, ""), ("P1", "7712", 200, "")])
+    tab = _tab("P1", [("007712", "core", 100), ("007712", "Core", 200)])
+    out = _dump(monkeypatch, ss, {"P1": tab})
+    assert out["ok"] and not out["warnings"], out
+    assert _written(tab) == [("7712", "core", 100), ("7712", "Core", 200)]
+
+
+def test_leading_zero_two_policies_only_conflicting_one_blocked(monkeypatch):
+    ss: dict = {}
+    _restore(ss, [("P1", "7712", 100, "core"), ("P1", "7712", 200, ""), ("P2", "G1", 7, "")])
+    p1 = _tab("P1", [("007712", "", 100), ("007712", "core", 200)])
+    p2 = _tab("P2", [("G1", "core", 7)])
+    out = _dump(monkeypatch, ss, {"P1": p1, "P2": p2})
+    assert p1.updates == [] and _written(p2) == [("G1", "core", 7)]
+    assert _conflict_warning(out, "P1", "7712")
+
+
+def test_needs_gate_uses_same_key_for_leading_zero_spellings():
+    assert needs_gate(["7712", "007712"], ["core", ""])

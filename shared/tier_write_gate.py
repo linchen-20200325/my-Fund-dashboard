@@ -109,7 +109,7 @@ def needs_gate(codes: Sequence[Any], tiers: Sequence[Any]) -> bool:
     """session 這張保單是否有「同代號 ≥2 列、且其中有未設定列」。沒有 → 不必讀 Sheet、不經本閘門。"""
     seen: dict = {}
     for c, t in zip(codes, tiers):
-        k = str(c if c is not None else "").strip().upper()
+        k = code_key(c)
         if not k:
             continue
         n, unset = seen.get(k, (0, False))
@@ -121,9 +121,12 @@ def needs_gate(codes: Sequence[Any], tiers: Sequence[Any]) -> bool:
 class GateResult:
     #: 衝突代號（session 內首次出現序、顯示用原樣）。非空 → 呼叫端整張保單不寫。
     conflicts: tuple = ()
-    #: True ＝ 有群組靠「快照一致」放行：呼叫端必須以 `tiers` 為最終級別欄、
-    #: 用 `keep_sheet_tier=False` 寫入（`write_policy_v2(keep_sheet_tier=True)` 看不到快照，
-    #: 會對 [核心, 衛星, 留白] 誤判衝突）。False ＝ 不經快照，維持原本 keep_sheet_tier=True。
+    #: True ＝ 呼叫端必須以 `tiers` 為最終級別欄、用 `keep_sheet_tier=False` 寫入。兩種情形：
+    #: ① 有群組靠「快照一致」放行（`write_policy_v2(keep_sheet_tier=True)` 看不到快照，
+    #:    會對 [核心, 衛星, 留白] 誤判衝突）；
+    #: ② 有群組只能靠 `code_key` 正規化才對得上 Sheet 的代號（session "7712" ↔ Sheet "007712"），
+    #:    v2 自己的查找是 strip().upper() 精確比對、對不上，會把它當新持倉而洗掉 Sheet 級別。
+    #: False ＝ 維持原本 keep_sheet_tier=True。（欄名沿用首版，語意以本段為準。）
     uses_snapshot: bool = False
     #: 每一列最終要寫的級別字串（依 session 列序）。
     tiers: tuple = ()
@@ -146,9 +149,17 @@ def evaluate_tier_gate(
     multi_plan      既有的 `repositories.policy.v2._multi_row_tier_out`，由呼叫端注入
                     （L0 不得 import L1）。用在：不需要快照的多列群組、以及「Sheet 級別完全一致」的群組。
     """
+    # Sheet 側與 session 側一律用同一把尺 `code_key`（去空白、大寫、純數字去前導零）建群組與查找：
+    # session 的 "7712" 來自 gspread 數字化（get_all_records），Sheet 重讀是 "007712"（get_all_values）。
+    # 只在 session 側正規化會讓這種代號被當成「Sheet 沒有這個代號」而整組繞過閘門。
+    sheet_norm: dict = {}
+    sheet_exact: set = set()
+    for raw_k, cells in sheet_by_code.items():
+        sheet_exact.add(str(raw_k if raw_k is not None else "").strip().upper())
+        sheet_norm.setdefault(code_key(raw_k), []).extend(cells)
     groups: dict = {}
     for i, c in enumerate(codes):
-        k = str(c if c is not None else "").strip().upper()
+        k = code_key(c)
         if not k:
             continue
         groups.setdefault(k, []).append(i)
@@ -157,9 +168,11 @@ def evaluate_tier_gate(
     conflicts: list = []
     uses_snapshot = False
     for k, idxs in groups.items():
-        sheet = list(sheet_by_code.get(k, []))
+        sheet = list(sheet_norm.get(k, []))
         if not sheet:
             continue                      # Sheet 沒有這個代號（新持倉）：寫 session 值，留白就是留白
+        if any(str(codes[i]).strip().upper() not in sheet_exact for i in idxs):
+            uses_snapshot = True          # 只靠 code_key 才對上 Sheet 代號 → v2 對不上，級別欄由本函式定案
         grp = [out[i] for i in idxs]
         disp = str(codes[idxs[0]]).strip()
         if len(sheet) == 1 and len(grp) == 1:
@@ -173,7 +186,7 @@ def evaluate_tier_gate(
             if len(set(levels)) > 1:
                 # Sheet 級別不完全一致（含「已設定＋留白」）：只有「與讀回快照逐項相等」才放行。
                 # 逐項相等 ＝ 比對整條序列是否一樣；不做第 k 格對第 k 列的配對。
-                snap = (snapshot or {}).get(code_key(k))
+                snap = (snapshot or {}).get(k)
                 if snap is not None and list(snap) == levels:
                     uses_snapshot = True   # 放行：寫 session 自己的值（grp 原樣），留白不填
                 else:
