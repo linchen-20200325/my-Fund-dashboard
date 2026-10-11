@@ -193,7 +193,7 @@ _UNIFIED_FRONT: list = [
     ("策略分覆蓋", "extra"),   # 策略分分母覆蓋率旗標(§1 第 3 項;post-merge 覆寫)
     ("景氣適配", "extra"), ("適配傾向", "extra"),      # v19.425 景氣位階適配(post-merge 覆寫)
     ("匯率位階", "extra"), ("淨值×匯率", "extra"),     # v19.426 淨值×匯率二維買賣切換(post-merge 覆寫)
-    ("資產屬性", "extra"), ("操作訊號", "extra"),
+    ("基金屬性", "extra"), ("操作訊號", "extra"),
     ("買 3 (深跌)", "extra"), ("買 1 (小跌)", "extra"),
     ("賣 1 (小漲)", "extra"), ("賣 3 (大漲)", "extra"), ("現價位階", "extra"),
 ]

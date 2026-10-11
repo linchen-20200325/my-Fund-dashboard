@@ -439,11 +439,12 @@ def extra_column_config() -> dict:
         "Beta": cc.TextColumn("Beta", width="small",
             help="大盤動 1%,這檔大約跟著動幾 %(>1 比大盤兇、<1 比大盤溫和)。"
                  "取自 MoneyDJ 官方風險表,對照的是他們自己選的基準,本站不重算。"),
-        "資產屬性": cc.TextColumn("資產屬性", width="small",
-            help="買賣點模型把這檔歸成哪一類資產(股票 / 債券 / 平衡…);"
-                 "還沒偵測出景氣位階時顯示 '—'。"),
+        "基金屬性": cc.TextColumn("基金屬性", width="small",
+            help="基金本身的客觀分類,僅在取得 MoneyDJ／FundClear 等可追溯的原始分類資料時才會顯示;"
+                 "目前尚無可靠來源,一律顯示「—」。這**不是**你在 Google Sheet 設定的核心／衛星級別,"
+                 "系統也不會依基金名稱推測。"),
         "操作訊號": cc.TextColumn("操作訊號", width="medium",
-            help="買賣點模型依**現在的景氣位階**給的操作傾向;景氣還沒偵測出來 → '—'。"),
+            help="依基金名稱推定的買賣訊號已停用,目前一律顯示「—」。"),
         "買 3 (深跌)": cc.TextColumn("買 3 (深跌)", width="small",
             help="第 3 段(最深)的分批買進參考價 —— 跌到這裡才進場的那一段。"),
         "買 1 (小跌)": cc.TextColumn("買 1 (小跌)", width="small",

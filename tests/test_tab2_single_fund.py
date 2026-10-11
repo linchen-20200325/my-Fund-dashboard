@@ -4,7 +4,7 @@
 - module import 不報錯
 - render_single_fund_tab 是 callable + 無位置 arg
 - 內部 _calc_data_health helper 與 ui.helpers.session 同源
-- _friendly_error / _is_core_fund alias 從 ui.helpers.session 正確 import
+- _friendly_error alias 從 ui.helpers.session 正確 import（_is_core_fund 已於 2026-10-11 移除）
 
 不直接 mock-render（Tab2 內容複雜、需大量 session_state 鋪墊，留 deploy 驗證）
 """
@@ -29,14 +29,30 @@ def test_friendly_error_imported():
     assert _friendly_error is friendly_error
 
 
-def test_is_core_fund_imported():
-    """_is_core_fund 從 ui.helpers.session 正確 import."""
+def test_is_core_fund_no_longer_imported_or_written():
+    """2026-10-11（客戶裁示：不以基金名稱猜核心／衛星）：單檔頁不再 import／呼叫 is_core_fund，
+    也不再把名稱推定的 `is_core` 寫進 `fund_data`（該鍵全 repo 無讀取點）。
+
+    舊測試鎖的是「名稱關鍵字 round-trip」本身（摩根多重收益 → 核心），那正是被停用的行為。
+    突變：把 `"is_core": _is_core_fund(...)` 與 import 貼回 → 本條紅。
+    """
+    import ast
+    import pathlib
+
     import fund_fetcher  # noqa: F401
-    from ui.tab2_single_fund import _is_core_fund
-    # 用幾個關鍵字驗 round-trip
-    assert _is_core_fund("摩根多重收益基金") is True
-    assert _is_core_fund("AI 半導體基金") is False
-    assert _is_core_fund("") is False
+    import ui.tab2_single_fund as _t2
+    assert not hasattr(_t2, "_is_core_fund"), "tab2 仍 import is_core_fund 別名"
+
+    _src = pathlib.Path(_t2.__file__).read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+    _names = {"is_core_fund", "_is_core_fund"}
+    _calls = [n.lineno for n in ast.walk(_tree) if isinstance(n, ast.Call)
+              and ((isinstance(n.func, ast.Name) and n.func.id in _names)
+                   or (isinstance(n.func, ast.Attribute) and n.func.attr in _names))]
+    assert not _calls, f"tab2 行 {_calls} 仍呼叫名稱啟發式"
+    _keys = [k.lineno for n in ast.walk(_tree) if isinstance(n, ast.Dict)
+             for k in n.keys if isinstance(k, ast.Constant) and k.value == "is_core"]
+    assert not _keys, f"tab2 行 {_keys} 仍寫入 fund_data['is_core']"
 
 
 def test_calc_data_health_returns_pct_traffic():

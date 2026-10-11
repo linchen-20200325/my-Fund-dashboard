@@ -78,8 +78,51 @@ def save(run_id: str, codes: list, rows: dict) -> None:
         raise
 
 
+# ── 讀回時中和「名稱推定時代」存下的買賣句(客戶 2026-10-11 裁示)────────────────
+# 舊版 `mk_fund_signal` 依基金名稱關鍵字猜核心／衛星，再輸出下列 8 句買賣操作句；
+# 批次大表把它存進 checkpoint 的「操作訊號」格。名稱推定已停用，但舊存檔讀回後欄名沒變，
+# 這些句子會原樣顯示、還和重跑的新列(「—」)並排 ⇒ 名稱推定結果從磁碟復活。
+# 做法:讀回(`load`)時就地把這 8 句改成「—」，**不改寫磁碟檔**;「⚠️ …計算失敗／載入失敗」之類
+# 的錯誤標記不是買賣句，原樣保留。
+# 為何用白名單而非「非『—』且非『⚠️』一律覆寫」:這 8 句的值域已逐一核對 git 歷史
+# (9dcab88f 初版 → 52c5243c 批次存檔上線 → 852cfb1e → 停用前)，全程不變;白名單只動
+# 已知由名稱推定產生的值，不會把日後任何合法的新「操作訊號」值無聲抹掉。
+# 舊欄「資產屬性」(名稱推定的核心資產／衛星資產／混合型)直接移除;新欄「基金屬性」
+# 不替舊列補值(缺值不補，§1)。
+_NAME_INFERRED_SIGNAL_LABELS = frozenset({
+    "🟢 買進加碼", "🟢 積極買進", "⚪ 持有核心", "🟡 持有設停利",
+    "🟡 持有減碼", "🔴 賣出獲利", "🟢 逢低買進", "⏸ 觀望等待",
+})
+_NEUTRALIZED_SIGNAL = "—"
+_RETIRED_ATTR_KEY = "資產屬性"
+_SIGNAL_KEY = "操作訊號"
+
+
+def _norm_label(s: str) -> str:
+    """去掉 emoji 變體選擇符 U+FE0F 與前後空白，避免「⏸️」與「⏸」字元差異漏網。"""
+    return str(s).replace("\ufe0f", "").strip()
+
+
+_NAME_INFERRED_NORM = frozenset(_norm_label(x) for x in _NAME_INFERRED_SIGNAL_LABELS)
+
+
+def _neutralize_name_inferred_signals(rows: dict) -> None:
+    """就地中和 rows(code -> row dict)裡名稱推定時代的「操作訊號」買賣句，並移除舊「資產屬性」鍵。"""
+    for _row in rows.values():
+        if not isinstance(_row, dict):
+            continue
+        _row.pop(_RETIRED_ATTR_KEY, None)
+        _sig = _row.get(_SIGNAL_KEY)
+        if isinstance(_sig, str) and _norm_label(_sig) in _NAME_INFERRED_NORM:
+            _row[_SIGNAL_KEY] = _NEUTRALIZED_SIGNAL
+
+
 def load(run_id: str) -> "dict | None":
-    """讀回 checkpoint。不存在 → None;壞檔 / 結構不符 → log + None(可重跑,不炸)。"""
+    """讀回 checkpoint。不存在 → None;壞檔 / 結構不符 → log + None(可重跑,不炸)。
+
+    讀回時中和名稱推定時代的買賣句(見 `_NAME_INFERRED_SIGNAL_LABELS`);磁碟檔內容不改。
+    本模組所有回傳 rows 的讀回路徑只有本函式(`list_recent` 只回 meta，不含列內容)。
+    """
     p = _path(run_id)
     if not p.exists():
         return None
@@ -88,6 +131,7 @@ def load(run_id: str) -> "dict | None":
             data = json.load(f)
         if not isinstance(data, dict) or not isinstance(data.get("rows"), dict):
             raise ValueError("checkpoint 結構不符(缺 rows dict)")
+        _neutralize_name_inferred_signals(data["rows"])
         return data
     except Exception as e:  # noqa: BLE001 — 壞 cache 可重跑,不 crash 分頁
         print(f"[batch_checkpoint] ⚠️ 讀 {p.name} 失敗,當作無存檔:{type(e).__name__}: {e}")
