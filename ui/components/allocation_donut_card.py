@@ -124,12 +124,11 @@ def build_footnotes(summary: Mapping[str, Any] | None) -> list[str]:
         notes.append(
             f"⬜ {miss} 檔未填投入本金 → **不在這個比例裡**（不在分母中）。"
             "圓環顯示的是「有填本金的那些」的配置，不是全部持倉。")
-    n_sheet = int(summary.get("n_tier_from_sheet") or 0)
+    n_unset = int(summary.get("n_tier_unset") or 0)
     n_funds = int(summary.get("n_funds") or 0)
-    if n_funds and n_sheet < n_funds:
+    if n_unset > 0:
         notes.append(
-            f"⬜ {n_funds - n_sheet}/{n_funds} 檔的核心／衛星級別**非 Sheet 明示**，"
-            "由基金名稱關鍵字推定。")
+            f"⬜ {n_unset}/{n_funds} 檔級別未設定，不計入核心/衛星比例。")
     return notes
 
 

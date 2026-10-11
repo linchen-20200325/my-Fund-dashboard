@@ -741,6 +741,31 @@ class TestAllocationDonutCard:
         notes = " ".join(build_footnotes(s))
         assert "3 檔" in notes and "不在這個比例裡" in notes
 
+    def test_tier_unset_footnote_new_wording(self):
+        """`n_tier_unset > 0` → 腳註「k/N 檔級別未設定，不計入…」，不含舊措辭。"""
+        from ui.components.allocation_donut_card import build_footnotes
+        notes = " ".join(build_footnotes(_summary(n_tier_unset=2)))
+        assert "2/4 檔級別未設定，不計入核心/衛星比例" in notes
+        assert "推定" not in notes and "關鍵字" not in notes
+
+    def test_tier_all_set_no_unset_footnote(self):
+        """全部已設定（k=0）→ 不輸出級別腳註。"""
+        from ui.components.allocation_donut_card import build_footnotes
+        notes = " ".join(build_footnotes(_summary(n_tier_unset=0)))
+        assert "級別未設定" not in notes
+
+    def test_v2_shape_never_says_guessed(self):
+        """v2 形態：policy_tier 空但 is_core 已設 → 不得出現「推定」。"""
+        from ui.helpers.portfolio.allocation import summarize_core_satellite
+        from ui.components.allocation_donut_card import build_footnotes
+        funds = [{"fund_name": "A", "policy_tier": "", "is_core": True, "invest_twd": 100},
+                 {"fund_name": "B", "policy_tier": "", "is_core": False, "invest_twd": 100}]
+        s = summarize_core_satellite(funds)
+        assert s["n_tier_unset"] == 0
+        notes = " ".join(build_footnotes(s))
+        assert "推定" not in notes and "關鍵字" not in notes
+        assert "級別未設定" not in notes
+
     def test_no_target_shows_dash_not_zero(self, spy):
         """`target_pct is None` → 偏差顯示 `—` + 「未設定目標」，**絕不**假設一個目標。"""
         from ui.components.allocation_donut_card import render_allocation_donut_card
