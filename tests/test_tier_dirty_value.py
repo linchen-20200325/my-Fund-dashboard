@@ -7,13 +7,15 @@
 - 缺資料（缺鍵、`None`、空字串、純空白）→ 退回嚴格布林 `is_core`（正常 fallback，不得被破壞）。
 - 髒值（有值、非空白但認不得；含非字串型別）→ `None`，不看 `is_core`。
 
-突變驗證（實跑）：把 `shared/policy_tier.py::resolve_tier` 的
-`if not _is_missing_tier(_raw_tier): return None` 拿掉（還原成一律退回 `is_core`）→
-`test_dirty_policy_tier_is_unset_not_fallback` 中 is_core 為 True／False 的各列、
-以及 `test_decision_matrix_dirty_tier_holds` 轉紅。
-NaN／`pandas.NA` 屬空值＝缺資料（總管 2026-10-12 拍板）：把 `_is_missing_tier` 的
-`_is_nan_like(raw)` 拿掉 → `test_nan_like_policy_tier_is_missing_and_falls_back`
-中 is_core 為 True／False 的各列轉紅（pd.NA 那幾列會在 `normalize_tier` 丟 TypeError）。
+突變驗證（實跑）：
+- 把 `shared/policy_tier.py::resolve_tier` 中 `if not _is_missing_tier(_raw_tier):` 底下的
+  `return normalize_tier(_raw_tier)` 改成「認得才 return、認不得往下走到 `is_core`」
+  （還原成髒值退回 `is_core`）→ `test_dirty_policy_tier_is_unset_not_fallback` 中 is_core 為
+  True／False 的各列、以及 `test_decision_matrix_dirty_tier_holds` 轉紅。
+- NaN／`pandas.NA` 屬空值＝缺資料（總管 2026-10-12 拍板）：把 `_is_missing_tier` 的
+  `if raw is None or _is_nan_like(raw):` 改成 `if raw is None:` →
+  `test_nan_like_policy_tier_is_missing_and_falls_back` 中 is_core 為 True／False 的各列轉紅，
+  另 pd.NA 配 None 那列會在 `normalize_tier` 丟 TypeError。
 另 `ui/tab1_macro.py` 動作對照表補上客戶 2026-10-12 核准的說明文字 (e)，
 `test_tab1_unset_tier_note_present` 鎖住逐字內容。
 """
@@ -49,6 +51,7 @@ _MISSING = [
     pytest.param({"policy_tier": ""}, id="empty"),
     pytest.param({"policy_tier": "  "}, id="blank"),
     pytest.param({"policy_tier": "\t\n"}, id="whitespace"),
+    pytest.param({"policy_tier": "\u3000"}, id="fullwidth-space"),   # 全形空白「　」
 ]
 
 
