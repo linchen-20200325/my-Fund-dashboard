@@ -53,10 +53,22 @@
     守 —— **那一條是 2026-10-12 重新實作時新增的，不是從 #839 移植的**。
   - 📐 建議資產水位卡開始印 `action_text`（整句／被截斷的半句／或只是去讀那個 key）
     → D 組轉紅。
+  - **2026-10-12 獨立稽核後補的兩項**（不是從 #839 移植的）：
+    · 🟡、🔴（位階）、override 🔴 三句各有字面值錨 —— 補之前只被「從產品碼
+      import 期望值」的鎖守著，改字會一起漂移而恆綠。⚠️ 這三句**不是客戶逐字核准**，
+      是 #839 實作組依客戶 2026-09-14 方向擬定、本次逐位元組沿用。
+    · A 組補「截斷子句比對」（比照 D4）—— 補之前，在 ② 表下註記追加
+      行動句被截斷的半句（稽核突變 M6）全綠漏抓。
+
+**刻意的誤擋（不放寬，理由寫在各條 docstring）**：
+  - 稽核 M7：兩處標題收斂成一個具名常數 → 標題守衛轉紅。
+  - 稽核 M8：不拆 `_action`、直接傳 `composite_action=""` → 清空結構鎖轉紅。
+  兩者行為都等價，但放寬要把字面鎖改成資料流分析，漏判方式更難察覺；
+  做那種重構的人必須在同一份 diff 裡一起改守衛。
 
 **守不到（據實寫明，不要把本檔讀成「① 已經合規」）**：
-  - **A 組比對的是五句逐字字串。** 有人把行動句**改寫**後直接寫進 UI，抓不到；
-    A 組只保證 `composite_action` 這條管道是空的。
+  - **A 組比對的是五句逐字字串與 ≥6 字的子句。** 有人把行動句**改寫**後直接寫進 UI、
+    或截得比 6 字還短，抓不到；A 組只保證 `composite_action` 這條管道是空的。
   - **D 組不判斷 📐 建議資產水位卡本身算不算「直接買賣建議」**（標題有「建議」、
     給了股債現金百分比、附停利／加碼 Z 門檻）—— 那是業務規則裁決（客戶），
     已另有登記（`docs/v2/21_decision_log.md` B21，①-4）。
@@ -310,11 +322,64 @@ def test_no_verdict_action_sentence_reaches_the_evidence_table(name, build):
         f"本條可能是因為整張表沒畫才綠的")
 
 
+def _verdict_action_clauses() -> tuple[str, ...]:
+    """A 組用：五句 `action_text` 各自切成子句（≥6 字），**從 L2 現場切**，不手抄。
+
+    與 D 組的 :func:`_action_clauses` 同一個切法，但來源是 `composite_verdict()`
+    本身（A 組守的就是它），不經 `allocation_from_composite()` —— 兩組各自取源，
+    一組的前提壞掉不會讓另一組跟著空轉。
+    """
+    import re
+    _out: dict[str, None] = {}
+    for _t in _all_verdict_action_texts():
+        for _c in re.split(r"[：，、；。]", _t):
+            _c = _c.strip()
+            if len(_c) >= 6:
+                _out[_c] = None
+    return tuple(_out)
+
+
+@pytest.mark.parametrize("name,build", _WORLDS)
+def test_no_truncated_verdict_clause_reaches_the_evidence_table(name, build):
+    """**A3 的補位**：連**半句**都不准出現在 ② 依據表的列／表下註記／頁面文字。
+
+    ⚠️ **本條不是從 #839 移植的，是 2026-10-12 獨立稽核後補的**（比照 D4）。
+    A3 比對完整句，擋不住「只印前 N 個字」或「只接了逗號後那半句」——
+    稽核的突變 M6「在 ② 表下註記追加行動句被截斷的半句」在補這條之前**全綠漏抓**。
+
+    ⚠️ 已知代價（同 D4）：日後若有一句**正當**的表內文案剛好含某個 ≥6 字子句，
+    本條會誤報。那時該做的是看一眼為什麼依據表在講 verdict 的話，
+    不是把子句從清單裡挑掉。
+    ⚠️ 已知射程（同 D4）：短於 6 字的截斷、或改寫過的說法，本條抓不到。
+    """
+    _clauses = _verdict_action_clauses()
+    assert len(_clauses) >= 5, (
+        f"反空轉：只切到 {len(_clauses)} 個子句（應 ≥5）—— 本條會恆綠：{_clauses}")
+
+    _out, _actions, _table, _rec = _render_evidence_layer(build)
+    assert _out.get("sufficient") is True, f"[{name}] 前提破了"
+    _blob = repr(_table) + "\n" + "\n".join(_rec.texts())
+    _hit = [_c for _c in _clauses if _c in _blob]
+    assert not _hit, (
+        f"[{name}] ② 依據表出現 `composite_verdict()` 行動句的子句"
+        f"（可能是被截斷的半句）：{_hit}")
+
+
 def test_the_action_is_cleared_unconditionally_in_source():
     """`_action = ""` 必須在函式**本體最外層**，不得被搬回 `if not _ok:` 裡。
 
     突變實測（2026-09-14）：把 `_action = ""` 縮排回 `if not _ok:` 區塊內
     → 本條轉紅（同時 A2／A3 在兩個世界也都轉紅）。
+
+    ⚠️ **已知誤擋，刻意不放寬（2026-10-12 獨立稽核 M8）**：
+    不拆 `_action`、改成在三個下游呼叫直接傳 `composite_action=""`，
+    行為與現狀等價，本條卻會轉紅（它找的是 `_action = ""` 這一個寫法）。
+    **取捨理由**：要同時認得兩種寫法，就得改成「追蹤每一個 `composite_action=`
+    引數的資料來源」，那會把本條從一個看得懂的結構鎖變成一個小型資料流分析器，
+    而資料流分析器漏判的方式比字面鎖更難察覺。行為面已由 A2（三個下游
+    逐字收到 `""`）承接，本條只負責「清空這件事不得變成有條件的」。
+    **代價**：真的要改成那種寫法的人，必須在同一份 diff 裡一起改本條 ——
+    這是刻意的：動到合規清空點的改動，本來就該被迫看一眼守衛。
     """
     _tree = ast.parse(_PAGE.read_text(encoding="utf-8"))
     _fn = [_n for _n in ast.walk(_tree)
@@ -350,6 +415,15 @@ def test_the_action_is_cleared_unconditionally_in_source():
 # 客戶拍板過的文案必須有一根不動的樁。
 _CLIENT_APPROVED_HEADING = "### 🧾 ① 結論 — 現在的景氣位階"
 _CLIENT_APPROVED_GREEN_STATE = "偏強 —— 擴張訊號明顯多於收縮訊號"
+
+# 另外三句的**字面值錨**（2026-10-12 獨立稽核後補，同樣刻意不從產品碼 import）。
+# ⚠️ **來源屬性與上面兩句不同，不得混稱「客戶核准」**：
+#    這三句是 #839 實作組依客戶 2026-09-14 的方向（只講狀態、不講該做什麼）擬定，
+#    本次逐位元組沿用；**不是客戶逐字核准的文字**。
+#    釘樁的理由是「改它必須是有意識的」，不是「它是客戶原文」。
+_LITERAL_ANCHOR_AMBER_STATE = "中性 —— 擴張與收縮訊號互見"
+_LITERAL_ANCHOR_RED_STATE = "偏弱 —— 收縮訊號明顯多於擴張訊號"
+_LITERAL_ANCHOR_OVERRIDE_STATE = "警戒 —— 硬衰退／恐慌訊號已觸發"
 
 
 def _full_indicators(**override) -> dict:
@@ -570,6 +644,29 @@ def test_the_client_approved_wording_is_rendered_verbatim():
         f"🟢 那句與客戶拍板的草稿不符，應為 {_CLIENT_APPROVED_GREEN_STATE!r}")
 
 
+@pytest.mark.parametrize("name,ov,ps,want", [
+    ("P4-phase-amber",  {},              4.0, _LITERAL_ANCHOR_AMBER_STATE),
+    ("P5-phase-red",    {},              1.0, _LITERAL_ANCHOR_RED_STATE),
+    ("P1-override-red", {"VIX": 45.0},   5.0, _LITERAL_ANCHOR_OVERRIDE_STATE),
+], ids=["P4-phase-amber", "P5-phase-red", "P1-override-red"])
+def test_the_amber_red_and_override_states_are_rendered_verbatim(name, ov, ps, want):
+    """**字面值錨**：🟡、🔴（位階）、override 🔴 三句，必須原樣出現在畫面上。
+
+    ⚠️ **本條不是從 #839 移植的，是 2026-10-12 獨立稽核後補的。**
+    補之前，這三句只被「從產品碼 import 期望值」的鎖守著 ——
+    產品碼改字，期望值跟著改，守衛恆綠（本組 2026-10-12 在 `git archive` 複本上
+    實測：三句任改一句，補強前的 34 條全綠；補強後各自只有本條對應那一格轉紅）。
+
+    ⚠️ **來源屬性**：這三句**不是客戶逐字核准的**，是 #839 實作組依客戶
+    2026-09-14 方向擬定、本次逐位元組沿用（見模組頂端常數旁的註解）。
+    本條鎖住它們，只是讓改動必須有意識地發生，**不代表**它們有客戶背書。
+    """
+    _rec, _nr, _ba, _blob = _render_conclusion(ov, ps)
+    assert not _nr, f"[{name}] 前提破了：這條路徑被 not_ready 擋下"
+    assert want in _blob, (
+        f"[{name}] 狀態句與釘樁的字面值不符，應為 {want!r}")
+
+
 def test_every_conclusion_heading_in_the_page_uses_the_approved_wording():
     """① 結論標題在本頁**每一處**都必須是客戶核准的那一句（含「尚未載入」骨架）。
 
@@ -583,6 +680,15 @@ def test_every_conclusion_heading_in_the_page_uses_the_approved_wording():
     做法：AST 收集本檔所有以「### 🧾 ① 結論」開頭的字串常數，
     每一個都必須逐字等於核准標題，且至少兩份（正常路徑 ＋ 骨架）——
     「至少兩份」擋的是「把骨架那一份整個刪掉」讓本條變綠。
+
+    ⚠️ **已知誤擋，刻意不放寬（2026-10-12 獨立稽核 M7）**：
+    把兩處標題收斂成一個具名常數（例如 `_HEADING = "..."`、兩處都
+    `st.markdown(_HEADING)`）是正當重構，但字串常數只剩一份，本條會轉紅。
+    **取捨理由**：「至少兩份字面值」是本條唯一擋得住「骨架那一份被刪掉」的訊號；
+    要同時接受具名常數，就得改成追蹤 `st.markdown` 的引數來源並數呼叫點，
+    那會讓本條變成一個資料流分析器，誤判方式更難察覺。
+    **代價**：做那個重構的人必須在同一份 diff 裡改本條（改成數呼叫點）——
+    動到客戶核准文案的改動，本來就該被迫看一眼守衛。
     """
     _tree = ast.parse(_PAGE.read_text(encoding="utf-8"))
     _heads = [(_c.lineno, _c.value) for _c in ast.walk(_tree)
