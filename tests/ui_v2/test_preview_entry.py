@@ -336,11 +336,42 @@ def test_檔頭列的試算表secret鍵名與L1實際讀的相同():
     assert "不得被 `app.py`" in doc
 
 
-def test_換頁清除的前綴與alo_set兩頁正式模式的輸入欄key前綴相同():
-    """`_forget_shared_live_inputs` 清的是 `live_`；這個前綴寫死在兩頁 `page.py` 的 `key = "live"`。
-    兩頁任一改了前綴，本條先紅，提醒預覽入口跟著改（否則撞名回來了、清除卻清不到）。"""
-    prefix = _string_constant(_tree(_PREVIEW), "SHARED_LIVE_INPUT_PREFIX")
-    assert prefix == "live_"
-    for page in ("alo", "set"):
-        text = (_ROOT / "ui_v2" / page / "page.py").read_text(encoding="utf-8")
-        assert re.search(r'^\s+key = "live"$', text, flags=re.MULTILINE), page
+def _pops_alo_save_errors(func: ast.FunctionDef) -> bool:
+    """`_on_page` 裡要有 `st.session_state.pop(alo_page._SAVE_ERRORS_STATE, ...)` —— 引用常數，不是寫死字串。"""
+    for node in ast.walk(func):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "pop"
+                and ast.unparse(node.func.value) == "st.session_state" and node.args
+                and ast.unparse(node.args[0]) == "alo_page._SAVE_ERRORS_STATE"):
+            return True
+    return False
+
+
+def test_換頁時pop資產配置存檔失敗帳_引用page的常數():
+    tree = _tree(_PREVIEW)
+    assert _pops_alo_save_errors(_function(tree, "_on_page"))
+    alo_tree = _tree(_ROOT / "ui_v2" / "alo" / "page.py")
+    assert _string_constant(alo_tree, "_SAVE_ERRORS_STATE")            # 常數真的存在
+    text = _PREVIEW.read_text(encoding="utf-8")
+    assert _string_constant(alo_tree, "_SAVE_ERRORS_STATE") not in text  # 沒有寫死同一個字串
+
+
+def test_每一頁函式第一句都是_on_page且slug對得上():
+    tree = _tree(_PREVIEW)
+    for slug in ("mkt", "hld", "exp", "alo", "set"):
+        first = _function(tree, f"page_{slug}").body[0]
+        assert ast.unparse(first) == f"_on_page({slug!r})", (slug, ast.unparse(first))
+
+
+def test_預覽入口沒有清除live前綴輸入欄的程式():
+    """2026-10-12 紅隊推翻「同名輸入欄會跨頁寫入」後移除；不得被加回來當成防護（真正的防護在 widget id 算法，
+    由 slow lane 的回歸測試看守）。"""
+    text = _PREVIEW.read_text(encoding="utf-8")
+    assert "startswith(\"live_\")" not in text and "SHARED_LIVE_INPUT_PREFIX" not in text
+
+
+@pytest.mark.parametrize("body", [
+    "def _on_page(slug):\n    st.session_state.pop('_alo_live_save_errors', None)",   # 寫死字串
+    "def _on_page(slug):\n    pass",
+])
+def test_正控_沒有引用常數的pop就紅(body):
+    assert _pops_alo_save_errors(ast.parse(body).body[0]) is False

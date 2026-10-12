@@ -8,8 +8,18 @@
 - (c)(e) 沒有任何憑證時，四頁真資料各自照實顯示缺失，**不碰 fixtures**（各頁 `page` 上的 `fixtures`
       換成「一存取就拋錯」的替身，體例同 `tests/ui_v2/test_mkt_live_page.py`）、畫面上沒有任何示意字樣；
 - (d) 標的探索在每一種示範情境（含存檔失敗開關、網址打錯情境名）下，示意資料標示都是本頁第一個元素；
-- 換頁清除：資產配置沒存檔的輸入不會跟著同名 key 進到設定與診斷、再被那一頁的「存檔」寫回試算表
-      （真 L2 ＋ 真 L1 ＋ 假 gspread；附對照組：拿掉清除就真的寫進去了）。
+- 換頁（真 L2 ＋ 真 L1 ＋ 假 gspread）：
+  - 回歸：資產配置與設定與診斷同名的 `live_alo_*` 輸入欄，在 `st.navigation` 下**不會**互相帶值、
+    不會被另一頁的「存檔」寫回試算表 —— 預覽入口本身**沒有任何清除**，靠的是 streamlit 1.59.2
+    把頁的 script hash 算進 widget id。升版改了算法，這一條先紅。
+  - 資產配置的存檔失敗帳換頁就清（`app_preview._on_page`）；附對照組：拿掉就殘留。
+
+**換頁一律走真的 `st.navigation`**：腳本呼叫 `app_preview.main()`，以 `AppTest._page_hash`
+（`calc_hash(url_path)`，與 `st.Page._script_hash` 同一個算法）選頁。⚠️ `_page_hash` 是 AppTest 的私有屬性
+（`AppTest.switch_page` 只收檔案路徑，收不了 callable 頁）；每次換頁都檢查頁標題真的換了，
+私有屬性一旦失效，測試會紅而不是靜默空跑。
+⛔ 不再用「同一支腳本以查詢參數切頁」的接頭：那條路五頁共用同一個 script hash，正式環境不存在，
+曾經讓本組誤判同名輸入欄會跨頁寫入（2026-10-12 紅隊推翻）。
 
 不打任何網路：Yahoo 取數以替身回錯誤；試算表 ID 與服務帳戶一律以 `get_secret` 替身回「沒有設定」。
 """
@@ -32,6 +42,8 @@ sys.path.insert(0, str(_ROOT / "tests"))
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 preview = pytest.importorskip("ui_v2.app_preview")  # 需要 L1 的相依（gspread、bs4 等）
 
+from streamlit.util import calc_hash  # noqa: E402
+
 from infra import source_backoff as SB  # noqa: E402
 from repositories import policy_supplement_repository as POL  # noqa: E402
 from repositories import settings_sheet_repository as SET_REPO  # noqa: E402
@@ -53,14 +65,23 @@ _NO_NET = "測試替身：本測試不打網路"
 _LIVE_PAGES = {"mkt": mkt_page, "hld": hld_page, "alo": alo_page, "set": set_page}
 _SOURCES = {"mkt": mkt_source, "hld": hld_source, "alo": alo_source, "set": set_source}
 
-# 依 slug 呼叫預覽入口的那一頁函式（與 `st.navigation` 執行的是同一個函式物件）。
-_ROUTER = f"""
+# 真的 `st.navigation`：與 `streamlit run ui_v2/app_preview.py` 跑的是同一個 `main()`。
+# 用 `from ui_v2 import app_preview`（而不是 `AppTest.from_file`）是為了讓測試能 monkeypatch 那個模組物件。
+_NAV = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})
-import streamlit as st
-from ui_v2 import app_preview as p
-dict((slug, fn) for slug, _t, fn in p.PAGES)[st.query_params["p"]]()
+from ui_v2 import app_preview
+app_preview.main()
 """
+
+# 每一頁畫出來一定有的頁標題（各頁 `page.py` 的 `<div class="…title">頁名</div>`；hld 正式模式錯誤畫面同一個）。
+_TITLE = {
+    "mkt": '<div class="mkt-page-title">市場總覽</div>',
+    "hld": '<div class="hld-title">持倉體檢</div>',
+    "exp": '<div class="exp-title">標的探索</div>',
+    "alo": '<div class="alo-title">資產配置</div>',
+    "set": '<div class="set-title">設定與診斷</div>',
+}
 
 
 class _FixturesThatBite:
@@ -95,12 +116,26 @@ def biting(monkeypatch):
         monkeypatch.setattr(page, "fixtures", _FixturesThatBite())
 
 
-def _app_test(script=_ROUTER, **query):
+def _app_test(**query):
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_string(script, default_timeout=120)
+    at = AppTest.from_string(_NAV, default_timeout=120)
     for key, value in query.items():
         at.query_params[key] = value
+    return at
+
+
+def _select(at, slug):
+    """選 `st.navigation` 的頁（下一次 `run()` 生效）。`calc_hash(url_path)` ＝ `st.Page._script_hash`。"""
+    at._page_hash = calc_hash(slug)
+    return at
+
+
+def _go(at, slug):
+    """經 `st.navigation` 換到 `slug` 那一頁並跑一次；確認真的換過去了（防 `_page_hash` 失效時空跑）。"""
+    _select(at, slug).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert _TITLE[slug] in [e.value for e in at.main.markdown], (slug, "沒有換到這一頁")
     return at
 
 
@@ -146,9 +181,7 @@ _MISSING = {
 
 @pytest.mark.parametrize("slug", sorted(_LIVE_PAGES))
 def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒有示意字樣(no_secrets, biting, slug):
-    at = _app_test(p=slug)
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
+    at = _go(_app_test(), slug)
     text = _main_text(at)
     for needle in _MISSING[slug]:
         assert needle in text, (slug, needle)
@@ -162,7 +195,7 @@ def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒
 def test_e_正控_同一個替身之下示範模式一定會炸(no_secrets, monkeypatch):
     """替身真的會咬人：把標的探索（示範模式，一定讀 fixtures）的 fixtures 也換掉，必須炸。"""
     monkeypatch.setattr(exp_page, "fixtures", _FixturesThatBite())
-    at = _app_test(p="exp")
+    at = _select(_app_test(), "exp")
     at.run()
     assert at.exception and any(_MARK in e.value for e in at.exception)
 
@@ -185,7 +218,7 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     from streamlit.testing.v1 import AppTest
 
     calls = _record_render(monkeypatch, _LIVE_PAGES[slug])
-    at = _app_test(p=slug)
+    at = _select(_app_test(), slug)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     live = AppTest.from_file(str(_ROOT / "ui_v2" / f"app_{slug}_live.py"), default_timeout=120)
@@ -204,7 +237,7 @@ def test_b_執行期_標的探索與示範入口一樣不傳任何參數(monkeyp
     from streamlit.testing.v1 import AppTest
 
     calls = _record_render(monkeypatch, exp_page)
-    _app_test(p="exp").run()
+    _select(_app_test(), "exp").run()
     AppTest.from_file(str(_ROOT / "ui_v2" / "app_exp.py"), default_timeout=120).run()
     assert calls == [((), {}), ((), {})]
 
@@ -226,9 +259,7 @@ _EXP_CASES = [(name, "0") for name in exp_fixtures.ALL_SCENARIO_NAMES] + [
 
 @pytest.mark.parametrize("scenario, savefail", _EXP_CASES)
 def test_d_每一種情境_示意資料標示都是本頁第一個元素(scenario, savefail):
-    at = _app_test(p="exp", scenario=scenario, savefail=savefail)
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
+    at = _go(_app_test(scenario=scenario, savefail=savefail), "exp")
     first = _first_main_element(at)
     assert first.type == "warning", first
     assert first.value == preview.EXP_DEMO_BANNER
@@ -240,7 +271,7 @@ def test_d_示意資料標示的字面():
         assert needle in preview.EXP_DEMO_BANNER
 
 
-# ═══════════════════════ 換頁清除：同名輸入欄不跨頁、不被別頁存檔寫回 ═══════════════════════
+# ═══════════════════════ 換頁（真 st.navigation） ═══════════════════════
 
 
 @pytest.fixture
@@ -265,66 +296,90 @@ def settings_book(monkeypatch, no_secrets):
     return book
 
 
-def _settings_rows(book):
-    return book.data(SET_REPO.TAB_USER_SETTING) if SET_REPO.TAB_USER_SETTING in book.tabs else []
+def _tolerance_rows(book):
+    rows = book.data(SET_REPO.TAB_USER_SETTING) if SET_REPO.TAB_USER_SETTING in book.tabs else []
+    return [row[:3] for row in rows[1:] if row[0] == "alo_tolerance_pp"]
 
 
-def _type_on_alo_then_save_on_set(book):
-    """在資產配置的容許帶欄打 99、不存檔，換到設定與診斷、不碰任何欄位直接按「存檔」。"""
-    at = _app_test(p="alo")
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
-    at.text_input(key="live_alo_tolerance_pp").input("99").run()
-    # 同一頁內重跑不清：剛打的值還在。
-    assert at.text_input(key="live_alo_tolerance_pp").value == "99"
-    at.query_params["p"] = "set"
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
-    shown = at.text_input(key="live_alo_tolerance_pp").value
+def _save_set(at):
     save = at.button(key="live_set4_btn_0")
     assert not save.disabled, save.help
     save.click().run()
     assert not at.exception, [e.value for e in at.exception]
-    return shown, [row for row in _settings_rows(book)[1:] if row[0] == "alo_tolerance_pp"]
 
 
-def test_換頁_資產配置沒存檔的輸入不會被設定與診斷的存檔寫回試算表(settings_book):
-    shown, written = _type_on_alo_then_save_on_set(settings_book)
-    assert shown == ""          # 設定與診斷的欄位是它自己讀到的值（尚未設定 ⇒ 空），不是資產配置打的 99
-    assert written == []
+def test_回歸_同名輸入欄在st_navigation下不跨頁_不被另一頁的存檔寫回(settings_book):
+    """預覽入口**沒有任何清除**；靠的是 streamlit 1.59.2 把頁的 script hash 算進 widget id。
+
+    升版若改了 widget id 算法（不再帶頁的 script hash），資產配置打的 99 會出現在設定與診斷的同名欄、
+    再被那一頁的「存檔」寫進試算表 —— 本條就會紅。
+    """
+    at = _go(_app_test(), "alo")
+    at.text_input(key="live_alo_tolerance_pp").input("99").run()
+    assert at.text_input(key="live_alo_tolerance_pp").value == "99"   # 同一頁內重跑：值還在
+    _go(at, "set")
+    assert at.text_input(key="live_alo_tolerance_pp").value == ""     # 設定與診斷讀到的是它自己的（尚未設定）
+    _save_set(at)
+    assert _tolerance_rows(settings_book) == []
 
 
-def test_換頁_對照組_拿掉清除就真的寫回去了(settings_book, monkeypatch):
-    """證明上一條不是空的：同名 key 真的會帶過去，而且真的會被別頁的存檔寫回試算表。"""
-    monkeypatch.setattr(preview, "_forget_shared_live_inputs", lambda slug: None)
-    shown, written = _type_on_alo_then_save_on_set(settings_book)
-    assert shown == "99"
-    assert [row[:3] for row in written] == [["alo_tolerance_pp", "99", "float"]]
+def test_回歸_正控_同一頁輸入再存檔確實會寫入(settings_book):
+    """證明上一條的「寫入 0 列」不是因為存檔根本寫不進去。"""
+    at = _go(_app_test(), "set")
+    at.text_input(key="live_alo_tolerance_pp").input("99").run()
+    _save_set(at)
+    assert _tolerance_rows(settings_book) == [["alo_tolerance_pp", "99", "float"]]
 
 
-def test_換頁清除只清live前綴_不碰其他頁的狀態():
-    """單元層：只有「換頁」那一次清，而且只清 `live_` 開頭的 key。"""
+_FAIL = "寫入被拒（測試注入）"
+
+
+def _alo_fail_then_set_ok_then_back(book):
+    """資產配置存容許帶失敗 → 設定與診斷把同一鍵存成功 → 回資產配置。回傳回來後畫面上的字。"""
+    at = _go(_app_test(), "alo")
+    at.text_input(key="live_alo_tolerance_pp").input("7").run()
+    book.fail_next("append_rows", RuntimeError(_FAIL))
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert _FAIL in _main_text(at)                                      # 失敗當下照實顯示
+    SB.reset_all()                                                       # 模擬設定試算表的冷卻已過
+    _go(at, "set")
+    at.text_input(key="live_alo_tolerance_pp").input("7").run()
+    _save_set(at)
+    assert _tolerance_rows(book) == [["alo_tolerance_pp", "7", "float"]]  # 這一次真的存成功了
+    _go(at, "alo")
+    return _main_text(at)
+
+
+def test_必修2_換頁後資產配置不再顯示已被別頁存成功的那一次失敗(settings_book):
+    assert _FAIL not in _alo_fail_then_set_ok_then_back(settings_book)
+
+
+def test_必修2_對照組_拿掉換頁pop就殘留失敗提示(settings_book, monkeypatch):
+    monkeypatch.setattr(preview, "_on_page", lambda slug: None)
+    assert _FAIL in _alo_fail_then_set_ok_then_back(settings_book)
+
+
+def test_必修2_同一頁內重跑不清存檔失敗帳():
+    """單元層：只有換頁那一次 pop；同一頁重跑不碰。key 名取自 `ui_v2/alo/page.py` 的常數。"""
     from streamlit.testing.v1 import AppTest
 
+    key = alo_page._SAVE_ERRORS_STATE
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})
 import streamlit as st
 from ui_v2 import app_preview as p
-p._forget_shared_live_inputs(st.query_params["p"])   # 與預覽入口每一頁的順序相同：先清、再畫
-st.session_state.setdefault("live_x", "keep-until-switch")
-st.session_state.setdefault("_hld_applied", "untouched")
-st.write(sorted(k for k in st.session_state if not k.startswith("_preview")))
+p._on_page(st.query_params["slug"])
 """
     at = AppTest.from_string(script)
-    at.query_params["p"] = "alo"
+    at.query_params["slug"] = "alo"
     at.run()
-    assert "live_x" in at.session_state and at.session_state["live_x"] == "keep-until-switch"
-    at.session_state["live_x"] = "typed"
-    at.session_state["_hld_applied"] = "set-by-another-page"
-    at.run()                                   # 同一頁重跑：不清
-    assert at.session_state["live_x"] == "typed"
-    at.query_params["p"] = "set"
-    at.run()                                   # 換頁：清掉後被 setdefault 重新放回初始值
-    assert at.session_state["live_x"] == "keep-until-switch"
-    assert at.session_state["_hld_applied"] == "set-by-another-page"   # 非 live_ 前綴：換頁也不碰
+    at.session_state[key] = {"alo_tolerance_pp": "失敗"}
+    at.session_state["_hld_applied"] = "別頁自己的狀態"
+    at.run()                                                 # 同一頁重跑：不清
+    assert at.session_state[key] == {"alo_tolerance_pp": "失敗"}
+    at.query_params["slug"] = "set"
+    at.run()                                                 # 換頁：pop
+    assert key not in at.session_state
+    assert at.session_state["_hld_applied"] == "別頁自己的狀態"   # 其他程式寫入的 key 不碰

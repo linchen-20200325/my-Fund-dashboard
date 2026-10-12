@@ -42,10 +42,18 @@
 - L1 的快取與來源冷卻狀態住在行程記憶體裡，五頁在同一個行程內**共用**：一頁讓某來源進了冷卻，
   另一頁也照樣被擋；設定與診斷的「重新取數」清的 L1 快取（Yahoo 的 `fetch_yf_close`、淨值的
   `fetch_nav` 整批，見 `services/v2_tables/settings_store.py`）也就是市場總覽、持倉體檢在用的那幾支。
-- 五頁共用同一份 `st.session_state`。資產配置與設定與診斷的正式模式輸入欄 key 都以 `live_` 開頭
-  （各自 `page.py` 寫死），其中 `live_alo_basis`、`live_alo_tolerance_pp` 兩頁同名。
-  本檔不改 `page.py`，改在**換頁時**清掉以 `live_` 開頭的 key（`_forget_shared_live_inputs`），
-  讓一頁沒存檔的輸入不會被帶進另一頁、再被另一頁的「存檔」寫回試算表。
+- 五頁共用同一份 `st.session_state`，但**輸入欄（widget）的狀態一頁一份**：streamlit 1.59.2 的
+  `streamlit/elements/lib/utils.py::compute_and_register_element_id` 把目前頁的 script hash
+  （`st.Page` 為 `calc_hash(url_path)`）算進 widget id，即使有指定 key 也一樣；離開一頁時，
+  那一頁的 widget 狀態就被清掉。所以資產配置與設定與診斷正式模式同名的 `live_alo_*` 輸入欄
+  不會互相帶值（回歸測試：tests/ui_v2/test_preview_page.py）。⚠️ 這個結論的依據是
+  streamlit 1.59.2 的 widget id 算法；升版改了算法時，那條回歸測試會先紅。
+  **會跨頁共用的只有各頁程式自己寫進 `st.session_state` 的 key**（不是輸入欄的那些）。
+  其中資產配置的存檔失敗帳（`ui_v2/alo/page.py::_SAVE_ERRORS_STATE`）會殘留：資產配置存某鍵失敗、
+  到設定與診斷把同一鍵存成功、再回資產配置，畫面仍說失敗 —— 與事實相反。
+  本檔不改 `page.py`，改在**換頁那一次**把這份帳 pop 掉（`_on_page`）。
+  代價：離開資產配置再回來，上一次的存檔失敗提示會消失；但此時欄位本來就會重讀試算表的值，
+  失敗那一次沒寫進去的內容也已不在欄位上。
 """
 
 from __future__ import annotations
@@ -71,54 +79,54 @@ PREVIEW_TITLE = "B 線 UI 預覽（非正式站）"
 PREVIEW_NOTE = (
     "B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料；"
     "標的探索為示意資料。"
+    "預覽把五頁放在同一個程式裡跑，快取與取數暫停（冷卻）也五頁共用，"
+    "和正式上線時各頁各自獨立運作不同；在設定與診斷按「重新取數」，"
+    "會一併影響市場總覽與持倉體檢顯示的資料。"
 )
 EXP_DEMO_BANNER = (
     "本頁為示意資料，不是真實資料：標的探索尚未接真資料。"
     "頁面上的基金名稱、數字與清單全部是假資料，不得據以判斷；本頁不連任何資料源、不寫入任何資料。"
 )
 
-# 換頁時要清掉的 session key 前綴：資產配置與設定與診斷正式模式的輸入欄 key 前綴（見檔頭）。
-SHARED_LIVE_INPUT_PREFIX = "live_"
 _LAST_PAGE_KEY = "_preview_last_page"
 
 
-def _forget_shared_live_inputs(slug: str) -> None:
-    """換到另一頁時，清掉上一頁留在 session 裡、以 `live_` 開頭的輸入欄值。
+def _on_page(slug: str) -> None:
+    """每一頁開頭呼叫一次。偵測到**換頁**時，把資產配置的存檔失敗帳 pop 掉（理由見檔頭）。
 
-    只在**換頁**那一次清；同一頁內的重跑（按套用、存檔、重新取數）一個 key 都不碰。
-    清掉之後輸入欄回到該頁從試算表讀到的值（各頁 `page.py` 的 `value=`），不補任何值。
+    只在換頁那一次動；同一頁內的重跑（按套用、存檔、重新取數）一個 key 都不碰。
+    key 名取自 `ui_v2/alo/page.py` 的常數，不在本檔另寫一份字串。
     """
     last = st.session_state.get(_LAST_PAGE_KEY)
     if last is not None and last != slug:
-        for key in [k for k in st.session_state if str(k).startswith(SHARED_LIVE_INPUT_PREFIX)]:
-            del st.session_state[key]
+        st.session_state.pop(alo_page._SAVE_ERRORS_STATE, None)
     st.session_state[_LAST_PAGE_KEY] = slug
 
 
 def page_mkt() -> None:
-    _forget_shared_live_inputs("mkt")
+    _on_page("mkt")
     mkt_page.render(load_live=mkt_source.load_live)
 
 
 def page_hld() -> None:
-    _forget_shared_live_inputs("hld")
+    _on_page("hld")
     hld_page.render(load_live=hld_source.load_live, mask_error=hld_source.mask_error)
 
 
 def page_exp() -> None:
-    _forget_shared_live_inputs("exp")
+    _on_page("exp")
     # 標示一律畫在本頁最上方、在 `exp_page.render()` 之前：不論 ?scenario= 是哪一種情境都看得到。
     st.warning(EXP_DEMO_BANNER, icon="⚠️")
     exp_page.render()
 
 
 def page_alo() -> None:
-    _forget_shared_live_inputs("alo")
+    _on_page("alo")
     alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting)
 
 
 def page_set() -> None:
-    _forget_shared_live_inputs("set")
+    _on_page("set")
     set_page.render(
         load_live=set_source.load_live, save_live=set_source.save_setting, refetch_live=set_source.refetch
     )
