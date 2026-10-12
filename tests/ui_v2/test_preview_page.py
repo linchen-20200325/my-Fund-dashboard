@@ -12,12 +12,18 @@
   - 回歸：資產配置與設定與診斷同名的 `live_alo_*` 輸入欄，在 `st.navigation` 下**不會**互相帶值、
     不會被另一頁的「存檔」寫回試算表 —— 預覽入口本身**沒有任何清除**，靠的是 streamlit 1.59.2
     把頁的 script hash 算進 widget id。升版改了算法，這一條先紅。
-  - 資產配置的存檔失敗帳換頁就清（`app_preview._on_page`）；附對照組：拿掉就殘留。
+  - 反方向（設定與診斷 → 資產配置）同樣不帶值，資產配置存檔只寫回試算表上的原值。
+  - 各頁程式自己寫進 session、換頁就要清的兩份狀態（`app_preview._PAGE_STATE_TO_DROP`），各附對照組：
+    資產配置的存檔失敗帳（只讓容許帶那一鍵失敗）、市場總覽「套用」的值（回來要與新開一模一樣）。
+- 誤導文字：側邊欄寫明標的探索為示意資料；標的探索頁沒有 `st.success`，除了示意資料標示那一句否定句，
+  主畫面不出現「真實資料」四個字。
 
 **換頁一律走真的 `st.navigation`**：腳本呼叫 `app_preview.main()`，以 `AppTest._page_hash`
 （`calc_hash(url_path)`，與 `st.Page._script_hash` 同一個算法）選頁。⚠️ `_page_hash` 是 AppTest 的私有屬性
-（`AppTest.switch_page` 只收檔案路徑，收不了 callable 頁）；每次換頁都檢查頁標題真的換了，
-私有屬性一旦失效，測試會紅而不是靜默空跑。
+（`AppTest.switch_page` 只收檔案路徑，收不了 callable 頁）。私有屬性一旦失效，測試要紅而不是靜默空跑：
+經 `_go` 換頁的地方檢查頁標題真的換了；直接用 `_select` 的三個呼叫點（參數化後共 6 次執行：
+注入比對 4 頁＋標的探索 1 次、fixtures 替身正控 1 次）畫面不會出現頁標題（`render` 被換成記錄器、
+或預期整頁拋例外），改以記錄器的呼叫次數與例外內容把關。
 ⛔ 不再用「同一支腳本以查詢參數切頁」的接頭：那條路五頁共用同一個 script hash，正式環境不存在，
 曾經讓本組誤判同名輸入欄會跨頁寫入（2026-10-12 紅隊推翻）。
 
@@ -164,6 +170,7 @@ def test_整個入口跑得起來_預設頁是市場總覽_側邊欄寫明非正
     assert not at.exception, [e.value for e in at.exception]
     assert [e.value for e in at.sidebar.info] == [preview.PREVIEW_NOTE]
     assert "B 線 UI 預覽（非正式站）" in preview.PREVIEW_NOTE
+    assert "標的探索為示意資料" in at.sidebar.info[0].value
     assert '<div class="mkt-page-title">市場總覽</div>' in [e.value for e in at.main.markdown]
     assert not at.main.warning  # 示意資料標示只屬於標的探索那一頁
 
@@ -264,6 +271,11 @@ def test_d_每一種情境_示意資料標示都是本頁第一個元素(scenari
     assert first.type == "warning", first
     assert first.value == preview.EXP_DEMO_BANNER
     assert [e.value for e in at.main.warning] == [preview.EXP_DEMO_BANNER]
+    # 誤導文字：沒有成功框；「真實資料」只准出現在標示那一句否定句（「不是真實資料」）裡，且只出現那一次。
+    assert not at.main.success and not at.sidebar.success
+    assert preview.EXP_DEMO_BANNER.count("真實資料") == 1 and "不是真實資料" in preview.EXP_DEMO_BANNER
+    assert _main_text(at).count("真實資料") == 1
+    assert "標的探索為示意資料" in at.sidebar.info[0].value
 
 
 def test_d_示意資料標示的字面():
@@ -331,40 +343,130 @@ def test_回歸_正控_同一頁輸入再存檔確實會寫入(settings_book):
     assert _tolerance_rows(settings_book) == [["alo_tolerance_pp", "99", "float"]]
 
 
-_FAIL = "寫入被拒（測試注入）"
+_TOL_FAIL = "容許帶寫入失敗（測試注入）"
 
 
-def _alo_fail_then_set_ok_then_back(book):
-    """資產配置存容許帶失敗 → 設定與診斷把同一鍵存成功 → 回資產配置。回傳回來後畫面上的字。"""
+@pytest.fixture
+def tolerance_save_fails(monkeypatch):
+    """資產配置的存檔函式只對 `alo_tolerance_pp` 回失敗（其餘鍵照真的 L2 寫）；設定與診斷的存檔不受影響。"""
+    real = alo_source.save_setting
+
+    def flaky(key, value, kind):
+        if key == "alo_tolerance_pp":
+            return {"status": "failed", "key": key, "message": _TOL_FAIL}
+        return real(key, value, kind)
+
+    monkeypatch.setattr(alo_source, "save_setting", flaky)
+
+
+def _tolerance_fail_then_set_ok_then_back(book):
+    """資產配置存容許帶失敗 → 設定與診斷把同一鍵存成功 → 回資產配置。回傳回來後的 (失敗帳, 畫面字)。"""
     at = _go(_app_test(), "alo")
     at.text_input(key="live_alo_tolerance_pp").input("7").run()
-    book.fail_next("append_rows", RuntimeError(_FAIL))
     at.button(key="live_alo1_btn_0").click().run()
     assert not at.exception, [e.value for e in at.exception]
-    assert _FAIL in _main_text(at)                                      # 失敗當下照實顯示
-    SB.reset_all()                                                       # 模擬設定試算表的冷卻已過
+    errors = at.session_state[alo_page._SAVE_ERRORS_STATE]
+    assert errors.get("alo_tolerance_pp") == _TOL_FAIL                   # 失敗的確實是容許帶那一鍵
+    assert [k for k, m in errors.items() if m == _TOL_FAIL] == ["alo_tolerance_pp"]
+    assert _TOL_FAIL in _main_text(at)                                    # 失敗當下照實顯示
     _go(at, "set")
     at.text_input(key="live_alo_tolerance_pp").input("7").run()
     _save_set(at)
-    assert _tolerance_rows(book) == [["alo_tolerance_pp", "7", "float"]]  # 這一次真的存成功了
+    assert _tolerance_rows(book) == [["alo_tolerance_pp", "7", "float"]]  # 這一鍵在設定與診斷真的存成功了
     _go(at, "alo")
-    return _main_text(at)
+    if alo_page._SAVE_ERRORS_STATE not in at.session_state:   # AppTest 的 session_state 沒有 .get
+        return None, _main_text(at)
+    return at.session_state[alo_page._SAVE_ERRORS_STATE], _main_text(at)
 
 
-def test_必修2_換頁後資產配置不再顯示已被別頁存成功的那一次失敗(settings_book):
-    assert _FAIL not in _alo_fail_then_set_ok_then_back(settings_book)
+def test_必修2_容許帶在設定與診斷存成功後_回資產配置不再顯示該鍵的失敗(settings_book, tolerance_save_fails):
+    state, text = _tolerance_fail_then_set_ok_then_back(settings_book)
+    assert state is None
+    assert _TOL_FAIL not in text
 
 
-def test_必修2_對照組_拿掉換頁pop就殘留失敗提示(settings_book, monkeypatch):
-    monkeypatch.setattr(preview, "_on_page", lambda slug: None)
-    assert _FAIL in _alo_fail_then_set_ok_then_back(settings_book)
+def test_必修2_對照組_拿掉換頁pop_容許帶的失敗提示殘留(settings_book, tolerance_save_fails, monkeypatch):
+    monkeypatch.setattr(preview, "_PAGE_STATE_TO_DROP", ("_mkt_applied",))   # 只拿掉資產配置那一格
+    state, text = _tolerance_fail_then_set_ok_then_back(settings_book)
+    assert state == {"alo_tolerance_pp": _TOL_FAIL}
+    assert _TOL_FAIL in text
 
 
-def test_必修2_同一頁內重跑不清存檔失敗帳():
-    """單元層：只有換頁那一次 pop；同一頁重跑不碰。key 名取自 `ui_v2/alo/page.py` 的常數。"""
+def test_反方向回歸_設定與診斷打的值不帶到資產配置_資產配置存檔只寫回原值(settings_book):
+    from services.v2_tables import settings_store
+
+    assert settings_store.save_setting_for_page("alo_tolerance_pp", "4", "float", [])["status"] == "saved"
+    SET_REPO.clear_cache()
+    at = _go(_app_test(), "set")
+    assert at.text_input(key="live_alo_tolerance_pp").value == "4"
+    at.text_input(key="live_alo_tolerance_pp").input("77").run()
+    _go(at, "alo")
+    assert at.text_input(key="live_alo_tolerance_pp").value == "4"       # 資產配置顯示試算表上的值
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    rows = _tolerance_rows(settings_book)
+    assert rows and all(row == ["alo_tolerance_pp", "4", "float"] for row in rows), rows
+
+
+# ═══════════════════════ 市場總覽「套用」的值：換頁就清 ═══════════════════════
+
+
+@pytest.fixture
+def vix_series(monkeypatch, no_secrets):
+    """市場總覽有一段 VIX 日線可算（不打網路），套用不同觀察窗時三張核心卡的數字才會不同。"""
+    import pandas as pd
+
+    index = pd.date_range("2026-06-01", periods=120, freq="D")
+    series = pd.Series([15.0 + (i % 9) for i in range(120)], index=index, dtype=float, name="^VIX")
+    series.attrs["fetched_at"] = "2026-10-01T06:00:00+00:00"
+    monkeypatch.setattr(MI, "fetch_yf_close_with_error", lambda ticker, *a, **k: (series.copy(), None))
+
+
+def _mkt_screen(at):
+    return [html.unescape(e.value) for e in at.main.markdown] + [e.value for e in at.main.caption] \
+        + [e.label for e in at.main.expander]
+
+
+def _apply_mkt_window(at):
+    import datetime
+
+    at.number_input(key="mkt4_days").set_value(30).run()
+    at.date_input(key="mkt4_baseline").set_value(datetime.date(2026, 9, 1)).run()
+    at.button(key="mkt4_apply").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+
+
+def _mkt_apply_leave_return():
+    at = _go(_app_test(), "mkt")
+    fresh = _mkt_screen(at)
+    _apply_mkt_window(at)
+    applied = _mkt_screen(at)
+    assert applied != fresh                                   # 套用真的改了畫面（否則下面的比較沒意義）
+    at.run()
+    assert _mkt_screen(at) == applied                         # 同一頁重跑：套用值保留
+    assert "_mkt_applied" in at.session_state
+    _go(at, "hld")
+    _go(at, "mkt")
+    return fresh, applied, _mkt_screen(at)
+
+
+def test_市場總覽_套用後換頁再回來_畫面與新開完全相同(vix_series):
+    fresh, _applied, back = _mkt_apply_leave_return()
+    assert back == fresh
+
+
+def test_市場總覽_對照組_拿掉這一格pop_回來的畫面與新開不同(vix_series, monkeypatch):
+    monkeypatch.setattr(preview, "_PAGE_STATE_TO_DROP", (alo_page._SAVE_ERRORS_STATE,))
+    fresh, _applied, back = _mkt_apply_leave_return()
+    assert back != fresh
+
+
+def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
+    """單元層：只有換頁那一次 pop；同一頁重跑不碰；清單以外的 key 不碰。"""
     from streamlit.testing.v1 import AppTest
 
     key = alo_page._SAVE_ERRORS_STATE
+    assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied")
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})
@@ -376,10 +478,12 @@ p._on_page(st.query_params["slug"])
     at.query_params["slug"] = "alo"
     at.run()
     at.session_state[key] = {"alo_tolerance_pp": "失敗"}
+    at.session_state["_mkt_applied"] = {"window_days": 30}
     at.session_state["_hld_applied"] = "別頁自己的狀態"
     at.run()                                                 # 同一頁重跑：不清
     assert at.session_state[key] == {"alo_tolerance_pp": "失敗"}
+    assert at.session_state["_mkt_applied"] == {"window_days": 30}
     at.query_params["slug"] = "set"
     at.run()                                                 # 換頁：pop
-    assert key not in at.session_state
+    assert key not in at.session_state and "_mkt_applied" not in at.session_state
     assert at.session_state["_hld_applied"] == "別頁自己的狀態"   # 其他程式寫入的 key 不碰

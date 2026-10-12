@@ -9,9 +9,9 @@
 - 頁序與頁名照 docs/v2/44_fund_ui_ssot.md 第三節（3.0 五頁總表與 3.1～3.5 的排序）：
   市場總覽 → 持倉體檢 → 標的探索 → 資產配置 → 設定與診斷。
 
-五頁怎麼接（逐字對照各自的入口，守衛同上）：
+五頁怎麼接（與各自的入口傳同名參數、同一物件；守衛同上）：
 
-| 頁 | 模式 | 呼叫方式（與誰逐字等價） |
+| 頁 | 模式 | 呼叫方式（與哪個入口同名參數、同一物件） |
 |---|---|---|
 | 市場總覽 | 真資料 | `page.render(load_live=source.load_live)` ＝ `ui_v2/app_mkt_live.py` |
 | 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error)` ＝ `ui_v2/app_hld_live.py` |
@@ -49,11 +49,17 @@
   不會互相帶值（回歸測試：tests/ui_v2/test_preview_page.py）。⚠️ 這個結論的依據是
   streamlit 1.59.2 的 widget id 算法；升版改了算法時，那條回歸測試會先紅。
   **會跨頁共用的只有各頁程式自己寫進 `st.session_state` 的 key**（不是輸入欄的那些）。
-  其中資產配置的存檔失敗帳（`ui_v2/alo/page.py::_SAVE_ERRORS_STATE`）會殘留：資產配置存某鍵失敗、
-  到設定與診斷把同一鍵存成功、再回資產配置，畫面仍說失敗 —— 與事實相反。
-  本檔不改 `page.py`，改在**換頁那一次**把這份帳 pop 掉（`_on_page`）。
-  代價：離開資產配置再回來，上一次的存檔失敗提示會消失；但此時欄位本來就會重讀試算表的值，
-  失敗那一次沒寫進去的內容也已不在欄位上。
+  其中兩份會讓畫面與事實或與自己相反，本檔不改 `page.py`，改在**換頁那一次** pop 掉
+  （`_on_page` ＋ `_PAGE_STATE_TO_DROP`）：
+  1. 資產配置的存檔失敗帳（`ui_v2/alo/page.py::_SAVE_ERRORS_STATE`）：資產配置存某鍵失敗、
+     到設定與診斷把同一鍵存成功、再回資產配置，畫面仍說失敗 —— 與事實相反。
+     代價：離開資產配置再回來，上一次的存檔失敗提示會消失；但此時欄位本來就會重讀試算表的值，
+     失敗那一次沒寫進去的內容也已不在欄位上。
+  2. 市場總覽「套用」的值（`"_mkt_applied"`；`ui_v2/mkt/page.py` 沒有常數，只能寫字面值，
+     守衛在 tests/ui_v2/test_preview_entry.py 讀該檔比對）：套用 30 日後換頁再回來，輸入欄已變回空白、
+     MKT-4 寫尚未設定，三張核心卡卻仍用看不見的 30 日窗計算 —— 畫面自相矛盾。
+     代價：離開市場總覽再回來，要重新按一次「套用」（與新開這一頁相同）。
+  ⚠️ 其他頁程式自己寫的 key（例如持倉體檢的套用值）未逐一處理，見交付報告的登記。
 """
 
 from __future__ import annotations
@@ -77,10 +83,10 @@ from ui_v2.set import source as set_source  # noqa: E402
 
 PREVIEW_TITLE = "B 線 UI 預覽（非正式站）"
 PREVIEW_NOTE = (
-    "B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料；"
-    "標的探索為示意資料。"
+    "B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料，"
+    "讀不到資料時照實顯示缺失；標的探索為示意資料。"
     "預覽把五頁放在同一個程式裡跑，快取與取數暫停（冷卻）也五頁共用，"
-    "和正式上線時各頁各自獨立運作不同；在設定與診斷按「重新取數」，"
+    "和各頁單獨啟動時不同；在設定與診斷按「重新取數」，"
     "會一併影響市場總覽與持倉體檢顯示的資料。"
 )
 EXP_DEMO_BANNER = (
@@ -90,16 +96,22 @@ EXP_DEMO_BANNER = (
 
 _LAST_PAGE_KEY = "_preview_last_page"
 
+# 換頁那一次要 pop 的、各頁程式自己寫進 session 的狀態（理由見檔頭）。
+_PAGE_STATE_TO_DROP = (
+    alo_page._SAVE_ERRORS_STATE,   # 資產配置的存檔失敗帳（取 page 的常數，不另寫字串）
+    "_mkt_applied",                # 市場總覽「套用」的值（mkt/page.py 沒有常數；守衛讀該檔比對字面值）
+)
+
 
 def _on_page(slug: str) -> None:
-    """每一頁開頭呼叫一次。偵測到**換頁**時，把資產配置的存檔失敗帳 pop 掉（理由見檔頭）。
+    """每一頁開頭呼叫一次。偵測到**換頁**時，pop 掉 `_PAGE_STATE_TO_DROP`（理由見檔頭）。
 
     只在換頁那一次動；同一頁內的重跑（按套用、存檔、重新取數）一個 key 都不碰。
-    key 名取自 `ui_v2/alo/page.py` 的常數，不在本檔另寫一份字串。
     """
     last = st.session_state.get(_LAST_PAGE_KEY)
     if last is not None and last != slug:
-        st.session_state.pop(alo_page._SAVE_ERRORS_STATE, None)
+        for key in _PAGE_STATE_TO_DROP:
+            st.session_state.pop(key, None)
     st.session_state[_LAST_PAGE_KEY] = slug
 
 

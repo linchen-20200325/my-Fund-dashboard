@@ -11,7 +11,9 @@
 - (d) 標的探索那一頁在 `exp_page.render()` 之前先畫示意資料標示，標示字面寫明「示意資料、不是真實資料、
       尚未接真資料」；
 - 另：頁序與頁名逐字對 `docs/v2/44_fund_ui_ssot.md` 3.0 五頁總表；`st.set_page_config` 全樹只有
-  預覽入口的 `main()` 呼叫一次；檔頭列的試算表 secret 鍵名與 L1 實際讀的鍵名相同。
+  預覽入口的 `main()` 呼叫一次；檔頭列的試算表 secret 鍵名與 L1 實際讀的鍵名相同；
+  換頁要 pop 的狀態清單（資產配置引用 page 常數、市場總覽的字面值確實住在 mkt/page.py）；
+  預覽入口不用 `getattr`／`__import__`／`importlib`／`globals()`；側邊欄說明的字面。
 
 每一條都附正控（守衛真的抓得到），避免它在結構上就是空的。
 """
@@ -336,23 +338,48 @@ def test_檔頭列的試算表secret鍵名與L1實際讀的相同():
     assert "不得被 `app.py`" in doc
 
 
-def _pops_alo_save_errors(func: ast.FunctionDef) -> bool:
-    """`_on_page` 裡要有 `st.session_state.pop(alo_page._SAVE_ERRORS_STATE, ...)` —— 引用常數，不是寫死字串。"""
+def _drop_list(tree: ast.Module) -> list[str]:
+    """`_PAGE_STATE_TO_DROP = (...)` 的每一格原始碼（常數引用照原樣、字面值帶引號）。"""
+    node = next(n for n in tree.body if isinstance(n, ast.Assign)
+                and any(isinstance(x, ast.Name) and x.id == "_PAGE_STATE_TO_DROP" for x in n.targets))
+    return [ast.unparse(e) for e in node.value.elts]
+
+
+def _pops_each_drop_key(func: ast.FunctionDef) -> bool:
+    """`_on_page` 裡要有 `for key in _PAGE_STATE_TO_DROP: st.session_state.pop(key, ...)`。"""
     for node in ast.walk(func):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "pop"
-                and ast.unparse(node.func.value) == "st.session_state" and node.args
-                and ast.unparse(node.args[0]) == "alo_page._SAVE_ERRORS_STATE"):
-            return True
+        if (isinstance(node, ast.For) and ast.unparse(node.iter) == "_PAGE_STATE_TO_DROP"
+                and isinstance(node.target, ast.Name)):
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                        and inner.func.attr == "pop" and ast.unparse(inner.func.value) == "st.session_state"
+                        and inner.args and ast.unparse(inner.args[0]) == node.target.id):
+                    return True
     return False
 
 
-def test_換頁時pop資產配置存檔失敗帳_引用page的常數():
+def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字面值():
     tree = _tree(_PREVIEW)
-    assert _pops_alo_save_errors(_function(tree, "_on_page"))
-    alo_tree = _tree(_ROOT / "ui_v2" / "alo" / "page.py")
-    assert _string_constant(alo_tree, "_SAVE_ERRORS_STATE")            # 常數真的存在
-    text = _PREVIEW.read_text(encoding="utf-8")
-    assert _string_constant(alo_tree, "_SAVE_ERRORS_STATE") not in text  # 沒有寫死同一個字串
+    assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'"]
+    assert _pops_each_drop_key(_function(tree, "_on_page"))
+    alo_key = _string_constant(_tree(_ROOT / "ui_v2" / "alo" / "page.py"), "_SAVE_ERRORS_STATE")
+    assert alo_key and alo_key not in _PREVIEW.read_text(encoding="utf-8")  # 常數存在，本檔沒有寫死同一個字串
+
+
+def test_市場總覽的套用key字面值確實住在mkt的page_py():
+    """`ui_v2/mkt/page.py` 沒有常數，預覽入口只能寫字面值；那一頁改了 key 名，本條就紅。"""
+    text = (_ROOT / "ui_v2" / "mkt" / "page.py").read_text(encoding="utf-8")
+    assert 'st.session_state["_mkt_applied"] = ' in text            # 「套用」寫入點
+    assert 'st.session_state.get("_mkt_applied", {})' in text       # render 讀取點
+
+
+@pytest.mark.parametrize("body", [
+    "def _on_page(slug):\n    st.session_state.pop('_alo_live_save_errors', None)",   # 沒走清單
+    "def _on_page(slug):\n    for key in _PAGE_STATE_TO_DROP:\n        print(key)",       # 走了清單卻沒 pop
+    "def _on_page(slug):\n    pass",
+])
+def test_正控_沒有逐一pop清單就紅(body):
+    assert _pops_each_drop_key(ast.parse(body).body[0]) is False
 
 
 def test_每一頁函式第一句都是_on_page且slug對得上():
@@ -369,9 +396,39 @@ def test_預覽入口沒有清除live前綴輸入欄的程式():
     assert "startswith(\"live_\")" not in text and "SHARED_LIVE_INPUT_PREFIX" not in text
 
 
-@pytest.mark.parametrize("body", [
-    "def _on_page(slug):\n    st.session_state.pop('_alo_live_save_errors', None)",   # 寫死字串
-    "def _on_page(slug):\n    pass",
+def dynamic_uses(tree: ast.AST) -> list[str]:
+    """`getattr`、`__import__`、`importlib`、`globals()` —— 這些寫法能繞過本檔所有靜態比對。"""
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in ("getattr", "__import__", "globals"):
+            out.append(node.id)
+        elif isinstance(node, ast.Attribute) and node.attr in ("__import__", "import_module"):
+            out.append(node.attr)
+        elif isinstance(node, ast.Import) and any(a.name.split(".")[0] == "importlib" for a in node.names):
+            out.append("import importlib")
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "importlib":
+            out.append("from importlib")
+    return out
+
+
+def test_預覽入口不用動態寫法():
+    assert dynamic_uses(_tree(_PREVIEW)) == []
+
+
+@pytest.mark.parametrize("code", [
+    'x = getattr(mkt_page, "fixtures")',
+    "m = __import__('ui_v2.mkt.fixtures')",
+    "import importlib\nm = importlib.import_module('ui_v2.mkt.fixtures')",
+    "from importlib import import_module",
+    "g = globals()['mkt_page']",
 ])
-def test_正控_沒有引用常數的pop就紅(body):
-    assert _pops_alo_save_errors(ast.parse(body).body[0]) is False
+def test_正控_動態寫法都抓得到(code):
+    assert dynamic_uses(ast.parse(code))
+
+
+def test_側邊欄說明的字面():
+    note = _string_constant(_tree(_PREVIEW), "PREVIEW_NOTE")
+    for needle in ("B 線 UI 預覽（非正式站）", "標的探索為示意資料", "讀不到資料時照實顯示缺失",
+                   "和各頁單獨啟動時不同", "重新取數"):
+        assert needle in note, needle
+    assert "正式上線" not in note   # 49 4.8：正式部署形態查不到，不得斷言
