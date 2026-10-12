@@ -14,6 +14,10 @@
 - (7) 動態 import 一律不准：`importlib`、`__import__(...)`、`sys.modules` —— 這三種寫法能繞過
       上面每一條靜態規則（2026-09-26 稽核建議）。
 - 兩個新檔（`source.py`、`app_<頁>_live.py`）另走 fail-closed 逐檔白名單：不在白名單就紅。
+- (8) 2026-10-12 客戶核准的 B 線預覽入口 `ui_v2/app_preview.py`（`_PREVIEW`）：
+      **只有這一個檔名**、**只限 `_PREVIEW_LIVE_PAGES` 四頁**的 `source` 可以被它 import
+      （第 (1) 條對它開的口子就這麼大）；它同時被當成正式路徑檔看待 ——
+      第 (3) 條「不得 import fixtures」與 fail-closed 逐檔白名單一併適用。
 
 本檔不改任何既有 ui_v2 測試；既有守衛（各頁 `test_*_logic.py`、`test_*_page.py`）照舊。
 """
@@ -75,7 +79,21 @@ _FILE_ALLOWLIST = {
     "ui_v2/app_hld_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.hld.page", "ui_v2.hld.source",
     },
+    # 2026-10-12 B 線預覽入口（客戶核准）：四頁真資料（page ＋ source）、標的探索只有 page（示意資料）。
+    # ⛔ 沒有 `ui_v2.exp.source`（標的探索沒有真資料版）、沒有任何 `fixtures`、沒有任何 `ui_v2.app_*`。
+    "ui_v2/app_preview.py": {
+        "__future__", "pathlib", "sys", "streamlit",
+        "ui_v2.mkt.page", "ui_v2.mkt.source",
+        "ui_v2.hld.page", "ui_v2.hld.source",
+        "ui_v2.exp.page",
+        "ui_v2.alo.page", "ui_v2.alo.source",
+        "ui_v2.set.page", "ui_v2.set.source",
+    },
 }
+
+# 第 (8) 條：預覽入口的檔名與它可以 import `source` 的頁（逐一列名，不用前綴比對）。
+_PREVIEW = "ui_v2/app_preview.py"
+_PREVIEW_LIVE_PAGES = ("mkt", "hld", "alo", "set")
 
 
 def _module_of(path: pathlib.Path) -> str:
@@ -175,6 +193,7 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
     live_page = name[len("app_"):-len("_live.py")] if is_live_app else None
     is_source = len(parts_rel) == 3 and name == "source.py"
     source_page = parts_rel[1] if is_source else None
+    is_preview = rel == _PREVIEW  # 第 (8) 條：只認這一個檔名
 
     imported = [m for m in imported if not m.startswith("__future__.")]  # 編譯器指示，不是模組
     for module in imported:
@@ -182,9 +201,10 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
         root = parts[0]
         if root in _NET_ROOTS:
             bad.append(f"網路套件 {module}")
-        if len(parts) >= 3 and parts[0] == "ui_v2" and parts[2] == "source":
-            if not (is_live_app and parts[1] == live_page):
-                bad.append(f"只有 app_{parts[1]}_live.py 可以 import {module}")
+        if len(parts) >= 3 and parts[0] == "ui_v2" and parts[2] == "source" \
+                and not (is_live_app and parts[1] == live_page) \
+                and not (is_preview and parts[1] in _PREVIEW_LIVE_PAGES):
+            bad.append(f"只有 app_{parts[1]}_live.py 可以 import {module}")
         if module == "services" or module.startswith("services."):
             if module in ("services", "services.v2_tables"):
                 # `from services import v2_tables` / `from services.v2_tables import X` 的前綴那一筆
@@ -197,7 +217,7 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
                 bad.append(f"舊樹模組 {module}（ui_v2 只准經 source.py 碰 services.v2_tables）")
         elif root in _OLD_ROOTS:
             bad.append(f"舊樹模組 {module}")
-        if (is_live_app or is_source) and len(parts) >= 3 and parts[0] == "ui_v2" \
+        if (is_live_app or is_source or is_preview) and len(parts) >= 3 and parts[0] == "ui_v2" \
                 and parts[2] == "fixtures":
             bad.append(f"正式路徑不得 import {module}")
         if len(parts) >= 2 and parts[0] == "ui_v2" and parts[1].startswith("app_"):
@@ -217,7 +237,7 @@ def violations_for(rel: str, imported: list[str]) -> list[str]:
             if any(a.startswith(module + ".") for a in allow):
                 continue
             bad.append(f"{module} 不在 {rel} 的逐檔白名單")
-    elif is_live_app or is_source:
+    elif is_live_app or is_source or is_preview:
         bad.append(f"{rel} 是正式路徑檔，卻沒有登記逐檔白名單（fail-closed）")
     return bad
 
@@ -322,6 +342,17 @@ def _check(rel: str, code: str) -> list[str]:
     ("ui_v2/mkt/page.py", "from runpy import run_module"),
     ("ui_v2/mkt/page.py", "import pkgutil\nm = pkgutil.resolve_name('ui_v2.mkt.source')"),
     ("ui_v2/mkt/page.py", "from pkgutil import resolve_name"),
+    # 2026-10-12 第 (8) 條：預覽入口開的口子只有「四頁的 source」，其餘照擋。
+    ("ui_v2/app_preview.py", "from ui_v2.exp import source"),           # 標的探索沒有真資料版
+    ("ui_v2/app_preview.py", "from ui_v2.mkt import fixtures"),         # 正式路徑不得碰 fixtures
+    ("ui_v2/app_preview.py", "from ui_v2.exp import fixtures"),         # 示意資料也只能經 page 進來
+    ("ui_v2/app_preview.py", "import ui_v2.hld.fixtures"),
+    ("ui_v2/app_preview.py", "from ui_v2 import app_mkt_live"),         # 不得 import 進入點
+    ("ui_v2/app_preview.py", "from services.v2_tables import masking"),  # 只有 source.py 可以碰 L2
+    ("ui_v2/app_preview.py", "import json"),                            # 逐檔白名單外
+    ("ui_v2/app_preview.py", "import requests"),
+    ("ui_v2/app_preview_v2.py", "from ui_v2.mkt import source"),        # 口子只認那一個檔名
+    ("ui_v2/app_mkt.py", "from ui_v2.hld import source"),               # 示範入口照擋
 ])
 def test_正控_每一種違規都被抓到(rel, code):
     assert _check(rel, code), (rel, code)
@@ -338,6 +369,8 @@ def test_正控_每一種違規都被抓到(rel, code):
     ("ui_v2/mkt/page.py", "modules = {}\nx = modules.get('a')"),        # 叫 modules 的一般變數不擋
     ("ui_v2/mkt/page.py", "class A:\n    modules = 1\nA.modules"),     # 非 sys 的 .modules 不擋
     ("ui_v2/mkt/source.py", "import os\nimport streamlit as st\nfrom services.v2_tables import masking"),
+    ("ui_v2/app_preview.py", "from ui_v2.mkt import page as mkt_page, source as mkt_source"),
+    ("ui_v2/app_preview.py", "from ui_v2.exp import page as exp_page"),
 ])
 def test_負控_合規寫法不誤報(rel, code):
     assert _check(rel, code) == [], (rel, code)
