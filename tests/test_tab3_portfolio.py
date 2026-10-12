@@ -27,13 +27,6 @@ def test_friendly_error_alias():
     assert _friendly_error is friendly_error
 
 
-def test_is_core_fund_alias():
-    import fund_fetcher  # noqa: F401
-    from ui.tab3_portfolio import _is_core_fund
-    from ui.helpers.session import is_core_fund
-    assert _is_core_fund is is_core_fund
-
-
 def test_app_py_only_has_render_calls_for_all_5_tabs():
     """app.py 應該只剩 5 個 render_*_tab() 呼叫，沒有 inline tab block。
 

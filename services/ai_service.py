@@ -4,7 +4,6 @@
 AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分輸入 · 容錯降級
 
 公開 API：
-  - assign_asset_role — 核心/衛星關鍵字分類
   - _gemini           — Gemini API 單次呼叫（thin delegate 至 infra.llm._call_gemini）
   - analyze_portfolio_mk_advisor   — 智能戰情室 AI 建議
   - get_gemini_keys / gemini_generate — v18.217 多 key 自動輪替
@@ -22,28 +21,6 @@ build_stale_flags / event_impact_analysis 4 fn(共 ~214 LOC, 0 production caller
 from infra.llm import _call_gemini, call_llm
 from shared.policy_tier import resolve_tier  # L2→L0（級別三態 SSOT）
 from services.ai_prompts import build_mk_advisor_prompt
-
-# ── 核心/衛星關鍵字分類 ──────────────────────────────────────
-_CORE_KW  = ["債", "收益", "配息", "平衡", "高息", "公用", "多元",
-             "income", "bond", "dividend", "balanced", "utility"]
-_SAT_KW   = ["ai", "科技", "半導體", "成長", "主題", "印度", "越南",
-             "生技", "醫療", "能源", "原物料", "中國", "新興",
-             "tech", "innovation", "growth", "emerging"]
-
-def assign_asset_role(fund_name: str, manual_override: str = "") -> str:
-    """
-    優先序：手動設定 > 名稱關鍵字 > 預設衛星
-    回傳 'core' 或 'satellite'
-    """
-    if manual_override in ("core", "satellite"):
-        return manual_override
-    name_lower = (fund_name or "").lower()
-    if any(kw in name_lower for kw in _CORE_KW):
-        return "core"
-    if any(kw in name_lower for kw in _SAT_KW):
-        return "satellite"
-    return "satellite"   # 未知預設衛星（較保守）
-
 
 # ── Gemini API 呼叫（F-H2 v19.78:I/O 下沉 infra.llm._call_gemini）──────
 def _gemini(api_key: str, prompt: str, max_tokens: int = 2000,

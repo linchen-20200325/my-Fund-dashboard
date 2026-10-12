@@ -76,34 +76,9 @@ def test_build_macro_df_missing_series(pse):
 
 
 # ════════════════════════════════════════════════════════════
-# §2 ai_engine — assign_asset_role 純字串，_gemini 不打網路
+# §2 ai_engine — _gemini 不打網路（assign_asset_role 已於 2026-10-12 刪除）
 # ════════════════════════════════════════════════════════════
-from services.ai_service import assign_asset_role, _gemini
-
-
-def test_assign_asset_role_manual_override_wins():
-    """manual_override 優先級高於名稱關鍵字。"""
-    # 名稱含「科技」（衛星 KW），但 override = core → 回 core
-    assert assign_asset_role("AI 科技基金", manual_override="core") == "core"
-    # 名稱含「債」（核心 KW），但 override = satellite → 回 satellite
-    assert assign_asset_role("全球債券基金", manual_override="satellite") == "satellite"
-
-
-@pytest.mark.parametrize("name,expected_role", [
-    ("聯博全球高收益債券基金", "core"),       # 含「債」「高息」
-    ("摩根多元收益基金", "core"),             # 含「收益」「多元」
-    ("富達世界平衡基金", "core"),             # 含「平衡」
-    ("Schroder Income Fund", "core"),         # 含 income
-    ("元大高息特別股基金", "core"),           # 含「高息」（連續字串）
-    ("摩根 AI 科技基金", "satellite"),         # 含「ai」「科技」
-    ("富蘭克林印度成長基金", "satellite"),     # 含「印度」「成長」
-    ("聯博生技基金", "satellite"),             # 含「生技」
-    ("某未知主題基金", "satellite"),           # 含「主題」 → satellite
-    ("XYZ 完全沒關鍵字的基金", "satellite"),   # 預設 satellite（保守）
-    ("", "satellite"),                         # 空字串 → satellite
-])
-def test_assign_asset_role_keyword_routing(name, expected_role):
-    assert assign_asset_role(name) == expected_role
+from services.ai_service import _gemini
 
 
 def test_gemini_empty_api_key_returns_degraded_message():

@@ -8,7 +8,7 @@ block 累積在同一 tab slot（block 1: 戰情室+組合管理，block 2: T5/T
 
 設計：
 - render_portfolio_tab() -> None **零閉包依賴**（與其他 5 個 tab 同設計）
-- GEMINI_KEY 從 env / _calc_data_health, _friendly_error, _is_core_fund 從
+- GEMINI_KEY 從 env / _calc_data_health, _friendly_error 從
   ui.helpers.session / 其餘 session_state 鍵透過 st.session_state 取
 - T7 ledger 相關 Ledger/Switch class 維持原邏輯：函式內部 lazy import 自
   services.ledger_service（避免本檔頂部一次 import 太多）
@@ -74,7 +74,6 @@ from ui.components.mk_dashboard import render_mk_war_room
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
-    is_core_fund as _is_core_fund,  # noqa: F401 — 2026-10-10 起本檔不再呼叫（不猜級別）；別名保留供既有測試
 )
 from ui.tab3_t7_ledger import T7InputAbort, render_t7_section
 
