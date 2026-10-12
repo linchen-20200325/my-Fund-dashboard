@@ -312,6 +312,13 @@ def test_summarize_excludes_unset_from_satellite():
     ]
     sm2 = summarize_actions(legacy)
     assert sm2["core_hold_pct"] == 100.0 and sm2["satellite_avg_target_pct"] == 0.0 and sm2["n_unset"] == 0
+    # 無 tier 鍵且 is_core 為 None／缺失／非布林 → 未設定（fail-closed）
+    sm3 = summarize_actions([
+        {"code": "x", "action": ACTION_HOLD, "target_pct": 100, "is_core": None},
+        {"code": "y", "action": ACTION_HOLD, "target_pct": 100},
+        {"code": "z", "action": ACTION_HOLD, "target_pct": 100, "is_core": 1},
+    ])
+    assert sm3["n_unset"] == 3 and sm3["satellite_avg_target_pct"] == 0.0
 
 
 def test_decision_matrix_source_has_no_bool_squash():

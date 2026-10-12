@@ -1544,7 +1544,7 @@ _ACTION_BADGE_FG = {
 def _enrich_fund_for_decision(_f: dict) -> dict:
     """從 portfolio_funds 條目擷取 verdict_to_actions 需要的欄位（複用 tab3 邏輯）.
 
-    產出：{code, name, policy_tier(三態 core/satellite/None), is_core(僅 core 為 True), invest_twd, sigma_info, dividend_info}
+    產出：{code, name, policy_tier(三態 core/satellite/None), is_core(三態 True/False/None), invest_twd, sigma_info, dividend_info}
     σ 位階 / 配息覆蓋率算法與 tab3_portfolio.py 既有 `_compute_advice_for` 同步。
     """
     code = _f.get("code", "?") or "?"
@@ -1552,7 +1552,8 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
 
     # 核心 / 衛星 / 未設定 三態走全站唯一那把尺 resolve_tier（只認 `policy_tier`／嚴格布林 `is_core`，不依基金名稱推定）。
     # 未設定 = None，**不是衛星**：輸出帶 `policy_tier`（三態）讓 decision_matrix 讀得到；
-    # `is_core` 僅 tier==core 為 True（舊消費端相容，False 不代表衛星）。
+    # `is_core` 同樣三態：core→True、satellite→False、未設定→None（**不得輸出 False 給未設定**，
+    # 否則下游 resolve_tier 會把 policy_tier=None + is_core=False 讀成明確衛星）。
     # 2026-08-07：本處原本 inline 了一份同語意的 if/elif —— 那是「全站一把尺」
     # 收斂時的第 4 個漏網點（前三處在 tab3 已收）。決策矩陣的逐檔行動建議吃的就是
     # 這個 is_core，兩份實作只要有一份沒跟上 Sheet 的改動，同一檔基金在保單卡片與
@@ -1594,7 +1595,7 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
         "code": code,
         "name": name,
         "policy_tier": tier,
-        "is_core": tier == CORE_TIER,
+        "is_core": (None if tier is None else tier == CORE_TIER),
         "invest_twd": float(_f.get("invest_twd", 0) or 0),
         "sigma_info": sigma_info,
         "dividend_info": div_info,
@@ -1603,7 +1604,10 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
 
 def _decision_role_label(a: dict) -> str:
     """決策矩陣角色欄：三態（核心／衛星／未設定）。未設定不當衛星。"""
-    _t = a.get("tier") if "tier" in a else ("core" if a.get("is_core") else "satellite")
+    if "tier" in a:
+        _t = a.get("tier")
+    else:  # 舊輸出無 tier 鍵：只認嚴格布林，None/缺失/非布林＝未設定（fail-closed）
+        _t = {True: "core", False: "satellite"}.get(a.get("is_core")) if isinstance(a.get("is_core"), bool) else None
     return {"core": "🏛️ 核心", "satellite": "🚀 衛星"}.get(_t, "⬜ 未設定")
 
 

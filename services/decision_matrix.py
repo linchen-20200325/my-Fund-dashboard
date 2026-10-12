@@ -233,10 +233,16 @@ def summarize_actions(actions: list[dict]) -> dict:
 
     def _tier_of(a: dict) -> Optional[str]:
         # 有 tier 鍵 → 以三態為準（None＝未設定，不併入衛星）。
-        # 僅「舊輸出沒有 tier 鍵」（手造 action dict）才退回 is_core：True→core，其餘→satellite（舊行為）。
+        # 僅「舊輸出沒有 tier 鍵」（手造 action dict）才退回 is_core，且只認嚴格布林：
+        # True→core、False→satellite，其餘（None/缺失/非布林）→未設定（fail-closed）。
         if "tier" in a:
             return a["tier"] if a["tier"] in (CORE_TIER, SATELLITE_TIER) else None
-        return CORE_TIER if a.get("is_core") else SATELLITE_TIER
+        _ic = a.get("is_core")
+        if _ic is True:
+            return CORE_TIER
+        if _ic is False:
+            return SATELLITE_TIER
+        return None
 
     cores = [a for a in actions if _tier_of(a) == CORE_TIER]
     sats = [a for a in actions if _tier_of(a) == SATELLITE_TIER]
