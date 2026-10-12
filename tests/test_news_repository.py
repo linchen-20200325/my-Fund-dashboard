@@ -89,11 +89,15 @@ from repositories.news_repository import (  # noqa: E402
 
 
 def test_infer_asset_class_basic():
-    assert infer_asset_class("安聯台灣大壩股票基金") == "stock"
-    assert infer_asset_class("聯博全球高收益債券基金") == "bond"
-    assert infer_asset_class("某某原油能源基金") == "commodity"
-    assert infer_asset_class("多重資產收益組合") == "macro"   # 無命中 → macro
-    assert infer_asset_class("") == "macro"
+    # 輸入為資料層的基金類別原值（不是基金名稱）
+    assert infer_asset_class("股票型") == "stock"
+    assert infer_asset_class("高收益債券") == "bond"
+    assert infer_asset_class("能源") == "commodity"
+    assert infer_asset_class("多重資產型") == "macro"   # 有值但無命中 → macro
+    # 類別缺值 → unknown（不補值）
+    assert infer_asset_class("") == "unknown"
+    assert infer_asset_class(None) == "unknown"
+    assert infer_asset_class("   ") == "unknown"
 
 
 def test_filter_news_by_asset_class_filters_and_keeps_systemic():

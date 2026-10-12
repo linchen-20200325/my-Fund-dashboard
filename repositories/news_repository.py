@@ -400,7 +400,8 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
 # v18.196（v5.0 Task3）：依資產類別過濾新聞
 #   - fetch_macro_news(asset_class)：spec 接口 — 抓 + 依類別過濾（會打網路）
 #   - filter_news_by_asset_class()：純過濾既有清單（給 UI 過濾 session 快取、零網路）
-#   - infer_asset_class()：從基金名稱/類別字串推資產類別
+#   - infer_asset_class()：從資料層的基金類別原值（MoneyDJ／FundClear category）推資產類別
+#     （不吃基金名稱；類別缺值 → 'unknown'）
 # ══════════════════════════════════════════════════════════════════════
 
 # 資產類別 → 命中關鍵字（大小寫不敏感）。空清單（macro/all）= 不過濾。
@@ -435,11 +436,20 @@ def _normalize_asset_class(asset_class: str) -> str:
     return alias.get(a, "macro")
 
 
-def infer_asset_class(text: str) -> str:
-    """從基金名稱/類別字串推資產類別；多重資產或無法判別 → 'macro'。"""
-    t = str(text or "").lower()
+def infer_asset_class(category: str) -> str:
+    """從**基金類別**原值推資產類別（新聞篩選用）。
+
+    - 只接受資料層提供的基金類別原值（MoneyDJ／FundClear 的 `category`）。
+      **禁止傳入基金名稱**（亦不得把名稱與類別串接後傳入）—— 名稱推定已退役
+      （客戶裁示：分類只能來自可追溯的類別欄位）。
+    - 類別缺值（None／空字串／全空白）→ 回 `'unknown'`，**不得**用任何其他資訊補值。
+    - 有值但未命中任何關鍵字（例：多重資產）→ 回 `'macro'`（行為不變）。
+    - `'unknown'` 傳入 `filter_news_by_asset_class` 時，經 `_normalize_asset_class`
+      正規化為 `'macro'` → 不篩選（與既有行為一致）。
+    """
+    t = str(category or "").strip().lower()
     if not t:
-        return "macro"
+        return "unknown"
     for cls in _CLASS_ORDER:
         if any(kw.lower() in t for kw in ASSET_CLASS_KEYWORDS[cls]):
             return cls
