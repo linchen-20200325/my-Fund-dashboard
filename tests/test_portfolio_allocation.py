@@ -37,9 +37,14 @@ def test_resolve_core_flag_falls_back_to_is_core():
     assert resolve_core_flag(None) is False
 
 
-def test_resolve_core_flag_unknown_tier_falls_back():
-    """policy_tier 填了看不懂的值 → 不猜，退回 is_core。"""
-    assert resolve_core_flag({"policy_tier": "中性", "is_core": True}) is True
+def test_resolve_core_flag_dirty_tier_is_unset_not_fallback():
+    """policy_tier 填了看不懂的值（髒值）→ 未設定，不退回 is_core（客戶 2026-10-12 裁示 (c)：
+    髒資料 ≠ 缺資料）。未設定不是核心 → resolve_core_flag 為 False。
+
+    ~~舊名 `test_resolve_core_flag_unknown_tier_falls_back`：「看不懂的值 → 退回 is_core」~~
+    —— 舊斷言在寫下當時為真；被推翻的是它的前提（髒值曾被當成缺資料）。
+    """
+    assert resolve_core_flag({"policy_tier": "中性", "is_core": True}) is False
     assert resolve_core_flag({"policy_tier": "中性", "is_core": False}) is False
 
 

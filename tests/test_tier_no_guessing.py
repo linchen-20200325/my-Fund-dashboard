@@ -40,7 +40,7 @@ _TECH_FUND_WITH_DISCLAIMER = f"貝萊德世界科技基金A6穩定配息(美元)
     ({"is_core": 0}, None),
     ({"is_core": 1}, None),
     ({"is_core": "yes"}, None),
-    ({"policy_tier": "中性", "is_core": True}, "core"),
+    ({"policy_tier": "中性", "is_core": True}, None),   # 髒值不退回 is_core（客戶 2026-10-12 裁示 (c)）
     ({"policy_tier": "satellite", "is_core": True}, "satellite"),
 ])
 def test_resolve_tier_three_states(fund, expect):
