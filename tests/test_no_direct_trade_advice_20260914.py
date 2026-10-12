@@ -67,8 +67,9 @@
   做那種重構的人必須在同一份 diff 裡一起改守衛。
 
 **守不到（據實寫明，不要把本檔讀成「① 已經合規」）**：
-  - **A 組比對的是五句逐字字串與 ≥6 字的子句。** 有人把行動句**改寫**後直接寫進 UI、
-    或截得比 6 字還短，抓不到；A 組只保證 `composite_action` 這條管道是空的。
+  - **A 組比對的是五句逐字字串、≥6 字的子句、以及明列的兩個短子句**
+    （「可滿倉持有」「分批進場」）。有人把行動句**改寫**後直接寫進 UI、
+    或截出其他短於 6 字的片段，抓不到；A 組只保證 `composite_action` 這條管道是空的。
   - **D 組不判斷 📐 建議資產水位卡本身算不算「直接買賣建議」**（標題有「建議」、
     給了股債現金百分比、附停利／加碼 Z 門檻）—— 那是業務規則裁決（客戶），
     已另有登記（`docs/v2/21_decision_log.md` B21，①-4）。
@@ -339,6 +340,30 @@ def _verdict_action_clauses() -> tuple[str, ...]:
     return tuple(_out)
 
 
+# 短於 6 字、但本身就是買賣指令的子句 —— **明列**，不靠整體降門檻
+# （2026-10-12 複驗建議補入；不是從 #839 移植的）。
+# ⚠️ **為什麼不把門檻整體降到 4**：今天五句裡短於 6 字的子句恰好只有這兩個，
+#    降門檻今天的效果相同；但門檻是**對未來文案的一般規則**，L2 日後新增的短子句
+#    （例如兩、三字的通用詞）會被自動收進比對清單，正當的表內文案就會開始誤報。
+#    明列只收「本身就是買賣指令」的那幾個，誤擋面最小。
+# ⚠️ **這是手抄清單，代價據實寫明**：它違反本檔「不手抄第二份」的原則，
+#    所以配一條反過期斷言（見 :func:`_short_action_clauses`）—— L2 改字使清單中
+#    任一個不再出現在現場取回的 `action_text` 裡，A 組直接轉紅，
+#    逼人回來重看這份清單，而不是讓它靜默地守一個已不存在的字串。
+_SHORT_ACTION_CLAUSES: tuple[str, ...] = ("可滿倉持有", "分批進場")
+
+
+def _short_action_clauses() -> tuple[str, ...]:
+    """明列的短子句，並斷言它們仍真的住在 L2 現場取回的 `action_text` 裡。"""
+    _live = _all_verdict_action_texts()
+    _stale = [_c for _c in _SHORT_ACTION_CLAUSES
+              if not any(_c in _t for _t in _live)]
+    assert not _stale, (
+        f"明列的短子句已不在 `composite_verdict()` 的 action_text 裡（清單過期）：{_stale}"
+        " —— 請依 L2 現況重看 `_SHORT_ACTION_CLAUSES`，不要直接刪掉了事。")
+    return _SHORT_ACTION_CLAUSES
+
+
 @pytest.mark.parametrize("name,build", _WORLDS)
 def test_no_truncated_verdict_clause_reaches_the_evidence_table(name, build):
     """**A3 的補位**：連**半句**都不准出現在 ② 依據表的列／表下註記／頁面文字。
@@ -350,9 +375,13 @@ def test_no_truncated_verdict_clause_reaches_the_evidence_table(name, build):
     ⚠️ 已知代價（同 D4）：日後若有一句**正當**的表內文案剛好含某個 ≥6 字子句，
     本條會誤報。那時該做的是看一眼為什麼依據表在講 verdict 的話，
     不是把子句從清單裡挑掉。
-    ⚠️ 已知射程（同 D4）：短於 6 字的截斷、或改寫過的說法，本條抓不到。
+    ⚠️ 已知射程：短於 6 字的截斷、或改寫過的說法，本條抓不到 ——
+    **例外是 `_SHORT_ACTION_CLAUSES` 明列的兩個**（「可滿倉持有」「分批進場」），
+    2026-10-12 複驗後補入：在 ② 註記追加「：」後第一個子句，bullish 世界追加的
+    正是「可滿倉持有」（5 字），補之前那一格是綠的。
+    ⚠️ D 組的 :func:`_action_clauses` 仍是單純的 ≥6 字門檻，**沒有**跟著補短子句。
     """
-    _clauses = _verdict_action_clauses()
+    _clauses = _verdict_action_clauses() + _short_action_clauses()
     assert len(_clauses) >= 5, (
         f"反空轉：只切到 {len(_clauses)} 個子句（應 ≥5）—— 本條會恆綠：{_clauses}")
 
