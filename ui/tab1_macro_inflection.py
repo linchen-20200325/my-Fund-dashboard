@@ -22,6 +22,13 @@ import streamlit as st
 
 from ui.helpers.render_state import system_error
 
+
+def _tier_badge(_pf: dict) -> str:
+    """核/衛徽章：三態（未設定不當衛星）。"""
+    from shared.policy_tier import resolve_tier  # noqa: PLC0415
+    return {"core": "🛡️ 核", "satellite": "⚡ 衛"}.get(resolve_tier(_pf), "⬜ 未設定")
+
+
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None,不再 `or 0`
 from services.macro import (
     backtest_turning_points,
@@ -226,7 +233,7 @@ def render_inflection_alert_section(
             _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
             _pf_ret1y = safe_num(_pf_m.get("ret_1y"))  # v19.396 §1:缺不捏造 0(否則假觸發吃本金紅燈)
             _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
-            _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
+            _pf_core  = _tier_badge(_pf)
             # 燈號判定（v18.6: σ + 布林雙確認 升級）
             _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", BG_DARK_GREEN_2, MATERIAL_GREEN, "淨值穩定，含息報酬正常"
             # 雙確認買 = σ 買點觸發 + 布林下軌觸碰

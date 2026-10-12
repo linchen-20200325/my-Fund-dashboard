@@ -82,6 +82,9 @@ def _action_after_individual_signals(
     """個股訊號覆寫：σ 極端 + 配息吃本金。回 (覆寫後 action, 原因 tag list)"""
     tags: list[str] = []
     action = base_action
+    # 未設定級別 fail-closed：不論 σ／配息，一律不給調整建議（維持持有）；reason 仍標「未設定」
+    if tier not in (CORE_TIER, SATELLITE_TIER):
+        return ACTION_HOLD, tags
     # 衛星專屬分支只在 tier == satellite 成立；未設定不當衛星（客戶 2026-10-12 裁示）
     is_sat = tier == SATELLITE_TIER
 

@@ -363,3 +363,24 @@ def test_enrich_to_verdict_end_to_end_three_state():
     # {"policy_tier": None, "is_core": False} 是明確 bool False＝衛星，屬合法輸入（不是未設定）
     ex = verdict_to_actions("極度樂觀", 0.0, [{"code": "E", "policy_tier": None, "is_core": False}])[0]
     assert ex["tier"] == "satellite" and ex["action"] == "加碼"
+
+
+def test_enrich_unset_with_sigma_info_end_to_end_holds():
+    """未設定 + 帶 σ 的端到端：σ 深跌／過熱都不得讓未設定基金動錢。"""
+    import pandas as pd
+    from services.decision_matrix import VERDICT_LEVELS, verdict_to_actions
+    from ui.tab1_macro import _enrich_fund_for_decision
+    un = _enrich_fund_for_decision({"code": "U"})
+    for rank in (-2.5, 1.5):
+        un["sigma_info"] = {"sigma_rank": rank}
+        for lv in VERDICT_LEVELS:
+            o = verdict_to_actions(lv, 0.0, [un])[0]
+            assert o["action"] == "持有" and o["tier"] is None, (lv, rank)
+
+
+def test_inflection_tier_badge_three_state():
+    from ui.tab1_macro_inflection import _tier_badge
+    assert _tier_badge({"policy_tier": "core"}) == "🛡️ 核"
+    assert _tier_badge({"is_core": False}) == "⚡ 衛"
+    assert _tier_badge({}) == "⬜ 未設定"
+    assert _tier_badge({"is_core": None}) == "⬜ 未設定"

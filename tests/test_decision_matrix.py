@@ -330,3 +330,29 @@ def test_decision_matrix_source_has_no_bool_squash():
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "bool":
             assert "is_core" not in ast.unparse(node)
+
+
+# ── M1：未設定 fail-closed，σ／配息都不得讓未設定基金動錢 ──
+@pytest.mark.parametrize("level,sigma", [
+    ("極度樂觀", -2.5), ("樂觀", -2.5), ("中性", -2.5),
+    ("悲觀", 1.5), ("極度悲觀", 1.5), ("悲觀", -2.5), ("樂觀", 1.5),
+])
+def test_unset_ignores_sigma_overrides(level, sigma):
+    f = {"code": "U", "sigma_info": {"sigma_rank": sigma}}
+    o = verdict_to_actions(level, 0.0, [f])[0]
+    assert o["action"] == ACTION_HOLD and o["tier"] is None and "未設定" in o["reason"]
+
+
+def test_unset_ignores_dividend_red():
+    f = {"code": "U", "dividend_info": {"alert_level": "red"}}
+    for lv in VERDICT_LEVELS:
+        assert verdict_to_actions(lv, 0.0, [f])[0]["action"] == ACTION_HOLD
+
+
+def test_core_satellite_sigma_behaviour_unchanged():
+    sig = {"sigma_rank": -2.5}
+    assert verdict_to_actions("中性", 0.0, [{**_CORE, "sigma_info": sig}])[0]["action"] == ACTION_ADD
+    assert verdict_to_actions("樂觀", 0.0, [{**_SAT, "sigma_info": sig}])[0]["action"] == ACTION_ADD
+    hot = {"sigma_rank": 1.5}
+    assert verdict_to_actions("悲觀", 0.0, [{**_CORE, "sigma_info": hot}])[0]["action"] == ACTION_EXIT
+    assert verdict_to_actions("極度悲觀", 0.0, [{**_SAT, "sigma_info": hot}])[0]["action"] == ACTION_EXIT
