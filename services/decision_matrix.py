@@ -13,12 +13,15 @@
 對應上游：
 - verdict_level 由 ui/helpers/macro_helpers.composite_verdict 第 2 元素提供
 - verdict_score 是 calculate_composite_score 後的 float
-- fund.is_core 由呼叫端傳入（來源：ui/tab1_macro.py 經 resolve_core_flag 讀客戶設定的 policy_tier；本模組僅二態，缺失/未設定一律當 False）
+- 級別三態 core／satellite／None（未設定）由 shared.policy_tier.resolve_tier 判定（policy_tier 優先，其次嚴格布林 is_core）。
+  「未設定 ≠ 衛星」：未設定 fail-closed 一律 HOLD（不吃核心也不吃衛星分支），reason 標「未設定」
 - sigma_info / dividend_info 結構同 policy_advisor_service.advise_fund 第 1/2 參數
 """
 from __future__ import annotations
 
 from typing import Iterable, Optional
+
+from shared.policy_tier import CORE_TIER, SATELLITE_TIER, resolve_tier
 
 # Verdict level → 5 級對應動作標籤（與 composite_verdict 第 2 元素對齊）
 VERDICT_LEVELS = ("極度樂觀", "樂觀", "中性", "悲觀", "極度悲觀")
@@ -48,8 +51,14 @@ _ACTION_TARGET_PCT = {
 }
 
 
-def _verdict_default_action(level: str, is_core: bool) -> str:
-    """5 級 verdict × 核心/衛星 → 預設動作（不看個股訊號）"""
+def _verdict_default_action(level: str, tier: Optional[str]) -> str:
+    """5 級 verdict × 核心/衛星/未設定 → 預設動作（不看個股訊號）。
+
+    未設定（tier 非 core/satellite）fail-closed：一律持有，不走核心也不走衛星分支。
+    """
+    if tier not in (CORE_TIER, SATELLITE_TIER):
+        return ACTION_HOLD
+    is_core = tier == CORE_TIER
     if level == "極度樂觀":
         return ACTION_HOLD if is_core else ACTION_ADD
     if level == "樂觀":
@@ -68,11 +77,16 @@ def _action_after_individual_signals(
     sigma_rank: Optional[float],
     div_alert: Optional[str],
     level: str,
-    is_core: bool,
+    tier: Optional[str],
 ) -> tuple[str, list[str]]:
     """個股訊號覆寫：σ 極端 + 配息吃本金。回 (覆寫後 action, 原因 tag list)"""
     tags: list[str] = []
     action = base_action
+    # 未設定級別 fail-closed：不論 σ／配息，一律不給調整建議（維持持有）；reason 仍標「未設定」
+    if tier not in (CORE_TIER, SATELLITE_TIER):
+        return ACTION_HOLD, tags
+    # 衛星專屬分支只在 tier == satellite 成立；未設定不當衛星（客戶 2026-10-12 裁示）
+    is_sat = tier == SATELLITE_TIER
 
     # σ ≤ -2 深度超跌
     if sigma_rank is not None and sigma_rank <= -2.0:
@@ -89,7 +103,7 @@ def _action_after_individual_signals(
 
     # σ > +1 過熱
     elif sigma_rank is not None and sigma_rank > 1.0:
-        if level in ("樂觀", "極度樂觀") and not is_core:
+        if level in ("樂觀", "極度樂觀") and is_sat:
             tags.append(f"σ {sigma_rank:+.2f}σ 過熱 → 分批停利")
             action = ACTION_REDUCE
         elif level in ("悲觀", "極度悲觀"):
@@ -101,17 +115,17 @@ def _action_after_individual_signals(
         tags.append("吃本金（配息>含息）")
         if action == ACTION_ADD:
             action = ACTION_HOLD
-        elif action == ACTION_HOLD and not is_core:
+        elif action == ACTION_HOLD and is_sat:
             action = ACTION_REDUCE
-        elif action == ACTION_REDUCE and not is_core:
+        elif action == ACTION_REDUCE and is_sat:
             action = ACTION_EXIT
 
     return action, tags
 
 
-def _build_reason(level: str, is_core: bool, tags: list[str]) -> str:
-    """組白話原因（verdict 主軸 + 個股 tag）"""
-    role = "核心" if is_core else "衛星"
+def _build_reason(level: str, tier: Optional[str], tags: list[str]) -> str:
+    """組白話原因（verdict 主軸 + 個股 tag）；角色：核心／衛星／未設定"""
+    role = {CORE_TIER: "核心", SATELLITE_TIER: "衛星"}.get(tier, "未設定")
     head = f"{role}・{level}"
     if tags:
         return head + " | " + " / ".join(tags)
@@ -129,17 +143,18 @@ def verdict_to_actions(
         verdict_level: 5 級 ("極度樂觀"/"樂觀"/"中性"/"悲觀"/"極度悲觀")
         verdict_score: 總經 composite score（float，僅供 reason 顯示用，不影響邏輯）
         funds: 逐檔 fund dict iterable，預期欄位：
-            code (str), name (str, optional), is_core (bool, default False),
+            code (str), name (str, optional), policy_tier / is_core（三態，見 resolve_tier；缺失＝未設定）,
             invest_twd (float, optional), sigma_info (dict|None), dividend_info (dict|None)
 
     Returns:
-        list[{code, name, action, action_code, color, reason, target_pct, is_core}]
+        list[{code, name, action, action_code, color, reason, target_pct, tier, is_core}]
+        tier 為 "core"/"satellite"/None；is_core 僅 tier==core 為 True（舊消費端相容）
         順序對齊輸入；空 funds → 空 list；未知 verdict_level → 全部 HOLD 並標 reason。
 
     邊界：
         - sigma_info.error 存在 / sigma_rank 非數值 → 略過 σ 覆寫
         - dividend_info 無 alert_level → 略過 cov 覆寫
-        - is_core 缺失 → 視為衛星 (False)，較保守
+        - 級別缺失／None／非布林 → 未設定（tier None）：一律持有，不當衛星
     """
     out: list[dict] = []
     if not funds:
@@ -152,7 +167,7 @@ def verdict_to_actions(
             continue
         code = str(f.get("code", "") or "")
         name = str(f.get("name", "") or "")
-        is_core = bool(f.get("is_core", False))
+        tier = resolve_tier(f)
 
         sig = f.get("sigma_info") or {}
         sigma_rank: Optional[float] = None
@@ -169,9 +184,9 @@ def verdict_to_actions(
                 div_alert = _al
 
         if is_known_level:
-            base = _verdict_default_action(verdict_level, is_core)
+            base = _verdict_default_action(verdict_level, tier)
             action, tags = _action_after_individual_signals(
-                base, sigma_rank, div_alert, verdict_level, is_core
+                base, sigma_rank, div_alert, verdict_level, tier
             )
         else:
             action = ACTION_HOLD
@@ -183,9 +198,10 @@ def verdict_to_actions(
             "action": action,
             "action_code": action,  # 保留別名供未來 i18n
             "color": _ACTION_COLOR[action],
-            "reason": _build_reason(verdict_level, is_core, tags),
+            "reason": _build_reason(verdict_level, tier, tags),
             "target_pct": _ACTION_TARGET_PCT[action],
-            "is_core": is_core,
+            "tier": tier,
+            "is_core": tier == CORE_TIER,
             "verdict_score": float(verdict_score) if isinstance(verdict_score, (int, float)) else 0.0,
         })
 
@@ -198,7 +214,7 @@ def summarize_actions(actions: list[dict]) -> dict:
     Returns:
         {
             n_total, n_hold, n_add, n_reduce, n_exit,
-            core_hold_pct, satellite_avg_target_pct,
+            core_hold_pct, satellite_avg_target_pct（不含未設定）, n_unset,
             top_risk_funds: list[code]  # action == 全撤/減倉，照原 list 順序
         }
     """
@@ -208,6 +224,7 @@ def summarize_actions(actions: list[dict]) -> dict:
             "n_hold": 0, "n_add": 0, "n_reduce": 0, "n_exit": 0,
             "core_hold_pct": 0.0,
             "satellite_avg_target_pct": 0.0,
+            "n_unset": 0,
             "top_risk_funds": [],
         }
 
@@ -217,8 +234,22 @@ def summarize_actions(actions: list[dict]) -> dict:
     n_reduce = sum(1 for a in actions if a["action"] == ACTION_REDUCE)
     n_exit = sum(1 for a in actions if a["action"] == ACTION_EXIT)
 
-    cores = [a for a in actions if a.get("is_core")]
-    sats = [a for a in actions if not a.get("is_core")]
+    def _tier_of(a: dict) -> Optional[str]:
+        # 有 tier 鍵 → 以三態為準（None＝未設定，不併入衛星）。
+        # 僅「舊輸出沒有 tier 鍵」（手造 action dict）才退回 is_core，且只認嚴格布林：
+        # True→core、False→satellite，其餘（None/缺失/非布林）→未設定（fail-closed）。
+        if "tier" in a:
+            return a["tier"] if a["tier"] in (CORE_TIER, SATELLITE_TIER) else None
+        _ic = a.get("is_core")
+        if _ic is True:
+            return CORE_TIER
+        if _ic is False:
+            return SATELLITE_TIER
+        return None
+
+    cores = [a for a in actions if _tier_of(a) == CORE_TIER]
+    sats = [a for a in actions if _tier_of(a) == SATELLITE_TIER]
+    n_unset = sum(1 for a in actions if _tier_of(a) is None)
     core_hold = sum(1 for a in cores if a["action"] == ACTION_HOLD)
     core_hold_pct = (core_hold / len(cores) * 100.0) if cores else 0.0
     sat_avg = (sum(a["target_pct"] for a in sats) / len(sats)) if sats else 0.0
@@ -233,6 +264,7 @@ def summarize_actions(actions: list[dict]) -> dict:
         "n_exit": n_exit,
         "core_hold_pct": round(core_hold_pct, 1),
         "satellite_avg_target_pct": round(sat_avg, 1),
+        "n_unset": n_unset,
         "top_risk_funds": top_risk,
     }
 
