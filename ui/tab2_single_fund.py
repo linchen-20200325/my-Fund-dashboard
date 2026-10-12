@@ -2697,7 +2697,8 @@ def render_single_fund_tab() -> None:
                                for it in items][:15]
                         _snap.append(f"- 個股新聞：{len(_hl)} 則（逐股 Google News）")
                     else:
-                        _t2cls = _infer_ac(f"{name} {mj_raw.get('category','')}")
+                        # 只用資料層的基金類別（不用基金名稱）；缺類別 → unknown（不篩選）
+                        _t2cls = _infer_ac(mj_raw.get('category', ''))
                         _hl = [str(n.get("title", "")) for n in
                                _filter_news(st.session_state.get("news_items", []) or [], _t2cls)
                                if isinstance(n, dict)][:8]
