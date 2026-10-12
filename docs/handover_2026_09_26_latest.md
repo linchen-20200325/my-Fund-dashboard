@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-12 09:47 UTC（`date -u` 實測）
+最後更新：2026-10-12 10:51 UTC（`date -u` 實測）
 
 ---
 
@@ -164,7 +164,8 @@
 ~~→ **2026-10-11 第四十八次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶／協作助手答的（只列真的還在等的）：** (1) **Sharpe**：客戶 2026-10-11 裁示草稿不核准，已自 #923 移出，不建 R1–R14，另批待客戶；(2) **單列純數字前導零代號的級別問題**（#922 後續獨立缺陷）：待客戶派工，本批不再碰 `ui/helpers/cloud_io.py`；(3) **三條分支的最終證據**（`claude/fund-taiwan-stock-dashboard-diff-sn42bh-cachefail`、`…-view01`、`claude/fund-p02-health-wiring-sn42bh`）：客戶已降回「待確認」，需最終 tree／content 等價證據，分支清理稽核負責補。另有 #842、#843、#844 三個 open draft PR（本組 2026-10-11 以 GitHub 實查仍為 open draft）：本組未見客戶對其關閉的指示，處置待總管／客戶；上句 (2) 的幣別待裁示 3 件 (a)(b)(c)，本組未逐項對照客戶 2026-10-11 的幣別裁示是否已取代，**未驗**。PR #922、#923 已合併，移出。main ＝ `4cd7bf8`。見本節〈第四十八次更新（2026-10-11）〉。出處：客戶 2026-10-11 裁示，經總管轉達（對話中，repo 內無原文）；PR／CI／diff 事實為本組實查~~
 
 ~~→ **2026-10-12 第四十九次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶裁示的：backlog a～e 五項** —— a. 大規模「系統分類」更名（客戶已裁「先不要自主施工」）；b. 預覽頁未接線表單與預覽 ⑨ 政策表未讀 v2 tier；c. 移除舊 `ui/tab1_macro.py`；d. 前導零代碼、Sharpe（維持第四十八次更新的既有裁示，細節指回既有各節）；e. AI prompt 標籤與 AI 輸入規則實質變更。#930～#934 已合併；main ＝ `81701587`。見本節〈第四十九次更新（2026-10-12，本對話結束交接）〉三。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測；對話中，repo 內無原文；本組只寫入，僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與五個 merge commit）~~
-→ **2026-10-12 第五十次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶裁示的：backlog a～e 五項（內容同上，未變）＋ 新增一件【待客戶裁示】f**：`services/decision_matrix.py::verdict_to_actions` 把缺失／未設定的配置級別當 False＝衛星並顯示「衛星」，與客戶 2026-10-12 裁示「unset ≠ satellite」有張力（見〈第五十次更新〉三）。「小型文件修正批」已完成 `decision_matrix.py` 一處；main ＝ `2248a59`。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit
+~~→ **2026-10-12 第五十次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶裁示的：backlog a～e 五項（內容同上，未變）＋ 新增一件【待客戶裁示】f**：`services/decision_matrix.py::verdict_to_actions` 把缺失／未設定的配置級別當 False＝衛星並顯示「衛星」，與客戶 2026-10-12 裁示「unset ≠ satellite」有張力（見〈第五十次更新〉三）。「小型文件修正批」已完成 `decision_matrix.py` 一處；main ＝ `2248a59`。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit~~
+→ **2026-10-12 第五十一次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**f 已解決**（#938 已合併，客戶 2026-10-12 裁示 f「核准修正：未設定≠衛星」已完成，見〈第五十一次更新〉）。**目前等客戶裁示的：backlog a～e 五項（內容同上，未變）＋ 新增【待客戶裁示】(c) `shared/policy_tier.py::resolve_tier` 髒值 policy_tier 處理 ＋ (e) `ui/tab1_macro.py` 靜態說明文字補句字句核准**（見〈第五十一次更新〉四）。main ＝ `581b295`。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。
 
 ~~**下一步（第三十四次更新；客戶 2026-10-09 裁示 4）**：**本對話停止（新對話切點）**。新對話以最新 main 上本交接本第一節（★ 進度總表）為 SSOT。下一階段依序：(1) ALO-1／ALO-4 已核准小批 → (2) #3 `nav` 表接來源**僅盤點＋規劃**（尚未授權修改 L3、新增資料來源）。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-09~~
 
@@ -195,7 +196,8 @@
 ~~→ **下一步（第四十八次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) **分支清理稽核**（A/B/C，只稽核不刪；#922、#923 已完成，可以開始）；(2) **單列前導零代號的級別缺陷**：登記為後續獨立缺陷，待客戶派工；本批不再碰 `ui/helpers/cloud_io.py`；(3) **Sharpe**：另批，待客戶；裁示前不改 production rf、不新增資料來源。#842、#843、#844 仍為 open draft，處置待總管／客戶指示，本組未動。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：客戶 2026-10-11 裁示，經總管轉達（對話中，repo 內無原文）；PR／CI 事實為本組實查~~
 
 ~~→ **下一步（第四十九次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 客戶無新指示時，可自主做 `STATE.md` 過時項與 `services/decision_matrix.py:16` 註解的小型文件修正批；(3) 其餘 backlog a～e 請客戶裁示並附推薦方案。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測；對話中，repo 內無原文；本組只寫入，僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與五個 merge commit）~~
-→ **下一步（第五十次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 安全候選已耗盡，無其他可自主做的項目；(3) 請客戶裁示 backlog a～e 與新增的 f（`verdict_to_actions` 未設定級別），附總管推薦方案與理由。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit
+~~→ **下一步（第五十次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 安全候選已耗盡，無其他可自主做的項目；(3) 請客戶裁示 backlog a～e 與新增的 f（`verdict_to_actions` 未設定級別），附總管推薦方案與理由。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit~~
+→ **下一步（第五十一次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 除 (c)(e) 與既有 backlog a～e 待客戶裁示外，(a)(b)(d) 為唯讀查證性質，可於下一批自主查證（只查、不改）；(3) 請客戶裁示 (c)(e) 與 backlog a～e，附總管推薦方案與理由。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。
 
 | 項目 | 狀態 | 下一步 |
 |---|---|---|
@@ -251,7 +253,10 @@
 | PR #930～#934（名稱推定退役、說明如實、用語統一、死碼清理） | 已合併（第四十九次更新）：main 現為 `81701587`；各項內容見〈第四十九次更新〉一；CI 均綠、各經獨立稽核 must-fix 0。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測；對話中，repo 內無原文；本組只寫入，僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與五個 merge commit） | 無。見第 4 節 #930～#934 |
 | backlog a～e（系統分類更名、預覽頁、舊 `ui/tab1_macro.py`、前導零代碼與 Sharpe、AI prompt／輸入規則） | 待客戶裁示（第四十九次更新）；客戶對 a 已裁「先不要自主施工」。出處：總管 2026-10-12 轉達（對話中，repo 內無原文） | 請客戶裁示，附總管推薦方案與理由；未授權前不動工。見〈第四十九次更新〉三 |
 | PR #935、#936（交接本第四十九次更新、decision_matrix docstring 更正） | 已合併（第五十次更新）：main 現為 `2248a59`（全長 `2248a5981930ded3d58e7846438654c865cf9ae2`；#936 的 merge commit；parents `cdae91535c7beed58fa237dc1c3b8427d32aec13`、`99dc5160e17f2c36cc8f461aa53a415d45275927`）；#935 merge commit `cdae9153`。#936 只改 `services/decision_matrix.py` 第 16 行 docstring 一行。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit；main CI 本組未驗 | 無 |
-| 【待客戶裁示】f：`verdict_to_actions` 未設定級別（第五十次更新） | 見〈第五十次更新〉三；與客戶 2026-10-12 裁示「unset ≠ satellite」有張力；屬資料語意／投資判斷邏輯，不得自改。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit | 請客戶裁示；總管推薦見〈第五十次更新〉三；未授權前不動工 |
+| PR #938（決策矩陣三態 fail-closed：未設定≠衛星） | 已合併（第五十一次更新）：main 現為 `581b295`（全長 `581b2955bca13c42d2996ed27be14fdc282ef9d2`；#938 的 merge commit）。內容見〈第五十一次更新〉二。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。 CI 三條綠以 GitHub 為準，本組未驗 | 無 |
+| ~~【待客戶裁示】f：`verdict_to_actions` 未設定級別（第五十次更新）~~ → **第五十一次更新，狀態更新，不是漏刪：已由 #938 完成** | 見〈第五十次更新〉三；與客戶 2026-10-12 裁示「unset ≠ satellite」有張力；屬資料語意／投資判斷邏輯，不得自改。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #935、#936 兩個 merge commit | 請客戶裁示；總管推薦見〈第五十次更新〉三；未授權前不動工 |
+| 【待客戶裁示】(c) `resolve_tier` 髒值；(e) tab1 說明文字補句（第五十一次更新） | 見〈第五十一次更新〉四；屬 L0 設計／新增文案，不得自改。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。 | 請客戶裁示；總管推薦見〈第五十一次更新〉四；未授權前不動工 |
+| 登記待查 (a)(b)(d)（第五十一次更新） | 唯讀查證性質，見〈第五十一次更新〉四；非待裁示。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。 | 下一批可自主只查不改 |
 
 #### 分支清理盤點（第四十一次更新）
 
@@ -478,6 +483,46 @@
 
 ~~⚠️ **`3/5` 的正確讀法：alo 只完成「讀表」那一層，畫面還沒接。**~~
 ~~#856 落地的是 L1／L2（`_持倉補充`、`_保單資料` → 44 holding／policy，**只讀不寫**），**alo 頁的 UI 尚未接上真資料**。**不要把 `3/5` 讀成「alo 整頁做完了」。**~~
+
+#### 第五十一次更新（2026-10-12）
+
+出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。本輪屬 C 級：因為只改交接本一檔；自驗，不派稽核。
+
+**一、最新 main**
+
+- main ＝ `581b2955bca13c42d2996ed27be14fdc282ef9d2`（#938 的 merge commit）。CI 三條綠，以 GitHub 為準，本組未驗。
+
+**二、#938 已合併：客戶 2026-10-12 裁示 f「核准修正：未設定≠衛星」已完成**
+
+- `services/decision_matrix.py`：`decision_matrix` 以 `resolve_tier` 取三態；未設定嚴格 fail-closed，一律「持有」（含 σ／配息覆寫皆不動錢）；輸出新增 `tier`、`n_unset`；`summarize` 不把未設定併入衛星。
+- `ui/tab1_macro.py::_enrich_fund_for_decision`：未設定輸出 `is_core=None`（不再 False 被讀成衛星）。
+- 角色欄與 `ui/tab1_macro_inflection.py::_tier_badge` 顯示「⬜ 未設定」。
+- f 由待裁示移至已裁示（第 28 點）。
+
+**三、總管自決紀錄（誠實揭露）**
+
+- 「未設定一律持有（連 σ 覆寫也不動錢）」是**總管在客戶「fail-closed」裁示下拍板的解讀**。原規格曾只跳過角色專屬分支；獨立稽核指出 σ 覆寫仍會讓未設定加碼／全撤，故改為嚴格持有。**若客戶認為不對，可覆寫。**
+- 稽核過程：初次稽核抓到 enrich→matrix 交接 B1（未設定被轉成衛星）與 M1／M2，皆已修並過複稽（必修 0）。CI 三條綠（以 GitHub 為準）。
+- 同檔回修輪數：`decision_matrix.py` 初版＋2 輪回修，已達同檔上限，不再開第 3 輪。
+
+**四、登記待辦（不動工；除 (c)(e) 外非待裁示）**
+
+- (a) `ui/tab3_portfolio.py` 約 L1434 依偏差方向的文案「核心過重，可贖回轉衛星／衛星過重，可獲利轉核心」：比例分母是否只含已設定級別，**未查**。
+- (b) `services/satellite.py` 參數 `is_satellite` 的呼叫端若用 `not resolve_core_flag(...)` 會把未設定當衛星，**未追呼叫端**。
+- (c)【待客戶裁示】`shared/policy_tier.py::resolve_tier` 對髒值 policy_tier（如 "foo"）會退回 `is_core` 判斷，`is_core=False` 時得衛星；屬 L0 設計問題。**總管推薦**：髒值 policy_tier 視為未設定、不退回 `is_core`（理由：不猜）。
+- (d) 其他二態消費點待另查：`ui/helpers/macro/helpers.py:94 RECS[phase][is_core]`、`ui/tab_fund_grp_health.py:763`、`ui/components/mk_dashboard.py`、`ui/helpers/cloud_io.py:419` 附近。
+- (e)【待客戶裁示】`ui/tab1_macro.py` 約 L1739–1749 靜態說明文字未說明「未設定一律持有」；**建議補一句**，總管不自行新增文案，待客戶核准字句。
+- 以上來源為 subagent 關鍵字 grep，**非窮舉**。
+
+**五、下一步**
+
+- 除 (c)(e) 與既有 backlog a～e 待客戶裁示外，(a)(b)(d) 為唯讀查證，可於下一批自主查證（只查、不改）。
+
+**六、本組自驗了什麼、沒驗什麼**
+
+- 已實查：`git fetch` 後 `origin/main` ＝ `581b295`，#938 merge commit 存在。
+- 未驗：#938 實作內容與測試（本組未讀 code）、CI、稽核結論、(a)～(e) 所列行號與現況，全部為總管轉述。
+
 
 #### 第五十次更新（2026-10-12）
 
@@ -869,7 +914,9 @@
 ## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ ~~2026-10-02~~ ~~2026-10-03~~ ~~2026-10-05~~ ~~2026-10-08~~ ~~2026-10-09~~ ~~2026-10-10~~ ~~2026-10-11~~ 2026-10-12 更新（~~第二十六次更新~~ ~~第二十七次更新~~ ~~第二十八次更新~~ ~~第三十次更新~~ ~~第三十一次更新~~ ~~第三十二次更新~~ ~~第三十三次更新~~ ~~第三十四次更新~~ ~~第三十五次更新~~ ~~第三十八次更新~~ ~~第三十九次更新~~ ~~第四十二次更新~~ ~~第四十四次更新~~ ~~第四十五次更新~~ ~~第四十六次更新~~ ~~第四十七次更新~~ ~~第四十八次更新~~ 第四十九次更新））
 
 - ~~`origin/main` ＝ **`81701587`**（全長 `81701587cfc5d39bdd017d0e6125af4b173b04e8`；PR #934 的 merge commit；一般 merge commit、2 parents（`4ce4b809`、`53fb069b`）；交接本第四十九次更新；main 上 CI run 38211208363 success（總管實測，本組未重跑）；其前依序為 #933（`4ce4b809`）、#932（`78a4bab0`）、#931（`d028ef8d`）、#930（`b7c23c5f`）的 merge commit；出處：本組 `git log --first-parent origin/main` 實查 SHA／parents，CI 為總管轉達）~~
-- `origin/main` ＝ **`2248a59`**（全長 `2248a5981930ded3d58e7846438654c865cf9ae2`；PR #936 的 merge commit；一般 merge、2 parents（`cdae9153`、`99dc5160`）；其前為 #935 的 merge commit `cdae9153`；交接本第五十次更新；main CI 以 GitHub 為準，本組未驗；出處：本組 `git log --first-parent origin/main` 實查 SHA／parents）
+~~- `origin/main` ＝ **`2248a59`**（全長 `2248a5981930ded3d58e7846438654c865cf9ae2`；PR #936 的 merge commit；一般 merge、2 parents（`cdae9153`、`99dc5160`）；其前為 #935 的 merge commit `cdae9153`；交接本第五十次更新；main CI 以 GitHub 為準，本組未驗；出處：本組 `git log --first-parent origin/main` 實查 SHA／parents）~~
+- `origin/main` ＝ **`581b295`**（全長 `581b2955bca13c42d2996ed27be14fdc282ef9d2`；PR #938 的 merge commit；交接本第五十一次更新；main CI 以 GitHub 為準，本組未驗；出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。）
+  → **2026-10-12 第五十一次更新，狀態更新，不是漏刪**：上一行（`2248a59`）在寫下當時為真；此後 #938 合併。出處：本組實查 `git log`。
   → **2026-10-12 第五十次更新，狀態更新，不是漏刪**：上一行（`81701587`）在寫下當時為真；此後 #935、#936 相繼合併。出處：本組實查。
   ~~`origin/main` ＝ **`4cd7bf8`**（全長 `4cd7bf8d3f3b8bdcb81ea934d9ea907de80dc91f`；PR #923 的 merge commit；一般 merge commit、2 parents（`f87f685`、`6a1604f`）；merged_at 2026-10-11T05:58:10Z；交接本第四十八次更新；main `4cd7bf8` 上 PR Check run 38116511120 run 層級 success；本組 2026-10-11 以 `git log origin/main` 實查最新為此顆，其前依序為 #922 的 merge commit `f87f685`、bot 資料 commit `1c0130a`；之後若出現 bot 資料 commit 不算功能 commit；出處：本組實查）~~
   → **2026-10-12 第四十九次更新，狀態更新，不是漏刪**：那一句在寫下當天為真；此後 #924～#934 相繼合併，#930～#934 見第 4 節與〈第四十九次更新〉一。出處：本組實查。
@@ -1006,6 +1053,19 @@
 - **實跑基線（本組 2026-09-28 於 `b1ea6be` 實跑）**：`tests/test_policy_supplement_repository.py` ＋ `tests/test_v2_tables_alo_holdings.py` → **400 passed**，0 skipped、0 xfail
   （13b 當時為 **377 passed**；`377 → 400` 是第 14～16 輪補測試的結果。⚠️ **會漂移，動工前現場重跑**）
 - 三個 secret（`SETTINGS_SHEET_ID`／`FRED_API_KEY`／`GOOGLE_SERVICE_ACCOUNT_JSON`）在本容器**讀不到**（無環境變數、無 `.streamlit/secrets.toml`，只有 `secrets.toml.example`）
+
+### 現在接手要做的事（2026-10-12 第五十一次更新存檔點）
+
+**以最新 main 上本交接本第一節（★ 進度總表）為 SSOT**；本清單與 ★ 進度總表不一致時以 ★ 進度總表為準。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #938 merge commit，其餘為轉述、本組未驗。
+
+1. 先 `git fetch`、核對 main（交接時 `581b295`）與 open PR。
+2. 待客戶裁示：(c) `resolve_tier` 髒值、(e) tab1 說明文字補句，以及 backlog a～e；一律附「總管推薦方案與理由」，細節見〈第五十一次更新（2026-10-12）〉四。
+3. (a)(b)(d) 為唯讀查證，可下一批自主只查不改。
+4. 第 7 節資料／公式 Gate 與靜默自主巡航規則照舊；未刪任何 branch，不得據舊清單清理。
+
+⛔ 本清單只排順序，**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。
+
+~~（第五十次更新存檔點，狀態更新，不是漏刪：下方清單在寫下當時為真，其中 f 已由 #938 完成，見〈第五十一次更新〉）~~
 
 ### 現在接手要做的事（2026-10-12 第五十次更新存檔點）
 
@@ -2867,6 +2927,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   25. **命名原則**：客戶 Sheet core／satellite／unset →「配置級別」；MoneyDJ／FundClear 原始分類 →「基金類別」；規則推導（3-3-3 等）→「系統分類」，不得沿用核心／衛星當正式名稱；級別三態 core／satellite／unset，unset ≠ satellite。
   26. **大規模「系統分類」更名**（欄名、值、🟦／🟠 符號、`tab_fund_grp_health` 標題、`tab6_manual` 章節、`_CS_READONLY_TMPL`「資產屬性」）：先不要自主施工（觸及凍結檔與 `services/**`）。
   27. **「基金類別缺值→新聞送 0 則？」**：維持現行（unknown＝不過濾），只登記不改。
+  28. **f「核准修正：未設定≠衛星」**（第五十一次更新寫入；接續第 25 點「unset ≠ satellite」）：已由 #938 完成，由待裁示移至已裁示。實作細節與總管自決解讀見〈第五十一次更新〉二、三。
 
 ### 已裁示（2026-10-11）
 
@@ -3460,6 +3521,7 @@ B. 到達必須交給協作助手複驗、而且沒有其他可自主執行工�
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-12 | 第五十一次更新（main `581b295`；本輪屬 C 級：因為只改交接本一檔；自驗，不派稽核）：檔頭時間更新；#938 合併寫入第 1 節與 ★ 進度總表；f 移至已裁示第 28 點；「目前等客戶答的」與「下一步」舊句劃線改新句；新增〈第五十一次更新〉與存檔點；登記 (a)～(e)。出處：總管 2026-10-12 轉達；SHA 為本組實查。 |
 | 2026-10-12 | 第五十次更新（main `2248a59`；本輪屬 C 級：因為只改交接本一檔；自驗，不派稽核）：檔頭時間更新；#935、#936 合併寫入第 1 節與 ★ 進度總表；「目前等客戶答的」與「下一步」舊句劃線改新句；新增【待客戶裁示】f（`verdict_to_actions` 未設定級別）；新增〈第五十次更新〉與存檔點。出處：總管 2026-10-12 轉達；SHA 為本組實查。 |
 | 2026-10-12 | 第四十九次更新（main `81701587`；本輪屬 C 級：因為只改交接本一檔；自驗，不派稽核）：檔頭時間更新；#930～#934 合併寫入 ★ 進度總表、第 1 節、第 4 節；★ 表新增 #930～#934 與 backlog a～e 兩列、分支清理列補記；「目前等客戶答的」與「下一步」舊句劃線改新句；新增〈第四十九次更新（2026-10-12，本對話結束交接）〉一～十一、第 1 節存檔點、第 5 節〈已裁示（2026-10-12）〉第 25～27 點。出處：總管 2026-10-12 轉達；SHA 為本組實查。 |
 | 2026-10-11 | 第四十八次更新（main `4cd7bf8`；本輪屬 C 級：因為只改交接本一檔；自驗，不派稽核）：檔頭時間更新；#922（`f87f685`）、#923（`4cd7bf8`）合併寫入 ★ 進度總表、第 1 節、第 3 節、第 4 節（PR、run、parents 為本組實查）；★ 表新增 PR #923、單列前導零代號缺陷兩列，#922、#842＋#843、Sharpe、幣別、分支清理列補新狀態；「目前等客戶／協作助手答的」與「下一步」舊句劃線改新句；新增〈第四十八次更新（2026-10-11）〉一～八、第 1 節存檔點、第 5 節〈已裁示（2026-10-11）〉第 13～24 點；**更正第四十七次更新的錯誤宣稱「#844 的 v2_editor 部分已併入 #922」**（舊句兩處劃線，更正依據見〈第四十八次更新〉六）。出處：客戶 2026-10-11 裁示，經總管轉達；事實為本組實查。 |
