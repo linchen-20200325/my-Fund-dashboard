@@ -913,7 +913,7 @@ def render_policy_admin_section(
                             "fund_code":    st.column_config.TextColumn("基金代號"),
                             "fund_name":    st.column_config.TextColumn("基金名稱"),
                             "currency":     st.column_config.TextColumn("幣別"),
-                            "tier":         st.column_config.TextColumn("級別"),
+                            "tier":         st.column_config.TextColumn("配置級別"),
                             "invest_twd":   st.column_config.NumberColumn("投資金額 (TWD)"),
                             "div_cash_pct": st.column_config.NumberColumn("現金給付%"),
                             "units":        st.column_config.NumberColumn("持有單位數(選填)"),

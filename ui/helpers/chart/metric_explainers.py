@@ -23,8 +23,7 @@ METRIC_EXPLAINERS: dict[str, dict[str, str]] = {
     "sigma": {
         "title": "波動 σ（標準差）",
         "body": "報酬上下擺動的幅度，**越大越刺激、越小越穩**。"
-                "實戰：低 σ 的擺核心（求穩），高 σ 的擺衛星（求攻）；"
-                "σ 高又 Sharpe 低 = 白白冒險，優先汰換。",
+                "實戰：σ 高又 Sharpe 低 = 白白冒險，優先汰換。",
     },
     "alpha": {
         "title": "Alpha 超額報酬",

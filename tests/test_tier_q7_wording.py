@@ -93,3 +93,46 @@ def test_asset_attr_help_has_no_false_no_source_claim():
     for bad in ("目前尚無可靠來源", "無可追溯的原始分類來源前不顯示"):
         assert _norm(bad) not in help_txt, f"columns.py 基金屬性 help 含不實措辭：{bad}"
         assert _norm(bad) not in src, f"signals.py 含不實措辭：{bad}"
+
+
+def _dict_label(rel: str, key: str, call_attr: str | None = None) -> list[str]:
+    """AST：取 `{key: st.column_config.X("label", ...)}` 的第一個位置參數字串。"""
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    out = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Dict):
+            for k, v in zip(n.keys, n.values):
+                if (isinstance(k, ast.Constant) and k.value == key and isinstance(v, ast.Call)
+                        and v.args and isinstance(v.args[0], ast.Constant)):
+                    out.append(v.args[0].value)
+    return out
+
+
+def test_tier_column_label_consistent_across_editors():
+    """同一個 Sheet 級別欄（tier ＝ policy_tier）在各編輯器 label 一致為「配置級別」。"""
+    assert _dict_label("ui/helpers/v2_editor.py", "tier") == ["配置級別"]
+    assert _dict_label("ui/helpers/portfolio/policy_admin_section.py", "tier") == ["配置級別"]
+
+
+def test_sigma_explainer_has_no_core_satellite_assignment():
+    from ui.helpers.chart.metric_explainers import METRIC_EXPLAINERS as D
+    body = _norm(D["sigma"]["body"])
+    for bad in ("擺核心", "擺衛星", "求穩）", "求攻）"):
+        assert bad not in body, f"σ 說明不得把波動度指派為核心／衛星：{bad}"
+    assert "越大越刺激" in body
+
+
+def test_satellite_stop_help_mentions_unset_state():
+    """T7「衛星停利」欄 help 須說明三態：未設定 ≠ 衛星（⬜ 未設定、不判）。"""
+    tree = ast.parse((ROOT / "ui/tab3_t7_ledger.py").read_text(encoding="utf-8"))
+    helps = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Dict):
+            for k, v in zip(n.keys, n.values):
+                if isinstance(k, ast.Constant) and k.value == "衛星停利" and isinstance(v, ast.Call):
+                    for kw in v.keywords:
+                        if kw.arg == "help":
+                            helps.append(_norm("".join(
+                                c.value for c in ast.walk(kw.value) if isinstance(c, ast.Constant))))
+    assert len(helps) == 1, helps
+    assert "未設定" in helps[0] and "不當衛星" in helps[0]

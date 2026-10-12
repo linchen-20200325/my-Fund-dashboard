@@ -397,7 +397,7 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                 # 2026-10-10：~~help="存檔時自動判斷，可手動修正"~~ —— 系統不再自動判斷級別
                 # （且本表唯讀），那句說明已不成立，移除（不另寫新文案）。
                 "tier":             st.column_config.SelectboxColumn(
-                                        "級別", options=["", "core", "satellite"]),
+                                        "配置級別", options=["", "core", "satellite"]),
                 # v18.160：配息「現金給付 %」（單位數% = 100 - 該值）
                 "div_cash_pct":     st.column_config.NumberColumn(
                                         "🟨 現金給付 %",
