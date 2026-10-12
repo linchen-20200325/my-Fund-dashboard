@@ -305,6 +305,20 @@ label 只在**渲染失敗**時出現在紅框裡）—— 所以掃描 1 與掃
 - `ui/views/page_01_macro.py:736/748/751/758`（注入點）→ **F2**；⚠️ **若採母法 §8 提案 1 推薦的 (a)「v2 不繼承 `action_text`，只取 `level`」，要動的就是這幾行，F4 可以一個位元組都不動。**
 
 ⛔ **本輪只登記，不修**：`.py` 一個位元組都沒動。
+
+→ **2026-10-12 狀態更新，不是漏刪**（上文在寫下當時為真；決策者：AI 總管）：
+**① 頁的注入點已由分支 `compliance/macro-conclusion-state-only` 的 commit `e909ce2` 處理** ——
+`page_01_macro.py::_render_layer_evidence` 把 `_action` **無條件**清成 `""`（不再只在撐不住時清），
+三個下游 builder 因此收不到 `composite_action`，表下註記不再出現「白話行動」那一句；等級與分數照常顯示
+（出自 #839 的 `da16c32`，本次逐位元組沿用；做法與上方「檔案邊界」第三點所說的推薦方案 (a)「只取 `level`」同向）。
+授權依據：客戶 2026-10-12 裁示「只把與 ① 有關的合規修正重新實作成小 PR」，經總管轉達，repo 內無原文；
+「這則裁示涵蓋 F2」是總管推論，不是客戶逐項明示。
+- ⚠️ **F4 未動**：上表 `services/macro/composite_score.py` 那五句 `action_text` **仍原樣存在**，
+  其他消費端照樣拿得到（例如 `mcp_server/tools_macro.py` 回傳的 `verdict.action`、`ui/tab1_macro.py`）。
+- ⚠️ **`ui/helpers/macro/beginner_view.py` 未動**：「白話行動」的組裝句仍在，只是 ① 頁不再餵它非空值。
+- ⚠️ 上方「同一批掃描另外撈到一處」那則門檻說明 caption **本次未處理**，照舊只登記。
+- 上表的現況引文與行號是 2026-09-16 的快照，**本次不改寫**。
+
 ### ①-4 層 3 三欄卡（📐 建議資產水位／⚡ ③ 例外／🔍 ④ 可信度）　卡 1 ⛔【母法衝突・待修】
 - 來源：三張卡**全部只吃層 2（①-3）算好的 `_ev`，一個都不重算** —— ①`_card_allocation(_ev)` 走 `allocation_from_composite(ev["score"], None)`（**沿用**）／②`_card_exceptions(_ev)` 讀五桶 summary 的拐點／新聞桶＋session `_SK_RADAR`（`v01_macro_risk_radar`，**沿用**；盤點表 0 命中）／③`_card_credibility(_ind, _ev)` 讀 `indicators` 非 meta 條目數＋`is_proxy`＋`prov.sources`（**沿用（部分）**；`source`／`fetched_at` **到不了**）
 - 規則：**一次 `render_cards([...])`、一列三欄**（`page_01_macro.py:2185-2189`；鐵則 01「正好 3 張 → 一列 3 欄」）。逐卡：**📐 建議資產水位** — `ev["sufficient"]` 撐不住 → **不給水位**（該檔 `:778` 逐字「給了就是拿 `fillna(0)` 的 0.0 分去配資產」）；**⚡ ③ 例外** — 零新取數、不重算，紅／黃計數走 `summarize_radar()`（原始 10 燈 dict 無這兩鍵）；**🔍 ④ 可信度** — 印「共 N 項、M 項附得出來源」＋替代來源數，**不印 N／M 比例**（缺 score 當 0 算恆 N／N）
