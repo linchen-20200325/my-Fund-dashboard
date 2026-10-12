@@ -3,8 +3,10 @@
 補老師 80/20「衛星獲利達 15-20% 嚴格停利、滾回核心」那一格(user 2026-08-18 核准規格)。
 把「衛星判定 + 未實現獲利% → 停利燈」的**判燈邏輯**抽成純函式;衛星判定(is_satellite)與
 未實現獲利%(從成本算)由呼叫端(T7 帳本,唯一同時握有兩者的 UI)算好後傳入。
+呼叫端只在 `resolve_tier(fund) == "satellite"` 時傳 True;級別未設定者不呼叫(2026-10-10 三態)。
 
-§8.2:純函式・零 IO;不 import L3 的 `resolve_core_flag`(改由 UI 傳 bool,避免上行依賴)。
+§8.2:純函式・零 IO;級別判定不在本檔(由 UI 以 `shared.policy_tier.resolve_tier` 判好傳 bool)。
+~~不 import L3 的 `resolve_core_flag`~~(2026-10-12 更正:呼叫端已改用 `resolve_tier`)。
 §3.3:門檻走 `shared.signal_thresholds`(15% 分批 / 20% 強制)。
 §1 Fail-Loud:非衛星 → 不判(核心長期領息);未填成本(pct=None)→ 誠實「無法判停利」不當 0%。
 """
@@ -24,7 +26,8 @@ def satellite_stop_gain(unrealized_pct: Optional[float], is_satellite: bool) -> 
 
     Args:
         unrealized_pct: 未實現獲利 %(從**成本**算,不含息;T7 帳本 `_pl_pct`)。None = 未填成本。
-        is_satellite: 是否衛星部位(呼叫端以 `resolve_core_flag` 反推;核心=False)。
+        is_satellite: 是否衛星部位。呼叫端只在 `resolve_tier(fund) == "satellite"` 時傳 True;
+            未設定者不呼叫(~~呼叫端以 `resolve_core_flag` 反推~~,2026-10-12 更正)。
 
     Returns: {lamp, emoji, color, status, pct, note}
         - lamp: "強制停利" / "分批停利" / None

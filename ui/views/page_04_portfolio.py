@@ -522,6 +522,7 @@ from typing import Any
 import streamlit as st
 
 from services.format_helpers import fmt_twd
+from shared.policy_tier import resolve_tier
 from ui.helpers.ia import (
     GRID_COLS,
     STATE_NOT_READY,
@@ -1479,11 +1480,12 @@ def _render_mix() -> None:
        該模組的 docstring 自陳是「核心 / 衛星配置的**唯一真相**」，
        而且是為了收掉「同一頁 4 處各算各的、3 種定義、2 種目標值」才存在的。
     2. **它算的是不是這一格講的那件事** —— 是。分母是 **Σ 投入本金**（金額加權，
-       不是檔數）、分類**`policy_tier` 優先**（使用者在 Sheet 明示的級別），
+       不是檔數）、分類走 `shared.policy_tier.resolve_tier`（**`policy_tier` 優先** →
+       缺才看 v2 讀回的 `is_core` 三態 → 都沒有＝未設定、不猜），
        目標**一律讀 `portfolio_core_pct`**。這正是「核心／衛星現況 vs 目標」。
        ⛔ **對照組（差一點就接錯的那個）**：`services/policy_advisor_service.py::`
        `recommend_policy` —— **名字對，意思錯**。分歧軸有兩條，**都與滑桿無關**：
-       (a) **分類**：它只看 `is_core`（名稱關鍵字啟發式），**完全不看 `policy_tier`**
+       (a) **分類**：它只看 `is_core`（~~名稱關鍵字啟發式~~ → 2026-10-10 起為三態、不猜），**完全不看 `policy_tier`**
        （實測 `git grep -n policy_tier -- services/policy_advisor_service.py` **0 命中**；
        正對照：同一條 grep 在全 repo 命中 10+ 檔，所以那個 0 是真的 0）；
        (b) **範圍**：它是**單一保單**級，本頁是**整個組合**。
@@ -1530,7 +1532,8 @@ def _render_mix() -> None:
         # 一檔本金都沒填 → **沒有比例可言**。⛔ 這裡不畫 0%／不畫甜甜圈／不猜 ——
         # 「0% 核心」與「不知道核心佔多少」在畫面上長得一樣，但意思差到相反（§1）。
         # 缺什麼由 SSOT 的 `format_core_satellite_caption()` 講（它知道幾檔沒填、
-        # 級別是 Sheet 給的還是關鍵字猜的），本檔不另寫一份會漂移的說明。
+        # ~~級別是 Sheet 給的還是關鍵字猜的~~ → 2026-10-10 起不猜：幾檔級別未設定），
+        # 本檔不另寫一份會漂移的說明。
         # ⛔ ~~去哪補 = 「➕ 加入與管理基金」——**這一條指路是真的有效的**~~
         # ⛔ ~~（同空狀態那一則，由 AppTest 實跑釘住），與四塊灰態那種「指了也沒用」不同。~~
         #    **2026-09-08 第三輪就地更正（有意識的更正，不是漏刪 · 決策者：AI 總管，
@@ -2049,15 +2052,16 @@ def _policy_rows() -> list[dict[str, Any]]:
 
     ⚠️ **每一格缺值都畫 :data:`UNKNOWN_VALUE`，不畫 0、不畫空字串** ——
        空字串在表格裡看起來像「這一欄不適用」，`—` 才看得出「這裡本來該有東西」。
-    ⚠️ **「級別」不做關鍵字啟發式猜測**：`policy_tier` 是使用者在 Sheet 上明示的東西，
-       猜一個出來就是替他決定核心／衛星。缺就是缺（對照
-       `ui/helpers/portfolio/allocation.py` 那支 SSOT —— 它**允許**退回關鍵字啟發式，
-       但那是為了算比例時不整組斷掉，**而且它會在 caption 裡講明**；
-       這張表是**逐列的事實清單**，沒有那個講明的位置，所以這裡不猜）。
+    ⚠️ **「級別」走 `shared.policy_tier.resolve_tier`（與同頁比例同一把尺），不猜**：
+       v1 讀 `policy_tier`、v2 讀回的 `is_core`（三態）；明確設定者如實呈現，
+       未設定或髒值 → :data:`UNKNOWN_VALUE`（客戶 2026-10-10／10-12 裁示）。
+       ~~只讀 `policy_tier`；對照 allocation.py「允許退回關鍵字啟發式」~~ ——
+       2026-10-12 更正：只讀 `policy_tier` 會把 v2 使用者的明確設定全畫成 `—`，
+       且 allocation.py 自 2026-10-10 起已不猜。
     """
     _rows: list[dict[str, Any]] = []
     for _f in _all_portfolio_rows():
-        _tier = str(_f.get("policy_tier") or "").strip().lower()
+        _tier = resolve_tier(_f)
         _amt = _f.get("invest_twd")
         _cash = _f.get("div_cash_pct")
         _rows.append({

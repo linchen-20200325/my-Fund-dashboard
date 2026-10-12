@@ -382,6 +382,34 @@ def test_t1_t2_stop_gain_lamp_only_for_explicit_satellites():
 
 
 # ══════════════════════════════════════════════════════════════════
+# H. ⑨「📋 保單一覽」級別欄（`page_04_portfolio._policy_rows`）
+# ══════════════════════════════════════════════════════════════════
+def _policy_tier_cells(monkeypatch, funds):
+    import ui.views.page_04_portfolio as _p4
+    monkeypatch.setattr(_p4, "_all_portfolio_rows", lambda: funds)
+    return [_r[_p4.POLICY_TABLE_COLUMNS[4]] for _r in _p4._policy_rows()]
+
+
+@pytest.mark.parametrize("fund, cell", [
+    # v2 讀回形狀（`ui/helpers/cloud_io.py`）：級別在 `is_core`、`policy_tier` 為 ""
+    ({"policy_tier": "", "is_core": True}, "核心"),
+    ({"policy_tier": "", "is_core": False}, "衛星"),
+    ({"policy_tier": "", "is_core": None}, "—"),
+    # v1 形狀：照舊
+    ({"policy_tier": "core"}, "核心"),
+    ({"policy_tier": "Satellite"}, "衛星"),
+    ({}, "—"),
+    # 髒值 policy_tier ＋ is_core True → 未設定（三態、不猜、不退回 is_core）
+    ({"policy_tier": "foo", "is_core": True}, "—"),
+])
+def test_policy_table_tier_column_follows_resolve_tier(monkeypatch, fund, cell):
+    """突變：`_policy_rows` 改回只讀 `policy_tier`（`str(_f.get("policy_tier") or "")
+    .strip().lower()`）→ v2 形狀的核心／衛星兩列顯示「—」，本條紅。"""
+    _f_ = {"code": "A1", "policy_id": "P1", "invest_twd": 100, **fund}
+    assert _policy_tier_cells(monkeypatch, [_f_]) == [cell]
+
+
+# ══════════════════════════════════════════════════════════════════
 # I. ③ 單檔研究「已在組合」定位 chip（D3／S5）
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.parametrize("fund, tag", [
