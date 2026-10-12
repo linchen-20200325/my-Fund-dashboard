@@ -26,7 +26,11 @@
     "⚠️ 續記（2026-09-23）：上一行的「本輪加註 5 筆」是**那一輪**的數字，對那一輪仍然為真。",
     "   第十二輪在 universals_without_reverse_check 另加了 7 筆（線框那一側），",
     "   第十三輪**一筆 why_safe 都沒有新增、也沒有改動任何一筆的內容**，只另外加了 orphaned_since_r13。",
-    "   ⇒ 現況是 5 ＋ 7，**不要把上一行讀成全檔的現況**。（這個數會漂移，要用請現場數。）"
+    "   ⇒ 現況是 5 ＋ 7，**不要把上一行讀成全檔的現況**。（這個數會漂移，要用請現場數。）",
+    "⚠️ 續記（2026-10-12）：本輪為 docs/v2/CONSTITUTION.md（子法 1 原文逐位元組存檔）手工增補 12 筆，全部帶 why_safe",
+    "   （counts_without_sha 5／self_scanning_commands 3／universals_without_reverse_check 4）。",
+    "   本輪實數 why_safe 欄位：增補前 1／5／9 ＝ 15，增補後 6／8／13 ＝ 27（量測日 2026-10-12；會漂移，要用請現場數）。",
+    "   ⚠️ 上方「現況是 5 ＋ 7」在本輪增補前就已與實數 15 不符；差額 3 筆的來歷本輪未查，只登記不改寫。"
   ],
   "_orphan_notes": [
     "`orphaned_since_r13` 欄位：第十三輪（2026-09-23，客戶裁示第 1 件）把句首判定改成",
@@ -796,6 +800,31 @@
       "file": "docs/v2/41_counters.md",
       "text": "負控：本組自訂隨機串，未列出 → git ls-files | grep -c <串> → 0 命中 exit=1"
     },
+    "8fe865285586fd14": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "grep -n 's\\[\"action\"\\]' → 8 條（:889／:896／:902／:909／:918／:926／:932／:940）",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "e67fc80bdd855f3b": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "grep -rn \"st\\.secrets\" --include=*.py . \\| grep -v \"^./tests/\" \\| grep -v \"^./infra/config.py\" → 39 行（含註解，須人工判讀",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "e7e4aca26953585f": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "own_settings_parts）grep 得到 0 命中，差點寫下「這套機制從未被使用」",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "ecf0c37bec96c31b": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "§6.4.4-T T1 的「同型抬頭共 5 行 .py」與容差常數的「12 行 / 2 檔」 —— 單組 git grep，",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "9e10c2f929ce7f3b": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "本組第一次用 grep \"own_settings_parts\" 去找呼叫點，得到 0 命中，",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
     "d505260baeb37f9d": {
       "file": "docs/v2/README_DRAFT_PACK.md",
       "text": "v2_holdings / v2_transactions 這兩個名字在 repo 內 0 命中 ✅（本組實測：git grep 兩者皆 exit=1）"
@@ -946,6 +975,21 @@
     "58d67bd30c6b1a8e": {
       "file": "docs/v2/41_counters.md",
       "text": "反例 (a)：wc -l docs/v2/41_counters.md、「本檔目前登記 N 條」、「本檔共 N 個全稱句」——"
+    },
+    "cf10bc3df575f51b": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "git diff --name-status 9cbf0377 <head> 只有一行 A docs/v2/CONSTITUTION.md，",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "b09aa5f26cbd5602": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "git diff --name-status 9cbf0377 只有一行 A docs/v2/CONSTITUTION.md",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "8aa041bdc0474000": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "grep -o '逐字' docs/v2/CONSTITUTION.md | wc -l",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
     }
   },
   "universals_without_reverse_check": {
@@ -1214,6 +1258,26 @@
     "312415e981e6568e": {
       "file": "docs/v2/41_counters.md",
       "text": "所有計數釘 commit SHA，不寫「工作樹」「HEAD」「origin/main..HEAD」"
+    },
+    "15ade9cc82d8744e": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "所有標的調整與再平衡一律採「偏離提示、客觀對照、情境試算」三種形式之一",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "e107c94fc6a7504a": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "所有試算參數均由使用者自行輸入",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "bd9bbdcc2af4c837": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "每一個「只有 N」「全部是 X」改寫成分類敘述 ＋ 明列未涵蓋範圍",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
+    },
+    "7305adcc6b22566b": {
+      "file": "docs/v2/CONSTITUTION.md",
+      "text": "每一個都會讓某個計數過期，故逐一重量（宣告值必須等於實測值）：",
+      "why_safe": "逐位元組存檔的子法 1 原文（#837 head 5569d85，客戶 2026-10-12 核准存檔），原文不得改寫；本登記不代表該句已通過 doc_counters 的語意要求"
     },
     "79affb5d58c35bdb": {
       "file": "docs/v2/prototype/ui_prototype_alo.html",
