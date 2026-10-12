@@ -11,6 +11,9 @@
 `if not _is_missing_tier(_raw_tier): return None` 拿掉（還原成一律退回 `is_core`）→
 `test_dirty_policy_tier_is_unset_not_fallback` 中 is_core 為 True／False 的各列、
 以及 `test_decision_matrix_dirty_tier_holds` 轉紅。
+NaN／`pandas.NA` 屬空值＝缺資料（總管 2026-10-12 拍板）：把 `_is_missing_tier` 的
+`_is_nan_like(raw)` 拿掉 → `test_nan_like_policy_tier_is_missing_and_falls_back`
+中 is_core 為 True／False 的各列轉紅（pd.NA 那幾列會在 `normalize_tier` 丟 TypeError）。
 另 `ui/tab1_macro.py` 動作對照表補上客戶 2026-10-12 核准的說明文字 (e)，
 `test_tab1_unset_tier_note_present` 鎖住逐字內容。
 """
@@ -60,6 +63,33 @@ def test_missing_policy_tier_falls_back_to_is_core(base, is_core, expect):
 @pytest.mark.parametrize("base", _MISSING)
 def test_missing_policy_tier_without_is_core_is_unset(base):
     assert resolve_tier(dict(base)) is None
+
+
+# ── 空值（NaN／pandas.NA，pandas 讀空儲存格的產物）＝缺資料，照舊 fallback ──
+# 總管 2026-10-12 拍板：NaN／NA 屬空值＝缺資料，不是髒值。
+def _nan_like_values():
+    vals = [pytest.param(float("nan"), id="float-nan")]
+    try:
+        import numpy as np
+        vals += [pytest.param(np.nan, id="np.nan"),
+                 pytest.param(np.float64("nan"), id="np.float64-nan"),
+                 pytest.param(np.float32("nan"), id="np.float32-nan")]
+    except ImportError:  # pragma: no cover - numpy 不在時只測 float('nan')
+        pass
+    try:
+        import pandas as pd
+        vals += [pytest.param(pd.NA, id="pd.NA")]
+    except ImportError:  # pragma: no cover
+        pass
+    return vals
+
+
+@pytest.mark.parametrize("raw", _nan_like_values())
+@pytest.mark.parametrize("is_core, expect", [
+    (True, "core"), (False, "satellite"), (None, None),
+])
+def test_nan_like_policy_tier_is_missing_and_falls_back(raw, is_core, expect):
+    assert resolve_tier({"policy_tier": raw, "is_core": is_core}) == expect
 
 
 # ── 髒值：未設定，不退回 is_core ─────────────────────────────────────

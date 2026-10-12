@@ -11,7 +11,8 @@
    - 合法值（`normalize_tier` 認得）→ 直接採用。
    - **髒值**（有值、非空白，但認不得；含非字串型別如數字）→ **`None`（未設定），
      不退回 `is_core`**。髒資料 ≠ 缺資料：無法確認就不猜（客戶 2026-10-12 裁示 (c)）。
-   - **缺資料**（缺鍵、`None`、空字串、純空白；`UNSET_SHEET_VALUE` 即空字串）→ 往下看 `is_core`。
+   - **缺資料**（缺鍵、`None`、空字串、純空白、NaN／`pandas.NA`；`UNSET_SHEET_VALUE` 即空字串）
+     → 往下看 `is_core`。
 2. `is_core` —— v2 讀回時由 `tier` 欄映射的三態布林（`ui/helpers/cloud_io.py`），
    **只認真正的 `True` / `False`**；`None`、缺鍵、其他型別一律視為未設定。
 3. 都沒有 → `None`。
@@ -30,6 +31,8 @@ Sheet 字串辨識（`normalize_tier`）：`core` / `satellite`（大小寫不�
 """
 from __future__ import annotations
 
+import math
+import numbers
 from typing import Any, Mapping, Optional
 
 CORE_TIER = "core"
@@ -55,12 +58,34 @@ def normalize_tier(raw: Any) -> Optional[str]:
     return _t if _t in _VALID_TIERS else None
 
 
-def _is_missing_tier(raw: Any) -> bool:
-    """`policy_tier` 是否為「缺資料」：`None`、或去前後空白後為空字串的字串。
+def _is_nan_like(raw: Any) -> bool:
+    """`float('nan')`／`numpy.nan`／numpy 浮點 NaN／`pandas.NA`（pandas 讀空儲存格的常見產物）。
 
-    其他一律不是缺資料（含 `0`、`False`、`NaN` 等非字串型別）—— 那是髒值。
+    寫法刻意不 import pandas／numpy（L0 零依賴），也不用 `raw != raw`：
+    - 浮點 NaN：`numbers.Real` 涵蓋 `float`（含 `numpy.nan`、`np.float64`）與 numpy 各寬度浮點
+      （numpy 有向 `numbers.Real` 註冊）；`math.isnan` 對 `int`／`bool` 一律 False，
+      極大整數會丟 `OverflowError` → 視為非 NaN。
+    - `pandas.NA`：`pd.NA != pd.NA` 回的是 `pd.NA`，`bool()` 會丟 `TypeError`，不能靠比較；
+      改認它的型別（`pandas._libs.missing.NAType`）—— 名稱與模組雙重比對，避免誤認同名類別。
     """
-    return raw is None or (isinstance(raw, str) and raw.strip() == "")
+    if isinstance(raw, numbers.Real):
+        try:
+            return math.isnan(raw)
+        except (TypeError, ValueError, OverflowError):
+            return False
+    _t = type(raw)
+    return _t.__name__ == "NAType" and _t.__module__.startswith("pandas")
+
+
+def _is_missing_tier(raw: Any) -> bool:
+    """`policy_tier` 是否為「缺資料」：`None`、NaN／`pandas.NA`（空儲存格）、
+    或去前後空白後為空字串的字串（總管 2026-10-12 拍板：NaN／NA 屬空值＝缺資料）。
+
+    其他一律不是缺資料（含 `0`、`False`、`123` 等非字串型別）—— 那是髒值。
+    """
+    if raw is None or _is_nan_like(raw):
+        return True
+    return isinstance(raw, str) and raw.strip() == ""
 
 
 def resolve_tier(fund: Mapping[str, Any] | None) -> Optional[str]:
@@ -69,16 +94,16 @@ def resolve_tier(fund: Mapping[str, Any] | None) -> Optional[str]:
     ⚠️ 刻意不用 `bool(is_core)`：`bool(None)` 是 `False`，會把未設定壓成衛星。
 
     `policy_tier` 有值但認不得（髒值，如 `"foo"`、`123`）→ `None`，**不退回 `is_core`**
-    （客戶 2026-10-12 裁示 (c)：髒資料 ≠ 缺資料）。只有缺鍵／`None`／空字串／純空白
-    才算缺資料、才看 `is_core`。
+    （客戶 2026-10-12 裁示 (c)：髒資料 ≠ 缺資料）。只有缺鍵／`None`／空字串／純空白／
+    NaN／`pandas.NA` 才算缺資料、才看 `is_core`。
     """
     _f = fund or {}
     _raw_tier = _f.get("policy_tier")
-    _explicit = normalize_tier(_raw_tier)
-    if _explicit is not None:
-        return _explicit
+    # 先判缺資料、再交給 normalize_tier：`normalize_tier(pandas.NA)` 會在 `raw or ""` 丟
+    # TypeError（NA 的布林值不確定），缺資料本來就不必辨識。
     if not _is_missing_tier(_raw_tier):
-        return None   # 髒值：有填但認不得 → 未設定，不猜
+        # 有值：認得就用；認不得＝髒值 → 未設定，不退回 is_core（不猜）
+        return normalize_tier(_raw_tier)
     _is_core = _f.get("is_core")
     if _is_core is True:
         return CORE_TIER
