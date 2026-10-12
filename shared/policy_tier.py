@@ -8,6 +8,10 @@
 
 優先序（`resolve_tier`）：
 1. `policy_tier` —— v1 保單分頁欄位（`repositories/policy/v1.py` 讀回時寫入）。
+   - 合法值（`normalize_tier` 認得）→ 直接採用。
+   - **髒值**（有值、非空白，但認不得；含非字串型別如數字）→ **`None`（未設定），
+     不退回 `is_core`**。髒資料 ≠ 缺資料：無法確認就不猜（客戶 2026-10-12 裁示 (c)）。
+   - **缺資料**（缺鍵、`None`、空字串、純空白；`UNSET_SHEET_VALUE` 即空字串）→ 往下看 `is_core`。
 2. `is_core` —— v2 讀回時由 `tier` 欄映射的三態布林（`ui/helpers/cloud_io.py`），
    **只認真正的 `True` / `False`**；`None`、缺鍵、其他型別一律視為未設定。
 3. 都沒有 → `None`。
@@ -51,15 +55,30 @@ def normalize_tier(raw: Any) -> Optional[str]:
     return _t if _t in _VALID_TIERS else None
 
 
+def _is_missing_tier(raw: Any) -> bool:
+    """`policy_tier` 是否為「缺資料」：`None`、或去前後空白後為空字串的字串。
+
+    其他一律不是缺資料（含 `0`、`False`、`NaN` 等非字串型別）—— 那是髒值。
+    """
+    return raw is None or (isinstance(raw, str) and raw.strip() == "")
+
+
 def resolve_tier(fund: Mapping[str, Any] | None) -> Optional[str]:
     """這一筆持倉的級別：`"core"` / `"satellite"` / `None`（未設定）。
 
     ⚠️ 刻意不用 `bool(is_core)`：`bool(None)` 是 `False`，會把未設定壓成衛星。
+
+    `policy_tier` 有值但認不得（髒值，如 `"foo"`、`123`）→ `None`，**不退回 `is_core`**
+    （客戶 2026-10-12 裁示 (c)：髒資料 ≠ 缺資料）。只有缺鍵／`None`／空字串／純空白
+    才算缺資料、才看 `is_core`。
     """
     _f = fund or {}
-    _explicit = normalize_tier(_f.get("policy_tier"))
+    _raw_tier = _f.get("policy_tier")
+    _explicit = normalize_tier(_raw_tier)
     if _explicit is not None:
         return _explicit
+    if not _is_missing_tier(_raw_tier):
+        return None   # 髒值：有填但認不得 → 未設定，不猜
     _is_core = _f.get("is_core")
     if _is_core is True:
         return CORE_TIER
