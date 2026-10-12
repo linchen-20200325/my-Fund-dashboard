@@ -63,3 +63,21 @@ def test_policy_tier_column_label_via_ast():
                         and v.args and isinstance(v.args[0], ast.Constant)):
                     labels.append(v.args[0].value)
     assert labels == ["配置級別"], labels
+
+
+def test_fund_category_help_states_real_source_not_old_claim():
+    """「基金類別」欄 help 須如實說明來源（含 FundClear 後備、缺值不以名稱補），不得回到舊不實說法。"""
+    from ui.helpers.fund_grp_health.columns import health_column_config
+    cfg = health_column_config()
+    helps = [str(getattr(v, "get", lambda *_: "")("help", "") or v) for k, v in cfg.items() if k == "基金類別"]
+    text = _norm("".join(helps))
+    assert text, "找不到「基金類別」欄 help"
+    assert _norm("MoneyDJ 頁面上寫的") not in text, "舊不實說法：值不只來自 MoneyDJ 頁面"
+    assert "FundClear" in text and "不以基金名稱補值" in text
+
+
+def test_mk_fund_signal_comment_does_not_claim_no_source_exists():
+    """helpers.py 註解不得宣稱「目前沒有這樣的來源」（MoneyDJ／FundClear category 原值存在）。"""
+    src = _norm((ROOT / "ui/helpers/macro/helpers.py").read_text(encoding="utf-8"))
+    assert _norm("目前沒有這樣的來源") not in src
+    assert "不得由基金名稱推定" in src

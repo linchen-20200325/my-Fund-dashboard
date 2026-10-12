@@ -155,7 +155,9 @@ def health_column_config() -> dict:
         "基金名": cc.TextColumn("基金名", width="medium"),
         # v19.327:核心/衛星資產分類(類別 +  3-3-3 兩層,見「分類依據」欄)
         "基金類別": cc.TextColumn("基金類別", width="small",
-            help="MoneyDJ 頁面上寫的投資標的 / 基金類型原文,是判定核心或衛星的依據之一。"),
+            help="資料來源原始分類文字:優先 MoneyDJ 投資標的／基金類型,"
+                 "MoneyDJ 無資料時可能為 FundClear 基金類型;缺值顯示為「—」,"
+                 "系統不以基金名稱補值。是系統分類(核心/衛星、資產大類)的判定依據之一。"),
         "核心/衛星": cc.TextColumn("核心/衛星", width="small",
             help="系統分類:系統依「基金類別」關鍵字與 3-3-3 推算的參考標記,"
                  "**不是**你在 Google Sheet 設定的配置級別。"

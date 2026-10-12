@@ -94,8 +94,12 @@ def format_phase_score(phase_info: dict | None) -> str:
 # `RECS[phase][is_core]` 給買進／賣出類操作句。名稱不是級別的可追溯來源 ——
 #   (1) 客戶設定的「核心／衛星級別」只來自 Google Sheet 的 policy_tier
 #       （SSOT：`shared/policy_tier.py::resolve_tier`），不得由名稱、AI 或其他推測補值；
-#   (2)「基金屬性」（舊稱「資產屬性」）是基金本身的客觀分類，只有取得 MoneyDJ／FundClear
-#       等可追溯的原始分類資料時才可顯示。**目前沒有這樣的來源 ⇒ 一律「—」**。
+#   (2)「基金屬性」（舊稱「資產屬性」）是基金本身的客觀分類。MoneyDJ／FundClear 的
+#       `category` 原值（`repositories/fund/sources.py::_pick_fund_category`、
+#       `_src_fundclear_meta`）本身是可追溯的原始分類，健診頁「基金類別」欄已在用；
+#       本函式恆回「—」的原因**不是**「不存在來源」，而是 (a) 客戶裁示停用「依名稱推定」，
+#       (b) 本函式簽名未接 category 資料 ⇒ 目前一律「—」。日後若要顯示，須由資料層提供
+#       category 原值，不得由基金名稱推定。
 # 因此 `asset_class`／`label` 恆為「—」、`sig_type` 恆為 "none"、`reason` 恆為空；
 # 不論景氣位階（phase／score）是否接回，都不得重新啟用名稱推定。
 # 簽名與回傳鍵刻意不變（caller 不連動修改）；`auto_alloc`（PMI／VIX／失業率／CPI 的

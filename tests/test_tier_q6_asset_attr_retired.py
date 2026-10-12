@@ -14,7 +14,8 @@
 
 語意：
 - 客戶設定的「核心／衛星級別」只來自 Google Sheet 的 `policy_tier`（`shared/policy_tier.py::resolve_tier`）。
-- 「基金屬性」只有取得 MoneyDJ／FundClear 等可追溯的原始分類資料時才可顯示；目前沒有 ⇒ 一律「—」。
+- 「基金屬性」若要顯示，須由資料層提供 MoneyDJ／FundClear 的 category 原值（可追溯的原始分類，非名稱推定）；
+  `mk_fund_signal` 目前不接 category 資料、且名稱推定已被裁示停用 ⇒ 恆「—」。
 
 突變驗證（實跑，見各條 docstring）：把舊的名稱關鍵字判斷貼回 `mk_fund_signal` ⇒ 1、2、3 的多條轉紅。
 """
