@@ -13,7 +13,7 @@
 對應上游：
 - verdict_level 由 ui/helpers/macro_helpers.composite_verdict 第 2 元素提供
 - verdict_score 是 calculate_composite_score 後的 float
-- fund.is_core 沿用 Tab3 _is_core_fund 既有 heuristic
+- fund.is_core 由呼叫端傳入（來源：ui/tab1_macro.py 經 resolve_core_flag 讀客戶設定的 policy_tier；本模組僅二態，缺失/未設定一律當 False）
 - sigma_info / dividend_info 結構同 policy_advisor_service.advise_fund 第 1/2 參數
 """
 from __future__ import annotations
