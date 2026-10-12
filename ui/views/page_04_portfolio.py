@@ -681,7 +681,10 @@ UNKNOWN_VALUE: str = "—"
 #: 之所以能釘 9 欄的理由）；而交易帳本線框**只寫了內容類型**，所以那裡一欄都不准釘
 #: （守衛：`test_the_ledger_invents_no_column_list`）。
 #: ⚠️ 七欄**全部**有對應的既有欄位，沒有一欄是本檔發明的：
-#: `policy_id` / `code` / `name` / `currency` / `policy_tier` / `invest_twd` / `div_cash_pct`
+#: `policy_id` / `code` / `name` / `currency` / ~~`policy_tier`~~ / `invest_twd` / `div_cash_pct`
+#: （2026-10-12 更正，不是漏刪：「級別」欄不直接讀 `policy_tier`，走
+#:  `shared.policy_tier.resolve_tier` —— `policy_tier` 優先、缺才看 v2 的 `is_core` 三態，
+#:  見 :func:`_policy_rows`）
 #: （前六個由 `ui/helpers/portfolio/load.py` 寫進 session，第七個是
 #:  `repositories/policy/_helpers.py::ALL_COLS` 的既有欄位，v18.183 起存在）。
 #: ⛔ **不要為了讓表好看而加第八欄** —— 那一刻起這份清單就變成自己發明的規格。
@@ -1484,10 +1487,13 @@ def _render_mix() -> None:
        缺才看 v2 讀回的 `is_core` 三態 → 都沒有＝未設定、不猜），
        目標**一律讀 `portfolio_core_pct`**。這正是「核心／衛星現況 vs 目標」。
        ⛔ **對照組（差一點就接錯的那個）**：`services/policy_advisor_service.py::`
-       `recommend_policy` —— **名字對，意思錯**。分歧軸有兩條，**都與滑桿無關**：
-       (a) **分類**：它只看 `is_core`（~~名稱關鍵字啟發式~~ → 2026-10-10 起為三態、不猜），**完全不看 `policy_tier`**
-       （實測 `git grep -n policy_tier -- services/policy_advisor_service.py` **0 命中**；
-       正對照：同一條 grep 在全 repo 命中 10+ 檔，所以那個 0 是真的 0）；
+       `recommend_policy` —— **名字對，意思錯**。~~分歧軸有兩條~~（2026-10-12 起只剩 (b)），**都與滑桿無關**：
+       ~~(a) **分類**：它只看 `is_core`（名稱關鍵字啟發式），**完全不看 `policy_tier`**~~
+       ~~（實測 `git grep -n policy_tier -- services/policy_advisor_service.py` **0 命中**；~~
+       ~~正對照：同一條 grep 在全 repo 命中 10+ 檔，所以那個 0 是真的 0）；~~
+       → **2026-10-12 更正，不是漏刪**：(a) 的「分類分歧」已不存在。它仍只讀 `is_core`
+       （三態），但唯一 production 呼叫點 `ui/tab3_portfolio.py` 先以 `resolve_tier`
+       推出 `is_core` 再傳入，與本頁同一把尺；
        (b) **範圍**：它是**單一保單**級，本頁是**整個組合**。
 
        ⚠️ **`target_core_pct` 寫死 75.0 那條不成立，不要再拿它當理由**
@@ -1498,12 +1504,16 @@ def _render_mix() -> None:
        **與本頁同一支 SSOT 函式**。也就是說目標值兩邊本來就同源，
        ~~「預設下一模一樣、拉滑桿才分歧」~~ 這個機制**是假的**。
 
-       **把目標值固定成同一個數（排除該變因）後實測，差距 62 個百分點**：
-       用本檔 fixture（620000 `core` ／ 380000 `satellite`，`policy_tier` 明示）、
-       兩邊同給 `target=75.0` ——
-       SSOT `core_pct` = **62.0**；`recommend_policy` 的訊息是
-       「核心配置 **0.0%** 低於目標 75%（-75.0%）」。
-       0.0 的來源正是 (a)：fixture 沒有 `is_core` 欄位，它就當成一檔核心都沒有。
+       ~~**把目標值固定成同一個數（排除該變因）後實測，差距 62 個百分點**：~~
+       ~~用本檔 fixture（620000 `core` ／ 380000 `satellite`，`policy_tier` 明示）、~~
+       ~~兩邊同給 `target=75.0` ——~~
+       ~~SSOT `core_pct` = **62.0**；`recommend_policy` 的訊息是~~
+       ~~「核心配置 **0.0%** 低於目標 75%（-75.0%）」。~~
+       ~~0.0 的來源正是 (a)：fixture 沒有 `is_core` 欄位，它就當成一檔核心都沒有。~~
+       → **2026-10-12 更正，不是漏刪**（實跑）：2026-10-10 三態後，同 fixture 直接傳入
+       回 `POLICY_TIER_UNSET`（灰色「此保單沒有已設定級別且已填本金的基金…」），
+       不再是 0.0%；照 production 那樣先以 `resolve_tier` 推 `is_core` 再傳入，
+       訊息為「核心配置 62.0%…」，與 SSOT 相同。
 
        ⚠️ **它其實連 `core_pct` 這個欄位都不回**（AST 掃過 **6** 條 return path，
        鍵一律只有 `{code, color, text}`）—— 那個數字是**內嵌在 `text` 字串裡**的。

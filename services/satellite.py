@@ -5,8 +5,8 @@
 未實現獲利%(從成本算)由呼叫端(T7 帳本,唯一同時握有兩者的 UI)算好後傳入。
 呼叫端只在 `resolve_tier(fund) == "satellite"` 時傳 True;級別未設定者不呼叫(2026-10-10 三態)。
 
-§8.2:純函式・零 IO;級別判定不在本檔(由 UI 以 `shared.policy_tier.resolve_tier` 判好傳 bool)。
-~~不 import L3 的 `resolve_core_flag`~~(2026-10-12 更正:呼叫端已改用 `resolve_tier`)。
+§8.2:純函式・零 IO;本檔不 import L3 的 `resolve_core_flag`(~~改由 UI 傳 bool~~ → 2026-10-12 更正:
+UI 以 `shared.policy_tier.resolve_tier` 判好傳 bool;避免上行依賴)。
 §3.3:門檻走 `shared.signal_thresholds`(15% 分批 / 20% 強制)。
 §1 Fail-Loud:非衛星 → 不判(核心長期領息);未填成本(pct=None)→ 誠實「無法判停利」不當 0%。
 """
