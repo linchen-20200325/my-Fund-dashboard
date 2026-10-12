@@ -185,10 +185,16 @@ def test_v19_15_unknown_verdict_defaults_to_hold():
     assert "未知 verdict" in out[0]["reason"]
 
 
-def test_v19_15_missing_is_core_treated_as_satellite():
-    funds = [{"code": "X1", "name": "X1"}]  # 無 is_core
+def test_missing_is_core_is_unset_not_satellite():
+    """客戶 2026-10-12 裁示：未設定 ≠ 衛星。極度悲觀下衛星會 EXIT，未設定必須 HOLD。"""
+    funds = [{"code": "X1", "name": "X1"}]  # 無 is_core / policy_tier
     out = verdict_to_actions("極度悲觀", -12.0, funds)
-    assert out[0]["action"] == ACTION_EXIT  # 衛星 → EXIT
+    assert out[0]["action"] == ACTION_HOLD
+    assert "未設定" in out[0]["reason"]
+    assert "衛星" not in out[0]["reason"]
+    assert out[0]["tier"] is None
+    assert out[0]["is_core"] is False
+    assert out[0]["target_pct"] == 100
 
 
 def test_v19_15_invalid_fund_entries_skipped():
@@ -225,3 +231,95 @@ def test_v19_15_target_pct_matches_action():
     out = verdict_to_actions("樂觀", 7.0, funds)
     for a in out:
         assert a["target_pct"] == mapping[a["action"]], f"{a['code']}: {a['action']}"
+
+
+# ════════════════════════════════════════════════
+# 三態 core / satellite / unset（客戶 2026-10-12 裁示）
+# ════════════════════════════════════════════════
+import ast
+import pathlib
+
+import pytest
+
+_CORE = {"code": "C", "policy_tier": "core"}
+_SAT = {"code": "S", "policy_tier": "satellite"}
+_UNSET = {"code": "U"}
+
+_EXPECT_DEFAULT = {
+    # level: (core, satellite)；unset 一律 HOLD
+    "極度樂觀": (ACTION_HOLD, ACTION_ADD),
+    "樂觀": (ACTION_HOLD, ACTION_HOLD),
+    "中性": (ACTION_HOLD, ACTION_HOLD),
+    "悲觀": (ACTION_HOLD, ACTION_REDUCE),
+    "極度悲觀": (ACTION_REDUCE, ACTION_EXIT),
+}
+
+
+@pytest.mark.parametrize("level", VERDICT_LEVELS)
+def test_three_state_default_action_per_level(level):
+    c, s_ = _EXPECT_DEFAULT[level]
+    out = verdict_to_actions(level, 0.0, [_CORE, _SAT, _UNSET])
+    assert [o["action"] for o in out] == [c, s_, ACTION_HOLD]
+    assert [o["tier"] for o in out] == ["core", "satellite", None]
+
+
+@pytest.mark.parametrize("unset", [
+    {"code": "U"},
+    {"code": "U", "is_core": None},
+    {"code": "U", "policy_tier": ""},
+    {"code": "U", "policy_tier": None, "is_core": None},
+    {"code": "U", "is_core": "yes"},
+])
+def test_unset_variants(unset):
+    out = verdict_to_actions("極度悲觀", 0.0, [unset])
+    assert out[0]["tier"] is None and out[0]["action"] == ACTION_HOLD
+
+
+def test_explicit_bool_is_core_still_core_or_satellite():
+    out = verdict_to_actions("極度悲觀", 0.0, [{"code": "a", "is_core": True}, {"code": "b", "is_core": False}])
+    assert [o["tier"] for o in out] == ["core", "satellite"]
+    assert [o["action"] for o in out] == [ACTION_REDUCE, ACTION_EXIT]
+
+
+def test_policy_tier_beats_is_core():
+    out = verdict_to_actions("極度悲觀", 0.0, [{"code": "a", "policy_tier": "satellite", "is_core": True}])
+    assert out[0]["tier"] == "satellite" and out[0]["action"] == ACTION_EXIT
+
+
+def test_unset_skips_satellite_only_branches():
+    # 樂觀 + σ>1：衛星 → 停利 REDUCE；未設定不吃
+    sig = {"sigma_rank": 1.5}
+    out = verdict_to_actions("樂觀", 0.0, [{**_SAT, "sigma_info": sig}, {**_UNSET, "sigma_info": sig}])
+    assert out[0]["action"] == ACTION_REDUCE and out[1]["action"] == ACTION_HOLD
+    # div red：衛星 HOLD→REDUCE；未設定仍 HOLD
+    div = {"alert_level": "red"}
+    out = verdict_to_actions("中性", 0.0, [{**_SAT, "dividend_info": div}, {**_UNSET, "dividend_info": div}])
+    assert out[0]["action"] == ACTION_REDUCE and out[1]["action"] == ACTION_HOLD
+    # 悲觀 + div red：衛星 REDUCE→EXIT；未設定 HOLD 不升
+    out = verdict_to_actions("悲觀", 0.0, [{**_SAT, "dividend_info": div}, {**_UNSET, "dividend_info": div}])
+    assert out[0]["action"] == ACTION_EXIT and out[1]["action"] == ACTION_HOLD
+
+
+def test_summarize_excludes_unset_from_satellite():
+    acts = verdict_to_actions("極度悲觀", 0.0, [_CORE, _SAT, _UNSET])
+    sm = summarize_actions(acts)
+    assert sm["n_unset"] == 1
+    assert sm["satellite_avg_target_pct"] == 0.0  # 只有 S（EXIT=0），U（100）不併入
+    # 舊輸出沒有 tier 鍵：退回 is_core（True→core，其餘→satellite）
+    legacy = [
+        {"code": "a", "action": ACTION_HOLD, "target_pct": 100, "is_core": True},
+        {"code": "b", "action": ACTION_EXIT, "target_pct": 0, "is_core": False},
+    ]
+    sm2 = summarize_actions(legacy)
+    assert sm2["core_hold_pct"] == 100.0 and sm2["satellite_avg_target_pct"] == 0.0 and sm2["n_unset"] == 0
+
+
+def test_decision_matrix_source_has_no_bool_squash():
+    path = pathlib.Path(__file__).resolve().parent.parent / "services" / "decision_matrix.py"
+    src = path.read_text(encoding="utf-8")
+    assert 'bool(f.get("is_core"' not in src
+    assert '.get("is_core", False)' not in src
+    # AST 層：不得有 bool(<含 is_core 的呼叫>)
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "bool":
+            assert "is_core" not in ast.unparse(node)

@@ -1544,19 +1544,21 @@ _ACTION_BADGE_FG = {
 def _enrich_fund_for_decision(_f: dict) -> dict:
     """從 portfolio_funds 條目擷取 verdict_to_actions 需要的欄位（複用 tab3 邏輯）.
 
-    產出：{code, name, is_core, invest_twd, sigma_info, dividend_info}
+    產出：{code, name, policy_tier(三態 core/satellite/None), is_core(僅 core 為 True), invest_twd, sigma_info, dividend_info}
     σ 位階 / 配息覆蓋率算法與 tab3_portfolio.py 既有 `_compute_advice_for` 同步。
     """
     code = _f.get("code", "?") or "?"
     name = (_f.get("name") or code)[:30]
 
-    # 核心 / 衛星判定走全站唯一那支 resolve_core_flag（只認 `policy_tier`／嚴格布林 `is_core`，未設定回 False，不依基金名稱推定）。
+    # 核心 / 衛星 / 未設定 三態走全站唯一那把尺 resolve_tier（只認 `policy_tier`／嚴格布林 `is_core`，不依基金名稱推定）。
+    # 未設定 = None，**不是衛星**：輸出帶 `policy_tier`（三態）讓 decision_matrix 讀得到；
+    # `is_core` 僅 tier==core 為 True（舊消費端相容，False 不代表衛星）。
     # 2026-08-07：本處原本 inline 了一份同語意的 if/elif —— 那是「全站一把尺」
     # 收斂時的第 4 個漏網點（前三處在 tab3 已收）。決策矩陣的逐檔行動建議吃的就是
     # 這個 is_core，兩份實作只要有一份沒跟上 Sheet 的改動，同一檔基金在保單卡片與
     # 決策矩陣就會一個標核心、一個標衛星。
-    from ui.helpers.portfolio.allocation import resolve_core_flag  # noqa: PLC0415
-    is_core = resolve_core_flag(_f)
+    from shared.policy_tier import CORE_TIER, resolve_tier  # noqa: PLC0415
+    tier = resolve_tier(_f)
 
     sigma_info = None
     _series = _f.get("series")
@@ -1591,11 +1593,18 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     return {
         "code": code,
         "name": name,
-        "is_core": is_core,
+        "policy_tier": tier,
+        "is_core": tier == CORE_TIER,
         "invest_twd": float(_f.get("invest_twd", 0) or 0),
         "sigma_info": sigma_info,
         "dividend_info": div_info,
     }
+
+
+def _decision_role_label(a: dict) -> str:
+    """決策矩陣角色欄：三態（核心／衛星／未設定）。未設定不當衛星。"""
+    _t = a.get("tier") if "tier" in a else ("core" if a.get("is_core") else "satellite")
+    return {"core": "🏛️ 核心", "satellite": "🚀 衛星"}.get(_t, "⬜ 未設定")
 
 
 def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
@@ -1711,7 +1720,7 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         {
             "代碼": a["code"],
             "名稱": a["name"],
-            "角色": "🏛️ 核心" if a["is_core"] else "🚀 衛星",
+            "角色": _decision_role_label(a),
             "建議": a["action"],
             "權重": f"{a['target_pct']}%",
             "原因": a["reason"],

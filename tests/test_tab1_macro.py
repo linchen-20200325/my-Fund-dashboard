@@ -327,3 +327,19 @@ def test_enrich_fund_for_decision_div_signal_live_v19400():
     assert eat["dividend_info"].get("alert_level") == "red"
     ok = _enrich_fund_for_decision({"code": "Z", "metrics": {"ret_1y": 8.0, "annual_div_rate": 5.0}})
     assert ok["dividend_info"].get("alert_level") == "green"
+
+
+def test_enrich_fund_for_decision_unset_is_not_satellite():
+    """未設定 → policy_tier None、is_core False；角色欄顯示「⬜ 未設定」，不是衛星。"""
+    from ui.tab1_macro import _decision_role_label, _enrich_fund_for_decision
+    un = _enrich_fund_for_decision({"code": "U"})
+    assert un["policy_tier"] is None and un["is_core"] is False
+    assert _decision_role_label({"tier": None, "is_core": False}) == "⬜ 未設定"
+    co = _enrich_fund_for_decision({"code": "C", "policy_tier": "core"})
+    assert co["policy_tier"] == "core" and co["is_core"] is True
+    sa = _enrich_fund_for_decision({"code": "S", "is_core": False})
+    assert sa["policy_tier"] == "satellite" and sa["is_core"] is False
+    assert _decision_role_label({"tier": "core"}) == "🏛️ 核心"
+    assert _decision_role_label({"tier": "satellite"}) == "🚀 衛星"
+    # 舊輸出（無 tier 鍵）相容路徑
+    assert _decision_role_label({"is_core": False}) == "🚀 衛星"
