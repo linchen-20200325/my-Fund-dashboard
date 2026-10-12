@@ -95,24 +95,9 @@ def init_session_state(session_state) -> None:
             session_state[_k] = _v
 
 
-# ──────────────────────────────────────────────────────────────
-# v18.126 B-C.4: 從 app.py 搬入 friendly_error / is_core_fund
-# ──────────────────────────────────────────────────────────────
-_CORE_WHITELIST = ["安聯收益成長","收益成長","多元收益","安聯多元入息","摩根多重收益","富達多重資產","聯博收益","柏瑞多重資產","施羅德多元收益","瀚亞多重資產","富蘭克林收益","先機多元收益"]
-_CORE_KEYWORDS  = ["配息","高股息","投資等級債","非投資等級債","公司債","公債","債券","債","特別股","基建","公用事業","infrastructure","preferred","utility","corporate bond","income fund","bond fund","fixed income","收益","平衡","多元","多重資產","balanced","income","bond","fixed","dividend","多重收益","全球股息","全球高股息"]
-_SAT_KEYWORDS   = ["科技","ai","半導體","生技","醫療","電動車","創新","綠能","機器人","網通","印度","越南","中國a股","a股","航太","theme","tech","growth","biotech","semiconductor","robot","ev","india","vietnam"]
-
-
-def is_core_fund(fund_name: str) -> bool:
-    """v18.126 從 app.py 搬入：依名稱關鍵字判斷核心 vs 衛星基金。"""
-    name = (fund_name or "").lower()
-    if any(w in name for w in _CORE_WHITELIST):
-        return True
-    if any(k in name for k in _CORE_KEYWORDS):
-        return True
-    if any(k in name for k in _SAT_KEYWORDS):
-        return False
-    return False
+# 2026-10-12：`is_core_fund`（依基金名稱關鍵字猜核心／衛星）與其白名單／關鍵字常數
+# 已整段刪除（客戶 2026-10-10 裁示不以基金名稱猜級別；production 0 caller）。
+# 級別一律走 `shared/policy_tier.py::resolve_tier`。守衛見 tests/test_name_heuristics_removed.py。
 
 
 # ══════════════════════════════════════════════════════════════════════════
