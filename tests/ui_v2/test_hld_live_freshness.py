@@ -669,12 +669,17 @@ def test_過期字面_兩頁逐字相同():
 _C2_LINE = "⬜ 另有 1 檔淨值超過 10 日未更新（資料未備），未列入"
 
 
+# 稽核 C2 第二輪：HLD-7 那幾檔有列出（0 筆／⬜ 資料未備），不能說「未列入」⇒ 另一句；HLD-6 照用 HLD-1 那一句。
+_C2_HLD7 = "⬜ 其中 1 檔淨值超過 10 日未更新（資料未備）"
+
+
 def test_C2_部分過期_HLD6與HLD7各加一行中性說明_真缺淨值的檔不算():
     model = _model(today=FRESH, mutate=_both(_age_one("AAAA", 20), _drop_nav("BBBB")))
-    for code in ("HLD-6", "HLD-7"):
+    for code, line in (("HLD-6", _C2_LINE), ("HLD-7", _C2_HLD7)):
         block = logic.find_block(model, code)
-        assert block["detail_lines"].count(_C2_LINE) == 1, code
+        assert block["detail_lines"].count(line) == 1, code
         assert block["_tone"] != "黃" and block["_tone"] != "紅", code
+    assert not [line for line in logic.find_block(model, "HLD-7")["detail_lines"] if "未列入" in line]
     # HLD-7 那一檔以淨值為輸入的列仍是「0 筆」，說明行交代原因
     rows = [r for r in logic.find_block(model, "HLD-7")["_rows"]
             if r["_fund_code"] == "AAAA" and r["_indicator"] in logic.NAV_INPUT_INDICATORS]
@@ -683,10 +688,11 @@ def test_C2_部分過期_HLD6與HLD7各加一行中性說明_真缺淨值的檔�
 
 def test_C2_全部過期_HLD6與HLD7寫出3檔():
     model = _model(today=TODAY)
-    line = "⬜ 另有 3 檔淨值超過 10 日未更新（資料未備），未列入"
     assert logic.find_block(model, "HLD-6")["summary_text"].startswith("淨值 0 列")
-    for code in ("HLD-6", "HLD-7"):
-        assert line in logic.find_block(model, code)["detail_lines"], code
+    assert "⬜ 另有 3 檔淨值超過 10 日未更新（資料未備），未列入" in logic.find_block(model, "HLD-6")["detail_lines"]
+    hld7 = logic.find_block(model, "HLD-7")["detail_lines"]
+    assert "⬜ 其中 3 檔淨值超過 10 日未更新（資料未備）" in hld7
+    assert not [line for line in hld7 if "未列入" in line]
 
 
 def test_C2_只有真缺淨值或全部新鮮_HLD6與HLD7不加這一行():
@@ -698,8 +704,8 @@ def test_C2_只有真缺淨值或全部新鮮_HLD6與HLD7不加這一行():
 def test_C2_天數取共用常數(monkeypatch):
     monkeypatch.setattr(live, "NAV_FRESH_DAYS_YELLOW", 5)
     model = _model(today=_LAST + timedelta(days=6))
-    for code in ("HLD-6", "HLD-7"):
-        assert "⬜ 另有 3 檔淨值超過 5 日未更新（資料未備），未列入" in logic.find_block(model, code)["detail_lines"]
+    assert "⬜ 另有 3 檔淨值超過 5 日未更新（資料未備），未列入" in logic.find_block(model, "HLD-6")["detail_lines"]
+    assert "⬜ 其中 3 檔淨值超過 5 日未更新（資料未備）" in logic.find_block(model, "HLD-7")["detail_lines"]
 
 
 # 稽核 D（H8b）：門檻是「不吃淨值」的期間配息合計時，過期的檔照樣進 HLD-1（配息照算），

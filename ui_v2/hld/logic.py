@@ -466,6 +466,9 @@ HLD1_SKIPPED_NOTE = "未列入的檔不進上表、也不進偏離筆數。"
 # ⚠️ 與 `ui_v2/alo/logic.py::NAV_NOT_READY_TEXT` 逐字相同（兩頁不互相 import，由測試逐字比對）。
 NAV_NOT_READY_TEXT = "⬜ 資料未備：最近淨值已超過 {days} 日"
 HLD1_NOT_READY_TAIL = "⬜ 另有 {n} 檔淨值超過 {days} 日未更新（資料未備），未列入"
+# 總管 2026-10-13 裁決（稽核 C2 第二輪）：HLD-7 那幾檔**有列出**（輸入欄「0 筆」、輸出欄「⬜ 資料未備」），
+# 「未列入」與畫面事實不符 ⇒ HLD-7 用這一句；HLD-1、HLD-6 維持上面那句（那兩塊確實沒有列出）。
+HLD7_NOT_READY_NOTE = "⬜ 其中 {n} 檔淨值超過 {days} 日未更新（資料未備）"
 
 
 def nav_not_ready_text(days) -> str:
@@ -2591,10 +2594,15 @@ def _build_page_model(
     for metric in metrics:
         if metric["_fund_code"] in not_ready:
             metric["nav_not_ready"] = True
-    # 總管 2026-10-13 裁決（稽核 C2）：HLD-6／HLD-7 的說明行，與 HLD-1 卡尾同一句；數的是持倉裡淨值過期的檔。
+    # 總管 2026-10-13 裁決（稽核 C2）：HLD-6 的說明行與 HLD-1 卡尾同一句；數的是持倉裡淨值過期的檔。
     held_not_ready = {m["_fund_code"] for m in metrics if m.get("nav_not_ready")}
     not_ready_line = (
         HLD1_NOT_READY_TAIL.format(n=len(held_not_ready), days=nav_not_ready_days) + _hint()
+        if held_not_ready else None
+    )
+    # ~~HLD-7 也用 `not_ready_line`~~ → 稽核 C2 第二輪（狀態更新，不是漏刪）：HLD-7 那幾檔有列出，改用如實的句子。
+    hld7_not_ready_line = (
+        HLD7_NOT_READY_NOTE.format(n=len(held_not_ready), days=nav_not_ready_days) + _hint()
         if held_not_ready else None
     )
     has_holdings = bool(dataset.get("holding"))
@@ -2673,7 +2681,7 @@ def _build_page_model(
             nav_not_ready_days=nav_not_ready_days,
         ),
         _build_hld6(dataset, not_ready_line=not_ready_line),
-        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings, not_ready_line=not_ready_line),
+        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings, not_ready_line=hld7_not_ready_line),
         _build_hld8(
             metrics, has_holdings=has_holdings, has_window=has_window,
             window_unknown=window_unknown, settings_error=settings_error,
