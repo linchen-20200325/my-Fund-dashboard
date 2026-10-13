@@ -91,7 +91,10 @@ _L2_STRINGS = {
 _COLON = chr(0xFF1A)
 _SEMICOLON = chr(0xFF1B)
 
-_TODAY = date(2026, 10, 2)
+# ~~`_TODAY = date(2026, 10, 2)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-02 已是 14 天 ⇒ 本檔驗的事（取數組裝、讀取失敗不說空）會被整片資料未備蓋掉。
+# 改用恰 10 天（照用）的 9/28；資料未備本身的驗證在 `test_hld_live_freshness.py`。
+_TODAY = date(2026, 9, 28)
 _WINDOW = (fixtures.WINDOW_START, fixtures.WINDOW_END)
 _UPDATED_AT = "2026-10-01T09:00:00+08:00"
 _RULES = [
@@ -1541,3 +1544,25 @@ def test_R7_settings缺tab_missing或bad_rows_KeyError_不當成沒有(name):
     del settings[name]
     with pytest.raises(KeyError):
         _assemble(settings=settings)
+
+
+# 稽核 D：端到端 —— L2 形狀的淨值表 → `assemble_live_load` → `build_live_model`，淨值過期時資料未備（客戶 2026-10-13 裁示）。
+def test_端到端_assemble到build_淨值過期_相依淨值的值都是資料未備_10天照用():
+    from datetime import date, timedelta
+
+    loaded = _assemble()
+    last = max(r["nav_date"] for r in loaded["dataset"]["nav"])
+    last_day = date.fromisoformat(last) if isinstance(last, str) else last
+
+    def build(today):
+        return live.build_live_model(loaded["dataset"], open_fund=None, fields=None, applied_window=_WINDOW,
+                                     applied_rules=None, today=today, **loaded["live_args"])
+
+    ok, stale = build(last_day + timedelta(days=10)), build(last_day + timedelta(days=11))
+    for code in _CODES:
+        assert _hld2_texts(ok, code) != [logic.ND_TEXT, logic.ND_TEXT], code
+        assert _hld2_texts(stale, code) == [logic.ND_TEXT, logic.ND_TEXT], code
+    assert logic.find_block(stale, "HLD-6")["nav_rows"] == []
+    assert logic.find_block(stale, "HLD-0")["_tone"] == "灰"
+    texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(stale, "HLD-5")["_items"]}
+    assert set(texts.values()) == {"⬜ 資料未備：最近淨值已超過 10 日"}

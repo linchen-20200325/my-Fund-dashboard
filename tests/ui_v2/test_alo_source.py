@@ -632,7 +632,11 @@ def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未
     assert wired["nav_table"]["rows"], "前提：L2 有寫列"
     assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["too_old"] == ["AAAA"]
     block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
-    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+    # ~~`== logic.empty_source_text(["nav"])`~~ → 總管 2026-10-13 裁決（狀態更新，不是漏刪）：過期的檔有資料、只是過期，
+    # 「nav 尚無資料」不實 ⇒ 改畫「最近淨值已超過 10 日」（天數取共用常數；期望值的 10 寫死，被測的是常數）。
+    assert out["dataset"]["nav_not_ready"] == {"codes": ["AAAA"], "days": 10}
+    assert block["placeholder"]["text"] == "⬜ 資料未備：最近淨值已超過 10 日"
+    assert block["placeholder"]["text"] != logic.empty_source_text(["nav"])
 
 
 def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(wired, monkeypatch):
@@ -649,3 +653,16 @@ def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(w
     assert seen["max_age_days"] == source.live.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
     monkeypatch.undo()
     assert source._today_tw() == __import__("datetime").datetime.now(source.nav_dividend.MARKET_DATE_TZ).date()
+
+
+def test_稽核D_A2_門檻常數換掉_source交出的天數與畫面字面跟著變(wired, monkeypatch):
+    """`nav_not_ready.days` 取 `live.NAV_MAX_AGE_DAYS`（＝共用常數），不是寫死的 10。"""
+    monkeypatch.setattr(source.live, "NAV_MAX_AGE_DAYS", 5)
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5, day="2026-05-20")
+    s.attrs["fetched_at"] = "2026-09-25T01:00:00+00:00"
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert out["dataset"]["nav_not_ready"] == {"codes": ["AAAA"], "days": 5}
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == "⬜ 資料未備：最近淨值已超過 5 日"

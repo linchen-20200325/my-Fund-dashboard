@@ -5,6 +5,10 @@
 直接呼叫 `page._render_hld5`，餵正式模式組出的 HLD-5 塊（展開區預設收合，AppTest 照樣收得到內容）。
 """
 
+# ~~本檔固定的 today `date(2026, 10, 2)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-02 已是 14 天 ⇒ 正式模式整頁資料未備，本檔要驗的「套用重算」「展開」等會變空掃。
+# 一律改用恰 10 天（照用）的 9/28（5 處）；資料未備本身的驗證在 `test_hld_live_freshness.py`。
+
 import pathlib
 import sys
 
@@ -51,7 +55,7 @@ def _app(with_direct, empty):
             policy_tab_source="保單分頁",
             direct_sources={"保單分頁", "_保單資料", "_持倉補充"},
         )
-    model = live.build_live_model(**args, today=date(2026, 10, 2), **kw)
+    model = live.build_live_model(**args, today=date(2026, 9, 28), **kw)
     page._render_hld5(logic.find_block(model, "HLD-5"))
 
 
@@ -149,19 +153,24 @@ def _badge(text, tone):
     return f'<span class="hld-badge" style="--hld-tone:{theme.tone_hex(tone)}">{text}</span>'
 
 
-@pytest.mark.parametrize("days, text, tone", [(0, "當日", "中性"), (10, "延遲 10 日", "中性"), (11, "延遲 11 日", "黃")])
+# ~~`(11, "延遲 11 日", "黃")`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：11 天 ＝ 灰色「⬜ 資料未備」，
+# 且 HLD-6 不再列那幾檔的淨值列（沒有分組標頭可掛）⇒ 只剩 HLD-2／HLD-3／HLD-8 的 9 枚。
+@pytest.mark.parametrize("days, text, tone", [(0, "當日", "中性"), (10, "延遲 10 日", "中性"), (11, "⬜ 資料未備", "灰")])
 def test_S5_徽章畫在HLD2_HLD3標頭旁_HLD8每一列_HLD6分組標頭(days, text, tone):
     md = _run_fresh(days)
     badge = _badge(text, tone)
-    # HLD-2／HLD-3 每檔標頭旁（3 檔 × 2 塊）＋ HLD-8 每一列（3）＋ HLD-6 分組標頭（3）
-    assert md.count(badge) == 12
+    # HLD-2／HLD-3 每檔標頭旁（3 檔 × 2 塊）＋ HLD-8 每一列（3）＋ HLD-6 分組標頭（3，資料未備時 0）
+    assert md.count(badge) == (12 if days <= 10 else 9)
     assert md.count(f'<div class="hld-fh">基金 A（示意） · 幣別 USD {badge}</div>') == 2   # HLD-2、HLD-3
     assert md.count(f"<td>基金 A（示意） {badge}") == 1                                   # HLD-8 基金名那一格
-    assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == 1
+    assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == (1 if days <= 10 else 0)
+    assert _badge(f"延遲 {days} 日", "黃") not in md   # 徽章不再有黃色
 
 
+# ~~`(11, "⚠ 淨值取自預存序列…已超過 10 日", "黃")`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：灰、不帶 ⚠；
+# HLD-6 不再列那一檔的淨值列（沒有分組可掛副標）⇒ 11 天時只剩 HLD-2／HLD-3／HLD-8／HLD-5 的 4 處。
 @pytest.mark.parametrize("days, text, tone", [
-    (11, "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "黃"),
+    (11, "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "灰"),
     (10, "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "中性"),
 ])
 def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, text, tone):
@@ -172,17 +181,26 @@ def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, tex
     text = text.replace(day, f'<span style="white-space:nowrap">{day}</span>')
     note = f'style="color:{color}">{text}</div>'
     # HLD-2、HLD-3、HLD-8（儲存格內）、HLD-6（分組標頭下一列）各 1；HLD-5 該檔展開標頭下 1
-    assert md.count(note) == 5
+    assert md.count(note) == (5 if days <= 10 else 4)
     assert f'<div class="hld-line" style="color:{color}">{text}</div>' in md          # HLD-5
-    assert f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>' in md  # HLD-6
+    hld6 = f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>'
+    assert (hld6 in md) is (days <= 10)                                                # HLD-6
+    assert "⚠ 淨值取自預存序列" not in md
 
 
-@pytest.mark.parametrize("days, tone", [(10, "中性"), (11, "黃")])
-def test_S5_HLD1卡尾第3句排在既有卡尾之後(days, tone):
-    md = _run_fresh(days, name="srcmiss")   # 這一組卡尾有「未列入的檔不進上表…」那兩行
-    tail = f'<div class="hld-note" style="color:{theme.tone_hex(tone)}">本卡所列的檔中，1 檔的淨值取自預存序列，逐檔見 HLD-6</div>'
+def test_S5_HLD1卡尾第3句排在既有卡尾之後():
+    # ~~`(11, "黃")` 那一組~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：11 天時三檔都資料未備、沒有用到淨值，
+    # 不算「取自預存序列」，卡尾第 3 句不出現（見下一條）；10 天那一組一字未改。
+    md = _run_fresh(10, name="srcmiss")   # 這一組卡尾有「未列入的檔不進上表…」那兩行
+    tail = f'<div class="hld-note" style="color:{theme.tone_hex("中性")}">本卡所列的檔中，1 檔的淨值取自預存序列，逐檔見 HLD-6</div>'
     assert tail in md
     assert md.index("未列入的檔不進上表") < md.index(tail)
+
+
+def test_S5_HLD1卡尾第3句_11天資料未備時不出現_也不畫黃():
+    md = _run_fresh(11, name="srcmiss")
+    assert "本卡所列的檔中" not in md
+    assert f'style="color:{theme.tone_hex("黃")}">本卡所列的檔中' not in md
 
 
 def test_S5_示範模式_一個新鮮度字樣都不畫():
@@ -214,7 +232,7 @@ def _bad_sync_app(raw):
         },
     }
     st.session_state[logic.HLD5_OPEN_KEY] = target["holding_id"]
-    model = live.build_live_model(**args, today=date(2026, 10, 2), open_fund=target["holding_id"], **kw)
+    model = live.build_live_model(**args, today=date(2026, 9, 28), open_fund=target["holding_id"], **kw)
     page._render_hld5(logic.find_block(model, "HLD-5"))
 
 
@@ -296,6 +314,8 @@ def _render_app(live_mode):
             holding["policy_id"] = "P-001"
     live_args = {
         "direct_policy_id": "DIRECT",
+        # 2026-10-13：固定 today（原本沒給，走當下時鐘；假資料最後一筆 9/18，日期一過 9/28 就整頁資料未備）。
+        "today": __import__("datetime").date(2026, 9, 28),
         "nav_provenance": {
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
@@ -369,7 +389,7 @@ def _apply_app(live_mode):
             holding["policy_id"] = "P-001"
     live_args = {
         "direct_policy_id": "DIRECT",
-        "today": __import__("datetime").date(2026, 10, 2),
+        "today": __import__("datetime").date(2026, 9, 28),
         "nav_provenance": {
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
@@ -411,7 +431,7 @@ def _models(live_mode):
                 holding["policy_id"] = "P-001"
         kw = {
             "direct_policy_id": "DIRECT",
-            "today": date(2026, 10, 2),
+            "today": date(2026, 9, 28),
             "nav_provenance": {
                 row["fund_code"]: {"cache_fallback": False, "stale": None} for row in args["dataset"]["nav"]
             },
@@ -554,7 +574,7 @@ def test_S6a第四輪_門檻改了按套用_HLD1跟著新門檻重算(live_mode)
             if holding["policy_id"] == "DIRECT":
                 holding["policy_id"] = "P-001"
         kw = {
-            "direct_policy_id": "DIRECT", "today": date(2026, 10, 2),
+            "direct_policy_id": "DIRECT", "today": date(2026, 9, 28),
             "nav_provenance": {r["fund_code"]: {"cache_fallback": False, "stale": None} for r in args["dataset"]["nav"]},
         }
         old, new = live.build_live_model(**args, **kw), live.build_live_model(**args, **kw, applied_rules=rules)

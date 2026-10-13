@@ -1539,3 +1539,58 @@ def test_示範模式savefail_五鍵全失敗_畫面行為不變():
         card = _block(model, code)
         assert card["error_lines"] == ["存檔寫入失敗：" + fixtures.SAVE_FAIL_MESSAGE], code
         assert not card.get("key_error_lines"), code
+
+
+# ═══════════ 總管 2026-10-13 裁決：淨值過期而不納入 ≠ nav 尚無資料（字面可區分，與持倉體檢頁一致；不改計算行為） ═══════════
+
+
+def _mv_two_missing(not_ready_codes, days=10):
+    """市值基準；前兩檔的淨值列拿掉，其中 `not_ready_codes` 標成「淨值過期而不納入」。"""
+    ds = copy.deepcopy(fixtures.scenario("mvbasis"))
+    codes = [h["fund_code"] for h in ds["holding"]][:2]
+    ds["nav"] = [r for r in ds["nav"] if r["fund_code"] not in codes]
+    ds["nav_not_ready"] = {"codes": [c for c in codes if c in not_ready_codes], "days": days}
+    return ds, codes
+
+
+def _alo6_rows(ds):
+    return logic.find_block(logic.build_page_model(ds), "ALO-6")["_rows"]
+
+
+def test_過期而不納入_與_缺淨值_ALO6理由各寫各的():
+    probe, codes = _mv_two_missing(())
+    stale, missing = codes
+    ds, _ = _mv_two_missing({stale})
+    reasons = {r["_fund_code"]: r["_reason"] for r in _alo6_rows(ds)}
+    assert reasons[stale] == "⬜ 資料未備：最近淨值已超過 10 日"
+    assert reasons[missing] == logic.empty_source_text(["nav"])     # 真正缺淨值：原字面一字未動
+    # 計算行為不變：每一列的基準值與「兩檔都只是缺」時逐格相同。
+    assert [(r["_fund_code"], r["_value"]) for r in _alo6_rows(ds)] == [
+        (r["_fund_code"], r["_value"]) for r in _alo6_rows(probe)]
+
+
+def test_過期字面的天數取交進來的值_不寫死():
+    ds, codes = _mv_two_missing(())
+    ds["nav_not_ready"] = {"codes": [codes[0]], "days": 7}
+    assert {r["_fund_code"]: r["_reason"] for r in _alo6_rows(ds)}[codes[0]] == "⬜ 資料未備：最近淨值已超過 7 日"
+
+
+def test_沒有nav_not_ready鍵或為空_畫面一格不變():
+    ds = copy.deepcopy(fixtures.scenario("mvbasis"))
+    without = copy.deepcopy(ds)
+    del without["nav_not_ready"]
+    assert logic.build_page_model(ds) == logic.build_page_model(without)
+
+
+@pytest.mark.parametrize("bad, exc", [
+    ({"codes": ["AAAA"], "days": None}, ValueError),
+    ({"codes": ["AAAA"], "days": True}, ValueError),
+    ({"codes": "AAAA", "days": 10}, TypeError),
+    ({"codes": ["AAAA"]}, TypeError),
+    (["AAAA"], TypeError),
+])
+def test_nav_not_ready形狀不對_raise(bad, exc):
+    ds = copy.deepcopy(fixtures.scenario("mvbasis"))
+    ds["nav_not_ready"] = bad
+    with pytest.raises(exc):
+        logic.nav_not_ready(ds)

@@ -254,6 +254,8 @@ def tables_failed_together(message: str) -> dict:
 # **一律照 `ui_v2/hld/source.py` ＋ `ui_v2/hld/live.py::assemble_live_load`**（幣別、拒收、閘門都在 L2，本頁不另寫一套）：
 # - 被扣下（`nav_unavailable_withheld` 四碼）、代碼對照查不到（`ok is False`）、來源回空且沒有原因
 #   → 那一檔沒有淨值列 ⇒ `logic.basis_value` 照既有路徑寫「⬜ 資料未備：nav 尚無資料」，不新增字句。
+#   （總管 2026-10-13 裁決：只有淨值日超過門檻那一種〔`too_old`〕改寫「⬜ 資料未備：最近淨值已超過 N 日」，
+#    由 `source.py` 經 dataset 的 `nav_not_ready` 交給 `logic`；上面這三種照舊。）
 # - 其餘取數失敗 → 原文經 `mask` 遮過，逐檔以「代碼：原文」串成一句放進 `errors["nav"]`
 #   （體例同 hld 的 `skipped_tabs`）。本頁沒有逐檔失敗的畫法（hld 有 `fund_errors`，本頁沒有），
 #   所以照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 畫 ⛔，成本基準不受影響。

@@ -26,6 +26,8 @@ S4（裁示 3-B (ii)）：DIRECT 持倉另外列出、不計入體檢 —— 見
 
 S5（裁示 1-A＋1-C）：舊淨值的新鮮度標示 —— 見 `NAV_FRESH_DAYS_YELLOW`、`nav_freshness` 與 `_apply_freshness`。
 本輪仍不接取數：`nav_provenance` 由呼叫端傳入。
+📌 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：淨值日距觀測日 > 10 天 → 該檔淨值**資料未備**，不再「黃燈、照用」——
+   見 `nav_freshness` 的 `old`、`withhold_not_ready_nav` 與 `_apply_freshness`。
 
 S6b-2（第一塊）：`user_setting` 三個鍵的解析 —— 見 `parse_user_settings`（體例照 `ui_v2/alo/live.py`）。
 S6b-2（第二塊）：L2 輸出 → `load_live` 回傳值的組裝 —— 見 `assemble_live_load`。
@@ -254,12 +256,30 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed
 # ~~`NAV_FRESH_DAYS_YELLOW = 10`（本檔寫死）~~ → 2026-10-13 客戶裁示（有意識的更正，不是漏刪）：10 天要有單一、
 # 明確的共用定義，不得各頁各寫一個數字 —— 值改由 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS` 供應，
 # 本名保留為別名（呼叫點與判定方向 `days > NAV_FRESH_DAYS_YELLOW` 一字未改，行為零變更）。
+# 📌 **客戶 2026-10-13 裁示（狀態更新，不是漏刪）**：~~超過 → 黃燈、淨值照用、數值照算照印（草稿 §D）~~
+#    → 超過（**大於** 10，剛好 10 照用）→ 該檔淨值視為**資料未備**：淨值列不交給 `logic`（`withhold_not_ready_nav`），
+#    所有以淨值為輸入的值（區間報酬率、期間波動、最大回撤、配息佔淨值比）走 `logic` 既有的「⬜ 資料未備」路徑，
+#    與資產配置頁（`ui_v2/alo/live.py::assemble_nav`：超過不交進 dataset）同一個語意。
+#    新鮮度徽章改為中性灰的「⬜ 資料未備」，不再用黃色、不再用 ⚠。
+#    ⛔ 資料未備是資料品質／新鮮度狀態，**不是**投資風險訊號：不觸發 HLD-0 黃／紅燈、不產生任何行動結論。
+#    名稱 `..._YELLOW` 刻意不改（改名會連動測試與他頁註解；判定方向與數值來源一字未改），讀作「資料未備門檻」。
+#    舊表述的理由（10 天是長假實況訂的門檻、7 天會誤標）**仍然成立**；被權衡掉的是「照用」——客戶不再接受用過期淨值算數。
 NAV_FRESH_DAYS_YELLOW = thresholds.NAV_NOT_READY_DAYS
 
 FRESHNESS_TODAY_TEXT = "當日"                      # 1-A：N＝0（`44` §5.2 新鮮度字面）
 FRESHNESS_DELAY_TEXT = "延遲 {n} 日"               # 1-A：N≥1（`44` §5.2 新鮮度字面）
-CACHE_NOTE_OLD = "⚠ 淨值取自預存序列，不是本次取得；最近一筆 {day}，已超過 {limit} 日"   # 1-C ①，黃
+# ~~`CACHE_NOTE_OLD = "⚠ 淨值取自預存序列，不是本次取得；最近一筆 {day}，已超過 {limit} 日"`（1-C ①，黃）~~
+# → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：超過門檻＝資料未備，不是投資黃燈 ⇒ 拿掉「⚠ 」、改中性灰；其餘字一字未改。
+CACHE_NOTE_OLD = "淨值取自預存序列，不是本次取得；最近一筆 {day}，已超過 {limit} 日"     # 1-C ①，灰（2026-10-13）
 CACHE_NOTE_FRESH = "淨值取自預存序列，不是本次取得；最近一筆 {day}"                       # 1-C ②，中性
+# 客戶 2026-10-13 裁示：超過門檻、而且**不是**預存序列的那幾檔（原本只有黃色徽章、沒有副標）。徽章換成「⬜ 資料未備」之後
+# 「延遲 N 日」的資訊會不見，所以補一行灰色副標交代是哪一天、超過幾日。字面取自 1-C ① 的後半段，不另造說法；
+# ⚠️ 新的一行字，**字面待線框覆核**（`CLAUDE.md` §-1.5.4），已回報待裁。
+NAV_NOTE_NOT_READY = "最近一筆淨值 {day}，已超過 {limit} 日"                              # 灰（2026-10-13）
+# 客戶 2026-10-13 裁示：超過門檻的那一檔的新鮮度徽章。字面＝`logic.ND_TEXT`（`44` 5.1 `資料未備` 的主值字面），
+# 顏色＝灰（`logic` 的 `資料未備` 色調），**不得**用黃、不得用 ⚠（那兩個是投資黃燈的樣子）。
+NOT_READY_BADGE_TEXT = logic.ND_TEXT
+NOT_READY_TONE = "灰"
 CACHE_TAIL_TEXT = "本卡所列的檔中，{n} 檔的淨值取自預存序列，逐檔見 HLD-6"               # 1-C ③
 CACHE_INPUT_SUFFIX = " · 預存序列"                                                       # 1-C：HLD-7 輸入欄尾端
 
@@ -340,16 +360,22 @@ def nav_freshness(dataset: dict, nav_provenance, *, today: date) -> dict:
         days = (today - last[code]).days
         if days < 0:
             raise ValueError(f"{code!r} 最後一筆 nav_date {last[code].isoformat()} 晚於今天 {today.isoformat()}")
+        # 客戶 2026-10-13 裁示：**大於**門檻才算資料未備（剛好 10 天照用）。`old` 為真 ⇒ 該檔淨值不交給 `logic`。
         old = days > NAV_FRESH_DAYS_YELLOW
         text = FRESHNESS_TODAY_TEXT if days == 0 else FRESHNESS_DELAY_TEXT.format(n=days)
         note = None
+        day_text = last[code].isoformat()
         if fallback:
-            day_text = last[code].isoformat()
             note = (
-                {"text": CACHE_NOTE_OLD.format(day=day_text, limit=NAV_FRESH_DAYS_YELLOW), "_tone": "黃"}
+                # ~~`"_tone": "黃"`~~ → 灰（客戶 2026-10-13 裁示，狀態更新，不是漏刪）
+                {"text": CACHE_NOTE_OLD.format(day=day_text, limit=NAV_FRESH_DAYS_YELLOW), "_tone": NOT_READY_TONE}
                 if old
                 else {"text": CACHE_NOTE_FRESH.format(day=day_text), "_tone": "中性"}
             )
+        elif old:
+            note = {"text": NAV_NOTE_NOT_READY.format(day=day_text, limit=NAV_FRESH_DAYS_YELLOW),
+                    "_tone": NOT_READY_TONE}
+        if note is not None:
             # S5 第二輪（紅隊建議 3）：375px 寬時日期被折成兩行。字面不變，只標出「這一段不斷行」，
             # 由 `page.py::_fresh_note_html` 包成不斷行的一段。
             note["_nowrap"] = [day_text]
@@ -359,15 +385,63 @@ def nav_freshness(dataset: dict, nav_provenance, *, today: date) -> dict:
             "cache_fallback": fallback,
             "old": old,
             # `44` §5.2 新鮮度徽章：「中性至黃，只映射日數」。
-            "badge": {"_kind": "新鮮度", "_tone": "黃" if old else "中性", "text": text},
+            # ~~`"_tone": "黃" if old else "中性", "text": text`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：
+            # 超過門檻 ⇒ 「⬜ 資料未備」、灰；不超過照舊（中性、`當日`／`延遲 N 日`）。徽章不再有黃色。
+            "badge": (
+                {"_kind": "新鮮度", "_tone": NOT_READY_TONE, "text": NOT_READY_BADGE_TEXT}
+                if old
+                else {"_kind": "新鮮度", "_tone": "中性", "text": text}
+            ),
             "note": note,
         }
     return out
 
 
+def not_ready_codes(dataset: dict, *, today: date) -> frozenset:
+    """淨值「資料未備」的代碼：該檔最後一筆 `nav_date` 距 `today` **大於** `NAV_FRESH_DAYS_YELLOW` 日（客戶 2026-10-13 裁示）。
+
+    與 `nav_freshness` 同一個 N（同一支 `_nav_day`、同一個 `today`），但**只看日期**：
+    `nav_freshness` 會略過取數失敗的檔（那幾檔不掛徽章），這裡不略過 —— 取數失敗的檔若還帶著過期的淨值列，
+    那些列同樣不得交給 `logic`（從嚴；那幾檔的值本來就是 ⛔，不受影響，只是 HLD-6／HLD-7 不再列出過期的列）。
+    """
+    last: dict = {}
+    for index, row in enumerate(dataset.get("nav") or ()):
+        code = row["fund_code"]
+        day = _nav_day(row["nav_date"], f"nav 第 {index} 列（{code!r}）")
+        if code not in last or day > last[code]:
+            last[code] = day
+    return frozenset(code for code, day in last.items() if (today - day).days > NAV_FRESH_DAYS_YELLOW)
+
+
+def withhold_not_ready_nav(dataset: dict, codes) -> dict:
+    """把資料未備那幾檔的**淨值列**從交給 `logic` 的 dataset 拿掉（客戶 2026-10-13 裁示）；回新的 dict，不改輸入。
+
+    為什麼是「拿掉列」而不是在 `logic` 裡另開一條判斷：
+    - 與資產配置頁同一個語意 —— `ui_v2/alo/live.py::assemble_nav` 對超過門檻的檔就是「不交進 dataset」；
+    - 這幾檔在 `logic` 裡因此只是「沒有淨值列」，所有以淨值為輸入的值（區間報酬率、期間波動、最大回撤、
+      配息佔淨值比的分母）走 `logic` 既有的 `nav_missing` 路徑印「⬜ 資料未備」（區間未設時與其他檔同樣印
+      「⬜ 不適用：尚未設定區間」）—— 構造上**不可能**再拿過期淨值算出任何一個數，也不會補 0、不會猜值；
+      ~~HLD-1 卡尾與 HLD-5 照 `nav_missing` 寫「缺淨值」「nav 尚無資料」~~ → 總管 2026-10-13 裁決（狀態更新，不是漏刪）：
+      那兩句與實況（有資料、只是過期）不符，`build_live_model` 另把代碼與門檻交給 `logic`，改寫
+      「淨值超過 N 日未更新（資料未備）」「⬜ 資料未備：最近淨值已超過 N 日」；真正缺淨值的檔照舊；
+    - `logic` 既有的 HLD-1／HLD-0 路徑對缺淨值的檔：不進偏離表、不計入偏離筆數，零列時燈為灰「⬜ 資料未備」——
+      **資料未備不會觸發黃／紅燈，也不會產生任何結論句**（`deviation_rows` 的 `missing` 那一類）。
+    - 配息列一格不動：期間配息合計（每單位配息 × 單位數）與本金類配息佔比不以淨值為輸入，照算。
+    ⚠️ HLD-6 因此也不列這幾檔的淨值列（與 alo 不交進 dataset 同向）；徽章與副標改掛在 HLD-2／3／5／8。
+    """
+    codes = frozenset(codes)
+    if not codes or not dataset.get("nav"):
+        return dataset
+    out = dict(dataset)
+    out["nav"] = [row for row in dataset["nav"] if row["fund_code"] not in codes]
+    return out
+
+
 def _apply_freshness(model: dict, fresh: dict) -> dict:
     """把 `nav_freshness` 的結果掛到各塊（草稿 §D 1-A＋1-C「放在哪」）。各塊的 `_state`／`_tone`、按鈕、
-    數值都不動：徽章與副標只說「多舊」「是不是預存的」，不改任何一個數（草稿 §D：數值照算、照印）。
+    數值都不動：徽章與副標只說「多舊」「是不是預存的」，不改任何一個數（~~草稿 §D：數值照算、照印~~ →
+    客戶 2026-10-13 裁示：超過門檻的檔，數值由 `withhold_not_ready_nav` 在組模型**之前**就不交給 `logic`，
+    本函式仍然不改任何一個數；那幾檔的徽章是灰色「⬜ 資料未備」，狀態更新，不是漏刪）。
 
     - HLD-2、HLD-3：每一檔分組加 `freshness_badge`（1-A）與 `freshness_note`（1-C ①②，只有預存那幾檔）；
     - HLD-8：每一列同上（1-A「表內每一列」；1-C「該檔標頭下一行」）；
@@ -417,15 +491,19 @@ def _apply_freshness(model: dict, fresh: dict) -> dict:
     # 配息類三列（含「配息佔淨值比」）與 HLD-1 帶來的「…與門檻的差額」列（`_indicator` 不在名單內）一律不掛。
     for row in logic.find_block(model, "HLD-7")["_rows"]:
         entry = fresh.get(row["_fund_code"])
-        if entry and entry["cache_fallback"] and row["_indicator"] in logic.NAV_INPUT_INDICATORS:
+        # 客戶 2026-10-13 裁示：資料未備那幾檔的淨值沒有交給 `logic`，該列輸入不是預存序列（是 0 筆），不掛尾巴。
+        if (entry and entry["cache_fallback"] and not entry["old"]
+                and row["_indicator"] in logic.NAV_INPUT_INDICATORS):
             row["inputs_text"] = row["inputs_text"] + CACHE_INPUT_SUFFIX
     hld1 = logic.find_block(model, "HLD-1")
     listed = {row["_fund_code"] for row in hld1["_rows"]}
-    cached = sorted(c for c in listed if c in fresh and fresh[c]["cache_fallback"])
+    # 客戶 2026-10-13 裁示：資料未備的檔沒有用到淨值，不算「淨值取自預存序列」；卡尾一律中性
+    # （~~`"黃" if any(fresh[c]["old"] for c in cached) else "中性"`~~，狀態更新，不是漏刪：算進來的檔都不超過門檻）。
+    cached = sorted(c for c in listed if c in fresh and fresh[c]["cache_fallback"] and not fresh[c]["old"])
     if cached:
         hld1["freshness_tail"] = {
             "text": CACHE_TAIL_TEXT.format(n=len(cached)),
-            "_tone": "黃" if any(fresh[c]["old"] for c in cached) else "中性",
+            "_tone": "中性",
         }
     return model
 
@@ -718,6 +796,8 @@ def build_live_model(
     - `nav_provenance`（S5，裁示 1-A＋1-C）：L2 `build_nav_table` 回傳的 `provenance` 原樣
       （`{fund_code: {..., "cache_fallback", "stale"}}`）；**一律要給**，沒給或形狀不對就 raise。
       每檔最後一筆 `nav_date` 取自同一份 `dataset["nav"]`（畫面上 HLD-6 印的就是那幾列）。
+      客戶 2026-10-13 裁示：最後一筆距 `today` **大於** `NAV_FRESH_DAYS_YELLOW` 日的那幾檔，淨值列不交給 `logic`
+      （`withhold_not_ready_nav`），相依淨值的值一律「⬜ 資料未備」；HLD-6 也不列那幾檔的淨值列。
     - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
     - `applied_window`、`applied_rules`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三、四輪）。
     - `dividend_coverage`（2026-10-13 稽核必修 1(b)）：`assemble_live_load` 交的 `{代碼: 最舊除息日}`；見 `_gate_dividend_coverage`。
@@ -738,6 +818,9 @@ def build_live_model(
     dataset = _gate_dividend_coverage(dataset, dividend_coverage, applied_window)
     today = taiwan_today() if today is None else today
     fresh = nav_freshness(dataset, nav_provenance, today=today)
+    # 客戶 2026-10-13 裁示：淨值日距今超過門檻 → 資料未備，過期淨值不交給 `logic` 計算任何一個數。
+    stale_codes = not_ready_codes(dataset, today=today)
+    dataset = withhold_not_ready_nav(dataset, stale_codes)
     model = logic.build_page_model(
         dataset,
         fields=fields,
@@ -746,6 +829,9 @@ def build_live_model(
         demo_hint=False,
         applied_window=applied_window,
         applied_rules=applied_rules,
+        # 總管 2026-10-13 裁決：那幾檔寫「淨值超過 N 日」而不是「缺淨值／nav 尚無資料」；N 取共用常數。
+        nav_not_ready_codes=stale_codes,
+        nav_not_ready_days=NAV_FRESH_DAYS_YELLOW,
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)
