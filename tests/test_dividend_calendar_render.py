@@ -287,11 +287,20 @@ def test_png_render_module_does_not_eager_load_playwright():
     out = subprocess.run([sys.executable, "-c", _code], capture_output=True, text=True,
                          cwd=str(_root))
     assert out.stdout.strip() == "False", (out.stdout, out.stderr)
+    # 2026-10-13:推播用的 PNG 產圖搬到編排層 `scripts/dividend_calendar_png.py`,
+    # 它也必須保持 lazy —— 每月排程一 import 就載入 playwright 等於把截圖依賴提前。
+    # ⚠️ 沒裝 playwright 的環境裡「playwright 不在 sys.modules」恆為真(守不到東西),
+    #    所以另外檢查 L0 `infra.html_to_png` 也沒被 eager import:那才是 lazy 與否的實際機制。
+    _code2 = ("import sys; import scripts.dividend_calendar_png as P; "
+              "print('playwright' in sys.modules, 'infra.html_to_png' in sys.modules)")
+    out2 = subprocess.run([sys.executable, "-c", _code2], capture_output=True, text=True,
+                          cwd=str(_root))
+    assert out2.stdout.strip() == "False False", (out2.stdout, out2.stderr)
 
 
 def test_png_render_produces_valid_png_or_skips():
     import pytest
-    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    from scripts.dividend_calendar_png import render_month_calendar_png   # 2026-10-13 移到編排層
     try:
         from infra.html_to_png import HtmlRenderError
     except Exception:  # noqa: BLE001
@@ -330,7 +339,7 @@ def test_push_width_narrower_than_app():
 def test_png_uses_compact_and_requires_cjk():
     # drift-lock:推播圖必須套 compact 版型 + 開中文字型探針(缺字型寧可退 Flex)
     import inspect
-    from ui.helpers import dividend_calendar_render as R
+    from scripts import dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
     src = inspect.getsource(R.render_month_calendar_png)
     assert "compact=True" in src
     assert "require_cjk=True" in src
@@ -1059,7 +1068,7 @@ def test_push_png_path_renders_the_same_template():
     這裡把 L0 換成間諜攔下實際傳進去的 HTML,不需要 Chromium。
     """
     import infra.html_to_png as _l0
-    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    from scripts.dividend_calendar_png import render_month_calendar_png   # 2026-10-13 移到編排層
     _seen = {}
     _orig = _l0.html_to_png
 

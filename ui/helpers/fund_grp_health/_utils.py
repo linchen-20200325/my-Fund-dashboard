@@ -1,72 +1,19 @@
-"""v19.198 P1-6 fund_grp_health 子套件 utility — 從 fund_grp_health_extras 主檔抽出。
+"""ui/helpers/fund_grp_health/_utils.py — 舊路徑別名(2026-10-13)。
 
-_build_fund_dict / _safe_num 兩個共用 helper,供子模組(dividend/investment/risk/signals/ai)
-複用。
+客戶 2026-10-13 裁示(LINE 推播與舊 UI 解耦):本檔內容**原封搬到 L2 `services/fund_grp_health/_utils.py`**
+(`_build_fund_dict` / `BASE_LABELS`,零 streamlit),每週換檔推播 `scripts/weekly_switch_notify.py` 改直接 import 那裡,不再載入 UI 層。
+
+舊 UI 呼叫點不必改:本模組在載入時把自己在 `sys.modules` 的位置**換成 L2 那個模組物件**,
+所以 `import ui.helpers.fund_grp_health._utils` 與 `import services.fund_grp_health._utils` 拿到的是**同一個模組**
+(不是複製一份、也不是逐名轉出 —— 逐名轉出會讓 monkeypatch 只改到其中一份,
+SSOT 就在測試替身這一層悄悄裂成兩份)。
+⚠️ 已知限制:Streamlit 熱重載(改檔後自動 rerun / reload 模組)時,本別名可能仍指向
+舊的模組物件(重載只重跑了其中一邊)—— 重啟 App 即可恢復。排程(cron)每次都是全新
+行程,不受影響。
+⛔ 不要在這裡新增任何程式碼;要改邏輯請改 `services/fund_grp_health/_utils.py`。
 """
-from __future__ import annotations
+import sys as _sys
 
+from services.fund_grp_health import _utils as _impl
 
-def _build_fund_dict(fd_raw: dict, code: str, principal_twd: float,
-                     name_hint: str = "") -> dict:
-    """把 _auto_fetch_moneydj 回傳的 raw dict 包成 portfolio_funds 標準結構。
-
-    對照 tab3_portfolio.py L1522-1533 的組合建構邏輯。
-    invest_twd 欄位給 fund_checkup._compute_fund_health_kpis 算「月配息 TWD」用。
-
-    name_hint:呼叫端已知名(選股池 / 政策表)。線上抓不到真名(如 "AL" 系代碼)時
-    用它,而非把代號當名字(v19.497 ALZF9);都沒有才退代號。
-    """
-    if not fd_raw:
-        return {}
-    return {
-        "code": code,
-        "name": fd_raw.get("fund_name") or (name_hint or "").strip() or code,
-        "series": fd_raw.get("series"),
-        "dividends": fd_raw.get("dividends", []) or [],
-        "metrics": fd_raw.get("metrics", {}) or {},
-        "moneydj_raw": fd_raw,
-        "risk_metrics": fd_raw.get("risk_metrics", {}) or {},
-        "currency": (fd_raw.get("currency", "")
-                     or (fd_raw.get("metrics", {}) or {}).get("currency", "")),
-        "loaded": True,
-        "invest_twd": float(principal_twd or 0),
-    }
-
-
-# v19.222 P1-1:_safe_num 收口至 shared/converters.py SSOT
-from shared.converters import safe_num as _safe_num  # noqa: E402
-
-
-# ── 「基期」標籤 SSOT(2026-09-02 T29)──────────────────────────────────────
-# `services.rotation.classify_base()` 的四個回傳值 → 畫面用字。
-#
-# 為什麼要有這一份:同一組字原本**手抄了三份**,而且三份都是**函式內的區域變數**
-# (`import` 不到,所以誰也沒辦法沿用誰):
-#   · `ui/helpers/fund_grp_health/unified.py::build_merged_extra_columns` 的 `_BASE_LBL`
-#     —— 健診大表「基期」欄;
-#   · `ui/tab_fund_grp_health.py::_render_low_base_screener` 的 `_base_map`
-#     —— 🎯 選基金（低基期）表;
-#   · `ui/helpers/fund_grp_health/rotation.py::_render_pairs_body` 的 `_lbl`
-#     —— 輪動配對「目前各檔基期」。
-# 而 `_render_low_base_screener` 的 caption 還寫著「本區標 🟢 低基期的,大表『基期』欄
-# 一定也是 🟢」—— 那句宣稱的前提正是三份用字一致,靠的卻是三次手抄。
-#
-# ⚠️ 這裡放的是**顯示用字**,不是門檻。門檻(`ROTATION_BUY_SIGMA` / `ROTATION_SELL_SIGMA`)
-#    的 SSOT 在 `shared/signal_thresholds.py`,兩者不要混。
-BASE_LABELS: dict[str, str] = {
-    "high": "🔴 高基期",
-    "low": "🟢 低基期",
-    "mid": "⚪ 中性",
-    "unknown": "⬜ 資料不足",
-}
-
-#: 輪動配對專用:同一組字 + 行動提示,並在「資料不足」處指明缺的是 σ。
-#: **由 `BASE_LABELS` 衍生**,不是第四份手抄 —— 改上面那一份,這裡跟著動。
-BASE_LABELS_ROTATION: dict[str, str] = {
-    **BASE_LABELS,
-    "high": f'{BASE_LABELS["high"]}(可賣)',
-    "low": f'{BASE_LABELS["low"]}(可買)',
-    # 「⬜ 資料不足」→「⬜ σ 資料不足」:輪動這一段缺的具體是 σ rank,
-    # 講明白比較有用(下一行的 `_render_insufficient_note()` 也是這樣講)。
-    "unknown": BASE_LABELS["unknown"].replace("⬜ ", "⬜ σ ", 1),
-}
+_sys.modules[__name__] = _impl

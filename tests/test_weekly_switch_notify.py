@@ -29,7 +29,7 @@ def test_assemble_rows_maps_fields(monkeypatch):
     import services.fx_regime_service as FXR
     import services.health.dividend as D
     import services.health.report as R
-    import ui.helpers.fund_grp_health.unified as U
+    import services.fund_grp_health.unified as U   # 2026-10-13 起週報直接用 L2(不再經 UI)
     monkeypatch.setattr(U, "build_merged_extra_columns",
                         lambda funds, phase, score: ([], {"AAA": {"σ rank": "-1.50σ",
                                                                    "距 HWM %": "-18%", "操盤評分": 72}}))
@@ -52,7 +52,7 @@ def test_assemble_rows_category_falls_back_to_pool(monkeypatch):
     import services.fx_regime_service as FXR
     import services.health.dividend as D
     import services.health.report as R
-    import ui.helpers.fund_grp_health.unified as U
+    import services.fund_grp_health.unified as U   # 2026-10-13 起週報直接用 L2(不再經 UI)
     monkeypatch.setattr(U, "build_merged_extra_columns", lambda funds, phase, score: ([], {}))
     monkeypatch.setattr(R, "build_health_analysis_row", lambda fd, code, **kw: {})  # 無類別
     monkeypatch.setattr(D, "check_eating_principal_1y_mk", lambda fd: {})
@@ -67,7 +67,7 @@ def test_assemble_rows_category_falls_back_to_pool(monkeypatch):
 def test_underperf_by_code_keys_str_and_flags(monkeypatch):
     import services.fund_total_return as T
     import services.health.dividend as D
-    import ui.helpers.fund_grp_health.capture as C
+    import services.fund_grp_health.capture as C   # 2026-10-13 起週報直接用 L2(不再經 UI)
     monkeypatch.setattr(C, "capture_by_code",
                         lambda funds: {"AAA": {"vs 大盤%": -8.0, "vs 大盤期間": "近1年"}})
     monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (5.0, ""))   # 不虧(紅燈另判)
@@ -83,7 +83,7 @@ def test_underperf_by_code_severe_eat_triggers_redlight(monkeypatch):
     """嚴重吃本金(含息報酬<0)→ 紅燈,即使 Sharpe≥0、沒跑輸大盤(舊碼 eat='' 會漏)。"""
     import services.fund_total_return as T
     import services.health.dividend as D
-    import ui.helpers.fund_grp_health.capture as C
+    import services.fund_grp_health.capture as C   # 2026-10-13 起週報直接用 L2(不再經 UI)
     monkeypatch.setattr(C, "capture_by_code",
                         lambda funds: {"AAA": {"vs 大盤%": 3.0, "vs 大盤期間": "近1年"}})  # 沒跑輸
     monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (-3.0, ""))   # 含息為負(嚴重前提)
@@ -102,7 +102,7 @@ def test_underperf_by_code_plain_eating_positive_return_triggers(monkeypatch):
     """
     import services.fund_total_return as T
     import services.health.dividend as D
-    import ui.helpers.fund_grp_health.capture as C
+    import services.fund_grp_health.capture as C   # 2026-10-13 起週報直接用 L2(不再經 UI)
     monkeypatch.setattr(C, "capture_by_code",
                         lambda funds: {"AAA": {"vs 大盤%": 3.0, "vs 大盤期間": "近1年"}})  # 沒跑輸
     monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (5.0, ""))    # 含息為正(+5%)
