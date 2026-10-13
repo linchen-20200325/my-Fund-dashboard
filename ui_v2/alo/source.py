@@ -23,10 +23,20 @@
     ⇒ 使用者在 ALO-4 把比重基準切到「市值」時，每一檔都缺基準值，畫面照 `44` 5.5 顯示
     `⬜ 資料未備`、ALO-6 表尾照算「缺基準值被排除的檔數」。**這是 `CLAUDE.md` §1 Fail Loud，不是 bug**：
     不把市值選項灰掉、不填 0、不拿成本值頂替、不靜默退回成本。
+    → **2026-10-13 狀態更新（有意識的變更，不是漏刪；依據：客戶 2026-10-13 裁示「B 線 `ui_v2/` 是唯一正式 UI，
+    切換前資產配置必須是真資料」＋ 核准 B 線復用既有多來源淨值鏈）**：已存基準為「市值」時，本頁經 L2
+    `nav_dividend.build_nav_table`（A 鏈，與 hld 同一個入口、同一套組輸入規則）取淨值；判讀在
+    `live.assemble_nav`（扣下、對照失敗、來源回空 → 那一檔資料未備；其餘取數失敗 → `errors["nav"]`，原文經遮蔽）。
+    成本基準不取（用不到）。上面三段舊句寫下時為真（當時未獲授權）；被推翻的是它的前提。
+    非美元幣別的匯率依 49 §6.1 Q9 經 L2 `market_indicator.build_fx_indicator_table` 取，與美元同一個閘門
+    （`FX_OBS_DATE_RULE_VERIFIED` 為假時不取數、不寫列 ⇒ 該類別「⬜ 資料未備：缺換算匯率 <鍵>」），
+    閘門狀態放在 `notes["fx_pending"]`。
   - `market_indicator` 讀的是**已寫在試算表上的那一份**（`settings_store.load_market_indicator`），
     不觸發任何取數 —— 本頁是消費端，不是取數端。本頁只用得到 `fx_twd_per_usd` 那一個鍵，
     而它目前在 L2 是暫停取數的（`market_indicator.FX_OBS_DATE_RULE_VERIFIED` 為假），
     所以表上通常沒有那一列 ⇒ 市值基準會缺匯率，同樣照實顯示。
+    （2026-10-13 補：非美元幣別的匯率鍵不在試算表上，由本頁經 L2 `build_fx_indicator_table` 取、併在後面；
+    美元仍只讀試算表那一份 —— 「只用得到 `fx_twd_per_usd` 那一個鍵」自此不再為真，但美元那一半不變。）
   - `save_errors` 本函式一律回空 dict：~~本輪只接讀、不接寫~~ → 2026-10-09 起 ALO-1／ALO-4 接上寫入
     （`save_setting`），但存檔成敗是**按鈕那一次**的事、不是讀表的結果，由 `page.py` 記在 session、
     重繪時再併進 `save_errors`；本函式不碰它。
@@ -47,9 +57,18 @@ import os
 
 import streamlit as st
 
-from services.v2_tables import alo_holdings, masking, settings_store
+from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
 
 from . import live
+
+# 淨值被扣下、畫面印「⬜ 資料未備」的四碼 —— 與 `ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD` 同一份
+# （兩頁不互相 import；tests/ui_v2/test_alo_source.py 比對兩者相等）。⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`。
+_NAV_UNAVAILABLE_WITHHELD = frozenset({
+    nav_dividend.WITHHELD_CCY_MISSING,
+    nav_dividend.WITHHELD_CCY_CONFLICT,
+    nav_dividend.WITHHELD_FETCHED_AT_MISSING,
+    nav_dividend.WITHHELD_FETCHED_AT_FUTURE,
+})
 
 # `load_alo_tables` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
 _SKIP_GROUPS = (
@@ -122,11 +141,63 @@ def load_live() -> dict:
             "broken_keys": list(settings["broken_keys"]),
         }
 
+    # ── nav ＋ 非美元匯率（2026-10-13 客戶裁示：B 線資產配置必須是真資料）──
+    # 只在已存基準是「市值」時取（成本基準用不到）；組 L2 輸入照 `ui_v2/hld/source.py` 三條（帶 holding_ccy、
+    # 不去重、只放代碼對照 ok 的檔）。這一段任何例外都轉成 `errors["nav"]` 的原文（經遮蔽）：本頁的
+    # `page.render` 沒有錯誤畫面，例外往上拋會整頁印 Traceback（hld 有、本頁沒有）。不吞：市值基準下照畫 ⛔。
+    nav_rows = []
+    mi_rows = [dict(row) for row in indicators["rows"]] if indicators else []
+    if tables is not None and live.wants_market_value(setting_rows):
+        mask = alo_holdings.masker(values)
+        try:
+            holding = tables["holding"]
+            key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
+            resolved = {r["input"]: r for r in key_results if r["ok"] is True}
+            nav_table = nav_dividend.build_nav_table([
+                {
+                    "fund_code": h["fund_code"],
+                    "full_key": resolved[h["fund_code"]]["full_key"],
+                    "portal": resolved[h["fund_code"]]["portal"],
+                    "chain_code": resolved[h["fund_code"]]["parsed_code"],
+                    "holding_ccy": h["ccy"],
+                }
+                for h in holding if h["fund_code"] in resolved
+            ])
+            nav_out = live.assemble_nav(
+                holding_codes=[h["fund_code"] for h in holding],
+                key_results=key_results,
+                nav_table=nav_table,
+                empty_without_reason=nav_dividend.EMPTY_WITHOUT_REASON,
+                nav_unavailable_withheld=_NAV_UNAVAILABLE_WITHHELD,
+                mask=mask,
+            )
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：原文進 errors["nav"]，市值基準下畫 ⛔
+            errors["nav"] = mask(f"{type(exc).__name__}: {exc}")
+        else:
+            nav_rows = nav_out["nav"]
+            notes["nav"] = nav_out["notes"]
+            if nav_out["error"] is not None:
+                errors["nav"] = nav_out["error"]
+            # 49 §6.1 Q9：非美元幣別的匯率鍵由 L2 取（同一條觀測日規則、同一個閘門；閘門關時不取數）。
+            ccys = live.fx_ccys_needed(nav_rows)
+            if ccys:
+                try:
+                    fx_table = market_indicator.build_fx_indicator_table(ccys)
+                except Exception as exc:  # noqa: BLE001 —— 不是吞：原文進 errors["market_indicator"]
+                    errors["market_indicator"] = "；".join(
+                        filter(None, [errors.get("market_indicator"), mask(f"{type(exc).__name__}: {exc}")]))
+                else:
+                    mi_rows, mi_error, notes["fx_pending"] = live.merge_fx_table(
+                        mi_rows, errors.get("market_indicator"), fx_table, mask)
+                    if mi_error is not None:
+                        errors["market_indicator"] = mi_error
+
     dataset = {
         "holding": [dict(row) for row in tables["holding"]] if tables else [],
-        "nav": [],                      # 本頁不取淨值（2026-10-09 裁示只到 hld、set），不是讀失敗
+        # ~~本頁不取淨值（2026-10-09 裁示只到 hld、set），不是讀失敗~~ → 2026-10-13 客戶裁示：本頁取淨值（上面那段）
+        "nav": nav_rows,
         "policy": [dict(row) for row in tables["policy"]] if tables else [],
-        "market_indicator": [dict(row) for row in indicators["rows"]] if indicators else [],
+        "market_indicator": mi_rows,
         "user_setting": setting_rows,
         "errors": errors,
         "save_errors": {},              # 存檔成敗由 page.py 併進來，不是讀表的結果

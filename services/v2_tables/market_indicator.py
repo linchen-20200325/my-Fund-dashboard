@@ -20,6 +20,8 @@
    只會多打來源；v3 §02「不連續轟炸來源」）。`fx_twd_per_usd` 是總管 2026-09-26 裁定暫停
    （見 `FX_OBS_DATE_RULE_VERIFIED`）。不寫列的原因以代碼記在回傳的 `pending`，
    說明文字記在 `skipped`；兩者都不是錯誤、不進 `errors`。
+   2026-10-13：非美元幣別的匯率鍵（49 §6.1 Q9）另由 `build_fx_indicator_table` 交出，
+   套同一條觀測日規則、同一個閘門；`INDICATOR_SPECS` 七鍵不變（市場總覽頁的鍵以它為準）。
 
 **取數函式與區間（技術選擇，寫明理由）**：
 - 匯率改用 `repositories/macro/yf.py::fetch_yf_close_with_error("USDTWD=X")`，**不用** 49 §2.1
@@ -151,6 +153,84 @@ INDICATOR_SPECS = {
         "pending_code": PENDING_NDC_NO_RELEASE_DATE,
     },
 }
+
+# ── 非美元幣別的匯率鍵（49 §6.1 Q9，客戶 2026-09-26 同意）──────────────────────────────
+# Q9 原文：「新增對應幣別的匯率鍵，由 L2 轉換層直接呼叫既有的 L1 `repositories/macro/yf.py::fetch_yf_close`
+# （例：`EURTWD=X`）」。不新增資料源：同一個 Yahoo 端點、同一個 L1 函式。
+# - 鍵名：沿用 `fx_twd_per_usd` 的形狀，`fx_twd_per_` ＋ ISO 4217 代碼小寫（例：`fx_twd_per_eur`）。
+#   ⚠️ 44 只定義了 `fx_twd_per_usd`；其餘鍵名是 Q9「新增對應幣別的匯率鍵」的落地寫法（2026-10-13 資料工程組），
+#   不是 44 的原文。`ui_v2/alo/logic.py::fx_key_for` 是本規則的字面鏡像（ui_v2 不得 import services），
+#   由 tests/test_v2_tables_market_indicator_fx_ccy.py 逐幣比對。
+# - Yahoo 代碼：`<ISO>TWD=X`（同 `repositories/fund/fx_and_main.py::get_latest_fx` 的既有組法）；
+#   方向「新臺幣／該幣」，與 `USDTWD=X` 同向，不取倒數。
+# - **觀測日規則與美元同一條、同一個閘門**（`FX_OBS_DATE_RULE_VERIFIED`）：閘門關閉時不取數、不寫列，
+#   原因代碼同 `PENDING_FX_OBS_DATE_RULE`（只會多打來源，v3 §02）。
+# - 美元**不走這裡**：`fx_twd_per_usd` 住在 `INDICATOR_SPECS`（市場總覽頁的七鍵之一，經設定試算表落地）；
+#   傳 `USD`／`TWD` 進來是呼叫端的 bug，當場炸。
+FX_KEY_PREFIX = "fx_twd_per_"
+# `value_unit` 字面值：美元沿用 MKT-3 的宣告「新臺幣／美元」；其餘幣別 44 沒有宣告，寫「新臺幣／<ISO 代碼>」
+# （不自行翻譯幣名）。⚠️ 這一句不是 44 的原文，閘門打開前要一併覆核。
+_FX_USD_UNIT = "新臺幣／美元"
+
+
+def _require_iso_ccy(ccy) -> str:
+    if not (isinstance(ccy, str) and len(ccy) == 3 and all("A" <= ch <= "Z" for ch in ccy)):
+        raise ValueError(f"幣別須為 ISO 4217 三個大寫英文字母：{ccy!r}")
+    return ccy
+
+
+def fx_indicator_key(ccy) -> str:
+    """幣別 → 匯率鍵（`USD` → `fx_twd_per_usd`；`EUR` → `fx_twd_per_eur`）。新臺幣沒有匯率鍵 → 炸。"""
+    if _require_iso_ccy(ccy) == "TWD":
+        raise ValueError("新臺幣不需要換算匯率鍵")
+    return FX_KEY_PREFIX + ccy.lower()
+
+
+def fx_yahoo_ticker(ccy) -> str:
+    """幣別 → Yahoo 代碼（`USD` → `USDTWD=X`，與 `INDICATOR_SPECS` 那一格相同）。"""
+    if _require_iso_ccy(ccy) == "TWD":
+        raise ValueError("新臺幣不需要換算匯率")
+    return f"{ccy}TWD=X"
+
+
+def fx_value_unit(ccy) -> str:
+    if _require_iso_ccy(ccy) == "USD":
+        return _FX_USD_UNIT
+    return f"新臺幣／{ccy}"
+
+
+def build_fx_indicator_table(ccys) -> dict:
+    """非美元幣別的匯率鍵（Q9）。回傳形狀同 `build_market_indicator_table`：
+    `{"rows", "errors", "pending", "skipped", "fetched"}`，鍵為各幣別的匯率鍵。
+
+    - 閘門（`FX_OBS_DATE_RULE_VERIFIED`）關閉：不取數、不寫列，`pending[鍵] = PENDING_FX_OBS_DATE_RULE`，
+      說明記在 `skipped`；不進 `errors`（不是失敗，是資料未備）。
+    - 閘門打開：經 `fetch_yf_close_with_error(<ISO>TWD=X)` 取數，套 `rows_from_daily_close`（與美元同一條規則）。
+    - 同一幣別重複出現只處理一次；`USD`／`TWD`／不合 ISO 4217 → ValueError（呼叫端的 bug）。
+    - 不另疊快取（49 §4.4）；不寫任何試算表；錯誤原文不遮蔽（遮蔽在寫出點做一次）。
+    """
+    rows, errors, pending, skipped, fetched = [], {}, {}, {}, {}
+    for ccy in dict.fromkeys(ccys):
+        if _require_iso_ccy(ccy) in ("USD", "TWD"):
+            raise ValueError(f"{ccy} 不走這裡（美元在 INDICATOR_SPECS；新臺幣不需要匯率）")
+        key = fx_indicator_key(ccy)
+        ticker = fx_yahoo_ticker(ccy)
+        if not FX_OBS_DATE_RULE_VERIFIED:
+            pending[key] = PENDING_FX_OBS_DATE_RULE
+            skipped[key] = [f"{ticker} 與 USDTWD=X 套同一條觀測日切日規則、同一個閘門，"
+                            f"待以真實資料驗證（FX_OBS_DATE_RULE_VERIFIED）"]
+            continue
+        series, error = _call(fetch_yf_close_with_error, ticker)
+        fetched[key] = 0 if (error or series is None) else len(series)
+        key_rows, key_error, key_skipped = rows_from_daily_close(
+            key, series, error, value_unit=fx_value_unit(ccy))
+        rows.extend(key_rows)
+        if key_error is not None:
+            errors[key] = key_error
+        if key_skipped:
+            skipped[key] = key_skipped
+    return {"rows": rows, "errors": errors, "pending": pending, "skipped": skipped, "fetched": fetched}
+
 
 def _phase1_of(spec) -> str:
     if spec["phase1"] == "write_if_fx_verified":

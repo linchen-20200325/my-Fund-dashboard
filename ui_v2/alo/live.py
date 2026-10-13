@@ -246,6 +246,98 @@ def tables_failed_together(message: str) -> dict:
     return {"holding": message, "policy": message}
 
 
+# ═══════════════════════ 淨值與非美元匯率（2026-10-13 客戶裁示：B 線資產配置必須是真資料）═══════════════════════
+#
+# 淨值走 L2 `services/v2_tables/nav_dividend.py::build_nav_table`（A 鏈，#946），組輸入與判讀淨值表的規則
+# **一律照 `ui_v2/hld/source.py` ＋ `ui_v2/hld/live.py::assemble_live_load`**（幣別、拒收、閘門都在 L2，本頁不另寫一套）：
+# - 被扣下（`nav_unavailable_withheld` 四碼）、代碼對照查不到（`ok is False`）、來源回空且沒有原因
+#   → 那一檔沒有淨值列 ⇒ `logic.basis_value` 照既有路徑寫「⬜ 資料未備：nav 尚無資料」，不新增字句。
+# - 其餘取數失敗 → 原文經 `mask` 遮過，逐檔以「代碼：原文」串成一句放進 `errors["nav"]`
+#   （體例同 hld 的 `skipped_tabs`）。本頁沒有逐檔失敗的畫法（hld 有 `fund_errors`，本頁沒有），
+#   所以照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 畫 ⛔，成本基準不受影響。
+# - 扣下代碼不在清單內（例 `input_conflict`）→ raise（契約被破壞，不畫成 ⬜；同 hld R-10）。
+
+
+def wants_market_value(setting_rows) -> bool:
+    """已存的比重基準是不是「市值」。只有這時本頁才去取淨值與匯率（成本基準用不到，取回來只會多打來源；
+    v3 §02）。設定讀不到或解析不了 → `setting_rows` 為空 → 假：各塊本來就畫設定失敗框。"""
+    for row in setting_rows or ():
+        if row.get("setting_key") == "alo_basis":
+            return row.get("setting_value") == logic.BASIS_MV
+    return False
+
+
+def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
+                 nav_unavailable_withheld, mask) -> dict:
+    """L2 淨值表 → `{"nav": 列, "error": 已遮蔽的失敗原文或 None, "notes": {...}}`（純函式，不改輸入）。
+
+    一致性檢查同 hld `assemble_live_load` 的 R-10、R-13～R-16，不過就 raise（呼叫端組錯，不是資料問題）。
+    """
+    if not callable(mask):
+        raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")
+    codes_held = list(dict.fromkeys(holding_codes))
+    nav_codes = {r["fund_code"] for r in nav_table["rows"]}
+    for name in ("errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"):
+        nav_codes |= set(nav_table[name])
+    if nav_codes - set(codes_held):
+        raise ValueError(f"淨值表出現持倉裡沒有的代碼：{sorted(nav_codes - set(codes_held))!r}")
+    for r in key_results:
+        if type(r["ok"]) is not bool:
+            raise TypeError(f"代碼對照的 ok 應為 bool：{r['input']!r}")
+    inputs = {r["input"] for r in key_results}
+    if inputs != set(codes_held):
+        raise ValueError(f"代碼對照的輸入與持倉代碼不一致：多 {sorted(inputs - set(codes_held))!r}、"
+                         f"少 {sorted(set(codes_held) - inputs)!r}")
+    key_failed = {r["input"] for r in key_results if r["ok"] is False}
+    if key_failed & nav_codes:
+        raise ValueError(f"代碼對照失敗的代碼不得出現在淨值表：{sorted(key_failed & nav_codes)!r}")
+    not_handed = {r["input"] for r in key_results if r["ok"] is True
+                  and r["input"] not in nav_table["fetched"] and r["input"] not in nav_table["withheld"]}
+    if not_handed:
+        raise ValueError(f"代碼對照成功、卻沒有交給淨值表的代碼：{sorted(not_handed)!r}")
+    for code, reason in nav_table["withheld"].items():
+        if reason not in nav_unavailable_withheld:
+            raise ValueError(f"淨值扣下原因 {reason!r} 不在本頁約定的清單內：{code!r}")
+
+    parts = []
+    for code in codes_held:
+        message = nav_table["errors"].get(code)
+        if message is None:
+            continue
+        if message == empty_without_reason and nav_table["fetched"].get(code, 0) == 0:
+            continue   # 來源回空、沒有原因 → 資料未備，不是失敗（同 hld）
+        parts.append(f"{code}：{mask(message)}")
+    return {
+        "nav": [dict(r) for r in nav_table["rows"]],
+        "error": "；".join(parts) if parts else None,
+        "notes": {
+            "withheld": dict(nav_table["withheld"]),
+            "key_failed": sorted(key_failed),
+            "provenance": dict(nav_table["provenance"]),
+        },
+    }
+
+
+def fx_ccys_needed(nav_rows) -> list:
+    """淨值列裡新臺幣與美元以外的幣別（依出現順序、不重複）。美元走設定試算表那一份（市場總覽頁落地），
+    其餘依 49 §6.1 Q9 由本頁經 L2 取。"""
+    return list(dict.fromkeys(r["ccy"] for r in nav_rows if r["ccy"] not in ("TWD", "USD")))
+
+
+def merge_fx_table(indicator_rows, indicator_error, fx_table, mask) -> tuple:
+    """設定試算表上的 `market_indicator` 列 ＋ L2 `build_fx_indicator_table` 的非美元匯率列。
+
+    回 `(列, 已遮蔽的失敗原文或 None, pending)`。
+    - 試算表讀失敗（`indicator_error` 已遮蔽）→ 照舊放前面；非美元那幾鍵的取數失敗以「鍵：原文」接在後面
+      （ALO-GAP-缺匯率從嚴：market_indicator 有任何取數失敗，市值基準下整張 ALO-2 進系統錯誤）。
+    - `pending`（閘門未開）不是失敗：不進錯誤、那幾鍵沒有列 ⇒ 該類別「⬜ 資料未備：缺換算匯率 <鍵>」。
+    """
+    rows = [dict(r) for r in indicator_rows] + [dict(r) for r in fx_table["rows"]]
+    parts = [indicator_error] if indicator_error else []
+    parts.extend(f"{key}：{mask(message)}" for key, message in fx_table["errors"].items())
+    return rows, ("；".join(parts) if parts else None), dict(fx_table["pending"])
+
+
 def _walk_buttons(node):
     if isinstance(node, dict):
         if "_action_kind" in node:

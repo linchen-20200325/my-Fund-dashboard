@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import math
 import pathlib
 import sys
 
@@ -305,6 +306,8 @@ def test_live的import就是那幾個_純函式模組():
 #
 # 「只在『每一檔都沒有基準值、而且缺的理由只有一種』時改畫 ⬜，其餘照舊 raise」——
 # 下面四條把界線的兩邊都釘住：放行的那一種要放行，不放行的兩種要照舊炸。
+# → 2026-10-13 更正（有意識的更正，不是漏刪；總管 2026-10-13 派工）：「理由不只一種」那一種改為逐類別寫理由、
+#   不再炸（見 ALO-GAP-分母全缺）；「有值卻加起來不為正」那一種照舊炸。
 
 
 def _mv(dataset):
@@ -325,16 +328,27 @@ def test_分母全缺_理由只有一種_改畫來源缺而不是炸掉():
     assert block["_rows"] == []
 
 
-def test_分母全缺_理由不只一種_照舊raise():
-    """一類缺 `nav`、一類缺匯率 —— `44` 沒有這種情形的畫法，不准自己編一句。"""
+def test_分母全缺_理由不只一種_逐類別各寫自己的理由_不再炸():
+    """~~一類缺 `nav`、一類缺匯率 —— `44` 沒有這種情形的畫法，不准自己編一句。（舊名 `…_照舊raise`）~~
+    → 2026-10-13 更正（有意識的更正，不是漏刪；依據：總管 2026-10-13 派工「非美元不崩頁、缺淨值或缺匯率照實呈現
+    資料未備」；見 `logic.GAPS["ALO-GAP-分母全缺"]`）：接上真淨值後，美元與非美元匯率都還在閘門後面，
+    這一種在真資料裡會出現。改為照 `44` ALO-2 空狀態逐類別寫各自的缺值字面（**沒有新句子**），
+    沒有持倉的目標類別只印 ⬜。舊斷言寫下時為真（當時真資料走不到）；被推翻的是它的前提。"""
     dataset = _mv(fixtures.scenario("full"))
     dataset["market_indicator"] = []                                     # 美元那幾類缺匯率
     dataset["nav"] = [r for r in dataset["nav"] if r["fund_code"] not in ("BBBB", "DDDD")]
     values = logic._category_values(dataset, logic.BASIS_MV,
                                     logic.setting_value(dataset, "alo_bucket_names"))
-    assert len({v["reason"] for v in values.values()}) == 2, "前提沒成立：這個資料集沒有兩種理由"
-    with pytest.raises(ValueError, match="分母為零或負"):
-        logic.build_page_model(dataset)
+    reasons = {v["reason"] for v in values.values()}
+    assert len(reasons) == 2 and None not in reasons, "前提沒成立：這個資料集沒有兩種理由"
+    block = logic.find_block(logic.build_page_model(dataset), "ALO-2")
+    assert block["placeholder"] is None
+    texts = {r["current_text"] for r in block["_rows"]}
+    assert reasons <= texts                                              # 每一種理由都照字面上了畫面
+    assert texts <= reasons | {"⬜"}                                     # 除此之外只有 ⬜，沒有新編的字
+    assert all(r["_current_pct"] is None and r["_diff"] is None for r in block["_rows"])
+    assert not any(r["current_text"].endswith("%") for r in block["_rows"])  # 不把「沒有分母」寫成 0%
+    assert any(line.startswith("合計未涵蓋 ") for line in block["tail_lines"])
 
 
 def test_有值卻加起來不為正_照舊raise():
@@ -354,6 +368,109 @@ def test_負控_市值基準但有台幣淨值時分母為正_根本不走那個
                                     logic.setting_value(dataset, "alo_bucket_names"))
     assert sum(v["value"] for v in values.values() if v["value"] is not None) > 0
     assert logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]     # 照常出列
+
+
+# ═══════════════════════ 市值基準：美元／新臺幣／歐元（2026-10-13 客戶裁示：資產配置必須是真資料）═══════════════════════
+#
+# ALO-GAP-非美元幣別：非美元幣別依 49 §6.1 Q9 換鍵（`fx_twd_per_<ISO 小寫>`），取 obs_date 規則同美元；
+# 缺匯率照 44 ALO-2 空狀態的既有字面「⬜ 資料未備：缺換算匯率 <鍵>」，不炸。
+
+
+def _to_eur(dataset, code="CCCC"):
+    """把一檔美元基金改成歐元計價（持倉列與淨值列一起改；淨值列的幣別來自持倉列，同 L2）。"""
+    for row in dataset["holding"]:
+        if row["fund_code"] == code:
+            row["ccy"] = "EUR"
+    for row in dataset["nav"]:
+        if row["fund_code"] == code:
+            row["ccy"] = "EUR"
+    return dataset
+
+
+def _fx_row(key, obs_date, value):
+    return {"indicator_key": key, "obs_date": obs_date, "release_date": obs_date, "value_num": value,
+            "value_unit": "新臺幣／EUR", "source_tier": "市場指標", "is_revised": False,
+            "fetched_at": "2026-09-23T01:30:00Z"}
+
+
+def _holding(dataset, code):
+    return next(h for h in logic.aggregated_holdings(dataset) if h["fund_code"] == code)
+
+
+def test_市值基準_新臺幣與美元_照淨值乘單位數_美元再乘不晚於淨值日的最近一筆匯率():
+    dataset = _mv(fixtures.scenario("full"))
+    # 新臺幣：BBBB 10000 單位 × 最近一筆淨值 21.5，不乘匯率
+    assert logic.basis_value(dataset, _holding(dataset, "BBBB"), logic.BASIS_MV) == (10000 * 21.5, None)
+    # 美元：AAAA 1000 × 15.2（09-23）× 32.0（obs 09-22；09-24 那筆晚於淨值日，不取）
+    value, reason = logic.basis_value(dataset, _holding(dataset, "AAAA"), logic.BASIS_MV)
+    assert reason is None and math.isclose(value, 1000 * 15.2 * 32.0)
+
+
+def test_市值基準_歐元有匯率_換鍵換算_只取不晚於淨值日的最近一筆():
+    dataset = _to_eur(_mv(fixtures.scenario("full")))
+    dataset["market_indicator"] += [_fx_row("fx_twd_per_eur", "2026-09-19", 34.0),
+                                    _fx_row("fx_twd_per_eur", "2026-09-23", 35.0),
+                                    _fx_row("fx_twd_per_eur", "2026-09-24", 99.0)]   # 晚於淨值日，不取
+    value, reason = logic.basis_value(dataset, _holding(dataset, "CCCC"), logic.BASIS_MV)
+    assert reason is None and math.isclose(value, 3000 * 3.1 * 35.0)
+    block = logic.find_block(logic.build_page_model(dataset), "ALO-2")
+    assert block["placeholder"] is None and all(r["_current_pct"] is not None for r in block["_rows"])
+
+
+def test_市值基準_歐元不拿美元的匯率():
+    """表上只有 fx_twd_per_usd：歐元那一檔不得拿美元匯率硬算（44 ALO-2 判準「不以 1 當匯率硬算」的同一件事）。"""
+    dataset = _to_eur(_mv(fixtures.scenario("full")))
+    value, reason = logic.basis_value(dataset, _holding(dataset, "CCCC"), logic.BASIS_MV)
+    assert value is None
+    assert reason == "⬜ 資料未備：缺換算匯率 fx_twd_per_eur"
+
+
+def test_市值基準_歐元缺匯率_不崩頁_該類別照字面寫資料未備_其餘照算():
+    dataset = _to_eur(_mv(fixtures.scenario("full")))
+    model = logic.build_page_model(dataset)                       # 舊行為：ValueError（ALO-GAP-非美元幣別）
+    alo2 = logic.find_block(model, "ALO-2")
+    by_bucket = {r["_bucket"]: r for r in alo2["_rows"]}
+    satellite = by_bucket[fixtures.SATELLITE]
+    assert satellite["current_text"] == "⬜ 資料未備：缺換算匯率 fx_twd_per_eur"
+    assert satellite["_current_pct"] is None and satellite["diff_text"] == "⬜"
+    assert by_bucket[fixtures.CORE]["_current_pct"] is not None          # 其餘類別照算
+    assert "合計未涵蓋 " + fixtures.SATELLITE in alo2["tail_lines"]
+    assert alo2["_tone"] == "灰"
+    alo4 = logic.find_block(model, "ALO-4")
+    assert logic.TEXT_FX_MISSING_ALO4 in alo4["detail_lines"]
+    assert "fx_twd_per_eur" in alo4["summary_text"] and alo4["_tone"] == "灰"
+    alo6 = logic.find_block(model, "ALO-6")
+    row = next(r for r in alo6["_rows"] if r["_fund_code"] == "CCCC")
+    assert row["_value"] is None and row["value_text"] == "⬜"
+
+
+def test_市值基準_美元與歐元都缺匯率_兩個鍵都列出_美元字面不變():
+    dataset = _to_eur(_mv(fixtures.scenario("full")))
+    dataset["market_indicator"] = []
+    model = logic.build_page_model(dataset)
+    texts = {r["current_text"] for r in logic.find_block(model, "ALO-2")["_rows"]}
+    assert logic.TEXT_FX_MISSING_ALO2 in texts                            # 44 原字面一字未改
+    assert "⬜ 資料未備：缺換算匯率 fx_twd_per_eur" in texts
+    summary = logic.find_block(model, "ALO-4")["summary_text"]
+    assert "缺 fx_twd_per_usd、fx_twd_per_eur" in summary
+
+
+def test_缺匯率字面_美元版就是44原字面():
+    assert logic.fx_missing_text(logic.FX_KEY) == logic.TEXT_FX_MISSING_ALO2
+    assert logic.fx_missing_text("fx_twd_per_eur").startswith(logic.TEXT_FX_MISSING_ALO4 + " ")
+
+
+@pytest.mark.parametrize("bad", ["TWD", "eur", "EU", None])
+def test_匯率鍵_契約外的幣別當場炸(bad):
+    with pytest.raises(ValueError):
+        logic.fx_key_for(bad)
+
+
+def test_成本基準不看淨值也不看匯率_歐元照算():
+    dataset = _to_eur(fixtures.scenario("full"))                   # 成本基準
+    dataset["nav"], dataset["market_indicator"] = [], []
+    block = logic.find_block(logic.build_page_model(dataset), "ALO-2")
+    assert block["placeholder"] is None and all(r["_current_pct"] is not None for r in block["_rows"])
 
 
 # ═══════════════════════ 存檔組值（ALO-1／ALO-4，客戶 2026-10-09 裁示）═══════════════════════
@@ -601,3 +718,75 @@ def test_沒動過但原字串表漏了那一鍵_當場炸不猜():
     fields, values, _raw = _precise()
     with pytest.raises(KeyError):
         live.save_entries(_ALO1_KEYS, values, fields=fields, raw={})
+
+
+# ═══════════════════════ 淨值表判讀 `live.assemble_nav`（2026-10-13；規則同 hld `assemble_live_load`）═══════════════════════
+
+_EMPTY = "來源回傳空值，原因未提供"
+_FOUR = frozenset({"ccy_missing", "ccy_conflict", "fetched_at_missing", "fetched_at_in_future"})
+
+
+def _nav_table(**over):
+    table = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
+             "provenance": {}}
+    table.update(over)
+    return table
+
+
+def _keys(codes, fail=()):
+    return [{"input": c, "ok": c not in fail} for c in codes]
+
+
+def _assemble(table, codes=("AAAA", "BBBB"), fail=(), mask=lambda m: m.replace("SECRET", "＊")):
+    return live.assemble_nav(holding_codes=list(codes), key_results=_keys(codes, fail), nav_table=table,
+                             empty_without_reason=_EMPTY, nav_unavailable_withheld=_FOUR, mask=mask)
+
+
+def test_assemble_nav_失敗原文逐檔遮蔽串成一句_來源回空與扣下不算失敗():
+    nav_row = {"fund_code": "AAAA", "nav_date": "2026-09-23", "nav_orig_ccy": 10.0, "ccy": "TWD",
+               "source_tier": "淨值", "is_estimated": False, "fetched_at": "2026-09-23T01:30:00+00:00"}
+    out = _assemble(_nav_table(rows=[nav_row], errors={"BBBB": "逾時 SECRET", "CCCC": _EMPTY},
+                               withheld={"DDDD": "ccy_conflict"},
+                               fetched={"AAAA": 1, "BBBB": 0, "CCCC": 0}),
+                    codes=("AAAA", "BBBB", "CCCC", "DDDD"))
+    assert out["nav"] == [nav_row]
+    assert out["error"] == "BBBB：逾時 ＊"
+    assert out["notes"]["withheld"] == {"DDDD": "ccy_conflict"}
+
+
+def test_assemble_nav_扣下代碼不在約定清單_當場炸():
+    with pytest.raises(ValueError, match="input_conflict"):
+        _assemble(_nav_table(withheld={"AAAA": "input_conflict"}, fetched={"BBBB": 0}))
+
+
+def test_assemble_nav_一致性_代碼對不上就炸():
+    with pytest.raises(ValueError, match="持倉裡沒有"):
+        _assemble(_nav_table(fetched={"AAAA": 0, "BBBB": 0, "ZZZZ": 0}))
+    with pytest.raises(ValueError, match="沒有交給淨值表"):
+        _assemble(_nav_table(fetched={"AAAA": 0}))
+    with pytest.raises(ValueError, match="不得出現在淨值表"):
+        _assemble(_nav_table(fetched={"AAAA": 0, "BBBB": 0}), fail=("BBBB",))
+
+
+def test_wants_market_value_只認已存基準為市值():
+    assert live.wants_market_value([{"setting_key": "alo_basis", "setting_value": logic.BASIS_MV}]) is True
+    assert live.wants_market_value([{"setting_key": "alo_basis", "setting_value": logic.BASIS_COST}]) is False
+    assert live.wants_market_value([{"setting_key": "alo_basis", "setting_value": None}]) is False
+    assert live.wants_market_value([]) is False                       # 設定讀不到：各塊本來就畫失敗框
+
+
+def test_fx_ccys_needed_只列新臺幣與美元以外_依序不重複():
+    rows = [{"ccy": c} for c in ("USD", "EUR", "TWD", "JPY", "EUR")]
+    assert live.fx_ccys_needed(rows) == ["EUR", "JPY"]
+
+
+def test_merge_fx_table_失敗接在試算表錯誤之後_pending不是失敗():
+    fx = {"rows": [{"indicator_key": "fx_twd_per_eur"}], "errors": {"fx_twd_per_jpy": "逾時 SECRET"},
+          "pending": {"fx_twd_per_aud": "fx_obs_date_rule"}, "skipped": {}, "fetched": {}}
+    rows, error, pending = live.merge_fx_table([{"indicator_key": "fx_twd_per_usd"}], "讀不到表", fx,
+                                               lambda m: m.replace("SECRET", "＊"))
+    assert [r["indicator_key"] for r in rows] == ["fx_twd_per_usd", "fx_twd_per_eur"]
+    assert error == "讀不到表；fx_twd_per_jpy：逾時 ＊"
+    assert pending == {"fx_twd_per_aud": "fx_obs_date_rule"}
+    _rows, error, _p = live.merge_fx_table([], None, dict(fx, errors={}), str)
+    assert error is None
