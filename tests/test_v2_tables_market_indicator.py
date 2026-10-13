@@ -475,4 +475,8 @@ def test_v2_tables只import標準庫與L0_L1():
     assert {(f, n) for f, names in _L2_TO_L2_ALLOWED.items() for n in names} == {
         ("nav_dividend.py", "services.moneydj_fetcher")}
     assert l2_seen == {("nav_dividend.py", "services.moneydj_fetcher")}, l2_seen
+    # 放行清單恰好是這一組（字面值自我釘死，比照 `_L2_TO_L2_ALLOWED`）：多開一個檔或一個名字就紅。
+    assert {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names} == {
+        ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
+        ("exp_universe.py", "time"), ("exp_universe.py", "threading")}
     assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen

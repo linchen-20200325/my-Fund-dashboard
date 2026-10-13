@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timedelta, timezone
 
 from . import logic
 
@@ -223,11 +224,39 @@ def pool_lines(pool) -> list:
         (f"母體：選股池的基金代碼 {len(pool['codes'])} 檔。只取代碼；"
          "選股池上的名稱、幣別、類別一律不用（不可信，客戶 2026-10-13 判定）。"),
     ]
+    read_line = pool_read_line(pool)
+    if read_line:
+        lines.append(read_line)
     if pool["dropped_blank"]:
         lines.append(f"選股池有 {pool['dropped_blank']} 列代碼為空白，未列入。")
     if pool["duplicates"]:
         lines.append(f"選股池有 {pool['duplicates']} 列代碼重複，只列一次。")
     return lines
+
+
+TAIPEI = timezone(timedelta(hours=8))
+
+
+def _interval_text(seconds) -> str:
+    if seconds and seconds % 3600 == 0:
+        return f"{seconds // 3600} 小時"
+    return f"{int(seconds or 0) // 60} 分鐘"
+
+
+def pool_read_line(pool) -> str | None:
+    """2026-10-13 第二輪複驗回修：交代母體的延遲 —— L2 只快取成功結果（`ttl_sec`），快取命中時沿用原讀取時間。
+    `read_at` 缺或解析不了 → 不寫這一行（不編一個時間）。字面為本組擬定。"""
+    raw = pool.get("read_at")
+    if not raw:
+        return None
+    try:
+        when = datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        return None
+    shown = when.astimezone(TAIPEI).strftime("%Y-%m-%d %H:%M")
+    return f"選股池讀取於 {shown}（台北時間），最長約 {_interval_text(pool.get('ttl_sec'))}更新一次。"
 
 
 def _fill_missing(cells):

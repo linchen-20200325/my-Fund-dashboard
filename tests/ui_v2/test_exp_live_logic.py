@@ -429,3 +429,14 @@ def test_正式模式_任何代碼形狀_代碼以外的欄全部缺值_不推�
         assert all(cell["_state"] == logic.STATE_MISSING for cell in column["_cells"].values()), code
     texts = [f["text"] for f in _b(model, "EXP-6")["_fields"]]
     assert texts[1] == code and all(t.startswith("⬜ 資料未備：") for i, t in enumerate(texts) if i != 1)
+
+
+
+def test_母體說明行_讀取時間轉台北時間_寫出最長更新間隔():
+    pool = dict(_pool(), read_at="2026-10-13T10:05:00+00:00", ttl_sec=3600)
+    assert live.pool_read_line(pool) == "選股池讀取於 2026-10-13 18:05（台北時間），最長約 1 小時更新一次。"
+    lines = _b(_model(inputs=_input(pool=pool, settings=_settings(rules=_NOT_C03))), "EXP-2")["detail_lines"]
+    assert live.pool_read_line(pool) in lines
+    assert live.pool_read_line(dict(pool, read_at=None)) is None
+    assert live.pool_read_line(dict(pool, read_at="2026-10-13T10:05:00")) is None     # 沒有時區：不猜
+    assert live.pool_read_line(dict(pool, read_at="壞字串")) is None

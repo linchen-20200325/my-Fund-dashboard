@@ -312,11 +312,18 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 外部來源
   → L0 infra/proxy.py::fetch_url（退避 infra/source_backoff.py）
   → L1 repositories/...（既有快取；新的 Sheets 讀取在這一層加 60 秒手動快取）
-  → L2 services/v2_tables/...（轉成第四節表列＋失敗原文＋fetched_at；不另疊快取，見 4.4）
+  → L2 services/v2_tables/...（轉成第四節表列＋失敗原文＋fetched_at；~~不另疊快取，見 4.4~~ → 例外一處：exp_universe，見本圖下方註記）
   → L3 ui_v2/<頁>/source.py（組參數；不放快取，見 4.4）
   → ui_v2/<頁>/logic.py::build_page_model
   → ui_v2/<頁>/page.py 渲染
 ```
+
+⚠️ **上圖 L2 那一行「不另疊快取」有一處有意識的偏離，不是漏刪**（日期 2026-10-13；決策者：AI 總管；依據：標的探索正式模式第一批的稽核 L 回修）。
+- **偏離內容**：`services/v2_tables/exp_universe.py` 在 L2 快取選股池代碼（只快取成功結果，TTL 取 `shared.ttls.TTL_1HOUR`），失敗冷卻沿用 L1 的同一把冷卻鑰匙（`infra.gspread_retry`）；為此 L2 綁了 L1 的兩個內部細節 —— 私有函式 `repositories/pool_repository.py::_pool_backoff_ident` 與型別 `LocalJsonPoolStore`（用它判斷「本機暫存檔不當母體」）。
+- **理由**：標的探索每一次互動都會重跑載入，L1 `list_pool()` 本身沒有快取（`_cached_pool_map` 是另一支、回的是補淨值查表用的 map），不快取就每次重跑都打一次 Google Sheets、失敗也不退避；而本批的檔案邊界不動 L1。
+- **撤銷條件**：日後有任務動到 L1 `repositories/pool_repository.py` 時，把「只快取成功的代碼讀取」與一支**公開**的冷卻鑰匙函式移回 L1，撤掉 L2 這份快取與對私有函式、具體型別的依賴，本註記同時劃線。
+- **畫面交代**：`EXP-2` 說明行寫出選股池讀取時間（台北時間）與最長更新間隔；B 線目前沒有清除這份快取的入口，只能等過期或重啟程式。
+- **舊表述的用意仍然成立**（快取集中在 L1，免得各層各疊一份、清不乾淨）；被權衡掉的是「本批不動 L1」這個邊界下，L1 沒有可用的快取。
 
 **第 4 步｜依賴方向**：`ui_v2.app_<頁>_live` → `ui_v2.<頁>.source` → `services.v2_tables` → `repositories.*` → `infra.*`／`shared.*`；`ui_v2.app_<頁>_live` 另 import `ui_v2.<頁>.page`，把載入函式傳進去。單向，無上行 import。`ui_v2` 各頁之間仍互不 import。
 
@@ -411,7 +418,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 
 - 既有 L1 多數已改為「只快取成功結果」，但有**照常快取失敗的已知支線**：`fetch_fred` 的 404、407、「回 200 沒有觀測」、「回 200 但 JSON 解析失敗」（30 分鐘）；`fetch_usdtwd_series` 上游拋例外那一支（10 分鐘）；`fetch_ndc_signal_history` 帶 `error` 的結果（15 分鐘，`EXCEPTIONS.md` 查不到登記）；`load_all_policy_worksheets` 缺分頁的結果（60 秒）。轉換層要把這些情形寫成不同的原文，並在 SET 頁可見。
 - **快取放哪一層**：
-  - 外部 HTTP 取數的快取**只放在 L1**（沿用既有 TTL）。L2 轉換層**不另疊一層**，否則會與 L1 的 TTL 失準，並把 L1 刻意不快取的失敗鎖住。
+  - 外部 HTTP 取數的快取**只放在 L1**（沿用既有 TTL）。L2 轉換層**不另疊一層**，否則會與 L1 的 TTL 失準，並把 L1 刻意不快取的失敗鎖住。（2026-10-13 有一處有意識的偏離，不是漏刪：`services/v2_tables/exp_universe.py` 在 L2 快取選股池代碼 —— 只快取成功、讀取時間照實交出、失敗沿用 L1 冷卻鑰匙；L1 `list_pool()` 本身沒有快取，所以沒有 TTL 可失準、也沒有被刻意不快取的失敗會被鎖住。內容、理由與撤銷條件見第三節第 3 步資料流圖下方的註記；決策者：AI 總管。）
   - Sheets 讀取目前沒有可用的快取（`load_all_policies_v2` 無），而 4.2 的配額問題又必須解決：快取放在 **L1**，就加在 `load_all_policies_v2` 本身（6.3 E-1），比照 `repositories/policy/v2.py::load_all_policy_worksheets` 的 60 秒手動快取先例（`gspread.Client` 不可雜湊，所以用模組層 dict），但鍵要改成「登入者＋試算表 ID」，不能只用試算表 ID —— OAuth 模式下不同登入者的讀取權限不同；**只快取成功的結果，有任何一張分頁被略過就算失敗、不快取**；「存檔」或「重新取數」時清掉。⚠️ **不能拿 `load_all_policy_worksheets` 代替**：它雖然已有 60 秒快取，讀的卻是 v1 欄位（`_records_to_policy_df` ＋ `repositories/policy/_helpers.py::ALL_COLS`），v2 分頁的 `fund_code`、`units`、`avg_nav` 等欄不在其內。**不放 L3**：v3 `01` 規定 UI 層不得私自存放原始資料，而 `EX-UICACHE-1` 的射程只到 `ui/**` 的 `@st.cache_data`，ui_v2 不在其內。
 - `fetched_at` 必須取自 L1 回傳，不能在 L2 用當下時間覆寫 —— 快取命中時覆寫會讓舊資料看起來是新的。例外見 2.8（`fetch_nav` 退回預存舊序列那一支改取 `cache_updated_at`）。
 

@@ -71,10 +71,14 @@ def _stub(monkeypatch, store):
 
 
 def test_只取代碼_其他欄一碰就炸也不炸(monkeypatch):
+    from datetime import datetime, timezone
+
     _stub(monkeypatch, _CloudStore([_OnlyCode("B02"), _OnlyCode("A01")]))
-    out = U.load_pool_codes([])
+    wall = datetime(2026, 10, 13, 10, 5, tzinfo=timezone.utc)
+    out = U.load_pool_codes([], wall=wall)
     assert out == {"status": U.STATUS_OK, "backend": "google-sheets", "codes": ["B02", "A01"],
-                   "dropped_blank": 0, "duplicates": 0, "message": None}
+                   "dropped_blank": 0, "duplicates": 0, "message": None,
+                   "read_at": "2026-10-13T10:05:00+00:00", "ttl_sec": U.SUCCESS_TTL_SEC}
 
 
 def test_正控_替身真的會咬人():
@@ -188,3 +192,61 @@ def test_全域刷新會清掉這份快取(monkeypatch):
     assert store.calls == 2
     info = U._REGISTERED.cache_info()
     assert set(info) >= set(C.CACHE_INFO_REQUIRED_KEYS) and not (set(info) & set(C.CACHE_INFO_STAT_KEYS))
+
+
+# ═════════════════════ 2026-10-13 第二輪複驗：冷卻的歸因、讀取時間 ═════════════════════
+
+
+def test_別本試算表被限流_本頁照實寫同一把憑證被限流_不說選股池讀取失敗(monkeypatch):
+    """稽核 K 的反例：限流冷卻記在整把憑證上，選股池一次都沒讀過。"""
+    store = _stub(monkeypatch, _CloudStore([_OnlyCode("A01")]))
+    U.record_gspread_failure("sa", "SETTINGS_SHEET_OTHER", _Quota429())
+    out = U.load_pool_codes([])
+    assert store.calls == 0
+    assert out["status"] == U.STATUS_FAILED
+    assert out["message"].startswith("同一把服務帳戶目前被 Google 限流") and "本次未讀選股池" in out["message"]
+    assert "選股池剛讀取失敗過" not in out["message"] and "上次失敗" not in out["message"]
+
+
+class _Quota429(Exception):
+    """帶 429 狀態碼的假 gspread 例外（`infra.gspread_retry.http_status_of` 讀 `.response.status_code`）。"""
+
+    def __init__(self):
+        super().__init__("APIError: [429]: Quota exceeded")
+        self.response = type("R", (), {"status_code": 429})()
+
+
+def test_本模組自己讀失敗_冷卻中才寫上次失敗原文(monkeypatch):
+    store = _stub(monkeypatch, _CloudStore(error=ConnectionError("連線中斷（測試）")))
+    U.load_pool_codes([])
+    out = U.load_pool_codes([])
+    assert store.calls == 1
+    assert out["message"].startswith("選股池剛讀取失敗過") and "上次失敗：ConnectionError: 連線中斷（測試）" in out["message"]
+
+
+def test_本模組自己被限流_寫限流那一句並接上次失敗(monkeypatch):
+    store = _stub(monkeypatch, _CloudStore(error=_Quota429()))
+    U.load_pool_codes([])
+    out = U.load_pool_codes([])
+    assert store.calls == 1
+    assert out["message"].startswith("同一把服務帳戶目前被 Google 限流") and "上次失敗：" in out["message"]
+
+
+def test_同一本選股池被其他讀取點讀失敗_不接本模組沒有的原文(monkeypatch):
+    store = _stub(monkeypatch, _CloudStore([_OnlyCode("A01")]))
+    U.record_gspread_failure(*_KEY, ConnectionError("L1 別處讀失敗"))
+    out = U.load_pool_codes([])
+    assert store.calls == 0
+    assert out["message"].startswith("選股池在其他讀取點剛讀取失敗過") and "上次失敗" not in out["message"]
+
+
+def test_讀取時間_快取命中沿用原讀取時間_失敗沒有時間(monkeypatch):
+    from datetime import datetime, timezone
+
+    store = _stub(monkeypatch, _CloudStore([_OnlyCode("A01")]))
+    first = U.load_pool_codes([], now=10.0, wall=datetime(2026, 10, 13, 1, 0, tzinfo=timezone.utc))
+    again = U.load_pool_codes([], now=20.0, wall=datetime(2026, 10, 13, 1, 30, tzinfo=timezone.utc))
+    assert store.calls == 1 and again["read_at"] == first["read_at"] == "2026-10-13T01:00:00+00:00"
+    U.clear_cache()
+    store.error = ConnectionError("x")
+    assert U.load_pool_codes([], now=30.0)["read_at"] is None

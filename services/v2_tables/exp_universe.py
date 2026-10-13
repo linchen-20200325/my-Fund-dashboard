@@ -25,14 +25,23 @@
 - **只快取成功結果**（`STATUS_OK`），TTL 取 `shared.ttls.TTL_1HOUR`。理由：選股池是使用者手動維護的清單，
   變動頻率以天計；而失敗冷卻沿用 `infra.gspread_retry`，最長一種（限流，`shared.backoff_policy.
   BACKOFF_RATE_LIMITED_SEC` ＝ 1800 秒）必須**短於**成功 TTL，`TTL_30MIN` 會與它相等，故取下一級。
-  代價：在別處改了選股池，本頁最多晚一小時看到；側欄「全域刷新」（`infra.cache.clear_all_caches`）
-  會清掉這份快取（本檔以 `register_cache` 登記），那是立即生效的逃生門。
+  代價：在別處改了選股池，本頁最多晚一小時看到（畫面上 `EXP-2` 說明行寫出讀取時間與更新間隔）。
+  ~~側欄「全域刷新」（`infra.cache.clear_all_caches`）會清掉這份快取（本檔以 `register_cache` 登記），
+  那是立即生效的逃生門。~~ → 2026-10-13 第二輪複驗更正（有意識的更正，不是漏刪；決策者：AI 總管）：
+  **那句不成立** —— ui_v2 全樹沒有任何 `clear_all_caches` 呼叫點，那個側欄按鈕住在舊站（另一個程式）。
+  **實況：B 線目前沒有清除入口**，只能等一小時過期或重啟程式。`register_cache` 的登記照留
+  （同一個行程裡若有人呼叫 `clear_all_caches` 仍清得掉），但它不是使用者在 B 線摸得到的東西。
   ⚠️ `49` §4.4 寫「快取只在 L1」：L1 `list_pool()` 本身沒有快取（`_cached_pool_map` 是另一支、回的是
   補淨值查表用的 map），本頁又不得改 L1，所以快取放在這一層（總管 2026-10-13 指定 L2 或 source 二選一）。
 - **失敗冷卻**：沿用 `infra.gspread_retry` 的 `should_skip_gspread`／`record_gspread_failure`／
   `record_gspread_success`，鍵取 L1 `pool_repository._pool_backoff_ident(...)`（與 L1 自己讀選股池的冷卻
   **同一把鑰匙** —— 同一本試算表、同一把憑證，失敗一次全部讀取點一起冷卻）。冷卻期內**不重打**，
   回上一次的失敗原文並註明「冷卻中」；冷卻到期由 `infra.source_backoff` 自動解除，下一次就真的重試。
+  ⚠️ **歸因（2026-10-13 第二輪複驗回修）**：限流冷卻記在**整把憑證**上（`gspread:quota:<actor>`），
+  別本試算表（設定、保單）被 429 也會讓本頁跳過 —— 那時選股池一次都沒讀過，不得寫「選股池剛讀取失敗過」。
+  種類為限流 → 寫「同一把<憑證>目前被 Google 限流……本次未讀選股池」；
+  不是限流、但本模組沒有自己記過失敗 → 寫「其他讀取點剛讀取失敗」；
+  **只有本模組自己記過同一種失敗時**才接「上次失敗：<原文>」。
   存檔不涉選股池，不清這份快取。
 """
 
@@ -45,6 +54,8 @@ from infra.cache import register_cache
 from infra.gspread_retry import record_gspread_failure, record_gspread_success, should_skip_gspread
 from repositories import pool_repository
 from services.v2_tables.masking import mask_message
+from datetime import datetime, timezone
+
 from shared.ttls import TTL_1HOUR
 
 STATUS_OK = "ok"
@@ -55,12 +66,16 @@ STATUS_FAILED = "failed"
 TEXT_NOT_CLOUD = "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"
 # 冷卻中時的訊息前半（後面接上一次的失敗原文）。字面為本組擬定。
 TEXT_COOLING = "選股池剛讀取失敗過，冷卻中（約剩 {left} 秒），本次不重打 Google Sheets"
+# 2026-10-13 第二輪複驗回修：冷卻不是本模組自己的失敗造成時的兩句（字面為本組擬定）。
+TEXT_COOLING_QUOTA = "同一把{actor}目前被 Google 限流，冷卻中（約剩 {left} 秒），本次未讀選股池"
+TEXT_COOLING_OTHER = "選股池在其他讀取點剛讀取失敗過，冷卻中（約剩 {left} 秒），本次未讀選股池"
+_ACTOR_TEXT = {"sa": "服務帳戶", "oauth": "登入身分"}
 
 SUCCESS_TTL_SEC = TTL_1HOUR
 
 _LOCK = threading.Lock()
 _CACHE: dict = {}          # (actor, sheet_id) → (存入時間 monotonic, 成功結果 dict)
-_LAST_FAILURE: dict = {}   # (actor, sheet_id) → 上一次失敗的原文（未遮蔽；回傳前才遮）
+_LAST_FAILURE: dict = {}   # (actor, sheet_id) → (上一次失敗的冷卻種類, 原文；未遮蔽，回傳前才遮)
 
 
 class _PoolCodesCache:
@@ -88,7 +103,21 @@ def clear_cache() -> None:
 
 def _empty(status: str, backend: str, message) -> dict:
     return {"status": status, "backend": backend, "codes": [], "dropped_blank": 0,
-            "duplicates": 0, "message": message}
+            "duplicates": 0, "message": message, "read_at": None, "ttl_sec": SUCCESS_TTL_SEC}
+
+
+def cooling_text(actor: str, left: float, kind: str, own) -> str:
+    """冷卻中時的那一句（未遮蔽）。`own`：本模組自己記過的 `(種類, 原文)`，沒有為 None。"""
+    seconds = int(left + 0.999)
+    if kind == "rate_limited":
+        text = TEXT_COOLING_QUOTA.format(actor=_ACTOR_TEXT.get(actor, "憑證"), left=seconds)
+    elif own is not None:
+        text = TEXT_COOLING.format(left=seconds)
+    else:
+        text = TEXT_COOLING_OTHER.format(left=seconds)
+    if own is not None and own[0] == kind:
+        text += f"；上次失敗：{own[1]}"
+    return text
 
 
 def _codes_of(entries) -> dict:
@@ -107,7 +136,7 @@ def _codes_of(entries) -> dict:
     return {"codes": codes, "dropped_blank": dropped_blank, "duplicates": duplicates}
 
 
-def load_pool_codes(secret_values, *, oauth_client=None, now=None) -> dict:
+def load_pool_codes(secret_values, *, oauth_client=None, now=None, wall=None) -> dict:
     """選股池的基金代碼。
 
     回傳 `{"status", "backend", "codes", "dropped_blank", "duplicates", "message"}`：
@@ -116,9 +145,11 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None) -> dict:
     - `codes`：去前後空白、去重（第一次出現的位置為準）後的代碼清單；**大小寫原樣保留**；
     - `dropped_blank`／`duplicates`：被丟掉的空代碼筆數／被併掉的重複筆數；
     - `message`：失敗、冷卻中或未設定雲端時的訊息（已遮蔽）；OK 時為 None。
+    - `read_at`：這一份代碼**實際讀自試算表**的時間（UTC，ISO 8601）；快取命中時沿用原讀取時間；失敗時為 None。
+    - `ttl_sec`：成功結果的快取秒數（畫面據此寫「最長約多久更新一次」）。
 
     `oauth_client`：L1 的注入點。⚠️ ui_v2 目前沒有取得它的途徑（取它的現有函式住在舊樹 `ui/`），呼叫端恆傳 None。
-    `now`：測試用（monotonic 秒）；不傳取 `time.monotonic()`。
+    `now`：測試用（monotonic 秒）；不傳取 `time.monotonic()`。`wall`：測試用（讀取時間）；不傳取現在的 UTC 時間。
 
     ⚠️ 讀取例外一律收成 `STATUS_FAILED`（訊息帶例外型別名）：`list_pool` 往外拋的型別沒有封閉清單
     （gspread 的 `APIError`、憑證錯誤、`RuntimeError`／`KeyError` 都會出現，本套件不得 import gspread 去列舉），
@@ -137,23 +168,25 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None) -> dict:
     if hit is not None and now - hit[0] < SUCCESS_TTL_SEC:
         return dict(hit[1], codes=list(hit[1]["codes"]))
 
-    skip, left, _kind = should_skip_gspread(*key)
+    skip, left, kind = should_skip_gspread(*key)
     if skip:
         with _LOCK:
-            last = _LAST_FAILURE.get(key)
-        text = TEXT_COOLING.format(left=int(left + 0.999))
-        return _empty(STATUS_FAILED, backend, mask(f"{text}；上次失敗：{last}" if last else text))
+            own = _LAST_FAILURE.get(key)
+        return _empty(STATUS_FAILED, backend, mask(cooling_text(key[0], left, kind, own)))
 
     try:
         entries = store.list_pool()
     except Exception as exc:  # noqa: BLE001 — 理由見 docstring：照實回失敗，不吞
         record_gspread_failure(key[0], key[1], exc)
         raw = f"{type(exc).__name__}: {exc}"
+        _skip, _left, recorded_kind = should_skip_gspread(*key)
         with _LOCK:
-            _LAST_FAILURE[key] = raw
+            _LAST_FAILURE[key] = (recorded_kind, raw)
         return _empty(STATUS_FAILED, backend, mask(raw))
     record_gspread_success(*key)
-    result = {"status": STATUS_OK, "backend": backend, "message": None, **_codes_of(entries)}
+    read_at = (wall or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    result = {"status": STATUS_OK, "backend": backend, "message": None, "read_at": read_at,
+              "ttl_sec": SUCCESS_TTL_SEC, **_codes_of(entries)}
     with _LOCK:
         _LAST_FAILURE.pop(key, None)
         _CACHE[key] = (now, dict(result, codes=list(result["codes"])))
