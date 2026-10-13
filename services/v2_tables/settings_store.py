@@ -91,7 +91,11 @@ LOG_TIMED_TABLES = {"nav": nav_dividend.SOURCE_TIER_NAV}
 # 2026-10-09：hld 頁正式入口 `ui_v2/app_hld_live.py` 落地（S6b-3），經 `ui_v2/hld/source.py` 讀
 # `load_user_settings`（`hld_` 開頭的三個鍵），故加入 "hld"；跨頁守衛
 # `tests/test_v2_tables_settings_store_page.py::test_跨頁守衛_hld有正式入口時必須列入PAGES_READING_SETTINGS`。
-PAGES_READING_SETTINGS = ("set", "alo", "hld")
+# ~~PAGES_READING_SETTINGS = ("set", "alo", "hld")~~
+# 2026-10-13：mkt 頁正式入口 `ui_v2/app_mkt_live.py` 經 `ui_v2/mkt/source.py` 讀 `load_user_settings`
+# （`mkt_` 開頭的三個鍵；客戶 2026-10-13 裁示：市場總覽設定存檔接上，存檔後下一次重新載入生效），
+# 故加入 "mkt"（狀態更新，不是漏刪；上一行在寫下當時為真）。exp 頁仍未讀取。
+PAGES_READING_SETTINGS = ("set", "alo", "hld", "mkt")
 
 # 「重新取數」要清的 L1 快取：第一階段真的會取數的來源 → 那個來源的 L1 取數函式本身
 # （`_ttl_cache` 包過、有 `cache_clear()`）。`50` 第 10 節 B9 定案：只清本次會用到的 L1 函式

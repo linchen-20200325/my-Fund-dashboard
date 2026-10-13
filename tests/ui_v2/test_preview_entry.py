@@ -173,8 +173,10 @@ def test_b_標的探索與示範入口一樣不傳任何參數():
 def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合():
     """記下量測當時四份 live 入口各傳什麼（量測日 2026-10-12）；live 入口一改，本條先紅，提醒回頭對預覽。"""
     got = {p: _entry_injections(_ROOT / "ui_v2" / f"app_{p}_live.py", p)[0] for p in _LIVE_PAGES}
+    # 2026-10-13 狀態更新（不是漏刪）：客戶裁示市場總覽設定存檔接上 user_setting ——
+    # ~~"mkt": {"load_live": "load_live"},~~ → mkt 入口與預覽同步加傳 save_live（上一條守衛比對兩者逐一相同）。
     assert got == {
-        "mkt": {"load_live": "load_live"},
+        "mkt": {"load_live": "load_live", "save_live": "save_setting"},
         "hld": {"load_live": "load_live", "mask_error": "mask_error"},
         "alo": {"load_live": "load_live", "save_live": "save_setting"},
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch"},
@@ -360,7 +362,11 @@ def _pops_each_drop_key(func: ast.FunctionDef) -> bool:
 
 def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字面值():
     tree = _tree(_PREVIEW)
-    assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'"]
+    # ~~assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'"]~~
+    # → 2026-10-13 狀態更新（不是漏刪）：市場總覽存檔接上後多一格「存檔逐鍵結果」，引用 page 的常數。
+    assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE"]
+    mkt_key = _string_constant(_tree(_ROOT / "ui_v2" / "mkt" / "page.py"), "_SAVE_RESULTS_STATE")
+    assert mkt_key and mkt_key not in _PREVIEW.read_text(encoding="utf-8")
     assert _pops_each_drop_key(_function(tree, "_on_page"))
     alo_key = _string_constant(_tree(_ROOT / "ui_v2" / "alo" / "page.py"), "_SAVE_ERRORS_STATE")
     assert alo_key and alo_key not in _PREVIEW.read_text(encoding="utf-8")  # 常數存在，本檔沒有寫死同一個字串
