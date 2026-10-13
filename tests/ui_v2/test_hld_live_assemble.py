@@ -91,7 +91,10 @@ _L2_STRINGS = {
 _COLON = chr(0xFF1A)
 _SEMICOLON = chr(0xFF1B)
 
-_TODAY = date(2026, 10, 2)
+# ~~`_TODAY = date(2026, 10, 2)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-02 已是 14 天 ⇒ 本檔驗的事（取數組裝、讀取失敗不說空）會被整片資料未備蓋掉。
+# 改用恰 10 天（照用）的 9/28；資料未備本身的驗證在 `test_hld_live_freshness.py`。
+_TODAY = date(2026, 9, 28)
 _WINDOW = (fixtures.WINDOW_START, fixtures.WINDOW_END)
 _UPDATED_AT = "2026-10-01T09:00:00+08:00"
 _RULES = [

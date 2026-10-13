@@ -85,10 +85,19 @@ def _prov(dataset, *, fallback=(), stale=None):
     return out
 
 
+# 假資料每一檔最後一筆 `nav_date` 是 2026-09-18（`ui_v2/hld/fixtures.py::navs`）。
+# 客戶 2026-10-13 裁示：淨值日距今**大於** 10 天 → 資料未備、不再照算。本檔的測試多半在驗別的事（示意字樣、
+# 核對日、DIRECT、套用），原本沒給 `today` 時走當下時鐘 —— 那會讓結果隨日期漂移，而且日期一過 9/28 就全部變成資料未備。
+# ⇒ 沒給 `today` 時固定用 `_FRESH_TODAY`（距最後一筆恰 10 天，照用）。要驗資料未備的測試見 `test_hld_live_freshness.py`。
+_FRESH_TODAY = date(2026, 9, 28)
+
+
 def _build(*args, **kw):
-    """正式模式的 `build_live_model`，帶上 `direct_policy_id`；`nav_provenance` 沒給就補「全部即時取回」（S5）。"""
+    """正式模式的 `build_live_model`，帶上 `direct_policy_id`；`nav_provenance` 沒給就補「全部即時取回」（S5）；
+    `today` 沒給就用 `_FRESH_TODAY`（2026-10-13 起，見上）。"""
     if "nav_provenance" not in kw:
         kw["nav_provenance"] = _prov(args[0] if args else kw["dataset"])
+    kw.setdefault("today", _FRESH_TODAY)
     return live.build_live_model(*args, direct_policy_id=_DIRECT_ID, **kw)
 
 
@@ -162,14 +171,32 @@ def test_組模型中途炸掉_開關照樣還原():
     assert logic.find_block(_demo("full"), "HLD-1")["summary_text"].endswith(logic.HINT)
 
 
+def _within_limit(dataset, today):
+    """期望值自己算（不呼叫 `live.withhold_not_ready_nav`，被測的就是那一支）：每檔最後一筆淨值日距 `today`
+    **大於** 10 日的，那一檔的淨值列全部拿掉（客戶 2026-10-13 裁示）。"""
+    last = {}
+    for row in dataset.get("nav") or ():
+        last[row["fund_code"]] = max(last.get(row["fund_code"], row["nav_date"]), row["nav_date"])
+    keep = {c for c, d in last.items() if (today - date.fromisoformat(d)).days <= 10}
+    out = copy.deepcopy(dataset)
+    if "nav" in out:
+        out["nav"] = [r for r in out["nav"] if r["fund_code"] in keep]
+    return out
+
+
+# 2026-10-13：原本只有 10-02 一個日期（假資料最後一筆 9/18 → 14 天，當時只是黃燈、照算）。客戶裁示超過 10 天＝資料未備之後，
+# 10-02 變成「全部資料未備」那一邊；補 9/28（恰 10 天，照用）守住「照用」那一邊仍與示範模式逐字相同。
+@pytest.mark.parametrize("today", [date(2026, 9, 28), date(2026, 10, 2)])
 @pytest.mark.parametrize("name", _ALL)
-def test_正式模式只差三件事_其餘逐字與示範模式相同(name):
+def test_正式模式只差三件事_其餘逐字與示範模式相同(name, today):
     """示範模型 → 去示意字尾 → 改欄名 → 停用兩類按鈕 → 掛新鮮度標示（S5），必須恰好等於正式模型。
-    正式模式若多改了任何一格（新增按鈕、改了別的字），這一條會紅。"""
+    正式模式若多改了任何一格（新增按鈕、改了別的字），這一條會紅。
+    2026-10-13 起多一件：示範模型組在「拿掉資料未備那幾檔淨值列」的 dataset 上（客戶裁示，過期淨值不算）。"""
     args = _scenario_args(name)
     open_fund = _first_holding(args["dataset"])
-    today = date(2026, 10, 2)
-    demo = logic.build_page_model(**copy.deepcopy(args), open_fund=open_fund)
+    demo_args = copy.deepcopy(args)
+    demo_args["dataset"] = _within_limit(demo_args["dataset"], today)
+    demo = logic.build_page_model(**demo_args, open_fund=open_fund)
     fresh = live.nav_freshness(args["dataset"], _prov(args["dataset"]), today=today)
     expected = live._apply_freshness(live.apply_live_notes(_scrub(demo), today=today), fresh)
     got = _build(**args, open_fund=open_fund, today=today)
@@ -341,7 +368,8 @@ def test_不傳今天_取台灣的今天():
     for raw, bad in ((tomorrow_tw.isoformat(), True), (today_tw.isoformat(), False)):
         args = _with_sync(raw)
         hid = args["dataset"]["holding"][1]["holding_id"]
-        cell = _sync_cell(_build(**args), hid)
+        # 刻意走當下時鐘（`_build` 沒給 `today` 才補 `_FRESH_TODAY`；明傳 None ＝ 交給 `build_live_model` 取台灣的今天）
+        cell = _sync_cell(_build(**args, today=None), hid)
         assert isinstance(cell, dict) is bad, raw
 
 
@@ -1203,7 +1231,7 @@ def test_S6a_原字串與抽常數之前相同():
 def test_S6a_正式模式_四處換成刪減版_其餘行照舊(name):
     args = _scenario_args(name)
     demo = _demo(name)
-    got = _build(**args, today=TODAY)
+    got = _build(**args, today=_FRESH_TODAY)
     for code, field in _FIELD.items():
         before = logic.find_block(demo, code)[field]
         after = logic.find_block(got, code)[field]
@@ -1396,7 +1424,7 @@ def test_S6a第三輪_套用的區間取代存過的區間_正式版照轉():
     args = _scenario_args("full")
     window = ("2026-06-01", "2026-09-19")
     demo = logic.build_page_model(**args, applied_window=window)
-    got = _build(**args, today=TODAY, applied_window=window)
+    got = _build(**args, today=_FRESH_TODAY, applied_window=window)
     assert demo["_window"] == got["_window"] == window
     assert logic.build_page_model(**args)["_window"] != window
     # 六塊裡會隨區間動的那幾塊，正式版與示範版拿到同一組數（示意字尾除外）。
@@ -1541,7 +1569,7 @@ def test_S6a第四輪_套用的門檻取代存過的門檻_正式版照轉():
     rules = [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}]
     args = _scenario_args("full")
     demo = logic.build_page_model(**args, applied_rules=rules)
-    got = _build(**args, today=TODAY, applied_rules=rules)
+    got = _build(**args, today=_FRESH_TODAY, applied_rules=rules)
     base = logic.build_page_model(**args)
     assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] != [
         r["_fund_code"] for r in logic.find_block(base, "HLD-1")["_rows"]
@@ -1574,7 +1602,7 @@ def test_S6a2_第2項_N1_結論燈數不重複的檔_偏離表列數不變():
     held = {h["fund_code"] for h in args["dataset"]["holding"]}
     for model in (
         logic.build_page_model(**args, applied_rules=_TWO_BREACH_RULES),
-        _build(**args, today=TODAY, applied_rules=_TWO_BREACH_RULES),
+        _build(**args, today=_FRESH_TODAY, applied_rules=_TWO_BREACH_RULES),
     ):
         rows = logic.find_block(model, "HLD-1")["_rows"]
         light = logic.find_block(model, "HLD-0")
@@ -1668,7 +1696,7 @@ def test_S6a2追加_HLD1卡尾那一句_只刪後半子句_前半句一字不改
 def test_S6a2追加_一檔超出兩條門檻_燈寫1檔_表2列_畫面沒有列數相等():
     args = _scenario_args("srcmiss")
     for model in (logic.build_page_model(**args, applied_rules=_ONE_FUND_TWO_RULES),
-                  _build(**args, today=TODAY, applied_rules=_ONE_FUND_TWO_RULES)):
+                  _build(**args, today=_FRESH_TODAY, applied_rules=_ONE_FUND_TWO_RULES)):
         rows = logic.find_block(model, "HLD-1")["_rows"]
         light = logic.find_block(model, "HLD-0")
         assert [r["_fund_code"] for r in rows] == ["AAAA", "AAAA"]

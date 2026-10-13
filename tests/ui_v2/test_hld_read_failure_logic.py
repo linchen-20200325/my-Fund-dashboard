@@ -48,7 +48,10 @@ _SOURCES = frozenset({
     _module_constant(_L1, "TAB_HOLDING_SUPPLEMENT"),
 })
 _REHOME_POLICY = "P-001"
-_TODAY = date(2026, 10, 2)
+# ~~`_TODAY = date(2026, 10, 2)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-02 已是 14 天 ⇒ 本檔驗的事（取數組裝、讀取失敗不說空）會被整片資料未備蓋掉。
+# 改用恰 10 天（照用）的 9/28；資料未備本身的驗證在 `test_hld_live_freshness.py`。
+_TODAY = date(2026, 9, 28)
 
 # 兩個讀取失敗的原文是資料，不是字句。設定那一句由解析器實際產生（正式模式寫進 `errors["user_setting"]` 的路之一）。
 _S = live.parse_user_settings({

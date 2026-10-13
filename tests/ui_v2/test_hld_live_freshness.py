@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """持倉體檢正式模式：舊淨值的新鮮度標示（hld 接真資料 S5，裁示 1-A＋1-C）。純函式測試，不 import streamlit。
 
+📌 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：~~超過 10 天 → 黃燈、淨值照用~~ → 淨值日距觀測日**大於** 10 天
+→ 該檔淨值「資料未備」：不交給 `logic`、相依淨值的值一律「⬜ 資料未備」、徽章中性灰，且**不得**觸發任何投資黃／紅燈或結論。
+本檔下方「11 天」那一邊的期望值因此全部改寫；「10 天以內」那一邊一字未改。
+
 出處：`docs/wireframes/draft_hld_live.html` §D（「N 的算法」那一列、選項 1-A、1-C、1-A＋1-C）
 與 §G 第 1、1a 題（客戶 2026-10-02 裁示：1-A＋1-C，黃燈門檻 10 天）。
 假資料每一檔最後一筆 `nav_date` 都是 2026-09-18（`ui_v2/hld/fixtures.py::navs`）。
@@ -21,7 +25,8 @@ from ui_v2.hld import fixtures, live, logic  # noqa: E402
 
 _LIVE_PY = _ROOT / "ui_v2" / "hld" / "live.py"
 _LAST = date(2026, 9, 18)
-TODAY = date(2026, 10, 2)
+TODAY = date(2026, 10, 2)            # 距最後一筆 14 天 ⇒ 2026-10-13 起三檔全部資料未備
+FRESH = _LAST + timedelta(days=10)   # 恰 10 天 ⇒ 照用（判定方向是「大於」）
 _ALL = fixtures.ALL_SCENARIO_NAMES
 # 派工單的八個禁詞，以跳脫碼寫（本檔字面不出現它們；同草稿 §H 那一條掃描指令的寫法）。
 _BANNED = ("一鍵", "最佳", "推薦", "最適",
@@ -89,8 +94,12 @@ def _group(model, block, code):
     return next(g for g in logic.find_block(model, block)["fund_groups"] if g["_fund_code"] == code)
 
 
-_OLD = {"text": "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "_tone": "黃",
+# ~~`_OLD = {"text": "⚠ 淨值取自預存序列…已超過 10 日", "_tone": "黃", ...}`~~ → 2026-10-13 客戶裁示：灰、不帶 ⚠。
+_OLD = {"text": "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "_tone": "灰",
         "_nowrap": ["2026-09-18"]}
+# 2026-10-13 新增：超過門檻、不是預存序列的那幾檔。
+_OLD_LIVE = {"text": "最近一筆淨值 2026-09-18，已超過 10 日", "_tone": "灰", "_nowrap": ["2026-09-18"]}
+_ND_BADGE = {"_kind": "新鮮度", "_tone": "灰", "text": "⬜ 資料未備"}
 _FRESH = {"text": "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "_tone": "中性", "_nowrap": ["2026-09-18"]}
 
 
@@ -110,9 +119,13 @@ def test_門檻常數是10_不沿用MJ_FRESH_DAYS_YELLOW_註解寫明客戶原�
 def test_字面逐字照草稿():
     assert live.FRESHNESS_TODAY_TEXT == "當日"
     assert live.FRESHNESS_DELAY_TEXT.format(n=3) == "延遲 3 日"
-    assert live.CACHE_NOTE_OLD.format(day="2026-09-09", limit=10) == (
+    # 2026-10-13 客戶裁示：草稿的「⚠ 」拿掉（資料未備不是投資黃燈），其餘字一字未改。草稿是裁示紀錄，不改。
+    assert "⚠ " + live.CACHE_NOTE_OLD.format(day="2026-09-09", limit=10) == (
         "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-09，已超過 10 日"
     )
+    assert "⚠" not in live.CACHE_NOTE_OLD and "⚠" not in live.NAV_NOTE_NOT_READY
+    assert live.NOT_READY_BADGE_TEXT == logic.ND_TEXT == "⬜ 資料未備"
+    assert live.NOT_READY_TONE == logic.tone_for_state(logic.STATE_MISSING) == "灰"
     assert live.CACHE_NOTE_FRESH.format(day="2026-09-09") == "淨值取自預存序列，不是本次取得；最近一筆 2026-09-09"
     assert live.CACHE_TAIL_TEXT.format(n=1) == "本卡所列的檔中，1 檔的淨值取自預存序列，逐檔見 HLD-6"
     draft = (_ROOT / "docs/wireframes/draft_hld_live.html").read_text(encoding="utf-8")
@@ -130,9 +143,10 @@ def test_字面逐字照草稿():
 # ───────────────────────── N 的算法與邊界 ─────────────────────────
 
 
+# ~~`(11, "延遲 11 日", "黃")`~~ → 2026-10-13 客戶裁示：11 天 ＝「⬜ 資料未備」、灰；HLD-6 不再列那幾檔的淨值列。
 @pytest.mark.parametrize(
     "days, text, tone",
-    [(0, "當日", "中性"), (1, "延遲 1 日", "中性"), (10, "延遲 10 日", "中性"), (11, "延遲 11 日", "黃")],
+    [(0, "當日", "中性"), (1, "延遲 1 日", "中性"), (10, "延遲 10 日", "中性"), (11, "⬜ 資料未備", "灰")],
 )
 def test_邊界_0天_1天_10天_11天(days, text, tone):
     model = _model(today=_LAST + timedelta(days=days))
@@ -140,7 +154,8 @@ def test_邊界_0天_1天_10天_11天(days, text, tone):
     for block in ("HLD-2", "HLD-3"):
         assert [g["freshness_badge"] for g in logic.find_block(model, block)["fund_groups"]] == [want] * 3
     assert [r["freshness_badge"] for r in logic.find_block(model, "HLD-8")["_rows"]] == [want] * 3
-    assert [g["freshness_badge"] for g in logic.find_block(model, "HLD-6")["nav_groups"]] == [want] * 3
+    hld6 = logic.find_block(model, "HLD-6")["nav_groups"]
+    assert [g["freshness_badge"] for g in hld6] == ([want] * 3 if days <= 10 else [])
 
 
 def test_未來日期_raise():
@@ -150,15 +165,16 @@ def test_未來日期_raise():
 
 @pytest.mark.parametrize("utc, days, tone", [
     (datetime(2026, 9, 28, 15, 59, 59, tzinfo=timezone.utc), 10, "中性"),   # 台灣 9/28 23:59:59
-    (datetime(2026, 9, 28, 16, 0, 0, tzinfo=timezone.utc), 11, "黃"),       # 台灣 9/29 00:00:00
+    (datetime(2026, 9, 28, 16, 0, 0, tzinfo=timezone.utc), 11, "灰"),       # 台灣 9/29 00:00:00（2026-10-13：~~黃~~ → 灰）
 ])
 def test_跨台灣午夜_N用台灣日期(utc, days, tone):
     model = _model(today=live.taiwan_today(utc))
     badge = _group(model, "HLD-2", "AAAA")["freshness_badge"]
-    assert (badge["text"], badge["_tone"]) == (f"延遲 {days} 日", tone)
+    text = f"延遲 {days} 日" if days <= 10 else "⬜ 資料未備"
+    assert (badge["text"], badge["_tone"]) == (text, tone)
 
 
-def test_長假情境_最後一筆停在長假前_第10天不轉黃_第11天才轉黃():
+def test_長假情境_最後一筆停在長假前_第10天照用_第11天才資料未備():
     """客戶理由：7 天的門檻遇到春節等長假，每一檔基金都會被誤標黃燈。"""
     shift = _LAST - date(2026, 2, 11)
 
@@ -166,7 +182,7 @@ def test_長假情境_最後一筆停在長假前_第10天不轉黃_第11天才�
         for row in ds["nav"]:
             row["nav_date"] = (date.fromisoformat(row["nav_date"]) - shift).isoformat()
 
-    for today, tone in ((date(2026, 2, 21), "中性"), (date(2026, 2, 22), "黃")):
+    for today, tone in ((date(2026, 2, 21), "中性"), (date(2026, 2, 22), "灰")):   # 2026-10-13：~~黃~~ → 灰
         model = _model(today=today, mutate=holiday)
         for block in ("HLD-2", "HLD-3"):
             assert {g["freshness_badge"]["_tone"] for g in logic.find_block(model, block)["fund_groups"]} == {tone}
@@ -177,25 +193,30 @@ def test_不讀stale_新舊只看N(stale, days, want):
     note = _group(_model(today=_LAST + timedelta(days=days), fallback={"AAAA"}, stale=stale), "HLD-2", "AAAA")
     if want is _FRESH:
         assert note["freshness_note"] == _FRESH
-    else:
-        assert note["freshness_note"]["_tone"] == "黃" and note["freshness_note"]["text"].startswith("⚠")
+    else:   # 2026-10-13：~~黃、以 ⚠ 開頭~~ → 灰、不帶 ⚠
+        assert note["freshness_note"] == _OLD
 
 
 # ───────────────────────── 1-C 副標、卡尾、輸入欄 ─────────────────────────
 
 
-@pytest.mark.parametrize("days, want", [(11, _OLD), (10, _FRESH)])
-def test_預存那一檔副標_其他檔沒有(days, want):
+# 2026-10-13 客戶裁示：11 天時三檔都資料未備 ⇒ 不是預存的 BBBB／CCCC 也掛一行灰色副標（`_OLD_LIVE`），
+# HLD-6 不再列淨值列（分組為空）。10 天那一邊一字未改。
+@pytest.mark.parametrize("days, want, other", [(11, _OLD, _OLD_LIVE), (10, _FRESH, None)])
+def test_預存那一檔副標_其他檔沒有(days, want, other):
     model = _model(today=_LAST + timedelta(days=days), fallback={"AAAA"})
     for block in ("HLD-2", "HLD-3"):
         notes = {g["_fund_code"]: g["freshness_note"] for g in logic.find_block(model, block)["fund_groups"]}
-        assert notes == {"AAAA": want, "BBBB": None, "CCCC": None}
+        assert notes == {"AAAA": want, "BBBB": other, "CCCC": other}
     assert {r["_fund_code"]: r["freshness_note"] for r in logic.find_block(model, "HLD-8")["_rows"]} == {
-        "AAAA": want, "BBBB": None, "CCCC": None}
+        "AAAA": want, "BBBB": other, "CCCC": other}
     hld5 = logic.find_block(model, "HLD-5")["_items"]
-    assert {i["_fund_code"]: i["freshness_note"] for i in hld5} == {"AAAA": want, "BBBB": None, "CCCC": None}
+    assert {i["_fund_code"]: i["freshness_note"] for i in hld5} == {"AAAA": want, "BBBB": other, "CCCC": other}
     hld6 = logic.find_block(model, "HLD-6")["nav_groups"]
-    assert {g["fund_code"]: g["freshness_note"] for g in hld6} == {"AAAA": want, "BBBB": None, "CCCC": None}
+    if days <= 10:
+        assert {g["fund_code"]: g["freshness_note"] for g in hld6} == {"AAAA": want, "BBBB": None, "CCCC": None}
+    else:
+        assert hld6 == []
 
 
 def test_HLD5不掛徽章_只掛副標():
@@ -223,8 +244,9 @@ _HLD7_SUFFIX_WANT = {
 
 
 def test_HLD7_淨值為輸入的三列掛尾巴_配息三列與門檻差額列不掛():
-    rows = logic.find_block(_model(today=TODAY, fallback={"AAAA"}), "HLD-7")["_rows"]
-    base = logic.find_block(_model(today=TODAY), "HLD-7")["_rows"]
+    # 2026-10-13：~~`today=TODAY`~~（10-02 起三檔全部資料未備，尾巴一列都不掛）→ 恰 10 天（照用）
+    rows = logic.find_block(_model(today=FRESH, fallback={"AAAA"}), "HLD-7")["_rows"]
+    base = logic.find_block(_model(today=FRESH), "HLD-7")["_rows"]
     assert len(rows) == len(base)
     got = {}
     for row, b in zip(rows, base):
@@ -251,25 +273,34 @@ def test_HLD7_判定淨值列的名單就是logic輸入欄讀淨值列的那一�
         assert ("D1" in text) == (indicator not in logic.NAV_INPUT_INDICATORS)
 
 
-def test_HLD1卡尾第3句_只數本卡列上的檔_顏色跟著N():
-    hld1 = logic.find_block(_model(today=TODAY), "HLD-1")
+def test_HLD1卡尾第3句_只數本卡列上的檔_資料未備的檔不算():
+    # 2026-10-13 客戶裁示：~~`(11, "黃")`~~ → 11 天時三檔都資料未備、沒有用到淨值 ⇒ 不算「取自預存序列」，卡尾不出現；
+    # 卡尾不再有黃色。名稱 ~~`…_顏色跟著N`~~ 隨之更正。
+    hld1 = logic.find_block(_model(today=FRESH), "HLD-1")
     listed = sorted({r["_fund_code"] for r in hld1["_rows"]})
     unlisted = sorted({"AAAA", "BBBB", "CCCC"} - set(listed))
     assert listed and unlisted and "freshness_tail" not in hld1   # 前提：有檔在卡上、有檔不在
-    assert "freshness_tail" not in logic.find_block(_model(today=TODAY, fallback=set(unlisted)), "HLD-1")
-    for days, tone in ((10, "中性"), (11, "黃")):
-        hld1 = logic.find_block(_model(today=_LAST + timedelta(days=days), fallback={"AAAA", "BBBB", "CCCC"}), "HLD-1")
-        assert hld1["freshness_tail"] == {
-            "text": f"本卡所列的檔中，{len(listed)} 檔的淨值取自預存序列，逐檔見 HLD-6", "_tone": tone}
-        assert hld1["tail_lines"] == logic.find_block(_model(today=TODAY), "HLD-1")["tail_lines"]
+    assert "freshness_tail" not in logic.find_block(_model(today=FRESH, fallback=set(unlisted)), "HLD-1")
+    hld1 = logic.find_block(_model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}), "HLD-1")
+    assert hld1["freshness_tail"] == {
+        "text": f"本卡所列的檔中，{len(listed)} 檔的淨值取自預存序列，逐檔見 HLD-6", "_tone": "中性"}
+    assert hld1["tail_lines"] == logic.find_block(_model(today=FRESH), "HLD-1")["tail_lines"]
+    stale = logic.find_block(_model(today=_LAST + timedelta(days=11), fallback={"AAAA", "BBBB", "CCCC"}), "HLD-1")
+    assert "freshness_tail" not in stale
 
 
-def test_HLD0燈與各塊狀態色調一格不動():
+@pytest.mark.parametrize("days", [10, 40])
+def test_HLD0燈與各塊狀態色調一格不動(days):
     # 基準是「沒掛新鮮度」的正式模型（S3 的 `apply_live_notes` 為止），不是另一份同樣掛過的模型 ——
     # 後者兩邊一起被改到時會照樣相等（突變 M34 就是這樣漏掉的）。
+    # 📌 2026-10-13 客戶裁示：超過 10 天時基準改為「淨值列整個拿掉」的 dataset（＝缺淨值的既有路徑），
+    #    期望值自己拿掉、不呼叫被測的 `withhold_not_ready_nav`；10 天那一邊基準照舊（原本只測 40 天）。
     args = _args()
-    today = _LAST + timedelta(days=40)
-    base = live.apply_live_notes(logic.build_page_model(**copy.deepcopy(args), demo_hint=False), today=today)
+    today = _LAST + timedelta(days=days)
+    base_args = copy.deepcopy(args)
+    if days > 10:
+        base_args["dataset"]["nav"] = []
+    base = live.apply_live_notes(logic.build_page_model(**base_args, demo_hint=False), today=today)
     model = _model(today=today, fallback={"AAAA", "BBBB", "CCCC"})
     assert logic.find_block(model, "HLD-0") == logic.find_block(base, "HLD-0")
     for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-5", "HLD-6", "HLD-7", "HLD-8"):
@@ -279,7 +310,7 @@ def test_HLD0燈與各塊狀態色調一格不動():
 
 
 def test_HLD6分組_列內容與順序不變():
-    hld6 = logic.find_block(_model(today=TODAY), "HLD-6")
+    hld6 = logic.find_block(_model(today=FRESH), "HLD-6")   # 2026-10-13：~~TODAY~~（10-02 起三檔都不列淨值列）
     assert [row for g in hld6["nav_groups"] for row in g["rows"]] == hld6["nav_rows"]
     assert [g["fund_code"] for g in hld6["nav_groups"]] == ["AAAA", "BBBB", "CCCC"]
 
@@ -405,3 +436,142 @@ def test_全情境_禁詞識別碼與狀態徽章守衛照過(name):
     for badge in logic.collect_badges(model):
         if badge["_kind"] == "狀態":
             assert badge["text"] in logic.STATUS_BADGE_LITERALS
+
+
+# ═══════════════ 客戶 2026-10-13 裁示：淨值日距觀測日大於 10 天 → 資料未備（不是投資風險訊號） ═══════════════
+# 期望值一律逐格寫死或自己組（不呼叫被測的 `withhold_not_ready_nav`／`not_ready_codes`）。
+
+_NAV_INPUT = ("區間報酬率", "期間波動", "配息佔淨值比", "最大回撤")   # 以淨值為輸入（含配息佔淨值比的分母）
+_DIV_ONLY = ("期間配息合計", "本金類配息佔比")                      # 不以淨值為輸入
+_RISK_WORDS = ("減碼", "撤出", "賣出", "買進", "加碼", "惡化", "轉弱", "風險升高", "該調整")
+
+
+def _values(model, code):
+    """一檔在各塊上的六個值節點：HLD-2／HLD-3 的主值、HLD-8 的最大回撤與本金類配息佔比。"""
+    out = {}
+    for block in ("HLD-2", "HLD-3"):
+        for mv in _group(model, block, code)["main_values"]:
+            out[mv["label"]] = mv
+    row = next(r for r in logic.find_block(model, "HLD-8")["_rows"] if r["_fund_code"] == code)
+    out["最大回撤"], out["本金類配息佔比"] = row["drawdown"], row["principal"]
+    return out
+
+
+def _age_one(code, days_back):
+    """只讓 `code` 那一檔的淨值整段往前移 `days_back` 天（其他檔不動）。"""
+    def mutate(ds):
+        for row in ds["nav"]:
+            if row["fund_code"] == code:
+                row["nav_date"] = (date.fromisoformat(row["nav_date"]) - timedelta(days=days_back)).isoformat()
+    return mutate
+
+
+def test_資料未備_11天_以淨值為輸入的四個值都是資料未備_不是0也不是空白():
+    stale = _model(today=_LAST + timedelta(days=11))
+    fresh = _model(today=FRESH)
+    for code in ("AAAA", "BBBB", "CCCC"):
+        got, base = _values(stale, code), _values(fresh, code)
+        for name in _NAV_INPUT:
+            assert base[name]["_state"] == logic.STATE_OK, (code, name)   # 正控：10 天時照算
+            node = got[name]
+            assert (node["_state"], node["text"], node["_tone"]) == (logic.STATE_MISSING, "⬜ 資料未備", "灰"), (code, name)
+            assert node["_raw"] is None and node["_has_number"] is False, (code, name)
+        for name in _DIV_ONLY:   # 不以淨值為輸入的照算，與 10 天時逐格相同
+            assert got[name] == base[name], (code, name)
+
+
+def test_恰10天_照用_以淨值為輸入的值都有數():
+    model = _model(today=FRESH)
+    for code in ("AAAA", "BBBB", "CCCC"):
+        got = _values(model, code)
+        assert all(got[n]["_state"] == logic.STATE_OK and got[n]["_raw"] is not None for n in _NAV_INPUT), code
+    assert len(logic.find_block(model, "HLD-6")["nav_rows"]) == len(_args()["dataset"]["nav"])
+
+
+def test_部分過期_只有那一檔資料未備_其他檔逐格與全新鮮時相同():
+    fresh = _model(today=FRESH)
+    model = _model(today=FRESH, mutate=_age_one("AAAA", 20))
+    for name in _NAV_INPUT:
+        assert _values(model, "AAAA")[name]["text"] == "⬜ 資料未備"
+    assert _group(model, "HLD-2", "AAAA")["freshness_badge"] == _ND_BADGE
+    for code in ("BBBB", "CCCC"):
+        assert _values(model, code) == _values(fresh, code)
+        assert _group(model, "HLD-2", code)["freshness_badge"] == _group(fresh, "HLD-2", code)["freshness_badge"]
+    hld6 = logic.find_block(model, "HLD-6")
+    assert {r["_fund_code"] for r in hld6["nav_rows"]} == {"BBBB", "CCCC"}   # 過期那一檔的淨值列一列都不列
+    hld1 = logic.find_block(model, "HLD-1")
+    # 門檻是「最大回撤」與「配息佔淨值比」，兩者都以淨值為輸入 ⇒ 過期那一檔不進偏離表、只進「缺淨值」卡尾。
+    assert "AAAA" not in {r["_fund_code"] for r in hld1["_rows"]}
+    assert "⬜ 另有 1 檔缺淨值，未列入" in hld1["tail_lines"]
+    # 本頁沒有跨檔合計（核心卡自陳「沒有任何跨幣別的合計、平均或比值」）—— 其他檔的列照舊，不因一檔資料未備而少列或改數。
+    assert [r for r in logic.find_block(fresh, "HLD-1")["_rows"] if r["_fund_code"] != "AAAA"] == hld1["_rows"]
+
+
+def test_全部過期_結論燈是灰色資料未備_不是黃也不是紅_沒有任何行動結論():
+    fresh = _model(today=FRESH)
+    assert logic.find_block(fresh, "HLD-0")["_tone"] == "黃"   # 正控：同一份持倉在 10 天時確實會亮投資黃燈
+    model = _model(today=TODAY, fallback={"BBBB"})
+    hld0 = logic.find_block(model, "HLD-0")
+    assert (hld0["_tone"], hld0["_state"], hld0["text"]) == ("灰", logic.STATE_MISSING, "⬜ 資料未備")
+    assert hld0["glyph"] == "⬜" and "超出" not in hld0["text"]
+    hld1 = logic.find_block(model, "HLD-1")
+    assert hld1["_rows"] == [] and hld1["_tone"] == "灰" and hld1["summary_text"] == "⬜ 資料未備"
+    assert logic.find_block(model, "HLD-6")["nav_rows"] == []
+    # 任何地方都沒有黃色的新鮮度徽章／副標，也沒有 ⚠。
+    for block in ("HLD-2", "HLD-3"):
+        for g in logic.find_block(model, block)["fund_groups"]:
+            assert g["freshness_badge"] == _ND_BADGE and g["freshness_note"]["_tone"] == "灰"
+    strings = logic.collect_ui_strings(model)
+    assert not [s for s in strings if "⚠" in s]
+    assert not [s for s in strings if any(w in s for w in _RISK_WORDS)]
+    # 比 10 天時多出來的字，一句都不是風險語彙（資料缺失不得被讀成市場或基金惡化）。
+    added = set(strings) - set(logic.collect_ui_strings(fresh))
+    assert added and not [s for s in added if any(w in s for w in _RISK_WORDS + ("黃燈", "紅燈", "超出"))]
+
+
+def test_部分過期_零偏離時_結論燈不因資料未備轉黃或轉紅():
+    base = _model("noexceed", today=FRESH)
+    assert logic.find_block(base, "HLD-0")["_tone"] == "灰"   # 正控：沒有偏離時是灰
+    model = _model("noexceed", today=FRESH, mutate=_age_one("AAAA", 20))
+    hld0 = logic.find_block(model, "HLD-0")
+    assert hld0["_tone"] == "灰" and hld0["_state"] != logic.STATE_ERROR
+    # 塊的色調：資料未備只會讓它變灰或維持原樣，不會因此變黃或變紅。
+    # （`noexceed` 的 HLD-8 在 10 天時本來就是黃 —— 那是 `44` 5.1 的「業務例外」塊色，與資料未備無關，維持原樣。）
+    for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-8"):
+        tone, before = logic.find_block(model, code)["_tone"], logic.find_block(base, code)["_tone"]
+        assert tone in (before, "灰") and tone != "紅", (code, before, tone)
+
+
+def test_資料未備的檔_HLD7輸入欄不掛預存序列尾巴():
+    model = _model(today=TODAY, fallback={"AAAA", "BBBB", "CCCC"})
+    rows = logic.find_block(model, "HLD-7")["_rows"]
+    assert rows and not [r for r in rows if r["inputs_text"].endswith("預存序列")]
+    for r in rows:
+        if r["_indicator"] in logic.NAV_INPUT_INDICATORS:
+            assert r["inputs_text"] == "0 筆" and r["output_text"] == "⬜ 資料未備", r
+
+
+def test_withhold不改輸入_也不碰配息列():
+    args = _args()
+    ds = args["dataset"]
+    snapshot = copy.deepcopy(ds)
+    out = live.withhold_not_ready_nav(ds, {"AAAA"})
+    assert ds == snapshot
+    assert out["dividend"] == ds["dividend"] and {r["fund_code"] for r in out["nav"]} == {"BBBB", "CCCC"}
+    assert live.withhold_not_ready_nav(ds, set()) is ds
+
+
+def test_門檻只來自共用常數_別名與判定():
+    """`NAV_FRESH_DAYS_YELLOW` 是 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS` 的別名；判定讀它，不讀別處寫死的 10。"""
+    assert live.NAV_FRESH_DAYS_YELLOW is live.thresholds.NAV_NOT_READY_DAYS
+    ds = _args()["dataset"]
+    assert live.not_ready_codes(ds, today=_LAST + timedelta(days=11)) == {"AAAA", "BBBB", "CCCC"}
+    assert live.not_ready_codes(ds, today=_LAST + timedelta(days=10)) == frozenset()
+
+
+def test_門檻只來自共用常數_換掉常數判定跟著變(monkeypatch):
+    monkeypatch.setattr(live, "NAV_FRESH_DAYS_YELLOW", 20)
+    ds = _args()["dataset"]
+    assert live.not_ready_codes(ds, today=_LAST + timedelta(days=11)) == frozenset()
+    badge = _group(_model(today=_LAST + timedelta(days=11)), "HLD-2", "AAAA")["freshness_badge"]
+    assert badge == {"_kind": "新鮮度", "_tone": "中性", "text": "延遲 11 日"}
