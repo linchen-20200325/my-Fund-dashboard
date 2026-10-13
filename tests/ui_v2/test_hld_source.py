@@ -322,3 +322,31 @@ def test_秘密值來源_st_secrets以外三處也收進遮蔽(monkeypatch, wire
     source.load_live()
     for call, values in wired["secret_values"].items():
         assert value in values, call
+
+
+# 稽核 D：端到端 —— `source.load_live`（L2 真的跑，只換 L1 替身）→ `build_live_model`；淨值日 2026-09-30。
+def test_端到端_source到build_淨值超過10日_資料未備_10日照用(wired):
+    from datetime import date
+
+    def dated():
+        s = _series()
+        s.attrs["fetched_at"] = "2026-09-30T01:00:00+00:00"   # L2 要取得時間才寫列
+        return s
+
+    wired["series"] = {"FK-" + h["fund_code"]: dated() for h in _holdings()}
+    out = source.load_live()
+    assert out["dataset"]["nav"], "前提：L2 有寫淨值列"
+    codes = {r["fund_code"] for r in out["dataset"]["nav"]}
+
+    def badges(model):
+        return {g["_fund_code"]: g["freshness_badge"] for g in logic.find_block(model, "HLD-2")["fund_groups"]
+                if g["_fund_code"] in codes}
+
+    ok = live.build_live_model(out["dataset"], today=date(2026, 10, 10), **out["live_args"])
+    stale = live.build_live_model(out["dataset"], today=date(2026, 10, 11), **out["live_args"])
+    assert {b["text"] for b in badges(ok).values()} == {"延遲 10 日"}
+    assert {(b["text"], b["_tone"]) for b in badges(stale).values()} == {("⬜ 資料未備", "灰")}
+    assert {r["_fund_code"] for r in logic.find_block(ok, "HLD-6")["nav_rows"]} == codes
+    assert not [r for r in logic.find_block(stale, "HLD-6")["nav_rows"] if r["_fund_code"] in codes]
+    texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(stale, "HLD-5")["_items"]}
+    assert all(texts[c] == "⬜ 資料未備：最近淨值已超過 10 日" for c in codes)

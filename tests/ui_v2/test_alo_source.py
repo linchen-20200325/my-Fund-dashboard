@@ -653,3 +653,16 @@ def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(w
     assert seen["max_age_days"] == source.live.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
     monkeypatch.undo()
     assert source._today_tw() == __import__("datetime").datetime.now(source.nav_dividend.MARKET_DATE_TZ).date()
+
+
+def test_稽核D_A2_門檻常數換掉_source交出的天數與畫面字面跟著變(wired, monkeypatch):
+    """`nav_not_ready.days` 取 `live.NAV_MAX_AGE_DAYS`（＝共用常數），不是寫死的 10。"""
+    monkeypatch.setattr(source.live, "NAV_MAX_AGE_DAYS", 5)
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5, day="2026-05-20")
+    s.attrs["fetched_at"] = "2026-09-25T01:00:00+00:00"
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert out["dataset"]["nav_not_ready"] == {"codes": ["AAAA"], "days": 5}
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == "⬜ 資料未備：最近淨值已超過 5 日"

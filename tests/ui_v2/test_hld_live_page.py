@@ -5,6 +5,10 @@
 直接呼叫 `page._render_hld5`，餵正式模式組出的 HLD-5 塊（展開區預設收合，AppTest 照樣收得到內容）。
 """
 
+# ~~本檔固定的 today `date(2026, 10, 2)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-02 已是 14 天 ⇒ 正式模式整頁資料未備，本檔要驗的「套用重算」「展開」等會變空掃。
+# 一律改用恰 10 天（照用）的 9/28（5 處）；資料未備本身的驗證在 `test_hld_live_freshness.py`。
+
 import pathlib
 import sys
 
@@ -51,7 +55,7 @@ def _app(with_direct, empty):
             policy_tab_source="保單分頁",
             direct_sources={"保單分頁", "_保單資料", "_持倉補充"},
         )
-    model = live.build_live_model(**args, today=date(2026, 10, 2), **kw)
+    model = live.build_live_model(**args, today=date(2026, 9, 28), **kw)
     page._render_hld5(logic.find_block(model, "HLD-5"))
 
 
@@ -214,7 +218,7 @@ def _bad_sync_app(raw):
         },
     }
     st.session_state[logic.HLD5_OPEN_KEY] = target["holding_id"]
-    model = live.build_live_model(**args, today=date(2026, 10, 2), open_fund=target["holding_id"], **kw)
+    model = live.build_live_model(**args, today=date(2026, 9, 28), open_fund=target["holding_id"], **kw)
     page._render_hld5(logic.find_block(model, "HLD-5"))
 
 
@@ -296,6 +300,8 @@ def _render_app(live_mode):
             holding["policy_id"] = "P-001"
     live_args = {
         "direct_policy_id": "DIRECT",
+        # 2026-10-13：固定 today（原本沒給，走當下時鐘；假資料最後一筆 9/18，日期一過 9/28 就整頁資料未備）。
+        "today": __import__("datetime").date(2026, 9, 28),
         "nav_provenance": {
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
@@ -369,7 +375,7 @@ def _apply_app(live_mode):
             holding["policy_id"] = "P-001"
     live_args = {
         "direct_policy_id": "DIRECT",
-        "today": __import__("datetime").date(2026, 10, 2),
+        "today": __import__("datetime").date(2026, 9, 28),
         "nav_provenance": {
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
@@ -411,7 +417,7 @@ def _models(live_mode):
                 holding["policy_id"] = "P-001"
         kw = {
             "direct_policy_id": "DIRECT",
-            "today": date(2026, 10, 2),
+            "today": date(2026, 9, 28),
             "nav_provenance": {
                 row["fund_code"]: {"cache_fallback": False, "stale": None} for row in args["dataset"]["nav"]
             },
@@ -554,7 +560,7 @@ def test_S6a第四輪_門檻改了按套用_HLD1跟著新門檻重算(live_mode)
             if holding["policy_id"] == "DIRECT":
                 holding["policy_id"] = "P-001"
         kw = {
-            "direct_policy_id": "DIRECT", "today": date(2026, 10, 2),
+            "direct_policy_id": "DIRECT", "today": date(2026, 9, 28),
             "nav_provenance": {r["fund_code"]: {"cache_fallback": False, "stale": None} for r in args["dataset"]["nav"]},
         }
         old, new = live.build_live_model(**args, **kw), live.build_live_model(**args, **kw, applied_rules=rules)

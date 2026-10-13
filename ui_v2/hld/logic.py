@@ -2182,7 +2182,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
 _DIV_KIND_TEXT = {"income": "收益", "principal": "本金", "unknown": "來源未區分"}
 
 
-def _build_hld6(dataset):
+def _build_hld6(dataset, *, not_ready_line=None):
     nav_rows = []
     for row in sorted(
         dataset.get("nav", []), key=lambda r: (r["fund_code"], r["nav_date"])
@@ -2236,6 +2236,9 @@ def _build_hld6(dataset):
         # `44` :719 只寫「無列 → `來源缺`」。兩張表為空**不一定**等於沒有持倉
         # （取數失敗、區間外都可能），上一輪那句原因是假資料下碰巧成立，已撤。
         detail_lines = [empty_source_text(["nav", "dividend"])]
+    if not_ready_line:
+        # 總管 2026-10-13 裁決（稽核 C2）：淨值過期而被拿掉的檔，本表看不出來 ⇒ 加一行中性說明（與 HLD-1 卡尾同一句）。
+        detail_lines = detail_lines + [not_ready_line]
 
     return {
         "code": "HLD-6",
@@ -2408,7 +2411,7 @@ def _inputs_text(metric, indicator):
     )
 
 
-def _build_hld7(metrics, hld1_rows, *, has_holdings):
+def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None):
     rows = []
     for metric in metrics:
         for indicator, owner in INDICATOR_OWNER.items():
@@ -2467,6 +2470,9 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings):
             "該塊把該指標判為不適用時，輸出欄顯示同一句不適用文案，輸入欄照列。"
         ]
         summary = f"逐檔逐指標 {len(rows)} 列{_hint()}"
+    if not_ready_line:
+        # 總管 2026-10-13 裁決（稽核 C2）：那幾檔以淨值為輸入的列印「0 筆」，交代是淨值過期被拿掉，不是缺。
+        detail_lines = detail_lines + [not_ready_line]
 
     return {
         "code": "HLD-7",
@@ -2585,6 +2591,12 @@ def _build_page_model(
     for metric in metrics:
         if metric["_fund_code"] in not_ready:
             metric["nav_not_ready"] = True
+    # 總管 2026-10-13 裁決（稽核 C2）：HLD-6／HLD-7 的說明行，與 HLD-1 卡尾同一句；數的是持倉裡淨值過期的檔。
+    held_not_ready = {m["_fund_code"] for m in metrics if m.get("nav_not_ready")}
+    not_ready_line = (
+        HLD1_NOT_READY_TAIL.format(n=len(held_not_ready), days=nav_not_ready_days) + _hint()
+        if held_not_ready else None
+    )
     has_holdings = bool(dataset.get("holding"))
     has_window = window_is_valid(applied_window)
 
@@ -2660,8 +2672,8 @@ def _build_page_model(
             holding_error=holding_error, holding_unknown=holding_unknown,
             nav_not_ready_days=nav_not_ready_days,
         ),
-        _build_hld6(dataset),
-        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings),
+        _build_hld6(dataset, not_ready_line=not_ready_line),
+        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings, not_ready_line=not_ready_line),
         _build_hld8(
             metrics, has_holdings=has_holdings, has_window=has_window,
             window_unknown=window_unknown, settings_error=settings_error,

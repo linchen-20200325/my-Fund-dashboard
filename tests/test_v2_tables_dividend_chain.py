@@ -501,7 +501,10 @@ def _tcb_for(code, ccy, rows):
     return _div(_tcb_items(*[("2026/01/01", ex.replace("-", "/"), "", amt, _DECL[ccy]) for ex, amt in rows]))
 
 
-_TODAY = dt.date(2026, 10, 1)
+# ~~`_TODAY = dt.date(2026, 10, 1)`~~ → 2026-10-13 客戶裁示（狀態更新，不是漏刪）：淨值日距今**大於** 10 天 → 資料未備、不再照算。
+# 假資料最後一筆淨值是 2026-09-18，10-01 已是 13 天 ⇒ 配息佔淨值比（分母是區間末淨值）會變成資料未備，
+# 本檔要驗的配息語意被蓋掉。改用恰 10 天（照用）的 9/28；斷言一字未放寬。
+_TODAY = dt.date(2026, 9, 28)
 
 
 def _model(loaded, *, applied_window=_WINDOW):

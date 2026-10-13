@@ -631,6 +631,9 @@ def test_過期字面的天數取共用常數_不寫死(monkeypatch):
     assert "⬜ 另有 3 檔淨值超過 5 日未更新（資料未備），未列入" in hld1["tail_lines"]
     texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(model, "HLD-5")["_items"]}
     assert set(texts.values()) == {"⬜ 資料未備：最近淨值已超過 5 日"}
+    # 稽核 D（H6d）：非預存那幾檔的灰色副標（`NAV_NOTE_NOT_READY`）也跟著常數變
+    for code in ("AAAA", "BBBB", "CCCC"):
+        assert _group(model, "HLD-2", code)["freshness_note"]["text"] == "最近一筆淨值 2026-09-18，已超過 5 日"
 
 
 def test_logic_有過期代碼卻沒給天數_raise():
@@ -659,3 +662,59 @@ def test_過期字面_兩頁逐字相同():
         raise AssertionError("ui_v2/alo/logic.py 沒有 NAV_NOT_READY_TEXT")
     assert logic.nav_not_ready_text(10) == "⬜ 資料未備：最近淨值已超過 10 日"
     assert logic.nav_not_ready_text(10) != logic.empty_source_text(["nav"])
+
+
+# ═══════════════ 總管 2026-10-13 裁決（稽核 C2）：HLD-6／HLD-7 也要看得出是「淨值過期被拿掉」 ═══════════════
+
+_C2_LINE = "⬜ 另有 1 檔淨值超過 10 日未更新（資料未備），未列入"
+
+
+def test_C2_部分過期_HLD6與HLD7各加一行中性說明_真缺淨值的檔不算():
+    model = _model(today=FRESH, mutate=_both(_age_one("AAAA", 20), _drop_nav("BBBB")))
+    for code in ("HLD-6", "HLD-7"):
+        block = logic.find_block(model, code)
+        assert block["detail_lines"].count(_C2_LINE) == 1, code
+        assert block["_tone"] != "黃" and block["_tone"] != "紅", code
+    # HLD-7 那一檔以淨值為輸入的列仍是「0 筆」，說明行交代原因
+    rows = [r for r in logic.find_block(model, "HLD-7")["_rows"]
+            if r["_fund_code"] == "AAAA" and r["_indicator"] in logic.NAV_INPUT_INDICATORS]
+    assert rows and all(r["inputs_text"] == "0 筆" for r in rows)
+
+
+def test_C2_全部過期_HLD6與HLD7寫出3檔():
+    model = _model(today=TODAY)
+    line = "⬜ 另有 3 檔淨值超過 10 日未更新（資料未備），未列入"
+    assert logic.find_block(model, "HLD-6")["summary_text"].startswith("淨值 0 列")
+    for code in ("HLD-6", "HLD-7"):
+        assert line in logic.find_block(model, code)["detail_lines"], code
+
+
+def test_C2_只有真缺淨值或全部新鮮_HLD6與HLD7不加這一行():
+    for model in (_model(today=FRESH), _model(today=FRESH, mutate=_drop_nav("BBBB"))):
+        for code in ("HLD-6", "HLD-7"):
+            assert not [line for line in logic.find_block(model, code)["detail_lines"] if "未更新" in line], code
+
+
+def test_C2_天數取共用常數(monkeypatch):
+    monkeypatch.setattr(live, "NAV_FRESH_DAYS_YELLOW", 5)
+    model = _model(today=_LAST + timedelta(days=6))
+    for code in ("HLD-6", "HLD-7"):
+        assert "⬜ 另有 3 檔淨值超過 5 日未更新（資料未備），未列入" in logic.find_block(model, code)["detail_lines"]
+
+
+# 稽核 D（H8b）：門檻是「不吃淨值」的期間配息合計時，過期的檔照樣進 HLD-1（配息照算），
+# 但它沒有用到淨值 ⇒ 不得被算進「淨值取自預存序列」的卡尾計數。
+_DIV_RULE = [{"indicator": "期間配息合計", "direction": "高於", "value": 0.0}]
+
+
+def test_H8b_不吃淨值的門檻_過期檔在偏離表上_卻不算進預存序列計數():
+    model = _model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}, mutate=_age_one("AAAA", 20),
+                   applied_rules=_DIV_RULE)
+    hld1 = logic.find_block(model, "HLD-1")
+    listed = {r["_fund_code"] for r in hld1["_rows"]}
+    assert "AAAA" in listed and len(listed) >= 2   # 前提：過期那一檔照樣因配息門檻列上卡
+    assert hld1["freshness_tail"] == {
+        "text": f"本卡所列的檔中，{len(listed) - 1} 檔的淨值取自預存序列，逐檔見 HLD-6", "_tone": "中性"}
+    # 正控：同一組門檻、AAAA 不過期時，三檔都算
+    fresh = logic.find_block(_model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}, applied_rules=_DIV_RULE), "HLD-1")
+    assert fresh["freshness_tail"]["text"].startswith(f"本卡所列的檔中，{len(listed)} 檔")
