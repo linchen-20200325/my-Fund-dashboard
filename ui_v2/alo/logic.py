@@ -232,10 +232,14 @@ GAPS = {
     "ALO-GAP-過期淨值不納入": (
         "本頁沒有淨值新鮮度的位置（加位置要先出線框）。過期或預存淨值（provenance 帶 cache_fallback 或 stale、"
         "~~或淨值列 is_estimated 為真~~ → 或淨值列 is_estimated 不是 False（含缺欄或 None）、"
-        "或最新淨值日距今（台灣日曆日）超過 shared/signal_thresholds.py 的 MJ_FRESH_DAYS_YELLOW〔經 contract.NAV_MAX_AGE_DAYS〕）"
+        "或最新淨值日距今（台灣日曆日）超過 ~~shared/signal_thresholds.py 的 MJ_FRESH_DAYS_YELLOW〔經 contract.NAV_MAX_AGE_DAYS〕~~"
+        " → 10 天〔ui_v2/alo/live.py::NAV_MAX_AGE_DAYS；出處 ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW，"
+        "客戶 2026-10-02 裁示原話「門檻 10 天，非 44 規定，是本輪依長假實況訂的」；第三輪總管裁定，有意識的更正，不是漏刪〕）"
         "目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
         "（CLAUDE.md §2.4 禁止靜默返回，fail closed）。新鮮度呈現與理由字面待線框。"
-        "淨值日期門檻：44 與 49 都沒有替 ALO 市值基準訂，本頁引用既有 SSOT，不自訂數字（總管 2026-10-13 第二輪裁定）。"
+        "淨值日期門檻：44 與 49 都沒有替 ALO 市值基準訂，~~本頁引用既有 SSOT，不自訂數字（總管 2026-10-13 第二輪裁定）~~"
+        " → 本頁沿用 B 線既有的客戶裁示 10 天（第三輪）。"
+        "殘餘風險：長假超過 10 天時仍會排除；畫面字面「尚無資料」與實況（有資料、只是過舊）不符，待線框。"
     ),
     # ── 2026-10-13 第二輪補登（只登記、不改行為；兩者在 224f233 就已存在）──
     "ALO-GAP-部分缺的內外判讀": (

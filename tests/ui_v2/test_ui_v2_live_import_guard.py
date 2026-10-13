@@ -63,10 +63,10 @@ _FILE_ALLOWLIST = {
     # 不是 fixtures —— 它不 import streamlit、不 import 舊樹，體例同 `ui_v2/set/source.py` 之於 `spec`。
     # 2026-10-13 客戶裁示（B 線資產配置必須是真資料）：加 `fund_keys`／`nav_dividend`（淨值，同 hld 入口）
     # 與 `market_indicator`（49 §6.1 Q9 非美元匯率鍵，`build_fx_indicator_table`）；`logging`：被包住的取數例外記 log（稽核 B2）；
-    # `contract`＋`datetime.datetime`：淨值日新鮮度門檻與台灣日曆日（第二輪 N-b）。
+    # `datetime.datetime`：台灣日曆日（第二輪 N-b）。~~`contract`~~ 第三輪撤掉：門檻改住 `ui_v2/alo/live.py`，用不到了。
     "ui_v2/alo/source.py": {
         "__future__", "logging", "os", "datetime.datetime", "streamlit",
-        "services.v2_tables.alo_holdings", "services.v2_tables.contract", "services.v2_tables.fund_keys",
+        "services.v2_tables.alo_holdings", "services.v2_tables.fund_keys",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
         "services.v2_tables.nav_dividend", "services.v2_tables.settings_store", "ui_v2.alo.live",
     },

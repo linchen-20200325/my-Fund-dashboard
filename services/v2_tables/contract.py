@@ -24,14 +24,6 @@ from __future__ import annotations
 import math
 from datetime import date, datetime
 
-from shared.signal_thresholds import MJ_FRESH_DAYS_YELLOW
-
-# 淨值日頻新鮮度門檻（2026-10-13 總管稽核後技術裁定 N-b）：44／49 都沒有替資產配置的市值基準訂淨值日期上限，
-# 故引用既有 SSOT `shared/signal_thresholds.py::MJ_FRESH_DAYS_YELLOW`（NAV 延遲：🟢 ≤ 2d／🟠 ≤ 7d／🔴 > 7d；
-# CLAUDE.md §2.4 日頻 🔴 > 7 天），不在 v2_tables 另立數字。淨值日距今（台灣日曆日）**超過**此天數即為紅燈。
-# ui_v2 不得 import shared，所以經本檔轉交給 `ui_v2/alo/source.py`。
-NAV_MAX_AGE_DAYS = MJ_FRESH_DAYS_YELLOW
-
 # (欄名, 型別字面值, 可空) —— 順序與 `44` 表格相同。
 MARKET_INDICATOR_FIELDS = (
     ("indicator_key", "字串", False),

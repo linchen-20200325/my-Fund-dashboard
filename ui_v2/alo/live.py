@@ -266,6 +266,20 @@ def tables_failed_together(message: str) -> dict:
 # - 2026-10-13 稽核 N2：`notes["nav"]["provenance"]` 裡的 `live_error` 是 L1 原文，經 `mask` 才放進 notes。
 #   第二輪 N-c：`chain_failures` 與 `nav_history.read_error` 同樣是 L1 原文，一併經 `mask`（深拷貝，不改輸入）。
 
+# 市值基準的淨值日上限（日曆日；N ＝ 台灣今天的日期減該檔最後一筆 `nav_date`，N **大於**這個數 → 不納入）。
+# ~~第二輪：引用 `shared/signal_thresholds.py::MJ_FRESH_DAYS_YELLOW`（7），經 `services/v2_tables/contract.py`
+# 的 `NAV_MAX_AGE_DAYS` 轉交~~ → **2026-10-13 第三輪總管裁定（有意識的更正，不是漏刪；決策者：AI 總管，
+# 錯在上一輪派工單沒查到 B 線已有客戶裁示）**：改用 B 線既有、客戶裁示過的門檻 10 天 ——
+# 出處 `ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`，客戶 2026-10-02 裁示（草稿 `docs/wireframes/draft_hld_live.html`
+# §G 第 1a 題），客戶要求註明的原話：
+#   「門檻 10 天，非 44 規定，是本輪依長假實況訂的」
+# 客戶理由：7 天遇到春節等長假會把所有基金誤標；草稿 §D 明寫「不要沿用 MJ_FRESH_DAYS_YELLOW」。
+# 稽核組 7 實跑：7 天在 2026 春節期間會連續 3～4 天把國內基金整片排除。舊值 7 的用意（§2.4 不得靜默返回舊值）仍然成立，
+# 被權衡掉的是它的數字 —— 它不是 B 線對淨值新鮮度的現行裁示。
+# 判定方向與 hld 黃燈一致：hld 是 `days > NAV_FRESH_DAYS_YELLOW` 才黃，本頁是 `> NAV_MAX_AGE_DAYS` 才排除。
+# 兩頁不互相 import（各自是頁面模組），由 tests/ui_v2/test_alo_live_logic.py 鎖住兩者相等，防止脫鉤。
+NAV_MAX_AGE_DAYS = 10
+
 
 def wants_market_value(setting_rows) -> bool:
     """已存的比重基準是不是「市值」。只有這時本頁才去取淨值與匯率（成本基準用不到，取回來只會多打來源；
@@ -282,7 +296,7 @@ def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
 
     一致性檢查同 hld `assemble_live_load` 的 R-10、R-13～R-16，不過就 raise（呼叫端組錯，不是資料問題）。
     `today`：台灣日曆日（`datetime.date`，呼叫端以 L2 的 `MARKET_DATE_TZ` 算好交進來）；
-    `max_age_days`：淨值日距今的上限天數（SSOT `contract.NAV_MAX_AGE_DAYS`，由呼叫端注入，本檔不寫字面值）。
+    `max_age_days`：淨值日距今的上限天數（呼叫端傳本檔的 `NAV_MAX_AGE_DAYS`；~~SSOT `contract.NAV_MAX_AGE_DAYS`~~ 第三輪改）。
     """
     if not callable(mask):
         raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")

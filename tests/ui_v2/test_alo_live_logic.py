@@ -743,7 +743,7 @@ _TODAY = __import__("datetime").date(2026, 9, 25)
 
 
 def _assemble(table, codes=("AAAA", "BBBB"), fail=(), mask=lambda m: m.replace("SECRET", "＊"),
-              today=_TODAY, max_age_days=7):
+              today=_TODAY, max_age_days=live.NAV_MAX_AGE_DAYS):
     return live.assemble_nav(holding_codes=list(codes), key_results=_keys(codes, fail), nav_table=table,
                              empty_without_reason=_EMPTY, nav_unavailable_withheld=_FOUR, mask=mask,
                              today=today, max_age_days=max_age_days)
@@ -948,8 +948,10 @@ def _dated_row(code, day):
 
 
 def test_第二輪Nb_淨值日超過門檻天數_不納入_剛好等於門檻照收():
-    """今天 2026-09-25、門檻 7 天：09-18（7 天）照收、09-17（8 天）不納入（🔴 > 7d）。"""
-    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-17"), _dated_row("BBBB", "2026-09-18")],
+    """~~今天 2026-09-25、門檻 7 天：09-18（7 天）照收、09-17（8 天）不納入（🔴 > 7d）。~~
+    → 第三輪（門檻改為客戶裁示的 10 天；有意識的更正，不是漏刪）：今天 2026-09-25，
+    09-15（10 天）照收、09-14（11 天）不納入 —— 與 hld 黃燈同向（`days > 10`）。"""
+    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-14"), _dated_row("BBBB", "2026-09-15")],
                        fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
     out = _assemble(table)
     assert [r["fund_code"] for r in out["nav"]] == ["BBBB"]
@@ -994,3 +996,24 @@ def test_第二輪Nc_chain_failures與累積表read_error經遮蔽_不改輸入(
 def test_第二輪6_兩筆只登記不改行為的GAP在():
     assert "ALO-GAP-部分缺的內外判讀" in logic.GAPS and "ALO-GAP-同類別多理由" in logic.GAPS
     assert "不是 False（含缺欄或 None）" in logic.GAPS["ALO-GAP-過期淨值不納入"]
+
+
+# ═══════════════════════ 2026-10-13 第三輪：門檻改用客戶裁示的 10 天，與 hld 鎖在一起 ═══════════════════════
+
+
+def test_第三輪_alo淨值日上限與hld黃燈門檻是同一個值_不得脫鉤():
+    """出處：`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`（客戶 2026-10-02 裁示「門檻 10 天，非 44 規定，是本輪依長假實況訂的」）。"""
+    from ui_v2.hld import live as hld_live
+    assert live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW
+    assert type(live.NAV_MAX_AGE_DAYS) is int
+
+
+def test_第三輪_判定方向與hld黃燈相同_剛好等於門檻不排除():
+    """hld：`days > NAV_FRESH_DAYS_YELLOW` 才黃；本頁：`> NAV_MAX_AGE_DAYS` 才排除。"""
+    import datetime as _dt
+    limit = live.NAV_MAX_AGE_DAYS
+    edge = (_TODAY - _dt.timedelta(days=limit)).isoformat()
+    over = (_TODAY - _dt.timedelta(days=limit + 1)).isoformat()
+    table = _nav_table(rows=[_dated_row("AAAA", over), _dated_row("BBBB", edge)],
+                       fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    assert _assemble(table)["notes"]["too_old"] == ["AAAA"]

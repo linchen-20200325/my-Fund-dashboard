@@ -575,9 +575,27 @@ def test_Na_匯率取數拋OSError_才是取數失敗(wired, monkeypatch):
 # ═══════════════════════ 2026-10-13 第二輪 N-b：淨值日期超過 SSOT 門檻不納入 ═══════════════════════
 
 
-def test_Nb_門檻引用既有SSOT_不另立數字():
-    from shared.signal_thresholds import MJ_FRESH_DAYS_YELLOW
-    assert source.contract.NAV_MAX_AGE_DAYS == MJ_FRESH_DAYS_YELLOW
+def test_Nb_門檻是客戶裁示的10天_不是MJ_FRESH_DAYS_YELLOW():
+    """~~`test_Nb_門檻引用既有SSOT_不另立數字`：門檻 == MJ_FRESH_DAYS_YELLOW（7）~~
+    → 第三輪總管裁定（有意識的更正，不是漏刪）：B 線已有客戶裁示的 10 天（`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`），
+    草稿 §D 明寫不要沿用 MJ_FRESH_DAYS_YELLOW。"""
+    from ui_v2.hld import live as hld_live
+    assert source.live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW
+    assert not hasattr(source, "contract")                                 # 不再經 contract 轉交
+
+
+def test_第三輪_today_tw取台灣日曆日_UTC前一天16點半已是台灣隔天(monkeypatch):
+    """決定性時鐘：UTC 2026-10-12T16:30 ＝ 台北 2026-10-13T00:30 → `_today_tw()` 必須回 2026-10-13（不是 10-12）。"""
+    import datetime as _dt
+    instant = _dt.datetime(2026, 10, 12, 16, 30, tzinfo=_dt.timezone.utc)
+
+    class _Clock(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant if tz is None else instant.astimezone(tz)
+
+    monkeypatch.setattr(source, "datetime", _Clock)
+    assert source._today_tw() == _dt.date(2026, 10, 13)
 
 
 def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備(wired):
@@ -592,7 +610,7 @@ def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未
     assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
 
 
-def test_Nb_source交給assemble_nav的是SSOT門檻與台灣日曆日(wired, monkeypatch):
+def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(wired, monkeypatch):
     wired["settings"] = _mv_settings()
     seen = {}
     real = source.live.assemble_nav
@@ -603,6 +621,6 @@ def test_Nb_source交給assemble_nav的是SSOT門檻與台灣日曆日(wired, mo
 
     monkeypatch.setattr(source.live, "assemble_nav", spy)
     source.load_live()
-    assert seen["max_age_days"] == source.contract.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
+    assert seen["max_age_days"] == source.live.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
     monkeypatch.undo()
     assert source._today_tw() == __import__("datetime").datetime.now(source.nav_dividend.MARKET_DATE_TZ).date()

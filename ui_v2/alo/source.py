@@ -59,9 +59,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from services.v2_tables import (
-    alo_holdings, contract, fund_keys, market_indicator, masking, nav_dividend, settings_store,
-)
+from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
 
 from . import live
 
@@ -110,6 +108,9 @@ _SKIP_GROUPS = (
 #   與出口檢查的 AssertionError —— 全是程式錯誤。
 # ⇒ 只接 `OSError`（含 ConnectionError、TimeoutError，以及 requests 的 RequestException〔IOError 子類〕），
 #   以防日後 L1 改成不吞而讓網路／讀檔例外漏出來。AssertionError／TypeError／ValueError／KeyError 一律往上拋（§1）。
+# ⚠️ 隱含前提（第三輪補記）：L1 與 A 鏈目前已經把非 OSError 的取數例外吞掉或轉成字串
+#   （例：gspread 的 `APIError`、pandas 的 `ParserError`）。L1 若改成不吞，這些例外會穿過本層、整頁印 Traceback ——
+#   那時要回頭把明文定義的取數例外型別補進這裡，不是改回全接 `Exception`。
 _FETCH_ERRORS = (OSError,)
 
 
@@ -221,7 +222,7 @@ def load_live() -> dict:
                 mask=mask,
                 # N-b：淨值日距今（台灣日曆日，L2 的 MARKET_DATE_TZ）超過 SSOT 門檻 → 不納入市值
                 today=_today_tw(),
-                max_age_days=contract.NAV_MAX_AGE_DAYS,
+                max_age_days=live.NAV_MAX_AGE_DAYS,   # 第三輪：客戶裁示的 10 天（出處見該常數）
             )
             nav_rows = nav_out["nav"]
             notes["nav"] = nav_out["notes"]
