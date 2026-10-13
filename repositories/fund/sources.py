@@ -89,8 +89,12 @@ __all__ = [
 # ── 2026-10-13 配息取數狀態與解析依據（新增鍵／新增屬性，schema-additive；B 線配息移交）──────────
 # 客戶 2026-10-13 裁示：B 線沿用 A 鏈的配息瀑布（`_src_tcb_div` → `_src_fundclear_div` → `_src_cnyes_div`）。
 # 本段只**多記兩件事**，不改任何一個解析器的請求、門檻、欄位取值與回傳內容：
-# 1. **取數狀態**：三個解析器的回傳值改成 `DividendList`（`list` 的子類別，內容與 `==` 比較和原本的 list 完全相同），
-#    多一個屬性 `div_fetch = {"parser", "status", "detail"}`，分出「成功取數且確實沒有配息列」（`empty`）
+# 1. **取數狀態**：三個解析器的回傳值改成 `DividendList`（`list` 的子類別）。
+#    ~~內容與 `==` 比較和原本的 list 完全相同~~ → 2026-10-13 稽核更正（有意識的更正，不是漏刪）：精確地說，
+#    `DividendList` 的 `==` 沿用 `list.__eq__`（逐元素比較、不看型別）；而每一個元素（配息 dict）多了
+#    `div_provenance` 這個鍵，所以與改動前的回傳值逐元素比較時，**要先去掉每個元素的 `div_provenance`** 才相等。
+#    元素裡原有的鍵與值、元素順序、筆數都不變（探針與黃金檔都是這樣比的）。
+#    多一個屬性 `div_fetch = {"parser", "status", "detail", "dropped"}`，分出「成功取數且確實沒有配息列」（`empty`）
 #    與「取數失敗或判斷不了」（`failed`）。空清單時沒有任何鍵可以掛，所以掛在清單物件上（`copy.deepcopy`／pickle 保留）。
 #    ⚠️ 判斷不了的一律算 `failed`（例：有表頭但有解析不了的資料列、回應沒有配息陣列、某一個網址沒取到）——
 #    下游據此「不快取」，與沒有這個屬性時的行為相同。
@@ -111,10 +115,27 @@ class DividendList(list):
     """配息清單：內容與比較行為同 `list`；另帶 `div_fetch` 屬性（取數狀態，見上方說明）。"""
 
 
-def _div_result(items, parser: str, status: str, detail: str = "") -> "DividendList":
+def _div_result(items, parser: str, status: str, detail: str = "", dropped=None) -> "DividendList":
+    """`dropped`：本次取回、卻沒有交出去的列數（2026-10-13 稽核必修 1，只記錄）——
+    `{"truncated": 只讀前 59 列而沒讀到的列, "filtered": 被解析器的過濾條件丟掉的列, "other_tables": 沒看的其他配息表的列}`；
+    值為 None ＝ 算不出來（呼叫端應當成「有丟列」）。"""
     out = DividendList(items)
-    out.div_fetch = {"parser": parser, "status": status, "detail": str(detail or "")}
+    dropped = dict(dropped or {})
+    out.div_fetch = {"parser": parser, "status": status, "dropped": dropped,
+                     "detail": str(detail or "") + (
+                         f"（丟列：{'、'.join(f'{k}={v}' for k, v in dropped.items())}）"
+                         if any(v != 0 for v in dropped.values()) else "")}
     return out
+
+
+def div_dropped_total(info) -> "int | None":
+    """`div_fetch["dropped"]` → 丟列總數；有任何一項算不出來（None）或形狀不對 → None（呼叫端當成有丟列）。"""
+    dropped = info.get("dropped") if isinstance(info, dict) else None
+    if not isinstance(dropped, dict):
+        return None
+    if any(not isinstance(v, int) or isinstance(v, bool) for v in dropped.values()):
+        return None
+    return sum(dropped.values())
 
 
 def _div_now_utc() -> str:
@@ -253,6 +274,7 @@ def _first_truthy_key(item: dict, keys) -> str:
 
 _FUNDCLEAR_DIV_DATE_KEYS = ("ExDividendDate", "exDividendDate", "Date", "date")
 _FUNDCLEAR_DIV_CCY_KEYS = ("Currency", "currency")
+_FUNDCLEAR_DIV_AMOUNT_KEYS = ("DividendAmount", "dividendAmount", "Amount", "amount")
 
 
 def _src_fundclear_div(code: str) -> list:
@@ -263,9 +285,12 @@ def _src_fundclear_div(code: str) -> list:
     與原本的 `or` 串同一個判法）、`currency_field`＝幣別取自哪個欄名（沒有 → `""`）、`fetched_at`。
     狀態：請求失敗、回應不是 JSON、例外 → `failed`；回應帶 `Data`／`data` 且是**空陣列** → `empty`；
     有項目卻一筆都沒收（金額缺或不大於 0）→ `failed`（分辨不出）。
+    2026-10-13 稽核必修 1、2（只記錄）：`div_fetch["dropped"]["filtered"]`＝被金額條件丟掉的項數；
+    逐筆 `amount_field`＝金額取自哪個欄名（與原本的 `or` 串同一個判法）。
     """
     divs = []
     status, detail = DIV_STATUS_FAILED, ""
+    _dropped = None   # 例外 → 算不出來
     try:
         url = (f"https://www.fundclear.com.tw/SmartFundAPI/api/FundAjax"
                f"/GetFundDividend?FundCode={code}")
@@ -277,11 +302,13 @@ def _src_fundclear_div(code: str) -> list:
         items = (data.get("Data") or data.get("data") or
                  (data if isinstance(data, list) else []))
         _fa = _div_now_utc()
+        _filtered = 0
         for item in (items or []):
             amt = safe_float(item.get("DividendAmount") or
                              item.get("dividendAmount") or
                              item.get("Amount") or item.get("amount"))
             if amt is None or amt <= 0:
+                _filtered += 1   # 2026-10-13 只記錄
                 continue
             d_str = (item.get("ExDividendDate") or item.get("exDividendDate") or
                      item.get("Date") or item.get("date") or "")
@@ -297,9 +324,11 @@ def _src_fundclear_div(code: str) -> list:
                     "parser": DIV_PARSER_FUNDCLEAR,
                     "date_field": _first_truthy_key(item, _FUNDCLEAR_DIV_DATE_KEYS),
                     "currency_field": _first_truthy_key(item, _FUNDCLEAR_DIV_CCY_KEYS),
+                    "amount_field": _first_truthy_key(item, _FUNDCLEAR_DIV_AMOUNT_KEYS),
                     "fetched_at": _fa,
                 },
             })
+        _dropped = {"filtered": _filtered}
         if divs:
             print(f"[src_fundclear_div] ✅ {code} {len(divs)} 筆配息")
             status = DIV_STATUS_ROWS
@@ -314,7 +343,8 @@ def _src_fundclear_div(code: str) -> list:
     except Exception as e:
         print(f"[src_fundclear_div] {code}: {e}")
         status, detail = DIV_STATUS_FAILED, f"{type(e).__name__}: {e}"
-    return _div_result(divs, DIV_PARSER_FUNDCLEAR, status, detail)
+    return _div_result(divs, DIV_PARSER_FUNDCLEAR, status, detail,
+                       dropped=_dropped if _dropped is not None else {"filtered": None})
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -788,6 +818,7 @@ def fetch_div_cnyes(code: str) -> list:
     # 每筆多 `div_provenance`（`date_field`＝日期實際取自 `date` 還是 `exDate`，與原本的 `or` 串同一個判法）。
     # 狀態：非 200、例外 → `failed`；回應帶 `data`／`items` 且是**空陣列** → `empty`；有項目卻一筆都沒收 → `failed`。
     status, detail = DIV_STATUS_FAILED, ""
+    _dropped = {"filtered": None}   # 2026-10-13 稽核必修 1（只記錄）；例外 → 算不出來
     try:
         url = f"{_CNYES_FUND_API}/{_code}/dividend"
         r = requests.get(url, headers={
@@ -799,6 +830,7 @@ def fetch_div_cnyes(code: str) -> list:
             data = r.json()
             items = (data.get("data") or data.get("items") or [])
             if isinstance(items, list):
+                _filtered = 0
                 for item in items:
                     d = (item.get("date") or item.get("exDate") or "")
                     amt = safe_float(item.get("dividend") or item.get("amount"))
@@ -808,8 +840,12 @@ def fetch_div_cnyes(code: str) -> list:
                             "amount": amt,
                             "yield_pct": safe_float(item.get("yieldRate") or item.get("yield_pct"), 0),
                             DIV_PROVENANCE_KEY: {"parser": DIV_PARSER_CNYES,
-                                                 "date_field": _first_truthy_key(item, ("date", "exDate"))},
+                                                 "date_field": _first_truthy_key(item, ("date", "exDate")),
+                                                 "amount_field": _first_truthy_key(item, ("dividend", "amount"))},
                         })
+                    else:
+                        _filtered += 1
+                _dropped = {"filtered": _filtered}
             if divs:
                 status = DIV_STATUS_ROWS
             elif (not items and isinstance(data, dict)
@@ -831,7 +867,7 @@ def fetch_div_cnyes(code: str) -> list:
             _d["source"] = f"Cnyes:dividend:{_code}"
             _d["fetched_at"] = _fa
             _d[DIV_PROVENANCE_KEY]["fetched_at"] = _fa
-    return _div_result(divs, DIV_PARSER_CNYES, status, detail)
+    return _div_result(divs, DIV_PARSER_CNYES, status, detail, dropped=_dropped)
 
 
 # ── v19.276 cnyes 持股 fallback(MoneyDJ yp013xxx 全失敗時的替代源)─────────
@@ -3360,6 +3396,51 @@ def _tcb_div_table_shape(html: str) -> str:
         return "parse_error"
 
 
+def _tcb_div_drop_counts(html: str, n_parsed: int) -> dict:
+    """`_src_tcb_div` 解析出 `n_parsed` 筆的那一頁，有多少列**取回了卻沒交出去**（2026-10-13 稽核必修 1，只記錄）：
+    - `truncated`：被採用的那張表在第 60 列之後的列（解析器只讀 `find_all("tr")[1:60]`）；
+    - `filtered`：被採用的那張表前 59 列裡、帶有文字卻被過濾條件丟掉的列（欄數 < 6、第一欄沒有「/」、
+      金額缺／不大於 0／大於 1000）；在它之前、一筆都沒解析出來的配息表裡帶有文字的列也算在這裡；
+    - `other_tables`：被採用的那張表之後、沒有被看的其他配息表裡帶有文字的列。
+    挑表與過濾條件逐條照 `_parse_div_html`；照著重算出來的筆數與 `n_parsed` 對不上（解析中途拋例外等）、
+    或本函式自己拋例外 → 三項皆為 None（算不出來；呼叫端當成有丟列）。"""
+    _unknown = {"truncated": None, "filtered": None, "other_tables": None}
+    try:
+        _soup = BeautifulSoup(html, "lxml")
+        truncated = filtered = other = kept = 0
+        adopted = False
+        for _tbl in _soup.find_all("table"):
+            _t = _tbl.get_text()
+            if "配息基準日" not in _t and "除息日" not in _t:
+                continue
+            _trs = _tbl.find_all("tr")
+            _texty = [tr for tr in _trs[1:] if any(td.get_text(strip=True) for td in tr.find_all("td"))]
+            if adopted:
+                other += len(_texty)
+                continue
+            _kept_here = _drop_here = 0
+            for _row in _trs[1:60]:
+                _cols = [td.get_text(strip=True) for td in _row.find_all("td")]
+                _ok = len(_cols) >= 6 and bool(_cols[0]) and "/" in _cols[0]
+                if _ok:
+                    _amt = safe_float(_cols[4])
+                    _ok = not (_amt is None or _amt <= 0 or _amt > 1000)
+                if _ok:
+                    _kept_here += 1
+                elif any(_cols):
+                    _drop_here += 1
+            filtered += _drop_here
+            if _kept_here:
+                adopted = True
+                kept = _kept_here
+                truncated = sum(1 for tr in _trs[60:] if any(td.get_text(strip=True) for td in tr.find_all("td")))
+        if kept != n_parsed:
+            return _unknown
+        return {"truncated": truncated, "filtered": filtered, "other_tables": other}
+    except Exception:  # noqa: BLE001 —— 只記錄；算不出來就是 None
+        return _unknown
+
+
 def _src_tcb_div(code: str) -> list:
     """
     TCB MoneyDJ 配息資料。
@@ -3389,7 +3470,8 @@ def _src_tcb_div(code: str) -> list:
         col[3]="配息" col[4]=每單位配息額 col[5]=年化配息率% col[6]=幣別
 
         2026-10-13（新增鍵，取值一個不改）：每筆多 `div_provenance`，記**這張表第一列**（本函式本來就當表頭略過的那一列）
-        第 1、2、3、7 格的文字（`date_header`／`ex_date_header`／`pay_date_header`／`currency_header`）。
+        第 1、2、3、5、7 格的文字（`date_header`／`ex_date_header`／`pay_date_header`／`amount_header`／
+        `currency_header`），以及表頭格數與這一列的格數（`header_cells`／`row_cells`；稽核必修 2 補）。
         欄位仍照原本寫死的序號取值；這幾個鍵只讓下游**逐頁核對**那一欄的表頭是不是它自稱的東西，不據此改取哪一欄。
         """
         _out: list = []
@@ -3423,6 +3505,10 @@ def _src_tcb_div(code: str) -> list:
                             "ex_date_header": _hdr[1] if len(_hdr) > 1 else None,
                             "pay_date_header": _hdr[2] if len(_hdr) > 2 else None,
                             "currency_header": _hdr[6] if len(_hdr) > 6 else None,
+                            # 2026-10-13 稽核必修 2：金額欄（第 5 格）的表頭、表頭格數與這一列的格數
+                            "amount_header": _hdr[4] if len(_hdr) > 4 else None,
+                            "header_cells": len(_hdr),
+                            "row_cells": len(_cols),
                         },
                     })
                 if _out:
@@ -3452,7 +3538,9 @@ def _src_tcb_div(code: str) -> list:
                     _fa = _div_now_utc()
                     for _p in _parsed:
                         _p[DIV_PROVENANCE_KEY].update(page=_where, fetched_at=_fa)
-                    return _div_result(_parsed, DIV_PARSER_TCB, DIV_STATUS_ROWS)
+                    # 2026-10-13 稽核必修 1（只記錄，同一份 HTML、不發請求）：這一頁有多少列沒交出去
+                    return _div_result(_parsed, DIV_PARSER_TCB, DIV_STATUS_ROWS, _where,
+                                       dropped=_tcb_div_drop_counts(r.text, len(_parsed)))
                 # 有表頭但無資料 → 換下一個 URL（換 base 或換 path）
                 _tried.append((_where, _tcb_div_table_shape(r.text)))
     except Exception as e:

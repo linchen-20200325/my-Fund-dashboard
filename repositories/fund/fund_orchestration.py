@@ -507,15 +507,38 @@ DIV_OUTCOME_FAILED = "failed"
 DIV_OUTCOME_UNDETERMINED = "undetermined"
 
 
-def _div_status_entry(source_name: str, value) -> dict:
-    """解析器回傳值 → `{"source", "parser", "status", "detail"}`；沒有取數狀態（例如被替身換掉、舊型別）→ `unknown`。"""
+def _div_code_evidence(seen: dict, source_name: str, got, what: str, *, cnyes_code: str = "") -> None:
+    """同一輪、同一來源、同一代碼取到東西 → 記一筆證據（2026-10-13 稽核必修 3；只記錄，失敗不影響取數）。
+    - 序列：非空才算；鉅亨另要求 `attrs["source"]` 恰為 `Cnyes:fund.api:v2/funds/{本代碼}/nav`
+      （鉅亨淨值會先經名稱／代碼搜尋換候選代碼，換過的不能證明配息端點認得**本代碼**）。
+    - dict（基本資料）：`fund_name` 非空才算。"""
+    try:
+        if isinstance(got, pd.Series):
+            if not len(got):
+                return
+            src = str(got.attrs.get("source") or "")
+            if cnyes_code and src != f"Cnyes:fund.api:v2/funds/{cnyes_code.upper().strip()}/nav":
+                return
+            seen.setdefault(source_name, []).append(f"{what}：{len(got)} 筆（{src or '未標來源'}）")
+        elif isinstance(got, dict) and got.get("fund_name"):
+            seen.setdefault(source_name, []).append(f"{what}：{str(got.get('fund_name'))[:30]}")
+    except Exception:  # noqa: BLE001 —— 只記錄
+        pass
+
+
+def _div_status_entry(source_name: str, value, seen=None) -> dict:
+    """解析器回傳值 → `{"source", "parser", "status", "detail", "dropped", "code_recognized"}`；
+    沒有取數狀態（例如被替身換掉、舊型別）→ `unknown`。`code_recognized`：本輪同一來源認得這個代碼的證據（見上）。"""
+    evidence = list((seen or {}).get(source_name) or ())
     # 屬性名寫字面（＝ `DIV_FETCH_ATTR`）：`tests/test_readonly_query_paths.py` 禁止非字面的 getattr 取名
     info = getattr(value, "div_fetch", None)
     if isinstance(info, dict):
         return {"source": source_name, "parser": info.get("parser"), "status": info.get("status"),
-                "detail": info.get("detail") or ""}
+                "detail": info.get("detail") or "", "dropped": info.get("dropped"),
+                "code_recognized": evidence}
     return {"source": source_name, "parser": None, "status": "unknown",
-            "detail": f"回傳值沒有取數狀態（{type(value).__name__}）"}
+            "detail": f"回傳值沒有取數狀態（{type(value).__name__}）", "dropped": None,
+            "code_recognized": evidence}
 
 
 def _dividends_outcome(divs, waterfalls: list, *, legacy_inline_parse: bool) -> dict:
@@ -536,7 +559,12 @@ def _dividends_outcome(divs, waterfalls: list, *, legacy_inline_parse: bool) -> 
         outcome = DIV_OUTCOME_FAILED
     else:
         outcome = DIV_OUTCOME_UNDETERMINED
-    return {"outcome": outcome, "sources": sources, "legacy_inline_parse": bool(legacy_inline_parse)}
+    # 2026-10-13 稽核必修 3：none_confirmed 只說「每一個來源都回空」；回空也可能是來源不認得這個代碼。
+    # `none_evidenced`：每一個回空的來源，本輪都有「同一來源認得同一代碼」的證據（`code_recognized`）。
+    # A 鏈快取照舊只看 `outcome`（只影響新鮮度）；B 線要 `none_evidenced` 才當成確定不配息。
+    evidenced = outcome == DIV_OUTCOME_NONE and all(s.get("code_recognized") for s in sources)
+    return {"outcome": outcome, "sources": sources, "legacy_inline_parse": bool(legacy_inline_parse),
+            "none_evidenced": bool(evidenced)}
 
 
 def _fetch_fund_single(code: str, force_refresh: bool = False,
@@ -569,6 +597,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     nav_s = pd.Series(dtype=float)
     nav_source = ""
     _nav_fail: list = []   # 2026-10-13 總管技術裁定第 3 條：逐來源失敗原文（只記錄，見 _note_nav_source_failure）
+    # 2026-10-13 稽核必修 3（只記錄，不參與任何判斷）：本輪同一來源以**同一個代碼**取到了東西的證據 ——
+    # 配息來源回「空」時，據此分辨「確實沒有配息」與「來源不認得這個代碼」。見 `_div_code_evidence`。
+    _div_seen: dict = {}
 
     # 0. 安聯投信官網（ACTI/ACCP/ACDD 境內基金 + 保險平台安聯代碼）
     # v6.23 fix: 加入 len(nav_s) < 10 防護，避免覆蓋 GitHub Actions 快取資料
@@ -606,6 +637,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2a. FundClear（境外最穩）
     if len(nav_s) < 20:
         nav_s = _src_fundclear_nav(_code)
+        _div_code_evidence(_div_seen, "FundClear", nav_s, "GetFundNAV 淨值")
         if len(nav_s) < 20:
             _note_nav_source_failure(_nav_fail, "FundClear", nav_s, 20)
         if len(nav_s) >= 20:
@@ -615,6 +647,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2b. 鉅亨網
     if len(nav_s) < 20:
         nav_s = _src_cnyes_nav(_code)
+        _div_code_evidence(_div_seen, "cnyes", nav_s, "v2/funds 淨值", cnyes_code=_code)
         if len(nav_s) < 20:
             _note_nav_source_failure(_nav_fail, "cnyes", nav_s, 20)
         if len(nav_s) >= 20:
@@ -624,6 +657,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2c. TCB MoneyDJ（子網域）
     if len(nav_s) < 20:
         nav_s = _src_tcb_nav(_code)
+        _div_code_evidence(_div_seen, "tcb_moneydj", nav_s, "MoneyDJ 淨值頁")
         if len(nav_s) < 10:
             _note_nav_source_failure(_nav_fail, "tcb_moneydj", nav_s, 10)
         if len(nav_s) >= 10:
@@ -927,11 +961,14 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 優先 TCB MoneyDJ（含年高/年低）
     if not meta.get("fund_name"):
         meta = _src_tcb_meta(_code)
+        _div_code_evidence(_div_seen, "tcb_moneydj", meta, "MoneyDJ 基本資料頁")
         if meta.get("fund_name"):
             result["source_trace"].append({"source": "tcb_meta", "success": True})
     # 再試 FundClear
     if not meta.get("fund_name"):
-        meta = merge_non_empty(meta, _src_fundclear_meta(_code))
+        _fc_meta = _src_fundclear_meta(_code)   # 2026-10-13：先接住再合併（合併結果與原本相同），只為記證據
+        _div_code_evidence(_div_seen, "FundClear", _fc_meta, "GetFundBasicInfo 基本資料")
+        meta = merge_non_empty(meta, _fc_meta)
         if meta.get("fund_name"):
             result["source_trace"].append({"source": "fundclear_meta", "success": True})
     # 最後 SITCA（境內基金）
@@ -1045,13 +1082,13 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     _div_status: list = []   # 2026-10-13 新增鍵（只記錄；順序與採用結果不變）
     if not divs:
         divs = _src_tcb_div(_code)
-        _div_status.append(_div_status_entry("tcb_moneydj", divs))
+        _div_status.append(_div_status_entry("tcb_moneydj", divs, _div_seen))
     if not divs:
         divs = _src_fundclear_div(_code)
-        _div_status.append(_div_status_entry("FundClear", divs))
+        _div_status.append(_div_status_entry("FundClear", divs, _div_seen))
     if not divs:
         divs = _src_cnyes_div(_code)
-        _div_status.append(_div_status_entry("cnyes", divs))
+        _div_status.append(_div_status_entry("cnyes", divs, _div_seen))
     if divs:
         result["dividends"] = divs
         latest_yield = divs[0].get("yield_pct", 0)

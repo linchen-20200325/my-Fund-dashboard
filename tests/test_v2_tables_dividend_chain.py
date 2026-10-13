@@ -45,7 +45,7 @@ class _Resp:
 
 
 _HDR = ("<tr><th>配息基準日</th><th>除息日</th><th>發放日</th><th>類別</th>"
-        "<th>每單位配息</th><th>年化配息率</th><th>幣別</th></tr>")
+        "<th>每單位配息額</th><th>年化配息率</th><th>幣別</th></tr>")
 _ROW = ("<tr><td>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
         "<td>0.05</td><td>6.1</td><td>美元</td></tr>")
 _TCB_PAGE = f"<table>{_HDR}{_ROW}</table>"
@@ -232,7 +232,9 @@ def test_B線_不配息基金_第二次build命中快取(monkeypatch):
     n = len(calls)
     second = _quiet(ND.build_nav_dividend_tables, _funds(code), now=NOW)
     assert not [c for c in calls[n:] if c[0].startswith("_src_") or c[0].startswith("fetch_")]
-    assert first["dividend"]["settled"] == second["dividend"]["settled"] == {code: True}
+    # 稽核必修 3：本情境鉅亨淨值沒被呼叫（FundClear 已夠筆數）→ 鉅亨回空沒有「認得代碼」的證據 → 不算確定不配息
+    assert first["dividend"]["settled"] == second["dividend"]["settled"] == {code: False}
+    assert first["dividend"]["withheld"] == {code: ND.WITHHELD_DIV_OUTCOME_UNDETERMINED}
     assert first["dividend"]["rows"] == []
 
 
@@ -249,17 +251,20 @@ def test_B線_配息取數失敗_第二次build不命中快取(monkeypatch):
 
 # ═══════════════════════ B 線：同一次 A 鏈呼叫交出淨值與配息 ═══════════════════════
 
-def _tcb_items(*rows, header=("配息基準日", "除息日", "發放日", "類別", "每單位配息", "年化配息率", "幣別"),
-               at=L1_AT):
+def _tcb_items(*rows, header=("配息基準日", "除息日", "發放日", "類別", "每單位配息額", "年化配息率", "幣別"),
+               at=L1_AT, dropped=None):
     items = [{"date": base, "ex_date": ex, "pay_date": pay, "amount": amt, "yield_pct": 6.0, "currency": ccy,
               S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_TCB,
                                      "date_header": header[0] if len(header) > 0 else None,
                                      "ex_date_header": header[1] if len(header) > 1 else None,
                                      "pay_date_header": header[2] if len(header) > 2 else None,
                                      "currency_header": header[6] if len(header) > 6 else None,
+                                     "amount_header": header[4] if len(header) > 4 else None,
+                                     "header_cells": len(header), "row_cells": 7,
                                      "page": "tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm", "fetched_at": at}}
              for base, ex, pay, amt, ccy in rows]
-    return S._div_result(items, S.DIV_PARSER_TCB, S.DIV_STATUS_ROWS)
+    return S._div_result(items, S.DIV_PARSER_TCB, S.DIV_STATUS_ROWS, dropped=dropped or {"truncated": 0, "filtered": 0,
+                                                                                           "other_tables": 0})
 
 
 def test_同一次A鏈呼叫_來源呼叫順序與只取淨值時相同_淨值逐鍵相同(monkeypatch):
@@ -276,11 +281,15 @@ def test_同一次A鏈呼叫_來源呼叫順序與只取淨值時相同_淨值�
     assert both["dividend"]["settled"] == {code: True}
 
 
-def _div(items, outcome=FO.DIV_OUTCOME_ROWS, sources=None):
+_NO_DROP = {"truncated": 0, "filtered": 0, "other_tables": 0}
+
+
+def _div(items, outcome=FO.DIV_OUTCOME_ROWS, sources=None, evidenced=False):
     if sources is None:
         sources = [{"source": "tcb_moneydj", "parser": S.DIV_PARSER_TCB, "status": S.DIV_STATUS_ROWS,
-                    "detail": "", "page_type": "yp010001"}]
-    return {"items": items, "outcome": {"outcome": outcome, "sources": sources, "legacy_inline_parse": False},
+                    "detail": "", "page_type": "yp010001", "dropped": dict(_NO_DROP)}]
+    return {"items": items, "outcome": {"outcome": outcome, "sources": sources, "legacy_inline_parse": False,
+                                        "none_evidenced": evidenced},
             "error": None}
 
 
@@ -298,8 +307,8 @@ def test_日期語意_合庫表頭第二格是除息日_取除息日那一欄_�
 
 
 @pytest.mark.parametrize("header", [
-    ("配息基準日", "配息基準日", "發放日", "類別", "每單位配息", "年化配息率", "幣別"),   # 第二欄其實是配息基準日
-    ("除息日", "配息基準日", "發放日", "類別", "每單位配息", "年化配息率", "幣別"),       # 欄位對調
+    ("配息基準日", "配息基準日", "發放日", "類別", "每單位配息額", "年化配息率", "幣別"),   # 第二欄其實是配息基準日
+    ("除息日", "配息基準日", "發放日", "類別", "每單位配息額", "年化配息率", "幣別"),       # 欄位對調
     (),                                                                                    # 抓不到表頭
 ])
 def test_日期語意_表頭第二格不是除息日_照實列pending_不寫列(header):
@@ -309,15 +318,15 @@ def test_日期語意_表頭第二格不是除息日_照實列pending_不寫列(
     assert any("證明不了是除息日" in line for line in out["skipped"])
 
 
-def _fc_item(field, value="2026-09-01", ccy="USD", ccy_field="Currency"):
+def _fc_item(field, value="2026-09-01", ccy="USD", ccy_field="Currency", amount_field="DividendAmount"):
     return {"date": value, "ex_date": value, "pay_date": value, "amount": 0.05, "yield_pct": 0, "currency": ccy,
             S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_FUNDCLEAR, "date_field": field,
-                                   "currency_field": ccy_field, "fetched_at": L1_AT}}
+                                   "currency_field": ccy_field, "amount_field": amount_field, "fetched_at": L1_AT}}
 
 
 def test_日期語意_FundClear_只收ExDividendDate_退回Date的不收():
     ok = _rows(_div([_fc_item("ExDividendDate")],
-                    sources=[{"parser": S.DIV_PARSER_FUNDCLEAR, "status": S.DIV_STATUS_ROWS}]))
+                    sources=[{"parser": S.DIV_PARSER_FUNDCLEAR, "status": S.DIV_STATUS_ROWS, "dropped": {"filtered": 0}}]))
     assert [r["ex_date"] for r in ok["rows"]] == ["2026-09-01"] and ok["settled"] is True
     bad = _rows(_div([_fc_item("Date")]))
     assert bad["rows"] == [] and bad["pending"] == ND.PENDING_DIV_EX_DATE_UNVERIFIED
@@ -333,7 +342,8 @@ def test_日期語意_沒有解析依據的列_例如legacy段內嵌解析_一�
 def test_日期語意_鉅亨取自exDate也因為沒有幣別而不寫():
     item = {"date": "2026-09-01", "amount": 0.05, "yield_pct": 0, "source": "Cnyes:dividend:ZZ01",
             "fetched_at": L1_AT,
-            S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_CNYES, "date_field": "exDate", "fetched_at": L1_AT}}
+            S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_CNYES, "date_field": "exDate", "amount_field": "dividend",
+                                   "fetched_at": L1_AT}}
     out = _rows(_div([item]))
     assert out["rows"] == [] and out["withheld"] == ND.WITHHELD_CCY_NOT_SOURCE_REPORTED
 
@@ -369,7 +379,7 @@ def test_幣別_來源沒宣告_照實不寫():
 
 
 def test_幣別_表頭第七格不是幣別_值不算來源宣告():
-    header = ("配息基準日", "除息日", "發放日", "類別", "每單位配息", "年化配息率", "備註")
+    header = ("配息基準日", "除息日", "發放日", "類別", "每單位配息額", "年化配息率", "備註")
     out = _rows(_div(_tcb_items(("2026/09/01", "2026/09/03", "", 0.05, "美元"), header=header)))
     assert out["rows"] == [] and out["withheld"] == ND.WITHHELD_CCY_NOT_SOURCE_REPORTED
 
@@ -394,9 +404,16 @@ def test_fetched_at取L1記下的值_缺了不以當下時間補():
 
 # ── 空結果與失敗 ──
 
-def test_空清單_確實沒有配息_settled():
-    out = _rows(_div([], outcome=FO.DIV_OUTCOME_NONE))
+def test_空清單_確實沒有配息_而且每個來源都認得這個代碼_settled():
+    out = _rows(_div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True))
     assert out["rows"] == [] and out["error"] is None and out["withheld"] is None and out["settled"] is True
+
+
+def test_必修3_空清單但沒有認得代碼的證據_不當成確定不配息():
+    out = _rows(_div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=False))
+    assert out["rows"] == [] and out["settled"] is False
+    assert out["withheld"] == ND.WITHHELD_DIV_OUTCOME_UNDETERMINED
+    assert any("認得這個代碼" in line for line in out["skipped"])
 
 
 def test_空清單_全部來源失敗_進error_逐來源原文():
@@ -413,7 +430,8 @@ def test_空清單_分辨不出_不當成沒有配息(outcome):
 
 
 def test_供列的來源自報失敗_列照寫但不算settled():
-    sources = [{"source": "tcb_moneydj", "parser": S.DIV_PARSER_TCB, "status": S.DIV_STATUS_FAILED}]
+    sources = [{"source": "tcb_moneydj", "parser": S.DIV_PARSER_TCB, "status": S.DIV_STATUS_FAILED,
+                "dropped": dict(_NO_DROP)}]
     out = _rows(_div(_tcb_items(("2026/09/01", "2026/09/03", "", 0.05, "美元")), sources=sources))
     assert len(out["rows"]) == 1 and out["settled"] is False
 
@@ -476,7 +494,7 @@ def _metrics(loaded, holding, code):
 
 def test_hld_每一檔都確定_接上真資料_HLD3合計與HLD8本金佔比():
     divs = {"AAAA": _tcb_for("AAAA", "USD", [("2025-08-15", 0.1010), ("2026-01-15", 0.1059), ("2026-09-16", 0.1059)]),
-            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
             "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
@@ -506,7 +524,7 @@ def test_hld_有一檔分辨不出_整張配息表照舊列為尚未接上_不�
 
 def test_hld_配息取數失敗_走既有的取數失敗_原文經遮蔽():
     divs = {"AAAA": {"items": None, "outcome": None, "error": "上游逾時 SECRET"},
-            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
             "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
@@ -516,9 +534,238 @@ def test_hld_配息取數失敗_走既有的取數失敗_原文經遮蔽():
 
 
 def test_hld_配息表出現持倉沒有的代碼_raise():
-    divs = {c: _div([], outcome=FO.DIV_OUTCOME_NONE) for c in ("AAAA", "BBBB", "CCCC")}
+    divs = {c: _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True) for c in ("AAAA", "BBBB", "CCCC")}
     kw, _holding = _hld_inputs(divs)
     kw = copy.deepcopy(kw)
     kw["dividend_table"]["settled"]["ZZZZ"] = True
     with pytest.raises(ValueError):
         HL.assemble_live_load(**kw)
+
+
+# ═══════════════════════ 稽核 11／12 回修 ═══════════════════════
+
+def _rows_page(n, *, amount="0.05", extra=""):
+    """合庫配息頁：表頭 ＋ n 列月配（2020-01 起往後），每列 7 格。"""
+    trs = []
+    for i in range(n):
+        y, m = 2020 + i // 12, i % 12 + 1
+        trs.append(f"<tr><td>{y}/{m:02d}/01</td><td>{y}/{m:02d}/03</td><td>{y}/{m:02d}/10</td><td>配息</td>"
+                   f"<td>{amount}</td><td>6.1</td><td>美元</td></tr>")
+    return f"<table>{_HDR}{''.join(trs)}{extra}</table>"
+
+
+def _real_tcb_through_chain(monkeypatch, page, *, ccy="USD"):
+    """端到端：A 鏈（其餘來源走替身）＋**真的**合庫配息解析器 → B 線。"""
+    code, sc = H.full_success_scenario()
+    sc = {k: v for k, v in sc.items() if k != "_src_tcb_div"}
+    H.install(monkeypatch, sc)
+    monkeypatch.setattr(FO, "_src_tcb_div", S._src_tcb_div)
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    # 真解析器記的取得時間是**真的當下**；判「未來」用的 now 也要是真的當下，否則會被當成未來時間
+    out = _quiet(ND.build_nav_dividend_tables, _funds(code, ccy), now=dt.datetime.now(dt.timezone.utc))
+    return code, out["dividend"]
+
+
+def test_必修1a_真解析器_70列只讀59列_回報truncated_B線不算settled(monkeypatch):
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(_rows_page(70)))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert len(divs) == 59                                        # 回傳值與改動前相同（只讀前 59 列）
+    assert divs.div_fetch["dropped"] == {"truncated": 11, "filtered": 0, "other_tables": 0}
+    code, tbl = _real_tcb_through_chain(monkeypatch, _rows_page(70))
+    assert len(tbl["rows"]) == 59 and tbl["settled"] == {code: False}
+
+
+@pytest.mark.parametrize("bad_row, why", [
+    ("<tr><td>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td><td>1500</td><td>6.1</td>"
+     "<td>美元</td></tr>", "金額大於 1000"),
+    ("<tr><td>20260901</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td><td>0.05</td><td>6.1</td>"
+     "<td>美元</td></tr>", "第一欄沒有「/」"),
+    ("<tr><td>2026/09/01</td><td>0.05</td></tr>", "欄數不足 6"),
+])
+def test_必修1a_被過濾掉的列_回報filtered_B線不算settled(monkeypatch, bad_row, why):
+    page = _rows_page(3, extra=bad_row)
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert len(divs) == 3 and divs.div_fetch["dropped"]["filtered"] == 1, why
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["settled"] == {code: False}, why
+
+
+def test_必修1a_第一張表之後的其他配息表_回報other_tables(monkeypatch):
+    page = _rows_page(2) + _rows_page(4)
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert len(divs) == 2 and divs.div_fetch["dropped"]["other_tables"] == 4
+
+
+def test_必修1a_沒有丟列_對照組_settled(monkeypatch):
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(_rows_page(3)))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert divs.div_fetch["dropped"] == {"truncated": 0, "filtered": 0, "other_tables": 0}
+    code, tbl = _real_tcb_through_chain(monkeypatch, _rows_page(3))
+    assert tbl["settled"] == {code: True}
+
+
+def test_必修1a_丟列算不出來_也不算settled():
+    out = _rows(_div(_tcb_items(("2026/09/01", "2026/09/03", "", 0.05, "美元")),
+                     sources=[{"source": "tcb_moneydj", "parser": S.DIV_PARSER_TCB, "status": S.DIV_STATUS_ROWS,
+                               "dropped": {"truncated": None, "filtered": None, "other_tables": None}}]))
+    assert len(out["rows"]) == 1 and out["settled"] is False
+
+
+def test_必修1a_FundClear_被金額條件丟掉的項_回報filtered(monkeypatch):
+    payload = {"Data": [{"DividendAmount": 0.05, "ExDividendDate": "2026-09-01"},
+                        {"DividendAmount": 0, "ExDividendDate": "2026-08-01"}]}
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(payload=payload))
+    divs = _quiet(S._src_fundclear_div, "ZZ01")
+    assert len(divs) == 1 and divs.div_fetch["dropped"] == {"filtered": 1}
+
+
+def test_必修2_真解析器_表頭第五格是年化配息率_pending_0列(monkeypatch):
+    hdr = ("<tr><th>配息基準日</th><th>除息日</th><th>發放日</th><th>類別</th>"
+           "<th>年化配息率</th><th>每單位配息額</th><th>幣別</th></tr>")
+    row = ("<tr><td>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>5.1</td><td>0.05</td><td>美元</td></tr>")
+    code, tbl = _real_tcb_through_chain(monkeypatch, f"<table>{hdr}{row}</table>")
+    assert tbl["rows"] == [] and tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+
+
+def test_必修2_真解析器_表頭格數與資料列格數不一致_pending_0列(monkeypatch):
+    row = ("<tr><td>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td><td>多一格</td></tr>")
+    code, tbl = _real_tcb_through_chain(monkeypatch, f"<table>{_HDR}{row}</table>")
+    assert tbl["rows"] == [] and tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+
+
+@pytest.mark.parametrize("field", ["Amount", "amount", ""])
+def test_必修2_FundClear金額取自語意不明的欄名_pending(field):
+    out = _rows(_div([_fc_item("ExDividendDate", amount_field=field)]))
+    assert out["rows"] == [] and out["pending"] == ND.PENDING_DIV_EX_DATE_UNVERIFIED
+
+
+def test_必修2_FundClear_真解析器記下金額欄名(monkeypatch):
+    payload = {"Data": [{"DividendAmount": 0.05, "ExDividendDate": "2026-09-01"},
+                        {"Amount": 0.06, "ExDividendDate": "2026-08-01"}]}
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(payload=payload))
+    divs = _quiet(S._src_fundclear_div, "ZZ01")
+    assert [d[S.DIV_PROVENANCE_KEY]["amount_field"] for d in divs] == ["DividendAmount", "Amount"]
+
+
+def test_必修2_鉅亨金額取自amount_pending():
+    item = {"date": "2026-09-01", "amount": 0.05, "yield_pct": 0,
+            S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_CNYES, "date_field": "exDate", "amount_field": "amount",
+                                   "fetched_at": L1_AT}}
+    out = _rows(_div([item]))
+    assert out["rows"] == [] and out["pending"] == ND.PENDING_DIV_EX_DATE_UNVERIFIED
+
+
+def _evidenced_no_div(code, sc, cnyes_code):
+    # FundClear 淨值只回 5 筆（低於 20 的門檻）→ 瀑布接著打鉅亨；合庫基本資料認得本代碼
+    return dict(sc, _src_fundclear_nav=H.series(5, attrs={"source": "FundClear:GetFundNAV", "fetched_at": "x"}),
+                _src_cnyes_nav=H.series(300, start="2025-01-06",
+                                        attrs={"source": f"Cnyes:fund.api:v2/funds/{cnyes_code}/nav",
+                                               "fetched_at": "2026-02-01T00:00:00+00:00"}))
+
+
+def test_必修3_三個來源同一輪都認得這個代碼_才當成確定不配息(monkeypatch):
+    code, sc = _no_div_scenario()
+    H.install(monkeypatch, _evidenced_no_div(code, sc, code))
+    out = _quiet(FO.fetch_fund_from_moneydj_url, code)[FO.DIVIDENDS_OUTCOME_KEY]
+    assert out["outcome"] == FO.DIV_OUTCOME_NONE and out["none_evidenced"] is True
+    assert all(s["code_recognized"] for s in out["sources"])
+    tbl = _quiet(ND.build_nav_dividend_tables, _funds(code), now=NOW)["dividend"]
+    assert tbl["settled"] == {code: True} and tbl["rows"] == []
+
+
+def test_必修3_鉅亨淨值換了候選代碼_不算認得本代碼(monkeypatch):
+    code, sc = _no_div_scenario()
+    H.install(monkeypatch, _evidenced_no_div(code, sc, "OTHER123"))
+    out = _quiet(FO.fetch_fund_from_moneydj_url, code)[FO.DIVIDENDS_OUTCOME_KEY]
+    assert out["outcome"] == FO.DIV_OUTCOME_NONE and out["none_evidenced"] is False
+    tbl = _quiet(ND.build_nav_dividend_tables, _funds(code), now=NOW)["dividend"]
+    assert tbl["settled"] == {code: False}
+
+
+def test_必修4_M11_真解析器端到端_表頭第二格是配息基準日_pending_0列(monkeypatch):
+    hdr = ("<tr><th>除息日</th><th>配息基準日</th><th>發放日</th><th>類別</th>"
+           "<th>每單位配息額</th><th>年化配息率</th><th>幣別</th></tr>")
+    row = ("<tr><td>2026/09/03</td><td>2026/09/01</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td></tr>")
+    code, tbl = _real_tcb_through_chain(monkeypatch, f"<table>{hdr}{row}</table>")
+    assert tbl["rows"] == [] and tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+    assert tbl["settled"] == {code: False}
+
+
+def test_必修4_真解析器端到端_正常頁面_照寫_對照組(monkeypatch):
+    code, tbl = _real_tcb_through_chain(monkeypatch, _rows_page(3))
+    assert [r["ex_date"] for r in tbl["rows"]] == ["2020-01-03", "2020-02-03", "2020-03-03"]
+
+
+def test_必修4_M13_legacy段_沒有配息一律undetermined(monkeypatch):
+    code, sc = H.scenarios()["S3_all_fail"]
+    sc = dict(sc, _src_tcb_div=_empty(S.DIV_PARSER_TCB), _src_fundclear_div=_empty(S.DIV_PARSER_FUNDCLEAR),
+              _src_cnyes_div=_empty(S.DIV_PARSER_CNYES))
+    H.install(monkeypatch, sc)
+    out = _quiet(FO.fetch_fund_from_moneydj_url, code)[FO.DIVIDENDS_OUTCOME_KEY]
+    assert out["legacy_inline_parse"] is True
+    assert [s["status"] for s in out["sources"]] == [S.DIV_STATUS_EMPTY] * 3
+    assert out["outcome"] == FO.DIV_OUTCOME_UNDETERMINED     # 三個來源都回空，但 legacy 段另跑了沒有狀態的解析
+
+
+def test_必修1b_區間起點早於最舊一筆除息日_整張退回尚未接上_不說區間內無配息():
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-03-15", 0.1059)]),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
+            "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
+    kw, holding = _hld_inputs(divs)
+    loaded = HL.assemble_live_load(**kw)
+    assert loaded["live_args"]["dividend_coverage"] == {"AAAA": "2026-03-15", "CCCC": "2026-02-10"}
+    # 區間 2026-01-01 起 → 早於 AAAA／CCCC 的最舊一筆
+    gated = HL._gate_dividend_coverage(loaded["dataset"], loaded["live_args"]["dividend_coverage"], _WINDOW)
+    assert gated["dividend"] == [] and "dividend" in gated["pending_tables"]
+    for code in ("AAAA", "BBBB", "CCCC"):
+        m = HG.fund_metrics(gated, next(h for h in holding if h["fund_code"] == code), _WINDOW)
+        assert m["期間配息合計"]["_state"] == HG.STATE_MISSING
+        assert m["期間配息合計"]["text"] != HG.not_applicable_text("區間內無配息")
+    # 區間起點不早於任何一檔的最舊一筆 → 照接
+    late = ("2026-03-15", HF.WINDOW_END)
+    assert HL._gate_dividend_coverage(loaded["dataset"], loaded["live_args"]["dividend_coverage"], late) \
+        is loaded["dataset"]
+    assert loaded["dataset"]["dividend"] and loaded["dataset"]["pending_tables"] == ["fund_profile"]   # 輸入沒被改
+
+
+def test_必修1b_build_live_model走得到覆蓋期間閘門(monkeypatch):
+    seen = {}
+    real = HL._gate_dividend_coverage
+
+    def spy(dataset, coverage, window):
+        seen["args"] = (coverage, window)
+        seen["out"] = real(dataset, coverage, window)
+        return seen["out"]
+
+    monkeypatch.setattr(HL, "_gate_dividend_coverage", spy)
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-03-15", 0.1059)]),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
+            "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
+    kw, _holding = _hld_inputs(divs)
+    loaded = HL.assemble_live_load(**kw)
+    args = dict(loaded["live_args"], nav_provenance={c: {"cache_fallback": False, "stale": None}
+                                                     for c in ("AAAA", "BBBB", "CCCC")})
+    try:
+        HL.build_live_model(loaded["dataset"], applied_window=_WINDOW, **args)
+    except Exception:  # noqa: BLE001 —— 本條只驗閘門有被呼叫、拿到正確的參數與結果
+        pass
+    assert seen["args"] == ({"AAAA": "2026-03-15", "CCCC": "2026-02-10"}, _WINDOW)
+    assert "dividend" in seen["out"]["pending_tables"]
+
+
+def test_HLD3_配息佔淨值比_值等於區間內每單位配息加總除以區間末淨值():
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-01-15", 0.1059), ("2026-09-16", 0.1059)]),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
+            "CCCC": _tcb_for("CCCC", "EUR", [("2026-01-02", 0.1492)])}
+    kw, holding = _hld_inputs(divs)
+    loaded = HL.assemble_live_load(**kw)
+    a = _metrics(loaded, holding, "AAAA")
+    navs = [r for r in HF.navs() if r["fund_code"] == "AAAA" and _WINDOW[0] <= r["nav_date"] <= _WINDOW[1]]
+    last = sorted(navs, key=lambda r: r["nav_date"])[-1]["nav_orig_ccy"]
+    assert a["配息佔淨值比"]["_state"] == HG.STATE_OK
+    assert a["配息佔淨值比"]["_raw"] == pytest.approx((0.1059 + 0.1059) / last * 100.0)

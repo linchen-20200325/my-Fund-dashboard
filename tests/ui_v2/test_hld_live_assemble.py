@@ -872,7 +872,8 @@ def test_T5h_未設區間時_沒有淨值的那一檔與健康檔的兩個主值
 
 _DATASET_KEYS = ["holding", "nav", "dividend", "policy", "fund_profile", "user_setting", "errors",
                  "pending_tables", "fund_errors"]
-_LIVE_ARGS_KEYS = ["direct_policy_id", "direct", "policy_tab_source", "direct_sources", "nav_provenance"]
+_LIVE_ARGS_KEYS = ["direct_policy_id", "direct", "policy_tab_source", "direct_sources", "nav_provenance",
+                   "dividend_coverage"]   # 2026-10-13 稽核必修 1(b) 新增
 
 
 def test_T7a_回傳值的鍵與鍵序逐一照規定():
