@@ -3363,10 +3363,28 @@ def _src_tcb_meta(code: str) -> dict:
 
 
 def _tcb_div_cells(tr) -> list:
-    """一列的格子（`th`＋`td`，依出現順序）。表頭與資料列**共用這一個**數格方式，免得兩邊數法再分歧。
-    與取值用的 `_row.find_all("td")` 同為遞迴搜尋（不只數直接子節點）—— 改成只數直接子節點會讓
-    「格數」與「取值實際讀到的 td」在巢狀表格時對不上，故刻意不改。"""
+    """一列的格子（`th`＋`td`，依出現順序；遞迴搜尋，與取值用的 `_row.find_all("td")` 相同）。
+    用在兩處：表頭格數（`header_cells`）與資料列的 th 格數（`row_th_cells`）。
+    ⚠️ 資料列的 td 格數（`row_td_cells`）**不**經過本函式，直接取 `len(_cols)` —— 那才是取值實際讀的那組格子。
+    ~~表頭與資料列**共用這一個**數格方式~~（稽核組 D 指出只對一半：資料列 td 數用的是 `len(_cols)`）。
+    刻意不改成只數直接子節點：那會讓格數與 `_cols`（遞迴）在巢狀表格時對不上。"""
     return tr.find_all(["th", "td"])
+
+
+def _tcb_div_table_has_span(tbl) -> bool:
+    """這張配息表（表頭列＋所有資料列，含第 60 列之後）是否有任何 `th`／`td` 帶 `colspan` 或 `rowspan` 且值不是 1
+    （值解析不了也算有）。稽核組 C：合併儲存格時「td 格數 ＝ 表頭格數」照樣成立，序號卻對不上表頭 → 下游據此 pending。"""
+    for _c in tbl.find_all(["th", "td"]):
+        for _attr in ("colspan", "rowspan"):
+            _v = _c.get(_attr)
+            if _v is None:
+                continue
+            try:
+                if int(str(_v).strip()) != 1:
+                    return True
+            except (TypeError, ValueError):   # 解析不了 → 當成有合併（fail closed）
+                return True
+    return False
 
 
 def _tcb_div_header_cells(tbl) -> list:
@@ -3479,7 +3497,8 @@ def _src_tcb_div(code: str) -> list:
         2026-10-13（新增鍵，取值一個不改）：每筆多 `div_provenance`，記**這張表第一列**（本函式本來就當表頭略過的那一列）
         第 1、2、3、5、7 格的文字（`date_header`／`ex_date_header`／`pay_date_header`／`amount_header`／
         `currency_header`），以及表頭格數與這一列的格數（`header_cells`／`row_td_cells`／`row_th_cells`；
-        稽核必修 2 補，稽核組 B 回修拆成兩個鍵：`row_td_cells` ＝ 取值實際讀的 td 格數、`row_th_cells` ＝ 這一列的 th 格數）。
+        稽核必修 2 補，稽核組 B 回修拆成兩個鍵：`row_td_cells` ＝ 取值實際讀的 td 格數、`row_th_cells` ＝ 這一列的 th 格數），
+        與這張表有沒有合併儲存格（`table_has_span`；稽核組 C 補）。
         欄位仍照原本寫死的序號取值；這幾個鍵只讓下游**逐頁核對**那一欄的表頭是不是它自稱的東西，不據此改取哪一欄。
         """
         _out: list = []
@@ -3490,6 +3509,7 @@ def _src_tcb_div(code: str) -> list:
                 if "配息基準日" not in _t and "除息日" not in _t:
                     continue
                 _hdr = _tcb_div_header_cells(_tbl)
+                _spanned = _tcb_div_table_has_span(_tbl)   # 稽核組 C：整張表有沒有合併儲存格（只記錄）
                 for _row in _tbl.find_all("tr")[1:60]:
                     _cols = [td.get_text(strip=True) for td in _row.find_all("td")]
                     if len(_cols) < 6:
@@ -3522,6 +3542,8 @@ def _src_tcb_div(code: str) -> list:
                             # 下游要求 `row_th_cells == 0` 且 `row_td_cells == header_cells`。
                             "row_td_cells": len(_cols),   # 取值實際讀的那組格子（即 `_cols`）
                             "row_th_cells": sum(1 for _c in _tcb_div_cells(_row) if _c.name == "th"),
+                            # 稽核組 C：colspan／rowspan 不是 1 → 格數相同也對不上表頭（下游 pending）
+                            "table_has_span": _spanned,
                         },
                     })
                 if _out:

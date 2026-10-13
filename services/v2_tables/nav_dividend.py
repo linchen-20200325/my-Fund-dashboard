@@ -1159,7 +1159,10 @@ DIV_CCY_EVIDENCE = {
 #   （⚠️ `fund_orchestration` legacy 段另一份內嵌解析的註解寫 `col[4]=配息金額`；那是**另一個解析器**的假設，
 #   且那一支的列本來就不收，故不採。）另要求~~表頭格數與該列格數相同（`row_cells == header_cells`）~~
 #   該列沒有 th 格、且取值讀的 td 格數等於表頭格數（`row_th_cells == 0 and row_td_cells == header_cells`；
-#   稽核組 B 回修，見 `_tcb_cells_mismatch`），否則序號對不上表頭（合併儲存格、少一格、列首多一格 th）。
+#   稽核組 B 回修，見 `_tcb_cells_mismatch`），~~否則序號對不上表頭（合併儲存格、少一格、列首多一格 th）。~~
+#   ⚠️ 上句「擋得住合併儲存格」已被稽核組 C 實測推翻：colspan／rowspan 時格數照樣相等、序號卻錯位。
+#   現行：格數條件只擋「少一格、多一格、列首多一格 th」；合併儲存格改由 L1 記的 `table_has_span`
+#   （整張表任一格 colspan／rowspan 不是 1）擋 —— 有合併、或缺這個鍵 → 對不上。
 # - FundClear：解析器依序試 `DividendAmount`／`dividendAmount`／`Amount`／`amount`；欄名本身就說明是配息金額的
 #   只有前兩個，`Amount`／`amount` 語意不明（同 `Date` 之於日期）→ 不收。
 # - 鉅亨：依序試 `dividend`／`amount` → 只收 `dividend`。
@@ -1188,17 +1191,21 @@ TEXT_DIV_KEY_MISMATCH = ("A 鏈回傳的 full_key {got!r} 與代碼對照（fund
 TEXT_DIV_NO_PROVENANCE = "沒有解析依據（不是已登記的三個配息解析器交出的列）"
 TEXT_DIV_DATE_UNVERIFIED = "日期欄證明不了是除息日（{parser}：{field}={value!r}）"
 TEXT_DIV_AMOUNT_UNVERIFIED = "金額欄證明不了是每單位配息（{parser}：{field}={value!r}）"
-TEXT_DIV_CELLS_MISMATCH = ("這一列含 th 格，或取值讀的 td 格數與表頭格數不同"
-                           "（表頭 {hdr}、列 td {td}、th {th}），欄位序號對不上表頭")
+TEXT_DIV_CELLS_MISMATCH = ("這一列含 th 格、取值讀的 td 格數與表頭格數不同，或表內有合併儲存格"
+                           "（表頭 {hdr}、列 td {td}、th {th}、合併 {span}），欄位序號對不上表頭")
 
 
 def _tcb_cells_mismatch(prov: dict) -> bool:
     """合庫配息列的欄位序號對不對得上表頭（稽核組 B 回修；fail closed）。
     L1 取值只讀 td（`_cols`），故要求：這一列**沒有** th（`row_th_cells == 0`），而且取值讀的 td 格數
-    等於表頭格數（`row_td_cells == header_cells`）。任一不成立、或任一個數不是 int → 對不上。
+    等於表頭格數（`row_td_cells == header_cells`），而且整張表沒有合併儲存格（`table_has_span is False`；
+    稽核組 C 補）。任一不成立、任一個數不是 int、或 `table_has_span` 不是 bool（含缺鍵）→ 對不上。
     ~~`row_cells == header_cells`（th＋td 合計）~~：首格 th＋7 td 對 8 格表頭會放行、取值卻整排左移一格。"""
     td, th, hdr = prov.get("row_td_cells"), prov.get("row_th_cells"), prov.get("header_cells")
     if not all(isinstance(v, int) and not isinstance(v, bool) for v in (td, th, hdr)):
+        return True
+    span = prov.get("table_has_span")
+    if not isinstance(span, bool) or span:
         return True
     return th > 0 or td != hdr
 
@@ -1399,7 +1406,8 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
             continue
         if parser == DIV_PARSER_TCB and _tcb_cells_mismatch(prov):
             _tally(rejected, TEXT_DIV_CELLS_MISMATCH.format(hdr=prov.get("header_cells"), td=prov.get("row_td_cells"),
-                                                            th=prov.get("row_th_cells")))
+                                                            th=prov.get("row_th_cells"),
+                                                            span=prov.get("table_has_span")))
             date_unverified += 1
             continue
         day = _div_date_text(item.get(date_key))

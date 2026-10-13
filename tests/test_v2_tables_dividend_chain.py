@@ -261,6 +261,7 @@ def _tcb_items(*rows, header=("配息基準日", "除息日", "發放日", "類�
                                      "currency_header": header[6] if len(header) > 6 else None,
                                      "amount_header": header[4] if len(header) > 4 else None,
                                      "header_cells": len(header), "row_td_cells": 7, "row_th_cells": 0,
+                                     "table_has_span": False,
                                      "page": "tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm", "fetched_at": at}}
              for base, ex, pay, amt, ccy in rows]
     return S._div_result(items, S.DIV_PARSER_TCB, S.DIV_STATUS_ROWS, dropped=dropped or {"truncated": 0, "filtered": 0,
@@ -917,14 +918,81 @@ def test_稽核B_正常頁_無th_td數等於表頭_照常寫出(monkeypatch):
     assert tbl["settled"] == {code: True} and tbl["pending"].get(code) is None
 
 
+_OK_CELLS = {"row_td_cells": 7, "row_th_cells": 0, "header_cells": 7, "table_has_span": False}
+
+
 @pytest.mark.parametrize("cells", [
-    {"row_td_cells": 7, "row_th_cells": 0, "header_cells": 8},          # td 數 ≠ 表頭
-    {"row_td_cells": 7, "row_th_cells": 1, "header_cells": 7},          # 含 th
-    {"row_td_cells": 7, "row_th_cells": 1, "header_cells": 8},          # 合計相符但含 th
-    {"row_td_cells": 7, "header_cells": 7},                             # 缺 th 鍵 → fail closed
-    {"row_cells": 7, "header_cells": 7},                                # 只有舊鍵 → fail closed
-    {"row_td_cells": True, "row_th_cells": 0, "header_cells": 1},       # bool 不算 int
+    dict(_OK_CELLS, header_cells=8),                                    # td 數 ≠ 表頭
+    dict(_OK_CELLS, row_th_cells=1),                                    # 含 th
+    dict(_OK_CELLS, row_th_cells=1, header_cells=8),                    # 合計相符但含 th
+    {"row_td_cells": 7, "header_cells": 7, "table_has_span": False},    # 缺 th 鍵 → fail closed
+    {"row_cells": 7, "header_cells": 7, "table_has_span": False},       # 只有舊鍵 → fail closed
+    dict(_OK_CELLS, row_td_cells=True, header_cells=1),                 # bool 不算 int
+    dict(_OK_CELLS, table_has_span=True),                               # 稽核組 C：表內有合併儲存格
+    {"row_td_cells": 7, "row_th_cells": 0, "header_cells": 7},          # 缺 table_has_span 鍵 → fail closed
+    dict(_OK_CELLS, table_has_span=None),                               # 型別不對 → fail closed
+    dict(_OK_CELLS, table_has_span=0),                                  # int 0 不是 bool → fail closed
+    dict(_OK_CELLS, table_has_span="False"),                            # 字串不是 bool → fail closed
 ])
 def test_稽核B_格數判定_fail_closed(cells):
     assert ND._tcb_cells_mismatch(cells) is True
-    assert ND._tcb_cells_mismatch({"row_td_cells": 7, "row_th_cells": 0, "header_cells": 7}) is False
+    assert ND._tcb_cells_mismatch(dict(_OK_CELLS)) is False
+
+
+# ═══════════════════════ 稽核組 C 回修：合併儲存格（colspan／rowspan）→ 格數相同也錯位 ═══════════════════════
+
+_HDR_ANNUAL_COLSPAN2 = ("<tr><th>配息基準日</th><th>除息日</th><th>發放日</th><th>類別</th>"
+                        "<th>每單位配息額</th><th colspan=\"2\">年化配息率</th><th>幣別</th></tr>")
+
+
+def test_稽核C_重現1_年化配息率colspan2_資料列首格colspan2_pending_0列(monkeypatch):
+    row = ("<tr><td colspan=\"2\">2026/09/01</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td><td>美元</td></tr>")
+    page = f"<table>{_HDR_ANNUAL_COLSPAN2}{row}</table>"
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert (divs[0]["ex_date"], divs[0]["amount"]) == ("2026/09/10", 6.1)     # A 鏈取值不變（錯位照舊）
+    prov = divs[0][S.DIV_PROVENANCE_KEY]
+    assert (prov["header_cells"], prov["row_td_cells"], prov["row_th_cells"]) == (7, 7, 0)  # 格數條件擋不住
+    assert prov["table_has_span"] is True
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["rows"] == [] and tbl["settled"] == {code: False}
+    assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+
+
+def test_稽核C_重現2_上一列基準日rowspan2_下一列7格_pending_0列(monkeypatch):
+    rows = ("<tr><td rowspan=\"2\">2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+            "<td>0.05</td><td>6.1</td><td>美元</td></tr>"
+            "<tr><td>2026/09/04</td><td>2026/09/11</td><td>配息</td>"
+            "<td>0.06</td><td>6.2</td><td>美元</td><td>美元</td></tr>")
+    page = f"<table>{_HDR}{rows}</table>"
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    assert (divs[1]["ex_date"], divs[1]["amount"]) == ("2026/09/11", 6.2)     # 第二列錯位（取值不變）
+    assert [d[S.DIV_PROVENANCE_KEY]["table_has_span"] for d in divs] == [True, True]
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["rows"] == [] and tbl["settled"] == {code: False}
+    assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+
+
+@pytest.mark.parametrize("span_attr", ['colspan="1"', 'rowspan="1"', 'colspan="1" rowspan=" 1 "'])
+def test_稽核C_span值為1_正常頁照常寫出(monkeypatch, span_attr):
+    row = (f"<tr><td {span_attr}>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td></tr>")
+    hdr = _HDR.replace("<th>除息日</th>", f"<th {span_attr}>除息日</th>")
+    page = f"<table>{hdr}{row}</table>"
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    assert _quiet(S._src_tcb_div, "TLZF9")[0][S.DIV_PROVENANCE_KEY]["table_has_span"] is False
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert [(r["ex_date"], r["div_per_unit_orig_ccy"], r["ccy"]) for r in tbl["rows"]] == [("2026-09-03", 0.05, "USD")]
+    assert tbl["settled"] == {code: True}
+
+
+@pytest.mark.parametrize("attr, expected", [
+    ('colspan="2"', True), ('rowspan="3"', True), ('colspan="abc"', True), ('colspan=""', True),
+    ('colspan="0"', True), ('colspan="1"', False), ("", False),
+])
+def test_稽核C_table_has_span_判定(attr, expected):
+    from bs4 import BeautifulSoup
+    tbl = BeautifulSoup(f"<table>{_HDR}<tr><td {attr}>x</td></tr></table>", "lxml").find("table")
+    assert S._tcb_div_table_has_span(tbl) is expected
