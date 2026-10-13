@@ -1,0 +1,87 @@
+name: "探測：Yahoo 匯率日線觀測日（只讀，手動觸發）"
+
+# 目的：驗證 Yahoo `<幣別>TWD=X` 日線時間戳以世界協調時間取日期，是否等於該根 K 線代表的交易日
+# （`services/v2_tables/market_indicator.py` 的 `FX_OBS_DATE_RULE_VERIFIED` 閘門與 `_obs_date` 判準）。
+# 開發環境連不到 Yahoo，故在 Actions 上取真實回應、寫成報告。
+#
+# ⚠️ 只讀：不寫任何試算表、不碰使用者設定、不改正式行為；報告只推到專用分支
+#    `probe/fx-obs-date-results`（**不推 main、不推其他分支、不 force**）。
+# ⚠️ 只有手動觸發，沒有排程。
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "逗號分隔的代號（USDTWD=X 與 ^VIX 一律納入）；留空用腳本預設"
+        required: false
+        default: ""
+
+permissions:
+  contents: write   # 只為了把報告推到 probe/fx-obs-date-results
+
+concurrency:
+  group: fx-obs-date-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RESULT_BRANCH: probe/fx-obs-date-results
+      REPORT_PATH: probe_out/fx_obs_date_report.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install deps
+        # 腳本借用正式的 `_obs_date` 與 `fetch_url`，會 import repositories / services → 裝完整 requirements。
+        run: pip install -r requirements.txt
+
+      - name: Run probe
+        env:
+          # 照抄 update_macro_history.yml 的用法；有設才經 NAS 中繼。
+          # ⚠️ `infra.proxy.get_proxy_config()` 讀的是 `st.secrets`，不讀環境變數；
+          #    報告裡的 `proxy_used_by_infra` 會如實記錄這次到底有沒有走代理。
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROBE_TICKERS: ${{ github.event.inputs.tickers }}
+        run: |
+          if [ -n "$PROBE_TICKERS" ]; then
+            python scripts/probe_fx_obs_date.py --tickers "$PROBE_TICKERS" --out "$REPORT_PATH"
+          else
+            python scripts/probe_fx_obs_date.py --out "$REPORT_PATH"
+          fi
+
+      - name: Commit report to probe/fx-obs-date-results
+        # 探測失敗（主要代號取不到）時報告照樣寫出，失敗原文也要留下來 → always()。
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "::error::報告檔不存在（$REPORT_PATH），沒有可提交的東西"
+            exit 1
+          fi
+          STAMP="$(date -u '+%Y%m%dT%H%M%SZ')_run${GITHUB_RUN_ID}"
+          mkdir -p "$RUNNER_TEMP/fxprobe"
+          cp "$REPORT_PATH" "$RUNNER_TEMP/fxprobe/report.json"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git clean -fdxq
+          if git ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            git fetch --depth=1 origin "$RESULT_BRANCH"
+            git checkout -B "$RESULT_BRANCH" FETCH_HEAD
+          else
+            git checkout --orphan "$RESULT_BRANCH"
+            git rm -rfq .
+          fi
+          mkdir -p "results/$STAMP"
+          cp "$RUNNER_TEMP/fxprobe/report.json" "results/$STAMP/report.json"
+          git add "results/$STAMP/report.json"
+          git commit -m "探測：Yahoo 匯率日線觀測日 ${STAMP} [skip ci]"
+          git push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          echo "報告已推到 $RESULT_BRANCH：results/$STAMP/report.json"
