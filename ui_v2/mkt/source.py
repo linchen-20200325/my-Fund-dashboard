@@ -15,7 +15,8 @@
 - `notes`：正式模式畫面要用的附註 ——
   `pending`（不寫列的鍵 → 原因代碼）、`masked_keys`（錯誤原文含遮蔽記號的鍵）、
   `cooldowns`（本頁來源的冷卻狀態）、
-  `available_keys`（資料層註冊的指標鍵，L2 `INDICATOR_SPECS`；MKT-5 可勾清單，客戶 2026-10-13 裁示）、
+  `available_keys`（MKT-5 可勾清單：L2 `INDICATOR_SPECS` 裡**第一階段會取數**的鍵，見 `available_keys()`；
+  客戶 2026-10-13 裁示「資料層實際可取得、可追溯」，此為總管依裁示的實作解讀）、
   `settings`（**已存**的 `mkt_` 三鍵，經 `live.parse_user_settings` 解析）、
   `settings_error`（讀不到或解析不了時的訊息原文，已遮蔽；讀得到時為 None）。
 
@@ -66,11 +67,21 @@ def load_live() -> dict:
             "pending": dict(table["pending"]),
             "masked_keys": sorted(k for k, m in errors.items() if masking.is_masked(m)),
             "cooldowns": market_indicator.source_cooldowns(),
-            "available_keys": list(market_indicator.INDICATOR_SPECS),
+            "available_keys": available_keys(table),
             "settings": settings,
             "settings_error": settings_error,
         },
     }
+
+
+def available_keys(table) -> list:
+    """MKT-5 可勾清單（N3，2026-10-13 稽核 G，總管裁定）：資料層註冊的鍵，排除 L2 本次交回的 `pending`
+    （第一階段刻意不取數、不寫列的鍵 —— `phase1` 為 `pending`，或 FX 觀測日規則未驗證時的
+    `write_if_fx_verified`）。判定一律取 L2 自己交出的旗標，本層不寫死任何鍵名。
+    ~~舊寫法：`list(market_indicator.INDICATOR_SPECS)`（七鍵全列）~~ —— 那會讓第一階段不可能有資料的鍵
+    成為可勾選項，不合「實際可取得」。"""
+    pending = set(table.get("pending") or {})
+    return [key for key in market_indicator.INDICATOR_SPECS if key not in pending]
 
 
 def _load_settings(values) -> tuple:
@@ -79,7 +90,7 @@ def _load_settings(values) -> tuple:
     try:
         loaded = settings_store.load_user_settings(values)
     except settings_store.SettingsSheetError as exc:
-        return {"window_days": None, "baseline_date": None, "indicator_keys": None}, str(exc)
+        return {"window_days": None, "baseline_date": None, "indicator_keys": None, "pair_consistent": None}, str(exc)
     return live.parse_user_settings(loaded["rows"], loaded["broken_keys"])
 
 

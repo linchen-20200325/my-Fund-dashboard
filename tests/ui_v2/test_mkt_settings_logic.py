@@ -54,11 +54,13 @@ class _FakeSheet:
         self.writes = []
         self.fail_keys = set()
         self.read_error = None
+        self.broken_keys = []
 
     def load(self, *, mask):
         if self.read_error is not None:
             raise self.read_error
-        return {"rows": {k: dict(v) for k, v in self.rows.items()}, "bad_rows": [], "broken_keys": [],
+        return {"rows": {k: dict(v) for k, v in self.rows.items() if k not in self.broken_keys},
+                "bad_rows": [], "broken_keys": list(self.broken_keys),
                 "blank_rows": 0, "tab_missing": not self.rows}
 
     def save(self, setting_key, setting_value, value_kind, *, mask):
@@ -75,6 +77,12 @@ class _FakeSheet:
         self.rows[key] = {"setting_key": key, "setting_value": value,
                           "value_kind": live.VALUE_KINDS[key], "updated_at": "2026-10-01T00:00:00Z"}
 
+    def put_complete(self, window, baseline):
+        """一組經本頁存檔會留下的完整設定：兩鍵 ＋ 一致性憑證（B2）。"""
+        self.put("mkt_window_days", str(window))
+        self.put("mkt_baseline_date", baseline)
+        self.put("mkt_compare_pair", live.pair_text(window, baseline))
+
 
 def _rows_without(*keys):
     return [r for r in fixtures.dataset_all_ok()["rows"] if r["indicator_key"] not in keys]
@@ -89,8 +97,11 @@ def sheet(monkeypatch):
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", list)
     fake.table_rows = fixtures.dataset_all_ok()["rows"]
 
+    fake.pending = {}
+
     def build(**_kwargs):
-        return {"rows": [dict(r) for r in fake.table_rows], "errors": {}, "pending": {}, "skipped": {}}
+        return {"rows": [dict(r) for r in fake.table_rows], "errors": {}, "pending": dict(fake.pending),
+                "skipped": {}}
 
     monkeypatch.setattr(source.market_indicator, "build_market_indicator_table", build)
     return fake
@@ -134,8 +145,10 @@ def test_二_存檔前後正式結果不同_而且要重新載入才變(sheet):
     assert all(lines[0] == "⬜ 不適用：尚未設定觀察窗" for lines in _card_lines(unset).values())
 
     results = live.run_saves(live.mkt4_save_entries(_GOOD_WINDOW, _GOOD_BASELINE), source.save_setting)
-    assert results == {"mkt_window_days": None, "mkt_baseline_date": None}
-    assert [w["setting_value"] for w in sheet.writes] == [str(_GOOD_WINDOW), _GOOD_BASELINE]
+    assert results == {"mkt_window_days": None, "mkt_baseline_date": None, "mkt_compare_pair": None}
+    assert [w["setting_value"] for w in sheet.writes] == [str(_GOOD_WINDOW), _GOOD_BASELINE,
+                                                          live.pair_text(_GOOD_WINDOW, _GOOD_BASELINE)]
+    assert [w["setting_key"] for w in sheet.writes][-1] == "mkt_compare_pair"      # 憑證排最後
 
     # 存檔只更新已存值：手上這一份（存檔前載入的）組出來的正式結果不變
     stale = _model(before_load, field_window_days=_GOOD_WINDOW, field_baseline_date=_GOOD_BASELINE)
@@ -164,14 +177,16 @@ def test_二_未存的暫存值不影響正式結果(sheet):
 
 
 def test_二_已存設定改了以後_正式結果跟著已存值_而不是欄位值(sheet):
-    sheet.put("mkt_window_days", str(_GOOD_WINDOW))
-    sheet.put("mkt_baseline_date", _GOOD_BASELINE)
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
     loaded = source.load_live()
     saved = _model(loaded)
     other_fields = _model(loaded, field_window_days=5, field_baseline_date="2026-08-01")
     assert _card_lines(other_fields) == _card_lines(saved)
-    # 欄位值只影響 MKT-4 的欄位與摘要
-    assert logic.find_block(other_fields, "MKT-4")["summary_text"] == "5 日曆日，基準日 2026-08-01"
+    # N2：標題寫已存值；欄位值只出現在欄位本身與存檔區（標「未存檔」）
+    mkt4 = logic.find_block(other_fields, "MKT-4")
+    assert mkt4["summary_text"] == f"{_GOOD_WINDOW} 日曆日，基準日 {_GOOD_BASELINE}"
+    assert live.TEXT_UNSAVED_WINDOW in mkt4["detail_lines"]
+    assert live.TEXT_UNSAVED_WINDOW not in logic.find_block(saved, "MKT-4")["detail_lines"]
 
 
 def test_二_正式模式的套用停用並寫原因(sheet):
@@ -229,7 +244,10 @@ def test_Q07_只填一欄_禁止存檔_存檔區寫明缺哪一欄(sheet, window
 def test_Q07_兩欄都完整才可存(sheet):
     model = _model(source.load_live(), field_window_days=30, field_baseline_date=_GOOD_BASELINE)
     assert _save("MKT-4", model)["_enabled"] is True
-    assert logic.find_block(model, "MKT-4")["summary_text"] == f"30 日曆日，基準日 {_GOOD_BASELINE}"
+    # N2：還沒存，標題照舊寫已存（未設定）那一組，欄位值只在存檔區標「未存檔」
+    block = logic.find_block(model, "MKT-4")
+    assert block["summary_text"] == "尚未設定觀察窗與比較基準日"
+    assert live.TEXT_UNSAVED_WINDOW in block["detail_lines"]
 
 
 @pytest.mark.parametrize("stored, text", [
@@ -383,7 +401,8 @@ def test_設定讀不到_不說未設定_不出比較數字_存檔停用(sheet):
 
 
 @pytest.mark.parametrize("key, value", [
-    ("mkt_window_days", "-5"), ("mkt_window_days", "3.5"), ("mkt_baseline_date", "2026/09/30"),
+    ("mkt_window_days", "-5"), ("mkt_window_days", "0"), ("mkt_window_days", "3.5"), ("mkt_baseline_date", "2026/09/30"),
+    ("mkt_window_days", "731"), ("mkt_window_days", "1000000"), ("mkt_window_days", "99999999999"),
     ("mkt_indicator_keys", "vol_index"), ("mkt_indicator_keys", '["a", "a"]'),
     ("mkt_indicator_keys", '["a","b","c","d","e","f","g"]'),
 ])
@@ -391,14 +410,15 @@ def test_已存值形狀不對_當成讀取失敗_不當成未設定(sheet, key,
     sheet.put(key, value)
     loaded = source.load_live()
     assert loaded["notes"]["settings_error"] and key in loaded["notes"]["settings_error"]
-    assert loaded["notes"]["settings"] == {"window_days": None, "baseline_date": None, "indicator_keys": None}
+    assert loaded["notes"]["settings"] == {"window_days": None, "baseline_date": None, "indicator_keys": None,
+                                           "pair_consistent": None}
 
 
 def test_L2型別檢查擋得下_value_kind與set頁一致(sheet):
     from ui_v2.set import spec
 
     kinds = dict(spec.SPEC_SETTING_KEYS)
-    assert {k: kinds[k] for k in live.SETTING_KEYS} == live.VALUE_KINDS
+    assert {k: kinds[k] for k in (*live.SETTING_KEYS, live.KEY_PAIR)} == live.VALUE_KINDS
     out = source.save_setting("mkt_window_days", "三十", "int")
     assert out["status"] == "kind_mismatch" and sheet.writes == []
 
@@ -419,3 +439,249 @@ def test_模型字串沒有None字樣(sheet):
     sheet.put("mkt_window_days", "30")
     model = _model(source.load_live(), field_window_days=30, field_baseline_date=None)
     assert not [s for s in logic.collect_ui_strings(model) if re.search(r"\bNone\b", s)]
+
+
+# ═══════════════════ 2026-10-13 稽核 G／H 回修（總管裁定） ═══════════════════
+
+
+# ── B1：觀察窗天數上限 ──
+
+
+def test_B1_上限有出處_與資料層回溯範圍逐字相同():
+    assert logic.WINDOW_DAYS_MAX == mi.FRED_LOOKBACK_DAYS == 730
+
+
+@pytest.mark.parametrize("days, ok, reason", [
+    (0, False, "日數為正整數"), (-3, False, "日數為正整數"), (1, True, ""), (730, True, ""),
+    (731, False, "日數需介於 1 與 730"), (1000000, False, "日數需介於 1 與 730"),
+    (99999999999, False, "日數需介於 1 與 730"),
+])
+def test_B1_存檔端_欄位與第二道都擋(sheet, days, ok, reason):
+    model = _model(source.load_live(), field_window_days=days, field_baseline_date=_GOOD_BASELINE)
+    save = _save("MKT-4", model)
+    assert save["_enabled"] is ok and save["disabled_reason"] == reason
+    if reason:
+        assert reason in logic.find_block(model, "MKT-4")["detail_lines"]
+    entries = live.mkt4_save_entries(days, _GOOD_BASELINE)
+    assert all(e["error"] is None for e in entries) is ok
+    if not ok:
+        assert {e["error"] for e in entries} == {reason}
+        live.run_saves(entries, source.save_setting)
+        assert sheet.writes == []
+
+
+@pytest.mark.parametrize("value", ["731", "1000000", "99999999999", "0"])
+def test_B1_讀回端_超出範圍的已存值_當成設定讀不到_整頁不當(sheet, value):
+    sheet.put_complete(5, _GOOD_BASELINE)
+    sheet.put("mkt_window_days", value)
+    loaded = source.load_live()
+    assert loaded["notes"]["settings_error"]
+    model = _model(loaded)                                        # 不得 raise
+    assert model["_comparison_state"] == logic.COMPARISON_READ_FAILED
+    assert _comparison_free(model)
+
+
+@pytest.mark.parametrize("days, baseline", [
+    (1000000, "2026-09-21"), (99999999999, "2026-09-21"), (30, "0001-01-05"), (0, "2026-09-21"),
+    (-5, "2026-09-21"),
+])
+def test_B1_window_start_自己也防溢位_回None不raise(days, baseline):
+    assert logic.window_start(days, baseline) is None
+
+
+def test_B1_兩鍵齊但組不出觀察窗_只寫算不出來_不出比較數字():
+    model = logic.build_page_model(fixtures.dataset_all_ok(), window_days=30, baseline_date="0001-01-05")
+    for code in _CARDS:
+        assert logic.find_block(model, code)["detail_lines"] == ["⬜ 不適用：觀察窗算不出來"], code
+
+
+# ── B2：一致性憑證 ──
+
+
+def test_B2_後一鍵失敗留下混搭_讀回判不一致_不出比較數字(sheet):
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
+    complete_view = _model(source.load_live())
+    assert complete_view["_comparison_state"] == logic.COMPARISON_COMPLETE
+    sheet.fail_keys = {"mkt_baseline_date"}
+    results = live.run_saves(live.mkt4_save_entries(3, "2026-09-20"), source.save_setting)
+    assert results["mkt_window_days"] is None and results["mkt_compare_pair"] == "前一個鍵存檔失敗，本鍵未寫入"
+    reread = _model(source.load_live())                          # 新天數 ＋ 舊基準日 ＋ 舊憑證
+    assert reread["_comparison_state"] == logic.DISPLAY_INCOMPLETE_SETTING
+    assert reread["_comparison_reason"] == logic.REASON_INCONSISTENT
+    for lines in _card_lines(reread).values():
+        assert lines == [logic.TEXT_INCOMPLETE_INCONSISTENT]
+    assert _comparison_free(reread)
+    unset_view = _investment_view(logic.build_page_model(source.load_live()["dataset"]))
+    assert _investment_view(reread) == unset_view
+
+
+@pytest.mark.parametrize("pair", [None, "[5, \"2026-09-20\"]", "[4, \"2026-09-21\"]", "not json", "[]"])
+def test_B2_憑證缺_壞_或對不上_一律判不一致(sheet, pair):
+    sheet.put("mkt_window_days", str(_GOOD_WINDOW))
+    sheet.put("mkt_baseline_date", _GOOD_BASELINE)
+    if pair is not None:
+        sheet.put("mkt_compare_pair", pair)
+    model = _model(source.load_live())
+    assert model["_comparison_reason"] == logic.REASON_INCONSISTENT
+    assert _comparison_free(model)
+    assert logic.find_block(model, "MKT-4")["summary_text"] == logic.TEXT_INCOMPLETE_INCONSISTENT
+
+
+def test_B2_設定頁單獨改了其中一鍵_判不一致(sheet):
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
+    out = S.save_setting_for_page("mkt_window_days", "6", "int", [])      # 設定與診斷頁逐鍵存
+    assert out["status"] == "saved"
+    assert _model(source.load_live())["_comparison_reason"] == logic.REASON_INCONSISTENT
+
+
+def test_B2_三者一致才算完整(sheet):
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
+    loaded = source.load_live()
+    assert loaded["notes"]["settings"]["pair_consistent"] is True
+    model = _model(loaded)
+    assert model["_comparison_state"] == logic.COMPARISON_COMPLETE
+    assert any("與觀察窗起點的差" in line for line in _card_lines(model)["MKT-1"])
+
+
+def test_B2_憑證值是確定性組合():
+    assert live.pair_text(5, "2026-09-21") == live.pair_text(5, "2026-09-21") == '[5, "2026-09-21"]'
+
+
+# ── N1：設定讀不到 ──
+
+
+def test_N1_設定讀不到_標題與明細用中性準確文字_不說尚未設定_不說取數失敗(sheet):
+    sheet.read_error = S.store.SettingsSheetError("設定試算表讀取失敗（替身）", code="api")
+    model = _model(source.load_live())
+    assert logic.find_block(model, "MKT-4")["summary_text"] == logic.TEXT_SETTINGS_UNREADABLE
+    assert logic.find_block(model, "MKT-5")["summary_text"] == logic.TEXT_SHOW_ALL_UNREADABLE
+    for code in ("MKT-4", "MKT-5"):
+        block = logic.find_block(model, code)
+        assert "尚未設定" not in block["summary_text"], code
+        assert not any("取數失敗" in line for line in block["detail_lines"]), code
+        assert logic.TEXT_SETTINGS_UNREADABLE_PREFIX + "設定試算表讀取失敗（替身）" in block["detail_lines"], code
+    for code in ("MKT-6", "MKT-7"):
+        assert logic.TEXT_SHOW_ALL_UNREADABLE in logic.find_block(model, code)["detail_lines"], code
+    assert model["_selection_state"] == logic.SELECTION_UNREADABLE
+    assert logic.DISPLAY_NOT_READY not in {model["_selection_state"]}
+
+
+def test_N1_設定讀得到時_明細不寫讀不到那一句(sheet):
+    model = _model(source.load_live())
+    assert model["_selection_state"] == logic.SELECTION_UNSAVED
+    for code in ("MKT-6", "MKT-7"):
+        assert logic.TEXT_SHOW_ALL_UNREADABLE not in logic.find_block(model, code)["detail_lines"]
+
+
+@pytest.mark.parametrize("key", ["mkt_window_days", "mkt_baseline_date", "mkt_indicator_keys"])
+def test_H2_L1回報broken_keys_判為設定讀取失敗_不當未設定也不當半套(sheet, key):
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
+    sheet.put("mkt_indicator_keys", '["vol_index"]')
+    sheet.broken_keys = [key]
+    loaded = source.load_live()
+    assert loaded["notes"]["settings_error"] and key in loaded["notes"]["settings_error"]
+    model = _model(loaded)
+    assert model["_comparison_state"] == logic.COMPARISON_READ_FAILED
+    assert model["_selection_state"] == logic.SELECTION_UNREADABLE
+    assert "尚未設定" not in logic.find_block(model, "MKT-4")["summary_text"]
+    assert _comparison_free(model)
+
+
+# ── N2：標題顯示已存值 ──
+
+
+def test_N2_標題只寫已存值_欄位改了也不跟(sheet):
+    sheet.put_complete(_GOOD_WINDOW, _GOOD_BASELINE)
+    loaded = source.load_live()
+    for fields in ({"field_window_days": 99, "field_baseline_date": "2026-01-01"},
+                   {"field_window_days": None, "field_baseline_date": None}):
+        block = logic.find_block(_model(loaded, **fields), "MKT-4")
+        assert block["summary_text"] == f"{_GOOD_WINDOW} 日曆日，基準日 {_GOOD_BASELINE}", fields
+
+
+# ── N3：可勾清單排除第一階段不取數的鍵 ──
+
+
+def test_N3_可勾清單排除L2標為pending的鍵_以L2旗標判定(sheet):
+    sheet.pending = {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
+                     "fx_twd_per_usd": "fx_obs_date_rule"}
+    sheet.table_rows = _rows_without("leading_index", "coincident_index", "fx_twd_per_usd")
+    loaded = source.load_live()
+    assert loaded["notes"]["available_keys"] == [k for k in mi.INDICATOR_SPECS if k not in sheet.pending]
+    names = [i["name"] for i in logic.find_block(_model(loaded), "MKT-5")["_items"]]
+    assert set(names).isdisjoint(sheet.pending)
+    assert "vol_index" in names
+
+
+def test_N3_正式模式真的旗標_pending與write_if_fx_verified未驗證都不在清單():
+    """不打網路：只看 L2 自己的旗標推得出哪些鍵第一階段不取數。"""
+    pending = {k for k, spec in mi.INDICATOR_SPECS.items() if mi._phase1_of(spec) != "write"}
+    assert {"leading_index", "coincident_index"} <= pending
+    if not mi.FX_OBS_DATE_RULE_VERIFIED:
+        assert "fx_twd_per_usd" in pending
+    table = {"pending": {k: "x" for k in pending}}
+    assert set(source.available_keys(table)).isdisjoint(pending)
+
+
+# ── N4：從未存過時勾選框預設與明細一致 ──
+
+
+def test_N4_從未存過_勾選框初值全勾_與明細全列一致(sheet):
+    loaded = source.load_live()
+    keys = logic.selectable_keys(loaded["dataset"], loaded["notes"]["available_keys"])
+    keys = keys[:logic.INDICATOR_PICK_CAP]
+    initial = live.initial_checkbox_values(loaded["notes"]["settings"], keys)
+    assert initial == {k: True for k in keys}
+    model = _model(loaded, field_selected_keys=[k for k, v in initial.items() if v])
+    assert logic.find_block(model, "MKT-5")["summary_text"] == logic.TEXT_SHOW_ALL_UNSAVED
+
+
+def test_N4_已存過依已存清單_讀不到不填_超過上限不預勾():
+    keys = ["a", "b", "c"]
+    assert live.initial_checkbox_values({"indicator_keys": ["b"]}, keys) == {"a": False, "b": True, "c": False}
+    assert live.initial_checkbox_values({"indicator_keys": None}, keys, "讀不到") is None
+    assert live.initial_checkbox_values({"indicator_keys": None}, list("abcdefg")) is None
+
+
+# ── N6：ghost／重複鍵拒絕 ──
+
+
+@pytest.mark.parametrize("picked, word", [
+    (["vol_index", "not_a_real_key"], "not_a_real_key"),
+    (["vol_index", "vol_index"], "重複"),
+])
+def test_N6_含不存在或重複的鍵_拒絕並說明_不靜默濾掉(sheet, picked, word):
+    entries = live.mkt5_save_entry(picked, ["vol_index", "credit_spread_pct"])
+    assert entries[0]["error"] and word in entries[0]["error"]
+    results = live.run_saves(entries, source.save_setting)
+    assert sheet.writes == [] and word in results["mkt_indicator_keys"]
+
+
+# ── H3：設定不完整不是燈號 —— 整張卡（扣掉副標）與未設定時逐格相同 ──
+
+
+def _card_without_subtitle(model, code):
+    card = copy.deepcopy(logic.find_block(model, code))
+    card.pop("detail_lines")
+    return card
+
+
+@pytest.mark.parametrize("setup", ["half_window", "half_baseline", "inconsistent", "unreadable"])
+def test_H3_設定狀態不動整張卡_徽章與按鈕一併比(sheet, setup):
+    sheet.table_rows = _rows_without("leading_index")           # 讓卡上真的有徽章與重新取數鈕
+    unset = _model(source.load_live())
+    if setup == "half_window":
+        sheet.put("mkt_window_days", "30")
+    elif setup == "half_baseline":
+        sheet.put("mkt_baseline_date", _GOOD_BASELINE)
+    elif setup == "inconsistent":
+        sheet.put("mkt_window_days", "30")
+        sheet.put("mkt_baseline_date", _GOOD_BASELINE)
+    else:
+        sheet.read_error = S.store.SettingsSheetError("讀不到（替身）", code="api")
+    model = _model(source.load_live())
+    assert logic.find_block(model, "MKT-0") == logic.find_block(unset, "MKT-0")
+    for code in _CARDS:
+        assert _card_without_subtitle(model, code) == _card_without_subtitle(unset, code), code
+    assert any(b for c in _CARDS for b in logic.find_block(model, c)["buttons"]), "空比：卡上沒有按鈕"
+    assert any(b for c in _CARDS for b in logic.find_block(model, c)["badges"]), "空比：卡上沒有徽章"

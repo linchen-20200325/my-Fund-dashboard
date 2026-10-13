@@ -500,7 +500,7 @@ def test_存檔只寫user_setting_重新取數只寫fetch_log():
 def test_首次開啟那個情境沒有一列輸入欄帶非空的預設值():
     """`44` 1.1 節判準。"""
     inputs = logic.collect_inputs(_model("first"))
-    assert len(inputs) == 17, len(inputs)
+    assert len(inputs) == 18, len(inputs)  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
     for field in inputs:
         assert field["_value"] is None and field["value_text"] == "", field
 
@@ -782,13 +782,13 @@ def test_SET2不改寫訊息_不給處置方向():
 def test_SET3判準_全新環境每一列目前值皆未設定_而且沒有第五欄():
     block = _block(_model("first"), "SET-3")
     assert len(block["column_labels"]) == 4
-    assert len(block["_rows"]) == 17
+    assert len(block["_rows"]) == 18  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
     assert all(r["value_text"] == "⬜ 未設定" for r in block["_rows"])
 
 
 def test_SET3依setting_key排列():
     keys = [r["key_text"] for r in _rows(_model("ok"), "SET-3")]
-    assert keys == sorted(keys) and len(keys) == 17
+    assert keys == sorted(keys) and len(keys) == 18  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
 
 
 def test_SET3依setting_key排列_與表裡的列序無關():
@@ -799,7 +799,7 @@ def test_SET3依setting_key排列_與表裡的列序無關():
     assert keys == sorted(keys) and keys != [r["setting_key"] for r in dataset["user_setting"]]
     dataset["user_setting"] = []
     keys = [r["key_text"] for r in _rows(logic.build_page_model(dataset), "SET-3")]
-    assert keys == sorted(keys) and len(keys) == 17
+    assert keys == sorted(keys) and len(keys) == 18  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
 
 
 def test_SET3全表為空也逐鍵列出():
@@ -807,7 +807,7 @@ def test_SET3全表為空也逐鍵列出():
     dataset = fixtures.scenario("ok")
     dataset["user_setting"] = []
     rows = _rows(logic.build_page_model(dataset), "SET-3")
-    assert len(rows) == 17 and all(r["value_text"] == "⬜ 未設定" for r in rows)
+    assert len(rows) == 18 and all(r["value_text"] == "⬜ 未設定" for r in rows)  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
 
 
 def test_SET3判準_值與型別不符_出現不適用並印出原始字面值():
@@ -934,7 +934,7 @@ def test_失敗框第二行與型別說明句尾照拍板草稿():
 def test_SET4未設定的鍵畫面顯示未設定_輸入欄仍留空():
     """建議 S2：`44` 4.5「未設定的鍵 `setting_value` 為空，畫面顯示 `⬜ 未設定`，不顯示任何候選值」。"""
     inputs = _block(_model("first"), "SET-4")["inputs"]
-    assert len(inputs) == 17
+    assert len(inputs) == 18  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
     for field in inputs:
         assert field["unset_lines"] == ["⬜ 未設定"] and field["value_text"] == "", field["name"]
     nolimit = {f["name"]: f for f in _block(_model("nolimit"), "SET-4")["inputs"]}

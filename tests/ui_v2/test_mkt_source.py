@@ -62,8 +62,11 @@ def test_dataset與fixtures同形_只有rows與errors兩鍵(monkeypatch, fake_st
     # → 2026-10-13 狀態更新（不是漏刪）：notes 另交可勾清單與已存設定（客戶裁示 MKT-5／設定存檔）。
     assert data["notes"] == {"pending": {"leading_index": "ndc_no_release_date"},
                              "masked_keys": [], "cooldowns": [],
-                             "available_keys": list(source.market_indicator.INDICATOR_SPECS),
-                             "settings": {"window_days": None, "baseline_date": None, "indicator_keys": None},
+                             # 2026-10-13 稽核 G N3：排除 L2 交回的 pending 鍵（狀態更新，不是漏刪）
+                             "available_keys": [k for k in source.market_indicator.INDICATOR_SPECS
+                                                if k != "leading_index"],
+                             "settings": {"window_days": None, "baseline_date": None, "indicator_keys": None,
+                                          "pair_consistent": None},
                              "settings_error": None}
     for row in data["dataset"]["rows"]:
         assert list(row) == list(fixtures.observation("vol_index"))

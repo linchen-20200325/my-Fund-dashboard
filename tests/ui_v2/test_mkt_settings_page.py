@@ -94,9 +94,13 @@ def env(monkeypatch):
     monkeypatch.setattr(S.store, "load_user_settings", sheet.load)
     monkeypatch.setattr(S.store, "save_user_setting", sheet.save)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", list)
+    # 與正式環境同一組旗標：國發會兩鍵、匯率鍵第一階段不取數（N3：不進可勾清單）
+    pending = {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
+               "fx_twd_per_usd": "fx_obs_date_rule"}
+    rows = [dict(r) for r in fixtures.dataset_all_ok()["rows"] if r["indicator_key"] not in pending]
     monkeypatch.setattr(source.market_indicator, "build_market_indicator_table",
-                        lambda **_kw: {"rows": [dict(r) for r in fixtures.dataset_all_ok()["rows"]],
-                                       "errors": {}, "pending": {}, "skipped": {}})
+                        lambda **_kw: {"rows": [dict(r) for r in rows],
+                                       "errors": {}, "pending": dict(pending), "skipped": {}})
     return sheet, fake
 
 
@@ -117,7 +121,7 @@ def test_按存檔之後重跑才生效_未按存檔的欄位值不進三張核�
     assert "與觀察窗起點的差" not in text
     assert fake.buttons["mkt4_apply"][2] is True          # 正式模式的套用停用
     fake.click("mkt4_save")                               # callback：只寫 user_setting
-    assert [w["setting_key"] for w in sheet.writes] == ["mkt_window_days", "mkt_baseline_date"]
+    assert [w["setting_key"] for w in sheet.writes] == ["mkt_window_days", "mkt_baseline_date", "mkt_compare_pair"]
     text = _render(fake)                                  # 重跑 → load_live 重新讀 → 生效
     assert "與觀察窗起點的差" in text and "尚未設定觀察窗" not in text
     assert live.TEXT_SAVED in text
@@ -135,8 +139,7 @@ def test_只填一欄_存檔鈕停用_寫明缺哪一欄(env):
 
 def test_新的工作階段以已存值填回欄位與勾選框(env):
     sheet, fake = env
-    sheet.put("mkt_window_days", "5")
-    sheet.put("mkt_baseline_date", "2026-09-21")
+    sheet.put_complete(5, "2026-09-21")
     sheet.put("mkt_indicator_keys", '["vol_index"]')
     _render(fake)
     assert fake.session_state["mkt4_days"] == 5
@@ -149,7 +152,8 @@ def test_勾選存檔後重跑才過濾明細_核心卡不變(env):
     sheet, fake = env
     first = _render(fake)
     cards_before = [x for x in fake.log if "mkt-card" in str(x)]
-    fake.session_state["mkt5_vol_index"] = True
+    for key in ("credit_spread_pct", "policy_rate_pct", "term_spread_pct"):
+        fake.session_state[f"mkt5_{key}"] = False         # N4 預設全勾；取消其餘三項，只留 vol_index
     _render(fake)
     assert "依指標清單設定不顯示" not in "\n".join(str(x) for x in fake.log)   # 未存：明細照舊
     fake.click("mkt5_save")
@@ -164,5 +168,56 @@ def test_半套已存設定_三張核心卡寫設定不完整(env):
     sheet, fake = env
     sheet.put("mkt_baseline_date", "2026-09-21")
     text = _render(fake)
-    assert text.count("⬜ 設定不完整：缺觀察窗") == 3
+    assert text.count("⬜ 設定不完整：缺觀察窗") == 4          # 三張核心卡 ＋ MKT-4 標題（N2：標題寫已存那一組）
     assert "兩者同向" not in text and "兩者分歧" not in text
+
+
+# ═══════════════════ 2026-10-13 稽核 G／H 回修 ═══════════════════
+
+
+def test_H1_已存值存在時_使用者改的欄位與勾選框_重跑後保留使用者的值(env):
+    """防「已存值每次重跑都蓋掉 session」：只有 session 裡**沒有**那一格時才以已存值填。"""
+    sheet, fake = env
+    sheet.put_complete(5, "2026-09-21")
+    sheet.put("mkt_indicator_keys", '["vol_index"]')
+    _render(fake)
+    fake.session_state["mkt4_days"] = 7
+    fake.session_state["mkt4_baseline"] = date(2026, 9, 1)
+    fake.session_state["mkt5_vol_index"] = False
+    fake.session_state["mkt5_credit_spread_pct"] = True
+    text = _render(fake)
+    assert fake.session_state["mkt4_days"] == 7
+    assert fake.session_state["mkt4_baseline"] == date(2026, 9, 1)
+    assert fake.session_state["mkt5_vol_index"] is False
+    assert fake.session_state["mkt5_credit_spread_pct"] is True
+    assert live.TEXT_UNSAVED_WINDOW in text and live.TEXT_UNSAVED_PICKS in text
+    # N2：標題仍寫已存那一組
+    assert "5 日曆日，基準日 2026-09-21" in text and "7 日曆日" not in text
+
+
+def test_N4_從未存過_勾選框全勾_與明細全列一致(env):
+    _sheet, fake = env
+    text = _render(fake)
+    for key in ("vol_index", "credit_spread_pct", "policy_rate_pct", "term_spread_pct"):
+        assert fake.session_state[f"mkt5_{key}"] is True, key
+    for key in ("leading_index", "coincident_index", "fx_twd_per_usd"):      # N3：不在可勾清單
+        assert f"mkt5_{key}" not in fake.session_state, key
+    assert "尚未存檔，預設顯示全部" in text
+    assert live.TEXT_UNSAVED_PICKS not in text
+
+
+def test_B2_混搭的已存設定_頁面寫不一致_不出比較數字(env):
+    sheet, fake = env
+    sheet.put_complete(5, "2026-09-21")
+    sheet.put("mkt_window_days", "6")
+    text = _render(fake)
+    assert text.count("⬜ 設定不完整：比較條件不一致，請重新存檔") >= 3
+    assert "與觀察窗起點的差" not in text
+
+
+def test_B1_已存天數過大_整頁不當_當成設定讀不到(env):
+    sheet, fake = env
+    sheet.put_complete(5, "2026-09-21")
+    sheet.put("mkt_window_days", "1000000")
+    text = _render(fake)                                   # 不得 raise
+    assert "設定讀不到" in text and "與觀察窗起點的差" not in text

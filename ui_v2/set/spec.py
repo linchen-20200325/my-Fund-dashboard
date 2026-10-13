@@ -160,7 +160,7 @@ SPEC_BLOCK_SOURCES = (
 
 
 # ───────────────────────── 規格快照：`user_setting` 的鍵 ─────────────────────────
-# `44` 沒有把鍵列成一張表（登記 SET-GAP-鍵清單）；下面十七個是 `44` 全文以反引號寫出的 `set_`／`mkt_`／`hld_`／
+# `44` 沒有把鍵列成一張表（登記 SET-GAP-鍵清單）；下面~~十七個~~十八個（2026-10-13 加 `mkt_compare_pair`；狀態更新，不是漏刪）是 `44` 全文以反引號寫出的 `set_`／`mkt_`／`hld_`／
 # `exp_`／`alo_` 開頭的鍵名。`value_kind` 是本頁配的（登記 SET-GAP-型別本頁配），`44` 沒有寫哪一鍵是哪一種。
 # `alo_basis` 放 `None`：它存的是二選一，`44` 4.5 那六種對不上（同 ui_v2/alo 的登記）。
 # ⚠️ 2026-09-26 起 `alo_basis` 在實作層定為 `list`（枚舉），見下方 `IMPLEMENTATION_KINDS`；本表（示範模式讀的那一份）
@@ -179,6 +179,8 @@ SPEC_SETTING_KEYS = (
     ("hld_window_end", "date"),
     ("hld_window_start", "date"),
     ("mkt_baseline_date", "date"),
+    # 2026-10-13：44 MKT-4 來源欄連帶補宣告一致性憑證鍵（稽核 G 回修 B2，決策者：AI 總管）；`list`＝`[天數, "YYYY-MM-DD"]`。
+    ("mkt_compare_pair", "list"),
     ("mkt_indicator_keys", "list"),
     ("mkt_window_days", "int"),
     ("set_log_keep_rows", "int"),
@@ -200,6 +202,7 @@ SPEC_KEY_USED_BY = (
     ("hld_window_end", ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-8")),
     ("hld_window_start", ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-8")),
     ("mkt_baseline_date", ("MKT-4",)),
+    ("mkt_compare_pair", ("MKT-4",)),
     ("mkt_indicator_keys", ("MKT-5",)),
     ("mkt_window_days", ("MKT-4",)),
     ("set_log_keep_rows", ()),

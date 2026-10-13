@@ -117,12 +117,18 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
 
 # ───────────────────────── user_setting：三個 mkt_ 鍵 ─────────────────────────
 # 鍵名與 value_kind 是 `ui_v2/set/spec.py::SPEC_SETTING_KEYS` 那三列的鏡像（本檔不 import set 頁），
-# 由 tests/ui_v2/test_mkt_settings.py 逐字比對。
+# 由 tests/ui_v2/test_mkt_settings_logic.py::test_L2型別檢查擋得下_value_kind與set頁一致 逐字比對（2026-10-13 更正：原寫的 test_mkt_settings.py 不存在）。
 KEY_WINDOW = "mkt_window_days"
 KEY_BASELINE = "mkt_baseline_date"
 KEY_INDICATORS = "mkt_indicator_keys"
+# B2（2026-10-13 稽核 G，總管裁定）：一致性憑證鍵。MKT-4 存檔時在兩鍵寫完之後**再寫**這一鍵，
+# 值是兩個已寫入值的確定性組合 —— JSON 陣列 `[天數, "YYYY-MM-DD"]`（`value_kind` 為 `list`，
+# `44` 4.5 的六種之一；總管舉的 `"5|2026-09-21"` 不合任何一種 `value_kind`，故改用 JSON 陣列，語意相同）。
+# 讀回時只有三者一致才算完整設定；不一致（存檔中途失敗、設定頁單獨改了其中一鍵、或舊資料沒有憑證）
+# → 三張核心卡「⬜ 設定不完整：比較條件不一致，請重新存檔」，不出任何比較數字。
+KEY_PAIR = "mkt_compare_pair"
 SETTING_KEYS = (KEY_WINDOW, KEY_BASELINE, KEY_INDICATORS)
-VALUE_KINDS = {KEY_WINDOW: "int", KEY_BASELINE: "date", KEY_INDICATORS: "list"}
+VALUE_KINDS = {KEY_WINDOW: "int", KEY_BASELINE: "date", KEY_INDICATORS: "list", KEY_PAIR: "list"}
 
 
 class BadSettingValue(ValueError):
@@ -141,6 +147,9 @@ def _parse_window(text: str) -> int:
     value = int(text)
     if value <= 0:
         raise BadSettingValue(f"{KEY_WINDOW} 不是正整數：{text!r}")
+    if value > logic.WINDOW_DAYS_MAX:
+        # B1：超出範圍的已存值（例如 1000000）當成讀取失敗，不交給 logic 去算（舊寫法會讓整頁溢位當掉）。
+        raise BadSettingValue(f"{KEY_WINDOW} 超出範圍（{logic.TEXT_WINDOW_RANGE}）：{text!r}")
     return value
 
 
@@ -171,9 +180,30 @@ def _parse_indicators(text: str) -> list:
 _PARSERS = {KEY_WINDOW: _parse_window, KEY_BASELINE: _parse_baseline, KEY_INDICATORS: _parse_indicators}
 
 
+def pair_text(window_days: int, baseline_date: str) -> str:
+    """一致性憑證的值（確定性：同一組兩鍵永遠得到同一個字串）。"""
+    return json.dumps([int(window_days), str(baseline_date)], ensure_ascii=False)
+
+
+def _pair_consistent(raw, broken, window_days, baseline_date):
+    """兩鍵都在時才判（否則回 None，由 Q-07「缺哪一鍵」那條規則處理）。
+    憑證缺、壞、或對不上 → False（從嚴；舊資料沒有憑證也算不一致，總管裁定）。"""
+    if window_days is None or baseline_date is None:
+        return None
+    if raw is None or broken:
+        return False
+    try:
+        value = json.loads(raw, parse_constant=_reject_constant)
+    except (ValueError, RecursionError, BadSettingValue):
+        return False
+    return value == [window_days, baseline_date]
+
+
 def parse_user_settings(rows, broken_keys=()) -> tuple:
     """L2 `load_user_settings()` 的 `rows`／`broken_keys` → (`{"window_days", "baseline_date",
-    "indicator_keys"}`, 失敗訊息或 None)。
+    "indicator_keys", "pair_consistent"}`, 失敗訊息或 None)。
+
+    `pair_consistent`（B2）：兩鍵都在時，與一致性憑證鍵 `mkt_compare_pair` 比對的結果；否則 None。
 
     沒有那一列（或值為空）→ None（未設定）。解析不了 → 回訊息、三個值一律 None ——
     **不把它當成「尚未設定」**（L1 `load_user_settings` 的 docstring：`broken_keys` 的鍵
@@ -195,21 +225,29 @@ def parse_user_settings(rows, broken_keys=()) -> tuple:
         except BadSettingValue as exc:
             problems.append(str(exc))
     if problems:
-        empty = {"window_days": None, "baseline_date": None, "indicator_keys": None}
+        empty = {"window_days": None, "baseline_date": None, "indicator_keys": None, "pair_consistent": None}
         return empty, "設定值讀不到可用的形狀：" + "；".join(problems)
+    pair_raw = (rows.get(KEY_PAIR) or {}).get("setting_value")
+    consistent = _pair_consistent(pair_raw, KEY_PAIR in broken, values[KEY_WINDOW], values[KEY_BASELINE])
     return {"window_days": values[KEY_WINDOW], "baseline_date": values[KEY_BASELINE],
-            "indicator_keys": values[KEY_INDICATORS]}, None
+            "indicator_keys": values[KEY_INDICATORS], "pair_consistent": consistent}, None
 
 
 def mkt4_save_entries(window_days, baseline_date) -> list:
-    """MKT-4 存檔要寫的兩鍵 → `[{"key", "value", "value_kind", "error"}, ...]`。
+    """MKT-4 存檔要寫的三鍵（兩鍵 ＋ 一致性憑證，依序）→ `[{"key", "value", "value_kind", "error"}, ...]`。
 
-    客戶 2026-10-13 裁示 Q-07：**兩欄都完整才能存**。任一欄缺或不合格 → 兩鍵**都**帶 `error`、
+    客戶 2026-10-13 裁示 Q-07：**兩欄都完整才能存**。任一欄缺或不合格 → 每一鍵**都**帶 `error`、
     一鍵也不寫（不得產生半套正式設定）。畫面上的存檔鈕本來就停用，這一層是第二道。
+    B1：天數須介於 1 與 `logic.WINDOW_DAYS_MAX`。B2：憑證排最後 —— 前面任一鍵失敗，憑證就不會寫，
+    讀回時兩鍵與憑證對不上 ⇒ 判不一致。
     """
     problem = None
-    if not logic._window_given(window_days):
-        problem = logic.TEXT_SAVE_MISSING_WINDOW if window_days is None else "日數為正整數"
+    if window_days is None:
+        problem = logic.TEXT_SAVE_MISSING_WINDOW
+    elif not isinstance(window_days, int) or isinstance(window_days, bool) or window_days <= 0:
+        problem = "日數為正整數"
+    elif window_days > logic.WINDOW_DAYS_MAX:
+        problem = logic.TEXT_WINDOW_RANGE
     elif not baseline_date:
         problem = logic.TEXT_SAVE_MISSING_BASELINE
     else:
@@ -219,22 +257,52 @@ def mkt4_save_entries(window_days, baseline_date) -> list:
             problem = str(exc)
     if problem:
         return [{"key": key, "value": None, "value_kind": VALUE_KINDS[key], "error": problem}
-                for key in (KEY_WINDOW, KEY_BASELINE)]
+                for key in (KEY_WINDOW, KEY_BASELINE, KEY_PAIR)]
     return [
         {"key": KEY_WINDOW, "value": str(int(window_days)), "value_kind": VALUE_KINDS[KEY_WINDOW], "error": None},
         {"key": KEY_BASELINE, "value": str(baseline_date), "value_kind": VALUE_KINDS[KEY_BASELINE], "error": None},
+        {"key": KEY_PAIR, "value": pair_text(window_days, baseline_date), "value_kind": VALUE_KINDS[KEY_PAIR],
+         "error": None},
     ]
 
 
 def mkt5_save_entry(selected, available) -> list:
-    """MKT-5 存檔要寫的一鍵。只收可勾清單裡的鍵、依字面值排序（44 MKT-5：清單以字面值排列）。"""
+    """MKT-5 存檔要寫的一鍵。依字面值排序（44 MKT-5：清單以字面值排列）。
+
+    N6（2026-10-13 稽核 G）：含可勾清單以外的鍵、或重複的鍵 → **拒絕並說明**（帶 `error`，不寫）。
+    ~~舊寫法把清單以外的鍵靜默濾掉再存~~ —— 使用者以為存了的東西沒存進去，而畫面不說。
+    """
+    selected = list(selected)
     allowed = set(available)
-    chosen = sorted(k for k in selected if k in allowed)
+    unknown = sorted({k for k in selected if k not in allowed})
+    duplicated = sorted({k for k in selected if selected.count(k) > 1})
     error = None
-    if len(chosen) > logic.INDICATOR_PICK_CAP:
+    if unknown:
+        error = "勾選中有資料層未提供的鍵，未存檔：" + "、".join(unknown)
+    elif duplicated:
+        error = "勾選中有重複的鍵，未存檔：" + "、".join(duplicated)
+    elif len(selected) > logic.INDICATOR_PICK_CAP:
         error = "已達勾選上限 6，請先取消一項"
-    text = json.dumps(chosen, ensure_ascii=False)
+    text = json.dumps(sorted(set(selected)), ensure_ascii=False)
     return [{"key": KEY_INDICATORS, "value": text, "value_kind": VALUE_KINDS[KEY_INDICATORS], "error": error}]
+
+
+def initial_checkbox_values(settings, keys, settings_error=None):
+    """正式模式勾選框的初值（`page.py` 只在 session 沒有那一格時才填）。回 `{鍵: bool}`，或 None ＝ 不填。
+
+    - 讀不到設定 → None（勾選框停用、存檔停用；不拿猜的值去填）。
+    - 已存過 → 依已存清單。
+    - N4（2026-10-13 稽核 G，總管裁定）：從未存過 → **全勾**，與下方明細「全部列出」一致（避免「全不勾卻全列」）；
+      MKT-5 摘要寫「尚未存檔，預設顯示全部」。可勾項目超過上限 6 時全勾會違反上限 → 不填（None），照舊全不勾。
+    """
+    if settings_error:
+        return None
+    saved = settings.get("indicator_keys")
+    if saved is None:
+        if len(keys) > logic.INDICATOR_PICK_CAP:
+            return None
+        return {key: True for key in keys}
+    return {key: key in saved for key in keys}
 
 
 def run_saves(entries, save, *, stop_on_failure: bool = True) -> dict:
@@ -242,9 +310,13 @@ def run_saves(entries, save, *, stop_on_failure: bool = True) -> dict:
 
     save：`source.save_setting(鍵, 值或 None, value_kind)`，回 L2 `save_setting_for_page` 的 dict。
     任一 entry 帶 `error` → **一鍵都不寫**（全部記成那個訊息）。
-    stop_on_failure：前一鍵寫入失敗就不再寫下一鍵（MKT-4 兩鍵：先寫的那一鍵失敗時，不讓後一鍵單獨落地成半套）。
-    ⚠️ 後一鍵失敗而前一鍵已寫入時，試算表上會留下半套 —— L1 是逐列追加、沒有交易，這一層擋不住；
-       讀回時 `logic` 判成「設定不完整」，不出任何比較數字（Q-07 讀取端的規則）。已登記待裁。
+    stop_on_failure：前一鍵寫入失敗就不再寫下一鍵（MKT-4：先寫的那一鍵失敗時，不讓後面的鍵單獨落地）。
+    ~~⚠️ 後一鍵失敗而前一鍵已寫入時，試算表上會留下半套 …；讀回時 `logic` 判成「設定不完整」~~
+    → **2026-10-13 更正（稽核 G 指出；有意識的更正，不是漏刪）：上一句不實。** 兩鍵都是**改寫既有值**，
+    後一鍵失敗時試算表上是「新天數 ＋ 舊基準日」這種**兩鍵齊全的混搭**，舊讀法會把它當完整設定照算。
+    現行：L1 是逐列追加、沒有交易，這一層仍然擋不住混搭落地；擋在**讀回端** ——
+    MKT-4 第三鍵是一致性憑證（`KEY_PAIR`，排最後寫），讀回時兩鍵與憑證對不上 → `logic` 判
+    「⬜ 設定不完整：比較條件不一致，請重新存檔」，不出任何比較數字（`parse_user_settings`）。
     寫入以外的例外照樣往上拋，不吞。
     """
     blocked = [e for e in entries if e["error"] is not None]
@@ -290,15 +362,40 @@ def build_live_model(live_input: dict, *, field_window_days=None, field_baseline
         field_selected_keys=list(field_selected_keys or ()),
         available_keys=notes.get("available_keys"),
         settings_error=notes.get("settings_error"),
+        pair_consistent=settings.get("pair_consistent"),
     )
     model = apply_live_notes(model, notes, save_wired=save_wired)
+    model = _mark_unsaved(model, settings, notes.get("settings_error"), field_window_days,
+                          field_baseline_date, field_selected_keys)
     return apply_save_results(model, save_results)
+
+
+# N2（2026-10-13 稽核 G，總管裁定）：未存的欄位值只能出現在欄位本身與存檔區，另標「未存檔」。字面為本組擬定。
+TEXT_UNSAVED_WINDOW = "未存檔：欄位的觀察窗與比較基準日和已存值不同，存檔後下一次重新載入才生效"
+TEXT_UNSAVED_PICKS = "未存檔：勾選與已存清單不同，存檔後下一次重新載入才生效"
+
+
+def _mark_unsaved(model, settings, settings_error, field_window_days, field_baseline_date, field_selected_keys):
+    """在存檔區（該塊說明行）標出「欄位值 ≠ 已存值」。讀不到設定時不比（沒有已存值可比）。"""
+    if settings_error:
+        return model
+    mkt4 = logic.find_block(model, "MKT-4")
+    fields = (field_window_days, field_baseline_date)
+    if fields != (None, None) and fields != (settings.get("window_days"), settings.get("baseline_date")):
+        mkt4["detail_lines"].append(TEXT_UNSAVED_WINDOW)
+    saved = settings.get("indicator_keys")
+    picks = set(field_selected_keys or ())
+    keys = {item["name"] for item in logic.find_block(model, "MKT-5")["_items"]}
+    baseline_picks = set(keys) if saved is None else set(saved)
+    if picks != baseline_picks:
+        logic.find_block(model, "MKT-5")["detail_lines"].append(TEXT_UNSAVED_PICKS)
+    return model
 
 
 # 存檔結果的文案（字面為本組擬定；失敗那一句體例同 alo「存檔寫入失敗：…」，訊息原文照印、不改寫）。
 TEXT_SAVED = "已存檔"
 TEXT_SAVE_FAILED = "存檔寫入失敗："
-_SAVE_BLOCK = {KEY_WINDOW: "MKT-4", KEY_BASELINE: "MKT-4", KEY_INDICATORS: "MKT-5"}
+_SAVE_BLOCK = {KEY_WINDOW: "MKT-4", KEY_BASELINE: "MKT-4", KEY_PAIR: "MKT-4", KEY_INDICATORS: "MKT-5"}
 
 
 def apply_save_results(model: dict, results) -> dict:

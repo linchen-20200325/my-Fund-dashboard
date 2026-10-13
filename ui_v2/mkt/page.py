@@ -302,20 +302,22 @@ def _on_save_mkt5_live(save_live, keys) -> None:
     _record_saves(live.run_saves(entries, save_live))
 
 
-def _seed_live_fields(settings, keys) -> None:
+def _seed_live_fields(settings, keys, settings_error=None) -> None:
     """正式模式：輸入欄／勾選框的狀態**不在** session 裡時，以**已存**設定填上（44 MKT-4 判準：
     重新載入後兩個欄位與存檔前逐字相同）。已在 session 裡（使用者正在編、或剛存完）就不動。
-    ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白、勾選框維持不勾。
+    ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白。
+    ~~勾選框維持不勾~~ → 2026-10-13 稽核 G N4（總管裁定）：從未存過的勾選框預設全勾，與下方明細全部列出一致
+    （`live.initial_checkbox_values`；與 44 1.1 節「無非空預設值」判準的張力已在 44 MKT-5 登記待裁）。
     """
     if "mkt4_days" not in st.session_state and settings.get("window_days") is not None:
         st.session_state["mkt4_days"] = settings["window_days"]
     if "mkt4_baseline" not in st.session_state and settings.get("baseline_date"):
         st.session_state["mkt4_baseline"] = date.fromisoformat(settings["baseline_date"])
-    saved_keys = settings.get("indicator_keys")
-    if saved_keys is not None:
-        for key in keys:
-            if _checkbox_key(key) not in st.session_state:
-                st.session_state[_checkbox_key(key)] = key in saved_keys
+    # 勾選框初值：已存過 → 依已存清單；從未存過 → 全勾（N4，與下方明細「全部列出」一致）；讀不到 → 不填。
+    initial = live.initial_checkbox_values(settings, keys, settings_error)
+    for key, value in (initial or {}).items():
+        if _checkbox_key(key) not in st.session_state:
+            st.session_state[_checkbox_key(key)] = value
 
 
 def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> None:
@@ -512,7 +514,7 @@ def render(*, load_live=None, save_live=None) -> None:
         settings = notes.get("settings") or {}
         available = notes.get("available_keys")
         keys = logic.selectable_keys(dataset, available)
-        _seed_live_fields(settings, keys)
+        _seed_live_fields(settings, keys, notes.get("settings_error"))
         # 客戶 2026-10-13 裁示：正式結果只讀**已存**設定（`load_live` 每次重跑重新讀 `user_setting`）；
         # 輸入欄／勾選框**當下**的值只決定欄位怎麼畫、存檔能不能按，不進任何正式計算（分工寫在 live.build_live_model）。
         model = live.build_live_model(

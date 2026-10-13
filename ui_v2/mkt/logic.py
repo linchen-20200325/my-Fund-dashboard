@@ -213,6 +213,33 @@ TEXT_NOTHING_SELECTED = "尚未選定任何指標"
 TEXT_SAVE_SETTINGS_UNREADABLE = "設定讀不到，暫不存檔"
 INDICATOR_PICK_CAP = 6
 
+# ── 2026-10-13 稽核 G 回修（總管裁定） ──
+# B1｜觀察窗天數上限。**出處：資料層的取數回溯範圍** —— L2 `services/v2_tables/market_indicator.py`
+#    的 `FRED_LOOKBACK_DAYS = 730`（FRED 三鍵）與 L1 `repositories/macro/yf.py::fetch_yf_close_with_error`
+#    的預設 `range_="2y"`（Yahoo 兩鍵）。超過 730 個日曆日的觀察窗，起點必然早於序列第一筆
+#    （副標本來就只會寫 `⬜ 不適用：觀察窗起點早於序列第一筆`），所以這個上限**不改變任何公式語意**，
+#    只擋掉一個會讓 `date - timedelta` 溢位、整頁當掉的輸入。本檔不得 import services，
+#    數字是鏡像，由 tests/ui_v2/test_mkt_settings_logic.py 與 L2 的常數逐字比對。
+WINDOW_DAYS_MAX = 730
+TEXT_WINDOW_RANGE = f"日數需介於 1 與 {WINDOW_DAYS_MAX}"
+# B2｜兩鍵與一致性憑證不一致（含前次存檔中途失敗、或設定頁單獨改了其中一鍵）。文案為總管裁定。
+TEXT_INCOMPLETE_INCONSISTENT = "⬜ 設定不完整：比較條件不一致，請重新存檔"
+# N1｜設定讀不到（讀 `user_setting` 失敗，不是取數失敗）。字面為本組擬定。
+TEXT_SETTINGS_UNREADABLE = "設定讀不到"
+TEXT_SETTINGS_UNREADABLE_PREFIX = "⛔ 設定讀不到："
+TEXT_SHOW_ALL_UNREADABLE = "設定讀不到，暫時列出全部指標"
+# N4｜從未存過勾選：明細顯示全部，正式模式勾選框也預設全勾（`page.py`），兩者一致。
+TEXT_SHOW_ALL_UNSAVED = "尚未存檔，預設顯示全部"
+# 比較條件不完整的原因（機器用；`_comparison_reason`）。
+REASON_MISSING_BASELINE = "missing_baseline"
+REASON_MISSING_WINDOW = "missing_window"
+REASON_INCONSISTENT = "inconsistent"
+# 下方明細「為什麼列出這些」（機器用；`_selection_state`）。N1：設定讀不到時全列，
+# 但那不是「使用者選了全部」也不是「從未存過」—— 第三個值，不得以 `not_ready` 充數。
+SELECTION_SAVED = "saved"
+SELECTION_UNSAVED = "unsaved_show_all"
+SELECTION_UNREADABLE = "setting_unreadable"
+
 
 # ───────────────────────── 格式 ─────────────────────────
 
@@ -412,33 +439,58 @@ def window_start(window_days: int | None, baseline_date: str | None) -> str | No
     """
     if not window_days or window_days <= 0 or not baseline_date:
         return None
-    return (date.fromisoformat(baseline_date) - timedelta(days=int(window_days))).isoformat()
+    # B1（2026-10-13 稽核 G）：fail-closed —— 天數過大或基準日過早會讓 `date - timedelta` 溢位，
+    # 舊寫法直接 raise 到頁面、整頁當掉而且每次載入都當。算不出來就回 None，由呼叫端寫「算不出來」。
+    try:
+        return (date.fromisoformat(baseline_date) - timedelta(days=int(window_days))).isoformat()
+    except (OverflowError, ValueError):
+        return None
 
 
 def _window_given(window_days) -> bool:
-    return isinstance(window_days, int) and not isinstance(window_days, bool) and window_days > 0
+    return (isinstance(window_days, int) and not isinstance(window_days, bool)
+            and 0 < window_days <= WINDOW_DAYS_MAX)
 
 
-def comparison_state(window_days, baseline_date, *, settings_error=None) -> str:
-    """比較條件的狀態（客戶 2026-10-13 裁示 Q-07）。
+def comparison_reason(window_days, baseline_date, *, settings_error=None, pair_consistent=None):
+    """(狀態, 原因)。原因只在 `incomplete_setting` 時非 None。
 
-    兩鍵齊 → `complete`；兩鍵皆空 → `unset`；只有一鍵 → `incomplete_setting`；
-    已存設定讀不到 → `read_failed`。觀察窗天數不是正整數視同「缺觀察窗」（它組不出觀察窗）。
+    兩鍵齊 → `complete`；兩鍵皆空 → `unset`；只有一鍵 → `incomplete_setting`（缺哪一鍵）；
+    已存設定讀不到 → `read_failed`。觀察窗天數不是 1～`WINDOW_DAYS_MAX` 的整數視同「缺觀察窗」（組不出觀察窗）。
+    `pair_consistent`（B2，2026-10-13 稽核 G，總管裁定）：正式模式由 `live.parse_user_settings` 比對
+    一致性憑證鍵後交進來；**兩鍵都在、而憑證對不上（False）→ 不完整（不一致）**。
+    None ＝ 不檢查（示範模式沒有憑證）。
     """
     if settings_error:
-        return COMPARISON_READ_FAILED
+        return COMPARISON_READ_FAILED, None
     has_window = _window_given(window_days)
     has_baseline = bool(baseline_date)
     if has_window and has_baseline:
-        return COMPARISON_COMPLETE
+        if pair_consistent is False:
+            return COMPARISON_INCOMPLETE, REASON_INCONSISTENT
+        return COMPARISON_COMPLETE, None
     if not has_window and not has_baseline:
-        return COMPARISON_UNSET
-    return COMPARISON_INCOMPLETE
+        return COMPARISON_UNSET, None
+    return COMPARISON_INCOMPLETE, (REASON_MISSING_BASELINE if has_window else REASON_MISSING_WINDOW)
 
 
-def incomplete_text(window_days, baseline_date) -> str:
-    """半套設定那一句（文案逐字照裁示）。只在 `comparison_state` 回 `incomplete_setting` 時呼叫。"""
-    return TEXT_INCOMPLETE_NO_BASELINE if _window_given(window_days) else TEXT_INCOMPLETE_NO_WINDOW
+def comparison_state(window_days, baseline_date, *, settings_error=None, pair_consistent=None) -> str:
+    """比較條件的狀態（客戶 2026-10-13 裁示 Q-07）。見 `comparison_reason`。"""
+    return comparison_reason(window_days, baseline_date, settings_error=settings_error,
+                             pair_consistent=pair_consistent)[0]
+
+
+_INCOMPLETE_TEXT = {
+    REASON_MISSING_BASELINE: TEXT_INCOMPLETE_NO_BASELINE,
+    REASON_MISSING_WINDOW: TEXT_INCOMPLETE_NO_WINDOW,
+    REASON_INCONSISTENT: TEXT_INCOMPLETE_INCONSISTENT,
+}
+
+
+def incomplete_text(window_days, baseline_date, *, pair_consistent=None) -> str:
+    """不完整那一句（缺一鍵的兩句逐字照裁示；不一致那一句為總管裁定）。只在狀態為 `incomplete_setting` 時呼叫。"""
+    _state, reason = comparison_reason(window_days, baseline_date, pair_consistent=pair_consistent)
+    return _INCOMPLETE_TEXT[reason]
 
 
 # ───────────────────────── 徽章 ─────────────────────────
@@ -493,7 +545,7 @@ def _retry_button() -> dict:
 # ───────────────────────── 三張核心卡 ─────────────────────────
 
 
-def _build_card(code, dataset, *, window_days, baseline_date, settings_error=None):
+def _build_card(code, dataset, *, window_days, baseline_date, settings_error=None, pair_consistent=None):
     specs = _CARD_SPECS[code]
     errors = dataset.get("errors", {})
     main_values = []
@@ -558,6 +610,7 @@ def _build_card(code, dataset, *, window_days, baseline_date, settings_error=Non
             window_days=window_days,
             baseline_date=baseline_date,
             settings_error=settings_error,
+            pair_consistent=pair_consistent,
         )
     )
 
@@ -598,7 +651,7 @@ _ANSWERS = {
 }
 
 
-def _card_detail_lines(code, dataset, *, window_days, baseline_date, settings_error=None):
+def _card_detail_lines(code, dataset, *, window_days, baseline_date, settings_error=None, pair_consistent=None):
     """各卡的副標。`44` MKT-4 逐字：未填時三張核心卡的副標顯示
     `⬜ 不適用：尚未設定觀察窗`。
 
@@ -610,14 +663,18 @@ def _card_detail_lines(code, dataset, *, window_days, baseline_date, settings_er
     「設定不完整」不是投資風險訊號：主值、主值狀態、卡片顏色、結論燈一律不動（見 `DISPLAY_STATES` 註解）。
     """
     lines = []
-    state = comparison_state(window_days, baseline_date, settings_error=settings_error)
+    state = comparison_state(window_days, baseline_date, settings_error=settings_error,
+                             pair_consistent=pair_consistent)
     if state == COMPARISON_INCOMPLETE:
-        return [incomplete_text(window_days, baseline_date)]
+        return [incomplete_text(window_days, baseline_date, pair_consistent=pair_consistent)]
     if state == COMPARISON_READ_FAILED:
         # 已存的比較條件讀不到：不拿「尚未設定」充數（那會是假話），也不出任何比較數字。字面為本組擬定。
         return [not_applicable_text("比較條件讀不到")]
 
     start = window_start(window_days, baseline_date)
+    if start is None and state == COMPARISON_COMPLETE:
+        # B1：兩鍵齊但組不出觀察窗（日期溢位）→ 只寫算不出來，不出任何比較數字。字面為本組擬定。
+        return [not_applicable_text("觀察窗算不出來")]
     if start is None:
         lines.append(not_applicable_text("尚未設定觀察窗"))
 
@@ -810,7 +867,7 @@ def _build_light(cards) -> dict:
 
 
 def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_baseline_date=_UNSET,
-                settings_error=None):
+                settings_error=None, pair_consistent=None):
     """`44` MKT-4：兩枚按鈕並存 —— 套用只重算不寫回、存檔只寫回不重算。
 
     ⚠️ 兩組值刻意分開，這是 `44` 本輪擴寫的重點：
@@ -828,6 +885,8 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
     invalid = field_window_days is not None and (
         not isinstance(field_window_days, int) or field_window_days <= 0
     )
+    # B1：日數超過上限（資料層回溯範圍）→ 不可存。`44` 的「日數為正整數」只管 ≤0，這一句另寫。
+    too_large = not invalid and isinstance(field_window_days, int) and field_window_days > WINDOW_DAYS_MAX
     applied_invalid = window_days is not None and (
         not isinstance(window_days, int) or window_days <= 0
     )
@@ -835,10 +894,12 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
 
     if invalid:
         detail_lines.append("日數為正整數")
+    if too_large:
+        detail_lines.append(TEXT_WINDOW_RANGE)
     # 客戶 2026-10-13 裁示 Q-07：兩欄都完整才能存；只填一欄 → 存檔停用，存檔區寫明缺哪一欄。
     # ⛔ 舊寫法只在「兩欄皆空」或「日數不合格」時停用 —— 只填一欄照樣可存，會存出半套正式設定。
     missing_field = None
-    if not both_empty and not invalid:
+    if not both_empty and not invalid and not too_large:
         if field_baseline_date is None:
             missing_field = TEXT_SAVE_MISSING_BASELINE
         elif field_window_days is None:
@@ -846,7 +907,8 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
     if missing_field:
         detail_lines.append(missing_field)
     if settings_error:
-        detail_lines.append(fetch_failed_text(settings_error))
+        # N1：讀 `user_setting` 失敗不是取數失敗，不借「取數失敗」那個模板。
+        detail_lines.append(TEXT_SETTINGS_UNREADABLE_PREFIX + settings_error)
 
     inputs = [
         {
@@ -874,6 +936,8 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
         save_reason = "兩個欄位皆未填"
     elif invalid:
         save_reason = "日數為正整數"
+    elif too_large:
+        save_reason = TEXT_WINDOW_RANGE
     else:
         save_reason = missing_field or ""
     save_button = _button(
@@ -884,17 +948,20 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
         disabled_reason=save_reason,
     )
 
-    if both_empty:
+    # N2（2026-10-13 稽核 G，總管裁定）：標題（「我現在是拿哪一段期間在比」）一律寫**正式生效的那一組**
+    # （正式模式＝已存值；示範模式＝已套用值），**不寫欄位當下的值** —— 未存的值只出現在欄位本身與存檔區。
+    # ~~舊寫法用欄位當下的值組摘要（含修掉「基準日 None」那一版）~~：欄位一改，標題就說「現在拿這段在比」，
+    # 而三張核心卡其實還在用已存那一組 —— 標題與卡片說的不是同一件事。
+    state, reason = comparison_reason(window_days, baseline_date, settings_error=settings_error,
+                                      pair_consistent=pair_consistent)
+    if state == COMPARISON_READ_FAILED:
+        summary = TEXT_SETTINGS_UNREADABLE
+    elif state == COMPARISON_UNSET:
         summary = "尚未設定觀察窗與比較基準日"
-    elif invalid:
-        summary = "輸入尚未通過檢查"
-    elif field_baseline_date is None:
-        # ⛔ 舊寫法在這裡印出「基準日 None」（客戶 2026-10-13 點名修正）。
-        summary = f"{field_window_days} 日曆日，{TEXT_SAVE_MISSING_BASELINE}"
-    elif field_window_days is None:
-        summary = f"{TEXT_SAVE_MISSING_WINDOW}，基準日 {field_baseline_date}"
+    elif state == COMPARISON_INCOMPLETE:
+        summary = _INCOMPLETE_TEXT[reason]
     else:
-        summary = f"{field_window_days} 日曆日，基準日 {field_baseline_date}"
+        summary = f"{window_days} 日曆日，基準日 {baseline_date}"
 
     return {
         "code": "MKT-4",
@@ -1007,8 +1074,10 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
         disabled_reason=save_reason,
     )
 
-    if selected_keys is None:
-        summary = "尚未設定，下方明細顯示全部指標"
+    if settings_error:
+        summary = TEXT_SHOW_ALL_UNREADABLE          # N1：不說「尚未設定」
+    elif selected_keys is None:
+        summary = TEXT_SHOW_ALL_UNSAVED             # N4
     elif not selected_keys:
         summary = TEXT_NOTHING_SELECTED
     else:
@@ -1021,7 +1090,7 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
     if unknown:
         detail_lines.append("已存清單中有資料層未提供的鍵，不顯示：" + "、".join(unknown))
     if settings_error:
-        detail_lines.append(fetch_failed_text(settings_error))
+        detail_lines.append(TEXT_SETTINGS_UNREADABLE_PREFIX + settings_error)
 
     return {
         "code": "MKT-5",
@@ -1048,12 +1117,24 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
 TEXT_USER_HIDDEN_PREFIX = "依指標清單設定不顯示："
 
 
+def _show_all_line(selection_state) -> list:
+    """N1：設定讀不到而全列時，明細區要明示（不可讓人以為那是使用者選的）。"""
+    return [TEXT_SHOW_ALL_UNREADABLE] if selection_state == SELECTION_UNREADABLE else []
+
+
+def selection_state(selected_keys, settings_error=None) -> str:
+    """下方明細列出這些指標的理由：已存的勾選／從未存過（全列）／設定讀不到（暫時全列）。"""
+    if settings_error:
+        return SELECTION_UNREADABLE
+    return SELECTION_UNSAVED if selected_keys is None else SELECTION_SAVED
+
+
 def _hidden_line(states) -> list:
     hidden = [key for key, state in states.items() if state == DISPLAY_USER_HIDDEN]
     return [TEXT_USER_HIDDEN_PREFIX + "、".join(hidden)] if hidden else []
 
 
-def _build_mkt6(dataset, *, selected_keys=None, states=None):
+def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=None):
     """`44` MKT-6：一列一筆觀測，欄位依宣告順序固定，不依數值排序。
 
     客戶 2026-10-13 裁示 MKT-5：只列**已存勾選**裡的指標（`selected_keys` 為 None ＝ 從未存過 → 全列）。
@@ -1087,6 +1168,7 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None):
     for note in blank_notes:
         detail_lines.append(f"該筆有空格：{note}")
     detail_lines.extend(_hidden_line(states))
+    detail_lines.extend(_show_all_line(selection_state))
 
     latest = max((r["obs_date"] for r in rows), default=None)
     summary = "尚無任何觀測" if not rows else f"共 {len(rows)} 筆觀測，最近一筆 {latest}"
@@ -1127,7 +1209,7 @@ def _detail_nothing_selected(code, extra) -> dict:
     return block
 
 
-def _build_mkt7(dataset, *, keys=None, states=None):
+def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None):
     """`44` MKT-7：一列一個 indicator_key，取各組最近一筆。
 
     客戶 2026-10-13 裁示 MKT-5：使用者取消勾選的鍵（`user_hidden`）不列；
@@ -1197,7 +1279,7 @@ def _build_mkt7(dataset, *, keys=None, states=None):
         # `44` MKT-7 逐字：顯示時轉當地時區並在表頭註明時區字面值。
         # 本輪不做時區切換器（`47` Q-10：本頁無任何塊定義該元件，八類按鈕亦無「切換」類），
         # 故表頭註明的就是存放時區本身。
-        "detail_lines": [f"時間以 {STORAGE_TIMEZONE} 顯示", *hidden_line],
+        "detail_lines": [f"時間以 {STORAGE_TIMEZONE} 顯示", *hidden_line, *_show_all_line(selection_state)],
         "badges": [],
         "buttons": [],
     }
@@ -1218,6 +1300,7 @@ def build_page_model(
     available_keys=None,
     field_selected_keys=_UNSET,
     settings_error=None,
+    pair_consistent=None,
 ) -> dict:
     """把資料 ＋ 使用者設定組成一份純資料模型。page.py 只負責把它畫出來。
 
@@ -1225,7 +1308,8 @@ def build_page_model(
     - `window_days`／`baseline_date`／`selected_keys` ＝ **已存**設定（正式結果只讀這一組）；
     - `field_*` ＝ 輸入欄／勾選框**當下**的值，只決定欄位怎麼畫、存檔能不能按，**不進任何正式計算**；
     - `available_keys` ＝ 資料層註冊的指標鍵（MKT-5 可勾清單，見 `selectable_keys`）；
-    - `settings_error` ＝ 已存設定讀不到時的訊息原文（已遮蔽）。
+    - `settings_error` ＝ 已存設定讀不到時的訊息原文（已遮蔽）；
+    - `pair_consistent` ＝ 兩鍵與一致性憑證是否一致（正式模式；None ＝ 不檢查，示範模式）。
     """
     cards = [
         _build_card(
@@ -1234,6 +1318,7 @@ def build_page_model(
             window_days=window_days,
             baseline_date=baseline_date,
             settings_error=settings_error,
+            pair_consistent=pair_consistent,
         )
         for code in ("MKT-1", "MKT-2", "MKT-3")
     ]
@@ -1246,6 +1331,7 @@ def build_page_model(
             field_window_days=field_window_days,
             field_baseline_date=field_baseline_date,
             settings_error=settings_error,
+            pair_consistent=pair_consistent,
         )
     )
     keys = selectable_keys(dataset, available_keys)
@@ -1255,14 +1341,21 @@ def build_page_model(
                               settings_error=settings_error))
     # 已存清單裡資料層不提供的鍵不算數（MKT-5 另寫一行點名）；剩下一個都沒有 ＝ 尚未選定任何指標。
     shown = None if selected_keys is None else [k for k in keys if states[k] != DISPLAY_USER_HIDDEN]
-    blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states))
-    blocks.append(_build_mkt7(dataset, keys=keys, states=states))
+    selection = selection_state(selected_keys, settings_error)
+    blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states, selection_state=selection))
+    blocks.append(_build_mkt7(dataset, keys=keys, states=states, selection_state=selection))
 
     return {
         "title": "市場總覽",
         # 客戶 2026-10-13 裁示：機器看得出「使用者選擇不顯示／資料未備／設定不完整／真實資料值」四者的差別。
         "_display_states": states,
-        "_comparison_state": comparison_state(window_days, baseline_date, settings_error=settings_error),
+        "_comparison_state": comparison_state(window_days, baseline_date, settings_error=settings_error,
+                                              pair_consistent=pair_consistent),
+        "_comparison_reason": comparison_reason(window_days, baseline_date, settings_error=settings_error,
+                                                pair_consistent=pair_consistent)[1],
+        # N1：`_display_states` 記的是每一個鍵（有值／資料未備／使用者選擇不顯示），
+        # 「為什麼列出這些」記在這裡 —— 設定讀不到時為 `setting_unreadable`，不以 `not_ready` 充數。
+        "_selection_state": selection,
         "answers": "現在的市場環境，和我上次看的時候比，變了哪裡",
         "_viewport_width": viewport_width,
         "_columns": columns_for_width(viewport_width),
