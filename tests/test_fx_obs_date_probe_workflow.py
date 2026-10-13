@@ -13,8 +13,10 @@
    —— 引用了就是有人想取回或使用觸發分支的內容。**本檔不設例外**：
    `Record executed SHA` 那一步用 `git rev-parse HEAD` 而非任何上述名稱，報告裡的觸發 SHA
    由腳本在執行期從 runner 預設環境變數讀取，不經 yml。
-4. checkout 之後的 `git checkout` / `git fetch` / `git pull` / `git switch` / `git reset` /
-   `git restore` 指令：在「執行探測腳本」那一步**之前**一律不得出現；之後（報告流程）每一行都
+4. checkout 之後的取碼指令 —— `git checkout` / `git fetch` / `git pull` / `git switch` /
+   `git reset` / `git restore`，以及**也能把別的版本內容寫到磁碟**的 `git show`
+   （`git show <rev>:<path> > file`）/ `git archive` / `git worktree` ——
+   在「執行探測腳本」那一步**之前**一律不得出現；之後（報告流程）每一行都
    必須只針對 `$RESULT_BRANCH`（`fetch ... "$RESULT_BRANCH"`、`checkout -B "$RESULT_BRANCH" FETCH_HEAD`、
    `checkout --orphan "$RESULT_BRANCH"`）。
 5. 推送指令行：remote 必須是 `origin`、不得帶任何旗標、refspec **剛好一個**且等於
@@ -26,14 +28,19 @@
   本檔（跑在 main 的 CI）看不到那份改過的檔。本檔只守 repo 裡這一份。
 * 不驗 GitHub 真的照文件行事；沒有觀測任何一次真實 run。
 * 指令檢查是對 `run:` 的**逐行文字**做的（`shlex` 斷詞；同一行以 `;` `&&` `||` `|` 串接、
-  或以 `if` / `then` / `!` 開頭的 git 指令**看得到**）。以下寫法**看不到**：
+  或以 `if` / `then` / `!` 開頭的 git 指令**看得到**）。
+  **不加引號的** `$(...)` 內嵌也**看得到**：`shlex` 會把 `(` 斷成獨立的分隔符，
+  例如 `X=$(git checkout origin/other -- scripts)` 會被擋（實測）。
+  以下寫法**看不到**：
+  **加了雙引號的** `"$(...)"` 內嵌（整串被當成一個字）、反引號內嵌的 git、
   跨行接續（`\\` 換行）、把 git 包進 shell 函式後以別名呼叫（`agit` 這個名字已特別認得，
-  別的名字不認得）、`eval`／變數組出的指令、`$(...)` 或反引號內嵌的 git、
+  別的名字不認得）、`eval`／變數組出的指令、
   `env`／`command`／`sudo` 等前綴包住的 git、以及非 git 的取碼手段
   （`curl`／`gh api` 下載檔案、`actions/download-artifact`、其他 `uses:` action）。
   其中「其他 `uses:` action」僅由「恰好一個 actions/checkout」部分涵蓋。
-* 只檢查 git 子指令名稱是否在上列清單；`git worktree add`、`git archive`、`git show <rev>:<path> > file`
-  這類**也能把別的版本內容寫到磁碟**的寫法不在清單內。
+* 只檢查 git 子指令名稱是否在第 4 點的清單內；清單外仍能取得別的版本內容的子指令
+  （例如 `git cat-file -p <rev>:<path> > file`、`git read-tree` ＋ `git checkout-index`、
+  `git bundle unbundle`）**看不到**。
 * 腳本自己（`scripts/probe_fx_obs_date.py`）若在執行期去讀觸發分支的內容，本檔看不到。
 
 PyYAML 會把 `on` 解析成布林 `True` 鍵，下方一律兩者都查。
@@ -56,7 +63,9 @@ _PROBE_SCRIPT = "scripts/probe_fx_obs_date.py"
 _REFSPEC = "HEAD:refs/heads/$RESULT_BRANCH"
 _FORBIDDEN_REF_TOKENS = ("github.sha", "github.ref", "github.head_ref",
                          "GITHUB_SHA", "GITHUB_REF", "head_ref")
-_CONTENT_VERBS = {"checkout", "fetch", "pull", "switch", "reset", "restore"}
+_CONTENT_VERBS = {"checkout", "fetch", "pull", "switch", "reset", "restore",
+                  # 也能把別的版本內容寫到磁碟：`git show <rev>:<path> > file`、`git archive`、`git worktree add`
+                  "show", "archive", "worktree"}
 _GIT_NAMES = {"git", "agit"}
 
 
