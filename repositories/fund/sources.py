@@ -3508,7 +3508,9 @@ def _src_tcb_div(code: str) -> list:
                             # 2026-10-13 稽核必修 2：金額欄（第 5 格）的表頭、表頭格數與這一列的格數
                             "amount_header": _hdr[4] if len(_hdr) > 4 else None,
                             "header_cells": len(_hdr),
-                            "row_cells": len(_cols),
+                            # 稽核小修：與 `header_cells` 同一套數法（`th`＋`td`）；只數 `td` 會讓
+                            # 「資料列開頭多一格 `th` 當列號」的頁面 7 對 7 判成相符、欄位卻錯一格
+                            "row_cells": len(_row.find_all(["th", "td"])),
                         },
                     })
                 if _out:

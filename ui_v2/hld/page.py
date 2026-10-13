@@ -851,7 +851,8 @@ def render(*, load_live=None, mask_error=None) -> None:
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
     `live_args` 原樣轉給 `live.build_live_model`：`direct_policy_id`、`direct`、`policy_tab_source`、
-    `direct_sources`、`nav_provenance`）。~~⚠️ 這個形狀是 S6a 暫定的，S6 後半寫 `source.py` 時可改。~~
+    `direct_sources`、`nav_provenance`、`dividend_coverage`〔2026-10-13 配息移交稽核回修新增：每一檔有配息列的
+    最舊除息日，供 `live._gate_dividend_coverage` 判所選區間有沒有證據〕）。~~⚠️ 這個形狀是 S6a 暫定的，S6 後半寫 `source.py` 時可改。~~
     → S6b-3 已由 `ui_v2/hld/source.py::load_live`（經 `live.assemble_live_load`）照這個形狀交出（狀態更新，不是漏刪）。
     不傳（None）時行為與加這個參數之前**逐字相同**：照舊以 `?scenario=` 挑 fixtures 情境。
     傳入時改走 `live.build_live_model`，這一條路徑不讀 fixtures；頁首副標只印本頁的提問句 ——

@@ -456,7 +456,17 @@ _WINDOW = (HF.WINDOW_START, HF.WINDOW_END)
 _DECL = {"USD": "美元", "EUR": "歐元"}
 
 
-def _hld_inputs(div_by_code):
+def _settings_rows(window=None):
+    """L2 `load_user_settings` 的形狀；`window` 給了就存成 `hld_window_start`／`hld_window_end`（存檔區間）。"""
+    rows = {}
+    if window:
+        for key, value in zip(("hld_window_start", "hld_window_end"), window):
+            rows[key] = {"setting_key": key, "setting_value": value, "value_kind": "date",
+                         "updated_at": "2026-09-30T00:00:00+00:00"}
+    return {"rows": rows, "broken_keys": [], "tab_missing": False, "bad_rows": []}
+
+
+def _hld_inputs(div_by_code, *, saved_window=None):
     holding = HF.holdings()
     for h in holding:
         if h["policy_id"] == "DIRECT":
@@ -467,7 +477,10 @@ def _hld_inputs(div_by_code):
     navs = HF.navs()
     nav_table = {"rows": navs, "errors": {}, "withheld": {}, "skipped": {},
                  "fetched": {c: sum(1 for r in navs if r["fund_code"] == c) for c in codes},
-                 "skipped_rows": {c: 0 for c in codes}, "provenance": {}}
+                 "skipped_rows": {c: 0 for c in codes},
+                 "provenance": {c: {"source": "MoneyDJ:x", "fetched_at": "2026-09-19T02:00:00+00:00",
+                                    "ccy_source": "holding_user_input", "cache_fallback": False, "stale": None}
+                                for c in codes}}
     keys = [{"input": h["fund_code"], "ok": True, "full_key": h["fund_code"], "portal": "",
              "parsed_code": h["fund_code"], "mapping_hit": True, "error": None} for h in holding]
     acc = ND._empty_div_acc()
@@ -476,7 +489,7 @@ def _hld_inputs(div_by_code):
         ND._merge_div(code, ND.rows_from_chain_dividends(code, div_by_code[code], holding_ccys=[ccy[code]], now=NOW),
                       acc)
     return dict(holding_tables=tables, holding_error=None,
-                settings={"rows": {}, "broken_keys": [], "tab_missing": False, "bad_rows": []},
+                settings=_settings_rows(saved_window),
                 settings_error=None, key_results=keys, nav_table=nav_table, direct_policy_id="DIRECT",
                 policy_tab_source="x", direct_sources=frozenset({"x"}), empty_without_reason="空",
                 nav_unavailable_withheld=(), dividend_gate_open=False, mask=lambda t: t.replace("SECRET", "***"),
@@ -487,27 +500,48 @@ def _tcb_for(code, ccy, rows):
     return _div(_tcb_items(*[("2026/01/01", ex.replace("-", "/"), "", amt, _DECL[ccy]) for ex, amt in rows]))
 
 
+_TODAY = dt.date(2026, 10, 1)
+
+
+def _model(loaded, *, applied_window=_WINDOW):
+    """真的走 `live.build_live_model`（含覆蓋期間閘門），與正式頁面同一條路。"""
+    return HL.build_live_model(loaded["dataset"], applied_window=applied_window, today=_TODAY,
+                               **loaded["live_args"])
+
+
+def _hld3(model, code):
+    block = next(b for b in model["blocks"] if b["code"] == "HLD-3")
+    group = next(g for g in block["fund_groups"] if g["_fund_code"] == code)
+    return {v["label"]: v for v in group["main_values"]}
+
+
+def _hld8_principal(model, code):
+    block = next(b for b in model["blocks"] if b["code"] == "HLD-8")
+    return next(r for r in block["_rows"] if r["_fund_code"] == code)["principal"]
+
+
 def _metrics(loaded, holding, code):
     fund = next(h for h in holding if h["fund_code"] == code)
     return HG.fund_metrics(loaded["dataset"], fund, _WINDOW)
 
 
 def test_hld_每一檔都確定_接上真資料_HLD3合計與HLD8本金佔比():
+    # 區間 2026-01-01 起；每一檔有配息列的最舊一筆都早於它（覆蓋期間涵蓋整個區間），閘門不擋
     divs = {"AAAA": _tcb_for("AAAA", "USD", [("2025-08-15", 0.1010), ("2026-01-15", 0.1059), ("2026-09-16", 0.1059)]),
             "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
-            "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
+            "CCCC": _tcb_for("CCCC", "EUR", [("2025-10-10", 0.1400), ("2026-02-10", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
     ds = loaded["dataset"]
     assert ds["pending_tables"] == ["fund_profile"]
     assert {r["fund_code"] for r in ds["dividend"]} == {"AAAA", "CCCC"}
-    a = _metrics(loaded, holding, "AAAA")
+    model = _model(loaded)
+    a = _hld3(model, "AAAA")
     units_a = next(h["units_shares"] for h in holding if h["fund_code"] == "AAAA")
     assert a["期間配息合計"]["_state"] == HG.STATE_OK
     assert a["期間配息合計"]["_raw"] == pytest.approx((0.1059 + 0.1059) * units_a)   # 2025-08-15 在區間外
-    assert a["本金類配息佔比"]["text"] == HG.not_applicable_text("配息類別未知")
-    b = _metrics(loaded, holding, "BBBB")
-    assert b["期間配息合計"]["text"] == HG.not_applicable_text("區間內無配息")
+    assert _hld8_principal(model, "AAAA")["text"] == HG.not_applicable_text("配息類別未知")
+    assert _hld3(model, "BBBB")["期間配息合計"]["text"] == HG.not_applicable_text("區間內無配息")
 
 
 def test_hld_有一檔分辨不出_整張配息表照舊列為尚未接上_不說成區間內無配息():
@@ -733,39 +767,110 @@ def test_必修1b_區間起點早於最舊一筆除息日_整張退回尚未接�
     assert loaded["dataset"]["dividend"] and loaded["dataset"]["pending_tables"] == ["fund_profile"]   # 輸入沒被改
 
 
-def test_必修1b_build_live_model走得到覆蓋期間閘門(monkeypatch):
-    seen = {}
-    real = HL._gate_dividend_coverage
-
-    def spy(dataset, coverage, window):
-        seen["args"] = (coverage, window)
-        seen["out"] = real(dataset, coverage, window)
-        return seen["out"]
-
-    monkeypatch.setattr(HL, "_gate_dividend_coverage", spy)
-    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-03-15", 0.1059)]),
+def _late_coverage_divs():
+    return {"AAAA": _tcb_for("AAAA", "USD", [("2026-03-15", 0.1059)]),
             "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
             "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
-    kw, _holding = _hld_inputs(divs)
+
+
+def test_必修1b_build_live_model_按套用的區間早於覆蓋期間_HLD3顯示資料未備():
+    kw, _holding = _hld_inputs(_late_coverage_divs())
     loaded = HL.assemble_live_load(**kw)
-    args = dict(loaded["live_args"], nav_provenance={c: {"cache_fallback": False, "stale": None}
-                                                     for c in ("AAAA", "BBBB", "CCCC")})
-    try:
-        HL.build_live_model(loaded["dataset"], applied_window=_WINDOW, **args)
-    except Exception:  # noqa: BLE001 —— 本條只驗閘門有被呼叫、拿到正確的參數與結果
-        pass
-    assert seen["args"] == ({"AAAA": "2026-03-15", "CCCC": "2026-02-10"}, _WINDOW)
-    assert "dividend" in seen["out"]["pending_tables"]
+    model = _model(loaded, applied_window=_WINDOW)          # 不吞例外：直接斷言結果
+    for code in ("AAAA", "BBBB", "CCCC"):
+        total = _hld3(model, code)["期間配息合計"]
+        assert total["_state"] == HG.STATE_MISSING and total["text"] == HG.ND_TEXT
+        assert total["text"] != HG.not_applicable_text("區間內無配息")
+    # 對照組：按套用的區間不早於任何一檔的最舊一筆 → 照接、出數
+    ok = _model(loaded, applied_window=("2026-03-15", HF.WINDOW_END))
+    assert _hld3(ok, "AAAA")["期間配息合計"]["_state"] == HG.STATE_OK
+
+
+def test_N12_沒按套用_走存檔區間_閘門照樣觸發():
+    kw, _holding = _hld_inputs(_late_coverage_divs(), saved_window=_WINDOW)
+    loaded = HL.assemble_live_load(**kw)
+    model = _model(loaded, applied_window=None)             # 預設載入路徑：區間取自存檔設定
+    assert model["_window"] == _WINDOW
+    for code in ("AAAA", "BBBB", "CCCC"):
+        assert _hld3(model, code)["期間配息合計"]["_state"] == HG.STATE_MISSING
+    # 對照組：存檔區間落在覆蓋期間內 → 照接
+    kw2, _h2 = _hld_inputs(_late_coverage_divs(), saved_window=("2026-03-15", HF.WINDOW_END))
+    ok = _model(HL.assemble_live_load(**kw2), applied_window=None)
+    assert _hld3(ok, "AAAA")["期間配息合計"]["_state"] == HG.STATE_OK
 
 
 def test_HLD3_配息佔淨值比_值等於區間內每單位配息加總除以區間末淨值():
-    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-01-15", 0.1059), ("2026-09-16", 0.1059)]),
+    # 每一檔有配息列的最舊一筆都早於區間起點 2026-01-01（覆蓋期間涵蓋整個區間）
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2025-12-15", 0.1000), ("2026-01-15", 0.1059), ("2026-09-16", 0.1059)]),
             "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
-            "CCCC": _tcb_for("CCCC", "EUR", [("2026-01-02", 0.1492)])}
+            "CCCC": _tcb_for("CCCC", "EUR", [("2025-12-10", 0.1400), ("2026-01-02", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
-    a = _metrics(loaded, holding, "AAAA")
+    a = _hld3(_model(loaded), "AAAA")
     navs = [r for r in HF.navs() if r["fund_code"] == "AAAA" and _WINDOW[0] <= r["nav_date"] <= _WINDOW[1]]
     last = sorted(navs, key=lambda r: r["nav_date"])[-1]["nav_orig_ccy"]
     assert a["配息佔淨值比"]["_state"] == HG.STATE_OK
     assert a["配息佔淨值比"]["_raw"] == pytest.approx((0.1059 + 0.1059) / last * 100.0)
+
+
+def test_N2_coverage_start取最舊一筆_不是最新一筆():
+    out = _rows(_div(_tcb_items(("2026/09/01", "2026/09/03", "", 0.05, "美元"),
+                                ("2025/03/01", "2025/03/03", "", 0.05, "美元"),
+                                ("2026/01/01", "2026/01/03", "", 0.05, "美元"))))
+    assert out["provenance"]["coverage_start"] == "2025-03-03"
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-09-16", 0.1059), ("2025-08-15", 0.1010), ("2026-01-15", 0.1059)]),
+            "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
+            "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492), ("2025-10-10", 0.1400)])}
+    kw, _holding = _hld_inputs(divs)
+    loaded = HL.assemble_live_load(**kw)
+    assert loaded["live_args"]["dividend_coverage"] == {"AAAA": "2025-08-15", "CCCC": "2025-10-10"}
+    assert _hld3(_model(loaded), "AAAA")["期間配息合計"]["_state"] == HG.STATE_OK   # 取最新一筆的話會被擋
+
+
+def test_N8_空序列不算認得代碼的證據():
+    import pandas as pd
+    seen = {}
+    FO._div_code_evidence(seen, "FundClear", pd.Series(dtype=float), "GetFundNAV 淨值")
+    FO._div_code_evidence(seen, "cnyes", pd.Series(dtype=float, name="x"), "v2/funds 淨值", cnyes_code="ZZ01")
+    FO._div_code_evidence(seen, "tcb_moneydj", {"fund_name": ""}, "MoneyDJ 基本資料頁")
+    assert seen == {}
+    FO._div_code_evidence(seen, "FundClear", H.series(3, attrs={"source": "FundClear:GetFundNAV"}), "GetFundNAV 淨值")
+    assert list(seen) == ["FundClear"]                     # 對照組：非空才算
+
+
+def test_N8_A鏈_FundClear淨值回空_就沒有FundClear的證據(monkeypatch):
+    code, sc = _no_div_scenario()
+    sc = _evidenced_no_div(code, sc, code)
+    sc = dict(sc, _src_fundclear_nav=H.series(0), _src_fundclear_meta={})
+    H.install(monkeypatch, sc)
+    out = _quiet(FO.fetch_fund_from_moneydj_url, code)[FO.DIVIDENDS_OUTCOME_KEY]
+    fc = next(s for s in out["sources"] if s["source"] == "FundClear")
+    assert fc["code_recognized"] == [] and out["none_evidenced"] is False
+
+
+def test_記證據失敗_記一行log_不吞_不算證據(capsys):
+    class Boom(dict):
+        def get(self, *_a, **_k):
+            raise RuntimeError("token=SECRET123")
+    seen = {}
+    FO._div_code_evidence(seen, "tcb_moneydj", Boom(), "MoneyDJ 基本資料頁")
+    out = capsys.readouterr().out
+    assert seen == {} and "div_code_evidence" in out and "RuntimeError" in out
+    assert "SECRET123" not in out                           # 只印例外類別名，不印原文
+
+
+def test_稽核小修_資料列開頭多一格th當列號_欄位錯一格_pending_0列(monkeypatch):
+    row = ("<tr><th>1</th><td>2026/09/01</td><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td></tr>")
+    page = f"<table>{_HDR}{row}</table>"
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    # A 鏈回傳值不變：解析器照舊只讀 td（7 格）。但畫面上列號那一格佔了第 1 欄，
+    # 「除息日」表頭底下其實是 2026/09/01（配息基準日），解析器卻把第 2 個 td（2026/09/03）當除息日。
+    assert _strip_prov(divs) == [{"date": "2026/09/01", "ex_date": "2026/09/03", "pay_date": "2026/09/10",
+                                  "amount": 0.05, "yield_pct": 6.1, "currency": "美元"}]
+    prov = divs[0][S.DIV_PROVENANCE_KEY]
+    assert (prov["row_cells"], prov["header_cells"]) == (8, 7)     # th＋td 同一套數法 → 對不上
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["rows"] == [] and tbl["settled"] == {code: False}
+    assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}

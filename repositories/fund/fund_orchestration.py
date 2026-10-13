@@ -522,8 +522,11 @@ def _div_code_evidence(seen: dict, source_name: str, got, what: str, *, cnyes_co
             seen.setdefault(source_name, []).append(f"{what}：{len(got)} 筆（{src or '未標來源'}）")
         elif isinstance(got, dict) and got.get("fund_name"):
             seen.setdefault(source_name, []).append(f"{what}：{str(got.get('fund_name'))[:30]}")
-    except Exception:  # noqa: BLE001 —— 只記錄
-        pass
+    except Exception as _ev_e:  # noqa: BLE001 —— 只記錄：少記一筆證據 → `none_evidenced` 為 false（fail closed）
+        # 稽核小修（§3.3 不得靜默吞例外）：記一行 log。只印例外類別名、不印原文 —— 原文可能夾帶網址或金鑰
+        # （本層沒有遮蔽器可用），類別名足以定位，又不可能外洩。
+        print(f"[div_code_evidence] {source_name}／{what}：記證據失敗（{type(_ev_e).__name__}），"
+              f"這一筆不算認得代碼的證據")
 
 
 def _div_status_entry(source_name: str, value, seen=None) -> dict:
