@@ -469,7 +469,14 @@ def fetch_url(
 
     # 【log 遮罩 query string】§1 保守優先的資安預防。
     # 現況查證:FinMind token 走 `params['token']`、FRED api_key 走 `params['api_key']`,
-    # 都不進 url 字串 → 目前無洩漏。但 fetch_url 是全站 30+ caller 的公用入口,任何未來
+    # ~~都不進 url 字串 → 目前無洩漏。~~
+    # → 2026-10-13 就地更正(有意識的更正,不是漏刪;決策者:AI 總管;依據:獨立稽核實測,docs/v2/49 §4.9):
+    #   「不進 url 字串」只對**本函式收到的 `url` 參數**成立,所以只對印網址的那幾行成立 ——
+    #   那幾行一律印 `_url_log`(下一行,從 `?` 起砍掉)。**印例外物件的三處不成立**:
+    #   requests 的連線類例外會把 `params` 編進去的完整網址(含 `api_key=`)放進訊息,
+    #   那三處(ProxyError、通用 except、降級直連失敗)改印 `_exc_log(e)`,同樣從 `?` 起砍掉。
+    #   舊句在寫下當時對它檢查的那幾行為真;被權衡掉的是它的射程 —— 它沒有涵蓋印例外的路徑。
+    # 但 fetch_url 是全站 30+ caller 的公用入口,任何未來
     # 把 key 塞進 query string 的 caller 都會直接把 secret 印進 stdout,而 Streamlit Cloud
     # 的 log 是 collaborator 可見。砍掉 `?` 之後即可根絕,且 scheme+host+path 完整保留
     # → 除錯仍看得出「哪個來源、哪支 endpoint」,資訊價值不減。
