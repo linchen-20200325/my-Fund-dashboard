@@ -42,9 +42,12 @@ _NET_ROOTS = {
 
 # 兩個新檔的逐檔白名單（fail-closed）。鍵是相對 repo 根的路徑。
 _FILE_ALLOWLIST = {
+    # 2026-10-13 客戶裁示（市場總覽設定存檔接上 user_setting）：加 `settings_store`（讀寫已存設定，同 set／alo）
+    # 與 `ui_v2.mkt.live`（本頁純函式：設定值解析；不 import streamlit、不 import 舊樹，體例同 alo）。
     "ui_v2/mkt/source.py": {
         "__future__", "os", "streamlit",
         "services.v2_tables.market_indicator", "services.v2_tables.masking",
+        "services.v2_tables.settings_store", "ui_v2.mkt.live",
     },
     "ui_v2/app_mkt_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.mkt.page", "ui_v2.mkt.source",

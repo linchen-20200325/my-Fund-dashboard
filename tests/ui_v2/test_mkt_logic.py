@@ -356,13 +356,15 @@ def test_負數或零_不套用也不存檔且主值不變():
         assert bad_values == base_values == ok_values  # 主值不隨觀察窗改變
 
 
-def test_MKT5是唯讀勾選_沒有存檔按鈕():
-    """44 MKT-5 的來源欄只宣告讀，沒有宣告寫入對象（對照 MKT-4 本輪補的寫入對象宣告）。
-    47 Q-08 亦登記本頁勾選無寫回路徑。照現況做成唯讀，不自行補一枚存檔鈕。"""
+def test_MKT5可存檔_一枚存檔鈕只寫user_setting():
+    """~~44 MKT-5 的來源欄只宣告讀，沒有宣告寫入對象…照現況做成唯讀，不自行補一枚存檔鈕。~~
+    → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：勾選存回 user_setting，存檔後下一次重新載入生效。
+    舊名 `test_MKT5是唯讀勾選_沒有存檔按鈕` 在寫下當時為真（Q-08／Q-09 未裁）；被推翻的是它的前提。"""
     model = logic.build_page_model(fixtures.dataset_all_ok())
     block = logic.find_block(model, "MKT-5")
-    assert block["buttons"] == []
-    assert block["_readonly"] is True
+    assert [b["_action_kind"] for b in block["buttons"]] == ["存檔"]
+    assert block["buttons"][0]["_writes"] == {"user_setting"}
+    assert block["_readonly"] is False
 
 
 def test_MKT5勾選上限六_第七項停用且附原因():
@@ -374,13 +376,20 @@ def test_MKT5勾選上限六_第七項停用且附原因():
         assert item["disabled_reason"]
 
 
-def test_MKT5一個也沒勾_三張核心卡顯示尚未選定任何指標():
+def test_MKT5一個也沒勾_核心卡照常_明細區顯示尚未選定任何指標():
+    """~~一個也沒勾 → 三張核心卡顯示尚未選定任何指標~~（舊名 `test_MKT5一個也沒勾_三張核心卡顯示尚未選定任何指標`）
+    → 客戶 2026-10-13 裁示 MKT-5 第 1、2 點（狀態更新，不是漏刪）：三張核心卡固定顯示、不受勾選影響；
+    一個都沒勾時「尚未選定任何指標」寫在下方明細區。「不是數字 0」那半句照舊成立。"""
     model = logic.build_page_model(fixtures.dataset_all_ok(), selected_keys=[])
-    for code in ("MKT-1", "MKT-2", "MKT-3"):
-        card = logic.find_block(model, code)
-        joined = " ".join(card["detail_lines"] + [mv["value_text"] for mv in card["main_values"]])
-        assert "尚未選定任何指標" in joined
-        assert "0" not in [mv["value_text"] for mv in card["main_values"]]
+    base = logic.build_page_model(fixtures.dataset_all_ok())
+    for code in ("MKT-0", "MKT-1", "MKT-2", "MKT-3"):
+        assert logic.find_block(model, code) == logic.find_block(base, code), code
+    for code in ("MKT-6", "MKT-7"):
+        block = logic.find_block(model, code)
+        assert block["_rows"] == []
+        assert "尚未選定任何指標" in block["detail_lines"]
+        assert not any("資料未備" in line for line in block["detail_lines"])
+        assert "0" not in block["detail_lines"]
 
 
 # ───────────────────────── 逐塊規則 ─────────────────────────
@@ -1339,6 +1348,13 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
        重跑一次逐格 dump 再 diff，**不要直接改期望值**。期望值改了，這條就廢了。
     """
     expected = {
+        # ⚠️ 2026-10-13：客戶裁示 MKT-5（勾選可存檔、只過濾下方明細）—— **只有 MKT-5 那 14 格**換新值
+        #    （有意識的更正，不是漏刪；決策者：客戶裁示，換值由實作組執行）。
+        #    換之前先證明（量測日 2026-10-13）：(1) 其餘 98 格以改動後程式重算，逐格與本表舊值相同；
+        #    (2) 把 MKT-5 本輪有意改的欄位（摘要「尚未設定…」、說明行、`_readonly`、多出的存檔鈕、
+        #    各項的 `_display_state`）換回舊值再算摘要，14 格舊值逐格全數重現。故差異只有那幾欄。
+        #    舊值：all_empty 744fadcede78／六種同值 6f94365bce3d／mkt1_both fff54b3d1a1d／
+        #    mkt1_fetch_failed 與 mkt2_both 214ed57f3396／mkt1_one 70af65a5c678。
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回 ⚠ 再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
@@ -1347,7 +1363,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("all_ok", "MKT-2"): "bd304edd8d7a",
         ("all_ok", "MKT-3"): "ddef408d6b7c",
         ("all_ok", "MKT-4"): "f707120cac99",
-        ("all_ok", "MKT-5"): "6f94365bce3d",
+        ("all_ok", "MKT-5"): "ce848ea2dd8a",
         ("all_ok", "MKT-6"): "c24cf97e69cd",
         ("all_ok", "MKT-7"): "bac3497a5a08",
         ("all_ok_negative", "MKT-0"): "cd15f0ceb6da",
@@ -1355,7 +1371,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("all_ok_negative", "MKT-2"): "345183416afc",
         ("all_ok_negative", "MKT-3"): "c6708ead229f",
         ("all_ok_negative", "MKT-4"): "f707120cac99",
-        ("all_ok_negative", "MKT-5"): "6f94365bce3d",
+        ("all_ok_negative", "MKT-5"): "ce848ea2dd8a",
         ("all_ok_negative", "MKT-6"): "31bff38dba2a",
         ("all_ok_negative", "MKT-7"): "bac3497a5a08",
         ("mkt1_one_key_missing", "MKT-0"): "ef60bfbaad0d",
@@ -1363,7 +1379,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt1_one_key_missing", "MKT-2"): "bd304edd8d7a",
         ("mkt1_one_key_missing", "MKT-3"): "ddef408d6b7c",
         ("mkt1_one_key_missing", "MKT-4"): "f707120cac99",
-        ("mkt1_one_key_missing", "MKT-5"): "70af65a5c678",
+        ("mkt1_one_key_missing", "MKT-5"): "2ca60dfdce0d",
         ("mkt1_one_key_missing", "MKT-6"): "dc25df106aba",
         ("mkt1_one_key_missing", "MKT-7"): "53af7974b63c",
         ("mkt1_both_keys_missing", "MKT-0"): "ef60bfbaad0d",
@@ -1371,7 +1387,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt1_both_keys_missing", "MKT-2"): "bd304edd8d7a",
         ("mkt1_both_keys_missing", "MKT-3"): "ddef408d6b7c",
         ("mkt1_both_keys_missing", "MKT-4"): "f707120cac99",
-        ("mkt1_both_keys_missing", "MKT-5"): "fff54b3d1a1d",
+        ("mkt1_both_keys_missing", "MKT-5"): "2d52c20e1dcd",
         ("mkt1_both_keys_missing", "MKT-6"): "aeb8c9401970",
         ("mkt1_both_keys_missing", "MKT-7"): "9e2a93c22cb1",
         ("mkt1_fetch_failed", "MKT-0"): "344b2d64a392",
@@ -1379,7 +1395,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt1_fetch_failed", "MKT-2"): "ad095103c630",
         ("mkt1_fetch_failed", "MKT-3"): "ddef408d6b7c",
         ("mkt1_fetch_failed", "MKT-4"): "f707120cac99",
-        ("mkt1_fetch_failed", "MKT-5"): "214ed57f3396",
+        ("mkt1_fetch_failed", "MKT-5"): "0fcffd222be9",
         ("mkt1_fetch_failed", "MKT-6"): "2ddc98a10e56",
         ("mkt1_fetch_failed", "MKT-7"): "70796f04a9ba",
         ("mkt2_both_keys_missing", "MKT-0"): "adb56d32cd27",
@@ -1387,7 +1403,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_both_keys_missing", "MKT-2"): "ad095103c630",
         ("mkt2_both_keys_missing", "MKT-3"): "ddef408d6b7c",
         ("mkt2_both_keys_missing", "MKT-4"): "f707120cac99",
-        ("mkt2_both_keys_missing", "MKT-5"): "214ed57f3396",
+        ("mkt2_both_keys_missing", "MKT-5"): "0fcffd222be9",
         ("mkt2_both_keys_missing", "MKT-6"): "2ddc98a10e56",
         ("mkt2_both_keys_missing", "MKT-7"): "70796f04a9ba",
         ("mkt2_only_five_rows", "MKT-0"): "cd15f0ceb6da",
@@ -1395,7 +1411,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_only_five_rows", "MKT-2"): "5802aba4e9e8",
         ("mkt2_only_five_rows", "MKT-3"): "ddef408d6b7c",
         ("mkt2_only_five_rows", "MKT-4"): "f707120cac99",
-        ("mkt2_only_five_rows", "MKT-5"): "6f94365bce3d",
+        ("mkt2_only_five_rows", "MKT-5"): "ce848ea2dd8a",
         ("mkt2_only_five_rows", "MKT-6"): "104bbfaf98cc",
         ("mkt2_only_five_rows", "MKT-7"): "f3ce815e6cda",
         ("mkt2_one_row_after_baseline", "MKT-0"): "cd15f0ceb6da",
@@ -1403,7 +1419,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_one_row_after_baseline", "MKT-2"): "d697126c2cfb",
         ("mkt2_one_row_after_baseline", "MKT-3"): "ddef408d6b7c",
         ("mkt2_one_row_after_baseline", "MKT-4"): "f707120cac99",
-        ("mkt2_one_row_after_baseline", "MKT-5"): "6f94365bce3d",
+        ("mkt2_one_row_after_baseline", "MKT-5"): "ce848ea2dd8a",
         ("mkt2_one_row_after_baseline", "MKT-6"): "12a9373cbc2d",
         ("mkt2_one_row_after_baseline", "MKT-7"): "80513c138371",
         ("mkt2_diverging", "MKT-0"): "cd15f0ceb6da",
@@ -1411,7 +1427,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_diverging", "MKT-2"): "581dd6da4127",
         ("mkt2_diverging", "MKT-3"): "ddef408d6b7c",
         ("mkt2_diverging", "MKT-4"): "f707120cac99",
-        ("mkt2_diverging", "MKT-5"): "6f94365bce3d",
+        ("mkt2_diverging", "MKT-5"): "ce848ea2dd8a",
         ("mkt2_diverging", "MKT-6"): "0d3dfaff86a1",
         ("mkt2_diverging", "MKT-7"): "bac3497a5a08",
         ("mkt3_unit_mismatch", "MKT-0"): "c53092c5a96c",
@@ -1419,7 +1435,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt3_unit_mismatch", "MKT-2"): "bd304edd8d7a",
         ("mkt3_unit_mismatch", "MKT-3"): "74a194e6bc2c",
         ("mkt3_unit_mismatch", "MKT-4"): "f707120cac99",
-        ("mkt3_unit_mismatch", "MKT-5"): "6f94365bce3d",
+        ("mkt3_unit_mismatch", "MKT-5"): "ce848ea2dd8a",
         ("mkt3_unit_mismatch", "MKT-6"): "05b1c5bf2b53",
         ("mkt3_unit_mismatch", "MKT-7"): "bac3497a5a08",
         ("all_empty", "MKT-0"): "e80f5173aa64",
@@ -1427,7 +1443,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("all_empty", "MKT-2"): "ad095103c630",
         ("all_empty", "MKT-3"): "a9db1ba8af95",
         ("all_empty", "MKT-4"): "f707120cac99",
-        ("all_empty", "MKT-5"): "744fadcede78",
+        ("all_empty", "MKT-5"): "a2657e7731bb",
         ("all_empty", "MKT-6"): "70d28a6ea733",
         ("all_empty", "MKT-7"): "29ac69345567",
         ("revised_row", "MKT-0"): "cd15f0ceb6da",
@@ -1435,7 +1451,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("revised_row", "MKT-2"): "bd304edd8d7a",
         ("revised_row", "MKT-3"): "71a5a27d7dd7",
         ("revised_row", "MKT-4"): "f707120cac99",
-        ("revised_row", "MKT-5"): "6f94365bce3d",
+        ("revised_row", "MKT-5"): "ce848ea2dd8a",
         ("revised_row", "MKT-6"): "c8010960bf01",
         ("revised_row", "MKT-7"): "bac3497a5a08",
         ("unknown_unit_literal", "MKT-0"): "cd15f0ceb6da",
@@ -1443,7 +1459,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("unknown_unit_literal", "MKT-2"): "bd304edd8d7a",
         ("unknown_unit_literal", "MKT-3"): "ddef408d6b7c",
         ("unknown_unit_literal", "MKT-4"): "f707120cac99",
-        ("unknown_unit_literal", "MKT-5"): "6f94365bce3d",
+        ("unknown_unit_literal", "MKT-5"): "ce848ea2dd8a",
         ("unknown_unit_literal", "MKT-6"): "48a65b18ad96",
         ("unknown_unit_literal", "MKT-7"): "bac3497a5a08",
         ("fetched_before_obs", "MKT-0"): "cd15f0ceb6da",
@@ -1451,7 +1467,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("fetched_before_obs", "MKT-2"): "bd304edd8d7a",
         ("fetched_before_obs", "MKT-3"): "8e0d5339c884",
         ("fetched_before_obs", "MKT-4"): "f707120cac99",
-        ("fetched_before_obs", "MKT-5"): "6f94365bce3d",
+        ("fetched_before_obs", "MKT-5"): "ce848ea2dd8a",
         ("fetched_before_obs", "MKT-6"): "d2c6b21df1e2",
         ("fetched_before_obs", "MKT-7"): "8b80c471541b",
     }

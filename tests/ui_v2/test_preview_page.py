@@ -429,38 +429,46 @@ def _mkt_screen(at):
         + [e.label for e in at.main.expander]
 
 
-def _apply_mkt_window(at):
+def _cards(at):
+    """三張核心卡（正式結果）那幾段 HTML。"""
+    return [e.value for e in at.main.markdown if 'class="mkt-card"' in e.value]
+
+
+def _fill_mkt_window(at):
     import datetime
 
     at.number_input(key="mkt4_days").set_value(30).run()
     at.date_input(key="mkt4_baseline").set_value(datetime.date(2026, 9, 1)).run()
-    at.button(key="mkt4_apply").click().run()
     assert not at.exception, [e.value for e in at.exception]
 
 
-def _mkt_apply_leave_return():
+# ~~`_apply_mkt_window`／`_mkt_apply_leave_return` 與下面兩條「套用後換頁再回來」~~
+# → **2026-10-13 狀態更新（不是漏刪；客戶裁示：未儲存的暫存設定不得影響正式結果）**：
+#   正式模式（預覽四頁皆是）的「套用」停用、三張核心卡只讀已存設定，`"_mkt_applied"` 不再進任何計算，
+#   舊兩條要驗的「套用改了畫面、換頁回來要清掉」在正式模式已不可能發生。改驗裁示本身：
+#   欄位填了不存 → 三張核心卡不動；換頁回來與新開相同；直接塞一份 `_mkt_applied` 也不改畫面。
+
+
+def test_市場總覽_正式模式套用停用_未存的欄位值不改三張核心卡_換頁回來與新開相同(vix_series):
     at = _go(_app_test(), "mkt")
     fresh = _mkt_screen(at)
-    _apply_mkt_window(at)
-    applied = _mkt_screen(at)
-    assert applied != fresh                                   # 套用真的改了畫面（否則下面的比較沒意義）
-    at.run()
-    assert _mkt_screen(at) == applied                         # 同一頁重跑：套用值保留
-    assert "_mkt_applied" in at.session_state
+    cards = _cards(at)
+    assert cards, "抓不到三張核心卡 —— 下面的比較會變成空比"
+    assert at.button(key="mkt4_apply").disabled
+    _fill_mkt_window(at)
+    assert _cards(at) == cards                              # 欄位有值、沒存檔：正式結果不動
     _go(at, "hld")
     _go(at, "mkt")
-    return fresh, applied, _mkt_screen(at)
+    assert _mkt_screen(at) == fresh
 
 
-def test_市場總覽_套用後換頁再回來_畫面與新開完全相同(vix_series):
-    fresh, _applied, back = _mkt_apply_leave_return()
-    assert back == fresh
-
-
-def test_市場總覽_對照組_拿掉這一格pop_回來的畫面與新開不同(vix_series, monkeypatch):
-    monkeypatch.setattr(preview, "_PAGE_STATE_TO_DROP", (alo_page._SAVE_ERRORS_STATE,))
-    fresh, _applied, back = _mkt_apply_leave_return()
-    assert back != fresh
+def test_市場總覽_session裡的套用值不進正式結果(vix_series):
+    at = _go(_app_test(), "mkt")
+    fresh = _mkt_screen(at)
+    at.session_state["_mkt_applied"] = {"window_days": 30, "baseline_date": "2026-09-01"}
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert _mkt_screen(at) == fresh
 
 
 def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
@@ -468,7 +476,8 @@ def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
     from streamlit.testing.v1 import AppTest
 
     key = alo_page._SAVE_ERRORS_STATE
-    assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied")
+    # ~~assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied")~~（2026-10-13 多一格市場總覽存檔結果；狀態更新，不是漏刪）
+    assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE)
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})

@@ -181,6 +181,38 @@ MKT6_COLUMN_LABELS = {
 # `44` 4.5：時間一律以世界協調時間存放。
 STORAGE_TIMEZONE = "UTC"
 
+# ───────────────────────── 客戶 2026-10-13 裁示（MKT-5／Q-07） ─────────────────────────
+# 下方指標明細（MKT-6／MKT-7）每一個指標鍵的顯示狀態。四個值彼此互斥、各有各的意思，
+# **不得混用文案或資料結構**（裁示 MKT-5 第 4 點：取消勾選 ≠ 資料未備）：
+#   value               有真實資料值，照畫；
+#   not_ready           資料未備（資料層沒有這個鍵的任何一筆）——照畫並掛 `資料未備` 徽章；
+#   user_hidden         使用者在指標清單取消勾選 ——**不畫**，與資料有沒有無關；
+#   incomplete_setting  比較條件（觀察窗＋基準日）只存了半套 —— 只用在三張核心卡的比較數字上。
+# ⛔ 這四個都是**資料／設定狀態**，不是投資風險訊號：不進結論燈、不改主值四狀態、不改任何顏色。
+DISPLAY_VALUE = "value"
+DISPLAY_NOT_READY = "not_ready"
+DISPLAY_USER_HIDDEN = "user_hidden"
+DISPLAY_INCOMPLETE_SETTING = "incomplete_setting"
+DISPLAY_STATES = (DISPLAY_VALUE, DISPLAY_NOT_READY, DISPLAY_USER_HIDDEN, DISPLAY_INCOMPLETE_SETTING)
+
+# 三張核心卡的比較條件（MKT-4 兩鍵）組成的狀態。
+COMPARISON_UNSET = "unset"                    # 兩鍵皆未設定（44 MKT-4 既有：`⬜ 不適用：尚未設定觀察窗`）
+COMPARISON_COMPLETE = "complete"              # 兩鍵齊
+COMPARISON_INCOMPLETE = DISPLAY_INCOMPLETE_SETTING   # 只有一鍵（Q-07）
+COMPARISON_READ_FAILED = "read_failed"        # 已存設定讀不到（正式模式）
+
+# 文案逐字照客戶 2026-10-13 裁示（Q-07）。
+TEXT_INCOMPLETE_NO_BASELINE = "⬜ 設定不完整：缺比較基準日"
+TEXT_INCOMPLETE_NO_WINDOW = "⬜ 設定不完整：缺觀察窗"
+# 存檔區寫明缺哪一欄（裁示 Q-07：「存檔區清楚指出缺哪一欄」；字面為本組擬定）。
+TEXT_SAVE_MISSING_BASELINE = "缺少：比較基準日"
+TEXT_SAVE_MISSING_WINDOW = "缺少：觀察窗天數"
+# 裁示 MKT-5：一個都沒勾 → 明細區顯示這一句（字面沿用 44 MKT-5 既有空狀態那一句），核心卡照常。
+TEXT_NOTHING_SELECTED = "尚未選定任何指標"
+# 讀不到已存設定時的存檔停用原因（本組擬定；體例同 alo：讀不到時不拿空白去蓋掉讀不到的真值）。
+TEXT_SAVE_SETTINGS_UNREADABLE = "設定讀不到，暫不存檔"
+INDICATOR_PICK_CAP = 6
+
 
 # ───────────────────────── 格式 ─────────────────────────
 
@@ -359,6 +391,9 @@ def all_keys(dataset: dict) -> list[str]:
     ⚠️ 登記：可選鍵清單的來源 `44` 沒有寫（`47` Q-09）。
     本檔取「資料表裡出現過的鍵」∪「三張核心卡點名的六個鍵」，是最保守的一種
     （不隱藏任何已經有資料的鍵，也不讓卡片點名的鍵從清單裡消失）。
+    → 2026-10-13 狀態更新（不是漏刪）：客戶裁示可勾清單只能來自資料層（`47` Q-09 已裁）。
+    正式模式改走 `selectable_keys(dataset, available_keys)`（資料層註冊鍵 ∪ 表內鍵，不併入六鍵）；
+    本函式只剩示範模式（假資料就是那一頁的資料層）與 `available_keys` 未給時使用。
     """
     from_rows = {r["indicator_key"] for r in dataset.get("rows", [])}
     return sorted(from_rows | set(_six_keys()))
@@ -378,6 +413,32 @@ def window_start(window_days: int | None, baseline_date: str | None) -> str | No
     if not window_days or window_days <= 0 or not baseline_date:
         return None
     return (date.fromisoformat(baseline_date) - timedelta(days=int(window_days))).isoformat()
+
+
+def _window_given(window_days) -> bool:
+    return isinstance(window_days, int) and not isinstance(window_days, bool) and window_days > 0
+
+
+def comparison_state(window_days, baseline_date, *, settings_error=None) -> str:
+    """比較條件的狀態（客戶 2026-10-13 裁示 Q-07）。
+
+    兩鍵齊 → `complete`；兩鍵皆空 → `unset`；只有一鍵 → `incomplete_setting`；
+    已存設定讀不到 → `read_failed`。觀察窗天數不是正整數視同「缺觀察窗」（它組不出觀察窗）。
+    """
+    if settings_error:
+        return COMPARISON_READ_FAILED
+    has_window = _window_given(window_days)
+    has_baseline = bool(baseline_date)
+    if has_window and has_baseline:
+        return COMPARISON_COMPLETE
+    if not has_window and not has_baseline:
+        return COMPARISON_UNSET
+    return COMPARISON_INCOMPLETE
+
+
+def incomplete_text(window_days, baseline_date) -> str:
+    """半套設定那一句（文案逐字照裁示）。只在 `comparison_state` 回 `incomplete_setting` 時呼叫。"""
+    return TEXT_INCOMPLETE_NO_BASELINE if _window_given(window_days) else TEXT_INCOMPLETE_NO_WINDOW
 
 
 # ───────────────────────── 徽章 ─────────────────────────
@@ -432,23 +493,20 @@ def _retry_button() -> dict:
 # ───────────────────────── 三張核心卡 ─────────────────────────
 
 
-def _build_card(code, dataset, *, window_days, baseline_date, selected_keys):
+def _build_card(code, dataset, *, window_days, baseline_date, settings_error=None):
     specs = _CARD_SPECS[code]
     errors = dataset.get("errors", {})
     main_values = []
     detail_lines = []
     badges = []
 
-    # `44` MKT-5 空狀態：一個也沒勾 → 三張核心卡顯示 `來源缺`，文案「尚未選定任何指標」。
-    # ⚠️ 登記：selected_keys 為 None 代表該設定「未設定」（MKT-5 沒有寫回路徑，見下）。
-    #    勾選與三張核心卡那六個固定鍵的關係 `44` 沒有寫（`47` Q-09），
-    #    故 None 時不套用任何過濾 —— 照各卡自己「來源」欄點名的鍵取數，那是 `44` 唯一寫明的綁定。
-    nothing_selected = selected_keys is not None and len(selected_keys) == 0
+    # ~~`44` MKT-5 空狀態：一個也沒勾 → 三張核心卡顯示 `來源缺`，文案「尚未選定任何指標」。~~
+    # → **客戶 2026-10-13 裁示 MKT-5 第 1 點（狀態更新，不是漏刪）：三張核心卡固定顯示，
+    #    不受「指標清單」勾選影響。** 本函式因此不再收 `selected_keys`；勾選只過濾 MKT-6／MKT-7。
+    #    舊表述在寫下當時照的是 44 MKT-5 空狀態那一句（當時 `47` Q-09 未裁）；被推翻的是它的前提。
 
     for source_key, label, decimals, unit_text, expected_unit in specs:
         rows = rows_for_key(dataset, source_key)
-        if nothing_selected:
-            rows = []
         error = errors.get(source_key)
         state = main_value_state(rows, expected_unit=expected_unit, error=error)
 
@@ -493,16 +551,13 @@ def _build_card(code, dataset, *, window_days, baseline_date, selected_keys):
     if STATE_OK in states and any(s != STATE_OK for s in states):
         badges.append(_status_badge("部分缺"))
 
-    if nothing_selected:
-        detail_lines.insert(0, "尚未選定任何指標")
-
     detail_lines.extend(
         _card_detail_lines(
             code,
             dataset,
             window_days=window_days,
             baseline_date=baseline_date,
-            nothing_selected=nothing_selected,
+            settings_error=settings_error,
         )
     )
 
@@ -543,12 +598,24 @@ _ANSWERS = {
 }
 
 
-def _card_detail_lines(code, dataset, *, window_days, baseline_date, nothing_selected):
+def _card_detail_lines(code, dataset, *, window_days, baseline_date, settings_error=None):
     """各卡的副標。`44` MKT-4 逐字：未填時三張核心卡的副標顯示
-    `⬜ 不適用：尚未設定觀察窗`。"""
+    `⬜ 不適用：尚未設定觀察窗`。
+
+    客戶 2026-10-13 裁示 Q-07：比較條件只有半套 → 副標**只**寫
+    `⬜ 設定不完整：缺比較基準日`／`⬜ 設定不完整：缺觀察窗`，
+    **任何依賴完整比較條件才成立的東西一律不出**（差值、方向、區間高低、被排除筆數、可用筆數）。
+    ⛔ 舊寫法在只有基準日時照算 MKT-2 的方向（`_mkt2_direction_lines` 只看基準日）——
+       那是半套設定照出比較數字，本輪修掉。
+    「設定不完整」不是投資風險訊號：主值、主值狀態、卡片顏色、結論燈一律不動（見 `DISPLAY_STATES` 註解）。
+    """
     lines = []
-    if nothing_selected:
-        return lines
+    state = comparison_state(window_days, baseline_date, settings_error=settings_error)
+    if state == COMPARISON_INCOMPLETE:
+        return [incomplete_text(window_days, baseline_date)]
+    if state == COMPARISON_READ_FAILED:
+        # 已存的比較條件讀不到：不拿「尚未設定」充數（那會是假話），也不出任何比較數字。字面為本組擬定。
+        return [not_applicable_text("比較條件讀不到")]
 
     start = window_start(window_days, baseline_date)
     if start is None:
@@ -742,7 +809,8 @@ def _build_light(cards) -> dict:
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_baseline_date=_UNSET):
+def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_baseline_date=_UNSET,
+                settings_error=None):
     """`44` MKT-4：兩枚按鈕並存 —— 套用只重算不寫回、存檔只寫回不重算。
 
     ⚠️ 兩組值刻意分開，這是 `44` 本輪擴寫的重點：
@@ -767,6 +835,18 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
 
     if invalid:
         detail_lines.append("日數為正整數")
+    # 客戶 2026-10-13 裁示 Q-07：兩欄都完整才能存；只填一欄 → 存檔停用，存檔區寫明缺哪一欄。
+    # ⛔ 舊寫法只在「兩欄皆空」或「日數不合格」時停用 —— 只填一欄照樣可存，會存出半套正式設定。
+    missing_field = None
+    if not both_empty and not invalid:
+        if field_baseline_date is None:
+            missing_field = TEXT_SAVE_MISSING_BASELINE
+        elif field_window_days is None:
+            missing_field = TEXT_SAVE_MISSING_WINDOW
+    if missing_field:
+        detail_lines.append(missing_field)
+    if settings_error:
+        detail_lines.append(fetch_failed_text(settings_error))
 
     inputs = [
         {
@@ -788,18 +868,31 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
     ]
 
     apply_button = _button("套用", "套用", writes=set())
+    if settings_error:
+        save_reason = TEXT_SAVE_SETTINGS_UNREADABLE
+    elif both_empty:
+        save_reason = "兩個欄位皆未填"
+    elif invalid:
+        save_reason = "日數為正整數"
+    else:
+        save_reason = missing_field or ""
     save_button = _button(
         "存檔",
         "存檔",
         writes={"user_setting"},  # `44` 5.3：存檔類只寫 user_setting
-        enabled=not both_empty and not invalid,
-        disabled_reason="兩個欄位皆未填" if both_empty else ("日數為正整數" if invalid else ""),
+        enabled=not save_reason,
+        disabled_reason=save_reason,
     )
 
     if both_empty:
         summary = "尚未設定觀察窗與比較基準日"
     elif invalid:
         summary = "輸入尚未通過檢查"
+    elif field_baseline_date is None:
+        # ⛔ 舊寫法在這裡印出「基準日 None」（客戶 2026-10-13 點名修正）。
+        summary = f"{field_window_days} 日曆日，{TEXT_SAVE_MISSING_BASELINE}"
+    elif field_window_days is None:
+        summary = f"{TEXT_SAVE_MISSING_WINDOW}，基準日 {field_baseline_date}"
     else:
         summary = f"{field_window_days} 日曆日，基準日 {field_baseline_date}"
 
@@ -820,60 +913,129 @@ def _build_mkt4(*, window_days, baseline_date, field_window_days=_UNSET, field_b
     }
 
 
-def _build_mkt5(dataset, selected_keys):
+def selectable_keys(dataset: dict, available_keys=None) -> list:
+    """MKT-5 可勾清單（客戶 2026-10-13 裁示 MKT-5 第 3 點：只能來自資料層實際可取得、可追溯的指標）。
+
+    `available_keys`：資料層註冊的指標鍵（正式模式由 `source` 交 L2 `INDICATOR_SPECS` 的鍵）。
+    給了 → 清單 ＝ 註冊鍵 ∪ 表內真實存在的鍵；**不併入**三張核心卡點名的六個鍵
+    （那六個是畫面寫死的，不是資料層給的；舊寫法併入它們，是暫行做法）。
+    沒給（`None`，示範模式）→ 退回 `all_keys()` 的舊行為，示範模式畫面一字不變。
+    """
+    if available_keys is None:
+        return all_keys(dataset)
+    from_rows = {r["indicator_key"] for r in dataset.get("rows", [])}
+    return sorted(set(available_keys) | from_rows)
+
+
+def display_states(keys, dataset: dict, selected_keys) -> dict:
+    """下方指標明細每一個鍵的顯示狀態（`DISPLAY_*`）。
+
+    `selected_keys` 是**已存**的勾選（`None` ＝ 從未存過 → 全部顯示）。
+    使用者取消勾選的鍵一律 `user_hidden`，**不論它有沒有資料** —— 那是使用者的選擇，不是資料狀態。
+    """
+    have_rows = {r["indicator_key"] for r in dataset.get("rows", [])}
+    chosen = None if selected_keys is None else set(selected_keys)
+    out = {}
+    for key in keys:
+        if chosen is not None and key not in chosen:
+            out[key] = DISPLAY_USER_HIDDEN
+        elif key in have_rows:
+            out[key] = DISPLAY_VALUE
+        else:
+            out[key] = DISPLAY_NOT_READY
+    return out
+
+
+def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_keys=_UNSET,
+                settings_error=None):
     """`44` MKT-5：清單以字面值排列、勾選上限 6、達上限其餘停用並附原因。
 
-    ⚠️ 登記：本塊**沒有寫回路徑** —— `44` MKT-4 本輪補宣告了寫入對象
-    （體例同 EXP-5：有寫入動作的塊在來源欄寫出寫入對象），**MKT-5 的來源欄沒有補**；
-    `47` Q-08 亦登記本頁勾選無處可存。故本塊做成**唯讀勾選**，
-    不自行補一枚存檔鈕（那會是發明規格）。
+    ~~⚠️ 登記：本塊**沒有寫回路徑** —— …故本塊做成**唯讀勾選**，不自行補一枚存檔鈕。~~
+    → **客戶 2026-10-13 裁示（狀態更新，不是漏刪）**：勾選存回 `user_setting` 的 `mkt_indicator_keys`，
+    **存檔成功後下一次重新載入才正式生效**；勾選**只**決定 MKT-6／MKT-7 顯示哪些指標，三張核心卡不受影響。
+    本塊因此加一枚 `存檔`（八類之一，只寫 `user_setting`）。舊表述在寫下當時為真（`44` MKT-5 來源欄未宣告寫入對象、
+    `47` Q-08／Q-09 未裁）；被推翻的是它的前提。
+
+    `selected_keys`：**已存**的勾選（驅動下方明細）。`field_selected_keys`：勾選框**當下**的狀態
+    （決定勾選框畫成什麼、存檔能不能按）；沒傳時等於已存的那一份。兩份刻意分開 ——
+    未存的勾選**不得**進入正式結果（裁示：未儲存的暫存設定不得影響正式結果）。
     """
-    selected = set(selected_keys or ())
-    at_cap = len(selected) >= 6
-    keys = all_keys(dataset)
+    if field_selected_keys is _UNSET:
+        field_selected_keys = selected_keys
+    field = set(field_selected_keys or ())
+    at_cap = len(field) >= INDICATOR_PICK_CAP
+    keys = selectable_keys(dataset, available_keys)
     have_rows = {r["indicator_key"] for r in dataset.get("rows", [])}
+    states = display_states(keys, dataset, selected_keys)
 
     items = []
     for key in keys:
-        checked = key in selected
-        enabled = checked or not at_cap
+        checked = key in field
+        enabled = (checked or not at_cap) and not settings_error
+        if settings_error:
+            reason = TEXT_SAVE_SETTINGS_UNREADABLE
+        elif not enabled:
+            reason = "已達勾選上限 6，請先取消一項"
+        else:
+            reason = ""
         item = {
             "_input": True,
-            "_default": None,  # 一個也沒有預先勾
+            "_default": None,  # 一個也沒有預先勾（勾選值只來自已存設定或使用者當下的勾選）
             "_value": checked,
             "_enabled": enabled,
-            "_readonly": True,
+            "_readonly": False,
+            "_display_state": states[key],
             "name": key,
             "label": key,
-            "disabled_reason": "" if enabled else "已達勾選上限 6，請先取消一項",
+            "disabled_reason": reason,
             "badges": [] if key in have_rows else [_status_badge("資料未備")],
         }
         items.append(item)
 
-    if selected_keys is None:
-        summary = "尚未設定，依 `44` 只讀不寫"
-    elif not selected:
-        summary = "尚未選定任何指標"
+    over_cap = len(field) > INDICATOR_PICK_CAP
+    if settings_error:
+        save_reason = TEXT_SAVE_SETTINGS_UNREADABLE
+    elif over_cap:
+        save_reason = "已達勾選上限 6，請先取消一項"
     else:
-        summary = f"已勾選 {len(selected)} ／ 上限 6"
+        save_reason = ""
+    save_button = _button(
+        "存檔",
+        "存檔",
+        writes={"user_setting"},  # `44` 5.3：存檔類只寫 user_setting
+        enabled=not save_reason,
+        disabled_reason=save_reason,
+    )
+
+    if selected_keys is None:
+        summary = "尚未設定，下方明細顯示全部指標"
+    elif not selected_keys:
+        summary = TEXT_NOTHING_SELECTED
+    else:
+        summary = f"已勾選 {len(set(selected_keys))} ／ 上限 6"
 
     detail_lines = [
-        "本塊在 `44` 的來源欄只宣告讀、未宣告寫入對象，故此處為唯讀勾選。",
+        "勾選只決定下方指標明細顯示哪些指標；三張核心卡固定顯示。存檔後，下一次重新載入才生效。",
     ]
+    unknown = sorted(set(selected_keys or ()) - set(keys))
+    if unknown:
+        detail_lines.append("已存清單中有資料層未提供的鍵，不顯示：" + "、".join(unknown))
+    if settings_error:
+        detail_lines.append(fetch_failed_text(settings_error))
 
     return {
         "code": "MKT-5",
         "title": BLOCK_TITLES["MKT-5"],
         "_layer": 3,
         "_default_open": False,
-        "_readonly": True,
+        "_readonly": False,
         "_items": items,
         "answers": _ANSWERS["MKT-5"],
         "summary_text": summary,
         "main_values": [],
         "detail_lines": detail_lines,
         "badges": [_redline_badge("G3†")],
-        "buttons": [],  # 唯讀：本塊沒有任何按鈕
+        "buttons": [save_button],
         "inputs": items,
     }
 
@@ -881,9 +1043,32 @@ def _build_mkt5(dataset, selected_keys):
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _build_mkt6(dataset):
-    """`44` MKT-6：一列一筆觀測，欄位依宣告順序固定，不依數值排序。"""
+# 裁示 MKT-5 第 4 點：「使用者選擇不顯示」要在畫面上看得出來，且不得與「資料未備」共用文案。
+# 字面為本組擬定（44 沒有這一句）。
+TEXT_USER_HIDDEN_PREFIX = "依指標清單設定不顯示："
+
+
+def _hidden_line(states) -> list:
+    hidden = [key for key, state in states.items() if state == DISPLAY_USER_HIDDEN]
+    return [TEXT_USER_HIDDEN_PREFIX + "、".join(hidden)] if hidden else []
+
+
+def _build_mkt6(dataset, *, selected_keys=None, states=None):
+    """`44` MKT-6：一列一筆觀測，欄位依宣告順序固定，不依數值排序。
+
+    客戶 2026-10-13 裁示 MKT-5：只列**已存勾選**裡的指標（`selected_keys` 為 None ＝ 從未存過 → 全列）。
+    一個都沒勾 → 只寫「尚未選定任何指標」，**不寫**資料未備（沒有選 ≠ 沒有資料）。
+    """
+    states = states or {}
+    if selected_keys is not None and not selected_keys:
+        return _detail_nothing_selected("MKT-6", {
+            "_columns": MKT6_COLUMNS,
+            "column_labels": [MKT6_COLUMN_LABELS[c] for c in MKT6_COLUMNS],
+        })
     rows = list(dataset.get("rows", []))
+    if selected_keys is not None:
+        chosen = set(selected_keys)
+        rows = [r for r in rows if r.get("indicator_key") in chosen]
     table_rows = []
     blank_notes = []
     for row in rows:
@@ -901,6 +1086,7 @@ def _build_mkt6(dataset):
         detail_lines.append("尚無任何觀測")
     for note in blank_notes:
         detail_lines.append(f"該筆有空格：{note}")
+    detail_lines.extend(_hidden_line(states))
 
     latest = max((r["obs_date"] for r in rows), default=None)
     summary = "尚無任何觀測" if not rows else f"共 {len(rows)} 筆觀測，最近一筆 {latest}"
@@ -922,9 +1108,41 @@ def _build_mkt6(dataset):
     }
 
 
-def _build_mkt7(dataset):
-    """`44` MKT-7：一列一個 indicator_key，取各組最近一筆。"""
-    keys = all_keys(dataset)
+def _detail_nothing_selected(code, extra) -> dict:
+    """裁示 MKT-5：一個都沒勾 → 明細區顯示「尚未選定任何指標」，一列都不列、不掛資料未備。"""
+    block = {
+        "code": code,
+        "title": BLOCK_TITLES[code],
+        "_layer": 4,
+        "_default_open": False,
+        "_rows": [],
+        "answers": _ANSWERS[code],
+        "summary_text": TEXT_NOTHING_SELECTED,
+        "main_values": [],
+        "detail_lines": [TEXT_NOTHING_SELECTED],
+        "badges": [],
+        "buttons": [],
+    }
+    block.update(extra)
+    return block
+
+
+def _build_mkt7(dataset, *, keys=None, states=None):
+    """`44` MKT-7：一列一個 indicator_key，取各組最近一筆。
+
+    客戶 2026-10-13 裁示 MKT-5：使用者取消勾選的鍵（`user_hidden`）不列；
+    `keys` 為 None 時照舊取 `all_keys()`（示範模式）。
+    """
+    states = states or {}
+    if keys is None:
+        keys = all_keys(dataset)
+    if keys and states and all(states.get(k) == DISPLAY_USER_HIDDEN for k in keys):
+        return _detail_nothing_selected("MKT-7", {
+            "column_labels": ["指標鍵", "最近觀測日", "最近取得時間", "來源層級", "延遲日數"],
+            "detail_lines": [TEXT_NOTHING_SELECTED, f"時間以 {STORAGE_TIMEZONE} 顯示"],
+        })
+    hidden_line = _hidden_line({k: states.get(k) for k in keys})
+    keys = [k for k in keys if states.get(k) != DISPLAY_USER_HIDDEN]
     rows_out = []
     worst_delay = None
     for key in keys:
@@ -979,7 +1197,7 @@ def _build_mkt7(dataset):
         # `44` MKT-7 逐字：顯示時轉當地時區並在表頭註明時區字面值。
         # 本輪不做時區切換器（`47` Q-10：本頁無任何塊定義該元件，八類按鈕亦無「切換」類），
         # 故表頭註明的就是存放時區本身。
-        "detail_lines": [f"時間以 {STORAGE_TIMEZONE} 顯示"],
+        "detail_lines": [f"時間以 {STORAGE_TIMEZONE} 顯示", *hidden_line],
         "badges": [],
         "buttons": [],
     }
@@ -997,15 +1215,25 @@ def build_page_model(
     viewport_width: int = 1280,
     field_window_days=_UNSET,
     field_baseline_date=_UNSET,
+    available_keys=None,
+    field_selected_keys=_UNSET,
+    settings_error=None,
 ) -> dict:
-    """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。"""
+    """把資料 ＋ 使用者設定組成一份純資料模型。page.py 只負責把它畫出來。
+
+    客戶 2026-10-13 裁示（正式模式由 `page.py` 照這個分工傳值）：
+    - `window_days`／`baseline_date`／`selected_keys` ＝ **已存**設定（正式結果只讀這一組）；
+    - `field_*` ＝ 輸入欄／勾選框**當下**的值，只決定欄位怎麼畫、存檔能不能按，**不進任何正式計算**；
+    - `available_keys` ＝ 資料層註冊的指標鍵（MKT-5 可勾清單，見 `selectable_keys`）；
+    - `settings_error` ＝ 已存設定讀不到時的訊息原文（已遮蔽）。
+    """
     cards = [
         _build_card(
             code,
             dataset,
             window_days=window_days,
             baseline_date=baseline_date,
-            selected_keys=selected_keys,
+            settings_error=settings_error,
         )
         for code in ("MKT-1", "MKT-2", "MKT-3")
     ]
@@ -1017,14 +1245,24 @@ def build_page_model(
             baseline_date=baseline_date,
             field_window_days=field_window_days,
             field_baseline_date=field_baseline_date,
+            settings_error=settings_error,
         )
     )
-    blocks.append(_build_mkt5(dataset, selected_keys))
-    blocks.append(_build_mkt6(dataset))
-    blocks.append(_build_mkt7(dataset))
+    keys = selectable_keys(dataset, available_keys)
+    states = display_states(keys, dataset, selected_keys)
+    blocks.append(_build_mkt5(dataset, selected_keys, available_keys=available_keys,
+                              field_selected_keys=field_selected_keys,
+                              settings_error=settings_error))
+    # 已存清單裡資料層不提供的鍵不算數（MKT-5 另寫一行點名）；剩下一個都沒有 ＝ 尚未選定任何指標。
+    shown = None if selected_keys is None else [k for k in keys if states[k] != DISPLAY_USER_HIDDEN]
+    blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states))
+    blocks.append(_build_mkt7(dataset, keys=keys, states=states))
 
     return {
         "title": "市場總覽",
+        # 客戶 2026-10-13 裁示：機器看得出「使用者選擇不顯示／資料未備／設定不完整／真實資料值」四者的差別。
+        "_display_states": states,
+        "_comparison_state": comparison_state(window_days, baseline_date, settings_error=settings_error),
         "answers": "現在的市場環境，和我上次看的時候比，變了哪裡",
         "_viewport_width": viewport_width,
         "_columns": columns_for_width(viewport_width),

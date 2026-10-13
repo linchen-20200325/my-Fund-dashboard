@@ -36,7 +36,8 @@ SPEC_BLOCK_SOURCES = (
     ("MKT-2", ("market_indicator.value_num",)),
     ("MKT-3", ("market_indicator.value_num",)),
     ("MKT-4", ("user_setting.setting_value", "user_setting.updated_at")),
-    ("MKT-5", ("user_setting.setting_value",)),
+    # 2026-10-13：44 MKT-5 來源欄連帶補宣告寫入對象（客戶裁示勾選可存檔），多 `updated_at` 一欄（狀態更新，不是漏刪）。
+    ("MKT-5", ("user_setting.setting_value", "user_setting.updated_at")),
     ("MKT-6", ("market_indicator.*",)),
     ("MKT-7", ("market_indicator.fetched_at", "market_indicator.obs_date", "market_indicator.source_tier")),
     ("HLD-0", ()),
