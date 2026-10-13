@@ -90,6 +90,8 @@ def test_asset_attr_help_has_no_false_no_source_claim():
     from ui.helpers.fund_grp_health.columns import unified_column_config
     help_txt = _norm(str(unified_column_config()["基金屬性"]["help"]))
     src = _norm((ROOT / "ui/helpers/fund_grp_health/signals.py").read_text(encoding="utf-8"))
+    # 2026-10-13(LINE 推播與舊 UI 解耦):`mk_signal_by_code` 實作已搬到 L2,兩檔一起掃。
+    src += _norm((ROOT / "services/fund_grp_health/signals.py").read_text(encoding="utf-8"))
     for bad in ("目前尚無可靠來源", "無可追溯的原始分類來源前不顯示"):
         assert _norm(bad) not in help_txt, f"columns.py 基金屬性 help 含不實措辭：{bad}"
         assert _norm(bad) not in src, f"signals.py 含不實措辭：{bad}"

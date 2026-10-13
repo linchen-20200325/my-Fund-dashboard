@@ -71,7 +71,7 @@ def wired(monkeypatch):
 
 
 def _ok_render(monkeypatch):
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
     monkeypatch.setattr(R, "render_month_calendar_png", lambda cal, **k: _PNG)
 
 
@@ -118,7 +118,7 @@ def test_published_path_is_year_month_scoped(monkeypatch, wired):
 
 # ── §1 降級鏈:每一段壞掉都要退到 Flex,不可靜默不送 ────────────────────────
 def test_render_failure_falls_back_to_flex(monkeypatch, wired):
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
 
     def _boom(cal, **k):
         raise RuntimeError("no chromium")
@@ -167,7 +167,7 @@ def test_image_not_sent_reason_falls_back_to_flex(monkeypatch, wired):
 def test_full_ladder_image_then_flex_then_text(monkeypatch, wired):
     # 圖 + Flex 都壞 → 最後純文字仍送達(§1 提醒不可消失)
     import infra.line_push as LP
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
     from infra.line_push import LinePushError
 
     def _no_img(cal, **k):
@@ -187,7 +187,7 @@ def test_flex_sent_false_falls_through_to_text(monkeypatch, wired):
     只接 exception 會讓 sent=False 直接落到 return 1 —— 明明手上有現成 text 卻不送,提醒消失(§1)。
     """
     import infra.line_push as LP
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
 
     def _no_img(cal, **k):
         raise RuntimeError("no chromium")
@@ -206,7 +206,7 @@ def test_render_png_signature_accepts_scale():
     """
     import inspect
 
-    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    from scripts.dividend_calendar_png import render_month_calendar_png   # 2026-10-13 移到編排層
     _sig = inspect.signature(render_month_calendar_png)
     assert "scale" in _sig.parameters
     _p = _sig.parameters["scale"]
@@ -217,7 +217,7 @@ def test_render_png_signature_accepts_scale():
 # ── LINE preview ≤1MB:超標自動降 scale,再超標就退 Flex(不推會被 LINE 退的圖)──────
 def test_oversize_png_retried_at_scale1(monkeypatch, wired):
     _ok_publish(monkeypatch)
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
     seen = []
 
     def _render(cal, **k):
@@ -231,7 +231,7 @@ def test_oversize_png_retried_at_scale1(monkeypatch, wired):
 
 def test_still_oversize_falls_back_to_flex(monkeypatch, wired):
     _ok_publish(monkeypatch)
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
     monkeypatch.setattr(R, "render_month_calendar_png",
                         lambda cal, **k: b"\x89PNG\r\n\x1a\n" + b"z" * 2_000_000)
     assert M.main([]) == 0
@@ -241,7 +241,7 @@ def test_still_oversize_falls_back_to_flex(monkeypatch, wired):
 # ── dry-run:完全不產圖、不發佈、不推播 ─────────────────────────────────────
 def test_dry_run_publishes_nothing(monkeypatch, wired, capsys):
     import infra.asset_publish as AP
-    import ui.helpers.dividend_calendar_render as R
+    import scripts.dividend_calendar_png as R   # 2026-10-13 PNG 產圖移到編排層(排程不依賴 UI)
 
     def _should_not_run(*a, **k):
         raise AssertionError("dry-run 不應產圖/發佈")

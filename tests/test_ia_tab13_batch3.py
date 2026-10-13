@@ -45,8 +45,12 @@ TAB1 = ROOT / "ui" / "tab1_macro.py"
 TAB2 = ROOT / "ui" / "tab2_single_fund.py"
 TAB_RESEARCH = ROOT / "ui" / "tab_fund_research.py"
 TAB_BATCH = ROOT / "ui" / "tab_batch_analysis.py"
-UNIFIED = ROOT / "ui" / "helpers" / "fund_grp_health" / "unified.py"
-SIGNALS = ROOT / "ui" / "helpers" / "fund_grp_health" / "signals.py"
+# 2026-10-13(客戶裁示:LINE 推播與舊 UI 解耦)`build_merged_extra_columns` 與
+# `mk_signal_by_code` 的實作原封搬到 L2 `services/fund_grp_health/`;舊 UI 檔只剩
+# re-export / 注入薄殼。本檔是**讀原始碼的 AST 守衛**,錨點必須跟著實作走,
+# 否則它會去掃一個已經沒有那段程式的殼(對空氣生效)。
+UNIFIED = ROOT / "services" / "fund_grp_health" / "unified.py"
+SIGNALS = ROOT / "services" / "fund_grp_health" / "signals.py"
 
 
 # ── 共用小工具 ────────────────────────────────────────────────────────

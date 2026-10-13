@@ -23,6 +23,29 @@ from services.v2_tables.masking import MASK
 
 SECRET = "k" + _secrets.token_hex(12)
 MI_HEAD = [n for n, _k, _nl in R.MARKET_INDICATOR_SPEC]
+_FRED_KEYS = ("credit_spread_pct", "term_spread_pct", "policy_rate_pct")
+_SPECS_AS_SHIPPED = dict(mi.INDICATOR_SPECS)
+
+
+def fred_pending_specs():
+    """FRED 三鍵改回 pending 的一份規格複本（只給測試用；正式碼不動）。"""
+    specs = dict(mi.INDICATOR_SPECS)
+    for key in _FRED_KEYS:
+        specs[key] = {**specs[key], "phase1": "pending", "pending_reason": "測試：本檔以 VIX 為樣本",
+                      "pending_code": mi.PENDING_FRED_RELEASE_DATE}
+    return specs
+
+
+@pytest.fixture(autouse=True)
+def _vix_only(monkeypatch):
+    """本檔測的是 sink／`fetch_log` 的寫表機制，以 VIX 一鍵為樣本（寫於 FRED 三鍵接上之前）。
+
+    2026-10-13 起 FRED 三鍵在 L2 取數；本檔的呼叫不傳金鑰，那三鍵會成為「未設定 FRED_API_KEY」的取數失敗，
+    改變本檔每一條的 outcome —— 那不是本檔要測的東西。故在本檔把 FRED 三鍵改回 pending（只在測試內）。
+    FRED 接到這條寫表路徑的測試在本檔末段（`test_FRED接線_*`，那幾條自己把規格換回出貨版）；
+    FRED 的轉換見 tests/test_v2_tables_market_indicator_fred.py。
+    """
+    monkeypatch.setattr(mi, "INDICATOR_SPECS", fred_pending_specs())
 
 
 @pytest.fixture
@@ -710,3 +733,61 @@ def test_淨值層_代碼解析失敗_鍵與原文都經遮蔽(book, monkeypatch
     assert log[4] == "failed" and SECRET not in log[6] and log[6].count(MASK) == 2
     assert "fund_code 須為字串" in log[6]
     assert SECRET not in repr(out["persist"])
+
+
+# ═══════════════════════ 2026-10-13：FRED 三鍵接到同一條寫表路徑 ═══════════════════════
+
+def _fred_frame():
+    """修正序列：2026-07-01 那一期 8/1 首次公布、9/1 修正（目前版本生效日 ≠ 首次公布日）。"""
+    df = pd.DataFrame({
+        "date": pd.to_datetime(["2026-07-01", "2026-07-01", "2026-08-01"]),
+        "value": [4.33, 4.32, 4.30],
+        "realtime_start": pd.to_datetime(["2026-08-01", "2026-09-01", "2026-09-02"]),
+        "realtime_end": ["2026-08-31", "9999-12-31", "9999-12-31"],
+    })
+    df.attrs.update(fetched_at="2026-10-13T06:00:00+00:00", realtime_floor="2024-10-13",
+                    source="FRED:X:vintages")
+    return df
+
+
+@pytest.fixture
+def fred_on(monkeypatch):
+    import datetime as _dt
+    monkeypatch.setattr(mi, "INDICATOR_SPECS", _SPECS_AS_SHIPPED)
+    monkeypatch.setattr(mi, "_utc_today", lambda: _dt.date(2026, 10, 13))
+    seen = []
+    monkeypatch.setattr(mi, "fetch_fred_vintages_with_error",
+                        lambda sid, key, start: (seen.append(key) or (_fred_frame(), None)))
+    return seen
+
+
+def test_FRED接線_金鑰往下傳_首次公布列與修正列都寫入_讀回is_revised與重算一致(book, monkeypatch, fred_on):
+    _stub(monkeypatch, _vix([17.0, 18.5], ["2026-09-22", "2026-09-23"]))
+    out = S.run_market_indicator_fetch([SECRET], fred_api_key="KEY")
+    assert fred_on == ["KEY", "KEY", "KEY"]
+    p = out["persist"]
+    assert p["ok"] is True and p["appended"] == 2 + 3 * 3
+    assert book.data("fetch_log")[1][4:] == ["ok", str(2 + 3 * 3), ""]   # row_count＝取回列數（過濾前）
+    back = S.load_market_indicator([SECRET])
+    assert back["is_revised_mismatch"] == 0 and back["conflicts"] == []
+    fed = sorted((r["obs_date"], r["release_date"], r["value_num"], r["is_revised"])
+                 for r in back["rows"] if r["indicator_key"] == "policy_rate_pct")
+    assert fed == [("2026-07-01", "2026-08-01", 4.33, False), ("2026-07-01", "2026-09-01", 4.32, True),
+                   ("2026-08-01", "2026-09-02", 4.30, False)]
+
+
+def test_FRED接線_沒給金鑰_FRED三鍵記failed_訊息逐字寫未設定FRED_API_KEY(book, monkeypatch, fred_on):
+    _stub(monkeypatch, _vix([17.0], ["2026-09-22"]))
+    out = S.run_market_indicator_fetch([SECRET])
+    assert fred_on == []                                   # 沒金鑰不打 L1
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed"
+    for key in _FRED_KEYS:
+        assert f"{key}: 未設定 FRED_API_KEY" in log[6]
+    assert len(out["table"]["rows"]) == 1                   # VIX 照寫
+
+
+def test_FRED接線_重新取數也把金鑰往下傳(book, monkeypatch, fred_on):
+    _stub(monkeypatch, _vix([17.0], ["2026-09-22"]))
+    out = S.refetch_market_indicator([SECRET], fred_api_key="KEY")
+    assert fred_on == ["KEY", "KEY", "KEY"] and out["persist"]["ok"] is True

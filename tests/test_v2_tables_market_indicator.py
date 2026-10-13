@@ -133,10 +133,15 @@ def fx_verified(monkeypatch):
 
 @pytest.fixture
 def no_other_l1(monkeypatch):
-    """FRED 與國發會第一階段不取數（49 §2.6 T1、Q3(c)）；被呼叫就紅。"""
+    """~~FRED 與國發會第一階段不取數（49 §2.6 T1、Q3(c)）；被呼叫就紅。~~
+    → 2026-10-13 狀態更新（不是漏刪）：FRED 三鍵改走逐版次 L1（`fetch_fred_vintages_with_error`，
+    轉換另見 tests/test_v2_tables_market_indicator_fred.py）；本檔的測試不傳 FRED 金鑰，故那一支照樣不會被打，
+    這裡改成被呼叫就紅以釘住這一點。**只拿得到目前版本 `realtime_start` 的 `fetch_fred`／`fetch_fred_with_error`
+    照舊被呼叫就紅**（拿它填公布日會把修正後的版本日當成首次公布日，49 §1.3 出入 2）；國發會照舊不取數（Q3(c)）。"""
     import repositories.macro.fred as fred
     import repositories.macro_tw_local_repository as tw
 
+    monkeypatch.setattr(mi, "fetch_fred_vintages_with_error", _forbid("fetch_fred_vintages_with_error"))
     for module, name in ((fred, "fetch_fred"), (fred, "fetch_fred_with_error"),
                          (tw, "fetch_tw_business_indicator_with_error"),
                          (tw, "_finmind_business_indicator"),
@@ -170,7 +175,10 @@ def test_日頻收盤_公布日等於觀測日_is_revised為否_fetched_at取L1�
     fx = [r for r in out["rows"] if r["indicator_key"] == "fx_twd_per_usd"]
     assert {r["value_unit"] for r in fx} == {"新臺幣／美元"}  # 49 §4.6：以 MKT-3 宣告為準
     assert {r["value_unit"] for r in vix} == {"index"}
-    assert out["errors"] == {}
+    # ~~assert out["errors"] == {}~~ → 2026-10-13：FRED 三鍵接上後，沒傳金鑰的呼叫在那三鍵寫「未設定 FRED_API_KEY」
+    # （49 §4.1；狀態更新，不是漏刪）。Yahoo 兩鍵照舊沒有錯誤。
+    assert out["errors"] == {k: mi.MISSING_FRED_API_KEY
+                             for k in ("credit_spread_pct", "term_spread_pct", "policy_rate_pct")}
 
 
 def test_開關打開時_呼叫的L1就是49點名的兩個ticker(monkeypatch, no_other_l1, fx_verified):
@@ -273,21 +281,21 @@ def test_同一觀測日重複_主鍵會撞_該日全部不寫(monkeypatch, no_o
 # ═══════════════════════ Q1／Q2／Q3(c)／T1：第一階段不寫列的鍵 ═══════════════════════
 
 
-def test_第一階段不寫列的六個鍵_不寫列_不取數_原因代碼各自登記(monkeypatch, no_other_l1):
+def test_第一階段不寫列的三個鍵_不寫列_不取數_原因代碼各自登記(monkeypatch, no_other_l1):
+    """~~六個鍵~~ → 2026-10-13 起三個（FRED 三鍵接上；狀態更新，不是漏刪）：匯率（規則未驗證）與國發會兩鍵（Q3(c)）。"""
     fake = _stub_yf(_ok_table())
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", fake)
     out = mi.build_market_indicator_table()
     written = {r["indicator_key"] for r in out["rows"]}
-    assert written == {"vol_index"}
+    assert written == {"vol_index"}   # 本條沒傳 FRED 金鑰 → FRED 三鍵是取數失敗，不是 pending
     assert fake.calls == ["^VIX"]  # 匯率在驗證前不取數
     assert out["pending"] == {
         "fx_twd_per_usd": mi.PENDING_FX_OBS_DATE_RULE,
-        "credit_spread_pct": mi.PENDING_FRED_RELEASE_DATE,
-        "term_spread_pct": mi.PENDING_FRED_RELEASE_DATE,
-        "policy_rate_pct": mi.PENDING_FRED_RELEASE_DATE,
         "leading_index": mi.PENDING_NDC_NO_RELEASE_DATE,
         "coincident_index": mi.PENDING_NDC_NO_RELEASE_DATE,
     }
+    for key in ("credit_spread_pct", "term_spread_pct", "policy_rate_pct"):
+        assert out["errors"][key] == mi.MISSING_FRED_API_KEY
     for key in out["pending"]:
         assert key not in out["errors"]  # 不是失敗，是資料未備
         assert out["skipped"][key], key
@@ -333,7 +341,8 @@ def test_冷卻狀態_只看第一階段真的會打的主機(monkeypatch):
 
     monkeypatch.setattr(mi, "cooling_sources", fake_cooling)
     assert mi.source_cooldowns() == [{"source": "query1.finance.yahoo.com", "remaining_sec": 44.2}]
-    assert seen["hosts"] == ["query1.finance.yahoo.com"]
+    # ~~["query1.finance.yahoo.com"]~~ → 2026-10-13 FRED 三鍵接上，FRED 主機一併列入（狀態更新，不是漏刪）
+    assert seen["hosts"] == ["query1.finance.yahoo.com", "api.stlouisfed.org"]
     assert status.host_of("https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX") == \
         "query1.finance.yahoo.com"
 

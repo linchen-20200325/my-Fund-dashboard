@@ -148,7 +148,7 @@ def _render_and_publish(cal: dict, year: int, month: int) -> "str | None":
     """
     try:
         from infra.line_push import LINE_IMAGE_PREVIEW_MAX_BYTES as _MAX
-        from ui.helpers.dividend_calendar_render import render_month_calendar_png
+        from scripts.dividend_calendar_png import render_month_calendar_png
         _png = render_month_calendar_png(cal)
         # LINE preview 上限(SSOT 在 infra.line_push)。明細表列數隨基金數成長,retina(scale=2)
         # 在檔數多時可能超標 → 超過就用 scale=1 重畫;仍超標則退 Flex,不推會被 LINE 退的圖。

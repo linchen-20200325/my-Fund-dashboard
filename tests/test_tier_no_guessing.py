@@ -314,6 +314,9 @@ _NO_GUESS_FILES = (
     "ui/helpers/macro/helpers.py",
     "ui/helpers/fund_grp_health/signals.py",
     "ui/helpers/fund_grp_health/unified.py",
+    # 2026-10-13(LINE 推播與舊 UI 解耦):上面兩檔的實作原封搬到 L2,守衛射程跟著實作走。
+    "services/fund_grp_health/signals.py",
+    "services/fund_grp_health/unified.py",
 )
 
 

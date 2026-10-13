@@ -35,9 +35,15 @@ def _secret_values() -> list:
     )
 
 
+def _fred_api_key() -> str:
+    """FRED 三鍵的金鑰（2026-10-13 起）：`st.secrets` 優先、環境變數其次（同 `app.py::_load_keys` 的鏡像方向）。
+    讀不到回空字串，由 L2 寫成「未設定 FRED_API_KEY」的取數失敗（49 §4.1），本層不補任何值。"""
+    return market_indicator.fred_api_key_from([st.secrets, os.environ])
+
+
 def load_live() -> dict:
     """給 `page.render(load_live=...)` 用的載入函式。"""
-    table = market_indicator.build_market_indicator_table()
+    table = market_indicator.build_market_indicator_table(fred_api_key=_fred_api_key())
     values = _secret_values()
     errors = {key: masking.mask_message(message, values)
               for key, message in table["errors"].items()}

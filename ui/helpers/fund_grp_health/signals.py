@@ -71,21 +71,16 @@ def _render_mk_signal_table(funds: list) -> None:
         system_error("買賣訊號表渲染失敗", e)
 
 
-def _first_num(*vals):
-    """依序取第一個**非 None** 的數值(§1:0.0 是合法值,不可用 `or` 略過)。"""
-    for _v in vals:
-        _n = _safe_num(_v)
-        if _n is not None:
-            return _n
-    return None
+# 2026-10-13 客戶裁示(LINE 推播與舊 UI 解耦):逐檔資料函式原封搬到 L2
+# `services/fund_grp_health/signals.py`(週報排程不得依賴 UI 層)。L2 不能 import
+# `mk_fund_signal`(它讀 `st.session_state`),所以本檔保留**原本那段 try/import**
+# 解析出它,再注入 L2 —— 舊 UI 行為(含 import 失敗時的 log 與標籤)逐字不變。
+from services.fund_grp_health.signals import _first_num  # noqa: E402,F401
+from services.fund_grp_health.signals import mk_signal_by_code as _svc_mk_signal_by_code  # noqa: E402
 
 
 def mk_signal_by_code(funds: list, phase: str, score) -> dict:
-    """⑩ 買賣點逐檔欄位(keyed by code)。供健診總表合併 + 標準表共用(單一資料源)。
-
-    phase/score 由呼叫端從 st.session_state.phase_info 取;缺 → 訊號欄 '—',
-    但買賣水平線 / 現價位階仍計算(不依景氣)。缺項 '—' 不偽造(§1)。
-    """
+    """⑩ 買賣點逐檔欄位(keyed by code)—— 舊 UI 入口;實作在 L2(見上方註解)。"""
     _import_err = ""
     try:
         from ui.helpers.macro_helpers import mk_fund_signal
@@ -96,60 +91,8 @@ def mk_signal_by_code(funds: list, phase: str, score) -> dict:
               f"{type(_e_imp).__name__}: {_e_imp}", file=_sys_imp.stderr)
         mk_fund_signal = None
         _import_err = f"⚠️ 訊號模組載入失敗({type(_e_imp).__name__})"
-
-    out: dict = {}
-    for _f in funds:
-        _code = _f.get("code", "?")
-        _m = _f.get("metrics") or {}
-        _mj = _f.get("moneydj_raw") or {}
-
-        _asset_class = "—"
-        _sig_label = _import_err or "—"
-        if mk_fund_signal is not None and phase:
-            try:
-                _sig = mk_fund_signal(_f, phase, score)
-                _asset_class = _sig.get("asset_class", "—")
-                _sig_label = _sig.get("label", "—")
-            except Exception as _e_sig:  # noqa: BLE001
-                # §1:原本靜默 pass → 「操作訊號」欄停在「—」,把**算爆了**偽裝成
-                # 「這檔沒訊號」。同 `services/fund_row.py` 對 吃本金 / 3-3-3 的處置。
-                import sys as _sys_sig
-                print(f"[grp_health/signals] {_code} mk_fund_signal 失敗:"
-                      f"{type(_e_sig).__name__}: {_e_sig}", file=_sys_sig.stderr)
-                _sig_label = f"⚠️ 計算失敗({type(_e_sig).__name__})"
-
-        # §1:`a or b` 把**合法的 0.0** 當缺值(買賣點價位理論上 >0,但 nav 由
-        # metrics 或 wb05 兩路來,顯式 is None 才不會在 0 附近悄悄換來源)。
-        _b1 = _first_num(_m.get("buy1"), _mj.get("buy1"))
-        _b3 = _first_num(_m.get("buy3"), _mj.get("buy3"))
-        _s1 = _first_num(_m.get("sell1"), _mj.get("sell1"))
-        _s3 = _first_num(_m.get("sell3"), _mj.get("sell3"))
-        _nav = _first_num(_m.get("nav"), _mj.get("nav_latest"))
-
-        if _nav is None:
-            _zone = "—"
-        elif _b3 is not None and _nav <= _b3:
-            _zone = "🟢 ≤買3(深跌)"
-        elif _b1 is not None and _nav <= _b1:
-            _zone = "🟢 ≤買1(小跌)"
-        elif _s3 is not None and _nav >= _s3:
-            _zone = "🔴 ≥賣3(大漲)"
-        elif _s1 is not None and _nav >= _s1:
-            _zone = "🟡 ≥賣1(小漲)"
-        else:
-            _zone = "⚪ 區間內"
-
-        out[_code] = {
-            "基金屬性": _asset_class,
-            "操作訊號": _sig_label,
-            "買 3 (深跌)": f"{_b3:.2f}" if _b3 is not None else "—",
-            "買 1 (小跌)": f"{_b1:.2f}" if _b1 is not None else "—",
-            "現價": f"{_nav:.2f}" if _nav is not None else "—",
-            "賣 1 (小漲)": f"{_s1:.2f}" if _s1 is not None else "—",
-            "賣 3 (大漲)": f"{_s3:.2f}" if _s3 is not None else "—",
-            "現價位階": _zone,
-        }
-    return out
+    return _svc_mk_signal_by_code(funds, phase, score, signal_fn=mk_fund_signal,
+                                  signal_unavailable_label=_import_err)
 
 
 def _render_bollinger_expanders(funds: list) -> None:

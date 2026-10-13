@@ -44,6 +44,30 @@ class Book(FakeSpreadsheet):
     title = "客戶的設定本"
 
 
+def _fred_pending_specs():
+    """FRED 三鍵改回 pending 的規格複本（只給測試用；正式碼不動）。"""
+    specs = dict(mi.INDICATOR_SPECS)
+    for key in ("credit_spread_pct", "term_spread_pct", "policy_rate_pct"):
+        specs[key] = {**specs[key], "phase1": "pending", "pending_reason": "測試：本檔以 VIX 為樣本",
+                      "pending_code": mi.PENDING_FRED_RELEASE_DATE}
+    return specs
+
+
+def test_FRED金鑰_重新取數從secrets讀好交給L2(monkeypatch):
+    """2026-10-13：set 頁「重新取數」市場指標層，金鑰在 L3 讀（L2 不讀 secrets），以關鍵字交下去；淨值層不帶。"""
+    seen = {}
+    fake = {"table": {"fetched": {}}, "persist": {"log_message": None, "masked_errors": {}, "empty": {},
+                                                  "stage": "done", "message": None, "ok": True}}
+    monkeypatch.setattr(source, "st", types.SimpleNamespace(secrets={"FRED_API_KEY": KEY}, session_state={}))
+    monkeypatch.setitem(S.REFETCH_BY_TIER, mi.SOURCE_TIER,
+                        lambda values, **kw: (seen.update(mi=kw) or fake))
+    monkeypatch.setitem(S.REFETCH_BY_TIER, S.nav_dividend.SOURCE_TIER_NAV,
+                        lambda values, **kw: (seen.update(nav=kw) or fake))
+    source.refetch(mi.SOURCE_TIER)
+    source.refetch(S.nav_dividend.SOURCE_TIER_NAV)
+    assert seen == {"mi": {"fred_api_key": KEY}, "nav": {}}
+
+
 @pytest.fixture
 def env(monkeypatch):
     book = Book()
@@ -57,6 +81,10 @@ def env(monkeypatch):
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
     for name in ("FRED_API_KEY", "SETTINGS_SHEET_ID"):
         monkeypatch.delenv(name, raising=False)
+    # 2026-10-13：FRED 三鍵接上後，本檔 cfg 裡的 FRED_API_KEY（原本只當遮蔽對象）會被「重新取數」交下去、
+    # 真的去打 FRED。本檔驗的是 VIX 那一條的畫面與寫表，故 FRED 三鍵在本檔改回 pending（只在測試內）；
+    # 金鑰有往下交的那一條另見 `test_FRED金鑰_重新取數從secrets讀好交給L2`。
+    monkeypatch.setattr(mi, "INDICATOR_SPECS", _fred_pending_specs())
     R.clear_cache()
     SB.reset_all()
     book.cfg = cfg

@@ -59,6 +59,7 @@ from datetime import date
 from typing import Callable, Optional
 
 from repositories import settings_sheet_repository as store
+from repositories.macro.fred_vintage import fetch_fred_vintages
 from repositories.macro.yf import fetch_yf_close
 from services.v2_tables import alo_holdings, fund_keys, nav_dividend
 from services.v2_tables import market_indicator as mi
@@ -97,7 +98,8 @@ PAGES_READING_SETTINGS = ("set", "alo", "hld")
 # 自己的快取，**不動來源冷卻、不呼叫全域清除**（`clear_all_caches`／`global_refresh_all`
 # 都會經 `_CACHE_REGISTRY` 裡的冷卻代理解除所有來源冷卻）。
 # `market_indicator` 經 `fetch_yf_close_with_error` 取 Yahoo，那一支走的是 `fetch_yf_close` 的快取。
-_CACHED_FETCHER_BY_SOURCE = {"Yahoo": fetch_yf_close}
+# 2026-10-13：FRED 三鍵接上（`fetch_fred_vintages_with_error` → `fetch_fred_vintages` 的快取），登記 "FRED"。
+_CACHED_FETCHER_BY_SOURCE = {"Yahoo": fetch_yf_close, "FRED": fetch_fred_vintages}
 
 
 def masker(secret_values) -> Callable[[str], str]:
@@ -398,17 +400,19 @@ def refetch_cached_functions() -> list:
 
 
 def refetch_market_indicator(secret_values, *,
-                             build: Callable = mi.build_market_indicator_table) -> dict:
+                             build: Callable = mi.build_market_indicator_table,
+                             fred_api_key: Optional[str] = None) -> dict:
     """set 頁「重新取數」（市場指標）：先清本次會用到的 L1 取數函式自己的快取，再照
     `run_market_indicator_fetch` 取數寫表。**不動來源冷卻、不呼叫全域清除**（`50` B9）。
     冷卻中的來源照樣由 L1（`infra.source_backoff`）擋下，不因清了快取就多打一次。"""
     for fetcher in refetch_cached_functions():
         fetcher.cache_clear()
-    return run_market_indicator_fetch(secret_values, build=build)
+    return run_market_indicator_fetch(secret_values, build=build, fred_api_key=fred_api_key)
 
 
 def run_market_indicator_fetch(secret_values, *,
-                               build: Callable = mi.build_market_indicator_table) -> dict:
+                               build: Callable = mi.build_market_indicator_table,
+                               fred_api_key: Optional[str] = None) -> dict:
     """set 頁「取數」：寫 `fetch_log_open` → 取數並寫表 → 寫 `fetch_log`。
 
     回傳 `{"table": build 的回傳（錯誤原文未遮）, "persist": sink.persist}`。
@@ -418,10 +422,16 @@ def run_market_indicator_fetch(secret_values, *,
     此時 `persist["log_message"]` 為 None，錯誤請讀 `persist["masked_errors"]`（見 `MarketIndicatorSheetSink`）。
     ⚠️ `market_indicator` 寫入時 gspread 上游失敗（會登記冷卻的那一類）時 `fetch_log` 寫不進去（被冷卻擋下）；
     標頭不符等不登記冷卻的失敗則照常寫出 `failed`。見檔頭 outcome 段的更正。
+    `fred_api_key`：FRED 三鍵的金鑰（2026-10-13 起；由 L3 讀好傳入，本層不讀 secrets）。
+    **只有給了才往 `build` 傳**，沒給就照舊只傳 `sink` —— 既有以 `build=` 注入的替身不必改簽名；
+    沒給時 L2 把 FRED 三鍵寫成「未設定 FRED_API_KEY」的取數失敗（`49` §4.1）。
     """
     sink = MarketIndicatorSheetSink(secret_values)
     sink.begin()
-    table = build(sink=sink)
+    if fred_api_key is None:
+        table = build(sink=sink)
+    else:
+        table = build(sink=sink, fred_api_key=fred_api_key)
     return {"table": table, "persist": sink.persist}
 
 
