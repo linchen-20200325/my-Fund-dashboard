@@ -505,6 +505,14 @@ def _proxy_used_by_infra() -> Optional[bool]:
         return None
 
 
+def _env_or_none(name: str) -> Optional[str]:
+    """環境變數值；未設或空白 → None（空字串不是 SHA，不當成值記錄、不猜）。"""
+    v = os.environ.get(name)
+    if v is None or not v.strip():
+        return None
+    return v.strip()
+
+
 def run(tickers, fetcher=None, pop_fail_kind=None, obs_date_fn=None,
         backoff_check=None, rejected=None) -> dict:
     """取數 ＋ 分析全部代號，回報告 dict（不寫檔）。"""
@@ -524,7 +532,14 @@ def run(tickers, fetcher=None, pop_fail_kind=None, obs_date_fn=None,
         "proxy_env_set": bool(os.environ.get("PROXY_URL", "").strip()),
         "proxy_used_by_infra": _proxy_used_by_infra(),
         "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+        # ⚠️ `github_sha` 保留原鍵名以免破壞既有讀法，但它＝**觸發 SHA**（GITHUB_SHA），
+        #    **不一定是實際執行的程式碼**：push 到按鈕分支觸發時，GITHUB_SHA 是按鈕分支那顆
+        #    commit，而 workflow 一律 checkout 當下的 main。要知道跑的是哪份程式碼看 `executed_sha`。
         "github_sha": os.environ.get("GITHUB_SHA"),
+        "trigger_sha": _env_or_none("GITHUB_SHA"),
+        # workflow 在 checkout 後以 `git rev-parse HEAD` 寫入；缺（例如本機直接跑）→ None，不猜。
+        "executed_sha": _env_or_none("PROBE_EXECUTED_SHA"),
+        "event_name": _env_or_none("GITHUB_EVENT_NAME"),
         "rejected_tickers": list(rejected or []),
         "tickers": {},
     }

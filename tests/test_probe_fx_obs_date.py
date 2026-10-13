@@ -431,3 +431,47 @@ def test_main_主要代號失敗_退出碼1但報告仍寫出(tmp_path, obs_fn):
     assert rc == 1
     rep = json.loads(out.read_text(encoding="utf-8"))
     assert rep["tickers"]["USDTWD=X"]["ok"] is False
+
+
+# ── 觸發 SHA vs 實際執行的 SHA ───────────────────────────────
+# push 到按鈕分支觸發時，GITHUB_SHA 是按鈕分支那顆 commit，但 workflow 一律 checkout main；
+# 報告必須分開記，且缺值記 None、不得拿其中一個去猜另一個。
+
+_TRIG = "1" * 40
+_EXEC = "2" * 40
+
+
+def test_報告分開記觸發SHA與實際執行SHA(monkeypatch, obs_fn):
+    monkeypatch.setenv("GITHUB_SHA", _TRIG)
+    monkeypatch.setenv("PROBE_EXECUTED_SHA", _EXEC)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    rep = probe.run([], fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "",
+                    obs_date_fn=obs_fn, backoff_check=_no_backoff)
+    assert rep["trigger_sha"] == _TRIG
+    assert rep["executed_sha"] == _EXEC
+    assert rep["event_name"] == "push"
+    assert rep["github_sha"] == _TRIG, "舊鍵 github_sha 保留，且語意＝觸發 SHA"
+
+
+@pytest.mark.parametrize("missing_value", [None, "", "   "])
+def test_環境變數缺或空_記None不猜(monkeypatch, obs_fn, missing_value):
+    monkeypatch.setenv("GITHUB_SHA", _TRIG)
+    for name in ("PROBE_EXECUTED_SHA", "GITHUB_EVENT_NAME"):
+        if missing_value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, missing_value)
+    rep = probe.run([], fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "",
+                    obs_date_fn=obs_fn, backoff_check=_no_backoff)
+    assert rep["executed_sha"] is None, "缺 PROBE_EXECUTED_SHA 不得拿 GITHUB_SHA 頂替"
+    assert rep["event_name"] is None
+    assert rep["trigger_sha"] == _TRIG
+
+
+def test_全部缺_三鍵皆None(monkeypatch, obs_fn):
+    for name in ("GITHUB_SHA", "PROBE_EXECUTED_SHA", "GITHUB_EVENT_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    rep = probe.run([], fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "",
+                    obs_date_fn=obs_fn, backoff_check=_no_backoff)
+    assert rep["trigger_sha"] is None and rep["executed_sha"] is None and rep["event_name"] is None
+    assert rep["github_sha"] is None
