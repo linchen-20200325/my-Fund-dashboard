@@ -1,4 +1,4 @@
-name: "探測：Yahoo 匯率日線觀測日（只讀，手動觸發）"
+name: "探測：Yahoo 匯率日線觀測日（只讀，手動／按鈕分支觸發）"
 
 # 目的：驗證 Yahoo `<幣別>TWD=X` 日線時間戳以世界協調時間取日期，是否等於該根 K 線代表的交易日
 # （`services/v2_tables/market_indicator.py` 的 `FX_OBS_DATE_RULE_VERIFIED` 閘門與 `_obs_date` 判準）。
@@ -6,8 +6,37 @@ name: "探測：Yahoo 匯率日線觀測日（只讀，手動觸發）"
 #
 # ⚠️ 只讀：不寫任何試算表、不碰使用者設定、不改正式行為；報告只推到專用分支
 #    `probe/fx-obs-date-results`（**不推 main、不推其他分支、不 force**）。
-# ⚠️ 只有手動觸發，沒有排程。
+# ⚠️ 沒有排程。觸發方式只有兩種：
+#    (1) 手動 `workflow_dispatch`；
+#    (2) push 到「按鈕分支」`probe/fx-obs-date-trigger`。
+#        起因：部分整合環境呼叫 dispatch API 會回 403（Resource not accessible by integration），
+#        無法手動觸發，故另開一個不靠 dispatch API 的觸發方式。
+#
+# ⛔ 按鈕分支只當「按鈕」用 —— 它的內容不被執行，執行的永遠是 main：
+#    - 探測步驟一律以 `actions/checkout` 指定 `ref: main`（見下方），
+#      所以往按鈕分支推入改過的腳本／requirements，**不會**拿著 contents: write 被執行。
+#    - 觸發分支 ≠ 報告分支（`probe/fx-obs-date-results`）；報告只推到報告分支，
+#      而報告分支不在 push 觸發清單內 → 不會自我觸發迴圈。
+#    - `workflow_dispatch` 也一律跑 main：從其他分支手動觸發，**不再**跑該分支的腳本。
+#      這是**有意的收緊**（原本 dispatch 會跑被選分支的內容）。
+#    - 報告分開記兩個 SHA：`trigger_sha`（觸發的那顆 commit，例如按鈕分支上的空 commit）
+#      與 `executed_sha`（checkout 後 `git rev-parse HEAD`，＝實際執行的 main）；
+#      舊鍵 `github_sha` 保留，語意＝觸發 SHA，**不等於**實際執行的程式碼。
+#    ⚠️ 據實揭露 `ref: main` 擋不到的一件事：push 事件執行的是「被推的那顆 commit 裡的
+#       這份 workflow 檔」本身（GitHub 的規則）。能推按鈕分支、**且能改 workflow 檔**的人，
+#       可以連這份 yml 一起改掉 —— 那條路 `ref: main` 擋不住。
+#       但若推送者只有 contents 寫入、**沒有 workflows 權限**（例如部分整合環境的 token），
+#       GitHub 會拒絕它推入改動 `.github/workflows/` 的 commit；此時它只能改腳本，
+#       **`ref: main` 就是唯一防線**。⚠️ 這個權限行為是依 GitHub 文件所述，**本 repo 未實測**。
+#    用法：按鈕分支請從 main 建立、上面不放任何改動。
+#    （例：先 `git fetch origin main`，再 `git push origin origin/main:refs/heads/probe/fx-obs-date-trigger`；
+#    要再跑一次就把 main 的新 SHA 再推過去，或推一顆空 commit。）
+#    ⚠️ 若 main 最新一顆 commit 訊息含 `[skip ci]`，把它推到按鈕分支**不會觸發**；
+#       改推一顆訊息**不含** `[skip ci]` 的空 commit。（此 GitHub 規則依文件所述，**未實測**。）
 on:
+  push:
+    branches:
+      - probe/fx-obs-date-trigger
   workflow_dispatch:
     inputs:
       tickers:
@@ -33,9 +62,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # ⛔ 一律跑 main 上的腳本：push 觸發時預設會 checkout 按鈕分支的內容，
+          #    這裡明確釘死 main，按鈕分支的內容永遠不被執行（見檔頭）。
+          ref: main
           # 不把 token 留在 .git/config：探測步驟（會跑 repo 內的 Python）拿不到推送權限；
           # 只有最後推送那一步臨時注入認證。
           persist-credentials: false
+
+      - name: Record executed SHA
+        # 記下「實際 checkout 並執行的那顆 commit」，與觸發 SHA 分開；腳本寫進報告的 `executed_sha`。
+        run: echo "PROBE_EXECUTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Setup Python
         uses: actions/setup-python@v5
