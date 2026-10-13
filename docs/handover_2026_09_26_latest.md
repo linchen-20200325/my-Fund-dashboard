@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-13 09:00 UTC（`date -u` 實測）
+最後更新：2026-10-13 09:06 UTC（`date -u` 實測）
 
 ---
 
@@ -205,7 +205,7 @@
 ~~→ **下一步（第五十二次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 進行「新版 UI 切換前盤點」（唯讀）：以屆時最新 main 為準，分「可直接預覽／尚缺工作／切換前必須裁示」三類；不切正式入口、不改 UI、不合併歷史 UI branch；**未經客戶確認不得把 Streamlit 正式入口切到新版**；(3) 請客戶裁示 backlog a～e 與 Core bucket 是否納入同規則，附總管推薦方案與理由。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（GitHub 實況由總管實測，main CI 以 GitHub 為準；對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main 與 #939、#940、#941 三個 merge commit，其餘為轉述、本組未驗。~~
 ~~→ **下一步（第五十三次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 本 PR（三條 `--no-ff` merge＋本交接本）依常設授權流程處理（CI 綠＋獨立稽核；**合併時不得 squash**，否則文件引用的 `e909ce2` 等原 SHA 不會進 main）；(3) 等客戶驗收 B 線預覽入口，**驗收前不得切換正式入口、不改 `app.py`**；(4) 「高優先唯讀資料語意稽核」（只追資料流，不修改；範圍見〈第五十三次更新〉一）；(5) 「新版 UI 切換前盤點」（唯讀，邊界維持第五十二次更新）；(6) 決策矩陣線框／位置方案以 B 線為基礎準備，等客戶看過 B 線 UI 後裁示。(3)～(6) 的先後本組未獲轉達，編號不代表順序。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-12 轉達（客戶裁示在對話中，repo 內無原文）；本組僅以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main ＝ `5bbf518`（#942 的 merge commit），並實查本 PR 三條分支原 SHA 皆保留、`docs/v2/CONSTITUTION.md` 的 sha256，其餘為轉述、本組未驗。~~
 ~~→ **下一步（第五十四次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：(1) 先 `git fetch`、核對 main 與 open PR；(2) 本分支 `docs/handover-54-and-v2-facts`（本交接本＋`docs/v2/49`、`53` 事實更正）由總管安排 PR、CI 與合併；(3) 依裁示 1、4、5 續做 B 線真資料（淨值已移交 A 鏈；累積點待客戶裁示閘門；裁示 4 的「B 線預存淨值檔無排程更新」先查明 repo 是否已有可復用更新機制，本批未查）；(4) 依裁示 2 把「舊 AI UI／舊 prompt／舊處置型功能」與「AI 分析能力」分開盤點；(5) 〈第五十四次更新〉四的登記事項未授權前不動工。(3)(4) 的先後本組未獲轉達，編號不代表順序。第五十三次「下一步」的 (4)(5)（總管轉述）：(4) 高優先唯讀資料語意稽核已完成並回報，客戶已改判為舊 UI 問題、只登記；(5) 新版 UI 切換前盤點已由裁示 1、6 取代。**刪除依裁示 6 的九道閘門依序進行（見〈第五十四次更新〉一之 6），「不得現在提前刪除」；切換 `app.py` 與實體刪除舊 UI／A 線只在正式切換批次做。****不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：客戶 2026-10-13 裁示，經總管轉達（對話中，repo 內無原文）；本組以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main ＝ `224f233`，並以 GitHub PR 列表核對 #943～#946 的 head SHA 等於各 merge commit 的第二個 parent，其餘為轉述、本組未驗。~~
-→ **下一步（第五十五次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：依序 (1) 配息分支 `feat/b-dividend-handover` 派組 11、組 12 對 `c0d682e2..687569bc` 做 delta 複驗 → 開 PR → 確認三條 check-run → merge；(2) 資產配置分支 `feat/b-alo-real-data` 先 merge main，再派組 7、組 8 對 `a8c50e9d..906a9f53` 做 delta 複驗 → 開 PR → CI → merge；(3) 檢查 main CI；(4) 向客戶做階段 A 報告，請客戶回覆 B1／B2；(5) 之後才排批 3（標的探索真資料、FX 驗證 workflow、AI 能力盤點），每批最多 3 項。刪除依第五十四次更新所列九道閘門，「不得現在提前刪除」。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。
+→ **下一步（第五十五次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：依序 (1) 配息分支 `feat/b-dividend-handover`：派兩組新的獨立稽核（新對話叫不回原本的組 7／8／11／12；派工時附本交接本〈第五十五次更新〉二的原稽核結論摘要）對 `c0d682e2..687569bc` 做 delta 複驗 → 開 PR → 確認三條 check-run → merge；(2) 資產配置分支 `feat/b-alo-real-data`：先 `git merge origin/main` 進該分支，再派兩組新的獨立稽核對 `a8c50e9d..<merge 後的新 head>` 做 delta 複驗（merge commit 一併驗：只帶進文件改動、無衝突殘留）→ 開 PR → CI → merge；不得先 merge main 卻只驗 `a8c50e9d..906a9f53`（head 會不等於稽核過的 SHA）；(3) 檢查 main CI；(4) 向客戶做階段 A 報告（定義見〈第五十五次更新〉二之 7），請客戶回覆 B1／B2；(5) 之後才排批 3（標的探索真資料、FX 驗證 workflow、AI 能力盤點），每批最多 3 項。刪除依第五十四次更新所列九道閘門，「不得現在提前刪除」，任何規模都不得提前刪。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。
 
 | 項目 | 狀態 | 下一步 |
 |---|---|---|
@@ -286,8 +286,8 @@
 | 【規格未定】MKT-4 存檔後是否即生效、MKT-5 `mkt_indicator_keys` 語意、47 Q-07（只填一欄）（第五十四次更新） | 待客戶裁示。出處：客戶 2026-10-13 裁示，經總管轉達（對話中，repo 內無原文）；本組以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main ＝ `224f233`，並以 GitHub PR 列表核對 #943～#946 的 head SHA 等於各 merge commit 的第二個 parent，其餘為轉述、本組未驗。 | 請客戶裁示；未裁前不動工 |
 | 登記事項（第五十四次更新） | 匯率觀測日規則未驗、`_exc_log` 射程有限、conftest 無全域網路阻斷、全敗基金重打不經主機冷卻的來源、B 線覆蓋率下降、`scripts/accumulate_nav_tw.py` 仍 import `ui.helpers`、已停止的現金%／幣別舊 UI 工作未提交，共七條，見〈第五十四次更新〉四。出處：客戶 2026-10-13 裁示，經總管轉達（對話中，repo 內無原文）；本組以 `git fetch` 後的 `git log --first-parent origin/main` 核對 main ＝ `224f233`，並以 GitHub PR 列表核對 #943～#946 的 head SHA 等於各 merge commit 的第二個 parent，其餘為轉述、本組未驗。 | 待派工；未授權前不動工 |
 | PR #947（交接本第五十四次更新＋49／53 事實回寫） | 已合併（第五十五次更新）：merge commit `9afe47e`（全長 `9afe47e68025d35ad96748dce47b5ac998e2b94f`；parents `224f233`、`6fc4c10`）。main push CI run 38361800460：Schema gate、Fast checks、Slow tests 三條 job 皆 success（本組以 GitHub 逐條查）。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 無 |
-| 未合併：`feat/b-dividend-handover`（B 線配息移交 A 鏈） | head `687569bc`，領先 main 6、落後 0（本組 `rev-list` 實查）；已 push、未開 PR。組 11、組 12 對 `c0d682e2` 判定無 blocking、可 merge；最後小修 `687569bc` 的 delta 複驗因使用量上限中止，未完成。內容見〈第五十五次更新〉二。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 組 11、12 對 `c0d682e2..687569bc` delta 複驗 → 開 PR → 三條 check-run → merge |
-| 未合併：`feat/b-alo-real-data`（資產配置接真淨值與非美元匯率鍵） | head `906a9f53`，領先 main 4、落後 5（落後的 5 個是 #947 的文件 commit；本組 `rev-list` 實查）；已 push、未開 PR。組 7、組 8 對 `19f6aa01`、`a8c50e9d` 兩輪無 blocking（組 8 指出 7 天門檻衝突，已改回 10 天）；`906a9f53` 的 delta 複驗中止，未完成。內容見〈第五十五次更新〉二。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 先 merge main → 組 7、8 對 `a8c50e9d..906a9f53` delta 複驗 → 開 PR → CI → merge |
+| 未合併：`feat/b-dividend-handover`（B 線配息移交 A 鏈） | head `687569bc`，領先 main 6、落後 0（本組 `rev-list` 實查）；已 push、未開 PR。組 11、組 12 對 `c0d682e2` 判定無 blocking、可 merge；最後小修 `687569bc` 的 delta 複驗因使用量上限中止，未完成。內容見〈第五十五次更新〉二。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 兩組新的獨立稽核（新對話叫不回原本的組 7／8／11／12；派工時附本交接本〈第五十五次更新〉二的原稽核結論摘要）對 `c0d682e2..687569bc` delta 複驗 → 開 PR → 三條 check-run → merge |
+| 未合併：`feat/b-alo-real-data`（資產配置接真淨值與非美元匯率鍵） | head `906a9f53`，領先 main 4、落後 5（落後的 5 個是 #947 的文件 commit；本組 `rev-list` 實查）；已 push、未開 PR。組 7、組 8 對 `19f6aa01`、`a8c50e9d` 兩輪無 blocking（組 8 指出 7 天門檻衝突，已改回 10 天）；`906a9f53` 的 delta 複驗中止，未完成。內容見〈第五十五次更新〉二。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 先 `git merge origin/main` 進分支 → 兩組新的獨立稽核對 `a8c50e9d..<merge 後的新 head>` delta 複驗（含 merge commit：只帶進文件改動、無衝突殘留）→ 開 PR → CI → merge |
 | 停工 worktree（第五十五次更新） | `fix/ccy-unrecognized-unset`、`fix/cash-pct-three-state` 有刻意不提交的停工改動（髒檔分別 12、15，總管轉述）。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。 | 保留；不 commit、不刪 |
 
 #### 分支清理盤點（第四十一次更新）
@@ -520,29 +520,52 @@
 
 出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論、停工改動的髒檔數與本機失敗歸因為轉述、本組未驗。本輪屬 C 級：因為只改交接本一檔；安全存檔，只寫事實，未做其他施工。
 
-**一、方向與原則（彙整；客戶裁示原文以〈第五十四次更新〉一為準，本段不改動原文）**
+**一之 (a)、客戶 2026-10-13 交接指示（原文）**（使用量上限安全存檔那則訊息；經總管轉達，對話中，repo 內無原文；以下逐字照抄）
 
-- B 線 `ui_v2/` 是未來唯一的正式 UI。
-- 流程：B 線真資料完成 → B 線預覽 → 客戶實際驗收 → 回歸測試 → 正式切換入口 → 實體刪除舊 UI／A 線 → Repository Cleanup／Dead Code Audit → 最終架構與回歸稽核。
-- 現在不得提前大規模刪除舊 UI。舊 UI／A 線處於待退役狀態：停止新功能，最終實體刪除；刪除前先抽離 B 線或排程仍需要的能力。刪除閘門沿用〈第五十四次更新〉一之 6 的九道。
-- 資料層與 AI 層分離：資料層只負責取得、清理、標準化、驗證，並提供可追溯的資料；AI 層只分析資料層已取得且可追溯的資料。禁止：AI 猜資料、缺值補 0、自行補值、從基金名稱推定屬性、AI 自行替換來源、未經核准新增 API／MCP／外部來源。
-- 復用既有多來源淨值鏈，不代表授權新增資料來源（裁示 4）。
-- LINE 每週換檔推播與每月配息日曆推播保留，已和 UI 解耦（#944）。
-- AI 分析能力不因舊 UI 退役而整體刪除，未來依 B 線架構重新接入（裁示 2）。
-- 決策矩陣等客戶看過 B 線之後再決定。
-- B 線預覽現況：入口 `ui_v2/app_preview.py`（`streamlit run ui_v2/app_preview.py`），非正式入口，`app.py` 不 import 它（守衛 `tests/ui_v2/test_preview_entry.py`）。依該檔檔頭：市場總覽、持倉體檢、資產配置、設定與診斷四頁走真資料；標的探索是示意資料，有標示。需 `SETTINGS_SHEET_ID`、`POLICY_SHEET_ID`、`google_service_account`（選填 `PROXY_URL`）；存檔與重新取數會寫入設定試算表。客戶是否已在 Streamlit Cloud 建好預覽 app、是否已開始驗收：**未驗**。⚠️ 資產配置的「真資料」在 main 上市值基準仍無淨值（真淨值在未合併分支 `feat/b-alo-real-data`）；配息在 main 上仍不取數（在未合併分支 `feat/b-dividend-handover`）。
+- 「【B 線 `ui_v2/` 是未來唯一正式 UI。】」
+- 「B 線真資料完成 → B 線預覽 → 客戶實際驗收 → 回歸測試 → 正式切換入口 → 實體刪除舊 UI / A 線 → Repository Cleanup / Dead Code Audit → 最終架構與回歸稽核」
+- 「現在不得提前大規模刪除舊 UI。」
+- 「資料層：只負責取得、清理、標準化、驗證與提供可追溯客觀資料。」
+- 「AI 層：只能分析資料層已取得且可追溯的資料。」
+- 「禁止：AI 猜資料、缺值補 0、缺值自行補值、從基金名稱猜客觀屬性、AI 自行替換資料來源、未經客戶核准新增 API / MCP / 外部資料源」
+- 「B 線復用 repo 既有多來源淨值鏈，不代表授權新增資料來源。」
+- 「舊 UI / A 線停止新功能開發。」
+- 「舊 UI 最終會實體刪除，不是永久保留。」
+- 「刪除前先保留／抽離 B 線或排程仍需要的資料與服務能力。」
+- 「LINE 每週換檔與每月配息日曆推播原則上保留並與 UI 解耦。」
+- 「AI 分析能力不是因舊 UI 退役而整體刪除；未來須依 B 線架構重新接入。」
+- 「決策矩陣仍等客戶實際看過 B 線後再決定。」
+
+> **總管註記**：此流程鏈與裁示 6 的九道刪除閘門併讀、取嚴。實體刪除仍須逐道通過裁示 6 的九道閘門（含 LINE 等非 UI 消費端解耦、最後依賴掃描、全套 CI）。『大規模』三字不得讀成小規模可先刪——依裁示 6『不得現在提前刪除』，任何規模都不得提前刪。
+
+**一之 (b)、彙整（只做指向，不改寫原文）**
+
+- 正式 UI、流程鏈、刪除時點：見一之 (a) 前三條；刪除閘門見〈第五十四次更新〉一之 6（裁示 6），兩者併讀取嚴（上方總管註記）。
+- 資料層與 AI 層：見一之 (a) 第 4～6 條。AI 禁止清單先依一之 (a) 第 6 條，再加裁示 2 的「產生直接買賣／加\u6e1b\u78bc處置指令」（〈第五十四次更新〉一之 2；跳脫碼依第 7 節〈禁詞〉體例，否則本檔自己會命中）。
+- 不新增資料來源：一之 (a) 第 7 條與裁示 4（〈第五十四次更新〉一之 4）。
+- 舊 UI／A 線待退役、刪除前先抽離：一之 (a) 第 8～10 條。
+- LINE 推播：一之 (a) 第 11 條與裁示 3；已由 #944 解耦。
+- AI 分析能力：一之 (a) 第 12 條與裁示 2。
+- 決策矩陣：一之 (a) 第 13 條與裁示 2。
+- **B 線預覽現況**：入口 `ui_v2/app_preview.py`（`streamlit run ui_v2/app_preview.py`），非正式入口，`app.py` 不 import 它（守衛 `tests/ui_v2/test_preview_entry.py`）。依該檔檔頭：市場總覽、持倉體檢、資產配置、設定與診斷四頁走真資料；標的探索是示意資料，有標示。需 `SETTINGS_SHEET_ID`、`POLICY_SHEET_ID`、`google_service_account`、`FRED_API_KEY`（選填 `PROXY_URL`）；`FRED_API_KEY` 沒設時，市場總覽 FRED 三鍵照實顯示取數失敗（「取數失敗：未設定 FRED_API_KEY」，依該檔檔頭）；存檔與重新取數會寫入設定試算表。客戶是否已在 Streamlit Cloud 建好預覽 app、是否已開始驗收：**未驗**。⚠️ 資產配置的「真資料」在 main 上市值基準仍無淨值（真淨值在未合併分支 `feat/b-alo-real-data`）；配息在 main 上仍不取數（在未合併分支 `feat/b-dividend-handover`）。
 
 **二、本輪狀態**
+
+- **批次劃分**（總管轉達）：批 2 ＝ 配息分支＋資產配置（alo）分支＋#947（已合併）；批 3 ＝ 標的探索（exp）真資料、FX 驗證 workflow、AI 能力盤點。每批最多 3 項。
 
 1. **main ＝ `9afe47e`**（#947 合併：交接本第五十四次更新＋49／53 事實回寫；parents `224f233`、`6fc4c10`）。main push CI run 38361800460：Schema gate、Fast checks、Slow tests 三條 job 皆 success（本組逐條查）。批 1 的 #944 `4f29b45`、#945 `2ced92b`、#946 `224f233` 與 #947 `9afe47e` 皆在 main。
 2. **未合併分支 a：`feat/b-dividend-handover` @ `687569bc`**（領先 main 6、落後 0；已 push、未開 PR）。
    - 內容：B 線配息移交 A 鏈——逐來源判定除息日、金額欄、幣別；丟列回報；覆蓋期間閘門；不配息要有認得代碼的證據；同步更正 49。
-   - 稽核：組 11、組 12 對 `c0d682e2` 判定無 blocking、可 merge；`687569bc`（最後小修）的 delta 複驗因使用量上限中止，未完成。
+   - 稽核（原稽核結論摘要，派新組時直接引用本段）：組 11、組 12 對 `c0d682e2` 判定無 blocking、可 merge；`687569bc`（最後小修）的 delta 複驗因使用量上限中止，未完成。
+   - 下一步：派**兩組新的獨立稽核**對 `c0d682e2..687569bc` 做 delta 複驗 → 開 PR → 確認三條 check-run → merge。
 3. **未合併分支 b：`feat/b-alo-real-data` @ `906a9f53`**（領先 main 4、落後 5；落後的 5 個是 #947 的文件 commit；已 push、未開 PR）。
    - 內容：資產配置市值基準改接真淨值與非美元匯率鍵；沒有分母時畫「來源缺」；except 只接 `OSError`；過期淨值（含 `cache_fallback`）不納入；淨值日超過 10 天不納入（對齊 hld 的客戶 2026-10-02 裁示並鎖定兩邊相等；第二輪錯用 7 天已改回 10 天，起因是總管派工單沒查到既有裁示）；notes 遮蔽。
-   - 稽核：組 7、組 8 對 `19f6aa01`、`a8c50e9d` 兩輪無 blocking（組 8 指出 7 天門檻衝突，已修）；`906a9f53` 的 delta 複驗中止，未完成。
-4. **其他 worktree**：`fix/ccy-unrecognized-unset`、`fix/cash-pct-three-state` 有刻意不提交的停工改動（髒檔 12、15），保留、不 commit、不刪。其餘 agent worktree 乾淨（總管轉述）。另有稽核組在 scratchpad 建的 detached worktree（`git worktree list` 可見，本組未查其狀態）。`.claude/worktrees/` 一律不 commit。
-5. **open PR**：只有 4 個舊 draft——#839、#837、#836、#791（本組以 GitHub 查），皆批 1 之前的舊稿，本輪未處理。
+   - 稽核（原稽核結論摘要，派新組時直接引用本段）：組 7、組 8 對 `19f6aa01`、`a8c50e9d` 兩輪無 blocking（組 8 指出 7 天門檻衝突，已修）；`906a9f53` 的 delta 複驗中止，未完成。
+   - 下一步：先 `git merge origin/main` 進 alo 分支，再派**兩組新的獨立稽核**對 `a8c50e9d..<merge 後的新 head>` 做 delta 複驗；merge commit 一併驗，確認只帶進文件改動、沒有衝突殘留 → 開 PR → CI → merge。⛔ 不得先 merge main 卻只驗 `a8c50e9d..906a9f53`：那樣合併時的 head 不等於稽核過的 SHA（`CLAUDE.md` §-2.A 第 6 款 (a)）。
+4. **稽核組不可延續**：新對話叫不回原本的組 7／8／11／12，一律改派兩組新的獨立稽核，派工時附上上列原稽核結論摘要（直接引用本交接本）。
+5. **其他 worktree**：`fix/ccy-unrecognized-unset`、`fix/cash-pct-three-state` 有刻意不提交的停工改動（髒檔 12、15），保留、不 commit、不刪。其餘 agent worktree 乾淨（總管轉述）。另有稽核組在 scratchpad 建的 detached worktree（`git worktree list` 可見，本組未查其狀態）。`.claude/worktrees/` 一律不 commit。
+6. **open PR**：#948（本交接本 PR，第五十五次更新；正在跑 CI 與稽核，由總管合併）；另有 4 個舊 draft——#839、#837、#836、#791（本組以 GitHub 查），皆批 1 之前的舊稿，本輪未處理。
+7. **「階段 A 報告」定義**（總管轉達：客戶 2026-10-13 規定的完整階段回報）：5 行以內，依序寫：完成什麼、最新 main SHA、CI／稽核結果、重要殘餘風險、下一階段能否自主繼續。不回報施工過程。
 
 **三、待客戶裁示（沿用第五十四次兩題，客戶尚未回覆）**
 
@@ -1336,9 +1359,9 @@
 **以最新 main 上本交接本第一節（★ 進度總表）為 SSOT**。出處：總管 2026-10-13 轉達（現場實測）；本組以 `git fetch` 後 `git log`、`git rev-list --left-right --count`、`git ls-remote` 重驗 SHA 與領先／落後數，以 GitHub 查 main CI 與 open PR；稽核結論與停工改動的髒檔數為轉述、本組未驗。
 
 1. 先 `git fetch`、核對 main（交接時 `9afe47e`）與兩條未合併分支 head（`687569bc`、`906a9f53`）。
-2. 配息分支：組 11、12 對 `c0d682e2..687569bc` delta 複驗 → 開 PR → 三條 check-run → merge。
-3. 資產配置分支：先 merge main；組 7、8 對 `a8c50e9d..906a9f53` delta 複驗 → 開 PR → CI → merge。
-4. 檢查 main CI；向客戶做階段 A 報告，請客戶回覆 B1／B2。
+2. 配息分支：兩組新的獨立稽核（新對話叫不回原本的組 7／8／11／12；派工時附本交接本〈第五十五次更新〉二的原稽核結論摘要）對 `c0d682e2..687569bc` delta 複驗 → 開 PR → 三條 check-run → merge。
+3. 資產配置分支：先 `git merge origin/main` 進分支，再派兩組新的獨立稽核對 `a8c50e9d..<merge 後的新 head>` delta 複驗（merge commit 一併驗：只帶進文件改動、無衝突殘留）→ 開 PR → CI → merge。不得只驗 `a8c50e9d..906a9f53`。
+4. 檢查 main CI；向客戶做階段 A 報告（5 行以內：完成什麼、最新 main SHA、CI／稽核結果、重要殘餘風險、下一階段能否自主繼續；不回報施工過程），請客戶回覆 B1／B2。
 5. 之後才排批 3（標的探索真資料、FX 驗證 workflow、AI 能力盤點），每批最多 3 項。
 6. 停工 worktree（`fix/ccy-unrecognized-unset`、`fix/cash-pct-three-state`）保留，不 commit、不刪；`.claude/worktrees/` 一律不 commit。
 7. 方向與原則見〈第五十五次更新〉一；刪除依九道閘門，「不得現在提前刪除」。
