@@ -170,6 +170,25 @@ def test_中間某版為缺值_那一版不寫_首個有值的版次為非修正
     assert [(r["release_date"], r["is_revised"]) for r in rows] == [("2026-08-15", False)]
 
 
+def test_邊界_公布日等於觀測日_照寫不擋(l1):
+    """M8（2026-10-13 稽核突變存活）：`before_obs` 擋的是「早於」；同一天公布（日頻常見）要寫。"""
+    l1.table[fred_series.FRED_T10Y2Y] = (_frame([("2026-09-30", "2026-09-30", _NOW, 0.55)]), None)
+    rows = _rows(mi.build_market_indicator_table(fred_api_key="KEY"), "term_spread_pct")
+    assert [(r["obs_date"], r["release_date"], r["value_num"], r["is_revised"]) for r in rows] == [
+        ("2026-09-30", "2026-09-30", 0.55, False)]
+
+
+def test_中間版次為缺值_那一版不寫_不以前後版補值(l1):
+    """M14（2026-10-13 稽核突變存活）：值—缺值—值 三版，只寫兩個有值的版次；缺值那一版的公布日不出現。"""
+    l1.table[fred_series.FRED_FED_FUNDS] = (_frame([
+        ("2026-07-01", "2026-08-01", "2026-08-15", 4.33),
+        ("2026-07-01", "2026-08-15", "2026-09-01", float("nan")),
+        ("2026-07-01", "2026-09-01", _NOW, 4.32)]), None)
+    rows = _rows(mi.build_market_indicator_table(fred_api_key="KEY"), "policy_rate_pct")
+    assert [(r["release_date"], r["value_num"], r["is_revised"]) for r in rows] == [
+        ("2026-08-01", 4.33, False), ("2026-09-01", 4.32, True)]
+
+
 @pytest.mark.parametrize("attrs_patch, needle", [
     ({"fetched_at": None}, "fetched_at"),
     ({"floor": None}, "realtime_floor"),

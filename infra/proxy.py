@@ -7,6 +7,7 @@ v11.0 分層歸位：本檔屬於 Infrastructure Layer，純 HTTP 基礎設施�
 向後相容：根目錄 proxy_helper.py 保留 `from infra.proxy import *` shim，
         E 階段收尾後 shim 刪除。
 """
+import re
 import threading
 
 import requests
@@ -402,6 +403,21 @@ def _note_success(key: str) -> bool:
     return _sb.record_success(key)
 
 
+# 例外字串裡的查詢字串（`?` 起到下一個空白／引號／括號為止）。
+_QUERY_IN_TEXT = re.compile(r"\?[^\s'\"()<>]*")
+
+
+def _exc_log(exc) -> str:
+    """例外 → 可印的字串：拿掉其中所有網址的查詢字串（2026-10-13，docs/v2/49 §4.9）。
+
+    requests 的連線類例外會把**完整網址**（含 `params` 編進去的 `api_key=`／`token=`）放進訊息，
+    例如 `Max retries exceeded with url: /fred/series/observations?series_id=…&api_key=…`。
+    與本檔 `_url_log = url.split("?")[0]` 同一個做法：從 `?` 起砍掉，網址的 host／path 照留。
+    只用在 print；回傳值、失敗分類、退避、快取一概不經過這裡。
+    """
+    return _QUERY_IN_TEXT.sub("", str(exc))
+
+
 def fetch_url(
     url:     str,
     headers: dict = None,
@@ -598,7 +614,7 @@ def fetch_url(
             # (刻意把 proxy 指向 127.0.0.1:9 讓它快速失敗)也因此被推過 60s timeout。
             # ⚠️ 與 429 的差異:429 是「對端限流」,sleep 後重試同一端點有意義;
             #    ProxyError 是「中繼站不存在」,重試沒有任何狀態會改變。
-            print(f"[proxy] ProxyError attempt {attempt+1} — 不重試,直接降級：{e}")
+            print(f"[proxy] ProxyError attempt {attempt+1} — 不重試,直接降級：{_exc_log(e)}")
             break
         except requests.exceptions.Timeout:
             _tmo += 1
@@ -611,7 +627,7 @@ def fetch_url(
             if attempt < retries - 1:
                 _t.sleep(2)
         except Exception as e:
-            print(f"[proxy] Error: {e}")
+            print(f"[proxy] Error: {_exc_log(e)}")
             break
 
     # v18.223：proxy 逾時（_tmo）同樣降級直連 — 原本只有 ProxyError/403 會降級，
@@ -630,7 +646,7 @@ def fetch_url(
                 return r_dc
             print(f"[proxy] 直連非 200：status={r_dc.status_code}")
         except Exception as e_dc:
-            print(f"[proxy] 直連失敗：{e_dc}")
+            print(f"[proxy] 直連失敗：{_exc_log(e_dc)}")
 
     # 收尾 log：原本這行是純 `return None`，零輸出 —— 呼叫端只知道「無回應」，
     # 完全無法分辨 402 額度用盡 / 404 dataset 不存在 / 逾時 / proxy 壞掉。
