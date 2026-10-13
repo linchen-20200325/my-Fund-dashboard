@@ -421,6 +421,9 @@ def withhold_not_ready_nav(dataset: dict, codes) -> dict:
     - 這幾檔在 `logic` 裡因此只是「沒有淨值列」，所有以淨值為輸入的值（區間報酬率、期間波動、最大回撤、
       配息佔淨值比的分母）走 `logic` 既有的 `nav_missing` 路徑印「⬜ 資料未備」（區間未設時與其他檔同樣印
       「⬜ 不適用：尚未設定區間」）—— 構造上**不可能**再拿過期淨值算出任何一個數，也不會補 0、不會猜值；
+      ~~HLD-1 卡尾與 HLD-5 照 `nav_missing` 寫「缺淨值」「nav 尚無資料」~~ → 總管 2026-10-13 裁決（狀態更新，不是漏刪）：
+      那兩句與實況（有資料、只是過期）不符，`build_live_model` 另把代碼與門檻交給 `logic`，改寫
+      「淨值超過 N 日未更新（資料未備）」「⬜ 資料未備：最近淨值已超過 N 日」；真正缺淨值的檔照舊；
     - `logic` 既有的 HLD-1／HLD-0 路徑對缺淨值的檔：不進偏離表、不計入偏離筆數，零列時燈為灰「⬜ 資料未備」——
       **資料未備不會觸發黃／紅燈，也不會產生任何結論句**（`deviation_rows` 的 `missing` 那一類）。
     - 配息列一格不動：期間配息合計（每單位配息 × 單位數）與本金類配息佔比不以淨值為輸入，照算。
@@ -816,7 +819,8 @@ def build_live_model(
     today = taiwan_today() if today is None else today
     fresh = nav_freshness(dataset, nav_provenance, today=today)
     # 客戶 2026-10-13 裁示：淨值日距今超過門檻 → 資料未備，過期淨值不交給 `logic` 計算任何一個數。
-    dataset = withhold_not_ready_nav(dataset, not_ready_codes(dataset, today=today))
+    stale_codes = not_ready_codes(dataset, today=today)
+    dataset = withhold_not_ready_nav(dataset, stale_codes)
     model = logic.build_page_model(
         dataset,
         fields=fields,
@@ -825,6 +829,9 @@ def build_live_model(
         demo_hint=False,
         applied_window=applied_window,
         applied_rules=applied_rules,
+        # 總管 2026-10-13 裁決：那幾檔寫「淨值超過 N 日」而不是「缺淨值／nav 尚無資料」；N 取共用常數。
+        nav_not_ready_codes=stale_codes,
+        nav_not_ready_days=NAV_FRESH_DAYS_YELLOW,
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)

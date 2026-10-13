@@ -274,6 +274,9 @@ def _dataset(
         "errors": errors,
         # `44` ALO-1／ALO-3／ALO-4 空狀態欄各有一句「存檔寫入失敗 → …」。
         "save_errors": {},
+        # 總管 2026-10-13 裁決：淨值日超過門檻而不納入市值的檔（正式模式由 `source.py` 交 `live.assemble_nav` 的 `too_old`）。
+        # 假資料沒有過期的檔 ⇒ 空；畫面一格不變（`logic.nav_not_ready`）。
+        "nav_not_ready": {"codes": [], "days": None},
     }
 
 

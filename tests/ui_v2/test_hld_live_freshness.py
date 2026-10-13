@@ -502,7 +502,9 @@ def test_部分過期_只有那一檔資料未備_其他檔逐格與全新鮮時
     hld1 = logic.find_block(model, "HLD-1")
     # 門檻是「最大回撤」與「配息佔淨值比」，兩者都以淨值為輸入 ⇒ 過期那一檔不進偏離表、只進「缺淨值」卡尾。
     assert "AAAA" not in {r["_fund_code"] for r in hld1["_rows"]}
-    assert "⬜ 另有 1 檔缺淨值，未列入" in hld1["tail_lines"]
+    # 總管 2026-10-13 裁決：過期的檔寫「淨值超過 10 日未更新」，不寫「缺淨值」（實況是有資料、只是過期）。
+    assert "⬜ 另有 1 檔淨值超過 10 日未更新（資料未備），未列入" in hld1["tail_lines"]
+    assert not [line for line in hld1["tail_lines"] if "缺淨值" in line]
     # 本頁沒有跨檔合計（核心卡自陳「沒有任何跨幣別的合計、平均或比值」）—— 其他檔的列照舊，不因一檔資料未備而少列或改數。
     assert [r for r in logic.find_block(fresh, "HLD-1")["_rows"] if r["_fund_code"] != "AAAA"] == hld1["_rows"]
 
@@ -575,3 +577,85 @@ def test_門檻只來自共用常數_換掉常數判定跟著變(monkeypatch):
     assert live.not_ready_codes(ds, today=_LAST + timedelta(days=11)) == frozenset()
     badge = _group(_model(today=_LAST + timedelta(days=11)), "HLD-2", "AAAA")["freshness_badge"]
     assert badge == {"_kind": "新鮮度", "_tone": "中性", "text": "延遲 11 日"}
+
+
+# ═══════════════ 總管 2026-10-13 裁決：「淨值過期而資料未備」與「淨值缺」字面可區分（兩頁一致） ═══════════════
+
+_ALO_LOGIC = _ROOT / "ui_v2" / "alo" / "logic.py"
+
+
+def _drop_nav(code):
+    def mutate(ds):
+        ds["nav"] = [r for r in ds["nav"] if r["fund_code"] != code]
+    return mutate
+
+
+def _both(*mutates):
+    def mutate(ds):
+        for m in mutates:
+            m(ds)
+    return mutate
+
+
+def test_過期與缺淨值_HLD1卡尾各寫各的_說明行只印一次():
+    """AAAA 淨值過期（有列、超過 10 日）、BBBB 真的缺淨值（一列都沒有）、CCCC 正常。"""
+    model = _model(today=FRESH, mutate=_both(_age_one("AAAA", 20), _drop_nav("BBBB")))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert "⬜ 另有 1 檔淨值超過 10 日未更新（資料未備），未列入" in hld1["tail_lines"]
+    assert "⬜ 另有 1 檔缺淨值，未列入" in hld1["tail_lines"]
+    assert hld1["tail_lines"].count(logic.HLD1_SKIPPED_NOTE) == 1
+    assert hld1["missing_nav_count"] == 1   # 只數真正缺淨值的那一檔
+
+
+def test_過期與缺淨值_HLD5淨值圖位置各寫各的():
+    model = _model(today=FRESH, mutate=_both(_age_one("AAAA", 20), _drop_nav("BBBB")))
+    texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(model, "HLD-5")["_items"]}
+    assert texts["AAAA"] == "⬜ 資料未備：最近淨值已超過 10 日"
+    assert texts["BBBB"] == "⬜ 資料未備：nav 尚無資料"          # 真正缺淨值：原字面一字未動
+    assert texts["CCCC"] == "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
+
+
+def test_只有缺淨值時_字面與裁決前逐字相同():
+    model = _model(today=FRESH, mutate=_drop_nav("BBBB"))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert "⬜ 另有 1 檔缺淨值，未列入" in hld1["tail_lines"]
+    assert not [line for line in hld1["tail_lines"] if "未更新" in line]
+    texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(model, "HLD-5")["_items"]}
+    assert texts["BBBB"] == logic.empty_source_text(["nav"])
+
+
+def test_過期字面的天數取共用常數_不寫死(monkeypatch):
+    monkeypatch.setattr(live, "NAV_FRESH_DAYS_YELLOW", 5)
+    model = _model(today=_LAST + timedelta(days=6))
+    hld1 = logic.find_block(model, "HLD-1")
+    assert "⬜ 另有 3 檔淨值超過 5 日未更新（資料未備），未列入" in hld1["tail_lines"]
+    texts = {i["_fund_code"]: i["nav_plot_text"] for i in logic.find_block(model, "HLD-5")["_items"]}
+    assert set(texts.values()) == {"⬜ 資料未備：最近淨值已超過 5 日"}
+
+
+def test_logic_有過期代碼卻沒給天數_raise():
+    args = _args()
+    with pytest.raises(ValueError, match="nav_not_ready_days"):
+        logic.build_page_model(**args, nav_not_ready_codes={"AAAA"})
+    with pytest.raises(TypeError, match="nav_not_ready_codes"):
+        logic.build_page_model(**_args(), nav_not_ready_codes="AAAA", nav_not_ready_days=10)
+
+
+def test_示範模式_不給過期代碼_一格不變():
+    args = _args()
+    assert logic.build_page_model(**copy.deepcopy(args)) == logic.build_page_model(
+        **copy.deepcopy(args), nav_not_ready_codes=frozenset(), nav_not_ready_days=None)
+
+
+def test_過期字面_兩頁逐字相同():
+    """hld 與 alo 不互相 import；同一句以 AST 從 alo 原始檔讀出比對。"""
+    import ast as _ast
+
+    for node in _ast.parse(_ALO_LOGIC.read_text(encoding="utf-8")).body:
+        if isinstance(node, _ast.Assign) and any(getattr(t, "id", None) == "NAV_NOT_READY_TEXT" for t in node.targets):
+            assert _ast.literal_eval(node.value) == logic.NAV_NOT_READY_TEXT
+            break
+    else:
+        raise AssertionError("ui_v2/alo/logic.py 沒有 NAV_NOT_READY_TEXT")
+    assert logic.nav_not_ready_text(10) == "⬜ 資料未備：最近淨值已超過 10 日"
+    assert logic.nav_not_ready_text(10) != logic.empty_source_text(["nav"])

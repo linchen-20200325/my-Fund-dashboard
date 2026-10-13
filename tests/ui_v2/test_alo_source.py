@@ -632,7 +632,11 @@ def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未
     assert wired["nav_table"]["rows"], "前提：L2 有寫列"
     assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["too_old"] == ["AAAA"]
     block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
-    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+    # ~~`== logic.empty_source_text(["nav"])`~~ → 總管 2026-10-13 裁決（狀態更新，不是漏刪）：過期的檔有資料、只是過期，
+    # 「nav 尚無資料」不實 ⇒ 改畫「最近淨值已超過 10 日」（天數取共用常數；期望值的 10 寫死，被測的是常數）。
+    assert out["dataset"]["nav_not_ready"] == {"codes": ["AAAA"], "days": 10}
+    assert block["placeholder"]["text"] == "⬜ 資料未備：最近淨值已超過 10 日"
+    assert block["placeholder"]["text"] != logic.empty_source_text(["nav"])
 
 
 def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(wired, monkeypatch):

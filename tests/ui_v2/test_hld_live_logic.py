@@ -181,7 +181,7 @@ def _within_limit(dataset, today):
     out = copy.deepcopy(dataset)
     if "nav" in out:
         out["nav"] = [r for r in out["nav"] if r["fund_code"] in keep]
-    return out
+    return out, frozenset(last) - keep
 
 
 # 2026-10-13：原本只有 10-02 一個日期（假資料最後一筆 9/18 → 14 天，當時只是黃燈、照算）。客戶裁示超過 10 天＝資料未備之後，
@@ -195,8 +195,10 @@ def test_正式模式只差三件事_其餘逐字與示範模式相同(name, tod
     args = _scenario_args(name)
     open_fund = _first_holding(args["dataset"])
     demo_args = copy.deepcopy(args)
-    demo_args["dataset"] = _within_limit(demo_args["dataset"], today)
-    demo = logic.build_page_model(**demo_args, open_fund=open_fund)
+    demo_args["dataset"], stale = _within_limit(demo_args["dataset"], today)
+    # 總管 2026-10-13 裁決：過期那幾檔的字面（HLD-1 卡尾、HLD-5）另寫，天數 10 寫死在這裡當期望值（被測的是共用常數）。
+    demo = logic.build_page_model(**demo_args, open_fund=open_fund,
+                                  nav_not_ready_codes=stale, nav_not_ready_days=10)
     fresh = live.nav_freshness(args["dataset"], _prov(args["dataset"]), today=today)
     expected = live._apply_freshness(live.apply_live_notes(_scrub(demo), today=today), fresh)
     got = _build(**args, open_fund=open_fund, today=today)

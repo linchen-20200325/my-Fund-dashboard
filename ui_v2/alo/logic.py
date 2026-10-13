@@ -236,6 +236,9 @@ GAPS = {
         " → 10 天〔ui_v2/alo/live.py::NAV_MAX_AGE_DAYS；出處 ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW，"
         "客戶 2026-10-02 裁示原話「門檻 10 天，非 44 規定，是本輪依長假實況訂的」；第三輪總管裁定，有意識的更正，不是漏刪〕）"
         "目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
+        "（→ 總管 2026-10-13 裁決，狀態更新，不是漏刪：其中因淨值日超過門檻而不納入的那幾檔，"
+        "改畫「⬜ 資料未備：最近淨值已超過 10 日」〔天數取 NAV_MAX_AGE_DAYS〕，與持倉體檢頁同一句；"
+        "預存序列與推估淨值照舊畫「nav 尚無資料」）"
         "（CLAUDE.md §2.4 禁止靜默返回，fail closed）。新鮮度呈現與理由字面待線框。"
         "淨值日期門檻：44 與 49 都沒有替 ALO 市值基準訂，~~本頁引用既有 SSOT，不自訂數字（總管 2026-10-13 第二輪裁定）~~"
         " → 本頁沿用 B 線既有的客戶裁示 10 天（第三輪）。"
@@ -484,6 +487,34 @@ def empty_source_text(source_keys) -> str:
     return "⬜ 資料未備：" + " 與 ".join(source_keys) + " 尚無資料"
 
 
+# 總管 2026-10-13 裁決（客戶同日裁示「淨值日距觀測日 > 10 天 → 資料未備」的字面細節；客戶 MKT-5 裁示要求狀態語意可區分）：
+# 淨值日超過門檻而不納入的檔（`live.assemble_nav` 的 `too_old`），~~畫「⬜ 資料未備：nav 尚無資料」~~ →
+# 畫這一句（狀態更新，不是漏刪）：那幾檔有淨值、只是過期，「尚無資料」不實。天數由正式模式從
+# `ui_v2/thresholds.py::NAV_NOT_READY_DAYS` 交進來（dataset 的 `nav_not_ready`），本檔不寫死。
+# ⚠️ 與 `ui_v2/hld/logic.py::NAV_NOT_READY_TEXT` 逐字相同（兩頁不互相 import，由測試逐字比對）。
+# ⚠️ 只換字面：計算行為一格未動（那幾檔照舊不納入市值、照舊走缺值路徑）。
+#    預存序列與推估淨值（`not_fresh` 的其餘部分）不在 `too_old` 裡，照舊畫「nav 尚無資料」—— 那一部分不在本次裁決射程。
+NAV_NOT_READY_TEXT = "⬜ 資料未備：最近淨值已超過 {days} 日"
+
+
+def nav_not_ready(dataset):
+    """`dataset["nav_not_ready"]` → (代碼集合, 天數)。沒有這個鍵（示範模式、舊呼叫端）＝ 沒有過期的檔。
+    形狀不對 → raise（不猜）：代碼要是字串的清單；有代碼時天數要是非負整數。"""
+    value = dataset.get("nav_not_ready")
+    if value is None:
+        return frozenset(), None
+    if not isinstance(value, dict) or set(value) != {"codes", "days"}:
+        raise TypeError(f"nav_not_ready 應為 {{'codes', 'days'}}：{value!r}")
+    codes, days = value["codes"], value["days"]
+    if isinstance(codes, (str, bytes)) or not isinstance(codes, (list, tuple, set, frozenset)) or not all(
+        isinstance(c, str) and c for c in codes
+    ):
+        raise TypeError(f"nav_not_ready 的 codes 應為代碼字串的清單：{codes!r}")
+    if codes and (isinstance(days, bool) or not isinstance(days, int) or days < 0):
+        raise ValueError(f"nav_not_ready 有代碼卻沒有合格的天數：{days!r}")
+    return frozenset(codes), days
+
+
 def not_applicable_text(reason: str) -> str:
     """`44` 5.5 `算不出來` 的文案模板。"""
     return "⬜ 不適用：" + reason
@@ -645,6 +676,10 @@ def basis_value(dataset, holding, basis):
         return float(holding["cost_twd"]), None
     nav = latest_nav(dataset, holding["fund_code"])
     if nav is None:
+        # 總管 2026-10-13 裁決：淨值過期而不納入的檔寫準確的那一句；真正缺淨值的照舊。
+        codes, days = nav_not_ready(dataset)
+        if holding["fund_code"] in codes:
+            return None, NAV_NOT_READY_TEXT.format(days=days)
         return None, empty_source_text(["nav"])
     value = holding["units_shares"] * nav["nav_orig_ccy"]
     if nav["ccy"] == "TWD":

@@ -460,6 +460,26 @@ TEXT_RULES_BAD = "門檻列未填齊，或格式不符"
 RULE_DIRECTIONS = ("低於", "高於")
 # HLD-1 卡尾，有檔因缺淨值未列入時的說明行（客戶 2026-10-03 裁示刪去後半句，見 `deviation_rows` 下方 `_build_hld1`）。
 HLD1_SKIPPED_NOTE = "未列入的檔不進上表、也不進偏離筆數。"
+# 總管 2026-10-13 裁決（客戶同日裁示「淨值日距觀測日 > 10 天 → 資料未備」的字面細節；客戶 MKT-5 裁示要求狀態語意可區分）：
+# 「淨值過期而資料未備」與「淨值缺」走不同字面 —— 前者有資料、只是超過門檻沒更新，寫成「缺淨值」或「nav 尚無資料」都不實。
+# 天數由呼叫端從 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS` 交進來（本檔不寫死、也不 import 它）。
+# ⚠️ 與 `ui_v2/alo/logic.py::NAV_NOT_READY_TEXT` 逐字相同（兩頁不互相 import，由測試逐字比對）。
+NAV_NOT_READY_TEXT = "⬜ 資料未備：最近淨值已超過 {days} 日"
+HLD1_NOT_READY_TAIL = "⬜ 另有 {n} 檔淨值超過 {days} 日未更新（資料未備），未列入"
+
+
+def nav_not_ready_text(days) -> str:
+    return NAV_NOT_READY_TEXT.format(days=days)
+
+
+def _check_not_ready(codes, days) -> frozenset:
+    """`nav_not_ready_codes`／`nav_not_ready_days` 的形狀。有代碼而沒有天數 → raise（不猜門檻）。"""
+    if isinstance(codes, (str, bytes)) or not isinstance(codes, (set, frozenset, list, tuple)):
+        raise TypeError(f"nav_not_ready_codes 應為代碼的集合：{codes!r}")
+    codes = frozenset(codes)
+    if codes and (isinstance(days, bool) or not isinstance(days, int) or days < 0):
+        raise ValueError(f"有 nav_not_ready_codes 卻沒有給合格的 nav_not_ready_days：{days!r}")
+    return codes
 TEXT_BOTH_EMPTY = "區間兩個欄位皆未填"
 TEXT_DIRECT_HOLD = "直接持有"
 # HLD-2 說明區的最後一行（示範模式照印）。抽成常數只為了讓 `live.py` 正式模式能逐字比對拿掉它
@@ -1208,7 +1228,7 @@ def deviation_rows(metrics, rules):
     （客戶 `H-01` 裁示；`44` HLD-1 空狀態 2026-09-22 改寫）。
     """
     rows = []
-    skipped = {"missing": set(), "missing_other": set(), "error": set(), "na": set()}
+    skipped = {"missing": set(), "missing_other": set(), "error": set(), "na": set(), "not_ready": set()}
     for metric in metrics:
         for rule in rules:
             name = rule["indicator"]
@@ -1227,7 +1247,9 @@ def deviation_rows(metrics, rules):
                 # ⛔ 不看區間內切片 `nav_rows`：表裡有淨值、只是區間內剛好沒有的檔，
                 #    不是缺淨值（紅隊 2026-10-02 指出）。
                 if metric["nav_missing"]:
-                    skipped["missing"].add(metric["_fund_code"])
+                    # 總管 2026-10-13 裁決：淨值過期而資料未備（正式模式由 live 把過期列拿掉）不是「缺淨值」，另計。
+                    kind = "not_ready" if metric.get("nav_not_ready") else "missing"
+                    skipped[kind].add(metric["_fund_code"])
                 else:
                     # 其他原因的 `資料未備`（配息表尚未接上；區間內一筆淨值都沒有，配息佔淨值比沒有分母）。
                     # ⚠️ 登記：`44` HLD-1 空狀態欄只替「缺淨值」寫了卡尾那一行，這一種沒有，
@@ -1263,7 +1285,7 @@ def deviation_rows(metrics, rules):
     rows.sort(key=lambda row: (row["_fund_code"], row["_indicator"]))
     # 取數失敗的那一檔**只算「取數失敗」**，不再同時算進缺淨值／其他缺漏／不適用
     # （總管 2026-10-02 J1 裁定）：同一檔進兩類，卡尾的計數會加總超過持倉檔數。
-    for kind in ("missing", "missing_other", "na"):
+    for kind in ("missing", "missing_other", "na", "not_ready"):
         skipped[kind] -= skipped["error"]
     return rows, skipped
 
@@ -1297,7 +1319,7 @@ def _is_missing_reason_line(line) -> bool:
 
 def _build_hld1(
     metrics, rules, *, has_holdings, fail_message=None, unsurfaced=None, pending=frozenset(),
-    settings_error=None, rules_unknown=False, holding_unknown=False,
+    settings_error=None, rules_unknown=False, holding_unknown=False, nav_not_ready_days=None,
 ):
     badges = [_redline_badge("G2†")]
     # ⛔ **本塊不掛「重新取數」按鈕**（客戶 2026-09-23 裁示；有意識的政策變更，不是漏刪）。
@@ -1323,7 +1345,7 @@ def _build_hld1(
     if not has_holdings and fail_message:
         # 與 `_build_core_card` 同一筆登記（`44` 沒有訂這一組先後；客戶 2026-09-23 對
         # `HLD-0` 裁示「改紅」，本輪同向辦並就地登記，待客戶覆核）。
-        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set(), "not_ready": set()}
         state = STATE_ERROR
         summary = fetch_failed_text(fail_message)
         detail_lines = [
@@ -1338,7 +1360,7 @@ def _build_hld1(
             None, text="", ccy="", error=fail_message, label="偏離筆數"
         )
     elif not has_holdings:
-        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set(), "not_ready": set()}
         state = STATE_MISSING
         summary = TEXT_NO_HOLDING
         detail_lines = [empty_source_text(["holding"]), TEXT_NO_HOLDING]
@@ -1347,13 +1369,13 @@ def _build_hld1(
         # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定：「未設定」字句全面拿掉）：
         #    門檻是讀不到，不是沒設定 —— 不畫「⬜ 不適用：尚未設定門檻」。主值走 `44` 5.5 `系統錯誤`，
         #    原因是設定讀取失敗的原文。只有有持倉時走得到這一支（空持倉時上面兩支先接走）。
-        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set(), "not_ready": set()}
         state = STATE_ERROR
         summary = fetch_failed_text(settings_error)
         detail_lines = [fetch_failed_text(settings_error), PRINT_AS_IS_LINE]
         placeholder = _metric(None, text="", ccy="", error=settings_error, label="偏離筆數")
     elif not rules:
-        rows, skipped = [], {"missing": set(), "error": set(), "na": set()}
+        rows, skipped = [], {"missing": set(), "error": set(), "na": set(), "not_ready": set()}
         state = STATE_BIZ
         summary = TEXT_NO_RULES
         detail_lines = ["不以任何內建值代替。"]
@@ -1390,7 +1412,7 @@ def _build_hld1(
             state = STATE_ERROR
             summary = ERR_TEXT
             placeholder = _metric(None, text="", ccy="", error=reason, label="偏離筆數")
-        elif not rows and (skipped["missing_other"] or skipped["missing"]):
+        elif not rows and (skipped["missing_other"] or skipped["missing"] or skipped["not_ready"]):
             # 零列，但有檔的門檻指標是 `資料未備`（而且不是缺淨值那一種）⇒ 「無偏離項」與
             # 「沒有任何一檔超出」都是假話：那幾檔超不超出，不知道（紅隊 2026-10-02 指出）。
             # 字樣只用 `44` 已宣告的：主值位置 `⬜ 資料未備`（`44` 5.1 卡片表 `資料未備` 那一列），
@@ -1433,6 +1455,13 @@ def _build_hld1(
             # → 客戶 2026-10-03 裁示（有意識的更正，不是漏刪）：燈改數不重複的檔（N1）之後，
             #   同一檔超出兩條門檻時 N 小於列數，後半句不再成立 ⇒ 只刪「；燈上的 N 與本卡列數因此相等」，
             #   前半句一字不改。與 `44` 的偏離登記在 `ACCEPTANCE.md` 第九節。
+            # 📌 總管 2026-10-13：這一行改由下方「缺淨值或淨值過期」共用（只印一次），字面一字未改。
+        if skipped["not_ready"]:
+            # 總管 2026-10-13 裁決：淨值過期的檔另寫一行，不併進「缺淨值」（兩者實況不同）。
+            tail_lines.append(
+                HLD1_NOT_READY_TAIL.format(n=len(skipped["not_ready"]), days=nav_not_ready_days) + _hint()
+            )
+        if skipped["missing"] or skipped["not_ready"]:
             tail_lines.append(HLD1_SKIPPED_NOTE)
         if skipped["error"]:
             tail_lines.append(
@@ -2052,7 +2081,7 @@ def _sync_field_value(raw):
 
 
 def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False,
-                settings_error=None, holding_error=None, holding_unknown=False):
+                settings_error=None, holding_error=None, holding_unknown=False, nav_not_ready_days=None):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
     items = []
@@ -2097,6 +2126,9 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
                     if window_unknown
                     else "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
                     if has_nav
+                    # 總管 2026-10-13 裁決：淨值過期而資料未備 ≠ nav 尚無資料，寫準確的那一句。
+                    else nav_not_ready_text(nav_not_ready_days)
+                    if metric.get("nav_not_ready")
                     # `44` :708 明文回指 §5.5 模板，不是自己寫一句散文。
                     else empty_source_text(["nav"])
                 ),
@@ -2470,6 +2502,8 @@ def build_page_model(
     demo_hint: bool = True,
     applied_window=None,
     applied_rules=None,
+    nav_not_ready_codes=frozenset(),
+    nav_not_ready_days=None,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
 
@@ -2480,6 +2514,11 @@ def build_page_model(
     `None` ＝ 照舊用存過的門檻（`saved_rules`）。
 
     `open_fund`：展開中那一列持倉的 `holding_id`（2026-10-02 起；之前是 `fund_code`）。
+
+    `nav_not_ready_codes`／`nav_not_ready_days`（總管 2026-10-13 裁決，客戶同日裁示）：淨值日距觀測日超過門檻、
+    淨值列已由正式模式（`live.withhold_not_ready_nav`）拿掉的那幾檔，以及門檻天數。只影響**字面**：
+    那幾檔在 HLD-1 卡尾與 HLD-5 寫「淨值超過 N 日」而不是「缺淨值／nav 尚無資料」；值的狀態一格不動。
+    預設（空集合）＝ 示範模式，輸出逐字同前。
 
     `demo_hint`：數字後面要不要接「（示意）」（2026-10-02 S3；客戶裁示 2-A）。
     預設 `True` ＝ 示範模式，輸出逐字同前；正式模式（`ui_v2/hld/live.py`）傳 `False`。
@@ -2500,13 +2539,15 @@ def build_page_model(
         return _build_page_model(
             dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund,
             applied_window=applied_window, applied_rules=applied_rules,
+            nav_not_ready_codes=nav_not_ready_codes, nav_not_ready_days=nav_not_ready_days,
         )
     finally:
         _HINT_SUFFIX.reset(token)
 
 
 def _build_page_model(
-    dataset, *, fields, viewport_width, open_fund, applied_window=None, applied_rules=None
+    dataset, *, fields, viewport_width, open_fund, applied_window=None, applied_rules=None,
+    nav_not_ready_codes=frozenset(), nav_not_ready_days=None,
 ) -> dict:
     # 📌 2026-10-05「讀取失敗不說空」（客戶 2026-10-05 核准開工）：讀不到不等於空。
     #    設定或持倉表讀取失敗時，不從空列表推出「未設定」或「尚未建立任何持倉」。
@@ -2538,6 +2579,12 @@ def _build_page_model(
     # `fund_errors` 形狀先驗：空持倉時 `fund_metrics()` 一次也不會跑，壞形狀不得因此靜默通過（§1）。
     fund_errors(dataset)
     metrics = all_metrics(dataset, applied_window, window_error=settings_error if window_unknown else None)
+    # 總管 2026-10-13 裁決：只標記，不改任何一個值（那幾檔的淨值列在進來之前就已經不在了）。
+    not_ready = _check_not_ready(nav_not_ready_codes, nav_not_ready_days)
+    # 只在真的過期時才加這個鍵：示範模式與沒有過期檔時，模型逐鍵與裁決前相同（既有的整頁雜湊不因此漂移）。
+    for metric in metrics:
+        if metric["_fund_code"] in not_ready:
+            metric["nav_not_ready"] = True
     has_holdings = bool(dataset.get("holding"))
     has_window = window_is_valid(applied_window)
 
@@ -2554,6 +2601,7 @@ def _build_page_model(
         settings_error=settings_error,
         rules_unknown=rules_unknown,
         holding_unknown=holding_unknown,
+        nav_not_ready_days=nav_not_ready_days,
     )
     hld2 = _build_core_card(
         "HLD-2",
@@ -2610,6 +2658,7 @@ def _build_page_model(
             dataset, metrics, open_fund=open_fund, has_window=has_window,
             window_unknown=window_unknown, settings_error=settings_error,
             holding_error=holding_error, holding_unknown=holding_unknown,
+            nav_not_ready_days=nav_not_ready_days,
         ),
         _build_hld6(dataset),
         _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings),
