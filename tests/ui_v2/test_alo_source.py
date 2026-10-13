@@ -145,7 +145,12 @@ def wired(monkeypatch):
     monkeypatch.setattr(source.nav_dividend, "build_nav_table", _build)
     monkeypatch.setattr(source.nav_dividend, "fetch_nav_chain_with_error", _fetch_nav)
     monkeypatch.setattr(source.market_indicator, "fetch_yf_close_with_error", _fetch_fx)
+    # 第二輪 N-b：淨值日新鮮度以台灣日曆日判，固定「今天」（替身淨值日 2026-09-23 → 距今 2 天）。
+    monkeypatch.setattr(source, "_today_tw", lambda: _TODAY)
     return state
+
+
+_TODAY = __import__("datetime").date(2026, 9, 25)
 
 
 _FAKE_SECRET = "zz-fake-secret-a10c"
@@ -293,12 +298,13 @@ def test_市值基準_代碼對照查不到與幣別衝突_那一檔資料未備
 
 
 def test_市值基準_代碼對照本身拋例外_原文經遮蔽進errors_nav_整頁畫得完(wired):
+    """第二輪 N-a：只接取數類例外（OSError 家族）；~~RuntimeError~~ 改用 ConnectionError（有意識的更正，不是漏刪）。"""
     source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
     wired["settings"] = _mv_settings()
-    wired["resolve"] = RuntimeError(f"對照表讀不到 {_FAKE_SECRET}")
+    wired["resolve"] = ConnectionError(f"對照表讀不到 {_FAKE_SECRET}")
     out = source.load_live()
     error = out["dataset"]["errors"]["nav"]
-    assert error.startswith("RuntimeError: 對照表讀不到") and _FAKE_SECRET not in error
+    assert error.startswith("ConnectionError: 對照表讀不到") and _FAKE_SECRET not in error
     assert logic.build_page_model(out["dataset"])["title"] == logic.PAGE_TITLE
 
 
@@ -465,10 +471,10 @@ def test_save_setting_寫表以外的例外照樣往上拋(wired, monkeypatch):
 def test_B2_取數呼叫拋例外_記log_原文經遮蔽進errors(wired, caplog):
     source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
     wired["settings"] = _mv_settings()
-    wired["resolve"] = RuntimeError(f"對照表讀不到 {_FAKE_SECRET}")
+    wired["resolve"] = OSError(f"對照表讀不到 {_FAKE_SECRET}")   # 第二輪 N-a：~~RuntimeError~~ → OSError
     with caplog.at_level("WARNING", logger=source.__name__):
         out = source.load_live()
-    assert out["dataset"]["errors"]["nav"].startswith("RuntimeError: 對照表讀不到")
+    assert out["dataset"]["errors"]["nav"].startswith("OSError: 對照表讀不到")
     logged = [r.getMessage() for r in caplog.records if r.name == source.__name__]
     assert logged and "fund_keys.resolve_full_keys" in logged[0]
     assert _FAKE_SECRET not in "".join(logged)                         # log 也只記遮蔽後的原文
@@ -521,3 +527,82 @@ def test_N1_預存舊序列_在市值基準下不納入_畫資料未備(wired):
     assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["not_fresh"] == ["AAAA"]
     block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
     assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+
+
+# ═══════════════════════ 2026-10-13 第二輪 N-a：外層只接取數類例外 ═══════════════════════
+
+
+def test_Na_L2拋AssertionError_往上拋_不標成取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def broken(funds, **kw):
+        raise AssertionError("nav 列的欄位與契約不符：['x']")
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", broken)
+    with pytest.raises(AssertionError, match="欄位與契約不符"):
+        source.load_live()
+
+
+def test_Na_對照拋ValueError_往上拋(wired):
+    wired["settings"] = _mv_settings()
+    wired["resolve"] = ValueError("mapping 的鍵不合格")
+    with pytest.raises(ValueError, match="mapping 的鍵不合格"):
+        source.load_live()
+
+
+def test_Na_匯率L2拋ValueError_往上拋(wired, monkeypatch):
+    """例：把美元交給 `build_fx_indicator_table` —— 程式錯誤，不是取數失敗。"""
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    monkeypatch.setattr(source.live, "fx_ccys_needed", lambda rows: ["USD"])
+    with pytest.raises(ValueError, match="不走這裡"):
+        source.load_live()
+
+
+def test_Na_匯率取數拋OSError_才是取數失敗(wired, monkeypatch):
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+
+    def down(ccys):
+        raise TimeoutError("Yahoo 逾時")
+
+    monkeypatch.setattr(source.market_indicator, "build_fx_indicator_table", down)
+    assert source.load_live()["dataset"]["errors"]["market_indicator"] == "TimeoutError: Yahoo 逾時"
+
+
+# ═══════════════════════ 2026-10-13 第二輪 N-b：淨值日期超過 SSOT 門檻不納入 ═══════════════════════
+
+
+def test_Nb_門檻引用既有SSOT_不另立數字():
+    from shared.signal_thresholds import MJ_FRESH_DAYS_YELLOW
+    assert source.contract.NAV_MAX_AGE_DAYS == MJ_FRESH_DAYS_YELLOW
+
+
+def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備(wired):
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5, day="2026-05-20")
+    s.attrs["fetched_at"] = "2026-09-25T01:00:00+00:00"            # 取得時間是今天：不能拿它判新鮮
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert wired["nav_table"]["rows"], "前提：L2 有寫列"
+    assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["too_old"] == ["AAAA"]
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+
+
+def test_Nb_source交給assemble_nav的是SSOT門檻與台灣日曆日(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+    seen = {}
+    real = source.live.assemble_nav
+
+    def spy(**kw):
+        seen.update(kw)
+        return real(**kw)
+
+    monkeypatch.setattr(source.live, "assemble_nav", spy)
+    source.load_live()
+    assert seen["max_age_days"] == source.contract.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
+    monkeypatch.undo()
+    assert source._today_tw() == __import__("datetime").datetime.now(source.nav_dividend.MARKET_DATE_TZ).date()

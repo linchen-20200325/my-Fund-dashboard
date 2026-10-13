@@ -299,7 +299,9 @@ def test_live的import就是那幾個_純函式模組():
             prefix = ("." * node.level) + (node.module or "")
             names.add(prefix)
             names.update(prefix + ("." if node.module else "") + a.name for a in node.names)
-    assert names == {"__future__", "__future__.annotations", "copy", "json", "math", "re", ".", ".logic"}, names
+    # 2026-10-13 第二輪 N-b：加 `datetime.date`（解析淨值日；標準庫、純函式，不讀時鐘 —— today 由呼叫端注入）。
+    assert names == {"__future__", "__future__.annotations", "copy", "datetime", "datetime.date", "json", "math", "re",
+                     ".", ".logic"}, names
 
 
 # ═══════════════════════ ALO-GAP-分母全缺：總管 2026-09-28 盯住的那條界線 ═══════════════════════
@@ -737,9 +739,14 @@ def _keys(codes, fail=()):
     return [{"input": c, "ok": c not in fail} for c in codes]
 
 
-def _assemble(table, codes=("AAAA", "BBBB"), fail=(), mask=lambda m: m.replace("SECRET", "＊")):
+_TODAY = __import__("datetime").date(2026, 9, 25)
+
+
+def _assemble(table, codes=("AAAA", "BBBB"), fail=(), mask=lambda m: m.replace("SECRET", "＊"),
+              today=_TODAY, max_age_days=7):
     return live.assemble_nav(holding_codes=list(codes), key_results=_keys(codes, fail), nav_table=table,
-                             empty_without_reason=_EMPTY, nav_unavailable_withheld=_FOUR, mask=mask)
+                             empty_without_reason=_EMPTY, nav_unavailable_withheld=_FOUR, mask=mask,
+                             today=today, max_age_days=max_age_days)
 
 
 def test_assemble_nav_失敗原文逐檔遮蔽串成一句_來源回空與扣下不算失敗():
@@ -915,3 +922,75 @@ def test_N2_notes裡的live_error經遮蔽():
     out = _assemble(table)
     assert out["notes"]["provenance"]["AAAA"]["live_error"] == "上一次 ＊ 失敗"
     assert table["provenance"]["AAAA"]["live_error"] == "上一次 SECRET 失敗"   # 不改輸入
+
+
+# ═══════════════════════ 2026-10-13 第二輪：N-b 淨值日期、N-c 遮蔽、is_estimated 缺欄／None ═══════════════════════
+
+
+def test_第二輪4_is_estimated為None_不納入():
+    table = _nav_table(rows=[_nav_row("AAAA", estimated=None), _nav_row("BBBB")],
+                       fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    out = _assemble(table)
+    assert [r["fund_code"] for r in out["nav"]] == ["BBBB"] and out["notes"]["not_fresh"] == ["AAAA"]
+
+
+def test_第二輪4_is_estimated缺欄_不納入():
+    row = _nav_row("AAAA")
+    del row["is_estimated"]
+    table = _nav_table(rows=[row, _nav_row("BBBB")], fetched={"AAAA": 1, "BBBB": 1},
+                       provenance={"AAAA": _prov(), "BBBB": _prov()})
+    out = _assemble(table)
+    assert [r["fund_code"] for r in out["nav"]] == ["BBBB"] and out["notes"]["not_fresh"] == ["AAAA"]
+
+
+def _dated_row(code, day):
+    return dict(_nav_row(code), nav_date=day)
+
+
+def test_第二輪Nb_淨值日超過門檻天數_不納入_剛好等於門檻照收():
+    """今天 2026-09-25、門檻 7 天：09-18（7 天）照收、09-17（8 天）不納入（🔴 > 7d）。"""
+    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-17"), _dated_row("BBBB", "2026-09-18")],
+                       fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    out = _assemble(table)
+    assert [r["fund_code"] for r in out["nav"]] == ["BBBB"]
+    assert out["notes"]["too_old"] == ["AAAA"] and out["notes"]["not_fresh"] == ["AAAA"]
+    assert out["error"] is None                                            # 不是取數失敗，是資料未備
+
+
+def test_第二輪Nb_看的是該檔最新一筆淨值日_不是fetched_at():
+    """即時取回（fetched_at 是今天）卻是四個月前的淨值 → 照樣不納入；同一檔有一筆夠新 → 整檔照收。"""
+    old = dict(_dated_row("AAAA", "2026-05-20"), fetched_at="2026-09-25T01:00:00+00:00")
+    table = _nav_table(rows=[old, _dated_row("BBBB", "2026-05-20"), _dated_row("BBBB", "2026-09-24")],
+                       fetched={"AAAA": 1, "BBBB": 2}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    out = _assemble(table)
+    assert out["notes"]["too_old"] == ["AAAA"]
+    assert {r["fund_code"] for r in out["nav"]} == {"BBBB"}
+
+
+def test_第二輪Nb_門檻由呼叫端注入_today型別不對就炸():
+    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-20")], fetched={"AAAA": 1, "BBBB": 0},
+                       provenance={"AAAA": _prov()})
+    assert _assemble(table, max_age_days=4)["notes"]["too_old"] == ["AAAA"]
+    assert _assemble(table, max_age_days=5)["notes"]["too_old"] == []
+    with pytest.raises(TypeError):
+        _assemble(table, today="2026-09-25")
+    with pytest.raises(TypeError):
+        _assemble(table, max_age_days=7.0)
+
+
+def test_第二輪Nc_chain_failures與累積表read_error經遮蔽_不改輸入():
+    prov = _prov(chain_failures="頁型 yp010001：SECRET 逾時",
+                 nav_history={"source": "nav_history", "points": 0, "read_error": "讀表 SECRET 403"})
+    table = _nav_table(rows=[_nav_row("AAAA")], fetched={"AAAA": 1, "BBBB": 0}, provenance={"AAAA": prov})
+    out = _assemble(table)
+    got = out["notes"]["provenance"]["AAAA"]
+    assert got["chain_failures"] == "頁型 yp010001：＊ 逾時"
+    assert got["nav_history"]["read_error"] == "讀表 ＊ 403"
+    assert "SECRET" not in repr(out["notes"])
+    assert prov["chain_failures"] == "頁型 yp010001：SECRET 逾時"
+    assert prov["nav_history"]["read_error"] == "讀表 SECRET 403"          # 深拷貝，不改輸入
+
+
+def test_第二輪6_兩筆只登記不改行為的GAP在():
+    assert "ALO-GAP-部分缺的內外判讀" in logic.GAPS and "ALO-GAP-同類別多理由" in logic.GAPS
+    assert "不是 False（含缺欄或 None）" in logic.GAPS["ALO-GAP-過期淨值不納入"]

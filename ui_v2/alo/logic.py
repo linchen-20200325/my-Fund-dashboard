@@ -231,8 +231,20 @@ GAPS = {
     ),
     "ALO-GAP-過期淨值不納入": (
         "本頁沒有淨值新鮮度的位置（加位置要先出線框）。過期或預存淨值（provenance 帶 cache_fallback 或 stale、"
-        "或淨值列 is_estimated 為真）目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
+        "~~或淨值列 is_estimated 為真~~ → 或淨值列 is_estimated 不是 False（含缺欄或 None）、"
+        "或最新淨值日距今（台灣日曆日）超過 shared/signal_thresholds.py 的 MJ_FRESH_DAYS_YELLOW〔經 contract.NAV_MAX_AGE_DAYS〕）"
+        "目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
         "（CLAUDE.md §2.4 禁止靜默返回，fail closed）。新鮮度呈現與理由字面待線框。"
+        "淨值日期門檻：44 與 49 都沒有替 ALO 市值基準訂，本頁引用既有 SSOT，不自訂數字（總管 2026-10-13 第二輪裁定）。"
+    ),
+    # ── 2026-10-13 第二輪補登（只登記、不改行為；兩者在 224f233 就已存在）──
+    "ALO-GAP-部分缺的內外判讀": (
+        "部分類別缺基準值時，分母不含被排除的類別（ALO-GAP-分母），「有目標、沒持倉」的類別畫成 0.0%、"
+        "差額與容許帶內外照算（常標「外」）—— 那個內外是用不完整的分母算出來的。44 沒寫這種情形，本頁照舊畫，據實登記。"
+    ),
+    "ALO-GAP-同類別多理由": (
+        "同一個類別內有兩檔以上缺基準值、而且理由不同（例：一檔缺 nav、一檔缺換算匯率）時，"
+        "ALO-2 那一格只顯示依持倉順序遇到的第一種理由。44 沒寫並列畫法，本頁照舊，據實登記。"
     ),
 }
 
@@ -664,7 +676,8 @@ def exceeds(diff, tolerance) -> bool:
 
 
 def _category_values(dataset, basis, bucket_names):
-    """回 {類別: {"value": float|None, "reason": str|None, "count": int}}，依持倉出現順序。"""
+    """回 {類別: {"value": float|None, "reason": str|None, "count": int}}，依持倉出現順序。
+    ALO-GAP-同類別多理由：同一類別遇到的第一種缺值理由就定案，後面的理由不再記。"""
     values = {}
     for holding in aggregated_holdings(dataset):
         cat = category_of(holding, bucket_names)
@@ -763,6 +776,7 @@ def _build_alo2(dataset) -> dict:
                 row["_current_pct"] = None
                 row["current_text"] = "⬜"
             else:
+                # ALO-GAP-部分缺的內外判讀：部分缺時分母不完整，有目標、沒持倉的類別照算 0.0% 與內外。
                 row["_current_pct"] = slot["value"] / denominator * 100.0
                 row["current_text"] = format_share(row["_current_pct"])
             if not has_target:

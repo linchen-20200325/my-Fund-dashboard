@@ -55,10 +55,13 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 
 import streamlit as st
 
-from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
+from services.v2_tables import (
+    alo_holdings, contract, fund_keys, market_indicator, masking, nav_dividend, settings_store,
+)
 
 from . import live
 
@@ -92,6 +95,27 @@ _SKIP_GROUPS = (
     "skipped_tabs",
     "invest_twd_parse_errors",
 )
+
+
+# 外層 `except` 只接這一組（2026-10-13 第二輪稽核 N-a；總管技術裁定）。逐一列舉三個呼叫會往外拋什麼（本組讀原始碼）：
+# - `fund_keys.resolve_full_keys(list)`：自己 raise 的只有 TypeError（引數不是 list／tuple；本檔恆傳 list）與
+#   注入對照表時的 TypeError／ValueError（本檔不注入）。讀對照表 `repositories/fund/sources.py::load_fund_code_mapping`
+#   以 `os.path.exists` 判檔、`pd.read_csv` 包在 `except Exception` 內 print 後退回內建表 —— **讀檔失敗不往外拋**，
+#   也沒有明文定義的讀檔失敗例外型別。⇒ 實務上沒有任何取數例外會漏出來。
+# - `nav_dividend.build_nav_table`：L1（A 鏈）呼叫都經 `_call` 轉成錯誤字串；往外拋的只剩 `_group_funds` 的
+#   ValueError（輸入不合契約）、`_check_rows_order` 的 AssertionError、`ReconcileError`（AssertionError 子類）——
+#   全是程式或契約錯誤。累積表讀取（`nav_history_gs.NavHistoryError`）發生在 A 鏈內、同樣在 `_call` 裡；
+#   且出處閘門關閉時根本不讀。
+# - `market_indicator.build_fx_indicator_table`：L1 經 `_call`；往外拋的只有 ValueError（USD／TWD／不合 ISO）
+#   與出口檢查的 AssertionError —— 全是程式錯誤。
+# ⇒ 只接 `OSError`（含 ConnectionError、TimeoutError，以及 requests 的 RequestException〔IOError 子類〕），
+#   以防日後 L1 改成不吞而讓網路／讀檔例外漏出來。AssertionError／TypeError／ValueError／KeyError 一律往上拋（§1）。
+_FETCH_ERRORS = (OSError,)
+
+
+def _today_tw():
+    """台灣日曆日（L2 `nav_dividend.MARKET_DATE_TZ`，同 L2 判「未來淨值日」的那一個時區）。獨立成函式讓測試能固定它。"""
+    return datetime.now(nav_dividend.MARKET_DATE_TZ).date()
 
 
 def _fetch_failed(call: str, exc: Exception, mask) -> str:
@@ -157,6 +181,7 @@ def load_live() -> dict:
     # ~~這一段任何例外都轉成 `errors["nav"]` 的原文（經遮蔽）~~ → 2026-10-13 稽核 B2（總管技術裁定；有意識的更正，
     # 不是漏刪）：`except` **只包三個取數呼叫**（`resolve_full_keys`、`build_nav_table`、`build_fx_indicator_table`），
     # 被包住的例外記 log 後以「型別名: 訊息」（經遮蔽）進對應的 errors，市值基準下畫 ⛔。
+    # 第二輪 N-a：而且只接取數類例外（`_FETCH_ERRORS`，列舉見該常數上方）。
     # 組輸入時的 KeyError／TypeError 與 `live.assemble_nav` 的契約錯誤（扣下碼不在清單、代碼對不上）是程式 bug，
     # 照 CLAUDE.md §1 往上拋 —— 頁面會印 Traceback，那是 bug 該有的 fail loud。舊寫法把 bug 標成「取數失敗」，
     # 會讓人去查來源而不是查程式；它的用意（本頁沒有錯誤畫面、不要整頁崩）只對取數失敗成立。
@@ -168,7 +193,7 @@ def load_live() -> dict:
         key_results = nav_table = None
         try:
             key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
-        except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["nav"]
+        except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["nav"]（N-a：只接取數類例外）
             errors["nav"] = _fetch_failed("fund_keys.resolve_full_keys", exc, mask)
         if key_results is not None:
             resolved = {r["input"]: r for r in key_results if r["ok"] is True}
@@ -184,7 +209,7 @@ def load_live() -> dict:
             ]
             try:
                 nav_table = nav_dividend.build_nav_table(funds)
-            except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["nav"]
+            except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["nav"]（N-a）
                 errors["nav"] = _fetch_failed("nav_dividend.build_nav_table", exc, mask)
         if nav_table is not None:
             nav_out = live.assemble_nav(   # 契約錯誤照拋（B2）
@@ -194,6 +219,9 @@ def load_live() -> dict:
                 empty_without_reason=nav_dividend.EMPTY_WITHOUT_REASON,
                 nav_unavailable_withheld=_NAV_UNAVAILABLE_WITHHELD,
                 mask=mask,
+                # N-b：淨值日距今（台灣日曆日，L2 的 MARKET_DATE_TZ）超過 SSOT 門檻 → 不納入市值
+                today=_today_tw(),
+                max_age_days=contract.NAV_MAX_AGE_DAYS,
             )
             nav_rows = nav_out["nav"]
             notes["nav"] = nav_out["notes"]
@@ -204,7 +232,7 @@ def load_live() -> dict:
             if ccys:
                 try:
                     fx_table = market_indicator.build_fx_indicator_table(ccys)
-                except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["market_indicator"]
+                except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["market_indicator"]（N-a）
                     errors["market_indicator"] = "；".join(filter(None, [
                         errors.get("market_indicator"),
                         _fetch_failed("market_indicator.build_fx_indicator_table", exc, mask)]))

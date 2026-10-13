@@ -22,6 +22,7 @@ import copy
 import json
 import math
 import re
+from datetime import date
 
 from . import logic
 
@@ -257,9 +258,13 @@ def tables_failed_together(message: str) -> dict:
 #   所以照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 畫 ⛔，成本基準不受影響。
 # - 扣下代碼不在清單內（例 `input_conflict`）→ raise（契約被破壞，不畫成 ⬜；同 hld R-10）。
 # - 2026-10-13 稽核 N1（總管技術裁定，fail closed）：過期或預存淨值 —— provenance 帶 `cache_fallback` 或 `stale`、
-#   或淨值列 `is_estimated` 為真 —— 一律不交進 dataset，該檔在市值基準下視為缺淨值（logic.GAPS「ALO-GAP-過期淨值不納入」）。
+#   ~~或淨值列 `is_estimated` 為真~~ → 或淨值列 `is_estimated` 不是 False（含缺欄或 None；第二輪文字對齊，與程式一致）、
+#   或（第二輪 N-b）該檔最新淨值日距 `today` 超過 `max_age_days` 個日曆日 —— 一律不交進 dataset，
+#   該檔在市值基準下視為缺淨值（logic.GAPS「ALO-GAP-過期淨值不納入」）。
 #   本頁沒有新鮮度位置，交進去就是把舊值靜默當成現值（CLAUDE.md §2.4「禁止靜默返回」）。
+#   淨值日一律取資料列本身的 `nav_date`，不用 `fetched_at`（即時取回的也可能是好幾個月前的淨值）。
 # - 2026-10-13 稽核 N2：`notes["nav"]["provenance"]` 裡的 `live_error` 是 L1 原文，經 `mask` 才放進 notes。
+#   第二輪 N-c：`chain_failures` 與 `nav_history.read_error` 同樣是 L1 原文，一併經 `mask`（深拷貝，不改輸入）。
 
 
 def wants_market_value(setting_rows) -> bool:
@@ -272,13 +277,19 @@ def wants_market_value(setting_rows) -> bool:
 
 
 def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
-                 nav_unavailable_withheld, mask) -> dict:
-    """L2 淨值表 → `{"nav": 列, "error": 已遮蔽的失敗原文或 None, "notes": {...}}`（純函式，不改輸入）。
+                 nav_unavailable_withheld, mask, today, max_age_days) -> dict:
+    """L2 淨值表 → `{"nav": 列, "error": 已遮蔽的失敗原文或 None, "notes": {...}}`（純函式，不改輸入、不讀時鐘）。
 
     一致性檢查同 hld `assemble_live_load` 的 R-10、R-13～R-16，不過就 raise（呼叫端組錯，不是資料問題）。
+    `today`：台灣日曆日（`datetime.date`，呼叫端以 L2 的 `MARKET_DATE_TZ` 算好交進來）；
+    `max_age_days`：淨值日距今的上限天數（SSOT `contract.NAV_MAX_AGE_DAYS`，由呼叫端注入，本檔不寫字面值）。
     """
     if not callable(mask):
         raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")
+    if type(today) is not date:
+        raise TypeError(f"today 應為 datetime.date：{type(today).__name__}")
+    if type(max_age_days) is not int or max_age_days < 0:
+        raise TypeError(f"max_age_days 應為非負整數：{max_age_days!r}")
     codes_held = list(dict.fromkeys(holding_codes))
     nav_codes = {r["fund_code"] for r in nav_table["rows"]}
     for name in ("errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"):
@@ -317,11 +328,22 @@ def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
         if prov and (prov.get("cache_fallback") or prov.get("stale")):
             not_fresh.add(code)
     not_fresh |= {r["fund_code"] for r in nav_table["rows"] if r.get("is_estimated") is not False}
+    newest = {}
+    for r in nav_table["rows"]:
+        day = date.fromisoformat(r["nav_date"])   # 契約保證 YYYY-MM-DD；不是就是契約被破壞，照拋
+        if r["fund_code"] not in newest or day > newest[r["fund_code"]]:
+            newest[r["fund_code"]] = day
+    too_old = {code for code, day in newest.items() if (today - day).days > max_age_days}
+    not_fresh |= too_old
     provenance = {}
     for code, prov in nav_table["provenance"].items():
-        prov = dict(prov or {})
-        if prov.get("live_error") is not None:
-            prov["live_error"] = mask(str(prov["live_error"]))
+        prov = copy.deepcopy(dict(prov or {}))
+        for name in ("live_error", "chain_failures"):
+            if prov.get(name) is not None:
+                prov[name] = mask(str(prov[name]))
+        hist = prov.get("nav_history")
+        if isinstance(hist, dict) and hist.get("read_error") is not None:
+            hist["read_error"] = mask(str(hist["read_error"]))
         provenance[code] = prov
     return {
         "nav": [dict(r) for r in nav_table["rows"] if r["fund_code"] not in not_fresh],
@@ -330,6 +352,7 @@ def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
             "withheld": dict(nav_table["withheld"]),
             "key_failed": sorted(key_failed),
             "not_fresh": sorted(not_fresh),     # 過期或預存淨值，市值基準下不納入（ALO-GAP-過期淨值不納入）
+            "too_old": sorted(too_old),         # 其中因淨值日超過門檻而不納入的（N-b）
             "provenance": provenance,
         },
     }
