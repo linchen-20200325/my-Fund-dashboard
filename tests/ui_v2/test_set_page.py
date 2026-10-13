@@ -157,7 +157,7 @@ def test_燈的狀態有圖示也有文字_三種顏色各一例():
 def test_首次開啟沒有一個輸入欄帶非空值_層級單選也沒有預選():
     at = _run("first")
     fields = list(at.text_input) + list(at.get("text_area"))
-    assert len(fields) == 18  # 2026-10-13：17 → 18（44 補宣告一致性憑證鍵 mkt_compare_pair；狀態更新，不是漏刪）
+    assert len(fields) == len(fixtures.SPEC_SETTING_KEYS)  # 鍵數取自規格快照，不寫死（2026-10-13：曾寫死 17，新增 mkt_compare_pair 後漏改一處 → CI 紅）
     for element in fields:
         assert element.value in ("", None), element.label
     assert len(at.radio) == 1 and at.radio[0].value is None
@@ -228,7 +228,7 @@ def test_SET4未設定的鍵在輸入欄下方畫出未設定():
     children = _set4_children(_run("first"))
     kinds = [getattr(c, "type", "") for c in children]
     fields = [i for i, k in enumerate(kinds) if k in ("text_input", "text_area")]
-    assert len(fields) == 17
+    assert len(fields) == len(fixtures.SPEC_SETTING_KEYS)  # 鍵數取自規格快照，不寫死（2026-10-13：曾寫死 17，新增 mkt_compare_pair 後漏改一處 → CI 紅）
     for index in fields:
         nxt = next(i for i in range(index + 1, len(children)) if kinds[i] in _WIDGETS)
         between = [children[i].value for i in range(index + 1, nxt) if kinds[i] == "markdown"]

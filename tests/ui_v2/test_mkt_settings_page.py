@@ -152,8 +152,8 @@ def test_勾選存檔後重跑才過濾明細_核心卡不變(env):
     sheet, fake = env
     first = _render(fake)
     cards_before = [x for x in fake.log if "mkt-card" in str(x)]
-    for key in ("credit_spread_pct", "policy_rate_pct", "term_spread_pct"):
-        fake.session_state[f"mkt5_{key}"] = False         # N4 預設全勾；取消其餘三項，只留 vol_index
+    assert "尚未選定任何指標，請在指標清單勾選並存檔" in first          # 從未存過：明細不列（總管裁定）
+    fake.session_state["mkt5_vol_index"] = True
     _render(fake)
     assert "依指標清單設定不顯示" not in "\n".join(str(x) for x in fake.log)   # 未存：明細照舊
     fake.click("mkt5_save")
@@ -195,15 +195,15 @@ def test_H1_已存值存在時_使用者改的欄位與勾選框_重跑後保留
     assert "5 日曆日，基準日 2026-09-21" in text and "7 日曆日" not in text
 
 
-def test_N4_從未存過_勾選框全勾_與明細全列一致(env):
+def test_N4_從未存過_勾選框不預勾_明細寫請勾選並存檔(env):
     _sheet, fake = env
     text = _render(fake)
     for key in ("vol_index", "credit_spread_pct", "policy_rate_pct", "term_spread_pct"):
-        assert fake.session_state[f"mkt5_{key}"] is True, key
+        assert fake.session_state[f"mkt5_{key}"] is False, key        # 不代填
     for key in ("leading_index", "coincident_index", "fx_twd_per_usd"):      # N3：不在可勾清單
         assert f"mkt5_{key}" not in fake.session_state, key
-    assert "尚未存檔，預設顯示全部" in text
-    assert live.TEXT_UNSAVED_PICKS not in text
+    assert text.count("尚未選定任何指標，請在指標清單勾選並存檔") >= 3   # MKT-5 摘要、MKT-6、MKT-7
+    assert live.TEXT_UNSAVED_PICKS not in text and live.TEXT_UNSAVED_WINDOW not in text   # 剛載入不誤標
 
 
 def test_B2_混搭的已存設定_頁面寫不一致_不出比較數字(env):

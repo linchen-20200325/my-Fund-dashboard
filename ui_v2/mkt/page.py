@@ -306,14 +306,14 @@ def _seed_live_fields(settings, keys, settings_error=None) -> None:
     """正式模式：輸入欄／勾選框的狀態**不在** session 裡時，以**已存**設定填上（44 MKT-4 判準：
     重新載入後兩個欄位與存檔前逐字相同）。已在 session 裡（使用者正在編、或剛存完）就不動。
     ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白。
-    ~~勾選框維持不勾~~ → 2026-10-13 稽核 G N4（總管裁定）：從未存過的勾選框預設全勾，與下方明細全部列出一致
-    （`live.initial_checkbox_values`；與 44 1.1 節「無非空預設值」判準的張力已在 44 MKT-5 登記待裁）。
+    勾選框維持不勾。（同日曾一度改為從未存過時預設全勾，總管 2026-10-13 依 44 1.1 節既有判準裁定撤回；
+    從未存過時下方明細改為不全列，見 `logic.TEXT_UNSAVED_NONE`。）
     """
     if "mkt4_days" not in st.session_state and settings.get("window_days") is not None:
         st.session_state["mkt4_days"] = settings["window_days"]
     if "mkt4_baseline" not in st.session_state and settings.get("baseline_date"):
         st.session_state["mkt4_baseline"] = date.fromisoformat(settings["baseline_date"])
-    # 勾選框初值：已存過 → 依已存清單；從未存過 → 全勾（N4，與下方明細「全部列出」一致）；讀不到 → 不填。
+    # 勾選框初值：已存過 → 依已存清單；從未存過或讀不到 → 不填（一個都不勾；總管 2026-10-13 裁定）。
     initial = live.initial_checkbox_values(settings, keys, settings_error)
     for key, value in (initial or {}).items():
         if _checkbox_key(key) not in st.session_state:

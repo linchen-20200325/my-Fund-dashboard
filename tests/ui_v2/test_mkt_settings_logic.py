@@ -372,7 +372,9 @@ def test_MKT5_存檔寫進mkt_indicator_keys_重新載入後才過濾(sheet):
     assert sheet.writes[-1]["setting_value"] == '["fx_twd_per_usd", "vol_index"]'
     assert sheet.writes[-1]["value_kind"] == "list"
     stale = _model(loaded, field_selected_keys=["vol_index", "fx_twd_per_usd"])
-    assert len(logic.find_block(stale, "MKT-7")["_rows"]) == 7                 # 未重新載入：照舊全列
+    # 未重新載入：照舊是「從未存過」—— 正式模式一個都不列（總管 2026-10-13 裁定），不因勾選框而變
+    assert logic.find_block(stale, "MKT-7")["_rows"] == []
+    assert logic.TEXT_UNSAVED_NONE in logic.find_block(stale, "MKT-7")["detail_lines"]
     fresh = _model(source.load_live())
     assert [r["indicator_key"] for r in logic.find_block(fresh, "MKT-7")["_rows"]] == \
         ["fx_twd_per_usd", "vol_index"]
@@ -568,7 +570,7 @@ def test_N1_設定讀不到_標題與明細用中性準確文字_不說尚未設
 
 def test_N1_設定讀得到時_明細不寫讀不到那一句(sheet):
     model = _model(source.load_live())
-    assert model["_selection_state"] == logic.SELECTION_UNSAVED
+    assert model["_selection_state"] == logic.SELECTION_UNSAVED_NONE
     for code in ("MKT-6", "MKT-7"):
         assert logic.TEXT_SHOW_ALL_UNREADABLE not in logic.find_block(model, code)["detail_lines"]
 
@@ -623,24 +625,83 @@ def test_N3_正式模式真的旗標_pending與write_if_fx_verified未驗證都�
     assert set(source.available_keys(table)).isdisjoint(pending)
 
 
-# ── N4：從未存過時勾選框預設與明細一致 ──
+# ── N4（總管 2026-10-13 裁定）：從未存過 → 不預勾、明細不全列 ──
 
 
-def test_N4_從未存過_勾選框初值全勾_與明細全列一致(sheet):
+def test_N4_從未存過_不預勾_明細不全列_寫請勾選並存檔(sheet):
     loaded = source.load_live()
     keys = logic.selectable_keys(loaded["dataset"], loaded["notes"]["available_keys"])
-    keys = keys[:logic.INDICATOR_PICK_CAP]
-    initial = live.initial_checkbox_values(loaded["notes"]["settings"], keys)
-    assert initial == {k: True for k in keys}
-    model = _model(loaded, field_selected_keys=[k for k, v in initial.items() if v])
+    assert live.initial_checkbox_values(loaded["notes"]["settings"], keys) is None      # 不代填
+    model = _model(loaded)
+    for item in logic.find_block(model, "MKT-5")["_items"]:
+        assert item["_value"] is False and item["_default"] is None, item["name"]
+    assert logic.find_block(model, "MKT-5")["summary_text"] == logic.TEXT_UNSAVED_NONE
+    for code in ("MKT-6", "MKT-7"):
+        block = logic.find_block(model, code)
+        assert block["_rows"] == [], code
+        assert logic.TEXT_UNSAVED_NONE in block["detail_lines"], code
+        assert not any("資料未備" in line for line in block["detail_lines"]), code
+    assert model["_selection_state"] == logic.SELECTION_UNSAVED_NONE
+    # 三張核心卡照常（與示範模式的全列無關）
+    assert any(mv["_has_number"] for c in _CARDS for mv in logic.find_block(model, c)["main_values"])
+
+
+def test_N4_示範模式從未存過照舊全列():
+    model = logic.build_page_model(fixtures.dataset_all_ok())
+    assert logic.find_block(model, "MKT-7")["_rows"]
     assert logic.find_block(model, "MKT-5")["summary_text"] == logic.TEXT_SHOW_ALL_UNSAVED
 
 
-def test_N4_已存過依已存清單_讀不到不填_超過上限不預勾():
+def test_N4_已存過依已存清單_讀不到不填():
     keys = ["a", "b", "c"]
     assert live.initial_checkbox_values({"indicator_keys": ["b"]}, keys) == {"a": False, "b": True, "c": False}
     assert live.initial_checkbox_values({"indicator_keys": None}, keys, "讀不到") is None
-    assert live.initial_checkbox_values({"indicator_keys": None}, list("abcdefg")) is None
+    assert live.initial_checkbox_values({"indicator_keys": None}, keys) is None
+
+
+# ── 稽核 G：剛載入未動任何東西不得誤標「未存檔」；「已勾選 N」只算仍可勾的鍵 ──
+
+
+def _initial_picks(loaded):
+    keys = logic.selectable_keys(loaded["dataset"], loaded["notes"]["available_keys"])
+    initial = live.initial_checkbox_values(loaded["notes"]["settings"], keys) or {}
+    return [k for k, v in initial.items() if v]
+
+
+@pytest.mark.parametrize("saved", [None, '["vol_index"]', '["vol_index", "leading_index"]', "[]"])
+def test_剛載入未動任何東西_不標未存檔(sheet, saved):
+    sheet.pending = {"leading_index": "ndc_no_release_date"}
+    sheet.table_rows = _rows_without("leading_index")             # pending 的鍵 L2 不寫列       # leading_index 已不在可勾清單
+    if saved is not None:
+        sheet.put("mkt_indicator_keys", saved)
+    loaded = source.load_live()
+    model = _model(loaded, field_selected_keys=_initial_picks(loaded))
+    assert live.TEXT_UNSAVED_PICKS not in logic.find_block(model, "MKT-5")["detail_lines"], saved
+    # 使用者真的改了一格 → 才標
+    changed = _model(loaded, field_selected_keys=sorted(set(_initial_picks(loaded)) ^ {"credit_spread_pct"}))
+    assert live.TEXT_UNSAVED_PICKS in logic.find_block(changed, "MKT-5")["detail_lines"], saved
+
+
+def test_已勾選N只算仍在可勾清單內的鍵_失效的鍵照舊點名(sheet):
+    sheet.pending = {"leading_index": "ndc_no_release_date"}
+    sheet.table_rows = _rows_without("leading_index")             # pending 的鍵 L2 不寫列
+    sheet.put("mkt_indicator_keys", '["vol_index", "leading_index"]')
+    block = logic.find_block(_model(source.load_live()), "MKT-5")
+    assert block["summary_text"] == "已勾選 1 ／ 上限 6"
+    assert any("leading_index" in line for line in block["detail_lines"])
+
+
+# ── 稽核 G：憑證型別嚴格 ──
+
+
+@pytest.mark.parametrize("pair", ['[5.0, "2026-09-21"]', '[true, "2026-09-21"]', '["5", "2026-09-21"]',
+                                  '[5, "2026-09-21", 1]'])
+def test_憑證型別嚴格_數值相等但型別不對也判不一致(sheet, pair):
+    sheet.put_complete(5, "2026-09-21")
+    sheet.put("mkt_compare_pair", pair)
+    model = _model(source.load_live())
+    assert model["_comparison_reason"] == logic.REASON_INCONSISTENT, pair
+    assert _comparison_free(model)
 
 
 # ── N6：ghost／重複鍵拒絕 ──

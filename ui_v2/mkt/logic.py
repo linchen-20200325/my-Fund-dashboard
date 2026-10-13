@@ -228,8 +228,12 @@ TEXT_INCOMPLETE_INCONSISTENT = "⬜ 設定不完整：比較條件不一致，�
 TEXT_SETTINGS_UNREADABLE = "設定讀不到"
 TEXT_SETTINGS_UNREADABLE_PREFIX = "⛔ 設定讀不到："
 TEXT_SHOW_ALL_UNREADABLE = "設定讀不到，暫時列出全部指標"
-# N4｜從未存過勾選：明細顯示全部，正式模式勾選框也預設全勾（`page.py`），兩者一致。
+# ~~N4｜從未存過勾選：明細顯示全部，正式模式勾選框也預設全勾（`page.py`），兩者一致。~~
+# → 2026-10-13 總管裁定（有意識的更正，不是漏刪）：正式模式**不預勾**（`44` 1.1 節「輸入欄不帶非空預設值」、
+#   本塊紅線說明「勾選狀態由使用者自行輸入，系統不代填」），從未存過時下方明細**不全列**，寫下面這一句（中性，不寫資料未備）。
+#   `TEXT_SHOW_ALL_UNSAVED` 只剩示範模式使用（示範模式從未存過時照舊全列）。
 TEXT_SHOW_ALL_UNSAVED = "尚未存檔，預設顯示全部"
+TEXT_UNSAVED_NONE = "尚未選定任何指標，請在指標清單勾選並存檔"
 # 比較條件不完整的原因（機器用；`_comparison_reason`）。
 REASON_MISSING_BASELINE = "missing_baseline"
 REASON_MISSING_WINDOW = "missing_window"
@@ -237,7 +241,8 @@ REASON_INCONSISTENT = "inconsistent"
 # 下方明細「為什麼列出這些」（機器用；`_selection_state`）。N1：設定讀不到時全列，
 # 但那不是「使用者選了全部」也不是「從未存過」—— 第三個值，不得以 `not_ready` 充數。
 SELECTION_SAVED = "saved"
-SELECTION_UNSAVED = "unsaved_show_all"
+SELECTION_UNSAVED = "unsaved_show_all"          # 示範模式：從未存過 → 全列
+SELECTION_UNSAVED_NONE = "unsaved_none_selected"   # 正式模式：從未存過 → 一個都不列（總管 2026-10-13 裁定）
 SELECTION_UNREADABLE = "setting_unreadable"
 
 
@@ -1014,7 +1019,7 @@ def display_states(keys, dataset: dict, selected_keys) -> dict:
 
 
 def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_keys=_UNSET,
-                settings_error=None):
+                settings_error=None, require_saved_selection=False):
     """`44` MKT-5：清單以字面值排列、勾選上限 6、達上限其餘停用並附原因。
 
     ~~⚠️ 登記：本塊**沒有寫回路徑** —— …故本塊做成**唯讀勾選**，不自行補一枚存檔鈕。~~
@@ -1074,14 +1079,16 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
         disabled_reason=save_reason,
     )
 
+    # 稽核 G（2026-10-13）：「已勾選 N」只計入仍在可勾清單內的鍵；已失效的鍵另行點名（下方 `unknown`）。
+    effective = set(selected_keys or ()) & set(keys)
     if settings_error:
         summary = TEXT_SHOW_ALL_UNREADABLE          # N1：不說「尚未設定」
     elif selected_keys is None:
-        summary = TEXT_SHOW_ALL_UNSAVED             # N4
-    elif not selected_keys:
+        summary = TEXT_UNSAVED_NONE if require_saved_selection else TEXT_SHOW_ALL_UNSAVED
+    elif not effective:
         summary = TEXT_NOTHING_SELECTED
     else:
-        summary = f"已勾選 {len(set(selected_keys))} ／ 上限 6"
+        summary = f"已勾選 {len(effective)} ／ 上限 6"
 
     detail_lines = [
         "勾選只決定下方指標明細顯示哪些指標；三張核心卡固定顯示。存檔後，下一次重新載入才生效。",
@@ -1122,11 +1129,13 @@ def _show_all_line(selection_state) -> list:
     return [TEXT_SHOW_ALL_UNREADABLE] if selection_state == SELECTION_UNREADABLE else []
 
 
-def selection_state(selected_keys, settings_error=None) -> str:
-    """下方明細列出這些指標的理由：已存的勾選／從未存過（全列）／設定讀不到（暫時全列）。"""
+def selection_state(selected_keys, settings_error=None, require_saved_selection=False) -> str:
+    """下方明細列出這些指標的理由：已存的勾選／從未存過（示範模式全列、正式模式不列）／設定讀不到（暫時全列）。"""
     if settings_error:
         return SELECTION_UNREADABLE
-    return SELECTION_UNSAVED if selected_keys is None else SELECTION_SAVED
+    if selected_keys is None:
+        return SELECTION_UNSAVED_NONE if require_saved_selection else SELECTION_UNSAVED
+    return SELECTION_SAVED
 
 
 def _hidden_line(states) -> list:
@@ -1134,15 +1143,15 @@ def _hidden_line(states) -> list:
     return [TEXT_USER_HIDDEN_PREFIX + "、".join(hidden)] if hidden else []
 
 
-def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=None):
+def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=None, nothing_text=None):
     """`44` MKT-6：一列一筆觀測，欄位依宣告順序固定，不依數值排序。
 
     客戶 2026-10-13 裁示 MKT-5：只列**已存勾選**裡的指標（`selected_keys` 為 None ＝ 從未存過 → 全列）。
     一個都沒勾 → 只寫「尚未選定任何指標」，**不寫**資料未備（沒有選 ≠ 沒有資料）。
     """
     states = states or {}
-    if selected_keys is not None and not selected_keys:
-        return _detail_nothing_selected("MKT-6", {
+    if nothing_text is not None or (selected_keys is not None and not selected_keys):
+        return _detail_nothing_selected("MKT-6", nothing_text or TEXT_NOTHING_SELECTED, {
             "_columns": MKT6_COLUMNS,
             "column_labels": [MKT6_COLUMN_LABELS[c] for c in MKT6_COLUMNS],
         })
@@ -1190,8 +1199,8 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=Non
     }
 
 
-def _detail_nothing_selected(code, extra) -> dict:
-    """裁示 MKT-5：一個都沒勾 → 明細區顯示「尚未選定任何指標」，一列都不列、不掛資料未備。"""
+def _detail_nothing_selected(code, text, extra) -> dict:
+    """裁示 MKT-5：一個都沒勾（或正式模式從未存過）→ 明細區寫 `text`，一列都不列、不掛資料未備。"""
     block = {
         "code": code,
         "title": BLOCK_TITLES[code],
@@ -1199,9 +1208,9 @@ def _detail_nothing_selected(code, extra) -> dict:
         "_default_open": False,
         "_rows": [],
         "answers": _ANSWERS[code],
-        "summary_text": TEXT_NOTHING_SELECTED,
+        "summary_text": text,
         "main_values": [],
-        "detail_lines": [TEXT_NOTHING_SELECTED],
+        "detail_lines": [text],
         "badges": [],
         "buttons": [],
     }
@@ -1209,7 +1218,7 @@ def _detail_nothing_selected(code, extra) -> dict:
     return block
 
 
-def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None):
+def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothing_text=None):
     """`44` MKT-7：一列一個 indicator_key，取各組最近一筆。
 
     客戶 2026-10-13 裁示 MKT-5：使用者取消勾選的鍵（`user_hidden`）不列；
@@ -1218,10 +1227,11 @@ def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None):
     states = states or {}
     if keys is None:
         keys = all_keys(dataset)
-    if keys and states and all(states.get(k) == DISPLAY_USER_HIDDEN for k in keys):
-        return _detail_nothing_selected("MKT-7", {
+    if nothing_text is not None or (keys and states and all(states.get(k) == DISPLAY_USER_HIDDEN for k in keys)):
+        text = nothing_text or TEXT_NOTHING_SELECTED
+        return _detail_nothing_selected("MKT-7", text, {
             "column_labels": ["指標鍵", "最近觀測日", "最近取得時間", "來源層級", "延遲日數"],
-            "detail_lines": [TEXT_NOTHING_SELECTED, f"時間以 {STORAGE_TIMEZONE} 顯示"],
+            "detail_lines": [text, f"時間以 {STORAGE_TIMEZONE} 顯示"],
         })
     hidden_line = _hidden_line({k: states.get(k) for k in keys})
     keys = [k for k in keys if states.get(k) != DISPLAY_USER_HIDDEN]
@@ -1301,6 +1311,7 @@ def build_page_model(
     field_selected_keys=_UNSET,
     settings_error=None,
     pair_consistent=None,
+    require_saved_selection=False,
 ) -> dict:
     """把資料 ＋ 使用者設定組成一份純資料模型。page.py 只負責把它畫出來。
 
@@ -1309,7 +1320,9 @@ def build_page_model(
     - `field_*` ＝ 輸入欄／勾選框**當下**的值，只決定欄位怎麼畫、存檔能不能按，**不進任何正式計算**；
     - `available_keys` ＝ 資料層註冊的指標鍵（MKT-5 可勾清單，見 `selectable_keys`）；
     - `settings_error` ＝ 已存設定讀不到時的訊息原文（已遮蔽）；
-    - `pair_consistent` ＝ 兩鍵與一致性憑證是否一致（正式模式；None ＝ 不檢查，示範模式）。
+    - `pair_consistent` ＝ 兩鍵與一致性憑證是否一致（正式模式；None ＝ 不檢查，示範模式）；
+    - `require_saved_selection` ＝ 從未存過勾選時下方明細一個都不列（正式模式 True，總管 2026-10-13 裁定；
+      示範模式 False，照舊全列）。
     """
     cards = [
         _build_card(
@@ -1338,12 +1351,16 @@ def build_page_model(
     states = display_states(keys, dataset, selected_keys)
     blocks.append(_build_mkt5(dataset, selected_keys, available_keys=available_keys,
                               field_selected_keys=field_selected_keys,
-                              settings_error=settings_error))
+                              settings_error=settings_error,
+                              require_saved_selection=require_saved_selection))
     # 已存清單裡資料層不提供的鍵不算數（MKT-5 另寫一行點名）；剩下一個都沒有 ＝ 尚未選定任何指標。
     shown = None if selected_keys is None else [k for k in keys if states[k] != DISPLAY_USER_HIDDEN]
-    selection = selection_state(selected_keys, settings_error)
-    blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states, selection_state=selection))
-    blocks.append(_build_mkt7(dataset, keys=keys, states=states, selection_state=selection))
+    selection = selection_state(selected_keys, settings_error, require_saved_selection)
+    nothing = TEXT_UNSAVED_NONE if selection == SELECTION_UNSAVED_NONE else None
+    blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states, selection_state=selection,
+                              nothing_text=nothing))
+    blocks.append(_build_mkt7(dataset, keys=keys, states=states, selection_state=selection,
+                              nothing_text=nothing))
 
     return {
         "title": "市場總覽",

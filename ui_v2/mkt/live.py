@@ -196,6 +196,10 @@ def _pair_consistent(raw, broken, window_days, baseline_date):
         value = json.loads(raw, parse_constant=_reject_constant)
     except (ValueError, RecursionError, BadSettingValue):
         return False
+    # 型別嚴格（2026-10-13 稽核 G）：Python 的 `5.0 == 5`、`True == 1` 都成立，只比值會讓 `[5.0, …]`、
+    # `[true, …]` 這種不是本頁寫出來的憑證蒙混過關（fail-open）。本頁寫的天數恆為 JSON 整數。
+    if not (isinstance(value, list) and len(value) == 2 and type(value[0]) is int and type(value[1]) is str):
+        return False
     return value == [window_days, baseline_date]
 
 
@@ -291,17 +295,17 @@ def initial_checkbox_values(settings, keys, settings_error=None):
     """正式模式勾選框的初值（`page.py` 只在 session 沒有那一格時才填）。回 `{鍵: bool}`，或 None ＝ 不填。
 
     - 讀不到設定 → None（勾選框停用、存檔停用；不拿猜的值去填）。
-    - 已存過 → 依已存清單。
-    - N4（2026-10-13 稽核 G，總管裁定）：從未存過 → **全勾**，與下方明細「全部列出」一致（避免「全不勾卻全列」）；
-      MKT-5 摘要寫「尚未存檔，預設顯示全部」。可勾項目超過上限 6 時全勾會違反上限 → 不填（None），照舊全不勾。
+    - 已存過 → 依已存清單（只對可勾清單內的鍵）。
+    - ~~N4：從未存過 → **全勾**，與下方明細「全部列出」一致~~ → **2026-10-13 總管裁定（有意識的更正，不是漏刪）：
+      從未存過 → 不填（None），勾選框一個都不勾** —— `44` 1.1 節「輸入欄不帶非空預設值」與本塊紅線說明
+      「勾選狀態由使用者自行輸入，系統不代填」；下方明細同時改為不全列（`logic.TEXT_UNSAVED_NONE`），
+      「全不勾卻全列」的矛盾由明細那一側消失。
     """
     if settings_error:
         return None
     saved = settings.get("indicator_keys")
     if saved is None:
-        if len(keys) > logic.INDICATOR_PICK_CAP:
-            return None
-        return {key: True for key in keys}
+        return None
     return {key: key in saved for key in keys}
 
 
@@ -363,6 +367,7 @@ def build_live_model(live_input: dict, *, field_window_days=None, field_baseline
         available_keys=notes.get("available_keys"),
         settings_error=notes.get("settings_error"),
         pair_consistent=settings.get("pair_consistent"),
+        require_saved_selection=True,
     )
     model = apply_live_notes(model, notes, save_wired=save_wired)
     model = _mark_unsaved(model, settings, notes.get("settings_error"), field_window_days,
@@ -383,10 +388,14 @@ def _mark_unsaved(model, settings, settings_error, field_window_days, field_base
     fields = (field_window_days, field_baseline_date)
     if fields != (None, None) and fields != (settings.get("window_days"), settings.get("baseline_date")):
         mkt4["detail_lines"].append(TEXT_UNSAVED_WINDOW)
-    saved = settings.get("indicator_keys")
+    # 稽核 G（2026-10-13）：只比「使用者在勾選框上實際改了什麼」。比較基準 ＝ 勾選框剛載入時的樣子
+    # （`initial_checkbox_values`：已存清單 ∩ 可勾清單；從未存過 ＝ 一個都不勾）。
+    # ~~舊寫法拿整份已存清單（或從未存過時的「全部」）比~~ —— 已存清單裡已不在可勾清單的鍵、或從未存過，
+    # 都會讓剛載入、什麼都沒動的畫面誤標「未存檔」。
     picks = set(field_selected_keys or ())
-    keys = {item["name"] for item in logic.find_block(model, "MKT-5")["_items"]}
-    baseline_picks = set(keys) if saved is None else set(saved)
+    keys = [item["name"] for item in logic.find_block(model, "MKT-5")["_items"]]
+    initial = initial_checkbox_values(settings, keys) or {}
+    baseline_picks = {key for key, checked in initial.items() if checked}
     if picks != baseline_picks:
         logic.find_block(model, "MKT-5")["detail_lines"].append(TEXT_UNSAVED_PICKS)
     return model
