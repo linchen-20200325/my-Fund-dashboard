@@ -208,6 +208,9 @@ def build_fx_indicator_table(ccys) -> dict:
     - 閘門打開：經 `fetch_yf_close_with_error(<ISO>TWD=X)` 取數，套 `rows_from_daily_close`（與美元同一條規則）。
     - 同一幣別重複出現只處理一次；`USD`／`TWD`／不合 ISO 4217 → ValueError（呼叫端的 bug）。
     - 不另疊快取（49 §4.4）；不寫任何試算表；錯誤原文不遮蔽（遮蔽在寫出點做一次）。
+    - ⚠️ 登記（2026-10-13 稽核 N4）：`phase1_hosts()`／`source_cooldowns()` 只列 `INDICATOR_SPECS` 那幾鍵的來源，
+      **不涵蓋**這裡的 `<ISO>TWD=X`；「重新取數」停用原因看不到它們的冷卻狀態。閘門關閉時本函式不取數，目前無實害；
+      閘門打開前一併處理。
     """
     rows, errors, pending, skipped, fetched = [], {}, {}, {}, {}
     for ccy in dict.fromkeys(ccys):
@@ -229,6 +232,11 @@ def build_fx_indicator_table(ccys) -> dict:
             errors[key] = key_error
         if key_skipped:
             skipped[key] = key_skipped
+    # 2026-10-13 稽核 N4：出口前核欄位與順序（同 `build_market_indicator_table`；不該發生，發生就是本檔的 bug，當場炸）。
+    names = [name for name, _k, _n in MARKET_INDICATOR_FIELDS]
+    for row in rows:
+        if list(row) != names:
+            raise AssertionError(f"market_indicator 列的欄位與契約不符：{list(row)}")
     return {"rows": rows, "errors": errors, "pending": pending, "skipped": skipped, "fetched": fetched}
 
 

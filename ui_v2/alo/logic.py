@@ -199,6 +199,41 @@ GAPS = {
         "本頁不掛，不自己編一個層級。"
     ),
     "ALO-GAP-同類別兩列": "同一張保單同一檔基金登記成兩列而 bucket 不同時該歸哪一類 44 沒寫。本頁炸掉。",
+    # ── 以下 2026-10-13 補登（總管同日技術裁定，接真淨值與非美元匯率鍵之後；有意識的登記，不是漏刪）──
+    "ALO-GAP-單檔淨值失敗升整表": (
+        "本頁沒有逐檔畫取數失敗的位置（hld 有 fund_errors，本頁沒有），44 也沒寫。"
+        "任一檔淨值取數失敗，各檔失敗原文遮蔽後以「代碼：原文」串成一句放進 errors[nav]，"
+        "照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 整張畫 ⛔，成本基準不受影響。比 hld 嚴，據實登記。"
+    ),
+    "ALO-GAP-匯率單位待裁": (
+        "非美元匯率鍵的 value_unit 44 沒有宣告；L2 暫寫「新臺幣／<ISO 代碼>」（美元沿用 MKT-3 的「新臺幣／美元」）。"
+        "本頁不讀 value_unit。匯率閘門打開前送客戶裁示。"
+    ),
+    "ALO-GAP-全缺兩種畫法": (
+        "每一類都缺基準值時，理由只有一種 → 整塊一個「來源缺」placeholder；理由不只一種 → 逐類別各寫自己的理由（見 ALO-GAP-分母全缺）。"
+        "同一種情形兩種畫法，是因為 44 只給了單一理由的模板、沒給多理由的畫法。"
+    ),
+    "ALO-GAP-全缺合計未涵蓋": (
+        "逐類別那一種畫法下，表尾「合計未涵蓋」會列出每一個有持倉的類別 —— 語意是「沒有任何一類被涵蓋、本卡沒有合計」，"
+        "不是「其餘類別照算」。44 這一句是為部分缺寫的，全缺時沿用字面，語意據實登記。"
+    ),
+    "ALO-GAP-多理由並列": (
+        "ALO-3 照 ALO-2 那一格的空狀態字串（ALO-GAP-ALO3上游）；ALO-2 逐類別而理由不只一種時，44 沒寫 ALO-3 怎麼並列。"
+        "各理由都是 5.5「來源缺」、嚴重度相同，本頁取 ALO-2 列序最先的那一種畫一個來源缺 placeholder，不並列、不新編句子。"
+    ),
+    "ALO-GAP-ALO4缺匯率字面": (
+        "ALO-4 缺換算匯率的那一句不帶鍵名（ALO-GAP-缺匯率不帶鍵），缺歐元等非美元匯率時沿用同一句；"
+        "缺的是哪幾個鍵寫在 ALO-4 摘要「缺 …」裡。"
+    ),
+    "ALO-GAP-基準標籤只寫美元": (
+        "BASIS_LABELS 的市值標籤寫「美元依 fx_twd_per_usd 換算」，沒有涵蓋非美元幣別（例 fx_twd_per_eur）。"
+        "本輪不得改文案，照舊；待客戶定字。"
+    ),
+    "ALO-GAP-過期淨值不納入": (
+        "本頁沒有淨值新鮮度的位置（加位置要先出線框）。過期或預存淨值（provenance 帶 cache_fallback 或 stale、"
+        "或淨值列 is_estimated 為真）目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
+        "（CLAUDE.md §2.4 禁止靜默返回，fail closed）。新鮮度呈現與理由字面待線框。"
+    ),
 }
 
 
@@ -357,6 +392,7 @@ DISPLAY_TZ_LABEL = "UTC+8"
 # alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（ui_v2/set/fixtures.py）。
 BASIS_COST = "成本"
 BASIS_MV = "市值"
+# ALO-GAP-基準標籤只寫美元：市值標籤沒有涵蓋非美元幣別；本輪不改文案。
 BASIS_LABELS = {BASIS_COST: "成本（cost_twd）", BASIS_MV: "市值（淨值 × 單位數，美元依 fx_twd_per_usd 換算）"}
 FX_KEY = "fx_twd_per_usd"
 # 非美元幣別的匯率鍵（49 §6.1 Q9；ALO-GAP-非美元幣別）。L2 `services/v2_tables/market_indicator.py::fx_indicator_key`
@@ -455,6 +491,9 @@ def fetch_error(dataset, tables):
     return None
 
 
+# ALO-GAP-單檔淨值失敗升整表：正式模式下任一檔淨值取數失敗都會以表層失敗進 errors["nav"]（ui_v2/alo/live.py）。
+# ALO-GAP-過期淨值不納入：過期或預存淨值在進 dataset 之前就被拿掉（ui_v2/alo/live.py::assemble_nav）。
+# ALO-GAP-匯率單位待裁：本頁不讀 market_indicator.value_unit。
 def _source_tables(basis):
     """ALO-2 的來源：holding（市值基準再加 nav 與匯率）＋ user_setting（目標、容許帶、基準、類別名稱）。
     ALO-GAP-缺匯率從嚴：market_indicator 失敗時整塊進系統錯誤。"""
@@ -755,6 +794,7 @@ def _build_alo2(dataset) -> dict:
             tail_lines.append(f"{UNCLASSIFIED} {values[UNCLASSIFIED]['count']} 檔")
             tail_lines.append("⚠ 44 沒有寫「未分類」的目標比重；本頁目標、差額、內外三格不算。")
         if uncovered:
+            # ALO-GAP-全缺合計未涵蓋：全缺（沒有分母）時這一句列出每一個有持倉的類別。
             tail_lines.append("合計未涵蓋 " + "、".join(uncovered))
 
     cell_tones = set()
@@ -776,6 +816,9 @@ def _build_alo2(dataset) -> dict:
         "_target_unset": not targets,
         "_tolerance": tolerance,
         "_values": values,
+        # ALO-GAP-全缺兩種畫法：每一類都缺值而理由不只一種 → 逐類別畫（沒有分母）；ALO-3 讀這兩個鍵（ALO-GAP-多理由並列）。
+        "_no_denominator": placeholder is None and bool(values) and denominator is None,
+        "_missing_reasons": list(dict.fromkeys(r["current_text"] for r in rows if r["_value"] is None)),
         "column_labels": ["類別", "目前比重", "目標比重", "差額", "容許帶內外"],
         "_rows": rows,
         "placeholder": placeholder,
@@ -969,6 +1012,10 @@ def _build_alo3(dataset, alo2) -> dict:
     if alo2["placeholder"] is not None:
         # 目標未設那一種是 44 ALO-1 空狀態欄逐字寫的；另外兩種是 ALO-GAP-ALO3上游。
         placeholder = dict(alo2["placeholder"])
+    elif alo2["_no_denominator"]:
+        # ALO-GAP-多理由並列：ALO-2 沒有分母（每一類都缺值、理由不只一種）。不算試算總額 ——
+        # 那不是「合計不為正」，是「沒有合計」；照 44 5.5「來源缺」畫列序最先的那一個理由（各理由嚴重度相同），不新編句子。
+        placeholder = _placeholder(alo2["_missing_reasons"][0], "來源缺")
 
     rows_by_bucket = {r["_bucket"]: r for r in alo2["_rows"]}
     accepted = {}
@@ -1128,7 +1175,7 @@ def _build_alo4(dataset) -> dict:
     fx_missing = bool(fx_missing_keys)
     if fx_missing:
         # 44 ALO-4 空狀態：基準不自動退回成本。ALO-GAP-缺匯率不帶鍵。
-        detail_lines.append(TEXT_FX_MISSING_ALO4)
+        detail_lines.append(TEXT_FX_MISSING_ALO4)   # ALO-GAP-ALO4缺匯率字面：非美元同一句，鍵名寫在摘要
     detail_lines.append("每一檔的類別在 Sheets 維護，本塊唯讀呈現；本塊的存檔只寫比重基準與類別名稱兩鍵")
     detail_lines.append(HINT_NOTE)
 

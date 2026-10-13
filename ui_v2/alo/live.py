@@ -256,6 +256,10 @@ def tables_failed_together(message: str) -> dict:
 #   （體例同 hld 的 `skipped_tabs`）。本頁沒有逐檔失敗的畫法（hld 有 `fund_errors`，本頁沒有），
 #   所以照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 畫 ⛔，成本基準不受影響。
 # - 扣下代碼不在清單內（例 `input_conflict`）→ raise（契約被破壞，不畫成 ⬜；同 hld R-10）。
+# - 2026-10-13 稽核 N1（總管技術裁定，fail closed）：過期或預存淨值 —— provenance 帶 `cache_fallback` 或 `stale`、
+#   或淨值列 `is_estimated` 為真 —— 一律不交進 dataset，該檔在市值基準下視為缺淨值（logic.GAPS「ALO-GAP-過期淨值不納入」）。
+#   本頁沒有新鮮度位置，交進去就是把舊值靜默當成現值（CLAUDE.md §2.4「禁止靜默返回」）。
+# - 2026-10-13 稽核 N2：`notes["nav"]["provenance"]` 裡的 `live_error` 是 L1 原文，經 `mask` 才放進 notes。
 
 
 def wants_market_value(setting_rows) -> bool:
@@ -307,13 +311,26 @@ def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
         if message == empty_without_reason and nav_table["fetched"].get(code, 0) == 0:
             continue   # 來源回空、沒有原因 → 資料未備，不是失敗（同 hld）
         parts.append(f"{code}：{mask(message)}")
+
+    not_fresh = set()
+    for code, prov in nav_table["provenance"].items():
+        if prov and (prov.get("cache_fallback") or prov.get("stale")):
+            not_fresh.add(code)
+    not_fresh |= {r["fund_code"] for r in nav_table["rows"] if r.get("is_estimated") is not False}
+    provenance = {}
+    for code, prov in nav_table["provenance"].items():
+        prov = dict(prov or {})
+        if prov.get("live_error") is not None:
+            prov["live_error"] = mask(str(prov["live_error"]))
+        provenance[code] = prov
     return {
-        "nav": [dict(r) for r in nav_table["rows"]],
+        "nav": [dict(r) for r in nav_table["rows"] if r["fund_code"] not in not_fresh],
         "error": "；".join(parts) if parts else None,
         "notes": {
             "withheld": dict(nav_table["withheld"]),
             "key_failed": sorted(key_failed),
-            "provenance": dict(nav_table["provenance"]),
+            "not_fresh": sorted(not_fresh),     # 過期或預存淨值，市值基準下不納入（ALO-GAP-過期淨值不納入）
+            "provenance": provenance,
         },
     }
 

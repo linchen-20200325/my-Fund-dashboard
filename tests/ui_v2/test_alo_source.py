@@ -457,3 +457,67 @@ def test_save_setting_寫表以外的例外照樣往上拋(wired, monkeypatch):
     monkeypatch.setattr(source.settings_store, "save_setting_for_page", _boom)
     with pytest.raises(RuntimeError, match="boom"):
         source.save_setting("alo_tolerance_pp", "4", "float")
+
+
+# ═══════════════════════ 2026-10-13 稽核 B2：except 只包取數呼叫；契約錯誤與組輸入錯誤照拋 ═══════════════════════
+
+
+def test_B2_取數呼叫拋例外_記log_原文經遮蔽進errors(wired, caplog):
+    source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
+    wired["settings"] = _mv_settings()
+    wired["resolve"] = RuntimeError(f"對照表讀不到 {_FAKE_SECRET}")
+    with caplog.at_level("WARNING", logger=source.__name__):
+        out = source.load_live()
+    assert out["dataset"]["errors"]["nav"].startswith("RuntimeError: 對照表讀不到")
+    logged = [r.getMessage() for r in caplog.records if r.name == source.__name__]
+    assert logged and "fund_keys.resolve_full_keys" in logged[0]
+    assert _FAKE_SECRET not in "".join(logged)                         # log 也只記遮蔽後的原文
+
+
+def test_B2_build_nav_table拋例外_同樣是取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def boom(funds, **kw):
+        raise ConnectionError("A 鏈斷線")
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", boom)
+    out = source.load_live()
+    assert out["dataset"]["errors"]["nav"] == "ConnectionError: A 鏈斷線"
+    assert out["dataset"]["nav"] == []
+
+
+def test_B2_assemble_nav的契約錯誤照拋_不標成取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def conflict(funds, **kw):
+        return {"rows": [], "errors": {}, "withheld": {"AAAA": source.nav_dividend.WITHHELD_INPUT_CONFLICT},
+                "skipped": {}, "fetched": {}, "skipped_rows": {}, "provenance": {}}
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", conflict)
+    with pytest.raises(ValueError, match="不在本頁約定的清單內"):
+        source.load_live()
+
+
+def test_B2_組輸入時的KeyError照拋(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def broken(codes, **_kw):
+        return {"results": [{"input": c, "ok": True, "full_key": "FK-" + c, "portal": ""} for c in codes]}
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", broken)      # 少了 parsed_code
+    with pytest.raises(KeyError, match="parsed_code"):
+        source.load_live()
+
+
+def test_N1_預存舊序列_在市值基準下不納入_畫資料未備(wired):
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5)
+    s.attrs = {"source": source.nav_dividend.CACHE_FALLBACK_SOURCE_PREFIX + "AAAA.json",
+               "fetched_at": "2026-09-23T01:30:00+00:00", "cache_updated_at": "2026-09-22T01:30:00+00:00",
+               "nav_quality": {"stale": True}}
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert wired["nav_table"]["rows"], "前提：L2 有寫列（預存序列的值是真的公布淨值）"
+    assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["not_fresh"] == ["AAAA"]
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])

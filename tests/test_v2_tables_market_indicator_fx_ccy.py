@@ -138,3 +138,19 @@ def test_美元與新臺幣不走這裡(ccy, monkeypatch):
 def test_INDICATOR_SPECS七鍵不變_市場總覽頁不受影響():
     assert set(mi.INDICATOR_SPECS) == {"vol_index", "fx_twd_per_usd", "credit_spread_pct", "term_spread_pct",
                                        "policy_rate_pct", "leading_index", "coincident_index"}
+
+
+def test_出口檢查_欄位或順序不符契約就當場炸(monkeypatch):
+    """2026-10-13 稽核 N4：比照 `build_market_indicator_table` 出口前核欄位與順序。"""
+    monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
+    monkeypatch.setattr(mi, "fetch_yf_close_with_error",
+                        _stub({"EURTWD=X": (_series([34.5], ["2026-09-22"], ticker="EURTWD=X"), None)}))
+    real = mi.rows_from_daily_close
+
+    def reordered(*args, **kwargs):
+        rows, error, skipped = real(*args, **kwargs)
+        return [dict(reversed(list(r.items()))) for r in rows], error, skipped
+
+    monkeypatch.setattr(mi, "rows_from_daily_close", reordered)
+    with pytest.raises(AssertionError, match="欄位與契約不符"):
+        mi.build_fx_indicator_table(["EUR"])

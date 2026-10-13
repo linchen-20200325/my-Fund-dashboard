@@ -53,6 +53,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import streamlit as st
@@ -60,6 +61,8 @@ import streamlit as st
 from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
 
 from . import live
+
+_log = logging.getLogger(__name__)
 
 # 淨值被扣下、畫面印「⬜ 資料未備」的四碼 —— 與 `ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD` 同一份
 # （兩頁不互相 import；tests/ui_v2/test_alo_source.py 比對兩者相等）。⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`。
@@ -89,6 +92,13 @@ _SKIP_GROUPS = (
     "skipped_tabs",
     "invest_twd_parse_errors",
 )
+
+
+def _fetch_failed(call: str, exc: Exception, mask) -> str:
+    """取數呼叫拋例外：遮蔽後記 log（CLAUDE.md §3.3：不吞、至少要 log），回傳給 errors 用的原文。"""
+    text = mask(f"{type(exc).__name__}: {exc}")
+    _log.warning("alo 取數失敗（%s）：%s", call, text)
+    return text
 
 
 def _secret_values() -> list:
@@ -143,17 +153,26 @@ def load_live() -> dict:
 
     # ── nav ＋ 非美元匯率（2026-10-13 客戶裁示：B 線資產配置必須是真資料）──
     # 只在已存基準是「市值」時取（成本基準用不到）；組 L2 輸入照 `ui_v2/hld/source.py` 三條（帶 holding_ccy、
-    # 不去重、只放代碼對照 ok 的檔）。這一段任何例外都轉成 `errors["nav"]` 的原文（經遮蔽）：本頁的
-    # `page.render` 沒有錯誤畫面，例外往上拋會整頁印 Traceback（hld 有、本頁沒有）。不吞：市值基準下照畫 ⛔。
+    # 不去重、只放代碼對照 ok 的檔）。
+    # ~~這一段任何例外都轉成 `errors["nav"]` 的原文（經遮蔽）~~ → 2026-10-13 稽核 B2（總管技術裁定；有意識的更正，
+    # 不是漏刪）：`except` **只包三個取數呼叫**（`resolve_full_keys`、`build_nav_table`、`build_fx_indicator_table`），
+    # 被包住的例外記 log 後以「型別名: 訊息」（經遮蔽）進對應的 errors，市值基準下畫 ⛔。
+    # 組輸入時的 KeyError／TypeError 與 `live.assemble_nav` 的契約錯誤（扣下碼不在清單、代碼對不上）是程式 bug，
+    # 照 CLAUDE.md §1 往上拋 —— 頁面會印 Traceback，那是 bug 該有的 fail loud。舊寫法把 bug 標成「取數失敗」，
+    # 會讓人去查來源而不是查程式；它的用意（本頁沒有錯誤畫面、不要整頁崩）只對取數失敗成立。
     nav_rows = []
     mi_rows = [dict(row) for row in indicators["rows"]] if indicators else []
     if tables is not None and live.wants_market_value(setting_rows):
         mask = alo_holdings.masker(values)
+        holding = tables["holding"]
+        key_results = nav_table = None
         try:
-            holding = tables["holding"]
             key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["nav"]
+            errors["nav"] = _fetch_failed("fund_keys.resolve_full_keys", exc, mask)
+        if key_results is not None:
             resolved = {r["input"]: r for r in key_results if r["ok"] is True}
-            nav_table = nav_dividend.build_nav_table([
+            funds = [
                 {
                     "fund_code": h["fund_code"],
                     "full_key": resolved[h["fund_code"]]["full_key"],
@@ -162,8 +181,13 @@ def load_live() -> dict:
                     "holding_ccy": h["ccy"],
                 }
                 for h in holding if h["fund_code"] in resolved
-            ])
-            nav_out = live.assemble_nav(
+            ]
+            try:
+                nav_table = nav_dividend.build_nav_table(funds)
+            except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["nav"]
+                errors["nav"] = _fetch_failed("nav_dividend.build_nav_table", exc, mask)
+        if nav_table is not None:
+            nav_out = live.assemble_nav(   # 契約錯誤照拋（B2）
                 holding_codes=[h["fund_code"] for h in holding],
                 key_results=key_results,
                 nav_table=nav_table,
@@ -171,9 +195,6 @@ def load_live() -> dict:
                 nav_unavailable_withheld=_NAV_UNAVAILABLE_WITHHELD,
                 mask=mask,
             )
-        except Exception as exc:  # noqa: BLE001 —— 不是吞：原文進 errors["nav"]，市值基準下畫 ⛔
-            errors["nav"] = mask(f"{type(exc).__name__}: {exc}")
-        else:
             nav_rows = nav_out["nav"]
             notes["nav"] = nav_out["notes"]
             if nav_out["error"] is not None:
@@ -183,9 +204,10 @@ def load_live() -> dict:
             if ccys:
                 try:
                     fx_table = market_indicator.build_fx_indicator_table(ccys)
-                except Exception as exc:  # noqa: BLE001 —— 不是吞：原文進 errors["market_indicator"]
-                    errors["market_indicator"] = "；".join(
-                        filter(None, [errors.get("market_indicator"), mask(f"{type(exc).__name__}: {exc}")]))
+                except Exception as exc:  # noqa: BLE001 —— 不是吞：記 log，原文經遮蔽進 errors["market_indicator"]
+                    errors["market_indicator"] = "；".join(filter(None, [
+                        errors.get("market_indicator"),
+                        _fetch_failed("market_indicator.build_fx_indicator_table", exc, mask)]))
                 else:
                     mi_rows, mi_error, notes["fx_pending"] = live.merge_fx_table(
                         mi_rows, errors.get("market_indicator"), fx_table, mask)

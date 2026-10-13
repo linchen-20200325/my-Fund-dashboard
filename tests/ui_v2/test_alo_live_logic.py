@@ -790,3 +790,128 @@ def test_merge_fx_table_失敗接在試算表錯誤之後_pending不是失敗():
     assert pending == {"fx_twd_per_aud": "fx_obs_date_rule"}
     _rows, error, _p = live.merge_fx_table([], None, dict(fx, errors={}), str)
     assert error is None
+
+
+# ═══════════════════════ 2026-10-13 稽核 B1：沒有分母時 ALO-3 不得說「合計不為正」；有目標、沒持倉的類別 ═══════════════════════
+
+_BOND = "債券（示意）"
+
+
+def _with_empty_target(dataset):
+    """加一個有目標、沒有任何持倉的類別（目標比重照舊合計 1，債券給 0.1、現金讓出 0.1）。"""
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "alo_target_weights":
+            row["setting_value"] = [dict(t) for t in row["setting_value"]]
+            for t in row["setting_value"]:
+                if t["weight_ratio"] == 0.1:
+                    t["weight_ratio"] = 0.0
+            row["setting_value"].append({"bucket": _BOND, "weight_ratio": 0.1})
+        if row["setting_key"] == "alo_bucket_names":
+            row["setting_value"] = list(row["setting_value"]) + [_BOND]
+    return dataset
+
+
+def _all_missing_two_reasons(dataset):
+    dataset["market_indicator"] = []                                     # 美元那幾類缺匯率
+    dataset["nav"] = [r for r in dataset["nav"] if r["fund_code"] not in ("BBBB", "DDDD")]
+    return dataset
+
+
+def test_B1_沒有分母_ALO3照來源缺畫列序最先的理由_不說合計不為正():
+    dataset = _all_missing_two_reasons(_mv(fixtures.scenario("full")))
+    assert logic.setting_value(dataset, "alo_scenario_input"), "前提：有試算輸入，否則量不到 total 那一支"
+    model = logic.build_page_model(dataset)
+    alo2 = logic.find_block(model, "ALO-2")
+    assert alo2["_no_denominator"] is True
+    alo3 = logic.find_block(model, "ALO-3")
+    first = next(r["current_text"] for r in alo2["_rows"] if r["_value"] is None)
+    assert alo3["placeholder"]["text"] == first and alo3["placeholder"]["_empty_kind"] == "來源缺"
+    assert first.startswith("⬜ 資料未備：")                              # 44 既有字面，不是新句子
+    strings = logic.collect_ui_strings(alo3)
+    assert logic.TEXT_NA_ZERO_TOTAL not in strings                         # 「沒有合計」不是「合計不為正」
+    assert alo3["_rows"] == []
+
+
+def test_B1_單一理由與正常情形_ALO2沒有分母旗標():
+    single = _mv(fixtures.scenario("full"))
+    single["nav"] = []
+    assert logic.find_block(logic.build_page_model(single), "ALO-2")["_no_denominator"] is False
+    assert logic.find_block(logic.build_page_model(fixtures.scenario("full")), "ALO-2")["_no_denominator"] is False
+
+
+def test_有目標沒持倉的類別_正常情形_目前比重0且照算差額_試算比重0():
+    dataset = _with_empty_target(fixtures.scenario("full"))               # 成本基準、有分母
+    model = logic.build_page_model(dataset)
+    row = next(r for r in logic.find_block(model, "ALO-2")["_rows"] if r["_bucket"] == _BOND)
+    assert row["_count"] == 0 and row["_current_pct"] == 0.0 and row["current_text"] == "0.0%"
+    assert math.isclose(row["_diff"], -10.0)
+    result = next(r for r in logic.find_block(model, "ALO-3")["_rows"] if r["_bucket"] == _BOND)
+    assert result["_share_pct"] == 0.0
+
+
+def test_有目標沒持倉的類別_沒有分母_只印方塊_不寫0百分比_ALO3不算():
+    dataset = _all_missing_two_reasons(_with_empty_target(_mv(fixtures.scenario("full"))))
+    model = logic.build_page_model(dataset)
+    alo2 = logic.find_block(model, "ALO-2")
+    row = next(r for r in alo2["_rows"] if r["_bucket"] == _BOND)
+    assert row["current_text"] == "⬜" and row["_current_pct"] is None and row["diff_text"] == "⬜"
+    assert _BOND not in next(line for line in alo2["tail_lines"] if line.startswith("合計未涵蓋 "))
+    assert logic.find_block(model, "ALO-3")["placeholder"]["_empty_kind"] == "來源缺"
+
+
+def test_2026_10_13補登的GAPS都在():
+    for gap_id in ("ALO-GAP-單檔淨值失敗升整表", "ALO-GAP-匯率單位待裁", "ALO-GAP-全缺兩種畫法",
+                   "ALO-GAP-全缺合計未涵蓋", "ALO-GAP-多理由並列", "ALO-GAP-ALO4缺匯率字面",
+                   "ALO-GAP-基準標籤只寫美元", "ALO-GAP-過期淨值不納入"):
+        assert gap_id in logic.GAPS, gap_id
+
+
+# ═══════════════════════ 2026-10-13 稽核 N1／N2：過期或預存淨值不納入；notes 的 live_error 經遮蔽 ═══════════════════════
+
+
+def _nav_row(code, *, estimated=False):
+    return {"fund_code": code, "nav_date": "2026-09-23", "nav_orig_ccy": 10.0, "ccy": "TWD",
+            "source_tier": "淨值", "is_estimated": estimated, "fetched_at": "2026-09-23T01:30:00+00:00"}
+
+
+def _prov(**over):
+    out = {"source": "MoneyDJ:x", "fetched_at": "2026-09-23T01:30:00+00:00", "ccy_source": "holding_user_input",
+           "cache_fallback": False, "stale": None, "live_error": None}
+    out.update(over)
+    return out
+
+
+@pytest.mark.parametrize("prov, estimated", [
+    (dict(cache_fallback=True, stale=False), False),   # 預存舊序列（即時全敗）
+    (dict(cache_fallback=True, stale=True), False),    # 預存且過期
+    (dict(stale=True), False),                          # 只標過期
+    ({}, True),                                         # 推估值
+])
+def test_N1_過期或預存或推估淨值_不交進dataset_記在notes(prov, estimated):
+    table = _nav_table(rows=[_nav_row("AAAA", estimated=estimated), _nav_row("BBBB")],
+                       fetched={"AAAA": 1, "BBBB": 1},
+                       provenance={"AAAA": _prov(**prov), "BBBB": _prov()})
+    out = _assemble(table)
+    assert [r["fund_code"] for r in out["nav"]] == ["BBBB"]
+    assert out["notes"]["not_fresh"] == ["AAAA"]
+    assert out["error"] is None                                            # 不是取數失敗，是資料未備
+
+
+def test_N1_被拿掉的那一檔在市值基準下畫資料未備():
+    dataset = _mv(fixtures.scenario("full"))
+    table = _nav_table(rows=[dict(r, fund_code=r["fund_code"]) for r in dataset["nav"]],
+                       fetched={c: 2 for c in ("AAAA", "BBBB", "CCCC", "DDDD")},
+                       provenance={"BBBB": _prov(cache_fallback=True)})
+    out = _assemble(table, codes=("AAAA", "BBBB", "CCCC", "DDDD"))
+    dataset["nav"] = out["nav"]
+    holding = next(h for h in logic.aggregated_holdings(dataset) if h["fund_code"] == "BBBB")
+    assert logic.basis_value(dataset, holding, logic.BASIS_MV) == (None, logic.empty_source_text(["nav"]))
+
+
+def test_N2_notes裡的live_error經遮蔽():
+    table = _nav_table(rows=[_nav_row("AAAA")], fetched={"AAAA": 1, "BBBB": 0},
+                       errors={"BBBB": "逾時 SECRET"},
+                       provenance={"AAAA": _prov(live_error="上一次 SECRET 失敗")})
+    out = _assemble(table)
+    assert out["notes"]["provenance"]["AAAA"]["live_error"] == "上一次 ＊ 失敗"
+    assert table["provenance"]["AAAA"]["live_error"] == "上一次 SECRET 失敗"   # 不改輸入
