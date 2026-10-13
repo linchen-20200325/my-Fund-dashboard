@@ -1157,8 +1157,9 @@ DIV_CCY_EVIDENCE = {
 # ── 2026-10-13 稽核必修 2：金額欄同樣要有出處證據（只收程式碼裡找得到依據的字面）──────────────────
 # - 合庫：`_src_tcb_div._parse_div_html` 自己的欄位註解寫 `col[4]=每單位配息額` → 表頭第 5 格必須恰為「每單位配息額」。
 #   （⚠️ `fund_orchestration` legacy 段另一份內嵌解析的註解寫 `col[4]=配息金額`；那是**另一個解析器**的假設，
-#   且那一支的列本來就不收，故不採。）另要求表頭格數與該列格數相同（`row_cells == header_cells`），
-#   否則序號對不上表頭（合併儲存格、少一格）。
+#   且那一支的列本來就不收，故不採。）另要求~~表頭格數與該列格數相同（`row_cells == header_cells`）~~
+#   該列沒有 th 格、且取值讀的 td 格數等於表頭格數（`row_th_cells == 0 and row_td_cells == header_cells`；
+#   稽核組 B 回修，見 `_tcb_cells_mismatch`），否則序號對不上表頭（合併儲存格、少一格、列首多一格 th）。
 # - FundClear：解析器依序試 `DividendAmount`／`dividendAmount`／`Amount`／`amount`；欄名本身就說明是配息金額的
 #   只有前兩個，`Amount`／`amount` 語意不明（同 `Date` 之於日期）→ 不收。
 # - 鉅亨：依序試 `dividend`／`amount` → 只收 `dividend`。
@@ -1187,7 +1188,21 @@ TEXT_DIV_KEY_MISMATCH = ("A 鏈回傳的 full_key {got!r} 與代碼對照（fund
 TEXT_DIV_NO_PROVENANCE = "沒有解析依據（不是已登記的三個配息解析器交出的列）"
 TEXT_DIV_DATE_UNVERIFIED = "日期欄證明不了是除息日（{parser}：{field}={value!r}）"
 TEXT_DIV_AMOUNT_UNVERIFIED = "金額欄證明不了是每單位配息（{parser}：{field}={value!r}）"
-TEXT_DIV_CELLS_MISMATCH = "表頭格數與這一列的格數不同（表頭 {hdr}、列 {row}），欄位序號對不上表頭"
+TEXT_DIV_CELLS_MISMATCH = ("這一列含 th 格，或取值讀的 td 格數與表頭格數不同"
+                           "（表頭 {hdr}、列 td {td}、th {th}），欄位序號對不上表頭")
+
+
+def _tcb_cells_mismatch(prov: dict) -> bool:
+    """合庫配息列的欄位序號對不對得上表頭（稽核組 B 回修；fail closed）。
+    L1 取值只讀 td（`_cols`），故要求：這一列**沒有** th（`row_th_cells == 0`），而且取值讀的 td 格數
+    等於表頭格數（`row_td_cells == header_cells`）。任一不成立、或任一個數不是 int → 對不上。
+    ~~`row_cells == header_cells`（th＋td 合計）~~：首格 th＋7 td 對 8 格表頭會放行、取值卻整排左移一格。"""
+    td, th, hdr = prov.get("row_td_cells"), prov.get("row_th_cells"), prov.get("header_cells")
+    if not all(isinstance(v, int) and not isinstance(v, bool) for v in (td, th, hdr)):
+        return True
+    return th > 0 or td != hdr
+
+
 # GAP-DIV-NONE-EVIDENCE-1（2026-10-13 稽核必修 3 登記；fail closed）：配息來源回空，可能是「確實不配息」，
 # 也可能是「來源不認得這個代碼」。本輪採的證據是 A 鏈**同一輪、同一來源、同一代碼**取到東西
 # （L1 `fund_orchestration._div_code_evidence`：FundClear 淨值或基本資料、合庫淨值或基本資料、
@@ -1382,9 +1397,9 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
                                                                value=prov.get(amount_key)))
             date_unverified += 1
             continue
-        if parser == DIV_PARSER_TCB and (not isinstance(prov.get("row_cells"), int)
-                                         or prov.get("row_cells") != prov.get("header_cells")):
-            _tally(rejected, TEXT_DIV_CELLS_MISMATCH.format(hdr=prov.get("header_cells"), row=prov.get("row_cells")))
+        if parser == DIV_PARSER_TCB and _tcb_cells_mismatch(prov):
+            _tally(rejected, TEXT_DIV_CELLS_MISMATCH.format(hdr=prov.get("header_cells"), td=prov.get("row_td_cells"),
+                                                            th=prov.get("row_th_cells")))
             date_unverified += 1
             continue
         day = _div_date_text(item.get(date_key))

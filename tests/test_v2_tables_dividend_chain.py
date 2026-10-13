@@ -260,7 +260,7 @@ def _tcb_items(*rows, header=("配息基準日", "除息日", "發放日", "類�
                                      "pay_date_header": header[2] if len(header) > 2 else None,
                                      "currency_header": header[6] if len(header) > 6 else None,
                                      "amount_header": header[4] if len(header) > 4 else None,
-                                     "header_cells": len(header), "row_cells": 7,
+                                     "header_cells": len(header), "row_td_cells": 7, "row_th_cells": 0,
                                      "page": "tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm", "fetched_at": at}}
              for base, ex, pay, amt, ccy in rows]
     return S._div_result(items, S.DIV_PARSER_TCB, S.DIV_STATUS_ROWS, dropped=dropped or {"truncated": 0, "filtered": 0,
@@ -870,7 +870,61 @@ def test_稽核小修_資料列開頭多一格th當列號_欄位錯一格_pendin
     assert _strip_prov(divs) == [{"date": "2026/09/01", "ex_date": "2026/09/03", "pay_date": "2026/09/10",
                                   "amount": 0.05, "yield_pct": 6.1, "currency": "美元"}]
     prov = divs[0][S.DIV_PROVENANCE_KEY]
-    assert (prov["row_cells"], prov["header_cells"]) == (8, 7)     # th＋td 同一套數法 → 對不上
+    # 取值讀 7 個 td ＝ 表頭 7 格，但這一列含 th → 對不上（稽核組 B 回修後改看兩個鍵）
+    assert (prov["row_td_cells"], prov["row_th_cells"], prov["header_cells"]) == (7, 1, 7)
+    assert "row_cells" not in prov                                  # th＋td 合計那一個鍵已拆掉，不留兩種數法
     code, tbl = _real_tcb_through_chain(monkeypatch, page)
     assert tbl["rows"] == [] and tbl["settled"] == {code: False}
     assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+
+
+# ═══════════════════════ 稽核組 B 回修：資料列含 th → 取值讀的 td 與表頭對不上 ═══════════════════════
+
+def test_稽核B_8格表頭_資料列首格th加7個td_合計8對8_仍pending_0列(monkeypatch):
+    hdr = _HDR.replace("</tr>", "<th>X</th></tr>")                 # 表頭 8 格
+    row = ("<tr><th>2026/09/01</th><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td><td>美元</td></tr>")
+    page = f"<table>{hdr}{row}</table>"
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(page))
+    divs = _quiet(S._src_tcb_div, "TLZF9")
+    # A 鏈回傳值不變：取值只讀 td → 整排左移一格（金額拿到年化配息率、除息日拿到發放日）
+    assert _strip_prov(divs) == [{"date": "2026/09/03", "ex_date": "2026/09/10", "pay_date": "配息",
+                                  "amount": 6.1, "yield_pct": 0, "currency": "美元"}]
+    prov = divs[0][S.DIV_PROVENANCE_KEY]
+    assert (prov["row_td_cells"], prov["row_th_cells"], prov["header_cells"]) == (7, 1, 8)
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["rows"] == [] and tbl["settled"] == {code: False}
+    assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+    assert tbl["withheld"].get(code) is None
+
+
+def test_稽核B_7格表頭_資料列首格th加6個td_原因是格式不符_不是幣別(monkeypatch):
+    row = ("<tr><th>2026/09/01</th><td>2026/09/03</td><td>2026/09/10</td><td>配息</td>"
+           "<td>0.05</td><td>6.1</td><td>美元</td></tr>")
+    page = f"<table>{_HDR}{row}</table>"
+    code, tbl = _real_tcb_through_chain(monkeypatch, page)
+    assert tbl["rows"] == [] and tbl["settled"] == {code: False}
+    assert tbl["pending"] == {code: ND.PENDING_DIV_EX_DATE_UNVERIFIED}
+    assert tbl["withheld"].get(code) != ND.WITHHELD_CCY_NOT_SOURCE_REPORTED
+
+
+def test_稽核B_正常頁_無th_td數等於表頭_照常寫出(monkeypatch):
+    monkeypatch.setattr(S, "fetch_url_with_retry", lambda *a, **k: _Resp(_TCB_PAGE))
+    prov = _quiet(S._src_tcb_div, "TLZF9")[0][S.DIV_PROVENANCE_KEY]
+    assert (prov["row_td_cells"], prov["row_th_cells"], prov["header_cells"]) == (7, 0, 7)
+    code, tbl = _real_tcb_through_chain(monkeypatch, _TCB_PAGE)
+    assert [(r["ex_date"], r["div_per_unit_orig_ccy"], r["ccy"]) for r in tbl["rows"]] == [("2026-09-03", 0.05, "USD")]
+    assert tbl["settled"] == {code: True} and tbl["pending"].get(code) is None
+
+
+@pytest.mark.parametrize("cells", [
+    {"row_td_cells": 7, "row_th_cells": 0, "header_cells": 8},          # td 數 ≠ 表頭
+    {"row_td_cells": 7, "row_th_cells": 1, "header_cells": 7},          # 含 th
+    {"row_td_cells": 7, "row_th_cells": 1, "header_cells": 8},          # 合計相符但含 th
+    {"row_td_cells": 7, "header_cells": 7},                             # 缺 th 鍵 → fail closed
+    {"row_cells": 7, "header_cells": 7},                                # 只有舊鍵 → fail closed
+    {"row_td_cells": True, "row_th_cells": 0, "header_cells": 1},       # bool 不算 int
+])
+def test_稽核B_格數判定_fail_closed(cells):
+    assert ND._tcb_cells_mismatch(cells) is True
+    assert ND._tcb_cells_mismatch({"row_td_cells": 7, "row_th_cells": 0, "header_cells": 7}) is False

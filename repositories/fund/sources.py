@@ -3362,13 +3362,20 @@ def _src_tcb_meta(code: str) -> dict:
     return meta
 
 
+def _tcb_div_cells(tr) -> list:
+    """一列的格子（`th`＋`td`，依出現順序）。表頭與資料列**共用這一個**數格方式，免得兩邊數法再分歧。
+    與取值用的 `_row.find_all("td")` 同為遞迴搜尋（不只數直接子節點）—— 改成只數直接子節點會讓
+    「格數」與「取值實際讀到的 td」在巢狀表格時對不上，故刻意不改。"""
+    return tr.find_all(["th", "td"])
+
+
 def _tcb_div_header_cells(tbl) -> list:
     """配息表第一列（`_src_tcb_div` 當表頭略過的那一列）每一格的文字；取不到回 `[]`（只記錄，失敗不影響取值）。"""
     try:
         _first = tbl.find("tr")
         if _first is None:
             return []
-        return [c.get_text(strip=True) for c in _first.find_all(["th", "td"])]
+        return [c.get_text(strip=True) for c in _tcb_div_cells(_first)]
     except Exception:  # noqa: BLE001 —— 表頭只拿來記錄；記不到就是 []，下游當成「無法核對」
         return []
 
@@ -3471,7 +3478,8 @@ def _src_tcb_div(code: str) -> list:
 
         2026-10-13（新增鍵，取值一個不改）：每筆多 `div_provenance`，記**這張表第一列**（本函式本來就當表頭略過的那一列）
         第 1、2、3、5、7 格的文字（`date_header`／`ex_date_header`／`pay_date_header`／`amount_header`／
-        `currency_header`），以及表頭格數與這一列的格數（`header_cells`／`row_cells`；稽核必修 2 補）。
+        `currency_header`），以及表頭格數與這一列的格數（`header_cells`／`row_td_cells`／`row_th_cells`；
+        稽核必修 2 補，稽核組 B 回修拆成兩個鍵：`row_td_cells` ＝ 取值實際讀的 td 格數、`row_th_cells` ＝ 這一列的 th 格數）。
         欄位仍照原本寫死的序號取值；這幾個鍵只讓下游**逐頁核對**那一欄的表頭是不是它自稱的東西，不據此改取哪一欄。
         """
         _out: list = []
@@ -3508,9 +3516,12 @@ def _src_tcb_div(code: str) -> list:
                             # 2026-10-13 稽核必修 2：金額欄（第 5 格）的表頭、表頭格數與這一列的格數
                             "amount_header": _hdr[4] if len(_hdr) > 4 else None,
                             "header_cells": len(_hdr),
-                            # 稽核小修：與 `header_cells` 同一套數法（`th`＋`td`）；只數 `td` 會讓
-                            # 「資料列開頭多一格 `th` 當列號」的頁面 7 對 7 判成相符、欄位卻錯一格
-                            "row_cells": len(_row.find_all(["th", "td"])),
+                            # ~~"row_cells": len(_row.find_all(["th", "td"]))~~（稽核小修，th＋td 合計）——
+                            # 稽核組 B 實測：首格 `<th>`＋7 個 td、表頭 8 格 → 8 對 8 放行，但取值只讀 td，
+                            # 整排左移一格（金額拿到年化配息率）。合計數不出「取值讀的是哪幾格」→ 拆成兩個鍵，
+                            # 下游要求 `row_th_cells == 0` 且 `row_td_cells == header_cells`。
+                            "row_td_cells": len(_cols),   # 取值實際讀的那組格子（即 `_cols`）
+                            "row_th_cells": sum(1 for _c in _tcb_div_cells(_row) if _c.name == "th"),
                         },
                     })
                 if _out:
