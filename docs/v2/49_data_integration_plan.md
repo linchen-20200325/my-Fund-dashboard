@@ -51,10 +51,10 @@
 | # | 既有寫法 | `16eb828` 上的實況 | 對本規劃的影響 |
 |---|---|---|---|
 | 1 | `CLAUDE.md` §2.1 T1 列仍點名 CBC ms1.json（M1B/M2） | 該列自己已註明實作已刪；`repositories`、`services` 底下查不到 CBC 取數（指令見下） | 若「政策利率」要用台灣央行，屬缺口 |
-| 2 | `fetch_fred` 的說明寫 `realtime_start` 約等於真實發布日 | 呼叫時沒有帶任何 vintage 參數；依 FRED 官方文件，未指定時 `realtime_start` 預設為**查詢當天**。本環境不發網路請求，本組沒有實測 | 若拿它填 `market_indicator.release_date`，可能把每一筆的公布日都寫成今天 —— 那是捏造，見 4.5。→ **2026-10-13 狀態更新**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：本列在 `16eb828` 為真、`fetch_fred` 本體至今未改；#945（merge `2ced92b`）新增 L1 `repositories/macro/fred_vintage.py`（N-3），帶 `realtime_start`＝觀察起日、`realtime_end`＝`9999-12-31`、`output_type`＝`1` 取逐版次，`services/v2_tables/market_indicator.py` 的 FRED 三鍵改用它取首次公布日，不再用 `fetch_fred` 的 `realtime_start`。FRED 的實際回應本組未實測（`fred_vintage.py` 檔頭同樣自陳未以真實回應實測） |
+| 2 | `fetch_fred` 的說明寫 `realtime_start` 約等於真實發布日 | 呼叫時沒有帶任何 vintage 參數；依 FRED 官方文件，未指定時 `realtime_start` 預設為**查詢當天**。本環境不發網路請求，本組沒有實測 | 若拿它填 `market_indicator.release_date`，可能把每一筆的公布日都寫成今天 —— 那是捏造，見 4.5。→ **2026-10-13 狀態更新**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：本列在 `16eb828` 為真；`fetch_fred` 的呼叫參數至今未改（仍不帶 vintage 參數；本組讀 `224f233` 的 `repositories/macro/fred.py::fetch_fred`，`params` 只有 `series_id`、`api_key`、`file_type`、`sort_order`、`limit`）；#945（merge `2ced92b`）新增 L1 `repositories/macro/fred_vintage.py`（N-3），帶 `realtime_start`＝觀察起日、`realtime_end`＝`9999-12-31`、`output_type`＝`1` 取逐版次，`services/v2_tables/market_indicator.py` 的 FRED 三鍵改用它取首次公布日，不再用 `fetch_fred` 的 `realtime_start`。FRED 的實際回應本組未實測（`fred_vintage.py` 檔頭同樣自陳未以真實回應實測） |
 | 3 | `_finmind_business_indicator` 說明列出 `leading`／`coincident`／`lagging` 三欄 | 實際只保留 `monitoring`、`monitoring_color`、`leading` 三欄，`coincident` 被丟掉（指令見下）；而且它是私有函式，公開的 `fetch_ndc_signal_history` 只交出對策信號分數 | `coincident_index` 在 L1 取回後就沒了；`leading_index` 雖有取回但沒有公開出口 |
 | 4 | `shared/fred_series.py::FRED_LEI`（`USSLIND`） | 同檔註明已停更、僅作舊參照；`services/macro/us_indicators.py` 在 LEI 那一段註明**改用 CFNAI（`FRED_CFNAI`）作為替代**，並註明兩者數值意涵不同、門檻另訂 | 若「領先指標」要用美國版，現有可用的是 CFNAI，而它是「活動指數」，不是同一個指標，屬業務定義題（Q2） |
-| 5 | 基金基本資料的幣別 | **預設值不一致**：`repositories/fund/sources.py` 的 `_src_fundclear_meta`、`_src_fundclear_div`、`_src_direct_moneydj_url`、`_src_tcb_meta`、`_src_tdcc_meta` 缺幣別時預設 **USD**；`repositories/fund/fund_orchestration.py` 內亦有「計價幣別」缺欄預設 USD 的寫法；**唯獨 `_src_allianzgi_meta` 預設 TWD** | 見下一列與 4.6。→ **2026-10-13 狀態更新**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：本列在 `16eb828` 為真；#923（merge `4cd7bf8`，2026-10-10「幣別未知不等於 USD」）之後，上列各函式缺幣別改填空字串，本組讀 `224f233` 的 `repositories/fund/sources.py` 未見 USD／TWD 缺值預設（只剩劃線註解）；`_correct_currency` 仍在（見下一列） |
+| 5 | 基金基本資料的幣別 | **預設值不一致**：`repositories/fund/sources.py` 的 `_src_fundclear_meta`、`_src_fundclear_div`、`_src_direct_moneydj_url`、`_src_tcb_meta`、`_src_tdcc_meta` 缺幣別時預設 **USD**；`repositories/fund/fund_orchestration.py` 內亦有「計價幣別」缺欄預設 USD 的寫法；**唯獨 `_src_allianzgi_meta` 預設 TWD** | 見下一列與 4.6。→ **2026-10-13 狀態更新**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：本列在 `16eb828` 為真；#923（merge `4cd7bf8`，2026-10-10「幣別未知不等於 USD」）之後，本組讀 `224f233` 實查的六個函式（`_src_fundclear_meta`、`_src_fundclear_div`、`_src_direct_moneydj_url`、`_src_tcb_meta`、`_src_tdcc_meta`、`_src_allianzgi_meta`）缺幣別皆改為空字串；`repositories/fund/fund_orchestration.py:1510` 的「計價幣別」缺欄也已改為空字串。其他函式本組未逐一查。`_correct_currency` 仍在（見下一列） |
 | 6 | `repositories/fund/fund_orchestration.py::_correct_currency`、`_ensure_currency` 依名稱修正幣別 | 它**只在目前值為空或 USD 時才動手**，依序用「名稱內的幣別字樣 → 選股池登記的幣別 → 名稱含台灣就推定 TWD」修正；目前值已是其他幣別（含 Allianz 預設出來的 TWD）時**原樣回傳** | 所以 Allianz 的 TWD 預設**修不到**；而修得到的那些，修出來的也是**推測值**。轉換層一律不得把預設或推測出來的幣別當成真值（見 2.7） |
 | 7 | `repositories/ledger_repository.py::_norm_float` | 空值、空字串、純空白、無法解析的字串，一律回 `0.0` | 若拿 `_Ledgers` 推單位數或成本，空欄會被算成 0 —— 與 `44` 第四節「不以零補」直接衝突 |
 
@@ -107,9 +107,9 @@ fixtures 只用 `market_indicator` 一張表（`ui_v2/mkt/fixtures.py::SIX_KEYS`
 | `credit_spread_pct` | MKT-1 | FRED `BAMLH0A0HYM2` | `fetch_fred` ＋ `FRED_HY_SPREAD` | 有 L1；~~公布日需帶 vintage 參數（技術題 T1）~~ → **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：T1 已由 #945（merge `2ced92b`）實作，改經 `repositories/macro/fred_vintage.py` 以首次公布日寫列 |
 | `leading_index` | MKT-2 | 待裁示（Q2） | 台灣：`_finmind_business_indicator`（私有，無公開出口）；美國：只有替代的 CFNAI | **缺口**：沒有公開出口、沒有公布日 |
 | `coincident_index` | MKT-2 | 待裁示（Q2） | 台灣：該欄被 L1 丟掉；美國：無 | **缺口** |
-| `policy_rate_pct` | MKT-3 | 待裁示（Q1） | 美國：`fetch_fred` ＋ `FRED_FED_FUNDS`（月頻）；台灣：無 | 美國有 L1、台灣為**缺口**（2026-10-13：美國 `FRED_FED_FUNDS` 已隨 #945 經 `fred_vintage.py` 接上 `policy_rate_pct`） |
+| `policy_rate_pct` | MKT-3 | 待裁示（Q1） | 美國：`fetch_fred` ＋ `FRED_FED_FUNDS`（月頻）；台灣：無 | 美國有 L1、台灣為**缺口**（2026-10-13 狀態更新（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：美國 `FRED_FED_FUNDS` 已隨 #945 經 `fred_vintage.py` 接上 `policy_rate_pct`；依據：本組讀 `224f233` 的 `services/v2_tables/market_indicator.py`，該鍵的 `source` 為 `("FRED", FRED_FED_FUNDS)`，取數走 `fetch_fred_vintages_with_error`） |
 | `fx_twd_per_usd` | MKT-3 | Yahoo `USDTWD=X` | `repositories/hot_money_repository.py::fetch_usdtwd_series` | 有 L1 |
-| `term_spread_pct`（第七鍵） | MKT-5／6／7 | FRED `T10Y2Y` | `fetch_fred` ＋ `FRED_T10Y2Y` | 有 L1；公布日同 `credit_spread_pct`（2026-10-13：已隨 #945 經 `fred_vintage.py` 接上） |
+| `term_spread_pct`（第七鍵） | MKT-5／6／7 | FRED `T10Y2Y` | `fetch_fred` ＋ `FRED_T10Y2Y` | 有 L1；公布日同 `credit_spread_pct`（2026-10-13 狀態更新（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：已隨 #945 經 `fred_vintage.py` 接上；依據：本組讀 `224f233` 的 `services/v2_tables/market_indicator.py`，該鍵的 `source` 為 `("FRED", FRED_T10Y2Y)`） |
 
 `market_indicator` 每一欄怎麼填、第一階段的處置見 2.6（不可空缺口總表）。
 ⚠️ `ui_v2/mkt/fixtures.py` 目前把 `source_tier` 寫成 `T1`／`T2`（舊五層分級），不在 `44` 值域（`淨值`／`配息`／`市場指標`／`其他`）內；接真資料時照 `44` 寫 `市場指標`。
@@ -452,7 +452,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 
 ### 4.9 失敗原文與金鑰外洩
 
-- `infra/proxy.py::fetch_url` 印 log 時已把網址的查詢字串砍掉（該處自註：FRED `api_key`、FinMind `token` 都走 `params`），~~**但同一函式在其他錯誤分支直接印例外物件本身**，而 HTTP 套件的連線例外字串通常會帶完整的請求路徑與查詢字串 —— `api_key` 就在查詢字串裡。~~這一點依套件行為推論，本環境不發網路請求，本組沒有實測。→ **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：劃線句在 `16eb828` 為真；#945（merge `2ced92b`，該段在 `5a94b52`）起，`fetch_url` 印例外的三處（ProxyError、通用 except、降級直連失敗）改印 `infra/proxy.py::_exc_log(e)`，從 `?` 起砍掉查詢字串。⚠️ `_exc_log` 是啟發式遮罩（以 `_QUERY_IN_TEXT` 這條 regex 比對），只處理查詢字串；下一條的 407 帳密問題不在它的射程內，仍未查。
+- `infra/proxy.py::fetch_url` 印 log 時已把網址的查詢字串砍掉（該處自註：FRED `api_key`、FinMind `token` 都走 `params`），~~**但同一函式在其他錯誤分支直接印例外物件本身**~~，而 HTTP 套件的連線例外字串通常會帶完整的請求路徑與查詢字串 —— `api_key` 就在查詢字串裡。這一點依套件行為推論，本環境不發網路請求，本組沒有實測。→ **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：劃線那半句在 `16eb828` 為真（後半句「連線例外字串通常會帶完整查詢字串」仍成立，未劃）；#945（merge `2ced92b`，該段在 `5a94b52`）起，`fetch_url` 印例外的三處（ProxyError、通用 except、降級直連失敗）改印 `infra/proxy.py::_exc_log(e)`，從 `?` 起砍掉查詢字串。⚠️ `_exc_log` 是啟發式遮罩（以 `_QUERY_IN_TEXT` 這條 regex 比對），只處理查詢字串；下一條的 407 帳密問題不在它的射程內，仍未查。
 - 407 代理驗證失敗的例外字串會不會帶出 `PROXY_URL` 裡的帳密，**查不到**（本組沒有實測）。
 - `44` 對 `fetch_log.message` 與畫面上的取數失敗文案要求「原文、不改寫、不截斷」；照做就可能把金鑰印到畫面與 Sheets 上。**這是本規劃與 `44` 的矛盾，送 Q13 裁示。**
 
@@ -548,7 +548,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 |---|---|---|---|
 | N-1 | `services/v2_tables/` | L2 轉換層 | 方案 A 不成立 |
 | N-2 | 設定、取數紀錄（與 Q12 裁定落地的 `market_indicator`）的 L1 存取模組 | `user_setting`、`fetch_log`、`market_indicator` 落地 | 「存檔」沒有後端；set 頁沒有取數紀錄；`is_revised` 無從比對 |
-| N-3 | FRED vintage 取數的新 L1 檔（**不動 `fetch_fred` 本體**）（2026-10-13：已建 `repositories/macro/fred_vintage.py`，#945） | 取公布日與版次（T1） | FRED 三鍵不寫列 |
+| N-3 | FRED vintage 取數的新 L1 檔（**不動 `fetch_fred` 本體**）（2026-10-13 狀態更新（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：已建 `repositories/macro/fred_vintage.py`，#945；依據：該檔存在於 `224f233`，檔頭自陳依本節 N-3） | 取公布日與版次（T1） | FRED 三鍵不寫列 |
 | N-4 | Q4 那兩張 `_` 分頁的 L1 讀取模組（含 60 秒手動快取，4.4） | 讀持倉補充與保單資料 | alo、hld 只剩空狀態 |
 | N-5 | `repositories/v2_source_status.py`（2026-09-26 補列；已新增於 `wip/mkt-live-data-2026-09-26` 的 `12f8a9a`） | 以唯讀方式讀 `infra/source_backoff.py::get_backoff_state`，交出本頁來源的冷卻狀態，供 mkt 正式入口「重新取數」的停用原因寫出剩餘秒數 | L2 純度白名單不含 `infra.source_backoff`、ui_v2 不得碰舊樹，冷卻秒數沒有合規的讀取路徑 |
 
