@@ -579,23 +579,48 @@ def test_Nb_門檻是客戶裁示的10天_不是MJ_FRESH_DAYS_YELLOW():
     """~~`test_Nb_門檻引用既有SSOT_不另立數字`：門檻 == MJ_FRESH_DAYS_YELLOW（7）~~
     → 第三輪總管裁定（有意識的更正，不是漏刪）：B 線已有客戶裁示的 10 天（`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`），
     草稿 §D 明寫不要沿用 MJ_FRESH_DAYS_YELLOW。"""
+    from ui_v2 import thresholds
     from ui_v2.hld import live as hld_live
-    assert source.live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW
+    # 2026-10-13 客戶裁示（10 天單一共用定義）：兩頁同引 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`
+    assert source.live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW == thresholds.NAV_NOT_READY_DAYS == 10
+    assert source.live.thresholds is thresholds
     assert not hasattr(source, "contract")                                 # 不再經 contract 轉交
 
 
-def test_第三輪_today_tw取台灣日曆日_UTC前一天16點半已是台灣隔天(monkeypatch):
-    """決定性時鐘：UTC 2026-10-12T16:30 ＝ 台北 2026-10-13T00:30 → `_today_tw()` 必須回 2026-10-13（不是 10-12）。"""
+@pytest.mark.parametrize("utc_instant, taiwan_day, utc_day", [
+    # UTC 前一天 16:30 ＝ 台北當天 00:30：台灣日期比 UTC 日期多一天
+    ((2026, 10, 12, 16, 30), (2026, 10, 13), (2026, 10, 12)),
+    # 跨年也一樣（另一個與今天無關的日期，免得替身時鐘漏接時剛好被真時鐘蒙混過關）
+    ((2025, 12, 31, 23, 59), (2026, 1, 1), (2025, 12, 31)),
+])
+def test_第三輪_today_tw取台灣日曆日_UTC前一天16點半已是台灣隔天(monkeypatch, utc_instant, taiwan_day, utc_day):
+    """決定性時鐘：替身把 `now`（帶或不帶時區）、`utcnow`、`today` 全部覆寫成同一個固定的 UTC 時刻，
+    該時刻的台灣日期與 UTC 日期不同 → `_today_tw()` 必須回台灣那一天。
+
+    ~~只覆寫 `now()`~~（2026-10-13 稽核：半決定性 —— `_today_tw` 若改用 `utcnow()`，替身沒接住、落到真時鐘，
+    在真實日期剛好是台灣那天時照樣會過；有意識的更正，不是漏刪）。現在三種錯誤寫法都會轉紅：
+    `utcnow()`、`now(timezone.utc)`、無時區 `now()`（替身模擬伺服器跑在 UTC，與 Streamlit Cloud 相同）。"""
     import datetime as _dt
-    instant = _dt.datetime(2026, 10, 12, 16, 30, tzinfo=_dt.timezone.utc)
+    instant = _dt.datetime(*utc_instant, tzinfo=_dt.timezone.utc)
+    naive_utc = instant.replace(tzinfo=None)
+    assert instant.astimezone(source.nav_dividend.MARKET_DATE_TZ).date() == _dt.date(*taiwan_day)  # 前提
+    assert naive_utc.date() == _dt.date(*utc_day) != _dt.date(*taiwan_day)                         # 前提：兩者不同
 
     class _Clock(_dt.datetime):
         @classmethod
         def now(cls, tz=None):
-            return instant if tz is None else instant.astimezone(tz)
+            return naive_utc if tz is None else instant.astimezone(tz)
+
+        @classmethod
+        def utcnow(cls):
+            return naive_utc
+
+        @classmethod
+        def today(cls):
+            return naive_utc
 
     monkeypatch.setattr(source, "datetime", _Clock)
-    assert source._today_tw() == _dt.date(2026, 10, 13)
+    assert source._today_tw() == _dt.date(*taiwan_day)
 
 
 def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備(wired):

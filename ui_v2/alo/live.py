@@ -24,6 +24,7 @@ import math
 import re
 from datetime import date
 
+from .. import thresholds
 from . import logic
 
 # ~~本輪只接讀不接寫 ⇒ 會寫 `user_setting` 的按鈕一律停用並寫出原因：~~
@@ -277,8 +278,11 @@ def tables_failed_together(message: str) -> dict:
 # 稽核組 7 實跑：7 天在 2026 春節期間會連續 3～4 天把國內基金整片排除。舊值 7 的用意（§2.4 不得靜默返回舊值）仍然成立，
 # 被權衡掉的是它的數字 —— 它不是 B 線對淨值新鮮度的現行裁示。
 # 判定方向與 hld 黃燈一致：hld 是 `days > NAV_FRESH_DAYS_YELLOW` 才黃，本頁是 `> NAV_MAX_AGE_DAYS` 才排除。
-# 兩頁不互相 import（各自是頁面模組），由 tests/ui_v2/test_alo_live_logic.py 鎖住兩者相等，防止脫鉤。
-NAV_MAX_AGE_DAYS = 10
+# ~~兩頁不互相 import（各自是頁面模組），由 tests/ui_v2/test_alo_live_logic.py 鎖住兩者相等，防止脫鉤。~~
+# ~~`NAV_MAX_AGE_DAYS = 10`（本檔寫死）~~ → 2026-10-13 客戶裁示（有意識的更正，不是漏刪）：10 天要有單一、
+# 明確的共用定義 —— 兩個寫死的 10 只靠測試鎖相等，仍是兩個數字。兩頁照舊不互相 import，
+# 改為同引 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`；本名保留為別名，判定方向 `> NAV_MAX_AGE_DAYS` 不變。
+NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS
 
 
 def wants_market_value(setting_rows) -> bool:

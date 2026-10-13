@@ -300,8 +300,10 @@ def test_live的import就是那幾個_純函式模組():
             names.add(prefix)
             names.update(prefix + ("." if node.module else "") + a.name for a in node.names)
     # 2026-10-13 第二輪 N-b：加 `datetime.date`（解析淨值日；標準庫、純函式，不讀時鐘 —— today 由呼叫端注入）。
+    # 2026-10-13 客戶裁示（10 天單一共用定義）：加 `from .. import thresholds`（`ui_v2/thresholds.py`，純常數、
+    # 不 import 任何東西；不是姊妹頁、不是舊樹 —— 舊樹 `shared` 被 import 守衛第 (5) 條擋，所以門檻住在 ui_v2 底下）。
     assert names == {"__future__", "__future__.annotations", "copy", "datetime", "datetime.date", "json", "math", "re",
-                     ".", ".logic"}, names
+                     ".", ".logic", "..", "..thresholds"}, names
 
 
 # ═══════════════════════ ALO-GAP-分母全缺：總管 2026-09-28 盯住的那條界線 ═══════════════════════
@@ -947,7 +949,8 @@ def _dated_row(code, day):
     return dict(_nav_row(code), nav_date=day)
 
 
-def test_第二輪Nb_淨值日超過門檻天數_不納入_剛好等於門檻照收():
+# 名稱更正（2026-10-13，斷言未改）：~~test_第二輪Nb_淨值日超過門檻天數_不納入_剛好等於門檻照收~~ —— 內容是第三輪的 10 天。
+def test_第三輪_淨值日超過10天_不納入_剛好10天照收():
     """~~今天 2026-09-25、門檻 7 天：09-18（7 天）照收、09-17（8 天）不納入（🔴 > 7d）。~~
     → 第三輪（門檻改為客戶裁示的 10 天；有意識的更正，不是漏刪）：今天 2026-09-25，
     09-15（10 天）照收、09-14（11 天）不納入 —— 與 hld 黃燈同向（`days > 10`）。"""
@@ -1001,11 +1004,97 @@ def test_第二輪6_兩筆只登記不改行為的GAP在():
 # ═══════════════════════ 2026-10-13 第三輪：門檻改用客戶裁示的 10 天，與 hld 鎖在一起 ═══════════════════════
 
 
-def test_第三輪_alo淨值日上限與hld黃燈門檻是同一個值_不得脫鉤():
-    """出處：`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`（客戶 2026-10-02 裁示「門檻 10 天，非 44 規定，是本輪依長假實況訂的」）。"""
+# ~~test_第三輪_alo淨值日上限與hld黃燈門檻是同一個值_不得脫鉤（只鎖兩個寫死的 10 相等）~~
+# → 2026-10-13 客戶裁示（有意識的更正，不是漏刪）：10 天要有**單一**共用定義，兩個寫死的 10 靠測試鎖相等仍是兩個數字。
+#   改為鎖「兩頁引用的是同一個共用常數」＋「門檻那一行不是整數字面值」。
+
+_THRESHOLD_ALIASES = {
+    "ui_v2/hld/live.py": "NAV_FRESH_DAYS_YELLOW",
+    "ui_v2/alo/live.py": "NAV_MAX_AGE_DAYS",
+}
+
+
+def _assignments_to(rel, name):
+    """回傳檔內所有對 `name` 賦值的右側 AST（Assign、AnnAssign、AugAssign 都算）。"""
+    import ast
+
+    tree = ast.parse((_ROOT / rel).read_text(encoding="utf-8"))
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            targets = [node.target]
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            out.append(node.value)
+    return out
+
+
+def test_10天門檻_兩頁引用同一個共用常數_值為10():
+    """出處：`ui_v2/thresholds.py::NAV_NOT_READY_DAYS`（客戶 2026-10-02 裁示「門檻 10 天，非 44 規定，是本輪依長假實況訂的」；
+    客戶 2026-10-13 裁示：10 天要有單一、明確的共用定義）。"""
+    import ast
+
+    from ui_v2 import thresholds
     from ui_v2.hld import live as hld_live
-    assert live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW
-    assert type(live.NAV_MAX_AGE_DAYS) is int
+
+    assert thresholds.NAV_NOT_READY_DAYS == 10 and type(thresholds.NAV_NOT_READY_DAYS) is int
+    # 執行期：兩頁拿到的是同一個模組物件、同一個值
+    assert live.thresholds is thresholds and hld_live.thresholds is thresholds
+    assert live.NAV_MAX_AGE_DAYS == thresholds.NAV_NOT_READY_DAYS
+    assert hld_live.NAV_FRESH_DAYS_YELLOW == thresholds.NAV_NOT_READY_DAYS
+    # 原始碼：別名的右側就是 `thresholds.NAV_NOT_READY_DAYS` 這個名稱（小整數在 CPython 是同一個物件，
+    # 光比 `is` 抓不到「各寫一個 10」，所以另以 AST 鎖名稱）
+    for rel, alias in _THRESHOLD_ALIASES.items():
+        values = _assignments_to(rel, alias)
+        assert len(values) == 1, (rel, alias, len(values))
+        assert ast.unparse(values[0]) == "thresholds.NAV_NOT_READY_DAYS", (rel, ast.unparse(values[0]))
+    # 共用常數本身：全 ui_v2 只有 `ui_v2/thresholds.py` 這一處給它值，而且是字面值 10
+    owners = {}
+    for path in sorted((_ROOT / "ui_v2").rglob("*.py")):
+        rel = path.relative_to(_ROOT).as_posix()
+        got = _assignments_to(rel, "NAV_NOT_READY_DAYS")
+        if got:
+            owners[rel] = [ast.unparse(v) for v in got]
+    assert owners == {"ui_v2/thresholds.py": ["10"]}, owners
+
+
+@pytest.mark.parametrize("rel, alias", sorted(_THRESHOLD_ALIASES.items()))
+def test_10天門檻_兩頁門檻那一行不得是整數字面值(rel, alias):
+    """AST 守衛：門檻賦值的右側不得是 `ast.Constant`（例：`NAV_MAX_AGE_DAYS = 10`）—— 那就是又各寫一個數字。"""
+    import ast
+
+    values = _assignments_to(rel, alias)
+    assert values, (rel, alias)                                            # 空掃防呆：真的找到那一行
+    bad = [ast.unparse(v) for v in values if _has_number_literal(v)]
+    assert bad == [], (rel, alias, bad)
+
+
+def _has_number_literal(value) -> bool:
+    """右側（含巢狀，例 `int(10)`、`x + 0`）出現數字字面值 → 真。"""
+    import ast
+
+    return any(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool)
+               for n in ast.walk(value))
+
+
+@pytest.mark.parametrize("code, caught", [
+    ("NAV_MAX_AGE_DAYS = 10", True),
+    ("NAV_MAX_AGE_DAYS: int = 10", True),
+    ("NAV_MAX_AGE_DAYS = int(10)", True),
+    ("NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS + 0", True),
+    ("NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS", False),          # 負控：現行寫法不誤報
+])
+def test_10天門檻_字面值守衛的正控與負控(code, caught):
+    """守衛本身會咬：把數字寫回本頁的各種寫法都要被判出來；現行寫法不得誤報。"""
+    import ast
+
+    tree = ast.parse(code)
+    values = [n.value for n in ast.walk(tree) if isinstance(n, (ast.Assign, ast.AnnAssign))]
+    assert len(values) == 1, code
+    assert _has_number_literal(values[0]) is caught, code
 
 
 def test_第三輪_判定方向與hld黃燈相同_剛好等於門檻不排除():

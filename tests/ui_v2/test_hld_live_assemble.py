@@ -425,7 +425,10 @@ def test_T1b_不讀時鐘_taiwan_today被換成一呼叫就raise的函式_照常
     assert list(out) == ["dataset", "live_args"]
 
 
-def test_T1c_live_py的import恰為既有七行_沒有新增任何模組():
+# 名稱更正（2026-10-13）：~~test_T1c_live_py的import恰為既有七行_沒有新增任何模組~~ —— 現在是八行。
+# 2026-10-13 客戶裁示（10 天單一共用定義；有意識的更正，不是漏刪）：加 `from .. import thresholds`
+# （`ui_v2/thresholds.py`，純常數、不 import 任何東西；不是姊妹頁、不是舊樹）。其餘七行一字未變。
+def test_T1c_live_py的import恰為這八行_只多了共用門檻模組():
     tree = ast.parse(_LIVE_PY.read_text(encoding="utf-8"))
     found = sorted(ast.unparse(n) for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)))
     assert found == sorted([
@@ -435,6 +438,7 @@ def test_T1c_live_py的import恰為既有七行_沒有新增任何模組():
         "import math",
         "import re",
         "from datetime import date, datetime, timedelta, timezone",
+        "from .. import thresholds",
         "from . import logic",
     ])
 
