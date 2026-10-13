@@ -153,19 +153,24 @@ def _badge(text, tone):
     return f'<span class="hld-badge" style="--hld-tone:{theme.tone_hex(tone)}">{text}</span>'
 
 
-@pytest.mark.parametrize("days, text, tone", [(0, "當日", "中性"), (10, "延遲 10 日", "中性"), (11, "延遲 11 日", "黃")])
+# ~~`(11, "延遲 11 日", "黃")`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：11 天 ＝ 灰色「⬜ 資料未備」，
+# 且 HLD-6 不再列那幾檔的淨值列（沒有分組標頭可掛）⇒ 只剩 HLD-2／HLD-3／HLD-8 的 9 枚。
+@pytest.mark.parametrize("days, text, tone", [(0, "當日", "中性"), (10, "延遲 10 日", "中性"), (11, "⬜ 資料未備", "灰")])
 def test_S5_徽章畫在HLD2_HLD3標頭旁_HLD8每一列_HLD6分組標頭(days, text, tone):
     md = _run_fresh(days)
     badge = _badge(text, tone)
-    # HLD-2／HLD-3 每檔標頭旁（3 檔 × 2 塊）＋ HLD-8 每一列（3）＋ HLD-6 分組標頭（3）
-    assert md.count(badge) == 12
+    # HLD-2／HLD-3 每檔標頭旁（3 檔 × 2 塊）＋ HLD-8 每一列（3）＋ HLD-6 分組標頭（3，資料未備時 0）
+    assert md.count(badge) == (12 if days <= 10 else 9)
     assert md.count(f'<div class="hld-fh">基金 A（示意） · 幣別 USD {badge}</div>') == 2   # HLD-2、HLD-3
     assert md.count(f"<td>基金 A（示意） {badge}") == 1                                   # HLD-8 基金名那一格
-    assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == 1
+    assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == (1 if days <= 10 else 0)
+    assert _badge(f"延遲 {days} 日", "黃") not in md   # 徽章不再有黃色
 
 
+# ~~`(11, "⚠ 淨值取自預存序列…已超過 10 日", "黃")`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：灰、不帶 ⚠；
+# HLD-6 不再列那一檔的淨值列（沒有分組可掛副標）⇒ 11 天時只剩 HLD-2／HLD-3／HLD-8／HLD-5 的 4 處。
 @pytest.mark.parametrize("days, text, tone", [
-    (11, "⚠ 淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "黃"),
+    (11, "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18，已超過 10 日", "灰"),
     (10, "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "中性"),
 ])
 def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, text, tone):
@@ -176,17 +181,26 @@ def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, tex
     text = text.replace(day, f'<span style="white-space:nowrap">{day}</span>')
     note = f'style="color:{color}">{text}</div>'
     # HLD-2、HLD-3、HLD-8（儲存格內）、HLD-6（分組標頭下一列）各 1；HLD-5 該檔展開標頭下 1
-    assert md.count(note) == 5
+    assert md.count(note) == (5 if days <= 10 else 4)
     assert f'<div class="hld-line" style="color:{color}">{text}</div>' in md          # HLD-5
-    assert f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>' in md  # HLD-6
+    hld6 = f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>'
+    assert (hld6 in md) is (days <= 10)                                                # HLD-6
+    assert "⚠ 淨值取自預存序列" not in md
 
 
-@pytest.mark.parametrize("days, tone", [(10, "中性"), (11, "黃")])
-def test_S5_HLD1卡尾第3句排在既有卡尾之後(days, tone):
-    md = _run_fresh(days, name="srcmiss")   # 這一組卡尾有「未列入的檔不進上表…」那兩行
-    tail = f'<div class="hld-note" style="color:{theme.tone_hex(tone)}">本卡所列的檔中，1 檔的淨值取自預存序列，逐檔見 HLD-6</div>'
+def test_S5_HLD1卡尾第3句排在既有卡尾之後():
+    # ~~`(11, "黃")` 那一組~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：11 天時三檔都資料未備、沒有用到淨值，
+    # 不算「取自預存序列」，卡尾第 3 句不出現（見下一條）；10 天那一組一字未改。
+    md = _run_fresh(10, name="srcmiss")   # 這一組卡尾有「未列入的檔不進上表…」那兩行
+    tail = f'<div class="hld-note" style="color:{theme.tone_hex("中性")}">本卡所列的檔中，1 檔的淨值取自預存序列，逐檔見 HLD-6</div>'
     assert tail in md
     assert md.index("未列入的檔不進上表") < md.index(tail)
+
+
+def test_S5_HLD1卡尾第3句_11天資料未備時不出現_也不畫黃():
+    md = _run_fresh(11, name="srcmiss")
+    assert "本卡所列的檔中" not in md
+    assert f'style="color:{theme.tone_hex("黃")}">本卡所列的檔中' not in md
 
 
 def test_S5_示範模式_一個新鮮度字樣都不畫():
