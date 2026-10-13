@@ -13,7 +13,7 @@
 
 | 頁 | 模式 | 呼叫方式（與哪個入口同名參數、同一物件） |
 |---|---|---|
-| 市場總覽 | 真資料 | `page.render(load_live=source.load_live)` ＝ `ui_v2/app_mkt_live.py` |
+| 市場總覽 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_mkt_live.py`（2026-10-13 起接上存檔） |
 | 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error)` ＝ `ui_v2/app_hld_live.py` |
 | 標的探索 | **示意資料** | `page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示 |
 | 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_alo_live.py` |
@@ -54,7 +54,7 @@
   不會互相帶值（回歸測試：tests/ui_v2/test_preview_page.py）。⚠️ 這個結論的依據是
   streamlit 1.59.2 的 widget id 算法；升版改了算法時，那條回歸測試會先紅。
   **會跨頁共用的只有各頁程式自己寫進 `st.session_state` 的 key**（不是輸入欄的那些）。
-  其中兩份會讓畫面與事實或與自己相反，本檔不改 `page.py`，改在**換頁那一次** pop 掉
+  其中~~兩份~~三份（2026-10-13 起；狀態更新，不是漏刪）會讓畫面與事實或與自己相反，本檔不改 `page.py`，改在**換頁那一次** pop 掉
   （`_on_page` ＋ `_PAGE_STATE_TO_DROP`）：
   1. 資產配置的存檔失敗帳（`ui_v2/alo/page.py::_SAVE_ERRORS_STATE`）：資產配置存某鍵失敗、
      到設定與診斷把同一鍵存成功、再回資產配置，畫面仍說失敗 —— 與事實相反。
@@ -64,6 +64,11 @@
      守衛在 tests/ui_v2/test_preview_entry.py 讀該檔比對）：套用 30 日後換頁再回來，輸入欄已變回空白、
      MKT-4 寫尚未設定，三張核心卡卻仍用看不見的 30 日窗計算 —— 畫面自相矛盾。
      代價：離開市場總覽再回來，要重新按一次「套用」（與新開這一頁相同）。
+     → 2026-10-13 狀態更新（不是漏刪）：客戶裁示「未儲存的暫存設定不得影響正式結果」後，
+     正式模式的「套用」停用、三張核心卡只讀已存設定，`"_mkt_applied"` 在本預覽已不進任何計算；
+     這一格照留（無害），上面那段描述的是當時的現象。
+  3. 市場總覽「存檔」那一次的逐鍵結果（`ui_v2/mkt/page.py::_SAVE_RESULTS_STATE`，2026-10-13 起）：
+     理由同第 1 項 —— 別頁把同一鍵存成功後回來，不能仍說失敗。
   ⚠️ 其他頁程式自己寫的 key（例如持倉體檢的套用值）未逐一處理，見交付報告的登記。
 """
 
@@ -105,6 +110,9 @@ _LAST_PAGE_KEY = "_preview_last_page"
 _PAGE_STATE_TO_DROP = (
     alo_page._SAVE_ERRORS_STATE,   # 資產配置的存檔失敗帳（取 page 的常數，不另寫字串）
     "_mkt_applied",                # 市場總覽「套用」的值（mkt/page.py 沒有常數；守衛讀該檔比對字面值）
+    # 2026-10-13：市場總覽存檔接上 user_setting（客戶裁示）後多一份「按存檔那一次的逐鍵結果」，
+    # 與資產配置的存檔失敗帳同一個理由（別頁存成功後回來仍說失敗 —— 與事實相反），換頁一併清。
+    mkt_page._SAVE_RESULTS_STATE,
 )
 
 
@@ -122,7 +130,7 @@ def _on_page(slug: str) -> None:
 
 def page_mkt() -> None:
     _on_page("mkt")
-    mkt_page.render(load_live=mkt_source.load_live)
+    mkt_page.render(load_live=mkt_source.load_live, save_live=mkt_source.save_setting)
 
 
 def page_hld() -> None:

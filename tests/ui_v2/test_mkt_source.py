@@ -34,6 +34,11 @@ def fake_st(monkeypatch):
     st = types.SimpleNamespace(secrets={}, session_state={})
     monkeypatch.setattr(source, "st", st)
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
+    # 2026-10-13 起 load_live 另讀已存設定（客戶裁示：市場總覽設定存檔接上）；本檔不測設定，給一張空表。
+    # 設定那一段的測試在 tests/ui_v2/test_mkt_settings_logic.py。
+    monkeypatch.setattr(source.settings_store, "load_user_settings",
+                        lambda _values: {"rows": {}, "bad_rows": [], "broken_keys": [], "blank_rows": 0,
+                                         "tab_missing": True})
     return st
 
 
@@ -53,8 +58,16 @@ def test_dataset與fixtures同形_只有rows與errors兩鍵(monkeypatch, fake_st
     assert set(data["dataset"]) == set(fixtures.dataset_all_ok()) == {"rows", "errors"}
     assert data["dataset"]["rows"] == [_ROW]
     assert data["dataset"]["errors"] == {"fx_twd_per_usd": "原文"}
+    # ~~assert data["notes"] == {"pending": …, "masked_keys": [], "cooldowns": []}~~
+    # → 2026-10-13 狀態更新（不是漏刪）：notes 另交可勾清單與已存設定（客戶裁示 MKT-5／設定存檔）。
     assert data["notes"] == {"pending": {"leading_index": "ndc_no_release_date"},
-                             "masked_keys": [], "cooldowns": []}
+                             "masked_keys": [], "cooldowns": [],
+                             # 2026-10-13 稽核 G N3：排除 L2 交回的 pending 鍵（狀態更新，不是漏刪）
+                             "available_keys": [k for k in source.market_indicator.INDICATOR_SPECS
+                                                if k != "leading_index"],
+                             "settings": {"window_days": None, "baseline_date": None, "indicator_keys": None,
+                                          "pair_consistent": None},
+                             "settings_error": None}
     for row in data["dataset"]["rows"]:
         assert list(row) == list(fixtures.observation("vol_index"))
 

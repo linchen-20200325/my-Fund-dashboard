@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import html
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import streamlit as st
 
@@ -251,7 +251,7 @@ def _on_apply() -> None:
 
 def _on_save() -> None:
     """`44` MKT-4：存檔把當下值寫回 user_setting 的同兩鍵並更新 updated_at，
-    不重算三張核心卡。本輪的 user_setting 替身是一個 in-memory dict。
+    不重算三張核心卡。本輪的 user_setting 替身是一個 in-memory dict。（**示範模式**）
 
     刻意不碰 `_mkt_applied` —— 存檔不重算三張核心卡。
     """
@@ -261,7 +261,66 @@ def _on_save() -> None:
     store["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _render_mkt4(block: dict, *, live_mode: bool = False) -> None:
+# ───────────── 指標清單（MKT-5）與正式模式的存檔（客戶 2026-10-13 裁示） ─────────────
+
+# 正式模式存檔的逐鍵結果（`{鍵: None（已存）或失敗訊息原文}`）：按鈕那一次的事、不是讀表的結果。
+_SAVE_RESULTS_STATE = "_mkt_save_results"
+
+
+def _checkbox_key(name: str) -> str:
+    return f"mkt5_{name}"
+
+
+def _field_selected_keys(keys) -> list:
+    """勾選框**當下**的狀態。只決定勾選框怎麼畫與存檔能不能按，不進任何正式計算。"""
+    return [key for key in keys if st.session_state.get(_checkbox_key(key)) is True]
+
+
+def _on_save_mkt5_demo(keys) -> None:
+    """示範模式：勾選寫進 in-memory 的 user_setting 替身（同 `_on_save`）。"""
+    store = st.session_state.setdefault("_user_setting", {})
+    store["mkt_indicator_keys"] = sorted(_field_selected_keys(keys))
+    store["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _record_saves(results) -> None:
+    merged = dict(st.session_state.get(_SAVE_RESULTS_STATE) or {})
+    merged.update(results)
+    st.session_state[_SAVE_RESULTS_STATE] = merged
+
+
+def _on_save_mkt4_live(save_live) -> None:
+    """正式模式 MKT-4：兩欄都完整才寫（`live.mkt4_save_entries` 第二道），寫進 `user_setting`。
+    不重算任何東西 —— 下一次重跑由 `load_live` 重新讀 `user_setting`，正式結果才換成新值。"""
+    entries = live.mkt4_save_entries(_field_window_days(), _field_baseline_date())
+    _record_saves(live.run_saves(entries, save_live))
+
+
+def _on_save_mkt5_live(save_live, keys) -> None:
+    """正式模式 MKT-5：勾選寫進 `user_setting` 的 `mkt_indicator_keys`。"""
+    entries = live.mkt5_save_entry(_field_selected_keys(keys), keys)
+    _record_saves(live.run_saves(entries, save_live))
+
+
+def _seed_live_fields(settings, keys, settings_error=None) -> None:
+    """正式模式：輸入欄／勾選框的狀態**不在** session 裡時，以**已存**設定填上（44 MKT-4 判準：
+    重新載入後兩個欄位與存檔前逐字相同）。已在 session 裡（使用者正在編、或剛存完）就不動。
+    ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白。
+    勾選框維持不勾。（同日曾一度改為從未存過時預設全勾，總管 2026-10-13 依 44 1.1 節既有判準裁定撤回；
+    從未存過時下方明細改為不全列，見 `logic.TEXT_UNSAVED_NONE`。）
+    """
+    if "mkt4_days" not in st.session_state and settings.get("window_days") is not None:
+        st.session_state["mkt4_days"] = settings["window_days"]
+    if "mkt4_baseline" not in st.session_state and settings.get("baseline_date"):
+        st.session_state["mkt4_baseline"] = date.fromisoformat(settings["baseline_date"])
+    # 勾選框初值：已存過 → 依已存清單；從未存過或讀不到 → 不填（一個都不勾；總管 2026-10-13 裁定）。
+    initial = live.initial_checkbox_values(settings, keys, settings_error)
+    for key, value in (initial or {}).items():
+        if _checkbox_key(key) not in st.session_state:
+            st.session_state[_checkbox_key(key)] = value
+
+
+def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> None:
     with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
         st.caption(block["answers"])
         days_field, date_field = block["inputs"]
@@ -289,10 +348,12 @@ def _render_mkt4(block: dict, *, live_mode: bool = False) -> None:
                 help=apply_button["disabled_reason"] or None,
             )
         with right:
+            on_click, args = save_click if save_click is not None else (_on_save, ())
             st.button(
                 save_button["label"],
                 key="mkt4_save",
-                on_click=_on_save,
+                on_click=on_click,
+                args=args,
                 disabled=not save_button["_enabled"],
                 help=save_button["disabled_reason"] or None,
             )
@@ -307,21 +368,33 @@ def _render_mkt4(block: dict, *, live_mode: bool = False) -> None:
         st.caption("紅線說明區：所有試算參數均由使用者自行輸入。")
 
 
-def _render_mkt5(block: dict) -> None:
+def _render_mkt5(block: dict, *, save_click) -> None:
     with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
         st.caption(block["answers"])
         for item in block["_items"]:
             st.checkbox(
                 item["label"],
-                value=False,  # 一個也沒有預先勾
-                key=f"mkt5_{item['name']}",
-                disabled=True,  # 唯讀：本塊在 `44` 沒有宣告寫入對象
+                value=False,  # 一個也沒有預先勾（正式模式只以使用者自己存過的值填，見 `_seed_live_fields`）
+                key=_checkbox_key(item["name"]),
+                # ~~disabled=True,  # 唯讀：本塊在 `44` 沒有宣告寫入對象~~
+                # → 客戶 2026-10-13 裁示：勾選可存回 user_setting（狀態更新，不是漏刪）。
+                disabled=not item["_enabled"],
                 help=item["disabled_reason"] or None,
             )
             if item["badges"]:
                 st.markdown(_badges_html(item["badges"]), unsafe_allow_html=True)
         for line in block["detail_lines"]:
             st.caption(line)
+        on_click, args = save_click
+        for button in block["buttons"]:
+            st.button(
+                button["label"],
+                key="mkt5_save",
+                on_click=on_click,
+                args=args,
+                disabled=not button["_enabled"],
+                help=button["disabled_reason"] or None,
+            )
         st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
         st.caption("紅線說明區：勾選狀態由使用者自行輸入，系統不代填。")
 
@@ -393,7 +466,7 @@ def _pick_dataset() -> tuple[str, dict]:
     return name, datasets[name]
 
 
-def render(*, load_live=None) -> None:
+def render(*, load_live=None, save_live=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 {"dataset": 與 fixtures 情境同形, "notes": {...}}）。
@@ -401,7 +474,14 @@ def render(*, load_live=None) -> None:
     傳入時（正式入口 app_mkt_live.py）改由它取得資料，這一條路徑不讀 fixtures，
     並套用 live.apply_live_notes 的正式模式調整；頁首副標只印本頁的提問句 ——
     情境名與示意字樣只屬於示範模式（這一處畫面差異客戶 2026-09-26 已核准）。
+
+    save_live：選填的寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`；客戶 2026-10-13 裁示）。
+    傳入時 MKT-4／MKT-5 的「存檔」寫進 `user_setting`；**正式結果（三張核心卡的比較、下方明細）只讀
+    `load_live` 交回的已存設定**，存檔後下一次重跑（重新讀 `user_setting`）才生效；輸入欄當下的值
+    只決定欄位怎麼畫、存檔能不能按。只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
     """
+    if load_live is None and save_live is not None:
+        raise ValueError("save_live 要與 load_live 一起傳")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     live_input = None
@@ -410,21 +490,48 @@ def render(*, load_live=None) -> None:
     else:
         live_input = load_live()
         scenario_name, dataset = None, live_input["dataset"]
-    applied = st.session_state.get("_mkt_applied", {})
-    model = logic.build_page_model(
-        dataset,
-        # 驅動三張核心卡的是**已套用**的那一組
-        window_days=applied.get("window_days"),
-        baseline_date=_as_setting_value(applied.get("baseline_date")),
-        # 決定存檔能不能按的是**欄位當下**的值
-        field_window_days=_field_window_days(),
-        field_baseline_date=_field_baseline_date(),
-        selected_keys=None,
-    )
+
+    if live_input is None:
+        # 示範模式：三張核心卡照舊由「套用」驅動（示範不是正式結果；客戶 2026-10-13 裁示的射程是正式結果）。
+        applied = st.session_state.get("_mkt_applied", {})
+        demo_store = st.session_state.get("_user_setting", {})
+        keys = logic.selectable_keys(dataset)
+        model = logic.build_page_model(
+            dataset,
+            # 驅動三張核心卡的是**已套用**的那一組
+            window_days=applied.get("window_days"),
+            baseline_date=_as_setting_value(applied.get("baseline_date")),
+            # 決定存檔能不能按的是**欄位當下**的值
+            field_window_days=_field_window_days(),
+            field_baseline_date=_field_baseline_date(),
+            # 指標清單：已存（in-memory 替身）的那一份驅動下方明細
+            selected_keys=demo_store.get("mkt_indicator_keys"),
+            field_selected_keys=_field_selected_keys(keys),
+        )
+        mkt4_click, mkt5_click = None, (_on_save_mkt5_demo, (keys,))
+    else:
+        notes = live_input["notes"]
+        settings = notes.get("settings") or {}
+        available = notes.get("available_keys")
+        keys = logic.selectable_keys(dataset, available)
+        _seed_live_fields(settings, keys, notes.get("settings_error"))
+        # 客戶 2026-10-13 裁示：正式結果只讀**已存**設定（`load_live` 每次重跑重新讀 `user_setting`）；
+        # 輸入欄／勾選框**當下**的值只決定欄位怎麼畫、存檔能不能按，不進任何正式計算（分工寫在 live.build_live_model）。
+        model = live.build_live_model(
+            live_input,
+            field_window_days=_field_window_days(),
+            field_baseline_date=_field_baseline_date(),
+            field_selected_keys=_field_selected_keys(keys),
+            save_wired=save_live is not None,
+            save_results=st.session_state.get(_SAVE_RESULTS_STATE),
+        )
+        if save_live is not None:
+            mkt4_click = (_on_save_mkt4_live, (save_live,))
+            mkt5_click = (_on_save_mkt5_live, (save_live, keys))
+        else:
+            mkt4_click, mkt5_click = (_on_save, ()), (_on_save_mkt5_demo, (keys,))
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
-    if live_input is not None:
-        model = live.apply_live_notes(model, live_input["notes"])
 
     if load_live is None:
         st.markdown(
@@ -455,9 +562,10 @@ def render(*, load_live=None) -> None:
     )
     left, right = st.columns(2)
     with left:
-        _render_mkt4(logic.find_block(model, "MKT-4"), live_mode=live_input is not None)
+        _render_mkt4(logic.find_block(model, "MKT-4"), live_mode=live_input is not None,
+                     save_click=mkt4_click)
     with right:
-        _render_mkt5(logic.find_block(model, "MKT-5"))
+        _render_mkt5(logic.find_block(model, "MKT-5"), save_click=mkt5_click)
 
     st.markdown(
         '<div class="mkt-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True

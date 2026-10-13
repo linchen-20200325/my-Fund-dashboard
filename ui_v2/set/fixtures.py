@@ -42,6 +42,7 @@ _VALUES = {
     "hld_window_end": "2026-09-21",
     "hld_window_start": "2026-06-21",
     "mkt_baseline_date": "2026-08-31",
+    "mkt_compare_pair": '[90, "2026-08-31"]',  # 2026-10-13：與上下兩鍵一致的憑證（稽核 G 回修 B2）
     "mkt_indicator_keys": '["vol_index", "credit_spread_pct"]',
     "mkt_window_days": "90",
     "set_log_keep_rows": "50",

@@ -82,7 +82,26 @@ def test_草稿4_存檔停用並寫原因():
     assert save[0]["_enabled"] is False and save[0]["_visible"] is True
     assert save[0]["disabled_reason"] == "設定存檔尚未接上，存了也留不到下次開頁"
     apply = [b for b in logic.find_block(model, "MKT-4")["buttons"] if b["_action_kind"] == "套用"]
-    assert apply[0]["_enabled"] is True  # 套用不受影響
+    # ~~assert apply[0]["_enabled"] is True  # 套用不受影響~~
+    # → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：未存的值不得影響正式結果 ⇒ 正式模式的「套用」停用並寫原因。
+    assert apply[0]["_enabled"] is False and apply[0]["_visible"] is True
+    assert apply[0]["disabled_reason"] == live.APPLY_DISABLED_REASON
+
+
+def test_存檔接上時_存檔照logic判定_套用照樣停用():
+    """客戶 2026-10-13 裁示：`save_wired=True`（`page.render` 傳了 `save_live`）時存檔照 logic 的判定。"""
+    model = live.apply_live_notes(
+        logic.build_page_model(_phase1_dataset(), field_window_days=30, field_baseline_date="2026-09-20"),
+        _notes(), save_wired=True)
+    saves = [b for b in logic.collect_buttons(model) if b["_action_kind"] == "存檔"]
+    assert len(saves) == 2 and all(b["_enabled"] for b in saves)          # MKT-4 與 MKT-5 各一枚
+    half = live.apply_live_notes(
+        logic.build_page_model(_phase1_dataset(), field_window_days=30, field_baseline_date=None),
+        _notes(), save_wired=True)
+    mkt4_save = next(b for b in logic.find_block(half, "MKT-4")["buttons"] if b["_action_kind"] == "存檔")
+    assert mkt4_save["_enabled"] is False and mkt4_save["disabled_reason"] == "缺少：比較基準日"
+    applies = [b for b in logic.collect_buttons(model) if b["_action_kind"] == "套用"]
+    assert applies and all(not b["_enabled"] for b in applies)
 
 
 def test_草稿5_重新取數停用_無後端與冷卻中兩種原因():

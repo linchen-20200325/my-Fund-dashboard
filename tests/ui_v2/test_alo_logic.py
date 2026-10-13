@@ -201,7 +201,8 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     import hashlib
 
-    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "795614090627cb6368bd2021244e9217"
+    # 2026-10-13 解凍（市場總覽 MKT-4／MKT-5 客戶裁示落字，同日再落稽核 G 回修：觀察窗上限、一致性憑證鍵、標題寫已存值、不預勾等，只在既有行內擴寫、行數不變）；舊值 795614090627cb6368bd2021244e9217。
+    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "77aad71ba0c99b7324f031165aad6dc3"
 
 
 def test_取數失敗圖示是禁止號_黃燈仍是警告號():
