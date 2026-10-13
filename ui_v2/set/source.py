@@ -155,7 +155,13 @@ def refetch(tier) -> dict:
     （客戶裁示 Q2～Q4；狀態更新，不是漏刪）。入口由 L2 `REFETCH_BY_TIER` 分派（與 `WIRED_TIERS` 同一組鍵）。"""
     if tier not in settings_store.WIRED_TIERS:
         raise ValueError(f"層級 {tier!r} 的取數尚未接上")
-    out = settings_store.REFETCH_BY_TIER[tier](_secret_values())
+    if tier == market_indicator.SOURCE_TIER:
+        # 2026-10-13：市場指標層含 FRED 三鍵，金鑰在本層讀好交下去（L2 不讀 secrets；讀法同 `ui_v2/mkt/source.py`）。
+        out = settings_store.REFETCH_BY_TIER[tier](
+            _secret_values(),
+            fred_api_key=market_indicator.fred_api_key_from([st.secrets, os.environ]))
+    else:
+        out = settings_store.REFETCH_BY_TIER[tier](_secret_values())
     persist = out["persist"]
     return {
         "tier": tier,

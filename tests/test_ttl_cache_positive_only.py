@@ -881,10 +881,15 @@ def test_derived_function_that_clears_the_mark_still_gets_cached():
 # ══════════════════════════════════════════════════════════════
 
 # 這三個是**已經被 mark_fetch_failed 標記、且確認不從被標記上游衍生**的。
+# ⚠️ 2026-10-13 起是四個（第 4 個 `fetch_fred_vintages` 照上面那句的條件審過才加入；狀態更新，不是漏刪）；
+#    本段標題與兩條測試名裡的「3／three」是當時的計數，名字不改以免斷掉既有引用。
 _MARKED_PANDAS_TTL_FUNCS = {
     "fetch_yf_close",
     "fetch_fred",
     "fetch_defillama_stablecoin_mcap",
+    # 2026-10-13 新增（49 §6.3 N-3）：FRED 逐版次觀測，失敗分支同 `fetch_fred` 走
+    # `mark_fetch_failed_if_retryable`；回傳值不是由任何被標記的上游算出來的（自己打 `fetch_url`）。
+    "fetch_fred_vintages",
 }
 
 
@@ -1091,6 +1096,7 @@ def test_the_three_are_actually_marked_in_source():
         "fetch_yf_close": root / "repositories" / "macro" / "yf.py",
         "fetch_fred": root / "repositories" / "macro" / "fred.py",
         "fetch_defillama_stablecoin_mcap": root / "repositories" / "macro" / "alternate.py",
+        "fetch_fred_vintages": root / "repositories" / "macro" / "fred_vintage.py",   # 2026-10-13
     }
     for fn_name, path in srcs.items():
         tree = ast.parse(path.read_text(encoding="utf-8"))
