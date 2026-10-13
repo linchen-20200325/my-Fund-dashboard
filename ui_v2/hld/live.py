@@ -668,6 +668,26 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     return out
 
 
+def _gate_dividend_coverage(dataset: dict, coverage, applied_window) -> dict:
+    """2026-10-13 稽核必修 1(b)：所選區間的起點早於任何一檔「有配息列」的最舊除息日（`coverage`）→
+    那一段沒有證據（來源可能只給到那麼舊），不得畫成「區間內無配息」，也不得加總成偏低的數。
+    依「全有或全無」規則，整張配息表退回既有的「尚未接上」呈現（`dividend` 清空、`pending_tables` 加回 `dividend`；
+    不新增任何字面）。區間取法與 `logic._build_page_model` 相同（沒按套用 → 存過的設定）。
+    `coverage` 為 None 或空、配息本來就未接上、或區間不合格 → 原樣交回（不改輸入，回新的 dict）。"""
+    if not coverage or "dividend" in (dataset.get("pending_tables") or ()):
+        return dataset
+    window = logic.saved_window(dataset) if applied_window is None else tuple(applied_window)
+    if not logic.window_is_valid(window):
+        return dataset
+    start = window[0]
+    if not any(isinstance(first, str) and first > start for first in coverage.values()):
+        return dataset
+    out = dict(dataset)
+    out["dividend"] = []
+    out["pending_tables"] = list(dataset.get("pending_tables") or ()) + ["dividend"]
+    return out
+
+
 def build_live_model(
     dataset: dict,
     *,
@@ -682,6 +702,7 @@ def build_live_model(
     nav_provenance=None,
     applied_window=None,
     applied_rules=None,
+    dividend_coverage=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
@@ -695,6 +716,7 @@ def build_live_model(
       每檔最後一筆 `nav_date` 取自同一份 `dataset["nav"]`（畫面上 HLD-6 印的就是那幾列）。
     - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
     - `applied_window`、`applied_rules`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三、四輪）。
+    - `dividend_coverage`（2026-10-13 稽核必修 1(b)）：`assemble_live_load` 交的 `{代碼: 最舊除息日}`；見 `_gate_dividend_coverage`。
     """
     if direct_policy_id is None:
         raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
@@ -709,6 +731,7 @@ def build_live_model(
         if direct
         else []
     )
+    dataset = _gate_dividend_coverage(dataset, dividend_coverage, applied_window)
     today = taiwan_today() if today is None else today
     fresh = nav_freshness(dataset, nav_provenance, today=today)
     model = logic.build_page_model(
@@ -934,6 +957,7 @@ def assemble_live_load(
     nav_unavailable_withheld,
     dividend_gate_open,
     mask,
+    dividend_table,
 ) -> dict:
     """S6b-2：把 L2 的輸出組成 `page.render(load_live=...)` 要的回傳值 `{"dataset", "live_args"}`。
 
@@ -948,7 +972,21 @@ def assemble_live_load(
     - L1 有回資料、但 L2 全數拒收（沒有淨值列、沒有錯誤、沒有扣下代碼）的檔，同樣不放任何東西。
     - 呼叫端**必須**只交幣別兩碼與取得時間兩碼；同一檔被給了互相矛盾輸入的那一碼只會因呼叫端組錯而出現，刻意不在清單內 → raise（契約被破壞不畫成 ⬜）。⚠️ 本函式不檢查清單內容：呼叫端若連那一碼也交進來，該檔會畫成 ⬜、不會 raise；「清單恰為四碼」列為 S6b-3 的驗收項。
     - `holding_tables["skipped_tabs"]` 有任何一筆（部分分頁讀取失敗或本次未讀）→ 持倉照交，另把各分頁的原因以 `mask` 遮過後放進 `errors["holding"]`。讀到的持倉不為空時，沿用 logic 既有的「有持倉時來源取數失敗」畫法，~~但 HLD-1 在零偏離時仍印「無偏離項」與「沒有任何一檔超出」—— 屬「結論燈兩句」那一塊，待修；~~ → 📌 2026-10-08 修好（有意識的更正，不是漏刪；「結論燈兩句」）：有持倉、零偏離又有略過分頁時，HLD-1 印「⛔ 取數失敗：<原文>」，不再印這兩句。~~讀到的持倉為空時，走 logic 空持倉那一支，畫面仍會印「尚未建立任何持倉」—— 屬「讀取失敗不說空」那一塊，待修。~~ → 📌 2026-10-05 修好（有意識的更正，不是漏刪；「讀取失敗不說空」）：讀到的持倉為空時，logic 把它當成讀取失敗畫、不說空；`direct` 清單照交時 HLD-5 只加卡尾（見 `_apply_direct`）。
-    - `pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。
+    - ~~`pending_tables` 固定為 `["fund_profile", "dividend"]`；配息閘門已打開 → raise（本頁尚未規定配息怎麼組）。~~
+      → 2026-10-13 狀態更新（有意識的更正，不是漏刪；客戶同日裁示 B 線配息改走 A 鏈，只改接線）：
+      `dividend_gate_open` 仍只管舊的 `fetch_div` 那一支（打開 → raise，照舊）。配息改由 `dividend_table`
+      （L2 `build_nav_dividend_tables` 的 `dividend`，與淨值同一次 A 鏈呼叫）交進來；不給（None）→ 與先前逐鍵相同
+      （`pending_tables` 為 `["fund_profile", "dividend"]`、`dividend` 為空）。給了的話：
+      - 配息取數失敗的檔 → `fund_errors["dividend"]`（`mask(原文)`）→ 畫面走既有的「⛔ 取數失敗」；
+      - **每一檔持倉**都「配息已確定」（L2 `settled`：寫出的列就是該檔全部配息，或確實沒有配息）或取數失敗 →
+        `dividend` 交 L2 的列、`pending_tables` 只剩 `["fund_profile"]`；
+      - 只要有一檔兩者皆非（幣別衝突、來源沒宣告幣別、日期欄證明不了是除息日、分辨不出是不配息還是沒抓到、
+        代碼對照失敗）→ 整張配息表照舊列為尚未接上（`dividend` 為空、`pending_tables` 含 `dividend`），
+        畫面照舊印「⬜ 資料未備」。⚠️ 理由：本頁的配息「資料未備」只有表層級一種畫法（`logic.fund_metrics` 的
+        `div_missing` 看 `pending_tables`）；那一檔若沒有列又不標未備，畫面會把它說成「區間內無配息」——
+        那是假話。逐檔的「資料未備」要改畫面判斷，不在「只改接線」的射程內，已回報待裁示。
+      - 稽核必修 1(b)：接上時另交 `live_args["dividend_coverage"]`（每一檔有配息列的最舊除息日）；
+        所選區間起點早於其中任何一檔 → `build_live_model` 同樣整張退回尚未接上（見 `_gate_dividend_coverage`）。
     - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
       R-7：`settings["tab_missing"]`、`settings["bad_rows"]` 一併交給 `parse_user_settings`（缺鍵 → KeyError，不當成沒有）。
     - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。
@@ -978,6 +1016,8 @@ def assemble_live_load(
         raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")
     if dividend_gate_open is True:   # R-9
         raise ValueError("配息閘門已打開，本頁尚未規定配息怎麼組")
+    if dividend_table is not None and holding_tables is None:   # R-17（2026-10-13）
+        raise ValueError("持倉表讀取失敗時，dividend_table 不得給")
 
     if holding_tables is not None:
         if not isinstance(key_results, (list, tuple)):
@@ -1003,6 +1043,21 @@ def assemble_live_load(
         not_handed = {c for c in key_ok if c not in nav_table["fetched"] and c not in nav_table["withheld"]}
         if not_handed:   # R-16
             raise ValueError(f"代碼對照成功、卻沒有交給淨值表的代碼：{sorted(not_handed)!r}")
+        if dividend_table is not None:   # R-18（2026-10-13）：配息表與淨值表同一套一致性檢查
+            div_codes = {r["fund_code"] for r in dividend_table["rows"]}
+            for name in ("errors", "pending", "withheld", "skipped", "fetched", "skipped_rows", "provenance",
+                         "settled"):
+                div_codes |= set(dividend_table[name])
+            if div_codes - codes_held:
+                raise ValueError(f"配息表出現持倉裡沒有的代碼：{sorted(div_codes - codes_held)!r}")
+            if key_failed & div_codes:
+                raise ValueError(f"代碼對照失敗的代碼不得出現在配息表：{sorted(key_failed & div_codes)!r}")
+            div_not_handed = key_ok - set(dividend_table["settled"])
+            if div_not_handed:
+                raise ValueError(f"代碼對照成功、卻沒有交給配息表的代碼：{sorted(div_not_handed)!r}")
+            for code, flag in dividend_table["settled"].items():
+                if type(flag) is not bool:
+                    raise TypeError(f"配息表的 settled 應為 bool：{code!r}")
 
     errors = {}
     if holding_tables is None:
@@ -1048,17 +1103,38 @@ def assemble_live_load(
         nav = [dict(r) for r in nav_table["rows"]]
         provenance = dict(nav_table["provenance"])
 
+    # 2026-10-13：配息（見 docstring）。不給 `dividend_table` → 與先前逐鍵相同。
+    dividend, div_failures, pending_tables, coverage = [], {}, ["fund_profile", "dividend"], {}
+    if holding_tables is not None and dividend_table is not None:
+        for code, message in dividend_table["errors"].items():
+            div_failures[code] = mask(message)
+        key_failed_codes = {r["input"] for r in key_results if r["ok"] is False}
+        if all(code not in key_failed_codes
+               and (dividend_table["settled"].get(code) is True or code in dividend_table["errors"])
+               for code in {h["fund_code"] for h in holding_tables["holding"]}):
+            dividend = [dict(r) for r in dividend_table["rows"]]
+            pending_tables = ["fund_profile"]
+            # 稽核必修 1(b)：每一檔「有配息列」的最舊除息日；區間要等到畫面套用時才知道，交給 `build_live_model` 判
+            for row in dividend:
+                code = row["fund_code"]
+                coverage[code] = min(coverage.get(code, row["ex_date"]), row["ex_date"])
+    per_fund_errors = {}
+    if failures:
+        per_fund_errors["nav"] = failures
+    if div_failures:
+        per_fund_errors["dividend"] = div_failures
+
     return {
         "dataset": {
             "holding": holding,
             "nav": nav,
-            "dividend": [],
+            "dividend": dividend,
             "policy": policy,
             "fund_profile": [],
             "user_setting": user_setting,
             "errors": errors,
-            "pending_tables": ["fund_profile", "dividend"],
-            "fund_errors": {"nav": failures} if failures else {},
+            "pending_tables": pending_tables,
+            "fund_errors": per_fund_errors,
         },
         "live_args": {
             "direct_policy_id": direct_policy_id,
@@ -1066,5 +1142,6 @@ def assemble_live_load(
             "policy_tab_source": policy_tab_source,
             "direct_sources": direct_sources,
             "nav_provenance": provenance,
+            "dividend_coverage": coverage,
         },
     }

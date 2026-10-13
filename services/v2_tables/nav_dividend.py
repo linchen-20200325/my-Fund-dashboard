@@ -22,6 +22,9 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A）。
   - `dividend.ccy`：**只收來源自報**，不沿用持倉列的幣別（配息幣別可能與計價幣別不同）。
     `fetch_div` 回傳的每一筆只有 `date`、`amount`、`source`、`fetched_at`，**沒有幣別** ⇒
     走 MoneyDJ 的基金配息一列都寫不進去（`49` §2.6；客戶 Q5 已知悉）。
+    → 2026-10-13 狀態更新（有意識的更正，不是漏刪；客戶同日裁示「幣別規則與淨值相同」）：上面兩句只對舊的
+      `build_dividend_table`（`fetch_div`）仍然為真。A 鏈那一支（`rows_from_chain_dividends`）：來源**仍必須自報**
+      （沒宣告 → 不寫，`49` T3 的要求不變），自報值與持倉手填意思相同才寫、**標籤用持倉手填**；不同或認不出 → 整檔不寫。
 - `49` §2.6 / Q5：`div_kind` 一律 `unknown`（來源沒有收益／本金區分）；`pay_date` 來源不給 → 空值。
 - `49` §2.2：`fetch_div` 的 `date` **是不是除息日，`49` 沒有查頁面欄位語意**。本檔把它寫進 `ex_date`
   之前需要先確認 ⇒ `DIV_DATE_IS_EX_DATE_VERIFIED`（預設 False）。未確認前**不取數、不寫列**
@@ -55,8 +58,15 @@ import pandas as pd
 
 from repositories.fund import fund_orchestration, nav_metrics
 from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY, _NAV_NON_NATIVE_PREFIXES
+from repositories.fund.fund_orchestration import (   # 2026-10-13 配息移交：A 鏈的配息總結（新增鍵）
+    DIV_OUTCOME_FAILED, DIV_OUTCOME_NONE, DIV_OUTCOME_ROWS, DIVIDENDS_OUTCOME_KEY,
+)
 from repositories.fund.sources import (
     MS_SECID_FROM_CODE_SEARCH, MS_SECID_FROM_NAME_SEARCH, MS_SECID_ORIGIN_ATTR,
+)
+from repositories.fund.sources import (   # 2026-10-13 配息移交：三個配息解析器的解析依據（新增鍵）
+    DIV_PARSER_CNYES, DIV_PARSER_FUNDCLEAR, DIV_PARSER_TCB, DIV_PROVENANCE_KEY, DIV_STATUS_ROWS,
+    _normalize_declared_ccy, div_dropped_total,
 )
 from repositories.fund.nav_metrics import LIVE_FETCH_ERROR_ATTR, fetch_div_with_error
 # 2026-10-13 客戶裁示：B 線復用既有多來源淨值鏈（A 鏈）。這是本目錄唯一一個 L2→L2 import，
@@ -71,6 +81,10 @@ DIV_KIND_UNKNOWN = "unknown"       # Q5
 
 # `49` §2.2：`fetch_div` 的 `date` 欄語意未查證（是不是除息日）。確認之前不取數、不寫列。
 # ⚠️ 確認是除息日，才可以只改這一處；若其實是入帳日或公告日，要先改對照規則。
+# 📌 2026-10-13 射程更正（有意識的更正，不是漏刪；客戶同日裁示 B 線配息改走 A 鏈）：本開關**只管舊的
+# `build_dividend_table`（L1 `fetch_div` 那一支）**，維持 False —— 依 `_src_tcb_div` 自己的欄位註解，合庫頁第一欄是
+# 「配息基準日」，而 `fetch_div` 把第一欄當日期、也不回報幣別（查證見 `DIV_EX_DATE_EVIDENCE` 上方）。
+# B 線現行配息走 A 鏈，改用**逐來源**的判定 `DIV_EX_DATE_EVIDENCE`，不再有總開關。
 DIV_DATE_IS_EX_DATE_VERIFIED = False
 
 # 2026-10-13 總管技術裁定（稽核 5 殘留缺口，fail closed；體例同 `DIV_DATE_IS_EX_DATE_VERIFIED`）：
@@ -818,6 +832,12 @@ def fetch_nav_chain_with_error(chain_code: str, full_key: str):
     - 失敗：沒有序列 → `(空 Series, 原文)`，原文逐頁型、逐來源列出 A 鏈交出的失敗原因（未遮蔽）。
     """
     res, page_type = auto_fetch_moneydj(chain_code, return_page_type=True)
+    return _nav_from_chain(res, page_type, chain_code, full_key)
+
+
+def _nav_from_chain(res, page_type, chain_code: str, full_key: str):
+    """A 鏈回傳值 → `(Series, error)`（2026-10-13 自 `fetch_nav_chain_with_error` 抽出，本體一字未改，
+    讓 `fetch_chain_with_error` 用同一次 A 鏈呼叫同時取淨值與配息）。"""
     if not isinstance(res, dict):
         return None, f"{TYPE_ERROR_PREFIX}：auto_fetch_moneydj 預期回 dict，收到 {type(res).__name__}"
     lines = _chain_failure_lines(res)
@@ -901,9 +921,17 @@ def build_nav_table(funds, *, now=None) -> dict:
       `withheld` 為 `input_conflict` 的檔**沒有呼叫 L1，也就沒有這兩個鍵** —— 不補 0（補 0 會讓它看起來像「取回 0 筆」）；
     - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale, live_error}`（`live_error` 2026-10-09 加）。
     """
+    return _build_tables(funds, now=now, with_dividends=False)["nav"]
+
+
+def _build_tables(funds, *, now, with_dividends: bool) -> dict:
+    """`build_nav_table` 與 `build_nav_dividend_tables` 共用的迴圈（2026-10-13 抽出）。
+    淨值那一半的每一步與抽出前逐行相同；`with_dividends` 為真時改呼叫 `fetch_chain_with_error`
+    （**同一次** A 鏈呼叫多交出配息），淨值仍由同一個 `_nav_from_chain` 判讀。"""
     grouped, conflicts = _group_funds(funds, chain=True)
     acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
            "provenance": {}}
+    div_acc = _empty_div_acc() if with_dividends else None
     # 第 6 條：本次 build 內 A 鏈讀累積表，整張表只讀一次（範圍結束即丟；失敗照實重拋，不吞）。
     # 2026-10-13 稽核 5 B4：出處閘門關閉 → 本次 build 範圍內不讀累積表（A 鏈頁型選擇與沒有累積表時相同）
     with nav_history_shared_reads(skip_reads=not NAV_HISTORY_PROVENANCE_VERIFIED):
@@ -911,16 +939,29 @@ def build_nav_table(funds, *, now=None) -> dict:
             if code in conflicts:
                 acc["withheld"][code] = WITHHELD_INPUT_CONFLICT
                 acc["skipped"][code] = [conflicts[code] + "；不取數、不寫列"]
+                if div_acc is not None:
+                    div_acc["withheld"][code] = WITHHELD_INPUT_CONFLICT
+                    div_acc["skipped"][code] = [conflicts[code] + "；不取數、不寫列"]
+                    div_acc["settled"][code] = False
                 continue
+            div = None
             if entry["portal"]:
                 series, error = None, (f"A 鏈不吃 portal（收到 {entry['portal']!r}）；"
                                        f"`fund_keys` 一律給空字串，不猜這個值要怎麼用")
+                div = {"items": None, "outcome": None, "error": error}
+            elif div_acc is not None:
+                series, error, div = _call_chain(entry["chain_code"], entry["full_key"])
             else:
                 series, error = _call(fetch_nav_chain_with_error, entry["chain_code"], entry["full_key"])
             _merge_one(code, rows_from_nav_series(code, series, error,
                                                   holding_ccys=entry["holding_ccys"], now=now), acc)
+            if div_acc is not None:
+                _merge_div(code, rows_from_chain_dividends(code, div, holding_ccys=entry["holding_ccys"],
+                                                           now=now), div_acc)
     _check_rows_order(acc["rows"], contract.NAV_FIELDS, "nav")
-    return acc
+    if div_acc is not None:
+        _check_rows_order(div_acc["rows"], contract.DIVIDEND_FIELDS, "dividend")
+    return {"nav": acc, "dividend": div_acc}
 
 
 # ───────────────────────── dividend ─────────────────────────
@@ -940,6 +981,7 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
     - `fetched_at` 取每一筆自帶的值換成世界協調時間；取不到或晚於當下不寫（不以當下時間補）。
     """
     out = _empty_out()
+    out["merged"] = 0   # 2026-10-13 新增鍵：同日同額合併的筆數（A 鏈配息那一支據此判「每一筆都寫進去了」）
     if error:
         out["error"] = str(error)
         return out
@@ -1047,6 +1089,7 @@ def rows_from_dividends(fund_code: str, items, error, *, now=None) -> dict:
         out["skipped"].append(f"不符欄位契約 {contract_bad} 筆不寫")
     if merged:
         out["skipped"].append(f"同日同值合併 {merged} 筆")
+    out["merged"] = merged
     total = (not_dict + no_ccy + sum(date_bad.values()) + sum(amount_bad.values()) + negative
              + sum(time_bad.values()) + conflicting + contract_bad + merged)
     return _reconcile(out, total, "dividend")
@@ -1078,3 +1121,358 @@ def build_dividend_table(funds, *, now=None) -> dict:
         _merge_one(code, rows_from_dividends(code, items, error, now=now), acc)
     _check_rows_order(acc["rows"], contract.DIVIDEND_FIELDS, "dividend")
     return acc
+
+
+# ───────────────────────── 配息：A 鏈同一次呼叫交出的 dividends（客戶 2026-10-13 裁示）─────────────────────────
+#
+# 來源、順序沿用 A 鏈（`_fetch_fund_single` 第 4 步：合庫 MoneyDJ → FundClear → 鉅亨，第一個有列的採用）；
+# 本層**不另外發請求**，只讀 `auto_fetch_moneydj` 回傳的 `dividends` 與 `dividends_fetch_outcome`。
+#
+# ── 日期語意：逐來源判定（取代單一總開關 `DIV_DATE_IS_EX_DATE_VERIFIED`）──────────────────────────────
+# 證據只採：解析器的**欄名比對**（以表頭文字或 JSON 欄名認欄位，不靠寫死的欄位序號）與既有測試。
+# 本組查過 repo：**沒有任何一份真實頁面的 fixture**（`tests/` 內的配息 HTML／JSON 都是手寫的最小樣本），
+# 所以「這個來源的某一欄是除息日」不能靠靜態證據一次判定，改成**每一筆、每一頁當場核對**：
+# - 合庫 MoneyDJ（`DIV_PARSER_TCB`）：解析器照寫死的序號取第 2 欄當 `ex_date`（它自己的註解說第 1 欄是配息基準日、
+#   第 2 欄是除息日、第 7 欄是幣別；既有測試的 HTML 是依同一份註解手寫的，**循環，不算證據**）。
+#   L1 本輪新增記下那一頁表頭第 2、7 格的文字 → 本層只收**表頭第 2 格恰為「除息日」**的那幾筆；
+#   幣別只收表頭第 7 格恰為「幣別」、且該格有值的。表頭對不上（版面改了、巢狀表、合併儲存格）→ 不寫。
+# - FundClear（`DIV_PARSER_FUNDCLEAR`）：解析器以 JSON 欄名取值 —— `ExDividendDate`／`exDividendDate` 優先，
+#   沒有才退 `Date`／`date`（語意不明）。L1 新增記下實際取自哪個欄名 → 本層只收取自前兩者的。
+#   幣別只收取自 `Currency`／`currency` 欄、且有值的（缺欄留白，2026-10-10 起不再死預設 USD）。
+#   ⚠️ 解析器同時把同一個值寫進 `pay_date`（那不是入帳日）→ 本層**不讀** `pay_date`，照舊寫空值。
+# - 鉅亨（`DIV_PARSER_CNYES`）：`date` 優先、`exDate` 次之；只收取自 `exDate` 的。**解析器不回報幣別** → 一律不寫。
+# - 其他（沒有 `div_provenance` 的列，例如 A 鏈 legacy 段的 wb05 內嵌解析：它缺幣別時沿用基金層級幣別 ——
+#   那是預設值，不是逐筆自報）→ 一律不寫。
+DIV_EX_DATE_EVIDENCE = {
+    # 解析器標記: (取哪一個鍵當日期, 解析依據裡記錄出處的鍵, 出處必須恰為其中之一)
+    DIV_PARSER_TCB: ("ex_date", "ex_date_header", ("除息日",)),
+    DIV_PARSER_FUNDCLEAR: ("ex_date", "date_field", ("ExDividendDate", "exDividendDate")),
+    DIV_PARSER_CNYES: ("date", "date_field", ("exDate",)),
+}
+DIV_CCY_EVIDENCE = {
+    # 解析器標記: (解析依據裡記錄幣別出處的鍵, 出處必須恰為其中之一)；不在表內 ＝ 解析器不回報幣別
+    DIV_PARSER_TCB: ("currency_header", ("幣別",)),
+    DIV_PARSER_FUNDCLEAR: ("currency_field", ("Currency", "currency")),
+}
+# ── 2026-10-13 稽核必修 2：金額欄同樣要有出處證據（只收程式碼裡找得到依據的字面）──────────────────
+# - 合庫：`_src_tcb_div._parse_div_html` 自己的欄位註解寫 `col[4]=每單位配息額` → 表頭第 5 格必須恰為「每單位配息額」。
+#   （⚠️ `fund_orchestration` legacy 段另一份內嵌解析的註解寫 `col[4]=配息金額`；那是**另一個解析器**的假設，
+#   且那一支的列本來就不收，故不採。）另要求~~表頭格數與該列格數相同（`row_cells == header_cells`）~~
+#   該列沒有 th 格、且取值讀的 td 格數等於表頭格數（`row_th_cells == 0 and row_td_cells == header_cells`；
+#   稽核組 B 回修，見 `_tcb_cells_mismatch`），~~否則序號對不上表頭（合併儲存格、少一格、列首多一格 th）。~~
+#   ⚠️ 上句「擋得住合併儲存格」已被稽核組 C 實測推翻：colspan／rowspan 時格數照樣相等、序號卻錯位。
+#   現行：格數條件只擋「少一格、多一格、列首多一格 th」；合併儲存格改由 L1 記的 `table_has_span`
+#   （整張表任一格 colspan／rowspan 不是 1）擋 —— 有合併、或缺這個鍵 → 對不上。
+# - FundClear：解析器依序試 `DividendAmount`／`dividendAmount`／`Amount`／`amount`；欄名本身就說明是配息金額的
+#   只有前兩個，`Amount`／`amount` 語意不明（同 `Date` 之於日期）→ 不收。
+# - 鉅亨：依序試 `dividend`／`amount` → 只收 `dividend`。
+# 不符 → 列 pending（與日期證明不了同一類：這一欄是什麼數字沒有證據），不寫列。
+DIV_AMOUNT_EVIDENCE = {
+    DIV_PARSER_TCB: ("amount_header", ("每單位配息額",)),
+    DIV_PARSER_FUNDCLEAR: ("amount_field", ("DividendAmount", "dividendAmount")),
+    DIV_PARSER_CNYES: ("amount_field", ("dividend",)),
+}
+
+# 整檔不寫的原因代碼（配息專用；其餘沿用上方 `WITHHELD_*`）。
+WITHHELD_DIV_OUTCOME_UNDETERMINED = "div_outcome_undetermined"   # 沒有配息列，又分辨不出是不配息還是沒抓到
+WITHHELD_DIV_ITEMS_REJECTED = "div_items_rejected"               # 有配息列，但一筆都過不了逐筆核對（原因見 skipped）
+# 待查證（`pending`）：日期欄證明不了是除息日。
+# 2026-10-13 稽核必修 2 擴大射程（代碼字面不改，免得下游對不上）：金額欄證明不了是每單位配息、
+# 合庫表頭格數與列格數不同，也列在這一碼 —— 都是「這一欄是什麼沒有證據」。
+PENDING_DIV_EX_DATE_UNVERIFIED = "div_ex_date_unverified"
+
+TEXT_DIV_NONE = "A 鏈配息瀑布每一個來源都回報：成功取數、這一檔沒有配息紀錄"
+TEXT_DIV_UNDETERMINED = ("A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（{detail}）；"
+                         "不當成「沒有配息」，不寫列")
+TEXT_DIV_FAILED = "A 鏈配息取數失敗（每一個來源都失敗）：\n{detail}"
+TEXT_DIV_KEY_MISSING = "A 鏈沒有回傳 full_key，配息無法與代碼對照核對；這一檔的配息不寫"
+TEXT_DIV_KEY_MISMATCH = ("A 鏈回傳的 full_key {got!r} 與代碼對照（fund_keys）的 full_key {want!r} 不同；"
+                         "不猜哪一個對，這一檔的配息不寫")
+TEXT_DIV_NO_PROVENANCE = "沒有解析依據（不是已登記的三個配息解析器交出的列）"
+TEXT_DIV_DATE_UNVERIFIED = "日期欄證明不了是除息日（{parser}：{field}={value!r}）"
+TEXT_DIV_AMOUNT_UNVERIFIED = "金額欄證明不了是每單位配息（{parser}：{field}={value!r}）"
+TEXT_DIV_CELLS_MISMATCH = ("這一列含 th 格、取值讀的 td 格數與表頭格數不同，或表內有合併儲存格"
+                           "（表頭 {hdr}、列 td {td}、th {th}、合併 {span}），欄位序號對不上表頭")
+
+
+def _tcb_cells_mismatch(prov: dict) -> bool:
+    """合庫配息列的欄位序號對不對得上表頭（稽核組 B 回修；fail closed）。
+    L1 取值只讀 td（`_cols`），故要求：這一列**沒有** th（`row_th_cells == 0`），而且取值讀的 td 格數
+    等於表頭格數（`row_td_cells == header_cells`），而且整張表沒有合併儲存格（`table_has_span is False`；
+    稽核組 C 補）。任一不成立、任一個數不是 int、或 `table_has_span` 不是 bool（含缺鍵）→ 對不上。
+    ~~`row_cells == header_cells`（th＋td 合計）~~：首格 th＋7 td 對 8 格表頭會放行、取值卻整排左移一格。"""
+    td, th, hdr = prov.get("row_td_cells"), prov.get("row_th_cells"), prov.get("header_cells")
+    if not all(isinstance(v, int) and not isinstance(v, bool) for v in (td, th, hdr)):
+        return True
+    span = prov.get("table_has_span")
+    if not isinstance(span, bool) or span:
+        return True
+    return th > 0 or td != hdr
+
+
+# GAP-DIV-NONE-EVIDENCE-1（2026-10-13 稽核必修 3 登記；fail closed）：配息來源回空，可能是「確實不配息」，
+# 也可能是「來源不認得這個代碼」。本輪採的證據是 A 鏈**同一輪、同一來源、同一代碼**取到東西
+# （L1 `fund_orchestration._div_code_evidence`：FundClear 淨值或基本資料、合庫淨值或基本資料、
+# 鉅亨淨值且 attrs 的端點恰為本代碼）。瀑布沒呼叫到的來源（例：FundClear 淨值已夠筆數 → 鉅亨淨值不會被打）
+# 就沒有證據 → 視為未定、不顯示「區間內無配息」。repo 內沒有任何真實頁面樣本，「回空＝不配息」本身也未經線上查證。
+TEXT_DIV_NONE_UNEVIDENCED = ("A 鏈配息瀑布每一個來源都回空，但本輪沒有「同一來源認得這個代碼」的證據"
+                             "（來源不認得代碼時也會回空）；不當成「沒有配息」，不寫列：\n{detail}")
+TEXT_DIV_DROPPED = "供列的來源回報有列沒有交出來（{detail}）；寫出的列不是全部，不算已確定"
+TEXT_DIV_DATE_FORMAT = "日期不是 YYYY-MM-DD 或 YYYY/MM/DD（{value!r}）"
+TEXT_DIV_CCY_UNDECLARED = "來源未宣告這一筆的配息幣別（{parser}）"
+TEXT_DIV_CCY_CONFLICT = ("配息宣告的幣別與持倉手填不同或認不出（{shown}；持倉 {holding}）；不改標籤、不換算，"
+                         "這一檔的配息 {n} 筆全部不寫")
+
+
+def _empty_div_acc() -> dict:
+    return {"rows": [], "errors": {}, "pending": {}, "withheld": {}, "skipped": {}, "fetched": {},
+            "skipped_rows": {}, "provenance": {}, "settled": {}}
+
+
+def _merge_div(code, one, acc) -> None:
+    _merge_one(code, one, acc)
+    if one.get("pending"):
+        acc["pending"][code] = one["pending"]
+    acc["settled"][code] = bool(one.get("settled"))
+
+
+def fetch_chain_with_error(chain_code: str, full_key: str):
+    """**同一次** A 鏈呼叫 → `(Series, error, div)`：淨值那兩個值與 `fetch_nav_chain_with_error` 同一個判讀
+    （`_nav_from_chain`）；`div` ＝ `{"items", "outcome", "error"}`，取自同一份回傳值的 `dividends` 與
+    `dividends_fetch_outcome`，本函式不另外發任何請求。
+    - A 鏈回傳的 `full_key` 缺或與 `fund_keys` 不同 → `div["error"]`（不猜哪一個對，同淨值）。
+    - `secid_origin` 拒收不適用於配息：那是晨星**淨值**序列的代碼出處；配息三個解析器都以 A 鏈的基金代碼取數，
+      不經任何名稱搜尋。累積表（nav_history）只存淨值，不存配息 → 累積表閘門同樣不適用。"""
+    res, page_type = auto_fetch_moneydj(chain_code, return_page_type=True)
+    series, error = _nav_from_chain(res, page_type, chain_code, full_key)
+    return series, error, _div_from_chain(res, full_key)
+
+
+def _div_from_chain(res, full_key: str) -> dict:
+    if not isinstance(res, dict):
+        return {"items": None, "outcome": None,
+                "error": f"{TYPE_ERROR_PREFIX}：auto_fetch_moneydj 預期回 dict，收到 {type(res).__name__}"}
+    got_key = res.get("full_key")
+    if not got_key:
+        text = TEXT_DIV_KEY_MISSING
+        if res.get("error"):
+            text += f"\n{res['error']}"
+        return {"items": None, "outcome": None, "error": text}
+    if got_key != full_key:
+        return {"items": None, "outcome": None, "error": TEXT_DIV_KEY_MISMATCH.format(got=got_key, want=full_key)}
+    return {"items": res.get("dividends"), "outcome": res.get(DIVIDENDS_OUTCOME_KEY), "error": None}
+
+
+def _call_chain(chain_code: str, full_key: str):
+    """呼叫 `fetch_chain_with_error`；例外不吞，轉成兩邊的失敗原文（同 `_call`）。"""
+    try:
+        result = fetch_chain_with_error(chain_code, full_key)
+    except Exception as exc:  # noqa: BLE001 —— 轉成可見的失敗原文，不是吞掉
+        text = f"{type(exc).__name__}: {exc}"
+        return None, text, {"items": None, "outcome": None, "error": text}
+    if not isinstance(result, tuple) or len(result) != 3:
+        text = f"{TYPE_ERROR_PREFIX}：預期 (序列, 錯誤, 配息) 三元組，收到 {type(result).__name__}"
+        return None, text, {"items": None, "outcome": None, "error": text}
+    return result
+
+
+def _div_date_text(value) -> Optional[str]:
+    """配息日期字串 → `YYYY-MM-DD`；只收**恰好** `YYYY-MM-DD` 或 `YYYY/MM/DD`（補零、十個字元），其餘回 None。
+    只換分隔符號，不交給 pandas 去猜（民國年、`9/1`、英文月份一律不收）。"""
+    if not isinstance(value, str) or len(value) != 10:
+        return None
+    if value[4] == "/" and value[7] == "/":
+        value = value.replace("/", "-")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value if parsed.isoformat() == value else None
+
+
+def _outcome_detail(outcome) -> str:
+    if not isinstance(outcome, dict):
+        return "A 鏈沒有交出配息取數狀態"
+    lines = []
+    for src in outcome.get("sources") or ():
+        if isinstance(src, dict):
+            pt = f"[{src.get('page_type')}] " if src.get("page_type") else ""
+            lines.append(f"{pt}{src.get('source')}：{src.get('status')}"
+                         + (f"（{src['detail']}）" if src.get("detail") else ""))
+    if outcome.get("legacy_inline_parse"):
+        lines.append("A 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態）")
+    return "\n".join(lines) or f"狀態 {outcome.get('outcome')!r}，沒有逐來源紀錄"
+
+
+def _resolve_div_holding(holding_ccys):
+    """持倉手填幣別 → `(標籤, withheld 代碼, 理由)`；與 `resolve_nav_ccy` 對持倉那一側的判法相同
+    （意思不一致 → 衝突；沒有合格 ISO 4217 的值 → 缺），標籤用持倉原值、不改寫。"""
+    values = [c for c in holding_ccys if not _is_blank_ccy(c)]
+    if len({_ccy_meaning(c) for c in values} - {None}) > 1:
+        return None, WITHHELD_CCY_CONFLICT, f"持倉列幣別意思不一致（{', '.join(repr(c) for c in values)}）"
+    label = next((c for c in values if _iso_ccy(c)), None)
+    if label is None:
+        shown = f"（持倉列幣別：{', '.join(repr(c) for c in values)}）" if values else ""
+        return None, WITHHELD_CCY_MISSING, "持倉列沒有可用的幣別" + shown
+    return label, None, None
+
+
+def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None) -> dict:
+    """單一檔基金、A 鏈同一次呼叫交出的配息 → `{rows, error, withheld, pending, skipped, fetched, skipped_rows,
+    provenance, settled}`（純函式）。
+
+    - `div["error"]` 非空：原文照回、不寫列。`items` 不是 list：型別錯誤進 `error`。
+    - 空清單：`dividends_fetch_outcome` 為 none_confirmed → 不寫列、`settled` 為真（確實沒有配息）；
+      failed → `error`（逐來源原文）；其餘 → `withheld = div_outcome_undetermined`（分辨不出，不當成沒有配息）。
+    - 有列：逐筆核對日期出處（`DIV_EX_DATE_EVIDENCE`）、日期格式、幣別出處（`DIV_CCY_EVIDENCE`）；
+      幣別規則同淨值 —— **標籤用持倉手填**；來源宣告的幣別（經 L1 `_normalize_declared_ccy` 對照中文名）與持倉
+      不同或認不出 → **整檔不寫**；來源沒宣告 → 那一筆不寫（整檔都沒宣告 → `ccy_not_source_reported`）。
+    - 過關的列交給 `rows_from_dividends`（金額、`fetched_at`、主鍵、契約檢查同舊路徑）；`div_kind` 一律 `unknown`（Q5）、
+      `pay_date` 一律空值；`fetched_at` 取 L1 逐筆記下的取得時間（`div_provenance["fetched_at"]`），不以當下時間補。
+    - `settled`：A 鏈交出的每一筆都寫成列（或同日同額合併）、而且供列的那個來源自報取數狀態為 `rows`
+      —— 只有這時「這一檔的配息就是這幾列」才成立；否則為假（hld 據此不把缺列說成「區間內無配息」）。
+      2026-10-13 稽核回修：另要求供列來源回報的丟列數恰為 0（必修 1a：只讀前 59 列、被過濾、沒看的其他表）；
+      空清單要 `none_confirmed` **而且** `none_evidenced`（必修 3：每個回空的來源本輪都認得這個代碼）。
+    - 金額欄（必修 2）：出處要在 `DIV_AMOUNT_EVIDENCE` 內；合庫另要求表頭格數與列格數相同。
+    - `provenance["coverage_start"]`（必修 1b）：寫出的列裡最舊的除息日；hld 據此判所選區間有沒有證據。
+    """
+    out = _empty_out()
+    out.update(pending=None, settled=False)
+    if not isinstance(div, dict):
+        div = {"items": None, "outcome": None,
+               "error": f"{TYPE_ERROR_PREFIX}：配息輸入預期 dict，收到 {type(div).__name__}"}
+    outcome = div.get("outcome")
+    outcome_name = outcome.get("outcome") if isinstance(outcome, dict) else None
+    out["provenance"] = {"source": None, "fetched_at": None, "ccy_source": None, "outcome": outcome_name,
+                         "outcome_detail": None if div.get("error") else _outcome_detail(outcome),
+                         "settled": False}
+    if div.get("error"):
+        out["error"] = str(div["error"])
+        return out
+    items = div.get("items")
+    if not isinstance(items, list):
+        out["error"] = f"{TYPE_ERROR_PREFIX}：dividends 預期 list，收到 {type(items).__name__}"
+        return out
+    if not items:
+        # 2026-10-13 稽核必修 3：none_confirmed 還要 `none_evidenced`（每個回空的來源，本輪都認得這個代碼）
+        if outcome_name == DIV_OUTCOME_NONE and outcome.get("none_evidenced") is True:
+            out["skipped"].append(TEXT_DIV_NONE)
+            out["settled"] = out["provenance"]["settled"] = True
+        elif outcome_name == DIV_OUTCOME_NONE:
+            out["withheld"] = WITHHELD_DIV_OUTCOME_UNDETERMINED
+            out["skipped"].append(TEXT_DIV_NONE_UNEVIDENCED.format(detail=_outcome_detail(outcome)))
+        elif outcome_name == DIV_OUTCOME_FAILED:
+            out["error"] = TEXT_DIV_FAILED.format(detail=_outcome_detail(outcome))
+        else:
+            out["withheld"] = WITHHELD_DIV_OUTCOME_UNDETERMINED
+            out["skipped"].append(TEXT_DIV_UNDETERMINED.format(detail=_outcome_detail(outcome)))
+        return out
+
+    n = len(items)
+    out["fetched"] = n
+    label, held_code, held_why = _resolve_div_holding(holding_ccys)
+    if held_code:
+        out["withheld"] = held_code
+        out["skipped"].append(f"{held_why}，配息 {n} 筆全部不寫")
+        return _reconcile(out, n, "dividend")
+
+    rejected: dict = {}
+    date_unverified = ccy_undeclared = 0
+    conflicts = []
+    accepted = []
+    parsers = set()
+    for item in items:
+        if not isinstance(item, dict):
+            _tally(rejected, "不是 dict")
+            continue
+        prov = item.get(DIV_PROVENANCE_KEY)
+        parser = prov.get("parser") if isinstance(prov, dict) else None
+        rule = DIV_EX_DATE_EVIDENCE.get(parser)
+        if rule is None:
+            _tally(rejected, TEXT_DIV_NO_PROVENANCE)
+            date_unverified += 1
+            continue
+        date_key, field_key, accept = rule
+        if prov.get(field_key) not in accept:
+            _tally(rejected, TEXT_DIV_DATE_UNVERIFIED.format(parser=parser, field=field_key,
+                                                             value=prov.get(field_key)))
+            date_unverified += 1
+            continue
+        amount_key, amount_accept = DIV_AMOUNT_EVIDENCE[parser]
+        if prov.get(amount_key) not in amount_accept:
+            _tally(rejected, TEXT_DIV_AMOUNT_UNVERIFIED.format(parser=parser, field=amount_key,
+                                                               value=prov.get(amount_key)))
+            date_unverified += 1
+            continue
+        if parser == DIV_PARSER_TCB and _tcb_cells_mismatch(prov):
+            _tally(rejected, TEXT_DIV_CELLS_MISMATCH.format(hdr=prov.get("header_cells"), td=prov.get("row_td_cells"),
+                                                            th=prov.get("row_th_cells"),
+                                                            span=prov.get("table_has_span")))
+            date_unverified += 1
+            continue
+        day = _div_date_text(item.get(date_key))
+        if day is None:
+            _tally(rejected, TEXT_DIV_DATE_FORMAT.format(value=item.get(date_key)))
+            continue
+        ccy_rule = DIV_CCY_EVIDENCE.get(parser)
+        declared = item.get("currency") if ccy_rule and prov.get(ccy_rule[0]) in ccy_rule[1] else None
+        if _is_blank_ccy(declared) or not str(declared).strip():
+            _tally(rejected, TEXT_DIV_CCY_UNDECLARED.format(parser=parser))
+            ccy_undeclared += 1
+            continue
+        if _normalize_declared_ccy(declared) != _ccy_meaning(label):
+            conflicts.append(declared)
+            continue
+        parsers.add(parser)
+        accepted.append({"date": day, "amount": item.get("amount"), "currency": label,
+                         "fetched_at": prov.get("fetched_at"), "source": parser})
+
+    if conflicts:
+        shown = "、".join(repr(c) for c in conflicts[:5]) + ("…" if len(conflicts) > 5 else "")
+        out["withheld"] = WITHHELD_CCY_CONFLICT
+        out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
+        return _reconcile(out, n, "dividend")
+
+    n_rejected = sum(rejected.values())
+    inner = rows_from_dividends(fund_code, accepted, None, now=now) if accepted else None
+    if inner is not None:
+        out["rows"] = inner["rows"]
+        out["skipped"].extend(inner["skipped"])
+        out["withheld"] = inner["withheld"]
+    out["skipped"].extend(_tally_lines(rejected, ""))
+    if not out["rows"] and out["withheld"] is None:
+        if inner is None and date_unverified == n_rejected:
+            out["pending"] = PENDING_DIV_EX_DATE_UNVERIFIED
+        elif inner is None and ccy_undeclared == n_rejected:
+            out["withheld"] = WITHHELD_CCY_NOT_SOURCE_REPORTED
+        else:
+            out["withheld"] = WITHHELD_DIV_ITEMS_REJECTED
+    # 供列的來源：自報 `rows`，而且（稽核必修 1）回報的丟列數恰為 0 —— 算不出來（None）也算有丟列。
+    suppliers = [s for s in (outcome.get("sources") if isinstance(outcome, dict) else None) or ()
+                 if isinstance(s, dict) and s.get("parser") in parsers]
+    supplier_ok = outcome_name == DIV_OUTCOME_ROWS and all(
+        any(s.get("parser") == p and s.get("status") == DIV_STATUS_ROWS for s in suppliers) for p in parsers)
+    dropped_ok = bool(suppliers) and all(div_dropped_total(s) == 0 for s in suppliers)
+    if out["rows"] and not dropped_ok:
+        out["skipped"].append(TEXT_DIV_DROPPED.format(
+            detail="；".join(f"{s.get('source')}：{s.get('dropped')!r}" for s in suppliers) or "沒有逐來源紀錄"))
+    inner_clean = inner is not None and inner["skipped_rows"] == inner["merged"]
+    out["settled"] = bool(out["rows"]) and n_rejected == 0 and inner_clean and supplier_ok and dropped_ok
+    times = sorted(r["fetched_at"] for r in out["rows"])
+    # 稽核必修 1(b)：覆蓋期間起點 ＝ 寫出的列裡最舊的除息日（hld 據此判斷所選區間有沒有證據）
+    out["provenance"].update(source=sorted(parsers) or None, fetched_at=times[-1] if times else None,
+                             ccy_source="holding_user_input_matches_source" if out["rows"] else None,
+                             settled=out["settled"],
+                             coverage_start=min((r["ex_date"] for r in out["rows"]), default=None))
+    return _reconcile(out, n_rejected + (inner["skipped_rows"] if inner is not None else 0), "dividend")
+
+
+def build_nav_dividend_tables(funds, *, now=None) -> dict:
+    """hld 用：**同一次** A 鏈呼叫組出 `nav` 與 `dividend` 兩張表 → `{"nav": ..., "dividend": ...}`。
+
+    - `nav`：與 `build_nav_table(funds, now=now)` 逐鍵相同（同一個迴圈、同一個判讀）。
+    - `dividend`：`{"rows", "errors", "pending", "withheld", "skipped", "fetched", "skipped_rows", "provenance",
+      "settled"}`，皆以 `fund_code` 為鍵（`rows` 除外）；`settled[代碼]` 見 `rows_from_chain_dividends`。
+      `fetched`／`skipped_rows` 射程同 `build_nav_table`（`input_conflict` 的檔沒有這兩個鍵）。
+    """
+    return _build_tables(funds, now=now, with_dividends=True)

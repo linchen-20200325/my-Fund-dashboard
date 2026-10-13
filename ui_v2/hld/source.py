@@ -54,7 +54,7 @@ def load_live() -> dict:
     values = _secret_values()
     mask = alo_holdings.masker(values)
 
-    tables = holding_error = key_results = nav_table = None
+    tables = holding_error = key_results = nav_table = dividend_table = None
     try:
         tables = alo_holdings.load_alo_tables(values)
     except alo_holdings.PolicySupplementError as exc:
@@ -70,7 +70,9 @@ def load_live() -> dict:
         holding = tables["holding"]
         key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
         resolved = {r["input"]: r for r in key_results if r["ok"] is True}
-        nav_table = nav_dividend.build_nav_table([
+        # 2026-10-13（客戶同日裁示：B 線配息沿用 A 鏈；只改接線）：~~`build_nav_table`~~ → `build_nav_dividend_tables`，
+        # 同一次 A 鏈呼叫交出淨值與配息（不另外發請求）；淨值那一半與 `build_nav_table` 逐鍵相同。
+        both = nav_dividend.build_nav_dividend_tables([
             {
                 "fund_code": h["fund_code"],
                 "full_key": resolved[h["fund_code"]]["full_key"],
@@ -81,6 +83,7 @@ def load_live() -> dict:
             }
             for h in holding if h["fund_code"] in resolved
         ])
+        nav_table, dividend_table = both["nav"], both["dividend"]
 
     return live.assemble_live_load(
         holding_tables=tables,
@@ -96,4 +99,5 @@ def load_live() -> dict:
         nav_unavailable_withheld=_NAV_UNAVAILABLE_WITHHELD,
         dividend_gate_open=nav_dividend.DIV_DATE_IS_EX_DATE_VERIFIED,
         mask=mask,
+        dividend_table=dividend_table,
     )

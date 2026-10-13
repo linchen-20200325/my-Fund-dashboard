@@ -294,6 +294,7 @@ def _kwargs(**over):
         nav_unavailable_withheld=_NAV_UNAVAILABLE,
         dividend_gate_open=False,
         mask=_identity_mask,
+        dividend_table=None,   # 2026-10-13 新增參數；None ＝ 與先前逐鍵相同（配息照舊列為尚未接上）
     )
     kw.update(over)
     return kw
@@ -394,6 +395,7 @@ def test_T0_簽名_全部keyword_only_參數順序照規定_沒有預設值():
         "key_results", "nav_table",
         "direct_policy_id", "policy_tab_source", "direct_sources",
         "empty_without_reason", "nav_unavailable_withheld", "dividend_gate_open", "mask",
+        "dividend_table",   # 2026-10-13 新增（客戶同日裁示 B 線配息改走 A 鏈；只改接線），排在最後、同樣沒有預設值
     ]
     assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params)
     assert all(p.default is inspect.Parameter.empty for p in params)
@@ -870,7 +872,8 @@ def test_T5h_未設區間時_沒有淨值的那一檔與健康檔的兩個主值
 
 _DATASET_KEYS = ["holding", "nav", "dividend", "policy", "fund_profile", "user_setting", "errors",
                  "pending_tables", "fund_errors"]
-_LIVE_ARGS_KEYS = ["direct_policy_id", "direct", "policy_tab_source", "direct_sources", "nav_provenance"]
+_LIVE_ARGS_KEYS = ["direct_policy_id", "direct", "policy_tab_source", "direct_sources", "nav_provenance",
+                   "dividend_coverage"]   # 2026-10-13 稽核必修 1(b) 新增
 
 
 def test_T7a_回傳值的鍵與鍵序逐一照規定():
