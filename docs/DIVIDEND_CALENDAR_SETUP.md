@@ -81,4 +81,4 @@
 - **信心度**:筆數 + 「幾號」離散度;少筆/離散大 → 標「低」,不硬給精準日(§1)。
 - **季/年配**:上次除息 + 週期恰落**目標月**才列,否則該月不顯示(誠實)。
 
-模組:`services/dividend_calendar.py`(L2 純邏輯)、`ui/helpers/dividend_calendar_render.py`(HTML)。
+模組:`services/dividend_calendar.py`(L2 純邏輯)、`services/dividend_calendar_render.py`(HTML / 推播 PNG;2026-10-13 由 `ui/helpers/dividend_calendar_render.py` 原封搬來,讓每月推播排程不依賴 UI 層 —— 舊路徑保留為同一個模組的別名,App 端不受影響)。

@@ -148,7 +148,7 @@ def _fetch_rich(codes: list, name_by_code: "dict | None" = None) -> dict:
     顯示池名而非代號(v19.497)。
     """
     from services.fund_row import process_one_fund
-    from ui.helpers.fund_grp_health._utils import _build_fund_dict
+    from services.fund_grp_health._utils import _build_fund_dict
     _nbc = name_by_code or {}
     out: dict = {}
     for _c in codes:
@@ -171,7 +171,7 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
     + 加 nav_series / type_override / 類別 fallback)。streamlit-free。"""
     from services.health.dividend import check_eating_principal_1y_mk
     from services.health.report import build_health_analysis_row
-    from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+    from services.fund_grp_health.unified import build_merged_extra_columns
 
     _extra = build_merged_extra_columns(funds, "", None)[1]     # σ rank / 距 HWM % / 操盤評分
     rows = []
@@ -214,7 +214,7 @@ def _underperf_by_code(funds: list) -> dict:
     from services.health.dividend import check_eating_principal_1y_mk
     from services.switch_advisor import assess_underperformance, eat_is_red
     from services.switch_strategy import RED, switch_score, switch_signal
-    from ui.helpers.fund_grp_health.capture import capture_by_code
+    from services.fund_grp_health.capture import capture_by_code
 
     _cap = capture_by_code(funds)
     _excess = {c: (_cap.get(c) or {}).get("vs 大盤%") for c in (_cap or {})}

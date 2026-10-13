@@ -33,6 +33,10 @@ _HELPERS = "ui/helpers/macro/helpers.py"
 _TAB2 = "ui/tab2_single_fund.py"
 _SIGNALS = "ui/helpers/fund_grp_health/signals.py"
 _UNIFIED = "ui/helpers/fund_grp_health/unified.py"
+# 2026-10-13(LINE 推播與舊 UI 解耦):`mk_signal_by_code` / `build_merged_extra_columns`
+# 的實作原封搬到 L2;上面兩個 UI 檔只剩薄殼,結構守衛同時掃實作所在的 L2 檔。
+_SIGNALS_L2 = "services/fund_grp_health/signals.py"
+_UNIFIED_L2 = "services/fund_grp_health/unified.py"
 
 # 舊的屬性值與動作句（只在此處作為「不得出現」的判準；不是掃描用的假符號）。
 _OLD_ATTR_VALUES = ("核心資產 🛡️", "衛星資產 ⚡", "混合型 ⚖️")
@@ -190,7 +194,7 @@ def test_mk_fund_signal_body_does_not_read_fund_identity():
         assert _v not in _consts, f"mk_fund_signal 仍帶舊字樣 {_v!r}"
 
 
-@pytest.mark.parametrize("rel", (_HELPERS, _TAB2, _SIGNALS, _UNIFIED))
+@pytest.mark.parametrize("rel", (_HELPERS, _TAB2, _SIGNALS, _UNIFIED, _SIGNALS_L2, _UNIFIED_L2))
 def test_no_old_attribute_values_or_actions_in_string_constants(rel):
     """四個檔案的字串常數（AST，註解不算）不得有舊的屬性值、舊動作句。"""
     _consts = _str_constants(_tree(rel))
@@ -198,7 +202,7 @@ def test_no_old_attribute_values_or_actions_in_string_constants(rel):
         assert not any(_v in c for c in _consts), f"{rel} 仍有字串常數含 {_v!r}"
 
 
-@pytest.mark.parametrize("rel", (_TAB2, _SIGNALS, _UNIFIED))
+@pytest.mark.parametrize("rel", (_TAB2, _SIGNALS, _UNIFIED, _SIGNALS_L2, _UNIFIED_L2))
 def test_old_label_is_renamed_in_visible_strings(rel):
     """使用者可見標籤已由「資產屬性」改為「基金屬性」（卡片標題、大表欄名）。"""
     _consts = _str_constants(_tree(rel))
