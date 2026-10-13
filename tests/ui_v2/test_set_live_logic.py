@@ -719,7 +719,8 @@ def _stub_nav(monkeypatch, by_code):
     """持倉＝`by_code` 的鍵（幣別 USD）；L1 `fetch_nav_with_error` 依代碼回 `(序列, 錯誤)`。不打網路。"""
     monkeypatch.setattr(S.alo_holdings, "load_alo_tables",
                         lambda values: {"holding": [{"fund_code": c, "ccy": "USD"} for c in by_code]})
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": by_code[full_key])
+    # 2026-10-13：淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error`（有意識的更正，不是漏刪）
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda chain_code, full_key: by_code[chain_code])
 
 
 def _clock(monkeypatch, text):
@@ -893,12 +894,22 @@ def _l1(monkeypatch, live_ok=(), cached=(), holding=None, secret=""):
     def fake_cache(code):
         if code not in cached:
             return None
-        s = pd.Series([9.0, 9.1], index=pd.to_datetime(["2026-09-18", "2026-09-19"]), dtype=float)
+        # ~~2 筆~~ → 2026-10-13（有意識的更正，不是漏刪）：A 鏈 legacy 最終備援只採用 ≥10 筆的序列
+        # （真的 `_src_cache_files` 也擋掉不足 10 筆的預存檔），2 筆的替身在 A 鏈下根本到不了 B 線。
+        s = pd.Series([9.0 + i / 10 for i in range(12)],
+                      index=pd.date_range("2026-09-08", periods=12, freq="D"), dtype=float)
         s.attrs.update(source=f"GitHubActions:cache/nav/{code}.json", cache_updated_at="2026-09-20T06:00:00+00:00")
         return s
 
     monkeypatch.setattr(NM, "fetch_url_with_retry", fake_url)
     monkeypatch.setattr(NM, "_src_cache_files", fake_cache)
+    # 2026-10-13：淨值改走 A 鏈（有意識的更正，不是漏刪）。A 鏈其他來源一律換成回空的替身（不打網路），
+    # 只留 legacy 最終備援的真 `fetch_nav`（上面兩個出口已換成替身）—— 本組測試守的就是那一支。
+    import _a_chain_stub as H
+    import repositories.fund.fund_orchestration as FO
+    H.install(monkeypatch, {})
+    monkeypatch.setattr(FO, "fetch_nav", NM.fetch_nav)
+    NM.fetch_nav.cache_clear()
 
 
 def _set1_nav(monkeypatch):
@@ -922,7 +933,7 @@ def test_M1_2_即時失敗退回預存_舊值照交_本次failed含原文已遮�
     _l1(monkeypatch, cached=[_NAV_A], secret=KEY)
     _clock(monkeypatch, "2026-09-25T05:00:00Z")
     out = S.refetch_nav([KEY])
-    assert len(out["table"]["rows"]) == 2                            # 舊值照常交給呼叫端（hld 用的同一支）
+    assert len(out["table"]["rows"]) == 12                           # 舊值照常交給呼叫端（hld 用的同一支；2026-10-13 替身 2→12 筆）
     assert out["table"]["provenance"][_NAV_A]["cache_fallback"] is True
     log = S.load_fetch_log([])["rows"][-1]
     assert log["outcome"] == "failed" and log["row_count"] is None
@@ -941,7 +952,11 @@ def test_M1_3_部分基金失敗_整筆failed_逐檔原文(env, monkeypatch):
     msg = log["message"]
     assert f"{_NAV_A}: " not in msg                                  # 即時成功那一檔不列
     assert msg.startswith(f"{_NAV_B}: ")                             # 退回預存：即時網址失敗原文
-    assert "\nZZNAVTESTC3: fetch_nav('ZZNAVTESTC3') 即時網址與預存檔皆失敗:" in msg   # 全敗：L1 既有原文
+    # ~~assert "\nZZNAVTESTC3: fetch_nav('ZZNAVTESTC3') 即時網址與預存檔皆失敗:" in msg~~
+    # → 2026-10-13（有意識的更正，不是漏刪）：全敗原文改由 A 鏈逐頁型、逐來源列出；
+    #   `fetch_nav` 自己的逐網址原文照樣在裡面（legacy 最終備援那一行）。
+    assert "\nZZNAVTESTC3: A 鏈（auto_fetch_moneydj('ZZNAVTESTC3')）沒有取得淨值序列" in msg
+    assert "fetch_nav('ZZNAVTESTC3') 即時網址與預存檔皆失敗:" in msg   # 全敗：L1 既有原文仍在
 
 
 def test_M1_4_全部即時失敗_不產生假的最新成功時間(env, monkeypatch):
@@ -965,7 +980,7 @@ def test_M1_5_兩檔以上即時全敗退回預存_整筆failed_每檔各一段�
     out = S.refetch_nav([KEY])
     prov = out["table"]["provenance"]
     assert prov[_NAV_A]["cache_fallback"] is True and prov[_NAV_B]["cache_fallback"] is True
-    assert len(out["table"]["rows"]) == 4                            # 兩檔舊值照常交給呼叫端
+    assert len(out["table"]["rows"]) == 24                           # 兩檔舊值照常交給呼叫端（2026-10-13 替身 2→12 筆）
     log = S.load_fetch_log([])["rows"][-1]
     assert log["outcome"] == "failed" and log["row_count"] is None
     msg = log["message"]

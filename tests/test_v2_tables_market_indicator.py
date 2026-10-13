@@ -401,8 +401,19 @@ def test_落地接縫拋錯_不吞(monkeypatch, no_other_l1):
 # ═══════════════════════ 層級：v2_tables 只准往下 import ═══════════════════════
 
 
+# L2→L2 的逐檔、逐名放行（fail-closed）。
+# 2026-10-13：客戶裁示 4「B 線復用既有多來源淨值鏈」（`services.moneydj_fetcher.auto_fetch_moneydj`）；
+# L2→L2 符合 `CLAUDE.md` §8.2；**只開這一個檔、這一個名字**（總管同日技術裁定第 1 條）。
+# 理由：A 鏈判「complete」要 L2 `calc_metrics` 算出的指標，只用 L1 重寫頁型迴圈與停止條件會與 A 鏈不同。
+# ⚠️ 這個名字會把 `services.fund_service` → `services.nav_history_gs`（gspread，`GSPREAD_DEBT` 已登記）
+#    帶進 B 線的呼叫鏈；登記 ≠ 核准，本批不處理那筆債。
+_L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
+
+
 def test_v2_tables只import標準庫與L0_L1():
     import ast
+
+    l2_seen = set()
 
     allowed_top = {"__future__", "datetime", "json", "math", "typing", "pandas",
                    "repositories", "shared", "services"}
@@ -422,7 +433,12 @@ def test_v2_tables只import標準庫與L0_L1():
                 seen += 1
                 top = name.split(".")[0]
                 assert top in allowed_top, (path.name, name)
-                if top == "services":
-                    assert name.startswith("services.v2_tables"), (path.name, name)
+                if top == "services" and not name.startswith("services.v2_tables"):
+                    assert name in _L2_TO_L2_ALLOWED.get(path.name, ()), (path.name, name)
+                    l2_seen.add((path.name, name))
                 assert not name.startswith("ui"), (path.name, name)
     assert seen >= 5
+    # 放行清單恰好是這一組：多開一個檔或一個名字就紅；開了卻沒人用也紅（不留沒人用的口子）。
+    assert {(f, n) for f, names in _L2_TO_L2_ALLOWED.items() for n in names} == {
+        ("nav_dividend.py", "services.moneydj_fetcher")}
+    assert l2_seen == {("nav_dividend.py", "services.moneydj_fetcher")}, l2_seen

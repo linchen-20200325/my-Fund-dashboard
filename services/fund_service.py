@@ -1159,6 +1159,19 @@ def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -
     else:
         merged.attrs.pop("currency", None)   # 不留 live 的舊宣告(那會變成一句謊)
     merged.attrs["nav_history_merged"] = f"+{added} pts from {s_hist.attrs.get('source', 'nav_history')}"
+    # 2026-10-13 總管技術裁定第 4 條（只加 attrs，合併語意一字未動）：記下**哪些日期是累積表貢獻的**
+    # （＝合併後有、live 沒有的日期；同日 live 蓋 hist，所以重疊日不算）與那幾天各自的 `recorded_at`
+    # （`load_series` 給的原值；缺 → 空字串，不補）。B 線據此逐點分辨「本次即時取得」與「累積表舊點」。
+    # 算不出來 → 記下原因、不寫這兩個鍵（B 線見到 `nav_history_merged` 卻沒有日期清單會整檔扣下，不猜）。
+    try:
+        _rec_by_date = s_hist.attrs.get("recorded_at_by_date") or {}
+        _hist_days = [pd.Timestamp(d).date().isoformat()
+                      for d in merged.index.difference(s_live.index)]
+        merged.attrs["nav_history_dates"] = _hist_days
+        merged.attrs["nav_history_recorded_at"] = {d: str(_rec_by_date.get(d) or "") for d in _hist_days}
+        merged.attrs["nav_history_source"] = str(s_hist.attrs.get("source", "nav_history"))
+    except Exception as _hd_e:  # noqa: BLE001 —— 只影響新增的 attrs；原因照實記下，不吞
+        merged.attrs["nav_history_dates_error"] = f"{type(_hd_e).__name__}: {_hd_e}"
     print(f"[nav_history] 🗂️ {code} 併入累積序列 +{added} 筆"
           f"(live {len(s_live)} → merged {len(merged)})")
     return merged, {"source": "nav_history_merge", "success": True,

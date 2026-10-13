@@ -245,7 +245,8 @@ def _holdings(monkeypatch, rows):
 
 def _stub_nav(monkeypatch, by_code, ccy="USD"):
     _holdings(monkeypatch, [{"fund_code": c, "ccy": ccy} for c in by_code])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": by_code[full_key])
+    # 2026-10-13：淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error(chain_code, full_key)`（有意識的更正，不是漏刪）
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda chain_code, full_key: by_code[chain_code])
 
 
 def _nav_logs(book):
@@ -318,7 +319,7 @@ def test_淨值層_持倉讀不到_記failed_原文已遮蔽_不取數(book, mon
     def boom(values):
         raise AH.PolicySupplementError(f"讀取失敗 https://x/{SECRET}", code="api")
     monkeypatch.setattr(AH, "load_alo_tables", boom)
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
     out = S.refetch_nav([SECRET])
     log = _nav_logs(book)[0]
     assert log[4] == "failed" and log[6].startswith("holding: 讀取失敗") and SECRET not in log[6]
@@ -327,7 +328,7 @@ def test_淨值層_持倉讀不到_記failed_原文已遮蔽_不取數(book, mon
 
 def test_淨值層_持倉為空_取數回空_記ok_0列(book, monkeypatch):
     _holdings(monkeypatch, [])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda *a, **k: pytest.fail("沒有持倉不得取數"))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("沒有持倉不得取數"))
     out = S.refetch_nav([SECRET])
     assert _nav_logs(book)[0][4:] == ["ok", "0", ""]
     assert out["persist"]["empty"] and out["persist"]["masked_errors"] == {}
@@ -336,7 +337,8 @@ def test_淨值層_持倉為空_取數回空_記ok_0列(book, monkeypatch):
 def test_淨值層_同一檔多張保單_取一次_每列持倉都交出幣別(book, monkeypatch):
     calls = []
     _holdings(monkeypatch, [{"fund_code": _A, "ccy": "USD"}, {"fund_code": _A, "ccy": "USD"}])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda key, portal="": (calls.append(key) or (_nav(2), None)))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error",
+                        lambda key, full_key: (calls.append(key) or (_nav(2), None)))
     S.refetch_nav([SECRET])
     assert calls == [_A] and _nav_logs(book)[0][4:] == ["ok", "2", ""]
 
@@ -351,8 +353,14 @@ def test_淨值層_沒設試算表ID_照常取數_不寫任何東西(book, monke
 
 
 def test_淨值層_清掉fetch_nav的快取_第二次真的再取_不動冷卻_不呼叫全域清除(book, monkeypatch):
-    """走真的 `fetch_nav`（`_daily_cache`）；只把它往外的兩個出口換成替身：即時網址一律失敗、預存檔回一份序列。"""
+    """走真的 A 鏈 → 真的 `fetch_nav`（L1 日快取）；A 鏈其他來源用 `tests/_a_chain_stub.py` 換成回空的替身，
+    `fetch_nav` 只把往外的兩個出口換成替身：即時網址一律失敗、預存檔回一份序列。
+
+    2026-10-13（有意識的更正，不是漏刪）：原本直接呼叫 L1 `fetch_nav`；淨值改走 A 鏈後，`fetch_nav` 是 A 鏈
+    legacy 段的最終備援，本條改走整條 A 鏈，守的事不變：清快取、第二次真的再取、不動冷卻、不呼叫全域清除。"""
     import infra.cache as IC
+    import repositories.fund.fund_orchestration as FO
+    import _a_chain_stub as H
     calls = {"url": 0, "cache_file": 0}
 
     def fake_url(*a, **k):
@@ -365,6 +373,8 @@ def test_淨值層_清掉fetch_nav的快取_第二次真的再取_不動冷卻_�
         s.attrs.update(source=f"GitHubActions:cache/nav/{code}.json", cache_updated_at="2026-09-25T06:00:00+00:00")
         return s
 
+    H.install(monkeypatch, {})
+    monkeypatch.setattr(FO, "fetch_nav", NM.fetch_nav)                   # A 鏈最終備援用真的（有日快取）
     monkeypatch.setattr(NM, "fetch_url_with_retry", fake_url)
     monkeypatch.setattr(NM, "_src_cache_files", fake_cache_file)
     monkeypatch.setattr(IC, "clear_all_caches", lambda *a, **k: pytest.fail("不得呼叫全域清除"))
@@ -377,16 +387,53 @@ def test_淨值層_清掉fetch_nav的快取_第二次真的再取_不動冷卻_�
     SB.record_failure("some.nav.host", "server_error")
     assert SB.should_skip("some.nav.host")[0] is True
     S.refetch_nav([SECRET])
+    after_first = calls["cache_file"]
     S.refetch_nav([SECRET])
-    assert calls["cache_file"] == 3                                      # 兩次重新取數都真的再取
+    # 每次重新取數，A 鏈兩個頁型各走一次 legacy 最終備援：第一次清掉快取後真的再取一次，
+    # 同一次的第二個頁型打到剛存進的日快取；第二次重新取數又清掉，再真的取一次。
+    assert after_first == 2 and calls["cache_file"] == 3
     assert SB.should_skip("some.nav.host")[0] is True                    # 冷卻原封不動
-    # ~~assert [r[4:6] for r in _nav_logs(book)] == [["ok", "12"], ["ok", "12"]]~~
-    # → 2026-10-09 客戶裁示 M-1 採 A（有意識的更正，不是漏刪）：本條的替身走的是「即時全敗、退回預存檔」，
-    #   自此算本次失敗；本條要守的「清快取、不動冷卻、不呼叫全域清除」不變。
     logs = _nav_logs(book)
     assert [r[4:6] for r in logs] == [["failed", ""], ["failed", ""]]
     assert all(r[6].startswith(f"{_A}: ") and "取數失敗" in r[6] for r in logs)
     NM.fetch_nav.cache_clear()
+
+
+def test_淨值層_重新取數清掉A鏈實際用到的全部快取_每個恰一次(book, monkeypatch):
+    cleared = []
+    for fn in ND.CHAIN_CACHED_FUNCTIONS:
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: cleared.append(_n))
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    S.refetch_nav([SECRET])
+    assert sorted(cleared) == sorted(fn.__name__ for fn in ND.CHAIN_CACHED_FUNCTIONS)
+    assert len(cleared) == 5 and len(_nav_logs(book)) == 1                # 仍只寫一筆 fetch_log
+
+
+def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分照交(book, monkeypatch):
+    """2026-10-13 第 6 條：A 鏈讀累積表失敗（含冷卻中不打）→ 照實記失敗，不吞。"""
+    s = _nav(3)
+    s.attrs[ND.CHAIN_ATTR] = {"page_type": "yp010001", "data_source": "FundClear", "fetched_at_from": "series_attrs"}
+    s.attrs[ND.CHAIN_HIST_READ_ERROR_ATTR] = f"nav_history load 失敗:APIError 429 {SECRET}"
+    _stub_nav(monkeypatch, {_A: (s, None)})
+    out = S.refetch_nav([SECRET])
+    assert len(out["table"]["rows"]) == 3
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and log[6].startswith(f"{_A}: 累積表讀取失敗：") and "429" in log[6]
+    assert SECRET not in log[6] and MASK in log[6]
+
+
+def test_淨值層_序列全部來自累積表_本次即時失敗_記failed(book, monkeypatch):
+    s = _nav(3)
+    days = [d.date().isoformat() for d in s.index]
+    s.attrs = {ND.HISTORY_MERGED_ATTR: "+3 pts", ND.HISTORY_DATES_ATTR: days,
+               ND.HISTORY_RECORDED_AT_ATTR: {d: "2026-09-20T00:00:00+00:00" for d in days},
+               ND.HISTORY_SOURCE_ATTR: "GoogleSheet:nav_history:X",
+               ND.CHAIN_FAILURES_ATTR: "[yp010001] FundClear：回傳 0 筆，未達本步採用門檻 20 筆"}
+    _stub_nav(monkeypatch, {_A: (s, None)})
+    out = S.refetch_nav([SECRET])
+    assert len(out["table"]["rows"]) == 3 and out["table"]["provenance"][_A]["cache_fallback"] is True
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and "FundClear：回傳 0 筆" in log[6]
 
 
 def test_淨值層_程式錯誤不被吞(book, monkeypatch):
@@ -644,7 +691,7 @@ def test_淨值層_持倉部分分頁讀取失敗_記failed_每張一段分頁�
         "holding": [{"fund_code": _A, "ccy": "USD"}],
         "skipped_tabs": [{"tab": "保單甲", "error": f"APIError 500 https://x/{SECRET}", "unread": False},
                          {"tab": "保單乙", "error": "冷卻中（還剩 30 秒）", "unread": True}]})
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda key, portal="": (_nav(2), None))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda key, full_key: (_nav(2), None))
     out = S.refetch_nav([SECRET])
     log = _nav_logs(book)[0]
     assert log[4] == "failed" and log[5] == ""

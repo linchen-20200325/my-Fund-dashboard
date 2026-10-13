@@ -95,7 +95,9 @@ def wired(monkeypatch):
         state["nav_table"] = real_build(state["funds"], **kw)
         return state["nav_table"]
 
-    def _fetch(full_key, portal):
+    # 2026-10-13：淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error(chain_code, full_key)`（有意識的更正，不是漏刪）
+    def _fetch(chain_code, full_key):
+        state.setdefault("chain_codes", []).append((chain_code, full_key))
         if full_key in state["series"]:
             return state["series"][full_key], None
         return None, f"上游逾時 token={_SECRET}"
@@ -104,7 +106,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(source.settings_store, "load_user_settings", _load("load_user_settings", "settings"))
     monkeypatch.setattr(source.fund_keys, "resolve_full_keys", _resolve)
     monkeypatch.setattr(source.nav_dividend, "build_nav_table", _build)
-    monkeypatch.setattr(source.nav_dividend, "fetch_nav_with_error", _fetch)
+    monkeypatch.setattr(source.nav_dividend, "fetch_nav_chain_with_error", _fetch)
     return state
 
 
@@ -125,6 +127,8 @@ def test_每一筆持倉列對應一筆fund_帶holding_ccy_不去重(wired):
     source.load_live()
     assert [(f["fund_code"], f["holding_ccy"]) for f in wired["funds"]] == [(h["fund_code"], h["ccy"]) for h in holding]
     assert all(f["full_key"] == "FK-" + f["fund_code"] for f in wired["funds"])
+    # 2026-10-13：交給 A 鏈的是 `fund_keys` 的 parsed_code（查表前的代碼），不是 full_key
+    assert all(f["chain_code"] == f["fund_code"] for f in wired["funds"])
 
 
 def test_同檔兩列幣別不同_L2判成ccy_conflict(wired):

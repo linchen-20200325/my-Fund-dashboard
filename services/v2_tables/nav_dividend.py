@@ -6,12 +6,19 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A）。
 依據（逐條出處）：
 - 客戶裁示 Q12＝A：資料不另外存，每次開頁即時抓。快取只在 L1（`fetch_nav`／`fetch_div` 掛
   `infra/cache.py::_daily_cache`，以台灣日曆日為界），本檔**不另疊快取**（`49` §4.4）、**不寫任何試算表**、
-  **不讀 `services/nav_history_gs.py` 的累積序列**（那是「保留歷史」，另一輪處理）。
+  ~~**不讀 `services/nav_history_gs.py` 的累積序列**（那是「保留歷史」，另一輪處理）。~~
+  → **2026-10-13 狀態更新（有意識的變更，不是漏刪；依據：客戶 2026-10-13 裁示「B 線復用 repo 現有的多來源
+  淨值取數鏈」＋總管同日技術裁定）**：淨值改走 A 鏈 `services.moneydj_fetcher.auto_fetch_moneydj`
+  （來源、優先序、頁型迴圈、停止條件一個不改），A 鏈本來就會併入累積表 → 本檔照實收下，**逐點分辨**
+  本次取得與累積表舊點（`_rows_with_history`），舊點的 `fetched_at` 取該點的 `recorded_at`，不冒充本次取得。
+  舊句在寫下當時為真（當時只呼叫 L1 `fetch_nav`）；被推翻的是它的前提。仍然**不另疊快取、不寫任何試算表**。
 - `49` §2.6 / §6.2 T3（幣別）：
   - `nav.ccy`：收**來源自報**的幣別（L1 序列 `attrs["currency"]`），或**持倉列的使用者手填幣別**
     （呼叫端傳入 `holding_ccy`；該欄語意就是計價幣別）。**預設值、名稱推測值一律不收**；
     兩者都沒有 → 該檔淨值整批不寫；兩者都有但不同 → 不猜哪個對，整批不寫。
     ⚠️ `fetch_nav` 目前**從不**自報幣別，所以實務上 `nav.ccy` 只會來自持倉列。
+    → 2026-10-13 起走 A 鏈：A 鏈回的幣別（結果的 `currency`、序列 attrs 的 `currency`）**一律不採用**
+      （可能是硬編表、推定值或來源預設值，分不出是不是來源自報；總管技術裁定第 5 條），`nav.ccy` 只來自持倉列。
   - `dividend.ccy`：**只收來源自報**，不沿用持倉列的幣別（配息幣別可能與計價幣別不同）。
     `fetch_div` 回傳的每一筆只有 `date`、`amount`、`source`、`fetched_at`，**沒有幣別** ⇒
     走 MoneyDJ 的基金配息一列都寫不進去（`49` §2.6；客戶 Q5 已知悉）。
@@ -46,7 +53,12 @@ from typing import Optional
 
 import pandas as pd
 
-from repositories.fund.nav_metrics import LIVE_FETCH_ERROR_ATTR, fetch_div_with_error, fetch_nav_with_error
+from repositories.fund import fund_orchestration, nav_metrics
+from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY
+from repositories.fund.nav_metrics import LIVE_FETCH_ERROR_ATTR, fetch_div_with_error
+# 2026-10-13 客戶裁示：B 線復用既有多來源淨值鏈（A 鏈）。這是本目錄唯一一個 L2→L2 import，
+# 守衛（`tests/test_v2_tables_market_indicator.py`）只對本檔、只放行這一個模組名（總管同日技術裁定第 1 條）。
+from services.moneydj_fetcher import NAV_ATTEMPTS_KEY, auto_fetch_moneydj, nav_history_shared_reads
 from services.v2_tables import contract
 from services.v2_tables.market_indicator import EMPTY_WITHOUT_REASON
 
@@ -181,7 +193,7 @@ def _is_blank_ccy(value) -> bool:
         return False
 
 
-def _group_funds(funds):
+def _group_funds(funds, *, chain: bool = False):
     """輸入 → `{fund_code: {"full_key", "portal", "holding_ccys": list}}` 與 `{fund_code: 矛盾說明}`。
 
     同一檔基金掛在多張保單下是常態，取數只做一次；但 `full_key`／`portal` 不一致就不猜。
@@ -198,11 +210,17 @@ def _group_funds(funds):
         if full_key != full_key.strip():
             raise ValueError(f"{code}：full_key 前後帶空白（{full_key!r}）；本檔不偷偷去掉")
         portal = item.get("portal", "") or ""
-        entry = grouped.setdefault(code, {"full_key": full_key, "portal": portal,
+        chain_code = item.get("chain_code") if chain else None   # 配息（另一批）不經 A 鏈，不看這一欄
+        if chain and (not isinstance(chain_code, str) or not chain_code.strip()
+                      or chain_code != chain_code.strip()):
+            raise ValueError(f"{code}：chain_code（交給 A 鏈的代碼，`fund_keys` 的 parsed_code）須由呼叫端"
+                             f"明確給出、前後無空白（{chain_code!r}）；本檔不猜代碼對照")
+        entry = grouped.setdefault(code, {"full_key": full_key, "portal": portal, "chain_code": chain_code,
                                           "holding_ccys": []})
-        if entry["full_key"] != full_key or entry["portal"] != portal:
-            conflicts[code] = (f"同一檔基金給了不同的 full_key／portal："
-                               f"({entry['full_key']!r}, {entry['portal']!r}) vs ({full_key!r}, {portal!r})")
+        if entry["full_key"] != full_key or entry["portal"] != portal or entry["chain_code"] != chain_code:
+            conflicts[code] = (f"同一檔基金給了不同的 full_key／portal／chain_code："
+                               f"({entry['full_key']!r}, {entry['portal']!r}, {entry['chain_code']!r}) vs "
+                               f"({full_key!r}, {portal!r}, {chain_code!r})")
         if "holding_ccy" in item and not _is_blank_ccy(item["holding_ccy"]):
             if item["holding_ccy"] not in entry["holding_ccys"]:
                 entry["holding_ccys"].append(item["holding_ccy"])
@@ -347,6 +365,19 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
     if len(series) == 0:
         out["error"] = EMPTY_WITHOUT_REASON
         return out
+    attrs = dict(series.attrs or {})
+    if any(key in attrs for key in _HISTORY_MARKERS):
+        out = _rows_with_history(fund_code, series, attrs, holding_ccys=holding_ccys, now=now)
+    else:
+        out = _rows_from_segment(fund_code, series, holding_ccys=holding_ccys, now=now)
+    _add_chain_provenance(out, attrs)
+    return out
+
+
+def _rows_from_segment(fund_code: str, series, *, holding_ccys=(), now=None) -> dict:
+    """同一個來源、同一個取得時間的一段序列 → `{rows, error, withheld, skipped, fetched, provenance}`。
+    （2026-10-13 前即 `rows_from_nav_series` 的本體，一字未改，只抽出來讓累積表那幾段共用。）"""
+    out = _empty_out()
     now_utc = _now_utc(now)
     today_market = now_utc.astimezone(MARKET_DATE_TZ).date()
     out["fetched"] = len(series)
@@ -452,6 +483,267 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
     return _reconcile(out, total, "nav")
 
 
+# ───────────────────────── 累積表併入點（2026-10-13 總管技術裁定第 4 條）─────────────────────────
+
+# A 鏈 `services/fund_service.py::_merge_nav_history_series` 在合併後序列上留下的 attrs 鍵（該函式是唯一寫入點）。
+HISTORY_MERGED_ATTR = "nav_history_merged"
+HISTORY_DATES_ATTR = "nav_history_dates"
+HISTORY_RECORDED_AT_ATTR = "nav_history_recorded_at"
+HISTORY_SOURCE_ATTR = "nav_history_source"
+HISTORY_DATES_ERROR_ATTR = "nav_history_dates_error"
+_HISTORY_MARKERS = (HISTORY_MERGED_ATTR, HISTORY_DATES_ATTR, HISTORY_DATES_ERROR_ATTR)
+_HISTORY_ATTRS = (*_HISTORY_MARKERS, HISTORY_RECORDED_AT_ATTR, HISTORY_SOURCE_ATTR)
+
+# 本檔轉接 A 鏈時掛在序列上的 attrs 鍵（`fetch_nav_chain_with_error` 是唯一寫入點）。
+CHAIN_ATTR = "v2_chain"                              # {"page_type", "data_source", "fetched_at_from"}
+CHAIN_FAILURES_ATTR = "v2_chain_failures"            # 各頁型、各來源沒採用的原文（未遮蔽）
+CHAIN_HIST_READ_ERROR_ATTR = "v2_nav_history_read_error"   # 本次讀累積表失敗的原文（未遮蔽）
+_CHAIN_ATTRS = (CHAIN_ATTR, CHAIN_FAILURES_ATTR, CHAIN_HIST_READ_ERROR_ATTR)
+
+LATEST_FROM_LIVE = "live"                # 最新一筆是本次即時取得
+LATEST_FROM_CACHE_NAV = "cache_nav"      # 最新一筆來自 `cache/nav` 預存檔（即時網址全敗）
+LATEST_FROM_NAV_HISTORY = "nav_history"  # 最新一筆來自累積表（不是本次取得）
+
+HISTORY_ONLY_LIVE_ERROR = "本次沒有取得任何即時淨值；序列全部來自累積表（A 鏈未交出逐來源原文）"
+
+
+def _hist_group_rows(fund_code, part, source, recorded_at, *, holding_ccys, now):
+    """累積表裡同一個 `recorded_at` 的那幾點 → 一段的輸出。`recorded_at` 缺 → 整段不寫，不以當下時間補。"""
+    if not recorded_at:
+        out = _empty_out()
+        out["fetched"] = len(part)
+        out["withheld"] = WITHHELD_FETCHED_AT_MISSING
+        out["skipped"].append(f"累積表這幾天沒有 recorded_at（寫入時間），{len(part)} 筆不寫（不以當下時間補）")
+        return _reconcile(out, len(part), "nav")
+    seg = part.copy()
+    seg.attrs = {"source": source, "fetched_at": recorded_at}
+    out = _rows_from_segment(fund_code, seg, holding_ccys=holding_ccys, now=now)
+    out["skipped"] = [f"累積表（recorded_at {recorded_at}）：{line}" for line in out["skipped"]]
+    return out
+
+
+def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
+    """A 鏈併入了累積表的序列：逐點分成「本次即時（或預存檔）那一段」與「累積表各點」，各自照實帶 `fetched_at`。
+
+    - 累積表的點：`fetched_at` ＝ 該點寫入累積表的 `recorded_at`（`load_series` 原值）；缺 → 那幾點不寫。
+      **絕不**拿本次取得時間或讀表時間冒充（`49` §4.3／§4.4、`44`）。
+    - 序列帶了併入標記、卻沒有日期清單（A 鏈算不出來）→ 分不出哪些是本次取得 → 整檔不寫。
+    - `provenance` 另記 `latest_from`、`nav_history`；最新一筆不是本次即時取得（預存檔或累積表）時，
+      `cache_fallback` 為真 —— 畫面據此標「不是本次取得」。
+    """
+    now_utc = _now_utc(now)
+    dates = attrs.get(HISTORY_DATES_ATTR)
+    hist_source = str(attrs.get(HISTORY_SOURCE_ATTR) or "nav_history")
+    read_error = attrs.get(CHAIN_HIST_READ_ERROR_ATTR)
+    if not isinstance(dates, list) or not all(isinstance(d, str) for d in dates):
+        out = _empty_out()
+        out["fetched"] = len(series)
+        out["withheld"] = WITHHELD_FETCHED_AT_MISSING
+        why = attrs.get(HISTORY_DATES_ERROR_ATTR) or f"沒有 {HISTORY_DATES_ATTR}"
+        out["skipped"].append(
+            f"A 鏈併入了累積表的點（{attrs.get(HISTORY_MERGED_ATTR)!s}），卻沒有交出是哪幾天（{why}）；"
+            f"分不出哪些是本次即時取得，{len(series)} 筆全部不寫")
+        out["provenance"] = {"source": attrs.get("source"), "fetched_at": None, "ccy_source": None,
+                             "cache_fallback": False, "stale": None, "live_error": None,
+                             "latest_from": None,
+                             "nav_history": {"source": hist_source, "points": None, "written": 0,
+                                             "recorded_at_missing": None, "read_error": read_error}}
+        return _reconcile(out, len(series), "nav")
+
+    hist_days = set(dates)
+    recorded = attrs.get(HISTORY_RECORDED_AT_ATTR) if isinstance(attrs.get(HISTORY_RECORDED_AT_ATTR), dict) else {}
+    is_hist = []
+    groups: dict = {}
+    for pos, stamp in enumerate(series.index):
+        day, _why = _date_value(stamp)
+        hit = day is not None and day.isoformat() in hist_days
+        is_hist.append(hit)
+        if hit:
+            groups.setdefault(str(recorded.get(day.isoformat()) or ""), []).append(pos)
+    live_mask = [not h for h in is_hist]
+    live_part = series[live_mask]
+    live_part.attrs = {k: v for k, v in attrs.items() if k not in _HISTORY_ATTRS and k not in _CHAIN_ATTRS}
+
+    parts = []
+    live_out = None
+    if len(live_part):
+        live_out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now_utc)
+        parts.append(live_out)
+    hist_written = hist_missing = 0
+    for recorded_at in sorted(groups):
+        one = _hist_group_rows(fund_code, series.iloc[groups[recorded_at]], hist_source, recorded_at,
+                               holding_ccys=holding_ccys, now=now_utc)
+        hist_written += len(one["rows"])
+        if not recorded_at:
+            hist_missing += len(groups[recorded_at])
+        parts.append(one)
+
+    out = _empty_out()
+    for one in parts:
+        out["rows"].extend(one["rows"])
+        out["skipped"].extend(one["skipped"])
+        out["fetched"] += one["fetched"]
+    out["rows"].sort(key=lambda r: r["nav_date"])
+    if not out["rows"]:
+        lead = live_out if live_out is not None else (parts[0] if parts else None)
+        out["withheld"] = lead["withheld"] if lead else None
+    skipped_rows = sum(one["skipped_rows"] for one in parts)
+
+    if live_out is not None:
+        prov = dict(live_out["provenance"] or {})
+    else:
+        prov = {"source": None, "fetched_at": None, "ccy_source": None, "cache_fallback": False,
+                "stale": None,
+                "live_error": str(attrs.get(LIVE_FETCH_ERROR_ATTR) or attrs.get(CHAIN_FAILURES_ATTR)
+                                  or HISTORY_ONLY_LIVE_ERROR)}
+    if prov.get("ccy_source") is None:
+        prov["ccy_source"] = next((one["provenance"]["ccy_source"] for one in parts
+                                   if one["provenance"] and one["provenance"].get("ccy_source")), None)
+    latest = None
+    if out["rows"]:
+        last_day = out["rows"][-1]["nav_date"]
+        if last_day in hist_days:
+            latest = LATEST_FROM_NAV_HISTORY
+        elif prov.get("cache_fallback"):
+            latest = LATEST_FROM_CACHE_NAV
+        else:
+            latest = LATEST_FROM_LIVE
+    live_fallback = bool(prov.get("cache_fallback"))
+    prov["cache_fallback"] = live_fallback or latest == LATEST_FROM_NAV_HISTORY or live_out is None
+    if not live_fallback:
+        prov["stale"] = None
+    prov["latest_from"] = latest
+    prov["nav_history"] = {"source": hist_source, "points": sum(len(v) for v in groups.values()),
+                           "written": hist_written, "recorded_at_missing": hist_missing,
+                           "read_error": None if read_error is None else str(read_error)}
+    out["provenance"] = prov
+    return _reconcile(out, skipped_rows, "nav")
+
+
+def _add_chain_provenance(out: dict, attrs: dict) -> None:
+    """A 鏈轉接那一支（序列帶 `CHAIN_ATTR`）：把頁型、採用來源、沒採用的來源原文、累積表讀取失敗補進 provenance。"""
+    if CHAIN_ATTR not in attrs or out.get("provenance") is None:
+        return
+    prov = out["provenance"]
+    prov["chain"] = dict(attrs.get(CHAIN_ATTR) or {})
+    prov["chain_failures"] = attrs.get(CHAIN_FAILURES_ATTR)
+    read_error = attrs.get(CHAIN_HIST_READ_ERROR_ATTR)
+    hist = prov.setdefault("nav_history", {"source": None, "points": 0, "written": 0,
+                                           "recorded_at_missing": 0, "read_error": None})
+    if read_error is not None:
+        hist["read_error"] = str(read_error)
+        out["skipped"].append(f"累積表本次讀取失敗，只用即時取得的部分：{read_error}")
+    prov.setdefault("latest_from", LATEST_FROM_CACHE_NAV if prov.get("cache_fallback") else LATEST_FROM_LIVE)
+
+
+# ───────────────────────── A 鏈轉接（客戶 2026-10-13 裁示：B 線復用既有多來源淨值鏈）─────────────────────────
+
+# A 鏈實際用到、會讓「重新取數」拿到舊結果的 L1 快取（逐一實查：`_fetch_fund_single` 第 5 步、
+# `fetch_fund_from_moneydj_url` 的持股與 legacy 最終備援）。set 頁 `refetch_nav` 依此逐一清掉。
+# ⚠️ 只列真的會被 A 鏈呼叫到的；`fetch_div` 不在 A 鏈內（配息另一批），不列。
+CHAIN_CACHED_FUNCTIONS = (
+    nav_metrics.fetch_nav,               # legacy 最終備援（L1 日快取）
+    nav_metrics.fetch_risk_metrics,      # wb07（L1 日快取）
+    nav_metrics.fetch_performance_wb01,  # wb01（L1 日快取）
+    nav_metrics.fetch_holdings,          # 持股（L1 日快取）
+    fund_orchestration._holdings_ttl,    # 持股外層 L1 一小時快取
+)
+
+TEXT_KEY_MISMATCH = ("A 鏈回傳的 full_key {got!r} 與代碼對照（fund_keys）的 full_key {want!r} 不同；"
+                     "不猜哪一個對，這一檔的淨值不寫")
+TEXT_KEY_MISSING = "A 鏈取到了淨值序列，卻沒有回傳 full_key，無法與代碼對照核對；這一檔的淨值不寫"
+TEXT_NO_SERIES = "A 鏈（auto_fetch_moneydj({code!r})）沒有取得淨值序列"
+
+
+def _chain_failure_lines(res: dict) -> list:
+    """A 鏈回傳值 → 逐頁型、逐來源的失敗原文行（未遮蔽）。只讀 A 鏈自己交出的欄位，不自編原因。"""
+    lines = []
+    attempts = res.get(NAV_ATTEMPTS_KEY)
+    if isinstance(attempts, list) and attempts:
+        for attempt in attempts:
+            if not isinstance(attempt, dict):
+                continue
+            pt = attempt.get("page_type")
+            head = f"[{pt}] 狀態 {attempt.get('status')}"
+            if attempt.get("error"):
+                head += f"：{attempt['error']}"
+            lines.append(head)
+            for f in attempt.get("nav_source_failures") or ():
+                if isinstance(f, dict):
+                    lines.append(f"[{pt}] {f.get('source')}：{f.get('error')}")
+        return lines
+    if res.get("error"):
+        lines.append(str(res["error"]))
+    for f in res.get(NAV_SOURCE_FAILURES_KEY) or ():
+        if isinstance(f, dict):
+            lines.append(f"{f.get('source')}：{f.get('error')}")
+    return lines
+
+
+def _nav_history_read_error(res: dict):
+    for entry in res.get("source_trace") or ():
+        if isinstance(entry, dict) and entry.get("source") == "nav_history_merge" and entry.get("success") is False:
+            return str(entry.get("error") or "nav_history 讀取失敗（A 鏈未給原文）")
+    return None
+
+
+def fetch_nav_chain_with_error(chain_code: str, full_key: str):
+    """B 線的淨值取數：**原樣**呼叫 A 鏈 `services.moneydj_fetcher.auto_fetch_moneydj(chain_code)`，
+    回 `(Series, error)`（介面同 L1 `fetch_nav_with_error`）。
+
+    - 來源、優先序、頁型迴圈、停止條件、nav_history 併入：全部是 A 鏈自己的，本函式一個都不重寫
+      （客戶 2026-10-13 裁示；總管同日技術裁定第 2 條）。
+    - `chain_code` 是 `fund_keys` 的 `parsed_code`（查表前的代碼；A 鏈自己查對照表）。A 鏈回傳的 `full_key`
+      必須等於 `fund_keys` 的 `full_key`，不等就照實回錯誤，不猜。
+    - 幣別：**完全不採用** A 鏈回的幣別（結果 dict 的 `currency` 可能是硬編表或推定值，序列 attrs 的幣別也可能是
+      來源的預設值，無法可靠分辨是否來源自報）→ 序列 attrs 的 `currency` 一律拿掉，只用持倉手填（第 5 條）。
+    - `fetched_at`：序列 attrs 自帶的優先；沒有時才用 A 鏈 L1 orchestrator 交出的 `fetched_at`
+      （本次那一輪多來源取數的開始時間，帶時區），並在 `CHAIN_ATTR["fetched_at_from"]` 標明。
+      預存檔那一支照舊由 `rows_from_nav_series` 改取 `cache_updated_at`；累積表的點取各自的 `recorded_at`。
+    - 失敗：沒有序列 → `(空 Series, 原文)`，原文逐頁型、逐來源列出 A 鏈交出的失敗原因（未遮蔽）。
+    """
+    res, page_type = auto_fetch_moneydj(chain_code, return_page_type=True)
+    if not isinstance(res, dict):
+        return None, f"{TYPE_ERROR_PREFIX}：auto_fetch_moneydj 預期回 dict，收到 {type(res).__name__}"
+    lines = _chain_failure_lines(res)
+    read_error = _nav_history_read_error(res)
+    got_key = res.get("full_key")
+    series = res.get("series")
+    usable = isinstance(series, pd.Series) and len(series) > 0
+    if not usable:
+        text = [TEXT_NO_SERIES.format(code=chain_code)]
+        if got_key and got_key != full_key:
+            text.append(TEXT_KEY_MISMATCH.format(got=got_key, want=full_key))
+        text.extend(lines)
+        if read_error is not None:
+            text.append(f"累積表讀取失敗：{read_error}")
+        return pd.Series(dtype=float), "\n".join(text)
+    if not got_key:
+        return pd.Series(dtype=float), TEXT_KEY_MISSING
+    if got_key != full_key:
+        return pd.Series(dtype=float), TEXT_KEY_MISMATCH.format(got=got_key, want=full_key)
+
+    out = series.copy()
+    attrs = {k: v for k, v in dict(series.attrs or {}).items() if k != "currency"}
+    fetched_at_from = "series_attrs"
+    if not attrs.get("fetched_at"):
+        attrs["fetched_at"] = res.get("fetched_at")
+        fetched_at_from = "orchestrator"
+    failures = "\n".join(lines) or None
+    is_cache = (str(attrs.get("source") or "").startswith(CACHE_FALLBACK_SOURCE_PREFIX)
+                or "nav_quality" in attrs)
+    if is_cache:
+        # 預存檔那一支：本次即時失敗的原文 ＝ A 鏈瀑布逐來源原文 ＋ fetch_nav 自己的逐網址原文
+        attrs[LIVE_FETCH_ERROR_ATTR] = "\n".join(
+            x for x in (failures, attrs.get(LIVE_FETCH_ERROR_ATTR)) if x) or None
+    attrs[CHAIN_ATTR] = {"page_type": page_type, "data_source": res.get("data_source"),
+                         "fetched_at_from": fetched_at_from}
+    attrs[CHAIN_FAILURES_ATTR] = failures
+    attrs[CHAIN_HIST_READ_ERROR_ATTR] = read_error
+    out.attrs = attrs
+    return out, None
+
+
 def _merge_one(code, one, acc):
     acc["rows"].extend(one["rows"])
     acc["fetched"][code] = one["fetched"]
@@ -467,8 +759,11 @@ def _merge_one(code, one, acc):
 
 
 def build_nav_table(funds, *, now=None) -> dict:
-    """組出 `nav` 表的列。`funds`：可迭代的 dict，每個帶 `fund_code`、`full_key`，選填 `portal`、
+    """組出 `nav` 表的列。`funds`：可迭代的 dict，每個帶 `fund_code`、`full_key`、`chain_code`
+    （2026-10-13 起必填：`fund_keys` 的 `parsed_code`，原樣交給 A 鏈），選填 `portal`（A 鏈不吃，非空即該檔報錯）、
     `holding_ccy`（持倉列使用者手填的幣別；同一檔多列持倉可重複出現）。
+    取數經 `fetch_nav_chain_with_error` 走 A 鏈（客戶 2026-10-13 裁示），整個迴圈在
+    `nav_history_shared_reads()` 範圍內（累積表本次只讀一次）。
 
     回傳 `{"rows", "errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"}`，皆以 `fund_code` 為鍵
     （`rows` 除外）：
@@ -480,17 +775,23 @@ def build_nav_table(funds, *, now=None) -> dict:
       `withheld` 為 `input_conflict` 的檔**沒有呼叫 L1，也就沒有這兩個鍵** —— 不補 0（補 0 會讓它看起來像「取回 0 筆」）；
     - `provenance`：`{source, fetched_at, ccy_source, cache_fallback, stale, live_error}`（`live_error` 2026-10-09 加）。
     """
-    grouped, conflicts = _group_funds(funds)
+    grouped, conflicts = _group_funds(funds, chain=True)
     acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
            "provenance": {}}
-    for code, entry in grouped.items():
-        if code in conflicts:
-            acc["withheld"][code] = WITHHELD_INPUT_CONFLICT
-            acc["skipped"][code] = [conflicts[code] + "；不取數、不寫列"]
-            continue
-        series, error = _call(fetch_nav_with_error, entry["full_key"], entry["portal"])
-        _merge_one(code, rows_from_nav_series(code, series, error,
-                                              holding_ccys=entry["holding_ccys"], now=now), acc)
+    # 第 6 條：本次 build 內 A 鏈讀累積表，整張表只讀一次（範圍結束即丟；失敗照實重拋，不吞）。
+    with nav_history_shared_reads():
+        for code, entry in grouped.items():
+            if code in conflicts:
+                acc["withheld"][code] = WITHHELD_INPUT_CONFLICT
+                acc["skipped"][code] = [conflicts[code] + "；不取數、不寫列"]
+                continue
+            if entry["portal"]:
+                series, error = None, (f"A 鏈不吃 portal（收到 {entry['portal']!r}）；"
+                                       f"`fund_keys` 一律給空字串，不猜這個值要怎麼用")
+            else:
+                series, error = _call(fetch_nav_chain_with_error, entry["chain_code"], entry["full_key"])
+            _merge_one(code, rows_from_nav_series(code, series, error,
+                                                  holding_ccys=entry["holding_ccys"], now=now), acc)
     _check_rows_order(acc["rows"], contract.NAV_FIELDS, "nav")
     return acc
 
