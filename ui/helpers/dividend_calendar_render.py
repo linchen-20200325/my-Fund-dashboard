@@ -8,6 +8,9 @@
 所以 `import ui.helpers.dividend_calendar_render` 與 `import services.dividend_calendar_render` 拿到的是**同一個模組**
 (不是複製一份、也不是逐名轉出 —— 逐名轉出會讓 monkeypatch 只改到其中一份,
 SSOT 就在測試替身這一層悄悄裂成兩份)。
+⚠️ 已知限制:Streamlit 熱重載(改檔後自動 rerun / reload 模組)時,本別名可能仍指向
+舊的模組物件(重載只重跑了其中一邊)—— 重啟 App 即可恢復。排程(cron)每次都是全新
+行程,不受影響。
 ⛔ 不要在這裡新增任何程式碼;要改邏輯請改 `services/dividend_calendar_render.py`。
 """
 import sys as _sys

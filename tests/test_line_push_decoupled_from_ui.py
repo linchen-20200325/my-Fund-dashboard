@@ -369,3 +369,51 @@ def test_ui_and_l2_merged_columns_agree_without_phase(monkeypatch):
          "risk_metrics": {}, "currency": ""},
     ]
     assert ui(funds, "", None) == svc(funds, "", None)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 5. 注入接縫:舊 UI 的 §1 失敗標籤不得在搬移後靜默消失
+# ══════════════════════════════════════════════════════════════════
+# L2 的 `mk_signal_by_code` / `build_merged_extra_columns` 不能 import 讀 session_state 的
+# `mk_fund_signal`,改由舊 UI 入口解析後注入(連同 import 失敗時的標籤)。
+# 稽核突變 M4:UI 入口不傳 `signal_unavailable_label` → 「⚠️ 訊號模組載入失敗」會靜默變成「—」,
+# 把**載入失敗**偽裝成「這檔沒訊號」(§1)。下面兩條在 phase 非空時把兩種失敗都釘住,
+# 並且同時走 `mk_signal_by_code` 與 `build_merged_extra_columns` 兩個 UI 入口。
+def _seam_funds():
+    return [{"code": "SEAM1", "name": "S", "series": None, "metrics": {"nav": 10.0, "buy1": 9.0},
+             "moneydj_raw": {}, "risk_metrics": {}, "currency": "USD"}]
+
+
+@pytest.fixture
+def _no_benchmark(monkeypatch):
+    import services.fund_grp_health.capture as SCap
+    monkeypatch.setattr(SCap, "_benchmark_nav", lambda m: None)   # 不觸網
+
+
+def test_ui_entry_keeps_import_failure_label(monkeypatch, _no_benchmark):
+    from ui.helpers.fund_grp_health.signals import mk_signal_by_code
+    from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+
+    # `sys.modules[X] = None` → `from X import ...` 直接 ImportError(模擬訊號模組載入失敗)
+    monkeypatch.setitem(sys.modules, "ui.helpers.macro_helpers", None)
+    out = mk_signal_by_code(_seam_funds(), "擴張", 6.5)["SEAM1"]
+    assert out["操作訊號"].startswith("⚠️ 訊號模組載入失敗("), out
+    merged = build_merged_extra_columns(_seam_funds(), "擴張", 6.5)[1]["SEAM1"]
+    assert merged["操作訊號"].startswith("⚠️ 訊號模組載入失敗("), merged
+    # 價位欄照常計算(只有訊號欄降級,不是整列停掉)
+    assert out["買 1 (小跌)"] == "9.00"
+
+
+def test_ui_entry_keeps_signal_crash_label(monkeypatch, _no_benchmark):
+    import ui.helpers.macro_helpers as MH
+    from ui.helpers.fund_grp_health.signals import mk_signal_by_code
+    from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+
+    def _boom(*a, **k):
+        raise RuntimeError("seam probe")
+
+    monkeypatch.setattr(MH, "mk_fund_signal", _boom)
+    out = mk_signal_by_code(_seam_funds(), "擴張", 6.5)["SEAM1"]
+    assert out["操作訊號"] == "⚠️ 計算失敗(RuntimeError)", out
+    merged = build_merged_extra_columns(_seam_funds(), "擴張", 6.5)[1]["SEAM1"]
+    assert merged["操作訊號"] == "⚠️ 計算失敗(RuntimeError)", merged

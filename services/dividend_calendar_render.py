@@ -616,4 +616,3 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
 # 不收 `infra.html_to_png`(它會啟動 headless Chromium,是 I/O)。它唯一的使用者是每月推播排程,
 # 故原封搬到編排層 `scripts/dividend_calendar_png.py`;HTML 樣板(本檔)仍是 App 與推播共用的單一份。
 __all__ = ["render_month_calendar_html", "_HOUSE_COLOR"]
-

@@ -287,6 +287,15 @@ def test_png_render_module_does_not_eager_load_playwright():
     out = subprocess.run([sys.executable, "-c", _code], capture_output=True, text=True,
                          cwd=str(_root))
     assert out.stdout.strip() == "False", (out.stdout, out.stderr)
+    # 2026-10-13:推播用的 PNG 產圖搬到編排層 `scripts/dividend_calendar_png.py`,
+    # 它也必須保持 lazy —— 每月排程一 import 就載入 playwright 等於把截圖依賴提前。
+    # ⚠️ 沒裝 playwright 的環境裡「playwright 不在 sys.modules」恆為真(守不到東西),
+    #    所以另外檢查 L0 `infra.html_to_png` 也沒被 eager import:那才是 lazy 與否的實際機制。
+    _code2 = ("import sys; import scripts.dividend_calendar_png as P; "
+              "print('playwright' in sys.modules, 'infra.html_to_png' in sys.modules)")
+    out2 = subprocess.run([sys.executable, "-c", _code2], capture_output=True, text=True,
+                          cwd=str(_root))
+    assert out2.stdout.strip() == "False False", (out2.stdout, out2.stderr)
 
 
 def test_png_render_produces_valid_png_or_skips():
