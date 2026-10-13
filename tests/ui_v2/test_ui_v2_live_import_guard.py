@@ -61,10 +61,14 @@ _FILE_ALLOWLIST = {
     # 2026-09-28 alo 頁正式模式接線骨架（客戶 2026-09-28 核准的 docs/wireframes/draft_alo_live.html）。
     # `ui_v2.alo.live` 是本頁的純函式模組（設定值解析、示意字樣移除、寫入端按鈕停用），
     # 不是 fixtures —— 它不 import streamlit、不 import 舊樹，體例同 `ui_v2/set/source.py` 之於 `spec`。
+    # 2026-10-13 客戶裁示（B 線資產配置必須是真資料）：加 `fund_keys`／`nav_dividend`（淨值，同 hld 入口）
+    # 與 `market_indicator`（49 §6.1 Q9 非美元匯率鍵，`build_fx_indicator_table`）；`logging`：被包住的取數例外記 log（稽核 B2）；
+    # `datetime.datetime`：台灣日曆日（第二輪 N-b）。~~`contract`~~ 第三輪撤掉：門檻改住 `ui_v2/alo/live.py`，用不到了。
     "ui_v2/alo/source.py": {
-        "__future__", "os", "streamlit",
-        "services.v2_tables.alo_holdings", "services.v2_tables.masking",
-        "services.v2_tables.settings_store", "ui_v2.alo.live",
+        "__future__", "logging", "os", "datetime.datetime", "streamlit",
+        "services.v2_tables.alo_holdings", "services.v2_tables.fund_keys",
+        "services.v2_tables.market_indicator", "services.v2_tables.masking",
+        "services.v2_tables.nav_dividend", "services.v2_tables.settings_store", "ui_v2.alo.live",
     },
     "ui_v2/app_alo_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.alo.page", "ui_v2.alo.source",

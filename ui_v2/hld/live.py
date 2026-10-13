@@ -41,6 +41,7 @@ import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
+from .. import thresholds
 from . import logic
 
 # 客戶 2026-10-02 裁示 A，逐字。⛔ 不准加字、不准補「請……」之類指示動作的句子。
@@ -250,7 +251,10 @@ def _apply_direct(model: dict, rows: list, *, has_holdings: bool, holding_failed
 # 客戶理由（同處）：7 天遇到春節等長假，所有基金都會被誤標黃燈；使用者習慣忽略黃燈後，真正落後的反而看不到。
 # ⛔ 不沿用 `shared/signal_thresholds.py::MJ_FRESH_DAYS_YELLOW`（那是 7，管的是 L2 `stale`，算法也不同）——
 #    草稿 §D：「實作時要另設一個常數放 10，不要沿用 MJ_FRESH_DAYS_YELLOW」。
-NAV_FRESH_DAYS_YELLOW = 10
+# ~~`NAV_FRESH_DAYS_YELLOW = 10`（本檔寫死）~~ → 2026-10-13 客戶裁示（有意識的更正，不是漏刪）：10 天要有單一、
+# 明確的共用定義，不得各頁各寫一個數字 —— 值改由 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS` 供應，
+# 本名保留為別名（呼叫點與判定方向 `days > NAV_FRESH_DAYS_YELLOW` 一字未改，行為零變更）。
+NAV_FRESH_DAYS_YELLOW = thresholds.NAV_NOT_READY_DAYS
 
 FRESHNESS_TODAY_TEXT = "當日"                      # 1-A：N＝0（`44` §5.2 新鮮度字面）
 FRESHNESS_DELAY_TEXT = "延遲 {n} 日"               # 1-A：N≥1（`44` §5.2 新鮮度字面）

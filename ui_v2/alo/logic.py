@@ -108,7 +108,11 @@ GAPS = {
     ),
     "ALO-GAP-非美元幣別": (
         "44 全檔唯一的匯率鍵是 fx_twd_per_usd（線框 A-08），而 holding.ccy 不限美元。"
-        "市值基準碰到新臺幣與美元以外的幣別時本頁炸掉，不自行發明匯率鍵。"
+        "~~市值基準碰到新臺幣與美元以外的幣別時本頁炸掉，不自行發明匯率鍵。~~"
+        "→ 2026-10-13 狀態更新（有意識的更正，不是漏刪；依據：49 §6.1 Q9 客戶 2026-09-26 同意「新增對應幣別的匯率鍵」）："
+        "非美元幣別的匯率鍵為 fx_twd_per_ 加 ISO 代碼小寫（fx_key_for，L2 market_indicator.fx_indicator_key 的字面鏡像），"
+        "取 obs_date 規則同美元；缺匯率時該類別照 44 ALO-2 空狀態的既有字面寫「⬜ 資料未備：缺換算匯率 <鍵>」，不炸。"
+        "舊句寫下時為真（當時 Q9 未裁）；被推翻的是它的前提。鍵名本身不是 44 原文，44 仍只列 fx_twd_per_usd。"
     ),
     "ALO-GAP-匯率對齊鍵": (
         "ALO-2 來源欄寫取 obs_date 不晚於淨值日的最近一筆，而 market_indicator 表規則寫跨期間對齊一律用 release_date。"
@@ -147,10 +151,16 @@ GAPS = {
         "每一檔都缺基準值時 ALO-2 的分母是 0，44 沒有寫這種情形的畫法。"
         "本頁判讀：缺的理由只有一種時，分母不是「零」而是「沒有」，照 44 5.5「來源缺」模板畫，"
         "理由字串沿用 basis_value 交出來的那一句，不新編。"
-        "有值卻加起來不為正、或缺值理由不只一種 → 兩者 44 都沒有畫法，照舊 raise。"
+        "有值卻加起來不為正~~、或缺值理由不只一種~~ → ~~兩者~~ 44 沒有畫法，照舊 raise。"
+        "→ 2026-10-13 更正（有意識的更正，不是漏刪；依據：總管 2026-10-13 派工「非美元不崩頁、缺淨值或缺匯率照實呈現資料未備」）："
+        "每一檔都缺基準值而理由不只一種（例：一類缺 nav、一類缺 fx_twd_per_usd、一類缺 fx_twd_per_eur）時，"
+        "照 44 ALO-2 空狀態「該類別顯示缺值字面、合計未涵蓋該類」逐類別各寫自己的理由，不再炸；"
+        "沒有持倉的目標類別目前比重算不出來，只印 ⬜（不寫 0%，不新編字句）。"
+        "舊句寫下時為真（當時真資料走不到這一種）；被推翻的是它的前提 —— 接上淨值後，"
+        "美元與非美元匯率都還在閘門後面，這一種在真資料裡會出現，炸掉等於整頁不能用。"
         "2026-09-28 接真資料時才走得到：~~nav 在 L2 是 PENDING_TABLES~~，市值基準下每一檔都沒有基準值。"
         "→ 2026-10-09 狀態更新（不是漏刪）：L2 已把 nav 移出 PENDING_TABLES，但本頁不取淨值（未獲授權），"
-        "所以照樣走得到。",
+        "所以照樣走得到。→ 2026-10-13：本頁已接淨值（客戶 2026-10-13 裁示），只剩淨值缺或匯率缺時走得到。",
     "ALO-GAP-value_kind": "alo_basis 的值在 44 第四節 value_kind 六種裡對不上任何一種。假資料那一列放空，不補第七種。"
         "2026-09-26 客戶裁示，實作層定 alo_basis 為 list 枚舉（成本／市值）；示範模式那一列 value_kind 仍放 None。",
     "ALO-GAP-匯出兩組欄名": (
@@ -189,6 +199,57 @@ GAPS = {
         "本頁不掛，不自己編一個層級。"
     ),
     "ALO-GAP-同類別兩列": "同一張保單同一檔基金登記成兩列而 bucket 不同時該歸哪一類 44 沒寫。本頁炸掉。",
+    # ── 以下 2026-10-13 補登（總管同日技術裁定，接真淨值與非美元匯率鍵之後；有意識的登記，不是漏刪）──
+    "ALO-GAP-單檔淨值失敗升整表": (
+        "本頁沒有逐檔畫取數失敗的位置（hld 有 fund_errors，本頁沒有），44 也沒寫。"
+        "任一檔淨值取數失敗，各檔失敗原文遮蔽後以「代碼：原文」串成一句放進 errors[nav]，"
+        "照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 整張畫 ⛔，成本基準不受影響。比 hld 嚴，據實登記。"
+    ),
+    "ALO-GAP-匯率單位待裁": (
+        "非美元匯率鍵的 value_unit 44 沒有宣告；L2 暫寫「新臺幣／<ISO 代碼>」（美元沿用 MKT-3 的「新臺幣／美元」）。"
+        "本頁不讀 value_unit。匯率閘門打開前送客戶裁示。"
+    ),
+    "ALO-GAP-全缺兩種畫法": (
+        "每一類都缺基準值時，理由只有一種 → 整塊一個「來源缺」placeholder；理由不只一種 → 逐類別各寫自己的理由（見 ALO-GAP-分母全缺）。"
+        "同一種情形兩種畫法，是因為 44 只給了單一理由的模板、沒給多理由的畫法。"
+    ),
+    "ALO-GAP-全缺合計未涵蓋": (
+        "逐類別那一種畫法下，表尾「合計未涵蓋」會列出每一個有持倉的類別 —— 語意是「沒有任何一類被涵蓋、本卡沒有合計」，"
+        "不是「其餘類別照算」。44 這一句是為部分缺寫的，全缺時沿用字面，語意據實登記。"
+    ),
+    "ALO-GAP-多理由並列": (
+        "ALO-3 照 ALO-2 那一格的空狀態字串（ALO-GAP-ALO3上游）；ALO-2 逐類別而理由不只一種時，44 沒寫 ALO-3 怎麼並列。"
+        "各理由都是 5.5「來源缺」、嚴重度相同，本頁取 ALO-2 列序最先的那一種畫一個來源缺 placeholder，不並列、不新編句子。"
+    ),
+    "ALO-GAP-ALO4缺匯率字面": (
+        "ALO-4 缺換算匯率的那一句不帶鍵名（ALO-GAP-缺匯率不帶鍵），缺歐元等非美元匯率時沿用同一句；"
+        "缺的是哪幾個鍵寫在 ALO-4 摘要「缺 …」裡。"
+    ),
+    "ALO-GAP-基準標籤只寫美元": (
+        "BASIS_LABELS 的市值標籤寫「美元依 fx_twd_per_usd 換算」，沒有涵蓋非美元幣別（例 fx_twd_per_eur）。"
+        "本輪不得改文案，照舊；待客戶定字。"
+    ),
+    "ALO-GAP-過期淨值不納入": (
+        "本頁沒有淨值新鮮度的位置（加位置要先出線框）。過期或預存淨值（provenance 帶 cache_fallback 或 stale、"
+        "~~或淨值列 is_estimated 為真~~ → 或淨值列 is_estimated 不是 False（含缺欄或 None）、"
+        "或最新淨值日距今（台灣日曆日）超過 ~~shared/signal_thresholds.py 的 MJ_FRESH_DAYS_YELLOW〔經 contract.NAV_MAX_AGE_DAYS〕~~"
+        " → 10 天〔ui_v2/alo/live.py::NAV_MAX_AGE_DAYS；出處 ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW，"
+        "客戶 2026-10-02 裁示原話「門檻 10 天，非 44 規定，是本輪依長假實況訂的」；第三輪總管裁定，有意識的更正，不是漏刪〕）"
+        "目前一律不納入市值：該檔視為缺淨值，畫既有字面「⬜ 資料未備：nav 尚無資料」"
+        "（CLAUDE.md §2.4 禁止靜默返回，fail closed）。新鮮度呈現與理由字面待線框。"
+        "淨值日期門檻：44 與 49 都沒有替 ALO 市值基準訂，~~本頁引用既有 SSOT，不自訂數字（總管 2026-10-13 第二輪裁定）~~"
+        " → 本頁沿用 B 線既有的客戶裁示 10 天（第三輪）。"
+        "殘餘風險：長假超過 10 天時仍會排除；畫面字面「尚無資料」與實況（有資料、只是過舊）不符，待線框。"
+    ),
+    # ── 2026-10-13 第二輪補登（只登記、不改行為；兩者在 224f233 就已存在）──
+    "ALO-GAP-部分缺的內外判讀": (
+        "部分類別缺基準值時，分母不含被排除的類別（ALO-GAP-分母），「有目標、沒持倉」的類別畫成 0.0%、"
+        "差額與容許帶內外照算（常標「外」）—— 那個內外是用不完整的分母算出來的。44 沒寫這種情形，本頁照舊畫，據實登記。"
+    ),
+    "ALO-GAP-同類別多理由": (
+        "同一個類別內有兩檔以上缺基準值、而且理由不同（例：一檔缺 nav、一檔缺換算匯率）時，"
+        "ALO-2 那一格只顯示依持倉順序遇到的第一種理由。44 沒寫並列畫法，本頁照舊，據實登記。"
+    ),
 }
 
 
@@ -347,8 +408,26 @@ DISPLAY_TZ_LABEL = "UTC+8"
 # alo 頁與 L2 已對齊；set 頁示範假資料仍存 cost，屬示範值，正式模式不讀它，另案處理（ui_v2/set/fixtures.py）。
 BASIS_COST = "成本"
 BASIS_MV = "市值"
+# ALO-GAP-基準標籤只寫美元：市值標籤沒有涵蓋非美元幣別；本輪不改文案。
 BASIS_LABELS = {BASIS_COST: "成本（cost_twd）", BASIS_MV: "市值（淨值 × 單位數，美元依 fx_twd_per_usd 換算）"}
 FX_KEY = "fx_twd_per_usd"
+# 非美元幣別的匯率鍵（49 §6.1 Q9；ALO-GAP-非美元幣別）。L2 `services/v2_tables/market_indicator.py::fx_indicator_key`
+# 的字面鏡像（ui_v2 不得 import services），由 tests/test_v2_tables_market_indicator_fx_ccy.py 逐幣比對。
+FX_KEY_PREFIX = "fx_twd_per_"
+
+
+def fx_key_for(ccy) -> str:
+    """幣別 → 匯率鍵：`USD` → `fx_twd_per_usd`（即 `FX_KEY`）；`EUR` → `fx_twd_per_eur`。
+    `nav.ccy` 依契約恆為 ISO 4217 三個大寫英文字母；不是 → 契約被破壞，當場炸（fixtures 不會走到）。"""
+    if not (isinstance(ccy, str) and len(ccy) == 3 and all("A" <= ch <= "Z" for ch in ccy)) or ccy == "TWD":
+        raise ValueError(f"{ccy!r} 沒有對應的換算匯率鍵（nav.ccy 須為新臺幣以外的 ISO 4217 代碼）")
+    return FX_KEY_PREFIX + ccy.lower()
+
+
+def fx_missing_text(key) -> str:
+    """ALO-2 缺匯率那一格：44 ALO-2 空狀態的既有字面「⬜ 資料未備：缺換算匯率 <鍵>」（美元即 `TEXT_FX_MISSING_ALO2`）。"""
+    return f"{TEXT_FX_MISSING_ALO4} {key}"
+
 
 # ⛔ 本頁畫「取數失敗」用的圖示只住在這一個常數裡（客戶 2026-09-24 裁示：取數失敗 ⛔、黃燈 ⚠）。
 # 44 逐字「`⛔ 取數失敗：<訊息原文>`」
@@ -428,6 +507,9 @@ def fetch_error(dataset, tables):
     return None
 
 
+# ALO-GAP-單檔淨值失敗升整表：正式模式下任一檔淨值取數失敗都會以表層失敗進 errors["nav"]（ui_v2/alo/live.py）。
+# ALO-GAP-過期淨值不納入：過期或預存淨值在進 dataset 之前就被拿掉（ui_v2/alo/live.py::assemble_nav）。
+# ALO-GAP-匯率單位待裁：本頁不讀 market_indicator.value_unit。
 def _source_tables(basis):
     """ALO-2 的來源：holding（市值基準再加 nav 與匯率）＋ user_setting（目標、容許帶、基準、類別名稱）。
     ALO-GAP-缺匯率從嚴：market_indicator 失敗時整塊進系統錯誤。"""
@@ -546,12 +628,13 @@ def latest_nav(dataset, fund_code):
     return max(rows, key=lambda r: r["nav_date"]) if rows else None
 
 
-def fx_for_date(dataset, nav_date):
-    """44 逐字「取 `obs_date` 不晚於 `nav.nav_date` 的最近一筆」（ALO-GAP-匯率對齊鍵）。"""
+def fx_for_date(dataset, nav_date, key=FX_KEY):
+    """44 逐字「取 `obs_date` 不晚於 `nav.nav_date` 的最近一筆」（ALO-GAP-匯率對齊鍵）。
+    `key`：美元為 `FX_KEY`；其餘幣別同一條規則換鍵（ALO-GAP-非美元幣別）。"""
     rows = [
         r
         for r in dataset["market_indicator"]
-        if r["indicator_key"] == FX_KEY and r["obs_date"] <= nav_date
+        if r["indicator_key"] == key and r["obs_date"] <= nav_date
     ]
     return max(rows, key=lambda r: r["obs_date"])["value_num"] if rows else None
 
@@ -566,11 +649,11 @@ def basis_value(dataset, holding, basis):
     value = holding["units_shares"] * nav["nav_orig_ccy"]
     if nav["ccy"] == "TWD":
         return value, None
-    if nav["ccy"] != "USD":
-        raise ValueError(f"{holding['fund_code']} 的幣別 {nav['ccy']} 沒有對應的換算匯率鍵（ALO-GAP-非美元幣別）")
-    rate = fx_for_date(dataset, nav["nav_date"])
+    # ~~非美元 → raise（ALO-GAP-非美元幣別）~~ → 2026-10-13：照 Q9 換鍵，缺匯率照實寫資料未備（見該 GAP）。
+    key = fx_key_for(nav["ccy"])
+    rate = fx_for_date(dataset, nav["nav_date"], key)
     if rate is None:
-        return None, TEXT_FX_MISSING_ALO2
+        return None, fx_missing_text(key)
     return value * rate, None
 
 
@@ -597,7 +680,8 @@ def exceeds(diff, tolerance) -> bool:
 
 
 def _category_values(dataset, basis, bucket_names):
-    """回 {類別: {"value": float|None, "reason": str|None, "count": int}}，依持倉出現順序。"""
+    """回 {類別: {"value": float|None, "reason": str|None, "count": int}}，依持倉出現順序。
+    ALO-GAP-同類別多理由：同一類別遇到的第一種缺值理由就定案，後面的理由不再記。"""
     values = {}
     for holding in aggregated_holdings(dataset):
         cat = category_of(holding, bucket_names)
@@ -665,9 +749,13 @@ def _build_alo2(dataset) -> dict:
             if len(reasons) == 1 and None not in reasons:
                 placeholder = _placeholder(reasons.pop(), "來源缺")
                 values = {}
-            else:
-                # 有值卻加起來不為正、或缺值的理由不只一種 —— 兩者 `44` 都沒有畫法，照舊炸掉。
+            elif None in reasons:
+                # 有值卻加起來不為正 —— `44` 沒有畫法，照舊炸掉。
+                # ~~有值卻加起來不為正、或缺值的理由不只一種 —— 兩者 `44` 都沒有畫法，照舊炸掉。~~
+                # → 2026-10-13（ALO-GAP-分母全缺）：理由不只一種時逐類別各寫自己的理由（下面 denominator=None 那一支）。
                 raise ValueError("目前比重的分母為零或負，44 沒有這種情形的畫法（fixtures 不會走到）")
+            else:
+                denominator = None   # 「沒有分母」：每一類都缺值，逐類別照 44 ALO-2 空狀態寫理由
     if placeholder is None:
         target_of = {t["bucket"]: t["weight_ratio"] for t in targets}
         for bucket in _row_order(targets, bucket_names, values):
@@ -687,7 +775,12 @@ def _build_alo2(dataset) -> dict:
                 row["_current_pct"] = None
                 row["current_text"] = slot["reason"]
                 row["_gap_text"] = slot["reason"]
+            elif denominator is None:
+                # ALO-GAP-分母全缺：每一類都缺值 ⇒ 沒有分母；沒有持倉的目標類別比重算不出來，只印 ⬜。
+                row["_current_pct"] = None
+                row["current_text"] = "⬜"
             else:
+                # ALO-GAP-部分缺的內外判讀：部分缺時分母不完整，有目標、沒持倉的類別照算 0.0% 與內外。
                 row["_current_pct"] = slot["value"] / denominator * 100.0
                 row["current_text"] = format_share(row["_current_pct"])
             if not has_target:
@@ -719,11 +812,13 @@ def _build_alo2(dataset) -> dict:
             tail_lines.append(f"{UNCLASSIFIED} {values[UNCLASSIFIED]['count']} 檔")
             tail_lines.append("⚠ 44 沒有寫「未分類」的目標比重；本頁目標、差額、內外三格不算。")
         if uncovered:
+            # ALO-GAP-全缺合計未涵蓋：全缺（沒有分母）時這一句列出每一個有持倉的類別。
             tail_lines.append("合計未涵蓋 " + "、".join(uncovered))
 
     cell_tones = set()
     for row in rows:
-        if row["_gap_text"] == TEXT_FX_MISSING_ALO2 or row["target_text"] == TEXT_NOT_READY:
+        # 缺匯率（任何一個鍵；美元即 TEXT_FX_MISSING_ALO2）那一格灰（ALO-GAP-非美元幣別）。
+        if (row["_gap_text"] or "").startswith(TEXT_FX_MISSING_ALO4) or row["target_text"] == TEXT_NOT_READY:
             cell_tones.add("灰")
     tone = placeholder["_tone"] if placeholder else ("灰" if cell_tones else "中性")
     return {
@@ -739,6 +834,9 @@ def _build_alo2(dataset) -> dict:
         "_target_unset": not targets,
         "_tolerance": tolerance,
         "_values": values,
+        # ALO-GAP-全缺兩種畫法：每一類都缺值而理由不只一種 → 逐類別畫（沒有分母）；ALO-3 讀這兩個鍵（ALO-GAP-多理由並列）。
+        "_no_denominator": placeholder is None and bool(values) and denominator is None,
+        "_missing_reasons": list(dict.fromkeys(r["current_text"] for r in rows if r["_value"] is None)),
         "column_labels": ["類別", "目前比重", "目標比重", "差額", "容許帶內外"],
         "_rows": rows,
         "placeholder": placeholder,
@@ -932,6 +1030,10 @@ def _build_alo3(dataset, alo2) -> dict:
     if alo2["placeholder"] is not None:
         # 目標未設那一種是 44 ALO-1 空狀態欄逐字寫的；另外兩種是 ALO-GAP-ALO3上游。
         placeholder = dict(alo2["placeholder"])
+    elif alo2["_no_denominator"]:
+        # ALO-GAP-多理由並列：ALO-2 沒有分母（每一類都缺值、理由不只一種）。不算試算總額 ——
+        # 那不是「合計不為正」，是「沒有合計」；照 44 5.5「來源缺」畫列序最先的那一個理由（各理由嚴重度相同），不新編句子。
+        placeholder = _placeholder(alo2["_missing_reasons"][0], "來源缺")
 
     rows_by_bucket = {r["_bucket"]: r for r in alo2["_rows"]}
     accepted = {}
@@ -1034,12 +1136,18 @@ def _build_alo3(dataset, alo2) -> dict:
 # ───────────────────────── ALO-4 ─────────────────────────
 
 
-def _fx_missing_for_mv(dataset) -> bool:
+def _fx_missing_for_mv(dataset) -> list:
+    """市值基準下缺換算匯率的鍵（依持倉順序、不重複）。~~只看美元~~ → 2026-10-13 新臺幣以外一律換鍵檢查
+    （ALO-GAP-非美元幣別）；空列表＝不缺。"""
+    missing = []
     for holding in aggregated_holdings(dataset):
         nav = latest_nav(dataset, holding["fund_code"])
-        if nav is not None and nav["ccy"] == "USD" and fx_for_date(dataset, nav["nav_date"]) is None:
-            return True
-    return False
+        if nav is None or nav["ccy"] == "TWD":
+            continue
+        key = fx_key_for(nav["ccy"])
+        if fx_for_date(dataset, nav["nav_date"], key) is None and key not in missing:
+            missing.append(key)
+    return missing
 
 
 def _build_alo4(dataset) -> dict:
@@ -1079,10 +1187,13 @@ def _build_alo4(dataset) -> dict:
     detail_lines = []
     failure = fetch_error(dataset, _source_tables(basis))
     fail_nodes = [_placeholder(fetch_failed_text(failure), "系統錯誤")] if failure is not None else []
-    fx_missing = failure is None and basis == BASIS_MV and bool(holdings) and _fx_missing_for_mv(dataset)
+    fx_missing_keys = (
+        _fx_missing_for_mv(dataset) if failure is None and basis == BASIS_MV and holdings else []
+    )
+    fx_missing = bool(fx_missing_keys)
     if fx_missing:
         # 44 ALO-4 空狀態：基準不自動退回成本。ALO-GAP-缺匯率不帶鍵。
-        detail_lines.append(TEXT_FX_MISSING_ALO4)
+        detail_lines.append(TEXT_FX_MISSING_ALO4)   # ALO-GAP-ALO4缺匯率字面：非美元同一句，鍵名寫在摘要
     detail_lines.append("每一檔的類別在 Sheets 維護，本塊唯讀呈現；本塊的存檔只寫比重基準與類別名稱兩鍵")
     detail_lines.append(HINT_NOTE)
 
@@ -1104,8 +1215,7 @@ def _build_alo4(dataset) -> dict:
         missing.append("alo_basis")
     if not bucket_names and not setting_failed:
         missing.append("alo_bucket_names")
-    if fx_missing:
-        missing.append(FX_KEY)
+    missing.extend(fx_missing_keys)   # ~~missing.append(FX_KEY)~~ → 2026-10-13：缺哪幾個鍵就列哪幾個
     summary = "基準 " + (BASIS_LABELS[basis] if basis else ("取不到" if setting_failed else "未設定"))
     summary += f"；類別 {len(bucket_names or ())} 個；未指派 {len(unassigned)} 檔"
     if missing:

@@ -99,6 +99,10 @@ _FRESH = {"text": "淨值取自預存序列，不是本次取得；最近一筆 
 
 def test_門檻常數是10_不沿用MJ_FRESH_DAYS_YELLOW_註解寫明客戶原話():
     assert live.NAV_FRESH_DAYS_YELLOW == 10
+    # 2026-10-13 客戶裁示：值來自 B 線共用定義 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`，本檔不再寫死
+    # （兩頁引用同一名稱與「不得是字面值」的 AST 守衛見 tests/ui_v2/test_alo_live_logic.py）。
+    assert live.thresholds.__name__ == "ui_v2.thresholds"
+    assert live.NAV_FRESH_DAYS_YELLOW == live.thresholds.NAV_NOT_READY_DAYS
     assert _module_constant("shared/signal_thresholds.py", "MJ_FRESH_DAYS_YELLOW") == 7
     assert "門檻 10 天，非 44 規定，是本輪依長假實況訂的" in _LIVE_PY.read_text(encoding="utf-8")
 

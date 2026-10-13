@@ -21,6 +21,7 @@ sys.path.insert(0, str(_ROOT))
 from ui_v2.alo import fixtures, live, logic  # noqa: E402
 
 source = pytest.importorskip("ui_v2.alo.source")  # 需要 L1 的相依（streamlit、gspread 等）
+pd = pytest.importorskip("pandas")
 
 _CORE, _SAT = fixtures.CORE, fixtures.SATELLITE
 
@@ -107,7 +108,62 @@ def wired(monkeypatch):
     monkeypatch.setattr(source.alo_holdings, "load_alo_tables", _load_alo_tables)
     monkeypatch.setattr(source.settings_store, "load_user_settings", _load_user_settings)
     monkeypatch.setattr(source.settings_store, "load_market_indicator", _load_market_indicator)
+
+    # ── 2026-10-13 淨值（A 鏈，同 hld）與非美元匯率（Q9）：真的 L2，只換最底下的取數 ──
+    # 代碼對照：`key_fail` 裡的代碼回 ok=False；`resolve` 設成例外時 `resolve_full_keys` 直接拋。
+    state.update(key_fail=(), resolve=None, series={}, chain_calls=[], fx_calls=[], fx={}, nav_table=None,
+                 key_inputs=None, nav_error_token="上游逾時")
+
+    def _resolve(codes, **_kw):
+        state["key_inputs"] = list(codes)
+        if isinstance(state["resolve"], Exception):
+            raise state["resolve"]
+        fail = state["key_fail"]
+        return {"results": [{"input": c, "ok": c not in fail, "full_key": None if c in fail else "FK-" + c,
+                             "portal": None if c in fail else "", "parsed_code": c,
+                             "mapping_hit": c not in fail, "error": "查不到" if c in fail else None}
+                            for c in codes], "provenance": {}}
+
+    real_build = source.nav_dividend.build_nav_table
+
+    def _build(funds, **kw):
+        state["nav_table"] = real_build([dict(f) for f in funds], **kw)
+        return state["nav_table"]
+
+    def _fetch_nav(chain_code, full_key):
+        state["chain_calls"].append((chain_code, full_key))
+        got = state["series"].get(full_key)
+        if got is None:
+            return None, state["nav_error_token"]
+        return got, None
+
+    def _fetch_fx(ticker, *args, **kwargs):
+        state["fx_calls"].append(ticker)
+        return state["fx"][ticker]
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", _resolve)
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", _build)
+    monkeypatch.setattr(source.nav_dividend, "fetch_nav_chain_with_error", _fetch_nav)
+    monkeypatch.setattr(source.market_indicator, "fetch_yf_close_with_error", _fetch_fx)
+    # 第二輪 N-b：淨值日新鮮度以台灣日曆日判，固定「今天」（替身淨值日 2026-09-23 → 距今 2 天）。
+    monkeypatch.setattr(source, "_today_tw", lambda: _TODAY)
     return state
+
+
+_TODAY = __import__("datetime").date(2026, 9, 25)
+
+
+_FAKE_SECRET = "zz-fake-secret-a10c"
+
+
+def _nav_series(value, day="2026-09-23"):
+    s = pd.Series([value], index=[pd.Timestamp(day)])
+    s.attrs = {"source": "MoneyDJ:x", "fetched_at": "2026-09-23T01:30:00+00:00"}
+    return s
+
+
+def _mv_settings():
+    return _settings(**dict(_GOOD_SETTINGS, alo_basis=logic.BASIS_MV))
 
 
 # ═══════════════════════ dataset 的形狀 ═══════════════════════
@@ -125,27 +181,137 @@ def test_dataset與fixtures同形_而且build_page_model吃得下(wired):
     assert out["dataset"]["errors"] == {} and out["dataset"]["save_errors"] == {}
 
 
-def test_本頁不取淨值_空列表而且不進errors(wired):
+def test_成本基準不取淨值_空列表而且不進errors(wired):
     """~~`settings_store.PENDING_TABLES` 列了 `nav` —— 那是「還沒接」，不是「讀失敗」。~~
     → 2026-10-09 客戶裁示 Q1（不存 NAV、各頁需要時即時抓取）：L2 已把 `nav` 移出 `PENDING_TABLES`；
-    但本頁取淨值未獲授權（裁示只到 hld、set），`nav` 照舊空列表、不進 `errors`（有意識的更正，不是漏刪）。"""
+    但本頁取淨值未獲授權（裁示只到 hld、set），`nav` 照舊空列表、不進 `errors`（有意識的更正，不是漏刪）。
+    → 2026-10-13 客戶裁示（資產配置必須是真資料）：本頁取淨值，但**只在已存基準為市值時**取；
+    成本基準用不到淨值，不取、不呼叫代碼對照（舊名 `test_本頁不取淨值_空列表而且不進errors`；有意識的更正，不是漏刪）。"""
     out = source.load_live()
     assert out["dataset"]["nav"] == []
     assert "nav" not in out["dataset"]["errors"]
+    assert wired["key_inputs"] is None and wired["chain_calls"] == []
     # ~~assert "nav" in out["notes"]["pending_tables"]~~
     assert out["notes"]["pending_tables"] == ["dividend"]
 
 
-def test_市值基準下整片資料未備_不偽造不退回成本(wired):
-    wired["settings"] = _settings(**dict(_GOOD_SETTINGS, alo_basis=logic.BASIS_MV))
-    model = logic.build_page_model(source.load_live()["dataset"])
+def test_市值基準_淨值取數失敗_原文經遮蔽進errors_nav_畫取數失敗_不偽造不退回成本(wired):
+    """~~`test_市值基準下整片資料未備_不偽造不退回成本`：本頁不取淨值 ⇒ 整片「nav 尚無資料」。~~
+    → 2026-10-13：本頁取淨值；替身的 A 鏈對每一檔都回失敗 ⇒ 那是取數失敗，不是資料未備（有意識的更正，不是漏刪）。"""
+    source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
+    wired["settings"] = _mv_settings()
+    wired["nav_error_token"] = f"上游逾時 token={_FAKE_SECRET}"
+    out = source.load_live()
+    error = out["dataset"]["errors"]["nav"]
+    assert error.startswith("AAAA：上游逾時") and _FAKE_SECRET not in error   # 原文經遮蔽才進 errors
+    model = logic.build_page_model(out["dataset"])
     block = logic.find_block(model, "ALO-2")
-    assert block["placeholder"] is not None
-    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+    assert block["placeholder"]["text"] == logic.fetch_failed_text(error)
     assert block["_rows"] == []                       # 不拿成本值頂替
     # ALO-4 的比重基準仍是二選一，兩個選項都在（不准灰掉或移除）。
     basis_field = logic.find_block(model, "ALO-4")["inputs"][0]
     assert basis_field["_options"] == (logic.BASIS_COST, logic.BASIS_MV)
+
+
+def test_市值基準_新臺幣淨值取到_市值照算(wired):
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(712.5)}
+    out = source.load_live()
+    assert out["dataset"]["errors"] == {}
+    assert [(r["fund_code"], r["nav_orig_ccy"], r["ccy"]) for r in out["dataset"]["nav"]] == [("AAAA", 712.5, "TWD")]
+    assert wired["chain_calls"] == [("AAAA", "FK-AAAA")]           # 同 hld：chain_code ＝ parsed_code
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"] is None
+    assert block["_values"][_CORE]["value"] == 1000.0 * 712.5     # 單位數 × 淨值，不乘匯率
+    assert wired["fx_calls"] == []
+
+
+def test_市值基準_美元淨值_乘試算表上不晚於淨值日的匯率(wired):
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="USD")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    out = source.load_live()
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["_values"][_CORE]["value"] == 1000.0 * 15.2 * 32.0
+    assert wired["fx_calls"] == []                                  # 美元走試算表那一份，本頁不另取
+
+
+def test_市值基準_歐元_閘門關閉_不取數_畫缺換算匯率鍵_不崩頁(wired):
+    assert source.market_indicator.FX_OBS_DATE_RULE_VERIFIED is False
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    out = source.load_live()
+    assert wired["fx_calls"] == []                                  # 閘門關閉：EURTWD=X 不取數
+    assert out["notes"]["fx_pending"] == {"fx_twd_per_eur": source.market_indicator.PENDING_FX_OBS_DATE_RULE}
+    assert "market_indicator" not in out["dataset"]["errors"]       # pending 不是失敗
+    model = logic.build_page_model(out["dataset"])
+    block = logic.find_block(model, "ALO-2")
+    assert block["placeholder"]["text"] == "⬜ 資料未備：缺換算匯率 fx_twd_per_eur"   # 只有一種理由 → 來源缺
+    assert block["placeholder"]["_empty_kind"] == "來源缺"
+
+
+def test_市值基準_歐元_閘門打開_取EURTWD換算(wired, monkeypatch):
+    monkeypatch.setattr(source.market_indicator, "FX_OBS_DATE_RULE_VERIFIED", True)
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    fx = pd.Series([35.0, 99.0], index=[pd.Timestamp("2026-09-22"), pd.Timestamp("2026-09-24")], name="EURTWD=X")
+    fx.attrs = {"source": "Yahoo:EURTWD=X", "fetched_at": "2026-09-25T06:00:00+00:00"}
+    wired["fx"] = {"EURTWD=X": (fx, None)}
+    out = source.load_live()
+    assert wired["fx_calls"] == ["EURTWD=X"]
+    assert {r["indicator_key"] for r in out["dataset"]["market_indicator"]} == {"fx_twd_per_usd", "fx_twd_per_eur"}
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["_values"][_CORE]["value"] == 1000.0 * 15.2 * 35.0   # 09-24 那筆晚於淨值日，不取
+
+
+def test_市值基準_歐元_閘門打開_取數失敗_原文經遮蔽進errors_market_indicator(wired, monkeypatch):
+    monkeypatch.setattr(source.market_indicator, "FX_OBS_DATE_RULE_VERIFIED", True)
+    source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    wired["fx"] = {"EURTWD=X": (pd.Series(dtype=float), f"fetch_url returned None token={_FAKE_SECRET}")}
+    out = source.load_live()
+    error = out["dataset"]["errors"]["market_indicator"]
+    assert error.startswith("fx_twd_per_eur：") and _FAKE_SECRET not in error
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["_empty_kind"] == "系統錯誤"           # ALO-GAP-缺匯率從嚴
+
+
+def test_市值基準_代碼對照查不到與幣別衝突_那一檔資料未備_不是取數失敗(wired):
+    wired["tables"] = _tables(holding=[
+        dict(_HOLDING),
+        dict(_HOLDING, policy_id="P002", ccy="USD"),                   # 同檔兩列幣別不同 → L2 ccy_conflict
+        dict(_HOLDING, fund_code="BBBB", holding_id="P001|BBBB|1"),
+    ])
+    wired["key_fail"] = ("BBBB",)
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    out = source.load_live()
+    assert out["dataset"]["nav"] == [] and "nav" not in out["dataset"]["errors"]
+    assert wired["nav_table"]["withheld"] == {"AAAA": source.nav_dividend.WITHHELD_CCY_CONFLICT}
+    assert out["notes"]["nav"]["key_failed"] == ["BBBB"]
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+
+
+def test_市值基準_代碼對照本身拋例外_原文經遮蔽進errors_nav_整頁畫得完(wired):
+    """第二輪 N-a：只接取數類例外（OSError 家族）；~~RuntimeError~~ 改用 ConnectionError（有意識的更正，不是漏刪）。"""
+    source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
+    wired["settings"] = _mv_settings()
+    wired["resolve"] = ConnectionError(f"對照表讀不到 {_FAKE_SECRET}")
+    out = source.load_live()
+    error = out["dataset"]["errors"]["nav"]
+    assert error.startswith("ConnectionError: 對照表讀不到") and _FAKE_SECRET not in error
+    assert logic.build_page_model(out["dataset"])["title"] == logic.PAGE_TITLE
+
+
+def test_淨值扣下清單與hld同一份_不含input_conflict():
+    hld_source = pytest.importorskip("ui_v2.hld.source")
+    assert source._NAV_UNAVAILABLE_WITHHELD == hld_source._NAV_UNAVAILABLE_WITHHELD
+    assert source.nav_dividend.WITHHELD_INPUT_CONFLICT not in source._NAV_UNAVAILABLE_WITHHELD
 
 
 def test_dataset的errors鍵一律在build_page_model認得的那一組裡(wired):
@@ -297,3 +463,189 @@ def test_save_setting_寫表以外的例外照樣往上拋(wired, monkeypatch):
     monkeypatch.setattr(source.settings_store, "save_setting_for_page", _boom)
     with pytest.raises(RuntimeError, match="boom"):
         source.save_setting("alo_tolerance_pp", "4", "float")
+
+
+# ═══════════════════════ 2026-10-13 稽核 B2：except 只包取數呼叫；契約錯誤與組輸入錯誤照拋 ═══════════════════════
+
+
+def test_B2_取數呼叫拋例外_記log_原文經遮蔽進errors(wired, caplog):
+    source.st.secrets = {"SETTINGS_SHEET_ID": _FAKE_SECRET}
+    wired["settings"] = _mv_settings()
+    wired["resolve"] = OSError(f"對照表讀不到 {_FAKE_SECRET}")   # 第二輪 N-a：~~RuntimeError~~ → OSError
+    with caplog.at_level("WARNING", logger=source.__name__):
+        out = source.load_live()
+    assert out["dataset"]["errors"]["nav"].startswith("OSError: 對照表讀不到")
+    logged = [r.getMessage() for r in caplog.records if r.name == source.__name__]
+    assert logged and "fund_keys.resolve_full_keys" in logged[0]
+    assert _FAKE_SECRET not in "".join(logged)                         # log 也只記遮蔽後的原文
+
+
+def test_B2_build_nav_table拋例外_同樣是取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def boom(funds, **kw):
+        raise ConnectionError("A 鏈斷線")
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", boom)
+    out = source.load_live()
+    assert out["dataset"]["errors"]["nav"] == "ConnectionError: A 鏈斷線"
+    assert out["dataset"]["nav"] == []
+
+
+def test_B2_assemble_nav的契約錯誤照拋_不標成取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def conflict(funds, **kw):
+        return {"rows": [], "errors": {}, "withheld": {"AAAA": source.nav_dividend.WITHHELD_INPUT_CONFLICT},
+                "skipped": {}, "fetched": {}, "skipped_rows": {}, "provenance": {}}
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", conflict)
+    with pytest.raises(ValueError, match="不在本頁約定的清單內"):
+        source.load_live()
+
+
+def test_B2_組輸入時的KeyError照拋(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def broken(codes, **_kw):
+        return {"results": [{"input": c, "ok": True, "full_key": "FK-" + c, "portal": ""} for c in codes]}
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", broken)      # 少了 parsed_code
+    with pytest.raises(KeyError, match="parsed_code"):
+        source.load_live()
+
+
+def test_N1_預存舊序列_在市值基準下不納入_畫資料未備(wired):
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5)
+    s.attrs = {"source": source.nav_dividend.CACHE_FALLBACK_SOURCE_PREFIX + "AAAA.json",
+               "fetched_at": "2026-09-23T01:30:00+00:00", "cache_updated_at": "2026-09-22T01:30:00+00:00",
+               "nav_quality": {"stale": True}}
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert wired["nav_table"]["rows"], "前提：L2 有寫列（預存序列的值是真的公布淨值）"
+    assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["not_fresh"] == ["AAAA"]
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+
+
+# ═══════════════════════ 2026-10-13 第二輪 N-a：外層只接取數類例外 ═══════════════════════
+
+
+def test_Na_L2拋AssertionError_往上拋_不標成取數失敗(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+
+    def broken(funds, **kw):
+        raise AssertionError("nav 列的欄位與契約不符：['x']")
+
+    monkeypatch.setattr(source.nav_dividend, "build_nav_table", broken)
+    with pytest.raises(AssertionError, match="欄位與契約不符"):
+        source.load_live()
+
+
+def test_Na_對照拋ValueError_往上拋(wired):
+    wired["settings"] = _mv_settings()
+    wired["resolve"] = ValueError("mapping 的鍵不合格")
+    with pytest.raises(ValueError, match="mapping 的鍵不合格"):
+        source.load_live()
+
+
+def test_Na_匯率L2拋ValueError_往上拋(wired, monkeypatch):
+    """例：把美元交給 `build_fx_indicator_table` —— 程式錯誤，不是取數失敗。"""
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+    monkeypatch.setattr(source.live, "fx_ccys_needed", lambda rows: ["USD"])
+    with pytest.raises(ValueError, match="不走這裡"):
+        source.load_live()
+
+
+def test_Na_匯率取數拋OSError_才是取數失敗(wired, monkeypatch):
+    wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
+    wired["settings"] = _mv_settings()
+    wired["series"] = {"FK-AAAA": _nav_series(15.2)}
+
+    def down(ccys):
+        raise TimeoutError("Yahoo 逾時")
+
+    monkeypatch.setattr(source.market_indicator, "build_fx_indicator_table", down)
+    assert source.load_live()["dataset"]["errors"]["market_indicator"] == "TimeoutError: Yahoo 逾時"
+
+
+# ═══════════════════════ 2026-10-13 第二輪 N-b：淨值日期超過 SSOT 門檻不納入 ═══════════════════════
+
+
+def test_Nb_門檻是客戶裁示的10天_不是MJ_FRESH_DAYS_YELLOW():
+    """~~`test_Nb_門檻引用既有SSOT_不另立數字`：門檻 == MJ_FRESH_DAYS_YELLOW（7）~~
+    → 第三輪總管裁定（有意識的更正，不是漏刪）：B 線已有客戶裁示的 10 天（`ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`），
+    草稿 §D 明寫不要沿用 MJ_FRESH_DAYS_YELLOW。"""
+    from ui_v2 import thresholds
+    from ui_v2.hld import live as hld_live
+    # 2026-10-13 客戶裁示（10 天單一共用定義）：兩頁同引 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`
+    assert source.live.NAV_MAX_AGE_DAYS == hld_live.NAV_FRESH_DAYS_YELLOW == thresholds.NAV_NOT_READY_DAYS == 10
+    assert source.live.thresholds is thresholds
+    assert not hasattr(source, "contract")                                 # 不再經 contract 轉交
+
+
+@pytest.mark.parametrize("utc_instant, taiwan_day, utc_day", [
+    # UTC 前一天 16:30 ＝ 台北當天 00:30：台灣日期比 UTC 日期多一天
+    ((2026, 10, 12, 16, 30), (2026, 10, 13), (2026, 10, 12)),
+    # 跨年也一樣（另一個與今天無關的日期，免得替身時鐘漏接時剛好被真時鐘蒙混過關）
+    ((2025, 12, 31, 23, 59), (2026, 1, 1), (2025, 12, 31)),
+])
+def test_第三輪_today_tw取台灣日曆日_UTC前一天16點半已是台灣隔天(monkeypatch, utc_instant, taiwan_day, utc_day):
+    """決定性時鐘：替身把 `now`（帶或不帶時區）、`utcnow`、`today` 全部覆寫成同一個固定的 UTC 時刻，
+    該時刻的台灣日期與 UTC 日期不同 → `_today_tw()` 必須回台灣那一天。
+
+    ~~只覆寫 `now()`~~（2026-10-13 稽核：半決定性 —— `_today_tw` 若改用 `utcnow()`，替身沒接住、落到真時鐘，
+    在真實日期剛好是台灣那天時照樣會過；有意識的更正，不是漏刪）。現在三種錯誤寫法都會轉紅：
+    `utcnow()`、`now(timezone.utc)`、無時區 `now()`（替身模擬伺服器跑在 UTC，與 Streamlit Cloud 相同）。"""
+    import datetime as _dt
+    instant = _dt.datetime(*utc_instant, tzinfo=_dt.timezone.utc)
+    naive_utc = instant.replace(tzinfo=None)
+    assert instant.astimezone(source.nav_dividend.MARKET_DATE_TZ).date() == _dt.date(*taiwan_day)  # 前提
+    assert naive_utc.date() == _dt.date(*utc_day) != _dt.date(*taiwan_day)                         # 前提：兩者不同
+
+    class _Clock(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return naive_utc if tz is None else instant.astimezone(tz)
+
+        @classmethod
+        def utcnow(cls):
+            return naive_utc
+
+        @classmethod
+        def today(cls):
+            return naive_utc
+
+    monkeypatch.setattr(source, "datetime", _Clock)
+    assert source._today_tw() == _dt.date(*taiwan_day)
+
+
+def test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備(wired):
+    wired["settings"] = _mv_settings()
+    s = _nav_series(712.5, day="2026-05-20")
+    s.attrs["fetched_at"] = "2026-09-25T01:00:00+00:00"            # 取得時間是今天：不能拿它判新鮮
+    wired["series"] = {"FK-AAAA": s}
+    out = source.load_live()
+    assert wired["nav_table"]["rows"], "前提：L2 有寫列"
+    assert out["dataset"]["nav"] == [] and out["notes"]["nav"]["too_old"] == ["AAAA"]
+    block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    assert block["placeholder"]["text"] == logic.empty_source_text(["nav"])
+
+
+def test_Nb_source交給assemble_nav的是客戶裁示門檻與台灣日曆日(wired, monkeypatch):
+    wired["settings"] = _mv_settings()
+    seen = {}
+    real = source.live.assemble_nav
+
+    def spy(**kw):
+        seen.update(kw)
+        return real(**kw)
+
+    monkeypatch.setattr(source.live, "assemble_nav", spy)
+    source.load_live()
+    assert seen["max_age_days"] == source.live.NAV_MAX_AGE_DAYS and seen["today"] == _TODAY
+    monkeypatch.undo()
+    assert source._today_tw() == __import__("datetime").datetime.now(source.nav_dividend.MARKET_DATE_TZ).date()

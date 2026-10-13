@@ -22,7 +22,9 @@ import copy
 import json
 import math
 import re
+from datetime import date
 
+from .. import thresholds
 from . import logic
 
 # ~~本輪只接讀不接寫 ⇒ 會寫 `user_setting` 的按鈕一律停用並寫出原因：~~
@@ -244,6 +246,154 @@ def tables_failed_together(message: str) -> dict:
     不假裝其中一張還活著。
     """
     return {"holding": message, "policy": message}
+
+
+# ═══════════════════════ 淨值與非美元匯率（2026-10-13 客戶裁示：B 線資產配置必須是真資料）═══════════════════════
+#
+# 淨值走 L2 `services/v2_tables/nav_dividend.py::build_nav_table`（A 鏈，#946），組輸入與判讀淨值表的規則
+# **一律照 `ui_v2/hld/source.py` ＋ `ui_v2/hld/live.py::assemble_live_load`**（幣別、拒收、閘門都在 L2，本頁不另寫一套）：
+# - 被扣下（`nav_unavailable_withheld` 四碼）、代碼對照查不到（`ok is False`）、來源回空且沒有原因
+#   → 那一檔沒有淨值列 ⇒ `logic.basis_value` 照既有路徑寫「⬜ 資料未備：nav 尚無資料」，不新增字句。
+# - 其餘取數失敗 → 原文經 `mask` 遮過，逐檔以「代碼：原文」串成一句放進 `errors["nav"]`
+#   （體例同 hld 的 `skipped_tabs`）。本頁沒有逐檔失敗的畫法（hld 有 `fund_errors`，本頁沒有），
+#   所以照 ALO-GAP-取數失敗走表層失敗：市值基準下 ALO-2／ALO-4／ALO-6 畫 ⛔，成本基準不受影響。
+# - 扣下代碼不在清單內（例 `input_conflict`）→ raise（契約被破壞，不畫成 ⬜；同 hld R-10）。
+# - 2026-10-13 稽核 N1（總管技術裁定，fail closed）：過期或預存淨值 —— provenance 帶 `cache_fallback` 或 `stale`、
+#   ~~或淨值列 `is_estimated` 為真~~ → 或淨值列 `is_estimated` 不是 False（含缺欄或 None；第二輪文字對齊，與程式一致）、
+#   或（第二輪 N-b）該檔最新淨值日距 `today` 超過 `max_age_days` 個日曆日 —— 一律不交進 dataset，
+#   該檔在市值基準下視為缺淨值（logic.GAPS「ALO-GAP-過期淨值不納入」）。
+#   本頁沒有新鮮度位置，交進去就是把舊值靜默當成現值（CLAUDE.md §2.4「禁止靜默返回」）。
+#   淨值日一律取資料列本身的 `nav_date`，不用 `fetched_at`（即時取回的也可能是好幾個月前的淨值）。
+# - 2026-10-13 稽核 N2：`notes["nav"]["provenance"]` 裡的 `live_error` 是 L1 原文，經 `mask` 才放進 notes。
+#   第二輪 N-c：`chain_failures` 與 `nav_history.read_error` 同樣是 L1 原文，一併經 `mask`（深拷貝，不改輸入）。
+
+# 市值基準的淨值日上限（日曆日；N ＝ 台灣今天的日期減該檔最後一筆 `nav_date`，N **大於**這個數 → 不納入）。
+# ~~第二輪：引用 `shared/signal_thresholds.py::MJ_FRESH_DAYS_YELLOW`（7），經 `services/v2_tables/contract.py`
+# 的 `NAV_MAX_AGE_DAYS` 轉交~~ → **2026-10-13 第三輪總管裁定（有意識的更正，不是漏刪；決策者：AI 總管，
+# 錯在上一輪派工單沒查到 B 線已有客戶裁示）**：改用 B 線既有、客戶裁示過的門檻 10 天 ——
+# 出處 `ui_v2/hld/live.py::NAV_FRESH_DAYS_YELLOW`，客戶 2026-10-02 裁示（草稿 `docs/wireframes/draft_hld_live.html`
+# §G 第 1a 題），客戶要求註明的原話：
+#   「門檻 10 天，非 44 規定，是本輪依長假實況訂的」
+# 客戶理由：7 天遇到春節等長假會把所有基金誤標；草稿 §D 明寫「不要沿用 MJ_FRESH_DAYS_YELLOW」。
+# 稽核組 7 實跑：7 天在 2026 春節期間會連續 3～4 天把國內基金整片排除。舊值 7 的用意（§2.4 不得靜默返回舊值）仍然成立，
+# 被權衡掉的是它的數字 —— 它不是 B 線對淨值新鮮度的現行裁示。
+# 判定方向與 hld 黃燈一致：hld 是 `days > NAV_FRESH_DAYS_YELLOW` 才黃，本頁是 `> NAV_MAX_AGE_DAYS` 才排除。
+# ~~兩頁不互相 import（各自是頁面模組），由 tests/ui_v2/test_alo_live_logic.py 鎖住兩者相等，防止脫鉤。~~
+# ~~`NAV_MAX_AGE_DAYS = 10`（本檔寫死）~~ → 2026-10-13 客戶裁示（有意識的更正，不是漏刪）：10 天要有單一、
+# 明確的共用定義 —— 兩個寫死的 10 只靠測試鎖相等，仍是兩個數字。兩頁照舊不互相 import，
+# 改為同引 `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`；本名保留為別名，判定方向 `> NAV_MAX_AGE_DAYS` 不變。
+NAV_MAX_AGE_DAYS = thresholds.NAV_NOT_READY_DAYS
+
+
+def wants_market_value(setting_rows) -> bool:
+    """已存的比重基準是不是「市值」。只有這時本頁才去取淨值與匯率（成本基準用不到，取回來只會多打來源；
+    v3 §02）。設定讀不到或解析不了 → `setting_rows` 為空 → 假：各塊本來就畫設定失敗框。"""
+    for row in setting_rows or ():
+        if row.get("setting_key") == "alo_basis":
+            return row.get("setting_value") == logic.BASIS_MV
+    return False
+
+
+def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
+                 nav_unavailable_withheld, mask, today, max_age_days) -> dict:
+    """L2 淨值表 → `{"nav": 列, "error": 已遮蔽的失敗原文或 None, "notes": {...}}`（純函式，不改輸入、不讀時鐘）。
+
+    一致性檢查同 hld `assemble_live_load` 的 R-10、R-13～R-16，不過就 raise（呼叫端組錯，不是資料問題）。
+    `today`：台灣日曆日（`datetime.date`，呼叫端以 L2 的 `MARKET_DATE_TZ` 算好交進來）；
+    `max_age_days`：淨值日距今的上限天數（呼叫端傳本檔的 `NAV_MAX_AGE_DAYS`；~~SSOT `contract.NAV_MAX_AGE_DAYS`~~ 第三輪改）。
+    """
+    if not callable(mask):
+        raise TypeError(f"mask 應為可呼叫：{type(mask).__name__}")
+    if type(today) is not date:
+        raise TypeError(f"today 應為 datetime.date：{type(today).__name__}")
+    if type(max_age_days) is not int or max_age_days < 0:
+        raise TypeError(f"max_age_days 應為非負整數：{max_age_days!r}")
+    codes_held = list(dict.fromkeys(holding_codes))
+    nav_codes = {r["fund_code"] for r in nav_table["rows"]}
+    for name in ("errors", "withheld", "skipped", "fetched", "skipped_rows", "provenance"):
+        nav_codes |= set(nav_table[name])
+    if nav_codes - set(codes_held):
+        raise ValueError(f"淨值表出現持倉裡沒有的代碼：{sorted(nav_codes - set(codes_held))!r}")
+    for r in key_results:
+        if type(r["ok"]) is not bool:
+            raise TypeError(f"代碼對照的 ok 應為 bool：{r['input']!r}")
+    inputs = {r["input"] for r in key_results}
+    if inputs != set(codes_held):
+        raise ValueError(f"代碼對照的輸入與持倉代碼不一致：多 {sorted(inputs - set(codes_held))!r}、"
+                         f"少 {sorted(set(codes_held) - inputs)!r}")
+    key_failed = {r["input"] for r in key_results if r["ok"] is False}
+    if key_failed & nav_codes:
+        raise ValueError(f"代碼對照失敗的代碼不得出現在淨值表：{sorted(key_failed & nav_codes)!r}")
+    not_handed = {r["input"] for r in key_results if r["ok"] is True
+                  and r["input"] not in nav_table["fetched"] and r["input"] not in nav_table["withheld"]}
+    if not_handed:
+        raise ValueError(f"代碼對照成功、卻沒有交給淨值表的代碼：{sorted(not_handed)!r}")
+    for code, reason in nav_table["withheld"].items():
+        if reason not in nav_unavailable_withheld:
+            raise ValueError(f"淨值扣下原因 {reason!r} 不在本頁約定的清單內：{code!r}")
+
+    parts = []
+    for code in codes_held:
+        message = nav_table["errors"].get(code)
+        if message is None:
+            continue
+        if message == empty_without_reason and nav_table["fetched"].get(code, 0) == 0:
+            continue   # 來源回空、沒有原因 → 資料未備，不是失敗（同 hld）
+        parts.append(f"{code}：{mask(message)}")
+
+    not_fresh = set()
+    for code, prov in nav_table["provenance"].items():
+        if prov and (prov.get("cache_fallback") or prov.get("stale")):
+            not_fresh.add(code)
+    not_fresh |= {r["fund_code"] for r in nav_table["rows"] if r.get("is_estimated") is not False}
+    newest = {}
+    for r in nav_table["rows"]:
+        day = date.fromisoformat(r["nav_date"])   # 契約保證 YYYY-MM-DD；不是就是契約被破壞，照拋
+        if r["fund_code"] not in newest or day > newest[r["fund_code"]]:
+            newest[r["fund_code"]] = day
+    too_old = {code for code, day in newest.items() if (today - day).days > max_age_days}
+    not_fresh |= too_old
+    provenance = {}
+    for code, prov in nav_table["provenance"].items():
+        prov = copy.deepcopy(dict(prov or {}))
+        for name in ("live_error", "chain_failures"):
+            if prov.get(name) is not None:
+                prov[name] = mask(str(prov[name]))
+        hist = prov.get("nav_history")
+        if isinstance(hist, dict) and hist.get("read_error") is not None:
+            hist["read_error"] = mask(str(hist["read_error"]))
+        provenance[code] = prov
+    return {
+        "nav": [dict(r) for r in nav_table["rows"] if r["fund_code"] not in not_fresh],
+        "error": "；".join(parts) if parts else None,
+        "notes": {
+            "withheld": dict(nav_table["withheld"]),
+            "key_failed": sorted(key_failed),
+            "not_fresh": sorted(not_fresh),     # 過期或預存淨值，市值基準下不納入（ALO-GAP-過期淨值不納入）
+            "too_old": sorted(too_old),         # 其中因淨值日超過門檻而不納入的（N-b）
+            "provenance": provenance,
+        },
+    }
+
+
+def fx_ccys_needed(nav_rows) -> list:
+    """淨值列裡新臺幣與美元以外的幣別（依出現順序、不重複）。美元走設定試算表那一份（市場總覽頁落地），
+    其餘依 49 §6.1 Q9 由本頁經 L2 取。"""
+    return list(dict.fromkeys(r["ccy"] for r in nav_rows if r["ccy"] not in ("TWD", "USD")))
+
+
+def merge_fx_table(indicator_rows, indicator_error, fx_table, mask) -> tuple:
+    """設定試算表上的 `market_indicator` 列 ＋ L2 `build_fx_indicator_table` 的非美元匯率列。
+
+    回 `(列, 已遮蔽的失敗原文或 None, pending)`。
+    - 試算表讀失敗（`indicator_error` 已遮蔽）→ 照舊放前面；非美元那幾鍵的取數失敗以「鍵：原文」接在後面
+      （ALO-GAP-缺匯率從嚴：market_indicator 有任何取數失敗，市值基準下整張 ALO-2 進系統錯誤）。
+    - `pending`（閘門未開）不是失敗：不進錯誤、那幾鍵沒有列 ⇒ 該類別「⬜ 資料未備：缺換算匯率 <鍵>」。
+    """
+    rows = [dict(r) for r in indicator_rows] + [dict(r) for r in fx_table["rows"]]
+    parts = [indicator_error] if indicator_error else []
+    parts.extend(f"{key}：{mask(message)}" for key, message in fx_table["errors"].items())
+    return rows, ("；".join(parts) if parts else None), dict(fx_table["pending"])
 
 
 def _walk_buttons(node):

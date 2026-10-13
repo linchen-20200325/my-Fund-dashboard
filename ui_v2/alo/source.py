@@ -23,10 +23,20 @@
     ⇒ 使用者在 ALO-4 把比重基準切到「市值」時，每一檔都缺基準值，畫面照 `44` 5.5 顯示
     `⬜ 資料未備`、ALO-6 表尾照算「缺基準值被排除的檔數」。**這是 `CLAUDE.md` §1 Fail Loud，不是 bug**：
     不把市值選項灰掉、不填 0、不拿成本值頂替、不靜默退回成本。
+    → **2026-10-13 狀態更新（有意識的變更，不是漏刪；依據：客戶 2026-10-13 裁示「B 線 `ui_v2/` 是唯一正式 UI，
+    切換前資產配置必須是真資料」＋ 核准 B 線復用既有多來源淨值鏈）**：已存基準為「市值」時，本頁經 L2
+    `nav_dividend.build_nav_table`（A 鏈，與 hld 同一個入口、同一套組輸入規則）取淨值；判讀在
+    `live.assemble_nav`（扣下、對照失敗、來源回空 → 那一檔資料未備；其餘取數失敗 → `errors["nav"]`，原文經遮蔽）。
+    成本基準不取（用不到）。上面三段舊句寫下時為真（當時未獲授權）；被推翻的是它的前提。
+    非美元幣別的匯率依 49 §6.1 Q9 經 L2 `market_indicator.build_fx_indicator_table` 取，與美元同一個閘門
+    （`FX_OBS_DATE_RULE_VERIFIED` 為假時不取數、不寫列 ⇒ 該類別「⬜ 資料未備：缺換算匯率 <鍵>」），
+    閘門狀態放在 `notes["fx_pending"]`。
   - `market_indicator` 讀的是**已寫在試算表上的那一份**（`settings_store.load_market_indicator`），
     不觸發任何取數 —— 本頁是消費端，不是取數端。本頁只用得到 `fx_twd_per_usd` 那一個鍵，
     而它目前在 L2 是暫停取數的（`market_indicator.FX_OBS_DATE_RULE_VERIFIED` 為假），
     所以表上通常沒有那一列 ⇒ 市值基準會缺匯率，同樣照實顯示。
+    （2026-10-13 補：非美元幣別的匯率鍵不在試算表上，由本頁經 L2 `build_fx_indicator_table` 取、併在後面；
+    美元仍只讀試算表那一份 —— 「只用得到 `fx_twd_per_usd` 那一個鍵」自此不再為真，但美元那一半不變。）
   - `save_errors` 本函式一律回空 dict：~~本輪只接讀、不接寫~~ → 2026-10-09 起 ALO-1／ALO-4 接上寫入
     （`save_setting`），但存檔成敗是**按鈕那一次**的事、不是讀表的結果，由 `page.py` 記在 session、
     重繪時再併進 `save_errors`；本函式不碰它。
@@ -43,13 +53,26 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from datetime import datetime
 
 import streamlit as st
 
-from services.v2_tables import alo_holdings, masking, settings_store
+from services.v2_tables import alo_holdings, fund_keys, market_indicator, masking, nav_dividend, settings_store
 
 from . import live
+
+_log = logging.getLogger(__name__)
+
+# 淨值被扣下、畫面印「⬜ 資料未備」的四碼 —— 與 `ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD` 同一份
+# （兩頁不互相 import；tests/ui_v2/test_alo_source.py 比對兩者相等）。⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`。
+_NAV_UNAVAILABLE_WITHHELD = frozenset({
+    nav_dividend.WITHHELD_CCY_MISSING,
+    nav_dividend.WITHHELD_CCY_CONFLICT,
+    nav_dividend.WITHHELD_FETCHED_AT_MISSING,
+    nav_dividend.WITHHELD_FETCHED_AT_FUTURE,
+})
 
 # `load_alo_tables` 回傳裡屬於「沒寫進持倉的列」那一組（草稿 D3）。本輪原樣轉交，不判讀、不歸納。
 _SKIP_GROUPS = (
@@ -70,6 +93,37 @@ _SKIP_GROUPS = (
     "skipped_tabs",
     "invest_twd_parse_errors",
 )
+
+
+# 外層 `except` 只接這一組（2026-10-13 第二輪稽核 N-a；總管技術裁定）。逐一列舉三個呼叫會往外拋什麼（本組讀原始碼）：
+# - `fund_keys.resolve_full_keys(list)`：自己 raise 的只有 TypeError（引數不是 list／tuple；本檔恆傳 list）與
+#   注入對照表時的 TypeError／ValueError（本檔不注入）。讀對照表 `repositories/fund/sources.py::load_fund_code_mapping`
+#   以 `os.path.exists` 判檔、`pd.read_csv` 包在 `except Exception` 內 print 後退回內建表 —— **讀檔失敗不往外拋**，
+#   也沒有明文定義的讀檔失敗例外型別。⇒ 實務上沒有任何取數例外會漏出來。
+# - `nav_dividend.build_nav_table`：L1（A 鏈）呼叫都經 `_call` 轉成錯誤字串；往外拋的只剩 `_group_funds` 的
+#   ValueError（輸入不合契約）、`_check_rows_order` 的 AssertionError、`ReconcileError`（AssertionError 子類）——
+#   全是程式或契約錯誤。累積表讀取（`nav_history_gs.NavHistoryError`）發生在 A 鏈內、同樣在 `_call` 裡；
+#   且出處閘門關閉時根本不讀。
+# - `market_indicator.build_fx_indicator_table`：L1 經 `_call`；往外拋的只有 ValueError（USD／TWD／不合 ISO）
+#   與出口檢查的 AssertionError —— 全是程式錯誤。
+# ⇒ 只接 `OSError`（含 ConnectionError、TimeoutError，以及 requests 的 RequestException〔IOError 子類〕），
+#   以防日後 L1 改成不吞而讓網路／讀檔例外漏出來。AssertionError／TypeError／ValueError／KeyError 一律往上拋（§1）。
+# ⚠️ 隱含前提（第三輪補記）：L1 與 A 鏈目前已經把非 OSError 的取數例外吞掉或轉成字串
+#   （例：gspread 的 `APIError`、pandas 的 `ParserError`）。L1 若改成不吞，這些例外會穿過本層、整頁印 Traceback ——
+#   那時要回頭把明文定義的取數例外型別補進這裡，不是改回全接 `Exception`。
+_FETCH_ERRORS = (OSError,)
+
+
+def _today_tw():
+    """台灣日曆日（L2 `nav_dividend.MARKET_DATE_TZ`，同 L2 判「未來淨值日」的那一個時區）。獨立成函式讓測試能固定它。"""
+    return datetime.now(nav_dividend.MARKET_DATE_TZ).date()
+
+
+def _fetch_failed(call: str, exc: Exception, mask) -> str:
+    """取數呼叫拋例外：遮蔽後記 log（CLAUDE.md §3.3：不吞、至少要 log），回傳給 errors 用的原文。"""
+    text = mask(f"{type(exc).__name__}: {exc}")
+    _log.warning("alo 取數失敗（%s）：%s", call, text)
+    return text
 
 
 def _secret_values() -> list:
@@ -122,11 +176,79 @@ def load_live() -> dict:
             "broken_keys": list(settings["broken_keys"]),
         }
 
+    # ── nav ＋ 非美元匯率（2026-10-13 客戶裁示：B 線資產配置必須是真資料）──
+    # 只在已存基準是「市值」時取（成本基準用不到）；組 L2 輸入照 `ui_v2/hld/source.py` 三條（帶 holding_ccy、
+    # 不去重、只放代碼對照 ok 的檔）。
+    # ~~這一段任何例外都轉成 `errors["nav"]` 的原文（經遮蔽）~~ → 2026-10-13 稽核 B2（總管技術裁定；有意識的更正，
+    # 不是漏刪）：`except` **只包三個取數呼叫**（`resolve_full_keys`、`build_nav_table`、`build_fx_indicator_table`），
+    # 被包住的例外記 log 後以「型別名: 訊息」（經遮蔽）進對應的 errors，市值基準下畫 ⛔。
+    # 第二輪 N-a：而且只接取數類例外（`_FETCH_ERRORS`，列舉見該常數上方）。
+    # 組輸入時的 KeyError／TypeError 與 `live.assemble_nav` 的契約錯誤（扣下碼不在清單、代碼對不上）是程式 bug，
+    # 照 CLAUDE.md §1 往上拋 —— 頁面會印 Traceback，那是 bug 該有的 fail loud。舊寫法把 bug 標成「取數失敗」，
+    # 會讓人去查來源而不是查程式；它的用意（本頁沒有錯誤畫面、不要整頁崩）只對取數失敗成立。
+    nav_rows = []
+    mi_rows = [dict(row) for row in indicators["rows"]] if indicators else []
+    if tables is not None and live.wants_market_value(setting_rows):
+        mask = alo_holdings.masker(values)
+        holding = tables["holding"]
+        key_results = nav_table = None
+        try:
+            key_results = fund_keys.resolve_full_keys([h["fund_code"] for h in holding])["results"]
+        except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["nav"]（N-a：只接取數類例外）
+            errors["nav"] = _fetch_failed("fund_keys.resolve_full_keys", exc, mask)
+        if key_results is not None:
+            resolved = {r["input"]: r for r in key_results if r["ok"] is True}
+            funds = [
+                {
+                    "fund_code": h["fund_code"],
+                    "full_key": resolved[h["fund_code"]]["full_key"],
+                    "portal": resolved[h["fund_code"]]["portal"],
+                    "chain_code": resolved[h["fund_code"]]["parsed_code"],
+                    "holding_ccy": h["ccy"],
+                }
+                for h in holding if h["fund_code"] in resolved
+            ]
+            try:
+                nav_table = nav_dividend.build_nav_table(funds)
+            except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["nav"]（N-a）
+                errors["nav"] = _fetch_failed("nav_dividend.build_nav_table", exc, mask)
+        if nav_table is not None:
+            nav_out = live.assemble_nav(   # 契約錯誤照拋（B2）
+                holding_codes=[h["fund_code"] for h in holding],
+                key_results=key_results,
+                nav_table=nav_table,
+                empty_without_reason=nav_dividend.EMPTY_WITHOUT_REASON,
+                nav_unavailable_withheld=_NAV_UNAVAILABLE_WITHHELD,
+                mask=mask,
+                # N-b：淨值日距今（台灣日曆日，L2 的 MARKET_DATE_TZ）超過 SSOT 門檻 → 不納入市值
+                today=_today_tw(),
+                max_age_days=live.NAV_MAX_AGE_DAYS,   # 第三輪：客戶裁示的 10 天（出處見該常數）
+            )
+            nav_rows = nav_out["nav"]
+            notes["nav"] = nav_out["notes"]
+            if nav_out["error"] is not None:
+                errors["nav"] = nav_out["error"]
+            # 49 §6.1 Q9：非美元幣別的匯率鍵由 L2 取（同一條觀測日規則、同一個閘門；閘門關時不取數）。
+            ccys = live.fx_ccys_needed(nav_rows)
+            if ccys:
+                try:
+                    fx_table = market_indicator.build_fx_indicator_table(ccys)
+                except _FETCH_ERRORS as exc:   # 不是吞：記 log，原文經遮蔽進 errors["market_indicator"]（N-a）
+                    errors["market_indicator"] = "；".join(filter(None, [
+                        errors.get("market_indicator"),
+                        _fetch_failed("market_indicator.build_fx_indicator_table", exc, mask)]))
+                else:
+                    mi_rows, mi_error, notes["fx_pending"] = live.merge_fx_table(
+                        mi_rows, errors.get("market_indicator"), fx_table, mask)
+                    if mi_error is not None:
+                        errors["market_indicator"] = mi_error
+
     dataset = {
         "holding": [dict(row) for row in tables["holding"]] if tables else [],
-        "nav": [],                      # 本頁不取淨值（2026-10-09 裁示只到 hld、set），不是讀失敗
+        # ~~本頁不取淨值（2026-10-09 裁示只到 hld、set），不是讀失敗~~ → 2026-10-13 客戶裁示：本頁取淨值（上面那段）
+        "nav": nav_rows,
         "policy": [dict(row) for row in tables["policy"]] if tables else [],
-        "market_indicator": [dict(row) for row in indicators["rows"]] if indicators else [],
+        "market_indicator": mi_rows,
         "user_setting": setting_rows,
         "errors": errors,
         "save_errors": {},              # 存檔成敗由 page.py 併進來，不是讀表的結果
