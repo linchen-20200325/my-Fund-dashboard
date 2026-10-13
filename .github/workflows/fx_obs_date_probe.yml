@@ -1,4 +1,4 @@
-name: "探測：Yahoo 匯率日線觀測日（只讀，手動觸發）"
+name: "探測：Yahoo 匯率日線觀測日（只讀，手動／按鈕分支觸發）"
 
 # 目的：驗證 Yahoo `<幣別>TWD=X` 日線時間戳以世界協調時間取日期，是否等於該根 K 線代表的交易日
 # （`services/v2_tables/market_indicator.py` 的 `FX_OBS_DATE_RULE_VERIFIED` 閘門與 `_obs_date` 判準）。
@@ -6,8 +6,28 @@ name: "探測：Yahoo 匯率日線觀測日（只讀，手動觸發）"
 #
 # ⚠️ 只讀：不寫任何試算表、不碰使用者設定、不改正式行為；報告只推到專用分支
 #    `probe/fx-obs-date-results`（**不推 main、不推其他分支、不 force**）。
-# ⚠️ 只有手動觸發，沒有排程。
+# ⚠️ 沒有排程。觸發方式只有兩種：
+#    (1) 手動 `workflow_dispatch`；
+#    (2) push 到「按鈕分支」`probe/fx-obs-date-trigger`。
+#        起因：部分整合環境呼叫 dispatch API 會回 403（Resource not accessible by integration），
+#        無法手動觸發，故另開一個不靠 dispatch API 的觸發方式。
+#
+# ⛔ 按鈕分支只當「按鈕」用 —— 它的內容不被執行，執行的永遠是 main：
+#    - 探測步驟一律以 `actions/checkout` 指定 `ref: main`（見下方），
+#      所以往按鈕分支推入改過的腳本／requirements，**不會**拿著 contents: write 被執行。
+#    - 觸發分支 ≠ 報告分支（`probe/fx-obs-date-results`）；報告只推到報告分支，
+#      而報告分支不在 push 觸發清單內 → 不會自我觸發迴圈。
+#    ⚠️ 據實揭露 `ref: main` 擋不到的一件事：push 事件執行的是「被推的那顆 commit 裡的
+#       這份 workflow 檔」本身（GitHub 的規則）。能推按鈕分支的人也能改掉這份 yml 本身
+#       —— 但那需要 repo 寫入權，而有寫入權本來就能在任何分支放任意 workflow；
+#       `ref: main` 不增加也不減少這層風險，它防的是「只改腳本、沿用這份 yml」那條路。
+#    用法：按鈕分支請從 main 建立、上面不放任何改動
+#    （例：`git push origin origin/main:refs/heads/probe/fx-obs-date-trigger`；
+#    要再跑一次就把 main 的新 SHA 再推過去，或推一顆空 commit）。
 on:
+  push:
+    branches:
+      - probe/fx-obs-date-trigger
   workflow_dispatch:
     inputs:
       tickers:
@@ -33,6 +53,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # ⛔ 一律跑 main 上的腳本：push 觸發時預設會 checkout 按鈕分支的內容，
+          #    這裡明確釘死 main，按鈕分支的內容永遠不被執行（見檔頭）。
+          ref: main
           # 不把 token 留在 .git/config：探測步驟（會跑 repo 內的 Python）拿不到推送權限；
           # 只有最後推送那一步臨時注入認證。
           persist-credentials: false
