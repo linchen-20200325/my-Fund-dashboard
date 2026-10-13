@@ -412,6 +412,21 @@ NAV_SOURCE_FAILURES_KEY = "nav_source_failures"
 _SERIES_ERROR_ATTRS = ("fetch_error", "error")
 
 
+RESCUED_NOTE = "（後經側車救援採用）"
+
+
+def _mark_rescued(acc: list, source: str) -> None:
+    """側車救援採用了先前被記為「未達門檻」的來源 → 在那幾筆記錄後面標明，免得讀起來像沒用到。純記錄。"""
+    try:
+        for entry in acc:
+            if (isinstance(entry, dict) and str(source or "")
+                    and str(entry.get("source") or "").startswith(str(source).split("（")[0])
+                    and RESCUED_NOTE not in str(entry.get("error") or "")):
+                entry["error"] = f"{entry.get('error')}{RESCUED_NOTE}"
+    except Exception:  # noqa: BLE001 —— 標註失敗不影響取數
+        pass
+
+
 def _note_nav_source_failure(acc: list, source: str, got=None, gate=None, *, note: str = "") -> None:
     """往 `acc` 加一筆 `{"source", "error"}`。純記錄：不改 `got`、不拋例外、不影響任何判斷。"""
     try:
@@ -804,6 +819,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
              "nav_count": len(_best_s), "replaced": nav_source or "",
              "replaced_count": len(nav_s)})
         nav_s, nav_source = _best_s, _best_src
+        _mark_rescued(_nav_fail, _best_src)   # 2026-10-13：先記失敗、後經救援採用 → 標明
 
     # v19.281/v19.284 span-extend(共用 _span_extend_insurance_nav,見檔頭 SSOT 說明)
     # ⚠️ 2026-10-10 複驗更正:此處在 meta 鏈(Step 3)**之前**,`result` 的 fund_name /
@@ -926,6 +942,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 if (_best_fallback_len >= 10
                         and not _fb_prov.startswith(_NAV_NON_NATIVE_PREFIXES)):
                     nav_s, nav_source = _best_s, f"{_best_src}(best-of-waterfall)"
+                    _mark_rescued(_nav_fail, _best_src)   # 2026-10-13：同上
                     _span_days = _nav_span_days(nav_s)
                     result["series"] = nav_s
                     result["data_source"] = nav_source
@@ -1124,8 +1141,30 @@ def _ensure_holdings(result: dict, code: str) -> None:
 _MONEYDJ_URL_CACHE_SOURCE_PREFIX = "GitHubActions:cache/nav/"
 
 
+def _component_ok(value) -> bool:
+    """wb07／持股這類 dict 組成部分：非空、而且來源不是失敗標記（`all_failed`／`exception`）。"""
+    if not isinstance(value, dict) or not value:
+        return False
+    src = str(value.get("source") or "")
+    return "all_failed" not in src and "exception" not in src
+
+
 def _moneydj_url_result_cacheable(result) -> bool:
-    """`fetch_fund_from_moneydj_url` 的「成功」判準（只有成功才入 15 分鐘快取）。"""
+    """`fetch_fund_from_moneydj_url` 的「成功」判準：**這次結果的每個組成部分都成功**才入 15 分鐘快取。
+
+    2026-10-13 稽核 6（B-3）：初版只看序列，於是 wb07／名稱第一次失敗的結果也被快取，沒有快取時
+    下一次呼叫會重試補到的部分，15 分鐘內再也補不到（舊 UI「重抓」「重新計算」失效）。
+    沒有快取時（`fdbfb550`～本次之前）每次呼叫都會重試下列每一項，所以任一項失敗都不快取；判斷不了就不快取：
+    - 序列：≥ `NAV_CACHE_MIN_POINTS` 筆，而且不是 `cache/nav` 預存檔（＝即時全敗）；
+    - 名稱（meta）：`fund_name` 非空；
+    - wb07：`risk_metrics` 非空、來源不是失敗標記；
+    - wb01：`perf_source == "wb01"`（`fetch_performance_wb01` 有回東西才會設）；
+    - 持股：`holdings` 非空、來源不是失敗標記；
+    - 配息：`dividends` 非空（不配息的基金分不出「沒有」與「沒抓到」→ 一律不快取）；
+    - `error` 非空 → 不快取。
+    ⚠️ 不看：瀑布裡排在採用來源之前、這次沒取到的來源（例如 FundClear 沒有、鉅亨有）——那些失敗在沒有快取時
+    同樣會被重試，但若連它們都算，幾乎沒有任何結果能入快取；這一點是本組的判斷，已在回報與 commit 寫明。
+    """
     from shared.data_quality import NAV_CACHE_MIN_POINTS
     if not isinstance(result, dict):
         return False
@@ -1134,6 +1173,14 @@ def _moneydj_url_result_cacheable(result) -> bool:
         return False
     attrs = getattr(s, "attrs", None) or {}
     if str(attrs.get("source") or "").startswith(_MONEYDJ_URL_CACHE_SOURCE_PREFIX) or "nav_quality" in attrs:
+        return False
+    if result.get("error") or not result.get("fund_name"):
+        return False
+    if not _component_ok(result.get("risk_metrics")) or not _component_ok(result.get("holdings")):
+        return False
+    if result.get("perf_source") != "wb01":
+        return False
+    if not result.get("dividends"):
         return False
     return True
 

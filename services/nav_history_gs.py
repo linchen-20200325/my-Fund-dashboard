@@ -862,6 +862,7 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
 
 # 2026-10-13：`load_series` 回傳序列上逐日 `recorded_at` 的 attrs 鍵（`{"YYYY-MM-DD": recorded_at 原值}`）。
 RECORDED_AT_BY_DATE_ATTR = "recorded_at_by_date"
+CURRENCY_BY_DATE_ATTR = "currency_by_date"   # 2026-10-13 B-1：逐日幣別宣告原值
 
 
 def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
@@ -894,6 +895,12 @@ def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
         if _ts is not pd.NaT and not pd.isna(_ts):
             _rec[_ts.date().isoformat()] = str(_p.get("recorded_at") or "")
     s.attrs[RECORDED_AT_BY_DATE_ATTR] = {k: _rec.get(k, "") for k in (d.date().isoformat() for d in s.index)}
+    # 2026-10-13 B-1：逐日記下該點寫入時宣告的幣別**原值**（空＝未宣告）；同一把 keep-last 尺。
+    _ccy_by: dict = {}
+    for _p, _ts in zip(pts, idx):
+        if _ts is not pd.NaT and not pd.isna(_ts):
+            _ccy_by[_ts.date().isoformat()] = str(_p.get("currency") or "")
+    s.attrs[CURRENCY_BY_DATE_ATTR] = {k: _ccy_by.get(k, "") for k in (d.date().isoformat() for d in s.index)}
     # 2026-09-01:**逐列一致才敢宣告**幣別(§1 / §4.1)。這張表的列來自多條寫入路徑、
     # 多個 fetcher,同一個 code 的列**可以**混到不同幣別;只要有一列未知或彼此不一致,
     # 就完全不設這個 key(未知),**絕不挑一個、絕不換算**。

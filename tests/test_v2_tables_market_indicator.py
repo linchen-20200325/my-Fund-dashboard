@@ -419,6 +419,18 @@ def test_落地接縫拋錯_不吞(monkeypatch, no_other_l1):
 _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
 
 
+def _is_v2_tables(name: str) -> bool:
+    """本目錄的模組名：恰為 `services.v2_tables`，或以 `services.v2_tables.` 開頭。
+    ~~`name.startswith("services.v2_tables")`~~ → 2026-10-13 稽核 6 N4（有意識的更正，不是漏刪）：
+    舊寫法會放行 `services.v2_tables_evil` 這種同前綴的別的模組。"""
+    return name == "services.v2_tables" or name.startswith("services.v2_tables.")
+
+
+def test_v2_tables模組名判定_不放行同前綴的別的模組():
+    assert _is_v2_tables("services.v2_tables") and _is_v2_tables("services.v2_tables.contract")
+    assert not _is_v2_tables("services.v2_tables_evil") and not _is_v2_tables("services.v2_tablesx.a")
+
+
 def test_v2_tables只import標準庫與L0_L1():
     import ast
 
@@ -442,7 +454,7 @@ def test_v2_tables只import標準庫與L0_L1():
                 seen += 1
                 top = name.split(".")[0]
                 assert top in allowed_top, (path.name, name)
-                if top == "services" and not name.startswith("services.v2_tables"):
+                if top == "services" and not _is_v2_tables(name):
                     assert name in _L2_TO_L2_ALLOWED.get(path.name, ()), (path.name, name)
                     l2_seen.add((path.name, name))
                 assert not name.startswith("ui"), (path.name, name)

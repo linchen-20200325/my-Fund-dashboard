@@ -25,13 +25,13 @@ def _quiet(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
 
-def _b(monkeypatch, name, *, ccy="USD", full_key=None, scenario=None):
+def _b(monkeypatch, name, *, ccy="USD", full_key=None, scenario=None, now=NOW):
     code, sc = H.scenarios()[name] if scenario is None else scenario
     calls = H.install(monkeypatch, sc)
     item = {"fund_code": code, "full_key": full_key or code, "chain_code": code, "portal": ""}
     if ccy is not None:
         item["holding_ccy"] = ccy
-    out = _quiet(ND.build_nav_table, [item], now=NOW)
+    out = _quiet(ND.build_nav_table, [item], now=now)
     return code, out, calls
 
 
@@ -121,14 +121,142 @@ def test_預存檔那一支_fetched_at取cache_updated_at_標預存_失敗原文
     assert "kind=blocked" in prov["live_error"] and "FundClear" in prov["live_error"]
 
 
-# ═══════════════════════ 幣別：A 鏈的幣別一律不採用 ═══════════════════════
+# ═══════════════════════ 幣別（2026-10-13 稽核 5 B-1）═══════════════════════
+# 標籤只用持倉手填；序列或累積表點宣告了與持倉不同的幣別 → 整檔不寫；非原生報價來源沒宣告 → 整檔不寫。
 
-def test_A鏈回的幣別不當來源自報_只用持倉手填(monkeypatch):
-    code, out, _calls = _b(monkeypatch, "S5_hist_read_fail", ccy="TWD")      # A 鏈序列 attrs 帶 USD
-    assert out["rows"] and {r["ccy"] for r in out["rows"]} == {"TWD"}
+def test_宣告幣別與持倉相同_標籤用持倉_照寫(monkeypatch):
+    code, out, _calls = _b(monkeypatch, "S5_hist_read_fail", ccy="USD")      # FundClear 宣告 USD
+    assert out["rows"] and {r["ccy"] for r in out["rows"]} == {"USD"}
     assert out["provenance"][code]["ccy_source"] == "holding_user_input"
-    code, out, _calls = _b(monkeypatch, "S5_hist_read_fail", ccy=None)
+    code, out, _calls = _b(monkeypatch, "S5_hist_read_fail", ccy=None)       # 持倉沒填：不拿序列宣告當標籤
     assert out["rows"] == [] and out["withheld"] == {code: ND.WITHHELD_CCY_MISSING}
+
+
+def test_B1例二_FundClear序列宣告USD_持倉填TWD_整檔不寫(monkeypatch):
+    code, out, _calls = _b(monkeypatch, "S5_hist_read_fail", ccy="TWD")
+    assert out["rows"] == [] and out["withheld"] == {code: ND.WITHHELD_CCY_CONFLICT}
+    assert "即時序列:'USD'" in out["skipped"][code][0] and "持倉 TWD" in out["skipped"][code][0]
+
+
+def test_B1例三_累積表點宣告USD_持倉填TWD_整檔不寫(monkeypatch):
+    code = "ZZF011"
+    sc = {"_src_tcb_meta": {"fund_name": "x"},
+          "nav_history_points": [dict(p, currency="USD") for p in H._hist_points(
+              code, [d.date().isoformat() for d in __import__("pandas").date_range("2025-10-01", periods=30, freq="B")])]}
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="TWD")
+    assert out["rows"] == [] and out["withheld"] == {code: ND.WITHHELD_CCY_CONFLICT}
+    assert "累積表 2025-10-01:'USD'" in out["skipped"][code][0]
+
+
+def _ms_scenario(monkeypatch, *, secid_from: str, fund_name="某某收益成長基金"):
+    """真的 `_src_morningstar_nav`（只換掉對外的部分）：池表／寫死表／名稱搜尋三種 secId 出處，
+    timeseries 以 `currencyId` 要回換算後的淨值。回 `(code, scenario, search_calls)`。"""
+    import io as _io
+    import json as _json
+    import repositories.fund.sources as SRC
+
+    code = "TLZZ8"
+    search_calls = []
+    monkeypatch.setattr("repositories.pool_repository.resolve_secid",
+                        lambda c: ("0PPOOL", "") if secid_from == "pool" else None, raising=False)
+    monkeypatch.setattr("repositories.pool_repository.resolve_isin", lambda c: "", raising=False)
+    monkeypatch.setattr(SRC, "_MORNINGSTAR_SECID_MAP",
+                        {code: ("0PHARD" if secid_from == "hardcoded" else "", "USD")})
+
+    def fake_search(q, *a, **k):
+        search_calls.append(("search", q))
+        return "0PNAME"
+    monkeypatch.setattr(SRC, "_morningstar_search_secid", fake_search)
+    payload = {"TimeSeries": {"Security": [{"HistoryDetail": [
+        {"EndDate": d.date().isoformat(), "Value": str(30 + i / 10)}
+        for i, d in enumerate(__import__("pandas").date_range("2024-01-01", periods=400, freq="B"))]}]}}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return _json.dumps(payload).encode()
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _Resp())
+    real = SRC._src_morningstar_nav
+    fund_name_meta = fund_name
+    sc = {"_src_tdcc_meta": {"fund_name": fund_name, "nav_latest": 30.0},
+          # 跨度延長（`_span_extend_insurance_nav`）那一趟會把 meta 名稱帶進來；瀑布 2g 那一趟還沒有名稱。
+          # 這裡一律以 meta 名稱呼叫，重現「名稱搜尋」那條路（稽核 5 B-2 的實例）。
+          "_src_morningstar_nav": lambda c, fund_name="", currency_hint="": real(
+              c, fund_name=fund_name or fund_name_meta, currency_hint=currency_hint)}
+    return code, sc, search_calls
+
+
+def test_B1例一_晨星以currencyId_USD取回換算後淨值_持倉填TWD_整檔不寫(monkeypatch):
+    code, sc, _search = _ms_scenario(monkeypatch, secid_from="hardcoded")
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="TWD", now=None)
+    assert out["rows"] == [] and out["withheld"] == {code: ND.WITHHELD_CCY_CONFLICT}, out
+    assert "USD" in out["skipped"][code][0]
+
+
+def test_非原生來源沒宣告幣別_整檔不寫():
+    s = H.series(12, attrs={"source": "AlphaVantage:TIME_SERIES_DAILY_ADJUSTED:X", "fetched_at": "2026-02-01T00:00:00+00:00",
+                            ND.CHAIN_ATTR: {"page_type": "yp010001"}, ND.CHAIN_DECLARED_CCY_ATTR: ""})
+    out = ND.rows_from_nav_series("X", s, None, holding_ccys=["USD"], now=NOW)
+    assert out["rows"] == [] and out["withheld"] == ND.WITHHELD_CCY_MISSING
+    assert "非原生報價來源" in out["skipped"][0]
+
+
+# ═══════════════════════ secId 出處（2026-10-13 稽核 5 B-2）═══════════════════════
+
+def test_B2_晨星secId由名稱搜尋得來_B線整檔不寫_A鏈照舊採用(monkeypatch):
+    code, sc, search_calls = _ms_scenario(monkeypatch, secid_from="name")
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="USD", now=None)
+    assert ("search", "某某收益成長基金") in search_calls
+    assert out["rows"] == [] and "以基金名稱搜尋的晨星代碼，依規則不採用" in out["errors"][code]
+    from services.moneydj_fetcher import auto_fetch_moneydj
+    res = _quiet(auto_fetch_moneydj, code)                      # A 鏈本身：照舊採用（不改選擇與順序）
+    assert res["series"] is not None and res["series"].attrs["secid_origin"] == "name_search"
+
+
+@pytest.mark.parametrize("secid_from,origin", [("pool", "pool"), ("hardcoded", "hardcoded_map")])
+def test_B2_晨星secId來自池表或寫死表_照收_並標出currencyId出處(monkeypatch, secid_from, origin):
+    code, sc, search_calls = _ms_scenario(monkeypatch, secid_from=secid_from)
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="USD", now=None)
+    assert search_calls == [] and out["rows"] and code not in out["errors"]
+    from services.moneydj_fetcher import auto_fetch_moneydj
+    attrs = _quiet(auto_fetch_moneydj, code)["series"].attrs
+    assert attrs["secid_origin"] == origin and attrs["currency_id_origin"] == "hardcoded_map"
+
+
+# ═══════════════════════ 稽核 5 N1／N2／N3 ═══════════════════════
+
+def test_N1_序列沒帶fetched_at_用快取內原本那次的chain_started_at_不是當下(monkeypatch):
+    code, sc = H.full_success_scenario()
+    sc["_src_fundclear_nav"].attrs.pop("fetched_at")
+    H.install(monkeypatch, sc)
+    item = {"fund_code": code, "full_key": code, "chain_code": code, "holding_ccy": "USD"}
+    first = _quiet(ND.build_nav_table, [item])
+    second = _quiet(ND.build_nav_table, [item])                           # 命中 L1 快取
+    times = {r["fetched_at"] for r in first["rows"]}
+    assert len(times) == 1 and {r["fetched_at"] for r in second["rows"]} == times
+    assert first["provenance"][code]["chain"]["fetched_at_from"] == "orchestrator"
+
+
+def test_N2_失敗行用每筆自己的頁型_成功不印狀態行():
+    res = {ND.NAV_ATTEMPTS_KEY: [
+        {"page_type": "yp010000", "status": "partial", "error": None, "nav_source_failures": [
+            {"source": "FundClear", "page_type": "yp010001", "error": "回傳 0 筆"},
+            {"source": "fetch_nav（legacy 最終備援）", "error": "回傳 0 筆"}]},
+        {"page_type": "yp010001", "status": "complete", "error": None, "nav_source_failures": []}]}
+    lines = ND._chain_failure_lines(res)
+    assert "[yp010001] FundClear：回傳 0 筆" in lines
+    assert "[yp010000·legacy] fetch_nav（legacy 最終備援）：回傳 0 筆" in lines
+    assert not any("complete" in line for line in lines)
+
+
+def test_N3_預存檔那一支_fetched_at_from標cache_updated_at(monkeypatch):
+    code, out, _calls = _b(monkeypatch, "S4_cache_fallback")
+    assert out["provenance"][code]["chain"]["fetched_at_from"] == "cache_updated_at"
 
 
 # ═══════════════════════ 代碼對照 ═══════════════════════

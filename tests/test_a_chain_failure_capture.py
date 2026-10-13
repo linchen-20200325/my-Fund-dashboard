@@ -27,7 +27,8 @@ import _a_chain_stub as H
 _GOLDEN = pathlib.Path(__file__).resolve().parent / "fixtures" / "a_chain_golden_before.json"
 NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts", "chain_started_at"})
 NEW_SERIES_ATTRS = frozenset({"nav_history_dates", "nav_history_recorded_at", "nav_history_source",
-                              "nav_history_dates_error"})
+                              "nav_history_dates_error", "nav_history_currency", "nav_history_live_currency",
+                              "secid_origin", "currency_id_origin"})
 
 
 def _run(monkeypatch, code, scenario):
@@ -157,7 +158,7 @@ def _l1(code):
 def test_L1快取_成功結果十五分鐘內命中_不再打來源_開始時間是原本那一次(monkeypatch):
     from repositories.fund import fund_orchestration as FO
     from shared.ttls import TTL_15MIN
-    code, sc = H.scenarios()["S1_complete_fundclear"]
+    code, sc = H.full_success_scenario()
     calls = H.install(monkeypatch, sc)
     first = _l1(code)
     n = len(calls)
@@ -169,7 +170,7 @@ def test_L1快取_成功結果十五分鐘內命中_不再打來源_開始時間
 
 
 def test_L1快取_下游改寫回傳物件_不會改到快取內容(monkeypatch):
-    code, sc = H.scenarios()["S1_complete_fundclear"]
+    code, sc = H.full_success_scenario()
     H.install(monkeypatch, sc)
     first = _l1(code)
     original_nav = float(first["series"].iloc[0])
@@ -188,21 +189,24 @@ def test_L1快取_下游改寫回傳物件_不會改到快取內容(monkeypatch)
     assert second is not first and second["series"] is not first["series"]
 
 
-@pytest.mark.parametrize("name", ["S3_all_fail", "S4_cache_fallback", "S6_insurance_morningstar"])
+@pytest.mark.parametrize("name", ["S1_complete_fundclear", "S3_all_fail", "S4_cache_fallback",
+                                  "S6_insurance_morningstar"])
 def test_L1快取_失敗或預存檔或序列不足_不入快取_下次真的再打(monkeypatch, name):
     code, sc = H.scenarios()[name]
     calls = H.install(monkeypatch, sc)
     _l1(code)
     n = len(calls)
     _l1(code)
-    assert len(calls) == 2 * n
+    # 第二次真的再跑一次瀑布：FundClear 被打的次數與第一次相同（持股另有自己的一小時快取，不在本條射程）
+    first = [c[0] for c in calls[:n]].count("_src_fundclear_nav")
+    assert first > 0 and [c[0] for c in calls[n:]].count("_src_fundclear_nav") == first
 
 
 def test_L1快取_cache_clear清得掉_有登記在全域清除名單(monkeypatch):
     from infra.cache import _CACHE_REGISTRY
     from repositories.fund import fund_orchestration as FO
     assert FO.fetch_fund_from_moneydj_url.__wrapped__ in _CACHE_REGISTRY   # 登記的是內層快取那一層
-    code, sc = H.scenarios()["S1_complete_fundclear"]
+    code, sc = H.full_success_scenario()
     calls = H.install(monkeypatch, sc)
     _l1(code)
     FO.fetch_fund_from_moneydj_url.cache_clear()
@@ -215,7 +219,7 @@ def test_B線連續兩次build_第二次不再打任何來源(monkeypatch):
     """hld 每次重跑都呼叫 build_nav_table：第二次應全部命中 L1 快取（累積表讀取不在此列，見第 3 條）。"""
     import datetime as dt
     from services.v2_tables import nav_dividend as ND
-    code, sc = H.scenarios()["S1_complete_fundclear"]
+    code, sc = H.full_success_scenario()
     calls = H.install(monkeypatch, sc)
     funds = [{"fund_code": code, "full_key": code, "chain_code": code, "holding_ccy": "USD"}]
     now = dt.datetime(2026, 3, 10, tzinfo=dt.timezone.utc)
@@ -226,3 +230,93 @@ def test_B線連續兩次build_第二次不再打任何來源(monkeypatch):
     extra = calls[n:]
     assert [c[0] for c in extra] == ["nav_history.load_points"]       # 只剩累積表那一次
     assert first["rows"] == second["rows"]
+
+
+# ═══════════════════════ B-3：只有每個組成部分都成功才快取（稽核 6 兩個實驗，head 與 base 行為相同）═══════════════════════
+# base ＝ 沒有 L1 快取（`fdbfb550`～本批之前）：每次呼叫都重試每一個組成部分。
+
+def _flaky(first, then):
+    state = {"n": 0}
+
+    def fn(*_a, **_k):
+        state["n"] += 1
+        return first if state["n"] == 1 else then
+    return fn
+
+
+def test_B3實驗一_wb07第一次失敗第二次成功_第二次補得到_與base相同(monkeypatch):
+    code, sc = H.full_success_scenario()
+    ok = sc["fetch_risk_metrics"]
+    sc = dict(sc, fetch_risk_metrics=_flaky({}, ok))
+    H.install(monkeypatch, sc)
+    first = _l1(code)
+    second = _l1(code)
+    assert first["risk_metrics"] == {} and second["risk_metrics"] == ok       # base 第二次會補到
+
+
+def test_B3實驗二_名稱第一次失敗_第二次結果與base相同(monkeypatch):
+    code, sc = H.full_success_scenario()
+    sc = dict(sc, _src_tcb_meta=_flaky({}, sc["_src_tcb_meta"]))
+    H.install(monkeypatch, sc)
+    first = _l1(code)
+    second = _l1(code)
+    assert not first["fund_name"] and first["status"] == "partial"
+    assert second["fund_name"] == "全成功基金"                               # base：failed→complete 的那個補回
+
+
+@pytest.mark.parametrize("broken", ["fetch_performance_wb01", "fetch_holdings", "_src_tcb_div"])
+def test_B3_任一組成部分失敗_不入快取(monkeypatch, broken):
+    code, sc = H.full_success_scenario()
+    sc = dict(sc, **{broken: [] if broken == "_src_tcb_div" else {}})
+    calls = H.install(monkeypatch, sc)
+    _l1(code)
+    _l1(code)
+    assert [c[0] for c in calls].count("_src_fundclear_nav") == 2
+
+
+# ═══════════════════════ 稽核 5 N3：救援採用的標明、多候選代碼的原文保留 ═══════════════════════
+
+def test_先記失敗後經救援採用_標明(monkeypatch):
+    code, sc = H.scenarios()["S2_shortwindow_rescue"]
+    H.install(monkeypatch, sc)
+    res = _l1(code)
+    tcb = [f for f in res["nav_source_failures"] if f["source"] == "tcb_moneydj"]
+    assert tcb and all("後經側車救援採用" in f["error"] for f in tcb)
+
+
+def test_多候選代碼_前面候選的失敗原文保留(monkeypatch):
+    code = "ACTI171"                                    # 境內，normalize_domestic_code 會展開成兩個候選
+    calls = H.install(monkeypatch, {"_src_tcb_meta": {"fund_name": "x"}})
+    res = _l1(code)
+    cands = {f.get("candidate") for f in res["nav_source_failures"] if f.get("candidate")}
+    assert {"ACTI171", "ACTI71"} <= cands
+    assert ("_src_fundclear_nav", "ACTI171") in calls and ("_src_fundclear_nav", "ACTI71") in calls
+
+
+# ═══════════════════════ 稽核 6 N2：_ttl_cache 多執行緒 ═══════════════════════
+
+def test_ttl_cache_多執行緒寫入淘汰_不拋錯_預設行為不變():
+    import threading
+    from infra.cache import _ttl_cache
+
+    @_ttl_cache(ttl_sec=60, maxsize=64)
+    def f(x):
+        return x * 2
+
+    errors = []
+
+    def worker(base):
+        try:
+            for i in range(3000):
+                assert f(base * 100000 + i) == (base * 100000 + i) * 2
+        except Exception as exc:  # noqa: BLE001
+            errors.append(repr(exc))
+
+    threads = [threading.Thread(target=worker, args=(b,)) for b in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert f.cache_info()["size"] <= 64
+    assert f(7) == 14 and f(7) == 14 and f.cache_info()["hits"] >= 1

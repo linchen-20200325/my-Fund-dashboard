@@ -97,7 +97,10 @@ def install(monkeypatch, scenario: dict, calls: list | None = None) -> list:
     monkeypatch.setattr(fo, "load_fund_code_mapping", lambda *a, **k: dict(mapping))
     monkeypatch.setattr(src, "load_fund_code_mapping", lambda *a, **k: dict(mapping))
     fo._holdings_ttl.cache_clear()
-    fo.fetch_fund_from_moneydj_url.cache_clear()
+    # 2026-10-13：`getattr` 相容 —— 改動前（base）的 L1 沒有快取、沒有 `cache_clear`，錄黃金檔時要能在 base 上跑。
+    _clear = getattr(fo.fetch_fund_from_moneydj_url, "cache_clear", None)
+    if _clear is not None:
+        _clear()
     fo._FUND_SNAPSHOT.clear()
 
     def _points(code=None, **kwargs):
@@ -199,4 +202,20 @@ def scenarios() -> dict:
             "nav_history_points": _hist_points("ZZF007", [d.date().isoformat() for d in
                                                           pd.date_range("2025-10-01", periods=30, freq="B")]),
         }),
+    }
+
+
+def full_success_scenario(code: str = "ZZF100", *, currency: str = "USD") -> tuple:
+    """每個組成部分都成功的情境（名稱、序列、wb07、wb01、持股、配息）—— 只有這種結果會進 L1 十五分鐘快取。
+    不放進 `scenarios()`（那七組是黃金檔的母體，不能動）。"""
+    attrs = {"source": "FundClear:GetFundNAV", "fetched_at": _T0}
+    if currency:
+        attrs["currency"] = currency
+    return code, {
+        "_src_fundclear_nav": series(25, attrs=attrs),
+        "_src_tcb_meta": {"fund_name": "全成功基金", "nav_latest": 10.24},
+        "_src_tcb_div": [{"date": "2026-01-15", "amount": 0.05, "yield_pct": 6.0}],
+        "fetch_risk_metrics": {"risk_table": {"1Y": {"std": 10.0}}, "source": "MoneyDJ:x:wb07"},
+        "fetch_performance_wb01": {"1Y": 5.0, "source": "MoneyDJ:x:wb01"},
+        "fetch_holdings": {"top_holdings": [{"name": "A", "pct": 5.0}], "source": "MoneyDJ:yp:x"},
     }

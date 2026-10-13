@@ -54,7 +54,10 @@ from typing import Optional
 import pandas as pd
 
 from repositories.fund import fund_orchestration, nav_metrics
-from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY
+from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY, _NAV_NON_NATIVE_PREFIXES
+from repositories.fund.sources import (
+    MS_SECID_FROM_CODE_SEARCH, MS_SECID_FROM_NAME_SEARCH, MS_SECID_ORIGIN_ATTR,
+)
 from repositories.fund.nav_metrics import LIVE_FETCH_ERROR_ATTR, fetch_div_with_error
 # 2026-10-13 客戶裁示：B 線復用既有多來源淨值鏈（A 鏈）。這是本目錄唯一一個 L2→L2 import，
 # 守衛（`tests/test_v2_tables_market_indicator.py`）只對本檔、只放行這一個模組名（總管同日技術裁定第 1 條）。
@@ -366,6 +369,11 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
         out["error"] = EMPTY_WITHOUT_REASON
         return out
     attrs = dict(series.attrs or {})
+    if CHAIN_ATTR in attrs:
+        blocked = _chain_ccy_gate(fund_code, series, attrs, holding_ccys)
+        if blocked is not None:
+            _add_chain_provenance(blocked, attrs)
+            return blocked
     if any(key in attrs for key in _HISTORY_MARKERS):
         out = _rows_with_history(fund_code, series, attrs, holding_ccys=holding_ccys, now=now)
     else:
@@ -491,20 +499,74 @@ HISTORY_DATES_ATTR = "nav_history_dates"
 HISTORY_RECORDED_AT_ATTR = "nav_history_recorded_at"
 HISTORY_SOURCE_ATTR = "nav_history_source"
 HISTORY_DATES_ERROR_ATTR = "nav_history_dates_error"
+HISTORY_CURRENCY_ATTR = "nav_history_currency"            # {日期: 累積表該點宣告的幣別原值}
+HISTORY_LIVE_CURRENCY_ATTR = "nav_history_live_currency"  # 併入前 live 那一段宣告的幣別原值
 _HISTORY_MARKERS = (HISTORY_MERGED_ATTR, HISTORY_DATES_ATTR, HISTORY_DATES_ERROR_ATTR)
-_HISTORY_ATTRS = (*_HISTORY_MARKERS, HISTORY_RECORDED_AT_ATTR, HISTORY_SOURCE_ATTR)
+_HISTORY_ATTRS = (*_HISTORY_MARKERS, HISTORY_RECORDED_AT_ATTR, HISTORY_SOURCE_ATTR, HISTORY_CURRENCY_ATTR,
+                  HISTORY_LIVE_CURRENCY_ATTR)
 
 # 本檔轉接 A 鏈時掛在序列上的 attrs 鍵（`fetch_nav_chain_with_error` 是唯一寫入點）。
 CHAIN_ATTR = "v2_chain"                              # {"page_type", "data_source", "fetched_at_from"}
 CHAIN_FAILURES_ATTR = "v2_chain_failures"            # 各頁型、各來源沒採用的原文（未遮蔽）
 CHAIN_HIST_READ_ERROR_ATTR = "v2_nav_history_read_error"   # 本次讀累積表失敗的原文（未遮蔽）
-_CHAIN_ATTRS = (CHAIN_ATTR, CHAIN_FAILURES_ATTR, CHAIN_HIST_READ_ERROR_ATTR)
+CHAIN_DECLARED_CCY_ATTR = "v2_declared_ccy"          # live 那一段序列自己宣告的幣別原值（不當標籤，只拿來比對）
+_CHAIN_ATTRS = (CHAIN_ATTR, CHAIN_FAILURES_ATTR, CHAIN_HIST_READ_ERROR_ATTR, CHAIN_DECLARED_CCY_ATTR)
 
 LATEST_FROM_LIVE = "live"                # 最新一筆是本次即時取得
 LATEST_FROM_CACHE_NAV = "cache_nav"      # 最新一筆來自 `cache/nav` 預存檔（即時網址全敗）
 LATEST_FROM_NAV_HISTORY = "nav_history"  # 最新一筆來自累積表（不是本次取得）
 
 HISTORY_ONLY_LIVE_ERROR = "本次沒有取得任何即時淨值；序列全部來自累積表（A 鏈未交出逐來源原文）"
+
+# ── 幣別閘（2026-10-13 稽核 5 B-1；總管技術裁定）────────────────────────────────
+# 標籤仍只用持倉手填（裁定第 5 條本意不變）；但 A 鏈序列或累積表點**宣告了與持倉不同的幣別** →
+# 那些數值根本不是持倉幣別計價（實例：晨星以 `currencyId=USD` 回的是換算成美元的淨值），貼上持倉幣別
+# 就是錯的數字 → 整檔不寫（fail closed）。
+# 非原生報價來源（SSOT：`fund_orchestration._NAV_NON_NATIVE_PREFIXES` ＝ 晨星／Yahoo／AlphaVantage）：
+# 晨星的計價幣別由請求參數 `currencyId` 決定、Yahoo／AlphaVantage 是掛牌幣別，都不保證是基金原幣 →
+# 這類序列**沒有宣告幣別**時同樣整檔不寫（不猜它是不是持倉幣別）。
+TEXT_CCY_DECLARED_CONFLICT = ("淨值序列宣告的幣別與持倉手填不同（{shown}；持倉 {holding}）；"
+                              "數值不是持倉幣別計價，不改標籤、不換算，{n} 筆全部不寫")
+TEXT_CCY_NON_NATIVE_UNDECLARED = ("淨值來自非原生報價來源（{source}），計價幣別由請求參數或掛牌決定、"
+                                  "序列卻沒有宣告幣別；不猜它是不是持倉幣別，{n} 筆全部不寫")
+TEXT_NAME_SEARCH_SECID = "淨值來自以基金名稱搜尋的晨星代碼，依規則不採用（{origin}，來源 {source}）"
+
+
+def _chain_ccy_gate(fund_code, series, attrs, holding_ccys):
+    """A 鏈那一支的幣別閘：擋下 → 回整檔不寫的輸出；放行 → None。不改任何標籤規則。"""
+    holding = {_ccy_meaning(c) for c in holding_ccys if not _is_blank_ccy(c)} - {None}
+    if len(holding) != 1:
+        return None          # 持倉沒填或互相矛盾：交給 resolve_nav_ccy 照原規則判（ccy_missing／ccy_conflict）
+    held = next(iter(holding))
+    declared = []
+    live_decl = attrs.get(CHAIN_DECLARED_CCY_ATTR)
+    hist_dates = attrs.get(HISTORY_DATES_ATTR) if isinstance(attrs.get(HISTORY_DATES_ATTR), list) else []
+    has_live = len(series) > len(hist_dates)
+    if has_live and not _is_blank_ccy(live_decl) and str(live_decl).strip():
+        declared.append(("即時序列", live_decl))
+    hist_ccy = attrs.get(HISTORY_CURRENCY_ATTR) if isinstance(attrs.get(HISTORY_CURRENCY_ATTR), dict) else {}
+    for day in sorted(hist_ccy):
+        if str(hist_ccy[day] or "").strip():
+            declared.append((f"累積表 {day}", hist_ccy[day]))
+    bad = [(where, v) for where, v in declared if _ccy_meaning(v) != held]
+    source = str(attrs.get("source") or "")
+    text = None
+    code = WITHHELD_CCY_CONFLICT
+    if bad:
+        shown = "、".join(f"{where}:{v!r}" for where, v in bad[:5]) + ("…" if len(bad) > 5 else "")
+        text = TEXT_CCY_DECLARED_CONFLICT.format(shown=shown, holding=held, n=len(series))
+    elif has_live and source.startswith(_NAV_NON_NATIVE_PREFIXES) and not str(live_decl or "").strip():
+        text = TEXT_CCY_NON_NATIVE_UNDECLARED.format(source=source, n=len(series))
+        code = WITHHELD_CCY_MISSING
+    if text is None:
+        return None
+    out = _empty_out()
+    out["fetched"] = len(series)
+    out["withheld"] = code
+    out["skipped"].append(text)
+    out["provenance"] = {"source": attrs.get("source"), "fetched_at": None, "ccy_source": None,
+                         "cache_fallback": False, "stale": None, "live_error": None}
+    return _reconcile(out, len(series), "nav")
 
 
 def _hist_group_rows(fund_code, part, source, recorded_at, *, holding_ccys, now):
@@ -665,13 +727,19 @@ def _chain_failure_lines(res: dict) -> list:
             if not isinstance(attempt, dict):
                 continue
             pt = attempt.get("page_type")
-            head = f"[{pt}] 狀態 {attempt.get('status')}"
-            if attempt.get("error"):
-                head += f"：{attempt['error']}"
-            lines.append(head)
+            # 2026-10-13 稽核 5 N3：成功（complete 且沒有錯誤）的那一次不印狀態行
+            if attempt.get("status") != "complete" or attempt.get("error"):
+                head = f"[{pt}] 狀態 {attempt.get('status')}"
+                if attempt.get("error"):
+                    head += f"：{attempt['error']}"
+                lines.append(head)
             for f in attempt.get("nav_source_failures") or ():
                 if isinstance(f, dict):
-                    lines.append(f"[{pt}] {f.get('source')}：{f.get('error')}")
+                    # 2026-10-13 稽核 5 N2：用每筆記錄自己的頁型（L1 會在同一次嘗試內換頁型重試）；
+                    # 沒有頁型的那幾筆（legacy 段）標明，不冒用外層頁型。
+                    own = f.get("page_type") or f"{pt}·legacy"
+                    cand = f" 候選 {f['candidate']}" if f.get("candidate") else ""
+                    lines.append(f"[{own}{cand}] {f.get('source')}：{f.get('error')}")
         return lines
     if res.get("error"):
         lines.append(str(res["error"]))
@@ -725,8 +793,17 @@ def fetch_nav_chain_with_error(chain_code: str, full_key: str):
     if got_key != full_key:
         return pd.Series(dtype=float), TEXT_KEY_MISMATCH.format(got=got_key, want=full_key)
 
+    raw_attrs = dict(series.attrs or {})
+    origin = raw_attrs.get(MS_SECID_ORIGIN_ATTR)
+    if origin in (MS_SECID_FROM_NAME_SEARCH, MS_SECID_FROM_CODE_SEARCH):
+        # 2026-10-13 稽核 5 B-2：客戶硬規則「不以基金名稱推定」；A 鏈照舊採用，B 線拒收（含跨度延長後整條換成它）
+        return pd.Series(dtype=float), TEXT_NAME_SEARCH_SECID.format(origin=origin, source=raw_attrs.get("source"))
     out = series.copy()
-    attrs = {k: v for k, v in dict(series.attrs or {}).items() if k != "currency"}
+    attrs = {k: v for k, v in raw_attrs.items() if k != "currency"}
+    # 2026-10-13 B-1：宣告的幣別不當標籤，但另存起來給幣別閘比對（併入累積表時，live 原值記在另一個鍵）
+    attrs[CHAIN_DECLARED_CCY_ATTR] = str(
+        (raw_attrs.get(HISTORY_LIVE_CURRENCY_ATTR) if HISTORY_MERGED_ATTR in raw_attrs
+         else raw_attrs.get("currency")) or "")
     fetched_at_from = "series_attrs"
     if not attrs.get("fetched_at"):
         # A 鏈 L1 在被快取的函式內取得的本輪開始時間（命中快取時是原本那一次的時間，不是當下）
@@ -739,6 +816,7 @@ def fetch_nav_chain_with_error(chain_code: str, full_key: str):
         # 預存檔那一支：本次即時失敗的原文 ＝ A 鏈瀑布逐來源原文 ＋ fetch_nav 自己的逐網址原文
         attrs[LIVE_FETCH_ERROR_ATTR] = "\n".join(
             x for x in (failures, attrs.get(LIVE_FETCH_ERROR_ATTR)) if x) or None
+        fetched_at_from = "cache_updated_at"   # 2026-10-13 稽核 5 N3：預存檔那一支用的是 cache_updated_at
     attrs[CHAIN_ATTR] = {"page_type": page_type, "data_source": res.get("data_source"),
                          "fetched_at_from": fetched_at_from}
     attrs[CHAIN_FAILURES_ATTR] = failures
