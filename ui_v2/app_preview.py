@@ -35,8 +35,13 @@
   設定試算表會被寫入（存檔、重新取數），該帳戶要有編輯權；保單試算表本預覽只讀。
 - 選填 `PROXY_URL`（或 `[proxy]` 區段）：`infra/proxy.py` 的 NAS 代理。市場總覽（Yahoo）與持倉體檢的淨值
   （MoneyDJ）走 `infra.proxy.fetch_url`；不設就直連，雲端 IP 被擋時該頁照實顯示取數失敗。
-- 市場總覽第一階段只取 Yahoo（`^VIX`），不需要金鑰；FRED 三鍵、國發會兩鍵、匯率鍵目前在 L2 是暫停取數
+- ~~市場總覽第一階段只取 Yahoo（`^VIX`），不需要金鑰；FRED 三鍵、國發會兩鍵、匯率鍵目前在 L2 是暫停取數
+  （`services/v2_tables/market_indicator.py::INDICATOR_SPECS`），畫面寫「資料未備」與原因。~~
+  → **2026-10-13 狀態更新（不是漏刪；上句在寫下當時為真）**：市場總覽取 Yahoo（`^VIX`）與 FRED 三鍵
+  （高收益信用利差、期限利差、聯邦基金利率），**FRED 需要 secret `FRED_API_KEY`**；沒設時那三鍵照實顯示
+  「取數失敗：未設定 FRED_API_KEY」。國發會兩鍵、匯率鍵仍在 L2 暫停取數
   （`services/v2_tables/market_indicator.py::INDICATOR_SPECS`），畫面寫「資料未備」與原因。
+  設定與診斷的「重新取數」另清 FRED 那一支 L1 快取（`fetch_fred_vintages`）。
 
 ⚠️ 同一個程式跑五頁的兩個連帶（docs/v2/49_data_integration_plan.md 4.8）：
 - L1 的快取與來源冷卻狀態住在行程記憶體裡，五頁在同一個行程內**共用**：一頁讓某來源進了冷卻，

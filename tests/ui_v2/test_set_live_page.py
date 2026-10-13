@@ -103,6 +103,14 @@ def real(monkeypatch):
     monkeypatch.setattr(source, "st", types.SimpleNamespace(secrets=cfg, session_state={}))
     monkeypatch.setattr(source.market_indicator, "source_cooldowns", lambda: [])
     monkeypatch.setattr(page, "fixtures", _FixturesThatBite())
+    # 2026-10-13：FRED 三鍵接上後，cfg 裡的 FRED_API_KEY 會被「重新取數」交下去、真的去打 FRED
+    # （slow lane 另設 FRED_API_KEY 環境變數）。本檔驗 VIX 那一條的畫面，FRED 三鍵在本檔改回 pending（只在測試內）。
+    _mi = source.market_indicator
+    _specs = dict(_mi.INDICATOR_SPECS)
+    for _key in ("credit_spread_pct", "term_spread_pct", "policy_rate_pct"):
+        _specs[_key] = {**_specs[_key], "phase1": "pending", "pending_reason": "測試：本檔以 VIX 為樣本",
+                        "pending_code": _mi.PENDING_FRED_RELEASE_DATE}
+    monkeypatch.setattr(_mi, "INDICATOR_SPECS", _specs)
     R.clear_cache()
     SB.reset_all()
     harness.LOADERS.clear()

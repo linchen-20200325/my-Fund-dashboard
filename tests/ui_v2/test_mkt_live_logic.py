@@ -132,4 +132,9 @@ def test_原因代碼與L2一致():
     mi = pytest.importorskip("services.v2_tables.market_indicator")
     codes = {mi.PENDING_FRED_RELEASE_DATE, mi.PENDING_NDC_NO_RELEASE_DATE, mi.PENDING_FX_OBS_DATE_RULE}
     assert codes == set(live.REASON_TEXT)
-    assert {spec["pending_code"] for spec in mi.INDICATOR_SPECS.values()} - {None} == codes
+    # ~~`... == codes`~~ → `<= codes`（2026-10-13 FRED 三鍵接上，`fred_release_date` 目前沒有鍵使用；
+    # L2 刻意保留該代碼與這裡的對照文案，見 `market_indicator._PENDING_FRED` 上方註解；狀態更新，不是漏刪）。
+    # 這條要守的仍是「L2 交得出來的每一個代碼都有核准文案」——子集關係就是那一句。
+    used = {spec["pending_code"] for spec in mi.INDICATOR_SPECS.values()} - {None}
+    assert used <= codes
+    assert mi.PENDING_FRED_RELEASE_DATE not in used

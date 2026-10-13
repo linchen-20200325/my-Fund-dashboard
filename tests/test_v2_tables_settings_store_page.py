@@ -150,9 +150,11 @@ def _vix():
 
 
 def test_要清的只有本次會取數的那一支L1():
+    from repositories.macro.fred_vintage import fetch_fred_vintages
     from repositories.macro.yf import fetch_yf_close
-    assert S.refetch_cached_functions() == [fetch_yf_close]
-    assert hasattr(fetch_yf_close, "cache_clear")
+    # ~~[fetch_yf_close]~~ → 2026-10-13 FRED 三鍵接上，多清 FRED 那一支（狀態更新，不是漏刪）
+    assert S.refetch_cached_functions() == [fetch_yf_close, fetch_fred_vintages]
+    assert hasattr(fetch_yf_close, "cache_clear") and hasattr(fetch_fred_vintages, "cache_clear")
 
 
 def test_來源沒登記要清哪一支_當場炸(monkeypatch):
@@ -163,7 +165,8 @@ def test_來源沒登記要清哪一支_當場炸(monkeypatch):
 
 def test_重新取數_先清那一支的快取_不動來源冷卻_不呼叫全域清除(book, monkeypatch):
     fake = _FakeCached()
-    monkeypatch.setattr(S, "_CACHED_FETCHER_BY_SOURCE", {"Yahoo": fake})
+    fake_fred = _FakeCached()   # 2026-10-13 FRED 三鍵接上：那一支也要先清（本條不傳金鑰，FRED 不取數）
+    monkeypatch.setattr(S, "_CACHED_FETCHER_BY_SOURCE", {"Yahoo": fake, "FRED": fake_fred})
     order = []
     monkeypatch.setattr(mi, "fetch_yf_close_with_error",
                         lambda ticker, *a, **k: (order.append(("fetch", fake.cleared)) or (_vix(), None)))
@@ -173,6 +176,7 @@ def test_重新取數_先清那一支的快取_不動來源冷卻_不呼叫全�
     assert SB.should_skip("some.other.host")[0] is True
     out = S.refetch_market_indicator([SECRET])
     assert fake.cleared == 1 and order == [("fetch", 1)]          # 先清、後取
+    assert fake_fred.cleared == 1
     assert SB.should_skip("some.other.host")[0] is True            # 冷卻原封不動
     assert out["persist"]["ok"] is True
 
@@ -180,7 +184,9 @@ def test_重新取數_先清那一支的快取_不動來源冷卻_不呼叫全�
 def test_重新取數_真的清掉fetch_yf_close的快取(monkeypatch):
     from repositories.macro import yf
     yf.fetch_yf_close._cache_dict[(("^VIX", "2y", "1d"), ())] = (9e18, "舊的")
-    monkeypatch.setattr(S, "run_market_indicator_fetch", lambda values, build=None: {"persist": {}, "table": {}})
+    # 2026-10-13：`refetch_market_indicator` 多傳 `fred_api_key`，替身照收（狀態更新，不是漏刪）
+    monkeypatch.setattr(S, "run_market_indicator_fetch",
+                        lambda values, build=None, fred_api_key=None: {"persist": {}, "table": {}})
     S.refetch_market_indicator([SECRET])
     assert (("^VIX", "2y", "1d"), ()) not in yf.fetch_yf_close._cache_dict
 
