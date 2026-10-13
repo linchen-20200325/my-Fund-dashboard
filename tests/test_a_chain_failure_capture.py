@@ -320,3 +320,43 @@ def test_ttl_cache_多執行緒寫入淘汰_不拋錯_預設行為不變():
     assert errors == []
     assert f.cache_info()["size"] <= 64
     assert f(7) == 14 and f(7) == 14 and f.cache_info()["hits"] >= 1
+
+
+
+# ═══════════════════════ 2026-10-13 第三輪：快取判準的補洞測試 ═══════════════════════
+
+def test_M6_除了淨值是預存檔以外全部成功_不入快取(monkeypatch):
+    code, sc = H.full_success_scenario()
+    # 長跨度（不是短窗），確保擋下它的只有「預存檔」這一條
+    cache_s = H.series(300, start="2025-01-06", attrs={"source": f"GitHubActions:cache/nav/{code}.json",
+                                  "fetched_at": "2026-03-05T00:00:00+00:00",
+                                  "cache_updated_at": "2026-03-01T00:00:00+00:00", "nav_quality": {"stale": False}})
+    sc = dict(sc, _src_fundclear_nav=H.series(0), fetch_nav=cache_s)
+    calls = H.install(monkeypatch, sc)
+    first = _l1(code)
+    assert first["fund_name"] and first["dividends"] and first["risk_metrics"]       # 其餘都成功
+    assert first["series"].attrs["source"].startswith("GitHubActions:cache/nav/")
+    _l1(code)
+    assert [c[0] for c in calls].count("fetch_nav") == 2
+
+
+def test_短窗tcb30救回後不入快取(monkeypatch):
+    code, sc = H.full_success_scenario()
+    sc = dict(sc, _src_fundclear_nav=H.series(0),
+              _src_tcb_nav=H.series(30, attrs={"source": "MoneyDJ:tcb:nav30", "fetched_at": "2026-02-01T00:00:00+00:00"}))
+    calls = H.install(monkeypatch, sc)
+    first = _l1(code)
+    assert first["data_source"] == "tcb_moneydj" and len(first["series"]) == 30   # 側車救援採用的短窗
+    _l1(code)
+    assert [c[0] for c in calls].count("_src_tcb_nav") == 2
+
+
+@pytest.mark.parametrize("value,ok", [
+    ({"risk_table": {}, "source": "MoneyDJ:x:wb07"}, True),
+    ({"source": "MoneyDJ:all_failed", "diag": []}, False),
+    ({"source": "MoneyDJ:exception", "error": "x"}, False),
+    ({}, False), (None, False), ([1], False),
+])
+def test_component_ok_判讀失敗標記(value, ok):
+    from repositories.fund.fund_orchestration import _component_ok
+    assert _component_ok(value) is ok

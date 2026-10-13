@@ -432,8 +432,9 @@ def test_淨值層_重新取數清掉A鏈實際用到的全部快取_每個恰�
     assert len(cleared) == 6 and len(_nav_logs(book)) == 1                # 仍只寫一筆 fetch_log
 
 
-def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分照交(book, monkeypatch):
+def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分照交_閘門開啟(book, monkeypatch):
     """2026-10-13 第 6 條：A 鏈讀累積表失敗（含冷卻中不打）→ 照實記失敗，不吞。"""
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     s = _nav(3)
     s.attrs[ND.CHAIN_ATTR] = {"page_type": "yp010001", "data_source": "FundClear", "fetched_at_from": "series_attrs"}
     s.attrs[ND.CHAIN_HIST_READ_ERROR_ATTR] = f"nav_history load 失敗:APIError 429 {SECRET}"
@@ -445,7 +446,8 @@ def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分�
     assert SECRET not in log[6] and MASK in log[6]
 
 
-def test_淨值層_序列全部來自累積表_本次即時失敗_記failed(book, monkeypatch):
+def test_淨值層_序列全部來自累積表_本次即時失敗_記failed_閘門開啟(book, monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     s = _nav(3)
     days = [d.date().isoformat() for d in s.index]
     s.attrs = {ND.HISTORY_MERGED_ATTR: "+3 pts", ND.HISTORY_DATES_ATTR: days,
@@ -457,6 +459,30 @@ def test_淨值層_序列全部來自累積表_本次即時失敗_記failed(book
     assert len(out["table"]["rows"]) == 3 and out["table"]["provenance"][_A]["cache_fallback"] is True
     log = _nav_logs(book)[0]
     assert log[4] == "failed" and "FundClear：回傳 0 筆" in log[6]
+
+
+def test_淨值層_閘門關閉_累積表讀取失敗不算本次失敗_原文仍在provenance(book, monkeypatch):
+    s = _nav(3)
+    s.attrs[ND.CHAIN_ATTR] = {"page_type": "yp010001", "data_source": "FundClear", "fetched_at_from": "series_attrs"}
+    s.attrs[ND.CHAIN_HIST_READ_ERROR_ATTR] = "nav_history load 失敗:APIError 429"
+    _stub_nav(monkeypatch, {_A: (s, None)})
+    out = S.refetch_nav([SECRET])
+    assert _nav_logs(book)[0][4:] == ["ok", "3", ""]
+    assert "429" in out["table"]["provenance"][_A]["nav_history"]["read_error"]
+
+
+def test_淨值層_閘門關閉_序列全部來自累積表_整檔不寫_記failed_附即時失敗原文(book, monkeypatch):
+    s = _nav(3)
+    days = [d.date().isoformat() for d in s.index]
+    s.attrs = {ND.HISTORY_MERGED_ATTR: "+3 pts", ND.HISTORY_DATES_ATTR: days,
+               ND.HISTORY_RECORDED_AT_ATTR: {d: "2026-09-20T00:00:00+00:00" for d in days},
+               ND.HISTORY_SOURCE_ATTR: "GoogleSheet:nav_history:X",
+               ND.CHAIN_FAILURES_ATTR: "[yp010001] FundClear：回傳 0 筆，未達本步採用門檻 20 筆"}
+    _stub_nav(monkeypatch, {_A: (s, None)})
+    out = S.refetch_nav([SECRET])
+    assert out["table"]["rows"] == []
+    log = _nav_logs(book)[0]
+    assert log[4] == "failed" and "FundClear：回傳 0 筆" in log[6] and "出處不可考" in log[6]
 
 
 def test_淨值層_程式錯誤不被吞(book, monkeypatch):

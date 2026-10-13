@@ -1155,7 +1155,8 @@ def _moneydj_url_result_cacheable(result) -> bool:
     2026-10-13 稽核 6（B-3）：初版只看序列，於是 wb07／名稱第一次失敗的結果也被快取，沒有快取時
     下一次呼叫會重試補到的部分，15 分鐘內再也補不到（舊 UI「重抓」「重新計算」失效）。
     沒有快取時（`fdbfb550`～本次之前）每次呼叫都會重試下列每一項，所以任一項失敗都不快取；判斷不了就不快取：
-    - 序列：≥ `NAV_CACHE_MIN_POINTS` 筆，而且不是 `cache/nav` 預存檔（＝即時全敗）；
+    - 序列：≥ `NAV_CACHE_MIN_POINTS` 筆，而且不是 `cache/nav` 預存檔（＝即時全敗），也不是近30日短窗
+      （既有 `_is_short_window_nav`）；
     - 名稱（meta）：`fund_name` 非空；
     - wb07：`risk_metrics` 非空、來源不是失敗標記；
     - wb01：`perf_source == "wb01"`（`fetch_performance_wb01` 有回東西才會設）；
@@ -1173,6 +1174,8 @@ def _moneydj_url_result_cacheable(result) -> bool:
         return False
     attrs = getattr(s, "attrs", None) or {}
     if str(attrs.get("source") or "").startswith(_MONEYDJ_URL_CACHE_SOURCE_PREFIX) or "nav_quality" in attrs:
+        return False
+    if _is_short_window_nav(s):   # 2026-10-13 稽核 6：近30日短窗（含救援採用的短窗）沒有快取的版本下次會再試長歷史
         return False
     if result.get("error") or not result.get("fund_name"):
         return False

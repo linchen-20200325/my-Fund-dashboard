@@ -588,9 +588,12 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
                 masked[mask(code)] = mask(prov["live_error"])
         # 2026-10-13 第 6 條：A 鏈本次讀累積表失敗（含冷卻中不打）→ 照實記失敗，不吞；
         # 該檔即時取得的部分照樣交給呼叫端。同一檔已有原因就接在後面（同一段，換行分隔）。
+        # 2026-10-13 稽核回修：`nav_dividend.NAV_HISTORY_PROVENANCE_VERIFIED` 關閉時累積點本來就不採用，
+        # 讀不讀得到都不影響本次寫出的淨值 → 讀取失敗不再算作本次失敗（原文仍記在 provenance）。
         for code, prov in table["provenance"].items():
             read_error = (prov.get("nav_history") or {}).get("read_error")
-            if read_error is not None and code not in table["errors"]:
+            if (read_error is not None and code not in table["errors"]
+                    and nav_dividend.NAV_HISTORY_PROVENANCE_VERIFIED):
                 text = mask(f"累積表讀取失敗：{read_error}")
                 key = mask(code)
                 masked[key] = f"{masked[key]}\n{text}" if key in masked else text

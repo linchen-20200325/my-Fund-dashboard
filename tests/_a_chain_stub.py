@@ -212,7 +212,8 @@ def full_success_scenario(code: str = "ZZF100", *, currency: str = "USD") -> tup
     if currency:
         attrs["currency"] = currency
     return code, {
-        "_src_fundclear_nav": series(25, attrs=attrs),
+        # 300 個工作日（跨度遠超過近30日短窗門檻）：短窗序列依 2026-10-13 稽核 6 不入快取
+        "_src_fundclear_nav": series(300, start="2025-01-06", attrs=attrs),
         "_src_tcb_meta": {"fund_name": "全成功基金", "nav_latest": 10.24},
         "_src_tcb_div": [{"date": "2026-01-15", "amount": 0.05, "yield_pct": 6.0}],
         "fetch_risk_metrics": {"risk_table": {"1Y": {"std": 10.0}}, "source": "MoneyDJ:x:wb07"},

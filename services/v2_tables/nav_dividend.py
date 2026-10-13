@@ -73,6 +73,16 @@ DIV_KIND_UNKNOWN = "unknown"       # Q5
 # ⚠️ 確認是除息日，才可以只改這一處；若其實是入帳日或公告日，要先改對照規則。
 DIV_DATE_IS_EX_DATE_VERIFIED = False
 
+# 2026-10-13 總管技術裁定（稽核 5 殘留缺口，fail closed；體例同 `DIV_DATE_IS_EX_DATE_VERIFIED`）：
+# 累積表（nav_history）的點不帶出處 —— `backfill_to_gs` 經 `_clean(raw)` 丟掉 attrs 後以 `source="backfill"`
+# 寫入、`nav_history_hook` 以 `source="app"` 寫入，都沒有記 secId 從哪裡來；A 鏈以名稱或代碼搜尋得來的
+# 晨星點會以「無出處的累積點」回到 B 線，B 線對 `secid_origin` 的拒收擋不住這一路。
+# 客戶裁示之前：閘門關閉 → `nav_history_dates` 標出的累積點一律不寫；同一天即時值已蓋過的點本來就是即時值，照寫；
+# 只剩累積點、沒有即時點的檔整檔不寫，記即時失敗原文。⚠️ 只在客戶裁示後才可以改這一處。
+NAV_HISTORY_PROVENANCE_VERIFIED = False
+TEXT_HISTORY_GATE_CLOSED = ("累積序列的出處不可考（可能含以名稱搜尋得來的資料），依規則暫不採用，待客戶裁示；"
+                            "累積表 {n} 筆不寫")
+
 # 退回預存舊序列的辨識（`49` §2.8）。
 CACHE_FALLBACK_SOURCE_PREFIX = "GitHubActions:cache/nav/"
 
@@ -545,6 +555,8 @@ def _chain_ccy_gate(fund_code, series, attrs, holding_ccys):
     if has_live and not _is_blank_ccy(live_decl) and str(live_decl).strip():
         declared.append(("即時序列", live_decl))
     hist_ccy = attrs.get(HISTORY_CURRENCY_ATTR) if isinstance(attrs.get(HISTORY_CURRENCY_ATTR), dict) else {}
+    if not NAV_HISTORY_PROVENANCE_VERIFIED:
+        hist_ccy = {}        # 閘門關閉：累積點不寫，它們的宣告也不拿來擋即時那一段
     for day in sorted(hist_ccy):
         if str(hist_ccy[day] or "").strip():
             declared.append((f"累積表 {day}", hist_ccy[day]))
@@ -626,6 +638,10 @@ def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
     live_part = series[live_mask]
     live_part.attrs = {k: v for k, v in attrs.items() if k not in _HISTORY_ATTRS and k not in _CHAIN_ATTRS}
 
+    if not NAV_HISTORY_PROVENANCE_VERIFIED:
+        return _rows_history_gate_closed(fund_code, live_part, attrs, groups, hist_source, read_error,
+                                         holding_ccys=holding_ccys, now=now_utc)
+
     parts = []
     live_out = None
     if len(live_part):
@@ -680,6 +696,31 @@ def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
                            "read_error": None if read_error is None else str(read_error)}
     out["provenance"] = prov
     return _reconcile(out, skipped_rows, "nav")
+
+
+def _rows_history_gate_closed(fund_code, live_part, attrs, groups, hist_source, read_error, *,
+                              holding_ccys, now) -> dict:
+    """`NAV_HISTORY_PROVENANCE_VERIFIED` 關閉：累積點一律不寫，只寫即時那一段（見常數註解）。"""
+    n_hist = sum(len(v) for v in groups.values())
+    gate_line = TEXT_HISTORY_GATE_CLOSED.format(n=n_hist)
+    if not len(live_part):
+        out = _empty_out()
+        live_error = str(attrs.get(LIVE_FETCH_ERROR_ATTR) or attrs.get(CHAIN_FAILURES_ATTR)
+                         or HISTORY_ONLY_LIVE_ERROR)
+        out["error"] = f"{live_error}\n{gate_line}"
+        return out
+    out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now)
+    out["fetched"] += n_hist
+    out["skipped"].append(gate_line)
+    prov = out["provenance"] = dict(out["provenance"] or {})
+    # 累積點一個都沒寫 → 最新一筆不可能來自累積表；`cache_fallback` 只反映即時那一段是不是預存檔
+    prov["latest_from"] = ((LATEST_FROM_CACHE_NAV if prov.get("cache_fallback") else LATEST_FROM_LIVE)
+                           if out["rows"] else None)
+    prov["nav_history"] = {"source": hist_source, "points": n_hist, "written": 0,
+                           "recorded_at_missing": sum(len(v) for k, v in groups.items() if not k),
+                           "read_error": None if read_error is None else str(read_error),
+                           "gate_closed": True, "withheld_by_gate": n_hist}
+    return _reconcile(out, out["skipped_rows"] + n_hist, "nav")
 
 
 def _add_chain_provenance(out: dict, attrs: dict) -> None:

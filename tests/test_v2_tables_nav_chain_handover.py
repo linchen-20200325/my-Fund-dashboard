@@ -61,7 +61,8 @@ def test_本層沒有自己的頁型迴圈或來源清單():
 
 # ═══════════════════════ 累積表併入點：fetched_at 與來源標記誠實 ═══════════════════════
 
-def test_累積表舊點_fetched_at取各自recorded_at_缺的不寫_重疊日用即時值(monkeypatch):
+def test_累積表舊點_fetched_at取各自recorded_at_缺的不寫_重疊日用即時值_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     code, out, _calls = _b(monkeypatch, "S1_complete_fundclear")
     rows = {r["nav_date"]: r for r in out["rows"]}
     assert rows["2025-11-03"]["fetched_at"] == "2025-11-03T09:00:00+00:00"
@@ -78,7 +79,8 @@ def test_累積表舊點_fetched_at取各自recorded_at_缺的不寫_重疊日�
     assert out["fetched"][code] == len(out["rows"]) + out["skipped_rows"][code]
 
 
-def test_累積表救援_全部是舊點_標不是本次取得_記本次即時失敗(monkeypatch):
+def test_累積表救援_全部是舊點_標不是本次取得_記本次即時失敗_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     code, out, _calls = _b(monkeypatch, "S7_hist_rescue")
     assert len(out["rows"]) == 30
     assert {r["fetched_at"] for r in out["rows"]} == {"2026-01-02T03:04:05+00:00"}
@@ -88,7 +90,8 @@ def test_累積表救援_全部是舊點_標不是本次取得_記本次即時�
     assert prov["fetched_at"] is None                                      # 沒有任何本次取得的點
 
 
-def test_累積表的點比即時新_最新一筆標不是本次取得(monkeypatch):
+def test_累積表的點比即時新_最新一筆標不是本次取得_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     code = "ZZF010"
     sc = {"_src_fundclear_nav": H.series(25, start="2025-06-02",
                                          attrs={"source": "FundClear:x", "fetched_at": "2026-02-01T00:00:00+00:00"}),
@@ -101,7 +104,8 @@ def test_累積表的點比即時新_最新一筆標不是本次取得(monkeypat
     assert prov["stale"] is None and prov["live_error"] is None             # 即時那一段是成功的
 
 
-def test_A鏈交出併入標記卻沒有日期清單_整檔不寫_不猜():
+def test_A鏈交出併入標記卻沒有日期清單_整檔不寫_不猜_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     s = H.series(12, attrs={"source": "FundClear:x", "fetched_at": "2026-02-01T00:00:00+00:00",
                             ND.HISTORY_MERGED_ATTR: "+3 pts from GoogleSheet:nav_history:X",
                             ND.HISTORY_DATES_ERROR_ATTR: "TypeError: boom"})
@@ -138,7 +142,8 @@ def test_B1例二_FundClear序列宣告USD_持倉填TWD_整檔不寫(monkeypatch
     assert "即時序列:'USD'" in out["skipped"][code][0] and "持倉 TWD" in out["skipped"][code][0]
 
 
-def test_B1例三_累積表點宣告USD_持倉填TWD_整檔不寫(monkeypatch):
+def test_B1例三_累積表點宣告USD_持倉填TWD_整檔不寫_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     code = "ZZF011"
     sc = {"_src_tcb_meta": {"fund_name": "x"},
           "nav_history_points": [dict(p, currency="USD") for p in H._hist_points(
@@ -302,7 +307,8 @@ def test_累積表讀取失敗_即時部分照交_原文記在provenance與skipp
 
 # ═══════════════════════ Sheets 讀取量：同一次 build 整張表只讀一次 ═══════════════════════
 
-def test_同一次build_多檔基金_累積表只讀一次(monkeypatch):
+def test_同一次build_多檔基金_累積表只讀一次_閘門開啟(monkeypatch):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）
     import services.nav_history_gs as nh
     real_load_points = nh.load_points
     sc = {"_src_fundclear_nav": H.series(25, attrs={"source": "FundClear:x",
@@ -332,3 +338,67 @@ def test_同一次build_多檔基金_累積表只讀一次(monkeypatch):
     out = _quiet(ND.build_nav_table, funds, now=NOW)
     assert len(reads) == 1
     assert "2025-11-03" in {r["nav_date"] for r in out["rows"] if r["fund_code"] == "ZZA1"}
+
+
+# ═══════════════════════ 累積表出處閘門（2026-10-13 總管技術裁定；預設關閉）═══════════════════════
+
+def test_閘門預設關閉():
+    assert ND.NAV_HISTORY_PROVENANCE_VERIFIED is False
+
+
+def test_閘門關閉_累積點一律不寫_重疊日是即時值照寫(monkeypatch):
+    code, out, _calls = _b(monkeypatch, "S1_complete_fundclear")
+    days = {r["nav_date"] for r in out["rows"]}
+    assert not days & {"2025-11-03", "2025-11-04", "2025-11-05"}         # 累積點不寫
+    assert "2026-01-05" in days                                          # 與累積表重疊的那天：即時值，照寫
+    assert all(r["fetched_at"] == "2026-02-01T00:00:00+00:00" for r in out["rows"])
+    assert any("出處不可考" in s and "待客戶裁示" in s for s in out["skipped"][code])
+    prov = out["provenance"][code]
+    assert prov["latest_from"] == ND.LATEST_FROM_LIVE and prov["cache_fallback"] is False
+    assert prov["nav_history"]["gate_closed"] is True and prov["nav_history"]["written"] == 0
+    assert prov["nav_history"]["withheld_by_gate"] == 3
+    assert out["fetched"][code] == len(out["rows"]) + out["skipped_rows"][code]
+
+
+def test_閘門關閉_累積點比即時新_最新一筆仍是即時(monkeypatch):
+    code = "ZZF010"
+    sc = {"_src_fundclear_nav": H.series(25, start="2025-06-02",
+                                         attrs={"source": "FundClear:x", "fetched_at": "2026-02-01T00:00:00+00:00"}),
+          "_src_tcb_meta": {"fund_name": "測試十"},
+          "nav_history_points": H._hist_points(code, ["2026-02-02"], recorded_at="2026-02-03T00:00:00+00:00")}
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc))
+    prov = out["provenance"][code]
+    assert "2026-02-02" not in {r["nav_date"] for r in out["rows"]}
+    assert prov["latest_from"] == ND.LATEST_FROM_LIVE and prov["cache_fallback"] is False
+
+
+def test_閘門關閉_只剩累積點_整檔不寫_記即時失敗原文(monkeypatch):
+    code, out, _calls = _b(monkeypatch, "S7_hist_rescue")
+    assert out["rows"] == []
+    assert "出處不可考" in out["errors"][code] and "FundClear" in out["errors"][code]   # 即時失敗原文
+
+
+def test_閘門關閉_累積點宣告不同幣別不擋即時那一段(monkeypatch):
+    code, sc = H.full_success_scenario(currency="TWD")
+    sc["nav_history_points"] = [dict(p, currency="USD") for p in H._hist_points(code, ["2024-06-03"])]
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="TWD", now=None)
+    assert out["rows"] and code not in out["withheld"]
+
+
+@pytest.mark.parametrize("gate", [False, True])
+def test_M18_即時宣告USD_累積點未宣告_持倉TWD_整檔不寫(monkeypatch, gate):
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", gate)
+    code, sc = H.full_success_scenario(currency="USD")
+    sc["nav_history_points"] = H._hist_points(code, ["2024-06-03"])            # currency 空＝未宣告
+    _c, out, _calls = _b(monkeypatch, None, scenario=(code, sc), ccy="TWD", now=None)
+    assert out["rows"] == [] and out["withheld"] == {code: ND.WITHHELD_CCY_CONFLICT}
+    assert "即時序列:'USD'" in out["skipped"][code][0]
+
+
+def test_M11_code_search_也拒收(monkeypatch):
+    s = H.series(30, attrs={"source": "Morningstar:UK:timeseries:0PCODE", "fetched_at": "2026-02-01T00:00:00+00:00",
+                            "currency": "USD", "secid_origin": "code_search"})
+    monkeypatch.setattr(ND, "auto_fetch_moneydj",
+                        lambda code, return_page_type=False: ({"full_key": code, "series": s}, "yp010001"))
+    got, err = ND.fetch_nav_chain_with_error("TLZZ7", "TLZZ7")
+    assert len(got) == 0 and "以基金名稱搜尋的晨星代碼，依規則不採用" in err and "code_search" in err
