@@ -25,7 +25,7 @@ import pytest
 import _a_chain_stub as H
 
 _GOLDEN = pathlib.Path(__file__).resolve().parent / "fixtures" / "a_chain_golden_before.json"
-NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts"})
+NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts", "chain_started_at"})
 NEW_SERIES_ATTRS = frozenset({"nav_history_dates", "nav_history_recorded_at", "nav_history_source",
                               "nav_history_dates_error"})
 
@@ -144,3 +144,85 @@ def test_shared_reads範圍內_整張表只讀一次_失敗照實重拋不重打
             with pytest.raises(nh.NavHistoryError, match="429"):
                 nh.load_points("AAA")
     assert len(reads) == 1
+
+
+# ═══════════════════════ L1 十五分鐘快取（2026-10-13 總管技術裁定：補回、只快取成功、防污染）═══════════════════════
+
+def _l1(code):
+    from repositories.fund.fund_orchestration import fetch_fund_from_moneydj_url
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return fetch_fund_from_moneydj_url(code)
+
+
+def test_L1快取_成功結果十五分鐘內命中_不再打來源_開始時間是原本那一次(monkeypatch):
+    from repositories.fund import fund_orchestration as FO
+    from shared.ttls import TTL_15MIN
+    code, sc = H.scenarios()["S1_complete_fundclear"]
+    calls = H.install(monkeypatch, sc)
+    first = _l1(code)
+    n = len(calls)
+    second = _l1(code)
+    assert len(calls) == n and n > 0                                   # 第二次一個來源都沒打
+    assert second["chain_started_at"] == first["chain_started_at"]    # 不是當下時間
+    info = FO.fetch_fund_from_moneydj_url.cache_info()
+    assert info["hits"] == 1 and info["ttl_sec"] == TTL_15MIN
+
+
+def test_L1快取_下游改寫回傳物件_不會改到快取內容(monkeypatch):
+    code, sc = H.scenarios()["S1_complete_fundclear"]
+    H.install(monkeypatch, sc)
+    first = _l1(code)
+    original_nav = float(first["series"].iloc[0])
+    original_name = first["fund_name"]
+    # 模擬 L2 finalize／_merge_nav_history_series 的就地改寫
+    first["fund_name"] = "被下游改掉"
+    first["metrics"]["x"] = 1
+    first["series"].iloc[0] = 999.0
+    first["series"].attrs["source"] = "被下游改掉"
+    first["source_trace"].append({"source": "下游", "success": True})
+    second = _l1(code)
+    assert second["fund_name"] == original_name and "x" not in second["metrics"]
+    assert float(second["series"].iloc[0]) == original_nav
+    assert second["series"].attrs["source"] != "被下游改掉"
+    assert not any(e.get("source") == "下游" for e in second["source_trace"])
+    assert second is not first and second["series"] is not first["series"]
+
+
+@pytest.mark.parametrize("name", ["S3_all_fail", "S4_cache_fallback", "S6_insurance_morningstar"])
+def test_L1快取_失敗或預存檔或序列不足_不入快取_下次真的再打(monkeypatch, name):
+    code, sc = H.scenarios()[name]
+    calls = H.install(monkeypatch, sc)
+    _l1(code)
+    n = len(calls)
+    _l1(code)
+    assert len(calls) == 2 * n
+
+
+def test_L1快取_cache_clear清得掉_有登記在全域清除名單(monkeypatch):
+    from infra.cache import _CACHE_REGISTRY
+    from repositories.fund import fund_orchestration as FO
+    assert FO.fetch_fund_from_moneydj_url.__wrapped__ in _CACHE_REGISTRY   # 登記的是內層快取那一層
+    code, sc = H.scenarios()["S1_complete_fundclear"]
+    calls = H.install(monkeypatch, sc)
+    _l1(code)
+    FO.fetch_fund_from_moneydj_url.cache_clear()
+    _l1(code)
+    # 清掉之後真的再跑一次瀑布（持股另有自己的一小時快取，不在本條射程）
+    assert [c[0] for c in calls].count("_src_fundclear_nav") == 2
+
+
+def test_B線連續兩次build_第二次不再打任何來源(monkeypatch):
+    """hld 每次重跑都呼叫 build_nav_table：第二次應全部命中 L1 快取（累積表讀取不在此列，見第 3 條）。"""
+    import datetime as dt
+    from services.v2_tables import nav_dividend as ND
+    code, sc = H.scenarios()["S1_complete_fundclear"]
+    calls = H.install(monkeypatch, sc)
+    funds = [{"fund_code": code, "full_key": code, "chain_code": code, "holding_ccy": "USD"}]
+    now = dt.datetime(2026, 3, 10, tzinfo=dt.timezone.utc)
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        first = ND.build_nav_table(funds, now=now)
+        n = len(calls)
+        second = ND.build_nav_table(funds, now=now)
+    extra = calls[n:]
+    assert [c[0] for c in extra] == ["nav_history.load_points"]       # 只剩累積表那一次
+    assert first["rows"] == second["rows"]

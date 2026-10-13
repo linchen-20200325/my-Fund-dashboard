@@ -647,6 +647,7 @@ CHAIN_CACHED_FUNCTIONS = (
     nav_metrics.fetch_performance_wb01,  # wb01（L1 日快取）
     nav_metrics.fetch_holdings,          # 持股（L1 日快取）
     fund_orchestration._holdings_ttl,    # 持股外層 L1 一小時快取
+    fund_orchestration.fetch_fund_from_moneydj_url,   # A 鏈 L1 主入口（L1 十五分鐘快取，2026-10-13 補回）
 )
 
 TEXT_KEY_MISMATCH = ("A 鏈回傳的 full_key {got!r} 與代碼對照（fund_keys）的 full_key {want!r} 不同；"
@@ -697,8 +698,9 @@ def fetch_nav_chain_with_error(chain_code: str, full_key: str):
       必須等於 `fund_keys` 的 `full_key`，不等就照實回錯誤，不猜。
     - 幣別：**完全不採用** A 鏈回的幣別（結果 dict 的 `currency` 可能是硬編表或推定值，序列 attrs 的幣別也可能是
       來源的預設值，無法可靠分辨是否來源自報）→ 序列 attrs 的 `currency` 一律拿掉，只用持倉手填（第 5 條）。
-    - `fetched_at`：序列 attrs 自帶的優先；沒有時才用 A 鏈 L1 orchestrator 交出的 `fetched_at`
-      （本次那一輪多來源取數的開始時間，帶時區），並在 `CHAIN_ATTR["fetched_at_from"]` 標明。
+    - `fetched_at`：序列 attrs 自帶的優先；沒有時才用 A 鏈 L1 交出的 `chain_started_at`
+      （L1 在被快取的函式內取得的本輪開始時間，帶時區，跟著結果一起快取；命中快取時就是原本那一次的時間），
+      並在 `CHAIN_ATTR["fetched_at_from"]` 標 `"orchestrator"`。本層**不**用當下時間補。
       預存檔那一支照舊由 `rows_from_nav_series` 改取 `cache_updated_at`；累積表的點取各自的 `recorded_at`。
     - 失敗：沒有序列 → `(空 Series, 原文)`，原文逐頁型、逐來源列出 A 鏈交出的失敗原因（未遮蔽）。
     """
@@ -727,7 +729,8 @@ def fetch_nav_chain_with_error(chain_code: str, full_key: str):
     attrs = {k: v for k, v in dict(series.attrs or {}).items() if k != "currency"}
     fetched_at_from = "series_attrs"
     if not attrs.get("fetched_at"):
-        attrs["fetched_at"] = res.get("fetched_at")
+        # A 鏈 L1 在被快取的函式內取得的本輪開始時間（命中快取時是原本那一次的時間，不是當下）
+        attrs["fetched_at"] = res.get("chain_started_at")
         fetched_at_from = "orchestrator"
     failures = "\n".join(lines) or None
     is_cache = (str(attrs.get("source") or "").startswith(CACHE_FALLBACK_SOURCE_PREFIX)

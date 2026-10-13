@@ -1382,6 +1382,10 @@ def fetch_fund_from_moneydj_url_enriched(url: str, oauth_client=None) -> dict:
     (EX-L1ORCH-1 退役)。L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留,本 wrapper
     每次 L1 命中 cache 後仍 re-run finalize(metrics 計算為 in-memory pandas
     vectorized 操作,成本 ~ms 級可接受)。
+    ⚠️ 2026-10-13 狀態更新(有意識的更正,不是漏刪;決策者:AI 總管):上句寫下的同一個 commit
+    (`fdbfb550`)其實把 L1 的 `@_ttl_cache` 一起刪了,此後到 2026-10-13 之間這句**為假**(L1 沒有快取)。
+    2026-10-13 已在 L1 補回(只快取成功、TTL_15MIN、每次交出深拷貝 —— 本 wrapper 的 finalize 會就地
+    改寫 dict 與 Series,不拷貝會污染快取),自此本句**再度為真**。
 
     v19.509:`oauth_client` 選填 —— 透傳給 finalize → nav_history 讀取(同上)。
     """

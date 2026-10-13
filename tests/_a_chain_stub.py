@@ -97,6 +97,7 @@ def install(monkeypatch, scenario: dict, calls: list | None = None) -> list:
     monkeypatch.setattr(fo, "load_fund_code_mapping", lambda *a, **k: dict(mapping))
     monkeypatch.setattr(src, "load_fund_code_mapping", lambda *a, **k: dict(mapping))
     fo._holdings_ttl.cache_clear()
+    fo.fetch_fund_from_moneydj_url.cache_clear()
     fo._FUND_SNAPSHOT.clear()
 
     def _points(code=None, **kwargs):

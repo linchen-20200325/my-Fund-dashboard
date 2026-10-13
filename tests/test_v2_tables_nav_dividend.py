@@ -470,7 +470,8 @@ def test_範圍_L1快取仍是daily_cache_本層沒有疊第二層():
     # A 鏈實際用到的 L1 快取：全部有 cache_clear，而且就是 A 鏈命名空間裡那幾個物件（不是另一份）
     assert ND.CHAIN_CACHED_FUNCTIONS == (fund_orchestration.fetch_nav, fund_orchestration.fetch_risk_metrics,
                                          fund_orchestration.fetch_performance_wb01,
-                                         fund_orchestration.fetch_holdings, fund_orchestration._holdings_ttl)
+                                         fund_orchestration.fetch_holdings, fund_orchestration._holdings_ttl,
+                                         fund_orchestration.fetch_fund_from_moneydj_url)
     assert all(hasattr(f, "cache_clear") for f in ND.CHAIN_CACHED_FUNCTIONS)
 
 

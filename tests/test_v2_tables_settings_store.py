@@ -406,7 +406,7 @@ def test_淨值層_重新取數清掉A鏈實際用到的全部快取_每個恰�
     _stub_nav(monkeypatch, {_A: (_nav(2), None)})
     S.refetch_nav([SECRET])
     assert sorted(cleared) == sorted(fn.__name__ for fn in ND.CHAIN_CACHED_FUNCTIONS)
-    assert len(cleared) == 5 and len(_nav_logs(book)) == 1                # 仍只寫一筆 fetch_log
+    assert len(cleared) == 6 and len(_nav_logs(book)) == 1                # 仍只寫一筆 fetch_log
 
 
 def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分照交(book, monkeypatch):

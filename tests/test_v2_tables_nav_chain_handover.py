@@ -53,7 +53,8 @@ def test_本層沒有自己的頁型迴圈或來源清單():
     import re
     src = (__import__("pathlib").Path(ND.__file__)).read_text(encoding="utf-8")
     body = re.sub(r"(?m)#.*$", "", re.sub(r'(?s)""".*?"""', "", src))   # 只看程式碼，不看說明
-    for token in ("yp010000", "yp010001", "_src_", "fetch_fund_from_moneydj_url", "fetch_fund_multi_source",
+    # 2026-10-13：`fetch_fund_from_moneydj_url` 只准以「名字」出現在 `CHAIN_CACHED_FUNCTIONS`（清快取用），不准被呼叫
+    for token in ("yp010000", "yp010001", "_src_", "fetch_fund_from_moneydj_url(", "fetch_fund_multi_source",
                   "fetch_nav_with_error"):
         assert token not in body, token
 

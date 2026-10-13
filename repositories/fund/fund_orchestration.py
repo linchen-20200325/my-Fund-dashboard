@@ -14,7 +14,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-from shared.ttls import TTL_1HOUR
+from shared.ttls import TTL_1HOUR, TTL_15MIN
 from infra.cache import (  # noqa: F401
     _ttl_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
@@ -1103,6 +1103,56 @@ def _ensure_holdings(result: dict, code: str) -> None:
         }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 2026-10-13 總管技術裁定：補回 L1 的 15 分鐘快取（`49` §4.4：快取只放 L1）
+# ══════════════════════════════════════════════════════════════════════════════
+# 歷史（`git log -S "_ttl_cache"` 實查）：v18.58 起本函式掛 `@register_cache` +
+# `@_ttl_cache(ttl_sec=TTL_15MIN, maxsize=64)`（「同 code 跨多保單載入時免重複 HTTP」；
+# `7fff19c6` 改用 `TTL_15MIN` 常數）。`fdbfb550`（#457，v19.240 R8 EX-L1ORCH-1 退役）
+# 把 inline `calc_metrics` 上提 L2 時，連同函式上方那段區塊註解一起刪掉了這兩行裝飾器；
+# 該 commit 的訊息、`STATE.md`、`CLAUDE.md` 都**沒有**任何一句提到要拿掉快取，而它同時新增的
+# `services/fund_service.py::fetch_fund_from_moneydj_url_enriched` docstring 還寫著
+# 「L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留」—— 判定為無意間刪掉，不是刻意移除。
+# ⚠️ 但那次上提確實帶來一個當年沒有的風險：L2 `finalize_fund_metrics`／`_merge_nav_history_series`
+#    會**就地改寫**回傳的 dict 與 Series。`_ttl_cache` 命中時回的是同一個物件 → 直接掛回去會讓
+#    下游的改寫污染快取。所以這次補回時：快取裡存一份、**每次一律交出深拷貝**（命中與未命中都是）。
+# 只快取成功：有 ≥ `NAV_CACHE_MIN_POINTS` 筆淨值序列、而且不是 `cache/nav` 預存檔退回的那一種
+# （預存檔＝即時全敗，屬可重試的失敗）。全來源失敗、只有 meta、只拿到幾筆 → 不入快取。
+# `chain_started_at`（本輪開始時間，世界協調時間）在被快取的函式內取得、跟著結果一起快取 ——
+# 命中時交出的是原本那一次的時間，下游不得用當下時間覆寫。
+# 行為改變：A 鏈所有呼叫者（舊 UI、`fund_row`、`backfill_to_gs`、B 線）**同一網址 15 分鐘內重抓會命中快取**。
+_MONEYDJ_URL_CACHE_SOURCE_PREFIX = "GitHubActions:cache/nav/"
+
+
+def _moneydj_url_result_cacheable(result) -> bool:
+    """`fetch_fund_from_moneydj_url` 的「成功」判準（只有成功才入 15 分鐘快取）。"""
+    from shared.data_quality import NAV_CACHE_MIN_POINTS
+    if not isinstance(result, dict):
+        return False
+    s = result.get("series")
+    if not isinstance(s, pd.Series) or len(s) < NAV_CACHE_MIN_POINTS:
+        return False
+    attrs = getattr(s, "attrs", None) or {}
+    if str(attrs.get("source") or "").startswith(_MONEYDJ_URL_CACHE_SOURCE_PREFIX) or "nav_quality" in attrs:
+        return False
+    return True
+
+
+def _deepcopy_result(fn):
+    """最外層：每次交出深拷貝（命中與未命中都是），下游就地改寫碰不到快取裡那一份。
+    `functools.wraps` 一併帶出內層的 `cache_clear()`／`cache_info()` 與 `__wrapped__`。"""
+    import copy as _copy
+    import functools as _functools
+
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return _copy.deepcopy(fn(*args, **kwargs))
+    return wrapper
+
+
+@_deepcopy_result
+@register_cache
+@_ttl_cache(ttl_sec=TTL_15MIN, maxsize=64, cache_if=_moneydj_url_result_cacheable)   # 2026-10-13 補回（見上方）
 def fetch_fund_from_moneydj_url(url: str) -> dict:
     """
     輸入任何 MoneyDJ 基金頁面網址（或純代碼如 tlzf9），
@@ -1128,6 +1178,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     # v19.61 E1：_moneydj_fetched_at 記錄抓取當下 wallclock（YYYY-MM-DD HH:MM:SS），
     # 給 Tab5 組合健檢「資料新鮮度」banner 顯示「抓取於 / NAV 日期 / 延遲 Nd」用。
     # 純新增欄位，零影響既有 caller（讀不到的就跳過）。
+    # 2026-10-13：本輪開始時間（帶時區），跟著結果一起快取（見上方「補回 L1 的 15 分鐘快取」）。
+    _chain_started_at = _dt_mj.datetime.now(_dt_mj.timezone.utc).isoformat()
     result = dict(fund_name="", full_key="", fund_code="", category="",
                   risk_level="", dividend_freq="", currency="",  # v19.505:不矇 USD;
                   # 空 init → protect loop 不會把假 USD 蓋回多來源解析出的真幣別(§1)
@@ -1142,7 +1194,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                   # C2 v19.208 F-PROV-1:加 source orchestrator-level(§2.2)
                   source="MoneyDJ:fund_url_orchestrator",
                   _moneydj_fetched_at=_dt_mj.datetime.now().strftime(
-                      "%Y-%m-%d %H:%M:%S"))
+                      "%Y-%m-%d %H:%M:%S"),
+                  chain_started_at=_chain_started_at)   # 2026-10-13 新增鍵
 
     # ── v18.22: 先 canonicalize 非標準變體 URL（mobile / 平台子網域）──
     #           m.moneydj.com / chubb.moneydj.com /w/wr/ 等都轉成
@@ -1813,8 +1866,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         print(f"[snapshot] 💾 {_snap_key} 快照已更新")
 
     _ensure_currency(result, code)   # v19.505:legacy 路徑收口修幣別
-    # 2026-10-13 新增鍵：放在快照回填之後才掛，免得快照裡上一次的原文蓋掉這一次的。
+    # 2026-10-13 新增鍵：放在快照回填之後才掛，免得快照裡上一次的原文／開始時間蓋掉這一次的。
     result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)
+    result["chain_started_at"] = _chain_started_at
     return result
 
 

@@ -333,7 +333,7 @@ def is_fetch_failed(obj) -> bool:
         return False
 
 
-def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
+def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None, cache_if=None):
     """TTL + LRU 兩層快取裝飾器。
 
     cache key 由 (args, sorted kwargs) 組成；無法 hash 的引數（list/dict）跳過快取直走原 fn。
@@ -342,6 +342,10 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
     2026-08-31（v3 §02「只快取成功結果」）：被 `mark_fetch_failed()` 標記過的結果
     **不入快取**，下次呼叫會真的重試（重試是否出門由 `infra.source_backoff` 決定，
     見上方 module 註解）。未標記者照舊快取 —— 既有使用者零行為改變。
+
+    2026-10-13（總管技術裁定；與 `_daily_cache(cache_if=...)` 對稱）：選填 `cache_if(result) -> bool`，
+    False → 不入快取（計入 `uncached_fail`）。給**回傳 dict 的 fetcher** 用 —— dict 掛不上
+    `mark_fetch_failed` 的標記（見該函式 TypeError 一支）。**預設 None ＝ 行為與改動前逐字相同。**
 
     Wrapper 暴露：cache_clear() / cache_info()
         → {size, maxsize, ttl_sec, hits, misses, uncached_fail}
@@ -386,6 +390,9 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
             # ⚠️ 這裡**不判斷「空不空」** —— 空有兩種意思，裝飾器沒有資訊分辨，
             #    猜錯任一邊都違憲。理由見本檔上方 module 註解。
             if is_fetch_failed(result):
+                _stats["uncached_fail"] += 1
+                return result
+            if cache_if is not None and not cache_if(result):   # 2026-10-13：選填，見 docstring
                 _stats["uncached_fail"] += 1
                 return result
             _cache[key] = (now, result)
