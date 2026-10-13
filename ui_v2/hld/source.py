@@ -75,6 +75,8 @@ def load_live() -> dict:
                 "fund_code": h["fund_code"],
                 "full_key": resolved[h["fund_code"]]["full_key"],
                 "portal": resolved[h["fund_code"]]["portal"],
+                # 2026-10-13：淨值走 A 鏈，交查表前的代碼（A 鏈自己查對照表）；只改接線。
+                "chain_code": resolved[h["fund_code"]]["parsed_code"],
                 "holding_ccy": h["ccy"],
             }
             for h in holding if h["fund_code"] in resolved

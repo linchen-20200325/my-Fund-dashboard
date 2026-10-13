@@ -1718,6 +1718,20 @@ def _morningstar_screener_secid(isin: str, currency: str = "") -> str:
     return ""
 
 
+# 2026-10-13 總管技術裁定 B-2（只加 attrs，不改任何選擇與順序）：晨星序列的 secId 從哪裡來、
+# `currencyId` 從哪裡來。B 線（`services/v2_tables/nav_dividend.py`）據此拒收「以文字搜尋得來的 secId」
+# （客戶硬規則：不以基金名稱推定）。A 鏈本身照舊採用，行為不變。
+MS_SECID_ORIGIN_ATTR = "secid_origin"
+MS_SECID_FROM_POOL = "pool"                    # 選股池（使用者自己的對照表）
+MS_SECID_FROM_HARDCODED = "hardcoded_map"      # `_MORNINGSTAR_SECID_MAP` 寫死表
+MS_SECID_FROM_ISIN = "pool_isin_search"        # 以選股池的 ISIN 精確查（screener／SecuritySearch）
+MS_SECID_FROM_NAME_SEARCH = "name_search"      # 以基金名稱文字搜尋（`_morningstar_search_secid(fund_name)`）
+MS_SECID_FROM_CODE_SEARCH = "code_search"      # 以代碼文字搜尋（名稱查不到或沒給名稱時的退路）
+MS_CCY_ORIGIN_ATTR = "currency_id_origin"
+MS_CCY_FROM_HARDCODED = "hardcoded_map"        # `currencyId` 取自寫死表手工宣告的幣別
+MS_CCY_FROM_HINT = "caller_hint"               # `currencyId` 取自呼叫端已確認的幣別
+
+
 def _src_morningstar_nav(code: str, fund_name: str = "",
                          currency_hint: str = "") -> "pd.Series":
     """
@@ -1744,6 +1758,9 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
     except Exception:  # noqa: BLE001 — 選股池不可用不阻斷抓取鏈(退硬編/搜尋)
         _user_mapped = None
     _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
+    # 2026-10-13 B-2：只記出處（`_mapped` 的選法一字未改）
+    _secid_origin = (MS_SECID_FROM_POOL if (_user_mapped and _user_mapped[0])
+                     else MS_SECID_FROM_HARDCODED if _mapped[0] else "")
     # 2026-10-10 客戶裁示(未知幣別 ≠ USD):查不到幣別就留空,不再死預設 USD;
     # 硬編表手工宣告的幣別(含 secId 待補者)照舊保留。
     # ~~currency_id = str(_mapped[1] or "").strip().upper()~~(「美元」會原樣送出)
@@ -1753,11 +1770,13 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
     sec_id = _mapped[0]
     currency_id = _normalize_declared_ccy(
         (_MORNINGSTAR_SECID_MAP.get(_code) or ("", ""))[1])
+    _ccy_origin = MS_CCY_FROM_HARDCODED if currency_id else ""   # 2026-10-13 B-2：只記出處
     # ~~2026-10-10 複驗 M1 / Q2:幣別來源 = 硬編表/池 secId 列 → 池使用者幣別 → 呼叫端 hint。~~
     # ~~(池使用者幣別 `resolve_currency` 那一段已移除)~~
     # 2026-10-10 客戶裁示 C1-3:幣別來源 = 晨星硬編表 → 呼叫端 hint;選股池幣別不採。
     if not currency_id and currency_hint:
         currency_id = _normalize_declared_ccy(currency_hint)   # 2026-10-10 批次二:同一套
+        _ccy_origin = MS_CCY_FROM_HINT if currency_id else _ccy_origin
     if not currency_id:
         # 幣別未知 → 後段的 timeseries 必然 fail closed;secId 搜尋(screener /
         # SecuritySearch)的結果用不到,提早結束、不發任何晨星請求(複驗建議 3c)。
@@ -1788,6 +1807,8 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
                 #   SecuritySearch 的 URL 本身不帶幣別參數(只解析 secId / 名稱)。
                 sec_id = (_morningstar_screener_secid(_isin, currency_id)
                           or _morningstar_search_secid(_isin, currency_id))
+                if sec_id:
+                    _secid_origin = MS_SECID_FROM_ISIN   # 2026-10-13 B-2：只記出處
                 # ~~使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)~~
                 # ~~_auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")~~
                 # 2026-10-10 客戶裁示 Q2(稽核一致性修正;有意識的政策變更,不是漏刪):
@@ -1870,8 +1891,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
         _query = fund_name.strip() if fund_name.strip() else _code
         if _query:
             sec_id = _morningstar_search_secid(_query)
+            # 2026-10-13 B-2：只記出處（`_query` 是名稱時＝名稱搜尋；沒給名稱時 `_query` 就是代碼）
+            _secid_origin = MS_SECID_FROM_NAME_SEARCH if _query != _code else MS_SECID_FROM_CODE_SEARCH
             if not sec_id and _query != _code:
                 sec_id = _morningstar_search_secid(_code)
+                _secid_origin = MS_SECID_FROM_CODE_SEARCH
 
     if not sec_id:
         print(f"[src_morningstar] {_code}: 無 secId（未在映射表且搜尋失敗）")
@@ -1936,6 +1960,8 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
             # 不宣告出來,下游長歷史救援就會拿它整條蓋掉別種幣別的序列(§1/§4.1)。
             # 慣例同 `repositories/fundclear_offshore.py` 的 attrs["currency"]。
             s.attrs["currency"] = str(currency_id or "").strip().upper()
+            s.attrs[MS_SECID_ORIGIN_ATTR] = _secid_origin     # 2026-10-13 B-2
+            s.attrs[MS_CCY_ORIGIN_ATTR] = _ccy_origin          # 2026-10-13 B-2
             return s
     except Exception as _e2:
         print(f"[src_morningstar] {_code} UK timeseries: {_e2}")
@@ -1963,6 +1989,8 @@ def _src_morningstar_nav(code: str, fund_name: str = "",
                 s.attrs["source"] = f"Morningstar:lt:{_tok}:{sec_id}"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 s.attrs["currency"] = str(currency_id or "").strip().upper()  # 同上(§1/§4.1)
+                s.attrs[MS_SECID_ORIGIN_ATTR] = _secid_origin     # 2026-10-13 B-2
+                s.attrs[MS_CCY_ORIGIN_ATTR] = _ccy_origin          # 2026-10-13 B-2
                 return s
         except Exception as _e3:
             print(f"[src_morningstar] {_code} lt/{_tok}: {_e3}")
@@ -3681,12 +3709,24 @@ def fetch_fund_multi_source(code: str,
     # `except Exception: print` 吞掉 → fetch_fund_from_moneydj_url 的 Step 2
     # 多來源聚合 + alt page_type 重試(境內↔境外切換)自 v19.248 全滅。
     from repositories.fund.fund_orchestration import _fetch_fund_single
+    from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY   # 2026-10-13
+
+    # 2026-10-13 稽核 5 N3：多候選代碼時，前面候選的逐來源失敗原文也要留（只記錄，不影響選擇）。
+    _all_failures: list = []
+
+    def _with_failures(r):
+        if isinstance(r, dict) and len(code_candidates) > 1:
+            r[NAV_SOURCE_FAILURES_KEY] = list(_all_failures)
+        return r
 
     for _candidate in code_candidates:
         _result = _fetch_fund_single(
             _candidate, force_refresh=force_refresh,
             page_type=page_type    # ← v13.4: 保留原始 page_type 傳遞
         )
+        for _f in (_result.get(NAV_SOURCE_FAILURES_KEY) or ()) if isinstance(_result, dict) else ():
+            if isinstance(_f, dict):
+                _all_failures.append({**_f, "candidate": _candidate})
         _status = classify_fetch_status(_result)
         # 2026-08-11 修:原本寫 `_result.get('error','')[:40]`。`error` 這個 key
         # **一定存在**(`_fetch_fund_single` 的 result dict 初始化就有 `error=None`),
@@ -3713,7 +3753,7 @@ def fetch_fund_multi_source(code: str,
               f"err:{(_result.get('error') or '')[:40]})",
               file=_sys_orch.stderr)
         if _status == "complete":
-            return _attach_prov(_result, ":complete")
+            return _with_failures(_attach_prov(_result, ":complete"))
         if best_result is None:
             best_result = _result
         elif (classify_fetch_status(best_result) == "failed"
@@ -3721,7 +3761,7 @@ def fetch_fund_multi_source(code: str,
             best_result = _result
 
     if best_result:
-        return _attach_prov(best_result, ":partial_or_failed")
+        return _with_failures(_attach_prov(best_result, ":partial_or_failed"))
     return _attach_prov({
         "fund_code": code, "error": f"所有候選代碼均無資料：{code_candidates}",
         "series": None, "fund_name": "", "nav_latest": None,

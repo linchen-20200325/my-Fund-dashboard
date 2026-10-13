@@ -244,7 +244,8 @@ def test_重新取數_淨值層按下後只記一筆fetch_log_SET1淨值列印�
     series.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
     monkeypatch.setattr(S.alo_holdings, "load_alo_tables",
                         lambda values: {"holding": [{"fund_code": "ZZNAVTESTA1", "ccy": "USD"}]})
-    monkeypatch.setattr(ND, "fetch_nav_with_error", lambda full_key, portal="": (series, None))
+    # 2026-10-13：淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error`（有意識的更正，不是漏刪）
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda chain_code, full_key: (series, None))
     at = _run()
     at.radio(key="live_set5_tier").set_value("淨值").run()
     btn = [b for b in at.button if b.label == "重新取數"][0]

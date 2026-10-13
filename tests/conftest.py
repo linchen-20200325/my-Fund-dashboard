@@ -60,6 +60,16 @@ import pytest as _pytest
 
 
 @_pytest.fixture(autouse=True)
+def _clear_moneydj_url_cache():
+    """2026-10-13：A 鏈 L1 `fetch_fund_from_moneydj_url` 補回 15 分鐘快取（module-level、跨呼叫存活）。
+    測試隔離同上一個 fixture 的理由：前一條測試的替身結果不得被下一條命中。驗證快取本身的測試在測試體內自己呼叫。"""
+    from repositories.fund.fund_orchestration import fetch_fund_from_moneydj_url as _f
+    _f.cache_clear()
+    yield
+    _f.cache_clear()
+
+
+@_pytest.fixture(autouse=True)
 def _reset_source_backoff():
     from infra import source_backoff as _sb
     _sb.reset_all()

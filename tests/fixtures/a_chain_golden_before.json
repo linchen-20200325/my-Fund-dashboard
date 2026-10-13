@@ -1,0 +1,5734 @@
+{
+ "S1_complete_fundclear": {
+  "auto": {
+   "category": "",
+   "currency": "USD",
+   "data_source": "FundClear",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF001",
+   "fund_code": "ZZF001",
+   "fund_name": "測試基金一",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {
+    "all_high": 10.24,
+    "all_high_date": "2026-02-06",
+    "all_low": 9.0,
+    "all_low_date": "2025-11-03",
+    "annual_div": 0,
+    "annual_div_rate": 0,
+    "bb_color": "#ff9800",
+    "bb_lower": 10.0267,
+    "bb_lower_series": {
+     "__series__": [
+      [
+       "2026-01-27",
+       9.13
+      ],
+      [
+       "2026-01-28",
+       9.3116
+      ],
+      [
+       "2026-01-29",
+       9.5456
+      ],
+      [
+       "2026-01-30",
+       9.9767
+      ],
+      [
+       "2026-02-02",
+       9.9867
+      ],
+      [
+       "2026-02-03",
+       9.9967
+      ],
+      [
+       "2026-02-04",
+       10.0067
+      ],
+      [
+       "2026-02-05",
+       10.0167
+      ],
+      [
+       "2026-02-06",
+       10.0267
+      ]
+     ],
+     "attrs": {}
+    },
+    "bb_mid": 10.145,
+    "bb_signal": "通道 90% 位置",
+    "bb_upper": 10.2633,
+    "bb_upper_series": {
+     "__series__": [
+      [
+       "2026-01-27",
+       10.709
+      ],
+      [
+       "2026-01-28",
+       10.6444
+      ],
+      [
+       "2026-01-29",
+       10.5274
+      ],
+      [
+       "2026-01-30",
+       10.2133
+      ],
+      [
+       "2026-02-02",
+       10.2233
+      ],
+      [
+       "2026-02-03",
+       10.2333
+      ],
+      [
+       "2026-02-04",
+       10.2433
+      ],
+      [
+       "2026-02-05",
+       10.2533
+      ],
+      [
+       "2026-02-06",
+       10.2633
+      ]
+     ],
+     "attrs": {}
+    },
+    "buy1": 9.6447,
+    "buy2": 9.2883,
+    "buy3": 8.9319,
+    "buy_basis": 10.0011,
+    "buy_distance_pct": {
+     "b1": 6.17,
+     "b2": 10.25,
+     "b3": 14.65
+    },
+    "buy_mode": "淨值σ通道",
+    "calmar": null,
+    "calmar_source": null,
+    "div_stability": null,
+    "div_trend": 0,
+    "div_yield_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "DIVIDEND_YIELD",
+     "source_a": "self_calc:sum(12M_div)/current_nav",
+     "source_b": "MoneyDJ:dividend_yield",
+     "status": "b_missing",
+     "value_a": 0.0,
+     "value_b": null
+    },
+    "high_1y": 10.24,
+    "high_2y": 10.24,
+    "high_3y": 10.24,
+    "high_date_1y": "2026-02-06",
+    "high_date_2y": "2026-02-06",
+    "high_date_3y": "2026-02-06",
+    "is_sparse": true,
+    "low_1y": 9.0,
+    "low_2y": 9.0,
+    "low_3y": 9.0,
+    "low_date_1y": "2025-11-03",
+    "low_date_2y": "2025-11-03",
+    "low_date_3y": "2025-11-03",
+    "ma20": 10.145,
+    "ma60": null,
+    "max_drawdown": null,
+    "max_drawdown_source": null,
+    "monthly_div": 0,
+    "nav": 10.24,
+    "nav_coverage": {
+     "coverage": 0.427,
+     "max_gap_days": 61,
+     "sparse": true
+    },
+    "near_threshold_pct": 2.0,
+    "pos_color": "#888888",
+    "pos_label": "正常波動區",
+    "ret_1m": 2.09,
+    "ret_1w": 0.49,
+    "ret_1y": null,
+    "ret_1y_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_1Y_RETURN",
+     "source_a": "self_calc:nav[-1]/nav[-252]-1",
+     "source_b": "MoneyDJ:wb01:1Y",
+     "status": "b_missing",
+     "value_a": 0.1378,
+     "value_b": null
+    },
+    "ret_1y_total": 13.78,
+    "ret_1y_window_days": 95,
+    "ret_3m": null,
+    "ret_3y": null,
+    "ret_3y_ann": null,
+    "ret_3y_cum": null,
+    "ret_5y_ann": null,
+    "ret_5y_cum": null,
+    "ret_6m": null,
+    "risk_metric_meta": {
+     "calmar": {
+      "max_dd_3y_pct": null,
+      "min_required": 756,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（28/756 交易日）",
+      "ret_3y_ann_price_pct": null,
+      "ret_3y_ann_tr_pct": null,
+      "source": null
+     },
+     "hl_windows": {
+      "1y": {
+       "actual_span_days": 95.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期95天",
+       "n_points": 28,
+       "reason": "視窗涵蓋不足（28/252 交易日,實際涵蓋 95天）→ 已退回全序列計算,此值**不是**「近 252 交易日」的值",
+       "requested_days": 252
+      },
+      "2y": {
+       "actual_span_days": 95.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期95天",
+       "n_points": 28,
+       "reason": "視窗涵蓋不足（28/504 交易日,實際涵蓋 95天）→ 已退回全序列計算,此值**不是**「近 504 交易日」的值",
+       "requested_days": 504
+      },
+      "3y": {
+       "actual_span_days": 95.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期95天",
+       "n_points": 28,
+       "reason": "視窗涵蓋不足（28/756 交易日,實際涵蓋 95天）→ 已退回全序列計算,此值**不是**「近 756 交易日」的值",
+       "requested_days": 756
+      }
+     },
+     "max_drawdown": {
+      "min_required": 125,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（27/125 交易日）",
+      "source": null
+     },
+     "mixed_period_warning": null,
+     "sharpe": {
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reconcile_blocked_reason": null,
+      "self_calc_reason": "樣本不足（27/250 交易日）",
+      "self_calc_value": null,
+      "source": null
+     },
+     "sortino": {
+      "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（27/250 交易日）",
+      "source": null
+     }
+    },
+    "risk_table": {},
+    "sell1": 10.3575,
+    "sell2": 10.7139,
+    "sell3": 11.0703,
+    "sell_basis": 10.0011,
+    "sell_distance_pct": {
+     "s1": -1.13,
+     "s2": -4.42,
+     "s3": -7.5
+    },
+    "sharpe": null,
+    "sharpe_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_SHARPE",
+     "source_a": "self_calc:mean/std*sqrt(252)",
+     "source_b": "MoneyDJ:wb07:Sharpe",
+     "status": "both_missing",
+     "value_a": null,
+     "value_b": null
+    },
+    "sharpe_source": null,
+    "sortino": null,
+    "sortino_source": null,
+    "sparse_reason": "累積序列稀疏(覆蓋 43%、最大缺口 61 天)→ 年化指標不給假精確(§1):std_1y, std_2y",
+    "std_1y": null,
+    "std_2y": null,
+    "std_amount": 0.3564,
+    "std_multi": {
+     "1年": 31.21,
+     "2年": 31.21,
+     "3年": 31.21,
+     "5年": 31.21
+    },
+    "std_multi_cn": {
+     "1年": 31.21,
+     "2年": 31.21,
+     "3年": 31.21,
+     "5年": null
+    },
+    "std_source": "nav",
+    "year_high_nav": null,
+    "year_low_nav": null
+   },
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": 10.24,
+   "nav_span_days": 95,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2025-11-03",
+      9.0
+     ],
+     [
+      "2025-11-04",
+      9.01
+     ],
+     [
+      "2025-11-05",
+      9.02
+     ],
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ]
+    ],
+    "attrs": {
+     "nav_history_merged": "+3 pts from GoogleSheet:nav_history:ZZF001",
+     "source": "FundClear:SmartFundAPI:nav"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 25,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "FundClear(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 25,
+     "source": "FundClear",
+     "span_days": 32,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    },
+    {
+     "added": 3,
+     "hist_points": 4,
+     "merged": true,
+     "note": "累積序列併入 +3 筆（live 25 → 28）",
+     "source": "nav_history_merge",
+     "success": true
+    },
+    {
+     "source": "calc_metrics",
+     "success": true
+    }
+   ],
+   "status": "complete",
+   "umbrella_fund": "",
+   "warning": null,
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF001"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF001"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF001"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF001"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF001"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF001"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF001"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF001"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF001"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF001"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF001"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "USD",
+   "data_source": "FundClear",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF001",
+   "fund_code": "ZZF001",
+   "fund_name": "測試基金一",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": 10.24,
+   "nav_span_days": 32,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ]
+    ],
+    "attrs": {
+     "currency": "USD",
+     "source": "FundClear:SmartFundAPI:nav"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 25,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "FundClear(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 25,
+     "source": "FundClear",
+     "span_days": 32,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 部分資料取得成功（淨值歷史或風險指標不完整）",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF001"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF001"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF001"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF001"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF001"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF001"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF001"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF001"
+   ]
+  ],
+  "page_type": "yp010000"
+ },
+ "S2_shortwindow_rescue": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "data_source": "tcb_moneydj",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF002",
+   "fund_code": "ZZF002",
+   "fund_name": "測試基金二",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {
+    "all_high": 10.29,
+    "all_high_date": "2026-02-13",
+    "all_low": 10.0,
+    "all_low_date": "2026-01-05",
+    "annual_div": 0,
+    "annual_div_rate": 0,
+    "bb_color": "#ff9800",
+    "bb_lower": 10.0767,
+    "bb_lower_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       9.9767
+      ],
+      [
+       "2026-02-02",
+       9.9867
+      ],
+      [
+       "2026-02-03",
+       9.9967
+      ],
+      [
+       "2026-02-04",
+       10.0067
+      ],
+      [
+       "2026-02-05",
+       10.0167
+      ],
+      [
+       "2026-02-06",
+       10.0267
+      ],
+      [
+       "2026-02-09",
+       10.0367
+      ],
+      [
+       "2026-02-10",
+       10.0467
+      ],
+      [
+       "2026-02-11",
+       10.0567
+      ],
+      [
+       "2026-02-12",
+       10.0667
+      ],
+      [
+       "2026-02-13",
+       10.0767
+      ]
+     ],
+     "attrs": {}
+    },
+    "bb_mid": 10.195,
+    "bb_signal": "通道 90% 位置",
+    "bb_upper": 10.3133,
+    "bb_upper_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       10.2133
+      ],
+      [
+       "2026-02-02",
+       10.2233
+      ],
+      [
+       "2026-02-03",
+       10.2333
+      ],
+      [
+       "2026-02-04",
+       10.2433
+      ],
+      [
+       "2026-02-05",
+       10.2533
+      ],
+      [
+       "2026-02-06",
+       10.2633
+      ],
+      [
+       "2026-02-09",
+       10.2733
+      ],
+      [
+       "2026-02-10",
+       10.2833
+      ],
+      [
+       "2026-02-11",
+       10.2933
+      ],
+      [
+       "2026-02-12",
+       10.3033
+      ],
+      [
+       "2026-02-13",
+       10.3133
+      ]
+     ],
+     "attrs": {}
+    },
+    "buy1": 10.057,
+    "buy2": 9.969,
+    "buy3": 9.881,
+    "buy_basis": 10.145,
+    "buy_distance_pct": {
+     "b1": 2.32,
+     "b2": 3.22,
+     "b3": 4.14
+    },
+    "buy_mode": "淨值σ通道",
+    "calmar": null,
+    "calmar_source": null,
+    "div_stability": null,
+    "div_trend": 0,
+    "div_yield_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "DIVIDEND_YIELD",
+     "source_a": "self_calc:sum(12M_div)/current_nav",
+     "source_b": "MoneyDJ:dividend_yield",
+     "status": "b_missing",
+     "value_a": 0.0,
+     "value_b": null
+    },
+    "high_1y": 10.29,
+    "high_2y": 10.29,
+    "high_3y": 10.29,
+    "high_date_1y": "2026-02-13",
+    "high_date_2y": "2026-02-13",
+    "high_date_3y": "2026-02-13",
+    "low_1y": 10.0,
+    "low_2y": 10.0,
+    "low_3y": 10.0,
+    "low_date_1y": "2026-01-05",
+    "low_date_2y": "2026-01-05",
+    "low_date_3y": "2026-01-05",
+    "ma20": 10.195,
+    "ma60": null,
+    "max_drawdown": null,
+    "max_drawdown_source": null,
+    "monthly_div": 0,
+    "nav": 10.29,
+    "near_threshold_pct": 2.0,
+    "pos_color": "#ffa726",
+    "pos_label": "小漲停利 💰 (出 20%)",
+    "ret_1m": 2.08,
+    "ret_1w": 0.49,
+    "ret_1y": null,
+    "ret_1y_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_1Y_RETURN",
+     "source_a": "self_calc:nav[-1]/nav[-252]-1",
+     "source_b": "MoneyDJ:wb01:1Y",
+     "status": "b_missing",
+     "value_a": 0.029,
+     "value_b": null
+    },
+    "ret_1y_total": 2.9,
+    "ret_1y_window_days": 39,
+    "ret_3m": null,
+    "ret_3y": null,
+    "ret_3y_ann": null,
+    "ret_3y_cum": null,
+    "ret_5y_ann": null,
+    "ret_5y_cum": null,
+    "ret_6m": null,
+    "risk_metric_meta": {
+     "calmar": {
+      "max_dd_3y_pct": null,
+      "min_required": 756,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（30/756 交易日）",
+      "ret_3y_ann_price_pct": null,
+      "ret_3y_ann_tr_pct": null,
+      "source": null
+     },
+     "hl_windows": {
+      "1y": {
+       "actual_span_days": 39.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期39天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/252 交易日,實際涵蓋 39天）→ 已退回全序列計算,此值**不是**「近 252 交易日」的值",
+       "requested_days": 252
+      },
+      "2y": {
+       "actual_span_days": 39.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期39天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/504 交易日,實際涵蓋 39天）→ 已退回全序列計算,此值**不是**「近 504 交易日」的值",
+       "requested_days": 504
+      },
+      "3y": {
+       "actual_span_days": 39.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期39天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/756 交易日,實際涵蓋 39天）→ 已退回全序列計算,此值**不是**「近 756 交易日」的值",
+       "requested_days": 756
+      }
+     },
+     "max_drawdown": {
+      "min_required": 125,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（29/125 交易日）",
+      "source": null
+     },
+     "mixed_period_warning": null,
+     "sharpe": {
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reconcile_blocked_reason": null,
+      "self_calc_reason": "樣本不足（29/250 交易日）",
+      "self_calc_value": null,
+      "source": null
+     },
+     "sortino": {
+      "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（29/250 交易日）",
+      "source": null
+     }
+    },
+    "risk_table": {},
+    "sell1": 10.233,
+    "sell2": 10.321,
+    "sell3": 10.409,
+    "sell_basis": 10.145,
+    "sell_distance_pct": {
+     "s1": 0.56,
+     "s2": -0.3,
+     "s3": -1.14
+    },
+    "sharpe": null,
+    "sharpe_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_SHARPE",
+     "source_a": "self_calc:mean/std*sqrt(252)",
+     "source_b": "MoneyDJ:wb07:Sharpe",
+     "status": "both_missing",
+     "value_a": null,
+     "value_b": null
+    },
+    "sharpe_source": null,
+    "sortino": null,
+    "sortino_source": null,
+    "std_1y": 0.01,
+    "std_2y": 0.01,
+    "std_amount": 0.088,
+    "std_multi": {
+     "1年": 0.01,
+     "2年": 0.01,
+     "3年": 0.01,
+     "5年": 0.01
+    },
+    "std_multi_cn": {
+     "1年": 0.01,
+     "2年": 0.01,
+     "3年": 0.01,
+     "5年": null
+    },
+    "std_source": "nav",
+    "year_high_nav": null,
+    "year_low_nav": null
+   },
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 39,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ],
+     [
+      "2026-02-09",
+      10.25
+     ],
+     [
+      "2026-02-10",
+      10.26
+     ],
+     [
+      "2026-02-11",
+      10.27
+     ],
+     [
+      "2026-02-12",
+      10.28
+     ],
+     [
+      "2026-02-13",
+      10.29
+     ]
+    ],
+    "attrs": {
+     "source": "MoneyDJ:tcb:nav30"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 30,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "tcb_moneydj(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 30,
+     "source": "tcb_moneydj",
+     "span_days": 39,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    },
+    {
+     "source": "calc_metrics",
+     "success": true
+    }
+   ],
+   "status": "complete",
+   "umbrella_fund": "",
+   "warning": null,
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF002"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF002"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF002"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF002"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF002"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF002"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF002"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF002"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "data_source": "tcb_moneydj",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF002",
+   "fund_code": "ZZF002",
+   "fund_name": "測試基金二",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 39,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ],
+     [
+      "2026-02-09",
+      10.25
+     ],
+     [
+      "2026-02-10",
+      10.26
+     ],
+     [
+      "2026-02-11",
+      10.27
+     ],
+     [
+      "2026-02-12",
+      10.28
+     ],
+     [
+      "2026-02-13",
+      10.29
+     ]
+    ],
+    "attrs": {
+     "source": "MoneyDJ:tcb:nav30"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 30,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "tcb_moneydj(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 30,
+     "source": "tcb_moneydj",
+     "span_days": 39,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 部分資料取得成功（淨值歷史或風險指標不完整）",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF002"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF002"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF002"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF002"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF002"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF002"
+   ]
+  ],
+  "page_type": "yp010000"
+ },
+ "S3_all_fail": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": "❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF003\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF003\n② 於下方手動填入淨值、配息數據",
+   "full_key": "ZZF003",
+   "fund_code": "ZZF003",
+   "fund_name": "",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": null,
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "failed",
+   "umbrella_fund": "",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF003"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF003"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF003"
+   ],
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF003"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF003"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF003"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": "❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF003\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF003\n② 於下方手動填入淨值、配息數據",
+   "full_key": "ZZF003",
+   "fund_code": "ZZF003",
+   "fund_name": "",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": null,
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "failed",
+   "umbrella_fund": "",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF003"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF003"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF003"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF003"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF003"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF003"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF003"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF003"
+   ]
+  ],
+  "page_type": "yp010001"
+ },
+ "S4_cache_fallback": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "data_source": "moneydj_legacy_scrape",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": "❌ 所有來源均無法取得資料",
+   "full_key": "ZZF004",
+   "fund_code": "ZZF004",
+   "fund_name": "",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {
+    "all_high": 10.39,
+    "all_high_date": "2026-02-27",
+    "all_low": 10.0,
+    "all_low_date": "2026-01-05",
+    "annual_div": 0,
+    "annual_div_rate": 0,
+    "bb_color": "#ff9800",
+    "bb_lower": 10.1767,
+    "bb_lower_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       9.9767
+      ],
+      [
+       "2026-02-02",
+       9.9867
+      ],
+      [
+       "2026-02-03",
+       9.9967
+      ],
+      [
+       "2026-02-04",
+       10.0067
+      ],
+      [
+       "2026-02-05",
+       10.0167
+      ],
+      [
+       "2026-02-06",
+       10.0267
+      ],
+      [
+       "2026-02-09",
+       10.0367
+      ],
+      [
+       "2026-02-10",
+       10.0467
+      ],
+      [
+       "2026-02-11",
+       10.0567
+      ],
+      [
+       "2026-02-12",
+       10.0667
+      ],
+      [
+       "2026-02-13",
+       10.0767
+      ],
+      [
+       "2026-02-16",
+       10.0867
+      ],
+      [
+       "2026-02-17",
+       10.0967
+      ],
+      [
+       "2026-02-18",
+       10.1067
+      ],
+      [
+       "2026-02-19",
+       10.1167
+      ],
+      [
+       "2026-02-20",
+       10.1267
+      ],
+      [
+       "2026-02-23",
+       10.1367
+      ],
+      [
+       "2026-02-24",
+       10.1467
+      ],
+      [
+       "2026-02-25",
+       10.1567
+      ],
+      [
+       "2026-02-26",
+       10.1667
+      ],
+      [
+       "2026-02-27",
+       10.1767
+      ]
+     ],
+     "attrs": {}
+    },
+    "bb_mid": 10.295,
+    "bb_signal": "通道 90% 位置",
+    "bb_upper": 10.4133,
+    "bb_upper_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       10.2133
+      ],
+      [
+       "2026-02-02",
+       10.2233
+      ],
+      [
+       "2026-02-03",
+       10.2333
+      ],
+      [
+       "2026-02-04",
+       10.2433
+      ],
+      [
+       "2026-02-05",
+       10.2533
+      ],
+      [
+       "2026-02-06",
+       10.2633
+      ],
+      [
+       "2026-02-09",
+       10.2733
+      ],
+      [
+       "2026-02-10",
+       10.2833
+      ],
+      [
+       "2026-02-11",
+       10.2933
+      ],
+      [
+       "2026-02-12",
+       10.3033
+      ],
+      [
+       "2026-02-13",
+       10.3133
+      ],
+      [
+       "2026-02-16",
+       10.3233
+      ],
+      [
+       "2026-02-17",
+       10.3333
+      ],
+      [
+       "2026-02-18",
+       10.3433
+      ],
+      [
+       "2026-02-19",
+       10.3533
+      ],
+      [
+       "2026-02-20",
+       10.3633
+      ],
+      [
+       "2026-02-23",
+       10.3733
+      ],
+      [
+       "2026-02-24",
+       10.3833
+      ],
+      [
+       "2026-02-25",
+       10.3933
+      ],
+      [
+       "2026-02-26",
+       10.4033
+      ],
+      [
+       "2026-02-27",
+       10.4133
+      ]
+     ],
+     "attrs": {}
+    },
+    "buy1": 10.0781,
+    "buy2": 9.9612,
+    "buy3": 9.8443,
+    "buy_basis": 10.195,
+    "buy_distance_pct": {
+     "b1": 3.09,
+     "b2": 4.3,
+     "b3": 5.54
+    },
+    "buy_mode": "淨值σ通道",
+    "calmar": null,
+    "calmar_source": null,
+    "div_stability": null,
+    "div_trend": 0,
+    "div_yield_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "DIVIDEND_YIELD",
+     "source_a": "self_calc:sum(12M_div)/current_nav",
+     "source_b": "MoneyDJ:dividend_yield",
+     "status": "b_missing",
+     "value_a": 0.0,
+     "value_b": null
+    },
+    "high_1y": 10.39,
+    "high_2y": 10.39,
+    "high_3y": 10.39,
+    "high_date_1y": "2026-02-27",
+    "high_date_2y": "2026-02-27",
+    "high_date_3y": "2026-02-27",
+    "low_1y": 10.0,
+    "low_2y": 10.0,
+    "low_3y": 10.0,
+    "low_date_1y": "2026-01-05",
+    "low_date_2y": "2026-01-05",
+    "low_date_3y": "2026-01-05",
+    "ma20": 10.295,
+    "ma60": null,
+    "max_drawdown": null,
+    "max_drawdown_source": null,
+    "monthly_div": 0,
+    "nav": 10.39,
+    "near_threshold_pct": 2.0,
+    "pos_color": "#ffa726",
+    "pos_label": "小漲停利 💰 (出 20%)",
+    "ret_1m": 2.06,
+    "ret_1w": 0.48,
+    "ret_1y": null,
+    "ret_1y_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_1Y_RETURN",
+     "source_a": "self_calc:nav[-1]/nav[-252]-1",
+     "source_b": "MoneyDJ:wb01:1Y",
+     "status": "b_missing",
+     "value_a": 0.039,
+     "value_b": null
+    },
+    "ret_1y_total": 3.9,
+    "ret_1y_window_days": 53,
+    "ret_3m": null,
+    "ret_3y": null,
+    "ret_3y_ann": null,
+    "ret_3y_cum": null,
+    "ret_5y_ann": null,
+    "ret_5y_cum": null,
+    "ret_6m": null,
+    "risk_metric_meta": {
+     "calmar": {
+      "max_dd_3y_pct": null,
+      "min_required": 756,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（40/756 交易日）",
+      "ret_3y_ann_price_pct": null,
+      "ret_3y_ann_tr_pct": null,
+      "source": null
+     },
+     "hl_windows": {
+      "1y": {
+       "actual_span_days": 53.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期53天",
+       "n_points": 40,
+       "reason": "視窗涵蓋不足（40/252 交易日,實際涵蓋 53天）→ 已退回全序列計算,此值**不是**「近 252 交易日」的值",
+       "requested_days": 252
+      },
+      "2y": {
+       "actual_span_days": 53.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期53天",
+       "n_points": 40,
+       "reason": "視窗涵蓋不足（40/504 交易日,實際涵蓋 53天）→ 已退回全序列計算,此值**不是**「近 504 交易日」的值",
+       "requested_days": 504
+      },
+      "3y": {
+       "actual_span_days": 53.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期53天",
+       "n_points": 40,
+       "reason": "視窗涵蓋不足（40/756 交易日,實際涵蓋 53天）→ 已退回全序列計算,此值**不是**「近 756 交易日」的值",
+       "requested_days": 756
+      }
+     },
+     "max_drawdown": {
+      "min_required": 125,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（39/125 交易日）",
+      "source": null
+     },
+     "mixed_period_warning": null,
+     "sharpe": {
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reconcile_blocked_reason": null,
+      "self_calc_reason": "樣本不足（39/250 交易日）",
+      "self_calc_value": null,
+      "source": null
+     },
+     "sortino": {
+      "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（39/250 交易日）",
+      "source": null
+     }
+    },
+    "risk_table": {},
+    "sell1": 10.3119,
+    "sell2": 10.4288,
+    "sell3": 10.5457,
+    "sell_basis": 10.195,
+    "sell_distance_pct": {
+     "s1": 0.76,
+     "s2": -0.37,
+     "s3": -1.48
+    },
+    "sharpe": null,
+    "sharpe_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_SHARPE",
+     "source_a": "self_calc:mean/std*sqrt(252)",
+     "source_b": "MoneyDJ:wb07:Sharpe",
+     "status": "both_missing",
+     "value_a": null,
+     "value_b": null
+    },
+    "sharpe_source": null,
+    "sortino": null,
+    "sortino_source": null,
+    "std_1y": 0.02,
+    "std_2y": 0.02,
+    "std_amount": 0.1169,
+    "std_multi": {
+     "1年": 0.02,
+     "2年": 0.02,
+     "3年": 0.02,
+     "5年": 0.02
+    },
+    "std_multi_cn": {
+     "1年": 0.02,
+     "2年": 0.02,
+     "3年": 0.02,
+     "5年": null
+    },
+    "std_source": "nav",
+    "year_high_nav": null,
+    "year_low_nav": null
+   },
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 53,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ],
+     [
+      "2026-02-09",
+      10.25
+     ],
+     [
+      "2026-02-10",
+      10.26
+     ],
+     [
+      "2026-02-11",
+      10.27
+     ],
+     [
+      "2026-02-12",
+      10.28
+     ],
+     [
+      "2026-02-13",
+      10.29
+     ],
+     [
+      "2026-02-16",
+      10.3
+     ],
+     [
+      "2026-02-17",
+      10.31
+     ],
+     [
+      "2026-02-18",
+      10.32
+     ],
+     [
+      "2026-02-19",
+      10.33
+     ],
+     [
+      "2026-02-20",
+      10.34
+     ],
+     [
+      "2026-02-23",
+      10.35
+     ],
+     [
+      "2026-02-24",
+      10.36
+     ],
+     [
+      "2026-02-25",
+      10.37
+     ],
+     [
+      "2026-02-26",
+      10.38
+     ],
+     [
+      "2026-02-27",
+      10.39
+     ]
+    ],
+    "attrs": {
+     "cache_updated_at": "2026-03-01T00:00:00+00:00",
+     "live_fetch_error": "https://x/wb02 → 取數失敗(kind=blocked)",
+     "nav_quality": {
+      "stale": true
+     },
+     "source": "GitHubActions:cache/nav/ZZF004.json"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    },
+    {
+     "source": "calc_metrics",
+     "success": true
+    }
+   ],
+   "status": "failed",
+   "umbrella_fund": "",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF004"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF004"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF004"
+   ],
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF004"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF004"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF004"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "data_source": "moneydj_legacy_scrape",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF004",
+   "fund_code": "ZZF004",
+   "fund_name": "",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 53,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ],
+     [
+      "2026-02-09",
+      10.25
+     ],
+     [
+      "2026-02-10",
+      10.26
+     ],
+     [
+      "2026-02-11",
+      10.27
+     ],
+     [
+      "2026-02-12",
+      10.28
+     ],
+     [
+      "2026-02-13",
+      10.29
+     ],
+     [
+      "2026-02-16",
+      10.3
+     ],
+     [
+      "2026-02-17",
+      10.31
+     ],
+     [
+      "2026-02-18",
+      10.32
+     ],
+     [
+      "2026-02-19",
+      10.33
+     ],
+     [
+      "2026-02-20",
+      10.34
+     ],
+     [
+      "2026-02-23",
+      10.35
+     ],
+     [
+      "2026-02-24",
+      10.36
+     ],
+     [
+      "2026-02-25",
+      10.37
+     ],
+     [
+      "2026-02-26",
+      10.38
+     ],
+     [
+      "2026-02-27",
+      10.39
+     ]
+    ],
+    "attrs": {
+     "cache_updated_at": "2026-03-01T00:00:00+00:00",
+     "live_fetch_error": "https://x/wb02 → 取數失敗(kind=blocked)",
+     "nav_quality": {
+      "stale": true
+     },
+     "source": "GitHubActions:cache/nav/ZZF004.json"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "failed",
+   "umbrella_fund": "",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF004"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_sitca_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tdcc_meta",
+    "ZZF004"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF004"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF004"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF004"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF004"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF004"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF004"
+   ]
+  ],
+  "page_type": "yp010000"
+ },
+ "S5_hist_read_fail": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "data_source": "FundClear",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF005",
+   "fund_code": "ZZF005",
+   "fund_name": "測試基金五",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {
+    "all_high": 10.24,
+    "all_high_date": "2026-02-06",
+    "all_low": 10.0,
+    "all_low_date": "2026-01-05",
+    "annual_div": 0,
+    "annual_div_rate": 0,
+    "bb_color": "#ff9800",
+    "bb_lower": 10.0267,
+    "bb_lower_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       9.9767
+      ],
+      [
+       "2026-02-02",
+       9.9867
+      ],
+      [
+       "2026-02-03",
+       9.9967
+      ],
+      [
+       "2026-02-04",
+       10.0067
+      ],
+      [
+       "2026-02-05",
+       10.0167
+      ],
+      [
+       "2026-02-06",
+       10.0267
+      ]
+     ],
+     "attrs": {}
+    },
+    "bb_mid": 10.145,
+    "bb_signal": "通道 90% 位置",
+    "bb_upper": 10.2633,
+    "bb_upper_series": {
+     "__series__": [
+      [
+       "2026-01-30",
+       10.2133
+      ],
+      [
+       "2026-02-02",
+       10.2233
+      ],
+      [
+       "2026-02-03",
+       10.2333
+      ],
+      [
+       "2026-02-04",
+       10.2433
+      ],
+      [
+       "2026-02-05",
+       10.2533
+      ],
+      [
+       "2026-02-06",
+       10.2633
+      ]
+     ],
+     "attrs": {}
+    },
+    "buy1": 10.0464,
+    "buy2": 9.9728,
+    "buy3": 9.8992,
+    "buy_basis": 10.12,
+    "buy_distance_pct": {
+     "b1": 1.93,
+     "b2": 2.68,
+     "b3": 3.44
+    },
+    "buy_mode": "淨值σ通道",
+    "calmar": null,
+    "calmar_source": null,
+    "div_stability": null,
+    "div_trend": 0,
+    "div_yield_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "DIVIDEND_YIELD",
+     "source_a": "self_calc:sum(12M_div)/current_nav",
+     "source_b": "MoneyDJ:dividend_yield",
+     "status": "b_missing",
+     "value_a": 0.0,
+     "value_b": null
+    },
+    "high_1y": 10.24,
+    "high_2y": 10.24,
+    "high_3y": 10.24,
+    "high_date_1y": "2026-02-06",
+    "high_date_2y": "2026-02-06",
+    "high_date_3y": "2026-02-06",
+    "low_1y": 10.0,
+    "low_2y": 10.0,
+    "low_3y": 10.0,
+    "low_date_1y": "2026-01-05",
+    "low_date_2y": "2026-01-05",
+    "low_date_3y": "2026-01-05",
+    "ma20": 10.145,
+    "ma60": null,
+    "max_drawdown": null,
+    "max_drawdown_source": null,
+    "monthly_div": 0,
+    "nav": 10.24,
+    "near_threshold_pct": 2.0,
+    "pos_color": "#ffa726",
+    "pos_label": "小漲停利 💰 (出 20%)",
+    "ret_1m": 2.09,
+    "ret_1w": 0.49,
+    "ret_1y": null,
+    "ret_1y_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_1Y_RETURN",
+     "source_a": "self_calc:nav[-1]/nav[-252]-1",
+     "source_b": "MoneyDJ:wb01:1Y",
+     "status": "b_missing",
+     "value_a": 0.024,
+     "value_b": null
+    },
+    "ret_1y_total": 2.4,
+    "ret_1y_window_days": 32,
+    "ret_3m": null,
+    "ret_3y": null,
+    "ret_3y_ann": null,
+    "ret_3y_cum": null,
+    "ret_5y_ann": null,
+    "ret_5y_cum": null,
+    "ret_6m": null,
+    "risk_metric_meta": {
+     "calmar": {
+      "max_dd_3y_pct": null,
+      "min_required": 756,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（25/756 交易日）",
+      "ret_3y_ann_price_pct": null,
+      "ret_3y_ann_tr_pct": null,
+      "source": null
+     },
+     "hl_windows": {
+      "1y": {
+       "actual_span_days": 32.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期32天",
+       "n_points": 25,
+       "reason": "視窗涵蓋不足（25/252 交易日,實際涵蓋 32天）→ 已退回全序列計算,此值**不是**「近 252 交易日」的值",
+       "requested_days": 252
+      },
+      "2y": {
+       "actual_span_days": 32.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期32天",
+       "n_points": 25,
+       "reason": "視窗涵蓋不足（25/504 交易日,實際涵蓋 32天）→ 已退回全序列計算,此值**不是**「近 504 交易日」的值",
+       "requested_days": 504
+      },
+      "3y": {
+       "actual_span_days": 32.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期32天",
+       "n_points": 25,
+       "reason": "視窗涵蓋不足（25/756 交易日,實際涵蓋 32天）→ 已退回全序列計算,此值**不是**「近 756 交易日」的值",
+       "requested_days": 756
+      }
+     },
+     "max_drawdown": {
+      "min_required": 125,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（24/125 交易日）",
+      "source": null
+     },
+     "mixed_period_warning": null,
+     "sharpe": {
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reconcile_blocked_reason": null,
+      "self_calc_reason": "樣本不足（24/250 交易日）",
+      "self_calc_value": null,
+      "source": null
+     },
+     "sortino": {
+      "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（24/250 交易日）",
+      "source": null
+     }
+    },
+    "risk_table": {},
+    "sell1": 10.1936,
+    "sell2": 10.2672,
+    "sell3": 10.3408,
+    "sell_basis": 10.12,
+    "sell_distance_pct": {
+     "s1": 0.46,
+     "s2": -0.26,
+     "s3": -0.97
+    },
+    "sharpe": null,
+    "sharpe_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_SHARPE",
+     "source_a": "self_calc:mean/std*sqrt(252)",
+     "source_b": "MoneyDJ:wb07:Sharpe",
+     "status": "both_missing",
+     "value_a": null,
+     "value_b": null
+    },
+    "sharpe_source": null,
+    "sortino": null,
+    "sortino_source": null,
+    "std_1y": 0.01,
+    "std_2y": 0.01,
+    "std_amount": 0.0736,
+    "std_multi": {
+     "1年": 0.01,
+     "2年": 0.01,
+     "3年": 0.01,
+     "5年": 0.01
+    },
+    "std_multi_cn": {
+     "1年": 0.01,
+     "2年": 0.01,
+     "3年": 0.01,
+     "5年": null
+    },
+    "std_source": "nav",
+    "year_high_nav": null,
+    "year_low_nav": null
+   },
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 32,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ]
+    ],
+    "attrs": {
+     "currency": "USD",
+     "source": "FundClear:SmartFundAPI:nav"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 25,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "FundClear(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 25,
+     "source": "FundClear",
+     "span_days": 32,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    },
+    {
+     "error": "nav_history load 失敗:APIError 429 quota",
+     "source": "nav_history_merge",
+     "success": false
+    },
+    {
+     "source": "calc_metrics",
+     "success": true
+    }
+   ],
+   "status": "complete",
+   "umbrella_fund": "",
+   "warning": null,
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF005"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF005"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF005"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF005"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF005"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF005"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF005"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF005"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF005"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF005"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF005"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "data_source": "FundClear",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF005",
+   "fund_code": "ZZF005",
+   "fund_name": "測試基金五",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 32,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2026-01-05",
+      10.0
+     ],
+     [
+      "2026-01-06",
+      10.01
+     ],
+     [
+      "2026-01-07",
+      10.02
+     ],
+     [
+      "2026-01-08",
+      10.03
+     ],
+     [
+      "2026-01-09",
+      10.04
+     ],
+     [
+      "2026-01-12",
+      10.05
+     ],
+     [
+      "2026-01-13",
+      10.06
+     ],
+     [
+      "2026-01-14",
+      10.07
+     ],
+     [
+      "2026-01-15",
+      10.08
+     ],
+     [
+      "2026-01-16",
+      10.09
+     ],
+     [
+      "2026-01-19",
+      10.1
+     ],
+     [
+      "2026-01-20",
+      10.11
+     ],
+     [
+      "2026-01-21",
+      10.12
+     ],
+     [
+      "2026-01-22",
+      10.13
+     ],
+     [
+      "2026-01-23",
+      10.14
+     ],
+     [
+      "2026-01-26",
+      10.15
+     ],
+     [
+      "2026-01-27",
+      10.16
+     ],
+     [
+      "2026-01-28",
+      10.17
+     ],
+     [
+      "2026-01-29",
+      10.18
+     ],
+     [
+      "2026-01-30",
+      10.19
+     ],
+     [
+      "2026-02-02",
+      10.2
+     ],
+     [
+      "2026-02-03",
+      10.21
+     ],
+     [
+      "2026-02-04",
+      10.22
+     ],
+     [
+      "2026-02-05",
+      10.23
+     ],
+     [
+      "2026-02-06",
+      10.24
+     ]
+    ],
+    "attrs": {
+     "currency": "USD",
+     "source": "FundClear:SmartFundAPI:nav"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 25,
+     "replaced": "",
+     "replaced_count": 0,
+     "source": "FundClear(best-of-waterfall)",
+     "success": true
+    },
+    {
+     "nav_count": 25,
+     "source": "FundClear",
+     "span_days": 32,
+     "success": true
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 部分資料取得成功（淨值歷史或風險指標不完整）",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF005"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF005"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF005"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF005"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF005"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF005"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF005"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF005"
+   ]
+  ],
+  "page_type": "yp010000"
+ },
+ "S6_insurance_morningstar": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "TLZZ9",
+   "fund_code": "TLZZ9",
+   "fund_name": "保單基金六",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": 12.0,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": null,
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 15,
+     "source": "morningstar",
+     "success": true
+    },
+    {
+     "nav_count": 15,
+     "source": "morningstar",
+     "span_days": 18,
+     "success": true
+    },
+    {
+     "source": "tdcc_meta_early",
+     "success": true
+    },
+    {
+     "discarded": true,
+     "error": "幣別未知:預期 未知、候選序列(morningstar)宣告 USD —— 無法確認一致,拒絕用它換掉現有序列",
+     "source": "morningstar",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 保險平台專屬代碼（TLZZ9）在 Streamlit Cloud 上無法下載歷史淨值。MoneyDJ 保險子網域封鎖雲端 IP，Morningstar 亦無此代碼的歷史序列。 上方已顯示 TDCC 最新淨值。如需走勢分析，請使用「手動淨值輸入」功能。",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=TLZZ9"
+   ],
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ],
+   [
+    "nav_history.load_points",
+    "TLZZ9"
+   ],
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZZ9"
+   ],
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ],
+   [
+    "nav_history.load_points",
+    "TLZZ9"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": "❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=TLZZ9\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=TLZZ9\n② 於下方手動填入淨值、配息數據",
+   "full_key": "TLZZ9",
+   "fund_code": "TLZZ9",
+   "fund_name": "保單基金六",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": 12.0,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": null,
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "nav_count": 15,
+     "source": "morningstar",
+     "success": true
+    },
+    {
+     "nav_count": 15,
+     "source": "morningstar",
+     "span_days": 18,
+     "success": true
+    },
+    {
+     "source": "tdcc_meta_early",
+     "success": true
+    },
+    {
+     "discarded": true,
+     "error": "幣別未知:預期 未知、候選序列(morningstar)宣告 USD —— 無法確認一致,拒絕用它換掉現有序列",
+     "source": "morningstar",
+     "success": false
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 保險平台專屬代碼（TLZZ9）在 Streamlit Cloud 上無法下載歷史淨值。MoneyDJ 保險子網域封鎖雲端 IP，Morningstar 亦無此代碼的歷史序列。 上方已顯示 TDCC 最新淨值。如需走勢分析，請使用「手動淨值輸入」功能。",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_nav_30day",
+    "TLZZ9"
+   ],
+   [
+    "_src_morningstar_nav",
+    "TLZZ9"
+   ],
+   [
+    "_src_tdcc_meta",
+    "TLZZ9"
+   ],
+   [
+    "_src_tcb_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_fundclear_div",
+    "TLZZ9"
+   ],
+   [
+    "_src_cnyes_div",
+    "TLZZ9"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "TLZZ9"
+   ],
+   [
+    "fetch_performance_wb01",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "TLZZ9"
+   ],
+   [
+    "fetch_holdings",
+    "TLZZ9"
+   ]
+  ],
+  "page_type": "yp010000"
+ },
+ "S7_hist_rescue": {
+  "auto": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": null,
+   "full_key": "ZZF007",
+   "fund_code": "ZZF007",
+   "fund_name": "測試基金七",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {
+    "all_high": 9.29,
+    "all_high_date": "2025-11-11",
+    "all_low": 9.0,
+    "all_low_date": "2025-10-01",
+    "annual_div": 0,
+    "annual_div_rate": 0,
+    "bb_color": "#ff9800",
+    "bb_lower": 9.0767,
+    "bb_lower_series": {
+     "__series__": [
+      [
+       "2025-10-28",
+       8.9767
+      ],
+      [
+       "2025-10-29",
+       8.9867
+      ],
+      [
+       "2025-10-30",
+       8.9967
+      ],
+      [
+       "2025-10-31",
+       9.0067
+      ],
+      [
+       "2025-11-03",
+       9.0167
+      ],
+      [
+       "2025-11-04",
+       9.0267
+      ],
+      [
+       "2025-11-05",
+       9.0367
+      ],
+      [
+       "2025-11-06",
+       9.0467
+      ],
+      [
+       "2025-11-07",
+       9.0567
+      ],
+      [
+       "2025-11-10",
+       9.0667
+      ],
+      [
+       "2025-11-11",
+       9.0767
+      ]
+     ],
+     "attrs": {}
+    },
+    "bb_mid": 9.195,
+    "bb_signal": "通道 90% 位置",
+    "bb_upper": 9.3133,
+    "bb_upper_series": {
+     "__series__": [
+      [
+       "2025-10-28",
+       9.2133
+      ],
+      [
+       "2025-10-29",
+       9.2233
+      ],
+      [
+       "2025-10-30",
+       9.2333
+      ],
+      [
+       "2025-10-31",
+       9.2433
+      ],
+      [
+       "2025-11-03",
+       9.2533
+      ],
+      [
+       "2025-11-04",
+       9.2633
+      ],
+      [
+       "2025-11-05",
+       9.2733
+      ],
+      [
+       "2025-11-06",
+       9.2833
+      ],
+      [
+       "2025-11-07",
+       9.2933
+      ],
+      [
+       "2025-11-10",
+       9.3033
+      ],
+      [
+       "2025-11-11",
+       9.3133
+      ]
+     ],
+     "attrs": {}
+    },
+    "buy1": 9.057,
+    "buy2": 8.969,
+    "buy3": 8.881,
+    "buy_basis": 9.145,
+    "buy_distance_pct": {
+     "b1": 2.57,
+     "b2": 3.58,
+     "b3": 4.61
+    },
+    "buy_mode": "淨值σ通道",
+    "calmar": null,
+    "calmar_source": null,
+    "div_stability": null,
+    "div_trend": 0,
+    "div_yield_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "DIVIDEND_YIELD",
+     "source_a": "self_calc:sum(12M_div)/current_nav",
+     "source_b": "MoneyDJ:dividend_yield",
+     "status": "b_missing",
+     "value_a": 0.0,
+     "value_b": null
+    },
+    "high_1y": 9.29,
+    "high_2y": 9.29,
+    "high_3y": 9.29,
+    "high_date_1y": "2025-11-11",
+    "high_date_2y": "2025-11-11",
+    "high_date_3y": "2025-11-11",
+    "low_1y": 9.0,
+    "low_2y": 9.0,
+    "low_3y": 9.0,
+    "low_date_1y": "2025-10-01",
+    "low_date_2y": "2025-10-01",
+    "low_date_3y": "2025-10-01",
+    "ma20": 9.195,
+    "ma60": null,
+    "max_drawdown": null,
+    "max_drawdown_source": null,
+    "monthly_div": 0,
+    "nav": 9.29,
+    "nav_coverage": {
+     "coverage": 1.0,
+     "max_gap_days": 3,
+     "sparse": false
+    },
+    "near_threshold_pct": 2.0,
+    "pos_color": "#ffa726",
+    "pos_label": "小漲停利 💰 (出 20%)",
+    "ret_1m": 2.31,
+    "ret_1w": 0.54,
+    "ret_1y": null,
+    "ret_1y_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_1Y_RETURN",
+     "source_a": "self_calc:nav[-1]/nav[-252]-1",
+     "source_b": "MoneyDJ:wb01:1Y",
+     "status": "b_missing",
+     "value_a": 0.0322,
+     "value_b": null
+    },
+    "ret_1y_total": 3.22,
+    "ret_1y_window_days": 41,
+    "ret_3m": null,
+    "ret_3y": null,
+    "ret_3y_ann": null,
+    "ret_3y_cum": null,
+    "ret_5y_ann": null,
+    "ret_5y_cum": null,
+    "ret_6m": null,
+    "risk_metric_meta": {
+     "calmar": {
+      "max_dd_3y_pct": null,
+      "min_required": 756,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（30/756 交易日）",
+      "ret_3y_ann_price_pct": null,
+      "ret_3y_ann_tr_pct": null,
+      "source": null
+     },
+     "hl_windows": {
+      "1y": {
+       "actual_span_days": 41.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期41天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/252 交易日,實際涵蓋 41天）→ 已退回全序列計算,此值**不是**「近 252 交易日」的值",
+       "requested_days": 252
+      },
+      "2y": {
+       "actual_span_days": 41.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期41天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/504 交易日,實際涵蓋 41天）→ 已退回全序列計算,此值**不是**「近 504 交易日」的值",
+       "requested_days": 504
+      },
+      "3y": {
+       "actual_span_days": 41.0,
+       "code": "window_shortfall",
+       "covers_window": false,
+       "honest_label": "⚠️全期41天",
+       "n_points": 30,
+       "reason": "視窗涵蓋不足（30/756 交易日,實際涵蓋 41天）→ 已退回全序列計算,此值**不是**「近 756 交易日」的值",
+       "requested_days": 756
+      }
+     },
+     "max_drawdown": {
+      "min_required": 125,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（29/125 交易日）",
+      "source": null
+     },
+     "mixed_period_warning": null,
+     "sharpe": {
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reconcile_blocked_reason": null,
+      "self_calc_reason": "樣本不足（29/250 交易日）",
+      "self_calc_value": null,
+      "source": null
+     },
+     "sortino": {
+      "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+      "min_required": 250,
+      "period_days": null,
+      "period_label": null,
+      "reason": "樣本不足（29/250 交易日）",
+      "source": null
+     }
+    },
+    "risk_table": {},
+    "sell1": 9.233,
+    "sell2": 9.321,
+    "sell3": 9.409,
+    "sell_basis": 9.145,
+    "sell_distance_pct": {
+     "s1": 0.62,
+     "s2": -0.33,
+     "s3": -1.26
+    },
+    "sharpe": null,
+    "sharpe_reconcile": {
+     "agree": false,
+     "delta_abs": null,
+     "delta_rel": null,
+     "name": "FUND_SHARPE",
+     "source_a": "self_calc:mean/std*sqrt(252)",
+     "source_b": "MoneyDJ:wb07:Sharpe",
+     "status": "both_missing",
+     "value_a": null,
+     "value_b": null
+    },
+    "sharpe_source": null,
+    "sortino": null,
+    "sortino_source": null,
+    "std_1y": 0.02,
+    "std_2y": 0.02,
+    "std_amount": 0.088,
+    "std_multi": {
+     "1年": 0.02,
+     "2年": 0.02,
+     "3年": 0.02,
+     "5年": 0.02
+    },
+    "std_multi_cn": {
+     "1年": 0.02,
+     "2年": 0.02,
+     "3年": 0.02,
+     "5年": null
+    },
+    "std_source": "nav",
+    "year_high_nav": null,
+    "year_low_nav": null
+   },
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "nav_span_days": 41,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": {
+    "__series__": [
+     [
+      "2025-10-01",
+      9.0
+     ],
+     [
+      "2025-10-02",
+      9.01
+     ],
+     [
+      "2025-10-03",
+      9.02
+     ],
+     [
+      "2025-10-06",
+      9.03
+     ],
+     [
+      "2025-10-07",
+      9.04
+     ],
+     [
+      "2025-10-08",
+      9.05
+     ],
+     [
+      "2025-10-09",
+      9.06
+     ],
+     [
+      "2025-10-10",
+      9.07
+     ],
+     [
+      "2025-10-13",
+      9.08
+     ],
+     [
+      "2025-10-14",
+      9.09
+     ],
+     [
+      "2025-10-15",
+      9.1
+     ],
+     [
+      "2025-10-16",
+      9.11
+     ],
+     [
+      "2025-10-17",
+      9.12
+     ],
+     [
+      "2025-10-20",
+      9.13
+     ],
+     [
+      "2025-10-21",
+      9.14
+     ],
+     [
+      "2025-10-22",
+      9.15
+     ],
+     [
+      "2025-10-23",
+      9.16
+     ],
+     [
+      "2025-10-24",
+      9.17
+     ],
+     [
+      "2025-10-27",
+      9.18
+     ],
+     [
+      "2025-10-28",
+      9.19
+     ],
+     [
+      "2025-10-29",
+      9.2
+     ],
+     [
+      "2025-10-30",
+      9.21
+     ],
+     [
+      "2025-10-31",
+      9.22
+     ],
+     [
+      "2025-11-03",
+      9.23
+     ],
+     [
+      "2025-11-04",
+      9.24
+     ],
+     [
+      "2025-11-05",
+      9.25
+     ],
+     [
+      "2025-11-06",
+      9.26
+     ],
+     [
+      "2025-11-07",
+      9.27
+     ],
+     [
+      "2025-11-10",
+      9.28
+     ],
+     [
+      "2025-11-11",
+      9.29
+     ]
+    ],
+    "attrs": {
+     "nav_history_merged": "+30 pts from GoogleSheet:nav_history:ZZF007"
+    }
+   },
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    },
+    {
+     "added": 30,
+     "hist_points": 30,
+     "merged": true,
+     "note": "累積序列併入 +30 筆（live 0 → 30）",
+     "source": "nav_history_merge",
+     "success": true
+    },
+    {
+     "note": "live 全敗,改用累積序列 30 筆",
+     "source": "nav_history_rescue",
+     "success": true
+    },
+    {
+     "source": "calc_metrics",
+     "success": true
+    }
+   ],
+   "status": "complete",
+   "umbrella_fund": "",
+   "warning": null,
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "auto_calls": [
+   [
+    "_src_direct_moneydj_url",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF007"
+   ],
+   [
+    "_src_fundclear_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF007"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF007"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF007"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF007"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF007"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF007"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF007"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF007"
+   ],
+   [
+    "nav_history.load_points",
+    "ZZF007"
+   ]
+  ],
+  "l1": {
+   "category": "",
+   "currency": "",
+   "dividend_freq": "",
+   "dividends": [],
+   "error": "❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF007\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF007\n② 於下方手動填入淨值、配息數據",
+   "full_key": "ZZF007",
+   "fund_code": "ZZF007",
+   "fund_name": "測試基金七",
+   "fund_rating": "",
+   "fund_region": "",
+   "fund_scale": "",
+   "fund_type": "",
+   "holdings": {},
+   "investment_target": "",
+   "is_esg": "",
+   "metrics": {},
+   "mgmt_fee": "",
+   "moneydj_div_yield": null,
+   "nav_date": "",
+   "nav_latest": null,
+   "perf": {},
+   "risk_level": "",
+   "risk_metrics": {},
+   "series": null,
+   "source": "Fund:multi_source_orchestrator:partial_or_failed",
+   "source_trace": [
+    {
+     "error": "所有來源均不足10筆（最多:0）",
+     "source": "nav_all",
+     "success": false
+    },
+    {
+     "source": "tcb_meta",
+     "success": true
+    },
+    {
+     "error": "無淨值序列",
+     "source": "nav_series",
+     "success": false
+    }
+   ],
+   "status": "partial",
+   "umbrella_fund": "",
+   "warning": "⚠️ 部分資料取得成功（淨值歷史或風險指標不完整）",
+   "year_high_nav": null,
+   "year_low_nav": null
+  },
+  "l1_calls": [
+   [
+    "_src_fundclear_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_cnyes_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_insurance_subdomain_nav",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yf/yp004002.djhtm"
+   ],
+   [
+    "_src_sitca_nav",
+    "ZZF007"
+   ],
+   [
+    "_src_nav_30day",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_meta",
+    "ZZF007"
+   ],
+   [
+    "_src_tcb_div",
+    "ZZF007"
+   ],
+   [
+    "_src_fundclear_div",
+    "ZZF007"
+   ],
+   [
+    "_src_cnyes_div",
+    "ZZF007"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF007"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/yp011000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010001.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm"
+   ],
+   [
+    "fetch_risk_metrics",
+    "ZZF007"
+   ],
+   [
+    "fetch_performance_wb01",
+    "ZZF007"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF007"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/wb05.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://www.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_url_with_retry",
+    "https://tcbbankfund.moneydj.com/funddj/yp/funddividend.djhtm"
+   ],
+   [
+    "fetch_nav",
+    "ZZF007"
+   ],
+   [
+    "fetch_holdings",
+    "ZZF007"
+   ]
+  ],
+  "page_type": "yp010000"
+ }
+}

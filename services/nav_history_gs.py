@@ -57,6 +57,40 @@ from typing import Any
 _OAUTH_GS_LOCK = _threading.Lock()
 
 
+# ── 2026-10-13 總管技術裁定第 6 條：同一個讀取範圍內，nav_history 整張表只讀一次 ──────────────
+# 起因：B 線（`services/v2_tables/nav_dividend.py`）每檔基金走一次 A 鏈，A 鏈每次 `finalize_fund_metrics`
+# 都呼叫 `load_series` → `load_points`，每次 3 趟 Sheets 往返（開表、分頁、整張讀）；純代碼兩個頁型
+# 都試時每檔兩次。25 檔 × 2 × 3 ＝ 150 趟，超過 `49` §4.2 記載的每使用者每分鐘 60 次讀取上限。
+# 做法：`shared_reads()` 範圍內，第一次 `load_points` 照原路徑（冷卻、重試、登記失敗一律不變）讀
+# **整張表**一次，之後同一範圍內的呼叫只從那一份過濾；那一次失敗 → 同一範圍內一律照實拋同一個
+# `NavHistoryError`，不重打、不吞。**範圍外行為一字未變**（預設 `None`，A 鏈其他消費者不受影響）。
+# ⚠️ 這不是跨請求的快取：範圍一結束就丟，不延長任何資料的壽命；合併語意（聯集、同日即時值為準）不動。
+# 範圍狀態放在本執行緒（`threading.local`，本檔既有慣例）：別的執行緒（例如健診的 worker）看不到、不受影響。
+_SHARED_READ_TLS = _threading.local()
+
+
+def _shared_read_scope():
+    return getattr(_SHARED_READ_TLS, "scope", None)
+
+
+_SKIP_READS_KEY = "__skip_reads__"
+
+
+@_contextlib.contextmanager
+def shared_reads(*, skip_reads: bool = False):
+    """進入後，本執行緒在範圍內呼叫 `load_points`（含 `load_series`）對同一份憑證只打一次 Sheets（見上方註解）。
+
+    `skip_reads=True`（2026-10-13 稽核 5 B4）：範圍內一律當作「累積表沒有任何點」（回 `[]`、**不打 Sheets**）。
+    給 B 線累積表出處閘門關閉時用 —— 讓 A 鏈在 B 線呼叫時的頁型選擇與「沒有累積表」時完全一樣
+    （否則 A 鏈會靠併入的累積點把第一個頁型判成 complete，不再試第二個頁型）。只在本執行緒、只在範圍內。"""
+    previous = _shared_read_scope()
+    _SHARED_READ_TLS.scope = {_SKIP_READS_KEY: True} if skip_reads else {}
+    try:
+        yield
+    finally:
+        _SHARED_READ_TLS.scope = previous
+
+
 def _gs_guard(oauth_client: Any, _sheet: Any):
     """注入 OAuth client 且非測試注入 _sheet → 上鎖序列化;否則 no-op(SA / 測試路徑不序列化)。"""
     return _OAUTH_GS_LOCK if (oauth_client is not None and _sheet is None) else _contextlib.nullcontext()
@@ -732,6 +766,26 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
     if _sheet is None and not is_enabled() and oauth_client is None:
         return []
 
+    # 2026-10-13 第 6 條：`shared_reads()` 範圍內，整張表只讀一次（範圍外不走這裡，行為不變）。
+    _scope = _shared_read_scope() if _sheet is None else None
+    if _scope is not None and _scope.get(_SKIP_READS_KEY):
+        return []                                   # 2026-10-13 B4：範圍內不讀（見 shared_reads）
+    if _scope is not None:
+        _scope_key = (id(oauth_client) if oauth_client is not None else None, bool(retries))
+        if _scope_key not in _scope:
+            _SHARED_READ_TLS.scope = None            # 讀整張表那一次走原路徑（不再進範圍分支）
+            try:
+                _scope[_scope_key] = load_points(None, oauth_client=oauth_client, retries=retries)
+            except NavHistoryError as _scope_err:
+                _scope[_scope_key] = _scope_err      # 照實記下；同一範圍內不重打
+            finally:
+                _SHARED_READ_TLS.scope = _scope
+        _hit = _scope[_scope_key]
+        if isinstance(_hit, NavHistoryError):
+            raise NavHistoryError(f"{_hit}（同一次讀取範圍內已失敗，本次不重打）") from _hit
+        _want = str(code or "").strip().upper()
+        return [dict(p) for p in _hit if not _want or p["code"] == _want]
+
     # `_sheet` 是測試注入(不碰真 gspread)→ 不查冷卻、不登記,避免污染測試狀態。
     _actor, _sid = ("", "") if _sheet is not None else _nav_backoff_ident(oauth_client)
     if _actor:
@@ -815,6 +869,11 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
     return out
 
 
+# 2026-10-13：`load_series` 回傳序列上逐日 `recorded_at` 的 attrs 鍵（`{"YYYY-MM-DD": recorded_at 原值}`）。
+RECORDED_AT_BY_DATE_ATTR = "recorded_at_by_date"
+CURRENCY_BY_DATE_ATTR = "currency_by_date"   # 2026-10-13 B-1：逐日幣別宣告原值
+
+
 def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
     """v19.360 Increment B:讀 nav_history 累積點 → pd.Series(DatetimeIndex→float)。
 
@@ -837,6 +896,20 @@ def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
     s = s.groupby(s.index).last().sort_index()   # 同日 keep-last + 昇冪
     s.attrs["source"] = f"GoogleSheet:nav_history:{str(code).strip().upper()}"
     s.attrs["fetched_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    # 2026-10-13 總管技術裁定第 4 條：逐日記下該點寫入累積表的時間（`recorded_at` 原值，可能是空字串）。
+    # 上一行的 `fetched_at` 是**讀表當下**，不是那一點的取得時間；B 線不得拿它冒充。
+    # 與上面 keep-last 同一把尺：同日多列 → 取最後一列的 `recorded_at`。
+    _rec: dict = {}
+    for _p, _ts in zip(pts, idx):
+        if _ts is not pd.NaT and not pd.isna(_ts):
+            _rec[_ts.date().isoformat()] = str(_p.get("recorded_at") or "")
+    s.attrs[RECORDED_AT_BY_DATE_ATTR] = {k: _rec.get(k, "") for k in (d.date().isoformat() for d in s.index)}
+    # 2026-10-13 B-1：逐日記下該點寫入時宣告的幣別**原值**（空＝未宣告）；同一把 keep-last 尺。
+    _ccy_by: dict = {}
+    for _p, _ts in zip(pts, idx):
+        if _ts is not pd.NaT and not pd.isna(_ts):
+            _ccy_by[_ts.date().isoformat()] = str(_p.get("currency") or "")
+    s.attrs[CURRENCY_BY_DATE_ATTR] = {k: _ccy_by.get(k, "") for k in (d.date().isoformat() for d in s.index)}
     # 2026-09-01:**逐列一致才敢宣告**幣別(§1 / §4.1)。這張表的列來自多條寫入路徑、
     # 多個 fetcher,同一個 code 的列**可以**混到不同幣別;只要有一列未知或彼此不一致,
     # 就完全不設這個 key(未知),**絕不挑一個、絕不換算**。

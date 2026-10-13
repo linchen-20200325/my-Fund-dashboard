@@ -59,7 +59,6 @@ from datetime import date
 from typing import Callable, Optional
 
 from repositories import settings_sheet_repository as store
-from repositories.fund import nav_metrics
 from repositories.macro.fred_vintage import fetch_fred_vintages
 from repositories.macro.yf import fetch_yf_close
 from services.v2_tables import alo_holdings, fund_keys, nav_dividend
@@ -567,10 +566,14 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
                 resolved[r["input"]] = r
             else:
                 masked.setdefault(mask(str(r["input"])), mask(str(r["error"])))
-        nav_metrics.fetch_nav.cache_clear()   # 整批清（見 docstring）；冷卻不動
+        # 2026-10-13：淨值改走 A 鏈 → 清 A 鏈實際用到的全部 L1 快取（`nav_dividend.CHAIN_CACHED_FUNCTIONS`，
+        # 逐一實查）；整批清（見 docstring）；冷卻不動。
+        for fetcher in nav_dividend.CHAIN_CACHED_FUNCTIONS:
+            fetcher.cache_clear()
         table = nav_dividend.build_nav_table([
             {"fund_code": h["fund_code"], "full_key": resolved[h["fund_code"]]["full_key"],
-             "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"]}
+             "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"],
+             "chain_code": resolved[h["fund_code"]]["parsed_code"]}
             for h in holding if h["fund_code"] in resolved
         ])
         if not holding:
@@ -583,6 +586,17 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
         for code, prov in table["provenance"].items():
             if prov.get("live_error") is not None and code not in table["errors"]:
                 masked[mask(code)] = mask(prov["live_error"])
+        # 2026-10-13 第 6 條：A 鏈本次讀累積表失敗（含冷卻中不打）→ 照實記失敗，不吞；
+        # 該檔即時取得的部分照樣交給呼叫端。同一檔已有原因就接在後面（同一段，換行分隔）。
+        # 2026-10-13 稽核回修：`nav_dividend.NAV_HISTORY_PROVENANCE_VERIFIED` 關閉時累積點本來就不採用，
+        # 讀不讀得到都不影響本次寫出的淨值 → 讀取失敗不再算作本次失敗（原文仍記在 provenance）。
+        for code, prov in table["provenance"].items():
+            read_error = (prov.get("nav_history") or {}).get("read_error")
+            if (read_error is not None and code not in table["errors"]
+                    and nav_dividend.NAV_HISTORY_PROVENANCE_VERIFIED):
+                text = mask(f"累積表讀取失敗：{read_error}")
+                key = mask(code)
+                masked[key] = f"{masked[key]}\n{text}" if key in masked else text
         for code, raw in table["errors"].items():
             if raw == nav_dividend.EMPTY_WITHOUT_REASON and fetched.get(code, 0) == 0:
                 empty[mask(code)] = mask(str(raw))

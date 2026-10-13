@@ -24,6 +24,23 @@ from __future__ import annotations
 
 from typing import Union
 
+# 2026-10-13 總管技術裁定第 3 條：純代碼走兩個頁型時，每一次嘗試的狀態與逐來源失敗原文
+# 以這個**新增鍵**掛在回傳的 dict 上（schema-additive；頁型迴圈與停止條件一字未動）。
+# 用途：B 線（`services/v2_tables/nav_dividend.py`）全來源失敗時，兩個頁型的原文都呈現得出來
+# —— 回傳值只有最後選中的那一次，前一次的原文原本就丟了。
+NAV_ATTEMPTS_KEY = "nav_page_type_attempts"
+
+
+def nav_history_shared_reads(*, skip_reads: bool = False):
+    """A 鏈的 nav_history 讀取共用範圍（`services.nav_history_gs.shared_reads`，2026-10-13 總管技術裁定第 6 條）。
+
+    批次呼叫 `auto_fetch_moneydj` 的一方（B 線 `build_nav_table`）在這個範圍內逐檔取數，整張累積表只讀一次。
+    範圍外不影響任何行為。放在本模組，是因為 B 線的 import 守衛只放行 `services.moneydj_fetcher` 這一個名字。
+    `skip_reads=True`：範圍內不讀累積表、一律當作沒有累積點（B 線出處閘門關閉時用，見 `shared_reads`）。
+    """
+    from services.nav_history_gs import shared_reads
+    return shared_reads(skip_reads=skip_reads)
+
 
 def build_moneydj_url(raw_input: str, page_type: str) -> str:
     """構造 MoneyDJ URL：http(s) 直傳短路；純代碼拼接 yp010000/yp010001 端點。"""
@@ -76,6 +93,17 @@ def auto_fetch_moneydj(
 
     # 純代碼：累計嘗試所有 page_type，挑最佳結果
     _attempts: list = []
+    _attempt_log: list = []   # 2026-10-13：只記錄（見 NAV_ATTEMPTS_KEY），不參與任何判斷
+
+    def _log_attempt(_r: dict, _p: str, _s: str) -> None:
+        from repositories.fund.fund_orchestration import NAV_SOURCE_FAILURES_KEY
+        _attempt_log.append({"page_type": _p, "status": _s, "error": _r.get("error"),
+                             "nav_source_failures": list(_r.get(NAV_SOURCE_FAILURES_KEY) or ())})
+
+    def _done(_r: dict, _p: str):
+        if isinstance(_r, dict):
+            _r[NAV_ATTEMPTS_KEY] = list(_attempt_log)
+        return (_r, _p) if return_page_type else _r
     for _pt in ("yp010000", "yp010001"):
         _url = build_moneydj_url(_raw, _pt)
         try:
@@ -83,32 +111,34 @@ def auto_fetch_moneydj(
         except Exception as _e:
             _err_res = {"error": f"{type(_e).__name__}: {_e}"}
             _attempts.append((_err_res, _pt, False, "failed"))
+            _log_attempt(_err_res, _pt, "failed")
             continue
         _st = _res.get("status", classify_fetch_status(_res))
         _ser = _res.get("series")
         _has_series = (
             _ser is not None and hasattr(_ser, "__len__") and len(_ser) >= 10
         )
+        _log_attempt(_res, _pt, _st)
         # complete 直接 return（最佳結果）
         if not _res.get("error") and _st == "complete":
-            return (_res, _pt) if return_page_type else _res
+            return _done(_res, _pt)
         _attempts.append((_res, _pt, _has_series, _st))
 
     # 沒有 complete → 偏好 has_series 的 partial（境外基金真實 case）
     _with_series = [t for t in _attempts if t[2]]
     if _with_series:
         _res, _pt = _with_series[0][0], _with_series[0][1]
-        return (_res, _pt) if return_page_type else _res
+        return _done(_res, _pt)
 
     # 全部 partial 但無 series → 回第一個 partial（至少有 metadata）
     _partials = [t for t in _attempts if t[3] == "partial"]
     if _partials:
         _res, _pt = _partials[0][0], _partials[0][1]
-        return (_res, _pt) if return_page_type else _res
+        return _done(_res, _pt)
 
     # 全 failed → 回最後一個
     if _attempts:
         _res, _pt = _attempts[-1][0], _attempts[-1][1]
-        return (_res, _pt) if return_page_type else _res
+        return _done(_res, _pt)
 
     return ({}, "") if return_page_type else {}

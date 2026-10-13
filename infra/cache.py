@@ -32,6 +32,7 @@ v19.74 K2：補充 _normalize_moneydj_url_for_cache() 正規化 URL key（防同
 from __future__ import annotations
 
 import functools as _ft
+import threading as _threading
 import time as _time
 import re as _re
 from collections.abc import MutableMapping as _MutableMapping
@@ -333,7 +334,7 @@ def is_fetch_failed(obj) -> bool:
         return False
 
 
-def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
+def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None, cache_if=None):
     """TTL + LRU 兩層快取裝飾器。
 
     cache key 由 (args, sorted kwargs) 組成；無法 hash 的引數（list/dict）跳過快取直走原 fn。
@@ -343,12 +344,20 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
     **不入快取**，下次呼叫會真的重試（重試是否出門由 `infra.source_backoff` 決定，
     見上方 module 註解）。未標記者照舊快取 —— 既有使用者零行為改變。
 
+    2026-10-13（總管技術裁定；與 `_daily_cache(cache_if=...)` 對稱）：選填 `cache_if(result) -> bool`，
+    False → 不入快取（計入 `uncached_fail`）。給**回傳 dict 的 fetcher** 用 —— dict 掛不上
+    `mark_fetch_failed` 的標記（見該函式 TypeError 一支）。**預設 None ＝ 行為與改動前逐字相同。**
+
     Wrapper 暴露：cache_clear() / cache_info()
         → {size, maxsize, ttl_sec, hits, misses, uncached_fail}
     """
     def decorator(fn):
         _cache: dict = {}
         _stats = {"hits": 0, "misses": 0, "uncached_fail": 0}
+        # 2026-10-13 稽核 6 N2：多執行緒同時寫入／淘汰時，`min(_cache.items(), ...)` 會遇到
+        # `RuntimeError: dictionary changed size during iteration`（4 執行緒、maxsize 64 實驗 962/12000 次）。
+        # 只鎖「讀快取」「寫入＋淘汰」「清空」三段；**不鎖 `fn` 本身**（取數照舊並行），其餘行為不變。
+        _lock = _threading.Lock()
 
         @_ft.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -375,31 +384,39 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
                 return fn(*args, **kwargs)
 
             now = _time.time()
-            hit = _cache.get(key)
-            if hit and (now - hit[0]) < ttl_sec:
-                _stats["hits"] += 1
-                return hit[1]
-            _stats["misses"] += 1
+            with _lock:
+                hit = _cache.get(key)
+                if hit and (now - hit[0]) < ttl_sec:
+                    _stats["hits"] += 1
+                    return hit[1]
+                _stats["misses"] += 1
             result = fn(*args, **kwargs)
             # v3 §02「只快取成功結果」：fetcher 明說這次是抓失敗 → 不入快取，
             # 下次呼叫真的重試（是否出門由 infra.source_backoff 決定）。
             # ⚠️ 這裡**不判斷「空不空」** —— 空有兩種意思，裝飾器沒有資訊分辨，
             #    猜錯任一邊都違憲。理由見本檔上方 module 註解。
             if is_fetch_failed(result):
-                _stats["uncached_fail"] += 1
+                with _lock:
+                    _stats["uncached_fail"] += 1
                 return result
-            _cache[key] = (now, result)
-            # LRU 防呆：超過 maxsize 砍最舊
-            if len(_cache) > maxsize:
-                oldest_key = min(_cache.items(), key=lambda kv: kv[1][0])[0]
-                _cache.pop(oldest_key, None)
+            if cache_if is not None and not cache_if(result):   # 2026-10-13：選填，見 docstring
+                with _lock:
+                    _stats["uncached_fail"] += 1
+                return result
+            with _lock:
+                _cache[key] = (now, result)
+                # LRU 防呆：超過 maxsize 砍最舊
+                if len(_cache) > maxsize:
+                    oldest_key = min(_cache.items(), key=lambda kv: kv[1][0])[0]
+                    _cache.pop(oldest_key, None)
             return result
 
         def _clear():
-            _cache.clear()
-            _stats["hits"] = 0
-            _stats["misses"] = 0
-            _stats["uncached_fail"] = 0
+            with _lock:
+                _cache.clear()
+                _stats["hits"] = 0
+                _stats["misses"] = 0
+                _stats["uncached_fail"] = 0
 
         wrapper.cache_clear = _clear   # type: ignore[attr-defined]
         wrapper.cache_info = lambda: {   # type: ignore[attr-defined]

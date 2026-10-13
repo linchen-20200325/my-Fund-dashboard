@@ -14,7 +14,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-from shared.ttls import TTL_1HOUR
+from shared.ttls import TTL_1HOUR, TTL_15MIN
 from infra.cache import (  # noqa: F401
     _ttl_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
@@ -399,6 +399,57 @@ def _is_short_window_nav(s: "pd.Series | None") -> bool:
     return _nav_span_days(s) < NAV_SHORT_WINDOW_MAX_DAYS
 
 
+# ── 2026-10-13 總管技術裁定第 3 條（L1 授權）：逐來源失敗原文 ─────────────────────
+# 客戶 2026-10-13 裁示 B 線復用本條多來源淨值鏈；B 線要能呈現每一個來源的失敗原文。
+# 瀑布各 `_src_*` 失敗時多半只 print、回空序列，原因到不了呼叫端。這裡在**每一步的既有
+# `if` 區塊裡、該步自己的判斷之後**記一筆「這個來源回了什麼、為什麼沒採用」，以**新增鍵**
+# 掛到結果上（schema-additive）。
+# ⛔ 只記錄、不判斷：不改任何來源的嘗試順序、門檻、選擇結果，不改任何既有欄位
+#    （守衛：`tests/test_a_chain_failure_capture.py` 以改動前錄下的黃金檔逐欄比對）。
+# ⚠️ 射程：記的是**本層看得到的原文**（回傳筆數與門檻、序列 `attrs` 自帶的錯誤字串、例外原文）。
+#    `_src_*` 內部只 print 到標準輸出的那些逐網址細節，本層拿不到，**不猜、不補寫**。
+NAV_SOURCE_FAILURES_KEY = "nav_source_failures"
+_SERIES_ERROR_ATTRS = ("fetch_error", "error")
+
+
+RESCUED_NOTE = "（後經側車救援採用）"
+
+
+def _mark_rescued(acc: list, source: str) -> None:
+    """側車救援採用了先前被記為「未達門檻」的來源 → 在那幾筆記錄後面標明，免得讀起來像沒用到。純記錄。"""
+    try:
+        for entry in acc:
+            if (isinstance(entry, dict) and str(source or "")
+                    and str(entry.get("source") or "").startswith(str(source).split("（")[0])
+                    and RESCUED_NOTE not in str(entry.get("error") or "")):
+                entry["error"] = f"{entry.get('error')}{RESCUED_NOTE}"
+    except Exception:  # noqa: BLE001 —— 標註失敗不影響取數
+        pass
+
+
+def _note_nav_source_failure(acc: list, source: str, got=None, gate=None, *, note: str = "") -> None:
+    """往 `acc` 加一筆 `{"source", "error"}`。純記錄：不改 `got`、不拋例外、不影響任何判斷。"""
+    try:
+        parts = []
+        if gate is not None:
+            if got is None:
+                parts.append(f"回傳 None，未達本步採用門檻 {gate} 筆")
+            elif hasattr(got, "__len__"):
+                parts.append(f"回傳 {len(got)} 筆，未達本步採用門檻 {gate} 筆")
+            else:
+                parts.append(f"回傳 {type(got).__name__}，未達本步採用門檻 {gate} 筆")
+        attrs = getattr(got, "attrs", None)
+        if isinstance(attrs, dict):
+            for key in _SERIES_ERROR_ATTRS:
+                if attrs.get(key):
+                    parts.append(f"{key}: {attrs[key]}")
+        if note:
+            parts.append(note)
+        acc.append({"source": source, "error": "；".join(parts) or "（來源沒有給出原因）"})
+    except Exception as exc:  # noqa: BLE001 —— 記錄本身失敗不得拖垮取數；把失敗照實記下
+        acc.append({"source": source, "error": f"（記錄失敗原文時出錯 {type(exc).__name__}: {exc}）"})
+
+
 def _adopt_if_better(
     nav_s: pd.Series, nav_source: str,
     cand: "pd.Series | None", cand_name: str,
@@ -465,6 +516,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # ── Step 2: 並行嘗試多來源（NAV）────────────────────────────────
     nav_s = pd.Series(dtype=float)
     nav_source = ""
+    _nav_fail: list = []   # 2026-10-13 總管技術裁定第 3 條：逐來源失敗原文（只記錄，見 _note_nav_source_failure）
 
     # 0. 安聯投信官網（ACTI/ACCP/ACDD 境內基金 + 保險平台安聯代碼）
     # v6.23 fix: 加入 len(nav_s) < 10 防護，避免覆蓋 GitHub Actions 快取資料
@@ -475,6 +527,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         or _code in _ALLIANZ_INSURANCE_CODES
     ):
         _allianz_s = _src_allianzgi_nav(_code)
+        if len(_allianz_s) < 5:
+            _note_nav_source_failure(_nav_fail, "allianzgi_tw", _allianz_s, 5)
         if len(_allianz_s) >= 5:
             nav_s = _allianz_s
             # 2026-08-11 §1「填補須帶旗標」:`_src_allianzgi_nav` 在「JSON API 與
@@ -500,6 +554,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2a. FundClear（境外最穩）
     if len(nav_s) < 20:
         nav_s = _src_fundclear_nav(_code)
+        if len(nav_s) < 20:
+            _note_nav_source_failure(_nav_fail, "FundClear", nav_s, 20)
         if len(nav_s) >= 20:
             nav_source = "FundClear"
         _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "FundClear")
@@ -507,6 +563,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2b. 鉅亨網
     if len(nav_s) < 20:
         nav_s = _src_cnyes_nav(_code)
+        if len(nav_s) < 20:
+            _note_nav_source_failure(_nav_fail, "cnyes", nav_s, 20)
         if len(nav_s) >= 20:
             nav_source = "cnyes"
         _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "cnyes")
@@ -514,6 +572,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2c. TCB MoneyDJ（子網域）
     if len(nav_s) < 20:
         nav_s = _src_tcb_nav(_code)
+        if len(nav_s) < 10:
+            _note_nav_source_failure(_nav_fail, "tcb_moneydj", nav_s, 10)
         if len(nav_s) >= 10:
             nav_source = "tcb_moneydj"
         _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "tcb_moneydj")
@@ -537,12 +597,18 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
               f"（{len(nav_s)}筆/{_nav_span_days(nav_s)}天）→ 不算數，"
               f"改試非 MoneyDJ 長歷史來源", file=_sys_sw.stderr)
         _retry_non_moneydj_only = True
+        _note_nav_source_failure(
+            _nav_fail, nav_source or "tcb_moneydj", note=(
+                f"近30日短窗（{len(nav_s)} 筆、跨度 {_nav_span_days(nav_s)} 天）不算數，"
+                f"改試非 MoneyDJ 長歷史來源"))
         nav_s, nav_source = pd.Series(dtype=float), ""
 
     # 2c2. v6.8: 保險公司專屬 MoneyDJ 子網域（TL=台灣人壽, FL=富蘭克林 等）
     # ⚠️ MoneyDJ 網域 → 短窗重試模式下跳過（見 2c' 註解）
     if len(nav_s) < 10 and not _retry_non_moneydj_only:
         _ins_s = _src_insurance_subdomain_nav(_code)
+        if len(_ins_s) < 10:
+            _note_nav_source_failure(_nav_fail, "insurance_subdomain", _ins_s, 10)
         if len(_ins_s) >= 10:
             nav_s = _ins_s
             nav_source = "insurance_subdomain"
@@ -598,12 +664,21 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                     nav_s = pd.Series(_www_rows).sort_index()
                     nav_source = "moneydj_www"
                     print(f"[src_www] ✅ {_code} {len(nav_s)} 筆")
+                else:
+                    _note_nav_source_failure(_nav_fail, "moneydj_www", _www_rows, 10,
+                                             note="www yp004002 頁面有效，解析出的日期列不足")
+            else:
+                _note_nav_source_failure(_nav_fail, "moneydj_www", note=(
+                    f"www yp004002 各頁型（{', '.join(_pages2)}）皆取數失敗或頁面無效"))
         except Exception as _we:
             print(f"[src_www] {_code}: {_we}")
+            _note_nav_source_failure(_nav_fail, "moneydj_www", note=f"{type(_we).__name__}: {_we}")
 
     # 2e. SITCA（境內基金備援）
     if len(nav_s) < 10:
         nav_s = _src_sitca_nav(_code)
+        if len(nav_s) < 10:
+            _note_nav_source_failure(_nav_fail, "sitca", nav_s, 10)
         if len(nav_s) >= 10:
             nav_source = "sitca"
         _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "sitca")
@@ -614,6 +689,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     #    再打一次是**完全重複**的請求（見 2c' 註解）。
     if len(nav_s) < 10 and not _retry_non_moneydj_only:
         nav_s = _src_nav_30day(_code, _page_type)
+        if len(nav_s) < 10:
+            _note_nav_source_failure(_nav_fail, "moneydj_nav30", nav_s, 10)
         if len(nav_s) >= 10:
             nav_source = "moneydj_nav30"
             print(f"[orchestrator] 📅 {_code} 使用近30日淨值（{len(nav_s)}筆）")
@@ -623,6 +700,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 使用真實 URL（華南銀行/遠東銀行/台灣人壽），非 moneydj.com domain 較不被封鎖
     if len(nav_s) < 10 and _code in _BANK_PLATFORM_CODES:
         _bp_s = _src_bank_platform_nav(_code)
+        if len(_bp_s) < 5:
+            _note_nav_source_failure(_nav_fail, "bank_platform", _bp_s, 5)
         if len(_bp_s) >= 5:
             nav_s = _bp_s
             nav_source = "bank_platform"
@@ -639,6 +718,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     if len(nav_s) < 10 and (_is_insurance_code or _pool_secid_or_isin(_code)):
         _ms_name = result.get("fund_name") or ""
         _ms_s = _src_morningstar_nav(_code, fund_name=_ms_name)
+        if len(_ms_s) < 10:
+            _note_nav_source_failure(_nav_fail, "morningstar", _ms_s, 10)
         if len(_ms_s) >= 10:
             nav_s = _ms_s
             nav_source = "morningstar"
@@ -654,6 +735,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # Yahoo Finance 對共同基金使用 {morningstar_secId}.F 作為代碼
     if len(nav_s) < 10 and _is_insurance_code and _code in _MORNINGSTAR_SECID_MAP:
         _yf_s = _src_yahoo_finance_nav(_code)
+        if len(_yf_s) < 10:
+            _note_nav_source_failure(_nav_fail, "yahoo_finance", _yf_s, 10)
         if len(_yf_s) >= 10:
             nav_s = _yf_s
             nav_source = "yahoo_finance"
@@ -670,6 +753,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 免費 key：25 req/day，https://www.alphavantage.co/support/#api-key
     if len(nav_s) < 10 and _is_insurance_code:
         _av_s = _src_alphavantage_nav(_code)
+        if len(_av_s) < 10:
+            _note_nav_source_failure(_nav_fail, "alphavantage", _av_s, 10)
         if len(_av_s) >= 10:
             nav_s = _av_s
             nav_source = "alphavantage"
@@ -696,6 +781,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
             _intl_src = "jpmorgan_tw"
         else:
             _intl_src = ""
+        if _intl_src and len(_intl_s) < 10:
+            _note_nav_source_failure(_nav_fail, _intl_src, _intl_s, 10)
         if len(_intl_s) >= 10:
             nav_s = _intl_s
             nav_source = _intl_src
@@ -706,6 +793,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 2i. v6.17: 台灣人壽官網直連（TL 前綴，TLZF9 等）
     if len(nav_s) < 10 and _is_insurance_code and _code.startswith("TL"):
         _tl_s = _src_taiwanlife_nav(_code)
+        if len(_tl_s) < 10:
+            _note_nav_source_failure(_nav_fail, "taiwanlife_direct", _tl_s, 10)
         if len(_tl_s) >= 10:
             nav_s = _tl_s
             nav_source = "taiwanlife_direct"
@@ -730,6 +819,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
              "nav_count": len(_best_s), "replaced": nav_source or "",
              "replaced_count": len(nav_s)})
         nav_s, nav_source = _best_s, _best_src
+        _mark_rescued(_nav_fail, _best_src)   # 2026-10-13：先記失敗、後經救援採用 → 標明
 
     # v19.281/v19.284 span-extend(共用 _span_extend_insurance_nav,見檔頭 SSOT 說明)
     # ⚠️ 2026-10-10 複驗更正:此處在 meta 鏈(Step 3)**之前**,`result` 的 fund_name /
@@ -846,10 +936,13 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 result.setdefault("source_trace", []).append(
                     {"source": nav_source, "success": False, "discarded": True,
                      "error": _xv["reason"]})
+                _note_nav_source_failure(_nav_fail, nav_source or "?",
+                                         note=f"跨來源幣別回驗不過，丟棄：{_xv['reason']}")
                 _fb_prov = str((getattr(_best_s, "attrs", None) or {}).get("source") or "")
                 if (_best_fallback_len >= 10
                         and not _fb_prov.startswith(_NAV_NON_NATIVE_PREFIXES)):
                     nav_s, nav_source = _best_s, f"{_best_src}(best-of-waterfall)"
+                    _mark_rescued(_nav_fail, _best_src)   # 2026-10-13：同上
                     _span_days = _nav_span_days(nav_s)
                     result["series"] = nav_s
                     result["data_source"] = nav_source
@@ -951,6 +1044,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                     "請確認代碼是否正確，或改用「手動淨值輸入」功能。"
                 )
 
+    result[NAV_SOURCE_FAILURES_KEY] = _nav_fail   # 2026-10-13 新增鍵（schema-additive）
     return result
 
 
@@ -1026,6 +1120,89 @@ def _ensure_holdings(result: dict, code: str) -> None:
         }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 2026-10-13 總管技術裁定：補回 L1 的 15 分鐘快取（`49` §4.4：快取只放 L1）
+# ══════════════════════════════════════════════════════════════════════════════
+# 歷史（`git log -S "_ttl_cache"` 實查）：v18.58 起本函式掛 `@register_cache` +
+# `@_ttl_cache(ttl_sec=TTL_15MIN, maxsize=64)`（「同 code 跨多保單載入時免重複 HTTP」；
+# `7fff19c6` 改用 `TTL_15MIN` 常數）。`fdbfb550`（#457，v19.240 R8 EX-L1ORCH-1 退役）
+# 把 inline `calc_metrics` 上提 L2 時，連同函式上方那段區塊註解一起刪掉了這兩行裝飾器；
+# 該 commit 的訊息、`STATE.md`、`CLAUDE.md` 都**沒有**任何一句提到要拿掉快取，而它同時新增的
+# `services/fund_service.py::fetch_fund_from_moneydj_url_enriched` docstring 還寫著
+# 「L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留」—— 判定為無意間刪掉，不是刻意移除。
+# ⚠️ 但那次上提確實帶來一個當年沒有的風險：L2 `finalize_fund_metrics`／`_merge_nav_history_series`
+#    會**就地改寫**回傳的 dict 與 Series。`_ttl_cache` 命中時回的是同一個物件 → 直接掛回去會讓
+#    下游的改寫污染快取。所以這次補回時：快取裡存一份、**每次一律交出深拷貝**（命中與未命中都是）。
+# 只快取成功：有 ≥ `NAV_CACHE_MIN_POINTS` 筆淨值序列、而且不是 `cache/nav` 預存檔退回的那一種
+# （預存檔＝即時全敗，屬可重試的失敗）。全來源失敗、只有 meta、只拿到幾筆 → 不入快取。
+# `chain_started_at`（本輪開始時間，世界協調時間）在被快取的函式內取得、跟著結果一起快取 ——
+# 命中時交出的是原本那一次的時間，下游不得用當下時間覆寫。
+# 行為改變：A 鏈所有呼叫者（舊 UI、`fund_row`、`backfill_to_gs`、B 線）**同一網址 15 分鐘內重抓會命中快取**。
+_MONEYDJ_URL_CACHE_SOURCE_PREFIX = "GitHubActions:cache/nav/"
+
+
+def _component_ok(value) -> bool:
+    """wb07／持股這類 dict 組成部分：非空、而且來源不是失敗標記（`all_failed`／`exception`）。"""
+    if not isinstance(value, dict) or not value:
+        return False
+    src = str(value.get("source") or "")
+    return "all_failed" not in src and "exception" not in src
+
+
+def _moneydj_url_result_cacheable(result) -> bool:
+    """`fetch_fund_from_moneydj_url` 的「成功」判準：**這次結果的每個組成部分都成功**才入 15 分鐘快取。
+
+    2026-10-13 稽核 6（B-3）：初版只看序列，於是 wb07／名稱第一次失敗的結果也被快取，沒有快取時
+    下一次呼叫會重試補到的部分，15 分鐘內再也補不到（舊 UI「重抓」「重新計算」失效）。
+    沒有快取時（`fdbfb550`～本次之前）每次呼叫都會重試下列每一項，所以任一項失敗都不快取；判斷不了就不快取：
+    - 序列：≥ `NAV_CACHE_MIN_POINTS` 筆，而且不是 `cache/nav` 預存檔（＝即時全敗），也不是近30日短窗
+      （既有 `_is_short_window_nav`）；
+    - 名稱（meta）：`fund_name` 非空；
+    - wb07：`risk_metrics` 非空、來源不是失敗標記；
+    - wb01：`perf_source == "wb01"`（`fetch_performance_wb01` 有回東西才會設）；
+    - 持股：`holdings` 非空、來源不是失敗標記；
+    - 配息：`dividends` 非空（不配息的基金分不出「沒有」與「沒抓到」→ 一律不快取）；
+    - `error` 非空 → 不快取。
+    ⚠️ 不看：瀑布裡排在採用來源之前、這次沒取到的來源（例如 FundClear 沒有、鉅亨有）——那些失敗在沒有快取時
+    同樣會被重試，但若連它們都算，幾乎沒有任何結果能入快取；這一點是本組的判斷，已在回報與 commit 寫明。
+    """
+    from shared.data_quality import NAV_CACHE_MIN_POINTS
+    if not isinstance(result, dict):
+        return False
+    s = result.get("series")
+    if not isinstance(s, pd.Series) or len(s) < NAV_CACHE_MIN_POINTS:
+        return False
+    attrs = getattr(s, "attrs", None) or {}
+    if str(attrs.get("source") or "").startswith(_MONEYDJ_URL_CACHE_SOURCE_PREFIX) or "nav_quality" in attrs:
+        return False
+    if _is_short_window_nav(s):   # 2026-10-13 稽核 6：近30日短窗（含救援採用的短窗）沒有快取的版本下次會再試長歷史
+        return False
+    if result.get("error") or not result.get("fund_name"):
+        return False
+    if not _component_ok(result.get("risk_metrics")) or not _component_ok(result.get("holdings")):
+        return False
+    if result.get("perf_source") != "wb01":
+        return False
+    if not result.get("dividends"):
+        return False
+    return True
+
+
+def _deepcopy_result(fn):
+    """最外層：每次交出深拷貝（命中與未命中都是），下游就地改寫碰不到快取裡那一份。
+    `functools.wraps` 一併帶出內層的 `cache_clear()`／`cache_info()` 與 `__wrapped__`。"""
+    import copy as _copy
+    import functools as _functools
+
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return _copy.deepcopy(fn(*args, **kwargs))
+    return wrapper
+
+
+@_deepcopy_result
+@register_cache
+@_ttl_cache(ttl_sec=TTL_15MIN, maxsize=64, cache_if=_moneydj_url_result_cacheable)   # 2026-10-13 補回（見上方）
 def fetch_fund_from_moneydj_url(url: str) -> dict:
     """
     輸入任何 MoneyDJ 基金頁面網址（或純代碼如 tlzf9），
@@ -1051,6 +1228,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     # v19.61 E1：_moneydj_fetched_at 記錄抓取當下 wallclock（YYYY-MM-DD HH:MM:SS），
     # 給 Tab5 組合健檢「資料新鮮度」banner 顯示「抓取於 / NAV 日期 / 延遲 Nd」用。
     # 純新增欄位，零影響既有 caller（讀不到的就跳過）。
+    # 2026-10-13：本輪開始時間（帶時區），跟著結果一起快取（見上方「補回 L1 的 15 分鐘快取」）。
+    _chain_started_at = _dt_mj.datetime.now(_dt_mj.timezone.utc).isoformat()
     result = dict(fund_name="", full_key="", fund_code="", category="",
                   risk_level="", dividend_freq="", currency="",  # v19.505:不矇 USD;
                   # 空 init → protect loop 不會把假 USD 蓋回多來源解析出的真幣別(§1)
@@ -1065,7 +1244,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                   # C2 v19.208 F-PROV-1:加 source orchestrator-level(§2.2)
                   source="MoneyDJ:fund_url_orchestrator",
                   _moneydj_fetched_at=_dt_mj.datetime.now().strftime(
-                      "%Y-%m-%d %H:%M:%S"))
+                      "%Y-%m-%d %H:%M:%S"),
+                  chain_started_at=_chain_started_at)   # 2026-10-13 新增鍵
 
     # ── v18.22: 先 canonicalize 非標準變體 URL（mobile / 平台子網域）──
     #           m.moneydj.com / chubb.moneydj.com /w/wr/ 等都轉成
@@ -1088,6 +1268,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             code = url.strip().upper()
     if not code:
         result["error"] = "無法解析代碼，請輸入 MoneyDJ 網址或代碼（如 tlzf9）"
+        result[NAV_SOURCE_FAILURES_KEY] = []   # 2026-10-13 新增鍵；還沒走到任何來源，原因已在 `error`
         return result
 
     _page_type = _input_info.get("page_type", "")   # 保留原始頁型（URL 輸入最準）
@@ -1116,6 +1297,14 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     # 選股池推定;但 Step 2 合併進來的值仍可能是**硬編表補的**而非本頁原值,故這裡
     # 仍只收本函式自己解析出的原值。
     _legacy_raw_ccy = ""
+    # 2026-10-13 總管技術裁定第 3 條：本函式各段（多來源主路線、alt 頁型、legacy 最終備援）的
+    # 逐來源失敗原文累積在這裡，回傳前以新增鍵 `NAV_SOURCE_FAILURES_KEY` 掛上（只記錄、不判斷）。
+    _nav_fail_acc: list = []
+
+    def _take_failures(_from: dict, _pt: str) -> None:
+        for _f in (_from or {}).get(NAV_SOURCE_FAILURES_KEY) or ():
+            if isinstance(_f, dict):
+                _nav_fail_acc.append({**_f, "page_type": _pt})
 
     # ── Step 1: 直接抓使用者提供的原始 URL（最高優先）───────────────
     if _input_info.get("is_url") and _input_info.get("full_url"):
@@ -1155,6 +1344,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         _ms_result = fetch_fund_multi_source(
             code, force_refresh=False, page_type=_page_type
         )
+        _take_failures(_ms_result, _page_type)
         # 合併策略：series/metrics/perf 優先用 multi_source，meta 保留 direct_url 結果
         # v13.5: merge_non_empty，保留 direct_url meta，補入 multi_source 的 series/metrics
         if _ms_result:
@@ -1183,6 +1373,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             # fast-path 勝利 stderr 訊號之後 → 訊號順序 / 語意不變(§3)
             _ensure_holdings(result, code)
             _ensure_currency(result, code)      # v19.505:收口修幣別(protect loop 可能蓋回假 USD)
+            result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)   # 2026-10-13 新增鍵
             return result
         # v18.121 issue 4: series 缺失但 fund_name+nav 有 → 不再提早 return（之前 bug）
         # 自動切 alternative page_type 重試一次（境內↔境外 mapping 錯誤的 case）
@@ -1195,6 +1386,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 _alt_result = fetch_fund_multi_source(
                     code, force_refresh=False, page_type=_alt_pt
                 )
+                _take_failures(_alt_result, _alt_pt)
                 if _alt_result:
                     _alt_s = _alt_result.get("series")
                     _alt_s_ok = (_alt_s is not None and hasattr(_alt_s, "__len__")
@@ -1215,12 +1407,15 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         # v19.499:alt page_type 提早 return 前補抓持股(見 _ensure_holdings)
                         _ensure_holdings(result, code)
                         _ensure_currency(result, code)   # v19.505:收口修幣別
+                        result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)   # 2026-10-13 新增鍵
                         return result
                     else:
                         print(f"[fetch] alt page_type ({_alt_pt}) 仍 series=0，"
                               f"繼續原始流程")
             except Exception as _alt_e:
                 print(f"[fetch] alt page_type fallback 異常: {_alt_e}")
+                _nav_fail_acc.append({"source": "multi_source", "page_type": _alt_pt,
+                                      "error": f"{type(_alt_e).__name__}: {_alt_e}"})
             # 兩個 page_type 都拿不到 series → 繼續走 Step 3+ 原始 _src_* 流程
             print("[fetch] ⚠️ 兩個 page_type 都不足，繼續原始流程")
         else:
@@ -1254,6 +1449,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         result.setdefault("source_trace", []).append(
             {"source": "multi_source", "success": False,
              "error": f"{type(_ms_e).__name__}: {_ms_e}"})
+        _nav_fail_acc.append({"source": "multi_source", "page_type": _page_type,
+                              "error": f"{type(_ms_e).__name__}: {_ms_e}"})
 
     # ── 判斷境內/境外基金（影響爬蟲路徑）──────────────────
     # 境內基金（投信，如聯博/安聯投信/富達投信）：
@@ -1627,8 +1824,13 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["series"] = _fallback_s
                 result["error"] = None
                 print(f"[fetch_nav_fallback] \u2705 {len(_fallback_s)} \u7b46")
+            else:
+                # 2026-10-13：保留 `fetch_nav` 自己的逐網址失敗原文（`attrs["fetch_error"]`），不再丟掉。
+                _note_nav_source_failure(_nav_fail_acc, "fetch_nav（legacy 最終備援）", _fallback_s, 10)
         except Exception as _fnf_e:
             print(f"[fetch_nav_fallback] {_fnf_e}")
+            _note_nav_source_failure(_nav_fail_acc, "fetch_nav（legacy 最終備援）",
+                                     note=f"{type(_fnf_e).__name__}: {_fnf_e}")
 
     # v19.284:本函式的「Step 3+ 原始流程」是與 _fetch_fund_single 平行的第二條
     # NAV pipeline(前面 Step 2 多來源 orchestrator 若 _s_ok/_m_ok 判斷失敗才會
@@ -1714,6 +1916,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         print(f"[snapshot] 💾 {_snap_key} 快照已更新")
 
     _ensure_currency(result, code)   # v19.505:legacy 路徑收口修幣別
+    # 2026-10-13 新增鍵：放在快照回填之後才掛，免得快照裡上一次的原文／開始時間蓋掉這一次的。
+    result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)
+    result["chain_started_at"] = _chain_started_at
     return result
 
 

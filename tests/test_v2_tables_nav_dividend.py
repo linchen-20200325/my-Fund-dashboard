@@ -120,11 +120,14 @@ def _series(points, **attrs):
 
 
 def _nav_stub(table, calls=None):
-    """full_key → (Series, error) 或例外。"""
-    def fake(full_key, portal=""):
+    """chain_code → (Series, error) 或例外。
+
+    2026-10-13：B 線淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error(chain_code, full_key)`
+    （原為 L1 `fetch_nav_with_error(full_key, portal)`；有意識的更正，不是漏刪）。"""
+    def fake(chain_code, full_key):
         if calls is not None:
-            calls.append((full_key, portal))
-        value = table[full_key]
+            calls.append((chain_code, full_key))
+        value = table[chain_code]
         if isinstance(value, Exception):
             raise value
         return value
@@ -138,7 +141,8 @@ def _forbid(name):
 
 
 def fund(code="ZZ9999", full_key="ZZ9999", ccy="USD", **kw):
-    item = {"fund_code": code, "full_key": full_key}
+    # 2026-10-13：`chain_code`（交給 A 鏈的 `parsed_code`）必填；替身預設與 full_key 相同。
+    item = {"fund_code": code, "full_key": full_key, "chain_code": kw.pop("chain_code", full_key)}
     if ccy is not None:
         item["holding_ccy"] = ccy
     item.update(kw)
@@ -149,7 +153,7 @@ def fund(code="ZZ9999", full_key="ZZ9999", ccy="USD", **kw):
 
 def test_nav正例_逐欄照44_幣別取持倉手填_provenance記來源(monkeypatch):
     s = _series([("2026-09-01", 10.5), ("2026-09-02", 10.6)])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}))
     out = ND.build_nav_table([fund()])
     assert out["rows"] == [
         _nav_row(nav_date="2026-09-01", nav_orig_ccy=10.5),
@@ -166,7 +170,7 @@ def test_nav正例_逐欄照44_幣別取持倉手填_provenance記來源(monkeyp
 def test_nav_週末與假日沒有列_不補列(monkeypatch):
     # 2026-09-04 週五、09-07 週一；中間的週末不得出現
     s = _series([("2026-09-04", 10.0), ("2026-09-07", 10.2)])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}))
     rows = ND.build_nav_table([fund()])["rows"]
     assert [r["nav_date"] for r in rows] == ["2026-09-04", "2026-09-07"]
 
@@ -226,7 +230,7 @@ def test_nav_空序列沒有原因_回弱訊息_不寫():
 
 def test_nav_取數失敗_原文逐字進errors(monkeypatch):
     msg = "fetch_nav('ZZ9999') 即時網址與預存檔皆失敗:\nhttps://x → 取數失敗(kind=http_403)"
-    monkeypatch.setattr(ND, "fetch_nav_with_error",
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error",
                         _nav_stub({"ZZ9999": (pd.Series(dtype=float), msg)}))
     out = ND.build_nav_table([fund()])
     assert out["rows"] == [] and out["errors"] == {"ZZ9999": msg} and out["fetched"] == {"ZZ9999": 0}
@@ -234,7 +238,7 @@ def test_nav_取數失敗_原文逐字進errors(monkeypatch):
 
 def test_nav_L1拋例外_轉成型別名加原文_其他基金照跑(monkeypatch):
     ok = _series([("2026-09-01", 10.0)])
-    monkeypatch.setattr(ND, "fetch_nav_with_error",
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error",
                         _nav_stub({"BAD": RuntimeError("boom"), "ZZ9999": (ok, None)}))
     out = ND.build_nav_table([fund(code="BAD", full_key="BAD"), fund()])
     assert out["errors"] == {"BAD": "RuntimeError: boom"}
@@ -300,7 +304,7 @@ def test_nav_來源自報與持倉不同_不猜_整批不寫():
 
 def test_nav_同一檔多列持倉幣別互相不同_整批不寫(monkeypatch):
     s = _series([("2026-09-01", 10.0)])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}))
     out = ND.build_nav_table([fund(ccy="USD"), fund(ccy="TWD")])
     assert out["rows"] == [] and out["withheld"] == {"ZZ9999": ND.WITHHELD_CCY_CONFLICT}
 
@@ -308,13 +312,13 @@ def test_nav_同一檔多列持倉幣別互相不同_整批不寫(monkeypatch):
 def test_nav_同一檔多列持倉_只取數一次(monkeypatch):
     calls = []
     s = _series([("2026-09-01", 10.0)])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}, calls))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}, calls))
     out = ND.build_nav_table([fund(), fund(), fund(ccy=None)])
-    assert calls == [("ZZ9999", "")] and len(out["rows"]) == 1
+    assert calls == [("ZZ9999", "ZZ9999")] and len(out["rows"]) == 1   # (chain_code, full_key)
 
 
 def test_nav_同一檔給了不同full_key_不取數不寫(monkeypatch):
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _forbid("fetch_nav_with_error"))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _forbid("fetch_nav_chain_with_error"))
     out = ND.build_nav_table([fund(full_key="A1"), fund(full_key="A2")])
     assert out["rows"] == [] and out["withheld"] == {"ZZ9999": ND.WITHHELD_INPUT_CONFLICT}
 
@@ -456,11 +460,19 @@ def test_範圍_本檔沒有寫入函式_也沒有快取裝飾():
 
 
 def test_範圍_L1快取仍是daily_cache_本層沒有疊第二層():
-    from repositories.fund import nav_metrics
-    assert ND.fetch_nav_with_error is nav_metrics.fetch_nav_with_error
+    from repositories.fund import fund_orchestration, nav_metrics
+    from services import moneydj_fetcher
+    # ~~assert ND.fetch_nav_with_error is nav_metrics.fetch_nav_with_error~~
+    # → 2026-10-13（有意識的更正，不是漏刪）：淨值改走 A 鏈；本層只轉接，不疊快取。
+    assert ND.auto_fetch_moneydj is moneydj_fetcher.auto_fetch_moneydj
     assert ND.fetch_div_with_error is nav_metrics.fetch_div_with_error
-    assert hasattr(nav_metrics.fetch_nav, "cache_clear")
     assert hasattr(nav_metrics.fetch_div, "cache_clear")
+    # A 鏈實際用到的 L1 快取：全部有 cache_clear，而且就是 A 鏈命名空間裡那幾個物件（不是另一份）
+    assert ND.CHAIN_CACHED_FUNCTIONS == (fund_orchestration.fetch_nav, fund_orchestration.fetch_risk_metrics,
+                                         fund_orchestration.fetch_performance_wb01,
+                                         fund_orchestration.fetch_holdings, fund_orchestration._holdings_ttl,
+                                         fund_orchestration.fetch_fund_from_moneydj_url)
+    assert all(hasattr(f, "cache_clear") for f in ND.CHAIN_CACHED_FUNCTIONS)
 
 
 def test_數值_淨值保留原精度不四捨五入():
@@ -599,9 +611,9 @@ def test_4_dividend型別不對_進errors_字串不逐字元計數(bad):
 def test_4_某一檔回非二元組_只有那一檔進errors_其他照跑(monkeypatch):
     ok = _series([("2026-09-01", 10.0)])
 
-    def fake(full_key, portal=""):
-        return {"BAD": ok, "BAD3": (ok, None, "x"), "ZZ9999": (ok, None)}[full_key]
-    monkeypatch.setattr(ND, "fetch_nav_with_error", fake)
+    def fake(chain_code, full_key):
+        return {"BAD": ok, "BAD3": (ok, None, "x"), "ZZ9999": (ok, None)}[chain_code]
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", fake)
     out = ND.build_nav_table([fund(code="BAD", full_key="BAD"), fund(code="BAD3", full_key="BAD3"),
                               fund()], now=NOW)
     assert set(out["errors"]) == {"BAD", "BAD3"}
@@ -706,7 +718,7 @@ def test_小修2_缺值加USD寫USD_單獨缺值判ccy_missing(blank, monkeypatc
     alone = ND.rows_from_nav_series("ZZ9999", s, None, holding_ccys=[blank], now=NOW)
     assert alone["withheld"] == ND.WITHHELD_CCY_MISSING
     # 經 build_nav_table：多列持倉、缺值重複出現，去重後只剩 USD
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}))
     built = ND.build_nav_table([fund(ccy=blank), fund(ccy="USD"), fund(ccy=blank)], now=NOW)
     assert [r["ccy"] for r in built["rows"]] == ["USD"] and built["withheld"] == {}
     only_blank = ND.build_nav_table([fund(ccy=blank), fund(ccy=blank)], now=NOW)
@@ -762,7 +774,7 @@ def test_小修3_整檔不寫的幾條路徑也核帳成立():
 
 def test_小修3_build回傳帶skipped_rows(monkeypatch):
     s = _raw_series([10.0, 10.0], ["2026-09-01", "2026-09-01"])
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _nav_stub({"ZZ9999": (s, None)}))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _nav_stub({"ZZ9999": (s, None)}))
     out = ND.build_nav_table([fund()], now=NOW)
     assert out["fetched"] == {"ZZ9999": 2} and out["skipped_rows"] == {"ZZ9999": 1}
     assert len(out["rows"]) == 1
@@ -788,7 +800,7 @@ def test_小修4_2_核帳不平會raise具名例外():
 
 
 def test_小修4_3_input_conflict與pending的檔沒有fetched與skipped_rows鍵(monkeypatch):
-    monkeypatch.setattr(ND, "fetch_nav_with_error", _forbid("fetch_nav_with_error"))
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", _forbid("fetch_nav_chain_with_error"))
     out = ND.build_nav_table([fund(full_key="A1"), fund(full_key="A2")], now=NOW)
     assert "ZZ9999" not in out["fetched"] and "ZZ9999" not in out["skipped_rows"]
     monkeypatch.setattr(ND, "fetch_div_with_error", _forbid("fetch_div_with_error"))

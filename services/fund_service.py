@@ -1158,7 +1158,29 @@ def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -
         merged.attrs["currency"] = _merged_ccy
     else:
         merged.attrs.pop("currency", None)   # 不留 live 的舊宣告(那會變成一句謊)
+    _live_ccy_raw = (getattr(s_live, "attrs", None) or {}).get("currency")   # 2026-10-13 B-1：在被改寫之前先記
     merged.attrs["nav_history_merged"] = f"+{added} pts from {s_hist.attrs.get('source', 'nav_history')}"
+    # 2026-10-13 總管技術裁定第 4 條（只加 attrs，合併語意一字未動）：記下**哪些日期是累積表貢獻的**
+    # （＝合併後有、live 沒有的日期；同日 live 蓋 hist，所以重疊日不算）與那幾天各自的 `recorded_at`
+    # （`load_series` 給的原值；缺 → 空字串，不補）。B 線據此逐點分辨「本次即時取得」與「累積表舊點」。
+    # 算不出來 → 記下原因、不寫這兩個鍵（B 線見到 `nav_history_merged` 卻沒有日期清單會整檔扣下，不猜）。
+    try:
+        _rec_by_date = s_hist.attrs.get("recorded_at_by_date") or {}
+        # 2026-10-13 稽核 5 N1：`groupby(level=0).last()` 跳過 NaN —— live 某天是 NaN 時，合併後那天其實是
+        # 累積表的值。故「累積表貢獻的日期」以 live **有效值**的日期為準（只改這份 attrs 標記，合併語意不動）。
+        _live_valid = s_live.dropna().index
+        _hist_days = [pd.Timestamp(d).date().isoformat()
+                      for d in merged.index.difference(_live_valid)]
+        merged.attrs["nav_history_dates"] = _hist_days
+        merged.attrs["nav_history_recorded_at"] = {d: str(_rec_by_date.get(d) or "") for d in _hist_days}
+        merged.attrs["nav_history_source"] = str(s_hist.attrs.get("source", "nav_history"))
+        # 2026-10-13 B-1：累積表各點宣告的幣別原值、live 那一段宣告的幣別原值（上方 `currency` 會被
+        # 對帳後改寫或拿掉；B 線要的是「有沒有任何一段宣告了與持倉不同的幣別」，所以另記原值）。
+        _ccy_by_date = s_hist.attrs.get("currency_by_date") or {}
+        merged.attrs["nav_history_currency"] = {d: str(_ccy_by_date.get(d) or "") for d in _hist_days}
+        merged.attrs["nav_history_live_currency"] = "" if _live_ccy_raw is None else str(_live_ccy_raw)
+    except Exception as _hd_e:  # noqa: BLE001 —— 只影響新增的 attrs；原因照實記下，不吞
+        merged.attrs["nav_history_dates_error"] = f"{type(_hd_e).__name__}: {_hd_e}"
     print(f"[nav_history] 🗂️ {code} 併入累積序列 +{added} 筆"
           f"(live {len(s_live)} → merged {len(merged)})")
     return merged, {"source": "nav_history_merge", "success": True,
@@ -1369,6 +1391,10 @@ def fetch_fund_from_moneydj_url_enriched(url: str, oauth_client=None) -> dict:
     (EX-L1ORCH-1 退役)。L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留,本 wrapper
     每次 L1 命中 cache 後仍 re-run finalize(metrics 計算為 in-memory pandas
     vectorized 操作,成本 ~ms 級可接受)。
+    ⚠️ 2026-10-13 狀態更新(有意識的更正,不是漏刪;決策者:AI 總管):上句寫下的同一個 commit
+    (`fdbfb550`)其實把 L1 的 `@_ttl_cache` 一起刪了,此後到 2026-10-13 之間這句**為假**(L1 沒有快取)。
+    2026-10-13 已在 L1 補回(只快取成功、TTL_15MIN、每次交出深拷貝 —— 本 wrapper 的 finalize 會就地
+    改寫 dict 與 Series,不拷貝會污染快取),自此本句**再度為真**。
 
     v19.509:`oauth_client` 選填 —— 透傳給 finalize → nav_history 讀取(同上)。
     """
