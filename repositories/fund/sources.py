@@ -86,6 +86,41 @@ __all__ = [
 ]
 
 
+# ── 2026-10-13 配息取數狀態與解析依據（新增鍵／新增屬性，schema-additive；B 線配息移交）──────────
+# 客戶 2026-10-13 裁示：B 線沿用 A 鏈的配息瀑布（`_src_tcb_div` → `_src_fundclear_div` → `_src_cnyes_div`）。
+# 本段只**多記兩件事**，不改任何一個解析器的請求、門檻、欄位取值與回傳內容：
+# 1. **取數狀態**：三個解析器的回傳值改成 `DividendList`（`list` 的子類別，內容與 `==` 比較和原本的 list 完全相同），
+#    多一個屬性 `div_fetch = {"parser", "status", "detail"}`，分出「成功取數且確實沒有配息列」（`empty`）
+#    與「取數失敗或判斷不了」（`failed`）。空清單時沒有任何鍵可以掛，所以掛在清單物件上（`copy.deepcopy`／pickle 保留）。
+#    ⚠️ 判斷不了的一律算 `failed`（例：有表頭但有解析不了的資料列、回應沒有配息陣列、某一個網址沒取到）——
+#    下游據此「不快取」，與沒有這個屬性時的行為相同。
+# 2. **解析依據**：每一筆配息多一個鍵 `div_provenance`（dict），記這一筆的日期／幣別**取自哪一欄**
+#    （TCB：表頭第 2、7 格的文字；FundClear／鉅亨：JSON 欄名），以及本次取得時間。
+#    B 線據此逐筆判斷日期是不是除息日、幣別是不是來源自報（`services/v2_tables/nav_dividend.py`）。
+DIV_FETCH_ATTR = "div_fetch"
+DIV_STATUS_ROWS = "rows"          # 取到配息列
+DIV_STATUS_EMPTY = "empty"        # 成功取數，且來源確實沒有任何配息列
+DIV_STATUS_FAILED = "failed"      # 取數失敗，或分辨不出是不是沒有配息
+DIV_PROVENANCE_KEY = "div_provenance"
+DIV_PARSER_TCB = "tcb_moneydj_div"
+DIV_PARSER_FUNDCLEAR = "fundclear_div"
+DIV_PARSER_CNYES = "cnyes_div"
+
+
+class DividendList(list):
+    """配息清單：內容與比較行為同 `list`；另帶 `div_fetch` 屬性（取數狀態，見上方說明）。"""
+
+
+def _div_result(items, parser: str, status: str, detail: str = "") -> "DividendList":
+    out = DividendList(items)
+    out.div_fetch = {"parser": parser, "status": status, "detail": str(detail or "")}
+    return out
+
+
+def _div_now_utc() -> str:
+    return pd.Timestamp.now('UTC').isoformat()
+
+
 # Yahoo Finance v8 chart API — Morningstar {secId}.F symbol 專用 template。
 # v19.230 P1-2 第二輪:深層稽核確認與 scripts/fetch_nav_cache.py:fetch_morningstar_via_yf
 # 真重複(同字串,兩處 production-ish caller)→ SSOT 收口至此(production fetcher 為主,
@@ -208,18 +243,40 @@ def _src_fundclear_meta(code: str) -> dict:
     return meta
 
 
+def _first_truthy_key(item: dict, keys) -> str:
+    """`item.get(k1) or item.get(k2) or ...` 實際取到值的那個欄名；都沒有回 `""`（與 `or` 串同一個判法）。"""
+    for k in keys:
+        if item.get(k):
+            return k
+    return ""
+
+
+_FUNDCLEAR_DIV_DATE_KEYS = ("ExDividendDate", "exDividendDate", "Date", "date")
+_FUNDCLEAR_DIV_CCY_KEYS = ("Currency", "currency")
+
+
 def _src_fundclear_div(code: str) -> list:
-    """從 FundClear 取配息資料"""
+    """從 FundClear 取配息資料
+
+    2026-10-13（新增鍵，取值一個不改）：回傳 `DividendList`（取數狀態見 `DIV_FETCH_ATTR`），
+    每筆多 `div_provenance`：`date_field`＝日期實際取自哪個 JSON 欄名（`ExDividendDate`…`date` 的第一個有值者，
+    與原本的 `or` 串同一個判法）、`currency_field`＝幣別取自哪個欄名（沒有 → `""`）、`fetched_at`。
+    狀態：請求失敗、回應不是 JSON、例外 → `failed`；回應帶 `Data`／`data` 且是**空陣列** → `empty`；
+    有項目卻一筆都沒收（金額缺或不大於 0）→ `failed`（分辨不出）。
+    """
     divs = []
+    status, detail = DIV_STATUS_FAILED, ""
     try:
         url = (f"https://www.fundclear.com.tw/SmartFundAPI/api/FundAjax"
                f"/GetFundDividend?FundCode={code}")
         r = fetch_url_with_retry(url, timeout=12, retries=2)
         if r is None:
-            return divs
+            return _div_result(divs, DIV_PARSER_FUNDCLEAR, DIV_STATUS_FAILED,
+                               "GetFundDividend 請求失敗（fetch_url_with_retry 回 None）")
         data = r.json()
         items = (data.get("Data") or data.get("data") or
                  (data if isinstance(data, list) else []))
+        _fa = _div_now_utc()
         for item in (items or []):
             amt = safe_float(item.get("DividendAmount") or
                              item.get("dividendAmount") or
@@ -236,12 +293,28 @@ def _src_fundclear_div(code: str) -> list:
                 "yield_pct": safe_float(
                     item.get("DividendRate") or item.get("dividendRate"), 0) or 0,
                 "currency":  item.get("Currency") or item.get("currency") or "",  # 2026-10-10 未知≠USD
+                DIV_PROVENANCE_KEY: {   # 2026-10-13 新增鍵（只記錄取自哪個欄名，不改上面任何一個值）
+                    "parser": DIV_PARSER_FUNDCLEAR,
+                    "date_field": _first_truthy_key(item, _FUNDCLEAR_DIV_DATE_KEYS),
+                    "currency_field": _first_truthy_key(item, _FUNDCLEAR_DIV_CCY_KEYS),
+                    "fetched_at": _fa,
+                },
             })
         if divs:
             print(f"[src_fundclear_div] ✅ {code} {len(divs)} 筆配息")
+            status = DIV_STATUS_ROWS
+        elif (isinstance(data, dict) and not items
+              and any(isinstance(data.get(k), list) for k in ("Data", "data"))):
+            # `items` 為空 ⇒ 兩個鍵都沒有值；其中至少一個**確實是陣列**（不是缺鍵、不是 null）才算「確實沒有」
+            status, detail = DIV_STATUS_EMPTY, "GetFundDividend 回應的配息陣列為空"
+        elif items:
+            detail = f"GetFundDividend 回了 {len(items)} 項，沒有一項有大於 0 的配息金額（分辨不出是不是沒有配息）"
+        else:
+            detail = "GetFundDividend 回應沒有 Data／data 配息陣列（分辨不出是不是沒有配息）"
     except Exception as e:
         print(f"[src_fundclear_div] {code}: {e}")
-    return divs
+        status, detail = DIV_STATUS_FAILED, f"{type(e).__name__}: {e}"
+    return _div_result(divs, DIV_PARSER_FUNDCLEAR, status, detail)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -711,6 +784,10 @@ def fetch_div_cnyes(code: str) -> list:
     """
     divs = []
     _code = code.upper().strip()
+    # 2026-10-13 新增（取值一個不改）：回傳 `DividendList`（取數狀態見 `DIV_FETCH_ATTR`）；
+    # 每筆多 `div_provenance`（`date_field`＝日期實際取自 `date` 還是 `exDate`，與原本的 `or` 串同一個判法）。
+    # 狀態：非 200、例外 → `failed`；回應帶 `data`／`items` 且是**空陣列** → `empty`；有項目卻一筆都沒收 → `failed`。
+    status, detail = DIV_STATUS_FAILED, ""
     try:
         url = f"{_CNYES_FUND_API}/{_code}/dividend"
         r = requests.get(url, headers={
@@ -730,16 +807,31 @@ def fetch_div_cnyes(code: str) -> list:
                             "date": str(d)[:10],
                             "amount": amt,
                             "yield_pct": safe_float(item.get("yieldRate") or item.get("yield_pct"), 0),
+                            DIV_PROVENANCE_KEY: {"parser": DIV_PARSER_CNYES,
+                                                 "date_field": _first_truthy_key(item, ("date", "exDate"))},
                         })
+            if divs:
+                status = DIV_STATUS_ROWS
+            elif (not items and isinstance(data, dict)
+                  and any(isinstance(data.get(k), list) for k in ("data", "items"))):
+                status, detail = DIV_STATUS_EMPTY, "鉅亨配息 API 回應的配息陣列為空"
+            elif items:
+                detail = "鉅亨配息 API 回了項目，沒有一項同時有日期與金額（分辨不出是不是沒有配息）"
+            else:
+                detail = "鉅亨配息 API 回應沒有 data／items 配息陣列（分辨不出是不是沒有配息）"
+        else:
+            detail = f"鉅亨配息 API HTTP {r.status_code}"
     except Exception as _e:
         print(f"[cnyes_div] {_code}: {_e}")
+        status, detail = DIV_STATUS_FAILED, f"{type(_e).__name__}: {_e}"
     # v19.226 F-PROV-1 B2:list-of-dict 每 element 加 source + fetched_at(§2.2)
     if divs:
         _fa = pd.Timestamp.now('UTC').isoformat()
         for _d in divs:
             _d["source"] = f"Cnyes:dividend:{_code}"
             _d["fetched_at"] = _fa
-    return divs
+            _d[DIV_PROVENANCE_KEY]["fetched_at"] = _fa
+    return _div_result(divs, DIV_PARSER_CNYES, status, detail)
 
 
 # ── v19.276 cnyes 持股 fallback(MoneyDJ yp013xxx 全失敗時的替代源)─────────
@@ -1178,15 +1270,23 @@ def _src_cnyes_nav(code: str) -> pd.Series:
 
 
 def _src_cnyes_div(code: str) -> list:
-    """鉅亨網配息（REST API，無 IP 封鎖）"""
+    """鉅亨網配息（REST API，無 IP 封鎖）
+
+    2026-10-13：空結果也原樣交回 `fetch_div_cnyes` 的回傳物件（內容同樣是空清單），取數狀態才帶得出去；
+    例外 → 空的 `DividendList`，狀態 `failed`。
+    """
     try:
         divs = fetch_div_cnyes(code)
         if divs:
             print(f"[src_cnyes_div] ✅ {code} {len(divs)} 筆")
             return divs
+        if isinstance(divs, DividendList):
+            return divs
     except Exception as e:
         print(f"[src_cnyes_div] {code}: {e}")
-    return []
+        return _div_result([], DIV_PARSER_CNYES, DIV_STATUS_FAILED, f"{type(e).__name__}: {e}")
+    return _div_result([], DIV_PARSER_CNYES, DIV_STATUS_FAILED,
+                       f"fetch_div_cnyes 回傳型別不帶取數狀態（{type(divs).__name__}）")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3226,6 +3326,40 @@ def _src_tcb_meta(code: str) -> dict:
     return meta
 
 
+def _tcb_div_header_cells(tbl) -> list:
+    """配息表第一列（`_src_tcb_div` 當表頭略過的那一列）每一格的文字；取不到回 `[]`（只記錄，失敗不影響取值）。"""
+    try:
+        _first = tbl.find("tr")
+        if _first is None:
+            return []
+        return [c.get_text(strip=True) for c in _first.find_all(["th", "td"])]
+    except Exception:  # noqa: BLE001 —— 表頭只拿來記錄；記不到就是 []，下游當成「無法核對」
+        return []
+
+
+def _tcb_div_table_shape(html: str) -> str:
+    """`_src_tcb_div` 解析出 0 筆時，這一頁屬於哪一種（2026-10-13，只記錄）：
+    - `header_only`：配息表（含「配息基準日」或「除息日」字樣的表）略過表頭後，**沒有任何一列帶有非空白的格**；
+    - `rows_unparsed`：有帶文字的列、卻一筆都沒解析成配息（版面改了、或「查無資料」之類的列）—— 分辨不出；
+    - `parse_error`：解析本身拋例外。
+    表的挑法與 `_parse_div_html` 相同（同一組字樣、同樣略過第一列、同樣最多看 60 列）。"""
+    try:
+        _soup = BeautifulSoup(html, "lxml")
+        _found = False
+        for _tbl in _soup.find_all("table"):
+            _t = _tbl.get_text()
+            if "配息基準日" not in _t and "除息日" not in _t:
+                continue
+            _found = True
+            for _row in _tbl.find_all("tr")[1:60]:
+                if any(td.get_text(strip=True) for td in _row.find_all("td")):
+                    return "rows_unparsed"
+        # 字樣出現在頁面上、卻不在任何一張表裡 → 不是「空表」，分辨不出
+        return "header_only" if _found else "no_dividend_table"
+    except Exception:  # noqa: BLE001 —— 判斷不了 → 呼叫端當成失敗（不快取），與沒有這個判斷時相同
+        return "parse_error"
+
+
 def _src_tcb_div(code: str) -> list:
     """
     TCB MoneyDJ 配息資料。
@@ -3236,6 +3370,8 @@ def _src_tcb_div(code: str) -> list:
             fallback 永遠不啟動 → dividends 為空 → 配息率 / 含息報酬率全空。
             改為：(a) 把 parse 搬到 loop 內，**只在解析出非空 divs 才 return**；
             (b) 境內也加 wb05 作次援（截圖示主站對 ACCP138 都有 funddividend 完整資料）。
+    2026-10-13（新增鍵／屬性，網址、順序、停止條件、取值一個不改）：回傳 `DividendList`，取數狀態見 `DIV_FETCH_ATTR`；
+            每筆 `div_provenance` 記表頭文字、頁面與取得時間。`empty` 只在每一個網址都取回空配息表時成立。
     """
     divs: list = []
     bases = ["https://tcbbankfund.moneydj.com/funddj",
@@ -3250,7 +3386,12 @@ def _src_tcb_div(code: str) -> list:
 
     def _parse_div_html(_html: str) -> list:
         """v14.2 表格結構：col[0]=配息基準日 col[1]=除息日 col[2]=發放日
-        col[3]="配息" col[4]=每單位配息額 col[5]=年化配息率% col[6]=幣別"""
+        col[3]="配息" col[4]=每單位配息額 col[5]=年化配息率% col[6]=幣別
+
+        2026-10-13（新增鍵，取值一個不改）：每筆多 `div_provenance`，記**這張表第一列**（本函式本來就當表頭略過的那一列）
+        第 1、2、3、7 格的文字（`date_header`／`ex_date_header`／`pay_date_header`／`currency_header`）。
+        欄位仍照原本寫死的序號取值；這幾個鍵只讓下游**逐頁核對**那一欄的表頭是不是它自稱的東西，不據此改取哪一欄。
+        """
         _out: list = []
         try:
             _soup = BeautifulSoup(_html, "lxml")
@@ -3258,6 +3399,7 @@ def _src_tcb_div(code: str) -> list:
                 _t = _tbl.get_text()
                 if "配息基準日" not in _t and "除息日" not in _t:
                     continue
+                _hdr = _tcb_div_header_cells(_tbl)
                 for _row in _tbl.find_all("tr")[1:60]:
                     _cols = [td.get_text(strip=True) for td in _row.find_all("td")]
                     if len(_cols) < 6:
@@ -3275,6 +3417,13 @@ def _src_tcb_div(code: str) -> list:
                     _out.append({
                         "date": _cols[0], "ex_date": _cols[1], "pay_date": _cols[2],
                         "amount": _amt, "yield_pct": _yld, "currency": _cur,
+                        DIV_PROVENANCE_KEY: {   # 2026-10-13 新增鍵（只記錄，不改上面任何一個值）
+                            "parser": DIV_PARSER_TCB,
+                            "date_header": _hdr[0] if len(_hdr) > 0 else None,
+                            "ex_date_header": _hdr[1] if len(_hdr) > 1 else None,
+                            "pay_date_header": _hdr[2] if len(_hdr) > 2 else None,
+                            "currency_header": _hdr[6] if len(_hdr) > 6 else None,
+                        },
                     })
                 if _out:
                     break   # 已解析出有效表 → 不用看其他 table
@@ -3282,24 +3431,40 @@ def _src_tcb_div(code: str) -> list:
             return _out
         return _out
 
+    # 2026-10-13：逐網址記下結果（只記錄，不改嘗試順序與停止條件），全部試完仍沒有配息列時據此判狀態。
+    _tried: list = []
     try:
         for _base in bases:
             for _dp in _div_paths:
+                _where = f"{_base.split('//')[-1].split('/')[0]}{_dp.split('?')[0]}"
                 r = fetch_url_with_retry(f"{_base}{_dp}", timeout=20)
                 if r is None:
+                    _tried.append((_where, "request_failed"))
                     continue
                 if "配息基準日" not in r.text and "除息日" not in r.text:
+                    _tried.append((_where, "no_dividend_table"))
                     continue
                 # v18.51: 解析後才決定要不要繼續試其他 URL（避免 tcbbankfund 空頁誤判）
                 _parsed = _parse_div_html(r.text)
                 if _parsed:
                     print(f"[src_tcb_div] ✅ {code} {len(_parsed)} 筆 "
                           f"({_base.split('//')[-1].split('/')[0]}{_dp})")
-                    return _parsed
+                    _fa = _div_now_utc()
+                    for _p in _parsed:
+                        _p[DIV_PROVENANCE_KEY].update(page=_where, fetched_at=_fa)
+                    return _div_result(_parsed, DIV_PARSER_TCB, DIV_STATUS_ROWS)
                 # 有表頭但無資料 → 換下一個 URL（換 base 或換 path）
+                _tried.append((_where, _tcb_div_table_shape(r.text)))
     except Exception as e:
         print(f"[src_tcb_div] {code}: {e}")
-    return divs
+        return _div_result(divs, DIV_PARSER_TCB, DIV_STATUS_FAILED, f"{type(e).__name__}: {e}")
+    _detail = "；".join(f"{w} → {s}" for w, s in _tried)
+    # 「確實沒有配息」只在**每一個網址**都取回了配息表、而且表裡一列資料都沒有時成立。
+    # ⚠️ 只要有一個網址沒取到、沒有配息表（例如被擋的頁面）、或有解析不了的列 → 分辨不出 → `failed`
+    #    （v18.51：tcbbankfund 對部分有配息的基金回「有表頭但無資料」，主站才有資料 —— 單一網址的空表不算數）。
+    if _tried and all(s == "header_only" for _w, s in _tried):
+        return _div_result(divs, DIV_PARSER_TCB, DIV_STATUS_EMPTY, _detail)
+    return _div_result(divs, DIV_PARSER_TCB, DIV_STATUS_FAILED, _detail)
 
 
 # ── 來源4：SITCA（境內基金基本資料）───────────────────────────────────

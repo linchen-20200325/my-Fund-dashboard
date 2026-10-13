@@ -25,7 +25,9 @@ import pytest
 import _a_chain_stub as H
 
 _GOLDEN = pathlib.Path(__file__).resolve().parent / "fixtures" / "a_chain_golden_before.json"
-NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts", "chain_started_at"})
+NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts", "chain_started_at",
+                             # 2026-10-13 B 線配息移交：配息取數狀態（新增鍵）
+                             "dividend_sources_status", "dividends_fetch_outcome"})
 NEW_SERIES_ATTRS = frozenset({"nav_history_dates", "nav_history_recorded_at", "nav_history_source",
                               "nav_history_dates_error", "nav_history_currency", "nav_history_live_currency",
                               "secid_origin", "currency_id_origin"})

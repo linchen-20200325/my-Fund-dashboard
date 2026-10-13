@@ -88,25 +88,32 @@ def wired(monkeypatch):
             raise state["fail"]
         return {"results": _key_results(codes, state["fail"]), "provenance": {}}
 
-    real_build = source.nav_dividend.build_nav_table
+    # ~~real_build = source.nav_dividend.build_nav_table~~ → 2026-10-13（有意識的更正，不是漏刪）：
+    # hld 改呼叫 `build_nav_dividend_tables`（同一次 A 鏈呼叫交出淨值與配息；淨值那一半與 `build_nav_table` 逐鍵相同）。
+    real_build = source.nav_dividend.build_nav_dividend_tables
 
     def _build(funds, **kw):
         state["funds"] = [dict(f) for f in funds]
-        state["nav_table"] = real_build(state["funds"], **kw)
-        return state["nav_table"]
+        both = real_build(state["funds"], **kw)
+        state["nav_table"], state["dividend_table"] = both["nav"], both["dividend"]
+        return both
 
     # 2026-10-13：淨值改走 A 鏈，替身換成 `fetch_nav_chain_with_error(chain_code, full_key)`（有意識的更正，不是漏刪）
+    # → 同日再改成 `fetch_chain_with_error`（多交出配息；配息部分給「分辨不出」，畫面照舊列為尚未接上）。
     def _fetch(chain_code, full_key):
         state.setdefault("chain_codes", []).append((chain_code, full_key))
         if full_key in state["series"]:
-            return state["series"][full_key], None
-        return None, f"上游逾時 token={_SECRET}"
+            return state["series"][full_key], None, {"items": [], "outcome": None, "error": None}
+        text = f"上游逾時 token={_SECRET}"
+        return None, text, {"items": None, "outcome": None, "error": text}
 
     monkeypatch.setattr(source.alo_holdings, "load_alo_tables", _load("load_alo_tables", "tables"))
     monkeypatch.setattr(source.settings_store, "load_user_settings", _load("load_user_settings", "settings"))
     monkeypatch.setattr(source.fund_keys, "resolve_full_keys", _resolve)
-    monkeypatch.setattr(source.nav_dividend, "build_nav_table", _build)
-    monkeypatch.setattr(source.nav_dividend, "fetch_nav_chain_with_error", _fetch)
+    monkeypatch.setattr(source.nav_dividend, "build_nav_dividend_tables", _build)
+    monkeypatch.setattr(source.nav_dividend, "fetch_chain_with_error", _fetch)
+    monkeypatch.setattr(source.nav_dividend, "fetch_nav_chain_with_error",
+                        lambda *a, **k: pytest.fail("hld 不得另走只取淨值的那一支（會多打一次 A 鏈）"))
     return state
 
 

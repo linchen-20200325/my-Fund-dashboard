@@ -487,6 +487,58 @@ def _adopt_if_better(
     return cand, cand_name
 
 
+# ── 2026-10-13 配息取數狀態（新增鍵，schema-additive；只記錄、不判斷，瀑布順序與採用結果一個不改）──────────
+# `_fetch_fund_single` 的配息瀑布（TCB → FundClear → 鉅亨）逐來源記下該解析器自報的取數狀態
+# （`repositories.fund.sources.DIV_FETCH_ATTR`）→ 結果的新增鍵 `DIVIDEND_SOURCES_STATUS_KEY`。
+# `fetch_fund_from_moneydj_url` 收集本次實際跑過的瀑布，回傳前算出 `DIVIDENDS_OUTCOME_KEY`：
+#   rows＝有配息列；none_confirmed＝每一個跑過的來源都回報「成功取數且確實沒有配息列」；
+#   failed＝每一個跑過的來源都失敗；undetermined＝其餘（混合、缺狀態、或 legacy 段另跑了 wb05 解析）。
+# L1 十五分鐘快取據此把「確實沒有配息」算成功（`_moneydj_url_result_cacheable`）；B 線據此分辨不配息與取數失敗。
+from repositories.fund.sources import (   # noqa: E402 —— 本段新增的常數；`import *` 只帶 `__all__` 的名字
+    DIV_FETCH_ATTR, DIV_STATUS_EMPTY, DIV_STATUS_FAILED,
+)
+assert DIV_FETCH_ATTR == "div_fetch"   # 與 `_div_status_entry` 的字面屬性名同步（漂了 import 就炸）
+
+DIVIDEND_SOURCES_STATUS_KEY = "dividend_sources_status"   # `_fetch_fund_single`：本次瀑布逐來源狀態
+DIVIDENDS_OUTCOME_KEY = "dividends_fetch_outcome"          # `fetch_fund_from_moneydj_url`：本次配息的總結
+DIV_OUTCOME_ROWS = "rows"
+DIV_OUTCOME_NONE = "none_confirmed"
+DIV_OUTCOME_FAILED = "failed"
+DIV_OUTCOME_UNDETERMINED = "undetermined"
+
+
+def _div_status_entry(source_name: str, value) -> dict:
+    """解析器回傳值 → `{"source", "parser", "status", "detail"}`；沒有取數狀態（例如被替身換掉、舊型別）→ `unknown`。"""
+    # 屬性名寫字面（＝ `DIV_FETCH_ATTR`）：`tests/test_readonly_query_paths.py` 禁止非字面的 getattr 取名
+    info = getattr(value, "div_fetch", None)
+    if isinstance(info, dict):
+        return {"source": source_name, "parser": info.get("parser"), "status": info.get("status"),
+                "detail": info.get("detail") or ""}
+    return {"source": source_name, "parser": None, "status": "unknown",
+            "detail": f"回傳值沒有取數狀態（{type(value).__name__}）"}
+
+
+def _dividends_outcome(divs, waterfalls: list, *, legacy_inline_parse: bool) -> dict:
+    """本次配息的總結（只記錄；見上方說明）。`waterfalls`：`[(頁型, 該次瀑布的逐來源狀態或 None), ...]`。"""
+    sources = []
+    for page_type, entries in waterfalls:
+        for e in entries or ():
+            if isinstance(e, dict):
+                sources.append({**e, "page_type": page_type})
+    if divs:
+        outcome = DIV_OUTCOME_ROWS
+    elif (legacy_inline_parse or not waterfalls or not sources
+          or any(not isinstance(entries, list) or not entries for _pt, entries in waterfalls)):
+        outcome = DIV_OUTCOME_UNDETERMINED
+    elif all(s.get("status") == DIV_STATUS_EMPTY for s in sources):
+        outcome = DIV_OUTCOME_NONE
+    elif all(s.get("status") == DIV_STATUS_FAILED for s in sources):
+        outcome = DIV_OUTCOME_FAILED
+    else:
+        outcome = DIV_OUTCOME_UNDETERMINED
+    return {"outcome": outcome, "sources": sources, "legacy_inline_parse": bool(legacy_inline_parse)}
+
+
 def _fetch_fund_single(code: str, force_refresh: bool = False,
                        page_type: str = "") -> dict:
     """單一代碼的多來源抓取（由 fetch_fund_multi_source 呼叫）"""
@@ -990,17 +1042,22 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
 
     # ── Step 4: 配息資料 ───────────────────────────────────────────
     divs = result.get("dividends") or []
+    _div_status: list = []   # 2026-10-13 新增鍵（只記錄；順序與採用結果不變）
     if not divs:
         divs = _src_tcb_div(_code)
+        _div_status.append(_div_status_entry("tcb_moneydj", divs))
     if not divs:
         divs = _src_fundclear_div(_code)
+        _div_status.append(_div_status_entry("FundClear", divs))
     if not divs:
         divs = _src_cnyes_div(_code)
+        _div_status.append(_div_status_entry("cnyes", divs))
     if divs:
         result["dividends"] = divs
         latest_yield = divs[0].get("yield_pct", 0)
         if latest_yield > 0:
             result["moneydj_div_yield"] = round(latest_yield, 2)
+    result[DIVIDEND_SOURCES_STATUS_KEY] = _div_status
 
     # ── Step 5: 風險指標（wb07）+ 績效（wb01）────────────────────────
     # v19.310 Bug A:原本 wb01 績效巢狀在 `if risk_data:` 內 → wb07 風險一失敗,
@@ -1161,7 +1218,10 @@ def _moneydj_url_result_cacheable(result) -> bool:
     - wb07：`risk_metrics` 非空、來源不是失敗標記；
     - wb01：`perf_source == "wb01"`（`fetch_performance_wb01` 有回東西才會設）；
     - 持股：`holdings` 非空、來源不是失敗標記；
-    - 配息：`dividends` 非空（不配息的基金分不出「沒有」與「沒抓到」→ 一律不快取）；
+    - 配息：~~`dividends` 非空（不配息的基金分不出「沒有」與「沒抓到」→ 一律不快取）；~~
+      → 2026-10-13（有意識的更正，不是漏刪；客戶同日裁示 B 線配息移交，三個配息解析器新增取數狀態）：
+      `dividends` 非空，**或** `DIVIDENDS_OUTCOME_KEY` 為 `none_confirmed`（每一個跑過的配息來源都自報成功且確實沒有配息列）。
+      舊句在寫下當時為真（解析器分不出兩者）；被推翻的是它的前提。分辨不出的情形照舊不快取；
     - `error` 非空 → 不快取。
     ⚠️ 不看：瀑布裡排在採用來源之前、這次沒取到的來源（例如 FundClear 沒有、鉅亨有）——那些失敗在沒有快取時
     同樣會被重試，但若連它們都算，幾乎沒有任何結果能入快取；這一點是本組的判斷，已在回報與 commit 寫明。
@@ -1184,7 +1244,11 @@ def _moneydj_url_result_cacheable(result) -> bool:
     if result.get("perf_source") != "wb01":
         return False
     if not result.get("dividends"):
-        return False
+        # 2026-10-13：配息部分「成功（含確實沒有配息）」就算成功 —— 只認 `DIVIDENDS_OUTCOME_KEY` 為 none_confirmed
+        # （每一個跑過的配息來源都自報「成功取數且確實沒有配息列」）；失敗、混合、缺狀態 → 照舊不快取。
+        _div_outcome = result.get(DIVIDENDS_OUTCOME_KEY)
+        if not (isinstance(_div_outcome, dict) and _div_outcome.get("outcome") == DIV_OUTCOME_NONE):
+            return False
     return True
 
 
@@ -1269,6 +1333,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     if not code:
         result["error"] = "無法解析代碼，請輸入 MoneyDJ 網址或代碼（如 tlzf9）"
         result[NAV_SOURCE_FAILURES_KEY] = []   # 2026-10-13 新增鍵；還沒走到任何來源，原因已在 `error`
+        result[DIVIDENDS_OUTCOME_KEY] = _dividends_outcome(result.get("dividends"), [],
+                                                           legacy_inline_parse=False)   # 2026-10-13 新增鍵
         return result
 
     _page_type = _input_info.get("page_type", "")   # 保留原始頁型（URL 輸入最準）
@@ -1305,6 +1371,10 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         for _f in (_from or {}).get(NAV_SOURCE_FAILURES_KEY) or ():
             if isinstance(_f, dict):
                 _nav_fail_acc.append({**_f, "page_type": _pt})
+        # 2026-10-13：同一個多來源結果的配息瀑布逐來源狀態（只記錄；見 `DIVIDENDS_OUTCOME_KEY`）
+        _div_wfs.append((_pt, (_from or {}).get(DIVIDEND_SOURCES_STATUS_KEY) if isinstance(_from, dict) else None))
+
+    _div_wfs: list = []
 
     # ── Step 1: 直接抓使用者提供的原始 URL（最高優先）───────────────
     if _input_info.get("is_url") and _input_info.get("full_url"):
@@ -1374,6 +1444,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             _ensure_holdings(result, code)
             _ensure_currency(result, code)      # v19.505:收口修幣別(protect loop 可能蓋回假 USD)
             result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)   # 2026-10-13 新增鍵
+            result[DIVIDENDS_OUTCOME_KEY] = _dividends_outcome(result.get("dividends"), _div_wfs,
+                                                               legacy_inline_parse=False)   # 2026-10-13 新增鍵
             return result
         # v18.121 issue 4: series 缺失但 fund_name+nav 有 → 不再提早 return（之前 bug）
         # 自動切 alternative page_type 重試一次（境內↔境外 mapping 錯誤的 case）
@@ -1408,6 +1480,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         _ensure_holdings(result, code)
                         _ensure_currency(result, code)   # v19.505:收口修幣別
                         result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)   # 2026-10-13 新增鍵
+                        result[DIVIDENDS_OUTCOME_KEY] = _dividends_outcome(
+                            result.get("dividends"), _div_wfs, legacy_inline_parse=False)   # 2026-10-13 新增鍵
                         return result
                     else:
                         print(f"[fetch] alt page_type ({_alt_pt}) 仍 series=0，"
@@ -1919,6 +1993,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     # 2026-10-13 新增鍵：放在快照回填之後才掛，免得快照裡上一次的原文／開始時間蓋掉這一次的。
     result[NAV_SOURCE_FAILURES_KEY] = list(_nav_fail_acc)
     result["chain_started_at"] = _chain_started_at
+    # 2026-10-13 新增鍵：走到這裡＝legacy 段（另跑了 wb05 內嵌解析，它沒有取數狀態）→ 沒有配息時一律 undetermined
+    result[DIVIDENDS_OUTCOME_KEY] = _dividends_outcome(result.get("dividends"), _div_wfs,
+                                                       legacy_inline_parse=True)
     return result
 
 

@@ -294,6 +294,7 @@ def _kwargs(**over):
         nav_unavailable_withheld=_NAV_UNAVAILABLE,
         dividend_gate_open=False,
         mask=_identity_mask,
+        dividend_table=None,   # 2026-10-13 新增參數；None ＝ 與先前逐鍵相同（配息照舊列為尚未接上）
     )
     kw.update(over)
     return kw
@@ -394,6 +395,7 @@ def test_T0_簽名_全部keyword_only_參數順序照規定_沒有預設值():
         "key_results", "nav_table",
         "direct_policy_id", "policy_tab_source", "direct_sources",
         "empty_without_reason", "nav_unavailable_withheld", "dividend_gate_open", "mask",
+        "dividend_table",   # 2026-10-13 新增（客戶同日裁示 B 線配息改走 A 鏈；只改接線），排在最後、同樣沒有預設值
     ]
     assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params)
     assert all(p.default is inspect.Parameter.empty for p in params)
