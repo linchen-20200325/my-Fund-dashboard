@@ -167,11 +167,143 @@ def test_analyze_彙整_交易所時區納入分組(obs_fn):
     meta = {"exchangeTimezoneName": "Europe/London", "gmtoffset": 3600,
             "regularMarketTime": ts[-1], "currentTradingPeriod": {"regular": {"timezone": "BST"}}}
     out = probe.analyze(_payload(ts, meta=meta), obs_fn)
-    assert out["bar_count"] == 2
+    nn = out["subsets"]["non_null"]
+    assert out["raw_bar_count"] == 2 and nn["bar_count"] == 2
     assert out["meta_summary"]["currentTradingPeriod"] == {"regular": {"timezone": "BST"}}
-    assert set(out["utc_hhmm"]["by_zone"]) == {"Europe/London", "America/New_York"}
-    assert "Asia/Taipei" in out["obs_date_vs_local_date"]
+    assert out["meta_summary"]["exchangeTimezoneName_known"] is True
+    assert set(nn["utc_hhmm"]["by_zone"]) == {"Europe/London", "America/New_York"}
+    assert "Asia/Taipei" in nn["obs_date_vs_local_date"]
     assert out["last_bar"]["equal"] is True
+    assert out["subsets"]["non_null_closed"] is None   # 沒給取得時間 → 不算這個子集
+
+
+# ── 稽核回修：週六、跨年 ISO 週、null 收盤、子集、未知時區 ──────────
+
+def test_星期分布_週六那根也算週末_例子附收盤(obs_fn):
+    # 2026-07-04 是週六
+    ts = [_sec(2026, 7, 3, 12), _sec(2026, 7, 4, 12)]
+    out = probe.weekday_distribution(ts, obs_fn, closes=[31.0, 31.5])
+    assert out["counts"]["Sat"] == 1 and out["counts"]["Fri"] == 1
+    assert out["weekend_count"] == 1
+    ex = out["weekend_examples"][0]
+    assert ex["weekday"] == "Sat" and ex["obs_date"] == "2026-07-04" and ex["close"] == 31.5
+
+
+def test_缺週五_跨年ISO週(obs_fn):
+    # 2025-12-22（週一）～ 2026-01-16（週五）的平日，拿掉 2026-01-02（週五）
+    # ISO 週：2025-W52（頭）、2026-W01、2026-W02、2026-W03（尾）→ 只看 W01、W02
+    from datetime import date, timedelta
+    ts, d = [], date(2025, 12, 22)
+    while d <= date(2026, 1, 16):
+        if d.weekday() < 5 and d != date(2026, 1, 2):
+            ts.append(_sec(d.year, d.month, d.day, 12))
+        d += timedelta(days=1)
+    out = probe.weekday_distribution(ts, obs_fn)
+    assert out["iso_weeks_considered"] == 2
+    assert out["iso_weeks_missing_friday"] == ["2026-W01"]
+
+
+def test_重複例子附收盤(obs_fn):
+    ts = [_sec(2026, 3, 2, 0, 0), _sec(2026, 3, 2, 23, 0)]
+    out = probe.weekday_distribution(ts, obs_fn, closes=[1.5, 1.6])
+    assert out["duplicate_obs_date_examples"][0]["closes"] == [1.5, 1.6]
+
+
+def test_null收盤_排除於分析之外_另列清單(obs_fn):
+    # 2026-07-05 週日（null）、07-07 00:00 會與 07-07 23:00 同日（null）→ 若沒排除，會出現假週末與假重複
+    ts = [_sec(2026, 7, 6, 23), _sec(2026, 7, 5, 23), _sec(2026, 7, 7, 0), _sec(2026, 7, 7, 23)]
+    closes = [31.0, None, None, 31.2]
+    out = probe.analyze(_payload(ts, closes=closes), obs_fn)
+    nn = out["subsets"]["non_null"]
+    assert out["raw_bar_count"] == 4
+    assert out["null_close_count"] == 2
+    assert [b["t"] for b in out["null_close_bars"]] == [ts[1], ts[2]]
+    assert out["null_close_bars"][0]["utc"] == "2026-07-05T23:00:00+00:00"
+    assert nn["bar_count"] == 2
+    assert nn["obs_date_weekday"]["weekend_count"] == 0
+    assert nn["obs_date_weekday"]["duplicate_obs_date_count"] == 0
+    # 原始節錄保留 null（那是原始回應）
+    assert [r["close"] for r in out["raw_excerpt"]["head"]] == closes
+
+
+def test_null收盤_NaN也算null():
+    kept, kc, nulls = probe.split_null_closes([1, 2, 3], [1.0, float("nan"), 2.0])
+    assert kept == [1, 3] and kc == [1.0, 2.0] and [n["t"] for n in nulls] == [2]
+
+
+def test_子集_去掉觀測日不早於取得日_與正式rows_from_daily_close一致(obs_fn):
+    ts = [_sec(2026, 7, 3, 23), _sec(2026, 7, 6, 23), _sec(2026, 7, 7, 9)]
+    out = probe.analyze(_payload(ts, closes=[31.0, None, 31.2]), obs_fn,
+                        fetched_at_utc="2026-07-07T10:00:00+00:00", ticker="USDTWD=X")
+    closed = out["subsets"]["non_null_closed"]
+    assert closed["fetched_day_utc"] == "2026-07-07"
+    assert closed["bar_count"] == 1
+    assert [b["obs_date"] for b in closed["excluded_not_closed_bars"]] == ["2026-07-07"]
+    assert closed["excluded_not_closed_bars"][0]["close"] == 31.2
+    pr = out["production_rows"]
+    assert pr["row_count"] == 1 and pr["first_obs_date"] == "2026-07-03"
+    assert any("觀測日不早於取得日" in s for s in pr["skipped"])
+
+
+def test_交易所時區不認得_其餘分析照常(obs_fn):
+    ts = [_sec(2026, 7, 6, 23), _sec(2026, 7, 7, 23)]
+    meta = {"exchangeTimezoneName": "Mars/Olympus_Mons", "gmtoffset": 0, "regularMarketTime": ts[-1]}
+    out = probe.analyze(_payload(ts, meta=meta), obs_fn)
+    assert out["meta_summary"]["exchangeTimezoneName_known"] is False
+    assert "Mars/Olympus_Mons" in out["warnings"][0]
+    nn = out["subsets"]["non_null"]
+    assert set(nn["utc_hhmm"]["by_zone"]) == {"Europe/London", "America/New_York"}
+    assert set(nn["obs_date_vs_local_date"]) == {"Asia/Taipei", "Europe/London", "America/New_York"}
+
+
+def test_時區字串非法也不炸():
+    assert probe.zone_known("../etc/passwd") is False
+    assert probe.zone_known(None) is False
+    assert probe.zone_known("Europe/London") is True
+
+
+# ── 代號白名單 ──────────────────────────────────────────────
+
+def test_白名單_拒絕路徑點段與workflow_command():
+    ok, rejected = probe.validate_tickers(
+        ["USDTWD=X", "::set-output name=x::y", "../v7/finance/quote", "usdtwd=x",
+         "A..B", "..", ".", "^VIX", "GBPTWD=X", "X" * 21, "  "])
+    assert ok == ["USDTWD=X", "^VIX", "GBPTWD=X"]
+    assert len(rejected) == 7
+    assert all(r["input_repr"].startswith("'") for r in rejected)   # repr，不原樣回顯
+
+
+def _no_backoff(url):
+    return (False, 0.0, "")
+
+
+class _Resp:
+    def __init__(self, payload):
+        self._p = payload
+        self.content = json.dumps(payload).encode()
+
+    def json(self):
+        return self._p
+
+
+def test_main_拒絕的代號寫進報告_不回顯到stdout(tmp_path, capsys, obs_fn):
+    ts = [_sec(2026, 7, 6, 23), _sec(2026, 7, 7, 23)]
+    calls = []
+
+    def fake_fetch(url, **k):
+        calls.append(url)
+        return _Resp(_payload(ts))
+
+    out = tmp_path / "r.json"
+    probe.main(["--tickers", "::error::boom,../x,EURTWD=X", "--out", str(out)],
+               fetcher=fake_fetch, pop_fail_kind=lambda: "", obs_date_fn=obs_fn,
+               backoff_check=_no_backoff)
+    stdout = capsys.readouterr().out
+    assert "::error::" not in stdout and "../x" not in stdout
+    rep = json.loads(out.read_text(encoding="utf-8"))
+    assert len(rep["rejected_tickers"]) == 2
+    assert list(rep["tickers"]) == ["USDTWD=X", "^VIX", "EURTWD=X"]
+    assert not any(".." in u or "::" in u for u in calls)
 
 
 # ── 遮蔽 ────────────────────────────────────────────────────
@@ -190,16 +322,67 @@ def test_遮蔽_明列的秘密字面值():
     assert probe.mask_text("boom tok123 boom", secrets=("tok123",)) == "boom *** boom"
 
 
+def test_遮蔽_PROXY_URL整串與密碼段都列入秘密(monkeypatch):
+    monkeypatch.setenv("PROXY_URL", "http://alice:hunter22@nas:3128")
+    secrets = probe._secret_literals()
+    assert "http://alice:hunter22@nas:3128" in secrets
+    assert "hunter22" in secrets and "alice:hunter22" in secrets
+    # 密碼以非網址形式出現（例如被 URL 解碼後印在訊息裡）也要遮
+    assert "hunter22" not in probe.mask_text("auth failed for hunter22", secrets)
+
+
+def test_遮蔽_fetch_url拋例外的訊息(monkeypatch):
+    monkeypatch.setenv("PROXY_URL", "http://alice:hunter22@nas:3128")
+
+    def boom(url, **k):
+        raise RuntimeError("ConnectionError http://alice:hunter22@nas:3128 url=/chart?token=abc hunter22")
+
+    got = probe.fetch_chart("USDTWD=X", fetcher=boom, pop_fail_kind=lambda: "", backoff_check=_no_backoff)
+    assert got["status"] == probe.STATUS_REQUEST_FAILED
+    assert "hunter22" not in got["error"] and "token=abc" not in got["error"]
+    assert "RuntimeError" in got["error"]
+
+
+def test_遮蔽_JSON解析失敗的body(monkeypatch):
+    monkeypatch.setenv("PROXY_URL", "http://alice:hunter22@nas:3128")
+
+    class _Bad:
+        content = b"<html>proxy http://alice:hunter22@nas:3128 /x?sig=zzz</html>"
+
+        def json(self):
+            raise ValueError("Expecting value hunter22")
+
+    got = probe.fetch_chart("USDTWD=X", fetcher=lambda url, **k: _Bad(),
+                            pop_fail_kind=lambda: "", backoff_check=_no_backoff)
+    assert got["status"] == probe.STATUS_UNPARSEABLE
+    assert "hunter22" not in got["error"] and "sig=zzz" not in got["error"]
+    assert "body=" in got["error"]
+
+
+# ── 退避跳過 vs 真的發了請求但失敗 ────────────────────────────
+
+def test_退避中_不呼叫fetch_url_狀態另記():
+    calls = []
+
+    def fake_fetch(url, **k):
+        calls.append(url)
+        return None
+
+    got = probe.fetch_chart("^VIX", fetcher=fake_fetch, pop_fail_kind=lambda: "x",
+                            backoff_check=lambda url: (True, 42.0, "unreachable"))
+    assert got["status"] == probe.STATUS_SKIPPED_BACKOFF
+    assert "unreachable" in got["error"] and "未發請求" in got["error"]
+    assert calls == []
+
+
+def test_真的發了請求但失敗_狀態為request_failed():
+    got = probe.fetch_chart("^VIX", fetcher=lambda url, **k: None,
+                            pop_fail_kind=lambda: "server_error", backoff_check=_no_backoff)
+    assert got["status"] == probe.STATUS_REQUEST_FAILED
+    assert "server_error" in got["error"]
+
+
 # ── 端到端（假 fetcher，不連網） ─────────────────────────────
-
-class _Resp:
-    def __init__(self, payload):
-        self._p = payload
-        self.content = json.dumps(payload).encode()
-
-    def json(self):
-        return self._p
-
 
 def test_main_寫出報告_失敗原文照錄並遮蔽(tmp_path, monkeypatch, obs_fn):
     monkeypatch.setenv("PROXY_URL", "http://u:pw@nas:3128")
@@ -213,28 +396,38 @@ def test_main_寫出報告_失敗原文照錄並遮蔽(tmp_path, monkeypatch, ob
             return None
         return _Resp(_payload(ts))
 
+    def backoff(url):
+        return (True, 30.0, "rate_limited") if url.endswith("/JPYTWD=X") else (False, 0.0, "")
+
     out = tmp_path / "r.json"
-    rc = probe.main(["--tickers", "USDTWD=X,EURTWD=X", "--out", str(out)],
-                    fetcher=fake_fetch, pop_fail_kind=lambda: "server_error", obs_date_fn=obs_fn)
+    rc = probe.main(["--tickers", "USDTWD=X,EURTWD=X,JPYTWD=X", "--out", str(out)],
+                    fetcher=fake_fetch, pop_fail_kind=lambda: "server_error", obs_date_fn=obs_fn,
+                    backoff_check=backoff)
     assert rc == 0
     rep = json.loads(out.read_text(encoding="utf-8"))
-    assert list(rep["tickers"]) == ["USDTWD=X", "^VIX", "EURTWD=X"]
+    assert list(rep["tickers"]) == ["USDTWD=X", "^VIX", "EURTWD=X", "JPYTWD=X"]
     assert rep["tickers"]["USDTWD=X"]["ok"] is True
+    assert rep["tickers"]["USDTWD=X"]["status"] == probe.STATUS_OK
+    assert rep["tickers"]["USDTWD=X"]["subsets"]["non_null_closed"] is not None
     vix = rep["tickers"]["^VIX"]
-    assert vix["ok"] is False and "server_error" in vix["error"]
+    assert vix["ok"] is False and vix["status"] == probe.STATUS_REQUEST_FAILED
+    assert "server_error" in vix["error"]
+    assert rep["tickers"]["JPYTWD=X"]["status"] == probe.STATUS_SKIPPED_BACKOFF
     text = out.read_text(encoding="utf-8")
     assert "u:pw@" not in text and "k=v" not in text
     assert rep["proxy_env_set"] is True
     assert rep["fx_obs_date_rule_verified_at_run"] is False
-    # 參數與正式 `fetch_yf_close` 相同
+    # 參數與正式 `fetch_yf_close` 相同；冷卻中的 JPYTWD=X 沒有發請求
     assert all(c[1] == {"interval": "1d", "range": "2y"} and c[2] == 15 and c[3] is False
                for c in calls)
+    assert not any(c[0].endswith("/JPYTWD=X") for c in calls)
 
 
 def test_main_主要代號失敗_退出碼1但報告仍寫出(tmp_path, obs_fn):
     out = tmp_path / "r.json"
     rc = probe.main(["--tickers", "USDTWD=X", "--out", str(out)],
-                    fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "", obs_date_fn=obs_fn)
+                    fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "", obs_date_fn=obs_fn,
+                    backoff_check=_no_backoff)
     assert rc == 1
     rep = json.loads(out.read_text(encoding="utf-8"))
     assert rep["tickers"]["USDTWD=X"]["ok"] is False

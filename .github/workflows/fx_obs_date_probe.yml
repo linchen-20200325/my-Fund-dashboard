@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       tickers:
-        description: "逗號分隔的代號（USDTWD=X 與 ^VIX 一律納入）；留空用腳本預設"
+        description: "逗號分隔的代號（USDTWD=X 與 ^VIX 一律納入；不合白名單者拒絕並記入報告）；留空用腳本預設"
         required: false
         default: ""
 
@@ -32,6 +32,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 不把 token 留在 .git/config：探測步驟（會跑 repo 內的 Python）拿不到推送權限；
+          # 只有最後推送那一步臨時注入認證。
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,7 +44,8 @@ jobs:
           cache: "pip"
 
       - name: Install deps
-        # 腳本借用正式的 `_obs_date` 與 `fetch_url`，會 import repositories / services → 裝完整 requirements。
+        # 腳本借用正式的 `_obs_date`、`rows_from_daily_close` 與 `fetch_url`，會 import repositories / services
+        # → 裝完整 requirements。
         run: pip install -r requirements.txt
 
       - name: Run probe
@@ -49,6 +54,7 @@ jobs:
           # ⚠️ `infra.proxy.get_proxy_config()` 讀的是 `st.secrets`，不讀環境變數；
           #    報告裡的 `proxy_used_by_infra` 會如實記錄這次到底有沒有走代理。
           PROXY_URL: ${{ secrets.PROXY_URL }}
+          # 使用者輸入只經環境變數傳入（不直接插進指令）；腳本另以白名單過濾。
           PROBE_TICKERS: ${{ github.event.inputs.tickers }}
         run: |
           if [ -n "$PROBE_TICKERS" ]; then
@@ -60,20 +66,26 @@ jobs:
       - name: Commit report to probe/fx-obs-date-results
         # 探測失敗（主要代號取不到）時報告照樣寫出，失敗原文也要留下來 → always()。
         if: always()
+        env:
+          # 只在這一步注入；以 http.extraheader 傳給單次 git 指令，不寫進 .git/config、不印出。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ ! -f "$REPORT_PATH" ]; then
             echo "::error::報告檔不存在（$REPORT_PATH），沒有可提交的東西"
             exit 1
           fi
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${AUTH}"
+          agit() { git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" "$@"; }
           STAMP="$(date -u '+%Y%m%dT%H%M%SZ')_run${GITHUB_RUN_ID}"
           mkdir -p "$RUNNER_TEMP/fxprobe"
           cp "$REPORT_PATH" "$RUNNER_TEMP/fxprobe/report.json"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git clean -fdxq
-          if git ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
-            git fetch --depth=1 origin "$RESULT_BRANCH"
+          if agit ls-remote --exit-code --heads origin "$RESULT_BRANCH" >/dev/null; then
+            agit fetch --depth=1 origin "$RESULT_BRANCH"
             git checkout -B "$RESULT_BRANCH" FETCH_HEAD
           else
             git checkout --orphan "$RESULT_BRANCH"
@@ -83,5 +95,5 @@ jobs:
           cp "$RUNNER_TEMP/fxprobe/report.json" "results/$STAMP/report.json"
           git add "results/$STAMP/report.json"
           git commit -m "探測：Yahoo 匯率日線觀測日 ${STAMP} [skip ci]"
-          git push origin "HEAD:refs/heads/$RESULT_BRANCH"
+          agit push origin "HEAD:refs/heads/$RESULT_BRANCH"
           echo "報告已推到 $RESULT_BRANCH：results/$STAMP/report.json"
