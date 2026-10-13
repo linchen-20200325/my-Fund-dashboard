@@ -743,6 +743,7 @@ def _assembled(**settings_kw):
         nav_unavailable_withheld=_NAV_UNAVAILABLE,
         dividend_gate_open=False,
         mask=lambda text: text,
+        dividend_table=None,   # 2026-10-13 新增參數；None ＝ 與先前逐鍵相同
         **settings_kw,
     )
 

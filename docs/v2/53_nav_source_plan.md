@@ -6,7 +6,7 @@
 
 - **本檔只是盤點＋規劃，不是動工授權**（`CLAUDE.md §-1`）。客戶 2026-10-09 只授權「盤點＋規劃」；**未授權修改 L3、接新資料來源或不可逆變更**（交接本:295 同列原文）。→ **2026-10-09 狀態更新，不是漏刪**（上句在寫下當時為真）：客戶同日已授權 #3 依 Q1～Q4（§4 Q-A～Q-D）與 §7 文案動工（L2／L3，`47406e2`）；紅隊 M-1 另經客戶裁示採 A，授權**最小** L1 修改（`nav_metrics.fetch_nav` 退回預存時掛即時失敗原文，`b1e4bbf`；不改來源、不改 fallback 策略、不新增文案或來源、不重構 L1）。**接新資料來源與不可逆變更仍未授權。** 出處：客戶 2026-10-09，經協作助手轉達（對話中，repo 內無原文）。
 - §3 的每一步都要另取授權才能開工；~~§4 的題目要客戶先裁。~~ → **2026-10-09 狀態更新，不是漏刪**（上句在寫下當時為真）：§4 Q-A～Q-D 客戶已裁 A；Q-E 依裁示出草稿，見 §7（新文案須客戶核准，不得自行實作）。~~**#3 的實作（L2／L3）仍未授權**，文案核准前不動工。~~ → **2026-10-09 再次狀態更新，不是漏刪**：客戶同日核准 §7 文案並授權 #3 淨值層 L2／L3 實作，已實作於 `47406e2`（稽核回修見 §7 開頭）。出處：客戶 2026-10-09，經協作助手轉達（對話中，repo 內無原文）。
-- 本檔不提議任何新資料來源；§3 所列取數路徑皆指向 repo 內既有的 L1（`nav_metrics.py::fetch_nav_with_error`）。
+- 本檔不提議任何新資料來源；~~§3 所列取數路徑皆指向 repo 內既有的 L1（`nav_metrics.py::fetch_nav_with_error`）。~~ → **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：上句在寫下當時（基準 `c15073d`）為真，被推翻的是它的前提。客戶 2026-10-13 裁示「B 線沿用既有多來源淨值鏈」後，#946（merge `224f233`）把 `services/v2_tables/nav_dividend.py::build_nav_table` 的淨值取數改為 `fetch_nav_chain_with_error` → A 鏈 `services.moneydj_fetcher.auto_fetch_moneydj`（來源、優先序、頁型迴圈、停止條件不改），不再直接呼叫 L1 `fetch_nav_with_error`；A 鏈用的仍是 repo 內既有來源，本檔「不提議新資料來源」不變。依據：本組讀 `224f233` 的 `nav_dividend.py`，`build_nav_table` 迴圈呼叫 `fetch_nav_chain_with_error`，後者呼叫 `auto_fetch_moneydj(chain_code, return_page_type=True)`。
 
 ## §1 現況盤點
 
@@ -25,16 +25,16 @@
 | 項目 | 現況 | 出處 |
 |---|---|---|
 | L2 接線狀態 | `PENDING_TABLES = ("nav", "dividend")`；`WIRED_TIERS = (mi.SOURCE_TIER,)`（只有市場指標） | `services/v2_tables/settings_store.py:69`、`:71`；註記「`nav`、`dividend` 等到 hld 階段再裁」:66-67 |
-| hld | 每次開頁即時取淨值、不寫表：`ui_v2/hld/source.py:71` 解代碼 → `:73` `nav_dividend.build_nav_table` → `services/v2_tables/nav_dividend.py:487` 呼叫 L1 `repositories/fund/nav_metrics.py::fetch_nav_with_error`（nav_metrics.py:257）；檔頭明寫「不另疊快取、不寫任何試算表」 | nav_dividend.py:7-9 |
-| L1 快取 | `fetch_nav` 掛 `@_daily_cache`（台灣日曆日為界） | nav_metrics.py:158-159 |
-| 幣別 | nav_dividend 檔頭：「`fetch_nav` 目前**從不**自報幣別，實務上 `nav.ccy` 只會來自持倉列」 | nav_dividend.py:14 |
+| hld | 每次開頁即時取淨值、不寫表：`ui_v2/hld/source.py:71` 解代碼 → `:73` `nav_dividend.build_nav_table` → ~~`services/v2_tables/nav_dividend.py:487` 呼叫 L1 `repositories/fund/nav_metrics.py::fetch_nav_with_error`（nav_metrics.py:257）~~ → **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：#946（merge `224f233`）起 `build_nav_table` 經 `fetch_nav_chain_with_error` 走 A 鏈 `auto_fetch_moneydj`（見 §0 第三點）；舊句在 `c15073d` 為真；檔頭明寫「不另疊快取、不寫任何試算表」 | ~~nav_dividend.py:7-9~~ → nav_dividend.py:7-8、:14（2026-10-13 依 `224f233` 重新量測（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）） |
+| L1 快取 | `fetch_nav` 掛 `@_daily_cache`（台灣日曆日為界）。→ **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：上句仍為真，但 #946 後 B 線經 A 鏈取數，A 鏈主入口 `repositories/fund/fund_orchestration.py::fetch_fund_from_moneydj_url` 另掛 L1 15 分鐘快取（`cache_if=_moneydj_url_result_cacheable`：序列、名稱、wb07、wb01、持股、配息都成功才存；回傳一律深拷貝），`fetch_nav` 的日快取改為 A 鏈的 legacy 最終備援；set 頁重新取數清的是 `nav_dividend.CHAIN_CACHED_FUNCTIONS` 所列各快取 | ~~nav_metrics.py:158-159~~ → nav_metrics.py:162-163（2026-10-13 依 `224f233` 重新量測（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）） |
+| 幣別 | nav_dividend 檔頭：「`fetch_nav` 目前**從不**自報幣別，實務上 `nav.ccy` 只會來自持倉列」。→ **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：#946 後取數改走 A 鏈，檔頭補註 A 鏈回的幣別一律不採用（非逐字），`nav.ccy` 仍只來自持倉列；分工：持倉手填互相矛盾的情形由 `resolve_nav_ccy` 判 `ccy_conflict`；序列宣告的幣別與持倉手填意思不同、或非原生報價來源（晨星／Yahoo／AlphaVantage）序列未宣告幣別，由 `_chain_ccy_gate` 擋下，整檔不寫 | ~~nav_dividend.py:14~~ → nav_dividend.py:19-20（2026-10-13 依 `224f233` 重新量測（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管））；`resolve_nav_ccy`、`_chain_ccy_gate` 同檔 |
 | 舊序列退回 | 即時網址全敗退回預存序列時，`fetched_at` 改取 `attrs["cache_updated_at"]`，無則整批不寫；不寫進 `is_estimated` | nav_dividend.py:22-26 |
 | alo | `nav` 寫死空列表 | `ui_v2/alo/source.py:116` |
 | set | `nav` 寫死空列表；`refetch()` 非 `WIRED_TIERS` 一律 `ValueError` | `ui_v2/set/source.py:120`、`:149-152` |
 | exp | 只有假資料入口，無 `ui_v2/exp/source.py` | `ui_v2/app_exp.py:4`；`git ls-tree -r --name-only c15073d ui_v2 \| grep exp` |
 | 寫表端 | 設定試算表 `TAB_SPECS` 為四個分頁（`user_setting_log`、`market_indicator`、`fetch_log`、`fetch_log_open`），無 nav 分頁；`git show c15073d:repositories/settings_sheet_repository.py \| grep -n "^def "` 的清單內無 nav 寫入函式；`SOURCE_TIER_VALUES` 含「淨值」 | `repositories/settings_sheet_repository.py:61-64`、`:97-102`、`:105` |
 | 淨值層 fetch_log | `open_fetch_log` 已支援任何 `SOURCE_TIER_VALUES` 值（:699-705）；非測試呼叫點只有 `settings_store.py:312`，傳的是 `mi.SOURCE_TIER` | `git grep -n "open_fetch_log(" c15073d -- '*.py'`，排除 `tests/` 後 2 行（定義＋該呼叫點） |
-| 既有累積本 | `services/nav_history_gs.py`（`NAV_SHEET_ID`）；nav_dividend 明寫不讀它 | nav_history_gs.py:69-77；nav_dividend.py:9 |
+| 既有累積本 | `services/nav_history_gs.py`（`NAV_SHEET_ID`）；~~nav_dividend 明寫不讀它~~ → **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：舊句在 `c15073d` 為真；#946 把 nav_dividend.py 檔頭「不讀 `services/nav_history_gs.py` 的累積序列」那句加刪除線（A 鏈本身會併入累積表，B 線逐點分辨）。但累積表出處閘門 `NAV_HISTORY_PROVENANCE_VERIFIED = False` 關閉中：`build_nav_table` 在 `nav_history_shared_reads(skip_reads=True)` 範圍內執行，本次 build 不讀累積表、累積點一律不寫；閘門待客戶裁示才可開 | ~~nav_history_gs.py:69-77~~ → nav_history_gs.py:103-111（2026-10-13 依 `224f233` 重新量測（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管））；nav_dividend.py:9（該行在 `224f233` 已加刪除線） |
 | 匯率 | `FX_OBS_DATE_RULE_VERIFIED = False` ⇒ `fx_twd_per_usd` 不取數、不寫列；alo 市值基準就算有 nav 也缺匯率 | `services/v2_tables/market_indicator.py:63-68` |
 | set 文案 | SET-0 `TEXT_PENDING_NAV_DIVIDEND`（:28，只在 nav 與 dividend 都 pending 時印，:348-349）；SET-1 `TEXT_REASON_KIND_PENDING`（:29）；SET-2 `TEXT_REASON_TIER_PENDING`（:30）；SET-5 `TEXT_TIER_NOT_WIRED`（:47）、`TEXT_SET5_NOTE`「目前只有市場指標可以重新取數…」（:54） | `ui_v2/set/live.py` |
 | 驗收登記 | ACCEPTANCE 第十一節：SET-0 暫留，等 #3 後 SET-0 與 SET-1／SET-2 一起處理；**未點名 SET-5** | `ACCEPTANCE.md:809-814` |
@@ -74,7 +74,7 @@
 |---|---|---|---|---|---|---|---|
 | 0 | 客戶裁 Q-A～Q-D（§4） | — | — | — | — | 否 | ~~**是**~~ → **已裁：Q-A～Q-D 皆 A（客戶 2026-10-09）** |
 | 1 | 依 Q-A／Q-B 把 44 的 G2 衝突就地更正（SET-5 規則與來源欄、§5.3 禁令、§3.5 一句）；交接本 G10 依賴欄更正 | 否 | 否 | 否 | **是** | 否 | 依裁示落字（2026-10-09 補：方向已定為不寫 `nav`；44 凍結，字句仍須客戶核准；G10 已於交接本第三十五次更新改完） |
-| 2 | ~~L2 新增淨值層重新取數：對 Q-C 指定的基金經 `fund_keys::resolve_full_keys` 解代碼（現成，hld/source.py:71）→ 清快取 → `nav_dividend.build_nav_table` 重取 → `open_fetch_log("淨值")` 寫 fetch_log（Q-D 語意）。清快取方式（G7／T5）總管自決~~ → **L2 新增淨值層重新取數（依 Q-B／Q-C／Q-D 裁示）**：清 `fetch_nav` 快取 → **只取持倉基金**（經 `fund_keys::resolve_full_keys` 解代碼，現成，hld/source.py:71）→ `nav_dividend.build_nav_table` 重取 → 寫**一筆** `淨值` 層 `fetch_log`（`open_fetch_log("淨值")`）；任一檔失敗則該筆 `outcome` 記 `failed`、`message` 逐檔保留原文（經遮蔽）；**不寫 `nav` 表**。清快取的實作細節（G7／T5）仍屬總管自決 | ~~否（`open_fetch_log` 現成）~~ → **是**（M-1 最小修改：`nav_metrics.fetch_nav` 退回預存時掛即時失敗原文，`b1e4bbf`；2026-10-09 狀態更新，不是漏刪） | **是** | 否 | 否 | 否 | ~~Q-C、Q-D~~ → 已裁（Q-C、Q-D 皆 A） |
+| 2 | ~~L2 新增淨值層重新取數：對 Q-C 指定的基金經 `fund_keys::resolve_full_keys` 解代碼（現成，hld/source.py:71）→ 清快取 → `nav_dividend.build_nav_table` 重取 → `open_fetch_log("淨值")` 寫 fetch_log（Q-D 語意）。清快取方式（G7／T5）總管自決~~ → **L2 新增淨值層重新取數（依 Q-B／Q-C／Q-D 裁示）**：清 `fetch_nav` 快取 → **只取持倉基金**（經 `fund_keys::resolve_full_keys` 解代碼，現成，hld/source.py:71）→ `nav_dividend.build_nav_table` 重取 → 寫**一筆** `淨值` 層 `fetch_log`（`open_fetch_log("淨值")`）；任一檔失敗則該筆 `outcome` 記 `failed`、`message` 逐檔保留原文（經遮蔽）；**不寫 `nav` 表**。清快取的實作細節（G7／T5）仍屬總管自決。→ **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：#946 起「清 `fetch_nav` 快取」改為清 `nav_dividend.CHAIN_CACHED_FUNCTIONS` 所列的 A 鏈 L1 快取（含 `fetch_nav`），`build_nav_table` 改走 A 鏈；只取持倉基金、寫一筆 `fetch_log`、不寫 `nav` 三點不變 | ~~否（`open_fetch_log` 現成）~~ → **是**（M-1 最小修改：`nav_metrics.fetch_nav` 退回預存時掛即時失敗原文，`b1e4bbf`；2026-10-09 狀態更新，不是漏刪） | **是** | 否 | 否 | 否 | ~~Q-C、Q-D~~ → 已裁（Q-C、Q-D 皆 A） |
 | 3 | L2：`WIRED_TIERS` 加淨值；`PENDING_TABLES` 是否移除 `nav` 由總管依 Q-A 決定（連動 alo，見 §5） | 否 | **是** | 否 | 否 | 否 | 否（總管自決） |
 | 4 | L3：set `refetch()` 接淨值層；SET-1 淨值列~~依 Q-C 讀該次 `fetched_at`~~ → 依 Q-C 用本次取得時間；alo `nav` 是否改即時取（市值基準仍缺匯率） | 否 | 否 | **是**（目前未授權） | 否 | 否 | 否（但需 L3 授權） |
 | 5 | SET-0/1/2/5 新文案出草稿送客戶（Q-E） | 否 | 否 | **是** | 否 | 否 | **是**（2026-10-09 補：草稿已出，見 §7，待客戶核准；核准前不實作） |
@@ -151,7 +151,7 @@ G7 清快取方式（T5）；G8 舊序列標示（只有要加畫面字樣時才
   - (e) 44 衝突：**對上，補一處**。§5.3 原文不是「淨值唯讀」字樣，而是「四張表的內容不由本儀表板產生，本儀表板只讀它們」（44:2289）與元件判準（44:2294）；另 SET-5 自己的來源欄只寫 `fetch_log`（44:1711），與同塊規則欄（44:1712）也不一致。
   - (f) 49 Q12 與交接本：**對上**，49:510、交接本:2177。
 - **與調查回報不符、以實測為準處**：
-  - 調查組 A 稱「Morningstar/Yahoo/FundClear 路徑可自報幣別」。本組抽查 `repositories/fund/sources.py:169`、`:236`、`:507`、`:974`，幣別欄在缺值時填預設值（`"USD"`／`"TWD"`），依 nav_dividend.py:11-13「預設值一律不收」不能當來源自報；且 `fetch_nav` 本身不帶幣別（nav_dividend.py:14）。**本檔未採用該說法。**
+  - 調查組 A 稱「Morningstar/Yahoo/FundClear 路徑可自報幣別」。本組抽查 `repositories/fund/sources.py:169`、`:236`、`:507`、`:974`，~~幣別欄在缺值時填預設值（`"USD"`／`"TWD"`）~~ → **2026-10-13 更正**（有意識的更正，不是漏刪 · 日期 2026-10-13 · 決策者 AI 總管）：上句在 `c15073d` 為真；#923（merge `4cd7bf8`，2026-10-10「幣別未知不等於 USD」；分別在 `e3e4d78`（:171、:238 與 screener 的 fail-closed）、`6375679`（:511）、`ce3b731`（:983 幣別只信硬編表），本組以 `git blame 224f233 -- repositories/fund/sources.py` 實查）之後，那四行所在的 `_src_fundclear_meta`、`_src_fundclear_div`、`_src_allianzgi_meta` 缺值改填空字串，`_pool_secid_lookup` 改為幣別未知就不呼叫晨星 screener（本組讀 `224f233` 的 sources.py，四處現約在 :171、:238、:511、:983，行號會漂移）；結論不變，且 #946 起 B 線連 A 鏈回的幣別也一律不採用。原句其餘部分：依 nav_dividend.py:11-13「預設值一律不收」不能當來源自報；且 `fetch_nav` 本身不帶幣別（nav_dividend.py:14）。**本檔未採用該說法。**
   - 客戶核准的 B 句「淨值即時取得」在 `c15073d` 的 `.py` 內查無（`git grep -n "淨值即時取得" c15073d -- '*.py'` 無輸出）；分支 `e7f05bd` 在本機不存在（`git show e7f05bd` 報 bad object），本組無法查證其內容。
 - **讀 `nav` 的塊清單**以下列指令得出 12 塊（repo 根執行）。只抓「來源」列寫法，其他欄提到 `nav` 的塊不在其內：
 

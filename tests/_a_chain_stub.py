@@ -49,7 +49,10 @@ def _copy(value):
     if isinstance(value, dict):
         return dict(value)
     if isinstance(value, list):
-        return list(value)
+        # 2026-10-13：配息解析器的回傳是 `list` 子類別（帶取數狀態屬性），淺拷貝要保留型別與屬性；
+        # 一般 list 結果與 `list(value)` 相同。
+        import copy as _copy_mod
+        return _copy_mod.copy(value) if type(value) is not list else list(value)
     return value
 
 
