@@ -472,7 +472,8 @@ def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
     # ~~assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied")~~（2026-10-13 多一格市場總覽存檔結果；狀態更新，不是漏刪）
     # ~~… == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE)~~ → 2026-10-13 多兩格標的探索的（狀態更新，不是漏刪）
     assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE,
-                                           exp_page._SAVE_RESULTS_STATE, exp_page._RULES_STATE)
+                                           exp_page._SAVE_RESULTS_STATE, exp_page._RULES_STATE,
+                                           exp_page._SEEDED_STATE)  # 2026-10-13 稽核 L 回修
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})

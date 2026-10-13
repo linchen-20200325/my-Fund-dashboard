@@ -502,6 +502,9 @@ TEXT_SAVEFAIL_BANNER = "＋ 存檔失敗開關（開）"
 # 正式模式（客戶 2026-10-13 裁示：只有成功儲存的設定才生效）：欄位與已存值不同時的說明行。字面為本組擬定，
 # 體例照姊妹頁 `ui_v2/mkt/live.py::TEXT_UNSAVED_PICKS`。
 TEXT_UNSAVED_RULES = "未存檔：條件列與已存值不同，存檔後下一次重新載入才生效"
+# 2026-10-13 稽核回修：正式模式多一欄 `fund_code`（`_build_exp2` 的 `code_column`），
+# 「目前只顯示基金名」在那時是假話 —— 照實寫出真的顯示的兩欄。字面為本組擬定。
+TEXT_ONLY_CODE_AND_NAME = "目前只顯示 fund_code 與基金名"
 TEXT_WATCHLIST_UNREADABLE = "觀察清單目前讀不到（已存設定讀取失敗），不顯示成空的"
 TEXT_EXP4_LIVE = (
     "欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：候選清單只吃已存的設定。"
@@ -1124,7 +1127,7 @@ def _build_exp2(
     # 2026-10-13：已存設定讀不到時，「欄位一個也沒勾」是**不知道**，不是使用者沒勾 —— 不印那一句（§1）。
     if len(shown) == 1 and shown[0] == ALWAYS_SHOWN_COLUMN and not visible_columns \
             and not settings_unknown:
-        notes.append(TEXT_ONLY_FUND_NAME)
+        notes.append(TEXT_ONLY_CODE_AND_NAME if code_column else TEXT_ONLY_FUND_NAME)
 
     # ⚠️ **登記（`E-08`）**：`44` 說依 `fund_code` 排，但那一欄不在它自己列的五欄裡。
     #    本檔把排序依據寫成表頭上方一行，**不自行把 `fund_code` 加進欄位清單**。
@@ -1357,7 +1360,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
 
 
 def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, fail_lines=(),
-                saved_only=False):
+                saved_only=False, code_column=False):
     """`EXP-4` 欄位與排序設定。
 
     2026-10-13 正式模式第一批（示範模式皆為預設值 ⇒ 輸出不變）：
@@ -1463,7 +1466,7 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, f
             ERR_TEXT if fail_lines
             else f"{hinted(format_count(len(visible_columns)))} 欄　排序：{sort_shown}"
             if visible_columns
-            else TEXT_ONLY_FUND_NAME
+            else (TEXT_ONLY_CODE_AND_NAME if code_column else TEXT_ONLY_FUND_NAME)
         ),
         _options=options,
         sort_options=sort_options,
@@ -2001,6 +2004,7 @@ def _build_page_model(
         ),
         fail_lines=settings_lines,
         saved_only=saved_only,
+        code_column=code_column,
     )
     exp5 = _build_exp5(
         dataset,

@@ -168,3 +168,73 @@ def test_EXP5加入觀察清單_寫已存與勾起的聯集(monkeypatch):
     at.button(key="exp5live_btn_0").click().run()
     _ok(at)
     assert STUB.STORE["exp_watchlist"] == '["A01", "Z09"]'
+
+
+# ═════════════════════ 2026-10-13 稽核 L 回修：讀失敗 → 恢復 → 存檔，不得用空值蓋掉雲端 ═════════════════════
+
+_SAVED_RULES = json.dumps([{"field": "fund_code", "op": "不等於", "value": "C03"}], ensure_ascii=False)
+
+
+def _first_rule_id(at) -> str:
+    ids = sorted({t.key.split("_")[1] for t in at.text_input if t.key and t.key.startswith("exp1live_")})
+    assert len(ids) == 1, ids
+    return ids[0]
+
+
+def test_讀失敗那一輪_不建EXP4勾選框_新增條件與存檔都停用(monkeypatch):
+    STUB.READ_ERROR.append("讀設定失敗（測試注入）")
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    keys = {c.key for c in at.checkbox}
+    assert not [k for k in keys if k and k.startswith("exp4live_col_")]
+    assert not [s for s in at.selectbox if s.key == "exp4live_sort"]
+    assert at.button(key="exp1live_btn_0").disabled                 # 新增條件
+    for key in ("exp1live_btn_1", "exp4live_btn_0", "exp5live_btn_0"):
+        assert at.button(key=key).disabled, key
+    assert "讀設定失敗（測試注入）" in _text(at)
+
+
+def test_讀失敗後恢復_輸入欄改回已存值_存檔不寫空值(monkeypatch):
+    STUB.STORE["exp_visible_columns"] = '["fund_name", "nav_date"]'
+    STUB.STORE["exp_sort_column"] = '["nav_date"]'
+    STUB.STORE["exp_filter_rules"] = _SAVED_RULES
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))                      # 第一輪：讀得到，以已存值填
+    assert at.checkbox(key="exp4live_col_nav_date").value is True
+    STUB.READ_ERROR.append("讀設定失敗（測試注入）")
+    _ok(at.run())                                                  # 第二輪：讀失敗
+    STUB.READ_ERROR.clear()
+    _ok(at.run())                                                  # 第三輪：恢復
+    assert at.checkbox(key="exp4live_col_fund_name").value is True
+    assert at.checkbox(key="exp4live_col_nav_date").value is True
+    assert at.selectbox(key="exp4live_sort").value == logic.COLUMN_LABELS["nav_date"]
+    assert at.text_input(key="exp1live_" + _first_rule_id(at) + "_value").value == "C03"
+    at.button(key="exp4live_btn_0").click().run()                  # 存檔：寫回的是已存值，不是空值
+    _ok(at)
+    at.button(key="exp1live_btn_1").click().run()
+    _ok(at)
+    assert ("exp_visible_columns", '["fund_name", "nav_date"]', "list") in STUB.SAVES
+    assert ("exp_sort_column", '["nav_date"]', "list") in STUB.SAVES
+    assert ("exp_filter_rules", _SAVED_RULES, "rules") in STUB.SAVES
+    assert STUB.STORE["exp_visible_columns"] == '["fund_name", "nav_date"]'
+    assert STUB.STORE["exp_filter_rules"] == _SAVED_RULES
+
+
+def test_他處改了設定_重跑後輸入欄改成新的已存值(monkeypatch):
+    STUB.STORE["exp_visible_columns"] = '["fund_name"]'
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    assert at.checkbox(key="exp4live_col_fund_name").value is True
+    at.checkbox(key="exp4live_col_ccy").check().run()               # 使用者動了一格、沒存
+    _ok(at)
+    STUB.STORE["exp_visible_columns"] = '["nav_date"]'             # 別處（例如設定與診斷）改了
+    _ok(at.run())
+    assert at.checkbox(key="exp4live_col_nav_date").value is True
+    assert at.checkbox(key="exp4live_col_fund_name").value is False
+    assert at.checkbox(key="exp4live_col_ccy").value is False
+
+
+def test_存檔成功後_同一份結果不被當成他處改了而清掉_已存檔照樣顯示(monkeypatch):
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    at.checkbox(key="exp4live_col_ccy").check().run()
+    at.button(key="exp4live_btn_0").click().run()
+    _ok(at)
+    assert live.TEXT_SAVED in _text(at)
+    assert at.checkbox(key="exp4live_col_ccy").value is True

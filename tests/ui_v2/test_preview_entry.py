@@ -377,8 +377,9 @@ def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字
     # → 2026-10-13 狀態更新（不是漏刪）：市場總覽存檔接上後多一格「存檔逐鍵結果」，引用 page 的常數。
     # ~~assert _drop_list(tree) == [… "mkt_page._SAVE_RESULTS_STATE"]~~ → 2026-10-13 標的探索接上正式模式後多兩格（狀態更新，不是漏刪）。
     assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE",
-                                "exp_page._SAVE_RESULTS_STATE", "exp_page._RULES_STATE"]
-    for name in ("_SAVE_RESULTS_STATE", "_RULES_STATE"):
+                                "exp_page._SAVE_RESULTS_STATE", "exp_page._RULES_STATE",
+                                "exp_page._SEEDED_STATE"]  # 2026-10-13 稽核 L 回修多一格
+    for name in ("_SAVE_RESULTS_STATE", "_RULES_STATE", "_SEEDED_STATE"):
         exp_key = _string_constant(_tree(_ROOT / "ui_v2" / "exp" / "page.py"), name)
         assert exp_key and exp_key not in _PREVIEW.read_text(encoding="utf-8"), name
     mkt_key = _string_constant(_tree(_ROOT / "ui_v2" / "mkt" / "page.py"), "_SAVE_RESULTS_STATE")

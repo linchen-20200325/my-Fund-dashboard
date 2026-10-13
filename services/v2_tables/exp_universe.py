@@ -4,37 +4,86 @@
 依據：客戶 2026-10-13 裁示（B 線標的探索正式模式第一批 ——
 「只有代碼、其餘欄 ⬜」；「禁止從基金名稱、代碼或 AI 推測任何屬性；缺值保持缺值、不填 0」）。
 
-本檔只做一件事：呼叫 L1 `repositories/pool_repository.py::list_pool`，**只取 `code` 這一欄**，
-回傳去空白、去重（保持原順序）後的代碼清單與計數。
+本檔只做一件事：讀選股池，**只取 `code` 這一欄**，回傳去空白、去重（保持原順序）後的代碼清單與計數。
 
 - ⛔ **選股池的 `name`／`currency`／`category`／`type_override`（以及 `isin`、`morningstar_secid`、
   `status`、`note`、`added_at`）一律不讀** —— 客戶已判定選股池的幣別等欄為系統推測、不可信；
-  本檔的回傳值結構上就沒有那些欄（`load_pool_codes` 只碰 `entry.code`）。
+  本檔的回傳值結構上就沒有那些欄（只碰 `entry.code`）。
 - ⛔ **不過濾 `status`**（含 `CLOSED` 也列）：客戶沒有訂哪一種狀態不算母體，本層不自創篩選規則。
-- **先檢查 `pool_backend_status(...)`**：回 `"local"`（沒有服務帳戶、也沒有注入登入者 OAuth）時，
-  **不讀本機 JSON 當母體**（`cache/fund_pool/pool.json` 在雲端重開就消失，那不是使用者的選股池），
-  照實回 `STATUS_NOT_CLOUD`，畫面顯示「選股池未設定雲端來源」。
+- **本機 JSON 不當母體**：~~先檢查 `pool_backend_status(...)` 回 `"local"`~~ → 2026-10-13 稽核 K 回修
+  （有意識的更正，不是漏刪；決策者：AI 總管）：**直接看 `get_pool_store(...)` 交回的 store 型別** ——
+  是 `LocalJsonPoolStore` 就照實回 `STATUS_NOT_CLOUD`，並且**就讀這一個 store**（不再另外呼叫 `list_pool`）。
+  舊寫法靠 `pool_backend_status` 與 `get_pool_store` 兩支 L1 函式的判斷碰巧一致；
+  稽核 K 的反例：服務帳戶在、但試算表 ID 為空 → 前者回 `service_account`、後者卻交出本機 store，
+  舊寫法就會把本機暫存檔當母體讀。
 - 讀取失敗 → 回 `STATUS_FAILED` 與遮蔽後的訊息原文（§1：「讀不到」不得長得跟「池是空的」一樣）。
 - **空字串代碼**：丟棄並計數（`dropped_blank`）。⚠️ L1 `PoolEntry.from_row` 本來就把代碼為空的列
-  丟掉（回 None）、`__post_init__` 也已去空白 —— 所以這裡的計數只涵蓋**到得了本層**的空代碼，
-  在 L1 被丟掉的那幾列本層看不到、也數不到（據實寫明，不宣稱「全部空列都數到了」）。
-- 不放任何快取（快取只在 L1，`49` §4.4）；不發任何網路請求以外的副作用（L1 讀取路徑唯讀，
-  `GoogleSheetsPoolStore._ws` 2026-09-06 起不建表、不補表頭）。
+  丟掉（回 None）—— 這裡的計數只涵蓋**到得了本層**的空代碼（據實寫明，不宣稱全部數到了）。
 
-秘密值由 L3（`ui_v2/exp/source.py`）讀好傳進來，失敗訊息在這裡遮一次（體例同 `settings_store`）。
+**快取與失敗冷卻（2026-10-13 稽核 L 回修；總管技術裁定）** —— 正式頁每一次互動都會重跑 `load_live`，
+沒有快取時每一次都打一次 Google Sheets、失敗也不退避：
+- **只快取成功結果**（`STATUS_OK`），TTL 取 `shared.ttls.TTL_1HOUR`。理由：選股池是使用者手動維護的清單，
+  變動頻率以天計；而失敗冷卻沿用 `infra.gspread_retry`，最長一種（限流，`shared.backoff_policy.
+  BACKOFF_RATE_LIMITED_SEC` ＝ 1800 秒）必須**短於**成功 TTL，`TTL_30MIN` 會與它相等，故取下一級。
+  代價：在別處改了選股池，本頁最多晚一小時看到；側欄「全域刷新」（`infra.cache.clear_all_caches`）
+  會清掉這份快取（本檔以 `register_cache` 登記），那是立即生效的逃生門。
+  ⚠️ `49` §4.4 寫「快取只在 L1」：L1 `list_pool()` 本身沒有快取（`_cached_pool_map` 是另一支、回的是
+  補淨值查表用的 map），本頁又不得改 L1，所以快取放在這一層（總管 2026-10-13 指定 L2 或 source 二選一）。
+- **失敗冷卻**：沿用 `infra.gspread_retry` 的 `should_skip_gspread`／`record_gspread_failure`／
+  `record_gspread_success`，鍵取 L1 `pool_repository._pool_backoff_ident(...)`（與 L1 自己讀選股池的冷卻
+  **同一把鑰匙** —— 同一本試算表、同一把憑證，失敗一次全部讀取點一起冷卻）。冷卻期內**不重打**，
+  回上一次的失敗原文並註明「冷卻中」；冷卻到期由 `infra.source_backoff` 自動解除，下一次就真的重試。
+  存檔不涉選股池，不清這份快取。
 """
 
 from __future__ import annotations
 
+import threading
+import time
+
+from infra.cache import register_cache
+from infra.gspread_retry import record_gspread_failure, record_gspread_success, should_skip_gspread
 from repositories import pool_repository
 from services.v2_tables.masking import mask_message
+from shared.ttls import TTL_1HOUR
 
 STATUS_OK = "ok"
 STATUS_NOT_CLOUD = "pool_not_cloud"
 STATUS_FAILED = "failed"
 
-# 回 `"local"` 時的訊息（字面為本組擬定；畫面照印）。
+# 本機 store 時的訊息（字面為本組擬定；畫面照印）。
 TEXT_NOT_CLOUD = "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"
+# 冷卻中時的訊息前半（後面接上一次的失敗原文）。字面為本組擬定。
+TEXT_COOLING = "選股池剛讀取失敗過，冷卻中（約剩 {left} 秒），本次不重打 Google Sheets"
+
+SUCCESS_TTL_SEC = TTL_1HOUR
+
+_LOCK = threading.Lock()
+_CACHE: dict = {}          # (actor, sheet_id) → (存入時間 monotonic, 成功結果 dict)
+_LAST_FAILURE: dict = {}   # (actor, sheet_id) → 上一次失敗的原文（未遮蔽；回傳前才遮）
+
+
+class _PoolCodesCache:
+    """給 `infra.cache` 的登記物件：`clear_all_caches()` 會呼叫 `cache_clear()`。
+    `cache_info()` 照 `infra/cache.py` 的欄位契約只交必備的 `name`／`size`（沒有命中率統計 —— 不湊 0）。"""
+
+    __name__ = "exp_pool_codes"
+
+    def cache_clear(self) -> None:
+        with _LOCK:
+            _CACHE.clear()
+            _LAST_FAILURE.clear()
+
+    def cache_info(self) -> dict:
+        with _LOCK:
+            return {"name": self.__name__, "size": len(_CACHE), "ttl_sec": SUCCESS_TTL_SEC}
+
+
+_REGISTERED = register_cache(_PoolCodesCache())
+
+
+def clear_cache() -> None:
+    _REGISTERED.cache_clear()
 
 
 def _empty(status: str, backend: str, message) -> dict:
@@ -42,33 +91,7 @@ def _empty(status: str, backend: str, message) -> dict:
             "duplicates": 0, "message": message}
 
 
-def load_pool_codes(secret_values, *, oauth_client=None) -> dict:
-    """選股池的基金代碼。
-
-    回傳 `{"status", "backend", "codes", "dropped_blank", "duplicates", "message"}`：
-    - `status`：`STATUS_OK`／`STATUS_NOT_CLOUD`／`STATUS_FAILED`；
-    - `backend`：`pool_backend_status` 的原值（`service_account`／`oauth`／`local`）；
-    - `codes`：去前後空白、去重（第一次出現的位置為準）後的代碼清單；**大小寫原樣保留**
-      （不 upper —— 本層不替使用者改寫代碼）；
-    - `dropped_blank`：去空白後為空字串而被丟掉的筆數；`duplicates`：重複而被併掉的筆數；
-    - `message`：失敗或未設定雲端時的訊息（已遮蔽）；OK 時為 None。
-
-    `oauth_client`：L1 的注入點（登入者的 gspread client）。⚠️ ui_v2 目前沒有取得它的途徑
-    （取它的現有函式住在舊樹 `ui/`，ui_v2 不得 import），呼叫端恆傳 None ⇒ 只有服務帳戶一條路。
-
-    ⚠️ 讀取例外一律收成 `STATUS_FAILED`（訊息帶例外型別名）：`list_pool` 往外拋的型別沒有封閉清單
-    （gspread 的 `APIError`、憑證錯誤、`RuntimeError`／`KeyError` 都會出現，本套件不得 import gspread 去列舉），
-    而這一支唯一的動作就是讀選股池 —— 任何例外都是「這次讀不到」，在畫面上以紅字照實顯示，
-    **不是吞掉**（§1）。`pool_backend_status` 本身是純判斷，不包在 try 裡。
-    """
-    mask = lambda text: mask_message(text, list(secret_values))  # noqa: E731
-    backend = pool_repository.pool_backend_status(oauth_client)
-    if backend == "local":
-        return _empty(STATUS_NOT_CLOUD, backend, TEXT_NOT_CLOUD)
-    try:
-        entries = pool_repository.list_pool(oauth_client)
-    except Exception as exc:  # noqa: BLE001 — 理由見 docstring：照實回失敗，不吞
-        return _empty(STATUS_FAILED, backend, mask(f"{type(exc).__name__}: {exc}"))
+def _codes_of(entries) -> dict:
     codes, seen = [], set()
     dropped_blank = duplicates = 0
     for entry in entries:
@@ -81,5 +104,57 @@ def load_pool_codes(secret_values, *, oauth_client=None) -> dict:
             continue
         seen.add(code)
         codes.append(code)
-    return {"status": STATUS_OK, "backend": backend, "codes": codes, "dropped_blank": dropped_blank,
-            "duplicates": duplicates, "message": None}
+    return {"codes": codes, "dropped_blank": dropped_blank, "duplicates": duplicates}
+
+
+def load_pool_codes(secret_values, *, oauth_client=None, now=None) -> dict:
+    """選股池的基金代碼。
+
+    回傳 `{"status", "backend", "codes", "dropped_blank", "duplicates", "message"}`：
+    - `status`：`STATUS_OK`／`STATUS_NOT_CLOUD`／`STATUS_FAILED`；
+    - `backend`：L1 store 的 `backend_name`（`google-sheets`／`local-json`）；
+    - `codes`：去前後空白、去重（第一次出現的位置為準）後的代碼清單；**大小寫原樣保留**；
+    - `dropped_blank`／`duplicates`：被丟掉的空代碼筆數／被併掉的重複筆數；
+    - `message`：失敗、冷卻中或未設定雲端時的訊息（已遮蔽）；OK 時為 None。
+
+    `oauth_client`：L1 的注入點。⚠️ ui_v2 目前沒有取得它的途徑（取它的現有函式住在舊樹 `ui/`），呼叫端恆傳 None。
+    `now`：測試用（monotonic 秒）；不傳取 `time.monotonic()`。
+
+    ⚠️ 讀取例外一律收成 `STATUS_FAILED`（訊息帶例外型別名）：`list_pool` 往外拋的型別沒有封閉清單
+    （gspread 的 `APIError`、憑證錯誤、`RuntimeError`／`KeyError` 都會出現，本套件不得 import gspread 去列舉），
+    而這一段唯一的動作就是讀選股池 —— 任何例外都是「這次讀不到」，在畫面上以紅字照實顯示，**不是吞掉**（§1）。
+    """
+    mask = lambda text: mask_message(text, list(secret_values))  # noqa: E731
+    now = time.monotonic() if now is None else now
+    store = pool_repository.get_pool_store(oauth_client)
+    backend = getattr(store, "backend_name", type(store).__name__)
+    if isinstance(store, pool_repository.LocalJsonPoolStore):
+        return _empty(STATUS_NOT_CLOUD, backend, TEXT_NOT_CLOUD)
+
+    key = pool_repository._pool_backoff_ident(oauth_client)
+    with _LOCK:
+        hit = _CACHE.get(key)
+    if hit is not None and now - hit[0] < SUCCESS_TTL_SEC:
+        return dict(hit[1], codes=list(hit[1]["codes"]))
+
+    skip, left, _kind = should_skip_gspread(*key)
+    if skip:
+        with _LOCK:
+            last = _LAST_FAILURE.get(key)
+        text = TEXT_COOLING.format(left=int(left + 0.999))
+        return _empty(STATUS_FAILED, backend, mask(f"{text}；上次失敗：{last}" if last else text))
+
+    try:
+        entries = store.list_pool()
+    except Exception as exc:  # noqa: BLE001 — 理由見 docstring：照實回失敗，不吞
+        record_gspread_failure(key[0], key[1], exc)
+        raw = f"{type(exc).__name__}: {exc}"
+        with _LOCK:
+            _LAST_FAILURE[key] = raw
+        return _empty(STATUS_FAILED, backend, mask(raw))
+    record_gspread_success(*key)
+    result = {"status": STATUS_OK, "backend": backend, "message": None, **_codes_of(entries)}
+    with _LOCK:
+        _LAST_FAILURE.pop(key, None)
+        _CACHE[key] = (now, dict(result, codes=list(result["codes"])))
+    return result

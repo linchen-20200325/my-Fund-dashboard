@@ -322,9 +322,14 @@ def test_EXP4前一鍵失敗就不寫後一鍵_逐鍵照實寫():
     results = live.run_saves(live.exp4_save_entries(["fund_name"], None),
                              _saver(fail_keys=("exp_visible_columns",), record=record))
     assert [k for k, _v, _k in record] == ["exp_visible_columns"]
-    assert results["exp_sort_column"] == "前一個鍵存檔失敗，本鍵未寫入"
+    # ~~assert results["exp_sort_column"] == "前一個鍵存檔失敗，本鍵未寫入"~~ → 2026-10-13 稽核回修：不冠「寫入失敗」
+    assert results["exp_sort_column"] == live.TEXT_SKIPPED == "未寫入：前一個鍵存檔失敗"
     exp4 = _b(_model(save_results=results), "EXP-4")
-    assert len(exp4["error_lines"]) == 2
+    assert exp4["error_lines"] == [
+        "存檔寫入失敗：exp_visible_columns：exp_visible_columns 寫入失敗（測試）",
+        "exp_sort_column：未寫入：前一個鍵存檔失敗",
+    ]
+    assert not [line for line in exp4["error_lines"] if line.startswith("存檔寫入失敗：exp_sort_column")]
 
 
 def test_全部成功_一行已存檔():
@@ -344,3 +349,83 @@ def test_沒接寫入函式_存檔停用():
         for button in _b(model, code)["buttons"]:
             if button["_action_kind"] == "存檔":
                 assert not button["_enabled"] and button["disabled_reason"] == live.SAVE_DISABLED_REASON
+
+
+# ═════════════════════ 2026-10-13 稽核 K／L 回修 ═════════════════════
+
+
+def test_存完又改了_不再單寫已存檔_改寫照實的句子():
+    saved = _input(settings=_settings(rules=_NOT_C03))
+    edited = _model(inputs=saved, field_rules=[{"field": "fund_code", "op": "等於", "value": "A01"}],
+                    save_results={"exp_filter_rules": None})
+    lines = _b(edited, "EXP-1")["detail_lines"]
+    assert logic.TEXT_UNSAVED_RULES in lines and live.TEXT_SAVED_THEN_EDITED in lines
+    assert live.TEXT_SAVED not in lines
+    same = _model(inputs=saved, field_rules=list(_NOT_C03), save_results={"exp_filter_rules": None})
+    assert live.TEXT_SAVED in _b(same, "EXP-1")["detail_lines"]
+    exp4 = _b(_model(inputs=saved, field_columns=["ccy"], field_sort=None,
+                     save_results={"exp_visible_columns": None, "exp_sort_column": None}), "EXP-4")
+    assert live.TEXT_SAVED_THEN_EDITED in exp4["detail_lines"] and live.TEXT_SAVED not in exp4["detail_lines"]
+
+
+def test_代碼欄存在時_不說只顯示基金名():
+    model = _model(inputs=_input(settings=_settings(rules=_NOT_C03, columns=())))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert logic.TEXT_ONLY_FUND_NAME not in exp2["notes"]
+    assert logic.TEXT_ONLY_CODE_AND_NAME in exp2["notes"]
+    assert _b(model, "EXP-4")["summary_text"] == logic.TEXT_ONLY_CODE_AND_NAME
+    # 對照組：同一份資料不帶代碼欄（示範模式的組法）→ 照舊「目前只顯示基金名」
+    demo = logic.build_page_model(live.build_dataset(_pool(), _settings(rules=_NOT_C03, columns=())))
+    assert logic.TEXT_ONLY_FUND_NAME in _b(demo, "EXP-2")["notes"]
+    assert logic.TEXT_ONLY_CODE_AND_NAME not in _b(demo, "EXP-2")["notes"]
+
+
+def test_讀不到設定時_新增條件也停用():
+    broken = _model(inputs=_input(settings=dict(live.EMPTY_SETTINGS), settings_error="HTTP 403"))
+    add = [b for b in _b(broken, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_ADD_ROW]
+    assert add and not add[0]["_enabled"]
+    ok = _model()
+    add = [b for b in _b(ok, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_ADD_ROW]
+    assert add and add[0]["_enabled"]
+
+
+def test_指紋_同值同指紋_換值換指紋_存檔後的預期值與讀回相同():
+    a = _settings(rules=_NOT_C03, columns=("fund_name",))
+    assert live.settings_fingerprint(a) == live.settings_fingerprint(dict(a))
+    assert live.settings_fingerprint(a) != live.settings_fingerprint(_settings(rules=_NOT_C03))
+    assert live.settings_fingerprint(live.EMPTY_SETTINGS) != live.settings_fingerprint(_settings(columns=()))
+    entries = live.exp4_save_entries(["ccy"], "ccy")
+    results = {"exp_visible_columns": None, "exp_sort_column": "失敗"}
+    after = live.settings_after_saves(a, entries, results)
+    assert after[live.KEY_COLUMNS] == ("ccy",) and after[live.KEY_SORT] is None   # 失敗的那一鍵不改
+    read_back, error = live.parse_user_settings(_rows(
+        exp_filter_rules=json.dumps(list(_NOT_C03), ensure_ascii=False),
+        exp_visible_columns=entries[0]["value"]), [])
+    assert error is None and live.settings_fingerprint(read_back) == live.settings_fingerprint(after)
+
+
+_CODE_SHAPES = ["00123", "0050", "ALZF9", "ACDD01", "AB-123", "tw-0001", "A01.US", "F0025"]
+
+
+@pytest.mark.parametrize("code", _CODE_SHAPES)
+def test_正式模式_任何代碼形狀_代碼以外的欄全部缺值_不推任何屬性(code):
+    """稽核 K M5：釘死「代碼以外的欄全部 ⬜／None」。依代碼形狀推幣別、推名稱這類突變會在這裡紅。"""
+    pool = _pool(codes=(code,))
+    data = live.build_dataset(pool, _settings(rules=({"field": "fund_code", "op": "等於", "value": code},),
+                                              columns=logic.COLUMN_ORDER))
+    row = data["fund_profile"][0]
+    assert row["fund_code"] == code
+    assert {k: v for k, v in row.items() if k != "fund_code"} == {k: None for k in logic.FUND_PROFILE_FIELDS
+                                                                  if k != "fund_code"}
+    assert data["nav"] == [] and data["dividend"] == [] and data["div_ratio_pct"] == {}
+    model = live.build_live_model({"dataset": data, "notes": {"pool": pool, "settings": None or {},
+                                                              "settings_error": None}},
+                                  compare_checked=(code,), save_wired=True)
+    (exp2_row,) = _b(model, "EXP-2")["_rows"]
+    for column in logic.COLUMN_ORDER:
+        assert exp2_row["_cells"][column]["text"] == live.missing_text(column), (code, column)
+    for column in _b(model, "EXP-3")["_columns"]:
+        assert all(cell["_state"] == logic.STATE_MISSING for cell in column["_cells"].values()), code
+    texts = [f["text"] for f in _b(model, "EXP-6")["_fields"]]
+    assert texts[1] == code and all(t.startswith("⬜ 資料未備：") for i, t in enumerate(texts) if i != 1)

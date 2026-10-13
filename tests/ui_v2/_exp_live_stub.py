@@ -12,6 +12,7 @@ from ui_v2.exp import live
 STORE: dict = {}          # 鍵 → setting_value 字串（試算表上的那一份）
 FAIL_KEYS: set = set()    # 這些鍵存檔時回失敗
 SAVES: list = []          # 每一次存檔呼叫 (鍵, 值, value_kind)
+READ_ERROR: list = []     # 非空時 load_live 照「讀設定失敗」交回（第一個元素是訊息原文）
 POOL = {"status": "ok", "backend": "service_account", "codes": ["B02", "A01", "C03"],
         "dropped_blank": 0, "duplicates": 0, "message": None}
 
@@ -20,11 +21,14 @@ def reset() -> None:
     STORE.clear()
     FAIL_KEYS.clear()
     SAVES.clear()
+    READ_ERROR.clear()
 
 
 def load_live() -> dict:
     rows = {key: {"setting_key": key, "setting_value": value} for key, value in STORE.items()}
     settings, error = live.parse_user_settings(rows, [])
+    if READ_ERROR:
+        settings, error = dict(live.EMPTY_SETTINGS), READ_ERROR[0]
     return {"dataset": live.build_dataset(POOL, settings),
             "notes": {"pool": dict(POOL), "settings": settings, "settings_error": error}}
 

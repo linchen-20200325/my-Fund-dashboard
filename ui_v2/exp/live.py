@@ -259,6 +259,13 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
         reason = SAVE_DISABLED_REASON
     elif notes.get("settings_error"):
         reason = SAVE_UNREADABLE_REASON
+    if notes.get("settings_error"):
+        # 2026-10-13 稽核 L 回修：讀不到設定時「新增條件」也停用 —— 那一輪新增的列沒有已存值可對照，
+        # 恢復後存檔會把它連同空白蓋回雲端。
+        for button in logic.find_block(out, "EXP-1")["buttons"]:
+            if button["_action_kind"] == ACTION_ADD_ROW:
+                button["_enabled"] = False
+                button["disabled_reason"] = SAVE_UNREADABLE_REASON
     if reason:
         for code in ("EXP-1", "EXP-4", "EXP-5"):
             for button in logic.find_block(out, code)["buttons"]:
@@ -336,7 +343,8 @@ def run_saves(entries, save, *, stop_on_failure: bool = True) -> dict:
     failed = False
     for entry in entries:
         if failed and stop_on_failure:
-            results[entry["key"]] = "前一個鍵存檔失敗，本鍵未寫入"
+            # ~~"前一個鍵存檔失敗，本鍵未寫入"~~ → 2026-10-13 稽核回修：這一鍵沒有去寫，不冠「寫入失敗」。
+            results[entry["key"]] = TEXT_SKIPPED
             continue
         out = save(entry["key"], entry["value"], entry["value_kind"])
         if out["status"] == "saved":
@@ -348,7 +356,14 @@ def run_saves(entries, save, *, stop_on_failure: bool = True) -> dict:
 
 
 TEXT_SAVED = "已存檔"
+# 2026-10-13 稽核回修（字面為本組擬定）：
+# - 前一鍵失敗而本鍵沒有去寫：照實寫「未寫入」，不冠「存檔寫入失敗」（本鍵根本沒有寫入動作）。
+# - 上次存檔成功、之後又改了欄位：不再單寫「已存檔」（那會與同卡的「未存檔」並排、互相矛盾）。
+TEXT_SKIPPED = "未寫入：前一個鍵存檔失敗"
+TEXT_SAVED_THEN_EDITED = "上次存檔已成功；目前有未存的變更"
 _SAVE_BLOCK = {KEY_RULES: "EXP-1", KEY_COLUMNS: "EXP-4", KEY_SORT: "EXP-4", KEY_WATCH: "EXP-5"}
+# 欄位與已存值不同時，各塊說明行上的那一句（`apply_save_results` 據此判斷「存完又改了」）。
+_UNSAVED_MARK = {"EXP-1": logic.TEXT_UNSAVED_RULES, "EXP-4": TEXT_UNSAVED_EXP4}
 
 
 def apply_save_results(model: dict, results) -> dict:
@@ -366,15 +381,45 @@ def apply_save_results(model: dict, results) -> dict:
         by_block.setdefault(_SAVE_BLOCK[key], []).append((key, message))
     for code, pairs in by_block.items():
         block = logic.find_block(out, code)
+        edited = _UNSAVED_MARK.get(code) in block["detail_lines"]
+        saved_text = TEXT_SAVED_THEN_EDITED if edited else TEXT_SAVED
         failed = [(key, message) for key, message in pairs if message is not None]
         if not failed:
-            block["detail_lines"].append(TEXT_SAVED)
+            block["detail_lines"].append(saved_text)
             continue
         for key, message in pairs:
             if message is None:
-                block["detail_lines"].append(f"{key}：{TEXT_SAVED}")
+                block["detail_lines"].append(f"{key}：{saved_text}")
+            elif message == TEXT_SKIPPED:
+                block.setdefault("error_lines", []).append(f"{key}：{TEXT_SKIPPED}")
             else:
                 block.setdefault("error_lines", []).append(f"{logic.TEXT_SAVE_FAILED}：{key}：{message}")
+    return out
+
+
+# ───────────────────────── 已存值指紋（2026-10-13 稽核 L 回修：防止空值蓋掉雲端） ─────────────────────────
+
+
+def settings_fingerprint(settings) -> str:
+    """已存設定的確定性指紋。`page.py` 記下「本 session 的輸入欄是用哪一版已存值填的」，
+    指紋一變（首次、讀失敗後恢復、他處改了設定）就強制以已存值覆寫輸入欄，
+    不讓讀失敗那一輪留下的空白輸入欄在恢復後被存回去蓋掉雲端。"""
+    def plain(value):
+        if isinstance(value, tuple):
+            return [plain(v) for v in value]
+        if isinstance(value, dict):
+            return {k: plain(v) for k, v in sorted(value.items())}
+        return value
+    return json.dumps({key: plain(settings.get(key)) for key in SETTING_KEYS}, ensure_ascii=False, sort_keys=True)
+
+
+def settings_after_saves(settings, entries, results) -> dict:
+    """存檔後「試算表上應該是什麼」：只把**寫成功**的鍵換成寫進去的值（解析成與 `parse_user_settings` 同形），
+    其餘照舊。`page.py` 存檔成功後以它更新指紋 —— 下一次重跑讀回的已存值與它相同，就不會被當成「他處改了」。"""
+    out = dict(settings)
+    for entry in entries:
+        if (results or {}).get(entry["key"], "x") is None and entry["value"] is not None:
+            out[entry["key"]] = _PARSERS[entry["key"]](entry["value"])
     return out
 
 

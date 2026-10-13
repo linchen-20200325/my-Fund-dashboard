@@ -408,11 +408,11 @@ def _expander(block: dict):
     )
 
 
-def _render_exp4(block: dict, *, scenario: str, save_click=None) -> None:
+def _render_exp4(block: dict, *, scenario: str, save_click=None, editable: bool = True) -> None:
     """`save_click`：正式模式才有（`(on_click, args)`）。有傳時五個欄位勾選框可勾、排序下拉與存檔接上
     `user_setting`（客戶 2026-10-13 裁示）；**`EXP-2` 照舊只吃已存值**（判定在 `live.build_live_model`）。"""
     if save_click is not None:
-        _render_exp4_live(block, save_click=save_click)
+        _render_exp4_live(block, save_click=save_click, editable=editable)
         return
     with _expander(block):
         st.caption(block["answers"])
@@ -470,6 +470,9 @@ _RULE_SEQ_STATE = "_exp_live_rule_seq"
 # 按「存檔」那一次的逐鍵結果（`{鍵: None 或失敗訊息原文}`）：按鈕那一次的事，不是讀表的結果。
 _SAVE_RESULTS_STATE = "_exp_save_results"
 _SORT_KEY = "exp4live_sort"
+# 2026-10-13 稽核 L 回修：本 session 的輸入欄是用哪一版已存值填的（指紋 ＋ 那一版本身）。
+_SEEDED_STATE = "_exp_live_seeded_fp"
+_SEEDED_SETTINGS_STATE = "_exp_live_seeded_settings"
 
 
 def _rule_key(uid: int, name: str) -> str:
@@ -497,24 +500,39 @@ def _current_rules() -> list:
 
 
 def _seed_live_fields(settings, settings_error) -> None:
-    """輸入欄／勾選框的狀態**不在** session 裡時，以**已存**設定填上（`44` `EXP-1`／`EXP-4` 判準：
-    重新載入後與存檔前逐字相同）。已在 session 裡（使用者正在編、或剛存完）就不動。
-    讀不到設定時一格都不填（沒有已存值可填；不拿猜的值去填）。
+    """以**已存**設定填輸入欄／勾選框（`44` `EXP-1`／`EXP-4` 判準：重新載入後與存檔前逐字相同）。
+
+    ~~狀態不在 session 裡時才填；已在 session 裡就不動。~~
+    → **2026-10-13 稽核 L 回修（有意識的更正，不是漏刪；決策者：AI 總管）**：舊寫法在「讀設定失敗」那一輪
+    建起來的空白勾選框，下一輪讀成功後**不會**改回已存值，按存檔就把空值蓋回雲端（稽核 L 實測試算表變成 `[]`）。
+    現行：記下「本 session 用哪一版已存值填過」的指紋；讀得到設定、而且指紋與上次填入的不同
+    （首次、讀失敗後恢復、他處改了設定）時，**強制以已存值覆寫**條件列、欄位勾選、排序下拉，並清掉上一次
+    存檔的逐鍵結果。指紋相同時不動（使用者正在編的值留著）。存檔成功後由 `_after_saves` 更新指紋。
+    讀不到設定時一格都不填、也不記指紋（沒有已存值可填；不拿猜的值去填）。
     ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白、不勾。
+    ⚠️ 讀不到的那一輪**清掉指紋**：那一輪沒有建 `EXP-1`／`EXP-4` 的輸入欄，streamlit 會把沒畫出來的輸入欄狀態
+    清掉；恢復後若指紋仍與讀失敗前相同而不重填，空白的勾選框就會被存回去。清掉指紋 ⇒ 恢復那一輪一定重填。
     """
     if settings_error:
+        st.session_state.pop(_SEEDED_STATE, None)
         return
-    if _RULES_STATE not in st.session_state:
-        st.session_state[_RULES_STATE] = [
-            {"_id": _next_rule_id(), **rule} for rule in settings.get(live.KEY_RULES) or ()
-        ]
+    fingerprint = live.settings_fingerprint(settings)
+    if st.session_state.get(_SEEDED_STATE) == fingerprint:
+        return
+    for row in st.session_state.get(_RULES_STATE) or ():
+        for name in ("field", "op", "value"):
+            st.session_state.pop(_rule_key(row["_id"], name), None)
+    st.session_state[_RULES_STATE] = [
+        {"_id": _next_rule_id(), **rule} for rule in settings.get(live.KEY_RULES) or ()
+    ]
     saved_columns = set(settings.get(live.KEY_COLUMNS) or ())
     for column in logic.COLUMN_ORDER:
-        if _col_key(column) not in st.session_state:
-            st.session_state[_col_key(column)] = column in saved_columns
-    if _SORT_KEY not in st.session_state:
-        saved_sort = settings.get(live.KEY_SORT)
-        st.session_state[_SORT_KEY] = logic.COLUMN_LABELS[saved_sort] if saved_sort else logic.TEXT_NO_SORT
+        st.session_state[_col_key(column)] = column in saved_columns
+    saved_sort = settings.get(live.KEY_SORT)
+    st.session_state[_SORT_KEY] = logic.COLUMN_LABELS[saved_sort] if saved_sort else logic.TEXT_NO_SORT
+    st.session_state.pop(_SAVE_RESULTS_STATE, None)
+    st.session_state[_SEEDED_STATE] = fingerprint
+    st.session_state[_SEEDED_SETTINGS_STATE] = dict(settings)
 
 
 def _field_columns() -> list:
@@ -543,17 +561,29 @@ def _on_remove_rule(uid: int) -> None:
         st.session_state.pop(_rule_key(uid, name), None)
 
 
+def _after_saves(entries, save_live) -> None:
+    """寫入、記逐鍵結果；寫成功的鍵同步更新「已用哪一版已存值填過」的指紋（稽核 L 回修）——
+    否則下一次重跑讀回剛存的值，會被當成「他處改了」而清掉這一次的存檔結果。"""
+    results = live.run_saves(entries, save_live)
+    _record_saves(results)
+    seeded = st.session_state.get(_SEEDED_SETTINGS_STATE)
+    if seeded is not None:
+        updated = live.settings_after_saves(seeded, entries, results)
+        st.session_state[_SEEDED_SETTINGS_STATE] = updated
+        st.session_state[_SEEDED_STATE] = live.settings_fingerprint(updated)
+
+
 def _on_save_rules(save_live) -> None:
-    _record_saves(live.run_saves(live.exp1_save_entries(_current_rules()), save_live))
+    _after_saves(live.exp1_save_entries(_current_rules()), save_live)
 
 
 def _on_save_columns(save_live) -> None:
-    _record_saves(live.run_saves(live.exp4_save_entries(_field_columns(), _field_sort()), save_live))
+    _after_saves(live.exp4_save_entries(_field_columns(), _field_sort()), save_live)
 
 
 def _on_save_watch(save_live, saved_watchlist, settings_error) -> None:
     picked = _checked(logic.GROUP_WATCH, _LIVE_SCENARIO, ())
-    _record_saves(live.run_saves(live.exp5_save_entries(saved_watchlist, picked, settings_error), save_live))
+    _after_saves(live.exp5_save_entries(saved_watchlist, picked, settings_error), save_live)
 
 
 def _live_buttons(block: dict, prefix: str, clicks: dict) -> None:
@@ -600,11 +630,18 @@ def _render_exp1_live(block: dict, rows: list, *, clicks: dict) -> None:
     _card_close(block)
 
 
-def _render_exp4_live(block: dict, *, save_click) -> None:
+def _render_exp4_live(block: dict, *, save_click, editable: bool = True) -> None:
+    """`editable=False`（已存設定讀不到）：不建任何可編輯的勾選框與下拉（稽核 L 回修）——
+    那一輪建起來的空白狀態會留在 session 裡，恢復後被存回去蓋掉雲端。只畫失敗行與說明。"""
     with _expander(block):
         st.caption(block["answers"])
         _notes(block)
         _fetch_fail_lines(block)
+        if not editable:
+            _live_buttons(block, "exp4", {live.ACTION_SAVE: save_click})
+            _error_lines(block)
+            _lines(block["detail_lines"], css="exp-detail")
+            return
         columns = st.columns(len(block["_options"]))
         for column, option in zip(columns, block["_options"]):
             with column:
@@ -932,7 +969,7 @@ def _render_live(load_live, save_live) -> None:
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-4":
-                _render_exp4(block, scenario=_LIVE_SCENARIO, save_click=exp4_click)
+                _render_exp4(block, scenario=_LIVE_SCENARIO, save_click=exp4_click, editable=readable)
             else:
                 _render_exp5(block, save_click=exp5_click)
 
