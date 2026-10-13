@@ -1166,8 +1166,11 @@ def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -
     # 算不出來 → 記下原因、不寫這兩個鍵（B 線見到 `nav_history_merged` 卻沒有日期清單會整檔扣下，不猜）。
     try:
         _rec_by_date = s_hist.attrs.get("recorded_at_by_date") or {}
+        # 2026-10-13 稽核 5 N1：`groupby(level=0).last()` 跳過 NaN —— live 某天是 NaN 時，合併後那天其實是
+        # 累積表的值。故「累積表貢獻的日期」以 live **有效值**的日期為準（只改這份 attrs 標記，合併語意不動）。
+        _live_valid = s_live.dropna().index
         _hist_days = [pd.Timestamp(d).date().isoformat()
-                      for d in merged.index.difference(s_live.index)]
+                      for d in merged.index.difference(_live_valid)]
         merged.attrs["nav_history_dates"] = _hist_days
         merged.attrs["nav_history_recorded_at"] = {d: str(_rec_by_date.get(d) or "") for d in _hist_days}
         merged.attrs["nav_history_source"] = str(s_hist.attrs.get("source", "nav_history"))

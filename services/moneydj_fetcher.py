@@ -31,14 +31,15 @@ from typing import Union
 NAV_ATTEMPTS_KEY = "nav_page_type_attempts"
 
 
-def nav_history_shared_reads():
+def nav_history_shared_reads(*, skip_reads: bool = False):
     """A 鏈的 nav_history 讀取共用範圍（`services.nav_history_gs.shared_reads`，2026-10-13 總管技術裁定第 6 條）。
 
     批次呼叫 `auto_fetch_moneydj` 的一方（B 線 `build_nav_table`）在這個範圍內逐檔取數，整張累積表只讀一次。
     範圍外不影響任何行為。放在本模組，是因為 B 線的 import 守衛只放行 `services.moneydj_fetcher` 這一個名字。
+    `skip_reads=True`：範圍內不讀累積表、一律當作沒有累積點（B 線出處閘門關閉時用，見 `shared_reads`）。
     """
     from services.nav_history_gs import shared_reads
-    return shared_reads()
+    return shared_reads(skip_reads=skip_reads)
 
 
 def build_moneydj_url(raw_input: str, page_type: str) -> str:

@@ -80,6 +80,7 @@ DIV_DATE_IS_EX_DATE_VERIFIED = False
 # 客戶裁示之前：閘門關閉 → `nav_history_dates` 標出的累積點一律不寫；同一天即時值已蓋過的點本來就是即時值，照寫；
 # 只剩累積點、沒有即時點的檔整檔不寫，記即時失敗原文。⚠️ 只在客戶裁示後才可以改這一處。
 NAV_HISTORY_PROVENANCE_VERIFIED = False
+TEXT_HISTORY_NOT_READ = "閘門關閉，本次未讀累積表"
 TEXT_HISTORY_GATE_CLOSED = ("累積序列的出處不可考（可能含以名稱搜尋得來的資料），依規則暫不採用，待客戶裁示；"
                             "累積表 {n} 筆不寫")
 
@@ -733,6 +734,9 @@ def _add_chain_provenance(out: dict, attrs: dict) -> None:
     read_error = attrs.get(CHAIN_HIST_READ_ERROR_ATTR)
     hist = prov.setdefault("nav_history", {"source": None, "points": 0, "written": 0,
                                            "recorded_at_missing": 0, "read_error": None})
+    if not NAV_HISTORY_PROVENANCE_VERIFIED:
+        hist.setdefault("gate_closed", True)
+        hist.setdefault("note", TEXT_HISTORY_NOT_READ)
     if read_error is not None:
         hist["read_error"] = str(read_error)
         out["skipped"].append(f"累積表本次讀取失敗，只用即時取得的部分：{read_error}")
@@ -901,7 +905,8 @@ def build_nav_table(funds, *, now=None) -> dict:
     acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
            "provenance": {}}
     # 第 6 條：本次 build 內 A 鏈讀累積表，整張表只讀一次（範圍結束即丟；失敗照實重拋，不吞）。
-    with nav_history_shared_reads():
+    # 2026-10-13 稽核 5 B4：出處閘門關閉 → 本次 build 範圍內不讀累積表（A 鏈頁型選擇與沒有累積表時相同）
+    with nav_history_shared_reads(skip_reads=not NAV_HISTORY_PROVENANCE_VERIFIED):
         for code, entry in grouped.items():
             if code in conflicts:
                 acc["withheld"][code] = WITHHELD_INPUT_CONFLICT

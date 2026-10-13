@@ -73,11 +73,18 @@ def _shared_read_scope():
     return getattr(_SHARED_READ_TLS, "scope", None)
 
 
+_SKIP_READS_KEY = "__skip_reads__"
+
+
 @_contextlib.contextmanager
-def shared_reads():
-    """進入後，本執行緒在範圍內呼叫 `load_points`（含 `load_series`）對同一份憑證只打一次 Sheets（見上方註解）。"""
+def shared_reads(*, skip_reads: bool = False):
+    """進入後，本執行緒在範圍內呼叫 `load_points`（含 `load_series`）對同一份憑證只打一次 Sheets（見上方註解）。
+
+    `skip_reads=True`（2026-10-13 稽核 5 B4）：範圍內一律當作「累積表沒有任何點」（回 `[]`、**不打 Sheets**）。
+    給 B 線累積表出處閘門關閉時用 —— 讓 A 鏈在 B 線呼叫時的頁型選擇與「沒有累積表」時完全一樣
+    （否則 A 鏈會靠併入的累積點把第一個頁型判成 complete，不再試第二個頁型）。只在本執行緒、只在範圍內。"""
     previous = _shared_read_scope()
-    _SHARED_READ_TLS.scope = {}
+    _SHARED_READ_TLS.scope = {_SKIP_READS_KEY: True} if skip_reads else {}
     try:
         yield
     finally:
@@ -761,6 +768,8 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
 
     # 2026-10-13 第 6 條：`shared_reads()` 範圍內，整張表只讀一次（範圍外不走這裡，行為不變）。
     _scope = _shared_read_scope() if _sheet is None else None
+    if _scope is not None and _scope.get(_SKIP_READS_KEY):
+        return []                                   # 2026-10-13 B4：範圍內不讀（見 shared_reads）
     if _scope is not None:
         _scope_key = (id(oauth_client) if oauth_client is not None else None, bool(retries))
         if _scope_key not in _scope:

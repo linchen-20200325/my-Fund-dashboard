@@ -19,6 +19,9 @@ from services.v2_tables import nav_dividend as ND
 
 NOW = dt.datetime(2026, 3, 10, 0, 0, tzinfo=dt.timezone.utc)
 
+import services.nav_history_gs as _NH  # noqa: E402
+_REAL_LOAD_POINTS = _NH.load_points
+
 
 def _quiet(fn, *args, **kwargs):
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -402,3 +405,115 @@ def test_M11_code_search_也拒收(monkeypatch):
                         lambda code, return_page_type=False: ({"full_key": code, "series": s}, "yp010001"))
     got, err = ND.fetch_nav_chain_with_error("TLZZ7", "TLZZ7")
     assert len(got) == 0 and "以基金名稱搜尋的晨星代碼，依規則不採用" in err and "code_search" in err
+
+
+# ═══════════════════════ 稽核 5 B4：閘門關閉時 B 線範圍內不讀累積表 ═══════════════════════
+
+def _real_history_sheet(monkeypatch, rows):
+    """換回真的 `load_points`，只把 Sheets 換成記錄讀取次數的假表。回讀取次數串列。"""
+    import services.nav_history_gs as nh
+    real = _REAL_LOAD_POINTS          # 收集期就取下的真函式（`H.install` 會把模組屬性換成替身）
+    reads = []
+
+    def fake_get_sheet(oauth_client=None):
+        reads.append(1)
+
+        class _WS:
+            def get_all_values(self):
+                return [["code", "date", "nav", "fund_name", "source", "recorded_at", "currency"], *rows]
+
+        class _SH:
+            def worksheet(self, _n):
+                return _WS()
+        return _SH()
+
+    monkeypatch.setattr(nh, "is_enabled", lambda: True)
+    monkeypatch.setattr(nh, "_nav_backoff_ident", lambda oauth_client=None: ("", ""))
+    monkeypatch.setattr(nh, "_get_sheet", fake_get_sheet)
+    return real, reads
+
+
+def _b4_scenario(code):
+    """只有 yp010001 有 25 筆即時淨值；meta 只有名稱沒有最新淨值（主路線失敗後走 legacy，不換頁型重試）。"""
+    import pandas as pd
+
+    def nav30(c, page_type=""):
+        if page_type == "yp010001":
+            return H.series(25, start="2026-01-05", attrs={"source": "MoneyDJ:nav_30day:table_parse",
+                                                            "fetched_at": "2026-02-10T00:00:00+00:00"})
+        return pd.Series(dtype=float)
+    return {"_src_tcb_meta": {"fund_name": "境外保單基金"}, "_src_nav_30day": nav30}
+
+
+def _b4_rows(code):
+    import pandas as pd
+    return [[code, d.date().isoformat(), str(9 + i / 100), "", "backfill", "2025-12-01T00:00:00+00:00", ""]
+            for i, d in enumerate(pd.date_range("2025-09-01", periods=30, freq="B"))]
+
+
+def test_B4_閘門關閉_只有第二頁型有即時資料加累積點_寫出25列_latest_live_不讀表(monkeypatch):
+    import services.nav_history_gs as nh
+    code = "TLZB4"
+    H.install(monkeypatch, _b4_scenario(code))
+    real, reads = _real_history_sheet(monkeypatch, _b4_rows(code))
+    monkeypatch.setattr(nh, "load_points", real)
+    item = {"fund_code": code, "full_key": code, "chain_code": code, "holding_ccy": "USD"}
+    out = _quiet(ND.build_nav_table, [item])
+    assert len(out["rows"]) == 25 and code not in out["errors"], out["errors"]
+    prov = out["provenance"][code]
+    assert prov["latest_from"] == ND.LATEST_FROM_LIVE and prov["chain"]["page_type"] == "yp010001"
+    assert prov["nav_history"]["note"] == ND.TEXT_HISTORY_NOT_READ and prov["nav_history"]["read_error"] is None
+    assert reads == []                                                    # 範圍內一次都沒打 Sheets
+
+
+def test_B4_對照_閘門開啟時A鏈靠累積點停在第一頁型(monkeypatch):
+    """同一組輸入、閘門開啟：A 鏈把第一個頁型判成 complete（累積點撐起序列），不試第二個頁型 —— 這正是 B4。"""
+    import services.nav_history_gs as nh
+    monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)
+    code = "TLZB4"
+    H.install(monkeypatch, _b4_scenario(code))
+    real, reads = _real_history_sheet(monkeypatch, _b4_rows(code))
+    monkeypatch.setattr(nh, "load_points", real)
+    item = {"fund_code": code, "full_key": code, "chain_code": code, "holding_ccy": "USD"}
+    out = _quiet(ND.build_nav_table, [item])
+    assert out["provenance"][code]["chain"]["page_type"] == "yp010000" and len(reads) == 1
+
+
+def test_B4_skip範圍只在範圍內_外面照舊真的讀表(monkeypatch):
+    import services.nav_history_gs as nh
+    real, reads = _real_history_sheet(monkeypatch, [["AAA", "2026-01-02", "10"]])
+    monkeypatch.setattr(nh, "load_points", real)
+    from services.moneydj_fetcher import nav_history_shared_reads
+    with nav_history_shared_reads(skip_reads=True):
+        assert nh.load_points("AAA") == [] and len(nh.load_series("AAA")) == 0
+    assert reads == []
+    assert [p["nav"] for p in nh.load_points("AAA")] == [10.0] and len(reads) == 1   # 範圍外：照舊讀
+
+
+def test_B4_skip範圍不外溢到別的執行緒(monkeypatch):
+    import threading
+    import services.nav_history_gs as nh
+    real, reads = _real_history_sheet(monkeypatch, [["AAA", "2026-01-02", "10"]])
+    monkeypatch.setattr(nh, "load_points", real)
+    got = []
+    with nh.shared_reads(skip_reads=True):
+        t = threading.Thread(target=lambda: got.append(nh.load_points("AAA")))
+        t.start()
+        t.join()
+    assert [p["nav"] for p in got[0]] == [10.0] and len(reads) == 1           # 別的執行緒（例：舊 UI）照舊讀
+
+
+def test_N1_live某天是NaN時_合併後那天標成累積表貢獻(monkeypatch):
+    """`groupby().last()` 跳過 NaN：live 某天 NaN → 合併後那天是累積表的值，必須標成累積表的點（不冒充即時）。"""
+    import pandas as pd
+    import services.nav_history_gs as nh
+    from services.fund_service import _merge_nav_history_series
+    live = pd.Series([10.0, float("nan"), 10.2], index=pd.to_datetime(["2026-01-05", "2026-01-06", "2026-01-07"]))
+    live.attrs = {"source": "FundClear:x", "fetched_at": "2026-02-01T00:00:00+00:00"}
+    hist = pd.Series([9.0, 9.5], index=pd.to_datetime(["2025-12-01", "2026-01-06"]))
+    hist.attrs = {"source": "GoogleSheet:nav_history:X", "recorded_at_by_date": {"2025-12-01": "r1", "2026-01-06": "r2"}}
+    monkeypatch.setattr(nh, "load_series", lambda code, oauth_client=None: hist)
+    merged, _trace = _merge_nav_history_series(live, "X")
+    assert merged.loc["2026-01-06"] == 9.5                                     # 合併語意不動（既有行為）
+    assert merged.attrs["nav_history_dates"] == ["2025-12-01", "2026-01-06"]   # 那天標成累積表貢獻
+    assert merged.attrs["nav_history_recorded_at"]["2026-01-06"] == "r2"
