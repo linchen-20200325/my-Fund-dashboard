@@ -5,11 +5,12 @@
 `tests/ui_v2/test_preview_page.py`，slow lane）：
 
 - (a) 預覽入口不被 `app.py`／`ui/**`（以及 tests 以外任何正式程式）import；
-- (b) 四頁真資料傳給 `page.render` 的注入函式，與各自的 `ui_v2/app_<頁>_live.py` 逐一相同、不多不少；
-      標的探索與 `ui_v2/app_exp.py` 一樣不傳任何參數；
+- (b) ~~四頁~~ 五頁（2026-10-13 起標的探索也接上正式模式；狀態更新，不是漏刪）真資料傳給 `page.render` 的
+      注入函式，與各自的 `ui_v2/app_<頁>_live.py` 逐一相同、不多不少；
+      ~~標的探索與 `ui_v2/app_exp.py` 一樣不傳任何參數；~~
 - (c) 預覽入口本身不 import、不引用任何 `fixtures`；
-- (d) 標的探索那一頁在 `exp_page.render()` 之前先畫示意資料標示，標示字面寫明「示意資料、不是真實資料、
-      尚未接真資料」；
+- (d) ~~標的探索那一頁在 `exp_page.render()` 之前先畫示意資料標示……~~ → 2026-10-13 撤下（狀態更新，不是漏刪）：
+      標的探索接上正式資料，正式資料不加示意標示（比照 hld 2026-10-02）；改驗「預覽入口不再有示意資料標示」；
 - 另：頁序與頁名逐字對 `docs/v2/44_fund_ui_ssot.md` 3.0 五頁總表；`st.set_page_config` 全樹只有
   預覽入口的 `main()` 呼叫一次；檔頭列的試算表 secret 鍵名與 L1 實際讀的鍵名相同；
   換頁要 pop 的狀態清單（資產配置引用 page 常數、市場總覽的字面值確實住在 mkt/page.py）；
@@ -28,7 +29,8 @@ import pytest
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _PREVIEW = _ROOT / "ui_v2" / "app_preview.py"
-_LIVE_PAGES = ("mkt", "hld", "alo", "set")
+# ~~_LIVE_PAGES = ("mkt", "hld", "alo", "set")~~ → 2026-10-13 加 exp（狀態更新，不是漏刪）。
+_LIVE_PAGES = ("mkt", "hld", "exp", "alo", "set")
 _PREVIEW_MODULE = "ui_v2.app_preview"
 
 
@@ -163,11 +165,13 @@ def test_b_四頁注入與live入口逐一相同(page):
     assert preview == live, (page, preview, live)
 
 
-def test_b_標的探索與示範入口一樣不傳任何參數():
+def test_b_標的探索的示範入口照舊不傳任何參數_預覽改走正式入口():
+    """~~標的探索與示範入口一樣不傳任何參數~~ → 2026-10-13（狀態更新，不是漏刪）：預覽改與 `app_exp_live.py`
+    逐一相同（上一條參數化守衛已含 exp）；示範入口 `app_exp.py` 不動、照舊不傳任何參數。"""
     demo = _entry_injections(_ROOT / "ui_v2" / "app_exp.py", "exp")
     preview = _entry_injections(_PREVIEW, "exp")
     assert demo == [{}]
-    assert preview == demo
+    assert preview == [{"load_live": "load_live", "save_live": "save_setting"}]
 
 
 def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合():
@@ -178,6 +182,7 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
     assert got == {
         "mkt": {"load_live": "load_live", "save_live": "save_setting"},
         "hld": {"load_live": "load_live", "mask_error": "mask_error"},
+        "exp": {"load_live": "load_live", "save_live": "save_setting"},   # 2026-10-13 新增
         "alo": {"load_live": "load_live", "save_live": "save_setting"},
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch"},
     }
@@ -268,14 +273,20 @@ def banner_before_render(func: ast.FunctionDef) -> bool:
     return False
 
 
-def test_d_標的探索先畫標示再畫頁面():
-    assert banner_before_render(_function(_tree(_PREVIEW), "page_exp"))
+# ~~def test_d_標的探索先畫標示再畫頁面(): assert banner_before_render(_function(_tree(_PREVIEW), "page_exp"))~~
+# ~~def test_d_標示字面寫明示意資料_不是真實資料_尚未接真資料(): …~~
+# → 2026-10-13 撤下（狀態更新，不是漏刪；客戶裁示 B 線標的探索正式模式第一批）：示意資料標示只在標的探索
+#   畫假資料時才是真話；接上正式資料後那一句（「本頁為示意資料、不是真實資料」）就是假的。兩條在寫下當時為真。
+#   `banner_before_render` 與它的正控留著：它是「這一頁不准再有示意標示」那一條的偵測器。
 
 
-def test_d_標示字面寫明示意資料_不是真實資料_尚未接真資料():
-    text = _string_constant(_tree(_PREVIEW), "EXP_DEMO_BANNER")
-    for needle in ("示意資料", "不是真實資料", "尚未接真資料", "假資料"):
-        assert needle in text, needle
+def test_d_標的探索不再畫示意資料標示_常數也已撤下():
+    tree = _tree(_PREVIEW)
+    func = _function(tree, "page_exp")
+    assert banner_before_render(func) is False
+    assert _calls_named(func, "warning") == 0
+    names = {t.id for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    assert "EXP_DEMO_BANNER" not in names
 
 
 @pytest.mark.parametrize("body", [
@@ -364,7 +375,12 @@ def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字
     tree = _tree(_PREVIEW)
     # ~~assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'"]~~
     # → 2026-10-13 狀態更新（不是漏刪）：市場總覽存檔接上後多一格「存檔逐鍵結果」，引用 page 的常數。
-    assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE"]
+    # ~~assert _drop_list(tree) == [… "mkt_page._SAVE_RESULTS_STATE"]~~ → 2026-10-13 標的探索接上正式模式後多兩格（狀態更新，不是漏刪）。
+    assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE",
+                                "exp_page._SAVE_RESULTS_STATE", "exp_page._RULES_STATE"]
+    for name in ("_SAVE_RESULTS_STATE", "_RULES_STATE"):
+        exp_key = _string_constant(_tree(_ROOT / "ui_v2" / "exp" / "page.py"), name)
+        assert exp_key and exp_key not in _PREVIEW.read_text(encoding="utf-8"), name
     mkt_key = _string_constant(_tree(_ROOT / "ui_v2" / "mkt" / "page.py"), "_SAVE_RESULTS_STATE")
     assert mkt_key and mkt_key not in _PREVIEW.read_text(encoding="utf-8")
     assert _pops_each_drop_key(_function(tree, "_on_page"))
@@ -434,7 +450,9 @@ def test_正控_動態寫法都抓得到(code):
 
 def test_側邊欄說明的字面():
     note = _string_constant(_tree(_PREVIEW), "PREVIEW_NOTE")
-    for needle in ("B 線 UI 預覽（非正式站）", "標的探索為示意資料", "讀不到資料時照實顯示缺失",
-                   "和各頁單獨啟動時不同", "重新取數"):
+    # ~~"標的探索為示意資料"~~ → 2026-10-13 標的探索接上正式模式（狀態更新，不是漏刪）。
+    for needle in ("B 線 UI 預覽（非正式站）", "五頁皆讀真資料", "標的探索目前只接上選股池的基金代碼",
+                   "讀不到資料時照實顯示缺失", "和各頁單獨啟動時不同", "重新取數"):
         assert needle in note, needle
+    assert "示意資料" not in note
     assert "正式上線" not in note   # 49 4.8：正式部署形態查不到，不得斷言

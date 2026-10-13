@@ -15,11 +15,12 @@
 |---|---|---|
 | 市場總覽 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_mkt_live.py`（2026-10-13 起接上存檔） |
 | 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error)` ＝ `ui_v2/app_hld_live.py` |
-| 標的探索 | **示意資料** | `page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示 |
+| ~~標的探索~~ | ~~**示意資料**~~ | ~~`page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示~~ |
+| 標的探索 | 真資料（第一批） | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_exp_live.py`（2026-10-13 起；狀態更新，不是漏刪 —— 上一列在寫下當時為真）。母體＝選股池的基金代碼，其餘欄「⬜ 資料未備」；不再加示意資料標示（正式資料不加示意，比照 hld 2026-10-02 前例） |
 | 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_alo_live.py` |
 | 設定與診斷 | 真資料 | `page.render(load_live=..., save_live=source.save_setting, refetch_live=source.refetch)` ＝ `ui_v2/app_set_live.py` |
 
-真資料四頁**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
+~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
 錯誤路徑照實顯示（例如「未設定保單試算表 ID（POLICY_SHEET_ID），不讀取」），不補任何數字。
 
 真資料四頁需要的設定（`st.secrets`，Streamlit Cloud 設在該 app 的 Secrets；本機放 `.streamlit/secrets.toml`；
@@ -31,6 +32,9 @@
   資產配置與設定與診斷的「存檔」、設定與診斷的「重新取數」寫回這一本。沒有預設值，缺值照實顯示未設定。
 - `POLICY_SHEET_ID`：保單試算表（`repositories/policy_supplement_repository.py`）。持倉體檢、資產配置讀持倉與保單。
   沒有預設值，不退回其他鍵。
+- `POOL_SHEET_ID`（選填）：選股池試算表（`repositories/pool_repository.py`；不設則用該檔內建的預設那一本）。
+  標的探索的母體（2026-10-13 起）只讀這一本 `_fund_pool` 分頁的**代碼欄**；**沒有服務帳戶時不讀本機暫存檔**，
+  畫面照實寫「選股池未設定雲端來源」。
 - `google_service_account`：服務帳戶憑證（TOML 表格或 JSON 字串）。上面兩本試算表都只走服務帳戶；
   設定試算表會被寫入（存檔、重新取數），該帳戶要有編輯權；保單試算表本預覽只讀。
 - 選填 `PROXY_URL`（或 `[proxy]` 區段）：`infra/proxy.py` 的 NAS 代理。市場總覽（Yahoo）與持倉體檢的淨值
@@ -69,6 +73,10 @@
      這一格照留（無害），上面那段描述的是當時的現象。
   3. 市場總覽「存檔」那一次的逐鍵結果（`ui_v2/mkt/page.py::_SAVE_RESULTS_STATE`，2026-10-13 起）：
      理由同第 1 項 —— 別頁把同一鍵存成功後回來，不能仍說失敗。
+  4. 標的探索「存檔」那一次的逐鍵結果（`ui_v2/exp/page.py::_SAVE_RESULTS_STATE`，2026-10-13 起）：理由同第 3 項。
+  5. 標的探索條件列的當下內容（`ui_v2/exp/page.py::_RULES_STATE`，2026-10-13 起）：條件列的輸入欄離開這一頁就被清掉
+     （上面那條 widget id 規則），但這一份是頁面程式自己存的；不清的話，在設定與診斷改了 `exp_filter_rules` 再回來，
+     條件列仍是舊的暫存內容。代價：離開標的探索再回來，沒存檔的條件列會回到已存值（未存的本來就不生效）。
   ⚠️ 其他頁程式自己寫的 key（例如持倉體檢的套用值）未逐一處理，見交付報告的登記。
 """
 
@@ -84,6 +92,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from ui_v2.alo import page as alo_page  # noqa: E402
 from ui_v2.alo import source as alo_source  # noqa: E402
 from ui_v2.exp import page as exp_page  # noqa: E402
+from ui_v2.exp import source as exp_source  # noqa: E402
 from ui_v2.hld import page as hld_page  # noqa: E402
 from ui_v2.hld import source as hld_source  # noqa: E402
 from ui_v2.mkt import page as mkt_page  # noqa: E402
@@ -92,17 +101,21 @@ from ui_v2.set import page as set_page  # noqa: E402
 from ui_v2.set import source as set_source  # noqa: E402
 
 PREVIEW_TITLE = "B 線 UI 預覽（非正式站）"
+# ~~"B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料，"~~
+# ~~"讀不到資料時照實顯示缺失；標的探索為示意資料。"~~
+# → 2026-10-13 狀態更新（不是漏刪；客戶裁示 B 線標的探索正式模式第一批）：標的探索改讀真資料（選股池代碼），
+#   其餘欄尚未接入、照實顯示「⬜ 資料未備」。舊兩句在寫下當時為真。
 PREVIEW_NOTE = (
-    "B 線 UI 預覽（非正式站）。市場總覽、持倉體檢、資產配置、設定與診斷四頁讀真資料，"
-    "讀不到資料時照實顯示缺失；標的探索為示意資料。"
+    "B 線 UI 預覽（非正式站）。五頁皆讀真資料，讀不到資料時照實顯示缺失；"
+    "標的探索目前只接上選股池的基金代碼，其餘欄位顯示資料未備。"
     "預覽把五頁放在同一個程式裡跑，快取與取數暫停（冷卻）也五頁共用，"
     "和各頁單獨啟動時不同；在設定與診斷按「重新取數」，"
     "會一併影響市場總覽與持倉體檢顯示的資料。"
 )
-EXP_DEMO_BANNER = (
-    "本頁為示意資料，不是真實資料：標的探索尚未接真資料。"
-    "頁面上的基金名稱、數字與清單全部是假資料，不得據以判斷；本頁不連任何資料源、不寫入任何資料。"
-)
+# ~~EXP_DEMO_BANNER = ("本頁為示意資料，不是真實資料：標的探索尚未接真資料。"~~
+# ~~    "頁面上的基金名稱、數字與清單全部是假資料，不得據以判斷；本頁不連任何資料源、不寫入任何資料。")~~
+# → 2026-10-13 撤下（狀態更新，不是漏刪）：標的探索接上正式模式（`page.render(load_live=..., save_live=...)`），
+#   畫面上已無假資料；正式資料不加示意標示（比照 hld 2026-10-02、mkt／alo 的接法）。那一段在寫下當時為真。
 
 _LAST_PAGE_KEY = "_preview_last_page"
 
@@ -113,6 +126,9 @@ _PAGE_STATE_TO_DROP = (
     # 2026-10-13：市場總覽存檔接上 user_setting（客戶裁示）後多一份「按存檔那一次的逐鍵結果」，
     # 與資產配置的存檔失敗帳同一個理由（別頁存成功後回來仍說失敗 —— 與事實相反），換頁一併清。
     mkt_page._SAVE_RESULTS_STATE,
+    # 2026-10-13：標的探索接上正式模式（客戶裁示）後的兩份，理由見檔頭第 4、5 項。
+    exp_page._SAVE_RESULTS_STATE,
+    exp_page._RULES_STATE,
 )
 
 
@@ -140,9 +156,10 @@ def page_hld() -> None:
 
 def page_exp() -> None:
     _on_page("exp")
-    # 標示一律畫在本頁最上方、在 `exp_page.render()` 之前：不論 ?scenario= 是哪一種情境都看得到。
-    st.warning(EXP_DEMO_BANNER, icon="⚠️")
-    exp_page.render()
+    # ~~st.warning(EXP_DEMO_BANNER, icon="⚠️")~~
+    # ~~exp_page.render()~~
+    # → 2026-10-13（狀態更新，不是漏刪）：與 `ui_v2/app_exp_live.py` 同名參數、同一物件（守衛同上）。
+    exp_page.render(load_live=exp_source.load_live, save_live=exp_source.save_setting)
 
 
 def page_alo() -> None:

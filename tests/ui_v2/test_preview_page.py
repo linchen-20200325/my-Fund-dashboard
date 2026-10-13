@@ -7,7 +7,9 @@
 - (b) 執行期：預覽入口傳給四頁 `page.render` 的物件，與同一頁 `ui_v2/app_<頁>_live.py` 傳的**是同一批物件**；
 - (c)(e) 沒有任何憑證時，四頁真資料各自照實顯示缺失，**不碰 fixtures**（各頁 `page` 上的 `fixtures`
       換成「一存取就拋錯」的替身，體例同 `tests/ui_v2/test_mkt_live_page.py`）、畫面上沒有任何示意字樣；
-- (d) 標的探索在每一種示範情境（含存檔失敗開關、網址打錯情境名）下，示意資料標示都是本頁第一個元素；
+- ~~(d) 標的探索在每一種示範情境（含存檔失敗開關、網址打錯情境名）下，示意資料標示都是本頁第一個元素；~~
+  → 2026-10-13（狀態更新，不是漏刪；客戶裁示 B 線標的探索正式模式第一批）：標的探索改走正式模式，
+  併入 (b)(c)(e) 的「真資料頁」；示意資料標示撤下。
 - 換頁（真 L2 ＋ 真 L1 ＋ 假 gspread）：
   - 回歸：資產配置與設定與診斷同名的 `live_alo_*` 輸入欄，在 `st.navigation` 下**不會**互相帶值、
     不會被另一頁的「存檔」寫回試算表 —— 預覽入口本身**沒有任何清除**，靠的是 streamlit 1.59.2
@@ -15,8 +17,8 @@
   - 反方向（設定與診斷 → 資產配置）同樣不帶值，資產配置存檔只寫回試算表上的原值。
   - 各頁程式自己寫進 session、換頁就要清的兩份狀態（`app_preview._PAGE_STATE_TO_DROP`），各附對照組：
     資產配置的存檔失敗帳（只讓容許帶那一鍵失敗）、市場總覽「套用」的值（回來要與新開一模一樣）。
-- 誤導文字：側邊欄寫明標的探索為示意資料；標的探索頁沒有 `st.success`，除了示意資料標示那一句否定句，
-  主畫面不出現「真實資料」四個字。
+- 誤導文字：~~側邊欄寫明標的探索為示意資料；標的探索頁沒有 `st.success`，除了示意資料標示那一句否定句，
+  主畫面不出現「真實資料」四個字。~~ → 2026-10-13：側邊欄寫明標的探索只接上代碼；五頁畫面都不得有示意字樣。
 
 **換頁一律走真的 `st.navigation`**：腳本呼叫 `app_preview.main()`，以 `AppTest._page_hash`
 （`calc_hash(url_path)`，與 `st.Page._script_hash` 同一個算法）選頁。⚠️ `_page_hash` 是 AppTest 的私有屬性
@@ -52,12 +54,14 @@ from streamlit.util import calc_hash  # noqa: E402
 
 from infra import source_backoff as SB  # noqa: E402
 from repositories import policy_supplement_repository as POL  # noqa: E402
+from repositories import pool_repository as POOL  # noqa: E402
 from repositories import settings_sheet_repository as SET_REPO  # noqa: E402
+from services.v2_tables import exp_universe as EXP_UNIVERSE  # noqa: E402
 from services.v2_tables import market_indicator as MI  # noqa: E402
 from ui_v2.alo import page as alo_page  # noqa: E402
 from ui_v2.alo import source as alo_source  # noqa: E402
-from ui_v2.exp import fixtures as exp_fixtures  # noqa: E402
 from ui_v2.exp import page as exp_page  # noqa: E402
+from ui_v2.exp import source as exp_source  # noqa: E402
 from ui_v2.hld import page as hld_page  # noqa: E402
 from ui_v2.hld import source as hld_source  # noqa: E402
 from ui_v2.mkt import page as mkt_page  # noqa: E402
@@ -68,8 +72,9 @@ from ui_v2.set import source as set_source  # noqa: E402
 _PREVIEW_PATH = _ROOT / "ui_v2" / "app_preview.py"
 _MARK = "正式路徑碰到 fixtures"
 _NO_NET = "測試替身：本測試不打網路"
-_LIVE_PAGES = {"mkt": mkt_page, "hld": hld_page, "alo": alo_page, "set": set_page}
-_SOURCES = {"mkt": mkt_source, "hld": hld_source, "alo": alo_source, "set": set_source}
+# 2026-10-13：標的探索接上正式模式（狀態更新，不是漏刪），加入 exp。
+_LIVE_PAGES = {"mkt": mkt_page, "hld": hld_page, "exp": exp_page, "alo": alo_page, "set": set_page}
+_SOURCES = {"mkt": mkt_source, "hld": hld_source, "exp": exp_source, "alo": alo_source, "set": set_source}
 
 # 真的 `st.navigation`：與 `streamlit run ui_v2/app_preview.py` 跑的是同一個 `main()`。
 # 用 `from ui_v2 import app_preview`（而不是 `AppTest.from_file`）是為了讓測試能 monkeypatch 那個模組物件。
@@ -105,6 +110,8 @@ def no_secrets(monkeypatch):
     nothing = lambda key, default=None: default  # noqa: E731
     monkeypatch.setattr(SET_REPO, "get_secret", nothing)
     monkeypatch.setattr(POL, "get_secret", nothing)
+    # 2026-10-13：標的探索的母體讀選股池；沒有服務帳戶 → L2 回「選股池未設定雲端來源」，不讀本機暫存檔。
+    monkeypatch.setattr(POOL, "_sa_present", lambda: False)
     monkeypatch.setattr(MI, "fetch_yf_close_with_error", lambda ticker, *a, **k: (None, _NO_NET))
     # 2026-10-13：FRED 三鍵接上；slow lane 設了 FRED_API_KEY 環境變數，不擋的話會真的去打 FRED。
     monkeypatch.setattr(MI, "fetch_fred_vintages_with_error", lambda *a, **k: (None, _NO_NET))
@@ -172,9 +179,10 @@ def test_整個入口跑得起來_預設頁是市場總覽_側邊欄寫明非正
     assert not at.exception, [e.value for e in at.exception]
     assert [e.value for e in at.sidebar.info] == [preview.PREVIEW_NOTE]
     assert "B 線 UI 預覽（非正式站）" in preview.PREVIEW_NOTE
-    assert "標的探索為示意資料" in at.sidebar.info[0].value
+    # ~~assert "標的探索為示意資料" in at.sidebar.info[0].value~~（2026-10-13 標的探索接上正式模式；狀態更新，不是漏刪）
+    assert "示意資料" not in at.sidebar.info[0].value
     assert '<div class="mkt-page-title">市場總覽</div>' in [e.value for e in at.main.markdown]
-    assert not at.main.warning  # 示意資料標示只屬於標的探索那一頁
+    assert not at.main.warning
 
 
 # ═══════════════════════ (c)(e) 無憑證：四頁照實顯示缺失 ═══════════════════════
@@ -185,6 +193,7 @@ _MISSING = {
     "hld": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
     "alo": (POL.NOT_CONFIGURED_MESSAGE, SET_REPO.NOT_CONFIGURED_MESSAGE),
     "set": (SET_REPO.NOT_CONFIGURED_MESSAGE,),
+    "exp": (EXP_UNIVERSE.TEXT_NOT_CLOUD, SET_REPO.NOT_CONFIGURED_MESSAGE),   # 2026-10-13 新增
 }
 
 
@@ -202,9 +211,14 @@ def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒
 
 
 def test_e_正控_同一個替身之下示範模式一定會炸(no_secrets, monkeypatch):
-    """替身真的會咬人：把標的探索（示範模式，一定讀 fixtures）的 fixtures 也換掉，必須炸。"""
+    """替身真的會咬人：把標的探索的 fixtures 換掉，跑**示範入口**（一定讀 fixtures），必須炸。
+
+    ~~原本走預覽入口的標的探索頁~~ → 2026-10-13 預覽的標的探索改走正式模式（狀態更新，不是漏刪），
+    預覽裡已沒有示範模式的頁，改跑示範入口 `ui_v2/app_exp.py`。"""
+    from streamlit.testing.v1 import AppTest
+
     monkeypatch.setattr(exp_page, "fixtures", _FixturesThatBite())
-    at = _select(_app_test(), "exp")
+    at = AppTest.from_file(str(_ROOT / "ui_v2" / "app_exp.py"), default_timeout=120)
     at.run()
     assert at.exception and any(_MARK in e.value for e in at.exception)
 
@@ -242,47 +256,26 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
         assert getattr(obj, "__module__", None) == _SOURCES[slug].__name__, (slug, name)
 
 
-def test_b_執行期_標的探索與示範入口一樣不傳任何參數(monkeypatch):
+def test_b_執行期_標的探索的示範入口照舊不傳任何參數(monkeypatch):
+    """~~預覽的標的探索與示範入口一樣不傳任何參數~~ → 2026-10-13（狀態更新，不是漏刪）：預覽改與
+    `app_exp_live.py` 傳同一批物件（上一條參數化已含 exp）；示範入口不動。"""
     from streamlit.testing.v1 import AppTest
 
     calls = _record_render(monkeypatch, exp_page)
-    _select(_app_test(), "exp").run()
     AppTest.from_file(str(_ROOT / "ui_v2" / "app_exp.py"), default_timeout=120).run()
-    assert calls == [((), {}), ((), {})]
+    assert calls == [((), {})]
 
 
-# ═══════════════════════ (d) 標的探索：每一種情境都看得到標示 ═══════════════════════
+# ═══════════════════════ (d) ~~標的探索：每一種情境都看得到標示~~ ═══════════════════════
+#
+# ~~`_first_main_element`／`_EXP_CASES`／`test_d_每一種情境_示意資料標示都是本頁第一個元素`／`test_d_示意資料標示的字面`~~
+# → 2026-10-13 撤下（狀態更新，不是漏刪；客戶裁示 B 線標的探索正式模式第一批）：預覽的標的探索改走正式模式，
+#   不再有示範情境與示意標示（那一句「本頁為示意資料、不是真實資料」接上真資料後就是假話）。
+#   正式模式「不碰 fixtures、沒有示意字樣、照實顯示缺失」由上面 (e) 的參數化（已含 exp）驗。
 
 
-def _first_main_element(at):
-    children = at.main.children
-    return children[min(children)]
-
-
-_EXP_CASES = [(name, "0") for name in exp_fixtures.ALL_SCENARIO_NAMES] + [
-    (exp_fixtures.ALL_SCENARIO_NAMES[0], "1"),
-    (exp_fixtures.ALL_SCENARIO_NAMES[-1], "1"),
-    ("沒有這個情境", "0"),
-]
-
-
-@pytest.mark.parametrize("scenario, savefail", _EXP_CASES)
-def test_d_每一種情境_示意資料標示都是本頁第一個元素(scenario, savefail):
-    at = _go(_app_test(scenario=scenario, savefail=savefail), "exp")
-    first = _first_main_element(at)
-    assert first.type == "warning", first
-    assert first.value == preview.EXP_DEMO_BANNER
-    assert [e.value for e in at.main.warning] == [preview.EXP_DEMO_BANNER]
-    # 誤導文字：沒有成功框；「真實資料」只准出現在標示那一句否定句（「不是真實資料」）裡，且只出現那一次。
-    assert not at.main.success and not at.sidebar.success
-    assert preview.EXP_DEMO_BANNER.count("真實資料") == 1 and "不是真實資料" in preview.EXP_DEMO_BANNER
-    assert _main_text(at).count("真實資料") == 1
-    assert "標的探索為示意資料" in at.sidebar.info[0].value
-
-
-def test_d_示意資料標示的字面():
-    for needle in ("示意資料", "不是真實資料", "尚未接真資料", "假資料"):
-        assert needle in preview.EXP_DEMO_BANNER
+def test_d_預覽沒有示意資料標示這個常數了():
+    assert not hasattr(preview, "EXP_DEMO_BANNER")
 
 
 # ═══════════════════════ 換頁（真 st.navigation） ═══════════════════════
@@ -477,7 +470,9 @@ def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
 
     key = alo_page._SAVE_ERRORS_STATE
     # ~~assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied")~~（2026-10-13 多一格市場總覽存檔結果；狀態更新，不是漏刪）
-    assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE)
+    # ~~… == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE)~~ → 2026-10-13 多兩格標的探索的（狀態更新，不是漏刪）
+    assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE,
+                                           exp_page._SAVE_RESULTS_STATE, exp_page._RULES_STATE)
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})

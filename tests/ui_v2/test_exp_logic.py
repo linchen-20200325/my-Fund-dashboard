@@ -916,7 +916,13 @@ def test_EXP0只讀那兩塊_不自取數():
     做法：把 `_build_exp0` 的簽名列出來 —— 它拿得到的只有數、旗標與那兩塊的狀態。
     """
     params = set(inspect.signature(logic._build_exp0).parameters)
-    assert params == {"dataset", "count", "has_rules", "rules", "read_states"}, params
+    # ~~assert params == {"dataset", "count", "has_rules", "rules", "read_states"}, params~~
+    # → 2026-10-13 狀態更新（不是漏刪；客戶 2026-10-13 裁示的 B 線標的探索正式模式第一批）：多一個
+    #   `extra_fail_lines` —— 內容是 `{"EXP-1": …, "EXP-2": …}`，**仍然只來自那兩塊**（已存設定讀不到、
+    #   條件套用不了），不是新的取數來源；鍵只准這兩塊由下一條斷言釘住。
+    assert params == {"dataset", "count", "has_rules", "rules", "read_states", "extra_fail_lines"}, params
+    source = pathlib.Path(logic.__file__).read_text(encoding="utf-8")
+    assert 'extra_fail_lines={"EXP-1": settings_lines, "EXP-2": compute_lines}' in source
     # `read_states` 真的只有兩個成員（那兩塊），不是三張卡。
     source = pathlib.Path(logic.__file__).read_text(encoding="utf-8")
     assert 'read_states=(exp1["_state"], exp2["_state"])' in source
