@@ -272,3 +272,119 @@ def test_同一檔輸入矛盾_不取數_不記憶():
 def test_TTL常數():
     from shared.ttls import TTL_5MIN, TTL_15MIN
     assert EN.SUCCESS_TTL_SEC == TTL_15MIN and EN.FAILURE_TTL_SEC == TTL_5MIN == 300
+
+
+# ═══════════════════════ 2026-10-14 稽核 V／W 回修 ═══════════════════════
+
+def test_取得時間晚於當下的扣下_不記憶_下一次重判():
+    # 稽核 V 的重現：第一次 fetched_at 比當下晚 400 秒（超過 300 秒容忍）→ 扣下；200 秒後同一天再查，
+    # 直接呼叫 nav_dividend 已經寫得出列，記憶不得把舊的扣下重播出來。
+    calls, clock = [], _Clock()
+    res = _ok_res("MZ01")
+    res["series"].attrs["fetched_at"] = (NOW + dt.timedelta(seconds=400)).isoformat()
+    first = _load(_funds("MZ01"), calls, {"MZ01": res}, clock=clock)
+    assert first["nav"]["withheld"] == {"MZ01": ND.WITHHELD_FETCHED_AT_FUTURE}
+    clock.t += 200
+    later = NOW + dt.timedelta(seconds=200)
+    second = _load(_funds("MZ01"), calls, {"MZ01": res}, now=later, clock=clock)
+    direct = ND.build_nav_dividend_tables(_funds("MZ01"), now=later, chain_fetch=_chain([], {"MZ01": res}))
+    assert len(calls) == 2 and second["memo"]["MZ01"]["hit"] is False
+    assert second["nav"] == direct["nav"] and len(second["nav"]["rows"]) == 5
+
+
+def test_配息逐筆取得時間晚於當下_也不記憶():
+    import repositories.fund.sources as S
+    from repositories.fund import fund_orchestration as FO
+    future = (NOW + dt.timedelta(seconds=400)).isoformat()
+    item = {"date": "2026-08-05", "ex_date": "2026-08-05", "pay_date": "2026-08-05", "amount": 0.04,
+            "yield_pct": 0, "currency": "USD",
+            S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_FUNDCLEAR, "date_field": "ExDividendDate",
+                                   "currency_field": "Currency", "amount_field": "DividendAmount",
+                                   "fetched_at": future}}
+    res = _ok_res("MZ01")
+    res["dividends"] = [item]
+    res[FO.DIVIDENDS_OUTCOME_KEY] = {
+        "outcome": FO.DIV_OUTCOME_ROWS, "legacy_inline_parse": False, "none_evidenced": False,
+        "sources": [{"source": "FundClear", "parser": S.DIV_PARSER_FUNDCLEAR, "status": S.DIV_STATUS_ROWS,
+                     "detail": "", "page_type": "yp010000",
+                     "dropped": {"truncated": 0, "filtered": 0, "other_tables": 0}}]}
+    calls, clock = [], _Clock()
+    first = _load(_funds("MZ01"), calls, {"MZ01": res}, clock=clock)
+    lines = list(first["dividend"]["skipped"].get("MZ01") or [])
+    assert any(EN.TIME_DEPENDENT_REASON_MARK in line for line in lines), first["dividend"]
+    _load(_funds("MZ01"), calls, {"MZ01": res}, clock=clock)
+    assert len(calls) == 2
+
+
+def test_晚於當下的理由字樣_與nav_dividend一致():
+    _iso, code, why = ND._fetched_at_check((NOW + dt.timedelta(hours=1)).isoformat(), NOW)
+    assert code == ND.WITHHELD_FETCHED_AT_FUTURE and why.startswith(EN.TIME_DEPENDENT_REASON_MARK)
+    # 依日期判定的那一種不含這個字樣（鍵裡有台灣日期，同一天判斷不變，可以記）
+    assert EN.TIME_DEPENDENT_REASON_MARK not in ND._date_bounds_reason(dt.date(2026, 10, 2), dt.date(2026, 10, 1))
+
+
+def test_計價幣別未確定_逐檔隔離_其他檔照常():
+    calls = []
+    funds = _funds("MZ01") + _funds("MZ02", ccy=None, source=None) + _funds("MZ03")
+    out = _load(funds, calls, {"MZ01": _ok_res("MZ01"), "MZ03": _ok_res("MZ03")})
+    assert [c[0] for c in calls] == ["MZ01", "MZ03"]                     # MZ02 不取數
+    assert out["not_fetched"] == {"MZ02": EN.TEXT_CCY_UNDETERMINED}
+    assert out["nav"]["withheld"] == {"MZ02": EN.WITHHELD_CCY_UNDETERMINED}
+    assert out["dividend"]["withheld"]["MZ02"] == EN.WITHHELD_CCY_UNDETERMINED
+    assert out["nav"]["skipped"]["MZ02"] == [EN.TEXT_CCY_UNDETERMINED]
+    assert out["dividend"]["settled"]["MZ02"] is False
+    assert {r["fund_code"] for r in out["nav"]["rows"]} == {"MZ01", "MZ03"}
+    assert list(out["memo"]) == ["MZ01", "MZ02", "MZ03"]
+    assert EN._REGISTERED.cache_info()["size"] == 2                    # MZ02 不記憶
+
+
+def test_計價幣別未確定_同一檔有一筆None_整檔不取():
+    calls = []
+    funds = _funds("MZ01") + _funds("MZ01", ccy=None, source=None)
+    out = _load(funds, calls, {"MZ01": _ok_res("MZ01")})
+    assert calls == [] and "MZ01" in out["not_fetched"]
+
+
+def test_清除與進行中讀取_清除後不寫回():
+    calls, clock = [], _Clock()
+    inner = _chain(calls, {"MZ01": _ok_res("MZ01")})
+
+    def racing(chain_code, full_key):
+        out = inner(chain_code, full_key)
+        EN.clear_memo()                     # 取數進行中，另一邊按了「重新取數」
+        return out
+    EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=racing)
+    assert EN._REGISTERED.cache_info()["size"] == 0                    # 清除前開始的那一筆沒有寫回
+    _load(_funds("MZ01"), calls, {"MZ01": _ok_res("MZ01")}, clock=clock)
+    assert len(calls) == 2
+
+
+def test_沒有清除時照常寫回():
+    calls, clock = [], _Clock()
+    _load(_funds("MZ01"), calls, {"MZ01": _ok_res("MZ01")}, clock=clock)
+    assert EN._REGISTERED.cache_info()["size"] == 1
+
+
+def test_鍵含portal_portal不同不命中():
+    # 稽核 W（突變存活）：鍵拿掉 portal 要紅 —— 先以空 portal 成功記住，再給非空 portal，必須照實回 portal 錯誤
+    calls, clock = [], _Clock()
+    _load(_funds("MZ01"), calls, {"MZ01": _ok_res("MZ01")}, clock=clock)
+    funds = [dict(_funds("MZ01")[0], portal="X")]
+    out = _load(funds, calls, {"MZ01": _ok_res("MZ01")}, clock=clock)
+    assert out["memo"]["MZ01"]["hit"] is False
+    assert "portal" in out["nav"]["errors"]["MZ01"] and out["nav"]["rows"] == []
+
+
+def test_命中時也交出深拷貝_改寫命中結果碰不到記憶():
+    # 稽核 W（突變存活）：命中路徑拿掉 deepcopy 要紅
+    calls, clock = [], _Clock()
+    by = {"MZ01": _ok_res("MZ01")}
+    _load(_funds("MZ01"), calls, by, clock=clock)
+    hit = _load(_funds("MZ01"), calls, by, clock=clock)
+    assert hit["memo"]["MZ01"]["hit"] is True
+    hit["nav"]["rows"][0]["nav_orig_ccy"] = -1.0
+    hit["nav"]["provenance"]["MZ01"]["source"] = "被改"
+    again = _load(_funds("MZ01"), calls, by, clock=clock)
+    assert len(calls) == 1 and again["memo"]["MZ01"]["hit"] is True
+    assert again["nav"]["rows"][0]["nav_orig_ccy"] != -1.0
+    assert again["nav"]["provenance"]["MZ01"]["source"] != "被改"

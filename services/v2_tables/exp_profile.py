@@ -30,7 +30,7 @@ from datetime import datetime
 from typing import Optional
 
 from repositories.fund import declared_profile as dp
-from repositories.fund.sources import _normalize_declared_ccy
+from repositories.fund.sources import normalize_declared_ccy
 
 STATUS_OK = "ok"
 STATUS_NOT_READY = "not_ready"
@@ -104,6 +104,11 @@ TEXT_KEY_FAILED = "代碼無法對照：{reason}"
 # MoneyDJ 欄 → `declared_profile.MONEYDJ_LABELS` 的標籤
 _MDJ_LABEL = {"fund_name": "基金名稱", "ccy": "計價幣別", "dividend_policy": "配息頻率", "inception_on": "成立日期"}
 _INCEPTION_FORMATS = ("%Y/%m/%d", "%Y-%m-%d")
+_ASCII_DIGITS = frozenset("0123456789")
+#: 成立日期的年份下限。理由：`strptime("%Y")` 收 `0099` 這種四位數字（＝西元 99 年），對基金成立日期顯然不是真值，
+#: 多半是民國年或欄位錯位；台灣境內外基金最早的成立年份遠晚於 1900，1900 只當「不可能更早」的保守下界，
+#: 不是業務判斷。早於它 → ⬜（不猜是民國年、不換算）。2026-10-14 稽核 V／W 必修 7。
+MIN_INCEPTION_YEAR = 1900
 
 
 # ───────────────────────── 小工具 ─────────────────────────
@@ -197,12 +202,20 @@ def _fund_name_cell(res: dict) -> dict:
 
 
 def parse_inception(raw) -> Optional[str]:
-    """MoneyDJ「成立日期」→ 補零 ISO（`YYYY-MM-DD`）；只收 `YYYY/MM/DD` 或 `YYYY-MM-DD`（`strptime` 解析，
-    月日可不補零），去頭尾空白後須為 ASCII。不存在的日期（2018/02/30）、民國年、中文年月日 → None。"""
+    """MoneyDJ「成立日期」→ ISO（`YYYY-MM-DD`）。去頭尾空白後，字面須**恰為** `DDDD/DD/DD` 或 `DDDD-DD-DD`
+    （十個字元、ASCII 數字、兩個分隔符號相同；內部空格、不補零、全形數字一律不收），再以 `strptime` 驗日期存在、
+    年份不早於 `MIN_INCEPTION_YEAR`。不存在的日期（2018/02/30）、民國年、中文年月日 → None。
+    ~~（舊：`strptime` 解析，月日可不補零，去頭尾空白後須為 ASCII）~~ → 2026-10-14 稽核 V／W 必修 7 收緊
+    （有意識的更正，不是漏刪；決策者：AI 總管）：`strptime` 自己會收 `2012/3/5`、`2012/03/ 5` 這類寫法，
+    與「只收 YYYY/MM/DD」的字面規定不符。"""
     if not isinstance(raw, str):
         return None
     text = raw.strip()
-    if not text or not text.isascii():
+    if len(text) != 10 or text[4] not in "/-" or text[7] != text[4]:
+        return None
+    if not all(ch in _ASCII_DIGITS for i, ch in enumerate(text) if i not in (4, 7)):
+        return None
+    if int(text[:4]) < MIN_INCEPTION_YEAR:
         return None
     for fmt in _INCEPTION_FORMATS:
         try:
@@ -254,7 +267,7 @@ def _ccy_raw(source: str, res: dict):
 
 
 def classify_ccy(source: str, res: dict):
-    """單一來源 → `(歸類, 原字面, ISO 或 None)`。歸類見 `CCY_*`；值一律經 L1 `_normalize_declared_ccy` 正規化。"""
+    """單一來源 → `(歸類, 原字面, ISO 或 None)`。歸類見 `CCY_*`；值一律經 L1 `normalize_declared_ccy`（`_normalize_declared_ccy` 的公開名稱）正規化。"""
     status = res.get("status")
     if status == dp.STATUS_FAILED:
         return CCY_FAILED, None, None
@@ -269,7 +282,7 @@ def classify_ccy(source: str, res: dict):
         return CCY_NOT_PROVIDED, raw, None
     if not isinstance(raw, str):
         return CCY_UNRECOGNIZED, raw, None
-    iso = _normalize_declared_ccy(raw)
+    iso = normalize_declared_ccy(raw)
     if not iso:
         return CCY_UNRECOGNIZED, raw, None
     return CCY_VALUE, raw, iso

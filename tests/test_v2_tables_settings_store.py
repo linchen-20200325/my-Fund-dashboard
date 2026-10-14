@@ -489,6 +489,28 @@ def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶
     assert len(_nav_logs(book)) == 1
 
 
+def test_淨值層_持倉讀不到_exp快取照樣清(book, monkeypatch):
+    """2026-10-14 稽核必修 8：清 exp 三支 L1、淨值記憶、TDCC 空清單，不依賴持倉讀取成功。"""
+    import repositories.fund.declared_profile as DP
+    import repositories.fund.sources as SRC
+    from services.v2_tables import exp_nav as EN
+    cleared = []
+    for fn in (DP.fetch_moneydj_basic_fields, DP.fetch_tdcc_listing, DP.fetch_fundclear_declared_ccy):
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: cleared.append(_n))
+    monkeypatch.setattr(SRC, "_tdcc_cache", {"3-2": []})
+    EN._MEMO[("佔位",)] = (0.0, EN.KIND_SUCCESS, {})
+
+    def boom(values):
+        raise AH.PolicySupplementError("讀取失敗", code="api")
+    monkeypatch.setattr(AH, "load_alo_tables", boom)
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    S.refetch_nav([SECRET])
+    assert sorted(cleared) == sorted(["fetch_moneydj_basic_fields", "fetch_tdcc_listing",
+                                      "fetch_fundclear_declared_ccy"])
+    assert EN._REGISTERED.cache_info()["size"] == 0 and "3-2" not in SRC._tdcc_cache
+    assert _nav_logs(book)[0][4] == "failed"
+
+
 def test_淨值層_重新取數不清TDCC非空清單(book, monkeypatch):
     import repositories.fund.sources as SRC
     data = [{"基金代碼": "X1"}]

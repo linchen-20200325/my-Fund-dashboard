@@ -813,12 +813,21 @@ class TestMoneyDJBinding:
         _net(monkeypatch, {})
         assert "binding" not in dp.fetch_moneydj_basic_fields(CODE)
 
-    def test_parse_label_table交回表格節點(self):
+    def test_parse_label_table_with_node交回表格節點(self):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(_bind_page(_row2("基金代碼", CODE)), "lxml")
-        fields, conflicts, tbl = dp._parse_label_table(soup)
+        fields, conflicts, tbl = dp._parse_label_table_with_node(soup)
         assert fields["基金名稱"] == "某基金" and conflicts == [] and tbl is soup.find_all("table")[0]
-        assert dp._parse_label_table(BeautifulSoup("<p>x</p>", "lxml")) == (None, [], None)
+        assert dp._parse_label_table_with_node(BeautifulSoup("<p>x</p>", "lxml")) == (None, [], None)
+
+    def test_parse_label_table維持C1的兩值介面(self):
+        # 2026-10-14 稽核 W（BLOCKING）：平行的 #961 探測腳本以兩個值接收，介面不得再改
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(_bind_page(_row2("基金代碼", CODE)), "lxml")
+        out = dp._parse_label_table(soup)
+        assert isinstance(out, tuple) and len(out) == 2
+        assert out == dp._parse_label_table_with_node(soup)[:2]
+        assert dp._parse_label_table(BeautifulSoup("<p>x</p>", "lxml")) == (None, [])
 
 
 # ═════════════════════ 2026-10-14 C2：reset_tdcc_list_cache_if_empty ═════════════════════

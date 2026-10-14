@@ -235,7 +235,19 @@ def _own_rows(tbl) -> list:
     return rows
 
 
-def _parse_label_table(soup) -> "tuple[dict | None, list[dict], object]":
+def _parse_label_table(soup) -> "tuple[dict | None, list[dict]]":
+    """找第一張含「基金名稱」那一列的表 → `(fields 或 None, conflicts)`。**介面與行為同 C1，一字未改**
+    （判法見 `_parse_label_table_with_node`，本函式只是丟掉第三個值）。
+
+    ⚠️ 2026-10-14 C2 稽核 W（BLOCKING）：C2 第一版把本函式的回傳改成三個值，平行的 #961 探測腳本
+    （`scripts/probe_moneydj_basic_page.py`）以兩個值接收，兩邊合併後會炸。現恢復兩值介面，要表格節點請用
+    `_parse_label_table_with_node`（有意識的更正，不是漏刪；決策者：AI 總管）。
+    """
+    fields, conflicts, _tbl = _parse_label_table_with_node(soup)
+    return fields, conflicts
+
+
+def _parse_label_table_with_node(soup) -> "tuple[dict | None, list[dict], object]":
     """找第一張含「基金名稱」那一列（標籤字面完全相同、值非空）的表，只收 `MONEYDJ_LABELS` 四個標籤。
 
     列配對同 `sources._src_tcb_meta`：恰 2 格 → (0,1)；4 格以上 → (0,1)(2,3)…；其餘格數不收。
@@ -243,10 +255,10 @@ def _parse_label_table(soup) -> "tuple[dict | None, list[dict], object]":
     - 標籤比對用**完全相同**（去頭尾空白後），不是子字串；
     - 只看表格自己的列（`_own_rows`）與列的**直接子** `td`，巢狀表不會串進外層；
     - 同一標籤出現兩次且值不同 → 該欄設 `None`，兩個值記進 conflicts（不取第一個、不取最後一個）。
-    ~~回傳 `(fields 或 None, conflicts)`；fields 的值是原始字面，標籤沒出現或自相矛盾 → `None`。~~
-    → 2026-10-14 C2（只增不改語意；決策者：AI 總管，依 docs/v2/49 第 8 節 (n)「C2 接上畫面前必須把表格與代碼綁定」）：
-    回傳 `(fields 或 None, conflicts, 該表格節點或 None)`；fields 與 conflicts 的判法一字未改，
-    第三個值是**被採用的那一張表**本身（沒有表時為 `None`），讓呼叫端檢查代碼是否出現在這張表自己的文字裡。
+    （2026-10-14 C2 新增的函式；判法即 C1 `_parse_label_table` 的本體，一字未改。）
+    回傳 `(fields 或 None, conflicts, 該表格節點或 None)`；fields 的值是原始字面，標籤沒出現或自相矛盾 → `None`；
+    第三個值是**被採用的那一張表**本身（沒有表時為 `None`），讓呼叫端檢查代碼是否出現在這張表自己的文字裡
+    （docs/v2/49 第 8 節 (n)「C2 接上畫面前必須把表格與代碼綁定」）。
     """
     for tbl in soup.find_all("table"):
         seen: dict = {}
@@ -369,7 +381,7 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
                 continue
             html = r.text or ""
             soup = BeautifulSoup(html, "lxml")
-            fields, conflicts, label_tbl = _parse_label_table(soup)
+            fields, conflicts, label_tbl = _parse_label_table_with_node(soup)
             mentions = _mentions_code(soup, code)
             if fields is not None and fields.get(_NAME_LABEL) and mentions:
                 att.update(outcome="ok", detail=None)

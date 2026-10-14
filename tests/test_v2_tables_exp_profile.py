@@ -321,9 +321,10 @@ def test_配息頻率_來源沒寫_not_ready():
     assert cells["dividend_policy"]["reason"] == "MoneyDJ 未提供「配息頻率」"
 
 
+# ~~("2012/3/5", "2012-03-05") 原列可辨識~~ → 2026-10-14 稽核必修 7（有意識的更正，不是漏刪）：字面須恰為十個字元，改列無法辨識組
 @pytest.mark.parametrize("raw, want", [
-    ("2012/03/23", "2012-03-23"), ("2012-03-23", "2012-03-23"), ("2012/3/5", "2012-03-05"),
-    (" 2012/03/23 ", "2012-03-23"),
+    ("2012/03/23", "2012-03-23"), ("2012-03-23", "2012-03-23"), (" 2012/03/23 ", "2012-03-23"),
+    ("1900/01/01", "1900-01-01"),
 ])
 def test_成立日期_可辨識寫法(raw, want):
     _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
@@ -331,7 +332,9 @@ def test_成立日期_可辨識寫法(raw, want):
 
 
 @pytest.mark.parametrize("raw", ["2018/02/30", "101/03/23", "2012年3月23日", "2012.03.23", "２０１２/03/23",
-                                 "2012/03-23"])
+                                 "2012/03-23", "2012/3/5", "2012/03/ 5", "2012/ 3/05", "2012 /03/23",
+                                 "0099/01/01", "1899/12/31", "2012/03/2３", "+012/03/23", "2012/03/23x",
+                                 "2012/03/5", "2012-03-5"])
 def test_成立日期_無法辨識(raw):
     _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
     assert cells["inception_on"]["status"] == "not_ready"
@@ -422,3 +425,16 @@ def test_真L1_代碼在不在表內決定名稱採不採用(monkeypatch, inside
         dp.fetch_moneydj_basic_fields.cache_clear()
     assert out["source_status"][CODE]["MoneyDJ"]["status"] == "ok"
     assert out["cells"][CODE]["fund_name"]["status"] == want
+
+
+def test_成立日期_年份下限常數():
+    assert EP.MIN_INCEPTION_YEAR == 1900
+
+
+@pytest.mark.parametrize("flag", [1, "yes", "True", [True], 1.0])
+def test_綁定旗標必須恰為True_truthy不算(flag):
+    # 2026-10-14 稽核 W（突變存活）：`_bound` 必須是 `is True`，放寬成 truthy 要紅
+    res = mdj_ok()
+    res["binding"]["code_in_label_table"] = flag
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
