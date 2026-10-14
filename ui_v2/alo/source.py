@@ -254,9 +254,11 @@ def load_live() -> dict:
         "save_errors": {},              # 存檔成敗由 page.py 併進來，不是讀表的結果
         # 總管 2026-10-13 裁決：淨值日超過門檻而不納入的檔，畫「最近淨值已超過 N 日」而不是「nav 尚無資料」
         # （只換字面；那幾檔照舊不交進 `nav`）。天數取 `live.NAV_MAX_AGE_DAYS`（＝ `ui_v2/thresholds.py::NAV_NOT_READY_DAYS`）。
+        # 客戶 2026-10-14 裁示「舊淨值要標示實際資料日期」：`last` ＝ 過期各檔最後一筆淨值日（`live.assemble_nav` 的 `too_old_last`）。
         "nav_not_ready": {
             "codes": list((notes.get("nav") or {}).get("too_old") or ()),
             "days": live.NAV_MAX_AGE_DAYS,
+            "last": dict((notes.get("nav") or {}).get("too_old_last") or {}),
         },
     }
     notes.update(

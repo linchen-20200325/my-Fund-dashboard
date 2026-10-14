@@ -373,6 +373,9 @@ def assemble_nav(*, holding_codes, key_results, nav_table, empty_without_reason,
             "key_failed": sorted(key_failed),
             "not_fresh": sorted(not_fresh),     # 過期或預存淨值，市值基準下不納入（ALO-GAP-過期淨值不納入）
             "too_old": sorted(too_old),         # 其中因淨值日超過門檻而不納入的（N-b）
+            # 客戶 2026-10-14 裁示「舊淨值要標示實際資料日期」：過期各檔的最後一筆 `nav_date`（ISO，取自資料列本身，
+            # 不是 `fetched_at`），經 `source.py` 的 `nav_not_ready["last"]` 交給 `logic` 寫進「資料未備」那一句。
+            "too_old_last": {code: newest[code].isoformat() for code in sorted(too_old)},
             "provenance": provenance,
         },
     }
