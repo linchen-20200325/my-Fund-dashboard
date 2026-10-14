@@ -14,7 +14,7 @@ import html
 
 import streamlit as st
 
-from . import fixtures, logic, theme
+from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -408,7 +408,12 @@ def _expander(block: dict):
     )
 
 
-def _render_exp4(block: dict, *, scenario: str) -> None:
+def _render_exp4(block: dict, *, scenario: str, save_click=None, editable: bool = True) -> None:
+    """`save_click`：正式模式才有（`(on_click, args)`）。有傳時五個欄位勾選框可勾、排序下拉與存檔接上
+    `user_setting`（客戶 2026-10-13 裁示）；**`EXP-2` 照舊只吃已存值**（判定在 `live.build_live_model`）。"""
+    if save_click is not None:
+        _render_exp4_live(block, save_click=save_click, editable=editable)
+        return
     with _expander(block):
         st.caption(block["answers"])
         _notes(block)
@@ -440,10 +445,210 @@ def _render_exp4(block: dict, *, scenario: str) -> None:
         _lines(block["detail_lines"], css="exp-detail")
 
 
-def _render_exp5(block: dict) -> None:
+def _render_exp5(block: dict, *, save_click=None) -> None:
     with _expander(block):
         st.caption(block["answers"])
-        _buttons(block, "exp5")
+        _fetch_fail_lines(block)
+        if save_click is None:
+            _buttons(block, "exp5")
+        else:
+            _live_buttons(block, "exp5", {live.ACTION_SAVE: save_click})
+        _error_lines(block)
+        _lines(block["detail_lines"], css="exp-detail")
+
+
+# ───────────────────────── 正式模式（客戶 2026-10-13 裁示） ─────────────────────────
+#
+# 分工（判定全在 `live.build_live_model`）：輸入欄／勾選框**當下**的值只決定欄位怎麼畫與存檔寫什麼；
+# 正式結果（篩選、顯示欄、排序、觀察清單）只吃 `load_live` 交回的**已存**設定，存檔後下一次重跑才生效。
+
+# 正式模式的 widget 鍵用另一組前綴與情境名，不與示範模式（`?scenario=`）的鍵相撞。
+_LIVE_SCENARIO = "live"
+# 正式模式 `EXP-1` 條件列的當下內容（每列帶自己的識別碼 `_id`，刪一列不讓其他列的輸入欄錯位）。
+_RULES_STATE = "_exp_live_rules"
+_RULE_SEQ_STATE = "_exp_live_rule_seq"
+# 按「存檔」那一次的逐鍵結果（`{鍵: None 或失敗訊息原文}`）：按鈕那一次的事，不是讀表的結果。
+_SAVE_RESULTS_STATE = "_exp_save_results"
+_SORT_KEY = "exp4live_sort"
+# 2026-10-13 稽核 L 回修：本 session 的輸入欄是用哪一版已存值填的（指紋 ＋ 那一版本身）。
+_SEEDED_STATE = "_exp_live_seeded_fp"
+_SEEDED_SETTINGS_STATE = "_exp_live_seeded_settings"
+
+
+def _rule_key(uid: int, name: str) -> str:
+    return f"exp1live_{uid}_{name}"
+
+
+def _col_key(column: str) -> str:
+    return f"exp4live_col_{column}"
+
+
+def _next_rule_id() -> int:
+    uid = st.session_state.get(_RULE_SEQ_STATE, 0) + 1
+    st.session_state[_RULE_SEQ_STATE] = uid
+    return uid
+
+
+def _current_rules() -> list:
+    """條件列的**當下**內容（輸入欄有值就取輸入欄的值）。session 裡還沒有條件列時回空。"""
+    out = []
+    for row in st.session_state.get(_RULES_STATE) or ():
+        uid = row["_id"]
+        out.append({"_id": uid, **{name: st.session_state.get(_rule_key(uid, name), row[name])
+                                    for name in ("field", "op", "value")}})
+    return out
+
+
+def _seed_live_fields(settings, settings_error) -> None:
+    """以**已存**設定填輸入欄／勾選框（`44` `EXP-1`／`EXP-4` 判準：重新載入後與存檔前逐字相同）。
+
+    ~~狀態不在 session 裡時才填；已在 session 裡就不動。~~
+    → **2026-10-13 稽核 L 回修（有意識的更正，不是漏刪；決策者：AI 總管）**：舊寫法在「讀設定失敗」那一輪
+    建起來的空白勾選框，下一輪讀成功後**不會**改回已存值，按存檔就把空值蓋回雲端（稽核 L 實測試算表變成 `[]`）。
+    現行：記下「本 session 用哪一版已存值填過」的指紋；讀得到設定、而且指紋與上次填入的不同
+    （首次、讀失敗後恢復、他處改了設定）時，**強制以已存值覆寫**條件列、欄位勾選、排序下拉，並清掉上一次
+    存檔的逐鍵結果。指紋相同時不動（使用者正在編的值留著）。存檔成功後由 `_after_saves` 更新指紋。
+    讀不到設定時一格都不填、也不記指紋（沒有已存值可填；不拿猜的值去填）。
+    ⚠️ 這不是「系統代填」（G3†）：填的是使用者自己存過的值；從未存過的欄位維持空白、不勾。
+    ⚠️ 讀不到的那一輪**清掉指紋**：那一輪沒有建 `EXP-1`／`EXP-4` 的輸入欄，streamlit 會把沒畫出來的輸入欄狀態
+    清掉；恢復後若指紋仍與讀失敗前相同而不重填，空白的勾選框就會被存回去。清掉指紋 ⇒ 恢復那一輪一定重填。
+    """
+    if settings_error:
+        st.session_state.pop(_SEEDED_STATE, None)
+        return
+    fingerprint = live.settings_fingerprint(settings)
+    if st.session_state.get(_SEEDED_STATE) == fingerprint:
+        return
+    for row in st.session_state.get(_RULES_STATE) or ():
+        for name in ("field", "op", "value"):
+            st.session_state.pop(_rule_key(row["_id"], name), None)
+    st.session_state[_RULES_STATE] = [
+        {"_id": _next_rule_id(), **rule} for rule in settings.get(live.KEY_RULES) or ()
+    ]
+    saved_columns = set(settings.get(live.KEY_COLUMNS) or ())
+    for column in logic.COLUMN_ORDER:
+        st.session_state[_col_key(column)] = column in saved_columns
+    saved_sort = settings.get(live.KEY_SORT)
+    st.session_state[_SORT_KEY] = logic.COLUMN_LABELS[saved_sort] if saved_sort else logic.TEXT_NO_SORT
+    st.session_state.pop(_SAVE_RESULTS_STATE, None)
+    st.session_state[_SEEDED_STATE] = fingerprint
+    st.session_state[_SEEDED_SETTINGS_STATE] = dict(settings)
+
+
+def _field_columns() -> list:
+    return [c for c in logic.COLUMN_ORDER if st.session_state.get(_col_key(c)) is True]
+
+
+def _field_sort():
+    return logic.column_for_label(st.session_state.get(_SORT_KEY))
+
+
+def _record_saves(results) -> None:
+    merged = dict(st.session_state.get(_SAVE_RESULTS_STATE) or {})
+    merged.update(results)
+    st.session_state[_SAVE_RESULTS_STATE] = merged
+
+
+def _on_add_rule() -> None:
+    rows = _current_rules()
+    rows.append({"_id": _next_rule_id(), "field": "", "op": "", "value": ""})
+    st.session_state[_RULES_STATE] = rows
+
+
+def _on_remove_rule(uid: int) -> None:
+    st.session_state[_RULES_STATE] = [row for row in _current_rules() if row["_id"] != uid]
+    for name in ("field", "op", "value"):
+        st.session_state.pop(_rule_key(uid, name), None)
+
+
+def _after_saves(entries, save_live) -> None:
+    """寫入、記逐鍵結果；寫成功的鍵同步更新「已用哪一版已存值填過」的指紋（稽核 L 回修）——
+    否則下一次重跑讀回剛存的值，會被當成「他處改了」而清掉這一次的存檔結果。"""
+    results = live.run_saves(entries, save_live)
+    _record_saves(results)
+    seeded = st.session_state.get(_SEEDED_SETTINGS_STATE)
+    if seeded is not None:
+        updated = live.settings_after_saves(seeded, entries, results)
+        st.session_state[_SEEDED_SETTINGS_STATE] = updated
+        st.session_state[_SEEDED_STATE] = live.settings_fingerprint(updated)
+
+
+def _on_save_rules(save_live) -> None:
+    _after_saves(live.exp1_save_entries(_current_rules()), save_live)
+
+
+def _on_save_columns(save_live) -> None:
+    _after_saves(live.exp4_save_entries(_field_columns(), _field_sort()), save_live)
+
+
+def _on_save_watch(save_live, saved_watchlist, settings_error) -> None:
+    picked = _checked(logic.GROUP_WATCH, _LIVE_SCENARIO, ())
+    _after_saves(live.exp5_save_entries(saved_watchlist, picked, settings_error), save_live)
+
+
+def _live_buttons(block: dict, prefix: str, clicks: dict) -> None:
+    """依按鈕類別接 on_click（`clicks`：`{action_kind: (on_click, args)}`）；沒接的類別照舊只畫。"""
+    for index, button in enumerate(block.get("buttons", ()) or ()):
+        on_click, args = clicks.get(button["_action_kind"], (None, ()))
+        st.button(
+            button["label"],
+            key=f"{prefix}live_btn_{index}",
+            on_click=on_click,
+            args=args,
+            disabled=not button["_enabled"],
+            help=button["disabled_reason"] or None,
+        )
+
+
+def _render_exp1_live(block: dict, rows: list, *, clicks: dict) -> None:
+    """正式模式的 `EXP-1`：輸入列接上 session（`rows` 與 `block["_rows"]` 同序，帶 `_id`）。"""
+    _card_open(block)
+    st.caption(block["answers"])
+    _notes(block)
+    _fetch_fail_lines(block)
+    for row, model_row in zip(rows, block["_rows"]):
+        cells = st.columns([3, 2, 2, 2])
+        for cell, field, name in zip(cells, model_row["_fields"], ("field", "op", "value")):
+            with cell:
+                st.text_input(
+                    field["label"],
+                    value=row[name] if _rule_key(row["_id"], name) not in st.session_state else "",
+                    placeholder=field["placeholder"],
+                    key=_rule_key(row["_id"], name),
+                )
+        with cells[3]:
+            st.button(model_row["_button"]["label"], key=f"exp1live_clear_{row['_id']}",
+                      on_click=_on_remove_rule, args=(row["_id"],))
+        if model_row["tail_text"]:
+            st.markdown(
+                f'<div class="exp-tail">{_esc(model_row["tail_text"])}</div>',
+                unsafe_allow_html=True,
+            )
+    _live_buttons(block, "exp1", clicks)
+    _error_lines(block)
+    _lines(block["detail_lines"], css="exp-detail")
+    _card_close(block)
+
+
+def _render_exp4_live(block: dict, *, save_click, editable: bool = True) -> None:
+    """`editable=False`（已存設定讀不到）：不建任何可編輯的勾選框與下拉（稽核 L 回修）——
+    那一輪建起來的空白狀態會留在 session 裡，恢復後被存回去蓋掉雲端。只畫失敗行與說明。"""
+    with _expander(block):
+        st.caption(block["answers"])
+        _notes(block)
+        _fetch_fail_lines(block)
+        if not editable:
+            _live_buttons(block, "exp4", {live.ACTION_SAVE: save_click})
+            _error_lines(block)
+            _lines(block["detail_lines"], css="exp-detail")
+            return
+        columns = st.columns(len(block["_options"]))
+        for column, option in zip(columns, block["_options"]):
+            with column:
+                # 值一律由 session 決定（`_seed_live_fields` 以已存值填）；這裡傳 False ＝ 不預先勾任何一欄。
+                st.checkbox(option["label"], value=False, key=_col_key(option["_column"]))
+        st.selectbox("排序欄位", block["sort_options"], index=0, key=_SORT_KEY)
+        _live_buttons(block, "exp4", {live.ACTION_SAVE: save_click})
         _error_lines(block)
         _lines(block["detail_lines"], css="exp-detail")
 
@@ -476,7 +681,11 @@ def _render_exp7(block: dict) -> None:
                 body += (
                     f'<tr><td>{_esc(row["condition_text"])}{tail}</td>'
                     f'<td>{_esc(row["before_text"])}</td>'
-                    f'<td>{_esc(row["after_text"])}</td></tr>'
+                    f'<td>{_esc(row["after_text"])}</td>'
+                    # 正式模式才有第四欄「無法判定」（AI 總管落地選擇；〔已撤〕舊註寫「客戶 2026-10-13 裁示」，
+                    # 稽核 L 第七輪指出，有意識的更正，不是漏刪）；示範模式的列沒有這個鍵。
+                    + (f'<td>{_esc(row["undet_text"])}</td>' if "undet_text" in row else "")
+                    + '</tr>'
                 )
             st.markdown(
                 f'<div class="exp-scroll"><table class="exp-table">'
@@ -609,8 +818,24 @@ _RENDERERS = {
 }
 
 
-def render() -> None:
+def render(*, load_live=None, save_live=None) -> None:
+    """畫整頁。
+
+    load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
+    不傳（None）時行為與加這個參數之前**完全相同**：照舊以 `?scenario=` 挑 fixtures 情境（示範模式）。
+    傳入時（正式入口 `app_exp_live.py`）改由它取得資料，這一條路徑不讀 fixtures，
+    組模型走 `live.build_live_model`（只吃已存設定、不帶示意字樣、缺的格寫原因）；頁首只印本頁的提問句。
+
+    save_live：選填的寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`；客戶 2026-10-13 裁示）。
+    傳入時 `EXP-1`／`EXP-4`／`EXP-5` 的存檔寫進 `user_setting`，下一次重跑（重新讀 `user_setting`）才生效。
+    只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
+    """
+    if load_live is None and save_live is not None:
+        raise ValueError("save_live 要與 load_live 一起傳")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
+    if load_live is not None:
+        _render_live(load_live, save_live)
+        return
 
     scenario = _pick_scenario()
     save_failed = _pick_save_failed()
@@ -678,6 +903,79 @@ def render() -> None:
                 _render_exp4(block, scenario=scenario)
             else:
                 _RENDERERS[code](block)
+
+    st.markdown(
+        '<div class="exp-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True
+    )
+    for code in logic.codes_in_layer(model, 4):
+        _RENDERERS[code](logic.find_block(model, code))
+
+    footer = "　".join(_esc(line) for line in model["footer_lines"])
+    st.markdown(
+        f'<div class="exp-footer">本頁不負責什麼：{footer}<br/>'
+        f'{_badges_html(model["footer_badges"])}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_live(load_live, save_live) -> None:
+    """正式模式整頁。判定全在 `live.build_live_model`；這裡只負責讀 session、接按鈕、畫。"""
+    live_input = load_live()
+    notes = live_input["notes"]
+    settings = notes.get("settings") or {}
+    settings_error = notes.get("settings_error")
+    _seed_live_fields(settings, settings_error)
+    rows = _current_rules()
+    readable = not settings_error
+    model = live.build_live_model(
+        live_input,
+        field_rules=rows if readable else None,
+        field_columns=_field_columns() if readable else None,
+        field_sort=_field_sort() if readable else None,
+        compare_checked=_checked(logic.GROUP_COMPARE, _LIVE_SCENARIO, ()),
+        watch_checked=_checked(logic.GROUP_WATCH, _LIVE_SCENARIO, ()),
+        save_wired=save_live is not None,
+        save_results=st.session_state.get(_SAVE_RESULTS_STATE),
+    )
+    noop = (None, ())
+    exp1_clicks = {live.ACTION_ADD_ROW: (_on_add_rule, ())}
+    exp4_click = exp5_click = noop
+    if save_live is not None:
+        exp1_clicks[live.ACTION_SAVE] = (_on_save_rules, (save_live,))
+        exp4_click = (_on_save_columns, (save_live,))
+        exp5_click = (_on_save_watch, (save_live, tuple(settings.get(live.KEY_WATCH) or ()), settings_error))
+
+    st.markdown(f'<div class="exp-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="exp-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="exp-layer-label">層 1　結論</div>', unsafe_allow_html=True)
+    _render_exp0(logic.find_block(model, "EXP-0"))
+
+    st.markdown(
+        '<div class="exp-layer-label exp-layer2">層 2　核心卡</div>',
+        unsafe_allow_html=True,
+    )
+    for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
+        with column:
+            block = logic.find_block(model, code)
+            if code == "EXP-1":
+                _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks)
+            elif code == "EXP-2":
+                _render_exp2(block, scenario=_LIVE_SCENARIO)
+            else:
+                _RENDERERS[code](block)
+
+    st.markdown(
+        '<div class="exp-layer-label exp-layer3">層 3　操作（預設收合）</div>',
+        unsafe_allow_html=True,
+    )
+    for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
+        with column:
+            block = logic.find_block(model, code)
+            if code == "EXP-4":
+                _render_exp4(block, scenario=_LIVE_SCENARIO, save_click=exp4_click, editable=readable)
+            else:
+                _render_exp5(block, save_click=exp5_click)
 
     st.markdown(
         '<div class="exp-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True

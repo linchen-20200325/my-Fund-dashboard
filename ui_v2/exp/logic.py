@@ -12,6 +12,9 @@
 
 from __future__ import annotations
 
+import contextvars
+import decimal
+
 # ───────────────────────── 常數（逐字引 `44`） ─────────────────────────
 
 # `44` 5.1 卡片四狀態。本檔沿用「逐主值判定」那個現行讀法，狀態不掛在整張卡。
@@ -183,6 +186,19 @@ DIVIDEND_WINDOW_MONTHS = 12
 
 HINT = "（示意）"
 
+# ⭐ **2026-10-13 示意字樣的模式開關**（客戶 2026-10-13 裁示：B 線標的探索正式模式第一批；
+#    體例照姊妹頁 `ui_v2/hld/logic.py` 2026-10-02 的前例 —— 正式資料不加示意字樣，示範模式照舊保留）。
+#    開關只有一個入口：`build_page_model(..., demo_hint=)`；`hinted()` 一律經 `_hint()` 取字尾。
+#    ⚠️ 用 `contextvars` 而不是模組層變數：streamlit 每個連線各跑一條執行緒，模組層旗標會互相污染；
+#       `build_page_model` 結束時一定還原（`finally`）。預設值是 `HINT` ⇒ 不傳 `demo_hint` 的呼叫端
+#       （示範入口、既有測試）輸出逐字不變。
+_HINT_SUFFIX = contextvars.ContextVar("exp_hint_suffix", default=HINT)
+
+
+def _hint() -> str:
+    """目前這一次組模型該接的示意字尾：示範模式為 `HINT`，正式模式為空字串。"""
+    return _HINT_SUFFIX.get()
+
 # 兩組勾選框的組名（`44` `EXP-2` 規則欄逐字：一組標「對照」，一組標「觀察清單」）。
 GROUP_COMPARE = "對照"
 GROUP_WATCH = "觀察清單"
@@ -253,6 +269,13 @@ COLUMN_LABELS = {
 # ⚠️ **真正的登記換成這一筆**：**勾了別的欄而沒勾基金名時，清單上就沒有基金名了** ——
 #    `44` 只保障「全不勾」那一種，**沒有寫這一種算不算可接受**。本頁照字面走，登記待裁。
 ALWAYS_SHOWN_COLUMN = "fund_name"
+# 正式模式才有的代碼欄（2026-10-13；登記與理由見 `_build_exp2` 的 `code_column`）。不在 `COLUMN_ORDER` 裡。
+CODE_COLUMN = "fund_code"
+# 正式模式才有的「篩選判定」欄。不在 `COLUMN_ORDER` 裡。
+# 客戶 2026-10-13 裁示只要求顯示「⬜ 無法判定（資料未備）」，沒有指定另開一欄；開一欄是 AI 總管的落地選擇，
+# 並把版面變動縮到最小（總管 2026-10-13 決定）：清單裡至少一列無法判定時才出現，只在那些列寫原因，
+# 明確符合的列留白。〔已撤〕明確符合的列寫「符合」（`JUDGE_MATCH_TEXT`）—— 本檔不用刪除線記號，改寫〔已撤〕。
+JUDGE_COLUMN = "篩選判定"
 
 # `44` `EXP-2` 規則欄逐字：「預設不排序，依 `fund_code` 字面值排列」。
 DEFAULT_SORT_FIELD = "fund_code"
@@ -297,7 +320,7 @@ COMPARE_ROWS = (
 
 def hinted(text: str) -> str:
     """每一個**會隨資料變**的數後面帶的三個字。"""
-    return text + HINT
+    return text + _hint()
 
 
 def format_count(value: int) -> str:
@@ -443,7 +466,14 @@ def fetch_failed_text(message: str) -> str:
     return "⛔ 取數失敗：" + message
 
 
+# 〔已撤〕`compute_failed_text`／`COMPUTE_ERR_TEXT`（「⛔ 計算失敗」，正式模式條件撞到缺值時亮紅燈）。本檔不用刪除線記號（`test_exp_logic.py` 的逐字引文守衛以本檔零刪除線為前提），改寫〔已撤〕。
+# → 2026-10-13 撤下（有意識的政策變更，不是漏刪；決策者：客戶）：客戶裁示「條件作用在資料未備的欄位時，
+#   該檔照樣列出、標無法判定，不算符合、不排除、不亮紅燈」。那一族在寫下當時是本組在 E-09 未裁時
+#   「不選邊、但不讓整頁當掉」的權宜；裁示之後改走 `compare_tristate`／`apply_rules_tristate`。
+
 ND_TEXT = "⬜ 資料未備"
+# 客戶 2026-10-13 裁示（正式模式）：條件作用在資料未備欄位時的狀態字。
+UNDET_TEXT = "⬜ 無法判定"
 ERR_TEXT = "⛔ 取數失敗"  # 客戶 2026-09-24 裁示：取數失敗 ⛔（44 第五節第五小節已同步），黃燈仍 ⚠
 
 # 逐字引 `44` 3.3 各塊空狀態欄／規則欄裡那幾句要印在畫面上的話。
@@ -470,6 +500,25 @@ TEXT_EFFECTIVE_CONDITIONS = "目前生效的條件列"
 # ⚠️ 刻意不寫成「存檔寫入失敗」——那是 `44` 三塊空狀態欄的字面，同字會讓
 #    「畫面上有幾個失敗框」數不準（本輪實測數出過 4 而不是 3）。
 TEXT_SAVEFAIL_BANNER = "＋ 存檔失敗開關（開）"
+# 正式模式（客戶 2026-10-13 裁示：只有成功儲存的設定才生效）：欄位與已存值不同時的說明行。字面為本組擬定，
+# 體例照姊妹頁 `ui_v2/mkt/live.py::TEXT_UNSAVED_PICKS`。
+TEXT_UNSAVED_RULES = "未存檔：條件列與已存值不同，存檔後下一次重新載入才生效"
+# 2026-10-13 稽核回修：正式模式多一欄 `fund_code`（`_build_exp2` 的 `code_column`）與「篩選判定」
+# （〔已撤〕原註寫「客戶同日裁示」→ 開這一欄是 AI 總管的落地選擇，客戶只裁示要顯示「⬜ 無法判定（資料未備）」；
+# 稽核 L 第六輪指出，有意識的更正，不是漏刪），「目前只顯示基金名」在那時是假話 —— 照實寫出真的顯示的欄。字面為本組擬定。
+# 〔已撤〕「目前只顯示 fund_code、篩選判定與基金名」一句通用 → 總管 2026-10-13 決定「篩選判定」欄只在有無法判定列時出現，
+#   兩種情形各寫各的（有意識的更正，不是漏刪）。
+TEXT_ONLY_CODE_AND_NAME = "目前只顯示 fund_code 與基金名"
+TEXT_ONLY_CODE_JUDGE_AND_NAME = "目前只顯示 fund_code、篩選判定與基金名"
+# 正式模式 `EXP-4` 欄位一個也沒勾時的摘要（稽核 L 第六輪 B1，總管裁決）：描述**設定**，在任何清單狀態下都為真。
+# 〔已撤〕沿用 `TEXT_ONLY_CODE_AND_NAME` —— 有無法判定列時 `EXP-2` 多一欄，兩卡的「目前只顯示」互相矛盾。
+TEXT_EXP4_CODE_FIXED = "未勾選額外欄位：清單固定顯示 fund_code 與基金名；有無法判定的列時另加「篩選判定」欄"
+TEXT_WATCHLIST_UNREADABLE = "觀察清單目前讀不到（已存設定讀取失敗），不顯示成空的"
+TEXT_EXP4_LIVE = (
+    "欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：候選清單只吃已存的設定。"
+    "⚠ 取消勾基金名、其他欄仍勾著時，清單上就沒有基金名 —— 44 只保障「全部不勾」那一種，"
+    "這一種算不算可接受待裁決；正式模式的候選清單另有 fund_code 一欄可辨認每一列。"
+)
 
 
 def conclusion_text(count: int) -> str:
@@ -526,6 +575,123 @@ def _compare(left, op: str, right: str) -> bool:
         a, b = str(left), str(right)
         return a <= b if op == "早於或等於" else a > b
     raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
+
+
+# `_compare` 認得的六個比較方向（`fixtures.OPERATORS` 的鏡像，由測試比對；本檔不 import fixtures）。
+KNOWN_OPERATORS = ("等於", "不等於", "大於", "小於", "早於或等於", "晚於")
+
+
+def undet_tail(count: int) -> str:
+    """結論列在原句後面接的那一段。
+
+    客戶 2026-10-13 裁示的是「無法判定的檔不算符合、不排除、不亮紅燈」；
+    「符合 N 檔、另有 M 檔無法判定」這種寫法（含本句字面）是 AI 總管的落地字樣（〔已撤〕舊註寫成客戶裁示，
+    稽核 L 第七輪指出，有意識的更正，不是漏刪）。
+    """
+    return f"；另有 {hinted(format_count(count))} 檔無法判定"
+
+
+def undet_text(reasons) -> str:
+    """候選清單「篩選判定」格裡無法判定那一句：`⬜ 無法判定（資料未備：ccy；…）`。"""
+    return f"{UNDET_TEXT}（{'；'.join(reasons)}）"
+
+
+def is_missing(value) -> bool:
+    """缺值判定（集中一處；稽核 K 第六、七輪）：None、空字串、浮點 NaN（含 numpy 純量）、`Decimal` 的 NaN／sNaN、
+    pandas 的 NA／NaT。
+
+    只認純量：list、tuple、dict、set 與 numpy 陣列（含 0 維）一律不算缺值；其餘任何比較會炸的型別也不算，
+    **絕不往上拋**（`except Exception`）。
+    本檔不 import pandas／numpy —— NA／NaT／ndarray 以型別名判斷，NaN 以「自己不等於自己」判斷。
+    示範資料沒有 NaN、沒有空白字串以外的空值 ⇒ 改用本函式的各處示範輸出不變（以逐位元組比對驗證）。
+    """
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, (list, tuple, dict, set, frozenset)) or type(value).__name__ == "ndarray":
+        return False
+    if isinstance(value, decimal.Decimal):
+        return value.is_nan()            # 含 sNaN；不做比較，避免 sNaN 的 InvalidOperation
+    if type(value).__name__ in ("NAType", "NaTType"):
+        return True
+    try:
+        return bool(value != value)
+    except Exception:  # noqa: BLE001 — 只做判定，任何型別都不得讓它炸（docstring）
+        return False
+
+
+def _finite_number(value) -> bool:
+    """轉得成數、而且是有限數（排除 nan、inf）。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return number == number and number not in (float("inf"), float("-inf"))
+
+
+def compare_tristate(left, op: str, right: str):
+    """一格比較的三種結果（正式模式）：回 `(True／False／None, 無法判定的原因或 None)`。
+
+    **客戶 2026-10-13 裁示的部分**：
+    - 欄位值缺（`is_missing`：None、空字串、浮點 NaN、pandas NA）→ `(None, "資料未備")`，**不分比較方向**：
+      不算符合、也不排除（`E-09`）。
+    **AI 總管延伸的部分**（2026-10-13，`44` 檔尾 7.3.2「其三之一」）：
+    - 「大於／小於」的欄位值轉不成數、或是 nan／inf → `(None, "欄位值不是數值")`；
+    - 「大於／小於」的條件數值轉不成數、或是 nan／inf → `(None, "條件數值「<條件數值>」不是數值")`。
+    同樣歸無法判定、不報錯。
+    - 比較方向不在六個之內 → 照舊 `raise UnspecifiedComparison`（那不是資料缺，是條件本身壞了）。
+    示範模式不走這一支（照舊 `_compare`，缺值就炸）。
+    """
+    if op not in KNOWN_OPERATORS:
+        raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
+    if is_missing(left):
+        return None, "資料未備"
+    if op in ("大於", "小於"):
+        # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
+        if not _finite_number(left):
+            return None, "欄位值不是數值"
+        if not _finite_number(right):
+            return None, f"條件數值「{right}」不是數值"
+    try:
+        return _compare(left, op, right), None
+    except UnspecifiedComparison:
+        try:
+            float(left)
+        except (TypeError, ValueError):
+            return None, "欄位值不是數值"
+        return None, f"條件數值「{right}」不是數值"
+
+
+def apply_rules_tristate(rows, rules):
+    """逐檔判定（客戶 2026-10-13 裁示，正式模式）。回 `(steps, listed, undet)`：
+
+    - `steps`：`[(條件, 套用前, 符合, 無法判定), ...]` —— 累計口徑：「符合」＝到這一條為止每一條都明確符合，
+      「無法判定」＝到這一條為止沒有一條明確不符合、但至少一條無法判定；下一條的「套用前」＝兩者之和。
+    - `listed`：要列在候選清單上的檔（明確符合 ＋ 無法判定），保持輸入順序；
+    - `undet`：`{fund_code: [原因, ...]}`（原因形如「資料未備：ccy」）。
+    任一條**明確不符合** → 該檔不列（客戶裁示的「不排除」只針對因缺值而無法判定的那部分）。
+    數值欄留空的條件不生效（`44` `EXP-1`），兩個數照抄上一列。
+    """
+    alive = list(rows)
+    undet = {}
+    steps = []
+    for rule in rules:
+        before = len(alive)
+        if rule_is_effective(rule):
+            kept = []
+            for row in alive:
+                result, why = compare_tristate(row.get(rule["field"]), rule["op"], rule["value"])
+                if result is False:
+                    undet.pop(row["fund_code"], None)
+                    continue
+                if result is None:
+                    undet.setdefault(row["fund_code"], []).append(f"{why}：{rule['field']}")
+                kept.append(row)
+            alive = kept
+        sure = sum(1 for row in alive if row["fund_code"] not in undet)
+        steps.append((rule, before, sure, len(alive) - sure))
+    return steps, alive, undet
 
 
 def apply_rules(rows, rules):
@@ -841,8 +1007,14 @@ def _block(code, *, state, states=(), **extra) -> dict:
     return block
 
 
-def _build_exp1(dataset, *, draft_rules, save_failed_message):
-    """`EXP-1` 條件輸入卡。"""
+def _build_exp1(dataset, *, draft_rules, save_failed_message, fail_lines=(), saved_only=False):
+    """`EXP-1` 條件輸入卡。
+
+    `fail_lines`（2026-10-13 正式模式第一批）：已存設定讀不到時的失敗行（`user_setting：⛔ 取數失敗：…`）。
+    示範模式恆為空 ⇒ 輸出不變。讀得到但沒設定 → 照舊「尚未設定條件」；**讀不到不得講成沒設定**。
+    `saved_only`（正式模式）：客戶 2026-10-13 裁示「只有成功儲存的設定才生效；未儲存的暫存條件不得影響正式結果」
+    —— `draft_rules` 只決定本卡的輸入列怎麼畫，`EXP-2` 吃已存值；欄位與已存值不同時，說明行改寫成「未存檔」那一句。
+    """
     rules = tuple(draft_rules)
     rows = []
     for index, rule in enumerate(rules):
@@ -873,14 +1045,17 @@ def _build_exp1(dataset, *, draft_rules, save_failed_message):
     # ⚠️ **登記（`44` `EXP-1` 塊下方的「其二」，就地標為待客戶或總管裁決）**：
     #    條件的「當下值」與「已存值」哪一個餵 `EXP-2`，`44` 沒有寫。
     saved = saved_rules(dataset)
-    if tuple(saved) != rules:
+    if saved_only:
+        if not fail_lines and tuple(saved) != rules:
+            detail_lines.append(TEXT_UNSAVED_RULES)
+    elif tuple(saved) != rules:
         detail_lines.append(
             "⚠ 欄位的當下內容與已存值不同。本頁把當下內容餵給 EXP-2（即時生效）—— "
             "44 就地登記這一題為待客戶或總管裁決，本頁只是把選了哪一邊寫在畫面上。"
         )
 
     notes = []
-    if not rules:
+    if not rules and not fail_lines:
         # `44` `EXP-1` 空狀態欄逐字：「一列也沒有 → 卡片顯示提示文字與一枚『新增條件』按鈕」。
         # ⚠️ **那句「提示文字」的字面 `44` 沒有給**（按鈕的標籤有給，提示文字沒有）——
         #    下面這一句是本組擬的，客戶可以逐字推翻，推翻不必改 `44`。
@@ -891,6 +1066,8 @@ def _build_exp1(dataset, *, draft_rules, save_failed_message):
         # `44` `EXP-1` 規則欄逐字：「本塊掛一枚『存檔』按鈕（`action_kind` 為 `存檔`）」。
         # ⚠️ 停用條件：`44` 塊下方的「其一」已就地判讀為走 `SET-4` 那一種（**不宣告任何停用條件**），
         #    並註明「這一步是本組判讀，客戶未逐字點名，可推翻」。本檔照那個判讀做。
+        #    正式模式另有一條（總管 2026-10-13 決定，比照 Q-07 前例）：「大於／小於」配上轉不成數的數值 → 停用，
+        #    由 `live.rule_value_problems` 套上；示範模式不套。清空照舊可存。
         _button(TEXT_SAVE, "存檔"),
     ]
 
@@ -901,13 +1078,15 @@ def _build_exp1(dataset, *, draft_rules, save_failed_message):
         error_lines.append(TEXT_SAVE_FAILED + "：" + save_failed_message)
 
     # `EXP-1` 沒有主值 —— 它是一組輸入列（`E-21`）。
-    state = STATE_OK
+    state = STATE_ERROR if fail_lines else STATE_OK
     return _block(
         "EXP-1",
         state=state,
         states=(),
+        fetch_fail_lines=list(fail_lines),
         summary_text=(
-            f"{hinted(format_count(len(rules)))} 條條件" if rules else TEXT_NO_CONDITION
+            ERR_TEXT if fail_lines
+            else f"{hinted(format_count(len(rules)))} 條條件" if rules else TEXT_NO_CONDITION
         ),
         _rows=rows,
         notes=notes,
@@ -934,8 +1113,21 @@ def _build_exp2(
     compare_checked,
     watch_checked,
     watchlist,
+    extra_fail_lines=(),
+    code_column=False,
+    settings_unknown=False,
+    undet=None,
 ):
-    """`EXP-2` 候選清單卡。"""
+    """`EXP-2` 候選清單卡。
+
+    2026-10-13 正式模式第一批新增兩個參數（示範模式皆為預設值 ⇒ 輸出不變）：
+    - `extra_fail_lines`：不是本塊來源表的失敗（已存設定讀不到、條件套用不了）。有就照列、本塊為 `系統錯誤`，
+      不印「尚未設定條件」或「目前條件下沒有符合的基金」—— 那兩句在那時是假的。
+    - `code_column`：正式模式在表頭最前面多一欄 `fund_code`。⚠️ **登記（待客戶裁示，§-1.5.4 草稿先行）**：
+      `44` `EXP-2` 規則欄列的五欄沒有 `fund_code`（`E-08`），示範模式照舊不加；正式模式第一批**只有代碼**，
+      其餘欄全是 ⬜，不加這一欄整張表無從辨認哪一列是哪一檔（總管派工單：「清單結構要先支援『只有代碼、其餘欄 ⬜』」）。
+      它不進 `EXP-4` 的可選欄位、不能被取消、不是排序選項。
+    """
     fail_message = source_error(dataset, "EXP-2")
     ratios = dataset.get("div_ratio_pct") or {}
 
@@ -944,15 +1136,32 @@ def _build_exp2(
 
     rows = []
     cell_states = []
+    show_judge = bool(undet) and any(profile["fund_code"] in undet for profile in matched)
     for profile in matched:
         code = profile["fund_code"]
         nav = latest_nav(dataset, code)
         cells = {}
+        if code_column:
+            cells[CODE_COLUMN] = _value(code, label=CODE_COLUMN)
+        if show_judge:
+            # 客戶 2026-10-13 裁示（正式模式）：無法判定的檔照樣列出，標「⬜ 無法判定（…）」。
+            # 落地方式（總管 2026-10-13 決定）：這一欄只在至少一列無法判定時出現，明確符合的列留白；
+            # 固定跟在代碼欄後面，不進 EXP-4 可選欄位、不是排序選項。
+            cells[JUDGE_COLUMN] = (
+                _value(undet_text(undet[code]), state=STATE_MISSING, label=JUDGE_COLUMN)
+                if code in undet
+                else _value("", label=JUDGE_COLUMN)
+            )
         for column in shown:
-            if column == "fund_name":
-                cells[column] = _value(profile["fund_name"], label=COLUMN_LABELS[column])
-            elif column == "ccy":
-                cells[column] = _value(profile["ccy"], label=COLUMN_LABELS[column])
+            if column in ("fund_name", "ccy"):
+                # 2026-10-13：值為空（正式模式第一批，基本資料尚未接入）→ 缺的格，**不印 `None`、不從代碼推名稱**。
+                #    示範資料這兩欄恆有值 ⇒ 示範輸出不變。
+                raw = profile.get(column)
+                cells[column] = (
+                    _value(raw, label=COLUMN_LABELS[column])
+                    if not is_missing(raw)   # NaN 不畫成「nan」（稽核 K 第六輪；與 `compare_tristate` 同一支）
+                    else _missing_value(COLUMN_LABELS[column])
+                )
             elif column == "nav_date":
                 cells[column] = (
                     _value(hinted(nav["nav_date"]), label=COLUMN_LABELS[column])
@@ -1033,7 +1242,7 @@ def _build_exp2(
         )
 
     notes = []
-    failure_notes = upstream_failure_notes(dataset, "EXP-2")
+    failure_notes = upstream_failure_notes(dataset, "EXP-2") + list(extra_fail_lines)
     if failure_notes:
         # ⛔ 取數失敗時**不印**「尚未設定條件」或「目前條件下沒有符合的基金」——
         #    那兩句在來源掛掉的時候是假的。理由見 `upstream_failure_notes()`。
@@ -1048,8 +1257,14 @@ def _build_exp2(
     #    —— **那一句的主詞是 `EXP-2`**，「且出現」承的是同一個主詞。**44 把指代解開了，而且解向 `EXP-2`。**
     #    ⇒ 本頁自本輪起把它寫在 **`EXP-2`**，照判準行走（§0.2：判準是那個可以被執行的檢查）。
     #    ⚠️ 空狀態欄那句「在卡上寫一行」的「卡上」確實仍然含混，**但它不再是本頁挑邊的理由**。
-    if len(shown) == 1 and shown[0] == ALWAYS_SHOWN_COLUMN and not visible_columns:
-        notes.append(TEXT_ONLY_FUND_NAME)
+    # 2026-10-13：已存設定讀不到時，「欄位一個也沒勾」是**不知道**，不是使用者沒勾 —— 不印那一句（§1）。
+    if len(shown) == 1 and shown[0] == ALWAYS_SHOWN_COLUMN and not visible_columns \
+            and not settings_unknown:
+        if not code_column:
+            notes.append(TEXT_ONLY_FUND_NAME)
+        elif matched:
+            # 總管 2026-10-13：正式模式沒有條件、清單是空的時候不寫這一句（沒有任何一欄在顯示）。
+            notes.append(TEXT_ONLY_CODE_JUDGE_AND_NAME if show_judge else TEXT_ONLY_CODE_AND_NAME)
 
     # ⚠️ **登記（`E-08`）**：`44` 說依 `fund_code` 排，但那一欄不在它自己列的五欄裡。
     #    本檔把排序依據寫成表頭上方一行，**不自行把 `fund_code` 加進欄位清單**。
@@ -1067,19 +1282,23 @@ def _build_exp2(
             "⚠ 目前依最近淨值（原幣）排序，不同幣別的數字因此被放在同一個順序裡比大小。"
             "44 允許使用者自選排序欄位，也沒有一條規則擋這一種；就地寫出來，不自行拿掉這一項。"
         )
-    state = STATE_ERROR if fail_message else worst_state(cell_states)
+    state = STATE_ERROR if (fail_message or extra_fail_lines) else worst_state(cell_states)
+    n_undet = sum(1 for row in rows if undet and row["_fund_code"] in undet)
+    keys = ((CODE_COLUMN,) if code_column else ()) + ((JUDGE_COLUMN,) if show_judge else ()) + tuple(shown)
     return _block(
         "EXP-2",
         state=state,
         states=cell_states,
         summary_text=(
-            TEXT_NO_CONDITION
+            ERR_TEXT if extra_fail_lines
+            else TEXT_NO_CONDITION
             if not has_rules
-            else f"{hinted(format_count(len(rows)))} 檔候選"
+            else (f"符合 {hinted(format_count(len(rows) - n_undet))} 檔、無法判定 {hinted(format_count(n_undet))} 檔"
+                  if n_undet else f"{hinted(format_count(len(rows)))} 檔候選")
         ),
         _rows=rows,
-        column_keys=tuple(shown),
-        column_labels=[COLUMN_LABELS[c] for c in shown],
+        column_keys=keys,
+        column_labels=[c if c in (CODE_COLUMN, JUDGE_COLUMN) else COLUMN_LABELS[c] for c in keys],
         sort_caption=sort_caption,
         notes=notes,
         detail_lines=detail_lines,
@@ -1172,6 +1391,18 @@ def _sorted_rows(rows, dataset, sort_column, ratios):
     return sorted(rows, key=lambda r: _sort_key(r, sort_column, ratios))
 
 
+def _compare_head(profile) -> str:
+    """`EXP-3` 欄頭。示範資料基金名與 `ccy` 恆有值 ⇒ 照舊「基金名　ccy」。
+
+    2026-10-13 正式模式第一批：兩者任一為空 → 欄頭寫 `fund_code` 與 `⬜ 資料未備`，
+    **不印 `None`、不拿代碼頂替基金名、不猜幣別**（客戶 2026-10-13 裁示：缺值保持缺值）。
+    """
+    name, ccy = profile.get("fund_name"), profile.get("ccy")
+    if not is_missing(name) and not is_missing(ccy):   # NaN 不畫成「nan」（稽核 K 第七輪）
+        return f"{name}　{ccy}"
+    return f"{profile['fund_code']}　{ND_TEXT}"
+
+
 def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
     """`EXP-3` 並排對照卡。"""
     ratios = dataset.get("div_ratio_pct") or {}
@@ -1211,7 +1442,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
                 fee = profile.get("mgmt_fee_rate_pct")
                 cells[key] = (
                     _value(hinted(format_fee(fee)), has_number=True, ccy=profile["ccy"])
-                    if fee is not None
+                    if not is_missing(fee)   # NaN 不畫成「nan」（稽核 K 第七輪）
                     else _missing_value()
                 )
         cell_states.extend(cell["_state"] for cell in cells.values())
@@ -1220,7 +1451,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
                 "_fund_code": code,
                 "_ccy": profile["ccy"],
                 # `44` 規則欄逐字：「不同幣別的檔並排時，幣別寫在欄頭」。
-                "head_text": f"{profile['fund_name']}　{profile['ccy']}",
+                "head_text": _compare_head(profile),
                 "_cells": cells,
             }
         )
@@ -1267,8 +1498,15 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
     )
 
 
-def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message):
-    """`EXP-4` 欄位與排序設定。"""
+def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, fail_lines=(),
+                saved_only=False, code_column=False):
+    """`EXP-4` 欄位與排序設定。
+
+    2026-10-13 正式模式第一批（示範模式皆為預設值 ⇒ 輸出不變）：
+    - `saved_only`：五個欄位勾選框改為可勾（`EXP-4` 的存檔要寫 `exp_visible_columns`，唯讀就存不了）；
+      **`EXP-2` 照舊只吃已存值**，勾選框與排序下拉的當下值只決定存檔寫什麼。說明行改寫成 `TEXT_EXP4_LIVE`。
+    - `fail_lines`：已存設定讀不到時的失敗行（照列在本卡，本卡為 `系統錯誤`）。
+    """
     # `44` 規則欄逐字：「可選欄位清單取 `EXP-2` 規則欄逐字列出的那幾欄」。
     options = [
         {
@@ -1321,11 +1559,13 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message):
         "而那一句 44 自己標的決策者是「AI 總管，本輪派工指定」，不是客戶裁示。"
         "本頁照 44 做（44 是 SSOT），但這個差異讓客戶看得到，不寫成「草稿沒跟上」。",
         # ⛔ **2026-09-24 第二輪稽核：這一組控制項的實際行為必須寫在畫面上，不能靠使用者自己發現。**
-        "⚠ 上面五個欄位勾選框目前是唯讀的：它們顯示已存的設定，改不動。"
-        "原因是接線會讓「取消勾基金名、其他仍勾著」變成走得到的狀態，"
-        "而 44 只保障「全部不勾」那一種，沒有寫這一種算不算可接受；那一格待裁決之前本頁不提供它。"
-        "欄位組合的各種樣子改由情境示範（例如全不勾那一種）。"
-        "排序下拉則是真的接上的：選了就會重排，下面那行說明也跟著換。",
+        TEXT_EXP4_LIVE if saved_only else (
+            "⚠ 上面五個欄位勾選框目前是唯讀的：它們顯示已存的設定，改不動。"
+            "原因是接線會讓「取消勾基金名、其他仍勾著」變成走得到的狀態，"
+            "而 44 只保障「全部不勾」那一種，沒有寫這一種算不算可接受；那一格待裁決之前本頁不提供它。"
+            "欄位組合的各種樣子改由情境示範（例如全不勾那一種）。"
+            "排序下拉則是真的接上的：選了就會重排，下面那行說明也跟著換。"
+        ),
     ]
     kind = None
     row = _setting(dataset, "exp_sort_column")
@@ -1358,12 +1598,14 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message):
 
     return _block(
         "EXP-4",
-        state=STATE_OK,
+        state=STATE_ERROR if fail_lines else STATE_OK,
         states=(),
+        fetch_fail_lines=list(fail_lines),
         summary_text=(
-            f"{hinted(format_count(len(visible_columns)))} 欄　排序：{sort_shown}"
+            ERR_TEXT if fail_lines
+            else f"{hinted(format_count(len(visible_columns)))} 欄　排序：{sort_shown}"
             if visible_columns
-            else TEXT_ONLY_FUND_NAME
+            else (TEXT_EXP4_CODE_FIXED if code_column else TEXT_ONLY_FUND_NAME)
         ),
         _options=options,
         sort_options=sort_options,
@@ -1381,8 +1623,12 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message):
     )
 
 
-def _build_exp5(dataset, *, watch_checked, watchlist, save_failed_message):
-    """`EXP-5` 加入觀察清單。"""
+def _build_exp5(dataset, *, watch_checked, watchlist, save_failed_message, fail_lines=()):
+    """`EXP-5` 加入觀察清單。
+
+    `fail_lines`（2026-10-13 正式模式第一批；示範模式恆為空）：已存設定讀不到時的失敗行。
+    讀不到時「觀察清單目前有幾檔」不得講成空的 —— 那一行改寫成讀不到（見下方 `detail_lines`）。
+    """
     picked = sorted(watch_checked)
     # `44` 空狀態欄逐字：「「觀察清單」那一組勾選為零 → 按鈕停用，停用原因為『尚未勾選任何基金』」。
     button = _button(
@@ -1397,7 +1643,8 @@ def _build_exp5(dataset, *, watch_checked, watchlist, save_failed_message):
     after = sorted(set(watchlist) | set(picked))
 
     detail_lines = [
-        f"觀察清單目前有 {hinted(format_count(len(watchlist)))} 檔："
+        TEXT_WATCHLIST_UNREADABLE if fail_lines
+        else f"觀察清單目前有 {hinted(format_count(len(watchlist)))} 檔："
         + ("、".join(watchlist) if watchlist else "（空）"),
         "本塊只寫 user_setting 的 exp_watchlist，不寫入 holding，不產生任何交易意圖的紀錄（G1†）。",
         "按鈕標籤是「加入觀察清單」，action_kind 是「存檔」—— 那是 44 第五節按鈕那一類的兩個不同參數。",
@@ -1423,10 +1670,12 @@ def _build_exp5(dataset, *, watch_checked, watchlist, save_failed_message):
 
     return _block(
         "EXP-5",
-        state=STATE_OK,
+        state=STATE_ERROR if fail_lines else STATE_OK,
         states=(),
+        fetch_fail_lines=list(fail_lines),
         summary_text=(
-            f"勾起 {hinted(format_count(len(picked)))} 檔"
+            ERR_TEXT if fail_lines
+            else f"勾起 {hinted(format_count(len(picked)))} 檔"
             if picked
             else TEXT_NO_PICK
         ),
@@ -1468,7 +1717,7 @@ def _build_exp6(dataset, *, compare_checked):
     if profile is not None:
         for key, label in EXP6_FIELDS:
             raw = profile.get(key)
-            if raw is None or raw == "":
+            if is_missing(raw):   # NaN 不畫成「nan」（稽核 K 第七輪）
                 # `44` 空狀態欄逐字：「某欄為空 → 顯示 `⬜`，不以零或字串『無』填。」
                 node = _missing_value(label)
             elif key == "mgmt_fee_rate_pct":
@@ -1534,14 +1783,28 @@ def _build_exp6(dataset, *, compare_checked):
     )
 
 
-def _build_exp7(dataset, *, steps, has_rules, conclusion_count):
-    """`EXP-7` 篩選軌跡。"""
-    failure_notes = upstream_failure_notes(dataset, "EXP-7")
+def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines=(), tristate=False):
+    """`EXP-7` 篩選軌跡。
+
+    `extra_fail_lines`（2026-10-13 正式模式第一批；示範模式恆為空）：已存設定讀不到。
+    有就與上游取數失敗走同一條路（不列任何軌跡列、本塊為 `系統錯誤`）—— 那時的檔數不是真的。
+    `tristate`（客戶 2026-10-13 裁示，正式模式）：`steps` 為四元組 `(條件, 套用前, 符合, 無法判定)`，
+    「符合」是到這一條為止**每一條都明確符合**的檔數、「無法判定」是到這一條為止沒有任何一條明確不符合、
+    但至少一條無法判定的檔數；最後一列的「符合」與 `EXP-0` 的 N 相等（`44` `EXP-7` 判準照舊成立）。
+    無法判定的原因有三種（見 `compare_tristate`）：資料未備（客戶裁示）；欄位值不是數值、條件數值不是數值
+    （「大於／小於」，AI 總管延伸）。四欄的欄名（套用前／符合／無法判定）是 AI 總管的落地選擇（`44` 檔尾 7.3.2）。
+    """
+    failure_notes = upstream_failure_notes(dataset, "EXP-7") + list(extra_fail_lines)
     rows = []
-    for rule, before, after in steps:
+    for step in steps:
+        rule, before, after = step[:3]
         effective = rule_is_effective(rule)
+        extra = {}
+        if tristate:
+            extra = {"undet_text": hinted(format_count(step[3])), "_undet": step[3]}
         rows.append(
             {
+                **extra,
                 "condition_text": rule_text(rule),
                 "before_text": hinted(format_count(before)),
                 "after_text": hinted(format_count(after)),
@@ -1569,7 +1832,8 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count):
         empty_kind = EMPTY_SOURCE
 
     detail_lines = [
-        f"最後一列的套用後檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。"
+        (f"最後一列的符合檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。" if tristate
+         else f"最後一列的套用後檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。")
         if rows
         else ("上游取數失敗，本塊不列出任何軌跡列。" if failure_notes else "尚未套用任何條件。"),
         # ⚠️ **登記（`E-12` 還開著的那一半）**：`44` 把「尚未設定條件」這個畫面掛上 `來源缺`
@@ -1604,7 +1868,7 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count):
             else TEXT_NO_CONDITION
         ),
         _rows=rows,
-        column_labels=("條件", "套用前", "套用後"),
+        column_labels=("條件", "套用前", "符合", "無法判定") if tristate else ("條件", "套用前", "套用後"),
         _empty_kind=empty_kind,
         notes=notes,
         detail_lines=detail_lines,
@@ -1630,9 +1894,17 @@ def conclusion_light(*, count, has_rules, read_states):
     return "黃", STATE_OK
 
 
-def _build_exp0(dataset, *, count, has_rules, rules, read_states):
-    """`EXP-0` 篩選結果結論列。"""
+def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lines=None, undet_count=0):
+    """`EXP-0` 篩選結果結論列。
+
+    `extra_fail_lines`（2026-10-13 正式模式第一批；示範模式為 None ⇒ 輸出不變）：
+    `{塊代號: [失敗行]}` —— 不是那一塊來源表的失敗（已存設定讀不到），照樣列出。
+    `undet_count`（客戶 2026-10-13 裁示，正式模式；示範模式恆為 0 ⇒ 輸出不變）：無法判定的檔數。
+    `count` 只算**明確符合**的檔；燈色照 `44` 原規則只看 `count`，無法判定**不影響燈色、絕不給紅燈**；
+    文案在原句後面接「；另有 M 檔無法判定」。
+    """
     tone, state = conclusion_light(count=count, has_rules=has_rules, read_states=read_states)
+    extra = extra_fail_lines or {}
 
     fetch_fail_lines = []
     if tone == "紅":
@@ -1640,7 +1912,8 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states):
         # ⚠️ 這一族是**取數**失敗，不是存檔失敗 —— 放 `fetch_fail_lines`，不放 `error_lines`。
         for code in ("EXP-1", "EXP-2"):
             fetch_fail_lines.extend(
-                f"{code}　{line}" for line in source_error_lines(dataset, code)
+                f"{code}　{line}"
+                for line in source_error_lines(dataset, code) + list(extra.get(code, ()))
             )
         text = "讀到的那兩塊有一塊取數失敗"
     elif not has_rules:
@@ -1649,6 +1922,8 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states):
         text = TEXT_NO_MATCH
     else:
         text = conclusion_text(count)
+    if undet_count and tone != "紅" and has_rules:
+        text += undet_tail(undet_count)
 
     # `44` 空狀態欄逐字：「N 為零 → 文案「目前條件下沒有符合的基金」，並列出目前生效的條件列」。
     # ⚠️ **登記（`E-02`）**：來源欄逐字只授權「只讀 `EXP-2` 的列數與 `EXP-1` 的條件列數」，
@@ -1725,8 +2000,25 @@ def build_page_model(
     save_failed: bool = False,
     visible_columns=_NO_OVERRIDE,
     sort_column=_NO_OVERRIDE,
+    demo_hint: bool = True,
+    saved_only: bool = False,
+    settings_error=None,
+    tristate: bool = False,
+    code_column: bool = False,
 ) -> dict:
     """把假資料 ＋ 使用者當下的勾選組成一份純資料模型。page.py 只負責把它畫出來。
+
+    2026-10-13 正式模式第一批新增五個參數，**預設值全部等於加參數之前的行為**（示範入口與既有測試輸出逐字不變）：
+    - `demo_hint`：False ＝ 不接「（示意）」字尾（正式資料不加示意；體例照 hld 2026-10-02）。
+    - `saved_only`：True ＝ **只有成功儲存的設定才生效**（客戶 2026-10-13 裁示）—— 篩選、欄位、排序一律吃
+      `dataset["user_setting"]` 的已存值；`draft_rules` 只決定 `EXP-1` 輸入列畫成什麼，不進 `EXP-2`／`EXP-7`／`EXP-0`。
+      （這一條把下面那段「本檔取當下值」的登記在正式模式下結掉；示範模式照舊取當下值。）
+    - `settings_error`：已存設定讀不到時的訊息原文（已遮蔽）。讀不到 ≠ 沒設定：相關各塊寫失敗行、為 `系統錯誤`，
+      不印「尚未設定條件」。
+    - 〔已撤〕`unspecified_as_error`：條件撞到 `UnspecifiedComparison` 時改寫成「計算失敗」與結論燈的紅
+      → `tristate`（客戶 2026-10-13 裁示；有意識的政策變更，不是漏刪）：逐檔判定符合／不符合／無法判定，
+      無法判定的檔照樣列出、不算符合、不排除、不亮紅燈（`apply_rules_tristate`）。示範模式照舊 `raise`。
+    - `code_column`：`EXP-2` 表頭最前面多一欄 `fund_code`（登記見 `_build_exp2`）。
 
     ⚠️ **`draft_rules` 是「欄位的當下內容」，`dataset` 裡的 `exp_filter_rules` 是「已存值」。**
     `44` `EXP-1` 塊下方就地登記過：「條件的『當下值』與『已存值』哪一個餵 `EXP-2`，本塊沒有寫」，
@@ -1734,17 +2026,68 @@ def build_page_model(
     「新增一列但數值留空，該列尾端出現 `⬜ 資料未備：數值未填` 且 `EXP-2` 的列數不因這一列改變」——
     那一句要成立，`EXP-2` 就得看得到還沒存的那一列。
     ⛔ **這是被迫挑的一邊，不是規格**；客戶裁哪一邊，改的只有這一行。畫面上也寫了這件事。
+    → **2026-10-13 狀態更新（不是漏刪）**：客戶已就**正式模式**裁示「只有成功儲存的設定才生效、
+    未儲存的暫存條件不得影響正式結果」（`saved_only=True`）；示範模式不在該裁示射程內，照舊取當下值。
     """
-    rules = tuple(draft_rules) if draft_rules is not None else saved_rules(dataset)
+    token = _HINT_SUFFIX.set(HINT if demo_hint else "")
+    try:
+        return _build_page_model(
+            dataset,
+            draft_rules=draft_rules,
+            compare_checked=compare_checked,
+            watch_checked=watch_checked,
+            viewport_width=viewport_width,
+            save_failed=save_failed,
+            visible_columns=visible_columns,
+            sort_column=sort_column,
+            saved_only=saved_only,
+            settings_error=settings_error,
+            tristate=tristate,
+            code_column=code_column,
+        )
+    finally:
+        _HINT_SUFFIX.reset(token)
+
+
+def _build_page_model(
+    dataset,
+    *,
+    draft_rules,
+    compare_checked,
+    watch_checked,
+    viewport_width,
+    save_failed,
+    visible_columns,
+    sort_column,
+    saved_only,
+    settings_error,
+    tristate,
+    code_column,
+):
+    if saved_only:
+        # 客戶 2026-10-13 裁示：正式結果只吃已存值。讀不到設定 ⇒ 沒有已存值可吃（不是「沒設定」，下面另寫失敗行）。
+        rules = () if settings_error else saved_rules(dataset)
+        field_rules = tuple(draft_rules) if draft_rules is not None else rules
+    else:
+        rules = tuple(draft_rules) if draft_rules is not None else saved_rules(dataset)
+        field_rules = rules
     has_rules = bool(rules)
     compare_checked = tuple(compare_checked)
     watch_checked = tuple(watch_checked)
+    settings_lines = [f"user_setting：{fetch_failed_text(settings_error)}"] if settings_error else []
 
     profiles = list(dataset.get("fund_profile", ()))
-    steps_full = apply_rules(profiles, rules)
-    matched = steps_full[-1][3] if steps_full else (profiles if has_rules else [])
-    if not has_rules:
-        matched = []
+    undet = None
+    if tristate:
+        steps_tri, listed, undet = apply_rules_tristate(profiles, rules)
+        matched = listed if has_rules else []
+        steps_for_exp7 = steps_tri
+    else:
+        steps_full = apply_rules(profiles, rules)
+        matched = steps_full[-1][3] if steps_full else (profiles if has_rules else [])
+        if not has_rules:
+            matched = []
+        steps_for_exp7 = [(rule, before, after) for rule, before, after, _rows in steps_full]
 
     # ⛔ **2026-09-24 第二輪稽核抓到：`EXP-4` 的五個勾選框與排序下拉完全沒接線。**
     #    取消勾「基金名」之後 `EXP-2` 的欄位**完全不變**；選了排序欄位之後，
@@ -1765,8 +2108,10 @@ def build_page_model(
 
     exp1 = _build_exp1(
         dataset,
-        draft_rules=rules,
+        draft_rules=field_rules,
         save_failed_message=save_error(dataset, ("exp_filter_rules",)) if save_failed else None,
+        fail_lines=settings_lines,
+        saved_only=saved_only,
     )
     exp2 = _build_exp2(
         dataset,
@@ -1777,6 +2122,10 @@ def build_page_model(
         compare_checked=compare_checked,
         watch_checked=watch_checked,
         watchlist=watchlist,
+        extra_fail_lines=settings_lines,
+        code_column=code_column,
+        settings_unknown=bool(settings_error),
+        undet=undet,
     )
     exp3 = _build_exp3(
         dataset,
@@ -1793,12 +2142,16 @@ def build_page_model(
             if save_failed
             else None
         ),
+        fail_lines=settings_lines,
+        saved_only=saved_only,
+        code_column=code_column,
     )
     exp5 = _build_exp5(
         dataset,
         watch_checked=watch_checked,
         watchlist=watchlist,
         save_failed_message=save_error(dataset, ("exp_watchlist",)) if save_failed else None,
+        fail_lines=settings_lines,
     )
     exp6 = _build_exp6(dataset, compare_checked=compare_checked)
 
@@ -1806,12 +2159,15 @@ def build_page_model(
     # ⚠️ **取數失敗不把 N 歸零** —— 失敗的那張表在資料層就已經沒有列了（見 `fixtures._dataset`），
     #    所以列數自己會反映它。硬把 N 壓成 0，`EXP-7` 那一行「最後一列的套用後檔數與 `EXP-0` 的 N 相等」
     #    就會在 `nav` 失敗時對不起來（清單照列、只有淨值那幾格是 `⬜`）。
-    count = len(exp2["_rows"])
+    undet_count = sum(1 for row in exp2["_rows"] if undet and row["_fund_code"] in undet)
+    count = len(exp2["_rows"]) - undet_count
     exp7 = _build_exp7(
         dataset,
-        steps=[(rule, before, after) for rule, before, after, _rows in steps_full],
+        steps=steps_for_exp7,
         has_rules=has_rules,
         conclusion_count=count,
+        extra_fail_lines=settings_lines,
+        tristate=tristate,
     )
     exp0 = _build_exp0(
         dataset,
@@ -1820,6 +2176,8 @@ def build_page_model(
         rules=rules,
         # `44` `EXP-0` 來源欄逐字：只讀 `EXP-2` 與 `EXP-1` 這兩塊。
         read_states=(exp1["_state"], exp2["_state"]),
+        extra_fail_lines={"EXP-1": settings_lines},
+        undet_count=undet_count,
     )
 
     blocks = [exp0, exp1, exp2, exp3, exp4, exp5, exp6, exp7]

@@ -268,9 +268,19 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     assert fields["hld_window_start"]["unset_lines"] == [logic.TEXT_UNSET]
     # ~~assert "mkt" not in S.PAGES_READING_SETTINGS~~（2026-10-13 mkt 已列入；「未設定：不出 ★7」改由 exp 鍵測，
     #   exp 頁仍未讀設定。狀態更新，不是漏刪）
-    assert "mkt" in S.PAGES_READING_SETTINGS and "exp" not in S.PAGES_READING_SETTINGS
-    assert fields["exp_watchlist"]["used_by_text"] is None                             # 未設定：不出 ★7
+    # ~~assert "mkt" in S.PAGES_READING_SETTINGS and "exp" not in S.PAGES_READING_SETTINGS~~
+    # ~~assert fields["exp_watchlist"]["used_by_text"] is None                             # 未設定：不出 ★7~~
+    # → 2026-10-13 exp 也列入讀設定的頁（客戶裁示：B 線標的探索正式模式第一批；狀態更新，不是漏刪）：
+    #   五頁的前綴自此全在清單上，exp_ 鍵改印 logic 原行；「未設定：不出 ★7」那條分支沒有真實的鍵可測了，
+    #   改由下方把清單換掉 exp 再組一次頁面來驗（分支本身仍在 `ui_v2/set/live.py`，不讓它變成沒人驗的死角）。
+    assert "mkt" in S.PAGES_READING_SETTINGS and "exp" in S.PAGES_READING_SETTINGS
+    assert fields["exp_watchlist"]["used_by_text"] == "改這個鍵會影響：EXP-5"
     assert fields["exp_watchlist"]["unset_lines"] == [logic.TEXT_UNSET]
+    monkeypatch.setattr(S, "PAGES_READING_SETTINGS", tuple(p for p in S.PAGES_READING_SETTINGS if p != "exp"))
+    _data2, model2 = _page()
+    fields2 = {f["name"]: f for f in _b(model2, "SET-4")["inputs"]}
+    assert fields2["exp_watchlist"]["used_by_text"] is None                            # 未設定：不出 ★7
+    assert fields2["exp_watchlist"]["unset_lines"] == [logic.TEXT_UNSET]
     assert fields["set_max_age_days"]["used_by_text"] == "改這個鍵會影響：SET-1"          # set_ 鍵維持原行
     # ★8 說明行
     assert _b(model, "SET-5")["detail_lines"][-1] == live.TEXT_SET5_NOTE
