@@ -4,7 +4,16 @@ name: "探測：MoneyDJ 基本資料頁真實樣本（只讀，手動／按鈕�
 # `repositories/fund/declared_profile.py::fetch_moneydj_basic_fields` 的解析，以及
 # 「代碼以詞界出現在含『基金名稱』那張表自身文字」能否作為 C2 的身分綁定規則。
 # 開發環境連 MoneyDJ 可能 403，故在 Actions 上取真實回應、寫成報告（含 gzip＋base64 的原始 HTML）。
-# 結構照抄 `fx_obs_date_probe.yml`，只改必要處（名稱、分支、腳本、報告路徑、逾時、無輸入參數）。
+# ~~結構照抄 `fx_obs_date_probe.yml`，只改必要處（名稱、分支、腳本、報告路徑、逾時、無輸入參數）。~~
+# → 2026-10-14 更正（有意識的更正，不是漏刪；依 #961 稽核）：結構照抄 `fx_obs_date_probe.yml`，**註解有刪減**；
+#   改動處為名稱、分支、腳本、報告路徑、逾時、無輸入參數，並拿掉 `PROXY_URL` 環境變數（理由見下）。
+#
+# ⚠️ 連線路徑：`infra.proxy.get_proxy_config()` 只讀 `st.secrets`，Actions 上沒有 secrets.toml →
+#    **不走 NAS 代理，以 GitHub runner IP 直連**。查過 repo 內先例：`weekly_nav_backfill.yml` 等幾支把
+#    `PROXY_URL` 放進環境變數，但經 `infra.proxy` 的取數路徑不讀環境變數；只有 `scripts/fetch_nav_cache.py`
+#    自建 Session 讀它（不經 `infra.proxy`，且目前沒有 workflow 執行它）。沒有先例把環境變數橋接進
+#    `infra.proxy`，故本 workflow 不使用該 secret；報告頂層 `network_path` 寫明「量到的是 runner IP 直連，
+#    與 production 經 NAS 代理的路徑不同」。
 #
 # ⚠️ 只讀：不寫任何試算表、不碰使用者設定、不改正式行為；報告只推到專用分支
 #    `probe/moneydj-basic-results`（**不推 main、不推其他分支、不 force**）。
@@ -25,7 +34,7 @@ name: "探測：MoneyDJ 基本資料頁真實樣本（只讀，手動／按鈕�
 #    ⚠️ 本 workflow 必須先合併進 main，按鈕分支觸發的 run 才會執行 main 上的腳本。
 #
 # 📌 報告大小未實測：每頁原始 HTML 以 gzip＋base64 內嵌，頁數上限為（8 個代碼 ＋ 1 個負控）× 4 個網址；
-#    以第一次真跑為準。
+#    另含 TDCC 3-2 整份清單（gzip＋base64，預估超過 2 MB 時改存精簡版）。以第一次真跑為準。
 on:
   push:
     branches:
@@ -42,9 +51,10 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    # 請求數上限約 9 代碼 ×（4 個原始頁 ＋ 公開函式最多 4 個 MoneyDJ 網址 ＋ 1 個 FundClear）＋ 1 個 TDCC，
-    # 每個請求最長約 20 秒（timeout=20、retries=1），另加每次 1.5 秒間隔；退避冷卻會跳過部分請求。
-    timeout-minutes: 40
+    # 請求數上限約 9 代碼 ×（4 個原始頁 ＋ 1 個 FundClear）＋ 1 個 TDCC；每個請求最長約 20 秒
+    # （timeout=20、retries=1），只在確實要發請求前間隔 1.5 秒。腳本另在 30 分鐘預算內等
+    # unreachable／server_error 冷卻到期（每主機一次）。報告逐代碼覆寫，逾時也留得下已取到的樣本。
+    timeout-minutes: 60
     env:
       RESULT_BRANCH: probe/moneydj-basic-results
       REPORT_PATH: probe_out/moneydj_basic_report.json
@@ -71,10 +81,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run probe
-        env:
-          # 照抄 fx_obs_date_probe.yml；`infra.proxy.get_proxy_config()` 讀的是 `st.secrets`，不讀環境變數，
-          # 報告的 `proxy_used_by_infra` 會如實記錄這次到底有沒有走代理。
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+        # 不傳 PROXY_URL（理由見檔頭「連線路徑」）；報告的 `proxy_used_by_infra` 會如實記錄有沒有走代理。
         run: python scripts/probe_moneydj_basic_page.py --out "$REPORT_PATH"
 
       - name: Commit report to probe/moneydj-basic-results

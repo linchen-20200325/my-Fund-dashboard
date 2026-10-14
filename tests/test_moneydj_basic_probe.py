@@ -11,8 +11,9 @@
 4. 探測步驟之前不得有取碼的 git 子指令；之後只能針對 `$RESULT_BRANCH`。
 5. 推送指令恰好一行，`origin`、無旗標、refspec 恰為 `HEAD:refs/heads/$RESULT_BRANCH`。
 
-另加本 workflow 專屬的三條：沒有 dispatch 輸入參數（代碼寫在腳本裡，不吃使用者輸入）、
-有 `timeout-minutes`、提交報告那一步 `if: always()` 且報告路徑含時間戳與 run id。
+另加本 workflow 專屬的四條：沒有 dispatch 輸入參數（代碼寫在腳本裡，不吃使用者輸入）、
+有 `timeout-minutes`、提交報告那一步 `if: always()` 且報告路徑含時間戳與 run id、
+除提交報告那一步的 `GITHUB_TOKEN` 外不引用任何 secret（沒有先例把 `PROXY_URL` 橋接進 `infra.proxy`）。
 
 ⚠️ 守不到什麼：與 fx 那支相同（見該檔「守不到什麼」一段，本檔不重抄）——
 push 事件執行的是被推那顆 commit 裡的 workflow 檔本身；指令檢查只是逐行文字斷詞；
@@ -243,6 +244,18 @@ def test_probe_step_runs_script_with_report_path(wf):
     assert runs == [f'python {_PROBE_SCRIPT} --out "$REPORT_PATH"']
 
 
+def test_only_github_token_secret_and_only_in_commit_step(wf):
+    """沒有先例把環境變數橋接進 infra.proxy → 不使用 PROXY_URL 等任何其他 secret（#961 稽核第 1 項）。"""
+    for job_name, job in wf["jobs"].items():
+        assert "secrets." not in repr(job.get("env") or {}), f"{job_name} 的 job env 不得引用 secret"
+    for _, _, s in _steps(wf):
+        text = repr(s.get("env") or {}) + repr(s.get("with") or {}) + (s.get("run") or "")
+        found = re.findall(r"secrets\.([A-Za-z0-9_]+)", text)
+        if found:
+            assert found == ["GITHUB_TOKEN"] and "$RESULT_BRANCH" in (s.get("run") or ""), (
+                f"只有提交報告那一步可用 GITHUB_TOKEN，實際 {s.get('name')}: {found}")
+
+
 # ═════════════════════════════════════════════════════════════════════
 # 第二部分：探測腳本
 # ═════════════════════════════════════════════════════════════════════
@@ -253,6 +266,7 @@ probe = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probe)
 
 _CODE = "JFZN3"
+_CODE2 = "TLZF9"
 _NEG = probe.make_negative_control(4242)
 
 
@@ -281,25 +295,36 @@ class _Resp:
         self.encoding = "big5"
 
 
-def test_analyze_表內有代碼_綁定成立_最高經理費不讀():
+class _BadTextResp(_Resp):
+    @property
+    def text(self):
+        raise UnicodeDecodeError("big5", b"\xff", 0, 1, "壞位元組")
+
+    @text.setter
+    def text(self, v):
+        pass
+
+
+# ── 解析：表自身文字與候選表 ─────────────────────────────────────────
+
+def test_analyze_表內有代碼_兩版綁定皆成立_最高經理費不讀():
     out = probe.analyze_html(_page(_ROWS_WITH_CODE), _CODE)
     assert out["fields"] == {"基金名稱": "測試環球基金A", "計價幣別": "美元",
                              "配息頻率": "月配", "成立日期": "2001/02/03"}
     nt = out["name_table"]
     assert nt["index"] == 0 and nt["consistent_with_whole_page_parse"] is True
-    assert nt["table_text_mentions_code"] is True and nt["own_rows_text_mentions_code"] is True
-    assert nt["probe_codes_mentioned"] == [_CODE]
-    assert out["would_be_ok_now"] is True and out["would_be_ok_with_table_binding"] is True
+    assert nt["mentions_own"] is True and nt["mentions_incl_nested"] is True
+    assert out["would_be_ok_now"] is True
+    assert out["would_be_ok_with_table_binding_own"] is True
+    assert out["would_be_ok_with_table_binding_incl_nested"] is True
     assert out["title_tag_html"] == "<title>基本資料</title>"
 
 
-def test_analyze_代碼只在表外_現行判ok但綁定規則不成立():
+def test_analyze_代碼只在表外_現行判ok但綁定不成立():
     out = probe.analyze_html(_page(_ROWS_NO_CODE, outside=f"相關基金 {_CODE}"), _CODE)
-    assert out["page_text_mentions_code"] is True
-    assert out["name_table"]["table_text_mentions_code"] is False
-    assert out["would_be_ok_now"] is True
-    assert out["would_be_ok_with_table_binding"] is False
-    assert out["page_text_code_snippets"] and _CODE in out["page_text_code_snippets"][0]
+    assert out["page_text_mentions_code"] is True and out["would_be_ok_now"] is True
+    assert out["would_be_ok_with_table_binding_own"] is False
+    assert out["would_be_ok_with_table_binding_incl_nested"] is False
 
 
 def test_analyze_詞界_長代碼不算提到短代碼():
@@ -307,7 +332,38 @@ def test_analyze_詞界_長代碼不算提到短代碼():
     assert out["page_text_mentions_code"] is False
 
 
-def test_analyze_巢狀表_選內層且與整頁解析一致():
+@pytest.mark.parametrize("where", ["th", "caption"])
+def test_自身文字含th與caption(where):
+    extra = (f"<caption>代碼 {_CODE}</caption>" if where == "caption"
+             else f"<tr><th>代碼 {_CODE}</th></tr>")
+    html = ("<html><body><table>" + extra + _ROWS_NO_CODE + "</table></body></html>")
+    nt = probe.analyze_html(html, _CODE)["name_table"]
+    assert nt["mentions_own"] is True and nt["mentions_incl_nested"] is True
+    assert nt["own_text_is_subset"] is True
+
+
+@pytest.mark.parametrize("hidden", [f"<!-- {_CODE} -->", f"<script>var c='{_CODE}';</script>"])
+def test_自身文字不含註解與script(hidden):
+    html = _page(_ROWS_NO_CODE.replace("另一檔基金", "另一檔基金" + hidden))
+    out = probe.analyze_html(html, _CODE)
+    assert out["name_table"]["mentions_own"] is False
+    assert out["name_table"]["mentions_incl_nested"] is False
+    assert out["would_be_ok_with_table_binding_own"] is False
+
+
+def test_代碼只在巢狀表_自身版不成立_含巢狀版成立():
+    html = _page("<tr><td>基金名稱</td><td>甲基金</td></tr>"
+                 f"<tr><td>附註</td><td><table><tr><td>{_CODE}</td></tr></table></td></tr>")
+    out = probe.analyze_html(html, _CODE)
+    nt = out["name_table"]
+    assert nt["contains_nested_table"] is True
+    assert nt["mentions_incl_nested"] is True and nt["mentions_own"] is False
+    assert nt["own_text_is_subset"] is True
+    assert out["would_be_ok_with_table_binding_own"] is False
+    assert out["would_be_ok_with_table_binding_incl_nested"] is True
+
+
+def test_巢狀表_選內層且與整頁解析一致():
     inner = f"<table>{_ROWS_NO_CODE}</table>"
     html = ("<html><body><table><tr><td>" + inner + "</td></tr></table>"
             "<table><tr><td>外表無關</td></tr></table></body></html>")
@@ -316,20 +372,26 @@ def test_analyze_巢狀表_選內層且與整頁解析一致():
     assert nt["consistent_with_whole_page_parse"] is True
 
 
-def test_analyze_自身列不含巢狀表文字():
-    html = _page("<tr><td>基金名稱</td><td>甲基金</td></tr>"
-                 f"<tr><td>附註</td><td><table><tr><td>{_CODE}</td></tr></table></td></tr>")
-    nt = probe.analyze_html(html, _CODE)["name_table"]
-    assert nt["contains_nested_table"] is True
-    assert nt["table_text_mentions_code"] is True
-    assert nt["own_rows_text_mentions_code"] is False
+def test_候選表計數_且取第一張而非最後一張():
+    """兩張含「基金名稱」的表：第一張沒有代碼、第二張有。正式函式取第一張 → 綁定不成立。
+    （突變「取最後一張表」會讓本測試轉紅。）"""
+    html = ("<html><body>" + f"<table>{_ROWS_NO_CODE}</table>" + f"<table>{_ROWS_WITH_CODE}</table>"
+            + "</body></html>")
+    out = probe.analyze_html(html, _CODE)
+    assert out["name_table_candidate_count"] == 2
+    assert [c["mentions_own"] for c in out["name_table_candidates"]] == [False, True]
+    assert out["name_table"]["index"] == 0
+    assert out["name_table"]["fields"]["基金名稱"] == "另一檔基金" == out["fields"]["基金名稱"]
+    assert out["would_be_ok_with_table_binding_own"] is False
 
 
-def test_analyze_沒有基金名稱表():
+def test_沒有基金名稱表():
     out = probe.analyze_html("<html><body>系統維護中 基金 淨值</body></html>", _CODE)
-    assert out["fields"] is None and out["name_table"] is None
-    assert out["would_be_ok_now"] is False and out["would_be_ok_with_table_binding"] is False
+    assert out["fields"] is None and out["name_table"] is None and out["name_table_candidate_count"] == 0
+    assert out["would_be_ok_now"] is False and out["would_be_ok_with_table_binding_own"] is False
 
+
+# ── 負控與順序 ─────────────────────────────────────────────────────
 
 def test_負控規則_由執行期生成且符合正式代碼形狀():
     from repositories.fund import declared_profile as dp
@@ -338,142 +400,267 @@ def test_負控規則_由執行期生成且符合正式代碼形狀():
     assert _NEG not in probe.PROBE_CODES
 
 
+def test_負控排第二():
+    assert probe.order_codes(["A1", "B2", "C3"], _NEG) == ["A1", _NEG, "B2", "C3"]
+    assert probe.order_codes([], _NEG) == [_NEG]
+
+
+# ── run：假網路、假時鐘 ─────────────────────────────────────────────
+
 def _urls(code):
     return [(h, p, f"https://{h}/funddj/yp/{p}.djhtm?a={code}")
             for p in ("yp011001", "yp011000") for h in ("tcb", "www")]
 
 
-def _run(fetch_map, *, cool=(), public_fns=None, tdcc=None, sleeps=None, raise_on=()):
-    calls = []
-    state = {"kind": ""}
+class _World:
+    """假網路＋假時鐘＋假退避：`cool[host] = (到期時刻, 分類)`。"""
 
-    def fetcher(url, timeout, retries):
-        calls.append((url, timeout, retries))
-        if url in raise_on:
+    def __init__(self, fetch_map=None, cool=None, raise_on=()):
+        self.t = 0.0
+        self.fetch_map = fetch_map or {}
+        self.cool = dict(cool or {})
+        self.raise_on = set(raise_on)
+        self.calls, self.sleeps = [], []
+        self.kind = ""
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.t += s
+
+    def backoff(self, url):
+        host = probe._host(url)
+        until, kind = self.cool.get(host, (0.0, ""))
+        return (self.t < until, max(0.0, until - self.t), kind if self.t < until else "")
+
+    def fetch(self, url, timeout, retries):
+        self.calls.append((url, timeout, retries))
+        if url in self.raise_on:
             raise RuntimeError("連線炸了 " + url)
-        v = fetch_map.get(url)
+        v = self.fetch_map.get(url)
         if isinstance(v, tuple):          # (None, 分類, 印出的 log)
             print(v[2])
-            state["kind"] = v[1]
+            self.kind = v[1]
             return None
-        state["kind"] = ""
+        self.kind = ""
         return v
 
-    def pop():
-        k, state["kind"] = state["kind"], ""
+    def pop(self):
+        k, self.kind = self.kind, ""
         return k
 
-    report = probe.run(
-        [_CODE], url_builder=_urls, fetcher=fetcher, pop_fail_kind=pop,
-        backoff_check=lambda u: (u in cool, "blocked" if u in cool else ""),
-        public_fns=public_fns if public_fns is not None else {"f": lambda c: {"status": "failed", "code": c}},
-        tdcc_list_getter=lambda: tdcc, backoff_state_getter=lambda: [],
-        sleep_fn=(sleeps.append if sleeps is not None else (lambda s: None)),
-        negative_control=_NEG)
-    return report, calls
+
+def _run(world, *, codes=(_CODE,), public_specs=(), tdcc=None, on_progress=None, budget=1800):
+    return probe.run(list(codes), url_builder=_urls, fetcher=world.fetch, pop_fail_kind=world.pop,
+                     backoff_check=world.backoff, public_specs=list(public_specs),
+                     tdcc_list_getter=lambda: tdcc, backoff_state_getter=lambda: [],
+                     sleep_fn=world.sleep, clock=world.clock, wait_budget_sec=budget,
+                     negative_control=_NEG, on_progress=on_progress)
 
 
-def test_run_逐網址記錄_成功失敗冷卻例外皆照錄():
-    u = [x[2] for x in _urls(_CODE)]
+def test_run_先廣後深_負控第二():
+    w = _World()
+    _run(w, codes=(_CODE, _CODE2))
+    got = [c[0] for c in w.calls]
+    first = [u for c in (_CODE, _NEG, _CODE2) for (_h, p, u) in _urls(c) if p == "yp011001"]
+    second = [u for c in (_CODE, _NEG, _CODE2) for (_h, p, u) in _urls(c) if p == "yp011000"]
+    assert got == first + second
+    assert all(c[1:] == (20, 1) for c in w.calls)
+
+
+def test_run_逐網址記錄_成功失敗例外皆照錄():
+    u = {(h, p): url for h, p, url in _urls(_CODE)}
     html = _page(_ROWS_WITH_CODE)
-    fmap = {u[0]: (None, "not_found", "[proxy] 全部嘗試失敗（last_seen_status=404, perr=0, block=0, tmo=0）：x"),
-            u[1]: _Resp(html, url="https://www.moneydj.com/final")}
-    report, calls = _run(fmap, cool={u[2]}, raise_on={u[3]})
-    recs = report["pages"][_CODE]
-    assert [r["outcome"] for r in recs] == ["http_failed", "fetched", "cooldown", "exception"]
-    assert recs[0]["http_status"] == 404 and recs[0]["http_status_source"] == "fetch_log:last_seen_status"
-    assert recs[0]["fail_kind"] == "not_found" and recs[0]["fetch_log"]
-    assert recs[1]["http_status"] == 200 and recs[1]["final_url"] == "https://www.moneydj.com/final"
-    assert recs[1]["parse"]["would_be_ok_with_table_binding"] is True
-    raw = gzip.decompress(base64.b64decode(recs[1]["raw_html_gzip_b64"]))
-    assert raw == html.encode("big5", errors="replace")
-    assert recs[1]["content_length_bytes"] == len(raw)
-    assert recs[2]["cooldown_origin_kind"] == "blocked"
-    assert recs[3]["error"]["type"] == "RuntimeError" and "連線炸了" in recs[3]["error"]["message"]
-    # 冷卻中的網址不發請求；呼叫參數照 declared_profile（timeout=20, retries=1）
-    assert u[2] not in [c[0] for c in calls]
-    assert all(c[1:] == (20, 1) for c in calls)
-    # 負控同樣探測，且記錄生成規則
-    assert _NEG in report["pages"]
-    assert report["negative_control"] == {"code": _NEG, "rule": probe.NEGATIVE_CONTROL_RULE}
+    w = _World(fetch_map={u[("tcb", "yp011001")]: (None, "not_found",
+                                                   "[proxy] 全部嘗試失敗（last_seen_status=404, perr=0）：x"),
+                          u[("www", "yp011001")]: _Resp(html, url="https://www.moneydj.com/final"),
+                          u[("www", "yp011000")]: _BadTextResp(html)},
+               raise_on={u[("tcb", "yp011000")]})
+    report = _run(w)
+    recs = {(r["host"], r["page_type"]): r for r in report["pages"][_CODE]}
+    r404 = recs[("tcb", "yp011001")]
+    assert r404["outcome"] == "http_failed" and r404["http_status"] == 404
+    assert r404["http_status_source"] == "fetch_log:last_seen_status" and r404["fail_kind"] == "not_found"
+    ok = recs[("www", "yp011001")]
+    assert ok["outcome"] == "fetched" and ok["http_status"] == 200
+    assert ok["final_url"] == "https://www.moneydj.com/final" and ok["round"] == 1
+    raw = gzip.decompress(base64.b64decode(ok["raw_html_gzip_b64"]))
+    assert raw == html.encode("big5", errors="replace") and ok["content_length_bytes"] == len(raw)
+    boom = recs[("tcb", "yp011000")]
+    assert boom["outcome"] == "exception" and boom["error"]["type"] == "RuntimeError"
+    bad = recs[("www", "yp011000")]
+    assert bad["outcome"] == "exception" and bad["error"]["type"] == "UnicodeDecodeError"
+    assert report["summary"]["fetched_page_count_real"] == 1
+    assert report["negative_control"]["code"] == _NEG and report["complete"] is True
+    assert "runner IP 直連" in report["network_path"]
 
 
-def test_run_只在真的發請求前sleep_冷卻不sleep():
-    sleeps = []
-    cool = {x[2] for c in (_CODE, _NEG) for x in _urls(c)}
-    report, calls = _run({}, cool=cool, public_fns={}, sleeps=sleeps)
-    assert calls == [] and sleeps == []
+def test_run_可等的冷卻_等到期後續取_並記錄():
+    w = _World(cool={"tcb": (100.0, "unreachable")})
+    report = _run(w)
+    tcb = [r for r in report["pages"][_CODE] if r["host"] == "tcb"]
+    assert [r["outcome"] for r in tcb] == ["empty_response", "empty_response"]
+    waited = [x for x in report["waits"] if x["waited_sec"] is not None]
+    assert len(waited) == 1 and waited[0]["host"] == "tcb" and waited[0]["kind"] == "unreachable"
+    assert waited[0]["after"]["still_cooling"] is False
+    assert waited[0]["waited_sec"] == pytest.approx(100.0 + probe.WAIT_PAD_SEC)
 
 
-def test_run_第一個請求不sleep_之後每個請求前sleep():
-    sleeps = []
-    report, calls = _run({}, public_fns={}, sleeps=sleeps)
-    assert len(calls) == 8 and sleeps == [probe.SLEEP_SEC] * 7
+def test_run_blocked不等_每主機只等一次_超預算不等():
+    w = _World(cool={"tcb": (10_000.0, "blocked")})
+    report = _run(w)
+    assert all(r["outcome"] == "cooldown" for r in report["pages"][_CODE] if r["host"] == "tcb")
+    assert all(x["waited_sec"] is None and "blocked" in x["skip_reason"] for x in report["waits"])
+    assert not any(c[0].startswith("https://tcb/") for c in w.calls)
+
+    w2 = _World(cool={"tcb": (5_000.0, "server_error")})
+    r2 = _run(w2, budget=60)
+    assert all(x["waited_sec"] is None and x["skip_reason"] == "超過等待預算" for x in r2["waits"])
 
 
-def test_run_公開函式例外不中止():
+def test_run_同一主機第二次冷卻不再等():
+    w = _World()
+
+    def fetch(url, timeout, retries):
+        w.calls.append((url, timeout, retries))
+        if url.startswith("https://tcb/"):     # 每次失敗都讓 tcb 再冷卻 50 秒
+            w.cool["tcb"] = (w.t + 50.0, "unreachable")
+        return None
+
+    w.fetch = fetch
+    report = _run(w)
+    tcb_waits = [x for x in report["waits"] if x["host"] == "tcb"]
+    assert [x["waited_sec"] is not None for x in tcb_waits][:1] == [True]
+    assert any(x["skip_reason"] == "此主機已等過一次" for x in tcb_waits)
+
+
+def test_run_只在確實發請求前sleep():
+    w = _World(cool={"tcb": (10_000.0, "blocked"), "www": (10_000.0, "blocked")})
+    _run(w)
+    assert w.calls == [] and w.sleeps == []
+    w2 = _World()
+    _run(w2)
+    assert len(w2.calls) == 8 and w2.sleeps == [probe.SLEEP_SEC] * 7
+
+
+def test_預設公開呼叫不含moneydj():
+    from repositories.fund import declared_profile as dp
+    names = [s[0] for s in probe._default_public_specs(dp)]
+    assert names == ["fetch_tdcc_listing", "fetch_fundclear_declared_ccy"]
+
+
+def test_run_公開函式_例外不中止_不發請求時不sleep():
     def boom(code):
         raise ValueError("壞了")
-    report, _ = _run({}, public_fns={"fetch_moneydj_basic_fields": boom,
-                                     "fetch_tdcc_listing": lambda c: {"status": "not_listed"}})
+    specs = [("fetch_tdcc_listing", lambda c: {"status": "not_listed"}, lambda c: "https://tdcc/x",
+              lambda c: False),
+             ("fetch_fundclear_declared_ccy", boom, lambda c: f"https://fc/x?FundCode={c}", lambda c: True)]
+    w = _World(cool={"tcb": (10_000.0, "blocked"), "www": (10_000.0, "blocked")})
+    report = _run(w, public_specs=specs)
     pc = report["public_calls"][_CODE]
-    assert pc["fetch_moneydj_basic_fields"]["exception"]["type"] == "ValueError"
+    assert pc["fetch_fundclear_declared_ccy"]["exception"]["type"] == "ValueError"
     assert pc["fetch_tdcc_listing"]["result"] == {"status": "not_listed"}
-    assert report["summary"][_CODE]["public_status"] == {
-        "fetch_moneydj_basic_fields": "exception", "fetch_tdcc_listing": "not_listed"}
+    # 頁面全冷卻 → 第一個真正發請求的是 FundClear（不 sleep），負控的 FundClear 前 sleep 一次
+    assert w.sleeps == [probe.SLEEP_SEC]
+    assert report["summary"]["per_code"][_CODE]["public_status"] == {
+        "fetch_tdcc_listing": "not_listed", "fetch_fundclear_declared_ccy": "exception"}
 
 
-def test_tdcc_只存相關列_欄名與總筆數():
+# ── TDCC ───────────────────────────────────────────────────────────
+
+def test_tdcc_比中規則與正式函式相同_只看第一個非空代碼欄():
+    from repositories.fund import declared_profile as dp
     data = [{"基金代碼": _CODE, "基金名稱": "甲", "計價幣別": "美元"},
-            {"境外基金代碼": "XX1", "基金名稱": f"乙 {_CODE} 相關", "計價幣別": "歐元"},
-            {"基金代碼": "ZZ9", "基金名稱": "丙", "其他": None},
+            {"基金代碼": "OTHER1", "境外基金代碼": _CODE, "基金名稱": "乙"},
+            {"基金代碼": "", "境外基金代碼": _CODE.lower(), "基金名稱": "丙"},
+            {"基金名稱": f"丁 {_CODE} 相關"},
             "不是 dict"]
-    ext = probe.tdcc_listing_extract(data, [_CODE])
-    assert ext["total_rows"] == 4 and ext["dict_rows"] == 3 and ext["non_dict_rows"] == 1
-    assert ext["columns"] == sorted({"基金代碼", "境外基金代碼", "基金名稱", "計價幣別", "其他"})
-    assert ext["rows_matching_code_keys"][_CODE] == [data[0]]
-    assert ext["rows_mentioning_code_any_field"][_CODE]["count"] == 2
-    assert probe.tdcc_listing_extract(None, [_CODE])["available"] is False
+    ext = probe.tdcc_listing_extract(data, [_CODE], code_keys=tuple(dp._TDCC_CODE_KEYS))
+    assert ext["total_rows"] == 5 and ext["dict_rows"] == 4 and ext["non_dict_rows"] == 1
+    got = [(m["code_key"], m["row"]["基金名稱"]) for m in ext["rows_matching_like_declared_profile"][_CODE]]
+    assert got == [("基金代碼", "甲"), ("境外基金代碼", "丙")]
+    assert ext["rows_mentioning_code_any_field"][_CODE]["count"] == 4
+    full = ext["full_listing"]
+    assert full["form"] == "full_json_gzip_b64"
+    assert json.loads(gzip.decompress(base64.b64decode(full["data"]))) == data
 
 
-def _main_kwargs(**over):
-    kw = dict(url_builder=lambda c: [], fetcher=lambda *a, **k: None, pop_fail_kind=lambda: "",
-              backoff_check=lambda u: (False, ""), public_fns={},
-              tdcc_list_getter=lambda: None, backoff_state_getter=lambda: [],
-              sleep_fn=lambda s: None, negative_control=_NEG)
+def test_tdcc_太大改存精簡版_空快取寫明出處():
+    data = [{"基金代碼": f"C{i}", "基金名稱": f"名{i}", "計價幣別": "美元", "備註": "x" * 50} for i in range(50)]
+    ext = probe.tdcc_listing_extract(data, [_CODE], full_max_b64=10)
+    full = ext["full_listing"]
+    assert full["form"] == "slim_code_and_name_gzip_b64"
+    slim = json.loads(gzip.decompress(base64.b64decode(full["data"])))
+    assert slim[0] == {"基金代碼": "C0", "境外基金代碼": None, "基金名稱": "名0"}
+    none = probe.tdcc_listing_extract(None, [_CODE])
+    assert none["available"] is False and "public_calls" in none["note"]
+
+
+# ── main：退出碼、嚴格 JSON、逐步寫出 ──────────────────────────────
+
+def _main_kwargs(world, **over):
+    kw = dict(url_builder=_urls, fetcher=world.fetch, pop_fail_kind=world.pop, backoff_check=world.backoff,
+              public_specs=[], tdcc_list_getter=lambda: None, backoff_state_getter=lambda: [],
+              sleep_fn=world.sleep, clock=world.clock, negative_control=_NEG)
     kw.update(over)
     return kw
 
 
-def test_main_嚴格JSON_且無樣本時退出碼1(tmp_path):
+def test_main_嚴格JSON_無樣本時退出碼1(tmp_path):
     out = tmp_path / "r.json"
-    rc = probe.main(["--out", str(out)], **_main_kwargs(
-        public_fns={"f": lambda c: {"status": "failed", "x": float("nan")}}))
+    w = _World()
+    specs = [("f", lambda c: {"status": "failed", "x": float("nan")}, lambda c: "https://f/x", lambda c: False)]
+    rc = probe.main(["--out", str(out)], **_main_kwargs(w, public_specs=specs))
     assert rc == 1
     text = out.read_text(encoding="utf-8")
     data = json.loads(text)
-    assert "NaN" not in text
+    assert "NaN" not in text and data["complete"] is True
     assert data["public_calls"][probe.PROBE_CODES[0]]["f"]["result"]["x"] is None
-    assert data["negative_control"]["rule"] == probe.NEGATIVE_CONTROL_RULE
 
 
-def test_main_有樣本時退出碼0(tmp_path):
+def test_main_只有負控取到頁面時退出碼1(tmp_path):
+    out = tmp_path / "r.json"
+    html = _page(_ROWS_NO_CODE)
+    w = _World(fetch_map={u: _Resp(html) for (_h, _p, u) in _urls(_NEG)})
+    rc = probe.main(["--out", str(out)], **_main_kwargs(w))
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["summary"]["fetched_page_count_negative_control"] == 4
+    assert data["summary"]["fetched_page_count_real"] == 0 and rc == 1
+
+
+def test_main_實際代碼有樣本時退出碼0(tmp_path):
     out = tmp_path / "r.json"
     html = _page(_ROWS_WITH_CODE)
-    rc = probe.main(["--out", str(out)], **_main_kwargs(
-        url_builder=lambda c: [("www", "yp011001", f"https://www/x?a={c}")],
-        fetcher=lambda url, timeout, retries: _Resp(html)))
-    assert rc == 0
-    n_codes = len(probe.PROBE_CODES) + 1
-    assert json.loads(out.read_text(encoding="utf-8"))["summary"]["fetched_page_count"] == n_codes
+    w = _World(fetch_map={u: _Resp(html) for (_h, _p, u) in _urls(probe.PROBE_CODES[0])})
+    assert probe.main(["--out", str(out)], **_main_kwargs(w)) == 0
 
 
 def test_main_寫不出嚴格JSON時保底寬鬆寫出並標記(tmp_path):
     out = tmp_path / "r.json"
-    rc = probe.main(["--out", str(out)], **_main_kwargs(
-        public_fns={"f": lambda c: {"status": "ok", "bad": {float("nan"): 1}}}))
-    assert rc == 1
+    w = _World()
+    specs = [("f", lambda c: {"status": "ok", "bad": {float("nan"): 1}}, lambda c: "https://f/x", lambda c: False)]
+    assert probe.main(["--out", str(out)], **_main_kwargs(w, public_specs=specs)) == 1
     assert "strict_json_error" in out.read_text(encoding="utf-8")
+
+
+def test_main_逐步寫出_中途就有未完成版報告(tmp_path):
+    """第二個代碼開始取數時，報告檔必須已經存在且 complete=false（突變「拿掉逐步寫出」會轉紅）。"""
+    out = tmp_path / "r.json"
+    w = _World()
+    seen = []
+    second = probe.order_codes(probe.PROBE_CODES, _NEG)[1]
+
+    def fetch(url, timeout, retries):
+        if url.endswith("=" + second) and not seen:
+            seen.append(json.loads(out.read_text(encoding="utf-8")) if out.exists() else None)
+        return None
+
+    probe.main(["--out", str(out)], **_main_kwargs(w, fetcher=fetch))
+    assert seen and seen[0] is not None, "第二個代碼開始前報告檔應已寫出"
+    assert seen[0]["complete"] is False and seen[0]["pages"][probe.PROBE_CODES[0]]
+    assert json.loads(out.read_text(encoding="utf-8"))["complete"] is True
 
 
 def test_mask_遮蔽代理帳密_查詢字串保留(monkeypatch):
