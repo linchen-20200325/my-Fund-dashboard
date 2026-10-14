@@ -30,7 +30,8 @@ C2 擬以「**代碼以詞界出現在含『基金名稱』那張表自身的文
   網址（依 `_moneydj_urls` 的順序），第二輪再回頭取次要頁型。sleep（預設 1.5 秒）**只在確實要發請求前**。
 - **解析借用正式函式**：`_parse_label_table`、`_mentions_code`、`is_valid_moneydj_page`。
 - 公開函式只呼叫 `fetch_tdcc_listing` 與 `fetch_fundclear_declared_ccy`（各代碼一次，完整回傳照錄）。
-  `fetch_moneydj_basic_fields` **不呼叫**：原始頁那一輪的 `would_be_ok_now` 已涵蓋它的判準，再呼叫會加倍請求。
+  `fetch_moneydj_basic_fields` **不呼叫**：原始頁那一輪的 ~~`would_be_ok_now`~~ `would_be_ok_old_rule`／
+  `would_be_ok_identity_rule` 已涵蓋它的判準（後者不含最終網址檢查，見下），再呼叫會加倍請求。
 - TDCC 3-2：讀 `sources._tdcc_cache`（`fetch_tdcc_listing` 剛取到的同一份，**不另發請求**），比中規則與正式函式相同
   （只看第一個非空代碼欄）；整份清單 gzip＋base64 存進報告，預估超過 2 MB 時改存欄名與每列代碼／名稱欄。
 - 不寫任何試算表、不碰使用者設定、不呼叫任何寫入函式。唯一的輸出是 `--out` 指定的 JSON 檔。
@@ -59,8 +60,13 @@ C2 擬以「**代碼以詞界出現在含『基金名稱』那張表自身的文
 - `name_table`：候選中的第一張（＝ `_parse_label_table` 對整頁選中的那一張）。
   `consistent_with_whole_page_parse` **依構造恆真**（`_parse_label_table` 對每張表各自從空的狀態開始，逐張餵與整頁餵
   選中同一張）——它只防「正式函式的呼叫方式／內部選表規則」日後漂移，不是一項發現；
-- `would_be_ok_now`：正式函式現行條件；`would_be_ok_with_table_binding_own`／`..._incl_nested`：
-  改成 C2 擬議規則（代碼須出現在該表自身文字／含巢狀表文字）時會不會判 `ok`。
+- ~~`would_be_ok_now`：正式函式現行條件；~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管）：改名 `would_be_ok_old_rule` ——
+  它算的是**舊**判準（名稱非空＋頁面可見文字提到代碼），正式函式已改用身分判準（docs/v2/49 第 8 節 (aa)），
+  名字說「現在」會誤導；`would_be_ok_with_table_binding_own`／`..._incl_nested`：
+  改成 C2 擬議規則（代碼須出現在該表自身文字／含巢狀表文字）時會不會判 `ok`（同屬已推翻的舊擬議，照實保留）。
+- `identity_rule`（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管） 新增）：`declared_profile._identify_name_table` 對整頁的結果（`problem`、含「基金名稱」
+  標籤的表張數、其中非空張數）；`would_be_ok_identity_rule`＝`problem` 為 None。⚠️ **不含**正式函式的最終網址檢查
+  （本腳本分析的是存下來的 HTML，最終網址另記在每頁的 `final_url`／`redirect_history`）。
 
 CLI
 ===
@@ -301,6 +307,9 @@ def analyze_html(html: str, code: str, probe_codes=(), dp=None) -> dict:
                                                       and chosen["label_conflicts"] == conflicts)
     name_ok = bool(fields is not None and fields.get(dp._NAME_LABEL))
     nt = chosen or {}
+    _ident = dp._identify_name_table(soup)
+    identity = {"problem": _ident["problem"], "name_table_count": _ident["name_table_count"],
+                "populated_name_table_count": _ident["populated_name_table_count"]}
     return {
         "fields": fields,
         "label_conflicts": conflicts,
@@ -314,7 +323,10 @@ def analyze_html(html: str, code: str, probe_codes=(), dp=None) -> dict:
         "name_table_candidates": candidates[:NAME_TABLE_CANDIDATES_MAX],
         "name_table_candidates_truncated": len(candidates) > NAME_TABLE_CANDIDATES_MAX,
         "name_table": chosen,
-        "would_be_ok_now": bool(name_ok and page_mentions),
+        # ~~"would_be_ok_now"~~ → 改名（舊判準，見檔頭）
+        "would_be_ok_old_rule": bool(name_ok and page_mentions),
+        "identity_rule": identity,
+        "would_be_ok_identity_rule": identity["problem"] is None,
         "would_be_ok_with_table_binding_own": bool(name_ok and nt.get("mentions_own")),
         "would_be_ok_with_table_binding_incl_nested": bool(name_ok and nt.get("mentions_incl_nested")),
     }
@@ -684,7 +696,8 @@ def summarize(report: dict) -> dict:
                 "page_mentions": p.get("page_text_mentions_code"),
                 "table_mentions_own": nt.get("mentions_own"),
                 "table_mentions_incl_nested": nt.get("mentions_incl_nested"),
-                "would_be_ok_now": p.get("would_be_ok_now"),
+                "would_be_ok_old_rule": p.get("would_be_ok_old_rule"),
+                "would_be_ok_identity_rule": p.get("would_be_ok_identity_rule"),
                 "would_be_ok_with_table_binding_own": p.get("would_be_ok_with_table_binding_own"),
                 "would_be_ok_with_table_binding_incl_nested": p.get("would_be_ok_with_table_binding_incl_nested"),
             })

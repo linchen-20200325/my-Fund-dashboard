@@ -507,15 +507,24 @@ def test_analyze_表內有代碼_兩版綁定皆成立_最高經理費不讀():
     nt = out["name_table"]
     assert nt["index"] == 0 and nt["consistent_with_whole_page_parse"] is True
     assert nt["mentions_own"] is True and nt["mentions_incl_nested"] is True
-    assert out["would_be_ok_now"] is True
+    assert out["would_be_ok_old_rule"] is True
     assert out["would_be_ok_with_table_binding_own"] is True
     assert out["would_be_ok_with_table_binding_incl_nested"] is True
     assert out["title_tag_html"] == "<title>基本資料</title>"
+    # 2026-10-14 #967 修正輪：`would_be_ok_now` 改名 `would_be_ok_old_rule`（舊判準）；另加身分判準欄（不含最終網址檢查）
+    assert out["identity_rule"] == {"problem": None, "name_table_count": 1, "populated_name_table_count": 1}
+    assert out["would_be_ok_identity_rule"] is True
+
+
+def test_analyze_身分判準欄_空殼頁不成立():
+    out = probe.analyze_html("<html><body><p>無資料</p></body></html>", _CODE)
+    assert out["would_be_ok_identity_rule"] is False
+    assert out["identity_rule"]["problem"] == "頁面沒有含「基金名稱」標籤的表"
 
 
 def test_analyze_代碼只在表外_現行判ok但綁定不成立():
     out = probe.analyze_html(_page(_ROWS_NO_CODE, outside=f"相關基金 {_CODE}"), _CODE)
-    assert out["page_text_mentions_code"] is True and out["would_be_ok_now"] is True
+    assert out["page_text_mentions_code"] is True and out["would_be_ok_old_rule"] is True
     assert out["would_be_ok_with_table_binding_own"] is False
     assert out["would_be_ok_with_table_binding_incl_nested"] is False
 
@@ -581,7 +590,7 @@ def test_候選表計數_且取第一張而非最後一張():
 def test_沒有基金名稱表():
     out = probe.analyze_html("<html><body>系統維護中 基金 淨值</body></html>", _CODE)
     assert out["fields"] is None and out["name_table"] is None and out["name_table_candidate_count"] == 0
-    assert out["would_be_ok_now"] is False and out["would_be_ok_with_table_binding_own"] is False
+    assert out["would_be_ok_old_rule"] is False and out["would_be_ok_with_table_binding_own"] is False
 
 
 # ── 負控與順序 ─────────────────────────────────────────────────────
