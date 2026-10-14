@@ -154,10 +154,17 @@ def no_other_l1(monkeypatch):
         monkeypatch.setattr(module, name, _forbid(name))
 
 
+# 2026-10-14：匯率走「前一交易日收盤」語意（客戶裁示），且有最少根數門檻（`FX_MIN_REFERENCE_VOTES`，判讀 A 的 A1）。
+# ~~`USDTWD=X` 兩根（09-23、09-24）~~ 在門檻下整鍵不寫，替身改為 25 個平日（世界協調時間午夜，時區 `Etc/UTC`），
+# 最後一根 09-24（有意識的更正，不是漏刪）。
+_USD_DAYS = [d.date().isoformat() for d in pd.bdate_range(end="2026-09-24", periods=25)]
+
+
 def _ok_table():
     return {
         "^VIX": (_series([16.0, 17.5], ["2026-09-23", "2026-09-24"]), None),
-        "USDTWD=X": (_series([31.2, 31.25], ["2026-09-23", "2026-09-24"], ticker="USDTWD=X"), None),
+        "USDTWD=X": (_series([31.0 + i * 0.01 for i in range(len(_USD_DAYS))], _USD_DAYS, ticker="USDTWD=X"),
+                     None),
     }
 
 
@@ -335,15 +342,22 @@ def test_時間戳落在23點UTC_以交易所時區取當地日期(monkeypatch, 
     → 探測報告證實 Yahoo 匯率日線以倫敦午夜為界：`2026-09-23 23:00 UTC` ＝ 倫敦（夏令）09-24 00:00，
     這一根代表 09-24。新規則取**來源自報的交易所時區**（`Europe/London`）的當地日期 → `2026-09-24`。
     閘門 `FX_OBS_DATE_RULE_VERIFIED` 仍為 False（待重跑探測確認），本條以 fixture 打開它來測規則本身。
+    → 2026-10-14（客戶裁示「匯率採『前一交易日收盤』語意與日期」；有意識的更正，不是漏刪）：
+    ~~這一根的觀測日是 `2026-09-24`~~ —— 09-24 是**日 K 日期**（交易所時區取日，規則不變）；外匯的觀測日再取
+    它的前一個平日 ⇒ `2026-09-23`。另因最少根數門檻（A1），單根不寫，改以 25 根同形狀的倫敦 00:00 平日根驗。
     """
     table = _ok_table()
-    table["USDTWD=X"] = (_series([31.2], [pd.Timestamp("2026-09-23 23:00:00")],
+    stamps = [pd.Timestamp(d) - pd.Timedelta(hours=1)
+              for d in pd.bdate_range(end="2026-09-24", periods=25)]   # 夏令：倫敦 00:00 ＝ UTC 前一天 23:00
+    assert stamps[-1] == pd.Timestamp("2026-09-23 23:00:00")
+    table["USDTWD=X"] = (_series([31.2 + i * 0.01 for i in range(25)], stamps,
                                  ticker="USDTWD=X", exchange_tz="Europe/London"), None)
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", _stub_yf(table))
-    (row,) = [r for r in mi.build_market_indicator_table()["rows"]
-              if r["indicator_key"] == "fx_twd_per_usd"]
-    assert row["obs_date"] == "2026-09-24"
-    assert row["release_date"] == "2026-09-24"
+    fx = [r for r in mi.build_market_indicator_table()["rows"] if r["indicator_key"] == "fx_twd_per_usd"]
+    row = fx[-1]
+    assert len(fx) == 25
+    assert row["obs_date"] == "2026-09-23"
+    assert row["release_date"] == "2026-09-23"
     # 有時區的時間戳直接換成交易所時區再取日期（台北 07:00 ＝ UTC 前一天 23:00 ＝ 倫敦 00:00）
     assert mi._obs_date(pd.Timestamp("2026-09-24 07:00", tz="Asia/Taipei"), "Europe/London") == "2026-09-24"
     # 不帶時區視為世界協調時間（與 L1 `unit="s"` 一致）

@@ -22,6 +22,9 @@
    說明文字記在 `skipped`；兩者都不是錯誤、不進 `errors`。
    2026-10-13：非美元幣別的匯率鍵（49 §6.1 Q9）另由 `build_fx_indicator_table` 交出，
    套同一條觀測日規則、同一個閘門；`INDICATOR_SPECS` 七鍵不變（市場總覽頁的鍵以它為準）。
+   2026-10-14：依客戶裁示，匯率的觀測日改採「前一交易日收盤」語意（`OBS_DATE_PREV_WEEKDAY`，見
+   `rows_from_daily_close`）；**閘門仍關**（`FX_OBS_DATE_RULE_VERIFIED` 為 False，開閘前條件見該常數註解），
+   所以畫面不會因此多出任何匯率；^VIX 等非外匯的觀測日不變。
 
 **取數函式與區間（技術選擇，寫明理由）**：
 - 匯率改用 `repositories/macro/yf.py::fetch_yf_close_with_error("USDTWD=X")`，**不用** 49 §2.1
@@ -53,7 +56,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -88,7 +91,39 @@ EMPTY_WITHOUT_REASON = "來源回傳空值，原因未提供"
 #   `rows_from_daily_close`）。**本格仍為 False**：新規則要在合併後**重跑探測**、以真實回應確認
 #   （週末 0、同日重複 0、正式路徑列數合理）之後，才可以**只改這一格**。
 #   舊句在寫下當時為真（當時還不知道哪一種切日才對），被推翻的是它「UTC 可能正確」的前提。
+# → 2026-10-14 狀態更新（不是漏刪；客戶 2026-10-14 裁示）：「匯率採『前一交易日收盤』語意與日期。但這只是批准規則，
+#   不代表批准立即開閘。美元必須完成後續實證並通過獨立稽核後才能顯示。EUR／JPY／CNY 未驗證完成前維持資料未備，
+#   不得推估、替代或自動換來源。」新語意已實作（`OBS_DATE_PREV_WEEKDAY`，見 `rows_from_daily_close`），
+#   **本格仍為 False**。開閘前尚需（docs/v2/49 第 8 節 (i)）：
+#   (a) 2026-11-02～約 11-24 冬令錯位期（倫敦 10-25、紐約 11-01 回冬令）再跑探測；
+#   (b) 下一筆標 10-14 的日 K 值落在 Yahoo 前收 32.124～32.128 附近（＝ 10-13 收盤，新語意下寫成觀測日 10-13）；
+#   (c) 小時 K 時間戳慣例（起點或終點）實證；
+#   (d) 09-15～09-17 三天日 K 與小時 K 對不上的原因查明；
+#   並經獨立稽核。EUR／JPY／CNY／CNH 另需各自的驗證方法，未驗證前一律資料未備（本格是全部匯率共用的閘門，
+#   美元先開時須另加逐幣閘門，不得因本格打開就連帶顯示其他幣別）。
 FX_OBS_DATE_RULE_VERIFIED = False
+
+# ── 日頻收盤行情的觀測日語意（客戶 2026-10-14 裁示）──────────────────────────────────────
+# Yahoo 外匯日 K 標日期 D（交易所當地日期，倫敦）的那一根，已收盤後 close（與 open）≈ 倫敦 D 日剛開始
+# （約 UTC D 日 00:00／夏令 D−1 日 23:00、台北 08:00／07:00）的價格，等於 Yahoo 自己的「D−1 收盤／前收」
+# （兩組獨立判讀，探測報告 `probe/fx-obs-date-results` 分支
+# `results/20261014T064729Z_run38524215912/report.json`）。週一那根實際是上週五收盤（含週末跳空後首小時的微小差異）。
+# ⇒ 外匯：觀測日＝D 的**前一個平日**（`OBS_DATE_PREV_WEEKDAY`）；^VIX 等非外匯：觀測日＝D（`OBS_DATE_SAME_DAY`，不變）。
+# 外匯與否**不從代碼或名稱猜**，沿用既有的外匯判定：`INDICATOR_SPECS` 中受外匯閘門管的鍵（`phase1 ==
+# "write_if_fx_verified"`，見 `_obs_date_rule_of`）與 `build_fx_indicator_table` 交出的鍵。
+# ⚠️ 不處理國定假日：前一個平日若是假日，照樣寫成那一天（不查行事曆、不猜）；碰到時照實記錄、另案處理。
+OBS_DATE_SAME_DAY = "same_day"
+OBS_DATE_PREV_WEEKDAY = "prev_weekday"
+_OBS_DATE_RULES = (OBS_DATE_SAME_DAY, OBS_DATE_PREV_WEEKDAY)
+
+# 外匯語意下「當地時刻基準」最少要有幾根乾淨的平日根投給它（docs/v2/49 第 8 節 (i) 判讀 A 的 A1，開閘必修）。
+# 理由：過半數自證只看比例；已收盤根只有一根時（`CNYTWD=X`／`CNHTWD=X` 只回一根盤中值的形狀，若那一根是停更的
+# 前一天報價、或在週末取數），分母為 1、過半數必然成立，那一根就會被當成收盤寫入。
+# 值的依據（探測報告 run 38524215912 實測）：`range=2y` 下 USD／EUR／JPY 各 517 根已收盤、CNY／CNH 各 1 根；
+# 20 ≈ 四週的平日，比健康序列少一個數量級以上、正常不會卡到，又足以擋掉「一兩根停更報價」這種形狀。
+# 未達門檻 → 該鍵已收盤根全部不寫（skipped 寫明）。⚠️ 只套外匯語意；^VIX 等非外匯不受影響（行為與改動前相同；
+# 登記於 docs/v2/49 第 8 節 (i)）。決策者：AI 總管（2026-10-14，內部自決）。
+FX_MIN_REFERENCE_VOTES = 20
 
 # 不寫列的原因代碼（L3 依代碼對照客戶核准的畫面文案；未知代碼在 L3 當場炸）。
 PENDING_FRED_RELEASE_DATE = "fred_release_date"
@@ -207,13 +242,42 @@ def fx_value_unit(ccy) -> str:
     return f"新臺幣／{ccy}"
 
 
+def prev_weekday(day: date) -> date:
+    """`day` 的前一個平日（週二～週五 → 前一天；週一、週日、週六 → 該週或前一週的週五）。不查國定假日。"""
+    d = day - timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def yahoo_ticker_obs_date_rule(ticker) -> str:
+    """某個 Yahoo 代碼在正式路徑會套哪一種觀測日語意（給探測腳本對照用；正式路徑以鍵判定，不經本函式）。
+
+    外匯＝正式路徑自己組得出的匯率代碼：`INDICATOR_SPECS` 中受外匯閘門管的鍵的代碼，或 `fx_yahoo_ticker(<ISO>)`
+    的值（`<ISO>TWD=X`；新臺幣本身不算）。組不出來的一律回 `OBS_DATE_SAME_DAY` —— 不依名稱推測其他形狀。
+    """
+    for spec in INDICATOR_SPECS.values():
+        if spec["source"] == ("Yahoo", ticker):
+            return _obs_date_rule_of(spec)
+    if isinstance(ticker, str) and ticker.endswith("TWD=X"):
+        try:
+            if fx_yahoo_ticker(ticker[:-len("TWD=X")]) == ticker:
+                return OBS_DATE_PREV_WEEKDAY
+        except ValueError:
+            pass
+    return OBS_DATE_SAME_DAY
+
+
 def build_fx_indicator_table(ccys) -> dict:
     """非美元幣別的匯率鍵（Q9）。回傳形狀同 `build_market_indicator_table`：
     `{"rows", "errors", "pending", "skipped", "fetched"}`，鍵為各幣別的匯率鍵。
 
     - 閘門（`FX_OBS_DATE_RULE_VERIFIED`）關閉：不取數、不寫列，`pending[鍵] = PENDING_FX_OBS_DATE_RULE`，
       說明記在 `skipped`；不進 `errors`（不是失敗，是資料未備）。
-    - 閘門打開：經 `fetch_yf_close_with_error(<ISO>TWD=X)` 取數，套 `rows_from_daily_close`（與美元同一條規則）。
+    - 閘門打開：經 `fetch_yf_close_with_error(<ISO>TWD=X)` 取數，套 `rows_from_daily_close`（與美元同一條規則：
+      前一交易日收盤語意 `OBS_DATE_PREV_WEEKDAY`，客戶 2026-10-14 裁示）。
+      ⚠️ 客戶同日裁示：EUR／JPY／CNY 未驗證完成前維持資料未備 —— 本函式與美元共用同一個閘門，
+      美元先開時須先加逐幣閘門（見 `FX_OBS_DATE_RULE_VERIFIED` 註解）。
     - 同一幣別重複出現只處理一次；`USD`／`TWD`／不合 ISO 4217 → ValueError（呼叫端的 bug）。
     - 不另疊快取（49 §4.4）；不寫任何試算表；錯誤原文不遮蔽（遮蔽在寫出點做一次）。
     - ⚠️ 登記（2026-10-13 稽核 N4）：`phase1_hosts()`／`source_cooldowns()` 只列 `INDICATOR_SPECS` 那幾鍵的來源，
@@ -234,7 +298,7 @@ def build_fx_indicator_table(ccys) -> dict:
         series, error = _call(fetch_yf_close_with_error, ticker)
         fetched[key] = 0 if (error or series is None) else len(series)
         key_rows, key_error, key_skipped = rows_from_daily_close(
-            key, series, error, value_unit=fx_value_unit(ccy))
+            key, series, error, value_unit=fx_value_unit(ccy), obs_date_rule=OBS_DATE_PREV_WEEKDAY)
         rows.extend(key_rows)
         if key_error is not None:
             errors[key] = key_error
@@ -252,6 +316,11 @@ def _phase1_of(spec) -> str:
     if spec["phase1"] == "write_if_fx_verified":
         return "write" if FX_OBS_DATE_RULE_VERIFIED else "pending"
     return spec["phase1"]
+
+
+def _obs_date_rule_of(spec) -> str:
+    """外匯判定沿用既有標記：受外匯閘門管的鍵（`phase1 == "write_if_fx_verified"`）→ 前一交易日語意；其餘 → 當日。"""
+    return OBS_DATE_PREV_WEEKDAY if spec["phase1"] == "write_if_fx_verified" else OBS_DATE_SAME_DAY
 
 
 def _utc_iso(fetched_at) -> Optional[str]:
@@ -349,11 +418,30 @@ def _obs_date(stamp, exchange_tz) -> str:
     return _local_stamp(stamp, zone).date().isoformat()
 
 
-def rows_from_daily_close(key: str, series, error, *, value_unit: str):
+def rows_from_daily_close(key: str, series, error, *, value_unit: str, obs_date_rule: str):
     """日頻收盤行情（Q3 a/b）→ (rows, error_text, skipped_reasons)。
 
-    觀測日＝**來源自報的交易所時區**（L1 `attrs["exchange_tz"]`，即 Yahoo `meta.exchangeTimezoneName`）
-    的當地日期（客戶 2026-10-13 裁示）。
+    ~~觀測日＝**來源自報的交易所時區**（L1 `attrs["exchange_tz"]`，即 Yahoo `meta.exchangeTimezoneName`）
+    的當地日期（客戶 2026-10-13 裁示）。~~
+    → 2026-10-14（客戶裁示「匯率採『前一交易日收盤』語意與日期」；有意識的政策變更，不是漏刪）：
+    先取每根日 K 的**日 K 日期 D**＝來源自報的交易所時區（L1 `attrs["exchange_tz"]`，即 Yahoo
+    `meta.exchangeTimezoneName`）的當地日期（2026-10-13 那一條不變），再依 `obs_date_rule`（**必填**，呼叫端依
+    既有外匯判定決定，見 `_obs_date_rule_of`；給錯值當場炸）定觀測日：
+    - `OBS_DATE_SAME_DAY`（^VIX 等非外匯）：觀測日＝D；判定與訊息字面沿用改動前（程式碼走同一條路徑；
+      2026-10-14 以 origin/main `753d59c` 的同一函式做 3000 組隨機序列抽樣比對，結果相同 —— 抽樣，不是窮舉）。
+    - `OBS_DATE_PREV_WEEKDAY`（外匯）：觀測日＝D 的前一個平日（`prev_weekday`；週一 → 上週五；不查國定假日）。
+      理由：已收盤的外匯日 K 標 D 那根的值＝倫敦 D 日剛開始的價格＝D−1 收盤（兩組獨立判讀；見檔頭常數區）。
+    舊表述在寫下當時為真（當時「標 D 的值是哪一刻的價格」還沒查明）；被推翻的是「D 那根的值屬於 D」這個前提。
+    下列各項規則**作用在哪個日期**（外匯語意下）：
+    - 「未收盤」、「週末」、「當地時刻基準」看的是**日 K 日期 D 與當地時刻**（位移前）：
+      未收盤那根（D 不早於界線）的 close 是即時價，位移後的觀測日雖然早於界線，仍不得寫入；
+      D 落在週六、週日代表日界錯位，位移不會讓它變正常。
+    - 「同一觀測日重複」看的是**位移後的觀測日**：例如週日根與週一根都會映到上週五，兩根都不寫、上週五整天不寫，
+      不得擇一（客戶 2026-10-14 派工單；主鍵 (indicator_key, obs_date, release_date) 會撞的是位移後的日期）。
+      位移是 D 的函數，所以原始 D 重複的根位移後必定也重複，這條涵蓋舊的重複檢查。
+    - 投票只算「位移後不重複、且 D 為平日」的已收盤根；外匯另加最少票數門檻 `FX_MIN_REFERENCE_VOTES`
+      （判讀 A 的 A1），未達門檻 → 已收盤根全部不寫。
+    - `release_date` 仍＝觀測日（Q3(a)：日頻收盤行情公布日＝觀測日）。
 
     - error 非空：原文照回，不寫列。
     - 空序列又沒有原因：回 49 訂的弱訊息，不寫列。
@@ -388,9 +476,15 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
       ⚠️ 「過半數」這個門檻是**實作組判準，不是客戶裁示**（決策者：AI 總管，2026-10-13；
       登記於 docs/v2/49 第 8 節 (i)）：「全部相同」在有一根異常時說不出哪一根才對，故取過半數。
       ^VIX 一併套用本規則同樣由 AI 總管決定（探測結果新舊相同，不分流）。
+      ⚠️ **過半數自證擋不住「錯位根佔多數」**（#957 稽核登記，2026-10-14 補）：同一序列若多數根都錯位，
+      錯位的時刻就會成為基準、那些根會以錯的日期寫入。真正擋得住的是重跑探測、以真實回應檢查
+      （docs/v2/49 第 8 節 (i)）；本規則只擋「少數根錯位」。
     - 非有限數值：不寫，記進 skipped。
-    判定順序（每根只歸一類）：重複 → 未收盤 → 週末 → 當地時刻不一致 → 非有限值 → 契約。
+    判定順序（每根只歸一類）：重複 → 未收盤 → 週末 → 當地時刻不一致（外匯含最少根數門檻）→ 非有限值 → 契約。
     """
+    if obs_date_rule not in _OBS_DATE_RULES:   # 呼叫端的 bug：外匯與否要明說，不預設（§1）
+        raise ValueError(f"obs_date_rule 須為 {_OBS_DATE_RULES} 之一：{obs_date_rule!r}")
+    shifted = obs_date_rule == OBS_DATE_PREV_WEEKDAY
     if error:
         return [], str(error), []
     if series is None or len(series) == 0:
@@ -416,24 +510,29 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
         return [], None, skipped
     fetched_day = not_closed_cutoff_day(fetched_at, zone)
 
+    # (當地時刻, 日 K 日期 D, 觀測日, 值)；非外匯時觀測日＝D。
     candidates = []
     for stamp, value in series.items():
         local = _local_stamp(stamp, zone)
-        candidates.append((local, local.date().isoformat(), value))
+        bar_day = local.date()
+        obs_day = prev_weekday(bar_day) if shifted else bar_day
+        candidates.append((local, bar_day.isoformat(), obs_day.isoformat(), value))
     counts = {}
-    for _local, obs, _value in candidates:
+    for _local, _bar, obs, _value in candidates:
         counts[obs] = counts.get(obs, 0) + 1
 
     # 基準當地時刻（AI 總管 2026-10-14 裁決，依稽核 M 反例；見 docstring）：
-    # - 分母：已收盤根（觀測日 < 未收盤界線）全部，含同日重複根與週末根；
-    # - 票：只有「不重複、且交易所當地為平日」的已收盤根，替自己的當地時刻投一票；
+    # - 分母：已收盤根（日 K 日期 D < 未收盤界線）全部，含同日重複根與週末根；
+    # - 票：只有「（位移後）不重複、且交易所當地為平日」的已收盤根，替自己的當地時刻投一票；
     # - 某時刻票數 > 分母 / 2（嚴格過半）才成為基準；沒有 → 無基準，已收盤根全部不寫。
     # ~~已收盤根全部替自己的時刻投票~~（舊做法：日界錯位時週一那根落在週日 23:00，週末根天生與錯位根同一時刻，
     # 等於替錯位那一邊投票 —— 稽核 M 反例；有意識的更正，不是漏刪）。
+    # ⚠️ 過半數自證擋不住「錯位根佔多數」：若同一序列多數根都錯位，錯位的時刻會成為基準。真正擋得住的是重跑探測
+    #    以真實回應檢查（docs/v2/49 第 8 節 (i)），不是這裡。
     denominator = 0
     votes: dict = {}
-    for local, obs, _value in candidates:
-        if obs >= fetched_day:
+    for local, bar, obs, _value in candidates:
+        if bar >= fetched_day:
             continue
         denominator += 1
         if counts[obs] == 1 and local.weekday() < 5:
@@ -443,14 +542,19 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
         top_time = max(votes, key=votes.get)
         if votes[top_time] * 2 > denominator:
             reference = top_time
+    # 外匯另加最少票數門檻（判讀 A 的 A1）：分母很小時過半數幾乎必然成立，不能當成日界已自證。
+    too_few_votes = None
+    if shifted and reference is not None and votes[reference] < FX_MIN_REFERENCE_VOTES:
+        too_few_votes = (reference, votes[reference])
+        reference = None
 
     not_finite = not_closed = duplicated = contract_bad = weekend = time_mismatch = 0
     rows = []
-    for local, obs, value in candidates:
+    for local, bar, obs, value in candidates:
         if counts[obs] > 1:
             duplicated += 1
             continue
-        if obs >= fetched_day:
+        if bar >= fetched_day:
             not_closed += 1
             continue
         if local.weekday() >= 5:
@@ -482,17 +586,33 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
             continue
         rows.append(row)
 
+    # 訊息：非外匯（`OBS_DATE_SAME_DAY`）逐字沿用改動前；外匯寫明「位移前的日 K 日期」與「位移後的觀測日」。
     if not_finite:
         skipped.append(f"數值非有限值 {not_finite} 筆不寫")
     if not_closed:
-        skipped.append(f"觀測日不早於取得日（界線 {fetched_day}：取得時刻的世界協調時間日期與"
-                       f"交易所時區 {raw_tz} 日期取較晚者）{not_closed} 筆不寫")
+        if shifted:
+            skipped.append(f"日 K 日期（交易所時區 {raw_tz}，位移前）不早於取得日（界線 {fetched_day}：取得時刻的"
+                           f"世界協調時間日期與交易所時區日期取較晚者），可能是盤中即時值，{not_closed} 筆不寫")
+        else:
+            skipped.append(f"觀測日不早於取得日（界線 {fetched_day}：取得時刻的世界協調時間日期與"
+                           f"交易所時區 {raw_tz} 日期取較晚者）{not_closed} 筆不寫")
     if duplicated:
-        skipped.append(f"同一觀測日重複 {duplicated} 筆不寫")
+        if shifted:
+            skipped.append(f"位移後同一觀測日重複（觀測日＝日 K 日期的前一個平日）{duplicated} 筆不寫")
+        else:
+            skipped.append(f"同一觀測日重複 {duplicated} 筆不寫")
     if weekend:
-        skipped.append(f"觀測日（交易所時區 {raw_tz}）為星期六或星期日 {weekend} 筆不寫")
+        if shifted:
+            skipped.append(f"日 K 日期（交易所時區 {raw_tz}，位移前）為星期六或星期日 {weekend} 筆不寫")
+        else:
+            skipped.append(f"觀測日（交易所時區 {raw_tz}）為星期六或星期日 {weekend} 筆不寫")
     if time_mismatch:
-        if reference is None:
+        if too_few_votes is not None:
+            ref_time, n_votes = too_few_votes
+            skipped.append(f"已收盤平日根中與過半數基準 {ref_time.isoformat()}（交易所時區 {raw_tz}）同一時刻者只有 "
+                           f"{n_votes} 根，少於外匯最少根數門檻 {FX_MIN_REFERENCE_VOTES}，無法自證日界，"
+                           f"{time_mismatch} 筆不寫")
+        elif reference is None:
             spread = "、".join(f"{t.isoformat()}×{n}" for t, n in sorted(votes.items())) or "無"
             skipped.append(f"已收盤根的當地時刻（交易所時區 {raw_tz}）沒有過半數一致的值"
                            f"（票數 {spread}；分母 {denominator}，含重複與週末根，只有不重複的平日根投票），"
@@ -714,7 +834,7 @@ def build_market_indicator_table(*, sink: Optional[Callable[[dict], None]] = Non
             series, error = _call(fetch_yf_close_with_error, ticker)
             fetched[key] = 0 if (error or series is None) else len(series)
             key_rows, key_error, key_skipped = rows_from_daily_close(
-                key, series, error, value_unit=spec["value_unit"])
+                key, series, error, value_unit=spec["value_unit"], obs_date_rule=_obs_date_rule_of(spec))
         elif source == "FRED":
             if not (isinstance(fred_api_key, str) and fred_api_key.strip()):
                 frame, error = None, MISSING_FRED_API_KEY

@@ -853,7 +853,7 @@ def test_部分略過摘要_經遮蔽才放進persist與message(book, monkeypatc
     from services.v2_tables import masking
 
     good_rows, _e, _s = mi.rows_from_daily_close("vol_index", _vix([17.0], ["2026-09-22"]), None,
-                                                 value_unit="index")
+                                                 value_unit="index", obs_date_rule=mi.OBS_DATE_SAME_DAY)
 
     def fake_build(sink, **_kw):
         table = {"rows": good_rows, "errors": {"credit_spread_pct": mi.MISSING_FRED_API_KEY},

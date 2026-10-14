@@ -86,8 +86,14 @@ LON_NC = "觀測日不早於取得日（界線 {d}：取得時刻的世界協調
 CHI_NC = "觀測日不早於取得日（界線 {d}：取得時刻的世界協調時間日期與交易所時區 America/Chicago 日期取較晚者）{n} 筆不寫"
 
 
-def _rows(series, key="fx_twd_per_usd"):
-    return mi.rows_from_daily_close(key, series, None, value_unit="新臺幣／美元")
+def _rows(series, key="fx_twd_per_usd", obs_date_rule=mi.OBS_DATE_SAME_DAY):
+    """~~`rows_from_daily_close(key, series, None, value_unit=…)`~~ → 2026-10-14 起 `obs_date_rule` 必填
+    （客戶裁示匯率採「前一交易日收盤」語意；有意識的更正，不是漏刪）。
+
+    本檔驗的是**日 K 日期 D 怎麼取**（交易所時區取日、未收盤、週末、過半數基準），預設以當日語意
+    （`OBS_DATE_SAME_DAY`，觀測日＝D）跑，鍵名沿用 `fx_twd_per_usd` 只是為了訊息字面不變；
+    外匯語意（觀測日＝D 的前一個平日）另見 tests/test_v2_tables_market_indicator_fx_prev_day.py。"""
+    return mi.rows_from_daily_close(key, series, None, value_unit="新臺幣／美元", obs_date_rule=obs_date_rule)
 
 
 def _legacy_utc_day(sec) -> str:
@@ -282,13 +288,31 @@ def test_同日重複仍整天不寫():
     assert "同一觀測日重複 2 筆不寫" in skipped
 
 
+def _london_weekday_midnights(first: str, n: int, base: float = 31.5):
+    """合成：從 `first`（倫敦日期）起 n 個倫敦平日的 00:00（以 zoneinfo 換算成 Unix 秒），值逐根 +0.001。
+    外匯語意有最少根數門檻（`FX_MIN_REFERENCE_VOTES`），經 builder 的測試需要足夠根數。"""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    day, out = date.fromisoformat(first), []
+    while len(out) < n:
+        if day.weekday() < 5:
+            out.append((int(datetime(day.year, day.month, day.day, tzinfo=ZoneInfo(LONDON)).timestamp()),
+                        round(base + len(out) * 0.001, 6)))
+        day += timedelta(days=1)
+    return out
+
+
 def test_開閘時_build_fx_indicator_table套新規則(monkeypatch):
+    """~~`USD_TAIL + 盤中值` → 首列 10-02、fetched 7~~ → 2026-10-14（客戶裁示前一交易日語意＋A1 最少根數門檻；
+    有意識的更正，不是漏刪）：舊例只有 6 根已收盤，不足門檻；改用 25 根合成倫敦 00:00 平日根 ＋ 盤中值。
+    首根倫敦 09-01（二）→ 觀測日 08-31（一）；盤中值未收盤不寫。"""
     monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
-    s = _series(USD_TAIL + [USD_INTRADAY], ticker="JPYTWD=X")
+    bars = _london_weekday_midnights("2026-09-01", 25)
+    s = _series(bars + [USD_INTRADAY], ticker="JPYTWD=X")
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda ticker, *a, **k: (s, None))
     out = mi.build_fx_indicator_table(["JPY"])
-    assert [r["obs_date"] for r in out["rows"]][0] == "2026-10-02"
-    assert out["fetched"] == {"fx_twd_per_jpy": 7}
+    assert [r["obs_date"] for r in out["rows"]][0] == "2026-08-31"
+    assert len(out["rows"]) == 25 and out["fetched"] == {"fx_twd_per_jpy": 26}
 
 
 def test_閘門仍為False():
@@ -355,7 +379,8 @@ def test_L1_缺或形狀不對_不放這個鍵_不變成解析失敗(yf_mod, mon
 
 def test_L1_到L2_端到端_夏令取倫敦隔日(yf_mod, monkeypatch):
     s, err = _fetch(yf_mod, monkeypatch, {"exchangeTimezoneName": LONDON})
-    rows, row_err, skipped = mi.rows_from_daily_close("fx_twd_per_usd", s, err, value_unit="新臺幣／美元")
+    rows, row_err, skipped = mi.rows_from_daily_close("fx_twd_per_usd", s, err, value_unit="新臺幣／美元",
+                                                      obs_date_rule=mi.OBS_DATE_SAME_DAY)
     assert row_err is None and skipped == []
     assert [r["obs_date"] for r in rows] == ["2024-10-14", "2024-10-15", "2024-10-16", "2024-10-17"]
 
@@ -409,7 +434,8 @@ def test_probe的zone_known借用同一個判定():
 def test_過半數基準_在同一鍵之內計算_不跨鍵(monkeypatch):
     """兩個鍵各自自洽（匯率倫敦 00:00、VIX 芝加哥 02:00）：若基準跨鍵合算，VIX 的 02:00 會被當成少數而丟掉。"""
     monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
-    usd = _series(USD_TAIL[:5], ticker="USDTWD=X")            # 倫敦 00:00 × 5
+    # ~~`USD_TAIL[:5]`（倫敦 00:00 × 5）~~ → 2026-10-14：外匯語意有最少根數門檻（A1），改 25 根合成（不是漏刪）
+    usd = _series(_london_weekday_midnights("2026-09-01", 25), ticker="USDTWD=X")   # 倫敦 00:00 × 25
     vix = _series(VIX_TAIL[:3], fetched_at=VIX_FETCHED, exchange_tz=CHICAGO, ticker="^VIX")   # 芝加哥 02:00 × 3
     table = {"USDTWD=X": usd, "^VIX": vix}
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda ticker, *a, **k: (table[ticker], None))
@@ -417,7 +443,7 @@ def test_過半數基準_在同一鍵之內計算_不跨鍵(monkeypatch):
     by_key = {}
     for r in out["rows"]:
         by_key[r["indicator_key"]] = by_key.get(r["indicator_key"], 0) + 1
-    assert by_key["fx_twd_per_usd"] == 5 and by_key["vol_index"] == 3
+    assert by_key["fx_twd_per_usd"] == 25 and by_key["vol_index"] == 3
     assert "vol_index" not in out["skipped"] and "fx_twd_per_usd" not in out["skipped"]
 
 
@@ -531,7 +557,7 @@ def test_稽核M反例_週末根不得替錯位時刻投票_錯位根一根都�
     ⇒ 無基準，整鍵不寫。（舊做法：週日兩根也替 23:00 投票 ⇒ 23:00 得 10 票 > 9.5 ⇒ 基準變 23:00，
     8 根錯位根以早一天的觀測日寫入、9 根正確的根被丟掉。）以實跑結果為準。"""
     rows, err, skipped = mi.rows_from_daily_close("fx_twd_per_usd", _counterexample_series(), None,
-                                                  value_unit="新臺幣／美元")
+                                                  value_unit="新臺幣／美元", obs_date_rule=mi.OBS_DATE_SAME_DAY)
     assert err is None
     assert [r for r in rows if r["value_num"] >= 31.0] == []          # 錯位根一根都不寫
     assert rows == []                                                  # 依推算：整鍵不寫

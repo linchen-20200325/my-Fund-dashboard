@@ -6,6 +6,13 @@
 > （見下方「日 K 值對應哪個時刻」一段與報告的 `daily_value_check`）；並存完整原始日 K（`raw_daily_full`）
 > 與小時 K（`hourly.raw`），以及 meta 欄位原值（`meta_snapshot`、`hourly.meta_snapshot`）。
 > 不新增資料來源、不改正式行為、不碰閘門。
+>
+> 📌 **2026-10-14 第二次擴充（客戶裁示「匯率採『前一交易日收盤』語意與日期」之後）**：
+> - `production_rows` 依正式路徑對該代號的觀測日語意跑（`market_indicator.yahoo_ticker_obs_date_rule`：
+>   正式路徑組得出的匯率代碼 → 前一交易日語意、其餘 → 當日），報告記在 `production_rows.obs_date_rule`；
+> - `daily_value_check.fixed_offset_scan`：固定位移掃描（對每根日 K 取交易所當地 D 日 00:00＋k 小時的小時價，
+>   k∈[−6,+26]，逐 k 取與日 K close 相對差的中位數；終點版與起點版各一份）。兩組判讀都指出「最接近值」方法
+>   分不出時刻（相鄰幾小時價格常常極接近），固定位移不挑根，同一個 k 對所有根一視同仁。
 
 ## 為什麼要有這支
 
@@ -57,7 +64,9 @@
 - `obs_date_vs_local_date`：現行規則的日期與各時區當地日期不一致的筆數與例子。
 ⚠️ 2026-10-13 起，上面三項在 `subsets` 下算的是**舊規則**（世界協調時間取日）；同樣三項以**新規則**
 （交易所時區取日）再算一次放在 `subsets_exchange_tz`（另含以正式 `not_closed_cutoff_day` 界線去掉未收盤根的 `non_null_closed`，界線記在 `fetched_day_exchange_tz`），
-兩規則結果不同的根列在 `obs_date_rule_diff`。`production_rows` 一律是正式新規則。
+兩規則結果不同的根列在 `obs_date_rule_diff`。~~`production_rows` 一律是正式新規則。~~
+→ 2026-10-14：`production_rows` 照正式路徑對該代號的觀測日語意跑（見檔頭第二次擴充；`obs_date_rule` 欄寫明）；
+`subsets_exchange_tz` 的日期仍是**日 K 日期**（交易所當地日期，位移前），不是外匯的位移後觀測日。
 另有 `last_bar`（最後一根時間戳是否等於 `meta.regularMarketTime`；相等多半表示最後一根是盤中即時值）
 與 `raw_excerpt`（頭尾各 30 根原始回應，含 null）。
 「有沒有差一天」要拿 `raw_excerpt` 的收盤值對照已知交易日行情再判定。
@@ -388,23 +397,29 @@ def subset_stats(timestamps, closes, obs_date_fn, dst_zones, local_zones) -> dic
     }
 
 
-def production_rows_summary(ticker, timestamps, closes, fetched_at_utc, exchange_tz=None) -> dict:
+def production_rows_summary(ticker, timestamps, closes, fetched_at_utc, exchange_tz=None,
+                            obs_date_rule=None) -> dict:
     """以正式 `rows_from_daily_close` 跑一次（純函式，不寫任何地方）：會寫幾列、跳過什麼。
 
     Series 建法照抄 `fetch_yf_close`（非 null 根、索引 `pd.to_datetime(秒, unit="s")`、attrs 帶 fetched_at；
     2026-10-13 起另帶 `exchange_tz`＝回應的 `meta.exchangeTimezoneName` 原字串，**非空字串才掛**，與 L1 相同）。
+    `obs_date_rule`：None → 依正式路徑對該代號的判定（`market_indicator.yahoo_ticker_obs_date_rule`，2026-10-14）。
     """
     import pandas as pd
     from repositories.macro.yf import EXCHANGE_TZ_ATTR
-    from services.v2_tables.market_indicator import rows_from_daily_close
+    from services.v2_tables.market_indicator import rows_from_daily_close, yahoo_ticker_obs_date_rule
+    if obs_date_rule is None:
+        obs_date_rule = yahoo_ticker_obs_date_rule(ticker)
     s = pd.Series(closes, index=pd.to_datetime(timestamps, unit="s"), dtype=float, name=ticker)
     s.attrs["source"] = f"Yahoo:{ticker}"
     s.attrs["fetched_at"] = fetched_at_utc
     if isinstance(exchange_tz, str) and exchange_tz:
         s.attrs[EXCHANGE_TZ_ATTR] = exchange_tz
-    rows, err, skipped = rows_from_daily_close(ticker, s, None, value_unit=_PROBE_VALUE_UNIT)
+    rows, err, skipped = rows_from_daily_close(ticker, s, None, value_unit=_PROBE_VALUE_UNIT,
+                                               obs_date_rule=obs_date_rule)
     obs = [r["obs_date"] for r in rows]
     return {
+        "obs_date_rule": obs_date_rule,
         "row_count": len(rows),
         "first_obs_date": obs[0] if obs else None,
         "last_obs_date": obs[-1] if obs else None,
@@ -556,6 +571,8 @@ MATCH_ZONES = ("Europe/London", "America/New_York", "Asia/Taipei")
 MATCH_EQ_REL = 1e-6
 # 診斷用的寬鬆容差（相對值）：各級另出「最佳 close 對應在容差內」根數與分布（同樣只收 ties＝1、非 partial、非重複）。
 MATCH_LOOSE_RELS = (1e-5, 1e-4)
+# 固定位移掃描的 k（小時，含兩端）：交易所當地 D 日 00:00 往前 6 小時到往後 26 小時（2026-10-14 派工單指定）。
+FIXED_OFFSET_HOURS = tuple(range(-6, 27))
 # 報告要逐字留下的 meta 欄位（缺就列進 absent，不補值）。
 META_FIELDS = ("regularMarketPrice", "chartPreviousClose", "previousClose", "regularMarketTime",
                "regularMarketDayHigh", "regularMarketDayLow", "fulldayPrice", "fulldayChange",
@@ -703,6 +720,53 @@ def _median(xs: list[float]) -> Optional[float]:
     return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2
 
 
+def _scan_stats(pcts: list) -> dict:
+    vals = [p for p in pcts if p is not None]
+    return {"n": len(vals), "median_pct_diff": _median(vals),
+            "median_abs_pct_diff": _median([abs(p) for p in vals])}
+
+
+def fixed_offset_scan(daily_bars: list, hourly: dict, exchange_tz: str,
+                      offsets=FIXED_OFFSET_HOURS) -> dict:
+    """固定位移掃描（2026-10-14；兩組判讀都指出「最接近值」方法分不出時刻）。
+
+    對每根日 K（`daily_bars`：`{"t", "close", ...}`；觀測日 D＝交易所當地日期），取**交易所當地 D 日 00:00＋k 小時**
+    那一刻的小時價，算 (小時價 − 日 K close) / 日 K close × 100，逐 k 取中位數（並列絕對值的中位數與根數 `n`）：
+    - `by_end`：**終點**（起點＋`HOURLY_BAR_SEC`）落在該時刻的小時 K 的 **close**；
+    - `by_start`：**起點**落在該時刻的小時 K 的 **open**。
+    兩版的前提見 `HOURLY_TIMESTAMP_CONVENTION`（未實證）；前提若反了，讀另一版。
+    與 `_best` 不同：本掃描**不挑根**，同一個 k 對所有根一視同仁 —— 若日 K close 是某個固定時刻的價格，
+    那個 k 的中位數應接近 0、其餘 k 明顯偏離。小時 K 沒有那一刻、或值為 null → 該根在該 k 不計（`n` 照實記）。
+    D 日 00:00 以 zoneinfo 換算（夏冬令自動處理）；k 小時以絕對時間相加（不跨日期重算當地時刻）。
+    """
+    zone = ZoneInfo(exchange_tz)
+    by_t = {b["t"]: b for b in _bars(hourly)}
+    anchors = []
+    for d in daily_bars:
+        if d.get("close") is None:
+            continue
+        day = _local_dt(d["t"], exchange_tz).date()
+        anchors.append((int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp()), d["close"]))
+    by_end, by_start = {}, {}
+    for k in offsets:
+        end_p, start_p = [], []
+        for anchor, close in anchors:
+            at = anchor + k * HOURLY_BAR_SEC
+            hb = by_t.get(at - HOURLY_BAR_SEC)            # 終點＝at 的那一根
+            if hb is not None and hb["close"] is not None:
+                end_p.append(_pct(hb["close"], close))
+            hb = by_t.get(at)                             # 起點＝at 的那一根
+            if hb is not None and hb["open"] is not None:
+                start_p.append(_pct(hb["open"], close))
+        by_end[f"{k:+d}"] = _scan_stats(end_p)
+        by_start[f"{k:+d}"] = _scan_stats(start_p)
+    return {"anchor": "交易所當地 D 日 00:00（D＝日 K 的交易所當地日期，位移前）＋k 小時",
+            "exchange_tz": exchange_tz, "k_hours": [min(offsets), max(offsets)] if offsets else [],
+            "daily_bars": len(anchors), "pct_diff": "(小時價 − 日 K close) / 日 K close × 100",
+            "hourly_timestamp_convention": HOURLY_TIMESTAMP_CONVENTION,
+            "by_end": by_end, "by_start": by_start}
+
+
 def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_day: str,
                           window_days: int = MATCH_WINDOW_DAYS, scope_days: int = MATCH_SCOPE_DAYS) -> dict:
     """逐根日 K（觀測日在 [cutoff−window_days, cutoff) 內的已收盤根）找出小時 K 對應的時刻。
@@ -719,6 +783,7 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
     - `close_vs_day_last_hourly_close`：日 K close 對前一個／當日／後一個**有小時 K 的平日**交易所日（跳過交易所當地週六、週日；
       #960 複驗）最後一根小時 close 的差距 %；實際取的日子列在 `close_vs_day_last_hourly_close_days`。
     - 分布只收：容差內、ties＝1、非 partial_coverage、觀測日不重複的根；另出配對精度統計。
+    - `fixed_offset_scan`：觀測窗內、觀測日不重複的已收盤根做固定位移掃描（見 `fixed_offset_scan`）。
     """
     hbars = [b for b in _bars(hourly) if b["close"] is not None or b["open"] is not None]
     agg = hourly_day_aggregate(hourly, exchange_tz)
@@ -832,6 +897,8 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
     }
     out["close_equals_same_day_last_hourly_close"] = same_last_close_eq
     out["close_equals_prev_day_last_hourly_close"] = prev_last_close_eq
+    out["fixed_offset_scan"] = fixed_offset_scan([d for d, obs in in_window if obs_count[obs] == 1],
+                                                 hourly, exchange_tz)
     out["skipped"] = dict(out["skipped"])
     return out
 
@@ -964,6 +1031,10 @@ def run(tickers, fetcher=None, pop_fail_kind=None, obs_date_fn=None,
                          "（pd.to_datetime(秒, unit='s') 視為世界協調時間 → 換成 meta.exchangeTimezoneName"
                          " 的當地時刻 → 取日期）；結果見 subsets_exchange_tz／production_rows",
         "obs_date_rule_legacy": "世界協調時間取日期（第一次探測時的正式規則，本檔重現）；結果見 subsets",
+        # 2026-10-14：客戶裁示匯率採「前一交易日收盤」語意；`_obs_date` 交出的是日 K 日期 D（位移前），
+        # 正式路徑對外匯再取 D 的前一個平日（`production_rows.obs_date_rule`）。
+        "obs_date_semantics": "外匯（正式路徑組得出的 <ISO>TWD=X）：觀測日＝日 K 日期 D 的前一個平日"
+                              "（prev_weekday）；其餘：觀測日＝D（same_day）。見 production_rows.obs_date_rule",
         "fx_obs_date_rule_verified_at_run": bool(mi.FX_OBS_DATE_RULE_VERIFIED),
         "proxy_env_set": bool(os.environ.get("PROXY_URL", "").strip()),
         "proxy_used_by_infra": _proxy_used_by_infra(),
@@ -1053,7 +1124,7 @@ def _summary_lines(report: dict) -> list[str]:
             f"缺週五週數={nx.get('iso_weeks_missing_friday_count')}/{nx.get('iso_weeks_considered')} "
             f"同日重複={nx.get('duplicate_obs_date_count')} "
             f"新舊不同={diff.get('diff_count')}/{diff.get('total')} "
-            f"正式列數(新)={pr.get('row_count')} "
+            f"正式列數(新；{pr.get('obs_date_rule')})={pr.get('row_count')} "
             f"最後一根=regularMarketTime:{e['last_bar']['equal']}"
         )
         if "hourly" in e:
@@ -1063,9 +1134,21 @@ def _summary_lines(report: dict) -> list[str]:
                 f"最佳close對應(以終點計；交易所日差 當地時:分；只收容差內且ties=1)={chk.get('best_close_match_distribution')} "
                 f"配對精度={chk.get('match_precision')} "
                 f"等於當日最後一根小時close={chk.get('close_equals_same_day_last_hourly_close')} "
-                f"等於前一日最後一根小時close={chk.get('close_equals_prev_day_last_hourly_close')}"
+                f"等於前一日最後一根小時close={chk.get('close_equals_prev_day_last_hourly_close')} "
+                f"固定位移最小中位|差|(終點版)={_scan_best(chk.get('fixed_offset_scan'), 'by_end')} "
+                f"(起點版)={_scan_best(chk.get('fixed_offset_scan'), 'by_start')}"
             )
     return lines
+
+
+def _scan_best(scan, part: str) -> Optional[str]:
+    """固定位移掃描某一版中「中位絕對相對差」最小的 k（摘要行用；沒有資料 → None）。"""
+    rows = [(v["median_abs_pct_diff"], k, v["n"]) for k, v in ((scan or {}).get(part) or {}).items()
+            if v.get("median_abs_pct_diff") is not None]
+    if not rows:
+        return None
+    best, k, n = min(rows)
+    return f"k={k} {best:.4f}% n={n}"
 
 
 def _parse_tickers(raw: Optional[str]) -> tuple[list[str], list[dict]]:
@@ -1073,6 +1156,21 @@ def _parse_tickers(raw: Optional[str]) -> tuple[list[str], list[dict]]:
     ok, rejected = validate_tickers(items)
     # 必取兩個永遠在、排最前；其餘去重保序。
     return list(dict.fromkeys(list(REQUIRED_TICKERS) + ok)), rejected
+
+
+def _minimal_report(report, strict_error: str, fallback_error: str) -> dict:
+    """寬鬆格式也寫不出時的最小報告：兩段錯誤原文＋各代號的 ok／status（逐項 str()，不讓這一步再炸）。"""
+    statuses = {}
+    try:
+        for tk, entry in (report.get("tickers") or {}).items():
+            try:
+                statuses[str(tk)] = {"ok": bool(entry.get("ok")), "status": str(entry.get("status"))}
+            except Exception as e:   # noqa: BLE001 —— 單一代號取不到狀態：照實記原因
+                statuses[str(tk)] = {"status": f"狀態取不到：{type(e).__name__}"}
+    except Exception as e:   # noqa: BLE001
+        statuses = {"_error": f"代號清單取不到：{type(e).__name__}"}
+    return {"strict_json_error": strict_error, "fallback_json_error": fallback_error,
+            "report_written": "minimal", "tickers_status": statuses}
 
 
 def main(argv=None, fetcher=None, pop_fail_kind=None, obs_date_fn=None, backoff_check=None) -> int:
@@ -1089,15 +1187,26 @@ def main(argv=None, fetcher=None, pop_fail_kind=None, obs_date_fn=None, backoff_
     out.parent.mkdir(parents=True, exist_ok=True)
     # 嚴格 JSON：NaN／±inf 一律轉 null 後以 allow_nan=False 寫出（#960 稽核）。
     # 保底（#960 複驗）：若仍寫不出嚴格 JSON（例如 dict 鍵是 NaN、值是 Decimal 這類 to_strict_json 管不到的東西），
-    # 改以 default=str、allow_nan=True 照樣寫出一份，報告頂層加 `strict_json_error`（例外原文），退出碼記為失敗 ——
-    # 日 K 結果不得因序列化失敗而丟失。
+    # 改以 default=str、allow_nan=True、skipkeys=True 照樣寫出一份，報告頂層加 `strict_json_error`（例外原文），
+    # 退出碼記為失敗。
+    # ~~日 K 結果不得因序列化失敗而丟失。~~ → 收窄為實際範圍（#960 稽核 Q；2026-10-14 開閘前小項，有意識的更正，
+    # 不是漏刪）：
+    #   - 寬鬆格式涵蓋 to_strict_json 管不到的值型別（Decimal、numpy.float32、set 等以 str 寫出）與 NaN 鍵；
+    #   - 鍵不是 str／int／float／bool／None（例如 tuple）時，`skipkeys=True` 會**略過那個鍵與它的內容**（該部分丟失）；
+    #   - 循環參照（嚴格版遞迴會 RecursionError、寬鬆版 ValueError）或其他寬鬆格式也寫不出的情形 → 外層
+    #     `except Exception` 只寫**最小報告**（兩段錯誤原文＋各代號狀態），**日 K 結果會丟**，退出碼 1。
+    #   資料來自 `r.json()`，鍵必為字串、無循環，實務上碰不到後兩種；寫明是為了不讓上一句被讀成「一定不丟」。
     strict_error = None
     try:
         text = json.dumps(to_strict_json(report), ensure_ascii=False, indent=1, allow_nan=False)
-    except (ValueError, TypeError) as e:
+    except (ValueError, TypeError, RecursionError) as e:
         strict_error = f"{type(e).__name__}: {e}"
         report["strict_json_error"] = strict_error
-        text = json.dumps(report, ensure_ascii=False, indent=1, allow_nan=True, default=str)
+        try:
+            text = json.dumps(report, ensure_ascii=False, indent=1, allow_nan=True, default=str, skipkeys=True)
+        except Exception as e2:   # noqa: BLE001 —— 不吞：錯誤原文寫進最小報告、退出碼 1
+            text = json.dumps(_minimal_report(report, strict_error, f"{type(e2).__name__}: {e2}"),
+                              ensure_ascii=False, indent=1, default=str)
     out.write_text(text + "\n", encoding="utf-8")
     for line in _summary_lines(report):
         print(line)
