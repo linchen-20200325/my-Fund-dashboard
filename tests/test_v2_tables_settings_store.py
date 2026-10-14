@@ -436,6 +436,97 @@ def test_淨值層_重新取數清掉A鏈實際用到的全部快取_每個恰�
     assert len(cleared) == 6 and len(_nav_logs(book)) == 1                # 仍只寫一筆 fetch_log
 
 
+def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶_淨值記憶_TDCC空清單_不動冷卻(book, monkeypatch):
+    """2026-10-14 C2：走真的三支 L1 把成功快取與失敗記憶填好、真的 exp 淨值記憶填一筆、TDCC 行程內快取放 `[]`，
+    重新取數後全部清空；`infra.source_backoff` 的冷卻原封不動。"""
+    import infra.proxy as PX
+    import repositories.fund.declared_profile as DP
+    import repositories.fund.sources as SRC
+    from services.v2_tables import exp_nav as EN
+    from services.v2_tables import exp_profile as EP
+
+    class _J:
+        text = "{}"
+
+        def json(self):
+            return {"Data": {"Currency": "USD"}}
+
+    def fake_fetch(url, **k):
+        PX._TLS_FAIL.kind = ""
+        if "fundclear" in url:
+            return _J()
+        PX._TLS_FAIL.kind = "not_found"        # MoneyDJ 四個網址全 404 → failed → 進失敗記憶
+        return None
+
+    monkeypatch.setattr(DP, "fetch_url_with_retry", fake_fetch)
+    monkeypatch.setattr(SRC, "_is_domestic_code", lambda code, page_type="": False)
+    monkeypatch.setattr(SRC, "_tdcc_cache", {"3-2": [], "3-1": []})
+    for fn in EP.DECLARED_CACHED_FUNCTIONS:
+        fn.cache_clear()
+    EN.clear_memo()
+    assert DP.fetch_fundclear_declared_ccy("ZZEXP1")["status"] == "ok"
+    assert DP.fetch_moneydj_basic_fields("ZZEXP1")["status"] == "failed"
+    assert DP.fetch_tdcc_listing("ZZEXP1")["status"] == "failed"
+    ok_res = {"full_key": "ZZEXP1", "series": _nav(3), "dividends": [], "data_source": "x"}
+    EN.load_nav_dividend(
+        [{"fund_code": "ZZEXP1", "full_key": "ZZEXP1", "chain_code": "ZZEXP1", "portal": "",
+          "declared_ccy": "USD", "declared_ccy_source": "meta:FundClear"}],
+        chain_fetch=lambda c, f: (*ND._nav_from_chain(ok_res, "yp010000", c, f), ND._div_from_chain(ok_res, f)))
+    # 負控：清之前都有東西
+    assert DP.fetch_fundclear_declared_ccy.cache_info()["size"] == 1
+    assert len(DP._FAILURE_MEMORY) == 2 and EN._REGISTERED.cache_info()["size"] == 1
+    SB.record_failure("some.exp.host", "server_error")
+    assert SB.should_skip("some.exp.host")[0] is True
+
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    S.refetch_nav([SECRET])
+
+    assert DP.fetch_fundclear_declared_ccy.cache_info()["size"] == 0       # 成功快取清空
+    assert DP._FAILURE_MEMORY == {}                                         # 失敗記憶清空
+    assert EN._REGISTERED.cache_info()["size"] == 0                         # exp 淨值記憶清空
+    assert "3-2" not in SRC._tdcc_cache and SRC._tdcc_cache["3-1"] == []    # 只丟 3-2 的 []
+    assert SB.should_skip("some.exp.host")[0] is True                       # 冷卻原封不動
+    assert len(_nav_logs(book)) == 1
+
+
+def test_淨值層_持倉讀不到_exp快取照樣清(book, monkeypatch):
+    """2026-10-14 稽核必修 8：清 exp 三支 L1、淨值記憶、TDCC 空清單，不依賴持倉讀取成功。"""
+    import repositories.fund.declared_profile as DP
+    import repositories.fund.sources as SRC
+    from services.v2_tables import exp_nav as EN
+    cleared = []
+    for fn in (DP.fetch_moneydj_basic_fields, DP.fetch_tdcc_listing, DP.fetch_fundclear_declared_ccy):
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: cleared.append(_n))
+    monkeypatch.setattr(SRC, "_tdcc_cache", {"3-2": []})
+    EN._MEMO[("佔位",)] = (0.0, EN.KIND_SUCCESS, {})
+
+    def boom(values):
+        raise AH.PolicySupplementError("讀取失敗", code="api")
+    monkeypatch.setattr(AH, "load_alo_tables", boom)
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    S.refetch_nav([SECRET])
+    assert sorted(cleared) == sorted(["fetch_moneydj_basic_fields", "fetch_tdcc_listing",
+                                      "fetch_fundclear_declared_ccy"])
+    assert EN._REGISTERED.cache_info()["size"] == 0 and "3-2" not in SRC._tdcc_cache
+    assert _nav_logs(book)[0][4] == "failed"
+
+
+def test_淨值層_重新取數不清TDCC非空清單(book, monkeypatch):
+    import repositories.fund.sources as SRC
+    data = [{"基金代碼": "X1"}]
+    monkeypatch.setattr(SRC, "_tdcc_cache", {"3-2": data})
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    S.refetch_nav([SECRET])
+    assert SRC._tdcc_cache["3-2"] is data
+
+
+def test_淨值層_exp清除不在市場指標的重新取數清單():
+    import repositories.fund.declared_profile as DP
+    names = {getattr(f, "__name__", "") for f in S.refetch_cached_functions()}
+    assert not names & {DP.fetch_moneydj_basic_fields.__name__, DP.fetch_tdcc_listing.__name__,
+                        DP.fetch_fundclear_declared_ccy.__name__}
+
+
 def test_淨值層_累積表讀取失敗_記failed_原文已遮蔽_即時部分照交_閘門開啟(book, monkeypatch):
     """2026-10-13 第 6 條：A 鏈讀累積表失敗（含冷卻中不打）→ 照實記失敗，不吞。"""
     monkeypatch.setattr(ND, "NAV_HISTORY_PROVENANCE_VERIFIED", True)   # 閘門開啟的路徑（2026-10-13 起預設關閉）

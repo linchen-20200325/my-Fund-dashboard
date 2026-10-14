@@ -183,7 +183,31 @@ def _declared_source_problem(value):
         return f"須以 {META_SOURCE_PREFIX!r} 開頭"
     if not rest or rest != rest.lstrip():
         return f"{META_SOURCE_PREFIX!r} 之後須緊接非空白的來源名稱"
+    if not _is_source_chain(rest):
+        return (f"{META_SOURCE_PREFIX!r} 之後須為 ASCII 英數段以 '+' 相接（例 MoneyDJ+TDCC）；"
+                f"零寬字元、全形字、空白、冒號（含 meta:meta:x）一律不收")
     return None
+
+
+_SOURCE_NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _is_source_chain(text: str) -> bool:
+    """`MoneyDJ`、`MoneyDJ+TDCC` 這種「ASCII 英數段以 + 相接」才收（2026-10-14 C2，#959 非阻擋項）。
+    空段（`+X`、`X+`、`X++Y`）、零寬字元、全形字、空白、冒號、底線一律不收。手寫判定：本目錄的 import 白名單不含 `re`。"""
+    parts = text.split("+")
+    return all(part and all(ch in _SOURCE_NAME_CHARS for ch in part) for part in parts)
+
+
+def _check_label_source(label_source) -> None:
+    """公開函式的 `label_source` 守衛（2026-10-14 C2，#959 非阻擋項）：不是持倉手填時，同樣要過
+    `_declared_source_problem`（與 `_group_funds` 同一套白名單），不合格 → ValueError。
+    持倉手填（預設值）直接放行 —— hld 路徑逐位元組不變。"""
+    if label_source == LABEL_SOURCE_HOLDING:
+        return
+    problem = _declared_source_problem(label_source)
+    if problem:
+        raise ValueError(f"label_source {problem}（{label_source!r}）；本檔不猜幣別出處")
 
 
 # ───────────────────────── 小工具 ─────────────────────────
@@ -425,6 +449,7 @@ def resolve_nav_ccy(source_ccy, holding_ccys, *, label_source=LABEL_SOURCE_HOLDI
     - 意思相同時取合格的那一個（例 `usd` 與 `USD` 並存 → `USD`，出處記合格值那一方）。
     - 只有不合格式的值、沒有合格值 → `ccy_missing`（維持原判法：不改大小寫、不猜）。
     """
+    _check_label_source(label_source)   # 2026-10-14 C2：非持倉手填的出處同樣要過白名單
     # 缺值＝沒填（第三輪小修 2）。來源那一側的缺值必須在 append 之前先歸成 None（第四輪小修 1），
     # 否則 NaN 會帶著 ("?", 'nan') 的意思進衝突判斷。
     if _is_blank_ccy(source_ccy):
@@ -483,7 +508,9 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
     空序列又沒有原因：回 `EMPTY_WITHOUT_REASON`、不寫列。`now`：判「未來」用的當下（測試注入）。
     `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處（預設持倉手填；meta 路徑見 `_group_funds`），
     一路帶到幣別閘、累積表各段與 `resolve_nav_ccy`；只影響文案字樣與 `ccy_source`，不影響判斷。
+    2026-10-14 C2：`label_source` 不是持倉手填時須過 `_declared_source_problem`，不合格 → ValueError（不論有沒有錯誤原文）。
     """
+    _check_label_source(label_source)
     out = _empty_out()
     if error:
         out["error"] = str(error)
@@ -1470,7 +1497,9 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
     - `provenance["coverage_start"]`（必修 1b）：寫出的列裡最舊的除息日；hld 據此判所選區間有沒有證據。
     - `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處（預設持倉手填）。`provenance["ccy_source"]` ＝
       `f"{label_source}_matches_source"`（⚠️ 是出處字串，**不是**幣別值 `label`）；文案字樣依它決定，判法不變。
+      2026-10-14 C2：不是持倉手填時須過 `_declared_source_problem`，不合格 → ValueError。
     """
+    _check_label_source(label_source)
     out = _empty_out()
     out.update(pending=None, settled=False)
     if not isinstance(div, dict):

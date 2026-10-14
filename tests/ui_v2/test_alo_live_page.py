@@ -181,6 +181,25 @@ def test_市值基準下每一檔都資料未備_不偽造不隱藏(monkeypatch)
     assert not radios[0].disabled
 
 
+def test_市值基準下淨值過期_畫面上逐檔印出實際淨值日(monkeypatch):
+    """客戶 2026-10-14 裁示「舊淨值要標示實際資料日期；超過 10 天門檻 →『⬜ 資料未備』，不得參與相關計算」：
+    正式模式 dataset 帶 `nav_not_ready.last` 時，畫面上那一句要帶每一檔的實際淨值日（不是舊的無日期那一句）。"""
+    import copy as _copy
+
+    dataset = _copy.deepcopy(_DATASET)
+    for row in dataset["user_setting"]:
+        if row["setting_key"] == "alo_basis":
+            row["setting_value"] = logic.BASIS_MV
+    dataset["nav_not_ready"] = {"codes": ["AAAA", "BBBB"], "days": 10,
+                                "last": {"AAAA": "2026-09-14", "BBBB": "2026-09-03"}}
+    script = _SCRIPT_LIVE.replace(repr(_DATASET), repr(dataset))
+    at = _run(script, monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    text = "\n".join(_rendered(at))
+    assert "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日" in text
+    assert logic.NAV_NOT_READY_TEXT.format(days=10) not in text
+
+
 def test_holding與policy一起取數失敗時照樣畫得完(monkeypatch):
     import copy as _copy
 

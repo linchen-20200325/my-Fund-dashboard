@@ -757,3 +757,107 @@ class TestFundClear:
         a = dp.fetch_fundclear_declared_ccy(CODE)
         b = dp.fetch_fundclear_declared_ccy(CODE)
         assert a["fetched_at"] and a["fetched_at"] == b["fetched_at"]
+
+
+# ═════════════════════ 2026-10-14 C2：MoneyDJ 表格與代碼的綁定 ═════════════════════
+
+def _bind_page(table_extra_rows: str = "", *, outside: str = "", nested: str = "") -> str:
+    """含基金名稱那張表；代碼放在哪裡由參數決定。`outside`：表外（例如導覽列）的可見文字；
+    `nested`：巢狀在那張表某一格裡的內層表。"""
+    nested_row = f"<tr><td>附表</td><td><table>{nested}</table></td></tr>" if nested else ""
+    return (f"<html><body>{_PAD}<div class='nav'>{outside}</div>"
+            f"<table>{_row2('基金名稱', '某基金')}{table_extra_rows}{nested_row}</table>"
+            f"<table>{_row2('其他', '別的表')}</table></body></html>")
+
+
+class TestMoneyDJBinding:
+    def test_表內有代碼_綁定為真(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _bind_page(_row2("基金代碼", CODE)))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok"
+        assert r["binding"] == {"code_in_label_table": True, "code_in_page_text": True}
+
+    def test_表內代碼大小寫不分(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _bind_page(_row2("基金代碼", CODE.lower())))})
+        assert dp.fetch_moneydj_basic_fields(CODE)["binding"]["code_in_label_table"] is True
+
+    def test_代碼只在導覽列_ok但未綁定(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _bind_page(outside=CODE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok"                                  # ok 判準不變
+        assert r["binding"] == {"code_in_label_table": False, "code_in_page_text": True}
+
+    def test_代碼只在別張表_未綁定(self, monkeypatch):
+        page = _bind_page().replace("別的表", CODE)
+        _net(monkeypatch, {U1: ("html", page)})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["binding"]["code_in_label_table"] is False
+
+    def test_代碼只在巢狀內層表_未綁定(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _bind_page(nested=_row2("代碼", CODE)))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["binding"]["code_in_label_table"] is False
+
+    def test_TLZF90不命中TLZF9(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _bind_page(_row2("基金代碼", "TLZF90"), outside=CODE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["binding"]["code_in_label_table"] is False
+
+    def test_既有頁面樣本_代碼在表外連結_未綁定(self, monkeypatch):
+        # `_page` 把代碼放在表外的 <a>（C1 的樣本形狀）：ok 但未綁定 —— L2 會判三欄資料未備
+        _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["binding"]["code_in_label_table"] is False
+
+    def test_failed結果沒有binding鍵(self, monkeypatch):
+        _net(monkeypatch, {})
+        assert "binding" not in dp.fetch_moneydj_basic_fields(CODE)
+
+    def test_parse_label_table_with_node交回表格節點(self):
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(_bind_page(_row2("基金代碼", CODE)), "lxml")
+        fields, conflicts, tbl = dp._parse_label_table_with_node(soup)
+        assert fields["基金名稱"] == "某基金" and conflicts == [] and tbl is soup.find_all("table")[0]
+        assert dp._parse_label_table_with_node(BeautifulSoup("<p>x</p>", "lxml")) == (None, [], None)
+
+    def test_parse_label_table維持C1的兩值介面(self):
+        # 2026-10-14 稽核 W（BLOCKING）：平行的 #961 探測腳本以兩個值接收，介面不得再改
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(_bind_page(_row2("基金代碼", CODE)), "lxml")
+        out = dp._parse_label_table(soup)
+        assert isinstance(out, tuple) and len(out) == 2
+        assert out == dp._parse_label_table_with_node(soup)[:2]
+        assert dp._parse_label_table(BeautifulSoup("<p>x</p>", "lxml")) == (None, [])
+
+
+# ═════════════════════ 2026-10-14 C2：reset_tdcc_list_cache_if_empty ═════════════════════
+
+class TestResetTdccEmpty:
+    def test_只丟空清單(self):
+        src._tdcc_cache["3-2"] = []
+        src._tdcc_cache["3-1"] = []
+        assert dp.reset_tdcc_list_cache_if_empty() is True
+        assert "3-2" not in src._tdcc_cache and src._tdcc_cache["3-1"] == []   # 其他端點不動
+
+    def test_非空清單不動(self):
+        data = [{"基金代碼": CODE}]
+        src._tdcc_cache["3-2"] = data
+        assert dp.reset_tdcc_list_cache_if_empty() is False
+        assert src._tdcc_cache["3-2"] is data
+
+    def test_沒有這一筆_回False(self):
+        assert dp.reset_tdcc_list_cache_if_empty() is False and src._tdcc_cache == {}
+
+    def test_丟掉後下一次真的重試(self, monkeypatch):
+        src._tdcc_cache["3-2"] = []
+        assert dp.fetch_tdcc_listing(CODE)["status"] == "failed"
+        dp.fetch_tdcc_listing.cache_clear()          # 公開 cache_clear 連同失敗記憶一起清
+        dp.reset_tdcc_list_cache_if_empty()
+        calls = []
+
+        def fake_get(ep, *, error_out=None):
+            calls.append(ep)
+            src._tdcc_cache[ep] = [{"基金代碼": CODE, "基金名稱": "某基金", "計價幣別": "USD"}]
+            return src._tdcc_cache[ep]
+        monkeypatch.setattr(src, "_tdcc_get", fake_get)
+        assert dp.fetch_tdcc_listing(CODE)["status"] == "ok" and calls == ["3-2"]

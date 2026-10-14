@@ -114,6 +114,9 @@ def rows():
     import repositories.fund.nav_metrics  # noqa: F401
     import infra.proxy  # noqa: F401
     import infra.source_backoff  # noqa: F401
+    # 2026-10-14 exp C2 稽核必修 11：讓 `exp_nav_memo`（L2 逐檔記憶的登記物件）進入本守衛的母體。
+    # ⚠️ 這一行的 import 會連帶載入 `nav_dividend` → A 鏈一整串模組，可達的註冊條目因此變多（不只 +1）。
+    import services.v2_tables.exp_nav  # noqa: F401
     out = get_all_cache_info()
     assert out, "registry 是空的 —— 這批測試就失去意義了（import 沒觸發註冊？）"
     return out
