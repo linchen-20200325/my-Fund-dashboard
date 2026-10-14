@@ -55,6 +55,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
@@ -63,7 +64,7 @@ from repositories.macro.fred_vintage import (
     REALTIME_END_LATEST,
     fetch_fred_vintages_with_error,
 )
-from repositories.macro.yf import YF_CHART_BASE, fetch_yf_close_with_error
+from repositories.macro.yf import EXCHANGE_TZ_ATTR, YF_CHART_BASE, fetch_yf_close_with_error
 from repositories.v2_source_status import cooling_sources, host_of
 from services.v2_tables.contract import (
     MARKET_INDICATOR_FIELDS,
@@ -79,7 +80,14 @@ EMPTY_WITHOUT_REASON = "來源回傳空值，原因未提供"
 # 總管 2026-09-26 裁定（稽核必修 1）：Yahoo `USDTWD=X` 日線的時間戳可能落在世界協調時間
 # 前一天（例如 23:00 UTC），以世界協調時間取日期會差一天；本環境連不到 Yahoo，無法以真實資料驗證。
 # ⇒ 驗證之前 `fx_twd_per_usd` 不取數、不寫列，顯示資料未備。
-# ⚠️ 驗證確認 UTC 切日正確，才可以只改這一處；否則要先改判準（`_obs_date` 的切日規則）。
+# ~~⚠️ 驗證確認 UTC 切日正確，才可以只改這一處；否則要先改判準（`_obs_date` 的切日規則）。~~
+# → 2026-10-13 狀態更新（不是漏刪；客戶 2026-10-13 裁示）：探測報告
+#   （`probe/fx-obs-date-results` 分支 `results/20261013T185433Z_run38450455092/report.json`）證實
+#   UTC 切日**不正確**（匯率日線時間戳＝倫敦當地 00:00，夏令時 UTC 取日早一天），所以走的是上句的「否則」：
+#   判準已改為「**以來源自報的交易所時區（`meta.exchangeTimezoneName`）的當地日期為準**」（見 `_obs_date`、
+#   `rows_from_daily_close`）。**本格仍為 False**：新規則要在合併後**重跑探測**、以真實回應確認
+#   （週末 0、同日重複 0、正式路徑列數合理）之後，才可以**只改這一格**。
+#   舊句在寫下當時為真（當時還不知道哪一種切日才對），被推翻的是它「UTC 可能正確」的前提。
 FX_OBS_DATE_RULE_VERIFIED = False
 
 # 不寫列的原因代碼（L3 依代碼對照客戶核准的畫面文案；未知代碼在 L3 當場炸）。
@@ -261,52 +269,128 @@ def _utc_iso(fetched_at) -> Optional[str]:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
-def _obs_date(stamp) -> str:
-    """序列索引 → 觀測日。L1 以 Unix 秒建索引（無時區＝世界協調時間）；有時區則先換算。"""
+def exchange_zone(name) -> Optional[ZoneInfo]:
+    """來源自報的交易所時區字串 → `ZoneInfo`；缺、不是字串、空字串、zoneinfo 不認得 → None。
+
+    **不推定**：不退回世界協調時間、不查任何寫死的「代碼 → 時區」對照表（客戶 2026-10-13 裁示：
+    以來源自報的交易所時區為準；來源沒報就是不知道）。字串原樣交給 zoneinfo，不修剪、不改大小寫。
+    """
+    if not isinstance(name, str) or not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):   # 不認得的名稱／非法字串（例如含 `..`）
+        return None
+
+
+def _local_stamp(stamp, zone: ZoneInfo) -> pd.Timestamp:
+    """序列索引 → 交易所時區的當地時刻。
+
+    L1 以 `pd.to_datetime(秒, unit="s")` 建索引：不帶時區＝世界協調時間，故先 `tz_localize("UTC")`；
+    已帶時區者直接 `tz_convert`。
+    """
     ts = pd.Timestamp(stamp)
-    if ts.tzinfo is not None:
-        ts = ts.tz_convert("UTC")
-    return ts.date().isoformat()
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert(zone)
+
+
+def _obs_date(stamp, exchange_tz) -> str:
+    """序列索引 → 觀測日（**交易所時區的當地日期**；客戶 2026-10-13 裁示）。
+
+    ~~L1 以 Unix 秒建索引（無時區＝世界協調時間）；有時區則先換算。~~（舊規則取**世界協調時間**的日期；
+    2026-10-13 有意識的變更，不是漏刪 —— 探測報告證實匯率日線時間戳＝倫敦當地 00:00，夏令時以 UTC 取日
+    會早一天、出現週日觀測日、缺週五；舊規則在寫下時是唯一可推的做法，被推翻的是「UTC 日＝交易日」的前提。）
+
+    `exchange_tz`：來源自報的時區字串（例：`"Europe/London"`）或 `ZoneInfo`。
+    認不得 → `ValueError`（呼叫端應先以 `exchange_zone` 檢查並整鍵不寫；走到這裡代表呼叫端的 bug，§1 當場炸）。
+    """
+    zone = exchange_tz if isinstance(exchange_tz, ZoneInfo) else exchange_zone(exchange_tz)
+    if zone is None:
+        raise ValueError(f"交易所時區無法辨識：{exchange_tz!r}（不推定，不退回世界協調時間）")
+    return _local_stamp(stamp, zone).date().isoformat()
 
 
 def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     """日頻收盤行情（Q3 a/b）→ (rows, error_text, skipped_reasons)。
 
+    觀測日＝**來源自報的交易所時區**（L1 `attrs["exchange_tz"]`，即 Yahoo `meta.exchangeTimezoneName`）
+    的當地日期（客戶 2026-10-13 裁示）。
+
     - error 非空：原文照回，不寫列。
     - 空序列又沒有原因：回 49 訂的弱訊息，不寫列。
     - `fetched_at` 取不到或沒有時區：整批不寫（不以當下時間補），記進 skipped。
-    - 觀測日不早於取得日（世界協調時間）：可能是未收盤的盤中值，Q3 的「收盤行情」前提
-      不成立 → 不寫，記進 skipped。
+    - 交易所時區缺、或 zoneinfo 不認得：整批不寫，記進 skipped（**不推定**：不退回世界協調時間、
+      不查寫死的對照表）。L1 快取裡改版前的舊物件沒有這個鍵 → 同樣走這一支，TTL 過期或重啟後自然消失。
+    - 觀測日不早於「取得時間換成同一交易所時區後的日期」：可能是未收盤的盤中值（或交易所當天那一根），
+      Q3 的「收盤行情」前提不成立 → 不寫，記進 skipped。
     - 同一觀測日重複：主鍵（indicator_key, obs_date, release_date）會撞 → 該日全部不寫。
+    - 觀測日（當地）為星期六或星期日：與交易日錯位的跡象 → 不寫並計數。
+    - **當地時刻須與同鍵其餘已收盤根一致**（以資料自證日界，不寫死 00:00）：已收盤根之中，
+      當地時刻（時:分:秒.微秒）過半數相同者為基準，不同者不寫並計數；沒有任何一個時刻過半數
+      → 無法自證日界，已收盤根全部不寫。理由：匯率日線在倫敦 00:00、^VIX 在芝加哥 02:00
+      （探測報告實測，夏冬令皆同），所以不能一體要求 00:00；但同一個序列的日線開盤時刻應當一致，
+      不一致的那幾根代表那一根的日界不是同一套，取日可能錯位。
     - 非有限數值：不寫，記進 skipped。
+    判定順序（每根只歸一類）：重複 → 未收盤 → 週末 → 當地時刻不一致 → 非有限值 → 契約。
     """
     if error:
         return [], str(error), []
     if series is None or len(series) == 0:
         return [], EMPTY_WITHOUT_REASON, []
 
+    attrs = getattr(series, "attrs", {}) or {}
     skipped = []
-    fetched_at = _utc_iso(getattr(series, "attrs", {}).get("fetched_at"))
+    fetched_at = _utc_iso(attrs.get("fetched_at"))
     if fetched_at is None:
         skipped.append(f"L1 回傳的 fetched_at 取不到或沒有時區，{len(series)} 筆全部不寫")
         return [], None, skipped
-    fetched_day = datetime.fromisoformat(fetched_at.replace("Z", "+00:00")).date().isoformat()
+    raw_tz = attrs.get(EXCHANGE_TZ_ATTR)
+    if raw_tz is None or raw_tz == "":
+        skipped.append(f"來源未提供交易所時區（attrs[{EXCHANGE_TZ_ATTR!r}]），不推定，"
+                       f"{len(series)} 筆全部不寫")
+        return [], None, skipped
+    zone = exchange_zone(raw_tz)
+    if zone is None:
+        skipped.append(f"來源自報的交易所時區 {raw_tz!r} 無法辨識（zoneinfo 不認得），不推定，"
+                       f"{len(series)} 筆全部不寫")
+        return [], None, skipped
+    fetched_day = (datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+                   .astimezone(zone).date().isoformat())
 
     candidates = []
     for stamp, value in series.items():
-        candidates.append((_obs_date(stamp), value))
+        local = _local_stamp(stamp, zone)
+        candidates.append((local, local.date().isoformat(), value))
     counts = {}
-    for obs, _value in candidates:
+    for _local, obs, _value in candidates:
         counts[obs] = counts.get(obs, 0) + 1
 
-    not_finite = not_closed = duplicated = contract_bad = 0
+    # 基準當地時刻：已收盤根之中**過半數**相同的那一個（沒有過半數 → 無基準，已收盤根全部不寫）。
+    closed_times: dict = {}
+    for local, obs, _value in candidates:
+        if obs < fetched_day:
+            closed_times[local.time()] = closed_times.get(local.time(), 0) + 1
+    reference = None
+    if closed_times:
+        top_time = max(closed_times, key=closed_times.get)
+        if closed_times[top_time] * 2 > sum(closed_times.values()):
+            reference = top_time
+
+    not_finite = not_closed = duplicated = contract_bad = weekend = time_mismatch = 0
     rows = []
-    for obs, value in candidates:
+    for local, obs, value in candidates:
         if counts[obs] > 1:
             duplicated += 1
             continue
         if obs >= fetched_day:
             not_closed += 1
+            continue
+        if local.weekday() >= 5:
+            weekend += 1
+            continue
+        if reference is None or local.time() != reference:
+            time_mismatch += 1
             continue
         try:
             number = float(value)
@@ -334,9 +418,19 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     if not_finite:
         skipped.append(f"數值非有限值 {not_finite} 筆不寫")
     if not_closed:
-        skipped.append(f"觀測日不早於取得日（{fetched_day}，世界協調時間）{not_closed} 筆不寫")
+        skipped.append(f"觀測日不早於取得日（{fetched_day}，交易所時區 {raw_tz}）{not_closed} 筆不寫")
     if duplicated:
         skipped.append(f"同一觀測日重複 {duplicated} 筆不寫")
+    if weekend:
+        skipped.append(f"觀測日（交易所時區 {raw_tz}）為星期六或星期日 {weekend} 筆不寫")
+    if time_mismatch:
+        if reference is None:
+            spread = "、".join(f"{t.isoformat()}×{n}" for t, n in sorted(closed_times.items()))
+            skipped.append(f"已收盤根的當地時刻（交易所時區 {raw_tz}）沒有過半數一致的值"
+                           f"（{spread}），無法自證日界，{time_mismatch} 筆不寫")
+        else:
+            skipped.append(f"當地時刻與同鍵已收盤根的基準 {reference.isoformat()}"
+                           f"（交易所時區 {raw_tz}）不一致 {time_mismatch} 筆不寫")
     if contract_bad:
         skipped.append(f"不符欄位契約 {contract_bad} 筆不寫")
     return rows, None, skipped

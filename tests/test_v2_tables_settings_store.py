@@ -67,6 +67,10 @@ def book(monkeypatch):
 def _vix(values, dates, fetched_at="2026-09-25T06:00:00.123456+00:00"):
     s = pd.Series(values, index=pd.to_datetime(dates), dtype=float, name="^VIX")
     s.attrs["fetched_at"] = fetched_at
+    # 2026-10-13：L1 改帶來源自報的交易所時區（客戶裁示：觀測日以交易所時區為準；缺時區整鍵不寫）。
+    # 本檔測的是寫表與取數紀錄，不是取日規則；替身寫 `UTC`，讓日期以世界協調時間午夜表示的既有例子
+    # 觀測日不變（取日規則另見 tests/test_v2_tables_market_indicator_exchange_tz.py）。
+    s.attrs["exchange_tz"] = "UTC"
     return s
 
 

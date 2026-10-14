@@ -25,6 +25,13 @@ YF_CHART_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 # `repositories/fund/nav_metrics.py` 同名同義(測試釘住三者一致)。
 _FETCH_ERROR_ATTR = "fetch_error"
 
+# 來源自報的交易所時區（客戶 2026-10-13 裁示：匯率的觀測日以來源自報的交易所時區的日期為準）。
+# 成功解析時，若回應 `chart.result[0].meta.exchangeTimezoneName` 是非空字串，就把**原字串**原封
+# 放進 `s.attrs[EXCHANGE_TZ_ATTR]`；缺、空字串或不是字串 → **不放這個鍵**（不填預設值、不猜，§1）。
+# 本層不驗證它是不是合法的時區名稱 —— 那是消費端（`services/v2_tables/market_indicator.py`）的事，
+# 消費端認不得就整鍵不寫。純新增一個 attrs 鍵：索引、值、其餘 attrs 一律不動。
+EXCHANGE_TZ_ATTR = "exchange_tz"
+
 
 def _with_fetch_error(obj, msg: str):
     """把失敗原文掛到**當場新建**的失敗物件上(不得對快取來的物件呼叫)。"""
@@ -47,6 +54,10 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
     pd.Series  index 為 DatetimeIndex,value 為收盤價。失敗時回傳空 Series。
                provenance(F-PROV-1 v19.83):成功時 `s.attrs` 含
                `source="Yahoo:<ticker>"` + `fetched_at=UTC ISO`。
+               2026-10-13 起,回應帶 `meta.exchangeTimezoneName`(非空字串)時另含
+               `exchange_tz=<原字串>`(`EXCHANGE_TZ_ATTR`);缺就沒有這個鍵,不填預設值。
+               ⚠️ 本函式有 `@_ttl_cache`:改版前已入快取的物件沒有這個鍵,
+               要等 TTL(10 分鐘)過期或行程重啟才會有;消費端須照「缺時區」處理。
 
     快取語意(2026-08-31,v3 §02「只快取成功結果」):
         **`fetch_url` 回 None(連不上/逾時/403/429/5xx)時回傳的空 Series 帶
@@ -95,6 +106,12 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         # caller 不存取 attrs 時無感;需要追溯時 s.attrs["source"] / s.attrs["fetched_at"]。
         s.attrs["source"] = f"Yahoo:{ticker}"
         s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        # 2026-10-13:來源自報的交易所時區(見 EXCHANGE_TZ_ATTR 註解)。刻意寫成**不會拋例外**的形狀:
+        # meta 缺或形狀不對時只是不放這個鍵,不得讓既有「解析成功」的回應因此掉進下面的解析失敗分支。
+        _meta = result.get("meta") if isinstance(result, dict) else None
+        _ex_tz = _meta.get("exchangeTimezoneName") if isinstance(_meta, dict) else None
+        if isinstance(_ex_tz, str) and _ex_tz:
+            s.attrs[EXCHANGE_TZ_ATTR] = _ex_tz
     except Exception as e:
         print(f"[macro_core/yf] {ticker} 解析失敗: {e}")
         # ⚠️ 這一支**刻意不標記**(2026-08-31),不是漏掉:

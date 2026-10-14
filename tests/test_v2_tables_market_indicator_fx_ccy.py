@@ -18,10 +18,13 @@ from services.v2_tables import market_indicator as mi
 _FETCHED = "2026-09-25T06:00:00+00:00"
 
 
-def _series(values, dates, *, ticker):
+def _series(values, dates, *, ticker, exchange_tz="Europe/London"):
+    """L1 回傳的替身；2026-10-13 起帶來源自報的交易所時區（匯率為 `Europe/London`，探測報告實測）。"""
     s = pd.Series(values, index=pd.DatetimeIndex([pd.Timestamp(d) for d in dates]), dtype=float, name=ticker)
     s.attrs["fetched_at"] = _FETCHED
     s.attrs["source"] = f"Yahoo:{ticker}"
+    if exchange_tz is not None:
+        s.attrs["exchange_tz"] = exchange_tz
     return s
 
 
@@ -95,19 +98,22 @@ def test_閘門關閉_不取數_不寫列_pending與美元同一個代碼_不進
 
 def test_閘門打開_取EURTWD並套與美元同一條規則(monkeypatch):
     monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
-    fake = _stub({"EURTWD=X": (_series([34.5, 34.6], ["2026-09-22", "2026-09-23 23:00:00"],
-                                       ticker="EURTWD=X"), None)})
+    # 2026-10-13：時間戳改用匯率日線的真實形狀（夏令時倫敦 00:00 ＝ UTC 前一天 23:00；探測報告實測）。
+    # ~~舊例 `["2026-09-22", "2026-09-23 23:00:00"]` 取世界協調時間日期~~ → 新規則取交易所時區（倫敦）日期；
+    # 舊例兩根的倫敦當地時刻不同（01:00／00:00），在新規則下會因「當地時刻不一致」整批不寫，故換例（不是漏刪）。
+    dates = ["2026-09-21 23:00:00", "2026-09-22 23:00:00"]
+    fake = _stub({"EURTWD=X": (_series([34.5, 34.6], dates, ticker="EURTWD=X"), None)})
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", fake)
     out = mi.build_fx_indicator_table(["EUR"])
     assert fake.calls == ["EURTWD=X"]
     assert out["pending"] == {} and out["errors"] == {} and out["fetched"] == {"fx_twd_per_eur": 2}
     assert [(r["indicator_key"], r["obs_date"], r["value_num"], r["value_unit"]) for r in out["rows"]] == [
+        # 與美元同一條規則：交易所時區（倫敦）的當地日期 —— UTC 09-21 23:00 ＝ 倫敦 09-22 00:00
         ("fx_twd_per_eur", "2026-09-22", 34.5, "新臺幣／EUR"),
-        # 與美元同一條（現行）規則：世界協調時間取日期；正確與否正是閘門要驗的那一件事
         ("fx_twd_per_eur", "2026-09-23", 34.6, "新臺幣／EUR"),
     ]
     same_rule, _e, _s = mi.rows_from_daily_close(
-        "fx_twd_per_eur", _series([34.5, 34.6], ["2026-09-22", "2026-09-23 23:00:00"], ticker="EURTWD=X"),
+        "fx_twd_per_eur", _series([34.5, 34.6], dates, ticker="EURTWD=X"),
         None, value_unit="新臺幣／EUR")
     assert same_rule == out["rows"]
 
