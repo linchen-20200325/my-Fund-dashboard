@@ -259,15 +259,25 @@ def test_市值基準_歐元_閘門打開_取EURTWD換算(wired, monkeypatch):
     # 2026-10-13：替身改成匯率日線的真實形狀（夏令倫敦 00:00 ＝ UTC 前一天 23:00）並帶 L1 新增的
     # `exchange_tz`（客戶裁示：觀測日以交易所時區為準）；~~索引 `2026-09-22`／`2026-09-24`（UTC 午夜）~~
     # 在新規則下倫敦當地時刻是 01:00、且缺時區會整鍵不寫，故換例（不是漏刪）。觀測日仍是 09-22／09-24。
-    fx = pd.Series([35.0, 99.0], index=[pd.Timestamp("2026-09-21 23:00"), pd.Timestamp("2026-09-23 23:00")],
-                   name="EURTWD=X")
-    fx.attrs = {"source": "Yahoo:EURTWD=X", "fetched_at": "2026-09-25T06:00:00+00:00",
+    # ~~兩根（倫敦 09-22 → 35.0、09-24 → 99.0）~~ → 2026-10-14（客戶裁示匯率採「前一交易日收盤」語意；
+    # 有意識的更正，不是漏刪）：日 K 日期 D 的值寫成觀測日 D 的前一個平日，且外匯有最少根數門檻
+    # （`FX_MIN_REFERENCE_VOTES`，判讀 A 的 A1），兩根整鍵不寫。改為 23 個倫敦平日 00:00 根（夏令＝UTC 前一天 23:00）：
+    # D＝09-24（四）→ 觀測日 09-23（＝淨值日）35.0；D＝09-25（五）→ 觀測日 09-24（晚於淨值日）99.0；其餘 34.0。
+    # 取得時間改為 09-28，讓 D＝09-25 那根已收盤（否則它是未收盤根，「晚於淨值日不取」就測不到）。
+    days = pd.bdate_range(end="2026-09-25", periods=23)
+    values = [35.0 if d.strftime("%m-%d") == "09-24" else 99.0 if d.strftime("%m-%d") == "09-25" else 34.0
+              for d in days]
+    fx = pd.Series(values, index=[d - pd.Timedelta(hours=1) for d in days], name="EURTWD=X")
+    fx.attrs = {"source": "Yahoo:EURTWD=X", "fetched_at": "2026-09-28T06:00:00+00:00",
                 "exchange_tz": "Europe/London"}
     wired["fx"] = {"EURTWD=X": (fx, None)}
     out = source.load_live()
     assert wired["fx_calls"] == ["EURTWD=X"]
     assert {r["indicator_key"] for r in out["dataset"]["market_indicator"]} == {"fx_twd_per_usd", "fx_twd_per_eur"}
     block = logic.find_block(logic.build_page_model(out["dataset"]), "ALO-2")
+    fx_rows = {r["obs_date"]: r["value_num"] for r in out["dataset"]["market_indicator"]
+               if r["indicator_key"] == "fx_twd_per_eur"}
+    assert fx_rows["2026-09-23"] == 35.0 and fx_rows["2026-09-24"] == 99.0      # 觀測日＝日 K 日期的前一個平日
     assert block["_values"][_CORE]["value"] == 1000.0 * 15.2 * 35.0   # 09-24 那筆晚於淨值日，不取
 
 

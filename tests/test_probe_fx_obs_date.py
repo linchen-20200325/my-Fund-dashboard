@@ -255,7 +255,10 @@ def test_子集_去掉觀測日不早於取得日_與正式rows_from_daily_close
     # 2026-10-13：production_rows 改走正式新規則（交易所時區取日）：UTC 07-03 23:00 ＝ 倫敦 07-04（週六）
     # ⇒ 週末不寫；~~`row_count == 1、first_obs_date == "2026-07-03"`~~（舊規則結果，不是漏刪）。
     assert pr["row_count"] == 0 and pr["first_obs_date"] is None
-    assert any("觀測日不早於取得日" in s for s in pr["skipped"])
+    # ~~`any("觀測日不早於取得日" in s ...)`~~ → 2026-10-14：USDTWD=X 走外匯「前一交易日」語意，
+    # 未收盤與週末都看位移前的日 K 日期，訊息寫明「日 K 日期（…位移前）」（有意識的更正，不是漏刪）。
+    assert pr["obs_date_rule"] == "prev_weekday"
+    assert any("日 K 日期" in s and "不早於取得日" in s for s in pr["skipped"])
     assert any("星期六或星期日" in s for s in pr["skipped"])
 
 
@@ -521,7 +524,26 @@ def test_新舊規則並列_夏令倫敦_新規則無週末_差異逐根列出(o
     assert closed["fetched_day_exchange_tz"] == "2026-10-13" and closed["bar_count"] == 3
     assert out["subsets"]["non_null_closed"]["fetched_day_utc"] == "2026-10-13"   # 舊欄保留
     pr = out["production_rows"]
-    assert pr["row_count"] == 3 and pr["first_obs_date"] == "2026-10-02" and pr["last_obs_date"] == "2026-10-06"
+    # ~~`row_count == 3、first 10-02、last 10-06`~~ → 2026-10-14（客戶裁示前一交易日語意；有意識的更正，不是漏刪）：
+    # USDTWD=X 在正式路徑走外匯語意，三根不足最少根數門檻（判讀 A 的 A1）⇒ 整鍵不寫。
+    assert pr["obs_date_rule"] == "prev_weekday" and pr["row_count"] == 0
+    assert any("最少根數門檻 20" in x for x in pr["skipped"])
+    # 舊期望改以當日語意（^VIX 等非外匯的語意）驗：交易所時區取日的結果不變
+    same = probe.production_rows_summary("USDTWD=X", ts, [31.88680076599121, 31.834400177001953,
+                                                          31.751399993896484],
+                                         "2026-10-13T18:54:31.379935+00:00", exchange_tz="Europe/London",
+                                         obs_date_rule="same_day")
+    assert same["row_count"] == 3 and same["first_obs_date"] == "2026-10-02" and same["last_obs_date"] == "2026-10-06"
+
+
+@pytest.mark.parametrize("ticker, rule", [("USDTWD=X", "prev_weekday"), ("EURTWD=X", "prev_weekday"),
+                                          ("JPYTWD=X", "prev_weekday"), ("CNHTWD=X", "prev_weekday"),
+                                          ("^VIX", "same_day"), ("GBPUSD=X", "same_day"), ("TWDTWD=X", "same_day"),
+                                          ("eurTWD=X", "same_day"), ("EURTWD=XX", "same_day"), ("probe", "same_day")])
+def test_production_rows的觀測日語意_依正式路徑組得出的匯率代碼判定_不依名稱猜(ticker, rule):
+    """2026-10-14：外匯＝正式路徑自己組得出的 `<ISO>TWD=X`（`fx_yahoo_ticker` 的值域）；組不出來的一律當日語意。"""
+    from services.v2_tables import market_indicator as mi
+    assert mi.yahoo_ticker_obs_date_rule(ticker) == rule
 
 
 def test_新規則_交易所時區不認得_新欄位為None_正式路徑整鍵不寫(obs_fn):

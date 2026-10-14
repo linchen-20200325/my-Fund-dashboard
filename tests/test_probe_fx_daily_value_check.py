@@ -462,3 +462,123 @@ def test_嚴格JSON寫得出時_不加strict_json_error_退出碼照主要代號
     out = tmp_path / "r.json"
     assert probe.main(["--out", str(out)]) == 0
     assert "strict_json_error" not in json.loads(out.read_text(encoding="utf-8"))
+
+
+# ═══════════════════════ 2026-10-14 開閘前小項（#960 延後項） ═══════════════════════
+
+
+def test_寬鬆級分布_不收partial():
+    """稽核 P 突變 L4 存活項：寬鬆級分布須與主分布同樣排除 partial_coverage 的根。
+    01-06（小時序列從 01-05 起，前面不足 2 個交易所日 ⇒ partial）與 01-14 兩根都只在 1e-5 級容差內。"""
+    head, mid = _lon(2026, 1, 6), _lon(2026, 1, 14)
+    out = _run(_daily([(head, _p(head - 3 * 3600) * (1 + 5e-6)), (mid, _p(mid - 3 * 3600) * (1 + 5e-6))]))
+    r_head, r_mid = out["bars"]
+    assert r_head["partial_coverage"] is True and r_mid["partial_coverage"] is False
+    assert r_head["best_close_match"]["loose"]["1e-05"] == {"within_tol": True, "ties": 1}
+    loose = out["match_precision"]["loose"]["1e-05"]
+    assert loose["within_tol"] == 2                                  # 容差內計數兩根都算
+    assert loose["distribution"] == {"-1 21:00": 1}                  # 分布只收非 partial 那一根
+
+
+def test_寬鬆級分布_不收觀測日重複的根():
+    """同一倫敦日兩根日 K（00:00 與 01:00），各自在 1e-5 級容差內、ties＝1 ⇒ 計入容差內，但不入寬鬆級分布。"""
+    day = _lon(2026, 1, 14)
+    out = _run(_daily([(day, _p(day - 3 * 3600) * (1 + 5e-6)), (day + 3600, _p(day - 2 * 3600) * (1 + 5e-6))]))
+    assert all(r["duplicate_obs_date"] for r in out["bars"])
+    assert all(r["best_close_match"]["loose"]["1e-05"] == {"within_tol": True, "ties": 1} for r in out["bars"])
+    loose = out["match_precision"]["loose"]["1e-05"]
+    assert loose["within_tol"] == 2 and loose["distribution"] == {}
+
+
+def test_寬鬆容差邊界_差距恰等於容差算在內_多一點就不算(monkeypatch):
+    """稽核 P 突變 L7 存活項（`<=` 改 `<`）。以二進位精確值構造：容差 2⁻¹⁰、日 K close 32 ⇒ 容差絕對值 2⁻⁵；
+    小時 close 32 ＋ 2⁻⁵ 差距恰為 2⁻⁵（浮點精確）⇒ 在容差內；再加 2⁻²⁰ ⇒ 不在。其餘小時值約 30，遠在容差外。"""
+    monkeypatch.setattr(probe, "MATCH_LOOSE_RELS", (2 ** -10,))
+    lvl = f"{2 ** -10:g}"
+    day = _lon(2026, 1, 14)
+    i = _WINTER["t"].index(day - 4 * 3600)                           # 起點 01-13 20:00 ⇒ 終點 21:00
+    for extra, inside in ((0.0, True), (2 ** -20, False)):
+        hourly = dict(_WINTER, close=list(_WINTER["close"]))
+        hourly["close"][i] = 32.0 + 2 ** -5 + extra
+        out = _run(_daily([(day, 32.0)]), hourly)
+        (rec,) = out["bars"]
+        assert rec["best_close_match"]["abs_diff"] == 2 ** -5 + extra
+        assert rec["best_close_match"]["loose"][lvl]["within_tol"] is inside
+        assert out["match_precision"]["loose"][lvl]["within_tol"] == int(inside)
+        assert out["match_precision"]["loose"][lvl]["distribution"] == ({"-1 21:00": 1} if inside else {})
+
+
+def test_固定位移掃描_close等於D日00點價格_終點版k0與起點版k0中位差為0():
+    """日 K close＝p(倫敦 D 日 00:00)：終點落在 00:00 的那根（起點 23:00）close＝p(00:00)；起點落在 00:00 的那根 open＝p(00:00)。"""
+    daily = _daily([(_lon(d.year, d.month, d.day), _p(_lon(d.year, d.month, d.day))) for d in _MID])
+    scan = _run(daily)["fixed_offset_scan"]
+    assert scan["k_hours"] == [-6, 26] and scan["daily_bars"] == 3 and scan["exchange_tz"] == LONDON
+    assert set(scan["by_end"]) == {f"{k:+d}" for k in range(-6, 27)} == set(scan["by_start"])
+    assert scan["by_end"]["+0"] == {"n": 3, "median_pct_diff": 0.0, "median_abs_pct_diff": 0.0}
+    assert scan["by_start"]["+0"] == {"n": 3, "median_pct_diff": 0.0, "median_abs_pct_diff": 0.0}
+    # 價格路徑遞增：k＞0 的小時價高於 close、k＜0 低於；離 0 越遠差越大
+    assert scan["by_end"]["+1"]["median_pct_diff"] > 0 > scan["by_end"]["-1"]["median_pct_diff"]
+    assert scan["by_end"]["+5"]["median_abs_pct_diff"] > scan["by_end"]["+1"]["median_abs_pct_diff"]
+
+
+def test_固定位移掃描_close等於前一日21點_終點版與起點版都在k負3():
+    daily = _daily([(_lon(d.year, d.month, d.day), _p(_lon(d.year, d.month, d.day) - 3 * 3600)) for d in _MID])
+    scan = _run(daily)["fixed_offset_scan"]
+    assert scan["by_end"]["-3"]["median_abs_pct_diff"] == 0.0 and scan["by_start"]["-3"]["median_abs_pct_diff"] == 0.0
+    assert min(v["median_abs_pct_diff"] for k, v in scan["by_end"].items() if k != "-3") > 0
+
+
+def test_固定位移掃描_夏令以當地00點為錨_小時K缺那一刻不計_重複觀測日不入():
+    """夏令（倫敦＝UTC＋1）：D 日 00:00 ＝ UTC D−1 23:00；錨點以 zoneinfo 換算。
+    週一 07-13 的終點版 k＝0 要的是起點週日 23:00 那根 —— 合成小時 K 沒有週日 ⇒ 該根在終點版 k＝0 不計（起點版有）。
+    同一倫敦日兩根（07-07 的 00:00 與 01:00，重複）不入掃描。"""
+    summer = _hourly(date(2026, 7, 1), date(2026, 7, 17))
+    tue, wed, thu, mon = (_lon(2026, 7, d) for d in (7, 8, 9, 13))
+    out = _run(_daily([(tue, _p(tue)), (tue + 3600, 1.0), (wed, _p(wed)), (thu, _p(thu)), (mon, _p(mon))]),
+               summer, "2026-07-20")
+    scan = out["fixed_offset_scan"]
+    assert scan["daily_bars"] == 3                                    # 07-08、07-09、07-13；07-07 兩根重複不入
+    assert scan["by_end"]["+0"] == {"n": 2, "median_pct_diff": 0.0, "median_abs_pct_diff": 0.0}
+    assert scan["by_start"]["+0"] == {"n": 3, "median_pct_diff": 0.0, "median_abs_pct_diff": 0.0}
+    assert summer["t"][0] == _lon(2026, 7, 1)                          # 錨點換算：倫敦 00:00 ＝ UTC 前一天 23:00
+    assert datetime.fromtimestamp(wed, timezone.utc).hour == 23
+
+
+def test_摘要行列出固定位移掃描最小的k():
+    scan = {"by_end": {"-1": {"n": 3, "median_pct_diff": -0.1, "median_abs_pct_diff": 0.1},
+                       "+0": {"n": 3, "median_pct_diff": 0.0, "median_abs_pct_diff": 0.0},
+                       "+1": {"n": 0, "median_pct_diff": None, "median_abs_pct_diff": None}}}
+    assert probe._scan_best(scan, "by_end") == "k=+0 0.0000% n=3"
+    assert probe._scan_best(scan, "by_start") is None and probe._scan_best(None, "by_end") is None
+
+
+def test_寬鬆格式保底_tuple鍵以skipkeys略過該鍵_其餘照寫(tmp_path, monkeypatch):
+    report = {"proxy_env_set": False, "proxy_used_by_infra": None, "rejected_tickers": [],
+              "tickers": {"USDTWD=X": {"ok": True, "status": "ok", "daily": {"close": 31.9}}},
+              "extra": {("a", "b"): 1, "kept": 2}}
+    monkeypatch.setattr(probe, "run", lambda *a, **k: report)
+    monkeypatch.setattr(probe, "_summary_lines", lambda rep: [])
+    out = tmp_path / "r.json"
+    assert probe.main(["--out", str(out)]) == 1
+    loaded = json.loads(out.read_text(encoding="utf-8"))
+    assert loaded["strict_json_error"].startswith("TypeError")
+    assert loaded["extra"] == {"kept": 2}                            # tuple 鍵（連同內容）被略過
+    assert loaded["tickers"]["USDTWD=X"]["daily"] == {"close": 31.9}
+
+
+def test_寬鬆格式也寫不出_循環參照_寫最小報告_退出碼1(tmp_path, monkeypatch):
+    loop: dict = {}
+    loop["self"] = loop
+    report = {"proxy_env_set": False, "proxy_used_by_infra": None, "rejected_tickers": [],
+              "tickers": {"USDTWD=X": {"ok": True, "status": "ok"}, "^VIX": {"ok": False, "status": "request_failed"}},
+              "extra": loop}
+    monkeypatch.setattr(probe, "run", lambda *a, **k: report)
+    monkeypatch.setattr(probe, "_summary_lines", lambda rep: [])
+    out = tmp_path / "r.json"
+    assert probe.main(["--out", str(out)]) == 1
+    loaded = json.loads(out.read_text(encoding="utf-8"))
+    assert loaded["report_written"] == "minimal"
+    assert loaded["strict_json_error"].startswith("RecursionError")
+    assert loaded["fallback_json_error"].startswith("ValueError")
+    assert loaded["tickers_status"] == {"USDTWD=X": {"ok": True, "status": "ok"},
+                                        "^VIX": {"ok": False, "status": "request_failed"}}

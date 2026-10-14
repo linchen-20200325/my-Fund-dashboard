@@ -96,25 +96,34 @@ def test_閘門關閉_不取數_不寫列_pending與美元同一個代碼_不進
     assert "EURTWD=X" in out["skipped"]["fx_twd_per_eur"][0]
 
 
+# 2026-10-14：匯率走「前一交易日收盤」語意＋最少根數門檻（`FX_MIN_REFERENCE_VOTES`，判讀 A 的 A1）；
+# 經 builder 的例子需要足夠根數。夏令倫敦 00:00 ＝ UTC 前一天 23:00（探測報告實測）。
+_EUR_STAMPS = [(pd.Timestamp(d) - pd.Timedelta(hours=1)).isoformat(sep=" ")
+               for d in pd.bdate_range(end="2026-09-23", periods=24)]
+_EUR_VALUES = [34.0 + i * 0.01 for i in range(len(_EUR_STAMPS))]
+
+
 def test_閘門打開_取EURTWD並套與美元同一條規則(monkeypatch):
     monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
     # 2026-10-13：時間戳改用匯率日線的真實形狀（夏令時倫敦 00:00 ＝ UTC 前一天 23:00；探測報告實測）。
     # ~~舊例 `["2026-09-22", "2026-09-23 23:00:00"]` 取世界協調時間日期~~ → 新規則取交易所時區（倫敦）日期；
     # 舊例兩根的倫敦當地時刻不同（01:00／00:00），在新規則下會因「當地時刻不一致」整批不寫，故換例（不是漏刪）。
-    dates = ["2026-09-21 23:00:00", "2026-09-22 23:00:00"]
-    fake = _stub({"EURTWD=X": (_series([34.5, 34.6], dates, ticker="EURTWD=X"), None)})
+    # ~~`dates = ["2026-09-21 23:00:00", "2026-09-22 23:00:00"]`，期望觀測日 09-22、09-23~~ → 2026-10-14（客戶裁示
+    # 前一交易日語意＋A1 門檻；有意識的更正，不是漏刪）：兩根不足門檻，改 24 根；最後兩根的日 K 日期是 09-22（二）、
+    # 09-23（三），觀測日取前一個平日 ⇒ 09-21、09-22；首根日 K 日期 08-21（五）→ 08-20。
+    fake = _stub({"EURTWD=X": (_series(_EUR_VALUES, _EUR_STAMPS, ticker="EURTWD=X"), None)})
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", fake)
     out = mi.build_fx_indicator_table(["EUR"])
     assert fake.calls == ["EURTWD=X"]
-    assert out["pending"] == {} and out["errors"] == {} and out["fetched"] == {"fx_twd_per_eur": 2}
-    assert [(r["indicator_key"], r["obs_date"], r["value_num"], r["value_unit"]) for r in out["rows"]] == [
-        # 與美元同一條規則：交易所時區（倫敦）的當地日期 —— UTC 09-21 23:00 ＝ 倫敦 09-22 00:00
-        ("fx_twd_per_eur", "2026-09-22", 34.5, "新臺幣／EUR"),
-        ("fx_twd_per_eur", "2026-09-23", 34.6, "新臺幣／EUR"),
-    ]
+    assert out["pending"] == {} and out["errors"] == {} and out["fetched"] == {"fx_twd_per_eur": 24}
+    got = [(r["indicator_key"], r["obs_date"], r["value_num"], r["value_unit"]) for r in out["rows"]]
+    assert len(got) == 24
+    assert got[0] == ("fx_twd_per_eur", "2026-08-20", 34.0, "新臺幣／EUR")
+    assert got[-2:] == [("fx_twd_per_eur", "2026-09-21", _EUR_VALUES[-2], "新臺幣／EUR"),
+                        ("fx_twd_per_eur", "2026-09-22", _EUR_VALUES[-1], "新臺幣／EUR")]
     same_rule, _e, _s = mi.rows_from_daily_close(
-        "fx_twd_per_eur", _series([34.5, 34.6], dates, ticker="EURTWD=X"),
-        None, value_unit="新臺幣／EUR")
+        "fx_twd_per_eur", _series(_EUR_VALUES, _EUR_STAMPS, ticker="EURTWD=X"),
+        None, value_unit="新臺幣／EUR", obs_date_rule=mi.OBS_DATE_PREV_WEEKDAY)
     assert same_rule == out["rows"]
 
 
@@ -150,7 +159,8 @@ def test_出口檢查_欄位或順序不符契約就當場炸(monkeypatch):
     """2026-10-13 稽核 N4：比照 `build_market_indicator_table` 出口前核欄位與順序。"""
     monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
     monkeypatch.setattr(mi, "fetch_yf_close_with_error",
-                        _stub({"EURTWD=X": (_series([34.5], ["2026-09-22"], ticker="EURTWD=X"), None)}))
+                        _stub({"EURTWD=X": (_series(_EUR_VALUES, _EUR_STAMPS, ticker="EURTWD=X"), None)}))
+    # ~~單根 `["2026-09-22"]`~~ → 2026-10-14：單根不足最少根數門檻、一列都不寫，出口檢查就空轉；改 24 根（不是漏刪）
     real = mi.rows_from_daily_close
 
     def reordered(*args, **kwargs):
@@ -158,5 +168,7 @@ def test_出口檢查_欄位或順序不符契約就當場炸(monkeypatch):
         return [dict(reversed(list(r.items()))) for r in rows], error, skipped
 
     monkeypatch.setattr(mi, "rows_from_daily_close", reordered)
+    assert real("fx_twd_per_eur", _series(_EUR_VALUES, _EUR_STAMPS, ticker="EURTWD=X"), None,
+                value_unit="新臺幣／EUR", obs_date_rule=mi.OBS_DATE_PREV_WEEKDAY)[0]   # 前提：真的有列可檢查
     with pytest.raises(AssertionError, match="欄位與契約不符"):
         mi.build_fx_indicator_table(["EUR"])
