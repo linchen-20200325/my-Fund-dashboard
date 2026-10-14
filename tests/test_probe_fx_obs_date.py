@@ -546,3 +546,16 @@ def test_摘要行列出新舊兩規則(tmp_path, capsys, obs_fn):
     assert "[舊UTC] 週末=1" in line and "[新交易所時區] 週末=0" in line and "新舊不同=3/3" in line
     rep = json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))
     assert "obs_date_rule_legacy" in rep and "exchangeTimezoneName" in rep["obs_date_rule"]
+
+
+def test_新規則_未收盤界線借用正式那一條_VIX_UTC換日時前一交易日算已收盤(obs_fn):
+    """`subsets_exchange_tz.non_null_closed` 的界線＝`not_closed_cutoff_day`（max(UTC 日, 交易所當地日)）
+    —— 2026-10-14 稽核 N 的 O12。取得於 2026-10-14T02:00Z（芝加哥 10-13 21:00）：界線 10-14，10-13 那根算已收盤。"""
+    ts = [1791529200, 1791788400, 1791874800]          # 2026-10-09／12／13 07:00Z（芝加哥 02:00）
+    meta = {"exchangeTimezoneName": "America/Chicago", "gmtoffset": -18000, "regularMarketTime": ts[-1]}
+    out = probe.analyze(_payload(ts, closes=[14.84, 15.21, 15.48], meta=meta), obs_fn,
+                        fetched_at_utc="2026-10-14T02:00:00+00:00", ticker="^VIX")
+    closed = out["subsets_exchange_tz"]["non_null_closed"]
+    assert closed["fetched_day_exchange_tz"] == "2026-10-14"
+    assert closed["bar_count"] == 3 and closed["excluded_not_closed_bars"] == []
+    assert out["production_rows"]["last_obs_date"] == "2026-10-13"

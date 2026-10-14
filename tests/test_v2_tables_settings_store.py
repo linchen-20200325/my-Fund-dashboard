@@ -846,3 +846,36 @@ def test_部分略過_failed時附在fetch_log_message之後(book, monkeypatch, 
     assert log[4] == "failed"
     assert "部分略過（該鍵其餘列照寫）：\nvol_index: 取回 2 列、寫入 1 列；略過：" in log[6]
     assert out["persist"]["log_message"] == log[6]           # 畫面讀的那一份與試算表逐字相同
+
+
+def test_部分略過摘要_經遮蔽才放進persist與message(book, monkeypatch, fred_on):
+    """`skipped_summary` 與 failed 時的 message 都要經遮蔽（2026-10-14 稽核 N 的 O13）。"""
+    from services.v2_tables import masking
+
+    good_rows, _e, _s = mi.rows_from_daily_close("vol_index", _vix([17.0], ["2026-09-22"]), None,
+                                                 value_unit="index")
+
+    def fake_build(sink, **_kw):
+        table = {"rows": good_rows, "errors": {"credit_spread_pct": mi.MISSING_FRED_API_KEY},
+                 "pending": {}, "fetched": {"vol_index": 2, "credit_spread_pct": 0},
+                 "skipped": {"vol_index": [f"含憑證 token={SECRET} 的略過原因 1 筆不寫"]}}
+        sink(table)
+        return table
+
+    out = S.run_market_indicator_fetch([SECRET], build=fake_build)
+    (line,) = out["persist"]["skipped_summary"]
+    assert SECRET not in line and masking.MASK in line
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed" and SECRET not in log[6] and masking.MASK in log[6]
+
+
+def test_整鍵都沒寫入的鍵_只在失敗原因_不在部分略過摘要(book, monkeypatch, fred_on):
+    """`kept > 0` 條件（2026-10-14 稽核 N 的 O16）：取回 >0 列、一列都沒寫成的鍵只出現在失敗原因。"""
+    s = _vix([17.0], ["2026-09-22"])
+    del s.attrs["exchange_tz"]                               # 缺時區 ⇒ 整鍵不寫
+    _stub(monkeypatch, s)
+    out = S.run_market_indicator_fetch([SECRET])
+    assert out["persist"]["skipped_summary"] == []
+    log = book.data("fetch_log")[1]
+    assert "vol_index: 取回 1 列，全部未寫入" in log[6]
+    assert "寫入 0 列" not in log[6] and "部分略過" not in log[6]

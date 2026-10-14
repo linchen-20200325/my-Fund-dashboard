@@ -459,3 +459,39 @@ def test_exchange_zone_posix與right前綴_即使系統有那棵子樹也拒絕(
     assert mi.exchange_zone("posix/Europe/London") is None
     assert mi.exchange_zone("right/America/Chicago") is None
     assert mi.exchange_zone("Europe/London") is sentinel
+
+
+# ═══════════════════════ 2026-10-14 收尾小輪：基準根的母體 ═══════════════════════
+# 基準（過半數的當地時刻）在「已收盤根」上計算：觀測日 < 未收盤界線的根，**含**同日重複根與週末根，
+# **不含**未收盤根（盤中值的時刻不是日界）。重複與週末根本身不寫，但計入母體 —— 它們出現就代表日界可疑，
+# 計進分母只會讓基準更難成立（從嚴），不會讓錯位的根被寫進去。
+
+
+def test_基準母體_含週末根_週末根讓多數不過半時全部不寫():
+    """平日 02:00 三根 ＋ 週末 05:00 三根（合成）：母體 6 根、02:00 只 3/6 不過半 ⇒ 全部不寫。
+    （若把週末根排出母體，02:00 會變成 3/3，平日三根就會被寫進去 —— 稽核 N 的 O10。）"""
+    wk = [(1791270000, 15.0), (1791356400, 15.1), (1791442800, 15.2)]      # 10-06／07／08 07:00Z（02:00 CDT）
+    we = [(1791021600, 16.0), (1791108000, 16.1), (1791626400, 16.2)]      # 10-03(六)／04(日)／10(六) 10:00Z（05:00 CDT）
+    rows, _err, skipped = _rows(_series(sorted(wk + we), fetched_at="2026-10-14T06:00:00+00:00",
+                                        exchange_tz=CHICAGO, ticker="^VIX"), key="vol_index")
+    assert rows == []
+    assert "觀測日（交易所時區 America/Chicago）為星期六或星期日 3 筆不寫" in skipped
+    assert any("沒有過半數一致的值" in x and "3 筆不寫" in x for x in skipped)
+
+
+def test_基準母體_含重複根_重複根讓多數不過半時全部不寫():
+    """10-06、10-07 02:00 兩根 ＋ 10-08 03:00／04:00 兩根（同日重複，合成）：母體 4 根、02:00 只 2/4 ⇒ 全部不寫。
+    （若把重複根排出母體，02:00 會變成 2/2 —— 稽核 N 的 O9。）"""
+    bars = [(1791270000, 15.0), (1791356400, 15.1), (1791446400, 15.2), (1791450000, 15.3)]
+    rows, _err, skipped = _rows(_series(bars, fetched_at="2026-10-14T06:00:00+00:00",
+                                        exchange_tz=CHICAGO, ticker="^VIX"), key="vol_index")
+    assert rows == []
+    assert "同一觀測日重複 2 筆不寫" in skipped
+    assert any("沒有過半數一致的值" in x and "2 筆不寫" in x for x in skipped)
+
+
+def test_基準母體_不含未收盤根_盤中值不干擾基準():
+    """尾段 5 根倫敦 00:00 ＋ 盤中值（倫敦 19:54）：盤中值未收盤、不計入母體 ⇒ 基準 00:00、5/5。"""
+    rows, _err, skipped = _rows(_series(USD_TAIL[:5] + [USD_INTRADAY]))
+    assert len(rows) == 5
+    assert skipped == [LON_NC.format(d="2026-10-13", n=1)]
