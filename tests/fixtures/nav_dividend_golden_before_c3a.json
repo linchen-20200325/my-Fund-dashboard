@@ -1,0 +1,6047 @@
+{
+ "chain:S1_complete_fundclear": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF001": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF001": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "undetermined",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list））",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF001": false
+   },
+   "skipped": {
+    "ZZF001": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list）））；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF001": 0
+   },
+   "withheld": {
+    "ZZF001": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF001": 28
+   },
+   "provenance": {
+    "ZZF001": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 3,
+      "read_error": null,
+      "recorded_at_missing": 1,
+      "source": "GoogleSheet:nav_history:ZZF001",
+      "withheld_by_gate": 3,
+      "written": 0
+     },
+     "source": "FundClear:SmartFundAPI:nav",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF001",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {
+    "ZZF001": [
+     "累積序列的出處不可考（可能含以名稱搜尋得來的資料），依規則暫不採用，待客戶裁示；累積表 3 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF001": 3
+   },
+   "withheld": {}
+  }
+ },
+ "chain:S3_all_fail": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF003": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF003": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "undetermined",
+     "outcome_detail": "[yp010001] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010001] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010001] cnyes：unknown（回傳值沒有取數狀態（list））\nA 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態）",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF003": false
+   },
+   "skipped": {
+    "ZZF003": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（[yp010001] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010001] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010001] cnyes：unknown（回傳值沒有取數狀態（list））\nA 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態））；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF003": 0
+   },
+   "withheld": {
+    "ZZF003": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {
+    "ZZF003": "A 鏈（auto_fetch_moneydj('ZZF003')）沒有取得淨值序列\n[yp010000] 狀態 failed：❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF003\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF003\n② 於下方手動填入淨值、配息數據\n[yp010000] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000·legacy] fetch_nav（legacy 最終備援）：回傳 0 筆，未達本步採用門檻 10 筆；fetch_error: fetch_nav('ZZF003') 即時網址與預存檔皆失敗:\nhttps://x/wb02 → 取數失敗(kind=blocked)\n[yp010001] 狀態 failed：❌ 無法取得基金資料（所有來源均失敗）\n💡 解決方案：\n① 直接貼 MoneyDJ 完整網址（比代碼更準確）：\n   境內基金：www.moneydj.com/funddj/ya/yp010000.djhtm?a=ZZF003\n   境外基金：www.moneydj.com/funddj/ya/yp010001.djhtm?a=ZZF003\n② 於下方手動填入淨值、配息數據\n[yp010001] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010001] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001·legacy] fetch_nav（legacy 最終備援）：回傳 0 筆，未達本步採用門檻 10 筆；fetch_error: fetch_nav('ZZF003') 即時網址與預存檔皆失敗:\nhttps://x/wb02 → 取數失敗(kind=blocked)"
+   },
+   "fetched": {
+    "ZZF003": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF003": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:S4_cache_fallback": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF004": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF004": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "undetermined",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list））\nA 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態）",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF004": false
+   },
+   "skipped": {
+    "ZZF004": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list））\nA 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態））；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF004": 0
+   },
+   "withheld": {
+    "ZZF004": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF004": 40
+   },
+   "provenance": {
+    "ZZF004": {
+     "cache_fallback": true,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "moneydj_legacy_scrape",
+      "fetched_at_from": "cache_updated_at",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] 狀態 failed：❌ 所有來源均無法取得資料\n[yp010000] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] 狀態 failed：❌ 所有來源均無法取得資料\n[yp010001] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010001] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "latest_from": "cache_nav",
+     "live_error": "[yp010000] 狀態 failed：❌ 所有來源均無法取得資料\n[yp010000] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010000] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010000] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] 狀態 failed：❌ 所有來源均無法取得資料\n[yp010001] FundClear：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] cnyes：回傳 0 筆，未達本步採用門檻 20 筆\n[yp010001] tcb_moneydj：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] insurance_subdomain：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_www：www yp004002 各頁型（yp010001, yp010000）皆取數失敗或頁面無效\n[yp010001] sitca：回傳 0 筆，未達本步採用門檻 10 筆\n[yp010001] moneydj_nav30：回傳 0 筆，未達本步採用門檻 10 筆\nhttps://x/wb02 → 取數失敗(kind=blocked)",
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "GitHubActions:cache/nav/ZZF004.json",
+     "stale": true
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-09",
+     "nav_orig_ccy": 10.25,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-10",
+     "nav_orig_ccy": 10.26,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-11",
+     "nav_orig_ccy": 10.27,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-12",
+     "nav_orig_ccy": 10.28,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-13",
+     "nav_orig_ccy": 10.29,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-16",
+     "nav_orig_ccy": 10.3,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-17",
+     "nav_orig_ccy": 10.31,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-18",
+     "nav_orig_ccy": 10.32,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-19",
+     "nav_orig_ccy": 10.33,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-20",
+     "nav_orig_ccy": 10.34,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-23",
+     "nav_orig_ccy": 10.35,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-24",
+     "nav_orig_ccy": 10.36,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-25",
+     "nav_orig_ccy": 10.37,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-26",
+     "nav_orig_ccy": 10.38,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-03-01T00:00:00+00:00",
+     "fund_code": "ZZF004",
+     "is_estimated": false,
+     "nav_date": "2026-02-27",
+     "nav_orig_ccy": 10.39,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF004": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:S5_hist_read_fail": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF005": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF005": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "undetermined",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list））",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF005": false
+   },
+   "skipped": {
+    "ZZF005": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））\n[yp010000] FundClear：unknown（回傳值沒有取數狀態（list））\n[yp010000] cnyes：unknown（回傳值沒有取數狀態（list）））；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF005": 0
+   },
+   "withheld": {
+    "ZZF005": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF005": 25
+   },
+   "provenance": {
+    "ZZF005": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": "nav_history load 失敗:APIError 429 quota",
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:SmartFundAPI:nav",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF005",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {
+    "ZZF005": [
+     "累積表本次讀取失敗，只用即時取得的部分：nav_history load 失敗:APIError 429 quota"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF005": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:div_undeclared": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "coverage_start": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "來源未宣告這一筆的配息幣別（tcb_moneydj_div） 1 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {
+    "ZZF100": "ccy_not_source_reported"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:fetched_at_future": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {
+    "ZZF100": "div_ex_date_unverified"
+   },
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "coverage_start": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "沒有解析依據（不是已登記的三個配息解析器交出的列） 1 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "L1 回傳的 fetched_at 晚於當下（'2027-01-01T00:00:00+00:00'），25 筆全部不寫（不以當下時間補）"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "fetched_at_in_future"
+   }
+  }
+ },
+ "chain:fetched_at_unparseable": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {
+    "ZZF100": "div_ex_date_unverified"
+   },
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "coverage_start": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "沒有解析依據（不是已登記的三個配息解析器交出的列） 1 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "L1 回傳的 fetched_at 取不到、格式不符或沒有時區，25 筆全部不寫（不以當下時間補）"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "fetched_at_missing"
+   }
+  }
+ },
+ "chain:full_key_mismatch": {
+  "dividend": {
+   "errors": {
+    "ZZF100": "A 鏈回傳的 full_key 'ZZF100' 與代碼對照（fund_keys）的 full_key 'WANTKEY' 不同；不猜哪一個對，這一檔的配息不寫"
+   },
+   "fetched": {
+    "ZZF100": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": null,
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {
+    "ZZF100": "A 鏈回傳的 full_key 'ZZF100' 與代碼對照（fund_keys）的 full_key 'WANTKEY' 不同；不猜哪一個對，這一檔的淨值不寫"
+   },
+   "fetched": {
+    "ZZF100": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:holding_bad_format": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "持倉列沒有可用的幣別（持倉列幣別：'usd'），配息 1 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {
+    "ZZF100": "ccy_missing"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "來源未自報幣別、持倉列也沒有可用的幣別（持倉列幣別不合 ISO 4217：'usd'），25 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "ccy_missing"
+   }
+  }
+ },
+ "chain:holding_input_series_undeclared_div_accept": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 2
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": "holding_user_input_matches_source",
+     "coverage_start": "2026-01-03",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": true,
+     "source": [
+      "tcb_moneydj_div"
+     ]
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.05,
+     "ex_date": "2026-01-03",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "ZZF100",
+     "pay_date": null
+    },
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.05,
+     "ex_date": "2026-02-03",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "ZZF100",
+     "pay_date": null
+    }
+   ],
+   "settled": {
+    "ZZF100": true
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:holding_missing": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "持倉列沒有可用的幣別，配息 1 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {
+    "ZZF100": "ccy_missing"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "來源未自報幣別、持倉列也沒有可用的幣別，25 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "ccy_missing"
+   }
+  }
+ },
+ "chain:holding_two_rows_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "持倉列幣別意思不一致（'USD', 'TWD'），配息 1 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {
+    "ZZF100": "ccy_conflict"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "幣別意思不一致（holding:'USD', holding:'TWD'），25 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "ccy_conflict"
+   }
+  }
+ },
+ "chain:holding_two_rows_same": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": "holding_user_input_matches_source",
+     "coverage_start": "2026-01-03",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": true,
+     "source": [
+      "tcb_moneydj_div"
+     ]
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.05,
+     "ex_date": "2026-01-03",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "ZZF100",
+     "pay_date": null
+    }
+   ],
+   "settled": {
+    "ZZF100": true
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:input_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {},
+   "pending": {},
+   "provenance": {},
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "同一檔基金給了不同的 full_key／portal／chain_code：('ZZF100', '', 'ZZF100') vs ('OTHERKEY', '', 'ZZF100')；不取數、不寫列"
+    ]
+   },
+   "skipped_rows": {},
+   "withheld": {
+    "ZZF100": "input_conflict"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {},
+   "provenance": {},
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "同一檔基金給了不同的 full_key／portal／chain_code：('ZZF100', '', 'ZZF100') vs ('OTHERKEY', '', 'ZZF100')；不取數、不寫列"
+    ]
+   },
+   "skipped_rows": {},
+   "withheld": {
+    "ZZF100": "input_conflict"
+   }
+  }
+ },
+ "chain:portal_given": {
+  "dividend": {
+   "errors": {
+    "ZZF100": "A 鏈不吃 portal（收到 'tcb'）；`fund_keys` 一律給空字串，不猜這個值要怎麼用"
+   },
+   "fetched": {
+    "ZZF100": 0
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": null,
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {
+    "ZZF100": "A 鏈不吃 portal（收到 'tcb'）；`fund_keys` 一律給空字串，不猜這個值要怎麼用"
+   },
+   "fetched": {
+    "ZZF100": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "chain:series_declared_conflicts_holding_div_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {},
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "配息宣告的幣別與持倉手填不同或認不出（'歐元'；持倉 USD）；不改標籤、不換算，這一檔的配息 1 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {
+    "ZZF100": "ccy_conflict"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "ZZF100": [
+     "淨值序列宣告的幣別與持倉手填不同（即時序列:'EUR'；持倉 USD）；數值不是持倉幣別計價，不改標籤、不換算，25 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 25
+   },
+   "withheld": {
+    "ZZF100": "ccy_conflict"
+   }
+  }
+ },
+ "chain:source_declared_matches_holding": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 1
+   },
+   "pending": {
+    "ZZF100": "div_ex_date_unverified"
+   },
+   "provenance": {
+    "ZZF100": {
+     "ccy_source": null,
+     "coverage_start": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010000] tcb_moneydj：unknown（回傳值沒有取數狀態（list））",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "ZZF100": false
+   },
+   "skipped": {
+    "ZZF100": [
+     "沒有解析依據（不是已登記的三個配息解析器交出的列） 1 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "ZZF100": 1
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "ZZF100": 25
+   },
+   "provenance": {
+    "ZZF100": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": "[yp010000] FundClear：近30日短窗（25 筆、跨度 32 天）不算數，改試非 MoneyDJ 長歷史來源（後經側車救援採用）\n[yp010000] sitca：回傳 0 筆，未達本步採用門檻 10 筆",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-05",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-06",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-07",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-08",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-09",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-12",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-13",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-14",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-15",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-16",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-19",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-20",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-21",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-22",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-23",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-26",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-27",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-28",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-29",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-01-30",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-02",
+     "nav_orig_ccy": 10.2,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-03",
+     "nav_orig_ccy": 10.21,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-04",
+     "nav_orig_ccy": 10.22,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-05",
+     "nav_orig_ccy": 10.23,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-02-01T00:00:00+00:00",
+     "fund_code": "ZZF100",
+     "is_estimated": false,
+     "nav_date": "2026-02-06",
+     "nav_orig_ccy": 10.24,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "ZZF100": 0
+   },
+   "withheld": {}
+  }
+ },
+ "pure:div_holding_missing": {
+  "error": null,
+  "fetched": 4,
+  "pending": null,
+  "provenance": {
+   "ccy_source": null,
+   "fetched_at": null,
+   "outcome": "rows",
+   "outcome_detail": "[yp010001] tcb_moneydj：rows",
+   "settled": false,
+   "source": null
+  },
+  "rows": [],
+  "settled": false,
+  "skipped": [
+   "持倉列沒有可用的幣別，配息 4 筆全部不寫"
+  ],
+  "skipped_rows": 4,
+  "withheld": "ccy_missing"
+ },
+ "pure:div_mixed_tcb": {
+  "error": null,
+  "fetched": 4,
+  "pending": null,
+  "provenance": {
+   "ccy_source": "holding_user_input_matches_source",
+   "coverage_start": "2026-01-03",
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "outcome": "rows",
+   "outcome_detail": "[yp010001] tcb_moneydj：rows",
+   "settled": false,
+   "source": [
+    "tcb_moneydj_div"
+   ]
+  },
+  "rows": [
+   {
+    "ccy": "USD",
+    "div_kind": "unknown",
+    "div_per_unit_orig_ccy": 0.05,
+    "ex_date": "2026-01-03",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ03",
+    "pay_date": null
+   }
+  ],
+  "settled": false,
+  "skipped": [
+   "來源未宣告這一筆的配息幣別（tcb_moneydj_div） 1 筆不寫",
+   "沒有解析依據（不是已登記的三個配息解析器交出的列） 1 筆不寫",
+   "不是 dict 1 筆不寫"
+  ],
+  "skipped_rows": 3,
+  "withheld": null
+ },
+ "pure:div_not_dict": {
+  "error": "L1 回傳型別不符：配息輸入預期 dict，收到 str",
+  "fetched": 0,
+  "pending": null,
+  "provenance": {
+   "ccy_source": null,
+   "fetched_at": null,
+   "outcome": null,
+   "outcome_detail": null,
+   "settled": false,
+   "source": null
+  },
+  "rows": [],
+  "settled": false,
+  "skipped": [],
+  "skipped_rows": 0,
+  "withheld": null
+ },
+ "pure:history_gate_open_hist_ccy_conflict": {
+  "error": null,
+  "fetched": 7,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "chain": {
+    "data_source": "x",
+    "fetched_at_from": "series_attrs",
+    "page_type": "yp010000"
+   },
+   "chain_failures": null,
+   "fetched_at": null,
+   "latest_from": "live",
+   "live_error": null,
+   "nav_history": {
+    "points": 0,
+    "read_error": null,
+    "recorded_at_missing": 0,
+    "source": null,
+    "written": 0
+   },
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "淨值序列宣告的幣別與持倉手填不同（累積表 2026-07-01:'TWD'；持倉 USD）；數值不是持倉幣別計價，不改標籤、不換算，7 筆全部不寫"
+  ],
+  "skipped_rows": 7,
+  "withheld": "ccy_conflict"
+ },
+ "pure:history_gate_open_ok": {
+  "error": null,
+  "fetched": 7,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": "holding_user_input",
+   "chain": {
+    "data_source": "x",
+    "fetched_at_from": "series_attrs",
+    "page_type": "yp010000"
+   },
+   "chain_failures": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "latest_from": "live",
+   "live_error": null,
+   "nav_history": {
+    "points": 2,
+    "read_error": null,
+    "recorded_at_missing": 1,
+    "source": "nav_history",
+    "written": 1
+   },
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-07-05T00:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-07-01",
+    "nav_orig_ccy": 9.0,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-08-03",
+    "nav_orig_ccy": 10.0,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-08-04",
+    "nav_orig_ccy": 10.01,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-08-05",
+    "nav_orig_ccy": 10.02,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-08-06",
+    "nav_orig_ccy": 10.03,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ02",
+    "is_estimated": false,
+    "nav_date": "2026-08-07",
+    "nav_orig_ccy": 10.04,
+    "source_tier": "淨值"
+   }
+  ],
+  "skipped": [
+   "累積表這幾天沒有 recorded_at（寫入時間），1 筆不寫（不以當下時間補）"
+  ],
+  "skipped_rows": 1,
+  "withheld": null
+ },
+ "pure:nav_both_bad_format": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "來源未自報幣別、持倉列也沒有可用的幣別（來源自報值不合 ISO 4217：'eur'；持倉列幣別不合 ISO 4217：'eur '），8 筆全部不寫"
+  ],
+  "skipped_rows": 8,
+  "withheld": "ccy_missing"
+ },
+ "pure:nav_holding_nan": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "來源未自報幣別、持倉列也沒有可用的幣別，8 筆全部不寫"
+  ],
+  "skipped_rows": 8,
+  "withheld": "ccy_missing"
+ },
+ "pure:nav_holding_non_string": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "來源未自報幣別、持倉列也沒有可用的幣別（持倉列幣別不合 ISO 4217：840），8 筆全部不寫"
+  ],
+  "skipped_rows": 8,
+  "withheld": "ccy_missing"
+ },
+ "pure:nav_holding_only": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": "holding_user_input",
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-03",
+    "nav_orig_ccy": 10.0,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-04",
+    "nav_orig_ccy": 10.01,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-05",
+    "nav_orig_ccy": 10.02,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-06",
+    "nav_orig_ccy": 10.03,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-07",
+    "nav_orig_ccy": 10.04,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-10",
+    "nav_orig_ccy": 10.05,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-11",
+    "nav_orig_ccy": 10.06,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "TWD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-12",
+    "nav_orig_ccy": 10.07,
+    "source_tier": "淨值"
+   }
+  ],
+  "skipped": [],
+  "skipped_rows": 0,
+  "withheld": null
+ },
+ "pure:nav_missing": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "來源未自報幣別、持倉列也沒有可用的幣別，8 筆全部不寫"
+  ],
+  "skipped_rows": 8,
+  "withheld": "ccy_missing"
+ },
+ "pure:nav_source_and_holding_same": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": "source_reported",
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-03",
+    "nav_orig_ccy": 10.0,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-04",
+    "nav_orig_ccy": 10.01,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-05",
+    "nav_orig_ccy": 10.02,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-06",
+    "nav_orig_ccy": 10.03,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-07",
+    "nav_orig_ccy": 10.04,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-10",
+    "nav_orig_ccy": 10.05,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-11",
+    "nav_orig_ccy": 10.06,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-12",
+    "nav_orig_ccy": 10.07,
+    "source_tier": "淨值"
+   }
+  ],
+  "skipped": [],
+  "skipped_rows": 0,
+  "withheld": null
+ },
+ "pure:nav_source_conflicts_holding": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": null,
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [],
+  "skipped": [
+   "幣別意思不一致（source:'EUR', holding:'USD'），8 筆全部不寫"
+  ],
+  "skipped_rows": 8,
+  "withheld": "ccy_conflict"
+ },
+ "pure:nav_source_reported": {
+  "error": null,
+  "fetched": 8,
+  "provenance": {
+   "cache_fallback": false,
+   "ccy_source": "source_reported",
+   "fetched_at": "2026-09-30T08:00:00+00:00",
+   "live_error": null,
+   "source": "FundClear:GetFundNAV",
+   "stale": null
+  },
+  "rows": [
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-03",
+    "nav_orig_ccy": 10.0,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-04",
+    "nav_orig_ccy": 10.01,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-05",
+    "nav_orig_ccy": 10.02,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-06",
+    "nav_orig_ccy": 10.03,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-07",
+    "nav_orig_ccy": 10.04,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-10",
+    "nav_orig_ccy": 10.05,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-11",
+    "nav_orig_ccy": 10.06,
+    "source_tier": "淨值"
+   },
+   {
+    "ccy": "USD",
+    "fetched_at": "2026-09-30T08:00:00+00:00",
+    "fund_code": "PZ01",
+    "is_estimated": false,
+    "nav_date": "2026-08-12",
+    "nav_orig_ccy": 10.07,
+    "source_tier": "淨值"
+   }
+  ],
+  "skipped": [],
+  "skipped_rows": 0,
+  "withheld": null
+ },
+ "pure:resolve_nav_ccy": [
+  [
+   "USD",
+   "source_reported",
+   null,
+   null
+  ],
+  [
+   "USD",
+   "holding_user_input",
+   null,
+   null
+  ],
+  [
+   null,
+   null,
+   "ccy_conflict",
+   "幣別意思不一致（source:'EUR', holding:'USD'）"
+  ],
+  [
+   null,
+   null,
+   "ccy_missing",
+   "來源未自報幣別、持倉列也沒有可用的幣別（來源自報值不合 ISO 4217：'eur'；持倉列幣別不合 ISO 4217：'eur'）"
+  ],
+  [
+   null,
+   null,
+   "ccy_missing",
+   "來源未自報幣別、持倉列也沒有可用的幣別"
+  ],
+  [
+   null,
+   null,
+   "ccy_conflict",
+   "幣別意思不一致（holding:'x', holding:'y'）"
+  ],
+  [
+   "JPY",
+   "holding_user_input",
+   null,
+   null
+  ]
+ ],
+ "res:div_failed": {
+  "dividend": {
+   "errors": {
+    "RZ01": "A 鏈配息取數失敗（每一個來源都失敗）：\n[yp010001] tcb_moneydj：failed"
+   },
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "failed",
+     "outcome_detail": "[yp010001] tcb_moneydj：failed",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_fundclear_all_accept": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 2
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": "holding_user_input_matches_source",
+     "coverage_start": "2026-08-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "outcome": "rows",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": true,
+     "source": [
+      "fundclear_div"
+     ]
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.04,
+     "ex_date": "2026-08-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "pay_date": null
+    },
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.04,
+     "ex_date": "2026-09-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "pay_date": null
+    }
+   ],
+   "settled": {
+    "RZ01": true
+   },
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_fundclear_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 2
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "配息宣告的幣別與持倉手填不同或認不出（'USD'、'USD'；持倉 TWD）；不改標籤、不換算，這一檔的配息 2 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 2
+   },
+   "withheld": {
+    "RZ01": "ccy_conflict"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "TWD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_fundclear_mixed": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 4
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": "holding_user_input_matches_source",
+     "coverage_start": "2026-08-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "outcome": "rows",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": false,
+     "source": [
+      "fundclear_div"
+     ]
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.04,
+     "ex_date": "2026-08-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "pay_date": null
+    },
+    {
+     "ccy": "USD",
+     "div_kind": "unknown",
+     "div_per_unit_orig_ccy": 0.04,
+     "ex_date": "2026-09-05",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "pay_date": null
+    }
+   ],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "日期欄證明不了是除息日（fundclear_div：date_field='Date'） 1 筆不寫",
+     "來源未宣告這一筆的配息幣別（fundclear_div） 1 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 2
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_holding_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 2
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "持倉列幣別意思不一致（'USD', 'EUR'），配息 2 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 2
+   },
+   "withheld": {
+    "RZ01": "ccy_conflict"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "RZ01": [
+     "幣別意思不一致（holding:'USD', holding:'EUR'），10 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 10
+   },
+   "withheld": {
+    "RZ01": "ccy_conflict"
+   }
+  }
+ },
+ "res:div_holding_missing_bad": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 2
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "rows",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "持倉列沒有可用的幣別（持倉列幣別：'us d'），配息 2 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 2
+   },
+   "withheld": {
+    "RZ01": "ccy_missing"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "RZ01": [
+     "來源未自報幣別、持倉列也沒有可用的幣別（持倉列幣別不合 ISO 4217：'us d'），10 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 10
+   },
+   "withheld": {
+    "RZ01": "ccy_missing"
+   }
+  }
+ },
+ "res:div_none_evidenced": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "none_confirmed",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": true,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": true
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈配息瀑布每一個來源都回報：成功取數、這一檔沒有配息紀錄"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_none_unevidenced": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": "none_confirmed",
+     "outcome_detail": "[yp010001] tcb_moneydj：rows",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈配息瀑布每一個來源都回空，但本輪沒有「同一來源認得這個代碼」的證據（來源不認得代碼時也會回空）；不當成「沒有配息」，不寫列：\n[yp010001] tcb_moneydj：rows"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:div_undetermined": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:history_gate_closed_hist_only": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {
+    "RZ01": "本次沒有取得任何即時淨值；序列全部來自累積表（A 鏈未交出逐來源原文）\n累積序列的出處不可考（可能含以名稱搜尋得來的資料），依規則暫不採用，待客戶裁示；累積表 3 筆不寫"
+   },
+   "fetched": {
+    "RZ01": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:history_gate_closed_live_and_hist": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 13
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 3,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": "nav_history",
+      "withheld_by_gate": 3,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {
+    "RZ01": [
+     "累積序列的出處不可考（可能含以名稱搜尋得來的資料），依規則暫不採用，待客戶裁示；累積表 3 筆不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 3
+   },
+   "withheld": {}
+  }
+ },
+ "res:history_live_declared_conflict": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 13
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "RZ01": [
+     "淨值序列宣告的幣別與持倉手填不同（即時序列:'EUR'；持倉 USD）；數值不是持倉幣別計價，不改標籤、不換算，13 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 13
+   },
+   "withheld": {
+    "RZ01": "ccy_conflict"
+   }
+  }
+ },
+ "res:morningstar_code_search": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {
+    "RZ01": "淨值來自以基金名稱搜尋的晨星代碼，依規則不採用（code_search，來源 Morningstar:0P000TEST）"
+   },
+   "fetched": {
+    "RZ01": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:morningstar_name_search": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {
+    "RZ01": "淨值來自以基金名稱搜尋的晨星代碼，依規則不採用（name_search，來源 Morningstar:0P000TEST）"
+   },
+   "fetched": {
+    "RZ01": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:no_series_with_attempts": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {
+    "RZ01": "A 鏈（auto_fetch_moneydj('RZ01')）沒有取得淨值序列\n[yp010000] 狀態 failed：全部失敗\n[yp010000] FundClear：HTTP 503"
+   },
+   "fetched": {
+    "RZ01": 0
+   },
+   "provenance": {},
+   "rows": [],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:non_native_declared_other": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 20
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "Morningstar:0P000TEST",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "RZ01": [
+     "淨值序列宣告的幣別與持倉手填不同（即時序列:'TWD'；持倉 USD）；數值不是持倉幣別計價，不改標籤、不換算，20 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 20
+   },
+   "withheld": {
+    "RZ01": "ccy_conflict"
+   }
+  }
+ },
+ "res:non_native_declared_same": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 20
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "Morningstar:0P000TEST",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-17",
+     "nav_orig_ccy": 10.1,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-18",
+     "nav_orig_ccy": 10.11,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-19",
+     "nav_orig_ccy": 10.12,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-20",
+     "nav_orig_ccy": 10.13,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-21",
+     "nav_orig_ccy": 10.14,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-24",
+     "nav_orig_ccy": 10.15,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-25",
+     "nav_orig_ccy": 10.16,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-26",
+     "nav_orig_ccy": 10.17,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-27",
+     "nav_orig_ccy": 10.18,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-28",
+     "nav_orig_ccy": 10.19,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:non_native_undeclared": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 20
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": null,
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "Morningstar:0P000TEST",
+     "stale": null
+    }
+   },
+   "rows": [],
+   "skipped": {
+    "RZ01": [
+     "淨值來自非原生報價來源（Morningstar:0P000TEST），計價幣別由請求參數或掛牌決定、序列卻沒有宣告幣別；不猜它是不是持倉幣別，20 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 20
+   },
+   "withheld": {
+    "RZ01": "ccy_missing"
+   }
+  }
+ },
+ "res:orchestrator_fetched_at": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ01": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ01": false
+   },
+   "skipped": {
+    "RZ01": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {
+    "RZ01": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ01": 10
+   },
+   "provenance": {
+    "RZ01": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "orchestrator",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T07:00:00+00:00",
+     "fund_code": "RZ01",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {},
+   "skipped_rows": {
+    "RZ01": 0
+   },
+   "withheld": {}
+  }
+ },
+ "res:two_funds": {
+  "dividend": {
+   "errors": {},
+   "fetched": {
+    "RZ02": 0,
+    "RZ03": 0
+   },
+   "pending": {},
+   "provenance": {
+    "RZ02": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    },
+    "RZ03": {
+     "ccy_source": null,
+     "fetched_at": null,
+     "outcome": null,
+     "outcome_detail": "A 鏈沒有交出配息取數狀態",
+     "settled": false,
+     "source": null
+    }
+   },
+   "rows": [],
+   "settled": {
+    "RZ02": false,
+    "RZ03": false
+   },
+   "skipped": {
+    "RZ02": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ],
+    "RZ03": [
+     "A 鏈沒有取到配息列，但分辨不出是這一檔不配息、還是沒抓到（A 鏈沒有交出配息取數狀態）；不當成「沒有配息」，不寫列"
+    ]
+   },
+   "skipped_rows": {
+    "RZ02": 0,
+    "RZ03": 0
+   },
+   "withheld": {
+    "RZ02": "div_outcome_undetermined",
+    "RZ03": "div_outcome_undetermined"
+   }
+  },
+  "nav": {
+   "errors": {},
+   "fetched": {
+    "RZ02": 10,
+    "RZ03": 10
+   },
+   "provenance": {
+    "RZ02": {
+     "cache_fallback": false,
+     "ccy_source": "holding_user_input",
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    },
+    "RZ03": {
+     "cache_fallback": false,
+     "ccy_source": null,
+     "chain": {
+      "data_source": "FundClear",
+      "fetched_at_from": "series_attrs",
+      "page_type": "yp010000"
+     },
+     "chain_failures": null,
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "latest_from": "live",
+     "live_error": null,
+     "nav_history": {
+      "gate_closed": true,
+      "note": "閘門關閉，本次未讀累積表",
+      "points": 0,
+      "read_error": null,
+      "recorded_at_missing": 0,
+      "source": null,
+      "written": 0
+     },
+     "source": "FundClear:GetFundNAV",
+     "stale": null
+    }
+   },
+   "rows": [
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-03",
+     "nav_orig_ccy": 10.0,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-04",
+     "nav_orig_ccy": 10.01,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-05",
+     "nav_orig_ccy": 10.02,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-06",
+     "nav_orig_ccy": 10.03,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-07",
+     "nav_orig_ccy": 10.04,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-10",
+     "nav_orig_ccy": 10.05,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-11",
+     "nav_orig_ccy": 10.06,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-12",
+     "nav_orig_ccy": 10.07,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-13",
+     "nav_orig_ccy": 10.08,
+     "source_tier": "淨值"
+    },
+    {
+     "ccy": "USD",
+     "fetched_at": "2026-09-30T08:00:00+00:00",
+     "fund_code": "RZ02",
+     "is_estimated": false,
+     "nav_date": "2026-08-14",
+     "nav_orig_ccy": 10.09,
+     "source_tier": "淨值"
+    }
+   ],
+   "skipped": {
+    "RZ03": [
+     "來源未自報幣別、持倉列也沒有可用的幣別，10 筆全部不寫"
+    ]
+   },
+   "skipped_rows": {
+    "RZ02": 0,
+    "RZ03": 10
+   },
+   "withheld": {
+    "RZ03": "ccy_missing"
+   }
+  }
+ }
+}
