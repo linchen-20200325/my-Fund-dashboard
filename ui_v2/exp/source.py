@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 from datetime import datetime
 
@@ -39,16 +40,20 @@ from services.v2_tables import exp_nav, exp_profile, exp_universe, fund_keys, ma
 
 from . import live
 
+_LOG = logging.getLogger(__name__)
+
 # 淨值被扣下、畫面印「⬜ 資料未備」的代碼 → 固定文字（None ＝ 用資料層的 `skipped` 原文）。封閉清單，體例同
 # `ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD`；⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`（契約被破壞 → raise）。
-# `ccy_undetermined`（2026-10-14 C2）：計價幣別未確定的檔，資料層不取數，畫面寫 `exp_nav.TEXT_CCY_UNDETERMINED`。
+# `ccy_undetermined`（2026-10-14 C2）：計價幣別未確定的檔，資料層不取數。~~畫面寫 `exp_nav.TEXT_CCY_UNDETERMINED`~~
+# → 2026-10-14 修正輪（有意識的更正，不是漏刪；決策者：AI 總管）：那一句含內部名稱 `declared_ccy_source`，
+#   畫面改寫 `live.TEXT_CCY_UNDETERMINED`（白話）；L2 原文照舊留在 `skipped`。
 # `ccy_conflict`：基本資料幣別與淨值資料幣別衝突（規則 14），原因用資料層的原文（含兩邊的幣別）。
 _NAV_UNAVAILABLE_WITHHELD = {
     nav_dividend.WITHHELD_CCY_MISSING: None,
     nav_dividend.WITHHELD_CCY_CONFLICT: None,
     nav_dividend.WITHHELD_FETCHED_AT_MISSING: None,
     nav_dividend.WITHHELD_FETCHED_AT_FUTURE: None,
-    exp_nav.WITHHELD_CCY_UNDETERMINED: exp_nav.TEXT_CCY_UNDETERMINED,
+    exp_nav.WITHHELD_CCY_UNDETERMINED: live.TEXT_CCY_UNDETERMINED,
 }
 
 
@@ -74,7 +79,8 @@ def load_live() -> dict:
     return {
         "dataset": live.build_dataset(pool, settings, wired),
         "notes": {"pool": pool, "settings": settings, "settings_error": settings_error,
-                  "cells": None if wired is None else wired["cells"]},
+                  "cells": None if wired is None else wired["cells"],
+                  "wiring_error": None if wired is None else wired["errors"].get("fund_profile")},
     }
 
 
@@ -101,9 +107,12 @@ def _load_funds(codes, settings, settings_error, values) -> dict:
     # 同一個當下時刻餵給基本資料、淨值與畫面的「台灣今天」（三處判同一天，測試可重現）。
     now = datetime.now(live.TAIPEI)
     try:
-        key_results = fund_keys.resolve_full_keys(list(codes))["results"]
-    except Exception as exc:  # noqa: BLE001 —— 轉成畫面上的 ⛔ 取數失敗（遮蔽後原文），不是吞掉
-        return live.wiring_failed(mask(f"代碼對照表讀取失敗：{type(exc).__name__}: {exc}"))
+        resolved = fund_keys.resolve_full_keys(list(codes))     # 只包住讀取本身（L1 例外 fund_keys 不攔）
+    except Exception as exc:  # noqa: BLE001 —— 轉成畫面上的 ⛔ 取數失敗（遮蔽後原文）並記 log，不是吞掉
+        message = mask(f"代碼對照表讀取失敗：{type(exc).__name__}: {exc}")
+        _LOG.error("exp 代碼對照表讀取失敗，整批不取數：%s", message)
+        return live.wiring_failed(message)
+    key_results = resolved["results"]                           # 契約取值不在 try 裡：形狀錯誤照常 raise
     profiles = exp_profile.build_profiles(key_results, **_profile_now_kwargs(now))
     needed = live.nav_codes_needed(profiles["rows"], settings, settings_error)
     funds, unresolved = live.nav_requests(needed, key_results, profiles["declared"])
@@ -115,6 +124,7 @@ def _load_funds(codes, settings, settings_error, values) -> dict:
         mask=mask,
         withheld_texts=_NAV_UNAVAILABLE_WITHHELD,
         input_conflict=nav_dividend.WITHHELD_INPUT_CONFLICT,
+        div_ccy_differs=nav_dividend.WITHHELD_DIV_CCY_DIFFERS,
     )
 
 

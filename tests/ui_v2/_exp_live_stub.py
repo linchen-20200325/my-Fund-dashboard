@@ -38,9 +38,7 @@ def _wired(settings, error) -> dict:
     key_results = [{"input": c, "ok": True, "full_key": c, "portal": "", "parsed_code": c, "error": None}
                    for c in WF.CODES]
     _funds, unresolved = live.nav_requests(needed, key_results, profiles["declared"])
-    return live.assemble_wired(profiles, needed, WF.nav_out(codes=needed) if needed else None,
-                               unresolved=unresolved, today=WF.TODAY, mask=WF.mask,
-                               withheld_texts=WF.WITHHELD_TEXTS, input_conflict=WF.INPUT_CONFLICT)
+    return WF.assemble(profiles, needed, WF.nav_out(codes=needed) if needed else None, unresolved=unresolved)
 
 
 def load_live() -> dict:
@@ -52,9 +50,12 @@ def load_live() -> dict:
         pool = dict(POOL, codes=list(WF.CODES))
         wired = _wired(settings, error)
         return {"dataset": live.build_dataset(pool, settings, wired),
-                "notes": {"pool": pool, "settings": settings, "settings_error": error, "cells": wired["cells"]}}
+                "notes": {"pool": pool, "settings": settings, "settings_error": error, "cells": wired["cells"],
+                          "wiring_error": None}}
+    # 未接線模式（只有代碼、其餘欄「…尚未接入」）只留給替身：正式入口沒有逐格原因時 `apply_live_notes` 會 raise。
     return {"dataset": live.build_dataset(POOL, settings),
-            "notes": {"pool": dict(POOL), "settings": settings, "settings_error": error}}
+            "notes": {"pool": dict(POOL), "settings": settings, "settings_error": error,
+                      live.UNWIRED_FOR_TESTS: True}}
 
 
 def save_setting(key, value, kind) -> dict:

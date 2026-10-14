@@ -114,7 +114,9 @@ def _all_text(out) -> str:
     ("usd", None, None, ND.WITHHELD_CCY_MISSING, ND.WITHHELD_CCY_MISSING),          # 格式不合
     (None, None, None, ND.WITHHELD_CCY_MISSING, ND.WITHHELD_CCY_MISSING),           # 缺值
     ("USD", {"currency": "EUR"}, None, ND.WITHHELD_CCY_CONFLICT, None),             # 序列宣告不同
-    ("TWD", None, None, None, ND.WITHHELD_CCY_CONFLICT),                            # 配息宣告不同
+    # ~~配息宣告不同 → ND.WITHHELD_CCY_CONFLICT~~ → 2026-10-14 exp C2 修正輪（`49` Q7；有意識的更正，不是漏刪）：
+    # meta 模式下「認得出、但不同」改為 `div_ccy_differs`；認不出的仍是 `ccy_conflict`（見檔尾兩條）。
+    ("TWD", None, None, None, ND.WITHHELD_DIV_CCY_DIFFERS),                         # 配息宣告不同（認得出）
 ])
 def test_meta_各種扣下_文案沒有持倉_有來源自報字樣(ccy, attrs, items, nav_code, div_code):
     out = _build(_meta_funds("MZ01", ccy), {"MZ01": _res("MZ01", series_attrs=attrs, items=items)})
@@ -217,7 +219,8 @@ def test_meta_配息宣告幣別與meta不同_配息整檔扣下():
     items = [_fc_item("2026-08-05", "USD"), _fc_item("2026-09-05", "EUR")]
     out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
     assert out["dividend"]["rows"] == []
-    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}
+    # ~~ND.WITHHELD_CCY_CONFLICT~~ → 2026-10-14（`49` Q7）：'EUR' 認得出、與 meta 不同 → `div_ccy_differs`；文案不變。
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_DIV_CCY_DIFFERS}
     assert out["dividend"]["skipped"]["MZ01"] == [
         f"配息宣告的幣別與{META_TEXT}的幣別不同或認不出（'EUR'；{META_TEXT} USD）；"
         "不改標籤、不換算，這一檔的配息 2 筆全部不寫"]
@@ -453,3 +456,25 @@ def test_公開函式_壞label_source_ValueError(source):
 def test_公開函式_持倉手填與合法meta照常():
     assert ND.resolve_nav_ccy("USD", ["USD"])[:2] == ("USD", "source_reported")
     assert ND.resolve_nav_ccy(None, ["USD"], label_source=META)[:2] == ("USD", META)
+
+
+# ═══════════════════════ 2026-10-14 exp C2 修正輪：配息幣別「不同」與「認不出」分開（`49` Q7） ═══════════════════════
+
+def test_meta_配息宣告幣別認不出_維持ccy_conflict_不是div_ccy_differs():
+    items = [_fc_item("2026-08-05", "USD"), _fc_item("2026-09-05", "美元累積")]   # 認不出（不在別名表、不是 ISO）
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    assert out["dividend"]["rows"] == []
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}
+
+
+def test_meta_配息宣告一筆不同一筆認不出_從嚴_ccy_conflict():
+    items = [_fc_item("2026-08-05", "EUR"), _fc_item("2026-09-05", "美元累積")]
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}
+
+
+def test_hld_配息宣告幣別不同_照舊ccy_conflict_不產生新代碼():
+    items = [_fc_item("2026-08-05", "USD"), _fc_item("2026-09-05", "EUR")]
+    funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "holding_ccy": "USD"}]
+    out = _build(funds, {"MZ01": _res("MZ01", items=items)})
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}

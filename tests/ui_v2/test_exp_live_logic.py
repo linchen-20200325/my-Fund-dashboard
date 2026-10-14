@@ -40,8 +40,10 @@ def _settings(rules=None, columns=None, sort=None, watch=None):
 def _input(pool=None, settings=None, settings_error=None):
     pool = pool or _pool()
     settings = settings or _settings()
+    # 2026-10-14 修正輪（Q O3）：未接線模式只留給測試替身，須明確標 `UNWIRED_FOR_TESTS`（正式入口沒有逐格原因會 raise）。
     return {"dataset": live.build_dataset(pool, settings),
-            "notes": {"pool": pool, "settings": settings, "settings_error": settings_error}}
+            "notes": {"pool": pool, "settings": settings, "settings_error": settings_error,
+                      live.UNWIRED_FOR_TESTS: True}}
 
 
 def _model(**kwargs):
@@ -510,7 +512,7 @@ def test_正式模式_任何代碼形狀_代碼以外的欄全部缺值_不推�
                                                                   if k != "fund_code"}
     assert data["nav"] == [] and data["dividend"] == [] and data["div_ratio_pct"] == {}
     model = live.build_live_model({"dataset": data, "notes": {"pool": pool, "settings": None or {},
-                                                              "settings_error": None}},
+                                                              "settings_error": None, live.UNWIRED_FOR_TESTS: True}},
                                   compare_checked=(code,), save_wired=True)
     (exp2_row,) = _b(model, "EXP-2")["_rows"]
     for column in logic.COLUMN_ORDER:

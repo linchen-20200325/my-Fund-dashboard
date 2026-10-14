@@ -19,9 +19,11 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import json
 import math
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from .. import thresholds
@@ -209,6 +211,8 @@ def build_dataset(pool, settings, wired=None) -> dict:
       與配息比；那幾格的原因與來源標示放在 `wired["cells"]`（`source.load_live` 交給 `notes["cells"]`）。
     - `wired` 為 None（只有代碼的舊呼叫端，例 `tests/ui_v2/_exp_live_stub.py`）→ 行為與接線前相同：
       其餘欄一律 None，那幾格由 `apply_live_notes` 寫「⬜ 資料未備：…尚未接入」。
+      ⚠️ 2026-10-14 修正輪：這條路**只留給測試替身**（`notes[UNWIRED_FOR_TESTS] is True`）；正式入口母體讀到了
+      卻沒有逐格原因，`apply_live_notes` 會 raise。
     """
     errors = {}
     profiles, navs, ratios = [], [], {}
@@ -236,13 +240,14 @@ def build_dataset(pool, settings, wired=None) -> dict:
 # ───────────────────────── C2 接線：基本資料、淨值、配息比（2026-10-14） ─────────────────────────
 #
 # 客戶已裁示的規則（派工單編號）逐條落在下面的函式；本段一律純函式，`today`、`mask` 由 `source.py` 注入。
-# L2 的狀態字面在這裡**鏡像**一份（本檔不得 import services），由 tests/ui_v2/test_exp_live_wiring.py 對拍。
+# L2 的狀態字面在這裡**鏡像**一份（本檔不得 import services），由 tests/ui_v2/test_exp_live_wiring_logic.py 對拍。
 
 PROFILE_STATUS_OK = "ok"                    # exp_profile.STATUS_OK
 PROFILE_STATUS_NOT_READY = "not_ready"      # exp_profile.STATUS_NOT_READY
 PROFILE_STATUS_FAILED = "fetch_failed"      # exp_profile.STATUS_FAILED
 PROFILE_STATUS_INCONSISTENT = "inconsistent"  # exp_profile.STATUS_INCONSISTENT（畫面以 ⬜ 呈現）
 TEXT_KEY_FAILED = "代碼無法對照：{reason}"   # exp_profile.TEXT_KEY_FAILED（逐字相同）
+DIVIDEND_POLICY_ACCUM = "accum"             # exp_profile.DIVIDEND_POLICY_ACCUM
 
 PROFILE_COLUMNS = ("fund_name", "ccy", "inception_on", "dividend_policy", "mgmt_fee_rate_pct")
 NAV_COLUMNS = ("nav_date", "nav_orig_ccy", "div_ratio_pct")
@@ -254,20 +259,92 @@ NAV_OLD_DAYS = thresholds.NAV_NOT_READY_DAYS
 NAV_NOT_READY_DATED_TEXT = "⬜ 資料未備：最近一筆淨值 {day}，已超過 {days} 日"
 # 規則 13：近 12 個月確認完整且確定無配息。字面照派工單；主值字面 `⬜ 不適用` 是 `44` 5.1 `業務例外` 那一列。
 TEXT_DIV_NONE_12M = logic.not_applicable_text("近 12 個月無配息")
+# `docs/v2/49` Q7（客戶 2026-09-26 已同意）：配息幣別與淨值幣別不同 → 不適用（認不出的幣別仍是資料未備）。
+TEXT_DIV_CCY_DIFFERS_NA = logic.not_applicable_text("配息幣別與淨值幣別不同")
 
 # 下列原因句為本組擬定（派工單沒有給字面；交付報告列待覆核）。
 TEXT_NAV_NO_ROWS = "淨值來源沒有交出可用的淨值列"
 TEXT_NAV_CCY_MISMATCH = "淨值資料幣別 {nav} 與基本資料幣別 {profile} 不同，淨值與配息比不計算"
-TEXT_DIV_FOLLOWS_NAV = "淨值不可用，配息比不計算"
 TEXT_DIV_NOT_SETTLED = "配息資料未確認完整，配息比不計算"
 TEXT_DIV_COVERAGE_SHORT = "配息資料最早只到 {start}，未涵蓋近 12 個月（窗口起點 {window}），配息比不計算"
-TEXT_DIV_CCY_MISMATCH = "配息幣別 {div} 與淨值幣別 {nav} 不同，配息比不計算"
-TEXT_REASON_MISSING = "來源沒有寫原因"
+# 總管 2026-10-14 裁定（規則 13 的依據）：沒有任何配息列時，只憑「各來源都回報沒有配息」不足以推到近 12 個月 ——
+# 無法排除配息端點只保留近期、或退化回空。只有基本資料「配息政策」已確認為累積型時才畫不適用。
+TEXT_DIV_NONE_UNVERIFIED = "各來源皆認得本檔且無配息紀錄，但無法確認來源保留期涵蓋近 12 個月"
+# 規則 13 的畫面字樣不改；`ccy_undetermined` 的畫面字樣（總管 2026-10-14 修正輪：使用者可見文字不寫內部名稱）。
+TEXT_CCY_UNDETERMINED = "計價幣別未確定（基本資料各來源幣別缺或不一致），淨值與配息比不取數"
 
 # 來源標示（規則 10）。
 SOURCE_SEP = "+"
 TAG_FAILED = "{names} 失敗"
 TAG_RATIO = "計算"
+TAG_DIV_REPORTED = "來源回報"
+
+
+# ───────── 原因白話化（總管 2026-10-14 修正輪：使用者可見文字不得出現內部名稱） ─────────
+#
+# 白名單對照（逐條、固定字串或固定樣式）＋ 通則（Python 字面與函式呼叫樣式改寫成字面文字）。
+# ⛔ 不吞原因：認不得的字照原樣留下，只拿掉程式語法的外殼（引號、大括號、函式呼叫）。
+
+_PLAIN_FIXED = (
+    ("；完整原文見 source_status", ""),
+    ("完整原文見 source_status", ""),
+    ("A 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態）", "另走了舊版配息頁解析（該段沒有取數狀態）"),
+    ("A 鏈", "淨值與配息取數"),
+)
+_PLAIN_WORDS = {
+    # 解析器標記（`repositories/fund/sources.py::DIV_PARSER_*`）
+    "tcb_moneydj_div": "合庫配息頁", "fundclear_div": "FundClear 配息", "cnyes_div": "鉅亨配息",
+    # 配息取數狀態（`DIV_OUTCOME_*`／`DIV_STATUS_*`）
+    "none_confirmed": "確認沒有配息", "undetermined": "無法判定", "failed": "取數失敗", "rows": "有配息列",
+    "empty": "沒有配息紀錄", "unknown": "狀態不明",
+    # 丟列明細的鍵（`div_dropped_total`）
+    "truncated": "截斷", "filtered": "過濾", "other_tables": "其他表格",
+}
+_INTERNAL_CALL = re.compile(r"auto_fetch_moneydj\([^()]*\)")                # A 鏈入口：整段是內部名稱，拿掉
+_CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\(([^()（）]*)\)")             # 其他 name(args)：去掉呼叫樣式、留內容
+_PAGE_TYPE = re.compile(r"\[[a-z]{2}\d{6}\]\s*")                         # [yp010000]
+_DICT = re.compile(r"\{[^{}]*\}")                                         # {'rows': 3}
+_STATUS_WORD = re.compile(r"(狀態 |：)'?(none_confirmed|undetermined|failed|rows|empty|unknown)'?(?![A-Za-z0-9_])")
+_DECLARED = re.compile(r"([^\s:：（(、，；]+):'([^']*)'")                    # 即時序列:'EUR'、MoneyDJ:'美元'
+_QUOTED = re.compile(r"'([^'\n]*)'")
+
+
+def _plain_dict(match) -> str:
+    try:
+        value = ast.literal_eval(match.group(0))
+    except (ValueError, SyntaxError):
+        return match.group(0).replace("{", "（").replace("}", "）").replace("'", "")
+    if not isinstance(value, dict):
+        return match.group(0)
+    parts = [f"{_PLAIN_WORDS.get(str(k), str(k))} {v}" for k, v in value.items()]
+    return "、".join(parts) if parts else "（空）"
+
+
+def plain_reason(text: str) -> str:
+    """L2 原因原文 → 使用者看得懂的字（集中一處；EXP-2／EXP-3／EXP-6 的文字、標示、tooltip 都走 `_finish`）。
+
+    1. 固定字串對照（`_PLAIN_FIXED`）：「完整原文見 source_status」拿掉、「A 鏈」改「淨值與配息取數」；
+    2. A 鏈入口的函式呼叫（`auto_fetch_moneydj('G07')`）整段拿掉、留下的空括號一併拿掉；其他 `name(args)`
+       改成「name（args）」（去掉呼叫樣式、內容保留）；頁型 `[yp010000]` 拿掉；
+    3. 狀態字（`狀態 'undetermined'`、`FundClear：empty`）與解析器標記照 `_PLAIN_WORDS` 換字；
+    4. Python dict 字面（`{'rows': 3}`）換成「鍵 值」；`來源:'值'` 換成「來源 宣告「值」」；其餘 `'x'` 換成「x」。
+    認不得的內容不刪，只去掉程式語法外殼。
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"plain_reason 只收字串（{type(text).__name__}）")
+    out = text
+    for old, new in _PLAIN_FIXED:
+        out = out.replace(old, new)
+    out = _INTERNAL_CALL.sub("", out).replace("（）", "").replace("()", "")
+    out = _CALL.sub(lambda m: f"{m.group(1)}（{m.group(2)}）", out)
+    out = _PAGE_TYPE.sub("", out)
+    out = _DICT.sub(_plain_dict, out)
+    out = _STATUS_WORD.sub(lambda m: m.group(1) + _PLAIN_WORDS[m.group(2)], out)
+    for word in ("tcb_moneydj_div", "fundclear_div", "cnyes_div"):
+        out = out.replace(word, _PLAIN_WORDS[word])
+    out = _DECLARED.sub(lambda m: f"{m.group(1)} 宣告「{m.group(2)}」", out)
+    out = _QUOTED.sub(lambda m: f"「{m.group(1)}」", out)
+    return out
 
 
 def _note(text, state, tag=None, tip=None) -> dict:
@@ -275,15 +352,16 @@ def _note(text, state, tag=None, tip=None) -> dict:
     return {"text": text, "state": state, "source_tag": tag or None, "source_tip": tip or None}
 
 
-def _masked(note: dict, mask) -> dict:
-    """遮蔽在寫出點做一次（`exp_profile` 檔頭：原文不遮蔽，遮蔽在 L3）：文字、標示、tooltip 三者都過。"""
+def _finish(note: dict, mask) -> dict:
+    """寫出點的最後一步（`exp_profile` 檔頭：原文不遮蔽，遮蔽在 L3）：文字、標示、tooltip 三者各自
+    先遮蔽（秘密值以原文比對，必須在任何改寫之前）、再白話化（`plain_reason`）。"""
     out = dict(note)
     for key in ("text", "source_tag", "source_tip"):
         if out[key] is not None:
             masked = mask(out[key])
             if not isinstance(masked, str):
                 raise TypeError(f"mask 應回傳字串（{type(masked).__name__}）")
-            out[key] = masked
+            out[key] = plain_reason(masked)
     return out
 
 
@@ -420,28 +498,34 @@ def nav_is_old(last: date, today: date) -> bool:
     return days > NAV_OLD_DAYS
 
 
-def dividend_ratio(nav_value, nav_ccy, nav_day, div_rows, *, settled, coverage_start) -> tuple:
-    """近 12 個月配息佔淨值比 → `(kind, ratio 或 None, 原因或明細)`；`kind` ∈ {"ok", "none", "not_ready"}。
+def dividend_ratio(nav_value, nav_ccy, nav_day, div_rows, *, settled, coverage_start, accum_confirmed) -> tuple:
+    """近 12 個月配息佔淨值比 → `(kind, ratio 或 None, 原因或明細)`；
+    `kind` ∈ {"ok", "none", "ccy_differs", "not_ready"}。
 
     算式：窗口 W ＝ (`window_start(d)`, d]，d ＝ 最新一筆 `nav_date`（含 d、不含起點那一天）；
         ratio ＝ Σ{ div_per_unit_orig_ccy ｜ ex_date ∈ W } ÷ 最新淨值 × 100（`math.fsum`）。
     前提（不成立 → `not_ready`，寫原因）：
     - `settled` 為 True（資料層確認每一筆都寫進來了）；
-    - 有配息列時，覆蓋起點 `coverage_start` ≤ 窗口起點（否則窗口前段沒有證據）。
-      ⚠️ `settled` 為 True 而**一筆配息列都沒有**（資料層的 none_confirmed ＋ none_evidenced：每一個來源都認得
-      這個代碼、都回報沒有配息）時 `coverage_start` 為 None —— 本組讀作「全期間確定無配息」，涵蓋窗口（交付報告列待覆核）。
-    - 窗口內每一筆配息的幣別都等於淨值幣別（不同 → 不計算，不換算）。
-    窗口內 0 筆、或合計為 0（`math.isclose`）→ `none`（規則 13）：不顯示 0.00%、也不是資料未備。
+    - 有配息列時，覆蓋起點 `coverage_start` ≤ 窗口起點（否則窗口前段沒有證據）；
+    - **一筆配息列都沒有**（資料層的「各來源都認得本檔、都回報沒有配息」，`coverage_start` 不存在）時：
+      只有 `accum_confirmed`（基本資料配息政策已確認為累積型）才算確定無配息 → `none`；
+      其餘（配息型、⬜、⛔、不一致）→ `not_ready`（`TEXT_DIV_NONE_UNVERIFIED`；總管 2026-10-14 裁定）。
+    窗口內有配息列的幣別與淨值幣別不同 → `ccy_differs`（`49` Q7：不適用，不換算）。
+    有配息列、覆蓋起點成立、窗口內 0 筆或合計為 0（`math.isclose`）→ `none`（規則 13）：不顯示 0.00%。
     逐筆走訪一次，O(n)。
     """
     if not settled:
         return "not_ready", None, TEXT_DIV_NOT_SETTLED
     start = window_start(nav_day)
-    if div_rows:
-        cover = None if coverage_start is None else _as_date(coverage_start, "coverage_start")
-        if cover is None or cover > start:
-            return "not_ready", None, TEXT_DIV_COVERAGE_SHORT.format(
-                start=cover.isoformat() if cover else "（未記錄）", window=start.isoformat())
+    window_text = f"除息日在 {start.isoformat()}（不含）至 {nav_day.isoformat()} 之間"
+    if not div_rows:
+        if accum_confirmed:
+            return "none", None, f"各來源皆認得本檔且無配息紀錄，基本資料配息政策為累積型；{window_text}沒有配息"
+        return "not_ready", None, TEXT_DIV_NONE_UNVERIFIED
+    cover = None if coverage_start is None else _as_date(coverage_start, "coverage_start")
+    if cover is None or cover > start:
+        return "not_ready", None, TEXT_DIV_COVERAGE_SHORT.format(
+            start=cover.isoformat() if cover else "（未記錄）", window=start.isoformat())
     amounts, bad_ccy = [], set()
     for index, row in enumerate(div_rows):
         ex_day = _as_date(row["ex_date"], f"dividend 第 {index} 列 ex_date")
@@ -452,9 +536,8 @@ def dividend_ratio(nav_value, nav_ccy, nav_day, div_rows, *, settled, coverage_s
             continue
         amounts.append(float(row["div_per_unit_orig_ccy"]))
     if bad_ccy:
-        return "not_ready", None, TEXT_DIV_CCY_MISMATCH.format(div="、".join(sorted(bad_ccy)), nav=nav_ccy)
+        return "ccy_differs", None, f"配息幣別 {'、'.join(sorted(bad_ccy))}，淨值幣別 {nav_ccy}；不換算、不計算"
     total = math.fsum(amounts)
-    window_text = f"除息日在 {start.isoformat()}（不含）至 {nav_day.isoformat()} 之間"
     if not amounts or math.isclose(total, 0.0, rel_tol=0.0, abs_tol=1e-12):
         return "none", None, f"{window_text}沒有配息；配息資料已確認完整"
     if not (isinstance(nav_value, (int, float)) and math.isfinite(nav_value) and nav_value > 0):
@@ -488,12 +571,15 @@ def _all_nav(text, state, tag=None, tip=None) -> dict:
     return {column: _note(text, state, tag, tip) for column in NAV_COLUMNS}
 
 
-def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, today, withheld_texts, input_conflict) -> tuple:
+def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, accum_codes, today, withheld_texts,
+                       input_conflict, div_ccy_differs) -> tuple:
     """淨值與配息比（規則 8、11、13、14 與配息比定義）→ `(nav 列, {代碼: 配息比}, {代碼: {欄: note}})`。
 
     - `nav_out`：`exp_nav.load_nav_dividend` 的回傳（`codes` 全部代碼無法對照時可為 None）。
     - `withheld_texts`：**封閉**的淨值扣下代碼 → 固定文字（None ＝ 用資料層的 `skipped` 原文）；
       不在裡面的扣下代碼、或 `input_conflict` → raise（契約被破壞，不猜）。
+    - `accum_codes`：基本資料配息政策已確認為累積型的代碼（規則 13 無配息列時的依據）。
+    - `div_ccy_differs`：資料層「配息幣別認得出、但與淨值幣別不同」的扣下代碼（`49` Q7 → 不適用）。
     - 只把**可用的最新一筆**淨值交給 `logic`：過舊（規則 11）、幣別衝突（規則 14）、扣下、失敗的檔一列都不交，
       所以它們不參與任何計算（含排序與配息比）。
     """
@@ -543,43 +629,64 @@ def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, today, withhe
                          "ccy": latest["ccy"]})
         tip = _nav_tip(prov, f"資料日期：{last.isoformat()}")
         cells = {"nav_date": _note(None, logic.STATE_OK, tag, tip), "nav_orig_ccy": _note(None, logic.STATE_OK, tag, tip)}
-        cells["div_ratio_pct"] = _ratio_note(code, latest, last, div_part, div_by, input_conflict, ratios)
+        cells["div_ratio_pct"] = _ratio_note(code, latest, last, div_part, div_by, ratios,
+                                             accum=code in accum_codes, input_conflict=input_conflict,
+                                             div_ccy_differs=div_ccy_differs)
         notes[code] = cells
     return nav_rows, ratios, notes
 
 
-def _ratio_note(code, latest, last, div_part, div_by, input_conflict, ratios) -> dict:
+def _div_basis(prov: dict) -> str:
+    """配息那一格 tooltip 的「依據」：L2 實際交出的取數狀態（`outcome_detail`，逐來源回報），經白話化後上畫面。"""
+    detail = prov.get("outcome_detail")
+    return f"配息依據：{str(detail).replace(chr(10), '；')}" if detail else ""
+
+
+def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_conflict, div_ccy_differs) -> dict:
     if div_part is None:
         raise ValueError(f"{code!r} 有淨值，卻沒有配息結果")
     prov = div_part["provenance"].get(code) or {}
     sources = prov.get("source")
     tag_src = SOURCE_SEP.join(map(str, sources)) if isinstance(sources, (list, tuple)) else (sources or None)
+    basis = _div_basis(prov)
     skipped = "；".join(str(line) for line in div_part["skipped"].get(code) or ())
     error = div_part["errors"].get(code)
+
+    def tip_of(*parts):
+        return "；".join(p for p in (f"配息來源：{tag_src}" if tag_src else "", *parts, basis) if p)
+
     if error:
-        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, f"配息：{error}")
+        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, tip_of())
     withheld = div_part["withheld"].get(code)
     if withheld == input_conflict:
         raise ValueError(f"{code!r}：配息輸入矛盾（{skipped}）")
+    if withheld == div_ccy_differs:                                            # `49` Q7
+        return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, tag_src, tip_of(skipped))
     if withheld or div_part["pending"].get(code):
         reason = skipped or str(withheld or div_part["pending"].get(code))
-        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, f"配息：{reason}")
+        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason))
+    rows = div_by.get(code) or []
     kind, ratio, detail = dividend_ratio(
-        latest["nav_orig_ccy"], latest["ccy"], last, div_by.get(code) or [],
-        settled=div_part["settled"].get(code) is True, coverage_start=prov.get("coverage_start"))
-    tip = f"配息來源：{tag_src}；{detail}" if tag_src else detail
+        latest["nav_orig_ccy"], latest["ccy"], last, rows,
+        settled=div_part["settled"].get(code) is True, coverage_start=prov.get("coverage_start"),
+        accum_confirmed=accum)
+    # 規則 13 那一格不寫「計算」：沒有配息列時標示是來源回報（依據在 tooltip）；有配息列時標示是配息來源。
+    tag = TAG_RATIO if kind == "ok" else (tag_src or TAG_DIV_REPORTED)
     if kind == "ok":
         ratios[code] = ratio
-        return _note(None, logic.STATE_OK, TAG_RATIO, tip)
+        return _note(None, logic.STATE_OK, tag, tip_of(detail))
     if kind == "none":
-        return _note(TEXT_DIV_NONE_12M, logic.STATE_BIZ, TAG_RATIO, tip)
-    reason = detail + (f"（{skipped}）" if skipped else "")
-    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, reason)
+        return _note(TEXT_DIV_NONE_12M, logic.STATE_BIZ, tag, tip_of(detail))
+    if kind == "ccy_differs":
+        return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, tag, tip_of(detail))
+    # 格內只寫本層的判定句；資料層的 `skipped` 原文（白話化後）放 tooltip。
+    return _note(f"{logic.ND_TEXT}：{detail}", logic.STATE_MISSING, tag, tip_of(detail, skipped))
 
 
-def assemble_wired(profiles, codes, nav_out, *, unresolved, today, mask, withheld_texts, input_conflict) -> dict:
+def assemble_wired(profiles, codes, nav_out, *, unresolved, today, mask, withheld_texts, input_conflict,
+                   div_ccy_differs) -> dict:
     """C2 接線的總裝（純函式）→ `build_dataset(..., wired=...)` 吃的形狀：
-    `{"fund_profile", "nav", "div_ratio_pct", "errors", "cells"}`。`cells` 每一格都已經過 `mask`。
+    `{"fund_profile", "nav", "div_ratio_pct", "errors", "cells"}`。`cells` 每一格都已經過 `mask` 與 `plain_reason`。
 
     `today`：台灣今天的日期（`date`，不收 `datetime`）。
     """
@@ -590,18 +697,25 @@ def assemble_wired(profiles, codes, nav_out, *, unresolved, today, mask, withhel
     cells = profile_notes(profiles)
     profile_ccy = {code: (c["ccy"]["value"] if c["ccy"]["status"] == PROFILE_STATUS_OK else None)
                    for code, c in profiles["cells"].items()}
+    accum_codes = {code for code, c in profiles["cells"].items()
+                   if c["dividend_policy"]["status"] == PROFILE_STATUS_OK
+                   and c["dividend_policy"]["value"] == DIVIDEND_POLICY_ACCUM}
     nav_rows, ratios, nav_notes = nav_notes_and_rows(
-        codes, nav_out, unresolved=unresolved, profile_ccy=profile_ccy, today=today,
-        withheld_texts=withheld_texts, input_conflict=input_conflict)
+        codes, nav_out, unresolved=unresolved, profile_ccy=profile_ccy, accum_codes=accum_codes, today=today,
+        withheld_texts=withheld_texts, input_conflict=input_conflict, div_ccy_differs=div_ccy_differs)
     for code, notes in nav_notes.items():
         cells.setdefault(code, {}).update(notes)
-    masked = {code: {column: _masked(note, mask) for column, note in notes.items()} for code, notes in cells.items()}
+    done = {code: {column: _finish(note, mask) for column, note in notes.items()} for code, notes in cells.items()}
     return {"fund_profile": [dict(row) for row in profiles["rows"]], "nav": nav_rows, "div_ratio_pct": ratios,
-            "errors": {}, "cells": masked}
+            "errors": {}, "cells": done}
+
+
+TEXT_KEYS_FAILED_SUMMARY = "⛔ 取數失敗：代碼對照表讀取失敗，無法列出候選"
 
 
 def wiring_failed(message: str) -> dict:
-    """代碼對照表讀不到（整批無從取數）→ `fund_profile` 取數失敗（規則 8；訊息由呼叫端遮蔽）。"""
+    """代碼對照表讀不到（整批無從取數）→ `fund_profile` 取數失敗（規則 8；訊息由呼叫端遮蔽）。
+    `EXP-2` 摘要改寫成 `TEXT_KEYS_FAILED_SUMMARY`（`apply_live_notes`），不寫「0 檔候選」。"""
     return {"fund_profile": [], "nav": [], "div_ratio_pct": {}, "errors": {"fund_profile": message}, "cells": {}}
 
 
@@ -723,6 +837,10 @@ def _apply_cell_notes(code, cells, by_code):
             cell["source_tip"] = note["source_tip"]
 
 
+# 未接線模式的開關（`notes` 的鍵）：**只有測試替身**可以設為 True（正式入口 `source.load_live` 一律交 `cells`）。
+UNWIRED_FOR_TESTS = "unwired_for_tests"
+
+
 def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。
 
@@ -734,8 +852,12 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
     by_code = notes.get("cells")
     exp6 = logic.find_block(out, "EXP-6")
     exp6_cells = dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"])) if exp6["_fields"] else {}
+    if by_code is None and notes["pool"]["status"] == "ok" and notes.get(UNWIRED_FOR_TESTS) is not True:
+        # 總管 2026-10-14 修正輪（Q O3）：正式入口母體讀到了卻沒有逐格原因 ＝ 接線斷了；不得靜默印「尚未接入」。
+        raise ValueError("母體已讀到，卻沒有逐格原因（notes['cells']）；正式入口一定要交接線結果")
     if by_code is None:
-        # 只有代碼的舊呼叫端（接線前的形狀）：缺的格寫「…尚未接入」。
+        # 未接線模式：**只給測試替身用**（`notes[UNWIRED_FOR_TESTS] is True`，例 `tests/ui_v2/_exp_live_stub.py`），
+        # 或母體讀不到（沒有任何一列可畫）。缺的格寫「…尚未接入」。
         for row in logic.find_block(out, "EXP-2")["_rows"]:
             _fill_missing(row["_cells"])
         for column in logic.find_block(out, "EXP-3")["_columns"]:
@@ -758,6 +880,9 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
             else TEXT_POOL_COOLING if pool.get("cooling")
             else TEXT_POOL_FAILED
         )
+    elif notes.get("wiring_error"):
+        # 代碼對照表讀不到（`wiring_failed`）：據實寫，不寫「0 檔候選」（Q 修正輪必修 9）。
+        exp2["summary_text"] = TEXT_KEYS_FAILED_SUMMARY
     logic.find_block(out, "EXP-1")["detail_lines"].append(TEXT_OPERATORS)
 
     reason = None

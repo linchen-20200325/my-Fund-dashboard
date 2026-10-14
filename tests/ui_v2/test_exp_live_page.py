@@ -295,7 +295,7 @@ def _wired_store():
 
 
 def _raw_table(at) -> str:
-    hits = [e.value for e in at.markdown if 'class="exp-table"' in e.value and "<th>fund_code</th>" in e.value]
+    hits = [e.value for e in at.markdown if 'class="exp-table"' in e.value and "<th>fund&#95;code</th>" in e.value]
     assert len(hits) == 1, len(hits)                 # EXP-2 那一張（EXP-7 另有一張，不含代碼欄）
     return hits[0]
 
@@ -304,7 +304,7 @@ def test_C2接線_代碼欄第一欄_沒有新增欄位_舊淨值與無配息照
     _wired_store()
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
     table = _raw_table(at)
-    heads = re.findall(r"<th>(.*?)</th>", table)
+    heads = [html.unescape(h) for h in re.findall(r"<th>(.*?)</th>", table)]
     assert heads == ["fund_code"] + [logic.COLUMN_LABELS[c] for c in logic.COLUMN_ORDER]   # 規則 2、10
     text = html.unescape(table)
     assert "⬜ 資料未備：最近一筆淨值 2026-10-03，已超過 10 日" in text                       # 規則 11
@@ -321,9 +321,23 @@ def test_C2接線_值與tooltip含腳本與引號_一律escape(monkeypatch):
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
     table = _raw_table(at)
     assert "<script>" not in table and 'Evil"Src' not in table
-    assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;基金" in table
-    assert 'title="淨值來源：Evil&quot;Src&lt;b&gt;' in table
+    # 2026-10-14 修正輪（Q M1）：`_esc` 比照 hld —— HTML 與 Markdown 字元一律改成數字字元參照。
+    assert page._esc(WF.XSS_NAME) in table and "&#60;script&#62;alert&#40;&#34;x&#34;&#41;" in table
+    assert 'title="淨值來源：Evil&#34;Src&#60;b&#62;' in table
     assert re.search(r'<td style="[^"]*" title="[^"]*">', table)
+
+
+def test_C2接線_錯誤原文含換行與Markdown語法_不跳出表格_不變成標題(monkeypatch):
+    """Q M1：原文含 `\n\n`、`## `、`|`、`*` —— 交給 `st.markdown` 的表格字串裡一個都不得以語法形式出現。"""
+    _wired_store()
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    table = _raw_table(at)
+    assert "\n" not in table                                               # 換行折掉（Markdown 不會跳出 HTML 區塊）
+    for raw in ("## ", "|", "*粗體*", "_斜體_"):
+        assert raw not in table, raw
+    assert "&#35;&#35; 注入標題" in table and "&#124;" in table and "&#42;粗體&#42;" in table
+    text = html.unescape(table)
+    assert "## 注入標題 | a | b |" in text                                   # 內容還在（只是不當語法）
 
 
 def _wired_app(tmp_path) -> pathlib.Path:
@@ -360,6 +374,14 @@ _EXP2_DOM_JS = """() => {
     bold: t ? t.querySelectorAll('td b').length : -1,
     src: t ? t.querySelectorAll('.exp-src').length : 0,
     names: rows.map(r => r.cells[1].textContent),
+    injected_headings: [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+      .filter(h => h.textContent.includes('注入標題')).length,
+    tables_in_cells: t ? t.querySelectorAll('td table').length : -1,
+    scroll_width: t ? t.closest('.exp-scroll').scrollWidth : -1,
+    client_width: t ? t.closest('.exp-scroll').clientWidth : -1,
+    src_max_width: t ? Math.max(...[...t.querySelectorAll('.exp-src')].map(e => e.getBoundingClientRect().width)) : -1,
+    src_limit_px: t && t.querySelector('.exp-src')
+      ? parseFloat(getComputedStyle(t.querySelector('.exp-src')).maxWidth) : -1,
   };
 }"""
 
@@ -386,6 +408,11 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 assert dom["scripts"] == 0 and dom["bold"] == 0                  # 字串沒有變成標籤
                 assert dom["src"] >= 8
                 assert any(n.startswith(WF.XSS_NAME) for n in dom["names"])
+                # Q M1：錯誤原文裡的 `## ` 不得變成標題、`|` 不得變成另一張表。
+                assert dom["injected_headings"] == 0 and dom["tables_in_cells"] == 0
+                # Q O1：1600 寬桌機，候選表不需要橫捲（`.exp-src` 限寬＋省略號，全文在 tooltip）。
+                assert dom["scroll_width"] <= dom["client_width"] + 1, (dom["scroll_width"], dom["client_width"])
+                assert dom["src_max_width"] <= dom["src_limit_px"] + 1
                 tab.close()
         finally:
             browser.close()

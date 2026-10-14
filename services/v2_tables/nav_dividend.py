@@ -1328,6 +1328,9 @@ DIV_AMOUNT_EVIDENCE = {
 # 整檔不寫的原因代碼（配息專用；其餘沿用上方 `WITHHELD_*`）。
 WITHHELD_DIV_OUTCOME_UNDETERMINED = "div_outcome_undetermined"   # 沒有配息列，又分辨不出是不配息還是沒抓到
 WITHHELD_DIV_ITEMS_REJECTED = "div_items_rejected"               # 有配息列，但一筆都過不了逐筆核對（原因見 skipped）
+# meta 模式專用（2026-10-14 exp C2 修正輪，`docs/v2/49` Q7）：配息宣告的幣別認得出、但與標籤（＝淨值）幣別不同。
+# 認不出的仍是 `WITHHELD_CCY_CONFLICT`。hld（持倉手填）路徑不產生本代碼。
+WITHHELD_DIV_CCY_DIFFERS = "div_ccy_differs"
 # 待查證（`pending`）：日期欄證明不了是除息日。
 # 2026-10-13 稽核必修 2 擴大射程（代碼字面不改，免得下游對不上）：金額欄證明不了是每單位配息、
 # 合庫表頭格數與列格數不同，也列在這一碼 —— 都是「這一欄是什麼沒有證據」。
@@ -1594,6 +1597,12 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
     if conflicts:
         shown = "、".join(repr(c) for c in conflicts[:5]) + ("…" if len(conflicts) > 5 else "")
         out["withheld"] = WITHHELD_CCY_CONFLICT
+        # 2026-10-14 exp C2 修正輪（`docs/v2/49` Q7，客戶 2026-09-26 已同意）：meta 模式下把「認得出、但與標籤
+        # 不同的幣別」與「認不出」分開 —— 前者每一筆都正規化得出 ISO（與標籤不同）→ `div_ccy_differs`
+        # （exp 畫「⬜ 不適用：配息幣別與淨值幣別不同」）；任一筆認不出 → 照舊 `ccy_conflict`（資料未備）。
+        # ⚠️ 只在 meta 模式（`label_source` 不是持倉手填）分流：hld 路徑輸出逐位元組不變（黃金檔守）。
+        if label_source != LABEL_SOURCE_HOLDING and all(_normalize_declared_ccy(c) for c in conflicts):
+            out["withheld"] = WITHHELD_DIV_CCY_DIFFERS
         if label_source == LABEL_SOURCE_HOLDING:
             out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
         else:

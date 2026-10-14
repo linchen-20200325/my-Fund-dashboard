@@ -92,7 +92,7 @@ _FILE_ALLOWLIST = {
     # `exp_nav`（淨值與配息的逐檔記憶）、`nav_dividend`（扣下代碼常數）；`datetime.datetime`：台灣今天的日期（同 alo）。
     # `inspect`：判斷 `exp_profile.build_profiles` 有沒有 #965 新增的 `now` 參數（呼叫端相容兩版）。
     "ui_v2/exp/source.py": {
-        "__future__", "inspect", "os", "datetime.datetime", "streamlit",
+        "__future__", "inspect", "logging", "os", "datetime.datetime", "streamlit",
         "services.v2_tables.exp_nav", "services.v2_tables.exp_profile", "services.v2_tables.exp_universe",
         "services.v2_tables.fund_keys", "services.v2_tables.masking", "services.v2_tables.nav_dividend",
         "services.v2_tables.settings_store", "ui_v2.exp.live",

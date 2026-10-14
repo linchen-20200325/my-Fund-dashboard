@@ -212,6 +212,32 @@ def test_每一格的原因用秘密值遮蔽(monkeypatch, fake_st, l2_calls):
     assert WF.SECRET not in flat and "‹已遮蔽›" in cells["nav_date"]["text"]
 
 
+def test_代碼對照表讀不到_記log_摘要據實(monkeypatch, fake_st, l2_calls, caplog):
+    fake_st.secrets = {"FRED_API_KEY": WF.SECRET}
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+
+    def boom(codes):
+        raise OSError(f"讀不到對照表 {WF.SECRET}")
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", boom)
+    with caplog.at_level("ERROR", logger=source.__name__):
+        data = source.load_live()
+    assert any("代碼對照表讀取失敗" in r.getMessage() and WF.SECRET not in r.getMessage() for r in caplog.records)
+    assert data["notes"]["wiring_error"].startswith("代碼對照表讀取失敗")
+    model = live.build_live_model(data, save_wired=True)
+    from ui_v2.exp import logic
+    assert logic.find_block(model, "EXP-2")["summary_text"] == live.TEXT_KEYS_FAILED_SUMMARY
+
+
+def test_代碼對照結果形狀不對_照常raise_不當成讀取失敗(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", lambda codes: {"rows": []})   # 少了 results
+    with pytest.raises(KeyError):
+        source.load_live()
+
+
 def test_代碼對照表讀不到_整批取數失敗_訊息遮蔽(monkeypatch, fake_st, l2_calls):
     fake_st.secrets = {"FRED_API_KEY": WF.SECRET}
     monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
@@ -242,5 +268,8 @@ def test_扣下代碼清單是封閉的_含幣別未確定():
     assert source._NAV_UNAVAILABLE_WITHHELD == {
         nav_dividend.WITHHELD_CCY_MISSING: None, nav_dividend.WITHHELD_CCY_CONFLICT: None,
         nav_dividend.WITHHELD_FETCHED_AT_MISSING: None, nav_dividend.WITHHELD_FETCHED_AT_FUTURE: None,
-        exp_nav.WITHHELD_CCY_UNDETERMINED: exp_nav.TEXT_CCY_UNDETERMINED}
+        # ~~exp_nav.TEXT_CCY_UNDETERMINED~~ → 2026-10-14 修正輪（P 必修 2；有意識的更正，不是漏刪）：
+        # L2 原文含內部名稱 `declared_ccy_source`，畫面改用 `live.TEXT_CCY_UNDETERMINED`（白話）。
+        exp_nav.WITHHELD_CCY_UNDETERMINED: live.TEXT_CCY_UNDETERMINED}
+    assert "declared_ccy_source" not in live.TEXT_CCY_UNDETERMINED
     assert nav_dividend.WITHHELD_INPUT_CONFLICT not in source._NAV_UNAVAILABLE_WITHHELD

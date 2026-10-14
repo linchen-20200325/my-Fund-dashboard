@@ -38,10 +38,8 @@ def _keys(codes=F.CODES):
 
 
 def _wired(*, profiles=None, nav_out=None, codes=F.CODES, unresolved=None, today=F.TODAY, mask=F.mask):
-    profiles = profiles or F.profiles()
-    return live.assemble_wired(profiles, list(codes), nav_out if nav_out is not None else F.nav_out(codes),
-                               unresolved=unresolved or {}, today=today, mask=mask,
-                               withheld_texts=F.WITHHELD_TEXTS, input_conflict=F.INPUT_CONFLICT)
+    return F.assemble(profiles or F.profiles(codes=codes), codes, nav_out, unresolved=unresolved, today=today,
+                      mask_=mask)
 
 
 def _model(wired=None, settings=None, compare=(), **kw):
@@ -88,7 +86,10 @@ def test_L2狀態字面與本檔鏡像相同():
     assert live.TEXT_KEY_FAILED == exp_profile.TEXT_KEY_FAILED
     assert live.PROFILE_COLUMNS == exp_profile.CELL_FIELDS
     assert F.TEXT_MGMT_FEE == exp_profile.TEXT_MGMT_FEE
-    assert F.TEXT_CCY_UNDETERMINED == exp_nav.TEXT_CCY_UNDETERMINED
+    assert F.TEXT_CCY_UNDETERMINED == exp_nav.TEXT_CCY_UNDETERMINED          # 假資料的 L2 原文
+    assert live.DIVIDEND_POLICY_ACCUM == exp_profile.DIVIDEND_POLICY_ACCUM
+    assert F.DIV_CCY_DIFFERS == nav_dividend.WITHHELD_DIV_CCY_DIFFERS
+    assert F.TEXT_DIV_NONE == nav_dividend.TEXT_DIV_NONE
     assert set(F.WITHHELD_TEXTS) == {nav_dividend.WITHHELD_CCY_MISSING, nav_dividend.WITHHELD_CCY_CONFLICT,
                                      nav_dividend.WITHHELD_FETCHED_AT_MISSING,
                                      nav_dividend.WITHHELD_FETCHED_AT_FUTURE, exp_nav.WITHHELD_CCY_UNDETERMINED}
@@ -197,10 +198,13 @@ def test_配息比算式_窗口內合計除以最新淨值():
     assert wired["div_ratio_pct"]["H08"] == pytest.approx(2.5)
     tip = _cell(model, "A01", "div_ratio_pct")["source_tip"]
     assert "2025-10-10（不含）至 2026-10-10 之間的配息共 12 筆" in tip
+    assert _cell(model, "A01", "div_ratio_pct")["source_tag"] == live.TAG_RATIO
 
 
-def _ratio(rows, *, nav_day=date(2026, 10, 10), settled=True, coverage=date(2020, 1, 1), nav=10.0, ccy="USD"):
-    return live.dividend_ratio(nav, ccy, nav_day, rows, settled=settled, coverage_start=coverage)
+def _ratio(rows, *, nav_day=date(2026, 10, 10), settled=True, coverage=date(2020, 1, 1), nav=10.0, ccy="USD",
+           accum=False):
+    return live.dividend_ratio(nav, ccy, nav_day, rows, settled=settled, coverage_start=coverage,
+                               accum_confirmed=accum)
 
 
 def _d(day, amount=0.1, ccy="USD"):
@@ -221,11 +225,7 @@ def test_配息比窗口_閏日往前一年是2月28日():
     assert live.window_start(date(2026, 10, 10)) == date(2025, 10, 10)
 
 
-def test_規則13_確認完整且窗口內無配息_不適用_不是0也不是資料未備():
-    model = _model()
-    node = _cell(model, "B02", "div_ratio_pct")
-    assert node["text"] == "⬜ 不適用：近 12 個月無配息" and node["_state"] == logic.STATE_BIZ
-    assert "0.00%" not in node["text"] and logic.ND_TEXT not in node["text"]
+def test_規則13_有配息列且覆蓋成立_窗口內無配息_不適用_不是0也不是資料未備():
     kind, ratio, _ = _ratio([_d(date(2024, 1, 1))])                          # 有配息列、但都在窗口外
     assert (kind, ratio) == ("none", None)
     kind, ratio, _ = _ratio([_d(date(2026, 5, 1), 0.0)])                     # 窗口內合計為 0
@@ -237,7 +237,7 @@ def test_配息比前提不成立_資料未備():
     kind, _r, why = _ratio([_d(date(2026, 5, 1))], coverage=date(2026, 5, 1))     # 覆蓋起點晚於窗口起點
     assert kind == "not_ready" and "未涵蓋近 12 個月" in why
     kind, _r, why = _ratio([_d(date(2026, 5, 1), ccy="TWD")])                    # 配息幣別與淨值幣別不同
-    assert kind == "not_ready" and "TWD" in why
+    assert kind == "ccy_differs" and "TWD" in why                               # `49` Q7：不適用（另一條測試）
     node = _cell(_model(), "D04", "div_ratio_pct")
     assert node["text"].startswith(logic.ND_TEXT + "：配息資料未確認完整")
 
@@ -252,7 +252,8 @@ def test_規則14_淨值與基本資料幣別衝突_保留基本資料幣別_三
     assert _cell(model, "E05", "ccy")["text"] == "USD"
     for column in live.NAV_COLUMNS:
         node = _cell(model, "E05", column)
-        assert node["text"] == f"{logic.ND_TEXT}：{F.CONFLICT_LINE}"
+        assert node["text"] == f"{logic.ND_TEXT}：{live.plain_reason(F.CONFLICT_LINE)}"
+        assert "即時序列 宣告「EUR」" in node["text"]
     assert "E05" not in _wired()["div_ratio_pct"]
 
 
@@ -276,7 +277,7 @@ def test_幣別未確定_傳None給資料層_畫面寫資料層的固定文字()
     f06 = next(f for f in funds if f["fund_code"] == "F06")
     assert f06["declared_ccy"] is None and f06["declared_ccy_source"] is None
     assert next(f for f in funds if f["fund_code"] == "A01")["declared_ccy_source"] == "meta:MoneyDJ+TDCC"
-    assert _cell(_model(), "F06", "nav_date")["text"] == f"{logic.ND_TEXT}：{F.TEXT_CCY_UNDETERMINED}"
+    assert _cell(_model(), "F06", "nav_date")["text"] == f"{logic.ND_TEXT}：{live.TEXT_CCY_UNDETERMINED}"
 
 
 def test_代碼無法對照_不取淨值_三格寫原因():
@@ -335,8 +336,8 @@ def test_XSS_值與tooltip在畫面層一律escape():
 
     node = {"text": F.XSS_NAME, "source_tag": F.XSS_SOURCE, "source_tip": 'a"b<script>x</script>'}
     title = page._title_attr(node)
-    assert title == ' title="a&quot;b&lt;script&gt;x&lt;/script&gt;"'
-    assert page._src_html(node) == '<span class="exp-src">Evil&quot;Src&lt;b&gt;</span>'
+    assert title == ' title="a&#34;b&#60;script&#62;x&#60;/script&#62;"'
+    assert page._src_html(node) == '<span class="exp-src">Evil&#34;Src&#60;b&#62;</span>'
     assert page._title_attr({"source_tip": None}) == "" and page._src_html({}) == ""
     assert html.unescape(title[len(' title="'):-1]) == node["source_tip"]
 
@@ -369,10 +370,16 @@ def test_畫面調整_有值卻說不可用_或缺格卻說可用_raise():
         _model(wired)
 
 
-def test_沒有接線結果時行為與接線前相同():
+def test_沒有接線結果時_只有測試替身標記才走舊路():
     pool = {"status": "ok", "backend": "x", "codes": ["A01"], "dropped_blank": 0, "duplicates": 0, "message": None}
     data = live.build_dataset(pool, _settings())
     assert data["fund_profile"] == [live._profile_row("A01")] and data["nav"] == [] and data["div_ratio_pct"] == {}
+    notes = {"pool": pool, "settings": _settings(), "settings_error": None}
+    with pytest.raises(ValueError, match="正式入口一定要交接線結果"):          # Q O3：正式入口不得靜默走舊路
+        live.build_live_model({"dataset": data, "notes": notes}, save_wired=True)
+    notes[live.UNWIRED_FOR_TESTS] = True
+    model = live.build_live_model({"dataset": data, "notes": notes}, save_wired=True)
+    assert _cell(model, "A01", "ccy")["text"] == live.missing_text("ccy")
 
 
 def test_代碼對照表讀不到_整批取數失敗():
@@ -432,7 +439,8 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
                 exp_nav.WITHHELD_CCY_UNDETERMINED: exp_nav.TEXT_CCY_UNDETERMINED}
     wired = live.assemble_wired(profiles, ["K01", "K02"], out, unresolved=unresolved, today=date(2026, 10, 14),
                                 mask=secret_mask, withheld_texts=withheld,
-                                input_conflict=nav_dividend.WITHHELD_INPUT_CONFLICT)
+                                input_conflict=nav_dividend.WITHHELD_INPUT_CONFLICT,
+                                div_ccy_differs=nav_dividend.WITHHELD_DIV_CCY_DIFFERS)
     assert [r["fund_code"] for r in wired["nav"]] == ["K01", "K02"]
     assert wired["nav"][0]["nav_date"] == "2026-10-09" and wired["nav"][0]["ccy"] == "USD"
     k02 = wired["cells"]["K02"]["ccy"]
@@ -442,3 +450,148 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
     assert ratio["text"].startswith(logic.ND_TEXT)                          # 沒有配息證據 → 不算、不是 0
     model = _model(wired, settings=_settings())
     assert _cell(model, "K01", "nav_orig_ccy")["text"] == "10.0000 USD"
+
+
+# ═════════════════════ 2026-10-14 修正輪 ═════════════════════
+
+
+def _all_strings(wired):
+    return [v for notes in wired["cells"].values() for n in notes.values()
+            for v in (n["text"], n["source_tag"], n["source_tip"]) if v]
+
+
+def test_規則13_無配息列_配息政策已確認為累積型_不適用_標示不是計算():
+    node = _cell(_model(), "B02", "div_ratio_pct")
+    assert node["text"] == "⬜ 不適用：近 12 個月無配息" and node["_state"] == logic.STATE_BIZ
+    assert node["source_tag"] == live.TAG_DIV_REPORTED and node["source_tag"] != live.TAG_RATIO
+    assert "配息依據：FundClear：沒有配息紀錄；合庫配息頁：沒有配息紀錄" in node["source_tip"]
+    assert "empty" not in node["source_tip"] and "[yp" not in node["source_tip"]
+
+
+def test_規則13_無配息列_配息政策為配息型_資料未備_保留期無法確認():
+    node = _cell(_model(), "I09", "div_ratio_pct")
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_NONE_UNVERIFIED}"
+    assert node["_state"] == logic.STATE_MISSING and node["source_tag"] != live.TAG_RATIO
+    assert "配息依據：" in node["source_tip"]
+
+
+@pytest.mark.parametrize("policy", [F.cell("dist"), F.cell(None, "not_ready", reason="配息頻率「不定期」依對照表不判定配息方式"),
+                                    F.cell(None, "fetch_failed", failed=("MoneyDJ",), reason="MoneyDJ 取數失敗")])
+def test_規則13_無配息列_配息政策不是已確認的累積型_一律資料未備(policy):
+    overrides = F.default_overrides()
+    overrides["B02"] = {"dividend_policy": policy}
+    wired = _wired(profiles=F.profiles(overrides, codes=("B02",)), codes=("B02",))
+    assert wired["cells"]["B02"]["div_ratio_pct"]["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_NONE_UNVERIFIED}"
+
+
+def test_dividend_ratio_無配息列_只看累積型旗標():
+    assert _ratio([], accum=True)[0] == "none"
+    kind, _r, why = _ratio([], accum=False)
+    assert kind == "not_ready" and why == live.TEXT_DIV_NONE_UNVERIFIED
+
+
+def test_Q7_配息幣別與淨值幣別不同_不適用():
+    node = _cell(_model(), "J10", "div_ratio_pct")
+    assert node["text"] == "⬜ 不適用：配息幣別與淨值幣別不同" and node["_state"] == logic.STATE_BIZ
+
+
+def test_Q7_配息幣別認不出_維持資料未備():
+    out = F.nav_out(("A01",))
+    out["dividend"]["withheld"]["A01"] = "ccy_conflict"
+    out["dividend"]["skipped"]["A01"] = [F.DIV_CCY_LINE.replace("'EUR'", "'美元累積'")]
+    out["dividend"]["rows"] = []
+    wired = _wired(nav_out=out, codes=("A01",))
+    text = wired["cells"]["A01"]["div_ratio_pct"]["text"]
+    assert text.startswith(logic.ND_TEXT + "：") and "不適用" not in text
+
+
+def test_Q7_本層再擋一次_窗口內配息幣別不同也是不適用():
+    out = F.nav_out(("A01",))
+    for row in out["dividend"]["rows"]:
+        row["ccy"] = "EUR"
+    wired = _wired(nav_out=out, codes=("A01",))
+    assert wired["cells"]["A01"]["div_ratio_pct"]["text"] == live.TEXT_DIV_CCY_DIFFERS_NA
+
+
+def test_幣別未確定_畫面不寫內部名稱():
+    text = _cell(_model(), "F06", "nav_date")["text"]
+    assert text == f"{logic.ND_TEXT}：計價幣別未確定（基本資料各來源幣別缺或不一致），淨值與配息比不取數"
+    assert "declared_ccy_source" not in text
+
+
+_INTERNAL = ("A 鏈", "auto_fetch_moneydj", "source_status", "moneydj_wb05", "{'", "'undetermined'", "：empty",
+             ":'", "declared_ccy_source", "tcb_moneydj_div", "fundclear_div", "[yp0", "None")
+
+
+def test_使用者可見文字沒有內部名稱():
+    strings = _all_strings(_wired())
+    assert strings
+    leaks = sorted({(word, v) for v in strings for word in _INTERNAL if word in v})
+    assert leaks == []
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("A 鏈（auto_fetch_moneydj('G07')）沒有取得淨值序列", "淨值與配息取數沒有取得淨值序列"),
+    ("供列的來源回報有列沒有交出來（TCB：{'truncated': 3, 'filtered': 0, 'other_tables': 0}）",
+     "供列的來源回報有列沒有交出來（TCB：截斷 3、過濾 0、其他表格 0）"),
+    ("狀態 'undetermined'，沒有逐來源紀錄", "狀態 無法判定，沒有逐來源紀錄"),
+    ("[yp010000] FundClear：empty", "FundClear：沒有配息紀錄"),
+    ("幣別不同（即時序列:'EUR'；來源自報 USD）", "幣別不同（即時序列 宣告「EUR」；來源自報 USD）"),
+    ("各來源（MoneyDJ:'美元'→USD）", "各來源（MoneyDJ 宣告「美元」→USD）"),
+    ("（FundClear：HTTP 503；完整原文見 source_status）", "（FundClear：HTTP 503）"),
+    ("RuntimeError: Pool(host='x', port=443): timeout", "RuntimeError: Pool（host=「x」, port=443）: timeout"),
+    ("認不得的原因原樣留下", "認不得的原因原樣留下"),
+])
+def test_原因白話化_白名單與通則_不吞原因(raw, want):
+    assert live.plain_reason(raw) == want
+
+
+def test_原因白話化只收字串():
+    with pytest.raises(TypeError):
+        live.plain_reason(None)
+
+
+def _secret_source_out():
+    out = F.nav_out(("A01",))
+    out["nav"]["provenance"]["A01"]["source"] = f"FundClear:{F.SECRET}"
+    return out
+
+
+def test_來源標示經過遮蔽():
+    """P M14：秘密值放在 `provenance.source` —— 它會進標示；標示本身要被遮蔽。"""
+    node = _wired(nav_out=_secret_source_out(), codes=("A01",))["cells"]["A01"]["nav_date"]
+    assert F.SECRET not in node["source_tag"] and "‹已遮蔽›" in node["source_tag"]
+
+
+def test_tooltip經過遮蔽():
+    """Q O2：同一個秘密值也進 tooltip（「淨值來源：…」）；tooltip 要被遮蔽。"""
+    node = _wired(nav_out=_secret_source_out(), codes=("A01",))["cells"]["A01"]["nav_date"]
+    assert F.SECRET not in node["source_tip"] and "‹已遮蔽›" in node["source_tip"]
+
+
+def test_代碼對照表讀不到_摘要據實_不寫0檔候選():
+    pool = {"status": "ok", "backend": "x", "codes": ["A01"], "dropped_blank": 0, "duplicates": 0, "message": None}
+    wired = live.wiring_failed("代碼對照表讀取失敗：OSError: x")
+    settings = _settings()
+    inputs = {"dataset": live.build_dataset(pool, settings, wired),
+              "notes": {"pool": pool, "settings": settings, "settings_error": None, "cells": {},
+                        "wiring_error": wired["errors"]["fund_profile"]}}
+    exp2 = logic.find_block(live.build_live_model(inputs, save_wired=True), "EXP-2")
+    assert exp2["summary_text"] == live.TEXT_KEYS_FAILED_SUMMARY and "0 檔" not in exp2["summary_text"]
+
+
+def test_契約_無配息列與有配息列的provenance_與真L2同形():
+    nav_dividend = pytest.importorskip("services.v2_tables.nav_dividend")
+    fo = pytest.importorskip("repositories.fund.fund_orchestration")
+    outcome = {"outcome": fo.DIV_OUTCOME_NONE, "none_evidenced": True, "legacy_inline_parse": False,
+               "sources": [{"source": "FundClear", "page_type": "yp010000", "status": "empty", "detail": ""},
+                           {"source": "合庫配息頁", "page_type": "yp010000", "status": "empty", "detail": ""}]}
+    real = nav_dividend.rows_from_chain_dividends("B02", {"items": [], "outcome": outcome, "error": None},
+                                                  holding_ccys=["USD"], label_source=F.META)
+    assert real["settled"] is True and real["rows"] == [] and real["skipped"] == [F.TEXT_DIV_NONE]
+    assert real["provenance"] == F._div_prov_none()                       # 同形且同值（含 outcome_detail）
+    assert "coverage_start" not in real["provenance"]
+    fake_rows = F._div_prov_rows(["fundclear_div"], date(2026, 1, 1))
+    assert set(fake_rows) == {"source", "fetched_at", "ccy_source", "outcome", "outcome_detail", "settled",
+                              "coverage_start"}
+

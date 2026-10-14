@@ -97,10 +97,19 @@ ALL_COLORS = (
 # `page.py` 把它接在 `<style>` 最後；完整說明在 tooltip（`title` 屬性），這裡只管樣式。
 SOURCE_TAG_CSS = f"""
     .stApp .exp-src, .exp-src {{
-      margin-left: .35rem; font-size: .66rem; font-weight: 400;
-      color: {TEXT_MUTED}; white-space: nowrap;
+      display: block; max-width: 6.5em;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin-top: .1rem; font-size: .66rem; font-weight: 400;
+      color: {TEXT_MUTED};
     }}
+    .exp-table td {{ overflow-wrap: anywhere; }}
     """
+# ~~`white-space: nowrap`（不限寬）~~ → 2026-10-14 修正輪（Q O1；有意識的更正，不是漏刪；決策者：AI 總管）：
+# 長來源名（例 `FundClear:GetFundNAV`）不折行，把 1600 寬桌機的候選表撐到要橫捲。改為**值下方另起一行**、
+# 限寬 6.5em ＋ 省略號（行內接在值後面時，值與標示之間沒有斷行點，兩者寬度相加仍會撐開欄寬），
+# 完整文字在 tooltip（`title`）；寬度量測見 tests/ui_v2/test_exp_live_page.py 的瀏覽器測試。
+# 同輪另加 `.exp-table td { overflow-wrap: anywhere; }`（體例同 hld：長字串靠折行，不截斷）——
+# 原因句裡的 ASCII 長字（`MoneyDJ+TDCC`、`<script>…`）沒有斷行點，會把欄寬撐大。
 
 
 def tone_hex(tone: str) -> str:

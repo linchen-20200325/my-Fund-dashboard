@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import html
+import re
 
 import streamlit as st
 
@@ -19,12 +19,29 @@ from . import fixtures, live, logic, theme
 _MAX_PROBE_WIDTH = 2000
 
 
+# 換行與連續空白（只認 ASCII 空白；全形空白「　」是版面用字，不折）。比照 `ui_v2/hld/page.py`（本頁不 import hld）。
+_WS_RUN = re.compile(r"[ \t\r\n\f\v]+")
+# 會被 Streamlit 的 Markdown 讀成語法的 ASCII 字元（同 hld）；一律改寫成數字字元參照（只當字面文字，不能組語法）。
+_MD_ACTIVE = "\\`*_{}[]()#!|~$:"
+# 一張表、一次走完（先 `html.escape` 再換字會把 `&#x27;` 的 `#` 再換一次；反過來會把 `&#36;` 的 `&` 換掉）。
+_MD_ENTITY = {ord(ch): f"&#{ord(ch)};" for ch in _MD_ACTIVE + "&<>\"'"}
+
+
 def _esc(text) -> str:
-    return html.escape(str(text))
+    """任何字串上畫面前一律走這裡（2026-10-14 修正輪 Q M1，比照 `ui_v2/hld/page.py::_esc`）。
+
+    ~~`html.escape(str(text))`~~ → 上游錯誤原文可以是任何東西：只做 HTML escape 時，原文裡的空行會讓 Markdown
+    跳出 HTML 區塊、`## ` 變成標題、`|` 變成表格（有意識的更正，不是漏刪；決策者：AI 總管）。三步：
+      1. 換行與連續空白折成一個空格；
+      2. HTML 特殊字元（`& < > " '`）改寫成字元參照（標籤以純文字呈現，`title` 屬性同樣安全）；
+      3. Markdown 語法字元改寫成字元參照。
+    不截斷。
+    """
+    return _WS_RUN.sub(" ", str(text)).translate(_MD_ENTITY)
 
 
 def _title_attr(node: dict) -> str:
-    """規則 10（2026-10-14 C2）：值旁的來源 tooltip。屬性值同樣經 `html.escape`（含引號）。"""
+    """規則 10（2026-10-14 C2）：值旁的來源 tooltip。屬性值同樣經 `_esc`（含引號、換行、Markdown 字元）。"""
     tip = node.get("source_tip")
     return f' title="{_esc(tip)}"' if tip else ""
 
