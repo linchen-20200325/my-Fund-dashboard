@@ -682,7 +682,8 @@ def _render_exp7(block: dict) -> None:
                     f'<tr><td>{_esc(row["condition_text"])}{tail}</td>'
                     f'<td>{_esc(row["before_text"])}</td>'
                     f'<td>{_esc(row["after_text"])}</td>'
-                    # 正式模式才有第四欄「無法判定」（客戶 2026-10-13 裁示）；示範模式的列沒有這個鍵。
+                    # 正式模式才有第四欄「無法判定」（AI 總管落地選擇；〔已撤〕舊註寫「客戶 2026-10-13 裁示」，
+                    # 稽核 L 第七輪指出，有意識的更正，不是漏刪）；示範模式的列沒有這個鍵。
                     + (f'<td>{_esc(row["undet_text"])}</td>' if "undet_text" in row else "")
                     + '</tr>'
                 )

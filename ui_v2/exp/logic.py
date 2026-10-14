@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import contextvars
+import decimal
 
 # ───────────────────────── 常數（逐字引 `44`） ─────────────────────────
 
@@ -581,7 +582,12 @@ KNOWN_OPERATORS = ("等於", "不等於", "大於", "小於", "早於或等於",
 
 
 def undet_tail(count: int) -> str:
-    """結論列在原句後面接的那一段（客戶 2026-10-13 裁示：符合 N 檔、另有 M 檔無法判定）。字面為本組擬定。"""
+    """結論列在原句後面接的那一段。
+
+    客戶 2026-10-13 裁示的是「無法判定的檔不算符合、不排除、不亮紅燈」；
+    「符合 N 檔、另有 M 檔無法判定」這種寫法（含本句字面）是 AI 總管的落地字樣（〔已撤〕舊註寫成客戶裁示，
+    稽核 L 第七輪指出，有意識的更正，不是漏刪）。
+    """
     return f"；另有 {hinted(format_count(count))} 檔無法判定"
 
 
@@ -591,22 +597,27 @@ def undet_text(reasons) -> str:
 
 
 def is_missing(value) -> bool:
-    """正式模式的缺值判定（集中一處；稽核 K 第六輪）：None、空字串、浮點 NaN（含 numpy）、pandas 的 NA／NaT。
+    """缺值判定（集中一處；稽核 K 第六、七輪）：None、空字串、浮點 NaN（含 numpy 純量）、`Decimal` 的 NaN／sNaN、
+    pandas 的 NA／NaT。
 
-    只認純量：list、tuple、dict、set 一律不算缺值；任何比較會炸的型別（例如陣列）也不算，**絕不往上拋**。
-    本檔不 import pandas／numpy —— NA／NaT 以型別名判斷，NaN 以「自己不等於自己」判斷。
+    只認純量：list、tuple、dict、set 與 numpy 陣列（含 0 維）一律不算缺值；其餘任何比較會炸的型別也不算，
+    **絕不往上拋**（`except Exception`）。
+    本檔不 import pandas／numpy —— NA／NaT／ndarray 以型別名判斷，NaN 以「自己不等於自己」判斷。
+    示範資料沒有 NaN、沒有空白字串以外的空值 ⇒ 改用本函式的各處示範輸出不變（以逐位元組比對驗證）。
     """
     if value is None:
         return True
     if isinstance(value, str):
         return value.strip() == ""
-    if isinstance(value, (list, tuple, dict, set, frozenset)):
+    if isinstance(value, (list, tuple, dict, set, frozenset)) or type(value).__name__ == "ndarray":
         return False
+    if isinstance(value, decimal.Decimal):
+        return value.is_nan()            # 含 sNaN；不做比較，避免 sNaN 的 InvalidOperation
     if type(value).__name__ in ("NAType", "NaTType"):
         return True
     try:
         return bool(value != value)
-    except (TypeError, ValueError):
+    except Exception:  # noqa: BLE001 — 只做判定，任何型別都不得讓它炸（docstring）
         return False
 
 
@@ -1387,7 +1398,7 @@ def _compare_head(profile) -> str:
     **不印 `None`、不拿代碼頂替基金名、不猜幣別**（客戶 2026-10-13 裁示：缺值保持缺值）。
     """
     name, ccy = profile.get("fund_name"), profile.get("ccy")
-    if name not in (None, "") and ccy not in (None, ""):
+    if not is_missing(name) and not is_missing(ccy):   # NaN 不畫成「nan」（稽核 K 第七輪）
         return f"{name}　{ccy}"
     return f"{profile['fund_code']}　{ND_TEXT}"
 
@@ -1431,7 +1442,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
                 fee = profile.get("mgmt_fee_rate_pct")
                 cells[key] = (
                     _value(hinted(format_fee(fee)), has_number=True, ccy=profile["ccy"])
-                    if fee is not None
+                    if not is_missing(fee)   # NaN 不畫成「nan」（稽核 K 第七輪）
                     else _missing_value()
                 )
         cell_states.extend(cell["_state"] for cell in cells.values())
@@ -1706,7 +1717,7 @@ def _build_exp6(dataset, *, compare_checked):
     if profile is not None:
         for key, label in EXP6_FIELDS:
             raw = profile.get(key)
-            if raw is None or raw == "":
+            if is_missing(raw):   # NaN 不畫成「nan」（稽核 K 第七輪）
                 # `44` 空狀態欄逐字：「某欄為空 → 顯示 `⬜`，不以零或字串『無』填。」
                 node = _missing_value(label)
             elif key == "mgmt_fee_rate_pct":

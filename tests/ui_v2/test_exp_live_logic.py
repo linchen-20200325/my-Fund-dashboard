@@ -746,3 +746,62 @@ def test_母體讀不到或冷卻中_EXP2摘要如實_不寫0檔候選(status, c
     assert exp2["summary_text"] == expected
     assert "檔候選" not in exp2["summary_text"]
     assert exp2["_state"] == logic.STATE_ERROR
+
+
+# ═════════════════════ #956 第七輪 ═════════════════════
+
+import decimal  # noqa: E402
+
+_NAN_FIELDS = ("fund_name", "ccy", "mgmt_fee_rate_pct", "inception_on", "dividend_policy")
+
+
+def _strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _strings(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            yield from _strings(value)
+
+
+@pytest.mark.parametrize("missing", [float("nan"), np.float64("nan"), pd.NA], ids=["float_nan", "np_nan", "pd_NA"])
+def test_NaN注入基本資料五欄_EXP3與EXP6都沒有nan字樣(missing):
+    inputs = _input(pool=_pool(codes=("A01",)), settings=_settings(rules=_NOT_C03, columns=logic.COLUMN_ORDER))
+    for field in _NAN_FIELDS:
+        inputs["dataset"]["fund_profile"][0][field] = missing
+    model = _model(inputs=inputs, compare_checked=("A01",))
+    exp3, exp6 = _b(model, "EXP-3"), _b(model, "EXP-6")
+    assert exp3["_columns"] and exp6["_fields"]                               # 真的有畫出來，不是空掃
+    for code, block in (("EXP-3", exp3), ("EXP-6", exp6)):
+        texts = list(_strings(block))
+        assert not [t for t in texts if "nan" in t.lower() or "<na>" in t.lower()], (code, missing)
+    (column,) = exp3["_columns"]
+    assert column["head_text"] == f"A01　{logic.ND_TEXT}"
+    assert column["_cells"]["mgmt_fee_rate_pct"]["_state"] == logic.STATE_MISSING
+    fields = dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"]))
+    for field in _NAN_FIELDS:
+        assert fields[field]["_state"] == logic.STATE_MISSING, field
+
+
+def test_缺值判定_Decimal_NaN與sNaN不炸_numpy陣列一律不算缺值():
+    assert logic.is_missing(decimal.Decimal("sNaN")) is True                  # 不得往上拋
+    assert logic.is_missing(decimal.Decimal("NaN")) is True
+    assert logic.is_missing(decimal.Decimal("1.5")) is False
+    assert logic.is_missing(np.array([float("nan")])) is False
+    assert logic.is_missing(np.array(float("nan"))) is False                   # 0 維陣列也照「陣列不算缺值」
+    assert logic.is_missing(np.array([])) is False
+    assert logic.is_missing(np.float64("nan")) is True                         # numpy 純量照算
+
+    class _Explodes:
+        def __ne__(self, other):
+            raise RuntimeError("比較就炸")
+
+    assert logic.is_missing(_Explodes()) is False
+
+
+def test_母體未設定雲端_EXP2摘要走系統錯誤模板體例():
+    assert live.TEXT_POOL_NOT_CLOUD.startswith(logic.ERR_TEXT + "：")
+    assert live.TEXT_POOL_FAILED.startswith(logic.ERR_TEXT + "：")
+    assert live.TEXT_POOL_COOLING.startswith(logic.ERR_TEXT + "：")
