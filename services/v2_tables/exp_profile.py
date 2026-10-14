@@ -73,10 +73,18 @@ DIVIDEND_FREQ_TO_POLICY: dict = {
     "": None, "—": None, "不定期": None,
 }
 
-#: 幣別「有值，但另有來源取數失敗」時的處置。`"fail"`（預設，從嚴）：整格 ⛔ 取數失敗 —— 失敗的那個來源
-#: 可能報的是另一種幣別，無法確認各來源一致；`"accept"`：照採有值的來源，`failed_sources` 列出失敗來源。
-#: ⚠️ **預設從嚴、待客戶裁示**（決策者：AI 總管，暫定）。
-PARTIAL_FAILURE_POLICY = "fail"
+#: 幣別「有值，但另有來源取數失敗」時的處置。
+#: ~~`"fail"`（預設，從嚴）：整格 ⛔ 取數失敗 —— 失敗的那個來源可能報的是另一種幣別，無法確認各來源一致；~~
+#: ~~⚠️ **預設從嚴、待客戶裁示**（決策者：AI 總管，暫定）。~~
+#: → **2026-10-14 客戶裁示（有意識的政策變更，不是漏刪；決策者：客戶）**：預設改 `"accept"` ——
+#:   其餘已成功的來源若一致且證據充分，可顯示該值；同時保留來源失敗標示與原因；**不得把失敗來源當成一致證據**。
+#:   「證據充分」＝至少一個成功來源給出可正規化的 ISO 值，且所有成功來源之間沒有不同的 ISO、沒有「認不出」；
+#:   MoneyDJ 未綁定（身分未核實）不算成功來源。`"accept"` 時：`status` ok、`value` 為一致的 ISO、
+#:   `sources` 只列成功且同意的來源、`failed_sources` 列失敗來源、`reason` 寫失敗來源與原因摘要（原文留在
+#:   `source_status`）。舊的從嚴用意（失敗來源可能報別的幣別）仍成立，被權衡掉的是它的結論：客戶接受這個風險，
+#:   換取畫面不因單一來源失敗而整格 ⛔；失敗照樣標示，使用者看得到。
+#:   `"fail"` 保留為可切換的從嚴行為（兩種行為都有測試），正式路徑不用。
+PARTIAL_FAILURE_POLICY = "accept"
 _PARTIAL_POLICIES = ("accept", "fail")
 
 # 逐來源幣別歸類
@@ -267,6 +275,25 @@ def classify_ccy(source: str, res: dict):
     return CCY_VALUE, raw, iso
 
 
+#: 原因摘要的長度上限（原文完整留在 `source_status[代碼][來源]["error"]`）。
+_FAILURE_SUMMARY_MAX = 80
+
+
+def _failure_summary(results: dict, failed) -> str:
+    """失敗來源 → 「來源：原文第一行（過長截斷）」；冷卻中另註明。原文完整版在 `source_status`。"""
+    parts = []
+    for src in failed:
+        res = results[src]
+        text = str(res.get("error") or "").strip()
+        first = text.splitlines()[0] if text else "未提供原因"
+        if len(first) > _FAILURE_SUMMARY_MAX:
+            first = first[:_FAILURE_SUMMARY_MAX] + "…"
+        if res.get("cooling"):
+            first += f"；失敗記憶冷卻中，約剩 {res.get('cooling_remaining_sec')} 秒"
+        parts.append(f"{src}：{first}")
+    return "；".join(parts) + "；完整原文見 source_status"
+
+
 def _ccy_cell(results: dict, policy: str) -> dict:
     cls = {src: classify_ccy(src, results[src]) for src in SOURCES}
     raw = {src: c[1] for src, c in cls.items() if c[1] is not None}
@@ -292,6 +319,10 @@ def _ccy_cell(results: dict, policy: str) -> dict:
         if failed and policy == "fail":
             return _cell(status=STATUS_FAILED,
                          reason=f"部分來源取數失敗，無法確認各來源幣別一致（{summary}）", **common)
+        if failed:   # 客戶 2026-10-14 裁示：其餘成功來源一致即可顯示，失敗照樣標示（失敗來源不進 sources）
+            return _cell(iso, STATUS_OK, sources=_ordered(agree),
+                         reason=f"部分來源取數失敗，以其餘一致的來源為準（{_failure_summary(results, failed)}）",
+                         **common)
         return _cell(iso, STATUS_OK, sources=_ordered(agree), **common)
     if failed:
         return _cell(status=STATUS_FAILED, reason=f"幣別來源取數失敗（{summary}）", **common)

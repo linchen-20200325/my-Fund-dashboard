@@ -83,7 +83,9 @@ def test_常數():
         "ok", "not_ready", "fetch_failed", "inconsistent")
     assert EP.DECLARED_CACHED_FUNCTIONS == (dp.fetch_moneydj_basic_fields, dp.fetch_tdcc_listing,
                                             dp.fetch_fundclear_declared_ccy)
-    assert EP.PARTIAL_FAILURE_POLICY == "fail"     # 預設從嚴，待客戶裁示
+    # ~~assert EP.PARTIAL_FAILURE_POLICY == "fail"（預設從嚴，待客戶裁示）~~
+    # → 2026-10-14 客戶裁示（有意識的政策變更，不是漏刪）：預設 accept
+    assert EP.PARTIAL_FAILURE_POLICY == "accept"
 
 
 def test_配息對照表逐字照49():
@@ -166,18 +168,50 @@ def test_兩檔只有一檔全失敗_不是table_wide():
     assert out["table_wide_failed"] is False
 
 
-def test_部分失敗_預設從嚴_fetch_failed():
+def test_部分失敗_fail政策_fetch_failed(monkeypatch):
+    # 2026-10-14 客戶裁示後，從嚴行為只在切換成 "fail" 時出現（原「預設從嚴」測試改名，有意識的更正，不是漏刪）
+    monkeypatch.setattr(EP, "PARTIAL_FAILURE_POLICY", "fail")
     _out, cells = _one(mdj_ok(ccy="USD"), failed("t"), fc_ok("USD"))
     assert cells["ccy"]["status"] == "fetch_failed" and cells["ccy"]["failed_sources"] == ("TDCC",)
-    assert "部分來源取數失敗" in cells["ccy"]["reason"]
+    assert "部分來源取數失敗" in cells["ccy"]["reason"] and cells["ccy"]["value"] is None
 
 
-def test_部分失敗_accept政策_照採有值來源(monkeypatch):
-    monkeypatch.setattr(EP, "PARTIAL_FAILURE_POLICY", "accept")
-    out, cells = _one(mdj_ok(ccy="USD"), failed("t"), fc_ok("USD"))
-    assert cells["ccy"]["status"] == "ok" and cells["ccy"]["sources"] == ("MoneyDJ", "FundClear")
-    assert cells["ccy"]["failed_sources"] == ("TDCC",)
+def test_部分失敗_預設accept_照採一致的成功來源_失敗照樣標示():
+    out, cells = _one(mdj_ok(ccy="USD"), failed("t 第一行\n第二行"), fc_ok("USD"))
+    c = cells["ccy"]
+    assert c["status"] == "ok" and c["value"] == "USD"
+    assert c["sources"] == ("MoneyDJ", "FundClear") and c["failed_sources"] == ("TDCC",)
+    assert "TDCC" not in c["sources"]                                     # 失敗來源不當成一致證據
+    assert c["reason"].startswith("部分來源取數失敗，以其餘一致的來源為準（TDCC：t 第一行；")
+    assert "第二行" not in c["reason"]                                    # 只放摘要，原文在 source_status
+    assert out["source_status"][CODE]["TDCC"]["error"] == "t 第一行\n第二行"
     assert out["declared"][CODE] == ("USD", "meta:MoneyDJ+FundClear")
+    assert out["rows"][0]["ccy"] == "USD"
+
+
+def test_部分失敗_只剩一個成功來源_仍ok_帶failed_sources():
+    out, cells = _one(failed("m", cooling=True, left=30.0), tdcc_ok("美元"), failed("f"))
+    c = cells["ccy"]
+    assert c["status"] == "ok" and c["value"] == "USD" and c["sources"] == ("TDCC",)
+    assert c["failed_sources"] == ("MoneyDJ", "FundClear")
+    assert "MoneyDJ：m；失敗記憶冷卻中，約剩 30.0 秒" in c["reason"] and "FundClear：f" in c["reason"]
+    assert out["declared"][CODE] == ("USD", "meta:TDCC")
+
+
+def test_部分失敗_成功來源只有未核實的MoneyDJ_不ok():
+    out, cells = _one(mdj_ok(ccy="USD", bound=False), failed("t"), failed("f"))
+    assert cells["ccy"]["status"] == "fetch_failed" and cells["ccy"]["value"] is None
+    assert out["declared"][CODE] == (None, None)
+
+
+def test_部分失敗_成功來源有認不出_不ok():
+    _out, cells = _one(mdj_ok(ccy="美金幣"), tdcc_ok("USD"), failed("f"))
+    assert cells["ccy"]["status"] == "inconsistent"
+
+
+def test_部分失敗_原因摘要過長截斷():
+    _out, cells = _one(mdj_ok(ccy="USD"), failed("x" * 200), not_listed())
+    assert "x" * 80 + "…" in cells["ccy"]["reason"] and "x" * 81 not in cells["ccy"]["reason"]
 
 
 def test_政策常數不合法_ValueError(monkeypatch):
