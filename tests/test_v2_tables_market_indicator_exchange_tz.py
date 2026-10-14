@@ -82,6 +82,10 @@ def _series(bars, *, fetched_at=USD_FETCHED, exchange_tz=LONDON, ticker="USDTWD=
     return s
 
 
+LON_NC = "觀測日不早於取得日（界線 {d}：取得時刻的世界協調時間日期與交易所時區 Europe/London 日期取較晚者）{n} 筆不寫"
+CHI_NC = "觀測日不早於取得日（界線 {d}：取得時刻的世界協調時間日期與交易所時區 America/Chicago 日期取較晚者）{n} 筆不寫"
+
+
 def _rows(series, key="fx_twd_per_usd"):
     return mi.rows_from_daily_close(key, series, None, value_unit="新臺幣／美元")
 
@@ -148,7 +152,7 @@ def test_尾段真實資料_新規則無週日_週五在_盤中根不寫():
     obs = [r["obs_date"] for r in rows]
     assert obs == ["2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"]
     assert all(date.fromisoformat(d).weekday() < 5 for d in obs)
-    assert skipped == ["觀測日不早於取得日（2026-10-13，交易所時區 Europe/London）1 筆不寫"]
+    assert skipped == [LON_NC.format(d="2026-10-13", n=1)]
     # 舊規則下同一批會出現週日 10-04
     assert _legacy_utc_day(USD_TAIL[1][0]) == "2026-10-04"
 
@@ -165,16 +169,37 @@ def test_VIX型_取得當天那根不寫():
     rows, _err, skipped = _rows(_series(VIX_TAIL, fetched_at=VIX_FETCHED, exchange_tz=CHICAGO,
                                         ticker="^VIX"), key="vol_index")
     assert [r["obs_date"] for r in rows] == ["2026-10-08", "2026-10-09", "2026-10-12"]
-    assert skipped == ["觀測日不早於取得日（2026-10-13，交易所時區 America/Chicago）1 筆不寫"]
+    assert skipped == [CHI_NC.format(d="2026-10-13", n=1)]
 
 
-def test_取得時間換成交易所時區再比_UTC已過午夜但芝加哥還是當天():
-    """取得於 2026-10-14T03:00Z ＝ 芝加哥 10-13 22:00 → 10-13 那根仍算「不早於取得日」，不寫。
-    （舊規則以 UTC 日 10-14 比，會寫。新規則較保守，照客戶裁示以同一交易所時區比。）"""
-    rows, _err, skipped = _rows(_series(VIX_TAIL, fetched_at="2026-10-14T03:00:00+00:00",
+def test_VIX_UTC已換日_芝加哥仍是前一天_前一交易日收盤照寫_不倒退():
+    """AI 總管 2026-10-14 裁決（稽核 M 實測）：取得於 2026-10-14T02:00Z（芝加哥 10-13 21:00、台北 10:00）。
+    未收盤界線＝max(UTC 日 10-14, 芝加哥日 10-13)＝10-14 ⇒ 10-13 那根（已於 15:15 CT 收盤）照寫，
+    與舊規則（UTC 取日）時效相同。~~舊版本測試：同一情境 10-13 不寫~~（有意識的更正，不是漏刪）。"""
+    rows, _err, skipped = _rows(_series(VIX_TAIL, fetched_at="2026-10-14T02:00:00+00:00",
                                         exchange_tz=CHICAGO, ticker="^VIX"), key="vol_index")
-    assert [r["obs_date"] for r in rows] == ["2026-10-08", "2026-10-09", "2026-10-12"]
-    assert skipped == ["觀測日不早於取得日（2026-10-13，交易所時區 America/Chicago）1 筆不寫"]
+    assert [r["obs_date"] for r in rows][-1] == "2026-10-13"
+    assert [r["obs_date"] for r in rows] == ["2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13"]
+    assert skipped == []
+    # 與舊規則（UTC 取日、以 UTC 取得日比）逐筆相同：這是保留既有 VIX 時效，不是新語意
+    assert [r["obs_date"] for r in rows] == [_legacy_utc_day(t) for t, _c in VIX_TAIL
+                                             if _legacy_utc_day(t) < "2026-10-14"]
+
+
+def test_VIX_盤中取數_當天那根不寫():
+    """取得於 2026-10-13T20:00Z（芝加哥 15:00，收盤前）：界線＝max(10-13, 10-13)＝10-13 ⇒ 10-13 那根不寫。"""
+    rows, _err, skipped = _rows(_series(VIX_TAIL, fetched_at="2026-10-13T20:00:00+00:00",
+                                        exchange_tz=CHICAGO, ticker="^VIX"), key="vol_index")
+    assert "2026-10-13" not in [r["obs_date"] for r in rows]
+    assert skipped == [CHI_NC.format(d="2026-10-13", n=1)]
+
+
+def test_not_closed_cutoff_day_取世界協調時間與交易所當地日期較晚者():
+    from zoneinfo import ZoneInfo
+    assert mi.not_closed_cutoff_day("2026-10-14T02:00:00+00:00", ZoneInfo(CHICAGO)) == "2026-10-14"
+    assert mi.not_closed_cutoff_day("2026-10-13T20:00:00+00:00", ZoneInfo(CHICAGO)) == "2026-10-13"
+    assert mi.not_closed_cutoff_day("2026-10-13T23:30:00+00:00", ZoneInfo(LONDON)) == "2026-10-14"
+    assert mi.not_closed_cutoff_day("2026-10-13T18:54:31+00:00", ZoneInfo(LONDON)) == "2026-10-13"
 
 
 def test_舊規則漏洞_倫敦當天那根UTC為昨天23點_新規則正確排除():
@@ -186,7 +211,7 @@ def test_舊規則漏洞_倫敦當天那根UTC為昨天23點_新規則正確排�
     assert [r["obs_date"] for r in rows][-1] == "2026-10-09"
     assert "2026-10-12" not in [r["obs_date"] for r in rows]
     assert 32.1 not in [r["value_num"] for r in rows]
-    assert skipped == ["觀測日不早於取得日（2026-10-13，交易所時區 Europe/London）1 筆不寫"]
+    assert skipped == [LON_NC.format(d="2026-10-13", n=1)]
     assert _legacy_utc_day(USD_TODAY_LONDON) == "2026-10-12"   # 舊規則的錯位
 
 
@@ -197,21 +222,26 @@ def test_倫敦已過午夜UTC還沒_前一個倫敦日成為已收盤():
     rows, _err, skipped = _rows(_series(USD_TAIL + [(USD_TODAY_LONDON, 32.1), tomorrow],
                                         fetched_at="2026-10-13T23:30:00+00:00"))
     assert [(r["obs_date"], r["value_num"]) for r in rows][-1] == ("2026-10-13", 32.1)
-    assert skipped == ["觀測日不早於取得日（2026-10-14，交易所時區 Europe/London）1 筆不寫"]
+    assert skipped == [LON_NC.format(d="2026-10-14", n=1)]
 
 
 def test_缺交易所時區_整批不寫_不退回UTC():
     rows, err, skipped = _rows(_series(USD_SUMMER_HEAD, exchange_tz=None))
     assert rows == [] and err is None
-    assert skipped == ["來源未提供交易所時區（attrs['exchange_tz']），不推定，4 筆全部不寫"]
+    assert skipped == ["L1 回傳未帶交易所時區（來源未報，或改版前的快取物件；attrs['exchange_tz']），"
+                       "不推定，4 筆全部不寫"]
 
 
 def test_交易所時區為空字串_同缺():
     rows, _err, skipped = _rows(_series(USD_SUMMER_HEAD, exchange_tz=""))
-    assert rows == [] and "來源未提供交易所時區" in skipped[0]
+    assert rows == [] and "L1 回傳未帶交易所時區" in skipped[0]
 
 
-@pytest.mark.parametrize("bad", ["Mars/Olympus_Mons", "../etc/passwd", "europe/london ", 123])
+@pytest.mark.parametrize("bad", ["Mars/Olympus_Mons", "../etc/passwd", "europe/london ", 123,
+                                 # 2026-10-14 稽核 N／M：目錄名（IsADirectoryError）、過長（ENAMETOOLONG）、
+                                 # 非 Area/Location 形式、posix/ right/ 別名樹
+                                 "America", "Europe", "America/Argentina", "A" * 300, "Europe/" + "A" * 300,
+                                 "Factory", "posixrules", "UTC", "posix/Europe/London", "right/Europe/London"])
 def test_不認得的交易所時區_整批不寫(bad):
     rows, err, skipped = _rows(_series(USD_SUMMER_HEAD, exchange_tz=bad))
     assert rows == [] and err is None
@@ -328,3 +358,104 @@ def test_L1_到L2_端到端_夏令取倫敦隔日(yf_mod, monkeypatch):
     rows, row_err, skipped = mi.rows_from_daily_close("fx_twd_per_usd", s, err, value_unit="新臺幣／美元")
     assert row_err is None and skipped == []
     assert [r["obs_date"] for r in rows] == ["2024-10-14", "2024-10-15", "2024-10-16", "2024-10-17"]
+
+
+# ═══════════════════════ 2026-10-14 稽核 N／M 合併修正輪 ═══════════════════════
+
+
+@pytest.mark.parametrize("name", ["America", "America/Argentina", "A" * 300, "Factory", "posixrules", "UTC",
+                                  "posix/Europe/London", "right/America/Chicago"])
+def test_exchange_zone_目錄名過長名與非地區名_回None_不拋例外(name):
+    assert mi.exchange_zone(name) is None
+
+
+@pytest.mark.parametrize("name", [LONDON, CHICAGO, "Etc/UTC", "America/Argentina/Buenos_Aires"])
+def test_exchange_zone_IANA地區名_接受(name):
+    assert mi.exchange_zone(name) is not None
+
+
+def test_怪時區不讓整張表炸掉_FRED鍵照寫(monkeypatch):
+    """VIX 帶 `America`（目錄名，ZoneInfo 拋 IsADirectoryError）：該鍵整批不寫，其他鍵（FRED）照寫。"""
+    from shared import fred_series
+
+    vix = _series(VIX_TAIL, fetched_at=VIX_FETCHED, exchange_tz="America", ticker="^VIX")
+    monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda ticker, *a, **k: (vix, None))
+    monkeypatch.setattr(mi, "_utc_today", lambda: date(2026, 10, 13))
+    floor = (date(2026, 10, 13) - pd.Timedelta(days=mi.FRED_LOOKBACK_DAYS)).isoformat()
+    frame = pd.DataFrame({"date": pd.to_datetime(["2026-08-01"]), "value": [4.3],
+                          "realtime_start": pd.to_datetime(["2026-09-02"]), "realtime_end": ["9999-12-31"]})
+    frame.attrs.update({"fetched_at": "2026-10-13T06:00:00+00:00", "realtime_floor": floor,
+                        "source": "FRED:X:vintages"})
+    monkeypatch.setattr(mi, "fetch_fred_vintages_with_error", lambda sid, key, start: (frame.copy(), None))
+    assert fred_series.FRED_FED_FUNDS   # 前提：FRED 鍵存在
+    out = mi.build_market_indicator_table(fred_api_key="KEY")
+    keys = {r["indicator_key"] for r in out["rows"]}
+    assert "vol_index" not in keys
+    assert {"credit_spread_pct", "term_spread_pct", "policy_rate_pct"} <= keys
+    assert "無法辨識" in out["skipped"]["vol_index"][0] and "vol_index" not in out["errors"]
+
+
+def test_probe的zone_known借用同一個判定():
+    import importlib.util
+    from pathlib import Path
+    script = Path(__file__).resolve().parents[1] / "scripts" / "probe_fx_obs_date.py"
+    spec = importlib.util.spec_from_file_location("probe_fx_obs_date_tz", script)
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    for name in ["America", "Factory", "posixrules", "UTC", "posix/Europe/London", LONDON, CHICAGO, None]:
+        assert probe.zone_known(name) is (mi.exchange_zone(name) is not None), name
+
+
+def test_過半數基準_在同一鍵之內計算_不跨鍵(monkeypatch):
+    """兩個鍵各自自洽（匯率倫敦 00:00、VIX 芝加哥 02:00）：若基準跨鍵合算，VIX 的 02:00 會被當成少數而丟掉。"""
+    monkeypatch.setattr(mi, "FX_OBS_DATE_RULE_VERIFIED", True)
+    usd = _series(USD_TAIL[:5], ticker="USDTWD=X")            # 倫敦 00:00 × 5
+    vix = _series(VIX_TAIL[:3], fetched_at=VIX_FETCHED, exchange_tz=CHICAGO, ticker="^VIX")   # 芝加哥 02:00 × 3
+    table = {"USDTWD=X": usd, "^VIX": vix}
+    monkeypatch.setattr(mi, "fetch_yf_close_with_error", lambda ticker, *a, **k: (table[ticker], None))
+    out = mi.build_market_indicator_table()
+    by_key = {}
+    for r in out["rows"]:
+        by_key[r["indicator_key"]] = by_key.get(r["indicator_key"], 0) + 1
+    assert by_key["fx_twd_per_usd"] == 5 and by_key["vol_index"] == 3
+    assert "vol_index" not in out["skipped"] and "fx_twd_per_usd" not in out["skipped"]
+
+
+def test_過半數基準_要嚴格過半_最多數但未過半不算():
+    """五根已收盤：02:00 兩根、其他三個時刻各一根 —— 02:00 是最多數但只有 2/5，不過半 ⇒ 全部不寫。"""
+    base = 1791356400   # 2026-10-07T07:00Z（芝加哥 02:00）
+    bars = [(base, 15.0), (base + 86400, 15.1),                     # 10-07、10-08 02:00
+            (base + 2 * 86400 + 3600, 15.2),                         # 10-09 03:00
+            (base + 5 * 86400 + 7200, 15.3),                         # 10-12 04:00
+            (base + 6 * 86400 + 10800, 15.4)]                        # 10-13 05:00
+    rows, _err, skipped = _rows(_series(bars, fetched_at="2026-10-15T06:00:00+00:00",
+                                        exchange_tz=CHICAGO, ticker="^VIX"), key="vol_index")
+    assert rows == []
+    assert len(skipped) == 1 and "沒有過半數一致的值" in skipped[0] and "5 筆不寫" in skipped[0]
+    # 對照：多一根 02:00（3/6 仍不過半）也不寫；再多一根（4/7）就過半，02:00 那四根寫入
+    more = bars + [(base + 7 * 86400, 15.5)]                         # 10-14 02:00
+    assert _rows(_series(more, fetched_at="2026-10-16T06:00:00+00:00", exchange_tz=CHICAGO,
+                         ticker="^VIX"), key="vol_index")[0] == []
+    most = more + [(base + 8 * 86400, 15.6)]                         # 10-15 02:00
+    rows3, _e, skipped3 = _rows(_series(most, fetched_at="2026-10-17T06:00:00+00:00", exchange_tz=CHICAGO,
+                                        ticker="^VIX"), key="vol_index")
+    assert [r["obs_date"] for r in rows3] == ["2026-10-07", "2026-10-08", "2026-10-14", "2026-10-15"]
+    assert any("基準 02:00:00" in x and "不一致 3 筆不寫" in x for x in skipped3)
+
+
+def test_判定順序_倫敦當天00點與盤中值同日_歸重複不歸未收盤():
+    """釘住「重複 → 未收盤」的順序（稽核 M 突變 M7：兩者對調時舊測試全綠）。
+    倫敦 10-13 00:00 那一根（合成：帶值）與盤中值（倫敦 10-13 19:54）同一個倫敦日 ⇒ 兩根都歸「重複」。"""
+    rows, _err, skipped = _rows(_series(USD_TAIL + [(USD_TODAY_LONDON, 32.1), USD_INTRADAY]))
+    assert [r["obs_date"] for r in rows][-1] == "2026-10-09"
+    assert skipped == ["同一觀測日重複 2 筆不寫"]
+
+
+def test_exchange_zone_posix與right前綴_即使系統有那棵子樹也拒絕(monkeypatch):
+    """本機 tzdata 沒有 `posix/`、`right/` 子樹（ZoneInfo 本來就認不得），前綴檢查在這裡測不出來；
+    以替身 ZoneInfo（什麼都認得）模擬有那棵子樹的系統（例如 Debian 的 tzdata），前綴檢查要自己擋下。"""
+    sentinel = object()
+    monkeypatch.setattr(mi, "ZoneInfo", lambda name: sentinel)
+    assert mi.exchange_zone("posix/Europe/London") is None
+    assert mi.exchange_zone("right/America/Chicago") is None
+    assert mi.exchange_zone("Europe/London") is sentinel

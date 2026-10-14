@@ -269,18 +269,52 @@ def _utc_iso(fetched_at) -> Optional[str]:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+# 不接受的 tzdata 子樹：`posix/`、`right/` 是同一份資料的別名樹（`right/` 還含閏秒），不是交易所會自報的名稱。
+_REJECTED_TZ_PREFIXES = ("posix/", "right/")
+
+
 def exchange_zone(name) -> Optional[ZoneInfo]:
-    """來源自報的交易所時區字串 → `ZoneInfo`；缺、不是字串、空字串、zoneinfo 不認得 → None。
+    """來源自報的交易所時區字串 → `ZoneInfo`；認不得 → None（呼叫端走「該鍵整批不寫」）。
 
     **不推定**：不退回世界協調時間、不查任何寫死的「代碼 → 時區」對照表（客戶 2026-10-13 裁示：
     以來源自報的交易所時區為準；來源沒報就是不知道）。字串原樣交給 zoneinfo，不修剪、不改大小寫。
+
+    回 None 的情形（2026-10-14 稽核 N／M 合併修正輪補齊）：
+    - 缺、不是字串、空字串；
+    - **不是 `Area/Location` 形式**（不含 `/`）：例如 `Factory`、`posixrules`、`UTC` —— zoneinfo 認得它們，
+      但它們不是交易所會自報的 IANA 地區名稱，一律拒絕（要表示世界協調時間請用 `Etc/UTC`）；
+    - `posix/`、`right/` 開頭（tzdata 的別名子樹）；
+    - zoneinfo 拋 `ZoneInfoNotFoundError`、`ValueError`（例如含 `..`、結尾 `/`），或 **`OSError`**：
+      目錄名（`America/Argentina` → `IsADirectoryError`）、名稱過長（`ENAMETOOLONG`）。
+      ⚠️ 不接住 `OSError` 的話，一個怪字串就會讓整張市場指標表（含 FRED 鍵）炸掉。
     """
-    if not isinstance(name, str) or not name:
+    if not isinstance(name, str) or not name or "/" not in name:
+        return None
+    if name.startswith(_REJECTED_TZ_PREFIXES):
         return None
     try:
         return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):   # 不認得的名稱／非法字串（例如含 `..`）
+    except (ZoneInfoNotFoundError, ValueError, OSError):
         return None
+
+
+def not_closed_cutoff_day(fetched_at_utc_iso: str, zone: ZoneInfo) -> str:
+    """「未收盤」的界線日：觀測日 ≥ 本日期的根視為未收盤、不寫。
+
+    界線 ＝ max(取得時刻的世界協調時間日期, 取得時刻的交易所當地日期)
+    （AI 總管 2026-10-14 裁決，內部自決；稽核 M 實測後訂定）。
+    - 匯率（`Europe/London`）：倫敦日期不早於世界協調時間日期 ⇒ 界線＝倫敦日期，與只看交易所當地日期相同。
+    - ^VIX（`America/Chicago`）：芝加哥日期不晚於世界協調時間日期 ⇒ 界線＝世界協調時間日期，**與舊規則相同**。
+      這一條成立的前提：**CBOE 收盤（15:15 CT）早於世界協調時間午夜**（CDT 19:00、CST 18:00），
+      所以世界協調時間換日時，芝加哥當天那一根必已收盤。這是**保留既有 VIX 時效，不是新語意**：
+      若只看芝加哥日期，世界協調時間 00:00～05:00／06:00 之間取數會把前一個美國交易日已定案的收盤
+      多扣約 5 小時（稽核 M 實測：取得於 2026-10-14T02:00Z，舊規則最後一根 10-13，只看芝加哥日期會變 10-12）。
+      ⚠️ 換成收盤晚於世界協調時間午夜的交易所（例如美洲以西），這個前提就不成立，要另外檢討。
+    """
+    fetched = datetime.fromisoformat(fetched_at_utc_iso.replace("Z", "+00:00"))
+    utc_day = fetched.astimezone(timezone.utc).date().isoformat()
+    local_day = fetched.astimezone(zone).date().isoformat()
+    return max(utc_day, local_day)
 
 
 def _local_stamp(stamp, zone: ZoneInfo) -> pd.Timestamp:
@@ -320,11 +354,15 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     - error 非空：原文照回，不寫列。
     - 空序列又沒有原因：回 49 訂的弱訊息，不寫列。
     - `fetched_at` 取不到或沒有時區：整批不寫（不以當下時間補），記進 skipped。
-    - 交易所時區缺、或 zoneinfo 不認得：整批不寫，記進 skipped（**不推定**：不退回世界協調時間、
+    - 交易所時區缺、或認不得（見 `exchange_zone`）：整批不寫，記進 skipped（**不推定**：不退回世界協調時間、
       不查寫死的對照表）。L1 快取裡改版前的舊物件沒有這個鍵 → 同樣走這一支，TTL 過期或重啟後自然消失。
-    - 觀測日不早於「取得時間換成同一交易所時區後的日期」：可能是未收盤的盤中值（或交易所當天那一根），
-      Q3 的「收盤行情」前提不成立 → 不寫，記進 skipped。
+    - ~~觀測日不早於「取得時間換成同一交易所時區後的日期」~~ → 觀測日不早於 `not_closed_cutoff_day`
+      ＝ max(取得時刻的世界協調時間日期, 取得時刻的交易所當地日期)（AI 總管 2026-10-14 裁決；舊表述會讓
+      ^VIX 在世界協調時間剛換日時多扣一天，見該函式；有意識的更正，不是漏刪）：可能是未收盤的盤中值
+      （或交易所當天那一根），Q3 的「收盤行情」前提不成立 → 不寫，記進 skipped。
     - 同一觀測日重複：主鍵（indicator_key, obs_date, release_date）會撞 → 該日全部不寫。
+      ⚠️ **重複先於未收盤判定**：倫敦當天 00:00 那一根若帶值，又與最後一根盤中值落在同一個倫敦日，
+      兩根都**歸「重複」**（不是「未收盤」）；只有一根時才歸「未收盤」。兩種歸類都不寫，差別只在計數落在哪一類。
     - 觀測日（當地）為星期六或星期日：與交易日錯位的跡象 → 不寫並計數。
     - **當地時刻須與同鍵其餘已收盤根一致**（以資料自證日界，不寫死 00:00）：已收盤根之中，
       當地時刻（時:分:秒.微秒）過半數相同者為基準，不同者不寫並計數；沒有任何一個時刻過半數
@@ -350,16 +388,17 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
         return [], None, skipped
     raw_tz = attrs.get(EXCHANGE_TZ_ATTR)
     if raw_tz is None or raw_tz == "":
-        skipped.append(f"來源未提供交易所時區（attrs[{EXCHANGE_TZ_ATTR!r}]），不推定，"
-                       f"{len(series)} 筆全部不寫")
+        # ~~「來源未提供交易所時區」~~ → 2026-10-14 稽核合併修正輪改寫（有意識的更正，不是漏刪）：
+        # L1 沒帶這個鍵有兩種原因，舊句只寫了一種。
+        skipped.append(f"L1 回傳未帶交易所時區（來源未報，或改版前的快取物件；attrs[{EXCHANGE_TZ_ATTR!r}]），"
+                       f"不推定，{len(series)} 筆全部不寫")
         return [], None, skipped
     zone = exchange_zone(raw_tz)
     if zone is None:
-        skipped.append(f"來源自報的交易所時區 {raw_tz!r} 無法辨識（zoneinfo 不認得），不推定，"
+        skipped.append(f"來源自報的交易所時區 {raw_tz!r} 無法辨識（不是可用的 IANA 地區時區名稱），不推定，"
                        f"{len(series)} 筆全部不寫")
         return [], None, skipped
-    fetched_day = (datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-                   .astimezone(zone).date().isoformat())
+    fetched_day = not_closed_cutoff_day(fetched_at, zone)
 
     candidates = []
     for stamp, value in series.items():
@@ -421,7 +460,8 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     if not_finite:
         skipped.append(f"數值非有限值 {not_finite} 筆不寫")
     if not_closed:
-        skipped.append(f"觀測日不早於取得日（{fetched_day}，交易所時區 {raw_tz}）{not_closed} 筆不寫")
+        skipped.append(f"觀測日不早於取得日（界線 {fetched_day}：取得時刻的世界協調時間日期與"
+                       f"交易所時區 {raw_tz} 日期取較晚者）{not_closed} 筆不寫")
     if duplicated:
         skipped.append(f"同一觀測日重複 {duplicated} 筆不寫")
     if weekend:

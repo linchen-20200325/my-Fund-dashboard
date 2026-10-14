@@ -319,7 +319,8 @@ class MarketIndicatorSheetSink:
         self.persist = {"ok": False, "stage": "not_started", "message": None,
                         "error_code": None, "log_id": None, "fetch_log": None,
                         "appended": 0, "already_present": 0, "conflicts": [],
-                        "masked_errors": {}, "empty": {}, "log_message": None}
+                        "masked_errors": {}, "empty": {}, "log_message": None,
+                        "skipped_summary": []}
 
     def _fail(self, stage: str, exc: store.SettingsSheetError) -> None:
         self.persist.update(ok=False, stage=stage, message=str(exc), error_code=exc.code)
@@ -371,7 +372,24 @@ class MarketIndicatorSheetSink:
                                 conflicts=result["conflicts"])
             if result["conflicts"]:
                 reasons.append(self._mask(_conflict_text(result["conflicts"])))
+        # 2026-10-14（稽核 N／M 合併修正輪，可觀測性）：該鍵**仍有寫成列**、但部分根被丟掉
+        # （未收盤、重複、週末、當地時刻與基準不一致、非有限值……）時，逐鍵列出各類略過筆數。
+        # - 一律放進 `persist["skipped_summary"]`（已遮蔽）。
+        # - 本次結果為 `failed` 時，另附在 `fetch_log.message` 失敗原因之後（message 本來就非空）。
+        # - ⚠️ 本次結果為 `ok` 時**不寫進 `fetch_log.message`**：`44` `fetch_log.message` 定義為
+        #   「失敗訊息原文；成功時為空」（44 已凍結），L1 `settings_sheet_repository.fetch_log_row` 也以此拒收
+        #   （ok 帶 message → ValueError）。要讓 ok 時也進試算表，須先改 44 的欄位定義，屬待裁示事項。
+        # `row_count` 照舊是**取回的列數（過濾前）**（`44`：「取回的列數」；本檔檔頭 B12），不改成寫入列數。
+        partial = []
+        for key, count in fetched.items():
+            kept = rows_by_key.get(key, 0)
+            why = table.get("skipped", {}).get(key) or []
+            if count > 0 and kept > 0 and why:
+                partial.append(self._mask(f"{key}: 取回 {count} 列、寫入 {kept} 列；略過：{'；'.join(why)}"))
+        self.persist["skipped_summary"] = partial
         if reasons:
+            if partial:
+                reasons.append("部分略過（該鍵其餘列照寫）：\n" + "\n".join(partial))
             outcome, row_count, message = "failed", None, "\n".join(reasons)
         else:
             outcome, row_count, message = "ok", sum(fetched.values()), None

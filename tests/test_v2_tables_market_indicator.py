@@ -96,9 +96,9 @@ def test_契約檢查_好列零問題_每一欄的壞值都被點名():
 # ═══════════════════════ 替身 L1 ═══════════════════════
 
 
-def _series(values, dates, *, fetched_at=_FETCHED, ticker="^VIX", exchange_tz="UTC"):
+def _series(values, dates, *, fetched_at=_FETCHED, ticker="^VIX", exchange_tz="Etc/UTC"):
     """L1 回傳的替身。2026-10-13 起 L1 另帶來源自報的交易所時區（`attrs["exchange_tz"]`）；
-    本檔預設寫 `UTC`，讓以世界協調時間午夜表示的既有例子觀測日不變（真實時區的取日規則另見
+    本檔預設寫 `Etc/UTC`（2026-10-14 起 `exchange_zone` 不收不含 `/` 的 `UTC`），讓以世界協調時間午夜表示的既有例子觀測日不變（真實時區的取日規則另見
     tests/test_v2_tables_market_indicator_exchange_tz.py）。傳 None 表示 L1 沒交出時區。"""
     s = pd.Series(values, index=pd.to_datetime(dates), dtype=float, name=ticker)
     if fetched_at is not None:
@@ -334,7 +334,7 @@ def test_時間戳落在23點UTC_以交易所時區取當地日期(monkeypatch, 
     # 有時區的時間戳直接換成交易所時區再取日期（台北 07:00 ＝ UTC 前一天 23:00 ＝ 倫敦 00:00）
     assert mi._obs_date(pd.Timestamp("2026-09-24 07:00", tz="Asia/Taipei"), "Europe/London") == "2026-09-24"
     # 不帶時區視為世界協調時間（與 L1 `unit="s"` 一致）
-    assert mi._obs_date(pd.Timestamp("2026-09-23 23:00"), "UTC") == "2026-09-23"
+    assert mi._obs_date(pd.Timestamp("2026-09-23 23:00"), "Etc/UTC") == "2026-09-23"
 
 
 def test_冷卻狀態_只看第一階段真的會打的主機(monkeypatch):

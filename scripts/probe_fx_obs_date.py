@@ -50,7 +50,7 @@
 - `obs_date_weekday`：以現行規則取日期後的星期分布。出現週六／週日、或缺週五，都是規則與交易日錯位的跡象。
 - `obs_date_vs_local_date`：現行規則的日期與各時區當地日期不一致的筆數與例子。
 ⚠️ 2026-10-13 起，上面三項在 `subsets` 下算的是**舊規則**（世界協調時間取日）；同樣三項以**新規則**
-（交易所時區取日）再算一次放在 `subsets_exchange_tz`（另含取得日換成交易所時區後的 `non_null_closed`），
+（交易所時區取日）再算一次放在 `subsets_exchange_tz`（另含以正式 `not_closed_cutoff_day` 界線去掉未收盤根的 `non_null_closed`，界線記在 `fetched_day_exchange_tz`），
 兩規則結果不同的根列在 `obs_date_rule_diff`。`production_rows` 一律是正式新規則。
 另有 `last_bar`（最後一根時間戳是否等於 `meta.regularMarketTime`；相等多半表示最後一根是盤中即時值）
 與 `raw_excerpt`（頭尾各 30 根原始回應，含 null）。
@@ -251,14 +251,15 @@ def _utc(sec: int) -> datetime:
 
 
 def zone_known(name) -> bool:
-    """zoneinfo 認不認得這個時區字串（不認得 → 該時區不參與分組，不讓整個代號分析失敗）。"""
-    if not isinstance(name, str) or not name:
-        return False
-    try:
-        ZoneInfo(name)
-        return True
-    except Exception:   # ZoneInfoNotFoundError（KeyError 子類）、ValueError（非法字串）等
-        return False
+    """認不認得這個交易所時區字串（不認得 → 該時區不參與分組，不讓整個代號分析失敗）。
+
+    2026-10-14 起**直接借用正式判定** `market_indicator.exchange_zone`（不複製一份）：
+    只接受 `Area/Location` 形式的 IANA 名稱、排除 `posix/`／`right/`、zoneinfo 拋 `OSError` 也算不認得。
+    ~~舊判定：zoneinfo 建得出來就算認得（`Factory`、`posixrules`、`UTC` 也算）~~（有意識的更正，不是漏刪：
+    探測與正式路徑必須用同一套判定，否則量到的是別的東西）。
+    """
+    from services.v2_tables.market_indicator import exchange_zone
+    return exchange_zone(name) is not None
 
 
 def _is_dst(sec: int, zone: str) -> bool:
@@ -497,7 +498,9 @@ def analyze(payload, obs_date_fn=None, fetched_at_utc: Optional[str] = None, tic
         out["subsets"]["non_null_closed"] = _closed_subset(
             ts, closes, obs_date_fn, fetched_day, dst_zones, local_zones, "fetched_day_utc")
         if new_fn is not None:
-            fetched_local_day = fetched_dt.astimezone(ZoneInfo(ex_tz)).date().isoformat()
+            # 未收盤界線借用正式那一條（max(世界協調時間日期, 交易所當地日期)；AI 總管 2026-10-14 裁決），不另寫一份。
+            from services.v2_tables.market_indicator import not_closed_cutoff_day
+            fetched_local_day = not_closed_cutoff_day(fetched_at_utc, ZoneInfo(ex_tz))
             out["subsets_exchange_tz"]["non_null_closed"] = _closed_subset(
                 ts, closes, new_fn, fetched_local_day, dst_zones, local_zones, "fetched_day_exchange_tz")
         out["production_rows"] = production_rows_summary(

@@ -531,7 +531,7 @@ def test_新規則_meta缺交易所時區_正式路徑照L1不掛時區_整鍵�
     out = probe.analyze(_payload(ts, meta={"regularMarketTime": ts[-1]}), obs_fn,
                         fetched_at_utc="2026-07-09T10:00:00+00:00", ticker="USDTWD=X")
     assert out["subsets_exchange_tz"] is None
-    assert "來源未提供交易所時區" in out["production_rows"]["skipped"][0]
+    assert "L1 回傳未帶交易所時區" in out["production_rows"]["skipped"][0]
 
 
 def test_摘要行列出新舊兩規則(tmp_path, capsys, obs_fn):
