@@ -29,7 +29,6 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 import os
 from datetime import datetime
@@ -84,16 +83,6 @@ def load_live() -> dict:
     }
 
 
-def _profile_now_kwargs(now) -> dict:
-    """`exp_profile.build_profiles` 的 `now`（平行 PR #965 新增的關鍵字參數，決定台灣今天）。
-
-    呼叫端寫成相容兩版：該參數存在 → 注入 `now`；main 上尚未合併 #965 → 不傳（行為與 #965 之前相同）。
-    以簽章判斷，不以 `TypeError` 判斷（那會把函式內部的型別錯誤誤當成「舊版」而吞掉）。
-    #965 合併後此判斷恆為真，可改成直接傳 `now=now`。
-    """
-    return {"now": now} if "now" in inspect.signature(exp_profile.build_profiles).parameters else {}
-
-
 def _load_funds(codes, settings, settings_error, values) -> dict:
     """C2 接線（2026-10-14）：兩段取數 —— 先基本資料（全部母體），再只對 `EXP-2` 會列出的檔取淨值與配息。
 
@@ -113,7 +102,9 @@ def _load_funds(codes, settings, settings_error, values) -> dict:
         _LOG.error("exp 代碼對照表讀取失敗，整批不取數：%s", message)
         return live.wiring_failed(message)
     key_results = resolved["results"]                           # 契約取值不在 try 裡：形狀錯誤照常 raise
-    profiles = exp_profile.build_profiles(key_results, **_profile_now_kwargs(now))
+    # #965 已合併（main 0805bcb）：`build_profiles` 有 `now` 參數，直接傳同一個 `now`
+    # （~~以簽章判斷、相容兩版~~ 已收掉；有意識的更正，不是漏刪）。
+    profiles = exp_profile.build_profiles(key_results, now=now)
     needed = live.nav_codes_needed(profiles["rows"], settings, settings_error)
     funds, unresolved = live.nav_requests(needed, key_results, profiles["declared"])
     nav_out = exp_nav.load_nav_dividend(funds, now=now) if funds else None

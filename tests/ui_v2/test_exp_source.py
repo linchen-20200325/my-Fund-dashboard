@@ -50,7 +50,7 @@ def l2_calls(monkeypatch):
         calls["keys"].append(list(codes))
         return _keys(codes)
 
-    def build(key_results, *, fetchers=None, now=None):   # `now`：#965 新增的參數（替身照新版簽章）
+    def build(key_results, *, fetchers=None, now=None):   # 簽章同 `exp_profile.build_profiles`（#965 起有 now）
         calls["profiles"].append([r["input"] for r in key_results])
         calls["now"].append(("profile", now))
         return WF.profiles(codes=[r["input"] for r in key_results])
@@ -176,21 +176,6 @@ def test_基本資料與淨值吃同一個now_畫面的今天由它而來(monkey
     (kind1, now1), (kind2, now2) = l2_calls["now"]
     assert (kind1, kind2) == ("profile", "nav") and now1 is now2
     assert now1.tzinfo is not None and now1.utcoffset().total_seconds() == 8 * 3600
-
-
-def test_相容舊版build_profiles_沒有now參數就不傳(monkeypatch, fake_st, l2_calls):
-    """平行 PR #965 合併前，main 上的 `build_profiles` 沒有 `now`：不傳、不靠 TypeError 判斷。"""
-    seen = []
-
-    def old_build(key_results, *, fetchers=None):
-        seen.append([r["input"] for r in key_results])
-        return WF.profiles(codes=[r["input"] for r in key_results])
-
-    monkeypatch.setattr(source.exp_profile, "build_profiles", old_build)
-    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
-    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
-    source.load_live()
-    assert seen == [list(WF.CODES)]
 
 
 def test_沒有條件_不取淨值(monkeypatch, fake_st, l2_calls):

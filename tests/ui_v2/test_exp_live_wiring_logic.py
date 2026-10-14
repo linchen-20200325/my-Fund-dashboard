@@ -398,12 +398,13 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
     exp_nav = pytest.importorskip("services.v2_tables.exp_nav")
     nav_dividend = pytest.importorskip("services.v2_tables.nav_dividend")
     pd = pytest.importorskip("pandas")
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone  # noqa: F811
 
     def mdj(full_key):
-        return {"status": "ok", "fields": {"基金名稱": f"基金{full_key}", "計價幣別": "美元", "配息頻率": "月配",
-                                           "成立日期": "2010/01/15"},
-                "binding": {"code_in_label_table": True}, "fetched_at": "2026-10-14T01:00:00+00:00"}
+        # 刻意不用 MoneyDJ 的 ok 形狀：它的 `binding`（身分判準）內部結構正在另一個 PR 改（#967），
+        # 替身寫死哪一版都會在另一版下被判「身分未核實」。這裡只驗接線形狀，所以讓 MoneyDJ 明確回報「未收錄」
+        # （兩版都有的狀態），幣別由 TDCC＋FundClear 兩個來源決定。
+        return {"status": "not_listed", "fields": {}, "fetched_at": "2026-10-14T01:00:00+00:00"}
 
     def tdcc(full_key):
         return {"status": "ok", "fields": {"計價幣別": "美元"}, "fetched_at": None, "observed_at": "2026-10-14"}
@@ -414,8 +415,10 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
         return {"status": "ok", "fields": {"currency": "USD"}, "fetched_at": "2026-10-14T01:00:00+00:00"}
 
     keys = _keys(("K01", "K02"))
-    profiles = exp_profile.build_profiles(keys, fetchers={"MoneyDJ": mdj, "TDCC": tdcc, "FundClear": fundclear})
-    assert profiles["declared"]["K02"] == ("USD", "meta:MoneyDJ+TDCC")      # 部分失敗、其餘一致（規則 12）
+    profiles = exp_profile.build_profiles(keys, fetchers={"MoneyDJ": mdj, "TDCC": tdcc, "FundClear": fundclear},
+                                          now=datetime(2026, 10, 14, 2, 0, tzinfo=timezone.utc))
+    assert profiles["declared"]["K01"] == ("USD", "meta:TDCC+FundClear")
+    assert profiles["declared"]["K02"] == ("USD", "meta:TDCC")              # 部分失敗、其餘一致（規則 12）
 
     def chain(chain_code, full_key):
         days = pd.date_range("2026-09-01", "2026-10-09", freq="B")
@@ -594,4 +597,3 @@ def test_契約_無配息列與有配息列的provenance_與真L2同形():
     fake_rows = F._div_prov_rows(["fundclear_div"], date(2026, 1, 1))
     assert set(fake_rows) == {"source", "fetched_at", "ccy_source", "outcome", "outcome_detail", "settled",
                               "coverage_start"}
-
