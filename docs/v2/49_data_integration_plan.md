@@ -668,6 +668,14 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 
 **已在本輪直接修正的一筆**：§5 第 9 條原寫「四個條件」，3.5 已是五個條件，本輪改為「五個」；原句見附錄第四輪。
 
+**2026-10-14 登記（C2 前置：MoneyDJ 基本資料頁真實樣本探測，只登記目的與判讀方式）**
+
+- (r) **目的**：(n) 第 5 點登記「MoneyDJ 的表格與代碼仍未綁定」；C2 擬以「代碼以詞界出現在含『基金名稱』那張表自身的文字裡」為身分綁定規則。這條規則能否成立要看真實頁面，本環境連不到 MoneyDJ，故比照 `scripts/probe_fx_obs_date.py` 的先例，新增 `scripts/probe_moneydj_basic_page.py` 與 `.github/workflows/moneydj_basic_probe.yml`（push 到按鈕分支 `probe/moneydj-basic-trigger` 或手動觸發；執行的一律是 main；報告推到 `probe/moneydj-basic-results` 的 `results/<時間戳>_run<run id>/report.json`）。不新增來源或 API：網址由 `declared_profile._moneydj_urls` 產生（於本分支基底 `753d59c` 讀碼確認為 yp011000／yp011001 × tcbbankfund／www 共 4 個網址），連線照 `declared_profile` 的 `fetch_url_with_retry(url, timeout=20, retries=1)`，冷卻中的主機不發請求。
+  - **對象**：派工單指定的 8 個代碼（境內 `ACCP138`；其餘為境外與保單平台代碼），另加一個負控代碼。負控字串不寫進本文件（`CLAUDE.md` §-2.A 第 8 款），生成規則是「`NX` ＋ 探測啟動時 Unix 秒的大寫十六進位」，報告記錄規則與當次值。
+  - **報告記什麼**：逐網址記 HTTP 狀態、最終網址、回應長度、原始位元組（gzip 後 base64）、`<title>` 原文、`_parse_label_table` 的四個標籤值、整頁可見文字是否提到代碼（＝現行判準），以及含「基金名稱」那張表節點的文字是否以詞界提到代碼（含巢狀表與只看該表自身列兩種）。另各代碼呼叫一次三支公開函式並照錄完整回傳；TDCC 3-2 只存相關列、欄名與總筆數。
+  - **判讀方式（本登記不下結論，結論等報告出來另外判定）**：C2 綁定規則要成立，至少要同時看到兩件事 —— 實際代碼取回的頁面上，`name_table.table_text_mentions_code` 為真；負控代碼取回的頁面（若有回應）上，含「基金名稱」那張表不存在，或該欄為假。若實際代碼的頁面只在表外提到代碼（`would_be_ok_now` 為真而 `would_be_ok_with_table_binding` 為假），代表這條規則會把真的基金判成失敗，要改綁定方式。負控頁面的樣子同時就是「查無此基金」的真實樣本，可據以重新評估 (n) 第 4 點「MoneyDJ 一律不判 `not_listed`」。
+  - **已知限制**：退避鍵是主機；某一主機失敗後在冷卻期內，該主機後面的網址都會記為 `cooldown`、沒有樣本（本組在開發環境以真實連線試跑一個代碼時，`www.moneydj.com` 與 `tcbbankfund.moneydj.com` 各失敗一次〔分類 `unreachable`〕後進冷卻，其餘網址都記為 `cooldown`）。報告大小未實測，以第一次真跑為準。本 PR 只新增探測工具，未觸發任何一次真實 run。
+
 ---
 
 ## 附錄　回修對照（第一版 → 本版）
