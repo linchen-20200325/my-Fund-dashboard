@@ -1180,6 +1180,11 @@ class TestGoldenMoneyDJ:
     def test_name_is_blank_空白_Cf_佔位字(self, text, want):
         assert dp.name_is_blank(text) is want
 
+    # 2026-10-14 #967 第二修正輪（總管裁定）：浮點 NaN 判空；其餘非字串照 str() 判
+    @pytest.mark.parametrize("value, want", [(float("nan"), True), (0, False), (0.0, False), (1.5, False)])
+    def test_name_is_blank_nan判空_數字照str判(self, value, want):
+        assert dp.name_is_blank(value) is want
+
     @pytest.mark.parametrize("name", ["N/A", "－", "無資料", "\u200b"])
     def test_名稱是佔位字或零寬_不採用(self, monkeypatch, name):
         _net(monkeypatch, {U1: ("html", _page(_row2("基金名稱", name) + _row2("計價幣別", "美元")))})
@@ -1221,6 +1226,40 @@ class TestFinalUrlGuard:
         _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), U1 + "&a=OTHER1")})
         r = dp.fetch_moneydj_basic_fields(CODE)
         assert r["status"] == "unrecognized_page" and "OTHER1" in r["attempts"][0]["problem"]
+
+    # 2026-10-14 #967 第二修正輪（總管裁定）：docstring 以程式為準 —— 每一個 a 都要相符，重複同值照樣通過
+    def test_兩個a參數同值_通過(self, monkeypatch):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), U1 + f"&a={CODE}")})
+        assert dp.fetch_moneydj_basic_fields(CODE)["status"] == "ok"
+
+    # 2026-10-14 #967 第二修正輪（總管裁定）：只收 ASCII：無點 i（U+0131）轉大寫會變成 I，不先擋就會讓 `ACTı71` 冒充 `ACTI71`
+    def test_a值含非ASCII字母_轉大寫後相同也判不符(self, monkeypatch):
+        code = "ACTI71"
+        look_alike = "ACT\u013171"
+        assert look_alike.upper() == code                              # 前提：不擋就會過關
+        req = _mdj(TCB, "yp011001", code)
+        _net(monkeypatch, {req: ("redirect", _page(FULL_TABLE, code=code),
+                                 _mdj(WWW, "yp011001", look_alike))})
+        r = dp.fetch_moneydj_basic_fields(code)
+        assert r["status"] == "unrecognized_page"
+        assert r["attempts"][0]["problem"] == f"回應網址與請求代碼不符（最終網址代碼 {look_alike}）"
+
+    # 2026-10-14 #967 第二修正輪（總管裁定）：a 值前後空白照舊去除（寬鬆行為，鎖住）
+    def test_a值前後有空白_通過(self, monkeypatch):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), _mdj(WWW, "yp011001", "%20" + CODE + "%09"))})
+        assert dp.fetch_moneydj_basic_fields(CODE)["status"] == "ok"
+
+    # 2026-10-14 #967 第二修正輪（總管裁定）：history 不是串列 → redirect_count 為 None，不湊 0
+    @pytest.mark.parametrize("history", [None, "x", 3])
+    def test_history不是串列_redirect_count為None(self, monkeypatch, history):
+        def fetch(url, **k):
+            proxy_mod._TLS_FAIL.kind = ""
+            resp = _Resp(text=_page(FULL_TABLE), url=url)
+            resp.history = history
+            return resp
+        monkeypatch.setattr(dp, "fetch_url_with_retry", fetch)
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["attempts"][0]["redirect_count"] is None
 
     def test_沒有url屬性_不默默放行(self, monkeypatch):
         _net(monkeypatch, {U1: ("nourl", _page(FULL_TABLE))})

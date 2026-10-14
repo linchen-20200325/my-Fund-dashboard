@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import copy as _copy
 import functools as _functools
+import math as _math
 import re as _re
 import threading as _threading
 import time as _time
@@ -344,10 +345,13 @@ NAME_PLACEHOLDERS: frozenset = frozenset(
 
 def name_is_blank(text) -> bool:
     """基金名稱是否等於沒有：去除空白、`\\xa0`、Unicode Cf 類（零寬字元等）後為空，或整欄是佔位字
-    （`NAME_PLACEHOLDERS`，全半形、大小寫不分）→ True。`None` → True。
+    （`NAME_PLACEHOLDERS`，全半形、大小寫不分）→ True。`None` 與浮點 NaN → True（NaN 為第二修正輪補）；
+    其餘非字串（例 `0`、`0.0`）照 `str()` 判，視為非空。
     L1 身分判準與 L2 `exp_profile._fund_name_cell` 共用這一支（L2 不得自己另寫一份）。
     ~~`_blank`：去除 `\\xa0` 與空白後是否為空~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：加 Cf 類與佔位字白名單，並改成公開名稱。"""
     if text is None:
+        return True
+    if isinstance(text, float) and _math.isnan(text):   # 2026-10-14 #967 第二修正輪（有意識的更正，不是漏刪；決策者：AI 總管）：NaN 也是「沒有」；其餘非字串照 str()
         return True
     cleaned = "".join(ch for ch in str(text) if _ud.category(ch) != "Cf")
     cleaned = cleaned.replace("\xa0", " ").strip()
@@ -470,7 +474,7 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
     上面那段 C2 的 `code_in_label_table` 也 0/8 成立：兩者結構上都不可能成立。
 
     **現行判準（`_identify_name_table`）**：以**請求的代碼**組出網址 → 回 200 → 該頁**恰有一張**含「基金名稱」
-    標籤的表，且該表「基金名稱」欄只有一個值、去除 `\xa0` 與空白後非空。信任模型與本 repo A 鏈淨值取數相同：
+    標籤的表，且該表「基金名稱」欄只有一個值、~~去除 nbsp 與空白後非空~~ → 經 `name_is_blank` 判為非空（2026-10-14 #967 第二修正輪（有意識的更正，不是漏刪；決策者：AI 總管）：引用判空函式本身，不在此另述規則）。信任模型與本 repo A 鏈淨值取數相同：
     「代碼 → MoneyDJ 網址」本身就是身分。實測擋得住的頁：空殼頁、「無資料」頁、頁型不符的空表（title 仍帶
     基金名稱 —— **不得改用 title 取值**）。兩張以上含「基金名稱」的表 → 不採用。
     **最終網址設防**（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）；稽核 G-D）：信任模型的前提是「回應就是請求的那個網址」，所以讀回應的 `.url`
@@ -606,7 +610,15 @@ def _final_url_of(r) -> "tuple[str | None, int | None]":
 
 def _final_url_problem(final_url, code: str):
     """最終網址是否仍是「請求的那個代碼」的 MoneyDJ 頁 → None ＝ 通過；否則回不採用的原因（中文）。
-    主機須在 `MONEYDJ_HOSTS`；查詢參數 `a`（鍵名不分大小寫）須恰有一個值、且轉大寫後等於請求代碼。"""
+
+    - 主機須在 `MONEYDJ_HOSTS`（小寫比對；尾端帶點的主機名不收）。
+    - 查詢參數 `a`（鍵名不分大小寫）至少一個；**每一個** `a` 值去頭尾空白後都須是 ASCII、且轉大寫後等於請求代碼
+      （`a=X&a=X` 通過，`a=X&a=Y` 不通過）。
+      ~~須恰有一個值~~ → 2026-10-14 #967 第二修正輪（有意識的更正，不是漏刪；決策者：AI 總管）：與程式不一致，以程式為準改寫。
+    - **只收 ASCII**（2026-10-14 #967 第二修正輪（有意識的更正，不是漏刪；決策者：AI 總管））：`str.upper()` 會把非 ASCII 字母折成 ASCII（例：無點 i U+0131 轉大寫成 `I`），
+      不先擋就會讓長得像的別的代碼過關；非 ASCII 一律判不符。
+    - 去頭尾空白是刻意的寬鬆（`a=%20CODE%09` 通過），有測試鎖住。
+    - **不驗路徑與頁型**：路徑由名稱表判準把關（頁型不符的頁沒有非空名稱表，見 `_identify_name_table`）。"""
     if final_url is None:
         return "取不到回應的最終網址（.url），無法確認回應對應請求代碼"
     try:
@@ -616,11 +628,12 @@ def _final_url_problem(final_url, code: str):
     host = (parts.hostname or "").lower()
     if host not in MONEYDJ_HOSTS:
         return f"回應的最終網址主機不是 MoneyDJ 已知主機（{host or '無主機'}）"
-    values = [v.strip().upper() for k, v in _parse_qsl(parts.query, keep_blank_values=True) if k.lower() == "a"]
+    values = [v.strip() for k, v in _parse_qsl(parts.query, keep_blank_values=True) if k.lower() == "a"]
     if not values:
         return "回應網址沒有代碼參數 a，無法確認回應對應請求代碼"
-    if any(v != code for v in values):
-        shown = "、".join(dict.fromkeys(values))
+    bad = [v for v in values if not v.isascii() or v.upper() != code]
+    if bad:
+        shown = "、".join(dict.fromkeys(v.upper() if v.isascii() else v for v in bad))
         return f"回應網址與請求代碼不符（最終網址代碼 {shown}）"
     return None
 
