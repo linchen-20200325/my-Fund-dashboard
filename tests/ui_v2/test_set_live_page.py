@@ -132,6 +132,9 @@ def _vix():
     import pandas as pd
     s = pd.Series([17.0, 18.5], index=pd.to_datetime(["2026-09-22", "2026-09-23"]), dtype=float, name="^VIX")
     s.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
+    # 2026-10-13：L1 改帶來源自報的交易所時區（客戶裁示；缺時區整鍵不寫）。本檔測畫面，替身寫 `UTC`，
+    # 讓以世界協調時間午夜表示的既有例子觀測日不變。
+    s.attrs["exchange_tz"] = "UTC"
     return s
 
 
