@@ -114,7 +114,11 @@ WAIT_PAD_SEC = 1.0
 #:   扣 30 分鐘等待預算，其餘留給請求與前後步驟。舊句寫於逾時仍是 40 分鐘時，逾時調整後未同步。
 WAIT_BUDGET_SEC = 30 * 60
 #: 單頁原始位元組超過此值才截斷（並標 `raw_truncated`）。
-#: 1 MB：最多 9 代碼 × 4 網址 = 36 頁，base64 後上界約 49 MB，低於 GitHub 單檔 50 MB 警告線
+#: ~~1 MB：最多 9 代碼 × 4 網址 = 36 頁，base64 後上界約 49 MB，低於 GitHub 單檔 50 MB 警告線~~
+#: → 2026-10-14 更正（有意識的更正，不是漏刪；依 #961 修正輪稽核）：舊句沒算進 TDCC 清單。
+#:   **推算、非實量**：36 頁 × 1 MB × 4/3（base64）≈ 48.0 MB，加 TDCC 完整清單上限 2 MB
+#:   ≈ 50.0 MB（十進位）＝ 47.7 MiB，仍低於 GitHub 50 MiB 警告線；另有 JSON 其餘欄位的開銷未計。
+#:   ⚠️ TDCC 改存精簡版時沒有大小上限（精簡版只留代碼與名稱欄，預期遠小於 2 MB，未實量）。
 #: （原為 3 MB，依 #961 修正輪稽核下修；有意識的更正，不是漏刪）。
 MAX_RAW_BYTES = 1_000_000
 #: TDCC 整份清單 gzip＋base64 後的預估上限；超過改存精簡版。
@@ -122,6 +126,8 @@ TDCC_FULL_MAX_B64_BYTES = 2_000_000
 SNIPPET_MAX = 5
 SNIPPET_RADIUS = 40
 TDCC_RELATED_ROWS_MAX = 20
+#: 每頁「含基金名稱的候選表」最多存幾張（總張數另記，超過標 `name_table_candidates_truncated`）。
+NAME_TABLE_CANDIDATES_MAX = 20
 DEFAULT_OUT = Path("probe_out") / "moneydj_basic_report.json"
 #: 照 `declared_profile._fetch_moneydj_basic_fields_cached` 的呼叫參數。
 FETCH_TIMEOUT = 20
@@ -305,7 +311,8 @@ def analyze_html(html: str, code: str, probe_codes=(), dp=None) -> dict:
         "title_tag_html": str(soup.title) if soup.title is not None else None,
         "title_text": soup.title.get_text() if soup.title is not None else None,
         "name_table_candidate_count": len(candidates),
-        "name_table_candidates": candidates,
+        "name_table_candidates": candidates[:NAME_TABLE_CANDIDATES_MAX],
+        "name_table_candidates_truncated": len(candidates) > NAME_TABLE_CANDIDATES_MAX,
         "name_table": chosen,
         "would_be_ok_now": bool(name_ok and page_mentions),
         "would_be_ok_with_table_binding_own": bool(name_ok and nt.get("mentions_own")),
@@ -719,8 +726,14 @@ def write_report(report: dict, out: Path) -> Optional[str]:
     text, err = _dump(report)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".tmp")
-    tmp.write_text(text + "\n", encoding="utf-8")
-    os.replace(tmp, out)
+    try:
+        tmp.write_text(text + "\n", encoding="utf-8")
+        os.replace(tmp, out)
+    finally:
+        # 寫到一半失敗時不留半個 .tmp（成功時 os.replace 已把它改名，這裡什麼都不做）。
+        with contextlib.suppress(OSError):
+            if tmp.exists():
+                tmp.unlink()
     return err
 
 

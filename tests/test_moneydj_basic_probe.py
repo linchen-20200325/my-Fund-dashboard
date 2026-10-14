@@ -244,39 +244,112 @@ def test_probe_step_runs_script_with_report_path(wf):
     assert runs == [f'python {_PROBE_SCRIPT} --out "$REPORT_PATH"']
 
 
-_SECRET_RE = re.compile(r"secrets|github\.token", re.IGNORECASE)
+#: `secrets`，以及 `github.token`／`github['token']`／`github [ "token" ]` 等寫法（不分大小寫）。
+_SECRET_RE = re.compile(r"""secrets|github\s*(?:\.|\[)\s*['"]?token""", re.IGNORECASE)
 _ALLOWED_SECRET = "${{ secrets.GITHUB_TOKEN }}"
 
 
-def _secret_violations(text: str) -> list:
-    """整份 yml **文字**掃描（不經 YAML 解析，註解、頂層 env、任何寫法都看得到）：
-    `secrets`／`github.token` 只准以 `${{ secrets.GITHUB_TOKEN }}` 出現**恰好一次**，且在提交報告那一步裡。
-    回傳違規描述；空串列＝合規。"""
+def _secret_violations_text(text: str) -> list:
+    """**文字層**：整份 yml 原文逐行掃（不經 YAML 解析，註解與任何區塊都看得到）。
+    `_SECRET_RE` 的每一個命中都必須是 `${{ secrets.GITHUB_TOKEN }}` 的一部分；該字面在全檔恰好出現一次，
+    且自它往上最近的 `- name:` 是提交報告那一步。"""
     out = []
     lines = text.splitlines()
-    hits = [(i, m) for i, ln in enumerate(lines) for m in _SECRET_RE.finditer(ln)]
-    allowed_lines = [i for i, ln in enumerate(lines) if _ALLOWED_SECRET in ln]
-    for i, m in hits:
-        ln = lines[i]
-        if i in allowed_lines and m.group(0) == "secrets" and ln[m.start() - 4:m.end() + len(".GITHUB_TOKEN }}")] \
-                == _ALLOWED_SECRET:
-            continue
-        out.append(f"第 {i + 1} 行不允許的寫法：{ln.strip()}")
-    if len(allowed_lines) != 1:
-        out.append(f"`{_ALLOWED_SECRET}` 應恰好出現一次，實際 {len(allowed_lines)} 次")
-    else:
-        # 那一行必須在提交報告那一步（自它往上找最近的 `- name:`）
-        step = next((lines[k] for k in range(allowed_lines[0], -1, -1) if lines[k].strip().startswith("- name:")),
-                    "")
+    allowed_at = []
+    for i, ln in enumerate(lines):
+        for m in _SECRET_RE.finditer(ln):
+            start = m.start() - len("${{ ")
+            if m.group(0) == "secrets" and start >= 0 and ln[start:start + len(_ALLOWED_SECRET)] == _ALLOWED_SECRET:
+                allowed_at.append(i)
+                continue
+            out.append(f"第 {i + 1} 行不允許的寫法：{ln.strip()}")
+    if len(allowed_at) != 1:
+        out.append(f"`{_ALLOWED_SECRET}` 應恰好出現一次，實際 {len(allowed_at)} 次")
+    for i in allowed_at:
+        step = next((lines[k] for k in range(i, -1, -1) if lines[k].strip().startswith("- name:")), "")
         if "Commit report" not in step:
-            out.append(f"`{_ALLOWED_SECRET}` 不在提交報告那一步：{step.strip()}")
+            out.append(f"第 {i + 1} 行的 `{_ALLOWED_SECRET}` 不在提交報告那一步：{step.strip()}")
     return out
+
+
+def _secret_violations_yaml(text: str) -> list:
+    """**解析層**：`yaml.safe_load` 後遍歷**所有**字串（鍵與值；跳脫已展開、錨點／別名已解開）。
+    含 `_SECRET_RE` 命中的字串，只准是提交報告那一步 `env.GH_TOKEN` 的值、且整串恰為允許字面，全檔恰好一次。"""
+    try:
+        doc = _yaml_safe_load(text)
+    except Exception as e:   # 解析失敗不放行
+        return [f"YAML 解析失敗：{type(e).__name__}: {e}"]
+    commit_paths = set()
+    for job_name, job in (doc.get("jobs") or {}).items():
+        for idx, step in enumerate((job or {}).get("steps") or []):
+            if (isinstance(step, dict) and str(step.get("name", "")).startswith("Commit report")
+                    and "$RESULT_BRANCH" in str(step.get("run") or "")):
+                commit_paths.add(("jobs", job_name, "steps", idx, "env", "GH_TOKEN"))
+    hits = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(k, path + ("<key>",))
+                walk(v, path + (k,))
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, path + (i,))
+        elif isinstance(node, str) and _SECRET_RE.search(node):
+            hits.append((path, node))
+
+    walk(doc, ())
+    out, allowed = [], 0
+    for path, val in hits:
+        if path in commit_paths and val.strip() == _ALLOWED_SECRET:
+            allowed += 1
+            continue
+        out.append(f"{'/'.join(map(str, path))} 不允許的值：{val.strip()[:80]}")
+    if allowed != 1:
+        out.append(f"提交報告那一步的 GH_TOKEN 應恰好一處為 `{_ALLOWED_SECRET}`，實際 {allowed} 處")
+    return out
+
+
+def _yaml_safe_load(text: str):
+    import yaml  # 缺 pyyaml → 紅燈，不 skip（同 _load_workflow_yaml）
+    return yaml.safe_load(text)
+
+
+def _secret_violations(text: str) -> list:
+    """兩層並用（射程見下方 `test_only_github_token_secret_and_only_in_commit_step` 說明）。"""
+    return _secret_violations_text(text) + _secret_violations_yaml(text)
 
 
 def test_only_github_token_secret_and_only_in_commit_step():
     """沒有先例把環境變數橋接進 infra.proxy → 不使用 PROXY_URL 等任何其他 secret（#961 稽核第 1 項）。
-    #961 修正輪：改為整份文字掃描（YAML 解析看不到註解與頂層 env 以外的寫法）。"""
+
+    ~~#961 修正輪：改為整份文字掃描（YAML 解析看不到註解與頂層 env 以外的寫法）。~~
+    ~~（文字層 docstring 原寫「註解、頂層 env、任何寫法都看得到」）~~
+    → 2026-10-14 更正（有意識的更正，不是漏刪；依 #961 修正輪稽核）：「任何寫法都看得到」是全稱宣稱，不成立 ——
+    `${{ github['token'] }}`、YAML 雙引號跳脫、錨點／別名都曾漏掉。現行射程據實明列：
+
+    * **文字層**（`_secret_violations_text`）：原文逐行看得到的字面 —— `secrets` 的任何用法
+      （`secrets.X`、`secrets['X']`、`toJSON(secrets)`、註解裡的字樣），以及 `github.token`、
+      `github['token']`、`github [ "token" ]` 等點號／中括號寫法（可夾空白，不分大小寫）；
+      另查允許字面恰好一次、且位於提交報告那一步。
+    * **解析層**（`_secret_violations_yaml`）：`yaml.safe_load` 之後的所有字串鍵與值 ——
+      涵蓋 YAML 雙引號跳脫（例如以 `\\x73` 寫出的字母）與錨點／別名（`&tok` 在提交步、`*tok` 在別步）。
+    * **仍不涵蓋**：以字串拼接或運算組出 context 名稱（例如 `format()`、`fromJSON()` 之類組字）、
+      執行期才取得的值（腳本在 runner 上自己讀環境）、以及 `uses:` 的第三方 action 在內部讀取 token
+      （GitHub 會自動提供給 action 的部分）。
+    """
     assert _secret_violations(_WF.read_text(encoding="utf-8")) == []
+
+
+def _wf_text() -> str:
+    return _WF.read_text(encoding="utf-8")
+
+
+def _inject_top_env(inject: str) -> str:
+    base = _wf_text()
+    bad = base.replace("\njobs:\n", "\n" + inject + "jobs:\n", 1)
+    assert bad != base
+    return bad
 
 
 @pytest.mark.parametrize("label,inject", [
@@ -286,17 +359,53 @@ def test_only_github_token_secret_and_only_in_commit_step():
     ("toJSON(secrets)", "env:\n  ALL: ${{ toJSON(secrets) }}\n"),
 ])
 def test_secret_scan_catches_audit_variants(label, inject):
-    base = _WF.read_text(encoding="utf-8")
-    bad = base.replace("\njobs:\n", "\n" + inject + "jobs:\n", 1)
+    assert _secret_violations(_inject_top_env(inject)), f"{label} 應被擋下"
+
+
+@pytest.mark.parametrize("expr", ["${{ github['token'] }}", "${{ github [ 'token' ] }}",
+                                  '${{ GitHub["TOKEN"] }}'])
+def test_secret_scan_catches_github_bracket_token(expr):
+    bad = _inject_top_env(f"env:\n  T: {expr}\n")
+    assert _secret_violations_text(bad), f"文字層應擋下 {expr}"
+    assert _secret_violations_yaml(bad), f"解析層應擋下 {expr}"
+
+
+def test_secret_scan_yaml_escape_caught_by_parse_layer():
+    """雙引號字串裡以跳脫寫出 `s` → 原文看不到 `secrets` 字面，解析後才看得到。"""
+    bad = _inject_top_env('env:\n  X: "${{ \\x73ecrets.PROXY_URL }}"\n')
+    assert _secret_violations_text(bad) == [], "文字層本來就看不到（這正是要解析層的理由）"
+    assert _secret_violations_yaml(bad)
+    assert _secret_violations(bad), "合併的守衛必須含解析層"
+
+
+def test_secret_scan_yaml_anchor_caught_by_parse_layer():
+    base = _wf_text()
+    bad = base.replace("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "GH_TOKEN: &tok ${{ secrets.GITHUB_TOKEN }}", 1)
+    bad = bad.rstrip("\n") + "\n      - name: Later step\n        env:\n          T: *tok\n        run: echo hi\n"
     assert bad != base
-    assert _secret_violations(bad), f"{label} 應被擋下"
+    assert _secret_violations_text(bad) == [], "文字層看不到別名（這正是要解析層的理由）"
+    assert _secret_violations_yaml(bad)
+    assert _secret_violations(bad), "合併的守衛必須含解析層"
 
 
-def test_secret_scan_catches_second_github_token_elsewhere():
-    base = _WF.read_text(encoding="utf-8")
-    bad = base.replace("      - name: Run probe\n",
-                       "      - name: Run probe\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n", 1)
-    assert bad != base and _secret_violations(bad)
+def test_secret_scan_catches_second_github_token_before_commit_step():
+    bad = _wf_text().replace("      - name: Run probe\n",
+                             "      - name: Run probe\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n", 1)
+    assert _secret_violations_text(bad) and _secret_violations_yaml(bad)
+
+
+def test_secret_scan_catches_second_github_token_after_commit_step():
+    """S1：第二個 GITHUB_TOKEN 出現在提交步「之後」的步驟。"""
+    bad = (_wf_text().rstrip("\n")
+           + "\n      - name: Later step\n        env:\n          T: ${{ secrets.GITHUB_TOKEN }}\n        run: echo hi\n")
+    assert _secret_violations_text(bad) and _secret_violations_yaml(bad)
+
+
+def test_secret_scan_catches_extra_secret_on_commit_line():
+    """S4：提交步同一行同時有允許字面與另一個 secret。"""
+    bad = _wf_text().replace("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+                             "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} ${{ secrets.PROXY_URL }}", 1)
+    assert _secret_violations_text(bad) and _secret_violations_yaml(bad)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -745,6 +854,8 @@ def test_write_report_原子寫出_中途失敗不毀舊檔(tmp_path, monkeypatc
     with pytest.raises(OSError):
         probe.write_report({"complete": False, "x": "y" * 1000}, out)
     monkeypatch.setattr(Path, "write_text", real)
+    # 失敗之後「立即」：半個 .tmp 必須已被清掉（#961 修正輪：先前在第二次成功寫出後才斷言，守不到）
+    assert not (tmp_path / "r.json.tmp").exists()
     assert json.loads(out.read_text(encoding="utf-8")) == {"old": True}
     probe.write_report({"complete": True}, out)
     assert json.loads(out.read_text(encoding="utf-8")) == {"complete": True}
@@ -763,3 +874,17 @@ def test_raw_html_超過上限截斷並標記(monkeypatch):
 
 def test_raw_html_上限為1MB():
     assert probe.MAX_RAW_BYTES == 1_000_000
+
+
+def test_候選表張數上限_總數另記並標截斷(monkeypatch):
+    monkeypatch.setattr(probe, "NAME_TABLE_CANDIDATES_MAX", 3)
+    html = "<html><body>" + "".join(f"<table>{_ROWS_NO_CODE}</table>" for _ in range(5)) + "</body></html>"
+    out = probe.analyze_html(html, _CODE)
+    assert out["name_table_candidate_count"] == 5
+    assert len(out["name_table_candidates"]) == 3 and out["name_table_candidates_truncated"] is True
+    assert out["name_table"]["index"] == 0
+    assert probe.analyze_html(_page(_ROWS_NO_CODE), _CODE)["name_table_candidates_truncated"] is False
+
+
+def test_候選表張數上限預設20():
+    assert probe.NAME_TABLE_CANDIDATES_MAX == 20
