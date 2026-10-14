@@ -676,6 +676,15 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 
 **已在本輪直接修正的一筆**：§5 第 9 條原寫「四個條件」，3.5 已是五個條件，本輪改為「五個」；原句見附錄第四輪。
 
+**2026-10-14 登記（C2 前置：MoneyDJ 基本資料頁真實樣本探測，只登記目的與判讀方式）**
+
+- (r) **目的**：~~(n) 第 5 點登記「MoneyDJ 的表格與代碼仍未綁定」；~~（#963 合併後此句已過時：#963 已在 MoneyDJ 的 ok 結果加上 `binding`，見下方 (u)；有意識的更正，不是漏刪；決策者：AI 總管。本探測的用途改為以真實頁面驗證那條綁定規則在實際頁面上是否成立 —— (u) 自陳「仍未以樣本驗證」。）C2 擬以「代碼以詞界出現在含『基金名稱』那張表自身的文字裡」為身分綁定規則。這條規則能否成立要看真實頁面，本環境連不到 MoneyDJ，故比照 `scripts/probe_fx_obs_date.py` 的先例，新增 `scripts/probe_moneydj_basic_page.py` 與 `.github/workflows/moneydj_basic_probe.yml`（push 到按鈕分支 `probe/moneydj-basic-trigger` 或手動觸發；執行的一律是 main；報告推到 `probe/moneydj-basic-results` 的 `results/<時間戳>_run<run id>/report.json`）。不新增來源或 API：網址由 `declared_profile._moneydj_urls` 產生（於本分支基底 `753d59c` 讀碼確認為 yp011000／yp011001 × tcbbankfund／www 共 4 個網址），連線照 `declared_profile` 的 `fetch_url_with_retry(url, timeout=20, retries=1)`，冷卻中的主機不發請求。
+  - **連線路徑（判讀前先看）**：`infra.proxy.get_proxy_config()` 只讀 `st.secrets`，Actions 上沒有 `secrets.toml`。本組查過 repo 內先例：`weekly_nav_backfill.yml` 等幾支 workflow 把 `PROXY_URL` 放進環境變數，但經 `infra.proxy` 的取數路徑不讀環境變數；只有 `scripts/fetch_nav_cache.py` 以自建 Session 讀它，不經 `infra.proxy`。沒有先例把環境變數橋接進 `infra.proxy`，故本探測不使用該 secret。⇒ **本報告量到的是 GitHub runner IP 直連的結果，與 production 經 NAS 代理的路徑不同**（報告頂層 `network_path` 同此）。
+  - **對象與順序**：派工單指定的 8 個代碼（境內 `ACCP138`；其餘為境外與保單平台代碼），另加一個負控代碼，排在第 2 位。負控字串不寫進本文件（`CLAUDE.md` §-2.A 第 8 款），生成規則是「`NX` ＋ 探測啟動時 Unix 秒的大寫十六進位」。報告內記錄本輪生成的負控值，屬資料產出、不作為掃描用字表（此判斷由 AI 總管作出，未經第二組驗證）。取數先廣後深：第一輪各代碼只取首選頁型的網址，第二輪再取次要頁型。
+  - **退避**：主機在冷卻中不發請求；冷卻分類為 `unreachable`／`server_error` 時，在 30 分鐘預算內等它自然到期再續，每個主機最多等一次；`blocked`（403）、`rate_limited`（429）不等。每次等待或不等的理由記在報告 `waits`。sleep 只在確實要發請求前。
+  - **報告記什麼**：逐網址記 HTTP 狀態、最終網址、回應長度、原始位元組（gzip 後 base64）、`<title>` 原文、`_parse_label_table` 的四個標籤值、整頁可見文字是否提到代碼（＝現行判準）。含「基金名稱」的候選表逐張記錄（張數，以及每張是否提到代碼）；被選中的那張（候選中的第一張，即 `_parse_label_table` 對整頁選中的同一張）分兩版記錄是否以詞界提到代碼：**自身版**＝該表文字扣掉其巢狀表的文字（含 `th`、`caption`，不含註解與 `script`），**含巢狀版**＝該表節點全部文字。另各代碼呼叫 `fetch_tdcc_listing`、`fetch_fundclear_declared_ccy` 並照錄完整回傳；`fetch_moneydj_basic_fields` 不另呼叫（原始頁那一輪的 `would_be_ok_now` 已涵蓋它的判準）。TDCC 3-2 的比中規則與正式函式相同（只看第一個非空代碼欄），整份清單 gzip＋base64 存進報告（預估超過 2 MB 改存欄名與每列代碼、名稱欄）。報告逐代碼覆寫，最後一次為完整版（`complete=true`）。
+  - **判讀方式（本登記不下結論，結論等報告出來另外判定）**：C2 擬採**自身版**（較嚴：巢狀表裡的代碼可能屬於別的基金）。規則要成立，至少要同時看到兩件事 —— 實際代碼取回的頁面上，`would_be_ok_with_table_binding_own` 為真；負控代碼取回的頁面（若有回應）上，候選表不存在，或自身版為假。若實際代碼的頁面只在表外或巢狀表裡提到代碼（`would_be_ok_now` 為真而自身版為假），代表這條規則會把真的基金判成失敗，要改綁定方式。負控頁面的樣子同時就是「查無此基金」的真實樣本，可據以重新評估 (n) 第 4 點「MoneyDJ 一律不判 `not_listed`」。退出碼：實際代碼一頁都沒取到（含只有負控取到頁面）為 1。
+  - **已知限制**：退避鍵是主機；`blocked` 不等，被 403 擋下的主機在冷卻期內後面的網址都記為 `cooldown`、沒有樣本（本組在開發環境以真實連線試跑一個代碼時，`www.moneydj.com` 與 `tcbbankfund.moneydj.com` 各失敗一次〔分類 `unreachable`〕後進冷卻）。報告大小未實測，以第一次真跑為準。本 PR 只新增探測工具，未觸發任何一次真實 run。
 
 **2026-10-14 登記（exp 正式模式批 C 的 C2：資料層，畫面尚未使用）**
 
