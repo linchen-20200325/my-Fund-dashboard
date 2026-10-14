@@ -180,7 +180,9 @@ class TestMoneyDJLabels:
         assert f["基金名稱"] == "甲" and f["計價幣別"] == "歐元" and f["配息頻率"] == "季配"
         assert f["成立日期"] is None
 
-    def test_conflicting_duplicate_label_keeps_first_and_is_reported(self, monkeypatch):
+    def test_conflicting_duplicate_label_sets_none_and_reports_values(self, monkeypatch):
+        # 2026-10-14 改名（有意識的更正，不是漏刪；決策者 AI 總管；依據稽核 N）：
+        # 舊名 `test_conflicting_duplicate_label_keeps_first_and_is_reported` 已名不副實（不再取第一個）。
         # 2026-10-14 修正輪（稽核非阻擋 2；決策者 AI 總管）：同標籤兩個不同值 → 該欄設 None、兩個值都記下，
         # 不再取第一個。舊斷言：`assert r["fields"]["計價幣別"] == "美元"`（取第一個）。
         rows = (_row2("基金名稱", "甲") + _row2("計價幣別", "美元") + _row2("計價幣別", "台幣")
@@ -264,11 +266,13 @@ class TestMoneyDJUrlChain:
         assert r["fetched_at"] is None
         assert proxy_mod.pop_last_fail_kind() == ""   # 分類被讀走了，沒有殘值留給下一個 caller
 
-    def test_all_definite_absent_is_not_listed(self, monkeypatch):
+    def test_all_404_and_codeless_page_is_failed_not_not_listed(self, monkeypatch):
+        # 2026-10-14 改名（有意識的更正，不是漏刪；決策者 AI 總管；依據稽核 N）：
+        # 舊名 `test_all_definite_absent_is_not_listed` 已名不副實（這組輸入現在必須判 failed）。
         # 2026-10-14 修正輪（BLOCKING 1；決策者 AI 總管；依據稽核 M 反例）：在拿到真實「查無此基金」頁面樣本前，
         # MoneyDJ 一律不判 not_listed —— 404 與「正常頁但沒代碼沒表」都證明不了查無此代碼。
         # 舊斷言：status == "not_listed"、error is None、第 3 筆 outcome == "valid_page_without_code_or_table"。
-        # 測試名保留（不刪測試），現在守的是反面：這組輸入**不得**判成 not_listed。
+        # 第一輪修正時測試名保留（不刪測試）；本輪依稽核 N 改名，守的是反面：這組輸入**不得**判成 not_listed。
         valid_no_code = "<html><body>" + _PAD + "</body></html>"
         _net(monkeypatch, {U1: ("fail", "not_found"), U2: ("fail", "not_found"),
                            U3: ("html", valid_no_code), U4: ("fail", "not_found")})
@@ -308,6 +312,14 @@ class TestMoneyDJUrlChain:
         r = dp.fetch_moneydj_basic_fields(CODE)
         assert r["status"] == "failed"
         assert r["attempts"][0]["outcome"] == "unrecognized_page"
+
+    def test_code_preceded_by_alnum_is_not_a_mention(self, monkeypatch):
+        html = (f"<html><body>{_PAD}<p>相關代碼：X{CODE}</p>"
+                f"<table>{FULL_TABLE}</table></body></html>")
+        _net(monkeypatch, {U1: ("html", html), U2: ("html", html), U3: ("html", html), U4: ("html", html)})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "failed"
+        assert all(a["outcome"] == "unrecognized_page" for a in r["attempts"])
 
     def test_code_mention_is_case_insensitive_whole_word(self, monkeypatch):
         html = (f"<html><body>{_PAD}<p>代碼：{CODE.lower()}。</p>"
@@ -373,10 +385,12 @@ class TestMoneyDJCache:
         assert a["fetched_at"] and b["fetched_at"] == a["fetched_at"]
         assert dp.fetch_moneydj_basic_fields.cache_info()["hits"] == 1
 
-    def test_not_listed_is_cached(self, monkeypatch):
+    def test_all_404_is_failed_and_remembered_not_cached(self, monkeypatch):
+        # 2026-10-14 改名（有意識的更正，不是漏刪；決策者 AI 總管；依據稽核 N）：
+        # 舊名 `test_not_listed_is_cached` 已名不副實（全部 404 現在是 failed、進失敗記憶、不進成功快取）。
         # 2026-10-14 修正輪（BLOCKING 1＋稽核 N-2；決策者 AI 總管）：全部 404 不再判 not_listed、不進 1 小時快取，
         # 改判 failed 並進 5 分鐘失敗記憶 —— 記憶期間第二次呼叫照樣不出門，所以請求數仍是 4。
-        # 舊斷言：`assert ...["status"] == "not_listed"`。測試名保留（不刪測試）。
+        # 舊斷言：`assert ...["status"] == "not_listed"`。
         net = _net(monkeypatch, {})   # 全部 404
         assert dp.fetch_moneydj_basic_fields(CODE)["status"] == "failed"
         again = dp.fetch_moneydj_basic_fields(CODE)
@@ -423,6 +437,50 @@ class TestFailureMemory:
         assert b["cooling_remaining_sec"] == pytest.approx(dp.FAILURE_MEMORY_SEC - 100)
         assert b["error"] == a["error"] and b["attempts"] == a["attempts"]
         assert b["fetched_at"] == a["fetched_at"]           # 不刷新成當下
+
+    def test_memory_key_is_normalized(self, monkeypatch):
+        net = _net(monkeypatch, {U1: ("fail", "unreachable")})
+        dp.fetch_moneydj_basic_fields(" tlzf9 ")
+        r = dp.fetch_moneydj_basic_fields("TLZF9")
+        assert len(net.calls) == 4 and r["cooling"] is True
+
+    def test_memory_stores_a_copy_not_the_returned_object(self, monkeypatch):
+        _net(monkeypatch, {U1: ("fail", "unreachable")})
+        a = dp.fetch_moneydj_basic_fields(CODE)
+        original_error = a["error"]
+        a["error"] = "呼叫端改掉"
+        a["attempts"].clear()
+        b = dp.fetch_moneydj_basic_fields(CODE)
+        assert b["cooling"] is True
+        assert b["error"] == original_error and len(b["attempts"]) == 4
+
+    def test_single_function_cache_clear_only_clears_its_own_memory(self, monkeypatch):
+        net = _net(monkeypatch, {U1: ("fail", "unreachable"), FC_URL: ("fail", "unreachable")})
+        dp.fetch_moneydj_basic_fields(CODE)
+        dp.fetch_fundclear_declared_ccy(CODE)
+        assert len(net.calls) == 5
+        dp.fetch_moneydj_basic_fields.cache_clear()
+        assert dp.fetch_moneydj_basic_fields(CODE)["cooling"] is False     # 自己那份清掉 → 重打
+        assert len(net.calls) == 9
+        assert dp.fetch_fundclear_declared_ccy(CODE)["cooling"] is True    # 別支的不清
+        assert len(net.calls) == 9
+
+    def test_memory_key_is_per_function(self, monkeypatch):
+        _tdcc(monkeypatch, [], error="URLError: timed out")
+        assert dp.fetch_tdcc_listing(CODE)["status"] == "failed"
+        net = _net(monkeypatch, {FC_URL: ("json", {"Data": {"Currency": "USD"}})})
+        r = dp.fetch_fundclear_declared_ccy(CODE)
+        assert net.calls == [FC_URL] and r["status"] == "ok"
+
+    def test_memory_expiry_boundary_is_inclusive(self, monkeypatch, mclock):
+        # 現行判準 `now - 記下時刻 >= FAILURE_MEMORY_SEC` 即過期：差 0.1 秒仍在記憶中，剛好 300 秒就重打。
+        net = _net(monkeypatch, {FC_URL: ("fail", "unreachable")})
+        dp.fetch_fundclear_declared_ccy(CODE)
+        mclock["t"] += dp.FAILURE_MEMORY_SEC - 0.1
+        assert dp.fetch_fundclear_declared_ccy(CODE)["cooling"] is True
+        mclock["t"] += 0.1
+        assert dp.fetch_fundclear_declared_ccy(CODE)["cooling"] is False
+        assert net.calls == [FC_URL, FC_URL]
 
     def test_memory_expiry_refetches(self, monkeypatch, mclock):
         net = _net(monkeypatch, {FC_URL: ("fail", "unreachable")})
@@ -653,11 +711,23 @@ class TestFundClear:
         {"Data": {"Currency": "USD"}, "Success": False},
         {"Data": None, "Message": "系統錯誤"},
         {"Data": [], "message": "error"},
-    ])
+        {"Data": {"Currency": "USD"}, "IsSuccess": False},
+        {"Data": {"Currency": "USD"}, "isSuccess": False},
+        {"Data": {"Currency": "USD"}, "success": False},
+        {"Data": {"Currency": "USD"}, "Success": "false"},
+        {"Data": {"Currency": "USD"}, "Success": " FALSE "},
+        {"Data": {"Currency": "USD"}, "IsSuccess": "False"},
+    ], ids=["Success_False_null", "Success_False_data", "msg_null", "msg_empty_list",
+            "IsSuccess", "isSuccess", "lower_success", "str_false", "str_FALSE_padded", "str_False_IsSuccess"])
     def test_error_flag_is_failed_not_not_listed(self, monkeypatch, payload):
         _net(monkeypatch, {FC_URL: ("json", payload)})
         r = dp.fetch_fundclear_declared_ccy(CODE)
         assert r["status"] == "failed" and r["attempts"][0]["outcome"] == "error_flag"
+
+    @pytest.mark.parametrize("value", [0, "0", "no", None, True, "true"])
+    def test_other_non_bool_success_values_are_not_error_flags(self, monkeypatch, value):
+        _net(monkeypatch, {FC_URL: ("json", {"Data": {"Currency": "USD"}, "Success": value})})
+        assert dp.fetch_fundclear_declared_ccy(CODE)["status"] == "ok"
 
     @pytest.mark.parametrize("empty", [{}, []])
     def test_empty_data_container_is_not_listed(self, monkeypatch, empty):

@@ -527,12 +527,14 @@ def _fundclear_error_flag(payload: dict):
     """回應帶錯誤旗標 → 回說明字串，否則 None。
 
     ⚠️ **保守推定**：repo 內沒有 FundClear 錯誤回應樣本，鍵名照 .NET Web API 常見慣例
-    （`Success`／`IsSuccess` 為 False；或 `Data` 為空而 `Message` 非空）。
+    （`Success`／`IsSuccess` 為 False 或字串 `"false"`（大小寫不分）；或 `Data` 為空而 `Message` 非空）。
+    其他非布林值（`0`、`"0"`、`"no"`…）不當成錯誤旗標，照其餘規則判。
     推定錯了的代價是把「沒有這一檔」判成 failed（偏保守），不會把失敗判成沒有。
     """
     for k in _FUNDCLEAR_SUCCESS_KEYS:
-        if payload.get(k) is False:
-            return f"回應的 {k} 為 False（Message={payload.get('Message') or payload.get('message')!r}）"
+        v = payload.get(k)
+        if v is False or (isinstance(v, str) and v.strip().lower() == "false"):
+            return f"回應的 {k} 為 {v!r}（Message={payload.get('Message') or payload.get('message')!r}）"
     data = payload.get("Data")
     msg_key = next((k for k in _FUNDCLEAR_MESSAGE_KEYS if payload.get(k)), None)
     if msg_key and (data is None or data == {} or data == []):
