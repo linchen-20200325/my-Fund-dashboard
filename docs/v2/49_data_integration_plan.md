@@ -656,7 +656,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
   - 因此 **TDCC 清單的取得時間不可考**：`fetched_at` 固定為 `None`，改記 `observed_at`＝本模組在這個行程內第一次觀察到這份清單（以物件身分判定是不是同一份）的時刻，語意是「清單取得時間**不晚於** `observed_at`」。
   - MoneyDJ 基本資料表的標籤結構、TDCC 3-2 的欄名、FundClear 的 `Data`／`Currency` 鍵名，**都未以真實回應樣本驗證**（repo 內沒有這三個來源的原始回應，本環境也連不到）；判準照 repo 既有解析碼寫成。FundClear 只收大寫 `Data` 鍵，沒有就判 `failed`，鍵名若其實是別的寫法，這支會一直是 `failed`，不會猜。
   - ~~MoneyDJ 的 `not_listed` 只在四個網址都是「確定沒有」（404，或是正常頁但既沒有該代碼也沒有表）時成立；查無此基金時 MoneyDJ 實際回什麼頁面同樣未以真實樣本驗證，若它回的頁面會提到該代碼，結果會落在 `failed`（偏保守的那一側）。~~ → **MoneyDJ 那支目前一律不判 `not_listed`**：404、空殼頁、無法判讀的頁都算 `failed`，直到拿到真實的「查無此基金」頁面樣本為止。（2026-10-14 有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 M 的實跑反例 —— 四個網址都回空殼頁、或都回含「基金 淨值 績效」字樣的「系統維護中」頁、或 tcb 兩個 404 加 www 兩個空殼，舊判準都會判成 `not_listed` 並快取 1 小時。舊句的用意——來源明確說沒有時要能分辨——仍然成立；被推翻的是它的判準：沒有真實樣本時，「正常頁」與 404 都證明不了查無此代碼，404 更像路徑或主機出問題，與 FundClear 那支「404 不當成沒有這一檔」的標準一致。）
-  - **MoneyDJ 的表格與代碼仍未綁定**：只確認頁面**可見文字**以完整詞提到該代碼（不看連結等屬性值，前後不得緊接英數字，大小寫不分），以及頁面上有一張含「基金名稱」那一列的表；沒有確認那張表就是該代碼的表 —— 頁面可見文字提到本檔代碼、而表格其實是另一檔時，結果仍會是 `ok`。真實頁面結構未以樣本驗證。**C2 接上畫面前必須解決（把表格與代碼綁定），或先取得真實頁面樣本確認這種情形不會發生。**
+  - **MoneyDJ 的表格與代碼仍未綁定**：只確認頁面**可見文字**以完整詞提到該代碼（不看連結等屬性值，前後不得緊接英數字，大小寫不分），以及頁面上有一張含「基金名稱」那一列的表；沒有確認那張表就是該代碼的表 —— 頁面可見文字提到本檔代碼、而表格其實是另一檔時，結果仍會是 `ok`。真實頁面結構未以樣本驗證。**C2 接上畫面前必須解決（把表格與代碼綁定），或先取得真實頁面樣本確認這種情形不會發生。** → **C2 已處理，待真實樣本確認**（2026-10-14 狀態更新，不是漏刪；決策者：AI 總管；做法見本節 (u)）。
   - FundClear 回應的錯誤旗標（`Success`／`IsSuccess` 為 False，或 `Data` 為空而 `Message` 非空 → 判 `failed`、不判 `not_listed`；**旗標值為字串 `"false"`（大小寫不分、去頭尾空白）同樣算 False**，其他非布林值如 `0`、`"0"` 不算）是**保守推定**：repo 內沒有 FundClear 錯誤回應樣本，鍵名照常見慣例寫。
   - TDCC 回 200 但不是 JSON 時，冷卻分類記為 `server_error`（`shared/backoff_policy` 既有分類裡最接近「有回應但內容不可用」的一種），沒有新增分類常數。
 - (o) **C1 只是 L1，畫面尚未使用。** 本 PR 不改 `services/v2_tables/`、`ui_v2/`、`ui/`；新函式目前沒有接到 exp 頁或任何畫面，接線是後續 PR 的事。
@@ -664,10 +664,33 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
   - **沒有 single-flight**：同一個（函式、代碼）被並行呼叫時，各自都會出門取數，不會合併成一次。
   - **主機冷卻造成的 `failed` 會被延長**：host 冷卻中的那一次 `failed` 同樣進 5 分鐘失敗記憶，即使冷卻先到期，也要等記憶過期才會重打。
 - (p) **舊殼模式（只登記）。** `declared_profile.py` 經由 `fund_fetcher` 取用 `fetch_url_with_retry`；`fund_fetcher` 在 import 時會間接載入 streamlit 與 services，這是既有的舊殼寫法，本 PR 沿用、不處理。
-- (q) **set 頁「重新取數」清不到這三支的快取（只登記）。** 三支的成功快取與失敗記憶都已用 `register_cache` 登記，同一行程裡呼叫 `infra.cache.clear_all_caches()` 清得到；但 set 頁「重新取數」走的是 `services/v2_tables/settings_store.py::refetch_cached_functions` 自己的清單（只清市場指標用到的取數函式），清不到這三支。等 C2 接上畫面時再把它們登記進那份清單。另：若改用 `infra.cache.clear_caches_by_names`，名稱要用內層的 `_fetch_moneydj_basic_fields_cached`／`_fetch_tdcc_listing_cached`／`_fetch_fundclear_declared_ccy_cached`，而且這三個名稱只清成功快取、清不到失敗記憶（失敗記憶要另外傳 `declared_profile_failure_memory` 整份清，或用 `clear_failure_memory()`、公開函式自己的 `cache_clear()`）；C2 接線時與本條一併處理。
+- (q) **set 頁「重新取數」清不到這三支的快取（只登記）。** 三支的成功快取與失敗記憶都已用 `register_cache` 登記，同一行程裡呼叫 `infra.cache.clear_all_caches()` 清得到；但 set 頁「重新取數」走的是 `services/v2_tables/settings_store.py::refetch_cached_functions` 自己的清單（只清市場指標用到的取數函式），清不到這三支。等 C2 接上畫面時再把它們登記進那份清單。另：若改用 `infra.cache.clear_caches_by_names`，名稱要用內層的 `_fetch_moneydj_basic_fields_cached`／`_fetch_tdcc_listing_cached`／`_fetch_fundclear_declared_ccy_cached`，而且這三個名稱只清成功快取、清不到失敗記憶（失敗記憶要另外傳 `declared_profile_failure_memory` 整份清，或用 `clear_failure_memory()`、公開函式自己的 `cache_clear()`）；C2 接線時與本條一併處理。 → **已結案（2026-10-14 C2）**，處理方式見本節 (v)；上句「登記進那份清單」**沒有照做**，改由 `refetch_nav` 清（理由見 (v)）。
 
 **已在本輪直接修正的一筆**：§5 第 9 條原寫「四個條件」，3.5 已是五個條件，本輪改為「五個」；原句見附錄第四輪。
 
+
+**2026-10-14 登記（exp 正式模式批 C 的 C2：資料層，畫面尚未使用）**
+
+> 本段編號由 (s) 起：平行的 #961（MoneyDJ 基本資料頁探測）已在本節檔尾新增 (r)，兩邊都在檔尾追加，後合併者以 merge commit 解衝突。
+> 本段計數一律綁 SHA：「以 `753d59c` 為底」＝本 PR 分支的起點（`origin/main` 當時的頭）。本 PR 不接 UI、不改 `ui_v2/`、不改 `44`。
+
+- (s) **`services/v2_tables/exp_profile.py` 的職責與逐欄規則。** 把 C1 三支 L1 的回傳逐欄判成 `ok`／`not_ready`（⬜資料未備）／`fetch_failed`（⛔ 取數失敗）／`inconsistent`（多來源不一致，畫面以 ⬜ 呈現），每一格附出處（`sources`、`failed_sources`、各來源原字面 `raw`、`fetched_at`、TDCC 的 `observed_at`、`reason`）；原文不遮蔽，遮蔽在 L3 做。輸入是 `fund_keys.resolve_full_keys` 的結果，對照失敗的代碼不取數、各欄 ⬜「代碼無法對照：<原因>」。
+  - 名稱：只採 MoneyDJ，且要過 (u) 的綁定閘門。
+  - 成立日期：只讀 MoneyDJ「成立日期」，只收 `YYYY/MM/DD` 或 `YYYY-MM-DD`（`strptime` 解析，月日可不補零、須為 ASCII），輸出補零 ISO；不存在的日期（例 2018/02/30）與其他寫法 ⬜，原因寫原字。
+  - 配息方式：MoneyDJ「配息頻率」去頭尾空白後整欄精確比對 §6.1 對照表（`DIVIDEND_FREQ_TO_POLICY` 逐字照該表，本組對讀過，與派工單摘錄相同）；「不寫入」那一類 ⬜「依對照表不判定配息方式」，表外 ⬜「不在對照表」。
+  - 經理費率：恆為空、⬜「來源未提供經理費率（不以「最高經理費」代替）」。
+  - 幣別：三來源各自歸類（值／認不出／沒提供／未收錄／取數失敗／身分未核實），值用 L1 `sources._normalize_declared_ccy` 正規化；恰一種 ISO 且沒有「認不出」→ `ok`；兩種以上、或「認不出」與值並存 → `inconsistent`；沒有值時有失敗 → `fetch_failed`、沒有失敗 → ⬜。**有值但另有來源失敗**由常數 `PARTIAL_FAILURE_POLICY` 決定，**預設 `"fail"`（從嚴，整格 ⛔），待客戶裁示**；改成 `"accept"` 即照採有值的來源（兩種行為都有測試）。決策者：AI 總管（暫定）。
+  - `declared[代碼]`＝幣別 `ok` 時的 `(ISO, "meta:<來源+來源>")`，出處字串只由 `MoneyDJ`／`TDCC`／`FundClear` 依此順序組成，過得了 `nav_dividend` 的出處白名單。
+  - 列層 `fetched_at`：被採用來源中最舊的實際取得時間（只看 MoneyDJ、FundClear）；只有 TDCC 被採用時為空（TDCC 只有 `observed_at`）。三來源對每一檔都失敗 → `table_wide_failed`。
+- (t) **`services/v2_tables/exp_nav.py`：§4.4「L2 不另疊快取」的有意偏離（決策者：AI 總管）。** 在 `build_nav_dividend_tables` 外面逐檔記憶：成功 `TTL_15MIN`（不長於 A 鏈 L1 自己的成功 TTL）、失敗 300 秒（`TTL_5MIN`，期間內不重打、回上一次的失敗原文並標冷卻與剩餘秒數）。鍵：代碼、`full_key`、`chain_code`、`declared_ccy`、`declared_ccy_source`、`portal`（本組多加，從嚴）、台灣日期。`fetched_at` 沿用 L2 輸出。以 `register_cache` 登記名稱 `exp_nav_memo`，set 頁 `refetch_nav` 會清。
+  - **依據：計數測試**（`tests/test_v2_tables_exp_nav.py::TestCountBasis`，以 `753d59c` 為底實跑；用 `tests/_a_chain_stub.py` 把 A 鏈葉節點換成記錄呼叫的替身、走真的 A 鏈）：(1) `build_nav_dividend_tables` 本身沒有記憶，同一份輸入呼叫兩次、注入的 `chain_fetch` 被呼叫兩次；(2) 每個元件都成功的情境（`H.full_success_scenario`），第二次一個葉節點都沒打（L1 十五分鐘快取命中）；(3) 淨值可用但沒有 wb07／wb01／持股的情境（`S1_complete_fundclear`，B 線第一次就寫得出淨值列）與全敗情境（`S3_all_fail`），第二次照樣把 FundClear 淨值來源再打一次。讀碼：L1 `fund_orchestration._moneydj_url_result_cacheable` 只收每一個元件都成功的結果，失敗一律不快取。⇒ L1 **只讓「全部元件成功」的重跑不出門**，B 線可用但元件不全的成功與所有失敗都會重打，所以成功記憶與失敗記憶都做。
+  - 「失敗」＝ 該檔 `nav.errors` 或 `dividend.errors` 有原文；淨值取到但被幣別閘扣下不算失敗。只收 meta 模式（`holding_ccy` 不在鍵裡，收了會錯配 → `ValueError`）。
+  - **撤銷條件**：A 鏈 L1 改成「B 線可用的結果都快取、失敗另有記憶」時，本檔即可拿掉。已知限制：沒有 single-flight；`chain_fetch`（測試注入）不在鍵裡。
+  - 計數測試裡 `nav_history.load_points` 的替身每次都記一筆，是因為替身整支換掉了它；真的 `load_points` 在 B 線範圍內（`nav_history_shared_reads(skip_reads=True)`）回空、不打試算表，所以不算出門。
+- (u) **MoneyDJ 表格與代碼的綁定。** `declared_profile._parse_label_table` 一併交回被採用的那張表；ok 結果新增 `binding = {"code_in_label_table", "code_in_page_text"}`：前者＝代碼是否以完整詞（`_mentions_code` 同一條規則：只看可見文字、前後不得緊接英數字、大小寫不分）出現在**那張含「基金名稱」的表自身**的文字裡，巢狀在裡面的內層表不算；後者在 ok 時恆為真。**ok 判準、快取語意不變**。L2 只在前者為真時採用 MoneyDJ 的名稱、成立日期、配息頻率與幣別；否則三欄 ⬜「MoneyDJ 頁面無法確認是本檔（表格內未見代碼）」、MoneyDJ 不參與幣別比對。⚠️ 真實頁面上代碼是不是寫在那張表裡**未以樣本驗證**；若真實頁面把代碼放在表外，結果會是三欄一律 ⬜（偏保守）。(n) 那條已標「C2 已處理，待真實樣本確認」。
+- (v) **(q) 結案。** set 頁「重新取數」（`settings_store.refetch_nav`）在清 A 鏈快取的同一處，一併呼叫三支 L1 公開的 `cache_clear()`（讀碼確認：`declared_profile._public` 的 `cache_clear` 同時清內層成功快取與該函式自己的失敗記憶）、`exp_nav.clear_memo()`、以及新函式 `declared_profile.reset_tdcc_list_cache_if_empty()`。**沒有**加進 `refetch_cached_functions()`（那份是市場指標的清單，加進去會讓市場指標的重新取數也清這三支）。`_tdcc_cache` 的處理：只在 3-2 存的是 `[]` 時丟掉那一筆，非空清單不動、其他端點不動、**不改 `_tdcc_get`**；清單本身永不過期的問題（(n) 第一條）照舊未處理。冷卻（`infra.source_backoff`）照舊不動。
+- (w) **§6.1 對照表規則 1 的 `fetch_log` 寫入不實作。** 規則 1 要求遇到表外寫法時在 `fetch_log` 記 `failed`；本 PR 只是資料層，沒有寫 `fetch_log` 的接點，表外寫法只在該格 ⬜ 的原因寫原字（`exp_profile` 的 `reason`）。另：§6.1 表裡「不寫入（該基金的 `fund_profile` 整列不寫）」**已被 2026-10-13 客戶裁示「缺欄照列」取代**（`44` §7.3.2「其二｜缺欄照列」：任何一欄缺就在那一格 ⬜，不得讓整檔消失）；本 PR 照後者做，§6.1 原表不劃線（那是客戶 9/26 定案的原文），只在此登記。
+- (x) **TDCC 3-2 的代碼與 MoneyDJ 代碼是否相同，未查證。** `fetch_tdcc_listing` 拿 `fund_keys` 給的 `full_key`（MoneyDJ 那一套代碼）去比 TDCC 清單的「基金代碼」／「境外基金代碼」；兩套代碼是不是同一套，repo 內沒有證據、本環境也連不到 TDCC。若不同，TDCC 會判 `not_listed`（不會冒充別檔，但幣別會少一個來源）。
 ---
 
 ## 附錄　回修對照（第一版 → 本版）
