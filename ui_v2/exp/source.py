@@ -14,10 +14,13 @@
 
 `load_live()` 回傳 `{"dataset": ..., "notes": ...}`：
 - `dataset`：與 `fixtures.scenario()["dataset"]` 同形（`live.build_dataset`）。
-  母體＝選股池的基金代碼（L2 `exp_universe.load_pool_codes`；**只取代碼**），其餘欄一律空（⬜）。
+  母體＝選股池的基金代碼（L2 `exp_universe.load_pool_codes`；**只取代碼**）。
+  ~~其餘欄一律空（⬜）~~ → 2026-10-14 C2 接線（狀態更新，不是漏刪）：基本資料來自 L2 `exp_profile`，
+  淨值與配息來自 L2 `exp_nav`（只取 `EXP-2` 會列出的檔），見 `_load_funds`。
 - `notes`：`pool`（L2 回傳原樣：狀態、後端、代碼、略過與重複的筆數、訊息）、
   `settings`（已存的 `exp_` 四鍵，`live.parse_user_settings` 解析後）、
   `settings_error`（讀不到或解析不了時的訊息原文，已遮蔽；讀得到時為 None —— **與「沒設定」分開**）。
+  `cells`（2026-10-14 C2）：逐格的原因與來源標示（`live.assemble_wired`，已遮蔽）；母體讀不到時為 None。
 
 `save_setting(鍵, 值或 None, value_kind)` → L2 `save_setting_for_page` 的回傳（純 dict，訊息已遮蔽）；
 體例與 `ui_v2/mkt/source.py::save_setting` 相同。
@@ -26,13 +29,27 @@
 
 from __future__ import annotations
 
+import inspect
 import os
+from datetime import datetime
 
 import streamlit as st
 
-from services.v2_tables import exp_universe, masking, settings_store
+from services.v2_tables import exp_nav, exp_profile, exp_universe, fund_keys, masking, nav_dividend, settings_store
 
 from . import live
+
+# 淨值被扣下、畫面印「⬜ 資料未備」的代碼 → 固定文字（None ＝ 用資料層的 `skipped` 原文）。封閉清單，體例同
+# `ui_v2/hld/source.py::_NAV_UNAVAILABLE_WITHHELD`；⛔ 刻意不含 `WITHHELD_INPUT_CONFLICT`（契約被破壞 → raise）。
+# `ccy_undetermined`（2026-10-14 C2）：計價幣別未確定的檔，資料層不取數，畫面寫 `exp_nav.TEXT_CCY_UNDETERMINED`。
+# `ccy_conflict`：基本資料幣別與淨值資料幣別衝突（規則 14），原因用資料層的原文（含兩邊的幣別）。
+_NAV_UNAVAILABLE_WITHHELD = {
+    nav_dividend.WITHHELD_CCY_MISSING: None,
+    nav_dividend.WITHHELD_CCY_CONFLICT: None,
+    nav_dividend.WITHHELD_FETCHED_AT_MISSING: None,
+    nav_dividend.WITHHELD_FETCHED_AT_FUTURE: None,
+    exp_nav.WITHHELD_CCY_UNDETERMINED: exp_nav.TEXT_CCY_UNDETERMINED,
+}
 
 
 def _secret_values() -> list:
@@ -51,10 +68,54 @@ def load_live() -> dict:
     #    ⇒ 只有服務帳戶一條路；沒有服務帳戶時 L2 回「選股池未設定雲端來源」（不讀本機暫存檔當母體）。
     pool = exp_universe.load_pool_codes(values, oauth_client=None)
     settings, settings_error = _load_settings(values)
+    wired = None
+    if pool["status"] == "ok":
+        wired = _load_funds(pool["codes"], settings, settings_error, values)
     return {
-        "dataset": live.build_dataset(pool, settings),
-        "notes": {"pool": pool, "settings": settings, "settings_error": settings_error},
+        "dataset": live.build_dataset(pool, settings, wired),
+        "notes": {"pool": pool, "settings": settings, "settings_error": settings_error,
+                  "cells": None if wired is None else wired["cells"]},
     }
+
+
+def _profile_now_kwargs(now) -> dict:
+    """`exp_profile.build_profiles` 的 `now`（平行 PR #965 新增的關鍵字參數，決定台灣今天）。
+
+    呼叫端寫成相容兩版：該參數存在 → 注入 `now`；main 上尚未合併 #965 → 不傳（行為與 #965 之前相同）。
+    以簽章判斷，不以 `TypeError` 判斷（那會把函式內部的型別錯誤誤當成「舊版」而吞掉）。
+    #965 合併後此判斷恆為真，可改成直接傳 `now=now`。
+    """
+    return {"now": now} if "now" in inspect.signature(exp_profile.build_profiles).parameters else {}
+
+
+def _load_funds(codes, settings, settings_error, values) -> dict:
+    """C2 接線（2026-10-14）：兩段取數 —— 先基本資料（全部母體），再只對 `EXP-2` 會列出的檔取淨值與配息。
+
+    - 基本資料：`fund_keys.resolve_full_keys` → `exp_profile.build_profiles`（三來源；L1 例外已在 L2 收成 failed）。
+    - 淨值：`live.nav_codes_needed`（已存條件篩完的名單）→ `exp_nav.load_nav_dividend`，傳 `declared_ccy` 與
+      `declared_ccy_source`（幣別未確定者傳 None，資料層隔離成 `ccy_undetermined`）。
+    - 代碼對照表讀不到（L1 例外，`fund_keys` 不攔）→ 整批 ⛔ 取數失敗（訊息遮蔽後上畫面，不吞）。
+    - 每一格的原因與來源標示在 `live.assemble_wired` 統一遮蔽（本層交 `mask`）。
+    """
+    mask = lambda text: masking.mask_message(text, values)  # noqa: E731
+    # 同一個當下時刻餵給基本資料、淨值與畫面的「台灣今天」（三處判同一天，測試可重現）。
+    now = datetime.now(live.TAIPEI)
+    try:
+        key_results = fund_keys.resolve_full_keys(list(codes))["results"]
+    except Exception as exc:  # noqa: BLE001 —— 轉成畫面上的 ⛔ 取數失敗（遮蔽後原文），不是吞掉
+        return live.wiring_failed(mask(f"代碼對照表讀取失敗：{type(exc).__name__}: {exc}"))
+    profiles = exp_profile.build_profiles(key_results, **_profile_now_kwargs(now))
+    needed = live.nav_codes_needed(profiles["rows"], settings, settings_error)
+    funds, unresolved = live.nav_requests(needed, key_results, profiles["declared"])
+    nav_out = exp_nav.load_nav_dividend(funds, now=now) if funds else None
+    return live.assemble_wired(
+        profiles, needed, nav_out,
+        unresolved=unresolved,
+        today=now.date(),
+        mask=mask,
+        withheld_texts=_NAV_UNAVAILABLE_WITHHELD,
+        input_conflict=nav_dividend.WITHHELD_INPUT_CONFLICT,
+    )
 
 
 def _load_settings(values) -> tuple:

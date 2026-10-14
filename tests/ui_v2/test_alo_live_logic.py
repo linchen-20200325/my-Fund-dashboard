@@ -1011,6 +1011,8 @@ def test_第二輪6_兩筆只登記不改行為的GAP在():
 _THRESHOLD_ALIASES = {
     "ui_v2/hld/live.py": "NAV_FRESH_DAYS_YELLOW",
     "ui_v2/alo/live.py": "NAV_MAX_AGE_DAYS",
+    # 2026-10-14 exp C2 接線：標的探索頁同一個門檻（規則 11），別名同樣只能指向共用常數。
+    "ui_v2/exp/live.py": "NAV_OLD_DAYS",
 }
 
 

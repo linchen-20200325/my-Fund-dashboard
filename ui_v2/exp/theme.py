@@ -91,6 +91,18 @@ ALL_COLORS = (
 )
 
 
+# 規則 10（客戶 2026-10-14 裁示：來源要顯示、但不新增主表欄位）：值旁的簡短來源標示 `.exp-src`。
+# 顏色用弱文字 `TEXT_MUTED`（上方對比表「弱文字／卡底」「弱文字／格底」兩組已算過 ≥ 4.5）；
+# 刻意**不是**藥丸形、沒有框線 —— 它不是 `44` 5.2 的徽章（徽章是封閉列舉，來源標示不在其中）。
+# `page.py` 把它接在 `<style>` 最後；完整說明在 tooltip（`title` 屬性），這裡只管樣式。
+SOURCE_TAG_CSS = f"""
+    .stApp .exp-src, .exp-src {{
+      margin-left: .35rem; font-size: .66rem; font-weight: 400;
+      color: {TEXT_MUTED}; white-space: nowrap;
+    }}
+    """
+
+
 def tone_hex(tone: str) -> str:
     """把 logic 回傳的顏色語意換成色碼。查不到就回中性色，不猜。"""
     return TONE_HEX.get(tone, TEXT_PRIMARY)
