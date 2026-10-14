@@ -1187,6 +1187,23 @@ def test_日期_類別層_同類別兩檔過期_兩個日期都寫出來_各標�
     assert rows[fixtures.SATELLITE]["_value"] is not None                 # 其他類別照算
 
 
+def test_日期_類別層_同一檔掛兩張保單同類別_代碼只列一次():
+    """業務唯一鍵是（policy_id, fund_code）⇒ 同一檔掛兩張保單、同類別時，`aggregated_holdings` 會交出兩列同代碼。
+    日期句是「逐檔」列，同一檔不得重複列兩次（2026-10-14 稽核 T／U 補）。整塊空狀態那一支同樣不得重複。"""
+    dataset = _stale_mv({"AAAA": "2026-09-14", "BBBB": "2026-09-03"})
+    twin = dict(next(h for h in dataset["holding"] if h["fund_code"] == "AAAA"), policy_id="P999")
+    dataset["holding"].insert(1, twin)                                     # AAAA（P001）、AAAA（P999）、BBBB…
+    assert [h["fund_code"] for h in logic.aggregated_holdings(dataset)][:3] == ["AAAA", "AAAA", "BBBB"]  # 前提
+    core = {r["_bucket"]: r for r in logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]}[fixtures.CORE]
+    assert core["current_text"] == "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日"
+    assert core["_count"] == 3                                             # 檔數照舊算三列（不因去重而少算）
+
+    every = _stale_mv({"AAAA": "2026-09-14", "BBBB": "2026-09-03", "CCCC": "2026-08-30", "DDDD": "2026-09-01"})
+    every["holding"].insert(1, dict(next(h for h in every["holding"] if h["fund_code"] == "AAAA"), policy_id="P999"))
+    block = logic.find_block(logic.build_page_model(every), "ALO-2")
+    assert block["placeholder"]["text"].count("（AAAA）") == 1, block["placeholder"]["text"]
+
+
 def test_日期_每一類都只因過期而缺_照舊整塊一句_逐檔列日期():
     """理由是同一種（淨值過期），只是日期不同 → 不因日期不同改走逐類別，照舊整塊空狀態一句。"""
     stale = {"AAAA": "2026-09-14", "BBBB": "2026-09-03", "CCCC": "2026-08-30", "DDDD": "2026-09-01"}
@@ -1271,7 +1288,12 @@ def test_日期_舊兩鍵形狀照收_畫舊的無日期字面():
 
 
 def test_日期_正式模式source一律交last():
-    """`source.py` 組 dataset 的那一段：`nav_not_ready` 三個鍵都在，`last` 取 `too_old_last`（AST，不 import source）。"""
+    """`source.py` 組 dataset 的那一段：`nav_not_ready` 三個鍵都在，各自讀的 notes 鍵名**逐字**正確（AST，不 import source）。
+
+    ~~`"too_old_last" in found[0]["last"]`（子字串比對）~~ → 2026-10-14 稽核 T／U（有意識的更正，不是漏刪）：
+    子字串比對放過 `.get("too_old_last_x")`；改為精確比對該運算式裡的字串字面值集合。
+    行為面的守衛另在 `tests/ui_v2/test_alo_source.py::test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備`
+    （走 `source.load_live()`，斷言 `last == {"AAAA": "2026-05-20"}`）；本條補的是結構面（三個鍵都在、鍵名讀對）。"""
     import ast
 
     tree = ast.parse((_ROOT / "ui_v2/alo/source.py").read_text(encoding="utf-8"))
@@ -1280,10 +1302,16 @@ def test_日期_正式模式source一律交last():
         if isinstance(node, ast.Dict):
             for key, value in zip(node.keys, node.values):
                 if isinstance(key, ast.Constant) and key.value == "nav_not_ready" and isinstance(value, ast.Dict):
-                    found.append({k.value: ast.unparse(v) for k, v in zip(value.keys, value.values)})
+                    found.append({k.value: v for k, v in zip(value.keys, value.values)})
     assert len(found) == 1, found
     assert set(found[0]) == {"codes", "days", "last"}
-    assert "too_old_last" in found[0]["last"] and "too_old" in found[0]["codes"]
+
+    def literals(expr):
+        return {n.value for n in ast.walk(expr) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+    assert literals(found[0]["last"]) == {"nav", "too_old_last"}, ast.unparse(found[0]["last"])
+    assert literals(found[0]["codes"]) == {"nav", "too_old"}, ast.unparse(found[0]["codes"])
+    assert ast.unparse(found[0]["days"]) == "live.NAV_MAX_AGE_DAYS"
 
 
 @pytest.mark.parametrize("name", fixtures.ALL_SCENARIO_NAMES)
