@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from datetime import datetime, timedelta, timezone
 
 from . import logic
@@ -109,6 +110,39 @@ def rule_problem(rule) -> str | None:
     if rule.get("op") not in RULE_OPERATORS:
         return f"的比較方向「{rule.get('op')}」不在可選的六個之內"
     return None
+
+
+# 「大於／小於」只能比數值（總管 2026-10-13 決定，比照客戶同日對 Q-07「單填一欄禁止存檔、存檔區寫明缺什麼」的前例）。
+NUMERIC_OPERATORS = ("大於", "小於")
+
+
+def numeric_value_text(index: int, value: str) -> str:
+    """存檔區那一句（字面照總管派工單）。"""
+    return f"第 {index} 列：條件數值「{value}」不是數值，大於／小於只能比數值"
+
+
+def rule_value_problems(field_rules) -> list:
+    """條件列裡「大於／小於」配上轉不成數的數值 → 每列一句（`numeric_value_text`）；沒有回空清單。
+
+    - 數值欄留空的列**不算**（`44` `EXP-1`：留空 → 該列不生效，維持原行為）；
+    - 「nan」「inf」這類 `float()` 吃得下、但比不出大小的字，同樣算轉不成數；
+    - 只判斷，**不修正、不丟棄**那一列 —— 交回的句子只用來停用存檔並寫在存檔區。
+    ⚠️ 刻意不併進 `rule_problem`：那一支也用在解析已存設定，併進去會讓雲端上已存的舊條件整份讀不了。
+    """
+    out = []
+    for index, rule in enumerate(field_rules or (), start=1):
+        if rule.get("op") not in NUMERIC_OPERATORS:
+            continue
+        value = str(rule.get("value", ""))
+        if value.strip() == "":
+            continue
+        try:
+            ok = math.isfinite(float(value))
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            out.append(numeric_value_text(index, value))
+    return out
 
 
 def parse_user_settings(rows, broken_keys=()) -> tuple:
@@ -324,6 +358,8 @@ def exp1_save_entries(field_rules) -> list:
         problem = rule_problem(rule)
         if problem:
             problems.append(f"第 {index} 列{problem}")
+    # 總管 2026-10-13 決定：「大於／小於」配上轉不成數的數值 → 不寫（畫面上存檔已停用，這裡是第二道）。
+    problems.extend(rule_value_problems(rules))
     if problems:
         return [_entry(KEY_RULES, None, "未存檔：" + "；".join(problems))]
     return [_entry(KEY_RULES, json.dumps(rules, ensure_ascii=False))]
@@ -480,6 +516,15 @@ def build_live_model(live_input: dict, *, field_rules=None, field_columns=None, 
         code_column=True,
     )
     model = apply_live_notes(model, notes, save_wired=save_wired)
+    value_problems = rule_value_problems(field_rules)
+    if value_problems:
+        # 總管 2026-10-13 決定（比照 Q-07 前例）：存檔停用，存檔區逐列寫明；不自動修正、不丟棄該列。
+        exp1 = logic.find_block(model, "EXP-1")
+        exp1["detail_lines"].extend(value_problems)
+        for button in exp1["buttons"]:
+            if button["_action_kind"] == ACTION_SAVE and button["_enabled"]:
+                button["_enabled"] = False
+                button["disabled_reason"] = "；".join(value_problems)
     if not settings_error and (field_columns is not None or field_sort is not None):
         settings = notes.get("settings") or {}
         if set(field_columns or ()) != set(settings.get(KEY_COLUMNS) or ()) \

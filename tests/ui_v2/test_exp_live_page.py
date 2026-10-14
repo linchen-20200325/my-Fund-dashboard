@@ -256,3 +256,27 @@ def test_條件作用在資料未備欄位_畫面照列並標無法判定_結論
     assert text.count("⬜ 無法判定（資料未備：ccy）") == 2
     assert ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
     assert "<th>無法判定</th>" in text                                    # EXP-7 第四欄
+
+
+def test_大於小於填了非數字_存檔停用_存檔區寫明_改成數字後才可存(monkeypatch):
+    """總管 2026-10-13 決定（比照 Q-07 前例）：停用存檔、寫明哪一列；不自動修正、不丟棄那一列。"""
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    at.button(key="exp1live_btn_0").click().run()            # 新增條件
+    rule_id = _first_rule_id(at)
+    at.text_input(key=f"exp1live_{rule_id}_field").input("mgmt_fee_rate_pct")
+    at.text_input(key=f"exp1live_{rule_id}_op").input("大於")
+    at.text_input(key=f"exp1live_{rule_id}_value").input("abc").run()
+    _ok(at)
+    line = "第 1 列：條件數值「abc」不是數值，大於／小於只能比數值"
+    assert at.button(key="exp1live_btn_1").disabled
+    assert line in _text(at)
+    assert at.text_input(key=f"exp1live_{rule_id}_value").value == "abc"   # 不改、不丟
+    assert STUB.SAVES == []
+    at.text_input(key=f"exp1live_{rule_id}_value").input("1.5").run()
+    _ok(at)
+    assert not at.button(key="exp1live_btn_1").disabled
+    assert line not in _text(at)
+    at.button(key="exp1live_btn_1").click().run()
+    _ok(at)
+    assert STUB.SAVES == [("exp_filter_rules",
+                           '[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1.5"}]', "rules")]

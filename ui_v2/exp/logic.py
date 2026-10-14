@@ -1006,6 +1006,8 @@ def _build_exp1(dataset, *, draft_rules, save_failed_message, fail_lines=(), sav
         # `44` `EXP-1` 規則欄逐字：「本塊掛一枚『存檔』按鈕（`action_kind` 為 `存檔`）」。
         # ⚠️ 停用條件：`44` 塊下方的「其一」已就地判讀為走 `SET-4` 那一種（**不宣告任何停用條件**），
         #    並註明「這一步是本組判讀，客戶未逐字點名，可推翻」。本檔照那個判讀做。
+        #    正式模式另有一條（總管 2026-10-13 決定，比照 Q-07 前例）：「大於／小於」配上轉不成數的數值 → 停用，
+        #    由 `live.rule_value_problems` 套上；示範模式不套。清空照舊可存。
         _button(TEXT_SAVE, "存檔"),
     ]
 

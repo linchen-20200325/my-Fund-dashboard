@@ -518,3 +518,70 @@ def test_母體說明行_讀取時間轉台北時間_寫出最長更新間隔():
     assert live.pool_read_line(dict(pool, read_at=None)) is None
     assert live.pool_read_line(dict(pool, read_at="2026-10-13T10:05:00")) is None     # 沒有時區：不猜
     assert live.pool_read_line(dict(pool, read_at="壞字串")) is None
+
+
+# ═════════════════════ 大於／小於只能比數值（總管 2026-10-13 決定，比照 Q-07 前例） ═════════════════════
+
+
+def _save_button(model):
+    (button,) = [b for b in _b(model, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_SAVE]
+    return button
+
+
+@pytest.mark.parametrize("op", ["大於", "小於"])
+@pytest.mark.parametrize("value", ["abc", "1.2%", "nan", "inf", "一百"])
+def test_大於小於配上轉不成數的數值_存檔停用_存檔區逐列寫明(op, value):
+    rows = [{"field": "fund_code", "op": "等於", "value": "A01"},
+            {"field": "mgmt_fee_rate_pct", "op": op, "value": value}]
+    model = _model(field_rules=rows)
+    line = f"第 2 列：條件數值「{value}」不是數值，大於／小於只能比數值"
+    button = _save_button(model)
+    assert button["_enabled"] is False and button["disabled_reason"] == line
+    assert line in _b(model, "EXP-1")["detail_lines"]
+    # 不自動修正、不丟棄：那一列照原樣留在條件卡上
+    assert [row["text"] for row in _b(model, "EXP-1")["_rows"]][1] == f"mgmt_fee_rate_pct {op} {value}"
+    # 第二道：就算按到了，存檔輸入也不寫，寫明同一句
+    entry = live.exp1_save_entries(rows)[0]
+    assert entry["value"] is None and line in entry["error"]
+    assert live.run_saves([entry], lambda *a: pytest.fail("不得寫入")) == {live.KEY_RULES: entry["error"]}
+
+
+def test_數值留空或轉得成數或不是大小比較_存檔照舊可用():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "小於", "value": ""},
+            {"field": "mgmt_fee_rate_pct", "op": "大於", "value": " 1.5 "},
+            {"field": "fund_code", "op": "等於", "value": "abc"},
+            {"field": "inception_on", "op": "晚於", "value": "非日期也照舊"}]
+    model = _model(field_rules=rows)
+    assert _save_button(model)["_enabled"] is True
+    assert not any("不是數值" in line for line in _b(model, "EXP-1")["detail_lines"])
+    assert live.exp1_save_entries(rows)[0]["error"] is None
+    assert live.rule_value_problems(rows) == []
+    # 清空照舊可存（`44` `EXP-1` 其一的理由不受影響）
+    assert _save_button(_model(field_rules=[]))["_enabled"] is True
+
+
+def test_多列都有問題_逐列寫出各自列號():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"},
+            {"field": "fund_code", "op": "等於", "value": "A01"},
+            {"field": "mgmt_fee_rate_pct", "op": "小於", "value": "y"}]
+    assert live.rule_value_problems(rows) == [
+        "第 1 列：條件數值「x」不是數值，大於／小於只能比數值",
+        "第 3 列：條件數值「y」不是數值，大於／小於只能比數值",
+    ]
+    model = _model(field_rules=rows)
+    assert _save_button(model)["disabled_reason"] == "；".join(live.rule_value_problems(rows))
+
+
+def test_存檔已因讀不到設定停用時_停用原因不被蓋掉_存檔區仍寫明():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"}]
+    model = _model(field_rules=rows, inputs=_input(settings_error="boom"))
+    button = _save_button(model)
+    assert button["_enabled"] is False and button["disabled_reason"] == live.SAVE_UNREADABLE_REASON
+    assert "第 1 列：條件數值「x」不是數值，大於／小於只能比數值" in _b(model, "EXP-1")["detail_lines"]
+
+
+def test_已存條件裡的非數值不擋讀取_照舊歸無法判定():
+    """擋的是存檔，不是讀取：雲端上已存的舊條件不能因為這條規則整份讀不了。"""
+    text = '[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"}]'
+    settings, error = live.parse_user_settings(_rows(exp_filter_rules=text), [])
+    assert error is None and settings[live.KEY_RULES][0]["value"] == "x"
