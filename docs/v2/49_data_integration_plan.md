@@ -714,6 +714,15 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
   - 單一來源寫任意三個英文字母（例 `XYZ`）會被 L1 `normalize_declared_ccy` 當成 ISO 幣別收下（`shared.data_quality.normalize_iso_ccy` 只看形狀、不查 ISO 4217 清單；既有行為）。只有一個來源有值時，`exp_profile` 會把它判成 `ok`。
   - 幣別部分來源失敗而判 `ok` 時，該格 `reason` 含失敗來源的 L1 錯誤原文第一行（未遮蔽）。**L3 接畫面時，遮蔽範圍必須涵蓋每一格的 `reason`**，不只 `source_status`。
   - `exp_nav` 記憶的大小只受代碼總數與存活時間限制，沒有容量上限；沒有 single-flight（同一檔並行查詢各自出門）。
+- (aa) **MoneyDJ 基本資料頁身分判準修訂、TDCC 代碼無法對照（依 #961 探測報告；以 `17840f3` 為底；決策者：AI 總管；技術判定，不送客戶）。** 編號跳過 (z)：平行的 #965 在本節檔尾新增 (z)，後合併者以 merge commit 解衝突。依據：`origin/probe/moneydj-basic-results:results/20261014T101710Z_run38548232056/report.json`（`complete=true`；GitHub runner **直連**，與 production 經 NAS 代理的路徑不同）；18 頁原始 HTML 已逐頁存成 golden fixture（`tests/fixtures/moneydj_basic/`，gzip，真實代碼頁 sha256 與報告逐頁相同；負控頁的代碼換成佔位符、測試內現編代碼代回）。
+  - **實測**：8 個真實代碼在 www 首選頁型都回 200、各有恰 1 張含「基金名稱」的表、四欄字面都讀得到（成立日期 8/8 補零 `YYYY/MM/DD`；幣別 8/8「美元」，境外頁尾端帶 `&nbsp;`、L1 去頭尾空白時已去掉；配息頻率月配 6、季配 1、空白 1）。**但頁面可見文字（含那張表）完全沒有出現代碼**：代碼只在 href／onclick 與 `<script>`、照請求網址原樣回顯，負控代碼的空殼頁回顯數量相同。⇒ C1 的 ok 判準（可見文字以詞界提到代碼）8/8 失敗、(u) 的 `code_in_label_table` 0/8 成立 —— 兩者結構上都不可能成立，正式函式對 8 檔全部回 `failed`，畫面會把正常取回的頁面錯標 ⛔，且與負控輸出相同。
+  - **現行身分判準**（`declared_profile._identify_name_table`）：以**請求的代碼**取頁 → 200 → 首選或次要頁型回傳的頁面中**恰有一張**含「基金名稱」標籤的表，且該表「基金名稱」只有一個值、去除 `\xa0` 與空白後非空。兩張以上含該標籤的表（不論幾張非空）→ 不採用。信任模型同 A 鏈淨值取數（「代碼 → MoneyDJ 網址」即身分）。頁型不符時 title 仍帶基金名稱但表內四欄全空 → 不採用，**不改用 title 取值**。ok 結果的 `binding` 改為 `{method: "requested_code_populated_name_table", identity_confirmed, name_table_count, populated_name_table_count, name_nonempty, code_in_label_table, code_in_page_text}`；後兩鍵是舊條件，**降為附加資訊、值照實**（真實頁面皆 False）。L2 `exp_profile._bound` 改看新判準的欄位（`is True`、張數須為 int 1）。(u) 的「表格內未見代碼」閘門自此不用（(u) 原文不改，以本條為準）。
+  - **錯誤分類據實**（L1 新增 status；L2 對應）：頁面 200 但不符判準（空殼、「無資料」、頁型不符的空表、兩張以上名稱表、名稱自相矛盾、200 但內文空白）→ `unrecognized_page` → 畫面 ⬜「MoneyDJ 頁面無法確認是本檔：<逐網址原因>」，**不是** ⛔；四個網址全部 404 → `not_found` → ⬜；只有取不到（網路錯誤、逾時、403／407／429、5xx、host 冷卻中、非預期例外）才是 `failed` → ⛔。沒有任何網址 ok 時依序判：任一網址取不到 → `failed`（沒讀到的那一頁可能正是本檔）；否則任一網址回來了但不符 → `unrecognized_page`；否則 → `not_found`。後兩者與 `failed` 一樣只進 5 分鐘失敗記憶、不進 1 小時成功快取（維護頁、暫時 404 可能是短暫的）。MoneyDJ 仍不判 `not_listed`。
+  - **TDCC：(x) 有答案了** —— 3-2 清單（5,295 列）用另一套代碼（例 `GLIACU`、`AGIF-FVGM`），探測的代碼在全部欄位 0 命中。清單取得成功、代碼 0 命中 → 新 status `code_unmapped`，L2 幣別歸類「代碼無法對照（TDCC 清單使用不同代碼體系）」，不再叫「未收錄」。**不以基金名稱模糊比對去找對應。** TDCC 自此對 MoneyDJ 代碼形同不提供幣別；要讓 TDCC 成為幣別來源，需要一份代碼對照（新資料源或新對照表），屬新需求，本條不做。
+  - **待查：FundClear `GetFundBasicInfo` 9/9 `JSONDecodeError`（回應非 JSON）。** 報告沒有存回應本文，原因未知（可能是直連被擋回 HTML、端點改版、或需要特定標頭）；直連路徑，production 經 NAS 代理是否相同未驗。本 PR 不修、不改探測腳本；**下一次探測應保存失敗回應的前 2 KB**（狀態碼、Content-Type、本文開頭）再判。
+  - **登記：tcbbankfund 子網域兩頁型對所有代碼（含 8 個真實代碼）都 404。** 只登記，不改取數順序；是否因直連造成未驗。現況每檔多兩個必然 404 的請求。
+  - **未驗**：production 經 NAS 代理的回應是否與直連相同；MoneyDJ 對不存在的代碼是否**永遠**不回某一檔的頁面（只有一個負控代碼、一次探測）；L1 未檢查回應的最終網址（報告各頁 `redirect_history` 皆空，但正式函式沒有據此設防）。
+  - **語意衝突（文字上不衝突）**：平行的 #966 有一條契約測試以舊形狀 `binding = {"code_in_label_table": True}` 當 MoneyDJ 替身；本條合併後該替身會被判「身分未核實」，期望值 `meta:MoneyDJ+TDCC` 會變成 `meta:TDCC`。後合併者須把該替身改成新形狀（`binding` 帶 `method`／`identity_confirmed` 等鍵）。
 
 ---
 

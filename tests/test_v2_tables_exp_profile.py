@@ -21,12 +21,39 @@ TDCC_OBS = "2026-10-14T00:10:00+00:00"
 
 # ───────────────────────── L1 回傳的替身（形狀照 declared_profile）─────────────────────────
 
+def mdj_binding(confirmed=True):
+    """L1 ok 結果的 `binding`（形狀照 `declared_profile._fetch_moneydj_basic_fields_cached`）。
+    2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者 AI 總管；依據 #961 探測報告）：
+    舊替身是 `{"code_in_label_table": bound, "code_in_page_text": True}`；那兩鍵現在只是附加資訊（真實頁面皆 False）。"""
+    return {"method": dp.MONEYDJ_BINDING_METHOD, "identity_confirmed": confirmed, "name_table_count": 1,
+            "populated_name_table_count": 1, "name_nonempty": True,
+            "code_in_label_table": False, "code_in_page_text": False}
+
+
 def mdj_ok(name="安聯收益成長基金", ccy="美元", freq="月配", inception="2012/03/23", *, bound=True,
            conflicts=(), at=MDJ_AT):
     return {"status": dp.STATUS_OK, "source": "MoneyDJ:www.moneydj.com:yp011001", "full_key": CODE,
             "fields": {"基金名稱": name, "計價幣別": ccy, "配息頻率": freq, "成立日期": inception},
-            "label_conflicts": list(conflicts), "binding": {"code_in_label_table": bound, "code_in_page_text": True},
+            "label_conflicts": list(conflicts), "binding": mdj_binding(bound),
             "fetched_at": at, "error": None, "cooling": False, "cooling_remaining_sec": None}
+
+
+def mdj_unrecognized(reason="yp011001@www.moneydj.com：頁面沒有含「基金名稱」標籤的表"):
+    return {"status": dp.STATUS_UNRECOGNIZED, "source": "MoneyDJ", "full_key": CODE,
+            "fields": {lb: None for lb in dp.MONEYDJ_LABELS}, "label_conflicts": [], "fetched_at": None,
+            "error": "（逐網址原文）", "reason": reason, "cooling": False, "cooling_remaining_sec": None}
+
+
+def mdj_not_found():
+    return {"status": dp.STATUS_NOT_FOUND, "source": "MoneyDJ", "full_key": CODE,
+            "fields": {lb: None for lb in dp.MONEYDJ_LABELS}, "label_conflicts": [], "fetched_at": None,
+            "error": "（逐網址原文）", "reason": "全部 404", "cooling": False, "cooling_remaining_sec": None}
+
+
+def tdcc_unmapped():
+    return {"status": dp.STATUS_CODE_UNMAPPED, "source": "TDCC:OpenAPI:3-2", "full_key": CODE,
+            "fields": {"基金名稱": None, "計價幣別": None}, "fetched_at": None, "observed_at": TDCC_OBS,
+            "error": None, "cooling": False, "cooling_remaining_sec": None}
 
 
 def tdcc_ok(ccy="USD", name="安聯收益成長", observed=TDCC_OBS):
@@ -411,7 +438,10 @@ def _real_mdj(monkeypatch, html):
     dp.fetch_moneydj_basic_fields.cache_clear()
 
 
-@pytest.mark.parametrize("inside, want", [(True, "ok"), (False, "not_ready")])
+# 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者 AI 總管；依據 #961 探測報告）：
+# 舊參數 `(False, "not_ready")`：代碼不在表內 → 名稱 ⬜。真實頁面的表內**從來沒有**代碼（0/8），
+# 那條規則會把所有真基金判成 ⬜；現在代碼在不在表內都不影響採用（照實記在 binding）。
+@pytest.mark.parametrize("inside, want", [(True, "ok"), (False, "ok")])
 def test_真L1_代碼在不在表內決定名稱採不採用(monkeypatch, inside, want):
     code_row = f"<tr><td>基金代碼</td><td>{CODE}</td></tr>" if inside else ""
     html = (f"<html><body><a href='#'>{CODE}</a><table><tr><td>基金名稱</td><td>某基金</td></tr>{code_row}"
@@ -431,10 +461,207 @@ def test_成立日期_年份下限常數():
     assert EP.MIN_INCEPTION_YEAR == 1900
 
 
-@pytest.mark.parametrize("flag", [1, "yes", "True", [True], 1.0])
-def test_綁定旗標必須恰為True_truthy不算(flag):
+# 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者 AI 總管；依據 #961 探測報告）：
+# 舊版只驗 `code_in_label_table` 須 `is True`；那個鍵已降為附加資訊，嚴格型別改套在新判準的欄位上。
+@pytest.mark.parametrize("key", ["identity_confirmed", "name_nonempty"])
+@pytest.mark.parametrize("flag", [1, "yes", "True", [True], 1.0, False, None])
+def test_綁定旗標必須恰為True_truthy不算(key, flag):
     # 2026-10-14 稽核 W（突變存活）：`_bound` 必須是 `is True`，放寬成 truthy 要紅
     res = mdj_ok()
-    res["binding"]["code_in_label_table"] = flag
+    res["binding"][key] = flag
     _out, cells = _one(res, not_listed(), not_listed())
     assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
+
+
+@pytest.mark.parametrize("count", [0, 2, True, 1.0, "1", None])
+def test_綁定_名稱表張數必須恰為int1(count):
+    res = mdj_ok()
+    res["binding"]["name_table_count"] = count
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
+
+
+@pytest.mark.parametrize("method", ["code_in_label_table", "", None, dp.MONEYDJ_BINDING_METHOD.upper()])
+def test_綁定_判準名稱不符不算(method):
+    res = mdj_ok()
+    res["binding"]["method"] = method
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
+
+
+@pytest.mark.parametrize("flag", [True, False, None])
+def test_綁定_舊兩鍵只是附加資訊_不影響採用(flag):
+    res = mdj_ok()
+    res["binding"]["code_in_label_table"] = flag
+    res["binding"]["code_in_page_text"] = flag
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["status"] == "ok"
+
+
+def test_舊形狀binding_只有code_in_label_table為True_不算通過():
+    # 平行 PR 的替身若仍用舊形狀，這裡會判 ⬜ —— 明寫出來，不讓它默默通過
+    res = mdj_ok()
+    res["binding"] = {"code_in_label_table": True, "code_in_page_text": True}
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
+
+
+
+# ═══════════════════════ 2026-10-14 身分判準修訂（#961 探測報告）═══════════════════════
+
+def test_MoneyDJ_unrecognized_三欄not_ready_不是取數失敗():
+    out, cells = _one(mdj_unrecognized("yp011001@www.moneydj.com：頁面沒有含「基金名稱」標籤的表"),
+                      tdcc_ok("USD"), fc_ok("USD"))
+    for f in ("fund_name", "inception_on", "dividend_policy"):
+        assert cells[f]["status"] == "not_ready" and cells[f]["failed_sources"] == ()
+        assert cells[f]["reason"] == ("MoneyDJ 頁面無法確認是本檔："
+                                      "yp011001@www.moneydj.com：頁面沒有含「基金名稱」標籤的表")
+    assert cells["ccy"]["status"] == "ok" and cells["ccy"]["sources"] == ("TDCC", "FundClear")
+    assert EP.classify_ccy("MoneyDJ", mdj_unrecognized()) == (EP.CCY_UNVERIFIED, None, None)   # 不參與比對
+    assert cells["ccy"]["failed_sources"] == ()
+    assert out["source_status"][CODE]["MoneyDJ"]["status"] == "unrecognized_page"
+
+
+def test_MoneyDJ_unrecognized_沒有reason時退回error():
+    res = mdj_unrecognized()
+    res["reason"] = None
+    _out, cells = _one(res, tdcc_unmapped(), not_listed())
+    assert cells["fund_name"]["reason"] == "MoneyDJ 頁面無法確認是本檔：（逐網址原文）"
+
+
+def test_MoneyDJ_unrecognized加另兩源失敗_不是table_wide_failed():
+    out, cells = _one(mdj_unrecognized(), failed("t"), failed("f"))
+    assert out["table_wide_failed"] is False                              # MoneyDJ 有回應
+    assert cells["fund_name"]["status"] == "not_ready"
+    assert cells["ccy"]["status"] == "fetch_failed"                       # 幣別兩個來源真的取不到
+
+
+def test_MoneyDJ_not_found_not_ready():
+    _out, cells = _one(mdj_not_found(), tdcc_unmapped(), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_MDJ_NOT_FOUND
+    assert "MoneyDJ:查無頁面（404）" in cells["ccy"]["reason"]
+
+
+def test_TDCC代碼無法對照_不叫未收錄():
+    _out, cells = _one(mdj_ok(ccy="美元"), tdcc_unmapped(), fc_ok("USD"))
+    c = cells["ccy"]
+    assert c["status"] == "ok" and c["sources"] == ("MoneyDJ", "FundClear")
+    assert c["observed_at"] == {} and "TDCC" not in c["fetched_at"]      # 沒採用 TDCC 的任何東西
+    _out, cells = _one(mdj_unrecognized(), tdcc_unmapped(), not_listed())
+    assert "TDCC:代碼無法對照（TDCC 清單使用不同代碼體系）" in cells["ccy"]["reason"]
+    assert "TDCC:未收錄" not in cells["ccy"]["reason"]
+
+
+@pytest.mark.parametrize("source, status", [
+    ("TDCC", "unrecognized_page"), ("TDCC", "not_found"), ("FundClear", "code_unmapped"),
+    ("FundClear", "unrecognized_page"), ("MoneyDJ", "code_unmapped"), ("MoneyDJ", "bogus"),
+])
+def test_來源交出不屬於它的status_當成型別不符(source, status):
+    res = {"status": status, "fields": {}, "error": None, "cooling": False, "cooling_remaining_sec": None}
+    given = {"MoneyDJ": mdj_ok(), "TDCC": tdcc_ok(), "FundClear": fc_ok()}
+    given[source] = res
+    out = EP.build_profiles(_keys(CODE), fetchers=_fetchers(given["MoneyDJ"], given["TDCC"], given["FundClear"]))
+    st = out["source_status"][CODE][source]
+    assert st["status"] == "failed" and "L1 回傳型別不符" in st["error"]
+
+
+# ─────────────── 端到端：真的 L1 ＋ 真實頁面 fixture ───────────────
+
+import gzip as _gzip  # noqa: E402
+import pathlib as _pathlib  # noqa: E402
+
+_FIX = _pathlib.Path(__file__).parent / "fixtures" / "moneydj_basic"
+_REAL_IS_DOMESTIC = src._is_domestic_code
+
+#: 報告實測（`GOLDEN` 在 tests/test_declared_profile.py 有逐字版；這裡只放 L2 的期望值）。
+E2E = {
+    "ACCP138": ("yp011000", "瀚亞多重收益優化組合基金B配息(美元)(本基金得投資於非投資等級之高風險債券基金且配息來源可能為本金)",
+                "2018-09-26", "dist"),
+    "ACTI71": ("yp011000", "聯博多元資產收益組合基金AI配息(美元)(本基金得投資於非投資等級之高風險債券基金且配息來源可能為本金及收益平準金)",
+               "2018-01-16", "dist"),
+    "JFZN3": ("yp011001", "摩根投資基金-多重收益基金A股(美元對沖)(穩定月配)(本基金有相當比重投資於非投資等級之高風險債券且配息來源可能為本金)",
+              "2021-07-02", "dist"),
+    "JFZA6": ("yp011001", "摩根投資基金-多重收益基金A股(美元對沖)(累計)(本基金有相當比重投資於非投資等級之高風險債券)",
+              "2012-05-30", None),
+    "JFZA5": ("yp011001", "摩根投資基金-多重收益基金A股(美元對沖)(每月派息)(本基金有相當比重投資於非投資等級之高風險債券且配息來源可能為本金)",
+              "2012-08-31", "dist"),
+    "JFZA3": ("yp011001", "摩根投資基金-多重收益基金A股(美元對沖)(每季派息)(本基金有相當比重投資於非投資等級之高風險債券且配息來源可能為本金)",
+              "2012-01-13", "dist"),
+    "JFZK2": ("yp011001", "摩根投資基金-多重收益基金A股(美元對沖)(利率入息)(本基金有相當比重投資於非投資等級之高風險債券且配息來源可能為本金)",
+              "2018-03-26", "dist"),
+    "TLZF9": ("yp011001", "安聯收益成長基金-AMg7月收總收益類股(美元)(本基金有相當比重投資於非投資等級之高風險債券且配息來源可能為本金)",
+              "2020-02-03", "dist"),
+}
+#: TDCC 3-2 的真實代碼體系樣本（報告 `tdcc_3_2_extract` 的代碼形狀；名稱刻意用無關字樣 —— 本檔不做名稱比對）。
+_TDCC_OTHER_SYSTEM = [{"基金代碼": "GLIACU", "基金名稱": "某境外基金甲", "計價幣別": "USD"},
+                      {"基金代碼": "AGIF-FVGM", "基金名稱": "某境外基金乙", "計價幣別": "USD"}]
+
+
+def _fixture_html(name):
+    return _gzip.decompress((_FIX / name).read_bytes()).decode("big5", errors="replace")
+
+
+def _e2e_net(monkeypatch):
+    import infra.proxy as proxy_mod
+    pages = {}
+    for code, (pref, *_rest) in E2E.items():
+        sec = "yp011001" if pref == "yp011000" else "yp011000"
+        for page in (pref, sec):
+            pages[f"https://www.moneydj.com/funddj/yp/{page}.djhtm?a={code}"] = _fixture_html(
+                f"moneydj_{code}_{page}.html.gz")
+    calls = []
+
+    def fake(url, **k):
+        calls.append(url)
+        proxy_mod._TLS_FAIL.kind = ""
+        if url in pages:
+            return _Resp(pages[url])
+        proxy_mod._TLS_FAIL.kind = "not_found"           # 報告實測：tcbbankfund 對所有代碼 404
+        return None
+    monkeypatch.setattr(dp, "fetch_url_with_retry", fake)
+    monkeypatch.setattr(src, "_is_domestic_code", _REAL_IS_DOMESTIC)
+    return calls
+
+
+def test_端到端_八檔真實頁面_四欄正確且標MoneyDJ(monkeypatch):
+    calls = _e2e_net(monkeypatch)
+    monkeypatch.setattr(src, "_tdcc_cache", {"3-2": [dict(r) for r in _TDCC_OTHER_SYSTEM]})
+
+    def fundclear(full_key):    # 報告實測 9/9：回應非 JSON
+        return {"status": dp.STATUS_FAILED, "fields": {"currency": None}, "fetched_at": None,
+                "error": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+                "cooling": False, "cooling_remaining_sec": None}
+    for fn in (dp.fetch_moneydj_basic_fields, dp.fetch_tdcc_listing):
+        fn.cache_clear()
+    dp.clear_failure_memory()
+    try:
+        fetchers = {"MoneyDJ": dp.fetch_moneydj_basic_fields, "TDCC": dp.fetch_tdcc_listing, "FundClear": fundclear}
+        out = EP.build_profiles(_keys(*E2E), fetchers=fetchers)
+    finally:
+        for fn in (dp.fetch_moneydj_basic_fields, dp.fetch_tdcc_listing):
+            fn.cache_clear()
+        dp.clear_failure_memory()
+    assert out["table_wide_failed"] is False
+    assert len(calls) == 16                                                # 每檔 tcb 404 一次 ＋ www 首選頁一次
+    for code, (_pref, name, inception, policy) in E2E.items():
+        cells = out["cells"][code]
+        row = next(r for r in out["rows"] if r["fund_code"] == code)
+        assert out["source_status"][code]["MoneyDJ"]["status"] == "ok"
+        assert out["source_status"][code]["TDCC"]["status"] == "code_unmapped"
+        assert cells["fund_name"]["status"] == "ok" and row["fund_name"] == name
+        assert cells["fund_name"]["sources"] == ("MoneyDJ",)
+        assert cells["inception_on"]["status"] == "ok" and row["inception_on"] == inception
+        assert cells["inception_on"]["sources"] == ("MoneyDJ",)
+        assert row["ccy"] == "USD" and cells["ccy"]["sources"] == ("MoneyDJ",)
+        assert cells["ccy"]["raw"] == {"MoneyDJ": "美元"}                    # \xa0 已在 L1 去掉
+        assert cells["ccy"]["failed_sources"] == ("FundClear",)
+        assert "JSONDecodeError" in cells["ccy"]["reason"]
+        assert out["declared"][code] == ("USD", "meta:MoneyDJ")
+        if policy is None:                                                  # JFZA6：原文只有 &nbsp;
+            assert cells["dividend_policy"]["status"] == "not_ready" and row["dividend_policy"] is None
+            assert cells["dividend_policy"]["raw"] == {"MoneyDJ": ""}
+            assert cells["dividend_policy"]["reason"] == "配息頻率「」依對照表不判定配息方式"
+        else:
+            assert cells["dividend_policy"]["status"] == "ok" and row["dividend_policy"] == policy
+            assert cells["dividend_policy"]["sources"] == ("MoneyDJ",)
+        assert row["fetched_at"] == cells["fund_name"]["fetched_at"]["MoneyDJ"]
