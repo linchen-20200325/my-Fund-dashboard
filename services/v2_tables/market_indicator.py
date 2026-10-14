@@ -371,9 +371,18 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     - **當地時刻須與同鍵其餘已收盤根一致**（以資料自證日界，不寫死 00:00）：已收盤根之中，
       當地時刻（時:分:秒.微秒）過半數相同者為基準，不同者不寫並計數；沒有任何一個時刻過半數
       → 無法自證日界，已收盤根全部不寫。
-      **基準的母體**（2026-10-14 稽核 N 要求寫明並以測試釘住）：同一個鍵之內、觀測日早於未收盤界線的根，
+      ~~**基準的母體**（2026-10-14 稽核 N 要求寫明並以測試釘住）：同一個鍵之內、觀測日早於未收盤界線的根，
       **含**同日重複根與週末根（它們本身不寫，但計入分母 —— 它們出現就代表日界可疑，計入只會讓基準更難成立，
-      不會讓錯位的根被寫進去），**不含**未收盤根（盤中值的時刻不是日界，計入反而會干擾）。理由：匯率日線在倫敦 00:00、^VIX 在芝加哥 02:00
+      不會讓錯位的根被寫進去），**不含**未收盤根（盤中值的時刻不是日界，計入反而會干擾）。~~
+      → **分母與票分開**（AI 總管 2026-10-14 裁決；依據：稽核 M 反例；有意識的更正，不是漏刪）：
+      - **分母**：同一個鍵之內、觀測日早於未收盤界線的全部根，含同日重複根與週末根；不含未收盤根
+        （盤中值的時刻不是日界）。
+      - **票**：只有「不重複、且交易所當地為平日」的已收盤根，才替自己的當地時刻投一票。
+      - **基準**：某時刻票數 > 分母 / 2（嚴格過半）；沒有任何時刻達標 → 已收盤根全部不寫。
+      舊表述的錯：重複根與週末根不只進分母，也替自己的時刻投票；日界錯位時，週一那根會標成週日 23:00，
+      週末根天生與錯位根同一時刻，等於替錯位那一邊投票（反例：倫敦冬令 9 根正確 00:00 ＋ 10 根錯位 23:00〔8 平日、
+      2 週日〕→ 舊做法基準變 23:00、8 根錯位根被寫入、觀測日早一天）。舊表述的用意（可疑根只能讓基準更難成立）
+      仍然成立，改成「只進分母、不投票」之後，那句話才真的成立；代價是基準更難成立，可接受。理由：匯率日線在倫敦 00:00、^VIX 在芝加哥 02:00
       （探測報告實測，夏冬令皆同），所以不能一體要求 00:00；但同一個序列的日線開盤時刻應當一致，
       不一致的那幾根代表那一根的日界不是同一套，取日可能錯位。
       ⚠️ 「過半數」這個門檻是**實作組判準，不是客戶裁示**（決策者：AI 總管，2026-10-13；
@@ -415,15 +424,24 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
     for _local, obs, _value in candidates:
         counts[obs] = counts.get(obs, 0) + 1
 
-    # 基準當地時刻：已收盤根之中**過半數**相同的那一個（沒有過半數 → 無基準，已收盤根全部不寫）。
-    closed_times: dict = {}
+    # 基準當地時刻（AI 總管 2026-10-14 裁決，依稽核 M 反例；見 docstring）：
+    # - 分母：已收盤根（觀測日 < 未收盤界線）全部，含同日重複根與週末根；
+    # - 票：只有「不重複、且交易所當地為平日」的已收盤根，替自己的當地時刻投一票；
+    # - 某時刻票數 > 分母 / 2（嚴格過半）才成為基準；沒有 → 無基準，已收盤根全部不寫。
+    # ~~已收盤根全部替自己的時刻投票~~（舊做法：日界錯位時週一那根落在週日 23:00，週末根天生與錯位根同一時刻，
+    # 等於替錯位那一邊投票 —— 稽核 M 反例；有意識的更正，不是漏刪）。
+    denominator = 0
+    votes: dict = {}
     for local, obs, _value in candidates:
-        if obs < fetched_day:
-            closed_times[local.time()] = closed_times.get(local.time(), 0) + 1
+        if obs >= fetched_day:
+            continue
+        denominator += 1
+        if counts[obs] == 1 and local.weekday() < 5:
+            votes[local.time()] = votes.get(local.time(), 0) + 1
     reference = None
-    if closed_times:
-        top_time = max(closed_times, key=closed_times.get)
-        if closed_times[top_time] * 2 > sum(closed_times.values()):
+    if votes:
+        top_time = max(votes, key=votes.get)
+        if votes[top_time] * 2 > denominator:
             reference = top_time
 
     not_finite = not_closed = duplicated = contract_bad = weekend = time_mismatch = 0
@@ -475,9 +493,10 @@ def rows_from_daily_close(key: str, series, error, *, value_unit: str):
         skipped.append(f"觀測日（交易所時區 {raw_tz}）為星期六或星期日 {weekend} 筆不寫")
     if time_mismatch:
         if reference is None:
-            spread = "、".join(f"{t.isoformat()}×{n}" for t, n in sorted(closed_times.items()))
+            spread = "、".join(f"{t.isoformat()}×{n}" for t, n in sorted(votes.items())) or "無"
             skipped.append(f"已收盤根的當地時刻（交易所時區 {raw_tz}）沒有過半數一致的值"
-                           f"（{spread}），無法自證日界，{time_mismatch} 筆不寫")
+                           f"（票數 {spread}；分母 {denominator}，含重複與週末根，只有不重複的平日根投票），"
+                           f"無法自證日界，{time_mismatch} 筆不寫")
         else:
             skipped.append(f"當地時刻與同鍵已收盤根的基準 {reference.isoformat()}"
                            f"（交易所時區 {raw_tz}）不一致 {time_mismatch} 筆不寫")

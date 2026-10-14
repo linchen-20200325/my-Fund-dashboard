@@ -280,7 +280,20 @@ def test_同一觀測日重複_主鍵會撞_該日全部不寫(monkeypatch, no_o
     monkeypatch.setattr(mi, "fetch_yf_close_with_error", _stub_yf(table))
     out = mi.build_market_indicator_table()
     vix = [r for r in out["rows"] if r["indicator_key"] == "vol_index"]
-    assert [r["obs_date"] for r in vix] == ["2026-09-24"]
+    # ~~`== ["2026-09-24"]`~~ → 2026-10-14（AI 總管裁決「可疑根只進分母、不投票」，依稽核 M 反例；有意識的更正，不是漏刪）：
+    # 已收盤 3 根（09-23 兩根重複、09-24 一根），分母 3；只有不重複的平日根投票 ⇒ 00:00 得 1 票，1 > 3/2 不成立
+    # ⇒ 沒有基準，整鍵不寫。舊期望在舊規則（重複根也替自己的時刻投票，00:00 得 3 票）下為真；
+    # 新規則下 2/3 的已收盤根是重複根，資料無法自證日界，整鍵不寫才是正確結果。
+    assert vix == []
+    assert out["skipped"]["vol_index"][0] == "同一觀測日重複 2 筆不寫"
+    assert "沒有過半數一致的值" in out["skipped"]["vol_index"][1]
+    # 本條原本要驗的事（重複那一天整天不寫、其他天照寫）改用乾淨根較多的序列驗：
+    # 已收盤 5 根、分母 5，00:00 得 3 票（09-21、09-22、09-24）> 5/2 ⇒ 基準成立。
+    table["^VIX"] = (_series([15.0, 15.5, 16.0, 16.1, 17.0],
+                             ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-23", "2026-09-24"]), None)
+    out = mi.build_market_indicator_table()
+    vix = [r for r in out["rows"] if r["indicator_key"] == "vol_index"]
+    assert [r["obs_date"] for r in vix] == ["2026-09-21", "2026-09-22", "2026-09-24"]
 
 
 # ═══════════════════════ Q1／Q2／Q3(c)／T1：第一階段不寫列的鍵 ═══════════════════════
