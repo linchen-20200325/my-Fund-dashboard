@@ -1106,3 +1106,216 @@ def test_第三輪_判定方向與hld黃燈相同_剛好等於門檻不排除():
     table = _nav_table(rows=[_dated_row("AAAA", over), _dated_row("BBBB", edge)],
                        fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
     assert _assemble(table)["notes"]["too_old"] == ["AAAA"]
+
+
+# ═══════════════════════ 客戶 2026-10-14 裁示：舊淨值要標示實際資料日期 ═══════════════════════
+#
+# 「舊淨值要標示實際資料日期；超過既定 10 天門檻 →『⬜ 資料未備』，不得參與相關計算。」
+# 門檻＝`ui_v2/thresholds.py::NAV_NOT_READY_DAYS`（台灣今天 − 最後一筆 nav_date，大於 10 才算）。
+# 本段只補 alo 的日期；hld 已符合（`ui_v2/hld/live.py::NAV_NOTE_NOT_READY`）。
+
+
+def test_日期_assemble_nav_交出過期各檔最後一筆淨值日_剛好10天照收不列():
+    """今天 2026-09-25：09-14（11 天）不納入、日期取它最後一筆；09-15（10 天）照收、不在 too_old_last。"""
+    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-10"), _dated_row("AAAA", "2026-09-14"),
+                             _dated_row("BBBB", "2026-09-15")],
+                       fetched={"AAAA": 2, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    out = _assemble(table)
+    assert out["notes"]["too_old"] == ["AAAA"]
+    assert out["notes"]["too_old_last"] == {"AAAA": "2026-09-14"}          # 最後一筆，不是第一筆
+    assert [r["fund_code"] for r in out["nav"]] == ["BBBB"]                # 過期那檔照舊不交進 nav（不參與計算）
+
+
+def test_日期_assemble_nav_沒有過期的檔_too_old_last為空():
+    table = _nav_table(rows=[_dated_row("AAAA", "2026-09-15"), _dated_row("BBBB", "2026-09-24")],
+                       fetched={"AAAA": 1, "BBBB": 1}, provenance={"AAAA": _prov(), "BBBB": _prov()})
+    assert _assemble(table)["notes"]["too_old_last"] == {}
+
+
+def _stale_mv(stale, missing=()):
+    """市值基準的 full；`stale` ＝ {代碼: 最後淨值日}（過期、不交進 nav），`missing` ＝ 真的缺淨值的代碼。"""
+    dataset = _mv(fixtures.scenario("full"))
+    gone = set(stale) | set(missing)
+    dataset["nav"] = [r for r in dataset["nav"] if r["fund_code"] not in gone]
+    dataset["nav_not_ready"] = {"codes": list(stale), "days": 10, "last": dict(stale)}
+    return dataset
+
+
+def test_日期_11天_逐檔字面帶自己的實際日期():
+    dataset = _stale_mv({"AAAA": "2026-09-14"})
+    value, reason = logic.basis_value(dataset, _holding(dataset, "AAAA"), logic.BASIS_MV)
+    assert value is None
+    assert reason == "⬜ 資料未備：最近一筆淨值 2026-09-14，已超過 10 日"
+    # 其他檔照算（新臺幣 BBBB 10000 × 21.5）
+    assert logic.basis_value(dataset, _holding(dataset, "BBBB"), logic.BASIS_MV) == (10000 * 21.5, None)
+
+
+def test_日期_端到端_assemble_nav到畫面_11天帶日期_10天照算():
+    """live → source 交的形狀 → logic：AAAA 11 天（不參與計算、字面帶日期），其餘三檔 10 天內照算。"""
+    base = _mv(fixtures.scenario("full"))
+    # 匯率觀測日一併挪到 09-15（不晚於淨值日才取得到；否則美元那檔 CCCC 會因缺匯率而缺，與本條無關）
+    base["market_indicator"] = [dict(r, obs_date="2026-09-15") for r in base["market_indicator"]]
+    rows = [dict(r, nav_date="2026-09-15") for r in base["nav"] if r["fund_code"] != "AAAA"]
+    rows.append(dict(next(r for r in base["nav"] if r["fund_code"] == "AAAA"), nav_date="2026-09-14"))
+    codes = ("AAAA", "BBBB", "CCCC", "DDDD")
+    table = _nav_table(rows=rows, fetched={c: 1 for c in codes}, provenance={c: _prov() for c in codes})
+    out = _assemble(table, codes=codes)
+    dataset = dict(base, nav=out["nav"], nav_not_ready={
+        "codes": out["notes"]["too_old"], "days": live.NAV_MAX_AGE_DAYS, "last": out["notes"]["too_old_last"]})
+    alo6 = {r["_fund_code"]: r for r in logic.find_block(logic.build_page_model(dataset), "ALO-6")["_rows"]}
+    assert alo6["AAAA"]["_value"] is None and alo6["AAAA"]["value_text"] == "⬜"
+    assert alo6["AAAA"]["_reason"] == "⬜ 資料未備：最近一筆淨值 2026-09-14，已超過 10 日"
+    assert all(alo6[c]["_value"] is not None for c in ("BBBB", "CCCC", "DDDD"))   # 剛好 10 天照收
+    # 不參與計算：與「AAAA 根本沒有淨值」時逐格同值
+    probe = dict(base, nav=out["nav"])
+    alo6_probe = {r["_fund_code"]: r["_value"]
+                  for r in logic.find_block(logic.build_page_model(probe), "ALO-6")["_rows"]}
+    assert {c: r["_value"] for c, r in alo6.items()} == alo6_probe
+    alo2 = logic.find_block(logic.build_page_model(dataset), "ALO-2")
+    alo2_probe = logic.find_block(logic.build_page_model(probe), "ALO-2")
+    assert [(r["_bucket"], r["_value"], r["_current_pct"]) for r in alo2["_rows"]] == [
+        (r["_bucket"], r["_value"], r["_current_pct"]) for r in alo2_probe["_rows"]]
+
+
+def test_日期_類別層_同類別兩檔過期_兩個日期都寫出來_各標代碼():
+    """AAAA 與 BBBB 同在核心：ALO-2 那一列只寫第一檔的日期會把 BBBB 的吞掉。"""
+    dataset = _stale_mv({"AAAA": "2026-09-14", "BBBB": "2026-09-03"})
+    rows = {r["_bucket"]: r for r in logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]}
+    core = rows[fixtures.CORE]
+    assert core["_value"] is None
+    assert core["current_text"] == "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日"
+    assert rows[fixtures.SATELLITE]["_value"] is not None                 # 其他類別照算
+
+
+def test_日期_類別層_同一檔掛兩張保單同類別_代碼只列一次():
+    """業務唯一鍵是（policy_id, fund_code）⇒ 同一檔掛兩張保單、同類別時，`aggregated_holdings` 會交出兩列同代碼。
+    日期句是「逐檔」列，同一檔不得重複列兩次（2026-10-14 稽核 T／U 補）。整塊空狀態那一支同樣不得重複。"""
+    dataset = _stale_mv({"AAAA": "2026-09-14", "BBBB": "2026-09-03"})
+    twin = dict(next(h for h in dataset["holding"] if h["fund_code"] == "AAAA"), policy_id="P999")
+    dataset["holding"].insert(1, twin)                                     # AAAA（P001）、AAAA（P999）、BBBB…
+    assert [h["fund_code"] for h in logic.aggregated_holdings(dataset)][:3] == ["AAAA", "AAAA", "BBBB"]  # 前提
+    core = {r["_bucket"]: r for r in logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]}[fixtures.CORE]
+    assert core["current_text"] == "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日"
+    assert core["_count"] == 3                                             # 檔數照舊算三列（不因去重而少算）
+
+    every = _stale_mv({"AAAA": "2026-09-14", "BBBB": "2026-09-03", "CCCC": "2026-08-30", "DDDD": "2026-09-01"})
+    every["holding"].insert(1, dict(next(h for h in every["holding"] if h["fund_code"] == "AAAA"), policy_id="P999"))
+    block = logic.find_block(logic.build_page_model(every), "ALO-2")
+    assert block["placeholder"]["text"].count("（AAAA）") == 1, block["placeholder"]["text"]
+
+
+def test_日期_每一類都只因過期而缺_照舊整塊一句_逐檔列日期():
+    """理由是同一種（淨值過期），只是日期不同 → 不因日期不同改走逐類別，照舊整塊空狀態一句。"""
+    stale = {"AAAA": "2026-09-14", "BBBB": "2026-09-03", "CCCC": "2026-08-30", "DDDD": "2026-09-01"}
+    block = logic.find_block(logic.build_page_model(_stale_mv(stale)), "ALO-2")
+    assert block["_rows"] == [] and block["placeholder"]["_empty_kind"] == "來源缺"
+    assert block["placeholder"]["text"] == (
+        "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB）、2026-08-30（CCCC）、"
+        "2026-09-01（DDDD），已超過 10 日")
+
+
+def test_日期_同類別先過期後真缺_第一種定案_真缺那檔不併進日期句():
+    """ALO-GAP-同類別多理由照舊：第一種（過期）定案；同類別後面真缺淨值的那檔不是「另一個日期」，不併進來。"""
+    dataset = _stale_mv({"AAAA": "2026-09-14"}, missing=("BBBB",))
+    rows = {r["_bucket"]: r for r in logic.find_block(logic.build_page_model(dataset), "ALO-2")["_rows"]}
+    assert rows[fixtures.CORE]["current_text"] == "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA），已超過 10 日"
+
+
+def test_日期_新字面後半段與hld的NAV_NOTE_NOT_READY逐字相同():
+    from ui_v2.hld import live as hld_live
+
+    for day in ("2026-09-14", "2026-01-02"):
+        for days in (10, 7):
+            alo = logic.NAV_NOT_READY_DATED_TEXT.format(day=day, days=days)
+            hld = hld_live.NAV_NOTE_NOT_READY.format(day=day, limit=days)
+            assert alo == logic.TEXT_NOT_READY + "：" + hld, (alo, hld)
+    # 舊的無日期字面一字未動（hld 那邊另有逐字守衛）
+    assert logic.NAV_NOT_READY_TEXT == "⬜ 資料未備：最近淨值已超過 {days} 日"
+
+
+def test_日期_字面一定帶日期_不是舊的無日期那一句():
+    dataset = _stale_mv({"AAAA": "2026-09-14"})
+    _, reason = logic.basis_value(dataset, _holding(dataset, "AAAA"), logic.BASIS_MV)
+    assert "2026-09-14" in reason and reason != logic.NAV_NOT_READY_TEXT.format(days=10)
+
+
+@pytest.mark.parametrize("last, exc", [
+    ({}, ValueError),                                            # last 缺漏（少 AAAA）
+    ({"AAAA": "2026-09-14", "BBBB": "2026-09-14"}, ValueError),  # 鍵多一個
+    ({"BBBB": "2026-09-14"}, ValueError),                        # 鍵不一致
+    (None, TypeError),
+    ([["AAAA", "2026-09-14"]], TypeError),
+    ({"AAAA": "20260914"}, ValueError),                          # 非 ISO（3.11 的 fromisoformat 吃得下，要擋）
+    ({"AAAA": "2026/09/14"}, ValueError),
+    ({"AAAA": "2026-9-14"}, ValueError),
+    ({"AAAA": "2026-02-30"}, ValueError),                        # 不存在的日子
+    ({"AAAA": 20260914}, ValueError),
+    ({"AAAA": None}, ValueError),
+])
+def test_日期_last形狀不對_raise(last, exc):
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["nav_not_ready"] = {"codes": ["AAAA"], "days": 10, "last": last}
+    with pytest.raises(exc):
+        logic.nav_not_ready(dataset)
+
+
+@pytest.mark.parametrize("bad", [
+    {"codes": ["AAAA"], "days": 10, "last": {"AAAA": "2026-09-14"}, "extra": 1},
+    {"codes": ["AAAA"], "last": {"AAAA": "2026-09-14"}},
+])
+def test_日期_多餘或缺少鍵_raise(bad):
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["nav_not_ready"] = bad
+    with pytest.raises(TypeError):
+        logic.nav_not_ready(dataset)
+
+
+def test_日期_合格形狀_回三元組():
+    dataset = _stale_mv({"AAAA": "2026-09-14"})
+    assert logic.nav_not_ready(dataset) == (frozenset({"AAAA"}), 10, {"AAAA": "2026-09-14"})
+    dataset["nav_not_ready"] = {"codes": [], "days": 10, "last": {}}
+    assert logic.nav_not_ready(dataset) == (frozenset(), 10, {})
+
+
+def test_日期_舊兩鍵形狀照收_畫舊的無日期字面():
+    """相容：示範模式 fixtures 與既有 test_alo_logic.py 交的是 `{"codes", "days"}`；正式模式一律帶 `last`（下一條鎖）。"""
+    dataset = _mv(fixtures.scenario("full"))
+    dataset["nav"] = [r for r in dataset["nav"] if r["fund_code"] != "AAAA"]
+    dataset["nav_not_ready"] = {"codes": ["AAAA"], "days": 10}
+    assert logic.nav_not_ready(dataset) == (frozenset({"AAAA"}), 10, None)
+    assert logic.basis_value(dataset, _holding(dataset, "AAAA"), logic.BASIS_MV) == (
+        None, logic.NAV_NOT_READY_TEXT.format(days=10))
+
+
+def test_日期_正式模式source一律交last():
+    """`source.py` 組 dataset 的那一段：`nav_not_ready` 三個鍵都在，各自讀的 notes 鍵名**逐字**正確（AST，不 import source）。
+
+    ~~`"too_old_last" in found[0]["last"]`（子字串比對）~~ → 2026-10-14 稽核 T／U（有意識的更正，不是漏刪）：
+    子字串比對放過 `.get("too_old_last_x")`；改為精確比對該運算式裡的字串字面值集合。
+    行為面的守衛另在 `tests/ui_v2/test_alo_source.py::test_Nb_即時取回但淨值日是四個月前_不納入市值_畫資料未備`
+    （走 `source.load_live()`，斷言 `last == {"AAAA": "2026-05-20"}`）；本條補的是結構面（三個鍵都在、鍵名讀對）。"""
+    import ast
+
+    tree = ast.parse((_ROOT / "ui_v2/alo/source.py").read_text(encoding="utf-8"))
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and key.value == "nav_not_ready" and isinstance(value, ast.Dict):
+                    found.append({k.value: v for k, v in zip(value.keys, value.values)})
+    assert len(found) == 1, found
+    assert set(found[0]) == {"codes", "days", "last"}
+
+    def literals(expr):
+        return {n.value for n in ast.walk(expr) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+    assert literals(found[0]["last"]) == {"nav", "too_old_last"}, ast.unparse(found[0]["last"])
+    assert literals(found[0]["codes"]) == {"nav", "too_old"}, ast.unparse(found[0]["codes"])
+    assert ast.unparse(found[0]["days"]) == "live.NAV_MAX_AGE_DAYS"
+
+
+@pytest.mark.parametrize("name", fixtures.ALL_SCENARIO_NAMES)
+def test_日期_示範模式各情境_畫面不出現日期句(name):
+    """示範模式沒有過期的檔（fixtures 的 `nav_not_ready` 代碼為空）⇒ 本次改動不改變任何示範畫面。"""
+    model = logic.build_page_model(fixtures.scenario(name))
+    assert "最近一筆淨值" not in repr(model)

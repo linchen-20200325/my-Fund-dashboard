@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 # ───────────────────────── 缺口與矛盾登記（`44` 沒寫或與線框不一致） ─────────────────────────
 #
@@ -497,14 +497,31 @@ def empty_source_text(source_keys) -> str:
 NAV_NOT_READY_TEXT = "⬜ 資料未備：最近淨值已超過 {days} 日"
 
 
+# 客戶 2026-10-14 裁示「舊淨值要標示實際資料日期；超過既定 10 天門檻 →『⬜ 資料未備』，不得參與相關計算」：
+# 上一句沒有日期 ⇒ 正式模式（dataset 的 `nav_not_ready` 帶 `last`）改畫這一句，逐檔帶自己最後一筆淨值日。
+# ⚠️ 後半段（「最近一筆淨值 {day}，已超過 … 日」）與 `ui_v2/hld/live.py::NAV_NOTE_NOT_READY` 逐字相同
+#    （兩頁不互相 import，由 tests/ui_v2/test_alo_live_logic.py 以字串格式化比對）。
+# ⚠️ 上面的 `NAV_NOT_READY_TEXT` 保留不動：`tests/ui_v2/test_hld_live_freshness.py` 鎖它與 hld 那一句逐字相等，
+#    且舊形狀（沒有 `last`）的呼叫端照舊畫它。計算行為一格未動（過期的檔照舊不交進 `nav`、照舊走缺值路徑）。
+NAV_NOT_READY_DATED_TEXT = "⬜ 資料未備：最近一筆淨值 {day}，已超過 {days} 日"
+
+
 def nav_not_ready(dataset):
-    """`dataset["nav_not_ready"]` → (代碼集合, 天數)。沒有這個鍵（示範模式、舊呼叫端）＝ 沒有過期的檔。
-    形狀不對 → raise（不猜）：代碼要是字串的清單；有代碼時天數要是非負整數。"""
+    """`dataset["nav_not_ready"]` → (代碼集合, 天數, 最後淨值日 `{代碼: "YYYY-MM-DD"}` 或 None)。
+
+    沒有這個鍵（示範模式、舊呼叫端）＝ 沒有過期的檔。形狀不對 → raise（不猜）：
+    - 鍵只能是 `{"codes", "days", "last"}`；代碼要是字串的清單；有代碼時天數要是非負整數。
+    - `last`（客戶 2026-10-14 裁示）：要是 dict（None 也不行），鍵必須與 `codes` 一致，值必須是 ISO 日期字串
+      （`date.fromisoformat(v).isoformat() == v`，擋 `20260901`、`2026/09/01`、`2026-9-1`）。
+    - ⚠️ 相容：只有 `{"codes", "days"}` 兩個鍵的舊形狀照收，回 `last=None` ⇒ 畫舊的無日期字面
+      （`NAV_NOT_READY_TEXT`）。理由：示範模式 `fixtures.py` 與既有測試 `tests/ui_v2/test_alo_logic.py`
+      交的是舊形狀，兩者都不在本次可改範圍；正式模式 `source.py` 一律交 `last`（測試鎖住）。
+    """
     value = dataset.get("nav_not_ready")
     if value is None:
-        return frozenset(), None
-    if not isinstance(value, dict) or set(value) != {"codes", "days"}:
-        raise TypeError(f"nav_not_ready 應為 {{'codes', 'days'}}：{value!r}")
+        return frozenset(), None, None
+    if not isinstance(value, dict) or set(value) not in ({"codes", "days"}, {"codes", "days", "last"}):
+        raise TypeError(f"nav_not_ready 應為 {{'codes', 'days', 'last'}}：{value!r}")
     codes, days = value["codes"], value["days"]
     if isinstance(codes, (str, bytes)) or not isinstance(codes, (list, tuple, set, frozenset)) or not all(
         isinstance(c, str) and c for c in codes
@@ -512,7 +529,29 @@ def nav_not_ready(dataset):
         raise TypeError(f"nav_not_ready 的 codes 應為代碼字串的清單：{codes!r}")
     if codes and (isinstance(days, bool) or not isinstance(days, int) or days < 0):
         raise ValueError(f"nav_not_ready 有代碼卻沒有合格的天數：{days!r}")
-    return frozenset(codes), days
+    if "last" not in value:
+        return frozenset(codes), days, None
+    last = value["last"]
+    if not isinstance(last, dict):
+        raise TypeError(f"nav_not_ready 的 last 應為 {{代碼: 'YYYY-MM-DD'}}：{last!r}")
+    if set(last) != set(codes):
+        raise ValueError(f"nav_not_ready 的 last 與 codes 不一致：多 {sorted(set(last) - set(codes), key=str)!r}、"
+                         f"少 {sorted(set(codes) - set(last))!r}")
+    for code, day in last.items():
+        try:
+            canonical = isinstance(day, str) and date.fromisoformat(day).isoformat() == day
+        except ValueError:
+            canonical = False
+        if not canonical:
+            raise ValueError(f"nav_not_ready 的 last 應為 ISO 日期（YYYY-MM-DD）：{code!r} → {day!r}")
+    return frozenset(codes), days, dict(last)
+
+
+def nav_not_ready_dated_text(entries, days) -> str:
+    """類別層（ALO-2 的列、整塊空狀態）的那一句：一個類別可能有好幾檔過期，句子裡逐檔寫「日期（代碼）」，
+    不只寫一個日期 —— 只寫日期看不出是哪一檔、也會把同類別其他檔的日期吞掉。
+    `entries`：[(代碼, "YYYY-MM-DD"), …]，依持倉順序；版型同 `NAV_NOT_READY_DATED_TEXT`，不另編句子。"""
+    return NAV_NOT_READY_DATED_TEXT.format(day="、".join(f"{day}（{code}）" for code, day in entries), days=days)
 
 
 def not_applicable_text(reason: str) -> str:
@@ -677,9 +716,12 @@ def basis_value(dataset, holding, basis):
     nav = latest_nav(dataset, holding["fund_code"])
     if nav is None:
         # 總管 2026-10-13 裁決：淨值過期而不納入的檔寫準確的那一句；真正缺淨值的照舊。
-        codes, days = nav_not_ready(dataset)
+        codes, days, last = nav_not_ready(dataset)
         if holding["fund_code"] in codes:
-            return None, NAV_NOT_READY_TEXT.format(days=days)
+            if last is None:   # 舊形狀（沒有 `last`）：照舊的無日期字面
+                return None, NAV_NOT_READY_TEXT.format(days=days)
+            # 客戶 2026-10-14 裁示：逐檔帶自己最後一筆淨值日。
+            return None, NAV_NOT_READY_DATED_TEXT.format(day=last[holding["fund_code"]], days=days)
         return None, empty_source_text(["nav"])
     value = holding["units_shares"] * nav["nav_orig_ccy"]
     if nav["ccy"] == "TWD":
@@ -714,21 +756,42 @@ def exceeds(diff, tolerance) -> bool:
     return abs(diff) > tolerance and not math.isclose(abs(diff), tolerance, abs_tol=1e-9)
 
 
-def _category_values(dataset, basis, bucket_names):
+def _category_values(dataset, basis, bucket_names, stale_out=None):
     """回 {類別: {"value": float|None, "reason": str|None, "count": int}}，依持倉出現順序。
-    ALO-GAP-同類別多理由：同一類別遇到的第一種缺值理由就定案，後面的理由不再記。"""
+    ALO-GAP-同類別多理由：同一類別遇到的第一種缺值理由就定案，後面的理由不再記。
+
+    客戶 2026-10-14 裁示（舊淨值標實際日期）：定案的那一種若是「淨值過期」（帶日期的正式形狀），
+    同類別後面同為過期的檔**不算另一種理由**，而是把它的日期併進同一句（`nav_not_ready_dated_text`），
+    否則畫面只看得到第一檔的日期。其他種理由照舊「第一種定案」。
+    `stale_out`（選填 dict）：回填 {類別: [(代碼, 日期), …]}，只含定案理由為過期的類別（給 ALO-2 整塊空狀態用）。"""
     values = {}
+    stale = {}
+    if basis == BASIS_MV:
+        codes, days, last = nav_not_ready(dataset)
+    else:
+        codes, days, last = frozenset(), None, None
     for holding in aggregated_holdings(dataset):
         cat = category_of(holding, bucket_names)
         slot = values.setdefault(cat, {"value": 0.0, "reason": None, "count": 0})
         slot["count"] += 1
         value, reason = basis_value(dataset, holding, basis)
+        code = holding["fund_code"]
+        is_stale = (value is None and last is not None and code in codes
+                    and reason == NAV_NOT_READY_DATED_TEXT.format(day=last[code], days=days))
         if slot["reason"] is not None:
+            if is_stale and cat in stale and code not in {c for c, _ in stale[cat]}:
+                stale[cat].append((code, last[code]))
+                slot["reason"] = nav_not_ready_dated_text(stale[cat], days)
             continue
         if value is None:
             slot["value"], slot["reason"] = None, reason
+            if is_stale:
+                stale[cat] = [(code, last[code])]
+                slot["reason"] = nav_not_ready_dated_text(stale[cat], days)
         else:
             slot["value"] += value
+    if stale_out is not None:
+        stale_out.update(stale)
     return values
 
 
@@ -773,7 +836,8 @@ def _build_alo2(dataset) -> dict:
     values = {}
     denominator = None
     if placeholder is None:
-        values = _category_values(dataset, basis, bucket_names)
+        stale_by_cat = {}
+        values = _category_values(dataset, basis, bucket_names, stale_by_cat)
         denominator = sum(v["value"] for v in values.values() if v["value"] is not None)
         if denominator <= 0:
             # ALO-GAP-分母全缺：每一檔都缺基準值、而且缺的理由是同一個（例：市值基準，
@@ -781,7 +845,15 @@ def _build_alo2(dataset) -> dict:
             # PENDING_TABLES，但 alo 取淨值未獲授權〕）→ 分母不是「零」，是「沒有」。
             # 照 `44` 5.5「來源缺」模板走既有的缺值路徑；理由字串由 `basis_value` 產生，這裡不新編。
             reasons = {v["reason"] for v in values.values()}
-            if len(reasons) == 1 and None not in reasons:
+            if None not in reasons and stale_by_cat and set(stale_by_cat) == set(values):
+                # 客戶 2026-10-14 裁示（舊淨值標實際日期）：每一類都只因淨值過期而缺 —— 理由是同一種，
+                # 只是各檔日期不同；照舊畫整塊一句（不因日期不同改走逐類別），句子裡逐檔列「日期（代碼）」。
+                order = [h["fund_code"] for h in aggregated_holdings(dataset)]
+                entries = dict(e for cat in values for e in stale_by_cat[cat])
+                merged = sorted(entries.items(), key=lambda e: order.index(e[0]))
+                placeholder = _placeholder(nav_not_ready_dated_text(merged, nav_not_ready(dataset)[1]), "來源缺")
+                values = {}
+            elif len(reasons) == 1 and None not in reasons:
                 placeholder = _placeholder(reasons.pop(), "來源缺")
                 values = {}
             elif None in reasons:
