@@ -84,6 +84,9 @@ _CACHE: dict = {}          # (actor, sheet_id) → (存入時間 monotonic, 成�
 # （到期時刻相差不到 `_SAME_COOLDOWN_SEC`）時才接「上次失敗」——舊紀錄不得接到不相干的冷卻上。
 # 比對對象取 `should_skip_gspread` 交回的剩餘秒數（`infra.source_backoff` 那一筆的 until），
 # 不直接讀 `infra.source_backoff`（不在 L2 的 infra 子模組白名單上）。
+# ⚠️ 已知限制（總管 2026-10-13 決定不修：要修得改 L1／infra，超出本檔射程）：同一身分、同一種類的冷卻
+# 若在本頁記下之後被別處覆寫，而新那一筆的到期時刻恰好與本頁記的相差不到 `_SAME_COOLDOWN_SEC`，
+# 本頁會把自己記的原文接到那一筆上。**只影響冷卻說明句後面附的「上次失敗」原文**，不影響燈色、狀態與任何資料。
 _LAST_FAILURE: dict = {}
 _SAME_COOLDOWN_SEC = 2.0
 # 與 `infra.source_backoff._clock` 同一種時鐘（monotonic）；模組層變數讓測試能注入同一個假時鐘。

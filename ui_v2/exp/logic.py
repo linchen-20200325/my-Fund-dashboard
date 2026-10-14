@@ -270,9 +270,11 @@ COLUMN_LABELS = {
 ALWAYS_SHOWN_COLUMN = "fund_name"
 # 正式模式才有的代碼欄（2026-10-13；登記與理由見 `_build_exp2` 的 `code_column`）。不在 `COLUMN_ORDER` 裡。
 CODE_COLUMN = "fund_code"
-# 正式模式才有的「篩選判定」欄（客戶 2026-10-13 裁示：無法判定的檔照列並標原因）。不在 `COLUMN_ORDER` 裡。
+# 正式模式才有的「篩選判定」欄。不在 `COLUMN_ORDER` 裡。
+# 客戶 2026-10-13 裁示只要求顯示「⬜ 無法判定（資料未備）」，沒有指定另開一欄；開一欄是 AI 總管的落地選擇，
+# 並把版面變動縮到最小（總管 2026-10-13 決定）：清單裡至少一列無法判定時才出現，只在那些列寫原因，
+# 明確符合的列留白。〔已撤〕明確符合的列寫「符合」（`JUDGE_MATCH_TEXT`）—— 本檔不用刪除線記號，改寫〔已撤〕。
 JUDGE_COLUMN = "篩選判定"
-JUDGE_MATCH_TEXT = "符合"
 
 # `44` `EXP-2` 規則欄逐字：「預設不排序，依 `fund_code` 字面值排列」。
 DEFAULT_SORT_FIELD = "fund_code"
@@ -502,7 +504,10 @@ TEXT_SAVEFAIL_BANNER = "＋ 存檔失敗開關（開）"
 TEXT_UNSAVED_RULES = "未存檔：條件列與已存值不同，存檔後下一次重新載入才生效"
 # 2026-10-13 稽核回修：正式模式多一欄 `fund_code`（`_build_exp2` 的 `code_column`）與「篩選判定」（客戶同日裁示），
 # 「目前只顯示基金名」在那時是假話 —— 照實寫出真的顯示的兩欄。字面為本組擬定。
-TEXT_ONLY_CODE_AND_NAME = "目前只顯示 fund_code、篩選判定與基金名"
+# 〔已撤〕「目前只顯示 fund_code、篩選判定與基金名」一句通用 → 總管 2026-10-13 決定「篩選判定」欄只在有無法判定列時出現，
+#   兩種情形各寫各的（有意識的更正，不是漏刪）。
+TEXT_ONLY_CODE_AND_NAME = "目前只顯示 fund_code 與基金名"
+TEXT_ONLY_CODE_JUDGE_AND_NAME = "目前只顯示 fund_code、篩選判定與基金名"
 TEXT_WATCHLIST_UNREADABLE = "觀察清單目前讀不到（已存設定讀取失敗），不顯示成空的"
 TEXT_EXP4_LIVE = (
     "欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：候選清單只吃已存的設定。"
@@ -581,6 +586,15 @@ def undet_text(reasons) -> str:
     return f"{UNDET_TEXT}（{'；'.join(reasons)}）"
 
 
+def _finite_number(value) -> bool:
+    """轉得成數、而且是有限數（排除 nan、inf）。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return number == number and number not in (float("inf"), float("-inf"))
+
+
 def compare_tristate(left, op: str, right: str):
     """一格比較的三種結果（客戶 2026-10-13 裁示，正式模式）：回 `(True／False／None, 無法判定的原因或 None)`。
 
@@ -593,6 +607,12 @@ def compare_tristate(left, op: str, right: str):
         raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
     if left is None or str(left).strip() == "":
         return None, "資料未備"
+    if op in ("大於", "小於"):
+        # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
+        if not _finite_number(left):
+            return None, "欄位值不是數值"
+        if not _finite_number(right):
+            return None, f"條件數值「{right}」不是數值"
     try:
         return _compare(left, op, right), None
     except UnspecifiedComparison:
@@ -1076,19 +1096,21 @@ def _build_exp2(
 
     rows = []
     cell_states = []
+    show_judge = bool(undet) and any(profile["fund_code"] in undet for profile in matched)
     for profile in matched:
         code = profile["fund_code"]
         nav = latest_nav(dataset, code)
         cells = {}
         if code_column:
             cells[CODE_COLUMN] = _value(code, label=CODE_COLUMN)
-        if undet is not None:
-            # 客戶 2026-10-13 裁示（正式模式）：無法判定的檔照樣列出，在「篩選判定」格寫原因；
-            # 明確符合的檔寫「符合」。這一欄固定跟在代碼欄後面，不進 EXP-4 可選欄位、不是排序選項。
+        if show_judge:
+            # 客戶 2026-10-13 裁示（正式模式）：無法判定的檔照樣列出，標「⬜ 無法判定（…）」。
+            # 落地方式（總管 2026-10-13 決定）：這一欄只在至少一列無法判定時出現，明確符合的列留白；
+            # 固定跟在代碼欄後面，不進 EXP-4 可選欄位、不是排序選項。
             cells[JUDGE_COLUMN] = (
                 _value(undet_text(undet[code]), state=STATE_MISSING, label=JUDGE_COLUMN)
                 if code in undet
-                else _value(JUDGE_MATCH_TEXT, label=JUDGE_COLUMN)
+                else _value("", label=JUDGE_COLUMN)
             )
         for column in shown:
             if column in ("fund_name", "ccy"):
@@ -1198,7 +1220,11 @@ def _build_exp2(
     # 2026-10-13：已存設定讀不到時，「欄位一個也沒勾」是**不知道**，不是使用者沒勾 —— 不印那一句（§1）。
     if len(shown) == 1 and shown[0] == ALWAYS_SHOWN_COLUMN and not visible_columns \
             and not settings_unknown:
-        notes.append(TEXT_ONLY_CODE_AND_NAME if code_column else TEXT_ONLY_FUND_NAME)
+        if not code_column:
+            notes.append(TEXT_ONLY_FUND_NAME)
+        elif matched:
+            # 總管 2026-10-13：正式模式沒有條件、清單是空的時候不寫這一句（沒有任何一欄在顯示）。
+            notes.append(TEXT_ONLY_CODE_JUDGE_AND_NAME if show_judge else TEXT_ONLY_CODE_AND_NAME)
 
     # ⚠️ **登記（`E-08`）**：`44` 說依 `fund_code` 排，但那一欄不在它自己列的五欄裡。
     #    本檔把排序依據寫成表頭上方一行，**不自行把 `fund_code` 加進欄位清單**。
@@ -1218,8 +1244,7 @@ def _build_exp2(
         )
     state = STATE_ERROR if (fail_message or extra_fail_lines) else worst_state(cell_states)
     n_undet = sum(1 for row in rows if undet and row["_fund_code"] in undet)
-    keys = ((CODE_COLUMN,) if code_column else ()) + ((JUDGE_COLUMN,) if undet is not None else ()) \
-        + tuple(shown)
+    keys = ((CODE_COLUMN,) if code_column else ()) + ((JUDGE_COLUMN,) if show_judge else ()) + tuple(shown)
     return _block(
         "EXP-2",
         state=state,
