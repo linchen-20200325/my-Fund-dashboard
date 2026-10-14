@@ -238,3 +238,21 @@ def test_存檔成功後_同一份結果不被當成他處改了而清掉_已存
     _ok(at)
     assert live.TEXT_SAVED in _text(at)
     assert at.checkbox(key="exp4live_col_ccy").value is True
+
+
+# ═════════════════════ 客戶 2026-10-13 裁示：條件作用在資料未備欄位 → 無法判定 ═════════════════════
+
+
+def test_條件作用在資料未備欄位_畫面照列並標無法判定_結論列灰燈不紅(monkeypatch):
+    STUB.STORE["exp_filter_rules"] = json.dumps(
+        [{"field": "fund_code", "op": "不等於", "value": "C03"}, {"field": "ccy", "op": "等於", "value": "USD"}],
+        ensure_ascii=False)
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    text = _text(at)
+    assert _lamp(at) == "目前條件下沒有符合的基金；另有 2 檔無法判定"
+    assert "⛔" not in "".join(m.group(0) for e in at.markdown
+                               for m in re.finditer(r'class="exp-lamp".*?</div>', e.value, re.S))
+    assert "<th>fund_code</th><th>篩選判定</th>" in text
+    assert text.count("⬜ 無法判定（資料未備：ccy）") == 2
+    assert ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
+    assert "<th>無法判定</th>" in text                                    # EXP-7 第四欄

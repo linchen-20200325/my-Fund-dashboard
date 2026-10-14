@@ -476,7 +476,7 @@ def build_live_model(live_input: dict, *, field_rules=None, field_columns=None, 
         demo_hint=False,
         saved_only=True,
         settings_error=settings_error,
-        unspecified_as_error=True,
+        tristate=True,
         code_column=True,
     )
     model = apply_live_notes(model, notes, save_wired=save_wired)

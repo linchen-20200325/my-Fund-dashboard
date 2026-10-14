@@ -81,8 +81,10 @@ def test_fixtures不import_logic_假資料不依賴判定層():
 def test_44還是凍結的那一份():
     """`44` 在 2026-10-13 解凍（落客戶 2026-10-13 裁示：市場總覽 `MKT-4`／`MKT-5` 存檔後下一次重新載入生效（同日再落稽核 G 回修：觀察窗上限、一致性憑證鍵、標題寫已存值、不預勾等）、勾選只過濾下方明細、`Q-07` 半套設定；只在既有行內擴寫、行數不變；上一輪 2026-10-09 為 `HLD-1` 來源欄補宣告，舊值 795614090627cb6368bd2021244e9217），改完重新凍結，下面的 md5 是那一輪改完後的新值。行號引用全靠內容比對，不靠行號 —— 但檔案本身要是那一份。"""
     digest = hashlib.md5(_D44.read_bytes()).hexdigest()
-    assert digest == "77aad71ba0c99b7324f031165aad6dc3", digest
-    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4260  # 4259 行 ＋ 末尾換行
+    # 2026-10-13 再解凍一次（落客戶 2026-10-13 標的探索裁示：`EXP-1` 其二結案、`EXP-2` 代碼欄／缺欄照列／
+    # 條件作用在資料未備欄位〔E-09〕、第四節第六小節可空衝突登記；既有行內只擴寫一句指標、行數不變，全文新增在檔尾第七節第三小節之二，共新增 40 行）。上一個值 77aad71ba0c99b7324f031165aad6dc3、4260 行。
+    assert digest == "c2c11310ac729e08459b0bafc185fba8", digest
+    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4300  # 4299 行 ＋ 末尾換行
 
 
 # ═════════════════════ 二、逐字引文守衛 ═════════════════════
@@ -920,9 +922,15 @@ def test_EXP0只讀那兩塊_不自取數():
     # → 2026-10-13 狀態更新（不是漏刪；客戶 2026-10-13 裁示的 B 線標的探索正式模式第一批）：多一個
     #   `extra_fail_lines` —— 內容是 `{"EXP-1": …, "EXP-2": …}`，**仍然只來自那兩塊**（已存設定讀不到、
     #   條件套用不了），不是新的取數來源；鍵只准這兩塊由下一條斷言釘住。
-    assert params == {"dataset", "count", "has_rules", "rules", "read_states", "extra_fail_lines"}, params
+    # ~~assert params == {…, "extra_fail_lines"}, params~~ 與 `{"EXP-1": settings_lines, "EXP-2": compute_lines}`
+    # → 2026-10-13 客戶裁示（條件作用在資料未備欄位 → 無法判定、不亮紅燈；有意識的政策變更，不是漏刪）：
+    #   「條件套用不了」那一路撤掉，`extra_fail_lines` 只剩 EXP-1 的已存設定讀不到；
+    #   另多 `undet_count` —— 它來自 EXP-2 自己的列（無法判定的列數），仍然只讀那兩塊、不自取數。
+    assert params == {"dataset", "count", "has_rules", "rules", "read_states", "extra_fail_lines",
+                      "undet_count"}, params
     source = pathlib.Path(logic.__file__).read_text(encoding="utf-8")
-    assert 'extra_fail_lines={"EXP-1": settings_lines, "EXP-2": compute_lines}' in source
+    assert 'extra_fail_lines={"EXP-1": settings_lines},' in source
+    assert 'undet_count = sum(1 for row in exp2["_rows"] if undet and row["_fund_code"] in undet)' in source
     # `read_states` 真的只有兩個成員（那兩塊），不是三張卡。
     source = pathlib.Path(logic.__file__).read_text(encoding="utf-8")
     assert 'read_states=(exp1["_state"], exp2["_state"])' in source

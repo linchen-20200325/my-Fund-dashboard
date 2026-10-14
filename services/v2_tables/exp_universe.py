@@ -49,13 +49,17 @@ from __future__ import annotations
 
 import threading
 import time
-
-from infra.cache import register_cache
-from infra.gspread_retry import record_gspread_failure, record_gspread_success, should_skip_gspread
-from repositories import pool_repository
-from services.v2_tables.masking import mask_message
 from datetime import datetime, timezone
 
+from infra.cache import register_cache
+from infra.gspread_retry import (
+    kind_for_gspread_error,
+    record_gspread_failure,
+    record_gspread_success,
+    should_skip_gspread,
+)
+from repositories import pool_repository
+from services.v2_tables.masking import mask_message
 from shared.ttls import TTL_1HOUR
 
 STATUS_OK = "ok"
@@ -75,7 +79,15 @@ SUCCESS_TTL_SEC = TTL_1HOUR
 
 _LOCK = threading.Lock()
 _CACHE: dict = {}          # (actor, sheet_id) → (存入時間 monotonic, 成功結果 dict)
-_LAST_FAILURE: dict = {}   # (actor, sheet_id) → (上一次失敗的冷卻種類, 原文；未遮蔽，回傳前才遮)
+# (actor, sheet_id) → (冷卻種類, 原文〔未遮蔽，回傳前才遮〕, 冷卻到期時刻〔monotonic〕)。
+# 2026-10-13 稽核 K 第三輪：記下這一筆冷卻**何時到期**，只有與目前正在生效的那筆冷卻是同一筆
+# （到期時刻相差不到 `_SAME_COOLDOWN_SEC`）時才接「上次失敗」——舊紀錄不得接到不相干的冷卻上。
+# 比對對象取 `should_skip_gspread` 交回的剩餘秒數（`infra.source_backoff` 那一筆的 until），
+# 不直接讀 `infra.source_backoff`（不在 L2 的 infra 子模組白名單上）。
+_LAST_FAILURE: dict = {}
+_SAME_COOLDOWN_SEC = 2.0
+# 與 `infra.source_backoff._clock` 同一種時鐘（monotonic）；模組層變數讓測試能注入同一個假時鐘。
+_clock = time.monotonic
 
 
 class _PoolCodesCache:
@@ -106,8 +118,18 @@ def _empty(status: str, backend: str, message) -> dict:
             "duplicates": 0, "message": message, "read_at": None, "ttl_sec": SUCCESS_TTL_SEC}
 
 
+def _own_for(record, kind: str, left: float, clock: float):
+    """本模組自己記過的那一筆，若與目前生效的冷卻是同一筆（同種類、到期時刻一致）→ `(種類, 原文)`；否則 None。"""
+    if record is None:
+        return None
+    own_kind, raw, until = record
+    if own_kind != kind or abs((clock + left) - until) > _SAME_COOLDOWN_SEC:
+        return None
+    return own_kind, raw
+
+
 def cooling_text(actor: str, left: float, kind: str, own) -> str:
-    """冷卻中時的那一句（未遮蔽）。`own`：本模組自己記過的 `(種類, 原文)`，沒有為 None。"""
+    """冷卻中時的那一句（未遮蔽）。`own`：本模組自己記過、而且就是目前這筆冷卻的 `(種類, 原文)`，沒有為 None。"""
     seconds = int(left + 0.999)
     if kind == "rate_limited":
         text = TEXT_COOLING_QUOTA.format(actor=_ACTOR_TEXT.get(actor, "憑證"), left=seconds)
@@ -171,17 +193,21 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None, wall=None) ->
     skip, left, kind = should_skip_gspread(*key)
     if skip:
         with _LOCK:
-            own = _LAST_FAILURE.get(key)
+            own = _own_for(_LAST_FAILURE.get(key), kind, left, _clock())
         return _empty(STATUS_FAILED, backend, mask(cooling_text(key[0], left, kind, own)))
 
     try:
         entries = store.list_pool()
     except Exception as exc:  # noqa: BLE001 — 理由見 docstring：照實回失敗，不吞
-        record_gspread_failure(key[0], key[1], exc)
+        # 失敗種類直接從例外判（與 `record_gspread_failure` 內部用的是同一支），不事後再查冷卻表（稽核 K 第三輪）。
+        recorded_kind = kind_for_gspread_error(exc)
+        _key, cooldown = record_gspread_failure(key[0], key[1], exc)
         raw = f"{type(exc).__name__}: {exc}"
-        _skip, _left, recorded_kind = should_skip_gspread(*key)
         with _LOCK:
-            _LAST_FAILURE[key] = (recorded_kind, raw)
+            if cooldown:
+                _LAST_FAILURE[key] = (recorded_kind, raw, _clock() + cooldown)
+            else:
+                _LAST_FAILURE.pop(key, None)
         return _empty(STATUS_FAILED, backend, mask(raw))
     record_gspread_success(*key)
     read_at = (wall or datetime.now(timezone.utc)).isoformat(timespec="seconds")

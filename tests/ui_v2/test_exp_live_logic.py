@@ -181,7 +181,7 @@ def test_只吃已存值_從未存過時_欄位有條件也是尚未設定條件
 def test_只吃已存值_欄位勾選與排序不影響候選清單的欄():
     saved = _input(settings=_settings(rules=_NOT_C03, columns=("fund_name",)))
     model = _model(inputs=saved, field_columns=["fund_name", "ccy", "nav_date"], field_sort="nav_date")
-    assert _b(model, "EXP-2")["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert _b(model, "EXP-2")["column_keys"] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN, "fund_name")
     assert _b(model, "EXP-2")["sort_caption"] == "依 fund_code 字面值排列（未選排序欄位）"
     assert live.TEXT_UNSAVED_EXP4 in _b(model, "EXP-4")["detail_lines"]
     same = _model(inputs=saved, field_columns=["fund_name"], field_sort=None)
@@ -202,7 +202,7 @@ def test_示範模式照舊取當下值_對照組():
 def test_只有代碼_其餘欄寫資料未備與原因_基金不消失_不印None_不帶示意():
     model = _model(inputs=_input(settings=_settings(rules=_NOT_C03, columns=logic.COLUMN_ORDER)))
     exp2 = _b(model, "EXP-2")
-    assert exp2["column_keys"] == (logic.CODE_COLUMN,) + logic.COLUMN_ORDER
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN) + logic.COLUMN_ORDER
     assert _codes(model) == ["A01", "B02"]
     for row in exp2["_rows"]:
         assert row["_cells"][logic.CODE_COLUMN]["text"] == row["_fund_code"]
@@ -248,20 +248,98 @@ def test_母體讀不到_照取數失敗畫_不講成沒有符合的基金(statu
 # ═════════════════════ 條件作用在 ⬜ 欄位：不替缺值選邊（E-09），也不讓整頁當掉 ═════════════════════
 
 
-def test_條件作用在資料未備的欄位_計算失敗_不排除也不保留_整頁照畫():
+# ~~def test_條件作用在資料未備的欄位_計算失敗_不排除也不保留_整頁照畫()~~（紅燈「計算失敗」）
+# → 2026-10-13 客戶裁示（有意識的政策變更，不是漏刪）：條件作用在資料未備欄位 → 該檔照樣列出、標無法判定，
+#   不算符合、不排除、不亮紅燈。下面幾條釘新規則；那一條在寫下當時是 E-09 未裁時的權宜。
+
+
+def _tri_model(rules, codes=("B02", "A01", "C03"), columns=("fund_name",)):
+    return _model(inputs=_input(pool=_pool(codes=codes), settings=_settings(rules=rules, columns=columns)))
+
+
+def test_無法判定_照樣列出_不算符合_不排除_不亮紅燈():
     rules = ({"field": "ccy", "op": "等於", "value": "USD"},)
-    model = _model(inputs=_input(settings=_settings(rules=rules)))
+    model = _tri_model(rules)
     exp0 = _b(model, "EXP-0")
-    assert exp0["_tone_override"] == "紅" and exp0["state_word"] == "計算失敗"
-    assert exp0["text"] == "讀到的那兩塊有一塊計算失敗"
-    assert _codes(model) == []                                        # 不是「全部保留」也不是「0 檔符合」
-    assert logic.TEXT_NO_MATCH not in _b(model, "EXP-2")["notes"]
-    assert any(n.startswith(logic.COMPUTE_ERR_TEXT) and "ccy 等於 USD" in n for n in _b(model, "EXP-2")["notes"])
-    exp7 = _b(model, "EXP-7")
-    assert exp7["_rows"] == [] and exp7["summary_text"] == logic.COMPUTE_ERR_TEXT
+    assert exp0["_tone_override"] == "灰" and exp0["_tone_override"] != "紅"
+    assert exp0["text"] == "目前條件下沒有符合的基金；另有 3 檔無法判定"
+    assert exp0["fetch_fail_lines"] == []
+    exp2 = _b(model, "EXP-2")
+    assert _codes(model) == ["A01", "B02", "C03"]                              # 照樣列出
+    assert exp2["column_keys"][:2] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN)
+    for row in exp2["_rows"]:
+        assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（資料未備：ccy）"
+    assert exp2["_state"] != logic.STATE_ERROR
+    assert exp2["summary_text"] == "符合 0 檔、無法判定 3 檔"
     # 示範模式照舊炸（既有行為不變）
     with pytest.raises(logic.UnspecifiedComparison):
         logic.build_page_model(live.build_dataset(_pool(), _settings(rules=rules)))
+
+
+def test_有一條明確不符合就不列_其餘無法判定照列_明確符合的另計():
+    rules = ({"field": "fund_code", "op": "不等於", "value": "C03"},       # C03 明確不符合
+             {"field": "ccy", "op": "等於", "value": "USD"})                # 其餘兩檔無法判定
+    model = _tri_model(rules)
+    assert _codes(model) == ["A01", "B02"]
+    exp7 = _b(model, "EXP-7")
+    assert exp7["column_labels"] == ("條件", "套用前", "符合", "無法判定")
+    assert [(r["_before"], r["_after"], r["_undet"]) for r in exp7["_rows"]] == [(3, 2, 0), (2, 0, 2)]
+    assert [r["undet_text"] for r in exp7["_rows"]] == ["0", "2"]
+    only_sure = _tri_model(({"field": "fund_code", "op": "不等於", "value": "C03"},))
+    exp0 = _b(only_sure, "EXP-0")
+    assert exp0["_tone_override"] == "黃" and exp0["text"] == "目前條件下有 2 檔"
+    assert all(r["_cells"][logic.JUDGE_COLUMN]["text"] == logic.JUDGE_MATCH_TEXT for r in _b(only_sure, "EXP-2")["_rows"])
+
+
+def test_符合與無法判定並存_燈只看符合檔數_黃燈_文案接另有M檔():
+    """兩條條件：fund_code 等於 A01 → A01 明確符合；B02 不符合；另以「或」做不到，改用兩組資料各驗一半。"""
+    # A01 有 ccy（測試直接改 dataset），B02 沒有 → A01 符合、B02 無法判定
+    inputs = _input(pool=_pool(codes=("A01", "B02")),
+                    settings=_settings(rules=({"field": "ccy", "op": "等於", "value": "USD"},), columns=()))
+    inputs["dataset"]["fund_profile"][0]["ccy"] = "USD"
+    model = _model(inputs=inputs)
+    exp0 = _b(model, "EXP-0")
+    assert exp0["_tone_override"] == "黃"
+    assert exp0["text"] == "目前條件下有 1 檔；另有 1 檔無法判定"
+    exp7 = _b(model, "EXP-7")
+    assert exp7["_rows"][-1]["_after"] == 1 and exp7["_rows"][-1]["_undet"] == 1   # 最後一列的符合 ＝ EXP-0 的 N
+
+
+def test_大於小於碰到非數字值_歸無法判定_不報錯():
+    model = _tri_model(({"field": "fund_code", "op": "大於", "value": "1"},), codes=("ALZF9", "00123"))
+    texts = {r["_fund_code"]: r["_cells"][logic.JUDGE_COLUMN]["text"] for r in _b(model, "EXP-2")["_rows"]}
+    assert texts["ALZF9"] == "⬜ 無法判定（欄位值不是數值：fund_code）"
+    assert texts["00123"] == logic.JUDGE_MATCH_TEXT                         # 00123 轉得成數 123 > 1
+    bad_value = _tri_model(({"field": "fund_code", "op": "小於", "value": "abc"},), codes=("00123",))
+    (row,) = _b(bad_value, "EXP-2")["_rows"]
+    assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（條件數值「abc」不是數值：fund_code）"
+    assert _b(bad_value, "EXP-0")["_tone_override"] == "灰"
+
+
+def test_三元比較_逐項():
+    assert logic.compare_tristate(None, "等於", "x") == (None, "資料未備")
+    assert logic.compare_tristate("", "晚於", "2020-01-01") == (None, "資料未備")
+    assert logic.compare_tristate("A", "等於", "A") == (True, None)
+    assert logic.compare_tristate("A", "不等於", "A") == (False, None)
+    assert logic.compare_tristate("X", "大於", "1") == (None, "欄位值不是數值")
+    with pytest.raises(logic.UnspecifiedComparison):
+        logic.compare_tristate("A", "包含", "A")
+    assert logic.KNOWN_OPERATORS == fixtures.OPERATORS
+
+
+def test_代碼欄固定第一欄_不可取消_不可排序_不進EXP4欄位清單():
+    for columns in ((), ("fund_name",), logic.COLUMN_ORDER, ("ccy", "nav_date")):
+        model = _tri_model(_NOT_C03, columns=columns)
+        assert _b(model, "EXP-2")["column_keys"][0] == logic.CODE_COLUMN, columns
+    exp4 = _b(_tri_model(_NOT_C03), "EXP-4")
+    assert [o["_column"] for o in exp4["_options"]] == list(logic.COLUMN_ORDER)
+    assert logic.CODE_COLUMN not in logic.COLUMN_ORDER and logic.JUDGE_COLUMN not in logic.COLUMN_ORDER
+    assert logic.CODE_COLUMN not in exp4["sort_options"] and logic.JUDGE_COLUMN not in exp4["sort_options"]
+    assert logic.column_for_label(logic.CODE_COLUMN) is None
+    # 存檔輸入也存不進代碼欄
+    assert live.exp4_save_entries([logic.CODE_COLUMN], None)[0]["error"]
+    # 已存的顯示欄裡寫了代碼欄 → 讀不了（不會把它當成可勾的欄）
+    assert live.parse_user_settings(_rows(exp_visible_columns='["fund_code"]'), [])[1]
 
 
 # ═════════════════════ 存檔輸入 ═════════════════════
@@ -371,7 +449,7 @@ def test_存完又改了_不再單寫已存檔_改寫照實的句子():
 def test_代碼欄存在時_不說只顯示基金名():
     model = _model(inputs=_input(settings=_settings(rules=_NOT_C03, columns=())))
     exp2 = _b(model, "EXP-2")
-    assert exp2["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN, "fund_name")
     assert logic.TEXT_ONLY_FUND_NAME not in exp2["notes"]
     assert logic.TEXT_ONLY_CODE_AND_NAME in exp2["notes"]
     assert _b(model, "EXP-4")["summary_text"] == logic.TEXT_ONLY_CODE_AND_NAME

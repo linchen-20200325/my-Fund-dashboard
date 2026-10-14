@@ -319,7 +319,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 ```
 
 ⚠️ **上圖 L2 那一行「不另疊快取」有一處有意識的偏離，不是漏刪**（日期 2026-10-13；決策者：AI 總管；依據：標的探索正式模式第一批的稽核 L 回修）。
-- **偏離內容**：`services/v2_tables/exp_universe.py` 在 L2 快取選股池代碼（只快取成功結果，TTL 取 `shared.ttls.TTL_1HOUR`），失敗冷卻沿用 L1 的同一把冷卻鑰匙（`infra.gspread_retry`）；為此 L2 綁了 L1 的兩個內部細節 —— 私有函式 `repositories/pool_repository.py::_pool_backoff_ident` 與型別 `LocalJsonPoolStore`（用它判斷「本機暫存檔不當母體」）。
+- **偏離內容**：`services/v2_tables/exp_universe.py` 在 L2 快取選股池代碼（只快取成功結果，TTL 取 `shared.ttls.TTL_1HOUR`），失敗冷卻沿用 L1 的同一把冷卻鑰匙（`infra.gspread_retry`）；為此 L2 綁了 L1 的 ~~兩個內部細節 —— 私有函式 `repositories/pool_repository.py::_pool_backoff_ident` 與型別 `LocalJsonPoolStore`~~ → 一個私有函式 `repositories/pool_repository.py::_pool_backoff_ident`；另用公開型別 `LocalJsonPoolStore`（列在該檔 `__all__`）判斷「本機暫存檔不當母體」（2026-10-13 稽核 K 第三輪更正，有意識的更正，不是漏刪：舊句把公開型別也講成內部細節）。⚠️ L1 另有一份 30 分鐘的 `_cached_pool_map`（補淨值查表用），與本頁 1 小時的代碼快取各自過期，**兩邊可能短暫看到不同版本的選股池**。
 - **理由**：標的探索每一次互動都會重跑載入，L1 `list_pool()` 本身沒有快取（`_cached_pool_map` 是另一支、回的是補淨值查表用的 map），不快取就每次重跑都打一次 Google Sheets、失敗也不退避；而本批的檔案邊界不動 L1。
 - **撤銷條件**：日後有任務動到 L1 `repositories/pool_repository.py` 時，把「只快取成功的代碼讀取」與一支**公開**的冷卻鑰匙函式移回 L1，撤掉 L2 這份快取與對私有函式、具體型別的依賴，本註記同時劃線。
 - **畫面交代**：`EXP-2` 說明行寫出選股池讀取時間（台北時間）與最長更新間隔；B 線目前沒有清除這份快取的入口，只能等過期或重啟程式。

@@ -250,3 +250,21 @@ def test_讀取時間_快取命中沿用原讀取時間_失敗沒有時間(monke
     U.clear_cache()
     store.error = ConnectionError("x")
     assert U.load_pool_codes([], now=30.0)["read_at"] is None
+
+
+def test_舊的失敗紀錄不接到不相干的冷卻上(monkeypatch):
+    """稽核 K 第三輪：本模組 t=0 讀失敗（冷卻 60 秒）→ 到期 → t=100 別的讀取點對同一本記了一筆同種類失敗。
+    那時的冷卻不是本模組那一筆，不得接「上次失敗：<本模組的舊原文>」。"""
+    clock = [0.0]
+    monkeypatch.setattr(SB, "_clock", lambda: clock[0])
+    monkeypatch.setattr(U, "_clock", lambda: clock[0])
+    store = _stub(monkeypatch, _CloudStore(error=ConnectionError("本模組的舊失敗")))
+    U.load_pool_codes([])
+    same = U.load_pool_codes([])
+    assert "上次失敗：ConnectionError: 本模組的舊失敗" in same["message"]       # 同一筆冷卻：接得上
+    clock[0] = 100.0
+    U.record_gspread_failure(*_KEY, ConnectionError("別處的新失敗"))
+    out = U.load_pool_codes([])
+    assert store.calls == 1
+    assert "上次失敗" not in out["message"] and "本模組的舊失敗" not in out["message"]
+    assert out["message"].startswith("選股池")
