@@ -438,6 +438,39 @@ def test_跨頁守衛_hld列入清單守衛本身_正控與負控(tmp_path):
     _assert_hld_listed_when_live(tmp_path, ("set", "alo", "hld"))
 
 
+def _exp_live_triggered(root, pages_reading) -> bool:
+    """exp 版觸發條件（2026-10-13 新增，同 alo／hld）：L2 宣告 exp 已讀設定，或 ui_v2 底下出現任何 exp 正式模式入口
+    （`app_exp*live*.py`、`exp/source.py`、`exp/live.py`）。"""
+    if "exp" in pages_reading:
+        return True
+    ui_v2 = root / "ui_v2"
+    return any(ui_v2.glob("app_exp*live*.py")) or (ui_v2 / "exp" / "source.py").exists() \
+        or (ui_v2 / "exp" / "live.py").exists()
+
+
+def _assert_exp_listed_when_live(root, pages_reading) -> None:
+    """exp 一出現正式模式入口，L2 的 `PAGES_READING_SETTINGS` 就必須列入 "exp"。"""
+    if _exp_live_triggered(root, pages_reading):
+        assert "exp" in pages_reading, ("exp 已有正式模式入口，PAGES_READING_SETTINGS 卻沒有列 exp", pages_reading)
+
+
+def test_跨頁守衛_exp有正式入口時必須列入PAGES_READING_SETTINGS():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    assert (root / "ui_v2" / "app_exp_live.py").exists()   # 2026-10-13 起入口存在 ⇒ 本條真的有觸發
+    _assert_exp_listed_when_live(root, S.PAGES_READING_SETTINGS)
+
+
+def test_跨頁守衛_exp列入清單守衛本身_正控與負控(tmp_path):
+    (tmp_path / "ui_v2" / "exp").mkdir(parents=True)
+    _assert_exp_listed_when_live(tmp_path, ("set", "alo", "hld", "mkt"))
+    for rel in ("ui_v2/app_exp_live.py", "ui_v2/app_exp_live_v2.py", "ui_v2/exp/source.py", "ui_v2/exp/live.py"):
+        (tmp_path / rel).write_text("", encoding="utf-8")
+        with pytest.raises(AssertionError):
+            _assert_exp_listed_when_live(tmp_path, ("set", "alo", "hld", "mkt"))
+        _assert_exp_listed_when_live(tmp_path, ("set", "alo", "hld", "mkt", "exp"))
+        (tmp_path / rel).unlink()
+
+
 def test_跨頁守衛_alo比重基準存值須與L2可選值一致():
     """2026-09-27：ui_v2/alo 的比重基準存值改成「成本／市值」，alo 頁與 L2 已對齊；set 頁示範假資料
     （ui_v2/set/fixtures.py）仍存 cost，屬示範值，正式模式不讀它，另案處理。

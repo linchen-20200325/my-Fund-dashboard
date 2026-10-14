@@ -86,13 +86,24 @@ _FILE_ALLOWLIST = {
     "ui_v2/app_hld_live.py": {
         "__future__", "pathlib", "sys", "streamlit", "ui_v2.hld.page", "ui_v2.hld.source",
     },
-    # 2026-10-12 B 線預覽入口（客戶核准）：四頁真資料（page ＋ source）、標的探索只有 page（示意資料）。
-    # ⛔ 沒有 `ui_v2.exp.source`（標的探索沒有真資料版）、沒有任何 `fixtures`、沒有任何 `ui_v2.app_*`。
+    # 2026-10-13 exp 頁正式模式第一批（客戶 2026-10-13 裁示：骨架＋設定存讀＋母體代碼）。
+    # `exp_universe`：選股池代碼（L2 新檔）；`settings_store`：讀寫 `exp_` 四鍵；`ui_v2.exp.live`：本頁純函式（體例同 mkt）。
+    "ui_v2/exp/source.py": {
+        "__future__", "os", "streamlit",
+        "services.v2_tables.exp_universe", "services.v2_tables.masking",
+        "services.v2_tables.settings_store", "ui_v2.exp.live",
+    },
+    "ui_v2/app_exp_live.py": {
+        "__future__", "pathlib", "sys", "streamlit", "ui_v2.exp.page", "ui_v2.exp.source",
+    },
+    # 2026-10-12 B 線預覽入口（客戶核准）：~~四頁真資料（page ＋ source）、標的探索只有 page（示意資料）~~。
+    # ~~⛔ 沒有 `ui_v2.exp.source`（標的探索沒有真資料版）~~ → 2026-10-13 狀態更新（不是漏刪）：標的探索接上正式模式，
+    #   預覽改傳 `exp.source`（與 `app_exp_live.py` 同名參數、同一物件）。⛔ 沒有任何 `fixtures`、沒有任何 `ui_v2.app_*`。
     "ui_v2/app_preview.py": {
         "__future__", "pathlib", "sys", "streamlit",
         "ui_v2.mkt.page", "ui_v2.mkt.source",
         "ui_v2.hld.page", "ui_v2.hld.source",
-        "ui_v2.exp.page",
+        "ui_v2.exp.page", "ui_v2.exp.source",
         "ui_v2.alo.page", "ui_v2.alo.source",
         "ui_v2.set.page", "ui_v2.set.source",
     },
@@ -100,7 +111,8 @@ _FILE_ALLOWLIST = {
 
 # 第 (8) 條：預覽入口的檔名與它可以 import `source` 的頁（逐一列名，不用前綴比對）。
 _PREVIEW = "ui_v2/app_preview.py"
-_PREVIEW_LIVE_PAGES = ("mkt", "hld", "alo", "set")
+# ~~_PREVIEW_LIVE_PAGES = ("mkt", "hld", "alo", "set")~~ → 2026-10-13 加 exp（狀態更新，不是漏刪）。
+_PREVIEW_LIVE_PAGES = ("mkt", "hld", "exp", "alo", "set")
 
 
 def _module_of(path: pathlib.Path) -> str:
@@ -283,6 +295,21 @@ def test_白名單登記的檔都真的存在():
         assert (_ROOT / rel).is_file(), rel
 
 
+@pytest.mark.parametrize("page_name, l2_module", [
+    ("exp", "services.v2_tables.exp_universe"),     # 2026-10-13 新增
+])
+def test_正式入口確實import了source與page_而page沒有import_source_各頁(page_name, l2_module):
+    live = _ROOT / "ui_v2" / f"app_{page_name}_live.py"
+    got = imports_of(ast.parse(live.read_text(encoding="utf-8")), "ui_v2")
+    assert f"ui_v2.{page_name}.source" in got and f"ui_v2.{page_name}.page" in got
+    page = _ROOT / "ui_v2" / page_name / "page.py"
+    got = imports_of(ast.parse(page.read_text(encoding="utf-8")), f"ui_v2.{page_name}")
+    assert f"ui_v2.{page_name}.source" not in got
+    src = _ROOT / "ui_v2" / page_name / "source.py"
+    got = imports_of(ast.parse(src.read_text(encoding="utf-8")), f"ui_v2.{page_name}")
+    assert l2_module in got
+
+
 def test_正式入口確實import了source與page_而page沒有import_source():
     live = _ROOT / "ui_v2" / "app_mkt_live.py"
     got = imports_of(ast.parse(live.read_text(encoding="utf-8")), "ui_v2")
@@ -324,7 +351,9 @@ def _check(rel: str, code: str) -> list[str]:
     ("ui_v2/hld/logic.py", "from shared.ttls import TTL_5MIN"),
     ("ui_v2/mkt/source.py", "import json"),                             # 逐檔白名單外
     ("ui_v2/app_mkt_live.py", "import os"),
-    ("ui_v2/exp/source.py", "from __future__ import annotations"),      # 新 source 沒登記白名單
+    # ~~("ui_v2/exp/source.py", …)~~ → 2026-10-13 exp 已登記白名單；改用一個不存在的頁名，驗同一件事。
+    ("ui_v2/zzz/source.py", "from __future__ import annotations"),      # 新 source 沒登記白名單
+    ("ui_v2/zzz/source.py", "from services.v2_tables import masking"),
     ("ui_v2/mkt/page.py", "from ui_v2 import app_mkt_live"),            # (6) import 進入點
     ("ui_v2/mkt/logic.py", "import ui_v2.app_mkt"),
     ("ui_v2/app_mkt_live.py", "from ui_v2.app_mkt import page"),
@@ -350,7 +379,13 @@ def _check(rel: str, code: str) -> list[str]:
     ("ui_v2/mkt/page.py", "import pkgutil\nm = pkgutil.resolve_name('ui_v2.mkt.source')"),
     ("ui_v2/mkt/page.py", "from pkgutil import resolve_name"),
     # 2026-10-12 第 (8) 條：預覽入口開的口子只有「四頁的 source」，其餘照擋。
-    ("ui_v2/app_preview.py", "from ui_v2.exp import source"),           # 標的探索沒有真資料版
+    # ~~("ui_v2/app_preview.py", "from ui_v2.exp import source"),  # 標的探索沒有真資料版~~
+    # → 2026-10-13 標的探索接上正式模式（狀態更新，不是漏刪）；口子仍只認列名的五頁，改用不存在的頁名驗。
+    ("ui_v2/app_preview.py", "from ui_v2.zzz import source"),
+    ("ui_v2/exp/source.py", "from . import fixtures"),                  # 新 source 照樣不得碰 fixtures
+    ("ui_v2/app_exp_live.py", "from ui_v2.exp import fixtures"),
+    ("ui_v2/exp/page.py", "from . import source"),                      # page 不得 import source
+    ("ui_v2/exp/source.py", "from services.v2_tables import nav_dividend"),  # 白名單外的 L2 模組
     ("ui_v2/app_preview.py", "from ui_v2.mkt import fixtures"),         # 正式路徑不得碰 fixtures
     ("ui_v2/app_preview.py", "from ui_v2.exp import fixtures"),         # 示意資料也只能經 page 進來
     ("ui_v2/app_preview.py", "import ui_v2.hld.fixtures"),
@@ -378,6 +413,9 @@ def test_正控_每一種違規都被抓到(rel, code):
     ("ui_v2/mkt/source.py", "import os\nimport streamlit as st\nfrom services.v2_tables import masking"),
     ("ui_v2/app_preview.py", "from ui_v2.mkt import page as mkt_page, source as mkt_source"),
     ("ui_v2/app_preview.py", "from ui_v2.exp import page as exp_page"),
+    ("ui_v2/app_preview.py", "from ui_v2.exp import source as exp_source"),
+    ("ui_v2/app_exp_live.py", "from ui_v2.exp import page, source"),
+    ("ui_v2/exp/source.py", "from services.v2_tables import exp_universe, masking, settings_store"),
 ])
 def test_負控_合規寫法不誤報(rel, code):
     assert _check(rel, code) == [], (rel, code)

@@ -94,8 +94,12 @@ LOG_TIMED_TABLES = {"nav": nav_dividend.SOURCE_TIER_NAV}
 # ~~PAGES_READING_SETTINGS = ("set", "alo", "hld")~~
 # 2026-10-13：mkt 頁正式入口 `ui_v2/app_mkt_live.py` 經 `ui_v2/mkt/source.py` 讀 `load_user_settings`
 # （`mkt_` 開頭的三個鍵；客戶 2026-10-13 裁示：市場總覽設定存檔接上，存檔後下一次重新載入生效），
-# 故加入 "mkt"（狀態更新，不是漏刪；上一行在寫下當時為真）。exp 頁仍未讀取。
-PAGES_READING_SETTINGS = ("set", "alo", "hld", "mkt")
+# 故加入 "mkt"（狀態更新，不是漏刪；上一行在寫下當時為真）。~~exp 頁仍未讀取。~~
+# ~~PAGES_READING_SETTINGS = ("set", "alo", "hld", "mkt")~~
+# 2026-10-13：exp 頁正式入口 `ui_v2/app_exp_live.py` 經 `ui_v2/exp/source.py` 讀 `load_user_settings`
+# （`exp_` 開頭的四個鍵；客戶 2026-10-13 裁示：篩選條件只有成功儲存的設定才生效，儲存後下一次重新載入套用），
+# 故加入 "exp"（狀態更新，不是漏刪；「exp 頁仍未讀取」在寫下當時為真）。五頁自此全部列入。
+PAGES_READING_SETTINGS = ("set", "alo", "hld", "mkt", "exp")
 
 # 「重新取數」要清的 L1 快取：第一階段真的會取數的來源 → 那個來源的 L1 取數函式本身
 # （`_ttl_cache` 包過、有 `cache_clear()`）。`50` 第 10 節 B9 定案：只清本次會用到的 L1 函式

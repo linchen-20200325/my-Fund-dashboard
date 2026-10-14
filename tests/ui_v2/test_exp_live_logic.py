@@ -1,0 +1,807 @@
+# -*- coding: utf-8 -*-
+"""標的探索正式模式的純邏輯測試（fast lane；不需要 streamlit、不連網、不碰 L1）。
+
+依據客戶 2026-10-13 裁示（B 線標的探索正式模式第一批）：
+- **只有成功儲存的設定才生效**：輸入欄當下的值不得影響 `EXP-2`／`EXP-7`／`EXP-0`（突變測試的目標：
+  把 `logic.build_page_model(saved_only=True)` 那一段拿掉，`test_只吃已存值_*` 幾條要轉紅）；
+- **基本資料缺欄：基金仍保留在清單**，缺的格寫「⬜ 資料未備：<原因>」，不印 None、不填 0、不從代碼推名稱；
+- 讀不到設定（錯誤）與沒設定分開顯示；`EXP-4` 一成一敗照實講哪一鍵成功、哪一鍵失敗。
+
+示範模式不受影響由既有的 `tests/ui_v2/test_exp_logic.py` 全套守住（本檔不重複）。
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+import pytest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+
+from ui_v2.exp import fixtures, live, logic  # noqa: E402
+from ui_v2.set import spec as set_spec  # noqa: E402
+
+
+def _pool(codes=("B02", "A01", "C03"), *, status="ok", message=None, blank=0, dup=0):
+    return {"status": status, "backend": "service_account" if status != "pool_not_cloud" else "local",
+            "codes": list(codes) if status == "ok" else [], "dropped_blank": blank, "duplicates": dup,
+            "message": message}
+
+
+def _settings(rules=None, columns=None, sort=None, watch=None):
+    return {live.KEY_RULES: None if rules is None else tuple(rules),
+            live.KEY_COLUMNS: None if columns is None else tuple(columns),
+            live.KEY_SORT: sort,
+            live.KEY_WATCH: None if watch is None else tuple(watch)}
+
+
+def _input(pool=None, settings=None, settings_error=None):
+    pool = pool or _pool()
+    settings = settings or _settings()
+    return {"dataset": live.build_dataset(pool, settings),
+            "notes": {"pool": pool, "settings": settings, "settings_error": settings_error}}
+
+
+def _model(**kwargs):
+    inputs = kwargs.pop("inputs", None) or _input()
+    return live.build_live_model(inputs, save_wired=kwargs.pop("save_wired", True), **kwargs)
+
+
+def _b(model, code):
+    return logic.find_block(model, code)
+
+
+def _codes(model):
+    return [row["_fund_code"] for row in _b(model, "EXP-2")["_rows"]]
+
+
+_NOT_C03 = ({"field": "fund_code", "op": "不等於", "value": "C03"},)
+
+
+# ═════════════════════ 鏡像與形狀 ═════════════════════
+
+
+def test_按鈕類別常數是44那八類的成員():
+    assert live.ACTION_SAVE in logic.BUTTON_KINDS and live.ACTION_ADD_ROW in logic.BUTTON_KINDS
+
+
+def test_四鍵與value_kind是set頁規格快照的鏡像():
+    mirror = {key: kind for key, kind in set_spec.SPEC_SETTING_KEYS if key.startswith("exp_")}
+    assert mirror == live.VALUE_KINDS
+
+
+def test_比較方向是fixtures那一份的鏡像_正式路徑不import_fixtures():
+    assert live.RULE_OPERATORS == fixtures.OPERATORS
+    import ast
+
+    tree = ast.parse(pathlib.Path(live.__file__).read_text(encoding="utf-8"))
+    imported = [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
+    imported += [f"{n.module}.{a.name}" if n.module else a.name
+                 for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names]
+    assert imported and not [m for m in imported if "fixtures" in m or "streamlit" in m], imported
+
+
+def test_dataset與示範資料同形():
+    data = live.build_dataset(_pool(), _settings())
+    demo = fixtures.scenario("full")["dataset"]
+    assert set(data) == set(demo)
+    assert [r["setting_key"] for r in data["user_setting"]] == [r["setting_key"] for r in demo["user_setting"]]
+    row = data["fund_profile"][0]
+    assert set(row) == set(logic.FUND_PROFILE_FIELDS)
+    assert row["fund_code"] == "B02" and all(v is None for k, v in row.items() if k != "fund_code")
+    assert data["nav"] == [] and data["dividend"] == [] and data["div_ratio_pct"] == {} and data["errors"] == {}
+
+
+# ═════════════════════ 設定解析：讀不到 ≠ 沒設定 ═════════════════════
+
+
+def _rows(**values):
+    return {key: {"setting_key": key, "setting_value": value} for key, value in values.items()}
+
+
+def test_解析_合法四鍵():
+    rows = _rows(exp_filter_rules=json.dumps(list(_NOT_C03), ensure_ascii=False),
+                 exp_visible_columns='["fund_name", "nav_date"]', exp_sort_column='["nav_date"]',
+                 exp_watchlist='["A01"]')
+    settings, error = live.parse_user_settings(rows, [])
+    assert error is None
+    assert settings == _settings(rules=_NOT_C03, columns=("fund_name", "nav_date"), sort="nav_date", watch=("A01",))
+
+
+def test_解析_沒有那一列是未設定_不是錯誤():
+    assert live.parse_user_settings({}, []) == (live.EMPTY_SETTINGS, None)
+    assert live.parse_user_settings(_rows(exp_sort_column="[]"), [])[0][live.KEY_SORT] is None
+
+
+@pytest.mark.parametrize("rows, broken", [
+    (_rows(exp_filter_rules="not json"), []),
+    (_rows(exp_filter_rules='[{"field": "ccy", "op": "包含", "value": "USD"}]'), []),       # 比較方向不在六個之內
+    (_rows(exp_filter_rules='[{"field": "名稱", "op": "等於", "value": "x"}]'), []),       # 欄位不在可選清單
+    (_rows(exp_filter_rules='[{"field": "ccy", "op": "等於"}]'), []),                      # 少一欄
+    (_rows(exp_visible_columns='["fund_name", "分數"]'), []),
+    (_rows(exp_sort_column='["nav_date", "ccy"]'), []),
+    (_rows(exp_watchlist='["A01", "A01"]'), []),
+    (_rows(exp_watchlist='[NaN]'), []),
+    ({}, ["exp_watchlist"]),
+])
+def test_解析_讀不了_回訊息_四鍵一律None_不當成未設定(rows, broken):
+    settings, error = live.parse_user_settings(rows, broken)
+    assert error and error.startswith("設定值讀不到可用的形狀")
+    assert settings == live.EMPTY_SETTINGS
+
+
+def test_讀不到設定_與沒設定分開顯示_存檔一律停用():
+    unset = _model(inputs=_input(settings=_settings()))
+    assert _b(unset, "EXP-0")["text"] == logic.TEXT_NO_CONDITION
+    assert logic.TEXT_NO_CONDITION in _b(unset, "EXP-2")["notes"]
+    broken = _model(inputs=_input(settings=dict(live.EMPTY_SETTINGS), settings_error="HTTP 403 讀不到"))
+    exp0 = _b(broken, "EXP-0")
+    assert exp0["_tone_override"] == "紅" and exp0["text"] != logic.TEXT_NO_CONDITION
+    assert any("HTTP 403 讀不到" in line for line in exp0["fetch_fail_lines"])
+    for code in ("EXP-1", "EXP-2", "EXP-4", "EXP-5", "EXP-7"):
+        block = _b(broken, code)
+        assert block["_state"] == logic.STATE_ERROR, code
+        assert logic.TEXT_NO_CONDITION not in block["notes"], code
+    assert logic.TEXT_ONLY_FUND_NAME not in _b(broken, "EXP-2")["notes"]      # 不知道 ≠ 使用者沒勾
+    assert _b(broken, "EXP-5")["detail_lines"][0] == logic.TEXT_WATCHLIST_UNREADABLE
+    for code in ("EXP-1", "EXP-4", "EXP-5"):
+        for button in _b(broken, code)["buttons"]:
+            if button["_action_kind"] == "存檔":
+                assert not button["_enabled"] and button["disabled_reason"] == live.SAVE_UNREADABLE_REASON
+    # 第二道：讀不到時 EXP-5 的存檔輸入本身就帶錯誤（不會把已存觀察清單蓋成只剩這次勾的幾檔）
+    assert live.exp5_save_entries((), ("A01",), "HTTP 403")[0]["error"] == live.SAVE_UNREADABLE_REASON
+
+
+# ═════════════════════ 只吃已存值（客戶 2026-10-13 裁示；突變測試目標） ═════════════════════
+
+
+def test_只吃已存值_欄位的條件不影響候選清單與結論與軌跡():
+    saved = _input(settings=_settings(rules=_NOT_C03))
+    base = _model(inputs=saved)
+    assert _codes(base) == ["A01", "B02"]
+    draft = [{"field": "fund_code", "op": "等於", "value": "A01"}]
+    edited = _model(inputs=saved, field_rules=draft)
+    assert _codes(edited) == ["A01", "B02"]                                    # 未存的條件不進 EXP-2
+    assert _b(edited, "EXP-0")["text"] == _b(base, "EXP-0")["text"] == "目前條件下有 2 檔"   # 正式模式不帶示意
+    assert [r["condition_text"] for r in _b(edited, "EXP-7")["_rows"]] == ["fund_code 不等於 C03"]
+    # EXP-1 的輸入列照畫當下內容，並標「未存檔」
+    exp1 = _b(edited, "EXP-1")
+    assert [r["text"] for r in exp1["_rows"]] == ["fund_code 等於 A01"]
+    assert logic.TEXT_UNSAVED_RULES in exp1["detail_lines"]
+    assert logic.TEXT_UNSAVED_RULES not in _b(base, "EXP-1")["detail_lines"]
+
+
+def test_只吃已存值_從未存過時_欄位有條件也是尚未設定條件():
+    model = _model(inputs=_input(settings=_settings()), field_rules=[{"field": "fund_code", "op": "等於", "value": "A01"}])
+    assert _b(model, "EXP-0")["text"] == logic.TEXT_NO_CONDITION and _codes(model) == []
+
+
+def test_只吃已存值_欄位勾選與排序不影響候選清單的欄():
+    saved = _input(settings=_settings(rules=_NOT_C03, columns=("fund_name",)))
+    model = _model(inputs=saved, field_columns=["fund_name", "ccy", "nav_date"], field_sort="nav_date")
+    assert _b(model, "EXP-2")["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert _b(model, "EXP-2")["sort_caption"] == "依 fund_code 字面值排列（未選排序欄位）"
+    assert live.TEXT_UNSAVED_EXP4 in _b(model, "EXP-4")["detail_lines"]
+    same = _model(inputs=saved, field_columns=["fund_name"], field_sort=None)
+    assert live.TEXT_UNSAVED_EXP4 not in _b(same, "EXP-4")["detail_lines"]
+
+
+def test_示範模式照舊取當下值_對照組():
+    """對照組：同一份資料走示範模式（`saved_only` 預設 False），當下的條件**會**進 EXP-2 ——
+    證明上面幾條紅綠真的取決於 `saved_only`，不是資料湊巧。"""
+    dataset = live.build_dataset(_pool(), _settings(rules=_NOT_C03))
+    demo = logic.build_page_model(dataset, draft_rules=[{"field": "fund_code", "op": "等於", "value": "A01"}])
+    assert [r["_fund_code"] for r in _b(demo, "EXP-2")["_rows"]] == ["A01"]
+
+
+# ═════════════════════ 缺欄：基金仍保留在清單 ═════════════════════
+
+
+def test_只有代碼_其餘欄寫資料未備與原因_基金不消失_不印None_不帶示意():
+    model = _model(inputs=_input(settings=_settings(rules=_NOT_C03, columns=logic.COLUMN_ORDER)))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN,) + logic.COLUMN_ORDER   # 全部明確符合 → 不出現篩選判定欄
+    assert _codes(model) == ["A01", "B02"]
+    for row in exp2["_rows"]:
+        assert row["_cells"][logic.CODE_COLUMN]["text"] == row["_fund_code"]
+        for column in logic.COLUMN_ORDER:
+            assert row["_cells"][column]["text"] == live.missing_text(column), column
+            assert row["_cells"][column]["_state"] == logic.STATE_MISSING
+    assert live.missing_text("fund_name") == "⬜ 資料未備：基本資料尚未接入"
+    strings = logic.collect_ui_strings(model)
+    assert not [s for s in strings if "None" in s]
+    assert not [s for s in strings if "示意" in s]
+
+
+def test_對照與單檔基礎資料_缺欄照寫_欄頭不拿代碼頂替基金名():
+    model = _model(inputs=_input(settings=_settings(rules=_NOT_C03)), compare_checked=("A01", "B02"))
+    columns = _b(model, "EXP-3")["_columns"]
+    assert [c["head_text"] for c in columns] == ["A01　⬜ 資料未備", "B02　⬜ 資料未備"]
+    for column in columns:
+        assert all(cell["text"].startswith("⬜ 資料未備：") for cell in column["_cells"].values())
+    fields = _b(model, "EXP-6")["_fields"]
+    assert [f["text"] for f in fields][1] == "A01"                             # fund_code 那一格原樣
+    assert all(f["text"] == live.missing_text(key)
+               for (key, _l), f in zip(logic.EXP6_FIELDS, fields) if key != "fund_code")
+
+
+def test_母體說明行_略過與重複的筆數():
+    model = _model(inputs=_input(pool=_pool(blank=2, dup=1), settings=_settings(rules=_NOT_C03)))
+    lines = _b(model, "EXP-2")["detail_lines"]
+    assert any(line.startswith("母體：選股池的基金代碼 3 檔") for line in lines)
+    assert "選股池有 2 列代碼為空白，未列入。" in lines and "選股池有 1 列代碼重複，只列一次。" in lines
+
+
+@pytest.mark.parametrize("status, message", [("pool_not_cloud", "選股池未設定雲端來源（測試）"),
+                                             ("failed", "APIError: 403 （測試）")])
+def test_母體讀不到_照取數失敗畫_不講成沒有符合的基金(status, message):
+    model = _model(inputs=_input(pool=_pool(status=status, message=message), settings=_settings(rules=_NOT_C03)))
+    exp0 = _b(model, "EXP-0")
+    assert exp0["_tone_override"] == "紅"
+    assert any(message in line for line in exp0["fetch_fail_lines"])
+    assert logic.TEXT_NO_MATCH not in _b(model, "EXP-2")["notes"]
+    assert any(message in line for line in _b(model, "EXP-2")["notes"])
+
+
+# ═════════════════════ 條件作用在 ⬜ 欄位：不替缺值選邊（E-09），也不讓整頁當掉 ═════════════════════
+
+
+# ~~def test_條件作用在資料未備的欄位_計算失敗_不排除也不保留_整頁照畫()~~（紅燈「計算失敗」）
+# → 2026-10-13 客戶裁示（有意識的政策變更，不是漏刪）：條件作用在資料未備欄位 → 該檔照樣列出、標無法判定，
+#   不算符合、不排除、不亮紅燈。下面幾條釘新規則；那一條在寫下當時是 E-09 未裁時的權宜。
+
+
+def _tri_model(rules, codes=("B02", "A01", "C03"), columns=("fund_name",)):
+    return _model(inputs=_input(pool=_pool(codes=codes), settings=_settings(rules=rules, columns=columns)))
+
+
+def test_無法判定_照樣列出_不算符合_不排除_不亮紅燈():
+    rules = ({"field": "ccy", "op": "等於", "value": "USD"},)
+    model = _tri_model(rules)
+    exp0 = _b(model, "EXP-0")
+    assert exp0["_tone_override"] == "灰" and exp0["_tone_override"] != "紅"
+    assert exp0["text"] == "目前條件下沒有符合的基金；另有 3 檔無法判定"
+    assert exp0["fetch_fail_lines"] == []
+    exp2 = _b(model, "EXP-2")
+    assert _codes(model) == ["A01", "B02", "C03"]                              # 照樣列出
+    assert exp2["column_keys"][:2] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN)
+    for row in exp2["_rows"]:
+        assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（資料未備：ccy）"
+    assert exp2["_state"] != logic.STATE_ERROR
+    assert exp2["summary_text"] == "符合 0 檔、無法判定 3 檔"
+    # 示範模式照舊炸（既有行為不變）
+    with pytest.raises(logic.UnspecifiedComparison):
+        logic.build_page_model(live.build_dataset(_pool(), _settings(rules=rules)))
+
+
+def test_有一條明確不符合就不列_其餘無法判定照列_明確符合的另計():
+    rules = ({"field": "fund_code", "op": "不等於", "value": "C03"},       # C03 明確不符合
+             {"field": "ccy", "op": "等於", "value": "USD"})                # 其餘兩檔無法判定
+    model = _tri_model(rules)
+    assert _codes(model) == ["A01", "B02"]
+    exp7 = _b(model, "EXP-7")
+    assert exp7["column_labels"] == ("條件", "套用前", "符合", "無法判定")
+    assert [(r["_before"], r["_after"], r["_undet"]) for r in exp7["_rows"]] == [(3, 2, 0), (2, 0, 2)]
+    assert [r["undet_text"] for r in exp7["_rows"]] == ["0", "2"]
+    only_sure = _tri_model(({"field": "fund_code", "op": "不等於", "value": "C03"},))
+    exp0 = _b(only_sure, "EXP-0")
+    assert exp0["_tone_override"] == "黃" and exp0["text"] == "目前條件下有 2 檔"
+    # 總管 2026-10-13：沒有任何無法判定列 → 不出現「篩選判定」欄（版面變動縮到最小）
+    only_sure_exp2 = _b(only_sure, "EXP-2")
+    assert logic.JUDGE_COLUMN not in only_sure_exp2["column_keys"]
+    assert all(logic.JUDGE_COLUMN not in r["_cells"] for r in only_sure_exp2["_rows"])
+    assert logic.JUDGE_COLUMN not in only_sure_exp2["column_labels"]
+
+
+def test_符合與無法判定並存_燈只看符合檔數_黃燈_文案接另有M檔():
+    """兩條條件：fund_code 等於 A01 → A01 明確符合；B02 不符合；另以「或」做不到，改用兩組資料各驗一半。"""
+    # A01 有 ccy（測試直接改 dataset），B02 沒有 → A01 符合、B02 無法判定
+    inputs = _input(pool=_pool(codes=("A01", "B02")),
+                    settings=_settings(rules=({"field": "ccy", "op": "等於", "value": "USD"},), columns=()))
+    inputs["dataset"]["fund_profile"][0]["ccy"] = "USD"
+    model = _model(inputs=inputs)
+    exp0 = _b(model, "EXP-0")
+    assert exp0["_tone_override"] == "黃"
+    assert exp0["text"] == "目前條件下有 1 檔；另有 1 檔無法判定"
+    exp7 = _b(model, "EXP-7")
+    assert exp7["_rows"][-1]["_after"] == 1 and exp7["_rows"][-1]["_undet"] == 1   # 最後一列的符合 ＝ EXP-0 的 N
+
+
+def test_大於小於碰到非數字值_歸無法判定_不報錯():
+    model = _tri_model(({"field": "fund_code", "op": "大於", "value": "1"},), codes=("ALZF9", "00123"))
+    texts = {r["_fund_code"]: r["_cells"][logic.JUDGE_COLUMN]["text"] for r in _b(model, "EXP-2")["_rows"]}
+    assert texts["ALZF9"] == "⬜ 無法判定（欄位值不是數值：fund_code）"
+    assert texts["00123"] == ""                    # 00123 轉得成數 123 > 1 → 明確符合，該格留白（總管 2026-10-13）
+    assert _b(model, "EXP-2")["column_keys"][:2] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN)
+    bad_value = _tri_model(({"field": "fund_code", "op": "小於", "value": "abc"},), codes=("00123",))
+    (row,) = _b(bad_value, "EXP-2")["_rows"]
+    assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（條件數值「abc」不是數值：fund_code）"
+    assert _b(bad_value, "EXP-0")["_tone_override"] == "灰"
+
+
+def test_三元比較_逐項():
+    assert logic.compare_tristate(None, "等於", "x") == (None, "資料未備")
+    assert logic.compare_tristate("", "晚於", "2020-01-01") == (None, "資料未備")
+    assert logic.compare_tristate("A", "等於", "A") == (True, None)
+    assert logic.compare_tristate("A", "不等於", "A") == (False, None)
+    assert logic.compare_tristate("X", "大於", "1") == (None, "欄位值不是數值")
+    # 總管 2026-10-13：nan、inf 不當數值（與 44 檔尾「其五」射程句一致）
+    for bad in ("nan", "NaN", "inf", "-inf", "Infinity"):
+        assert logic.compare_tristate(bad, "大於", "1") == (None, "欄位值不是數值"), bad
+        assert logic.compare_tristate("1", "小於", bad) == (None, f"條件數值「{bad}」不是數值"), bad
+    assert logic.compare_tristate("2", "大於", "1") == (True, None)
+    assert logic.compare_tristate("1e3", "小於", "1") == (False, None)
+    with pytest.raises(logic.UnspecifiedComparison):
+        logic.compare_tristate("A", "包含", "A")
+    assert logic.KNOWN_OPERATORS == fixtures.OPERATORS
+
+
+def test_代碼欄固定第一欄_不可取消_不可排序_不進EXP4欄位清單():
+    for columns in ((), ("fund_name",), logic.COLUMN_ORDER, ("ccy", "nav_date")):
+        model = _tri_model(_NOT_C03, columns=columns)
+        assert _b(model, "EXP-2")["column_keys"][0] == logic.CODE_COLUMN, columns
+    exp4 = _b(_tri_model(_NOT_C03), "EXP-4")
+    assert [o["_column"] for o in exp4["_options"]] == list(logic.COLUMN_ORDER)
+    assert logic.CODE_COLUMN not in logic.COLUMN_ORDER and logic.JUDGE_COLUMN not in logic.COLUMN_ORDER
+    assert logic.CODE_COLUMN not in exp4["sort_options"] and logic.JUDGE_COLUMN not in exp4["sort_options"]
+    assert logic.column_for_label(logic.CODE_COLUMN) is None
+    # 存檔輸入也存不進代碼欄
+    assert live.exp4_save_entries([logic.CODE_COLUMN], None)[0]["error"]
+    # 已存的顯示欄裡寫了代碼欄 → 讀不了（不會把它當成可勾的欄）
+    assert live.parse_user_settings(_rows(exp_visible_columns='["fund_code"]'), [])[1]
+
+
+# ═════════════════════ 存檔輸入 ═════════════════════
+
+
+def test_EXP1存檔_原樣寫回_數值留空的列照寫_欄位不合法就不寫():
+    rows = [{"_id": 3, "field": "fund_code", "op": "等於", "value": "A01"},
+            {"_id": 4, "field": "mgmt_fee_rate_pct", "op": "小於", "value": ""}]
+    entry = live.exp1_save_entries(rows)[0]
+    assert entry["error"] is None and entry["value_kind"] == "rules"
+    assert json.loads(entry["value"]) == [{"field": "fund_code", "op": "等於", "value": "A01"},
+                                          {"field": "mgmt_fee_rate_pct", "op": "小於", "value": ""}]
+    # 讀回逐字相同
+    settings, error = live.parse_user_settings(_rows(exp_filter_rules=entry["value"]), [])
+    assert error is None and list(settings[live.KEY_RULES]) == [{k: r[k] for k in ("field", "op", "value")} for r in rows]
+    bad = live.exp1_save_entries([{"field": "名稱", "op": "等於", "value": "x"}])[0]
+    assert bad["value"] is None and "第 1 列" in bad["error"]
+    assert live.exp1_save_entries([])[0]["value"] == "[]"                      # 清空也存得回去
+
+
+def test_EXP4存檔_一枚按鈕寫兩鍵_排序存成長度0或1的陣列():
+    entries = live.exp4_save_entries(["nav_date", "fund_name"], "nav_date")
+    assert [(e["key"], e["value"], e["value_kind"]) for e in entries] == [
+        ("exp_visible_columns", '["fund_name", "nav_date"]', "list"), ("exp_sort_column", '["nav_date"]', "list")]
+    assert live.exp4_save_entries([], None)[1]["value"] == "[]"
+
+
+def test_EXP5存檔_已存與這次勾的聯集_同一檔只一次():
+    entry = live.exp5_save_entries(("A01",), ("B02", "A01"))[0]
+    assert json.loads(entry["value"]) == ["A01", "B02"]
+
+
+def _saver(fail_keys=(), record=None):
+    def save(key, value, kind):
+        if record is not None:
+            record.append((key, value, kind))
+        if key in fail_keys:
+            return {"status": "failed", "key": key, "message": f"{key} 寫入失敗（測試）"}
+        return {"status": "saved", "key": key}
+    return save
+
+
+def test_EXP4一成一敗_照實講哪一鍵成功哪一鍵失敗_不整體顯示成功():
+    record = []
+    results = live.run_saves(live.exp4_save_entries(["fund_name"], None),
+                             _saver(fail_keys=("exp_sort_column",), record=record))
+    assert results == {"exp_visible_columns": None, "exp_sort_column": "exp_sort_column 寫入失敗（測試）"}
+    assert [k for k, _v, _k in record] == ["exp_visible_columns", "exp_sort_column"]
+    model = _model(save_results=results)
+    exp4 = _b(model, "EXP-4")
+    assert "exp_visible_columns：已存檔" in exp4["detail_lines"]
+    assert live.TEXT_SAVED not in exp4["detail_lines"]                         # 不出整體「已存檔」
+    assert exp4["error_lines"] == ["存檔寫入失敗：exp_sort_column：exp_sort_column 寫入失敗（測試）"]
+
+
+def test_EXP4前一鍵失敗就不寫後一鍵_逐鍵照實寫():
+    record = []
+    results = live.run_saves(live.exp4_save_entries(["fund_name"], None),
+                             _saver(fail_keys=("exp_visible_columns",), record=record))
+    assert [k for k, _v, _k in record] == ["exp_visible_columns"]
+    # ~~assert results["exp_sort_column"] == "前一個鍵存檔失敗，本鍵未寫入"~~ → 2026-10-13 稽核回修：不冠「寫入失敗」
+    assert results["exp_sort_column"] == live.TEXT_SKIPPED == "未寫入：前一個鍵存檔失敗"
+    exp4 = _b(_model(save_results=results), "EXP-4")
+    assert exp4["error_lines"] == [
+        "存檔寫入失敗：exp_visible_columns：exp_visible_columns 寫入失敗（測試）",
+        "exp_sort_column：未寫入：前一個鍵存檔失敗",
+    ]
+    assert not [line for line in exp4["error_lines"] if line.startswith("存檔寫入失敗：exp_sort_column")]
+
+
+def test_全部成功_一行已存檔():
+    model = _model(save_results={"exp_filter_rules": None})
+    assert live.TEXT_SAVED in _b(model, "EXP-1")["detail_lines"]
+
+
+def test_帶錯誤的輸入一鍵都不寫():
+    record = []
+    results = live.run_saves(live.exp1_save_entries([{"field": "x", "op": "等於", "value": "1"}]), _saver(record=record))
+    assert record == [] and results["exp_filter_rules"].startswith("未存檔：")
+
+
+def test_沒接寫入函式_存檔停用():
+    model = _model(save_wired=False)
+    for code in ("EXP-1", "EXP-4", "EXP-5"):
+        for button in _b(model, code)["buttons"]:
+            if button["_action_kind"] == "存檔":
+                assert not button["_enabled"] and button["disabled_reason"] == live.SAVE_DISABLED_REASON
+
+
+# ═════════════════════ 2026-10-13 稽核 K／L 回修 ═════════════════════
+
+
+def test_存完又改了_不再單寫已存檔_改寫照實的句子():
+    saved = _input(settings=_settings(rules=_NOT_C03))
+    edited = _model(inputs=saved, field_rules=[{"field": "fund_code", "op": "等於", "value": "A01"}],
+                    save_results={"exp_filter_rules": None})
+    lines = _b(edited, "EXP-1")["detail_lines"]
+    assert logic.TEXT_UNSAVED_RULES in lines and live.TEXT_SAVED_THEN_EDITED in lines
+    assert live.TEXT_SAVED not in lines
+    same = _model(inputs=saved, field_rules=list(_NOT_C03), save_results={"exp_filter_rules": None})
+    assert live.TEXT_SAVED in _b(same, "EXP-1")["detail_lines"]
+    exp4 = _b(_model(inputs=saved, field_columns=["ccy"], field_sort=None,
+                     save_results={"exp_visible_columns": None, "exp_sort_column": None}), "EXP-4")
+    assert live.TEXT_SAVED_THEN_EDITED in exp4["detail_lines"] and live.TEXT_SAVED not in exp4["detail_lines"]
+
+
+def test_代碼欄存在時_不說只顯示基金名():
+    model = _model(inputs=_input(settings=_settings(rules=_NOT_C03, columns=())))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert logic.TEXT_ONLY_FUND_NAME not in exp2["notes"]
+    assert logic.TEXT_ONLY_CODE_AND_NAME in exp2["notes"]
+    # 稽核 L 第六輪 B1（總管裁決）：EXP-4 摘要描述設定、不描述畫面現況
+    assert _b(model, "EXP-4")["summary_text"] == logic.TEXT_EXP4_CODE_FIXED
+    # 對照組：同一份資料不帶代碼欄（示範模式的組法）→ 照舊「目前只顯示基金名」
+    demo = logic.build_page_model(live.build_dataset(_pool(), _settings(rules=_NOT_C03, columns=())))
+    assert logic.TEXT_ONLY_FUND_NAME in _b(demo, "EXP-2")["notes"]
+    assert logic.TEXT_ONLY_CODE_AND_NAME not in _b(demo, "EXP-2")["notes"]
+
+
+def test_讀不到設定時_新增條件也停用():
+    broken = _model(inputs=_input(settings=dict(live.EMPTY_SETTINGS), settings_error="HTTP 403"))
+    add = [b for b in _b(broken, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_ADD_ROW]
+    assert add and not add[0]["_enabled"]
+    ok = _model()
+    add = [b for b in _b(ok, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_ADD_ROW]
+    assert add and add[0]["_enabled"]
+
+
+def test_指紋_同值同指紋_換值換指紋_存檔後的預期值與讀回相同():
+    a = _settings(rules=_NOT_C03, columns=("fund_name",))
+    assert live.settings_fingerprint(a) == live.settings_fingerprint(dict(a))
+    assert live.settings_fingerprint(a) != live.settings_fingerprint(_settings(rules=_NOT_C03))
+    assert live.settings_fingerprint(live.EMPTY_SETTINGS) != live.settings_fingerprint(_settings(columns=()))
+    entries = live.exp4_save_entries(["ccy"], "ccy")
+    results = {"exp_visible_columns": None, "exp_sort_column": "失敗"}
+    after = live.settings_after_saves(a, entries, results)
+    assert after[live.KEY_COLUMNS] == ("ccy",) and after[live.KEY_SORT] is None   # 失敗的那一鍵不改
+    read_back, error = live.parse_user_settings(_rows(
+        exp_filter_rules=json.dumps(list(_NOT_C03), ensure_ascii=False),
+        exp_visible_columns=entries[0]["value"]), [])
+    assert error is None and live.settings_fingerprint(read_back) == live.settings_fingerprint(after)
+
+
+_CODE_SHAPES = ["00123", "0050", "ALZF9", "ACDD01", "AB-123", "tw-0001", "A01.US", "F0025"]
+
+
+@pytest.mark.parametrize("code", _CODE_SHAPES)
+def test_正式模式_任何代碼形狀_代碼以外的欄全部缺值_不推任何屬性(code):
+    """稽核 K M5：釘死「代碼以外的欄全部 ⬜／None」。依代碼形狀推幣別、推名稱這類突變會在這裡紅。"""
+    pool = _pool(codes=(code,))
+    data = live.build_dataset(pool, _settings(rules=({"field": "fund_code", "op": "等於", "value": code},),
+                                              columns=logic.COLUMN_ORDER))
+    row = data["fund_profile"][0]
+    assert row["fund_code"] == code
+    assert {k: v for k, v in row.items() if k != "fund_code"} == {k: None for k in logic.FUND_PROFILE_FIELDS
+                                                                  if k != "fund_code"}
+    assert data["nav"] == [] and data["dividend"] == [] and data["div_ratio_pct"] == {}
+    model = live.build_live_model({"dataset": data, "notes": {"pool": pool, "settings": None or {},
+                                                              "settings_error": None}},
+                                  compare_checked=(code,), save_wired=True)
+    (exp2_row,) = _b(model, "EXP-2")["_rows"]
+    for column in logic.COLUMN_ORDER:
+        assert exp2_row["_cells"][column]["text"] == live.missing_text(column), (code, column)
+    for column in _b(model, "EXP-3")["_columns"]:
+        assert all(cell["_state"] == logic.STATE_MISSING for cell in column["_cells"].values()), code
+    texts = [f["text"] for f in _b(model, "EXP-6")["_fields"]]
+    assert texts[1] == code and all(t.startswith("⬜ 資料未備：") for i, t in enumerate(texts) if i != 1)
+
+
+
+def test_母體說明行_讀取時間轉台北時間_寫出最長更新間隔():
+    pool = dict(_pool(), read_at="2026-10-13T10:05:00+00:00", ttl_sec=3600)
+    assert live.pool_read_line(pool) == "選股池讀取於 2026-10-13 18:05（台北時間），最長約 1 小時更新一次。"
+    lines = _b(_model(inputs=_input(pool=pool, settings=_settings(rules=_NOT_C03))), "EXP-2")["detail_lines"]
+    assert live.pool_read_line(pool) in lines
+    assert live.pool_read_line(dict(pool, read_at=None)) is None
+    assert live.pool_read_line(dict(pool, read_at="2026-10-13T10:05:00")) is None     # 沒有時區：不猜
+    assert live.pool_read_line(dict(pool, read_at="壞字串")) is None
+
+
+# ═════════════════════ 大於／小於只能比數值（總管 2026-10-13 決定，比照 Q-07 前例） ═════════════════════
+
+
+def _save_button(model):
+    (button,) = [b for b in _b(model, "EXP-1")["buttons"] if b["_action_kind"] == live.ACTION_SAVE]
+    return button
+
+
+@pytest.mark.parametrize("op", ["大於", "小於"])
+@pytest.mark.parametrize("value", ["abc", "1.2%", "nan", "inf", "一百"])
+def test_大於小於配上轉不成數的數值_存檔停用_存檔區逐列寫明(op, value):
+    rows = [{"field": "fund_code", "op": "等於", "value": "A01"},
+            {"field": "mgmt_fee_rate_pct", "op": op, "value": value}]
+    model = _model(field_rules=rows)
+    line = f"第 2 列：條件數值「{value}」不是數值，大於／小於只能比數值"
+    button = _save_button(model)
+    assert button["_enabled"] is False and button["disabled_reason"] == line
+    assert line in _b(model, "EXP-1")["detail_lines"]
+    # 不自動修正、不丟棄：那一列照原樣留在條件卡上
+    assert [row["text"] for row in _b(model, "EXP-1")["_rows"]][1] == f"mgmt_fee_rate_pct {op} {value}"
+    # 第二道：就算按到了，存檔輸入也不寫，寫明同一句
+    entry = live.exp1_save_entries(rows)[0]
+    assert entry["value"] is None and line in entry["error"]
+    assert live.run_saves([entry], lambda *a: pytest.fail("不得寫入")) == {live.KEY_RULES: entry["error"]}
+
+
+def test_數值留空或轉得成數或不是大小比較_存檔照舊可用():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "小於", "value": ""},
+            {"field": "mgmt_fee_rate_pct", "op": "大於", "value": " 1.5 "},
+            {"field": "fund_code", "op": "等於", "value": "abc"},
+            {"field": "inception_on", "op": "晚於", "value": "非日期也照舊"}]
+    model = _model(field_rules=rows)
+    assert _save_button(model)["_enabled"] is True
+    assert not any("不是數值" in line for line in _b(model, "EXP-1")["detail_lines"])
+    assert live.exp1_save_entries(rows)[0]["error"] is None
+    assert live.rule_value_problems(rows) == []
+    # 清空照舊可存（`44` `EXP-1` 其一的理由不受影響）
+    assert _save_button(_model(field_rules=[]))["_enabled"] is True
+
+
+def test_多列都有問題_逐列寫出各自列號():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"},
+            {"field": "fund_code", "op": "等於", "value": "A01"},
+            {"field": "mgmt_fee_rate_pct", "op": "小於", "value": "y"}]
+    assert live.rule_value_problems(rows) == [
+        "第 1 列：條件數值「x」不是數值，大於／小於只能比數值",
+        "第 3 列：條件數值「y」不是數值，大於／小於只能比數值",
+    ]
+    model = _model(field_rules=rows)
+    assert _save_button(model)["disabled_reason"] == "；".join(live.rule_value_problems(rows))
+
+
+def test_存檔已因讀不到設定停用時_停用原因不被蓋掉_存檔區仍寫明():
+    rows = [{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"}]
+    model = _model(field_rules=rows, inputs=_input(settings_error="boom"))
+    button = _save_button(model)
+    assert button["_enabled"] is False and button["disabled_reason"] == live.SAVE_UNREADABLE_REASON
+    assert "第 1 列：條件數值「x」不是數值，大於／小於只能比數值" in _b(model, "EXP-1")["detail_lines"]
+
+
+def test_已存條件裡的非數值不擋讀取_照舊歸無法判定():
+    """擋的是存檔，不是讀取：雲端上已存的舊條件不能因為這條規則整份讀不了。"""
+    text = '[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "x"}]'
+    settings, error = live.parse_user_settings(_rows(exp_filter_rules=text), [])
+    assert error is None and settings[live.KEY_RULES][0]["value"] == "x"
+
+
+# ═════════════════════ 總管 2026-10-13 最後一輪小修 ═════════════════════
+
+
+def test_篩選判定欄_只在有無法判定列時出現_明確符合的列留白():
+    inputs = _input(pool=_pool(codes=("A01", "B02")),
+                    settings=_settings(rules=({"field": "ccy", "op": "等於", "value": "USD"},), columns=()))
+    inputs["dataset"]["fund_profile"][0]["ccy"] = "USD"            # A01 明確符合、B02 無法判定
+    exp2 = _b(_model(inputs=inputs), "EXP-2")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, logic.JUDGE_COLUMN, "fund_name")
+    cells = {r["_fund_code"]: r["_cells"][logic.JUDGE_COLUMN]["text"] for r in exp2["_rows"]}
+    assert cells == {"A01": "", "B02": "⬜ 無法判定（資料未備：ccy）"}
+    assert "符合" not in cells["A01"]
+    assert logic.TEXT_ONLY_CODE_JUDGE_AND_NAME in exp2["notes"]
+    # 兩檔都明確符合 → 整欄不出現
+    inputs["dataset"]["fund_profile"][1]["ccy"] = "USD"
+    exp2 = _b(_model(inputs=inputs), "EXP-2")
+    assert exp2["column_keys"] == (logic.CODE_COLUMN, "fund_name")
+    assert logic.TEXT_ONLY_CODE_AND_NAME in exp2["notes"]
+
+
+def test_nan_inf_當條件值或欄位值_歸無法判定_不算明確不符合():
+    rules = ({"field": "mgmt_fee_rate_pct", "op": "大於", "value": "nan"},)
+    inputs = _input(pool=_pool(codes=("A01",)), settings=_settings(rules=rules))
+    inputs["dataset"]["fund_profile"][0]["mgmt_fee_rate_pct"] = 1.5
+    model = _model(inputs=inputs)
+    assert _codes(model) == ["A01"]                                      # 照列，不是被排除
+    (row,) = _b(model, "EXP-2")["_rows"]
+    assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（條件數值「nan」不是數值：mgmt_fee_rate_pct）"
+    assert _b(model, "EXP-0")["text"] == "目前條件下沒有符合的基金；另有 1 檔無法判定"
+    inputs["dataset"]["fund_profile"][0]["mgmt_fee_rate_pct"] = float("inf")
+    rules_ok = ({"field": "mgmt_fee_rate_pct", "op": "小於", "value": "2"},)
+    inputs2 = _input(pool=_pool(codes=("A01",)), settings=_settings(rules=rules_ok))
+    inputs2["dataset"]["fund_profile"][0]["mgmt_fee_rate_pct"] = float("inf")
+    (row,) = _b(_model(inputs=inputs2), "EXP-2")["_rows"]
+    assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（欄位值不是數值：mgmt_fee_rate_pct）"
+
+
+def test_沒有條件_清單是空的_不寫目前只顯示那一句():
+    model = _model(inputs=_input(settings=_settings(columns=())))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["_rows"] == []
+    assert not any(note.startswith("目前只顯示") for note in exp2["notes"])
+    assert logic.TEXT_NO_CONDITION in exp2["notes"] or exp2["summary_text"] == logic.TEXT_NO_CONDITION
+
+
+# ═════════════════════ #956 第六輪 ═════════════════════
+
+import itertools  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+
+def _only_shown_sentences(model):
+    """兩卡上所有「目前只顯示…」的句子（EXP-2 的說明、EXP-4 的摘要／說明）。"""
+    exp2, exp4 = _b(model, "EXP-2"), _b(model, "EXP-4")
+    texts = list(exp2["notes"]) + list(exp2["detail_lines"]) + [exp4["summary_text"]] \
+        + list(exp4["notes"]) + list(exp4["detail_lines"])
+    return {t for t in texts if isinstance(t, str) and t.startswith("目前只顯示")}
+
+
+_SCENARIO_RULES = (
+    None,                                                            # 從未存過條件
+    (),                                                              # 存了空的
+    _NOT_C03,                                                        # 全部明確符合
+    ({"field": "ccy", "op": "等於", "value": "USD"},),                 # 全部無法判定
+    ({"field": "ccy", "op": "等於", "value": "USD"},
+     {"field": "fund_code", "op": "不等於", "value": "C03"}),           # 混合
+    ({"field": "fund_code", "op": "等於", "value": "ZZZ"},),           # 一檔都不符合
+)
+_SCENARIO_COLUMNS = (None, (), ("fund_name",), ("ccy", "nav_date"), logic.COLUMN_ORDER)
+
+
+@pytest.mark.parametrize("rules,columns,fill,pool_status", list(itertools.product(
+    _SCENARIO_RULES, _SCENARIO_COLUMNS, (False, True), ("ok", "failed"))))
+def test_EXP2與EXP4不會同時出現互相矛盾的目前只顯示敘述(rules, columns, fill, pool_status):
+    inputs = _input(pool=_pool(status=pool_status, message="boom" if pool_status != "ok" else None),
+                    settings=_settings(rules=rules, columns=columns))
+    if fill and inputs["dataset"]["fund_profile"]:
+        inputs["dataset"]["fund_profile"][0]["ccy"] = "USD"               # 一檔明確符合、其餘無法判定
+    model = _model(inputs=inputs)
+    sentences = _only_shown_sentences(model)
+    assert len(sentences) <= 1, sentences
+    assert not _b(model, "EXP-4")["summary_text"].startswith("目前只顯示")   # EXP-4 不描述畫面現況
+
+
+@pytest.mark.parametrize("missing", [None, float("nan"), np.float64("nan"), pd.NA, ""],
+                         ids=["None", "float_nan", "np_nan", "pd_NA", "empty"])
+@pytest.mark.parametrize("op", ["等於", "不等於", "大於", "小於"])
+def test_缺值不分比較方向一律資料未備(missing, op):
+    assert logic.compare_tristate(missing, op, "1") == (None, "資料未備")
+
+
+def test_inf在大於小於下仍歸欄位值不是數值_不是資料未備():
+    for value in (float("inf"), np.float64("inf"), float("-inf")):
+        assert logic.compare_tristate(value, "大於", "1") == (None, "欄位值不是數值")
+        assert logic.compare_tristate(value, "小於", "1") == (None, "欄位值不是數值")
+        assert logic.is_missing(value) is False
+
+
+def test_缺值判定只認純量_非純量不炸():
+    assert logic.is_missing([float("nan")]) is False
+    assert logic.is_missing(()) is False
+    assert logic.is_missing({}) is False
+    assert logic.is_missing(np.array([1.0, float("nan")])) is False
+    assert logic.is_missing(pd.NaT) is True
+    assert logic.is_missing(0) is False and logic.is_missing(0.0) is False and logic.is_missing("nan") is False
+
+
+@pytest.mark.parametrize("missing", [float("nan"), np.float64("nan"), pd.NA], ids=["float_nan", "np_nan", "pd_NA"])
+def test_等於不等於碰到NaN欄位值_照列並標資料未備_不排除不計入(missing):
+    for op in ("等於", "不等於"):
+        inputs = _input(pool=_pool(codes=("A01",)),
+                        settings=_settings(rules=({"field": "ccy", "op": op, "value": "USD"},),
+                                           columns=("ccy",)))
+        inputs["dataset"]["fund_profile"][0]["ccy"] = missing
+        model = _model(inputs=inputs)
+        assert _codes(model) == ["A01"], op                                   # 不排除
+        (row,) = _b(model, "EXP-2")["_rows"]
+        assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（資料未備：ccy）", op
+        assert row["_cells"]["ccy"]["text"] == live.missing_text("ccy"), op   # 不畫成「nan」
+        assert "nan" not in row["_cells"]["ccy"]["text"].lower()
+        assert _b(model, "EXP-0")["text"] == "目前條件下沒有符合的基金；另有 1 檔無法判定", op   # 不計入
+
+
+def test_EXP7說明行_正式模式寫符合檔數_示範模式照舊套用後檔數():
+    model = _tri_model(_NOT_C03)
+    lines = _b(model, "EXP-7")["detail_lines"]
+    assert any(line.startswith("最後一列的符合檔數與 EXP-0 的 N 相等") for line in lines)
+    assert not any("套用後檔數" in line for line in lines)
+    demo = logic.build_page_model(live.build_dataset(_pool(), _settings(rules=_NOT_C03)))
+    assert any(line.startswith("最後一列的套用後檔數與 EXP-0 的 N 相等") for line in _b(demo, "EXP-7")["detail_lines"])
+
+
+@pytest.mark.parametrize("status,cooling,expected", [
+    ("failed", False, live.TEXT_POOL_FAILED),
+    ("failed", True, live.TEXT_POOL_COOLING),
+    ("pool_not_cloud", False, live.TEXT_POOL_NOT_CLOUD),
+])
+@pytest.mark.parametrize("rules", [None, _NOT_C03])
+def test_母體讀不到或冷卻中_EXP2摘要如實_不寫0檔候選(status, cooling, expected, rules):
+    pool = dict(_pool(status=status, message="（遮蔽後原文）"), cooling=cooling)
+    model = _model(inputs=_input(pool=pool, settings=_settings(rules=rules)))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["summary_text"] == expected
+    assert "檔候選" not in exp2["summary_text"]
+    assert exp2["_state"] == logic.STATE_ERROR
+
+
+# ═════════════════════ #956 第七輪 ═════════════════════
+
+import decimal  # noqa: E402
+
+_NAN_FIELDS = ("fund_name", "ccy", "mgmt_fee_rate_pct", "inception_on", "dividend_policy")
+
+
+def _strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _strings(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            yield from _strings(value)
+
+
+@pytest.mark.parametrize("missing", [float("nan"), np.float64("nan"), pd.NA], ids=["float_nan", "np_nan", "pd_NA"])
+def test_NaN注入基本資料五欄_EXP3與EXP6都沒有nan字樣(missing):
+    inputs = _input(pool=_pool(codes=("A01",)), settings=_settings(rules=_NOT_C03, columns=logic.COLUMN_ORDER))
+    for field in _NAN_FIELDS:
+        inputs["dataset"]["fund_profile"][0][field] = missing
+    model = _model(inputs=inputs, compare_checked=("A01",))
+    exp3, exp6 = _b(model, "EXP-3"), _b(model, "EXP-6")
+    assert exp3["_columns"] and exp6["_fields"]                               # 真的有畫出來，不是空掃
+    for code, block in (("EXP-3", exp3), ("EXP-6", exp6)):
+        texts = list(_strings(block))
+        assert not [t for t in texts if "nan" in t.lower() or "<na>" in t.lower()], (code, missing)
+    (column,) = exp3["_columns"]
+    assert column["head_text"] == f"A01　{logic.ND_TEXT}"
+    assert column["_cells"]["mgmt_fee_rate_pct"]["_state"] == logic.STATE_MISSING
+    fields = dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"]))
+    for field in _NAN_FIELDS:
+        assert fields[field]["_state"] == logic.STATE_MISSING, field
+
+
+def test_缺值判定_Decimal_NaN與sNaN不炸_numpy陣列一律不算缺值():
+    assert logic.is_missing(decimal.Decimal("sNaN")) is True                  # 不得往上拋
+    assert logic.is_missing(decimal.Decimal("NaN")) is True
+    assert logic.is_missing(decimal.Decimal("1.5")) is False
+    assert logic.is_missing(np.array([float("nan")])) is False
+    assert logic.is_missing(np.array(float("nan"))) is False                   # 0 維陣列也照「陣列不算缺值」
+    assert logic.is_missing(np.array([])) is False
+    assert logic.is_missing(np.float64("nan")) is True                         # numpy 純量照算
+
+    class _Explodes:
+        def __ne__(self, other):
+            raise RuntimeError("比較就炸")
+
+    assert logic.is_missing(_Explodes()) is False
+
+
+def test_母體未設定雲端_EXP2摘要走系統錯誤模板體例():
+    assert live.TEXT_POOL_NOT_CLOUD.startswith(logic.ERR_TEXT + "：")
+    assert live.TEXT_POOL_FAILED.startswith(logic.ERR_TEXT + "：")
+    assert live.TEXT_POOL_COOLING.startswith(logic.ERR_TEXT + "：")

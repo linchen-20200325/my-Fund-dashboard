@@ -438,6 +438,14 @@ def test_落地接縫拋錯_不吞(monkeypatch, no_other_l1):
 #    帶進 B 線的呼叫鏈；登記 ≠ 核准，本批不處理那筆債。
 _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
 
+# 逐檔額外放行（2026-10-13 標的探索稽核 L 回修；總管技術裁定：選股池讀取要「只快取成功、失敗冷卻」，
+# 放在 L2 `exp_universe.py`）：
+# - `infra.cache`：`register_cache`（全域刷新清得掉這份快取）；`infra.gspread_retry`：與 L1 選股池讀取同一把冷卻鑰匙。
+#   兩者都在 `tests/test_services_purity_contract.py::ALLOWED_IMPORTS` 的 infra 子模組清單上（不開整個 infra）。
+# - `time`（monotonic 時鐘算 TTL）、`threading`（鎖住模組層快取 dict）：純標準庫、無 I/O。
+# 只開這一個檔、這幾個名字；開了卻沒人用也紅。
+_EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading")}
+
 
 def _is_v2_tables(name: str) -> bool:
     """本目錄的模組名：恰為 `services.v2_tables`，或以 `services.v2_tables.` 開頭。
@@ -455,6 +463,7 @@ def test_v2_tables只import標準庫與L0_L1():
     import ast
 
     l2_seen = set()
+    extra_seen = set()
 
     # 2026-10-13 +`zoneinfo`（標準庫）：觀測日改以來源自報的交易所時區取日（客戶裁示），
     # 認不認得該時區要以 zoneinfo 判定（`market_indicator.exchange_zone`）；檔頭的白名單本來就是「標準庫」。
@@ -475,6 +484,9 @@ def test_v2_tables只import標準庫與L0_L1():
             for name in names:
                 seen += 1
                 top = name.split(".")[0]
+                if name in _EXTRA_ALLOWED.get(path.name, ()):
+                    extra_seen.add((path.name, name))
+                    continue
                 assert top in allowed_top, (path.name, name)
                 if top == "services" and not _is_v2_tables(name):
                     assert name in _L2_TO_L2_ALLOWED.get(path.name, ()), (path.name, name)
@@ -485,3 +497,8 @@ def test_v2_tables只import標準庫與L0_L1():
     assert {(f, n) for f, names in _L2_TO_L2_ALLOWED.items() for n in names} == {
         ("nav_dividend.py", "services.moneydj_fetcher")}
     assert l2_seen == {("nav_dividend.py", "services.moneydj_fetcher")}, l2_seen
+    # 放行清單恰好是這一組（字面值自我釘死，比照 `_L2_TO_L2_ALLOWED`）：多開一個檔或一個名字就紅。
+    assert {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names} == {
+        ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
+        ("exp_universe.py", "time"), ("exp_universe.py", "threading")}
+    assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen
