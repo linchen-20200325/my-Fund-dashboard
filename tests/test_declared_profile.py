@@ -51,6 +51,8 @@ def _row4(k1, v1, k2, v2):
     return f"<tr><td>{k1}</td><td>{v1}</td><td>{k2}</td><td>{v2}</td></tr>"
 
 
+_NO_URL = object()
+
 FULL_TABLE = (_row2("基金名稱", "安聯收益成長基金-AM穩定月收類股(美元)")
               + _row4("計價幣別", "美元", "配息頻率", "月配")
               + _row4("成立日期", "2012/03/23", "最高經理費(%)", "1.80"))
@@ -59,9 +61,14 @@ SHELL = "<html><body>" + _PAD + ("x" * 2000) + "</body></html>"   # 長度夠、
 
 
 class _Resp:
-    def __init__(self, text=None, payload=None):
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：
+    # 補 `url`／`history`（L1 讀回應的最終網址設防，稽核 G-D）。`url=_NO_URL` ＝ 不給這個屬性。
+    def __init__(self, text=None, payload=None, url=None, history=()):
         self.text = text if text is not None else json.dumps(payload or {})
         self._payload = payload
+        if url is not _NO_URL:
+            self.url = url
+        self.history = list(history)
 
     def json(self):
         if self._payload is None:
@@ -81,9 +88,13 @@ class _Net:
         proxy_mod._TLS_FAIL.kind = ""          # 同 fetch_url：進場先清
         spec = self.routes.get(url, ("fail", "not_found"))
         if spec[0] == "html":
-            return _Resp(text=spec[1])
+            return _Resp(text=spec[1], url=url)            # 預設：最終網址＝請求網址（沒有轉址）
+        if spec[0] == "redirect":                          # ("redirect", html, 最終網址)
+            return _Resp(text=spec[1], url=spec[2], history=[object()])
+        if spec[0] == "nourl":                             # ("nourl", html)：回應沒有 .url 屬性
+            return _Resp(text=spec[1], url=_NO_URL)
         if spec[0] == "json":
-            return _Resp(payload=spec[1])
+            return _Resp(payload=spec[1], url=url)
         if spec[0] == "fail":
             proxy_mod._TLS_FAIL.kind = spec[1]   # 同 fetch_url 的 _note_failure
             return None
@@ -369,6 +380,7 @@ class TestMoneyDJUrlChain:
     # 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者 AI 總管；依據 #961 探測報告）：
     # 參數原含 `("empty",)`（200 但內文空白）—— 它是 200 的回應，不是網路錯誤／逾時／5xx／例外，
     # 改歸 unrecognized_page（見 `test_empty_200_with_404s_is_unrecognized_not_failed`）。
+    # → #967 修正輪（總管裁定）：又改回 failed，見 `test_empty_200_with_404s_is_failed`。
     @pytest.mark.parametrize("bad", [("fail", "unreachable"), ("fail", "blocked"), ("fail", "rate_limited"),
                                      ("fail", "server_error"), ("fail", "proxy_auth")])
     def test_any_indeterminate_attempt_makes_it_failed_not_not_listed(self, monkeypatch, bad):
@@ -378,12 +390,16 @@ class TestMoneyDJUrlChain:
         assert r["status"] == "failed"
         assert U4 in r["error"]
 
-    def test_empty_200_with_404s_is_unrecognized_not_failed(self, monkeypatch):
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：
+    # ~~test_empty_200_with_404s_is_unrecognized_not_failed~~（舊期望 status == "unrecognized_page"）→ 總管裁定：
+    # 200 但內文空白＝沒讀到內容，不能說「不是本檔」，改歸 failed（與 FundClear 一致）。
+    def test_empty_200_with_404s_is_failed(self, monkeypatch):
         _net(monkeypatch, {U1: ("fail", "not_found"), U2: ("fail", "not_found"),
                            U3: ("fail", "not_found"), U4: ("empty",)})
         r = dp.fetch_moneydj_basic_fields(CODE)
-        assert r["status"] == "unrecognized_page"
+        assert r["status"] == "failed"
         assert "內文空白" in r["reason"] and U4 in r["error"]
+        assert r["failure_reason"] == "yp011000@www.moneydj.com：回應 200 但內文空白（沒讀到內容）"   # 404 不列
 
     def test_empty_response_is_classified(self, monkeypatch):
         _net(monkeypatch, {U1: ("empty",)})
@@ -573,6 +589,19 @@ def _tdcc(monkeypatch, data, error=None):
 
 
 class TestTdcc:
+    # 2026-10-14 #967 修正輪（稽核 G／H；決策者 AI 總管）：detail 依清單實際有的代碼欄據實寫（舊句「兩欄 0 命中」）
+    def test_0命中detail據實寫比對了哪些欄(self, monkeypatch):
+        _tdcc(monkeypatch, [{"基金代碼": "GLIACU", "基金名稱": "甲", "計價幣別": "USD"}])
+        r = dp.fetch_tdcc_listing(CODE)
+        d = r["attempts"][0]["detail"]
+        assert r["status"] == "code_unmapped"
+        assert "以「基金代碼」比對 0 命中（清單沒有「境外基金代碼」欄）" in d and "兩欄" not in d
+
+    def test_0命中detail_兩欄都有時不寫缺欄(self, monkeypatch):
+        _tdcc(monkeypatch, TDCC_ROWS)
+        d = dp.fetch_tdcc_listing("ZZZ99")["attempts"][0]["detail"]
+        assert "以「基金代碼」「境外基金代碼」比對 0 命中；" in d and "清單沒有" not in d
+
     def test_listed_by_offshore_code_key(self, monkeypatch):
         _tdcc(monkeypatch, TDCC_ROWS)
         r = dp.fetch_tdcc_listing(CODE)
@@ -1095,7 +1124,7 @@ class TestGoldenMoneyDJ:
             if spec[0] == "fail":
                 proxy_mod._TLS_FAIL.kind = spec[1]
                 return None
-            return _Resp(text=spec[1])
+            return _Resp(text=spec[1], url=url)
         monkeypatch.setattr(dp, "fetch_url_with_retry", fetch)
         r = dp.fetch_moneydj_basic_fields("TLZF9")
         assert r["status"] == "failed"
@@ -1138,7 +1167,84 @@ class TestGoldenMoneyDJ:
         dp.fetch_moneydj_basic_fields(CODE)
         assert len(net.calls) == 8
 
-    @pytest.mark.parametrize("text, want", [("\xa0", True), ("\xa0 \xa0　", True), ("", True),
-                                            ("\xa0甲\xa0", False), ("甲", False)])
-    def test_blank_去除nbsp與空白後判空(self, text, want):
-        assert dp._blank(text) is want
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：
+    # `_blank` 改名公開的 `name_is_blank`，加 Cf 類與佔位字白名單（總管裁定）。
+    @pytest.mark.parametrize("text, want", [
+        ("\xa0", True), ("\xa0 \xa0\u3000", True), ("", True), (None, True),
+        ("\u200b", True), ("\ufeff\u200d \xa0", True), ("\u2060", True),               # Cf 類
+        ("N/A", True), ("n/a", True), ("Ｎ／Ａ", True), ("NA", True), ("na", True), ("ＮＡ", True),
+        ("-", True), ("--", True), ("—", True), ("－", True), ("－－", True), ("無", True), ("無資料", True),
+        ("null", True), ("NULL", True), ("None", True), ("none", True), (" \xa0N/A\u200b ", True),
+        ("\xa0甲\xa0", False), ("甲", False), ("NAV", False), ("無配息", False), ("N/A基金", False),
+        ("\u200b甲", False)])
+    def test_name_is_blank_空白_Cf_佔位字(self, text, want):
+        assert dp.name_is_blank(text) is want
+
+    @pytest.mark.parametrize("name", ["N/A", "－", "無資料", "\u200b"])
+    def test_名稱是佔位字或零寬_不採用(self, monkeypatch, name):
+        _net(monkeypatch, {U1: ("html", _page(_row2("基金名稱", name) + _row2("計價幣別", "美元")))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page" and "基金名稱欄為空白" in r["attempts"][0]["problem"]
+
+
+class TestFinalUrlGuard:
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：
+    # 最終網址設防（稽核 G-D）：信任模型是「代碼 → 網址」，回應必須仍是那個代碼的 MoneyDJ 頁。
+
+    def test_最終網址同代碼_通過_記final_url與轉址次數(self, monkeypatch):
+        _net(monkeypatch, {U1: ("html", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok"
+        assert r["attempts"][0]["final_url"] == U1 and r["attempts"][0]["redirect_count"] == 0
+
+    def test_最終網址代碼大小寫不分_參數名大小寫不分_通過(self, monkeypatch):
+        final = f"https://{WWW}/funddj/yp/yp011001.djhtm?A={CODE.lower()}"
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), final)})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "ok" and r["attempts"][0]["redirect_count"] == 1
+
+    def test_被導向他檔代碼_不採用(self, monkeypatch):
+        other = _mdj(WWW, "yp011001", "OTHER1")
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), other)})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page"
+        att = r["attempts"][0]
+        assert att["outcome"] == "unrecognized_page" and att["final_url"] == other and att["redirect_count"] == 1
+        assert att["problem"] == "回應網址與請求代碼不符（最終網址代碼 OTHER1）"
+        assert "回應網址與請求代碼不符（最終網址代碼 OTHER1）" in r["reason"]
+
+    def test_代碼前綴相同也算不符(self, monkeypatch):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), _mdj(WWW, "yp011001", CODE + "0"))})
+        assert dp.fetch_moneydj_basic_fields(CODE)["status"] == "unrecognized_page"
+
+    def test_兩個a參數其一不符_不採用(self, monkeypatch):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), U1 + "&a=OTHER1")})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page" and "OTHER1" in r["attempts"][0]["problem"]
+
+    def test_沒有url屬性_不默默放行(self, monkeypatch):
+        _net(monkeypatch, {U1: ("nourl", _page(FULL_TABLE))})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page"
+        assert r["attempts"][0]["final_url"] is None
+        assert "取不到回應的最終網址" in r["attempts"][0]["problem"]
+
+    @pytest.mark.parametrize("final", ["https://evil.example.com/funddj/yp/yp011001.djhtm?a=TLZF9",
+                                       "https://moneydj.com.evil.example/funddj/yp/yp011001.djhtm?a=TLZF9"])
+    def test_最終主機不是MoneyDJ_不採用(self, monkeypatch, final):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), final)})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page" and "不是 MoneyDJ 已知主機" in r["attempts"][0]["problem"]
+
+    def test_最終網址沒有a參數_不採用(self, monkeypatch):
+        _net(monkeypatch, {U1: ("redirect", _page(FULL_TABLE), f"https://{WWW}/funddj/yp/yp011001.djhtm")})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "unrecognized_page" and "沒有代碼參數 a" in r["attempts"][0]["problem"]
+
+    def test_failure_reason只列取不到的嘗試_404不列(self, monkeypatch):
+        _net(monkeypatch, {U1: ("fail", "not_found"), U2: ("fail", "unreachable"),
+                           U3: ("fail", "not_found"), U4: ("fail", "not_found")})
+        r = dp.fetch_moneydj_basic_fields(CODE)
+        assert r["status"] == "failed"
+        assert r["failure_reason"] == "yp011001@www.moneydj.com：取數失敗（unreachable）"
+        assert "404" not in r["failure_reason"]

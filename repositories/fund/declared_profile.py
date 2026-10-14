@@ -35,9 +35,11 @@
   `results/20261014T101710Z_run38548232056`）：「取到但無法判讀」與「取不到」是兩件事，混在一起會把
   正常取回、只是不是本檔的頁面在畫面上標成 ⛔ 取數失敗。舊句的用意（無法判讀就不得說成「沒有這一檔」）
   照舊成立 —— 下面兩個新狀態都**不是** not_listed。
-- `failed`：**取不到**：網路錯誤、逾時、403／407／429、5xx、host 冷卻中（沒發請求）、非預期例外。
+- `failed`：**取不到**：網路錯誤、逾時、403／407／429、5xx、host 冷卻中（沒發請求）、非預期例外，
+  以及（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H））200 但內文空白 —— 沒讀到內容就不能說「頁面不是本檔」，與 FundClear 那支一致。
 - `unrecognized_page`（只 MoneyDJ）：頁面**回來了**（200），但不符身分判準（見該函式）—— 空殼頁、
-  「無資料」頁、頁型不符的空表、兩張以上含「基金名稱」的表、基金名稱自相矛盾、200 但內文空白。
+  「無資料」頁、頁型不符的空表、兩張以上含「基金名稱」的表、基金名稱自相矛盾或為佔位字、
+  回應的最終網址與請求代碼不符或主機不是 MoneyDJ、取不到最終網址。~~200 但內文空白。~~（改歸 failed，見上）
 - `not_found`（只 MoneyDJ）：兩種頁型、兩個主機**全部** 404，一頁都沒回來。
 - `code_unmapped`（只 TDCC）：清單取得成功，但代碼在兩個代碼欄都 0 命中 —— 3-2 用的是另一套代碼體系
   （探測實測：5,295 列，例 `GLIACU`、`AGIF-FVGM`），0 命中**不證明**未收錄。**不以名稱比對去找對應**。
@@ -69,6 +71,8 @@ import functools as _functools
 import re as _re
 import threading as _threading
 import time as _time
+import unicodedata as _ud
+from urllib.parse import parse_qsl as _parse_qsl, urlsplit as _urlsplit
 from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
@@ -81,6 +85,7 @@ from repositories.fund import sources as _src
 from shared.ttls import TTL_1HOUR, TTL_5MIN
 
 __all__ = [
+    "name_is_blank",
     "STATUS_OK", "STATUS_NOT_LISTED", "STATUS_FAILED",
     "STATUS_UNRECOGNIZED", "STATUS_NOT_FOUND", "STATUS_CODE_UNMAPPED", "MONEYDJ_BINDING_METHOD",
     "MONEYDJ_LABELS", "MONEYDJ_HOSTS", "FAILURE_MEMORY_SEC",
@@ -330,14 +335,30 @@ def _fields_from(seen: dict) -> "tuple[dict, list[dict]]":
     return fields, conflicts
 
 
-def _blank(text) -> bool:
-    """去除 `\\xa0` 與空白後是否為空（`str.strip()` 本來就去 `\\xa0`；這裡寫明，不靠讀者記得）。"""
-    return not str(text).replace("\xa0", " ").strip()
+#: 名稱欄的佔位字（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）；總管裁定）。比對前先 NFKC（全形→半形）並 casefold（大小寫不分）。
+#: 這些字樣出現在「基金名稱」欄等於沒有名稱，一律視為空白、不採用。
+NAME_PLACEHOLDERS: frozenset = frozenset(
+    _ud.normalize("NFKC", t).casefold()
+    for t in ("N/A", "NA", "-", "--", "—", "－", "無", "無資料", "null", "None"))
+
+
+def name_is_blank(text) -> bool:
+    """基金名稱是否等於沒有：去除空白、`\\xa0`、Unicode Cf 類（零寬字元等）後為空，或整欄是佔位字
+    （`NAME_PLACEHOLDERS`，全半形、大小寫不分）→ True。`None` → True。
+    L1 身分判準與 L2 `exp_profile._fund_name_cell` 共用這一支（L2 不得自己另寫一份）。
+    ~~`_blank`：去除 `\\xa0` 與空白後是否為空~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：加 Cf 類與佔位字白名單，並改成公開名稱。"""
+    if text is None:
+        return True
+    cleaned = "".join(ch for ch in str(text) if _ud.category(ch) != "Cf")
+    cleaned = cleaned.replace("\xa0", " ").strip()
+    if not cleaned:
+        return True
+    return _ud.normalize("NFKC", cleaned).strip().casefold() in NAME_PLACEHOLDERS
 
 
 def _identify_name_table(soup) -> dict:
     """2026-10-14 身分判準：頁面上**恰有一張**含「基金名稱」標籤（字面完全相同）的表，且該表「基金名稱」欄
-    **只有一個值、去除 `\\xa0` 與空白後非空** → 採用這張表。
+    **只有一個值、且 `name_is_blank` 判為非空**（去除空白、`\\xa0`、Cf 類後非空、也不是佔位字）→ 採用這張表。
 
     回傳 `{"problem", "fields", "conflicts", "table", "name_table_count", "populated_name_table_count"}`：
     - `name_table_count`：含「基金名稱」標籤的表的張數（值空白的也算）；
@@ -356,7 +377,7 @@ def _identify_name_table(soup) -> dict:
         seen = _label_values(tbl)
         if _NAME_LABEL in seen:
             found.append((tbl, seen))
-    populated = [(t, s) for t, s in found if any(not _blank(v) for v in s[_NAME_LABEL])]
+    populated = [(t, s) for t, s in found if any(not name_is_blank(v) for v in s[_NAME_LABEL])]
     out = {"problem": None, "fields": None, "conflicts": [], "table": None,
            "name_table_count": len(found), "populated_name_table_count": len(populated)}
     if not found:
@@ -384,7 +405,9 @@ def _mentions_code(soup, code: str) -> bool:
     ~~ok 判準的一半（頁面可見文字須提到代碼）~~ → 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；
     決策者：AI 總管；依據：#961 探測報告）：**降為附加資訊**（ok 結果的 `binding["code_in_page_text"]`），
     不再是採用門檻。理由：8 個真實代碼的頁面可見文字（含那張表）**都沒有印代碼**，代碼只出現在 href／onclick
-    與 `<script>`，而且是照請求網址原樣回顯 —— 不存在的代碼的空殼頁同樣出現相同數量的回顯。
+    與 `<script>`，而且是照請求網址原樣回顯 —— ~~不存在的代碼的空殼頁同樣出現相同數量的回顯。~~
+    → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：精確化 —— 回顯次數（不分大小寫）：真實首選頁 25～30 次；**真實境外代碼打到 yp011000 的空殼頁**
+    與負控代碼的空殼頁**都是 19 次、完全相同**。「回顯分不出真假」這個論點不變。
     舊條件結構上不可能成立（8/8 失敗），而回顯也分不出真假，兩種用法都不能當身分證據。"""
     pat = _re.compile(rf"(?<![A-Za-z0-9]){_re.escape(code)}(?![A-Za-z0-9])", _re.IGNORECASE)
     return bool(pat.search(soup.get_text(" ")))
@@ -442,13 +465,17 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
     依據：#961 探測報告 `results/20261014T101710Z_run38548232056`（GitHub runner 直連；18 頁原始 HTML、sha256 已核）。
     8 個真實代碼在 www 首選頁型都回 200、各有恰 1 張含「基金名稱」的表、四欄字面都讀得到；**但頁面可見文字
     （含那張表）完全沒有出現代碼** —— 代碼只在 href／onclick 與 `<script>` 裡、照請求網址原樣回顯，
-    不存在的代碼的空殼頁回顯數量相同。舊判準（可見文字以詞界提到代碼）因此 8/8 失敗，
+    ~~不存在的代碼的空殼頁回顯數量相同。~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：真實境外代碼打到 yp011000 的空殼頁與負控空殼頁回顯次數相同
+    （不分大小寫皆 19 次；真實首選頁 25～30 次），回顯分不出真假。舊判準（可見文字以詞界提到代碼）因此 8/8 失敗，
     上面那段 C2 的 `code_in_label_table` 也 0/8 成立：兩者結構上都不可能成立。
 
     **現行判準（`_identify_name_table`）**：以**請求的代碼**組出網址 → 回 200 → 該頁**恰有一張**含「基金名稱」
     標籤的表，且該表「基金名稱」欄只有一個值、去除 `\xa0` 與空白後非空。信任模型與本 repo A 鏈淨值取數相同：
     「代碼 → MoneyDJ 網址」本身就是身分。實測擋得住的頁：空殼頁、「無資料」頁、頁型不符的空表（title 仍帶
     基金名稱 —— **不得改用 title 取值**）。兩張以上含「基金名稱」的表 → 不採用。
+    **最終網址設防**（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）；稽核 G-D）：信任模型的前提是「回應就是請求的那個網址」，所以讀回應的 `.url`
+    （與 `.history`）：最終主機不在 `MONEYDJ_HOSTS`、或最終網址的代碼參數 `a`（不分大小寫）與請求代碼不符、
+    或取不到 `.url` → 該頁 `unrecognized_page`，**不默默放行**。嘗試紀錄另記 `final_url` 與 `redirect_count`。
     舊的兩項檢查（頁面可見文字、表自身文字是否提到代碼）**保留為附加資訊**，值照實記在 `binding`，不再是門檻。
     ⚠️ 未驗：production 經 NAS 代理的回應是否與直連相同；MoneyDJ 對不存在的代碼是否**永遠**不回某一檔的頁面
     （探測只有一個負控代碼）。
@@ -467,7 +494,7 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
       → `unrecognized_page`：200 但不符身分判準（具體原因寫在 `detail` 與 `problem`）；
     - `cooldown`：host 冷卻中，沒有發請求；`fail_kind="cooldown"`，當初的分類記在 `cooldown_origin_kind`；
     - `http_failed`：逾時／403／429／5xx／407，分類取自 `infra.proxy.pop_last_fail_kind()`；
-    - `empty_response`：200 但內文為空（`fetch_url_with_retry` 回 None 且沒有失敗分類）；
+    - `empty_response`：200 但內文為空（`fetch_url_with_retry` 回 None 且沒有失敗分類）；整體歸「取不到」；
     - `exception`：取數或解析拋例外（原文記在 detail）。
     不符身分判準、但頁面確實回來的嘗試另帶 `identity_check`（張數與附加資訊）。
 
@@ -482,12 +509,15 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
     → **2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者：AI 總管）**：「其餘一律 failed」把正常取回、
     只是不符判準的頁面也說成取數失敗（探測實測：負控代碼與 8 個真實代碼的輸出完全相同，畫面全是 ⛔）。
     上一段「不判 not_listed」的理由照舊成立、照舊不判。**現行（沒有任何網址 ok 時，依序判）**：
-    1. 有任一網址**取不到**（`http_failed`／`cooldown`／`exception`）→ `failed`
+    1. 有任一網址**取不到**（`http_failed`／`cooldown`／`exception`／`empty_response`）→ `failed`
        —— 沒讀到的那一頁可能正是本檔，不能說「頁面不是本檔」；
-    2. 否則有任一網址**回來了但不符判準**（`unrecognized_page`、`empty_response`）→ `unrecognized_page`；
-       `empty_response`（200 但內文空白）歸這一類：它是 200 的回應，不是網路錯誤、逾時、5xx 或例外；
+    2. 否則有任一網址**回來了但不符判準**（`unrecognized_page`）→ `unrecognized_page`；
+       ~~`empty_response`（200 但內文空白）歸這一類：它是 200 的回應，不是網路錯誤、逾時、5xx 或例外；~~
+       → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）（總管裁定）：`empty_response` 改歸第 1 類 —— 沒讀到內容就不能說「不是本檔」，與 FundClear 一致。
+       舊句的事實（它是 200 回應）仍然為真；被權衡掉的是「200 就算讀到頁面」這個前提。
     3. 否則（四個網址全部 404）→ `not_found`。
-    三者的 `error` 都是逐網址的結果原文，`reason` 是逐網址的白話摘要（`頁型@主機：原因`），L2 顯示用。
+    三者的 `error` 都是逐網址的結果原文，`reason` 是逐網址的白話摘要（`頁型@主機：原因`），L2 顯示用；
+    `failure_reason` 只列**取不到**的那幾筆（404 不是失敗、不列），L2 寫失敗原因用它（稽核 G-C）。
 
     `fetched_at`：ok 時為那一次回應的實際時刻；其餘為 `None`。
     """
@@ -514,6 +544,13 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
                 else:
                     att.update(outcome="empty_response", fail_kind="",
                                detail="回應 200 但內文為空（fetch_url_with_retry 回 None）")
+                continue
+            final_url, redirect_count = _final_url_of(r)
+            att["final_url"], att["redirect_count"] = final_url, redirect_count
+            url_problem = _final_url_problem(final_url, code)
+            if url_problem is not None:
+                att.update(outcome="unrecognized_page", problem=url_problem,
+                           detail=f"不符身分判準：{url_problem}（final_url={final_url!r}、redirect_count={redirect_count}）")
                 continue
             html = r.text or ""
             soup = BeautifulSoup(html, "lxml")
@@ -552,9 +589,40 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
 
 
 #: 「取不到」的嘗試結果：只要有一個，整體就是 failed（沒讀到的那一頁可能正是本檔）。
-_MDJ_UNREADABLE_OUTCOMES = frozenset({"http_failed", "cooldown", "exception"})
-#: 「回來了但不符判準」的嘗試結果。
-_MDJ_UNRECOGNIZED_OUTCOMES = frozenset({"unrecognized_page", "empty_response"})
+#: ~~frozenset({"http_failed", "cooldown", "exception"})~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：加 `empty_response`（總管裁定）。
+_MDJ_UNREADABLE_OUTCOMES = frozenset({"http_failed", "cooldown", "exception", "empty_response"})
+#: 「回來了但不符判準」的嘗試結果。~~含 `empty_response`~~（同上，移到取不到）。
+_MDJ_UNRECOGNIZED_OUTCOMES = frozenset({"unrecognized_page"})
+
+
+def _final_url_of(r) -> "tuple[str | None, int | None]":
+    """回應的最終網址與轉址次數。取不到（沒有 `.url`、或不是非空字串）→ `(None, …)`；
+    `.history` 不是串列 → 轉址次數 `None`（不湊 0）。"""
+    url = getattr(r, "url", None)
+    history = getattr(r, "history", None)
+    count = len(history) if isinstance(history, (list, tuple)) else None
+    return (url if isinstance(url, str) and url else None), count
+
+
+def _final_url_problem(final_url, code: str):
+    """最終網址是否仍是「請求的那個代碼」的 MoneyDJ 頁 → None ＝ 通過；否則回不採用的原因（中文）。
+    主機須在 `MONEYDJ_HOSTS`；查詢參數 `a`（鍵名不分大小寫）須恰有一個值、且轉大寫後等於請求代碼。"""
+    if final_url is None:
+        return "取不到回應的最終網址（.url），無法確認回應對應請求代碼"
+    try:
+        parts = _urlsplit(final_url)
+    except ValueError as e:
+        return f"回應的最終網址無法解析（{type(e).__name__}）"
+    host = (parts.hostname or "").lower()
+    if host not in MONEYDJ_HOSTS:
+        return f"回應的最終網址主機不是 MoneyDJ 已知主機（{host or '無主機'}）"
+    values = [v.strip().upper() for k, v in _parse_qsl(parts.query, keep_blank_values=True) if k.lower() == "a"]
+    if not values:
+        return "回應網址沒有代碼參數 a，無法確認回應對應請求代碼"
+    if any(v != code for v in values):
+        shown = "、".join(dict.fromkeys(values))
+        return f"回應網址與請求代碼不符（最終網址代碼 {shown}）"
+    return None
 
 
 def _attempt_short(att: dict) -> str:
@@ -565,7 +633,7 @@ def _attempt_short(att: dict) -> str:
     elif outcome == "unrecognized_page":
         why = att.get("problem") or "不符身分判準"
     elif outcome == "empty_response":
-        why = "回應 200 但內文空白"
+        why = "回應 200 但內文空白（沒讀到內容）"
     elif outcome == "cooldown":
         why = f"主機冷卻中、未發請求（當初分類 {att.get('cooldown_origin_kind')}）"
     elif outcome == "http_failed":
@@ -588,11 +656,14 @@ def _moneydj_not_ok(code: str, attempts: list) -> dict:
         status = STATUS_FAILED
     err = "；".join(f"{a['url']} → {a['outcome']}（{a['detail']}）" for a in attempts)
     reason = "；".join(_attempt_short(a) for a in attempts)
+    # 稽核 G-C：失敗原因只列「取不到」的那幾筆（404、不符判準都不是失敗）；沒有取不到的嘗試 → None
+    failure = "；".join(_attempt_short(a) for a in attempts if a.get("outcome") in _MDJ_UNREADABLE_OUTCOMES)
     print(f"[declared_profile/moneydj] {code} {status}：{err}")
     return {
         "status": status, "source": "MoneyDJ", "full_key": code,
         "fields": {lb: None for lb in MONEYDJ_LABELS}, "label_conflicts": [],
         "provenance": None, "fetched_at": None, "attempts": attempts, "error": err, "reason": reason,
+        "failure_reason": failure or None,
     }
 
 
@@ -721,8 +792,13 @@ def _fetch_tdcc_listing_cached(code: str) -> dict:
     attempt["outcome"] = "listed" if matches else "not_in_list"
     if not matches:
         # ~~return _tdcc_result(code, STATUS_NOT_LISTED, ...)~~ → 2026-10-14：代碼無法對照（見 docstring）
-        attempt["detail"] = (f"清單 {len(data)} 列，{'／'.join(_TDCC_CODE_KEYS)} 兩欄 0 命中；"
-                             "TDCC 3-2 使用不同的代碼體系，0 命中不等於未收錄（不以名稱比對）")
+        # ~~f"清單 N 列，基金代碼／境外基金代碼 兩欄 0 命中"~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）（稽核 G）：探測報告的欄名清單沒有
+        # 「境外基金代碼」欄，「兩欄」不實；改成依這份清單實際有哪些代碼欄據實寫。
+        present = [k for k in _TDCC_CODE_KEYS if any(isinstance(i, dict) and k in i for i in data)]
+        absent = [k for k in _TDCC_CODE_KEYS if k not in present]
+        attempt["detail"] = (f"清單 {len(data)} 列，以「{'」「'.join(present) or '（無代碼欄）'}」比對 0 命中"
+                             + (f"（清單沒有「{'」「'.join(absent)}」欄）" if absent else "")
+                             + "；TDCC 3-2 使用不同的代碼體系，0 命中不等於未收錄（不以名稱比對）")
         return _tdcc_result(code, STATUS_CODE_UNMAPPED, observed_at=observed, attempt=attempt)
     key, item = matches[0]
     fields = {"基金名稱": item.get("基金名稱"), "計價幣別": item.get("計價幣別")}

@@ -287,7 +287,8 @@ def test_各源not_listed_MoneyDJ有值照採():
 
 def test_三源都未收錄_not_ready():
     _out, cells = _one(not_listed(), not_listed(), not_listed())
-    assert cells["ccy"]["status"] == "not_ready" and cells["ccy"]["reason"].startswith("各來源未提供幣別／未收錄")
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：標頭改「各來源未取得幣別」（舊：startswith("各來源未提供幣別／未收錄")）
+    assert cells["ccy"]["status"] == "not_ready" and cells["ccy"]["reason"].startswith("各來源未取得幣別（")
     assert cells["fund_name"]["reason"] == "MoneyDJ 未收錄此代碼"
 
 
@@ -435,8 +436,11 @@ def test_declared出處過得了nav_dividend白名單():
 # ═══════════════════════ 走真的 MoneyDJ L1（綁定）═══════════════════════
 
 class _Resp:
-    def __init__(self, text):
+    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者 AI 總管；依據 稽核 G／H）：補 `url`／`history`（L1 讀最終網址設防）
+    def __init__(self, text, url=None):
         self.text = text
+        self.url = url
+        self.history = []
 
 
 def _real_mdj(monkeypatch, html):
@@ -444,7 +448,7 @@ def _real_mdj(monkeypatch, html):
 
     def fake(url, **k):
         proxy_mod._TLS_FAIL.kind = ""
-        return _Resp(html)
+        return _Resp(html, url)
     monkeypatch.setattr(dp, "fetch_url_with_retry", fake)
     monkeypatch.setattr(src, "_is_domestic_code", lambda code, page_type="": False)
     dp.fetch_moneydj_basic_fields.cache_clear()
@@ -684,7 +688,7 @@ def _e2e_net(monkeypatch):
         calls.append(url)
         proxy_mod._TLS_FAIL.kind = ""
         if url in pages:
-            return _Resp(pages[url])
+            return _Resp(pages[url], url)
         proxy_mod._TLS_FAIL.kind = "not_found"           # 報告實測：tcbbankfund 對所有代碼 404
         return None
     monkeypatch.setattr(dp, "fetch_url_with_retry", fake)
@@ -734,3 +738,71 @@ def test_端到端_八檔真實頁面_四欄正確且標MoneyDJ(monkeypatch):
             assert cells["dividend_policy"]["status"] == "ok" and row["dividend_policy"] == policy
             assert cells["dividend_policy"]["sources"] == ("MoneyDJ",)
         assert row["fetched_at"] == cells["fund_name"]["fetched_at"]["MoneyDJ"]
+
+
+
+# ═══════════════════════ #967 修正輪（稽核 G／H）═══════════════════════
+
+def test_真L1_tcb404加www取不到_失敗原因只列www那筆(monkeypatch):
+    # 2026-10-14 #967 修正輪（稽核 G／H；決策者 AI 總管）：G-C：舊寫法拿 L1 `error` 第一行，MoneyDJ 的第一筆是 tcbbankfund 的 404 —— 把不是失敗的嘗試當成失敗原因
+    import infra.proxy as proxy_mod
+    www = f"https://www.moneydj.com/funddj/yp/yp011001.djhtm?a={CODE}"
+
+    def fake(url, **k):
+        proxy_mod._TLS_FAIL.kind = "unreachable" if url == www else "not_found"
+        return None
+    monkeypatch.setattr(dp, "fetch_url_with_retry", fake)
+    monkeypatch.setattr(src, "_is_domestic_code", lambda code, page_type="": False)
+    dp.fetch_moneydj_basic_fields.cache_clear()
+    dp.clear_failure_memory()
+    try:
+        fetchers = _fetchers(None, tdcc_ok("USD"), fc_ok("USD"))
+        fetchers["MoneyDJ"] = dp.fetch_moneydj_basic_fields
+        out = EP.build_profiles(_keys(CODE), fetchers=fetchers)
+    finally:
+        dp.fetch_moneydj_basic_fields.cache_clear()
+        dp.clear_failure_memory()
+    cells = out["cells"][CODE]
+    want = "yp011001@www.moneydj.com：取數失敗（unreachable）"
+    for f in ("fund_name", "inception_on", "dividend_policy"):
+        assert cells[f]["status"] == "fetch_failed"
+        assert cells[f]["reason"] == f"MoneyDJ 取數失敗：{want}"
+        assert "404" not in cells[f]["reason"] and "tcbbankfund" not in cells[f]["reason"]
+    assert cells["ccy"]["status"] == "ok" and f"MoneyDJ：{want}" in cells["ccy"]["reason"]
+    assert "404" not in cells["ccy"]["reason"]
+
+
+def test_失敗原因_多筆取不到逐筆列出且各自截斷():
+    res = failed("原文")
+    res["failure_reason"] = "甲@a：取數失敗（unreachable）；乙@b：" + "y" * 200
+    _out, cells = _one(res, tdcc_ok("USD"), not_listed())
+    r = cells["fund_name"]["reason"]
+    assert r.startswith("MoneyDJ 取數失敗：甲@a：取數失敗（unreachable） / 乙@b：")
+    assert "y" * 81 not in r and "…" in r and "原文" not in r
+
+
+def test_失敗原因_沒有failure_reason時退回error第一行():
+    _out, cells = _one(failed("第一行\n第二行"), tdcc_ok("USD"), not_listed())
+    assert cells["fund_name"]["reason"] == "MoneyDJ 取數失敗：第一行"
+
+
+@pytest.mark.parametrize("name", ["N/A", "ｎ／ａ", "－", "--", "無資料", "None", "\u200b", "\xa0"])
+def test_名稱為佔位字或零寬_L2也判not_ready(name):
+    # 2026-10-14 #967 修正輪（稽核 G／H；決策者 AI 總管）：L2 與 L1 共用 `declared_profile.name_is_blank`
+    _out, cells = _one(mdj_ok(name=name), tdcc_ok("USD"), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready"
+    assert cells["fund_name"]["reason"] == "MoneyDJ「基金名稱」為空白或佔位字"
+
+
+def test_L2名稱判空用的是L1那一支():
+    import inspect
+    src_text = inspect.getsource(EP._fund_name_cell)
+    assert "dp.name_is_blank(" in src_text
+
+
+@pytest.mark.parametrize("count", [0, 2, True, 1.0, "1", None])
+def test_綁定_非空名稱表張數必須恰為int1(count):
+    res = mdj_ok()
+    res["binding"]["populated_name_table_count"] = count
+    _out, cells = _one(res, not_listed(), not_listed())
+    assert cells["fund_name"]["status"] == "not_ready" and cells["fund_name"]["reason"] == EP.TEXT_UNBOUND
