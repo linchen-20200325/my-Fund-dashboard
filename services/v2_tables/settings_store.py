@@ -61,7 +61,8 @@ from typing import Callable, Optional
 from repositories import settings_sheet_repository as store
 from repositories.macro.fred_vintage import fetch_fred_vintages
 from repositories.macro.yf import fetch_yf_close
-from services.v2_tables import alo_holdings, fund_keys, nav_dividend
+from repositories.fund import declared_profile
+from services.v2_tables import alo_holdings, exp_nav, exp_profile, fund_keys, nav_dividend
 from services.v2_tables import market_indicator as mi
 from services.v2_tables.masking import mask_message
 
@@ -478,6 +479,9 @@ def refetch_nav(secret_values) -> dict:
     ⇒ 這裡清的是本行程裡 `fetch_nav` 的**全部**當日快取（含持倉以外的基金；舊樹頁面同行程內下次會重抓）。
     五個 app 各是獨立行程（`49` §4.8），清不到別的 app。**不動來源冷卻、不呼叫全域清除**（`50` B9，同
     `refetch_market_indicator`）：冷卻中的來源照樣由 L1（`infra.source_backoff`）擋下，那一檔照實記失敗原文。
+    2026-10-14 C2：清 A 鏈快取的同一處，一併清 exp 的自報基本資料三支 L1（`exp_profile.DECLARED_CACHED_FUNCTIONS`，
+    成功快取與失敗記憶）、exp 淨值逐檔記憶（`exp_nav.clear_memo()`），以及 TDCC 3-2 被快取成 `[]` 的那一筆
+    （`declared_profile.reset_tdcc_list_cache_if_empty()`）。持倉讀不到時與 A 鏈快取一樣不清。簽名不變。
 
     `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
     - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
@@ -596,6 +600,13 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
         # 逐一實查）；整批清（見 docstring）；冷卻不動。
         for fetcher in nav_dividend.CHAIN_CACHED_FUNCTIONS:
             fetcher.cache_clear()
+        # 2026-10-14 C2：exp 用到的自報基本資料三支 L1（各自的公開 `cache_clear()` 同時清成功快取與自己的失敗記憶）、
+        # exp 淨值逐檔記憶，以及 TDCC 3-2 被永久快取成 `[]` 的那一筆（只丟 `[]`，非空清單不動）。
+        # 冷卻（`infra.source_backoff`）照舊不動；不加進 `refetch_cached_functions()`（那份是市場指標的清單）。
+        for fetcher in exp_profile.DECLARED_CACHED_FUNCTIONS:
+            fetcher.cache_clear()
+        exp_nav.clear_memo()
+        declared_profile.reset_tdcc_list_cache_if_empty()
         table = nav_dividend.build_nav_table([
             {"fund_code": h["fund_code"], "full_key": resolved[h["fund_code"]]["full_key"],
              "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"],

@@ -324,7 +324,9 @@ def test_declared_ccy_source_以matches_source結尾_ValueError(source):
         _build(_meta_funds("MZ01", source=source), {})
 
 
-@pytest.mark.parametrize("source", ["meta:MoneyDJ", "meta:MoneyDJ+TDCC", "meta:TDCC:基本資料", "meta:FundClear 境外"])
+# ~~合法值原列 "meta:TDCC:基本資料"、"meta:FundClear 境外"~~ → 2026-10-14 C2（有意識的更正，不是漏刪；決策者：AI 總管；
+# 依據 #959 非阻擋項）：白名單收緊為「前綴後須為 ASCII 英數段以 + 相接」，這兩個改列在下方的拒收組。
+@pytest.mark.parametrize("source", ["meta:MoneyDJ", "meta:MoneyDJ+TDCC", "meta:FundClear", "meta:MoneyDJ+TDCC+FundClear"])
 def test_declared_ccy_source_合法值照常通過(source):
     out = _build(_meta_funds("MZ01", source=source), {"MZ01": _res("MZ01")})
     assert out["nav"]["provenance"]["MZ01"]["ccy_source"] == source
@@ -423,3 +425,31 @@ def test_chain_fetch拋例外_照舊轉成兩邊的失敗原文():
 def test_chain_fetch不是可呼叫物_ValueError():
     with pytest.raises(ValueError, match="chain_fetch"):
         ND.build_nav_dividend_tables(_meta_funds("MZ01"), now=NOW, chain_fetch="x")
+
+
+# ── 2026-10-14 C2：前綴後須為 ASCII 英數段以 + 相接（#959 非阻擋項）──
+
+@pytest.mark.parametrize("source", ["meta:TDCC:基本資料", "meta:FundClear 境外", "meta:meta:X", "meta:Money\u200bDJ",
+                                    "meta:ＭｏｎｅｙＤＪ", "meta:MoneyDJ+", "meta:+TDCC", "meta:MoneyDJ++TDCC",
+                                    "meta:Money_DJ", "meta:MoneyDJ\u200b"])
+def test_declared_ccy_source_非英數段以加號相接_ValueError(source):
+    with pytest.raises(ValueError, match="ASCII 英數段以 '\\+' 相接"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["meta:meta:X", "meta:Money\u200bDJ", "TDCC:基本資料"])
+def test_公開函式_壞label_source_ValueError(source):
+    with pytest.raises(ValueError, match="label_source"):
+        ND.resolve_nav_ccy("USD", ["USD"], label_source=source)
+    with pytest.raises(ValueError, match="label_source"):
+        ND.rows_from_nav_series("MZ01", H.series(3, start="2026-08-03"), None, holding_ccys=["USD"], now=NOW,
+                                label_source=source)
+    with pytest.raises(ValueError, match="label_source"):   # 有錯誤原文也一樣先擋
+        ND.rows_from_nav_series("MZ01", None, "boom", label_source=source)
+    with pytest.raises(ValueError, match="label_source"):
+        ND.rows_from_chain_dividends("MZ01", {"items": [], "outcome": None, "error": None}, label_source=source)
+
+
+def test_公開函式_持倉手填與合法meta照常():
+    assert ND.resolve_nav_ccy("USD", ["USD"])[:2] == ("USD", "source_reported")
+    assert ND.resolve_nav_ccy(None, ["USD"], label_source=META)[:2] == ("USD", META)

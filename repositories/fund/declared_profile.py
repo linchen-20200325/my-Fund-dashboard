@@ -10,6 +10,10 @@
 3. `fetch_fundclear_declared_ccy(full_key)` —— FundClear `GetFundBasicInfo`（`_src_fundclear_meta` 用的同一支）
    （status ∈ {ok, not_listed, failed}）。
 
+另有一支維護用函式 `reset_tdcc_list_cache_if_empty()`（2026-10-14 C2）：只在 `sources._tdcc_cache` 對 3-2 存的是
+空清單 `[]` 時丟掉那一筆（set 頁「重新取數」用），不改 `_tdcc_get`。MoneyDJ 的 ok 結果另帶 `binding`（同日 C2，
+表格與代碼的綁定；見 `_fetch_moneydj_basic_fields_cached`）。
+
 ## 客戶裁示（本檔的邊界，逐條落在程式裡）
 
 - 幣別只取來源**自報**的值，可追溯；**不從名稱或代碼推斷**。本檔沒有任何一行看基金名稱或代碼去猜幣別。
@@ -63,7 +67,7 @@ __all__ = [
     "STATUS_OK", "STATUS_NOT_LISTED", "STATUS_FAILED",
     "MONEYDJ_LABELS", "MONEYDJ_HOSTS", "FAILURE_MEMORY_SEC",
     "fetch_moneydj_basic_fields", "fetch_tdcc_listing", "fetch_fundclear_declared_ccy",
-    "clear_failure_memory",
+    "clear_failure_memory", "reset_tdcc_list_cache_if_empty",
 ]
 
 STATUS_OK = "ok"
@@ -231,7 +235,7 @@ def _own_rows(tbl) -> list:
     return rows
 
 
-def _parse_label_table(soup) -> "tuple[dict | None, list[dict]]":
+def _parse_label_table(soup) -> "tuple[dict | None, list[dict], object]":
     """找第一張含「基金名稱」那一列（標籤字面完全相同、值非空）的表，只收 `MONEYDJ_LABELS` 四個標籤。
 
     列配對同 `sources._src_tcb_meta`：恰 2 格 → (0,1)；4 格以上 → (0,1)(2,3)…；其餘格數不收。
@@ -239,7 +243,10 @@ def _parse_label_table(soup) -> "tuple[dict | None, list[dict]]":
     - 標籤比對用**完全相同**（去頭尾空白後），不是子字串；
     - 只看表格自己的列（`_own_rows`）與列的**直接子** `td`，巢狀表不會串進外層；
     - 同一標籤出現兩次且值不同 → 該欄設 `None`，兩個值記進 conflicts（不取第一個、不取最後一個）。
-    回傳 `(fields 或 None, conflicts)`；fields 的值是原始字面，標籤沒出現或自相矛盾 → `None`。
+    ~~回傳 `(fields 或 None, conflicts)`；fields 的值是原始字面，標籤沒出現或自相矛盾 → `None`。~~
+    → 2026-10-14 C2（只增不改語意；決策者：AI 總管，依 docs/v2/49 第 8 節 (n)「C2 接上畫面前必須把表格與代碼綁定」）：
+    回傳 `(fields 或 None, conflicts, 該表格節點或 None)`；fields 與 conflicts 的判法一字未改，
+    第三個值是**被採用的那一張表**本身（沒有表時為 `None`），讓呼叫端檢查代碼是否出現在這張表自己的文字裡。
     """
     for tbl in soup.find_all("table"):
         seen: dict = {}
@@ -263,8 +270,8 @@ def _parse_label_table(soup) -> "tuple[dict | None, list[dict]]":
             fields = {lb: (seen[lb][0] if len(seen.get(lb, [])) == 1 else None) for lb in MONEYDJ_LABELS}
             conflicts = [{"label": lb, "values": list(seen[lb])}
                          for lb in MONEYDJ_LABELS if len(seen.get(lb, [])) > 1]
-            return fields, conflicts
-    return None, []
+            return fields, conflicts, tbl
+    return None, [], None
 
 
 def _mentions_code(soup, code: str) -> bool:
@@ -272,6 +279,18 @@ def _mentions_code(soup, code: str) -> bool:
     只看 `get_text()`（不含 href 等屬性值），前後不得緊接英數字：查 `TLZF9` 不會被 `TLZF90` 命中。"""
     pat = _re.compile(rf"(?<![A-Za-z0-9]){_re.escape(code)}(?![A-Za-z0-9])", _re.IGNORECASE)
     return bool(pat.search(soup.get_text(" ")))
+
+
+def _table_mentions_code(tbl, code: str) -> bool:
+    """「含基金名稱那張表**自身**的文字」是否以完整詞提到該代碼（規則同 `_mentions_code`：只看可見文字、
+    前後不得緊接英數字、大小寫不分）。**巢狀在這張表裡的內層表不算**（先複製再拿掉內層表，不動原頁面）——
+    內層表可能是另一檔基金的表，算進來就等於沒有綁定。`tbl` 為 None → False。"""
+    if tbl is None:
+        return False
+    clone = _copy.copy(tbl)          # bs4 Tag 的 copy 是整棵子樹的複本；拿掉內層表不影響原頁面
+    for inner in clone.find_all("table"):
+        inner.decompose()
+    return _mentions_code(clone, code)
 
 
 def _moneydj_urls(code: str) -> list:
@@ -296,8 +315,13 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
     `is_valid_moneydj_page` 靠不住（`sources._src_allianzgi_meta` 自註：任兩個常見中文詞就回 True），
     本函式只拿它記進嘗試紀錄的說明，從不用它判定任何 status。
 
-    ⚠️ 表格與代碼**仍未綁定**：只確認「頁面可見文字提到該代碼」＋「頁面上有一張含基金名稱的表」，
-    沒有確認那張表就是該代碼的表（真實頁面結構未以樣本驗證）。
+    ~~⚠️ 表格與代碼**仍未綁定**：只確認「頁面可見文字提到該代碼」＋「頁面上有一張含基金名稱的表」，
+    沒有確認那張表就是該代碼的表（真實頁面結構未以樣本驗證）。~~
+    → 2026-10-14 C2（有意識的更正，不是漏刪；決策者：AI 總管）：**ok 判準不變**（仍只看上面兩件事），
+    但 ok 結果多交一個 `binding`：`code_in_label_table`＝代碼是否以完整詞出現在**那張含基金名稱的表自身**的文字裡
+    （`_table_mentions_code`，巢狀內層表不算）；`code_in_page_text` 在 ok 時恆為 True。
+    綁定與否由 L2（`services/v2_tables/exp_profile.py`）決定採不採用。真實頁面上代碼是不是寫在那張表裡，
+    **仍未以樣本驗證** —— 若真實頁面把代碼放在表外，L2 會把四欄一律判成資料未備（偏保守的那一側）。
 
     逐網址結果（`attempts[i]["outcome"]`）：
     - `ok`：有表、可見文字有代碼 → 採用並停止；
@@ -345,13 +369,16 @@ def _fetch_moneydj_basic_fields_cached(code: str) -> dict:
                 continue
             html = r.text or ""
             soup = BeautifulSoup(html, "lxml")
-            fields, conflicts = _parse_label_table(soup)
+            fields, conflicts, label_tbl = _parse_label_table(soup)
             mentions = _mentions_code(soup, code)
             if fields is not None and fields.get(_NAME_LABEL) and mentions:
                 att.update(outcome="ok", detail=None)
                 return {
                     "status": STATUS_OK, "source": f"MoneyDJ:{host}:{page}", "full_key": code,
                     "fields": fields, "label_conflicts": conflicts,
+                    # 2026-10-14 C2：表格與代碼的綁定（只增鍵；ok 判準不變，L2 據 code_in_label_table 決定採不採用）
+                    "binding": {"code_in_label_table": _table_mentions_code(label_tbl, code),
+                                "code_in_page_text": True},
                     "provenance": {"host": host, "page_type": page, "url": url},
                     "fetched_at": att["at"], "attempts": attempts, "error": None,
                 }
@@ -505,6 +532,22 @@ def _fetch_tdcc_listing_cached(code: str) -> dict:
 
 
 fetch_tdcc_listing = _public(_fetch_tdcc_listing_cached)
+
+
+def reset_tdcc_list_cache_if_empty() -> bool:
+    """`sources._tdcc_cache` 對 3-2 存的若是空清單 `[]` → 丟掉那一筆，回 True；其餘（沒有這一筆、或是非空清單）
+    一律不動，回 False。
+
+    2026-10-14 C2（docs/v2/49 第 8 節 (q) 的後續）：`_tdcc_get` 把非清單回應**永久**快取成 `[]`，
+    `fetch_tdcc_listing` 因此在該行程內恆判 failed、直到重啟。set 頁「重新取數」呼叫本函式，讓下一次真的重試。
+    ⛔ **不改 `_tdcc_get`**、不清非空清單（那是 TDCC 真的交回的清單，清掉只會多打一次）、不動其他端點。
+    鎖沿用 `sources._tdcc_lock`（與 `_tdcc_get` 讀寫快取同一把）。
+    """
+    with _src._tdcc_lock:
+        if _TDCC_EP in _src._tdcc_cache and _src._tdcc_cache[_TDCC_EP] == []:
+            del _src._tdcc_cache[_TDCC_EP]
+            return True
+    return False
 
 
 # ═════════════════════════════════════════════════════════════════════
