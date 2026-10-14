@@ -148,6 +148,11 @@ LABEL_SOURCE_HOLDING = "holding_user_input"
 # `<來源>` 取 `declared_ccy_source` 去掉 `META_SOURCE_PREFIX` 前綴後的原文（例 `meta:MoneyDJ+TDCC` → `MoneyDJ+TDCC`）。
 TEXT_LABEL_DECLARED = "來源自報（{source}）"
 META_SOURCE_PREFIX = "meta:"
+# `declared_ccy_source` 的白名單（2026-10-14 C3a 回修）：必須以 `META_SOURCE_PREFIX` 開頭、前綴後緊接非空白字元；
+# 整串或前綴後那段（大小寫不分）不得等於既有的出處值、也不得以配息的出處尾綴結尾 —— 否則寫進
+# `provenance["ccy_source"]` 後會與 hld／來源自報的出處撞名，下游分不出是誰說的。
+_RESERVED_CCY_SOURCES = (LABEL_SOURCE_HOLDING, "source_reported")
+_MATCHES_SOURCE_SUFFIX = "_matches_source"
 
 
 def _label_words(label_source) -> dict:
@@ -155,14 +160,30 @@ def _label_words(label_source) -> dict:
     - `row`／`input`：hld 原文的「持倉列」「持倉手填」；meta 一律是「來源自報（<來源>）」。
     - `series`：`resolve_nav_ccy` 指稱淨值序列自報值的主詞（hld 原文是「來源」；meta 改「淨值序列」，
       免得與「來源自報（…）」混成同一個詞）。
+    - `row_ccy`：緊接「幣別」二字的修飾語（hld 原文「持倉列」→「持倉列幣別」；meta 是「來源自報（<來源>）的」
+      →「來源自報（<來源>）的幣別」—— 整句標籤後面直接接「幣別」會缺「的」，2026-10-14 C3a 回修）。
     - `side`：衝突說明裡標籤那一側的標記（hld 原文 `holding`）。"""
     if label_source == LABEL_SOURCE_HOLDING:
-        return {"row": "持倉列", "input": "持倉手填", "series": "來源", "side": "holding"}
-    text = str(label_source)
-    if text.startswith(META_SOURCE_PREFIX):
-        text = text[len(META_SOURCE_PREFIX):]
-    shown = TEXT_LABEL_DECLARED.format(source=text)
-    return {"row": shown, "input": shown, "series": "淨值序列", "side": "declared"}
+        return {"row": "持倉列", "row_ccy": "持倉列", "input": "持倉手填", "series": "來源", "side": "holding"}
+    shown = TEXT_LABEL_DECLARED.format(source=str(label_source).removeprefix(META_SOURCE_PREFIX))
+    return {"row": shown, "row_ccy": f"{shown}的", "input": shown, "series": "淨值序列", "side": "declared"}
+
+
+def _declared_source_problem(value):
+    """`declared_ccy_source` 不合白名單 → 回說明（給 ValueError 用）；合格 → None。見 `_RESERVED_CCY_SOURCES`。"""
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        return "須為前後無空白的非空字串"
+    rest = value.removeprefix(META_SOURCE_PREFIX)
+    for text in (value, rest):
+        if text.casefold() in {r.casefold() for r in _RESERVED_CCY_SOURCES}:
+            return f"不得是既有的出處值 {', '.join(repr(r) for r in _RESERVED_CCY_SOURCES)}（大小寫不分）"
+        if text.casefold().endswith(_MATCHES_SOURCE_SUFFIX):
+            return f"不得以 {_MATCHES_SOURCE_SUFFIX!r} 結尾（那是配息的出處尾綴）"
+    if not value.startswith(META_SOURCE_PREFIX):
+        return f"須以 {META_SOURCE_PREFIX!r} 開頭"
+    if not rest or rest != rest.lstrip():
+        return f"{META_SOURCE_PREFIX!r} 之後須緊接非空白的來源名稱"
+    return None
 
 
 # ───────────────────────── 小工具 ─────────────────────────
@@ -266,11 +287,16 @@ def _group_funds(funds, *, chain: bool = False):
     判法完全相同），`label_source` ＝ `declared_ccy_source`；沒給就是 `LABEL_SOURCE_HOLDING`。
     - 同一次呼叫裡同時出現 `holding_ccy` 與 `declared_ccy`（或 `declared_ccy_source`）→ `ValueError`（不混用：
       同一張表的標籤出處只能是一種，否則畫面分不出哪一列的幣別是誰說的）。
-    - `declared_ccy_source` 不是前後無空白的非空字串、或等於 `LABEL_SOURCE_HOLDING` → `ValueError`（不猜出處）。
+    - `declared_ccy_source` 不合白名單（`_declared_source_problem`：須以 `META_SOURCE_PREFIX` 開頭、前綴後緊接
+      非空白字元；不得撞既有出處值、不得以 `_matches_source` 結尾）→ `ValueError`（不猜出處）。
+    - 同一次呼叫只要有任一列是 meta 模式，每一列都必須明確帶 `declared_ccy` 或 `declared_ccy_source`
+      （`declared_ccy=None` 算有帶）；兩種鍵都沒帶的列 → `ValueError`（否則那一列會落回持倉手填的出處與文案，
+      把「沒給」寫成持倉手填）。沒有任何列帶 declared 鍵 ＝ hld，行為不變。
     - 同一檔基金的 `declared_ccy_source` 不同 → 該檔列為輸入矛盾（同 `full_key` 不一致）。
     """
     grouped, conflicts = {}, {}
     modes = set()
+    unlabeled = []          # 兩種 declared 鍵都沒帶的列（只在 meta 模式下才是錯；迴圈後判，`funds` 只走一次）
     for item in funds:
         code = item.get("fund_code")
         if not isinstance(code, str) or not code.strip() or code != code.strip():
@@ -297,10 +323,11 @@ def _group_funds(funds, *, chain: bool = False):
         label_source = LABEL_SOURCE_HOLDING
         if declared:
             label_source = item.get("declared_ccy_source")
-            if (not isinstance(label_source, str) or not label_source.strip() or label_source != label_source.strip()
-                    or label_source == LABEL_SOURCE_HOLDING):
-                raise ValueError(f"{code}：declared_ccy_source 須為前後無空白的非空字串、且不得是 "
-                                 f"{LABEL_SOURCE_HOLDING!r}（{label_source!r}）；本檔不猜幣別出處")
+            problem = _declared_source_problem(label_source)
+            if problem:
+                raise ValueError(f"{code}：declared_ccy_source {problem}（{label_source!r}）；本檔不猜幣別出處")
+        elif "holding_ccy" not in item and code not in unlabeled:
+            unlabeled.append(code)
         entry = grouped.setdefault(code, {"full_key": full_key, "portal": portal, "chain_code": chain_code,
                                           "holding_ccys": [], "label_source": label_source})
         if entry["full_key"] != full_key or entry["portal"] != portal or entry["chain_code"] != chain_code:
@@ -314,6 +341,10 @@ def _group_funds(funds, *, chain: bool = False):
         if ccy_key in item and not _is_blank_ccy(item[ccy_key]):
             if item[ccy_key] not in entry["holding_ccys"]:
                 entry["holding_ccys"].append(item[ccy_key])
+    if "declared_ccy" in modes and unlabeled:
+        raise ValueError(f"{'、'.join(unlabeled)}：本次呼叫是 meta 模式（有列給了 declared_ccy／declared_ccy_source），"
+                         f"這幾列卻兩種鍵都沒帶；每一列都要明確給（沒有幣別請給 declared_ccy=None），"
+                         f"本檔不把「沒給」當成持倉手填")
     return grouped, conflicts
 
 
@@ -419,7 +450,7 @@ def resolve_nav_ccy(source_ccy, holding_ccys, *, label_source=LABEL_SOURCE_HOLDI
         detail.append(f"{words['series']}自報值不合 ISO 4217：{source_ccy!r}")
     bad = [repr(c) for c in holding_ccys if not _iso_ccy(c)]
     if bad:
-        detail.append(f"{words['row']}幣別不合 ISO 4217：{', '.join(bad)}")
+        detail.append(f"{words['row_ccy']}幣別不合 ISO 4217：{', '.join(bad)}")
     reason = (f"{words['series']}未自報幣別、{words['row']}也沒有可用的幣別"
               + (f"（{'；'.join(detail)}）" if detail else ""))
     return None, None, WITHHELD_CCY_MISSING, reason
@@ -1406,13 +1437,14 @@ def _resolve_div_holding(holding_ccys, *, label_source=LABEL_SOURCE_HOLDING):
     """持倉手填幣別 → `(標籤, withheld 代碼, 理由)`；與 `resolve_nav_ccy` 對持倉那一側的判法相同
     （意思不一致 → 衝突；沒有合格 ISO 4217 的值 → 缺），標籤用持倉原值、不改寫。
     `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處；只決定理由文案的字樣（`_label_words`），判法不變。"""
-    row = _label_words(label_source)["row"]
+    words = _label_words(label_source)
+    row, row_ccy = words["row"], words["row_ccy"]
     values = [c for c in holding_ccys if not _is_blank_ccy(c)]
     if len({_ccy_meaning(c) for c in values} - {None}) > 1:
-        return None, WITHHELD_CCY_CONFLICT, f"{row}幣別意思不一致（{', '.join(repr(c) for c in values)}）"
+        return None, WITHHELD_CCY_CONFLICT, f"{row_ccy}幣別意思不一致（{', '.join(repr(c) for c in values)}）"
     label = next((c for c in values if _iso_ccy(c)), None)
     if label is None:
-        shown = f"（{row}幣別：{', '.join(repr(c) for c in values)}）" if values else ""
+        shown = f"（{row_ccy}幣別：{', '.join(repr(c) for c in values)}）" if values else ""
         return None, WITHHELD_CCY_MISSING, f"{row}沒有可用的幣別" + shown
     return label, None, None
 

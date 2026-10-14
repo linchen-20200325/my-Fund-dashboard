@@ -5,7 +5,9 @@ hld（持倉手填）路徑零變化由 `tests/test_nav_dividend_golden_c3a.py` 
 - `ccy_source` 是呼叫端給的出處字串（配息是 `<出處>_matches_source`，不是幣別值）；
 - 使用者可見文案不出現「持倉」，改用暫定字面「來源自報（<來源>）」；
 - 判斷規則與 hld 相同：序列／配息宣告的幣別與 meta 不同 → 扣下；配息沒宣告 → 那幾筆不寫；
-- `holding_ccy` 與 `declared_ccy` 混用 → ValueError；
+- `holding_ccy` 與 `declared_ccy` 混用 → ValueError；meta 模式下有列兩種 declared 鍵都沒帶 → ValueError；
+- `declared_ccy_source` 白名單（`meta:` 前綴、不撞既有出處值、不以 `_matches_source` 結尾）；
+- meta 文案「來源自報（…）」後面接「幣別」時補「的」（hld 字樣一字不動，黃金檔證明）；
 - `chain_fetch` 可注入、預設值不變。
 """
 
@@ -123,6 +125,45 @@ def test_meta_各種扣下_文案沒有持倉_有來源自報字樣(ccy, attrs, 
     assert META_TEXT in text
 
 
+# ── 「來源自報（…）」接「幣別」要有「的」（2026-10-14 回修）──
+
+_MISSING_DE = "）幣別"
+
+
+@pytest.mark.parametrize("ccys", [["x"], [""], ["usd"], ["USD", "EUR"], ["usd", "EUR"], [None], [840]])
+def test_meta_各種扣下_文案不出現缺的的串接(ccys):
+    funds = [row for c in ccys for row in _meta_funds("MZ01", c)]
+    out = _build(funds, {"MZ01": _res("MZ01")})
+    text = _all_text(out)
+    assert out["nav"]["withheld"] or out["dividend"]["withheld"]
+    assert _MISSING_DE not in text, text
+    assert "持倉" not in text
+
+
+@pytest.mark.parametrize("source_ccy, held", [
+    ("x", ["x"]), (None, ["x"]), (None, [""]), ("USD", ["EUR"]), (None, ["usd", "USD"]), ("eur", ["eur"])])
+def test_meta_resolve_nav_ccy與配息標籤_文案不出現缺的的串接(source_ccy, held):
+    _ccy, _src, _code, why = ND.resolve_nav_ccy(source_ccy, held, label_source=META)
+    _label, _dcode, dwhy = ND._resolve_div_holding(held, label_source=META)
+    for line in (why, dwhy):
+        assert _MISSING_DE not in str(line), line
+
+
+def test_meta_配息標籤缺值與衝突_文案原文():
+    assert ND._resolve_div_holding(["x"], label_source=META)[2] == (
+        f"{META_TEXT}沒有可用的幣別（{META_TEXT}的幣別：'x'）")
+    assert ND._resolve_div_holding([""], label_source=META)[2] == f"{META_TEXT}沒有可用的幣別（{META_TEXT}的幣別：''）"
+    assert ND._resolve_div_holding(["USD", "EUR"], label_source=META)[2] == (
+        f"{META_TEXT}的幣別意思不一致（'USD', 'EUR'）")
+
+
+def test_hld_配息標籤文案字樣不變():
+    assert ND._resolve_div_holding(["x"])[2] == "持倉列沒有可用的幣別（持倉列幣別：'x'）"
+    assert ND._resolve_div_holding(["USD", "EUR"])[2] == "持倉列幣別意思不一致（'USD', 'EUR'）"
+    assert ND.resolve_nav_ccy("eur", ["eur"])[3] == (
+        "來源未自報幣別、持倉列也沒有可用的幣別（來源自報值不合 ISO 4217：'eur'；持倉列幣別不合 ISO 4217：'eur'）")
+
+
 def test_meta_非原生報價未宣告_文案沒有持倉():
     ms = {"source": "Morningstar:0P000TEST", S.MS_SECID_ORIGIN_ATTR: S.MS_SECID_FROM_POOL}
     out = _build(_meta_funds("MZ01"), {"MZ01": _res("MZ01", series_attrs=ms)})
@@ -144,13 +185,22 @@ def test_meta_resolve_nav_ccy_缺值文案_主詞換成淨值序列():
     ccy, src, code, why = ND.resolve_nav_ccy("eur", ["eur"], label_source=META)
     assert (ccy, src, code) == (None, None, ND.WITHHELD_CCY_MISSING)
     assert why == ("淨值序列未自報幣別、來源自報（MoneyDJ+TDCC）也沒有可用的幣別"
-                   "（淨值序列自報值不合 ISO 4217：'eur'；來源自報（MoneyDJ+TDCC）幣別不合 ISO 4217：'eur'）")
+                   "（淨值序列自報值不合 ISO 4217：'eur'；來源自報（MoneyDJ+TDCC）的幣別不合 ISO 4217：'eur'）")
     assert ND.resolve_nav_ccy(None, ["USD"], label_source=META)[:2] == ("USD", META)
 
 
 def test_meta_出處沒有meta前綴_字樣照原文顯示():
+    # `_group_funds` 已拒收沒有 `meta:` 前綴的出處；純函式 `resolve_nav_ccy` 等仍可直接收 `label_source`，字樣照原文
     assert ND._label_words("TDCC:基本資料")["row"] == "來源自報（TDCC:基本資料）"
-    assert ND._label_words(ND.LABEL_SOURCE_HOLDING)["row"] == "持倉列"
+    assert ND._label_words("TDCC:基本資料")["row_ccy"] == "來源自報（TDCC:基本資料）的"
+    assert ND._label_words(META)["row"] == META_TEXT
+    hld = ND._label_words(ND.LABEL_SOURCE_HOLDING)
+    assert hld["row"] == "持倉列" and hld["row_ccy"] == "持倉列"   # hld 原文「持倉列幣別」不加「的」
+
+
+def test_meta_去前綴只去開頭一次():
+    assert ND._label_words("meta:meta:X")["row"] == "來源自報（meta:X）"
+    assert ND._label_words("Xmeta:")["row"] == "來源自報（Xmeta:）"
 
 
 # ═══════════════════════ 序列／配息宣告的幣別與 meta 不同 → 扣下 ═══════════════════════
@@ -237,6 +287,98 @@ def test_混用_只給declared_ccy_source也算meta():
 def test_declared_ccy_source不合格_ValueError(source):
     with pytest.raises(ValueError, match="declared_ccy_source"):
         _build(_meta_funds("MZ01", source=source), {})
+
+
+# ── 白名單（2026-10-14 回修）：每一種拒收各一組 ──
+
+@pytest.mark.parametrize("source", ["source_reported", "x", "TDCC:基本資料", "Meta:MoneyDJ", "META:MoneyDJ"])
+def test_declared_ccy_source_沒有meta前綴_ValueError(source):
+    with pytest.raises(ValueError, match="須以 'meta:' 開頭|不得是既有的出處值"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["meta:", "meta: MoneyDJ", "meta:\tMoneyDJ"])
+def test_declared_ccy_source_前綴後沒有緊接來源名稱_ValueError(source):
+    with pytest.raises(ValueError, match="之後須緊接非空白的來源名稱"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["holding_user_input", "Holding_User_Input", "HOLDING_USER_INPUT",
+                                    "meta:holding_user_input", "meta:Holding_User_Input"])
+def test_declared_ccy_source_撞holding_user_input_大小寫不分_ValueError(source):
+    with pytest.raises(ValueError, match="不得是既有的出處值"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["source_reported", "Source_Reported", "meta:source_reported",
+                                    "meta:SOURCE_REPORTED"])
+def test_declared_ccy_source_撞source_reported_大小寫不分_ValueError(source):
+    with pytest.raises(ValueError, match="不得是既有的出處值"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["x_matches_source", "meta:x_matches_source", "meta:MoneyDJ_MATCHES_SOURCE",
+                                    "meta:_matches_source"])
+def test_declared_ccy_source_以matches_source結尾_ValueError(source):
+    with pytest.raises(ValueError, match="_matches_source"):
+        _build(_meta_funds("MZ01", source=source), {})
+
+
+@pytest.mark.parametrize("source", ["meta:MoneyDJ", "meta:MoneyDJ+TDCC", "meta:TDCC:基本資料", "meta:FundClear 境外"])
+def test_declared_ccy_source_合法值照常通過(source):
+    out = _build(_meta_funds("MZ01", source=source), {"MZ01": _res("MZ01")})
+    assert out["nav"]["provenance"]["MZ01"]["ccy_source"] == source
+    assert out["dividend"]["provenance"]["MZ01"]["ccy_source"] == f"{source}_matches_source"
+
+
+# ── meta 模式下每一列都要明確帶 declared 鍵（2026-10-14 回修）──
+
+def _bare(code):
+    return {"fund_code": code, "full_key": code, "chain_code": code, "portal": ""}
+
+
+@pytest.mark.parametrize("order", ["meta_first", "bare_first"])
+def test_meta模式混入兩種鍵都沒帶的列_ValueError_點名該列(order):
+    rows = [*_meta_funds("MZ01"), _bare("MZ02")]
+    if order == "bare_first":
+        rows.reverse()
+    with pytest.raises(ValueError, match="MZ02") as exc:
+        _build(rows, {})
+    assert "MZ01" not in str(exc.value).split("：", 1)[0]
+
+
+def test_meta模式_同一檔一列有鍵一列沒鍵_也ValueError():
+    with pytest.raises(ValueError, match="MZ01.*兩種鍵都沒帶"):
+        _build([*_meta_funds("MZ01"), _bare("MZ01")], {})
+
+
+def test_meta模式_無鍵列只點名一次():
+    with pytest.raises(ValueError) as exc:
+        _build([*_meta_funds("MZ01"), _bare("MZ02"), _bare("MZ02"), _bare("MZ03")], {})
+    assert str(exc.value).startswith("MZ02、MZ03：")
+
+
+def test_meta模式_無鍵列判定不需要走兩次funds_產生器也可以():
+    with pytest.raises(ValueError, match="MZ02"):
+        _build(iter([*_meta_funds("MZ01"), _bare("MZ02")]), {})
+
+
+def test_meta模式_全部明確帶declared_含None_正常():
+    funds = [*_meta_funds("MZ01", "USD"), *_meta_funds("MZ02", None),
+             {**_bare("MZ03"), "declared_ccy_source": META}]          # 只給出處也算有帶
+    out = _build(funds, {c: _res(c) for c in ("MZ01", "MZ02", "MZ03")})
+    assert out["nav"]["provenance"]["MZ01"]["ccy_source"] == META
+    assert out["nav"]["withheld"] == {"MZ02": ND.WITHHELD_CCY_MISSING, "MZ03": ND.WITHHELD_CCY_MISSING}
+    assert out["dividend"]["withheld"] == {"MZ02": ND.WITHHELD_CCY_MISSING, "MZ03": ND.WITHHELD_CCY_MISSING}
+    text = _all_text(out)
+    assert "持倉" not in text and ND.LABEL_SOURCE_HOLDING not in text
+
+
+def test_hld_沒有任何列帶declared鍵_沒帶holding_ccy的列照舊不報錯():
+    out = _build([_bare("MZ01"), {**_bare("MZ02"), "holding_ccy": "USD"}],
+                 {"MZ01": _res("MZ01"), "MZ02": _res("MZ02")})
+    assert out["nav"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_MISSING}
+    assert out["nav"]["provenance"]["MZ02"]["ccy_source"] == ND.LABEL_SOURCE_HOLDING
 
 
 def test_同一檔meta出處不同_列為輸入矛盾_不取數():
