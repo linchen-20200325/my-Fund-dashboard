@@ -636,13 +636,18 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 
 **2026-10-14 登記（exp 正式模式批 C 的 C1：L1 自報基本資料取數，只登記限制）**
 
-- (m) **新 L1 檔 `repositories/fund/declared_profile.py` 的職責。** 三支函式把既有來源對一檔基金「自己寫了什麼」原樣交出：`fetch_moneydj_basic_fields`（MoneyDJ 基本資料頁 yp011000／yp011001，只收字面完全相同的「基金名稱」「計價幣別」「配息頻率」「成立日期」四個標籤，「最高經理費」不讀）、`fetch_tdcc_listing`（TDCC OpenAPI 3-2 清單的名稱與計價幣別）、`fetch_fundclear_declared_ccy`（FundClear `GetFundBasicInfo` 回應 `Data` 裡的幣別，並記下取自哪個鍵；成立日期不讀）。回傳帶 `status`（`ok`／`not_listed`／`failed`）、原始字面、出處、取得時間、逐網址嘗試紀錄（含失敗種類）與失敗原文；幣別字面不在 L1 正規化，留給 L2。快取只收 `ok` 與 `not_listed`。未新增資料來源或 API。
+- (m) **新 L1 檔 `repositories/fund/declared_profile.py` 的職責。** 三支函式把既有來源對一檔基金「自己寫了什麼」原樣交出：`fetch_moneydj_basic_fields`（MoneyDJ 基本資料頁 yp011000／yp011001，只收字面完全相同的「基金名稱」「計價幣別」「配息頻率」「成立日期」四個標籤，「最高經理費」不讀）、`fetch_tdcc_listing`（TDCC OpenAPI 3-2 清單的名稱與計價幣別）、`fetch_fundclear_declared_ccy`（FundClear `GetFundBasicInfo` 回應 `Data` 裡的幣別，並記下取自哪個鍵；成立日期不讀）。回傳帶 `status`（`ok`／`not_listed`／`failed`；MoneyDJ 那支目前只會是 `ok` 或 `failed`，見 (n)）、原始字面、出處、取得時間、逐網址嘗試紀錄（含失敗種類）與失敗原文；幣別字面不在 L1 正規化，留給 L2。快取只收 `ok` 與 `not_listed`；`failed` 另記 5 分鐘失敗記憶（期間不發請求，回傳帶 `cooling=True` 與剩餘秒數，原文與嘗試紀錄沿用上一次）。代碼在進快取前先去空白、轉大寫。未新增資料來源或 API。
 - (n) **這個檔已知的限制（照實登記，本 PR 不處理）。**
   - `sources._tdcc_get` 把非清單回應**永久**快取成 `[]`，清單本身也永不過期（裸 dict、無 TTL）。前者讓 `fetch_tdcc_listing` 在該行程內恆判 `failed`，直到行程重啟；後者讓它外層的 1 小時快取過期後，拿到的仍是同一份舊清單。本 PR 依派工不改 `_tdcc_get`。
   - 因此 **TDCC 清單的取得時間不可考**：`fetched_at` 固定為 `None`，改記 `observed_at`＝本模組在這個行程內第一次觀察到這份清單（以物件身分判定是不是同一份）的時刻，語意是「清單取得時間**不晚於** `observed_at`」。
   - MoneyDJ 基本資料表的標籤結構、TDCC 3-2 的欄名、FundClear 的 `Data`／`Currency` 鍵名，**都未以真實回應樣本驗證**（repo 內沒有這三個來源的原始回應，本環境也連不到）；判準照 repo 既有解析碼寫成。FundClear 只收大寫 `Data` 鍵，沒有就判 `failed`，鍵名若其實是別的寫法，這支會一直是 `failed`，不會猜。
-  - MoneyDJ 的 `not_listed` 只在四個網址都是「確定沒有」（404，或是正常頁但既沒有該代碼也沒有表）時成立；查無此基金時 MoneyDJ 實際回什麼頁面同樣未以真實樣本驗證，若它回的頁面會提到該代碼，結果會落在 `failed`（偏保守的那一側）。
+  - ~~MoneyDJ 的 `not_listed` 只在四個網址都是「確定沒有」（404，或是正常頁但既沒有該代碼也沒有表）時成立；查無此基金時 MoneyDJ 實際回什麼頁面同樣未以真實樣本驗證，若它回的頁面會提到該代碼，結果會落在 `failed`（偏保守的那一側）。~~ → **MoneyDJ 那支目前一律不判 `not_listed`**：404、空殼頁、無法判讀的頁都算 `failed`，直到拿到真實的「查無此基金」頁面樣本為止。（2026-10-14 有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 M 的實跑反例 —— 四個網址都回空殼頁、或都回含「基金 淨值 績效」字樣的「系統維護中」頁、或 tcb 兩個 404 加 www 兩個空殼，舊判準都會判成 `not_listed` 並快取 1 小時。舊句的用意——來源明確說沒有時要能分辨——仍然成立；被推翻的是它的判準：沒有真實樣本時，「正常頁」與 404 都證明不了查無此代碼，404 更像路徑或主機出問題，與 FundClear 那支「404 不當成沒有這一檔」的標準一致。）
+  - **MoneyDJ 的表格與代碼仍未綁定**：只確認頁面**可見文字**以完整詞提到該代碼（不看連結等屬性值，前後不得緊接英數字，大小寫不分），以及頁面上有一張含「基金名稱」那一列的表；沒有確認那張表就是該代碼的表。真實頁面結構未以樣本驗證。
+  - FundClear 回應的錯誤旗標（`Success`／`IsSuccess` 為 False，或 `Data` 為空而 `Message` 非空 → 判 `failed`、不判 `not_listed`）是**保守推定**：repo 內沒有 FundClear 錯誤回應樣本，鍵名照常見慣例寫。
+  - TDCC 回 200 但不是 JSON 時，冷卻分類記為 `server_error`（`shared/backoff_policy` 既有分類裡最接近「有回應但內容不可用」的一種），沒有新增分類常數。
 - (o) **C1 只是 L1，畫面尚未使用。** 本 PR 不改 `services/v2_tables/`、`ui_v2/`、`ui/`；新函式目前沒有接到 exp 頁或任何畫面，接線是後續 PR 的事。
+- (p) **舊殼模式（只登記）。** `declared_profile.py` 經由 `fund_fetcher` 取用 `fetch_url_with_retry`；`fund_fetcher` 在 import 時會間接載入 streamlit 與 services，這是既有的舊殼寫法，本 PR 沿用、不處理。
+- (q) **set 頁「重新取數」清不到這三支的快取（只登記）。** 三支的成功快取與失敗記憶都已用 `register_cache` 登記，同一行程裡呼叫 `infra.cache.clear_all_caches()` 清得到；但 set 頁「重新取數」走的是 `services/v2_tables/settings_store.py::refetch_cached_functions` 自己的清單（只清市場指標用到的取數函式），清不到這三支。等 C2 接上畫面時再把它們登記進那份清單。
 
 **已在本輪直接修正的一筆**：§5 第 9 條原寫「四個條件」，3.5 已是五個條件，本輪改為「五個」；原句見附錄第四輪。
 
