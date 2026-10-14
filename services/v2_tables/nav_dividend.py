@@ -25,6 +25,10 @@ ui_v2 只經由 `ui_v2/<頁>/source.py` 碰到本檔（`49` §3.3 方案 A）。
     → 2026-10-13 狀態更新（有意識的更正，不是漏刪；客戶同日裁示「幣別規則與淨值相同」）：上面兩句只對舊的
       `build_dividend_table`（`fetch_div`）仍然為真。A 鏈那一支（`rows_from_chain_dividends`）：來源**仍必須自報**
       （沒宣告 → 不寫，`49` T3 的要求不變），自報值與持倉手填意思相同才寫、**標籤用持倉手填**；不同或認不出 → 整檔不寫。
+  - 2026-10-14 C3a（客戶已裁示：淨值與配息幣別可以用 MoneyDJ／TDCC／FundClear 自報的幣別，要標明來源；
+    與淨值資料不一 → ⬜）：標籤除了持倉手填（`holding_ccy`），也可以改吃 **meta 頁自報**（`declared_ccy` ＋
+    `declared_ccy_source`；同一次呼叫只能一種）。判斷規則完全相同，只換出處字串（`ccy_source`）與文案字樣；
+    持倉手填那一支（hld）的輸出與 C3a 之前逐位元組相同。exp 之後才會接上，本輪沒有呼叫端。見 `LABEL_SOURCE_HOLDING`。
 - `49` §2.6 / Q5：`div_kind` 一律 `unknown`（來源沒有收益／本金區分）；`pay_date` 來源不給 → 空值。
 - `49` §2.2：`fetch_div` 的 `date` **是不是除息日，`49` 沒有查頁面欄位語意**。本檔把它寫進 `ex_date`
   之前需要先確認 ⇒ `DIV_DATE_IS_EX_DATE_VERIFIED`（預設 False）。未確認前**不取數、不寫列**
@@ -131,6 +135,35 @@ _PENDING_DIV_TEXT = (
 # L1 回傳型別不對時寫進 `errors` 的前綴（第二輪回修 4）。
 TYPE_ERROR_PREFIX = "L1 回傳型別不符"
 
+# ── 幣別標籤的出處（2026-10-14 C3a；客戶已裁示：淨值與配息幣別可以用 MoneyDJ／TDCC／FundClear 自報的幣別，
+# 要標明來源；與淨值資料不一 → ⬜）──────────────────────────────────────────────
+# 標籤可以來自兩種輸入之一（同一次呼叫只能一種，混用 → ValueError，見 `_group_funds`）：
+# - 持倉列手填（`holding_ccy`；hld 現行路徑）：`label_source` ＝ `LABEL_SOURCE_HOLDING`（預設值），
+#   輸出與 C3a 之前逐位元組相同（`tests/test_nav_dividend_golden_c3a.py`）；
+# - meta 頁自報（`declared_ccy` ＋ `declared_ccy_source`，例 `"meta:MoneyDJ+TDCC"`；exp 之後才會接上）：
+#   `label_source` ＝ 呼叫端給的 `declared_ccy_source` 原值，原樣寫進 `provenance["ccy_source"]`。
+# 判斷規則（衝突、缺值、序列／配息宣告的幣別與標籤不同 → 扣下）兩種輸入完全相同，只換文案字樣與出處字串。
+LABEL_SOURCE_HOLDING = "holding_user_input"
+# ⚠️ meta 路徑的使用者可見字樣「來源自報（<來源>）」是計算服務組 C3a 的**暫定字面**，exp 接上時另行送審；
+# `<來源>` 取 `declared_ccy_source` 去掉 `META_SOURCE_PREFIX` 前綴後的原文（例 `meta:MoneyDJ+TDCC` → `MoneyDJ+TDCC`）。
+TEXT_LABEL_DECLARED = "來源自報（{source}）"
+META_SOURCE_PREFIX = "meta:"
+
+
+def _label_words(label_source) -> dict:
+    """依標籤出處決定使用者可見文案的字樣。預設（持倉手填）的字樣與 C3a 之前逐字相同。
+    - `row`／`input`：hld 原文的「持倉列」「持倉手填」；meta 一律是「來源自報（<來源>）」。
+    - `series`：`resolve_nav_ccy` 指稱淨值序列自報值的主詞（hld 原文是「來源」；meta 改「淨值序列」，
+      免得與「來源自報（…）」混成同一個詞）。
+    - `side`：衝突說明裡標籤那一側的標記（hld 原文 `holding`）。"""
+    if label_source == LABEL_SOURCE_HOLDING:
+        return {"row": "持倉列", "input": "持倉手填", "series": "來源", "side": "holding"}
+    text = str(label_source)
+    if text.startswith(META_SOURCE_PREFIX):
+        text = text[len(META_SOURCE_PREFIX):]
+    shown = TEXT_LABEL_DECLARED.format(source=text)
+    return {"row": shown, "input": shown, "series": "淨值序列", "side": "declared"}
+
 
 # ───────────────────────── 小工具 ─────────────────────────
 
@@ -222,12 +255,22 @@ def _is_blank_ccy(value) -> bool:
 
 
 def _group_funds(funds, *, chain: bool = False):
-    """輸入 → `{fund_code: {"full_key", "portal", "holding_ccys": list}}` 與 `{fund_code: 矛盾說明}`。
+    """輸入 → `{fund_code: {"full_key", "portal", "holding_ccys": list, "label_source": str}}` 與
+    `{fund_code: 矛盾說明}`。
 
     同一檔基金掛在多張保單下是常態，取數只做一次；但 `full_key`／`portal` 不一致就不猜。
     `holding_ccys` 收集所有持倉列的手填幣別原值（含不合格式的值，交給 `resolve_nav_ccy` 判斷）。
+
+    2026-10-14 C3a：每一筆也可以改給 `declared_ccy`（meta 頁自報的幣別原值）＋ `declared_ccy_source`
+    （出處字串，例 `"meta:MoneyDJ+TDCC"`）。此時 `holding_ccys` 收的是 `declared_ccy` 的原值（鍵名沿用，
+    判法完全相同），`label_source` ＝ `declared_ccy_source`；沒給就是 `LABEL_SOURCE_HOLDING`。
+    - 同一次呼叫裡同時出現 `holding_ccy` 與 `declared_ccy`（或 `declared_ccy_source`）→ `ValueError`（不混用：
+      同一張表的標籤出處只能是一種，否則畫面分不出哪一列的幣別是誰說的）。
+    - `declared_ccy_source` 不是前後無空白的非空字串、或等於 `LABEL_SOURCE_HOLDING` → `ValueError`（不猜出處）。
+    - 同一檔基金的 `declared_ccy_source` 不同 → 該檔列為輸入矛盾（同 `full_key` 不一致）。
     """
     grouped, conflicts = {}, {}
+    modes = set()
     for item in funds:
         code = item.get("fund_code")
         if not isinstance(code, str) or not code.strip() or code != code.strip():
@@ -243,15 +286,34 @@ def _group_funds(funds, *, chain: bool = False):
                       or chain_code != chain_code.strip()):
             raise ValueError(f"{code}：chain_code（交給 A 鏈的代碼，`fund_keys` 的 parsed_code）須由呼叫端"
                              f"明確給出、前後無空白（{chain_code!r}）；本檔不猜代碼對照")
+        declared = "declared_ccy" in item or "declared_ccy_source" in item
+        if "holding_ccy" in item:
+            modes.add("holding_ccy")
+        if declared:
+            modes.add("declared_ccy")
+        if len(modes) > 1:
+            raise ValueError(f"{code}：同一次呼叫同時給了 holding_ccy 與 declared_ccy；"
+                             f"幣別標籤只能來自其中一種，本檔不混用")
+        label_source = LABEL_SOURCE_HOLDING
+        if declared:
+            label_source = item.get("declared_ccy_source")
+            if (not isinstance(label_source, str) or not label_source.strip() or label_source != label_source.strip()
+                    or label_source == LABEL_SOURCE_HOLDING):
+                raise ValueError(f"{code}：declared_ccy_source 須為前後無空白的非空字串、且不得是 "
+                                 f"{LABEL_SOURCE_HOLDING!r}（{label_source!r}）；本檔不猜幣別出處")
         entry = grouped.setdefault(code, {"full_key": full_key, "portal": portal, "chain_code": chain_code,
-                                          "holding_ccys": []})
+                                          "holding_ccys": [], "label_source": label_source})
         if entry["full_key"] != full_key or entry["portal"] != portal or entry["chain_code"] != chain_code:
             conflicts[code] = (f"同一檔基金給了不同的 full_key／portal／chain_code："
                                f"({entry['full_key']!r}, {entry['portal']!r}, {entry['chain_code']!r}) vs "
                                f"({full_key!r}, {portal!r}, {chain_code!r})")
-        if "holding_ccy" in item and not _is_blank_ccy(item["holding_ccy"]):
-            if item["holding_ccy"] not in entry["holding_ccys"]:
-                entry["holding_ccys"].append(item["holding_ccy"])
+        elif entry["label_source"] != label_source:
+            conflicts[code] = (f"同一檔基金給了不同的 declared_ccy_source："
+                               f"{entry['label_source']!r} vs {label_source!r}")
+        ccy_key = "declared_ccy" if declared else "holding_ccy"
+        if ccy_key in item and not _is_blank_ccy(item[ccy_key]):
+            if item[ccy_key] not in entry["holding_ccys"]:
+                entry["holding_ccys"].append(item[ccy_key])
     return grouped, conflicts
 
 
@@ -319,8 +381,11 @@ def _tally_lines(counter: dict, what: str) -> list:
 
 # ───────────────────────── nav ─────────────────────────
 
-def resolve_nav_ccy(source_ccy, holding_ccys):
+def resolve_nav_ccy(source_ccy, holding_ccys, *, label_source=LABEL_SOURCE_HOLDING):
     """`49` T3：`nav.ccy` 的取值。回 `(ccy, ccy_source, withheld_code, reason)`。
+
+    - `label_source`（2026-10-14 C3a）：`holding_ccys` 這一側的出處（預設持倉手填）。採用這一側的值時
+      `ccy_source` 就回它；文案字樣依它決定（`_label_words`），判法不變。
 
     - 合格（ISO 4217）的值寫入時一律用**原值**，不改寫。
     - 衝突判定（第二輪回修必修 2）：把來源自報與每一個持倉手填值**去空白、大寫化後**比意思；
@@ -337,7 +402,8 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
     provided = []
     if source_ccy is not None:
         provided.append(("source", source_ccy))
-    provided.extend(("holding", c) for c in holding_ccys)
+    words = _label_words(label_source)
+    provided.extend((words["side"], c) for c in holding_ccys)
     meanings = {_ccy_meaning(v) for _side, v in provided} - {None}
     if len(meanings) > 1:
         shown = ", ".join(f"{side}:{v!r}" for side, v in provided)
@@ -347,14 +413,15 @@ def resolve_nav_ccy(source_ccy, holding_ccys):
     if source:
         return source, "source_reported", None, None
     if holding:
-        return holding, "holding_user_input", None, None
+        return holding, label_source, None, None
     detail = []
     if source_ccy is not None:
-        detail.append(f"來源自報值不合 ISO 4217：{source_ccy!r}")
+        detail.append(f"{words['series']}自報值不合 ISO 4217：{source_ccy!r}")
     bad = [repr(c) for c in holding_ccys if not _iso_ccy(c)]
     if bad:
-        detail.append(f"持倉列幣別不合 ISO 4217：{', '.join(bad)}")
-    reason = "來源未自報幣別、持倉列也沒有可用的幣別" + (f"（{'；'.join(detail)}）" if detail else "")
+        detail.append(f"{words['row']}幣別不合 ISO 4217：{', '.join(bad)}")
+    reason = (f"{words['series']}未自報幣別、{words['row']}也沒有可用的幣別"
+              + (f"（{'；'.join(detail)}）" if detail else ""))
     return None, None, WITHHELD_CCY_MISSING, reason
 
 
@@ -377,11 +444,14 @@ def _reconcile(out, skipped_rows: int, table: str):
     return out
 
 
-def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=None) -> dict:
+def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=None,
+                         label_source=LABEL_SOURCE_HOLDING) -> dict:
     """單一檔基金的 L1 淨值序列 → `{rows, error, withheld, skipped, fetched, provenance}`（純函式）。
 
     `error` 非空：原文照回、不寫列。`series` 不是 `pd.Series`（含 None）：型別錯誤進 `error`。
     空序列又沒有原因：回 `EMPTY_WITHOUT_REASON`、不寫列。`now`：判「未來」用的當下（測試注入）。
+    `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處（預設持倉手填；meta 路徑見 `_group_funds`），
+    一路帶到幣別閘、累積表各段與 `resolve_nav_ccy`；只影響文案字樣與 `ccy_source`，不影響判斷。
     """
     out = _empty_out()
     if error:
@@ -395,19 +465,21 @@ def rows_from_nav_series(fund_code: str, series, error, *, holding_ccys=(), now=
         return out
     attrs = dict(series.attrs or {})
     if CHAIN_ATTR in attrs:
-        blocked = _chain_ccy_gate(fund_code, series, attrs, holding_ccys)
+        blocked = _chain_ccy_gate(fund_code, series, attrs, holding_ccys, label_source=label_source)
         if blocked is not None:
             _add_chain_provenance(blocked, attrs)
             return blocked
     if any(key in attrs for key in _HISTORY_MARKERS):
-        out = _rows_with_history(fund_code, series, attrs, holding_ccys=holding_ccys, now=now)
+        out = _rows_with_history(fund_code, series, attrs, holding_ccys=holding_ccys, now=now,
+                                 label_source=label_source)
     else:
-        out = _rows_from_segment(fund_code, series, holding_ccys=holding_ccys, now=now)
+        out = _rows_from_segment(fund_code, series, holding_ccys=holding_ccys, now=now, label_source=label_source)
     _add_chain_provenance(out, attrs)
     return out
 
 
-def _rows_from_segment(fund_code: str, series, *, holding_ccys=(), now=None) -> dict:
+def _rows_from_segment(fund_code: str, series, *, holding_ccys=(), now=None,
+                       label_source=LABEL_SOURCE_HOLDING) -> dict:
     """同一個來源、同一個取得時間的一段序列 → `{rows, error, withheld, skipped, fetched, provenance}`。
     （2026-10-13 前即 `rows_from_nav_series` 的本體，一字未改，只抽出來讓累積表那幾段共用。）"""
     out = _empty_out()
@@ -423,7 +495,7 @@ def _rows_from_segment(fund_code: str, series, *, holding_ccys=(), now=None) -> 
     at_field = "cache_updated_at" if fallback else "fetched_at"
     fetched_at, at_code, at_why = _fetched_at_check(attrs.get(at_field), now_utc)
 
-    ccy, ccy_source, withheld, why = resolve_nav_ccy(attrs.get("currency"), holding_ccys)
+    ccy, ccy_source, withheld, why = resolve_nav_ccy(attrs.get("currency"), holding_ccys, label_source=label_source)
     # `live_error`（2026-10-09 客戶裁示 M-1 採 A）：退回預存舊序列時，L1 交出的本次即時網址失敗原文
     # （未遮蔽）；不是預存那一支 → None。只供 set 頁淨值層重新取數判失敗用；hld 不讀它，列照常寫。
     live_error = attrs.get(LIVE_FETCH_ERROR_ATTR) if fallback else None
@@ -554,11 +626,18 @@ TEXT_CCY_DECLARED_CONFLICT = ("淨值序列宣告的幣別與持倉手填不同�
                               "數值不是持倉幣別計價，不改標籤、不換算，{n} 筆全部不寫")
 TEXT_CCY_NON_NATIVE_UNDECLARED = ("淨值來自非原生報價來源（{source}），計價幣別由請求參數或掛牌決定、"
                                   "序列卻沒有宣告幣別；不猜它是不是持倉幣別，{n} 筆全部不寫")
+# 2026-10-14 C3a：meta 路徑（`label_source` 不是持倉手填）的同義文案；`{label}` ＝「來源自報（<來源>）」
+# （暫定字面，exp 接上時另行送審，見 `TEXT_LABEL_DECLARED`）。上面兩句 hld 原文一字不動。
+TEXT_CCY_DECLARED_CONFLICT_LABELED = ("淨值序列宣告的幣別與{label}的幣別不同（{shown}；{label} {holding}）；"
+                                      "數值不是該幣別計價，不改標籤、不換算，{n} 筆全部不寫")
+TEXT_CCY_NON_NATIVE_UNDECLARED_LABELED = ("淨值來自非原生報價來源（{source}），計價幣別由請求參數或掛牌決定、"
+                                          "序列卻沒有宣告幣別；不猜它是不是{label}的幣別，{n} 筆全部不寫")
 TEXT_NAME_SEARCH_SECID = "淨值來自以基金名稱搜尋的晨星代碼，依規則不採用（{origin}，來源 {source}）"
 
 
-def _chain_ccy_gate(fund_code, series, attrs, holding_ccys):
-    """A 鏈那一支的幣別閘：擋下 → 回整檔不寫的輸出；放行 → None。不改任何標籤規則。"""
+def _chain_ccy_gate(fund_code, series, attrs, holding_ccys, *, label_source=LABEL_SOURCE_HOLDING):
+    """A 鏈那一支的幣別閘：擋下 → 回整檔不寫的輸出；放行 → None。不改任何標籤規則。
+    `label_source`（2026-10-14 C3a）只決定文案字樣；判斷邏輯與 C3a 之前逐行相同。"""
     holding = {_ccy_meaning(c) for c in holding_ccys if not _is_blank_ccy(c)} - {None}
     if len(holding) != 1:
         return None          # 持倉沒填或互相矛盾：交給 resolve_nav_ccy 照原規則判（ccy_missing／ccy_conflict）
@@ -581,9 +660,17 @@ def _chain_ccy_gate(fund_code, series, attrs, holding_ccys):
     code = WITHHELD_CCY_CONFLICT
     if bad:
         shown = "、".join(f"{where}:{v!r}" for where, v in bad[:5]) + ("…" if len(bad) > 5 else "")
-        text = TEXT_CCY_DECLARED_CONFLICT.format(shown=shown, holding=held, n=len(series))
+        if label_source == LABEL_SOURCE_HOLDING:
+            text = TEXT_CCY_DECLARED_CONFLICT.format(shown=shown, holding=held, n=len(series))
+        else:
+            text = TEXT_CCY_DECLARED_CONFLICT_LABELED.format(label=_label_words(label_source)["input"], shown=shown,
+                                                             holding=held, n=len(series))
     elif has_live and source.startswith(_NAV_NON_NATIVE_PREFIXES) and not str(live_decl or "").strip():
-        text = TEXT_CCY_NON_NATIVE_UNDECLARED.format(source=source, n=len(series))
+        if label_source == LABEL_SOURCE_HOLDING:
+            text = TEXT_CCY_NON_NATIVE_UNDECLARED.format(source=source, n=len(series))
+        else:
+            text = TEXT_CCY_NON_NATIVE_UNDECLARED_LABELED.format(label=_label_words(label_source)["input"],
+                                                                 source=source, n=len(series))
         code = WITHHELD_CCY_MISSING
     if text is None:
         return None
@@ -596,7 +683,7 @@ def _chain_ccy_gate(fund_code, series, attrs, holding_ccys):
     return _reconcile(out, len(series), "nav")
 
 
-def _hist_group_rows(fund_code, part, source, recorded_at, *, holding_ccys, now):
+def _hist_group_rows(fund_code, part, source, recorded_at, *, holding_ccys, now, label_source=LABEL_SOURCE_HOLDING):
     """累積表裡同一個 `recorded_at` 的那幾點 → 一段的輸出。`recorded_at` 缺 → 整段不寫，不以當下時間補。"""
     if not recorded_at:
         out = _empty_out()
@@ -606,12 +693,12 @@ def _hist_group_rows(fund_code, part, source, recorded_at, *, holding_ccys, now)
         return _reconcile(out, len(part), "nav")
     seg = part.copy()
     seg.attrs = {"source": source, "fetched_at": recorded_at}
-    out = _rows_from_segment(fund_code, seg, holding_ccys=holding_ccys, now=now)
+    out = _rows_from_segment(fund_code, seg, holding_ccys=holding_ccys, now=now, label_source=label_source)
     out["skipped"] = [f"累積表（recorded_at {recorded_at}）：{line}" for line in out["skipped"]]
     return out
 
 
-def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
+def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now, label_source=LABEL_SOURCE_HOLDING) -> dict:
     """A 鏈併入了累積表的序列：逐點分成「本次即時（或預存檔）那一段」與「累積表各點」，各自照實帶 `fetched_at`。
 
     - 累積表的點：`fetched_at` ＝ 該點寫入累積表的 `recorded_at`（`load_series` 原值）；缺 → 那幾點不寫。
@@ -655,17 +742,18 @@ def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
 
     if not NAV_HISTORY_PROVENANCE_VERIFIED:
         return _rows_history_gate_closed(fund_code, live_part, attrs, groups, hist_source, read_error,
-                                         holding_ccys=holding_ccys, now=now_utc)
+                                         holding_ccys=holding_ccys, now=now_utc, label_source=label_source)
 
     parts = []
     live_out = None
     if len(live_part):
-        live_out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now_utc)
+        live_out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now_utc,
+                                      label_source=label_source)
         parts.append(live_out)
     hist_written = hist_missing = 0
     for recorded_at in sorted(groups):
         one = _hist_group_rows(fund_code, series.iloc[groups[recorded_at]], hist_source, recorded_at,
-                               holding_ccys=holding_ccys, now=now_utc)
+                               holding_ccys=holding_ccys, now=now_utc, label_source=label_source)
         hist_written += len(one["rows"])
         if not recorded_at:
             hist_missing += len(groups[recorded_at])
@@ -714,7 +802,7 @@ def _rows_with_history(fund_code, series, attrs, *, holding_ccys, now) -> dict:
 
 
 def _rows_history_gate_closed(fund_code, live_part, attrs, groups, hist_source, read_error, *,
-                              holding_ccys, now) -> dict:
+                              holding_ccys, now, label_source=LABEL_SOURCE_HOLDING) -> dict:
     """`NAV_HISTORY_PROVENANCE_VERIFIED` 關閉：累積點一律不寫，只寫即時那一段（見常數註解）。"""
     n_hist = sum(len(v) for v in groups.values())
     gate_line = TEXT_HISTORY_GATE_CLOSED.format(n=n_hist)
@@ -724,7 +812,7 @@ def _rows_history_gate_closed(fund_code, live_part, attrs, groups, hist_source, 
                          or HISTORY_ONLY_LIVE_ERROR)
         out["error"] = f"{live_error}\n{gate_line}"
         return out
-    out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now)
+    out = _rows_from_segment(fund_code, live_part, holding_ccys=holding_ccys, now=now, label_source=label_source)
     out["fetched"] += n_hist
     out["skipped"].append(gate_line)
     prov = out["provenance"] = dict(out["provenance"] or {})
@@ -924,10 +1012,16 @@ def build_nav_table(funds, *, now=None) -> dict:
     return _build_tables(funds, now=now, with_dividends=False)["nav"]
 
 
-def _build_tables(funds, *, now, with_dividends: bool) -> dict:
+def _build_tables(funds, *, now, with_dividends: bool, chain_fetch=None) -> dict:
     """`build_nav_table` 與 `build_nav_dividend_tables` 共用的迴圈（2026-10-13 抽出）。
     淨值那一半的每一步與抽出前逐行相同；`with_dividends` 為真時改呼叫 `fetch_chain_with_error`
-    （**同一次** A 鏈呼叫多交出配息），淨值仍由同一個 `_nav_from_chain` 判讀。"""
+    （**同一次** A 鏈呼叫多交出配息），淨值仍由同一個 `_nav_from_chain` 判讀。
+    `chain_fetch`（2026-10-14 C3a）：`with_dividends` 為真時取代 `fetch_chain_with_error` 的可呼叫物
+    （介面相同：`(chain_code, full_key) -> (Series, error, div)`）；None ＝ 預設 `fetch_chain_with_error`
+    （在呼叫當下才解析模組層名稱，所以既有以 monkeypatch 換掉模組層 `fetch_chain_with_error` 的寫法照樣有效）。
+    `with_dividends` 為假時不使用（淨值單表走 `fetch_nav_chain_with_error`）。"""
+    if chain_fetch is not None and not callable(chain_fetch):
+        raise ValueError(f"chain_fetch 須為可呼叫物（{chain_fetch!r}）")
     grouped, conflicts = _group_funds(funds, chain=True)
     acc = {"rows": [], "errors": {}, "withheld": {}, "skipped": {}, "fetched": {}, "skipped_rows": {},
            "provenance": {}}
@@ -950,14 +1044,14 @@ def _build_tables(funds, *, now, with_dividends: bool) -> dict:
                                        f"`fund_keys` 一律給空字串，不猜這個值要怎麼用")
                 div = {"items": None, "outcome": None, "error": error}
             elif div_acc is not None:
-                series, error, div = _call_chain(entry["chain_code"], entry["full_key"])
+                series, error, div = _call_chain(entry["chain_code"], entry["full_key"], chain_fetch=chain_fetch)
             else:
                 series, error = _call(fetch_nav_chain_with_error, entry["chain_code"], entry["full_key"])
-            _merge_one(code, rows_from_nav_series(code, series, error,
-                                                  holding_ccys=entry["holding_ccys"], now=now), acc)
+            _merge_one(code, rows_from_nav_series(code, series, error, holding_ccys=entry["holding_ccys"], now=now,
+                                                  label_source=entry["label_source"]), acc)
             if div_acc is not None:
-                _merge_div(code, rows_from_chain_dividends(code, div, holding_ccys=entry["holding_ccys"],
-                                                           now=now), div_acc)
+                _merge_div(code, rows_from_chain_dividends(code, div, holding_ccys=entry["holding_ccys"], now=now,
+                                                           label_source=entry["label_source"]), div_acc)
     _check_rows_order(acc["rows"], contract.NAV_FIELDS, "nav")
     if div_acc is not None:
         _check_rows_order(div_acc["rows"], contract.DIVIDEND_FIELDS, "dividend")
@@ -1222,6 +1316,9 @@ TEXT_DIV_DATE_FORMAT = "日期不是 YYYY-MM-DD 或 YYYY/MM/DD（{value!r}）"
 TEXT_DIV_CCY_UNDECLARED = "來源未宣告這一筆的配息幣別（{parser}）"
 TEXT_DIV_CCY_CONFLICT = ("配息宣告的幣別與持倉手填不同或認不出（{shown}；持倉 {holding}）；不改標籤、不換算，"
                          "這一檔的配息 {n} 筆全部不寫")
+# 2026-10-14 C3a：meta 路徑的同義文案（`{label}` 暫定字面見 `TEXT_LABEL_DECLARED`）；上句 hld 原文一字不動。
+TEXT_DIV_CCY_CONFLICT_LABELED = ("配息宣告的幣別與{label}的幣別不同或認不出（{shown}；{label} {holding}）；"
+                                 "不改標籤、不換算，這一檔的配息 {n} 筆全部不寫")
 
 
 def _empty_div_acc() -> dict:
@@ -1263,10 +1360,11 @@ def _div_from_chain(res, full_key: str) -> dict:
     return {"items": res.get("dividends"), "outcome": res.get(DIVIDENDS_OUTCOME_KEY), "error": None}
 
 
-def _call_chain(chain_code: str, full_key: str):
-    """呼叫 `fetch_chain_with_error`；例外不吞，轉成兩邊的失敗原文（同 `_call`）。"""
+def _call_chain(chain_code: str, full_key: str, *, chain_fetch=None):
+    """呼叫 `fetch_chain_with_error`（或注入的 `chain_fetch`，2026-10-14 C3a）；例外不吞，轉成兩邊的失敗原文（同 `_call`）。"""
+    fetch = fetch_chain_with_error if chain_fetch is None else chain_fetch
     try:
-        result = fetch_chain_with_error(chain_code, full_key)
+        result = fetch(chain_code, full_key)
     except Exception as exc:  # noqa: BLE001 —— 轉成可見的失敗原文，不是吞掉
         text = f"{type(exc).__name__}: {exc}"
         return None, text, {"items": None, "outcome": None, "error": text}
@@ -1304,20 +1402,23 @@ def _outcome_detail(outcome) -> str:
     return "\n".join(lines) or f"狀態 {outcome.get('outcome')!r}，沒有逐來源紀錄"
 
 
-def _resolve_div_holding(holding_ccys):
+def _resolve_div_holding(holding_ccys, *, label_source=LABEL_SOURCE_HOLDING):
     """持倉手填幣別 → `(標籤, withheld 代碼, 理由)`；與 `resolve_nav_ccy` 對持倉那一側的判法相同
-    （意思不一致 → 衝突；沒有合格 ISO 4217 的值 → 缺），標籤用持倉原值、不改寫。"""
+    （意思不一致 → 衝突；沒有合格 ISO 4217 的值 → 缺），標籤用持倉原值、不改寫。
+    `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處；只決定理由文案的字樣（`_label_words`），判法不變。"""
+    row = _label_words(label_source)["row"]
     values = [c for c in holding_ccys if not _is_blank_ccy(c)]
     if len({_ccy_meaning(c) for c in values} - {None}) > 1:
-        return None, WITHHELD_CCY_CONFLICT, f"持倉列幣別意思不一致（{', '.join(repr(c) for c in values)}）"
+        return None, WITHHELD_CCY_CONFLICT, f"{row}幣別意思不一致（{', '.join(repr(c) for c in values)}）"
     label = next((c for c in values if _iso_ccy(c)), None)
     if label is None:
-        shown = f"（持倉列幣別：{', '.join(repr(c) for c in values)}）" if values else ""
-        return None, WITHHELD_CCY_MISSING, "持倉列沒有可用的幣別" + shown
+        shown = f"（{row}幣別：{', '.join(repr(c) for c in values)}）" if values else ""
+        return None, WITHHELD_CCY_MISSING, f"{row}沒有可用的幣別" + shown
     return label, None, None
 
 
-def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None) -> dict:
+def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
+                              label_source=LABEL_SOURCE_HOLDING) -> dict:
     """單一檔基金、A 鏈同一次呼叫交出的配息 → `{rows, error, withheld, pending, skipped, fetched, skipped_rows,
     provenance, settled}`（純函式）。
 
@@ -1335,6 +1436,8 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
       空清單要 `none_confirmed` **而且** `none_evidenced`（必修 3：每個回空的來源本輪都認得這個代碼）。
     - 金額欄（必修 2）：出處要在 `DIV_AMOUNT_EVIDENCE` 內；合庫另要求表頭格數與列格數相同。
     - `provenance["coverage_start"]`（必修 1b）：寫出的列裡最舊的除息日；hld 據此判所選區間有沒有證據。
+    - `label_source`（2026-10-14 C3a）：`holding_ccys` 的出處（預設持倉手填）。`provenance["ccy_source"]` ＝
+      `f"{label_source}_matches_source"`（⚠️ 是出處字串，**不是**幣別值 `label`）；文案字樣依它決定，判法不變。
     """
     out = _empty_out()
     out.update(pending=None, settled=False)
@@ -1370,7 +1473,7 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
 
     n = len(items)
     out["fetched"] = n
-    label, held_code, held_why = _resolve_div_holding(holding_ccys)
+    label, held_code, held_why = _resolve_div_holding(holding_ccys, label_source=label_source)
     if held_code:
         out["withheld"] = held_code
         out["skipped"].append(f"{held_why}，配息 {n} 筆全部不寫")
@@ -1430,7 +1533,11 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
     if conflicts:
         shown = "、".join(repr(c) for c in conflicts[:5]) + ("…" if len(conflicts) > 5 else "")
         out["withheld"] = WITHHELD_CCY_CONFLICT
-        out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
+        if label_source == LABEL_SOURCE_HOLDING:
+            out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
+        else:
+            out["skipped"].append(TEXT_DIV_CCY_CONFLICT_LABELED.format(
+                label=_label_words(label_source)["input"], shown=shown, holding=label, n=n))
         return _reconcile(out, n, "dividend")
 
     n_rejected = sum(rejected.values())
@@ -1461,18 +1568,24 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None)
     times = sorted(r["fetched_at"] for r in out["rows"])
     # 稽核必修 1(b)：覆蓋期間起點 ＝ 寫出的列裡最舊的除息日（hld 據此判斷所選區間有沒有證據）
     out["provenance"].update(source=sorted(parsers) or None, fetched_at=times[-1] if times else None,
-                             ccy_source="holding_user_input_matches_source" if out["rows"] else None,
+                             # C3a：`label_source`（出處字串），不是 `label`（幣別值）—— 否則 hld 會變成 "USD_matches_source"
+                             ccy_source=f"{label_source}_matches_source" if out["rows"] else None,
                              settled=out["settled"],
                              coverage_start=min((r["ex_date"] for r in out["rows"]), default=None))
     return _reconcile(out, n_rejected + (inner["skipped_rows"] if inner is not None else 0), "dividend")
 
 
-def build_nav_dividend_tables(funds, *, now=None) -> dict:
+def build_nav_dividend_tables(funds, *, now=None, chain_fetch=None) -> dict:
     """hld 用：**同一次** A 鏈呼叫組出 `nav` 與 `dividend` 兩張表 → `{"nav": ..., "dividend": ...}`。
+
+    - `funds` 每筆給 `holding_ccy`（持倉手填，hld）或 `declared_ccy` ＋ `declared_ccy_source`（meta 頁自報，
+      2026-10-14 C3a；exp 之後才會接上），同一次呼叫只能一種（見 `_group_funds`）。
+    - `chain_fetch`（2026-10-14 C3a）：可注入的 A 鏈取數（介面同 `fetch_chain_with_error`）；None ＝ 預設
+      `fetch_chain_with_error`。
 
     - `nav`：與 `build_nav_table(funds, now=now)` 逐鍵相同（同一個迴圈、同一個判讀）。
     - `dividend`：`{"rows", "errors", "pending", "withheld", "skipped", "fetched", "skipped_rows", "provenance",
       "settled"}`，皆以 `fund_code` 為鍵（`rows` 除外）；`settled[代碼]` 見 `rows_from_chain_dividends`。
       `fetched`／`skipped_rows` 射程同 `build_nav_table`（`input_conflict` 的檔沒有這兩個鍵）。
     """
-    return _build_tables(funds, now=now, with_dividends=True)
+    return _build_tables(funds, now=now, with_dividends=True, chain_fetch=chain_fetch)
