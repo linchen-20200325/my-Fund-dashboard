@@ -411,10 +411,33 @@ def vix_series(monkeypatch, no_secrets):
     """市場總覽有一段 VIX 日線可算（不打網路），套用不同觀察窗時三張核心卡的數字才會不同。"""
     import pandas as pd
 
-    index = pd.date_range("2026-06-01", periods=120, freq="D")
-    series = pd.Series([15.0 + (i % 9) for i in range(120)], index=index, dtype=float, name="^VIX")
+    # ~~`pd.date_range("2026-06-01", periods=120, freq="D")`、attrs 只有 fetched_at~~ → 2026-10-14（稽核 N 的 B1；
+    # 有意識的更正，不是漏刪）：L1 自 2026-10-13 起帶來源自報的交易所時區，缺時區整鍵不寫 —— 舊替身沒帶，
+    # VIX 一列都寫不進去，三張核心卡變成「資料未備」，下面兩條客戶裁示守衛等於拿空畫面比空畫面。
+    # 改成 VIX 日線的真實形狀：工作日、芝加哥當地 02:00（夏令 UTC 07:00；探測報告實測），帶 `exchange_tz`。
+    index = pd.bdate_range("2026-05-01", periods=105) + pd.Timedelta(hours=7)
+    series = pd.Series([15.0 + (i % 9) for i in range(105)], index=index, dtype=float, name="^VIX")
     series.attrs["fetched_at"] = "2026-10-01T06:00:00+00:00"
+    series.attrs["exchange_tz"] = "America/Chicago"
     monkeypatch.setattr(MI, "fetch_yf_close_with_error", lambda ticker, *a, **k: (series.copy(), None))
+
+
+@pytest.fixture
+def vix_saved(vix_series, settings_book):
+    """`vix_series` ＋ 設定試算表上**已存**一組比較條件（觀察窗 10 日、基準日 2026-08-03）。
+
+    2026-10-14（稽核 N 的 N-A；有意識的更正，不是漏刪）：只有 `vix_series` 時讀不到任何已存設定，
+    比較列永遠是「比較條件讀不到」—— 暫存值就算漏進正式結果，畫面也一樣，兩條客戶裁示守衛抓不到
+    （突變 MB1、MB2 皆存活，origin/main 上亦同）。這裡經正式 L1 `save_user_setting` 寫進假試算表，
+    寫法照 `mkt.live.mkt4_save_entries`（含一致性憑證鍵），讓比較列真的算出數字。
+    """
+    from ui_v2.mkt import live as mkt_live
+
+    for entry in mkt_live.mkt4_save_entries(10, "2026-08-03"):
+        assert entry["error"] is None, entry
+        SET_REPO.save_user_setting(entry["key"], entry["value"], entry["value_kind"], mask=lambda text: text)
+    SET_REPO.clear_cache()
+    return settings_book
 
 
 def _mkt_screen(at):
@@ -425,6 +448,19 @@ def _mkt_screen(at):
 def _cards(at):
     """三張核心卡（正式結果）那幾段 HTML。"""
     return [e.value for e in at.main.markdown if 'class="mkt-card"' in e.value]
+
+
+_VIX_VALUE_RE = re.compile(r'波動度指數</div>\s*<div class="mkt-mv-value"[^>]*>\s*\d+(?:\.\d+)?\s*</div>')
+
+
+def _compare_shown(texts) -> bool:
+    """MKT-1 的比較列真的以已存設定算出數字（不是「比較條件讀不到」）—— 2026-10-14 稽核 N 的 N-A。"""
+    return any(re.search(r"與觀察窗起點的差：-?\d", t) for t in texts)
+
+
+def _vix_value_shown(texts) -> bool:
+    """MKT-1 的波動度指數有畫出數值（不是「資料未備」）—— 客戶裁示守衛不得是空對空的前提（2026-10-14 稽核 N 的 B1）。"""
+    return any(_VIX_VALUE_RE.search(t) for t in texts)
 
 
 def _fill_mkt_window(at):
@@ -442,11 +478,13 @@ def _fill_mkt_window(at):
 #   欄位填了不存 → 三張核心卡不動；換頁回來與新開相同；直接塞一份 `_mkt_applied` 也不改畫面。
 
 
-def test_市場總覽_正式模式套用停用_未存的欄位值不改三張核心卡_換頁回來與新開相同(vix_series):
+def test_市場總覽_正式模式套用停用_未存的欄位值不改三張核心卡_換頁回來與新開相同(vix_saved):
     at = _go(_app_test(), "mkt")
     fresh = _mkt_screen(at)
     cards = _cards(at)
     assert cards, "抓不到三張核心卡 —— 下面的比較會變成空比"
+    assert _vix_value_shown(cards), "波動度指數沒有數值 —— 下面的比較會變成空畫面比空畫面"
+    assert _compare_shown(cards), "比較列沒有算出數字 —— 暫存值漏進正式結果時畫面也不會變"
     assert at.button(key="mkt4_apply").disabled
     _fill_mkt_window(at)
     assert _cards(at) == cards                              # 欄位有值、沒存檔：正式結果不動
@@ -455,9 +493,11 @@ def test_市場總覽_正式模式套用停用_未存的欄位值不改三張核
     assert _mkt_screen(at) == fresh
 
 
-def test_市場總覽_session裡的套用值不進正式結果(vix_series):
+def test_市場總覽_session裡的套用值不進正式結果(vix_saved):
     at = _go(_app_test(), "mkt")
     fresh = _mkt_screen(at)
+    assert _vix_value_shown(fresh), "波動度指數沒有數值 —— 下面的比較會變成空畫面比空畫面"
+    assert _compare_shown(fresh), "比較列沒有算出數字 —— 暫存值漏進正式結果時畫面也不會變"
     at.session_state["_mkt_applied"] = {"window_days": 30, "baseline_date": "2026-09-01"}
     at.run()
     assert not at.exception, [e.value for e in at.exception]

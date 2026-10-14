@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/probe_fx_obs_date.py — 只讀探測：Yahoo 日線時間戳以世界協調時間取日期，是否等於交易日。
+"""scripts/probe_fx_obs_date.py — 只讀探測：Yahoo 日線時間戳取觀測日的規則，是否等於交易日（新舊兩規則並列）。
 
 ## 為什麼要有這支
 
@@ -10,12 +10,25 @@
 倫敦午夜為界，23:00 UTC 那一根其實代表隔天，現行規則就差一天）。
 開發環境連不到 Yahoo，所以由 GitHub Actions 手動觸發本腳本取得真實回應，把觀察結果寫成報告。
 
+> ⚠️ **2026-10-13 狀態更新（不是漏刪；客戶 2026-10-13 裁示）**：第一次探測
+> （`results/20261013T185433Z_run38450455092/report.json`）證實上段疑慮成立 —— 匯率日線時間戳＝倫敦當地
+> 00:00，以 UTC 取日在夏令時早一天。正式規則已改為「**以來源自報的交易所時區（`meta.exchangeTimezoneName`）
+> 的當地日期為準**」（`market_indicator._obs_date(stamp, exchange_tz)`）。本腳本因此**兩條規則並列**：
+> - **舊規則（世界協調時間取日）**：沿用原有報告鍵（`subsets` 及其子集、`fetched_day_utc`），
+>   規則改在本檔以 `legacy_utc_obs_date_of_epoch` 重現（正式程式已不再有這一條），供與第一次報告逐欄比較；
+> - **新規則（交易所時區取日）**：新增 `subsets_exchange_tz` 與 `obs_date_rule_diff`；
+>   `production_rows` 改以正式 `rows_from_daily_close`（新規則）跑，Series 的 attrs 照 L1 掛上
+>   `exchange_tz`（取自同一份回應的 `meta.exchangeTimezoneName`，非空字串才掛，與 L1 相同）。
+> 合併後要**重跑本探測**，以新規則的結果確認後，才可以只改 `FX_OBS_DATE_RULE_VERIFIED` 那一格。
+
 ## 範圍（只讀，不改任何正式行為）
 
 - 端點：`repositories/macro/yf.py::YF_CHART_BASE`；連線：`infra.proxy.fetch_url`（與 `fetch_yf_close`
   同樣的 `interval`／`range` 參數、同樣的 `timeout=15`、`backoff_on_429=False`）。不新增資料來源、不新增套件。
 - 觀測日規則**直接呼叫** `services.v2_tables.market_indicator._obs_date`，時間戳建法照抄 `fetch_yf_close`
   （`pd.to_datetime(秒, unit="s")`，無時區＝世界協調時間）——**不在本檔另寫一份規則**，免得量到的是別的東西。
+  ⚠️ 2026-10-13 起唯一的例外是**舊規則**（世界協調時間取日）：正式程式已不再有它，為了與第一次報告比較，
+  在本檔以 `legacy_utc_obs_date_of_epoch` 重現（只用於對照欄，不影響 `production_rows`）。
 - **分析只用收盤非 null 的根**：正式 `fetch_yf_close` 會 `.dropna()` 丟掉那些根，算進來會造成假的
   週末／重複警訊。被排除的根另列 `null_close_bars`。
 - 另以正式 `rows_from_daily_close` 實際跑一次（純函式、不寫任何地方），列出「正式路徑會寫幾列、跳過什麼」。
@@ -36,6 +49,9 @@
   若匯率日線全落在 `23:00`（夏令）／`00:00`（冬令）之類的倫敦午夜，代表一根 K 線以倫敦日界切。
 - `obs_date_weekday`：以現行規則取日期後的星期分布。出現週六／週日、或缺週五，都是規則與交易日錯位的跡象。
 - `obs_date_vs_local_date`：現行規則的日期與各時區當地日期不一致的筆數與例子。
+⚠️ 2026-10-13 起，上面三項在 `subsets` 下算的是**舊規則**（世界協調時間取日）；同樣三項以**新規則**
+（交易所時區取日）再算一次放在 `subsets_exchange_tz`（另含以正式 `not_closed_cutoff_day` 界線去掉未收盤根的 `non_null_closed`，界線記在 `fetched_day_exchange_tz`），
+兩規則結果不同的根列在 `obs_date_rule_diff`。`production_rows` 一律是正式新規則。
 另有 `last_bar`（最後一根時間戳是否等於 `meta.regularMarketTime`；相等多半表示最後一根是盤中即時值）
 與 `raw_excerpt`（頭尾各 30 根原始回應，含 null）。
 「有沒有差一天」要拿 `raw_excerpt` 的收盤值對照已知交易日行情再判定。
@@ -151,17 +167,33 @@ def validate_tickers(items) -> tuple[list[str], list[dict]]:
 
 # ───────────────────────── 觀測日規則（借用正式那一條） ─────────────────────────
 
-def production_obs_date_of_epoch() -> Callable[[int], str]:
-    """回傳「Unix 秒 → 現行規則的觀測日字串」。
+def legacy_utc_obs_date_of_epoch() -> Callable[[int], str]:
+    """回傳「Unix 秒 → **舊規則**（世界協調時間取日期）的觀測日字串」。
+
+    正式程式 2026-10-13 起已改為交易所時區取日，這一條只為了與第一次探測報告逐欄比較而重現：
+    時間戳建法同 `fetch_yf_close`（`pd.to_datetime(秒, unit="s")`，無時區＝世界協調時間），直接取 `.date()`
+    （＝舊 `_obs_date` 對無時區時間戳的行為）。
+    """
+    import pandas as pd
+
+    def _fn(sec: int) -> str:
+        return pd.to_datetime(sec, unit="s").date().isoformat()
+
+    return _fn
+
+
+def production_obs_date_of_epoch(exchange_tz) -> Callable[[int], str]:
+    """回傳「Unix 秒 → 現行正式規則（交易所時區取日）的觀測日字串」。
 
     時間戳建法照抄 `repositories/macro/yf.py::fetch_yf_close`（`pd.to_datetime(秒, unit="s")`，
-    無時區＝世界協調時間），日期規則直接呼叫 `market_indicator._obs_date`，不另寫一份。
+    無時區＝世界協調時間），日期規則直接呼叫 `market_indicator._obs_date(…, exchange_tz)`，不另寫一份。
+    `exchange_tz` 認不得時 `_obs_date` 會拋 `ValueError`（呼叫端先用 `zone_known` 檢查）。
     """
     import pandas as pd
     from services.v2_tables.market_indicator import _obs_date
 
     def _fn(sec: int) -> str:
-        return _obs_date(pd.to_datetime(sec, unit="s"))
+        return _obs_date(pd.to_datetime(sec, unit="s"), exchange_tz)
 
     return _fn
 
@@ -219,14 +251,15 @@ def _utc(sec: int) -> datetime:
 
 
 def zone_known(name) -> bool:
-    """zoneinfo 認不認得這個時區字串（不認得 → 該時區不參與分組，不讓整個代號分析失敗）。"""
-    if not isinstance(name, str) or not name:
-        return False
-    try:
-        ZoneInfo(name)
-        return True
-    except Exception:   # ZoneInfoNotFoundError（KeyError 子類）、ValueError（非法字串）等
-        return False
+    """認不認得這個交易所時區字串（不認得 → 該時區不參與分組，不讓整個代號分析失敗）。
+
+    2026-10-14 起**直接借用正式判定** `market_indicator.exchange_zone`（不複製一份）：
+    只接受 `Area/Location` 形式的 IANA 名稱、排除 `posix/`／`right/`、zoneinfo 拋 `OSError` 也算不認得。
+    ~~舊判定：zoneinfo 建得出來就算認得（`Factory`、`posixrules`、`UTC` 也算）~~（有意識的更正，不是漏刪：
+    探測與正式路徑必須用同一套判定，否則量到的是別的東西）。
+    """
+    from services.v2_tables.market_indicator import exchange_zone
+    return exchange_zone(name) is not None
 
 
 def _is_dst(sec: int, zone: str) -> bool:
@@ -349,16 +382,20 @@ def subset_stats(timestamps, closes, obs_date_fn, dst_zones, local_zones) -> dic
     }
 
 
-def production_rows_summary(ticker, timestamps, closes, fetched_at_utc) -> dict:
+def production_rows_summary(ticker, timestamps, closes, fetched_at_utc, exchange_tz=None) -> dict:
     """以正式 `rows_from_daily_close` 跑一次（純函式，不寫任何地方）：會寫幾列、跳過什麼。
 
-    Series 建法照抄 `fetch_yf_close`（非 null 根、索引 `pd.to_datetime(秒, unit="s")`、attrs 帶 fetched_at）。
+    Series 建法照抄 `fetch_yf_close`（非 null 根、索引 `pd.to_datetime(秒, unit="s")`、attrs 帶 fetched_at；
+    2026-10-13 起另帶 `exchange_tz`＝回應的 `meta.exchangeTimezoneName` 原字串，**非空字串才掛**，與 L1 相同）。
     """
     import pandas as pd
+    from repositories.macro.yf import EXCHANGE_TZ_ATTR
     from services.v2_tables.market_indicator import rows_from_daily_close
     s = pd.Series(closes, index=pd.to_datetime(timestamps, unit="s"), dtype=float, name=ticker)
     s.attrs["source"] = f"Yahoo:{ticker}"
     s.attrs["fetched_at"] = fetched_at_utc
+    if isinstance(exchange_tz, str) and exchange_tz:
+        s.attrs[EXCHANGE_TZ_ATTR] = exchange_tz
     rows, err, skipped = rows_from_daily_close(ticker, s, None, value_unit=_PROBE_VALUE_UNIT)
     obs = [r["obs_date"] for r in rows]
     return {
@@ -370,12 +407,43 @@ def production_rows_summary(ticker, timestamps, closes, fetched_at_utc) -> dict:
     }
 
 
-def analyze(payload, obs_date_fn, fetched_at_utc: Optional[str] = None, ticker: str = "probe") -> dict:
-    """單一代號的完整分析。
+def _closed_subset(ts, closes, obs_date_fn, fetched_day, dst_zones, local_zones, day_key) -> dict:
+    """去掉觀測日不早於取得日的根之後的子集（`day_key` 是記取得日那一欄的鍵名）。"""
+    c_ts, c_cl, not_closed = [], [], []
+    for t, c in zip(ts, closes):
+        d = obs_date_fn(t)
+        if d < fetched_day:
+            c_ts.append(t)
+            c_cl.append(c)
+        else:
+            not_closed.append(_example(t, d, close=c))
+    closed = subset_stats(c_ts, c_cl, obs_date_fn, dst_zones, local_zones)
+    closed[day_key] = fetched_day
+    closed["excluded_not_closed_bars"] = not_closed
+    return closed
 
-    `obs_date_fn`：Unix 秒 → 觀測日字串（正式跑時用 `production_obs_date_of_epoch()`）。
+
+def obs_date_rule_diff(timestamps, legacy_fn, new_fn) -> dict:
+    """舊規則（世界協調時間取日）與新規則（交易所時區取日）結果不同的筆數與例子。"""
+    bad = []
+    for t in timestamps:
+        old, new = legacy_fn(t), new_fn(t)
+        if old != new:
+            bad.append({"t": t, "utc": _utc(t).isoformat(), "legacy_utc_obs_date": old,
+                        "exchange_tz_obs_date": new})
+    return {"diff_count": len(bad), "total": len(timestamps), "examples": bad[:EXAMPLES_MAX]}
+
+
+def analyze(payload, obs_date_fn=None, fetched_at_utc: Optional[str] = None, ticker: str = "probe") -> dict:
+    """單一代號的完整分析（新舊兩規則並列）。
+
+    `obs_date_fn`：**舊規則**（Unix 秒 → 觀測日字串）；None 時用 `legacy_utc_obs_date_of_epoch()`。
+    它只驅動既有的對照欄（`subsets`）；新規則一律取同一份回應的 `meta.exchangeTimezoneName`
+    走正式 `_obs_date`（`subsets_exchange_tz`、`obs_date_rule_diff`、`production_rows`）。
     `fetched_at_utc`：取得當下的世界協調時間 ISO 字串；給了才算 `non_null_closed` 子集與正式列數。
     """
+    if obs_date_fn is None:
+        obs_date_fn = legacy_utc_obs_date_of_epoch()
     chart = extract_chart(payload)
     meta, ts_all, closes_all = chart["meta"], chart["timestamps"], chart["closes"]
     ex_tz = meta.get("exchangeTimezoneName")
@@ -409,27 +477,38 @@ def analyze(payload, obs_date_fn, fetched_at_utc: Optional[str] = None, ticker: 
         "raw_excerpt": excerpt(ts_all, closes_all),
     }
     if not ex_known:
-        out["warnings"] = [f"交易所時區不認得：{ex_tz!r}（不參與夏冬令分組與當地日期比對，其餘照常）"]
+        out["warnings"] = [f"交易所時區不認得：{ex_tz!r}（不參與夏冬令分組與當地日期比對，其餘照常；"
+                           f"新規則無法套用，正式路徑整鍵不寫）"]
+
+    # 新規則（交易所時區取日）：時區認不得 → 不算（正式路徑同樣整鍵不寫，見 production_rows）。
+    new_fn = production_obs_date_of_epoch(ex_tz) if ex_known else None
+    if new_fn is not None:
+        out["subsets_exchange_tz"] = {
+            "exchange_tz": ex_tz,
+            "non_null": subset_stats(ts, closes, new_fn, dst_zones, local_zones),
+        }
+        out["obs_date_rule_diff"] = obs_date_rule_diff(ts, obs_date_fn, new_fn)
+    else:
+        out["subsets_exchange_tz"] = None
+        out["obs_date_rule_diff"] = None
 
     if fetched_at_utc:
-        fetched_day = datetime.fromisoformat(fetched_at_utc.replace("Z", "+00:00")) \
-            .astimezone(timezone.utc).date().isoformat()
-        c_ts, c_cl, not_closed = [], [], []
-        for t, c in zip(ts, closes):
-            d = obs_date_fn(t)
-            if d < fetched_day:
-                c_ts.append(t)
-                c_cl.append(c)
-            else:
-                not_closed.append(_example(t, d, close=c))
-        closed = subset_stats(c_ts, c_cl, obs_date_fn, dst_zones, local_zones)
-        closed["fetched_day_utc"] = fetched_day
-        closed["excluded_not_closed_bars"] = not_closed
-        out["subsets"]["non_null_closed"] = closed
+        fetched_dt = datetime.fromisoformat(fetched_at_utc.replace("Z", "+00:00"))
+        fetched_day = fetched_dt.astimezone(timezone.utc).date().isoformat()
+        out["subsets"]["non_null_closed"] = _closed_subset(
+            ts, closes, obs_date_fn, fetched_day, dst_zones, local_zones, "fetched_day_utc")
+        if new_fn is not None:
+            # 未收盤界線借用正式那一條（max(世界協調時間日期, 交易所當地日期)；AI 總管 2026-10-14 裁決），不另寫一份。
+            from services.v2_tables.market_indicator import not_closed_cutoff_day
+            fetched_local_day = not_closed_cutoff_day(fetched_at_utc, ZoneInfo(ex_tz))
+            out["subsets_exchange_tz"]["non_null_closed"] = _closed_subset(
+                ts, closes, new_fn, fetched_local_day, dst_zones, local_zones, "fetched_day_exchange_tz")
         out["production_rows"] = production_rows_summary(
-            ticker, ts, closes, fetched_at_utc)
+            ticker, ts, closes, fetched_at_utc, exchange_tz=ex_tz)
     else:
         out["subsets"]["non_null_closed"] = None
+        if new_fn is not None:
+            out["subsets_exchange_tz"]["non_null_closed"] = None
     return out
 
 
@@ -519,15 +598,18 @@ def run(tickers, fetcher=None, pop_fail_kind=None, obs_date_fn=None,
     from repositories.macro.yf import YF_CHART_BASE
     from services.v2_tables import market_indicator as mi
     if obs_date_fn is None:
-        obs_date_fn = production_obs_date_of_epoch()
+        obs_date_fn = legacy_utc_obs_date_of_epoch()
     secrets = _secret_literals()
     report = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "endpoint": YF_CHART_BASE,
         "range": RANGE,
         "interval": INTERVAL,
+        # 2026-10-13：~~正式規則＝世界協調時間取日~~ → 改為交易所時區取日（客戶裁示；不是漏刪）。
         "obs_date_rule": "services.v2_tables.market_indicator._obs_date"
-                         "（pd.to_datetime(秒, unit='s') → 世界協調時間取日期）",
+                         "（pd.to_datetime(秒, unit='s') 視為世界協調時間 → 換成 meta.exchangeTimezoneName"
+                         " 的當地時刻 → 取日期）；結果見 subsets_exchange_tz／production_rows",
+        "obs_date_rule_legacy": "世界協調時間取日期（第一次探測時的正式規則，本檔重現）；結果見 subsets",
         "fx_obs_date_rule_verified_at_run": bool(mi.FX_OBS_DATE_RULE_VERIFIED),
         "proxy_env_set": bool(os.environ.get("PROXY_URL", "").strip()),
         "proxy_used_by_infra": _proxy_used_by_infra(),
@@ -569,12 +651,20 @@ def _summary_lines(report: dict) -> list[str]:
         nn = e["subsets"]["non_null"]
         wd = nn.get("obs_date_weekday", {})
         pr = e.get("production_rows") or {}
+        nx = ((e.get("subsets_exchange_tz") or {}).get("non_null") or {}).get("obs_date_weekday", {})
+        diff = e.get("obs_date_rule_diff") or {}
         lines.append(
             f"{tk}: tz={ms['exchangeTimezoneName']} gmtoffset={ms['gmtoffset']} "
             f"bars={e['raw_bar_count']} null={e['null_close_count']} "
-            f"hh:mm={nn.get('utc_hhmm', {}).get('all')} 週末={wd.get('weekend_count')} "
+            f"hh:mm={nn.get('utc_hhmm', {}).get('all')} "
+            f"[舊UTC] 週末={wd.get('weekend_count')} "
             f"缺週五週數={wd.get('iso_weeks_missing_friday_count')}/{wd.get('iso_weeks_considered')} "
-            f"同日重複={wd.get('duplicate_obs_date_count')} 正式列數={pr.get('row_count')} "
+            f"同日重複={wd.get('duplicate_obs_date_count')} "
+            f"[新交易所時區] 週末={nx.get('weekend_count')} "
+            f"缺週五週數={nx.get('iso_weeks_missing_friday_count')}/{nx.get('iso_weeks_considered')} "
+            f"同日重複={nx.get('duplicate_obs_date_count')} "
+            f"新舊不同={diff.get('diff_count')}/{diff.get('total')} "
+            f"正式列數(新)={pr.get('row_count')} "
             f"最後一根=regularMarketTime:{e['last_bar']['equal']}"
         )
     return lines

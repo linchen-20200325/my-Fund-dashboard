@@ -96,6 +96,9 @@ def env(monkeypatch):
 def _vix(values=(17.0, 18.5), dates=("2026-09-22", "2026-09-23")):
     s = pd.Series(list(values), index=pd.to_datetime(list(dates)), dtype=float, name="^VIX")
     s.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
+    # 2026-10-13：L1 改帶來源自報的交易所時區（客戶裁示；缺時區整鍵不寫）。本檔測的是畫面文案，
+    # 替身寫 `Etc/UTC`（`exchange_zone` 不收不含 `/` 的 `UTC`），讓以世界協調時間午夜表示的既有例子觀測日不變。
+    s.attrs["exchange_tz"] = "Etc/UTC"
     return s
 
 

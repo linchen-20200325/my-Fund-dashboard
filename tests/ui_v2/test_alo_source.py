@@ -256,8 +256,13 @@ def test_市值基準_歐元_閘門打開_取EURTWD換算(wired, monkeypatch):
     wired["tables"] = _tables(holding=[dict(_HOLDING, ccy="EUR")])
     wired["settings"] = _mv_settings()
     wired["series"] = {"FK-AAAA": _nav_series(15.2)}
-    fx = pd.Series([35.0, 99.0], index=[pd.Timestamp("2026-09-22"), pd.Timestamp("2026-09-24")], name="EURTWD=X")
-    fx.attrs = {"source": "Yahoo:EURTWD=X", "fetched_at": "2026-09-25T06:00:00+00:00"}
+    # 2026-10-13：替身改成匯率日線的真實形狀（夏令倫敦 00:00 ＝ UTC 前一天 23:00）並帶 L1 新增的
+    # `exchange_tz`（客戶裁示：觀測日以交易所時區為準）；~~索引 `2026-09-22`／`2026-09-24`（UTC 午夜）~~
+    # 在新規則下倫敦當地時刻是 01:00、且缺時區會整鍵不寫，故換例（不是漏刪）。觀測日仍是 09-22／09-24。
+    fx = pd.Series([35.0, 99.0], index=[pd.Timestamp("2026-09-21 23:00"), pd.Timestamp("2026-09-23 23:00")],
+                   name="EURTWD=X")
+    fx.attrs = {"source": "Yahoo:EURTWD=X", "fetched_at": "2026-09-25T06:00:00+00:00",
+                "exchange_tz": "Europe/London"}
     wired["fx"] = {"EURTWD=X": (fx, None)}
     out = source.load_live()
     assert wired["fx_calls"] == ["EURTWD=X"]

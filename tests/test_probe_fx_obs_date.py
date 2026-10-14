@@ -3,6 +3,10 @@
 探測腳本只讀：它取 Yahoo 日線、用**正式那一條** `_obs_date` 算觀測日，再把分布寫成報告。
 本檔只驗分析是否算對，不驗 Yahoo 實際長什麼樣（那正是探測要量的東西）。
 
+2026-10-13：正式規則改為交易所時區取日（客戶裁示），腳本改成新舊兩規則並列 ——
+`obs_fn` fixture 從此是**舊規則**（世界協調時間取日，腳本以 `legacy_utc_obs_date_of_epoch` 重現），
+驅動既有的對照欄；新規則的欄位（`subsets_exchange_tz`、`obs_date_rule_diff`、`production_rows`）另有測試。
+
 時間戳都由 `datetime(..., tzinfo=UTC)` 算出，不手寫 Unix 秒，免得例子本身算錯。
 """
 from __future__ import annotations
@@ -38,17 +42,24 @@ def _payload(timestamps, closes=None, meta=None):
 
 @pytest.fixture(scope="module")
 def obs_fn():
-    """正式規則（`market_indicator._obs_date`），確認腳本借用的真的是那一條。"""
-    return probe.production_obs_date_of_epoch()
+    """~~正式規則（`market_indicator._obs_date`）~~ → 2026-10-13 起為**舊規則**（世界協調時間取日），
+    供對照欄使用；正式（新）規則見 `test_新規則借用的是正式那一條_23點UTC取倫敦隔天`。"""
+    return probe.legacy_utc_obs_date_of_epoch()
 
 
 # ── 觀測日規則：借用正式那一條，且探測不改閘門 ──────────────────────────
 
-def test_借用的是正式規則_23點UTC取當天(obs_fn):
-    from services.v2_tables import market_indicator as mi
+def test_舊規則_23點UTC取世界協調時間當天(obs_fn):
     sec = _sec(2026, 9, 23, 23, 0)
     assert obs_fn(sec) == "2026-09-23"
-    assert obs_fn(sec) == mi._obs_date(datetime(2026, 9, 23, 23, 0))
+
+
+def test_新規則借用的是正式那一條_23點UTC取倫敦隔天():
+    from services.v2_tables import market_indicator as mi
+    sec = _sec(2026, 9, 23, 23, 0)
+    new_fn = probe.production_obs_date_of_epoch("Europe/London")
+    assert new_fn(sec) == "2026-09-24"
+    assert new_fn(sec) == mi._obs_date(datetime(2026, 9, 23, 23, 0), "Europe/London")
     assert mi.FX_OBS_DATE_RULE_VERIFIED is False  # 探測只讀，不碰閘門
 
 
@@ -241,8 +252,11 @@ def test_子集_去掉觀測日不早於取得日_與正式rows_from_daily_close
     assert [b["obs_date"] for b in closed["excluded_not_closed_bars"]] == ["2026-07-07"]
     assert closed["excluded_not_closed_bars"][0]["close"] == 31.2
     pr = out["production_rows"]
-    assert pr["row_count"] == 1 and pr["first_obs_date"] == "2026-07-03"
+    # 2026-10-13：production_rows 改走正式新規則（交易所時區取日）：UTC 07-03 23:00 ＝ 倫敦 07-04（週六）
+    # ⇒ 週末不寫；~~`row_count == 1、first_obs_date == "2026-07-03"`~~（舊規則結果，不是漏刪）。
+    assert pr["row_count"] == 0 and pr["first_obs_date"] is None
     assert any("觀測日不早於取得日" in s for s in pr["skipped"])
+    assert any("星期六或星期日" in s for s in pr["skipped"])
 
 
 def test_交易所時區不認得_其餘分析照常(obs_fn):
@@ -475,3 +489,73 @@ def test_全部缺_三鍵皆None(monkeypatch, obs_fn):
                     obs_date_fn=obs_fn, backoff_check=_no_backoff)
     assert rep["trigger_sha"] is None and rep["executed_sha"] is None and rep["event_name"] is None
     assert rep["github_sha"] is None
+
+
+# ── 2026-10-13：新規則（交易所時區取日）欄位，與舊規則並列 ─────────────────
+
+def test_新舊規則並列_夏令倫敦_新規則無週末_差異逐根列出(obs_fn):
+    # 節錄自第一次探測報告（USDTWD=X）：三根皆為 UTC 23:00（倫敦夏令）
+    ts = [1790895600, 1791154800, 1791241200]   # 2026-10-01／10-04／10-05 23:00Z
+    meta = {"exchangeTimezoneName": "Europe/London", "gmtoffset": 3600, "regularMarketTime": ts[-1]}
+    out = probe.analyze(_payload(ts, closes=[31.88680076599121, 31.834400177001953, 31.751399993896484],
+                                 meta=meta), obs_fn,
+                        fetched_at_utc="2026-10-13T18:54:31.379935+00:00", ticker="USDTWD=X")
+    old_wd = out["subsets"]["non_null"]["obs_date_weekday"]
+    new_wd = out["subsets_exchange_tz"]["non_null"]["obs_date_weekday"]
+    assert old_wd["weekend_count"] == 1          # 舊規則：10-04（日）
+    assert new_wd["weekend_count"] == 0          # 新規則：10-02（五）、10-05（一）、10-06（二）
+    assert out["subsets_exchange_tz"]["exchange_tz"] == "Europe/London"
+    diff = out["obs_date_rule_diff"]
+    assert diff["diff_count"] == 3 and diff["total"] == 3
+    assert diff["examples"][1] == {"t": ts[1], "utc": "2026-10-04T23:00:00+00:00",
+                                   "legacy_utc_obs_date": "2026-10-04", "exchange_tz_obs_date": "2026-10-05"}
+    closed = out["subsets_exchange_tz"]["non_null_closed"]
+    assert closed["fetched_day_exchange_tz"] == "2026-10-13" and closed["bar_count"] == 3
+    assert out["subsets"]["non_null_closed"]["fetched_day_utc"] == "2026-10-13"   # 舊欄保留
+    pr = out["production_rows"]
+    assert pr["row_count"] == 3 and pr["first_obs_date"] == "2026-10-02" and pr["last_obs_date"] == "2026-10-06"
+
+
+def test_新規則_交易所時區不認得_新欄位為None_正式路徑整鍵不寫(obs_fn):
+    ts = [_sec(2026, 7, 6, 23), _sec(2026, 7, 7, 23)]
+    meta = {"exchangeTimezoneName": "Mars/Olympus_Mons", "gmtoffset": 0, "regularMarketTime": ts[-1]}
+    out = probe.analyze(_payload(ts, meta=meta), obs_fn,
+                        fetched_at_utc="2026-07-09T10:00:00+00:00", ticker="USDTWD=X")
+    assert out["subsets_exchange_tz"] is None and out["obs_date_rule_diff"] is None
+    pr = out["production_rows"]
+    assert pr["row_count"] == 0 and "無法辨識" in pr["skipped"][0]
+
+
+def test_新規則_meta缺交易所時區_正式路徑照L1不掛時區_整鍵不寫(obs_fn):
+    ts = [_sec(2026, 7, 6, 23), _sec(2026, 7, 7, 23)]
+    out = probe.analyze(_payload(ts, meta={"regularMarketTime": ts[-1]}), obs_fn,
+                        fetched_at_utc="2026-07-09T10:00:00+00:00", ticker="USDTWD=X")
+    assert out["subsets_exchange_tz"] is None
+    assert "L1 回傳未帶交易所時區" in out["production_rows"]["skipped"][0]
+
+
+def test_摘要行列出新舊兩規則(tmp_path, capsys, obs_fn):
+    ts = [1790895600, 1791154800, 1791241200]
+
+    def fake_fetch(url, **k):
+        return _Resp(_payload(ts))
+
+    probe.main(["--tickers", "USDTWD=X", "--out", str(tmp_path / "r.json")],
+               fetcher=fake_fetch, pop_fail_kind=lambda: "", obs_date_fn=obs_fn, backoff_check=_no_backoff)
+    line = next(x for x in capsys.readouterr().out.splitlines() if x.startswith("USDTWD=X:"))
+    assert "[舊UTC] 週末=1" in line and "[新交易所時區] 週末=0" in line and "新舊不同=3/3" in line
+    rep = json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))
+    assert "obs_date_rule_legacy" in rep and "exchangeTimezoneName" in rep["obs_date_rule"]
+
+
+def test_新規則_未收盤界線借用正式那一條_VIX_UTC換日時前一交易日算已收盤(obs_fn):
+    """`subsets_exchange_tz.non_null_closed` 的界線＝`not_closed_cutoff_day`（max(UTC 日, 交易所當地日)）
+    —— 2026-10-14 稽核 N 的 O12。取得於 2026-10-14T02:00Z（芝加哥 10-13 21:00）：界線 10-14，10-13 那根算已收盤。"""
+    ts = [1791529200, 1791788400, 1791874800]          # 2026-10-09／12／13 07:00Z（芝加哥 02:00）
+    meta = {"exchangeTimezoneName": "America/Chicago", "gmtoffset": -18000, "regularMarketTime": ts[-1]}
+    out = probe.analyze(_payload(ts, closes=[14.84, 15.21, 15.48], meta=meta), obs_fn,
+                        fetched_at_utc="2026-10-14T02:00:00+00:00", ticker="^VIX")
+    closed = out["subsets_exchange_tz"]["non_null_closed"]
+    assert closed["fetched_day_exchange_tz"] == "2026-10-14"
+    assert closed["bar_count"] == 3 and closed["excluded_not_closed_bars"] == []
+    assert out["production_rows"]["last_obs_date"] == "2026-10-13"

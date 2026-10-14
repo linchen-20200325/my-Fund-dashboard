@@ -67,6 +67,10 @@ def book(monkeypatch):
 def _vix(values, dates, fetched_at="2026-09-25T06:00:00.123456+00:00"):
     s = pd.Series(values, index=pd.to_datetime(dates), dtype=float, name="^VIX")
     s.attrs["fetched_at"] = fetched_at
+    # 2026-10-13：L1 改帶來源自報的交易所時區（客戶裁示：觀測日以交易所時區為準；缺時區整鍵不寫）。
+    # 本檔測的是寫表與取數紀錄，不是取日規則；替身寫 `Etc/UTC`（`exchange_zone` 不收不含 `/` 的 `UTC`），讓日期以世界協調時間午夜表示的既有例子
+    # 觀測日不變（取日規則另見 tests/test_v2_tables_market_indicator_exchange_tz.py）。
+    s.attrs["exchange_tz"] = "Etc/UTC"
     return s
 
 
@@ -817,3 +821,61 @@ def test_FRED接線_重新取數也把金鑰往下傳(book, monkeypatch, fred_on
     _stub(monkeypatch, _vix([17.0], ["2026-09-22"]))
     out = S.refetch_market_indicator([SECRET], fred_api_key="KEY")
     assert fred_on == ["KEY", "KEY", "KEY"] and out["persist"]["ok"] is True
+
+
+# ═══════════════════════ 2026-10-14 稽核 N／M：部分略過要看得見 ═══════════════════════
+
+
+def test_部分略過_ok時記在persist_skipped_summary_fetch_log_message照44為空(book, monkeypatch):
+    """`44` `fetch_log.message`「成功時為空」（L1 `fetch_log_row` 也拒收 ok 帶訊息）⇒ ok 時只放 persist；
+    `row_count` 照舊是取回列數（過濾前），不是寫入列數。"""
+    _stub(monkeypatch, _vix([17.0, 18.5, 19.0], ["2026-09-22", "2026-09-23", "2026-09-25"]))
+    out = S.run_market_indicator_fetch([SECRET])
+    p = out["persist"]
+    log = book.data("fetch_log")[1]
+    assert log[4:] == ["ok", "3", ""]                       # 取回 3 列（過濾前）；寫入 2 列
+    assert len(out["table"]["rows"]) == 2
+    (line,) = p["skipped_summary"]
+    assert line.startswith("vol_index: 取回 3 列、寫入 2 列；略過：") and "觀測日不早於取得日" in line
+
+
+def test_部分略過_failed時附在fetch_log_message之後(book, monkeypatch, fred_on):
+    _stub(monkeypatch, _vix([17.0, 19.0], ["2026-09-22", "2026-09-25"]))
+    out = S.run_market_indicator_fetch([SECRET])                # 沒給 FRED 金鑰 ⇒ failed
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed"
+    assert "部分略過（該鍵其餘列照寫）：\nvol_index: 取回 2 列、寫入 1 列；略過：" in log[6]
+    assert out["persist"]["log_message"] == log[6]           # 畫面讀的那一份與試算表逐字相同
+
+
+def test_部分略過摘要_經遮蔽才放進persist與message(book, monkeypatch, fred_on):
+    """`skipped_summary` 與 failed 時的 message 都要經遮蔽（2026-10-14 稽核 N 的 O13）。"""
+    from services.v2_tables import masking
+
+    good_rows, _e, _s = mi.rows_from_daily_close("vol_index", _vix([17.0], ["2026-09-22"]), None,
+                                                 value_unit="index")
+
+    def fake_build(sink, **_kw):
+        table = {"rows": good_rows, "errors": {"credit_spread_pct": mi.MISSING_FRED_API_KEY},
+                 "pending": {}, "fetched": {"vol_index": 2, "credit_spread_pct": 0},
+                 "skipped": {"vol_index": [f"含憑證 token={SECRET} 的略過原因 1 筆不寫"]}}
+        sink(table)
+        return table
+
+    out = S.run_market_indicator_fetch([SECRET], build=fake_build)
+    (line,) = out["persist"]["skipped_summary"]
+    assert SECRET not in line and masking.MASK in line
+    log = book.data("fetch_log")[1]
+    assert log[4] == "failed" and SECRET not in log[6] and masking.MASK in log[6]
+
+
+def test_整鍵都沒寫入的鍵_只在失敗原因_不在部分略過摘要(book, monkeypatch, fred_on):
+    """`kept > 0` 條件（2026-10-14 稽核 N 的 O16）：取回 >0 列、一列都沒寫成的鍵只出現在失敗原因。"""
+    s = _vix([17.0], ["2026-09-22"])
+    del s.attrs["exchange_tz"]                               # 缺時區 ⇒ 整鍵不寫
+    _stub(monkeypatch, s)
+    out = S.run_market_indicator_fetch([SECRET])
+    assert out["persist"]["skipped_summary"] == []
+    log = book.data("fetch_log")[1]
+    assert "vol_index: 取回 1 列，全部未寫入" in log[6]
+    assert "寫入 0 列" not in log[6] and "部分略過" not in log[6]

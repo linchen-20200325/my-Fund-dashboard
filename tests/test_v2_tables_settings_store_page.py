@@ -146,6 +146,10 @@ class _FakeCached:
 def _vix():
     s = pd.Series([17.0], index=pd.to_datetime(["2026-09-22"]), dtype=float, name="^VIX")
     s.attrs["fetched_at"] = "2026-09-25T06:00:00+00:00"
+    # 2026-10-14（稽核 N2）：L1 自 2026-10-13 起帶來源自報的交易所時區，缺時區整鍵不寫；本替身原本沒帶
+    # （`86f4a03`、`88d00b6` 皆無），下面那條仍會綠 —— 因為它只看 `persist["ok"]`（寫表成功），不看有沒有寫成列。
+    # 補 `Etc/UTC`（讓 UTC 午夜表示的日期觀測日不變），並在該測試加一條「真的寫成一列」。
+    s.attrs["exchange_tz"] = "Etc/UTC"
     return s
 
 
@@ -179,6 +183,7 @@ def test_重新取數_先清那一支的快取_不動來源冷卻_不呼叫全�
     assert fake_fred.cleared == 1
     assert SB.should_skip("some.other.host")[0] is True            # 冷卻原封不動
     assert out["persist"]["ok"] is True
+    assert [r["indicator_key"] for r in out["table"]["rows"]] == ["vol_index"]   # 真的寫成一列（2026-10-14）
 
 
 def test_重新取數_真的清掉fetch_yf_close的快取(monkeypatch):
