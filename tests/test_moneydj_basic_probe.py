@@ -244,8 +244,11 @@ def test_probe_step_runs_script_with_report_path(wf):
     assert runs == [f'python {_PROBE_SCRIPT} --out "$REPORT_PATH"']
 
 
-#: `secrets`，以及 `github.token`／`github['token']`／`github [ "token" ]` 等寫法（不分大小寫）。
-_SECRET_RE = re.compile(r"""secrets|github\s*(?:\.|\[)\s*['"]?token""", re.IGNORECASE)
+#: 違規寫法（不分大小寫、可夾空白）：`secrets` 的任何用法；`github.token`；`github` 後接任何 `[`
+#: （`github['token']`、`github[format('to{0}','ken')]` 等索引存取一律視為違規）；`toJSON(github)`。
+#: `toJSON(secrets)` 已由第一項涵蓋。#961 第四輪：先前只擋 `github[` 後直接接 token 的寫法。
+_SECRET_RE = re.compile(r"""secrets|github\s*\.\s*token|github\s*\[|toJSON\s*\(\s*github\s*\)""",
+                        re.IGNORECASE)
 _ALLOWED_SECRET = "${{ secrets.GITHUB_TOKEN }}"
 
 
@@ -334,9 +337,18 @@ def test_only_github_token_secret_and_only_in_commit_step():
       另查允許字面恰好一次、且位於提交報告那一步。
     * **解析層**（`_secret_violations_yaml`）：`yaml.safe_load` 之後的所有字串鍵與值 ——
       涵蓋 YAML 雙引號跳脫（例如以 `\\x73` 寫出的字母）與錨點／別名（`&tok` 在提交步、`*tok` 在別步）。
-    * **仍不涵蓋**：以字串拼接或運算組出 context 名稱（例如 `format()`、`fromJSON()` 之類組字）、
-      執行期才取得的值（腳本在 runner 上自己讀環境）、以及 `uses:` 的第三方 action 在內部讀取 token
-      （GitHub 會自動提供給 action 的部分）。
+    * ~~**仍不涵蓋**：以字串拼接或運算組出 context 名稱（例如 `format()`、`fromJSON()` 之類組字）、~~
+      ~~執行期才取得的值（腳本在 runner 上自己讀環境）、以及 `uses:` 的第三方 action 在內部讀取 token~~
+      ~~（GitHub 會自動提供給 action 的部分）。~~
+      → 2026-10-14 第四輪更正（有意識的更正，不是漏刪；依 #961 稽核 R）：舊句的前半不準確 ——
+      context 名稱本身無法用字串組出；真正的缺口是**組出索引鍵**（例如 `github[format('to{0}','ken')]`）
+      與 `toJSON(github)`。本輪起兩層都把 `github` 後接任何 `[` 與 `toJSON(github)`／`toJSON(secrets)`
+      視為違規（測試 `test_secret_scan_catches_tojson_and_any_github_index`）。
+    * **仍不涵蓋（據實列出已知的幾項，不宣稱只有這些）**：
+      其他 context 經 `toJSON(...)` 輸出時是否可能含 token —— **未逐一驗證**；
+      執行期才取得的值（腳本在 runner 上自己讀環境）；`uses:` 的第三方 action 在內部讀取 token
+      （GitHub 會自動提供給 action 的部分）；`!!binary`、重複鍵等寫法 —— 解析層以 **PyYAML** 的解析結果為準，
+      GitHub 實際的 YAML 解析器是否接受、解析結果是否相同，**未驗證**。
     """
     assert _secret_violations(_WF.read_text(encoding="utf-8")) == []
 
@@ -370,6 +382,22 @@ def test_secret_scan_catches_github_bracket_token(expr):
     assert _secret_violations_yaml(bad), f"解析層應擋下 {expr}"
 
 
+@pytest.mark.parametrize("expr", ["${{ toJSON(github) }}", "${{ ToJson( github ) }}", "${{ toJSON(secrets) }}",
+                                  "${{ github[format('to{0}','ken')] }}"])
+def test_secret_scan_catches_tojson_and_any_github_index(expr):
+    """#961 第四輪：`toJSON(github)`（含空白／大小寫變體）、`toJSON(secrets)` 與 `github` 的任何索引存取，兩層都擋。"""
+    bad = _inject_top_env(f'env:\n  T: "{expr}"\n')
+    assert _secret_violations_text(bad), f"文字層應擋下 {expr}"
+    assert _secret_violations_yaml(bad), f"解析層應擋下 {expr}"
+
+
+def test_secret_scan_current_workflow_has_no_false_positive_on_github_words():
+    """現行 workflow 裡的 `github-actions[bot]` 等字樣不得被新規則誤擋（`github` 後接的是 `-`，不是 `[`）。"""
+    text = _wf_text()
+    assert "github-actions[bot]" in text
+    assert _secret_violations_text(text) == [] and _secret_violations_yaml(text) == []
+
+
 def test_secret_scan_yaml_escape_caught_by_parse_layer():
     """雙引號字串裡以跳脫寫出 `s` → 原文看不到 `secrets` 字面，解析後才看得到。"""
     bad = _inject_top_env('env:\n  X: "${{ \\x73ecrets.PROXY_URL }}"\n')
@@ -386,6 +414,19 @@ def test_secret_scan_yaml_anchor_caught_by_parse_layer():
     assert _secret_violations_text(bad) == [], "文字層看不到別名（這正是要解析層的理由）"
     assert _secret_violations_yaml(bad)
     assert _secret_violations(bad), "合併的守衛必須含解析層"
+
+
+def test_secret_scan_yaml_escape_in_key_caught_by_parse_layer():
+    """鍵名內以跳脫寫出 secrets：文字層看不到，解析層掃鍵才擋得下（鎖住「解析層不掃鍵」的突變）。"""
+    bad = _inject_top_env('env:\n  "\\x73ecrets_X": "1"\n')
+    assert _secret_violations_text(bad) == []
+    assert _secret_violations_yaml(bad)
+
+
+def test_secret_scan_yaml_parse_failure_is_violation():
+    """YAML 解析失敗時守衛不得放行。"""
+    out = _secret_violations_yaml("jobs: [unclosed\n  - : :\n")
+    assert out and "YAML 解析失敗" in out[0]
 
 
 def test_secret_scan_catches_second_github_token_before_commit_step():
@@ -888,3 +929,14 @@ def test_候選表張數上限_總數另記並標截斷(monkeypatch):
 
 def test_候選表張數上限預設20():
     assert probe.NAME_TABLE_CANDIDATES_MAX == 20
+
+
+def test_候選表剛好20張不截斷_21張截斷():
+    def page(n):
+        return "<html><body>" + "".join(f"<table>{_ROWS_NO_CODE}</table>" for _ in range(n)) + "</body></html>"
+    at20 = probe.analyze_html(page(20), _CODE)
+    assert at20["name_table_candidate_count"] == 20 and at20["name_table_candidates_truncated"] is False
+    assert len(at20["name_table_candidates"]) == 20
+    at21 = probe.analyze_html(page(21), _CODE)
+    assert at21["name_table_candidate_count"] == 21 and at21["name_table_candidates_truncated"] is True
+    assert len(at21["name_table_candidates"]) == 20
