@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """scripts/probe_fx_obs_date.py — 只讀探測：Yahoo 日線時間戳取觀測日的規則，是否等於交易日（新舊兩規則並列）。
 
+> 📌 **2026-10-14 擴充（日 K 值對應哪個時刻）**：對 `HOURLY_TICKERS`（USDTWD=X、EURTWD=X、JPYTWD=X）
+> 以**同一個端點**多取一份小時 K（`interval=60m`、`range=1mo`），逐根比對「標 D 的日 K close 對應哪個時刻」
+> （見下方「日 K 值對應哪個時刻」一段與報告的 `daily_value_check`）；並存完整原始日 K（`raw_daily_full`）
+> 與小時 K（`hourly.raw`），以及 meta 欄位原值（`meta_snapshot`、`hourly.meta_snapshot`）。
+> 不新增資料來源、不改正式行為、不碰閘門。
+
 ## 為什麼要有這支
 
 `services/v2_tables/market_indicator.py` 以 `_obs_date`（時間戳換成世界協調時間後取日期）
@@ -76,7 +82,7 @@ import os
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlsplit
@@ -467,6 +473,9 @@ def analyze(payload, obs_date_fn=None, fetched_at_utc: Optional[str] = None, tic
             "exchangeName": meta.get("exchangeName"),
         },
         "meta": meta,
+        # 2026-10-14：meta 欄位原值（缺的列進 absent）與完整原始日 K（每一根的 Unix 秒、OHLC，null 原樣）。
+        "meta_snapshot": meta_snapshot(meta),
+        "raw_daily_full": raw_series(extract_ohlc(payload)),
         "raw_bar_count": len(ts_all),
         "null_close_count": len(nulls),
         "null_close_bars": nulls,
@@ -512,6 +521,237 @@ def analyze(payload, obs_date_fn=None, fetched_at_utc: Optional[str] = None, tic
     return out
 
 
+# ───────────────────────── 日 K 值對應哪個時刻（2026-10-14 擴充；純函式，測試不連網） ─────────────────────────
+# 起因：main 上重跑的探測（`results/20261014T041819Z_run38510633247/report.json`）判讀 B 發現，寫入的「10-13」
+# 匯率值與 Yahoo 自報的同日收盤對不上（USD −0.61%、EUR −1.11%、JPY +0.30%，且都落在 10-14 當日高低區間之外），
+# 而上一次探測的 USD 10-12 收盤幾乎等於這次寫入的「10-13」值。所以「標 D 的日 K 值」是 D 的收盤、前一天的收盤，
+# 還是某個固定時刻的快照，目前定不下來。這一段用**同一個端點**多取一份小時 K，逐根找日 K close 對應的時刻。
+# ⛔ 不新增資料來源：只打同一個 Yahoo chart 端點，只改 interval／range 參數（FRED、臺北外匯經紀等需客戶核准）。
+#
+# ⚠️ 小時級粒度的 range 上限**本環境無法查證**（連不到 Yahoo）。社群文件普遍記載 60m 可取到約 730 日，
+#    `1mo` 遠在其內；實際 Yahoo 接不接受，以報告 `hourly.status`／`hourly.error` 的原文為準。
+
+HOURLY_INTERVAL = "60m"
+HOURLY_RANGE = "1mo"
+HOURLY_TICKERS = ("USDTWD=X", "EURTWD=X", "JPYTWD=X")
+MATCH_WINDOW_DAYS = 31        # 只比對最近這麼多日（交易所當地日）內、已收盤的日 K
+MATCH_SCOPE_DAYS = 2          # 每根日 K 只在觀測日前後這麼多個交易所當地日內的小時 K 裡找對應
+MATCH_ZONES = ("Europe/London", "America/New_York", "Asia/Taipei")
+# 相對差距在這以內就算「相等」（浮點序列化的雜訊；Yahoo 匯率 priceHint 4 位小數）。
+MATCH_EQ_REL = 1e-6
+# 報告要逐字留下的 meta 欄位（缺就列進 absent，不補值）。
+META_FIELDS = ("regularMarketPrice", "chartPreviousClose", "previousClose", "regularMarketTime",
+               "regularMarketDayHigh", "regularMarketDayLow", "fulldayPrice", "fulldayChange",
+               "fulldayChangePercent", "regularMarketChangePercent", "regularMarketVolume",
+               "currentTradingPeriod", "gmtoffset", "timezone", "exchangeTimezoneName",
+               "dataGranularity", "range", "validRanges")
+OHLC = ("open", "high", "low", "close")
+
+
+def _num(x) -> Optional[float]:
+    """數值或 None（None／NaN／轉不成數值 → None；不補值）。"""
+    if x is None or isinstance(x, bool):
+        return None
+    try:
+        f = float(x)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(f) else f
+
+
+def extract_ohlc(payload) -> dict:
+    """Yahoo Chart JSON → `{"meta", "t", "open", "high", "low", "close", "missing_fields"}`（null 原樣保留）。
+
+    結構檢查同 `extract_chart`；`quote[0]` 缺某一欄 → 該欄整列為 None 並記進 `missing_fields`，不讓整個分析失敗。
+    """
+    chart = extract_chart(payload)   # 結構不符就照 extract_chart 的原因拋 ValueError
+    q0 = payload["chart"]["result"][0]["indicators"]["quote"][0]
+    out = {"meta": chart["meta"], "t": chart["timestamps"], "missing_fields": []}
+    n = len(chart["timestamps"])
+    for f in OHLC:
+        col = q0.get(f)
+        if not isinstance(col, list) or len(col) != n:
+            out[f] = [None] * n
+            out["missing_fields"].append(f)
+        else:
+            out[f] = list(col)
+    return out
+
+
+def raw_series(ohlc: dict) -> dict:
+    """完整原始序列（每一根的 Unix 秒與 OHLC，null 原樣），以欄為單位存，省報告體積。"""
+    return {"count": len(ohlc["t"]), "t": list(ohlc["t"]),
+            **{f: list(ohlc[f]) for f in OHLC}, "missing_fields": list(ohlc.get("missing_fields", []))}
+
+
+def meta_snapshot(meta) -> dict:
+    """`META_FIELDS` 逐字照錄；缺的列進 `absent`（不補值、不推算）。"""
+    meta = meta if isinstance(meta, dict) else {}
+    return {"values": {f: meta[f] for f in META_FIELDS if f in meta},
+            "absent": [f for f in META_FIELDS if f not in meta]}
+
+
+def _local_dt(sec: int, zone: str) -> datetime:
+    return _utc(sec).astimezone(ZoneInfo(zone))
+
+
+def _bars(ohlc: dict) -> list[dict]:
+    return [{"t": int(t), **{f: _num(ohlc[f][i]) for f in OHLC}} for i, t in enumerate(ohlc["t"])]
+
+
+def hourly_day_aggregate(hourly: dict, exchange_tz: str) -> dict:
+    """小時 K 依交易所當地日彙總：`{日: {first_t, last_t, bars, open, high, low, close}}`。
+
+    open＝當日第一根非 null 的 open；close＝當日最後一根非 null 的 close；high／low＝非 null 的最大／最小。
+    """
+    days: dict = {}
+    for b in _bars(hourly):
+        d = _local_dt(b["t"], exchange_tz).date().isoformat()
+        days.setdefault(d, []).append(b)
+    out = {}
+    for d, bs in sorted(days.items()):
+        bs.sort(key=lambda x: x["t"])
+        opens = [b["open"] for b in bs if b["open"] is not None]
+        closes = [b["close"] for b in bs if b["close"] is not None]
+        highs = [b["high"] for b in bs if b["high"] is not None]
+        lows = [b["low"] for b in bs if b["low"] is not None]
+        out[d] = {"first_t": bs[0]["t"], "last_t": bs[-1]["t"], "bars": len(bs),
+                  "open": opens[0] if opens else None, "close": closes[-1] if closes else None,
+                  "high": max(highs) if highs else None, "low": min(lows) if lows else None}
+    return out
+
+
+def _pct(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    """(a − b) / b × 100；任一缺或 b 為 0 → None。"""
+    if a is None or b is None or b == 0:
+        return None
+    return (a - b) / b * 100.0
+
+
+def _times(sec: int) -> dict:
+    out = {"utc": _utc(sec).strftime("%Y-%m-%d %H:%M")}
+    for z in MATCH_ZONES:
+        out[z] = _local_dt(sec, z).strftime("%Y-%m-%d %H:%M")
+    return out
+
+
+def _best(candidates: list[dict], field: str, target: float, exchange_tz: str, obs: str) -> Optional[dict]:
+    """候選小時 K 之中 `field` 最接近 `target` 的一根（相同差距者計入 `ties`，回最早的一根）。"""
+    usable = [b for b in candidates if b[field] is not None]
+    if not usable:
+        return None
+    diffs = [(abs(b[field] - target), b["t"], b) for b in usable]
+    diffs.sort(key=lambda x: (x[0], x[1]))
+    best_abs, _t, b = diffs[0]
+    tol = MATCH_EQ_REL * abs(target)
+    ties = sum(1 for d, _tt, _b in diffs if d - best_abs <= tol)
+    local_day = _local_dt(b["t"], exchange_tz).date()
+    return {"t": b["t"], **_times(b["t"]), "value": b[field], "abs_diff": best_abs,
+            "pct_diff": _pct(b[field], target),
+            "exchange_day_offset": (local_day - datetime.strptime(obs, "%Y-%m-%d").date()).days,
+            "exchange_hhmm": _local_dt(b["t"], exchange_tz).strftime("%H:%M"),
+            "ties": ties}
+
+
+def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_day: str,
+                          window_days: int = MATCH_WINDOW_DAYS, scope_days: int = MATCH_SCOPE_DAYS) -> dict:
+    """逐根日 K（最近 `window_days` 日內、觀測日早於 `cutoff_day` 的已收盤根）找出小時 K 對應的時刻。
+
+    - 觀測日＝日 K 時間戳的交易所當地日期（同正式 `_obs_date`）；`cutoff_day` 由呼叫端以正式
+      `not_closed_cutoff_day` 算好傳入（同正式路徑的未收盤界線）。
+    - 每根日 K 只在觀測日 ±`scope_days` 個交易所當地日內的小時 K 找：
+      `best_close_match`＝小時 close 最接近日 K close 的那一根；`best_open_match`＝小時 open 最接近日 K close 的那一根。
+      各附 UTC／倫敦／紐約／台北當地時刻、差距（絕對值與 %）、相對觀測日的交易所日差、同差距根數 `ties`。
+    - `vs_same_exchange_day`：日 K 的 OHLC 對同一交易所當地日小時 K 彙總（第一根 open、最高 high、最低 low、最後一根 close）
+      的差距 %，以及日 K close 是否落在該日小時 K 高低區間內。
+    - `close_vs_day_last_hourly_close`：日 K close 對前一日／當日／後一日最後一根小時 close 的差距 %
+      （回答「標 D 的 close 是不是其實是 D−1 的收盤」）。
+    - 分布：最佳 close 對應時刻以「交易所日差＋交易所當地時:分」與「UTC 時:分」兩種鍵計數。
+    """
+    hbars = [b for b in _bars(hourly) if b["close"] is not None or b["open"] is not None]
+    agg = hourly_day_aggregate(hourly, exchange_tz)
+    out = {"exchange_tz": exchange_tz, "cutoff_day": cutoff_day, "window_days": window_days,
+           "scope_days": scope_days, "hourly_bar_count": len(hourly["t"]),
+           "hourly_first_utc": _utc(min(hourly["t"])).isoformat() if hourly["t"] else None,
+           "hourly_last_utc": _utc(max(hourly["t"])).isoformat() if hourly["t"] else None,
+           "bars": [], "skipped": Counter()}
+    cutoff = datetime.strptime(cutoff_day, "%Y-%m-%d").date()
+    earliest = cutoff - timedelta(days=window_days)
+    by_offset_hhmm, by_utc_hhmm, open_by_offset_hhmm = Counter(), Counter(), Counter()
+    same_last_close_eq = prev_last_close_eq = 0
+    for d in _bars(daily):
+        obs_d = _local_dt(d["t"], exchange_tz).date()
+        if d["close"] is None:
+            out["skipped"]["daily_close_null"] += 1
+            continue
+        if obs_d >= cutoff:
+            out["skipped"]["not_closed"] += 1
+            continue
+        if obs_d < earliest:
+            continue
+        obs = obs_d.isoformat()
+        cand = [h for h in hbars
+                if abs((_local_dt(h["t"], exchange_tz).date() - obs_d).days) <= scope_days]
+        rec = {"t": d["t"], **_times(d["t"]), "obs_date": obs, **{f: d[f] for f in OHLC}}
+        if not cand:
+            rec["status"] = "no_hourly_in_scope"
+            out["skipped"]["no_hourly_in_scope"] += 1
+            out["bars"].append(rec)
+            continue
+        rec["status"] = "ok"
+        bc = _best(cand, "close", d["close"], exchange_tz, obs)
+        bo = _best(cand, "open", d["close"], exchange_tz, obs)
+        rec["best_close_match"], rec["best_open_match"] = bc, bo
+        if bc:
+            by_offset_hhmm[f"{bc['exchange_day_offset']:+d} {bc['exchange_hhmm']}"] += 1
+            by_utc_hhmm[bc["utc"][-5:]] += 1
+        if bo:
+            open_by_offset_hhmm[f"{bo['exchange_day_offset']:+d} {bo['exchange_hhmm']}"] += 1
+        same = agg.get(obs)
+        if same:
+            rec["vs_same_exchange_day"] = {
+                "hourly": same,
+                **{f"{f}_pct_diff": _pct(d[f], same[f]) for f in OHLC},
+                "close_within_hourly_range": (same["low"] is not None and same["high"] is not None
+                                              and same["low"] <= d["close"] <= same["high"]),
+            }
+        else:
+            rec["vs_same_exchange_day"] = None
+        last = {}
+        for off in (-1, 0, 1):
+            day = (obs_d + timedelta(days=off)).isoformat()
+            last[f"{off:+d}"] = _pct(d["close"], (agg.get(day) or {}).get("close"))
+        rec["close_vs_day_last_hourly_close"] = last
+        tol = MATCH_EQ_REL * 100
+        if last["+0"] is not None and abs(last["+0"]) <= tol:
+            same_last_close_eq += 1
+        if last["-1"] is not None and abs(last["-1"]) <= tol:
+            prev_last_close_eq += 1
+        out["bars"].append(rec)
+    out["compared"] = sum(1 for r in out["bars"] if r.get("status") == "ok")
+    out["best_close_match_distribution"] = _sorted_counter(by_offset_hhmm)
+    out["best_close_match_utc_distribution"] = _sorted_counter(by_utc_hhmm)
+    out["best_open_match_distribution"] = _sorted_counter(open_by_offset_hhmm)
+    out["close_equals_same_day_last_hourly_close"] = same_last_close_eq
+    out["close_equals_prev_day_last_hourly_close"] = prev_last_close_eq
+    out["skipped"] = dict(out["skipped"])
+    return out
+
+
+def daily_value_check(daily_payload, hourly_payload, daily_fetched_at_utc: str) -> dict:
+    """日 K 回應＋小時 K 回應 → `match_daily_to_hourly` 的結果（交易所時區取自日 K 回應的 meta；認不得 → 不比）。"""
+    from services.v2_tables.market_indicator import not_closed_cutoff_day
+    daily = extract_ohlc(daily_payload)
+    hourly = extract_ohlc(hourly_payload)
+    ex_tz = daily["meta"].get("exchangeTimezoneName")
+    if not zone_known(ex_tz):
+        return {"status": "exchange_tz_unknown", "exchange_tz": ex_tz}
+    cutoff = not_closed_cutoff_day(daily_fetched_at_utc, ZoneInfo(ex_tz))
+    out = match_daily_to_hourly(daily, hourly, ex_tz, cutoff)
+    out["status"] = "ok"
+    return out
+
+
 # ───────────────────────── 取數（只讀） ─────────────────────────
 
 def _default_backoff_check(url: str):
@@ -519,8 +759,9 @@ def _default_backoff_check(url: str):
     return sb.should_skip(sb.source_key(url))
 
 
-def fetch_chart(ticker: str, fetcher=None, pop_fail_kind=None, backoff_check=None) -> dict:
-    """以 `fetch_url` 取一個代號（參數與 `fetch_yf_close` 相同）。
+def fetch_chart(ticker: str, fetcher=None, pop_fail_kind=None, backoff_check=None,
+                interval: str = INTERVAL, range_: str = RANGE) -> dict:
+    """以 `fetch_url` 取一個代號（預設參數與 `fetch_yf_close` 相同；小時 K 另傳 `interval`／`range_`）。
 
     回 `{"status", "payload", "error", "fetch_log", "fetched_at_utc"}`；`fetch_log` 是 `fetch_url`
     印出的那幾行（已遮蔽）。來源在冷卻期時**不呼叫** `fetch_url`（它也不會發請求），狀態另記，
@@ -546,7 +787,7 @@ def fetch_chart(ticker: str, fetcher=None, pop_fail_kind=None, backoff_check=Non
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
-            r = fetcher(url, params={"interval": INTERVAL, "range": RANGE},
+            r = fetcher(url, params={"interval": interval, "range": range_},
                         timeout=15, backoff_on_429=False)
     except Exception as e:   # 照錄原文，不吞：寫進報告的 error
         res["fetch_log"] = [mask_text(x, secrets) for x in buf.getvalue().splitlines() if x.strip()]
@@ -636,8 +877,29 @@ def run(tickers, fetcher=None, pop_fail_kind=None, obs_date_fn=None,
             except Exception as e:
                 entry["status"] = STATUS_ANALYSIS_FAILED
                 entry["error"] = mask_text(f"分析失敗：{type(e).__name__}: {e}", secrets)
+        if entry["ok"] and tk in HOURLY_TICKERS:
+            entry.update(_hourly_part(tk, got, fetcher, pop_fail_kind, backoff_check, secrets))
         report["tickers"][tk] = entry
     return report
+
+
+def _hourly_part(tk, daily_got, fetcher, pop_fail_kind, backoff_check, secrets) -> dict:
+    """同一端點多取一份小時 K，附原始序列、meta 原值與 `daily_value_check`。小時 K 失敗不影響日 K 的結果與退出碼。"""
+    h = fetch_chart(tk, fetcher=fetcher, pop_fail_kind=pop_fail_kind, backoff_check=backoff_check,
+                    interval=HOURLY_INTERVAL, range_=HOURLY_RANGE)
+    hourly = {"status": h["status"], "error": h["error"], "fetch_log": h["fetch_log"],
+              "fetched_at_utc": h["fetched_at_utc"], "interval": HOURLY_INTERVAL, "range": HOURLY_RANGE}
+    check = None
+    if h["status"] == STATUS_OK:
+        try:
+            ohlc = extract_ohlc(h["payload"])
+            hourly["meta_snapshot"] = meta_snapshot(ohlc["meta"])
+            hourly["raw"] = raw_series(ohlc)
+            check = daily_value_check(daily_got["payload"], h["payload"], daily_got["fetched_at_utc"])
+        except Exception as e:
+            hourly["status"] = STATUS_ANALYSIS_FAILED
+            hourly["error"] = mask_text(f"小時 K 分析失敗：{type(e).__name__}: {e}", secrets)
+    return {"hourly": hourly, "daily_value_check": check}
 
 
 def _summary_lines(report: dict) -> list[str]:
@@ -667,6 +929,14 @@ def _summary_lines(report: dict) -> list[str]:
             f"正式列數(新)={pr.get('row_count')} "
             f"最後一根=regularMarketTime:{e['last_bar']['equal']}"
         )
+        if "hourly" in e:
+            chk = e.get("daily_value_check") or {}
+            lines.append(
+                f"{tk}[日K值對應]: 小時K={e['hourly']['status']} 比對根數={chk.get('compared')} "
+                f"最佳close對應(交易所日差 當地時:分)={chk.get('best_close_match_distribution')} "
+                f"等於當日最後一根小時close={chk.get('close_equals_same_day_last_hourly_close')} "
+                f"等於前一日最後一根小時close={chk.get('close_equals_prev_day_last_hourly_close')}"
+            )
     return lines
 
 

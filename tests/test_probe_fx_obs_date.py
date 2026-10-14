@@ -432,8 +432,16 @@ def test_main_寫出報告_失敗原文照錄並遮蔽(tmp_path, monkeypatch, ob
     assert rep["proxy_env_set"] is True
     assert rep["fx_obs_date_rule_verified_at_run"] is False
     # 參數與正式 `fetch_yf_close` 相同；冷卻中的 JPYTWD=X 沒有發請求
-    assert all(c[1] == {"interval": "1d", "range": "2y"} and c[2] == 15 and c[3] is False
-               for c in calls)
+    # ~~`all(c[1] == {"interval": "1d", "range": "2y"} ... for c in calls)`~~ → 2026-10-14（日 K 值對應擴充；
+    # 有意識的更正，不是漏刪）：日 K 那幾次請求的參數照舊與正式 `fetch_yf_close` 逐字相同；另外只對
+    # `HOURLY_TICKERS` 中日 K 成功的代號多打一次**同一個端點**的小時 K（60m／1mo），不打其他端點。
+    daily = [c for c in calls if c[1] == {"interval": "1d", "range": "2y"}]
+    hourly = [c for c in calls if c[1] == {"interval": "60m", "range": "1mo"}]
+    assert len(daily) + len(hourly) == len(calls)
+    assert all(c[2] == 15 and c[3] is False for c in calls)
+    assert [c[0].rsplit("/", 1)[1] for c in daily] == ["USDTWD=X", "^VIX", "EURTWD=X"]
+    assert [c[0].rsplit("/", 1)[1] for c in hourly] == ["USDTWD=X", "EURTWD=X"]   # ^VIX 不在名單、JPY 冷卻中
+    assert len({c[0].rsplit("/", 1)[0] for c in calls}) == 1                      # 同一個端點
     assert not any(c[0].endswith("/JPYTWD=X") for c in calls)
 
 
