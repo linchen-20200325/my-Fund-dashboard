@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import datetime as _dt
+
 import pytest
 
 import repositories.fund.declared_profile as dp
@@ -349,19 +351,29 @@ def test_配息頻率_來源沒寫_not_ready():
 
 
 # ~~("2012/3/5", "2012-03-05") 原列可辨識~~ → 2026-10-14 稽核必修 7（有意識的更正，不是漏刪）：字面須恰為十個字元，改列無法辨識組
+# → 同日 #963 之後的收尾（有意識的更正，不是漏刪；決策者：AI 總管）：`2012/3/5` 等不補零寫法**改回可辨識**。
+#   理由：月日不補零沒有歧義，拒收只增加 ⬜資料未備；稽核 V、W 兩組獨立建議放寬。
+#   內部空白、全形數字、前後分隔符不同照舊拒收（見下一支）。
 @pytest.mark.parametrize("raw, want", [
     ("2012/03/23", "2012-03-23"), ("2012-03-23", "2012-03-23"), (" 2012/03/23 ", "2012-03-23"),
     ("1900/01/01", "1900-01-01"),
+    ("2012/3/5", "2012-03-05"), ("2012-3-5", "2012-03-05"), ("2012/03/5", "2012-03-05"), ("2012-03-5", "2012-03-05"),
+    ("2012/3/05", "2012-03-05"), ("　2012/3/5　", "2012-03-05"),        # 全形空白在頭尾：去掉
 ])
 def test_成立日期_可辨識寫法(raw, want):
     _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
     assert cells["inception_on"]["status"] == "ok" and cells["inception_on"]["value"] == want
 
 
+# ~~"2012/3/5"、"2012/03/5"、"2012-03-5" 原列無法辨識~~ → 同上，改列可辨識組（有意識的更正，不是漏刪）
+# ~~"0099/01/01"、"1899/12/31" 原列無法辨識~~ → #965 小修（有意識的更正，不是漏刪）：字樣認得、只是早於 1900，
+#   原因據實另寫，移到 `test_成立日期_早於1900_原因據實`
 @pytest.mark.parametrize("raw", ["2018/02/30", "101/03/23", "2012年3月23日", "2012.03.23", "２０１２/03/23",
-                                 "2012/03-23", "2012/3/5", "2012/03/ 5", "2012/ 3/05", "2012 /03/23",
-                                 "0099/01/01", "1899/12/31", "2012/03/2３", "+012/03/23", "2012/03/23x",
-                                 "2012/03/5", "2012-03-5"])
+                                 "2012/03-23", "2012/03/ 5", "2012/ 3/05", "2012 /03/23",
+                                 "2012/03/2３", "+012/03/23", "2012/03/23x",
+                                 "2012/3-5", "2012/ 3/5", "2012/３/5", "2012/3/５", "2012/003/05", "2012/3/005",
+                                 "2012//3/5", "2012/3/5/", "2012/3/", "2012-3/5", "12012/3/5", "2012/00/05",
+                                 "2012/3/0", "2012/13/1", "2012　/3/5"])
 def test_成立日期_無法辨識(raw):
     _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
     assert cells["inception_on"]["status"] == "not_ready"
@@ -459,6 +471,63 @@ def test_真L1_代碼在不在表內決定名稱採不採用(monkeypatch, inside
 
 def test_成立日期_年份下限常數():
     assert EP.MIN_INCEPTION_YEAR == 1900
+
+
+# ───────────────────────── 成立日期上限：不晚於台灣今天（#963 之後的收尾）─────────────────────────
+
+
+# 台灣 2026-10-14 08:30（世界協調時間 2026-10-14 00:30）
+_NOW_TW_MORNING = _dt.datetime(2026, 10, 14, 0, 30, tzinfo=_dt.timezone.utc)
+
+
+@pytest.mark.parametrize("raw, want_status", [
+    ("2026/10/14", "ok"), ("2026-10-14", "ok"), ("2026/10/13", "ok"),
+    ("2026/10/15", "not_ready"), ("2026-10-15", "not_ready"), ("2027/1/1", "not_ready"),
+])
+def test_成立日期_不晚於台灣今天(raw, want_status):
+    out = EP.build_profiles(_keys(CODE), fetchers=_fetchers(mdj_ok(inception=raw), not_listed(), not_listed()),
+                            now=_NOW_TW_MORNING)
+    cell = out["cells"][CODE]["inception_on"]
+    assert cell["status"] == want_status
+    # ~~not_ready 時原因寫「成立日期字樣無法辨識：{raw}」~~ → #965 小修（有意識的更正，不是漏刪）：字樣認得，據實寫晚於今天
+    if want_status == "not_ready":
+        assert cell["reason"] == f"成立日期 {raw} 晚於台灣今天 2026-10-14，不採用"
+        assert cell["value"] is None and cell["raw"] == {"MoneyDJ": raw}
+
+
+@pytest.mark.parametrize("raw", ["1899/12/31", "0099/01/01", "1899/2/30"])
+def test_成立日期_早於1900_原因據實(raw):
+    _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
+    cell = cells["inception_on"]
+    assert cell["status"] == "not_ready" and cell["value"] is None
+    assert cell["reason"] == f"成立日期 {raw} 早於 1900 年，不採用（不猜是民國年、不換算）"
+
+
+def test_成立日期_日期不存在仍寫無法辨識():
+    _out, cells = _one(mdj_ok(inception="2018/2/30"), not_listed(), not_listed())
+    assert cells["inception_on"]["reason"] == "成立日期字樣無法辨識：2018/2/30"
+
+
+def test_成立日期_今天以台灣日期判_不是世界協調時間():
+    # 世界協調時間 2026-10-13 16:30 ＝ 台灣 2026-10-14 00:30：台灣已是 14 日，14 日收、15 日不收
+    now = _dt.datetime(2026, 10, 13, 16, 30, tzinfo=_dt.timezone.utc)
+    assert EP.taiwan_today(now) == _dt.date(2026, 10, 14)
+    assert EP.parse_inception("2026/10/14", today=EP.taiwan_today(now)) == "2026-10-14"
+    assert EP.parse_inception("2026/10/15", today=EP.taiwan_today(now)) is None
+
+
+def test_parse_inception_today必須注入且為date():
+    with pytest.raises(TypeError):
+        EP.parse_inception("2012/3/5")                                    # 沒給 today
+    with pytest.raises(TypeError):
+        EP.parse_inception("2012/3/5", today=_dt.datetime(2026, 10, 14))  # datetime 不收（比較會出錯）
+    assert EP.parse_inception("2012/3/5", today=_dt.date(2026, 10, 14)) == "2012-03-05"
+
+
+def test_build_profiles_now要帶時區():
+    with pytest.raises(ValueError, match="now"):
+        EP.build_profiles(_keys(CODE), fetchers=_fetchers(mdj_ok(), not_listed(), not_listed()),
+                          now=_dt.datetime(2026, 10, 14))
 
 
 # 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者 AI 總管；依據 #961 探測報告）：

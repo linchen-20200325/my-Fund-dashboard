@@ -455,7 +455,9 @@ def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶
         PX._TLS_FAIL.kind = ""
         if "fundclear" in url:
             return _J()
-        PX._TLS_FAIL.kind = "not_found"        # MoneyDJ 四個網址全 404 → failed → 進失敗記憶
+        # ~~MoneyDJ 四個網址全 404 → failed → 進失敗記憶~~ → 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；
+        # 決策者 AI 總管；docs/v2/49 第 8 節 (aa)）：全 404 改判 not_found，一樣進失敗記憶（本測試要守的清除行為不變）
+        PX._TLS_FAIL.kind = "not_found"
         return None
 
     monkeypatch.setattr(DP, "fetch_url_with_retry", fake_fetch)
@@ -465,7 +467,7 @@ def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶
         fn.cache_clear()
     EN.clear_memo()
     assert DP.fetch_fundclear_declared_ccy("ZZEXP1")["status"] == "ok"
-    assert DP.fetch_moneydj_basic_fields("ZZEXP1")["status"] == "failed"
+    assert DP.fetch_moneydj_basic_fields("ZZEXP1")["status"] == "not_found"     # 舊斷言 == "failed"（見上）
     assert DP.fetch_tdcc_listing("ZZEXP1")["status"] == "failed"
     ok_res = {"full_key": "ZZEXP1", "series": _nav(3), "dividends": [], "data_source": "x"}
     EN.load_nav_dividend(
@@ -509,6 +511,43 @@ def test_淨值層_持倉讀不到_exp快取照樣清(book, monkeypatch):
                                       "fetch_fundclear_declared_ccy"])
     assert EN._REGISTERED.cache_info()["size"] == 0 and "3-2" not in SRC._tdcc_cache
     assert _nav_logs(book)[0][4] == "failed"
+
+
+def test_淨值層_持倉讀不到_A鏈快取也清_其餘行為不變(book, monkeypatch):
+    """2026-10-14 稽核 V／W 可選項：「重新取淨值」持倉讀不到時，A 鏈 L1（含 15 分鐘主入口）照樣清，
+    否則 exp 記憶清了、下一次 exp 取數仍命中清除前的舊 L1。錯誤訊息、回傳值、fetch_log 筆數照舊
+    （對照 `test_淨值層_持倉讀不到_記failed_原文已遮蔽_不取數`）。"""
+    cleared = []
+    for fn in ND.CHAIN_CACHED_FUNCTIONS:
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: cleared.append(_n))
+
+    def boom(values):
+        raise AH.PolicySupplementError(f"讀取失敗 https://x/{SECRET}", code="api")
+    monkeypatch.setattr(AH, "load_alo_tables", boom)
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    out = S.refetch_nav([SECRET])
+    assert sorted(cleared) == sorted(fn.__name__ for fn in ND.CHAIN_CACHED_FUNCTIONS) and len(cleared) == 6
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4] == "failed"
+    assert logs[0][6].startswith("holding: 讀取失敗") and SECRET not in logs[0][6]
+    assert out["table"] is None and list(out["persist"]["masked_errors"]) == ["holding"]
+    assert out["persist"]["log_message"] == logs[0][6] and out["persist"]["empty"] == {}
+
+
+def test_淨值層_A鏈快取在讀持倉之前清(book, monkeypatch):
+    order = []
+    for fn in ND.CHAIN_CACHED_FUNCTIONS:
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: order.append("clear"))
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    inner = AH.load_alo_tables
+
+    def spy(values):
+        order.append("holding")
+        return inner(values)
+    monkeypatch.setattr(AH, "load_alo_tables", spy)
+    S.refetch_nav([SECRET])
+    assert order == ["clear"] * 6 + ["holding"]
+    assert _nav_logs(book)[0][4:] == ["ok", "2", ""]
 
 
 def test_淨值層_重新取數不清TDCC非空清單(book, monkeypatch):

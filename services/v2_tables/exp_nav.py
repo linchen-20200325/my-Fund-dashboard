@@ -27,15 +27,27 @@
 - **計價幣別未確定（`declared_ccy_source` 為 None）逐檔隔離**（2026-10-14 稽核必修 3）：該檔不取數、不記憶，
   `nav`／`dividend` 的 `withheld` 記 `WITHHELD_CCY_UNDETERMINED`、`skipped` 與回傳的 `not_fetched` 寫明原因；
   其他檔照常。其餘不合格的 `declared_ccy_source`（壞字串）照舊由 `nav_dividend` 整批 ValueError（那是程式錯誤）。
+  ~~（以 `item.get("declared_ccy_source") is None` 判定，鍵不存在也算未確定）~~ → 2026-10-14 稽核 V／W 可選項
+  （有意識的更正，不是漏刪；決策者：AI 總管）：只有**明確給 None** 才隔離；`declared_ccy_source` 鍵**完全不存在**
+  屬程式錯誤，照 #963 之前的行為 ValueError（不把「呼叫端漏帶鍵」說成「幣別未確定」）。
 - **與當下時刻（不是日期）有關的扣下不記憶**（2026-10-14 稽核必修 2）：`nav_dividend` 裡唯一一種依時刻判定的扣下是
-  `_fetched_at_check` 的「取得時間晚於當下超過 `FETCHED_AT_MAX_FUTURE_SEC`」（淨值整段、累積表各段、配息逐筆都走它）；
+  `_fetched_at_check` 的「取得時間晚於當下超過 `FETCHED_AT_MAX_FUTURE_SEC`」（淨值整段、累積表各段、配息逐筆都走它；
+  這句的射程限 `services/v2_tables/nav_dividend.py`，經兩組獨立讀碼一致）；
   過幾分鐘再判可能就過了，記住它會把當下的判斷重播成舊的。只要該檔的結果裡出現這一種扣下，本次就**不存**。
   依日期判定的（「晚於當下的台灣日期」）不受影響：鍵裡已有台灣日期，同一天內判斷不變。
 - **清除與進行中讀取**（2026-10-14 稽核必修 5）：`clear_memo()` 會把世代計數加一；清除前就開始取數、清除後才完成的
   那一筆**不寫回**記憶（否則「重新取數」之後還會讀到清除前那一輪的結果）。
+- **較舊的失敗不蓋掉較新的成功**（2026-10-14 稽核 V／W 可選項，#963 之後的收尾 PR）：每一筆記憶另記**取數開始時刻**
+  （本檔時鐘，見 `clock`）；寫回時若該鍵已有「取數開始時刻較晚」的**成功**記憶，就不覆蓋。沒有 clear 的交錯下，
+  較早開始、較晚完成的失敗取數原本會把較晚開始、較早完成的成功覆寫成失敗記憶（之後 300 秒都顯示取數失敗）。
+  只保護成功：較舊的成功照樣可以蓋掉較新的失敗（列的 `fetched_at` 是當初實際取得的時間，畫面不會把它說成新的）；
+  開始時刻相同時無從分先後，照舊由後完成者寫回。
+  **兩個時刻各管各的**：存活時間從整次呼叫開始（`tick`）起算，先後比較用每一檔自己的開始時刻（`started`）；
+  同一次呼叫裡 `tick ≤ started`，故成功記憶不會活超過 TTL（只可能提早一點過期）。
+  沒有第四欄（取數開始時刻）的舊三欄項目視為「沒有開始時刻」，不阻擋寫回。
 - **撤銷條件**：A 鏈 L1 改成「B 線可用的結果都快取、失敗另有記憶」時，本檔即可拿掉，改直接呼叫 `build_nav_dividend_tables`。
 
-已知限制（照實寫）：沒有 single-flight（同一檔被並行查詢時各自出門）；記憶沒有容量上限，筆數受代碼總數與
+已知限制（照實寫）：沒有 single-flight（同一檔被並行查詢時各自出門；寫回先後見上方「較舊的失敗」那一條）；記憶沒有容量上限，筆數受代碼總數與
 存活時間限制（每次呼叫先清掉過期的）；`chain_fetch` 不在鍵裡（測試注入用，
 正式路徑恆為 None —— 同一行程內換注入物而不 `clear_memo()` 會命中舊結果）。
 """
@@ -63,10 +75,13 @@ _DIV_KEYS = (*_NAV_KEYS, "pending", "settled")
 WITHHELD_CCY_UNDETERMINED = "ccy_undetermined"
 TEXT_CCY_UNDETERMINED = "計價幣別未確定（declared_ccy_source 為 None），本檔不取數、不寫列"
 #: `nav_dividend._fetched_at_check`「晚於當下」那一種扣下的理由開頭（逐筆、整段都用它）；有守衛測試釘住。
+#: ⚠️ 2026-10-14 讀碼結論：`nav_dividend` 的 `skipped` 是純文字串列、**沒有原因代碼欄**（整段扣下才有 `withheld`
+#: 代碼），所以逐筆那一種只能比對字面。守衛：`tests/test_v2_tables_exp_nav.py` 直接呼叫公開的
+#: `build_nav_dividend_tables` 造出逐筆與整段兩種情境、斷言原因文字含本標記 —— `nav_dividend` 改文案即紅。
 TIME_DEPENDENT_REASON_MARK = "晚於當下（"
 
 _LOCK = threading.Lock()
-_MEMO: dict = {}           # 鍵 → (存入時刻 monotonic, KIND_*, {"nav": 片段, "dividend": 片段})
+_MEMO: dict = {}           # 鍵 → (存入時刻 monotonic, KIND_*, {"nav": 片段, "dividend": 片段}, 取數開始時刻 monotonic)
 _GEN = [0]                 # 世代計數：clear 一次加一；開始取數時的世代與寫回時不同 → 不寫回
 #: 與 `infra.source_backoff._clock` 同一種時鐘（monotonic）；模組層變數讓測試能注入假時鐘。
 _clock = time.monotonic
@@ -102,6 +117,12 @@ def _ttl(kind: str) -> int:
 def _expired(tick: float, at: float, kind: str) -> bool:
     """存入後經過的秒數 ≥ TTL 即過期（成功 900 秒時第 899 秒命中、第 900 秒不命中）。清理與查詢共用這一個判準。"""
     return tick - at >= _ttl(kind)
+
+
+def _newer_success(existing, started: float) -> bool:
+    """既有記憶是不是「取數開始時刻比 `started` 晚」的成功。沒有第四欄（取數開始時刻）的項目 → False（不阻擋）。"""
+    return (existing is not None and len(existing) > 3 and existing[1] == KIND_SUCCESS
+            and existing[3] > started)
 
 
 def _empty_tables() -> dict:
@@ -156,6 +177,9 @@ def _check_items(funds) -> list:
         if "declared_ccy" not in item and "declared_ccy_source" not in item:
             raise ValueError(f"{item.get('fund_code')!r}：每一筆都要明確帶 declared_ccy 與 declared_ccy_source"
                              "（沒有幣別請給 declared_ccy=None）")
+        if "declared_ccy_source" not in item:
+            raise ValueError(f"{item.get('fund_code')!r}：缺 declared_ccy_source 鍵（程式錯誤）；"
+                             "計價幣別未確定請明確給 declared_ccy_source=None")
         code = item.get("fund_code")
         if not isinstance(code, str) or not code.strip() or code != code.strip():
             raise ValueError(f"fund_code 須為前後無空白的非空字串（{code!r}）")
@@ -169,7 +193,8 @@ def load_nav_dividend(funds, *, now=None, clock=None, chain_fetch=None) -> dict:
     `declared_ccy`、`declared_ccy_source`）。輸入檢查完全交給 `nav_dividend`（同一套 `ValueError`），
     另加：不收 `holding_ccy`、每筆都要帶 declared 鍵（見檔頭）。
     `now`：帶時區的 datetime（決定台灣日期，並原樣交給 `build_nav_dividend_tables`）；None ＝ 當下。
-    `clock`：monotonic 時鐘（可呼叫物，測試注入）；None ＝ 模組層 `_clock`。
+    `clock`：monotonic 時鐘（可呼叫物，測試注入）；None ＝ 模組層 `_clock`。呼叫開始讀一次（存活時間的起點），
+    每一檔取數前再讀一次（取數開始時刻，寫回時比先後）。
     `chain_fetch`：原樣交給 `build_nav_dividend_tables`（測試注入）。
 
     回傳 `{"nav": ..., "dividend": ..., "memo": {代碼: {"hit", "cooling", "cooling_remaining_sec"}},
@@ -180,14 +205,15 @@ def load_nav_dividend(funds, *, now=None, clock=None, chain_fetch=None) -> dict:
     items = _check_items(funds)
     now_utc = nav_dividend._now_utc(now)
     tw_date = now_utc.astimezone(nav_dividend.MARKET_DATE_TZ).date().isoformat()
-    tick = (clock or _clock)()
+    clk = clock or _clock
+    tick = clk()
     undetermined = {item["fund_code"] for item in items if item.get("declared_ccy_source") is None}
     fetchable = [item for item in items if item["fund_code"] not in undetermined]
     grouped, conflicts = nav_dividend._group_funds(fetchable, chain=True)   # 同一套輸入檢查（不合格當場 ValueError）
     acc = _empty_tables()
     memo_info, not_fetched = {}, {}
     with _LOCK:
-        for k in [k for k, (at, kind, _p) in _MEMO.items() if _expired(tick, at, kind)]:
+        for k in [k for k, entry in _MEMO.items() if _expired(tick, entry[0], entry[1])]:
             del _MEMO[k]
     for code in dict.fromkeys(item["fund_code"] for item in items):   # 代碼第一次出現的順序
         if code in undetermined:
@@ -212,7 +238,7 @@ def load_nav_dividend(funds, *, now=None, clock=None, chain_fetch=None) -> dict:
             if hit is not None and _expired(tick, hit[0], hit[1]):
                 hit = None
         if hit is not None:
-            at, kind, piece = hit
+            at, kind, piece = hit[0], hit[1], hit[2]
             cooling = kind == KIND_FAILURE
             memo_info[code] = {"hit": True, "cooling": cooling,
                                "cooling_remaining_sec": round(_ttl(kind) - (tick - at), 1) if cooling else None}
@@ -220,13 +246,16 @@ def load_nav_dividend(funds, *, now=None, clock=None, chain_fetch=None) -> dict:
             continue
         with _LOCK:
             gen = _GEN[0]
+        started = clk()                # 本檔取數開始時刻（較舊的失敗不蓋掉較新的成功）
         tables = nav_dividend.build_nav_dividend_tables(own, now=now_utc, chain_fetch=chain_fetch)
         piece = _piece(tables, code)
         if key is not None and not _time_dependent(piece, code):
             failed = code in piece["nav"]["errors"] or code in piece["dividend"]["errors"]
             with _LOCK:
-                if _GEN[0] == gen:     # 取數期間被清過 → 不寫回（清除前那一輪的結果不得留到清除後）
-                    _MEMO[key] = (tick, KIND_FAILURE if failed else KIND_SUCCESS, copy.deepcopy(piece))
+                # 取數期間被清過 → 不寫回（清除前那一輪的結果不得留到清除後）；
+                # 該鍵已有較晚開始的成功 → 不寫回（較舊的取數結果不得蓋掉較新的成功）
+                if _GEN[0] == gen and not _newer_success(_MEMO.get(key), started):
+                    _MEMO[key] = (tick, KIND_FAILURE if failed else KIND_SUCCESS, copy.deepcopy(piece), started)
         memo_info[code] = {"hit": False, "cooling": False, "cooling_remaining_sec": None}
         _merge(acc, piece)
     return {"nav": acc["nav"], "dividend": acc["dividend"], "memo": memo_info, "not_fetched": not_fetched}
