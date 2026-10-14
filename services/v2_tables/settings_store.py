@@ -483,6 +483,14 @@ def refetch_nav(secret_values) -> dict:
     成功快取與失敗記憶）、exp 淨值逐檔記憶（`exp_nav.clear_memo()`），以及 TDCC 3-2 被快取成 `[]` 的那一筆
     （`declared_profile.reset_tdcc_list_cache_if_empty()`）。~~持倉讀不到時與 A 鏈快取一樣不清。~~
     → 稽核必修 8（有意識的更正，不是漏刪）：這三樣在讀持倉**之前**清，持倉讀不到時也清（`_clear_exp_caches`）。簽名不變。
+    ~~A 鏈 L1 快取（`nav_dividend.CHAIN_CACHED_FUNCTIONS`）只在持倉讀取成功之後清~~ → 2026-10-14 稽核 V／W 可選項
+    （有意識的更正，不是漏刪；決策者：AI 總管）：A 鏈 L1 也改在讀持倉**之前**清，持倉讀不到時也清。理由：客戶語意是
+    「重新取淨值」，持倉讀不到時 exp 記憶已清、底下 A 鏈 15 分鐘 L1 卻還在，下一次 exp 取數會命中清除前的舊 L1。
+    讀碼確認無其他副作用：六支的 `cache_clear()` 只動行程內記憶 —— `infra/cache.py` 的 `_ttl_cache`（兩支）清 dict
+    並歸零命中統計；`_daily_cache`（四支）只清 dict、**不**歸零命中統計（~~兩者都清 dict 與命中統計~~，#965 小修
+    更正，不是漏刪）；`fetch_fund_from_moneydj_url` 外層 `_deepcopy_result` 以 `functools.wraps` 帶出同一支 ——
+    不印、不寫 log、不拋錯；持倉讀取（`alo_holdings.load_alo_tables` → `policy_supplement_repository`）與代碼解析
+    都不經這六支快取；錯誤訊息、回傳值、`fetch_log` 筆數不變。
 
     `fetch_log`（Q4）：一次只記一筆。`row_count`＝L1 取回的列數（過濾前，`50` 第 10 節 B12，同市場指標）。
     - `ok`：沒有任何失敗原因。持倉為 0 列 → `ok`、`row_count` 0（`44` SET-5 的取數回空，同市場指標體例）。
@@ -593,6 +601,12 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
     """`refetch_nav` 的本體（取數、組 message、寫結束列）；例外由 `refetch_nav` 收斂。"""
     masked, empty, table = {}, {}, None
     _clear_exp_caches()   # 2026-10-14 稽核必修 8：不依賴持倉讀取成功（持倉讀不到時也要清）
+    # 2026-10-13：淨值改走 A 鏈 → 清 A 鏈實際用到的全部 L1 快取（`nav_dividend.CHAIN_CACHED_FUNCTIONS`，
+    # 逐一實查）；整批清（見 docstring）；冷卻不動。
+    # ~~放在持倉讀取成功之後~~ → 2026-10-14 稽核 V／W 可選項（有意識的更正，不是漏刪）：移到讀持倉之前，
+    # 持倉讀不到時也清（理由與無副作用的讀碼依據見 docstring）。
+    for fetcher in nav_dividend.CHAIN_CACHED_FUNCTIONS:
+        fetcher.cache_clear()
     try:
         tables = alo_holdings.load_alo_tables(secret_values)
     except alo_holdings.PolicySupplementError as exc:
@@ -610,10 +624,7 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
                 resolved[r["input"]] = r
             else:
                 masked.setdefault(mask(str(r["input"])), mask(str(r["error"])))
-        # 2026-10-13：淨值改走 A 鏈 → 清 A 鏈實際用到的全部 L1 快取（`nav_dividend.CHAIN_CACHED_FUNCTIONS`，
-        # 逐一實查）；整批清（見 docstring）；冷卻不動。
-        for fetcher in nav_dividend.CHAIN_CACHED_FUNCTIONS:
-            fetcher.cache_clear()
+        # A 鏈 L1 快取已在函式開頭清過（2026-10-14 移到讀持倉之前）。
         table = nav_dividend.build_nav_table([
             {"fund_code": h["fund_code"], "full_key": resolved[h["fund_code"]]["full_key"],
              "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"],

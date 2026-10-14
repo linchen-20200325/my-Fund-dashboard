@@ -511,6 +511,43 @@ def test_淨值層_持倉讀不到_exp快取照樣清(book, monkeypatch):
     assert _nav_logs(book)[0][4] == "failed"
 
 
+def test_淨值層_持倉讀不到_A鏈快取也清_其餘行為不變(book, monkeypatch):
+    """2026-10-14 稽核 V／W 可選項：「重新取淨值」持倉讀不到時，A 鏈 L1（含 15 分鐘主入口）照樣清，
+    否則 exp 記憶清了、下一次 exp 取數仍命中清除前的舊 L1。錯誤訊息、回傳值、fetch_log 筆數照舊
+    （對照 `test_淨值層_持倉讀不到_記failed_原文已遮蔽_不取數`）。"""
+    cleared = []
+    for fn in ND.CHAIN_CACHED_FUNCTIONS:
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: cleared.append(_n))
+
+    def boom(values):
+        raise AH.PolicySupplementError(f"讀取失敗 https://x/{SECRET}", code="api")
+    monkeypatch.setattr(AH, "load_alo_tables", boom)
+    monkeypatch.setattr(ND, "fetch_nav_chain_with_error", lambda *a, **k: pytest.fail("持倉讀不到時不得取數"))
+    out = S.refetch_nav([SECRET])
+    assert sorted(cleared) == sorted(fn.__name__ for fn in ND.CHAIN_CACHED_FUNCTIONS) and len(cleared) == 6
+    logs = _nav_logs(book)
+    assert len(logs) == 1 and logs[0][4] == "failed"
+    assert logs[0][6].startswith("holding: 讀取失敗") and SECRET not in logs[0][6]
+    assert out["table"] is None and list(out["persist"]["masked_errors"]) == ["holding"]
+    assert out["persist"]["log_message"] == logs[0][6] and out["persist"]["empty"] == {}
+
+
+def test_淨值層_A鏈快取在讀持倉之前清(book, monkeypatch):
+    order = []
+    for fn in ND.CHAIN_CACHED_FUNCTIONS:
+        monkeypatch.setattr(fn, "cache_clear", lambda _n=fn.__name__: order.append("clear"))
+    _stub_nav(monkeypatch, {_A: (_nav(2), None)})
+    inner = AH.load_alo_tables
+
+    def spy(values):
+        order.append("holding")
+        return inner(values)
+    monkeypatch.setattr(AH, "load_alo_tables", spy)
+    S.refetch_nav([SECRET])
+    assert order == ["clear"] * 6 + ["holding"]
+    assert _nav_logs(book)[0][4:] == ["ok", "2", ""]
+
+
 def test_淨值層_重新取數不清TDCC非空清單(book, monkeypatch):
     import repositories.fund.sources as SRC
     data = [{"基金代碼": "X1"}]
