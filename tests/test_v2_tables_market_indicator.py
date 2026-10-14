@@ -443,8 +443,14 @@ _L2_TO_L2_ALLOWED = {"nav_dividend.py": ("services.moneydj_fetcher",)}
 # - `infra.cache`：`register_cache`（全域刷新清得掉這份快取）；`infra.gspread_retry`：與 L1 選股池讀取同一把冷卻鑰匙。
 #   兩者都在 `tests/test_services_purity_contract.py::ALLOWED_IMPORTS` 的 infra 子模組清單上（不開整個 infra）。
 # - `time`（monotonic 時鐘算 TTL）、`threading`（鎖住模組層快取 dict）：純標準庫、無 I/O。
-# 只開這一個檔、這幾個名字；開了卻沒人用也紅。
-_EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading")}
+# ~~只開這一個檔、這幾個名字；開了卻沒人用也紅。~~
+# → 2026-10-14 C2（有意識的更正，不是漏刪；決策者：AI 總管）：照 `exp_universe.py` 先例加開 `exp_nav.py`
+#   （exp 淨值逐檔記憶，`49` 第 8 節 (t)）：`infra.cache`（`register_cache`）、`time`（monotonic 時鐘）、
+#   `threading`（鎖住模組層記憶 dict）、`copy`（存入與交出都用深拷貝，下游就地改寫碰不到記憶裡那一份）。
+#   `copy` 是純標準庫、無 I/O，且在 `tests/test_services_purity_contract.py::ALLOWED_IMPORTS` 上。
+# 只開這兩個檔、這幾個名字；開了卻沒人用也紅。
+_EXTRA_ALLOWED = {"exp_universe.py": ("infra.cache", "infra.gspread_retry", "time", "threading"),
+                  "exp_nav.py": ("infra.cache", "time", "threading", "copy")}
 
 
 def _is_v2_tables(name: str) -> bool:
@@ -500,5 +506,6 @@ def test_v2_tables只import標準庫與L0_L1():
     # 放行清單恰好是這一組（字面值自我釘死，比照 `_L2_TO_L2_ALLOWED`）：多開一個檔或一個名字就紅。
     assert {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names} == {
         ("exp_universe.py", "infra.cache"), ("exp_universe.py", "infra.gspread_retry"),
-        ("exp_universe.py", "time"), ("exp_universe.py", "threading")}
+        ("exp_universe.py", "time"), ("exp_universe.py", "threading"),
+        ("exp_nav.py", "infra.cache"), ("exp_nav.py", "time"), ("exp_nav.py", "threading"), ("exp_nav.py", "copy")}
     assert extra_seen == {(f, n) for f, names in _EXTRA_ALLOWED.items() for n in names}, extra_seen

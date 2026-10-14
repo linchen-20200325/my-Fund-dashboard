@@ -1606,6 +1606,12 @@ def _normalize_declared_ccy(raw) -> str:
     return _alias or _iso(_s)
 
 
+#: 公開名稱（2026-10-14 exp C2 稽核 V／W 必修 9）：L2 `services/v2_tables/exp_profile.py` 以此名稱使用，
+#: 不再跨層 import 底線開頭的私有函式。與 `_normalize_declared_ccy` 是**同一個物件**（行為一字未改；
+#: 舊名照留，檔內與既有呼叫端不必改）。登記於 docs/v2/49 第 8 節 (s)。
+normalize_declared_ccy = _normalize_declared_ccy
+
+
 def _ccy_from_fund_name(name: str) -> str:
     """從晨星基金名稱抓計價幣別(如 "…AMg7 USD" → USD);抓不到回 ""(§1 不猜,由呼叫端退 USD)。
 
