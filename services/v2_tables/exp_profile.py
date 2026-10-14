@@ -26,11 +26,12 @@ MoneyDJ 基本資料頁的 ok 只確認「頁面可見文字提到代碼」＋�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from repositories.fund import declared_profile as dp
 from repositories.fund.sources import normalize_declared_ccy
+from services.v2_tables.nav_dividend import MARKET_DATE_TZ
 
 STATUS_OK = "ok"
 STATUS_NOT_READY = "not_ready"
@@ -103,7 +104,7 @@ TEXT_KEY_FAILED = "代碼無法對照：{reason}"
 
 # MoneyDJ 欄 → `declared_profile.MONEYDJ_LABELS` 的標籤
 _MDJ_LABEL = {"fund_name": "基金名稱", "ccy": "計價幣別", "dividend_policy": "配息頻率", "inception_on": "成立日期"}
-_INCEPTION_FORMATS = ("%Y/%m/%d", "%Y-%m-%d")
+_INCEPTION_SEPARATORS = ("/", "-")
 _ASCII_DIGITS = frozenset("0123456789")
 #: 成立日期的年份下限。理由：`strptime("%Y")` 收 `0099` 這種四位數字（＝西元 99 年），對基金成立日期顯然不是真值，
 #: 多半是民國年或欄位錯位；台灣境內外基金最早的成立年份遠晚於 1900，1900 只當「不可能更早」的保守下界，
@@ -201,36 +202,61 @@ def _fund_name_cell(res: dict) -> dict:
                  fetched_at={"MoneyDJ": res.get("fetched_at")})
 
 
-def parse_inception(raw) -> Optional[str]:
-    """MoneyDJ「成立日期」→ ISO（`YYYY-MM-DD`）。去頭尾空白後，字面須**恰為** `DDDD/DD/DD` 或 `DDDD-DD-DD`
-    （十個字元、ASCII 數字、兩個分隔符號相同；內部空格、不補零、全形數字一律不收），再以 `strptime` 驗日期存在、
-    年份不早於 `MIN_INCEPTION_YEAR`。不存在的日期（2018/02/30）、民國年、中文年月日 → None。
-    ~~（舊：`strptime` 解析，月日可不補零，去頭尾空白後須為 ASCII）~~ → 2026-10-14 稽核 V／W 必修 7 收緊
-    （有意識的更正，不是漏刪；決策者：AI 總管）：`strptime` 自己會收 `2012/3/5`、`2012/03/ 5` 這類寫法，
-    與「只收 YYYY/MM/DD」的字面規定不符。"""
+def parse_inception(raw, *, today: date) -> Optional[str]:
+    """MoneyDJ「成立日期」→ ISO（`YYYY-MM-DD`）。
+
+    去頭尾空白（半形、全形都去；`str.strip`）後，字面須為「4 位 ASCII 年 ＋ 分隔符 ＋ 1～2 位 ASCII 月 ＋
+    同一個分隔符 ＋ 1～2 位 ASCII 日」，分隔符為 `/` 或 `-`；內部不得有空白、不得有全形數字。再以 `strptime`
+    驗日期存在，且年份不早於 `MIN_INCEPTION_YEAR`、日期不晚於 `today`（台灣今天，由呼叫端注入）。
+    不存在的日期（2018/02/30）、民國年、中文年月日、未來日期 → None。輸出一律補零的 ISO。
+
+    ~~（舊：字面須**恰為** `DDDD/DD/DD` 或 `DDDD-DD-DD`，十個字元，不補零一律不收）~~ → 2026-10-14 稽核 V／W
+    可選項（有意識的更正，不是漏刪；決策者：AI 總管）：`2012/3/5` 沒有歧義，拒收只會多一格 ⬜資料未備；
+    兩組稽核獨立建議放寬。收緊的用意（擋 `strptime` 自己會收的內部空白，例 `2012/03/ 5`）照舊成立、照舊擋。
+    同一輪新增上限：不晚於台灣今天（成立日期不可能在未來）。
+    ⚠️ MoneyDJ 真實頁面的月日補不補零，**未以真實樣本驗證**（待 #961 探測報告）。"""
+    if not isinstance(today, date) or isinstance(today, datetime):
+        raise TypeError(f"today 須為 datetime.date（不是 datetime；收到 {type(today).__name__}）")
     if not isinstance(raw, str):
         return None
     text = raw.strip()
-    if len(text) != 10 or text[4] not in "/-" or text[7] != text[4]:
+    sep = text[4] if len(text) > 4 else None
+    if sep not in _INCEPTION_SEPARATORS:
         return None
-    if not all(ch in _ASCII_DIGITS for i, ch in enumerate(text) if i not in (4, 7)):
+    parts = text.split(sep)
+    if len(parts) != 3:
         return None
-    if int(text[:4]) < MIN_INCEPTION_YEAR:
+    year, month, day = parts
+    if len(year) != 4 or not 1 <= len(month) <= 2 or not 1 <= len(day) <= 2:
         return None
-    for fmt in _INCEPTION_FORMATS:
-        try:
-            return datetime.strptime(text, fmt).date().isoformat()
-        except ValueError:
-            continue
-    return None
+    if not all(ch in _ASCII_DIGITS for ch in year + month + day):
+        return None
+    if int(year) < MIN_INCEPTION_YEAR:
+        return None
+    try:
+        parsed = datetime.strptime(f"{year}/{int(month):02d}/{int(day):02d}", "%Y/%m/%d").date()
+    except ValueError:
+        return None
+    if parsed > today:
+        return None
+    return parsed.isoformat()
 
 
-def _inception_cell(res: dict) -> dict:
+def taiwan_today(now: Optional[datetime] = None) -> date:
+    """台灣今天（`nav_dividend.MARKET_DATE_TZ`）。`now` 須帶時區；None ＝ 當下。"""
+    if now is None:
+        now = datetime.now(MARKET_DATE_TZ)
+    elif not isinstance(now, datetime) or now.tzinfo is None:
+        raise ValueError(f"now 須為帶時區的 datetime（{now!r}）")
+    return now.astimezone(MARKET_DATE_TZ).date()
+
+
+def _inception_cell(res: dict, today: date) -> dict:
     decided, raw = _mdj_gate("inception_on", res)
     if decided is not None:
         return decided
     fetched = {"MoneyDJ": res.get("fetched_at")}
-    iso = parse_inception(raw)
+    iso = parse_inception(raw, today=today)
     if iso is None:
         return _cell(raw={"MoneyDJ": raw}, fetched_at=fetched, reason=f"成立日期字樣無法辨識：{raw}")
     return _cell(iso, STATUS_OK, sources=("MoneyDJ",), raw={"MoneyDJ": raw}, fetched_at=fetched)
@@ -393,13 +419,14 @@ def _row(code: str, cells: dict, fetched_at) -> dict:
     return {f: row[f] for f in FUND_PROFILE_FIELDS}
 
 
-def build_profiles(key_results, *, fetchers=None) -> dict:
+def build_profiles(key_results, *, fetchers=None, now=None) -> dict:
     """`fund_keys.resolve_full_keys` 的結果 → `fund_profile` 列與逐欄出處。
 
     - `key_results`：`resolve_full_keys(...)` 的回傳（帶 `results`），或其 `results` 串列。每一筆的 `input` 當
       `fund_code`（須為字串，否則 `TypeError`）；同一個代碼重複出現只處理第一筆（保持原順序）。
       `ok` 為真者以 `full_key` 呼叫三支 L1；`ok` 為假者不取數，各欄 ⬜「代碼無法對照：<原因>」。
     - `fetchers`：測試注入 `{"MoneyDJ": fn, "TDCC": fn, "FundClear": fn}`（恰三鍵）；None ＝ `DECLARED_CACHED_FUNCTIONS`。
+    - `now`：帶時區的 datetime，只用來取「台灣今天」（成立日期不得晚於它）；None ＝ 當下（`taiwan_today`）。
 
     回傳::
 
@@ -417,6 +444,7 @@ def build_profiles(key_results, *, fetchers=None) -> dict:
         raise ValueError(f"PARTIAL_FAILURE_POLICY 須為 {_PARTIAL_POLICIES} 之一（{PARTIAL_FAILURE_POLICY!r}）")
     entries = _key_results_list(key_results)
     fns = _check_fetchers(fetchers)
+    today = taiwan_today(now)
     out = {"rows": [], "cells": {}, "declared": {}, "source_status": {}, "table_wide_failed": False}
     fetched_any = False
     all_failed = True
@@ -445,7 +473,7 @@ def build_profiles(key_results, *, fetchers=None) -> dict:
         cells = {
             "fund_name": _fund_name_cell(mdj),
             "ccy": _ccy_cell(results, PARTIAL_FAILURE_POLICY),
-            "inception_on": _inception_cell(mdj),
+            "inception_on": _inception_cell(mdj, today),
             "dividend_policy": _dividend_cell(mdj),
             "mgmt_fee_rate_pct": _cell(reason=TEXT_MGMT_FEE),
         }

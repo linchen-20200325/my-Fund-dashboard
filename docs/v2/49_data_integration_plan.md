@@ -697,6 +697,14 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
   - 單一來源寫任意三個英文字母（例 `XYZ`）會被 L1 `normalize_declared_ccy` 當成 ISO 幣別收下（`shared.data_quality.normalize_iso_ccy` 只看形狀、不查 ISO 4217 清單；既有行為）。只有一個來源有值時，`exp_profile` 會把它判成 `ok`。
   - 幣別部分來源失敗而判 `ok` 時，該格 `reason` 含失敗來源的 L1 錯誤原文第一行（未遮蔽）。**L3 接畫面時，遮蔽範圍必須涵蓋每一格的 `reason`**，不只 `source_status`。
   - `exp_nav` 記憶的大小只受代碼總數與存活時間限制，沒有容量上限；沒有 single-flight（同一檔並行查詢各自出門）。
+- (z) **2026-10-14 #963 之後的收尾（稽核 V／W 的可選項；以 `1a15077` 為底；決策者：AI 總管；技術實作，不送客戶）。** 本 PR 不接 UI、不改 `ui_v2/`、不改 `44`、不改 `nav_dividend.py`。
+  - **混合配息測試**：一檔兩筆配息，一筆正常、一筆 `fetched_at` 晚於當下超過 300 秒 → 寫一列、`withheld` 為空、`skipped` 帶標記、本次不記憶；時鐘前進 200 秒後重判得兩列。原本只有單筆版，單筆版的配息整段 `withheld` 也會擋下記憶，「`_time_dependent` 不看 `skipped`」的突變在單筆版下存活；新測試把它打紅。
+  - **較舊的失敗不蓋掉較新的成功**（`exp_nav`）：每一筆記憶另記取數開始時刻（本檔注入的時鐘）；寫回時若該鍵已有開始時刻較晚的成功記憶就不覆蓋。只保護成功；開始時刻相同時照舊由後完成者寫回。測試以重入模擬交錯（取數期間不持鎖），不靠執行緒時序。
+  - **`declared_ccy_source` 鍵不存在仍 `ValueError`**：只有明確給 `None` 才逐檔隔離成 `ccy_undetermined`；鍵不存在屬程式錯誤，照 #963 之前的行為（(t) 稽核回修 (2) 的「`None`」自此只指明確給的 `None`）。
+  - **`_time_dependent` 的判法**：讀碼結論 —— `nav_dividend` 的 `skipped` 是純文字串列，沒有原因代碼欄（整段扣下另有 `withheld` 代碼）。因此維持比對 `TIME_DEPENDENT_REASON_MARK` 字面，另加守衛：直接呼叫公開的 `build_nav_dividend_tables` 造出「配息逐筆」與「淨值整段」兩種晚於當下的情境，斷言原因文字含該標記；`nav_dividend` 改這段文案即紅。
+  - **(t) 那句的射程補註**：(t) 稽核回修 (1) 寫「`nav_dividend` 裡唯一一種依時刻判定的扣下是 `_fetched_at_check`」—— 射程限 `services/v2_tables/nav_dividend.py`；經兩組獨立讀碼（稽核 V、W）一致。
+  - **成立日期解析放寬月日補零**（(s) 那一條的字面規則自此改寫，原句不動、以本條為準）：去頭尾半形／全形空白後，字面須為「4 位 ASCII 年 ＋ 分隔符 ＋ 1～2 位 ASCII 月 ＋ 同一個分隔符 ＋ 1～2 位 ASCII 日」，分隔符為 `/` 或 `-`；內部空白、全形數字、前後分隔符不同照舊拒收；再以 `strptime` 驗日期存在、年份不早於 1900。**新增上限：不晚於台灣今天**（`build_profiles(..., now=)` 注入，`parse_inception(raw, today=)` 必須給 `date`）。輸出維持補零的 ISO `YYYY-MM-DD`（現行格式，未改成 `YYYY/MM/DD`）。理由：月日不補零沒有歧義，拒收只增加 ⬜資料未備；稽核 V、W 兩組獨立建議。⚠️ **MoneyDJ 真實頁面上成立日期的月日補不補零，尚未以真實樣本驗證**（待 #961 探測報告）。
+  - **set 頁「重新取數」持倉讀不到時也清 A 鏈 L1**（`nav_dividend.CHAIN_CACHED_FUNCTIONS`）：清除移到讀持倉之前。理由：客戶語意是「重新取淨值」，持倉讀不到時 exp 記憶已清、A 鏈 15 分鐘 L1 卻還在，下一次 exp 取數會命中舊 L1。讀碼確認這六支的 `cache_clear()` 只清行程內 dict 與命中統計、不印不寫 log；持倉讀取與代碼解析不經這六支快取；錯誤訊息、回傳值、`fetch_log` 筆數不變（有測試對照）。
 
 ---
 

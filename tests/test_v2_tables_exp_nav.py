@@ -388,3 +388,120 @@ def test_命中時也交出深拷貝_改寫命中結果碰不到記憶():
     assert len(calls) == 1 and again["memo"]["MZ01"]["hit"] is True
     assert again["nav"]["rows"][0]["nav_orig_ccy"] != -1.0
     assert again["nav"]["provenance"]["MZ01"]["source"] != "被改"
+
+
+# ═══════════════════════ #963 之後的收尾（稽核 V／W 可選項）═══════════════════════
+
+def _fc_div_item(day, fetched_at, amount=0.04):
+    import repositories.fund.sources as S
+    return {"date": day, "ex_date": day, "pay_date": day, "amount": amount, "yield_pct": 0, "currency": "USD",
+            S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_FUNDCLEAR, "date_field": "ExDividendDate",
+                                   "currency_field": "Currency", "amount_field": "DividendAmount",
+                                   "fetched_at": fetched_at}}
+
+
+def _with_divs(res, items):
+    import repositories.fund.sources as S
+    from repositories.fund import fund_orchestration as FO
+    res["dividends"] = list(items)
+    res[FO.DIVIDENDS_OUTCOME_KEY] = {
+        "outcome": FO.DIV_OUTCOME_ROWS, "legacy_inline_parse": False, "none_evidenced": False,
+        "sources": [{"source": "FundClear", "parser": S.DIV_PARSER_FUNDCLEAR, "status": S.DIV_STATUS_ROWS,
+                     "detail": "", "page_type": "yp010000",
+                     "dropped": {"truncated": 0, "filtered": 0, "other_tables": 0}}]}
+    return res
+
+
+def test_混合配息_一筆正常一筆晚於當下_寫一列_不記憶_200秒後重判兩列():
+    # 稽核 V：原本只有單筆配息版；那一版的配息整段 withheld 也會擋下記憶，所以
+    # 「`_time_dependent` 不看 skipped」的突變會存活。這裡 withheld 為空、只有 skipped 帶標記。
+    future = (NOW + dt.timedelta(seconds=400)).isoformat()
+    res = _with_divs(_ok_res("MZ01"), [_fc_div_item("2026-08-05", L1_AT), _fc_div_item("2026-09-05", future)])
+    calls, clock = [], _Clock()
+    first = _load(_funds("MZ01"), calls, {"MZ01": res}, clock=clock)
+    assert len(first["dividend"]["rows"]) == 1
+    assert "MZ01" not in first["dividend"]["withheld"] and "MZ01" not in first["nav"]["withheld"]
+    assert any(EN.TIME_DEPENDENT_REASON_MARK in line for line in first["dividend"]["skipped"]["MZ01"])
+    assert EN._REGISTERED.cache_info()["size"] == 0                    # 本次不存
+    clock.t += 200
+    second = _load(_funds("MZ01"), calls, {"MZ01": res}, now=NOW + dt.timedelta(seconds=200), clock=clock)
+    assert len(calls) == 2 and second["memo"]["MZ01"]["hit"] is False
+    assert len(second["dividend"]["rows"]) == 2
+
+
+def test_沒有清除_較早開始較晚完成的失敗_不蓋掉較晚開始的成功():
+    # 稽核 V 的交錯：A（失敗）先開始；A 取數途中，B（成功）較晚開始、較早完成並寫回；A 最後完成。
+    # 以重入模擬（取數期間本檔不持鎖），不靠執行緒時序。
+    clock = _Clock()
+    ok = _chain([], {"MZ01": _ok_res("MZ01")})
+    fail = _chain([], {"MZ01": _fail_res("MZ01")})
+
+    def fetch_a(chain_code, full_key):
+        clock.t += 10                                                  # B 比 A 晚 10 秒開始
+        b = EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=ok)
+        assert b["memo"]["MZ01"]["hit"] is False and b["nav"]["rows"]
+        return fail(chain_code, full_key)
+
+    a = EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fetch_a)
+    assert "MZ01" in a["nav"]["errors"]                                # A 這一次照實回失敗
+    again = EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fail)
+    assert again["memo"]["MZ01"] == {"hit": True, "cooling": False, "cooling_remaining_sec": None}
+    assert len(again["nav"]["rows"]) == 5 and "MZ01" not in again["nav"]["errors"]
+
+
+def test_沒有清除_較早開始的成功_可以蓋掉較晚開始的失敗():
+    # 只保護「較新的成功」：較舊的成功資料是真的（fetched_at 照實），照常寫回。
+    clock = _Clock()
+    ok = _chain([], {"MZ01": _ok_res("MZ01")})
+    fail = _chain([], {"MZ01": _fail_res("MZ01")})
+
+    def fetch_a(chain_code, full_key):
+        clock.t += 10
+        EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fail)
+        return ok(chain_code, full_key)
+
+    EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fetch_a)
+    again = EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fail)
+    assert again["memo"]["MZ01"]["hit"] is True and again["memo"]["MZ01"]["cooling"] is False
+
+
+@pytest.mark.parametrize("existing, started, want", [
+    (None, 1000.0, False),
+    ((0.0, EN.KIND_SUCCESS, {}, 1010.0), 1000.0, True),     # 較晚開始的成功：不覆蓋
+    ((0.0, EN.KIND_SUCCESS, {}, 1000.0), 1000.0, False),    # 同時開始：無從分先後，照舊由後完成者寫回
+    ((0.0, EN.KIND_SUCCESS, {}, 990.0), 1000.0, False),     # 較早開始的成功：照常覆蓋
+    ((0.0, EN.KIND_FAILURE, {}, 1010.0), 1000.0, False),    # 較晚開始的失敗：不保護
+])
+def test_較新成功的判準(existing, started, want):
+    assert EN._newer_success(existing, started) is want
+
+
+def test_declared_ccy_source明確給None_逐檔隔離():
+    calls = []
+    out = _load(_funds("MZ01", ccy="USD", source=None), calls, {})
+    assert calls == [] and out["not_fetched"] == {"MZ01": EN.TEXT_CCY_UNDETERMINED}
+    assert out["nav"]["withheld"] == {"MZ01": EN.WITHHELD_CCY_UNDETERMINED}
+
+
+def test_declared_ccy_source鍵不存在_ValueError_不當成幣別未確定():
+    funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "declared_ccy": "USD"}]
+    calls = []
+    with pytest.raises(ValueError, match="declared_ccy_source"):
+        EN.load_nav_dividend(funds, now=NOW, clock=_Clock(), chain_fetch=_chain(calls, {}))
+    assert calls == []
+
+
+@pytest.mark.parametrize("where", ["dividend_item", "nav_whole"])
+def test_守衛_nav_dividend晚於當下的原因文字含標記(where):
+    # 讀碼結論：`nav_dividend` 的 skipped 是純文字、沒有原因代碼欄，`_time_dependent` 只能比對字面。
+    # 直接呼叫公開的 `build_nav_dividend_tables` 造出情境：`nav_dividend` 改了這段文案，這裡當場紅。
+    future = (NOW + dt.timedelta(seconds=400)).isoformat()
+    res = _ok_res("MZ01")
+    if where == "dividend_item":
+        _with_divs(res, [_fc_div_item("2026-08-05", L1_AT), _fc_div_item("2026-09-05", future)])
+    else:
+        res["series"].attrs["fetched_at"] = future
+    out = ND.build_nav_dividend_tables(_funds("MZ01"), now=NOW, chain_fetch=_chain([], {"MZ01": res}))
+    table = out["dividend"] if where == "dividend_item" else out["nav"]
+    lines = list(table["skipped"].get("MZ01") or [])
+    assert lines and any(EN.TIME_DEPENDENT_REASON_MARK in line for line in lines), lines
