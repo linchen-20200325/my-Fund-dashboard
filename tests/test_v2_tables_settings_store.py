@@ -455,7 +455,9 @@ def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶
         PX._TLS_FAIL.kind = ""
         if "fundclear" in url:
             return _J()
-        PX._TLS_FAIL.kind = "not_found"        # MoneyDJ 四個網址全 404 → failed → 進失敗記憶
+        # ~~MoneyDJ 四個網址全 404 → failed → 進失敗記憶~~ → 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；
+        # 決策者 AI 總管；docs/v2/49 第 8 節 (aa)）：全 404 改判 not_found，一樣進失敗記憶（本測試要守的清除行為不變）
+        PX._TLS_FAIL.kind = "not_found"
         return None
 
     monkeypatch.setattr(DP, "fetch_url_with_retry", fake_fetch)
@@ -465,7 +467,7 @@ def test_淨值層_重新取數一併清exp自報基本資料快取_失敗記憶
         fn.cache_clear()
     EN.clear_memo()
     assert DP.fetch_fundclear_declared_ccy("ZZEXP1")["status"] == "ok"
-    assert DP.fetch_moneydj_basic_fields("ZZEXP1")["status"] == "failed"
+    assert DP.fetch_moneydj_basic_fields("ZZEXP1")["status"] == "not_found"     # 舊斷言 == "failed"（見上）
     assert DP.fetch_tdcc_listing("ZZEXP1")["status"] == "failed"
     ok_res = {"full_key": "ZZEXP1", "series": _nav(3), "dividends": [], "data_source": "x"}
     EN.load_nav_dividend(

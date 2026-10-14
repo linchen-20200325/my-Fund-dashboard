@@ -19,9 +19,21 @@
 
 ## 綁定閘門（docs/v2/49 第 8 節 (n)）
 
-MoneyDJ 基本資料頁的 ok 只確認「頁面可見文字提到代碼」＋「頁面上有一張含基金名稱的表」。本檔另要求
-`binding["code_in_label_table"]` 為真（代碼出現在**那張表自身**的文字裡）才採用 MoneyDJ 的四個欄位；
-否則名稱、成立日期、配息方式判 ⬜，MoneyDJ 也**不參與**幣別比對。⚠️ 真實頁面上代碼是否寫在那張表裡**未以樣本驗證**。
+~~MoneyDJ 基本資料頁的 ok 只確認「頁面可見文字提到代碼」＋「頁面上有一張含基金名稱的表」。本檔另要求~~
+~~`binding["code_in_label_table"]` 為真（代碼出現在**那張表自身**的文字裡）才採用 MoneyDJ 的四個欄位；~~
+~~否則名稱、成立日期、配息方式判 ⬜，MoneyDJ 也**不參與**幣別比對。⚠️ 真實頁面上代碼是否寫在那張表裡**未以樣本驗證**。~~
+
+→ 2026-10-14 身分判準修訂（有意識的更正，不是漏刪；決策者：AI 總管；依據：#961 探測報告）：真實頁面的可見文字
+（含那張表）**完全沒有印代碼**，舊閘門 0/8 成立，8 檔正常取回的頁面全被判成「無法確認是本檔」。
+**現行**：MoneyDJ 的 ok 結果須帶 `binding`，且 `method == declared_profile.MONEYDJ_BINDING_METHOD`、
+`identity_confirmed is True`、`name_nonempty is True`、`name_table_count == 1`、
+`populated_name_table_count == 1`（型別嚴格；後者 #967 修正輪補）—— 即
+「以請求的代碼取頁 → 200 → 恰一張含基金名稱的表且名稱非空」（判準本體在 L1 `_identify_name_table`）。
+不符 → 名稱、成立日期、配息方式判 ⬜，MoneyDJ **不參與**幣別比對（與舊閘門相同的處置）。
+`code_in_label_table`／`code_in_page_text` 照實保留在 L1 結果裡，**本檔不看**。
+
+L1 回 `unrecognized_page`（頁面回來了但不符判準）→ ⬜「MoneyDJ 頁面無法確認是本檔：<逐網址原因>」，
+**不是** ⛔ 取數失敗；`not_found`（全部 404）→ ⬜。只有 L1 `failed`（取不到）才是 ⛔。
 """
 
 from __future__ import annotations
@@ -95,10 +107,25 @@ CCY_NOT_PROVIDED = "not_provided"     # 來源有這一檔，但沒寫幣別
 CCY_NOT_LISTED = "not_listed"         # 來源明確回答沒有這一檔
 CCY_FAILED = "failed"                 # 取數失敗
 CCY_UNVERIFIED = "identity_unverified"  # 只 MoneyDJ：頁面無法確認是本檔，不參與比對
+CCY_NO_PAGE = "no_page"               # 只 MoneyDJ：兩頁型、兩主機都 404（2026-10-14）
+CCY_CODE_UNMAPPED = "code_unmapped"   # 只 TDCC：清單成功、代碼 0 命中，另一套代碼體系（2026-10-14）
 _CCY_CLASS_TEXT = {CCY_UNRECOGNIZED: "認不出", CCY_NOT_PROVIDED: "沒提供", CCY_NOT_LISTED: "未收錄",
-                   CCY_FAILED: "取數失敗", CCY_UNVERIFIED: "身分未核實"}
+                   CCY_FAILED: "取數失敗", CCY_UNVERIFIED: "身分未核實", CCY_NO_PAGE: "查無頁面（404）",
+                   CCY_CODE_UNMAPPED: "代碼無法對照（TDCC 清單使用不同代碼體系）"}
 
-TEXT_UNBOUND = "MoneyDJ 頁面無法確認是本檔（表格內未見代碼）"
+#: 各來源 L1 可能交出的 status（`_call` 據此驗收；表外 → 當成 L1 回傳型別不符、判 failed）。
+#: MoneyDJ／TDCC 的 `not_listed` 現行 L1 已不會交出（2026-10-14），留著是因為本檔對它仍有據實的處置。
+_L1_STATUSES = {
+    "MoneyDJ": (dp.STATUS_OK, dp.STATUS_NOT_LISTED, dp.STATUS_UNRECOGNIZED, dp.STATUS_NOT_FOUND, dp.STATUS_FAILED),
+    "TDCC": (dp.STATUS_OK, dp.STATUS_NOT_LISTED, dp.STATUS_CODE_UNMAPPED, dp.STATUS_FAILED),
+    "FundClear": (dp.STATUS_OK, dp.STATUS_NOT_LISTED, dp.STATUS_FAILED),
+}
+
+# ~~TEXT_UNBOUND = "MoneyDJ 頁面無法確認是本檔（表格內未見代碼）"~~ → 2026-10-14 身分判準修訂（有意識的更正，
+# 不是漏刪）：「表格內未見代碼」不再是判準。本常數只剩一種用途：L1 交出 ok 卻沒有合格的 `binding`。
+TEXT_UNBOUND = "MoneyDJ 頁面無法確認是本檔：取數結果沒有通過身分判準的紀錄（binding 缺漏或不符）"
+TEXT_UNRECOGNIZED = "MoneyDJ 頁面無法確認是本檔：{reason}"
+TEXT_MDJ_NOT_FOUND = "MoneyDJ 查無此代碼的基本資料頁（兩種頁型、兩個主機皆 404）"
 TEXT_MGMT_FEE = "來源未提供經理費率（不以「最高經理費」代替）"
 TEXT_KEY_FAILED = "代碼無法對照：{reason}"
 TEXT_INCEPTION_TOO_EARLY = "成立日期 {raw} 早於 {year} 年，不採用（不猜是民國年、不換算）"
@@ -128,14 +155,15 @@ def _ordered(names) -> tuple:
     return tuple(s for s in SOURCES if s in names)
 
 
-def _call(fetch, full_key: str) -> dict:
-    """呼叫一支 L1；例外與型別不符都轉成 failed 結果（原文可見，不吞）。"""
+def _call(fetch, full_key: str, allowed=(dp.STATUS_OK, dp.STATUS_NOT_LISTED, dp.STATUS_FAILED)) -> dict:
+    """呼叫一支 L1；例外與型別不符都轉成 failed 結果（原文可見，不吞）。`allowed`：該來源可交出的 status
+    （2026-10-14 起各來源不同，見 `_L1_STATUSES`）。"""
     try:
         res = fetch(full_key)
     except Exception as exc:  # noqa: BLE001 —— 轉成可見的失敗原文，不是吞掉
         return {"status": dp.STATUS_FAILED, "error": f"{type(exc).__name__}: {exc}", "cooling": False,
                 "cooling_remaining_sec": None, "fields": {}}
-    if not isinstance(res, dict) or res.get("status") not in (dp.STATUS_OK, dp.STATUS_NOT_LISTED, dp.STATUS_FAILED):
+    if not isinstance(res, dict) or res.get("status") not in allowed:
         got = f"dict（status={res.get('status')!r}）" if isinstance(res, dict) else type(res).__name__
         return {"status": dp.STATUS_FAILED, "fields": {}, "cooling": False, "cooling_remaining_sec": None,
                 "error": f"L1 回傳型別不符：預期帶合法 status 的 dict，收到 {got}"}
@@ -147,16 +175,50 @@ def _status_entry(res: dict) -> dict:
             "cooling_remaining_sec": res.get("cooling_remaining_sec")}
 
 
+def _failure_text(res: dict) -> str:
+    """一個來源「為什麼取不到」的據實摘要。MoneyDJ 用 L1 的 `failure_reason`（只列取不到的那幾筆嘗試，
+    404 與不符判準都不列）；其餘來源用 `error` 的第一行。每一筆超過 `_FAILURE_SUMMARY_MAX` 字截斷，
+    完整原文在 `source_status`。（2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）；稽核 G-C：舊寫法拿 `error` 第一行，MoneyDJ 的第一筆常是 tcbbankfund
+    的 404 —— 把不是失敗的嘗試當成失敗原因。）"""
+    multi = res.get("failure_reason")
+    if isinstance(multi, str) and multi.strip():
+        items = [t.strip() for t in multi.split("；") if t.strip()]
+    else:
+        text = str(res.get("error") or "").strip()
+        items = [text.splitlines()[0]] if text else []
+    if not items:
+        return "未提供原因"
+    return " / ".join(t if len(t) <= _FAILURE_SUMMARY_MAX else t[:_FAILURE_SUMMARY_MAX] + "…" for t in items)
+
+
 def _failed_reason(source: str, res: dict) -> str:
-    text = f"{source} 取數失敗"
+    # ~~text = f"{source} 取數失敗"~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：附上據實的失敗摘要（稽核 G-C）
+    text = f"{source} 取數失敗：{_failure_text(res)}"
     if res.get("cooling"):
         text += f"（失敗記憶冷卻中，約剩 {res.get('cooling_remaining_sec')} 秒，本次未重打）"
     return text
 
 
 def _bound(res: dict) -> bool:
+    """MoneyDJ ok 結果是否通過身分判準（見模組開頭「綁定閘門」）。全部欄位型別嚴格：`True` 必須 `is True`，
+    張數必須是 int 1（`True == 1` 不算）。
+    ~~`binding.get("code_in_label_table") is True`~~ → 2026-10-14 身分判準修訂（有意識的更正，不是漏刪）。"""
     binding = res.get("binding")
-    return isinstance(binding, dict) and binding.get("code_in_label_table") is True
+    if not isinstance(binding, dict):
+        return False
+    count = binding.get("name_table_count")
+    populated = binding.get("populated_name_table_count")    # 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：一併驗（型別嚴格 int 1）
+    return (binding.get("method") == dp.MONEYDJ_BINDING_METHOD
+            and binding.get("identity_confirmed") is True
+            and binding.get("name_nonempty") is True
+            and type(count) is int and count == 1
+            and type(populated) is int and populated == 1)
+
+
+def _mdj_reason(res: dict) -> str:
+    """L1 的逐網址白話原因（`reason`）；沒有就退回 `error`；都沒有 → 明說沒有。"""
+    text = res.get("reason") or res.get("error")
+    return str(text) if text else "L1 未提供原因"
 
 
 def _parse_aware(value) -> Optional[datetime]:
@@ -179,6 +241,10 @@ def _mdj_gate(field: str, res: dict):
         return _cell(status=STATUS_FAILED, failed_sources=("MoneyDJ",), reason=_failed_reason("MoneyDJ", res)), None
     if status == dp.STATUS_NOT_LISTED:
         return _cell(reason="MoneyDJ 未收錄此代碼"), None
+    if status == dp.STATUS_UNRECOGNIZED:      # 頁面回來了但不符身分判準：⬜，不是 ⛔（2026-10-14）
+        return _cell(reason=TEXT_UNRECOGNIZED.format(reason=_mdj_reason(res))), None
+    if status == dp.STATUS_NOT_FOUND:
+        return _cell(reason=TEXT_MDJ_NOT_FOUND), None
     raw = (res.get("fields") or {}).get(label)
     raw_map = {"MoneyDJ": raw} if raw is not None else {}
     fetched = {"MoneyDJ": res.get("fetched_at")}
@@ -197,9 +263,11 @@ def _fund_name_cell(res: dict) -> dict:
     decided, raw = _mdj_gate("fund_name", res)
     if decided is not None:
         return decided
-    if not isinstance(raw, str) or not raw.strip():
+    # ~~if not isinstance(raw, str) or not raw.strip():~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）（總管裁定）：與 L1 身分判準共用
+    # `declared_profile.name_is_blank`（空白、nbsp、Cf 類、佔位字），不另寫一份
+    if not isinstance(raw, str) or dp.name_is_blank(raw):
         return _cell(raw={"MoneyDJ": raw}, fetched_at={"MoneyDJ": res.get("fetched_at")},
-                     reason="MoneyDJ「基金名稱」為空白")
+                     reason="MoneyDJ「基金名稱」為空白或佔位字")
     return _cell(raw, STATUS_OK, sources=("MoneyDJ",), raw={"MoneyDJ": raw},
                  fetched_at={"MoneyDJ": res.get("fetched_at")})
 
@@ -320,6 +388,12 @@ def classify_ccy(source: str, res: dict):
         return CCY_FAILED, None, None
     if status == dp.STATUS_NOT_LISTED:
         return CCY_NOT_LISTED, None, None
+    if status == dp.STATUS_CODE_UNMAPPED:         # 只 TDCC（2026-10-14）：不是「未收錄」，是代碼無法對照
+        return CCY_CODE_UNMAPPED, None, None
+    if status == dp.STATUS_NOT_FOUND:             # 只 MoneyDJ（2026-10-14）
+        return CCY_NO_PAGE, None, None
+    if status == dp.STATUS_UNRECOGNIZED:          # 只 MoneyDJ（2026-10-14）：身分未核實，不參與比對
+        return CCY_UNVERIFIED, None, None
     if source == "MoneyDJ" and not _bound(res):
         return CCY_UNVERIFIED, (res.get("fields") or {}).get(_MDJ_LABEL["ccy"]), None
     raw = _ccy_raw(source, res)
@@ -344,10 +418,8 @@ def _failure_summary(results: dict, failed) -> str:
     parts = []
     for src in failed:
         res = results[src]
-        text = str(res.get("error") or "").strip()
-        first = text.splitlines()[0] if text else "未提供原因"
-        if len(first) > _FAILURE_SUMMARY_MAX:
-            first = first[:_FAILURE_SUMMARY_MAX] + "…"
+        # ~~原文第一行~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：改用 `_failure_text`（MoneyDJ 只列取不到的嘗試）
+        first = _failure_text(res)
         if res.get("cooling"):
             first += f"；失敗記憶冷卻中，約剩 {res.get('cooling_remaining_sec')} 秒"
         parts.append(f"{src}：{first}")
@@ -357,7 +429,7 @@ def _failure_summary(results: dict, failed) -> str:
 def _ccy_cell(results: dict, policy: str) -> dict:
     cls = {src: classify_ccy(src, results[src]) for src in SOURCES}
     raw = {src: c[1] for src, c in cls.items() if c[1] is not None}
-    seen = [src for src in SOURCES if cls[src][0] not in (CCY_FAILED, CCY_NOT_LISTED)]
+    seen = [src for src in SOURCES if cls[src][0] not in (CCY_FAILED, CCY_NOT_LISTED, CCY_CODE_UNMAPPED, CCY_NO_PAGE)]
     fetched = {src: results[src].get("fetched_at") for src in seen}
     observed = ({"TDCC": results["TDCC"].get("observed_at")}
                 if "TDCC" in seen and results["TDCC"].get("observed_at") else {})
@@ -388,7 +460,9 @@ def _ccy_cell(results: dict, policy: str) -> dict:
         return _cell(status=STATUS_FAILED, reason=f"幣別來源取數失敗（{summary}）", **common)
     if unrec:
         return _cell(reason=f"各來源幣別字樣無法辨識（{summary}）", **common)
-    return _cell(reason=f"各來源未提供幣別／未收錄（{summary}）", **common)
+    # ~~"各來源未提供幣別／未收錄（…）"~~ → 2026-10-14 #967 修正輪（有意識的更正，不是漏刪；決策者：AI 總管；依據：稽核 G／H）：「未收錄」會誤導（TDCC 是代碼無法對照、MoneyDJ 可能是頁面不符），
+    # 標頭改中性措辭，細項照舊逐來源寫
+    return _cell(reason=f"各來源未取得幣別（{summary}）", **common)
 
 
 # ───────────────────────── 組表 ─────────────────────────
@@ -486,7 +560,7 @@ def build_profiles(key_results, *, fetchers=None, now=None) -> dict:
             out["rows"].append(_row(code, cells, None))
             continue
         full_key = entry.get("full_key")
-        results = {src: _call(fns[src], full_key) for src in SOURCES}
+        results = {src: _call(fns[src], full_key, _L1_STATUSES[src]) for src in SOURCES}
         fetched_any = True
         if any(results[src].get("status") != dp.STATUS_FAILED for src in SOURCES):
             all_failed = False
