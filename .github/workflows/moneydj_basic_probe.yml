@@ -8,7 +8,8 @@ name: "探測：MoneyDJ 基本資料頁真實樣本（只讀，手動／按鈕�
 # → 2026-10-14 更正（有意識的更正，不是漏刪；依 #961 稽核）：結構照抄 `fx_obs_date_probe.yml`，**註解有刪減**；
 #   改動處為名稱、分支、腳本、報告路徑、逾時、無輸入參數，並拿掉 `PROXY_URL` 環境變數（理由見下）。
 #
-# ⚠️ 連線路徑：`infra.proxy.get_proxy_config()` 只讀 `st.secrets`，Actions 上沒有 secrets.toml →
+# ⚠️ 連線路徑：`infra.proxy.get_proxy_config()` 只讀 Streamlit 的機密設定檔，Actions 上沒有那個檔 →
+#    （本檔刻意不寫出那幾個字面：守衛以整份文字掃描，只准提交那一步出現一次 GITHUB_TOKEN。）
 #    **不走 NAS 代理，以 GitHub runner IP 直連**。查過 repo 內先例：`weekly_nav_backfill.yml` 等幾支把
 #    `PROXY_URL` 放進環境變數，但經 `infra.proxy` 的取數路徑不讀環境變數；只有 `scripts/fetch_nav_cache.py`
 #    自建 Session 讀它（不經 `infra.proxy`，且目前沒有 workflow 執行它）。沒有先例把環境變數橋接進

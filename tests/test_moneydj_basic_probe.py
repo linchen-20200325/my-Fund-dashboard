@@ -244,16 +244,59 @@ def test_probe_step_runs_script_with_report_path(wf):
     assert runs == [f'python {_PROBE_SCRIPT} --out "$REPORT_PATH"']
 
 
-def test_only_github_token_secret_and_only_in_commit_step(wf):
-    """沒有先例把環境變數橋接進 infra.proxy → 不使用 PROXY_URL 等任何其他 secret（#961 稽核第 1 項）。"""
-    for job_name, job in wf["jobs"].items():
-        assert "secrets." not in repr(job.get("env") or {}), f"{job_name} 的 job env 不得引用 secret"
-    for _, _, s in _steps(wf):
-        text = repr(s.get("env") or {}) + repr(s.get("with") or {}) + (s.get("run") or "")
-        found = re.findall(r"secrets\.([A-Za-z0-9_]+)", text)
-        if found:
-            assert found == ["GITHUB_TOKEN"] and "$RESULT_BRANCH" in (s.get("run") or ""), (
-                f"只有提交報告那一步可用 GITHUB_TOKEN，實際 {s.get('name')}: {found}")
+_SECRET_RE = re.compile(r"secrets|github\.token", re.IGNORECASE)
+_ALLOWED_SECRET = "${{ secrets.GITHUB_TOKEN }}"
+
+
+def _secret_violations(text: str) -> list:
+    """整份 yml **文字**掃描（不經 YAML 解析，註解、頂層 env、任何寫法都看得到）：
+    `secrets`／`github.token` 只准以 `${{ secrets.GITHUB_TOKEN }}` 出現**恰好一次**，且在提交報告那一步裡。
+    回傳違規描述；空串列＝合規。"""
+    out = []
+    lines = text.splitlines()
+    hits = [(i, m) for i, ln in enumerate(lines) for m in _SECRET_RE.finditer(ln)]
+    allowed_lines = [i for i, ln in enumerate(lines) if _ALLOWED_SECRET in ln]
+    for i, m in hits:
+        ln = lines[i]
+        if i in allowed_lines and m.group(0) == "secrets" and ln[m.start() - 4:m.end() + len(".GITHUB_TOKEN }}")] \
+                == _ALLOWED_SECRET:
+            continue
+        out.append(f"第 {i + 1} 行不允許的寫法：{ln.strip()}")
+    if len(allowed_lines) != 1:
+        out.append(f"`{_ALLOWED_SECRET}` 應恰好出現一次，實際 {len(allowed_lines)} 次")
+    else:
+        # 那一行必須在提交報告那一步（自它往上找最近的 `- name:`）
+        step = next((lines[k] for k in range(allowed_lines[0], -1, -1) if lines[k].strip().startswith("- name:")),
+                    "")
+        if "Commit report" not in step:
+            out.append(f"`{_ALLOWED_SECRET}` 不在提交報告那一步：{step.strip()}")
+    return out
+
+
+def test_only_github_token_secret_and_only_in_commit_step():
+    """沒有先例把環境變數橋接進 infra.proxy → 不使用 PROXY_URL 等任何其他 secret（#961 稽核第 1 項）。
+    #961 修正輪：改為整份文字掃描（YAML 解析看不到註解與頂層 env 以外的寫法）。"""
+    assert _secret_violations(_WF.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize("label,inject", [
+    ("頂層 env", "env:\n  X: ${{ secrets.PROXY_URL }}\n"),
+    ("github.token", "# 註解也算\nenv:\n  T: ${{ github.token }}\n"),
+    ("中括號取 secret", "env:\n  X: ${{ secrets['PROXY_URL'] }}\n"),
+    ("toJSON(secrets)", "env:\n  ALL: ${{ toJSON(secrets) }}\n"),
+])
+def test_secret_scan_catches_audit_variants(label, inject):
+    base = _WF.read_text(encoding="utf-8")
+    bad = base.replace("\njobs:\n", "\n" + inject + "jobs:\n", 1)
+    assert bad != base
+    assert _secret_violations(bad), f"{label} 應被擋下"
+
+
+def test_secret_scan_catches_second_github_token_elsewhere():
+    base = _WF.read_text(encoding="utf-8")
+    bad = base.replace("      - name: Run probe\n",
+                       "      - name: Run probe\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n", 1)
+    assert bad != base and _secret_violations(bad)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -668,3 +711,55 @@ def test_mask_遮蔽代理帳密_查詢字串保留(monkeypatch):
     secrets = probe._secret_literals()
     masked = probe.mask_text(f"ProxyError http://user:secretpw@nas.example:3128 ?a={_CODE}", secrets)
     assert "secretpw" not in masked and f"?a={_CODE}" in masked
+
+
+def test_run_等待後重查仍在冷卻_記cooldown且不發請求():
+    """等完冷卻後重查仍在冷卻（例如冷卻被延長）→ 記 cooldown、不發請求（#961 修正輪：稽核突變 W1）。"""
+    w = _World()
+
+    def backoff(url):
+        if probe._host(url) == "tcb":
+            return True, 10.0, "unreachable"     # 永遠還剩 10 秒
+        return False, 0.0, ""
+
+    w.backoff = backoff
+    report = _run(w)
+    tcb = [r for r in report["pages"][_CODE] if r["host"] == "tcb"]
+    assert tcb and all(r["outcome"] == "cooldown" for r in tcb)
+    assert not any(c[0].startswith("https://tcb/") for c in w.calls)
+    waited = [x for x in report["waits"] if x["waited_sec"] is not None]
+    assert len(waited) == 1 and waited[0]["after"]["still_cooling"] is True
+
+
+def test_write_report_原子寫出_中途失敗不毀舊檔(tmp_path, monkeypatch):
+    """先寫 .tmp 再 os.replace：寫到一半失敗時，既有報告檔保持原樣（#961 修正輪：稽核突變 X6）。"""
+    out = tmp_path / "r.json"
+    out.write_text('{"old": true}\n', encoding="utf-8")
+    real = Path.write_text
+
+    def half_then_fail(self, data, *a, **k):
+        real(self, data[: len(data) // 2], *a, **k)
+        raise OSError("磁碟寫到一半壞了")
+
+    monkeypatch.setattr(Path, "write_text", half_then_fail)
+    with pytest.raises(OSError):
+        probe.write_report({"complete": False, "x": "y" * 1000}, out)
+    monkeypatch.setattr(Path, "write_text", real)
+    assert json.loads(out.read_text(encoding="utf-8")) == {"old": True}
+    probe.write_report({"complete": True}, out)
+    assert json.loads(out.read_text(encoding="utf-8")) == {"complete": True}
+    assert not (tmp_path / "r.json.tmp").exists()
+
+
+def test_raw_html_超過上限截斷並標記(monkeypatch):
+    monkeypatch.setattr(probe, "MAX_RAW_BYTES", 100)
+    html = _page(_ROWS_WITH_CODE + "<tr><td>x</td></tr>" * 50)
+    w = _World(fetch_map={u: _Resp(html) for (_h, _p, u) in _urls(_CODE)})
+    rec = _run(w)["pages"][_CODE][0]
+    assert rec["raw_truncated"] is True
+    assert len(gzip.decompress(base64.b64decode(rec["raw_html_gzip_b64"]))) == 100
+    assert rec["content_length_bytes"] > 100
+
+
+def test_raw_html_上限為1MB():
+    assert probe.MAX_RAW_BYTES == 1_000_000

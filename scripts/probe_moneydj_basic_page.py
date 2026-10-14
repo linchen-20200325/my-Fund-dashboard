@@ -108,10 +108,15 @@ SLEEP_SEC = 1.5
 WAITABLE_KINDS = frozenset({"unreachable", "server_error"})
 #: 等待時多等的秒數，避開冷卻剛好到期的邊界。
 WAIT_PAD_SEC = 1.0
-#: 從啟動起算的等待預算（秒）：超過就不再等。workflow 的 timeout-minutes 為 40，留 10 分鐘給其餘步驟。
+#: 從啟動起算的等待預算（秒）：超過就不再等。
+#: ~~workflow 的 timeout-minutes 為 40，留 10 分鐘給其餘步驟。~~
+#: → 2026-10-14 更正（有意識的更正，不是漏刪；依 #961 修正輪稽核）：workflow 的 timeout-minutes 已改為 60，
+#:   扣 30 分鐘等待預算，其餘留給請求與前後步驟。舊句寫於逾時仍是 40 分鐘時，逾時調整後未同步。
 WAIT_BUDGET_SEC = 30 * 60
 #: 單頁原始位元組超過此值才截斷（並標 `raw_truncated`）。
-MAX_RAW_BYTES = 3_000_000
+#: 1 MB：最多 9 代碼 × 4 網址 = 36 頁，base64 後上界約 49 MB，低於 GitHub 單檔 50 MB 警告線
+#: （原為 3 MB，依 #961 修正輪稽核下修；有意識的更正，不是漏刪）。
+MAX_RAW_BYTES = 1_000_000
 #: TDCC 整份清單 gzip＋base64 後的預估上限；超過改存精簡版。
 TDCC_FULL_MAX_B64_BYTES = 2_000_000
 SNIPPET_MAX = 5
