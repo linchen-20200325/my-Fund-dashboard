@@ -478,3 +478,23 @@ def test_hld_配息宣告幣別不同_照舊ccy_conflict_不產生新代碼():
     funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "holding_ccy": "USD"}]
     out = _build(funds, {"MZ01": _res("MZ01", items=items)})
     assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}
+
+
+# ═══════════════════════ 2026-10-14 exp C2 合併修正輪 C1：衝突各筆的除息日 ═══════════════════════
+
+def test_meta_div_ccy_differs_交出衝突除息日_排序_缺日期計數為0():
+    items = [_fc_item("2026-09-05", "EUR"), _fc_item("2026-08-05", "EUR"), _fc_item("2026-07-05", "USD")]
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    prov = out["dividend"]["provenance"]["MZ01"]
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_DIV_CCY_DIFFERS}
+    assert prov["conflict_ex_dates"] == ["2026-08-05", "2026-09-05"]          # 只列衝突那幾筆，排序
+    assert prov["conflict_ex_dates_missing"] == 0
+
+
+def test_meta_ccy_conflict與hld_不附加衝突除息日():
+    items = [_fc_item("2026-09-05", "美元累積")]
+    meta = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    assert "conflict_ex_dates" not in meta["dividend"]["provenance"]["MZ01"]
+    funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "holding_ccy": "USD"}]
+    hld = _build(funds, {"MZ01": _res("MZ01", items=[_fc_item("2026-09-05", "EUR")])})
+    assert "conflict_ex_dates" not in hld["dividend"]["provenance"]["MZ01"]

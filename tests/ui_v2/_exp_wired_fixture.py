@@ -17,7 +17,7 @@
 - G07 MoneyDJ 取數失敗（名稱 ⛔）、淨值取數失敗（原因含秘密值、換行與 Markdown 標題／表格語法）。
 - H08 名稱與來源字串含 `<script>`、引號（驗 escape）。
 - I09 各來源都回報沒有配息、但配息政策為配息型 → ⬜ 資料未備（保留期無法確認，總管 2026-10-14 裁定）。
-- J10 配息宣告的幣別認得出、與淨值幣別不同（`49` Q7）→ ⬜ 不適用：配息幣別與淨值幣別不同。
+- J10 配息宣告的幣別認得出、與淨值幣別不同（`49` Q7），衝突除息日落在配息比窗口內 → ⬜ 不適用：配息幣別與淨值幣別不同。
 """
 
 from __future__ import annotations
@@ -202,7 +202,10 @@ def nav_out(codes=CODES) -> dict:
             div["skipped"][code] = [DIV_CCY_LINE]
             div["settled"][code] = False
             div["provenance"][code] = {"source": None, "fetched_at": None, "ccy_source": None, "outcome": "rows",
-                                       "outcome_detail": "[yp010000] FundClear：rows", "settled": False}
+                                       "outcome_detail": "[yp010000] FundClear：rows", "settled": False,
+                                       # 合併修正輪 C1：衝突各筆的除息日（2026-08-05 與 2026-09-05 都在窗口內）
+                                       "conflict_ex_dates": ["2026-08-05", "2026-09-05"],
+                                       "conflict_ex_dates_missing": 0}
     return {"nav": nav, "dividend": div, "memo": memo, "not_fetched": not_fetched}
 
 

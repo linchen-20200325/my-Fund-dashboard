@@ -261,6 +261,12 @@ NAV_NOT_READY_DATED_TEXT = "⬜ 資料未備：最近一筆淨值 {day}，已超
 TEXT_DIV_NONE_12M = logic.not_applicable_text("近 12 個月無配息")
 # `docs/v2/49` Q7（客戶 2026-09-26 已同意）：配息幣別與淨值幣別不同 → 不適用（認不出的幣別仍是資料未備）。
 TEXT_DIV_CCY_DIFFERS_NA = logic.not_applicable_text("配息幣別與淨值幣別不同")
+# 總管 2026-10-14 裁定（Q7 只看配息比窗口）：衝突不在窗口內、或無法確認在不在 → 資料未備（本組擬定字面）。
+TEXT_DIV_CCY_DIFFERS_BEFORE = "配息幣別與淨值幣別不同的紀錄只出現在近 12 個月以前，本格不下結論"
+TEXT_DIV_CCY_DIFFERS_OUTSIDE = "配息幣別與淨值幣別不同的紀錄只出現在近 12 個月窗口之外，本格不下結論"
+TEXT_DIV_CCY_DIFFERS_UNKNOWN = "無法確認幣別不同的配息是否在近 12 個月內"
+TAG_DIV_CCY_DECLARED = "配息幣別宣告"
+TIP_DIV_CCY_DECLARED = "來源：配息資料（各筆幣別宣告）"
 
 # 下列原因句為本組擬定（派工單沒有給字面；交付報告列待覆核）。
 TEXT_NAV_NO_ROWS = "淨值來源沒有交出可用的淨值列"
@@ -289,8 +295,16 @@ _PLAIN_FIXED = (
     ("；完整原文見 source_status", ""),
     ("完整原文見 source_status", ""),
     ("A 鏈另走了 legacy 段的 wb05 內嵌解析（該段沒有取數狀態）", "另走了舊版配息頁解析（該段沒有取數狀態）"),
-    ("A 鏈", "淨值與配息取數"),
+    # ~~("A 鏈", "淨值與配息取數")~~ → 2026-10-14 合併修正輪 D3（有意識的更正，不是漏刪）：一律換同一個詞時
+    # 「A 鏈配息瀑布…」會變成「淨值與配息取數配息瀑布…」，語句不通；改成先換較長的片語。
+    ("A 鏈配息瀑布", "配息"),
+    ("A 鏈配息", "配息"),
+    ("A 鏈", "多來源取數"),
 )
+# MoneyDJ 基本資料頁的頁型與主機（`repositories/fund/declared_profile.py` 的 `_DOMESTIC_INFO_PAGE`／`_OFFSHORE_INFO_PAGE`／
+# `MONEYDJ_HOSTS`；#967 的逐網址原因寫成 `頁型@主機：原因`）。表外的頁型、主機照原字留下（不刪資訊）。
+_PAGE_NAMES = {"yp011000": "境內基本資料頁", "yp011001": "境外基本資料頁"}
+_HOST_NAMES = {"tcbbankfund.moneydj.com": "合庫子網域", "www.moneydj.com": "主站"}
 _PLAIN_WORDS = {
     # 解析器標記（`repositories/fund/sources.py::DIV_PARSER_*`）
     "tcb_moneydj_div": "合庫配息頁", "fundclear_div": "FundClear 配息", "cnyes_div": "鉅亨配息",
@@ -302,11 +316,19 @@ _PLAIN_WORDS = {
 }
 _INTERNAL_CALL = re.compile(r"auto_fetch_moneydj\([^()]*\)")                # A 鏈入口：整段是內部名稱，拿掉
 _CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\(([^()（）]*)\)")             # 其他 name(args)：去掉呼叫樣式、留內容
-_PAGE_TYPE = re.compile(r"\[[a-z]{2}\d{6}\]\s*")                         # [yp010000]
+_PAGE_AT_HOST = re.compile(r"\b([a-z]{2}\d{6})@([A-Za-z0-9.-]+)")          # yp011001@www.moneydj.com
+_PAGE_SOURCE = re.compile(r"\[([a-z]{2}\d{6})\]\s*([^\[\]：\n；]+?)：")         # [yp010000] FundClear：
+_PAGE_TYPE = re.compile(r"\[([a-z]{2}\d{6})\]\s*")                       # 其餘 [yp010000]
 _DICT = re.compile(r"\{[^{}]*\}")                                         # {'rows': 3}
 _STATUS_WORD = re.compile(r"(狀態 |：)'?(none_confirmed|undetermined|failed|rows|empty|unknown)'?(?![A-Za-z0-9_])")
 _DECLARED = re.compile(r"([^\s:：（(、，；]+):'([^']*)'")                    # 即時序列:'EUR'、MoneyDJ:'美元'
-_QUOTED = re.compile(r"'([^'\n]*)'")
+# 只認「前後不緊接英數字」的成對單引號：`can't parse 'x' near 'y` 只換 `'x'`，不把縮寫的撇號當引號。
+_QUOTED = re.compile(r"(?<![A-Za-z0-9])'([^'\n]*)'(?![A-Za-z0-9])")
+
+
+def _page_at_host(match) -> str:
+    page, host = match.group(1), match.group(2)
+    return f"{_PAGE_NAMES.get(page, '頁面 ' + page)}（{_HOST_NAMES.get(host, host)}）"
 
 
 def _plain_dict(match) -> str:
@@ -316,16 +338,17 @@ def _plain_dict(match) -> str:
         return match.group(0).replace("{", "（").replace("}", "）").replace("'", "")
     if not isinstance(value, dict):
         return match.group(0)
-    parts = [f"{_PLAIN_WORDS.get(str(k), str(k))} {v}" for k, v in value.items()]
+    parts = [f"{_PLAIN_WORDS.get(str(k), str(k))} {'未記錄' if v is None else v}" for k, v in value.items()]
     return "、".join(parts) if parts else "（空）"
 
 
 def plain_reason(text: str) -> str:
     """L2 原因原文 → 使用者看得懂的字（集中一處；EXP-2／EXP-3／EXP-6 的文字、標示、tooltip 都走 `_finish`）。
 
-    1. 固定字串對照（`_PLAIN_FIXED`）：「完整原文見 source_status」拿掉、「A 鏈」改「淨值與配息取數」；
+    1. 固定字串對照（`_PLAIN_FIXED`）：「完整原文見 source_status」拿掉、「A 鏈…」改成白話片語；
     2. A 鏈入口的函式呼叫（`auto_fetch_moneydj('G07')`）整段拿掉、留下的空括號一併拿掉；其他 `name(args)`
-       改成「name（args）」（去掉呼叫樣式、內容保留）；頁型 `[yp010000]` 拿掉；
+       改成「name（args）」（去掉呼叫樣式、內容保留）；頁型保留：`[yp010000] FundClear：` →「FundClear（頁面 yp010000）：」，
+       `yp011001@www.moneydj.com` →「境外基本資料頁（主站）」（表外頁型、主機照原字）；
     3. 狀態字（`狀態 'undetermined'`、`FundClear：empty`）與解析器標記照 `_PLAIN_WORDS` 換字；
     4. Python dict 字面（`{'rows': 3}`）換成「鍵 值」；`來源:'值'` 換成「來源 宣告「值」」；其餘 `'x'` 換成「x」。
     認不得的內容不刪，只去掉程式語法外殼。
@@ -337,7 +360,11 @@ def plain_reason(text: str) -> str:
         out = out.replace(old, new)
     out = _INTERNAL_CALL.sub("", out).replace("（）", "").replace("()", "")
     out = _CALL.sub(lambda m: f"{m.group(1)}（{m.group(2)}）", out)
-    out = _PAGE_TYPE.sub("", out)
+    # ~~`_PAGE_TYPE.sub("", out)`（頁型整個刪掉）~~ → 2026-10-14 合併修正輪 B1（有意識的更正，不是漏刪）：
+    # 刪掉之後同一來源的兩個頁型結果會畫成「FundClear：沒有配息紀錄；FundClear：取數失敗」自相矛盾；改為保留頁型。
+    out = _PAGE_AT_HOST.sub(_page_at_host, out)
+    out = _PAGE_SOURCE.sub(lambda m: f"{m.group(2)}（頁面 {m.group(1)}）：", out)
+    out = _PAGE_TYPE.sub(lambda m: f"（頁面 {m.group(1)}）", out)
     out = _DICT.sub(_plain_dict, out)
     out = _STATUS_WORD.sub(lambda m: m.group(1) + _PLAIN_WORDS[m.group(2)], out)
     for word in ("tcb_moneydj_div", "fundclear_div", "cnyes_div"):
@@ -490,6 +517,12 @@ def window_start(nav_day: date) -> date:
         return nav_day.replace(year=nav_day.year - 1, day=28)
 
 
+def in_ratio_window(day: date, nav_day: date) -> bool:
+    """配息比窗口 W ＝ (`window_start(nav_day)`, nav_day]：起點那一天不含、最新淨值日含。
+    `dividend_ratio` 與 Q7 幣別衝突的判斷共用這一支（不另寫一份窗口）。"""
+    return window_start(nav_day) < day <= nav_day
+
+
 def nav_is_old(last: date, today: date) -> bool:
     """規則 11：台灣今天減最後一筆 `nav_date` **大於** `NAV_OLD_DAYS`（＝`thresholds.NAV_NOT_READY_DAYS`）→ 舊（剛好 10 天不算）。"""
     days = (today - last).days
@@ -529,7 +562,7 @@ def dividend_ratio(nav_value, nav_ccy, nav_day, div_rows, *, settled, coverage_s
     amounts, bad_ccy = [], set()
     for index, row in enumerate(div_rows):
         ex_day = _as_date(row["ex_date"], f"dividend 第 {index} 列 ex_date")
-        if not (start < ex_day <= nav_day):
+        if not in_ratio_window(ex_day, nav_day):
             continue
         if row["ccy"] != nav_ccy:
             bad_ccy.add(str(row["ccy"]))
@@ -642,6 +675,32 @@ def _div_basis(prov: dict) -> str:
     return f"配息依據：{str(detail).replace(chr(10), '；')}" if detail else ""
 
 
+def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str) -> dict:
+    """資料層 `div_ccy_differs`（配息宣告的幣別認得出、但與淨值幣別不同）→ 該格（總管 2026-10-14 裁定 C2）。
+
+    - 至少一筆衝突除息日落在配息比窗口內（`in_ratio_window`，與 `dividend_ratio` 同一個窗口）→ `⬜ 不適用`；
+    - 衝突全在窗口外 → `⬜ 資料未備`（只在以前／窗口外，本格不下結論）；
+    - 任一筆衝突取不到除息日、或資料層沒有交出衝突日期 → `⬜ 資料未備`（無法確認）。
+    本輪不拿窗口內同幣別的配息去算配息比。來源標示照實寫「配息幣別宣告」（資料層這一支沒有配息來源欄可用）。
+    """
+    raw = prov.get("conflict_ex_dates")
+    missing = prov.get("conflict_ex_dates_missing")
+    tip_parts = [TIP_DIV_CCY_DECLARED, f"淨值幣別 {nav_ccy}；配息比窗口：除息日在 {window_start(nav_day).isoformat()}"
+                 f"（不含）至 {nav_day.isoformat()} 之間"]
+    if not isinstance(raw, list) or not raw or not isinstance(missing, int) or missing or any(d is None for d in raw):
+        tip = "；".join([*tip_parts, "配息宣告的幣別與淨值幣別不同，但有衝突筆取不到除息日", basis])
+        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED,
+                     tip.strip("；"))
+    days = [_as_date(d, "conflict_ex_dates") for d in raw]
+    shown = "、".join(d.isoformat() for d in days)
+    tip = "；".join(p for p in [*tip_parts, f"配息宣告的幣別與淨值幣別不同的除息日：{shown}", basis] if p)
+    if any(in_ratio_window(d, nav_day) for d in days):
+        return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, TAG_DIV_CCY_DECLARED, tip)
+    reason = (TEXT_DIV_CCY_DIFFERS_BEFORE if all(d <= window_start(nav_day) for d in days)
+              else TEXT_DIV_CCY_DIFFERS_OUTSIDE)
+    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+
+
 def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_conflict, div_ccy_differs) -> dict:
     if div_part is None:
         raise ValueError(f"{code!r} 有淨值，卻沒有配息結果")
@@ -660,8 +719,8 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
     withheld = div_part["withheld"].get(code)
     if withheld == input_conflict:
         raise ValueError(f"{code!r}：配息輸入矛盾（{skipped}）")
-    if withheld == div_ccy_differs:                                            # `49` Q7
-        return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, tag_src, tip_of(skipped))
+    if withheld == div_ccy_differs:                                            # `49` Q7（只看配息比窗口）
+        return _ccy_differs_note(prov, latest["ccy"], last, basis)
     if withheld or div_part["pending"].get(code):
         reason = skipped or str(withheld or div_part["pending"].get(code))
         return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason))

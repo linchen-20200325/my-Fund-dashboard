@@ -1546,6 +1546,7 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
     rejected: dict = {}
     date_unverified = ccy_undeclared = 0
     conflicts = []
+    conflict_days = []      # 與 `conflicts` 逐筆對應的除息日（2026-10-14 exp C2 合併修正輪 C1）
     accepted = []
     parsers = set()
     for item in items:
@@ -1589,6 +1590,7 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
             continue
         if _normalize_declared_ccy(declared) != _ccy_meaning(label):
             conflicts.append(declared)
+            conflict_days.append(day)
             continue
         parsers.add(parser)
         accepted.append({"date": day, "amount": item.get("amount"), "currency": label,
@@ -1603,6 +1605,13 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
         # ⚠️ 只在 meta 模式（`label_source` 不是持倉手填）分流：hld 路徑輸出逐位元組不變（黃金檔守）。
         if label_source != LABEL_SOURCE_HOLDING and all(_normalize_declared_ccy(c) for c in conflicts):
             out["withheld"] = WITHHELD_DIV_CCY_DIFFERS
+            # 2026-10-14 exp C2 合併修正輪 C1（總管裁定：Q7 只看配息比窗口）：交出衝突各筆的除息日，
+            # 畫面層據此判斷衝突是否落在近 12 個月窗口內。ISO 字串、排序；取不到的照實記 None（排在最後）並另計數。
+            # 只在這一支附加（meta 模式、`div_ccy_differs`）；hld 路徑與其他扣下的輸出不變。
+            dated = sorted(d for d in conflict_days if d is not None)
+            missing = sum(1 for d in conflict_days if d is None)
+            out["provenance"]["conflict_ex_dates"] = dated + [None] * missing
+            out["provenance"]["conflict_ex_dates_missing"] = missing
         if label_source == LABEL_SOURCE_HOLDING:
             out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
         else:

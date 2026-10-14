@@ -400,11 +400,17 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
     pd = pytest.importorskip("pandas")
     from datetime import datetime, timezone  # noqa: F811
 
+    dp = pytest.importorskip("repositories.fund.declared_profile")
+
     def mdj(full_key):
-        # 刻意不用 MoneyDJ 的 ok 形狀：它的 `binding`（身分判準）內部結構正在另一個 PR 改（#967），
-        # 替身寫死哪一版都會在另一版下被判「身分未核實」。這裡只驗接線形狀，所以讓 MoneyDJ 明確回報「未收錄」
-        # （兩版都有的狀態），幣別由 TDCC＋FundClear 兩個來源決定。
-        return {"status": "not_listed", "fields": {}, "fetched_at": "2026-10-14T01:00:00+00:00"}
+        # ~~刻意回 not_listed 避開 #967 舊 binding 形狀~~ → 2026-10-14 #967 合併後（有意識的更正，不是漏刪）：
+        # 改回 ok 形狀；`method` 取 L1 公開常數 `MONEYDJ_BINDING_METHOD`，其餘四欄照 L2 `_bound` 的要求
+        # （identity_confirmed is True、兩個張數為 int 1、name_nonempty is True）。not_listed 另有一條測試。
+        return {"status": "ok", "fields": {"基金名稱": f"基金{full_key}", "計價幣別": "美元", "配息頻率": "月配",
+                                           "成立日期": "2010/01/15"},
+                "binding": {"method": dp.MONEYDJ_BINDING_METHOD, "identity_confirmed": True,
+                            "name_table_count": 1, "populated_name_table_count": 1, "name_nonempty": True},
+                "fetched_at": "2026-10-14T01:00:00+00:00"}
 
     def tdcc(full_key):
         return {"status": "ok", "fields": {"計價幣別": "美元"}, "fetched_at": None, "observed_at": "2026-10-14"}
@@ -417,8 +423,9 @@ def test_契約_真的exp_profile與exp_nav_輸出接得上assemble_wired():
     keys = _keys(("K01", "K02"))
     profiles = exp_profile.build_profiles(keys, fetchers={"MoneyDJ": mdj, "TDCC": tdcc, "FundClear": fundclear},
                                           now=datetime(2026, 10, 14, 2, 0, tzinfo=timezone.utc))
-    assert profiles["declared"]["K01"] == ("USD", "meta:TDCC+FundClear")
-    assert profiles["declared"]["K02"] == ("USD", "meta:TDCC")              # 部分失敗、其餘一致（規則 12）
+    assert profiles["declared"]["K01"] == ("USD", "meta:MoneyDJ+TDCC+FundClear")
+    assert profiles["declared"]["K02"] == ("USD", "meta:MoneyDJ+TDCC")      # 部分失敗、其餘一致（規則 12）
+    assert profiles["rows"][0]["fund_name"] == "基金K01"                    # 身分判準通過（MoneyDJ 欄有值）
 
     def chain(chain_code, full_key):
         days = pd.date_range("2026-09-01", "2026-10-09", freq="B")
@@ -467,7 +474,9 @@ def test_規則13_無配息列_配息政策已確認為累積型_不適用_標�
     node = _cell(_model(), "B02", "div_ratio_pct")
     assert node["text"] == "⬜ 不適用：近 12 個月無配息" and node["_state"] == logic.STATE_BIZ
     assert node["source_tag"] == live.TAG_DIV_REPORTED and node["source_tag"] != live.TAG_RATIO
-    assert "配息依據：FundClear：沒有配息紀錄；合庫配息頁：沒有配息紀錄" in node["source_tip"]
+    # ~~頁型被刪掉的寫法~~ → 合併修正輪 B1：頁型保留成「（頁面 …）」
+    assert ("配息依據：FundClear（頁面 yp010000）：沒有配息紀錄；合庫配息頁（頁面 yp010000）：沒有配息紀錄"
+            in node["source_tip"])
     assert "empty" not in node["source_tip"] and "[yp" not in node["source_tip"]
 
 
@@ -534,11 +543,19 @@ def test_使用者可見文字沒有內部名稱():
 
 
 @pytest.mark.parametrize("raw, want", [
-    ("A 鏈（auto_fetch_moneydj('G07')）沒有取得淨值序列", "淨值與配息取數沒有取得淨值序列"),
+    ("A 鏈（auto_fetch_moneydj('G07')）沒有取得淨值序列", "多來源取數沒有取得淨值序列"),
+    ("A 鏈配息瀑布每一個來源都回報：成功取數、這一檔沒有配息紀錄", "配息每一個來源都回報：成功取數、這一檔沒有配息紀錄"),
+    ("A 鏈配息取數失敗（每一個來源都失敗）", "配息取數失敗（每一個來源都失敗）"),
+    ("can't parse 'x' near 'y", "can't parse 「x」 near 'y"),
+    ("（TCB：{'truncated': None, 'filtered': 0}）", "（TCB：截斷 未記錄、過濾 0）"),
+    ("yp011001@tcbbankfund.moneydj.com：HTTP 404；yp011001@www.moneydj.com：不符身分判準",
+     "境外基本資料頁（合庫子網域）：HTTP 404；境外基本資料頁（主站）：不符身分判準"),
+    ("yp099999@other.example：HTTP 404", "頁面 yp099999（other.example）：HTTP 404"),
     ("供列的來源回報有列沒有交出來（TCB：{'truncated': 3, 'filtered': 0, 'other_tables': 0}）",
      "供列的來源回報有列沒有交出來（TCB：截斷 3、過濾 0、其他表格 0）"),
     ("狀態 'undetermined'，沒有逐來源紀錄", "狀態 無法判定，沒有逐來源紀錄"),
-    ("[yp010000] FundClear：empty", "FundClear：沒有配息紀錄"),
+    ("[yp010000] FundClear：empty", "FundClear（頁面 yp010000）：沒有配息紀錄"),
+    ("[yp010000] 其他", "（頁面 yp010000）其他"),
     ("幣別不同（即時序列:'EUR'；來源自報 USD）", "幣別不同（即時序列 宣告「EUR」；來源自報 USD）"),
     ("各來源（MoneyDJ:'美元'→USD）", "各來源（MoneyDJ 宣告「美元」→USD）"),
     ("（FundClear：HTTP 503；完整原文見 source_status）", "（FundClear：HTTP 503）"),
@@ -580,7 +597,12 @@ def test_代碼對照表讀不到_摘要據實_不寫0檔候選():
               "notes": {"pool": pool, "settings": settings, "settings_error": None, "cells": {},
                         "wiring_error": wired["errors"]["fund_profile"]}}
     exp2 = logic.find_block(live.build_live_model(inputs, save_wired=True), "EXP-2")
-    assert exp2["summary_text"] == live.TEXT_KEYS_FAILED_SUMMARY and "0 檔" not in exp2["summary_text"]
+    # ~~驗 `summary_text`~~ → 合併修正輪 D4（有意識的更正，不是漏刪）：EXP-2 是層 2 核心卡，`page.py` 不印 summary；
+    # 改驗卡內實際印出的失敗行（`notes`，由 `page._notes` 畫出）與結論燈。
+    assert exp2["notes"] == ["fund_profile：⛔ 取數失敗：代碼對照表讀取失敗：OSError: x"]
+    assert not any("0 檔" in line or logic.TEXT_NO_MATCH in line for line in exp2["notes"])
+    exp0 = logic.find_block(live.build_live_model(inputs, save_wired=True), "EXP-0")
+    assert "0 檔" not in exp0["text"]
 
 
 def test_契約_無配息列與有配息列的provenance_與真L2同形():
@@ -597,3 +619,145 @@ def test_契約_無配息列與有配息列的provenance_與真L2同形():
     fake_rows = F._div_prov_rows(["fundclear_div"], date(2026, 1, 1))
     assert set(fake_rows) == {"source", "fetched_at", "ccy_source", "outcome", "outcome_detail", "settled",
                               "coverage_start"}
+
+
+# ═════════════════════ 2026-10-14 合併修正輪（#967 合併後） ═════════════════════
+
+
+def test_B1_同一來源兩頁型結果不同_畫面看得出是兩頁():
+    text = live.plain_reason("[yp010000] FundClear：empty\n[yp010001] FundClear：failed".replace("\n", "；"))
+    assert text == "FundClear（頁面 yp010000）：沒有配息紀錄；FundClear（頁面 yp010001）：取數失敗"
+    assert "yp010000" in text and "yp010001" in text
+
+
+def test_D1_有配息列但沒有覆蓋起點_不當作有涵蓋():
+    kind, _r, why = _ratio([_d(date(2026, 5, 1))], coverage=None)
+    assert kind == "not_ready" and "未記錄" in why
+
+
+def test_D2_先遮蔽再白話化_秘密值含引號也遮得掉():
+    secret = "tok 'en' XYZ"                        # 白話化會把成對單引號改成「」；若先白話化，秘密值就比對不到
+    assert live.plain_reason(secret) != secret                                # 前提：這個值真的會被白話化改寫
+    out = F.nav_out(("A01",))
+    out["nav"]["errors"]["A01"] = f"HTTP 503 key={secret}"
+    out["nav"]["rows"] = [r for r in out["nav"]["rows"] if r["fund_code"] != "A01"]
+    wired = _wired(nav_out=out, codes=("A01",), mask=lambda t: t.replace(secret, "‹已遮蔽›"))
+    node = wired["cells"]["A01"]["nav_date"]
+    assert "‹已遮蔽›" in node["text"] and "XYZ" not in node["text"] and "tok" not in node["text"]
+
+
+def _differs_out(dates, missing=0):
+    out = F.nav_out(("J10",))
+    out["dividend"]["provenance"]["J10"]["conflict_ex_dates"] = dates
+    out["dividend"]["provenance"]["J10"]["conflict_ex_dates_missing"] = missing
+    return _wired(nav_out=out, codes=("J10",))["cells"]["J10"]["div_ratio_pct"]
+
+
+def test_C2_衝突落在窗口內_不適用():
+    node = _differs_out(["2024-01-05", "2026-09-05"])
+    assert node["text"] == "⬜ 不適用：配息幣別與淨值幣別不同" and node["state"] == logic.STATE_BIZ
+    assert node["source_tag"] == live.TAG_DIV_CCY_DECLARED
+    assert node["source_tip"].startswith("來源：配息資料（各筆幣別宣告）") and "不同或認不出" not in node["source_tip"]
+    assert "2026-09-05" in node["source_tip"]
+
+
+def test_C2_衝突只在窗口外_資料未備():
+    node = _differs_out(["2023-03-01", "2024-01-05"])
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_BEFORE}" and node["state"] == logic.STATE_MISSING
+
+
+def test_C2_窗口邊界_起點當天不在窗口內_隔天在():
+    # J10 最新淨值日 2026-10-12 → 窗口 (2025-10-12, 2026-10-12]
+    assert _differs_out(["2025-10-12"])["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_BEFORE}"
+    assert _differs_out(["2025-10-11"])["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_BEFORE}"
+    assert _differs_out(["2025-10-13"])["text"] == live.TEXT_DIV_CCY_DIFFERS_NA
+    assert _differs_out(["2026-10-12"])["text"] == live.TEXT_DIV_CCY_DIFFERS_NA
+
+
+def test_C2_衝突晚於最新淨值日_窗口外_資料未備():
+    assert _differs_out(["2026-10-13"])["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_OUTSIDE}"
+
+
+@pytest.mark.parametrize("dates, missing", [(["2026-09-05", None], 1), ([], 0), (None, None), (["2026-09-05"], 1)])
+def test_C2_衝突筆缺日期或沒交出日期_資料未備(dates, missing):
+    node = _differs_out(dates, missing)
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+
+
+def test_C2_窗口判斷與配息比共用同一支():
+    source = (_HERE.parents[1] / "ui_v2" / "exp" / "live.py").read_text(encoding="utf-8")
+    assert source.count("window_start(nav_day) < day <= nav_day") == 1
+    assert "in_ratio_window(ex_day, nav_day)" in source and "in_ratio_window(d, nav_day)" in source
+
+
+def test_A2_真的exp_profile_各種新狀態的原因句_白話化後據實且沒有內部名稱():
+    """#967 合併後：MoneyDJ `unrecognized_page`／`not_found`、TDCC `code_unmapped`、MoneyDJ 取數失敗 —— 走真 L2。"""
+    exp_profile = pytest.importorskip("services.v2_tables.exp_profile")
+    dp = pytest.importorskip("repositories.fund.declared_profile")
+    from datetime import datetime, timezone
+
+    attempts = {
+        "U01": [{"page_type": "yp011001", "host": "tcbbankfund.moneydj.com", "outcome": "not_found_404"},
+                {"page_type": "yp011001", "host": "www.moneydj.com", "outcome": "unrecognized_page",
+                 "problem": "含基金名稱標籤的表 0 張（空殼頁）"}],
+        "N02": [{"page_type": p, "host": h, "outcome": "not_found_404"}
+                for p in ("yp011000", "yp011001") for h in dp.MONEYDJ_HOSTS],
+        "F03": [{"page_type": "yp011000", "host": "www.moneydj.com", "outcome": "http_failed",
+                 "fail_kind": "timeout"}],
+    }
+    attempts["T04"] = attempts["N02"]
+    status = {"U01": dp.STATUS_UNRECOGNIZED, "N02": dp.STATUS_NOT_FOUND, "F03": dp.STATUS_FAILED,
+              "T04": dp.STATUS_NOT_FOUND}
+
+    def mdj(full_key):
+        short = "；".join(dp._attempt_short(a) for a in attempts[full_key])
+        return {"status": status[full_key], "source": "MoneyDJ", "full_key": full_key,
+                "fields": {lb: None for lb in dp.MONEYDJ_LABELS}, "label_conflicts": [], "provenance": None,
+                "fetched_at": None, "attempts": attempts[full_key], "error": short, "reason": short,
+                "failure_reason": short if full_key == "F03" else None}
+
+    def tdcc(full_key):
+        return {"status": dp.STATUS_CODE_UNMAPPED, "fields": {}, "fetched_at": None, "observed_at": None,
+                "error": None}
+
+    def fundclear(full_key):
+        if full_key == "T04":
+            raise RuntimeError("HTTP 503")
+        return {"status": "ok", "fields": {"currency": "USD"}, "fetched_at": "2026-10-14T01:00:00+00:00"}
+
+    profiles = exp_profile.build_profiles(_keys(("U01", "N02", "F03", "T04")),
+                                          fetchers={"MoneyDJ": mdj, "TDCC": tdcc, "FundClear": fundclear},
+                                          now=datetime(2026, 10, 14, 2, 0, tzinfo=timezone.utc))
+    wired = F.assemble(profiles, (), None)              # 只看基本資料各格（不取淨值）
+    u01 = wired["cells"]["U01"]["fund_name"]["text"]
+    assert u01 == ("⬜ 資料未備：MoneyDJ 頁面無法確認是本檔：境外基本資料頁（合庫子網域）：HTTP 404；"
+                   "境外基本資料頁（主站）：含基金名稱標籤的表 0 張（空殼頁）")
+    assert wired["cells"]["N02"]["fund_name"]["text"] == f"{logic.ND_TEXT}：{exp_profile.TEXT_MDJ_NOT_FOUND}"
+    f03 = wired["cells"]["F03"]["fund_name"]["text"]
+    assert f03.startswith("⛔ 取數失敗：MoneyDJ 取數失敗：") and "境內基本資料頁（主站）" in f03 and "timeout" in f03
+    ccy_tip = wired["cells"]["U01"]["ccy"]["source_tip"] or ""
+    assert "FundClear" in ccy_tip
+    t04 = wired["cells"]["T04"]["ccy"]["text"]                 # 三來源都沒有可用幣別：TDCC 代碼體系不同、FundClear 失敗
+    assert t04.startswith("⛔ 取數失敗：") and "代碼無法對照（TDCC 清單使用不同代碼體系）" in t04
+    leaks = sorted({(w, v) for v in _all_strings(wired)
+                    for w in ("yp011000", "yp011001", "@www", "@tcbbankfund", "moneydj.com", "code_unmapped",
+                              "unrecognized_page", "not_found") if w in v})
+    assert leaks == []
+
+
+def test_契約_MoneyDJ_not_listed_L2仍收_畫成資料未備():
+    exp_profile = pytest.importorskip("services.v2_tables.exp_profile")
+    dp = pytest.importorskip("repositories.fund.declared_profile")
+    from datetime import datetime, timezone
+
+    profiles = exp_profile.build_profiles(
+        _keys(("L01",)),
+        fetchers={"MoneyDJ": lambda k: {"status": dp.STATUS_NOT_LISTED, "fields": {}, "fetched_at": None},
+                  "TDCC": lambda k: {"status": "ok", "fields": {"計價幣別": "美元"}, "fetched_at": None,
+                                     "observed_at": "2026-10-14"},
+                  "FundClear": lambda k: {"status": "ok", "fields": {"currency": "USD"},
+                                          "fetched_at": "2026-10-14T01:00:00+00:00"}},
+        now=datetime(2026, 10, 14, 2, 0, tzinfo=timezone.utc))
+    assert profiles["declared"]["L01"] == ("USD", "meta:TDCC+FundClear")
+    wired = F.assemble(profiles, (), None)
+    assert wired["cells"]["L01"]["fund_name"]["text"] == f"{logic.ND_TEXT}：MoneyDJ 未收錄此代碼"

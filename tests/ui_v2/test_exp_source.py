@@ -212,7 +212,9 @@ def test_代碼對照表讀不到_記log_摘要據實(monkeypatch, fake_st, l2_c
     assert data["notes"]["wiring_error"].startswith("代碼對照表讀取失敗")
     model = live.build_live_model(data, save_wired=True)
     from ui_v2.exp import logic
-    assert logic.find_block(model, "EXP-2")["summary_text"] == live.TEXT_KEYS_FAILED_SUMMARY
+    # 合併修正輪 D4：驗卡內實際印出的失敗行（summary 在層 2 核心卡不上畫面）。
+    notes = logic.find_block(model, "EXP-2")["notes"]
+    assert len(notes) == 1 and notes[0].startswith("fund_profile：⛔ 取數失敗：代碼對照表讀取失敗：OSError")
 
 
 def test_代碼對照結果形狀不對_照常raise_不當成讀取失敗(monkeypatch, fake_st, l2_calls):
