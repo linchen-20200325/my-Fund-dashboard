@@ -502,12 +502,16 @@ TEXT_SAVEFAIL_BANNER = "＋ 存檔失敗開關（開）"
 # 正式模式（客戶 2026-10-13 裁示：只有成功儲存的設定才生效）：欄位與已存值不同時的說明行。字面為本組擬定，
 # 體例照姊妹頁 `ui_v2/mkt/live.py::TEXT_UNSAVED_PICKS`。
 TEXT_UNSAVED_RULES = "未存檔：條件列與已存值不同，存檔後下一次重新載入才生效"
-# 2026-10-13 稽核回修：正式模式多一欄 `fund_code`（`_build_exp2` 的 `code_column`）與「篩選判定」（客戶同日裁示），
-# 「目前只顯示基金名」在那時是假話 —— 照實寫出真的顯示的兩欄。字面為本組擬定。
+# 2026-10-13 稽核回修：正式模式多一欄 `fund_code`（`_build_exp2` 的 `code_column`）與「篩選判定」
+# （〔已撤〕原註寫「客戶同日裁示」→ 開這一欄是 AI 總管的落地選擇，客戶只裁示要顯示「⬜ 無法判定（資料未備）」；
+# 稽核 L 第六輪指出，有意識的更正，不是漏刪），「目前只顯示基金名」在那時是假話 —— 照實寫出真的顯示的欄。字面為本組擬定。
 # 〔已撤〕「目前只顯示 fund_code、篩選判定與基金名」一句通用 → 總管 2026-10-13 決定「篩選判定」欄只在有無法判定列時出現，
 #   兩種情形各寫各的（有意識的更正，不是漏刪）。
 TEXT_ONLY_CODE_AND_NAME = "目前只顯示 fund_code 與基金名"
 TEXT_ONLY_CODE_JUDGE_AND_NAME = "目前只顯示 fund_code、篩選判定與基金名"
+# 正式模式 `EXP-4` 欄位一個也沒勾時的摘要（稽核 L 第六輪 B1，總管裁決）：描述**設定**，在任何清單狀態下都為真。
+# 〔已撤〕沿用 `TEXT_ONLY_CODE_AND_NAME` —— 有無法判定列時 `EXP-2` 多一欄，兩卡的「目前只顯示」互相矛盾。
+TEXT_EXP4_CODE_FIXED = "未勾選額外欄位：清單固定顯示 fund_code 與基金名；有無法判定的列時另加「篩選判定」欄"
 TEXT_WATCHLIST_UNREADABLE = "觀察清單目前讀不到（已存設定讀取失敗），不顯示成空的"
 TEXT_EXP4_LIVE = (
     "欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：候選清單只吃已存的設定。"
@@ -586,6 +590,26 @@ def undet_text(reasons) -> str:
     return f"{UNDET_TEXT}（{'；'.join(reasons)}）"
 
 
+def is_missing(value) -> bool:
+    """正式模式的缺值判定（集中一處；稽核 K 第六輪）：None、空字串、浮點 NaN（含 numpy）、pandas 的 NA／NaT。
+
+    只認純量：list、tuple、dict、set 一律不算缺值；任何比較會炸的型別（例如陣列）也不算，**絕不往上拋**。
+    本檔不 import pandas／numpy —— NA／NaT 以型別名判斷，NaN 以「自己不等於自己」判斷。
+    """
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
+        return False
+    if type(value).__name__ in ("NAType", "NaTType"):
+        return True
+    try:
+        return bool(value != value)
+    except (TypeError, ValueError):
+        return False
+
+
 def _finite_number(value) -> bool:
     """轉得成數、而且是有限數（排除 nan、inf）。"""
     try:
@@ -596,16 +620,21 @@ def _finite_number(value) -> bool:
 
 
 def compare_tristate(left, op: str, right: str):
-    """一格比較的三種結果（客戶 2026-10-13 裁示，正式模式）：回 `(True／False／None, 無法判定的原因或 None)`。
+    """一格比較的三種結果（正式模式）：回 `(True／False／None, 無法判定的原因或 None)`。
 
-    - 欄位值為空 → `(None, "資料未備")`：**不算符合、也不排除**（`E-09` 由客戶裁定）。
-    - 「大於／小於」碰到轉不成數的值（例如代碼）→ `(None, "不是數值")`：同樣歸無法判定、不報錯。
+    **客戶 2026-10-13 裁示的部分**：
+    - 欄位值缺（`is_missing`：None、空字串、浮點 NaN、pandas NA）→ `(None, "資料未備")`，**不分比較方向**：
+      不算符合、也不排除（`E-09`）。
+    **AI 總管延伸的部分**（2026-10-13，`44` 檔尾 7.3.2「其三之一」）：
+    - 「大於／小於」的欄位值轉不成數、或是 nan／inf → `(None, "欄位值不是數值")`；
+    - 「大於／小於」的條件數值轉不成數、或是 nan／inf → `(None, "條件數值「<條件數值>」不是數值")`。
+    同樣歸無法判定、不報錯。
     - 比較方向不在六個之內 → 照舊 `raise UnspecifiedComparison`（那不是資料缺，是條件本身壞了）。
     示範模式不走這一支（照舊 `_compare`，缺值就炸）。
     """
     if op not in KNOWN_OPERATORS:
         raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
-    if left is None or str(left).strip() == "":
+    if is_missing(left):
         return None, "資料未備"
     if op in ("大於", "小於"):
         # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
@@ -1119,7 +1148,7 @@ def _build_exp2(
                 raw = profile.get(column)
                 cells[column] = (
                     _value(raw, label=COLUMN_LABELS[column])
-                    if raw not in (None, "")
+                    if not is_missing(raw)   # NaN 不畫成「nan」（稽核 K 第六輪；與 `compare_tristate` 同一支）
                     else _missing_value(COLUMN_LABELS[column])
                 )
             elif column == "nav_date":
@@ -1565,7 +1594,7 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, f
             ERR_TEXT if fail_lines
             else f"{hinted(format_count(len(visible_columns)))} 欄　排序：{sort_shown}"
             if visible_columns
-            else (TEXT_ONLY_CODE_AND_NAME if code_column else TEXT_ONLY_FUND_NAME)
+            else (TEXT_EXP4_CODE_FIXED if code_column else TEXT_ONLY_FUND_NAME)
         ),
         _options=options,
         sort_options=sort_options,
@@ -1750,7 +1779,9 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
     有就與上游取數失敗走同一條路（不列任何軌跡列、本塊為 `系統錯誤`）—— 那時的檔數不是真的。
     `tristate`（客戶 2026-10-13 裁示，正式模式）：`steps` 為四元組 `(條件, 套用前, 符合, 無法判定)`，
     「符合」是到這一條為止**每一條都明確符合**的檔數、「無法判定」是到這一條為止沒有任何一條明確不符合、
-    但至少一條作用在資料未備欄位的檔數；最後一列的「符合」與 `EXP-0` 的 N 相等（`44` `EXP-7` 判準照舊成立）。
+    但至少一條無法判定的檔數；最後一列的「符合」與 `EXP-0` 的 N 相等（`44` `EXP-7` 判準照舊成立）。
+    無法判定的原因有三種（見 `compare_tristate`）：資料未備（客戶裁示）；欄位值不是數值、條件數值不是數值
+    （「大於／小於」，AI 總管延伸）。四欄的欄名（套用前／符合／無法判定）是 AI 總管的落地選擇（`44` 檔尾 7.3.2）。
     """
     failure_notes = upstream_failure_notes(dataset, "EXP-7") + list(extra_fail_lines)
     rows = []
@@ -1790,7 +1821,8 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
         empty_kind = EMPTY_SOURCE
 
     detail_lines = [
-        f"最後一列的套用後檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。"
+        (f"最後一列的符合檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。" if tristate
+         else f"最後一列的套用後檔數與 EXP-0 的 N 相等：{hinted(format_count(conclusion_count))}。")
         if rows
         else ("上游取數失敗，本塊不列出任何軌跡列。" if failure_notes else "尚未套用任何條件。"),
         # ⚠️ **登記（`E-12` 還開著的那一半）**：`44` 把「尚未設定條件」這個畫面掛上 `來源缺`

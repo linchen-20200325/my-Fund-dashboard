@@ -248,6 +248,10 @@ SAVE_DISABLED_REASON = "設定存檔尚未接上，存了也留不到下次開�
 SAVE_UNREADABLE_REASON = "已存設定讀不到，暫不提供存檔（存了會蓋掉讀不到的那一份）"
 TEXT_OPERATORS = "比較方向可填：" + "、".join(RULE_OPERATORS) + "。"
 TEXT_UNSAVED_EXP4 = "未存檔：欄位勾選或排序欄位與已存值不同，存檔後下一次重新載入才生效"
+# 母體讀不到時 `EXP-2` 的摘要（稽核 L 第六輪：不得寫「0 檔候選」）。字面為本組擬定；燈與狀態照舊走取數失敗那一路。
+TEXT_POOL_FAILED = "⛔ 取數失敗：選股池這次讀不到，候選清單不列任何一檔"
+TEXT_POOL_COOLING = "⛔ 取數失敗：選股池冷卻中，本次未重新讀取，候選清單不列任何一檔"
+TEXT_POOL_NOT_CLOUD = "⛔ 未讀取選股池：未設定雲端來源，候選清單不列任何一檔"
 
 
 def pool_lines(pool) -> list:
@@ -314,7 +318,15 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
     exp6 = logic.find_block(out, "EXP-6")
     if exp6["_fields"]:
         _fill_missing(dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"])))
-    logic.find_block(out, "EXP-2")["detail_lines"].extend(pool_lines(notes["pool"]))
+    exp2 = logic.find_block(out, "EXP-2")
+    exp2["detail_lines"].extend(pool_lines(notes["pool"]))
+    pool = notes["pool"]
+    if pool["status"] != "ok":
+        exp2["summary_text"] = (
+            TEXT_POOL_NOT_CLOUD if pool["status"] == "pool_not_cloud"
+            else TEXT_POOL_COOLING if pool.get("cooling")
+            else TEXT_POOL_FAILED
+        )
     logic.find_block(out, "EXP-1")["detail_lines"].append(TEXT_OPERATORS)
 
     reason = None

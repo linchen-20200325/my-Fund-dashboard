@@ -463,7 +463,8 @@ def test_代碼欄存在時_不說只顯示基金名():
     assert exp2["column_keys"] == (logic.CODE_COLUMN, "fund_name")
     assert logic.TEXT_ONLY_FUND_NAME not in exp2["notes"]
     assert logic.TEXT_ONLY_CODE_AND_NAME in exp2["notes"]
-    assert _b(model, "EXP-4")["summary_text"] == logic.TEXT_ONLY_CODE_AND_NAME
+    # 稽核 L 第六輪 B1（總管裁決）：EXP-4 摘要描述設定、不描述畫面現況
+    assert _b(model, "EXP-4")["summary_text"] == logic.TEXT_EXP4_CODE_FIXED
     # 對照組：同一份資料不帶代碼欄（示範模式的組法）→ 照舊「目前只顯示基金名」
     demo = logic.build_page_model(live.build_dataset(_pool(), _settings(rules=_NOT_C03, columns=())))
     assert logic.TEXT_ONLY_FUND_NAME in _b(demo, "EXP-2")["notes"]
@@ -641,3 +642,107 @@ def test_沒有條件_清單是空的_不寫目前只顯示那一句():
     assert exp2["_rows"] == []
     assert not any(note.startswith("目前只顯示") for note in exp2["notes"])
     assert logic.TEXT_NO_CONDITION in exp2["notes"] or exp2["summary_text"] == logic.TEXT_NO_CONDITION
+
+
+# ═════════════════════ #956 第六輪 ═════════════════════
+
+import itertools  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+
+def _only_shown_sentences(model):
+    """兩卡上所有「目前只顯示…」的句子（EXP-2 的說明、EXP-4 的摘要／說明）。"""
+    exp2, exp4 = _b(model, "EXP-2"), _b(model, "EXP-4")
+    texts = list(exp2["notes"]) + list(exp2["detail_lines"]) + [exp4["summary_text"]] \
+        + list(exp4["notes"]) + list(exp4["detail_lines"])
+    return {t for t in texts if isinstance(t, str) and t.startswith("目前只顯示")}
+
+
+_SCENARIO_RULES = (
+    None,                                                            # 從未存過條件
+    (),                                                              # 存了空的
+    _NOT_C03,                                                        # 全部明確符合
+    ({"field": "ccy", "op": "等於", "value": "USD"},),                 # 全部無法判定
+    ({"field": "ccy", "op": "等於", "value": "USD"},
+     {"field": "fund_code", "op": "不等於", "value": "C03"}),           # 混合
+    ({"field": "fund_code", "op": "等於", "value": "ZZZ"},),           # 一檔都不符合
+)
+_SCENARIO_COLUMNS = (None, (), ("fund_name",), ("ccy", "nav_date"), logic.COLUMN_ORDER)
+
+
+@pytest.mark.parametrize("rules,columns,fill,pool_status", list(itertools.product(
+    _SCENARIO_RULES, _SCENARIO_COLUMNS, (False, True), ("ok", "failed"))))
+def test_EXP2與EXP4不會同時出現互相矛盾的目前只顯示敘述(rules, columns, fill, pool_status):
+    inputs = _input(pool=_pool(status=pool_status, message="boom" if pool_status != "ok" else None),
+                    settings=_settings(rules=rules, columns=columns))
+    if fill and inputs["dataset"]["fund_profile"]:
+        inputs["dataset"]["fund_profile"][0]["ccy"] = "USD"               # 一檔明確符合、其餘無法判定
+    model = _model(inputs=inputs)
+    sentences = _only_shown_sentences(model)
+    assert len(sentences) <= 1, sentences
+    assert not _b(model, "EXP-4")["summary_text"].startswith("目前只顯示")   # EXP-4 不描述畫面現況
+
+
+@pytest.mark.parametrize("missing", [None, float("nan"), np.float64("nan"), pd.NA, ""],
+                         ids=["None", "float_nan", "np_nan", "pd_NA", "empty"])
+@pytest.mark.parametrize("op", ["等於", "不等於", "大於", "小於"])
+def test_缺值不分比較方向一律資料未備(missing, op):
+    assert logic.compare_tristate(missing, op, "1") == (None, "資料未備")
+
+
+def test_inf在大於小於下仍歸欄位值不是數值_不是資料未備():
+    for value in (float("inf"), np.float64("inf"), float("-inf")):
+        assert logic.compare_tristate(value, "大於", "1") == (None, "欄位值不是數值")
+        assert logic.compare_tristate(value, "小於", "1") == (None, "欄位值不是數值")
+        assert logic.is_missing(value) is False
+
+
+def test_缺值判定只認純量_非純量不炸():
+    assert logic.is_missing([float("nan")]) is False
+    assert logic.is_missing(()) is False
+    assert logic.is_missing({}) is False
+    assert logic.is_missing(np.array([1.0, float("nan")])) is False
+    assert logic.is_missing(pd.NaT) is True
+    assert logic.is_missing(0) is False and logic.is_missing(0.0) is False and logic.is_missing("nan") is False
+
+
+@pytest.mark.parametrize("missing", [float("nan"), np.float64("nan"), pd.NA], ids=["float_nan", "np_nan", "pd_NA"])
+def test_等於不等於碰到NaN欄位值_照列並標資料未備_不排除不計入(missing):
+    for op in ("等於", "不等於"):
+        inputs = _input(pool=_pool(codes=("A01",)),
+                        settings=_settings(rules=({"field": "ccy", "op": op, "value": "USD"},),
+                                           columns=("ccy",)))
+        inputs["dataset"]["fund_profile"][0]["ccy"] = missing
+        model = _model(inputs=inputs)
+        assert _codes(model) == ["A01"], op                                   # 不排除
+        (row,) = _b(model, "EXP-2")["_rows"]
+        assert row["_cells"][logic.JUDGE_COLUMN]["text"] == "⬜ 無法判定（資料未備：ccy）", op
+        assert row["_cells"]["ccy"]["text"] == live.missing_text("ccy"), op   # 不畫成「nan」
+        assert "nan" not in row["_cells"]["ccy"]["text"].lower()
+        assert _b(model, "EXP-0")["text"] == "目前條件下沒有符合的基金；另有 1 檔無法判定", op   # 不計入
+
+
+def test_EXP7說明行_正式模式寫符合檔數_示範模式照舊套用後檔數():
+    model = _tri_model(_NOT_C03)
+    lines = _b(model, "EXP-7")["detail_lines"]
+    assert any(line.startswith("最後一列的符合檔數與 EXP-0 的 N 相等") for line in lines)
+    assert not any("套用後檔數" in line for line in lines)
+    demo = logic.build_page_model(live.build_dataset(_pool(), _settings(rules=_NOT_C03)))
+    assert any(line.startswith("最後一列的套用後檔數與 EXP-0 的 N 相等") for line in _b(demo, "EXP-7")["detail_lines"])
+
+
+@pytest.mark.parametrize("status,cooling,expected", [
+    ("failed", False, live.TEXT_POOL_FAILED),
+    ("failed", True, live.TEXT_POOL_COOLING),
+    ("pool_not_cloud", False, live.TEXT_POOL_NOT_CLOUD),
+])
+@pytest.mark.parametrize("rules", [None, _NOT_C03])
+def test_母體讀不到或冷卻中_EXP2摘要如實_不寫0檔候選(status, cooling, expected, rules):
+    pool = dict(_pool(status=status, message="（遮蔽後原文）"), cooling=cooling)
+    model = _model(inputs=_input(pool=pool, settings=_settings(rules=rules)))
+    exp2 = _b(model, "EXP-2")
+    assert exp2["summary_text"] == expected
+    assert "檔候選" not in exp2["summary_text"]
+    assert exp2["_state"] == logic.STATE_ERROR

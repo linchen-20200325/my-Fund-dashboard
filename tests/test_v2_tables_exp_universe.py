@@ -78,7 +78,7 @@ def test_只取代碼_其他欄一碰就炸也不炸(monkeypatch):
     out = U.load_pool_codes([], wall=wall)
     assert out == {"status": U.STATUS_OK, "backend": "google-sheets", "codes": ["B02", "A01"],
                    "dropped_blank": 0, "duplicates": 0, "message": None,
-                   "read_at": "2026-10-13T10:05:00+00:00", "ttl_sec": U.SUCCESS_TTL_SEC}
+                   "read_at": "2026-10-13T10:05:00+00:00", "ttl_sec": U.SUCCESS_TTL_SEC, "cooling": False}
 
 
 def test_正控_替身真的會咬人():
@@ -155,9 +155,11 @@ def test_失敗不入快取_冷卻期內不重打_回上次失敗原文並註明
     store = _stub(monkeypatch, _CloudStore(error=ConnectionError(f"連線中斷 {secret}")))
     first = U.load_pool_codes([secret])
     assert first["status"] == U.STATUS_FAILED and store.calls == 1
+    assert first["cooling"] is False                                     # 讀了、失敗 —— 不是冷卻
     second = U.load_pool_codes([secret])
     assert store.calls == 1                                              # 冷卻中：沒有再打
     assert second["status"] == U.STATUS_FAILED
+    assert second["cooling"] is True                                     # 畫面據此如實寫摘要（稽核 L 第六輪）
     assert "冷卻中" in second["message"] and "連線中斷" in second["message"] and secret not in second["message"]
 
 

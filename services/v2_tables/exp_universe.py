@@ -85,8 +85,11 @@ _CACHE: dict = {}          # (actor, sheet_id) → (存入時間 monotonic, 成�
 # 比對對象取 `should_skip_gspread` 交回的剩餘秒數（`infra.source_backoff` 那一筆的 until），
 # 不直接讀 `infra.source_backoff`（不在 L2 的 infra 子模組白名單上）。
 # ⚠️ 已知限制（總管 2026-10-13 決定不修：要修得改 L1／infra，超出本檔射程）：同一身分、同一種類的冷卻
-# 若在本頁記下之後被別處覆寫，而新那一筆的到期時刻恰好與本頁記的相差不到 `_SAME_COOLDOWN_SEC`，
-# 本頁會把自己記的原文接到那一筆上。**只影響冷卻說明句後面附的「上次失敗」原文**，不影響燈色、狀態與任何資料。
+# 若在本頁記下之後被別處覆寫，而新那一筆的到期時刻恰好與本頁記的相差不到 `_SAME_COOLDOWN_SEC`
+# （或反過來，同一筆被誤判成不是同一筆），本頁會判錯「這筆冷卻是不是自己記的」。
+# 判錯時，冷卻說明的**主句**（「選股池剛讀取失敗過」或「選股池在其他讀取點剛讀取失敗過」）與後面附的
+# 「上次失敗」原文**會一起錯**；燈色、狀態與任何資料都不受影響。
+# （〔已撤〕舊註寫「只影響後面附的原文」—— 稽核 L 第六輪指出主句也會跟著錯，有意識的更正，不是漏刪。）
 _LAST_FAILURE: dict = {}
 _SAME_COOLDOWN_SEC = 2.0
 # 與 `infra.source_backoff._clock` 同一種時鐘（monotonic）；模組層變數讓測試能注入同一個假時鐘。
@@ -116,9 +119,11 @@ def clear_cache() -> None:
     _REGISTERED.cache_clear()
 
 
-def _empty(status: str, backend: str, message) -> dict:
+def _empty(status: str, backend: str, message, *, cooling: bool = False) -> dict:
+    # `cooling`：這一次是因為冷卻中而沒有去讀（不是讀了失敗）。畫面據此如實寫摘要（稽核 L 第六輪）。
     return {"status": status, "backend": backend, "codes": [], "dropped_blank": 0,
-            "duplicates": 0, "message": message, "read_at": None, "ttl_sec": SUCCESS_TTL_SEC}
+            "duplicates": 0, "message": message, "read_at": None, "ttl_sec": SUCCESS_TTL_SEC,
+            "cooling": cooling}
 
 
 def _own_for(record, kind: str, left: float, clock: float):
@@ -197,7 +202,7 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None, wall=None) ->
     if skip:
         with _LOCK:
             own = _own_for(_LAST_FAILURE.get(key), kind, left, _clock())
-        return _empty(STATUS_FAILED, backend, mask(cooling_text(key[0], left, kind, own)))
+        return _empty(STATUS_FAILED, backend, mask(cooling_text(key[0], left, kind, own)), cooling=True)
 
     try:
         entries = store.list_pool()
@@ -215,7 +220,7 @@ def load_pool_codes(secret_values, *, oauth_client=None, now=None, wall=None) ->
     record_gspread_success(*key)
     read_at = (wall or datetime.now(timezone.utc)).isoformat(timespec="seconds")
     result = {"status": STATUS_OK, "backend": backend, "message": None, "read_at": read_at,
-              "ttl_sec": SUCCESS_TTL_SEC, **_codes_of(entries)}
+              "ttl_sec": SUCCESS_TTL_SEC, "cooling": False, **_codes_of(entries)}
     with _LOCK:
         _LAST_FAILURE.pop(key, None)
         _CACHE[key] = (now, dict(result, codes=list(result["codes"])))
