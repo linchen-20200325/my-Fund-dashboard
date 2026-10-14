@@ -286,6 +286,33 @@ def test_反例_重複根不得替錯位時刻投票():
     assert "票數 00:00:00×4、23:00:00×3；分母 9" in base and "7 筆不寫" in base
 
 
+def test_外匯語意_未收盤判定看位移前的日K日期_盤中根不進分母():
+    """2026-10-14 稽核 X N3：投票迴圈的未收盤判定必須看**位移前**的日 K 日期 D，不得看位移後的觀測日。
+    合成（倫敦夏令）：已收盤平日根 00:00 × 25、01:00 × 24（各自不同的 D，不重複）；另加 1 根盤中值，
+    D＝取得當日（倫敦 10-14 07:47），位移後觀測日 10-13 早於界線 10-14。
+    - 正確：盤中根 D 不早於界線 ⇒ 不進分母；分母 49，00:00 得 25 票 > 24.5 ⇒ 基準 00:00，寫入 25 列。
+    - 突變「投票迴圈改看位移後的觀測日」：盤中根進分母 ⇒ 分母 50，25 > 25 不成立 ⇒ 無基準，整鍵不寫（本條抓這個）。
+    - 突變「寫列迴圈改看位移後的觀測日」：盤中根不歸「未收盤」、改歸「當地時刻不一致」⇒ skipped 不同（本條也抓）。"""
+    bars, day, n0, n1 = [], date(2026, 7, 1), 0, 0
+    while n0 < 25 or n1 < 24:
+        if day.weekday() < 5:
+            if n0 <= n1 and n0 < 25:
+                bars.append((_lon(day.year, day.month, day.day), round(31.0 + n0 * 0.001, 6)))
+                n0 += 1
+            else:
+                bars.append((_lon(day.year, day.month, day.day, 1), round(32.0 + n1 * 0.001, 6)))
+                n1 += 1
+        day += timedelta(days=1)
+    intraday = (_lon(2026, 10, 14, 7) + 47 * 60, 99.0)                       # 倫敦 10-14 07:47（盤中）
+    rows, err, skipped = _fx(_series(bars + [intraday], fetched_at="2026-10-14T06:47:25+00:00"))
+    assert err is None
+    assert len(rows) == 25
+    assert all(31.0 <= r["value_num"] < 32.0 for r in rows)                  # 只寫 00:00 那 25 根
+    assert 99.0 not in [r["value_num"] for r in rows]
+    assert skipped == [FX_NC.format(d="2026-10-14", n=1),
+                       "當地時刻與同鍵已收盤根的基準 00:00:00（交易所時區 Europe/London）不一致 24 筆不寫"]
+
+
 # ═══════════════════════ 呼叫端與外匯判定 ═══════════════════════
 
 
