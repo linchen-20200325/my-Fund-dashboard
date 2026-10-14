@@ -398,3 +398,67 @@ def test_B1_小時K失敗_所有代號日K仍是ok_用真的source_backoff(monke
     assert [tk for tk, iv in calls[:4]] == ["USDTWD=X", "^VIX", "EURTWD=X", "JPYTWD=X"]   # 日 K 全部先取完
     assert all(iv == "1d" for _tk, iv in calls[:4]) and all(iv == "60m" for _tk, iv in calls[4:])
     assert rep["tickers"]["USDTWD=X"]["hourly"]["status"] == probe.STATUS_REQUEST_FAILED
+
+
+# ═══════════════════════ #960 複驗：週末的前一日、寬鬆容差、嚴格 JSON 保底 ═══════════════════════
+
+
+def test_前一日對照跳過週日_週日傍晚有小時K時週一的負1仍是週五():
+    """合成資料加上倫敦週日 22:00、23:00 兩根（真實匯率週日傍晚就開盤）。週一 01-19 的日 K close＝週五 01-16 最後一根
+    小時 close：前一日對照必須取週五（不是週日），且計入「等於前一日最後一根」。最佳對應的候選範圍照舊含週日。"""
+    hourly = _hourly(date(2026, 1, 5), date(2026, 1, 23))
+    for hh in (22, 23):                                  # 週日 01-18 倫敦 22:00、23:00
+        s = _lon(2026, 1, 18, hh)
+        i = next(k for k, t in enumerate(hourly["t"]) if t > s)
+        for f, v in (("t", s), ("open", _p(s)), ("close", _p(s + 3600)), ("high", _p(s + 3600) + 0.0005),
+                     ("low", _p(s) - 0.0005)):
+            hourly[f].insert(i, v)
+    mon = _lon(2026, 1, 19)
+    fri_last = _p(_lon(2026, 1, 17))                     # 週五 23:00 那根的 close＝p(週六 00:00)
+    out = _run(_daily([(mon, fri_last)]), hourly)
+    (rec,) = out["bars"]
+    assert rec["close_vs_day_last_hourly_close_days"]["-1"] == "2026-01-16"
+    assert abs(rec["close_vs_day_last_hourly_close"]["-1"]) < 1e-9
+    assert out["close_equals_prev_day_last_hourly_close"] == 1
+    assert "2026-01-18" in rec["scope_exchange_days"]    # 候選範圍仍含週日
+
+
+def test_寬鬆容差兩級_各級只收ties等於1_主分布仍以1e6為準():
+    """日 K close＝前一日 21:00 的價格 ×(1＋5e-6)：1e-6 級不在容差內（主分布空），1e-5 級在容差內且 ties＝1（入分布），
+    1e-4 級雖在容差內，但前後幾根也落在 best＋1e-4 內 ⇒ ties＞1，不入該級分布。"""
+    day = _lon(2026, 1, 14)
+    close = _p(day - 3 * 3600) * (1 + 5e-6)
+    out = _run(_daily([(day, close)]))
+    (rec,) = out["bars"]
+    bc = rec["best_close_match"]
+    assert bc["within_tol"] is False and bc["loose"]["1e-05"] == {"within_tol": True, "ties": 1}
+    assert bc["loose"]["0.0001"]["within_tol"] is True and bc["loose"]["0.0001"]["ties"] > 1
+    loose = out["match_precision"]["loose"]
+    assert out["best_close_match_distribution"] == {}
+    assert loose["1e-05"] == {"tolerance_rel": 1e-05, "within_tol": 1, "distribution": {"-1 21:00": 1}}
+    assert loose["0.0001"]["within_tol"] == 1 and loose["0.0001"]["distribution"] == {}
+
+
+@pytest.mark.parametrize("bad", [{float("nan"): 1}, {"v": __import__("decimal").Decimal("1.5")}])
+def test_嚴格JSON寫不出時_改以寬鬆格式保底_記錯誤原文且退出碼非0(tmp_path, monkeypatch, bad):
+    report = {"proxy_env_set": False, "proxy_used_by_infra": None, "rejected_tickers": [],
+              "tickers": {"USDTWD=X": {"ok": True, "status": "ok", "daily": {"close": 31.9}}}, "extra": bad}
+    monkeypatch.setattr(probe, "run", lambda *a, **k: report)
+    monkeypatch.setattr(probe, "_summary_lines", lambda rep: [])
+    out = tmp_path / "r.json"
+    rc = probe.main(["--out", str(out)])
+    text = out.read_text(encoding="utf-8")
+    loaded = json.loads(text)                            # 寬鬆格式照樣讀得回來
+    assert rc != 0
+    assert loaded["strict_json_error"].split(":")[0] in ("ValueError", "TypeError")
+    assert loaded["tickers"]["USDTWD=X"]["daily"] == {"close": 31.9}   # 日 K 結果不丟
+
+
+def test_嚴格JSON寫得出時_不加strict_json_error_退出碼照主要代號(tmp_path, monkeypatch):
+    report = {"proxy_env_set": False, "proxy_used_by_infra": None, "rejected_tickers": [],
+              "tickers": {"USDTWD=X": {"ok": True, "status": "ok"}}}
+    monkeypatch.setattr(probe, "run", lambda *a, **k: report)
+    monkeypatch.setattr(probe, "_summary_lines", lambda rep: [])
+    out = tmp_path / "r.json"
+    assert probe.main(["--out", str(out)]) == 0
+    assert "strict_json_error" not in json.loads(out.read_text(encoding="utf-8"))

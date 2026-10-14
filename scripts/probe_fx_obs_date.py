@@ -544,10 +544,18 @@ MATCH_WINDOW_DAYS = 31        # 只比對最近這麼多個日曆日（交易所
 MATCH_SCOPE_DAYS = 2
 MATCH_ZONES = ("Europe/London", "America/New_York", "Asia/Taipei")
 # 「相等」與「入分布」的容差（相對值）：Yahoo 回的價格是 float32 精度（例：31.927799224853516 ＝ 31.9278 的 float32），
-# 同一個來源值在日 K 與小時 K 之間只會差到約 1e-7 的相對量；取 1e-6 留十倍餘裕，
-# 又遠小於一個報價跳動（USD 約 32 時 0.0001 ≈ 3e-6、JPY 約 0.2 時 0.0001 ≈ 5e-4）。
+# 同一個來源值在日 K 與小時 K 之間只會差到約 1e-7 的相對量，1e-6 對此留約十倍餘裕。
+# ~~又遠小於一個報價跳動（USD 約 32 時 0.0001 ≈ 3e-6、JPY 約 0.2 時 0.0001 ≈ 5e-4）。~~
+# → 2026-10-14 #960 稽核更正（有意識的更正，不是漏刪）：對「一個報價跳動」的餘裕據實如下，**常數不變**：
+#   - USD（約 32，跳動 0.0001）：跳動相對約 3e-6，1e-6 只有約 3 倍餘裕；
+#   - JPY 實際多為 6 位小數（例 0.201395，跳動 1e-6）：跳動相對約 5e-6，餘裕約 5 倍（舊註寫的 500 倍是錯的）；
+#   - EUR（約 36）沒有固定跳動，只到 float32 解析度：float32 在 36 附近的最小單位約 3.8e-6（相對約 1.06e-7），
+#     1e-6 相對約等於 9 個 float32 最小單位 —— **相差在 1e-6 相對內的兩個不同價格會被當成相等**。
+#   因此另輸出 1e-5、1e-4 兩級寬鬆計數只供診斷（`MATCH_LOOSE_RELS`），主分布仍以 1e-6 為準。
 # 只有差距在此容差內、且同差距根數 ties＝1 的對應才入分布（#960 稽核：近似對應不該被當成證據計數）。
 MATCH_EQ_REL = 1e-6
+# 診斷用的寬鬆容差（相對值）：各級另出「最佳 close 對應在容差內」根數與分布（同樣只收 ties＝1、非 partial、非重複）。
+MATCH_LOOSE_RELS = (1e-5, 1e-4)
 # 報告要逐字留下的 meta 欄位（缺就列進 absent，不補值）。
 META_FIELDS = ("regularMarketPrice", "chartPreviousClose", "previousClose", "regularMarketTime",
                "regularMarketDayHigh", "regularMarketDayLow", "fulldayPrice", "fulldayChange",
@@ -663,11 +671,16 @@ def _best(candidates: list[dict], field: str, target: float, exchange_tz: str, o
     best_abs, _t, b = diffs[0]
     tol = MATCH_EQ_REL * abs(target)
     ties = sum(1 for d, _tt, _b in diffs if d - best_abs <= tol)
+    loose = {}
+    for rel in MATCH_LOOSE_RELS:
+        lt = rel * abs(target)
+        loose[f"{rel:g}"] = {"within_tol": best_abs <= lt,
+                             "ties": sum(1 for d, _tt, _b in diffs if d - best_abs <= lt)}
     start, end = b["t"], b["t"] + HOURLY_BAR_SEC
     at = end if field == "close" else start
     obs_d = datetime.strptime(obs, "%Y-%m-%d").date()
     return {"t": start, "start": _times(start), "end": _times(end), "value": b[field], "abs_diff": best_abs,
-            "pct_diff": _pct(b[field], target), "within_tol": best_abs <= tol, "ties": ties,
+            "pct_diff": _pct(b[field], target), "within_tol": best_abs <= tol, "ties": ties, "loose": loose,
             "timed_by": "end" if field == "close" else "start",
             "exchange_day_offset": (_local_dt(at, exchange_tz).date() - obs_d).days,
             "exchange_hhmm": _local_dt(at, exchange_tz).strftime("%H:%M"),
@@ -703,12 +716,16 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
       交易所日差、同差距根數 `ties`、是否在容差內 `within_tol`。
     - `vs_same_exchange_day`：日 K 的 OHLC 對同一交易所日小時 K 彙總的差距 %，以及日 K close 是否落在該日小時 K
       高低區間內（高或低缺 → None，不當成「不在區間內」）。
-    - `close_vs_day_last_hourly_close`：日 K close 對前一個／當日／後一個**有小時 K 的**交易所日最後一根小時 close 的差距 %。
+    - `close_vs_day_last_hourly_close`：日 K close 對前一個／當日／後一個**有小時 K 的平日**交易所日（跳過交易所當地週六、週日；
+      #960 複驗）最後一根小時 close 的差距 %；實際取的日子列在 `close_vs_day_last_hourly_close_days`。
     - 分布只收：容差內、ties＝1、非 partial_coverage、觀測日不重複的根；另出配對精度統計。
     """
     hbars = [b for b in _bars(hourly) if b["close"] is not None or b["open"] is not None]
     agg = hourly_day_aggregate(hourly, exchange_tz)
     hdays = sorted(agg)
+    # 前一日／後一日對照只取「有小時 K 的**平日**交易所日」（#960 複驗：週日傍晚有小時 K 時，週一的 −1 不得指到週日）。
+    # ⚠️ 只改這組對照；最佳對應的候選範圍（`_neighbors`）照舊含週日，免得漏掉真實對應。
+    hweekdays = [d for d in hdays if datetime.strptime(d, "%Y-%m-%d").weekday() < 5]
     day_of = {b["t"]: _local_dt(b["t"], exchange_tz).date().isoformat() for b in hbars}
     out = {"exchange_tz": exchange_tz, "cutoff_day": cutoff_day, "window_days": window_days,
            "scope_days": scope_days, "scope_unit": "該小時序列中實際存在的交易所日",
@@ -735,6 +752,8 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
     obs_count = Counter(obs for _d, obs in in_window)
 
     dist_end, dist_start, dist_utc_end, dist_open = Counter(), Counter(), Counter(), Counter()
+    loose_within = {f"{rel:g}": 0 for rel in MATCH_LOOSE_RELS}
+    loose_dist = {f"{rel:g}": Counter() for rel in MATCH_LOOSE_RELS}
     same_last_close_eq = prev_last_close_eq = 0
     abs_diffs, pct_diffs = [], []
     n_within = n_ties = n_partial = n_dup = 0
@@ -763,6 +782,10 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
             pct_diffs.append(abs(bc["pct_diff"]) if bc["pct_diff"] is not None else None)
             n_within += bc["within_tol"]
             n_ties += bc["ties"] > 1
+            for lvl, lv in bc["loose"].items():
+                loose_within[lvl] += lv["within_tol"]
+                if lv["within_tol"] and lv["ties"] == 1 and not partial and not dup:
+                    loose_dist[lvl][f"{bc['exchange_day_offset']:+d} {bc['exchange_hhmm']}"] += 1
             if bc["within_tol"] and bc["ties"] == 1 and not partial and not dup:
                 dist_end[f"{bc['exchange_day_offset']:+d} {bc['exchange_hhmm']}"] += 1
                 dist_start[f"{bc['start_exchange_day_offset']:+d} {bc['start_exchange_hhmm']}"] += 1
@@ -777,8 +800,9 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
                                            "close_within_hourly_range": rng}
         else:
             rec["vs_same_exchange_day"] = None
-        prev_day = before[-1] if before else None
-        next_day = after[0] if after else None
+        wk_before, wk_after = _neighbors(hweekdays, obs, 1)
+        prev_day = wk_before[-1] if wk_before else None
+        next_day = wk_after[0] if wk_after else None
         last = {"-1": _pct(d["close"], (agg.get(prev_day) or {}).get("close")),
                 "+0": _pct(d["close"], (agg.get(obs) or {}).get("close")),
                 "+1": _pct(d["close"], (agg.get(next_day) or {}).get("close"))}
@@ -802,6 +826,9 @@ def match_daily_to_hourly(daily: dict, hourly: dict, exchange_tz: str, cutoff_da
         "median_abs_pct_diff": _median(pcts), "max_abs_pct_diff": max(pcts) if pcts else None,
         "within_tol": n_within, "ties_gt_1": n_ties, "partial_coverage": n_partial,
         "duplicate_obs_date": n_dup, "in_distribution": sum(dist_end.values()),
+        # 診斷用寬鬆級（主分布仍以 MATCH_EQ_REL 為準）：各級的容差內根數與分布（只收 ties＝1、非 partial、非重複）。
+        "loose": {lvl: {"tolerance_rel": float(lvl), "within_tol": loose_within[lvl],
+                        "distribution": _sorted_counter(loose_dist[lvl])} for lvl in loose_within},
     }
     out["close_equals_same_day_last_hourly_close"] = same_last_close_eq
     out["close_equals_prev_day_last_hourly_close"] = prev_last_close_eq
@@ -1061,11 +1088,23 @@ def main(argv=None, fetcher=None, pop_fail_kind=None, obs_date_fn=None, backoff_
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     # 嚴格 JSON：NaN／±inf 一律轉 null 後以 allow_nan=False 寫出（#960 稽核）。
-    out.write_text(json.dumps(to_strict_json(report), ensure_ascii=False, indent=1, allow_nan=False) + "\n",
-                   encoding="utf-8")
+    # 保底（#960 複驗）：若仍寫不出嚴格 JSON（例如 dict 鍵是 NaN、值是 Decimal 這類 to_strict_json 管不到的東西），
+    # 改以 default=str、allow_nan=True 照樣寫出一份，報告頂層加 `strict_json_error`（例外原文），退出碼記為失敗 ——
+    # 日 K 結果不得因序列化失敗而丟失。
+    strict_error = None
+    try:
+        text = json.dumps(to_strict_json(report), ensure_ascii=False, indent=1, allow_nan=False)
+    except (ValueError, TypeError) as e:
+        strict_error = f"{type(e).__name__}: {e}"
+        report["strict_json_error"] = strict_error
+        text = json.dumps(report, ensure_ascii=False, indent=1, allow_nan=True, default=str)
+    out.write_text(text + "\n", encoding="utf-8")
     for line in _summary_lines(report):
         print(line)
     print(f"報告：{out}")
+    if strict_error:
+        print(f"⚠️ 報告不是嚴格 JSON（已以寬鬆格式寫出）：{strict_error}")
+        return 1
     return 0 if report["tickers"].get(PRIMARY_TICKER, {}).get("ok") else 1
 
 
