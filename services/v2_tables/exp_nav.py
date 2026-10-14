@@ -42,6 +42,9 @@
   較早開始、較晚完成的失敗取數原本會把較晚開始、較早完成的成功覆寫成失敗記憶（之後 300 秒都顯示取數失敗）。
   只保護成功：較舊的成功照樣可以蓋掉較新的失敗（列的 `fetched_at` 是當初實際取得的時間，畫面不會把它說成新的）；
   開始時刻相同時無從分先後，照舊由後完成者寫回。
+  **兩個時刻各管各的**：存活時間從整次呼叫開始（`tick`）起算，先後比較用每一檔自己的開始時刻（`started`）；
+  同一次呼叫裡 `tick ≤ started`，故成功記憶不會活超過 TTL（只可能提早一點過期）。
+  沒有第四欄（取數開始時刻）的舊三欄項目視為「沒有開始時刻」，不阻擋寫回。
 - **撤銷條件**：A 鏈 L1 改成「B 線可用的結果都快取、失敗另有記憶」時，本檔即可拿掉，改直接呼叫 `build_nav_dividend_tables`。
 
 已知限制（照實寫）：沒有 single-flight（同一檔被並行查詢時各自出門；寫回先後見上方「較舊的失敗」那一條）；記憶沒有容量上限，筆數受代碼總數與
@@ -117,8 +120,9 @@ def _expired(tick: float, at: float, kind: str) -> bool:
 
 
 def _newer_success(existing, started: float) -> bool:
-    """既有記憶是不是「取數開始時刻比 `started` 晚」的成功。"""
-    return existing is not None and existing[1] == KIND_SUCCESS and existing[3] > started
+    """既有記憶是不是「取數開始時刻比 `started` 晚」的成功。沒有第四欄（取數開始時刻）的項目 → False（不阻擋）。"""
+    return (existing is not None and len(existing) > 3 and existing[1] == KIND_SUCCESS
+            and existing[3] > started)
 
 
 def _empty_tables() -> dict:

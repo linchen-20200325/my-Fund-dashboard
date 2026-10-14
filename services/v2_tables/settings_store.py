@@ -486,8 +486,9 @@ def refetch_nav(secret_values) -> dict:
     ~~A 鏈 L1 快取（`nav_dividend.CHAIN_CACHED_FUNCTIONS`）只在持倉讀取成功之後清~~ → 2026-10-14 稽核 V／W 可選項
     （有意識的更正，不是漏刪；決策者：AI 總管）：A 鏈 L1 也改在讀持倉**之前**清，持倉讀不到時也清。理由：客戶語意是
     「重新取淨值」，持倉讀不到時 exp 記憶已清、底下 A 鏈 15 分鐘 L1 卻還在，下一次 exp 取數會命中清除前的舊 L1。
-    讀碼確認無其他副作用：六支的 `cache_clear()` 只清行程內 dict 與命中統計（`infra/cache.py` 的 `_ttl_cache`／
-    `_daily_cache`，`fetch_fund_from_moneydj_url` 外層 `_deepcopy_result` 以 `functools.wraps` 帶出同一支），
+    讀碼確認無其他副作用：六支的 `cache_clear()` 只動行程內記憶 —— `infra/cache.py` 的 `_ttl_cache`（兩支）清 dict
+    並歸零命中統計；`_daily_cache`（四支）只清 dict、**不**歸零命中統計（~~兩者都清 dict 與命中統計~~，#965 小修
+    更正，不是漏刪）；`fetch_fund_from_moneydj_url` 外層 `_deepcopy_result` 以 `functools.wraps` 帶出同一支 ——
     不印、不寫 log、不拋錯；持倉讀取（`alo_holdings.load_alo_tables` → `policy_supplement_repository`）與代碼解析
     都不經這六支快取；錯誤訊息、回傳值、`fetch_log` 筆數不變。
 
@@ -624,7 +625,7 @@ def _refetch_nav_run(secret_values, mask, persist: dict, opened, closing: dict) 
             else:
                 masked.setdefault(mask(str(r["input"])), mask(str(r["error"])))
         # A 鏈 L1 快取已在函式開頭清過（2026-10-14 移到讀持倉之前）。
-        table =nav_dividend.build_nav_table([
+        table = nav_dividend.build_nav_table([
             {"fund_code": h["fund_code"], "full_key": resolved[h["fund_code"]]["full_key"],
              "portal": resolved[h["fund_code"]]["portal"], "holding_ccy": h["ccy"],
              "chain_code": resolved[h["fund_code"]]["parsed_code"]}

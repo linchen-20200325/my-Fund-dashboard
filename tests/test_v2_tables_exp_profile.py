@@ -339,9 +339,11 @@ def test_成立日期_可辨識寫法(raw, want):
 
 
 # ~~"2012/3/5"、"2012/03/5"、"2012-03-5" 原列無法辨識~~ → 同上，改列可辨識組（有意識的更正，不是漏刪）
+# ~~"0099/01/01"、"1899/12/31" 原列無法辨識~~ → #965 小修（有意識的更正，不是漏刪）：字樣認得、只是早於 1900，
+#   原因據實另寫，移到 `test_成立日期_早於1900_原因據實`
 @pytest.mark.parametrize("raw", ["2018/02/30", "101/03/23", "2012年3月23日", "2012.03.23", "２０１２/03/23",
                                  "2012/03-23", "2012/03/ 5", "2012/ 3/05", "2012 /03/23",
-                                 "0099/01/01", "1899/12/31", "2012/03/2３", "+012/03/23", "2012/03/23x",
+                                 "2012/03/2３", "+012/03/23", "2012/03/23x",
                                  "2012/3-5", "2012/ 3/5", "2012/３/5", "2012/3/５", "2012/003/05", "2012/3/005",
                                  "2012//3/5", "2012/3/5/", "2012/3/", "2012-3/5", "12012/3/5", "2012/00/05",
                                  "2012/3/0", "2012/13/1", "2012　/3/5"])
@@ -457,8 +459,23 @@ def test_成立日期_不晚於台灣今天(raw, want_status):
                             now=_NOW_TW_MORNING)
     cell = out["cells"][CODE]["inception_on"]
     assert cell["status"] == want_status
+    # ~~not_ready 時原因寫「成立日期字樣無法辨識：{raw}」~~ → #965 小修（有意識的更正，不是漏刪）：字樣認得，據實寫晚於今天
     if want_status == "not_ready":
-        assert cell["reason"] == f"成立日期字樣無法辨識：{raw}"
+        assert cell["reason"] == f"成立日期 {raw} 晚於台灣今天 2026-10-14，不採用"
+        assert cell["value"] is None and cell["raw"] == {"MoneyDJ": raw}
+
+
+@pytest.mark.parametrize("raw", ["1899/12/31", "0099/01/01", "1899/2/30"])
+def test_成立日期_早於1900_原因據實(raw):
+    _out, cells = _one(mdj_ok(inception=raw), not_listed(), not_listed())
+    cell = cells["inception_on"]
+    assert cell["status"] == "not_ready" and cell["value"] is None
+    assert cell["reason"] == f"成立日期 {raw} 早於 1900 年，不採用（不猜是民國年、不換算）"
+
+
+def test_成立日期_日期不存在仍寫無法辨識():
+    _out, cells = _one(mdj_ok(inception="2018/2/30"), not_listed(), not_listed())
+    assert cells["inception_on"]["reason"] == "成立日期字樣無法辨識：2018/2/30"
 
 
 def test_成立日期_今天以台灣日期判_不是世界協調時間():

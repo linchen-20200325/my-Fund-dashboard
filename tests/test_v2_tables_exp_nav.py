@@ -465,6 +465,46 @@ def test_沒有清除_較早開始的成功_可以蓋掉較晚開始的失敗():
     assert again["memo"]["MZ01"]["hit"] is True and again["memo"]["MZ01"]["cooling"] is False
 
 
+def test_一次取多檔_先後用每檔開始時刻_不用整次呼叫的tick():
+    # 稽核 V（E4：寫回存 tick 而非每檔 started 的突變存活）：
+    # Y（只查 MZ02，失敗）在 1200 開始；Y 取數途中，X 在 1000 開始一次查 MZ01、MZ02，MZ02 在 1500 才開始（成功）
+    # 並寫回；Y 最後完成。X 的 MZ02 開始於 1500 ＞ 1200，Y 不得蓋掉它。若記的是 X 整次的 tick（1000）就會被蓋掉。
+    ok = _chain([], {"MZ01": _ok_res("MZ01"), "MZ02": _ok_res("MZ02")})
+    fail = _chain([], {"MZ02": _fail_res("MZ02")})
+    x_clock = iter([1000.0, 1000.0, 1500.0])   # tick、MZ01 started、MZ02 started
+
+    def fetch_y(chain_code, full_key):
+        x = EN.load_nav_dividend(_funds("MZ01") + _funds("MZ02"), now=NOW,
+                                 clock=lambda: next(x_clock), chain_fetch=ok)
+        assert x["memo"]["MZ02"]["hit"] is False and "MZ02" not in x["nav"]["errors"]
+        return fail(chain_code, full_key)
+
+    y = EN.load_nav_dividend(_funds("MZ02"), now=NOW, clock=_Clock(1200.0), chain_fetch=fetch_y)
+    assert "MZ02" in y["nav"]["errors"]
+    again = EN.load_nav_dividend(_funds("MZ02"), now=NOW, clock=_Clock(1501.0), chain_fetch=fail)
+    assert again["memo"]["MZ02"] == {"hit": True, "cooling": False, "cooling_remaining_sec": None}
+    assert len(again["nav"]["rows"]) == 5
+
+
+def test_舊三欄記憶項目_不IndexError_不阻擋寫回():
+    # 沒有取數開始時刻的舊格式項目（三欄）視為「沒有開始時刻」：判準回 False，照常寫回
+    assert EN._newer_success((0.0, EN.KIND_SUCCESS, {}), 1000.0) is False
+    clock = _Clock()
+    inner = _chain([], {"MZ01": _ok_res("MZ01")})
+    _load(_funds("MZ01"), [], {"MZ01": _ok_res("MZ01")}, clock=clock)   # 先取得這一檔的鍵
+    (key,) = EN._MEMO
+    EN._MEMO.clear()                                                     # 不動世代，讓下一輪真的出門
+
+    def fetch_and_plant(chain_code, full_key):
+        out = inner(chain_code, full_key)
+        EN._MEMO[key] = (clock.t, EN.KIND_SUCCESS, {})                  # 取數途中，該鍵出現一筆舊三欄的成功項目
+        return out
+
+    out = EN.load_nav_dividend(_funds("MZ01"), now=NOW, clock=clock, chain_fetch=fetch_and_plant)
+    assert out["nav"]["rows"] and out["memo"]["MZ01"]["hit"] is False
+    assert len(EN._MEMO[key]) == 4                                       # 照常寫回，覆蓋了舊三欄項目
+
+
 @pytest.mark.parametrize("existing, started, want", [
     (None, 1000.0, False),
     ((0.0, EN.KIND_SUCCESS, {}, 1010.0), 1000.0, True),     # 較晚開始的成功：不覆蓋

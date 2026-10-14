@@ -101,6 +101,8 @@ _CCY_CLASS_TEXT = {CCY_UNRECOGNIZED: "認不出", CCY_NOT_PROVIDED: "沒提供",
 TEXT_UNBOUND = "MoneyDJ 頁面無法確認是本檔（表格內未見代碼）"
 TEXT_MGMT_FEE = "來源未提供經理費率（不以「最高經理費」代替）"
 TEXT_KEY_FAILED = "代碼無法對照：{reason}"
+TEXT_INCEPTION_TOO_EARLY = "成立日期 {raw} 早於 {year} 年，不採用（不猜是民國年、不換算）"
+TEXT_INCEPTION_FUTURE = "成立日期 {raw} 晚於台灣今天 {today}，不採用"
 
 # MoneyDJ 欄 → `declared_profile.MONEYDJ_LABELS` 的標籤
 _MDJ_LABEL = {"fund_name": "基金名稱", "ccy": "計價幣別", "dividend_policy": "配息頻率", "inception_on": "成立日期"}
@@ -215,31 +217,42 @@ def parse_inception(raw, *, today: date) -> Optional[str]:
     兩組稽核獨立建議放寬。收緊的用意（擋 `strptime` 自己會收的內部空白，例 `2012/03/ 5`）照舊成立、照舊擋。
     同一輪新增上限：不晚於台灣今天（成立日期不可能在未來）。
     ⚠️ MoneyDJ 真實頁面的月日補不補零，**未以真實樣本驗證**（待 #961 探測報告）。"""
+    return _check_inception(raw, today)[0]
+
+
+#: 成立日期不採用的三種原因（`_check_inception` 的第二個回傳值）。
+INCEPTION_UNRECOGNIZED = "unrecognized"   # 字樣認不出，或日期不存在（2018/02/30）
+INCEPTION_TOO_EARLY = "too_early"         # 認得，但年份早於 MIN_INCEPTION_YEAR
+INCEPTION_FUTURE = "future"               # 認得，但晚於台灣今天
+
+
+def _check_inception(raw, today: date):
+    """→ `(ISO 或 None, None 或 INCEPTION_*)`。判準同 `parse_inception`；第二個值說明為什麼不採用。"""
     if not isinstance(today, date) or isinstance(today, datetime):
         raise TypeError(f"today 須為 datetime.date（不是 datetime；收到 {type(today).__name__}）")
     if not isinstance(raw, str):
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     text = raw.strip()
     sep = text[4] if len(text) > 4 else None
     if sep not in _INCEPTION_SEPARATORS:
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     parts = text.split(sep)
     if len(parts) != 3:
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     year, month, day = parts
     if len(year) != 4 or not 1 <= len(month) <= 2 or not 1 <= len(day) <= 2:
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     if not all(ch in _ASCII_DIGITS for ch in year + month + day):
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     if int(year) < MIN_INCEPTION_YEAR:
-        return None
+        return None, INCEPTION_TOO_EARLY
     try:
         parsed = datetime.strptime(f"{year}/{int(month):02d}/{int(day):02d}", "%Y/%m/%d").date()
     except ValueError:
-        return None
+        return None, INCEPTION_UNRECOGNIZED
     if parsed > today:
-        return None
-    return parsed.isoformat()
+        return None, INCEPTION_FUTURE
+    return parsed.isoformat(), None
 
 
 def taiwan_today(now: Optional[datetime] = None) -> date:
@@ -256,7 +269,15 @@ def _inception_cell(res: dict, today: date) -> dict:
     if decided is not None:
         return decided
     fetched = {"MoneyDJ": res.get("fetched_at")}
-    iso = parse_inception(raw, today=today)
+    iso, problem = _check_inception(raw, today)
+    # ~~認不出、早於 1900、晚於今天一律寫「成立日期字樣無法辨識」~~ → 2026-10-14 #965 小修（有意識的更正，
+    # 不是漏刪；決策者：AI 總管）：後兩種字樣其實認得，據實分開寫原因。
+    if problem == INCEPTION_TOO_EARLY:
+        return _cell(raw={"MoneyDJ": raw}, fetched_at=fetched,
+                     reason=TEXT_INCEPTION_TOO_EARLY.format(raw=raw, year=MIN_INCEPTION_YEAR))
+    if problem == INCEPTION_FUTURE:
+        return _cell(raw={"MoneyDJ": raw}, fetched_at=fetched,
+                     reason=TEXT_INCEPTION_FUTURE.format(raw=raw, today=today.isoformat()))
     if iso is None:
         return _cell(raw={"MoneyDJ": raw}, fetched_at=fetched, reason=f"成立日期字樣無法辨識：{raw}")
     return _cell(iso, STATUS_OK, sources=("MoneyDJ",), raw={"MoneyDJ": raw}, fetched_at=fetched)
