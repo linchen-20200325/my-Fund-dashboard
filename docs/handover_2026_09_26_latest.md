@@ -312,7 +312,7 @@
 | 2026-10-14 交接本（分支 `handover/2026-10-14`，`docs/handover_2026_10_14.md`） | 已被本檔取代（第五十七次更新整併，見〈第五十七次更新〉一）；分支暫留（`efeee8a`，本組 `git ls-remote` 實查） | 無 |
 | Phase 1.5（方向性判斷：規格／契約解除矛盾；客戶 2026-10-15 裁示 A+ 修正版） | ~~✅實作完成待稽核（第五十八次更新）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `629a6e0`），PR #969 draft；動 44（行內擴寫＋檔尾第七節第三小節之四）、52 Part C 註二、54、`ACCEPTANCE.md` 第六節、本交接本、五個 `ui_v2/*/logic.py` 的註解與 docstring、`tests/ui_v2/` 11 支現況守衛更名（其餘呼叫 `scan_forbidden` 的斷言未改名，見〈第五十八次更新〉二之 4）與 44 md5 守衛；畫面零變更（AST 去 docstring 後與 main 相同，本組實測）。本輪屬 A 級：因為改的是規格契約紅線與合規相關守衛的語意。兩組稽核已回報，同檔唯一一輪回修已完成（見〈第五十八次更新〉三）~~ → **✅ 已合併（第五十九次更新）**：merge commit `88e464c`（全長 `88e464c85ed919e096e3217d9c27dd45b2f55945`；parents `629a6e0`、`b89d2f6`；merged_at 2026-10-15T22:10:09Z）；合併前 head `b89d2f6` 上 Schema gate、Fast checks、Slow tests 三條 check-run 皆 success（本組 GitHub REST 實查）。兩組稽核結論以 merge commit 訊息為準：稽核 1（規格語意）驗 `4085e39`，必修 1 由 `4c93f2b` 修、複驗必修（行號）由 `b89d2f6` 修、該 delta 總管自驗；稽核 2（工程守衛）無必修，建議 1 由 `4c93f2b` 修、複驗無必修 | ~~總管複核回修 → final-head CI → 總管合併 → 交接本~~ → 無（Phase 2 見「Phase 2 批 1」列） |
 | 子法 1（`docs/v2/CONSTITUTION.md`）與 Phase 1.5 裁示的條款衝突（第五十八次更新） | 已登記，需走獨立正式修正程序（客戶裁示第 5 點：本批不改子法 1） | 見〈登記待辦〉第五十八次更新；修正字句須客戶核准 |
-| Phase 2 批 1（第五十九次更新：預覽側欄過時子句、持倉體檢套用值換頁、交接本） | 實作完成待稽核：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），draft PR（號碼見〈第五十九次更新〉）；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛。持倉體檢那一項重現結果為不成立，只補守衛、不改清單（見〈第五十九次更新〉一） | 稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併 → 交接本；其後批 2 |
+| Phase 2 批 1（第五十九次更新：預覽側欄過時子句、持倉體檢套用值換頁、交接本） | 實作完成待稽核：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛。持倉體檢那一項重現結果為不成立，只補守衛、不改清單（見〈第五十九次更新〉一） | 稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併 → 交接本；其後批 2 |
 | 遠端分支 `feat/exp-c2-ui-wiring`（#966 head） | #966 合併後被 GitHub 自動刪除（repo 設定 `delete_branch_on_merge` 為 true，本組 2026-10-15 GitHub REST 實查）；總管已用 `f6ca761` 重建（本組 `git ls-remote` 實查：`f6ca761`）（第五十八次更新） | 之後要保留的分支須手動重建或改設定；改 repo 設定須先問客戶 |
 
 #### 分支清理盤點（第四十一次更新）
@@ -545,7 +545,7 @@
 
 出處：main SHA、parents、merged_at、check-run 為本組 2026-10-15 `git fetch` 後以 `git log`、`git show` 與 GitHub REST 實查；#969 的稽核結論以 merge commit 訊息（`git log -1 --format=%B 88e464c`）為準，稽核報告原文不在 repo、本組未見全文；Phase 2 分批與待裁示 8 點為總管 2026-10-15 派工單轉達。本輪屬 A 級：因為動到預覽入口的程式狀態（側欄說明常數）與守衛測試；交接本與 54 為 C 級，跨級取最高。
 
-**一、#969 已合併、Phase 2 批 1**
+**一、#969 已合併、Phase 2 批 1**（分支 `ccr-8f3b9d52-xgnleg`，起點 main `88e464c`，PR #970，draft）
 
 1. **#969 已合併**：merge commit `88e464c`（parents `629a6e0`、`b89d2f6`；merged_at 2026-10-15T22:10:09Z）；合併前 head `b89d2f6` 上 Schema gate、Fast checks、Slow tests 三條 check-run 皆 success。main `88e464c` 的 push CI：Schema gate success（22:11:05Z 完成）、Fast checks success（22:23:32Z 完成）、Slow tests（informational）於 2026-10-15 22:33Z 本組查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）。main ＝ `88e464c`。54 §0 Phase 1.5 列、§7、§18、§19 同步為「✅ 已完成（#969 merge `88e464c`）」。
 2. **G1 預覽側欄說明過時**（`ui_v2/app_preview.py::PREVIEW_NOTE`）：「標的探索目前只接上選股池的基金代碼，其餘欄位顯示資料未備」自 #966（merge `dbb629c`）起與實況不符 —— 本組讀 `ui_v2/exp/source.py`：基本資料走 L2 `exp_profile`、淨值與配息走 L2 `exp_nav`（`_load_funds`）。處置：只刪該子句（連同前面的分號），前一句改由原句尾的句號收尾，**沒有新增任何字**；`tests/ui_v2/test_preview_entry.py::test_側邊欄說明的字面` 改驗該句不再出現。突變：把那一句加回去 → 該測試紅。檔頭表格與 `PREVIEW_NOTE` 上方註解就地補狀態更新。
@@ -1523,7 +1523,7 @@
 #### A. Current Executable State
 
 - **main**：~~`629a6e0`（PR #968 的 merge commit）；三條 check-run 皆 success。~~ → `88e464c`（PR #969 的 merge commit；第五十九次更新，狀態更新，不是漏刪）。
-- **open／draft PR 與 head**：~~PR #969 `ccr-8f3b9d52-xgnleg`（Phase 1.5 ＋ 本交接本；A 級；draft；起點 main `629a6e0`）~~ → **#969 已合併（merge `88e464c`；第五十九次更新，狀態更新，不是漏刪）**；現行 open PR 為 Phase 2 批 1（同分支名，起點 main `88e464c`，見〈第五十九次更新〉）；舊 draft #839、#837、#836、#791（客戶指示不動）。
+- **open／draft PR 與 head**：~~PR #969 `ccr-8f3b9d52-xgnleg`（Phase 1.5 ＋ 本交接本；A 級；draft；起點 main `629a6e0`）~~ → **#969 已合併（merge `88e464c`；第五十九次更新，狀態更新，不是漏刪）**；現行 open PR 為 #970 Phase 2 批 1（同分支名，起點 main `88e464c`，見〈第五十九次更新〉）；舊 draft #839、#837、#836、#791（客戶指示不動）。
 - **分支**：`ccr-8f3b9d52-xgnleg`（Phase 1.5）；`feat/exp-c2-ui-wiring` ＝ `f6ca761`（#966 合併後被自動刪除、總管重建）；`handover/2026-10-14`、`wip/exp-c2-ui-wiring-round2-unaudited`、探測分支四條（同第五十七次）。不大規模清理分支。
 - **目前 milestone**：~~Phase 1.5（規格／契約解除矛盾）實作完成、待稽核 → 其後 Phase 2。~~ → Phase 1.5 ✅ 已完成（#969）；Phase 2 批 1 進行中（第五十九次更新，狀態更新，不是漏刪）。路線見 `docs/v2/54_phase7_design_backlog.md` §0。
 - **可直接執行的下一步**：
@@ -3367,7 +3367,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **幣別 fail closed（五顆）**（2026-10-10）：本機分支 `local-ccy`（未 push、未開 PR）；容器結束即遺失，唯一保存為 `docs/wip/currency_fail_closed_549876c_efb3fa2.patch`。見〈第四十七次更新〉四。→ **2026-10-10 狀態更新，不是漏刪**（上句在寫下當時為真）：該 patch 已於 2026-10-10 依客戶裁示自本分支移除；內容已在 main `549876c` 上以 `git am` 重建為 PR #923（分支 `ccr-42040ab6-csywcs`）。patch 原檔仍可由 `git show 5c21b1c:docs/wip/currency_fail_closed_549876c_efb3fa2.patch` 取得。 → **2026-10-11 第四十八次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：PR #923 已合併（merge commit `4cd7bf8`），移到第 4 節。出處：本組實查。
 
 ~~- **Phase 1.5 規格／契約解除矛盾＋交接本第五十八次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `629a6e0`），PR #969（draft）；兩組獨立稽核待派、未合併。見 ★ 表 Phase 1.5 列。~~ → **已合併（第五十九次更新，狀態更新，不是漏刪）**：見第 4 節 #969。
-- **Phase 2 批 1＋交接本第五十九次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），draft PR；稽核待派、未合併。見 ★ 表「Phase 2 批 1」列與〈第五十九次更新〉。
+- **Phase 2 批 1＋交接本第五十九次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；稽核待派、未合併。見 ★ 表「Phase 2 批 1」列與〈第五十九次更新〉。
 
 ## 4. 已完成（已 merge）
 
@@ -4290,7 +4290,7 @@ B. 到達必須交給協作助手複驗、而且沒有其他可自主執行工�
 
 | 日期 | 內容 |
 |---|---|
-| 2026-10-15 | 第五十九次更新（main `88e464c`，分支 `ccr-8f3b9d52-xgnleg`，Phase 2 批 1 draft PR；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛，交接本與 54 為 C 級、跨級取最高）：檔頭時間；#969 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點；新增〈第五十九次更新〉（G1、G2 重現不成立、Phase 2 計畫）與〈登記待辦〉待裁示 8 點；54 §0／§7／§18／§19 Phase 1.5 改為已完成。 |
+| 2026-10-15 | 第五十九次更新（main `88e464c`，分支 `ccr-8f3b9d52-xgnleg`，PR #970；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛，交接本與 54 為 C 級、跨級取最高）：檔頭時間；#969 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點；新增〈第五十九次更新〉（G1、G2 重現不成立、Phase 2 計畫）與〈登記待辦〉待裁示 8 點；54 §0／§7／§18／§19 Phase 1.5 改為已完成。 |
 | 2026-10-15 | 第五十八次更新（main `629a6e0`，分支 `ccr-8f3b9d52-xgnleg`，PR #969；本輪屬 A 級：因為改的是規格契約紅線與合規相關守衛的語意）：檔頭時間；#968 合併寫入第 1 節 `origin/main`、★ 表；新增〈第五十八次更新〉與第 1 節〈第五十八次更新存檔點〉；Phase 1.5 列、子法 1 衝突列、`feat/exp-c2-ui-wiring` 重建列；第 3 節；〈登記待辦〉子法 1 衝突條款與 head 分支自動刪除；第 5 節〈已裁示（2026-10-15）〉第 61 點；第 7 節新增〈客戶 2026-10-15 裁示：Phase 1.5（A+ 修正版）〉逐字全文、〈禁詞〉就地補註；〈第五十四次更新〉裁示 2 與三處引文就地補註 |
 | 2026-10-15 | 第五十七次更新（main `dbb629c`，分支 `ccr-8f3b9d52-xgnleg`，PR #968；本輪屬 C 級：因為只改文件 —— 本交接本與 `docs/v2/54_phase7_design_backlog.md`）：檔頭時間；#951～#967 與 #966 合併寫入第 1 節 `origin/main`、★ 表與第 4 節；★ 表「目前等客戶的」「下一步」舊句劃線改新句，新增五列；第 1 節新增〈第五十七次更新存檔點〉（A. Current Executable State／B. Deferred / Future Work）；新增〈第五十七次更新〉；2026-10-14 交接本整併（第 5 節〈已裁示（2026-10-14）〉第 49～60 點、第 7 節新節、〈登記待辦〉新條），註明該檔已被本檔取代、分支暫留；〈總管錯誤紀錄〉新增三筆（總管 2026-10-15 自陳）；〈未來待辦〉Phase 7 小節缺口改為已補。出處：總管 2026-10-15 轉達；SHA、PR、CI 與分支為本組實查。 |
 | 2026-10-13 | 第五十六次更新（main `3801287`，分支 `docs/handover-56`；本輪屬 C 級：因為只改交接本一檔）：檔頭時間；#948、#949、#950 合併寫入第 1 節與 ★ 表（兩條「未合併」列改劃線並更新、新增四列）；客戶 2026-10-13 新裁示三則寫入〈第五十六次更新〉一與第 5 節〈已裁示（2026-10-13）〉第 46～48 點；「目前等客戶的」「下一步」舊句劃線改新句；新增存檔點；登記已知未處理六項；遠端分支已刪（issue events 實查），總管轉述「未刪」劃線註明。第二顆依兩組稽核（無 blocking）回修七點：裁示（三）補「新的」、2／7 常數出處與 `shared/data_quality.py` 的 `stale` 用法、遠端分支已刪升為實查（issue events）、【規格未定】列 MKT-4 劃線、hld 措辭、〈第五十五次更新〉二加狀態註記、`3801287` CI 更新。出處：總管 2026-10-13 轉達；SHA、CI、patch-id 與遠端分支為本組實查。 |
