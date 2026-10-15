@@ -549,6 +549,9 @@ def save_entries(keys, values, *, fields=(), raw=None, settings_error=None) -> l
     fields：該塊畫上去的輸入欄節點（`logic._field`；帶 `_value` 已存值與 `value_text` 顯示字串）。
     raw：`{鍵: 試算表上的原字串或 None}`（`source.load_live` 的 `notes["setting_raw"]`）。
     `error` 非 None ⇒ **不寫**：解析不過時是 `BadSettingValue` 原文。
+    `skip` 為真 ⇒ **不寫、也不算失敗**：要寫的是清除（None），而 `raw` 明載該鍵本來就沒有值 ——
+    使用者沒填、試算表上也沒有，寫下去只會多一列空值（2026-10-15 Phase 2 批 2 重現後修正）。
+    `raw` 沒帶那個鍵 ⇒ 不知道有沒有值 ⇒ 不跳過（照舊寫清除，不猜）。
     settings_error：`user_setting` 讀失敗的訊息原文（`logic.settings_failure`）。讀失敗時畫面上沒有已存值可編，
     寫了就是拿空白去蓋掉讀不到的真值 ⇒ 每一鍵都不寫、`error` 填這個原文，交 `run_saves` 記成存檔失敗
     （卡片層既有的「存檔寫入失敗：…」）—— 不讓「按了沒反應」看起來像成功（`CLAUDE.md` §1）。
@@ -557,19 +560,22 @@ def save_entries(keys, values, *, fields=(), raw=None, settings_error=None) -> l
         if key not in SAVE_WIRED_KEYS:
             raise ValueError(f"{key} 的寫入尚未接上")
     if settings_error is not None:
-        return [{"key": key, "value": None, "value_kind": VALUE_KINDS[key], "error": settings_error}
-                for key in keys]
+        return [{"key": key, "value": None, "value_kind": VALUE_KINDS[key], "error": settings_error,
+                 "skip": False} for key in keys]
     by_name = {field["name"]: field for field in fields}
+    raw = raw if raw is not None else {}
     out = []
     for key in keys:
-        text = _COMPOSERS[key](values, by_name, raw if raw is not None else {})
+        text = _COMPOSERS[key](values, by_name, raw)
         error = None
         if text is not None:
             try:
                 _PARSERS[key](text, key)
             except BadSettingValue as exc:
                 error = str(exc)
-        out.append({"key": key, "value": text, "value_kind": VALUE_KINDS[key], "error": error})
+        skip = text is None and key in raw and raw[key] is None
+        out.append({"key": key, "value": text, "value_kind": VALUE_KINDS[key], "error": error,
+                    "skip": skip})
     return out
 
 
@@ -578,10 +584,14 @@ def run_saves(entries, save) -> dict:
 
     save：`source.save_setting(鍵, 值或 None, value_kind)`，回 L2 `save_setting_for_page` 的 dict。
     一鍵失敗不擋另一鍵（客戶 2026-10-09 裁示：已成功的鍵保留，不 rollback）。
+    `skip` 為真的鍵不呼叫寫入、記為 None（沒有東西要寫；之前留下的失敗訊息一併消掉，因為畫面上已回到與表上一致）。
     寫入以外的例外照樣往上拋，不吞。
     """
     results = {}
     for entry in entries:
+        if entry.get("skip"):
+            results[entry["key"]] = None
+            continue
         if entry["error"] is not None:
             results[entry["key"]] = entry["error"]
             continue
