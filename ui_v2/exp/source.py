@@ -96,14 +96,21 @@ def _load_funds(codes, settings, settings_error, values) -> dict:
     mask = lambda text: masking.mask_message(text, values)  # noqa: E731
     # 同一個當下時刻餵給基本資料、淨值與畫面的「台灣今天」（三處判同一天，測試可重現）。
     now = datetime.now(live.TAIPEI)
+    # ~~try「只包住讀取本身（L1 例外 fund_keys 不攔）」~~ → 2026-10-15 #966 修正輪 3 據實更正（稽核 B 複驗；有意識的更正，
+    # 不是漏刪；決策者：AI 總管；只改註解、行為不變）：try 包住的是**整支** `fund_keys.resolve_full_keys` —— 讀對照表
+    # （L1 例外 fund_keys 不攔）之外，還有逐檔的 `_resolve_one`。所以逐檔解析的程式錯誤也會落到下面這個 except，
+    # 被歸為「代碼對照表讀取失敗」：畫面整批 ⛔（遮蔽後原文）、log 附遮蔽後的 traceback（可據以定位到出錯那一行），
+    # 不是吞錯。**歸類不精確屬已知限制，已登記**；本輪刻意不縮 try 範圍（避免行為變更）。
     try:
-        resolved = fund_keys.resolve_full_keys(list(codes))     # 只包住讀取本身（L1 例外 fund_keys 不攔）
+        resolved = fund_keys.resolve_full_keys(list(codes))
     except Exception as exc:  # noqa: BLE001 —— 轉成畫面上的 ⛔ 取數失敗（遮蔽後原文）並記 log，不是吞掉
         message = mask(f"代碼對照表讀取失敗：{type(exc).__name__}: {exc}")
         # ~~`_LOG.error(..., message)`（沒有 traceback）~~ → 2026-10-15 #966 修正輪 3（獨立稽核小修；有意識的更正，
         # 不是漏刪；決策者：AI 總管）：補上 traceback，查錯才找得到出錯的那一行。
         # ⚠️ 刻意不用 `_LOG.exception`／`exc_info=True`：那會把**未遮蔽**的例外原文（可能含秘密值）原樣寫進 log
-        # （ACCEPTANCE 七）；改成自己格式化 traceback、先遮蔽再寫。try 只包住讀取本身（範圍不變）。
+        # （ACCEPTANCE 七）；改成自己格式化 traceback、先遮蔽再寫。~~try 只包住讀取本身（範圍不變）。~~
+        # → 同日據實更正（有意識的更正，不是漏刪）：try 範圍本輪未變，但它涵蓋整支 `resolve_full_keys`（含逐檔解析），
+        # 不只讀取本身；見上方 try 前的註解。
         trace = mask("".join(traceback.format_exception(exc)))
         _LOG.error("exp 代碼對照表讀取失敗，整批不取數：%s\n%s", message, trace)
         return live.wiring_failed(message)
