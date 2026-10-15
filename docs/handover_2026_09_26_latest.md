@@ -3081,6 +3081,15 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **52「待客戶確認」**（2026-10-05 #896 合併後新增）：延到圖表設計階段，屆時逐條附總管建議請示客戶；在那之前只登記。見〈登記待辦〉「本輪留下的待辦」第 2 條。
 - ⛔ 本節為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
 
+#### Phase 7 設計方向 — Design Backlog
+
+- **檔案**：`docs/v2/54_phase7_design_backlog.md`（2026-10-15 建立）。性質為 Design Backlog／Research Hypotheses，**不是 Production Specification**；檔內一切具體數字、公式、門檻皆標 `Candidate / Unvalidated / Non-production`，權重、門檻、veto 條件一律未核准。出處：客戶已確認的 Phase 7 設計方向，經總管 2026-10-15 派工轉達（對話中，repo 內無原文）。
+- **狀態**：已登記，未核准。依客戶路線圖，Phase 5（Read-only Data Gap Audit）完成且客戶正式核准後，才在 Phase 7 據以制定正式規格；Phase 8 才實作。
+- **已知缺口**：Phase 5 的「17 項盤點清單」本體與 §9 的「evidence 清單」細目未隨派工轉達，54 未自行補列，待總管提供客戶原文後補入。
+- **已知張力**：54 §7（Mean-Reversion Guard）與 44 §1.2、52 Part C 紅線衝突，待 Phase 1.5（獨立 PR，只做契約／文件／tests 一致性）處理並經客戶核准；在那之前現行紅線照舊有效。其餘張力見 54 §19（文件組辨識，非窮舉）。
+- **用詞**：54 的「Phase 7」與 `BACKLOG.md` 的「phase 7 (v19.93)」無關；54 的「股份級別」不是核心／衛星「級別」。
+- ⛔ 本節為登記，**不構成動工授權**（`CLAUDE.md` §-1）。
+
 ## 3. 已完成（未 merge）
 
 - ~~目前無。~~

@@ -2433,6 +2433,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/51_cleanup_plan.md",
     "docs/v2/52_ui_design_spec.md",
     "docs/v2/53_nav_source_plan.md",
+    "docs/v2/54_phase7_design_backlog.md",
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
