@@ -777,8 +777,13 @@ def test_來源徽章中性不著色():
 # ───────────────────────── 紅線字表掃描 ─────────────────────────
 
 
-def test_紅線字表_方向詞與箭頭一個也對不上():
-    """`44` 1.2 節判準。掃的是渲染用的全部文案字串。"""
+def test_現況守衛_目前B線v1沒有未授權方向性輸出_方向詞與箭頭一個也對不上():
+    """現況守衛（2026-10-15 客戶裁示 Phase 1.5 起）：目前 B 線 v1 沒有未授權方向性輸出 —— 渲染用的文案字串對不上方向詞與箭頭（`44` 1.2 節層級檢查的現行寫法）。
+
+    這不是「方向性判斷永久封死」：日後經正式規格核准、證據足夠、新鮮度與出處合格的方向性輸出塊，
+    走帶證據的准入路徑進畫面（`44` 第七節第三小節之四），不是把字從字表裡拿掉。
+    箭頭照舊不准（不得偷偷取代尚未核准的方向性模型）。
+    """
     for name in ("full", "srcmiss", "bizexc", "fetchfail", "nothr", "empty", "onenav"):
         model = logic.build_page_model(**fixtures.scenario(name))
         assert logic.scan_forbidden(logic.collect_ui_strings(model)) == {}, name
@@ -810,7 +815,7 @@ def test_持有起始日不寫成首次買進日():
 
 
 def test_本頁不輸出目標價與預期報酬():
-    """`44` 1.2 禁輸出。"""
+    """`44` 1.2 禁輸出其餘三項（2026-10-15 照舊保留：目前沒有可靠模型支持，不得亂猜）；再平衡屬禁止自動交易，照舊。"""
     model = logic.build_page_model(fixtures.dataset_full())
     joined = "".join(logic.collect_ui_strings(model))
     for word in ("目標價", "預期報酬", "最佳配置", "再平衡"):

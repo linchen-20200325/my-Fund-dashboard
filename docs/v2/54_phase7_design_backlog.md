@@ -11,14 +11,14 @@
 - **標記慣例**：本檔中任何具體數字、公式或門檻，一律在旁標 `Candidate / Unvalidated / Non-production`。帶這個標記的東西是**研究假說**，不是規則、不是預設值、不得寫進程式當常數。
   - 路線圖（§0）裡的批量與寬度（Phase 4 每批上限、Phase 3 的 390px）是客戶描述的驗收／施工方式，本檔只記錄；它們何時生效，以各該 Phase 的正式核准為準。
 - **權重、門檻、veto 條件、分數**：本檔一律**未核准、未定值**。本檔出現的任何數字都不是它們的值。
-- **禁詞**：本檔遵守交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉（劃線裡的字也算），不寫那八個詞的字面；需要時改用中性說法（例：「調整方向」「增加／降低曝險」「候選」）。
+- **禁詞**：本檔遵守交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉（劃線裡的字也算），不寫那八個詞的字面；需要時改用中性說法（例：「調整方向」「增加／降低曝險」「候選」）。（2026-10-15 補註：詞表後四個自 Phase 1.5 起不是永久禁詞；本檔照舊不寫字面，不回頭改。）
 
 ## §0 路線圖
 
 | Phase | 內容 | 本檔角色（文件組加註） |
 |---|---|---|
 | 1 | #966（exp 正式頁接上 C2 資料層）。✅ 已完成（#966 merge `dbb629c`） | 無 |
-| 1.5 | 移除舊「全面禁止方向性投資建議」規則。**獨立 PR，只做契約／文件／tests 一致性。** | 本檔 §7 標出的張力待此處理（依客戶方向）；§19 其餘張力是否一併處理，未定；在 1.5 完成並經客戶核准前，現行紅線照舊有效 |
+| 1.5 | 移除舊「全面禁止方向性投資建議」規則。**獨立 PR，只做契約／文件／tests 一致性。** → ✅ **2026-10-15 規格／契約解除矛盾已完成**（客戶裁示 A+ 修正版；合併狀態以交接本 ★ 表為準） | ~~本檔 §7 標出的張力待此處理（依客戶方向）；§19 其餘張力是否一併處理，未定；在 1.5 完成並經客戶核准前，現行紅線照舊有效~~ → 已處理：§7 與 §19 前三列（見兩處補註）；§19 第四列不是方向性禁令，留 Phase 7（狀態更新，不是漏刪） |
 | 2 | B 線五頁真資料 preview | 無 |
 | 3 | 客戶實際使用／視覺／390px 手機 UX 驗收 | 無 |
 | 4 | 修驗收問題（每批 ≤3） | 無 |
@@ -92,7 +92,7 @@
 1. **Hard Safety／Veto**：critical freshness、identity mismatch、critical source conflict、thesis invalidation、data-quality failure。
 2. **Evidence Score**（加減分、權重未定）：fund quality、Benchmark／peer RS、structural trend、quantitative proxy、partial look-through、price position、FX、portfolio overlap、allocation fit、transaction cost、cash opportunity cost。
 3. **Execution Layer**：分開「應不應調整」與「怎麼執行」。涉及 TWD Cash／USD Cash／Fund A／Fund B、switching、same-umbrella、channel、成本、settlement、Pending、In-Transit、capital destination、FX conversion、cash drag。**不得假設「降低曝險＝換回 TWD」。**
-4. **Confidence／Explanation**：completeness、missing、stale、source failure、evidence conflict、look-through coverage、confidence、invalidation、supporting evidence。資料不足時顯示「⬜ 無法形成可靠判斷」。
+4. **Confidence／Explanation**：completeness、missing、stale、source failure、evidence conflict、look-through coverage、confidence、invalidation、supporting evidence。資料不足時顯示「⬜ 無法形成可靠判斷」。（2026-10-15 補註：上句是客戶 Phase 7 方向原話，照留；Phase 1.5 另訂現行契約字樣 `⬜ 無法判定（資料未備／證據不足）`（44 第七節第三小節之四）。兩句並存，Phase 7 正式規格時對齊，待客戶裁示。）
 
 - **具體的 veto 條件、score、weight、threshold 一律未核准。**
 
@@ -143,6 +143,7 @@
 - 價格可能領先落後的揭露資料；**不能只用低頻基本面當 fuse**。
 - RS 可作為**候選即時 Guard**，須回測。
 - ⚠️ **據實標註（客戶要求）**：本主題與現行 `docs/v2/44_fund_ui_ssot.md` §1.2（呈現層禁令）、`docs/v2/52_ui_design_spec.md` Part C（禁用清單）的紅線**衝突**。待 Phase 1.5 處理並經客戶核准；在那之前，44 §1.2 與 52 Part C 照舊有效，本節不得被引用為放寬它們的依據。
+  → **2026-10-15 已處理（Phase 1.5，客戶裁示 A+ 修正版；狀態更新，不是漏刪；決策者：客戶）**：44 §1.2 禁方向詞、禁輸出「買賣指示」那一項與 §1.2 節層級檢查前半已改寫為「目前 B 線 v1 現況＋准入條件」，52 Part C 已加註二。准入條件：正式規格經客戶核准、資料與 evidence 足夠、freshness／provenance 合格（44 第七節第三小節之四）。禁箭頭、顏色不得成為唯一資訊載體、評比語意照舊保留。本節仍是 Research Hypothesis，**不構成動工授權**；Phase 7 正式規格核准前，本節不得被引用為已可實作的依據。
 
 ## §8 產業／政策 Evidence
 
@@ -237,7 +238,7 @@
 | §4 | NAV／Return Series 契約 | 否 | 是 | 是 |
 | §5 | Look-through 降級 | 否 | 是 | 是 |
 | §6 | 價格模型 | 否 | 是 | 是 |
-| §7 | Mean-Reversion Guard | 否 | 是 | 是（另需 Phase 1.5） |
+| §7 | Mean-Reversion Guard | 否 | 是 | 是（~~另需 Phase 1.5~~ → Phase 1.5 已於 2026-10-15 完成規格／契約解除矛盾） |
 | §8 | 產業／政策 Evidence | 否 | 是 | 是 |
 | §9 | 基金候選／替代引擎 | 否 | 是 | 是 |
 | §10 | FX／Cash／Execution | 否 | 是 | 是 |
@@ -259,3 +260,10 @@
 | `docs/v2/44_fund_ui_ssot.md` §1.2 | §6、§7、§14 | 禁方向詞、禁顏色暗示方向、禁輸出買賣指示 |
 | `docs/v2/52_ui_design_spec.md` Part C 第 2、5、6、8 條 | §2、§6、§9、§14 | AI 多空判斷、Switching Engine 的 From → To recommendation、任何預測、Explicit Action Thresholds |
 | `docs/v2/52_ui_design_spec.md` Part C 第 7 條 | §11 | Intra-family free switch；本檔 §11 把 same-umbrella 列為候選因素（但不得預設加分） |
+
+→ **2026-10-15 Phase 1.5 處理狀態（狀態更新，不是漏刪；決策者：客戶）**：
+- 第一列（44 G2、G3）：44 內改為現況讀法（行內讀法註記，子法 1 原文未改）；子法 1 與新裁示的衝突另走正式修正程序，登記於交接本〈登記待辦〉第五十八次更新。
+- 第二列（44 §1.2）：禁方向詞、禁輸出買賣指示改寫為現況；禁箭頭與禁顏色暗示方向照舊（不得偷偷取代尚未核准的方向性模型）。
+- 第三列（52 Part C 第 2、5、6、8 條）：第 2 條、第 5 條的轉換方向那一半、第 8 條改讀為現況；第 6 條（任何預測）保留。
+- 第四列（52 Part C 第 7 條）：不是方向性禁令，本次未處理，留 Phase 7。
+- 上表左欄條文自此以各該處的現行讀法為準；本補註同屬文件組整理，未經第二組驗證。

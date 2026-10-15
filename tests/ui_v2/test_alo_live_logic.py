@@ -273,7 +273,13 @@ def test_停用原因刻意不沿用mkt那一句_因為那一句在本頁是假�
                                          "alo_basis", "alo_bucket_names"}
 
 
-def test_正式模式的模型零禁詞_零方向詞零箭頭():
+def test_現況守衛_目前B線v1沒有未授權方向性輸出_正式模式的模型零方向詞零箭頭_按鈕零禁詞():
+    """現況守衛（2026-10-15 客戶裁示 Phase 1.5 起）：目前 B 線 v1 沒有未授權方向性輸出 —— 正式模式的模型文字對不上方向詞、語氣詞與箭頭；按鈕標籤四個禁詞照舊不准。
+
+    這不是「方向性判斷永久封死」：日後經正式規格核准、證據足夠、新鮮度與出處合格的方向性輸出塊，
+    走帶證據的准入路徑進畫面（`44` 第七節第三小節之四），不是把字從字表裡拿掉。
+    箭頭照舊不准（不得偷偷取代尚未核准的方向性模型）。
+    """
     for name in fixtures.ALL_SCENARIO_NAMES:
         text = "\n".join(_all_strings(_live_model(name)))
         for word in logic.FORBIDDEN_DIRECTION_WORDS + logic.FORBIDDEN_ADVICE_WORDS:
