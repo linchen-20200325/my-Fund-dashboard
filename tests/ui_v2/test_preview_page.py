@@ -18,7 +18,8 @@
   - 各頁程式自己寫進 session、換頁就要清的兩份狀態（`app_preview._PAGE_STATE_TO_DROP`），各附對照組：
     資產配置的存檔失敗帳（只讓容許帶那一鍵失敗）、市場總覽「套用」的值（回來要與新開一模一樣）。
 - 誤導文字：~~側邊欄寫明標的探索為示意資料；標的探索頁沒有 `st.success`，除了示意資料標示那一句否定句，
-  主畫面不出現「真實資料」四個字。~~ → 2026-10-13：側邊欄寫明標的探索只接上代碼；五頁畫面都不得有示意字樣。
+  主畫面不出現「真實資料」四個字。~~ → 2026-10-13：~~側邊欄寫明標的探索只接上代碼；~~五頁畫面都不得有示意字樣
+  （2026-10-15：#966 起標的探索也接上基本資料與淨值，側邊欄那一句已刪；狀態更新，不是漏刪）。
 
 **換頁一律走真的 `st.navigation`**：腳本呼叫 `app_preview.main()`，以 `AppTest._page_hash`
 （`calc_hash(url_path)`，與 `st.Page._script_hash` 同一個算法）選頁。⚠️ `_page_hash` 是 AppTest 的私有屬性
@@ -502,6 +503,77 @@ def test_市場總覽_session裡的套用值不進正式結果(vix_saved):
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert _mkt_screen(at) == fresh
+
+
+# ═══════════════════════ 持倉體檢「套用」的值：換頁再回來，畫面與計算一致（2026-10-15 Phase 2 批 1） ═══════════════════════
+#
+# 盤點時懷疑：持倉體檢「套用」（`ui_v2/hld/page.py::_APPLIED_KEY`）是頁面程式自己存進 session 的，
+# 預覽入口換頁不清它；輸入欄離開這一頁會被清掉（檔頭那條 widget id 規則）→「輸入欄空白、計算仍用看不見的舊區間」，
+# 與 2026-10-12 市場總覽那一份同型。**本組重現的結果是不成立**：回來那一次欄位還沒畫過，
+# `ui_v2/hld/logic.py::_build_page_model` 以**已套用的區間**當欄位的值（`fields = ... else {"window_start": applied_window[0], ...}`），
+# 門檻列的格子也照已套用的門檻畫 —— 輸入欄回填套用值，與計算一致。故預覽入口的換頁清單**不加**這一格。
+# 本條守的是「一致」本身，不釘套用值留不留（那屬客戶裁示）：回來後要嘛整組是套用的（欄位＝套用值、卡＝套用結果），
+# 要嘛整組是新開的（欄位＝新開值、卡＝新開結果）；兩邊各取一半就紅。
+
+_HLD_NEW_START = "2026-06-01"
+
+
+@pytest.fixture
+def hld_dataset(monkeypatch, no_secrets):
+    """持倉體檢有一份算得出數字的資料（假資料 `full` 去掉「（示意）」字樣、DIRECT 改掛既有保單；不打網路）。
+
+    體例照 `tests/ui_v2/test_hld_live_page.py::_apply_app`：today 固定 2026-09-28（淨值恰 10 天、照算）。
+    預覽入口每次渲染才讀 `hld_source.load_live`，換掉模組屬性即可。"""
+    import datetime
+
+    from ui_v2.hld import fixtures as hld_fixtures
+    from ui_v2.hld import logic as hld_logic
+
+    def scrub(node):
+        if isinstance(node, str):
+            return node.replace(hld_logic.HINT, "")
+        if isinstance(node, dict):
+            return {k: scrub(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [scrub(v) for v in node]
+        return node
+
+    dataset = scrub(hld_fixtures.scenario("full")["dataset"])
+    for holding in dataset["holding"]:
+        if holding["policy_id"] == "DIRECT":
+            holding["policy_id"] = "P-001"
+    live_args = {
+        "direct_policy_id": "DIRECT",
+        "today": datetime.date(2026, 9, 28),
+        "nav_provenance": {row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]},
+    }
+    monkeypatch.setattr(hld_source, "load_live", lambda: {"dataset": dataset, "live_args": live_args})
+
+
+def _hld_cards(at):
+    """層 2 三張核心卡（正式結果）那幾段 HTML。"""
+    return [e.value for e in at.main.markdown if 'class="hld-card-code"' in e.value]
+
+
+def _hld_field(at):
+    return at.text_input(key="hld4_window_start").value
+
+
+def test_持倉體檢_套用後換頁再回來_輸入欄與核心卡用的是同一個區間(hld_dataset):
+    at = _go(_app_test(), "hld")
+    fresh_field, fresh_cards = _hld_field(at), _hld_cards(at)
+    assert fresh_cards, "抓不到核心卡 —— 下面的比較會變成空比"
+    assert fresh_field and fresh_field != _HLD_NEW_START, fresh_field
+    at.text_input(key="hld4_window_start").input(_HLD_NEW_START)
+    apply_key = next(b.key for b in at.main.button if b.label == "套用")
+    at.button(key=apply_key).click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    applied_cards = _hld_cards(at)
+    assert applied_cards != fresh_cards, "套用新區間沒有改到核心卡 —— 下面的比較驗不到任何東西"
+    _go(at, "mkt")
+    _go(at, "hld")
+    shown = (_hld_field(at), _hld_cards(at))
+    assert shown in ((_HLD_NEW_START, applied_cards), (fresh_field, fresh_cards)), shown[0]
 
 
 def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
