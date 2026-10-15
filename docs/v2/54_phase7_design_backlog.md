@@ -17,7 +17,7 @@
 
 | Phase | 內容 | 本檔角色（文件組加註） |
 |---|---|---|
-| 1 | #966（exp 正式頁接上 C2 資料層，draft） | 無 |
+| 1 | #966（exp 正式頁接上 C2 資料層）。✅ 已完成（#966 merge `dbb629c`） | 無 |
 | 1.5 | 移除舊「全面禁止方向性投資建議」規則。**獨立 PR，只做契約／文件／tests 一致性。** | 本檔 §7 標出的張力待此處理（依客戶方向）；§19 其餘張力是否一併處理，未定；在 1.5 完成並經客戶核准前，現行紅線照舊有效 |
 | 2 | B 線五頁真資料 preview | 無 |
 | 3 | 客戶實際使用／視覺／390px 手機 UX 驗收 | 無 |
@@ -29,7 +29,27 @@
 
 ### §0.1 Phase 5 Data Gap Audit 的範圍（只盤點，不接來源）
 
-- **盤點清單**：客戶方向為 **17 項盤點清單**。⚠️ **清單本體未隨本次派工轉達**，本檔不自行補列；待總管提供客戶原文後補入本節。
+- **盤點清單（17 項）**：
+  1. NAV／基本資料
+  2. Fund／Share Class／ISIN／Currency／Dist-Acc／Hedge 等 identity capability
+  3. Top holdings／partial holdings
+  4. 官方產業配置
+  5. Benchmark
+  6. peer／fund universe
+  7. USD/TWD 現貨與歷史
+  8. manager／strategy
+  9. company fundamentals
+  10. company → industry／theme mapping
+  11. macro
+  12. policy／regulation evidence
+  13. fund flows
+  14. historical data／backtest capability
+  15. transaction／switching／settlement 資料能力
+  16. distribution／return-of-capital 類資料能力
+  17. 各資料來源 publication cadence／publication lag
+  - Audit 要如實回答：目前可取得的是 full holdings、partial／Top holdings、official industry allocation，或完全沒有。
+  - 出處：客戶原文，經總管 2026-10-15 第二次派工照錄轉達（第一次派工漏給，見交接本第 2 節〈總管錯誤紀錄〉2026-10-15）。
+  → **2026-10-15 補入，狀態更新，不是漏刪**：本節初版寫「清單本體未隨本次派工轉達，本檔不自行補列」，在寫下當時為真。
 - **每一項要記錄的屬性**：
   1. authority／reliability
   2. license／ToS
@@ -140,7 +160,9 @@
   1. 使用者主動找；
   2. 系統發現結構性機會；
   3. 替換現有持有。
-- evidence 清單：客戶方向列有「evidence 清單」一項；⚠️ **細目未隨本次派工轉達**，本檔不自行補列，待總管提供客戶原文後補入本節。
+- 候選 evidence：fund quality、benchmark／peer、actual／partial holdings、industry fit、portfolio overlap、allocation fit、NAV price、FX、transaction／switching reality、data confidence。
+  - 出處：客戶原文，經總管 2026-10-15 第二次派工照錄轉達。
+  → **2026-10-15 補入，狀態更新，不是漏刪**：本節初版寫「細目未隨本次派工轉達，本檔不自行補列」，在寫下當時為真。
 - **目標是「適合目前 portfolio 的候選」，不是熱門排行榜。**
 - **AI 不得把網路上看到的基金直接加入 production universe。**
 
