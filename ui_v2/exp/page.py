@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import html
+import re
 
 import streamlit as st
 
@@ -19,8 +19,37 @@ from . import fixtures, live, logic, theme
 _MAX_PROBE_WIDTH = 2000
 
 
+# 換行與連續空白（只認 ASCII 空白；全形空白「　」是版面用字，不折）。比照 `ui_v2/hld/page.py`（本頁不 import hld）。
+_WS_RUN = re.compile(r"[ \t\r\n\f\v]+")
+# 會被 Streamlit 的 Markdown 讀成語法的 ASCII 字元（同 hld）；一律改寫成數字字元參照（只當字面文字，不能組語法）。
+_MD_ACTIVE = "\\`*_{}[]()#!|~$:"
+# 一張表、一次走完（先 `html.escape` 再換字會把 `&#x27;` 的 `#` 再換一次；反過來會把 `&#36;` 的 `&` 換掉）。
+_MD_ENTITY = {ord(ch): f"&#{ord(ch)};" for ch in _MD_ACTIVE + "&<>\"'"}
+
+
 def _esc(text) -> str:
-    return html.escape(str(text))
+    """任何字串上畫面前一律走這裡（2026-10-14 修正輪 Q M1，比照 `ui_v2/hld/page.py::_esc`）。
+
+    ~~`html.escape(str(text))`~~ → 上游錯誤原文可以是任何東西：只做 HTML escape 時，原文裡的空行會讓 Markdown
+    跳出 HTML 區塊、`## ` 變成標題、`|` 變成表格（有意識的更正，不是漏刪；決策者：AI 總管）。三步：
+      1. 換行與連續空白折成一個空格；
+      2. HTML 特殊字元（`& < > " '`）改寫成字元參照（標籤以純文字呈現，`title` 屬性同樣安全）；
+      3. Markdown 語法字元改寫成字元參照。
+    不截斷。
+    """
+    return _WS_RUN.sub(" ", str(text)).translate(_MD_ENTITY)
+
+
+def _title_attr(node: dict) -> str:
+    """規則 10（2026-10-14 C2）：值旁的來源 tooltip。屬性值同樣經 `_esc`（含引號、換行、Markdown 字元）。"""
+    tip = node.get("source_tip")
+    return f' title="{_esc(tip)}"' if tip else ""
+
+
+def _src_html(node: dict) -> str:
+    """規則 10：值旁的簡短來源標示（不加欄）。樣式在 `theme.SOURCE_TAG_CSS`。"""
+    tag = node.get("source_tag")
+    return f'<span class="exp-src">{_esc(tag)}</span>' if tag else ""
 
 
 def _tone(tone: str) -> str:
@@ -330,8 +359,8 @@ def _render_exp2(block: dict, *, scenario: str) -> None:
         body = ""
         for row in block["_rows"]:
             cells = "".join(
-                f'<td style="color:{_tone(row["_cells"][key]["_tone"])}">'
-                f'{_esc(row["_cells"][key]["text"])}</td>'
+                f'<td style="color:{_tone(row["_cells"][key]["_tone"])}"{_title_attr(row["_cells"][key])}>'
+                f'{_esc(row["_cells"][key]["text"])}{_src_html(row["_cells"][key])}</td>'
                 for key in block["column_keys"]
             )
             body += f"<tr>{cells}</tr>"
@@ -383,8 +412,8 @@ def _render_exp3(block: dict) -> None:
             rows_html = "".join(
                 f'<div class="exp-cmp-row"><span class="exp-cmp-label">{_esc(label)}</span>'
                 f'<span class="exp-cmp-value" '
-                f'style="--exp-cell:{_tone(column["_cells"][key]["_tone"])}">'
-                f'{_esc(column["_cells"][key]["text"])}</span></div>'
+                f'style="--exp-cell:{_tone(column["_cells"][key]["_tone"])}"{_title_attr(column["_cells"][key])}>'
+                f'{_esc(column["_cells"][key]["text"])}{_src_html(column["_cells"][key])}</span></div>'
                 for key, label in zip(block["row_keys"], block["row_labels"])
             )
             cols += (
@@ -463,7 +492,7 @@ def _render_exp5(block: dict, *, save_click=None) -> None:
 # 正式結果（篩選、顯示欄、排序、觀察清單）只吃 `load_live` 交回的**已存**設定，存檔後下一次重跑才生效。
 
 # 正式模式的 widget 鍵用另一組前綴與情境名，不與示範模式（`?scenario=`）的鍵相撞。
-_LIVE_SCENARIO = "live"
+# 〔已搬〕原本在本檔定義的情境名 → 2026-10-14 移到 `live.LIVE_SCENARIO`（值不變；有意識的搬移，不是漏刪）。
 # 正式模式 `EXP-1` 條件列的當下內容（每列帶自己的識別碼 `_id`，刪一列不讓其他列的輸入欄錯位）。
 _RULES_STATE = "_exp_live_rules"
 _RULE_SEQ_STATE = "_exp_live_rule_seq"
@@ -582,7 +611,7 @@ def _on_save_columns(save_live) -> None:
 
 
 def _on_save_watch(save_live, saved_watchlist, settings_error) -> None:
-    picked = _checked(logic.GROUP_WATCH, _LIVE_SCENARIO, ())
+    picked = _checked(logic.GROUP_WATCH, live.LIVE_SCENARIO, ())
     _after_saves(live.exp5_save_entries(saved_watchlist, picked, settings_error), save_live)
 
 
@@ -661,8 +690,8 @@ def _render_exp6(block: dict) -> None:
             st.markdown(
                 f'<div class="exp-cmp-row"><span class="exp-cmp-label">'
                 f'{_esc(node["label"])}</span>'
-                f'<span class="exp-cmp-value" style="--exp-cell:{_tone(node["_tone"])}">'
-                f'{_esc(node["text"])}</span></div>',
+                f'<span class="exp-cmp-value" style="--exp-cell:{_tone(node["_tone"])}"{_title_attr(node)}>'
+                f'{_esc(node["text"])}{_src_html(node)}</span></div>',
                 unsafe_allow_html=True,
             )
         _fetch_fail_lines(block)
@@ -832,7 +861,7 @@ def render(*, load_live=None, save_live=None) -> None:
     """
     if load_live is None and save_live is not None:
         raise ValueError("save_live 要與 load_live 一起傳")
-    st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
+    st.markdown(f"<style>{_base_css()}{_grid_css()}{theme.SOURCE_TAG_CSS}</style>", unsafe_allow_html=True)
     if load_live is not None:
         _render_live(load_live, save_live)
         return
@@ -932,8 +961,8 @@ def _render_live(load_live, save_live) -> None:
         field_rules=rows if readable else None,
         field_columns=_field_columns() if readable else None,
         field_sort=_field_sort() if readable else None,
-        compare_checked=_checked(logic.GROUP_COMPARE, _LIVE_SCENARIO, ()),
-        watch_checked=_checked(logic.GROUP_WATCH, _LIVE_SCENARIO, ()),
+        compare_checked=_checked(logic.GROUP_COMPARE, live.LIVE_SCENARIO, ()),
+        watch_checked=_checked(logic.GROUP_WATCH, live.LIVE_SCENARIO, ()),
         save_wired=save_live is not None,
         save_results=st.session_state.get(_SAVE_RESULTS_STATE),
     )
@@ -961,7 +990,7 @@ def _render_live(load_live, save_live) -> None:
             if code == "EXP-1":
                 _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks)
             elif code == "EXP-2":
-                _render_exp2(block, scenario=_LIVE_SCENARIO)
+                _render_exp2(block, scenario=live.LIVE_SCENARIO)
             else:
                 _RENDERERS[code](block)
 
@@ -973,7 +1002,7 @@ def _render_live(load_live, save_live) -> None:
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-4":
-                _render_exp4(block, scenario=_LIVE_SCENARIO, save_click=exp4_click, editable=readable)
+                _render_exp4(block, scenario=live.LIVE_SCENARIO, save_click=exp4_click, editable=readable)
             else:
                 _render_exp5(block, save_click=exp5_click)
 

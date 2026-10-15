@@ -9,6 +9,7 @@
    看 `at.exception` 與**實際渲染出來的元素**。
 """
 
+import html
 import pathlib
 import re
 import sys
@@ -60,7 +61,9 @@ def _rendered(at):
     """
     out = []
     for element in at.markdown:
-        out.append(element.value)
+        # 2026-10-14 exp C2 修正輪（Q M1）：`page._esc` 比照 hld，HTML 與 Markdown 字元一律改成數字字元參照 ——
+        # 瀏覽器上看到的是解碼後的字，所以這裡解碼後再比（~~原樣 `element.value`~~；有意識的更正，不是漏刪）。
+        out.append(html.unescape(element.value))
     for element in at.caption:
         out.append(element.value)
     for element in at.button:

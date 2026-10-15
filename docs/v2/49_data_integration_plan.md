@@ -737,6 +737,22 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
   - **探測腳本欄名（#967 修正輪）**：`scripts/probe_moneydj_basic_page.py` 的 `would_be_ok_now` 改名 `would_be_ok_old_rule`（它算的是舊判準，名字說「現在」會誤導），另加 `identity_rule`（`_identify_name_table` 的結果：problem、張數）與 `would_be_ok_identity_rule`；不含最終網址檢查（腳本分析的是已存下的 HTML）。
   - **歷史註記**：本條本體 commit `a106c23` 單獨檢出時 `tests/test_v2_tables_settings_store.py` 會有一條紅（那行修正在其後的 merge commit `682f4a5` 內）；歷史不改寫，只在此登記。
 
+- (ab) **Q7 實作現況（exp 正式頁，#966；2026-10-14；決策者：AI 總管；本條只追加，6.1 表內 Q7 原句未改）。**
+  - 6.1 Q7 的「配息幣別與淨值幣別不同時顯示不適用」已在 exp 正式頁落地，並依總管 2026-10-14 裁定**只看配息比窗口**：
+    資料層（`services/v2_tables/nav_dividend.py`，meta 模式）把「配息宣告的幣別認得出、但與標籤不同」分成扣下代碼 `div_ccy_differs`
+    （認不出的仍是 `ccy_conflict`），並在該代碼的 provenance 交出衝突各筆的除息日（`conflict_ex_dates`）；
+    畫面層在至少一筆落在配息比窗口內時畫 `⬜ 不適用：配息幣別與淨值幣別不同`，只在窗口外或取不到日期時畫 `⬜ 資料未備`。
+  - hld（持倉手填）路徑不產生 `div_ccy_differs`、也不附加衝突除息日；黃金檔照過。
+  - 本輪不拿窗口內同幣別的配息去算配息比（衝突時整格不算）。
+  - **2026-10-15 #966 修正輪 2 補註（稽核 P 必修；決策者：AI 總管；上列各句未改）**：`div_ccy_differs` 這一支提早回傳，
+    被剔除的配息列（日期格式不對、出處對不上、沒宣告幣別）原本只記在函式內、不交出；日期壞掉的那一筆也進不了 `conflict_ex_dates`
+    （所以 `conflict_ex_dates_missing` 在現行程式下恆為 0）。本輪起**只在這一支**另交出 `provenance["conflict_rejected_rows"]`
+    （被剔除的筆數），並把逐原因的計數接在 `skipped` 後面（句型同無衝突那條路：「原因 N 筆不寫」）；
+    這一支的 `skipped` 首句改用專用句（「……的幣別不同（…）」，不寫「或認不出」，因為這一支每筆幣別都認得出）。
+    `ccy_conflict` 那一支與 hld（持倉手填）路徑的輸出不變。畫面層在被剔除筆數大於 0、或沒有交出這個計數時，
+    不再說「只出現在近 12 個月以前」，改寫「無法確認幣別不同的配息是否在近 12 個月內」（狀態仍是 `⬜ 資料未備`；
+    至少一筆已確認落在窗口內時仍是 `⬜ 不適用`）。完整紀錄見 `docs/v2/44` 7.3.3。
+
 ---
 
 ## 附錄　回修對照（第一版 → 本版）

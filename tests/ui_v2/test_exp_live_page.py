@@ -29,6 +29,7 @@ sys.path.insert(0, str(_HERE))
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
 import _exp_live_stub as STUB  # noqa: E402
+import _exp_wired_fixture as WF  # noqa: E402
 from ui_v2.exp import live, logic, page  # noqa: E402
 
 _MARK = "正式路徑碰到 fixtures"
@@ -280,3 +281,138 @@ def test_大於小於填了非數字_存檔停用_存檔區寫明_改成數字�
     _ok(at)
     assert STUB.SAVES == [("exp_filter_rules",
                            '[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1.5"}]', "rules")]
+
+
+# ───────────────────────── 2026-10-14 C2 接線：基本資料、淨值、配息比 ─────────────────────────
+
+_ALL_RULES = json.dumps([{"field": "fund_code", "op": "不等於", "value": "ZZZ"}], ensure_ascii=False)
+
+
+def _wired_store():
+    STUB.WIRED.append(True)
+    STUB.STORE["exp_filter_rules"] = _ALL_RULES
+    STUB.STORE["exp_visible_columns"] = json.dumps(list(logic.COLUMN_ORDER))
+
+
+def _raw_table(at) -> str:
+    hits = [e.value for e in at.markdown if 'class="exp-table"' in e.value and "<th>fund&#95;code</th>" in e.value]
+    assert len(hits) == 1, len(hits)                 # EXP-2 那一張（EXP-7 另有一張，不含代碼欄）
+    return hits[0]
+
+
+def test_C2接線_代碼欄第一欄_沒有新增欄位_舊淨值與無配息照裁示寫(monkeypatch):
+    _wired_store()
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    table = _raw_table(at)
+    heads = [html.unescape(h) for h in re.findall(r"<th>(.*?)</th>", table)]
+    assert heads == ["fund_code"] + [logic.COLUMN_LABELS[c] for c in logic.COLUMN_ORDER]   # 規則 2、10
+    text = html.unescape(table)
+    assert "⬜ 資料未備：最近一筆淨值 2026-10-03，已超過 10 日" in text                       # 規則 11
+    assert ">2026-10-04<" in text                                                              # 10 天照用
+    assert "⬜ 不適用：近 12 個月無配息" in text and "0.00%" not in text                       # 規則 13
+    assert ">6.00%<" in text
+    assert text.count('class="exp-src"') >= 8                                                  # 規則 10
+    assert "‹已遮蔽›" in text and WF.SECRET not in text                                       # 遮蔽
+    assert "尚未接入" not in _text(at)
+
+
+def test_C2接線_值與tooltip含腳本與引號_一律escape(monkeypatch):
+    _wired_store()
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    table = _raw_table(at)
+    assert "<script>" not in table and 'Evil"Src' not in table
+    # 2026-10-14 修正輪（Q M1）：`_esc` 比照 hld —— HTML 與 Markdown 字元一律改成數字字元參照。
+    assert page._esc(WF.XSS_NAME) in table and "&#60;script&#62;alert&#40;&#34;x&#34;&#41;" in table
+    assert 'title="淨值來源：Evil&#34;Src&#60;b&#62;' in table
+    assert re.search(r'<td style="[^"]*" title="[^"]*">', table)
+
+
+def test_C2接線_錯誤原文含換行與Markdown語法_不跳出表格_不變成標題(monkeypatch):
+    """Q M1：原文含 `\n\n`、`## `、`|`、`*` —— 交給 `st.markdown` 的表格字串裡一個都不得以語法形式出現。"""
+    _wired_store()
+    at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
+    table = _raw_table(at)
+    assert "\n" not in table                                               # 換行折掉（Markdown 不會跳出 HTML 區塊）
+    for raw in ("## ", "|", "*粗體*", "_斜體_"):
+        assert raw not in table, raw
+    assert "&#35;&#35; 注入標題" in table and "&#124;" in table and "&#42;粗體&#42;" in table
+    text = html.unescape(table)
+    assert "## 注入標題 | a | b |" in text                                   # 內容還在（只是不當語法）
+
+
+def _wired_app(tmp_path) -> pathlib.Path:
+    app = tmp_path / "exp_wired_app.py"
+    app.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {str(_ROOT)!r})\n"
+        f"sys.path.insert(0, {str(_HERE)!r})\n"
+        "import json\n"
+        "import _exp_live_stub as STUB\n"
+        "from ui_v2.exp import logic, page\n"
+        "STUB.reset()\n"
+        "STUB.WIRED.append(True)\n"
+        f"STUB.STORE['exp_filter_rules'] = {_ALL_RULES!r}\n"
+        "STUB.STORE['exp_visible_columns'] = json.dumps(list(logic.COLUMN_ORDER))\n"
+        "page.render(load_live=STUB.load_live, save_live=STUB.save_setting)\n",
+        encoding="utf-8",
+    )
+    return app
+
+
+_EXP2_DOM_JS = """() => {
+  const tables = [...document.querySelectorAll('table.exp-table')]
+    .filter(t => t.querySelector('th') && t.querySelector('th').textContent === 'fund_code');
+  const t = tables[0];
+  const rows = t ? [...t.querySelectorAll('tbody tr')] : [];
+  return {
+    tables: tables.length,
+    heads: t ? [...t.querySelectorAll('thead th')].map(e => e.textContent) : [],
+    first: rows.map(r => r.cells[0].textContent),
+    widths: rows.map(r => r.cells.length),
+    titles: t ? [...t.querySelectorAll('td[title]')].map(e => e.getAttribute('title')) : [],
+    scripts: t ? t.querySelectorAll('script').length : -1,
+    bold: t ? t.querySelectorAll('td b').length : -1,
+    src: t ? t.querySelectorAll('.exp-src').length : 0,
+    names: rows.map(r => r.cells[1].textContent),
+    injected_headings: [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+      .filter(h => h.textContent.includes('注入標題')).length,
+    tables_in_cells: t ? t.querySelectorAll('td table').length : -1,
+    scroll_width: t ? t.closest('.exp-scroll').scrollWidth : -1,
+    client_width: t ? t.closest('.exp-scroll').clientWidth : -1,
+    src_max_width: t ? Math.max(...[...t.querySelectorAll('.exp-src')].map(e => e.getBoundingClientRect().width)) : -1,
+    src_limit_px: t && t.querySelector('.exp-src')
+      ? parseFloat(getComputedStyle(t.querySelector('.exp-src')).maxWidth) : -1,
+  };
+}"""
+
+
+def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在_沒有新增欄位(tmp_path):
+    """Chromium 實測（客戶規則 2、10 與 escape）：DOM 查詢，不看截圖。"""
+    import _ui_v2_chromium
+
+    api = _ui_v2_chromium.import_sync_api()
+    with api.sync_playwright() as p:
+        browser = _ui_v2_chromium.launch(p)
+        try:
+            with _ui_v2_chromium.streamlit_server(_wired_app(tmp_path)) as base:
+                tab = browser.new_page(viewport={"width": 1600, "height": 2200})
+                tab.goto(base + "/", wait_until="networkidle")
+                tab.wait_for_selector("table.exp-table", timeout=60000)
+                tab.wait_for_timeout(1500)
+                dom = tab.evaluate(_EXP2_DOM_JS)
+                assert dom["tables"] == 1, dom                                   # EXP-2 那一張（帶代碼欄）
+                assert dom["heads"] == ["fund_code"] + [logic.COLUMN_LABELS[c] for c in logic.COLUMN_ORDER]
+                assert dom["first"] == sorted(WF.CODES)                          # 代碼欄是第一欄
+                assert dom["widths"] == [len(dom["heads"])] * len(WF.CODES)     # 每列格數＝表頭數，沒有新增欄
+                assert any(t.startswith('淨值來源：Evil"Src<b>') for t in dom["titles"]), dom["titles"]
+                assert dom["scripts"] == 0 and dom["bold"] == 0                  # 字串沒有變成標籤
+                assert dom["src"] >= 8
+                assert any(n.startswith(WF.XSS_NAME) for n in dom["names"])
+                # Q M1：錯誤原文裡的 `## ` 不得變成標題、`|` 不得變成另一張表。
+                assert dom["injected_headings"] == 0 and dom["tables_in_cells"] == 0
+                # Q O1：1600 寬桌機，候選表不需要橫捲（`.exp-src` 限寬＋省略號，全文在 tooltip）。
+                assert dom["scroll_width"] <= dom["client_width"] + 1, (dom["scroll_width"], dom["client_width"])
+                assert dom["src_max_width"] <= dom["src_limit_px"] + 1
+                tab.close()
+        finally:
+            browser.close()

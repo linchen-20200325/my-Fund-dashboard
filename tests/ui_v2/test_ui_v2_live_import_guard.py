@@ -88,9 +88,14 @@ _FILE_ALLOWLIST = {
     },
     # 2026-10-13 exp 頁正式模式第一批（客戶 2026-10-13 裁示：骨架＋設定存讀＋母體代碼）。
     # `exp_universe`：選股池代碼（L2 新檔）；`settings_store`：讀寫 `exp_` 四鍵；`ui_v2.exp.live`：本頁純函式（體例同 mkt）。
+    # 2026-10-14 C2 接線（基本資料與淨值）：加 `fund_keys`（代碼對照）、`exp_profile`（基本資料逐欄出處）、
+    # `exp_nav`（淨值與配息的逐檔記憶）、`nav_dividend`（扣下代碼常數）；`datetime.datetime`：台灣今天的日期（同 alo）。
+    # `logging`：代碼對照表讀取失敗記 log（2026-10-14 修正輪）。
+    # `traceback`：同一條 log 帶遮蔽後的 traceback（2026-10-15 #966 修正輪 3，獨立稽核小修；標準庫）。
     "ui_v2/exp/source.py": {
-        "__future__", "os", "streamlit",
-        "services.v2_tables.exp_universe", "services.v2_tables.masking",
+        "__future__", "logging", "os", "traceback", "datetime.datetime", "streamlit",
+        "services.v2_tables.exp_nav", "services.v2_tables.exp_profile", "services.v2_tables.exp_universe",
+        "services.v2_tables.fund_keys", "services.v2_tables.masking", "services.v2_tables.nav_dividend",
         "services.v2_tables.settings_store", "ui_v2.exp.live",
     },
     "ui_v2/app_exp_live.py": {
@@ -385,7 +390,9 @@ def _check(rel: str, code: str) -> list[str]:
     ("ui_v2/exp/source.py", "from . import fixtures"),                  # 新 source 照樣不得碰 fixtures
     ("ui_v2/app_exp_live.py", "from ui_v2.exp import fixtures"),
     ("ui_v2/exp/page.py", "from . import source"),                      # page 不得 import source
-    ("ui_v2/exp/source.py", "from services.v2_tables import nav_dividend"),  # 白名單外的 L2 模組
+    # ~~("ui_v2/exp/source.py", "from services.v2_tables import nav_dividend")~~ → 2026-10-14 C2 接線後 nav_dividend 已登記白名單
+    # （有意識的更正，不是漏刪）；改用 exp 仍未登記的 L2 模組驗同一件事。
+    ("ui_v2/exp/source.py", "from services.v2_tables import alo_holdings"),  # 白名單外的 L2 模組
     ("ui_v2/app_preview.py", "from ui_v2.mkt import fixtures"),         # 正式路徑不得碰 fixtures
     ("ui_v2/app_preview.py", "from ui_v2.exp import fixtures"),         # 示意資料也只能經 page 進來
     ("ui_v2/app_preview.py", "import ui_v2.hld.fixtures"),
@@ -416,6 +423,7 @@ def test_正控_每一種違規都被抓到(rel, code):
     ("ui_v2/app_preview.py", "from ui_v2.exp import source as exp_source"),
     ("ui_v2/app_exp_live.py", "from ui_v2.exp import page, source"),
     ("ui_v2/exp/source.py", "from services.v2_tables import exp_universe, masking, settings_store"),
+    ("ui_v2/exp/source.py", "from services.v2_tables import exp_nav, exp_profile, fund_keys, nav_dividend"),
 ])
 def test_負控_合規寫法不誤報(rel, code):
     assert _check(rel, code) == [], (rel, code)
