@@ -32,6 +32,40 @@ def fake_st(monkeypatch):
     return st
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _exp_wired_fixture as WF  # noqa: E402
+
+
+def _keys(codes):
+    return {"results": [{"input": c, "ok": True, "full_key": c, "portal": "", "parsed_code": c, "error": None}
+                        for c in codes]}
+
+
+@pytest.fixture(autouse=True)
+def l2_calls(monkeypatch):
+    """2026-10-14 C2 接線後 `load_live` 會再呼叫三支 L2；本檔一律換成替身（不打網路），並記下呼叫。"""
+    calls = {"keys": [], "profiles": [], "nav": [], "now": []}
+
+    def resolve(codes):
+        calls["keys"].append(list(codes))
+        return _keys(codes)
+
+    def build(key_results, *, fetchers=None, now=None):   # 簽章同 `exp_profile.build_profiles`（#965 起有 now）
+        calls["profiles"].append([r["input"] for r in key_results])
+        calls["now"].append(("profile", now))
+        return WF.profiles(codes=[r["input"] for r in key_results])
+
+    def load_nav(funds, *, now=None):
+        calls["nav"].append([dict(f) for f in funds])
+        calls["now"].append(("nav", now))
+        return WF.nav_out(codes=[f["fund_code"] for f in funds])
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", resolve)
+    monkeypatch.setattr(source.exp_profile, "build_profiles", build)
+    monkeypatch.setattr(source.exp_nav, "load_nav_dividend", load_nav)
+    return calls
+
+
 def _settings_rows(**values):
     return {"rows": {k: {"setting_key": k, "setting_value": v} for k, v in values.items()},
             "bad_rows": [], "broken_keys": [], "blank_rows": 0, "tab_missing": False}
@@ -99,3 +133,137 @@ def test_source不import_fixtures():
     tree = ast.parse(pathlib.Path(source.__file__).read_text(encoding="utf-8"))
     names = [a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names]
     assert names and "fixtures" not in names
+
+
+# ───────────────────────── 2026-10-14 C2 接線 ─────────────────────────
+
+_POOL8 = dict(_OK_POOL, codes=list(WF.CODES))
+
+
+def test_兩段取數_基本資料取全部母體_淨值只取篩選後會列出的檔(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    rules = json.dumps([{"field": "dividend_policy", "op": "等於", "value": "dist"}], ensure_ascii=False)
+    monkeypatch.setattr(source.settings_store, "load_user_settings",
+                        lambda values: _settings_rows(exp_filter_rules=rules))
+    data = source.load_live()
+    assert l2_calls["profiles"] == [list(WF.CODES)]
+    nav_codes = [f["fund_code"] for f in l2_calls["nav"][0]]
+    assert "G07" in nav_codes                                         # 配息方式取數失敗 → 無法判定，照列、照取
+    f06 = next(f for f in l2_calls["nav"][0] if f["fund_code"] == "F06")
+    assert f06["declared_ccy"] is None and f06["declared_ccy_source"] is None   # 幣別未確定 → 交資料層隔離
+    a01 = next(f for f in l2_calls["nav"][0] if f["fund_code"] == "A01")
+    assert (a01["declared_ccy"], a01["declared_ccy_source"]) == ("USD", "meta:MoneyDJ+TDCC")
+    assert a01["chain_code"] == "A01" and a01["portal"] == ""
+    assert data["notes"]["cells"]["A01"]["div_ratio_pct"]["text"] is None
+    assert data["dataset"]["div_ratio_pct"]["A01"] == pytest.approx(6.0)
+
+
+def test_篩選後列不到的檔_不取淨值(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    rules = json.dumps([{"field": "fund_code", "op": "等於", "value": "A01"}], ensure_ascii=False)
+    monkeypatch.setattr(source.settings_store, "load_user_settings",
+                        lambda values: _settings_rows(exp_filter_rules=rules))
+    source.load_live()
+    assert [[f["fund_code"] for f in funds] for funds in l2_calls["nav"]] == [["A01"]]
+
+
+def test_基本資料與淨值吃同一個now_畫面的今天由它而來(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    rules = json.dumps([{"field": "fund_code", "op": "等於", "value": "A01"}], ensure_ascii=False)
+    monkeypatch.setattr(source.settings_store, "load_user_settings",
+                        lambda values: _settings_rows(exp_filter_rules=rules))
+    source.load_live()
+    (kind1, now1), (kind2, now2) = l2_calls["now"]
+    assert (kind1, kind2) == ("profile", "nav") and now1 is now2
+    assert now1.tzinfo is not None and now1.utcoffset().total_seconds() == 8 * 3600
+
+
+def test_沒有條件_不取淨值(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+    source.load_live()
+    assert l2_calls["profiles"] == [list(WF.CODES)] and l2_calls["nav"] == []
+
+
+def test_每一格的原因用秘密值遮蔽(monkeypatch, fake_st, l2_calls):
+    fake_st.secrets = {"FRED_API_KEY": WF.SECRET}
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    rules = json.dumps([{"field": "fund_code", "op": "等於", "value": "G07"}], ensure_ascii=False)
+    monkeypatch.setattr(source.settings_store, "load_user_settings",
+                        lambda values: _settings_rows(exp_filter_rules=rules))
+    data = source.load_live()
+    cells = data["notes"]["cells"]["G07"]
+    flat = json.dumps(cells, ensure_ascii=False)
+    assert WF.SECRET not in flat and "‹已遮蔽›" in cells["nav_date"]["text"]
+
+
+def test_代碼對照表讀不到_記log_摘要據實(monkeypatch, fake_st, l2_calls, caplog):
+    fake_st.secrets = {"FRED_API_KEY": WF.SECRET}
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+
+    def boom(codes):
+        raise OSError(f"讀不到對照表 {WF.SECRET}")
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", boom)
+    with caplog.at_level("ERROR", logger=source.__name__):
+        data = source.load_live()
+    assert any("代碼對照表讀取失敗" in r.getMessage() and WF.SECRET not in r.getMessage() for r in caplog.records)
+    # 修正輪 3（獨立稽核小修）：log 帶 traceback（找得到出錯的那一行），而且 traceback 同樣遮蔽 ——
+    # 以 handler 實際會寫出的字串（`Formatter().format`，含 exc_info 附加的段落）檢查，不只看 getMessage()。
+    import logging
+
+    written = "\n".join(logging.Formatter().format(r) for r in caplog.records)
+    assert "Traceback (most recent call last)" in written and "in boom" in written
+    assert WF.SECRET not in written and "‹已遮蔽›" in written
+    assert data["notes"]["wiring_error"].startswith("代碼對照表讀取失敗")
+    model = live.build_live_model(data, save_wired=True)
+    from ui_v2.exp import logic
+    # 合併修正輪 D4：驗卡內實際印出的失敗行（summary 在層 2 核心卡不上畫面）。
+    notes = logic.find_block(model, "EXP-2")["notes"]
+    assert len(notes) == 1 and notes[0].startswith("fund_profile：⛔ 取數失敗：代碼對照表讀取失敗：OSError")
+
+
+def test_代碼對照結果形狀不對_照常raise_不當成讀取失敗(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", lambda codes: {"rows": []})   # 少了 results
+    with pytest.raises(KeyError):
+        source.load_live()
+
+
+def test_代碼對照表讀不到_整批取數失敗_訊息遮蔽(monkeypatch, fake_st, l2_calls):
+    fake_st.secrets = {"FRED_API_KEY": WF.SECRET}
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+
+    def boom(codes):
+        raise OSError(f"讀不到對照表 {WF.SECRET}")
+
+    monkeypatch.setattr(source.fund_keys, "resolve_full_keys", boom)
+    data = source.load_live()
+    message = data["dataset"]["errors"]["fund_profile"]
+    assert message.startswith("代碼對照表讀取失敗：OSError: 讀不到對照表") and WF.SECRET not in message
+    assert data["dataset"]["fund_profile"] == [] and l2_calls["profiles"] == []
+
+
+def test_母體讀不到_不取基本資料也不取淨值(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes",
+                        lambda values, oauth_client=None: {"status": "failed", "backend": "x", "codes": [],
+                                                           "dropped_blank": 0, "duplicates": 0, "message": "boom"})
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+    data = source.load_live()
+    assert l2_calls == {"keys": [], "profiles": [], "nav": [], "now": []} and data["notes"]["cells"] is None
+
+
+def test_扣下代碼清單是封閉的_含幣別未確定():
+    exp_nav = pytest.importorskip("services.v2_tables.exp_nav")
+    nav_dividend = pytest.importorskip("services.v2_tables.nav_dividend")
+    assert source._NAV_UNAVAILABLE_WITHHELD == {
+        nav_dividend.WITHHELD_CCY_MISSING: None, nav_dividend.WITHHELD_CCY_CONFLICT: None,
+        nav_dividend.WITHHELD_FETCHED_AT_MISSING: None, nav_dividend.WITHHELD_FETCHED_AT_FUTURE: None,
+        # ~~exp_nav.TEXT_CCY_UNDETERMINED~~ → 2026-10-14 修正輪（P 必修 2；有意識的更正，不是漏刪）：
+        # L2 原文含內部名稱 `declared_ccy_source`，畫面改用 `live.TEXT_CCY_UNDETERMINED`（白話）。
+        exp_nav.WITHHELD_CCY_UNDETERMINED: live.TEXT_CCY_UNDETERMINED}
+    assert "declared_ccy_source" not in live.TEXT_CCY_UNDETERMINED
+    assert nav_dividend.WITHHELD_INPUT_CONFLICT not in source._NAV_UNAVAILABLE_WITHHELD

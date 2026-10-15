@@ -1328,6 +1328,9 @@ DIV_AMOUNT_EVIDENCE = {
 # 整檔不寫的原因代碼（配息專用；其餘沿用上方 `WITHHELD_*`）。
 WITHHELD_DIV_OUTCOME_UNDETERMINED = "div_outcome_undetermined"   # 沒有配息列，又分辨不出是不配息還是沒抓到
 WITHHELD_DIV_ITEMS_REJECTED = "div_items_rejected"               # 有配息列，但一筆都過不了逐筆核對（原因見 skipped）
+# meta 模式專用（2026-10-14 exp C2 修正輪，`docs/v2/49` Q7）：配息宣告的幣別認得出、但與標籤（＝淨值）幣別不同。
+# 認不出的仍是 `WITHHELD_CCY_CONFLICT`。hld（持倉手填）路徑不產生本代碼。
+WITHHELD_DIV_CCY_DIFFERS = "div_ccy_differs"
 # 待查證（`pending`）：日期欄證明不了是除息日。
 # 2026-10-13 稽核必修 2 擴大射程（代碼字面不改，免得下游對不上）：金額欄證明不了是每單位配息、
 # 合庫表頭格數與列格數不同，也列在這一碼 —— 都是「這一欄是什麼沒有證據」。
@@ -1377,6 +1380,10 @@ TEXT_DIV_CCY_CONFLICT = ("配息宣告的幣別與持倉手填不同或認不出
 # 2026-10-14 C3a：meta 路徑的同義文案（`{label}` 暫定字面見 `TEXT_LABEL_DECLARED`）；上句 hld 原文一字不動。
 TEXT_DIV_CCY_CONFLICT_LABELED = ("配息宣告的幣別與{label}的幣別不同或認不出（{shown}；{label} {holding}）；"
                                  "不改標籤、不換算，這一檔的配息 {n} 筆全部不寫")
+# 2026-10-15 #966 修正輪 2（稽核 P；決策者：AI 總管）：`div_ccy_differs` 那一支專用的句子。那一支的每一筆衝突幣別
+# 都認得出（全部正規化得出 ISO），上句的「或認不出」說過頭；exp 畫面會把這句原文放進 tooltip。上句不改（`ccy_conflict` 照用）。
+TEXT_DIV_CCY_DIFFERS_LABELED = ("配息宣告的幣別與{label}的幣別不同（{shown}；{label} {holding}）；"
+                                "不改標籤、不換算，這一檔的配息 {n} 筆全部不寫")
 
 
 def _empty_div_acc() -> dict:
@@ -1543,6 +1550,7 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
     rejected: dict = {}
     date_unverified = ccy_undeclared = 0
     conflicts = []
+    conflict_days = []      # 與 `conflicts` 逐筆對應的除息日（2026-10-14 exp C2 合併修正輪 C1）
     accepted = []
     parsers = set()
     for item in items:
@@ -1586,6 +1594,7 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
             continue
         if _normalize_declared_ccy(declared) != _ccy_meaning(label):
             conflicts.append(declared)
+            conflict_days.append(day)
             continue
         parsers.add(parser)
         accepted.append({"date": day, "amount": item.get("amount"), "currency": label,
@@ -1594,11 +1603,36 @@ def rows_from_chain_dividends(fund_code: str, div, *, holding_ccys=(), now=None,
     if conflicts:
         shown = "、".join(repr(c) for c in conflicts[:5]) + ("…" if len(conflicts) > 5 else "")
         out["withheld"] = WITHHELD_CCY_CONFLICT
+        # 2026-10-14 exp C2 修正輪（`docs/v2/49` Q7，客戶 2026-09-26 已同意）：meta 模式下把「認得出、但與標籤
+        # 不同的幣別」與「認不出」分開 —— 前者每一筆都正規化得出 ISO（與標籤不同）→ `div_ccy_differs`
+        # （exp 畫「⬜ 不適用：配息幣別與淨值幣別不同」）；任一筆認不出 → 照舊 `ccy_conflict`（資料未備）。
+        # ⚠️ 只在 meta 模式（`label_source` 不是持倉手填）分流：hld 路徑輸出逐位元組不變（黃金檔守）。
+        differs = label_source != LABEL_SOURCE_HOLDING and all(_normalize_declared_ccy(c) for c in conflicts)
+        if differs:
+            out["withheld"] = WITHHELD_DIV_CCY_DIFFERS
+            # 2026-10-14 exp C2 合併修正輪 C1（總管裁定：Q7 只看配息比窗口）：交出衝突各筆的除息日，
+            # 畫面層據此判斷衝突是否落在近 12 個月窗口內。ISO 字串、排序；取不到的照實記 None（排在最後）並另計數。
+            # 只在這一支附加（meta 模式、`div_ccy_differs`）；hld 路徑與其他扣下的輸出不變。
+            # ⚠️ 2026-10-15 #966 修正輪 2 讀碼補註：日期取不到的那一筆在上面迴圈已被 `rejected` 剔除、不會進 `conflicts`，
+            # 所以 `conflict_ex_dates_missing` 在現行程式下恆為 0；被剔除的筆數改由下面的 `conflict_rejected_rows` 交出。
+            dated = sorted(d for d in conflict_days if d is not None)
+            missing = sum(1 for d in conflict_days if d is None)
+            out["provenance"]["conflict_ex_dates"] = dated + [None] * missing
+            out["provenance"]["conflict_ex_dates_missing"] = missing
+            # 2026-10-15 #966 修正輪 2（稽核 P 必修；決策者：AI 總管）：本支提早回傳，被剔除的列（日期格式不對、出處對不上、
+            # 沒宣告幣別…）原本只記在 `rejected`、不交出來，畫面層因此會把「2020 年 EUR ＋ 一筆壞日期 EUR」說成
+            # 「只出現在近 12 個月以前」。改為交出被剔除的筆數，並把逐原因的計數接在 `skipped` 後面（與無衝突那條路同句型）。
+            out["provenance"]["conflict_rejected_rows"] = sum(rejected.values())
         if label_source == LABEL_SOURCE_HOLDING:
             out["skipped"].append(TEXT_DIV_CCY_CONFLICT.format(shown=shown, holding=label, n=n))
         else:
-            out["skipped"].append(TEXT_DIV_CCY_CONFLICT_LABELED.format(
-                label=_label_words(label_source)["input"], shown=shown, holding=label, n=n))
+            # ~~兩支都用 `TEXT_DIV_CCY_CONFLICT_LABELED`~~ → 2026-10-15 #966 修正輪 2（有意識的更正，不是漏刪）：
+            # `div_ccy_differs` 那一支改用專用句（沒有「或認不出」）；`ccy_conflict` 那一支一字不變。
+            text = TEXT_DIV_CCY_DIFFERS_LABELED if differs else TEXT_DIV_CCY_CONFLICT_LABELED
+            out["skipped"].append(text.format(label=_label_words(label_source)["input"], shown=shown, holding=label,
+                                              n=n))
+        if differs:
+            out["skipped"].extend(_tally_lines(rejected, ""))
         return _reconcile(out, n, "dividend")
 
     n_rejected = sum(rejected.values())
