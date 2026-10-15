@@ -16,7 +16,7 @@
 | 市場總覽 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_mkt_live.py`（2026-10-13 起接上存檔） |
 | 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error)` ＝ `ui_v2/app_hld_live.py` |
 | ~~標的探索~~ | ~~**示意資料**~~ | ~~`page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示~~ |
-| 標的探索 | 真資料（第一批） | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_exp_live.py`（2026-10-13 起；狀態更新，不是漏刪 —— 上一列在寫下當時為真）。母體＝選股池的基金代碼，其餘欄「⬜ 資料未備」；不再加示意資料標示（正式資料不加示意，比照 hld 2026-10-02 前例） |
+| 標的探索 | 真資料（第一批） | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_exp_live.py`（2026-10-13 起；狀態更新，不是漏刪 —— 上一列在寫下當時為真）。母體＝選股池的基金代碼，~~其餘欄「⬜ 資料未備」~~（2026-10-15 狀態更新，不是漏刪：#966 起基本資料接 `exp_profile`、淨值與配息接 `exp_nav`）；不再加示意資料標示（正式資料不加示意，比照 hld 2026-10-02 前例） |
 | 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_alo_live.py` |
 | 設定與診斷 | 真資料 | `page.render(load_live=..., save_live=source.save_setting, refetch_live=source.refetch)` ＝ `ui_v2/app_set_live.py` |
 
@@ -80,6 +80,9 @@
   6. 標的探索「本 session 用哪一版已存值填過輸入欄」的指紋（`ui_v2/exp/page.py::_SEEDED_STATE`，2026-10-13 稽核 L 回修）：
      輸入欄離開這一頁就被清掉，指紋若留著，回來時不會重填，空白的勾選框按存檔就蓋掉雲端；清掉指紋就一定重填。
   ⚠️ 其他頁程式自己寫的 key（例如持倉體檢的套用值）未逐一處理，見交付報告的登記。
+  → 2026-10-15（Phase 2 批 1）持倉體檢的套用值（`ui_v2/hld/page.py::_APPLIED_KEY`）已重現查過：換頁回來時欄位還沒畫過，
+    `ui_v2/hld/logic.py::_build_page_model` 以已套用的區間回填欄位，輸入欄與計算一致，**不加進換頁清單**
+    （守衛：tests/ui_v2/test_preview_page.py 的「套用後換頁再回來」那一條）。其餘頁程式自己寫的 key 仍未逐一查。
 """
 
 from __future__ import annotations
@@ -107,9 +110,12 @@ PREVIEW_TITLE = "B 線 UI 預覽（非正式站）"
 # ~~"讀不到資料時照實顯示缺失；標的探索為示意資料。"~~
 # → 2026-10-13 狀態更新（不是漏刪；客戶裁示 B 線標的探索正式模式第一批）：標的探索改讀真資料（選股池代碼），
 #   其餘欄尚未接入、照實顯示「⬜ 資料未備」。舊兩句在寫下當時為真。
+# ~~"…照實顯示缺失；標的探索目前只接上選股池的基金代碼，其餘欄位顯示資料未備。"~~
+# → 2026-10-15 狀態更新（不是漏刪；Phase 2 批 1）：#966（merge `dbb629c`）起標的探索的基本資料接 L2 `exp_profile`、
+#   淨值與配息接 L2 `exp_nav`（`ui_v2/exp/source.py::_load_funds`），那一句已與實況不符。只刪該子句、不新增文案
+#   （新增字句屬 UI 文案變更，要客戶草稿）；刪後前一句的分號改由原句尾的句號收尾。在寫下當時為真。
 PREVIEW_NOTE = (
-    "B 線 UI 預覽（非正式站）。五頁皆讀真資料，讀不到資料時照實顯示缺失；"
-    "標的探索目前只接上選股池的基金代碼，其餘欄位顯示資料未備。"
+    "B 線 UI 預覽（非正式站）。五頁皆讀真資料，讀不到資料時照實顯示缺失。"
     "預覽把五頁放在同一個程式裡跑，快取與取數暫停（冷卻）也五頁共用，"
     "和各頁單獨啟動時不同；在設定與診斷按「重新取數」，"
     "會一併影響市場總覽與持倉體檢顯示的資料。"

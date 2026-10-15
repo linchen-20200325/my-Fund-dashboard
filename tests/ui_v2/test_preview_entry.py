@@ -452,8 +452,11 @@ def test_正控_動態寫法都抓得到(code):
 def test_側邊欄說明的字面():
     note = _string_constant(_tree(_PREVIEW), "PREVIEW_NOTE")
     # ~~"標的探索為示意資料"~~ → 2026-10-13 標的探索接上正式模式（狀態更新，不是漏刪）。
-    for needle in ("B 線 UI 預覽（非正式站）", "五頁皆讀真資料", "標的探索目前只接上選股池的基金代碼",
-                   "讀不到資料時照實顯示缺失", "和各頁單獨啟動時不同", "重新取數"):
+    # ~~"標的探索目前只接上選股池的基金代碼"~~ → 2026-10-15（狀態更新，不是漏刪）：#966 起標的探索也接上基本資料與淨值，
+    #   那一句已過時、自 PREVIEW_NOTE 刪除；改驗它不再出現。
+    for needle in ("B 線 UI 預覽（非正式站）", "五頁皆讀真資料",
+                   "讀不到資料時照實顯示缺失。", "和各頁單獨啟動時不同", "重新取數"):
         assert needle in note, needle
+    assert "只接上選股池的基金代碼" not in note and "其餘欄位顯示資料未備" not in note
     assert "示意資料" not in note
     assert "正式上線" not in note   # 49 4.8：正式部署形態查不到，不得斷言
