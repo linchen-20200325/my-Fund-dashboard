@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import os
+import traceback
 from datetime import datetime
 
 import streamlit as st
@@ -99,7 +100,12 @@ def _load_funds(codes, settings, settings_error, values) -> dict:
         resolved = fund_keys.resolve_full_keys(list(codes))     # 只包住讀取本身（L1 例外 fund_keys 不攔）
     except Exception as exc:  # noqa: BLE001 —— 轉成畫面上的 ⛔ 取數失敗（遮蔽後原文）並記 log，不是吞掉
         message = mask(f"代碼對照表讀取失敗：{type(exc).__name__}: {exc}")
-        _LOG.error("exp 代碼對照表讀取失敗，整批不取數：%s", message)
+        # ~~`_LOG.error(..., message)`（沒有 traceback）~~ → 2026-10-15 #966 修正輪 3（獨立稽核小修；有意識的更正，
+        # 不是漏刪；決策者：AI 總管）：補上 traceback，查錯才找得到出錯的那一行。
+        # ⚠️ 刻意不用 `_LOG.exception`／`exc_info=True`：那會把**未遮蔽**的例外原文（可能含秘密值）原樣寫進 log
+        # （ACCEPTANCE 七）；改成自己格式化 traceback、先遮蔽再寫。try 只包住讀取本身（範圍不變）。
+        trace = mask("".join(traceback.format_exception(exc)))
+        _LOG.error("exp 代碼對照表讀取失敗，整批不取數：%s\n%s", message, trace)
         return live.wiring_failed(message)
     key_results = resolved["results"]                           # 契約取值不在 try 裡：形狀錯誤照常 raise
     # #965 已合併（main 0805bcb）：`build_profiles` 有 `now` 參數，直接傳同一個 `now`

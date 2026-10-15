@@ -209,6 +209,13 @@ def test_代碼對照表讀不到_記log_摘要據實(monkeypatch, fake_st, l2_c
     with caplog.at_level("ERROR", logger=source.__name__):
         data = source.load_live()
     assert any("代碼對照表讀取失敗" in r.getMessage() and WF.SECRET not in r.getMessage() for r in caplog.records)
+    # 修正輪 3（獨立稽核小修）：log 帶 traceback（找得到出錯的那一行），而且 traceback 同樣遮蔽 ——
+    # 以 handler 實際會寫出的字串（`Formatter().format`，含 exc_info 附加的段落）檢查，不只看 getMessage()。
+    import logging
+
+    written = "\n".join(logging.Formatter().format(r) for r in caplog.records)
+    assert "Traceback (most recent call last)" in written and "in boom" in written
+    assert WF.SECRET not in written and "‹已遮蔽›" in written
     assert data["notes"]["wiring_error"].startswith("代碼對照表讀取失敗")
     model = live.build_live_model(data, save_wired=True)
     from ui_v2.exp import logic

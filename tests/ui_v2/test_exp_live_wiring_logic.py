@@ -645,6 +645,11 @@ _PERF_INPUTS = {
     "name( +長串": "f(" + "x" * _LONG,
     "中英引號混合": ("來源中文abc'x'" * (_LONG // 10))[:_LONG],
 }
+# 2026-10-15 #966 修正輪 3（獨立稽核必修）：頁型標記後接一長串空白 —— 四種空白 × 結尾（無、接 x、接「：」）。
+_WS_KINDS = {"半形": " ", "tab": "\t", "全形": "\u3000", "NBSP": "\u00a0"}
+for _ws_name, _ws in _WS_KINDS.items():
+    for _tail_name, _tail in (("", ""), ("+x", "x"), ("+：", "："), ("+名稱：", "FundClear：")):
+        _PERF_INPUTS[f"[頁型]+長{_ws_name}空白{_tail_name}"] = "[yp010000]" + _ws * _LONG + _tail
 
 
 @pytest.mark.parametrize("name", list(_PERF_INPUTS))
@@ -657,6 +662,57 @@ def test_修正輪2_效能_十萬字的病態輸入_兩秒內(name):
     started = time.perf_counter()
     live.plain_reason(text)
     assert time.perf_counter() - started < 2.0
+
+
+@pytest.mark.parametrize("ws", ["\u0020", "\t", "\u3000", "\u00a0"], ids=["半形", "tab", "全形", "NBSP"])
+def test_修正輪3_頁型後只有空白緊接冒號_空白不當來源名稱(ws):
+    """邊角語意（總管修正輪 3 要求先判斷再釘住）：舊式會把冒號前那一個空白當成來源名稱，畫成「 （頁面 …）：」；
+    空白不是來源名稱 → 新式不當成「來源（頁面 頁型）：」，改由頁型通則畫成「（頁面 頁型）：」。"""
+    assert live.plain_reason(f"[yp010000]{ws * 3}：其他") == "（頁面 yp010000）：其他"
+    assert live.plain_reason(f"[yp010000]{ws}FundClear：empty") == "FundClear（頁面 yp010000）：沒有配息紀錄"
+
+
+# 修正前的 `_PAGE_SOURCE`（f383c0c 原字），只用來做新舊等價對照；不得拿去用在正式路徑。
+_OLD_PAGE_SOURCE = r"\[([a-z]{2}\d{6})\]\s*([^\[\]：\n；]+?)："
+
+
+def test_修正輪3_頁型來源樣式_新舊替換逐字相同_只差空白名稱那個邊角():
+    import random
+    import re
+
+    old = re.compile(_OLD_PAGE_SOURCE)
+    new = live._PAGE_SOURCE
+    assert old.pattern != new.pattern                                       # 前提：真的換了 pattern
+
+    def fmt(m):
+        return f"{m.group(2)}（頁面 {m.group(1)}）："
+
+    def pipe(pat, text):                                                   # 照 `plain_reason` 的順序：先來源、再頁型通則
+        return live._PAGE_TYPE.sub(lambda m: f"（頁面 {m.group(1)}）", pat.sub(fmt, text))
+
+    pieces = ["[yp010000]", "[yp010001]", " ", "\t", "\u3000", "\u00a0", "\n", "\r", "：", "；", "[", "]", "FundClear",
+              "合庫配息頁", "x", "a b", "empty", "，", "(", "'"]
+    rng = random.Random(20261015)
+    corpus = ["".join(rng.choice(pieces) for _ in range(rng.randint(1, 12))) for _ in range(20000)]
+    corpus += [f"[yp010000]{ws * n}{tail}" for ws in (" ", "\t", "\u3000", "\u00a0") for n in (0, 1, 2, 5)
+               for tail in ("", "x", "：", "x：", "\n：", "；：", "FundClear：empty")]
+
+    def edge(text):                                                         # 舊式以「全是空白」當名稱命中
+        return any(m.group(2).strip() == "" for m in old.finditer(text))
+
+    edges = [t for t in corpus if edge(t)]
+    assert edges                                                            # 語料真的含這個邊角
+    diffs = [t for t in corpus if pipe(old, t) != pipe(new, t)]
+    assert diffs and set(diffs) <= set(edges)
+    for text in edges:                                                      # 邊角上的差別只有「開頭多一個空白名稱」
+        if text in diffs:
+            assert pipe(new, text) == pipe(old, re.sub(r"(\[[a-z]{2}\d{6}\])\s*(?=：)", r"\1", text))
+
+
+def test_修正輪3_dict讀得懂但格式化失敗_照去殼處理_不炸():
+    raw = "{'a': 0x" + "f" * 4000 + "}"                     # str() 轉十進位超過 4300 位上限 → ValueError
+    out = live.plain_reason(raw)
+    assert out == "（a: 0x" + "f" * 4000 + "）"
 
 
 def test_修正輪2_效能_長名稱宣告_輸出不丟字():

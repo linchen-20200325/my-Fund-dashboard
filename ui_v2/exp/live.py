@@ -324,7 +324,15 @@ _PLAIN_WORDS = {
 _INTERNAL_CALL = re.compile(r"（auto_fetch_moneydj\([^()]*\)）|\(auto_fetch_moneydj\([^()]*\)\)|auto_fetch_moneydj\([^()]*\)")
 _CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\(([^()（）]*)\)")             # 其他 name(args)：去掉呼叫樣式、留內容
 _PAGE_AT_HOST = re.compile(r"\b([a-z]{2}\d{6})@([A-Za-z0-9.-]+)")          # yp011001@www.moneydj.com
-_PAGE_SOURCE = re.compile(r"\[([a-z]{2}\d{6})\]\s*([^\[\]：\n；]+?)：")         # [yp010000] FundClear：
+# [yp010000] FundClear：
+# ~~`\[([a-z]{2}\d{6})\]\s*([^\[\]：\n；]+?)：`~~ → 2026-10-15 #966 修正輪 3（獨立稽核必修；有意識的更正，不是漏刪；
+# 決策者：AI 總管）：`\s*` 與第二組都吃得下空白，頁型標記後接一長串空白（半形、tab、全形「　」、NBSP）又沒有「：」時，
+# `\s*` 每退一格第二組就重掃到尾 —— 平方時間（實測 f383c0c：`[yp010000]` 後接 2 萬個空白約 3.4 秒）。
+# 改為第二組（來源名稱）第一個字不得是空白：`\s*` 退回的那一格一定是空白，第二組當場失敗，整體線性。
+# **語意只差一個邊角**：舊式在「頁型後只有空白、緊接「：」」（`[yp010000]   ：`）時會把空白當成來源名稱命中，
+# 名稱是冒號前那一個空白，畫成「 （頁面 yp010000）：」（開頭多一個空白）；新式不命中，改由 `_PAGE_TYPE` 畫成「（頁面 yp010000）：」。空白不是來源名稱，
+# 以新式為準（測試釘住）。其餘輸入新舊逐字相同（等價性測試）。
+_PAGE_SOURCE = re.compile(r"\[([a-z]{2}\d{6})\]\s*([^\[\]：\n；\s][^\[\]：\n；]*?)：")
 _PAGE_TYPE = re.compile(r"\[([a-z]{2}\d{6})\]\s*")                       # 其餘 [yp010000]
 _DICT = re.compile(r"\{[^{}]*\}")                                         # {'rows': 3}
 _STATUS_WORD = re.compile(r"(狀態 |：)'?(none_confirmed|undetermined|failed|rows|empty|unknown)'?(?![A-Za-z0-9_])")
@@ -346,6 +354,11 @@ def _page_at_host(match) -> str:
     return f"{_PAGE_NAMES.get(page, '頁面 ' + page)}（{_HOST_NAMES.get(host, host)}）"
 
 
+def _strip_shell(text: str) -> str:
+    """讀不懂的字面只去殼：大括號換成全形括號、拿掉單引號，其餘逐字留下（不刪內容）。"""
+    return text.replace("{", "（").replace("}", "）").replace("'", "")
+
+
 def _plain_dict(match) -> str:
     try:
         value = ast.literal_eval(match.group(0))
@@ -353,10 +366,16 @@ def _plain_dict(match) -> str:
     # 實測 `{[1]}`（集合裡放清單）丟 TypeError、`{'a': 1+1+…}` 十萬字丟 RecursionError、`{'a': ---…1}` 丟 MemoryError
     # （剖析器堆疊溢位），都會讓 `plain_reason` 連帶整頁組裝炸掉。這些都只表示「這段不是讀得懂的 dict 字面」，照下面去殼處理。
     except (ValueError, SyntaxError, TypeError, RecursionError, MemoryError):
-        return match.group(0).replace("{", "（").replace("}", "）").replace("'", "")
+        return _strip_shell(match.group(0))
     if not isinstance(value, dict):
         return match.group(0)
-    parts = [f"{_PLAIN_WORDS.get(str(k), str(k))} {'未記錄' if v is None else v}" for k, v in value.items()]
+    # 2026-10-15 #966 修正輪 3（獨立稽核小修；決策者：AI 總管）：讀得懂之後的格式化也可能失敗 —— 實測
+    # `{'a': 0xfff…}`（4000 位十六進位）在 `str()` 轉十進位時超過 Python 4300 位上限丟 ValueError，整頁組裝跟著炸。
+    # 格式化失敗同樣只表示「這段沒辦法換成白話」，照去殼處理。只收 ValueError（實測得到的那一種），其他例外照常往上拋。
+    try:
+        parts = [f"{_PLAIN_WORDS.get(str(k), str(k))} {'未記錄' if v is None else v}" for k, v in value.items()]
+    except ValueError:
+        return _strip_shell(match.group(0))
     # ~~空 dict →「（空）」~~ → 2026-10-15 #966 修正輪 2（稽核 Q 可選項；有意識的更正，不是漏刪；決策者：AI 總管）：
     # 字面 `{}` 不一定是「空的明細」（也可能是格式字串沒填的佔位），寫成「（空）」等於替原文下結論；改為原樣留下。
     return "、".join(parts) if parts else match.group(0)

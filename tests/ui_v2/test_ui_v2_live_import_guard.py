@@ -91,8 +91,9 @@ _FILE_ALLOWLIST = {
     # 2026-10-14 C2 接線（基本資料與淨值）：加 `fund_keys`（代碼對照）、`exp_profile`（基本資料逐欄出處）、
     # `exp_nav`（淨值與配息的逐檔記憶）、`nav_dividend`（扣下代碼常數）；`datetime.datetime`：台灣今天的日期（同 alo）。
     # `logging`：代碼對照表讀取失敗記 log（2026-10-14 修正輪）。
+    # `traceback`：同一條 log 帶遮蔽後的 traceback（2026-10-15 #966 修正輪 3，獨立稽核小修；標準庫）。
     "ui_v2/exp/source.py": {
-        "__future__", "logging", "os", "datetime.datetime", "streamlit",
+        "__future__", "logging", "os", "traceback", "datetime.datetime", "streamlit",
         "services.v2_tables.exp_nav", "services.v2_tables.exp_profile", "services.v2_tables.exp_universe",
         "services.v2_tables.fund_keys", "services.v2_tables.masking", "services.v2_tables.nav_dividend",
         "services.v2_tables.settings_store", "ui_v2.exp.live",
