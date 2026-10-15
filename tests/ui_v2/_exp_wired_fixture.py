@@ -40,8 +40,12 @@ NONE_DETAIL = "[yp010000] FundClear：empty\n[yp010000] 合庫配息頁：empty"
 CONFLICT_LINE = "淨值序列宣告的幣別與來源自報（MoneyDJ+TDCC）的幣別不同（即時序列:'EUR'；來源自報（MoneyDJ+TDCC） USD）；淨值 30 筆全部不寫"
 DROPPED_LINE = ("供列的來源回報有列沒有交出來（TCB：{'truncated': 3, 'filtered': 0, 'other_tables': 0}）；"
                 "寫出的列不是全部，不算已確定")
-DIV_CCY_LINE = ("配息宣告的幣別與來源自報（MoneyDJ+TDCC）的幣別不同或認不出（'EUR'；來源自報（MoneyDJ+TDCC） USD）；"
+# ~~`div_ccy_differs` 也用「不同或認不出」那一句~~ → 2026-10-15 #966 修正輪 2（有意識的更正，不是漏刪）：L2 這一支改用
+# 專用句（`nav_dividend.TEXT_DIV_CCY_DIFFERS_LABELED`，沒有「或認不出」）；「認不出」那一句留給 `ccy_conflict`。
+DIV_CCY_LINE = ("配息宣告的幣別與來源自報（MoneyDJ+TDCC）的幣別不同（'EUR'、'EUR'；來源自報（MoneyDJ+TDCC） USD）；"
                 "不改標籤、不換算，這一檔的配息 2 筆全部不寫")
+DIV_CCY_CONFLICT_LINE = ("配息宣告的幣別與來源自報（MoneyDJ+TDCC）的幣別不同或認不出（'美元累積'；來源自報（MoneyDJ+TDCC） USD）；"
+                         "不改標籤、不換算，這一檔的配息 1 筆全部不寫")
 NO_SERIES = "A 鏈（auto_fetch_moneydj('G07')）沒有取得淨值序列"
 
 CODES = ("A01", "B02", "C03", "D04", "E05", "F06", "G07", "H08", "I09", "J10")
@@ -200,12 +204,15 @@ def nav_out(codes=CODES) -> dict:
             ok_nav(code, date(2026, 10, 12), 9.0)
             div["withheld"][code] = DIV_CCY_DIFFERS
             div["skipped"][code] = [DIV_CCY_LINE]
+            div["fetched"][code] = div["skipped_rows"][code] = 2              # 修正輪 2：與真 L2 同（`_reconcile(out, n)`）
             div["settled"][code] = False
             div["provenance"][code] = {"source": None, "fetched_at": None, "ccy_source": None, "outcome": "rows",
                                        "outcome_detail": "[yp010000] FundClear：rows", "settled": False,
                                        # 合併修正輪 C1：衝突各筆的除息日（2026-08-05 與 2026-09-05 都在窗口內）
                                        "conflict_ex_dates": ["2026-08-05", "2026-09-05"],
-                                       "conflict_ex_dates_missing": 0}
+                                       "conflict_ex_dates_missing": 0,
+                                       # 修正輪 2：L2 這一支另交出被剔除的筆數（本情境沒有被剔除的列）
+                                       "conflict_rejected_rows": 0}
     return {"nav": nav, "dividend": div, "memo": memo, "not_fetched": not_fetched}
 
 

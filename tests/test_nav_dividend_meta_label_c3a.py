@@ -221,9 +221,12 @@ def test_meta_配息宣告幣別與meta不同_配息整檔扣下():
     assert out["dividend"]["rows"] == []
     # ~~ND.WITHHELD_CCY_CONFLICT~~ → 2026-10-14（`49` Q7）：'EUR' 認得出、與 meta 不同 → `div_ccy_differs`；文案不變。
     assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_DIV_CCY_DIFFERS}
+    # ~~「不同或認不出」~~ → 2026-10-15 #966 修正輪 2（稽核 P；有意識的更正，不是漏刪）：這一支每筆幣別都認得出，
+    # 改用專用句 `TEXT_DIV_CCY_DIFFERS_LABELED`（沒有「或認不出」）；`ccy_conflict` 那一支的句子不變（見下一條）。
     assert out["dividend"]["skipped"]["MZ01"] == [
-        f"配息宣告的幣別與{META_TEXT}的幣別不同或認不出（'EUR'；{META_TEXT} USD）；"
+        f"配息宣告的幣別與{META_TEXT}的幣別不同（'EUR'；{META_TEXT} USD）；"
         "不改標籤、不換算，這一檔的配息 2 筆全部不寫"]
+    assert out["dividend"]["provenance"]["MZ01"]["conflict_rejected_rows"] == 0
     assert len(out["nav"]["rows"]) == 10   # 淨值不受影響
 
 
@@ -498,3 +501,48 @@ def test_meta_ccy_conflict與hld_不附加衝突除息日():
     funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "holding_ccy": "USD"}]
     hld = _build(funds, {"MZ01": _res("MZ01", items=[_fc_item("2026-09-05", "EUR")])})
     assert "conflict_ex_dates" not in hld["dividend"]["provenance"]["MZ01"]
+
+
+# ═══════════════════════ 2026-10-15 #966 修正輪 2：被剔除的列交出來（稽核 P 必修） ═══════════════════════
+
+def test_meta_ccy_conflict認不出_句子照舊有或認不出_不附加剔除計數():
+    items = [_fc_item("2026-09-05", "美元累積")]
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    assert out["dividend"]["skipped"]["MZ01"] == [
+        f"配息宣告的幣別與{META_TEXT}的幣別不同或認不出（'美元累積'；{META_TEXT} USD）；"
+        "不改標籤、不換算，這一檔的配息 1 筆全部不寫"]
+    assert "conflict_rejected_rows" not in out["dividend"]["provenance"]["MZ01"]
+
+
+@pytest.mark.parametrize("bad", ["2020-13-45", None, "民國109年"])
+def test_meta_div_ccy_differs_壞日期那筆被剔除_交出筆數與原因_不進衝突日期(bad):
+    """稽核 P 情境：2020 年 EUR ＋ 一筆日期壞掉的 EUR。壞日期那筆在迴圈裡被剔除、進不了 `conflict_ex_dates`
+    （`conflict_ex_dates_missing` 仍為 0）；本輪起另交出 `conflict_rejected_rows` 與逐原因的 skipped 行。"""
+    items = [_fc_item("2020-03-05", "EUR"), _fc_item(bad, "EUR")]
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    div = out["dividend"]
+    prov = div["provenance"]["MZ01"]
+    assert div["withheld"] == {"MZ01": ND.WITHHELD_DIV_CCY_DIFFERS}
+    assert prov["conflict_ex_dates"] == ["2020-03-05"] and prov["conflict_ex_dates_missing"] == 0
+    assert prov["conflict_rejected_rows"] == 1
+    assert div["skipped"]["MZ01"] == [
+        f"配息宣告的幣別與{META_TEXT}的幣別不同（'EUR'；{META_TEXT} USD）；不改標籤、不換算，這一檔的配息 2 筆全部不寫",
+        f"日期不是 YYYY-MM-DD 或 YYYY/MM/DD（{bad!r}） 1 筆不寫"]
+    assert div["fetched"]["MZ01"] == 2 and div["skipped_rows"]["MZ01"] == 2
+
+
+def test_meta_div_ccy_differs_沒宣告幣別那筆被剔除_也計入():
+    items = [_fc_item("2020-03-05", "EUR"), _fc_item("2026-09-05", "")]
+    out = _build(_meta_funds("MZ01", "USD"), {"MZ01": _res("MZ01", items=items)})
+    prov = out["dividend"]["provenance"]["MZ01"]
+    assert prov["conflict_rejected_rows"] == 1
+    assert any("來源未宣告這一筆的配息幣別" in line for line in out["dividend"]["skipped"]["MZ01"])
+
+
+def test_hld_幣別衝突_剔除的列照舊不交出_黃金不變():
+    items = [_fc_item("2026-09-05", "EUR"), _fc_item("2026-13-45", "EUR")]
+    funds = [{"fund_code": "MZ01", "full_key": "MZ01", "chain_code": "MZ01", "portal": "", "holding_ccy": "USD"}]
+    out = _build(funds, {"MZ01": _res("MZ01", items=items)})
+    assert out["dividend"]["withheld"] == {"MZ01": ND.WITHHELD_CCY_CONFLICT}
+    assert "conflict_rejected_rows" not in out["dividend"]["provenance"]["MZ01"]
+    assert len(out["dividend"]["skipped"]["MZ01"]) == 1

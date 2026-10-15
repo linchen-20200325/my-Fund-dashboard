@@ -510,7 +510,7 @@ def test_Q7_配息幣別與淨值幣別不同_不適用():
 def test_Q7_配息幣別認不出_維持資料未備():
     out = F.nav_out(("A01",))
     out["dividend"]["withheld"]["A01"] = "ccy_conflict"
-    out["dividend"]["skipped"]["A01"] = [F.DIV_CCY_LINE.replace("'EUR'", "'美元累積'")]
+    out["dividend"]["skipped"]["A01"] = [F.DIV_CCY_CONFLICT_LINE]
     out["dividend"]["rows"] = []
     wired = _wired(nav_out=out, codes=("A01",))
     text = wired["cells"]["A01"]["div_ratio_pct"]["text"]
@@ -564,6 +564,104 @@ def test_使用者可見文字沒有內部名稱():
 ])
 def test_原因白話化_白名單與通則_不吞原因(raw, want):
     assert live.plain_reason(raw) == want
+
+
+# ═════════════════════ 2026-10-15 #966 修正輪 2：plain_reason 走樣與效能（稽核 Q） ═════════════════════
+
+
+@pytest.mark.parametrize("raw, want", [
+    # 稽核 Q 可選項：`int()` 不再被吃成 `int`（舊版全域刪空括號）
+    ("invalid literal for int() with base 10: 'x'", "invalid literal for int（） with base 10: 「x」"),
+    ("f() 與 g（） 都失敗", "f（） 與 g（） 都失敗"),
+    # 入口呼叫拿掉時，只連包著它的那一對括號一起拿掉（全形、半形各一）
+    ("A 鏈（auto_fetch_moneydj('G07')）與 f() 都失敗", "多來源取數與 f（） 都失敗"),
+    ("A 鏈(auto_fetch_moneydj('G07'))失敗", "多來源取數失敗"),
+    ("auto_fetch_moneydj('G07') 回空", " 回空"),
+    # 稽核 Q 可選項：字面 `{}` 原樣留下，不寫成「（空）」
+    ("明細 {}，格式 {} 未填", "明細 {}，格式 {} 未填"),
+    # 讀不懂的字面只去殼、不炸（舊版 `{[1]}` 丟 TypeError，整頁組裝跟著炸）
+    ("集合 {[1]} 與 {()}", "集合 （[1]） 與 {()}"),
+    ("{'rows': 3}", "有配息列 3"),
+    # 已知未涵蓋：巢狀呼叫只改最內層（`docs/v2/44` 7.3.3 有記）
+    ("outer(inner(x))", "outer(inner（x）)"),
+])
+def test_修正輪2_空括號與空dict不走樣_怪字面不炸(raw, want):
+    assert live.plain_reason(raw) == want
+
+
+@pytest.mark.parametrize("raw", [
+    "{'a': " + "-" * 100_000 + "1}",          # 剖析器堆疊溢位：MemoryError
+    "{'a': 1" + "+1" * 50_000 + "}",          # RecursionError
+    "{[1]}",                                  # TypeError
+], ids=["MemoryError", "RecursionError", "TypeError"])
+def test_修正輪2_literal_eval丟的各種例外_都照去殼處理_不炸(raw):
+    out = live.plain_reason(raw)
+    assert "{" not in out and "}" not in out and out.startswith("（")
+
+
+# 修正前的 `_DECLARED`（d00365c 原字），只用來做新舊等價對照；不得拿去用在正式路徑。
+_OLD_DECLARED = r"([^\s:：（(、，；]+):'([^']*)'"
+
+
+def _declared_corpus():
+    import random
+
+    pieces = ["即時序列:'EUR'", "MoneyDJ:'美元'", "TDCC:'歐元'", "FundClear:沒提供", "a:'", "':'", ":'x'", "'",
+              "（", "(", "、", "，", "；", " ", "\n", "：", "中文", "abc", "None", "{'rows': 3}", "[yp010000]",
+              "yp011001@www.moneydj.com", "auto_fetch_moneydj('G07')", "A 鏈", "int()", "{}", "名" * 63, "名" * 64,
+              "名" * 65, "x" * 200]
+    rng = random.Random(20261015)
+    corpus = [rng.choice(pieces) for _ in range(200)]
+    corpus += ["".join(rng.choice(pieces) for _ in range(rng.randint(2, 12))) for _ in range(3000)]
+    corpus += ["名" * n + ":'EUR'" for n in (1, 63, 64, 65, 66, 200, 5000)]
+    corpus += ["前綴 " + "a" * n + ":'v' 後" + "b" * n + ":'w'" for n in (10, 64, 65, 129)]
+    return corpus
+
+
+def test_修正輪2_宣告樣式加上限_新舊替換逐字相同():
+    """名稱段加上限 64 之後，`來源:'值'` 的替換結果與舊式逐字相同（含名稱段超過 64 字：前面那段原樣留著、不丟字）。"""
+    import re
+
+    old = re.compile(_OLD_DECLARED)
+    assert old.pattern != live._DECLARED.pattern                             # 前提：真的換了 pattern
+
+    def fmt(m):
+        return f"{m.group(1)} 宣告「{m.group(2)}」"
+
+    diffs = [t for t in _declared_corpus() if old.sub(fmt, t) != live._DECLARED.sub(fmt, t)]
+    assert diffs == []
+
+
+_LONG = 100_000
+_PERF_INPUTS = {
+    "a": "a" * _LONG,
+    "中": "中" * _LONG,
+    "'": "'" * _LONG,
+    "a:": "a:" * (_LONG // 2),
+    "長名稱:'v'": "名" * _LONG + ":'EUR'",
+    "[頁型] +長串": "[yp010000] " + "a" * _LONG,
+    "頁型@+a.": "yp011001@" + "a." * (_LONG // 2),
+    "{ +長串": "{'a': '" + "x" * _LONG,
+    "name( +長串": "f(" + "x" * _LONG,
+    "中英引號混合": ("來源中文abc'x'" * (_LONG // 10))[:_LONG],
+}
+
+
+@pytest.mark.parametrize("name", list(_PERF_INPUTS))
+def test_修正輪2_效能_十萬字的病態輸入_兩秒內(name):
+    """稽核 Q 效能必修：d00365c 的 `_DECLARED` 對長串不含空白的字是平方時間（實測 4 萬個「中」約 15 秒）。"""
+    import time
+
+    text = _PERF_INPUTS[name]
+    assert len(text) >= _LONG
+    started = time.perf_counter()
+    live.plain_reason(text)
+    assert time.perf_counter() - started < 2.0
+
+
+def test_修正輪2_效能_長名稱宣告_輸出不丟字():
+    text = "名" * _LONG + ":'EUR'"
+    assert live.plain_reason(text) == "名" * _LONG + " 宣告「EUR」"
 
 
 def test_原因白話化只收字串():
@@ -646,11 +744,25 @@ def test_D2_先遮蔽再白話化_秘密值含引號也遮得掉():
     assert "‹已遮蔽›" in node["text"] and "XYZ" not in node["text"] and "tok" not in node["text"]
 
 
-def _differs_out(dates, missing=0):
+_KEEP = object()
+
+
+def _differs_out(dates, missing=0, *, rejected=0, skipped=_KEEP, mask=F.mask):
+    """`rejected`：L2 交出的 `conflict_rejected_rows`（`_KEEP` 以外的值照放；`_DROP` ＝ 不放這個鍵）。"""
     out = F.nav_out(("J10",))
-    out["dividend"]["provenance"]["J10"]["conflict_ex_dates"] = dates
-    out["dividend"]["provenance"]["J10"]["conflict_ex_dates_missing"] = missing
-    return _wired(nav_out=out, codes=("J10",))["cells"]["J10"]["div_ratio_pct"]
+    prov = out["dividend"]["provenance"]["J10"]
+    prov["conflict_ex_dates"] = dates
+    prov["conflict_ex_dates_missing"] = missing
+    if rejected is _DROP:
+        prov.pop("conflict_rejected_rows", None)
+    else:
+        prov["conflict_rejected_rows"] = rejected
+    if skipped is not _KEEP:
+        out["dividend"]["skipped"]["J10"] = skipped
+    return _wired(nav_out=out, codes=("J10",), mask=mask)["cells"]["J10"]["div_ratio_pct"]
+
+
+_DROP = object()
 
 
 def test_C2_衝突落在窗口內_不適用():
@@ -659,6 +771,9 @@ def test_C2_衝突落在窗口內_不適用():
     assert node["source_tag"] == live.TAG_DIV_CCY_DECLARED
     assert node["source_tip"].startswith("來源：配息資料（各筆幣別宣告）") and "不同或認不出" not in node["source_tip"]
     assert "2026-09-05" in node["source_tip"]
+    # 修正輪 2（稽核 P 必修）：L2 原文（先遮蔽、再白話化）照實附上 —— 幣別值與筆數找得回來
+    assert ("資料層紀錄：配息宣告的幣別與來源自報（MoneyDJ+TDCC）的幣別不同（「EUR」、「EUR」；來源自報（MoneyDJ+TDCC） USD）；"
+            "不改標籤、不換算，這一檔的配息 2 筆全部不寫") in node["source_tip"]
 
 
 def test_C2_衝突只在窗口外_資料未備():
@@ -682,6 +797,105 @@ def test_C2_衝突晚於最新淨值日_窗口外_資料未備():
 def test_C2_衝突筆缺日期或沒交出日期_資料未備(dates, missing):
     node = _differs_out(dates, missing)
     assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+
+
+def test_修正輪2_有被剔除的列_衝突只在以前_一律無法確認_tooltip揭露():
+    """稽核 P：2020 年 EUR ＋ 一筆被剔除的列 → 不得說「只出現在近 12 個月以前」。"""
+    node = _differs_out(["2020-03-05"], rejected=1)
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}" and node["state"] == logic.STATE_MISSING
+    assert live.TEXT_DIV_CCY_DIFFERS_BEFORE not in node["text"]
+    assert live.TIP_DIV_REJECTED.format(n=1) in node["source_tip"] and "2020-03-05" in node["source_tip"]
+
+
+def test_修正輪2_有被剔除的列_衝突晚於淨值日_也無法確認():
+    assert _differs_out(["2026-10-13"], rejected=2)["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+
+
+@pytest.mark.parametrize("rejected", [_DROP, None, "1", True, False, 1.0, -1])
+def test_修正輪2_資料層沒交出合法的剔除筆數_無法確認(rejected):
+    node = _differs_out(["2020-03-05"], rejected=rejected)
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+    assert live.TIP_DIV_REJECTED_UNKNOWN in node["source_tip"]
+
+
+def test_修正輪2_窗口內已確認有衝突_有被剔除的列仍是不適用():
+    node = _differs_out(["2020-03-05", "2026-09-05"], rejected=3)
+    assert node["text"] == live.TEXT_DIV_CCY_DIFFERS_NA
+    assert live.TIP_DIV_REJECTED.format(n=3) in node["source_tip"]
+
+
+def test_修正輪2_沒有被剔除的列_衝突只在以前_照舊不下結論():
+    assert _differs_out(["2020-03-05"], rejected=0)["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_BEFORE}"
+
+
+def test_修正輪2_缺日期那一支_tooltip也附資料層紀錄():
+    node = _differs_out(["2026-09-05", None], 1)
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+    assert "資料層紀錄：" in node["source_tip"] and "「EUR」" in node["source_tip"]
+
+
+def test_修正輪2_資料層紀錄也先遮蔽再白話化():
+    secret = "tok 'en' XYZ"                          # 先白話化的話，成對單引號會變「」，秘密值就比對不到
+    line = f"配息宣告的幣別與來源自報的幣別不同（'EUR'；{secret}）；這一檔的配息 1 筆全部不寫"
+    node = _differs_out(["2020-03-05"], skipped=[line], mask=lambda t: t.replace(secret, "‹已遮蔽›"))
+    assert "‹已遮蔽›" in node["source_tip"] and "XYZ" not in node["source_tip"] and "tok" not in node["source_tip"]
+
+
+def test_修正輪2_真的L2_壞日期被剔除_2020衝突_無法確認_tooltip有幣別筆數與剔除原因():
+    """稽核 P 情境走真的 `exp_nav` → `nav_dividend`（只替換 A 鏈取數）：2020 年 EUR ＋ `2020-13-45` EUR。"""
+    exp_nav = pytest.importorskip("services.v2_tables.exp_nav")
+    nav_dividend = pytest.importorskip("services.v2_tables.nav_dividend")
+    S = pytest.importorskip("repositories.fund.sources")
+    FO = pytest.importorskip("repositories.fund.fund_orchestration")
+    pd = pytest.importorskip("pandas")
+    from datetime import datetime, timezone
+
+    at = "2026-10-14T00:00:00+00:00"
+
+    def item(day):
+        return {"date": day, "ex_date": day, "pay_date": day, "amount": 0.04, "yield_pct": 0, "currency": "EUR",
+                S.DIV_PROVENANCE_KEY: {"parser": S.DIV_PARSER_FUNDCLEAR, "date_field": "ExDividendDate",
+                                       "currency_field": "Currency", "amount_field": "DividendAmount",
+                                       "fetched_at": at}}
+
+    outcome = {"outcome": FO.DIV_OUTCOME_ROWS, "legacy_inline_parse": False, "none_evidenced": False,
+               "sources": [{"source": "FundClear", "parser": S.DIV_PARSER_FUNDCLEAR, "status": S.DIV_STATUS_ROWS,
+                            "detail": "", "page_type": "yp010000",
+                            "dropped": {"truncated": 0, "filtered": 0, "other_tables": 0}}]}
+
+    def chain(chain_code, full_key):
+        days = pd.date_range("2026-09-01", "2026-10-09", freq="B")
+        res = {"full_key": full_key, "series": pd.Series([10.0] * len(days), index=days),
+               "dividends": [item("2020-03-05"), item("2020-13-45")], FO.DIVIDENDS_OUTCOME_KEY: outcome,
+               "data_source": "FundClear", "chain_started_at": at}
+        res["series"].attrs.update({"source": "FundClear:GetFundNAV", "fetched_at": at, "currency": "USD"})
+        series, error = nav_dividend._nav_from_chain(res, "yp010000", chain_code, full_key)
+        return series, error, nav_dividend._div_from_chain(res, full_key)
+
+    funds = [{"fund_code": "B01", "full_key": "B01", "chain_code": "B01", "portal": "",
+              "declared_ccy": "USD", "declared_ccy_source": "meta:MoneyDJ+TDCC"}]
+    exp_nav.clear_memo()
+    try:
+        out = exp_nav.load_nav_dividend(funds, now=datetime(2026, 10, 14, 2, 0, tzinfo=timezone.utc),
+                                        chain_fetch=chain)
+    finally:
+        exp_nav.clear_memo()
+    div = out["dividend"]
+    # 前提：真 L2 走了 div_ccy_differs、只交出 2020 那一筆衝突日期、壞日期那筆以剔除計數交出
+    assert div["withheld"] == {"B01": nav_dividend.WITHHELD_DIV_CCY_DIFFERS}
+    prov = div["provenance"]["B01"]
+    assert prov["conflict_ex_dates"] == ["2020-03-05"] and prov["conflict_ex_dates_missing"] == 0
+    assert prov["conflict_rejected_rows"] == 1
+    profiles = {"rows": [], "cells": {}, "declared": {}, "source_status": {}}
+    wired = live.assemble_wired(profiles, ["B01"], out, unresolved={}, today=date(2026, 10, 14), mask=F.mask,
+                                withheld_texts=F.WITHHELD_TEXTS, input_conflict=F.INPUT_CONFLICT,
+                                div_ccy_differs=nav_dividend.WITHHELD_DIV_CCY_DIFFERS)
+    node = wired["cells"]["B01"]["div_ratio_pct"]
+    assert node["text"] == f"{logic.ND_TEXT}：{live.TEXT_DIV_CCY_DIFFERS_UNKNOWN}"
+    tip = node["source_tip"]
+    assert "「EUR」" in tip and "這一檔的配息 2 筆全部不寫" in tip            # 幣別值、筆數
+    assert "日期不是 YYYY-MM-DD 或 YYYY/MM/DD（「2020-13-45」） 1 筆不寫" in tip   # 被剔除的列
+    assert live.TIP_DIV_REJECTED.format(n=1) in tip and "不同或認不出" not in tip
 
 
 def test_C2_窗口判斷與配息比共用同一支():
