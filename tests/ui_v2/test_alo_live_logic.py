@@ -287,7 +287,8 @@ def test_現況守衛_目前B線v1沒有未授權方向性輸出_正式模式的
         for arrow in logic.FORBIDDEN_ARROWS:
             assert arrow not in text, (name, arrow)
         for word in logic.FORBIDDEN_BUTTON_WORDS:
-            assert word not in [b["label"] for b in _buttons(_live_model(name))], (name, word)
+            # 2026-10-15 稽核指出：舊寫法 `word not in [標籤串列]` 比的是整串相等，標籤「含」禁詞時不會紅；改成包含比對。
+            assert not any(word in b["label"] for b in _buttons(_live_model(name))), (name, word)
 
 
 def test_live的import就是那幾個_純函式模組():
