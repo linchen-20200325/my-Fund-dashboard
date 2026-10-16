@@ -28,7 +28,7 @@
    - `docs/v2/44_fund_ui_ssot.md`（凍結 SSOT，畫面與文案規格）
    - `docs/v2/49_data_integration_plan.md`（資料接線計畫）
    - `docs/v2/55_preview_acceptance_guide.md`（Phase 3 驗收前置與已知限制）
-   - `docs/v2/CONSTITUTION.md`（子法 1）
+   - `docs/v2/CONSTITUTION.md`（子法 1；**須併讀**正式修正案 #8 `docs/v2/57_amendment_8_directional_judgment.md`，兩者合讀為單一版本，`docs/DECISIONS.md` `DEC-2026-10-16-14`）
    - `EXCEPTIONS.md`（憲法的例外清單與 `8.3.P` 待判定登記簿）
 
 ## 2. 現況 checkpoint
@@ -42,14 +42,14 @@
 | Phase 位置 | **Phase 2 完成**；分支成果保存批完成（#978）；~~**Project AI Constitution v1.0 導入中**（本批）~~ v1.0 導入完成（#979 已合併）；~~**治理十一項裁示收斂批進行中**（本批）~~ 治理十一項裁示收斂批完成（#980 已合併，`cbf24b5`）；**Phase 3 尚未開始**（2026-10-16 更新） | Phase 2 完成見交接本〈第六十五次更新〉；保存批見〈第六十六次更新〉；#979 見 `git log -1 ab30239`；#980 見 `git log -1 cbf24b5`；Phase 3 時機為客戶 2026-10-16 治理十一項裁示〈本批禁止〉清單之後一句「完成後停在 safe checkpoint，不要自行開始 Phase 3」（2026-10-16 更新） |
 | active PR | ~~**本批 PR #979**（導入 v1.0 四份治理文件；由總管開與合併）~~ ~~#979 已合併；**本批 PR 待開**（治理十一項裁示收斂；由總管開與合併，PR 號合併後補）~~ → #979、#980 皆已合併；**目前沒有 active PR**（舊 draft 四支見下一列） | 總管 2026-10-16 派工單；#979 合併由 `ab30239` 的 parents 實查；#980 合併由 `cbf24b5` 的 parents 實查；open PR 以 `gh api …/pulls?state=open` 實查（2026-10-16 14:38 UTC） |
 | 舊 draft PR | #791、#836、#837、#839 四支，**客戶指示不動** | `gh api …/pulls?state=open` 實查（~~2026-10-16 13:18 UTC~~ 2026-10-16 14:38 UTC）：open 只有這四支 draft（~~本批 PR 開之前~~ #980 合併之後；2026-10-16 更新） |
-| blocker | ~~目前無（依上列實查：~~ ~~main CI 三條 success、~~ ~~無衝突中的 PR；main `cbf24b5` 的 CI 量測時尚未跑完，跑完前不判定為 blocker 也不判定為綠）~~ → 無（依上列實查，2026-10-16 15:04 UTC：main `cbf24b5` CI 三條 success、沒有 active PR） | 本組實查；「無」只涵蓋上列查過的項目 |
-| 治理面待客戶的唯一動作 | 核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）：第 1 欄所列「修改後完整條文」（可改字後核准）＋同一次明示該提案單列出的四點；**不擋 Phase 3**（總管 2026-10-16 派工判定） | `docs/DECISIONS.md` `DEC-2026-10-16-08`；`docs/BACKLOG.md` BL-0221 |
+| blocker | ~~目前無（依上列實查：~~ ~~main CI 三條 success、~~ ~~無衝突中的 PR；main `cbf24b5` 的 CI 量測時尚未跑完，跑完前不判定為 blocker 也不判定為綠）~~ → 無（依上列實查，2026-10-16 15:04 UTC：main `cbf24b5` CI 三條 success、沒有 active PR）；方向性政策 blocker：無（客戶 2026-10-16 已核准提案單 #8，`DEC-2026-10-16-14`；狀態更新，不是漏刪） | 本組實查；「無」只涵蓋上列查過的項目；方向性政策一項見 `docs/DECISIONS.md` `DEC-2026-10-16-14` |
+| 治理面待客戶的唯一動作 | ~~核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）：第 1 欄所列「修改後完整條文」（可改字後核准）＋同一次明示該提案單列出的四點~~；**不擋 Phase 3**（總管 2026-10-16 派工判定）→ **無**：客戶 2026-10-16 已正式核准提案單 #8 全部四項，正式修正案 `docs/v2/57_amendment_8_directional_judgment.md` 自併入 main 起生效（有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`）） | `docs/DECISIONS.md` `DEC-2026-10-16-08`、`DEC-2026-10-16-14`；`docs/BACKLOG.md` BL-0221（已關閉） |
 
 ## 3. 下一步與待客戶裁示
 
 **下一步**：
 
-1. ~~本批 PR（`PROJECT_RULES.md`、`docs/BACKLOG.md`、`docs/DECISIONS.md`、本檔，及交接本／`CLAUDE.md`／root `BACKLOG.md`／`TODO.md` 的指標行）→ 稽核 → CI → 合併 → 更新本檔第 2 節 main SHA。~~ → #979 已合併（`ab30239`；狀態更新，不是漏刪）。~~**本批（治理十一項裁示收斂批）**：逐字裁示存檔、`docs/DECISIONS.md` `DEC-2026-10-16-03`～`-13`、`PROJECT_RULES.md` 第 14 節收斂、`CLAUDE.md`／`PROCESS.md`／`STATE.md`／`ARCHITECTURE.md` 指標、提案單 #8 → 至少 1 組獨立稽核（治理規則屬 `DEC-2026-10-16-05` 第二級）→ CI → 合併 → 驗證 main → 更新本檔第 2 節（**本批 PR 合併後更新**）。~~ → #980 已合併（`cbf24b5`；狀態更新，不是漏刪）。
+1. ~~本批 PR（`PROJECT_RULES.md`、`docs/BACKLOG.md`、`docs/DECISIONS.md`、本檔，及交接本／`CLAUDE.md`／root `BACKLOG.md`／`TODO.md` 的指標行）→ 稽核 → CI → 合併 → 更新本檔第 2 節 main SHA。~~ → #979 已合併（`ab30239`；狀態更新，不是漏刪）。~~**本批（治理十一項裁示收斂批）**：逐字裁示存檔、`docs/DECISIONS.md` `DEC-2026-10-16-03`～`-13`、`PROJECT_RULES.md` 第 14 節收斂、`CLAUDE.md`／`PROCESS.md`／`STATE.md`／`ARCHITECTURE.md` 指標、提案單 #8 → 至少 1 組獨立稽核（治理規則屬 `DEC-2026-10-16-05` 第二級）→ CI → 合併 → 驗證 main → 更新本檔第 2 節（**本批 PR 合併後更新**）。~~ → #980 已合併（`cbf24b5`；狀態更新，不是漏刪）。**本批（提案單 #8 核准裁示批）**：逐字裁示存檔 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`、正式修正案 `docs/v2/57_amendment_8_directional_judgment.md`、`docs/DECISIONS.md` `DEC-2026-10-16-14`、`PROJECT_RULES.md`／`docs/BACKLOG.md`／本檔／提案單 56 狀態同步、守衛 `tests/test_amendment_8_integrity.py` → 獨立稽核（母法／投資語意治理變更）→ CI 全綠 → 合併 → 重新驗證 main → 更新本檔第 2 節（checkpoint 由總管合併後更新）。
 2. 合併後停在 safe checkpoint；**本對話不自行開始 Phase 3**。之後可開新對話開始 **Phase 3：客戶實際使用／視覺／390px 手機 UX 驗收**（依 `docs/v2/55_preview_acceptance_guide.md`）。客戶回報驗收問題後進 Phase 4（修驗收問題，每批原則上最多 3 項）。
 3. 有時間窗：FX 觀測日探測重跑窗口 2026-11-02～約 11-24（上限約 11-26），錯過要等明年 3 月；重跑方式與按鈕分支見 `docs/BACKLOG.md` BL-0217（按鈕分支窗口結束前不得刪，見 BL-0265）。
 4. 本項以外**不構成動工授權**（`CLAUDE.md` §-1）。
@@ -57,8 +57,8 @@
 **待客戶裁示**（本檔不複製，只指位置）：
 
 - ~~`PROJECT_RULES.md` 第 14 節〈未調和的衝突（待客戶裁示）〉。~~ → 第 14 節 11 項已由客戶 2026-10-16 治理十一項裁示收斂（`docs/DECISIONS.md` `DEC-2026-10-16-03`～`-13`；狀態更新，不是漏刪）；該節改題為〈已裁示的治理衝突（2026-10-16 收斂）與尚待程序完成者〉。
-- **治理面唯一剩餘的客戶動作**：核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）第 1 欄所列「修改後完整條文」（可改字後核准），並在同一次簽核明示該提案單列出的四點（黑名單前三片語、user 2026-08-07 裁決的讀法、改法、母法同字條文）；詳見 `DEC-2026-10-16-08`。在那之前子法 1 一個位元組都不改，修正程序**尚未完成**。
-- `docs/BACKLOG.md` 中標「需客戶裁示」的條目（例：子法 1 條款衝突 BL-0221；BL-0222（`delete_branch_on_merge`）已由 `DEC-2026-10-16-10` 關閉；以該檔為準；2026-10-16 更新）。
+- **治理面唯一剩餘的客戶動作**：~~核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）第 1 欄所列「修改後完整條文」（可改字後核准），並在同一次簽核明示該提案單列出的四點~~（黑名單前三片語、user 2026-08-07 裁決的讀法、改法、母法同字條文）；詳見 `DEC-2026-10-16-08`。在那之前子法 1 一個位元組都不改，修正程序**~~尚未完成~~**。→ **無**（有意識的狀態變更，不是漏刪；2026-10-16；決策者：客戶（#8 核准裁示，`DEC-2026-10-16-14`））：客戶已正式核准提案單 #8 全部四項；正式修正案 `docs/v2/57_amendment_8_directional_judgment.md` 生效，子法 1 存檔仍一個位元組未改（方案 A）。
+- `docs/BACKLOG.md` 中標「需客戶裁示」的條目（例：~~子法 1 條款衝突 BL-0221~~（2026-10-16 由 `DEC-2026-10-16-14` 關閉）；BL-0222（`delete_branch_on_merge`）已由 `DEC-2026-10-16-10` 關閉；以該檔為準；2026-10-16 更新）。
 
 ## 4. 分支現況摘要
 
@@ -83,3 +83,4 @@
 - 第 2 節 main、CI、open PR、遠端分支數為本組 ~~2026-10-16 13:18 UTC~~ 2026-10-16 14:38 UTC 實查（#980 合併後的交接同步）；`CLAUDE.md`、`PROCESS.md`、`STATE.md`、`ARCHITECTURE.md` 與提案單 #8 由同批其他組撰寫，本組撰寫本檔時未見其定稿。
 - `PROJECT_RULES.md`、`docs/BACKLOG.md`、`docs/DECISIONS.md` 由同批其他組撰寫，本檔原稿寫作時尚未見其定稿；PR #979 稽核回修時已把本檔對 `PROJECT_RULES.md` 的引用改為該檔節號。
 - blocker「目前無」只涵蓋第 2 節查過的項目，不宣稱窮舉。
+- 提案單 #8 核准裁示批只改本檔第 1 節子法 1 指標、第 2 節「blocker」與「治理面待客戶的唯一動作」兩列、第 3 節；第 2 節 main／CI／active PR 等 checkpoint 欄位未動，由總管合併後更新。
