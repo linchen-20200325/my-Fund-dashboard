@@ -1,5 +1,7 @@
 # STATE.md — 基金戰情室 (Fund Dashboard)
 
+> 歷史文件；自 2026-10-16 起現況與下一步見 `docs/HANDOFF.md`，`PROCESS.md` §1 與本檔的張力見 `PROJECT_RULES.md` 第 14 節之 5。
+
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
 ## ⚠️ 2026-09-02 斷層登記:本檔自 2026-08-12 起漏記 132 批,本次補五筆條目 + 結構性變更索引
