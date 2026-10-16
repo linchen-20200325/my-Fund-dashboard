@@ -176,14 +176,14 @@
 3. 沒有未保存的 research／evidence —— `git diff --stat origin/main...origin/<b>` 看有無報告或資料檔，並對照 `docs/evidence/`；
 4. 沒有 worktree residue —— `git worktree list`；
 5. 沒有正式文件只能靠該 branch 作證據 —— `git grep -n '<b>' -- docs/ '*.md'`，並以該分支 head SHA 前 7 碼再搜一次；
-6. 沒有 workflow／runtime dependency —— `git grep -n '<b>' -- .github/`。
+6. 沒有 workflow／runtime dependency —— 全 repo 搜：`git grep -n '<b>' -- . ':!docs'`，`docs/` 內的命中另行判讀（多為歷史紀錄，依第 5 項處理）。理由：程式也會以常數引用分支名（例 `infra/asset_publish.py` 的 `_DEFAULT_BRANCH = "push-assets"`），只搜 `.github/` 會漏。
 
 指令中 `<b>` 是分支名的佔位；實際輸出要貼進回報，不寫「已確認」了事。
 
 **限定**：
 
 - 不因名稱舊就刪；remote cleanup 與 feature 工作分開成批。
-- **本輪（v1.0 導入批）禁止刪除既有／歷史 remote branch**；其後刪除既有分支仍須客戶指示：交接本〈客戶 2026-10-15 指示〉第 6 點「branch 不大規模清理」仍有效（約 :4579）；客戶 2026-10-16 核准的分支批是「只保存、不刪除」（`docs/DECISIONS.md` `DEC-2026-10-16-02`）。「須客戶指示」是本檔對「branch 不大規模清理」的延伸讀法，比常設授權嚴，見第 14 節之 8。
+- **本輪（v1.0 導入批）禁止刪除既有／歷史 remote branch**；其後刪除既有分支仍須客戶指示（射程依下一條總管裁決）：交接本〈客戶 2026-10-15 指示〉第 6 點「branch 不大規模清理」仍有效（約 :4579）；客戶 2026-10-16 核准的分支批是「只保存、不刪除」（`docs/DECISIONS.md` `DEC-2026-10-16-02`）。「須客戶指示」是本檔對「branch 不大規模清理」的延伸讀法，比常設授權嚴，見第 14 節之 8。
 - **PR 自身 head 分支在合併時自動刪除 —— 總管裁決（可被客戶推翻）**：repo 設定 `delete_branch_on_merge` 使 PR 合併時自動刪除其 head 分支。這屬既有常設授權（`PROCESS.md` §4 Auto-Ship 的 `--delete-branch`，約 :159；`CLAUDE.md` §-1.5.1a 接合 A1，約 :1016 起），**不屬**上一條「本輪禁止刪除」的射程；該射程指既有／歷史分支。要保留的 head 分支須在合併前處置。該設定本身的去留待客戶裁示（`docs/BACKLOG.md` BL-0222）。
 - **#791、#836、#837、#839 客戶指示不動**（交接本第 7 節〈客戶 2026-09-28 重申〉約 :4227 與其 2026-10-09 補註；交接本第六十六次更新分支分類 B 類，約 :597）。
 - `main`、`data`、`push-assets` 與探測 workflow 分支（`probe/*`）依實況保護（交接本第六十六次更新分支分類 A 類，約 :596）。
