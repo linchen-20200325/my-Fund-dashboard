@@ -455,7 +455,8 @@ _LAMP_LOOK = {
 # ALO-GAP-燈狀態字：取數失敗時燈仍灰，但不寫「中性」。
 _LAMP_LOOK_FAILED = (FETCH_FAIL_GLYPH, "狀態：取數失敗")
 # `44` 5.5 空狀態四種的顏色（本頁只用到其中三種）。
-_EMPTY_TONE = {"來源缺": "灰", "算不出來": "黃", "部分缺": "黃", "系統錯誤": "紅"}
+# 客戶 2026-10-16 裁示第 7 點：`算不出來`（文案為「⬜ 不適用：…」）由黃改灰；`部分缺` 的黃不動。
+_EMPTY_TONE = {"來源缺": "灰", "算不出來": "灰", "部分缺": "黃", "系統錯誤": "紅"}
 
 
 # ───────────────────────── 格式 ─────────────────────────
@@ -623,7 +624,8 @@ def layer_columns(layer: int, width_px: int) -> int:
 def status_badge(text: str) -> dict:
     if text not in STATUS_BADGE_LITERALS:
         raise ValueError(f"狀態徽章 {text!r} 不在 `44` 5.2 那七個之內")
-    return {"_kind": "狀態", "text": text, "_tone": "灰" if text == "資料未備" else "黃"}
+    # 客戶 2026-10-16 裁示第 7 點：「不適用」徽章與「資料未備」同為中性灰；其餘五個不動。
+    return {"_kind": "狀態", "text": text, "_tone": "灰" if text in ("資料未備", "不適用") else "黃"}
 
 
 def _redline_badge(mark: str) -> dict:

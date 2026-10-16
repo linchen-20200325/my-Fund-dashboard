@@ -88,7 +88,8 @@ def test_主值狀態_系統錯誤蓋過其他三態():
 def test_顏色語意逐態對上SSOT卡片表():
     assert logic.tone_for_state(logic.STATE_OK) == "中性"
     assert logic.tone_for_state(logic.STATE_MISSING) == "灰"
-    assert logic.tone_for_state(logic.STATE_BIZ) == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外`（`⬜ 不適用`）由黃改中性灰；`44` 5.1 卡片表同日行內擴寫。
+    assert logic.tone_for_state(logic.STATE_BIZ) == "灰"
     assert logic.tone_for_state(logic.STATE_ERROR) == "紅"
 
 
@@ -1451,7 +1452,8 @@ def test_第6件正控_同級是真的會發生_而且畫面照樣畫得出顏�
     assert logic.STATE_ERROR not in states, sorted(states)
     # 狀態排不出來 → 不硬答；但畫面還是要有一個顏色，不能當掉。
     assert block["_state"] is logic.STATE_UNRANKED
-    assert block["_tone"] == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外` 改灰之後，同級的兩個狀態顏色相同，畫面照樣畫得出顏色（灰）。
+    assert block["_tone"] == "灰"
 
 
 def test_第6件正控_拆掉tie_break沒有改變任何一個現行畫面的顏色():
@@ -1459,25 +1461,27 @@ def test_第6件正控_拆掉tie_break沒有改變任何一個現行畫面的顏
     **不是**畫面。逐情境逐塊比對顏色，與拆之前逐格相同。
 
     這一份期望值是拆掉 tie-break **之前**跑出來的（量測日 2026-09-23）。
+    ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：原為黃的 10 格改灰（有意識的更正，不是漏刪），
+    逐格由程式重算；其餘格一格未動。改的是 `業務例外` 的顏色，與第 6 件無關。
     """
     expected = {
         ("full", "HLD-1"): "中性", ("full", "HLD-2"): "中性",
-        ("full", "HLD-3"): "中性", ("full", "HLD-8"): "黃",
+        ("full", "HLD-3"): "中性", ("full", "HLD-8"): "灰",
         ("srcmiss", "HLD-1"): "中性", ("srcmiss", "HLD-2"): "灰",
         ("srcmiss", "HLD-3"): "灰", ("srcmiss", "HLD-8"): "灰",
         # ~~("bizexc", "HLD-1"): "中性"~~ → "黃"：客戶 2026-10-08 裁示（結論燈兩句）——
         # 零列而有檔的門檻指標不適用時，HLD-1 進 `業務例外`（主值 `⬜ 不適用`），色照 `44` 5.1 卡片表那一列。
         # 這是本條期望值唯一一格有意識的更正（不是漏刪），與第 6 件無關。
-        ("bizexc", "HLD-1"): "黃", ("bizexc", "HLD-2"): "黃",
-        ("bizexc", "HLD-3"): "中性", ("bizexc", "HLD-8"): "黃",
+        ("bizexc", "HLD-1"): "灰", ("bizexc", "HLD-2"): "灰",
+        ("bizexc", "HLD-3"): "中性", ("bizexc", "HLD-8"): "灰",
         ("fetchfail", "HLD-1"): "中性", ("fetchfail", "HLD-2"): "中性",
         ("fetchfail", "HLD-3"): "紅", ("fetchfail", "HLD-8"): "紅",
-        ("nothr", "HLD-1"): "黃", ("nothr", "HLD-2"): "中性",
-        ("nothr", "HLD-3"): "中性", ("nothr", "HLD-8"): "黃",
+        ("nothr", "HLD-1"): "灰", ("nothr", "HLD-2"): "中性",
+        ("nothr", "HLD-3"): "中性", ("nothr", "HLD-8"): "灰",
         ("empty", "HLD-1"): "灰", ("empty", "HLD-2"): "灰",
         ("empty", "HLD-3"): "灰", ("empty", "HLD-8"): "灰",
-        ("onenav", "HLD-2"): "黃", ("onenav", "HLD-8"): "黃",
-        ("badrange", "HLD-1"): "黃", ("badrange", "HLD-8"): "黃",
+        ("onenav", "HLD-2"): "灰", ("onenav", "HLD-8"): "灰",
+        ("badrange", "HLD-1"): "灰", ("badrange", "HLD-8"): "灰",
         ("other_window", "HLD-8"): "中性",
     }
     assert expected, "期望值是空的 —— 這一條會變成空掃"
@@ -2031,6 +2035,9 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
        重跑一次逐格 dump 再 diff，不要直接改期望值。**期望值改了，這條就廢了。**
     """
     expected = {
+        # ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：本表 16 格換新值（有意識的更正，不是漏刪），舊值見 `bde5568`。
+        #    換之前先證明：把新模型裡 `業務例外` 節點、「不適用」徽章、同級哨符塊的灰換回黃再算摘要，
+        #    16 格舊值逐格全數重現（量測日 2026-10-16，Python 3.11）；其餘 92 格一格未動。
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪；hld 燈的紅圖示同輪 ✖→⛔）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回原圖示（燈的圖示格換回 ✖、其餘換回 ⚠）再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
@@ -2046,7 +2053,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("full", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full", "HLD-7"): ('中性', 'ok', "0594b2871949"),
-        ("full", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("full", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
         ("srcmiss", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
         # ⚠️ 2026-10-03（客戶裁示：HLD-1 卡尾那一句刪去後半子句「；燈上的 N 與本卡列數因此相等」）：
         #    本格摘要換新值（有意識的更正，不是漏刪）；舊值 ~~36dc9ac49a78~~。
@@ -2065,14 +2072,14 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         #    舊值 ~~361d526cc96d~~／~~54989f40bf94~~（HLD-1 舊為 中性／ok）。換之前先證明：以 `1384e1b` 的 logic 與本次 logic 對 17 個情境逐塊算摘要，
         #    只有 bizexc、onenav、tiedstate 三情境的 HLD-0／HLD-1 共 6 格不同（量測日 2026-10-08，3.11）；其餘格一格未動。
         ("bizexc", "HLD-0"): ('灰', '業務例外', "e2963a70a875"),
-        ("bizexc", "HLD-1"): ('黃', '業務例外', "bb03512252ba"),
-        ("bizexc", "HLD-2"): ('黃', '業務例外', "10f06cc9db29"),
+        ("bizexc", "HLD-1"): ('灰', '業務例外', "128c54edd1bd"),
+        ("bizexc", "HLD-2"): ('灰', '業務例外', "a3db364deba8"),
         ("bizexc", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("bizexc", "HLD-4"): ('中性', 'ok', "e887c1dadaf2"),
         ("bizexc", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("bizexc", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("bizexc", "HLD-7"): ('中性', 'ok', "4cf045f13082"),
-        ("bizexc", "HLD-8"): ('黃', '業務例外', "cecebdfffedc"),
+        ("bizexc", "HLD-8"): ('灰', '業務例外', "b1d809d2bf49"),
         ("fetchfail", "HLD-0"): ('紅', '系統錯誤', "1cf22225b317"),
         # ⚠️ 2026-10-02（總管 S2 第二輪，紅隊建議 3）：`HLD-1` 卡尾在「⛔ 另有 3 檔…取數失敗」底下
         #    逐檔列出原因（表層級錯誤也列），本格摘要換新值（有意識的更正，不是漏刪）。
@@ -2087,14 +2094,14 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("fetchfail", "HLD-7"): ('中性', 'ok', "1f8c41588f98"),
         ("fetchfail", "HLD-8"): ('紅', '系統錯誤', "5f6082f726fb"),
         ("nothr", "HLD-0"): ('灰', '業務例外', "c9353d4830c6"),
-        ("nothr", "HLD-1"): ('黃', '業務例外', "e1d2c2c2da54"),
+        ("nothr", "HLD-1"): ('灰', '業務例外', "9e04df5af48d"),
         ("nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("nothr", "HLD-3"): ('中性', 'ok', "1d1e3f822996"),
         ("nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
         ("nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
-        ("nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("nothr", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
         ("empty", "HLD-0"): ('灰', '資料未備', "4562c6ab4995"),
         ("empty", "HLD-1"): ('灰', '資料未備', "47cf6be0fa49"),
         ("empty", "HLD-2"): ('灰', '資料未備', "19fe8879556e"),
@@ -2121,7 +2128,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("noexceed", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("noexceed", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("noexceed", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
-        ("noexceed", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("noexceed", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
         ("other_window", "HLD-0"): ('灰', 'ok', "5aa16b6c8ace"),
         ("other_window", "HLD-1"): ('中性', 'ok', "d6e09a8fff14"),
         ("other_window", "HLD-2"): ('中性', 'ok', "5ea8fe7a7d69"),
@@ -2136,23 +2143,23 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         #    舊值 ~~361d526cc96d~~／~~51f6d37571ec~~（HLD-1 舊為 中性／ok）。換之前先證明：以 `1384e1b` 的 logic 與本次 logic 對 17 個情境逐塊算摘要，
         #    只有 bizexc、onenav、tiedstate 三情境的 HLD-0／HLD-1 共 6 格不同（量測日 2026-10-08，3.11）；其餘格一格未動。
         ("onenav", "HLD-0"): ('灰', '業務例外', "e2963a70a875"),
-        ("onenav", "HLD-1"): ('黃', '業務例外', "746de379cbf2"),
-        ("onenav", "HLD-2"): ('黃', '業務例外', "eac4b10c9634"),
-        ("onenav", "HLD-3"): ('黃', '業務例外', "a0b4b23b64c4"),
+        ("onenav", "HLD-1"): ('灰', '業務例外', "1dd4ac9ee195"),
+        ("onenav", "HLD-2"): ('灰', '業務例外', "7f21501589a9"),
+        ("onenav", "HLD-3"): ('灰', '業務例外', "6a56f7cc83de"),
         ("onenav", "HLD-4"): ('中性', 'ok', "ff7c473013a3"),
         ("onenav", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("onenav", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("onenav", "HLD-7"): ('灰', '資料未備', "5ac721b1d7cb"),
-        ("onenav", "HLD-8"): ('黃', '業務例外', "6131e0d46dd5"),
+        ("onenav", "HLD-8"): ('灰', '業務例外', "924bd500ee90"),
         ("badrange", "HLD-0"): ('灰', '業務例外', "c9353d4830c6"),
-        ("badrange", "HLD-1"): ('黃', '業務例外', "e1d2c2c2da54"),
-        ("badrange", "HLD-2"): ('黃', '業務例外', "4d9d1c56d7e3"),
-        ("badrange", "HLD-3"): ('黃', '業務例外', "56270fe59261"),
+        ("badrange", "HLD-1"): ('灰', '業務例外', "9e04df5af48d"),
+        ("badrange", "HLD-2"): ('灰', '業務例外', "6508da927f16"),
+        ("badrange", "HLD-3"): ('灰', '業務例外', "0b2e4d1ed627"),
         ("badrange", "HLD-4"): ('中性', 'ok', "14676aae6af8"),
         ("badrange", "HLD-5"): ('中性', 'ok', "206e13e2de2d"),
         ("badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("badrange", "HLD-7"): ('灰', '資料未備', "15a039bc1d56"),
-        ("badrange", "HLD-8"): ('黃', '業務例外', "2d3de88d51b7"),
+        ("badrange", "HLD-8"): ('灰', '業務例外', "5aa5a8c2b53a"),
         ("full_then_badrange", "HLD-0"): ('黃', 'ok', "e241f44eef9e"),
         ("full_then_badrange", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
         ("full_then_badrange", "HLD-2"): ('中性', 'ok', "6347d81de348"),
@@ -2161,7 +2168,7 @@ def test_第2件反向控制_十二情境乘九塊一百零八格逐格未變():
         ("full_then_badrange", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("full_then_badrange", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("full_then_badrange", "HLD-7"): ('中性', 'ok', "0594b2871949"),
-        ("full_then_badrange", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("full_then_badrange", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
     }
     assert len(expected) == 108, len(expected)
     old12 = set(fixtures.SCENARIO_NAMES) | {
@@ -2326,6 +2333,8 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         #    （有意識的更正，不是漏刪）。每一列多一個機器鍵 `_holding_id`，畫面文字一格未動。
         #    換之前先證明：把現行模型 `_items` 每一列的 `_holding_id` 拿掉再算摘要，本表舊值逐格全數重現
         #    （量測日 2026-10-02）；其餘八塊一格未動。
+        # ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：本表 4 格換新值（有意識的更正，不是漏刪）；
+        #    換之前先證明：把新模型裡 `業務例外` 節點的灰換回黃再算摘要，4 格舊值逐格全數重現（量測日 2026-10-16，3.11）。
         ("holdfail", "HLD-0"): ('紅', '系統錯誤', "da6f97c35600"),
         ("holdfail", "HLD-1"): ('紅', '系統錯誤', "6781b2bdacd5"),
         ("holdfail", "HLD-2"): ('中性', 'ok', "6347d81de348"),
@@ -2334,7 +2343,7 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("holdfail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
-        ("holdfail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("holdfail", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
         ("profilefail", "HLD-0"): ('紅', '系統錯誤', "84b033948b7f"),
         ("profilefail", "HLD-1"): ('中性', 'ok', "057d10d7e5b3"),
         ("profilefail", "HLD-2"): ('紅', '系統錯誤', "020d64867585"),
@@ -2343,16 +2352,16 @@ def test_第2件_三個新情境的整頁模型逐格釘住():
         ("profilefail", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("profilefail", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("profilefail", "HLD-7"): ('中性', 'ok', "0594b2871949"),
-        ("profilefail", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("profilefail", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
         ("holdfail_nothr", "HLD-0"): ('紅', '系統錯誤', "e2716e8e35a7"),
-        ("holdfail_nothr", "HLD-1"): ('紅', '系統錯誤', "59e8c7ce9c35"),
+        ("holdfail_nothr", "HLD-1"): ('紅', '系統錯誤', "6d45d9024749"),
         ("holdfail_nothr", "HLD-2"): ('中性', 'ok', "6347d81de348"),
         ("holdfail_nothr", "HLD-3"): ('紅', '系統錯誤', "1edc467d1985"),
         ("holdfail_nothr", "HLD-4"): ('中性', 'ok', "3de52cd071ec"),
         ("holdfail_nothr", "HLD-5"): ('中性', 'ok', "453bfe294a09"),
         ("holdfail_nothr", "HLD-6"): ('中性', 'ok', "cc137930f370"),
         ("holdfail_nothr", "HLD-7"): ('中性', 'ok', "8c667c291d77"),
-        ("holdfail_nothr", "HLD-8"): ('黃', '業務例外', "552b13b86b81"),
+        ("holdfail_nothr", "HLD-8"): ('灰', '業務例外', "edff910c4b90"),
     }
     assert len(expected) == 27, len(expected)
     assert {name for name, _ in expected} == {"holdfail", "profilefail", "holdfail_nothr"}
@@ -3753,3 +3762,18 @@ def test_本金類配息佔比_配息全為0_優先序():
     assert (pending["本金類配息佔比"]["_state"], pending["本金類配息佔比"]["text"]) == (
         logic.STATE_MISSING, logic.ND_TEXT,
     )
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_不適用主值與徽章是中性灰_其他黃徽章照舊():
+    """`業務例外` 主值（`⬜ 不適用：…`）改灰、文案照舊；防改過頭：`推估`／`修正過`／`部分缺`／`未定義` 照舊是黃。"""
+    block = logic.find_block(logic.build_page_model(**fixtures.scenario("bizexc")), "HLD-8")
+    biz = [n for n in logic.value_nodes(block) if n["_state"] == logic.STATE_BIZ]
+    assert biz, "情境裡一個 `業務例外` 主值都沒有 —— 這一條會變成空掃"
+    for node in biz:
+        assert node["_tone"] == "灰" and node["text"].startswith("⬜ 不適用"), node
+    assert logic.status_badge("不適用")["_tone"] == "灰"
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        assert logic.status_badge(text)["_tone"] == "黃", text

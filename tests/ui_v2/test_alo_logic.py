@@ -1604,3 +1604,32 @@ def test_nav_not_ready形狀不對_raise(bad, exc):
     ds["nav_not_ready"] = bad
     with pytest.raises(exc):
         logic.nav_not_ready(ds)
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_算不出來的空狀態是中性灰_文案照舊():
+    """`44` 5.5 `算不出來`（文案 `⬜ 不適用：<原因>`）的顏色由黃改灰；文案一字不動（顏色不是唯一資訊）。"""
+    assert _block(_model("notarget"), "ALO-2")["placeholder"] == {
+        "text": logic.TEXT_NA_NO_TARGET, "_empty_kind": "算不出來", "_tone": "灰"}
+    assert _block(_model("nobasis"), "ALO-2")["placeholder"] == {
+        "text": logic.TEXT_NA_NO_BASIS, "_empty_kind": "算不出來", "_tone": "灰"}
+    dataset = fixtures.scenario("full")
+    _setting(dataset, "alo_scenario_input", [
+        {"bucket": fixtures.CORE, "amount_twd": -660000},
+        {"bucket": fixtures.SATELLITE, "amount_twd": -290000},
+        {"bucket": fixtures.CASH, "amount_twd": -50000},
+    ])
+    note = _block(logic.build_page_model(dataset), "ALO-3")["placeholder"]
+    assert note["_empty_kind"] == "算不出來" and note["_tone"] == "灰"
+    assert note["text"].startswith("⬜ 不適用：")
+
+
+def test_第7點_不適用徽章是灰_其他黃徽章與部分缺照舊是黃():
+    """防改過頭：只有「不適用」改灰；`推估`／`修正過`／`部分缺`／`未定義` 與 `部分缺` 空狀態照舊是黃。"""
+    assert logic.status_badge("不適用")["_tone"] == "灰"
+    assert logic.status_badge("資料未備")["_tone"] == "灰"
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        assert logic.status_badge(text)["_tone"] == "黃", text
+    assert logic._EMPTY_TONE == {"來源缺": "灰", "算不出來": "灰", "部分缺": "黃", "系統錯誤": "紅"}

@@ -524,7 +524,8 @@ def test_紅線徽章只在說明區_而且是本頁那兩枚():
 
 
 def test_狀態徽章字面值落在44那七個之內_顏色照5_2():
-    tones = {"資料未備": "灰", "不適用": "黃", "取數失敗": "紅", "推估": "黃", "修正過": "黃", "部分缺": "黃", "未定義": "黃"}
+    # 客戶 2026-10-16 裁示第 7 點：「不適用」由黃改灰（`44` 5.2 同日行內擴寫）。
+    tones = {"資料未備": "灰", "不適用": "灰", "取數失敗": "紅", "推估": "黃", "修正過": "黃", "部分缺": "黃", "未定義": "黃"}
     seen = set()
     for name, save_failed in _every_case():
         for badge in logic.collect_badges(_model(name, save_failed=save_failed)):
@@ -1294,3 +1295,31 @@ def test_fixtures的欄位照44第四節():
         assert row["setting_value"] is None or isinstance(row["setting_value"], str)  # 44 4.5：字串形式
     for row in dataset["fetch_log"]:
         assert row["source_tier"] in fixtures.TIERS and row["outcome"] in ("ok", "failed")
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_不適用徽章是中性灰_圖示跟著變成空格():
+    """`不適用` 徽章由黃改灰；圖示由 ⚠ 變 ⬜，與文案 `⬜ 不適用：…` 同一個圖示，字面照留（顏色不是唯一資訊）。
+
+    ⚠️ 本頁目前沒有任何情境真的掛出「不適用」徽章（見上方 5.2 那一條的 `seen` 斷言），
+    所以這裡直接呼叫徽章工廠；哪天有塊掛上它，顏色就是這裡釘住的這一個。
+    """
+    badge = logic.status_badge("不適用")
+    assert badge == {"_kind": "狀態", "text": "不適用", "_tone": "灰", "glyph": logic.EMPTY_GLYPH}
+
+
+def test_第7點_其他黃徽章照舊_防改過頭():
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        badge = logic.status_badge(text)
+        assert (badge["_tone"], badge["glyph"]) == ("黃", logic.WARN_GLYPH), text
+    assert logic.status_badge("資料未備")["_tone"] == "灰"
+    assert logic.status_badge("取數失敗")["_tone"] == "紅"
+
+
+def test_第7點_算不出來的空狀態是中性灰_部分缺照舊是黃():
+    assert logic._placeholder("⬜ 不適用：保留筆數小於 0", "算不出來")["_tone"] == "灰"
+    assert logic._placeholder("x", "部分缺")["_tone"] == "黃"
+    assert logic._placeholder("x", "來源缺")["_tone"] == "灰"
+    assert logic._placeholder("x", "系統錯誤")["_tone"] == "紅"
