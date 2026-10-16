@@ -94,8 +94,11 @@ def test_44還是凍結的那一份():
     # 前 4395 行只做行內擴寫、行數不變，檔尾追加第七節第三小節之四，共新增 82 行；同 PR 稽核回修輪在第 2285 行行內改決策者、
     # 第七節第三小節之四內再加 10 行，共新增 92 行；回修前分支值 df58130ed9c4e815da5bf078257094a8、4478）。
     # 上一個主線值 11c523139f2dae27a551ba9af5d90568、4396（4395 行 ＋ 末尾換行）。
-    assert digest == "336328ba155069407bcc7433501898bb", digest
-    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4488  # 4487 行 ＋ 末尾換行
+    # 2026-10-16 再解凍一次（客戶 2026-10-16 裁示第 6、7 點：黃色「不適用」改中性灰、MKT-0 三塊皆空 → 灰；
+    # 前 4487 行只在第 314、316、337、964、2010、2132、2325 行行內擴寫、行數不變，第 310 行原字未動；檔尾追加第七節第三小節之五，共新增 16 行）。
+    # 上一個主線值 336328ba155069407bcc7433501898bb、4488（4487 行 ＋ 末尾換行）。
+    assert digest == "cefdabe36f5a37a228fddcc69ad10a94", digest
+    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4504  # 4503 行 ＋ 末尾換行
 
 
 # ═════════════════════ 二、逐字引文守衛 ═════════════════════
@@ -664,8 +667,10 @@ def test_每一個用到的色都登記過對比():
 def test_四狀態的顏色語意照44卡片那張表():
     assert logic.tone_for_state(logic.STATE_OK) == "中性"
     assert logic.tone_for_state(logic.STATE_MISSING) == "灰"
-    assert logic.tone_for_state(logic.STATE_BIZ) == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外`（`⬜ 不適用`）由黃改中性灰（`44` 5.1 卡片表同日行內擴寫）。
+    assert logic.tone_for_state(logic.STATE_BIZ) == "灰"
     assert logic.tone_for_state(logic.STATE_ERROR) == "紅"
+    # 黃這一色本頁仍在用（結論燈 N 大於零、`部分缺` 等），色票不刪。
     assert set(theme.TONE_HEX) == {"中性", "灰", "黃", "紅"}
 
 
@@ -811,7 +816,7 @@ def test_哨符真的流過每一塊也不會炸():
     assert logic.worst_state([logic.STATE_OK]) == logic.STATE_OK
 
 
-def test_block_tone的顏色優先序逐組釘住():
+def test_block_tone的顏色優先序逐組釘住(monkeypatch):
     """⛔ **2026-09-24 稽核的突變抓到的洞：把 `block_tone` 的顏色優先序倒過來，測試不會紅。**
 
     它只在哨符時才被用到，而哨符**沒有任何情境走得到**
@@ -822,14 +827,18 @@ def test_block_tone的顏色優先序逐組釘住():
     assert logic.block_tone([]) == "中性"
     assert logic.block_tone([logic.STATE_OK]) == "中性"
     assert logic.block_tone([logic.STATE_MISSING]) == "灰"
-    assert logic.block_tone([logic.STATE_BIZ]) == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外` 改灰，因此四狀態裡已沒有一個映到黃。
+    assert logic.block_tone([logic.STATE_BIZ]) == "灰"
     assert logic.block_tone([logic.STATE_ERROR]) == "紅"
     # 逐組：越前面的越優先，而且與輸入順序無關。
+    # 黃那一級仍在 `block_tone` 的排序裡；四狀態已沒有黃，改用一個只在本測試存在的假狀態把那一級釘住，
+    # 否則把排序倒過來時，黃的位置不會被任何一條斷言驗到。
     import itertools
 
+    monkeypatch.setitem(logic._TONE_BY_STATE, "測試用黃狀態", "黃")
     order = ["紅", "黃", "灰", "中性"]
     by_tone = {
-        "紅": logic.STATE_ERROR, "黃": logic.STATE_BIZ,
+        "紅": logic.STATE_ERROR, "黃": "測試用黃狀態",
         "灰": logic.STATE_MISSING, "中性": logic.STATE_OK,
     }
     pairs = 0
@@ -2719,3 +2728,14 @@ def test_無呼叫者登記表與現況一致_既不漏登也不過期():
     # `KNOWN_CURRENCIES` 那句假註解不准回來：真正的跨幣別守衛不讀它。
     cross = blob[blob.index("def cross_currency_nodes"):][:1200]
     assert "KNOWN_CURRENCIES" not in cross, "跨幣別守衛若真的用了它，上面那筆登記就過期了"
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_不適用徽章是灰_其他黃徽章照舊():
+    """徽章工廠本頁 0 caller（見 `status_badge` docstring），守的是那份封閉列舉的顏色：只有「不適用」改灰。"""
+    assert logic.status_badge("不適用")["_tone"] == "灰"
+    assert logic.status_badge("資料未備")["_tone"] == "灰"
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        assert logic.status_badge(text)["_tone"] == "黃", text

@@ -95,7 +95,7 @@ KNOWN_CURRENCIES = ("USD", "EUR", "TWD", "JPY", "GBP")
 _TONE_BY_STATE = {
     STATE_OK: "中性",
     STATE_MISSING: "灰",
-    STATE_BIZ: "黃",
+    STATE_BIZ: "灰",  # 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰（原為黃）
     STATE_ERROR: "紅",
 }
 
@@ -883,7 +883,8 @@ def status_badge(text: str) -> dict:
     """
     if text not in STATUS_BADGE_LITERALS:
         raise ValueError(f"狀態徽章字面值 {text!r} 不在 `44` 5.2 的七個之內")
-    return {"_kind": "狀態", "_tone": "灰" if text == "資料未備" else "黃", "text": text}
+    # 客戶 2026-10-16 裁示第 7 點：「不適用」徽章與「資料未備」同為中性灰；其餘五個不動。
+    return {"_kind": "狀態", "_tone": "灰" if text in ("資料未備", "不適用") else "黃", "text": text}
 
 
 def source_badge(tier: str) -> dict:
