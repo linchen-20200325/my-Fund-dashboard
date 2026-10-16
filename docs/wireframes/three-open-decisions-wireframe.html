@@ -1,0 +1,1167 @@
+<title>四題待拍板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 視覺語言沿用 docs/wireframes/ia-wireframe.html —— 同一組 token、同一套元件，
+   本檔只新增三個既有線框沒有的元件：證據徽章 .ev、方案切換 .opts、去留表 .dest。 */
+:root{
+  --ink:#15181e;
+  --ink-2:#39414e;
+  --muted:#626c7a;
+  --paper:#f2f5f8;
+  --card:#ffffff;
+  --card-2:#f8fafb;
+  --rule:#d5dce4;
+  --rule-soft:#e4e9ef;
+  --accent:#1e5a72;
+  --accent-soft:#e3edf2;
+  --berry:#8e1f3c;
+  --berry-soft:#fbeef1;
+  --sysred:#bf3a2b;
+  --sysred-soft:#fdeeec;
+  --grey-state:#9aa3af;
+  --grey-soft:#eceff3;
+  --gold:#8a6d1f;
+  --gold-soft:#fbf4e2;
+  --shadow:0 1px 2px rgba(21,24,30,.05), 0 6px 18px rgba(21,24,30,.05);
+  --sans:"IBM Plex Sans","Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e8ecf1; --ink-2:#b9c2cd; --muted:#8d97a5;
+    --paper:#12151a; --card:#1a1f26; --card-2:#20262f;
+    --rule:#2e3742; --rule-soft:#262e37;
+    --accent:#6fb2ce; --accent-soft:#16303d;
+    --berry:#e2839c; --berry-soft:#2e1620;
+    --sysred:#f0897a; --sysred-soft:#301813;
+    --grey-state:#6d7683; --grey-soft:#20262f;
+    --gold:#d9b45c; --gold-soft:#2b2413;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e8ecf1; --ink-2:#b9c2cd; --muted:#8d97a5;
+  --paper:#12151a; --card:#1a1f26; --card-2:#20262f;
+  --rule:#2e3742; --rule-soft:#262e37;
+  --accent:#6fb2ce; --accent-soft:#16303d;
+  --berry:#e2839c; --berry-soft:#2e1620;
+  --sysred:#f0897a; --sysred-soft:#301813;
+  --grey-state:#6d7683; --grey-soft:#20262f;
+  --gold:#d9b45c; --gold-soft:#2b2413;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; margin:0;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 72px}
+code{font-family:var(--mono);font-size:.88em}
+
+/* ---------- masthead ---------- */
+.mast{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;
+  gap:18px;padding-bottom:18px;border-bottom:2px solid var(--ink)}
+.mast h1{margin:0;font-size:clamp(26px,4vw,38px);font-weight:600;letter-spacing:-.02em;
+  text-wrap:balance;line-height:1.2}
+.mast .sub{margin:6px 0 0;color:var(--muted);font-size:14px;max-width:64ch}
+.stamp{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);text-align:right;line-height:1.8;white-space:nowrap}
+.stamp b{color:var(--accent);font-weight:500}
+
+/* ---------- 全域聲明 ---------- */
+.decl{margin:20px 0 0;border:2px solid var(--sysred);border-radius:3px;
+  background:var(--sysred-soft);padding:13px 15px}
+.decl .dh{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--sysred);font-weight:500;display:block;margin-bottom:6px}
+.decl p{margin:0 0 6px;font-size:13px;color:var(--ink-2);line-height:1.6}
+.decl p:last-child{margin-bottom:0}
+
+/* ---------- 證據徽章 ---------- */
+.ev{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;padding:1px 5px;border-radius:2px;
+  border:1px solid var(--rule);white-space:nowrap;vertical-align:2px;margin-right:4px}
+.ev.m{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.ev.w{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
+.ev.g{border-color:var(--berry);color:var(--berry);background:var(--berry-soft)}
+.legend{margin-top:12px;background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:12px 14px;box-shadow:var(--shadow)}
+.legend h3{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+.legend .lr{display:grid;gap:9px;grid-template-columns:repeat(3,minmax(0,1fr));font-size:12.5px;
+  color:var(--ink-2);line-height:1.5}
+@media (max-width:700px){.legend .lr{grid-template-columns:1fr}}
+
+/* ---------- layout ---------- */
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr);gap:26px;margin-top:30px}
+@media (max-width:840px){.shell{grid-template-columns:1fr;gap:18px}}
+nav.rail{position:sticky;top:18px;align-self:start}
+@media (max-width:840px){nav.rail{position:static}}
+.rail-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 9px;padding-left:2px}
+.rail-list{display:flex;flex-direction:column;gap:5px}
+@media (max-width:840px){.rail-list{flex-direction:row;flex-wrap:wrap}}
+.tab-btn{display:flex;align-items:baseline;gap:9px;width:100%;text-align:left;cursor:pointer;
+  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--rule);
+  border-radius:2px;padding:9px 11px;font-family:var(--sans);font-size:14px;color:var(--ink-2);
+  transition:border-color .12s ease, background .12s ease}
+@media (max-width:840px){.tab-btn{width:auto;flex:1 1 auto}}
+.tab-btn .idx{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.tab-btn .nm{font-weight:500}
+.tab-btn:hover{border-color:var(--accent)}
+.tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tab-btn[aria-selected="true"]{background:var(--accent-soft);border-color:var(--rule);
+  border-left-color:var(--accent);color:var(--ink)}
+.tab-btn[aria-selected="true"] .idx{color:var(--accent)}
+.rail-note{margin-top:14px;padding:10px 11px;border:1px dashed var(--rule);border-radius:2px;
+  font-size:12px;color:var(--muted);line-height:1.55;background:var(--card-2)}
+
+/* ---------- panel ---------- */
+.panel[hidden]{display:none}
+.panel-head{border-bottom:1px solid var(--rule);padding-bottom:12px;margin-bottom:16px}
+.panel-head .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent)}
+.panel-head h2{margin:3px 0 5px;font-size:24px;font-weight:600;letter-spacing:-.01em}
+.panel-head .job{color:var(--muted);font-size:13.5px;max-width:66ch;margin:0}
+
+h3.sec{margin:22px 0 9px;font-size:15px;font-weight:600;display:flex;align-items:baseline;gap:8px}
+h3.sec .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em}
+
+/* ---------- 現況條 ---------- */
+.facts{display:grid;gap:10px;margin:0}
+.fact{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;
+  padding:10px 12px;background:var(--card);font-size:13px;line-height:1.6;color:var(--ink-2)}
+.fact .ft{display:block;font-weight:600;color:var(--ink);margin-bottom:3px;font-size:13.5px}
+.fact.correct{border-left-color:var(--gold);background:var(--gold-soft)}
+.fact.correct .ft{color:var(--gold)}
+
+/* ---------- 方案切換 ---------- */
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.opt{cursor:pointer;background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  padding:7px 13px;font-family:var(--sans);font-size:13px;color:var(--ink-2);
+  transition:border-color .12s ease,background .12s ease}
+.opt:hover{border-color:var(--accent)}
+.opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.opt[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent);
+  color:var(--ink);font-weight:600}
+.opt .tagrec{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--accent);
+  margin-left:6px}
+.optview[hidden]{display:none}
+
+/* ---------- screen ---------- */
+.screen{background:var(--card);border:1px solid var(--rule);border-radius:4px;
+  box-shadow:var(--shadow);overflow:hidden}
+.screen-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--card-2);
+  border-bottom:1px solid var(--rule-soft);font-family:var(--mono);font-size:11px;color:var(--muted)}
+.screen-bar .dot{width:8px;height:8px;border-radius:50%;background:var(--rule);flex:none}
+.screen-body{padding:16px}
+.grid3{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:760px){.grid3{grid-template-columns:1fr}}
+.span3{grid-column:1/-1}
+@media (max-width:760px){.span3{grid-column:auto}}
+.card{border:1px solid var(--rule);border-radius:3px;background:var(--card);
+  padding:12px 13px;min-height:104px;display:flex;flex-direction:column;gap:6px}
+.card.warn{border-left:4px solid var(--berry);background:var(--berry-soft)}
+.card.dim{border-style:dashed;background:var(--grey-soft)}
+.card h4{margin:0;font-size:14px;font-weight:600;line-height:1.35}
+.card p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.card.warn p{color:var(--ink-2)}
+.card.dim h4{color:var(--muted)}
+.big{font-family:var(--mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em}
+.card.warn .big{color:var(--berry)}
+.card.dim .big{color:var(--grey-state);font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto;padding-top:4px}
+.chip{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:2px 6px;border-radius:2px;
+  border:1px solid var(--rule);color:var(--muted);background:var(--card-2);white-space:nowrap}
+.chip.form{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.chip.tri{border-color:var(--berry);color:var(--berry);background:var(--berry-soft)}
+.chip.mock{border-color:var(--sysred);color:var(--sysred);background:var(--sysred-soft)}
+
+/* 全寬區塊示意 */
+.block{border:1px solid var(--rule);border-radius:3px;background:var(--card);padding:12px 13px;
+  margin-bottom:12px}
+.block > h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.strip{display:grid;gap:8px;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:10px}
+@media (max-width:700px){.strip{grid-template-columns:1fr}}
+.st{border:1px solid var(--rule);border-radius:2px;background:var(--card-2);padding:8px 10px}
+.st .k{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em;display:block}
+.st .v{font-family:var(--mono);font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+.tbl{border:1px solid var(--rule);border-radius:2px;overflow-x:auto;background:var(--card-2)}
+.tbl table{border-collapse:collapse;width:100%;min-width:640px;font-size:12px}
+.tbl th{background:var(--card);text-align:left;padding:7px 9px;border-bottom:1px solid var(--rule);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--muted);font-weight:500;
+  white-space:nowrap}
+.tbl td{padding:6px 9px;border-bottom:1px solid var(--rule-soft);color:var(--ink-2);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.tbl tr:last-child td{border-bottom:none}
+.subcard{border:1px solid var(--rule);border-radius:2px;background:var(--card-2);padding:10px 11px;
+  margin-top:9px}
+.subcard .sh{font-size:12.5px;font-weight:600;margin-bottom:5px}
+.formbox{border:1px solid var(--accent);border-radius:3px;background:var(--accent-soft);
+  padding:11px 13px;margin-bottom:12px}
+.formbox .fh{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:6px}
+.formbox .fields{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fld{flex:1 1 150px;background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  padding:6px 9px;font-size:12.5px;color:var(--muted)}
+.apply{background:var(--accent);color:#fff;border:none;border-radius:2px;padding:7px 16px;
+  font-family:var(--sans);font-size:12.5px;font-weight:600;cursor:default;flex:none}
+:root[data-theme="dark"] .apply,
+:root:not([data-theme="light"]) .apply{color:var(--paper)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .apply{color:#fff}}
+.gone{border:1px dashed var(--rule);border-radius:2px;background:var(--grey-soft);
+  padding:10px 12px;font-size:12.5px;color:var(--muted);min-height:104px;display:flex;
+  align-items:center;justify-content:center;text-align:center;line-height:1.5}
+
+/* ---------- 推薦 ---------- */
+.rec{margin-top:16px;border:1px solid var(--accent);border-left:4px solid var(--accent);
+  border-radius:3px;background:var(--accent-soft);padding:14px 16px}
+.rec .rh{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:5px}
+.rec h4{margin:0 0 8px;font-size:16px;font-weight:600;color:var(--ink)}
+.rec ol,.rec ul{margin:0 0 10px;padding-left:19px;font-size:13px;line-height:1.7;color:var(--ink-2)}
+.rec ol:last-child,.rec ul:last-child{margin-bottom:0}
+.rec .why-not{margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule);
+  font-size:12.5px;color:var(--muted);line-height:1.6}
+.rec .why-not b{color:var(--ink-2)}
+.cost{margin-top:10px;padding:9px 11px;border:1px solid var(--berry);border-left:3px solid var(--berry);
+  border-radius:2px;background:var(--berry-soft);font-size:12.5px;color:var(--ink-2);line-height:1.6}
+.cost b{color:var(--berry)}
+
+/* ---------- 去留表 ---------- */
+.dest{border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--card)}
+.dest details{border-bottom:1px solid var(--rule-soft)}
+.dest details:last-child{border-bottom:none}
+.dest summary{cursor:pointer;padding:10px 13px;display:flex;flex-wrap:wrap;align-items:center;gap:9px;
+  font-size:13.5px;list-style:none;background:var(--card)}
+.dest summary::-webkit-details-marker{display:none}
+.dest summary::before{content:"▸";font-family:var(--mono);color:var(--muted);flex:none;font-size:12px}
+.dest details[open] summary::before{content:"▾"}
+.dest details[open] summary{background:var(--card-2);border-bottom:1px solid var(--rule-soft)}
+.dest summary:hover{background:var(--accent-soft)}
+.dest summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.dest .bn{font-weight:600;flex:1 1 auto;min-width:150px}
+.dest .go{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;padding:2px 7px;
+  border-radius:2px;border:1px solid var(--rule);color:var(--muted);background:var(--card-2);
+  white-space:nowrap}
+.dest .go.stay{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.dest .go.move{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
+.dest .go.ask{border-color:var(--sysred);color:var(--sysred);background:var(--sysred-soft)}
+.dest .db{padding:11px 15px 14px 33px;font-size:12.5px;line-height:1.7;color:var(--ink-2);
+  background:var(--card)}
+.dest .db p{margin:0 0 7px}
+.dest .db p:last-child{margin-bottom:0}
+
+/* ---------- 收尾 ---------- */
+.decide{margin-top:30px;border-top:2px solid var(--ink);padding-top:16px}
+.decide h3{margin:0 0 4px;font-size:17px;font-weight:600}
+.decide > p{margin:0 0 12px;color:var(--muted);font-size:13.5px;max-width:72ch}
+.qa{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
+@media (max-width:560px){.qa{grid-template-columns:1fr}}
+.q{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;
+  padding:11px 12px;background:var(--card)}
+.q .ql{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--accent);
+  text-transform:uppercase}
+.q p{margin:4px 0 0;font-size:13px;color:var(--ink-2);line-height:1.55}
+.q .rr{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.q .rr b{color:var(--ink);font-weight:600}
+
+.honest{margin-top:26px;border:1px dashed var(--rule);border-radius:3px;background:var(--card-2);
+  padding:14px 16px}
+.honest h3{margin:0 0 8px;font-size:14px;font-weight:600}
+.honest ul{margin:0;padding-left:19px;font-size:12.5px;line-height:1.7;color:var(--muted)}
+.honest ul b{color:var(--ink-2)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div>
+      <h1>四題待拍板</h1>
+      <p class="sub">四件卡在「需要你看版面」的事，一次看完。每題都有<b>總管推薦與理由</b> ── 你只要說「照推薦」，或指出哪一項要改。</p>
+    </div>
+    <div class="stamp">
+      狀態 <b>待審</b><br>
+      版次 <b>WF-DECIDE-2</b><br>
+      日期 <b>2026-09-06</b><br>
+      依據 <b>main 1ad0821</b>
+    </div>
+  </header>
+
+  <section class="decl" role="note">
+    <span class="dh">⛔ 先講三件事，再看畫面</span>
+    <p><b>1 ─ 本線框裡每一個數字都是示意值，一個都不是真實資料。</b>凡是數字，旁邊都掛著 <span class="chip mock">示意值</span>。</p>
+    <p><b>2 ─ 只示意「查證過真的有來源」的東西。</b>沒有來源的指標，這裡一律畫成灰態，不會替它編一個好看的數字 ── 否則你會核准一個我們交不出來的畫面。</p>
+    <p><b>3 ─ 本線框推翻了一些寫下來的宣稱，逐句列在各題的「⚠️ 更正」欄位並附實測指令。</b>
+    <b>射程寫清楚（不寫成「只有 N 句」）</b>：第一版更正了<b>派工單的 6 句</b>；<b>本輪（2026-09-06）再更正 5 處</b>，
+    對象<b>不只派工單</b> ── 還包含<b>程式裡的既有登記</b>（<code>page_04_portfolio.py</code> 的「相反的規定」）、
+    <b>你拍板過的線框</b>（<code>-final</code> Q7 的兩個前提），以及<b>本檔自己的上一版</b>（題三那句「只有一塊」）。
+    <b>這不是窮舉</b>：只代表本組查到這些，不代表沒有第 12 處。</p>
+  </section>
+
+  <section class="legend" aria-label="證據標記圖例">
+    <h3>每句話的證據等級（全篇一致）</h3>
+    <div class="lr">
+      <div><span class="ev m">實測</span>本組跑過指令確認，就地附出處（檔名／函式名，<b>不寫行號</b>，行號重構後即失效）。</div>
+      <div><span class="ev w">線框原文</span>逐字引自已拍板線框，出處寫明是哪一份。</div>
+      <div><span class="ev g">推測</span>本組<b>沒有</b>查證，只是判斷。看到這個徽章請當待驗事項，不要當事實用。</div>
+    </div>
+  </section>
+
+  <div class="shell">
+
+    <nav class="rail" aria-label="四題">
+      <p class="rail-h">待拍板的四題</p>
+      <div class="rail-list" role="tablist" aria-orientation="vertical">
+        <button class="tab-btn" role="tab" id="t1" aria-controls="p1" aria-selected="true"><span class="idx">題一</span><span class="nm">④ 保單版面</span></button>
+        <button class="tab-btn" role="tab" id="t2" aria-controls="p2" aria-selected="false"><span class="idx">題二</span><span class="nm">② 總分那一格</span></button>
+        <button class="tab-btn" role="tab" id="t3" aria-controls="p3" aria-selected="false"><span class="idx">題三</span><span class="nm">舊 ④ 區塊去留</span></button>
+        <button class="tab-btn" role="tab" id="t4" aria-controls="p4" aria-selected="false"><span class="idx">題四</span><span class="nm">選股池住哪頁</span></button>
+      </div>
+      <p class="rail-note">四題互不相干，可以分開回答。<b>題三</b>有<b>三塊</b>需要你決定（舊版寫「只有一塊」，本輪已更正），其餘都已經有明文去處。<b>題四</b>是線框自己標的 Q7，一直沒人追蹤。</p>
+    </nav>
+
+    <div>
+
+      <!-- ═══════════════ 題一 ═══════════════ -->
+      <section class="panel" id="p1" role="tabpanel" aria-labelledby="t1">
+        <div class="panel-head">
+          <span class="kicker">題一 · 需要你拍板</span>
+          <h2>④ 資產配置 ── 「保單與扣款標的」要多寬？</h2>
+          <p class="job">兩份你都拍板過的線框，對這一塊給了不同的版面。這一題<b>已經被寫死在程式裡當成動工前置</b>：下一批要接保單明細時，沒有你的裁決就不能開工。</p>
+        </div>
+
+        <h3 class="sec"><span class="n">01</span>兩份線框各自怎麼寫</h3>
+        <div class="facts">
+          <div class="fact">
+            <span class="ft"><span class="ev w">線框原文</span><code>ia-wireframe.html</code> Tab 04（2026-09-01）── 一張 1/3 寬的卡</span>
+            「保單與扣款標的／<b>3 張保單</b>／每張保單下的基金與投入金額；權重是算出來的，不是存的。」<br>
+            <span class="ev m">實測</span>它與「換股顧問」「配息月曆」同列，是 <code>.grid3</code> 內的 <code>&lt;div class="card"&gt;</code>，<b>沒有</b> <code>span3</code> ── 也就是實打實的三分之一寬。
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev w">線框原文</span><code>policy-split-wireframe.html</code> 決定 E（2026-08-31）── 一整個全寬區塊</span>
+            「狀態列用<b>三欄自適應網格</b>；保單明細表<b>維持全寬</b>，不塞進三欄。」<br>
+            該份的 ④ 保單資料底下有四塊：3 欄狀態列 → 全寬「保單一覽」表 → 每張保單的明細卡 → 新增／更新保單列。
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>這個衝突已經登記在程式裡，而且擋著下一批</span>
+            <code>ui/views/page_04_portfolio.py</code> 的「未決事項 (B)」逐字寫著：兩份都是你拍板過的線框、對同一塊版面給了相反規定，<b>「下一批要把保單明細接上時，動工前必須先有客戶裁決」</b>，且明示「不由總管代決」。
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正派工單 ── 這不是二選一</span>
+            派工單寫「一份是 3 欄卡片、一份是全寬表格」。<b>方向對，但描述不準</b>：<span class="ev m">實測</span><code>policy-split</code> 自己<b>同時用了兩者</b> ── 狀態列走 3 欄網格、明細表走全寬，決定 E 就是在講這兩者怎麼並存。<br>
+            <b>真正對撞的只有一件事</b>：<code>ia</code> 那張 1/3 摘要卡，要不要留。
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 本輪就地更正（2026-09-06）──「相反規定」不成立，兩者可以並存<br><span style="font-weight:400;font-size:12.5px;color:var(--muted)">這是有意識的更正，不是漏刪。上面三格原文一字未動，被更正的是它們共同引用的那個「相反」框架。</span></span>
+            <b>被更正的來源</b>：<span class="ev m">實測</span><code>ui/views/page_04_portfolio.py</code> 未決事項 (B) 逐字寫著「兩份都是客戶拍板過的線框，對同一塊版面給了<b>相反的規定</b>」──<b>這一句就是本題「二選一」框架的源頭，而它不精確。</b><br><br>
+            <b>推翻它的證據（本組逐字讀兩份線框原文）</b>：<br>
+            ① <span class="ev m">實測</span><code>ia</code> 那一塊是 <code>.grid3</code> 內的 <code>&lt;div class="card"&gt;</code>，內容是「3 張保單」──<b>它管的是一張摘要卡</b>。<br>
+            ② <span class="ev w">線框原文</span>決定 E 管的是<b>保單明細表</b>，而且它自己的理由逐字寫著「三欄網格是給卡片型內容用的規則，六七欄的表格壓成三分之一寬反而更難看──<b>這不是破例，是規則本來就不涵蓋表格</b>」。<br><br>
+            <b>→ 決定 E 從頭到尾沒有說「那張卡不能存在」，它說的是「表格不歸這條規則管」。兩者治理的是不同的東西，<u>可以並存</u>。</b>
+            衝突是真的（同一塊版面確實有兩份規範），<b>但它是可調和的，不是非此即彼</b> ── 所以本題是<b>三選一</b>，案 C 是正當選項，不是湊數的第三案。
+          </div>
+        </div>
+
+        <h3 class="sec"><span class="n">02</span>版面示意 ── 三個做法，點著切換</h3>
+        <div class="opts" role="tablist" aria-label="題一的三個做法">
+          <button class="opt" role="tab" id="o1a" aria-controls="v1a" aria-selected="true">案 A ─ 全寬區塊<span class="tagrec">推薦</span></button>
+          <button class="opt" role="tab" id="o1b" aria-controls="v1b" aria-selected="false">案 B ─ 維持 1/3 卡</button>
+          <button class="opt" role="tab" id="o1c" aria-controls="v1c" aria-selected="false">案 C ─ 兩者並存</button>
+        </div>
+
+        <div class="optview" id="v1a" role="tabpanel" aria-labelledby="o1a">
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>④ 資產配置 · 案 A</div>
+            <div class="screen-body">
+              <div class="grid3" style="margin-bottom:12px">
+                <div class="card span3">
+                  <h4>核心 ／ 衛星現況 vs 建議</h4>
+                  <span class="big">現況 62 ／ 38　→　建議 70 ／ 30</span>
+                  <p>不動，維持線框原樣。</p>
+                  <div class="chips"><span class="chip">全寬</span><span class="chip mock">示意值</span></div>
+                </div>
+              </div>
+              <div class="formbox">
+                <span class="fh">Form ─ 再平衡試算（不動）</span>
+                <div class="fields">
+                  <div class="fld">目標核心比例　70%</div>
+                  <div class="fld">可動用金額　TWD 200,000</div>
+                  <button class="apply" type="button" tabindex="-1">試算</button>
+                </div>
+              </div>
+              <div class="grid3" style="margin-bottom:12px">
+                <div class="card">
+                  <h4>換股顧問</h4><span class="big">2 組建議</span>
+                  <p>不動。</p>
+                  <div class="chips"><span class="chip">串接 02 ＋ 03</span><span class="chip mock">示意值</span></div>
+                </div>
+                <div class="card">
+                  <h4>配息月曆</h4><span class="big">本月 4 筆</span>
+                  <p>不動。</p>
+                  <div class="chips"><span class="chip mock">示意值</span></div>
+                </div>
+                <div class="gone">原本這一格是「保單與扣款標的」<br>→ 案 A 把它移到下方，升成全寬區塊</div>
+              </div>
+
+              <div class="block">
+                <h4>📋 保單與扣款標的　<span class="chip">全寬區塊</span></h4>
+                <div class="strip">
+                  <div class="st"><span class="k">目前帳本</span><span class="v">我的投資組合</span></div>
+                  <div class="st"><span class="k">保單</span><span class="v">3 張 / 9 檔</span></div>
+                  <div class="st"><span class="k">上次讀回</span><span class="v">09-06 14:02</span></div>
+                </div>
+                <div class="chips" style="margin:0 0 10px"><span class="chip">狀態列走 3 欄網格</span><span class="chip mock">示意值</span></div>
+                <div class="tbl">
+                  <table>
+                    <thead><tr><th>保單編號</th><th>基金代號</th><th>基金名稱</th><th>幣別</th><th>級別</th><th>投入金額</th><th>扣款標的</th><th>狀態</th></tr></thead>
+                    <tbody>
+                      <tr><td>示意-001</td><td>XXXXXX</td><td>（示意）全球股票</td><td>USD</td><td>核心</td><td>300,000</td><td>台幣現金</td><td>正常</td></tr>
+                      <tr><td>示意-001</td><td>YYYYYY</td><td>（示意）新興債</td><td>USD</td><td>衛星</td><td>120,000</td><td>同保單基金</td><td>正常</td></tr>
+                      <tr><td>示意-002</td><td>ZZZZZZ</td><td>（示意）亞太平衡</td><td>TWD</td><td>核心</td><td>200,000</td><td>台幣現金</td><td>正常</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="chips" style="margin-top:8px"><span class="chip">大表全寬</span><span class="chip">橫向捲動</span><span class="chip mock">整張表都是示意值</span></div>
+                <div class="subcard">
+                  <div class="sh">📄 每張保單的明細（每張一張卡，往下重複）</div>
+                  <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.55">🟨 自己填（對帳單抄）　·　⬜ 自動帶（系統算）。內含基金持有明細與配息拆分均值，維持 <code>policy-split</code> 原樣。</p>
+                </div>
+                <div class="subcard">
+                  <div class="sh">➕ 新增／更新保單列</div>
+                  <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.55">Form 封裝，填完按送出才重整畫面。<b>這一塊是 ② 空狀態指過來的落點</b> ── 見下方推薦理由第 2 點。</p>
+                </div>
+              </div>
+
+              <div class="grid3">
+                <div class="card span3">
+                  <h4>交易帳本</h4>
+                  <p>不動，維持全寬 + 橫向捲動、不留巢狀分頁。</p>
+                  <div class="chips"><span class="chip">解掉巢狀分頁</span><span class="chip">大表全寬</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="optview" id="v1b" role="tabpanel" aria-labelledby="o1b" hidden>
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>④ 資產配置 · 案 B</div>
+            <div class="screen-body">
+              <div class="grid3">
+                <div class="card">
+                  <h4>換股顧問</h4><span class="big">2 組建議</span>
+                  <p>把 02 診斷出的問題檔，配對到 03 的候選標的。</p>
+                  <div class="chips"><span class="chip mock">示意值</span></div>
+                </div>
+                <div class="card">
+                  <h4>保單與扣款標的</h4><span class="big">3 張保單</span>
+                  <p>每張保單下的基金與投入金額；權重是算出來的，不是存的。</p>
+                  <div class="chips"><span class="chip">1/3 寬</span><span class="chip mock">示意值</span></div>
+                </div>
+                <div class="card">
+                  <h4>配息月曆</h4><span class="big">本月 4 筆</span>
+                  <p>預估除息日與誤差天數。</p>
+                  <div class="chips"><span class="chip mock">示意值</span></div>
+                </div>
+              </div>
+              <div class="block" style="margin-top:12px;border-color:var(--sysred);border-width:2px">
+                <h4 style="color:var(--sysred)">⚠️ 案 B 沒有解決的事</h4>
+                <p style="margin:0;font-size:12.5px;line-height:1.7;color:var(--ink-2)">
+                  這張卡上放得下「3 張保單」這個數字，<b>放不下那張保單一覽表</b>（<span class="ev m">實測</span><code>policy-split</code> 畫的是 <b>7 欄</b>：保單編號／基金代號／基金名稱／幣別／級別／金額／現金%）。所以案 B 等於要回答一個新問題：<b>那張表去哪？</b><br>
+                  若答「另開一頁」→ 推翻 <code>policy-split</code> 決定 A（保單明細留 ④）。<br>
+                  若答「也放 ④、放這張卡下面」→ 那就是案 C，不是案 B。<br>
+                  若答「不做那張表」→ 那是<b>砍功能</b>，不是版面決定，須另案請示。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="optview" id="v1c" role="tabpanel" aria-labelledby="o1c" hidden>
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>④ 資產配置 · 案 C</div>
+            <div class="screen-body">
+              <div class="grid3" style="margin-bottom:12px">
+                <div class="card"><h4>換股顧問</h4><span class="big">2 組建議</span><p>不動。</p><div class="chips"><span class="chip mock">示意值</span></div></div>
+                <div class="card"><h4>保單與扣款標的</h4><span class="big">3 張保單</span><p>摘要卡，點了捲到下方明細。</p><div class="chips"><span class="chip">1/3 寬</span><span class="chip mock">示意值</span></div></div>
+                <div class="card"><h4>配息月曆</h4><span class="big">本月 4 筆</span><p>不動。</p><div class="chips"><span class="chip mock">示意值</span></div></div>
+              </div>
+              <div class="block">
+                <h4>📋 保單與扣款標的（明細）　<span class="chip">全寬區塊</span></h4>
+                <div class="tbl">
+                  <table>
+                    <thead><tr><th>保單編號</th><th>基金代號</th><th>基金名稱</th><th>幣別</th><th>級別</th><th>投入金額</th><th>扣款標的</th><th>狀態</th></tr></thead>
+                    <tbody>
+                      <tr><td>示意-001</td><td>XXXXXX</td><td>（示意）全球股票</td><td>USD</td><td>核心</td><td>300,000</td><td>台幣現金</td><td>正常</td></tr>
+                      <tr><td>示意-002</td><td>ZZZZZZ</td><td>（示意）亞太平衡</td><td>TWD</td><td>核心</td><td>200,000</td><td>台幣現金</td><td>正常</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="chips" style="margin-top:8px"><span class="chip mock">整張表都是示意值</span></div>
+              </div>
+              <div class="block" style="border-color:var(--berry);border-left:4px solid var(--berry);background:var(--berry-soft)">
+                <h4 style="color:var(--berry)">案 C 的代價：同一份資料在同一頁出現兩次</h4>
+                <p style="margin:0;font-size:12.5px;line-height:1.7;color:var(--ink-2)">
+                  卡上寫「3 張保單」、表上也剛好 3 張保單。<b>兩個數字一樣時你會問「為什麼要講兩次」，不一樣時你會問「哪個是對的」</b> ── 而後者遲早會發生（卡與表的過濾條件只要有一處不同步就會分岔）。<br>
+                  <span class="ev m">實測</span>本 repo 已經為同型問題付過代價：<code>ui/helpers/portfolio/health.py</code> 的 hero KPI 就是為了合併「上下兩段 KPI 重複占版面」才做出來的（該檔就地註解逐字寫著這個起因）。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rec">
+          <span class="rh">總管推薦</span>
+          <h4>選案 A ── 保單升為全寬區塊，<code>ia</code> 那張 1/3 摘要卡不另外保留</h4>
+          <ol>
+            <li><b>決定 E 是你 2026-08-31 已經拍板過的，而且它的理由在程式裡有機械佐證。</b>
+              <span class="ev m">實測</span><code>ui/helpers/ia/layout.py::wide_table</code> 的 docstring 逐字寫著：「<b>不要把本函式放進 <code>card_row()</code> 的欄位裡。大表在 1/3 寬會被壓成無法閱讀的窄欄</b>……這一點無法在函式內偵測，所以它是<b>呼叫端的責任</b>」。
+              而 <span class="ev m">實測</span><code>policy-split</code> 的保單一覽<b>正是 7 欄</b>，決定 E 自己也逐字寫著「<b>六七欄的表格壓成三分之一寬反而更難看 ── 這不是破例，是規則本來就不涵蓋表格</b>」。<b>兩份文件各自獨立地指向同一個結論。</b></li>
+            <li><b><code>ia</code> 那張卡承接不了它自己派給它的動線。</b>
+              <span class="ev w">線框原文</span><code>ia-wireframe.html</code> 的 <b>Tab 02 空狀態</b>逐字寫著「去哪補 ─ 到<b>「04 資產配置 › 保單與扣款標的」新增</b>」。
+              也就是說 <code>ia</code> 自己把「新增保單與扣款標的」的入口指到這一塊 ── <b>一張純摘要卡放不下一個新增表單</b>。案 A 的全寬區塊底下就有「➕ 新增／更新保單列」，這條動線才接得起來。</li>
+            <li><b>名字不必改，兩份線框在這一點上本來就一致。</b>
+              <span class="ev m">實測</span><code>ui/views/page_04_portfolio.py</code> 的 <code>BLOCK_POLICY</code> 常數<b>本來就是</b> <code>ia</code> 的逐字字面「保單與扣款標的」。案 A 直接拿它當全寬區塊的標題，<code>ia</code> 的命名照樣成立，被換掉的只有「寬度」。</li>
+          </ol>
+          <div class="why-not">
+            <b>為什麼不選 B（維持 1/3 卡）</b>：它沒有真的回答問題，只是把問題推給「那張表去哪」，而三個可能的答案裡有兩個會推翻你已經拍板的決定 A，第三個是砍功能。<br><br>
+            <b>為什麼不選 C（兩者並存）── 這一案值得單獨講，因為它有一個很好的理由，而那個理由已經被案 A 滿足了</b><br>
+            <b>支持 C 最強的說法是</b>：摘要卡回答「<b>我有幾張保單</b>」，明細表回答「<b>這張保單裡有哪幾檔、各扣多少</b>」──<b>這是兩個不同的問題，不是同一個問題的兩種畫法。</b>
+            <span class="ev g">推測</span>本組認為這個區分本身<b>成立</b>，而且是本題三案裡最有說服力的一句話。<br>
+            <b>但它不構成選 C 的理由，因為案 A 已經在回答那個問題了。</b>
+            <span class="ev w">線框原文</span><code>policy-split</code> 的 ④ 版面圖逐字畫著三欄狀態列的內容是
+            <code>│ 📒 目前帳本 │ 📋 保單 │ 🕐 上次讀回 │</code> ──
+            <b>「保單張數」本來就是決定 E 那條狀態列的其中一格</b>（見上方案 A 示意圖第二列）。<br>
+            <b>→ 所以案 C 加的不是「第二個問題的答案」，是「同一個答案的第三個位置」</b>：頂列卡片、狀態列、明細表各一次。
+            <b>兩個數字一樣時你會問「為什麼講三次」，不一樣時你會問「哪個是對的」</b> ── 而後者遲早會發生。<br>
+            <span class="ev m">實測</span>本 repo 已經為同型問題付過代價：<code>ui/helpers/portfolio/health.py</code> 的 hero KPI 就是為了合併「上下兩段 KPI 重複占版面」才做出來的（該檔就地註解逐字寫著這個起因）。
+          </div>
+          <div class="cost" style="border-color:var(--accent);background:var(--accent-soft)">
+            <b style="color:var(--accent)">⭐ 但支持 C 的那句話點出案 A 真的缺了一半，順手補上（這不是第四案，是案 A 的微調）</b><br>
+            上面那句話講的是「幾張保單」與「各多少錢」<b>兩件事</b>。<span class="ev m">實測</span>決定 E 的狀態列有「📋 保單」<b>張數</b>，
+            <b>但沒有任何一格是金額</b>；金額只存在於明細表的逐列「投入金額」欄，<b>沒有總計</b>。<br>
+            <b>建議：在狀態列補一格「💰 總投入」，變成四格。</b>這樣「我有幾張、總共投了多少」在同一條狀態列上回答完，
+            <b>而不必為此另外掛一張 1/3 卡</b> ── 一個數字只出現在一個地方，動線也不必跳。
+            <span class="ev g">推測</span>四格在窄螢幕會塌成兩列，本組<b>沒有實作驗證過</b>，只是判斷。<br>
+            ⚠️ <b>若你認為「總投入」該獨立成卡、放在頂列讓人一眼看到，那就是選案 C</b> ── 那是合理的偏好，說一聲即可，本組不代決。
+          </div>
+          <div class="cost">
+            <b>案 A 的代價，據實講</b>：④ 的首屏會變長，而且 <code>ia</code> 原本「三張卡一列」的節奏被打斷 ── 那一列剩「換股顧問／配息月曆」兩張。
+            <span class="ev g">推測</span>本組認為 3 欄網格塌成 2 欄不會難看（鐵則 01 本來就寫「手機自動塌為 1 欄」，塌欄是既有行為），<b>但這一點本組沒有實作驗證過</b>，只是判斷。
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════ 題二 ═══════════════ -->
+      <section class="panel" id="p2" role="tabpanel" aria-labelledby="t2" hidden>
+        <div class="panel-head">
+          <span class="kicker">題二 · 需要你拍板</span>
+          <h2>② 持倉體檢 ── 「組合健康總分」那一格改放什麼</h2>
+          <p class="job">總管已拍板<b>不做那個 72 分</b>（不會有假數字）。那一格是全寬的，空著很明顯 ── 改放什麼是版面問題，所以來問你。</p>
+        </div>
+
+        <h3 class="sec"><span class="n">01</span>現況與背景</h3>
+        <div class="facts">
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>那一格現在是<b>灰態</b>，不是空白</span>
+            <code>ui/views/page_02_health.py::_render_health_score</code> 走 <code>not_ready(...)</code>，畫面上是灰色說明而不是紅色錯誤 ── 這一點符合三態規則，本題不動它。
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>為什麼做不出那個 72：「五桶」在本站是<b>總經</b>概念</span>
+            <code>shared/macro_buckets.py</code> 的五桶是長期／中期／短線／拐點／新聞，<b>沒有逐檔基金版本</b>。逐檔真正存在的是 <code>services/health/grade.py::compute_4d_health</code> 的 <b>4D Grade（A～F）</b>，切點走 <code>GRADE_CUTOFFS_4D</code>。名字、維度、級距三樣都不同。
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span><b>同一個未答問題卡住的是兩塊，不是一塊</b></span>
+            除了這一格，<b>逐檔體檢表的「五桶評等」整欄也是留白的</b>（<code>_table_rows</code> 內該欄恆為 <code>NOT_READY_MARK</code>，就地註解寫「不要拿 4D Grade 填進來」）。<br>
+            <b>你回答一次，兩塊一起解開。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正派工單 ── 三句話</span>
+            <b>(a) 不是五個，是六個。</b><span class="ev m">實測</span><code>ui/helpers/portfolio/health.py::render_hero_kpi_cards</code> 畫的是<b>兩列各三格、共 6 格</b>：📊 組合基金數／⚖️ 核心‧衛星檔數／💵 現金流安全／🟢 撿便宜雷達／🔴 留校查看／💰 停利提醒。<br>
+            <b>(b) 六個裡有四個 ② 現在拿不到。</b>⚖️🟢🔴💰 四個全部讀 <code>mk_df</code>，而 <code>mk_df</code> 來自 <code>ui/components/mk_dashboard.py::build_mk_dataframe</code> ── <span class="ev m">實測</span>② <b>被守衛明文禁止 import 它</b>（<code>tests/test_wf02_health_skeleton.py::test_the_page_does_not_delegate_to_the_old_tab</code>，因為波段觀測站的搬遷是你指定的獨立批次）。<br>
+            <b>(c) 剩下兩個裡，💵 現金流安全會和同頁的卡打架。</b><span class="ev m">實測</span>它的吃本金判準是裸比「含息報酬 &lt; 配息率」；而 ② 現有的「吃本金警示」卡走 SSOT <code>check_eating_principal_1y_mk</code> 的 <code>alert_level=="red"</code>（帶 <code>NEAR_DIVIDEND_WARNING_PCT</code> 緩衝門檻）。<b>照搬會讓同一頁上下兩處，對同一件事給出兩個不同的數字。</b><br>
+            → 所以派工單推薦的做法<b>照原樣交不出來</b>。以下是可交付的版本。
+          </div>
+        </div>
+
+        <h3 class="sec"><span class="n">02</span>版面示意 ── 三個做法，點著切換</h3>
+        <div class="opts" role="tablist" aria-label="題二的三個做法">
+          <button class="opt" role="tab" id="o2a" aria-controls="v2a" aria-selected="true">案 A ─ 涵蓋範圍計數帶<span class="tagrec">推薦</span></button>
+          <button class="opt" role="tab" id="o2b" aria-controls="v2b" aria-selected="false">案 B ─ 6 格 hero KPI</button>
+          <button class="opt" role="tab" id="o2c" aria-controls="v2c" aria-selected="false">案 C ─ 4D 評等分佈</button>
+        </div>
+
+        <div class="optview" id="v2a" role="tabpanel" aria-labelledby="o2a">
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>② 持倉體檢 · 案 A</div>
+            <div class="screen-body">
+              <div class="formbox">
+                <span class="fh">Form ─ 診斷條件（不動）</span>
+                <div class="fields">
+                  <div class="fld">輪動門檻　σ ±1.0</div><div class="fld">回看窗　12 個月</div>
+                  <button class="apply" type="button" tabindex="-1">套用</button>
+                </div>
+              </div>
+              <div class="block">
+                <h4>本次體檢涵蓋範圍　<span class="chip">全寬</span></h4>
+                <div class="strip">
+                  <div class="st"><span class="k">納入體檢</span><span class="v">9 檔</span></div>
+                  <div class="st"><span class="k">judged · 判得出結論</span><span class="v">7 檔</span></div>
+                  <div class="st"><span class="k">資料不足 · 未列入判定</span><span class="v">2 檔</span></div>
+                </div>
+                <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.6">
+                  同一檔基金跨多張保單只算一次。未列入判定的 2 檔會<b>具名列出</b>，不靜默縮小比對範圍。
+                </p>
+                <div class="chips" style="margin-top:8px"><span class="chip">全寬</span><span class="chip mock">全部示意值</span><span class="chip">零新取數</span></div>
+              </div>
+              <div class="grid3">
+                <div class="card warn"><h4>吃本金警示</h4><span class="big">2 檔</span><p>不動，本批已接真資料。</p><div class="chips"><span class="chip tri">業務警示</span><span class="chip mock">示意值</span></div></div>
+                <div class="card dim"><h4>衛星連續落後</h4><span class="big">⬜ 尚未接上</span><p>維持灰態（波段觀測站搬遷是獨立批次）。</p><div class="chips"><span class="chip">灰 · 前提不足</span></div></div>
+                <div class="card warn"><h4>影子基金重疊</h4><span class="big">1 對</span><p>不動，本批已接真資料。</p><div class="chips"><span class="chip tri">業務警示</span><span class="chip mock">示意值</span></div></div>
+                <div class="card span3"><h4>逐檔體檢表</h4><p>不動。<b>「五桶評等」欄仍留白，直到你回答本題的追加問題（見下方推薦）。</b></p><div class="chips"><span class="chip">大表全寬</span><span class="chip">橫向捲動</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="optview" id="v2b" role="tabpanel" aria-labelledby="o2b" hidden>
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>② 持倉體檢 · 案 B</div>
+            <div class="screen-body">
+              <div class="block">
+                <h4>組合健康儀表（6 格）　<span class="chip">全寬 · 兩列各 3 欄</span></h4>
+                <div class="strip">
+                  <div class="st"><span class="k">📊 組合基金數</span><span class="v">9 檔</span></div>
+                  <div class="st"><span class="k">⚖️ 核心/衛星檔數</span><span class="v">核心 5 / 衛星 4</span></div>
+                  <div class="st"><span class="k">💵 現金流安全</span><span class="v">6/8 檔</span></div>
+                </div>
+                <div class="strip" style="margin-bottom:0">
+                  <div class="st"><span class="k">🟢 撿便宜雷達</span><span class="v">2 檔</span></div>
+                  <div class="st"><span class="k">🔴 留校查看</span><span class="v">3 檔</span></div>
+                  <div class="st"><span class="k">💰 停利提醒</span><span class="v">1 檔</span></div>
+                </div>
+                <div class="chips" style="margin-top:9px"><span class="chip mock">全部示意值</span></div>
+              </div>
+              <div class="block" style="border-color:var(--sysred);border-width:2px">
+                <h4 style="color:var(--sysred)">⚠️ 案 B 現在做不出來，這張圖是「解禁之後」的樣子</h4>
+                <p style="margin:0;font-size:12.5px;line-height:1.7;color:var(--ink-2)">
+                  <span class="ev m">實測</span>上面六格裡，<b>⚖️🟢🔴💰 四格的資料源是 <code>mk_df</code></b>，而 ② 被守衛禁止 import 產生它的模組。
+                  要做案 B，得先把<b>波段觀測站搬到 ②</b> ── 那是你指定的獨立批次。<br>
+                  <b>換句話說：選案 B 等於「這一格繼續灰著，等另一批做完」。</b>本圖只是讓你看到那一批做完後長什麼樣，不是本批可交付的東西。<br>
+                  <span class="ev m">實測</span>另外 💵 現金流安全這一格與下方「吃本金警示」卡<b>判準不同源</b>，直接搬會在同頁產生兩個數字（見上方更正 (c)）── 若真要選案 B，這一格必須先統一口徑，那是另一件事。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="optview" id="v2c" role="tabpanel" aria-labelledby="o2c" hidden>
+          <div class="screen">
+            <div class="screen-bar"><span class="dot"></span>② 持倉體檢 · 案 C</div>
+            <div class="screen-body">
+              <div class="block">
+                <h4>4D 評等分佈　<span class="chip">全寬</span></h4>
+                <div class="strip" style="grid-template-columns:repeat(6,minmax(0,1fr))">
+                  <div class="st"><span class="k">A</span><span class="v">2</span></div>
+                  <div class="st"><span class="k">B</span><span class="v">3</span></div>
+                  <div class="st"><span class="k">C</span><span class="v">2</span></div>
+                  <div class="st"><span class="k">D</span><span class="v">0</span></div>
+                  <div class="st"><span class="k">F</span><span class="v">0</span></div>
+                  <div class="st"><span class="k">— 不足評等</span><span class="v">2</span></div>
+                </div>
+                <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.6">
+                  <span class="ev m">實測</span>來源是真的：<code>services/health/grade.py::compute_4d_health</code>，切點走 SSOT <code>GRADE_CUTOFFS_4D</code>，維度不足時誠實回「—」而不是硬給一個等第。
+                </p>
+                <div class="chips" style="margin-top:8px"><span class="chip mock">全部示意值</span></div>
+              </div>
+              <div class="block" style="border-color:var(--gold);border-left:4px solid var(--gold);background:var(--gold-soft)">
+                <h4 style="color:var(--gold)">案 C 要先改一個名字，否則它就是我們一直在防的那種錯</h4>
+                <p style="margin:0;font-size:12.5px;line-height:1.7;color:var(--ink-2)">
+                  4D Grade <b>不是</b>線框寫的「五桶評等」。把它畫在「五桶評等」這個標題底下，就是「<b>名字對得上、數字是真的、意思完全不同</b>」那一類錯誤 ── 而你在畫面上<b>看不出來</b>。<br>
+                  <span class="ev m">實測</span>本 repo 已經為同型錯誤立過警語：<code>mk_dashboard.py</code> 有一個叫 <code>Principal_Erosion</code>（直譯「吃本金」）的訊號，它的 docstring 逐字寫著「本訊號實為『淨值連續下跌動能』，<b>非配息覆蓋/吃本金</b>……<b>勿混用</b>」。<br>
+                  <b>所以案 C 可行，但前提是把名字一起正名</b>（見下方推薦的追加問題）。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rec">
+          <span class="rh">總管推薦</span>
+          <h4>選案 A ── 那一格改成「本次體檢涵蓋範圍」的計數帶</h4>
+          <ol>
+            <li><b>零新取數、零跨層、不碰被禁的模組 ── 本批就能交。</b>
+              它報的全是 ② <b>這一頁已經算完</b>的東西：<code>_uniq_by_code()</code> 去重後的檔數，加上 <code>_eating_tally()</code> 已經分好的四種落點。案 B 要等另一個批次，案 C 要先等你回答一個命名問題，<b>只有案 A 不欠任何前置</b>。</li>
+            <li><b>它不製造第二個口徑。</b>它報的是「涵蓋幾檔／判不動幾檔」，<b>不是</b>把吃本金重算一次 ── 所以不會出現更正 (c) 講的那種「同頁兩個數字」。</li>
+            <li><b>它回答你看完三張卡後最想問的那句話。</b>「這頁的結論到底蓋到我幾檔？」這件事現在只藏在卡片說明的小字裡（<span class="ev m">實測</span><code>_eating_note</code> 已經在寫「N 檔資料不足、未列入判定」）。把它提到全寬那一格，等於<b>先講清楚樣本，再講結論</b>。</li>
+          </ol>
+          <div class="why-not">
+            <b>為什麼不選 B</b>：它把這一格<b>綁死在另一個批次之後</b>。在波段觀測站搬完之前，選了 B 也只能繼續灰著 ── 那等於這一題沒有答案。<br>
+            <b>為什麼不選 C</b>：資料源是真的、我也認為它有價值，但它<b>不是線框寫的那個東西</b>，直接放上去會犯 <code>Principal_Erosion</code> 那類錯誤。它要能用，得先改名字 ── 見下面那個追加問題。
+          </div>
+          <div class="cost">
+            <b>⭐ 一個追加問題，順便問（回答它會一次解開兩塊，也決定案 C 能不能用）</b><br>
+            <b>「五桶評等」這個名字，要不要改成「4D 評等」？</b><br>
+            <b>要改</b> → 逐檔體檢表那一欄立刻能填上真的 A～F（不再留白），而且案 C 也就變成可選的了。<br>
+            <b>不改</b> → 那一欄繼續誠實留白，直到有一個真的叫「五桶」的逐檔評等被定義出來。<br>
+            <span class="ev g">推測</span>本組認為<b>該改</b> ── 「五桶」這個詞在本站已經被總經用掉了，同一個詞兩個意思遲早出事。但<b>這是業務命名，本組不代決。</b>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════ 題三 ═══════════════ -->
+      <section class="panel" id="p3" role="tabpanel" aria-labelledby="t3" hidden>
+        <div class="panel-head">
+          <span class="kicker">題三 · 大部分不必你決定</span>
+          <h2>舊 ④ 那些區塊，各自去哪</h2>
+          <p class="job">派工單說「新線框沒有逐一交代去處」。<b>查完之後結論不同：多數其實早就有明文去處</b>，只是不在 <code>ia</code> 那一份。
+          <b>舊 ④ 的 8 個頂層區塊（下表 1～8 列）全部有明文依據</b>；此外還有<b>四個子區塊</b>（9～12 列），
+          其中<b>只有第 9 列有明文去處，第 10／11／12 三塊從頭到尾沒有任何線框提過 ── 那三塊要你點頭。</b></p>
+        </div>
+
+        <h3 class="sec"><span class="n">01</span>先更正清單本身</h3>
+        <div class="facts">
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正派工單 ── 那八塊不是那八塊</span>
+            <span class="ev m">實測</span>舊 ④（<code>ui/tab3_portfolio.py</code>）的<b>頂層區塊確實是 8 個</b>，但成員和派工單列的不一樣：<br>
+            <code>加入與管理基金 · 保單管理 · 配置總覽 · 持股重疊度診斷 · 換股顧問 · 帳本＋費用與扣款 · AI 摘要 · Raw data</code><br><br>
+            <b>差三處</b>：<br>
+            ① 派工單列的<b>「組合績效」「波段觀測站」不是頂層區塊</b> ── 組合績效＋效率前緣 render 在「加入與管理基金」那一塊的深處；波段觀測站 render 在「配置總覽」<b>底下的子區塊</b>。<br>
+            ② 派工單<b>漏了「帳本」「保單管理」「換股顧問」</b>三塊。<br>
+            ③ 派工單說「新線框沒有逐一交代去處」── <b>不成立</b>：<span class="ev w">線框原文</span><code>fund-wireframe-final.html</code> §03 的 ④ 對<b>持股重疊度診斷／帳本／費用與扣款／AI 摘要／Raw data 逐條標「保留」</b>。
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>一條先講清楚的硬規則：<b>線框沒列，不等於該退役</b></span>
+            2026-09-05 總管裁決 (A)（就地寫在 <code>ui/views/page_04_portfolio.py</code>）：「<b>線框是版面規範，不是功能清單</b>」，任何一頁都不得因為「線框沒列」就推論「那個功能不該存在」。<br>
+            所以 <code>ia</code> 沒提到某一塊，<b>不構成砍掉它的理由</b> ── 下表的「保留」多半是這條規則的直接結果。
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 本輪就地更正（2026-09-06）── 沒有明文依據的是<b>三塊</b>，不是一塊<br><span style="font-weight:400;font-size:12.5px;color:var(--muted)">這是有意識的更正，不是漏刪。下表 1～10 列一列未刪、一字未改，本輪只補上 11／12 兩列並改寫計數句。</span></span>
+            <b>舊表述錯在哪</b>：本檔上一版寫「下表十塊裡九塊已有明文依據，<b>只有</b>『組合績效／效率前緣』需要你點頭」。
+            <b>那句話在它自己的射程內是對的</b>（射程＝舊 ④ 的<b>頂層</b>區塊），
+            <b>但射程寫在表頭、沒有寫在那句話裡</b> ── 於是它讀起來像「整個 ④ 只有一件事要你決定」，而那不成立。<br><br>
+            <b>實際上還有兩塊同樣「9 份線框從頭到尾沒提過」</b>，它們和第 10 塊一樣是<b>子區塊</b>，所以上一版的頂層清單掃不到：
+            <b>穿透式持股／產業集中度</b>與<b>總經曝險聯動</b>（見下表 11、12 列）。<br><br>
+            <b>⭐ 方法教訓（寫在這裡讓後人看得到）：凡是「只有 N 個」這種計數句，射程必須寫在同一句話裡。</b>
+            把射程放在表頭、把結論放在句子裡，讀者只會讀到結論 ── <b>一句射程受限的真話，被當成全稱句讀，效果和假話一樣。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正派工單 ──「持股重疊度診斷 → ②」這句不精確</span>
+            派工單說「唯一已有明文去處的是持股重疊度診斷 → ②」。<span class="ev m">實測</span><b>查不到這句話</b>：<code>ia-wireframe.html</code> 全篇「重疊」只出現在 Tab 02 的<b>「影子基金重疊」那張 1/3 卡</b>，<b>沒有任何一句</b>寫「持股重疊度診斷搬去 ②」。<br>
+            反倒是<b>波段觀測站</b>才是真的有明文去處 ── 見下表第 9 列。
+          </div>
+        </div>
+
+        <h3 class="sec"><span class="n">02</span>逐塊去留（點開看依據）</h3>
+        <div class="dest">
+
+          <details>
+            <summary><span class="bn">1 ─ ➕ 加入與管理基金</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev m">實測</span>程式端的 SSOT 自己就把它歸給 ④：<code>ui/helpers/story_nav.py</code> 的 <code>_SECTION_TO_TAB["pf_add"] == "portfolio"</code>，標籤是「➕ 加入與管理基金」。</p>
+              <p><span class="ev m">實測</span>而且它現在就是 ④ 的第一個區塊（<code>_sec_add</code> 的就地註解：「1. 加入與管理基金（沒有標的就沒有配置）」）。</p>
+              <p><b>推薦：留 ④，不動。</b>沒有標的就沒有配置可看，它必須排在最前面。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">2 ─ 📋 保單管理 ／ 保單與扣款標的</span><span class="go stay">留在 ④</span><span class="go ask">版面 → 見題一</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>policy-split-wireframe.html</code> 決定 A：保單一覽與每張保單明細<b>留在 ④</b>（它同時覆蓋了更早的 <code>-final</code>，該覆蓋已記在 <code>docs/wireframes/README.md</code>）。</p>
+              <p><b>「去哪」沒有爭議，「多寬」才是問題</b> ── 那就是<b>題一</b>。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">3 ─ 📊 配置總覽</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>fund-wireframe-final.html</code> §03 ④ 的保留清單內。</p>
+              <p><span class="ev m">實測</span>它底下有三個子區塊：配置總覽本體（KPI 卡＋淨值成長模擬曲線）／FX 曝險摘要與智能戰情室／保單分組視圖。</p>
+              <p><b>推薦：留 ④，不動</b>（子區塊「波段觀測站」的去處另見第 9 列）。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">4 ─ 🔬 持股重疊度診斷</span><span class="go stay">留在 ④</span><span class="go">附一個順帶建議</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>-final</code> §03 ④ 標「保留」，並註明「維持『每張保單一顆按鈕才算』的做法 ── 這是全站少數一開始就做對延遲載入的區塊」。</p>
+              <p><span class="ev m">實測</span>而 ② 那張「影子基金重疊」卡<b>已經接上真資料</b>了（<code>page_02_health.py</code> 的 <code>_overlap_result</code>）。<b>兩者不是同一塊東西</b>：② 那張是 1/3 摘要卡（回答「有幾對重疊」），④ 這一塊是按保單分組的完整診斷（回答「哪幾檔、重疊在哪些持股與產業」）。</p>
+              <p><b>推薦：兩邊都留，職責分開</b> ── ② 留摘要（診斷），④ 留完整診斷（配置）。理由：<span class="ev w">線框原文</span><code>ia</code> Tab 02 自陳「只診斷、不決策」，而「按保單分組的重疊」本質是配置問題（你要據此決定調哪張保單）。</p>
+              <p><span class="ev g">推測</span>本組沒有逐格比對兩處的計算是否同源；<b>若日後發現兩邊給出的重疊對數不一致，那是另一個要修的問題</b>，本題不涵蓋。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">5 ─ 🎯 換股顧問</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>ia</code> Tab 04「從哪裡搬來」逐字：「換股顧問 ─ 自 02 的健診段切出」；Tab 02「這裡不放什麼」逐字：「換股建議與再平衡試算 → <b>04</b>（那是決策，不是診斷）」。</p>
+              <p><span class="ev m">實測</span>已經搬完了 ── 舊 ④ 內有 <code>_sec_switch</code> 區塊在 render。</p>
+              <p><b>推薦：留 ④，不動。已定案。</b></p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">6 ─ 💼 交易帳本（T7）</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>ia</code> Tab 04：拉到 04 同一層，<b>全站不留任何巢狀分頁</b>。這一條<b>推翻了</b> <code>-final</code> 原本寫的「帳本內部三個子分頁不動」。</p>
+              <p><span class="ev m">實測</span>已經 merge：commit <code>adac135</code>（④ 交易帳本拉平巢狀分頁）。</p>
+              <p><b>推薦：留 ④，不動。已完成。</b></p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">7 ─ 費用與扣款</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>-final</code> §03 ④ 標「保留」，理由逐字：「現況緊貼在帳本與 AI 摘要之間、沒有編號。<b>位置合理（費用是持有成本），只補上層級</b>」。</p>
+              <p><span class="ev m">實測</span>它現在還活著：<code>ui/helpers/portfolio/fee_deduction.py::render_fee_deduction_section</code>，在帳本之後 render。</p>
+              <p><b>推薦：留 ④，不動。</b>費用要吃哪一檔基金扣，本來就要看著帳本與持倉決定。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">8 ─ 🤖 AI 摘要 ／ 🗂️ Raw data</span><span class="go stay">留在 ④</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev w">線框原文</span><code>-final</code> §03 ④ 兩者都標「保留」；Raw data 那條並註明「<b>保留在最後。它是「這個數字哪來的」的追查入口，有價值但不該擋路</b>」。</p>
+              <p><span class="ev m">實測</span>兩塊都還在（<code>_sec_ai</code> / <code>_sec_raw</code>），且 Raw data 是收合的。</p>
+              <p><b>推薦：留 ④，不動</b>，Raw data 維持收合、排最後。</p>
+            </div>
+          </details>
+
+          <details>
+            <summary><span class="bn">9 ─ 🌊 波段觀測站</span><span class="go move">搬去 ②</span><span class="go">不必你決定</span></summary>
+            <div class="db">
+              <p><span class="ev m">實測</span>「波段觀測站」在 <code>origin/main</code> 的<b>全部 8 份線框裡只出現一次</b>，就在 <code>ia-wireframe.html</code> 的 <b>Tab 02「從哪裡搬來」</b>，逐字列著 <code>ui/components/mk_dashboard.py ─ 波段觀測站</code>。<br>
+                驗證指令：<code>git grep -c "波段觀測站" origin/main -- 'docs/wireframes/'</code> → <b>只有 <code>ia-wireframe.html:1</code> 一行</b>。
+                ⚠️ <b>射程（2026-09-06 補）</b>：<b>本檔不在 <code>origin/main</code> 上</b>，所以不列入這 8 份；本檔自己提到它是<b>在討論它</b>，不是規範它。</p>
+              <p><b>所以它的去處已經定了：② 持倉體檢。</b>這是本題唯一一塊有<b>明文搬遷指令</b>的區塊 ── 派工單原本以為是「持股重疊度診斷」，查下來是這一塊。</p>
+              <p><span class="ev m">實測</span>但<b>施工是獨立批次</b>：<code>page_02_health.py</code> 就地寫著「客戶已裁決波段觀測站的搬遷是本頁上線之後的獨立批次」，且有守衛測試擋住 ② 提前 import 它。</p>
+              <p><b>推薦：維持現狀，等那一批。</b>不必你現在決定 ── 但它同時是<b>題二案 B 的前置</b>，兩題相關。</p>
+            </div>
+          </details>
+
+          <details open>
+            <summary><span class="bn">10 ─ 📊 組合績效 ／ 🎯 效率前緣</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
+            <div class="db">
+              <p><span class="ev m">實測</span><b>0 次提到它們。</b>驗證指令（repo 根目錄，可自跑）：<br>
+                <code>git grep -c "組合績效\|效率前緣" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，代表 0 命中）</b>。<br>
+                ⚠️ <b>射程（2026-09-06 就地更正，本列原寫「全部 9 份線框」）</b>：這條指令掃的是 <code>origin/main</code>，上面只有 <b>8 份</b>線框 ──<b>本檔不在 main 上</b>。
+                <b>這與第 11／12 列是同一個射程問題</b>，本輪修那兩列時<b>把同一把尺也對本列重跑了一次</b>，故一併更正。
+                <b>結論（0 命中）不變</b>，改的是那句話的射程。</p>
+              <p><span class="ev m">實測</span>但它們<b>是活的</b>：<code>ui/helpers/portfolio_perf.py</code> 的 <code>render_portfolio_performance</code> 與 <code>render_efficient_frontier</code>，現在 render 在舊 ④「加入與管理基金」那一塊的<b>持倉健診段末尾</b>。產出四個 KPI：年化報酬／σ／Sharpe／最大回撤，加上各檔貢獻表。</p>
+              <p><b>這是三個缺口之一</b>（另兩個見第 11、12 列）── 依上面那條硬規則（線框沒列 ≠ 該退役），它<b>不會</b>因為沒被線框提到就被砍；但也就沒有人講過它該放哪。</p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
+                <b>總管推薦：留在 ④，但<u>升成頂層區塊</u>、四個 KPI 走 3 欄網格、各檔貢獻表走全寬。</b><br><br>
+                <b>理由 1</b>：它回答的是「<b>我整個組合表現如何</b>」，那是 ④ 的職責（配置），不是 ② 的「哪一檔出問題」。<span class="ev w">線框原文</span><code>ia</code> Tab 02「這裡不放什麼」逐字寫「換股建議與再平衡試算 → 04（那是決策，不是診斷）」── 組合層級的績效同屬「看整體、做配置決定」那一側。<br>
+                <b>理由 2</b>：<span class="ev m">實測</span>它現在埋在「加入與管理基金」區塊的深處，<b>你得先捲過整個加入表單與健診大表才看得到</b>一組本該顯眼的組合 KPI。這不是設計，是搬遷過程留下的位置。<br>
+                <b>理由 3</b>：四個 KPI 是卡片型內容，<b>正好合鐵則 01 的 3 欄網格</b>；貢獻表欄位多，走全寬，與題一同一條理由。<br><br>
+                <b>不推薦搬去 ②</b>：② 全篇只診斷不決策，而「年化報酬／Sharpe」是拿來決定要不要調整配置的，放進 ② 會讓 ② 的職責不純 ── 那正是換股顧問被移出 ② 的同一個理由。
+              </p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--berry);border-left:3px solid var(--berry);border-radius:2px;background:var(--berry-soft)">
+                <b>⚠️ 這一塊的代價比另外兩塊高，據實講在前面（2026-09-06 本輪補查發現）</b><br>
+                <span class="ev m">實測</span><b>④ 已經有第二張卡在顯示同樣的三個數字</b>：換股顧問裡的「📈 績效追蹤卡」與這一塊
+                <b>有三個逐字相同的標籤</b>（<b>年化報酬 ／ 年化波動 σ ／ 最大回撤</b>）。<br>
+                <span class="ev m">實測</span><b>這件事已經出過事、已經上了守衛</b>：<code>tests/test_ia_tracking_card_scope_caption.py</code> 檔頭逐字記載 ──
+                兩者數學收口到同一個 SSOT，共同交易日足夠時<b>三個同名指標數字完全相同（純冗餘）</b>；
+                不足時<b>一張顯示「—」、另一張仍給數字</b>，「<b>會被讀成『其中一張壞了』</b>」，
+                而「不足 60 天」<b>正是新載入組合的常態</b>。現在靠一行 caption 把範圍講清楚，並有<b>執行期</b>守衛（真的把畫面跑起來斷言）鎖住它。<br>
+                <b>→ 把這一塊升成顯眼的區塊，等於把這組重複標籤擺到更明顯的位置。</b>
+                <b>本組仍然推薦升</b>（理由 1~3 不變：它現在的位置是搬遷留下的、不是設計），
+                <b>但你拍板時應該知道它會連帶把一個既有的重複問題放大</b>。<br>
+                <span class="ev g">推測</span>本組認為正解是<b>升的同時把兩張卡的分工在畫面上講明</b>（一張是「整個組合到今天」、一張是「這次換股的追蹤範圍」），
+                <b>但本組沒有設計那個版面，也沒有查證兩者的範圍定義是否真的只差在這裡</b> ── 這是判斷，不是驗證。<br>
+                ⚠️ <b>順帶更正本組上一版的一個方位用詞</b>：上面寫「埋在深處」<b>指的是「區塊之內」的深度，不是「頁面之底」</b> ──
+                <span class="ev m">實測</span>它其實在 <code>_sec_add</code>、<b>顯示位置 1/8</b>（換股顧問是 5/8）。
+                <b>它在第一塊裡面的最後面，不是在整頁的最後面。</b>兩件事都成立，但用「深處」兩個字容易被讀成後者。
+              </p>
+            </div>
+          </details>
+
+          <details open>
+            <summary><span class="bn">11 ─ 🔬 穿透式持股集中度 ／ 產業集中度</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
+            <div class="db">
+              <p><b>它在做什麼（先講白話，因為線框從沒描述過它）</b>：你買的是<b>基金</b>，基金底下持有的是<b>股票</b>。
+                這一塊把你所有基金<b>穿透合併計算</b>，告訴你「<b>你以為分散了，其實 X% 壓在同一批股票／同一個產業</b>」。<b>這是風險示警，不是統計花絮。</b></p>
+              <p><span class="ev m">實測</span><b>0 次提到它。</b>驗證指令（repo 根目錄，可自跑）：<br>
+                <code>git grep -c "集中度" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1，即 0 命中）</b>。<br>
+                <b>正對照（證明掃描有效，同一條指令換個字）</b>：「保單」<b>4</b> 份、「配息」<b>7</b> 份、「核心」<b>7</b> 份。<br>
+                ⚠️ <b>射程（本輪自己踩到，就地更正）</b>：<code>origin/main</code> 上只有 <b>8 份</b>線框 ──<b>本檔不在 main 上</b>。
+                本組另做的<b>「strip 掉 HTML 標籤後再掃」是在本分支工作樹上跑的，涵蓋 9 份</b>（含本檔），那一輪的正對照是「配息 8／核心 8」。
+                <b>兩組數字都對，差的就是本檔自己</b> ── 本輪初稿把 9 份的數字寫在 8 份的指令旁邊，<b>指令與輸出對不起來</b>，已改成以上面那條指令為準。
+                <b>記這一筆是因為它正是本檔在講的那個病：一條沒有跟著自己輸出對過的指令，看起來卻像證據。</b><br>
+                ⚠️ <b>本組另做了別名掃描防漏</b>（<code>集中</code>／<code>分散</code>／<code>個股</code>／<code>穿透</code>）：
+                「集中」的命中<b>全是動詞</b>（「本次改動集中在這頁」「設定類集中到一頁」）；
+                「穿透」在 3 份線框命中 6 次，<b>逐條讀過全部是「三率穿透」</b>（單一個股的財務三率），<b>沒有一個是持股集中度</b>。</p>
+              <p><span class="ev m">實測</span><b>但它是活的，而且是刻意被救回來的</b>：<code>ui/tab3_portfolio.py</code> 就地註解逐字寫著 ──
+                「以下 4 個都是『風險揭露』元件（總經曝險 / 資料新鮮度 / 持股集中度 / 產業集中度）。原本 4 個 <code>except: pass</code> 讓它們失敗時<b>畫面完全沒有痕跡</b>
+                ──『<b>沒出現</b>』與『<b>沒風險</b>』長得一模一樣，是 §1 反造假的鏡像違規。」<br>
+                <b>這句話正好說明它為什麼不能就這樣消失在版面裡</b>：一個風險揭露元件被排版排到沒人看見，效果等同於它失敗時被吞掉。</p>
+              <p><span class="ev m">實測</span><b>它現在在哪</b>：住在<b>「配置總覽」的 <code>_ov_core</code> 子容器</b>裡（<code>with _ov_core:</code> 涵蓋該段），
+                也就是<b>下表第 3 列那一塊的深處</b> ── 所以上一版的頂層清單掃不到它。實作為 <code>ui/helpers/concentration.py</code> 的
+                <code>render_concentration_summary</code>（持股）與 <code>render_sector_concentration_summary</code>（產業）。</p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
+                <b>總管推薦：留在 ④，升成看得見的具名區塊，緊接在配置比例之後。</b><br><br>
+                <b>理由 1</b>：它回答的是「<b>我這個配置真的分散嗎</b>」── 那正是看完核心／衛星比例之後的下一個問題，<b>接在後面才讀得順</b>。<br>
+                <b>理由 2</b>：它是<b>風險揭露</b>。上面那段就地註解已經為「失敗時無痕跡」修過一次；<b>「排版上看不見」是同一個失效模式的另一種寫法</b>。<br>
+                <b>理由 3</b>：持股與產業兩塊<b>合成一個區塊</b>（同一個檔、同一件事的兩個切面），不要各占一格。<br><br>
+                ⚠️ <b>但「升成看得見的區塊」這件事本身就是版面變更，所以才要問你</b> ── 見下方第 12 列末段對這條規則射程的說明。
+              </p>
+            </div>
+          </details>
+
+          <details open>
+            <summary><span class="bn">12 ─ 🧭 總經曝險聯動</span><span class="go ask">⭐ 要你決定（三塊之一）</span></summary>
+            <div class="db">
+              <p><b>它在做什麼</b>：把 <b>① 市場總覽</b>判出來的景氣位階，接到<b>你的組合</b>上，提示目前配置在這個環境下偏積極還是偏保守。
+                <b>這是「大盤」與「我的配置」之間唯一一條連線</b> ── 沒有它，① 判完的結論就停在 ①。</p>
+              <p><span class="ev m">實測</span><b>0 次提到它。</b><code>git grep -c "總經曝險" origin/main -- 'docs/wireframes/'</code> → <b>無輸出（rc=1）</b>。<b>射程與正對照同第 11 列</b>（main 上 8 份、strip 掃描 9 份）。
+                <b>別名掃描防漏</b>：「曝險」另在 <code>fund-wireframe-final</code> 命中 2 次，<b>逐條讀過都是「FX 曝險」</b>（匯率），<b>不是總經曝險</b>；「景氣」的命中全在 ① 總經頁自己的版面，<b>沒有一句把它接到組合上</b>。</p>
+              <p><span class="ev m">實測</span><b>它已經在配置比例旁邊了，不必搬</b>：呼叫處逐字是
+                <code>render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)</code> ──
+                <b>它吃的參數就是核心比例本身</b>，而那個 KPI 就在它上方幾行 render。<b>「它在解釋那個比例該不該動」不是推論，是它的函式簽章。</b></p>
+              <p><span class="ev m">實測</span><b>它已經先把一個誠實問題處理掉了</b>：<code>ui/helpers/macro/linkage.py</code> 檔頭逐字寫著
+                「phase_info.alloc 是『股/債/現金』資產類別配置……<b>與組合的『核心/衛星』軸不同 → banner 分開呈現，不硬湊等號</b>」，
+                且只在<b>防禦 regime ＋ 高系統性風險 ＋ 核心比例偏低</b>三個條件同時成立時才給輕量提示。<b>它不會天天對你喊話。</b><br>
+                同檔另註明「Tab3 render 時 Tab1 可能尚未載入 → 容錯」，<b>未載入時是灰字說明，不是紅字錯誤</b>（合鐵則 03 三態分離）。</p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px;background:var(--accent-soft)">
+                <b>總管推薦：留在 ④、維持現在的位置（緊貼核心／衛星比例），但在線框上<u>具名</u>成一個區塊。</b><br><br>
+                <b>理由</b>：這一塊<b>不需要搬</b>，它的位置本來就對（見上面的函式簽章）。要你點頭的是<b>「把它寫進線框、讓它有名字」</b> ──
+                因為線框沒列到它，而下一批照線框施工的人<b>不會知道它存在</b>。<span class="ev g">推測</span>本組認為這正是它至今沒被任何線框提過的原因：它是 v19.64 之後才長出來的，而線框沒回頭補。<b>本組沒有查證這個時序，只是判斷。</b>
+              </p>
+              <p style="margin-top:10px;padding:10px 12px;border:1px solid var(--gold);border-left:3px solid var(--gold);border-radius:2px;background:var(--gold-soft)">
+                <b>⚠️ 這三塊為什麼非問你不可 ── 一條規則的兩半，只引用一半會出錯</b><br>
+                上面第二格引的那條硬規則（<b>2026-09-05 總管裁決 (A)</b>，<span class="ev m">實測</span>就地寫在 <code>ui/views/page_04_portfolio.py</code>）是
+                「<b>線框是版面規範，不是功能清單</b>」。<b>但它自己緊接著寫了反面</b>，逐字：<br>
+                「⚠️ <b>反過來也不成立</b>：<b>不得</b>把本條讀成『線框沒列的都可以自己加』。它解除的是『<b>沒列 ⇒ 不該存在</b>』這個推論，<b>不是</b>授權在線框之外新增版面（那仍是客戶 gate）。」<br>
+                <b>→ 所以裁決 (A) 只保住了「這三塊不會被砍」，它<u>沒有</u>授權我們把它們升成看得見的區塊。</b>
+                <b>升版面這件事仍然要你拍板 ── 這就是本題存在的理由。</b><br>
+                ⚠️ <b>據實標明出處</b>：這條規則<b>是 2026-09-05 的總管裁決，不是你說過的話</b>，就地寫在程式裡；<b>你隨時可以推翻它</b>。
+              </p>
+            </div>
+          </details>
+
+        </div>
+      </section>
+
+      <!-- ═══════════════ 題四 ═══════════════ -->
+      <section class="panel" id="p4" role="tabpanel" aria-labelledby="t4" hidden>
+        <div class="panel-head">
+          <span class="kicker">題四 · 需要你拍板（線框自己標的 Q7）</span>
+          <h2>📁 選股池與除息行事曆 ── 要住哪一頁？</h2>
+          <p class="job"><code>fund-wireframe-final.html</code> 自己把這題標成「<b>需你拍板（Q7）</b>」，但它<b>沒有被答過，也沒有被追蹤</b>。
+          <b>本組查完之後，這題的前提變了</b> ── 它問的已經不是原本那個問題了。</p>
+        </div>
+
+        <h3 class="sec"><span class="n">01</span>線框當初怎麼問</h3>
+        <div class="facts">
+          <div class="fact">
+            <span class="ft"><span class="ev w">線框原文</span><code>fund-wireframe-final.html</code>（2026-08-27）Q7，逐字</span>
+            「<b>Q7 · 我方追加</b>　選股池與除息行事曆，搬到「組合健診」還是留在「設定與診斷」？」<br>
+            「同一份選股池<b>現在有兩個入口</b>（管理室、以及組合健診裡的換股池顧問），<b>標題只差一個層級</b>，操作的是同一份資料。<b>除息行事曆的資料來源就是選股池。</b>」<br>
+            該份的建議：「<b>兩者都搬到 ② 組合健診</b>，管理室那個入口收掉。選股池是<b>決策資產</b>（下一檔要買什麼）不是設定」，
+            並補一句反向選項：「（若你習慣在「維護」的心情下整理選股池，也可以反過來 —— 全部留在 ⑤，② 只讀不改。<b>但不能維持現在兩個都能改的狀態。</b>）」
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (1) ── 「兩個都能改」這個前提<b>今天已經不成立</b>，而且早在線框寫下之前就被修掉了</span>
+            <span class="ev m">實測</span><code>_render_pool_editor()</code> 全 repo <b>只有一個呼叫點</b>：<code>ui/tab_manage.py</code>。
+            驗證指令：<code>git grep -n "_render_pool_editor" origin/main -- '*.py'</code>（命中須人工判讀「定義」與「呼叫」）。<br>
+            <span class="ev m">實測</span>而且<b>有守衛測試擋著它復辟</b>：<code>tests/test_tab_manage.py</code> 逐字寫
+            「換股顧問區<b>不得再直接呼叫</b> <code>_render_pool_editor()</code>(已移到管理室;避免同 run 雙渲染崩)」，斷言 <code>assert "_render_pool_editor()" not in _fn</code>。<br>
+            <span class="ev m">實測</span><code>switch_advisor_section.py</code> 就地註解逐字：「兩處都渲染 <code>_render_pool_editor</code> → <b>DuplicateWidgetID</b>)。<b>本區仍讀選股池做配對</b>(下方按鈕)。」<br>
+            <span class="ev m">實測</span>修掉的時間點：<code>STATE.md</code> <b>2026-08-12</b> 存檔（v19.433・PR #625）逐字「📁 選股池:重用 <code>_render_pool_editor</code>…<b>同步從 換股顧問移除該編輯器呼叫</b>」。<br><br>
+            <b>→ 而線框日期是 2026-08-27</b>（<code>docs/wireframes/README.md</code>）。<b>也就是說：Q7 被寫下的當天，它描述的那個狀態已經被修好 15 天了。</b>
+            <b>那個「編輯器」的標題還留在 <code>switch_advisor_section.py</code> 裡，是因為函式<u>定義</u>住在那，但<u>呼叫</u>只在管理室</b> ── 讀 code 很容易看成兩個入口。<br>
+            ⚠️ <b>所以「不能維持現在兩個都能改的狀態」這句話已經沒有對象了。它不是還沒做，是已經做完了。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (2) ── 線框寫的目的地「② 組合健診」，<b>今天會把它送到錯的地方</b></span>
+            線框推薦「搬到 ②」的理由是<b>「跟著換股顧問走，留在決策動線內」</b>。<b>那個理由今天仍然成立，但換股顧問已經不在 ② 了。</b><br>
+            <span class="ev m">實測</span><code>ui/helpers/story_nav.py</code> 就地註解逐字：<code>render_switch_advisor_section</code> 的分區標題（<b>渲染於 ④ 資產配置</b>）；
+            實際呼叫在 <code>ui/tab3_portfolio.py</code> 的 <code>_sec_switch</code> 區塊內（<b>④ 就是這一支</b>）。<br>
+            <span class="ev m">實測</span>② 那邊的舊呼叫已被劃掉：<code>ui/tab_fund_grp_health.py</code> 內是
+            <code>~~render_switch_advisor_section(_funds_extra)~~</code>。<br>
+            <span class="ev w">線框原文</span>這次搬遷是 <code>ia-wireframe.html</code>（<b>2026-09-01，比 Q7 晚 5 天</b>）Tab 02 定的：「換股建議與再平衡試算 → <b>04</b>（那是決策，不是診斷）」。<br><br>
+            <b>→ 依線框自己的理由（跟著換股顧問、待在決策動線內），今天的答案是 ④ 資產配置，不是 ②。</b>
+          </div>
+          <div class="fact correct">
+            <span class="ft">⚠️ 更正 (3) ── 這題不只選股池，<b>還綁著除息行事曆</b></span>
+            Q7 的標題逐字就是「<b>選股池<u>與除息行事曆</u></b>」。<span class="ev w">線框原文</span>理由：「它的資料來源就是選股池（按鈕字面是『<b>抓選股池標的 → 產生本月除息月曆</b>』），<b>兩者分開會再造出一次跨頁跳轉</b>」。<br>
+            <span class="ev m">實測</span>它現在也在管理室：<code>scripts/dividend_calendar_notify.py</code> 檔頭逐字指路「視覺完整月曆看 App「<b>我的管理室 → 除息行事曆</b>」」。<br>
+            <b>→ 兩者要一起決定，分開決定會再製造一次跨頁跳轉。</b>
+          </div>
+          <div class="fact">
+            <span class="ft"><span class="ev m">實測</span>這題為什麼會沒人管 ── 它<b>不是被否決，是被順手掃掉的</b></span>
+            repo 內唯一追蹤過 Q7 的地方是 <code>ui/tab_settings_diag.py</code> 裡的一句<b>括號附註</b>：「（另建議選股池／除息行事曆搬去 ②，<b>Q7 待客戶拍板</b>）」。<br>
+            <span class="ev m">實測</span><b>那整段已經被劃掉了</b>（<code>~~…~~</code>），
+            但劃掉它的理由<b>與 Q7 無關</b> ── 就地更正寫的是「B／C 未拆」這個框架不成立（分區拆分那件事 T24 已於 2026-09-02 撤銷）。<br>
+            <b>→ Q7 是<u>夾在別人句子裡的括號</u>，那句話因為別的原因被劃掉，它就跟著消失了。</b>這不是有人決定不做，是<b>沒有人再看得到它</b>。<br>
+            ⚠️ <b>順帶一個會害人的命名碰撞</b>：<span class="ev m">實測</span><code>PHASE1_FINAL_ISSUE_LIST.md</code> 裡另有一個<b>完全不同的 Q7</b>（「sidebar 開發者功能收 expander 還是搬 Tab5？」）。
+            <b>在本 repo 講「Q7」必須指明是哪一份文件的 Q7</b>，否則搜尋會撈到另一題。<br>
+            <span class="ev g">推測</span>本組<b>只證明了 repo 內查不到答覆紀錄</b>，<b>不證明你沒答過</b>（口頭答覆不會進 repo）。
+            <b>正對照</b>：同一份線框的 Q1~Q4 是<b>查得到</b>答覆的 ── <code>docs/wireframes/README.md</code> 逐字「客戶已拍板（<b>Q1~Q4 全數照推薦</b>）」，可見答覆確實會被記進 repo。<b>所以「Q7 查不到」是有意義的空白，不是掃描失效。</b>
+          </div>
+        </div>
+
+        <h3 class="sec"><span class="n">02</span>所以現在真正要問的是什麼</h3>
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>選股池 · 現況與三個去處</div>
+          <div class="screen-body">
+            <div class="block">
+              <h4>現況（不是線框描述的那個現況）　<span class="chip">實測</span></h4>
+              <div class="strip">
+                <div class="st"><span class="k">可編輯入口</span><span class="v">1 個</span></div>
+                <div class="st"><span class="k">位置</span><span class="v">⑤ 設定與診斷</span></div>
+                <div class="st"><span class="k">換股顧問在哪</span><span class="v">④ 資產配置</span></div>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.6">
+                <span class="ev m">實測</span>「管理室」已於 2026-08-31 七→五併入 ⑤（<code>app.py</code> 逐字：「⑤ = 舊「我的管理室」+「參考 / 診斷」內的資料診斷與說明書」）。
+                <b>所以選股池現在住 ⑤，而它要服務的換股顧問住 ④ ── 中間隔一頁。</b>
+              </p>
+              <div class="chips" style="margin-top:8px"><span class="chip mock">「1 個」是實測，不是示意值</span></div>
+            </div>
+            <div class="grid3">
+              <div class="card"><h4>去處 A ─ 留在 ⑤</h4><p>維持現狀。整理選股池屬「維護心情」，和連線設定放一起。<b>④ 只讀不改。</b></p><div class="chips"><span class="chip">零改動</span></div></div>
+              <div class="card warn"><h4>去處 B ─ 搬到 ④<span class="chip tri" style="margin-left:6px">推薦</span></h4><p>緊鄰換股顧問。你在看「這檔該換掉」的當下，候選名單就在旁邊。</p><div class="chips"><span class="chip">跟著決策動線</span></div></div>
+              <div class="card dim"><h4>去處 C ─ 搬到 ②</h4><p>線框當初寫的字面。<b>但換股顧問已經不在 ② 了</b>，搬過去會離它服務的對象更遠。</p><div class="chips"><span class="chip">字面照做</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rec">
+          <span class="rh">總管推薦</span>
+          <h4>選去處 B ── 選股池與除息行事曆一起搬到 ④ 資產配置，緊鄰換股顧問；⑤ 不再保留編輯入口</h4>
+          <ol>
+            <li><b>這是線框自己的理由，只是把目的地更新到今天。</b>線框說「選股池是<b>決策資產</b>（下一檔要買什麼）不是設定，該待在決策動線內」。
+              <span class="ev m">實測</span>那條決策動線今天在 ④（換股顧問已於 <code>ia</code> 2026-09-01 搬入 ④ 並已落地）。<b>照舊字面搬 ② 會違背它自己的理由。</b></li>
+            <li><b>它解掉一次跨頁跳轉，而不是製造一次。</b><span class="ev m">實測</span>換股顧問區<b>本來就在讀選股池</b>（<code>switch_advisor_section.py</code> 就地註解：「本區仍讀選股池做配對(下方按鈕)」）──
+              <b>資料已經在 ④ 被用了，只有「編輯它」這件事還留在 ⑤。</b>你現在要加一檔候選，得跳去 ⑤、改完再跳回 ④ 看配對結果。</li>
+            <li><b>除息行事曆跟著走，因為它吃的就是選股池。</b>按鈕字面是「抓選股池標的 → 產生本月除息月曆」，兩者分家會再造出第二次跳轉。</li>
+          </ol>
+          <div class="why-not">
+            <b>為什麼不選 A（留 ⑤）</b>：它<b>不是錯的</b> ── 線框自己就寫了這個反向選項（「若你習慣在『維護』的心情下整理選股池」）。
+            <b>本組不推薦只是因為第 2 點</b>：資料已經在 ④ 被消費了，編輯卻在 ⑤。<b>如果你確實是在「整理資料」的心情下維護這份名單，A 才是對的 ── 這一點只有你知道，本組不代決。</b><br>
+            <b>為什麼不選 C（搬 ②）</b>：它是線框的字面，但那個字面寫於 2026-08-27，而 <code>ia</code> 在 <b>5 天後</b>把換股顧問移出了 ②。<b>照字面做等於執行一個已經被覆蓋的前提。</b>
+          </div>
+          <div class="cost">
+            <b>本題的代價與風險，據實講</b><br>
+            <b>(a)</b> 這題<b>不急</b>。原本讓它顯得緊急的那句「不能維持兩個都能改」已經沒有對象（見更正 1）。<b>現在它是一個純粹的動線偏好問題，不修也不會壞。</b><br>
+            <b>(b)</b> <span class="ev m">實測</span>搬動會碰到<b>四個守衛測試</b>（<code>test_tab_manage.py</code> / <code>test_ui_grid_contract.py</code> / <code>test_ui_rerun_contract.py</code> / <code>test_render_state_color_separation.py</code> 都對 <code>_render_pool_editor</code> 有斷言），
+            其中 <code>test_tab_manage.py</code> 那條<b>正是在擋「換股顧問區呼叫它」</b> ── <b>搬到 ④ 必須連同那條守衛一起改，否則 CI 紅燈。</b>
+            <span class="ev g">推測</span>本組認為那條守衛擋的是「<b>同一次 run 渲染兩份</b>」而非「④ 不准有它」，所以改寫守衛而非刪除即可；<b>但本組沒有實作驗證過，這是判斷。</b><br>
+            <b>(c)</b> ⚠️ <b>搬動選股池＝分頁動線異動，本身就要走本頁這道 gate</b>（<code>ia</code> 鐵則）。<b>所以這題問完才能動工，不能先做再說。</b>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="decide">
+    <h3>所以你只需要回答四件事（外加一個小的）</h3>
+    <p>其餘全部已經有明文依據，不佔用你的時間。下面每一格都已經有推薦 ── 你可以直接說「四題都照推薦」。</p>
+    <div class="qa">
+      <div class="q">
+        <span class="ql">題一 · ④ 保單版面</span>
+        <p>1/3 摘要卡，還是全寬區塊？</p>
+        <p class="rr">推薦 <b>案 A：全寬區塊</b>，1/3 卡不另留。7 欄的表在 1/3 寬讀不了，而且 <code>ia</code> 自己把「新增保單」的入口指到這一塊 ── 一張摘要卡接不住那條動線。<br>
+        <b>＋一個微調</b>：狀態列有「保單張數」、<b>沒有金額</b> → 建議補一格「💰 總投入」。<b>若你認為總投入該獨立成卡放頂列，那就是案 C</b>，說一聲即可。</p>
+      </div>
+      <div class="q">
+        <span class="ql">題二 · ② 總分那一格</span>
+        <p>那個做不出來的 72 分，改放什麼？</p>
+        <p class="rr">推薦 <b>案 A：本次體檢涵蓋範圍計數帶</b>。全部用這一頁已經算完的數，本批就能交；另外兩案各自欠一個前置。</p>
+      </div>
+      <div class="q">
+        <span class="ql">題三 · 舊 ④ 區塊</span>
+        <p>那些區塊各自去哪？</p>
+        <p class="rr"><b>8 個頂層區塊全部有明文依據</b>；另有四個<b>子區塊</b>，其中<b>三塊從沒被任何線框提過</b>：
+        <b>組合績效／效率前緣</b>、<b>穿透式持股／產業集中度</b>、<b>總經曝險聯動</b>。三塊都推薦<b>留在 ④、升成看得見的具名區塊</b>。
+        （舊版寫「只有一塊」，射程是頂層區塊、沒寫在句子裡，本輪已就地更正。）</p>
+      </div>
+      <div class="q">
+        <span class="ql">題四 · 選股池住哪頁</span>
+        <p>選股池與除息行事曆，留 ⑤ 還是搬到決策動線裡？</p>
+        <p class="rr">推薦 <b>搬到 ④、緊鄰換股顧問</b>。線框當初寫「搬 ②」，但換股顧問已於 5 天後搬進 ④ ── 照它自己的理由，今天的答案是 ④。<b>另：線框說的「兩個入口」早在 2026-08-12 就修掉了，這題因此不急。</b></p>
+      </div>
+    </div>
+    <p style="margin:14px 0 0;padding:11px 13px;border:1px solid var(--gold);border-left:3px solid var(--gold);border-radius:2px;background:var(--gold-soft);font-size:13px;color:var(--ink-2);max-width:none">
+      <b>⭐ 外加一個小問題（回答它會一次解開 ② 的兩塊留白）</b>：<br>
+      「<b>五桶評等</b>」這個名字要不要改叫「<b>4D 評等</b>」？── 本站的「五桶」已經被總經用掉了，而逐檔真正存在的評等叫 4D Grade（A～F）。
+      <b>改</b>：逐檔體檢表那一欄立刻能填上真的等第。<b>不改</b>：那一欄繼續誠實留白。
+      <span class="ev g">推測</span>本組認為該改，但這是業務命名，不代決。
+    </p>
+    <p style="margin:14px 0 0"><b>你點頭之後，前端組才開始寫這幾塊的 Streamlit 程式碼 ── 在那之前一行都不寫。</b>
+    <br><span style="font-size:12.5px;color:var(--muted)">（<b>題四不急</b>：讓它顯得緊急的那句「不能維持兩個都能改」已經沒有對象了，見題四更正 1。其餘三題是下一批的動工前置。）</span></p>
+  </section>
+
+  <section class="honest">
+    <h3>本組查了什麼、沒查什麼（依 CLAUDE.md §-2 規則 6 據實揭露）</h3>
+    <ul>
+      <li><b>本線框全部由單一線框組產出，未經第二組獨立複驗。</b>凡標 <span class="ev m">實測</span> 者為本組實跑指令所得，凡標 <span class="ev g">推測</span> 者本組沒有查證 ── 後者只能當待驗事項，不得當前提用。</li>
+      <li><b>沒讀完的</b>：<code>policy-split-wireframe.html</code> 只讀了 masthead、§02 的 ④ 版面、§04 六項決定、§05 揭露；其餘段落未讀。<code>ia-wireframe.html</code> 讀了全部五個 panel 與收尾，但 Tab 01／03／05 只掃過、未逐字比對。</li>
+      <li><b>「舊 ④ 頂層區塊恰好 8 個」是取決於有沒有漏看的全稱句。</b>本組是讀 <code>st.container()</code> 宣告段＋掃 <code>with _sec_</code> 得到的，<b>單組未複驗</b>。</li>
+      <li><b>「全部 9 份線框 0 次提到組合績效／效率前緣」同樣是單組 grep 的窮舉句。</b>指令已寫在該列供自驗；但它只掃 <code>組合績效</code>／<code>效率前緣</code> 兩個字面，<b>若線框用別的名字講同一件事，這條指令掃不到</b>。
+      <br>→ <b>2026-09-06 本輪就地補救（這一條是上一版自己標出來的缺口，本輪把它補上）</b>：本輪把 9 份線框<b>全部 strip 掉 HTML 標籤後再掃</b>（防標籤把字切斷），
+      並對三塊各跑一輪<b>別名掃描</b>：<code>績效／Sharpe／回撤／年化／波動／前緣</code>（組合績效）、<code>集中／分散／穿透／個股／持股／產業</code>（集中度）、<code>曝險／景氣</code>（總經曝險）。
+      <b>命中全部逐條讀過</b>，結論是<b>「有命中、但講的都是別的東西」</b>：<code>Sharpe</code>／<code>最大回撤</code> 在 <code>ia</code> 是<b>逐檔體檢表的欄位</b>（每一檔一個數字），<b>不是整個組合的一個數字</b>；
+      <code>穿透</code> 全是<b>三率穿透</b>（單一個股財務三率）；<code>集中</code> 全是<b>動詞</b>；<code>曝險</code> 全是 <b>FX 曝險</b>。
+      <b>→ 原本那句「別名掃不到」的擔憂本輪已經實際掃過了，結論不變。</b>
+      ⚠️ 但它<b>仍然是單組窮舉句</b>：本組只想得到這些別名，<b>想不到的別名一樣掃不到</b>。</li>
+      <li><b>本輪的正對照（證明掃描沒有壞掉，不是「什麼都掃不到」）</b>：<b>strip + grep（本分支工作樹，9 份含本檔）</b>之下，<code>保單</code> 4 份、<code>配息</code> 8 份、<code>核心</code> 8 份、<code>新鮮度</code> 2 份。
+      ⚠️ <b>換成線框內寫的那條 <code>git grep … origin/main</code>（只有 8 份，本檔不在 main 上）則是：保單 4／配息 7／核心 7。</b>
+      <b>兩組都對，差的就是本檔自己</b> —— 本輪初稿把 9 份的數字寫在 8 份的指令旁邊，已就地更正（見第 11 列）。
+      <b>這是本輪第二次犯「引用一個沒跟自己輸出對過的指令」，兩次都是自己抓到並留痕。</b>
+      <b>特別記一筆</b>：<code>ui/tab3_portfolio.py</code> 那段註解列的<b>風險揭露元件是 4 個</b>（總經曝險／<b>資料新鮮度</b>／持股集中度／產業集中度），
+      而本輪只把其中 <b>3 個</b>列進題三 ── 因為<b>第 4 個「資料新鮮度」查得到明文</b>（<code>wireframe-macro-health.html</code> 逐字寫著 <code>MoneyDJ 資料新鮮度 banner _render_mj_freshness_banner</code>）。
+      <b>本組是逐個查過才排除它的，不是漏列。</b></li>
+      <li><b>題四（Q7）本組沒有查證的事，明講</b>：(a) <b>只證明 repo 內查不到 Q7 的答覆紀錄，不證明你沒答過</b>（口頭答覆不會進 repo）；
+      (b) 搬動選股池會碰到的四個守衛測試，本組<b>只讀了斷言文字、沒有實跑</b>，「改寫守衛即可、不必刪除」是<b>判斷不是驗證</b>；
+      (c) 本組<b>沒有查證「總經曝險是 v19.64 之後才長出來、線框沒回頭補」這個時序</b>，那一句已就地標為推測。</li>
+      <li><b>本批沒有跑任何測試、沒有改任何 <code>.py</code>。</b>產出只有這一個 HTML 檔。所有關於程式現況的敘述都是唯讀查證，不是執行驗證。
+      <b>本輪所有 <code>git grep</code> 都跑在 <code>origin/main</code> 上</b>（量測日 2026-09-06），<b>不是本分支</b> ── 分支只多了這一個 HTML 檔。</li>
+      <li><b>⭐ 本輪自己犯過、就地修掉的一個錯，記下來（因為它正是本檔在講的那個病）</b>：
+      本組原本要照派工單把題一改寫成「兩份線框給了相反規定 → 二選一」。
+      <b>逐字讀完兩份線框後發現不成立</b>：決定 E 治理的是<b>表格</b>、<code>ia</code> 那一塊是<b>卡片</b>，
+      而決定 E 自己的理由就寫著「<b>規則本來就不涵蓋表格</b>」── <b>它從來沒有否定過那張卡</b>。
+      <b>「相反的規定」這個框架是從 <code>page_04_portfolio.py</code> 的登記照抄下來的，沒有人回頭讀過線框原文。</b>
+      這與題四的 Q7 是<b>同一種病</b>：<b>一句登記寫下之後，後面每個人都引用它，沒有人再回去看它引的東西。</b></li>
+      <li><b>本組沒有查證的兩件事，明講</b>：(a) ② 與 ④ 兩處重疊度計算是否同源；(b) 3 欄網格塌成 2 欄的實際視覺效果（題一案 A 的代價那一段）。</li>
+    </ul>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  function wire(btns){
+    btns.forEach(function(b, i){
+      b.addEventListener('click', function(){ show(b.id); });
+      b.addEventListener('keydown', function(e){
+        var d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1
+              : e.key === 'ArrowUp'   || e.key === 'ArrowLeft'  ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var n = btns[(i + d + btns.length) % btns.length];
+        n.focus(); show(n.id);
+      });
+    });
+    function show(id){
+      btns.forEach(function(b){
+        var sel = b.id === id;
+        b.setAttribute('aria-selected', sel ? 'true' : 'false');
+        var panel = document.getElementById(b.getAttribute('aria-controls'));
+        if (panel) panel.hidden = !sel;
+      });
+    }
+  }
+  wire(Array.prototype.slice.call(document.querySelectorAll('.tab-btn')));
+  Array.prototype.slice.call(document.querySelectorAll('.opts')).forEach(function(grp){
+    wire(Array.prototype.slice.call(grp.querySelectorAll('.opt')));
+  });
+})();
+</script>
