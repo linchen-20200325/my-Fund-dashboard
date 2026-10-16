@@ -2436,6 +2436,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/54_phase7_design_backlog.md",
     "docs/v2/55_preview_acceptance_guide.md",
     "docs/v2/56_proposal_8_directional_judgment.md",
+    "docs/v2/57_amendment_8_directional_judgment.md",
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
