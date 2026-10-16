@@ -1,6 +1,6 @@
 # 交接本（2026-09-26 最新）
 
-最後更新：2026-10-15 22:34 UTC（`date -u` 實測）
+最後更新：2026-10-15 23:59 UTC（`date -u` 實測）
 
 ---
 
@@ -175,7 +175,8 @@
 ~~→ **2026-10-15 第五十七次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶的：見第 1 節〈第五十七次更新存檔點〉A 塊「Blockers／客戶裁示」**（不在此重抄，避免兩處不同步）。main ＝ `dbb629c`（#966 已合併）。出處：SHA、parents、merged_at、check-run 與遠端分支狀態為本組 2026-10-15 `git fetch` 後以 `git log`、`git ls-remote` 與 GitHub REST 實查；稽核經過與客戶 2026-10-15 指示為總管 2026-10-15 轉達（對話中，repo 內無原文），本組未驗。~~
 
 ~~→ **2026-10-15 第五十八次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶的：見第 1 節〈第五十八次更新存檔點〉A 塊「Blockers／客戶裁示」**（不在此重抄）。main ＝ `629a6e0`（#968 已合併）；Phase 1.5 已依客戶 2026-10-15 裁示（A+ 修正版）完成規格／契約解除矛盾，PR #969 為 draft、待兩組獨立稽核與合併。出處：SHA 為本組 2026-10-15 `git fetch` 後 `git log`／`git show` 實查；客戶裁示為總管派工單轉達（逐字見第 7 節）。~~
-→ **2026-10-15 第五十九次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶的：見第 1 節〈第五十八次更新存檔點〉A 塊「Blockers／客戶裁示」(e)(f)，另 8 點待 Phase 2 收尾時一次請示（見〈登記待辦〉第五十九次更新；不得現在問）**。main ＝ `88e464c`（#969 已合併，Phase 1.5 ✅ 已完成）；Phase 2（B 線五頁真資料 preview）批 1 進行中（見〈第五十九次更新〉）。出處：SHA 為本組 2026-10-15 `git fetch` 後 `git log` 實查；稽核結論以 `git log -1 --format=%B 88e464c` 為準；待裁示 8 點為總管派工單轉達。
+~~→ **2026-10-15 第五十九次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶的：見第 1 節〈第五十八次更新存檔點〉A 塊「Blockers／客戶裁示」(e)(f)，另 8 點待 Phase 2 收尾時一次請示（見〈登記待辦〉第五十九次更新；不得現在問）**。main ＝ `88e464c`（#969 已合併，Phase 1.5 ✅ 已完成）；Phase 2（B 線五頁真資料 preview）批 1 進行中（見〈第五十九次更新〉）。出處：SHA 為本組 2026-10-15 `git fetch` 後 `git log` 實查；稽核結論以 `git log -1 --format=%B 88e464c` 為準；待裁示 8 點為總管派工單轉達。~~
+→ **2026-10-15 第六十次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：**目前等客戶的：同上 (e)(f) 與 8 點（未變）；另批 2 第 2 項「資產配置冷卻那一輪輸入欄沒畫出、打的字遺失」重現成立，但修法涉及版面或行為設計，本組未自決、停下交總管判定是否需客戶裁示（見〈第六十次更新〉一之 2）**。main ＝ `de3f22c`（#970 已合併，Phase 2 批 1 完成）；Phase 2 批 2 進行中。出處：SHA 為本組 2026-10-15 `git fetch` 後 `git log` 與 GitHub REST 實查；#970 稽核結論以 `git log -1 --format=%B de3f22c` 為準。
 
 ~~**下一步（第三十四次更新；客戶 2026-10-09 裁示 4）**：**本對話停止（新對話切點）**。新對話以最新 main 上本交接本第一節（★ 進度總表）為 SSOT。下一階段依序：(1) ALO-1／ALO-4 已核准小批 → (2) #3 `nav` 表接來源**僅盤點＋規劃**（尚未授權修改 L3、新增資料來源）。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-09~~
 
@@ -217,7 +218,8 @@
 ~~→ **下一步（第五十七次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：上句的批 3 已推進——#951～#967 相繼合併（標的探索第一批、匯率觀測日探測、exp C2 資料層與正式頁接線），見第 4 節與〈第五十七次更新〉二。依序：(1) 先 `git fetch`、核對 main（交接時 `dbb629c`）與 open PR；(2) PR #968（`docs/v2/54_phase7_design_backlog.md` 與本交接本第五十七次更新；C 級）由總管處理合併；(3) **Phase 1.5**：獨立小 PR，移除舊「全面禁止方向性投資建議」規則，只做契約／文件／必要 tests 一致性，**不做決策引擎**（開工前注意第 1 節〈第五十七次更新存檔點〉A 塊 Blocker (a)：涉及 44 凍結檔）；(4) Phase 2 B 五頁真資料 preview → Phase 3 客戶實際使用／視覺／390px 手機 UX 驗收 → 其後各 Phase 見 `docs/v2/54_phase7_design_backlog.md` §0（引用不重抄）。每批最多 3 項。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：路線為總管 2026-10-15 轉達（對話中，repo 內無原文）；SHA 為本組實查。~~
 
 ~~→ **下一步（第五十八次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：上句 (2) #968 已合併（`629a6e0`），Phase 1.5 已完成實作（PR #969，draft）。依序：(1) Phase 1.5 依客戶指定的 A 級流程：兩組獨立稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併（一般 merge，不 squash）→ 交接本；(2) 子法 1 條款衝突走獨立正式修正程序（見〈登記待辦〉第五十八次更新），不帶進 Phase 1.5；(3) 其後 Phase 2 B 五頁真資料 preview（54 §0）。每批最多 3 項。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-15 派工單與客戶裁示（逐字見第 7 節）。~~
-→ **下一步（第五十九次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：上句 (1) 已完成 —— #969 已合併（merge `88e464c`）。依序：(1) Phase 2 批 1（本批：預覽側欄過時子句、持倉體檢套用值換頁查證、交接本）→ 稽核 → 合併；(2) 批 2 資產配置寫入正確性；(3) 批 3 五頁正式模式 390 寬瀏覽器煙霧測試；(4) 批 4 驗收前置與已知限制文件（見〈第五十九次更新〉二）；(5) 子法 1 條款衝突仍走獨立正式修正程序。每批最多 3 項。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-15 派工單。
+~~→ **下一步（第五十九次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：上句 (1) 已完成 —— #969 已合併（merge `88e464c`）。依序：(1) Phase 2 批 1（本批：預覽側欄過時子句、持倉體檢套用值換頁查證、交接本）→ 稽核 → 合併；(2) 批 2 資產配置寫入正確性；(3) 批 3 五頁正式模式 390 寬瀏覽器煙霧測試；(4) 批 4 驗收前置與已知限制文件（見〈第五十九次更新〉二）；(5) 子法 1 條款衝突仍走獨立正式修正程序。每批最多 3 項。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-15 派工單。~~
+→ **下一步（第六十次更新；狀態更新，不是漏刪；上句在寫下當時為真）**：上句 (1) 已完成 —— #970 已合併（merge `de3f22c`）。依序：(1) Phase 2 批 2（本批：資產配置未設定鍵不寫空值列〔已修〕、冷卻那一輪打的字遺失〔重現成立、未修，待判定〕、交接本）→ 稽核 → 合併；(2) 批 2 第 2 項的修法方向由總管判定（需不需要客戶裁示）；(3) 批 3 五頁正式模式 390 寬瀏覽器煙霧測試；(4) 批 4 驗收前置與已知限制文件；(5) 子法 1 條款衝突仍走獨立正式修正程序。每批最多 3 項。**不構成上列以外的動工授權**（`CLAUDE.md` §-1）。出處：總管 2026-10-15 派工單。
 
 | 項目 | 狀態 | 下一步 |
 |---|---|---|
@@ -312,7 +314,8 @@
 | 2026-10-14 交接本（分支 `handover/2026-10-14`，`docs/handover_2026_10_14.md`） | 已被本檔取代（第五十七次更新整併，見〈第五十七次更新〉一）；分支暫留（`efeee8a`，本組 `git ls-remote` 實查） | 無 |
 | Phase 1.5（方向性判斷：規格／契約解除矛盾；客戶 2026-10-15 裁示 A+ 修正版） | ~~✅實作完成待稽核（第五十八次更新）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `629a6e0`），PR #969 draft；動 44（行內擴寫＋檔尾第七節第三小節之四）、52 Part C 註二、54、`ACCEPTANCE.md` 第六節、本交接本、五個 `ui_v2/*/logic.py` 的註解與 docstring、`tests/ui_v2/` 11 支現況守衛更名（其餘呼叫 `scan_forbidden` 的斷言未改名，見〈第五十八次更新〉二之 4）與 44 md5 守衛；畫面零變更（AST 去 docstring 後與 main 相同，本組實測）。本輪屬 A 級：因為改的是規格契約紅線與合規相關守衛的語意。兩組稽核已回報，同檔唯一一輪回修已完成（見〈第五十八次更新〉三）~~ → **✅ 已合併（第五十九次更新）**：merge commit `88e464c`（全長 `88e464c85ed919e096e3217d9c27dd45b2f55945`；parents `629a6e0`、`b89d2f6`；merged_at 2026-10-15T22:10:09Z）；合併前 head `b89d2f6` 上 Schema gate、Fast checks、Slow tests 三條 check-run 皆 success（本組 GitHub REST 實查）。兩組稽核結論以 merge commit 訊息為準：稽核 1（規格語意）驗 `4085e39`，必修 1 由 `4c93f2b` 修、複驗必修（行號）由 `b89d2f6` 修、該 delta 總管自驗；稽核 2（工程守衛）無必修，建議 1 由 `4c93f2b` 修、複驗無必修 | ~~總管複核回修 → final-head CI → 總管合併 → 交接本~~ → 無（Phase 2 見「Phase 2 批 1」列） |
 | 子法 1（`docs/v2/CONSTITUTION.md`）與 Phase 1.5 裁示的條款衝突（第五十八次更新） | 已登記，需走獨立正式修正程序（客戶裁示第 5 點：本批不改子法 1） | 見〈登記待辦〉第五十八次更新；修正字句須客戶核准 |
-| Phase 2 批 1（第五十九次更新：預覽側欄過時子句、持倉體檢套用值換頁、交接本） | 實作完成待稽核：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛。持倉體檢那一項重現結果為不成立，只補守衛、不改清單（見〈第五十九次更新〉一） | 稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併 → 交接本；其後批 2 |
+| Phase 2 批 1（第五十九次更新：預覽側欄過時子句、持倉體檢套用值換頁、交接本） | ~~實作完成待稽核：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛。持倉體檢那一項重現結果為不成立，只補守衛、不改清單（見〈第五十九次更新〉一）~~ → **✅ 已合併（第六十次更新）**：merge commit `de3f22c`（全長 `de3f22cd354ba3310fc3cdf70fd1ba40a909bf80`；parents `88e464c`、`6276c16`；merged_at 2026-10-15T23:29:57Z）。稽核結論以 merge commit 訊息為準：1 組獨立稽核驗 `6276c16`；必修 1（PR 說明尾端工具自動附的頁尾帶 session 網址）總管判定依第 7 節客戶 2026-10-09 射程釐清第 3 點不擋；建議三項登記待辦（見〈登記待辦〉第六十次更新）；`6276c16` 三條 check-run 皆 success | ~~稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併 → 交接本；其後批 2~~ → 無（見「Phase 2 批 2」列） |
+| Phase 2 批 2（第六十次更新：資產配置寫入正確性兩條舊登記、交接本） | 實作完成待稽核：分支 `ccr-8f3b9d52-xgnleg`（起點 main `de3f22c`），PR #971（draft）；本輪屬 A 級：因為改的是寫入客戶設定試算表的資料完整性。第 1 項重現成立、已修；第 2 項重現成立、未修（修法涉及版面或行為設計，停下待判定）（見〈第六十次更新〉一） | 稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併 → 交接本；第 2 項修法方向待總管判定 |
 | 遠端分支 `feat/exp-c2-ui-wiring`（#966 head） | #966 合併後被 GitHub 自動刪除（repo 設定 `delete_branch_on_merge` 為 true，本組 2026-10-15 GitHub REST 實查）；總管已用 `f6ca761` 重建（本組 `git ls-remote` 實查：`f6ca761`）（第五十八次更新） | 之後要保留的分支須手動重建或改設定；改 repo 設定須先問客戶 |
 
 #### 分支清理盤點（第四十一次更新）
@@ -541,13 +544,41 @@
 ~~⚠️ **`3/5` 的正確讀法：alo 只完成「讀表」那一層，畫面還沒接。**~~
 ~~#856 落地的是 L1／L2（`_持倉補充`、`_保單資料` → 44 holding／policy，**只讀不寫**），**alo 頁的 UI 尚未接上真資料**。**不要把 `3/5` 讀成「alo 整頁做完了」。**~~
 
+#### 第六十次更新（2026-10-15）
+
+出處：main SHA、parents、merged_at、check-run 為本組 2026-10-15 `git fetch` 後以 `git log`、`git show` 與 GitHub REST 實查；#970 的稽核結論以 merge commit 訊息（`git log -1 --format=%B de3f22c`）為準，稽核報告原文不在 repo、本組未見全文；批 2 範圍為總管 2026-10-15 派工單轉達；兩項重現為本組實跑。本輪屬 A 級：因為改的是寫入客戶設定試算表的資料完整性（`ui_v2/alo/live.py` 的存檔組值）；交接本為 C 級，跨級取最高。
+
+**一、#970 已合併、Phase 2 批 2**（分支 `ccr-8f3b9d52-xgnleg`，起點 main `de3f22c`，PR #971，draft）
+
+1. **資產配置「沒改就存檔，會對未設定的鍵寫入空值列」—— 重現成立，已修。**
+   - **重現（真路徑）**：L2 `services/v2_tables/settings_store.py::save_setting_for_page(鍵, None, value_kind, [])` 經型別檢查放行（值為 None 視為清除），交 L1 `repositories/settings_sheet_repository.py::save_user_setting`；把 L1 的開表與追加四支（`_run`、`_read_tabs`、`_worksheet_for_append`、`_append`）換成替身後，`alo_tolerance_pp`、`alo_basis` 各回 `saved`，追加的列為 `['alo_tolerance_pp', '', 'float', <時間>]`、`['alo_basis', '', 'list', <時間>]` —— 也就是 `user_setting_log` 多一列 `setting_value` 空白。
+   - **重現（畫面）**：`tests/ui_v2/test_alo_live_page.py` 那套（AppTest＋替身寫入端），四鍵未設定、沒動就按 ALO-1 存檔 → 寫入函式收到 `[('alo_target_weights', None, 'list'), ('alo_tolerance_pp', None, 'float')]`；按 ALO-4 → `[('alo_basis', None, 'list'), ('alo_bucket_names', None, 'list')]`；只有容許帶未設定時按 ALO-1 → 目標列寫回原字串、容許帶寫 None。
+   - **修法**（`ui_v2/alo/live.py`，production +14／−4）：`save_entries` 每筆多一個 `skip` —— 要寫的是清除（None），而 `raw`（`source.load_live` 的 `notes["setting_raw"]`）明載該鍵本來就沒有值 ⇒ 不寫；`run_saves` 對 `skip` 的鍵不呼叫寫入、記為 None（同一個鍵先前留下的失敗行一併消掉，因為畫面已回到與表上一致）。**照舊寫**：有值被使用者清空（寫清除）、`raw` 沒帶那個鍵（不知道有沒有值，不猜）、已設定且沒動過（寫回原字串，2026-10-09 稽核回修的既有行為）。未把空白寫成 0 或任何預設值（`CLAUDE.md` §1）。
+   - **讀法據實寫明**：派工單「只寫使用者實際改動、且有值的鍵（`setting_raw` 或同義資料已存在可用）」本組讀作「**未設定且未改動的鍵不寫列**；已設定未改動的鍵仍寫回原值」—— 後者有既有測試 `test_已存值帶四位以上小數_沒動就按存檔_寫回原值不寫顯示字串` 釘住。若總管的本意是連已設定未改動的鍵也不寫，那是另一個行為變更，本批未做。
+   - **測試**（tests +101／−4）：`tests/ui_v2/test_alo_live_logic.py` 兩條逐欄比對補上 `skip`、`test_沒動過的留空列與未設定容許帶_照舊寫null與None` 改名為 `test_沒動過的留空列照舊寫null_未設定的容許帶不寫`（舊名釘的正是本 bug）、新增 4 條；`tests/ui_v2/test_alo_live_page.py` 新增 3 條（四鍵未設定按兩枚存檔寫入 0 次且畫面無失敗行、只有容許帶未設定只寫目標列、容許帶未設定使用者填了才寫）。
+   - **突變**：(M1) `skip` 恆為 False → 6 條紅；(M2) `run_saves` 不看 `skip` → 5 條紅；(M3) `raw` 沒帶那個鍵也跳過 → 1 條紅（`test_有值被清空_照舊寫清除_raw沒帶那個鍵也照舊寫清除`）。還原後兩檔 198 passed。
+2. **資產配置「冷卻那一輪輸入欄沒畫出來，打的字遺失」—— 重現成立，未修（停下待判定）。**
+   - **重現（畫面）**：同一套 AppTest＋替身。容許帶改成 `5` → 按 ALO-1 存檔 → 替身對容許帶回 `failed`，並把讀取端切成冷卻（`errors["user_setting"]` ＝「設定試算表暫停重試，還剩 30 秒（上次失敗類別：api）」）→ 這一輪畫面上 `text_input` 0 個（ALO-1／ALO-4 依 `ALO-GAP-設定取數失敗` 不畫輸入欄，只畫失敗框）→ 冷卻結束再重繪，容許帶欄顯示已存的 `4`，打的 `5` 不見。
+   - **真路徑的機制**（本組讀程式，未對真試算表跑）：L1 `_run` 寫入失敗時登記冷卻並清快取；下一輪 `load_user_settings` 經 `should_skip_gspread` 回 `code="cooling"` ⇒ L2 拋 `SettingsSheetError` ⇒ `source.load_live` 填 `errors["user_setting"]`。
+   - **為什麼不修**：`44` ALO-1／ALO-4 空狀態的「存檔寫入失敗 → 當下內容留在畫面上不清掉」與頁面缺口 `ALO-GAP-設定取數失敗`（讀不到時不畫輸入欄）在同一輪相撞，44 沒有定義這個組合。本組看到的修法都超出派工單授權：(A) 讀取失敗那一輪照樣畫輸入欄並帶當下內容 —— 失敗狀態多出輸入欄，屬版面變更，也推翻 `ALO-GAP-設定取數失敗`；(B) 失敗時把打的字另存、輸入欄重新出現時帶回 —— 不改版面，但屬新的狀態保留行為（存多久、何時丟、與表上新值衝突時以誰為準），且冷卻那一輪本身仍看不到打的字。依派工單「唯一修法需要改版面或行為設計 → 停下回報」，未動；也未新增釘住現況的測試（避免把待改的行為釘死）。
+3. **交接本**：檔頭時間；#970 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點；〈第五十九次更新〉一之 1 的 Slow tests 補註為已 success；〈第五十三次更新〉三兩條舊登記補狀態；〈登記待辦〉登記 #970 稽核建議三項與本節第 2 項。
+4. **本機驗證**（scratchpad venv）：`tests/ui_v2/test_alo_*.py`＋`tests/test_v2_tables_settings_store_page.py`（含 slow、含 Chromium）→ 468 passed；`tests/ui_v2/test_preview_page.py`＋`test_preview_entry.py`＋`test_ui_v2_live_import_guard.py`＋`test_ui_v2_lane_guards.py` → 162 passed；`tests/test_doc_counters.py`＋`test_constitution_file_refs.py`＋`test_retired_exception_ids.py`＋`test_constitution_archive_integrity.py` → 93 passed；`test_doc_counters.py --report` 三類新增皆 0；`pre-commit run --all-files` → 五個檔案 hook 皆 Passed，pytest hook 4 failed／14369 passed／40 skipped，失敗的 4 條是派工單所列在 main 上同環境就失敗的那 4 條（`test_hld_logic.py` 2 條、`test_hld_read_failure_logic.py` 2 條；本組未在 main 上重跑比對）；補寫本節後以 `SKIP=pytest-smoke pre-commit run --files <改動檔>` 重跑五個檔案 hook，皆 Passed 或無檔可查；新增文字以第 7 節詞表掃描 0 命中。
+
+**二、本組沒查證的部分**
+
+- 兩項重現都在替身寫入端／替身讀取端上跑，沒有對真的設定試算表寫入；第 2 項的真路徑機制是讀程式推得。
+- #970 的稽核內容以 merge commit 訊息為準，稽核報告原文本組未見。
+- 其他頁（set／mkt／hld／exp）的存檔是否有同型的「未設定鍵寫空值列」，本批沒查（不在授權範圍）。
+
+**三、下一步**：見 ★ 進度總表「Phase 2 批 2」列。
+
 #### 第五十九次更新（2026-10-15）
 
 出處：main SHA、parents、merged_at、check-run 為本組 2026-10-15 `git fetch` 後以 `git log`、`git show` 與 GitHub REST 實查；#969 的稽核結論以 merge commit 訊息（`git log -1 --format=%B 88e464c`）為準，稽核報告原文不在 repo、本組未見全文；Phase 2 分批與待裁示 8 點為總管 2026-10-15 派工單轉達。本輪屬 A 級：因為動到預覽入口的程式狀態（側欄說明常數）與守衛測試；交接本與 54 為 C 級，跨級取最高。
 
 **一、#969 已合併、Phase 2 批 1**（分支 `ccr-8f3b9d52-xgnleg`，起點 main `88e464c`，PR #970，draft）
 
-1. **#969 已合併**：merge commit `88e464c`（parents `629a6e0`、`b89d2f6`；merged_at 2026-10-15T22:10:09Z）；合併前 head `b89d2f6` 上 Schema gate、Fast checks、Slow tests 三條 check-run 皆 success。main `88e464c` 的 push CI：Schema gate success（22:11:05Z 完成）、Fast checks success（22:23:32Z 完成）、Slow tests（informational）於 2026-10-15 22:33Z 本組查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）。main ＝ `88e464c`。54 §0 Phase 1.5 列、§7、§18、§19 同步為「✅ 已完成（#969 merge `88e464c`）」。
+1. **#969 已合併**：merge commit `88e464c`（parents `629a6e0`、`b89d2f6`；merged_at 2026-10-15T22:10:09Z）；合併前 head `b89d2f6` 上 Schema gate、Fast checks、Slow tests 三條 check-run 皆 success。main `88e464c` 的 push CI：Schema gate success（22:11:05Z 完成）、Fast checks success（22:23:32Z 完成）、Slow tests（informational）於 2026-10-15 22:33Z 本組查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）。 → **第六十次更新補註（狀態更新，不是漏刪；上句在寫下當時為真）**：Slow tests 已於 22:34:24Z 完成、success —— main `88e464c` 三條 check-run 皆 success（本組 2026-10-15 GitHub REST 實查）。main ＝ `88e464c`。54 §0 Phase 1.5 列、§7、§18、§19 同步為「✅ 已完成（#969 merge `88e464c`）」。
 2. **G1 預覽側欄說明過時**（`ui_v2/app_preview.py::PREVIEW_NOTE`）：「標的探索目前只接上選股池的基金代碼，其餘欄位顯示資料未備」自 #966（merge `dbb629c`）起與實況不符 —— 本組讀 `ui_v2/exp/source.py`：基本資料走 L2 `exp_profile`、淨值與配息走 L2 `exp_nav`（`_load_funds`）。處置：只刪該子句（連同前面的分號），前一句改由原句尾的句號收尾，**沒有新增任何字**；`tests/ui_v2/test_preview_entry.py::test_側邊欄說明的字面` 改驗該句不再出現。突變：把那一句加回去 → 該測試紅。檔頭表格與 `PREVIEW_NOTE` 上方註解就地補狀態更新。
 3. **G2 持倉體檢「套用」值換頁未清 —— 重現結果：不成立，不改清單**。本組在真的 `st.navigation` 下以假資料跑：持倉體檢起日改 `2026-06-01` 按套用 → 換到市場總覽 → 回持倉體檢；回來後起日欄顯示 `2026-06-01`、三張核心卡等於套用後的那一組（新開時起日欄是 `2026-01-01`）。機制：回來那一次欄位還沒畫過，`ui_v2/hld/logic.py::_build_page_model` 以已套用的區間回填欄位、門檻格照已套用的門檻畫 —— 輸入欄與計算一致，不是「欄位空白、計算用舊區間」。故**未**把 `_hld_applied` 加進換頁清單（那會改變使用者看到的行為，又沒有 bug 支撐）；只新增一條守衛 `tests/ui_v2/test_preview_page.py::test_持倉體檢_套用後換頁再回來_輸入欄與核心卡用的是同一個區間`，守「一致」本身、不釘套用值留不留（回來後要嘛整組是套用的、要嘛整組是新開的）。突變：(M1) 把 logic 回填欄位改成存過的區間 → 紅在最後一條斷言（欄位 `2026-01-01`、卡是套用那組，正是盤點懷疑的形狀）；(M2) 改成空字串 → 紅（紅在前置斷言「新開時欄位有值」，不是最後一條）；(M3) 把 `_hld_applied` 加進換頁清單 → 綠（守衛與設計選擇無關）。還原後綠。⚠️ 套用值跨頁保留這件事本身是否符合客戶「未儲存的暫存設定不得影響正式結果」的方向，屬「套用」語意的去留，本批不碰（見〈登記待辦〉第五十九次更新第 2 點）。
 4. **本機驗證**：（scratchpad venv）`tests/ui_v2/test_preview_entry.py`＋`test_preview_page.py`（後者整檔 slow，本機一併跑）→ 68 passed；`tests/test_doc_counters.py`＋`test_constitution_file_refs.py`＋`test_retired_exception_ids.py` → 91 passed；`test_doc_counters.py --report` 三類新增皆 0；`pre-commit run --all-files` → 五個檔案 hook 皆 Passed，pytest hook 4 failed／14365 passed／40 skipped，失敗的 4 條是派工單所列在 main 上同環境就失敗的那 4 條（`test_hld_logic.py` 2 條、`test_hld_read_failure_logic.py` 2 條；本組未在 main 上重跑比對）；新增文字以第 7 節詞表掃描 0 命中。
@@ -854,7 +885,9 @@
 **三、登記待辦（未處理；未授權前不動工）**
 
 - alo 未改就存檔，會對未設定鍵寫入空值列。
+  → **第六十次更新，狀態更新，不是漏刪**：重現成立、已修（Phase 2 批 2），見〈第六十次更新〉一之 1。
 - alo 冷卻那一輪輸入欄沒畫出，打的字遺失。
+  → **第六十次更新，狀態更新，不是漏刪**：重現成立、**未修**（修法涉及版面或行為設計，停下待判定），見〈第六十次更新〉一之 2。
 - 「⛔ 取數失敗：未設定試算表 ID，暫停寫入」用在唯讀頁與 SET-1 位置不妥（B11 客戶 2026-09-26 定稿）。
 - hld 套用的觀察窗在 set 改存後不更新、無標示。
 - mkt 只套天數時，MKT-4 印出「基準日 None」。
@@ -1357,7 +1390,7 @@
 
 ---
 
-## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ ~~2026-10-02~~ ~~2026-10-03~~ ~~2026-10-05~~ ~~2026-10-08~~ ~~2026-10-09~~ ~~2026-10-10~~ ~~2026-10-11~~ ~~2026-10-12~~ ~~2026-10-13~~ 2026-10-15 更新（~~第二十六次更新~~ ~~第二十七次更新~~ ~~第二十八次更新~~ ~~第三十次更新~~ ~~第三十一次更新~~ ~~第三十二次更新~~ ~~第三十三次更新~~ ~~第三十四次更新~~ ~~第三十五次更新~~ ~~第三十八次更新~~ ~~第三十九次更新~~ ~~第四十二次更新~~ ~~第四十四次更新~~ ~~第四十五次更新~~ ~~第四十六次更新~~ ~~第四十七次更新~~ ~~第四十八次更新~~ ~~第四十九次更新~~ ~~第五十二次更新~~ ~~第五十三次更新~~ ~~第五十四次更新~~ ~~第五十五次更新~~ ~~第五十六次更新~~ ~~第五十八次更新~~ 第五十九次更新））
+## 1. 當前位置（2026-09-28 實測；`origin/main` 那一行 ~~2026-10-01~~ ~~2026-10-02~~ ~~2026-10-03~~ ~~2026-10-05~~ ~~2026-10-08~~ ~~2026-10-09~~ ~~2026-10-10~~ ~~2026-10-11~~ ~~2026-10-12~~ ~~2026-10-13~~ 2026-10-15 更新（~~第二十六次更新~~ ~~第二十七次更新~~ ~~第二十八次更新~~ ~~第三十次更新~~ ~~第三十一次更新~~ ~~第三十二次更新~~ ~~第三十三次更新~~ ~~第三十四次更新~~ ~~第三十五次更新~~ ~~第三十八次更新~~ ~~第三十九次更新~~ ~~第四十二次更新~~ ~~第四十四次更新~~ ~~第四十五次更新~~ ~~第四十六次更新~~ ~~第四十七次更新~~ ~~第四十八次更新~~ ~~第四十九次更新~~ ~~第五十二次更新~~ ~~第五十三次更新~~ ~~第五十四次更新~~ ~~第五十五次更新~~ ~~第五十六次更新~~ ~~第五十八次更新~~ ~~第五十九次更新~~ 第六十次更新））
 
 - ~~`origin/main` ＝ **`81701587`**（全長 `81701587cfc5d39bdd017d0e6125af4b173b04e8`；PR #934 的 merge commit；一般 merge commit、2 parents（`4ce4b809`、`53fb069b`）；交接本第四十九次更新；main 上 CI run 38211208363 success（總管實測，本組未重跑）；其前依序為 #933（`4ce4b809`）、#932（`78a4bab0`）、#931（`d028ef8d`）、#930（`b7c23c5f`）的 merge commit；出處：本組 `git log --first-parent origin/main` 實查 SHA／parents，CI 為總管轉達）~~
 ~~- `origin/main` ＝ **`2248a59`**（全長 `2248a5981930ded3d58e7846438654c865cf9ae2`；PR #936 的 merge commit；一般 merge、2 parents（`cdae9153`、`99dc5160`）；其前為 #935 的 merge commit `cdae9153`；交接本第五十次更新；main CI 以 GitHub 為準，本組未驗；出處：本組 `git log --first-parent origin/main` 實查 SHA／parents）~~
@@ -1369,7 +1402,9 @@
 ~~- `origin/main` ＝ **`3801287`**（全長 `3801287ba5d19a0d7423854ce02e5a54c79a986a`；PR #950 的 merge commit；2 parents（`56b04c7b`、`9ac951e0`）；其前依序為 #949（`56b04c7`）、#948（`2ba1373`）的 merge commit；交接本第五十六次更新；main CI：Schema gate success（12:19:11Z 完成）、Fast checks success（12:31:42Z 完成）、Slow tests（informational）仍進行中（本組 2026-10-13 12:42 UTC 以 GitHub REST check-runs 查詢；以 GitHub 為準）；出處：本組 `git fetch` 後 `git log --first-parent origin/main` 與 GitHub REST 實查）~~
 ~~- `origin/main` ＝ **`dbb629c`**（全長 `dbb629c8a05168e65ca5bab12f91c52168522a09`；PR #966 的 merge commit；2 parents（`832b7c1d`、`f6ca761d`）；其前依序為 #967（`832b7c1`）、#965（`0805bcb`）、#961（`17840f3`）、#964（`52fb423`）、#963（`1a15077`）、#962（`df42673`）、#960（`753d59c`）、#958（`6220ebf`）、#959（`97bcd66`）、#957（`1aa3f93`）、#956（`4eda84d`）、#955（`2488ffa`）、#954（`7cc9448`）、#953（`93d9f20`）、#952（`aca5354`）、#951（`6e3f467`）的 merge commit；交接本第五十七次更新；main CI：Schema gate success（16:30:27Z 完成）、Fast checks 進行中、Slow tests（informational）尚未出現（本組 2026-10-15 16:36 UTC 以 GitHub REST check-runs 查詢；以 GitHub 為準）；出處：本組 `git fetch` 後 `git log --first-parent origin/main` 與 GitHub REST 實查）~~
 ~~- `origin/main` ＝ **`629a6e0`**（全長 `629a6e03608f04a62486b51c76a2ab4381376f6d`；PR #968 的 merge commit；2 parents（`dbb629c8`、`6e17da51`）；交接本第五十八次更新；main `629a6e0` 上三條 check-run（Schema gate、Fast checks、Slow tests）皆 success（本組 2026-10-15 GitHub REST 實查）；出處：本組 `git fetch` 後 `git log`／`git show` 實查）~~
-- `origin/main` ＝ **`88e464c`**（全長 `88e464c85ed919e096e3217d9c27dd45b2f55945`；PR #969 的 merge commit；2 parents（`629a6e03`、`b89d2f6f`）；交接本第五十九次更新；合併前 head `b89d2f6` 三條 check-run 皆 success；main `88e464c` 的 push CI 見〈第五十九次更新〉一；出處：本組 `git fetch` 後 `git log`／`git show` 與 GitHub REST 實查）
+~~- `origin/main` ＝ **`88e464c`**（全長 `88e464c85ed919e096e3217d9c27dd45b2f55945`；PR #969 的 merge commit；2 parents（`629a6e03`、`b89d2f6f`）；交接本第五十九次更新；合併前 head `b89d2f6` 三條 check-run 皆 success；main `88e464c` 的 push CI 見〈第五十九次更新〉一；出處：本組 `git fetch` 後 `git log`／`git show` 與 GitHub REST 實查）~~
+- `origin/main` ＝ **`de3f22c`**（全長 `de3f22cd354ba3310fc3cdf70fd1ba40a909bf80`；PR #970 的 merge commit；2 parents（`88e464c8`、`6276c168`）；交接本第六十次更新；合併前 head `6276c16` 三條 check-run 皆 success（以 merge commit 訊息為準）；main `de3f22c` 的 push CI：Schema gate success（23:30:57Z 完成）、Fast checks success（23:41:03Z 完成）、Slow tests（informational）於本組 2026-10-15 23:42Z 查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）；出處：本組 `git fetch` 後 `git log`／`git show` 與 GitHub REST 實查）
+  → **2026-10-15 第六十次更新，狀態更新，不是漏刪**：上一行（`88e464c`）在寫下當時為真；此後 #970 合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-15 第五十九次更新，狀態更新，不是漏刪**：上一行（`629a6e0`）在寫下當時為真；此後 #969 合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-15 第五十八次更新，狀態更新，不是漏刪**：上一行（`dbb629c`）在寫下當時為真；此後 #968 合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-15 第五十七次更新，狀態更新，不是漏刪**：上一行（`3801287`）在寫下當時為真；此後 #951～#967 相繼合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
@@ -1522,10 +1557,10 @@
 
 #### A. Current Executable State
 
-- **main**：~~`629a6e0`（PR #968 的 merge commit）；三條 check-run 皆 success。~~ → `88e464c`（PR #969 的 merge commit；第五十九次更新，狀態更新，不是漏刪）。
-- **open／draft PR 與 head**：~~PR #969 `ccr-8f3b9d52-xgnleg`（Phase 1.5 ＋ 本交接本；A 級；draft；起點 main `629a6e0`）~~ → **#969 已合併（merge `88e464c`；第五十九次更新，狀態更新，不是漏刪）**；現行 open PR 為 #970 Phase 2 批 1（同分支名，起點 main `88e464c`，見〈第五十九次更新〉）；舊 draft #839、#837、#836、#791（客戶指示不動）。
+- **main**：~~`629a6e0`（PR #968 的 merge commit）；三條 check-run 皆 success。~~ → ~~`88e464c`（PR #969 的 merge commit；第五十九次更新，狀態更新，不是漏刪）~~ → `de3f22c`（PR #970 的 merge commit；第六十次更新，狀態更新，不是漏刪）。
+- **open／draft PR 與 head**：~~PR #969 `ccr-8f3b9d52-xgnleg`（Phase 1.5 ＋ 本交接本；A 級；draft；起點 main `629a6e0`）~~ → **#969 已合併（merge `88e464c`；第五十九次更新，狀態更新，不是漏刪）**；~~現行 open PR 為 #970 Phase 2 批 1（同分支名，起點 main `88e464c`，見〈第五十九次更新〉）~~ → #970 已合併（merge `de3f22c`；第六十次更新，狀態更新，不是漏刪），現行 open PR 為 #971 Phase 2 批 2（同分支名，起點 main `de3f22c`，見〈第六十次更新〉）；舊 draft #839、#837、#836、#791（客戶指示不動）。
 - **分支**：`ccr-8f3b9d52-xgnleg`（Phase 1.5）；`feat/exp-c2-ui-wiring` ＝ `f6ca761`（#966 合併後被自動刪除、總管重建）；`handover/2026-10-14`、`wip/exp-c2-ui-wiring-round2-unaudited`、探測分支四條（同第五十七次）。不大規模清理分支。
-- **目前 milestone**：~~Phase 1.5（規格／契約解除矛盾）實作完成、待稽核 → 其後 Phase 2。~~ → Phase 1.5 ✅ 已完成（#969）；Phase 2 批 1 進行中（第五十九次更新，狀態更新，不是漏刪）。路線見 `docs/v2/54_phase7_design_backlog.md` §0。
+- **目前 milestone**：~~Phase 1.5（規格／契約解除矛盾）實作完成、待稽核 → 其後 Phase 2。~~ → Phase 1.5 ✅ 已完成（#969）；~~Phase 2 批 1 進行中（第五十九次更新，狀態更新，不是漏刪）~~ → Phase 2 批 1 ✅ 已完成（#970）、批 2 進行中（第六十次更新，狀態更新，不是漏刪）。路線見 `docs/v2/54_phase7_design_backlog.md` §0。
 - **可直接執行的下一步**：
   1. ~~Phase 1.5 PR：兩組獨立稽核 → final-head CI 三條逐條看 `conclusion` → 總管合併（一般 merge，不 squash）→ 交接本。~~ → 已完成（#969 merge `88e464c`；第五十九次更新，狀態更新，不是漏刪）。
   2. 其後 Phase 2（批 1～4 見〈第五十九次更新〉二） B 五頁真資料 preview → Phase 3 客戶 390px 手機 UX 驗收（54 §0）。每批最多 3 項。
@@ -3269,6 +3304,11 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   7. 黃色「不適用」改中性灰。
   8. 44 §4.1 同鍵多列加總。
   - 請示時依 `CLAUDE.md` §-1.5 v3 `03`-2：用商業與功能語言、附總管建議的做法與具體原因、讓客戶直接決定（用語依第 7 節〈禁詞〉）；其中涉及畫面版面或文案的，附線框或草稿。
+- **（2026-10-15 第六十次更新新增）#970 稽核建議三項 —— 不擋合併，登記下一輪**（出處：`git log -1 --format=%B de3f22c` 的 merge 訊息與總管 2026-10-15 派工單轉達；稽核報告原文不在 repo、本組未見全文）：
+  - (a) #970 新守衛 `tests/ui_v2/test_preview_page.py::test_持倉體檢_套用後換頁再回來_輸入欄與核心卡用的是同一個區間` 只涵蓋區間欄，未涵蓋「套用門檻列後換頁回來」（`ui_v2/hld/logic.py::_build_hld4` 的門檻格回填）。
+  - (b) 兩處「正式模式第一批只有代碼」的歷史註解在 #966 之後與實況不符：`ui_v2/exp/logic.py` 約 :1130（本組 2026-10-15 grep 在 :1130）、`docs/v2/44_fund_ui_ssot.md` 約 :4277（本組 grep 在 :4277，字面為「正式資料第一批只有代碼」）。44 為凍結檔，改字須依既有程序。
+  - (c) #970 PR 說明尾端由工具自動附的頁尾帶 session 網址 —— 總管依第 7 節〈客戶 2026-10-09 裁示：commit message 識別碼 0 優先〉射程釐清第 3 點（PR 工具自動附的頁尾視為工具 metadata、不要求人工刪除）判定**不擋、不人工刪除**；記此一筆供追溯，同一問題不再為此停手（同節第 5 點）。
+- **（2026-10-15 第六十次更新新增）資產配置「冷卻那一輪輸入欄沒畫出、打的字遺失」—— 重現成立、未修，待總管判定修法方向**（〈第五十三次更新〉三的舊登記；重現與選項見〈第六十次更新〉一之 2）。
 
 ### 未來待辦
 
@@ -3367,7 +3407,8 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 - **幣別 fail closed（五顆）**（2026-10-10）：本機分支 `local-ccy`（未 push、未開 PR）；容器結束即遺失，唯一保存為 `docs/wip/currency_fail_closed_549876c_efb3fa2.patch`。見〈第四十七次更新〉四。→ **2026-10-10 狀態更新，不是漏刪**（上句在寫下當時為真）：該 patch 已於 2026-10-10 依客戶裁示自本分支移除；內容已在 main `549876c` 上以 `git am` 重建為 PR #923（分支 `ccr-42040ab6-csywcs`）。patch 原檔仍可由 `git show 5c21b1c:docs/wip/currency_fail_closed_549876c_efb3fa2.patch` 取得。 → **2026-10-11 第四十八次更新，狀態更新，不是漏刪**（上句在寫下當時為真）：PR #923 已合併（merge commit `4cd7bf8`），移到第 4 節。出處：本組實查。
 
 ~~- **Phase 1.5 規格／契約解除矛盾＋交接本第五十八次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `629a6e0`），PR #969（draft）；兩組獨立稽核待派、未合併。見 ★ 表 Phase 1.5 列。~~ → **已合併（第五十九次更新，狀態更新，不是漏刪）**：見第 4 節 #969。
-- **Phase 2 批 1＋交接本第五十九次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；稽核待派、未合併。見 ★ 表「Phase 2 批 1」列與〈第五十九次更新〉。
+- ~~**Phase 2 批 1＋交接本第五十九次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `88e464c`），PR #970（draft）；稽核待派、未合併。見 ★ 表「Phase 2 批 1」列與〈第五十九次更新〉。~~ → **已合併（第六十次更新，狀態更新，不是漏刪）**：merge `de3f22c`，見第 4 節。
+- **Phase 2 批 2＋交接本第六十次更新**（2026-10-15）：分支 `ccr-8f3b9d52-xgnleg`（起點 main `de3f22c`），PR #971（draft）；稽核待派、未合併。見 ★ 表「Phase 2 批 2」列與〈第六十次更新〉。
 
 ## 4. 已完成（已 merge）
 
@@ -3531,6 +3572,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
   - #967 判準（2026-10-14 交接本原文要點）：用請求代碼取頁，回 200，且頁面上恰好一張「基金名稱」表、名稱非空；另檢查最終網址（主機須是 MoneyDJ，`a=` 須等於請求代碼）。新狀態：`unrecognized_page`（⬜）、`not_found`（⬜）、TDCC `code_unmapped`；200 但內文空白歸 `failed`。合併前三條 check-run 皆 success；稽核 G2 驗 `4902695`、H2 驗程式（`371fe62`），之後只改文件（該檔原文，本組未驗）。
 - **#966（merge commit `dbb629c`，2 parents `832b7c1`、`f6ca761`）：exp 正式頁接上 C2 資料層（基本資料、淨值、配息比與來源標示）**。merged_at 2026-10-15T16:29:26Z；合併前 head `f6ca761` 三條 check-run 皆 success（本組 GitHub REST 實查）。含 2026-10-14 交接本第 6 節所列修正輪 2（總管轉述）。稽核經過見 ★ 表 #966 列。
 - **#969（merge commit `88e464c`，2 parents `629a6e0`、`b89d2f6`）：Phase 1.5 規格／契約解除矛盾（客戶 2026-10-15 裁示 A+ 修正版）＋交接本第五十八次更新**。merged_at 2026-10-15T22:10:09Z；合併前 head `b89d2f6` 三條 check-run 皆 success（本組 GitHub REST 實查）；兩組稽核結論見 merge commit 訊息。見〈第五十八次更新〉、〈第五十九次更新〉一。
+- **#970（merge commit `de3f22c`，2 parents `88e464c`、`6276c16`）：Phase 2 批 1 —— 預覽側欄過時說明更正、持倉體檢套用換頁守衛、交接本第五十九次更新**。merged_at 2026-10-15T23:29:57Z；合併前 head `6276c16` 三條 check-run 皆 success（以 merge commit 訊息為準）；稽核結論見 merge commit 訊息。見〈第五十九次更新〉、〈第六十次更新〉。
 
 ## 5. 待客戶裁示
 
@@ -4290,6 +4332,7 @@ B. 到達必須交給協作助手複驗、而且沒有其他可自主執行工�
 
 | 日期 | 內容 |
 |---|---|
+| 2026-10-15 | 第六十次更新（main `de3f22c`，分支 `ccr-8f3b9d52-xgnleg`，PR #971；本輪屬 A 級：因為改的是寫入客戶設定試算表的資料完整性，交接本為 C 級、跨級取最高）：檔頭時間；#970 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點；新增〈第六十次更新〉（資產配置未設定鍵不寫空值列〔已修〕、冷卻那一輪打的字遺失〔重現成立、未修〕）；〈第五十九次更新〉Slow tests 補註為 success；〈第五十三次更新〉三兩條補狀態；〈登記待辦〉#970 稽核建議三項與冷卻一項。 |
 | 2026-10-15 | 第五十九次更新（main `88e464c`，分支 `ccr-8f3b9d52-xgnleg`，PR #970；本輪屬 A 級：因為動到預覽入口的程式狀態與守衛，交接本與 54 為 C 級、跨級取最高）：檔頭時間；#969 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點；新增〈第五十九次更新〉（G1、G2 重現不成立、Phase 2 計畫）與〈登記待辦〉待裁示 8 點；54 §0／§7／§18／§19 Phase 1.5 改為已完成。 |
 | 2026-10-15 | 第五十八次更新（main `629a6e0`，分支 `ccr-8f3b9d52-xgnleg`，PR #969；本輪屬 A 級：因為改的是規格契約紅線與合規相關守衛的語意）：檔頭時間；#968 合併寫入第 1 節 `origin/main`、★ 表；新增〈第五十八次更新〉與第 1 節〈第五十八次更新存檔點〉；Phase 1.5 列、子法 1 衝突列、`feat/exp-c2-ui-wiring` 重建列；第 3 節；〈登記待辦〉子法 1 衝突條款與 head 分支自動刪除；第 5 節〈已裁示（2026-10-15）〉第 61 點；第 7 節新增〈客戶 2026-10-15 裁示：Phase 1.5（A+ 修正版）〉逐字全文、〈禁詞〉就地補註；〈第五十四次更新〉裁示 2 與三處引文就地補註 |
 | 2026-10-15 | 第五十七次更新（main `dbb629c`，分支 `ccr-8f3b9d52-xgnleg`，PR #968；本輪屬 C 級：因為只改文件 —— 本交接本與 `docs/v2/54_phase7_design_backlog.md`）：檔頭時間；#951～#967 與 #966 合併寫入第 1 節 `origin/main`、★ 表與第 4 節；★ 表「目前等客戶的」「下一步」舊句劃線改新句，新增五列；第 1 節新增〈第五十七次更新存檔點〉（A. Current Executable State／B. Deferred / Future Work）；新增〈第五十七次更新〉；2026-10-14 交接本整併（第 5 節〈已裁示（2026-10-14）〉第 49～60 點、第 7 節新節、〈登記待辦〉新條），註明該檔已被本檔取代、分支暫留；〈總管錯誤紀錄〉新增三筆（總管 2026-10-15 自陳）；〈未來待辦〉Phase 7 小節缺口改為已補。出處：總管 2026-10-15 轉達；SHA、PR、CI 與分支為本組實查。 |

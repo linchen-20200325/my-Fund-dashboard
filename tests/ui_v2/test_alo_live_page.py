@@ -414,3 +414,46 @@ def test_已存值帶四位以上小數_沒動就按存檔_寫回原值不寫顯
     written = dict((key, value) for key, value, _kind in probe.calls)
     assert written["alo_tolerance_pp"] == "2.55555"
     assert json.loads(written["alo_target_weights"]) == json.loads(raw["alo_target_weights"])
+
+
+# ═══════════════════════ 未設定且沒動過的鍵不寫空值列（2026-10-15 Phase 2 批 2）═══════════════════════
+#
+# 重現（修正前）：四鍵都未設定時沒動就按 ALO-1、ALO-4 的存檔，寫入函式被呼叫四次、值皆為 None ——
+# 真路徑下 L1 `save_user_setting` 會對每個鍵追加一列 `setting_value` 空白的紀錄。
+
+def _with_unset(keys):
+    import copy as _copy
+
+    dataset = _copy.deepcopy(_DATASET)
+    for row in dataset["user_setting"]:
+        if row["setting_key"] in keys:
+            row["setting_value"], row["updated_at"] = None, None
+    return dataset, dict(_RAW, **{key: None for key in keys})
+
+
+def test_四鍵都未設定_沒動就按兩枚存檔_寫入0次_畫面無失敗行(monkeypatch, probe):
+    dataset, raw = _with_unset(set(live.SAVE_WIRED_KEYS))
+    at = _run(_save_script(dataset, raw), monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    for button_key in ("live_alo1_btn_0", "live_alo4_btn_1"):
+        assert not at.button(key=button_key).disabled
+        at.button(key=button_key).click().run()
+        assert not at.exception, [e.value for e in at.exception]
+    assert probe.calls == []
+    assert not any('class="alo-errline"' in v for v in _markdown_values(at))
+
+
+def test_只有容許帶未設定_沒動就按存檔_只寫目標列(monkeypatch, probe):
+    dataset, raw = _with_unset({"alo_tolerance_pp"})
+    at = _run(_save_script(dataset, raw), monkeypatch)
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert probe.calls == [("alo_target_weights", _RAW["alo_target_weights"], "list")]
+
+
+def test_容許帶未設定_使用者填了才寫(monkeypatch, probe):
+    dataset, raw = _with_unset({"alo_tolerance_pp"})
+    at = _run(_save_script(dataset, raw), monkeypatch)
+    at.text_input(key="live_alo_tolerance_pp").set_value("3")
+    at.button(key="live_alo1_btn_0").click().run()
+    assert [call for call in probe.calls if call[0] == "alo_tolerance_pp"] == [("alo_tolerance_pp", "3", "float")]

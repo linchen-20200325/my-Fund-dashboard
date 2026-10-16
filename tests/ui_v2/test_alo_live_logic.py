@@ -510,9 +510,10 @@ def test_組值_ALO1正常_順序同畫面列序_原字照寫():
     assert out["alo_target_weights"] == {
         "key": "alo_target_weights", "value_kind": "list", "error": None,
         "value": '[{"bucket": "%s", "weight_ratio": 0.60}, {"bucket": "%s", "weight_ratio": 0.4}]' % (_CORE, _SAT),
+        "skip": False,
     }
     assert out["alo_tolerance_pp"] == {"key": "alo_tolerance_pp", "value": "4", "value_kind": "float",
-                                       "error": None}
+                                       "error": None, "skip": False}
     # 寫出去的字串讀回來就是原值（與讀取端同一支解析器）。
     assert live._PARSERS["alo_target_weights"](out["alo_target_weights"]["value"], "k") == [
         {"bucket": _CORE, "weight_ratio": 0.6}, {"bucket": _SAT, "weight_ratio": 0.4}]
@@ -565,7 +566,7 @@ def test_組值_ALO4_比重基準與類別名稱():
     values = {"alo_basis": logic.BASIS_MV, "alo_bucket_name_0": _CORE, "alo_bucket_name_1": _SAT}
     out = _entries(_ALO4_KEYS, values)
     assert out["alo_basis"] == {"key": "alo_basis", "value": logic.BASIS_MV, "value_kind": "list",
-                                "error": None}
+                                "error": None, "skip": False}
     assert out["alo_bucket_names"]["value"] == json.dumps([_CORE, _SAT], ensure_ascii=False)
     assert json.loads(out["alo_bucket_names"]["value"]) == [_CORE, _SAT]
     assert out["alo_bucket_names"]["value_kind"] == "list" and out["alo_bucket_names"]["error"] is None
@@ -714,7 +715,9 @@ def test_改動其中一列_只有那一列換成新輸入():
     assert _entries(_ALO1_KEYS, values, fields=fields, raw=raw)["alo_tolerance_pp"]["value"] == "3"
 
 
-def test_沒動過的留空列與未設定容許帶_照舊寫null與None():
+def test_沒動過的留空列照舊寫null_未設定的容許帶不寫():
+    """~~舊名「…未設定容許帶_照舊寫null與None」~~ → 2026-10-15 Phase 2 批 2：未設定且沒動過的容許帶
+    不再寫一列空值（`skip`）；有已存值的目標列（含留空列）照舊寫回。改名是行為修正，不是漏刪。"""
     rows, _ = live.parse_user_settings(_rows(alo_target_weights=_weights([(_CORE, None)])))
     dataset = dict(fixtures.scenario("full"), user_setting=rows)
     card = logic.find_block(logic.build_page_model(dataset), "ALO-1")
@@ -722,7 +725,58 @@ def test_沒動過的留空列與未設定容許帶_照舊寫null與None():
     out = _entries(_ALO1_KEYS, values, fields=card["inputs"],
                    raw={"alo_target_weights": _weights([(_CORE, None)]), "alo_tolerance_pp": None})
     assert json.loads(out["alo_target_weights"]["value"]) == [{"bucket": _CORE, "weight_ratio": None}]
-    assert out["alo_tolerance_pp"]["value"] is None
+    assert out["alo_target_weights"]["skip"] is False
+    assert out["alo_tolerance_pp"]["value"] is None and out["alo_tolerance_pp"]["skip"] is True
+
+
+# ═══════════════════════ 未設定且沒動過的鍵不寫空值列（2026-10-15 Phase 2 批 2）═══════════════════════
+#
+# 重現：四鍵都未設定時沒動就按存檔，舊版對每個鍵都呼叫寫入函式、值為 None ⇒ L1 追加一列 `setting_value` 空白。
+# 只跳過「要寫的是清除、而 raw 明載本來就沒有值」的鍵；有值被清空、raw 沒帶那個鍵，照舊寫清除。
+
+_ALL_UNSET_RAW = {key: None for key in live.SETTING_KEYS}
+
+
+def _unset_card_values(code):
+    rows, problem = live.parse_user_settings({})
+    assert problem is None
+    card = logic.find_block(logic.build_page_model(dict(fixtures.scenario("full"), user_setting=rows)), code)
+    return card["inputs"], {field["name"]: field["value_text"] if not field.get("_options") else field["_value"]
+                            for field in card["inputs"]}
+
+
+@pytest.mark.parametrize("code, keys", [("ALO-1", _ALO1_KEYS), ("ALO-4", _ALO4_KEYS)])
+def test_四鍵都未設定_沒動就按存檔_全都不寫(code, keys):
+    fields, values = _unset_card_values(code)
+    entries = live.save_entries(keys, values, fields=fields, raw=_ALL_UNSET_RAW)
+    assert [(e["key"], e["value"], e["error"], e["skip"]) for e in entries] == [(k, None, None, True) for k in keys]
+    calls = []
+    assert live.run_saves(entries, lambda *a: calls.append(a)) == {k: None for k in keys}
+    assert calls == []                                          # 寫入函式 0 次呼叫
+
+
+def test_未設定的鍵_先打錯字存失敗_再清回空白存檔_不寫且舊失敗消掉():
+    raw = dict(_ALL_UNSET_RAW, alo_target_weights=_weights([(_CORE, 1.0)]))
+    first = live.save_entries(_ALO1_KEYS, _alo1_values([(_CORE, "1")], "四"), raw=raw)
+    errors = live.merge_save_results(None, live.run_saves(first, lambda k, v, kind: {"status": "saved"}))
+    assert "alo_tolerance_pp" in errors
+    second = live.save_entries(_ALO1_KEYS, _alo1_values([(_CORE, "1")], ""), raw=raw)
+    calls = []
+
+    def save(key, value, kind):
+        calls.append(key)
+        return {"status": "saved"}
+
+    assert live.merge_save_results(errors, live.run_saves(second, save)) == {}
+    assert calls == ["alo_target_weights"]
+
+
+def test_有值被清空_照舊寫清除_raw沒帶那個鍵也照舊寫清除():
+    out = _entries(_ALO1_KEYS, _alo1_values([], ""), raw={"alo_target_weights": _weights([(_CORE, 1.0)]),
+                                                          "alo_tolerance_pp": "4"})
+    assert all(e["value"] is None and e["skip"] is False for e in out.values())
+    out = _entries(_ALO1_KEYS, _alo1_values([], ""))                       # raw 沒帶 ⇒ 不知道 ⇒ 不猜
+    assert all(e["value"] is None and e["skip"] is False for e in out.values())
 
 
 def test_沒動過但原字串表漏了那一鍵_當場炸不猜():
