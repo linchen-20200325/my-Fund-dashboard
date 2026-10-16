@@ -31,8 +31,29 @@ git show efeee8ac72d3433597cf065321e90fcc51c5e8dd:docs/handover_2026_10_14.md | 
 | `feat_exp-c3a-nav-label-source__9295482.patch` | 133164 | `9c05175b3cde9869f92fe6f3d3d7d4917677c415e9e4f7679cdddf213ab852d5` |
 | `feat_fx-prev-trading-day-semantics__a3b6664.patch` | 21921 | `2256146d09b846c8d3657487cffd7fd1e0ba4db035660fa13ae615a1e9fd5fd2` |
 
-- 複核結論（總管 2026-10-16 派工單轉述的獨立複核結論，本組未獨立重驗）：三份都是「把 main 退回舊版的反向差異、無新內容」，故不存全文。
-- 本組實測的旁證（只是旁證，不足以單獨證成上句）：在 main `cac7c00` 上對三份做 `git apply --check`，正反兩個方向都因程式已漂移而失敗；反向檢查的錯誤訊息之一是「`ui_v2/thresholds.py` 已存在」，表示該 patch 會刪掉 main 上現有的檔，方向與「退回舊版」一致。
+- ~~複核結論（總管 2026-10-16 派工單轉述的獨立複核結論，本組未獨立重驗）：三份都是「把 main 退回舊版的反向差異、無新內容」，故不存全文。~~ → **實證結論（#978 稽核實證，本組 2026-10-16 重跑確認；有意識的更正，不是漏刪）**：三份 patch 各自套在它檔名所指的 commit 上之後，所動到的每一個檔都與該 commit 的 parent 逐檔相同 —— 也就是每一份都只是「把該 commit 的改動倒回去」，沒有新內容，故不存全文。三個 commit 都已在 main（`git merge-base --is-ancestor <commit> cac7c00` 皆成立）。
+
+  | patch | 套在 | parent | 逐檔相同 |
+  |---|---|---|---|
+  | `feat_b-alo-real-data__9ac951e.patch` | `9ac951e` | `4de49f6` | 7／7 |
+  | `feat_exp-c3a-nav-label-source__9295482.patch` | `9295482` | `200943b` | 5／5 |
+  | `feat_fx-prev-trading-day-semantics__a3b6664.patch` | `a3b6664` | `2b38ac1` | 3／3 |
+
+  重跑方式（不碰工作樹，用暫存 index；以 `9ac951e` 為例，另兩份換 commit 與檔名）：
+
+  ```
+  git show efeee8ac72d3433597cf065321e90fcc51c5e8dd:docs/handover_residue_2026_10_14/feat_b-alo-real-data__9ac951e.patch > /tmp/p.patch
+  GIT_INDEX_FILE=/tmp/idx git read-tree 9ac951e
+  GIT_INDEX_FILE=/tmp/idx git apply --cached /tmp/p.patch
+  T=$(GIT_INDEX_FILE=/tmp/idx git write-tree)
+  for f in $(git apply --numstat /tmp/p.patch | awk '{print $3}'); do
+    a=$(git rev-parse -q --verify $T:$f || echo none); b=$(git rev-parse -q --verify 9ac951e^:$f || echo none)
+    [ "$a" = "$b" ] && echo "same $f" || echo "DIFF $f"
+  done
+  ```
+
+  「兩邊都不存在」記為相同（patch 刪掉的檔在 parent 本來就沒有）。
+- 本組第一版的旁證（~~只是旁證，不足以單獨證成上句~~ → 已被上方逐檔實證取代，留作紀錄）：在 main `cac7c00` 上對三份做 `git apply --check`，正反兩個方向都因程式已漂移而失敗；反向檢查的錯誤訊息之一是「`ui_v2/thresholds.py` 已存在」，表示該 patch 會刪掉 main 上現有的檔，方向與「退回舊版」一致。
 - 該交接本自己的判讀（原文第 1 節表格）：「多半是稽核突變或舊 checkout 的殘留，不是待交付成果；這是推測，沒有驗證」。
 - 若日後需要全文：`git show efeee8ac72d3433597cf065321e90fcc51c5e8dd:docs/handover_residue_2026_10_14/<檔名>`；分支被刪後需先取回該 commit 物件。
 

@@ -6,7 +6,7 @@
 |---|---|---|
 | `probe_fx_obs_date/` | Yahoo 匯率日線觀測日探測報告 3 份（`.json.gz`） | `probe/fx-obs-date-results` @ `6dd3e62` |
 | `probe_moneydj_basic/` | MoneyDJ 基本資料頁探測報告 1 份（`.json.gz`） | `probe/moneydj-basic-results` @ `39672f9` |
-| `branch_archive/docs-handover-latest/` | 舊交接本 3 個版本（`885b71a`、`fce9176`、`ddc5625`） | `docs/handover-latest` |
+| `branch_archive/docs-handover-latest/` | 舊交接本 4 個版本（`885b71a`、`fce9176`、`ddc5625`、`ed896e4`） | `docs/handover-latest` |
 | `branch_archive/handover-2026-10-14/` | 2026-10-14 交接本；三份殘留 patch 只記雜湊 | `handover/2026-10-14` @ `efeee8a` |
 | `branch_archive/wip-exp-c2-ui-wiring-round2-unaudited/` | WIP commit 的程式差異（`git diff`，`.patch.gz`；不含 commit message 署名行） | `wip/exp-c2-ui-wiring-round2-unaudited` @ `4d00b6b` |
 | `branch_archive/pr838/` | #838 資料字典 §4.6 文案草稿與 §5 G-13 摘錄（草稿、未核准） | `claude/v2-data-dictionary-a` @ `78863c3` |

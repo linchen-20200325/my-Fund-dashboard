@@ -559,21 +559,21 @@
 
 #### 第六十六次更新（2026-10-16）
 
-出處：客戶 2026-10-16 核准「只保存、不刪除」、tag 推送被拒（HTTP 403）、分支盤點分類、三份殘留 patch 的複核結論、排程 ID 查詢結果，皆為總管 2026-10-16 派工單轉達（對話中，repo 內無原文；本組未重做盤點與複核）；各保存檔的來源 commit、時間、大小與 sha256 為本組 2026-10-16 以 `git show`、`git log`、`git ls-tree`、`git ls-remote --heads` 實查實跑。本輪屬 C 級：因為只新增證據檔與改文件，不動任何程式（`ui_v2/`、`services/`、`repositories/`、`infra/`、`shared/`、`scripts/`、`app*.py`、測試檔皆未改）。
+出處：客戶 2026-10-16 核准「只保存、不刪除」、tag 推送被拒（HTTP 403）、分支盤點分類、三份殘留 patch 的複核結論、排程 ID 查詢結果，皆為總管 2026-10-16 派工單轉達（對話中，repo 內無原文；本組未重做盤點與複核）；各保存檔的來源 commit、時間、大小與 sha256 為本組 2026-10-16 以 `git show`、`git log`、`git ls-tree`、`git ls-remote --heads` 實查實跑。本輪屬 C 級：因為只新增證據檔與改文件，不動任何程式；~~自驗~~ 實際已由總管派 1 組獨立稽核（#978，必修 3 已回修；有意識的更正，不是漏刪）（`ui_v2/`、`services/`、`repositories/`、`infra/`、`shared/`、`scripts/`、`app*.py`、測試檔皆未改）。
 
 **一、為什麼這樣保存**
 
 1. 客戶 2026-10-16 核准「只保存、不刪除」。原計畫以保存用 tag 鎖住舊 commit；本環境推送 tag 被拒（HTTP 403），改以「內容＋來源資訊」落盤到 main 的 `docs/evidence/`。tag 由總管另向客戶說明。
 2. 放 `docs/evidence/` 而不放 `docs/v2/evidence/`：`docs/v2/` 底下的 `.md` 受 `tests/test_doc_counters.py` 守衛（非遞迴射程＋「不得有 `.md` 落在射程外」正控），證據說明不是規格文件，放在 `docs/v2/` 之外，該測試一字未改。理由寫在 `docs/evidence/README.md`。
-3. **本批未刪任何分支、未建 tag、未 push、未關 PR。** 客戶 2026-10-15「branch 不大規模清理」仍有效。
+3. **本批未刪任何分支、未建 tag、~~未 push、~~未關 PR。**（「未 push」在寫下時為真：實作組只在本機 commit；其後由總管壓成單一 commit `d8d062d` 推到 PR #978 分支 `ccr-8f3b9d52-xgnleg`。有意識的更正，不是漏刪。） 客戶 2026-10-15「branch 不大規模清理」仍有效。
 
 **二、保存清單（各目錄 `README.md` 記全長 SHA、時間、原始與保存檔 sha256、被引用處、驗證指令）**
 
 1. `docs/evidence/probe_fx_obs_date/`：`probe/fx-obs-date-results`（head `6dd3e62`）的三份探測報告，`gzip -9 -n` 壓縮（run `38450455092`、`38510633247`、`38524215912`）。
 2. `docs/evidence/probe_moneydj_basic/`：`probe/moneydj-basic-results`（head `39672f9`）的一份探測報告（run `38548232056`），壓縮後 493680 bytes（上限 512000）。
-3. `docs/evidence/branch_archive/docs-handover-latest/`：`docs/handover-latest` 的三版交接本原文（`885b71a`、`fce9176`、`ddc5625`），未壓縮、逐位元組、行號不變。
-4. `docs/evidence/branch_archive/handover-2026-10-14/`：`docs/handover_2026_10_14.md` 原文（`efeee8a`）；三份殘留 patch 只記檔名、sha256 與複核結論，不存全文；排程 `trig_01QBd32YKeaDzjEXTDKaFLeN` 該檔記為已停用，本 session 查詢回 not found，現況不明。
-5. `docs/evidence/branch_archive/wip-exp-c2-ui-wiring-round2-unaudited/`：~~`4d00b6b` 的 `git format-patch` 全文，`gzip -9 -n` 壓縮~~ → `4d00b6b` 的程式差異（`git diff 4d00b6b^ 4d00b6b`，`gzip -9 -n` 壓縮，`4d00b6b_diff.patch.gz`）；commit 標題與正文記於 README，已刻意略去署名行與 session 網址（有意識的更正，不是漏刪；決策者：AI 總管；理由：main 不得新增 session 網址與署名行，第一版 format-patch 在同分支下一顆 commit 移除，舊 commit 未改寫）；README 記取代關係（main 改用 L2 `conflict_rejected_rows`，見 49 第 (ab) 條）。
+3. `docs/evidence/branch_archive/docs-handover-latest/`：`docs/handover-latest` 的~~三版~~四版交接本原文（`885b71a`、`fce9176`、`ddc5625`；稽核建議 S1 補 `ed896e4`，第 2 節〈稽核紀錄缺口〉以其為出處），未壓縮、逐位元組、行號不變。
+4. `docs/evidence/branch_archive/handover-2026-10-14/`：`docs/handover_2026_10_14.md` 原文（`efeee8a`）；三份殘留 patch 只記檔名、sha256 與逐檔實證結論（套回後與 parent 相同），不存全文；排程 `trig_01QBd32YKeaDzjEXTDKaFLeN` 該檔記為已停用，本 session 查詢回 not found，現況不明。
+5. `docs/evidence/branch_archive/wip-exp-c2-ui-wiring-round2-unaudited/`：~~`4d00b6b` 的 `git format-patch` 全文，`gzip -9 -n` 壓縮~~ → `4d00b6b` 的程式差異（`git diff 4d00b6b^ 4d00b6b`，`gzip -9 -n` 壓縮，`4d00b6b_diff.patch.gz`）；commit 標題與正文記於 README，已刻意略去署名行與 session 網址（有意識的更正，不是漏刪；決策者：AI 總管；理由：main 不得新增 session 網址與署名行。第一版（format-patch，含署名行與 session 網址）只存在本機 commit，推送前已壓成單一 commit，從未進入 PR 或遠端）；README 記取代關係（main 改用 L2 `conflict_rejected_rows`，見 49 第 (ab) 條）。
 6. `docs/evidence/branch_archive/pr838/`：#838 `docs/v2/DATA_DICTIONARY.md` 兩段逐字摘錄（§4.6 文案草稿、§5 前言至 G-13），含撞字登記。
 7. `docs/evidence/branch_archive/pr799/`：#799 `HANDOVER.md` 四段逐字摘錄（工作原則）。
 8. 每個保存檔都實跑過：`gzip -dc`（或直接）後的 sha256 ＝ `git show` 原始輸出的 sha256。
@@ -582,7 +582,7 @@
 
 1. `ACCEPTANCE.md` 約 :517、:534（`885b71a`）。
 2. `docs/v2/49_data_integration_plan.md`：`fce9176` 各處（約 :512、:656、:888、:889、:891、:892）；探測報告各處（約 :429、:634、:640、:644、:647、:648、:727、:894）。
-3. 本交接本約 :322、:343、:781、:785、:789、:1731、:1759、:3426。
+3. 本交接本約 :322、:343、:781、:785、:789、:1731、:1759、:3426（以上為 `cac7c00` 行號）；另 `ed896e4` 引用處約 :2844（`cac7c00` 行號；稽核建議 S1 補）。
 4. **未改、只在此登記對應**（production／script／測試檔，本批不動程式）：
    - `services/v2_tables/alo_holdings.py:470` docstring 引 `ddc5625` :117 → 內容保存於 `docs/evidence/branch_archive/docs-handover-latest/ddc5625_handover_2026_09_26_latest.md` 第 117 行（本組實讀，該行為「鍵含 BOM、零寬字元、NBSP 的處理」）。
    - `repositories/fund/declared_profile.py`（約 :35、:469）、`tests/test_declared_profile.py`（約 :947）、`tests/fixtures/moneydj_basic/manifest.json` 的 `source_report` → `docs/evidence/probe_moneydj_basic/20261014T101710Z_run38548232056_report.json.gz`。
@@ -601,7 +601,7 @@
 
 **五、本組沒查證的部分**
 
-- 分支分類、三份殘留 patch「反向差異、無新內容」的複核結論、排程 ID 現況、#799 摘錄「不在客戶裁示 (c) 範圍內」的界定：皆為總管轉述，本組未獨立重做（patch 一項本組只做了 `git apply --check` 旁證，見該目錄 README）。
+- 分支分類、排程 ID 現況、#799 摘錄「不在客戶裁示 (c) 範圍內」的界定：皆為總管轉述，本組未獨立重做。~~三份殘留 patch 的複核結論同屬轉述（本組只做了 `git apply --check` 旁證）~~ → 已由 #978 稽核實證、本組重跑確認：三份 patch 套在 `9ac951e`／`9295482`／`a3b6664` 後與各自 parent 逐檔相同（7／7、5／5、3／3），三 commit 皆在 main；指令見該目錄 README（有意識的更正，不是漏刪）。
 - 引用處清單以 `git grep` 搜 SHA 前 7 碼、run ID、分支名得出，不宣稱窮舉。
 - main `cac7c00` 的 push CI。
 
@@ -1616,8 +1616,9 @@
 ~~- `origin/main` ＝ **`629d08a`**（全長 `629d08a4f623abcdc4fc16c1e9c0c8f4025e6418`；PR #971 的 merge commit；2 parents（`de3f22cd`、`0ba66527`）；交接本第六十一次更新；合併前 head `0ba6652` 三條 check-run 皆 success（以 merge commit 訊息為準）；main `629d08a` 的 push CI：Schema gate success（00:30:53Z 完成）、Fast checks success（00:39:22Z 完成）、Slow tests（informational）於本組 2026-10-16 查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）；出處：本組 `git fetch` 後 `git log`／`git show` 與 GitHub REST 實查）~~
 ~~- `origin/main` ＝ **`54f079f`**（全長 `54f079fada38fb996d2c6b6bd33647af112c8ea3`；PR #972 的 merge commit；2 parents（`629d08a4`、`a239acc7`）；交接本第六十二次更新；合併前 head `a239acc` 三條 check-run 皆 success（以 merge commit 訊息為準，本組另以 GitHub REST 查得三條皆 success）；main `54f079f` 的 push CI：Schema gate success，Fast checks 與 Slow tests 於本組 2026-10-16 查詢時仍在跑（GitHub REST 實查；結果以 GitHub 為準）；出處：本組 `git fetch` 後 `git log`／`git show` 與 GitHub REST 實查）~~
 ~~- `origin/main` ＝ **`bde5568`**（全長 `bde556894fb4491c976ef676f8bad8c685d4535e`；PR #973 的 merge commit；2 parents（`54f079fa`、`e8ae2051`）；merged_at 2026-10-16T02:50:04Z；交接本第六十三次更新；合併前 head `e8ae205` 三條 check-run（Schema gate、Fast checks、Slow tests）皆 success（本組 2026-10-16 GitHub REST 實查）；main `bde5568` 的 push CI 本組未查；出處：本組 `git log -1 --format='%H %P' bde5568` 與 GitHub REST pulls/973 實查）~~
+~~- `origin/main` ＝ **`498d971`**（全長 `498d971b72c41e0dc9e32b4ec2b9c263ca8646b5`；PR #976 的 merge commit；2 parents（`3e6ca86e`、`9a6edd1a`）；merged_at 2026-10-16T07:36:57Z；其前依序為 #975（`3e6ca86`，parents `279db9f`、`466e4dd`）、#974（`279db9f`，parents `bde5568`、`8bd6c6b`）的 merge commit；交接本第六十五次更新；合併前 head `9a6edd1` 三條 check-run 皆 success（以 merge commit 訊息為準，本組未另查）；main `498d971` 的 push CI 本組未查；出處：本組 `git log -1 --format='%H %P'` 與 GitHub REST pulls/974、975、976 實查）~~
 - `origin/main` ＝ **`cac7c00`**（全長 `cac7c005e2c6470044c12ff43ea20198fbf3ff32`；PR #977 的 merge commit（交接本第六十五次更新與 55 對齊新行為）；2 parents（`498d971b`、`40a0b0b3`）；commit 時間 2026-10-16T08:18:09Z；main `cac7c00` 的 push CI 本組未查；出處：本組 `git log -1 --format='%H %P %cI'` 實查）
-  → **2026-10-16 第六十六次更新，狀態更新，不是漏刪**：上一版本行為「`origin/main` ＝ `498d971`（PR #976 的 merge commit；parents `3e6ca86e`、`9a6edd1a`；merged_at 2026-10-16T07:36:57Z；其前依序為 #975 `3e6ca86`、#974 `279db9f`；合併前 head `9a6edd1` 三條 check-run 皆 success，以 merge commit 訊息為準）」，在寫下當時為真；此後 #977 合併。本批分支 `r5-preserve` 起點即 `cac7c00`，合併後 main 會再前進。
+  → **2026-10-16 第六十六次更新，狀態更新，不是漏刪**：上一行（`498d971`）在寫下當時為真；此後 #977 合併。本分支（PR #978）合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-16 第六十五次更新，狀態更新，不是漏刪**：上一行（`bde5568`）在寫下當時為真；此後 #974、#975、#976 相繼合併（第六十四次更新在分支 `r3-hld` 上寫，未動本行）。本分支合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-16 第六十三次更新，狀態更新，不是漏刪**：上一行（`54f079f`）在寫下當時為真；此後 #973 合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
   → **2026-10-16 第六十二次更新，狀態更新，不是漏刪**：上一行（`629d08a`）在寫下當時為真；此後 #972 合併。本分支合併後 main 會再前進。出處：本組實查 `git log`。
@@ -2841,7 +2842,7 @@ git show -m --first-parent --format="" <sha> | grep '^+[^+]' \
 
 - **17 顆 commit 的 message 全部沒有任何稽核字樣**；所有證據都只能從檔案內容間接推得。
 - **全程沒有留下任何獨立稽核報告檔**（`docs/v2/*audit*`、`scratchpad/audit/*` 在 9/25～9/28 一個都沒被動過）。紅隊回報只以「回修後的程式註解／`EXCEPTIONS.md` 條目」形式間接存在。
-- **有稽核痕跡的至少 7 輪（第 2／5／6／11／12／12b／13 輪）；其中第 5／11／12／12b／13 輪含稽核 A 歸屬，第 2／6／12／12b／13 輪含稽核 B（紅隊）歸屬。**交接本 `ed896e4`（2026-09-26）記「紅隊改標稽核 B」，兩者是同一組。
+- **有稽核痕跡的至少 7 輪（第 2／5／6／11／12／12b／13 輪）；其中第 5／11／12／12b／13 輪含稽核 A 歸屬，第 2／6／12／12b／13 輪含稽核 B（紅隊）歸屬。**交接本 `ed896e4`（2026-09-26）記「紅隊改標稽核 B」（保存於 main：`docs/evidence/branch_archive/docs-handover-latest/ed896e4_handover_2026_09_26_latest.md`；該句是該 commit 的標題），兩者是同一組。
   ⚠️ **2026-09-28 就地更正（有意識的更正，不是漏刪；依據：稽核 C 組複驗 ＋ 本組寬字表重跑 17 顆）**：本行原寫 ~~「稽核 A 自第 3 輪之後完全查不到痕跡；有痕跡的五輪全部是紅隊（＝稽核 B）」~~ —— **兩句都不實**。實測：`4bc155f`（第 5 輪）有兩處「第 5 輪 A 組 6」，`git grep 'A 組' 41ca5de` 顯示兩處**至今仍在**；`2e6d805`／`98672ee`／`f71ab3c`／`e227aac` 亦皆有 A 組歸屬。**舊表述錯在查法**：第一版只掃「紅隊／稽核」兩個詞，掃不到以「A 組／B 組／建議 N」形式寫的歸屬 —— **與 `CLAUDE.md` §-1.5.1c 判定 2 記載的「字表選錯，掃再多次都沒用」同型**。**被權衡掉的只有粒度，核心指控三句未動。**
 - 交接本停在第 3 輪「已送複驗、等回報」，**從未記到任何一份回報收回**。
 - 流程結論：**這是流程漏洞，不是個人疏失** —— 派工與回報沒有進交接本，導致多輪無從追溯（**從檔案痕跡反推得出的歸屬，粒度遠低於當場記錄**）。
@@ -4621,7 +4622,7 @@ B. 到達必須交給協作助手複驗、而且沒有其他可自主執行工�
 
 | 日期 | 內容 |
 |---|---|
-| 2026-10-16 | 第六十六次更新（main `cac7c00`，分支 `r5-preserve`，本機 commit、未 push；本輪屬 C 級：因為只新增證據檔與改文件，自驗、不派稽核）：檔頭時間；第 1 節 `origin/main` 改 `cac7c00`（#977）；新增 `docs/evidence/`（探測報告 4 份、舊交接本 4 份、WIP 程式差異 1 份（第一版 format-patch 因含署名行，同分支下一顆 commit 改存 `git diff`）、#838／#799 摘錄 6 段，各附 README 與 sha256）；tag 推送被拒（HTTP 403）改以內容落盤；`ACCEPTANCE.md`、49、本交接本的分支依賴引用行內補保存位置；production 引用未改、登記對應；★ 表 Phase 3 列註明本批完成後開始；〈登記待辦〉新增 #841／#838／#799／#840 四筆；未刪任何分支 |
+| 2026-10-16 | 第六十六次更新（main `cac7c00`，PR #978，分支 `ccr-8f3b9d52-xgnleg`，已推送；~~分支 `r5-preserve`，本機 commit、未 push；本輪屬 C 級：因為只新增證據檔與改文件，自驗、不派稽核~~（有意識的更正，不是漏刪：寫下時是本機分支；推送前總管壓成單一 commit `d8d062d` 推到 PR 分支，並派 1 組獨立稽核，必修 3 已回修））：檔頭時間；第 1 節 `origin/main` 改 `cac7c00`（#977）；新增 `docs/evidence/`（探測報告 4 份、舊交接本 5 份（第六十六次更新稽核建議 S1 補 `ed896e4`）、WIP 程式差異 1 份（第一版 format-patch 含署名行與 session 網址，只存在本機 commit，推送前已壓成單一 commit，從未進入 PR 或遠端）、#838／#799 摘錄 6 段，各附 README 與 sha256）；tag 推送被拒（HTTP 403）改以內容落盤；`ACCEPTANCE.md`、49、本交接本的分支依賴引用行內補保存位置；production 引用未改、登記對應；★ 表 Phase 3 列註明本批完成後開始；〈登記待辦〉新增 #841／#838／#799／#840 四筆；未刪任何分支 |
 | 2026-10-16 | 第六十五次更新（main `498d971`，分支 `r4-doc`，本機 commit、未 push；本輪屬 C 級：因為只改文件，自驗、不派稽核）：檔頭時間；#974、#975、#976 合併寫入第 1 節 `origin/main`、★ 表（R1、R3 列標已合併，新增「Phase 3 客戶驗收」列）、「目前等客戶的」與「下一步」、第五十八次存檔點 A 塊（open PR 無）、第 3／4 節、第 5 節第 63、64、66、69、70 點；新增〈第六十五次更新〉；〈登記待辦〉新增 #976 稽核 A 組複驗兩項建議（(b) 就地修掉下一列「本機未 push」）與 `app_preview.py` 檔頭一筆；待裁示清單第 3、9 點標已落地；55 對照 #975、#976 新行為最小補寫；54 §0 Phase 2 列標完成、Phase 3 列標進行中。 |
 | 2026-10-16 | 第六十四次更新（分支 `r3-hld`，起點 `8bd6c6b`，同日併入 main `3e6ca86`，~~本機未 push~~（第六十五次更新就地更正，狀態更新，不是漏刪：寫下當時為真，同日第三輪 PR #976 已開、後已合併為 `498d971`；依 #976 稽核 A 組建議修掉與後文的矛盾）；同日第三輪（PR #976 稽核後）補：〈第六十四次更新〉六（總管判定回修六項）、〈登記待辦〉三條、二之兩句劃線、PR #976 已開、條數更正；同日第二輪補：〈第六十四次更新〉五（總管判定、兩項必修、merge 衝突解法）、〈登記待辦〉兩條、★ 表 R3 列狀態；本輪屬 A 級：因為改了持倉體檢計算與寫入路徑、資產配置加總檢查與 44 凍結檔）：檔頭時間；新增〈第六十四次更新〉（第 2、5、8 點落地、總管判定、要總管判斷的事）；★ 表新增「Phase 2 收尾裁示 R3」列；〈登記待辦〉待裁示清單第 2、5、8 點劃線標已落地；第 5 節〈已裁示（2026-10-16）〉第 63、66、69 點補落地註。 |
 | 2026-10-16 | 第六十三次更新（main `bde5568`，分支 `r1-color-docs`，PR 由總管開；本輪屬 A 級：因為改了五頁畫面顏色與 44 凍結檔，文件與交接本為 C 級、跨級取最高）：檔頭時間；#973 合併寫入第 1 節 `origin/main`、★ 表、第 3／4 節、第五十八次存檔點 A 塊；客戶 2026-10-16 裁示 10 點寫入第 5 節〈已裁示（2026-10-16）〉（第 62～71 點，第 8 點含客戶護欄逐字）；〈登記待辦〉待裁示清單標已裁示、新增兩條登記（取數失敗徽章判黃、44 與線框殘留的卡片表那一種黃）；★ 表新增「Phase 2 收尾裁示 R1」列、下一步改為三組並行後進 Phase 3；第 7 節新增長期工作規則（模型／模式／Effort）；新增〈第六十三次更新〉（記總管判定 2、3、4）。 |

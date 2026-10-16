@@ -41,7 +41,7 @@ git diff 4d00b6b4c5aa8b225c73675de3b209513832f041^ 4d00b6b4c5aa8b225c73675de3b20
 
 已刻意略去署名行與 session 網址，原文以 SHA 在 GitHub 查。
 
-> 沿革（有意識的更正，不是漏刪；2026-10-16；決策者：AI 總管）：本目錄第一版存的是 `git format-patch -1 --stdout` 的 gzip（`4d00b6b_format-patch.patch.gz`，原始 sha256 `1fa0522d8c9ec9ae3ea716af79e9733580da38c3a3e5d9b56b805f517674e3e0`），其中原樣帶著該 commit 的署名行與 session 網址。總管判定 main 不得新增 session 網址與署名行，該檔已在下一顆 commit 移除，改存上表的純程式差異；第一版 commit 本身未改寫。
+> 沿革（有意識的更正，不是漏刪；2026-10-16；決策者：AI 總管）：本目錄第一版存的是 `git format-patch -1 --stdout` 的 gzip（`4d00b6b_format-patch.patch.gz`，原始 sha256 `1fa0522d8c9ec9ae3ea716af79e9733580da38c3a3e5d9b56b805f517674e3e0`），其中原樣帶著該 commit 的署名行與 session 網址。總管判定 main 不得新增 session 網址與署名行，改存上表的純程式差異。第一版（format-patch，含署名行與 session 網址）只存在本機 commit，推送前已壓成單一 commit，從未進入 PR 或遠端。
 
 ## 被 main 哪些地方引用（2026-10-16 實查，main ＝ `cac7c00`；不宣稱窮舉）
 
