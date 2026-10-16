@@ -378,6 +378,11 @@ def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
         for field in block["inputs"][:1]:
             options = list(field["_options"])
             chosen = _initial_value(field["name"], f"{scenario}_alo_basis", field["_value"], ctx)
+            if chosen is not None and chosen not in options:
+                # 暫存的值不是現有選項 ⇒ 退回表上值，並丟掉這一欄的暫存（以表為準，不讓 index 拋錯把整頁炸掉）。
+                chosen = field["_value"]
+                st.session_state[_PENDING_INPUTS_STATE] = live.pending_drop(
+                    st.session_state.get(_PENDING_INPUTS_STATE), field["name"])
             st.radio(
                 field["label"],
                 options,

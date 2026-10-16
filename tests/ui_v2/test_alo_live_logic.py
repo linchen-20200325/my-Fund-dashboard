@@ -1450,3 +1450,10 @@ def test_暫存_帶回與跟著走():
     assert tracked == {"alo_tolerance_pp": {"text": "7", "raw": "4"}}
     assert pending["alo_tolerance_pp"]["text"] == "5"                 # 不改呼叫端那一份
     assert live.pending_track(pending, "alo_basis", "市值") == pending  # 沒有暫存的欄位不新增
+
+
+def test_暫存_丟掉一欄_不改呼叫端那一份():
+    pending = {"alo_basis": {"text": "x", "raw": "成本"}, "alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert live.pending_drop(pending, "alo_basis") == {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert "alo_basis" in pending
+    assert live.pending_drop(None, "alo_basis") == {}

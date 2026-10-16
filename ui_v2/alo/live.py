@@ -640,6 +640,13 @@ def dataset_with_save_errors(dataset, errors) -> dict:
 #   ⛔ 不得改寫 `field["value_text"]`：`_unchanged` 靠它判斷「沒動過」，改寫會讓帶回的字被當成沒動過、
 #   存檔時靜默寫回舊值。
 # - 跟著走：輸入欄的鍵在 session 時，以當下值刷新暫存（`pending_track`），之後若再遇冷卻帶回的是最新內容。
+# - radio（比重基準）帶回時，暫存值若不是現有選項 ⇒ 退回表上值並丟掉該欄暫存（`pending_drop`），不讓頁面崩。
+# 兩種刻意的行為，據實寫明（2026-10-16 稽核 B2／B3，總管判定可接受、不改程式）：
+# - 「冷卻中」的判定是 `raw` 是否為空：`source.load_live` 只在 `user_setting` 讀得到時才填 `setting_raw`
+#   （每個 `SETTING_KEYS` 都帶，值可能是 None），讀不到（含冷卻、其他讀取失敗）就是空字典。所以任何讀取失敗都只保留、
+#   不判定，不分是不是冷卻；讀得到時才以表為準核對。
+# - 解析不過（`save_entries` 的 `error` 是 `BadSettingValue` 原文、沒有真的呼叫寫入）也算該鍵失敗，同樣暫存使用者打的字；
+#   失敗行同時照舊顯示解析器原文，帶回的字不會被誤認為已存進去。
 
 
 def setting_key_of(name):
@@ -687,6 +694,13 @@ def restore_text(pending, name, default):
     """輸入欄的初值：有暫存 ⇒ 暫存的字；沒有 ⇒ 原本的初值（`value_text` 或 radio 的已存值）。"""
     entry = (pending or {}).get(name)
     return default if entry is None else entry["text"]
+
+
+def pending_drop(pending, name) -> dict:
+    """丟掉一欄的暫存（不改呼叫端那一份）。用在 radio 帶回時暫存值已不是現有選項：以表為準。"""
+    out = dict(pending or {})
+    out.pop(name, None)
+    return out
 
 
 def pending_track(pending, name, value) -> dict:

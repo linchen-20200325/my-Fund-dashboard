@@ -617,6 +617,17 @@ def test_暫存帶回_ALO4比重基準radio(monkeypatch, cooling):
     assert at.radio(key="live_alo_basis").value == logic.BASIS_MV
 
 
+def test_暫存帶回_ALO4比重基準暫存值不在選項內_頁面不崩_顯示表上值_丟掉該欄暫存(monkeypatch, cooling):
+    """2026-10-16 稽核 B4：radio 帶回用 `options.index`，暫存值不在選項內時不得拋錯把整頁炸掉。"""
+    at = _save_fails_into_cooling(
+        monkeypatch, cooling, {"alo_basis"},
+        lambda at: at.radio(key="live_alo_basis").set_value(logic.BASIS_MV), "live_alo4_btn_1")
+    at.session_state[page._PENDING_INPUTS_STATE] = {"alo_basis": {"text": "不是選項的值", "raw": _RAW["alo_basis"]}}
+    _recover(at, cooling)
+    assert at.radio(key="live_alo_basis").value == logic.BASIS_COST            # 表上值（_RAW 的「成本」）
+    assert "alo_basis" not in at.session_state[page._PENDING_INPUTS_STATE]
+
+
 def test_暫存帶回_帶回之後再改字_又遇冷卻_帶回的是最新的字(monkeypatch, cooling):
     at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
                                   "live_alo1_btn_0")
