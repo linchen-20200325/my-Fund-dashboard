@@ -1,5 +1,7 @@
 # BACKLOG.md — 動態任務追蹤
 
+> 歷史文件；自 2026-10-16 起現行待辦見 `docs/BACKLOG.md`。
+
 > 與 `STATE.md`（靜態架構地圖 + 高層 Roadmap）分離，本檔追蹤逐項進度。
 > 規則：每項一行 checkbox，附 commit hash / PR # / 狀態。
 
