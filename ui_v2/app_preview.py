@@ -29,7 +29,11 @@
 
 - `SETTINGS_SHEET_ID`：設定試算表（`repositories/settings_sheet_repository.py`）。持倉體檢、資產配置、
   設定與診斷讀 `user_setting`；設定與診斷另讀 `fetch_log`、`market_indicator`；資產配置讀 `market_indicator`。
-  資產配置與設定與診斷的「存檔」、設定與診斷的「重新取數」寫回這一本。沒有預設值，缺值照實顯示未設定。
+  ~~資產配置與設定與診斷的「存檔」、設定與診斷的「重新取數」寫回這一本。~~
+  → 2026-10-16 更正（狀態更新，不是漏刪；上句寫於 2026-10-12，當時為真）：市場總覽、標的探索、資產配置、
+  設定與診斷的「存檔」與設定與診斷的「重新取數」寫回這一本（市場總覽與標的探索 2026-10-13 起接上存檔，
+  見本檔上方五頁表與 `ui_v2/mkt/page.py::render`、`ui_v2/exp/page.py::render` 的 `save_live` 說明）。
+  沒有預設值，缺值照實顯示未設定。
 - `POLICY_SHEET_ID`：保單試算表（`repositories/policy_supplement_repository.py`）。持倉體檢、資產配置讀持倉與保單。
   沒有預設值，不退回其他鍵。
 - `POOL_SHEET_ID`（選填）：選股池試算表（`repositories/pool_repository.py`；不設則用該檔內建的預設那一本）。
