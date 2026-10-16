@@ -599,16 +599,17 @@ def test_持倉體檢_套用後換頁再回來_輸入欄與核心卡用的是同
     fresh_field, fresh_cards = _hld_field(at), _hld_cards(at)
     assert fresh_cards, "抓不到核心卡 —— 下面的比較會變成空比"
     assert fresh_field and fresh_field != _HLD_NEW_START, fresh_field
+    # ~~按「套用」之後核心卡換成新區間、換頁回來兩者一致~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+    # 正式模式「套用」停用、核心卡只讀已存設定 —— 改欄位按套用，核心卡不動；換頁回來輸入欄回到已存值、核心卡照舊。
     at.text_input(key="hld4_window_start").input(_HLD_NEW_START)
-    apply_key = next(b.key for b in at.main.button if b.label == "套用")
-    at.button(key=apply_key).click().run()
+    apply_button = next(b for b in at.main.button if b.label == "套用")
+    assert apply_button.disabled is True
+    at.button(key=apply_button.key).click().run()
     assert not at.exception, [e.value for e in at.exception]
-    applied_cards = _hld_cards(at)
-    assert applied_cards != fresh_cards, "套用新區間沒有改到核心卡 —— 下面的比較驗不到任何東西"
+    assert _hld_cards(at) == fresh_cards
     _go(at, "mkt")
     _go(at, "hld")
-    shown = (_hld_field(at), _hld_cards(at))
-    assert shown in ((_HLD_NEW_START, applied_cards), (fresh_field, fresh_cards)), shown[0]
+    assert (_hld_field(at), _hld_cards(at)) == (fresh_field, fresh_cards)
 
 
 def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
@@ -621,7 +622,8 @@ def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
     assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE,
                                            exp_page._SAVE_RESULTS_STATE, exp_page._RULES_STATE,
                                            exp_page._SEEDED_STATE,  # 2026-10-13 稽核 L 回修
-                                           alo_page._PENDING_INPUTS_STATE)  # 2026-10-16 客戶裁示方案 B
+                                           alo_page._PENDING_INPUTS_STATE,  # 2026-10-16 客戶裁示方案 B
+                                           hld_page._SAVE_RESULTS_STATE)  # 2026-10-16 客戶裁示第 2 點
     script = f"""
 import sys
 sys.path.insert(0, {str(_ROOT)!r})

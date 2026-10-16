@@ -467,7 +467,9 @@ def _settings_rows(window=None):
     return {"rows": rows, "broken_keys": [], "tab_missing": False, "bad_rows": []}
 
 
-def _hld_inputs(div_by_code, *, saved_window=None):
+# ~~`saved_window=None`~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式不再收「套用」的區間，
+# 原本靠 `_model(applied_window=_WINDOW)` 帶區間的測試改成把同一段區間存進設定（計算結果不變）。
+def _hld_inputs(div_by_code, *, saved_window=_WINDOW):
     holding = HF.holdings()
     for h in holding:
         if h["policy_id"] == "DIRECT":
@@ -507,10 +509,10 @@ def _tcb_for(code, ccy, rows):
 _TODAY = dt.date(2026, 9, 28)
 
 
-def _model(loaded, *, applied_window=_WINDOW):
-    """真的走 `live.build_live_model`（含覆蓋期間閘門），與正式頁面同一條路。"""
-    return HL.build_live_model(loaded["dataset"], applied_window=applied_window, today=_TODAY,
-                               **loaded["live_args"])
+def _model(loaded):
+    """真的走 `live.build_live_model`（含覆蓋期間閘門），與正式頁面同一條路。
+    客戶 2026-10-16 裁示第 2 點起不帶 `applied_window`（正式結果只讀已存設定；區間由 `_hld_inputs(saved_window=)` 存進去）。"""
+    return HL.build_live_model(loaded["dataset"], today=_TODAY, **loaded["live_args"])
 
 
 def _hld3(model, code):
@@ -548,16 +550,25 @@ def test_hld_每一檔都確定_接上真資料_HLD3合計與HLD8本金佔比():
     assert _hld3(model, "BBBB")["期間配息合計"]["text"] == HG.not_applicable_text("區間內無配息")
 
 
-def test_hld_有一檔分辨不出_整張配息表照舊列為尚未接上_不說成區間內無配息():
-    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-01-15", 0.1059)]),
+# ~~test_hld_有一檔分辨不出_整張配息表照舊列為尚未接上_不說成區間內無配息~~ → 客戶 2026-10-16 裁示第 5 點
+# （有意識的更正，不是漏刪）：改為只有分辨不出的那一檔資料未備，其他檔照常。舊斷言（`pending_tables` 含 dividend、
+# `dividend` 為空）在寫下當時是「全有或全無」規則下的正確期望。
+def test_hld_有一檔分辨不出_只有那一檔資料未備_其他檔照常_不說成區間內無配息():
+    divs = {"AAAA": _tcb_for("AAAA", "USD", [("2025-12-15", 0.1000), ("2026-01-15", 0.1059)]),
             "BBBB": _div([], outcome=FO.DIV_OUTCOME_UNDETERMINED),
-            "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
+            "CCCC": _tcb_for("CCCC", "EUR", [("2025-12-10", 0.1400), ("2026-02-10", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
-    assert loaded["dataset"]["pending_tables"] == ["fund_profile", "dividend"]
-    assert loaded["dataset"]["dividend"] == []
+    assert loaded["dataset"]["pending_tables"] == ["fund_profile"]
+    assert loaded["dataset"]["dividend_not_ready"] == ["BBBB"]
+    assert {r["fund_code"] for r in loaded["dataset"]["dividend"]} == {"AAAA", "CCCC"}
     b = _metrics(loaded, holding, "BBBB")
     assert b["期間配息合計"]["_state"] == HG.STATE_MISSING
+    model = _model(loaded)
+    assert _hld3(model, "BBBB")["期間配息合計"]["text"] == HG.ND_TEXT
+    assert _hld3(model, "BBBB")["期間配息合計"]["text"] != HG.not_applicable_text("區間內無配息")
+    for code in ("AAAA", "CCCC"):
+        assert _hld3(model, code)["期間配息合計"]["_state"] == HG.STATE_OK, code
 
 
 def test_hld_配息取數失敗_走既有的取數失敗_原文經遮蔽():
@@ -750,25 +761,38 @@ def test_必修4_M13_legacy段_沒有配息一律undetermined(monkeypatch):
     assert out["outcome"] == FO.DIV_OUTCOME_UNDETERMINED     # 三個來源都回空，但 legacy 段另跑了沒有狀態的解析
 
 
-def test_必修1b_區間起點早於最舊一筆除息日_整張退回尚未接上_不說區間內無配息():
+# ~~test_必修1b_區間起點早於最舊一筆除息日_整張退回尚未接上_不說區間內無配息~~ → 客戶 2026-10-16 裁示第 5 點
+# （有意識的更正，不是漏刪）：閘門改為逐檔；區間改取已存設定（第 2 點，`_gate_dividend_coverage` 不再收區間參數）。
+def test_必修1b_區間起點早於最舊一筆除息日_只有那幾檔退回資料未備_不說區間內無配息():
     divs = {"AAAA": _tcb_for("AAAA", "USD", [("2026-03-15", 0.1059)]),
             "BBBB": _div([], outcome=FO.DIV_OUTCOME_NONE, evidenced=True),
             "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
     kw, holding = _hld_inputs(divs)
     loaded = HL.assemble_live_load(**kw)
     assert loaded["live_args"]["dividend_coverage"] == {"AAAA": "2026-03-15", "CCCC": "2026-02-10"}
-    # 區間 2026-01-01 起 → 早於 AAAA／CCCC 的最舊一筆
-    gated = HL._gate_dividend_coverage(loaded["dataset"], loaded["live_args"]["dividend_coverage"], _WINDOW)
-    assert gated["dividend"] == [] and "dividend" in gated["pending_tables"]
-    for code in ("AAAA", "BBBB", "CCCC"):
+    # 存檔區間 2026-01-01 起 → 早於 AAAA／CCCC 的最舊一筆：只有那兩檔進資料未備、列被拿掉
+    gated = HL._gate_dividend_coverage(loaded["dataset"], loaded["live_args"]["dividend_coverage"])
+    assert gated["dividend"] == [] and gated["dividend_not_ready"] == ["AAAA", "CCCC"]
+    assert gated["pending_tables"] == ["fund_profile"]
+    for code in ("AAAA", "CCCC"):
         m = HG.fund_metrics(gated, next(h for h in holding if h["fund_code"] == code), _WINDOW)
         assert m["期間配息合計"]["_state"] == HG.STATE_MISSING
         assert m["期間配息合計"]["text"] != HG.not_applicable_text("區間內無配息")
-    # 區間起點不早於任何一檔的最舊一筆 → 照接
-    late = ("2026-03-15", HF.WINDOW_END)
-    assert HL._gate_dividend_coverage(loaded["dataset"], loaded["live_args"]["dividend_coverage"], late) \
-        is loaded["dataset"]
+    # BBBB 沒有任何配息列（L2 確定不配息），不在覆蓋期間的射程內：照舊「區間內無配息」
+    m = HG.fund_metrics(gated, next(h for h in holding if h["fund_code"] == "BBBB"), _WINDOW)
+    assert m["期間配息合計"]["text"] == HG.not_applicable_text("區間內無配息")
+    # 只有一檔早於覆蓋期間（區間 2026-03-01 起：早於 AAAA 的 03-15、晚於 CCCC 的 02-10）→ 只標 AAAA
+    kw_mid, _h = _hld_inputs(divs, saved_window=("2026-03-01", HF.WINDOW_END))
+    mid = HL.assemble_live_load(**kw_mid)
+    gated_mid = HL._gate_dividend_coverage(mid["dataset"], mid["live_args"]["dividend_coverage"])
+    assert gated_mid["dividend_not_ready"] == ["AAAA"]
+    assert {r["fund_code"] for r in gated_mid["dividend"]} == {"CCCC"}
+    # 區間起點不早於任何一檔的最舊一筆 → 照接（原樣交回）
+    kw_late, _h = _hld_inputs(divs, saved_window=("2026-03-15", HF.WINDOW_END))
+    late = HL.assemble_live_load(**kw_late)
+    assert HL._gate_dividend_coverage(late["dataset"], late["live_args"]["dividend_coverage"]) is late["dataset"]
     assert loaded["dataset"]["dividend"] and loaded["dataset"]["pending_tables"] == ["fund_profile"]   # 輸入沒被改
+    assert loaded["dataset"]["dividend_not_ready"] == []
 
 
 def _late_coverage_divs():
@@ -777,29 +801,25 @@ def _late_coverage_divs():
             "CCCC": _tcb_for("CCCC", "EUR", [("2026-02-10", 0.1492)])}
 
 
-def test_必修1b_build_live_model_按套用的區間早於覆蓋期間_HLD3顯示資料未備():
-    kw, _holding = _hld_inputs(_late_coverage_divs())
-    loaded = HL.assemble_live_load(**kw)
-    model = _model(loaded, applied_window=_WINDOW)          # 不吞例外：直接斷言結果
-    for code in ("AAAA", "BBBB", "CCCC"):
-        total = _hld3(model, code)["期間配息合計"]
-        assert total["_state"] == HG.STATE_MISSING and total["text"] == HG.ND_TEXT
-        assert total["text"] != HG.not_applicable_text("區間內無配息")
-    # 對照組：按套用的區間不早於任何一檔的最舊一筆 → 照接、出數
-    ok = _model(loaded, applied_window=("2026-03-15", HF.WINDOW_END))
-    assert _hld3(ok, "AAAA")["期間配息合計"]["_state"] == HG.STATE_OK
+# ~~test_必修1b_build_live_model_按套用的區間早於覆蓋期間_HLD3顯示資料未備~~ → 客戶 2026-10-16 裁示第 2 點
+# （有意識的更正，不是漏刪）：正式模式不再收套用的區間，「按套用」這一條路已不存在；同一個閘門由下一條
+# `test_N12_…`（存檔區間）照樣覆蓋。原條在寫下當時為真。
 
 
 def test_N12_沒按套用_走存檔區間_閘門照樣觸發():
     kw, _holding = _hld_inputs(_late_coverage_divs(), saved_window=_WINDOW)
     loaded = HL.assemble_live_load(**kw)
-    model = _model(loaded, applied_window=None)             # 預設載入路徑：區間取自存檔設定
+    model = _model(loaded)             # 預設載入路徑：區間取自存檔設定
     assert model["_window"] == _WINDOW
-    for code in ("AAAA", "BBBB", "CCCC"):
-        assert _hld3(model, code)["期間配息合計"]["_state"] == HG.STATE_MISSING
+    # ~~三檔都資料未備~~ → 客戶 2026-10-16 裁示第 5 點（有意識的更正，不是漏刪）：只有早於覆蓋期間的兩檔；
+    # BBBB 沒有配息列（確定不配息），照舊「區間內無配息」。
+    for code in ("AAAA", "CCCC"):
+        total = _hld3(model, code)["期間配息合計"]
+        assert total["_state"] == HG.STATE_MISSING and total["text"] == HG.ND_TEXT, code
+    assert _hld3(model, "BBBB")["期間配息合計"]["text"] == HG.not_applicable_text("區間內無配息")
     # 對照組：存檔區間落在覆蓋期間內 → 照接
     kw2, _h2 = _hld_inputs(_late_coverage_divs(), saved_window=("2026-03-15", HF.WINDOW_END))
-    ok = _model(HL.assemble_live_load(**kw2), applied_window=None)
+    ok = _model(HL.assemble_live_load(**kw2))
     assert _hld3(ok, "AAAA")["期間配息合計"]["_state"] == HG.STATE_OK
 
 

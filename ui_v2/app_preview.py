@@ -14,10 +14,10 @@
 | 頁 | 模式 | 呼叫方式（與哪個入口同名參數、同一物件） |
 |---|---|---|
 | 市場總覽 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_mkt_live.py`（2026-10-13 起接上存檔） |
-| 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error)` ＝ `ui_v2/app_hld_live.py` |
+| 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error, save_live=source.save_setting)` ＝ `ui_v2/app_hld_live.py`（2026-10-16 起接上存檔） |
 | ~~標的探索~~ | ~~**示意資料**~~ | ~~`page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示~~ |
 | 標的探索 | 真資料（第一批） | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_exp_live.py`（2026-10-13 起；狀態更新，不是漏刪 —— 上一列在寫下當時為真）。母體＝選股池的基金代碼，~~其餘欄「⬜ 資料未備」~~（2026-10-15 狀態更新，不是漏刪：#966 起基本資料接 `exp_profile`、淨值與配息接 `exp_nav`）；不再加示意資料標示（正式資料不加示意，比照 hld 2026-10-02 前例） |
-| 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_alo_live.py` |
+| 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting, mask_error=source.mask_error)` ＝ `ui_v2/app_alo_live.py`（2026-10-16 起另傳遮蔽函式） |
 | 設定與診斷 | 真資料 | `page.render(load_live=..., save_live=source.save_setting, refetch_live=source.refetch)` ＝ `ui_v2/app_set_live.py` |
 
 ~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
@@ -89,10 +89,13 @@
      （第 1 項清掉後失敗行已不在，帶回的字就看不出是沒存進去的內容）。另本組 2026-10-16 實測：從設定與診斷
      換回來的第一輪，`live_alo_*` 這些鍵在 session 裡讀到的是設定與診斷那一頁同名欄的值，不清的話暫存會被它刷掉。
      代價同第 1 項：離開資產配置再回來，沒存成功的內容不再帶回，欄位改顯示試算表上的值。
+  8. 持倉體檢「存檔」那一次的逐鍵結果（`ui_v2/hld/page.py::_SAVE_RESULTS_STATE`，2026-10-16 起）：理由同第 3 項。
   ⚠️ 其他頁程式自己寫的 key（例如持倉體檢的套用值）未逐一處理，見交付報告的登記。
   → 2026-10-15（Phase 2 批 1）持倉體檢的套用值（`ui_v2/hld/page.py::_APPLIED_KEY`）已重現查過：換頁回來時欄位還沒畫過，
     `ui_v2/hld/logic.py::_build_page_model` 以已套用的區間回填欄位，輸入欄與計算一致，**不加進換頁清單**
     （守衛：tests/ui_v2/test_preview_page.py 的「套用後換頁再回來」那一條）。其餘頁程式自己寫的 key 仍未逐一查。
+  → 2026-10-16（客戶裁示第 2 點）：持倉體檢正式模式「套用」停用、計算只讀已存設定，套用值在本預覽已不進任何計算
+    （同上面第 2 項市場總覽的情形）；上一段描述的是當時的現象。
 """
 
 from __future__ import annotations
@@ -152,6 +155,8 @@ _PAGE_STATE_TO_DROP = (
     exp_page._SEEDED_STATE,
     # 2026-10-16（客戶裁示方案 B）：資產配置寫入失敗那個鍵的輸入欄暫存，換頁一併清（理由見檔頭第 7 項）。
     alo_page._PENDING_INPUTS_STATE,
+    # 2026-10-16：持倉體檢存檔接上 user_setting（客戶裁示第 2 點）後的「按存檔那一次的逐鍵結果」，理由同市場總覽（檔頭第 8 項）。
+    hld_page._SAVE_RESULTS_STATE,
 )
 
 
@@ -174,7 +179,7 @@ def page_mkt() -> None:
 
 def page_hld() -> None:
     _on_page("hld")
-    hld_page.render(load_live=hld_source.load_live, mask_error=hld_source.mask_error)
+    hld_page.render(load_live=hld_source.load_live, mask_error=hld_source.mask_error, save_live=hld_source.save_setting)
 
 
 def page_exp() -> None:
@@ -187,7 +192,7 @@ def page_exp() -> None:
 
 def page_alo() -> None:
     _on_page("alo")
-    alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting)
+    alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting, mask_error=alo_source.mask_error)
 
 
 def page_set() -> None:

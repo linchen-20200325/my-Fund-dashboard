@@ -58,7 +58,8 @@ def _app(kind):
         original = getattr(page, name)
         setattr(page, name, boom)
         try:
-            page.render(load_live=lambda: {"dataset": {}, "live_args": {}}, mask_error=mask)
+            page.render(load_live=lambda: {"dataset": {}, "live_args": {}}, mask_error=mask,
+                        save_live=lambda *_a: {"status": "saved"})  # 2026-10-16 第 2 點
         finally:
             setattr(page, name, original)
         return
@@ -92,7 +93,7 @@ def _app(kind):
         def load():
             return {"dataset": dataset, "live_args": live_args}
 
-    page.render(load_live=load, mask_error=mask)
+    page.render(load_live=load, mask_error=mask, save_live=lambda *_a: {"status": "saved"})  # 2026-10-16 第 2 點
 
 
 def _run(kind):

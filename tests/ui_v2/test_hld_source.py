@@ -234,7 +234,7 @@ def test_代碼對照拋L1例外_正式入口畫錯誤畫面_不印Traceback_不
     def _app():
         from ui_v2.hld import page, source
 
-        page.render(load_live=source.load_live, mask_error=source.mask_error)
+        page.render(load_live=source.load_live, mask_error=source.mask_error, save_live=source.save_setting)
 
     at = AppTest.from_function(_app, default_timeout=60)
     at.run()

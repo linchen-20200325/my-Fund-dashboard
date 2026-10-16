@@ -606,6 +606,28 @@ def pending_tables(dataset) -> frozenset:
     return frozenset(value)
 
 
+def dividend_not_ready(dataset) -> frozenset:
+    """配息**逐檔**資料未備的代碼（客戶 2026-10-16 裁示第 5 點）：正式模式由 `live.assemble_live_load` 與
+    `live._gate_dividend_coverage` 放進 dataset —— 配息尚未確定（L2 非 settled 且非取數失敗）、代碼對照失敗、
+    或所選區間起點早於該檔最舊除息日。那幾檔的配息列在進來之前就已經拿掉；畫面上只有它們的配息值印 `⬜ 資料未備`。
+    ⚠️ 假資料模式**不設**這個鍵 ⇒ 回空集合，畫面一格不變。
+    ⛔ 形狀不對一律 raise（§1 Fail Loud），體例同 `pending_tables()`；點名持倉以外的代碼同 `fund_errors()` raise。
+    """
+    value = dataset.get("dividend_not_ready")
+    if value is None:
+        return frozenset()
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        raise TypeError(f"dividend_not_ready 必須是基金代碼的集合，收到 {type(value).__name__}：{value!r}")
+    bad = [code for code in value if not isinstance(code, str) or not code]
+    if bad:
+        raise TypeError(f"dividend_not_ready 裡每一項都必須是非空字串，收到：{bad!r}")
+    held = {h["fund_code"] for h in dataset.get("holding", [])}
+    stray = sorted(code for code in value if code not in held)
+    if stray:
+        raise ValueError(f"dividend_not_ready 點名了持倉裡沒有的 fund_code：{stray!r}")
+    return frozenset(value)
+
+
 # 逐檔取數的表：接真資料後，淨值與配息是**逐檔**即時取的，會有「某一檔取失敗、其他檔正常」。
 FUND_ERROR_TABLES = ("nav", "dividend")
 
@@ -918,7 +940,10 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
     # `⬜ 資料未備`（與 `HLD-3` 空狀態欄「區間末無淨值 → 佔比顯示 `⬜ 資料未備`」同一個字面值）。
     # ⚠️ 區間未設時照舊「尚未設定區間」（與 `nav_missing` 同一個形狀）；
     #    取數失敗照舊由 `main_value_state()` 先判成 `系統錯誤`。
-    div_missing = bool(has_window and "dividend" in pending)
+    #    → 客戶 2026-10-16 裁示第 5 點（有意識的更正，不是漏刪）：另有**逐檔**的一種 —— 該檔在 `dividend_not_ready()`
+    #      裡（配息尚未確定、代碼對照失敗、或區間起點早於該檔最舊除息日；那幾檔的列在進來之前就已拿掉）。
+    #      只有那幾檔進 `資料未備`，其他檔照常；上面「本輪不處理」那一句在寫下當時為真。
+    div_missing = bool(has_window and ("dividend" in pending or code in dividend_not_ready(dataset)))
     na_div = None if div_missing else div_na()
     na_div_text = not_applicable_text(na_div) if na_div else None
 
@@ -1313,7 +1338,9 @@ def _missing_other_lines(metrics, missing_other, pending) -> list:
     """
     hit = [m for m in metrics if m["_fund_code"] in missing_other]
     lines = []
-    if "dividend" in pending and any(m["div_missing"] for m in hit):
+    # ~~`"dividend" in pending and any(m["div_missing"] ...)`~~ → 客戶 2026-10-16 裁示第 5 點（有意識的更正，不是漏刪）：
+    # 配息資料未備也可能是**逐檔**的（`dividend_not_ready()`），`div_missing` 已涵蓋兩種，不再另看 `pending`。
+    if any(m["div_missing"] for m in hit):
         lines.append(empty_source_text(["dividend"]))
     if "fund_profile" in pending and any(m["nav_starts_late"] for m in hit):
         lines.append(empty_source_text(["fund_profile"]))
@@ -2067,6 +2094,47 @@ def _check_holding_ids(holdings) -> None:
         raise HoldingIdError(f"holding_id 重複：{dup!r}")
 
 
+# 客戶 2026-10-16 裁示第 8 點（`44` 4.1：業務上唯一的鍵（`policy_id`, `fund_code`），同鍵多列顯示時把金額與單位數加總成一列）。
+# 客戶護欄（原文記在 `44` 檔尾〈第七節第三小節之六〉與交接本〈已裁示（2026-10-16）〉第 69 點）：同一個正式鍵、同一語意才加總；
+# 不得因名稱相似而合併。
+# - 鍵的比對規則與 L2 `services/v2_tables/alo_holdings.py::_key_text` 相同：只去前後空白，不改大小寫、不補 0；
+#   ⛔ 絕不拿基金名稱比對（名稱只拿來驗「同一語意」，名稱相同但鍵不同 → 照舊兩列）。
+# - 只加總下列三欄；其餘欄取第一列（含 `holding_id`；顯示名稱 `fund_name` 也取第一列）。
+# - 同鍵而下列任一欄不同 → 不是同一語意，不加總、也不挑一列 —— raise（呈現方式同 `ui_v2/alo/logic.py::aggregated_holdings`
+#   的 bucket 衝突；正式模式由 `page.render` 的錯誤畫面接住，不印 Traceback）。
+# 本頁不 import ui_v2.alo（各頁自足），所以另寫一份。
+HOLDING_SUM_COLUMNS = ("units_shares", "cost_orig_ccy", "cost_twd")
+# ~~HOLDING_SAME_COLUMNS = ("ccy", "fund_name", "bucket", "opened_on", "last_synced_at")~~
+# → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：拿掉 `fund_name` —— 同一個正式鍵下，名稱是手打的標籤、
+#   不是語意欄位；與 `ui_v2/alo/logic.py::aggregated_holdings`（不比名稱）一致；名稱打字差異不得讓整頁失效。
+#   舊表述在寫下當時依派工單列舉；被權衡掉的是「名稱不同就整頁進錯誤畫面」這個代價。
+HOLDING_SAME_COLUMNS = ("ccy", "bucket", "opened_on", "last_synced_at")
+
+
+def _holding_key(row) -> tuple:
+    def text(value):
+        return value.strip() if isinstance(value, str) else value
+    return (text(row.get("policy_id")), text(row.get("fund_code")))
+
+
+def merge_same_key_holdings(holdings) -> list:
+    """同鍵多列加總成一列（見上方常數的註解）。順序照第一次出現的位置；不改輸入。"""
+    merged, order = {}, []
+    for row in holdings:
+        key = _holding_key(row)
+        if key not in merged:
+            merged[key] = dict(row)
+            order.append(key)
+            continue
+        base = merged[key]
+        diff = [column for column in HOLDING_SAME_COLUMNS if base.get(column) != row.get(column)]
+        if diff:
+            raise ValueError(f"{key} 兩列的 {'、'.join(diff)} 不同（同鍵不同語意，不加總）")
+        for column in HOLDING_SUM_COLUMNS:
+            base[column] = base[column] + row[column]
+    return [merged[key] for key in order]
+
+
 def _row_is_open(holding_id, open_fund) -> bool:
     """這一列是不是展開中。⛔ `None == None` 不算展開 —— 沒有鍵的列絕不自動展開。"""
     return bool(holding_id) and holding_id == open_fund
@@ -2562,6 +2630,13 @@ def _build_page_model(
     dataset, *, fields, viewport_width, open_fund, applied_window=None, applied_rules=None,
     nav_not_ready_codes=frozenset(), nav_not_ready_days=None,
 ) -> dict:
+    # 客戶 2026-10-16 裁示第 8 點：同鍵多列先加總成一列（`merge_same_key_holdings`），之後每一塊都只看到一列。
+    # `holding_id` 先驗**原始列**再加總：加總會留第一列的 id，第二列的 id 壞了（空、重複、帶空白）不得因此被蓋掉（§1）。
+    # （派工單原寫「加總在 `_check_holding_ids` 之前」；改為先驗後加總，總管 2026-10-16 同意，理由即上一行。）
+    _check_holding_ids(dataset.get("holding", []))
+    merged_holdings = merge_same_key_holdings(dataset.get("holding", []))
+    if len(merged_holdings) != len(dataset.get("holding", [])):
+        dataset = {**dataset, "holding": merged_holdings}
     # 📌 2026-10-05「讀取失敗不說空」（客戶 2026-10-05 核准開工）：讀不到不等於空。
     #    設定或持倉表讀取失敗時，不從空列表推出「未設定」或「尚未建立任何持倉」。
     errors = dataset.get("errors", {})
@@ -2588,9 +2663,10 @@ def _build_page_model(
     applied_window = saved_window(dataset) if applied_window is None else tuple(applied_window)
     rules = saved_rules(dataset) if applied_rules is None else list(applied_rules)
     # `holding_id` 先驗（`44` 4.1 主鍵）：`fund_metrics()` 與 `_build_hld5()` 都直接拿它當鍵。
-    _check_holding_ids(dataset.get("holding", []))
+    # → 客戶 2026-10-16 裁示第 8 點：這一步移到本函式開頭、加總之前（見上；狀態更新，不是漏刪）。
     # `fund_errors` 形狀先驗：空持倉時 `fund_metrics()` 一次也不會跑，壞形狀不得因此靜默通過（§1）。
     fund_errors(dataset)
+    dividend_not_ready(dataset)   # 同上理由（客戶 2026-10-16 裁示第 5 點）
     metrics = all_metrics(dataset, applied_window, window_error=settings_error if window_unknown else None)
     # 總管 2026-10-13 裁決：只標記，不改任何一個值（那幾檔的淨值列在進來之前就已經不在了）。
     not_ready = _check_not_ready(nav_not_ready_codes, nav_not_ready_days)

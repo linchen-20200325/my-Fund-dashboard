@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 
 import streamlit as st
@@ -417,6 +418,35 @@ def _on_apply() -> None:
         state[_APPLIED_KEY] = applied
 
 
+# 客戶 2026-10-16 裁示第 2 點：正式模式按「存檔」那一次的逐鍵結果（`{鍵: None（已存）或失敗訊息原文}`）。
+# 是按鈕那一次的事、不是讀表的結果；體例同 `ui_v2/mkt/page.py::_SAVE_RESULTS_STATE`。
+_SAVE_RESULTS_STATE = "_hld_save_results"
+
+
+def _on_save_live(save_live) -> None:
+    """正式模式「存檔」：欄位當下值經 `live.hld4_save_entries` 檢查後逐鍵寫進 `user_setting`。
+    不重算任何東西、不清欄位 —— 下一次重跑由 `load_live` 重新讀 `user_setting`，正式結果才換成已存值。"""
+    _keep_hld4_open()
+    state = st.session_state
+    entries = live.hld4_save_entries(
+        state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
+    )
+    # 連同當下寫出的值一起記（`live.save_record`）：欄位之後再改，結果就過期不顯示（`live.current_save_results`）。
+    state[_SAVE_RESULTS_STATE] = live.save_record(entries, live.run_saves(entries, save_live))
+
+
+def _current_save_results():
+    """這一次存檔的結果；欄位已改得與存檔當下不同 → 過期，清掉並回 None（判定在 `live.current_save_results`）。"""
+    state = st.session_state
+    record = state.get(_SAVE_RESULTS_STATE)
+    results = live.current_save_results(
+        record, state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
+    )
+    if record and results is None:
+        del state[_SAVE_RESULTS_STATE]
+    return results
+
+
 def _applied() -> dict:
     try:
         return st.session_state.get(_APPLIED_KEY) or {}
@@ -480,7 +510,7 @@ def _hld4_keep_open() -> bool:
         return False
 
 
-def _render_hld4(block: dict) -> None:
+def _render_hld4(block: dict, *, on_save=None) -> None:
     with _expander(block, keep_open=_hld4_keep_open()):
         st.caption(block["answers"])
         columns = st.columns(2)
@@ -520,7 +550,10 @@ def _render_hld4(block: dict) -> None:
                     args=(index,),
                 )
         _lines(block["detail_lines"])
-        _buttons(block, "hld4", on_click={"套用": _on_apply, "新增列": _on_add_row})
+        clicks = {"套用": _on_apply, "新增列": _on_add_row}
+        if on_save is not None:   # 正式模式（客戶 2026-10-16 裁示第 2 點）；示範模式「存檔」照舊不接任何動作
+            clicks["存檔"] = on_save
+        _buttons(block, "hld4", on_click=clicks)
         _lines(block["notes"])
         st.markdown(
             f'<div class="hld-detail">{_badges_html(block["badges"])}'
@@ -846,7 +879,7 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
         )
 
 
-def render(*, load_live=None, mask_error=None) -> None:
+def render(*, load_live=None, mask_error=None, save_live=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
@@ -868,13 +901,20 @@ def render(*, load_live=None, mask_error=None) -> None:
     正式模式下 `load_live()` 或 `live.build_live_model(...)` 拋例外 → 不印 Traceback、也不吞：
     畫出錯誤畫面（`_render_live_error`），寫出例外型別與遮蔽後的訊息原文，整頁其餘塊不畫。
     遮蔽或取字串失敗時，退路只印例外型別、不帶訊息內容（見 `_live_error_line`）。
+
+    save_live（客戶 2026-10-16 裁示第 2 點）：寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`）。
+    正式模式**一定要給**、示範模式**不得給**（與 `mask_error` 同一條規矩）。HLD-4「存檔」經它寫進 `user_setting`；
+    **正式結果只讀 `load_live` 交回的已存設定**，「套用」停用（`live.APPLY_DISABLED_REASON`），session 裡的套用值
+    在正式模式一律不讀；存檔後下一次重跑重新讀 `user_setting`，正式結果才換成新值。示範模式照舊由「套用」驅動。
     """
-    if (load_live is None) != (mask_error is None):
-        raise ValueError("load_live 與 mask_error 要一起傳（正式模式兩個都要，示範模式兩個都不傳）")
+    if not ((load_live is None) == (mask_error is None) == (save_live is None)):
+        raise ValueError(
+            "load_live、mask_error、save_live 要一起傳（正式模式三個都要，示範模式三個都不傳）"
+        )
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
-    applied = _applied()
     if load_live is None:
+        applied = _applied()
         scenario = _pick_scenario()
         args = dict(fixtures.scenario(scenario))
         args["fields"] = _current_fields(args.get("fields"))
@@ -887,11 +927,13 @@ def render(*, load_live=None, mask_error=None) -> None:
         # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
         open_fund = _open_fund()
         fields = _current_fields(None)
+        save_results = _current_save_results()   # 客戶 2026-10-16 裁示第 2 點（同理放在 try 外）；過期的不顯示
         try:
             loaded = load_live()
+            # 客戶 2026-10-16 裁示第 2 點：不轉 session 裡的套用值 —— 正式結果只讀已存設定（`build_live_model` 沒有那兩個參數）。
             model = live.build_live_model(
                 loaded["dataset"], open_fund=open_fund, fields=fields,
-                applied_window=applied.get("window"), applied_rules=applied.get("rules"),
+                save_results=save_results,
                 **loaded["live_args"]
             )
         except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印
@@ -929,9 +971,13 @@ def render(*, load_live=None, mask_error=None) -> None:
         unsafe_allow_html=True,
     )
     # `44` 2.1：層 3 只有兩塊，兩塊並排同一列，第三欄空著。
+    on_save = None if save_live is None else functools.partial(_on_save_live, save_live)
     for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
         with column:
-            _RENDERERS[code](logic.find_block(model, code))
+            if code == "HLD-4":
+                _render_hld4(logic.find_block(model, code), on_save=on_save)
+            else:
+                _RENDERERS[code](logic.find_block(model, code))
 
     st.markdown(
         '<div class="hld-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True

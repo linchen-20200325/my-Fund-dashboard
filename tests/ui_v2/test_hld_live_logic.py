@@ -101,6 +101,21 @@ def _build(*args, **kw):
     return live.build_live_model(*args, direct_policy_id=_DIRECT_ID, **kw)
 
 
+def _saved(args, *, window=None, rules=None):
+    """客戶 2026-10-16 裁示第 2 點：正式模式不再收「套用」的值，只讀已存設定。
+    原本以 `applied_window`／`applied_rules` 驗正式版的測試，改成把同一組值**存進** dataset 的 `user_setting`。"""
+    out = copy.deepcopy(args)
+    values = {}
+    if window is not None:
+        values.update(hld_window_start=window[0], hld_window_end=window[1])
+    if rules is not None:
+        values["hld_deviation_rules"] = [dict(r) for r in rules]
+    for row in out["dataset"]["user_setting"]:
+        if row["setting_key"] in values:
+            row["setting_value"] = values[row["setting_key"]]
+    return out
+
+
 def _first_holding(dataset):
     holdings = dataset.get("holding") or []
     return holdings[0]["holding_id"] if holdings else None
@@ -575,18 +590,24 @@ def test_兩條執行緒同時組示範與正式_輸出逐字與單獨組的相�
 # ───────────────────────── 3. 按鈕（裁示 A） ─────────────────────────
 
 
-def test_停用原因逐字照裁示A():
-    assert live.SAVE_DISABLED_REASON == "存檔寫入端尚未接上，這一輪只讀不寫"
+# ~~三條：「停用原因逐字照裁示A」「存檔停用原因_與alo頁逐字相同」「停用原因沒有指示動作的句子」~~
+# → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式「存檔」接上 user_setting，
+#   `SAVE_DISABLED_REASON` 拿掉；改驗「套用」停用的原因句（與市場總覽同一條裁示的前例逐字相同）。
 
 
-def test_存檔停用原因_與alo頁逐字相同():
-    from ui_v2.alo import live as alo_live
+def test_第2點_套用停用原因_與市場總覽前例逐字相同():
+    from ui_v2.mkt import live as mkt_live
 
-    assert live.SAVE_DISABLED_REASON == alo_live.SAVE_DISABLED_REASON
+    assert live.APPLY_DISABLED_REASON == mkt_live.APPLY_DISABLED_REASON
+    assert not hasattr(live, "SAVE_DISABLED_REASON")
 
 
-def test_停用原因沒有指示動作的句子():
-    assert "請" not in live.SAVE_DISABLED_REASON
+def test_第2點_套用停用原因_禁詞零命中():
+    banned = [chr(0x4e00) + chr(0x9375), chr(0x6700) + chr(0x4f73), chr(0x63a8) + chr(0x85a6),
+              chr(0x6700) + chr(0x9069), chr(0x8cb7) + chr(0x9032), chr(0x8ce3) + chr(0x51fa),
+              chr(0x52a0) + chr(0x78bc), chr(0x6e1b) + chr(0x78bc)]
+    for text in (live.APPLY_DISABLED_REASON, live.TEXT_SAVED, live.TEXT_SAVE_FAILED, live.TEXT_PREVIOUS_FAILED):
+        assert not [w for w in banned if w in text], text
 
 
 def _buttons_by_block(model):
@@ -595,14 +616,36 @@ def _buttons_by_block(model):
     }
 
 
+# ~~test_存檔一律停用_原因逐字~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+# 「存檔」不再一律停用（照 logic 的存檔判定，且欄位當下值須可套用）；「套用」一律停用，原因逐字。
 @pytest.mark.parametrize("name", _ALL)
-def test_存檔一律停用_原因逐字(name):
-    saves = [b for b in logic.collect_buttons(_live(name)) if b["_action_kind"] == "存檔"]
-    assert len(saves) == 1
-    assert saves[0]["label"] == "存檔"
-    assert saves[0]["_enabled"] is False
-    assert saves[0]["_visible"] is True
-    assert saves[0]["disabled_reason"] == live.SAVE_DISABLED_REASON
+def test_第2點_存檔照logic判定_套用一律停用_原因逐字(name):
+    demo = logic.find_block(_demo(name), "HLD-4")
+    got = logic.find_block(_live(name), "HLD-4")
+    d = {b["_action_kind"]: b for b in demo["buttons"]}
+    g = {b["_action_kind"]: b for b in got["buttons"]}
+    assert g["存檔"]["label"] == "存檔" and g["存檔"]["_visible"] is True
+    assert g["存檔"]["_enabled"] is (d["存檔"]["_enabled"] and d["套用"]["_enabled"])
+    if not d["存檔"]["_enabled"]:
+        assert g["存檔"]["disabled_reason"] == d["存檔"]["disabled_reason"]
+    assert g["套用"]["_enabled"] is False and g["套用"]["_visible"] is True
+    assert g["套用"]["disabled_reason"] == live.APPLY_DISABLED_REASON
+
+
+@pytest.mark.parametrize("fields, reason", [
+    ({"window_start": "2026-01-01", "window_end": None}, logic.TEXT_BAD_RANGE),            # 只填一格
+    ({"window_start": None, "window_end": "2026-09-19"}, logic.TEXT_BAD_RANGE),           # 只填另一格
+    ({"window_start": "2026-01-01", "window_end": "2026-09-19",
+      "rule_rows": [("最大回撤", "", "-1")]}, logic.TEXT_RULES_BAD),                      # 門檻列不合格
+])
+def test_第2點_欄位不可套用時_存檔也停用_原因沿用logic(fields, reason):
+    """logic 的存檔判定只看兩格皆空與兩格皆填而不合格；只填一格、門檻列不合格時它照樣可存 ——
+    正式模式存進去的就是正式結果，這兩種也不得存。"""
+    demo = logic.find_block(_demo("full", fields=fields), "HLD-4")
+    assert {b["_action_kind"]: b["_enabled"] for b in demo["buttons"]}["存檔"] is True   # 正控：logic 單看是可存的
+    got = logic.find_block(_live("full", fields=fields), "HLD-4")
+    save = next(b for b in got["buttons"] if b["_action_kind"] == "存檔")
+    assert (save["_enabled"], save["disabled_reason"]) == (False, reason)
 
 
 # 客戶 2026-10-09 裁示：正式畫面拿掉「重新取數」（不保留停用＋原因）。
@@ -661,7 +704,8 @@ def test_其他類按鈕的啟用狀態_一格不動(name):
     assert len(demo) == len(got)
     for d, g in zip(demo, got):
         assert d["_action_kind"] == g["_action_kind"]
-        if g["_action_kind"] not in ("存檔", "取數"):
+        # 客戶 2026-10-16 裁示第 2 點：「套用」在正式模式停用（另一條測試驗），不在「一格不動」之列。
+        if g["_action_kind"] not in ("存檔", "取數", "套用"):
             assert (g["_enabled"], g["disabled_reason"]) == (d["_enabled"], d["disabled_reason"])
 
 
@@ -1172,16 +1216,15 @@ _TRIMMED = {
     "HLD-8": "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。"
     "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。",
     "HLD-0": "（另：尚未設定門檻。）",
-    # S6a 第四輪（規格組必修 2／紅隊 J1）：不是開發過程字句，同一體例只刪不加。
-    "HLD-4": "「套用」只讀這些欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，"
-    "不寫任何資料表、不改欄位的內容。",
+    # ~~S6a 第四輪（規格組必修 2／紅隊 J1）：不是開發過程字句，同一體例只刪不加。~~
+    # ~~"HLD-4": "「套用」只讀這些欄位的當下值、…六塊，不寫任何資料表、不改欄位的內容。",~~
+    # → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式「套用」停用，那一句整句不印（`_LIVE_DROPS`）。
 }
 _ORIGINAL = {
     "HLD-2": logic.HLD2_MOVED_NOTE,
     "HLD-3": logic.HLD3_MOVED_NOTE,
     "HLD-8": logic.HLD8_DETAIL_NOTE,
     "HLD-0": logic.HLD0_NO_RULES_ASIDE,
-    "HLD-4": logic.HLD4_APPLY_NOTE,
 }
 _FIELD = {"HLD-2": "detail_lines", "HLD-3": "detail_lines", "HLD-8": "detail_lines", "HLD-0": "lines"}
 # 被刪掉的子句（逐字），一個都不能留在正式畫面上。
@@ -1190,7 +1233,8 @@ _DELETED = (
     "客戶 2026-09-22 裁定核心卡各留兩個主值，第三個值移到這一層",
     "兩句同時成立時哪一句出現，規格沒有寫",
     "兩枚按鈕並存，各做一件事。",
-    logic.HLD4_SAVE_SCOPE_NOTE,
+    # ~~logic.HLD4_SAVE_SCOPE_NOTE,~~ → 客戶 2026-10-16 裁示第 2 點：存檔接上後這一句成立，正式版恢復照印（有意識的更正，不是漏刪）。
+    "只讀這些欄位的當下值",   # 客戶 2026-10-16 裁示第 2 點：正式模式「套用」停用，講「套用」那一段整句不印
 )
 
 
@@ -1333,7 +1377,10 @@ def test_S6b1_T1_錯誤行前綴取自logic本身():
 # ───────────────────────── S6a-1：HLD-4 講兩枚按鈕的三句，正式版不印 ─────────────────────────
 # 客戶 2026-10-03 裁示：「套用」尚未接線、「存檔」停用，三句在正式版都不成立 ⇒ 整句不印（只刪不加）；示範版照舊。
 
-_HLD4_DROPPED = (logic.HLD4_APPLY_NOTE, logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
+# ~~_HLD4_DROPPED = (logic.HLD4_APPLY_NOTE, logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)~~
+# → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：存檔接上、套用停用 —— 正式版不印的是「套用」那一句與
+#   「兩枚都按」那一句；講存檔範圍那一句恢復照印。
+_HLD4_DROPPED = (logic.HLD4_APPLY_NOTE, logic.HLD4_SAVE_NOTE)
 
 
 def test_S6a1_HLD4三句_原字面與抽常數之前相同():
@@ -1365,28 +1412,29 @@ def test_S6a第三輪_HLD4存檔那一句_原字面與抽常數之前相同():
 def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
     """~~三句整句不印~~ → S6a-2（客戶 2026-10-03 範圍裁示第 1 項；有意識的更正，不是漏刪）：
     「套用」接好了，`HLD4_APPLY_NOTE` 只刪「兩枚按鈕並存，各做一件事。」，講「套用」的那一段恢復；
-    講「存檔」的兩句照舊整句不印。"""
+    講「存檔」的兩句照舊整句不印。
+    → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：「套用」停用 ⇒ `HLD4_APPLY_NOTE` 整句不印；
+    「存檔」接上 ⇒ `HLD4_SAVE_SCOPE_NOTE` 恢復照印；`HLD4_SAVE_NOTE`（「兩枚都按」）照舊不印。"""
     demo = logic.find_block(_demo(name), "HLD-4")["notes"]
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
-    for line in _HLD4_DROPPED:
+    for line in _HLD4_DROPPED + (logic.HLD4_SAVE_SCOPE_NOTE,):
         assert line in demo, line          # 正控：示範版照印
-    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
-    assert got == [
-        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
-    ]
-    assert got, "拿掉之後 HLD-4 說明區不得變空"
+    assert got == [line for line in demo if line not in _HLD4_DROPPED]
+    assert logic.HLD4_SAVE_SCOPE_NOTE in got
 
 
 @pytest.mark.parametrize("name", _ALL)
 def test_S6a1_正式版全頁模型沒有那三句的任何一段(name):
     args = _scenario_args(name)
     blob = "\n".join(logic.collect_ui_strings(_build(**args, today=TODAY, open_fund=_first_holding(args["dataset"]))))
-    # S6a-2：「只讀這些欄位的當下值」那一段恢復（「套用」接好了），不再列在這裡。
-    for piece in ("兩枚按鈕並存", "把當下值寫回使用者設定", "「存檔」只寫使用者設定"):
+    # ~~S6a-2：「只讀這些欄位的當下值」那一段恢復（「套用」接好了），不再列在這裡。~~
+    # → 客戶 2026-10-16 裁示第 2 點：「套用」停用，那一段又不印；「「存檔」只寫使用者設定」恢復照印（有意識的更正，不是漏刪）。
+    for piece in ("兩枚按鈕並存", "把當下值寫回使用者設定", "只讀這些欄位的當下值"):
         assert piece not in blob, (name, piece)
+    assert "「存檔」只寫使用者設定" in blob
 
 
-@pytest.mark.parametrize("index", [0, 1, 2])
+@pytest.mark.parametrize("index", [0, 1])
 def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
     model = _demo("full")
     block = logic.find_block(model, "HLD-4")
@@ -1397,15 +1445,15 @@ def test_S6a1_logic改了任一句字面而live沒跟上_raise(index):
 
 @pytest.mark.parametrize("name", _ALL)
 def test_S6a第三輪_正式版HLD4不印存檔那一句_示範版照印_其餘照舊(name):
-    """第四輪起同一區另外兩處：「兩枚按鈕並存，各做一件事。」刪掉、講存檔只寫什麼的那一句整句不印。"""
+    """第四輪起同一區另外兩處：「兩枚按鈕並存，各做一件事。」刪掉、講存檔只寫什麼的那一句整句不印。
+    → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：存檔那一句（「兩枚都按」）照舊不印；
+    講存檔只寫什麼的那一句恢復照印；講「套用」的那一句整句不印。"""
     demo = logic.find_block(_demo(name), "HLD-4")["notes"]
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
     for line in (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE, logic.HLD4_APPLY_NOTE):
         assert line in demo
-    dropped = (logic.HLD4_SAVE_NOTE, logic.HLD4_SAVE_SCOPE_NOTE)
-    assert got == [
-        _TRIMMED["HLD-4"] if line == logic.HLD4_APPLY_NOTE else line for line in demo if line not in dropped
-    ]
+    assert logic.HLD4_SAVE_NOTE not in got and logic.HLD4_APPLY_NOTE not in got
+    assert logic.HLD4_SAVE_SCOPE_NOTE in got
 
 
 def test_S6a第三輪_logic改了存檔那一句而live沒跟上_raise():
@@ -1422,18 +1470,27 @@ def test_S6a第三輪_沒按套用時_模型與加參數之前相同(name):
     assert logic.build_page_model(**args) == logic.build_page_model(**args, applied_window=None)
 
 
-def test_S6a第三輪_套用的區間取代存過的區間_正式版照轉():
+# ~~test_S6a第三輪_套用的區間取代存過的區間_正式版照轉~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+# 正式版**不再**轉套用的區間 —— `build_live_model` 沒有 `applied_window` 參數；同一段區間**存進設定**之後，
+# 正式版才與示範版套用那一段時拿到同一組數。原條在寫下當時為真（那時正式版照轉）。
+def test_第2點_正式版不收套用值_同一段區間存進設定後才換():
+    import inspect
+
+    params = inspect.signature(live.build_live_model).parameters
+    assert "applied_window" not in params and "applied_rules" not in params
     args = _scenario_args("full")
     window = ("2026-06-01", "2026-09-19")
     demo = logic.build_page_model(**args, applied_window=window)
-    got = _build(**args, today=_FRESH_TODAY, applied_window=window)
+    unsaved = _build(**args, today=_FRESH_TODAY)
+    assert unsaved["_window"] == logic.saved_window(args["dataset"]) != window   # 沒存 → 照已存的那一段
+    got = _build(**_saved(args, window=window), today=_FRESH_TODAY)
     assert demo["_window"] == got["_window"] == window
-    assert logic.build_page_model(**args)["_window"] != window
-    # 六塊裡會隨區間動的那幾塊，正式版與示範版拿到同一組數（示意字尾除外）。
     for code in ("HLD-2", "HLD-3"):
         a = [mv["text"].replace(logic.HINT, "") for g in logic.find_block(demo, code)["fund_groups"] for mv in g["main_values"]]
         b = [mv["text"] for g in logic.find_block(got, code)["fund_groups"] for mv in g["main_values"]]
+        c = [mv["text"] for g in logic.find_block(unsaved, code)["fund_groups"] for mv in g["main_values"]]
         assert a == b, code
+        assert b != c, code
 
 
 # ───────────────────────── S6a 第四輪 ─────────────────────────
@@ -1450,12 +1507,8 @@ def test_S6a第四輪_HLD4另兩句_原字面與抽常數之前相同():
     )
 
 
-def test_S6a第四輪_正式版HLD4存檔範圍那一句找不到_raise():
-    model = _demo("full")
-    block = logic.find_block(model, "HLD-4")
-    block["notes"] = [line for line in block["notes"] if line != logic.HLD4_SAVE_SCOPE_NOTE]
-    with pytest.raises(ValueError, match="HLD-4 的 notes 沒有"):
-        live.apply_live_notes(model, today=TODAY)
+# ~~test_S6a第四輪_正式版HLD4存檔範圍那一句找不到_raise~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+# 那一句不再列在 `_LIVE_DROPS`（正式版恢復照印），找不到也不是 live 要擋的事；改驗它照印（上方 `test_S6a1_…`）。
 
 
 # 紅隊 M4：區間只收嚴格的 YYYY-MM-DD
@@ -1567,12 +1620,18 @@ def test_S6a第四輪_套用能不能按_與回呼同一支判定(fields, enable
     assert appliable is enabled
 
 
-def test_S6a第四輪_套用的門檻取代存過的門檻_正式版照轉():
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~正式版照轉~~ → 正式版不收套用的門檻；同一組門檻**存進設定**
+# 之後，正式版才與示範版套用那一組時拿到同一張偏離表。
+def test_S6a第四輪_套用的門檻取代存過的門檻_正式版要存進設定才換():
     rules = [{"indicator": "最大回撤", "direction": "低於", "value": -1.0}]
     args = _scenario_args("full")
     demo = logic.build_page_model(**args, applied_rules=rules)
-    got = _build(**args, today=_FRESH_TODAY, applied_rules=rules)
+    got = _build(**_saved(args, rules=rules), today=_FRESH_TODAY)
     base = logic.build_page_model(**args)
+    unsaved = _build(**args, today=_FRESH_TODAY)
+    assert [r["_fund_code"] for r in logic.find_block(unsaved, "HLD-1")["_rows"]] == [
+        r["_fund_code"] for r in logic.find_block(base, "HLD-1")["_rows"]
+    ]
     assert [r["_fund_code"] for r in logic.find_block(demo, "HLD-1")["_rows"]] != [
         r["_fund_code"] for r in logic.find_block(base, "HLD-1")["_rows"]
     ]
@@ -1604,7 +1663,8 @@ def test_S6a2_第2項_N1_結論燈數不重複的檔_偏離表列數不變():
     held = {h["fund_code"] for h in args["dataset"]["holding"]}
     for model in (
         logic.build_page_model(**args, applied_rules=_TWO_BREACH_RULES),
-        _build(**args, today=_FRESH_TODAY, applied_rules=_TWO_BREACH_RULES),
+        # 客戶 2026-10-16 裁示第 2 點：正式版不收套用值，同一組門檻改為存進設定。
+        _build(**_saved(args, rules=_TWO_BREACH_RULES), today=_FRESH_TODAY),
     ):
         rows = logic.find_block(model, "HLD-1")["_rows"]
         light = logic.find_block(model, "HLD-0")
@@ -1698,7 +1758,8 @@ def test_S6a2追加_HLD1卡尾那一句_只刪後半子句_前半句一字不改
 def test_S6a2追加_一檔超出兩條門檻_燈寫1檔_表2列_畫面沒有列數相等():
     args = _scenario_args("srcmiss")
     for model in (logic.build_page_model(**args, applied_rules=_ONE_FUND_TWO_RULES),
-                  _build(**args, today=_FRESH_TODAY, applied_rules=_ONE_FUND_TWO_RULES)):
+                  # 客戶 2026-10-16 裁示第 2 點：正式版不收套用值，同一組門檻改為存進設定。
+                  _build(**_saved(args, rules=_ONE_FUND_TWO_RULES), today=_FRESH_TODAY)):
         rows = logic.find_block(model, "HLD-1")["_rows"]
         light = logic.find_block(model, "HLD-0")
         assert [r["_fund_code"] for r in rows] == ["AAAA", "AAAA"]

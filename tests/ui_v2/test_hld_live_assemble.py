@@ -307,7 +307,7 @@ def _assemble(**over):
     return live.assemble_live_load(**_kwargs(**over))
 
 
-def _build_model(loaded, *, window=_WINDOW):
+def _build_model(loaded):
     """~~`ui_v2/hld/page.py::render` 正式模式呼叫 `live.build_live_model` 的形狀（`**loaded["live_args"]`），~~
     ~~另帶固定的 `today`，結果不隨時鐘變。~~
     → 📌 2026-10-05 更正（有意識的更正，不是漏刪；決策者：總管；稽核甲指出上一句說得比實際多）：
@@ -316,13 +316,15 @@ def _build_model(loaded, *, window=_WINDOW):
     ⚠️ `applied_window=window`（預設 `_WINDOW`）配 `applied_rules=None` 這一組，頁面產生不了：頁面上兩個值取自
     同一次「套用」（`page.py::_applied`；值由 `logic.applied_from_inputs` 一次交出），沒按過時兩者皆為 None，
     按過時兩者皆不是 None。本支的預設等於「區間照帶、門檻照用存過的」。預設值不改，以免牽動其他測試。
+    → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪；上段在寫下當時為真）：`build_live_model` 拿掉
+    `applied_window`／`applied_rules`（正式結果只讀已存設定），本支的 `window` 參數一併拿掉。
+    原預設 `_WINDOW` 恰等於 `_settings()` 預設存過的區間，所以原本帶 `_WINDOW` 的呼叫端計算結果不變；
+    原本帶 `window=None` 的呼叫端本來就是「取已存的那一組」，也不變。
     """
     return live.build_live_model(
         loaded["dataset"],
         open_fund=None,
         fields=None,
-        applied_window=window,
-        applied_rules=None,
         today=_TODAY,
         **loaded["live_args"],
     )
@@ -769,8 +771,6 @@ def _hand_written_model(omit_code):
         dataset,
         open_fund=None,
         fields=None,
-        applied_window=_WINDOW,
-        applied_rules=None,
         today=_TODAY,
         direct_policy_id=_DIRECT_ID,
         direct=[],
@@ -869,7 +869,7 @@ def test_R5_L1有回資料但L2全數拒收_比照扣下_不放任何東西_畫�
 @pytest.mark.parametrize("kind", _NO_NAV_KINDS)
 def test_T5h_未設區間時_沒有淨值的那一檔與健康檔的兩個主值逐字相同(kind):
     loaded = _loaded_without_nav(kind, settings=_settings(window=None, rules=None))
-    model = _build_model(loaded, window=None)
+    model = _build_model(loaded)
     healthy_texts = _hld2_texts(model, _OK_CODE)
     assert len(healthy_texts) == 2
     assert _hld2_texts(model, _BAD_CODE) == healthy_texts
@@ -878,7 +878,8 @@ def test_T5h_未設區間時_沒有淨值的那一檔與健康檔的兩個主值
 # ═════════════════════════ T7　形狀、鍵序、各種輸入都能交給 build_live_model、錯誤與一致性檢查 ═════════════════════════
 
 _DATASET_KEYS = ["holding", "nav", "dividend", "policy", "fund_profile", "user_setting", "errors",
-                 "pending_tables", "fund_errors"]
+                 "pending_tables", "fund_errors",
+                 "dividend_not_ready"]   # 客戶 2026-10-16 裁示第 5 點新增（配息逐檔資料未備）
 _LIVE_ARGS_KEYS = ["direct_policy_id", "direct", "policy_tab_source", "direct_sources", "nav_provenance",
                    "dividend_coverage"]   # 2026-10-13 稽核必修 1(b) 新增
 
@@ -1415,7 +1416,7 @@ def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_
 def test_讀取失敗不說空_設定讀取失敗而且沒按過套用_全頁沒有未設定字句_原文照印():
     """設定讀取失敗（`settings_error`）經組裝交進來、使用者還沒按「套用」（`applied_window` 為 None）。"""
     message = _unique("設定讀取失敗")
-    model = _build_model(_assemble(settings=None, settings_error=message), window=None)
+    model = _build_model(_assemble(settings=None, settings_error=message))
     strings = _strings(model)
     assert not [s for s in strings if any(p in s for p in ("尚未設定區間", "尚未設定門檻", "門檻一列也沒有"))]
     failed = logic.fetch_failed_text(message)
@@ -1501,23 +1502,24 @@ _R7_MESSAGES = {
 }
 
 
+# ~~@pytest.mark.parametrize("window", [None, _WINDOW])~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+# 正式模式不再收套用的區間，原本兩組參數（沒按過套用／按過套用）在正式模式是同一個輸入，只留一組。
 @pytest.mark.parametrize("form", list(_R7_MESSAGES))
-@pytest.mark.parametrize("window", [None, _WINDOW])
-def test_R7_讀不到改判讀取失敗_交空列表_全頁印取數失敗_不說尚未設定(form, window):
+def test_R7_讀不到改判讀取失敗_交空列表_全頁印取數失敗_不說尚未設定(form):
     out = _assemble(settings=_r7_settings(form))
     message = _R7_MESSAGES[form]
     assert out["dataset"]["errors"] == {"user_setting": message}
     assert out["dataset"]["user_setting"] == []
-    model = _build_model(out, window=window)
+    model = _build_model(out)
     strings = _strings(model)
     assert not [s for s in strings if logic.NA_NO_WINDOW in s or logic.TEXT_NO_RULES in s]
     failed = logic.fetch_failed_text(message)
     assert failed in strings
-    if window is None:   # 沒按過套用：比照既有「設定讀取失敗而且沒按過套用」那一條，六塊都印
-        for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-5", "HLD-8"):
-            assert failed in logic.find_block(model, code)["detail_lines"], code
+    # 正式模式一律是「沒按過套用」那一種（客戶 2026-10-16 裁示第 2 點）：比照既有「設定讀取失敗而且沒按過套用」那一條，六塊都印
+    for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-4", "HLD-5", "HLD-8"):
+        assert failed in logic.find_block(model, code)["detail_lines"], code
     # 沒有新字串：與「同一句原文經既有的 settings_error 路徑交進來」的整頁字串完全相同。
-    same = _build_model(_assemble(settings=None, settings_error=message), window=window)
+    same = _build_model(_assemble(settings=None, settings_error=message))
     assert set(strings) == set(_strings(same))
 
 
@@ -1533,7 +1535,7 @@ def test_R7_反向_只有標頭零筆資料_仍是尚未設定():
     settings.update(rows={}, broken_keys=[], tab_missing=False, bad_rows=[])
     out = _assemble(settings=settings)
     assert "user_setting" not in out["dataset"]["errors"]
-    strings = _strings(_build_model(out, window=None))
+    strings = _strings(_build_model(out))
     assert [s for s in strings if logic.NA_NO_WINDOW in s]
     assert not [s for s in strings if s.startswith(logic.ERR_TEXT)]
 
@@ -1555,8 +1557,8 @@ def test_端到端_assemble到build_淨值過期_相依淨值的值都是資料�
     last_day = date.fromisoformat(last) if isinstance(last, str) else last
 
     def build(today):
-        return live.build_live_model(loaded["dataset"], open_fund=None, fields=None, applied_window=_WINDOW,
-                                     applied_rules=None, today=today, **loaded["live_args"])
+        return live.build_live_model(loaded["dataset"], open_fund=None, fields=None,
+                                     today=today, **loaded["live_args"])
 
     ok, stale = build(last_day + timedelta(days=10)), build(last_day + timedelta(days=11))
     for code in _CODES:

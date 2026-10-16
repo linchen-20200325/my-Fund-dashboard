@@ -20,4 +20,4 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from ui_v2.alo import page, source  # noqa: E402
 
 st.set_page_config(page_title="資產配置", layout="wide")
-page.render(load_live=source.load_live, save_live=source.save_setting)
+page.render(load_live=source.load_live, save_live=source.save_setting, mask_error=source.mask_error)

@@ -111,6 +111,14 @@ def _build(dataset, **kw):
     )
 
 
+def _build_logic(dataset, **kw):
+    """客戶 2026-10-16 裁示第 2 點：正式模式不再收「套用」的值（`live.build_live_model` 沒有那兩個參數、「套用」停用），
+    「設定讀取失敗後按套用」這條路在正式模式已經不可達。`logic` 那幾支判定（空白套用仍算未知等）一字未改，
+    原本經 `_build` 走正式模式驗它們的測試改成直接打 `logic.build_page_model`（`demo_hint=False`），
+    驗的仍是同一段 `logic`；正式模式那一層另由 `test_hld_live_logic.py` 的第 2 點測試驗。"""
+    return logic.build_page_model(dataset, demo_hint=False, **kw)
+
+
 def _full():
     """`full` 情境的正式形狀。"""
     return _scrub(_rehome(copy.deepcopy(fixtures.dataset_full())))
@@ -320,21 +328,29 @@ def _demo_models(name):
 
 
 def _live_models(name):
-    """正式模式：去掉示意字樣、改掛保單之後，三種套用狀態。"""
+    """正式模式：去掉示意字樣、改掛保單之後，~~三種套用狀態~~ 一個模型。
+    → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式不再收套用的值（`build_live_model` 沒有那兩個參數），
+    三種套用狀態在正式模式是同一個輸入，只留一個（原本 `_APPLIED_STATES` 第一種 `{}` 那一個）。"""
     args = _scrub(copy.deepcopy(fixtures.scenario(name)))
     _rehome(args["dataset"])
     return [
         live.build_live_model(
             **copy.deepcopy(args), direct_policy_id=_DIRECT_ID, nav_provenance=_prov(args["dataset"]),
-            today=_TODAY, **applied,
+            today=_TODAY,
         )
-        for applied in _APPLIED_STATES
     ]
 
 
 # 情境名 → (示範模式那一組模型的摘要, 正式模式那一組模型的摘要)。
 # 量測於改動前的 `a43dd54`（`logic.py` 與 `cfd0c97` 相同，兩者算出的值一致；換 `PYTHONHASHSEED` 重算不變）。
 _BASELINE = {
+    # ⚠️ 2026-10-16（客戶裁示第 2 點：HLD-4 只有已存設定生效、正式模式「套用」停用、「存檔」接上）：17 個情境的**正式模式**
+    #    那一格全部換新值（有意識的更正，不是漏刪；各格行尾劃線保留舊值），示範模式 17 格一格未動。
+    #    換之前先證明（量測日 2026-10-16，Python 3.11）：以 `8bd6c6b`（`git archive` 舊程式）與本次程式，對 17 個情境
+    #    產生同一組模型（示範模式 372 個 ＋ 正式模式「沒按套用」那一個）逐節點比對 —— 示範模式 0 處差異；
+    #    正式模式差異全部落在 `HLD-4`（`blocks[4]`）：`buttons[1]`（套用）的 `_enabled` 15 處、`disabled_reason` 17 處，
+    #    `buttons[2]`（存檔）的 `_enabled` 13 處、`disabled_reason` 17 處，`notes[0]` 17 處（套用那一句換成存檔範圍那一句），
+    #    其他 0 處。正式模式每情境由三個模型改為一個（見 `_live_models`），所以舊值無法逐格重現於新函式，只能以上述比對歸因。
     # ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：本表 15 個情境的兩格換新值（有意識的更正，不是漏刪），
     #    舊值見 `bde5568`；`empty`、`emptyfail` 兩情境一格未動。換之前先證明：以 `bde5568` 的程式與本次程式對本表全部情境
     #    逐模型做結構比對，唯一的差異是 `_tone` 由黃改灰，而且全落在 `業務例外` 節點（3880 處）或同級哨符塊（36 處）上，
@@ -343,52 +359,52 @@ _BASELINE = {
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "full": ("6976f8936c07", "7aeb7cbbd59b"),
+    "full": ("6976f8936c07", "623948256820"),  # 正式模式舊值 ~~"7aeb7cbbd59b"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-09（客戶裁示：S6b-3 正式畫面拿掉「重新取數」）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"0557ba93e77b"~~。
     #    17 個情境中只有示範模式掛得出「重新取數」的 srcmiss、fetchfail、tiedstate、twofail 四格的正式模式值改變；示範模式值一格不變（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"65245d17a65b"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "srcmiss": ("3155e155f675", "9f9375265558"),
+    "srcmiss": ("3155e155f675", "a01470bbd37a"),  # 正式模式舊值 ~~"9f9375265558"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("0bc089371169", "632657e86044")~~。
     #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"be0d6f62850b"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "bizexc": ("e1b420100452", "937db0e1de08"),
+    "bizexc": ("e1b420100452", "9db4f8fbbbcb"),  # 正式模式舊值 ~~"937db0e1de08"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-09（客戶裁示：S6b-3 正式畫面拿掉「重新取數」）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"0803dd5d4def"~~。
     #    17 個情境中只有示範模式掛得出「重新取數」的 srcmiss、fetchfail、tiedstate、twofail 四格的正式模式值改變；示範模式值一格不變（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"50eee798b051"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "fetchfail": ("1f387643a060", "a76c8ed781c7"),
+    "fetchfail": ("1f387643a060", "8038568a12e3"),  # 正式模式舊值 ~~"a76c8ed781c7"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"4fd09632f697"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "nothr": ("c68b9f4e5146", "ec14e7c0a09e"),
-    "empty": ("9fed2f3a1d0a", "de19a6aaee05"),
-    "emptyfail": ("87d83bb69775", "3231755732ce"),
+    "nothr": ("c68b9f4e5146", "47b377ca9adc"),  # 正式模式舊值 ~~"ec14e7c0a09e"~~（2026-10-16 第 2 點）
+    "empty": ("9fed2f3a1d0a", "449550161c02"),  # 正式模式舊值 ~~"de19a6aaee05"~~（2026-10-16 第 2 點）
+    "emptyfail": ("87d83bb69775", "2e66e55e29f0"),  # 正式模式舊值 ~~"3231755732ce"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"7a6b9977ea59"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "noexceed": ("6e9dbb798c8a", "60450c9893a7"),
+    "noexceed": ("6e9dbb798c8a", "6efa64962fc3"),  # 正式模式舊值 ~~"60450c9893a7"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"a54793d3f167"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "other_window": ("ab60e0f82b0a", "99bc4a8f2dbc"),
+    "other_window": ("ab60e0f82b0a", "3f3851ba5d6c"),  # 正式模式舊值 ~~"99bc4a8f2dbc"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("dcc5c9a80f00", "fbf120f7d7a3")~~。
     #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"afc63319f5ec"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "onenav": ("232dc77f0e39", "41374f22c5e9"),
+    "onenav": ("232dc77f0e39", "9c213f2aab45"),  # 正式模式舊值 ~~"41374f22c5e9"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：HLD-0／HLD-1 不再說「無偏離項」，換新值（有意識的更正，不是漏刪）；舊值 ~~("ade666d29a29", "83911f05520d")~~。
     #    換之前先證明：以 `1384e1b` 的 logic 重算，舊值原樣重現；17 個情境只有 bizexc、onenav、tiedstate 三格不同（3.11）。
     # ⚠️ 2026-10-09（客戶裁示：S6b-3 正式畫面拿掉「重新取數」）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"20a402ef0d16"~~。
@@ -397,46 +413,48 @@ _BASELINE = {
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "tiedstate": ("d709a0a69eb0", "a77ee9b3cb77"),
+    "tiedstate": ("d709a0a69eb0", "8a12f17ec5e3"),  # 正式模式舊值 ~~"a77ee9b3cb77"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-09（客戶裁示：S6b-3 正式畫面拿掉「重新取數」）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"fdc3c45c05f8"~~。
     #    17 個情境中只有示範模式掛得出「重新取數」的 srcmiss、fetchfail、tiedstate、twofail 四格的正式模式值改變；示範模式值一格不變（3.11）。
-    "twofail": ("9d25e1774901", "3a1a5c083b7a"),
+    "twofail": ("9d25e1774901", "c82712ae56a9"),  # 正式模式舊值 ~~"3a1a5c083b7a"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"6294a2551be9"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "holdfail": ("1e417571d326", "e9b97bc4ba17"),
+    "holdfail": ("1e417571d326", "6efb0a8e9bbc"),  # 正式模式舊值 ~~"e9b97bc4ba17"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"b28c4f76b50c"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "profilefail": ("57235e6db261", "7b6a2d75c1c4"),
+    "profilefail": ("57235e6db261", "54b74494ca73"),  # 正式模式舊值 ~~"7b6a2d75c1c4"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"0a3e78075e81"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "holdfail_nothr": ("3e1d6274ac7f", "f74ff4a28a58"),
+    "holdfail_nothr": ("3e1d6274ac7f", "d783700b4e3b"),  # 正式模式舊值 ~~"f74ff4a28a58"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"f31b5ac86e6e"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "badrange": ("74345d2d70cc", "7d06f403f469"),
+    "badrange": ("74345d2d70cc", "e125b22901ab"),  # 正式模式舊值 ~~"7d06f403f469"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"f09a6e57d685"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
-    "full_then_badrange": ("158329ea0fde", "b5beebfece49"),
+    "full_then_badrange": ("158329ea0fde", "916daa605768"),  # 正式模式舊值 ~~"b5beebfece49"~~（2026-10-16 第 2 點）
 }
 
 
-def test_T2c正_十七個情境_示範與正式模式共423個模型_與改動前相同():
+# ~~test_T2c正_十七個情境_示範與正式模式共423個模型_與改動前相同~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
+# 正式模式每情境由三個模型改為一個（見 `_live_models`），總數 423 → 389（示範模式 372 個一個不少）。
+def test_T2c正_十七個情境_示範與正式模式共389個模型_與改動前相同():
     assert set(_BASELINE) == set(fixtures.ALL_SCENARIO_NAMES)
     count = 0
     for name in fixtures.ALL_SCENARIO_NAMES:
         demo, real = _demo_models(name), _live_models(name)
         count += len(demo) + len(real)
         assert (_digest(demo), _digest(real)) == _BASELINE[name], name
-    assert count == 423, count
+    assert count == 389, count
 
 
 def test_T2c反_同一個情境注入設定讀取失敗_模型真的會變():
@@ -570,8 +588,13 @@ def _known_strings():
     return frozenset(known)
 
 
+# 總管 2026-10-16 判定（R3 回修，必修）：設定讀取失敗時 HLD-4「存檔」停用的原因句是**有意新增**的一句（只在讀取失敗時出現），
+# 列進既有字句；其餘仍須是既有字句（有意識的更正，不是漏刪）。
+_R3_NEW = {live.SAVE_BLOCKED_READ_FAILED_REASON}
+
+
 def test_T4正_三種讀取失敗下的字句都是既有字句_只多了原文本身():
-    known = _known_strings() | {_S, _H, _FF_S, _FF_H}
+    known = _known_strings() | {_S, _H, _FF_S, _FF_H} | _R3_NEW
     new = set()
     for make in (_s1, _s2, _s3):
         new.update(s for s in _strings(_build(make())) if isinstance(s, str))
@@ -582,7 +605,7 @@ def test_T4反_掃描抓得到一句新字句():
     model = _build(_s1())
     fresh = "新字句-" + uuid.uuid4().hex
     _block(model, "HLD-4")["detail_lines"].append(fresh)
-    known = _known_strings() | {_S, _H, _FF_S, _FF_H}
+    known = _known_strings() | {_S, _H, _FF_S, _FF_H} | _R3_NEW
     assert sorted(set(_strings(model)) - known) == [fresh]
 
 
@@ -592,7 +615,7 @@ def test_T4反_掃描抓得到一句新字句():
 
 
 def test_套用正_設定讀取失敗後按套用_主值照套用的值算_三張卡仍是紅的():
-    model = _build(_s1(), **_APPLIED)
+    model = _build_logic(_s1(), **_APPLIED)
     states = {mv["_state"] for g in _block(model, "HLD-2")["fund_groups"] for mv in g["main_values"]}
     assert states == {logic.STATE_OK}
     for code in ("HLD-1", "HLD-2", "HLD-3"):
@@ -664,22 +687,22 @@ def _assert_blank_apply_reads_as_unknown(model, failed):
 
 def test_空白套用a_設定讀取失敗_區間門檻都空白套用_全頁沒有未設定字句_五塊印出原文():
     assert _BLANK_APPLY == {"window": (None, None), "rules": []}, "頁面的空白套用不是這個形狀 —— 這一條會測錯東西"
-    model = _build(_s1(), **_apply(_BLANK_APPLY))
+    model = _build_logic(_s1(), **_apply(_BLANK_APPLY))
     _assert_blank_apply_reads_as_unknown(model, _FF_S)
     # 空白套用與沒按過「套用」畫出同一頁（兩者都是讀不到）；兩種讀取失敗同時發生時也一樣。
-    assert model == _build(_s1())
-    assert _build(_s3(), **_apply(_BLANK_APPLY)) == _build(_s3())
+    assert model == _build_logic(_s1())
+    assert _build_logic(_s3(), **_apply(_BLANK_APPLY)) == _build_logic(_s3())
 
 
 def test_空白套用b_設定讀取失敗_只填區間_核心卡照區間出數_門檻那一半印原文():
     assert _WINDOW_ONLY_APPLY["rules"] == [] and all(_WINDOW_ONLY_APPLY["window"])
-    model = _build(_s1(), **_apply(_WINDOW_ONLY_APPLY))
+    model = _build_logic(_s1(), **_apply(_WINDOW_ONLY_APPLY))
     assert _hits(model, _UNSET_PHRASES) == []
     hld1 = _block(model, "HLD-1")
     assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_ERROR, _FF_S)
     assert hld1["detail_lines"] == [_FF_S, logic.PRINT_AS_IS_LINE]
     # 核心卡照區間出數：主值與「設定讀得到、同一組套用」時相同，而且都出數。
-    same_apply = _build(_full(), **_apply(_WINDOW_ONLY_APPLY))
+    same_apply = _build_logic(_full(), **_apply(_WINDOW_ONLY_APPLY))
     for code in ("HLD-2", "HLD-3"):
         nodes = [mv for g in _block(model, code)["fund_groups"] for mv in g["main_values"]]
         expected = [mv for g in _block(same_apply, code)["fund_groups"] for mv in g["main_values"]]
@@ -691,7 +714,7 @@ def test_空白套用b_設定讀取失敗_只填區間_核心卡照區間出數_
 
 def test_空白套用c_設定讀取失敗_只填門檻_核心卡印原文_不說尚未設定區間():
     assert _RULES_ONLY_APPLY["window"] == (None, None) and _RULES_ONLY_APPLY["rules"]
-    model = _build(_s1(), **_apply(_RULES_ONLY_APPLY))
+    model = _build_logic(_s1(), **_apply(_RULES_ONLY_APPLY))
     assert _hits(model, _UNSET_PHRASES) == []
     for code in ("HLD-2", "HLD-3"):
         block = _block(model, code)
@@ -708,38 +731,42 @@ def test_空白套用c_設定讀取失敗_只填門檻_核心卡印原文_不說
 
 # (d) 的期望值在本條修正之前的程式（`6aa3c57`）上產生，不從被測程式現撈；換 `PYTHONHASHSEED` 重算不變。
 _NO_SETTINGS_FAILURE_BASELINE = {
+    # ⚠️ 2026-10-16（客戶裁示第 2 點）：12 格全部換新值（有意識的更正，不是漏刪；各格行尾劃線保留舊值）。
+    #    原因不是程式改了，是本條改走 `_build_logic`（直接打 `logic.build_page_model(demo_hint=False)`）——
+    #    正式模式不再收套用的值，原本經 `live.build_live_model` 帶套用值的呼叫已不可達。
+    #    證明（量測日 2026-10-16，Python 3.11）：以 `8bd6c6b`（`git archive` 舊程式）走同一條 `logic` 呼叫，12 格逐格得到與新值相同的摘要。
     # ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：「真的沒設定」「設定照讀」兩組共 6 格換新值（有意識的更正，不是漏刪），
     #    舊值見 `bde5568`；證明同上一張表那一次結構比對（差異只有 `業務例外` 節點的黃改灰）。其餘 6 格一格未動。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~4abd24a85466~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("真的沒設定", "空白套用"): "128887e7f0ca",
+    ("真的沒設定", "空白套用"): "1dc3e7d7f045",  # 舊值 ~~"128887e7f0ca"~~（2026-10-16 第 2 點：改打 logic）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~e0491f48a746~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("真的沒設定", "只填區間"): "1d28a5e3502c",
+    ("真的沒設定", "只填區間"): "a9e70b99bb53",  # 舊值 ~~"1d28a5e3502c"~~（2026-10-16 第 2 點：改打 logic）
     # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：只填門檻、區間未設 ⇒ 各檔門檻指標「⬜ 不適用：尚未設定區間」，
     #    HLD-1 零列改進 `業務例外`（主值 `⬜ 不適用`）、燈改印它。舊值 ~~e7e24687badb~~（有意識的更正，不是漏刪）；
     #    以 `1384e1b` 的 logic 重算舊值原樣重現，本表 12 格只有這兩格不同（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~2194cd857604~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("真的沒設定", "只填門檻"): "2c8a85fa53b8",
+    ("真的沒設定", "只填門檻"): "1f41983b59b2",  # 舊值 ~~"2c8a85fa53b8"~~（2026-10-16 第 2 點：改打 logic）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~4abd24a85466~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("設定照讀", "空白套用"): "128887e7f0ca",
+    ("設定照讀", "空白套用"): "1dc3e7d7f045",  # 舊值 ~~"128887e7f0ca"~~（2026-10-16 第 2 點：改打 logic）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~e0491f48a746~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("設定照讀", "只填區間"): "1d28a5e3502c",
+    ("設定照讀", "只填區間"): "a9e70b99bb53",  # 舊值 ~~"1d28a5e3502c"~~（2026-10-16 第 2 點：改打 logic）
     # ⚠️ 2026-10-08（客戶裁示：結論燈兩句）：只填門檻、區間未設 ⇒ 各檔門檻指標「⬜ 不適用：尚未設定區間」，
     #    HLD-1 零列改進 `業務例外`（主值 `⬜ 不適用`）、燈改印它。舊值 ~~e7e24687badb~~（有意識的更正，不是漏刪）；
     #    以 `1384e1b` 的 logic 重算舊值原樣重現，本表 12 格只有這兩格不同（3.11）。
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：舊值 ~~2194cd857604~~（有意識的更正，不是漏刪）。
     #    原因同 T2c 表：固定的 today 由 10-02 改 09-28；`6e3f467` 在 09-28 重算得本值、在 10-02 重算得舊值（3.11）。
-    ("設定照讀", "只填門檻"): "2c8a85fa53b8",
-    ("真的沒有持倉", "空白套用"): "047e6bb321bf",
-    ("真的沒有持倉", "只填區間"): "bf8542264b76",
-    ("真的沒有持倉", "只填門檻"): "c99430bc7652",
-    ("只有持倉讀取失敗", "空白套用"): "0211dc640591",
-    ("只有持倉讀取失敗", "只填區間"): "7510a3ded358",
-    ("只有持倉讀取失敗", "只填門檻"): "b4adfbfda7ad",
+    ("設定照讀", "只填門檻"): "1f41983b59b2",  # 舊值 ~~"2c8a85fa53b8"~~（2026-10-16 第 2 點：改打 logic）
+    ("真的沒有持倉", "空白套用"): "c8d2ff65c3bd",  # 舊值 ~~"047e6bb321bf"~~（2026-10-16 第 2 點：改打 logic）
+    ("真的沒有持倉", "只填區間"): "80d7d03d8dee",  # 舊值 ~~"bf8542264b76"~~（2026-10-16 第 2 點：改打 logic）
+    ("真的沒有持倉", "只填門檻"): "f44072cf3e23",  # 舊值 ~~"c99430bc7652"~~（2026-10-16 第 2 點：改打 logic）
+    ("只有持倉讀取失敗", "空白套用"): "0423ade83ebd",  # 舊值 ~~"0211dc640591"~~（2026-10-16 第 2 點：改打 logic）
+    ("只有持倉讀取失敗", "只填區間"): "b82968a69604",  # 舊值 ~~"7510a3ded358"~~（2026-10-16 第 2 點：改打 logic）
+    ("只有持倉讀取失敗", "只填門檻"): "cde4d4fd0e93",  # 舊值 ~~"b4adfbfda7ad"~~（2026-10-16 第 2 點：改打 logic）
 }
 
 
@@ -748,10 +775,10 @@ def test_空白套用d反_設定讀得到_清空再套用照舊說未設定_本�
     applies = {"空白套用": _BLANK_APPLY, "只填區間": _WINDOW_ONLY_APPLY, "只填門檻": _RULES_ONLY_APPLY}
     assert set(_NO_SETTINGS_FAILURE_BASELINE) == {(m, a) for m in makes for a in applies}
     for (make, applied), expected in _NO_SETTINGS_FAILURE_BASELINE.items():
-        assert _digest(_build(makes[make](), **_apply(applies[applied]))) == expected, (make, applied)
+        assert _digest(_build_logic(makes[make](), **_apply(applies[applied]))) == expected, (make, applied)
     # 正控：清空再套用時「未設定」字句真的在畫面上，上面的比對不是空比。
     for make in (_unset, _full):
-        model = _build(make(), **_apply(_BLANK_APPLY))
+        model = _build_logic(make(), **_apply(_BLANK_APPLY))
         assert _block(model, "HLD-4")["summary_text"] == "尚未設定區間；門檻一列也沒有；存檔停用"
         assert _hits(model, ("尚未設定區間",)) and _hits(model, ("尚未設定門檻",))
 
@@ -842,8 +869,10 @@ def test_空白套用e_經assemble組出的設定讀取失敗形狀_空白套用
     message = dataset["errors"].get("user_setting")
     assert isinstance(message, str) and message, "組裝沒有交出設定讀取失敗 —— 這一組會變成空掃"
     assert dataset["user_setting"] == []
+    # 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~`**_apply(_BLANK_APPLY)`~~ —— 正式模式不再收套用的值，
+    # 正式模式的路徑一律是「沒按過套用」，與空白套用同屬「讀不到」，斷言一字未改。
     model = live.build_live_model(
-        dataset, open_fund=None, fields=None, today=_TODAY, **_apply(_BLANK_APPLY), **loaded["live_args"]
+        dataset, open_fund=None, fields=None, today=_TODAY, **loaded["live_args"]
     )
     _assert_blank_apply_reads_as_unknown(model, logic.fetch_failed_text(message))
 
@@ -858,7 +887,7 @@ _CLEARED_WINDOW_FIELDS = {"window_start": "", "window_end": ""}
 
 def test_M2正_設定讀取失敗_套用過有值的區間後清空欄位_HLD4不印尚未設定區間_印原文():
     assert all(_WINDOW_ONLY_APPLY["window"]), "套用的區間沒有值 —— window_unknown 不會是 False，這一條會測錯東西"
-    model = _build(_s1(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
+    model = _build_logic(_s1(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
     hld4 = _block(model, "HLD-4")
     assert [f["_value"] for f in hld4["inputs"]] == ["", ""], "欄位沒有清空 —— 這一條會變成空掃"
     assert logic.NA_NO_WINDOW not in hld4["detail_lines"]
@@ -866,7 +895,7 @@ def test_M2正_設定讀取失敗_套用過有值的區間後清空欄位_HLD4�
 
 
 def test_M2反_設定讀得到_套用過有值的區間後清空欄位_HLD4照舊印尚未設定區間():
-    model = _build(_full(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
+    model = _build_logic(_full(), fields=_CLEARED_WINDOW_FIELDS, **_apply(_WINDOW_ONLY_APPLY))
     hld4 = _block(model, "HLD-4")
     assert [f["_value"] for f in hld4["inputs"]] == ["", ""]
     assert logic.NA_NO_WINDOW in hld4["detail_lines"]
@@ -886,11 +915,11 @@ _UNKNOWN_INDICATOR_APPLY = logic.applied_from_inputs(
 
 def test_結論燈兩句_設定讀取失敗後套用_零偏離_HLD1不說無偏離項_主值取數失敗_燈照舊紅():
     # 正控：設定讀得到、同一組套用時，零偏離而兩句都是真話。
-    ok_model = _build(_full(), **_apply(_NO_EXCEED_APPLY))
+    ok_model = _build_logic(_full(), **_apply(_NO_EXCEED_APPLY))
     ok1 = _block(ok_model, "HLD-1")
     assert (ok1["_state"], ok1["_rows"], ok1["summary_text"]) == (logic.STATE_OK, [], logic.TEXT_NO_DEVIATION)
     assert "目前這一組門檻下，沒有任何一檔超出。" in ok1["detail_lines"]
-    model = _build(_s1(), **_apply(_NO_EXCEED_APPLY))
+    model = _build_logic(_s1(), **_apply(_NO_EXCEED_APPLY))
     hld1 = _block(model, "HLD-1")
     assert (hld1["_state"], hld1["_rows"], hld1["summary_text"]) == (logic.STATE_ERROR, [], _FF_S)
     assert hld1["_placeholder"]["text"] == logic.ERR_TEXT
@@ -903,7 +932,7 @@ def test_結論燈兩句_設定讀取失敗後套用_零偏離_HLD1不說無偏�
 
 def test_結論燈兩句_設定讀取失敗後套用_指標名不在清單內_HLD1主值取數失敗不是不適用():
     # 正控：設定讀得到時，同一組套用是 `業務例外`、主值 `⬜ 不適用`。
-    assert _block(_build(_full(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")["summary_text"] == logic.NA_TEXT
-    hld1 = _block(_build(_s1(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")
+    assert _block(_build_logic(_full(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")["summary_text"] == logic.NA_TEXT
+    hld1 = _block(_build_logic(_s1(), **_apply(_UNKNOWN_INDICATOR_APPLY)), "HLD-1")
     assert (hld1["_state"], hld1["summary_text"]) == (logic.STATE_ERROR, _FF_S)
     assert hld1["_placeholder"]["text"] == logic.ERR_TEXT
