@@ -33,17 +33,17 @@
 
 ## 2. 現況 checkpoint
 
-**查詢時間**：~~2026-10-16 10:33 UTC~~ 2026-10-16 13:18 UTC（`date -u` 實測；狀態更新，不是漏刪）。**查詢方式**：`git fetch` 後 `git log`、`git ls-remote --heads origin`；GitHub REST 唯讀（`gh api` 的 open PR 清單、main commit 的 check-runs）。
+**查詢時間**：~~2026-10-16 10:33 UTC~~ 2026-10-16 13:18 UTC（`date -u` 實測；狀態更新，不是漏刪）。**查詢方式**：`git fetch` 後 `git log`、`git ls-remote --heads origin`；GitHub REST 唯讀（`gh api` 的 open PR 清單、main commit 的 check-runs；查詢方式 2026-10-16 更新）。
 
 | 項目 | 現況 | 出處 |
 |---|---|---|
-| main | ~~`d5d391b`（全長 `d5d391bd6f2b14939f71dd1ed0e007449f519f59`；PR #978 的 merge commit，2 parents `cac7c005`、`74b865d4`）~~ → `ab30239`（全長 `ab302390886e1818f0d9a56afccdf3ba9dd7a41b`；PR #979 的 merge commit，2 parents `d5d391bd`、`63ad45d9`），**本批 PR（治理十一項裁示批）合併後更新**；PR 號由總管合併後補 | 本組 `git log -1 --format='%H %P'` 實查 |
-| main CI | ~~`d5d391b` 的 push run `38884240502`：三條 job 皆 `success`~~ → `ab30239` 的三條 check-run：Schema gate、Fast checks、Slow tests（informational）皆 `completed`／`success`（逐條看 `conclusion`，不看 run 總結） | `gh api repos/linchen-20200325/my-Fund-dashboard/commits/ab30239/check-runs` 實查 |
-| Phase 位置 | **Phase 2 完成**；分支成果保存批完成（#978）；~~**Project AI Constitution v1.0 導入中**（本批）~~ v1.0 導入完成（#979 已合併）；**治理十一項裁示收斂批進行中**（本批）；**Phase 3 尚未開始** | Phase 2 完成見交接本〈第六十五次更新〉；保存批見〈第六十六次更新〉；#979 見 `git log -1 ab30239`；Phase 3 時機為客戶 2026-10-16 治理十一項裁示〈執行要求〉末段「完成後停在 safe checkpoint，不要自行開始 Phase 3」 |
+| main | ~~`d5d391b`（全長 `d5d391bd6f2b14939f71dd1ed0e007449f519f59`；PR #978 的 merge commit，2 parents `cac7c005`、`74b865d4`）~~ → `ab30239`（全長 `ab302390886e1818f0d9a56afccdf3ba9dd7a41b`；PR #979 的 merge commit，2 parents `d5d391bd`、`63ad45d9`），**本批 PR（治理十一項裁示批）合併後更新**；PR 號由總管合併後補（2026-10-16 更新） | 本組 `git log -1 --format='%H %P'` 實查 |
+| main CI | `ab30239` 的三條 check-run：Schema gate、Fast checks、Slow tests（informational）皆 `completed`／`success`（逐條看 `conclusion`，不看 run 總結）（2026-10-16 更新） | `gh api repos/linchen-20200325/my-Fund-dashboard/commits/ab30239/check-runs` 實查（2026-10-16 更新） |
+| Phase 位置 | **Phase 2 完成**；分支成果保存批完成（#978）；~~**Project AI Constitution v1.0 導入中**（本批）~~ v1.0 導入完成（#979 已合併）；**治理十一項裁示收斂批進行中**（本批）；**Phase 3 尚未開始**（2026-10-16 更新） | Phase 2 完成見交接本〈第六十五次更新〉；保存批見〈第六十六次更新〉；#979 見 `git log -1 ab30239`；Phase 3 時機為客戶 2026-10-16 治理十一項裁示〈本批禁止〉清單之後一句「完成後停在 safe checkpoint，不要自行開始 Phase 3」（2026-10-16 更新） |
 | active PR | ~~**本批 PR #979**（導入 v1.0 四份治理文件；由總管開與合併）~~ #979 已合併；**本批 PR 待開**（治理十一項裁示收斂；由總管開與合併，PR 號合併後補） | 總管 2026-10-16 派工單；#979 合併由 `ab30239` 的 parents 實查 |
-| 舊 draft PR | #791、#836、#837、#839 四支，**客戶指示不動** | `gh api …/pulls?state=open` 實查（2026-10-16 13:18 UTC）：open 只有這四支 draft（本批 PR 開之前） |
+| 舊 draft PR | #791、#836、#837、#839 四支，**客戶指示不動** | `gh api …/pulls?state=open` 實查（2026-10-16 13:18 UTC）：open 只有這四支 draft（本批 PR 開之前；2026-10-16 更新） |
 | blocker | 目前無（依上列實查：main CI 三條 success、無衝突中的 PR） | 本組實查；「無」只涵蓋上列查過的項目 |
-| 待客戶的唯一動作 | 核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）：第 1 欄所列「修改後完整條文」（可改字後核准）＋同一次明示該提案單列出的四點；**不擋 Phase 3**（總管 2026-10-16 派工判定） | `docs/DECISIONS.md` `DEC-2026-10-16-08`；`docs/BACKLOG.md` BL-0221 |
+| 治理面待客戶的唯一動作 | 核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）：第 1 欄所列「修改後完整條文」（可改字後核准）＋同一次明示該提案單列出的四點；**不擋 Phase 3**（總管 2026-10-16 派工判定） | `docs/DECISIONS.md` `DEC-2026-10-16-08`；`docs/BACKLOG.md` BL-0221 |
 
 ## 3. 下一步與待客戶裁示
 
@@ -58,14 +58,14 @@
 
 - ~~`PROJECT_RULES.md` 第 14 節〈未調和的衝突（待客戶裁示）〉。~~ → 第 14 節 11 項已由客戶 2026-10-16 治理十一項裁示收斂（`docs/DECISIONS.md` `DEC-2026-10-16-03`～`-13`；狀態更新，不是漏刪）；該節改題為〈已裁示的治理衝突（2026-10-16 收斂）與尚待程序完成者〉。
 - **治理面唯一剩餘的客戶動作**：核准〈母法修正提案單 #8〉（`docs/v2/56_proposal_8_directional_judgment.md`）第 1 欄所列「修改後完整條文」（可改字後核准），並在同一次簽核明示該提案單列出的四點（黑名單前三片語、user 2026-08-07 裁決的讀法、改法、母法同字條文）；詳見 `DEC-2026-10-16-08`。在那之前子法 1 一個位元組都不改，修正程序**尚未完成**。
-- `docs/BACKLOG.md` 中標「需客戶裁示」的條目（例：子法 1 條款衝突 BL-0221；~~`delete_branch_on_merge`~~ BL-0222 已由 `DEC-2026-10-16-10` 關閉；以該檔為準）。
+- `docs/BACKLOG.md` 中標「需客戶裁示」的條目（例：子法 1 條款衝突 BL-0221；BL-0222（`delete_branch_on_merge`）已由 `DEC-2026-10-16-10` 關閉；以該檔為準；2026-10-16 更新）。
 
 ## 4. 分支現況摘要
 
 - 遠端分支的 A～E 分類、保存清單與保存位置：見交接本〈第六十六次更新〉四與 `docs/evidence/README.md`。
 - ~~本批**未刪任何既有分支、未建 tag**（PR 自身 head 依 `delete_branch_on_merge` 於合併時自動刪除，屬既有常設授權，總管裁決，可被客戶推翻；見 `PROJECT_RULES.md` 第 10 節、第 14 節之 8）。既有／歷史 remote branch 的刪除須客戶指示；刪前六項確認見 `PROJECT_RULES.md` 第 10 節。~~（#979 批的記載，在寫下當時為真）
 - **branch lifecycle（客戶治理第 8 項，`DEC-2026-10-16-10`；有意識的政策變更，不是漏刪，2026-10-16）**：PR 自身 head 依 `delete_branch_on_merge` 於合併時自動刪除，屬正常常設授權、不需每次另問；既有／歷史 remote branch 先做 Preservation Check（`PROJECT_RULES.md` 第 10 節六項），證據完整且明確 superseded 者可進入 cleanup eligible；大批清理、證據不完整、有 production/workflow dependency、刪除具產品或資料保存意義者仍需客戶裁示。**本批不刪任何歷史分支、不建 tag。**
-- 遠端分支數：~~19（量測時間 2026-10-16 10:33 UTC）~~ 19（量測時間 2026-10-16 13:18 UTC，main `ab30239`，`git ls-remote --heads origin | wc -l`，本批 PR 開立之前；本批 PR head 推送後與合併自動刪除後都會變，引用前重查）。
+- 遠端分支數：19（量測時間 2026-10-16 13:18 UTC；2026-10-16 更新，main `ab30239`，`git ls-remote --heads origin | wc -l`，本批 PR 開立之前；本批 PR head 推送後與合併自動刪除後都會變，引用前重查）。
 
 ## 5. 新對話 takeover
 
