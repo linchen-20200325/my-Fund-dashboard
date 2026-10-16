@@ -92,7 +92,7 @@
 1. **Hard Safety／Veto**：critical freshness、identity mismatch、critical source conflict、thesis invalidation、data-quality failure。
 2. **Evidence Score**（加減分、權重未定）：fund quality、Benchmark／peer RS、structural trend、quantitative proxy、partial look-through、price position、FX、portfolio overlap、allocation fit、transaction cost、cash opportunity cost。
 3. **Execution Layer**：分開「應不應調整」與「怎麼執行」。涉及 TWD Cash／USD Cash／Fund A／Fund B、switching、same-umbrella、channel、成本、settlement、Pending、In-Transit、capital destination、FX conversion、cash drag。**不得假設「降低曝險＝換回 TWD」。**
-4. **Confidence／Explanation**：completeness、missing、stale、source failure、evidence conflict、look-through coverage、confidence、invalidation、supporting evidence。資料不足時顯示「⬜ 無法形成可靠判斷」。（2026-10-15 補註：上句是客戶 Phase 7 方向原話，照留；Phase 1.5 另訂現行契約字樣 `⬜ 無法判定（資料未備／證據不足）`（44 第七節第三小節之四）。兩句並存，Phase 7 正式規格時對齊，待客戶裁示。）
+4. **Confidence／Explanation**：completeness、missing、stale、source failure、evidence conflict、look-through coverage、confidence、invalidation、supporting evidence。資料不足時顯示「⬜ 無法形成可靠判斷」。（2026-10-15 補註：上句是客戶 Phase 7 方向原話，照留；Phase 1.5 另訂現行契約字樣 `⬜ 無法判定（資料未備／證據不足）`（44 第七節第三小節之四）。兩句並存，Phase 7 正式規格時對齊，~~待客戶裁示~~。）（2026-10-16 讀法註記；狀態更新，不是漏刪：劃線的「待客戶裁示」在寫下當時為真；決策者：客戶（治理第 6 項，`docs/DECISIONS.md` DEC-2026-10-16-08）：資料不足字樣已裁定為「⬜ 無法判定（資料未備／證據不足）」。上句「⬜ 無法形成可靠判斷」是客戶 Phase 7 方向原話，照留不改，讀作已由該裁定字樣取代（此讀法＝**文件組判讀**，不是客戶逐字，可被客戶推翻）；44 本文的同步待下一個解凍輪或 Phase 7 正式規格。本檔仍是 Non-Production 研究文件，本註不構成動工授權。）
 
 - **具體的 veto 條件、score、weight、threshold 一律未核准。**
 

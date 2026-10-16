@@ -11,6 +11,7 @@
 | `branch_archive/wip-exp-c2-ui-wiring-round2-unaudited/` | WIP commit 的程式差異（`git diff`，`.patch.gz`；不含 commit message 署名行） | `wip/exp-c2-ui-wiring-round2-unaudited` @ `4d00b6b` |
 | `branch_archive/pr838/` | #838 資料字典 §4.6 文案草稿與 §5 G-13 摘錄（草稿、未核准） | `claude/v2-data-dictionary-a` @ `78863c3` |
 | `branch_archive/pr799/` | #799 舊 HANDOVER 工作原則摘錄（未重新核准） | `claude/fund-handover-sn42bh` @ `c6750e8` |
+| `decisions/` | 客戶裁示逐字存檔（2026-10-16 加入；性質與上列不同：存的是對話中裁示的全文，不是分支內容）。首份：客戶 2026-10-16 治理十一項裁示，三個 sha256 見該目錄 `README.md` | 客戶 2026-10-16 對話，經總管逐字轉存；存檔時 base main `ab30239` |
 
 每個子目錄的 `README.md` 記來源分支、全長 SHA、時間、原始與保存檔的 sha256、被 main 何處引用、驗證指令。
 

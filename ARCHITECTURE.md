@@ -493,7 +493,7 @@ my-fund-dashboard/
 ├── ledger_snapshot_store.py # `_T7_State` 系統 tab — T7 帳本 JSON snapshot 跨刷新還原
 ├── requirements.txt        # 依賴清單
 ├── CLAUDE.md               # AI 協作規範（Core Protocol v2.0）
-├── STATE.md                # 專案進度追蹤器
+├── STATE.md                # 專案進度追蹤器（歷史；2026-10-16 起不再要求更新，現行熱交接改為 docs/HANDOFF.md，見 docs/DECISIONS.md DEC-2026-10-16-07）
 ├── ARCHITECTURE.md         # 本文件
 ├── SPEC.md                 # 系統需求規格書
 ├── NAS_PROXY_GUIDE.md      # NAS 中繼站人類說明書

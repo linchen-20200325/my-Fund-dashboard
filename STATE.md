@@ -1,6 +1,7 @@
 # STATE.md — 基金戰情室 (Fund Dashboard)
 
-> 歷史文件；自 2026-10-16 起現況與下一步見 `docs/HANDOFF.md`，`PROCESS.md` §1 與本檔的張力見 `PROJECT_RULES.md` 第 14 節之 5。
+> 歷史文件；自 2026-10-16 起現況與下一步見 `docs/HANDOFF.md`，~~`PROCESS.md` §1 與本檔的張力見 `PROJECT_RULES.md` 第 14 節之 5~~。
+> → **2026-10-16 客戶治理第 5、11 項已裁示**（`docs/DECISIONS.md` 的 `DEC-2026-10-16-07`／`DEC-2026-10-16-13`；決策者：客戶；**有意識的政策變更，不是漏刪**，上一行劃線處原為「張力待裁示」的指標）：本檔**保留歷史**、**不再**作為現行熱資料來源、**不再**要求更新、**不刪除**（除非未來另有正式裁示）；唯一現行熱交接是 `docs/HANDOFF.md`，開工必讀順序見 `PROJECT_RULES.md`。以下內文為歷史紀錄，一字未改。
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
