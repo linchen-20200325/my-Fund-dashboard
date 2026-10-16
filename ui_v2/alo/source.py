@@ -135,6 +135,12 @@ def _secret_values() -> list:
     )
 
 
+def mask_error(message: str) -> str:
+    """給 `page.render(mask_error=...)`：正式頁錯誤行的訊息原文經遮蔽才上畫面（同 `ui_v2/hld/source.py::mask_error`；
+    總管 2026-10-16 判定，PR #976 稽核後）。"""
+    return masking.mask_message(message, _secret_values())
+
+
 def load_live() -> dict:
     """給 `page.render(load_live=...)` 用的載入函式。三個來源逐一讀、逐一收錯誤，一個壞不拖垮其餘。"""
     values = _secret_values()

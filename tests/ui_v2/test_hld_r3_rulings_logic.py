@@ -248,6 +248,23 @@ def test_第5點_覆蓋閘門只標區間起點早於該檔最舊除息日的那
         assert (texts == [logic.ND_TEXT, logic.ND_TEXT]) is (g["_fund_code"] == A._MID_CODE), g["_fund_code"]
 
 
+def test_第5點_覆蓋閘門邊界_最舊除息日恰等於區間起點_不算資料未備():
+    """總管 2026-10-16 判定（PR #976 稽核後）：最舊除息日 == 區間起點 → 區間內第一天就有證據，不得判資料未備。"""
+    start = A._WINDOW[0]
+    rows = [r for r in fixtures.dividends() if r["fund_code"] != A._MID_CODE]
+    rows.append({"fund_code": A._MID_CODE, "ex_date": start, "pay_date": None, "div_per_unit_orig_ccy": 0.1,
+                 "ccy": next(h["ccy"] for h in fixtures.holdings() if h["fund_code"] == A._MID_CODE),
+                 "div_kind": "income", "fetched_at": "2026-01-02T02:00:00Z"})
+    loaded = A._assemble(dividend_table=_div_table(settled=_all_settled(), rows=rows))
+    coverage = loaded["live_args"]["dividend_coverage"]
+    assert coverage[A._MID_CODE] == start
+    assert live._gate_dividend_coverage(loaded["dataset"], coverage) is loaded["dataset"]
+    model = A._build_model(loaded)
+    texts = [mv["text"] for g in logic.find_block(model, "HLD-3")["fund_groups"] if g["_fund_code"] == A._MID_CODE
+             for mv in g["main_values"]]
+    assert logic.ND_TEXT not in texts
+
+
 def test_第5點_門檻指標資料未備時_HLD1寫出dividend那一句():
     bad = A._MID_CODE
     rules = [{"indicator": "配息佔淨值比", "direction": "高於", "value": -1.0}]
@@ -347,8 +364,10 @@ def test_第8點_名稱相同但鍵不同_不合併():
     assert {"H-X", "H-Y"} <= {r["holding_id"] for r in merged}
 
 
+# ~~("fund_name", "另一個名稱")~~ → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：名稱不再是語意欄，
+# 名稱不同照樣加總（見下一條）。
 @pytest.mark.parametrize("column, value", [
-    ("ccy", "EUR"), ("fund_name", "另一個名稱"), ("bucket", "別的類別"), ("opened_on", "2020-01-01"),
+    ("ccy", "EUR"), ("bucket", "別的類別"), ("opened_on", "2020-01-01"),
     ("last_synced_at", "2026-01-01T04:00:00Z"),
 ])
 def test_第8點_同鍵但語意欄不同_不加總_raise(column, value):
@@ -356,6 +375,23 @@ def test_第8點_同鍵但語意欄不同_不加總_raise(column, value):
     _split_first_holding(args["dataset"], **{column: value})
     with pytest.raises(ValueError, match=f"兩列的 {column} 不同"):
         logic.build_page_model(**args)
+
+
+@pytest.mark.parametrize("mode", ["demo", "live"])
+def test_第8點_同鍵兩列只有名稱不同_照加總_一列_名稱取第一列(mode):
+    """總管 2026-10-16 判定：同一個正式鍵下名稱是手打的標籤，名稱打字差異不得讓整頁失效（與資產配置一致）。"""
+    args = _rehomed_args()
+    first, second = _split_first_holding(args["dataset"], fund_name="手打的另一個名稱")
+    model = (logic.build_page_model(**args, open_fund=first["holding_id"]) if mode == "demo"
+             else _live(args["dataset"], open_fund=first["holding_id"]))
+    items = logic.find_block(model, "HLD-5")["_items"]
+    assert [i["_holding_id"] for i in items].count(first["holding_id"]) == 1
+    assert second["holding_id"] not in [i["_holding_id"] for i in items]
+    fields = dict(next(i for i in items if i["_holding_id"] == first["holding_id"])["_fields"])
+    hint = logic.HINT if mode == "demo" else ""
+    assert fields["單位數"] == f"{first['units_shares'] + second['units_shares']:,.3f}{hint}"
+    merged = logic.merge_same_key_holdings(args["dataset"]["holding"])
+    assert merged[0]["fund_name"] == first["fund_name"] != second["fund_name"]
 
 
 def test_第8點_第二列holding_id壞了_不因加總被蓋掉():

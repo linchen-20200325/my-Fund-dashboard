@@ -510,7 +510,21 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None) -> None:
+def _error_line(exc: BaseException, mask_error) -> str:
+    """正式頁錯誤行：「⛔ 取數失敗：<型別>：<遮蔽後訊息>」。遮蔽失敗或回傳非字串 → 只印型別（不往外拋、不帶訊息）。"""
+    type_name = type(exc).__name__
+    if mask_error is None:
+        return logic.fetch_failed_text(f"{type_name}：{exc}")
+    try:
+        masked = mask_error(str(exc))
+        if not isinstance(masked, str):
+            raise TypeError("mask_error 應回傳字串")
+    except Exception:  # noqa: BLE001 —— 不是吞：照樣畫錯誤行，只是不帶訊息內容
+        return logic.fetch_failed_text(type_name)
+    return logic.fetch_failed_text(f"{type_name}：{masked}")
+
+
+def render(*, load_live=None, save_live=None, mask_error=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
@@ -522,7 +536,13 @@ def render(*, load_live=None, save_live=None) -> None:
     save_live：選填的寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`），
     只在正式模式有意義。傳入時 ALO-1／ALO-4 的「存檔」掛 callback 真的寫入；不傳時正式模式的
     三枚存檔照舊停用，與加這個參數之前逐字相同。只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
+
+    mask_error（總管 2026-10-16 判定，PR #976 稽核後）：選填的遮蔽函式（`source.mask_error`），只用在正式模式組模型失敗
+    那一行錯誤原文；遮蔽本身失敗或回傳非字串時，退路只印例外型別、不帶訊息內容（同 `ui_v2/hld/page.py::_live_error_line`）。
+    不傳時照舊印原文（訊息只帶保單編號與基金代碼）。只傳 `mask_error` 不傳 `load_live` 是呼叫端的 bug，當場炸。
     """
+    if load_live is None and mask_error is not None:
+        raise ValueError("mask_error 要與 load_live 一起傳")
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
     ctx = None
@@ -554,7 +574,8 @@ def render(*, load_live=None, save_live=None) -> None:
         # 總管 2026-10-16 判定（R3，必修）：同鍵兩列而類別或幣別不同時 `logic.aggregated_holdings` raise ValueError ——
         # 原本沒有人接，正式頁畫出帶堆疊的例外框。比照持倉體檢既有錯誤畫面（`ui_v2/hld/page.py::_render_live_error`）
         # 接住：頁名、提問句、一行「⛔ 取數失敗：ValueError：<訊息原文>」，其餘塊不畫。只接組模型這一步的 ValueError，
-        # 不新設計畫面、不改訊息（訊息只帶保單編號與基金代碼，來自已遮蔽的讀表結果）。
+        # 不新設計畫面。~~不改訊息（訊息只帶保單編號與基金代碼，來自已遮蔽的讀表結果）~~ → 訊息經 `mask_error` 遮蔽
+        # （總管 2026-10-16 判定；有意識的更正，不是漏刪：舊註解的「已遮蔽」說得比實況多 —— 讀表結果裡的鍵沒有經過遮蔽）。
         try:
             model = live.apply_live_notes(
                 logic.build_page_model(dataset),
@@ -563,8 +584,7 @@ def render(*, load_live=None, save_live=None) -> None:
         except ValueError as exc:
             _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
             _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
-            _html(f'<div class="alo-errline" role="alert">'
-                  f'{_esc(logic.fetch_failed_text(f"{type(exc).__name__}：{exc}"))}</div>')
+            _html(f'<div class="alo-errline" role="alert">{_esc(_error_line(exc, mask_error))}</div>')
             return
         key = "live"
 

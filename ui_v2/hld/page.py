@@ -431,7 +431,20 @@ def _on_save_live(save_live) -> None:
     entries = live.hld4_save_entries(
         state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
     )
-    state[_SAVE_RESULTS_STATE] = live.run_saves(entries, save_live)
+    # 連同當下寫出的值一起記（`live.save_record`）：欄位之後再改，結果就過期不顯示（`live.current_save_results`）。
+    state[_SAVE_RESULTS_STATE] = live.save_record(entries, live.run_saves(entries, save_live))
+
+
+def _current_save_results():
+    """這一次存檔的結果；欄位已改得與存檔當下不同 → 過期，清掉並回 None（判定在 `live.current_save_results`）。"""
+    state = st.session_state
+    record = state.get(_SAVE_RESULTS_STATE)
+    results = live.current_save_results(
+        record, state.get(_WINDOW_KEYS[0]), state.get(_WINDOW_KEYS[1]), _rule_rows_now(state)
+    )
+    if record and results is None:
+        del state[_SAVE_RESULTS_STATE]
+    return results
 
 
 def _applied() -> dict:
@@ -914,7 +927,7 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
         # 那些出錯是本檔的 bug，照常浮出來，不畫成取數失敗（第二輪，規格組建議 2）。
         open_fund = _open_fund()
         fields = _current_fields(None)
-        save_results = st.session_state.get(_SAVE_RESULTS_STATE)   # 客戶 2026-10-16 裁示第 2 點（同理放在 try 外）
+        save_results = _current_save_results()   # 客戶 2026-10-16 裁示第 2 點（同理放在 try 外）；過期的不顯示
         try:
             loaded = load_live()
             # 客戶 2026-10-16 裁示第 2 點：不轉 session 裡的套用值 —— 正式結果只讀已存設定（`build_live_model` 沒有那兩個參數）。

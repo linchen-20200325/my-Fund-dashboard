@@ -203,3 +203,29 @@ def test_第8點_正式模式_同鍵兩列幣別不同_畫既有錯誤畫面_沒
     assert page._esc(logic.fetch_failed_text("ValueError：")) in md
     assert "兩列的 ccy 不同（同鍵不同語意，不加總）" in md
     assert [b.label for b in at.button] == []
+
+
+def test_存檔結果過期_欄位改得與存檔當下不同_已存檔就不再顯示(probe):
+    """總管 2026-10-16 判定（PR #976 稽核後）：存檔後又改了欄位，「已存檔」不得再掛在畫面上；改回存檔當下的值也不再出現（已清掉）。"""
+    at = _run()
+    at.text_input(key="hld4_window_start").input(_NEW_START)
+    at.button(key=_button_key("存檔")).click().run()
+    assert live.TEXT_SAVED in _block_blob(at, "HLD-4")
+    at.run()                                                  # 欄位沒動：照樣顯示
+    assert live.TEXT_SAVED in _block_blob(at, "HLD-4")
+    at.text_input(key="hld4_window_start").input("2026-07-01").run()
+    assert not at.exception
+    assert live.TEXT_SAVED not in _block_blob(at, "HLD-4")
+    assert page._SAVE_RESULTS_STATE not in at.session_state
+    at.text_input(key="hld4_window_start").input(_NEW_START).run()
+    assert live.TEXT_SAVED not in _block_blob(at, "HLD-4")
+
+
+def test_存檔失敗原文_欄位一改也不再顯示(probe):
+    probe.failing = {"hld_window_start"}
+    at = _run()
+    at.text_input(key="hld4_window_start").input(_NEW_START)
+    at.button(key=_button_key("存檔")).click().run()
+    assert live.TEXT_SAVE_FAILED in _block_blob(at, "HLD-4")
+    at.text_input(key="hld4_window_start").input("2026-07-01").run()
+    assert live.TEXT_SAVE_FAILED not in _block_blob(at, "HLD-4")

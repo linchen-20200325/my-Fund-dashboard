@@ -17,7 +17,7 @@
 | 持倉體檢 | 真資料 | `page.render(load_live=source.load_live, mask_error=source.mask_error, save_live=source.save_setting)` ＝ `ui_v2/app_hld_live.py`（2026-10-16 起接上存檔） |
 | ~~標的探索~~ | ~~**示意資料**~~ | ~~`page.render()` ＝ `ui_v2/app_exp.py`（本頁還沒有真資料版）；頁首另加一條示意資料標示~~ |
 | 標的探索 | 真資料（第一批） | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_exp_live.py`（2026-10-13 起；狀態更新，不是漏刪 —— 上一列在寫下當時為真）。母體＝選股池的基金代碼，~~其餘欄「⬜ 資料未備」~~（2026-10-15 狀態更新，不是漏刪：#966 起基本資料接 `exp_profile`、淨值與配息接 `exp_nav`）；不再加示意資料標示（正式資料不加示意，比照 hld 2026-10-02 前例） |
-| 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting)` ＝ `ui_v2/app_alo_live.py` |
+| 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting, mask_error=source.mask_error)` ＝ `ui_v2/app_alo_live.py`（2026-10-16 起另傳遮蔽函式） |
 | 設定與診斷 | 真資料 | `page.render(load_live=..., save_live=source.save_setting, refetch_live=source.refetch)` ＝ `ui_v2/app_set_live.py` |
 
 ~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
@@ -192,7 +192,7 @@ def page_exp() -> None:
 
 def page_alo() -> None:
     _on_page("alo")
-    alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting)
+    alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting, mask_error=alo_source.mask_error)
 
 
 def page_set() -> None:

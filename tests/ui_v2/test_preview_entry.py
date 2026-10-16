@@ -185,7 +185,8 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
         # 持倉體檢存檔接上 user_setting，入口與預覽同步加傳 save_live。
         "hld": {"load_live": "load_live", "mask_error": "mask_error", "save_live": "save_setting"},
         "exp": {"load_live": "load_live", "save_live": "save_setting"},   # 2026-10-13 新增
-        "alo": {"load_live": "load_live", "save_live": "save_setting"},
+        # 2026-10-16 總管判定（PR #976 稽核後）：資產配置入口與預覽同步加傳 mask_error（狀態更新，不是漏刪）。
+        "alo": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch"},
     }
 

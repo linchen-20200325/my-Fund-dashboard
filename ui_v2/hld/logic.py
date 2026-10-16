@@ -2099,12 +2099,16 @@ def _check_holding_ids(holdings) -> None:
 # 不得因名稱相似而合併。
 # - 鍵的比對規則與 L2 `services/v2_tables/alo_holdings.py::_key_text` 相同：只去前後空白，不改大小寫、不補 0；
 #   ⛔ 絕不拿基金名稱比對（名稱只拿來驗「同一語意」，名稱相同但鍵不同 → 照舊兩列）。
-# - 只加總下列三欄；其餘欄取第一列（含 `holding_id`）。
+# - 只加總下列三欄；其餘欄取第一列（含 `holding_id`；顯示名稱 `fund_name` 也取第一列）。
 # - 同鍵而下列任一欄不同 → 不是同一語意，不加總、也不挑一列 —— raise（呈現方式同 `ui_v2/alo/logic.py::aggregated_holdings`
 #   的 bucket 衝突；正式模式由 `page.render` 的錯誤畫面接住，不印 Traceback）。
 # 本頁不 import ui_v2.alo（各頁自足），所以另寫一份。
 HOLDING_SUM_COLUMNS = ("units_shares", "cost_orig_ccy", "cost_twd")
-HOLDING_SAME_COLUMNS = ("ccy", "fund_name", "bucket", "opened_on", "last_synced_at")
+# ~~HOLDING_SAME_COLUMNS = ("ccy", "fund_name", "bucket", "opened_on", "last_synced_at")~~
+# → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：拿掉 `fund_name` —— 同一個正式鍵下，名稱是手打的標籤、
+#   不是語意欄位；與 `ui_v2/alo/logic.py::aggregated_holdings`（不比名稱）一致；名稱打字差異不得讓整頁失效。
+#   舊表述在寫下當時依派工單列舉；被權衡掉的是「名稱不同就整頁進錯誤畫面」這個代價。
+HOLDING_SAME_COLUMNS = ("ccy", "bucket", "opened_on", "last_synced_at")
 
 
 def _holding_key(row) -> tuple:

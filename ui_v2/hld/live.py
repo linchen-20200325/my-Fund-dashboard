@@ -59,7 +59,10 @@ from . import logic
 APPLY_DISABLED_REASON = "正式結果只讀已存設定：請按「存檔」，下一次重新載入時生效"
 # 總管 2026-10-16 判定（R3 回報判斷 4 之二，必修）：正式模式 `user_setting` 讀取失敗時，HLD-4 欄位帶不出已存值、是空的；
 # 這時存檔會把空白或半套值蓋掉試算表上原本的設定 ⇒「存檔」停用並寫出這一句（字面為本組擬定，商業語言、避開禁詞）。
-SAVE_BLOCKED_READ_FAILED_REASON = "讀不到已存設定，為避免覆蓋原本的設定，暫不開放存檔"
+# ~~SAVE_BLOCKED_READ_FAILED_REASON = "讀不到已存設定，為避免覆蓋原本的設定，暫不開放存檔"~~
+# → 總管 2026-10-16 判定（PR #976 稽核後；有意識的更正，不是漏刪）：`errors["user_setting"]` 也涵蓋「讀得到但有問題」
+#   （值解析不了、找不到設定分頁、別列設定鍵空白等，見 `parse_user_settings`），舊字面只說「讀不到」不準 ⇒ 改為涵蓋兩者。
+SAVE_BLOCKED_READ_FAILED_REASON = "已存設定讀取或解析有問題，為避免覆蓋原本的設定，暫不開放存檔；請到設定與診斷頁確認"
 
 # 哪一類按鈕停用、原因是哪一句。以 `logic` 的按鈕類別（`44` 5.3）判，不以標籤字面判。
 # 「取數」類不在此：客戶 2026-10-09 裁示正式模式拿掉，見 `apply_live_notes`。
@@ -786,7 +789,7 @@ def _gate_save_by_apply(block: dict) -> None:
 
 
 def _block_save_when_settings_unreadable(block: dict) -> None:
-    """總管 2026-10-16 判定（必修）：設定讀不到時「存檔」一律停用、原因 `SAVE_BLOCKED_READ_FAILED_REASON`。
+    """總管 2026-10-16 判定（必修）：設定讀不到或解析不了時「存檔」一律停用、原因 `SAVE_BLOCKED_READ_FAILED_REASON`。
     讀不到 ≠ 沒設定：欄位空白不代表使用者要清掉已存值，存下去等於覆蓋。排在 `_gate_save_by_apply` 之後，原因句以本句為準。"""
     for button in block["buttons"]:
         if button["_action_kind"] == "存檔":
@@ -966,6 +969,21 @@ def run_saves(entries, save) -> dict:
             results[entry["key"]] = out.get("message") or out["status"]
             failed = True
     return results
+
+
+def save_record(entries, results) -> dict:
+    """`page.py` 記在 session 的「這一次存檔」：逐鍵結果 ＋ 當下寫出（或要寫）的值。"""
+    return {"results": dict(results), "written": {e["key"]: e["value"] for e in entries}}
+
+
+def current_save_results(record, start, end, rule_rows):
+    """總管 2026-10-16 判定（PR #976 稽核後）：存檔結果會過期 —— HLD-4 欄位當下值組出的存檔值與存檔那一次寫出的值
+    不同（使用者又改了欄位），「已存檔」或失敗原文就不再顯示，回 None；相同才回逐鍵結果。
+    比對用 `hld4_save_entries`（與存檔同一支組法），不另寫一套正規化。`record` 為 None → None。"""
+    if not record:
+        return None
+    now = {e["key"]: e["value"] for e in hld4_save_entries(start, end, rule_rows)}
+    return record["results"] if now == record["written"] else None
 
 
 def apply_save_results(model: dict, results) -> dict:
