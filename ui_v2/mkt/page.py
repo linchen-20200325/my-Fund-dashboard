@@ -144,20 +144,32 @@ def _badges_html(badges) -> str:
     return "".join(_badge_html(b) for b in badges)
 
 
+def _drop_blank_lines(markup: str) -> str:
+    """交給 `st.markdown` 的多行 HTML 樣板去掉空白行（2026-10-16 Phase 2 批 3 修正）。
+
+    樣板裡 `{_badges_html(...)}`、`{detail_html}` 那幾行在內容為空時只剩縮排空白 ＝ 空行 ⇒ Markdown 在那裡
+    結束 HTML 區塊，後面縮排四格以上的行被當成程式碼區塊，整張卡下半部以原始碼印在畫面上
+    （瀏覽器實測：3 個 `stCode`，`stMain` 被推到 5878 寬；守衛 `tests/ui_v2/test_live_390_page.py`）。
+    只拿掉空白行、其餘換行與縮排原樣保留 —— 有內容的行渲染結果不變（同 `ui_v2/hld/page.py::_one_line` 的病，
+    但那一支會把行間空白一起拿掉，這裡不拿，免得卡頭代號與標題之間的間距變了）。
+    """
+    return "\n".join(line for line in markup.splitlines() if line.strip())
+
+
 # ───────────────────────── 層 1 ─────────────────────────
 
 
 def _render_light(block: dict) -> None:
     tone = theme.tone_hex(block["_tone"])
     st.markdown(
-        f"""<div class="mkt-light" style="--mkt-tone:{tone}">
+        _drop_blank_lines(f"""<div class="mkt-light" style="--mkt-tone:{tone}">
           <div class="mkt-light-dot"></div>
           <div>
             <div class="mkt-light-text">{_esc(block["text"])}</div>
             <div class="mkt-mv-note">{_esc(block["answers"])}</div>
           </div>
           <div class="mkt-light-code">{_esc(block["code"])}　{_esc(block["title"])}</div>
-        </div>""",
+        </div>"""),
         unsafe_allow_html=True,
     )
     for index, button in enumerate(block["buttons"]):
@@ -199,7 +211,7 @@ def _render_card(block: dict) -> None:
     )
     detail_html = f'<div class="mkt-detail">{detail}</div>' if detail else ""
     st.markdown(
-        f"""<div class="mkt-card">
+        _drop_blank_lines(f"""<div class="mkt-card">
           <div class="mkt-card-head">
             <span class="mkt-card-code">{_esc(block["code"])}</span>
             <span class="mkt-card-title">{_esc(block["title"])}</span>
@@ -208,7 +220,7 @@ def _render_card(block: dict) -> None:
           {"".join(_main_value_html(mv) for mv in block["main_values"])}
           {detail_html}
           <div class="mkt-mv-note">{_esc(block["answers"])}</div>
-        </div>""",
+        </div>"""),
         unsafe_allow_html=True,
     )
     for index, button in enumerate(block["buttons"]):

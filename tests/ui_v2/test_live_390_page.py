@@ -12,6 +12,8 @@
    - 逐一列出右緣超出視窗的元素（排除範圍見下）。
    先量預設（收合）狀態，再把每一個 `<details>` 展開後量一次。
 3. Data Health 燈（各頁 `*-0`）存在，且在首屏可見：預設狀態下 bounding box 頂端 ≥ 0、＜ 視窗高度、高度 ＞ 0。
+4. 沒有 HTML 被 Markdown 印成程式碼區塊（`[data-testid=stCode]` 為 0），1400 寬下 `stMain` 不橫捲 —— 正式模式五頁之外，
+   示範模式五頁也各跑一個情境（2026-10-16 市場總覽核心卡原始碼外露那個病的專屬守衛）。
 
 **排除範圍與理由（只排這些，不是排除「所有會捲的東西」）**：
 - 各頁自己設計的容器內橫捲外框 `.mkt-scroll`／`.hld-scroll`／`.exp-scroll`（`overflow-x: auto`）裡的元素。
@@ -164,6 +166,7 @@ _MEASURE_JS = """([lampSel, innerSel]) => {
     innerScroll,
     lamp: lampBox ? [lampBox.top, lampBox.bottom, lampBox.height] : null,
     exceptions: [...document.querySelectorAll('[data-testid=stException]')].map(e => e.innerText.slice(0, 300)),
+    codeBlocks: [...document.querySelectorAll('[data-testid=stCode]')].map(e => e.innerText.slice(0, 120)),
   };
 }"""
 
@@ -227,29 +230,21 @@ def test_390寬_正式模式_渲染無例外_DataHealth燈在首屏(live_page):
     assert height > 0 and 0 <= top < m["vh"], (name, "Data Health 燈不在首屏", m["lamp"])
 
 
-_MKT_HSCROLL_REASON = (
-    "2026-10-16 實測（真實問題，不在本批修 —— 修版面要客戶線框，回報總管）：市場總覽 MKT-1／MKT-2／MKT-3 三張核心卡"
-    "的 HTML 被 Markdown 當成程式碼區塊印出（DOM 有 3 個 [data-testid=stCode]，內容是 `</div>` 與 "
-    "`<div class=\"mkt-mv\">…` 原始碼），程式碼區塊不換行，把 stMain 推到 scrollWidth 5878（clientWidth 390），整頁要橫捲。"
-    "documentElement 量到的仍是 390／390。推定成因：`ui_v2/mkt/page.py::_render_card` 的三引號字串裡 "
-    "`{_badges_html(block['badges'])}` 那一行在沒有徽章時只剩空白 → 成為空行，結束 HTML 區塊，後面縮排四格以上的行"
-    "變成縮排程式碼區塊（scratch 驗證：把空徽章換成 `<span></span>` 後 stCode 0 個、stMain 390）。"
-    "示範模式 `?scenario=all_ok` 同樣重現；1400 寬也重現（stMain 6210）。修好後本條會 XPASS → 失敗，屆時拿掉 xfail。"
-)
+# ~~本測試發現、尚未修的整頁橫捲：頁名 → 原因（strict：修好後 XPASS 轉紅，逼人拿掉這一條）。~~
+# ~~_KNOWN_PAGE_HSCROLL = {"mkt": _MKT_HSCROLL_REASON}~~
+# → 2026-10-16 同 PR 修正（狀態更新，不是漏刪；決策者：AI 總管判定屬「修回原本規格」）：市場總覽三張核心卡的 HTML
+#   曾被 Markdown 當成程式碼區塊印出（3 個 `stCode`，`stMain` 被推到 5878 寬；示範模式與 1400 寬同樣重現）。
+#   成因：`ui_v2/mkt/page.py::_render_card` 在沒有徽章時 `{_badges_html(...)}` 那一行只剩空白 ＝ 空行，結束 HTML 區塊；
+#   已由同檔 `_drop_blank_lines` 修正，xfail 拿掉。下方 `test_沒有程式碼區塊外露_1400寬stMain不橫捲` 是這個病的專屬守衛。
 
 
-# 本測試發現、尚未修的整頁橫捲：頁名 → 原因（strict：修好後 XPASS 轉紅，逼人拿掉這一條）。
-_KNOWN_PAGE_HSCROLL = {"mkt": _MKT_HSCROLL_REASON}
-
-
-def test_390寬_正式模式_整頁不得水平捲動_收合與全部展開都量(live_page, request):
+def test_390寬_正式模式_整頁不得水平捲動_收合與全部展開都量(live_page):
     name, browser, base = live_page
-    if name in _KNOWN_PAGE_HSCROLL:
-        request.applymarker(pytest.mark.xfail(strict=True, raises=AssertionError, reason=_KNOWN_PAGE_HSCROLL[name]))
     tab = _open(browser, base, name)
     try:
         collapsed = _measure(tab, name)
         assert collapsed["exceptions"] == [], (name, collapsed["exceptions"])
+        assert collapsed["codeBlocks"] == [], (name, "HTML 被當成程式碼區塊印出", collapsed["codeBlocks"])
         _assert_no_page_hscroll(name, "收合", collapsed)
         assert set(collapsed["innerScroll"]) <= _DEFAULT_VISIBLE_INNER_SCROLL[name], (
             name, "預設可見的容器內橫捲多了一塊（未登記）", collapsed["innerScroll"])
@@ -259,3 +254,45 @@ def test_390寬_正式模式_整頁不得水平捲動_收合與全部展開都�
         _assert_no_page_hscroll(name, "全部展開", expanded)
     finally:
         tab.close()
+
+
+# ───────────────────────── 程式碼區塊外露守衛（2026-10-16 市場總覽核心卡那一個病） ─────────────────────────
+#
+# 五頁的 page 都用 `st.markdown(unsafe_allow_html=True)` 交 HTML 樣板；樣板裡出現空行，Markdown 就把後面縮排的行當成
+# 程式碼區塊，原始碼直接印上畫面、還把整頁推寬。示範與正式模式各一個情境；示範模式不帶 `?scenario=`，
+# 市場總覽的預設情境 `all_ok` 正是核心卡沒有徽章的那一種（2026-10-16 實測重現過）。
+
+_DEMO_APPS = {name: _ROOT / "ui_v2" / f"app_{name}.py" for name in _PAGES}
+_WIDE = {"width": 1400, "height": 1200}
+
+
+def _assert_no_code_block_and_no_hscroll(tab, name, mode):
+    m = _measure(tab, name)
+    assert m["exceptions"] == [], (name, mode, m["exceptions"])
+    assert m["codeBlocks"] == [], (name, mode, "HTML 被當成程式碼區塊印出", m["codeBlocks"])
+    assert m["main"] is not None and m["main"][0] <= m["main"][1] + 1, (name, mode, "1400 寬 stMain 被推寬", m["main"])
+
+
+def test_沒有程式碼區塊外露_1400寬stMain不橫捲_正式模式(live_page):
+    name, browser, base = live_page
+    tab = browser.new_page(viewport=_WIDE)
+    try:
+        tab.goto(base + "/", wait_until="networkidle")
+        tab.wait_for_selector(_LAMP[name], timeout=60000)
+        tab.wait_for_timeout(1500)
+        _assert_no_code_block_and_no_hscroll(tab, name, "正式模式")
+    finally:
+        tab.close()
+
+
+@pytest.mark.parametrize("name", _PAGES)
+def test_沒有程式碼區塊外露_1400寬stMain不橫捲_示範模式(browser, name):
+    with _ui_v2_chromium.streamlit_server(_DEMO_APPS[name]) as base:
+        tab = browser.new_page(viewport=_WIDE)
+        try:
+            tab.goto(base + "/", wait_until="networkidle")
+            tab.wait_for_selector(_LAMP[name], timeout=60000)
+            tab.wait_for_timeout(1500)
+            _assert_no_code_block_and_no_hscroll(tab, name, "示範模式")
+        finally:
+            tab.close()
