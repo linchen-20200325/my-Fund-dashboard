@@ -514,7 +514,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 程式：`repositories/policy_supplement_repository.py`（L1）、`services/v2_tables/alo_holdings.py`（L2）。
 寫在本檔而不寫進 `44` 的理由同 7.1：`docs/v2/44_fund_ui_ssot.md` 已凍結，不得加附註。
 
-**出處逐項分開標註**（交接本＝`origin/docs/handover-latest` @ `885b71a` 的 `docs/handover_2026_09_26_latest.md`，行號在該 SHA 上核對過）：
+**出處逐項分開標註**（交接本＝`origin/docs/handover-latest` @ `885b71a` 的 `docs/handover_2026_09_26_latest.md`，行號在該 SHA 上核對過）（保存於 main：`docs/evidence/branch_archive/docs-handover-latest/885b71a_handover_2026_09_26_latest.md`，逐位元組、行號不變；2026-10-16 補，分支仍在）：
 
 | 項目 | 性質 | 出處 |
 |---|---|---|
@@ -531,7 +531,7 @@ git grep -nE '_resolve\("[A-Z_]+"' 7f564aa -- '*.py'
 ⚠️ **2026-09-28 第 14 輪補（稽核 A 建議 1）：上表凡寫「scratchpad 規格 `alo_sheet_tabs_spec.md`」的格子，
 `repo` 內都查不到那份檔案**（它是總管工作區草稿，不在任何分支上）。體例沿用
 `docs/v2/49_data_integration_plan.md` 既有寫法（「規格目前不在 repo 內（總管工作區草稿）」「repo 內無法查證」）。
-**在 repo 內查得到的出處是**：`49` 本身、`44`、交接本分支 `docs/handover-latest`。
+**在 repo 內查得到的出處是**：`49` 本身、`44`、交接本分支 `docs/handover-latest`（該分支 `885b71a` 版交接本保存於 main：`docs/evidence/branch_archive/docs-handover-latest/885b71a_handover_2026_09_26_latest.md`；2026-10-16 補）。
 ⚠️ **同輪順帶查證一則、結論與派工單相反，據實寫明**：派工單轉述稽核 C 稱「實際引到的節是 0.2、2.1、3.1、6.2，
 **沒有 2.2**（`git grep -c '規格 2\.2'` → 0）」。**本組實測：2.2 有被引到，至少三處**
 （`ACCEPTANCE.md` 本表、`repositories/policy_supplement_repository.py` 分頁名那一行「規格 2.1、2.2」、
