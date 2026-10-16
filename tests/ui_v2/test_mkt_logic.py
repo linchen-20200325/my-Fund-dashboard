@@ -590,7 +590,8 @@ def test_顏色只映射資料狀態與新鮮度_主值正負號相反時顏色�
 def test_四狀態各自的顏色照SSOT第五節卡片那張表():
     assert logic.tone_for_state(logic.STATE_OK) == "中性"
     assert logic.tone_for_state(logic.STATE_MISSING) == "灰"
-    assert logic.tone_for_state(logic.STATE_BIZ) == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外`（`⬜ 不適用`）由黃改中性灰；`44` 5.1 卡片表同日行內擴寫。
+    assert logic.tone_for_state(logic.STATE_BIZ) == "灰"
     assert logic.tone_for_state(logic.STATE_ERROR) == "紅"
 
 
@@ -785,21 +786,27 @@ def test_哨符可以再餵回worst_state_而不是KeyError():
     assert logic.worst_state([logic.STATE_UNRANKED, logic.STATE_OK]) is logic.STATE_UNRANKED
 
 
-def test_block_tone只做呈現_不宣稱誰比較嚴重():
+def test_block_tone只做呈現_不宣稱誰比較嚴重(monkeypatch):
     """`44` 沒有給卡層級一個顏色，邊框得有一個 —— 這一支就是那個實作必需品。"""
     assert logic.block_tone([logic.STATE_OK, logic.STATE_OK]) == "中性"
     assert logic.block_tone([logic.STATE_OK, logic.STATE_MISSING]) == "灰"
-    assert logic.block_tone([logic.STATE_MISSING, logic.STATE_BIZ]) == "黃"
+    # 客戶 2026-10-16 裁示第 7 點：`業務例外` 改灰，同級兩態同色。
+    assert logic.block_tone([logic.STATE_MISSING, logic.STATE_BIZ]) == "灰"
     assert logic.block_tone([logic.STATE_BIZ, logic.STATE_ERROR]) == "紅"
     # 顏色與輸入順序無關。
     assert logic.block_tone([logic.STATE_BIZ, logic.STATE_MISSING]) == logic.block_tone(
         [logic.STATE_MISSING, logic.STATE_BIZ]
     )
     # 排得出來就照 `44` 5.1 那張表；排不出來才退到主值顏色。
-    assert logic.tone_for_block(logic.STATE_BIZ, [logic.STATE_BIZ]) == "黃"
+    assert logic.tone_for_block(logic.STATE_BIZ, [logic.STATE_BIZ]) == "灰"
     assert logic.tone_for_block(
         logic.STATE_UNRANKED, [logic.STATE_MISSING, logic.STATE_BIZ]
-    ) == "黃"
+    ) == "灰"
+    # 黃那一級仍在排序裡（四狀態已沒有黃）：用只在本測試存在的假狀態釘住「黃壓過灰、紅壓過黃」。
+    monkeypatch.setitem(logic._TONE_BY_STATE, "測試用黃狀態", "黃")
+    assert logic.block_tone([logic.STATE_MISSING, "測試用黃狀態"]) == "黃"
+    assert logic.block_tone(["測試用黃狀態", logic.STATE_MISSING]) == "黃"
+    assert logic.block_tone(["測試用黃狀態", logic.STATE_ERROR]) == "紅"
 
 
 def test_回歸_同級主值不得讓整頁建不起來():
@@ -980,7 +987,9 @@ def test_第1件反向控制_拆掉tie_break沒有改變任何一個現行情境
         ("mkt2_diverging", "MKT-0"): "灰", ("mkt2_diverging", "MKT-1"): "中性",
         ("mkt2_diverging", "MKT-2"): "中性", ("mkt2_diverging", "MKT-3"): "中性",
         ("mkt3_unit_mismatch", "MKT-0"): "黃", ("mkt3_unit_mismatch", "MKT-1"): "中性",
-        ("mkt3_unit_mismatch", "MKT-2"): "中性", ("mkt3_unit_mismatch", "MKT-3"): "黃",
+        # 客戶 2026-10-16 裁示第 7 點：MKT-3 那一格 ~~"黃"~~ → "灰"（`業務例外` 改中性灰；有意識的更正，不是漏刪）；
+        # 同情境 MKT-0 結論燈照 `44` :310 規則欄仍為黃（總管判定 3：燈的黃不屬「不適用」狀態色）。
+        ("mkt3_unit_mismatch", "MKT-2"): "中性", ("mkt3_unit_mismatch", "MKT-3"): "灰",
         ("all_empty", "MKT-0"): "灰", ("all_empty", "MKT-1"): "灰",
         ("all_empty", "MKT-2"): "灰", ("all_empty", "MKT-3"): "灰",
         ("revised_row", "MKT-0"): "灰", ("revised_row", "MKT-1"): "中性",
@@ -1356,6 +1365,10 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
        重跑一次逐格 dump 再 diff，**不要直接改期望值**。期望值改了，這條就廢了。
     """
     expected = {
+        # ⚠️ 2026-10-16（客戶裁示第 7 點：黃色「不適用」改中性灰）：**只有 mkt3_unit_mismatch／MKT-3 一格**換新值
+        #    （有意識的更正，不是漏刪），舊值 74a194e6bc2c。換之前先證明（量測日 2026-10-16，Python 3.11）：以 `bde5568` 的程式
+        #    與本次程式對全部情境做整頁結構比對，差異只有該卡的邊框、`業務例外` 主值與其「不適用」徽章三處 `_tone` 由黃改灰，
+        #    其他差異 0 處；其餘 111 格逐格未變。
         # ⚠️ 2026-10-13 第二次（稽核 G 回修 N4：從未存過時 MKT-5 摘要改為「尚未存檔，預設顯示全部」）——
         #    同樣**只有 MKT-5 那 14 格**換新值；換前證明：其餘 98 格逐格未變，把摘要換回上一版字樣後
         #    上一版的值逐格重現（量測日 2026-10-13）。上一版值：all_empty a2657e7731bb／六種同值 ce848ea2dd8a／
@@ -1445,7 +1458,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt3_unit_mismatch", "MKT-0"): "c53092c5a96c",
         ("mkt3_unit_mismatch", "MKT-1"): "e156a51bed11",
         ("mkt3_unit_mismatch", "MKT-2"): "bd304edd8d7a",
-        ("mkt3_unit_mismatch", "MKT-3"): "74a194e6bc2c",
+        ("mkt3_unit_mismatch", "MKT-3"): "811547da23a5",
         ("mkt3_unit_mismatch", "MKT-4"): "f707120cac99",
         ("mkt3_unit_mismatch", "MKT-5"): "d77a98bb3c59",
         ("mkt3_unit_mismatch", "MKT-6"): "05b1c5bf2b53",
@@ -1532,3 +1545,28 @@ def test_結論燈_窮舉六十四種組合_永遠點名最高那一級的全部
     assert checked == 64, checked
     # 反空掃：真的有「點名超過一張卡」的組合，否則這一條退化成「永遠只點一張」。
     assert named_more_than_one > 0, "沒有任何組合點名超過一張卡 —— 這一條沒驗到重點"
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_不適用主值與徽章是中性灰_結論燈的黃不動():
+    """`業務例外` 主值與它的「不適用」徽章改灰，字面照留；同情境 `MKT-0` 結論燈照 `44` :310 規則欄仍為黃
+    （總管判定 3：燈的黃是「多看一眼」，不屬「不適用」狀態色）。"""
+    model = logic.build_page_model(fixtures.all_datasets()["mkt3_unit_mismatch"])
+    card = logic.find_block(model, "MKT-3")
+    biz = [mv for mv in card["main_values"] if mv["_state"] == logic.STATE_BIZ]
+    assert biz, "情境裡一個 `業務例外` 主值都沒有 —— 這一條會變成空掃"
+    for mv in biz:
+        assert mv["_tone"] == "灰"
+        badges = [b for b in mv["badges"] if b["_kind"] == "狀態"]
+        assert [(b["text"], b["_tone"]) for b in badges] == [("不適用", "灰")], badges
+    assert card["_tone"] == "灰"
+    light = logic.find_block(model, "MKT-0")
+    assert (light["_tone"], light["text"]) == ("黃", "資金與匯率卡：不適用")
+
+
+def test_第7點_其他黃徽章照舊_防改過頭():
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        assert logic._status_badge(text)["_tone"] == "黃", text
+    assert logic._status_badge("資料未備")["_tone"] == "灰"

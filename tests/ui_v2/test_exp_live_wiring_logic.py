@@ -1031,3 +1031,14 @@ def test_契約_MoneyDJ_not_listed_L2仍收_畫成資料未備():
     assert profiles["declared"]["L01"] == ("USD", "meta:TDCC+FundClear")
     wired = F.assemble(profiles, (), None)
     assert wired["cells"]["L01"]["fund_name"]["text"] == f"{logic.ND_TEXT}：MoneyDJ 未收錄此代碼"
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_正式模式不適用格是中性灰_文案照舊():
+    """正式模式 `業務例外` 那兩種格（規則 13 無配息、Q7 幣別不同）的顏色走 `tone_for_state`，由黃改灰；文案一字不動。"""
+    model = _model()
+    for code, text in (("B02", "⬜ 不適用：近 12 個月無配息"), ("J10", "⬜ 不適用：配息幣別與淨值幣別不同")):
+        node = _cell(model, code, "div_ratio_pct")
+        assert (node["text"], node["_state"], node["_tone"]) == (text, logic.STATE_BIZ, "灰"), code

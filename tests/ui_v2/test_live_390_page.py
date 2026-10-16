@@ -128,7 +128,7 @@ _LAMP = {"mkt": ".mkt-light", "hld": ".hld-lamp", "exp": ".exp-lamp", "alo": ".a
 _INNER_SCROLL = ".mkt-scroll, .hld-scroll, .exp-scroll"
 
 # 預設可見（不在 `<details>` 裡）、390 寬會在容器內橫捲的塊 —— 2026-10-16 實測登記。
-# exp：EXP-2 候選表（7 欄，容器 358 寬、內容 674 寬）。是否屬「核心區」待客戶看線框判斷（本檔不替客戶決定）。
+# exp：EXP-2 候選表（7 欄，容器 358 寬、內容 674 寬）。客戶 2026-10-16 先接受，Phase 3 實機再定（裁示第 10 點）。
 _DEFAULT_VISIBLE_INNER_SCROLL = {"mkt": set(), "hld": set(), "exp": {"EXP-2"}, "alo": set(), "set": set()}
 
 _PAGES = tuple(_SCRIPTS)

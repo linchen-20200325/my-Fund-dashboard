@@ -65,7 +65,7 @@ FORBIDDEN_BUTTON_WORDS = ("一鍵", "最佳", "推薦", "最適")
 _TONE_BY_STATE = {
     STATE_OK: "中性",
     STATE_MISSING: "灰",
-    STATE_BIZ: "黃",
+    STATE_BIZ: "灰",  # 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰（原為黃）
     STATE_ERROR: "紅",
 }
 # ⚠️ **`44` 對這四個狀態只排過一次序，而那一次把中間兩個並列同級。**
@@ -394,7 +394,8 @@ def worst_state(states):
 
     ⚠️ **舊 docstring 寫「`44` MKT-0 規則逐字：三塊狀態取最差者」** ——
        前半句是真的（`44` :310 確實寫了「三塊狀態取最差者」），**但它只抄了半句**：
-       同一行接下來就把 `資料未備` 與 `業務例外` 並列成同一個結果（都是黃）。
+       同一行接下來就把 `資料未備` 與 `業務例外` 並列成同一個結果（都是黃；這裡的黃指結論燈，不是卡片色 ——
+       卡片的 `業務例外` 自客戶 2026-10-16 裁示第 7 點起為灰）。
        **抄前半句、丟掉後半句，抄出來的就是一個 `44` 沒有寫的全序。**
     ⚠️ **回傳值與輸入順序無關**（同級時回哨符，不回「第一個」）。
     ⚠️ 空集回 `資料未備`：本檔既有行為，`44` 未訂（一塊的主值集合為空時沒有東西可讀）。
@@ -507,7 +508,8 @@ def incomplete_text(window_days, baseline_date, *, pair_consistent=None) -> str:
 def _status_badge(text: str) -> dict:
     if text not in STATUS_BADGE_LITERALS:
         raise ValueError(f"狀態徽章字面值 {text!r} 不在 `44` 5.2 的七個之內")
-    return {"_kind": "狀態", "_tone": "黃" if text != "資料未備" else "灰", "text": text}
+    # 客戶 2026-10-16 裁示第 7 點：「不適用」徽章與「資料未備」同為中性灰；其餘五個仍照 `44` 5.2（取數失敗、推估、修正過、部分缺、未定義）不動。
+    return {"_kind": "狀態", "_tone": "灰" if text in ("資料未備", "不適用") else "黃", "text": text}
 
 
 def _source_badge(tier: str) -> dict:

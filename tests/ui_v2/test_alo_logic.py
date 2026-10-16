@@ -206,7 +206,8 @@ def test_44還是凍結的那一份():
     # 2026-10-14 再解凍（標的探索 C2 接線紀錄，檔尾追加第七節第三小節之三；前文一字未動；分支上前三版 2c5803f3d0bac6b40cc88fb09b929cfc、e5193b6e2a2f0804b89855d065ed41ae、095bdedc0865a369dbf02bc7f63c4c3a）；上一個主線值 cd7bd86bea69ef4157ca0debc8657842。
     # 2026-10-15 #966 修正輪 2：7.3.3 末條 Q7 半句加刪除線並追加更正與白話化補正（只動檔尾標的探索段落）。
     # 2026-10-15 Phase 1.5（客戶 2026-10-15 裁示 A+ 修正版）：方向性條文改寫為現況＋准入條件；前文只做行內擴寫、行數不變，檔尾追加第七節第三小節之四；上一個主線值 11c523139f2dae27a551ba9af5d90568（同 PR 稽核回修前分支值 df58130ed9c4e815da5bf078257094a8）。
-    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "336328ba155069407bcc7433501898bb"
+    # 2026-10-16 客戶裁示第 6、7 點（黃色「不適用」改中性灰、MKT-0 三塊皆空 → 灰）：前文只做行內擴寫、行數不變，檔尾追加第七節第三小節之五；上一個主線值 336328ba155069407bcc7433501898bb。
+    assert hashlib.md5(_D44.read_bytes()).hexdigest() == "cefdabe36f5a37a228fddcc69ad10a94"
 
 
 def test_取數失敗圖示是禁止號_黃燈仍是警告號():
@@ -1604,3 +1605,51 @@ def test_nav_not_ready形狀不對_raise(bad, exc):
     ds["nav_not_ready"] = bad
     with pytest.raises(exc):
         logic.nav_not_ready(ds)
+
+
+# ═════════════════════ 客戶 2026-10-16 裁示第 7 點：黃色「不適用」改中性灰 ═════════════════════
+
+
+def test_第7點_算不出來的空狀態是中性灰_文案照舊():
+    """`44` 5.5 `算不出來`（文案 `⬜ 不適用：<原因>`）的顏色由黃改灰；文案一字不動（顏色不是唯一資訊）。"""
+    assert _block(_model("notarget"), "ALO-2")["placeholder"] == {
+        "text": logic.TEXT_NA_NO_TARGET, "_empty_kind": "算不出來", "_tone": "灰"}
+    assert _block(_model("nobasis"), "ALO-2")["placeholder"] == {
+        "text": logic.TEXT_NA_NO_BASIS, "_empty_kind": "算不出來", "_tone": "灰"}
+    dataset = fixtures.scenario("full")
+    _setting(dataset, "alo_scenario_input", [
+        {"bucket": fixtures.CORE, "amount_twd": -660000},
+        {"bucket": fixtures.SATELLITE, "amount_twd": -290000},
+        {"bucket": fixtures.CASH, "amount_twd": -50000},
+    ])
+    note = _block(logic.build_page_model(dataset), "ALO-3")["placeholder"]
+    assert note["_empty_kind"] == "算不出來" and note["_tone"] == "灰"
+    assert note["text"].startswith("⬜ 不適用：")
+
+
+def test_第7點_不適用徽章是灰_其他黃徽章與部分缺照舊是黃():
+    """防改過頭：只有「不適用」改灰；`推估`／`修正過`／`部分缺`／`未定義` 與 `部分缺` 空狀態照舊是黃。"""
+    assert logic.status_badge("不適用")["_tone"] == "灰"
+    assert logic.status_badge("資料未備")["_tone"] == "灰"
+    for text in ("推估", "修正過", "部分缺", "未定義"):
+        assert logic.status_badge(text)["_tone"] == "黃", text
+    assert logic._EMPTY_TONE == {"來源缺": "灰", "算不出來": "灰", "部分缺": "黃", "系統錯誤": "紅"}
+
+
+@pytest.mark.parametrize("rows, tail", [
+    ([{"bucket": "拼錯的類別", "amount_twd": 1000}, {"bucket": fixtures.CASH, "amount_twd": 50000}],
+     logic.TEXT_NA_UNKNOWN_BUCKET),
+    ([{"bucket": fixtures.CASH, "amount_twd": -10_000_000}, {"bucket": fixtures.SATELLITE, "amount_twd": 1000}],
+     logic.TEXT_NA_OVERFLOW),
+])
+def test_第7點_ALO3列尾不適用推導的卡片色是中性灰(rows, tail):
+    """列尾 `⬜ 不適用：…`（類別不在清單／假設金額超出現值）推導出的卡片色由黃改灰，
+    與同卡總額為零的 `算不出來` placeholder 同色；列尾文字照舊（稽核 #974 必修 M1）。"""
+    dataset = fixtures.scenario("full")
+    _setting(dataset, "alo_scenario_input", rows)
+    card = _block(logic.build_page_model(dataset), "ALO-3")
+    tails = [r["tail_text"] for r in card["input_rows"]]
+    assert tail in tails and tail.startswith("⬜ 不適用")
+    assert not any(t.startswith("⬜ 資料未備") for t in tails), tails  # 不讓別的灰蓋住這一條
+    assert card["placeholder"] is None
+    assert card["_tone"] == "灰"
