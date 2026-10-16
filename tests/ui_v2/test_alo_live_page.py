@@ -457,3 +457,184 @@ def test_容許帶未設定_使用者填了才寫(monkeypatch, probe):
     at.text_input(key="live_alo_tolerance_pp").set_value("3")
     at.button(key="live_alo1_btn_0").click().run()
     assert [call for call in probe.calls if call[0] == "alo_tolerance_pp"] == [("alo_tolerance_pp", "3", "float")]
+
+
+# ═══════════════════════ 存檔失敗後恰逢讀取冷卻：打的字暫存帶回（客戶 2026-10-16 裁示方案 B）═══════════════════════
+#
+# 重現（2026-10-15 Phase 2 批 2，修正前）：容許帶打 5 → 存檔失敗 → 下一輪讀 `user_setting` 回冷卻 ⇒
+# ALO-1／ALO-4 不畫輸入欄（`ALO-GAP-設定取數失敗`）⇒ 冷卻結束重繪時欄位回到表上的 4，打的 5 不見。
+# 載入函式改由探針模組提供：`probe.cooling` 為真時回冷卻那一輪的資料（`errors["user_setting"]`、`setting_raw` 為空），
+# 否則回 `probe.dataset`／`probe.raw`。探針的寫入不回寫到讀取（表上的值不會因為存成功而變），
+# 這樣「存成功後丟掉暫存」才看得出差別。
+
+_COOLING_MSG = "設定試算表暫停重試，還剩 30 秒（上次失敗類別：api）"
+
+
+def _cooling_script():
+    return f"""
+import sys
+sys.path.insert(0, {str(_ROOT)!r})
+from ui_v2.alo import page
+import {_PROBE} as probe
+
+page.render(load_live=probe.load, save_live=probe.save)
+"""
+
+
+@pytest.fixture
+def cooling(probe):
+    import copy as _copy
+
+    probe.dataset = _copy.deepcopy(_DATASET)
+    probe.raw = dict(_RAW)
+    probe.cooling = False
+    probe.cool_on_fail = True
+
+    def load():
+        if probe.cooling:
+            dataset = _copy.deepcopy(_DATASET)
+            dataset["errors"] = {"user_setting": _COOLING_MSG}
+            dataset["user_setting"] = []
+            return {"dataset": dataset, "notes": {"setting_raw": {}}}
+        return {"dataset": _copy.deepcopy(probe.dataset), "notes": {"setting_raw": dict(probe.raw)}}
+
+    real_save = probe.save
+
+    def save(key, value, kind):
+        out = real_save(key, value, kind)
+        if out["status"] != "saved" and probe.cool_on_fail:
+            probe.cooling = True                     # 寫入失敗 ⇒ L1 登記冷卻，下一輪讀取被擋
+        return out
+
+    probe.load, probe.save = load, save
+    return probe
+
+
+def _save_fails_into_cooling(monkeypatch, cooling, failing, edit, button_key):
+    cooling.failing = set(failing)
+    at = _run(_cooling_script(), monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    edit(at)
+    at.button(key=button_key).click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(at.text_input) == 0 and len(at.radio) == 0      # 冷卻那一輪：照舊不畫輸入欄（不改版面）
+    return at
+
+
+def _recover(at, cooling):
+    cooling.cooling = False
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def _set_tolerance(value):
+    return lambda at: at.text_input(key="live_alo_tolerance_pp").set_value(value)
+
+
+def test_暫存帶回_容許帶存檔失敗進冷卻_恢復後欄位帶回打的字_失敗行在_寫入次數不變(monkeypatch, cooling):
+    at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
+                                  "live_alo1_btn_0")
+    written = len(cooling.calls)
+    assert written == 2                                        # 目標列＋容許帶各寫一次
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_tolerance_pp").value == "5"
+    _fail_line_index(at)                                       # 失敗行照舊顯示
+    assert len(cooling.calls) == written                       # 不自動存檔
+
+
+def test_暫存帶回_恢復後再按存檔_寫出帶回的字不是舊值(monkeypatch, cooling):
+    at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
+                                  "live_alo1_btn_0")
+    _recover(at, cooling)
+    cooling.failing = set()
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert cooling.calls[-1] == ("alo_tolerance_pp", "5", "float")
+    assert not any('class="alo-errline"' in v for v in _markdown_values(at))
+
+
+def test_暫存帶回_冷卻那一輪按存檔_暫存不被清(monkeypatch, cooling):
+    at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
+                                  "live_alo1_btn_0")
+    written = len(cooling.calls)
+    at.button(key="live_alo1_btn_0").click().run()             # 讀取失敗那一輪：不寫，記成存檔失敗
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(cooling.calls) == written
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_tolerance_pp").value == "5"
+
+
+def test_暫存帶回_冷卻期間表上值改了_恢復後以表為準(monkeypatch, cooling):
+    at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
+                                  "live_alo1_btn_0")
+    for row in cooling.dataset["user_setting"]:
+        if row["setting_key"] == "alo_tolerance_pp":
+            row["setting_value"] = 6.0
+    cooling.raw["alo_tolerance_pp"] = "6"
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_tolerance_pp").value == "6"
+
+
+def test_暫存帶回_存成功之後再遇冷卻_恢復後顯示表上值(monkeypatch, cooling):
+    cooling.failing, cooling.cool_on_fail = {"alo_tolerance_pp"}, False
+    at = _run(_cooling_script(), monkeypatch)
+    at.text_input(key="live_alo_tolerance_pp").set_value("5")
+    at.button(key="live_alo1_btn_0").click().run()             # 失敗、沒冷卻 ⇒ 有暫存
+    cooling.failing = set()
+    at.button(key="live_alo1_btn_0").click().run()             # 這一次存成功 ⇒ 暫存丟掉
+    assert cooling.calls[-1] == ("alo_tolerance_pp", "5", "float")
+    cooling.cooling = True                                     # 之後另一個原因進了冷卻
+    at.run()
+    assert len(at.text_input) == 0
+    _recover(at, cooling)
+    # 探針的寫入不回寫到讀取，表上仍是 4：畫面顯示表上值，不帶回已經存出去的暫存。
+    assert at.text_input(key="live_alo_tolerance_pp").value == "4"
+
+
+def test_暫存帶回_目標列比重(monkeypatch, cooling):
+    at = _save_fails_into_cooling(
+        monkeypatch, cooling, {"alo_target_weights"},
+        lambda at: at.text_input(key="live_alo_target_0_weight").set_value("0.65"), "live_alo1_btn_0")
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_target_0_weight").value == "0.65"
+    assert at.text_input(key="live_alo_tolerance_pp").value == "4"   # 存成功的那個鍵不帶回（本來也沒改）
+
+
+def test_暫存帶回_ALO4類別名稱(monkeypatch, cooling):
+    at = _save_fails_into_cooling(
+        monkeypatch, cooling, {"alo_bucket_names"},
+        lambda at: at.text_input(key="live_alo_bucket_name_0").set_value("成長"), "live_alo4_btn_1")
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_bucket_name_0").value == "成長"
+
+
+def test_暫存帶回_ALO4比重基準radio(monkeypatch, cooling):
+    at = _save_fails_into_cooling(
+        monkeypatch, cooling, {"alo_basis"},
+        lambda at: at.radio(key="live_alo_basis").set_value(logic.BASIS_MV), "live_alo4_btn_1")
+    _recover(at, cooling)
+    assert at.radio(key="live_alo_basis").value == logic.BASIS_MV
+
+
+def test_暫存帶回_ALO4比重基準暫存值不在選項內_頁面不崩_顯示表上值_丟掉該欄暫存(monkeypatch, cooling):
+    """2026-10-16 稽核 B4：radio 帶回用 `options.index`，暫存值不在選項內時不得拋錯把整頁炸掉。"""
+    at = _save_fails_into_cooling(
+        monkeypatch, cooling, {"alo_basis"},
+        lambda at: at.radio(key="live_alo_basis").set_value(logic.BASIS_MV), "live_alo4_btn_1")
+    at.session_state[page._PENDING_INPUTS_STATE] = {"alo_basis": {"text": "不是選項的值", "raw": _RAW["alo_basis"]}}
+    _recover(at, cooling)
+    assert at.radio(key="live_alo_basis").value == logic.BASIS_COST            # 表上值（_RAW 的「成本」）
+    assert "alo_basis" not in at.session_state[page._PENDING_INPUTS_STATE]
+
+
+def test_暫存帶回_帶回之後再改字_又遇冷卻_帶回的是最新的字(monkeypatch, cooling):
+    at = _save_fails_into_cooling(monkeypatch, cooling, {"alo_tolerance_pp"}, _set_tolerance("5"),
+                                  "live_alo1_btn_0")
+    _recover(at, cooling)
+    at.text_input(key="live_alo_tolerance_pp").set_value("8").run()   # 跟著走：暫存刷新成 8
+    cooling.cooling = True
+    at.run()
+    assert len(at.text_input) == 0
+    _recover(at, cooling)
+    assert at.text_input(key="live_alo_tolerance_pp").value == "8"

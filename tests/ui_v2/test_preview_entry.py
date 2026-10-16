@@ -381,6 +381,7 @@ def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字
     assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE",
                                 "exp_page._SAVE_RESULTS_STATE", "exp_page._RULES_STATE",
                                 "exp_page._SEEDED_STATE",  # 2026-10-13 稽核 L 回修多一格
+                                "alo_page._PENDING_INPUTS_STATE",  # 2026-10-16 客戶裁示方案 B 多一格
                                 "hld_page._SAVE_RESULTS_STATE"]  # 2026-10-16 客戶裁示第 2 點：持倉體檢存檔接上後多一格
     hld_key = _string_constant(_tree(_ROOT / "ui_v2" / "hld" / "page.py"), "_SAVE_RESULTS_STATE")
     assert hld_key and hld_key not in _PREVIEW.read_text(encoding="utf-8")
@@ -392,6 +393,8 @@ def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字
     assert _pops_each_drop_key(_function(tree, "_on_page"))
     alo_key = _string_constant(_tree(_ROOT / "ui_v2" / "alo" / "page.py"), "_SAVE_ERRORS_STATE")
     assert alo_key and alo_key not in _PREVIEW.read_text(encoding="utf-8")  # 常數存在，本檔沒有寫死同一個字串
+    alo_pending = _string_constant(_tree(_ROOT / "ui_v2" / "alo" / "page.py"), "_PENDING_INPUTS_STATE")
+    assert alo_pending and alo_pending not in _PREVIEW.read_text(encoding="utf-8")
 
 
 def test_市場總覽的套用key字面值確實住在mkt的page_py():

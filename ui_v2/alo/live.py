@@ -620,3 +620,93 @@ def dataset_with_save_errors(dataset, errors) -> dict:
     out = dict(dataset)
     out["save_errors"] = {**(dataset.get("save_errors") or {}), **dict(errors or {})}
     return out
+
+
+# ───────────────────────── 暫存帶回（客戶 2026-10-16 裁示方案 B）─────────────────────────
+#
+# 重現（2026-10-15 Phase 2 批 2）：存檔寫入失敗 → L1 登記冷卻 → 下一輪讀 `user_setting` 回冷卻 ⇒
+# ALO-1／ALO-4 依 `ALO-GAP-設定取數失敗` 不畫輸入欄 ⇒ streamlit 把沒畫出來的輸入欄狀態清掉 ⇒
+# 冷卻結束重繪時欄位回到表上已存值，使用者打的字不見了。
+# 方案 B：把寫入失敗那個鍵的輸入欄當下內容另存一份（`page.py::_PENDING_INPUTS_STATE`），
+# 輸入欄重新出現時拿它當初值帶回。**不改版面**：冷卻那一輪照舊不畫輸入欄。不自動存檔。
+# 形狀：`{輸入欄 name: {"text": 當下值, "raw": 暫存當時該鍵在試算表上的原字串}}`。
+# 規則：
+# - 存入：讀取沒失敗、某鍵寫入失敗 ⇒ 只存那個鍵的輸入欄（`pending_after_save`）。
+#   讀取失敗那一輪按存檔（畫面上沒有輸入欄、`values` 為空）**不覆寫、也不清掉**暫存。
+# - 丟棄：那個鍵存成功（含「沒有東西要寫」的 skip）；讀得到設定、而表上原字串與暫存時不同
+#   ⇒ 以表為準（`pending_reconcile`，比照 `ui_v2/exp/page.py::_seed_live_fields` 讀得到才判定的先例）；
+#   預覽換頁（`ui_v2/app_preview.py::_PAGE_STATE_TO_DROP`）。讀不到設定（`raw` 為空）⇒ 只保留、不判定。
+# - 帶回：輸入欄的鍵不在 session 時用暫存值當初值（`restore_text`）。
+#   ⛔ 不得改寫 `field["value_text"]`：`_unchanged` 靠它判斷「沒動過」，改寫會讓帶回的字被當成沒動過、
+#   存檔時靜默寫回舊值。
+# - 跟著走：輸入欄的鍵在 session 時，以當下值刷新暫存（`pending_track`），之後若再遇冷卻帶回的是最新內容。
+# - radio（比重基準）帶回時，暫存值若不是現有選項 ⇒ 退回表上值並丟掉該欄暫存（`pending_drop`），不讓頁面崩。
+# 兩種刻意的行為，據實寫明（2026-10-16 稽核 B2／B3，總管判定可接受、不改程式）：
+# - 「冷卻中」的判定是 `raw` 是否為空：`source.load_live` 只在 `user_setting` 表讀得到時才填 `setting_raw`
+#   （每個 `SETTING_KEYS` 都帶，值可能是 None）。讀不到表（raw 為空，含冷卻）只保留、不判定；
+#   讀得到表但結構有問題時（`errors["user_setting"]` 有值、輸入欄不畫，但 `setting_raw` 已填），照表比對（以表為準），
+#   值不同即丟暫存。
+# - 解析不過（`save_entries` 的 `error` 是 `BadSettingValue` 原文、沒有真的呼叫寫入）也算該鍵失敗，同樣暫存使用者打的字；
+#   失敗行同時照舊顯示解析器原文，帶回的字不會被誤認為已存進去。
+
+
+def setting_key_of(name):
+    """輸入欄 name → 它寫進的設定鍵；不屬於任何已接上寫入的鍵 ⇒ None。"""
+    if name.startswith("alo_target_"):
+        return "alo_target_weights"
+    if name.startswith("alo_bucket_name_"):
+        return "alo_bucket_names"
+    if name in ("alo_tolerance_pp", "alo_basis"):
+        return name
+    return None
+
+
+def pending_after_save(pending, values, results, *, raw, settings_error) -> dict:
+    """按存檔之後的暫存（不改呼叫端那一份）。
+
+    values：這一枚存檔收集到的 `{輸入欄 name: 當下值}`；results：`run_saves` 的 `{鍵: None 或失敗訊息}`；
+    raw：按存檔那一輪的 `notes["setting_raw"]`；settings_error：那一輪 `user_setting` 的讀取失敗原文。
+    """
+    out = dict(pending or {})
+    if settings_error is not None:
+        return out                         # 讀取失敗那一輪：沒有輸入欄可存，也不清掉先前的暫存
+    raw = raw or {}
+    for key, message in results.items():
+        for name in [n for n in out if setting_key_of(n) == key]:
+            out.pop(name)                  # 這個鍵的舊暫存一律換掉（成功 ⇒ 不再需要；失敗 ⇒ 換成這一次的內容）
+        if message is None:
+            continue
+        for name, value in values.items():
+            if setting_key_of(name) == key:
+                out[name] = {"text": value, "raw": raw.get(key)}
+    return out
+
+
+def pending_reconcile(pending, raw) -> dict:
+    """重繪時以表為準：讀得到設定時，表上原字串與暫存當時不同的那幾欄丟掉。`raw` 為空（讀不到）⇒ 原樣保留。"""
+    out = dict(pending or {})
+    if not raw:
+        return out
+    return {name: entry for name, entry in out.items()
+            if raw.get(setting_key_of(name)) == entry["raw"]}
+
+
+def restore_text(pending, name, default):
+    """輸入欄的初值：有暫存 ⇒ 暫存的字；沒有 ⇒ 原本的初值（`value_text` 或 radio 的已存值）。"""
+    entry = (pending or {}).get(name)
+    return default if entry is None else entry["text"]
+
+
+def pending_drop(pending, name) -> dict:
+    """丟掉一欄的暫存（不改呼叫端那一份）。用在 radio 帶回時暫存值已不是現有選項：以表為準。"""
+    out = dict(pending or {})
+    out.pop(name, None)
+    return out
+
+
+def pending_track(pending, name, value) -> dict:
+    """輸入欄還在畫面上時，以當下值刷新那一欄的暫存；沒有暫存的欄位不新增（不改呼叫端那一份）。"""
+    out = dict(pending or {})
+    if name in out:
+        out[name] = {**out[name], "text": value}
+    return out

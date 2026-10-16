@@ -994,6 +994,26 @@ def test_ALO2判準_市值基準而沒有任何匯率_含外幣的類別資料�
     assert any(line.startswith("合計未涵蓋") and fixtures.CORE in line for line in card["tail_lines"])
 
 
+def test_ALO2部分類別缺基準值_有值的類別照判內外_缺值的類別寫資料未備_不整張不判():
+    """客戶 2026-10-16 裁示（ALO-GAP-部分缺的內外判讀，已裁結案）：有基準值的類別照常判斷帶內／帶外，
+    缺基準值的類別顯示「⬜ 資料未備」；不要因一個缺值就整張都不判。
+    `nofx` 情境：核心、衛星各含一檔外幣 ⇒ 缺換算匯率；現金只有新臺幣 ⇒ 有值。"""
+    card = _block(_model("nofx"), "ALO-2")
+    assert card["placeholder"] is None                         # 不是整張空狀態
+    rows = {r["_bucket"]: r for r in card["_rows"]}
+    valued = [r for r in card["_rows"] if r["_current_pct"] is not None]
+    missing = [r for r in card["_rows"] if r["_current_pct"] is None]
+    assert valued and missing                                   # 前提：真的是「部分缺」
+    for row in valued:
+        assert row["band_text"] in ("內", "外"), row
+        assert row["_diff"] is not None, row
+    for row in missing:
+        assert row["current_text"].startswith("⬜ 資料未備"), row
+        assert row["band_text"] == "⬜", row                    # 內外格維持兩字限制內的「⬜」（44 ALO-2）
+    assert rows[fixtures.CASH] in valued
+    assert any(line.startswith("合計未涵蓋") for line in card["tail_lines"])
+
+
 def test_ALO2判準_目標合計0點9_每一列差額仍是當前減目標_不先歸一():
     dataset = fixtures.scenario("full")
     _setting(dataset, "alo_target_weights", [

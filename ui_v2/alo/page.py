@@ -203,6 +203,9 @@ def _placeholder(block: dict) -> None:
 
 # 正式模式存檔失敗的累積帳（`{鍵: 失敗訊息}`）。成功的鍵由 `live.merge_save_results` 移除。
 _SAVE_ERRORS_STATE = "_alo_live_save_errors"
+# 寫入失敗那個鍵的輸入欄當下內容（客戶 2026-10-16 裁示方案 B；形狀與存入、丟棄、帶回規則見 live.py「暫存帶回」段）。
+# 只在正式模式拿到寫入函式時使用；示範模式不碰。
+_PENDING_INPUTS_STATE = "_alo_live_pending_inputs"
 
 
 def _on_save(keys, fields, prefix, ctx) -> None:
@@ -216,6 +219,23 @@ def _on_save(keys, fields, prefix, ctx) -> None:
     st.session_state[_SAVE_ERRORS_STATE] = live.merge_save_results(
         st.session_state.get(_SAVE_ERRORS_STATE), results
     )
+    st.session_state[_PENDING_INPUTS_STATE] = live.pending_after_save(
+        st.session_state.get(_PENDING_INPUTS_STATE), values, results,
+        raw=ctx["setting_raw"], settings_error=ctx["settings_error"],
+    )
+
+
+def _initial_value(name: str, key: str, default, ctx):
+    """輸入欄的初值。正式模式有寫入函式時：鍵不在 session（上一輪沒畫出來）⇒ 用暫存帶回；
+    鍵在 session ⇒ 以當下值刷新暫存、初值照舊（streamlit 此時不看初值）。`field["value_text"]` 一律不改寫。"""
+    if ctx is None:
+        return default
+    pending = st.session_state.get(_PENDING_INPUTS_STATE) or {}
+    if key in st.session_state:
+        if name in pending:
+            st.session_state[_PENDING_INPUTS_STATE] = live.pending_track(pending, name, st.session_state[key])
+        return default
+    return live.restore_text(pending, name, default)
 
 
 def _save_kwargs(block: dict, button: dict, input_prefix: str, ctx) -> dict:
@@ -237,9 +257,9 @@ def _buttons(block: dict, prefix: str, ctx=None, input_prefix: str = "") -> None
         )
 
 
-def _text_input(field: dict, key: str) -> None:
+def _text_input(field: dict, key: str, ctx=None) -> None:
     """ALO-GAP-輸入元件：輸入欄不屬第五節五類元件的任何一類，照實畫成輸入欄。"""
-    st.text_input(field["label"], value=field["value_text"], key=key)
+    st.text_input(field["label"], value=_initial_value(field["name"], key, field["value_text"], ctx), key=key)
 
 
 def _table(labels, rows) -> str:
@@ -283,15 +303,15 @@ def _render_alo1(block: dict, scenario: str, ctx=None) -> None:
     for index, row in enumerate(block["_rows"]):
         left, right = st.columns(2)
         with left:
-            _text_input(target_fields[2 * index], f"{scenario}_{target_fields[2 * index]['name']}")
+            _text_input(target_fields[2 * index], f"{scenario}_{target_fields[2 * index]['name']}", ctx)
         with right:
-            _text_input(target_fields[2 * index + 1], f"{scenario}_{target_fields[2 * index + 1]['name']}")
+            _text_input(target_fields[2 * index + 1], f"{scenario}_{target_fields[2 * index + 1]['name']}", ctx)
         if row["tail_text"]:
             _lines([row["tail_text"]], "alo-line")
     _lines(block["unset_lines"], "alo-line")
     _key_error_lines(block, "alo_target_weights")
     for field in fields[2 * len(block["_rows"]) :]:
-        _text_input(field, f"{scenario}_{field['name']}")
+        _text_input(field, f"{scenario}_{field['name']}", ctx)
     _lines(block["tolerance_lines"], "alo-line")
     _key_error_lines(block, "alo_tolerance_pp")
     _lines(block["sum_lines"], "alo-line")
@@ -357,10 +377,16 @@ def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
         st.caption(block["answers"])
         for field in block["inputs"][:1]:
             options = list(field["_options"])
+            chosen = _initial_value(field["name"], f"{scenario}_alo_basis", field["_value"], ctx)
+            if chosen is not None and chosen not in options:
+                # 暫存的值不是現有選項 ⇒ 退回表上值，並丟掉這一欄的暫存（以表為準，不讓 index 拋錯把整頁炸掉）。
+                chosen = field["_value"]
+                st.session_state[_PENDING_INPUTS_STATE] = live.pending_drop(
+                    st.session_state.get(_PENDING_INPUTS_STATE), field["name"])
             st.radio(
                 field["label"],
                 options,
-                index=None if field["_value"] is None else options.index(field["_value"]),
+                index=None if chosen is None else options.index(chosen),
                 format_func=block["basis_option_labels"].get,
                 key=f"{scenario}_alo_basis",
                 horizontal=True,
@@ -368,7 +394,7 @@ def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
         _lines([block["basis_line"]] if block["basis_line"] else [], "alo-line")
         _key_error_lines(block, "alo_basis")
         for field in block["inputs"][1:]:
-            _text_input(field, f"{scenario}_{field['name']}")
+            _text_input(field, f"{scenario}_{field['name']}", ctx)
         _lines(block["bucket_unset_lines"], "alo-line")
         _key_error_lines(block, "alo_bucket_names")
         if block["_assign_rows"]:
@@ -520,6 +546,11 @@ def render(*, load_live=None, save_live=None) -> None:
                 # 試算表上的原字串：沒動過的欄位寫回它（見 live.py「存檔」段）。
                 "setting_raw": dict(live_input["notes"].get("setting_raw") or {}),
             }
+            # 暫存帶回：讀得到設定時以表為準，表上原字串與暫存當時不同的欄位丟掉（讀不到 ⇒ 只保留）。
+            if _PENDING_INPUTS_STATE in st.session_state:
+                st.session_state[_PENDING_INPUTS_STATE] = live.pending_reconcile(
+                    st.session_state[_PENDING_INPUTS_STATE], ctx["setting_raw"]
+                )
         model = live.apply_live_notes(
             logic.build_page_model(dataset),
             wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),

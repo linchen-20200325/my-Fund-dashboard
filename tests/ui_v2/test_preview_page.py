@@ -388,6 +388,41 @@ def test_必修2_對照組_拿掉換頁pop_容許帶的失敗提示殘留(settin
     assert _TOL_FAIL in text
 
 
+def _tolerance_fail_then_leave_and_back():
+    """資產配置容許帶打 7、存檔失敗（暫存存下）→ 換到市場總覽（什麼都不做）→ 回資產配置。
+    回傳回來後的 (暫存或 None, 容許帶欄位的值)。
+
+    ⚠️ 刻意換到市場總覽、不換到設定與診斷：本組實測，從設定與診斷換回來的第一輪，`live_alo_tolerance_pp`
+    這個鍵在 session 裡還查得到（值是設定與診斷那一頁同名欄的），帶回那一支不會走到，
+    對照組就證明不了「沒清暫存會帶回」。市場總覽沒有同名欄。"""
+    at = _go(_app_test(), "alo")
+    at.text_input(key="live_alo_tolerance_pp").input("7").run()
+    at.button(key="live_alo1_btn_0").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.session_state[alo_page._PENDING_INPUTS_STATE] == {
+        "alo_tolerance_pp": {"text": "7", "raw": None}}                  # 前提：失敗那個鍵確實暫存了
+    _go(at, "mkt")
+    _go(at, "alo")
+    pending = (at.session_state[alo_page._PENDING_INPUTS_STATE]
+               if alo_page._PENDING_INPUTS_STATE in at.session_state else None)  # AppTest 的 session_state 沒有 .get
+    return pending, at.text_input(key="live_alo_tolerance_pp").value
+
+
+def test_暫存帶回_存檔失敗後換頁再回來_暫存已清_欄位顯示試算表上的值(settings_book, tolerance_save_fails):
+    """客戶 2026-10-16 裁示方案 B：資產配置寫入失敗那個鍵的輸入欄暫存，預覽換頁一併清（`_PAGE_STATE_TO_DROP`）。"""
+    pending, value = _tolerance_fail_then_leave_and_back()
+    assert pending is None
+    assert value == ""                                                   # 試算表上沒有這個鍵 ⇒ 空白，不帶回 7
+
+
+def test_暫存帶回_對照組_拿掉換頁pop_回來時帶回沒存成功的字(settings_book, tolerance_save_fails, monkeypatch):
+    monkeypatch.setattr(preview, "_PAGE_STATE_TO_DROP",
+                        tuple(k for k in preview._PAGE_STATE_TO_DROP if k != alo_page._PENDING_INPUTS_STATE))
+    pending, value = _tolerance_fail_then_leave_and_back()
+    assert pending == {"alo_tolerance_pp": {"text": "7", "raw": None}}
+    assert value == "7"
+
+
 def test_反方向回歸_設定與診斷打的值不帶到資產配置_資產配置存檔只寫回原值(settings_book):
     from services.v2_tables import settings_store
 
@@ -587,6 +622,7 @@ def test_換頁清單_同一頁內重跑不清_換頁只清清單內的key():
     assert preview._PAGE_STATE_TO_DROP == (key, "_mkt_applied", mkt_page._SAVE_RESULTS_STATE,
                                            exp_page._SAVE_RESULTS_STATE, exp_page._RULES_STATE,
                                            exp_page._SEEDED_STATE,  # 2026-10-13 稽核 L 回修
+                                           alo_page._PENDING_INPUTS_STATE,  # 2026-10-16 客戶裁示方案 B
                                            hld_page._SAVE_RESULTS_STATE)  # 2026-10-16 客戶裁示第 2 點
     script = f"""
 import sys

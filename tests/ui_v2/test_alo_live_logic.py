@@ -1382,3 +1382,78 @@ def test_日期_示範模式各情境_畫面不出現日期句(name):
     """示範模式沒有過期的檔（fixtures 的 `nav_not_ready` 代碼為空）⇒ 本次改動不改變任何示範畫面。"""
     model = logic.build_page_model(fixtures.scenario(name))
     assert "最近一筆淨值" not in repr(model)
+
+
+# ═══════════════════════ 暫存帶回（客戶 2026-10-16 裁示方案 B）═══════════════════════
+
+_RAW_P = {"alo_target_weights": '[{"bucket": "核心", "weight_ratio": 0.6}]', "alo_tolerance_pp": "4",
+          "alo_basis": "成本", "alo_bucket_names": '["核心"]', "alo_scenario_input": None}
+
+
+def test_暫存_輸入欄名對應設定鍵():
+    assert live.setting_key_of("alo_target_0_bucket") == "alo_target_weights"
+    assert live.setting_key_of("alo_target_3_weight") == "alo_target_weights"
+    assert live.setting_key_of("alo_tolerance_pp") == "alo_tolerance_pp"
+    assert live.setting_key_of("alo_basis") == "alo_basis"
+    assert live.setting_key_of("alo_bucket_name_1") == "alo_bucket_names"
+    assert live.setting_key_of("alo_scenario_0_amount") is None      # ALO-3 沒接寫入，不暫存
+
+
+def test_暫存_某鍵寫入失敗_只存那個鍵的輸入欄_帶表上原字串():
+    values = {"alo_target_0_bucket": "核心", "alo_target_0_weight": "0.65", "alo_tolerance_pp": "5"}
+    out = live.pending_after_save(None, values, {"alo_target_weights": None, "alo_tolerance_pp": "HTTP 503"},
+                                  raw=_RAW_P, settings_error=None)
+    assert out == {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+
+
+def test_暫存_讀取失敗那一輪按存檔_不覆寫也不清掉():
+    pending = {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    out = live.pending_after_save(pending, {}, {"alo_target_weights": "讀不到", "alo_tolerance_pp": "讀不到"},
+                                  raw={}, settings_error="設定試算表暫停重試")
+    assert out == pending and out is not pending
+
+
+def test_暫存_該鍵存成功就丟_含skip記為None():
+    pending = {"alo_tolerance_pp": {"text": "5", "raw": "4"}, "alo_basis": {"text": "市值", "raw": "成本"}}
+    out = live.pending_after_save(pending, {"alo_tolerance_pp": "5"}, {"alo_tolerance_pp": None},
+                                  raw=_RAW_P, settings_error=None)
+    assert out == {"alo_basis": {"text": "市值", "raw": "成本"}}
+
+
+def test_暫存_同一個鍵再失敗_換成這一次的內容_舊列不殘留():
+    pending = {"alo_target_0_weight": {"text": "0.7", "raw": "x"}, "alo_target_2_weight": {"text": "0.1", "raw": "x"}}
+    values = {"alo_target_0_bucket": "核心", "alo_target_0_weight": "0.65"}
+    out = live.pending_after_save(pending, values, {"alo_target_weights": "HTTP 503"},
+                                  raw=_RAW_P, settings_error=None)
+    assert out == {"alo_target_0_bucket": {"text": "核心", "raw": _RAW_P["alo_target_weights"]},
+                   "alo_target_0_weight": {"text": "0.65", "raw": _RAW_P["alo_target_weights"]}}
+
+
+def test_暫存_表上原字串變了就以表為準_沒變就留():
+    pending = {"alo_tolerance_pp": {"text": "5", "raw": "4"}, "alo_basis": {"text": "市值", "raw": "成本"}}
+    out = live.pending_reconcile(pending, dict(_RAW_P, alo_tolerance_pp="6"))
+    assert out == {"alo_basis": {"text": "市值", "raw": "成本"}}
+
+
+def test_暫存_讀不到設定時raw為空_只保留不判定():
+    pending = {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert live.pending_reconcile(pending, {}) == pending
+    assert live.pending_reconcile(None, {}) == {}
+
+
+def test_暫存_帶回與跟著走():
+    pending = {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert live.restore_text(pending, "alo_tolerance_pp", "4") == "5"
+    assert live.restore_text(pending, "alo_basis", "成本") == "成本"
+    assert live.restore_text(None, "alo_tolerance_pp", "4") == "4"
+    tracked = live.pending_track(pending, "alo_tolerance_pp", "7")
+    assert tracked == {"alo_tolerance_pp": {"text": "7", "raw": "4"}}
+    assert pending["alo_tolerance_pp"]["text"] == "5"                 # 不改呼叫端那一份
+    assert live.pending_track(pending, "alo_basis", "市值") == pending  # 沒有暫存的欄位不新增
+
+
+def test_暫存_丟掉一欄_不改呼叫端那一份():
+    pending = {"alo_basis": {"text": "x", "raw": "成本"}, "alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert live.pending_drop(pending, "alo_basis") == {"alo_tolerance_pp": {"text": "5", "raw": "4"}}
+    assert "alo_basis" in pending
+    assert live.pending_drop(None, "alo_basis") == {}
