@@ -695,6 +695,10 @@ def aggregated_holdings(dataset) -> list:
         base = merged[key]
         if base["bucket"] != row["bucket"]:
             raise ValueError(f"{key} 兩列的 bucket 不同（ALO-GAP-同類別兩列）")
+        # 客戶 2026-10-16 裁示第 8 點（護欄：同一個鍵、同一語意才能加總）：幣別不同的原幣成本不得相加（`CLAUDE.md` §4.1）。
+        # 呈現方式與上一行 bucket 衝突相同（raise）。
+        if base["ccy"] != row["ccy"]:
+            raise ValueError(f"{key} 兩列的 ccy 不同（不同幣別的原幣成本不得相加）")
         for column in ("units_shares", "cost_orig_ccy", "cost_twd"):
             base[column] = base[column] + row[column]
     return [merged[key] for key in order]

@@ -81,7 +81,8 @@ for _h in _dataset["holding"]:
         _h["policy_id"] = "P-001"
 _live_args = {"direct_policy_id": "DIRECT", "today": datetime.date(2026, 9, 28),
               "nav_provenance": {r["fund_code"]: {"cache_fallback": False, "stale": None} for r in _dataset["nav"]}}
-page.render(load_live=lambda: {"dataset": _dataset, "live_args": _live_args}, mask_error=str)
+page.render(load_live=lambda: {"dataset": _dataset, "live_args": _live_args}, mask_error=str,
+            save_live=lambda *_a: {"status": "saved"})
 """,
     "exp": _HEAD + """
 import json

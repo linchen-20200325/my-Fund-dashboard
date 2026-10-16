@@ -101,3 +101,10 @@ def load_live() -> dict:
         mask=mask,
         dividend_table=dividend_table,
     )
+
+
+def save_setting(setting_key, setting_value, value_kind) -> dict:
+    """給 `page.render(save_live=...)` 用：存一個鍵（L2 先檢查值與型別，不符不存）。客戶 2026-10-16 裁示第 2 點。
+    體例與 `ui_v2/mkt/source.py::save_setting`、`ui_v2/alo/source.py::save_setting` 相同（同一個 L2 函式、同一份秘密值）；
+    不新增資料來源。回 L2 `save_setting_for_page` 的純 dict（訊息已遮蔽）。"""
+    return settings_store.save_setting_for_page(setting_key, setting_value, value_kind, _secret_values())

@@ -181,7 +181,9 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
     # ~~"mkt": {"load_live": "load_live"},~~ → mkt 入口與預覽同步加傳 save_live（上一條守衛比對兩者逐一相同）。
     assert got == {
         "mkt": {"load_live": "load_live", "save_live": "save_setting"},
-        "hld": {"load_live": "load_live", "mask_error": "mask_error"},
+        # ~~"hld": {"load_live": "load_live", "mask_error": "mask_error"},~~ → 2026-10-16 客戶裁示第 2 點（狀態更新，不是漏刪）：
+        # 持倉體檢存檔接上 user_setting，入口與預覽同步加傳 save_live。
+        "hld": {"load_live": "load_live", "mask_error": "mask_error", "save_live": "save_setting"},
         "exp": {"load_live": "load_live", "save_live": "save_setting"},   # 2026-10-13 新增
         "alo": {"load_live": "load_live", "save_live": "save_setting"},
         "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch"},
@@ -378,7 +380,10 @@ def test_換頁時pop的狀態清單_資產配置引用常數_市場總覽為字
     # ~~assert _drop_list(tree) == [… "mkt_page._SAVE_RESULTS_STATE"]~~ → 2026-10-13 標的探索接上正式模式後多兩格（狀態更新，不是漏刪）。
     assert _drop_list(tree) == ["alo_page._SAVE_ERRORS_STATE", "'_mkt_applied'", "mkt_page._SAVE_RESULTS_STATE",
                                 "exp_page._SAVE_RESULTS_STATE", "exp_page._RULES_STATE",
-                                "exp_page._SEEDED_STATE"]  # 2026-10-13 稽核 L 回修多一格
+                                "exp_page._SEEDED_STATE",  # 2026-10-13 稽核 L 回修多一格
+                                "hld_page._SAVE_RESULTS_STATE"]  # 2026-10-16 客戶裁示第 2 點：持倉體檢存檔接上後多一格
+    hld_key = _string_constant(_tree(_ROOT / "ui_v2" / "hld" / "page.py"), "_SAVE_RESULTS_STATE")
+    assert hld_key and hld_key not in _PREVIEW.read_text(encoding="utf-8")
     for name in ("_SAVE_RESULTS_STATE", "_RULES_STATE", "_SEEDED_STATE"):
         exp_key = _string_constant(_tree(_ROOT / "ui_v2" / "exp" / "page.py"), name)
         assert exp_key and exp_key not in _PREVIEW.read_text(encoding="utf-8"), name

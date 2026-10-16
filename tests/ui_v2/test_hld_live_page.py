@@ -320,7 +320,8 @@ def _render_app(live_mode):
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
     }
-    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str)
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str,
+                save_live=lambda *_a: {"status": "saved"})  # 2026-10-16 第 2 點：正式模式三個一起傳
 
 
 def _run_render(live_mode):
@@ -394,7 +395,8 @@ def _apply_app(live_mode):
             row["fund_code"]: {"cache_fallback": False, "stale": None} for row in dataset["nav"]
         },
     }
-    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str)
+    page.render(load_live=lambda: {"dataset": dataset, "live_args": live_args}, mask_error=str,
+                save_live=lambda *_a: {"status": "saved"})  # 2026-10-16 第 2 點：正式模式三個一起傳
 
 
 def _apply_run(live_mode):
@@ -468,7 +470,8 @@ def _diff_texts(old_block, new_block):
     return a - b, b - a
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a_套用_六塊跟著新區間重算_HLD6不變(live_mode):
     from ui_v2.hld import logic, page
 
@@ -500,7 +503,8 @@ def test_S6a_套用_六塊跟著新區間重算_HLD6不變(live_mode):
     assert _block_blob(at, "HLD-6") == before["HLD-6"]
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a_套用_不改欄位內容_改了沒按套用就不重算(live_mode):
     from ui_v2.hld import logic
 
@@ -519,7 +523,8 @@ def test_S6a_套用_不改欄位內容_改了沒按套用就不重算(live_mode)
     assert at.text_input(key="hld4_window_end").value == _SAVED_END
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a_起迄日顛倒_套用照既有規則停用_卡上維持上一次套用的結果(live_mode):
     from ui_v2.hld import logic
 
@@ -550,7 +555,8 @@ def _hld4_expander(at):
     return next(e for e in at.expander if e.label.startswith("HLD-4　"))
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a第四輪_門檻改了按套用_HLD1跟著新門檻重算(live_mode):
     """紅隊 M3／規格組必修 1：門檻列也接上「套用」。"""
     from datetime import date
@@ -609,7 +615,8 @@ def test_S6a第四輪_只改欄位不按套用_摘要與各塊都不動(live_mod
         assert _block_blob(at, code) == before[code], code
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 @pytest.mark.parametrize("key, value", [
     ("hld4_window_start", "20260601"),     # 紅隊 M4：格式不是 YYYY-MM-DD
     ("hld4_window_start", "2026/06/01"),
@@ -633,7 +640,8 @@ def test_S6a第四輪_區間格式錯或只填一格_套用停用_沿用既有�
     assert _block_blob(at, "HLD-2") == before
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 @pytest.mark.parametrize("value", ["abc", "", "1e3", "9" * 400])
 def test_S6a第四輪_門檻值既有規則處理不了_套用停用_沒有原因句(live_mode, value):
     """~~沒有既有原因句可用 —— 停用、原因留空（待補文案，已回報）~~ → S6a-2 第 4 項：停用，原因句是客戶
@@ -653,7 +661,8 @@ def test_S6a第四輪_門檻值既有規則處理不了_套用停用_沒有原�
     assert _block_blob(at, "HLD-1") == before
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a第四輪_按完套用HLD4以展開狀態重建(live_mode):
     """紅隊 M2：標題列一變 Streamlit 就重建這一枚 expander；按完「套用」要以展開狀態重建。"""
     at = _apply_run(live_mode)
@@ -735,7 +744,8 @@ def _lamp(at):
     return next(m.value for m in at.markdown if 'class="hld-lamp"' in m.value)
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a2_第2項_N1_畫面上燈寫不重複的檔數_偏離表照列數(live_mode):
     """門檻改成每一檔都超出兩條 → 偏離表 6 列，燈寫「有 3 檔超出」。"""
     at = _apply_run(live_mode)
@@ -750,7 +760,8 @@ def test_S6a2_第2項_N1_畫面上燈寫不重複的檔數_偏離表照列數(li
     assert _block_blob(at, "HLD-1").count("<tr><td>") == 6
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 @pytest.mark.parametrize("direction", ["大於", "低於 "])
 def test_S6a2_第3項_N2_方向填錯_套用停用_原因句是客戶核准字面(live_mode, direction):
     from ui_v2.hld import logic
@@ -766,7 +777,8 @@ def test_S6a2_第3項_N2_方向填錯_套用停用_原因句是客戶核准字�
     assert _block_blob(at, "HLD-1") == before
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a2_第5項_新增一列_多一列空白格_不重算_填好按套用才算(live_mode):
     at = _apply_run(live_mode)
     before = {code: _block_blob(at, code) for code in ("HLD-1", "HLD-2")}
@@ -790,7 +802,8 @@ def test_S6a2_第5項_新增一列_多一列空白格_不重算_填好按套用�
     assert _block_blob(at, "HLD-1") != before["HLD-1"]
 
 
-@pytest.mark.parametrize("live_mode", [False, True])
+# 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
+@pytest.mark.parametrize("live_mode", [False])
 def test_S6a2_第5項_清除這一列_後面的列往上補_只剩一列時清空(live_mode):
     at = _apply_run(live_mode)
     second = _rule_values(at, 1)

@@ -75,10 +75,15 @@ def _prov(dataset, *, fallback=(), stale=None):
     return out
 
 
-def _model(name="full", *, today, fallback=(), stale=None, mutate=None, **kw):
+def _model(name="full", *, today, fallback=(), stale=None, mutate=None, saved_rules=None, **kw):
     args = _args(name)
     if mutate:
         mutate(args["dataset"])
+    if saved_rules is not None:
+        # 客戶 2026-10-16 裁示第 2 點：正式模式不再收套用的門檻（`applied_rules`），同一組門檻改為存進設定。
+        for row in args["dataset"]["user_setting"]:
+            if row["setting_key"] == "hld_deviation_rules":
+                row["setting_value"] = [dict(r) for r in saved_rules]
     holdings = args["dataset"].get("holding") or []
     return live.build_live_model(
         **args,
@@ -715,12 +720,12 @@ _DIV_RULE = [{"indicator": "期間配息合計", "direction": "高於", "value":
 
 def test_H8b_不吃淨值的門檻_過期檔在偏離表上_卻不算進預存序列計數():
     model = _model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}, mutate=_age_one("AAAA", 20),
-                   applied_rules=_DIV_RULE)
+                   saved_rules=_DIV_RULE)
     hld1 = logic.find_block(model, "HLD-1")
     listed = {r["_fund_code"] for r in hld1["_rows"]}
     assert "AAAA" in listed and len(listed) >= 2   # 前提：過期那一檔照樣因配息門檻列上卡
     assert hld1["freshness_tail"] == {
         "text": f"本卡所列的檔中，{len(listed) - 1} 檔的淨值取自預存序列，逐檔見 HLD-6", "_tone": "中性"}
     # 正控：同一組門檻、AAAA 不過期時，三檔都算
-    fresh = logic.find_block(_model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}, applied_rules=_DIV_RULE), "HLD-1")
+    fresh = logic.find_block(_model(today=FRESH, fallback={"AAAA", "BBBB", "CCCC"}, saved_rules=_DIV_RULE), "HLD-1")
     assert fresh["freshness_tail"]["text"].startswith(f"本卡所列的檔中，{len(listed)} 檔")

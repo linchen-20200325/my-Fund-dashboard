@@ -15,6 +15,9 @@
    → **客戶 2026-10-09 裁示（S6b-3），有意識的更正，不是漏刪**：「存檔」照舊停用並寫出原因（裁示 A，文案逐字）；
    「取數」類按鈕（「重新取數」）在正式模式**拿掉**，不再停用＋原因。該不該掛仍由 `logic` 判斷
    （HLD-8 在任一值為 `資料未備` 或 `系統錯誤` 時掛），本檔只負責正式模式不呈現；示範模式不經過本檔，照掛。
+   → **客戶 2026-10-16 裁示第 2 點（狀態更新，不是漏刪）**：「存檔」接上 `user_setting`（`page.render(save_live=...)`，
+   見 `hld4_save_entries`、`run_saves`、`apply_save_results`），不再停用；正式結果只讀**已存**設定，
+   「套用」在正式模式停用並寫出原因（`APPLY_DISABLED_REASON`）—— 未存的輸入不影響計算，存檔後下一次載入套用。
 
 ~~⛔ 頁面入口 `ui_v2/app_hld_live.py` 與取數 `ui_v2/hld/source.py` 是 S6 的工作，本輪不建。~~
    → S6b-3 已建（狀態更新，不是漏刪；上句在 S3 寫下時為真）：入口 `ui_v2/app_hld_live.py`、取數 `ui_v2/hld/source.py`。
@@ -46,15 +49,19 @@ from datetime import date, datetime, timedelta, timezone
 from .. import thresholds
 from . import logic
 
-# 客戶 2026-10-02 裁示 A，逐字。⛔ 不准加字、不准補「請……」之類指示動作的句子。
-# 「存檔」那一句與 `ui_v2/alo/live.py::SAVE_DISABLED_REASON` 逐字相同（本套件不 import ui_v2.alo，
-# 兩份由 tests/ui_v2/test_hld_live_logic.py 逐字比對）。
-SAVE_DISABLED_REASON = "存檔寫入端尚未接上，這一輪只讀不寫"
+# ~~客戶 2026-10-02 裁示 A，逐字。⛔ 不准加字、不准補「請……」之類指示動作的句子。~~
+# ~~「存檔」那一句與 `ui_v2/alo/live.py::SAVE_DISABLED_REASON` 逐字相同（…兩份由測試逐字比對）。~~
+# ~~SAVE_DISABLED_REASON = "存檔寫入端尚未接上，這一輪只讀不寫"~~
+# → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式「存檔」接上 `user_setting`，那一句已不成立，
+#   常數拿掉（0 caller）。舊句在寫下當時為真（存檔寫入端確實還沒接上）。
+# 客戶 2026-10-16 裁示第 2 點：正式模式「套用」停用的原因。文案逐字比照 `ui_v2/mkt/live.py::APPLY_DISABLED_REASON`
+# （市場總覽 2026-10-13 同一條裁示的前例；本套件不 import ui_v2.mkt，兩份由測試逐字比對）。
+APPLY_DISABLED_REASON = "正式結果只讀已存設定：請按「存檔」，下一次重新載入時生效"
 
 # 哪一類按鈕停用、原因是哪一句。以 `logic` 的按鈕類別（`44` 5.3）判，不以標籤字面判。
 # 「取數」類不在此：客戶 2026-10-09 裁示正式模式拿掉，見 `apply_live_notes`。
 _DISABLED_BY_KIND = {
-    "存檔": SAVE_DISABLED_REASON,
+    "套用": APPLY_DISABLED_REASON,
 }
 
 # 裁示 4-C：欄名逐字。舊欄名是 `logic._build_hld5` 的字面。
@@ -649,11 +656,11 @@ _DEV_TRIMS = (
      "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。", False, "2026-09-22"),
     # e：刪「兩句同時成立時哪一句出現，規格沒有寫」。只有空持倉且門檻未設時才出現。
     ("HLD-0", "lines", logic.HLD0_NO_RULES_ASIDE, "（另：尚未設定門檻。）", False, "規格沒有寫"),
-    # S6a 第四輪（規格組必修 2／紅隊 J1，總管裁定）：不是開發過程字句，但同一體例（只刪不加）。
-    # 正式版「存檔」停用，「兩枚按鈕並存，各做一件事。」這一句是假的 ⇒ 只刪這一句，後面講「套用」的照留。
-    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE,
-     "「套用」只讀這些欄位的當下值、重算 HLD-1、HLD-2、HLD-3、HLD-5、HLD-7、HLD-8 六塊，"
-     "不寫任何資料表、不改欄位的內容。", True, "兩枚按鈕並存"),
+    # ~~S6a 第四輪（規格組必修 2／紅隊 J1，總管裁定）：不是開發過程字句，但同一體例（只刪不加）。~~
+    # ~~正式版「存檔」停用，「兩枚按鈕並存，各做一件事。」這一句是假的 ⇒ 只刪這一句，後面講「套用」的照留。~~
+    # ~~("HLD-4", "notes", logic.HLD4_APPLY_NOTE, "「套用」只讀這些欄位的當下值、…六塊，…", True, "兩枚按鈕並存"),~~
+    # → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：正式模式「套用」停用，講「套用」那一段也不成立了
+    #   ⇒ `HLD4_APPLY_NOTE` 改走 `_LIVE_DROPS` 整句不印。這一列在寫下當時為真（那時「套用」在正式模式照算）。
 )
 
 
@@ -709,9 +716,14 @@ def _strip_dev_lines(model: dict) -> None:
 # 「「套用」只讀這些欄位的當下值、重算…六塊…」恢復。
 # 每一列：（塊、欄位、整句）。找不到就 raise（同 `_strip_dev_lines`）：logic 改了字面而本檔沒跟上時，
 # 靜默略過的話那一句會原封上正式畫面。
+# → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪；上面幾行在寫下當時為真）：「存檔」接上、「套用」停用。
+#   - `HLD4_SAVE_SCOPE_NOTE`（存檔只寫使用者設定、不寫四張表、不代填）在正式版**成立了** ⇒ 恢復照印，不再列在這裡；
+#   - `HLD4_SAVE_NOTE` 後半「要兩件事都發生就兩枚都按」在正式版不成立（套用停用），前半「不重算任何一塊」
+#     也會被讀成「存了不會生效」—— 存檔後下一次載入就以已存值計算 ⇒ 照舊整句不印；
+#   - `HLD4_APPLY_NOTE`（套用重算六塊）在正式版不成立（套用停用，原因寫在按鈕上）⇒ 整句不印。
 _LIVE_DROPS = (
+    ("HLD-4", "notes", logic.HLD4_APPLY_NOTE),
     ("HLD-4", "notes", logic.HLD4_SAVE_NOTE),
-    ("HLD-4", "notes", logic.HLD4_SAVE_SCOPE_NOTE),
 )
 
 
@@ -728,10 +740,15 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
 
     1. HLD-5 的「最後對帳」改名「最後核對日（只記日期）」，值換成台灣日期；不合格的那一格進 `系統錯誤`
        （`today`：台灣的今天，可注入；不傳就取當下）；
-    2. ~~「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；~~ → 「存檔」停用，原因逐字照裁示 A；
+    2. ~~「存檔」「重新取數」兩類按鈕停用，原因逐字照裁示 A；~~ → ~~「存檔」停用，原因逐字照裁示 A；~~
        「取數」類按鈕從各塊的 `buttons` 拿掉（客戶 2026-10-09 裁示，有意識的更正，不是漏刪）；
+       → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：「存檔」不再停用（接上 `user_setting`）；
+       「套用」停用，原因 `APPLY_DISABLED_REASON`。欄位當下值不合格（`logic` 判「套用」不可按）時，
+       「存檔」也停用、原因沿用 `logic` 那一句 —— 能不能存與能不能套用讀同一支判定（`logic.applied_from_inputs`），
+       不另立一套；
     3. 畫面上交代開發過程的子句刪掉，只刪不加（S6a，`_DEV_TRIMS`）；
-    4. HLD-4 講「存檔」的兩句整句不印（S6a-1，`_LIVE_DROPS`）。
+    4. ~~HLD-4 講「存檔」的兩句整句不印（S6a-1，`_LIVE_DROPS`）。~~ → HLD-4 講「套用」與「兩枚都按」的兩句整句不印
+       （`_LIVE_DROPS`；客戶 2026-10-16 裁示第 2 點，有意識的更正，不是漏刪）。
 
     ⚠️ 示意字樣不在這裡拿 —— 那是組模型時就決定的（`build_live_model` 傳 `demo_hint=False`）。
        本函式若拿到一份示範模式的模型，示意字樣會原封留著；所以正式模式一律走 `build_live_model`。
@@ -742,6 +759,7 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for block in out["blocks"]:
         block["buttons"] = [b for b in block["buttons"] if b["_action_kind"] != "取數"]
+    _gate_save_by_apply(logic.find_block(out, "HLD-4"))
     for button in _walk_buttons(out["blocks"]):
         reason = _DISABLED_BY_KIND.get(button["_action_kind"])
         if reason is not None:
@@ -750,23 +768,50 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     return out
 
 
-def _gate_dividend_coverage(dataset: dict, coverage, applied_window) -> dict:
+def _gate_save_by_apply(block: dict) -> None:
+    """客戶 2026-10-16 裁示第 2 點：正式模式「存檔」能不能按 ＝ `logic` 的存檔判定 **且** `logic` 的套用判定。
+    `logic._build_hld4` 的存檔判定只看「兩格皆空」與「兩格皆填而不合格」；只填一格、門檻列不合格時
+    它照樣可按，而那兩種在 `logic` 的套用判定裡不可按（原因句也由 `logic` 寫好）。正式模式存進去的就是正式結果，
+    所以借用同一支判定，不另寫第二套（防膨脹 Gate 第 6 條）。在「套用」被本檔停用之前呼叫。"""
+    by_kind = {b["_action_kind"]: b for b in block["buttons"]}
+    save, apply_ = by_kind.get("存檔"), by_kind.get("套用")
+    if save is None or apply_ is None:
+        raise ValueError("HLD-4 應同時有「存檔」與「套用」兩枚按鈕，logic 改了而本檔沒跟上")
+    if save["_enabled"] and not apply_["_enabled"]:
+        save["_enabled"] = False
+        save["disabled_reason"] = apply_["disabled_reason"]
+
+
+def _gate_dividend_coverage(dataset: dict, coverage) -> dict:
     """2026-10-13 稽核必修 1(b)：所選區間的起點早於任何一檔「有配息列」的最舊除息日（`coverage`）→
     那一段沒有證據（來源可能只給到那麼舊），不得畫成「區間內無配息」，也不得加總成偏低的數。
-    依「全有或全無」規則，整張配息表退回既有的「尚未接上」呈現（`dividend` 清空、`pending_tables` 加回 `dividend`；
-    不新增任何字面）。區間取法與 `logic._build_page_model` 相同（沒按套用 → 存過的設定）。
+    ~~依「全有或全無」規則，整張配息表退回既有的「尚未接上」呈現（`dividend` 清空、`pending_tables` 加回 `dividend`；
+    不新增任何字面）。區間取法與 `logic._build_page_model` 相同（沒按套用 → 存過的設定）。~~
+    → 客戶 2026-10-16 裁示（有意識的更正，不是漏刪；上句在寫下當時為真）：
+      - 第 5 點：改為**逐檔** —— 只有區間起點早於「該檔」最舊除息日的那幾檔，從 `dividend` 拿掉那幾檔的列、
+        代碼加進 `dividend_not_ready`（畫面上只有那幾檔的配息值印「⬜ 資料未備」）；其他檔照常；
+      - 第 2 點：區間只看**已存**的設定（`logic.saved_window`），不看「套用」的值（正式模式「套用」停用）。
     `coverage` 為 None 或空、配息本來就未接上、或區間不合格 → 原樣交回（不改輸入，回新的 dict）。"""
     if not coverage or "dividend" in (dataset.get("pending_tables") or ()):
         return dataset
-    window = logic.saved_window(dataset) if applied_window is None else tuple(applied_window)
+    window = logic.saved_window(dataset)
     if not logic.window_is_valid(window):
         return dataset
     start = window[0]
-    if not any(isinstance(first, str) and first > start for first in coverage.values()):
+    late = {code for code, first in coverage.items() if isinstance(first, str) and first > start}
+    if not late:
         return dataset
+    return _withhold_dividend(dataset, late)
+
+
+def _withhold_dividend(dataset: dict, codes) -> dict:
+    """客戶 2026-10-16 裁示第 5 點：`codes` 那幾檔的配息「資料未備」—— 拿掉它們的配息列（部分列不得進加總，
+    否則會加出偏低的數），代碼併進 `dataset["dividend_not_ready"]`（`logic.dividend_not_ready` 讀它）。
+    其他檔的列一列不動。不改輸入，回新的 dict。"""
+    codes = set(codes)
     out = dict(dataset)
-    out["dividend"] = []
-    out["pending_tables"] = list(dataset.get("pending_tables") or ()) + ["dividend"]
+    out["dividend"] = [row for row in dataset.get("dividend") or () if row["fund_code"] not in codes]
+    out["dividend_not_ready"] = sorted(set(dataset.get("dividend_not_ready") or ()) | codes)
     return out
 
 
@@ -782,9 +827,8 @@ def build_live_model(
     policy_tab_source=None,
     direct_sources=None,
     nav_provenance=None,
-    applied_window=None,
-    applied_rules=None,
     dividend_coverage=None,
+    save_results=None,
 ) -> dict:
     """正式模式的整頁模型：不帶示意字樣的 `logic.build_page_model`，再套 `apply_live_notes`。
 
@@ -799,8 +843,13 @@ def build_live_model(
       客戶 2026-10-13 裁示：最後一筆距 `today` **大於** `NAV_FRESH_DAYS_YELLOW` 日的那幾檔，淨值列不交給 `logic`
       （`withhold_not_ready_nav`），相依淨值的值一律「⬜ 資料未備」；HLD-6 也不列那幾檔的淨值列。
     - `today`：台灣的今天（S3 的 `taiwan_today`；不傳就取當下）。核對日與新鮮度用**同一個** `today`。
-    - `applied_window`、`applied_rules`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三、四輪）。
+    - ~~`applied_window`、`applied_rules`：按「套用」時欄位的當下值，原樣轉給 `logic.build_page_model`（S6a 第三、四輪）。~~
+      → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪；上句在寫下當時為真）：**這兩個參數拿掉** ——
+      正式結果只讀已存設定（`logic.saved_window`／`saved_rules`），未存的輸入不影響計算，存檔後下一次載入套用。
+      `fields`（欄位當下值）照收，只決定欄位怎麼畫、存檔能不能按，不進任何計算（體例：`ui_v2/mkt/live.py::build_live_model`）。
     - `dividend_coverage`（2026-10-13 稽核必修 1(b)）：`assemble_live_load` 交的 `{代碼: 最舊除息日}`；見 `_gate_dividend_coverage`。
+    - `save_results`（客戶 2026-10-16 裁示第 2 點）：上一次按「存檔」的逐鍵結果（`run_saves` 的回傳，`page.py` 記在 session）；
+      見 `apply_save_results`。
     """
     if direct_policy_id is None:
         raise ValueError("沒有給 direct_policy_id，無法驗 holding 裡有沒有 DIRECT 列")
@@ -815,7 +864,7 @@ def build_live_model(
         if direct
         else []
     )
-    dataset = _gate_dividend_coverage(dataset, dividend_coverage, applied_window)
+    dataset = _gate_dividend_coverage(dataset, dividend_coverage)
     today = taiwan_today() if today is None else today
     fresh = nav_freshness(dataset, nav_provenance, today=today)
     # 客戶 2026-10-13 裁示：淨值日距今超過門檻 → 資料未備，過期淨值不交給 `logic` 計算任何一個數。
@@ -827,19 +876,103 @@ def build_live_model(
         viewport_width=viewport_width,
         open_fund=open_fund,
         demo_hint=False,
-        applied_window=applied_window,
-        applied_rules=applied_rules,
+        # 客戶 2026-10-16 裁示第 2 點：不傳 applied_window／applied_rules ⇒ logic 一律取已存設定。
         # 總管 2026-10-13 裁決：那幾檔寫「淨值超過 N 日」而不是「缺淨值／nav 尚無資料」；N 取共用常數。
         nav_not_ready_codes=stale_codes,
         nav_not_ready_days=NAV_FRESH_DAYS_YELLOW,
     )
     out = apply_live_notes(model, today=today)
     out = _apply_freshness(out, fresh)
-    return _apply_direct(
+    out = _apply_direct(
         out, rows, has_holdings=bool(dataset.get("holding")),
         # 與 `logic._build_page_model` 的 `holding_unknown` 同一個判定（「讀取失敗不說空」，2026-10-05）。
         holding_failed=bool(dataset.get("errors", {}).get("holding")) and not dataset.get("holding"),
     )
+    return apply_save_results(out, save_results)
+
+
+# ───────────────────────── 客戶 2026-10-16 裁示第 2 點：HLD-4「存檔」接上 user_setting ─────────────────────────
+# 體例照 `ui_v2/mkt/live.py`（`mkt4_save_entries`、`run_saves`、`apply_save_results`；本套件不 import ui_v2.mkt，各頁自足）。
+# 三鍵的 value_kind 是 `ui_v2/set/spec.py::SPEC_SETTING_KEYS` 那三列的鏡像（本檔不 import set 頁），由測試逐字比對。
+SAVE_VALUE_KINDS = {"hld_window_start": "date", "hld_window_end": "date", "hld_deviation_rules": "rules"}
+# 存檔結果的文案：與 `ui_v2/mkt/live.py::TEXT_SAVED`／`TEXT_SAVE_FAILED` 逐字相同（失敗那一句體例同 alo，訊息原文照印）。
+TEXT_SAVED = "已存檔"
+TEXT_SAVE_FAILED = "存檔寫入失敗："
+TEXT_PREVIOUS_FAILED = "前一個鍵存檔失敗，本鍵未寫入"   # 與 `ui_v2/mkt/live.py::run_saves` 同一句
+
+
+def hld4_save_entries(start, end, rule_rows) -> list:
+    """HLD-4 存檔要寫的三鍵（起日、迄日、門檻，依序）→ `[{"key", "value", "value_kind", "error"}, ...]`。
+
+    合不合格讀 `logic.applied_from_inputs`（與「套用」同一支判定）；兩格皆空另擋（`44` HLD-4：區間兩欄皆空 →「存檔」停用）。
+    不合格 → 每個鍵**都**帶 `error`、任何鍵都不寫（畫面上的存檔鈕本來就停用，這一層是第二道；同 mkt 的
+    「不得產生半套正式設定」）。門檻列寫成 `_parse_rules` 讀得回來的 JSON 陣列（`value_kind` 為 `rules`）。
+    """
+    problem = None
+    if not start and not end:
+        problem = logic.TEXT_BOTH_EMPTY
+    else:
+        applied = logic.applied_from_inputs(start, end, rule_rows)
+        if applied is None:
+            problem = logic.TEXT_BAD_RANGE if logic.window_input_blocked(start, end) else logic.TEXT_RULES_BAD
+    keys = SETTING_KEYS
+    if problem:
+        return [{"key": key, "value": None, "value_kind": SAVE_VALUE_KINDS[key], "error": problem} for key in keys]
+    window, rules = applied["window"], applied["rules"]
+    values = (window[0], window[1], json.dumps(rules, ensure_ascii=False))
+    return [
+        {"key": key, "value": value, "value_kind": SAVE_VALUE_KINDS[key], "error": None}
+        for key, value in zip(keys, values)
+    ]
+
+
+def run_saves(entries, save) -> dict:
+    """逐鍵寫入。回 `{鍵: None（已存）或失敗訊息原文}`（同 `ui_v2/mkt/live.py::run_saves`）。
+
+    save：`source.save_setting(鍵, 值或 None, value_kind)`，回 L2 `save_setting_for_page` 的 dict。
+    任一 entry 帶 `error` → 任何鍵都不寫（全部記成那個訊息）。前一個鍵寫入失敗就不再寫下一個鍵。
+    ⚠️ 已知殘餘（登記，不在本輪射程）：L1 逐列追加、沒有交易；前一個鍵寫入成功、後一個鍵失敗時，試算表上會是
+       「新起日 ＋ 舊迄日」這類混搭。mkt 以第三把一致性憑證鍵擋在讀回端，本頁沒有那一個鍵（新增設定鍵要動規格），
+       畫面照實寫出失敗那一個鍵的原文。
+    寫入以外的例外照樣往上拋，不吞。
+    """
+    blocked = [e for e in entries if e["error"] is not None]
+    if blocked:
+        return {e["key"]: blocked[0]["error"] for e in entries}
+    results, failed = {}, False
+    for entry in entries:
+        if failed:
+            results[entry["key"]] = TEXT_PREVIOUS_FAILED
+            continue
+        out = save(entry["key"], entry["value"], entry["value_kind"])
+        if out["status"] == "saved":
+            results[entry["key"]] = None
+        else:
+            # 訊息已由 L2 遮蔽；萬一是空字串，退回狀態碼原文，不讓失敗變成「看起來成功」。
+            results[entry["key"]] = out.get("message") or out["status"]
+            failed = True
+    return results
+
+
+def apply_save_results(model: dict, results) -> dict:
+    """把上一次按「存檔」的逐鍵結果寫到 HLD-4 的說明行（回複本，不改呼叫端那一份）。
+    全部存成功 → 一行「已存檔」；任一個鍵失敗 → 逐鍵寫失敗訊息原文（`44` HLD-4：「存檔寫入失敗 → 欄位下方顯示失敗訊息原文，
+    三組欄位的當下輸入留在畫面上不清掉，六塊的主值不變」）。失敗不改任何計算（計算只讀已存設定）。"""
+    if not results:
+        return model
+    out = copy.deepcopy(model)
+    block = logic.find_block(out, "HLD-4")
+    unknown = sorted(set(results) - set(SETTING_KEYS))
+    if unknown:
+        raise ValueError(f"存檔結果點名了本頁三鍵以外的鍵：{unknown!r}")
+    failed = [(key, message) for key, message in results.items() if message is not None]
+    if failed:
+        block["detail_lines"] = list(block["detail_lines"]) + [
+            f"{TEXT_SAVE_FAILED}{key}：{message}" for key, message in failed
+        ]
+    else:
+        block["detail_lines"] = list(block["detail_lines"]) + [TEXT_SAVED]
+    return out
 
 
 # ───────────────────────── S6b-2：user_setting 解析 ─────────────────────────
@@ -1070,13 +1203,18 @@ def assemble_live_load(
       - 配息取數失敗的檔 → `fund_errors["dividend"]`（`mask(原文)`）→ 畫面走既有的「⛔ 取數失敗」；
       - **每一檔持倉**都「配息已確定」（L2 `settled`：寫出的列就是該檔全部配息，或確實沒有配息）或取數失敗 →
         `dividend` 交 L2 的列、`pending_tables` 只剩 `["fund_profile"]`；
-      - 只要有一檔兩者皆非（幣別衝突、來源沒宣告幣別、日期欄證明不了是除息日、分辨不出是不配息還是沒抓到、
+      - ~~只要有一檔兩者皆非（幣別衝突、來源沒宣告幣別、日期欄證明不了是除息日、分辨不出是不配息還是沒抓到、
         代碼對照失敗）→ 整張配息表照舊列為尚未接上（`dividend` 為空、`pending_tables` 含 `dividend`），
         畫面照舊印「⬜ 資料未備」。⚠️ 理由：本頁的配息「資料未備」只有表層級一種畫法（`logic.fund_metrics` 的
         `div_missing` 看 `pending_tables`）；那一檔若沒有列又不標未備，畫面會把它說成「區間內無配息」——
-        那是假話。逐檔的「資料未備」要改畫面判斷，不在「只改接線」的射程內，已回報待裁示。
+        那是假話。逐檔的「資料未備」要改畫面判斷，不在「只改接線」的射程內，已回報待裁示。~~
+        → **客戶 2026-10-16 裁示第 5 點（狀態更新，不是漏刪；上段在寫下當時為真，「已回報待裁示」那一件已裁）**：
+        兩者皆非的檔（同上五種）→ 只有**那幾檔**列進 `dataset["dividend_not_ready"]`，它們的配息列一列都不交；
+        其他檔照常交，`pending_tables` 只剩 `["fund_profile"]`。畫面上只有那幾檔的配息值印「⬜ 資料未備」
+        （`logic.fund_metrics` 的 `div_missing` 另看 `logic.dividend_not_ready`）。
       - 稽核必修 1(b)：接上時另交 `live_args["dividend_coverage"]`（每一檔有配息列的最舊除息日）；
-        所選區間起點早於其中任何一檔 → `build_live_model` 同樣整張退回尚未接上（見 `_gate_dividend_coverage`）。
+        ~~所選區間起點早於其中任何一檔 → `build_live_model` 同樣整張退回尚未接上~~ → 客戶 2026-10-16 裁示第 5 點：
+        只有區間起點早於**該檔**最舊除息日的那幾檔進 `dividend_not_ready`（見 `_gate_dividend_coverage`）。
     - 設定有問題時交空列表、問題訊息進 `errors["user_setting"]`，不交部分結果。
       R-7：`settings["tab_missing"]`、`settings["bad_rows"]` 一併交給 `parse_user_settings`（缺鍵 → KeyError，不當成沒有）。
     - 持倉讀取成功時，另做四條一致性檢查（淨值表、代碼對照、持倉三者的代碼要對得上），不過就 raise。
@@ -1195,19 +1333,27 @@ def assemble_live_load(
 
     # 2026-10-13：配息（見 docstring）。不給 `dividend_table` → 與先前逐鍵相同。
     dividend, div_failures, pending_tables, coverage = [], {}, ["fund_profile", "dividend"], {}
+    div_not_ready = []
     if holding_tables is not None and dividend_table is not None:
         for code, message in dividend_table["errors"].items():
             div_failures[code] = mask(message)
         key_failed_codes = {r["input"] for r in key_results if r["ok"] is False}
-        if all(code not in key_failed_codes
-               and (dividend_table["settled"].get(code) is True or code in dividend_table["errors"])
-               for code in {h["fund_code"] for h in holding_tables["holding"]}):
-            dividend = [dict(r) for r in dividend_table["rows"]]
-            pending_tables = ["fund_profile"]
-            # 稽核必修 1(b)：每一檔「有配息列」的最舊除息日；區間要等到畫面套用時才知道，交給 `build_live_model` 判
-            for row in dividend:
-                code = row["fund_code"]
-                coverage[code] = min(coverage.get(code, row["ex_date"]), row["ex_date"])
+        # ~~任一檔「非 settled 且非取數失敗、或代碼對照失敗」→ 整張配息表照舊列為尚未接上~~
+        # → 客戶 2026-10-16 裁示第 5 點（有意識的更正，不是漏刪；舊寫法在寫下當時是「只改接線」射程內的唯一畫法）：
+        #   改為**逐檔** —— 只有那幾檔進 `dividend_not_ready`、它們的配息列一列都不交（非 settled 的檔可能帶部分列，
+        #   部分列加總會出偏低的數）；其他檔照常交、`pending_tables` 不再因此留 `dividend`。取數失敗那一支照舊走 `fund_errors`。
+        div_not_ready = sorted(
+            code for code in {h["fund_code"] for h in holding_tables["holding"]}
+            if code in key_failed_codes
+            or (dividend_table["settled"].get(code) is not True and code not in dividend_table["errors"])
+        )
+        withheld_div = set(div_not_ready)
+        dividend = [dict(r) for r in dividend_table["rows"] if r["fund_code"] not in withheld_div]
+        pending_tables = ["fund_profile"]
+        # 稽核必修 1(b)：每一檔「有配息列」的最舊除息日；區間要等到畫面組模型時才判，交給 `build_live_model`
+        for row in dividend:
+            code = row["fund_code"]
+            coverage[code] = min(coverage.get(code, row["ex_date"]), row["ex_date"])
     per_fund_errors = {}
     if failures:
         per_fund_errors["nav"] = failures
@@ -1225,6 +1371,8 @@ def assemble_live_load(
             "errors": errors,
             "pending_tables": pending_tables,
             "fund_errors": per_fund_errors,
+            # 客戶 2026-10-16 裁示第 5 點：配息資料未備的那幾檔（`logic.dividend_not_ready` 讀它）。
+            "dividend_not_ready": div_not_ready,
         },
         "live_args": {
             "direct_policy_id": direct_policy_id,
