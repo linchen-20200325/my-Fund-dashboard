@@ -588,8 +588,13 @@ def _known_strings():
     return frozenset(known)
 
 
+# 總管 2026-10-16 判定（R3 回修，必修）：設定讀取失敗時 HLD-4「存檔」停用的原因句是**有意新增**的一句（只在讀取失敗時出現），
+# 列進既有字句；其餘仍須是既有字句（有意識的更正，不是漏刪）。
+_R3_NEW = {live.SAVE_BLOCKED_READ_FAILED_REASON}
+
+
 def test_T4正_三種讀取失敗下的字句都是既有字句_只多了原文本身():
-    known = _known_strings() | {_S, _H, _FF_S, _FF_H}
+    known = _known_strings() | {_S, _H, _FF_S, _FF_H} | _R3_NEW
     new = set()
     for make in (_s1, _s2, _s3):
         new.update(s for s in _strings(_build(make())) if isinstance(s, str))
@@ -600,7 +605,7 @@ def test_T4反_掃描抓得到一句新字句():
     model = _build(_s1())
     fresh = "新字句-" + uuid.uuid4().hex
     _block(model, "HLD-4")["detail_lines"].append(fresh)
-    known = _known_strings() | {_S, _H, _FF_S, _FF_H}
+    known = _known_strings() | {_S, _H, _FF_S, _FF_H} | _R3_NEW
     assert sorted(set(_strings(model)) - known) == [fresh]
 
 
