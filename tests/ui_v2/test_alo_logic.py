@@ -1634,3 +1634,22 @@ def test_第7點_不適用徽章是灰_其他黃徽章與部分缺照舊是黃()
     for text in ("推估", "修正過", "部分缺", "未定義"):
         assert logic.status_badge(text)["_tone"] == "黃", text
     assert logic._EMPTY_TONE == {"來源缺": "灰", "算不出來": "灰", "部分缺": "黃", "系統錯誤": "紅"}
+
+
+@pytest.mark.parametrize("rows, tail", [
+    ([{"bucket": "拼錯的類別", "amount_twd": 1000}, {"bucket": fixtures.CASH, "amount_twd": 50000}],
+     logic.TEXT_NA_UNKNOWN_BUCKET),
+    ([{"bucket": fixtures.CASH, "amount_twd": -10_000_000}, {"bucket": fixtures.SATELLITE, "amount_twd": 1000}],
+     logic.TEXT_NA_OVERFLOW),
+])
+def test_第7點_ALO3列尾不適用推導的卡片色是中性灰(rows, tail):
+    """列尾 `⬜ 不適用：…`（類別不在清單／假設金額超出現值）推導出的卡片色由黃改灰，
+    與同卡總額為零的 `算不出來` placeholder 同色；列尾文字照舊（稽核 #974 必修 M1）。"""
+    dataset = fixtures.scenario("full")
+    _setting(dataset, "alo_scenario_input", rows)
+    card = _block(logic.build_page_model(dataset), "ALO-3")
+    tails = [r["tail_text"] for r in card["input_rows"]]
+    assert tail in tails and tail.startswith("⬜ 不適用")
+    assert not any(t.startswith("⬜ 資料未備") for t in tails), tails  # 不讓別的灰蓋住這一條
+    assert card["placeholder"] is None
+    assert card["_tone"] == "灰"

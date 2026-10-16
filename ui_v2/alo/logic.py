@@ -1220,10 +1220,11 @@ def _build_alo3(dataset, alo2) -> dict:
     if total_note is not None:
         placeholder = total_note
     tones = {placeholder["_tone"]} if placeholder else set()
+    # 客戶 2026-10-16 裁示第 7 點：列尾「⬜ 不適用：…」推導出的卡片色由黃改灰（與同卡總額為零的 `算不出來` placeholder 一致）。
     if any(r["tail_text"] == TEXT_NA_UNKNOWN_BUCKET for r in input_rows):
-        tones.add("黃")
+        tones.add("灰")
     if any(r["tail_text"] == TEXT_NA_OVERFLOW for r in input_rows):
-        tones.add("黃")
+        tones.add("灰")
     if any(r["tail_text"].startswith("⬜ 資料未備") for r in input_rows):
         tones.add("灰")
     tone = next((c for c in ("紅", "黃", "灰") if c in tones), "中性")
