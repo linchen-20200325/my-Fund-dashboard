@@ -642,9 +642,10 @@ def dataset_with_save_errors(dataset, errors) -> dict:
 # - 跟著走：輸入欄的鍵在 session 時，以當下值刷新暫存（`pending_track`），之後若再遇冷卻帶回的是最新內容。
 # - radio（比重基準）帶回時，暫存值若不是現有選項 ⇒ 退回表上值並丟掉該欄暫存（`pending_drop`），不讓頁面崩。
 # 兩種刻意的行為，據實寫明（2026-10-16 稽核 B2／B3，總管判定可接受、不改程式）：
-# - 「冷卻中」的判定是 `raw` 是否為空：`source.load_live` 只在 `user_setting` 讀得到時才填 `setting_raw`
-#   （每個 `SETTING_KEYS` 都帶，值可能是 None），讀不到（含冷卻、其他讀取失敗）就是空字典。所以任何讀取失敗都只保留、
-#   不判定，不分是不是冷卻；讀得到時才以表為準核對。
+# - 「冷卻中」的判定是 `raw` 是否為空：`source.load_live` 只在 `user_setting` 表讀得到時才填 `setting_raw`
+#   （每個 `SETTING_KEYS` 都帶，值可能是 None）。讀不到表（raw 為空，含冷卻）只保留、不判定；
+#   讀得到表但結構有問題時（`errors["user_setting"]` 有值、輸入欄不畫，但 `setting_raw` 已填），照表比對（以表為準），
+#   值不同即丟暫存。
 # - 解析不過（`save_entries` 的 `error` 是 `BadSettingValue` 原文、沒有真的呼叫寫入）也算該鍵失敗，同樣暫存使用者打的字；
 #   失敗行同時照舊顯示解析器原文，帶回的字不會被誤認為已存進去。
 
