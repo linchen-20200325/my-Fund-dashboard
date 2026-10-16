@@ -57,6 +57,9 @@ from . import logic
 # 客戶 2026-10-16 裁示第 2 點：正式模式「套用」停用的原因。文案逐字比照 `ui_v2/mkt/live.py::APPLY_DISABLED_REASON`
 # （市場總覽 2026-10-13 同一條裁示的前例；本套件不 import ui_v2.mkt，兩份由測試逐字比對）。
 APPLY_DISABLED_REASON = "正式結果只讀已存設定：請按「存檔」，下一次重新載入時生效"
+# 總管 2026-10-16 判定（R3 回報判斷 4 之二，必修）：正式模式 `user_setting` 讀取失敗時，HLD-4 欄位帶不出已存值、是空的；
+# 這時存檔會把空白或半套值蓋掉試算表上原本的設定 ⇒「存檔」停用並寫出這一句（字面為本組擬定，商業語言、避開禁詞）。
+SAVE_BLOCKED_READ_FAILED_REASON = "讀不到已存設定，為避免覆蓋原本的設定，暫不開放存檔"
 
 # 哪一類按鈕停用、原因是哪一句。以 `logic` 的按鈕類別（`44` 5.3）判，不以標籤字面判。
 # 「取數」類不在此：客戶 2026-10-09 裁示正式模式拿掉，見 `apply_live_notes`。
@@ -782,6 +785,15 @@ def _gate_save_by_apply(block: dict) -> None:
         save["disabled_reason"] = apply_["disabled_reason"]
 
 
+def _block_save_when_settings_unreadable(block: dict) -> None:
+    """總管 2026-10-16 判定（必修）：設定讀不到時「存檔」一律停用、原因 `SAVE_BLOCKED_READ_FAILED_REASON`。
+    讀不到 ≠ 沒設定：欄位空白不代表使用者要清掉已存值，存下去等於覆蓋。排在 `_gate_save_by_apply` 之後，原因句以本句為準。"""
+    for button in block["buttons"]:
+        if button["_action_kind"] == "存檔":
+            button["_enabled"] = False
+            button["disabled_reason"] = SAVE_BLOCKED_READ_FAILED_REASON
+
+
 def _gate_dividend_coverage(dataset: dict, coverage) -> dict:
     """2026-10-13 稽核必修 1(b)：所選區間的起點早於任何一檔「有配息列」的最舊除息日（`coverage`）→
     那一段沒有證據（來源可能只給到那麼舊），不得畫成「區間內無配息」，也不得加總成偏低的數。
@@ -882,6 +894,8 @@ def build_live_model(
         nav_not_ready_days=NAV_FRESH_DAYS_YELLOW,
     )
     out = apply_live_notes(model, today=today)
+    if dataset.get("errors", {}).get("user_setting"):
+        _block_save_when_settings_unreadable(logic.find_block(out, "HLD-4"))
     out = _apply_freshness(out, fresh)
     out = _apply_direct(
         out, rows, has_holdings=bool(dataset.get("holding")),

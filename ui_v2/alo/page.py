@@ -551,10 +551,21 @@ def render(*, load_live=None, save_live=None) -> None:
                 st.session_state[_PENDING_INPUTS_STATE] = live.pending_reconcile(
                     st.session_state[_PENDING_INPUTS_STATE], ctx["setting_raw"]
                 )
-        model = live.apply_live_notes(
-            logic.build_page_model(dataset),
-            wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
-        )
+        # 總管 2026-10-16 判定（R3，必修）：同鍵兩列而類別或幣別不同時 `logic.aggregated_holdings` raise ValueError ——
+        # 原本沒有人接，正式頁畫出帶堆疊的例外框。比照持倉體檢既有錯誤畫面（`ui_v2/hld/page.py::_render_live_error`）
+        # 接住：頁名、提問句、一行「⛔ 取數失敗：ValueError：<訊息原文>」，其餘塊不畫。只接組模型這一步的 ValueError，
+        # 不新設計畫面、不改訊息（訊息只帶保單編號與基金代碼，來自已遮蔽的讀表結果）。
+        try:
+            model = live.apply_live_notes(
+                logic.build_page_model(dataset),
+                wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
+            )
+        except ValueError as exc:
+            _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
+            _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
+            _html(f'<div class="alo-errline" role="alert">'
+                  f'{_esc(logic.fetch_failed_text(f"{type(exc).__name__}：{exc}"))}</div>')
+            return
         key = "live"
 
     _html(f'<div class="alo-title">{_esc(model["title"])}</div>')

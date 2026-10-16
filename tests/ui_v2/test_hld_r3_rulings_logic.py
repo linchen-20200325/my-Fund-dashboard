@@ -425,3 +425,33 @@ def test_第8點_source加真的L2組表_同鍵兩列端到端只剩一列():
     fields = dict(items[0]["_fields"])
     assert fields["單位數"] == f"{1500.0:,.3f}"
     assert fields["成本（新臺幣）"] == f"{450000:,} 元"
+
+
+# ═══════════ 總管 2026-10-16 判定（必修）：設定讀取失敗時「存檔」停用，免得空白欄位覆蓋已存值 ═══════════
+
+
+def _settings_failed_dataset():
+    args = _rehomed_args()
+    args["dataset"]["user_setting"] = []
+    args["dataset"]["errors"] = {"user_setting": "ConnectionError: 設定表讀取逾時（測試用原文）"}
+    return args["dataset"]
+
+
+@pytest.mark.parametrize("fields", [
+    None,                                                            # 首次渲染：欄位空白
+    {"window_start": "2026-02-01", "window_end": "2026-09-19"},      # 使用者自己填了合格的值，照樣不開放
+])
+def test_總管判定_設定讀取失敗_存檔停用_原因句(fields):
+    model = _live(_settings_failed_dataset(), fields=fields)
+    save = next(b for b in logic.find_block(model, "HLD-4")["buttons"] if b["_action_kind"] == "存檔")
+    assert (save["_enabled"], save["disabled_reason"]) == (False, live.SAVE_BLOCKED_READ_FAILED_REASON)
+    # 正控：設定讀得到、同一組欄位值時，存檔是開的
+    ok = _live(_rehomed_args()["dataset"], fields={"window_start": "2026-02-01", "window_end": "2026-09-19"})
+    assert next(b for b in logic.find_block(ok, "HLD-4")["buttons"] if b["_action_kind"] == "存檔")["_enabled"]
+
+
+def test_總管判定_設定讀取失敗的原因句_禁詞零命中():
+    banned = [chr(0x4e00) + chr(0x9375), chr(0x6700) + chr(0x4f73), chr(0x63a8) + chr(0x85a6),
+              chr(0x6700) + chr(0x9069), chr(0x8cb7) + chr(0x9032), chr(0x8ce3) + chr(0x51fa),
+              chr(0x52a0) + chr(0x78bc), chr(0x6e1b) + chr(0x78bc)]
+    assert not [w for w in banned if w in live.SAVE_BLOCKED_READ_FAILED_REASON]

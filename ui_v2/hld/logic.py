@@ -2628,6 +2628,7 @@ def _build_page_model(
 ) -> dict:
     # 客戶 2026-10-16 裁示第 8 點：同鍵多列先加總成一列（`merge_same_key_holdings`），之後每一塊都只看到一列。
     # `holding_id` 先驗**原始列**再加總：加總會留第一列的 id，第二列的 id 壞了（空、重複、帶空白）不得因此被蓋掉（§1）。
+    # （派工單原寫「加總在 `_check_holding_ids` 之前」；改為先驗後加總，總管 2026-10-16 同意，理由即上一行。）
     _check_holding_ids(dataset.get("holding", []))
     merged_holdings = merge_same_key_holdings(dataset.get("holding", []))
     if len(merged_holdings) != len(dataset.get("holding", [])):
