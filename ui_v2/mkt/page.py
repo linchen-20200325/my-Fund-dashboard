@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import html
 from datetime import date, datetime, timezone
 
@@ -179,7 +180,21 @@ def _expander_title(block: dict, plain_mode: bool) -> str:
     return f"{block['code']}　{block['title']}　—　{block['summary_text']}"
 
 
-def _render_light(block: dict, *, plain_mode: bool = False) -> None:
+def _render_buttons(block: dict, plain_mode: bool) -> None:
+    """塊上的按鈕。正式模式（`plain_mode`）不畫停用中的「套用」與「重新取數」（`live.hidden_in_live`；
+    44 第七節第三小節之七其二第 7 條）；示範模式照舊全畫。"""
+    for index, button in enumerate(block["buttons"]):
+        if plain_mode and live.hidden_in_live(button):
+            continue
+        st.button(
+            button["label"],
+            key=f"{block['code']}_btn_{index}",
+            disabled=not button["_enabled"],
+            help=button["disabled_reason"] or None,
+        )
+
+
+def _render_light(block: dict, *, plain_mode: bool = False, settings_page=None) -> None:
     tone = theme.tone_hex(block["_tone"])
     st.markdown(
         _drop_blank_lines(f"""<div class="mkt-light" style="--mkt-tone:{tone}"{_block_attr(block, plain_mode)}>
@@ -192,13 +207,10 @@ def _render_light(block: dict, *, plain_mode: bool = False) -> None:
         </div>"""),
         unsafe_allow_html=True,
     )
-    for index, button in enumerate(block["buttons"]):
-        st.button(
-            button["label"],
-            key=f"{block['code']}_btn_{index}",
-            disabled=not button["_enabled"],
-            help=button["disabled_reason"] or None,
-        )
+    _render_buttons(block, plain_mode)
+    if plain_mode and live.light_needs_settings_link(block):
+        # 三塊皆空：正式模式改畫「前往設定與診斷」（只換頁；59 線框第 2.3a 節、護欄 3）。
+        health_view.render_settings_link(settings_page)
 
 
 # ───────────────────────── 層 2 ─────────────────────────
@@ -243,13 +255,7 @@ def _render_card(block: dict, *, plain_mode: bool = False) -> None:
         </div>"""),
         unsafe_allow_html=True,
     )
-    for index, button in enumerate(block["buttons"]):
-        st.button(
-            button["label"],
-            key=f"{block['code']}_btn_{index}",
-            disabled=not button["_enabled"],
-            help=button["disabled_reason"] or None,
-        )
+    _render_buttons(block, plain_mode)
 
 
 # ───────────────────────── 層 3 ─────────────────────────
@@ -304,8 +310,18 @@ def _checkbox_key(name: str) -> str:
 
 
 def _field_selected_keys(keys) -> list:
-    """勾選框**當下**的狀態。只決定勾選框怎麼畫與存檔能不能按，不進任何正式計算。"""
+    """勾選框**當下**的狀態。只決定勾選框怎麼畫與存檔能不能按，不進任何正式計算。（示範模式）"""
     return [key for key in keys if st.session_state.get(_checkbox_key(key)) is True]
+
+
+# 正式模式 `MKT-5` 多選清單的 session 鍵（Phase 3 P0-③；示範模式照舊用 `_checkbox_key` 那一組勾選框）。
+_PICK_KEY = "mkt5_pick"
+
+
+def _field_picks(keys) -> list:
+    """正式模式多選清單**當下**選了哪些（依可選清單順序；清單以外的值不算）。語意同 `_field_selected_keys`。"""
+    picked = st.session_state.get(_PICK_KEY) or ()
+    return [key for key in keys if key in picked]
 
 
 def _on_save_mkt5_demo(keys) -> None:
@@ -328,9 +344,10 @@ def _on_save_mkt4_live(save_live) -> None:
     _record_saves(live.run_saves(entries, save_live))
 
 
-def _on_save_mkt5_live(save_live, keys) -> None:
-    """正式模式 MKT-5：勾選寫進 `user_setting` 的 `mkt_indicator_keys`。"""
-    entries = live.mkt5_save_entry(_field_selected_keys(keys), keys)
+def _on_save_mkt5_live(save_live, keys, never_saved=False) -> None:
+    """正式模式 MKT-5：多選清單的選取寫進 `user_setting` 的 `mkt_indicator_keys`（存檔格式不變：排序後的 JSON 陣列）。
+    `never_saved`：渲染當下讀到的「從未存過」（BL-0228 第二道，見 `live.mkt5_save_entry`）。"""
+    entries = live.mkt5_save_entry(_field_picks(keys), keys, never_saved=never_saved)
     _record_saves(live.run_saves(entries, save_live))
 
 
@@ -345,11 +362,15 @@ def _seed_live_fields(settings, keys, settings_error=None) -> None:
         st.session_state["mkt4_days"] = settings["window_days"]
     if "mkt4_baseline" not in st.session_state and settings.get("baseline_date"):
         st.session_state["mkt4_baseline"] = date.fromisoformat(settings["baseline_date"])
-    # 勾選框初值：已存過 → 依已存清單；從未存過或讀不到 → 不填（一個都不勾；總管 2026-10-13 裁定）。
-    initial = live.initial_checkbox_values(settings, keys, settings_error)
-    for key, value in (initial or {}).items():
-        if _checkbox_key(key) not in st.session_state:
-            st.session_state[_checkbox_key(key)] = value
+    # 多選清單初值（Phase 3 P0-③；原為逐鍵勾選框，判定不變）：已存過 → 依已存清單；
+    # 從未存過或讀不到 → 不填（一個都不選；總管 2026-10-13 裁定）。
+    if _PICK_KEY in st.session_state:
+        # 已在 session（使用者正在編）：只濾掉已不在可選清單裡的值，免得多選清單收到清單外的選項。
+        st.session_state[_PICK_KEY] = _field_picks(keys)
+        return
+    initial = live.initial_picks(settings, keys, settings_error)
+    if initial is not None:
+        st.session_state[_PICK_KEY] = initial
 
 
 def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> None:
@@ -370,17 +391,21 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
             st.caption(line)
 
         apply_button, save_button = block["buttons"]
-        left, right = st.columns(2)
-        with left:
-            st.button(
-                apply_button["label"],
-                key="mkt4_apply",
-                on_click=_on_apply,
-                disabled=not apply_button["_enabled"],
-                help=apply_button["disabled_reason"] or None,
-            )
-        with right:
-            on_click, args = save_click if save_click is not None else (_on_save, ())
+        on_click, args = save_click if save_click is not None else (_on_save, ())
+        if live_mode and live.hidden_in_live(apply_button):
+            # 正式模式：永遠停用的「套用」不畫（44 第七節第三小節之七其二第 7 條）；只剩「存檔」。
+            columns = [contextlib.nullcontext()]
+        else:
+            columns = st.columns(2)
+            with columns[0]:
+                st.button(
+                    apply_button["label"],
+                    key="mkt4_apply",
+                    on_click=_on_apply,
+                    disabled=not apply_button["_enabled"],
+                    help=apply_button["disabled_reason"] or None,
+                )
+        with columns[-1]:
             st.button(
                 save_button["label"],
                 key="mkt4_save",
@@ -400,10 +425,43 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
         st.caption("紅線說明區：所有試算參數均由使用者自行輸入。")
 
 
+def _render_mkt5_picks(block: dict) -> None:
+    """正式模式：一份多選清單（44 第七節第三小節之七其二第 5 條）。可選母體、上限 6、排序照模型（`logic._build_mkt5`）；
+    以中文指標名顯示（`plain.key_name`），底層值與存檔內容仍是原鍵。"""
+    items = block["_items"]
+    options = [item["name"] for item in items]
+    # 整份停用只有一種情形：設定讀不到（`logic` 把每一項都停用並寫同一個原因）。達上限時已選的項目仍可用，不算。
+    disabled = bool(items) and all(not item["_enabled"] for item in items)
+    reasons = list(dict.fromkeys(item["disabled_reason"] for item in items if item["disabled_reason"]))
+    st.multiselect(
+        live.PICK_LABEL,
+        options=options,
+        format_func=plain.key_name,
+        key=_PICK_KEY,
+        max_selections=logic.INDICATOR_PICK_CAP,
+        placeholder="請選擇指標",
+        disabled=disabled,
+        help="　".join(reasons) or None,
+    )
+    # 停用原因寫成一行（44 `MKT-5`：「達上限時其餘項目停用並附一行停用原因」）。
+    for reason in reasons:
+        st.caption(reason)
+    # 可選項目上的狀態徽章（現行只有「資料未備」）：原本掛在每一格勾選框下，多選清單的選項上掛不了，
+    # 改成同一種徽章一行、列出是哪幾項（字面取徽章本身，不另立文案）。
+    by_badge: dict = {}
+    for item in items:
+        for badge in item["badges"]:
+            by_badge.setdefault(badge["text"], []).append(plain.key_name(item["name"]))
+    for text, names in by_badge.items():
+        st.caption(f"{text}：{'、'.join(names)}")
+
+
 def _render_mkt5(block: dict, *, save_click, plain_mode: bool = False) -> None:
     with st.expander(_expander_title(block, plain_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
-        for item in block["_items"]:
+        if plain_mode:
+            _render_mkt5_picks(block)
+        for item in () if plain_mode else block["_items"]:
             st.checkbox(
                 item["label"],
                 value=False,  # 一個也沒有預先勾（正式模式只以使用者自己存過的值填，見 `_seed_live_fields`）
@@ -428,7 +486,10 @@ def _render_mkt5(block: dict, *, save_click, plain_mode: bool = False) -> None:
                 help=button["disabled_reason"] or None,
             )
         st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
-        st.caption("紅線說明區：勾選狀態由使用者自行輸入，系統不代填。")
+        st.caption(
+            "紅線說明區：要看的指標由使用者自行選取，系統不代填。" if plain_mode
+            else "紅線說明區：勾選狀態由使用者自行輸入，系統不代填。"
+        )
 
 
 # ───────────────────────── 層 4 ─────────────────────────
@@ -559,13 +620,14 @@ def render(*, load_live=None, save_live=None, settings_page=None) -> None:
             live_input,
             field_window_days=_field_window_days(),
             field_baseline_date=_field_baseline_date(),
-            field_selected_keys=_field_selected_keys(keys),
+            field_selected_keys=_field_picks(keys),
             save_wired=save_live is not None,
             save_results=st.session_state.get(_SAVE_RESULTS_STATE),
         )
         if save_live is not None:
             mkt4_click = (_on_save_mkt4_live, (save_live,))
-            mkt5_click = (_on_save_mkt5_live, (save_live, keys))
+            never_saved = settings.get("indicator_keys") is None and not notes.get("settings_error")
+            mkt5_click = (_on_save_mkt5_live, (save_live, keys, never_saved))
         else:
             mkt4_click, mkt5_click = (_on_save, ()), (_on_save_mkt5_demo, (keys,))
         # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
@@ -601,7 +663,7 @@ def render(*, load_live=None, save_live=None, settings_page=None) -> None:
         else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
     )
     st.markdown(f'<div class="mkt-layer-label">{label1}</div>', unsafe_allow_html=True)
-    _render_light(logic.find_block(model, "MKT-0"), plain_mode=plain_mode)
+    _render_light(logic.find_block(model, "MKT-0"), plain_mode=plain_mode, settings_page=settings_page)
 
     st.markdown(
         f'<div class="mkt-layer-label mkt-layer2">{label2}</div>', unsafe_allow_html=True

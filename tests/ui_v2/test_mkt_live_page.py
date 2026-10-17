@@ -168,8 +168,10 @@ def test_草稿4與5_存檔與重新取數停用並寫原因_沒有in_memory說�
     save = [b for b in at.button if b.key == "mkt4_save"]
     assert len(save) == 1 and save[0].disabled
     assert save[0].help == "設定存檔尚未接上，存了也留不到下次開頁"
-    retry = [b for b in at.button if b.label == "重新取數"]
-    assert retry and all(b.disabled and b.help == "重新取數尚未接上" for b in retry)
+    # ~~retry 存在且停用、help 為「重新取數尚未接上」~~ → 2026-10-17 Phase 3 P0-③（44 第七節第三小節之七其二第 7 條；
+    # 有意識的更正，不是漏刪）：正式模式下永遠停用的「重新取數」與「套用」在一般畫面不畫；停用原因照舊留在模型裡
+    # （`tests/ui_v2/test_mkt_p03_controls_logic.py` 驗）。測試名保留，便於對照沿革。
+    assert not [b for b in at.button if b.label in ("重新取數", "套用")]
     text = "\n".join(_rendered(at))
     assert "in-memory" not in text and "updated_at" not in text
     assert "舊資料" not in text                 # 草稿 6
