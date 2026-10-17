@@ -319,9 +319,9 @@
 | 日期 | 2026-10-17 |
 | 決策內容摘要 | 停止為舊 branch 做考古與封存；舊 branch 未進 main 或未封存的內容可放棄，日後需要時依當時 main／SSOT／需求重做。歷史與 WIP branch 只要不被現行 workflow、data、output 依賴即可刪除，刪前只查是否被 open PR、workflow 或 production 使用。不得刪：main、data、push-assets；現行 workflow 依賴的 trigger／results branch；open PR 使用中的 branch；其他經查證屬 production／runtime 必要者。無刪除權限時列清單交客戶手動刪 |
 | evidence／source | `docs/evidence/decisions/2026-10-17_branch_cleanup_ruling.md` |
-| 影響範圍 | `PROJECT_RULES.md` 第 10 節；`docs/BACKLOG.md` BL-0235、BL-0236、BL-0237、BL-0265、BL-0267 |
+| 影響範圍 | 治理層：`PROJECT_RULES.md` 第 10 節（:300、:301 標記與 2026-10-17 指標）、第 14 節之 8；`docs/HANDOFF.md` branch lifecycle 段；`DEC-2026-10-16-02`、`DEC-2026-10-16-10` 指標；`docs/BACKLOG.md` BL-0235、BL-0236、BL-0237、BL-0265、BL-0267；`docs/evidence/decisions/`。產品程式碼一行未改；本條登記本身未刪任何 branch |
 | 是否可逆 | 刪除 branch 不可逆；裁示本身可由客戶另行變更 |
-| supersedes／superseded by | 放寬：`DEC-2026-10-16-10` 的 Preservation Check 與 `DEC-2026-10-16-02`「只保存、不刪除」在歷史 branch 上的適用（舊條目不刪，就地加指標）。superseded by：無 |
+| supersedes／superseded by | 放寬：`DEC-2026-10-16-10` 的 Preservation Check 與 `DEC-2026-10-16-02`「只保存、不刪除」在歷史 branch 上的適用（舊條目不刪，就地加指標）。`DEC-2026-10-16-10` 四類請示條件對歷史／WIP branch 的讀法（**總管讀法，可被客戶推翻**）：(1)「preservation evidence 不完整」不再需要請示；(2)「大批／大規模 cleanup」只要是歷史／WIP branch 且不在不得刪範圍內，不再需要請示（裁示原文為可直接刪除，未設批量上限）；(3)「production／workflow dependency」仍不得刪，併入本條不得刪範圍；(4)「刪除結果具有產品或資料保存意義」屬 production、data 或 output 者仍不得刪，歷史文件與程式碼依本條可以放棄。superseded by：無 |
 | provenance | **要點轉述**（客戶 2026-10-17 對話中裁示，經總管於派工單內轉述；存檔見上） |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
