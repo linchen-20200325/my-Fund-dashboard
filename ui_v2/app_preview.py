@@ -20,6 +20,10 @@
 | 資產配置 | 真資料 | `page.render(load_live=source.load_live, save_live=source.save_setting, mask_error=source.mask_error)` ＝ `ui_v2/app_alo_live.py`（2026-10-16 起另傳遮蔽函式） |
 | 設定與診斷 | 真資料 | `page.render(load_live=..., save_live=source.save_setting, refetch_live=source.refetch)` ＝ `ui_v2/app_set_live.py` |
 
+2026-10-17 Phase 3 P0-②：市場總覽、持倉體檢、標的探索、資產配置四頁**另多傳一個** `settings_page=_settings_page()`
+（設定與診斷那一頁的 `st.Page`，給頁首資料狀態行旁的「前往設定與診斷」；只換頁）。單頁的 live 入口沒有
+`st.navigation`、換不了頁，不傳這一個；其餘參數照舊與 live 入口同名、同一物件（守衛同上，只容許多這一個）。
+
 ~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
 錯誤路徑照實顯示（例如「未設定保單試算表 ID（POLICY_SHEET_ID），不讀取」），不補任何數字。
 
@@ -172,14 +176,28 @@ def _on_page(slug: str) -> None:
     st.session_state[_LAST_PAGE_KEY] = slug
 
 
+def _settings_page():
+    """設定與診斷那一頁的 `st.Page`（Phase 3 P0-②：四頁資料狀態行旁那一枚「前往設定與診斷」）。
+
+    與 `main()` 註冊進 `st.navigation` 的是同一個函式、同一個 url_path、同一個頁名（取自 `PAGES`，不另寫字面）；
+    streamlit 1.59.2 以 url_path 算頁的雜湊，`st.page_link` 驗它是不是已註冊的那一頁
+    （`streamlit/navigation/page.py::_validate_registered_page`）。只用來換頁：不讀不寫任何資料、不觸發取數。
+    """
+    slug, title, func = next(row for row in PAGES if row[0] == "set")
+    return st.Page(func, title=title, url_path=slug)
+
+
 def page_mkt() -> None:
     _on_page("mkt")
-    mkt_page.render(load_live=mkt_source.load_live, save_live=mkt_source.save_setting)
+    mkt_page.render(load_live=mkt_source.load_live, save_live=mkt_source.save_setting, settings_page=_settings_page())
 
 
 def page_hld() -> None:
     _on_page("hld")
-    hld_page.render(load_live=hld_source.load_live, mask_error=hld_source.mask_error, save_live=hld_source.save_setting)
+    hld_page.render(
+        load_live=hld_source.load_live, mask_error=hld_source.mask_error, save_live=hld_source.save_setting,
+        settings_page=_settings_page(),
+    )
 
 
 def page_exp() -> None:
@@ -187,12 +205,15 @@ def page_exp() -> None:
     # ~~st.warning(EXP_DEMO_BANNER, icon="⚠️")~~
     # ~~exp_page.render()~~
     # → 2026-10-13（狀態更新，不是漏刪）：與 `ui_v2/app_exp_live.py` 同名參數、同一物件（守衛同上）。
-    exp_page.render(load_live=exp_source.load_live, save_live=exp_source.save_setting)
+    exp_page.render(load_live=exp_source.load_live, save_live=exp_source.save_setting, settings_page=_settings_page())
 
 
 def page_alo() -> None:
     _on_page("alo")
-    alo_page.render(load_live=alo_source.load_live, save_live=alo_source.save_setting, mask_error=alo_source.mask_error)
+    alo_page.render(
+        load_live=alo_source.load_live, save_live=alo_source.save_setting, mask_error=alo_source.mask_error,
+        settings_page=_settings_page(),
+    )
 
 
 def page_set() -> None:

@@ -155,14 +155,47 @@ def _entry_injections(path: pathlib.Path, page: str) -> list[dict]:
     return _render_injections(tree, page_alias, source_alias)
 
 
+# 2026-10-17 Phase 3 P0-②：預覽入口另多傳一個 `settings_page`（設定與診斷那一頁的 `st.Page`，給「前往設定與診斷」），
+# 只給這四頁；單頁的 live 入口沒有 `st.navigation`、不傳。抽取器把它記成「非 source 屬性」的那一個字串。
+_SETTINGS_PAGE_KW = "settings_page"
+_SETTINGS_PAGE_VALUE = "<非source屬性：_settings_page()>"
+_SETTINGS_PAGE_PAGES = ("mkt", "hld", "exp", "alo")
+
+
 @pytest.mark.parametrize("page", _LIVE_PAGES)
 def test_b_四頁注入與live入口逐一相同(page):
+    """~~`preview == live`（逐一相同）~~ → 2026-10-17 P0-②（有意識的更正，不是漏刪）：預覽在四頁多傳一個
+    `settings_page=_settings_page()`；**拿掉那一個之後**其餘仍與 live 入口逐一相同（關鍵字、source 屬性名一個不差）。
+    其他比較一條都沒有放寬：多傳別的、少傳、換成別的物件，照舊當場不相等。"""
     live = _entry_injections(_ROOT / "ui_v2" / f"app_{page}_live.py", page)
     preview = _entry_injections(_PREVIEW, page)
     assert len(live) == 1, live            # live 入口只呼叫一次（守衛前提）
     assert live[0], live                   # 至少傳了 load_live（空字典＝比對沒有意義）
     assert "load_live" in live[0]
-    assert preview == live, (page, preview, live)
+    assert _SETTINGS_PAGE_KW not in live[0], live   # 單頁入口不傳（換不了頁）
+    assert len(preview) == 1, preview
+    rest = dict(preview[0])
+    if page in _SETTINGS_PAGE_PAGES:
+        assert rest.pop(_SETTINGS_PAGE_KW) == _SETTINGS_PAGE_VALUE, (page, preview)
+    assert [rest] == live, (page, preview, live)
+
+
+def test_b_設定與診斷頁本身不傳settings_page_四頁都傳():
+    for page in _LIVE_PAGES:
+        preview = _entry_injections(_PREVIEW, page)[0]
+        assert (_SETTINGS_PAGE_KW in preview) is (page in _SETTINGS_PAGE_PAGES), (page, preview)
+
+
+def test_b_settings_page只建一個st_Page_取自PAGES_不碰任何source():
+    """`_settings_page` 只換頁用：函式本體只准 `next(...)` 與 `st.Page(...)`，不得引用任何頁的 `source`
+    （不讀不寫任何資料、不觸發取數；44 第五節第三小節 `導覽`、護欄 3）。"""
+    fn = _function(_tree(_PREVIEW), "_settings_page")
+    calls = {ast.unparse(c.func) for c in ast.walk(fn) if isinstance(c, ast.Call)}
+    assert calls == {"next", "st.Page"}, calls
+    names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
+    assert not any(name.endswith("_source") or name.endswith("_page") and name != "_settings_page"
+                   for name in names), names
+    assert "PAGES" in names
 
 
 def test_b_標的探索的示範入口照舊不傳任何參數_預覽改走正式入口():
@@ -171,7 +204,8 @@ def test_b_標的探索的示範入口照舊不傳任何參數_預覽改走正�
     demo = _entry_injections(_ROOT / "ui_v2" / "app_exp.py", "exp")
     preview = _entry_injections(_PREVIEW, "exp")
     assert demo == [{}]
-    assert preview == [{"load_live": "load_live", "save_live": "save_setting"}]
+    # 2026-10-17 P0-②：預覽另多傳 settings_page（上一條守衛只容許多這一個）。
+    assert preview == [{"load_live": "load_live", "save_live": "save_setting", _SETTINGS_PAGE_KW: _SETTINGS_PAGE_VALUE}]
 
 
 def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合():
