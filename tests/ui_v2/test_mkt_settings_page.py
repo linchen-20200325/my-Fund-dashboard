@@ -228,3 +228,39 @@ def test_B1_已存天數過大_整頁不當_當成設定讀不到(env):
     sheet.put("mkt_window_days", "1000000")
     text = _render(fake)                                   # 不得 raise
     assert "設定讀不到" in text and "與觀察窗起點的差" not in text
+
+
+# ═══════════════════ 2026-10-17 Phase 3 P0-③ 稽核回修 ═══════════════════
+
+
+def test_P03_BL0228_畫面把從未存過傳進存檔回呼_繞過停用直接叫也不寫(env):
+    """稽核必修 (1)：守住 `page.render` → `_on_save_mkt5_live(..., never_saved)` 這條接線。
+    從未存過 → 回呼的最後一個參數是 True，就算繞過停用直接叫回呼也一鍵不寫；已存過 → False（清空再存照舊寫 "[]"）。"""
+    sheet, fake = env
+    _render(fake)
+    on_click, args, disabled, _help = fake.buttons["mkt5_save"]
+    assert disabled is True and args[-1] is True
+    on_click(*args)                                        # 繞過畫面停用：第二道必須擋下
+    assert sheet.writes == []
+
+    sheet.put("mkt_indicator_keys", '["vol_index"]')
+    fresh = _FakeSt()
+    page.st = fresh                                        # 新的工作階段（monkeypatch 結束時還原）
+    _render(fresh)
+    on_click, args, disabled, _help = fresh.buttons["mkt5_save"]
+    assert args[-1] is False
+    fresh.session_state["mkt5_pick"] = []
+    _render(fresh)
+    on_click, args, disabled, _help = fresh.buttons["mkt5_save"]
+    assert disabled is False and args[-1] is False
+    on_click(*args)
+    assert sheet.writes[-1]["setting_value"] == "[]"
+
+
+def test_P03_session舊值含已不在可選清單的鍵_重跑時濾掉(env):
+    """稽核可選 (a)：多選清單只收可選清單內的值；session 裡殘留的舊鍵在畫之前濾掉（真 streamlit 收到清單外的值會出錯）。"""
+    _sheet, fake = env
+    _render(fake)
+    fake.session_state["mkt5_pick"] = ["vol_index", "leading_index", "已下架的鍵"]   # leading_index：N3 不在可選清單
+    _render(fake)
+    assert fake.session_state["mkt5_pick"] == ["vol_index"]

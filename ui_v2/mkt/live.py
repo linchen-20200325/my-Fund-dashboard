@@ -21,6 +21,7 @@
    `MKT-5` 改一份多選清單（`PICK_LABEL`、`initial_picks`）。BL-0228：從未存過＋一個都沒選不寫 `"[]"`（`mkt5_save_entry`）。
 
 ⚠️ 文案逐字照草稿；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
+⚠️ 例外（據實寫明）：BL-0228 的停用原因 `logic.TEXT_SAVE_NOTHING_PICKED` 不是草稿字面 —— 本組擬定，44／59 未列。
 """
 
 from __future__ import annotations
@@ -279,8 +280,9 @@ def mkt5_save_entry(selected, available, *, never_saved: bool = False) -> list:
     N6（2026-10-13 稽核 G）：含可勾清單以外的鍵、或重複的鍵 → **拒絕並說明**（帶 `error`，不寫）。
     ~~舊寫法把清單以外的鍵靜默濾掉再存~~ —— 使用者以為存了的東西沒存進去，而畫面不說。
 
-    never_saved（BL-0228，Phase 3 P0-③）：`user_setting` 裡**從來沒有** `mkt_indicator_keys` 這一列
-    （`parse_user_settings` 交回 `indicator_keys is None`、且沒有讀取失敗）。這時一個都沒選 → 拒絕（不寫 `"[]"`）。
+    never_saved（BL-0228，Phase 3 P0-③）：「從未存過」＝ `user_setting` 裡**沒有** `mkt_indicator_keys` 這一列，
+    或最新一筆的值已被清除（兩者 `parse_user_settings` 都交回 `indicator_keys is None`）；且沒有讀取失敗。
+    實際判定就是 `indicator_keys is None and not settings_error`（`page.render` 算好傳進存檔回呼）。這時一個都沒選 → 拒絕（不寫 `"[]"`）。
     ⚠️ 判定照既有資料，不新發明：已存過的 `"[]"` 照舊是「已存、一個都沒選」（44 `MKT-5` 判準「取消全部勾選並存檔、
     重新載入，下方明細出現『尚未選定任何指標』」），所以**已存過**時清空再存照舊允許；只有「從未存過」才擋。
     畫面上的存檔鈕本來就停用（`logic._build_mkt5`），這一層是第二道。
