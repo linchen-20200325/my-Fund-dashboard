@@ -247,8 +247,8 @@
 |---|---|
 | 日期 | 2026-10-17 |
 | 決策內容摘要 | 客戶指示把「客戶已確認的新 UI/UX 與『Personal Investment Decision System』長期方向」正式登記進 `docs/BACKLOG.md`，並分為兩組：【Phase 3 / 近期】與【Roadmap / 後續，不得在 Phase 3 一次實作】；指示同時寫明「不要在本舊對話開始實作」「不得因為登記 backlog 就視為已核准立即實作」。本筆記錄的決策只有一件：**這些方向是客戶確認的長期產品方向，並依客戶的分組切成 Phase 3 與 Later／Roadmap**。**本筆不是實作核准**：各項動工仍依 `CLAUDE.md` §-1、Phase 3 驗收流程（每批 ≤3）與 UI 草稿先行（`CLAUDE.md` §-1.5.4）；**不修改凍結 SSOT** `docs/v2/44_fund_ui_ssot.md`（改它仍須走既有解凍程序）；**不啟用任何方向性判斷**（B 線 v1 現況照舊，Phase 7 准入要件九項未完成前不得 production 啟用，`DEC-2026-10-16-14`）；不核准 54 的任何候選數字、公式或門檻 |
-| 理由／背景 | 避免這些方向只存在對話中而遺失（客戶原話）。客戶稱之為「已確認」的方向；各標籤背後的細部討論不在 repo，文件實作組未見，BACKLOG 各列的一行讀法一律標文件組讀法。依指示「不要把所有 backlog 複製進 DECISIONS；只記錄真正的決策」，本筆不列各方向清單 |
-| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`；落地索引 `docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉：新列 BL-0344～BL-0361，另補記既有列 BL-0250、BL-0293（39 個標籤對照表在該小節） |
+| 理由／背景 | 依客戶原話：「避免只存在對話中而遺失」。客戶稱之為「已確認」的方向；各標籤背後的細部討論不在 repo，文件實作組未見，BACKLOG 各列的一行讀法一律標文件組讀法。依指示「不要把所有 backlog 複製進 DECISIONS；只記錄真正的決策」，本筆不列各方向清單 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`；落地索引 `docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉：新列 BL-0344～BL-0361，另補記既有列 BL-0250、BL-0293，另於 BL-0244／0248／0287 補交叉指標（39 個標籤對照表在該小節） |
 | 影響範圍 | 治理層：`docs/BACKLOG.md`（上列）、`docs/HANDOFF.md` 第 3 節一行指標。規格層：無（44、54、57、子法 1 本批一個字都不改）。程式：無 |
 | 是否可逆 | 可逆（客戶可另行裁示調整方向、分組或撤回） |
 | supersedes／superseded by | supersedes：無。superseded by：無。與既有規格的張力（例：「Data Health 集中至 SET」對 55 §5 第 1 條各頁首屏 `*-0` 燈；Thesis／Severity／What-if 等對 B 線 v1 不輸出方向性判斷）只登記於 BACKLOG 各列，本筆不裁定、不視為已取代任何條文 |

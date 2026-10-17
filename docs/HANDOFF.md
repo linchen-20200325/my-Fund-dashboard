@@ -55,7 +55,7 @@
    - 下一步：客戶在 Streamlit Cloud 另建第二個 App（repo `linchen-20200325/my-Fund-dashboard`、branch `main`、main file `ui_v2/app_preview.py`），Secrets 依 `docs/v2/55_preview_acceptance_guide.md` §2；`SETTINGS_SHEET_ID` 只填驗收用複本（複本名稱要看得出是複本，並以編輯權共用給服務帳戶），存檔前先在設定與診斷頁看「設定試算表：〔名稱〕」；正式站 App 設定不動。
    - 辨認 B 線：分頁標題「B 線 UI 預覽（非正式站）」、左側欄五頁不帶 emoji、側欄藍框說明、首屏有 `MKT-0` 等結論燈；看到頂部橫向分頁或「[新]」即舊站。市場總覽從網址根目錄進（`/mkt` 會跳 Page not found，BL-0343）。
    - 之後才收五頁 390px／桌面首屏真實資料截圖；截圖到齊前不改 UI、不改 `app.py`／舊站；下一個新對話會收到新的完整 Phase 3 UI/UX 提示語。
-   - **2026-10-17 方向登記**：客戶確認之 UI/UX／Personal Investment Decision System 長期方向已登記於 `docs/BACKLOG.md`（BL-0344～BL-0361，另補記 BL-0250、BL-0293）與 `docs/DECISIONS.md` `DEC-2026-10-17-01`；Phase 3 範圍項目仍依 Phase 3 驗收流程逐批（≤3）處理、版面變更先出草稿；Roadmap 項目不得在 Phase 3 實作；新對話以 BACKLOG／DECISIONS 為正式來源（登記不構成動工授權）。
+   - **2026-10-17 方向登記**：客戶確認之 UI/UX／Personal Investment Decision System 長期方向已登記於 `docs/BACKLOG.md`（BL-0344～BL-0361，另補記 BL-0250、BL-0293，另於 BL-0244／0248／0287 補交叉指標）與 `docs/DECISIONS.md` `DEC-2026-10-17-01`；Phase 3 範圍項目仍依 Phase 3 驗收流程逐批（≤3）處理、版面變更先出草稿；Roadmap 項目不得在 Phase 3 實作；新對話以 BACKLOG／DECISIONS 為正式來源（登記不構成動工授權）。
 3. 有時間窗：FX 觀測日探測重跑窗口 2026-11-02～約 11-24（上限約 11-26），錯過要等明年 3 月；重跑方式與按鈕分支見 `docs/BACKLOG.md` BL-0217（按鈕分支窗口結束前不得刪，見 BL-0265）。
 4. 本項以外**不構成動工授權**（`CLAUDE.md` §-1）。
 

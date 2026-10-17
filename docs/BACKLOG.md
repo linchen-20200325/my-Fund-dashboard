@@ -460,7 +460,7 @@
 | BL-0290 | open | architecture debt | 2026-10-12 | 預覽五頁共用一個行程，快取與冷卻共用；set「重新取數」會影響 mkt／hld。 | 交接本 ★ 進度總表區 :1103 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0291 | open | tech debt | 2026-10-12 | 動態寫法守衛可再補 `vars`／`locals`。 | 交接本 ★ 進度總表區 :1104 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0292 | deferred | architecture debt | 2026-10-13 | 舊 UI／A 線切換與實體刪除的九道刪除閘門（目前在第一道：B 線真資料完成）。 | 交接本 ★ 進度總表區 :305；另見 交接本 :917、:930 | 未記載 | B 線真資料完成 → 客戶 UI 驗收 → 回歸 → 非 UI 消費端解耦 → 依賴掃描 → 切換 `app.py` | 不得提前刪除（任何規模） | 已裁順序 |
-| BL-0293 | open | research | 2026-10-13 | AI 分析能力盤點：把舊 AI UI／舊 prompt／舊處置型功能與 AI 分析能力分開盤點（裁示 2）。 | 交接本 ★ 進度總表區 :306；另見 交接本 :975 | 未記載 | — | 待總管派工；不得照搬舊 AI 實作。→ 2026-10-17 補（客戶 2026-10-17 方向登記指示（`docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`）；本列原有盤點工作與狀態不變）：另承接兩個 Later／Roadmap 方向標籤，不另開號：AI disagreement with deterministic rules；未來 AI page interpretation，但 AI 與 Data Layer 必須分離（讀法＝文件組讀法：AI 解讀可以與確定性規則的結果不同、分歧要標示出來；未來 AI 可解讀頁面內容，但 AI 推論不得寫回 Data Layer、不得猜缺值或補造資料，受 54 §1 約束）。範圍：Later／Roadmap（不得在 Phase 3 實作）；會改變投資判斷的 AI 行為屬 Stop／Decision Gate（`PROJECT_RULES.md` 第 4 節），這兩項動工前需客戶裁示；另見 BL-0271 | 否 |
+| BL-0293 | open | research | 2026-10-13 | AI 分析能力盤點：把舊 AI UI／舊 prompt／舊處置型功能與 AI 分析能力分開盤點（裁示 2）。 | 交接本 ★ 進度總表區 :306；另見 交接本 :975 | 未記載 | — | 待總管派工；不得照搬舊 AI 實作。→ 2026-10-17 補（客戶 2026-10-17 方向登記指示（`docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`）；本列原有盤點工作與狀態不變）：另承接兩個 Later／Roadmap 方向標籤，不另開號：AI disagreement with deterministic rules；未來 AI page interpretation，但 AI 與 Data Layer 必須分離（讀法＝文件組讀法：AI 解讀可以與確定性規則的結果不同、分歧要標示出來；未來 AI 可解讀頁面內容，但 AI 推論不得寫回 Data Layer、不得猜缺值或補造資料，受 54 §1 約束）。這兩項範圍：Later／Roadmap（deferred 性質，不得在 Phase 3 實作；本列 `open` 狀態只指原有盤點工作）；會改變投資判斷的 AI 行為屬 Stop／Decision Gate（`PROJECT_RULES.md` 第 4 節），這兩項動工前需客戶裁示；另見 BL-0271 | 否（原盤點）；是（兩項 Roadmap 動工前） |
 | BL-0294 | 待確認 | data gap | 2026-10-13 | 累積表 `nav_history` 出處：回填不保留出處、可能含以名稱搜尋得來的晨星點，閘門 `NAV_HISTORY_PROVENANCE_VERIFIED = False` 關閉中。 | 交接本 ★ 進度總表區 :307；另見 交接本 :965、:1023 | 未記載 | — | 待確認：客戶 2026-10-13 新裁示（一）「保留累積淨值能力、UI 不必顯示原始累積淨值表」（:315）是否回答本題未載明；:1819 自陳未逐題核對 | 否 |
 | BL-0295 | 待確認 | UX debt | 2026-10-13 | MKT-5 `mkt_indicator_keys` 語意與 47 Q-07（只填一欄）；另新裁示（二）MKT 設定下次載入生效的實作。 | 交接本 ★ 進度總表區 :308；另見 交接本 :315、:1024 | 未記載 | — | 待確認：:1819 記 #952 依 PR 標題已處理這兩題與 B2，但只讀標題、未讀內容 | 否 |
 | BL-0296 | open | tech debt | 2026-10-13 | `infra/proxy.py::_exc_log` 是啟發式遮罩，只砍 `?` 起的查詢字串，射程有限。 | 交接本 ★ 進度總表區 :1029 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
@@ -542,6 +542,8 @@
 
 **標籤對照（39 個標籤全列；「處理」＝新列／補記既有列／54 索引指標）**
 
+- 標「索引指標」者僅表示 54 有相關節，未必涵蓋該標籤；未涵蓋者以本列為登記來源（標「新列（54 §X 部分相關）」者即屬此類）。
+
 | # | 標籤（照指示原字） | BL-ID | 處理 | 範圍 |
 |---|---|---|---|---|
 | 1 | B 線五頁 Answer-first UX | BL-0344 | 新列 | Phase 3 |
@@ -563,23 +565,23 @@
 | 17 | mobile / desktop information density | BL-0250 | 補記既有列 | Phase 3 |
 | 18 | Today Overview / 今日總覽 | BL-0353 | 新列 | Later／Roadmap |
 | 19 | Signal Lifecycle：NEW / ONGOING / WORSENING / RESOLVED | BL-0354 | 54 索引指標（§14） | Later／Roadmap |
-| 20 | Why Now / 首次越過門檻 | BL-0354 | 54 索引指標（§14） | Later／Roadmap |
+| 20 | Why Now / 首次越過門檻 | BL-0354 | 新列（54 §14 部分相關） | Later／Roadmap |
 | 21 | Thesis Card / Thesis Monitoring | BL-0355 | 54 索引指標（§2） | Later／Roadmap |
 | 22 | Supporting vs Contrary Evidence | BL-0355 | 54 索引指標（§2） | Later／Roadmap |
-| 23 | Severity vs Evidence Quality | BL-0356 | 54 索引指標（§2） | Later／Roadmap |
+| 23 | Severity vs Evidence Quality | BL-0356 | 新列（54 §2 部分相關） | Later／Roadmap |
 | 24 | Decision Journal | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
-| 25 | Decision Quality ≠ Investment Outcome | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
+| 25 | Decision Quality ≠ Investment Outcome | BL-0357 | 新列（54 §15 部分相關） | Later／Roadmap |
 | 26 | Expected vs Actual / Thesis Review | BL-0355 | 54 索引指標（§2、§15） | Later／Roadmap |
 | 27 | Portfolio Look-through Exposure | BL-0358 | 54 索引指標（§5） | Later／Roadmap |
 | 28 | Fund overlap / False Diversification | BL-0358 | 54 索引指標（§5） | Later／Roadmap |
 | 29 | What-if Engine | BL-0359 | 54 索引指標（§9、§10） | Later／Roadmap |
 | 30 | Replacement Flow：HLD → ALO → EXP → ALO | BL-0359 | 54 索引指標（§9） | Later／Roadmap |
 | 31 | Performance Attribution（fund / FX / dividend / allocation） | BL-0360 | 54 索引指標（§10、§12） | Later／Roadmap |
-| 32 | Regime × Fund | BL-0361 | 54 索引指標（§7、§8） | Later／Roadmap |
+| 32 | Regime × Fund | BL-0361 | 新列（54 §7、§8 部分相關） | Later／Roadmap |
 | 33 | AI disagreement with deterministic rules | BL-0293 | 補記既有列 | Later／Roadmap |
-| 34 | Counterfactual Review | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
+| 34 | Counterfactual Review | BL-0357 | 新列（54 §15 部分相關） | Later／Roadmap |
 | 35 | Portfolio Story | BL-0360 | 新列（與 #31 同列） | Later／Roadmap |
-| 36 | Alert usefulness / threshold review | BL-0354 | 54 索引指標（§14） | Later／Roadmap |
+| 36 | Alert usefulness / threshold review | BL-0354 | 新列（54 §14 部分相關） | Later／Roadmap |
 | 37 | 「無法判定」原因分類 | BL-0356 | 54 索引指標（§2、§5） | Later／Roadmap |
 | 38 | 未來 AI page interpretation，但 AI 與 Data Layer 必須分離 | BL-0293 | 補記既有列 | Later／Roadmap |
 | 39 | Decision-time evidence snapshot / rule version preservation | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
@@ -598,14 +600,14 @@
 | BL-0351 | open | architecture debt | 2026-10-17 | 標籤：partial failure isolation；freshness-aware refresh。讀法（文件組讀法）：單一來源或單一區塊失敗不拖垮整頁；重新取數依資料新鮮度決定。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；`CLAUDE.md` §1、§2.4；54 §13（Non-production）；相關 BL-0304、BL-0129 | 否 | 不改正式 freshness 門檻值或語意（屬 Stop／Decision Gate） | 完成條件（文件組讀法）：逐頁列出各區塊的失敗隔離邊界，並以測試覆蓋「一塊失敗、其餘照畫且標明失敗」；刷新依既有 freshness 規則，不新增門檻。範圍：Phase 3 | 否（若動到正式 freshness 門檻值或語意則是） |
 | BL-0352 | open | UX debt | 2026-10-17 | 標籤：draft vs saved；simulation vs real change。讀法（文件組讀法）：畫面清楚區分未存檔值與已存檔值，以及試算結果與實際資料變更。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；55 §4；44 §1.1 G2（「情境試算」為允許形式之一）；相關 BL-0244 | 否 | Phase 3 客戶驗收回報（BL-0250）；新增標示屬元件增刪，先出草稿 | 完成條件（文件組讀法）：凡可編輯欄位都有可辨的「未存檔／已存檔」狀態；任何試算結果都標明不是實際變更、且不寫入試算表。範圍：Phase 3 | 否 |
 | BL-0353 | deferred | deferred improvement | 2026-10-17 | 標籤：Today Overview / 今日總覽。讀法（文件組讀法）：一個彙整「今天要看什麼」的入口畫面。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §16 北極星（間接） | 否 | Phase 3 五頁驗收完成；產品方向屬 Stop／Decision Gate | ⚠️ 張力（只登記、不解）：44 §3.0 現行為五頁、各頁只答自己那一句問題；若是新增一頁，屬產品方向＋版面變更，需客戶裁示＋草稿＋44 解凍程序；若是既有頁的摘要區，另判。完成條件待正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
-| BL-0354 | deferred | research | 2026-10-17 | 標籤：Signal Lifecycle：NEW / ONGOING / WORSENING / RESOLVED；Why Now / 首次越過門檻；Alert usefulness / threshold review。讀法（文件組讀法）：訊號帶生命週期狀態、標明何時首次越過門檻、事後檢討提醒是否有用與門檻是否合適。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §14 LINE State Machine（state transition、hysteresis、recovery notification） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格（54 §0）；threshold review 涉及正式 threshold 值或語意（Stop／Decision Gate，`DEC-2026-10-16-03`） | 54 索引指標：內容以 54 §14 為準，本列不複製；54 的候選示例一律 Non-production。完成條件待 Phase 7 正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0354 | deferred | research | 2026-10-17 | 標籤：Signal Lifecycle：NEW / ONGOING / WORSENING / RESOLVED；Why Now / 首次越過門檻；Alert usefulness / threshold review。讀法（文件組讀法）：訊號帶生命週期狀態、標明何時首次越過門檻、事後檢討提醒是否有用與門檻是否合適。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §14 LINE State Machine（state transition、hysteresis、recovery notification） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格（54 §0）；threshold review 涉及正式 threshold 值或語意（Stop／Decision Gate，`DEC-2026-10-16-03`） | 「Signal Lifecycle」部分以 54 §14 為相關節（54 §14 只談 LINE state machine，本列不複製；候選示例一律 Non-production）；「Why Now」「Alert usefulness / threshold review」54 未涵蓋，以本列為登記來源。完成條件待 Phase 7 正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
 | BL-0355 | deferred | research | 2026-10-17 | 標籤：Thesis Card / Thesis Monitoring；Supporting vs Contrary Evidence；Expected vs Actual / Thesis Review。讀法（文件組讀法）：每檔持有附投資論點卡並持續監看、並列支持與反對證據、事後比對預期與實際。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §2 第 1 層（thesis invalidation）、第 4 層（supporting evidence、invalidation）；54 §15 | 否 | Phase 7 准入要件九項（正式修正案 #8 第 5 節）；投資語意屬 Stop／Decision Gate | ⚠️ 張力（只登記、不解）：論點與證據比對屬投資判斷的呈現，B 線 v1 現階段不輸出正式方向性判斷（`DEC-2026-10-16-14`）；Phase 7 准入前不得上線。54 索引指標（§2）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
-| BL-0356 | deferred | research | 2026-10-17 | 標籤：Severity vs Evidence Quality；「無法判定」原因分類。讀法（文件組讀法）：嚴重度與證據品質分兩軸呈現；「無法判定」細分原因（例：資料未備、證據不足、身分不符、來源衝突）。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §2 第 1、4 層；54 §5 第 4 級（`⬜ 無法判定（持股／產業資料未備）`）；`DEC-2026-10-16-08` | 否 | Phase 7 正式規格；嚴重度屬投資語意（Stop／Decision Gate） | ⚠️ 張力（只登記、不解）：`DEC-2026-10-16-08` 已定資料不足字樣為「⬜ 無法判定（資料未備／證據不足）」；原因分類若改變此字樣或新增子類字樣，需客戶裁示並同步 44（另見 BL-0340）。54 索引指標（§2）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
-| BL-0357 | deferred | research | 2026-10-17 | 標籤：Decision Journal；Decision Quality ≠ Investment Outcome；Counterfactual Review；Decision-time evidence snapshot / rule version preservation。讀法（文件組讀法）：記錄每次決策當下的證據快照與規則版本，事後把決策品質與結果好壞分開檢討，並對照「當時若不這樣做」。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §15 Decision Snapshot（含 rule version、evidence references；事後驗證期間 Non-production） | 否 | Phase 7 正式規格；schema 格式 Phase 7 再定（54 §15） | 54 索引指標：內容以 54 §15 為準。⚠️ 張力（只登記、不解）：決策紀錄若含方向性判斷，受 Phase 7 准入約束；只記錄客戶自己做的決策是否屬方向性輸出，本組不代判。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0356 | deferred | research | 2026-10-17 | 標籤：Severity vs Evidence Quality；「無法判定」原因分類。讀法（文件組讀法）：嚴重度與證據品質分兩軸呈現；「無法判定」細分原因（例：資料未備、證據不足、身分不符、來源衝突）。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §2 第 1、4 層；54 §5 第 4 級（`⬜ 無法判定（持股／產業資料未備）`）；`DEC-2026-10-16-08` | 否 | Phase 7 正式規格；嚴重度屬投資語意（Stop／Decision Gate） | ⚠️ 張力（只登記、不解）：`DEC-2026-10-16-08` 已定資料不足字樣為「⬜ 無法判定（資料未備／證據不足）」；原因分類若改變此字樣或新增子類字樣，需客戶裁示並同步 44（另見 BL-0340）。54 §2 第 4 層與 §5 第 4 級只部分相關（54 §2 沒有嚴重度軸），兩個標籤以本列為登記來源。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0357 | deferred | research | 2026-10-17 | 標籤：Decision Journal；Decision Quality ≠ Investment Outcome；Counterfactual Review；Decision-time evidence snapshot / rule version preservation。讀法（文件組讀法）：記錄每次決策當下的證據快照與規則版本，事後把決策品質與結果好壞分開檢討，並對照「當時若不這樣做」。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §15 Decision Snapshot（含 rule version、evidence references；事後驗證期間 Non-production） | 否 | Phase 7 正式規格；schema 格式 Phase 7 再定（54 §15） | 「Decision Journal」「Decision-time evidence snapshot / rule version preservation」以 54 §15 為相關節（54 §15 只有 snapshot 欄位概念與 3／6／12 個月驗證）；「Decision Quality ≠ Investment Outcome」「Counterfactual Review」54 未涵蓋，以本列為登記來源。⚠️ 張力（只登記、不解）：決策紀錄若含方向性判斷，受 Phase 7 准入約束；只記錄客戶自己做的決策是否屬方向性輸出，本組不代判。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
 | BL-0358 | deferred | research | 2026-10-17 | 標籤：Portfolio Look-through Exposure；Fund overlap / False Diversification。讀法（文件組讀法）：穿透到底層持股看整體曝險；辨識多檔基金持股重疊造成的假分散。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §5 Look-through 降級（引用 52 B-10、B-11、B-13 與 `ui/helpers/portfolio/concentration.py`）；`CLAUDE.md` §3.2 Shadow fund 相似度 | 否 | Phase 5 Data Gap Audit（持股資料覆蓋）；新來源屬 Stop／Decision Gate | 54 索引指標：內容以 54 §5 為準；只有 Top holdings 時須標 Partial、不得稱完整 exposure（54 §5）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
 | BL-0359 | deferred | research | 2026-10-17 | 標籤：What-if Engine；Replacement Flow：HLD → ALO → EXP → ALO。讀法（文件組讀法）：試算「若調整某檔」對配置的影響；替換流程從持倉體檢出發，到資產配置看缺口、到標的探索找候選、再回資產配置看結果。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §9 第 3 情境（替換現有持有；整合在 EXP、不新增頁面）、§10；44 §1.1 G2 | 否 | Phase 7 准入要件九項（候選與替換涉及方向性判斷）；跨頁動線屬版面變更 | ⚠️ 張力（只登記、不解）：44 §3.0 標的探索「不談我目前的持倉狀況」、資產配置「不產生再平衡動作」、「一頁只回答自己那一句問題」，跨頁替換流程與現行頁面邊界衝突；What-if 與 G2 允許的「情境試算」可能相容（本組讀法）。需客戶裁示＋草稿＋44 解凍程序。54 索引指標（§9）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
 | BL-0360 | deferred | research | 2026-10-17 | 標籤：Performance Attribution（fund / FX / dividend / allocation）；Portfolio Story。讀法（文件組讀法）：把報酬拆成基金本身、匯率、配息、配置四個來源；用一段敘事說明組合這段期間發生了什麼。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §10（FX contribution、TWD total return）、§12；`CLAUDE.md` §4.1（TWD vs 原幣） | 否 | 歸因公式屬正式公式（Stop／Decision Gate）；Portfolio Story 若由 AI 產生，受 54 §1 與 BL-0293 約束 | 54 索引指標（§10、§12）；Portfolio Story 在 54 無對應節，屬新列。完成條件待正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
-| BL-0361 | deferred | research | 2026-10-17 | 標籤：Regime × Fund。讀法（文件組讀法）：不同市場環境（regime）下各基金表現的對照。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §7（policy regime）、§8（單一 Proxy ETF 不得等同整個產業 regime）；相關 BL-0234（#841 `services/regime_fit.py`，只登記） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格；regime 判定屬投資語意（Stop／Decision Gate） | 54 索引指標（§7、§8）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0361 | deferred | research | 2026-10-17 | 標籤：Regime × Fund。讀法（文件組讀法）：不同市場環境（regime）下各基金表現的對照。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §7（policy regime）、§8（單一 Proxy ETF 不得等同整個產業 regime）；相關 BL-0234（#841 `services/regime_fit.py`，只登記） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格；regime 判定屬投資語意（Stop／Decision Gate） | 54 §7（Mean-Reversion Guard，研究對象含 policy regime）與 §8 只部分相關，本標籤以本列為登記來源。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
 
 ## §5 判為關閉、合併與非待辦的來源條目（不開 BL 號；附依據）
 
