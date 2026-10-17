@@ -155,6 +155,16 @@ def _go(at, slug):
     return at
 
 
+def _raw_text(at, slug) -> str:
+    """Phase 3 P0-①：四頁移出一般畫面的原文（跨頁的原始訊息；設定與診斷頁的進階診斷讀這一份）。"""
+    from ui_v2 import plain
+
+    if plain.RAW_STATE not in at.session_state:
+        return ""
+    store = at.session_state[plain.RAW_STATE]
+    return "\n".join(entry["text"] for entry in (store.get(slug) or {}).get("entries", ()))
+
+
 def _main_text(at) -> str:
     """主畫面（不含側邊欄）上的字：markdown、caption、各種提示框、按鈕與輸入欄標籤。"""
     main = at.main
@@ -202,8 +212,13 @@ _MISSING = {
 def test_e_無憑證_四頁照實顯示缺失_沒有Traceback_不碰fixtures_沒有示意字樣(no_secrets, biting, slug):
     at = _go(_app_test(), slug)
     text = _main_text(at)
+    # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：四頁的原文移到跨頁的原始訊息（不刪除）；
+    # 設定與診斷頁照舊照印原文。
+    where = text if slug == "set" else _raw_text(at, slug)
     for needle in _MISSING[slug]:
-        assert needle in text, (slug, needle)
+        assert needle in where, (slug, needle)
+        if slug != "set":
+            assert needle not in text, (slug, needle)
     assert _MARK not in text
     # fixtures 的每一個基金名、類別名、訊息原文都帶「示意」；正式模式的頁首也不印情境名。
     assert "示意" not in text, slug
@@ -364,15 +379,17 @@ def _tolerance_fail_then_set_ok_then_back(book):
     errors = at.session_state[alo_page._SAVE_ERRORS_STATE]
     assert errors.get("alo_tolerance_pp") == _TOL_FAIL                   # 失敗的確實是容許帶那一鍵
     assert [k for k, m in errors.items() if m == _TOL_FAIL] == ["alo_tolerance_pp"]
-    assert _TOL_FAIL in _main_text(at)                                    # 失敗當下照實顯示
+    assert _TOL_FAIL in _raw_text(at, "alo")                              # 失敗當下照實記下（原文移到進階診斷）
+    assert "⛔" in _main_text(at)                                          # 一般畫面照實顯示失敗狀態
     _go(at, "set")
     at.text_input(key="live_alo_tolerance_pp").input("7").run()
     _save_set(at)
     assert _tolerance_rows(book) == [["alo_tolerance_pp", "7", "float"]]  # 這一鍵在設定與診斷真的存成功了
     _go(at, "alo")
+    text = _main_text(at) + "\n" + _raw_text(at, "alo")      # 一般畫面＋原始訊息（Phase 3 P0-①：原文移到後者）
     if alo_page._SAVE_ERRORS_STATE not in at.session_state:   # AppTest 的 session_state 沒有 .get
-        return None, _main_text(at)
-    return at.session_state[alo_page._SAVE_ERRORS_STATE], _main_text(at)
+        return None, text
+    return at.session_state[alo_page._SAVE_ERRORS_STATE], text
 
 
 def test_必修2_容許帶在設定與診斷存成功後_回資產配置不再顯示該鍵的失敗(settings_book, tolerance_save_fails):
@@ -587,7 +604,8 @@ def hld_dataset(monkeypatch, no_secrets):
 
 def _hld_cards(at):
     """層 2 三張核心卡（正式結果）那幾段 HTML。"""
-    return [e.value for e in at.main.markdown if 'class="hld-card-code"' in e.value]
+    # Phase 3 P0-①：正式模式卡頭不印塊代號，改以 `data-block` 屬性定位。
+    return [e.value for e in at.main.markdown if 'class="hld-card"' in e.value and 'data-block="HLD-' in e.value]
 
 
 def _hld_field(at):
@@ -644,3 +662,22 @@ p._on_page(st.query_params["slug"])
     at.run()                                                 # 換頁：pop
     assert key not in at.session_state and "_mkt_applied" not in at.session_state
     assert at.session_state["_hld_applied"] == "別頁自己的狀態"   # 其他程式寫入的 key 不碰
+
+
+# ═══════════════════════ Phase 3 P0-①：跨頁的原始訊息（設定與診斷頁的進階診斷） ═══════════════════════
+
+
+def test_P0_1_開過持倉體檢再到設定與診斷_進階診斷照印那一頁移出的原文(no_secrets, biting):
+    """44 第七節第三小節之七其二第 8 條：四頁移出一般畫面的原文，換頁之後在設定與診斷頁的「進階診斷（原始訊息）」
+    照印（只收本次瀏覽開過的頁）。它不在 `_PAGE_STATE_TO_DROP` 裡，換頁不會被清掉。"""
+    from ui_v2 import plain
+
+    at = _go(_app_test(), "hld")
+    assert POL.NOT_CONFIGURED_MESSAGE not in _main_text(at)          # 一般畫面不印原文
+    assert POL.NOT_CONFIGURED_MESSAGE in _raw_text(at, "hld")
+    _go(at, "set")
+    diag = [e for e in at.main.expander if e.label == plain.ADVANCED_DIAG_TITLE]
+    assert len(diag) == 1
+    body = "\n".join(html.unescape(m.value) for m in diag[0].markdown)
+    assert POL.NOT_CONFIGURED_MESSAGE in body and plain.PAGE_NAMES["hld"] in body
+    assert f"{plain.PAGE_NAMES['exp']}（" not in body                  # 沒開過的頁不在「已記錄的頁」裡

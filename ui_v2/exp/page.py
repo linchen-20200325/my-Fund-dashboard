@@ -11,9 +11,11 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 import streamlit as st
 
+from .. import plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -273,10 +275,16 @@ def _buttons(block: dict, prefix: str) -> None:
         )
 
 
-def _card_open(block: dict) -> None:
+def _block_attr(block: dict, plain_mode: bool) -> str:
+    """正式模式：塊代號只放進 `data-block` 屬性（畫面不可見；給測試與瀏覽器量測定位）。示範模式回空字串、畫面照舊。"""
+    return f' data-block="{_esc(block["code"])}"' if plain_mode else ""
+
+
+def _card_open(block: dict, *, plain_mode: bool = False) -> None:
+    code_span = "" if plain_mode else f'<span class="exp-card-code">{_esc(block["code"])}</span>'
     st.markdown(
-        f'<div class="exp-card" style="--exp-tone:{_tone(block["_tone"])}">'
-        f'<div class="exp-card-head"><span class="exp-card-code">{_esc(block["code"])}</span>'
+        f'<div class="exp-card" style="--exp-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>'
+        f'<div class="exp-card-head">{code_span}'
         f'<span class="exp-card-title">{_esc(block["title"])}</span></div>',
         unsafe_allow_html=True,
     )
@@ -298,14 +306,16 @@ def _notes(block: dict) -> None:
 # ───────────────────────── 層 1 ─────────────────────────
 
 
-def _render_exp0(block: dict) -> None:
+def _render_exp0(block: dict, *, plain_mode: bool = False) -> None:
     tone = _tone(block["_tone_override"])
+    # 燈右側那一格：正式模式只留標題（44 第七節第三小節之七其二第 1 條）；示範模式「代號　標題」照舊。
+    code_title = _esc(block["title"]) if plain_mode else f'{_esc(block["code"])}　{_esc(block["title"])}'
     st.markdown(
-        f'<div class="exp-lamp" style="--exp-tone:{tone}">'
+        f'<div class="exp-lamp" style="--exp-tone:{tone}"{_block_attr(block, plain_mode)}>'
         f'<span class="exp-glyph">{_esc(block["glyph"])}</span>'
         f'<span><span class="exp-stword">狀態：{_esc(block["state_word"])}</span>'
         f'<span class="exp-lamp-text">{_esc(block["text"])}</span></span>'
-        f'<span class="exp-code">{_esc(block["code"])}　{_esc(block["title"])}</span></div>',
+        f'<span class="exp-code">{code_title}</span></div>',
         unsafe_allow_html=True,
     )
     st.caption(block["answers"])
@@ -346,8 +356,8 @@ def _render_exp1(block: dict) -> None:
     _card_close(block)
 
 
-def _render_exp2(block: dict, *, scenario: str) -> None:
-    _card_open(block)
+def _render_exp2(block: dict, *, scenario: str, plain_mode: bool = False) -> None:
+    _card_open(block, plain_mode=plain_mode)
     st.caption(block["answers"])
     _notes(block)
     st.markdown(
@@ -402,8 +412,8 @@ def _render_exp2(block: dict, *, scenario: str) -> None:
     _card_close(block)
 
 
-def _render_exp3(block: dict) -> None:
-    _card_open(block)
+def _render_exp3(block: dict, *, plain_mode: bool = False) -> None:
+    _card_open(block, plain_mode=plain_mode)
     st.caption(block["answers"])
     _notes(block)
     if block["_columns"]:
@@ -430,18 +440,21 @@ def _render_exp3(block: dict) -> None:
 # ───────────────────────── 層 3 與層 4 ─────────────────────────
 
 
-def _expander(block: dict):
+def _expander(block: dict, *, plain_mode: bool = False):
+    # 正式模式標題去掉塊代號（44 第七節第三小節之七其二第 1 條）；示範模式照舊。
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
     return st.expander(
-        f"{block['code']}　{block['title']}　—　{block['summary_text']}",
+        f"{head}　—　{block['summary_text']}",
         expanded=block["_default_open"],
     )
 
 
-def _render_exp4(block: dict, *, scenario: str, save_click=None, editable: bool = True) -> None:
+def _render_exp4(block: dict, *, scenario: str, save_click=None, editable: bool = True,
+                 plain_mode: bool = False) -> None:
     """`save_click`：正式模式才有（`(on_click, args)`）。有傳時五個欄位勾選框可勾、排序下拉與存檔接上
     `user_setting`（客戶 2026-10-13 裁示）；**`EXP-2` 照舊只吃已存值**（判定在 `live.build_live_model`）。"""
     if save_click is not None:
-        _render_exp4_live(block, save_click=save_click, editable=editable)
+        _render_exp4_live(block, save_click=save_click, editable=editable, plain_mode=plain_mode)
         return
     with _expander(block):
         st.caption(block["answers"])
@@ -474,8 +487,8 @@ def _render_exp4(block: dict, *, scenario: str, save_click=None, editable: bool 
         _lines(block["detail_lines"], css="exp-detail")
 
 
-def _render_exp5(block: dict, *, save_click=None) -> None:
-    with _expander(block):
+def _render_exp5(block: dict, *, save_click=None, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         _fetch_fail_lines(block)
         if save_click is None:
@@ -523,8 +536,11 @@ def _current_rules() -> list:
     out = []
     for row in st.session_state.get(_RULES_STATE) or ():
         uid = row["_id"]
-        out.append({"_id": uid, **{name: st.session_state.get(_rule_key(uid, name), row[name])
-                                    for name in ("field", "op", "value")}})
+        values = {name: st.session_state.get(_rule_key(uid, name), row[name]) for name in ("field", "op", "value")}
+        # 「欄位」是下拉選單（Phase 3 P0-①）：還沒選 ＝ None，讀作空字串 —— 與原本文字欄留空的值相同，存檔判定照舊。
+        if values["field"] is None:
+            values["field"] = ""
+        out.append({"_id": uid, **values})
     return out
 
 
@@ -629,9 +645,35 @@ def _live_buttons(block: dict, prefix: str, clicks: dict) -> None:
         )
 
 
-def _render_exp1_live(block: dict, rows: list, *, clicks: dict) -> None:
+FIELD_PLACEHOLDER = "請選擇欄位"
+
+
+def _field_select(field: dict, row: dict) -> None:
+    """`EXP-1`「欄位」下拉（44 第七節第三小節之七其二第 6 條）：從既有欄位中選、以中文名顯示。
+
+    底層值照舊是欄位鍵（存檔內容不變）；沒有預設值（`index=None`）；不在可選清單裡的舊值照樣列為選項、
+    可以原樣回存（是否寫得進去照舊由 `live.exp1_save_entries` 判定，本處不加不減）。"""
+    key = _rule_key(row["_id"], "field")
+    current = row["field"]
+    options = list(logic.FUND_PROFILE_FIELDS)
+    if current and current not in options:
+        options.append(current)
+    index = None
+    if key not in st.session_state and current in options:
+        index = options.index(current)
+    st.selectbox(
+        field["label"],
+        options,
+        index=index,
+        format_func=plain.key_name,
+        placeholder=field["placeholder"] or FIELD_PLACEHOLDER,
+        key=key,
+    )
+
+
+def _render_exp1_live(block: dict, rows: list, *, clicks: dict, plain_mode: bool = True) -> None:
     """正式模式的 `EXP-1`：輸入列接上 session（`rows` 與 `block["_rows"]` 同序，帶 `_id`）。"""
-    _card_open(block)
+    _card_open(block, plain_mode=plain_mode)
     st.caption(block["answers"])
     _notes(block)
     _fetch_fail_lines(block)
@@ -639,6 +681,9 @@ def _render_exp1_live(block: dict, rows: list, *, clicks: dict) -> None:
         cells = st.columns([3, 2, 2, 2])
         for cell, field, name in zip(cells, model_row["_fields"], ("field", "op", "value")):
             with cell:
+                if name == "field":
+                    _field_select(field, row)
+                    continue
                 st.text_input(
                     field["label"],
                     value=row[name] if _rule_key(row["_id"], name) not in st.session_state else "",
@@ -659,10 +704,10 @@ def _render_exp1_live(block: dict, rows: list, *, clicks: dict) -> None:
     _card_close(block)
 
 
-def _render_exp4_live(block: dict, *, save_click, editable: bool = True) -> None:
+def _render_exp4_live(block: dict, *, save_click, editable: bool = True, plain_mode: bool = True) -> None:
     """`editable=False`（已存設定讀不到）：不建任何可編輯的勾選框與下拉（稽核 L 回修）——
     那一輪建起來的空白狀態會留在 session 裡，恢復後被存回去蓋掉雲端。只畫失敗行與說明。"""
-    with _expander(block):
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         _notes(block)
         _fetch_fail_lines(block)
@@ -676,14 +721,16 @@ def _render_exp4_live(block: dict, *, save_click, editable: bool = True) -> None
             with column:
                 # 值一律由 session 決定（`_seed_live_fields` 以已存值填）；這裡傳 False ＝ 不預先勾任何一欄。
                 st.checkbox(option["label"], value=False, key=_col_key(option["_column"]))
-        st.selectbox("排序欄位", block["sort_options"], index=0, key=_SORT_KEY)
+        # 選項清單照舊（值＝欄名字串，`_field_sort` 照舊以它反查欄位鍵）；正式模式只換顯示名（Phase 3 P0-①）。
+        st.selectbox("排序欄位", block["sort_options"], index=0, key=_SORT_KEY,
+                     format_func=plain.key_name if plain_mode else str)
         _live_buttons(block, "exp4", {live.ACTION_SAVE: save_click})
         _error_lines(block)
         _lines(block["detail_lines"], css="exp-detail")
 
 
-def _render_exp6(block: dict) -> None:
-    with _expander(block):
+def _render_exp6(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         _notes(block)
         for node in block["_fields"]:
@@ -698,8 +745,8 @@ def _render_exp6(block: dict) -> None:
         _lines(block["detail_lines"], css="exp-detail")
 
 
-def _render_exp7(block: dict) -> None:
-    with _expander(block):
+def _render_exp7(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         _notes(block)
         if block["_rows"]:
@@ -966,6 +1013,10 @@ def _render_live(load_live, save_live) -> None:
         save_wired=save_live is not None,
         save_results=st.session_state.get(_SAVE_RESULTS_STATE),
     )
+    # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+    # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+    model, raw, _status = plain.plain_model(model, page="exp")
+    plain.record_raw(st.session_state, "exp", raw, datetime.now(timezone.utc))
     noop = (None, ())
     exp1_clicks = {live.ACTION_ADD_ROW: (_on_add_rule, ())}
     exp4_click = exp5_click = noop
@@ -977,40 +1028,43 @@ def _render_live(load_live, save_live) -> None:
     st.markdown(f'<div class="exp-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="exp-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="exp-layer-label">層 1　結論</div>', unsafe_allow_html=True)
-    _render_exp0(logic.find_block(model, "EXP-0"))
+    st.markdown(f'<div class="exp-layer-label">{plain.LABEL_LAYER1}</div>', unsafe_allow_html=True)
+    _render_exp0(logic.find_block(model, "EXP-0"), plain_mode=True)
 
     st.markdown(
-        '<div class="exp-layer-label exp-layer2">層 2　核心卡</div>',
+        f'<div class="exp-layer-label exp-layer2">{plain.LABEL_LAYER2}</div>',
         unsafe_allow_html=True,
     )
     for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-1":
-                _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks)
+                _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks, plain_mode=True)
             elif code == "EXP-2":
-                _render_exp2(block, scenario=live.LIVE_SCENARIO)
+                _render_exp2(block, scenario=live.LIVE_SCENARIO, plain_mode=True)
             else:
-                _RENDERERS[code](block)
+                _RENDERERS[code](block, plain_mode=True)
 
+    # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+    st.markdown(f'<div class="exp-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="exp-layer-label exp-layer3">層 3　操作（預設收合）</div>',
+        f'<div class="exp-layer-label exp-layer3">{plain.LABEL_LAYER3}</div>',
         unsafe_allow_html=True,
     )
     for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-4":
-                _render_exp4(block, scenario=live.LIVE_SCENARIO, save_click=exp4_click, editable=readable)
+                _render_exp4(block, scenario=live.LIVE_SCENARIO, save_click=exp4_click, editable=readable,
+                             plain_mode=True)
             else:
-                _render_exp5(block, save_click=exp5_click)
+                _render_exp5(block, save_click=exp5_click, plain_mode=True)
 
     st.markdown(
-        '<div class="exp-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True
+        f'<div class="exp-layer-label">{plain.LABEL_LAYER4}</div>', unsafe_allow_html=True
     )
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code))
+        _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     st.markdown(

@@ -26,6 +26,7 @@ sys.path.insert(0, str(_ROOT))
 
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
+from ui_v2 import plain  # noqa: E402
 from ui_v2.hld import fixtures, live, logic, page  # noqa: E402
 
 _PROBE = "_hld_r3_rulings_probe"
@@ -110,12 +111,13 @@ def _button_key(kind):
 
 
 def _block_blob(at, code) -> str:
-    """一塊在畫面上的全部文字（同 `test_hld_live_page.py::_block_blob`）。"""
+    """一塊在畫面上的全部文字（同 `test_hld_live_page.py::_block_blob`）。
+    Phase 3 P0-①：正式模式卡頭不印塊代號，改讀 `data-block` 屬性；展開區標題以塊名起頭。"""
     for m in at.markdown:
-        if f'<span class="hld-card-code">{code}</span>' in m.value:
+        if f'<span class="hld-card-code">{code}</span>' in m.value or f'data-block="{code}"' in m.value:
             return m.value
     for exp in at.expander:
-        if exp.label.startswith(f"{code}　"):
+        if exp.label.startswith(f"{code}　") or exp.label.startswith(f"{plain.BLOCK_NAMES[code]}　—　"):
             return "\n".join([exp.label] + [m.value for m in exp.markdown] + [c.value for c in exp.caption])
     raise AssertionError(f"畫面上找不到 {code}")
 
@@ -182,8 +184,13 @@ def test_第2點_存檔寫入失敗_原文照印_欄位不清_計算不變_後�
     assert not at.exception
     assert probe.calls == [("hld_window_start", _NEW_START, "date")]
     blob = _block_blob(at, "HLD-4")
-    assert page._esc(f"{live.TEXT_SAVE_FAILED}hld_window_start：{_FAIL_MSG}") in blob
-    assert page._esc(f"{live.TEXT_SAVE_FAILED}hld_window_end：{live.TEXT_PREVIOUS_FAILED}") in blob
+    # Phase 3 P0-①：一般畫面是改寫後的那一句（鍵名換中文、上游原文換狀態句），原文移到跨頁的原始訊息。
+    raw = f"{live.TEXT_SAVE_FAILED}hld_window_start：{_FAIL_MSG}"
+    assert page._esc(plain.plain_text(raw, page="hld", code="HLD-4")) in blob
+    assert raw in [e["text"] for e in at.session_state[plain.RAW_STATE]["hld"]["entries"]]
+    previous = f"{live.TEXT_SAVE_FAILED}hld_window_end：{live.TEXT_PREVIOUS_FAILED}"
+    assert page._esc(plain.plain_text(previous, page="hld", code="HLD-4")) in blob
+    assert live.TEXT_PREVIOUS_FAILED in blob                    # 本頁自己的句子照留
     assert at.text_input(key="hld4_window_start").value == _NEW_START
     after = _blobs(at)
     for code in logic.APPLY_RECALC_BLOCKS:
@@ -200,8 +207,11 @@ def test_第8點_正式模式_同鍵兩列幣別不同_畫既有錯誤畫面_沒
     at = _run()
     md = "\n".join(m.value for m in at.markdown)
     assert "Traceback" not in md and not at.code
-    assert page._esc(logic.fetch_failed_text("ValueError：")) in md
-    assert "兩列的 ccy 不同（同鍵不同語意，不加總）" in md
+    # Phase 3 P0-①：一般畫面一句狀態；型別與原文移到跨頁的原始訊息。
+    assert page._esc(plain.plain_error_line(logic.fetch_failed_text("ValueError：x"), page="hld")[0]) in md
+    raw = "\n".join(e["text"] for e in at.session_state[plain.RAW_STATE]["hld"]["entries"])
+    assert logic.fetch_failed_text("ValueError：") in raw
+    assert "兩列的 ccy 不同（同鍵不同語意，不加總）" in raw and "兩列的 ccy 不同" not in md
     assert [b.label for b in at.button] == []
 
 

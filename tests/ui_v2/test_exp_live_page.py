@@ -30,7 +30,22 @@ pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 st
 
 import _exp_live_stub as STUB  # noqa: E402
 import _exp_wired_fixture as WF  # noqa: E402
+from ui_v2 import plain  # noqa: E402
 from ui_v2.exp import live, logic, page  # noqa: E402
+
+# Phase 3 P0-①（44 第七節第三小節之七其二）：正式模式一般畫面的欄位鍵改中文名、失敗原文移到跨頁的原始訊息、
+# `EXP-1`「欄位」改下拉選單。以下兩支是本檔改定位／改字面期望用的小工具（斷言本身沒有拿掉）。
+_CODE_HEAD = plain.key_name(logic.CODE_COLUMN)   # 「基金代碼」
+
+
+def _raw_texts(at) -> str:
+    return "\n".join(e["text"] for e in at.session_state[plain.RAW_STATE]["exp"]["entries"])
+
+
+def _pick_field(at, key, field):
+    """`EXP-1`「欄位」下拉：以中文名找到那一個選項（底層值仍是欄位鍵）。"""
+    box = at.selectbox(key=key)
+    return box.select_index(box.options.index(plain.key_name(field)))
 
 _MARK = "正式路徑碰到 fixtures"
 
@@ -99,7 +114,7 @@ def test_正式模式_fixtures一碰就炸也照樣渲染_缺欄照寫_沒有示
     assert _MARK not in text
     assert _lamp(at) == "目前條件下有 2 檔"
     assert "⬜ 資料未備：基本資料尚未接入" in text and "⬜ 資料未備：淨值尚未接入" in text
-    assert "<th>fund_code</th>" in text and ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
+    assert f"<th>{_CODE_HEAD}</th>" in text and ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
     assert "示意" not in text and "None" not in text
     assert not at.warning  # 沒有 session state 與 widget 預設值相衝的警告
     assert not re.search(r"·\s*情境 ", text)
@@ -115,7 +130,7 @@ def test_只吃已存值_填了不存不生效_存檔後下一次重跑才套用
     assert _lamp(at) == logic.TEXT_NO_CONDITION
     at.button(key="exp1live_btn_0").click().run()            # 新增條件
     _ok(at)
-    at.text_input(key="exp1live_1_field").input("fund_code")
+    _pick_field(at, "exp1live_1_field", "fund_code")
     at.text_input(key="exp1live_1_op").input("等於")
     at.text_input(key="exp1live_1_value").input("A01").run()
     _ok(at)
@@ -134,13 +149,16 @@ def test_存檔失敗_條件列留在畫面上_正式結果不變(monkeypatch):
     STUB.FAIL_KEYS.add("exp_filter_rules")
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
     at.button(key="exp1live_btn_0").click().run()
-    at.text_input(key="exp1live_1_field").input("fund_code")
+    _pick_field(at, "exp1live_1_field", "fund_code")
     at.text_input(key="exp1live_1_op").input("等於")
     at.text_input(key="exp1live_1_value").input("A01").run()
     at.button(key="exp1live_btn_1").click().run()
     _ok(at)
     text = _text(at)
-    assert "存檔寫入失敗：exp_filter_rules：exp_filter_rules 寫入失敗（測試注入）" in text
+    raw = "存檔寫入失敗：exp_filter_rules：exp_filter_rules 寫入失敗（測試注入）"
+    # 失敗訊息（替身回的是整句中文、不帶上游英文字樣）照 `plain._looks_raw` 判定留在一般畫面，鍵名照換中文。
+    assert plain.plain_text(raw, page="exp", code="EXP-1") in text
+    assert "存檔寫入失敗：" in text and raw.split("：")[1] not in text.replace("寫入失敗（測試注入）", "")
     assert at.text_input(key="exp1live_1_value").value == "A01"
     assert _lamp(at) == logic.TEXT_NO_CONDITION
 
@@ -154,8 +172,11 @@ def test_EXP4一成一敗_畫面照實寫哪一鍵成功哪一鍵失敗(monkeypa
     at.button(key="exp4live_btn_0").click().run()
     _ok(at)
     text = _text(at)
-    assert "exp_visible_columns：已存檔" in text
-    assert "存檔寫入失敗：exp_sort_column：exp_sort_column 寫入失敗（測試注入）" in text
+    assert f"{plain.key_name('exp_visible_columns')}：已存檔" in text
+    raw = "存檔寫入失敗：exp_sort_column：exp_sort_column 寫入失敗（測試注入）"
+    # 失敗訊息（替身回的是整句中文、不帶上游英文字樣）照 `plain._looks_raw` 判定留在一般畫面，鍵名照換中文。
+    assert plain.plain_text(raw, page="exp", code="EXP-4") in text
+    assert "存檔寫入失敗：" in text and raw.split("：")[1] not in text.replace("寫入失敗（測試注入）", "")
     assert STUB.STORE == {"exp_visible_columns": '["ccy"]'}
 
 
@@ -191,7 +212,9 @@ def test_讀失敗那一輪_不建EXP4勾選框_新增條件與存檔都停用(m
     assert at.button(key="exp1live_btn_0").disabled                 # 新增條件
     for key in ("exp1live_btn_1", "exp4live_btn_0", "exp5live_btn_0"):
         assert at.button(key=key).disabled, key
-    assert "讀設定失敗（測試注入）" in _text(at)
+    assert "讀設定失敗（測試注入）" not in _text(at)                 # 原文移到跨頁的原始訊息
+    assert "讀設定失敗（測試注入）" in _raw_texts(at)
+    assert "⛔ 使用者設定 取數失敗" in _text(at)
 
 
 def test_讀失敗後恢復_輸入欄改回已存值_存檔不寫空值(monkeypatch):
@@ -253,8 +276,8 @@ def test_條件作用在資料未備欄位_畫面照列並標無法判定_結論
     assert _lamp(at) == "目前條件下沒有符合的基金；另有 2 檔無法判定"
     assert "⛔" not in "".join(m.group(0) for e in at.markdown
                                for m in re.finditer(r'class="exp-lamp".*?</div>', e.value, re.S))
-    assert "<th>fund_code</th><th>篩選判定</th>" in text
-    assert text.count("⬜ 無法判定（資料未備：ccy）") == 2
+    assert f"<th>{_CODE_HEAD}</th><th>篩選判定</th>" in text
+    assert text.count(f"⬜ 無法判定（資料未備：{plain.key_name('ccy')}）") == 2
     assert ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
     assert "<th>無法判定</th>" in text                                    # EXP-7 第四欄
 
@@ -264,7 +287,7 @@ def test_大於小於填了非數字_存檔停用_存檔區寫明_改成數字�
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
     at.button(key="exp1live_btn_0").click().run()            # 新增條件
     rule_id = _first_rule_id(at)
-    at.text_input(key=f"exp1live_{rule_id}_field").input("mgmt_fee_rate_pct")
+    _pick_field(at, f"exp1live_{rule_id}_field", "mgmt_fee_rate_pct")
     at.text_input(key=f"exp1live_{rule_id}_op").input("大於")
     at.text_input(key=f"exp1live_{rule_id}_value").input("abc").run()
     _ok(at)
@@ -295,7 +318,7 @@ def _wired_store():
 
 
 def _raw_table(at) -> str:
-    hits = [e.value for e in at.markdown if 'class="exp-table"' in e.value and "<th>fund&#95;code</th>" in e.value]
+    hits = [e.value for e in at.markdown if 'class="exp-table"' in e.value and f"<th>{_CODE_HEAD}</th>" in e.value]
     assert len(hits) == 1, len(hits)                 # EXP-2 那一張（EXP-7 另有一張，不含代碼欄）
     return hits[0]
 
@@ -305,14 +328,15 @@ def test_C2接線_代碼欄第一欄_沒有新增欄位_舊淨值與無配息照
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
     table = _raw_table(at)
     heads = [html.unescape(h) for h in re.findall(r"<th>(.*?)</th>", table)]
-    assert heads == ["fund_code"] + [logic.COLUMN_LABELS[c] for c in logic.COLUMN_ORDER]   # 規則 2、10
+    assert heads == [_CODE_HEAD] + [plain.key_name(logic.COLUMN_LABELS[c]) for c in logic.COLUMN_ORDER]   # 規則 2、10
     text = html.unescape(table)
     assert "⬜ 資料未備：最近一筆淨值 2026-10-03，已超過 10 日" in text                       # 規則 11
     assert ">2026-10-04<" in text                                                              # 10 天照用
     assert "⬜ 不適用：近 12 個月無配息" in text and "0.00%" not in text                       # 規則 13
     assert ">6.00%<" in text
     assert text.count('class="exp-src"') >= 8                                                  # 規則 10
-    assert "‹已遮蔽›" in text and WF.SECRET not in text                                       # 遮蔽
+    # 遮蔽：那一格的失敗原文移到跨頁的原始訊息（Phase 3 P0-①），遮蔽照舊在原文上做、秘密值哪裡都不出現。
+    assert "‹已遮蔽›" in _raw_texts(at) and WF.SECRET not in text and WF.SECRET not in _raw_texts(at)
     assert "尚未接入" not in _text(at)
 
 
@@ -335,9 +359,10 @@ def test_C2接線_錯誤原文含換行與Markdown語法_不跳出表格_不變�
     assert "\n" not in table                                               # 換行折掉（Markdown 不會跳出 HTML 區塊）
     for raw in ("## ", "|", "*粗體*", "_斜體_"):
         assert raw not in table, raw
-    assert "&#35;&#35; 注入標題" in table and "&#124;" in table and "&#42;粗體&#42;" in table
+    # Phase 3 P0-①：那一格的失敗原文移到跨頁的原始訊息（一般畫面只寫狀態句）；內容還在、只是換了地方。
+    assert "## 注入標題\n| a | b |" in _raw_texts(at)
     text = html.unescape(table)
-    assert "## 注入標題 | a | b |" in text                                   # 內容還在（只是不當語法）
+    assert "⛔ 資料 取數失敗" in text
 
 
 def _wired_app(tmp_path) -> pathlib.Path:
@@ -361,7 +386,7 @@ def _wired_app(tmp_path) -> pathlib.Path:
 
 _EXP2_DOM_JS = """() => {
   const tables = [...document.querySelectorAll('table.exp-table')]
-    .filter(t => t.querySelector('th') && t.querySelector('th').textContent === 'fund_code');
+    .filter(t => t.querySelector('th') && t.querySelector('th').textContent === CODE_HEAD);
   const t = tables[0];
   const rows = t ? [...t.querySelectorAll('tbody tr')] : [];
   return {
@@ -399,9 +424,9 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 tab.goto(base + "/", wait_until="networkidle")
                 tab.wait_for_selector("table.exp-table", timeout=60000)
                 tab.wait_for_timeout(1500)
-                dom = tab.evaluate(_EXP2_DOM_JS)
+                dom = tab.evaluate(_EXP2_DOM_JS.replace("CODE_HEAD", repr(_CODE_HEAD)))
                 assert dom["tables"] == 1, dom                                   # EXP-2 那一張（帶代碼欄）
-                assert dom["heads"] == ["fund_code"] + [logic.COLUMN_LABELS[c] for c in logic.COLUMN_ORDER]
+                assert dom["heads"] == [_CODE_HEAD] + [plain.key_name(logic.COLUMN_LABELS[c]) for c in logic.COLUMN_ORDER]
                 assert dom["first"] == sorted(WF.CODES)                          # 代碼欄是第一欄
                 assert dom["widths"] == [len(dom["heads"])] * len(WF.CODES)     # 每列格數＝表頭數，沒有新增欄
                 assert any(t.startswith('淨值來源：Evil"Src<b>') for t in dom["titles"]), dom["titles"]

@@ -104,6 +104,20 @@ def _run(kind):
     return at
 
 
+def _raw(at) -> list:
+    """Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：「<型別>：<遮蔽後訊息>」那一行照舊組好，
+    只移到跨頁的原始訊息（設定與診斷頁的進階診斷）；一般畫面只寫一句狀態。"""
+    from ui_v2 import plain
+
+    return [e["text"] for e in at.session_state[plain.RAW_STATE]["hld"]["entries"]]
+
+
+def _plain_line():
+    from ui_v2 import plain
+
+    return plain.plain_error_line("⛔ 取數失敗：x", page="hld")[0]
+
+
 def _texts(at) -> str:
     parts = [m.value for m in at.markdown] + [c.value for c in at.caption]
     parts += [e.value for e in at.error] + [str(x.value) for x in at.exception]
@@ -123,15 +137,18 @@ def test_S6b1_正式模式拋例外_畫錯誤畫面_不印Traceback_訊息經遮
     assert len(at.exception) == 0, [x.value for x in at.exception]
     blob = _texts(at)
     assert "Traceback" not in blob
-    # 不吞錯：錯誤畫面在，型別與遮蔽後的訊息原文都在。
+    # 不吞錯：錯誤畫面在（一般畫面一句狀態），型別與遮蔽後的訊息原文都在（跨頁的原始訊息）。
     md = [m.value for m in at.markdown]
-    errs = [v for v in md if logic.fetch_failed_text(type_name + "：") in v]
-    assert len(errs) == 1, md
+    errs = [v for v in _raw(at) if logic.fetch_failed_text(type_name + "：") in v]
+    assert len(errs) == 1, _raw(at)
     assert _MASK in errs[0]
-    assert any(logic.PRINT_AS_IS_LINE in v for v in md)
+    assert [v for v in md if _plain_line() in v] and not [v for v in md if type_name in v]
+    # 照印句跟著原文走：一般畫面不再印（原文已不在一般畫面上，留著就是假話）。
+    assert not any(logic.PRINT_AS_IS_LINE in v for v in md)
     assert f'<div class="hld-title">{logic.PAGE_TITLE}</div>' in md
-    # 假秘密值不得出現在畫面任何地方。
+    # 假秘密值不得出現在畫面任何地方，也不得出現在原始訊息裡。
     assert _FAKE_SECRET not in blob
+    assert not [v for v in _raw(at) if _FAKE_SECRET in v]
     # ~~「重新取數」照 `44` 5.5 掛上、正式版停用、原因逐字（裁示 A）。~~
     # → 客戶 2026-10-09 裁示：正式畫面拿掉「重新取數」，錯誤畫面一枚按鈕都沒有（有意識的更正，不是漏刪）。
     assert [b.label for b in at.button] == []
@@ -141,8 +158,7 @@ def test_S6b1_正式模式拋例外_畫錯誤畫面_不印Traceback_訊息經遮
 
 def test_S6b1_訊息原文其餘字元逐字保留():
     at = _run("load_raises")
-    md = "\n".join(m.value for m in at.markdown)
-    assert "上游讀取失敗 token=‹已遮蔽› 請求逾時" in md
+    assert "上游讀取失敗 token=‹已遮蔽› 請求逾時" in "\n".join(_raw(at))
 
 
 def test_S6b1_mask_error與load_live要一起傳():
@@ -171,13 +187,15 @@ def test_S6b1_後備_遮蔽或str壞了_只印型別_不帶訊息_不印Tracebac
     assert "Traceback" not in blob
     assert _FAKE_SECRET not in blob
     md = [m.value for m in at.markdown]
-    errs = [v for v in md if "⛔ 取數失敗" in v]
-    # 只有型別、不帶任何訊息內容（逐字整行比對）。
-    assert errs == [f'<div class="hld-line" style="color:{_red()}">{logic.fetch_failed_text(type_name)}</div>'], errs
+    errs = [v for v in md if "⛔" in v]
+    # 一般畫面一句狀態（逐字整行比對）；原始訊息只有型別、不帶任何訊息內容（逐字比對）。
+    assert errs == [f'<div class="hld-line" style="color:{_red()}">{_plain_line()}</div>'], errs
+    assert _raw(at) == [logic.fetch_failed_text(type_name)]
     for piece in ("上游讀取失敗", "請求逾時", "遮蔽壞了", "str 也壞了"):
         assert piece not in blob, piece
-    # 其餘畫面照錯誤畫面原樣。
-    assert any(logic.PRINT_AS_IS_LINE in v for v in md)
+        assert piece not in "\n".join(_raw(at)), piece
+    # 其餘畫面照錯誤畫面原樣；照印句跟著原文走，一般畫面不再印。
+    assert not any(logic.PRINT_AS_IS_LINE in v for v in md)
     assert f'<div class="hld-title">{logic.PAGE_TITLE}</div>' in md
     assert [b.label for b in at.button] == []  # 客戶 2026-10-09 裁示：不掛「重新取數」
     assert not any('class="hld-layer-label' in v for v in md)
@@ -194,7 +212,8 @@ def test_S6b1_例外型別名也經遮蔽():
     assert len(at.exception) == 0
     blob = _texts(at)
     assert _FAKE_SECRET not in blob
-    assert "⛔ 取數失敗：Err‹已遮蔽›：型別名裡藏了秘密" in blob
+    assert "⛔ 取數失敗：Err‹已遮蔽›：型別名裡藏了秘密" in _raw(at)
+    assert not [v for v in _raw(at) if _FAKE_SECRET in v]
     assert [b.label for b in at.button] == []  # 客戶 2026-10-09 裁示：不掛「重新取數」
 
 
