@@ -63,7 +63,7 @@
 | evidence／source | PR #978（merge 進 main 為 `d5d391b`）；交接本〈第六十六次更新（2026-10-16）〉（約 :560 起，出處行約 :562）；`docs/evidence/README.md` |
 | 影響範圍 | `docs/evidence/` 底下的保存檔；交接本第六十六次更新的分支分類表（約 :592-600） |
 | 是否可逆 | 可逆（只新增檔案，未刪任何分支） |
-| supersedes／superseded by | 無。與交接本第 7 節〈客戶 2026-10-15 指示〉第 6 點「branch 不大規模清理」（約 :4579）同向，不取代它。→ 2026-10-16 補：同向延伸見 `DEC-2026-10-16-10`（治理第 8 項 remote branch lifecycle；本筆不被取代） |
+| supersedes／superseded by | 無。與交接本第 7 節〈客戶 2026-10-15 指示〉第 6 點「branch 不大規模清理」（約 :4579）同向，不取代它。→ 2026-10-16 補：同向延伸見 `DEC-2026-10-16-10`（治理第 8 項 remote branch lifecycle；本筆不被取代）。→ 2026-10-17：歷史 branch 上的「只保存、不刪除」已由 `DEC-2026-10-17-06` 放寬（有意識的政策變更，不是漏刪；2026-10-17；決策者：客戶（`DEC-2026-10-17-06`）） |
 | provenance | **要點轉述**（客戶核准，經總管派工單轉達；交接本出處行自陳「對話中，repo 內無原文」） |
 
 > **以下 DEC-2026-10-16-03～13 共 11 筆＝客戶 2026-10-16 治理十一項裁示**（項次寫「治理第 N 項」，對應 DEC 流水號依序 03～13）。同日另有一份「客戶 2026-10-16 十點裁示」（PR #974～#977；第五節索引 `H5-1016-62`～`H5-1016-71`），兩者不是同一份。各筆「決策內容摘要」依原文照錄、不增刪語意；原文以存檔檔為準。行號：本節新條目凡寫「約 :N」者，若未另註 SHA，一律依本檔檔頭慣例以 `d5d391b` 讀；另註 `ab30239` 者以該 SHA 讀。
@@ -181,7 +181,7 @@
 | evidence／source | 逐字存檔治理第 8 項；落地：`PROJECT_RULES.md` 第 10 節、第 14 節之 8；`docs/BACKLOG.md` BL-0222（關閉）、BL-0265（本批） |
 | 影響範圍 | `PROJECT_RULES.md` 第 10、14 節；`docs/HANDOFF.md` 第 4 節；`docs/BACKLOG.md` BL-0222、BL-0265 |
 | 是否可逆 | 可逆 |
-| supersedes／superseded by | supersedes：`PROJECT_RULES.md` 第 10 節「其後刪除既有分支仍須客戶指示」的延伸讀法與「PR 自身 head 分支自動刪除＝總管裁決」的標記；第 14 節之 8 的暫行讀法。與 `DEC-2026-10-16-02`（只保存、不刪除）及交接本〈客戶 2026-10-15 指示〉第 6 點同向，不取代它們。superseded by：無 |
+| supersedes／superseded by | supersedes：`PROJECT_RULES.md` 第 10 節「其後刪除既有分支仍須客戶指示」的延伸讀法與「PR 自身 head 分支自動刪除＝總管裁決」的標記；第 14 節之 8 的暫行讀法。與 `DEC-2026-10-16-02`（只保存、不刪除）及交接本〈客戶 2026-10-15 指示〉第 6 點同向，不取代它們。superseded by：歷史 branch 的 Preservation Check 部分由 `DEC-2026-10-17-06` 放寬（有意識的政策變更，不是漏刪；2026-10-17；決策者：客戶（`DEC-2026-10-17-06`）） |
 | provenance | **逐字**（客戶 2026-10-16 治理十一項裁示，對話中正式裁示、經總管逐字轉存；逐字全文見 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`） |
 
 ### DEC-2026-10-16-11｜完成回報格式（治理第 9 項）
@@ -311,6 +311,18 @@
 | 是否可逆 | 可逆（客戶可另行裁示） |
 | supersedes／superseded by | supersedes：`H7-1016-MODEL` 的三處（交接本原文不動，劃線在 `PROJECT_RULES.md` 第 5 節）：「通知最多 3 行」→ 固定格式；「降級建議只在完整 milestone 結束時提」→ 調高調低都在開始該工作前通知、降低建議在安全停點提出；「停止高成本工作、等客戶回覆」→ 只限需要調整強度的那項工作，其他不受影響的安全工作照常進行。**不 supersede**：總管自主判斷不問客戶、產品／資料／投資語意的裁示不得包裝成模式切換。superseded by：無 |
 | provenance | **逐字**（客戶 2026-10-17 條款與同日補充，經總管於兩則追加訊息逐字轉存；全文見存檔）。下列不是客戶字句：「降低建議只在安全停點提出；等待切換期間不受影響的安全工作照常進行，除非下一階段就是唯一剩下的工作」的條文化方式＝**總管指定（總管讀法，可被客戶推翻）**；推理強度通知另列為 3.1 第 ④ 種而不歸入「必須由客戶裁示」＝**文件組判讀，可被客戶推翻** |
+
+### DEC-2026-10-17-06｜客戶裁示停止歷史 branch 考古與封存；非依賴 branch 可刪
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-17 |
+| 決策內容摘要 | 停止為舊 branch 做考古與封存；舊 branch 未進 main 或未封存的內容可放棄，日後需要時依當時 main／SSOT／需求重做。歷史與 WIP branch 只要不被現行 workflow、data、output 依賴即可刪除，刪前只查是否被 open PR、workflow 或 production 使用。不得刪：main、data、push-assets；現行 workflow 依賴的 trigger／results branch；open PR 使用中的 branch；其他經查證屬 production／runtime 必要者。無刪除權限時列清單交客戶手動刪 |
+| evidence／source | `docs/evidence/decisions/2026-10-17_branch_cleanup_ruling.md` |
+| 影響範圍 | 治理層：`PROJECT_RULES.md` 第 10 節（:300、:301 標記與 2026-10-17 指標）、第 14 節之 8；`docs/HANDOFF.md` branch lifecycle 段；`DEC-2026-10-16-02`、`DEC-2026-10-16-10` 指標；`docs/BACKLOG.md` BL-0235、BL-0236、BL-0237、BL-0265、BL-0267；`docs/evidence/decisions/`。產品程式碼一行未改；本條登記本身未刪任何 branch |
+| 是否可逆 | 刪除 branch 不可逆；裁示本身可由客戶另行變更 |
+| supersedes／superseded by | 放寬：`DEC-2026-10-16-10` 的 Preservation Check 與 `DEC-2026-10-16-02`「只保存、不刪除」在歷史 branch 上的適用（舊條目不刪，就地加指標）。`DEC-2026-10-16-10` 四類請示條件對歷史／WIP branch 的讀法（**總管讀法，可被客戶推翻**）：(1)「preservation evidence 不完整」不再需要請示；(2)「大批／大規模 cleanup」只要是歷史／WIP branch 且不在不得刪範圍內，不再需要請示（裁示原文為可直接刪除，未設批量上限）；(3)「production／workflow dependency」仍不得刪，併入本條不得刪範圍；(4)「刪除結果具有產品或資料保存意義」屬 production、data 或 output 者仍不得刪，歷史文件與程式碼依本條可以放棄。superseded by：無 |
+| provenance | **要點轉述**（客戶 2026-10-17 對話中裁示，經總管於派工單內轉述；存檔見上） |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
