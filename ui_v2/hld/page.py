@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import functools
 import re
+from datetime import datetime, timezone
 
 import streamlit as st
 
+from .. import plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -264,17 +266,29 @@ def _lines(lines) -> None:
 # ───────────────────────── 層 1 ─────────────────────────
 
 
-def _render_lamp(block: dict) -> None:
+def _block_attr(block: dict, plain_mode: bool) -> str:
+    """正式模式：塊代號只放進 `data-block` 屬性（畫面不可見；給測試與瀏覽器量測定位）。示範模式回空字串、畫面照舊。"""
+    return f' data-block="{_esc(block["code"])}"' if plain_mode else ""
+
+
+def _code_title(block: dict, plain_mode: bool) -> str:
+    """燈右側那一格：示範模式「代號　標題」照舊；正式模式只留標題（44 第七節第三小節之七其二第 1 條）。"""
+    if plain_mode:
+        return _esc(block["title"])
+    return f'{_esc(block["code"])}　{_esc(block["title"])}'
+
+
+def _render_lamp(block: dict, *, plain_mode: bool = False) -> None:
     tone = _tone(block["_tone"])
     st.markdown(
-        _one_line(f"""<div class="hld-lamp" style="--hld-tone:{tone}">
+        _one_line(f"""<div class="hld-lamp" style="--hld-tone:{tone}"{_block_attr(block, plain_mode)}>
           <div class="hld-glyph" aria-hidden="true">{_esc(block["glyph"])}</div>
           <div>
             <div><span class="hld-stword">{_esc(block["state_word"])}</span>
               <span class="hld-lamp-text">{_esc(block["text"])}</span></div>
             <div class="hld-note">{_esc(block["answers"])}</div>
           </div>
-          <div class="hld-code">{_esc(block["code"])}　{_esc(block["title"])}</div>
+          <div class="hld-code">{_code_title(block, plain_mode)}</div>
         </div>"""),
         unsafe_allow_html=True,
     )
@@ -286,11 +300,12 @@ def _render_lamp(block: dict) -> None:
 # ───────────────────────── 層 2 ─────────────────────────
 
 
-def _card_shell(block: dict, body_html: str) -> None:
+def _card_shell(block: dict, body_html: str, *, plain_mode: bool = False) -> None:
+    code_span = "" if plain_mode else f'<span class="hld-card-code">{_esc(block["code"])}</span>'
     st.markdown(
-        _one_line(f"""<div class="hld-card" style="--hld-tone:{_tone(block["_tone"])}">
+        _one_line(f"""<div class="hld-card" style="--hld-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>
           <div class="hld-card-head">
-            <span class="hld-card-code">{_esc(block["code"])}</span>
+            {code_span}
             <span class="hld-card-title">{_esc(block["title"])}</span>
             {_badges_html(block["badges"])}
           </div>
@@ -301,7 +316,7 @@ def _card_shell(block: dict, body_html: str) -> None:
     )
 
 
-def _render_hld1(block: dict) -> None:
+def _render_hld1(block: dict, *, plain_mode: bool = False) -> None:
     parts = []
     if block["_rows"]:
         head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
@@ -344,11 +359,11 @@ def _render_hld1(block: dict) -> None:
         f'<div class="hld-detail">{_badges_html(block["badges"])}'
         f'{_esc(block["redline_note"])}</div>'
     )
-    _card_shell(block, "".join(parts))
+    _card_shell(block, "".join(parts), plain_mode=plain_mode)
     _buttons(block, block["code"])
 
 
-def _render_core_card(block: dict) -> None:
+def _render_core_card(block: dict, *, plain_mode: bool = False) -> None:
     parts = []
     for group in block["fund_groups"]:
         rows = "".join(
@@ -367,16 +382,18 @@ def _render_core_card(block: dict) -> None:
     detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"])
     if detail:
         parts.append(f'<div class="hld-detail">{detail}</div>')
-    _card_shell(block, "".join(parts))
+    _card_shell(block, "".join(parts), plain_mode=plain_mode)
     _buttons(block, block["code"])
 
 
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _expander(block: dict, *, keep_open: bool = False):
+def _expander(block: dict, *, keep_open: bool = False, plain_mode: bool = False):
+    # 正式模式標題去掉塊代號（44 第七節第三小節之七其二第 1 條）；示範模式照舊。
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
     return st.expander(
-        f"{block['code']}　{block['title']}　—　{block['summary_text']}",
+        f"{head}　—　{block['summary_text']}",
         expanded=block["_default_open"] or keep_open,
     )
 
@@ -510,8 +527,8 @@ def _hld4_keep_open() -> bool:
         return False
 
 
-def _render_hld4(block: dict, *, on_save=None) -> None:
-    with _expander(block, keep_open=_hld4_keep_open()):
+def _render_hld4(block: dict, *, on_save=None, plain_mode: bool = False) -> None:
+    with _expander(block, keep_open=_hld4_keep_open(), plain_mode=plain_mode):
         st.caption(block["answers"])
         columns = st.columns(2)
         for column, field in zip(columns, block["inputs"]):
@@ -589,8 +606,8 @@ def _kv_value_html(value) -> str:
     return f"<b>{_esc(value)}</b>"
 
 
-def _render_hld5(block: dict) -> None:
-    with _expander(block):
+def _render_hld5(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         _lines(block["detail_lines"])
         # `44` :707 與 §5.4 逐字「**展開區不巢狀第二層**」—— 本塊是**純文字列表**：
@@ -653,8 +670,8 @@ def _table_html(labels, rows, cells) -> str:
     )
 
 
-def _render_hld6(block: dict) -> None:
-    with _expander(block):
+def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         def nav_cells(row):
             return [
@@ -718,8 +735,8 @@ def _render_hld6(block: dict) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_hld7(block: dict) -> None:
-    with _expander(block):
+def _render_hld7(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         if block["_rows"]:
             st.markdown(
@@ -738,8 +755,8 @@ def _render_hld7(block: dict) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_hld8(block: dict) -> None:
-    with _expander(block):
+def _render_hld8(block: dict, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
         if block["_rows"]:
             st.markdown(
@@ -868,15 +885,23 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
       （裁示 A，逐字）。~~ → 不掛「重新取數」：客戶 2026-10-09 裁示正式畫面拿掉這顆按鈕
       （不保留停用＋原因；有意識的更正，不是漏刪）。
     顏色走 `44` 5.5 那一列的「紅」。⛔ 不截斷、不改寫成安撫語句；遮蔽只換秘密值，其餘逐字保留。
+
+    → **2026-10-17 Phase 3 P0-①（44 第七節第三小節之七其二第 2 條；有意識的更正，不是漏刪）**：上面那一行
+    「⛔ 取數失敗：<型別>：<遮蔽後訊息>」照舊組好、照舊不截斷，只是改放進跨頁的原始訊息
+    （`ui_v2/plain.py::record_raw`，設定與診斷頁的進階診斷照印）；一般畫面改印一句狀態
+    （`plain.plain_error_line`），`logic.PRINT_AS_IS_LINE` 跟著原文走、一般畫面不再印。上面各段在寫下當時為真。
     """
     error_line = _live_error_line(exc, mask_error)
+    # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
+    # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。照印句跟著原文走，一般畫面不再印。
+    plain_line, raw = plain.plain_error_line(error_line, page="hld")
+    plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
     st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
     red = _tone("紅")
-    for line in (error_line, logic.PRINT_AS_IS_LINE):
-        st.markdown(
-            f'<div class="hld-line" style="color:{red}">{_esc(line)}</div>', unsafe_allow_html=True
-        )
+    st.markdown(
+        f'<div class="hld-line" style="color:{red}">{_esc(plain_line)}</div>', unsafe_allow_html=True
+    )
 
 
 def render(*, load_live=None, mask_error=None, save_live=None) -> None:
@@ -936,9 +961,14 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
                 save_results=save_results,
                 **loaded["live_args"]
             )
-        except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印（進階診斷）
             _render_live_error(exc, mask_error)
             return
+        # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+        # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+        model, raw, _status = plain.plain_model(model, page="hld")
+        plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
+    plain_mode = load_live is not None
 
     st.markdown(
         f'<div class="hld-title">{_esc(model["title"])}</div>', unsafe_allow_html=True
@@ -955,19 +985,26 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
     else:
         st.markdown(f'<div class="hld-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="hld-layer-label">層 1　結論</div>', unsafe_allow_html=True)
-    _render_lamp(logic.find_block(model, "HLD-0"))
+    label1, label2, label3, label4 = (
+        (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
+        else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
+    )
+    st.markdown(f'<div class="hld-layer-label">{label1}</div>', unsafe_allow_html=True)
+    _render_lamp(logic.find_block(model, "HLD-0"), plain_mode=plain_mode)
 
     st.markdown(
-        '<div class="hld-layer-label hld-layer2">層 2　核心卡</div>',
+        f'<div class="hld-layer-label hld-layer2">{label2}</div>',
         unsafe_allow_html=True,
     )
     for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
         with column:
-            _RENDERERS[code](logic.find_block(model, code))
+            _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
+    if plain_mode:
+        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        st.markdown(f'<div class="hld-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="hld-layer-label hld-layer3">層 3　操作（預設收合）</div>',
+        f'<div class="hld-layer-label hld-layer3">{label3}</div>',
         unsafe_allow_html=True,
     )
     # `44` 2.1：層 3 只有兩塊，兩塊並排同一列，第三欄空著。
@@ -975,15 +1012,15 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
     for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
         with column:
             if code == "HLD-4":
-                _render_hld4(logic.find_block(model, code), on_save=on_save)
+                _render_hld4(logic.find_block(model, code), on_save=on_save, plain_mode=plain_mode)
             else:
-                _RENDERERS[code](logic.find_block(model, code))
+                _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
     st.markdown(
-        '<div class="hld-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True
+        f'<div class="hld-layer-label">{label4}</div>', unsafe_allow_html=True
     )
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code))
+        _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(

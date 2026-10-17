@@ -225,6 +225,12 @@ def test_代碼對照拋L1例外_往上拋給page的try(wired):
 
 
 @pytest.mark.slow
+def _raw(at) -> str:
+    from ui_v2 import plain
+
+    return "\n".join(e["text"] for e in at.session_state[plain.RAW_STATE]["hld"]["entries"])
+
+
 def test_代碼對照拋L1例外_正式入口畫錯誤畫面_不印Traceback_不帶秘密值_沒有按鈕(wired):
     pytest.importorskip("streamlit")
     from streamlit.testing.v1 import AppTest
@@ -241,7 +247,10 @@ def test_代碼對照拋L1例外_正式入口畫錯誤畫面_不印Traceback_不
     assert len(at.exception) == 0
     md = "\n".join(m.value for m in at.markdown)
     assert "Traceback" not in md and _SECRET not in md
-    assert "RuntimeError：對照表讀不到 " + source.masking.MASK in md
+    # Phase 3 P0-①：型別與遮蔽後的原文移到跨頁的原始訊息（設定與診斷頁的進階診斷）；一般畫面一句狀態。
+    raw = _raw(at)
+    assert "RuntimeError：對照表讀不到 " + source.masking.MASK in raw and _SECRET not in raw
+    assert "RuntimeError" not in md
     assert [b.label for b in at.button] == []
 
 
@@ -265,7 +274,9 @@ def test_正式入口_讀取拋例外_畫錯誤畫面_秘密值經遮蔽_不是�
     at.run()
     assert len(at.exception) == 0
     md = "\n".join(m.value for m in at.markdown)
-    assert "RuntimeError：讀不到 " + source.masking.MASK in md
+    raw = _raw(at)
+    assert "RuntimeError：讀不到 " + source.masking.MASK in raw and _SECRET not in raw
+    assert "RuntimeError" not in md
     assert _SECRET not in md and "Traceback" not in md
     assert "資料為假資料" not in md and "示意" not in md   # 示範模式的頁首副標與假資料字樣
     assert [b.label for b in at.button] == []

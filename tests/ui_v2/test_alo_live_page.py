@@ -25,6 +25,7 @@ sys.path.insert(0, str(_ROOT))
 
 pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 streamlit")
 
+from ui_v2 import plain  # noqa: E402
 from ui_v2.alo import live, logic, page  # noqa: E402
 
 _MARK = "正式路徑碰到 fixtures"
@@ -176,8 +177,9 @@ def test_市值基準下每一檔都資料未備_不偽造不隱藏(monkeypatch)
     radios = [r for r in at.radio if r.key == "live_alo_basis"]
     assert len(radios) == 1
     # AppTest 的 `options` 回的是 `format_func` 之後的標籤（`logic.BASIS_LABELS`），不是存值。
-    assert list(radios[0].options) == [logic.BASIS_LABELS[logic.BASIS_COST],
-                                       logic.BASIS_LABELS[logic.BASIS_MV]]
+    # Phase 3 P0-①：正式模式標籤裡的鍵名換成中文（`plain.key_name`）；兩個選項與它們的存值照舊。
+    assert list(radios[0].options) == [plain.key_name(logic.BASIS_LABELS[logic.BASIS_COST]),
+                                       plain.key_name(logic.BASIS_LABELS[logic.BASIS_MV])]
     assert not radios[0].disabled
 
 
@@ -210,7 +212,11 @@ def test_holding與policy一起取數失敗時照樣畫得完(monkeypatch):
     at = _run(script, monkeypatch)
     assert not at.exception, [e.value for e in at.exception]
     text = "\n".join(_rendered(at))
-    assert text.count("HTTP 503 upstream unavailable") >= 2   # 兩張表各自的失敗框
+    # Phase 3 P0-①：一般畫面只寫狀態句（⛔ 照舊）；原文移到跨頁的原始訊息（設定與診斷頁的進階診斷）。
+    assert text.count("取數失敗") >= 2                        # 兩張表各自的失敗框照畫
+    assert "HTTP 503 upstream unavailable" not in text
+    raw = [e["text"] for e in at.session_state[plain.RAW_STATE]["alo"]["entries"]]
+    assert sum("HTTP 503 upstream unavailable" in t for t in raw) >= 2
     assert logic.HINT_NOTE not in text
 
 
@@ -288,10 +294,18 @@ def _markdown_values(at):
     return [e.value for e in at.markdown]
 
 
-def _fail_line_index(at):
-    error = f'<div class="alo-errline" role="alert">{logic.fetch_failed_text(_FAIL_MSG)}</div>'
+def _raw_texts(at):
+    return [e["text"] for e in at.session_state[plain.RAW_STATE]["alo"]["entries"]]
+
+
+def _fail_line_index(at, code="ALO-1"):
+    """失敗鍵原位那一行。Phase 3 P0-①：一般畫面是 `plain` 改寫後的狀態句，原文只在跨頁的原始訊息裡。"""
+    shown = plain.plain_text(logic.fetch_failed_text(_FAIL_MSG), page="alo", code=code)
+    error = f'<div class="alo-errline" role="alert">{shown}</div>'
     values = _markdown_values(at)
     assert values.count(error) == 1, values
+    assert logic.fetch_failed_text(_FAIL_MSG) in _raw_texts(at)
+    assert not any(_FAIL_MSG in v for v in values)
     return values.index(error)
 
 
@@ -350,7 +364,7 @@ def test_ALO4存檔_類別名稱失敗_基準照寫_失敗鍵原位(monkeypatch,
         ("alo_bucket_names", f'["{_CORE}", "{_SAT}"]', "list"),
     ]
     values = _markdown_values(at)
-    index = _fail_line_index(at)
+    index = _fail_line_index(at, "ALO-4")
     basis = [i for i, v in enumerate(values) if v.startswith('<div class="alo-line">目前基準：')]
     assert basis and index > basis[0]
     assert not any(logic.TEXT_SAVE_FAILED in v for v in values)
@@ -388,9 +402,11 @@ def test_設定讀取失敗時按存檔_卡上出現存檔寫入失敗行_寫入
         at.button(key=button_key).click().run()
         assert not at.exception, [e.value for e in at.exception]
     assert probe.calls == []
+    # Phase 3 P0-①：一般畫面是改寫後的狀態句（圖示照舊），原文移到跨頁的原始訊息。
     failed = (f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} '
-              f'{logic.TEXT_SAVE_FAILED}：{message}</div>')
+              f'{plain.plain_text(f"{logic.TEXT_SAVE_FAILED}：{message}", page="alo", code="ALO-1")}</div>')
     assert _markdown_values(at).count(failed) == 2                # ALO-1、ALO-4 各一行
+    assert f"{logic.TEXT_SAVE_FAILED}：{message}" in _raw_texts(at)
 
 
 def test_已存值帶四位以上小數_沒動就按存檔_寫回原值不寫顯示字串(monkeypatch, probe):

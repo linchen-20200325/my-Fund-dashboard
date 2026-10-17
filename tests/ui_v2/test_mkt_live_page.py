@@ -127,14 +127,22 @@ def test_草稿1_頁首只留提問句(monkeypatch):
 
 
 def test_M11_MKT版_畫面上的訊息與遮蔽後字串逐字相同_下一行加註(monkeypatch):
+    """~~畫面上的訊息與遮蔽後字串逐字相同~~ → Phase 3 P0-①（44 第七節第三小節之七其二第 2 條；有意識的更正，不是漏刪）：
+    原文移到跨頁的原始訊息（設定與診斷頁的進階診斷），那裡與遮蔽後字串逐字相同；卡上主值位置是改寫後的狀態句，
+    下一行照舊加註「已遮蔽憑證」。金鑰兩處都不出現。測試名保留，便於對照沿革。"""
+    from ui_v2 import plain
+
     key, masked = _MASKED
     at = _run(_SCRIPT_LIVE, monkeypatch)
     card = [e.value for e in at.markdown if "高收益信用利差" in e.value]
     assert len(card) == 1
-    html_masked = __import__("html").escape("⛔ 取數失敗：" + masked, quote=True)
-    assert html_masked in card[0]               # 逐字（經 HTML 跳脫）
-    assert key not in "\n".join(_rendered(at))
-    after = card[0].split(html_masked, 1)[1]
+    raw = [e["text"] for e in at.session_state[plain.RAW_STATE]["mkt"]["entries"]]
+    assert "⛔ 取數失敗：" + masked in raw                       # 原文逐字（遮蔽後）收進原始訊息
+    shown = __import__("html").escape(plain.plain_text("⛔ 取數失敗：" + masked, page="mkt", code="MKT-1"),
+                                      quote=True)
+    assert shown in card[0] and masked not in card[0]
+    assert key not in "\n".join(_rendered(at)) and key not in "\n".join(raw)
+    after = card[0].split(shown, 1)[1]
     assert after.lstrip().startswith("</div>") and "已遮蔽憑證" in after.split("mkt-badge")[0]
 
 

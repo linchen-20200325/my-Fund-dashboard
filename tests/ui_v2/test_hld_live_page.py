@@ -409,12 +409,15 @@ def _apply_run(live_mode):
 
 
 def _block_blob(at, code) -> str:
-    """一塊在畫面上的全部文字。層 2 的卡是一整段 markdown；層 3、層 4 是一枚 expander（含標題列）。"""
+    """一塊在畫面上的全部文字。層 2 的卡是一整段 markdown；層 3、層 4 是一枚 expander（含標題列）。
+    Phase 3 P0-①：正式模式卡頭不印塊代號，改讀 `data-block` 屬性；展開區標題以塊名起頭（示範模式照舊）。"""
+    from ui_v2 import plain
+
     for m in at.markdown:
-        if f'<span class="hld-card-code">{code}</span>' in m.value:
+        if f'<span class="hld-card-code">{code}</span>' in m.value or f'data-block="{code}"' in m.value:
             return m.value
     for exp in at.expander:
-        if exp.label.startswith(f"{code}　"):
+        if exp.label.startswith(f"{code}　") or exp.label.startswith(f"{plain.BLOCK_NAMES[code]}　—　"):
             parts = [exp.label] + [m.value for m in exp.markdown] + [c.value for c in exp.caption]
             return "\n".join(parts)
     raise AssertionError(f"畫面上找不到 {code}")
@@ -552,7 +555,11 @@ def _apply_key(live_mode):
 
 
 def _hld4_expander(at):
-    return next(e for e in at.expander if e.label.startswith("HLD-4　"))
+    # Phase 3 P0-①：正式模式展開區標題以塊名起頭（不帶塊代號）；示範模式照舊以代號起頭。
+    from ui_v2 import plain
+
+    return next(e for e in at.expander
+                if e.label.startswith("HLD-4　") or e.label.startswith(f"{plain.BLOCK_NAMES['HLD-4']}　—　"))
 
 
 # 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：~~[False, True]~~ → 只留示範模式 —— 正式模式「套用」停用、計算只讀已存設定，見本檔〈第 2 點〉那幾條。
