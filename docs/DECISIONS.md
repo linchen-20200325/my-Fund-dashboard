@@ -241,17 +241,32 @@
 - **生效**：自正式修正案 57 併入 main 起。
 - **現況不變**：B 線 v1 不輸出正式方向性判斷；方向詞現況守衛全部保留；不碰 Phase 7 decision engine、production threshold、production data source、Phase 3 UI。
 
-### DEC-2026-10-17-02｜客戶頒布 B 線 UI Phase 3 提示語（取代先前未執行的 Phase 3 UI/UX 提示語）
+### DEC-2026-10-17-01｜客戶確認 UI/UX 與 Personal Investment Decision System 長期方向（登記為 backlog，不授權實作）
 
 | 欄位 | 內容 |
 |---|---|
 | 日期 | 2026-10-17 |
-| 決策內容摘要 | 客戶給出新的〈B 線 UI Phase 3 提示語〉，**取代先前尚未執行的 Phase 3 UI/UX 提示語，不疊加**。要點（總管轉述，非逐字）：只處理 B 線 `ui_v2/` 五頁（MKT／HLD／EXP／ALO／SET）；不改舊 UI、不 cutover、不新增或替換 production data source、不啟用未驗證 FX、不刪 provenance、不為好看填補缺值、不 fake precision、不改既有投資／資料業務規則、AI 不生成客觀資料；Phase 3 只做「簡單、可信、手機 30 秒看懂、不堵死未來」的 UI 地基；先產出 UX audit、UI/UX Constitution、五頁 390px 文字線框、Phase 3／Roadmap 切分；實作依序 P0 ①一般 UI 去工程化 ②重複錯誤與資料健康收斂 ③MKT 控制項簡化，P1 ④answer-first ⑤可行動空狀態與錯誤 ⑥SET 診斷中央化，P1/P2 ⑦全站情境與狀態保留 ⑧390 導覽與資訊密度 ⑨OAuth → 有效試算表 → 分頁（須先做讀寫邊界稽核，有架構衝突就停下請客戶裁示），**核准後才做，每批最多 3 項**；今日總覽等未來功能列 Roadmap，未獲核准不得新增第六頁 production UI；文件治理不得建立第二套互相衝突的真相源 |
-| 理由／背景 | 前一份 Phase 3 UI/UX 提示語尚未執行即被本份取代。本份提示語下的第一批產出（三份唯讀稽核、58 草案、59 線框）只是文件，不改 UI |
-| evidence／source | 客戶 2026-10-17 對話，經總管派工單轉述；**repo 內無逐字原文**。落地：`docs/v2/58_ui_ux_constitution.md`（草案，待客戶核准）、`docs/v2/59_b_line_390_wireframes.md`（線框草稿，客戶尚未拍板）、稽核原始報告 `docs/evidence/phase3_uiux_audit_2026-10-17/`、`docs/BACKLOG.md` BL-0362～BL-0368 |
-| 影響範圍 | 文件層：上列。規格層：**無**（44、子法 1、57 本批一個字都不改）。程式：無 |
-| 是否可逆 | 可逆（客戶可另行裁示；本批只新增文件） |
-| supersedes／superseded by | supersedes：先前尚未執行的 Phase 3 UI/UX 提示語（`docs/HANDOFF.md` 第 3 節預告「下一個新對話會收到新的完整 Phase 3 UI/UX 提示語」那一份，總管轉述其已被取代；repo 內同樣無原文）。superseded by：無。**與 `docs/HANDOFF.md` 第 3 節「截圖到齊前不改 UI」（客戶 2026-10-16 指示）的關係**：提示語本身要求的文件類工作（稽核、Constitution 草案、線框）不改 UI，依提示語即可做；**改 UI 的批次**仍受該指示拘束，要等客戶核准 58 待裁示 (1)（方向與 44 解凍授權）與 (6)（核准線框後可否不等五頁截圖開工）—— 本筆**不**把該指示讀成已解除。同日另一份客戶「UI/UX 與 Personal Investment Decision System 長期方向登記指示」由 PR #986 擬登記為 `DEC-2026-10-17-01`（2026-10-17 02:21 UTC 量測時未合併），兩者不是同一份；本筆編號接在其後以免撞號，若 #986 未合併須重編 |
+| 決策內容摘要 | 客戶指示把「客戶已確認的新 UI/UX 與『Personal Investment Decision System』長期方向」正式登記進 `docs/BACKLOG.md`，並分為兩組：【Phase 3 / 近期】與【Roadmap / 後續，不得在 Phase 3 一次實作】；指示同時寫明「不要在本舊對話開始實作」「不得因為登記 backlog 就視為已核准立即實作」。本筆記錄的決策只有一件：**這些方向是客戶確認的長期產品方向，並依客戶的分組切成 Phase 3 與 Later／Roadmap**。**本筆不是實作核准**：各項動工仍依 `CLAUDE.md` §-1、Phase 3 驗收流程（每批 ≤3）與 UI 草稿先行（`CLAUDE.md` §-1.5.4）；**不修改凍結 SSOT** `docs/v2/44_fund_ui_ssot.md`（改它仍須走既有解凍程序）；**不啟用任何方向性判斷**（B 線 v1 現況照舊，Phase 7 准入要件九項未完成前不得 production 啟用，`DEC-2026-10-16-14`）；不核准 54 的任何候選數字、公式或門檻 |
+| 理由／背景 | 依客戶原話：「避免只存在對話中而遺失」。客戶稱之為「已確認」的方向；各標籤背後的細部討論不在 repo，文件實作組未見，BACKLOG 各列的一行讀法一律標文件組讀法。依指示「不要把所有 backlog 複製進 DECISIONS；只記錄真正的決策」，本筆不列各方向清單 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`；落地索引 `docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉：新列 BL-0344～BL-0361，另補記既有列 BL-0250、BL-0293，另於 BL-0244／0248／0287 補交叉指標（39 個標籤對照表在該小節） |
+| 影響範圍 | 治理層：`docs/BACKLOG.md`（上列）、`docs/HANDOFF.md` 第 3 節一行指標。規格層：無（44、54、57、子法 1 本批一個字都不改）。程式：無 |
+| 是否可逆 | 可逆（客戶可另行裁示調整方向、分組或撤回） |
+| supersedes／superseded by | supersedes：無。superseded by：無。與既有規格的張力（例：「Data Health 集中至 SET」對 55 §5 第 1 條各頁首屏 `*-0` 燈；Thesis／Severity／What-if 等對 B 線 v1 不輸出方向性判斷）只登記於 BACKLOG 各列，本筆不裁定、不視為已取代任何條文 |
+| provenance | **逐字**（客戶 2026-10-17 對話中的指示，經總管於派工單內轉存；全文見 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`，轉存時的三項格式處理見該檔檔頭）。下列不是客戶逐字：把指示讀成「確認長期方向＋分組」這一項決策＝**總管讀法，可被客戶推翻**（依總管派工單）；BACKLOG 各列的讀法、去重判斷與張力辨識＝**文件組判讀** |
+
+- **現況不變**：Phase 3 仍在等客戶提供五頁真實資料截圖（`docs/HANDOFF.md` 第 3 節）；本筆不開任何工作。
+
+### DEC-2026-10-17-02｜客戶頒布 Phase 3 執行提示語（取代先前未執行的 Phase 3 提示語）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-17 |
+| 決策內容摘要 | 客戶給出〈B 線 UI Phase 3 提示語〉，**取代先前尚未執行的 Phase 3 UI/UX 提示語，不疊加**。**方向本身以 `DEC-2026-10-17-01` 與其逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md` 為準，本筆不另列方向清單**；本筆只登記這份提示語加上的**執行方式**（總管轉述要點）：先產出 UX 稽核、UI/UX Constitution、五頁 390px 文字線框、Phase 3／Roadmap 切分；實作要等核准後才做，每批最多 3 項，順序 P0（去工程化、重複錯誤與資料健康收斂、MKT 控制項簡化）→ P1 → P1/P2；OAuth → 有效試算表 → 分頁要先做讀寫邊界稽核，有架構衝突就停下請客戶裁示；未獲核准不得新增第六頁 production UI；不得建立第二套互相衝突的真相源 |
+| 理由／背景 | 先前那一份 Phase 3 提示語尚未執行即被本份取代。依本份完成的第一批只是文件，不改 UI |
+| evidence／source | 客戶 2026-10-17 對話，經總管派工單轉述；**repo 內無逐字原文**。方向來源：`DEC-2026-10-17-01`。落地：`docs/v2/58_ui_ux_constitution.md`（草案，待客戶核准）、`docs/v2/59_b_line_390_wireframes.md`（線框草稿，客戶尚未拍板）、稽核原始報告 `docs/evidence/phase3_uiux_audit_2026-10-17/`、`docs/BACKLOG.md` BL-0362～BL-0366 與既有列補記 |
+| 影響範圍 | 文件層：上列。規格層：**無**（44、子法 1、57 一個字都不改）。程式：只在 `tests/test_doc_counters.py::_MD_DOCS` 登記 58、59 兩行（總管授權） |
+| 是否可逆 | 可逆 |
+| supersedes／superseded by | supersedes：先前尚未執行的 Phase 3 UI/UX 提示語（`docs/HANDOFF.md` 第 3 節預告「下一個新對話會收到新的完整 Phase 3 UI/UX 提示語」那一份；總管轉述其已被取代，repo 內無原文）。superseded by：無。**與 `docs/HANDOFF.md` 第 3 節「截圖到齊前不改 UI」（客戶 2026-10-16 指示）的關係**：文件類工作不改 UI，依本提示語即可做；**改 UI 的批次**仍受該指示拘束，要等客戶核准 58 待裁示 (1)（方向與 44 解凍授權）與 (6)（核准線框後可否不等五頁截圖開工）—— 本筆不把該指示讀成已解除 |
 | provenance | **要點轉述**（總管轉述客戶 2026-10-17 提示語）。下列不是客戶裁示：「文件類工作依提示語即可做、改 UI 的批次需待 58 待裁示 (1)(6)」＝**總管讀法，可被客戶推翻**；58、59 的條文、衝突判定與建議方案＝**agent 推論與總管建議**，客戶尚未核准任何一條 |
 
 - **現況不變**：Phase 3 仍在等客戶（五頁真實資料截圖，以及 58 第 13 節 7 題）；本筆不開任何 UI 工作，也不核准 58／59 的任何內容。
@@ -350,6 +365,7 @@
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。
+- 第四節 `DEC-2026-10-17-01`：原文已落盤於 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`（總管於派工單內轉存；文件實作組未見客戶對話本身，轉存時做了三項格式處理，見該檔檔頭）。該筆「確認長期方向＋分組」的讀法是總管讀法；BACKLOG 各列的讀法與張力辨識是文件組判讀，未經第二組驗證。
+- 第四節 `DEC-2026-10-17-02`：客戶原文 repo 內沒有；內容依總管派工單轉述，本組未見原文。「先前那一份提示語已被取代」同樣是總管轉述。方向一律回指 `DEC-2026-10-17-01`，本筆不重述。
 - 第五節的區塊範圍、點號與行號是本組以 `sed`／`awk` 在 `d5d391b` 實查；各區塊的 provenance 是照抄原處自陳，本組沒有回頭核對原始對話。
 - 第五節不宣稱窮舉：其他文件（例 `docs/v2/49_data_integration_plan.md`、`ACCEPTANCE.md`、各 PR 說明）裡也可能記有客戶裁示，本批未逐檔掃。
-- 第四節 `DEC-2026-10-17-02`：客戶原文 repo 內沒有；內容依總管派工單轉述，本組未見原文。「先前那一份提示語已被取代」同樣是總管轉述。與 PR #986 的編號關係是本組 2026-10-17 以 GitHub 唯讀查詢所見，未判斷 #986 會不會合併。

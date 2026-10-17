@@ -69,9 +69,9 @@
 
 ### 快速索引
 
-- **待客戶裁示**：BL-0102、BL-0121、BL-0123、BL-0127、~~BL-0221~~（~~2026-10-16 起所等的是客戶簽核提案單 #8，不是規則本身~~ → 2026-10-16 關閉，`DEC-2026-10-16-14`）、~~BL-0222~~（2026-10-16 關閉，`DEC-2026-10-16-10`）、BL-0223、BL-0224、BL-0247、BL-0250、BL-0253、BL-0263、BL-0268、BL-0269、BL-0271、BL-0277、BL-0280、BL-0285、BL-0311、BL-0312、BL-0317、BL-0366、BL-0368
-- **blocked**：BL-0019、BL-0201、BL-0251、BL-0313、BL-0364
-- **待確認**：BL-0009、BL-0012、BL-0013、BL-0014、BL-0018、BL-0023、BL-0024、BL-0051、BL-0052、BL-0054、BL-0075、BL-0083、BL-0108、BL-0128、BL-0129、BL-0130、BL-0134、BL-0137、BL-0140、BL-0151、BL-0155、BL-0167、BL-0237、BL-0249、BL-0252、BL-0255、BL-0256、BL-0262、BL-0288、BL-0294、BL-0295、BL-0302、BL-0305、BL-0319、BL-0320、BL-0336、BL-0365
+- **待客戶裁示**：BL-0102、BL-0121、BL-0123、BL-0127、~~BL-0221~~（~~2026-10-16 起所等的是客戶簽核提案單 #8，不是規則本身~~ → 2026-10-16 關閉，`DEC-2026-10-16-14`）、~~BL-0222~~（2026-10-16 關閉，`DEC-2026-10-16-10`）、BL-0223、BL-0224、BL-0247、BL-0250、BL-0253、BL-0263、BL-0268、BL-0269、BL-0271、BL-0277、BL-0280、BL-0285、BL-0311、BL-0312、BL-0317、BL-0366
+- **blocked**：BL-0019、BL-0201、BL-0251、BL-0313
+- **待確認**：BL-0009、BL-0012、BL-0013、BL-0014、BL-0018、BL-0023、BL-0024、BL-0051、BL-0052、BL-0054、BL-0075、BL-0083、BL-0108、BL-0128、BL-0129、BL-0130、BL-0134、BL-0137、BL-0140、BL-0151、BL-0155、BL-0167、BL-0237、BL-0249、BL-0252、BL-0255、BL-0256、BL-0262、BL-0288、BL-0294、BL-0295、BL-0302、BL-0305、BL-0319、BL-0320、BL-0336、BL-0364
 - **有到期日**：BL-0217（2026-11-24（約；上限約 11-26））
 
 ### 交接本〈登記待辦〉早期條目（未記載日期；約 :3019-:3067）
@@ -401,7 +401,7 @@
 | BL-0241 | open | UX debt | 2026-10-16 | 同鍵衝突畫面沿用「⛔ 取數失敗」字樣，其實是資料內容衝突。 | 交接本〈登記待辦〉:3560；另見 55 §6 第 16 條 | 否 | — | 待派工（下次動到該處時處理） | 可能（改字樣） |
 | BL-0242 | open | bug | 2026-10-16 | 資產配置正式頁只接組模型那一步的 ValueError，程式本身的 ValueError 也會畫成「取數失敗」。 | 交接本〈登記待辦〉:3561 | 否 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0243 | deferred | architecture debt | 2026-10-16 | 持倉體檢 HLD-4 存檔三鍵逐列寫入、沒有交易，可能留下新舊混搭；新增一致性憑證鍵要動規格。 | 交接本〈登記待辦〉:3562；另見 55 §6 第 14 條 | 未記載 | — | 總管判定只登記、不修 | 是（若新增設定鍵） |
-| BL-0244 | deferred | UX debt | 2026-10-16 | 持倉體檢 HLD-4 未存的欄位值沒有另標「未存檔」（市場總覽有）。 | 交接本〈登記待辦〉:3563；另見 55 §6 第 14 條 | 未記載 | — | 總管判定只登記、不修 | 否 |
+| BL-0244 | deferred | UX debt | 2026-10-16 | 持倉體檢 HLD-4 未存的欄位值沒有另標「未存檔」（市場總覽有）。 | 交接本〈登記待辦〉:3563；另見 55 §6 第 14 條 | 未記載 | — | 總管判定只登記、不修。→ 2026-10-17 補：與客戶確認之 Phase 3 方向「draft vs saved」同主題，見 BL-0352；本列狀態不變 | 否 |
 | BL-0245 | open | bug | 2026-10-16 | 狀態徽章「取數失敗」在 mkt／hld／exp／alo 判黃，與 44 第五節第二小節徽章表寫紅不一致（set 已是紅）。 | 交接本〈登記待辦〉:3564 | 否 | — | 總管判定 4：只登記，本批不修 | 否 |
 | BL-0246 | open | governance | 2026-10-16 | 44 與線框另有幾處仍寫卡片表那一種黃（歷史敘述），動不動由下一輪判斷。 | 交接本〈登記待辦〉:3565 | 否 | — | 待派工（下次動到該處時處理） | 否 |
 
@@ -410,14 +410,14 @@
 | BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
 |---|---|---|---|---|---|---|---|---|---|
 | BL-0247 | 待客戶裁示 | governance | 2026-10-05 | `docs/v2/52_ui_design_spec.md` 狀態「待客戶複核原稿已提供」。 | 交接本〈未來待辦〉:3576 | 未記載 | — | 請示客戶（附總管建議方案） | 是 |
-| BL-0248 | deferred | research | 2026-10-15 | Phase 7 設計方向（`docs/v2/54_phase7_design_backlog.md`）：Design Backlog／Research Hypotheses，一切數字與門檻 Non-production、未核准。 | 交接本〈未來待辦〉:3604；另見 ★ 表 :321 | 未記載 | — | 不自動成為動工項；Phase 5 完成並經客戶核准後才在 Phase 7 制定正式規格 | 是 |
+| BL-0248 | deferred | research | 2026-10-15 | Phase 7 設計方向（`docs/v2/54_phase7_design_backlog.md`）：Design Backlog／Research Hypotheses，一切數字與門檻 Non-production、未核准。 | 交接本〈未來待辦〉:3604；另見 ★ 表 :321 | 未記載 | — | 不自動成為動工項；Phase 5 完成並經客戶核准後才在 Phase 7 制定正式規格。→ 2026-10-17 補（客戶 2026-10-17 方向登記指示（`docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`）；不改本列狀態）：該指示中屬 Later／Roadmap 的標籤已以 BL-0353～BL-0361 與 BL-0293 補記登記；與 54 重疊者以 54 為準，那幾列只是索引指標，不構成動工授權 | 是 |
 | BL-0249 | 待確認 | governance | 2026-10-15 | 54 §7（Mean-Reversion Guard）與 44 §1.2、52 Part C 紅線衝突，原訂待 Phase 1.5 處理並經客戶核准。 | 交接本〈未來待辦〉:3608 | 未記載 | — | 待確認：Phase 1.5 已合併（#969），未載明本張力是否已處理 | 否 |
 
 ### 交接本 ★ 進度總表與其下各次更新小節（:103-:1601）
 
 | BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
 |---|---|---|---|---|---|---|---|---|---|
-| BL-0250 | 待客戶裁示 | governance | 2026-10-16 | Phase 3 客戶實際使用／視覺／390px 手機 UX 驗收（Streamlit Cloud 預覽 app、`SETTINGS_SHEET_ID` 指向複本）。 | 交接本 ★ 進度總表區 :331；另見 交接本 :183、:230、:296；`docs/v2/55_preview_acceptance_guide.md` | 是（擋 Phase 4） | — | 客戶驗收並回報；未收到回報前不動工 | 是 |
+| BL-0250 | 待客戶裁示 | governance | 2026-10-16 | Phase 3 客戶實際使用／視覺／390px 手機 UX 驗收（Streamlit Cloud 預覽 app、`SETTINGS_SHEET_ID` 指向複本）。 | 交接本 ★ 進度總表區 :331；另見 交接本 :183、:230、:296；`docs/v2/55_preview_acceptance_guide.md` | 是（擋 Phase 4） | — | 客戶驗收並回報；未收到回報前不動工。→ 2026-10-17 補（客戶 2026-10-17 方向登記指示（`docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`）；不改本列狀態）：客戶確認的 Phase 3 方向「390px Mobile First」與「mobile / desktop information density」併入本列，不另開號（讀法＝文件組讀法：以 390px 手機為首要設計寬度，並分別檢視手機與桌面首屏的資訊密度）；驗收依 55 §5 與 44 §2.1 三個斷點；版面變更仍先出草稿（`CLAUDE.md` §-1.5.4）。同批其他 Phase 3 方向見 BL-0344～BL-0352。範圍：Phase 3 | 是 |
 | BL-0251 | blocked | governance | 2026-10-16 | Phase 4：修驗收問題，每批 ≤3。 | 交接本 ★ 進度總表區 :230 | 未記載 | Phase 3 客戶回報 | 收到回報後逐批處理 | 否 |
 | BL-0252 | 待確認 | governance | 2026-10-11 | #842／#843 關閉狀態，與 #844 獨有內容（`P-WIZARDTIER-1` 登記、`tests/test_q8_add_fund_no_tier_guess.py`）的處置。 | 交接本 ★ 進度總表區 :274；另見 交接本 :1260、:1369 | 未記載 | — | 待確認：第四十九次更新記 #842～#844 已不在 open 清單、關閉經過未查；#844 獨有內容是否保存未查 | 否 |
 | BL-0253 | 待客戶裁示 | research | 2026-10-10 | Sharpe／Sortino 無風險利率：rf 有 4%／0%／2% 三種、log 與 simple return 不一致、DGS3MO 未接入、rf 注入 key 失效；客戶 2026-10-11 不核准草稿，另批待客戶。 | 交接本 ★ 進度總表區 :275；另見 交接本 :424-:432、:510-:531；backlog d | 未記載 | — | 裁示前不改 production rf、不新增資料來源 | 是 |
@@ -454,13 +454,13 @@
 | BL-0284 | open | tech debt | 2026-10-12 | `health_quadrant_scatter` 的 `_tier_key` 只讀 policy_tier（0 呼叫點）。 | 交接本 ★ 進度總表區 :1160；另見 PR #922〈已知未處理／登記〉第 8 項（`_tier_key` 直接讀字串） | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0285 | 待客戶裁示 | UX debt | 2026-10-12 | 決策矩陣放哪一頁：等客戶實際看過 B 線 UI 後裁示。 | 交接本 ★ 進度總表區 :297 | 未記載 | Phase 3 | 總管以 B 線為基礎準備線框／位置方案 | 是 |
 | BL-0286 | deferred | data gap | 2026-10-12 | 舊 UI 資料語意（Sheet「現金%」缺值→100%、空白→0%、幣別缺值預設 USD）改判舊 UI 問題，只登記；已停止的現金%／幣別舊 UI 工作未提交、停工 worktree 保留。 | 交接本 ★ 進度總表區 :298；另見 交接本 :313、:959、:1034 | 未記載 | 舊 UI 退役 | 停工 worktree 是否仍在本環境未查 | 否 |
-| BL-0287 | open | UX debt | 2026-10-12 | 「⛔ 取數失敗：未設定試算表 ID，暫停寫入」用在唯讀頁與 SET-1 位置不妥（B11 客戶 2026-09-26 定稿）。 | 交接本 ★ 進度總表區 :1100 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
+| BL-0287 | open | UX debt | 2026-10-12 | 「⛔ 取數失敗：未設定試算表 ID，暫停寫入」用在唯讀頁與 SET-1 位置不妥（B11 客戶 2026-09-26 定稿）。 | 交接本 ★ 進度總表區 :1100 | 未記載 | — | 待派工（下次動到該處時處理）。→ 2026-10-17 補：與客戶確認之 Phase 3 方向「錯誤去重與 actionable empty/error states」「READ / WRITE boundary」同主題，見 BL-0347、BL-0349；本列狀態不變 | 否 |
 | BL-0288 | 待確認 | bug | 2026-10-12 | hld 套用的觀察窗在 set 改存後不更新、無標示。 | 交接本 ★ 進度總表區 :1101 | 未記載 | — | 待確認：客戶 2026-10-16 第 2 點已改正式模式只讀已存設定（#976），未載明本條 | 否 |
 | BL-0289 | open | bug | 2026-10-12 | mkt 只套天數時，MKT-4 印出「基準日 None」。 | 交接本 ★ 進度總表區 :1102 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0290 | open | architecture debt | 2026-10-12 | 預覽五頁共用一個行程，快取與冷卻共用；set「重新取數」會影響 mkt／hld。 | 交接本 ★ 進度總表區 :1103 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0291 | open | tech debt | 2026-10-12 | 動態寫法守衛可再補 `vars`／`locals`。 | 交接本 ★ 進度總表區 :1104 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
 | BL-0292 | deferred | architecture debt | 2026-10-13 | 舊 UI／A 線切換與實體刪除的九道刪除閘門（目前在第一道：B 線真資料完成）。 | 交接本 ★ 進度總表區 :305；另見 交接本 :917、:930 | 未記載 | B 線真資料完成 → 客戶 UI 驗收 → 回歸 → 非 UI 消費端解耦 → 依賴掃描 → 切換 `app.py` | 不得提前刪除（任何規模） | 已裁順序 |
-| BL-0293 | open | research | 2026-10-13 | AI 分析能力盤點：把舊 AI UI／舊 prompt／舊處置型功能與 AI 分析能力分開盤點（裁示 2）。 | 交接本 ★ 進度總表區 :306；另見 交接本 :975 | 未記載 | — | 待總管派工；不得照搬舊 AI 實作 | 否 |
+| BL-0293 | open | research | 2026-10-13 | AI 分析能力盤點：把舊 AI UI／舊 prompt／舊處置型功能與 AI 分析能力分開盤點（裁示 2）。 | 交接本 ★ 進度總表區 :306；另見 交接本 :975 | 未記載 | — | 待總管派工；不得照搬舊 AI 實作。→ 2026-10-17 補（客戶 2026-10-17 方向登記指示（`docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`）；本列原有盤點工作與狀態不變）：另承接兩個 Later／Roadmap 方向標籤，不另開號：AI disagreement with deterministic rules；未來 AI page interpretation，但 AI 與 Data Layer 必須分離（讀法＝文件組讀法：AI 解讀可以與確定性規則的結果不同、分歧要標示出來；未來 AI 可解讀頁面內容，但 AI 推論不得寫回 Data Layer、不得猜缺值或補造資料，受 54 §1 約束）。這兩項範圍：Later／Roadmap（deferred 性質，不得在 Phase 3 實作；本列 `open` 狀態只指原有盤點工作）；會改變投資判斷的 AI 行為屬 Stop／Decision Gate（`PROJECT_RULES.md` 第 4 節），這兩項動工前需客戶裁示；另見 BL-0271 | 否（原盤點）；是（兩項 Roadmap 動工前） |
 | BL-0294 | 待確認 | data gap | 2026-10-13 | 累積表 `nav_history` 出處：回填不保留出處、可能含以名稱搜尋得來的晨星點，閘門 `NAV_HISTORY_PROVENANCE_VERIFIED = False` 關閉中。 | 交接本 ★ 進度總表區 :307；另見 交接本 :965、:1023 | 未記載 | — | 待確認：客戶 2026-10-13 新裁示（一）「保留累積淨值能力、UI 不必顯示原始累積淨值表」（:315）是否回答本題未載明；:1819 自陳未逐題核對 | 否 |
 | BL-0295 | 待確認 | UX debt | 2026-10-13 | MKT-5 `mkt_indicator_keys` 語意與 47 Q-07（只填一欄）；另新裁示（二）MKT 設定下次載入生效的實作。 | 交接本 ★ 進度總表區 :308；另見 交接本 :315、:1024 | 未記載 | — | 待確認：:1819 記 #952 依 PR 標題已處理這兩題與 B2，但只讀標題、未讀內容 | 否 |
 | BL-0296 | open | tech debt | 2026-10-13 | `infra/proxy.py::_exc_log` 是啟發式遮罩，只砍 `?` 起的查詢字串，射程有限。 | 交接本 ★ 進度總表區 :1029 | 未記載 | — | 待派工（下次動到該處時處理） | 否 |
@@ -529,24 +529,99 @@
 
 | BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
 |---|---|---|---|---|---|---|---|---|---|
-| BL-0342 | open | tech debt | 2026-10-16 | `tests/ui_v2` 在 Python 3.13 有 1 條失敗：`tests/ui_v2/test_hld_logic.py::test_第2件反向控制_十二情境乘九塊一百零八格逐格未變`，`('full','HLD-2')` 那一格內容摘要預期 `6347d81de348`、實得 `4b599a9f2b3f`（3.13 下設 `TZ=UTC` 仍失敗）。Python 3.11（＝CI baseline）同一套 `tests/ui_v2` 全過（3107 passed, 2 skipped）；main `1ab6128` CI 三條 check-run 皆 success。**尚未完成 root-cause 判定**（未查是 3.13 環境差異還是測試或程式本身的問題）。 | 2026-10-16 Phase 3 準備檢查的本機實跑（scratchpad 兩個 venv：3.13 與 3.11；streamlit 1.59.2；量測於 `1ab6128`） | 否（不擋 Phase 3 視覺驗收；不擋 CI） | — | 不自行修；只有在後續證明影響 production、CI 或 Phase 3 時才派工查 root cause（客戶 2026-10-16 指示）。→ 2026-10-17 補（本列狀態不變）：Phase 3 UX 稽核在 scratchpad 的 repo 複本（CPython 3.13.16、streamlit 1.59.2，量測於 `57f03c9`）跑完整 `tests/ui_v2`，得 3072 passed、4 failed、33 skipped；4 個失敗皆為黃金雜湊比對，2 個在 `tests/ui_v2/test_hld_logic.py`、2 個在 `tests/ui_v2/test_hld_read_failure_logic.py`（例 `holdfail/HLD-2` `4b599a9f2b3f != 6347d81de348`），比本列原記的 1 條多；root cause 仍未查；同一 SHA 的 CI（Python 3.11）三條 check-run 皆 success（出處 `docs/evidence/phase3_uiux_audit_2026-10-17/ux_inventory.md` 第 0 節；該稽核自陳可能與日期或環境有關，未驗證） | 否 |
+| BL-0342 | open | tech debt | 2026-10-16 | `tests/ui_v2` 在 Python 3.13 有 1 條失敗：`tests/ui_v2/test_hld_logic.py::test_第2件反向控制_十二情境乘九塊一百零八格逐格未變`，`('full','HLD-2')` 那一格內容摘要預期 `6347d81de348`、實得 `4b599a9f2b3f`（3.13 下設 `TZ=UTC` 仍失敗）。Python 3.11（＝CI baseline）同一套 `tests/ui_v2` 全過（3107 passed, 2 skipped）；main `1ab6128` CI 三條 check-run 皆 success。**尚未完成 root-cause 判定**（未查是 3.13 環境差異還是測試或程式本身的問題）。 | 2026-10-16 Phase 3 準備檢查的本機實跑（scratchpad 兩個 venv：3.13 與 3.11；streamlit 1.59.2；量測於 `1ab6128`） | 否（不擋 Phase 3 視覺驗收；不擋 CI） | — | 不自行修；只有在後續證明影響 production、CI 或 Phase 3 時才派工查 root cause（客戶 2026-10-16 指示）。→ 2026-10-17 補（本列狀態不變）：Phase 3 UX 稽核在 scratchpad 的 repo 複本（CPython 3.13.16、streamlit 1.59.2，量測於 `57f03c9`）跑完整 `tests/ui_v2`，得 3072 passed、4 failed、33 skipped；4 個失敗皆為黃金雜湊比對，2 個在 `tests/ui_v2/test_hld_logic.py`、2 個在 `tests/ui_v2/test_hld_read_failure_logic.py`（例 `holdfail/HLD-2` `4b599a9f2b3f != 6347d81de348`），比本列原記的 1 條多；root cause 仍未查；同一 SHA 的 CI（Python 3.11）三條 check-run 皆 success（出處 `docs/evidence/phase3_uiux_audit_2026-10-17/``ux_inventory.md` 第 0 節；該稽核自陳可能與日期或環境有關，未驗證） | 否 |
 | BL-0343 | open | UX debt | 2026-10-16 | B 線預覽直接開 `/mkt` 會跳出 Streamlit「Page not found … Running the app's main page」提示框蓋在頁上，底下照樣畫出市場總覽；推定成因是市場總覽為預設頁、網址在 `/`（未驗）。從 `/` 進入、或開 `/hld` `/exp` `/alo` `/set` 都不會出現。 | 2026-10-16 Phase 3 準備檢查的本機實跑（無 secrets，playwright，`streamlit run ui_v2/app_preview.py`） | 否 | — | 只登記；驗收期間請客戶從 `/` 進市場總覽；Phase 3 驗收結論出來前不修（客戶 2026-10-16 指示：先不要修改 UI） | 否 |
 
-### 2026-10-17 Phase 3 UI/UX 提示語：稽核發現與待裁示（接在既有號碼之後）
+### 2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向（接在既有號碼之後）
 
-- **出處**：客戶 2026-10-17〈B 線 UI Phase 3 提示語〉（總管轉述要點，`docs/DECISIONS.md` `DEC-2026-10-17-02`）之下三組唯讀稽核，原始報告存於 `docs/evidence/phase3_uiux_audit_2026-10-17/`（量測於 `57f03c9`）。
-- **編號**：自 BL-0362 起。PR #986（2026-10-17 02:21 UTC 量測時 open、未合併）擬用 BL-0344～BL-0361 登記同日的方向登記指示；本小節為避免撞號接在其後。**若 #986 未合併，合併本批時須重編**。本小節各列與 #986 擬登記的方向列（例 BL-0345 去工程化、BL-0346 資料健康集中、BL-0349 OAuth／讀寫邊界）是「具體發現 ↔ 方向」的關係，不是重複。
-- ⛔ **登記不構成動工授權**（`CLAUDE.md` §-1）。改 UI 的批次另須 58 待裁示 (1)(6) 核准（見 BL-0368）。
+- **出處**：客戶 2026-10-17 方向登記指示，逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`；決策登記 `docs/DECISIONS.md` `DEC-2026-10-17-01`。各標籤背後的細部討論不在 repo，本小節每列的「讀法」都只是標籤的一行字面讀法（**文件組讀法**，可被客戶推翻），不是規格。
+- ⛔ **登記不構成動工授權**（`CLAUDE.md` §-1；指示本身亦寫「不得因為登記 backlog 就視為已核准立即實作」）。
+- **Phase 3 項目**：仍依 Phase 3 驗收流程逐批處理（每批 ≤3），任何版面佈局、元件增刪、分頁動線變更動工前先出草稿（`CLAUDE.md` §-1.5.4）；修改凍結 SSOT `docs/v2/44_fund_ui_ssot.md` 須走既有解凍程序。
+- **Later／Roadmap 項目**：不得在 Phase 3 實作。凡涉及投資語意、方向性判斷、正式公式、正式 threshold、新資料來源者屬 Stop／Decision Gate（`PROJECT_RULES.md` 第 4 節），且須先完成 Phase 7 准入要件九項（正式修正案 #8 第 5 節，`DEC-2026-10-16-14`）；與 `docs/v2/54_phase7_design_backlog.md` 重疊者，本小節只是索引指標，內容以 54 為準（54 全檔 Non-production）。
+- **AI 項目**：受 54 §1「資料歸資料、AI 分析歸 AI 分析」約束（AI 不得猜缺值、補造資料、自行替換來源；AI 推論不得寫回 Data Layer）。
+
+**標籤對照（39 個標籤全列；「處理」＝新列／補記既有列／54 索引指標）**
+
+- 標「索引指標」者僅表示 54 有相關節，未必涵蓋該標籤；未涵蓋者以本列為登記來源（標「新列（54 §X 部分相關）」者即屬此類）。
+
+| # | 標籤（照指示原字） | BL-ID | 處理 | 範圍 |
+|---|---|---|---|---|
+| 1 | B 線五頁 Answer-first UX | BL-0344 | 新列 | Phase 3 |
+| 2 | 390px Mobile First | BL-0250 | 補記既有列 | Phase 3 |
+| 3 | UI de-engineering | BL-0345 | 新列 | Phase 3 |
+| 4 | Data Health 集中至 SET | BL-0346 | 新列 | Phase 3 |
+| 5 | 錯誤去重與 actionable empty/error states | BL-0347 | 新列（另於 BL-0287 補交叉指標） | Phase 3 |
+| 6 | investment status 與 data status 分離 | BL-0346 | 新列 | Phase 3 |
+| 7 | change-first / exception-first | BL-0344 | 新列 | Phase 3 |
+| 8 | Global Context / context persistence | BL-0348 | 新列 | Phase 3 |
+| 9 | controls / CTA 簡化 | BL-0345 | 新列 | Phase 3 |
+| 10 | OAuth → valid Sheet → worksheet UX | BL-0349 | 新列 | Phase 3 |
+| 11 | READ / WRITE boundary | BL-0349 | 新列（另於 BL-0287 補交叉指標） | Phase 3 |
+| 12 | Evidence Path / provenance 可追溯架構 | BL-0350 | 新列 | Phase 3 |
+| 13 | partial failure isolation | BL-0351 | 新列 | Phase 3 |
+| 14 | freshness-aware refresh | BL-0351 | 新列 | Phase 3 |
+| 15 | draft vs saved | BL-0352 | 新列（另於 BL-0244 補交叉指標） | Phase 3 |
+| 16 | simulation vs real change | BL-0352 | 新列 | Phase 3 |
+| 17 | mobile / desktop information density | BL-0250 | 補記既有列 | Phase 3 |
+| 18 | Today Overview / 今日總覽 | BL-0353 | 新列 | Later／Roadmap |
+| 19 | Signal Lifecycle：NEW / ONGOING / WORSENING / RESOLVED | BL-0354 | 54 索引指標（§14） | Later／Roadmap |
+| 20 | Why Now / 首次越過門檻 | BL-0354 | 新列（54 §14 部分相關） | Later／Roadmap |
+| 21 | Thesis Card / Thesis Monitoring | BL-0355 | 54 索引指標（§2） | Later／Roadmap |
+| 22 | Supporting vs Contrary Evidence | BL-0355 | 54 索引指標（§2） | Later／Roadmap |
+| 23 | Severity vs Evidence Quality | BL-0356 | 新列（54 §2 部分相關） | Later／Roadmap |
+| 24 | Decision Journal | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
+| 25 | Decision Quality ≠ Investment Outcome | BL-0357 | 新列（54 §15 部分相關） | Later／Roadmap |
+| 26 | Expected vs Actual / Thesis Review | BL-0355 | 54 索引指標（§2、§15） | Later／Roadmap |
+| 27 | Portfolio Look-through Exposure | BL-0358 | 54 索引指標（§5） | Later／Roadmap |
+| 28 | Fund overlap / False Diversification | BL-0358 | 54 索引指標（§5） | Later／Roadmap |
+| 29 | What-if Engine | BL-0359 | 54 索引指標（§9、§10） | Later／Roadmap |
+| 30 | Replacement Flow：HLD → ALO → EXP → ALO | BL-0359 | 54 索引指標（§9） | Later／Roadmap |
+| 31 | Performance Attribution（fund / FX / dividend / allocation） | BL-0360 | 54 索引指標（§10、§12） | Later／Roadmap |
+| 32 | Regime × Fund | BL-0361 | 新列（54 §7、§8 部分相關） | Later／Roadmap |
+| 33 | AI disagreement with deterministic rules | BL-0293 | 補記既有列 | Later／Roadmap |
+| 34 | Counterfactual Review | BL-0357 | 新列（54 §15 部分相關） | Later／Roadmap |
+| 35 | Portfolio Story | BL-0360 | 新列（與 #31 同列） | Later／Roadmap |
+| 36 | Alert usefulness / threshold review | BL-0354 | 新列（54 §14 部分相關） | Later／Roadmap |
+| 37 | 「無法判定」原因分類 | BL-0356 | 54 索引指標（§2、§5） | Later／Roadmap |
+| 38 | 未來 AI page interpretation，但 AI 與 Data Layer 必須分離 | BL-0293 | 補記既有列 | Later／Roadmap |
+| 39 | Decision-time evidence snapshot / rule version preservation | BL-0357 | 54 索引指標（§15） | Later／Roadmap |
+
+- 去重方式：以中英文關鍵字 grep BL-0001～BL-0343（Data Health、390、錯誤、OAuth、provenance、freshness、草稿／draft、模擬／simulation、試算、穿透／look-through、重疊／overlap、what-if、attribution、regime、journal、snapshot／快照、無法判定、AI 等）並逐列讀命中，另對 54 §2～§18 逐節比對。完全涵蓋者 0 列；部分重疊者補記於 BL-0250、BL-0293，同主題交叉指標補於 BL-0244、BL-0248、BL-0287。「沒有其他重疊」取決於有沒有漏看，**不宣稱窮舉**，未經第二組驗證。
 
 | BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
 |---|---|---|---|---|---|---|---|---|---|
-| BL-0362 | open | bug | 2026-10-17 | MKT／EXP／ALO／SET 正式模式的 `ui_v2/<頁>/page.py::render` 呼叫 `load_live()` 時沒有包例外處理；稽核注入 `RuntimeError` 後四頁都出現 Streamlit 例外框（含訊息原文，本機顯示完整 traceback）。HLD 有包（`ui_v2/hld/page.py::_render_live_error`），但畫面會印例外型別名。`source.load_live` 實際會拋哪些未包裝例外未逐一驗證。 | `docs/evidence/phase3_uiux_audit_2026-10-17/ux_inventory.md` C 節；本組 2026-10-17 讀碼確認四頁呼叫處無 try（`57f03c9`） | 否 | — | 屬已確認 bug 的最小修復（`PROJECT_RULES.md` 第 4 節可自行處理類，不包裝成裁示題）；但它改 UI 程式，動工時機依 58 待裁示 (6)（客戶 2026-10-16 指示「截圖到齊前不改 UI」）。修法不得吞例外、不得在一般畫面印 stack 或型別名，原文留給 SET 進階診斷 | 否 |
-| BL-0363 | open | tech debt | 2026-10-17 | `repositories/settings_sheet_repository.py::_worksheet_for_append` 在分頁不存在時自動新增分頁再寫入；若 `SETTINGS_SHEET_ID` 指到一本服務帳戶有編輯權、但不是設定試算表的檔，會在那本長出分頁並寫入，沒有標記驗證，也沒有守衛測試。「分頁不存在則建立」是 `docs/v2/50_settings_sheet_design.md` §7.1 的規格；客戶 2026-10-09 裁示（`H5-1009-1`）明示 50 §7.1 對 alo、set 維持原規則。 | `docs/evidence/phase3_uiux_audit_2026-10-17/oauth_rw_audit.md` G2、G5；本組讀碼確認該函式內有 `add_worksheet`（`57f03c9`） | 否 | — | 先補守衛測試鎖住現行行為與「不建立整本試算表」（內部自決）；若要改成「分頁不存在就停」或加標記分頁驗證，屬 50 §7.1 規格變更，且加標記＝生產試算表資料變更，須客戶裁示 | 是（改規格時） |
-| BL-0364 | blocked | tech debt | 2026-10-17 | 缺「一般模式不可見工程識別碼」測試（塊代號、層字樣、原始鍵名、試算表鍵名、例外型別名）；現有禁字表只管投資建議用語（各頁 `logic.py` 的 `FORBIDDEN_*`）。現況這些字依 44 屬合規顯示，規則改之前寫不出期望。 | `docs/evidence/phase3_uiux_audit_2026-10-17/ux_inventory.md`〈現有測試〉 | 否 | 58 待裁示 (1) 核准＋44 解凍 | 與 P0-① 同批寫；同時寫反向檢查：SET 進階診斷內仍看得到 | 否 |
-| BL-0365 | 待確認 | governance | 2026-10-17 | 子法 1 §6.1「全站底部固定標註（客戶逐字定死，⛔ 照抄不得改寫）」那一句，全 repo `.py` 檔 0 命中（本組 2026-10-17 在 `57f03c9` 實查；B 線五頁與舊 UI 都沒有）；57 第 1-3 點「保留不改」。**判斷不了的理由**：子法 1 射程是「只適用於基金儀表板」、§6.1 寫「全站」，但 44（B 線畫面規格）沒有把它列成畫面元素；是 44 漏列（bug）還是待客戶裁示放哪裡，本組不代判。 | 子法 1 §6.1；`docs/v2/57_amendment_8_directional_judgment.md` 1-3；`docs/evidence/phase3_uiux_audit_2026-10-17/governance_audit.md` 1.1 第 s 列 | 否 | — | 總管判定是 bug 還是裁示題（`PROJECT_RULES.md` 第 1 節 1.2：不得偷改任何一方）；59 第 1.2 節已畫出頁尾供客戶確認 | 未記載 |
-| BL-0366 | 待客戶裁示 | UX debt | 2026-10-17 | HLD-0、ALO-0 的「正常」（無偏離項／各類別皆在容許帶內）與「無法判定」（尚未設定門檻、尚未建立持倉、不適用、資料未備）共用同一個 ⬜＋灰，只能靠後面那句話分辨。EXP-0 燈色方向與其他四枚相反：44 塊 `EXP-0` 下方 2026-09-22「方向反轉」已就地登記，本列只指過去。 | `docs/evidence/phase3_uiux_audit_2026-10-17/ux_inventory.md`〈「無法判定」與「正常」能不能區分〉；44 塊 `EXP-0` | 否 | 44 解凍 | 併 58 待裁示 (3)（資料狀態符號）一起處理 | 是 |
-| BL-0367 | open | governance | 2026-10-17 | 文件與檔頭過期：`docs/OAUTH_SETUP.md`（scope 寫 4 個、程式 `infra/oauth.py::GOOGLE_OAUTH_SCOPES` 有 5 個；寫「預設 OAuth」，實際 `ui/tab3_portfolio.py::_t3_sheet_client` 是服務帳戶優先；登入位置與選本方式已改）；`docs/POLICY_SHEETS_SETUP.md`（對應檔 `policy_store.py` 不存在，範例 import 會失敗）；`infra/oauth.py` 檔頭 docstring 列的 `build_oauth_flow` 等三個函式名與根目錄 `oauth_helper.py` shim 皆不存在。 | `docs/evidence/phase3_uiux_audit_2026-10-17/oauth_rw_audit.md` G1、G7；本組 2026-10-17 確認 `policy_store.py`、`oauth_helper.py` 不存在、兩處字面如稽核所述 | 否 | — | 兩份 `.md` 屬文件同步（可自行處理類，只改說明、不給舊 UI 加功能）；`infra/oauth.py` 檔頭是 `.py`，另批處理 | 否 |
-| BL-0368 | 待客戶裁示 | governance | 2026-10-17 | `docs/v2/58_ui_ux_constitution.md`（B 線 UI/UX Constitution v1.0 草案）與 `docs/v2/59_b_line_390_wireframes.md`（五頁 390px 文字線框）待客戶核准；58 第 13 節共 7 題（44 解凍範圍、投資狀態燈、資料狀態符號、可行動錯誤、OAuth 選本、截圖前可否開工、③需要注意）。 | 58 第 13 節；`docs/DECISIONS.md` `DEC-2026-10-17-02` | 是（擋 Phase 3 改 UI 的批次） | — | 客戶逐題裁示；核准後依 44 既有慣例另開解凍輪寫進 44，並登記 DEC。相關既有列：BL-0102、BL-0121、BL-0127、BL-0224、BL-0250 | 是 |
+| BL-0344 | open | UX debt | 2026-10-17 | 標籤：B 線五頁 Answer-first UX；change-first / exception-first。讀法（文件組讀法）：五頁首屏先給該頁那一句問題的答案，並優先呈現「和上次比變了什麼」「哪裡是例外」。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；相關現行規格：44 §3.0 五頁「回答什麼問題」、44 §2.1 堆疊順序、55 §5 第 3 條 | 否 | Phase 3 客戶驗收回報（BL-0250）；版面／元件／動線變更先出草稿（`CLAUDE.md` §-1.5.4） | 完成條件（文件組讀法）：五頁首屏不捲動即可讀到答案句與變動／例外摘要，經客戶驗收通過。與 44 現行方向同向（44 §3.0 市場總覽已寫「和我上次看的時候比，變了哪裡」；本組判讀，未逐頁查證）；改 44 字面須走解凍程序。範圍：Phase 3 | 否（版面變更另須草稿先行） |
+| BL-0345 | open | UX debt | 2026-10-17 | 標籤：UI de-engineering；controls / CTA 簡化。讀法（文件組讀法）：使用者可見畫面去掉工程用語與工程細節；控制項與行動按鈕減量。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；相關：44 §5.3 按鈕、BL-0317（組內擬定文案） | 否 | Phase 3 客戶驗收回報（BL-0250）；元件增刪先出草稿 | ⚠️ 張力（只登記、不解）：44 各塊以代號（例 `MKT-0`）編排，`docs/HANDOFF.md` 也以「首屏有 `MKT-0` 等結論燈」辨認 B 線；代號、診斷字樣是否算要去掉的「工程用語」，本組不代判，需先出草稿請客戶確認。完成條件（文件組讀法）：逐頁清點可見工程字樣與控制項，去留經客戶確認；按鈕字樣仍受交接本第 7 節禁詞前四個（含按鈕禁令）約束。範圍：Phase 3。→ 2026-10-17 補（Phase 3 UI/UX 文件批；本列狀態不變）：現況工程字樣逐頁清點見 `docs/evidence/phase3_uiux_audit_2026-10-17/``ux_inventory.md` C 節；原則與待裁示見 `docs/v2/58_ui_ux_constitution.md` U-08、第 13 節 (1)，線框見 `docs/v2/59_b_line_390_wireframes.md`。**另併入一項驗收要求**（原擬另開號，判為本列範圍）：缺「一般模式不可見工程識別碼」測試（塊代號、層字樣、原始鍵名、試算表鍵名、例外型別名；現有禁字表只管投資建議用語），規則改之前寫不出期望 ⇒ 待 58 待裁示 (1) 核准＋44 解凍後與 P0-① 同批寫，並同時寫反向檢查（SET 進階診斷內仍看得到） | 否（去留以草稿經客戶確認） |
+| BL-0346 | open | UX debt | 2026-10-17 | 標籤：Data Health 集中至 SET；investment status 與 data status 分離。讀法（文件組讀法）：資料健康狀態集中在設定與診斷頁呈現；投資面狀態與資料面狀態分開表達，不混在同一個燈號。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；44 §3.0 設定與診斷頁、44 「塊 MKT-0｜環境結論燈」、44 約 :4519（ALO-0 結論燈缺差距時灰燈不判）；55 §5 第 1 條；`tests/ui_v2/test_live_390_page.py` | 否 | Phase 3 客戶驗收回報（BL-0250）；草稿；客戶裁示範圍 | ⚠️ 張力（只登記、不解）：(1) 55 §5 第 1 條要求各頁首屏看得到 Data Health 燈（`*-0`：MKT-0、HLD-0、EXP-0、ALO-0、SET-0），390 煙霧測試逐頁驗「Data Health 燈在首屏」；「集中至 SET」若讀作各頁不再顯示，與之衝突。(2) 44 稱 `MKT-0` 為「環境結論燈」、ALO-0 在缺差距時灰燈不判，55 卻稱 `*-0` 為 Data Health 燈 —— 即現行 `*-0` 同時承載投資面結論與資料面狀態（本組讀法，未逐頁查證），與「分離」方向衝突。下一步：先出草稿並請客戶裁示兩件事的實際範圍（各頁是否保留精簡資料狀態、`*-0` 是否拆分）；修改凍結 SSOT 44 須走既有解凍程序（含 md5 守衛），並同步 55 與 390 測試。範圍：Phase 3。→ 2026-10-17 補（Phase 3 UI/UX 文件批；本列狀態不變）：提案見 `docs/v2/58_ui_ux_constitution.md` U-20、U-30 與第 13 節 (1)(2)(3)（`*-0` 維持 44「這一頁能不能照著讀」語意、名稱不叫 Data Health；資料狀態與評估狀態兩套符號，**皆為提案、未核准**）。**另併入一項現況發現**（原擬另開號，判為本列範圍）：HLD-0、ALO-0 的「正常」與「無法判定」（尚未設定門檻、尚未建立持倉、不適用、資料未備）共用同一個 ⬜＋灰，只能靠後面那句話分辨；EXP-0 燈色方向與其他四枚相反（44 塊 `EXP-0` 下方 2026-09-22「方向反轉」已登記）。出處 `docs/evidence/phase3_uiux_audit_2026-10-17/``ux_inventory.md`〈「無法判定」與「正常」能不能區分〉；處理併 58 待裁示 (3) | 是（動工前） |
+| BL-0347 | open | UX debt | 2026-10-17 | 標籤：錯誤去重與 actionable empty/error states。讀法（文件組讀法）：同一錯誤不在同頁多處重複；空狀態與錯誤狀態告訴使用者下一步可以做什麼。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；44 §5.5 空狀態 `EmptyState`；相關 BL-0287、BL-0126、BL-0088 | 否 | Phase 3 客戶驗收回報（BL-0250）；使用者可見文案定稿依既有程序（同 BL-0317） | 完成條件（文件組讀法）：五頁錯誤／空狀態清點後，同源錯誤每頁只出現一次、每個空／錯誤狀態附一條可執行的下一步；不得為了「看起來可操作」而隱藏或淡化錯誤（`CLAUDE.md` §1 Fail Loud）；44 §5.5 字樣變更須走解凍程序。範圍：Phase 3。→ 2026-10-17 補：同源錯誤重複次數的實測清點見 `docs/evidence/phase3_uiux_audit_2026-10-17/``ux_inventory.md` B 節；「可行動」的寫法受客戶 2026-10-03 裁示（原因文案只描述狀態、不指示動作，`H5-1003-b1`）約束，提案見 58 U-32 與第 13 節 (4)；`load_live()` 未包例外的具體 bug 另列 BL-0362 | 否 |
+| BL-0348 | open | UX debt | 2026-10-17 | 標籤：Global Context / context persistence。讀法（文件組讀法）：跨頁共用的情境（例：目前看的帳本、觀察窗）換頁後保持，不必每頁重選。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；相關 BL-0288（set 改存後 hld 觀察窗不更新）、BL-0295 | 否 | Phase 3 客戶驗收回報（BL-0250）；若新增全域選擇器屬元件增刪，先出草稿 | 完成條件（文件組讀法）：列出哪些情境要跨頁保持、以哪一處為單一真相（不得 `page.py` 與 `logic.py` 各維護一套狀態，客戶 2026-10-08 防膨脹 Gate），換頁後各頁一致。範圍：Phase 3 | 否（元件增刪另須草稿） |
+| BL-0349 | open | UX debt | 2026-10-17 | 標籤：OAuth → valid Sheet → worksheet UX；READ / WRITE boundary。讀法（文件組讀法）：設定流程依序引導授權 → 指定有效試算表 → 確認分頁；明確劃出哪些頁只讀、哪些動作會寫入試算表。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；55 §2～§4（§4：預覽會真的寫入設定試算表）；客戶 2026-10-13 裁示 2「保單／帳本改由 Sheets 維護，B 線只讀取」（交接本 ★ 進度總表區 :319）；相關 BL-0287、BL-0175、BL-0333 | 否 | Phase 3 客戶驗收回報（BL-0250）；流程動線變更先出草稿 | 完成條件（文件組讀法）：每一步失敗時畫面說出卡在哪一步；唯讀頁不出現寫入字樣或寫入控制項；寫入只發生在明示的存檔動作。範圍：Phase 3。→ 2026-10-17 補（Phase 3 UI/UX 文件批；本列分類與狀態不變，仍屬 Phase 3）：OAuth／讀寫邊界稽核見 `docs/evidence/phase3_uiux_audit_2026-10-17/``oauth_rw_audit.md`（F、G 節），發現四個架構衝突；58 第 13 節 (5) 建議本項放在 Phase 3 最後一批，動工前先裁示 OAuth scope 收窄、是否推翻 T6／Q10／B7、是否走子法 1 提案單＋資安 2 組稽核；之前先做方案 0（不接 OAuth 寫入）與讀寫邊界守衛測試。設定試算表分頁自動新增的風險另列 BL-0363 | 否 |
+| BL-0350 | open | architecture debt | 2026-10-17 | 標籤：Evidence Path / provenance 可追溯架構。讀法（文件組讀法）：畫面上每個數字都能追回來源、取數時間與計算路徑。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；`CLAUDE.md` §2.2；54 §1、§15；相關 BL-0294、BL-0188 | 否 | 不新增資料來源（新來源屬 Stop／Decision Gate）；架構變更依 `CLAUDE.md` §8 先設計 | 完成條件（文件組讀法）：五頁可見數字逐項對得到 source／fetched_at／as_of 的呈現位置；只整理既有血緣欄位的呈現與串接，不改資料語意。Phase 3 只做與驗收相關的部分（文件組讀法）。範圍：Phase 3 | 否 |
+| BL-0351 | open | architecture debt | 2026-10-17 | 標籤：partial failure isolation；freshness-aware refresh。讀法（文件組讀法）：單一來源或單一區塊失敗不拖垮整頁；重新取數依資料新鮮度決定。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；`CLAUDE.md` §1、§2.4；54 §13（Non-production）；相關 BL-0304、BL-0129 | 否 | 不改正式 freshness 門檻值或語意（屬 Stop／Decision Gate） | 完成條件（文件組讀法）：逐頁列出各區塊的失敗隔離邊界，並以測試覆蓋「一塊失敗、其餘照畫且標明失敗」；刷新依既有 freshness 規則，不新增門檻。範圍：Phase 3。→ 2026-10-17 補：`load_live()` 未包例外造成整頁露出例外框，屬本列「一塊失敗不拖垮整頁」的反例，具體 bug 另列 BL-0362 | 否（若動到正式 freshness 門檻值或語意則是） |
+| BL-0352 | open | UX debt | 2026-10-17 | 標籤：draft vs saved；simulation vs real change。讀法（文件組讀法）：畫面清楚區分未存檔值與已存檔值，以及試算結果與實際資料變更。 | 2026-10-17 方向登記指示〈Phase 3 / 近期〉；55 §4；44 §1.1 G2（「情境試算」為允許形式之一）；相關 BL-0244 | 否 | Phase 3 客戶驗收回報（BL-0250）；新增標示屬元件增刪，先出草稿 | 完成條件（文件組讀法）：凡可編輯欄位都有可辨的「未存檔／已存檔」狀態；任何試算結果都標明不是實際變更、且不寫入試算表。範圍：Phase 3 | 否 |
+| BL-0353 | deferred | deferred improvement | 2026-10-17 | 標籤：Today Overview / 今日總覽。讀法（文件組讀法）：一個彙整「今天要看什麼」的入口畫面。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §16 北極星（間接） | 否 | Phase 3 五頁驗收完成；產品方向屬 Stop／Decision Gate | ⚠️ 張力（只登記、不解）：44 §3.0 現行為五頁、各頁只答自己那一句問題；若是新增一頁，屬產品方向＋版面變更，需客戶裁示＋草稿＋44 解凍程序；若是既有頁的摘要區，另判。完成條件待正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0354 | deferred | research | 2026-10-17 | 標籤：Signal Lifecycle：NEW / ONGOING / WORSENING / RESOLVED；Why Now / 首次越過門檻；Alert usefulness / threshold review。讀法（文件組讀法）：訊號帶生命週期狀態、標明何時首次越過門檻、事後檢討提醒是否有用與門檻是否合適。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §14 LINE State Machine（state transition、hysteresis、recovery notification） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格（54 §0）；threshold review 涉及正式 threshold 值或語意（Stop／Decision Gate，`DEC-2026-10-16-03`） | 「Signal Lifecycle」部分以 54 §14 為相關節（54 §14 只談 LINE state machine，本列不複製；候選示例一律 Non-production）；「Why Now」「Alert usefulness / threshold review」54 未涵蓋，以本列為登記來源。完成條件待 Phase 7 正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0355 | deferred | research | 2026-10-17 | 標籤：Thesis Card / Thesis Monitoring；Supporting vs Contrary Evidence；Expected vs Actual / Thesis Review。讀法（文件組讀法）：每檔持有附投資論點卡並持續監看、並列支持與反對證據、事後比對預期與實際。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §2 第 1 層（thesis invalidation）、第 4 層（supporting evidence、invalidation）；54 §15 | 否 | Phase 7 准入要件九項（正式修正案 #8 第 5 節）；投資語意屬 Stop／Decision Gate | ⚠️ 張力（只登記、不解）：論點與證據比對屬投資判斷的呈現，B 線 v1 現階段不輸出正式方向性判斷（`DEC-2026-10-16-14`）；Phase 7 准入前不得上線。54 索引指標（§2）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0356 | deferred | research | 2026-10-17 | 標籤：Severity vs Evidence Quality；「無法判定」原因分類。讀法（文件組讀法）：嚴重度與證據品質分兩軸呈現；「無法判定」細分原因（例：資料未備、證據不足、身分不符、來源衝突）。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §2 第 1、4 層；54 §5 第 4 級（`⬜ 無法判定（持股／產業資料未備）`）；`DEC-2026-10-16-08` | 否 | Phase 7 正式規格；嚴重度屬投資語意（Stop／Decision Gate） | ⚠️ 張力（只登記、不解）：`DEC-2026-10-16-08` 已定資料不足字樣為「⬜ 無法判定（資料未備／證據不足）」；原因分類若改變此字樣或新增子類字樣，需客戶裁示並同步 44（另見 BL-0340）。54 §2 第 4 層與 §5 第 4 級只部分相關（54 §2 沒有嚴重度軸），兩個標籤以本列為登記來源。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0357 | deferred | research | 2026-10-17 | 標籤：Decision Journal；Decision Quality ≠ Investment Outcome；Counterfactual Review；Decision-time evidence snapshot / rule version preservation。讀法（文件組讀法）：記錄每次決策當下的證據快照與規則版本，事後把決策品質與結果好壞分開檢討，並對照「當時若不這樣做」。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §15 Decision Snapshot（含 rule version、evidence references；事後驗證期間 Non-production） | 否 | Phase 7 正式規格；schema 格式 Phase 7 再定（54 §15） | 「Decision Journal」「Decision-time evidence snapshot / rule version preservation」以 54 §15 為相關節（54 §15 只有 snapshot 欄位概念與 3／6／12 個月驗證）；「Decision Quality ≠ Investment Outcome」「Counterfactual Review」54 未涵蓋，以本列為登記來源。⚠️ 張力（只登記、不解）：決策紀錄若含方向性判斷，受 Phase 7 准入約束；只記錄客戶自己做的決策是否屬方向性輸出，本組不代判。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0358 | deferred | research | 2026-10-17 | 標籤：Portfolio Look-through Exposure；Fund overlap / False Diversification。讀法（文件組讀法）：穿透到底層持股看整體曝險；辨識多檔基金持股重疊造成的假分散。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §5 Look-through 降級（引用 52 B-10、B-11、B-13 與 `ui/helpers/portfolio/concentration.py`）；`CLAUDE.md` §3.2 Shadow fund 相似度 | 否 | Phase 5 Data Gap Audit（持股資料覆蓋）；新來源屬 Stop／Decision Gate | 54 索引指標：內容以 54 §5 為準；只有 Top holdings 時須標 Partial、不得稱完整 exposure（54 §5）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0359 | deferred | research | 2026-10-17 | 標籤：What-if Engine；Replacement Flow：HLD → ALO → EXP → ALO。讀法（文件組讀法）：試算「若調整某檔」對配置的影響；替換流程從持倉體檢出發，到資產配置看缺口、到標的探索找候選、再回資產配置看結果。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §9 第 3 情境（替換現有持有；整合在 EXP、不新增頁面）、§10；44 §1.1 G2 | 否 | Phase 7 准入要件九項（候選與替換涉及方向性判斷）；跨頁動線屬版面變更 | ⚠️ 張力（只登記、不解）：44 §3.0 標的探索「不談我目前的持倉狀況」、資產配置「不產生再平衡動作」、「一頁只回答自己那一句問題」，跨頁替換流程與現行頁面邊界衝突；What-if 與 G2 允許的「情境試算」可能相容（本組讀法）。需客戶裁示＋草稿＋44 解凍程序。54 索引指標（§9）。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0360 | deferred | research | 2026-10-17 | 標籤：Performance Attribution（fund / FX / dividend / allocation）；Portfolio Story。讀法（文件組讀法）：把報酬拆成基金本身、匯率、配息、配置四個來源；用一段敘事說明組合這段期間發生了什麼。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §10（FX contribution、TWD total return）、§12；`CLAUDE.md` §4.1（TWD vs 原幣） | 否 | 歸因公式屬正式公式（Stop／Decision Gate）；Portfolio Story 若由 AI 產生，受 54 §1 與 BL-0293 約束 | 54 索引指標（§10、§12）；Portfolio Story 在 54 無對應節，屬新列。完成條件待正式規格。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+| BL-0361 | deferred | research | 2026-10-17 | 標籤：Regime × Fund。讀法（文件組讀法）：不同市場環境（regime）下各基金表現的對照。 | 2026-10-17 方向登記指示〈Roadmap / 後續〉；54 §7（policy regime）、§8（單一 Proxy ETF 不得等同整個產業 regime）；相關 BL-0234（#841 `services/regime_fit.py`，只登記） | 否 | Phase 5 Data Gap Audit → Phase 7 正式規格；regime 判定屬投資語意（Stop／Decision Gate） | 54 §7（Mean-Reversion Guard，研究對象含 policy regime）與 §8 只部分相關，本標籤以本列為登記來源。範圍：Later／Roadmap（不得在 Phase 3 實作） | 是（動工前） |
+
+### 2026-10-17 Phase 3 UI/UX 執行提示語：稽核發現與待裁示（接在既有號碼之後）
+
+- **出處**：客戶 2026-10-17 Phase 3 執行提示語（`docs/DECISIONS.md` `DEC-2026-10-17-02`；方向以 `DEC-2026-10-17-01` 為準）之下三組唯讀稽核，原始報告存於 `docs/evidence/phase3_uiux_audit_2026-10-17/`（量測於 `57f03c9`）。
+- **去重**：本批發現逐條比對上一小節 BL-0344～BL-0361 與其補記的 BL-0244／0248／0250／0287／0293。屬方向範圍內的發現改在既有列補記（BL-0345、BL-0346、BL-0347、BL-0349、BL-0351），不另開號；下表只列方向列沒有涵蓋的具體 bug、風險、缺口與待裁示。
+- ⛔ **登記不構成動工授權**（`CLAUDE.md` §-1）。改 UI 的批次另須 58 待裁示 (1)(6) 核准（見 BL-0366）。
+
+| BL-ID | 狀態 | 類別 | 發現 | 問題 | 出處 | 擋 | 前提 | 下一步 | 裁示 |
+|---|---|---|---|---|---|---|---|---|---|
+| BL-0362 | open | bug | 2026-10-17 | MKT／EXP／ALO／SET 正式模式的 `ui_v2/<頁>/page.py::render` 呼叫 `load_live()` 時沒有包例外處理；稽核注入 `RuntimeError` 後四頁都出現 Streamlit 例外框（含訊息原文，本機顯示完整 traceback）。HLD 有包（`ui_v2/hld/page.py::_render_live_error`），但畫面會印例外型別名。`source.load_live` 實際會拋哪些未包裝例外未逐一驗證。 | `docs/evidence/phase3_uiux_audit_2026-10-17/ux_inventory.md` C 節；本組 2026-10-17 讀碼確認四頁呼叫處無 try（`57f03c9`）；方向列 BL-0347、BL-0351 | 否 | — | 屬已確認 bug 的最小修復（`PROJECT_RULES.md` 第 4 節可自行處理類，不包裝成裁示題）；但它改 UI 程式，動工時機依 58 待裁示 (6)（客戶 2026-10-16 指示「截圖到齊前不改 UI」）。修法不得吞例外、不得在一般畫面印 stack 或型別名，原文留給 SET 進階診斷 | 否 |
+| BL-0363 | 待確認 | architecture debt | 2026-10-17 | **既定行為下的風險登記，不是 bug。** 設定試算表寫入路徑在分頁不存在時會建立分頁、寫一次標頭再追加（`repositories/settings_sheet_repository.py::_worksheet_for_append`）——這是 `docs/v2/50_settings_sheet_design.md` §7.1「分頁不存在：……寫入路徑建立分頁並寫一次標頭，再追加」的既定規格，客戶 2026-10-09 裁示（`H5-1009-1`）明示「50 §7.1 對 alo、set 維持原規則」。風險：若 `SETTINGS_SHEET_ID` 指到一本服務帳戶有編輯權、但不是設定試算表的檔，會在那本長出分頁並寫入；目前沒有標記驗證，也沒有專門守衛測試。**判斷不了的理由**：要不要加守衛（以及加哪一種）牽涉既定規格與生產試算表，本組不代判。 | `docs/evidence/phase3_uiux_audit_2026-10-17/oauth_rw_audit.md` G2、G5；50 §7.1、Q10（「本設計不建檔」）；本組讀碼確認該函式內有新增分頁呼叫（`57f03c9`）；方向列 BL-0349 | 否 | — | 不改行為的守衛測試可先補（內部自決）：設定 L1 不得建立或複製整本試算表、`ui_v2` 寫入目標只來自 `SETTINGS_SHEET_ID`。若要改成「分頁不存在就停」或加標記分頁驗證，屬 50 §7.1 既定規格變更、且加標記＝生產試算表資料變更，須客戶裁示 | 是（改既定行為時） |
+| BL-0364 | 待確認 | governance | 2026-10-17 | 子法 1 §6.1「全站底部固定標註（客戶逐字定死，⛔ 照抄不得改寫）」那一句，全 repo `.py` 檔 0 命中（本組 2026-10-17 在 `57f03c9` 實查；B 線五頁與舊 UI 都沒有）；57 第 1-3 點「保留不改」。**判斷不了的理由**：子法 1 射程是「只適用於基金儀表板」、§6.1 寫「全站」，但 44（B 線畫面規格）沒有把它列成畫面元素；是 44 漏列（bug）還是待客戶裁示放哪裡，本組不代判。 | 子法 1 §6.1；`docs/v2/57_amendment_8_directional_judgment.md` 1-3；`docs/evidence/phase3_uiux_audit_2026-10-17/governance_audit.md` 1.1 第 s 列 | 否 | — | 總管判定是 bug 還是裁示題（`PROJECT_RULES.md` 第 1 節 1.2：不得偷改任何一方）；59 第 1.2 節已畫出頁尾供客戶確認 | 未記載 |
+| BL-0365 | open | governance | 2026-10-17 | 文件與檔頭過期：`docs/OAUTH_SETUP.md`（scope 寫 4 個、程式 `infra/oauth.py::GOOGLE_OAUTH_SCOPES` 有 5 個；寫「預設 OAuth」，實際 `ui/tab3_portfolio.py` 內的 `_t3_sheet_client` 是服務帳戶優先；登入位置與選本方式已改）；`docs/POLICY_SHEETS_SETUP.md`（對應檔 `policy_store.py` 不存在，範例 import 會失敗）；`infra/oauth.py` 檔頭 docstring 列的 `build_oauth_flow` 等三個函式名與根目錄 `oauth_helper.py` shim 皆不存在。 | `docs/evidence/phase3_uiux_audit_2026-10-17/oauth_rw_audit.md` G1、G7；本組 2026-10-17 確認 `policy_store.py`、`oauth_helper.py` 不存在、兩處字面如稽核所述 | 否 | — | 兩份 `.md` 屬文件同步（可自行處理類，只改說明、不給舊 UI 加功能）；`infra/oauth.py` 檔頭是 `.py`，另批處理 | 否 |
+| BL-0366 | 待客戶裁示 | governance | 2026-10-17 | `docs/v2/58_ui_ux_constitution.md`（B 線 UI/UX Constitution v1.0 草案）與 `docs/v2/59_b_line_390_wireframes.md`（五頁 390px 文字線框）待客戶核准；58 第 13 節共 7 題（44 解凍範圍、投資狀態燈、資料狀態符號、可行動錯誤、OAuth 選本的批次與前置裁示、截圖前可否開工、③需要注意）。 | 58 第 13 節；`docs/DECISIONS.md` `DEC-2026-10-17-02` | 是（擋 Phase 3 改 UI 的批次） | — | 客戶逐題裁示；核准後依 44 既有慣例另開解凍輪寫進 44，並登記 DEC。相關既有列：BL-0102、BL-0121、BL-0127、BL-0224、BL-0250、BL-0344～BL-0352 | 是 |
 
 ## §5 判為關閉、合併與非待辦的來源條目（不開 BL 號；附依據）
 
@@ -677,4 +752,5 @@
 - 計數與分類由本組單組產出，未經第二組驗證。
 - 2026-10-16 治理十一項裁示批：BL-0221、BL-0222、BL-0265、BL-0276、BL-0338 的更新與 BL-0340、BL-0341 的新增，由該批文件實作組單組依裁示逐字存檔與 `docs/DECISIONS.md` 寫成；§3 計數仍是 `d5d391b` 快照，未隨本批重算（快速索引已同步）。
 - 2026-10-16 提案單 #8 核准裁示批：BL-0221 關閉、BL-0338 與 BL-0340 更新，由該批合規文件實作組單組依逐字存檔與 `docs/DECISIONS.md` `DEC-2026-10-16-14` 寫成；本批不新增條目；§3 計數仍是 `d5d391b` 快照，未重算（快速索引已同步）。
-- 2026-10-17 Phase 3 UI/UX 稽核批：BL-0362～BL-0368 新增、BL-0342 補記，由架構與文件組單組依三份稽核報告與本組抽樣讀碼寫成；編號接在 PR #986 擬用號碼之後（見該小節說明）；§3 計數仍是 `d5d391b` 快照，未重算（快速索引已同步）。
+- 2026-10-17 UI/UX／PIDS 長期方向登記批：BL-0344～BL-0361 新增，BL-0244、BL-0248、BL-0250、BL-0287、BL-0293 補記，由文件實作組單組依逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md` 寫成；每列「讀法」是標籤字面的一行讀法（文件組讀法），各標籤背後的客戶討論不在 repo、本組未見；去重以 grep＋逐列讀命中＋對 54 逐節比對，不宣稱窮舉；張力只登記未裁定；§3 計數仍是 `d5d391b` 快照，未重算（新列皆 open／deferred，快速索引無需變動）。
+- 2026-10-17 Phase 3 UI/UX 執行提示語批：BL-0362～BL-0366 新增；BL-0342、BL-0345、BL-0346、BL-0347、BL-0349、BL-0351 補記（其中兩項原擬另開號的發現判為 BL-0345、BL-0346 範圍、併入不開號），由架構與文件組單組依三份稽核報告與本組抽樣讀碼寫成；去重以逐列讀 BL-0344～BL-0361 為準，不宣稱窮舉；§3 計數仍是 `d5d391b` 快照，未重算（快速索引已同步）。
