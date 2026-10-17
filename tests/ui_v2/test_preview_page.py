@@ -266,6 +266,18 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     assert len(calls) == 2, calls
     (preview_args, preview_kwargs), (live_args, live_kwargs) = calls
     assert preview_args == live_args == ()
+    # ~~`preview_kwargs.keys() == live_kwargs.keys()`~~ → 2026-10-17 P0-②（有意識的更正，不是漏刪）：預覽在四頁
+    # 多傳一個 `settings_page`（設定與診斷那一頁的 `st.Page`，只換頁）；拿掉它之後其餘照舊逐一相同、同一物件。
+    preview_kwargs = dict(preview_kwargs)
+    settings_page = preview_kwargs.pop("settings_page", None)
+    if slug == "set":
+        assert settings_page is None
+    else:
+        from streamlit.navigation.page import StreamlitPage
+
+        assert isinstance(settings_page, StreamlitPage) and settings_page.url_path == "set", settings_page
+        assert settings_page.title == dict((s, t) for s, t, _f in preview.PAGES)["set"]
+    assert "settings_page" not in live_kwargs
     assert preview_kwargs.keys() == live_kwargs.keys() and preview_kwargs
     for name, obj in preview_kwargs.items():
         assert obj is live_kwargs[name], (slug, name)
@@ -681,3 +693,88 @@ def test_P0_1_開過持倉體檢再到設定與診斷_進階診斷照印那一�
     body = "\n".join(html.unescape(m.value) for m in diag[0].markdown)
     assert POL.NOT_CONFIGURED_MESSAGE in body and plain.PAGE_NAMES["hld"] in body
     assert f"{plain.PAGE_NAMES['exp']}（" not in body                  # 沒開過的頁不在「已記錄的頁」裡
+
+
+# ═══════════════════════ Phase 3 P0-②：「前往設定與診斷」只換頁 ═══════════════════════
+
+
+def _recorders(monkeypatch):
+    """五頁 source 的 load／save／refetch 換成「記下呼叫再照原樣做」的替身（預覽的頁函式在呼叫時才取屬性）。"""
+    calls = {"save": [], "refetch": [], "load": []}
+    for slug, source in _SOURCES.items():
+        for attr, kind in (("save_setting", "save"), ("refetch", "refetch"), ("load_live", "load")):
+            real = getattr(source, attr, None)
+            if real is None:
+                continue
+
+            def _wrap(*args, _real=real, _kind=kind, _slug=slug, **kwargs):
+                calls[_kind].append((_slug, args))
+                return _real(*args, **kwargs)
+
+            _wrap.__module__ = source.__name__
+            monkeypatch.setattr(source, attr, _wrap)
+    return calls
+
+
+@pytest.mark.parametrize("slug", ["mkt", "hld", "exp", "alo"])
+def test_P0_2_四頁的前往設定與診斷是頁面連結_指向設定與診斷_沒有同名按鈕(no_secrets, biting, slug):
+    from ui_v2 import health
+
+    at = _go(_app_test(), slug)
+    links = [e for e in at.get("page_link") if e.proto.label == health.SETTINGS_LINK_LABEL]
+    assert len(links) == 1, [e.proto for e in at.get("page_link")]
+    assert links[0].proto.page == "set" and links[0].proto.page_script_hash == calc_hash("set")
+    assert health.SETTINGS_LINK_LABEL not in [b.label for b in at.button]
+    assert health.SETTINGS_ELSEWHERE_TEXT not in [c.value for c in at.main.caption]   # 預覽有連結，不寫那一行
+
+
+def _book_state(book):
+    """試算表每一分頁的列（含表頭）與到目前為止的寫入呼叫。"""
+    from _fake_settings_sheet import WRITE_METHODS
+
+    rows = {title: [list(r) for r in ws.rows] for title, ws in book.tabs.items()}
+    writes = [c for c in book.calls if c[0] in WRITE_METHODS]
+    return rows, writes
+
+
+@pytest.mark.parametrize("slug", ["mkt", "hld", "exp", "alo"])
+def test_P0_2_畫頁面連結與換到設定與診斷_save與refetch都是0次_試算表一列未動(settings_book, biting, monkeypatch, slug):
+    """護欄 3：導覽只換頁（44 第七節第三小節之七其五第 4 條的驗法）。畫出連結的那一輪、以及換到設定與診斷之後：
+    任何一頁的存檔與重新取數都沒有被呼叫，設定試算表每一分頁的列與寫入呼叫都與換頁之前相同（讀取照常）。"""
+    calls = _recorders(monkeypatch)
+    at = _go(_app_test(), slug)
+    assert calls["load"], "正控：替身確實接在預覽的呼叫路徑上"
+    assert calls["save"] == [] and calls["refetch"] == [], calls
+    _go(at, "set")      # 先到設定與診斷一次：它自己的讀取（含建分頁）算在「換頁之前」
+    _go(at, slug)
+    before = _book_state(settings_book)
+    _go(at, "set")      # 等同按下連結：連結的目的地就是這一頁（上一條已驗 page 與雜湊）
+    assert any(s == "set" for s, _a in calls["load"]), calls["load"]
+    assert calls["save"] == [] and calls["refetch"] == [], calls
+    assert _book_state(settings_book) == before
+
+
+def test_P0_2_正控_同一組替身之下真的按存檔就記得到_試算表也真的多一列(settings_book, biting, monkeypatch):
+    """上一條「0 次、一列未動」不是空掃：同一組替身與同一本假試算表，在設定與診斷真的按存檔，
+    替身記到呼叫、試算表多一列。"""
+    calls = _recorders(monkeypatch)
+    at = _go(_app_test(), "set")
+    before = _book_state(settings_book)
+    at.text_input(key="live_alo_tolerance_pp").input("99").run()
+    _save_set(at)
+    assert calls["save"], calls
+    assert _book_state(settings_book) != before
+    assert _tolerance_rows(settings_book) == [["alo_tolerance_pp", "99", "float"]]
+
+
+def test_P0_2_寫入用的原文經換頁後在設定與診斷的進階診斷照印(no_secrets, biting):
+    """`NOT_CONFIGURED_MESSAGE`（設定試算表那一句，寫入用的訊息被讀取端回報）：一般畫面 0 次、進階診斷 ≥1 次。"""
+    from ui_v2 import plain
+
+    at = _go(_app_test(), "mkt")
+    assert SET_REPO.NOT_CONFIGURED_MESSAGE not in _main_text(at)
+    _go(at, "set")
+    diag = [e for e in at.main.expander if e.label == plain.ADVANCED_DIAG_TITLE]
+    assert len(diag) == 1
+    body = "\n".join(html.unescape(m.value) for m in diag[0].markdown)
+    assert body.count(SET_REPO.NOT_CONFIGURED_MESSAGE) >= 1
