@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import plain
+from .. import health, health_view, plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -844,7 +844,11 @@ def _live_error_line(exc: BaseException, mask_error) -> str:
     return logic.fetch_failed_text(f"{masked_type}：{masked}")
 
 
-def _render_live_error(exc: BaseException, mask_error) -> None:
+# 「淨值取自預存序列」那一類副標的開頭（`live.CACHE_NOTE_FRESH` 的 `{day}` 之前；中性色那一種＝只顯示最後有效資料）。
+_LAST_VALID_PREFIX = live.CACHE_NOTE_FRESH.split("{", 1)[0]
+
+
+def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> None:
     """正式模式取數或組模型失敗時的整頁畫面（S6b-1）。字面全部沿用既有的，不新寫句子：
 
     - 頁名與提問句：`logic.PAGE_TITLE`、`logic.PAGE_ANSWERS`（與正式模式正常時的頁首同一組）；
@@ -902,9 +906,12 @@ def _render_live_error(exc: BaseException, mask_error) -> None:
     st.markdown(
         f'<div class="hld-line" style="color:{red}">{_esc(plain_line)}</div>', unsafe_allow_html=True
     )
+    # Phase 3 P0-②（44 第七節第三小節之七其五第 2 條）：整頁錯誤畫面那一行本身就是本頁唯一的失敗摘要；
+    # 下面只加一枚只換頁的導覽（不觸發取數、重新整理、存檔或任何寫入）。
+    health_view.render_settings_link(settings_page)
 
 
-def render(*, load_live=None, mask_error=None, save_live=None) -> None:
+def render(*, load_live=None, mask_error=None, save_live=None, settings_page=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數；回傳 `{"dataset": 與 fixtures 情境同形, "live_args": {...}}`，
@@ -931,11 +938,17 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
     正式模式**一定要給**、示範模式**不得給**（與 `mask_error` 同一條規矩）。HLD-4「存檔」經它寫進 `user_setting`；
     **正式結果只讀 `load_live` 交回的已存設定**，「套用」停用（`live.APPLY_DISABLED_REASON`），session 裡的套用值
     在正式模式一律不讀；存檔後下一次重跑重新讀 `user_setting`，正式結果才換成新值。示範模式照舊由「套用」驅動。
+
+    settings_page：選填的 `st.Page`（Phase 3 P0-②；預覽入口傳設定與診斷那一頁）。正式模式頁首資料狀態行旁
+    那一枚「前往設定與診斷」**只換頁**（`ui_v2/health_view.py::render_settings_link`）；不傳時只寫一行說明。
+    示範模式不畫資料狀態行，傳了當場炸。
     """
     if not ((load_live is None) == (mask_error is None) == (save_live is None)):
         raise ValueError(
             "load_live、mask_error、save_live 要一起傳（正式模式三個都要，示範模式三個都不傳）"
         )
+    if load_live is None and settings_page is not None:
+        raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     if load_live is None:
@@ -962,12 +975,21 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
                 **loaded["live_args"]
             )
         except Exception as exc:  # noqa: BLE001 —— 不是吞：下一行整頁改畫錯誤畫面，型別與訊息原文照印（進階診斷）
-            _render_live_error(exc, mask_error)
+            _render_live_error(exc, mask_error, settings_page)
             return
         # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
         model, raw, _status = plain.plain_model(model, page="hld")
         plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
+        # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
+        # 核心卡的新鮮度徽章移到 ④「證據／來源」，「只顯示最後有效資料」的副標在卡上加 ◷。只改呈現（`ui_v2/health.py`）。
+        model, failures = health.dedupe_failures(model)
+        cards = logic.codes_in_layer(model, 2)
+        stale = health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)
+        provenance = health.move_card_provenance(model, cards)
+        status_line = health.status_line(
+            model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
+        )
     plain_mode = load_live is not None
 
     st.markdown(
@@ -984,6 +1006,7 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
         )
     else:
         st.markdown(f'<div class="hld-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
+        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     label1, label2, label3, label4 = (
         (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
@@ -1021,6 +1044,8 @@ def render(*, load_live=None, mask_error=None, save_live=None) -> None:
     )
     for code in logic.codes_in_layer(model, 4):
         _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
+    if plain_mode:
+        health_view.render_provenance(provenance)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(

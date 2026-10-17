@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import plain
+from .. import health, health_view, plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -540,7 +540,21 @@ def _error_line(exc: BaseException, mask_error) -> str:
     return logic.fetch_failed_text(f"{type_name}：{masked}")
 
 
-def render(*, load_live=None, save_live=None, mask_error=None) -> None:
+def _both_keys_failed(model: dict, save_errors) -> list:
+    """ALO-1、ALO-4 各一枚寫兩鍵的「存檔」：兩鍵都失敗時改卡片層那一行（`health.both_keys_save_failed`），回原文清單。
+    兩鍵取自該塊「存檔」按鈕自己的 `_keys`（logic 交出的，不另寫一份）。"""
+    entries = []
+    for block in model["blocks"]:
+        for button in block.get("buttons") or ():
+            keys = tuple(button.get("_keys") or ())
+            if button.get("_action_kind") == "存檔" and len(keys) == 2:
+                entries += health.both_keys_save_failed(
+                    model, block["code"], keys, save_errors, f"{block['code']} {block['title']}"
+                )
+    return entries
+
+
+def render(*, load_live=None, save_live=None, mask_error=None, settings_page=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
@@ -556,7 +570,13 @@ def render(*, load_live=None, save_live=None, mask_error=None) -> None:
     mask_error（總管 2026-10-16 判定，PR #976 稽核後）：選填的遮蔽函式（`source.mask_error`），只用在正式模式組模型失敗
     那一行錯誤原文；遮蔽本身失敗或回傳非字串時，退路只印例外型別、不帶訊息內容（同 `ui_v2/hld/page.py::_live_error_line`）。
     不傳時照舊印原文（訊息只帶保單編號與基金代碼）。只傳 `mask_error` 不傳 `load_live` 是呼叫端的 bug，當場炸。
+
+    settings_page：選填的 `st.Page`（Phase 3 P0-②；預覽入口傳設定與診斷那一頁）。正式模式頁首資料狀態行旁
+    那一枚「前往設定與診斷」**只換頁**（`ui_v2/health_view.py::render_settings_link`）；不傳時只寫一行說明。
+    示範模式不畫資料狀態行，傳了當場炸。
     """
+    if load_live is None and settings_page is not None:
+        raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     if load_live is None and mask_error is not None:
         raise ValueError("mask_error 要與 load_live 一起傳")
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
@@ -605,11 +625,21 @@ def render(*, load_live=None, save_live=None, mask_error=None) -> None:
             _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
             _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
             _html(f'<div class="alo-errline" role="alert">{_esc(plain_line)}</div>')
+            # Phase 3 P0-②：整頁錯誤那一行就是本頁唯一的失敗摘要；下面只加一枚只換頁的導覽。
+            health_view.render_settings_link(settings_page)
             return
         # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
         model, raw, _status = plain.plain_model(model, page="alo")
+        # Phase 3 P0-②（BL-0177）：一枚存檔寫兩鍵、兩鍵都沒存進去 → 卡片層只寫「儲存失敗」，兩鍵的原文各一筆進進階診斷
+        # （logic 照舊只把第一鍵的原文放在卡片層；判定與寫入一行未動）。
+        raw = list(raw) + _both_keys_failed(model, dataset.get("save_errors"))
         plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
+        # 同源錯誤只在頁首資料狀態行摘要一次（44 第七節第三小節之七其二第 3、4 條；`ui_v2/health.py`）。
+        model, failures = health.dedupe_failures(model)
+        status_line = health.status_line(
+            model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date")
+        )
         key = "live"
     plain_mode = load_live is not None
 
@@ -622,6 +652,7 @@ def render(*, load_live=None, save_live=None, mask_error=None) -> None:
         )
     else:
         _html(f'<div class="alo-sub">{_esc(model["answers"])}</div>')
+        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
     # ALO-GAP-灰字落點：照 ALO-1 規則欄現行字面「頁面頂端」。
     _lines(model["top_lines"], "alo-topline")
 
