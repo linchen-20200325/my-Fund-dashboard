@@ -11,10 +11,14 @@
 from __future__ import annotations
 
 import html
+import logging
+from datetime import datetime, timezone
 
 import streamlit as st
 
-from . import health
+from . import health, plain
+
+_log = logging.getLogger(__name__)
 
 
 def _esc(value) -> str:
@@ -63,3 +67,29 @@ def render_provenance(rows) -> None:
             f"<tbody>{body}</tbody></table>",
             unsafe_allow_html=True,
         )
+
+
+def render_load_failure(page: str, exc: BaseException, mask_error, *, fetch_failed_text, title: str, answers: str,
+                        title_class: str, sub_class: str, tone_hex, settings_page=None, link: bool = True) -> None:
+    """正式模式 `load_live()` 拋例外時的整頁畫面（BL-0362；Phase 3 P1-⑤）。體例照持倉體檢既有的
+    `ui_v2/hld/page.py::_render_live_error`：頁名、提問句、一行狀態句（紅、`⛔`），其餘塊不畫；不印 Traceback、不吞。
+
+    - 一般畫面那一行：`plain.plain_error_line`（P0-① 既有的字：「⛔ <資料類> 取數失敗：<一句狀態>」），不帶例外型別與原文；
+    - 原文（`health.load_failure_line`：型別＋遮蔽後訊息）收進跨頁的原始訊息（`plain.record_raw`，設定與診斷頁的進階診斷照印），
+      並寫一筆 log（`CLAUDE.md` 第三節第三小節：接住例外至少要 log）；
+    - `link`：四頁接一枚「前往設定與診斷」（`render_settings_link`，只換頁；44 第七節第三小節之七其五第 2 條）；
+      設定與診斷頁自己傳 `False`（它就是那一頁）。
+    """
+    raw_line = health.load_failure_line(exc, mask_error, fetch_failed_text)
+    plain_line, raw = plain.plain_error_line(raw_line, page=page)
+    plain.record_raw(st.session_state, page, raw, datetime.now(timezone.utc))
+    _log.warning("ui_v2 %s 正式頁載入失敗：%s", page, raw_line)
+    st.markdown(f'<div class="{_esc(title_class)}">{_esc(title)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="{_esc(sub_class)}">{_esc(answers)}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="v2-load-failure" role="alert" style="color:{tone_hex("紅")};font-weight:700">'
+        f"{_esc(plain_line)}</div>",
+        unsafe_allow_html=True,
+    )
+    if link:
+        render_settings_link(settings_page)

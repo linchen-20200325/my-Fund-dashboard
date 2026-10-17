@@ -22,6 +22,7 @@ ALO-3 的存檔客戶仍未授權，照舊停用。不傳 `load_live`／`save_li
 from __future__ import annotations
 
 import html
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -29,6 +30,8 @@ import streamlit as st
 
 from .. import health, health_view, plain
 from . import fixtures, live, logic, theme
+
+_log = logging.getLogger(__name__)
 
 _MAX_PROBE_WIDTH = 2000
 
@@ -530,7 +533,10 @@ def _error_line(exc: BaseException, mask_error) -> str:
     """正式頁錯誤行：「⛔ 取數失敗：<型別>：<遮蔽後訊息>」。遮蔽失敗或回傳非字串 → 只印型別（不往外拋、不帶訊息）。"""
     type_name = type(exc).__name__
     if mask_error is None:
-        return logic.fetch_failed_text(f"{type_name}：{exc}")
+        # ~~`return logic.fetch_failed_text(f"{type_name}：{exc}")`~~ → 2026-10-17 P1-⑤ 稽核順修（有意識的更正，
+        # 不是漏刪；決策者：AI 總管依稽核）：沒有遮蔽函式時只寫型別，與 `health.load_failure_line` 一致 ——
+        # 沒有遮蔽過的原文不收進進階診斷、也不寫進 log。正式入口一定會傳遮蔽函式，這一支只有測試會走到。
+        return logic.fetch_failed_text(type_name)
     try:
         masked = mask_error(str(exc))
         if not isinstance(masked, str):
@@ -538,6 +544,26 @@ def _error_line(exc: BaseException, mask_error) -> str:
     except Exception:  # noqa: BLE001 —— 不是吞：照樣畫錯誤行，只是不帶訊息內容
         return logic.fetch_failed_text(type_name)
     return logic.fetch_failed_text(f"{type_name}：{masked}")
+
+
+def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> None:
+    """正式頁整頁錯誤畫面：頁名、提問句、一行狀態句，其餘塊不畫（體例同 `ui_v2/hld/page.py::_render_live_error`）。
+
+    兩個入口共用（Phase 3 P1-⑤ 抽出，畫法一字未改）：組模型那一步的 `ValueError`（總管 2026-10-16 判定 R3），
+    與 `load_live()` 本身拋的任何例外（BL-0362；原本沒有人接，正式頁畫出帶堆疊的例外框）。
+    """
+    # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
+    # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。
+    raw_line = _error_line(exc, mask_error)
+    plain_line, raw = plain.plain_error_line(raw_line, page="alo")
+    plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
+    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳時只有型別）。
+    _log.warning("ui_v2 alo 正式頁載入或組模型失敗：%s", raw_line)
+    _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
+    _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
+    _html(f'<div class="alo-errline" role="alert">{_esc(plain_line)}</div>')
+    # Phase 3 P0-②：整頁錯誤那一行就是本頁唯一的失敗摘要；下面只加一枚只換頁的導覽。
+    health_view.render_settings_link(settings_page)
 
 
 def _both_keys_failed(model: dict, save_errors) -> list:
@@ -591,7 +617,11 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # 輸入欄的 key 前綴：示範模式帶情境名（換情境時不沿用上一個情境留在 session 裡的值）。
         key = scenario
     else:
-        live_input = load_live()
+        try:
+            live_input = load_live()
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：整頁改畫同一個錯誤畫面，原文進進階診斷並記 log（BL-0362）
+            _render_live_error(exc, mask_error, settings_page)
+            return
         dataset = live_input["dataset"]
         if save_live is not None:
             # 上一次按存檔留下的逐鍵失敗併進 save_errors，交給 logic 決定畫在卡片層還是該鍵原位。
@@ -618,15 +648,7 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
                 wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
             )
         except ValueError as exc:
-            # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
-            # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。
-            plain_line, raw = plain.plain_error_line(_error_line(exc, mask_error), page="alo")
-            plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
-            _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
-            _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
-            _html(f'<div class="alo-errline" role="alert">{_esc(plain_line)}</div>')
-            # Phase 3 P0-②：整頁錯誤那一行就是本頁唯一的失敗摘要；下面只加一枚只換頁的導覽。
-            health_view.render_settings_link(settings_page)
+            _render_live_error(exc, mask_error, settings_page)
             return
         # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。

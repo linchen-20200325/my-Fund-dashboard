@@ -54,6 +54,12 @@ def _secret_values() -> list:
     )
 
 
+def mask_error(message: str) -> str:
+    """給 `page.render(mask_error=...)`：整頁載入失敗時的訊息原文經遮蔽，才收進設定與診斷頁的進階診斷
+    （Phase 3 P1-⑤，BL-0362；同 `ui_v2/hld/source.py::mask_error`）。"""
+    return masking.mask_message(message, _secret_values())
+
+
 def _now_utc() -> str:
     return datetime.now(timezone.utc).strftime(_TIME_FORMAT)
 

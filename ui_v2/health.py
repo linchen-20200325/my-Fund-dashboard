@@ -438,6 +438,31 @@ def mark_last_valid(display: dict, codes, prefix: str) -> bool:
     return found
 
 
+# ───────────────────────── 整頁載入失敗（BL-0362；Phase 3 P1-⑤） ─────────────────────────
+
+
+def load_failure_line(exc: BaseException, mask_error, fetch_failed_text) -> str:
+    """正式模式 `load_live()` 拋例外時那一行原文：「⛔ 取數失敗：<型別>：<遮蔽後訊息>」（給設定與診斷頁的進階診斷）。
+
+    組法照持倉體檢既有的 `ui_v2/hld/page.py::_live_error_line`（總管 2026-10-03 裁定）：型別名與訊息都經 `mask_error`。
+    `fetch_failed_text`：該頁 `logic.fetch_failed_text`（44 第五節第五小節 `系統錯誤` 那一列的模板；本模組不另寫一份）。
+    退路（**不往外拋** —— 往外拋就是整段 Traceback）：沒有遮蔽函式（`mask_error is None`）、`str(exc)` 本身拋、
+    遮蔽拋、或回傳非字串 ⇒ 只寫例外型別，**不帶任何訊息內容**（沒有遮蔽過的原文不收進進階診斷）。
+    沒有遮蔽函式時只寫型別，是本組擬定（44／59 沒有寫；理由：進階診斷的說明句寫「原文已遮蔽憑證」）。
+    """
+    type_name = type(exc).__name__
+    if mask_error is None:
+        return fetch_failed_text(type_name)
+    try:
+        masked_type = mask_error(type_name)
+        masked = mask_error(str(exc))
+        if not isinstance(masked_type, str) or not isinstance(masked, str):
+            raise TypeError("mask_error 應回傳字串")
+    except Exception:  # noqa: BLE001 —— 不是吞：照樣組出錯誤行，只是不帶訊息內容
+        return fetch_failed_text(type_name)
+    return fetch_failed_text(f"{masked_type}：{masked}")
+
+
 # ───────────────────────── 兩鍵一起存、兩鍵都失敗（BL-0177） ─────────────────────────
 
 

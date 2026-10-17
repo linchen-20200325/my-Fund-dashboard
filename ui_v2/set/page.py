@@ -21,7 +21,7 @@ import re
 
 import streamlit as st
 
-from .. import plain
+from .. import health_view, plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -516,7 +516,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
+def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None) -> None:
     """畫整頁。
 
     三個參數都不傳（None）時行為與加這些參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
@@ -524,6 +524,12 @@ def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
     並套用 `live.apply_live_notes` 的正式模式調整；「存檔」呼叫 `save_live(鍵, 值, value_kind)`，
     「重新取數」呼叫 `refetch_live(層級)`。頁首副標只印本頁的提問句（草稿 ✂1）。
     三個函式要一起傳：只傳其中一部分就是呼叫端的 bug，當場炸。
+
+    mask_error：選填的遮蔽函式（字串 → 遮蔽後的字串；Phase 3 P1-⑤，正式入口傳 `source.mask_error`）。
+    正式模式 `load_live()` 拋例外 → 不印 Traceback、也不吞（BL-0362）：整頁改畫錯誤畫面
+    （`ui_v2/health_view.py::render_load_failure`；本頁就是設定與診斷，不掛「前往設定與診斷」），
+    型別與遮蔽後的訊息原文收進進階診斷、並在同一頁畫出那一枚進階診斷；不傳遮蔽函式時只收型別。
+    示範模式傳了當場炸。
     """
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
@@ -531,6 +537,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
     if load_live is None:
         if save_live is not None or refetch_live is not None:
             raise ValueError("save_live／refetch_live 要與 load_live 一起傳")
+        if mask_error is not None:
+            raise ValueError("mask_error 要與 load_live 一起傳")
         scenario = _pick_scenario()
         save_failed = _pick_save_failed()
         model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
@@ -539,7 +547,19 @@ def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
     else:
         if save_live is None or refetch_live is None:
             raise ValueError("正式模式要同時傳 load_live、save_live、refetch_live")
-        live_input = load_live()
+        try:
+            live_input = load_live()
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：整頁改畫錯誤畫面，原文進進階診斷並記 log（BL-0362）
+            health_view.render_load_failure(
+                "set", exc, mask_error, fetch_failed_text=logic.fetch_failed_text,
+                title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS,
+                title_class="set-title", sub_class="set-sub", tone_hex=theme.tone_hex, link=False,
+            )
+            # 原文只在進階診斷照印（44 第七節第三小節之七其二第 8 條）；本頁就是那一頁，錯誤畫面下面直接畫那一枚。
+            _render_advanced_diag()
+            return
+        # 本頁上一次載入失敗時記下的那一筆，載入成功就拿掉（免得舊的錯誤留在進階診斷裡說謊）。
+        plain.clear_raw(st.session_state, "set")
         save_results = st.session_state.pop("_set_live_save_results", None)
         dataset = live.dataset_with_save_results(live_input["dataset"], save_results)
         model = live.apply_live_notes(logic.build_page_model(dataset), dataset, live_input["notes"],
