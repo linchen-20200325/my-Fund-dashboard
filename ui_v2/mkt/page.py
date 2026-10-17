@@ -559,7 +559,7 @@ def _pick_dataset() -> tuple[str, dict]:
     return name, datasets[name]
 
 
-def render(*, load_live=None, save_live=None, settings_page=None) -> None:
+def render(*, load_live=None, save_live=None, settings_page=None, mask_error=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 {"dataset": 與 fixtures 情境同形, "notes": {...}}）。
@@ -576,18 +576,34 @@ def render(*, load_live=None, save_live=None, settings_page=None) -> None:
     settings_page：選填的 `st.Page`（Phase 3 P0-②；預覽入口 `ui_v2/app_preview.py` 傳設定與診斷那一頁）。
     正式模式頁首資料狀態行旁那一枚「前往設定與診斷」**只換頁**（`ui_v2/health_view.py::render_settings_link`）；
     不傳（單頁入口）時只寫一行「完整資料狀態在『設定與診斷』頁」。示範模式不畫資料狀態行，傳了當場炸。
+
+    mask_error：選填的遮蔽函式（字串 → 遮蔽後的字串；Phase 3 P1-⑤，正式入口傳 `source.mask_error`）。
+    正式模式 `load_live()` 拋例外 → 不印 Traceback、也不吞（BL-0362）：整頁改畫錯誤畫面
+    （`ui_v2/health_view.py::render_load_failure`），一般畫面只寫一句狀態加「前往設定與診斷」，
+    型別與遮蔽後的訊息原文收進設定與診斷頁的進階診斷；不傳遮蔽函式時只收型別。示範模式傳了當場炸。
     """
     if load_live is None and save_live is not None:
         raise ValueError("save_live 要與 load_live 一起傳")
     if load_live is None and settings_page is not None:
         raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
+    if load_live is None and mask_error is not None:
+        raise ValueError("mask_error 要與 load_live 一起傳")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     live_input = None
     if load_live is None:
         scenario_name, dataset = _pick_dataset()
     else:
-        live_input = load_live()
+        try:
+            live_input = load_live()
+        except Exception as exc:  # noqa: BLE001 —— 不是吞：整頁改畫錯誤畫面，原文進進階診斷並記 log（BL-0362）
+            health_view.render_load_failure(
+                "mkt", exc, mask_error, fetch_failed_text=logic.fetch_failed_text,
+                title=logic.PAGE_TITLE, answers=logic.PAGE_ANSWERS,
+                title_class="mkt-page-title", sub_class="mkt-page-sub", tone_hex=theme.tone_hex,
+                settings_page=settings_page,
+            )
+            return
         scenario_name, dataset = None, live_input["dataset"]
 
     if live_input is None:

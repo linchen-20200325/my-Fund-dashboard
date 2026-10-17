@@ -45,6 +45,12 @@ def _secret_values() -> list:
     )
 
 
+def mask_error(message: str) -> str:
+    """給 `page.render(mask_error=...)`：整頁載入失敗時的訊息原文經遮蔽，才收進設定與診斷頁的進階診斷
+    （Phase 3 P1-⑤，BL-0362；同 `ui_v2/hld/source.py::mask_error`）。"""
+    return masking.mask_message(message, _secret_values())
+
+
 def _fred_api_key() -> str:
     """FRED 三鍵的金鑰（2026-10-13 起）：`st.secrets` 優先、環境變數其次（同 `app.py::_load_keys` 的鏡像方向）。
     讀不到回空字串，由 L2 寫成「未設定 FRED_API_KEY」的取數失敗（49 §4.1），本層不補任何值。"""

@@ -342,6 +342,11 @@ def not_applicable_text(reason: str) -> str:
     return "⬜ 不適用：" + reason
 
 
+# 頁名與提問句（2026-10-17 Phase 3 P1-⑤ 抽成常數，字面一字未改：整頁載入失敗的畫面要用同一組，體例同其他四頁）。
+PAGE_TITLE = "市場總覽"
+PAGE_ANSWERS = "現在的市場環境，和我上次看的時候比，變了哪裡"
+
+
 def fetch_failed_text(message: str) -> str:
     """訊息原文照印 —— 不改寫成安撫語句，也不截斷。"""
     return "⛔ 取數失敗：" + message
@@ -1375,7 +1380,7 @@ def build_page_model(
                               nothing_text=nothing))
 
     return {
-        "title": "市場總覽",
+        "title": PAGE_TITLE,
         # 客戶 2026-10-13 裁示：機器看得出「使用者選擇不顯示／資料未備／設定不完整／真實資料值」四者的差別。
         "_display_states": states,
         "_comparison_state": comparison_state(window_days, baseline_date, settings_error=settings_error,
@@ -1385,7 +1390,7 @@ def build_page_model(
         # N1：`_display_states` 記的是每一個鍵（有值／資料未備／使用者選擇不顯示），
         # 「為什麼列出這些」記在這裡 —— 設定讀不到時為 `setting_unreadable`，不以 `not_ready` 充數。
         "_selection_state": selection,
-        "answers": "現在的市場環境，和我上次看的時候比，變了哪裡",
+        "answers": PAGE_ANSWERS,
         "_viewport_width": viewport_width,
         "_columns": columns_for_width(viewport_width),
         "blocks": blocks,
