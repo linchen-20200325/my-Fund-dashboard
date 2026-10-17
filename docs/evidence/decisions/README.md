@@ -10,6 +10,8 @@
 | `2026-10-16_proposal8_approval.md` | 客戶 2026-10-16 提案單 #8 核准裁示全文（`docs/DECISIONS.md` `DEC-2026-10-16-14`；落地為 `docs/v2/57_amendment_8_directional_judgment.md`） | 客戶 2026-10-16 對話中正式核准，經總管逐字轉存 | 2026-10-16 | main `66b6033`（全長 `66b60336589b7fe04bce051f629bb76ff41c692f`） | 6170 | `21c5e3843d76aa21ca53223f505f5a6583025cc066719ea450197fa423cebb06` |
 | `2026-10-17_uiux_pids_direction.md` | 客戶 2026-10-17 UI/UX 與 Personal Investment Decision System 長期方向登記指示全文（`docs/DECISIONS.md` `DEC-2026-10-17-01`；`docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉） | 客戶 2026-10-17 對話中的指示，經總管於派工單內轉存 | 2026-10-17 | main `57f03c9`（全長 `57f03c9188f35cf0aaee147625e159aaa002b6ad`） | 5067 | `8e15f752bdffac8d1f3f991bdf3529033912a1a2b061de116d0722c140301923` |
 | `2026-10-17_phase3_8_rulings.md` | 客戶 2026-10-17 Phase 3 UI/UX 八題裁示全文（`docs/v2/58_ui_ux_constitution.md` 第 13 節 8 題照總管建議核准＋六條護欄；`docs/DECISIONS.md` `DEC-2026-10-17-03`） | 客戶 2026-10-17 在對話中的裁示，經總管逐字轉存 | 2026-10-17 | main `10db810`（全長 `10db8108e64c0809d52e22375d0032ac061fd750`） | 3942 | `e23e7332a3c4c75c2b6fa5ae8ca799f46586ba14366e5bd3097c015acb6843fc` |
+| `2026-10-17_silent_cruise_rule.md` | 客戶 2026-10-17 靜默自主巡航／回報節流長期規則裁示全文（`docs/DECISIONS.md` `DEC-2026-10-17-04`；落地為 `PROJECT_RULES.md` 第 3 節 3.1） | 客戶 2026-10-17 在對話中的裁示，經總管逐字轉存 | 2026-10-17 | 分支 `claude/fund-dashboard-b-ui-phase3-0hdhsy` `3c44ebc`（全長 `3c44ebcaba0a7b3660289cd0fc84986ab40c79f9`；不是 main） | 2870 | `e01ea2ffc4f095dbd24bed4a578a95d215385875fdd7813e65fb1dc0bc31a762` |
+| `2026-10-17_effort_management_rule.md` | 客戶 2026-10-17 模型／推理強度主動管理永久條款全文，含同日補充（`docs/DECISIONS.md` `DEC-2026-10-17-05`；落地為 `PROJECT_RULES.md` 第 5 節 5.1） | 客戶 2026-10-17 在對話中的追加永久條款，經總管逐字轉存 | 2026-10-17 | 同上 | 3830 | `e2a62e0e537ab060c4c2ac90a48975a473d638344cce8797e2fb25cf4d088cf7` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -55,6 +57,28 @@
 - 派工單圍欄外另有總管對各題選項的說明，不是客戶字句，未收（見該檔檔頭）。
 - 雜湊為 2026-10-17 實跑。
 
+### `2026-10-17_silent_cruise_rule.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 2870 | `e01ea2ffc4f095dbd24bed4a578a95d215385875fdd7813e65fb1dc0bc31a762` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 1168 | `58d6c2979f0f5fc93a225ffeb0fff429b66ef9b43f8f5b1b54d4d310406233b1` |
+
+- 圍欄內文是文件實作組依總管派工單圍欄內的字句照抄；本組沒有另存派工單原文做逐位元組比對（見該筆 DECISIONS 的未查證段）。
+- 雜湊為 2026-10-17 實跑。
+
+### `2026-10-17_effort_management_rule.md` 的三個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋兩段圍欄） | 3830 | `e2a62e0e537ab060c4c2ac90a48975a473d638344cce8797e2fb25cf4d088cf7` |
+| 第一段圍欄內文（條款本文；無跳脫碼） | 1666 | `7881b0304e781106a63afb5860245b2a71c55eea4c10d9018d320d2afb18b463` |
+| 第二段圍欄內文（同日補充；無跳脫碼） | 388 | `a9754f0309a6e54473f81871308cec85f8871eba9423a9956341e6a168c3fffb` |
+
+- 兩段圍欄內文是文件實作組依總管兩則追加訊息圍欄內的字句照抄；同樣沒有另存原文做逐位元組比對。
+- 本檔有兩段圍欄，上方驗證指令的貪婪比對會把兩段連同中間文字抓成一段；本檔請改用 `re.findall(r'```text\n(.*?)```\n', t, re.S)` 逐段算。
+- 雜湊為 2026-10-17 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -64,6 +88,8 @@
 `2026-10-17_uiux_pids_direction.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-17 實跑），無撞字、無跳脫碼。
 
 `2026-10-17_phase3_8_rulings.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-17 實跑），無撞字、無跳脫碼。
+
+`2026-10-17_silent_cruise_rule.md`、`2026-10-17_effort_management_rule.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-17 實跑），無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 
@@ -89,3 +115,5 @@ PY
 `2026-10-17_uiux_pids_direction.md`：把上方指令裡的檔名換成 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md` 再跑；第一行應等於該檔雜湊表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`。
 
 `2026-10-17_phase3_8_rulings.md`：把上方指令裡的檔名換成 `docs/evidence/decisions/2026-10-17_phase3_8_rulings.md` 再跑；第一行應等於該檔雜湊表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-17_phase3_8_rulings.md`。
+
+`2026-10-17_silent_cruise_rule.md`：把上方指令裡的檔名換成該檔再跑；第一行應等於該檔雜湊表第二列；第二行與第一行相同（無跳脫碼可換）。`2026-10-17_effort_management_rule.md` 有兩段圍欄，改用非貪婪 `findall` 逐段算（見該檔雜湊表下註），兩值應依序等於第二、三列。整檔：`sha256sum <該檔>`。
