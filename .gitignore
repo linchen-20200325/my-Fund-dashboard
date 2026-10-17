@@ -71,3 +71,6 @@ codes.txt
 #   請明確 `git add -f scratchpad/<檔名>` 把它加進版控,**不要**靠這條規則把它擋在外面
 #   —— 擋掉不等於保存。姊妹 repo `my-stock-dashboard` 就有幾份筆記是刻意被追蹤的。
 scratchpad/
+
+# agent worktree（harness 建立的隔離 checkout）:不是 repo 內容;不忽略會讓 stop hook 反覆要求 commit/push。只忽略這一層,不忽略整個 .claude/。
+.claude/worktrees/
