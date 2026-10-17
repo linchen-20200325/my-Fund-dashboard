@@ -112,7 +112,36 @@ def test_原文經遮蔽才收進進階診斷(slug):
     assert raw == [f"⛔ 取數失敗：RuntimeError：{_MESSAGE.replace(_SECRET, _MASK)}"], raw
 
 
-@pytest.mark.parametrize("slug", ("mkt", "exp", "set"))
+def _run_logged(slug, caplog, mask="ok"):
+    import logging
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        at = _run(slug, mask)
+    records = [r for r in caplog.records if r.levelno == logging.WARNING and r.name.startswith("ui_v2.")]
+    return at, records
+
+
+@pytest.mark.parametrize("slug", _PAGES)
+def test_載入失敗寫一筆WARNING_內容經遮蔽(slug, caplog):
+    """CLAUDE.md 第三節第三小節：接住例外至少要 log（P1-⑤ 稽核必修：拿掉 log 這條要紅）。"""
+    at, records = _run_logged(slug, caplog)
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(records) == 1, [(r.name, r.getMessage()) for r in records]
+    message = records[0].getMessage()
+    assert "RuntimeError" in message and _MASK in message, message
+    assert _SECRET not in message, message
+
+
+@pytest.mark.parametrize("slug", _PAGES)
+def test_沒有遮蔽函式時_log只有型別_不含假秘密值(slug, caplog):
+    at, records = _run_logged(slug, caplog, mask="none")
+    assert len(records) == 1, [(r.name, r.getMessage()) for r in records]
+    message = records[0].getMessage()
+    assert "RuntimeError" in message and _SECRET not in message and "上游讀取失敗" not in message, message
+
+
+@pytest.mark.parametrize("slug", _PAGES)
 @pytest.mark.parametrize("mask", ("none", "raises"))
 def test_沒有遮蔽函式或遮蔽壞了_只收型別_不帶訊息(slug, mask):
     at = _run(slug, mask)

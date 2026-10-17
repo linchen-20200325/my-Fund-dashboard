@@ -533,7 +533,10 @@ def _error_line(exc: BaseException, mask_error) -> str:
     """正式頁錯誤行：「⛔ 取數失敗：<型別>：<遮蔽後訊息>」。遮蔽失敗或回傳非字串 → 只印型別（不往外拋、不帶訊息）。"""
     type_name = type(exc).__name__
     if mask_error is None:
-        return logic.fetch_failed_text(f"{type_name}：{exc}")
+        # ~~`return logic.fetch_failed_text(f"{type_name}：{exc}")`~~ → 2026-10-17 P1-⑤ 稽核順修（有意識的更正，
+        # 不是漏刪；決策者：AI 總管依稽核）：沒有遮蔽函式時只寫型別，與 `health.load_failure_line` 一致 ——
+        # 沒有遮蔽過的原文不收進進階診斷、也不寫進 log。正式入口一定會傳遮蔽函式，這一支只有測試會走到。
+        return logic.fetch_failed_text(type_name)
     try:
         masked = mask_error(str(exc))
         if not isinstance(masked, str):
@@ -554,7 +557,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     raw_line = _error_line(exc, mask_error)
     plain_line, raw = plain.plain_error_line(raw_line, page="alo")
     plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
-    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳遮蔽函式時是測試）。
+    # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳時只有型別）。
     _log.warning("ui_v2 alo 正式頁載入或組模型失敗：%s", raw_line)
     _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
     _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
