@@ -9,6 +9,7 @@
 | `2026-10-16_governance_11_rulings.md` | 客戶 2026-10-16 治理十一項裁示全文（`docs/DECISIONS.md` `DEC-2026-10-16-03`～`DEC-2026-10-16-13`） | 客戶 2026-10-16 對話中正式裁示，經總管逐字轉存 | 2026-10-16 | main `ab30239`（全長 `ab302390886e1818f0d9a56afccdf3ba9dd7a41b`） | 9439 | `77ca3b636a590706eaea07016a279003feb25dfd3b2f5480fad1bdce566497f5` |
 | `2026-10-16_proposal8_approval.md` | 客戶 2026-10-16 提案單 #8 核准裁示全文（`docs/DECISIONS.md` `DEC-2026-10-16-14`；落地為 `docs/v2/57_amendment_8_directional_judgment.md`） | 客戶 2026-10-16 對話中正式核准，經總管逐字轉存 | 2026-10-16 | main `66b6033`（全長 `66b60336589b7fe04bce051f629bb76ff41c692f`） | 6170 | `21c5e3843d76aa21ca53223f505f5a6583025cc066719ea450197fa423cebb06` |
 | `2026-10-17_uiux_pids_direction.md` | 客戶 2026-10-17 UI/UX 與 Personal Investment Decision System 長期方向登記指示全文（`docs/DECISIONS.md` `DEC-2026-10-17-01`；`docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉） | 客戶 2026-10-17 對話中的指示，經總管於派工單內轉存 | 2026-10-17 | main `57f03c9`（全長 `57f03c9188f35cf0aaee147625e159aaa002b6ad`） | 5067 | `8e15f752bdffac8d1f3f991bdf3529033912a1a2b061de116d0722c140301923` |
+| `2026-10-17_phase3_8_rulings.md` | 客戶 2026-10-17 Phase 3 UI/UX 八題裁示全文（`docs/v2/58_ui_ux_constitution.md` 第 13 節 8 題照總管建議核准＋六條護欄；`docs/DECISIONS.md` `DEC-2026-10-17-03`） | 客戶 2026-10-17 在對話中的裁示，經總管逐字轉存 | 2026-10-17 | main `10db810`（全長 `10db8108e64c0809d52e22375d0032ac061fd750`） | 3942 | `e23e7332a3c4c75c2b6fa5ae8ca799f46586ba14366e5bd3097c015acb6843fc` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
@@ -43,6 +44,17 @@
 - 圍欄內文與總管派工單轉存的字句之間有三項格式處理（拿掉最外層引號、不收一個英文引導詞、段間空行），逐項見該檔檔頭；字句本身未改。文件實作組 2026-10-17 以 `sha256sum` 對 scratchpad 內的轉存檔與存檔圍欄實跑，兩值相同（轉存檔不入 repo）。
 - 雜湊為 2026-10-17 實跑。
 
+### `2026-10-17_phase3_8_rulings.md` 的兩個雜湊
+
+| 對象 | 大小（bytes） | sha256 |
+|---|---|---|
+| 整檔（檔頭說明＋圍欄） | 3942 | `e23e7332a3c4c75c2b6fa5ae8ca799f46586ba14366e5bd3097c015acb6843fc` |
+| 圍欄內文（＝檔內實際位元組；無跳脫碼，故沒有「換回原字」那一列） | 1511 | `ba60b40a434f7f036d06bd54af69690ffa5b1aee42fcad607053ff658aef4e9f` |
+
+- 圍欄內文與總管派工單圍欄內的字句逐位元組相同：文件實作組 2026-10-17 把派工單圍欄內文另存到 scratchpad（不入 repo）後以 `sha256sum` 實跑，與存檔圍欄的值相同。
+- 派工單圍欄外另有總管對各題選項的說明，不是客戶字句，未收（見該檔檔頭）。
+- 雜湊為 2026-10-17 實跑。
+
 ## 撞字登記
 
 全文含交接本第 7 節〈客戶 2026-10-05 接手訊息：禁詞〉詞表的**第 7、8 個詞**，共 3 處，都在治理第 6 項「未來允許的方向」列舉內（圍欄內第 114、116、117 行）。依該節〈禁詞〉體例以 Unicode 跳脫碼書寫（`\u52a0\u78bc`、`\u6e1b\u78bc`），其餘一字未改。第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。依客戶 2026-10-15 Phase 1.5（A+ 修正版）裁示，第 5～8 個詞已不是永久禁詞；本批新增行仍以 0 命中為目標，故改用跳脫碼並在此登記（與 `branch_archive/pr838/README.md` 不同：那裡是逐字摘錄照字面保留、只做登記）。
@@ -50,6 +62,8 @@
 `2026-10-16_proposal8_approval.md`：裁示全文同樣含詞表的**第 7、8 個詞**，共 3 處，都在「新正式政策邊界」一段允許的方向性狀態列舉內（圍欄內第 62、64、65 行）：第 7 個詞單獨一列一次、「暫停」後接第 7 個詞一次、第 8 個詞單獨一列一次。依同一體例以 Unicode 跳脫碼書寫，其餘一字未改；第 1～6 個詞以 2026-10-16 碼位組字掃描 0 命中。
 
 `2026-10-17_uiux_pids_direction.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-17 實跑），無撞字、無跳脫碼。
+
+`2026-10-17_phase3_8_rulings.md`：圍欄內以詞表八個詞碼位組字掃描 0 命中（2026-10-17 實跑），無撞字、無跳脫碼。
 
 已實測：無行尾空白、結尾單一換行、無 session 識別碼、無合併衝突標記。
 
@@ -73,3 +87,5 @@ PY
 `2026-10-16_proposal8_approval.md`：把上方指令裡的檔名換成 `docs/evidence/decisions/2026-10-16_proposal8_approval.md` 再跑一次；第一行應等於 `2026-10-16_proposal8_approval.md` 雜湊表第二列，第二行應等於第三列。整檔：`sha256sum docs/evidence/decisions/2026-10-16_proposal8_approval.md`。
 
 `2026-10-17_uiux_pids_direction.md`：把上方指令裡的檔名換成 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md` 再跑；第一行應等於該檔雜湊表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`。
+
+`2026-10-17_phase3_8_rulings.md`：把上方指令裡的檔名換成 `docs/evidence/decisions/2026-10-17_phase3_8_rulings.md` 再跑；第一行應等於該檔雜湊表第二列；第二行與第一行相同（無跳脫碼可換）。整檔：`sha256sum docs/evidence/decisions/2026-10-17_phase3_8_rulings.md`。
