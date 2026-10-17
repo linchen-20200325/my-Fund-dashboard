@@ -70,6 +70,12 @@ class _FakeSt:
     def checkbox(self, label, value=False, key=None, **_kw):
         return self._widget(key, value)
 
+    def multiselect(self, label, options=(), key=None, max_selections=None, disabled=False, help=None, **_kw):
+        # Phase 3 P0-③：正式模式 MKT-5 改多選清單。記下選項與上限，供測試驗；沒選過時值為空清單（同 streamlit）。
+        self.multiselects = getattr(self, "multiselects", {})
+        self.multiselects[key] = (list(options), max_selections, disabled, help)
+        return self._widget(key, [])
+
     def number_input(self, label, value=None, key=None, **_kw):
         return self._widget(key, value)
 
@@ -119,7 +125,9 @@ def test_按存檔之後重跑才生效_未按存檔的欄位值不進三張核�
     text = _render(fake)                                  # 欄位有值、沒按存檔：正式結果不動
     assert text.count("⬜ 不適用：尚未設定觀察窗") == 3
     assert "與觀察窗起點的差" not in text
-    assert fake.buttons["mkt4_apply"][2] is True          # 正式模式的套用停用
+    # ~~assert fake.buttons["mkt4_apply"][2] is True  # 正式模式的套用停用~~ → 2026-10-17 Phase 3 P0-③（44 第七節第三小節之七
+    # 其二第 7 條；有意識的更正，不是漏刪）：正式模式下永遠停用的「套用」一般畫面不畫。
+    assert "mkt4_apply" not in fake.buttons
     fake.click("mkt4_save")                               # callback：只寫 user_setting
     assert [w["setting_key"] for w in sheet.writes] == ["mkt_window_days", "mkt_baseline_date", "mkt_compare_pair"]
     text = _render(fake)                                  # 重跑 → load_live 重新讀 → 生效
@@ -144,8 +152,8 @@ def test_新的工作階段以已存值填回欄位與勾選框(env):
     _render(fake)
     assert fake.session_state["mkt4_days"] == 5
     assert fake.session_state["mkt4_baseline"] == date(2026, 9, 21)
-    assert fake.session_state["mkt5_vol_index"] is True
-    assert fake.session_state["mkt5_credit_spread_pct"] is False
+    # ~~逐鍵勾選框 mkt5_<鍵> 依已存清單~~ → 2026-10-17 Phase 3 P0-③：多選清單一格（判定不變）。
+    assert fake.session_state["mkt5_pick"] == ["vol_index"]
 
 
 def test_勾選存檔後重跑才過濾明細_核心卡不變(env):
@@ -153,7 +161,7 @@ def test_勾選存檔後重跑才過濾明細_核心卡不變(env):
     first = _render(fake)
     cards_before = [x for x in fake.log if "mkt-card" in str(x)]
     assert "尚未選定任何指標，請在指標清單勾選並存檔" in first          # 從未存過：明細不列（總管裁定）
-    fake.session_state["mkt5_vol_index"] = True
+    fake.session_state["mkt5_pick"] = ["vol_index"]
     _render(fake)
     assert "依指標清單設定不顯示" not in "\n".join(str(x) for x in fake.log)   # 未存：明細照舊
     fake.click("mkt5_save")
@@ -183,13 +191,11 @@ def test_H1_已存值存在時_使用者改的欄位與勾選框_重跑後保留
     _render(fake)
     fake.session_state["mkt4_days"] = 7
     fake.session_state["mkt4_baseline"] = date(2026, 9, 1)
-    fake.session_state["mkt5_vol_index"] = False
-    fake.session_state["mkt5_credit_spread_pct"] = True
+    fake.session_state["mkt5_pick"] = ["credit_spread_pct"]
     text = _render(fake)
     assert fake.session_state["mkt4_days"] == 7
     assert fake.session_state["mkt4_baseline"] == date(2026, 9, 1)
-    assert fake.session_state["mkt5_vol_index"] is False
-    assert fake.session_state["mkt5_credit_spread_pct"] is True
+    assert fake.session_state["mkt5_pick"] == ["credit_spread_pct"]
     assert live.TEXT_UNSAVED_WINDOW in text and live.TEXT_UNSAVED_PICKS in text
     # N2：標題仍寫已存那一組
     assert "5 日曆日，基準日 2026-09-21" in text and "7 日曆日" not in text
@@ -198,10 +204,11 @@ def test_H1_已存值存在時_使用者改的欄位與勾選框_重跑後保留
 def test_N4_從未存過_勾選框不預勾_明細寫請勾選並存檔(env):
     _sheet, fake = env
     text = _render(fake)
-    for key in ("vol_index", "credit_spread_pct", "policy_rate_pct", "term_spread_pct"):
-        assert fake.session_state[f"mkt5_{key}"] is False, key        # 不代填
-    for key in ("leading_index", "coincident_index", "fx_twd_per_usd"):      # N3：不在可勾清單
-        assert f"mkt5_{key}" not in fake.session_state, key
+    # ~~逐鍵勾選框皆 False／不在可勾清單的鍵沒有勾選框~~ → 2026-10-17 Phase 3 P0-③：多選清單一格，判定不變。
+    assert fake.session_state["mkt5_pick"] == []                           # 不代填
+    options, cap, _disabled, _help = fake.multiselects["mkt5_pick"]
+    assert options == ["credit_spread_pct", "policy_rate_pct", "term_spread_pct", "vol_index"]   # N3：母體不變
+    assert cap == 6
     assert text.count("尚未選定任何指標，請在指標清單勾選並存檔") >= 3   # MKT-5 摘要、MKT-6、MKT-7
     assert live.TEXT_UNSAVED_PICKS not in text and live.TEXT_UNSAVED_WINDOW not in text   # 剛載入不誤標
 
@@ -221,3 +228,39 @@ def test_B1_已存天數過大_整頁不當_當成設定讀不到(env):
     sheet.put("mkt_window_days", "1000000")
     text = _render(fake)                                   # 不得 raise
     assert "設定讀不到" in text and "與觀察窗起點的差" not in text
+
+
+# ═══════════════════ 2026-10-17 Phase 3 P0-③ 稽核回修 ═══════════════════
+
+
+def test_P03_BL0228_畫面把從未存過傳進存檔回呼_繞過停用直接叫也不寫(env):
+    """稽核必修 (1)：守住 `page.render` → `_on_save_mkt5_live(..., never_saved)` 這條接線。
+    從未存過 → 回呼的最後一個參數是 True，就算繞過停用直接叫回呼也一鍵不寫；已存過 → False（清空再存照舊寫 "[]"）。"""
+    sheet, fake = env
+    _render(fake)
+    on_click, args, disabled, _help = fake.buttons["mkt5_save"]
+    assert disabled is True and args[-1] is True
+    on_click(*args)                                        # 繞過畫面停用：第二道必須擋下
+    assert sheet.writes == []
+
+    sheet.put("mkt_indicator_keys", '["vol_index"]')
+    fresh = _FakeSt()
+    page.st = fresh                                        # 新的工作階段（monkeypatch 結束時還原）
+    _render(fresh)
+    on_click, args, disabled, _help = fresh.buttons["mkt5_save"]
+    assert args[-1] is False
+    fresh.session_state["mkt5_pick"] = []
+    _render(fresh)
+    on_click, args, disabled, _help = fresh.buttons["mkt5_save"]
+    assert disabled is False and args[-1] is False
+    on_click(*args)
+    assert sheet.writes[-1]["setting_value"] == "[]"
+
+
+def test_P03_session舊值含已不在可選清單的鍵_重跑時濾掉(env):
+    """稽核可選 (a)：多選清單只收可選清單內的值；session 殘留的舊鍵在畫之前明確濾掉（不依賴 streamlit 默默丟棄）。"""
+    _sheet, fake = env
+    _render(fake)
+    fake.session_state["mkt5_pick"] = ["vol_index", "leading_index", "已下架的鍵"]   # leading_index：N3 不在可選清單
+    _render(fake)
+    assert fake.session_state["mkt5_pick"] == ["vol_index"]

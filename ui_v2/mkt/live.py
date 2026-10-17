@@ -16,8 +16,12 @@
    `mkt5_save_entry`、`run_saves`；體例照 `ui_v2/alo/live.py`）。
 5. 「重新取數」停用並寫出原因；來源冷卻中時改寫剩餘秒數。
 6. 不新增「舊資料」字樣（本檔沒有這一條文案；新鮮度照舊由「延遲 N 日」交代）。
+8. Phase 3 P0-③（44 第七節第三小節之七其二第 5、7 條）：4b 的「套用」與 5 的「重新取數」在模型裡照舊停用＋原因，
+   但**一般畫面不畫**（`hidden_in_live`；`MKT-0` 三塊皆空改畫「前往設定與診斷」，`light_needs_settings_link`）；
+   `MKT-5` 改一份多選清單（`PICK_LABEL`、`initial_picks`）。BL-0228：從未存過＋一個都沒選不寫 `"[]"`（`mkt5_save_entry`）。
 
 ⚠️ 文案逐字照草稿；改字要先回草稿（`CLAUDE.md` §-1.5.4）。
+⚠️ 例外（據實寫明）：BL-0228 的停用原因 `logic.TEXT_SAVE_NOTHING_PICKED` 不是草稿字面 —— 本組擬定，44／59 未列。
 """
 
 from __future__ import annotations
@@ -270,18 +274,27 @@ def mkt4_save_entries(window_days, baseline_date) -> list:
     ]
 
 
-def mkt5_save_entry(selected, available) -> list:
+def mkt5_save_entry(selected, available, *, never_saved: bool = False) -> list:
     """MKT-5 存檔要寫的一鍵。依字面值排序（44 MKT-5：清單以字面值排列）。
 
     N6（2026-10-13 稽核 G）：含可勾清單以外的鍵、或重複的鍵 → **拒絕並說明**（帶 `error`，不寫）。
     ~~舊寫法把清單以外的鍵靜默濾掉再存~~ —— 使用者以為存了的東西沒存進去，而畫面不說。
+
+    never_saved（BL-0228，Phase 3 P0-③）：「從未存過」＝ `user_setting` 裡**沒有** `mkt_indicator_keys` 這一列，
+    或最新一筆的值已被清除（兩者 `parse_user_settings` 都交回 `indicator_keys is None`）；且沒有讀取失敗。
+    實際判定就是 `indicator_keys is None and not settings_error`（`page.render` 算好傳進存檔回呼）。這時一個都沒選 → 拒絕（不寫 `"[]"`）。
+    ⚠️ 判定照既有資料，不新發明：已存過的 `"[]"` 照舊是「已存、一個都沒選」（44 `MKT-5` 判準「取消全部勾選並存檔、
+    重新載入，下方明細出現『尚未選定任何指標』」），所以**已存過**時清空再存照舊允許；只有「從未存過」才擋。
+    畫面上的存檔鈕本來就停用（`logic._build_mkt5`），這一層是第二道。
     """
     selected = list(selected)
     allowed = set(available)
     unknown = sorted({k for k in selected if k not in allowed})
     duplicated = sorted({k for k in selected if selected.count(k) > 1})
     error = None
-    if unknown:
+    if never_saved and not selected:
+        error = logic.TEXT_SAVE_NOTHING_PICKED
+    elif unknown:
         error = "勾選中有資料層未提供的鍵，未存檔：" + "、".join(unknown)
     elif duplicated:
         error = "勾選中有重複的鍵，未存檔：" + "、".join(duplicated)
@@ -289,6 +302,36 @@ def mkt5_save_entry(selected, available) -> list:
         error = "已達勾選上限 6，請先取消一項"
     text = json.dumps(sorted(set(selected)), ensure_ascii=False)
     return [{"key": KEY_INDICATORS, "value": text, "value_kind": VALUE_KINDS[KEY_INDICATORS], "error": error}]
+
+
+# ───────────────────── Phase 3 P0-③：正式模式一般畫面不畫的兩種按鈕、指標多選清單 ─────────────────────
+# 44 第七節第三小節之七其二第 7 條：`MKT-4` 正式模式下永遠停用的「套用」，與每張卡（含 `MKT-0`）正式模式下
+# 永遠停用的「重新取數」，一般畫面不畫；`MKT-0` 三塊皆空那一格改畫「前往設定與診斷」導覽鈕。
+# ⚠️ 只改「畫不畫」：模型照舊帶著這兩種按鈕（停用＋原因；`apply_live_notes`），頁面模型與資料判定不變。
+# ⚠️ 只擋「停用中」的那兩類 —— 日後若接上取數、那一枚變成可用，這裡不會把可用的按鈕藏掉（同條文末句）。
+LIVE_HIDDEN_KINDS = ("套用", "取數")
+# 44 第七節第三小節之七其二第 5 條：`MKT-5` 改一份多選清單（正式模式；示範模式照舊勾選框，同小節開頭第 4 條）。
+PICK_LABEL = "要看的指標"
+
+
+def hidden_in_live(button: dict) -> bool:
+    """正式模式一般畫面不畫這一枚？只有停用中的「套用」與「重新取數」（`取數` 類）回 True。"""
+    return button["_action_kind"] in LIVE_HIDDEN_KINDS and not button["_enabled"]
+
+
+def light_needs_settings_link(block: dict) -> bool:
+    """`MKT-0` 三塊皆空（燈上那一枚「重新取數」只在這時出現，`logic.conclusion_light`）且它在正式模式不畫 →
+    改畫一枚「前往設定與診斷」（59 線框第 2.3a 節）。"""
+    return any(b["_action_kind"] == "取數" and hidden_in_live(b) for b in block["buttons"])
+
+
+def initial_picks(settings, keys, settings_error=None):
+    """正式模式多選清單的初值（已存清單 ∩ 可選清單，依可選清單順序）；None ＝ 不填（從未存過或讀不到）。
+    與 `initial_checkbox_values` 同一份判定，只是換成多選清單要的形狀。"""
+    initial = initial_checkbox_values(settings, keys, settings_error)
+    if initial is None:
+        return None
+    return [key for key in keys if initial[key]]
 
 
 def initial_checkbox_values(settings, keys, settings_error=None):

@@ -237,6 +237,9 @@ TEXT_SHOW_ALL_UNREADABLE = "設定讀不到，暫時列出全部指標"
 #   `TEXT_SHOW_ALL_UNSAVED` 只剩示範模式使用（示範模式從未存過時照舊全列）。
 TEXT_SHOW_ALL_UNSAVED = "尚未存檔，預設顯示全部"
 TEXT_UNSAVED_NONE = "尚未選定任何指標，請在指標清單勾選並存檔"
+# BL-0228（Phase 3 P0-③）：正式模式**從未存過**指標清單、而當下一個都沒選 → 存檔停用（不寫 `"[]"`）。字面為本組擬定，44／59 未列。
+# ⚠️ 已存過（含已存的 `"[]"`）時清空再存照舊允許 —— 44 `MKT-5` 判準要「取消全部勾選並存檔」做得到。
+TEXT_SAVE_NOTHING_PICKED = "尚未選任何指標，沒有可存的內容"
 # 比較條件不完整的原因（機器用；`_comparison_reason`）。
 REASON_MISSING_BASELINE = "missing_baseline"
 REASON_MISSING_WINDOW = "missing_window"
@@ -1074,6 +1077,10 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
         save_reason = TEXT_SAVE_SETTINGS_UNREADABLE
     elif over_cap:
         save_reason = "已達勾選上限 6，請先取消一項"
+    elif require_saved_selection and selected_keys is None and not field:
+        # BL-0228：從未存過＋一個都沒選 → 不可存（舊寫法照樣可按，寫出 `"[]"`，把「從未存過」變成「已存、一個都沒選」）。
+        # 只在正式模式（`require_saved_selection`）擋：示範模式的畫面照 44 第七節第三小節之七開頭第 4 條維持現行。
+        save_reason = TEXT_SAVE_NOTHING_PICKED
     else:
         save_reason = ""
     save_button = _button(

@@ -550,7 +550,9 @@ def test_市場總覽_正式模式套用停用_未存的欄位值不改三張核
     assert cards, "抓不到三張核心卡 —— 下面的比較會變成空比"
     assert _vix_value_shown(cards), "波動度指數沒有數值 —— 下面的比較會變成空畫面比空畫面"
     assert _compare_shown(cards), "比較列沒有算出數字 —— 暫存值漏進正式結果時畫面也不會變"
-    assert at.button(key="mkt4_apply").disabled
+    # ~~assert at.button(key="mkt4_apply").disabled~~ → 2026-10-17 Phase 3 P0-③（44 第七節第三小節之七其二第 7 條；
+    # 有意識的更正，不是漏刪）：正式模式下永遠停用的「套用」一般畫面不畫。測試名保留，便於對照沿革。
+    assert not [b for b in at.button if b.key == "mkt4_apply" or b.label == "套用"]
     _fill_mkt_window(at)
     assert _cards(at) == cards                              # 欄位有值、沒存檔：正式結果不動
     _go(at, "hld")
