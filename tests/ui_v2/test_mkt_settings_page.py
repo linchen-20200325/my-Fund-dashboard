@@ -258,7 +258,7 @@ def test_P03_BL0228_畫面把從未存過傳進存檔回呼_繞過停用直接�
 
 
 def test_P03_session舊值含已不在可選清單的鍵_重跑時濾掉(env):
-    """稽核可選 (a)：多選清單只收可選清單內的值；session 裡殘留的舊鍵在畫之前濾掉（真 streamlit 收到清單外的值會出錯）。"""
+    """稽核可選 (a)：多選清單只收可選清單內的值；session 殘留的舊鍵在畫之前明確濾掉（不依賴 streamlit 默默丟棄）。"""
     _sheet, fake = env
     _render(fake)
     fake.session_state["mkt5_pick"] = ["vol_index", "leading_index", "已下架的鍵"]   # leading_index：N3 不在可選清單
