@@ -986,7 +986,8 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         model, failures = health.dedupe_failures(model)
         cards = logic.codes_in_layer(model, 2)
         stale = health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)
-        provenance = health.move_card_provenance(model, cards)
+        provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
+        stale = stale or health.has_stale_marker(model, cards)
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
         )

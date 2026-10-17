@@ -745,7 +745,9 @@ def test_P0_2_畫頁面連結與換到設定與診斷_save與refetch都是0次_�
     at = _go(_app_test(), slug)
     assert calls["load"], "正控：替身確實接在預覽的呼叫路徑上"
     assert calls["save"] == [] and calls["refetch"] == [], calls
-    _go(at, "set")      # 先到設定與診斷一次：它自己的讀取（含建分頁）算在「換頁之前」
+    # 先到設定與診斷一次：那一頁自己的讀取（不論會不會在假試算表上留下任何呼叫）算在「換頁之前」，
+    # 下面比的只有「再換一次頁」這個動作本身。
+    _go(at, "set")
     _go(at, slug)
     before = _book_state(settings_book)
     _go(at, "set")      # 等同按下連結：連結的目的地就是這一頁（上一條已驗 page 與雜湊）
