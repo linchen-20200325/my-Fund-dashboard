@@ -452,3 +452,136 @@ def test_health模組不import_streamlit():
         elif isinstance(node, ast.ImportFrom) and node.module:
             roots.add(node.module.split(".")[0])
     assert "streamlit" not in roots, roots
+
+
+# ───────────────────────── 6. 稽核必修：「ok 但延遲」在 ② 卡上留 ◷（2026-10-17 回修） ─────────────────────────
+
+
+def _card(badge_tone, group_tone=None):
+    block = {"code": "MKT-1", "title": "風險情緒卡", "_layer": 2, "_state": "ok",
+             "main_values": [{"label": "波動度指數", "_state": "ok", "badges": [
+                 {"_kind": "來源", "_tone": "中性", "text": "T2"},
+                 {"_kind": "新鮮度", "_tone": badge_tone, "text": "延遲 12 日"}]}]}
+    if group_tone:
+        block["fund_groups"] = [{"head_text": "基金 A",
+                                 "freshness_badge": {"_kind": "新鮮度", "_tone": group_tone, "text": "延遲 15 日"}}]
+    return {"blocks": [block]}
+
+
+_EMPTY_SUMMARY = {"fetch_failed": [], "not_configured": [], "affected_blocks": [], "explained_blocks": []}
+
+
+def test_畫成黃的新鮮度徽章_卡上留時鐘加原字面_同色調_第四段照列原字面_狀態行報時鐘():
+    display = _card("黃", group_tone="黃")
+    rows = health.move_card_provenance(display, ("MKT-1",))
+    value = display["blocks"][0]["main_values"][0]
+    assert value["badges"] == [{"_kind": "新鮮度", "_tone": "黃", "text": "◷ 延遲 12 日"}]
+    assert display["blocks"][0]["fund_groups"][0]["freshness_badge"] == {
+        "_kind": "新鮮度", "_tone": "黃", "text": "◷ 延遲 15 日"}
+    assert ("風險情緒卡", "波動度指數", ["T2", "延遲 12 日"]) in rows            # ④ 照列原字面（換位置，不刪除）
+    assert ("風險情緒卡", "基金 A", ["延遲 15 日"]) in rows
+    assert health.has_stale_marker(display, ("MKT-1",)) is True
+    line = health.status_line(display, _EMPTY_SUMMARY, as_of="2026-10-01",
+                              stale=health.has_stale_marker(display, ("MKT-1",)))
+    assert line["items"][0][0] == health.SYMBOL_STALE
+
+
+@pytest.mark.parametrize("tone", ["中性", "灰"])
+def test_中性與灰色的延遲_卡上與狀態行都沒有時鐘(tone):
+    display = _card(tone, group_tone=tone)
+    health.move_card_provenance(display, ("MKT-1",))
+    assert display["blocks"][0]["main_values"][0]["badges"] == []
+    assert display["blocks"][0]["fund_groups"][0]["freshness_badge"] is None
+    assert health.has_stale_marker(display, ("MKT-1",)) is False
+    line = health.status_line(display, _EMPTY_SUMMARY, as_of="2026-10-01", stale=False)
+    assert health.SYMBOL_STALE not in line["text"]
+    assert not any(health.SYMBOL_STALE in t for t in _strings(display))
+
+
+def test_時鐘只看既有色調_不看日數():
+    """「延遲 99 日」但色調中性 → 不加；「延遲 1 日」色調黃 → 加。日數門檻與色調映射住在各頁 logic／live，本模組不新算。"""
+    neutral = {"blocks": [{"code": "MKT-1", "main_values": [{"badges": [
+        {"_kind": "新鮮度", "_tone": "中性", "text": "延遲 99 日"}]}]}]}
+    yellow = {"blocks": [{"code": "MKT-1", "main_values": [{"badges": [
+        {"_kind": "新鮮度", "_tone": "黃", "text": "延遲 1 日"}]}]}]}
+    health.move_card_provenance(neutral, ("MKT-1",))
+    health.move_card_provenance(yellow, ("MKT-1",))
+    assert neutral["blocks"][0]["main_values"][0]["badges"] == []
+    assert yellow["blocks"][0]["main_values"][0]["badges"][0]["text"] == "◷ 延遲 1 日"
+
+
+def test_現行三頁正式模型沒有一枚畫成黃的新鮮度徽章_時鐘路徑目前不觸發():
+    """依據（程式碼位置）：`ui_v2/mkt/logic.py::_freshness_badge` 的回傳色調寫死「中性」；
+    `ui_v2/hld/live.py::nav_freshness` 的 `badge` 只有「灰」（超過門檻＝資料未備）與「中性」兩支；
+    `ui_v2/exp/logic.py::placeholder_badge` 寫死「中性」（佔位）。本條掃本機可組出的全部正式模型實測同一件事 ——
+    哪天某頁開始交出黃色新鮮度徽章，本條先紅，提醒回頭看卡上的 ◷（`move_card_provenance` 已會處理）。"""
+    yellow, checked = [], 0
+
+    def walk(node, key):
+        nonlocal checked
+        if isinstance(node, dict):
+            if node.get("_kind") == "新鮮度":
+                checked += 1
+                if node.get("_tone") == "黃":
+                    yellow.append((key, node))
+            for value in node.values():
+                walk(value, key)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                walk(value, key)
+
+    for key, model in _live():
+        if key[1] in ("mkt", "hld", "exp"):
+            walk(model, key)
+    assert yellow == []
+    assert checked >= 50, checked
+
+
+def test_三頁真身的新鮮度色調寫法_AST():
+    """上一條的靜態半邊：三處產生新鮮度徽章的程式碼，色調常值只有「中性」／`NOT_READY_TONE`（灰）。"""
+    sources = {
+        "ui_v2/mkt/logic.py": "_freshness_badge",
+        "ui_v2/hld/live.py": "nav_freshness",
+        "ui_v2/exp/logic.py": "placeholder_badge",
+    }
+    for rel, name in sources.items():
+        fn = _function(_ROOT / rel, name)
+        tones = set()
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Dict):
+                for k, v in zip(node.keys, node.values):
+                    if isinstance(k, ast.Constant) and k.value == "_tone":
+                        tones.add(ast.unparse(v))
+        assert tones and tones <= {"'中性'", "NOT_READY_TONE"}, (rel, tones)
+    from ui_v2.hld import live as HL
+
+    assert HL.NOT_READY_TONE == "灰"
+
+
+# ───────────────────────── 7. 稽核可選 3：⛔ 與尚未設定各自獨立 ─────────────────────────
+
+
+def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊照樣報停止符號():
+    display = {"blocks": [
+        {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
+         "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]},
+        {"code": "HLD-3", "title": "配息與本金卡", "_layer": 2, "_state": "系統錯誤",
+         "detail_lines": ["⛔ 取數失敗"]},                    # 這一塊的錯誤沒有任何一句摘要交代
+    ]}
+    after, summary = health.dedupe_failures(display)
+    assert summary["not_configured"] == ["保單試算表"] and summary["fetch_failed"] == []
+    line = health.status_line(after, summary, as_of=None)
+    assert [s for s, _t, _tone in line["items"]] == ["⛔", ""], line
+    assert "⛔ 取數失敗" in line["text"] and "尚未設定：保單試算表" in line["text"]
+
+
+def test_每一塊的錯誤都被尚未設定交代到_就不另報停止符號():
+    display = {"blocks": [
+        {"code": "HLD-0", "title": "體檢結論燈", "_layer": 1, "_state": "系統錯誤", "text": "有一塊取數失敗"},
+        {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
+         "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]},
+    ]}
+    after, summary = health.dedupe_failures(display)
+    assert summary["explained_blocks"] == ["HLD-1"]
+    line = health.status_line(after, summary, as_of=None)
+    assert [s for s, _t, _tone in line["items"]] == [""], line             # 結論燈不自己取數，不算沒交代

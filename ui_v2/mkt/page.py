@@ -637,9 +637,11 @@ def render(*, load_live=None, save_live=None, settings_page=None) -> None:
         # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
         # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
         model, failures = health.dedupe_failures(model)
-        provenance = health.move_card_provenance(model, logic.codes_in_layer(model, 2))
+        cards = logic.codes_in_layer(model, 2)
+        provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
         status_line = health.status_line(
-            model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date")
+            model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date"),
+            stale=health.has_stale_marker(model, cards),
         )
     plain_mode = live_input is not None
 

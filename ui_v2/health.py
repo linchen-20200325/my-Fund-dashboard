@@ -111,6 +111,7 @@ class _Dedupe:
         self.fetch_failed: list = []      # 中文資料類（不含尚未設定那一族）
         self.not_configured: list = []    # 尚未設定的對象（「設定試算表」…）
         self.affected: list = []          # 寫了「此區塊暫時無法判定」的塊代號
+        self.explained: list = []         # 畫面上看得到的位置有失敗摘要的塊代號（不論是取數失敗還是尚未設定）
 
     def note(self, cls, state) -> bool:
         """記一筆，回「是不是尚未設定那一族」。"""
@@ -162,8 +163,10 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
             cls = plain.TABLE_NAMES["user_setting"]
         # 畫面上不畫的位置不進資料狀態行（那一句使用者看不到，狀態行就不能替它說話）；照樣換成狀態族。
         unconfigured = ctx.note(cls, state) if _shown(block, field) else state in NOT_CONFIGURED_STATES
-        whole = not text[: match.start()].strip() and not text[match.end():].strip()
         code = (block or {}).get("code")
+        if _shown(block, field) and code is not None and code not in ctx.explained:
+            ctx.explained.append(code)
+        whole = not text[: match.start()].strip() and not text[match.end():].strip()
         if (whole and not fund and not in_rows and _block_is_error(block) and _shown(block, field)
                 and code is not None and code not in ctx.affected):
             ctx.affected.append(code)
@@ -240,6 +243,7 @@ def dedupe_failures(display: dict):
         "fetch_failed": list(ctx.fetch_failed),
         "not_configured": list(ctx.not_configured),
         "affected_blocks": list(ctx.affected),
+        "explained_blocks": list(ctx.explained),
     }
 
 
@@ -266,6 +270,14 @@ def has_error_state(node) -> bool:
     if isinstance(node, (list, tuple)):
         return any(has_error_state(v) for v in node)
     return False
+
+
+def _unexplained_error(display: dict, explained) -> bool:
+    """有沒有 `系統錯誤` 的塊，畫面上一句失敗摘要都沒有（那一塊的錯誤，狀態行的類別句與尚未設定句都沒有交代到）。"""
+    # 層 1 的結論燈不算：燈不自己取數，它的 `系統錯誤` 來自同頁其他塊（44 第二節），那幾塊自己會被數到。
+    explained = set(explained)
+    return any(_block_is_error(block) and block.get("_layer") != 1 and block.get("code") not in explained
+               for block in display.get("blocks") or ())
 
 
 def latest_date(rows, key):
@@ -298,9 +310,11 @@ def status_line(display: dict, summary: dict, *, as_of, stale: bool = False) -> 
         items.append((SYMBOL_STALE, TEXT_STALE, "中性"))
     if has_missing(display):
         items.append((SYMBOL_MISSING, TEXT_MISSING, "灰"))
+    # ⛔ 與「尚未設定」各自獨立判斷（不因為有尚未設定就省掉 ⛔）：有取數失敗的類別 → 列類別；
+    # 沒有類別、但有 `系統錯誤` 的塊在畫面上沒有任何一句失敗摘要（取數失敗或尚未設定都沒有）→ 照樣報 ⛔ 取數失敗。
     if summary["fetch_failed"]:
         items.append((SYMBOL_ERROR, f"{TEXT_FETCH_FAILED}：{'、'.join(summary['fetch_failed'])}", "紅"))
-    elif has_error_state(display) and not summary["not_configured"]:
+    elif _unexplained_error(display, summary.get("explained_blocks", ())):
         items.append((SYMBOL_ERROR, TEXT_FETCH_FAILED, "紅"))
     if summary["not_configured"]:
         items.append(("", f"{TEXT_NOT_CONFIGURED}：{'、'.join(summary['not_configured'])}", "中性"))
@@ -323,32 +337,77 @@ def _is_provenance(badge) -> bool:
     return isinstance(badge, dict) and badge.get("_kind") in _PROVENANCE_KINDS
 
 
+# 新鮮度徽章「畫成黃的那一段」（44 第五節第二小節新鮮度列、第七節第三小節之七其四表）：色調沿用各頁 logic／live 交出的
+# `_tone`，本模組不新算、不看日數。
+_STALE_TONE = "黃"
+
+
+def _is_stale_badge(badge) -> bool:
+    return isinstance(badge, dict) and badge.get("_kind") == "新鮮度" and badge.get("_tone") == _STALE_TONE
+
+
+def _stale_marker(badge) -> dict:
+    """留在 ② 卡上的那一枚：同一枚徽章（同色調、同類別）、文字前加 `◷ `（44 既有字面，例「◷ 延遲 N 日」）。"""
+    marker = dict(badge)
+    text = str(badge.get("text", ""))
+    marker["text"] = text if text.startswith(f"{SYMBOL_STALE} ") else f"{SYMBOL_STALE} {text}"
+    return marker
+
+
 def move_card_provenance(display: dict, codes) -> list:
     """把 `codes` 那幾塊（② 核心卡）上的來源／新鮮度徽章拿下來（就地改寫），回 ④ 要畫的列：
-    `[(卡名, 項目名, [徽章文字…]), ...]`，依卡、依主值／逐檔分組的順序。徽章本身不改字、不改色調。
+    `[(卡名, 項目名, [徽章文字…]), ...]`，依卡、依主值／逐檔分組的順序。④ 那份的徽章文字不改字。
 
     拿的位置：塊層級 `badges`、主值 `main_values[*].badges`、逐檔分組 `fund_groups[*].freshness_badge`。
+    ⚠️ 例外（44 第七節第三小節之七其二第 4 條「延遲的值在 ② 卡上保留 ◷ 記號」）：新鮮度徽章依既有色調畫成**黃**的那一枚，
+    卡上**留一枚** `◷ <原字面>`（同色調）；中性與灰色的不留。④ 照樣列原字面（換位置，不刪除）。
     """
+    def split(badges):
+        keep, moved = [], []
+        for badge in badges or ():
+            if _is_provenance(badge):
+                moved.append(badge)
+                if _is_stale_badge(badge):
+                    keep.append(_stale_marker(badge))
+            else:
+                keep.append(badge)
+        return keep, moved
+
     rows = []
     for block in display.get("blocks") or ():
         if block.get("code") not in codes:
             continue
         title = block.get("title", "")
-        own = [b for b in block.get("badges") or () if _is_provenance(b)]
-        if own:
-            rows.append((title, "", [b["text"] for b in own]))
-            block["badges"] = [b for b in block["badges"] if not _is_provenance(b)]
+        keep, moved = split(block.get("badges"))
+        if moved:
+            rows.append((title, "", [b["text"] for b in moved]))
+            block["badges"] = keep
         for value in block.get("main_values") or ():
-            moved = [b for b in value.get("badges") or () if _is_provenance(b)]
+            keep, moved = split(value.get("badges"))
             if moved:
                 rows.append((title, value.get("label", ""), [b["text"] for b in moved]))
-                value["badges"] = [b for b in value["badges"] if not _is_provenance(b)]
+                value["badges"] = keep
         for group in block.get("fund_groups") or ():
             badge = group.get("freshness_badge")
             if _is_provenance(badge):
                 rows.append((title, group.get("head_text", ""), [badge["text"]]))
-                group["freshness_badge"] = None
+                group["freshness_badge"] = _stale_marker(badge) if _is_stale_badge(badge) else None
     return rows
+
+
+def has_stale_marker(display: dict, codes) -> bool:
+    """`codes` 那幾塊（② 卡）上有沒有 `move_card_provenance` 留下的 `◷` 徽章（給資料狀態行的 `stale`）。"""
+    for block in display.get("blocks") or ():
+        if block.get("code") not in codes:
+            continue
+        badges = list(block.get("badges") or ())
+        for value in block.get("main_values") or ():
+            badges += list(value.get("badges") or ())
+        for group in block.get("fund_groups") or ():
+            badges.append(group.get("freshness_badge"))
+        if any(_is_stale_badge(b) and str(b.get("text", "")).startswith(f"{SYMBOL_STALE} ") for b in badges):
+            return True
+    return False
 
 
 def mark_last_valid(display: dict, codes, prefix: str) -> bool:

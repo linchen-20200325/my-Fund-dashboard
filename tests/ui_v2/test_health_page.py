@@ -234,3 +234,66 @@ page.render(load_live=lambda: {"dataset": _dataset, "notes": {}}, mask_error=str
 """
     at, _ = _run(script)
     assert health.TEXT_SAVE_FAILED_BOTH not in "\n".join(_visible(at))
+
+
+# ───────────────────────── 2026-10-17 稽核必修：「ok 但延遲」在 ② 卡上留 ◷ ─────────────────────────
+
+
+def _cards(at, page):
+    return [html.unescape(m.value) for m in at.main.markdown
+            if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
+
+
+def test_市場總覽_黃色新鮮度徽章_卡上有時鐘_狀態行有時鐘(monkeypatch):
+    """黃色調只能用替身造（`ui_v2/mkt/logic.py::_freshness_badge` 現行寫死中性，見 test_health_logic 的依據條）：
+    把那一支換成「同一枚徽章、色調改黃」，其餘判定一行不動。"""
+    from ui_v2.mkt import logic as L
+
+    real = L._freshness_badge
+    monkeypatch.setattr(L, "_freshness_badge", lambda rows: dict(real(rows), _tone="黃"))
+    at, _ = _run(P.SCRIPTS["mkt"]["正常"])
+    cards = _cards(at, "mkt")
+    assert cards and all(f"{health.SYMBOL_STALE} 延遲 " in card for card in cards), cards
+    line = " ".join(_status_lines(at)[0].split())
+    assert health.SYMBOL_STALE in line and f"{health.AS_OF_LABEL} 2026-" in line, line
+    box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
+    assert "延遲 3 日" in html.unescape(" ".join(m.value for m in box[0].markdown))   # ④ 照列原字面
+
+
+def test_市場總覽_中性延遲_卡上與狀態行都沒有時鐘():
+    at, _ = _run(P.SCRIPTS["mkt"]["正常"])
+    assert not any(health.SYMBOL_STALE in card for card in _cards(at, "mkt"))
+    assert not any("延遲 " in card for card in _cards(at, "mkt"))                    # 中性的延遲徽章移到 ④
+    assert health.SYMBOL_STALE not in _status_lines(at)[0]
+
+
+def test_持倉體檢_黃色新鮮度徽章_逐檔標頭有時鐘_狀態行有時鐘(monkeypatch):
+    """同上：`ui_v2/hld/live.py::nav_freshness` 現行只交灰與中性；替身把中性那一支改黃（日數、門檻、灰色那一支不動）。"""
+    from ui_v2.hld import live as HL
+
+    real = HL.nav_freshness
+
+    def yellow(*args, **kwargs):
+        out = real(*args, **kwargs)
+        for entry in out.values():
+            if entry["badge"]["_tone"] == "中性":
+                entry["badge"] = dict(entry["badge"], _tone="黃")
+        return out
+
+    monkeypatch.setattr(HL, "nav_freshness", yellow)
+    at, _ = _run(P.SCRIPTS["hld"]["正常"])
+    cards = [c for c in _cards(at, "hld") if 'data-block="HLD-2"' in c or 'data-block="HLD-3"' in c]
+    assert cards and all(f"{health.SYMBOL_STALE} 延遲 10 日" in card for card in cards), cards
+    assert health.SYMBOL_STALE in _status_lines(at)[0]
+
+
+def test_持倉體檢_中性延遲_徽章移到第四段_卡上與狀態行都沒有時鐘():
+    """稽核可選 2：持倉體檢逐檔的新鮮度徽章（中性「延遲 10 日」）不在 ② 卡上、在 ④「核心卡的來源與新鮮度」裡。"""
+    at, _ = _run(P.SCRIPTS["hld"]["正常"])
+    cards = [c for c in _cards(at, "hld") if 'data-block="HLD-2"' in c or 'data-block="HLD-3"' in c]
+    assert cards and not any("延遲 10 日" in card or health.SYMBOL_STALE in card for card in cards), cards
+    assert health.SYMBOL_STALE not in _status_lines(at)[0]
+    box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
+    assert len(box) == 1 and box[0].proto.expanded is False
+    body = html.unescape(" ".join(m.value for m in box[0].markdown))
+    assert body.count("延遲 10 日") >= 6, body                                     # 兩張卡 × 三檔
