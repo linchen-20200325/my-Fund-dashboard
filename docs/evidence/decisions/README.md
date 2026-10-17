@@ -12,6 +12,7 @@
 | `2026-10-17_phase3_8_rulings.md` | 客戶 2026-10-17 Phase 3 UI/UX 八題裁示全文（`docs/v2/58_ui_ux_constitution.md` 第 13 節 8 題照總管建議核准＋六條護欄；`docs/DECISIONS.md` `DEC-2026-10-17-03`） | 客戶 2026-10-17 在對話中的裁示，經總管逐字轉存 | 2026-10-17 | main `10db810`（全長 `10db8108e64c0809d52e22375d0032ac061fd750`） | 3942 | `e23e7332a3c4c75c2b6fa5ae8ca799f46586ba14366e5bd3097c015acb6843fc` |
 | `2026-10-17_silent_cruise_rule.md` | 客戶 2026-10-17 靜默自主巡航／回報節流長期規則裁示全文（`docs/DECISIONS.md` `DEC-2026-10-17-04`；落地為 `PROJECT_RULES.md` 第 3 節 3.1） | 客戶 2026-10-17 在對話中的裁示，經總管逐字轉存 | 2026-10-17 | 分支 `claude/fund-dashboard-b-ui-phase3-0hdhsy` `3c44ebc`（全長 `3c44ebcaba0a7b3660289cd0fc84986ab40c79f9`；不是 main） | 2870 | `e01ea2ffc4f095dbd24bed4a578a95d215385875fdd7813e65fb1dc0bc31a762` |
 | `2026-10-17_effort_management_rule.md` | 客戶 2026-10-17 模型／推理強度主動管理永久條款全文，含同日補充（`docs/DECISIONS.md` `DEC-2026-10-17-05`；落地為 `PROJECT_RULES.md` 第 5 節 5.1） | 客戶 2026-10-17 在對話中的追加永久條款，經總管逐字轉存 | 2026-10-17 | 同上 | 3830 | `e2a62e0e537ab060c4c2ac90a48975a473d638344cce8797e2fb25cf4d088cf7` |
+| `2026-10-17_branch_cleanup_ruling.md` | 客戶 2026-10-17 歷史 branch 清理裁示要點（`docs/DECISIONS.md` `DEC-2026-10-17-06`） | 客戶 2026-10-17 對話中裁示，經總管於派工單內轉述（要點轉述，非逐字） | 2026-10-17 | main `762f602`（全長 `762f602863f622bfb4d994db06d7e512b04436dd`） | 1456 | `dd42d3000e70b823fa9e1a27060cb37f335260f450a9a85332f1d439796cd53b` |
 
 ### `2026-10-16_governance_11_rulings.md` 的三個雜湊
 
