@@ -585,3 +585,71 @@ def test_每一塊的錯誤都被尚未設定交代到_就不另報停止符號(
     assert summary["explained_blocks"] == ["HLD-1"]
     line = health.status_line(after, summary, as_of=None)
     assert [s for s, _t, _tone in line["items"]] == [""], line             # 結論燈不自己取數，不算沒交代
+
+
+# ───────────────────────── 8. Phase 3 P1-④：結論燈同一則訊息不印兩次 ─────────────────────────
+# 依據：58 U-31「同一則原文重複印多次本身是錯，可視為修正錯誤」；44 第七節第三小節之七其二第 3 條；59 線框第 1.1 節。
+# 只動燈的 `text`；圖示、狀態字、色調、狀態一個都不碰（護欄 2）。
+
+
+def _lamp(glyph, word, text, **extra):
+    return {"code": "ALO-0", "title": "差距結論燈", "_layer": 1, "_tone": "灰", "glyph": glyph,
+            "state_word": word, "text": text, **extra}
+
+
+@pytest.mark.parametrize(("glyph", "word", "text", "expected"), [
+    ("⛔", "狀態：取數失敗", "⛔ 尚未設定", "尚未設定"),          # 句首圖示與燈相同 → 拿掉
+    ("⛔", "狀態：取數失敗", "⛔ 取數失敗", ""),                  # 拿掉之後與狀態字相同 → 整句不畫
+    ("⛔", "取數失敗", "⛔ 取數失敗", ""),                        # 標的探索：狀態字不帶「狀態：」
+    ("⬜", "狀態：中性", "⬜ 資料未備", "資料未備"),
+])
+def test_結論燈句首重複的圖示拿掉_與狀態字相同就整句不畫(glyph, word, text, expected):
+    block = _lamp(glyph, word, text, _state="系統錯誤")
+    keep = {k: v for k, v in block.items() if k != "text"}
+    assert health.trim_light_echo(block) is True
+    assert block["text"] == expected
+    assert {k: v for k, v in block.items() if k != "text"} == keep          # 只動 text
+
+
+@pytest.mark.parametrize(("glyph", "text"), [
+    ("⛔", "有一塊取數失敗，這一頁的數字先不要照著讀"),   # 句首沒有圖示
+    ("⬜", "◇ 資料未備"),                                # 圖示不同
+    ("⛔", "⛔取數失敗"),                                 # 圖示後面沒有空白：不是「圖示＋一句」的形狀
+    ("", "⛔ 取數失敗"),                                  # 燈沒有圖示
+])
+def test_結論燈句首不是同一個圖示就一個字都不動(glyph, text):
+    block = _lamp(glyph, "狀態：取數失敗", text)
+    before = dict(block)
+    assert health.trim_light_echo(block) is False
+    assert block == before
+
+
+def test_市場總覽的燈沒有圖示鍵_不動():
+    block = {"code": "MKT-0", "title": "環境結論燈", "_layer": 1, "text": "⛔ 取數失敗"}
+    assert health.trim_light_echo(block) is False and block["text"] == "⛔ 取數失敗"
+
+
+def test_去重之後四頁正式模型的結論燈都不以自己的圖示開頭_而且不是空掃():
+    changed = []
+    for key, model in _live():
+        display, _raw, _status = plain.plain_model(model, page=key[1])
+        before = {b["code"]: b.get("text") for b in display["blocks"] if b.get("_layer") == 1}
+        after, _summary = health.dedupe_failures(display)
+        for block in after["blocks"]:
+            if block.get("_layer") != 1 or not block.get("glyph"):
+                continue
+            assert not block["text"].startswith(f"{block['glyph']} "), (key, block["text"])
+            if block["text"] != before[block["code"]]:
+                changed.append(key)
+    assert any(key[1] == "alo" for key in changed), changed                 # 資產配置那一句真的被改到
+
+
+def test_核心卡與展開區的字不經過結論燈那一步():
+    display = {"blocks": [
+        _lamp("⛔", "狀態：取數失敗", "⛔ 尚未設定"),
+        {"code": "ALO-2", "title": "目標對照卡", "_layer": 2, "glyph": "⛔", "state_word": "狀態：取數失敗",
+         "text": "⛔ 尚未設定"},
+    ]}
+    after, _summary = health.dedupe_failures(display)
+    assert after["blocks"][0]["text"] == "尚未設定"
+    assert after["blocks"][1]["text"] == "⛔ 尚未設定"                        # 只有層 1 的燈

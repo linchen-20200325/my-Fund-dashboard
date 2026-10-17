@@ -13,6 +13,8 @@
    - 其餘位置 → 只留狀態族：「⛔ 取數失敗」／「⛔ 尚未設定」／「⛔ 設定讀不到」；逐檔的那一種留基金代碼
      （「⛔ <代碼> 取數失敗」—— 哪一檔失敗是該塊自己的內容，不是摘要）。
    - 同一串說明行裡因此變成一模一樣的 ⛔ 行，只留第一行（BL-0146）。
+   - 結論燈（①）那一句若以燈自己的圖示開頭，拿掉重複的圖示；剩下的字與狀態字相同就整句不畫
+     （Phase 3 P1-④；`trim_light_echo`。例：「⛔ 狀態：取數失敗 ⛔ 尚未設定」→「⛔ 狀態：取數失敗 尚未設定」）。
    ⛔ 與紅色照舊：`_` 開頭的鍵（狀態、顏色、嚴重度）一個都不碰，**判定照舊**（護欄 2）。
 2. **資料狀態行**（其二第 4 條、59 線框第 2.6 節）：四種 —— `◷` 不是最新（只顯示最後有效資料）、`◇` 資料未備、
    `⛔` 取數失敗、尚未設定 —— 同類只列一次，附資料截至日；**沒有任何一種時不寫「資料齊」或「正常」，只寫資料截至日**。
@@ -239,12 +241,45 @@ def dedupe_failures(display: dict):
     """
     ctx = _Dedupe()
     _walk(display, None, ctx)
+    for block in display.get("blocks") or ():
+        if block.get("_layer") == 1:
+            trim_light_echo(block)
     return display, {
         "fetch_failed": list(ctx.fetch_failed),
         "not_configured": list(ctx.not_configured),
         "affected_blocks": list(ctx.affected),
         "explained_blocks": list(ctx.explained),
     }
+
+
+# ───────────────────────── 結論燈：同一則訊息不印兩次（Phase 3 P1-④） ─────────────────────────
+
+# 狀態字的前綴（持倉體檢、資產配置的 `state_word` 自帶；標的探索的 `state_word` 不帶、由 `page.py` 補）。
+LIGHT_STATE_PREFIX = "狀態："
+
+
+def trim_light_echo(block: dict) -> bool:
+    """結論燈（①）右側那一句若以燈自己的圖示開頭，就把那個圖示拿掉；拿掉後剩下的字若與狀態字相同，整句不畫（就地改寫）。
+    回「有沒有改」。
+
+    例：資產配置設定試算表讀不到時，燈畫「⛔ 狀態：取數失敗 ⛔ 尚未設定」→「⛔ 狀態：取數失敗 尚未設定」；
+    取數失敗時「⛔ 狀態：取數失敗 ⛔ 取數失敗」→「⛔ 狀態：取數失敗」。
+    依據：58 U-31「同一則原文重複印多次本身是錯，可視為修正錯誤」、44 第七節第三小節之七其二第 3 條
+    （同源失敗一頁只摘要一次）、59 線框第 1.1 節（同源錯誤只在資料狀態行與 ① 各出現一次）。
+
+    只動 `text` 這一個顯示字串：`glyph`、`state_word`、`_tone`、`_state` 與任何判定一個都不碰（護欄 2）；
+    圖示不同（例：燈 ⬜、句首 ◇）不動；句首沒有圖示不動。
+    """
+    glyph, text, word = block.get("glyph"), block.get("text"), block.get("state_word")
+    if not (isinstance(glyph, str) and glyph.strip() and isinstance(text, str)):
+        return False
+    head = f"{glyph} "
+    if not text.startswith(head):
+        return False
+    rest = text[len(head):].strip()
+    payload = word[len(LIGHT_STATE_PREFIX):] if isinstance(word, str) and word.startswith(LIGHT_STATE_PREFIX) else word
+    block["text"] = "" if rest == payload else rest
+    return True
 
 
 # ───────────────────────── 資料未備（◇）的判定：沿用模型既有的狀態 ─────────────────────────
