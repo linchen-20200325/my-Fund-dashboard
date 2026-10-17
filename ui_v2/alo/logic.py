@@ -771,7 +771,8 @@ def _band_text(diff, tolerance):
 
 
 def exceeds(diff, tolerance) -> bool:
-    """44 逐字「超出容許帶 → 燈為黃」。相等不算超出（ALO-GAP-端點，本頁判讀）。"""
+    """44 逐字「超出容許帶 → 燈不著色」（~~燈為黃~~ 已於 ◆／◇ 小批劃線；判定照舊，只換燈的顏色與符號：
+    正式模式由 `ui_v2/symbols.py` 換成 ◆、示範模式照舊黃燈）。相等不算超出（ALO-GAP-端點，本頁判讀）。"""
     return abs(diff) > tolerance and not math.isclose(abs(diff), tolerance, abs_tol=1e-9)
 
 

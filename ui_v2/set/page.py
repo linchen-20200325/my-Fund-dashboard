@@ -21,7 +21,7 @@ import re
 
 import streamlit as st
 
-from .. import health_view, plain
+from .. import health_view, plain, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -567,6 +567,9 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         # Phase 3 P0-①：本頁只換塊代號、層字樣與 `SET-1` 的鍵名；`SET-2`／`SET-6`／`SET-7` 照舊照印原文與鍵名
         # （44 第七節第三小節之七其二第 1、2 條），`SET-3`／`SET-4` 的鍵名不在本批。判定一個都不動。
         model, _raw, _status = plain.plain_model(model, page="set")
+        # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
+        # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
+        symbols.apply(model)
         ctx = {
             "notes": live_input["notes"],
             "save_live": save_live,
