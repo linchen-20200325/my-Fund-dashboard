@@ -21,6 +21,7 @@ import re
 
 import streamlit as st
 
+from .. import plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -233,10 +234,16 @@ def _table(labels, rows) -> str:
     return f'<table class="set-table"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
 
 
-def _card_head(block: dict) -> None:
+def _block_attr(block: dict, plain_mode: bool) -> str:
+    """正式模式：塊代號只放進 `data-block` 屬性（畫面不可見；給測試與瀏覽器量測定位）。示範模式回空字串、畫面照舊。"""
+    return f' data-block="{_esc(block["code"])}"' if plain_mode else ""
+
+
+def _card_head(block: dict, plain_mode: bool = False) -> None:
+    code_span = "" if plain_mode else f'<span class="set-card-code">{_esc(block["code"])}</span>'
     _html(
-        f'<div class="set-card-head" style="--set-tone:{_tone(block["_tone"])}">'
-        f'<span class="set-card-code">{_esc(block["code"])}</span>'
+        f'<div class="set-card-head" style="--set-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>'
+        f'{code_span}'
         f'<span class="set-card-title">{_esc(block["title"])}</span></div>'
     )
 
@@ -254,14 +261,16 @@ def _buttons(buttons, prefix: str) -> None:
 # ───────────────────────── 層 1 ─────────────────────────
 
 
-def _render_set0(block: dict) -> None:
+def _render_set0(block: dict, *, plain_mode: bool = False) -> None:
+    # 燈右側那一格：正式模式只留標題（44 第七節第三小節之七其二第 1 條）；示範模式「代號　標題」照舊。
+    code_title = _esc(block["title"]) if plain_mode else f'{_esc(block["code"])}　{_esc(block["title"])}'
     _html(
-        f'<div class="set-lamp" style="--set-tone:{_tone(block["_tone"])}">'
+        f'<div class="set-lamp" style="--set-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>'
         f'<div class="set-glyph" aria-hidden="true">{_esc(block["glyph"])}</div>'
         f'<div><div><span class="set-stword">{_esc(block["state_word"])}</span>'
         f'<span class="set-lamp-text">{_esc(block["text"])}</span></div>'
         f'<div class="set-note">{_esc(block["answers"])}</div></div>'
-        f'<div class="set-code">{_esc(block["code"])}　{_esc(block["title"])}</div></div>'
+        f'<div class="set-code">{code_title}</div></div>'
     )
     _lines(block.get("note_lines"))  # 正式模式才有：燈文含遮蔽記號時的下一行（★5）
     _lines(block["detail_lines"])
@@ -271,7 +280,7 @@ def _render_set0(block: dict) -> None:
 
 
 def _render_set1(block: dict, key: str, ctx=None) -> None:
-    _card_head(block)
+    _card_head(block, ctx is not None)
     rows = []
     for row in block["_rows"]:
         fail_tone = "紅" if row["_failed"] else None
@@ -291,7 +300,7 @@ def _render_set1(block: dict, key: str, ctx=None) -> None:
 
 
 def _render_set2(block: dict, key: str, ctx=None) -> None:
-    _card_head(block)
+    _card_head(block, ctx is not None)
     _placeholders([block["placeholder"]])
     if block["_rows"]:
         rows = [
@@ -309,7 +318,7 @@ def _render_set2(block: dict, key: str, ctx=None) -> None:
 
 
 def _render_set3(block: dict, key: str, ctx=None) -> None:
-    _card_head(block)
+    _card_head(block, ctx is not None)
     _tone_lines(block.get("head_lines"))  # 正式模式才有（★10）
     _placeholders([block["placeholder"]])
     if block["_rows"]:
@@ -325,15 +334,17 @@ def _render_set3(block: dict, key: str, ctx=None) -> None:
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _expander(block: dict):
+def _expander(block: dict, plain_mode: bool = False):
+    # 正式模式標題去掉塊代號（44 第七節第三小節之七其二第 1 條）；示範模式照舊。
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
     return st.expander(
-        f"{block['code']}　{block['title']}　—　{block['summary_text']}",
+        f"{head}　—　{block['summary_text']}",
         expanded=block["_default_open"],
     )
 
 
 def _render_set4(block: dict, key: str, ctx=None) -> None:
-    with _expander(block):
+    with _expander(block, ctx is not None):
         st.caption(block["answers"])
         _tone_lines(block.get("top_lines"))  # 正式模式才有（★6 缺設定那一行）
         _placeholders(block["fail_nodes"])
@@ -374,7 +385,7 @@ def _live_save(block: dict, key: str, ctx) -> None:
 
 
 def _render_set5(block: dict, key: str, ctx=None) -> None:
-    with _expander(block):
+    with _expander(block, ctx is not None):
         st.caption(block["answers"])
         picked = st.radio(
             block["tier_label"],
@@ -416,7 +427,7 @@ def _live_refetch(picked, key: str, ctx) -> None:
 
 
 def _render_set6(block: dict, key: str, ctx=None) -> None:
-    with _expander(block):
+    with _expander(block, ctx is not None):
         st.caption(block["answers"])
         _placeholders([block["placeholder"]])
         if block["_rows"]:
@@ -430,11 +441,48 @@ def _render_set6(block: dict, key: str, ctx=None) -> None:
 
 
 def _render_set7(block: dict, key: str, ctx=None) -> None:
-    with _expander(block):
+    with _expander(block, ctx is not None):
         st.caption(block["answers"])
         rows = [[_cell(r["field_text"], badges=r["badges"]), _cell(r["blocks_text"])] for r in block["_rows"]]
         _html(_table(block["column_labels"], rows))
         _lines(block["detail_lines"])
+
+
+# ── 進階診斷（原始訊息）：Phase 3 P0-①（44 第七節第三小節之七其二第 8 條；只在正式模式畫） ──
+# 呈現層：不取數、不寫入，只轉放其他頁本次瀏覽已經畫過、移出一般畫面的原文（`ui_v2/plain.py::record_raw`），
+# 以及原始鍵名、塊代號的對照。它是一枚預設收合的展開區，不是新的塊（不計入塊數與判準行數）。
+ADVANCED_DIAG_NOTE = "只收錄本次瀏覽開過的頁；每一頁每次重新畫面時整格更新。原文已遮蔽憑證，照印、不改寫。"
+# 原文可以是任何東西（例：上游錯誤頁裡的空行、`## `、`|`）。本頁 `_esc` 只做 HTML 跳脫，空行會讓 Markdown 跳出
+# HTML 區塊、把後面的字當語法解析 —— 這一枚改走與 `ui_v2/hld/page.py::_esc` 同樣的三步（折空白、HTML、Markdown
+# 語法字元一律改成數字字元參照），不截斷。
+_DIAG_WS = re.compile(r"[ \t\r\n\f\v]+")
+_DIAG_ENTITY = {ord(ch): f"&#{ord(ch)};" for ch in "\\`*_{}[]()#!|~$:" + "&<>\"'"}
+
+
+def _diag_cell(value) -> str:
+    return _DIAG_WS.sub(" ", str(value)).translate(_DIAG_ENTITY)
+ADVANCED_DIAG_EMPTY = "本次瀏覽開過的頁沒有被移出的原始訊息。"
+ADVANCED_DIAG_NO_PAGE = "本次瀏覽還沒有開過其他頁。"
+_ADVANCED_DIAG_LABELS = ("頁", "記錄時間", "位置", "原文")
+
+
+def _render_advanced_diag() -> None:
+    with st.expander(plain.ADVANCED_DIAG_TITLE, expanded=False):
+        st.caption(ADVANCED_DIAG_NOTE)
+        pages = plain.recorded_pages(st.session_state)
+        if pages:
+            _lines(["已記錄的頁：" + "、".join(f"{name}（{at}）" for name, at in pages)], "set-line")
+        else:
+            _lines([ADVANCED_DIAG_NO_PAGE], "set-line")
+        entries = plain.raw_entries(st.session_state)
+        if entries:
+            _html(_table(_ADVANCED_DIAG_LABELS, [[_diag_cell(cell) for cell in entry] for entry in entries]))
+        elif pages:
+            _lines([ADVANCED_DIAG_EMPTY], "set-line")
+        _lines(["塊代號對照"], "set-line")
+        _html(_table(("塊代號", "塊名"), [[_cell(code), _cell(name)] for code, name in plain.BLOCK_NAMES.items()]))
+        _lines(["原始鍵名對照"], "set-line")
+        _html(_table(("鍵名", "畫面上的名稱"), [[_cell(k), _cell(v)] for k, v in plain.KEY_NAMES.items()]))
 
 
 # ───────────────────────── 整頁 ─────────────────────────
@@ -496,6 +544,9 @@ def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
         dataset = live.dataset_with_save_results(live_input["dataset"], save_results)
         model = live.apply_live_notes(logic.build_page_model(dataset), dataset, live_input["notes"],
                                       save_results=save_results)
+        # Phase 3 P0-①：本頁只換塊代號、層字樣與 `SET-1` 的鍵名；`SET-2`／`SET-6`／`SET-7` 照舊照印原文與鍵名
+        # （44 第七節第三小節之七其二第 1、2 條），`SET-3`／`SET-4` 的鍵名不在本批。判定一個都不動。
+        model, _raw, _status = plain.plain_model(model, page="set")
         ctx = {
             "notes": live_input["notes"],
             "save_live": save_live,
@@ -514,24 +565,34 @@ def render(*, load_live=None, save_live=None, refetch_live=None) -> None:
     else:
         _html(f'<div class="set-sub">{_esc(model["answers"])}</div>')  # 草稿 ✂1：只留提問句
 
-    _html('<div class="set-layer-label">層 1　結論</div>')
-    _render_set0(logic.find_block(model, "SET-0"))
+    plain_mode = ctx is not None
+    label1, label2, label3, label4 = (
+        (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
+        else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
+    )
+    _html(f'<div class="set-layer-label">{label1}</div>')
+    _render_set0(logic.find_block(model, "SET-0"), plain_mode=plain_mode)
 
-    _html('<div class="set-layer-label">層 2　核心卡</div>')
+    _html(f'<div class="set-layer-label">{label2}</div>')
     with st.container(key="set_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
                 _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
-    _html('<div class="set-layer-label">層 3　操作（預設收合）</div>')
+    if plain_mode:
+        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        _html(f'<div class="set-layer-label">{plain.LABEL_DETAILS}</div>')
+    _html(f'<div class="set-layer-label">{label3}</div>')
     with st.container(key="set_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
                 _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
-    _html('<div class="set-layer-label">層 4　佐證（預設收合）</div>')
+    _html(f'<div class="set-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):
         _RENDERERS[code](logic.find_block(model, code), key, ctx)
+    if plain_mode:
+        _render_advanced_diag()
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(_badge(b) for b in model["footer_badges"])

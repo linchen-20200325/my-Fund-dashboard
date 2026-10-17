@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import datetime, timezone
 
 import streamlit as st
 
+from .. import plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -268,10 +270,16 @@ def _table(labels, rows) -> str:
     return f'<table class="alo-table"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
 
 
-def _card_head(block: dict) -> None:
+def _block_attr(block: dict, plain_mode: bool) -> str:
+    """正式模式：塊代號只放進 `data-block` 屬性（畫面不可見；給測試與瀏覽器量測定位）。示範模式回空字串、畫面照舊。"""
+    return f' data-block="{_esc(block["code"])}"' if plain_mode else ""
+
+
+def _card_head(block: dict, plain_mode: bool = False) -> None:
+    code_span = "" if plain_mode else f'<span class="alo-card-code">{_esc(block["code"])}</span>'
     _html(
-        f'<div class="alo-card-head" style="--alo-tone:{_tone(block["_tone"])}">'
-        f'<span class="alo-card-code">{_esc(block["code"])}</span>'
+        f'<div class="alo-card-head" style="--alo-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>'
+        f'{code_span}'
         f'<span class="alo-card-title">{_esc(block["title"])}</span></div>'
     )
 
@@ -279,14 +287,16 @@ def _card_head(block: dict) -> None:
 # ───────────────────────── 層 1 ─────────────────────────
 
 
-def _render_alo0(block: dict) -> None:
+def _render_alo0(block: dict, *, plain_mode: bool = False) -> None:
+    # 燈右側那一格：正式模式只留標題（44 第七節第三小節之七其二第 1 條）；示範模式「代號　標題」照舊。
+    code_title = _esc(block["title"]) if plain_mode else f'{_esc(block["code"])}　{_esc(block["title"])}'
     _html(
-        f'<div class="alo-lamp" style="--alo-tone:{_tone(block["_tone"])}">'
+        f'<div class="alo-lamp" style="--alo-tone:{_tone(block["_tone"])}"{_block_attr(block, plain_mode)}>'
         f'<div class="alo-glyph" aria-hidden="true">{_esc(block["glyph"])}</div>'
         f'<div><div><span class="alo-stword">{_esc(block["state_word"])}</span>'
         f'<span class="alo-lamp-text">{_esc(block["text"])}</span></div>'
         f'<div class="alo-note">{_esc(block["answers"])}</div></div>'
-        f'<div class="alo-code">{_esc(block["code"])}　{_esc(block["title"])}</div></div>'
+        f'<div class="alo-code">{code_title}</div></div>'
     )
     _lines(block["detail_lines"])
 
@@ -294,9 +304,9 @@ def _render_alo0(block: dict) -> None:
 # ───────────────────────── 層 2 ─────────────────────────
 
 
-def _render_alo1(block: dict, scenario: str, ctx=None) -> None:
+def _render_alo1(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
     _html(f'<div class="alo-intro">{_esc(block["intro_line"])}</div>')
-    _card_head(block)
+    _card_head(block, plain_mode)
     _placeholder(block)
     fields = block["inputs"]
     target_fields = fields[: 2 * len(block["_rows"])]
@@ -320,8 +330,8 @@ def _render_alo1(block: dict, scenario: str, ctx=None) -> None:
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo2(block: dict, scenario: str, ctx=None) -> None:
-    _card_head(block)
+def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    _card_head(block, plain_mode)
     _placeholder(block)
     if block["_rows"]:
         _html(
@@ -337,8 +347,8 @@ def _render_alo2(block: dict, scenario: str, ctx=None) -> None:
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo3(block: dict, scenario: str, ctx=None) -> None:
-    _card_head(block)
+def _render_alo3(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    _card_head(block, plain_mode)
     fields = block["inputs"]
     for index, row in enumerate(block["input_rows"]):
         left, right = st.columns(2)
@@ -365,15 +375,17 @@ def _render_alo3(block: dict, scenario: str, ctx=None) -> None:
 # ───────────────────────── 層 3 ─────────────────────────
 
 
-def _expander(block: dict):
+def _expander(block: dict, plain_mode: bool = False):
+    # 正式模式標題去掉塊代號（44 第七節第三小節之七其二第 1 條）；示範模式照舊。
+    head = block["title"] if plain_mode else f"{block['code']}　{block['title']}"
     return st.expander(
-        f"{block['code']}　{block['title']}　—　{block['summary_text']}",
+        f"{head}　—　{block['summary_text']}",
         expanded=block["_default_open"],
     )
 
 
-def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
-    with _expander(block):
+def _render_alo4(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode):
         st.caption(block["answers"])
         for field in block["inputs"][:1]:
             options = list(field["_options"])
@@ -387,7 +399,11 @@ def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
                 field["label"],
                 options,
                 index=None if chosen is None else options.index(chosen),
-                format_func=block["basis_option_labels"].get,
+                # 選項與它們的標籤照舊（`basis_option_labels` 不動）；正式模式只把標籤裡的鍵名換成中文（Phase 3 P0-①）。
+                format_func=(
+                    (lambda value, labels=block["basis_option_labels"]: plain.key_name(labels.get(value)))
+                    if plain_mode else block["basis_option_labels"].get
+                ),
                 key=f"{scenario}_alo_basis",
                 horizontal=True,
             )
@@ -422,8 +438,8 @@ def _render_alo4(block: dict, scenario: str, ctx=None) -> None:
                 _lines([block["goto_note"]], "alo-line")
 
 
-def _render_alo5(block: dict, scenario: str, ctx=None) -> None:
-    with _expander(block):
+def _render_alo5(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode):
         st.caption(block["answers"])
         button = block["buttons"][0]
         st.download_button(
@@ -441,8 +457,8 @@ def _render_alo5(block: dict, scenario: str, ctx=None) -> None:
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _render_alo6(block: dict, scenario: str, ctx=None) -> None:
-    with _expander(block):
+def _render_alo6(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode):
         st.caption(block["answers"])
         _placeholder(block)
         if block["_rows"]:
@@ -466,8 +482,8 @@ def _render_alo6(block: dict, scenario: str, ctx=None) -> None:
         _lines(block["detail_lines"])
 
 
-def _render_alo7(block: dict, scenario: str, ctx=None) -> None:
-    with _expander(block):
+def _render_alo7(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+    with _expander(block, plain_mode):
         st.caption(block["answers"])
         _placeholder(block)
         if block["_rows"]:
@@ -582,11 +598,20 @@ def render(*, load_live=None, save_live=None, mask_error=None) -> None:
                 wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
             )
         except ValueError as exc:
+            # Phase 3 P0-①（44 第七節第三小節之七其二第 2 條）：一般畫面只寫一句狀態；「<型別>：<遮蔽後訊息>」那一行
+            # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。
+            plain_line, raw = plain.plain_error_line(_error_line(exc, mask_error), page="alo")
+            plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
             _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
             _html(f'<div class="alo-sub">{_esc(logic.PAGE_ANSWERS)}</div>')
-            _html(f'<div class="alo-errline" role="alert">{_esc(_error_line(exc, mask_error))}</div>')
+            _html(f'<div class="alo-errline" role="alert">{_esc(plain_line)}</div>')
             return
+        # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+        # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+        model, raw, _status = plain.plain_model(model, page="alo")
+        plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
         key = "live"
+    plain_mode = load_live is not None
 
     _html(f'<div class="alo-title">{_esc(model["title"])}</div>')
     if load_live is None:
@@ -600,24 +625,31 @@ def render(*, load_live=None, save_live=None, mask_error=None) -> None:
     # ALO-GAP-灰字落點：照 ALO-1 規則欄現行字面「頁面頂端」。
     _lines(model["top_lines"], "alo-topline")
 
-    _html('<div class="alo-layer-label">層 1　結論</div>')
-    _render_alo0(logic.find_block(model, "ALO-0"))
+    label1, label2, label3, label4 = (
+        (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
+        else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
+    )
+    _html(f'<div class="alo-layer-label">{label1}</div>')
+    _render_alo0(logic.find_block(model, "ALO-0"), plain_mode=plain_mode)
 
-    _html('<div class="alo-layer-label">層 2　核心卡</div>')
+    _html(f'<div class="alo-layer-label">{label2}</div>')
     with st.container(key="alo_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key, ctx)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
-    _html('<div class="alo-layer-label">層 3　操作（預設收合）</div>')
+    if plain_mode:
+        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        _html(f'<div class="alo-layer-label">{plain.LABEL_DETAILS}</div>')
+    _html(f'<div class="alo-layer-label">{label3}</div>')
     with st.container(key="alo_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key, ctx)
+                _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
-    _html('<div class="alo-layer-label">層 4　佐證（預設收合）</div>')
+    _html(f'<div class="alo-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key, ctx)
+        _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(

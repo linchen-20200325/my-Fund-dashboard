@@ -167,8 +167,14 @@ def test_草稿剪1_頁首只留提問句_示意字樣全拿掉(real):
     sub = [e.value for e in at.markdown if e.value.startswith('<div class="set-sub">')]
     assert sub == ['<div class="set-sub">畫面上的數字現在可不可信，不可信是卡在哪一段</div>']
     text = "\n".join(_rendered(at))
-    for demo in ("情境", "示意值", "本頁沒有後端"):
+    # ~~for demo in ("情境", "示意值", "本頁沒有後端"):~~ → Phase 3 P0-①（有意識的更正，不是漏刪）：
+    # `SET-4`「改這個鍵會影響：…」的塊代號換成塊名之後，`ALO-3` 的塊名逐字就是「情境試算卡」，只掃「情境」兩個字必誤報。
+    # 要擋的是示範模式那一段標籤，所以改成逐字比對 fixtures 的那一份（同 `test_alo_live_page.py` 的做法）。
+    for demo in ("示意值", "本頁沒有後端", "\u3000·\u3000情境 "):
         assert demo not in text, demo
+    from ui_v2.set import fixtures as _demo           # 只有測試讀它；page 上的 fixtures 是會咬人的替身
+    for label in _demo.SCENARIO_LABELS.values():
+        assert label not in text, label
 
 
 def test_星1至星4星8星10_正常狀態都畫出來(real, monkeypatch):

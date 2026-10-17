@@ -25,7 +25,13 @@ pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 st
 
 import test_alo_live_page as T  # noqa: E402  —— 沿用正式模式的合格資料
 
+from ui_v2 import plain  # noqa: E402
 from ui_v2.alo import logic  # noqa: E402
+
+
+def _raw(at) -> str:
+    """Phase 3 P0-①：錯誤原文移到跨頁的原始訊息（設定與診斷頁的進階診斷），一般畫面只寫狀態句。"""
+    return "\n".join(e["text"] for e in at.session_state[plain.RAW_STATE]["alo"]["entries"])
 
 
 def _run(dataset, mask=""):
@@ -54,8 +60,10 @@ def test_同鍵兩列語意欄不同_畫既有錯誤呈現_沒有Traceback(colum
     assert len(at.exception) == 0, [e.message for e in at.exception]
     md = "\n".join(m.value for m in at.markdown)
     assert "Traceback" not in md and not at.code
-    assert logic.fetch_failed_text("ValueError：") in md
-    assert f"兩列的 {column} 不同" in md
+    assert plain.plain_error_line(logic.fetch_failed_text("ValueError：x"), page="alo")[0] in md
+    assert "ValueError" not in md and f"兩列的 {column} 不同" not in md
+    assert logic.fetch_failed_text("ValueError：") in _raw(at)
+    assert f"兩列的 {column} 不同" in _raw(at)
     assert logic.PAGE_TITLE in md and logic.PAGE_ANSWERS in md
     assert [b.label for b in at.button] == []
 
@@ -73,9 +81,12 @@ def test_錯誤行經過遮蔽函式_遮蔽失敗只印型別():
     first = dataset["holding"][0]
     dataset["holding"].append(dict(first, holding_id=first["holding_id"][:-1] + "2", ccy="USD"))
     pid = first["policy_id"]
-    md = "\n".join(m.value for m in _run(dataset, f', mask_error=lambda s: s.replace({pid!r}, "‹已遮蔽›")').markdown)
-    assert "‹已遮蔽›" in md and f"&#x27;{pid}&#x27;" not in md and f"'{pid}'" not in md
+    at = _run(dataset, f', mask_error=lambda s: s.replace({pid!r}, "‹已遮蔽›")')
+    md = "\n".join(m.value for m in at.markdown)
+    raw = _raw(at)
+    assert "‹已遮蔽›" in raw and f"'{pid}'" not in raw                    # 原文照舊先遮蔽，才收進原始訊息
+    assert f"&#x27;{pid}&#x27;" not in md and f"'{pid}'" not in md
     at = _run(dataset, ", mask_error=lambda s: 1 / 0")
     assert len(at.exception) == 0
     md = "\n".join(m.value for m in at.markdown)
-    assert logic.fetch_failed_text("ValueError") in md and "兩列的 ccy 不同" not in md
+    assert _raw(at) == logic.fetch_failed_text("ValueError") and "兩列的 ccy 不同" not in md + _raw(at)

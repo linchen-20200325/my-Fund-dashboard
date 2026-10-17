@@ -14,6 +14,7 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
+from .. import plain
 from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
@@ -159,16 +160,35 @@ def _drop_blank_lines(markup: str) -> str:
 # ───────────────────────── 層 1 ─────────────────────────
 
 
-def _render_light(block: dict) -> None:
+def _block_attr(block: dict, plain_mode: bool) -> str:
+    """正式模式：塊代號只放進 `data-block` 屬性（畫面不可見；給測試與瀏覽器量測定位）。示範模式回空字串、畫面照舊。"""
+    return f' data-block="{_esc(block["code"])}"' if plain_mode else ""
+
+
+def _code_title(block: dict, plain_mode: bool) -> str:
+    """燈右側那一格：示範模式「代號　標題」照舊；正式模式只留標題（44 第七節第三小節之七其二第 1 條）。"""
+    if plain_mode:
+        return _esc(block["title"])
+    return f'{_esc(block["code"])}　{_esc(block["title"])}'
+
+
+def _expander_title(block: dict, plain_mode: bool) -> str:
+    """展開區標題：正式模式去掉塊代號（同上）；示範模式照舊。"""
+    if plain_mode:
+        return f"{block['title']}　—　{block['summary_text']}"
+    return f"{block['code']}　{block['title']}　—　{block['summary_text']}"
+
+
+def _render_light(block: dict, *, plain_mode: bool = False) -> None:
     tone = theme.tone_hex(block["_tone"])
     st.markdown(
-        _drop_blank_lines(f"""<div class="mkt-light" style="--mkt-tone:{tone}">
+        _drop_blank_lines(f"""<div class="mkt-light" style="--mkt-tone:{tone}"{_block_attr(block, plain_mode)}>
           <div class="mkt-light-dot"></div>
           <div>
             <div class="mkt-light-text">{_esc(block["text"])}</div>
             <div class="mkt-mv-note">{_esc(block["answers"])}</div>
           </div>
-          <div class="mkt-light-code">{_esc(block["code"])}　{_esc(block["title"])}</div>
+          <div class="mkt-light-code">{_code_title(block, plain_mode)}</div>
         </div>"""),
         unsafe_allow_html=True,
     )
@@ -205,15 +225,15 @@ def _main_value_html(main_value: dict) -> str:
     return "".join(lines)
 
 
-def _render_card(block: dict) -> None:
+def _render_card(block: dict, *, plain_mode: bool = False) -> None:
     detail = "".join(
         f'<div>{_esc(line)}</div>' for line in block["detail_lines"]
     )
     detail_html = f'<div class="mkt-detail">{detail}</div>' if detail else ""
     st.markdown(
-        _drop_blank_lines(f"""<div class="mkt-card">
+        _drop_blank_lines(f"""<div class="mkt-card"{_block_attr(block, plain_mode)}>
           <div class="mkt-card-head">
-            <span class="mkt-card-code">{_esc(block["code"])}</span>
+            {"" if plain_mode else f'<span class="mkt-card-code">{_esc(block["code"])}</span>'}
             <span class="mkt-card-title">{_esc(block["title"])}</span>
             {_badges_html(block["badges"])}
           </div>
@@ -333,7 +353,7 @@ def _seed_live_fields(settings, keys, settings_error=None) -> None:
 
 
 def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> None:
-    with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
+    with st.expander(_expander_title(block, live_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
         days_field, date_field = block["inputs"]
         st.number_input(
@@ -380,8 +400,8 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
         st.caption("紅線說明區：所有試算參數均由使用者自行輸入。")
 
 
-def _render_mkt5(block: dict, *, save_click) -> None:
-    with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
+def _render_mkt5(block: dict, *, save_click, plain_mode: bool = False) -> None:
+    with st.expander(_expander_title(block, plain_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
         for item in block["_items"]:
             st.checkbox(
@@ -414,8 +434,8 @@ def _render_mkt5(block: dict, *, save_click) -> None:
 # ───────────────────────── 層 4 ─────────────────────────
 
 
-def _render_mkt6(block: dict) -> None:
-    with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
+def _render_mkt6(block: dict, *, plain_mode: bool = False) -> None:
+    with st.expander(_expander_title(block, plain_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
         if block["_rows"]:
             head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
@@ -438,8 +458,8 @@ def _render_mkt6(block: dict) -> None:
             st.caption(line)
 
 
-def _render_mkt7(block: dict) -> None:
-    with st.expander(f"{block['code']}　{block['title']}　—　{block['summary_text']}", expanded=block["_default_open"]):
+def _render_mkt7(block: dict, *, plain_mode: bool = False) -> None:
+    with st.expander(_expander_title(block, plain_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
         head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
         body = []
@@ -542,6 +562,11 @@ def render(*, load_live=None, save_live=None) -> None:
             mkt5_click = (_on_save_mkt5_live, (save_live, keys))
         else:
             mkt4_click, mkt5_click = (_on_save, ()), (_on_save_mkt5_demo, (keys,))
+        # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
+        # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
+        model, raw, _status = plain.plain_model(model, page="mkt")
+        plain.record_raw(st.session_state, "mkt", raw, datetime.now(timezone.utc))
+    plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
 
@@ -557,33 +582,40 @@ def render(*, load_live=None, save_live=None) -> None:
             unsafe_allow_html=True,
         )
 
-    st.markdown('<div class="mkt-layer-label">層 1　結論</div>', unsafe_allow_html=True)
-    _render_light(logic.find_block(model, "MKT-0"))
+    label1, label2, label3, label4 = (
+        (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
+        else ("層 1　結論", "層 2　核心卡", "層 3　操作（預設收合）", "層 4　佐證（預設收合）")
+    )
+    st.markdown(f'<div class="mkt-layer-label">{label1}</div>', unsafe_allow_html=True)
+    _render_light(logic.find_block(model, "MKT-0"), plain_mode=plain_mode)
 
     st.markdown(
-        '<div class="mkt-layer-label mkt-layer2">層 2　核心卡</div>', unsafe_allow_html=True
+        f'<div class="mkt-layer-label mkt-layer2">{label2}</div>', unsafe_allow_html=True
     )
     columns = st.columns(3)
     for column, code in zip(columns, logic.codes_in_layer(model, 2)):
         with column:
-            _render_card(logic.find_block(model, code))
+            _render_card(logic.find_block(model, code), plain_mode=plain_mode)
 
+    if plain_mode:
+        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        st.markdown(f'<div class="mkt-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="mkt-layer-label mkt-layer3">層 3　操作（預設收合）</div>',
+        f'<div class="mkt-layer-label mkt-layer3">{label3}</div>',
         unsafe_allow_html=True,
     )
     left, right = st.columns(2)
     with left:
-        _render_mkt4(logic.find_block(model, "MKT-4"), live_mode=live_input is not None,
+        _render_mkt4(logic.find_block(model, "MKT-4"), live_mode=plain_mode,
                      save_click=mkt4_click)
     with right:
-        _render_mkt5(logic.find_block(model, "MKT-5"), save_click=mkt5_click)
+        _render_mkt5(logic.find_block(model, "MKT-5"), save_click=mkt5_click, plain_mode=plain_mode)
 
     st.markdown(
-        '<div class="mkt-layer-label">層 4　佐證（預設收合）</div>', unsafe_allow_html=True
+        f'<div class="mkt-layer-label">{label4}</div>', unsafe_allow_html=True
     )
-    _render_mkt6(logic.find_block(model, "MKT-6"))
-    _render_mkt7(logic.find_block(model, "MKT-7"))
+    _render_mkt6(logic.find_block(model, "MKT-6"), plain_mode=plain_mode)
+    _render_mkt7(logic.find_block(model, "MKT-7"), plain_mode=plain_mode)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(

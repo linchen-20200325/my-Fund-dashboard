@@ -146,14 +146,18 @@ _MEASURE_JS = """([lampSel, innerSel]) => {
     offenders.push([el.tagName, (el.getAttribute('data-testid') || String(el.className)).slice(0, 40),
                     Math.round(box.right), el.textContent.trim().slice(0, 60)]);
   }
-  // 預設可見的容器內橫捲：記下它前面最近的一個塊代號（`*-card-code`／`*-code`）。
-  const codes = [...document.querySelectorAll('[class$="-card-code"], [class$="-code"]')];
+  // 預設可見的容器內橫捲：記下它前面最近的一個塊代號。
+  // ~~讀 `*-card-code`／`*-code` 的文字~~ → Phase 3 P0-①（有意識的更正，不是漏刪）：正式模式畫面上不再印塊代號，
+  // 改讀卡片／燈外框的 `data-block` 屬性（畫面不可見）；示範模式沒有這個屬性，照舊讀代號文字。
+  const codes = [...document.querySelectorAll('[data-block], [class$="-card-code"], [class$="-code"]')];
   const innerScroll = [];
   for (const box of document.querySelectorAll(innerSel)) {
     if (box.scrollWidth <= box.clientWidth + 1 || box.closest('details')) continue;
     let code = null;
     for (const c of codes) {
-      if (c.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING) code = c.textContent.trim().split(/\\s/)[0];
+      if (c.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        code = c.getAttribute('data-block') || c.textContent.trim().split(/\\s/)[0];
+      }
     }
     innerScroll.push(code);
   }
