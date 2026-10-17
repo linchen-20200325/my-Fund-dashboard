@@ -138,9 +138,19 @@ def test_M11_MKT版_畫面上的訊息與遮蔽後字串逐字相同_下一行�
     assert len(card) == 1
     raw = [e["text"] for e in at.session_state[plain.RAW_STATE]["mkt"]["entries"]]
     assert "⛔ 取數失敗：" + masked in raw                       # 原文逐字（遮蔽後）收進原始訊息
-    shown = __import__("html").escape(plain.plain_text("⛔ 取數失敗：" + masked, page="mkt", code="MKT-1"),
-                                      quote=True)
-    assert shown in card[0] and masked not in card[0]
+    # ~~shown = escape(plain.plain_text("⛔ 取數失敗：" + masked, …))~~ → 2026-10-17 Phase 3 P0-②（44 第七節第三小節之七
+    # 其二第 3 條；有意識的更正，不是漏刪）：那一句失敗摘要只在頁首資料狀態行出現一次；卡上主值位置改寫成狀態族
+    # （該塊是 `系統錯誤` 時第一處寫「⛔ 此區塊暫時無法判定」，其餘「⛔ 取數失敗」／「⛔ 尚未設定」）。下一行加註照舊。
+    from ui_v2 import health
+
+    summary = plain.plain_text("⛔ 取數失敗：" + masked, page="mkt", code="MKT-1")
+    # 本情境：風險情緒卡的高收益信用利差取數失敗（波動度指數 ok）⇒ 該塊是 `系統錯誤`、那一句是本塊第一處也是唯一一處
+    # ⇒ 只接受「⛔ 此區塊暫時無法判定」一種字樣（2026-10-17 稽核可選 1 收緊）。
+    shown = __import__("html").escape(health.LINE_BLOCK_UNDECIDABLE, quote=True)
+    assert card[0].count(shown) == 1 and masked not in card[0], card[0]
+    for other in (health.LINE_FETCH_FAILED, health.LINE_NOT_CONFIGURED):
+        assert f">{other}<" not in card[0], (other, card[0])
+    assert __import__("html").escape(summary, quote=True) not in card[0]
     assert key not in "\n".join(_rendered(at)) and key not in "\n".join(raw)
     after = card[0].split(shown, 1)[1]
     assert after.lstrip().startswith("</div>") and "已遮蔽憑證" in after.split("mkt-badge")[0]

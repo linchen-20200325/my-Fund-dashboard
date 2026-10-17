@@ -14,7 +14,7 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
-from .. import plain
+from .. import health, health_view, plain
 from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
@@ -498,7 +498,7 @@ def _pick_dataset() -> tuple[str, dict]:
     return name, datasets[name]
 
 
-def render(*, load_live=None, save_live=None) -> None:
+def render(*, load_live=None, save_live=None, settings_page=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 {"dataset": 與 fixtures 情境同形, "notes": {...}}）。
@@ -511,9 +511,15 @@ def render(*, load_live=None, save_live=None) -> None:
     傳入時 MKT-4／MKT-5 的「存檔」寫進 `user_setting`；**正式結果（三張核心卡的比較、下方明細）只讀
     `load_live` 交回的已存設定**，存檔後下一次重跑（重新讀 `user_setting`）才生效；輸入欄當下的值
     只決定欄位怎麼畫、存檔能不能按。只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
+
+    settings_page：選填的 `st.Page`（Phase 3 P0-②；預覽入口 `ui_v2/app_preview.py` 傳設定與診斷那一頁）。
+    正式模式頁首資料狀態行旁那一枚「前往設定與診斷」**只換頁**（`ui_v2/health_view.py::render_settings_link`）；
+    不傳（單頁入口）時只寫一行「完整資料狀態在『設定與診斷』頁」。示範模式不畫資料狀態行，傳了當場炸。
     """
     if load_live is None and save_live is not None:
         raise ValueError("save_live 要與 load_live 一起傳")
+    if load_live is None and settings_page is not None:
+        raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     live_input = None
@@ -566,6 +572,15 @@ def render(*, load_live=None, save_live=None) -> None:
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
         model, raw, _status = plain.plain_model(model, page="mkt")
         plain.record_raw(st.session_state, "mkt", raw, datetime.now(timezone.utc))
+        # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
+        # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
+        model, failures = health.dedupe_failures(model)
+        cards = logic.codes_in_layer(model, 2)
+        provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
+        status_line = health.status_line(
+            model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date"),
+            stale=health.has_stale_marker(model, cards),
+        )
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
@@ -581,6 +596,7 @@ def render(*, load_live=None, save_live=None) -> None:
             f'<div class="mkt-page-sub">{_esc(model["answers"])}</div>',
             unsafe_allow_html=True,
         )
+        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     label1, label2, label3, label4 = (
         (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
@@ -616,6 +632,8 @@ def render(*, load_live=None, save_live=None) -> None:
     )
     _render_mkt6(logic.find_block(model, "MKT-6"), plain_mode=plain_mode)
     _render_mkt7(logic.find_block(model, "MKT-7"), plain_mode=plain_mode)
+    if plain_mode:
+        health_view.render_provenance(provenance)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(

@@ -214,7 +214,10 @@ def test_讀失敗那一輪_不建EXP4勾選框_新增條件與存檔都停用(m
         assert at.button(key=key).disabled, key
     assert "讀設定失敗（測試注入）" not in _text(at)                 # 原文移到跨頁的原始訊息
     assert "讀設定失敗（測試注入）" in _raw_texts(at)
-    assert "⛔ 使用者設定 取數失敗" in _text(at)
+    # ~~assert "⛔ 使用者設定 取數失敗" in _text(at)~~ → 2026-10-17 Phase 3 P0-②（44 第七節第三小節之七其二第 3 條；
+    # 有意識的更正，不是漏刪）：同源失敗摘要只在頁首資料狀態行出現一次；那一句換成「⛔ 取數失敗：使用者設定」。
+    assert "⛔ 取數失敗：使用者設定" in _text(at)
+    assert "⛔ 使用者設定 取數失敗" not in _text(at)
 
 
 def test_讀失敗後恢復_輸入欄改回已存值_存檔不寫空值(monkeypatch):
@@ -362,7 +365,9 @@ def test_C2接線_錯誤原文含換行與Markdown語法_不跳出表格_不變�
     # Phase 3 P0-①：那一格的失敗原文移到跨頁的原始訊息（一般畫面只寫狀態句）；內容還在、只是換了地方。
     assert "## 注入標題\n| a | b |" in _raw_texts(at)
     text = html.unescape(table)
-    assert "⛔ 資料 取數失敗" in text
+    # ~~assert "⛔ 資料 取數失敗" in text~~ → 2026-10-17 Phase 3 P0-②（有意識的更正，不是漏刪）：表格列裡的失敗只留
+    # 狀態族「⛔ 取數失敗」（資料類摘要只在頁首資料狀態行一次）；那一格照舊是失敗、照舊看得到 ⛔。
+    assert "⛔ 取數失敗" in text and "⛔ 資料 取數失敗" not in text
 
 
 def _wired_app(tmp_path) -> pathlib.Path:

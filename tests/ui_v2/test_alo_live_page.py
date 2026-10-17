@@ -403,10 +403,16 @@ def test_設定讀取失敗時按存檔_卡上出現存檔寫入失敗行_寫入
         assert not at.exception, [e.value for e in at.exception]
     assert probe.calls == []
     # Phase 3 P0-①：一般畫面是改寫後的狀態句（圖示照舊），原文移到跨頁的原始訊息。
-    failed = (f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} '
-              f'{plain.plain_text(f"{logic.TEXT_SAVE_FAILED}：{message}", page="alo", code="ALO-1")}</div>')
+    # ~~failed = …plain.plain_text(f"{logic.TEXT_SAVE_FAILED}：{message}", …)~~ → 2026-10-17 Phase 3 P0-②（BL-0177；
+    # 有意識的更正，不是漏刪）：讀失敗時按存檔，兩鍵都記為存檔失敗 ⇒ 卡片層改寫「儲存失敗」（`health.TEXT_SAVE_FAILED_BOTH`），
+    # 兩鍵的原文各一筆進進階診斷。「兩鍵都失敗、卡片層一行、按鈕不停用、寫入 0 次」照舊。
+    from ui_v2 import health
+
+    failed = f'<div class="alo-errline" role="alert">{logic.SAVE_FAIL_GLYPH} {health.TEXT_SAVE_FAILED_BOTH}</div>'
     assert _markdown_values(at).count(failed) == 2                # ALO-1、ALO-4 各一行
     assert f"{logic.TEXT_SAVE_FAILED}：{message}" in _raw_texts(at)
+    for key in ("alo_target_weights", "alo_tolerance_pp", "alo_basis", "alo_bucket_names"):
+        assert f"{logic.TEXT_SAVE_FAILED}：{key}：{message}" in _raw_texts(at), key   # 兩鍵原文都進原始訊息
 
 
 def test_已存值帶四位以上小數_沒動就按存檔_寫回原值不寫顯示字串(monkeypatch, probe):

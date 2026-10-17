@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import plain
+from .. import health, health_view, plain
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -894,7 +894,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None) -> None:
+def render(*, load_live=None, save_live=None, settings_page=None) -> None:
     """畫整頁。
 
     load_live：選填的載入函式（無參數，回傳 `{"dataset": 與 fixtures 情境同形, "notes": {...}}`）。
@@ -905,12 +905,18 @@ def render(*, load_live=None, save_live=None) -> None:
     save_live：選填的寫入函式 `save_live(鍵, 值或 None, value_kind)`（`source.save_setting`；客戶 2026-10-13 裁示）。
     傳入時 `EXP-1`／`EXP-4`／`EXP-5` 的存檔寫進 `user_setting`，下一次重跑（重新讀 `user_setting`）才生效。
     只傳 `save_live` 不傳 `load_live` 是呼叫端的 bug，當場炸。
+
+    settings_page：選填的 `st.Page`（Phase 3 P0-②；預覽入口傳設定與診斷那一頁）。正式模式頁首資料狀態行旁
+    那一枚「前往設定與診斷」**只換頁**（`ui_v2/health_view.py::render_settings_link`）；不傳時只寫一行說明。
+    示範模式不畫資料狀態行，傳了當場炸。
     """
     if load_live is None and save_live is not None:
         raise ValueError("save_live 要與 load_live 一起傳")
+    if load_live is None and settings_page is not None:
+        raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}{theme.SOURCE_TAG_CSS}</style>", unsafe_allow_html=True)
     if load_live is not None:
-        _render_live(load_live, save_live)
+        _render_live(load_live, save_live, settings_page)
         return
 
     scenario = _pick_scenario()
@@ -994,7 +1000,16 @@ def render(*, load_live=None, save_live=None) -> None:
     )
 
 
-def _render_live(load_live, save_live) -> None:
+def _as_of(model: dict):
+    """資料截至日：候選清單上已畫出來的「最近淨值日」（`ok` 那幾格）最晚的一天；一格都沒有 → None（畫成「—」）。"""
+    rows = logic.find_block(model, "EXP-2").get("_rows") or ()
+    cells = [(row.get("_cells") or {}).get("nav_date") or {} for row in rows]
+    return health.latest_date(
+        [{"day": cell.get("text")} for cell in cells if cell.get("_state") == logic.STATE_OK], "day"
+    )
+
+
+def _render_live(load_live, save_live, settings_page=None) -> None:
     """正式模式整頁。判定全在 `live.build_live_model`；這裡只負責讀 session、接按鈕、畫。"""
     live_input = load_live()
     notes = live_input["notes"]
@@ -1017,6 +1032,12 @@ def _render_live(load_live, save_live) -> None:
     # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
     model, raw, _status = plain.plain_model(model, page="exp")
     plain.record_raw(st.session_state, "exp", raw, datetime.now(timezone.utc))
+    # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
+    # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
+    model, failures = health.dedupe_failures(model)
+    cards = logic.codes_in_layer(model, 2)
+    provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
+    status_line = health.status_line(model, failures, as_of=_as_of(model), stale=health.has_stale_marker(model, cards))
     noop = (None, ())
     exp1_clicks = {live.ACTION_ADD_ROW: (_on_add_rule, ())}
     exp4_click = exp5_click = noop
@@ -1027,6 +1048,7 @@ def _render_live(load_live, save_live) -> None:
 
     st.markdown(f'<div class="exp-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="exp-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
+    health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     st.markdown(f'<div class="exp-layer-label">{plain.LABEL_LAYER1}</div>', unsafe_allow_html=True)
     _render_exp0(logic.find_block(model, "EXP-0"), plain_mode=True)
@@ -1065,6 +1087,7 @@ def _render_live(load_live, save_live) -> None:
     )
     for code in logic.codes_in_layer(model, 4):
         _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
+    health_view.render_provenance(provenance)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     st.markdown(
