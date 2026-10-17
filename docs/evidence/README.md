@@ -12,6 +12,7 @@
 | `branch_archive/pr838/` | #838 資料字典 §4.6 文案草稿與 §5 G-13 摘錄（草稿、未核准） | `claude/v2-data-dictionary-a` @ `78863c3` |
 | `branch_archive/pr799/` | #799 舊 HANDOVER 工作原則摘錄（未重新核准） | `claude/fund-handover-sn42bh` @ `c6750e8` |
 | `decisions/` | 客戶裁示逐字存檔（2026-10-16 加入；性質與上列不同：存的是對話中裁示的全文，不是分支內容）。首份：客戶 2026-10-16 治理十一項裁示，三個 sha256 見該目錄 `README.md` | 客戶 2026-10-16 對話，經總管逐字轉存；存檔時 base main `ab30239` |
+| `phase3_uiux_audit_2026-10-17/` | Phase 3 UI/UX 三份唯讀稽核原始報告（UX inventory、OAuth／READ-WRITE、治理衝突；2026-10-17 加入；性質與上列皆不同：存的是本 repo 稽核組的報告，不是客戶原文、不是分支內容），作為 `docs/v2/58_ui_ux_constitution.md`、`docs/v2/59_b_line_390_wireframes.md` 的證據 | 三組稽核 2026-10-17 於 scratchpad 產出，由架構與文件組複製存檔；量測基準 main `57f03c9` |
 
 每個子目錄的 `README.md` 記來源分支、全長 SHA、時間、原始與保存檔的 sha256、被 main 何處引用、驗證指令。
 
