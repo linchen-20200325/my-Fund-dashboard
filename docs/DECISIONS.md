@@ -241,6 +241,21 @@
 - **生效**：自正式修正案 57 併入 main 起。
 - **現況不變**：B 線 v1 不輸出正式方向性判斷；方向詞現況守衛全部保留；不碰 Phase 7 decision engine、production threshold、production data source、Phase 3 UI。
 
+### DEC-2026-10-17-01｜客戶確認 UI/UX 與 Personal Investment Decision System 長期方向（登記為 backlog，不授權實作）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-17 |
+| 決策內容摘要 | 客戶指示把「客戶已確認的新 UI/UX 與『Personal Investment Decision System』長期方向」正式登記進 `docs/BACKLOG.md`，並分為兩組：【Phase 3 / 近期】與【Roadmap / 後續，不得在 Phase 3 一次實作】；指示同時寫明「不要在本舊對話開始實作」「不得因為登記 backlog 就視為已核准立即實作」。本筆記錄的決策只有一件：**這些方向是客戶確認的長期產品方向，並依客戶的分組切成 Phase 3 與 Later／Roadmap**。**本筆不是實作核准**：各項動工仍依 `CLAUDE.md` §-1、Phase 3 驗收流程（每批 ≤3）與 UI 草稿先行（`CLAUDE.md` §-1.5.4）；**不修改凍結 SSOT** `docs/v2/44_fund_ui_ssot.md`（改它仍須走既有解凍程序）；**不啟用任何方向性判斷**（B 線 v1 現況照舊，Phase 7 准入要件九項未完成前不得 production 啟用，`DEC-2026-10-16-14`）；不核准 54 的任何候選數字、公式或門檻 |
+| 理由／背景 | 避免這些方向只存在對話中而遺失（客戶原話）。客戶稱之為「已確認」的方向；各標籤背後的細部討論不在 repo，文件實作組未見，BACKLOG 各列的一行讀法一律標文件組讀法。依指示「不要把所有 backlog 複製進 DECISIONS；只記錄真正的決策」，本筆不列各方向清單 |
+| evidence／source | 逐字存檔 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`；落地索引 `docs/BACKLOG.md` §4〈2026-10-17 客戶確認之 UI/UX 與 Personal Investment Decision System 長期方向〉：新列 BL-0344～BL-0361，另補記既有列 BL-0250、BL-0293（39 個標籤對照表在該小節） |
+| 影響範圍 | 治理層：`docs/BACKLOG.md`（上列）、`docs/HANDOFF.md` 第 3 節一行指標。規格層：無（44、54、57、子法 1 本批一個字都不改）。程式：無 |
+| 是否可逆 | 可逆（客戶可另行裁示調整方向、分組或撤回） |
+| supersedes／superseded by | supersedes：無。superseded by：無。與既有規格的張力（例：「Data Health 集中至 SET」對 55 §5 第 1 條各頁首屏 `*-0` 燈；Thesis／Severity／What-if 等對 B 線 v1 不輸出方向性判斷）只登記於 BACKLOG 各列，本筆不裁定、不視為已取代任何條文 |
+| provenance | **逐字**（客戶 2026-10-17 對話中的指示，經總管於派工單內轉存；全文見 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`，轉存時的三項格式處理見該檔檔頭）。下列不是客戶逐字：把指示讀成「確認長期方向＋分組」這一項決策＝**總管讀法，可被客戶推翻**（依總管派工單）；BACKLOG 各列的讀法、去重判斷與張力辨識＝**文件組判讀** |
+
+- **現況不變**：Phase 3 仍在等客戶提供五頁真實資料截圖（`docs/HANDOFF.md` 第 3 節）；本筆不開任何工作。
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -335,5 +350,6 @@
 - 第四節 `DEC-2026-10-16-01`、`-02` 兩筆的客戶原話 repo 內沒有；內容依總管派工單與交接本轉述，本組未見原文。
 - 第四節 `DEC-2026-10-16-03`～`-13`：原文已落盤於 `docs/evidence/decisions/2026-10-16_governance_11_rulings.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔逐位元組相同）。各筆中標「總管讀法」「總管整理」者不是客戶裁示；「supersedes」欄的例示由文件實作組判讀，不宣稱窮舉，未經第二組驗證。
 - 第四節 `DEC-2026-10-16-14`：原文已落盤於 `docs/evidence/decisions/2026-10-16_proposal8_approval.md`（總管逐字轉存；文件實作組未見客戶對話本身，只核對了轉存檔與存檔檔圍欄還原後逐位元組相同）。該筆中標「總管判定」「總管設計基準」者不是客戶裁示；「supersedes」欄的條文清單以 57 為準，由文件實作組整理，未經第二組驗證。
+- 第四節 `DEC-2026-10-17-01`：原文已落盤於 `docs/evidence/decisions/2026-10-17_uiux_pids_direction.md`（總管於派工單內轉存；文件實作組未見客戶對話本身，轉存時做了三項格式處理，見該檔檔頭）。該筆「確認長期方向＋分組」的讀法是總管讀法；BACKLOG 各列的讀法與張力辨識是文件組判讀，未經第二組驗證。
 - 第五節的區塊範圍、點號與行號是本組以 `sed`／`awk` 在 `d5d391b` 實查；各區塊的 provenance 是照抄原處自陳，本組沒有回頭核對原始對話。
 - 第五節不宣稱窮舉：其他文件（例 `docs/v2/49_data_integration_plan.md`、`ACCEPTANCE.md`、各 PR 說明）裡也可能記有客戶裁示，本批未逐檔掃。
