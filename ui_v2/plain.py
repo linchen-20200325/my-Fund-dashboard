@@ -2,7 +2,7 @@
 """一般畫面去工程化（Phase 3 P0-①；`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之七其二）。
 
 純函式模組：**不 import streamlit、不 import 舊樹**（`tests/ui_v2/test_ui_v2_live_import_guard.py`），
-只 import 同樹的 `ui_v2.set.spec`（純 tuple 的規格快照，零 import）。
+除標準庫（`copy`、`re`）外不 import 任何模組；對照表與 `ui_v2/set/spec.py` 的一致性由測試比對。
 
 做什麼：正式模式的頁面模型（各頁 `logic`／`live` 已經算好、判定完的那一份）**深拷貝**後，
 把畫面上的工程字樣換成使用者語言，原文另交出來給設定與診斷頁的「進階診斷（原始訊息）」。
@@ -28,7 +28,6 @@ from __future__ import annotations
 import copy
 import re
 
-from .set import spec
 
 # ───────────────────────── 頁與塊 ─────────────────────────
 
@@ -197,6 +196,12 @@ _KEY_TOKEN = re.compile(
     + r")(?![A-Za-z0-9_])"
 )
 
+# 使用者自己的資料（基金名、保單名、類別名、已存的設定值）：顯示時不換任何字。`value_text` 只在紀錄列
+# （`_` 開頭容器裡的每一列，例：資產配置 ALO-7 修改紀錄、設定與診斷 SET-3）受保護；主值節點的 `value_text`
+# 是本頁組的字（可能是失敗原文），照常換。（2026-10-17 獨立稽核建議）
+_USER_DATA_KEYS = frozenset({"fund_name", "policy_name", "fund_text", "policy_text", "bucket_text", "raw_text"})
+_ROW_USER_DATA_KEYS = frozenset({"value_text"})
+
 # 不碰的鍵：識別、選項清單、下載檔名、畫面拿去當查表鍵的清單（值會被程式拿去比對、查表或寫出）。
 # 另外凡是名字以 `_keys` 結尾的鍵也不碰（`column_keys`、`row_keys` 這類鍵名清單）。
 _PROTECTED_KEYS = frozenset(
@@ -215,15 +220,10 @@ def _protected(key) -> bool:
     return isinstance(key, str) and (key in _PROTECTED_KEYS or key.endswith("_keys"))
 
 
-def _block_data_class(code) -> str:
-    """一塊預設的中文資料類：該塊來源欄（`spec.SPEC_BLOCK_SOURCES`）扣掉使用者設定後只剩一張表 → 那張表的中文名。"""
-    sources = dict(spec.SPEC_BLOCK_SOURCES).get(code) or ()
-    tables = {item.split(".", 1)[0] for item in sources} - {"user_setting"}
-    if len(tables) == 1:
-        return TABLE_NAMES[next(iter(tables))]
-    if not tables and sources:
-        return TABLE_NAMES["user_setting"]
-    return DATA_CLASS_DEFAULT
+# ~~`_block_data_class(code)`：依該塊來源欄推一個資料類~~ → 2026-10-17 獨立稽核必修（有意識的更正，不是漏刪；
+# 決策者：AI 總管依稽核）：一塊可以照抄別塊的失敗字串（例：資產配置 ALO-3 照抄 ALO-2 的持倉／匯率失敗），
+# 依「這一塊的來源」推資料類會把它標成「使用者設定」—— 錯誤歸因。改為：只有失敗字首帶表鍵、或認得出是
+# 已知訊息時才寫具體資料類，否則一律寫「資料」（`DATA_CLASS_DEFAULT`）。舊推法在寫下當時以為各塊只印自己的來源。
 
 
 def key_name(key) -> str:
@@ -265,10 +265,9 @@ class _Context:
 
 def _rewrite_failure(text: str, block, ctx: _Context):
     """失敗原文那一族 → 一句狀態描述。回 (新字串, 是否改寫)。"""
-    code = (block or {}).get("code")
     if FETCH_FAIL_PREFIX in text:
         prefix, raw = text.split(FETCH_FAIL_PREFIX, 1)
-        data_class = _block_data_class(code)
+        data_class = DATA_CLASS_DEFAULT
         table = _TABLE_PREFIX.search(prefix)
         if table:   # 標的探索的「<表鍵>：⛔ 取數失敗：…」：表鍵就是資料類，不再另寫一次
             data_class, prefix = TABLE_NAMES[table.group(1)], prefix[: table.start()]
@@ -365,6 +364,8 @@ def _walk(node, block, ctx: _Context, private: bool = False):
                 if isinstance(value, (dict, list, tuple)):
                     node[key] = _walk(value, block, ctx, private=True)
                 continue
+            if isinstance(value, str) and (key in _USER_DATA_KEYS or (private and key in _ROW_USER_DATA_KEYS)):
+                continue   # 使用者的資料（字串本身），不換字；同名鍵底下是一格值節點（例 EXP-2 的 `_cells`）時照常往下走
             if key == "value_text" and _is_input_field(node):
                 continue   # 輸入欄的當下值是使用者的資料，不換字
             node[key] = _walk(value, block, ctx)

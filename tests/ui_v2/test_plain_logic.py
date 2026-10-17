@@ -360,9 +360,10 @@ def test_失敗行照舊以停止符號起頭_紅色與狀態不動():
         page="mkt")
     block = display["blocks"][0]
     assert block["_tone"] == "紅" and block["state"] == "系統錯誤"
-    assert block["main_values"][0]["value_text"] == "⛔ 市場指標 取數失敗：相關數字暫時無法判定"
+    # 原文認不出是哪一張表 → 資料類一律寫「資料」（獨立稽核必修：不依塊的來源欄推）
+    assert block["main_values"][0]["value_text"] == "⛔ 資料 取數失敗：相關數字暫時無法判定"
     assert raw == [{"where": "MKT-1 風險情緒卡", "text": "⛔ 取數失敗：fetch_url returned None (kind=x)"}]
-    assert status["fetch_failed"] == ["市場指標"]
+    assert status["fetch_failed"] == ["資料"]
 
 
 @pytest.mark.parametrize(
@@ -385,6 +386,67 @@ def test_逐條改寫(text, expected):
     block = {"code": "HLD-2" if "AAAA" in text else ("EXP-0" if "EXP-1" in text else "HLD-1"), "title": "x"}
     display, _raw, _status = plain.plain_model({"blocks": [dict(block, line=text)]}, page="hld")
     assert display["blocks"][0]["line"] == expected
+
+
+_CLASS = re.compile(r"⛔ (\S+) 取數失敗：")
+
+
+def _expected_class(raw: str) -> str:
+    """原文可判定的所屬資料類（本檔獨立寫一份）：字首表鍵 → 已知訊息 → 否則「資料」。"""
+    head = raw.split(plain.FETCH_FAIL_PREFIX, 1)[0]
+    for table, name in plain.TABLE_NAMES.items():
+        if re.search(rf"(?<![A-Za-z0-9_]){table}：\s*$", head):
+            return name
+    known = {plain.MSG_SETTINGS_NOT_CONFIGURED: "使用者設定", plain.MSG_POLICY_NOT_CONFIGURED: "保單與持倉",
+             plain.MSG_FRED_MISSING: "市場指標", plain.MSG_POOL_NOT_CLOUD: "選股池"}
+    for message, name in known.items():
+        if message in raw:
+            return name
+    return "資料"
+
+
+def test_改寫後寫的資料類_必須與原文可判定的所屬表一致_判定不了就是資料():
+    checked = 0
+    for key, model in _all_models().items():
+        if key[0] != "live" or key[1] == "set":
+            continue
+        display, raw, _status = plain.plain_model(model, page=key[1])
+        for block, shown in zip(model["blocks"], display["blocks"]):
+            where = f"{block['code']} {block['title']}"
+            allowed = {_expected_class(e["text"]) for e in raw
+                       if e["where"] == where and plain.FETCH_FAIL_PREFIX in e["text"]}
+            for text in _strings(shown):
+                for found in _CLASS.findall(text):
+                    assert found in allowed, (key, block["code"], found, allowed, text)
+                    checked += 1
+    assert checked >= 30, checked
+
+
+@pytest.mark.parametrize("scenario", ["holdfail", "fxfail"])
+def test_ALO3照抄別塊的失敗字串時_不得標成使用者設定(scenario):
+    from ui_v2.alo import fixtures as AF
+    from ui_v2.alo import live as AL
+    from ui_v2.alo import logic as A
+
+    display = plain.plain_model(AL.apply_live_notes(A.build_page_model(AF.scenario(scenario))), page="alo")[0]
+    alo3 = next(b for b in display["blocks"] if b["code"] == "ALO-3")
+    texts = list(_strings(alo3))
+    assert any("取數失敗" in t for t in texts), texts      # 前提：這一塊真的有失敗字串
+    assert not [t for t in texts if "使用者設定" in t], texts
+
+
+def test_使用者的資料不換字_小寫詞照原樣():
+    model = {"blocks": [
+        {"code": "ALO-7", "title": "目標修改紀錄",
+         "_rows": [{"key_text": "alo_bucket_names", "value_text": "nav status policy", "time_text": "t"}]},
+        {"code": "ALO-6", "title": "歸屬明細", "_rows": [{"fund_text": "global nav fund", "policy_text": "policy x",
+                                                        "bucket_text": "status"}]},
+        {"code": "HLD-8", "title": "最大回撤與本金類配息佔比", "_rows": [{"fund_name": "nav growth"}]},
+    ]}
+    blocks = plain.plain_model(model, page="alo")[0]["blocks"]
+    assert blocks[0]["_rows"][0] == {"key_text": "類別名稱", "value_text": "nav status policy", "time_text": "t"}
+    assert blocks[1]["_rows"][0] == {"fund_text": "global nav fund", "policy_text": "policy x", "bucket_text": "status"}
+    assert blocks[2]["_rows"][0] == {"fund_name": "nav growth"}
 
 
 def test_受保護的鍵不換字():
