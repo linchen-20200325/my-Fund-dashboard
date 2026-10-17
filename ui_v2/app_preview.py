@@ -24,6 +24,10 @@
 （設定與診斷那一頁的 `st.Page`，給頁首資料狀態行旁的「前往設定與診斷」；只換頁）。單頁的 live 入口沒有
 `st.navigation`、換不了頁，不傳這一個；其餘參數照舊與 live 入口同名、同一物件（守衛同上，只容許多這一個）。
 
+2026-10-17 Phase 3 P1-⑤（BL-0362）：市場總覽、標的探索、設定與診斷三頁**與各自的 live 入口一起**多傳
+`mask_error=source.mask_error`（整頁載入失敗時，原文經遮蔽才收進進階診斷）；上表三列的呼叫方式在寫下當時為真，
+現行以本段為準（狀態更新，不是漏刪）。持倉體檢、資產配置早已傳。
+
 ~~真資料四頁~~ 真資料五頁（2026-10-13 起標的探索也接上；狀態更新，不是漏刪）**不退回 fixtures**：本檔不 import 任何 `fixtures`；讀不到資料時由各頁既有的正式模式
 錯誤路徑照實顯示（例如「未設定保單試算表 ID（POLICY_SHEET_ID），不讀取」），不補任何數字。
 
@@ -189,7 +193,10 @@ def _settings_page():
 
 def page_mkt() -> None:
     _on_page("mkt")
-    mkt_page.render(load_live=mkt_source.load_live, save_live=mkt_source.save_setting, settings_page=_settings_page())
+    mkt_page.render(
+        load_live=mkt_source.load_live, save_live=mkt_source.save_setting, mask_error=mkt_source.mask_error,
+        settings_page=_settings_page(),
+    )
 
 
 def page_hld() -> None:
@@ -205,7 +212,10 @@ def page_exp() -> None:
     # ~~st.warning(EXP_DEMO_BANNER, icon="⚠️")~~
     # ~~exp_page.render()~~
     # → 2026-10-13（狀態更新，不是漏刪）：與 `ui_v2/app_exp_live.py` 同名參數、同一物件（守衛同上）。
-    exp_page.render(load_live=exp_source.load_live, save_live=exp_source.save_setting, settings_page=_settings_page())
+    exp_page.render(
+        load_live=exp_source.load_live, save_live=exp_source.save_setting, mask_error=exp_source.mask_error,
+        settings_page=_settings_page(),
+    )
 
 
 def page_alo() -> None:
@@ -219,7 +229,8 @@ def page_alo() -> None:
 def page_set() -> None:
     _on_page("set")
     set_page.render(
-        load_live=set_source.load_live, save_live=set_source.save_setting, refetch_live=set_source.refetch
+        load_live=set_source.load_live, save_live=set_source.save_setting, refetch_live=set_source.refetch,
+        mask_error=set_source.mask_error,
     )
 
 

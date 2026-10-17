@@ -13,6 +13,9 @@
    - 其餘位置 → 只留狀態族：「⛔ 取數失敗」／「⛔ 尚未設定」／「⛔ 設定讀不到」；逐檔的那一種留基金代碼
      （「⛔ <代碼> 取數失敗」—— 哪一檔失敗是該塊自己的內容，不是摘要）。
    - 同一串說明行裡因此變成一模一樣的 ⛔ 行，只留第一行（BL-0146）。
+   - 結論燈（①）那一句若以燈自己的圖示開頭，拿掉重複的圖示；剩下的字與狀態字相同就整句不畫
+     （Phase 3 P1-④；`trim_light_echo`。例：「⛔ 狀態：取數失敗 ⛔ 尚未設定」→「⛔ 狀態：取數失敗 尚未設定」；
+     「⬜ 狀態：中性 ⬜ 資料未備」→「⬜ 狀態：中性 資料未備」。依據與變動範圍見該函式）。
    ⛔ 與紅色照舊：`_` 開頭的鍵（狀態、顏色、嚴重度）一個都不碰，**判定照舊**（護欄 2）。
 2. **資料狀態行**（其二第 4 條、59 線框第 2.6 節）：四種 —— `◷` 不是最新（只顯示最後有效資料）、`◇` 資料未備、
    `⛔` 取數失敗、尚未設定 —— 同類只列一次，附資料截至日；**沒有任何一種時不寫「資料齊」或「正常」，只寫資料截至日**。
@@ -239,12 +242,55 @@ def dedupe_failures(display: dict):
     """
     ctx = _Dedupe()
     _walk(display, None, ctx)
+    for block in display.get("blocks") or ():
+        if block.get("_layer") == 1:
+            trim_light_echo(block)
     return display, {
         "fetch_failed": list(ctx.fetch_failed),
         "not_configured": list(ctx.not_configured),
         "affected_blocks": list(ctx.affected),
         "explained_blocks": list(ctx.explained),
     }
+
+
+# ───────────────────────── 結論燈：同一則訊息不印兩次（Phase 3 P1-④） ─────────────────────────
+
+# 狀態字的前綴（持倉體檢、資產配置的 `state_word` 自帶；標的探索的 `state_word` 不帶、由 `page.py` 補）。
+LIGHT_STATE_PREFIX = "狀態："
+
+
+def trim_light_echo(block: dict) -> bool:
+    """結論燈（①）右側那一句若以燈自己的圖示開頭，就把那個圖示拿掉；拿掉後剩下的字若與狀態字相同，整句不畫（就地改寫）。
+    回「有沒有改」。
+
+    例：資產配置設定試算表讀不到時，燈畫「⛔ 狀態：取數失敗 ⛔ 尚未設定」→「⛔ 狀態：取數失敗 尚未設定」；
+    取數失敗時「⛔ 狀態：取數失敗 ⛔ 取數失敗」→「⛔ 狀態：取數失敗」。
+    依據：⛔ 那幾句 —— 58 U-31「同一則原文重複印多次本身是錯，可視為修正錯誤」、44 第七節第三小節之七其二第 3 條
+    （同源失敗一頁只摘要一次）、59 線框第 1.1 節（同源錯誤只在資料狀態行與 ① 各出現一次）。
+    ⬜ 那幾句（「⬜ 資料未備」「⬜ 不適用…」）只依 58 U-31 的一般原則做呈現去重，**不屬於** 44 其二第 3 條
+    （那一條只管同源的系統錯誤）。44 其四的 ◇ 落地後，資料未備的句首改成 ◇、與燈的 ⬜ 不同，本規則對資料未備不再觸發。
+
+    變動範圍（2026-10-17 量測，只對下列兩組情境成立，不宣稱窮舉）：
+    - `tests/ui_v2/_plain_scan.py` 的正式模式畫面：資產配置「未設定」「未設定保單」「取數失敗」「局部失敗」四個情境、
+      持倉體檢「超過10日」，共 5 處。
+    - `tests/ui_v2/test_plain_logic.py::_all_models()` 的正式模型：持倉體檢「⬜ 資料未備」9 個（full/21、srcmiss/21、
+      bizexc/21、noexceed/21、other_window/21、onenav/21、tiedstate/10、tiedstate/21、full_then_badrange/21）、
+      持倉體檢「⬜ 不適用」2 個（bizexc/10、onenav/10）、資產配置 nobasis、nofx 兩個 ⬜，
+      資產配置 holdfail、fxfail、settingfail 三個「⛔ 取數失敗」整句不畫，共 16 處。
+
+    只動 `text` 這一個顯示字串：`glyph`、`state_word`、`_tone`、`_state` 與任何判定一個都不碰（護欄 2）；
+    圖示不同（例：燈 ⬜、句首 ◇）不動；句首沒有圖示不動。
+    """
+    glyph, text, word = block.get("glyph"), block.get("text"), block.get("state_word")
+    if not (isinstance(glyph, str) and glyph.strip() and isinstance(text, str)):
+        return False
+    head = f"{glyph} "
+    if not text.startswith(head):
+        return False
+    rest = text[len(head):].strip()
+    payload = word[len(LIGHT_STATE_PREFIX):] if isinstance(word, str) and word.startswith(LIGHT_STATE_PREFIX) else word
+    block["text"] = "" if rest == payload else rest
+    return True
 
 
 # ───────────────────────── 資料未備（◇）的判定：沿用模型既有的狀態 ─────────────────────────
@@ -436,6 +482,31 @@ def mark_last_valid(display: dict, codes, prefix: str) -> bool:
         if block.get("code") in codes:
             visit(block)
     return found
+
+
+# ───────────────────────── 整頁載入失敗（BL-0362；Phase 3 P1-⑤） ─────────────────────────
+
+
+def load_failure_line(exc: BaseException, mask_error, fetch_failed_text) -> str:
+    """正式模式 `load_live()` 拋例外時那一行原文：「⛔ 取數失敗：<型別>：<遮蔽後訊息>」（給設定與診斷頁的進階診斷）。
+
+    組法照持倉體檢既有的 `ui_v2/hld/page.py::_live_error_line`（總管 2026-10-03 裁定）：型別名與訊息都經 `mask_error`。
+    `fetch_failed_text`：該頁 `logic.fetch_failed_text`（44 第五節第五小節 `系統錯誤` 那一列的模板；本模組不另寫一份）。
+    退路（**不往外拋** —— 往外拋就是整段 Traceback）：沒有遮蔽函式（`mask_error is None`）、`str(exc)` 本身拋、
+    遮蔽拋、或回傳非字串 ⇒ 只寫例外型別，**不帶任何訊息內容**（沒有遮蔽過的原文不收進進階診斷）。
+    沒有遮蔽函式時只寫型別，是本組擬定（44／59 沒有寫；理由：進階診斷的說明句寫「原文已遮蔽憑證」）。
+    """
+    type_name = type(exc).__name__
+    if mask_error is None:
+        return fetch_failed_text(type_name)
+    try:
+        masked_type = mask_error(type_name)
+        masked = mask_error(str(exc))
+        if not isinstance(masked_type, str) or not isinstance(masked, str):
+            raise TypeError("mask_error 應回傳字串")
+    except Exception:  # noqa: BLE001 —— 不是吞：照樣組出錯誤行，只是不帶訊息內容
+        return fetch_failed_text(type_name)
+    return fetch_failed_text(f"{masked_type}：{masked}")
 
 
 # ───────────────────────── 兩鍵一起存、兩鍵都失敗（BL-0177） ─────────────────────────

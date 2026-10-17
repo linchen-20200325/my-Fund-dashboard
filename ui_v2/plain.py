@@ -444,6 +444,16 @@ def record_raw(session_state, slug: str, entries, now) -> None:
     session_state[RAW_STATE] = store
 
 
+def clear_raw(session_state, slug: str) -> None:
+    """拿掉這一頁記下的原始訊息（設定與診斷頁載入成功時拿掉自己上一次載入失敗的那一筆；Phase 3 P1-⑤）。
+    沒有那一筆 → 一個字都不寫（不新增「已記錄的頁」）。"""
+    store = session_state.get(RAW_STATE) or {}
+    if slug in store:
+        store = dict(store)
+        del store[slug]
+        session_state[RAW_STATE] = store
+
+
 def raw_entries(session_state) -> list:
     """設定與診斷頁讀：`[(頁名, 記錄時間, 位置, 原文), ...]`，依五頁頁序；沒開過的頁不在裡面。"""
     store = session_state.get(RAW_STATE) or {}

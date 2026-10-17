@@ -297,3 +297,51 @@ def test_持倉體檢_中性延遲_徽章移到第四段_卡上與狀態行都�
     assert len(box) == 1 and box[0].proto.expanded is False
     body = html.unescape(" ".join(m.value for m in box[0].markdown))
     assert body.count("延遲 10 日") >= 6, body                                     # 兩張卡 × 三檔
+
+
+# ───────────────────────── Phase 3 P1-④：結論燈同一則訊息不印兩次 ─────────────────────────
+# 本段只驗 `_plain_scan` 畫面情境裡的 5 處；模型層的完整變動範圍（含持倉體檢與資產配置的 ⬜）見 `health.trim_light_echo`。
+
+
+def _lamp_text(at, code):
+    lamps = [" ".join(P.markdown_text(m.value).split()) for m in at.main.markdown if f'data-block="{code}"' in m.value]
+    assert len(lamps) == 1, (code, lamps)
+    return lamps[0]
+
+
+@pytest.mark.parametrize(("name", "rest"), [
+    ("未設定", "狀態：取數失敗 尚未設定"),
+    ("未設定保單", "狀態：取數失敗 尚未設定"),
+    ("取數失敗", "狀態：取數失敗 我這一季"),
+    ("局部失敗", "狀態：取數失敗 我這一季"),
+])
+def test_資產配置結論燈_停止符號與取數失敗各只出現一次(name, rest):
+    """改前畫面是「⛔ 狀態：取數失敗 ⛔ 尚未設定」「⛔ 狀態：取數失敗 ⛔ 取數失敗」（P0-② 稽核所見）。"""
+    at, _ = _run(P.SCRIPTS["alo"][name])
+    lamp = _lamp_text(at, "ALO-0")
+    assert lamp.count(health.SYMBOL_ERROR) == 1, lamp
+    assert lamp.count(health.TEXT_FETCH_FAILED) == 1, lamp
+    assert lamp.startswith(f"{health.SYMBOL_ERROR} {rest}"), lamp
+
+
+def test_持倉體檢超過10日_結論燈的方塊只出現一次():
+    at, _ = _run(P.SCRIPTS["hld"]["超過10日"])
+    lamp = _lamp_text(at, "HLD-0")
+    assert lamp.startswith("⬜ 狀態：中性 資料未備"), lamp
+    assert lamp.count("⬜") == 1, lamp
+
+
+def test_示範模式的結論燈照舊():
+    """示範模式畫面維持現行（BL-0367）：取數失敗情境的燈文字照舊是 logic 交出的原句（本步只在正式模式的去重裡做）。"""
+    from streamlit.testing.v1 import AppTest
+
+    from ui_v2.alo import fixtures as AF
+    from ui_v2.alo import logic as AL
+
+    at = AppTest.from_file(str(_ROOT / "ui_v2" / "app_alo.py"), default_timeout=60)
+    at.query_params["scenario"] = "holdfail"
+    at.run()
+    assert not at.exception
+    expected = AL.find_block(AL.build_page_model(AF.scenario("holdfail")), "ALO-0")["text"]
+    lamps = [m.value for m in at.main.markdown if 'class="alo-lamp"' in m.value]
+    assert len(lamps) == 1 and html.escape(expected) in lamps[0], (expected, lamps)

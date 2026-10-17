@@ -56,7 +56,9 @@ def test_同鍵兩列語意欄不同_畫既有錯誤呈現_沒有Traceback(colum
     dup[column] = value
     assert dup[column] != first[column], "兩列沒有不同 —— 這一條會測錯東西"
     dataset["holding"].append(dup)
-    at = _run(dataset)
+    # ~~`at = _run(dataset)`~~ → 2026-10-17 P1-⑤ 稽核順修（有意識的更正，不是漏刪）：沒有遮蔽函式時原文只收型別，
+    # 本條要驗原文照收，改傳一個不換任何字的遮蔽函式（正式入口一定會傳 `source.mask_error`）。
+    at = _run(dataset, ", mask_error=lambda s: s")
     assert len(at.exception) == 0, [e.message for e in at.exception]
     md = "\n".join(m.value for m in at.markdown)
     assert "Traceback" not in md and not at.code
@@ -90,3 +92,13 @@ def test_錯誤行經過遮蔽函式_遮蔽失敗只印型別():
     assert len(at.exception) == 0
     md = "\n".join(m.value for m in at.markdown)
     assert _raw(at) == logic.fetch_failed_text("ValueError") and "兩列的 ccy 不同" not in md + _raw(at)
+
+
+def test_沒有遮蔽函式時_原文只收型別_不帶訊息():
+    """2026-10-17 P1-⑤ 稽核順修：與 `health.load_failure_line` 一致 —— 沒有遮蔽過的原文不收進進階診斷。"""
+    dataset = copy.deepcopy(T._DATASET)
+    first = dataset["holding"][0]
+    dataset["holding"].append(dict(first, holding_id=first["holding_id"][:-1] + "2", ccy="USD"))
+    at = _run(dataset)
+    assert len(at.exception) == 0
+    assert _raw(at) == logic.fetch_failed_text("ValueError")

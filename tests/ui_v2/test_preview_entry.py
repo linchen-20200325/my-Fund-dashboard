@@ -205,7 +205,10 @@ def test_b_標的探索的示範入口照舊不傳任何參數_預覽改走正�
     preview = _entry_injections(_PREVIEW, "exp")
     assert demo == [{}]
     # 2026-10-17 P0-②：預覽另多傳 settings_page（上一條守衛只容許多這一個）。
-    assert preview == [{"load_live": "load_live", "save_live": "save_setting", _SETTINGS_PAGE_KW: _SETTINGS_PAGE_VALUE}]
+    # ~~`[{"load_live": "load_live", "save_live": "save_setting", _SETTINGS_PAGE_KW: _SETTINGS_PAGE_VALUE}]`~~ →
+    # 2026-10-17 P1-⑤（BL-0362；狀態更新，不是漏刪）：入口與預覽同步加傳 mask_error。
+    assert preview == [{"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error",
+                        _SETTINGS_PAGE_KW: _SETTINGS_PAGE_VALUE}]
 
 
 def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合():
@@ -213,15 +216,18 @@ def test_b_live入口的注入本身沒有漂移_體檢四份的關鍵字集合(
     got = {p: _entry_injections(_ROOT / "ui_v2" / f"app_{p}_live.py", p)[0] for p in _LIVE_PAGES}
     # 2026-10-13 狀態更新（不是漏刪）：客戶裁示市場總覽設定存檔接上 user_setting ——
     # ~~"mkt": {"load_live": "load_live"},~~ → mkt 入口與預覽同步加傳 save_live（上一條守衛比對兩者逐一相同）。
+    # 2026-10-17 P1-⑤（BL-0362；狀態更新，不是漏刪）：mkt、exp、set 三份入口與預覽同步加傳 mask_error
+    # （整頁載入失敗時原文經遮蔽才收進進階診斷）。舊值：mkt／exp 只有 load_live、save_live；set 沒有 mask_error。
     assert got == {
-        "mkt": {"load_live": "load_live", "save_live": "save_setting"},
+        "mkt": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},
         # ~~"hld": {"load_live": "load_live", "mask_error": "mask_error"},~~ → 2026-10-16 客戶裁示第 2 點（狀態更新，不是漏刪）：
         # 持倉體檢存檔接上 user_setting，入口與預覽同步加傳 save_live。
         "hld": {"load_live": "load_live", "mask_error": "mask_error", "save_live": "save_setting"},
-        "exp": {"load_live": "load_live", "save_live": "save_setting"},   # 2026-10-13 新增
+        "exp": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},   # 2026-10-13 新增
         # 2026-10-16 總管判定（PR #976 稽核後）：資產配置入口與預覽同步加傳 mask_error（狀態更新，不是漏刪）。
         "alo": {"load_live": "load_live", "save_live": "save_setting", "mask_error": "mask_error"},
-        "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch"},
+        "set": {"load_live": "load_live", "save_live": "save_setting", "refetch_live": "refetch",
+                "mask_error": "mask_error"},
     }
 
 
