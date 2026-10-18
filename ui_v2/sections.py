@@ -22,8 +22,14 @@
    m ＝ `HLD-0` 的偏離檔數（`_deviation_count`，燈上「有 N 檔超出」的 N）、j ＝ `HLD-1` 已彙總的「沒有進入偏離評估」的
    不重複檔數（`_unevaluated_count`，不論成因；2026-10-18 更正，見 44 之八其一 (a-2) 第 1 條）、n ＝ `HLD-2` 已讀到的不重複基金代碼數（三個數同一個單位；`fund_groups` 是逐筆持倉分組，同檔兩張保單只算 1）。不寫 `○`、不寫「正常」，不列持有減另兩數的差。
 
+4. **設定與診斷**（Phase 3 P1-⑥，之八其二 (b-1)～(b-4)、其三 (c-1)；`set_reshape`）：`SET-2` → 層 4、`SET-3` → 層 3；
+   `SET-0` 黃燈那一句改「◷ N 類資料超過你設的上限」、設定試算表未設定時改出空狀態欄第三句；`SET-1` 比較欄「外」前加 `◷`；
+   ③ 由 `SET-1` 已算出的「外」那幾列撐起（`set_attention`）。
+
 **不做什麼（護欄 2）**：不改任何 `_state`、顏色、門檻、算法、資料來源與寫入；不新增按鈕；不改任何一格的文案字面
 （③ 的字句是本組依 59 線框擬的，見各函式）。**示範模式不經過本模組**（44 第七節第三小節之八開頭第 4 條）。
+例外（44 字面明訂的，只在設定與診斷頁）：`SET-0` 在設定試算表未設定時改灰、改出第三句（之八其三 (c-1)），黃燈那一句換字面
+（之八其二 (b-2) 第 3 條）；`SET-1` 比較欄「外」加 `◷`（之七其四）。判定（逾期數、失敗來源、內外）一個都不動。
 """
 
 from __future__ import annotations
@@ -44,6 +50,9 @@ ALO_TEXT_OUT = "外"
 RELAYER = {
     "exp": {"EXP-2": 3, "EXP-3": 4},
     "alo": {"ALO-1": 3},
+    # Phase 3 P1-⑥（之八其二 (b-2) 選項 B 第 1 條；歸屬理由見之八其一 (a-1) 第 3 條）：
+    # `SET-3` 規則參數卡 → 層 3（④「操作」，與 `SET-4` 參數編輯同一組）、`SET-2` 來源健康卡 → 層 4（④「證據／來源」）。
+    "set": {"SET-2": 4, "SET-3": 3},
 }
 
 # 持倉體檢 ③ 畫的那一塊（結構上照舊屬層 2）。
@@ -162,6 +171,8 @@ def attention_items(model: dict, page: str) -> list:
         return alo_attention(model)
     if page == "hld":
         return []
+    if page == "set":
+        return set_attention(model)
     raise ValueError(f"沒有這一頁：{page!r}")
 
 
@@ -233,3 +244,143 @@ def alo3_entry_title(block: dict) -> str:
     if not placeholder:
         return ALO_SCENARIO_ENTRY
     return f"{ALO_SCENARIO_ENTRY}　—　{_placeholder_family(placeholder)}"
+
+
+# ───────────────────────── 設定與診斷（Phase 3 P1-⑥；之八其二 (b-1)～(b-4)、其三 (c-1)） ─────────────────────────
+# 鏡像常數：真身在 `ui_v2/set/logic.py`（`TEXT_OUT`、`EMPTY_GLYPH`、`conclusion_light`／`_build_set0` 的字面），測試逐字比對。
+
+SET_TEXT_OUT = "外"
+SET_STATE_OVERDUE = "有逾期"
+SET_STATE_EMPTY = "空狀態"
+SET_EMPTY_GLYPH = "⬜"
+SET_STATE_WORD_EMPTY = "狀態：尚不足以判定"
+SYMBOL_STALE = "◷"
+SET_EMPTY_KIND_NO_SOURCE = "來源缺"
+SET_LOG_TABLE = "fetch_log"
+# 正式模式 `SET-3` 壞列的目前值（真身 `ui_v2/set/live.py::TEXT_BAD_ROWS` 以 n=1 帶入）。
+SET_BAD_ROW_TEXT = "⚠ 1 列格式不符，未採用"
+
+# 44 `SET-0` 規則欄（之八其二 (b-2) 第 3 條）：黃燈那一句改寫；N 的算法照舊（`SET-1` 一列一類，逾期筆數就是逾期類數）。
+SET_OVERDUE_TEXT = SYMBOL_STALE + " {n} 類資料超過你設的上限"
+# 44 `SET-0` 空狀態欄第三句（之八其三 (c-1)）：只寫狀態，不寫操作指引。
+SET_NO_SHEET_TEXT = f"{SET_EMPTY_GLYPH} 無法判定：尚未設定設定試算表"
+# ③需要注意：`SET-1` 已算出的「外」那幾列（之八其二 (b-2) 第 4 條）；字句是本組依 59 第 6.1 節擬的（59 原寫「超過你設的上限
+# ‹n› 日」，‹n› 為上限；本組改寫距今日數，上限值不從字串裡拆，避免把「上限 n 日」讀成「超過 n 日」）。
+SET_ATTENTION_TEXT = "{kind}：距今 {days} 日，超過你設的上限"
+# `SET-0` 燈旁那一枚 `導覽`（之八其二 (b-1) 第 2 條）：同頁錨點，只捲到 ④ 的 `SET-5`；不觸發取數、重新整理、存檔或寫入。
+SET_NAV_LABEL = "前往重新取數"
+SET_NAV_ANCHOR = "set-refetch"
+SET_REFETCH_CODE = "SET-5"
+
+
+def set_conclusion(model: dict, *, sheet_configured: bool) -> None:
+    """`SET-0` 的兩處改寫（就地）：
+
+    - 設定試算表未設定 → 燈為灰、文案「⬜ 無法判定：尚未設定設定試算表」；與空狀態欄另兩句、讀取失敗同時成立時以這一句為準
+      （之八其三 (c-1)；設定試算表沒設時其餘各表本來就讀不到，讀取失敗是同一件事的結果）。圖示與狀態字照本頁空狀態那一組。
+    - 黃燈（`_state` 為「有逾期」）→ 文案改「◷ N 類資料超過你設的上限」，N 取 `SET-1` 已算出的逾期數；燈色、圖示照舊。
+    其餘情形（灰「資料齊、來源皆可達」、紅、另兩句空狀態）一字不動（BL-0371 待客戶另裁）。
+    """
+    light = _find(model, "SET-0")
+    if not sheet_configured:
+        light.update(_tone="灰", _state=SET_STATE_EMPTY, glyph=SET_EMPTY_GLYPH, state_word=SET_STATE_WORD_EMPTY,
+                     text=SET_NO_SHEET_TEXT, note_lines=[])
+        return
+    if light["_state"] == SET_STATE_OVERDUE:
+        overdue = _find(model, "SET-1")["_overdue"]
+        if overdue <= 0:
+            raise ValueError(f"SET-0 為有逾期，但 SET-1 的逾期數是 {overdue}")
+        light["text"] = SET_OVERDUE_TEXT.format(n=overdue)
+
+
+def _set_is_out(row: dict) -> bool:
+    text = row["compare_text"]
+    return text == SET_TEXT_OUT or text == f"{SYMBOL_STALE} {SET_TEXT_OUT}"
+
+
+def mark_set1_rows(model: dict) -> int:
+    """`SET-1` 比較欄為「外」的列 → 「◷ 外」（之七其四：超過新鮮度上限的筆，文字前加 ◷；顏色照舊）。回改了幾列。
+    「內」、`⬜`、「⬜ 不適用：…」一字不動；不加 `✓`、不寫「資料齊」「正常」（之八其二 (b-2) 第 2 條）。"""
+    count = 0
+    for row in _find(model, "SET-1")["_rows"]:
+        if row["compare_text"] == SET_TEXT_OUT:
+            row["compare_text"] = f"{SYMBOL_STALE} {SET_TEXT_OUT}"
+            count += 1
+    return count
+
+
+def set_attention(model: dict) -> list:
+    """設定與診斷 ③：`SET-1` 比較欄為「外」的每一列一行（依 `SET-1` 列序）；沒有就空串列（不列）。
+    只讀 `SET-1` 已算出的比較結果與距今日數，不另判。"""
+    return [
+        _item(SYMBOL_STALE, SET_ATTENTION_TEXT.format(kind=row["_kind_label"], days=row["_days"]), "黃")
+        for row in _find(model, "SET-1")["_rows"]
+        if _set_is_out(row)
+    ]
+
+
+def set_reshape(model: dict, *, sheet_configured: bool) -> None:
+    """設定與診斷頁正式模式的重排（就地）：移層（`SET-2` → 層 4、`SET-3` → 層 3）、`SET-0` 兩處改寫、`SET-1` 的 ◷。"""
+    relayer(model, "set")
+    set_conclusion(model, sheet_configured=sheet_configured)
+    mark_set1_rows(model)
+
+
+def _node_text(node: dict) -> str:
+    glyph = node.get("glyph", "")
+    text = node["text"]
+    return f"{glyph} {text}" if glyph and not text.startswith(glyph) else text
+
+
+def set2_summary(block: dict) -> str:
+    """`SET-2` 移進 ④「證據／來源」之後收合時的摘要那一行（44 第五節第四小節：缺什麼在摘要就看得見）。
+    只拼卡上已有的格：佔位 → 佔位那一句；否則依列序分三組 —— 結果為 `failed` 的層級、三欄缺值（資料未備）的層級、
+    結果為 `ok` 的層級。不寫「正常」。"""
+    placeholder = block["placeholder"]
+    if placeholder:
+        if placeholder.get("_empty_kind") == SET_EMPTY_KIND_NO_SOURCE:
+            # 比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
+            return f"缺 {SET_LOG_TABLE}：{_node_text(placeholder)}"
+        return _node_text(placeholder)
+    failed = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "failed"]
+    missing = [r["tier_text"] for r in block["_rows"] if r["result_text"] not in ("failed", "ok")]
+    ok = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "ok"]
+    parts = []
+    if failed:
+        parts.append(f"{SYMBOL_ERROR} 最近一次取數失敗：" + "、".join(failed))
+    if missing:
+        parts.append(f"{SYMBOL_MISSING} 資料未備：" + "、".join(missing))
+    if ok:
+        parts.append("最近一次 ok：" + "、".join(ok))
+    return "；".join(parts)
+
+
+def set3_summary(block: dict) -> str:
+    """`SET-3` 移進 ④「操作」之後收合時的摘要那一行（44 第五節第四小節：缺什麼在摘要就看得見）。只拼卡上已有的字，
+    標點比照 `SET-4` 的摘要用「，」：
+
+    - 佔位 → 佔位那一句；
+    - 卡頭紅字（正式模式 ★10，例：「⛔ 未設定試算表 ID，暫停寫入」）→ 先寫那一句；**沒有任何列時就只寫那一句**，
+      不寫「0 個鍵」（2026-10-18 獨立稽核必修 M1：正式模式未設定時佔位已併入卡頭，舊寫法會報「0 個鍵」）；
+    - 否則鍵數，加上目前值為「⬜ 未設定」「⬜ 不適用：值與型別不符」「⚠ 1 列格式不符，未採用」（正式模式壞列）的鍵名；
+    - 最後接上卡上的結構檢查行（正式模式 ★9 的 `live_lines`，例：格式不符未採用 N 列）。
+    """
+    placeholder = block["placeholder"]
+    if placeholder:
+        return _node_text(placeholder)
+    rows = block["_rows"]
+    red_heads = [node["text"] for node in block.get("head_lines") or () if node["_tone"] == "紅"]
+    if not rows and red_heads:
+        return "，".join(red_heads)
+    parts = red_heads + [f"{len(rows)} 個鍵"]
+    unset = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 未設定"]
+    bad = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 不適用：值與型別不符"]
+    broken = [r["key_text"] for r in rows if r["value_text"] == SET_BAD_ROW_TEXT]
+    if unset:
+        parts.append(f"{len(unset)} 個未設定：" + "、".join(unset))
+    if bad:
+        parts.append(f"{len(bad)} 個值與型別不符：" + "、".join(bad))
+    if broken:
+        parts.append(f"{len(broken)} 個格式不符未採用：" + "、".join(broken))
+    parts += [node["text"] for node in block.get("live_lines") or () if node["_tone"] != "中性"]
+    return "，".join(parts)

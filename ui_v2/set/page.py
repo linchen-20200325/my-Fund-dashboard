@@ -21,7 +21,7 @@ import re
 
 import streamlit as st
 
-from .. import health_view, plain, symbols
+from .. import health_view, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -485,6 +485,35 @@ def _render_advanced_diag() -> None:
         _html(_table(("鍵名", "畫面上的名稱"), [[_cell(k), _cell(v)] for k, v in plain.KEY_NAMES.items()]))
 
 
+# ── Phase 3 P1-⑥：正式模式 ④ 的搬入塊與 `SET-0` 燈旁的導覽（44 第七節第三小節之八其二；示範模式不經過這裡） ──
+
+_MOVED_SUMMARY = {"SET-2": sections.set2_summary, "SET-3": sections.set3_summary}
+
+
+def _render_set0_nav() -> None:
+    """`SET-0` 燈旁那一枚 `導覽`（之八其二 (b-1) 第 2 條）：同頁錨點連結，只把畫面捲到 ④「操作」的 `SET-5`。
+    純 HTML 錨點 —— 不是 `st.button`（按下會重跑整頁、重讀設定試算表），不讀也不寫任何資料表，
+    不觸發取數、重新整理、存檔或任何寫入（護欄 3）。樣式寫在這一枚的 style 屬性：共用 CSS 一字不改（示範模式畫面不變）。"""
+    _html(
+        f'<div class="set-nav" style="margin:.35rem 0 .2rem;font-size:.82rem">'
+        f'<a href="#{_esc(sections.SET_NAV_ANCHOR)}" style="color:{theme.TEAL_BRIGHT};text-decoration:underline">'
+        f"{_esc(sections.SET_NAV_LABEL)}</a></div>"
+    )
+
+
+def _render_moved(code: str, block: dict, key: str, ctx) -> None:
+    """正式模式 ④ 內的一塊：`SET-2`／`SET-3` 原本是層 2 的卡，移進 ④ 之後包成一枚預設收合的展開區，
+    標題帶摘要（只拼卡上已有的格，`sections.set2_summary`／`set3_summary`；44 第五節第四小節）。
+    `SET-5` 前放錨點（`SET-0` 燈旁那一枚導覽的落點）。其餘塊照原本的畫法。"""
+    if code == sections.SET_REFETCH_CODE:
+        _html(f'<div id="{_esc(sections.SET_NAV_ANCHOR)}"></div>')
+    if code in _MOVED_SUMMARY:
+        with st.expander(f"{block['title']}　—　{_MOVED_SUMMARY[code](block)}", expanded=block["_default_open"]):
+            _RENDERERS[code](block, key, ctx)
+        return
+    _RENDERERS[code](block, key, ctx)
+
+
 # ───────────────────────── 整頁 ─────────────────────────
 
 
@@ -570,6 +599,11 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
         # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
         symbols.apply(model)
+        # Phase 3 P1-⑥（44 第七節第三小節之八其二 (b-1)～(b-4)、其三 (c-1)）：`SET-2` → 層 4（④「證據／來源」）、
+        # `SET-3` → 層 3（④「操作」）；`SET-0` 黃燈那一句與設定試算表未設定時的第三句；`SET-1`「外」前加 ◷；
+        # ③ 由 `SET-1` 已算出的「外」那幾列撐起。判定、門檻、取數與寫入一個都不動（`ui_v2/sections.py`）。
+        sections.set_reshape(model, sheet_configured=live.sheet_configured(live_input["notes"]))
+        attention = sections.attention_items(model, "set")
         ctx = {
             "notes": live_input["notes"],
             "save_live": save_live,
@@ -595,6 +629,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
     )
     _html(f'<div class="set-layer-label">{label1}</div>')
     _render_set0(logic.find_block(model, "SET-0"), plain_mode=plain_mode)
+    if plain_mode:
+        _render_set0_nav()
 
     _html(f'<div class="set-layer-label">{label2}</div>')
     with st.container(key="set_layer2"):
@@ -603,17 +639,25 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
                 _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     if plain_mode:
-        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        # ③需要注意：`SET-1` 已算出的「外」那幾列；沒有就整段不畫（Phase 3 P1-⑥，之八其二 (b-2) 第 4 條）。
+        health_view.render_attention(attention, tone_hex=theme.tone_hex, label_class="set-layer-label")
+        # ④詳細資料；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         _html(f'<div class="set-layer-label">{plain.LABEL_DETAILS}</div>')
     _html(f'<div class="set-layer-label">{label3}</div>')
     with st.container(key="set_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key, ctx)
+                if plain_mode:
+                    _render_moved(code, logic.find_block(model, code), key, ctx)
+                else:
+                    _RENDERERS[code](logic.find_block(model, code), key, ctx)
 
     _html(f'<div class="set-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key, ctx)
+        if plain_mode:
+            _render_moved(code, logic.find_block(model, code), key, ctx)
+        else:
+            _RENDERERS[code](logic.find_block(model, code), key, ctx)
     if plain_mode:
         _render_advanced_diag()
 

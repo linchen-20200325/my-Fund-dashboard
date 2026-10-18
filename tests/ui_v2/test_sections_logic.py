@@ -203,8 +203,9 @@ def test_資產配置_帶外類別逐列_帶內不列():
 def test_持倉體檢_需要注意由HLD1整塊撐起_不另列項目():
     model = hld_logic.build_page_model(**hld_fixtures.scenario("full"))
     assert sections.attention_items(model, "hld") == []
+    # ~~sections.attention_items(model, "set")~~ → P1-⑥ 起設定與診斷頁也有 ③（`set_attention`），改用不存在的頁名驗「沒有這一頁就炸」。
     with pytest.raises(ValueError):
-        sections.attention_items(model, "set")
+        sections.attention_items(model, "nope")
 
 
 def test_持倉體檢_偏離列加菱形_只改畫面字串():
