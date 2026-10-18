@@ -99,18 +99,45 @@ def test_上限設0日_N等於3():
 
 @pytest.mark.parametrize("name, sf", _ALL)
 def test_非黃燈的燈一字不動(name, sf):
+    """黃燈（改類數句）與兩個計數皆為零那一支（客戶 2026-10-18 裁示 BL-0371：不寫整體正常宣告）之外，燈一字不動；
+    那兩支也只動 `text`。"""
     before = _b(_model(name, sf), "SET-0")
     after = _b(_reshaped(name, save_failed=sf), "SET-0")
-    if before["_state"] == sections.SET_STATE_OVERDUE:
+    if before["_state"] in (sections.SET_STATE_OVERDUE, sections.SET_STATE_ALL_CLEAR):
         assert after["text"] != before["text"]
         assert {k: v for k, v in after.items() if k != "text"} == {k: v for k, v in before.items() if k != "text"}
     else:
         assert after == before
 
 
-def test_資料齊那一句照舊不改():
-    """BL-0371 待客戶另裁：灰燈「資料齊、來源皆可達」照舊。"""
-    assert _b(_reshaped("ok"), "SET-0")["text"] == set_logic.TEXT_ALL_OK
+def test_BL0371_兩個計數皆為零_燈上不寫資料齊來源皆可達_只留狀態字():
+    """客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：沒有異常時省略整體正常宣告。燈色、圖示、狀態字照舊。
+    （舊測試 `test_資料齊那一句照舊不改` 在寫下當時為真 —— BL-0371 那時待客戶另裁；被推翻的是它的前提。）"""
+    before = _b(_model("ok"), "SET-0")
+    assert before["_state"] == sections.SET_STATE_ALL_CLEAR and before["text"] == set_logic.TEXT_ALL_OK
+    light = _b(_reshaped("ok"), "SET-0")
+    assert light["text"] == ""
+    assert light["state_word"] == "狀態：無逾期、無失敗來源" and light["_tone"] == "灰"
+    for word in ("資料齊", "來源皆可達", "正常"):
+        assert word not in json.dumps(light, ensure_ascii=False)
+
+
+def test_BL0371_齊那一支文案不是預期字面_當場炸():
+    model = _model("ok")
+    _b(model, "SET-0")["text"] = "別的字"
+    with pytest.raises(ValueError):
+        sections.set_reshape(model, sheet_configured=True)
+
+
+@pytest.mark.parametrize("name, sf", _ALL)
+def test_BL0371_全情境正式模式SET0燈不寫資料齊或來源皆可達(name, sf):
+    light = _b(_reshaped(name, save_failed=sf), "SET-0")
+    assert "資料齊" not in light["text"] and "來源皆可達" not in light["text"], (name, light["text"])
+
+
+def test_鏡像常數_齊與資料齊字面等於真身():
+    assert sections.SET_TEXT_ALL_CLEAR == set_logic.TEXT_ALL_OK
+    assert _b(_model("ok"), "SET-0")["_state"] == sections.SET_STATE_ALL_CLEAR
 
 
 @pytest.mark.parametrize("name", ["ok", "stale", "failed", "logfail", "nolimit", "first", "settingfail"])
@@ -121,6 +148,34 @@ def test_設定試算表未設定_燈灰_第三句優先(name):
     assert light["glyph"] == set_logic.EMPTY_GLYPH and light["state_word"] == "狀態：尚不足以判定"
     assert light["note_lines"] == []
     assert "請" not in light["text"] and "暫停" not in light["text"]   # 只寫狀態，不寫操作指引
+
+
+@pytest.mark.parametrize("name", ["ok", "stale", "failed", "logfail", "nolimit", "first", "settingfail"])
+def test_S1C1_設定試算表與服務帳戶皆未設定_燈維持紅_不出第三句(name):
+    """客戶 2026-10-18 裁示 C1（`DEC-2026-10-18-01`）：缺服務帳戶維持 ⛔，不改成第三句；兩者同時未設定時取保守 ⛔
+    （總管指定讀法）。燈由 `live.apply_live_notes` 畫好（見 `test_set_live_logic.py`），本函式不動它。"""
+    model = _model(name)
+    light = _b(model, "SET-0")
+    light.update(_tone="紅", _state="讀取失敗", glyph="⛔", state_word="狀態：取數失敗", text="⛔ 取數失敗：未設定服務帳戶")
+    before = copy.deepcopy(light)
+    sections.set_reshape(model, sheet_configured=False, service_account_configured=False)
+    assert _b(model, "SET-0") == before
+    assert sections.SET_NO_SHEET_TEXT not in json.dumps(_b(model, "SET-0"), ensure_ascii=False)
+
+
+def test_S1C1_兩者皆未設定而燈不是紅_當場炸():
+    with pytest.raises(ValueError):
+        sections.set_reshape(_model("ok"), sheet_configured=False, service_account_configured=False)
+
+
+def test_服務帳戶有沒有設定_閘門不是not_configured時不讀_是時缺鍵就炸():
+    for state in ("ok", "cooling", "no_service_account"):
+        assert set_live.service_account_configured({"gate": {"state": state}}) is True
+    gate = {"state": "not_configured"}
+    assert set_live.service_account_configured({"gate": gate, "service_account": {"configured": True}}) is True
+    assert set_live.service_account_configured({"gate": gate, "service_account": {"configured": False}}) is False
+    with pytest.raises(KeyError):
+        set_live.service_account_configured({"gate": gate})
 
 
 def test_設定試算表有沒有設定_只看寫入閘門的not_configured():

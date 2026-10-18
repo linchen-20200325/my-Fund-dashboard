@@ -143,6 +143,7 @@ def load_live() -> dict:
         "wired_tiers": list(settings_store.WIRED_TIERS),
         "pages_reading_settings": list(settings_store.PAGES_READING_SETTINGS),
         "gate": dict(settings_store.sheet_gate(values)),
+        "service_account": dict(settings_store.service_account_status(values)),   # 客戶 2026-10-18 裁示 C1／S1
         "title": title,
         "table_errors": table_errors,
         "structure": structure,

@@ -25,6 +25,11 @@
 4. **設定與診斷**（Phase 3 P1-⑥，之八其二 (b-1)～(b-4)、其三 (c-1)；`set_reshape`）：`SET-2` → 層 4、`SET-3` → 層 3；
    `SET-0` 黃燈那一句改「◷ N 類資料超過你設的上限」、設定試算表未設定時改出空狀態欄第三句；`SET-1` 比較欄「外」前加 `◷`；
    ③ 由 `SET-1` 已算出的「外」那幾列撐起（`set_attention`）。
+5. **客戶 2026-10-18 裁示**（`DEC-2026-10-18-01`；44 第七節第三小節之九）：
+   - BL-0371：沒有異常時省略整體正常宣告 —— `MKT-0` 三塊皆 `ok` 時燈上不寫「三張卡的資料齊」（`mkt_conclusion`）；
+     `SET-0` 兩個計數皆為零時燈上不寫「資料齊、來源皆可達」，只留狀態字「狀態：無逾期、無失敗來源」（`set_conclusion`）。
+   - BL-0373：市場總覽 `MKT-7` 取數失敗的鍵不掛「資料未備」，改「取數失敗」、四格 `⛔`（`mark_mkt7_fetch_failed`）。
+   - S1／C1：設定試算表未設定 → 第三句優先於由此衍生的讀取失敗；服務帳戶也未設定時維持 ⛔（`set_conclusion`）。
 
 **不做什麼（護欄 2）**：不改任何 `_state`、顏色、門檻、算法、資料來源與寫入；不新增按鈕；不改任何一格的文案字面
 （③ 的字句是本組依 59 線框擬的，見各函式）。**示範模式不經過本模組**（44 第七節第三小節之八開頭第 4 條）。
@@ -271,20 +276,43 @@ SET_ATTENTION_TEXT = "{kind}：距今 {days} 日，超過你設的上限"
 SET_NAV_LABEL = "前往重新取數"
 SET_NAV_ANCHOR = "set-refetch"
 SET_REFETCH_CODE = "SET-5"
+# 44 `SET-0` 規則欄「兩者皆為零」那一支（真身 `ui_v2/set/logic.py::conclusion_light` 的 `_state` 與 `TEXT_ALL_OK`）。
+SET_STATE_ALL_CLEAR = "齊"
+SET_TEXT_ALL_CLEAR = "資料齊、來源皆可達"
+# 44 `MKT-0` 規則欄「三塊皆 `ok`」那一句（真身 `ui_v2/mkt/logic.py::conclusion_light`）。
+MKT_TEXT_ALL_OK = "三張卡的資料齊"
+# 市場總覽狀態徽章「取數失敗」（真身 `ui_v2/mkt/logic.py::_status_badge("取數失敗")`；44 第五節第二小節七個字面值之一）。
+MKT_BADGE_FETCH_FAILED = {"_kind": "狀態", "_tone": "黃", "text": "取數失敗"}
+MKT_BADGE_MISSING_TEXT = "資料未備"
+MKT7_CELLS = ("obs_text", "fetched_text", "tier_text", "delay_text")
 
 
-def set_conclusion(model: dict, *, sheet_configured: bool) -> None:
-    """`SET-0` 的兩處改寫（就地）：
+def set_conclusion(model: dict, *, sheet_configured: bool, service_account_configured: bool = True) -> None:
+    """`SET-0` 的改寫（就地）：
 
-    - 設定試算表未設定 → 燈為灰、文案「⬜ 無法判定：尚未設定設定試算表」；與空狀態欄另兩句、讀取失敗同時成立時以這一句為準
-      （之八其三 (c-1)；設定試算表沒設時其餘各表本來就讀不到，讀取失敗是同一件事的結果）。圖示與狀態字照本頁空狀態那一組。
+    - 設定試算表未設定 → 燈為灰、文案「⬜ 無法判定：尚未設定設定試算表」；與空狀態欄另兩句、由此衍生的讀取失敗同時成立時
+      以這一句為準（之八其三 (c-1)；客戶 2026-10-18 裁示 S1，`DEC-2026-10-18-01`）。圖示與狀態字照本頁空狀態那一組。
+    - **例外（C1）**：服務帳戶也未設定（`service_account_configured` 為假）時不出第三句 —— 缺服務帳戶是取數能力失敗，
+      不是由設定試算表未設定衍生的；燈維持 `live.apply_live_notes` 已畫好的 ⛔（與只缺服務帳戶時同一盞），本函式不動它
+      （客戶 2026-10-18 裁示 C1；兩者同時成立時採保守 ⛔ ＝ 總管指定讀法，可被客戶推翻）。
     - 黃燈（`_state` 為「有逾期」）→ 文案改「◷ N 類資料超過你設的上限」，N 取 `SET-1` 已算出的逾期數；燈色、圖示照舊。
-    其餘情形（灰「資料齊、來源皆可達」、紅、另兩句空狀態）一字不動（BL-0371 待客戶另裁）。
+    - 兩個計數皆為零（`_state` 為「齊」）→ 燈上不寫「資料齊、來源皆可達」（文案留空），只留狀態字「狀態：無逾期、無失敗來源」
+      （客戶 2026-10-18 裁示 BL-0371：沒有異常時省略整體正常宣告）。燈色、圖示、狀態字照舊。
+    其餘情形（紅、另兩句空狀態）一字不動。
     """
     light = _find(model, "SET-0")
     if not sheet_configured:
+        if not service_account_configured:
+            if light["_tone"] != "紅":
+                raise ValueError(f"服務帳戶與設定試算表皆未設定，SET-0 卻不是紅燈（{light['_tone']}）")
+            return
         light.update(_tone="灰", _state=SET_STATE_EMPTY, glyph=SET_EMPTY_GLYPH, state_word=SET_STATE_WORD_EMPTY,
                      text=SET_NO_SHEET_TEXT, note_lines=[])
+        return
+    if light["_state"] == SET_STATE_ALL_CLEAR:
+        if light["text"] != SET_TEXT_ALL_CLEAR:
+            raise ValueError(f"SET-0 為齊，文案卻是 {light['text']!r}")
+        light["text"] = ""
         return
     if light["_state"] == SET_STATE_OVERDUE:
         overdue = _find(model, "SET-1")["_overdue"]
@@ -319,11 +347,51 @@ def set_attention(model: dict) -> list:
     ]
 
 
-def set_reshape(model: dict, *, sheet_configured: bool) -> None:
-    """設定與診斷頁正式模式的重排（就地）：移層（`SET-2` → 層 4、`SET-3` → 層 3）、`SET-0` 兩處改寫、`SET-1` 的 ◷。"""
+def set_reshape(model: dict, *, sheet_configured: bool, service_account_configured: bool = True) -> None:
+    """設定與診斷頁正式模式的重排（就地）：移層（`SET-2` → 層 4、`SET-3` → 層 3）、`SET-0` 的改寫、`SET-1` 的 ◷。"""
     relayer(model, "set")
-    set_conclusion(model, sheet_configured=sheet_configured)
+    set_conclusion(model, sheet_configured=sheet_configured, service_account_configured=service_account_configured)
     mark_set1_rows(model)
+
+
+# ───────────────────────── 市場總覽（客戶 2026-10-18 裁示 BL-0371、BL-0373；44 第七節第三小節之九） ─────────────────────────
+
+
+def mkt_conclusion(model: dict) -> bool:
+    """`MKT-0` 三張核心卡皆 `ok` → 燈上不寫「三張卡的資料齊」（文案留空；燈色照舊灰）。回有沒有改。
+
+    客戶 2026-10-18 裁示 BL-0371：沒有異常時省略整體正常宣告。只讀三張卡已算出的 `_state`，不另判；
+    其餘情形（點名卡片的黃／紅、三塊皆空）一字不動。"""
+    light = _find(model, "MKT-0")
+    if not all(_find(model, code)["_state"] == STATE_OK for code in MKT_CARD_CODES):
+        return False
+    if light["text"] != MKT_TEXT_ALL_OK:
+        raise ValueError(f"MKT-0 三塊皆 ok，文案卻是 {light['text']!r}")
+    light["text"] = ""
+    return True
+
+
+def mark_mkt7_fetch_failed(model: dict, failed_keys) -> int:
+    """`MKT-7` 取數失敗的鍵（`failed_keys`：資料層 `errors` 裡有失敗字串的鍵）那一列：徽章「資料未備」→「取數失敗」、
+    四格 `⬜` → `⛔`（就地改寫）。回改了幾列。
+
+    客戶 2026-10-18 裁示 BL-0373：取數失敗＝⛔、資料未備＝◇，不得把取數失敗判成資料未備。只動「這個鍵一筆觀測也沒有、
+    而且資料層回報了失敗」的那幾列（logic 已把它們與真正的資料未備分開：資料未備那幾列帶 `_missing_cells`）；
+    有觀測的列（取數失敗但沿用既有列）照舊。"""
+    failed = set(failed_keys or ())
+    count = 0
+    for row in _find(model, "MKT-7")["_rows"]:
+        if row["indicator_key"] not in failed or row.get("_missing_cells"):
+            continue
+        if not any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in row["badges"]):
+            continue
+        row["badges"] = [dict(MKT_BADGE_FETCH_FAILED) if b.get("text") == MKT_BADGE_MISSING_TEXT else b
+                         for b in row["badges"]]
+        for cell in MKT7_CELLS:
+            if row[cell] == SYMBOL_UNDECIDABLE:
+                row[cell] = SYMBOL_ERROR
+        count += 1
+    return count
 
 
 def _node_text(node: dict) -> str:

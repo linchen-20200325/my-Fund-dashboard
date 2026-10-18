@@ -279,6 +279,11 @@ def sheet_gate(secret_values) -> dict:
     return store.gate_status(mask=masker(secret_values))
 
 
+def service_account_status(secret_values) -> dict:
+    """服務帳戶有沒有設定（不打上游）：`{"configured", "message"（已遮蔽）}`。見 L1 `service_account_status`。"""
+    return store.service_account_status(mask=masker(secret_values))
+
+
 def sheet_title(secret_values) -> str:
     """設定試算表的標題，**已過遮蔽**（標題不是憑證，但若客戶把 ID 取成標題就會被遮）。
     讀不到 → `SettingsSheetError`（訊息已遮蔽）。"""

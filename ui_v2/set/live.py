@@ -70,6 +70,11 @@ TEXT_PK_CONFLICT = "⚠ 主鍵矛盾 {n} 組，未採用"
 TEXT_REVISED_MISMATCH = "⚠ is_revised 與重算不符 {n} 列"
 TEXT_DUPLICATE_LOG = "⚠ 重複紀錄 {n} 筆"
 
+# `SET-0` 說明行（44 `SET-0` 來源欄；客戶 2026-10-18 裁示 S4，`DEC-2026-10-18-01`）：正式模式補明第三個輸入；
+# 示範模式那一行（`logic._build_set0` 的 `detail_lines`）照舊。
+TEXT_SET0_INPUTS_DEMO = logic.TEXT_LAMP_DATA_ONLY + "。本燈只讀 SET-1 的逾期筆數與 SET-2 的失敗來源數。"
+TEXT_SET0_INPUTS = logic.TEXT_LAMP_DATA_ONLY + "。本燈讀三個輸入：SET-1 的逾期筆數、SET-2 的失敗來源數、設定試算表是否已設定。"
+
 # 存檔失敗但「根本沒寫」的錯誤碼：這些不印「可能其實已寫入」那一行（2026-09-26 總管裁示）。
 _NOT_WRITTEN_CODES = ("cooling", "not_configured", "no_service_account", "header_mismatch")
 
@@ -137,6 +142,15 @@ def sheet_configured(notes) -> bool:
     """設定試算表有沒有設定（44 `SET-0` 來源欄第二輪擴寫的那一個輸入；之八其三 (c-1)）。
     讀寫入閘門（`notes["gate"]`，不打上游）：狀態為 `not_configured` ⇒ 沒設。缺鍵就 `KeyError`，不猜。"""
     return notes["gate"]["state"] != "not_configured"
+
+
+def service_account_configured(notes) -> bool:
+    """服務帳戶有沒有設定（客戶 2026-10-18 裁示 C1／S1，`DEC-2026-10-18-01`）。只在設定試算表未設定時才需要
+    （寫入閘門先判 ID，ID 沒設時閘門看不到服務帳戶）：閘門不是 `not_configured` → 回 True（閘門已經把缺服務帳戶判成
+    `no_service_account`，那一支照 44 字面是 ⛔，不經本函式）。`not_configured` 時讀 `notes["service_account"]`，缺鍵就 `KeyError`，不猜。"""
+    if notes["gate"]["state"] != "not_configured":
+        return True
+    return bool(notes["service_account"]["configured"])
 
 
 def gate_reason(gate):
@@ -361,7 +375,15 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
 
     # ── SET-0：燈的外框與文字照 `44`（含 5.5 系統錯誤模板 `logic.fetch_failed_text`），只在下一行加 ★5；說明行加 ★1、★3 ──
     set0 = logic.find_block(out, "SET-0")
+    if not sheet_configured(notes) and not service_account_configured(notes):
+        # 客戶 2026-10-18 裁示 C1（`DEC-2026-10-18-01`）：設定試算表與服務帳戶都沒設時，讀取失敗看到的只有「沒設 ID」，
+        # 缺服務帳戶被蓋掉；燈改用缺服務帳戶那一句（與只缺服務帳戶時同一盞 ⛔ 讀取失敗），不出第三句（`sections.set_conclusion`）。
+        message = notes["service_account"]["message"]
+        set0.update(_tone="紅", _state="讀取失敗", glyph=logic.FETCH_FAIL_GLYPH, state_word="狀態：取數失敗",
+                    text=logic.fetch_failed_text(message))
     set0["note_lines"] = [MASKED_NOTE] if _masked(set0["text"], token) else []
+    # 客戶 2026-10-18 裁示 S4：說明行補明第三個輸入（設定試算表是否已設定）。示範模式不經過本檔，照舊。
+    set0["detail_lines"] = [TEXT_SET0_INPUTS if line == TEXT_SET0_INPUTS_DEMO else line for line in set0["detail_lines"]]
     if "dividend" in pending_tables:
         set0["detail_lines"].append(TEXT_PENDING_DIVIDEND)
     set0["detail_lines"].append(TEXT_LOG_SCOPE)

@@ -655,6 +655,20 @@ def latest_ok_started_at(logs, tier):
     return max(stamps) if stamps else None   # 字面格式固定（秒＋Z），字串比較＝時間比較
 
 
+def latest_failed_record(logs, tier):
+    """`fetch_log` 該層級**最近一次**紀錄（取法同 `latest_per_tier`／SET-2「最近一次」）為 `failed` 時回那一筆；否則回 None。
+
+    客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：取數失敗＝⛔、資料未備＝◇，不得把只有失敗紀錄的取數紀錄判成資料未備。
+    `latest_ok_started_at` 回 None 時才用到本函式：該層級沒有任何一次取回列的成功紀錄 ——
+    最近一次是 `failed` → 成因是取數失敗（⛔）；沒有任何紀錄、或最近一次是取數回空（`ok` 且 0 列）→ 照舊資料未備（◇）。
+    （本組讀法：與 SET-2 該層級「最近一次」同一筆，兩塊不各說各話；可被客戶與總管推翻。）
+    """
+    if tier not in TIERS:
+        raise ValueError(f"來源層級 {tier!r} 不在 `44` 第四節那四個之內")
+    record = latest_per_tier([r for r in logs if r["source_tier"] == tier]).get(tier)
+    return record if record is not None and record["outcome"] == "failed" else None
+
+
 def _build_set1(dataset, known_keys) -> dict:
     """SET-GAP-觀測日欄：不畫觀測日欄。SET-GAP-來源徽章：不另掛來源與新鮮度徽章。
 
@@ -666,9 +680,12 @@ def _build_set1(dataset, known_keys) -> dict:
     from_log = dataset.get("kind_time_from_log") or {}
     rows, failures = [], []
     for label, table in KIND_TABLES:
+        log_failed = None
         if table in from_log:
             failure = fetch_error(dataset, "fetch_log")
             latest = None if failure is not None else latest_ok_started_at(dataset["fetch_log"], from_log[table])
+            if failure is None and latest is None:
+                log_failed = latest_failed_record(dataset["fetch_log"], from_log[table])
         else:
             failure = fetch_error(dataset, table)
             latest = max(r["fetched_at"] for r in dataset[table]) if failure is None and dataset[table] else None
@@ -678,6 +695,13 @@ def _build_set1(dataset, known_keys) -> dict:
             # SET-GAP-讀取失敗逐列
             row.update(_failed=True, at_text=fetch_failed_text(failure), days_text="⬜", compare_text="⬜")
             row["_days"] = None
+        elif log_failed is not None:
+            # BL-0373（客戶 2026-10-18 裁示，`DEC-2026-10-18-01`）：只有失敗、沒有取回列的取數紀錄 ＝ 取數失敗（⛔），不是資料未備。
+            # 只有正式模式會給 `kind_time_from_log`，示範模式走不到這一支。失敗原文照 `fetch_log.message`（寫入前已遮蔽）。
+            message = log_failed["message"]
+            at_text = fetch_failed_text(message) if message else f"{FETCH_FAIL_GLYPH} {TEXT_FETCH_FAILED}"
+            row.update(_failed=True, at_text=at_text, days_text="⬜", compare_text="⬜", _days=None)
+            row["badges"] = [status_badge("取數失敗")]
         elif latest is None:
             # 44 逐字「某類無任何列 → 三欄皆 `⬜` 並掛 `資料未備` 徽章」
             row.update(_empty=True, at_text="⬜", days_text="⬜", compare_text="⬜", _days=None,
@@ -703,7 +727,7 @@ def _build_set1(dataset, known_keys) -> dict:
     read_failure = next((f for f in failures if f), None)
     if read_failure is None and limit_state == "failed":
         read_failure = settings_failure(dataset)
-    if read_failure is not None:
+    if read_failure is not None or any(r["_failed"] for r in rows):
         tone = "紅"
     elif any(r["_empty"] for r in rows) or limit_state in ("unset", "bad"):
         tone = "灰"
