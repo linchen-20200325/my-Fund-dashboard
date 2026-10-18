@@ -1599,7 +1599,8 @@ _44_ANCHORS = {
     1641: "訊息原文照印，不改寫成安撫語句。",  # S6b-1：`SET-2` 規則欄，hld 錯誤畫面沿用（page.py）
     1735: "該欄位單獨列出並掛「未定義」徽章",
     1799: "`source_tier`",
-    2009: "主值位置顯示 `⬜ 資料未備`",
+    # 2026-10-17 ◆／◇ 小批：舊字面劃線、正式模式改 ◇（示範模式照舊 ⬜）；引用本行的兩處講的是那一列的「重新取數」按鈕，與符號無關，錨點只跟著改字。
+    2009: "主值位置顯示 ~~`⬜ 資料未備`~~ → `◇ 資料未備`",
     2010: "主值位置顯示 `⬜ 不適用`",  # 客戶 2026-10-08 裁示：HLD-1 零列而有檔不適用時的主值
     2315: "`default_open` 為真的區塊剛好是結論燈與 3 張核心卡",
     2326: "取數或計算本身失敗",  # S6b-1：5.5 `系統錯誤` 那一列（page.py 錯誤畫面）
@@ -1986,8 +1987,12 @@ def _cell_digest(block) -> str:
     import hashlib
 
     def scrub(obj):
+        # ◆／◇ 小批（2026-10-17）：logic 新增的呈現標記鍵（`_missing_cells`、`_missing_fields`，只告訴正式模式哪幾格畫 ◇）
+        # 不算進摘要 —— 本守衛釘的是判定與既有字面，標記本身的對錯由 `tests/ui_v2/test_symbols_logic.py` 驗。
+        # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(obj, dict):
-            return {k: scrub(v) for k, v in sorted(obj.items())}
+            return {k: scrub(v) for k, v in sorted(obj.items())
+                    if k not in ("_missing_cells", "_missing_fields")}
         if isinstance(obj, (list, tuple)):
             return [scrub(v) for v in obj]
         if isinstance(obj, set):

@@ -113,7 +113,8 @@ def test_正式模式_fixtures一碰就炸也照樣渲染_缺欄照寫_沒有示
     text = _text(at)
     assert _MARK not in text
     assert _lamp(at) == "目前條件下有 2 檔"
-    assert "⬜ 資料未備：基本資料尚未接入" in text and "⬜ 資料未備：淨值尚未接入" in text
+    assert "◇ 資料未備：基本資料尚未接入" in text and "◇ 資料未備：淨值尚未接入" in text  # 2026-10-17 ◆／◇ 小批：正式模式「⬜ 資料未備」改 ◇（44 第七節第三小節之七其四；示範模式照舊）
+    assert "⬜ 資料未備" not in text
     assert f"<th>{_CODE_HEAD}</th>" in text and ">A01</td>" in text and ">B02</td>" in text and ">C03</td>" not in text
     assert "示意" not in text and "None" not in text
     assert not at.warning  # 沒有 session state 與 widget 預設值相衝的警告
@@ -333,7 +334,7 @@ def test_C2接線_代碼欄第一欄_沒有新增欄位_舊淨值與無配息照
     heads = [html.unescape(h) for h in re.findall(r"<th>(.*?)</th>", table)]
     assert heads == [_CODE_HEAD] + [plain.key_name(logic.COLUMN_LABELS[c]) for c in logic.COLUMN_ORDER]   # 規則 2、10
     text = html.unescape(table)
-    assert "⬜ 資料未備：最近一筆淨值 2026-10-03，已超過 10 日" in text                       # 規則 11
+    assert "◇ 資料未備：最近一筆淨值 2026-10-03，已超過 10 日" in text                       # 規則 11；◆／◇ 小批起正式模式改 ◇
     assert ">2026-10-04<" in text                                                              # 10 天照用
     assert "⬜ 不適用：近 12 個月無配息" in text and "0.00%" not in text                       # 規則 13
     assert ">6.00%<" in text

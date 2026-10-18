@@ -109,7 +109,9 @@ def test_44還是凍結的那一份():
     # 前 4624 行只做行內擴寫、行數不變（行號錨點子字串保留）；檔尾追加第七節第三小節之八，共新增 106 行）。
     # 上一個值 5f5ca5acd3cdc5b18a5eb5d2c9b8ed8a、4625（4624 行 ＋ 末尾換行）。
     # 同日獨立稽核回修：前 4624 行只插字（劃線只加記號），檔尾之八內改句、行數不變；上一個分支值 060128a19f3e69c9881d7a755b0ddbdf、4731。
-    assert digest == "fe24652733c72b98b4d838786498d63a", digest
+    # 2026-10-17 ◆／◇ 小批（DEC-2026-10-17-03 第 (3)(4) 題、DEC-2026-10-17-07 (c-2)）：之七其七第 15、19、25 條三處舊字面劃線、之八 (c-2) 行內補狀態與總管三點內部決定、獨立稽核回修補第 2323 行狀態字，
+    # 只在既有行內插字、行數不變；上一個值 fe24652733c72b98b4d838786498d63a、4731。
+    assert digest == "63ed86f5fabf8afc29430e165d6ca39b", digest
     assert len(_D44.read_text(encoding="utf-8").split("\n")) == 4731  # 4730 行 ＋ 末尾換行
 
 
@@ -2091,8 +2093,12 @@ def _cell_digest(block) -> str:
     """一塊模型的全格摘要（正規化方式與產生期望值時逐字相同）。"""
 
     def scrub(obj):
+        # ◆／◇ 小批（2026-10-17）：logic 新增的呈現標記鍵（`_missing_cells`、`_missing_fields`，只告訴正式模式哪幾格畫 ◇）
+        # 不算進摘要 —— 本守衛釘的是判定與既有字面，標記本身的對錯由 `tests/ui_v2/test_symbols_logic.py` 驗。
+        # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(obj, dict):
-            return {k: scrub(v) for k, v in sorted(obj.items())}
+            return {k: scrub(v) for k, v in sorted(obj.items())
+                    if k not in ("_missing_cells", "_missing_fields")}
         if isinstance(obj, (list, tuple)):
             return [scrub(v) for v in obj]
         if isinstance(obj, set):

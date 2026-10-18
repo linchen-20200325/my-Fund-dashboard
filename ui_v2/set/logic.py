@@ -680,7 +680,8 @@ def _build_set1(dataset, known_keys) -> dict:
             row["_days"] = None
         elif latest is None:
             # 44 逐字「某類無任何列 → 三欄皆 `⬜` 並掛 `資料未備` 徽章」
-            row.update(_empty=True, at_text="⬜", days_text="⬜", compare_text="⬜", _days=None)
+            row.update(_empty=True, at_text="⬜", days_text="⬜", compare_text="⬜", _days=None,
+                       _missing_cells=("at_text", "days_text", "compare_text"))   # 資料未備（其四第 2 條；正式模式畫 ◇）
             row["badges"] = [status_badge("資料未備")]
         else:
             days = days_since(latest, now)
@@ -800,7 +801,8 @@ def _build_set2(dataset) -> dict:
         row = {"_tier": tier, "tier_text": tier, "badges": [], "_tone": "中性"}
         record = latest.get(tier)
         if record is None:
-            row.update(result_text="⬜", time_text="⬜", message_text="⬜", _tone="灰")
+            row.update(result_text="⬜", time_text="⬜", message_text="⬜", _tone="灰",
+                       _missing_cells=("result_text", "time_text", "message_text"))   # 資料未備（其四第 2 條；正式模式畫 ◇）
             row["badges"] = [status_badge("資料未備")]
         elif record["outcome"] == "failed":
             failed.append(tier)

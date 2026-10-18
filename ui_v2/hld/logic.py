@@ -2174,6 +2174,11 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
             ("類別", holding["bucket"] or "⬜"),
             ("最後對帳", _sync_field_value(holding["last_synced_at"])),
         ]
+        # ◆／◇ 小批（44 第七節第三小節之七其四第 2 條）：保單表沒有這一列、或那一列沒有該欄 ＝ 資料未備 → 記在
+        # `_missing_fields`，正式模式畫 ◇（`ui_v2/symbols.py`）。「類別」留空的成因分不清（未分類或未填），照舊 ⬜。
+        missing_fields = () if is_direct else tuple(
+            label for label, key in (("保單", "policy_name"), ("發行單位", "issuer")) if key not in (policy or {})
+        )
         has_nav = bool(metric["nav_rows"])
         items.append(
             {
@@ -2193,6 +2198,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
                     disabled_reason=HLD5_OPEN_DISABLED_REASON,
                 ),
                 "_fields": fields,
+                "_missing_fields": missing_fields,
                 "head_text": f"{metric['fund_name']} · {metric['_fund_code']}{_hint()}",
                 # 📌 2026-10-05「讀取失敗不說空」（總管 2026-10-05 裁定）：區間是讀不到時，「該檔在區間內無淨值」
                 #    無從判斷，不印「⬜ 資料未備：nav 尚無資料」，改印設定讀取失敗的原文。

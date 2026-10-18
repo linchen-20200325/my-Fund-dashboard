@@ -327,7 +327,9 @@ def test_資產配置結論燈_停止符號與取數失敗各只出現一次(nam
 def test_持倉體檢超過10日_結論燈的方塊只出現一次():
     at, _ = _run(P.SCRIPTS["hld"]["超過10日"])
     lamp = _lamp_text(at, "HLD-0")
-    assert lamp.startswith("⬜ 狀態：中性 資料未備"), lamp
+    # 2026-10-17 ◆／◇ 小批：資料未備的句首改 ◇、與燈的 ⬜ 不同，去重不再觸發（`ui_v2/health.py::trim_light_echo` 說明）；
+    # 燈的方塊照舊只出現一次。
+    assert lamp.startswith("⬜ 狀態：中性 ◇ 資料未備"), lamp
     assert lamp.count("⬜") == 1, lamp
 
 
@@ -345,3 +347,29 @@ def test_示範模式的結論燈照舊():
     expected = AL.find_block(AL.build_page_model(AF.scenario("holdfail")), "ALO-0")["text"]
     lamps = [m.value for m in at.main.markdown if 'class="alo-lamp"' in m.value]
     assert len(lamps) == 1 and html.escape(expected) in lamps[0], (expected, lamps)
+
+
+@pytest.mark.parametrize(("page", "code", "pattern"), [
+    ("hld", "HLD-0", r"^◆ 狀態：需要注意 有 \d+ 檔超出你設定的門檻"),
+    ("alo", "ALO-0", r"^◆ 狀態：需要注意 \S+ 與目標差 \d+\.\d 個百分點"),
+])
+def test_正式模式偏離的結論燈_不著色_以菱形需要注意呈現(page, code, pattern):
+    """2026-10-17 ◆／◇ 小批（44 第七節第三小節之七其三；`ui_v2/symbols.py`）：偏離的燈不再畫成黃色。"""
+    import re
+
+    from ui_v2.hld import theme as HT
+
+    at, _ = _run(P.SCRIPTS[page]["正常"])
+    lamp = _lamp_text(at, code)
+    assert re.match(pattern, lamp), lamp
+    raw = [m.value for m in at.main.markdown if f'data-block="{code}"' in m.value][0]
+    assert HT.STATE_WARN not in raw and HT.TEXT_PRIMARY in raw, raw[:300]
+    assert "黃燈" not in " ".join(P.markdown_text(m.value) for m in at.main.markdown)
+
+
+@pytest.mark.parametrize("name", sorted(P.SCRIPTS["set"]))
+def test_設定與診斷正式頁_畫面上沒有方塊資料未備(name):
+    """2026-10-17 ◆／◇ 小批獨立稽核 M2：狀態徽章「資料未備」帶的圖示改 ◇（`ui_v2/symbols.py`），文字不動。"""
+    at, _ = _run(P.SCRIPTS["set"][name])
+    text = " ".join(P.screen_texts(at))
+    assert "⬜ 資料未備" not in text, name

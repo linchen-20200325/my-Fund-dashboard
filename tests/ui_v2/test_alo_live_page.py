@@ -198,7 +198,8 @@ def test_市值基準下淨值過期_畫面上逐檔印出實際淨值日(monkey
     at = _run(script, monkeypatch)
     assert not at.exception, [e.value for e in at.exception]
     text = "\n".join(_rendered(at))
-    assert "⬜ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日" in text
+    assert "◇ 資料未備：最近一筆淨值 2026-09-14（AAAA）、2026-09-03（BBBB），已超過 10 日" in text  # 2026-10-17 ◆／◇ 小批：正式模式「⬜ 資料未備」改 ◇（44 第七節第三小節之七其四；示範模式照舊）
+    assert "⬜ 資料未備" not in text
     assert logic.NAV_NOT_READY_TEXT.format(days=10) not in text
 
 

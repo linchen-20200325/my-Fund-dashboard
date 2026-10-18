@@ -771,7 +771,8 @@ def _band_text(diff, tolerance):
 
 
 def exceeds(diff, tolerance) -> bool:
-    """44 逐字「超出容許帶 → 燈為黃」。相等不算超出（ALO-GAP-端點，本頁判讀）。"""
+    """44 逐字「超出容許帶 → 燈不著色」（~~燈為黃~~ 已於 ◆／◇ 小批劃線；判定照舊，只換燈的顏色與符號：
+    正式模式由 `ui_v2/symbols.py` 換成 ◆、示範模式照舊黃燈）。相等不算超出（ALO-GAP-端點，本頁判讀）。"""
     return abs(diff) > tolerance and not math.isclose(abs(diff), tolerance, abs_tol=1e-9)
 
 
@@ -896,7 +897,12 @@ def _build_alo2(dataset) -> dict:
                 "_band_tone": "中性",  # ALO-GAP-內外不著色
                 "_gap_text": None,
             }
+            # ◆／◇ 小批（44 第七節第三小節之七其四第 2 條）：這一格的 ⬜ 出自資料未備那一支 → 記在 `_missing_cells`，正式模式畫 ◇（`ui_v2/symbols.py`）；判定不變。
+            # 差額與內外兩格：有目標而缺的是資料（基準值或目標比重）→ 資料未備；沒有目標 → 不適用，照舊 ⬜；
+            # 沒有目標而且基準值也缺 → 兩種成因並存，不記（照舊 ⬜）。
+            missing_cells, current_missing, target_missing = [], False, False
             if slot["value"] is None:
+                current_missing = True
                 uncovered.append(bucket)  # ALO-GAP-分母
                 row["_current_pct"] = None
                 row["current_text"] = slot["reason"]
@@ -905,6 +911,8 @@ def _build_alo2(dataset) -> dict:
                 # ALO-GAP-分母全缺：每一類都缺值 ⇒ 沒有分母；沒有持倉的目標類別比重算不出來，只印 ⬜。
                 row["_current_pct"] = None
                 row["current_text"] = "⬜"
+                current_missing = True
+                missing_cells.append("current_text")
             else:
                 # ALO-GAP-部分缺的內外判讀：部分缺時分母不完整，有目標、沒持倉的類別照算 0.0% 與內外。
                 row["_current_pct"] = slot["value"] / denominator * 100.0
@@ -914,6 +922,7 @@ def _build_alo2(dataset) -> dict:
                 row["_target_pct"] = None
                 row["target_text"] = "⬜"
             elif weight is None:
+                target_missing = True
                 row["_target_pct"] = None
                 row["target_text"] = TEXT_NOT_READY
                 row["_gap_text"] = row["_gap_text"] or TEXT_NOT_READY
@@ -924,12 +933,16 @@ def _build_alo2(dataset) -> dict:
                 row["_diff"] = None
                 row["diff_text"] = "⬜"
                 row["band_text"] = "⬜"
+                if has_target and (current_missing or target_missing):
+                    missing_cells += ["diff_text", "band_text"]
             else:
                 # 44 逐字「差額的算式逐字釘死：當前值減目標值」—— 逐列各自相減，不先歸一。
                 row["_diff"] = row["_current_pct"] - row["_target_pct"]
                 row["diff_text"] = format_pp(row["_diff"])
                 row["band_text"] = _band_text(row["_diff"], tolerance)
             row["_has_target"] = has_target
+            if missing_cells:
+                row["_missing_cells"] = tuple(missing_cells)
             # 有目標、卻因缺基準值算不出差距的那一列，燈不得跳過它（ALO-GAP-燈讀不到差距）。
             # 目標比重留空的那一列不算：它不計入合計，與「未分類」同樣沒有可比的目標。
             row["_blocks_lamp"] = row["_current_pct"] is None and row["_target_pct"] is not None
@@ -1190,6 +1203,8 @@ def _build_alo3(dataset, alo2) -> dict:
                 "amount_text": "⬜" if amount is None else format_twd(amount),
                 "tail_text": tail,
                 "_effective": effective,
+                # 金額留空 → 列尾照 44 寫資料未備，金額格同一個成因（其四第 2 條；正式模式畫 ◇）。
+                **({"_missing_cells": ("amount_text",)} if amount is None else {}),
             }
         )
 
@@ -1210,11 +1225,15 @@ def _build_alo3(dataset, alo2) -> dict:
             if base["_value"] is None:
                 row["_share_pct"], row["share_text"] = None, base["current_text"]
                 row["_new_diff"], row["new_diff_text"] = None, "⬜"
+                if base["_has_target"]:   # 基準值缺 ＝ 資料未備（其四第 2 條）；沒有目標又缺基準值 ＝ 兩種成因並存，照舊 ⬜
+                    row["_missing_cells"] = ("new_diff_text",)
             else:
                 row["_share_pct"] = new_values[base["_bucket"]] / total * 100.0
                 row["share_text"] = format_share(row["_share_pct"])
                 if base["_target_pct"] is None:
                     row["_new_diff"], row["new_diff_text"] = None, "⬜"
+                    if base["_has_target"]:   # 目標比重留空 ＝ 資料未備；沒有目標 ＝ 不適用，照舊 ⬜
+                        row["_missing_cells"] = ("new_diff_text",)
                 else:
                     # ALO-GAP-ALO3目標：目標取 ALO-1 的已存值（經 ALO-2）。
                     row["_new_diff"] = row["_share_pct"] - base["_target_pct"]
@@ -1485,6 +1504,15 @@ def _build_alo6(dataset) -> dict:
                 "value_text": "⬜" if value is None else format_twd(value),
             }
         )
+        # ◆／◇ 小批（44 第七節第三小節之七其四第 2 條）：這一格的 ⬜ 出自資料未備那一支 → 記在 `_missing_cells`，正式模式畫 ◇（`ui_v2/symbols.py`）；判定不變。
+        # 保單名查不到 ＝ 保單表沒有這一列；基準值缺而且基準已選 ＝ `basis_value` 的缺值那幾支（皆為資料未備）；
+        # 基準未選 ＝ 不適用，照舊 ⬜。
+        # 直接持有（`DIRECT`）不記，比照持倉體檢單檔展開（獨立稽核回修）。
+        missing_cells = [] if holding["policy_id"] in policy_name or holding["policy_id"] == "DIRECT" else ["policy_text"]
+        if value is None and basis is not None:
+            missing_cells.append("value_text")
+        if missing_cells:
+            rows[-1]["_missing_cells"] = tuple(missing_cells)
     included = [r for r in rows if r["_value"] is not None]
     total = sum(r["_value"] for r in included)
     by_bucket = {}
@@ -1494,6 +1522,8 @@ def _build_alo6(dataset) -> dict:
         if row["_value"] is None or total <= 0:
             row["_in_bucket"], row["_in_total"] = None, None
             row["in_bucket_text"], row["in_total_text"] = "⬜", "⬜"
+            if row["_value"] is None and basis is not None:   # 同列基準值格的成因；合計不為正那一支 ＝ 不適用，照舊 ⬜
+                row["_missing_cells"] = tuple(row.get("_missing_cells", ())) + ("in_bucket_text", "in_total_text")
         else:
             row["_in_bucket"] = row["_value"] / by_bucket[row["_bucket"]]
             row["_in_total"] = row["_value"] / total

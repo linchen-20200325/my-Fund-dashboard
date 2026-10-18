@@ -944,7 +944,8 @@ def _value(text, *, state=STATE_OK, has_number=False, ccy=None, label="") -> dic
 
 def _missing_value(label="") -> dict:
     """缺的格。`44` `EXP-2` 空狀態欄逐字：「缺的格顯示 `⬜`」。"""
-    return _value("⬜", state=STATE_MISSING, label=label)
+    # ◆／◇ 小批（44 第七節第三小節之七其四第 2 條）：這一支就是資料未備 → 正式模式畫 ◇（`ui_v2/symbols.py`）。
+    return {**_value("⬜", state=STATE_MISSING, label=label), "_missing_cells": ("text",)}
 
 
 def _checkbox(group, fund_code, *, checked, enabled=True, disabled_reason="", note="") -> dict:

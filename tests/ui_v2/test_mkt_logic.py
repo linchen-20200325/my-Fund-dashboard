@@ -1331,8 +1331,12 @@ def _cell_digest(block) -> str:
     import json
 
     def scrub(obj):
+        # ◆／◇ 小批（2026-10-17）：logic 新增的呈現標記鍵（`_missing_cells`、`_missing_fields`，只告訴正式模式哪幾格畫 ◇）
+        # 不算進摘要 —— 本守衛釘的是判定與既有字面，標記本身的對錯由 `tests/ui_v2/test_symbols_logic.py` 驗。
+        # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(obj, dict):
-            return {k: scrub(v) for k, v in sorted(obj.items())}
+            return {k: scrub(v) for k, v in sorted(obj.items())
+                    if k not in ("_missing_cells", "_missing_fields")}
         if isinstance(obj, (list, tuple)):
             return [scrub(v) for v in obj]
         if isinstance(obj, set):

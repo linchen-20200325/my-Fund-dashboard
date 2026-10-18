@@ -15,7 +15,7 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain
+from .. import health, health_view, plain, symbols
 from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
@@ -649,6 +649,9 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         # Phase 3 P0-①（44 第七節第三小節之七其二）：一般畫面換成使用者語言；原文交給設定與診斷頁的進階診斷。
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
         model, raw, _status = plain.plain_model(model, page="mkt")
+        # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
+        # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
+        symbols.apply(model)
         plain.record_raw(st.session_state, "mkt", raw, datetime.now(timezone.utc))
         # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
         # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
