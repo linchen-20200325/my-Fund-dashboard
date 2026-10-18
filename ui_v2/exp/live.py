@@ -568,6 +568,8 @@ def in_ratio_window(day: date, nav_day: date) -> bool:
 # 「已確認」只讀 L2 provenance 既有的兩個鍵（鏡像 `services/v2_tables/nav_dividend.py`，本檔不 import services，由測試對拍）：
 # `cache_fallback` 為真（L1 只在即時網址全敗時交出 `cache/nav` 預存序列），而且 `latest_from` 不是累積表
 # （累積表那一支 `cache_fallback` 也為真、但不是取數失敗；目前由 `NAV_HISTORY_PROVENANCE_VERIFIED` 關閉）。
+# ⚠️ 只在閘門關閉時成立：閘門打開後，即時一段都沒有、`latest_from` 為累積表的那一種實為取數失敗後退回，這裡會漏判成
+# 資料未備 —— 打開閘門前必須重審（`docs/BACKLOG.md` BL-0376；稽核建議改看 `live_error`）。
 NAV_LATEST_FROM_HISTORY = "nav_history"    # nav_dividend.LATEST_FROM_NAV_HISTORY
 NAV_RETREAT_FAILED_TEXT = "改用 {day} 的預存淨值"   # 與 `ui_v2/hld/live.py::NAV_RETREAT_FAILED_TEXT` 逐字相同（由測試比對）
 TIP_NAV_RETREAT = "即時取數失敗，淨值取自預存序列，不是本次取得"

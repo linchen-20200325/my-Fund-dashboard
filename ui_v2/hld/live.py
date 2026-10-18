@@ -456,6 +456,8 @@ def withhold_not_ready_nav(dataset: dict, codes) -> dict:
 #   （L1 只在即時網址全敗時才交出 `cache/nav` 預存序列，`repositories/fund/nav_metrics.py::fetch_nav`；L2 據 `source` 前綴或
 #   `nav_quality` 判定），**而且** `latest_from` 不是累積表（`cache_fallback` 在累積表那一支也會為真、但那不是取數失敗；
 #   該支目前由 `NAV_HISTORY_PROVENANCE_VERIFIED` 關閉，這一條是防它打開後被誤讀）。
+#   ⚠️ 整個判定**只在閘門關閉時成立**：閘門打開後，即時一段都沒有（`live_out` 為 None）、`latest_from` 為累積表的那一種
+#   實為取數失敗後退回，本判定會漏判成資料未備 —— 打開閘門前必須重審（`docs/BACKLOG.md` BL-0376；稽核建議改看 `live_error`）。
 # - 不改 10 日門檻（`not_ready_codes` 照舊）、不改任何公式：那幾檔的淨值列照舊不交給 `logic`（`withhold_not_ready_nav`），
 #   不拿舊淨值算任何一個數、不補 0；改的只是成因 —— 改記成該檔的淨值取數失敗（`fund_errors["nav"]`），
 #   由 `logic` 既有的逐檔取數失敗路徑寫 `⛔ 取數失敗：<代碼>：改用 <日期> 的預存淨值`（44 第五節第五小節的模板）。

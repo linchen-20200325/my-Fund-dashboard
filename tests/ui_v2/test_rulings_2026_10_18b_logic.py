@@ -258,3 +258,17 @@ def test_失敗去重_退回日期句照留_資料狀態行記淨值():
         after, summary = health.dedupe_failures(display)
         assert after["blocks"][0]["detail_lines"] == [text]          # 照留日期；同一串裡一模一樣的 ⛔ 行只留一行
         assert summary["fetch_failed"] == ["淨值"] and summary["affected_blocks"] == []
+
+
+def test_失敗去重_同一字串裡日期句與其他失敗摘要並存_其他摘要照舊改寫並記進資料狀態行():
+    """2026-10-18 獨立稽核回修：日期句不得讓同一字串裡的其他失敗摘要逃過去重。"""
+    from ui_v2 import health
+
+    keep = "⛔ 淨值 取數失敗：AAAA：改用 2026-09-18 的預存淨值"
+    other = f"⛔ 配息 取數失敗：BBBB 的{health.plain.STATE_FETCH_DEFAULT}"
+    for text, want in ((f"{keep}；{other}", f"{keep}；⛔ BBBB 取數失敗"),
+                       (f"{other}；{keep}", f"⛔ BBBB 取數失敗；{keep}")):
+        display = {"blocks": [{"code": "HLD-2", "title": "績效與風險卡", "_state": "系統錯誤", "detail_lines": [text]}]}
+        after, summary = health.dedupe_failures(display)
+        assert after["blocks"][0]["detail_lines"] == [want]
+        assert sorted(summary["fetch_failed"]) == sorted(["淨值", "配息"])

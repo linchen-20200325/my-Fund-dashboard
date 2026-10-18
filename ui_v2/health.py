@@ -162,19 +162,23 @@ def _shown(block, field) -> bool:
 
 def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
     """一個字串裡的失敗摘要 → 狀態族（或該塊第一處的「此區塊暫時無法判定」）。沒有摘要 → 原樣。"""
-    retreat = _RETREAT_SUMMARY.search(text)
-    if retreat:   # BL-0375：日期句照留，只記狀態族（見 `_RETREAT_SUMMARY`）
-        if _shown(block, field):
-            ctx.note(retreat.group("cls"), None)
-            code = (block or {}).get("code")
-            if code is not None and code not in ctx.explained:
-                ctx.explained.append(code)
-        return text
     out, pos = [], 0
     for match in sorted(
-        [*_FETCH_SUMMARY.finditer(text), *_SETTINGS_SUMMARY.finditer(text)], key=lambda m: m.start()
+        [*_FETCH_SUMMARY.finditer(text), *_SETTINGS_SUMMARY.finditer(text), *_RETREAT_SUMMARY.finditer(text)],
+        key=lambda m: m.start(),
     ):
         if match.start() < pos:
+            continue
+        if match.re is _RETREAT_SUMMARY:
+            # BL-0375：日期句照留（原字不換），只把資料類記進資料狀態行、記為看得到失敗摘要的塊（見 `_RETREAT_SUMMARY`）；
+            # 同一字串裡的其他失敗摘要照常往下改寫（2026-10-18 獨立稽核回修：原本整串早退，會漏改其他摘要）。
+            if _shown(block, field):
+                ctx.note(match.group("cls"), None)
+                code = (block or {}).get("code")
+                if code is not None and code not in ctx.explained:
+                    ctx.explained.append(code)
+            out.append(text[pos:match.end()])
+            pos = match.end()
             continue
         groups = match.groupdict()
         cls, fund, state = groups.get("cls"), groups.get("fund"), groups["state"]
