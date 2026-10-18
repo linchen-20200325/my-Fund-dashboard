@@ -175,7 +175,7 @@ def test_結論燈_三塊皆齊_灰燈且文案不含任何一張卡的名字():
     model = logic.build_page_model(fixtures.dataset_all_ok())
     light = logic.find_block(model, "MKT-0")
     assert light["_tone"] == "灰"
-    assert light["text"] == "三張卡的資料齊"
+    assert light["text"] == ""   # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：燈上不寫「三張卡的資料齊」
     for name in ("風險情緒卡", "景氣位置卡", "資金與匯率卡"):
         assert name not in light["text"]
     assert light["buttons"] == []
@@ -999,21 +999,22 @@ def test_第1件反向控制_拆掉tie_break沒有改變任何一個現行情境
         ("fetched_before_obs", "MKT-0"): "灰", ("fetched_before_obs", "MKT-1"): "中性",
         ("fetched_before_obs", "MKT-2"): "中性", ("fetched_before_obs", "MKT-3"): "中性",
     }
+    # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：三塊皆 ok 的那幾格由「三張卡的資料齊」改為空字串（燈上不寫文案）。
     expected_text = {
-        "all_ok": "三張卡的資料齊",
-        "all_ok_negative": "三張卡的資料齊",
+        "all_ok": "",
+        "all_ok_negative": "",
         "mkt1_one_key_missing": "風險情緒卡：資料未備",
         "mkt1_both_keys_missing": "風險情緒卡：資料未備",
         "mkt1_fetch_failed": "風險情緒卡：取數失敗",
         "mkt2_both_keys_missing": "景氣位置卡：資料未備",
-        "mkt2_only_five_rows": "三張卡的資料齊",
-        "mkt2_one_row_after_baseline": "三張卡的資料齊",
-        "mkt2_diverging": "三張卡的資料齊",
+        "mkt2_only_five_rows": "",
+        "mkt2_one_row_after_baseline": "",
+        "mkt2_diverging": "",
         "mkt3_unit_mismatch": "資金與匯率卡：不適用",
         "all_empty": "本頁三張卡皆未取到資料",
-        "revised_row": "三張卡的資料齊",
-        "unknown_unit_literal": "三張卡的資料齊",
-        "fetched_before_obs": "三張卡的資料齊",
+        "revised_row": "",
+        "unknown_unit_literal": "",
+        "fetched_before_obs": "",
     }
     assert expected_tone and expected_text, "期望值是空的 —— 這一條會變成空掃"
     # 反向控制的**涵蓋度**也要驗：拆之前存在的情境，一個都不准從期望值裡漏掉。
@@ -1387,7 +1388,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         # ⚠️ 2026-09-24 第二十一輪：客戶裁示取數失敗圖示 ⚠→⛔，受影響格的摘要已換新值（有意識的更正，不是漏刪）。
         #    換之前先證明：把現行模型字串裡的 ⛔ 換回 ⚠ 再算摘要，本表舊值逐格全數重現（量測日 2026-09-24）；
         #    故差異只有那個圖示。沒被取數失敗碰到的格一格未動。
-        ("all_ok", "MKT-0"): "cd15f0ceb6da",
+        ("all_ok", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("all_ok", "MKT-1"): "e156a51bed11",
         ("all_ok", "MKT-2"): "bd304edd8d7a",
         ("all_ok", "MKT-3"): "ddef408d6b7c",
@@ -1395,7 +1396,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("all_ok", "MKT-5"): "d77a98bb3c59",
         ("all_ok", "MKT-6"): "c24cf97e69cd",
         ("all_ok", "MKT-7"): "bac3497a5a08",
-        ("all_ok_negative", "MKT-0"): "cd15f0ceb6da",
+        ("all_ok_negative", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("all_ok_negative", "MKT-1"): "ed7b2bcbe848",
         ("all_ok_negative", "MKT-2"): "345183416afc",
         ("all_ok_negative", "MKT-3"): "c6708ead229f",
@@ -1435,7 +1436,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_both_keys_missing", "MKT-5"): "40b0a04953da",
         ("mkt2_both_keys_missing", "MKT-6"): "2ddc98a10e56",
         ("mkt2_both_keys_missing", "MKT-7"): "70796f04a9ba",
-        ("mkt2_only_five_rows", "MKT-0"): "cd15f0ceb6da",
+        ("mkt2_only_five_rows", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("mkt2_only_five_rows", "MKT-1"): "e156a51bed11",
         ("mkt2_only_five_rows", "MKT-2"): "5802aba4e9e8",
         ("mkt2_only_five_rows", "MKT-3"): "ddef408d6b7c",
@@ -1443,7 +1444,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_only_five_rows", "MKT-5"): "d77a98bb3c59",
         ("mkt2_only_five_rows", "MKT-6"): "104bbfaf98cc",
         ("mkt2_only_five_rows", "MKT-7"): "f3ce815e6cda",
-        ("mkt2_one_row_after_baseline", "MKT-0"): "cd15f0ceb6da",
+        ("mkt2_one_row_after_baseline", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("mkt2_one_row_after_baseline", "MKT-1"): "e156a51bed11",
         ("mkt2_one_row_after_baseline", "MKT-2"): "d697126c2cfb",
         ("mkt2_one_row_after_baseline", "MKT-3"): "ddef408d6b7c",
@@ -1451,7 +1452,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("mkt2_one_row_after_baseline", "MKT-5"): "d77a98bb3c59",
         ("mkt2_one_row_after_baseline", "MKT-6"): "12a9373cbc2d",
         ("mkt2_one_row_after_baseline", "MKT-7"): "80513c138371",
-        ("mkt2_diverging", "MKT-0"): "cd15f0ceb6da",
+        ("mkt2_diverging", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("mkt2_diverging", "MKT-1"): "e156a51bed11",
         ("mkt2_diverging", "MKT-2"): "581dd6da4127",
         ("mkt2_diverging", "MKT-3"): "ddef408d6b7c",
@@ -1475,7 +1476,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("all_empty", "MKT-5"): "6d450966498d",
         ("all_empty", "MKT-6"): "70d28a6ea733",
         ("all_empty", "MKT-7"): "29ac69345567",
-        ("revised_row", "MKT-0"): "cd15f0ceb6da",
+        ("revised_row", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("revised_row", "MKT-1"): "e156a51bed11",
         ("revised_row", "MKT-2"): "bd304edd8d7a",
         ("revised_row", "MKT-3"): "71a5a27d7dd7",
@@ -1483,7 +1484,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("revised_row", "MKT-5"): "d77a98bb3c59",
         ("revised_row", "MKT-6"): "c8010960bf01",
         ("revised_row", "MKT-7"): "bac3497a5a08",
-        ("unknown_unit_literal", "MKT-0"): "cd15f0ceb6da",
+        ("unknown_unit_literal", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("unknown_unit_literal", "MKT-1"): "e156a51bed11",
         ("unknown_unit_literal", "MKT-2"): "bd304edd8d7a",
         ("unknown_unit_literal", "MKT-3"): "ddef408d6b7c",
@@ -1491,7 +1492,7 @@ def test_第1件反向控制_十四情境乘八塊一百一十二格逐格未變
         ("unknown_unit_literal", "MKT-5"): "d77a98bb3c59",
         ("unknown_unit_literal", "MKT-6"): "48a65b18ad96",
         ("unknown_unit_literal", "MKT-7"): "bac3497a5a08",
-        ("fetched_before_obs", "MKT-0"): "cd15f0ceb6da",
+        ("fetched_before_obs", "MKT-0"): "92e8fd329f36",   # BL-0371（2026-10-18）：燈上不寫「三張卡的資料齊」；舊值 cd15f0ceb6da
         ("fetched_before_obs", "MKT-1"): "e156a51bed11",
         ("fetched_before_obs", "MKT-2"): "bd304edd8d7a",
         ("fetched_before_obs", "MKT-3"): "8e0d5339c884",
@@ -1535,7 +1536,7 @@ def test_結論燈_窮舉六十四種組合_永遠點名最高那一級的全部
         light = logic.conclusion_light(cards)
         checked += 1
         if all(s == logic.STATE_OK for s in combo):
-            assert light["text"] == "三張卡的資料齊", combo
+            assert light["text"] == "", combo   # BL-0371：三塊皆 ok 不寫文案
             continue
         top = max(logic._band(s) for s in combo)
         expect = {titles[c] for c, s in zip(("MKT-1", "MKT-2", "MKT-3"), combo)

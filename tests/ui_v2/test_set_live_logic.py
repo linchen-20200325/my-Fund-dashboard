@@ -287,7 +287,7 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     assert fields["set_max_age_days"]["used_by_text"] == "改這個鍵會影響：SET-1"          # set_ 鍵維持原行
     # ★8 說明行
     assert _b(model, "SET-5")["detail_lines"][-1] == live.TEXT_SET5_NOTE
-    assert _b(model, "SET-0")["text"] == logic.TEXT_ALL_OK
+    assert _b(model, "SET-0")["text"] == logic.TEXT_ALL_CLEAR == ""   # 客戶 2026-10-18 裁示 BL-0371
     assert logic.scan_forbidden(logic.collect_ui_strings(model)) == {}
 
 
@@ -822,12 +822,18 @@ def test_淨值層_ok之後再失敗_SET1仍顯示ok那筆時間_SET2顯示失�
     assert _b(model, "SET-0")["text"] == "失敗的來源層級：淨值"
 
 
-def test_淨值層_只有失敗紀錄_SET1為資料未備_不印新句也不印尚未接上(env, monkeypatch):
+def test_淨值層_只有失敗紀錄_SET1為取數失敗_不是資料未備_不印尚未接上(env, monkeypatch):
+    """客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：只有失敗紀錄的取數紀錄 ＝ 取數失敗（⛔），不判成資料未備。
+    （舊名「…SET1為資料未備…」在寫下當時照的是 44 基底判讀；被推翻的是它的前提 —— 客戶已裁成因要分開。）"""
     _stub_nav(monkeypatch, {_NAV_A: (None, "HTTP 503 upstream")})
     source.refetch("淨值")
     _d, model = _page()
     nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
-    assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備"
+    log = [r for r in S.load_fetch_log([])["rows"] if r["source_tier"] == "淨值"][-1]
+    assert log["outcome"] == "failed"
+    assert nav["_failed"] is True and nav["at_text"] == f"⛔ 取數失敗：{log['message']}"
+    assert [b["text"] for b in nav["badges"]] == ["取數失敗"]
+    assert "資料未備" not in nav["at_text"] and nav["days_text"] == "⬜" and nav["compare_text"] == "⬜"
     assert nav["note_lines"] == []
 
 
@@ -1011,7 +1017,9 @@ def test_M1_4_全部即時失敗_不產生假的最新成功時間(env, monkeypa
     assert _lines(result)[0].startswith("⛔ 取數失敗：")
     assert [r["outcome"] for r in S.load_fetch_log([])["rows"]] == ["failed"]
     nav = _set1_nav(monkeypatch)
-    assert nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備" and nav["note_lines"] == []
+    # 客戶 2026-10-18 裁示 BL-0373：只有失敗紀錄 ＝ 取數失敗（⛔），不是資料未備；照舊不產生假的最新成功時間。
+    assert nav["_failed"] is True and nav["at_text"].startswith("⛔ 取數失敗：")
+    assert [b["text"] for b in nav["badges"]] == ["取數失敗"] and nav["note_lines"] == []
 
 
 def test_M1_5_兩檔以上即時全敗退回預存_整筆failed_每檔各一段原文_SET1不前進(env, monkeypatch):
@@ -1038,3 +1046,83 @@ def test_M1_5_兩檔以上即時全敗退回預存_整筆failed_每檔各一段�
     assert KEY not in msg
     nav = _set1_nav(monkeypatch)
     assert nav["at_text"] == "2026-09-25 10:00"                      # 停在上一次真正成功，不前進到 13:00
+
+
+# ═══════════════════════ 客戶 2026-10-18 裁示（`DEC-2026-10-18-01`）：S1／S4／C1 的優先序、BL-0373 ═══════════════════════
+
+
+def _reshaped_page():
+    """`_page()` 再走正式模式的 `sections.set_reshape`（`plain`／`symbols` 只換字與符號，這幾條驗的是燈的判定與優先序）。"""
+    from ui_v2 import sections
+
+    data, model = _page()
+    notes = data["notes"]
+    sections.set_reshape(model, sheet_configured=live.sheet_configured(notes),
+                         service_account_configured=live.service_account_configured(notes))
+    return data, model
+
+
+def test_S1_只缺設定試算表_第三句優先於由此衍生的讀取失敗(env):
+    env.cfg.pop("SETTINGS_SHEET_ID")
+    data, model = _reshaped_page()
+    assert data["notes"]["service_account"]["configured"] is True
+    light = _b(model, "SET-0")
+    assert light["_tone"] == "灰" and light["text"] == "⬜ 無法判定：尚未設定設定試算表"
+
+
+def test_C1_只缺服務帳戶_燈維持紅_取數失敗_不改成第三句(env):
+    env.cfg.pop("google_service_account")
+    data, model = _reshaped_page()
+    assert data["notes"]["gate"]["state"] == "no_service_account"
+    light = _b(model, "SET-0")
+    assert light["_tone"] == "紅" and light["glyph"] == "⛔" and light["state_word"] == "狀態：取數失敗"
+    assert light["text"] == "⛔ 取數失敗：" + R.NO_SERVICE_ACCOUNT_MESSAGE
+    assert "尚未設定設定試算表" not in light["text"]
+
+
+def test_S1C1_兩者皆未設定_取保守紅燈_與只缺服務帳戶同一盞(env):
+    """設定試算表與服務帳戶同時未設定：取數能力失敗不是由設定試算表未設定衍生的 → 維持 ⛔（總管指定的保守讀法）。"""
+    env.cfg.pop("google_service_account")
+    _d, only_sa = _reshaped_page()
+    env.cfg.pop("SETTINGS_SHEET_ID")
+    R.clear_cache()
+    data, both = _reshaped_page()
+    assert data["notes"]["gate"]["state"] == "not_configured"
+    assert data["notes"]["service_account"] == {"configured": False, "message": R.NO_SERVICE_ACCOUNT_MESSAGE}
+    keys = ("_tone", "_state", "glyph", "state_word", "text")
+    assert {k: _b(both, "SET-0")[k] for k in keys} == {k: _b(only_sa, "SET-0")[k] for k in keys}
+    assert _b(both, "SET-0")["_tone"] == "紅"
+
+
+def test_S4_正式模式燈下說明行寫三個輸入_示範模式照舊兩個(env):
+    _d, model = _page()
+    lines = _b(model, "SET-0")["detail_lines"]
+    assert live.TEXT_SET0_INPUTS in lines and live.TEXT_SET0_INPUTS_DEMO not in lines
+    assert "設定試算表是否已設定" in live.TEXT_SET0_INPUTS
+    demo = _b(logic.build_page_model(fixtures.scenario("ok")), "SET-0")["detail_lines"]
+    assert live.TEXT_SET0_INPUTS_DEMO in demo and live.TEXT_SET0_INPUTS not in demo
+
+
+def test_BL0373_淨值層_失敗之後又回空_最近一次是回空_照舊資料未備(env, monkeypatch):
+    """取數回空（`ok` 且 0 列）不是取數失敗：最近一次是回空時照舊資料未備（實作組判讀，與 SET-2「最近一次」同一筆）。"""
+    _stub_nav(monkeypatch, {_NAV_A: (None, "HTTP 503 upstream")})
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")
+    _stub_nav(monkeypatch, {})
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    source.refetch("淨值")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["_failed"] is False and nav["at_text"] == "⬜" and nav["badges"][0]["text"] == "資料未備"
+
+
+def test_BL0373_淨值層_先成功後失敗_時間照舊取成功那一次_不改判取數失敗(env, monkeypatch):
+    _l1(monkeypatch, live_ok=[_NAV_A])
+    _clock(monkeypatch, "2026-09-25T02:00:00Z")
+    source.refetch("淨值")
+    _stub_nav(monkeypatch, {_NAV_A: (None, "HTTP 503 upstream")})
+    _clock(monkeypatch, "2026-09-25T05:00:00Z")
+    source.refetch("淨值")
+    _d, model = _page()
+    nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
+    assert nav["_failed"] is False and nav["at_text"] != "⬜" and not nav["at_text"].startswith("⛔")

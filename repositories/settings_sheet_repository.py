@@ -435,6 +435,16 @@ def load_sheet_title(*, mask: Mask) -> str:
     return title
 
 
+def service_account_status(*, mask: Mask) -> dict:
+    """服務帳戶有沒有設定（**不打上游**，只讀 secret）：`{"configured": bool, "message": 已遮蔽的缺設定訊息}`。
+
+    給 set 頁 `SET-0` 判「設定試算表未設定、服務帳戶也未設定」那一種情形（客戶 2026-10-18 裁示 C1／S1，
+    `docs/DECISIONS.md` `DEC-2026-10-18-01`）：`gate_status` 先判 ID，ID 沒設時看不到服務帳戶缺不缺。
+    判讀與 `_run`／`gate_status` 同一個 `_service_account()`；`message` 與缺服務帳戶時讀取失敗的訊息逐字相同。
+    """
+    return {"configured": _service_account() is not None, "message": mask(NO_SERVICE_ACCOUNT_MESSAGE)}
+
+
 def gate_status(*, mask: Mask) -> dict:
     """寫入之前的閘門狀態（**不打上游**）：`{"state", "message", "remaining_sec"}`。
 

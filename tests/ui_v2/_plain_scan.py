@@ -263,7 +263,10 @@ def _set(*, cfg=None, preset=None, refetch=False, stale=False) -> str:
 SET_PRESET_RAW = "⛔ 取數失敗：fetch_url returned None: ^VIX (kind=unreachable)"
 SET = {
     "正常": _set(),
-    "未設定": _set(cfg={}),
+    # 只缺設定試算表 ID（服務帳戶在）。客戶 2026-10-18 裁示 C1（`DEC-2026-10-18-01`）之後，兩者都缺時燈改為 ⛔，
+    # 那一種另寫在 `tests/ui_v2/test_rulings_2026_10_18_page.py`；本情境照舊驗「尚未設定設定試算表」那一頁。
+    # （舊寫法 `cfg={}` 在 C1 之前與本情境畫面相同；被權衡掉的是它同時缺服務帳戶。）
+    "未設定": _set(cfg={"google_service_account": _SET_CFG["google_service_account"]}),
     "取數失敗": _set(cfg={"SETTINGS_SHEET_ID": "sheet-for-plain-scan"}),
     "局部失敗": _set(preset={"mkt": [{"where": "MKT-1 風險情緒卡", "text": SET_PRESET_RAW}]}),
     "取數紀錄": _set(refetch=True),

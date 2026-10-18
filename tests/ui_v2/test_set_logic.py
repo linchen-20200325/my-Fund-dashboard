@@ -607,14 +607,16 @@ def test_SET0只讀SET1與SET2():
     assert sig == ["set1", "set2"], sig
 
 
-def test_SET0判準_放寬上限到沒有任何一筆逾期_燈轉灰且文案為資料齊來源皆可達():
+def test_SET0判準_放寬上限到沒有任何一筆逾期_燈轉灰_不寫文案_只留狀態字():
+    """44 `SET-0` 判準（2026-10-18 改讀，客戶裁示 BL-0371，`DEC-2026-10-18-01`）：燈轉灰、狀態字「狀態：無逾期、無失敗來源」、
+    燈上不寫文案。舊名「…文案為資料齊來源皆可達」在寫下當時照 44 字面；被推翻的是那句字面本身。"""
     lamp = _block(_model("ok"), "SET-0")
-    assert lamp["_tone"] == "灰" and lamp["text"] == "資料齊、來源皆可達"
+    assert lamp["_tone"] == "灰" and lamp["text"] == "" and lamp["state_word"] == "狀態：無逾期、無失敗來源"
     dataset = fixtures.scenario("stale")
     assert _block(logic.build_page_model(dataset), "SET-0")["_tone"] == "黃"
     _setting(dataset, "set_max_age_days", "999")
     lamp = _block(logic.build_page_model(dataset), "SET-0")
-    assert lamp["_tone"] == "灰" and lamp["text"] == "資料齊、來源皆可達"
+    assert lamp["_tone"] == "灰" and lamp["text"] == "" and lamp["state_word"] == "狀態：無逾期、無失敗來源"
 
 
 def test_SET0判準_讓某一個來源取數失敗_燈轉紅且文案含該來源的層級字面值():
@@ -656,7 +658,8 @@ def test_SET0紅蓋過黃_也蓋過上限未設():
 def test_SET0某類無列或某層級無紀錄仍照字面為灰():
     """登記 `SET-GAP-某類無列不入燈`。"""
     for name in ("norows", "notier"):
-        assert _block(_model(name), "SET-0")["text"] == "資料齊、來源皆可達", name
+        lamp = _block(_model(name), "SET-0")
+        assert lamp["_tone"] == "灰" and lamp["text"] == "" and lamp["_state"] == "齊", name   # BL-0371：不寫文案
 
 
 def test_SET0讀取失敗時燈為紅且照抄失敗字串():

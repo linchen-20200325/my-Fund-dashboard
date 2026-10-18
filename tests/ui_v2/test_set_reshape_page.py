@@ -149,6 +149,19 @@ def test_全情境沒有勾與一切正常字樣(name):
 _DEMO = SCAN._HEAD + "from ui_v2.set import page\npage.render()\n"
 
 
+_ALL_CLEAR_EMPTY = '<span class="set-stword">狀態：無逾期、無失敗來源</span><span class="set-lamp-text"></span>'
+_ALL_CLEAR_OLD = '<span class="set-stword">狀態：無逾期、無失敗來源</span><span class="set-lamp-text">資料齊、來源皆可達</span>'
+_RESTORED = []
+
+
+def _restore_all_clear(markup: str) -> str:
+    if _ALL_CLEAR_EMPTY in markup:
+        _RESTORED.append(1)
+        return markup.replace(_ALL_CLEAR_EMPTY, _ALL_CLEAR_OLD)
+    assert "資料齊" not in markup and "來源皆可達" not in markup
+    return markup
+
+
 def test_示範模式畫面逐位元組不變():
     """示範模式不經過重排（44 之八開頭第 4 條）。17 情境 × 存檔失敗開關，把 AppTest 抓到的 markdown、展開區標題、按鈕、
     說明、單選、輸入欄標籤序列化後取 md5；基準值於 c44e1551（P1-④ 稽核通過版）量得。"""
@@ -163,11 +176,15 @@ def test_示範模式畫面逐位元組不變():
             at.query_params["savefail"] = save_failed
             at.run()
             assert not at.exception
-            out.append([name, save_failed, [m.value for m in at.markdown], [e.label for e in at.expander],
+            # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：示範模式同樣不寫「資料齊、來源皆可達」。證明「示範畫面只差這一句」：
+            # 把燈上那一格還原成舊字面，md5 必須回到舊基準值（c44e1551）；其餘一格不動。
+            restored_md = [_restore_all_clear(m.value) for m in at.markdown]
+            out.append([name, save_failed, restored_md, [e.label for e in at.expander],
                         [(b.label, b.disabled, b.help) for b in at.button], [c.value for c in at.caption],
                         [r.label for r in at.radio], [t.label for t in at.text_input] + [t.label for t in at.text_area]])
     digest = hashlib.md5(json.dumps(out, ensure_ascii=False).encode()).hexdigest()
-    assert digest == "1e269cdf55b4f1078cd9624bb6d88ec8", digest
+    assert _RESTORED, "一盞齊燈也沒還原 —— 這一條會變成空掃"
+    assert digest == "1e269cdf55b4f1078cd9624bb6d88ec8", digest   # 舊基準值（還原 BL-0371 那一句之後）
 
 
 def test_示範模式不重排_沒有需要注意_沒有導覽():

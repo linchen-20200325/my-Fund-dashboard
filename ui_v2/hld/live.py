@@ -895,6 +895,8 @@ def build_live_model(
         # 總管 2026-10-13 裁決：那幾檔寫「淨值超過 N 日」而不是「缺淨值／nav 尚無資料」；N 取共用常數。
         nav_not_ready_codes=stale_codes,
         nav_not_ready_days=NAV_FRESH_DAYS_YELLOW,
+        # 客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：取數失敗不判成資料未備（`logic._STRICT_FETCH`）。
+        strict_fetch_failure=True,
     )
     out = apply_live_notes(model, today=today)
     if dataset.get("errors", {}).get("user_setting"):

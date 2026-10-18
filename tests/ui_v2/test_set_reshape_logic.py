@@ -108,9 +108,19 @@ def test_非黃燈的燈一字不動(name, sf):
         assert after == before
 
 
-def test_資料齊那一句照舊不改():
-    """BL-0371 待客戶另裁：灰燈「資料齊、來源皆可達」照舊。"""
-    assert _b(_reshaped("ok"), "SET-0")["text"] == set_logic.TEXT_ALL_OK
+def test_BL0371_兩個計數皆為零_燈上不寫文案_只留狀態字_示範與正式皆同():
+    """客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：移除「資料齊、來源皆可達」，不限正式模式（logic 本身不寫）。
+    （舊測試 `test_資料齊那一句照舊不改` 在寫下當時為真 —— BL-0371 那時待客戶另裁；被推翻的是它的前提。）"""
+    for light in (_b(_model("ok"), "SET-0"), _b(_reshaped("ok"), "SET-0")):
+        assert light["_state"] == "齊" and light["text"] == ""
+        assert light["state_word"] == "狀態：無逾期、無失敗來源" and light["_tone"] == "灰"
+
+
+@pytest.mark.parametrize("name, sf", _ALL)
+def test_BL0371_全情境SET0燈不寫資料齊或來源皆可達_示範與正式皆同(name, sf):
+    for light in (_b(_model(name, sf), "SET-0"), _b(_reshaped(name, save_failed=sf), "SET-0")):
+        text = json.dumps(light, ensure_ascii=False)
+        assert "資料齊" not in text and "來源皆可達" not in text, (name, light["text"])
 
 
 @pytest.mark.parametrize("name", ["ok", "stale", "failed", "logfail", "nolimit", "first", "settingfail"])
@@ -121,6 +131,34 @@ def test_設定試算表未設定_燈灰_第三句優先(name):
     assert light["glyph"] == set_logic.EMPTY_GLYPH and light["state_word"] == "狀態：尚不足以判定"
     assert light["note_lines"] == []
     assert "請" not in light["text"] and "暫停" not in light["text"]   # 只寫狀態，不寫操作指引
+
+
+@pytest.mark.parametrize("name", ["ok", "stale", "failed", "logfail", "nolimit", "first", "settingfail"])
+def test_S1C1_設定試算表與服務帳戶皆未設定_燈維持紅_不出第三句(name):
+    """客戶 2026-10-18 裁示 C1（`DEC-2026-10-18-01`）：缺服務帳戶維持 ⛔，不改成第三句；兩者同時未設定時取保守 ⛔
+    （總管指定讀法）。燈由 `live.apply_live_notes` 畫好（見 `test_set_live_logic.py`），本函式不動它。"""
+    model = _model(name)
+    light = _b(model, "SET-0")
+    light.update(_tone="紅", _state="讀取失敗", glyph="⛔", state_word="狀態：取數失敗", text="⛔ 取數失敗：未設定服務帳戶")
+    before = copy.deepcopy(light)
+    sections.set_reshape(model, sheet_configured=False, service_account_configured=False)
+    assert _b(model, "SET-0") == before
+    assert sections.SET_NO_SHEET_TEXT not in json.dumps(_b(model, "SET-0"), ensure_ascii=False)
+
+
+def test_S1C1_兩者皆未設定而燈不是紅_當場炸():
+    with pytest.raises(ValueError):
+        sections.set_reshape(_model("ok"), sheet_configured=False, service_account_configured=False)
+
+
+def test_服務帳戶有沒有設定_閘門不是not_configured時不讀_是時缺鍵就炸():
+    for state in ("ok", "cooling", "no_service_account"):
+        assert set_live.service_account_configured({"gate": {"state": state}}) is True
+    gate = {"state": "not_configured"}
+    assert set_live.service_account_configured({"gate": gate, "service_account": {"configured": True}}) is True
+    assert set_live.service_account_configured({"gate": gate, "service_account": {"configured": False}}) is False
+    with pytest.raises(KeyError):
+        set_live.service_account_configured({"gate": gate})
 
 
 def test_設定試算表有沒有設定_只看寫入閘門的not_configured():
@@ -245,8 +283,19 @@ def test_示範模型逐位元組不變():
     基準值於 c44e1551（P1-④ 稽核通過版）量得：17 情境 × 存檔失敗開關，共 34 個模型。"""
     models = {f"{n}|{sf}": _model(n, sf) for n, sf in _ALL}
     assert len(models) == 34
-    blob = json.dumps(models, ensure_ascii=False, sort_keys=True, default=repr).encode()
-    assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"
+    # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：示範模式同樣不寫「資料齊、來源皆可達」。
+    # 證明「示範模型只差這一句」：把 `SET-0` 齊那一支的文案還原成舊字面，md5 必須回到舊基準值；其餘一格不動。
+    restored = copy.deepcopy(models)
+    changed = 0
+    for model in restored.values():
+        light = _b(model, "SET-0")
+        if light["_state"] == "齊":
+            assert light["text"] == ""
+            light["text"] = "資料齊、來源皆可達"
+            changed += 1
+    assert changed > 0
+    blob = json.dumps(restored, ensure_ascii=False, sort_keys=True, default=repr).encode()
+    assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"   # 舊基準值（c44e1551）
 
 
 # ───────────────────────── 2026-10-18 獨立稽核回修（M1、S2、S6） ─────────────────────────

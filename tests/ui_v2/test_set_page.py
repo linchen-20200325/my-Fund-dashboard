@@ -146,7 +146,7 @@ def test_渲染出來的按鈕只有存檔與重新取數_標籤零禁詞():
 
 def test_燈的狀態有圖示也有文字_三種顏色各一例():
     cases = {
-        "ok": ("⬜", "資料齊、來源皆可達"),
+        "ok": ("⬜", "狀態：無逾期、無失敗來源"),   # 客戶 2026-10-18 裁示 BL-0371：燈上不寫「資料齊、來源皆可達」
         "stale": (logic.WARN_GLYPH, "有 1 筆資料超過你設定的新鮮度上限"),
         "failed": (logic.FETCH_FAIL_GLYPH, "失敗的來源層級：" + fixtures.FAILED_TIER),
     }
