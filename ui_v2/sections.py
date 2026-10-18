@@ -255,6 +255,10 @@ SET_STATE_EMPTY = "空狀態"
 SET_EMPTY_GLYPH = "⬜"
 SET_STATE_WORD_EMPTY = "狀態：尚不足以判定"
 SYMBOL_STALE = "◷"
+SET_EMPTY_KIND_NO_SOURCE = "來源缺"
+SET_LOG_TABLE = "fetch_log"
+# 正式模式 `SET-3` 壞列的目前值（真身 `ui_v2/set/live.py::TEXT_BAD_ROWS` 以 n=1 帶入）。
+SET_BAD_ROW_TEXT = "⚠ 1 列格式不符，未採用"
 
 # 44 `SET-0` 規則欄（之八其二 (b-2) 第 3 條）：黃燈那一句改寫；N 的算法照舊（`SET-1` 一列一類，逾期筆數就是逾期類數）。
 SET_OVERDUE_TEXT = SYMBOL_STALE + " {n} 類資料超過你設的上限"
@@ -334,6 +338,9 @@ def set2_summary(block: dict) -> str:
     結果為 `ok` 的層級。不寫「正常」。"""
     placeholder = block["placeholder"]
     if placeholder:
+        if placeholder.get("_empty_kind") == SET_EMPTY_KIND_NO_SOURCE:
+            # 比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
+            return f"缺 {SET_LOG_TABLE}：{_node_text(placeholder)}"
         return _node_text(placeholder)
     failed = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "failed"]
     missing = [r["tier_text"] for r in block["_rows"] if r["result_text"] not in ("failed", "ok")]
@@ -349,17 +356,31 @@ def set2_summary(block: dict) -> str:
 
 
 def set3_summary(block: dict) -> str:
-    """`SET-3` 移進 ④「操作」之後收合時的摘要那一行。只拼卡上已有的格：佔位 → 佔位那一句；
-    否則鍵數，加上目前值為「⬜ 未設定」與「⬜ 不適用：值與型別不符」的鍵名（44 第五節第四小節）。"""
+    """`SET-3` 移進 ④「操作」之後收合時的摘要那一行（44 第五節第四小節：缺什麼在摘要就看得見）。只拼卡上已有的字，
+    標點比照 `SET-4` 的摘要用「，」：
+
+    - 佔位 → 佔位那一句；
+    - 卡頭紅字（正式模式 ★10，例：「⛔ 未設定試算表 ID，暫停寫入」）→ 先寫那一句；**沒有任何列時就只寫那一句**，
+      不寫「0 個鍵」（2026-10-18 獨立稽核必修 M1：正式模式未設定時佔位已併入卡頭，舊寫法會報「0 個鍵」）；
+    - 否則鍵數，加上目前值為「⬜ 未設定」「⬜ 不適用：值與型別不符」「⚠ 1 列格式不符，未採用」（正式模式壞列）的鍵名；
+    - 最後接上卡上的結構檢查行（正式模式 ★9 的 `live_lines`，例：格式不符未採用 N 列）。
+    """
     placeholder = block["placeholder"]
     if placeholder:
         return _node_text(placeholder)
     rows = block["_rows"]
-    parts = [f"{len(rows)} 個鍵"]
+    red_heads = [node["text"] for node in block.get("head_lines") or () if node["_tone"] == "紅"]
+    if not rows and red_heads:
+        return "，".join(red_heads)
+    parts = red_heads + [f"{len(rows)} 個鍵"]
     unset = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 未設定"]
     bad = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 不適用：值與型別不符"]
+    broken = [r["key_text"] for r in rows if r["value_text"] == SET_BAD_ROW_TEXT]
     if unset:
         parts.append(f"{len(unset)} 個未設定：" + "、".join(unset))
     if bad:
         parts.append(f"{len(bad)} 個值與型別不符：" + "、".join(bad))
-    return "；".join(parts)
+    if broken:
+        parts.append(f"{len(broken)} 個格式不符未採用：" + "、".join(broken))
+    parts += [node["text"] for node in block.get("live_lines") or () if node["_tone"] != "中性"]
+    return "，".join(parts)

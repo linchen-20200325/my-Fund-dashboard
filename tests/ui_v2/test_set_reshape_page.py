@@ -176,3 +176,48 @@ def test_示範模式不重排_沒有需要注意_沒有導覽():
     assert _label(values, plain.LABEL_ATTENTION) == -1
     assert _first(values, f'href="#{sections.SET_NAV_ANCHOR}"') == -1
     assert not [e for e in at.expander if e.label.startswith(("規則參數卡", "來源健康卡"))]
+
+
+# ───────────────────────── 2026-10-18 獨立稽核回修（M1、S3、S5） ─────────────────────────
+
+
+def test_未設定_規則參數卡摘要寫紅字那一句_不寫0個鍵():
+    """M1：正式模式未設定時，`SET-3` 的佔位併入卡頭紅字（★10）、沒有任何列；摘要要寫出那一句，不得寫「0 個鍵」。"""
+    at = _run(SCAN.SCRIPTS["set"]["未設定"])
+    label = _expander(at, "規則參數卡　—　").label
+    assert "⛔" in label and "0 個鍵" not in label, label
+
+
+def test_未設定_導覽照舊顯示_它指向的重新取數停用():
+    """S3（登記情境 C3）：重新取數不可執行時，`SET-0` 燈下那一枚導覽照 44 仍然顯示；落點那一枚「重新取數」是停用的。"""
+    at = _run(SCAN.SCRIPTS["set"]["未設定"])
+    values = _md(at)
+    assert _first(values, f'href="#{sections.SET_NAV_ANCHOR}"') != -1
+    assert _first(values, f'id="{sections.SET_NAV_ANCHOR}"') != -1
+    refetch = [b for b in at.button if b.label == "重新取數"]
+    assert len(refetch) == 1 and refetch[0].disabled
+
+
+# S5：正式模式的純黃燈情境（只有逾期、沒有失敗來源）。資料取自示範情境 stale（不打網路），經正式模式的整條路徑畫出。
+_PURE_YELLOW = SCAN._HEAD + """
+from ui_v2.set import page, fixtures
+_ds = fixtures.scenario("stale")
+_notes = {"mask_token": "<已遮蔽>", "pending_tables": [], "wired_tiers": ["淨值", "配息", "市場指標", "其他"],
+          "pages_reading_settings": [], "gate": {"state": "ok"}, "title": {"state": "ok", "text": "測試用設定本"},
+          "table_errors": {}, "structure": {}, "source_cooldowns": []}
+page.render(load_live=lambda: {"dataset": _ds, "notes": _notes}, save_live=lambda *a: {}, refetch_live=lambda t: {})
+"""
+
+
+def test_純黃燈_燈寫類數句_需要注意列出同一類():
+    from ui_v2.set import logic as set_logic
+
+    overdue = set_logic.find_block(set_logic.build_page_model(fixtures.scenario("stale")), "SET-1")["_overdue"]
+    assert overdue > 0
+    values = _md(_run(_PURE_YELLOW))
+    lamp = _lamp(values)
+    assert f"◷ {overdue} 類資料超過你設的上限" in lamp
+    assert "狀態：有逾期" in lamp and "失敗的來源層級" not in lamp and "其餘正常" not in lamp
+    assert "筆資料超過你設定的新鮮度上限" not in "\n".join(values)
+    items = [v for v in values if 'class="v2-attention"' in v]
+    assert len(items) == overdue

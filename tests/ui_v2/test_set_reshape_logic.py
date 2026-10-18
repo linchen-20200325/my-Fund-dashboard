@@ -247,3 +247,37 @@ def test_示範模型逐位元組不變():
     assert len(models) == 34
     blob = json.dumps(models, ensure_ascii=False, sort_keys=True, default=repr).encode()
     assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"
+
+
+# ───────────────────────── 2026-10-18 獨立稽核回修（M1、S2、S6） ─────────────────────────
+
+
+def test_壞列字面與來源缺字面逐字等於真身():
+    assert sections.SET_BAD_ROW_TEXT == set_live.TEXT_BAD_ROWS.format(n=1)
+    assert sections.SET_LOG_TABLE in set_logic.FETCHABLE_TABLES
+    assert set_logic._placeholder(set_logic.TEXT_NO_RECORDS, "來源缺")["_empty_kind"] == sections.SET_EMPTY_KIND_NO_SOURCE
+
+
+def test_SET3摘要_沒有列而卡頭有紅字_寫紅字不寫0個鍵():
+    block = {"placeholder": None, "_rows": [],
+             "head_lines": [{"text": "⛔ 未設定試算表 ID，暫停寫入", "_tone": "紅"}], "live_lines": []}
+    assert sections.set3_summary(block) == "⛔ 未設定試算表 ID，暫停寫入"
+    block["head_lines"] = [{"text": "設定試算表：本", "_tone": "中性"}]
+    assert sections.set3_summary(block) == "0 個鍵"   # 沒有紅字時照舊寫鍵數
+
+
+def test_SET3摘要_壞列與結構檢查行帶進摘要_標點用逗號():
+    block = {"placeholder": None,
+             "_rows": [{"key_text": "a", "value_text": "⬜ 未設定"}, {"key_text": "b", "value_text": sections.SET_BAD_ROW_TEXT},
+                       {"key_text": "c", "value_text": "3"}],
+             "head_lines": [{"text": "設定試算表：本", "_tone": "中性"}],
+             "live_lines": [{"text": "⚠ 2 列格式不符，未採用", "_tone": "黃"}]}
+    assert sections.set3_summary(block) == "3 個鍵，1 個未設定：a，1 個格式不符未採用：b，⚠ 2 列格式不符，未採用"
+
+
+def test_SET2摘要_來源缺寫出缺的來源鍵():
+    first = _b(_model("first"), "SET-2")
+    assert first["placeholder"]["_empty_kind"] == "來源缺"
+    assert sections.set2_summary(first).startswith("缺 fetch_log：")
+    assert set_logic.TEXT_NO_RECORDS in sections.set2_summary(first)
+    assert sections.set2_summary(_b(_model("logfail"), "SET-2")).startswith("⛔ 取數失敗：")   # 取數失敗不是來源缺
