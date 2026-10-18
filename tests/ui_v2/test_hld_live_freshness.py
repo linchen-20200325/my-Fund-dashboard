@@ -193,13 +193,16 @@ def test_長假情境_最後一筆停在長假前_第10天照用_第11天才資�
             assert {g["freshness_badge"]["_tone"] for g in logic.find_block(model, block)["fund_groups"]} == {tone}
 
 
-@pytest.mark.parametrize("stale, days, want", [(True, 2, _FRESH), (False, 20, _OLD), (None, 20, _OLD)])
+# 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`）：預存序列（`cache_fallback`）而且超過 10 日 ＝ 已確認是取數失敗後退回 →
+#   記成該檔的淨值取數失敗（⛔），不再掛「⬜ 資料未備」徽章與 `_OLD` 副標（有意識的更正，不是漏刪）。
+@pytest.mark.parametrize("stale, days, want", [(True, 2, _FRESH), (False, 20, None), (None, 20, None)])
 def test_不讀stale_新舊只看N(stale, days, want):
     note = _group(_model(today=_LAST + timedelta(days=days), fallback={"AAAA"}, stale=stale), "HLD-2", "AAAA")
     if want is _FRESH:
         assert note["freshness_note"] == _FRESH
-    else:   # 2026-10-13：~~黃、以 ⚠ 開頭~~ → 灰、不帶 ⚠
-        assert note["freshness_note"] == _OLD
+    else:   # 2026-10-13：~~黃、以 ⚠ 開頭~~ → 灰、不帶 ⚠ → 2026-10-18 BL-0375：~~`_OLD`~~ → 取數失敗，不掛副標與徽章
+        assert note["freshness_note"] is None and note["freshness_badge"] is None
+        assert all(mv["text"] == "⛔ 取數失敗" for mv in note["main_values"])
 
 
 # ───────────────────────── 1-C 副標、卡尾、輸入欄 ─────────────────────────
@@ -207,7 +210,9 @@ def test_不讀stale_新舊只看N(stale, days, want):
 
 # 2026-10-13 客戶裁示：11 天時三檔都資料未備 ⇒ 不是預存的 BBBB／CCCC 也掛一行灰色副標（`_OLD_LIVE`），
 # HLD-6 不再列淨值列（分組為空）。10 天那一邊一字未改。
-@pytest.mark.parametrize("days, want, other", [(11, _OLD, _OLD_LIVE), (10, _FRESH, None)])
+# 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`）：預存序列（`cache_fallback`）而且超過 10 日 ＝ 已確認是取數失敗後退回 →
+#   記成該檔的淨值取數失敗（⛔），不再掛「⬜ 資料未備」徽章與 `_OLD` 副標（有意識的更正，不是漏刪）。
+@pytest.mark.parametrize("days, want, other", [(11, None, _OLD_LIVE), (10, _FRESH, None)])   # ~~`(11, _OLD, _OLD_LIVE)`~~
 def test_預存那一檔副標_其他檔沒有(days, want, other):
     model = _model(today=_LAST + timedelta(days=days), fallback={"AAAA"})
     for block in ("HLD-2", "HLD-3"):
@@ -230,9 +235,12 @@ def test_HLD5不掛徽章_只掛副標():
 
 
 def test_同一檔徽章與副標同一個N_顏色一致():
-    for days in (10, 11):
-        group = _group(_model(today=_LAST + timedelta(days=days), fallback={"AAAA"}), "HLD-2", "AAAA")
+    # 2026-10-18 BL-0375：11 天的預存那一檔改為取數失敗、兩者都不掛（有意識的更正，不是漏刪）；11 天改用不是預存的檔驗。
+    for days, code in ((10, "AAAA"), (11, "BBBB")):
+        group = _group(_model(today=_LAST + timedelta(days=days), fallback={"AAAA"}), "HLD-2", code)
         assert group["freshness_badge"]["_tone"] == group["freshness_note"]["_tone"]
+    group = _group(_model(today=_LAST + timedelta(days=11), fallback={"AAAA"}), "HLD-2", "AAAA")
+    assert group["freshness_badge"] is None and group["freshness_note"] is None
 
 
 # S5 第二輪（紅隊必修 M1，總管裁定）：尾巴只掛在以淨值為輸入的三列；配息類三列、門檻差額列不掛。
@@ -305,7 +313,10 @@ def test_HLD0燈與各塊狀態色調一格不動(days):
     base_args = copy.deepcopy(args)
     if days > 10:
         base_args["dataset"]["nav"] = []
-    base = live.apply_live_notes(logic.build_page_model(**base_args, demo_hint=False), today=today)
+        # 2026-10-18 BL-0375：三檔都是預存序列又超過 10 日 ⇒ 都是取數失敗（期望值自己組，不呼叫被測的 `mark_retreat_failed`）。
+        base_args["dataset"]["fund_errors"] = {"nav": {c: "改用 2026-09-18 的預存淨值" for c in ("AAAA", "BBBB", "CCCC")}}
+    base = live.apply_live_notes(logic.build_page_model(**base_args, demo_hint=False, strict_fetch_failure=True),
+                                 today=today)
     model = _model(today=today, fallback={"AAAA", "BBBB", "CCCC"})
     assert logic.find_block(model, "HLD-0") == logic.find_block(base, "HLD-0")
     for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-5", "HLD-6", "HLD-7", "HLD-8"):
@@ -388,7 +399,8 @@ def test_與S2逐檔淨值取數失敗並存_失敗那一檔不掛徽章不掛�
     def fail(ds):
         ds["fund_errors"] = {"nav": {"BBBB": "ConnectionError: 逾時"}}
 
-    model = _model(today=TODAY, fallback={"AAAA", "BBBB"}, mutate=fail)
+    # 2026-10-18 BL-0375：~~`today=TODAY`~~（14 天時預存的 AAAA 也成了取數失敗，驗不到「另一檔照掛」）→ 恰 10 天
+    model = _model(today=FRESH, fallback={"AAAA", "BBBB"}, mutate=fail)
     b = _group(model, "HLD-2", "BBBB")
     assert b["freshness_badge"] is None and b["freshness_note"] is None
     assert all(mv["_state"] == logic.STATE_ERROR for mv in b["main_values"])
@@ -416,7 +428,8 @@ def test_與S3核對日並存_HLD5展開欄位一格不動():
 
 def test_與S4的DIRECT並存_互不覆蓋():
     direct = [{"source": _POLICY_TAB, "tab": "DIRECT", "row": 3}]
-    model = _model(today=TODAY, fallback={"AAAA"}, direct=direct, policy_tab_source=_POLICY_TAB,
+    # 2026-10-18 BL-0375：~~`today=TODAY`~~（預存又過期的 AAAA 成了取數失敗、不掛副標）→ 恰 10 天
+    model = _model(today=FRESH, fallback={"AAAA"}, direct=direct, policy_tab_source=_POLICY_TAB,
                    direct_sources=_SOURCES)
     hld5 = logic.find_block(model, "HLD-5")
     assert hld5["tail_notes"][0]["text"] == "⚠ DIRECT 列暫不支援，該筆不計入體檢（1 筆）"
@@ -517,7 +530,8 @@ def test_部分過期_只有那一檔資料未備_其他檔逐格與全新鮮時
 def test_全部過期_結論燈是灰色資料未備_不是黃也不是紅_沒有任何行動結論():
     fresh = _model(today=FRESH)
     assert logic.find_block(fresh, "HLD-0")["_tone"] == "黃"   # 正控：同一份持倉在 10 天時確實會亮投資黃燈
-    model = _model(today=TODAY, fallback={"BBBB"})
+    # 2026-10-18 BL-0375：~~`fallback={"BBBB"}`~~（預存又過期 ＝ 取數失敗，燈會轉紅；本條驗的是純資料未備）→ 不帶預存
+    model = _model(today=TODAY)
     hld0 = logic.find_block(model, "HLD-0")
     assert (hld0["_tone"], hld0["_state"], hld0["text"]) == ("灰", logic.STATE_MISSING, "⬜ 資料未備")
     assert hld0["glyph"] == "⬜" and "超出" not in hld0["text"]
@@ -549,13 +563,19 @@ def test_部分過期_零偏離時_結論燈不因資料未備轉黃或轉紅():
         assert tone in (before, "灰") and tone != "紅", (code, before, tone)
 
 
-def test_資料未備的檔_HLD7輸入欄不掛預存序列尾巴():
-    model = _model(today=TODAY, fallback={"AAAA", "BBBB", "CCCC"})
+@pytest.mark.parametrize("fallback, want", [
+    # 2026-10-18 BL-0375：~~三檔都預存時輸出欄是「⬜ 資料未備」~~ → 預存又過期 ＝ 取數失敗（有意識的更正，不是漏刪）；
+    # 不是預存的過期檔照舊資料未備。兩種都不掛「預存序列」尾巴（淨值沒有交給 `logic`）。
+    ({"AAAA", "BBBB", "CCCC"}, "⛔ 取數失敗"),
+    ((), "⬜ 資料未備"),
+])
+def test_資料未備的檔_HLD7輸入欄不掛預存序列尾巴(fallback, want):
+    model = _model(today=TODAY, fallback=fallback)
     rows = logic.find_block(model, "HLD-7")["_rows"]
     assert rows and not [r for r in rows if r["inputs_text"].endswith("預存序列")]
     for r in rows:
         if r["_indicator"] in logic.NAV_INPUT_INDICATORS:
-            assert r["inputs_text"] == "0 筆" and r["output_text"] == "⬜ 資料未備", r
+            assert r["inputs_text"] == "0 筆" and r["output_text"] == want, r
 
 
 def test_withhold不改輸入_也不碰配息列():
