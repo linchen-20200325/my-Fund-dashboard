@@ -705,8 +705,10 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
             with column:
                 if plain_mode and code == sections.ALO_SCENARIO_CODE:
                     # 卡片本體屬層 2；預設只畫一枚 `展開` 類入口，按下後才顯示試算畫面（之八其一 (a-1) 第 4 條）。
-                    with st.expander(sections.ALO_SCENARIO_ENTRY, expanded=False):
-                        _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+                    # 卡為空狀態或取數失敗時，入口標題帶出狀態族（44 第五節第四小節「不把空狀態藏進展開內容」）。
+                    block = logic.find_block(model, code)
+                    with st.expander(sections.alo3_entry_title(block), expanded=False):
+                        _RENDERERS[code](block, key, ctx, plain_mode=plain_mode)
                 else:
                     _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 

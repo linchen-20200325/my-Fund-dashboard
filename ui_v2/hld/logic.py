@@ -387,7 +387,8 @@ def layer_columns(layer: int, width_px: int) -> int:
         return 1  # 單欄滿寬，逐塊上下堆疊
     if layer == 2:
         return columns_for_width(width_px)
-    # 層 3：`44` 逐字「五頁的層 3 各只有兩塊，兩塊並排同一列，第三欄空著」。
+    # 層 3：`44` 2.1 現行逐字「層 3 兩塊的頁兩塊並排同一列、第三欄空著」（舊字面「五頁的層 3 各只有兩塊」已於 P1-④ 劃線）。
+    # 本頁層 3 兩塊（HLD-4、HLD-5），≥1280 時第三欄空著，並排數上限是 2。
     return min(2, columns_for_width(width_px))
 
 
@@ -1535,7 +1536,7 @@ def _build_hld1(
                 "訊息原文照印，不改寫成安撫語句。",
             ]
 
-    return {
+    block = {
         "code": "HLD-1",
         "title": BLOCK_TITLES["HLD-1"],
         "_layer": 2,
@@ -1554,6 +1555,14 @@ def _build_hld1(
         "buttons": buttons,
         "redline_note": "偏離提示只客觀描述現況與目標差距，不提供任何處置方向。",
     }
+    if not _hint():
+        # Phase 3 P1-④（44 第七節第三小節之八其一 (a-2) 第 1 條 2026-10-18 更正）：持倉體檢 ① 的 j ＝
+        # 沒有進入偏離評估的不重複檔數，不論成因（`deviation_rows` 未列入的五類：缺淨值、淨值過期、其他資料未備、
+        # 不適用、門檻指標取數失敗）；已經有偏離列的檔算在 m（偏離檔數），不重算進 j。只彙總既有逐檔判定，不新增判定。
+        # 只在正式模式放這個鍵（示範模式 `_hint()` 為「（示意）」⇒ 模型逐位元組不變）。
+        unevaluated = set().union(*skipped.values()) - {row["_fund_code"] for row in rows}
+        block["_unevaluated_count"] = len(unevaluated)
+    return block
 
 
 # ───────────────────────── HLD-2 / HLD-3 核心卡 ─────────────────────────

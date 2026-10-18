@@ -304,9 +304,11 @@ def _digest(obj) -> str:
         # ◆／◇ 小批（2026-10-17）：logic 新增的呈現標記鍵（`_missing_cells`、`_missing_fields`，只告訴正式模式哪幾格畫 ◇）
         # 不算進摘要 —— 本守衛釘的是判定與既有字面，標記本身的對錯由 `tests/ui_v2/test_symbols_logic.py` 驗。
         # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
+        # P1-④（2026-10-18）：HLD-1 正式模式新增的彙總鍵 `_unevaluated_count`（持倉體檢 ① 的 j，只彙總既有逐檔判定）同理不算進摘要；
+        # 它的值由 `tests/ui_v2/test_sections_logic.py` 逐情境驗。期望值一個都沒改。
         if isinstance(value, dict):
             return {k: scrub(v) for k, v in sorted(value.items())
-                    if k not in ("_missing_cells", "_missing_fields")}
+                    if k not in ("_missing_cells", "_missing_fields", "_unevaluated_count")}
         if isinstance(value, (list, tuple)):
             return [scrub(v) for v in value]
         if isinstance(value, set):

@@ -217,6 +217,11 @@ def test_正式模式只差三件事_其餘逐字與示範模式相同(name, tod
     fresh = live.nav_freshness(args["dataset"], _prov(args["dataset"]), today=today)
     expected = live._apply_freshness(live.apply_live_notes(_scrub(demo), today=today), fresh)
     got = _build(**args, open_fund=open_fund, today=today)
+    # P1-④（2026-10-18）：第四件 —— HLD-1 在正式模式多交一個已彙總的數 `_unevaluated_count`（持倉體檢 ① 的 j；
+    # 44 第七節第三小節之八其一 (a-2) 第 1 條）。只在正式模式有、示範模式沒有；拿掉它之後其餘逐字相同。
+    hld1 = logic.find_block(got, "HLD-1")
+    assert "_unevaluated_count" not in logic.find_block(expected, "HLD-1")
+    assert isinstance(hld1.pop("_unevaluated_count"), int)
     assert got == expected
 
 

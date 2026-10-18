@@ -106,11 +106,17 @@ def test_標的探索_結果清單框收合_EXP2與EXP3在框內_關鍵數字只
 
 
 def test_標的探索_有無法判定檔時_需要注意列出():
+    """固定情境（`_plain_scan` 的 stale：條件作用在經理費率，選股池十檔該欄皆缺 → 十檔無法判定）。"""
     values = _md(_run(SCAN.SCRIPTS["exp"]["stale"]))
-    three = _label_index(values, plain.LABEL_ATTENTION)
-    if three == -1:
-        pytest.skip("這組情境沒有無法判定的檔（③ 不畫，由四段順序那一條驗）")
-    assert any("檔無法判定：照列在結果清單中" in v for v in values[three:])
+    three, four = _label_index(values, plain.LABEL_ATTENTION), _label_index(values, plain.LABEL_DETAILS)
+    assert three != -1 and three < four
+    assert any("⬜ 10 檔無法判定：照列在結果清單中，不算符合、不排除" in v for v in values[three:four])
+
+
+def test_標的探索_沒有無法判定檔時_需要注意整段不畫():
+    values = _md(_run(SCAN.SCRIPTS["exp"]["正常"]))
+    assert _label_index(values, plain.LABEL_ATTENTION) == -1
+    assert not any("檔無法判定：照列在結果清單中" in v for v in values)
 
 
 def test_資產配置_需要注意列帶外類別_ALO1在詳細資料收合_ALO3只畫開始試算入口():
@@ -134,10 +140,29 @@ def test_市場總覽_有資料面例外才畫需要注意_沒有就不畫也不
     assert three != -1
     assert values[three + 1].count(sections.MKT_DATA_PREFIX) == 1
     ok = _md(_run(SCAN.SCRIPTS["mkt"]["正常"]))
-    if _label_index(ok, plain.LABEL_ATTENTION) == -1:
-        assert not any(sections.MKT_DATA_PREFIX in v for v in ok)
+    assert _label_index(ok, plain.LABEL_ATTENTION) == -1
+    assert not any(sections.MKT_DATA_PREFIX in v for v in ok)
     joined = "\n".join(ok)
     assert "沒有例外" not in joined and "變化大不大" not in joined
+
+
+def test_市場總覽_取數失敗時需要注意那一行是紅色():
+    from ui_v2.mkt import theme
+
+    values = _md(_run(SCAN.SCRIPTS["mkt"]["取數失敗"]))
+    three = _label_index(values, plain.LABEL_ATTENTION)
+    assert three != -1
+    line = values[three + 1]
+    assert "⛔ 取數失敗" in line
+    assert f'color:{theme.tone_hex("紅")}' in line
+
+
+@pytest.mark.parametrize("name", ["未設定", "取數失敗"])
+def test_資產配置_開始試算入口_取數失敗時標題帶出狀態族(name):
+    at = _run(SCAN.SCRIPTS["alo"][name])
+    entry = _expander(at, sections.ALO_SCENARIO_ENTRY)
+    assert entry.label == f"{sections.ALO_SCENARIO_ENTRY}　—　⛔ 取數失敗"
+    assert not entry.proto.expanded
 
 
 _DEMO = {

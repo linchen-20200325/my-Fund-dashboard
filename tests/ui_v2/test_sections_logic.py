@@ -131,23 +131,61 @@ def test_市場總覽_三張卡全ok的真資料_不寫沒有例外():
     assert sections.attention_items(model, "mkt") == []
 
 
+def _formal(logic, build):
+    """在正式模式（不接示意字尾）的情境下跑 `build()`；各頁 logic 的模式開關只有 `_HINT_SUFFIX` 這一個。"""
+    token = logic._HINT_SUFFIX.set("")
+    try:
+        return build()
+    finally:
+        logic._HINT_SUFFIX.reset(token)
+
+
+def test_市場總覽_需要注意顏色讀MKT0的燈色_取數失敗時為紅():
+    model = mkt_logic.build_page_model(mkt_fixtures.dataset_mkt1_fetch_failed())
+    light = mkt_logic.find_block(model, "MKT-0")
+    assert light["_tone"] == "紅"
+    items = sections.attention_items(model, "mkt")
+    assert items and "⛔ 取數失敗" in items[0]["text"]
+    assert items[0]["_tone"] == "紅"
+    light["_tone"] = "黃"   # 只跟著燈走，不另判
+    assert sections.attention_items(model, "mkt")[0]["_tone"] == "黃"
+
+
 def test_標的探索_讀EXP0的無法判定檔數():
-    model = exp_logic.build_page_model(**exp_fixtures.scenario("full"))
-    assert "_undet_count" not in exp_logic.find_block(model, "EXP-0")   # 示範模式不放這個鍵（模型逐位元組不變）
+    demo = exp_logic.build_page_model(**exp_fixtures.scenario("full"))
+    assert "_undet_count" not in exp_logic.find_block(demo, "EXP-0")   # 示範模式不放這個鍵（模型逐位元組不變）
+    with pytest.raises(KeyError):
+        sections.attention_items(demo, "exp")                           # 直讀：缺鍵就炸，不以 0 代替
+    model = exp_logic.build_page_model(**exp_fixtures.scenario("full"), demo_hint=False)
+    assert exp_logic.find_block(model, "EXP-0")["_undet_count"] == 0
     assert sections.attention_items(model, "exp") == []
     exp_logic.find_block(model, "EXP-0")["_undet_count"] = 2
     items = sections.attention_items(model, "exp")
     assert [(i["symbol"], i["text"]) for i in items] == [("⬜", "2 檔無法判定：照列在結果清單中，不算符合、不排除")]
 
 
-def test_EXP0_無法判定檔數只在寫進燈時才放():
+def test_EXP0_無法判定檔數_正式模式放寫進燈的那個數_示範模式不放():
     rules = [{"field": "ccy", "op": "等於", "value": "USD"}]
     args = dict(count=1, has_rules=True, rules=rules, read_states=["ok", "ok"])
-    shown = exp_logic._build_exp0({}, undet_count=3, **args)
-    assert shown["_undet_count"] == 3 and "另有" in shown["text"]
-    assert "_undet_count" not in exp_logic._build_exp0({}, undet_count=0, **args)
-    no_rules = exp_logic._build_exp0({}, **dict(args, has_rules=False), undet_count=3)
-    assert "_undet_count" not in no_rules and "另有" not in no_rules["text"]
+    shown = _formal(exp_logic, lambda: exp_logic._build_exp0({}, undet_count=3, **args))
+    assert shown["_undet_count"] == 3 and "另有 3 檔無法判定" in shown["text"]
+    assert _formal(exp_logic, lambda: exp_logic._build_exp0({}, undet_count=0, **args))["_undet_count"] == 0
+    no_rules = _formal(exp_logic, lambda: exp_logic._build_exp0({}, **dict(args, has_rules=False), undet_count=3))
+    assert no_rules["_undet_count"] == 0 and "另有" not in no_rules["text"]
+    assert "_undet_count" not in exp_logic._build_exp0({}, undet_count=3, **args)   # 示範模式
+
+
+def test_標的探索_真的有無法判定檔的正式模型_需要注意列出同一個數():
+    """自己構造一個有缺值欄位的選股池：條件作用在 `mgmt_fee_rate_pct`，其中一檔該欄為空 → 無法判定。"""
+    params = dict(exp_fixtures.scenario("full"))
+    dataset = copy.deepcopy(params.pop("dataset"))
+    profiles = dataset["fund_profile"]
+    profiles[0]["mgmt_fee_rate_pct"] = None
+    rules = [{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "-1"}]
+    model = exp_logic.build_page_model(dataset, **dict(params, draft_rules=rules), demo_hint=False, tristate=True)
+    count = exp_logic.find_block(model, "EXP-0")["_undet_count"]
+    assert count >= 1
+    assert sections.attention_items(model, "exp")[0]["text"].startswith(f"{count} 檔無法判定")
 
 
 def test_資產配置_帶外類別逐列_帶內不列():
@@ -184,26 +222,86 @@ def test_持倉體檢_偏離列加菱形_只改畫面字串():
 # ───────────────────────── 持倉體檢 ① 三個計數 ─────────────────────────
 
 
-def test_持倉體檢_三個計數只讀已算出的數():
-    model = hld_logic.build_page_model(**hld_fixtures.scenario("full"))
+def _hld_formal(name, mutate=None, **extra):
+    args = copy.deepcopy(hld_fixtures.scenario(name))
+    if mutate:
+        mutate(args["dataset"])
+    return hld_logic.build_page_model(**args, demo_hint=False, **extra)
+
+
+def _counts(model):
     light = hld_logic.find_block(model, "HLD-0")
-    n = len(hld_logic.find_block(model, "HLD-2")["fund_groups"])
-    m = light["_deviation_count"]
-    j = hld_logic.find_block(model, "HLD-1")["missing_nav_count"]
+    return (len(hld_logic.find_block(model, "HLD-2")["fund_groups"]), light["_deviation_count"],
+            hld_logic.find_block(model, "HLD-1")["_unevaluated_count"])
+
+
+def _drop_nav(code):
+    def mutate(dataset):
+        dataset["nav"] = [row for row in dataset["nav"] if row["fund_code"] != code]
+    return mutate
+
+
+def _fund_nav_error(code):
+    def mutate(dataset):
+        dataset["fund_errors"] = {"nav": {code: "fetch_url returned None"}}
+    return mutate
+
+
+# (情境, 變動, 額外參數, 期望 (n, m, j))。j ＝ 沒有進入偏離評估的不重複檔數，不論成因（44 之八其一 (a-2) 第 1 條 2026-10-18 更正）。
+_J_CASES = {
+    "全齊": ("full", None, {}, (3, 2, 0)),
+    "缺淨值": ("srcmiss", None, {}, (3, 2, 1)),
+    "門檻指標不適用": ("bizexc", None, {}, (3, 0, 1)),
+    "只有一筆淨值": ("onenav", None, {}, (3, 0, 3)),
+    "同檔兩種狀態": ("tiedstate", None, {}, (3, 0, 3)),
+    "淨值超過10日": ("full", _drop_nav("AAAA"), {"nav_not_ready_codes": frozenset({"AAAA"}), "nav_not_ready_days": 10},
+                     (3, 1, 1)),
+    "單檔取數失敗": ("full", _fund_nav_error("AAAA"), {}, (3, 1, 1)),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_J_CASES))
+def test_持倉體檢_j是沒有進入偏離評估的檔數_不論成因(case):
+    name, mutate, extra, expected = _J_CASES[case]
+    model = _hld_formal(name, mutate, **extra)
+    n, m, j = _counts(model)
+    assert (n, m, j) == expected
+    assert n >= m + j                                        # 不變量：m 與 j 互斥，都是持倉的子集
     line = sections.hld_counts(model)
     assert line == f"持有 {n} 檔　◆ 需要注意 {m} 檔　⬜ 無法判定 {j} 檔"
     assert "○" not in line and "正常" not in line
 
 
-def test_持倉體檢_計數跟著HLD1卡尾的缺淨值檔數走():
-    model = hld_logic.build_page_model(**hld_fixtures.scenario("full"))
-    hld_logic.find_block(model, "HLD-1")["missing_nav_count"] = 2
-    assert sections.hld_counts(model).endswith("⬜ 無法判定 2 檔")
+def test_持倉體檢_j的舊定義只算缺淨值_會把不適用與取數失敗的檔藏起來():
+    """回歸：舊定義 j ＝ `missing_nav_count`。「只有一筆淨值」這一組三檔都沒有評估，舊定義寫 0。"""
+    model = _hld_formal("onenav")
+    assert hld_logic.find_block(model, "HLD-1")["missing_nav_count"] == 0
+    assert _counts(model)[2] == 3
+
+
+@pytest.mark.parametrize("name", hld_fixtures.ALL_SCENARIO_NAMES)
+def test_持倉體檢_不變量_全情境_n不小於m加j(name):
+    n, m, j = _counts(_hld_formal(name))
+    assert n >= m + j, (name, n, m, j)
+
+
+def test_持倉體檢_未評估檔數只在正式模式放():
+    demo = hld_logic.build_page_model(**hld_fixtures.scenario("full"))
+    assert "_unevaluated_count" not in hld_logic.find_block(demo, "HLD-1")
+    with pytest.raises(KeyError):
+        sections.hld_counts(demo)
+
+
+def test_持倉體檢_計數不成立時當場炸():
+    model = _hld_formal("full")
+    hld_logic.find_block(model, "HLD-1")["_unevaluated_count"] = 2   # 2 ＋ 2 > 3
+    with pytest.raises(ValueError):
+        sections.hld_counts(model)
 
 
 @pytest.mark.parametrize("name", ["empty", "nothr", "fetchfail"])
 def test_持倉體檢_空持倉_門檻未設_紅燈_不列計數(name):
-    model = hld_logic.build_page_model(**hld_fixtures.scenario(name))
+    model = _hld_formal(name)
     light = hld_logic.find_block(model, "HLD-0")
     assert light["_tone"] == "紅" or light["text"] in (hld_logic.TEXT_NO_HOLDING, hld_logic.TEXT_NO_RULES), (
         name, light["_tone"], light["text"])
@@ -224,6 +322,35 @@ def test_ALO1摘要只拼卡上已有的字():
     assert sections.alo1_summary(block) == "⛔ 取數失敗"
     block["placeholder"] = {"text": "◇ 資料未備", "_empty_kind": "來源缺"}
     assert sections.alo1_summary(block) == "◇ 資料未備"
+
+
+def test_ALO1摘要_目標比重缺值時寫出資料未備():
+    model = alo_logic.build_page_model(alo_fixtures.scenario("full"))
+    block = alo_logic.find_block(model, "ALO-1")
+    assert "◇ 資料未備" not in sections.alo1_summary(block)
+    block["_rows"][0]["_weight"] = None
+    assert "◇ 資料未備" in sections.alo1_summary(block).split("；")
+
+
+def test_開始試算入口_空狀態或取數失敗時帶出狀態族():
+    model = alo_logic.build_page_model(alo_fixtures.scenario("full"))
+    block = alo_logic.find_block(model, "ALO-3")
+    assert sections.alo3_entry_title(block) == "開始試算"
+    block["placeholder"] = {"text": "⛔ 此區塊暫時無法判定", "_empty_kind": "系統錯誤"}
+    assert sections.alo3_entry_title(block) == "開始試算　—　⛔ 取數失敗"
+    block["placeholder"] = {"text": "◇ 資料未備", "_empty_kind": "來源缺"}
+    assert sections.alo3_entry_title(block) == "開始試算　—　◇ 資料未備"
+
+
+@pytest.mark.parametrize("name", ["holdfail", "settingfail", "nobasis", "nofx"])
+def test_開始試算入口_真情境的佔位都帶得出狀態族(name):
+    model = alo_logic.build_page_model(alo_fixtures.scenario(name))
+    block = alo_logic.find_block(model, "ALO-3")
+    title = sections.alo3_entry_title(block)
+    if block["placeholder"]:
+        assert title.startswith("開始試算　—　") and len(title) > len("開始試算　—　")
+    else:
+        assert title == "開始試算"
 
 
 def test_市場總覽的狀態字照MKT0燈點名卡片的同一組():
