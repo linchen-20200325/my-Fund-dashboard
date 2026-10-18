@@ -2317,6 +2317,17 @@ def _hld6_failures(dataset) -> list:
     return uniq
 
 
+def _hld6_all_failed(dataset) -> bool:
+    """`HLD-6` 兩張表都沒有列時，成因是不是全是取數失敗：持倉表讀不到；或淨值、配息兩張表各自是整張失敗、
+    或每一檔持倉都有該表的逐檔失敗。有任何一檔在任一張表沒有失敗紀錄 ⇒ 成因混合（回 False）。"""
+    errors = dataset.get("errors") or {}
+    if errors.get("holding"):
+        return True
+    held = {h["fund_code"] for h in dataset.get("holding", [])}
+    per_fund = fund_errors(dataset)
+    return all(errors.get(table) or (held and held <= set(per_fund.get(table, {}))) for table in ("nav", "dividend"))
+
+
 def _build_hld6(dataset, *, not_ready_line=None):
     nav_rows = []
     for row in sorted(
@@ -2372,12 +2383,16 @@ def _build_hld6(dataset, *, not_ready_line=None):
         # （取數失敗、區間外都可能），上一輪那句原因是假資料下碰巧成立，已撤。
         detail_lines = [empty_source_text(["nav", "dividend"])]
         failures = _hld6_failures(dataset) if _STRICT_FETCH.get() else []
-        if failures:
-            # BL-0373（客戶 2026-10-18 裁示）：兩張表都沒有列、而來源有取數失敗 ⇒ 成因含取數失敗，正式模式走 `系統錯誤`（⛔），
+        if failures and _hld6_all_failed(dataset):
+            # BL-0373（客戶 2026-10-18 裁示）：兩張表都沒有列、而成因全是取數失敗 ⇒ 正式模式走 `系統錯誤`（⛔），
             # 不畫資料未備。示範模式照舊。
             state = STATE_ERROR
             summary = fetch_failed_text(failures[0])
             detail_lines = [fetch_failed_text(f) for f in failures] + [PRINT_AS_IS_LINE]
+        elif failures:
+            # 成因混合（有取數失敗、也有沒有失敗紀錄的檔）：44 第七節第三小節之九其二第 5 條統一規則 ——
+            # 資料未備那一句照留，另寫取數失敗原文（⛔）；塊態照舊資料未備。
+            detail_lines = detail_lines + [fetch_failed_text(f) for f in failures] + [PRINT_AS_IS_LINE]
     if not_ready_line:
         # 總管 2026-10-13 裁決（稽核 C2）：淨值過期而被拿掉的檔，本表看不出來 ⇒ 加一行中性說明（與 HLD-1 卡尾同一句）。
         detail_lines = detail_lines + [not_ready_line]
@@ -2596,12 +2611,19 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None, holdin
     )
     state = STATE_OK if (has_holdings and rows and any_output) else STATE_MISSING
     failure = None
+    mixed_failures = []
     if state == STATE_MISSING and _STRICT_FETCH.get():
-        # BL-0373（客戶 2026-10-18 裁示）：四塊沒有一塊出數，而成因有取數失敗（持倉表讀不到、或任一值是取數失敗）
-        # ⇒ 正式模式走 `系統錯誤`（⛔），不畫資料未備。示範模式照舊。
-        failure = holding_error or next(
-            (metric[ind]["reason_text"] for metric in metrics for ind in INDICATOR_OWNER
-             if metric[ind]["_state"] == STATE_ERROR and metric[ind]["reason_text"]), None)
+        # BL-0373（客戶 2026-10-18 裁示）：四塊沒有一塊出數，而成因全是取數失敗（持倉表讀不到、或每一個值都是取數失敗）
+        # ⇒ 正式模式走 `系統錯誤`（⛔），不畫資料未備。成因混合（有取數失敗、也有資料未備或不適用的值）⇒
+        # 44 第七節第三小節之九其二第 5 條統一規則：資料未備那一句照留，另寫取數失敗原文。示範模式照舊。
+        nodes = [metric[ind] for metric in metrics for ind in INDICATOR_OWNER]
+        reasons = list(dict.fromkeys(n["reason_text"] for n in nodes if n["_state"] == STATE_ERROR and n["reason_text"]))
+        if holding_error:
+            failure = holding_error
+        elif reasons and all(n["_state"] == STATE_ERROR for n in nodes):
+            failure = reasons[0]
+        else:
+            mixed_failures = reasons
     if failure:
         state = STATE_ERROR
         detail_lines = [fetch_failed_text(failure), PRINT_AS_IS_LINE,
@@ -2612,6 +2634,8 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None, holdin
             empty_source_text(["HLD-1", "HLD-2", "HLD-3", "HLD-8"]),
             "四塊沒有一塊出數；下面各列的輸入筆數與不適用原因照列。",
         ]
+        if mixed_failures:
+            detail_lines += [fetch_failed_text(r) for r in mixed_failures] + [PRINT_AS_IS_LINE]
         summary = (
             f"{ND_TEXT}：四塊沒有一塊出數 · {len(rows)} 列{_hint()}"
             if rows

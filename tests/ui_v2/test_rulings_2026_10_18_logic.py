@@ -173,10 +173,36 @@ def _hld(name, *, strict, mutate=None):
 
 def _no_series(ds):
     ds["nav"], ds["dividend"] = [], []
-    ds["errors"] = {"nav": "ConnectionError: 淨值讀取逾時（測試用原文）"}
+    ds["errors"] = {"nav": "ConnectionError: 淨值讀取逾時（測試用原文）",
+                    "dividend": "ConnectionError: 淨值讀取逾時（測試用原文）"}
 
 
-def test_BL0373_HLD6兩張表都沒有列而來源取數失敗_正式模式取數失敗_示範照舊():
+def test_BL0373_HLD6成因混合_資料未備那一句照留_另寫取數失敗原文():
+    """44 之九其二第 5 條統一規則：淨值整張失敗、配息沒有失敗紀錄 ⇒ 成因混合。"""
+    def mixed(ds):
+        ds["nav"], ds["dividend"] = [], []
+        ds["errors"] = {"nav": "ConnectionError: 淨值讀取逾時（測試用原文）"}
+    block = hld_logic.find_block(_hld("full", strict=True, mutate=mixed), "HLD-6")
+    msg = hld_logic.fetch_failed_text("ConnectionError: 淨值讀取逾時（測試用原文）")
+    assert block["_state"] == hld_logic.STATE_MISSING
+    assert hld_logic.empty_source_text(["nav", "dividend"]) in block["detail_lines"] and msg in block["detail_lines"]
+    demo = hld_logic.find_block(_hld("full", strict=False, mutate=mixed), "HLD-6")
+    assert msg not in demo["detail_lines"]
+
+
+def test_BL0373_HLD7成因混合_資料未備那一句照留_另寫取數失敗原文():
+    """配息取數失敗、區間未設（淨值類的值是不適用）⇒ 四塊沒有一塊出數，成因混合。"""
+    def no_window(ds):
+        ds["user_setting"] = [r for r in ds.get("user_setting", []) if not r["setting_key"].startswith("hld_window")]
+    block = hld_logic.find_block(_hld("fetchfail", strict=True, mutate=no_window), "HLD-7")
+    assert block["_state"] == hld_logic.STATE_MISSING
+    assert hld_logic.empty_source_text(["HLD-1", "HLD-2", "HLD-3", "HLD-8"]) in block["detail_lines"]
+    assert any(line.startswith("⛔ 取數失敗：") for line in block["detail_lines"])
+    demo = hld_logic.find_block(_hld("fetchfail", strict=False, mutate=no_window), "HLD-7")
+    assert not any(line.startswith("⛔ 取數失敗：") for line in demo["detail_lines"])
+
+
+def test_BL0373_HLD6兩張表都沒有列而成因全是取數失敗_正式模式取數失敗_示範照舊():
     strict = hld_logic.find_block(_hld("full", strict=True, mutate=_no_series), "HLD-6")
     demo = hld_logic.find_block(_hld("full", strict=False, mutate=_no_series), "HLD-6")
     msg = hld_logic.fetch_failed_text("ConnectionError: 淨值讀取逾時（測試用原文）")
@@ -191,7 +217,7 @@ def test_BL0373_HLD6兩張表都沒有列而沒有任何失敗_照舊資料未�
     assert hld_logic.find_block(_hld("full", strict=True, mutate=empty), "HLD-6")["_state"] == hld_logic.STATE_MISSING
 
 
-def test_BL0373_HLD7四塊沒有一塊出數而成因有取數失敗_正式模式取數失敗_示範照舊():
+def test_BL0373_HLD7四塊沒有一塊出數而成因全是取數失敗_正式模式取數失敗_示範照舊():
     strict = hld_logic.find_block(_hld("twofail", strict=True), "HLD-7")
     demo = hld_logic.find_block(_hld("twofail", strict=False), "HLD-7")
     assert strict["_state"] == hld_logic.STATE_ERROR and strict["summary_text"].startswith("⛔ 取數失敗：")
