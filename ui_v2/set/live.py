@@ -133,6 +133,12 @@ def cooldown_reason(cooldowns):
     return text
 
 
+def sheet_configured(notes) -> bool:
+    """設定試算表有沒有設定（44 `SET-0` 來源欄第二輪擴寫的那一個輸入；之八其三 (c-1)）。
+    讀寫入閘門（`notes["gate"]`，不打上游）：狀態為 `not_configured` ⇒ 沒設。缺鍵就 `KeyError`，不猜。"""
+    return notes["gate"]["state"] != "not_configured"
+
+
 def gate_reason(gate):
     """寫入閘門 → 停用原因（None＝可寫）。草稿 6.1／6.2 缺設定與設定試算表冷卻中那幾列。"""
     state = (gate or {}).get("state")

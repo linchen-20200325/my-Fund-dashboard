@@ -196,7 +196,12 @@ def test_ID未設_存檔與重新取數都停用_燈照44外框(real):
     at = _run()
     assert not at.exception
     text = "\n".join(_rendered(at))
-    assert "⛔ 取數失敗：未設定試算表 ID，暫停寫入" in text
+    # ~~燈照 44 外框「⛔ 取數失敗：未設定試算表 ID，暫停寫入」~~ → Phase 3 P1-⑥（44 SET-0 空狀態欄第三句，之八其三 (c-1)）：
+    # 正式模式燈改灰、文案「⬜ 無法判定：尚未設定設定試算表」；其餘位置照舊那一句「⛔ 未設定試算表 ID，暫停寫入」。
+    lamp = [m.value for m in at.markdown if 'class="set-lamp"' in m.value]
+    assert len(lamp) == 1 and "⬜ 無法判定：尚未設定設定試算表" in lamp[0], lamp
+    assert "⛔ 取數失敗：未設定試算表 ID，暫停寫入" not in text
+    assert "⛔ 未設定試算表 ID，暫停寫入" in text
     save = [b for b in at.button if b.label == "存檔"][0]
     assert save.disabled and save.help == "未設定試算表 ID，暫停寫入"
 

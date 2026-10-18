@@ -21,6 +21,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
+from ui_v2 import sections  # noqa: E402
 from ui_v2.set import fixtures, logic, theme  # noqa: E402
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -355,15 +356,29 @@ def test_圖示常數改值之後_全頁每一處取數失敗與紅燈都跟著�
 
 
 def test_層次分佈照44那張表():
+    """~~示範模型的層次逐字等於 44 層表~~ → 2026-10-18 P1-⑥（44 之八其二 (b-2) 第 1 條）：44 層表三列的舊字面已劃線。
+    現行（刪除線外）的塊代號 ＝ 正式模式重排後的層次（`sections.relayer(model, "set")`）；
+    示範模式照舊（44 之八開頭第 4 條）—— 示範模型的層次 ＝ 該列刪除線內外全部塊代號去掉移入的那幾塊，且列上寫明「示範模式照舊」。"""
     model = _model("ok")
     assert logic.codes_in_layer(model, 1) == ["SET-0"]
     assert logic.codes_in_layer(model, 2) == ["SET-1", "SET-2", "SET-3"]
     assert logic.codes_in_layer(model, 3) == ["SET-4", "SET-5"]
     assert logic.codes_in_layer(model, 4) == ["SET-6", "SET-7"]
+    formal = copy.deepcopy(model)
+    sections.relayer(formal, "set")
     table = _D44.read_text(encoding="utf-8").split("### 3.5 頁｜設定與診斷")[1].split("#### 塊 SET-0")[0]
     for layer in (1, 2, 3, 4):
         row = [line for line in table.split("\n") if line.startswith(f"| 層 {layer} |")][0]
-        assert re.findall(r"SET-\d", row) == logic.codes_in_layer(model, layer), layer
+        live = re.sub(r"~~.*?~~", "", row)
+        assert re.findall(r"SET-\d", live) == logic.codes_in_layer(formal, layer), layer
+        struck = re.findall(r"SET-\d", "".join(re.findall(r"~~.*?~~", row)))
+        demo = logic.codes_in_layer(model, layer)
+        if layer == 2:
+            assert re.findall(r"SET-\d", row) == demo and struck == ["SET-2", "SET-3"]
+        elif layer in (3, 4):
+            assert struck == demo, (layer, struck, demo)
+        if layer > 1:
+            assert "示範模式照舊" in row, layer
 
 
 def test_初次載入展開的剛好是結論燈與三張核心卡():
