@@ -429,7 +429,8 @@ def layer_columns(layer: int, width_px: int) -> int:
         return 1  # 單欄滿寬，逐塊上下堆疊
     if layer == 2:
         return columns_for_width(width_px)
-    # 層 3：`44` 逐字「五頁的層 3 各只有兩塊，兩塊並排同一列，第三欄空著」。
+    # 層 3：`44` 2.1 現行逐字「層 3 兩塊的頁兩塊並排同一列、第三欄空著」（舊字面「五頁的層 3 各只有兩塊」已於 P1-④ 劃線）。
+    # 示範模式層 3 兩塊；正式模式 EXP-2 移入層 3 但畫在 ④ 的「結果清單」框（44 之八其一 (a-1) 第 3 條），「操作」那一列仍是兩塊，並排數上限照舊是 2。
     return min(2, columns_for_width(width_px))
 
 
@@ -1927,7 +1928,8 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
         text = TEXT_NO_MATCH
     else:
         text = conclusion_text(count)
-    if undet_count and tone != "紅" and has_rules:
+    shown_undet = undet_count if (undet_count and tone != "紅" and has_rules) else 0
+    if shown_undet:
         text += undet_tail(undet_count)
 
     # `44` 空狀態欄逐字：「N 為零 → 文案「目前條件下沒有符合的基金」，並列出目前生效的條件列」。
@@ -1984,6 +1986,10 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
     #    這裡把 `_block()` 依四狀態算出來的 `_tone` 覆寫掉，讓這一塊只有**一個**顏色，
     #    **不留兩個會各說各話的欄位**給畫面層挑。
     block["_tone"] = tone
+    if not _hint():
+        # Phase 3 P1-④：燈上「另有 M 檔無法判定」那個 M（沒寫進燈就是 0）；正式模式 ③需要注意讀它（`ui_v2/sections.py`），不另算。
+        # 只在正式模式（`demo_hint=False`）放這個鍵 —— 示範模式模型因此逐位元組不變（`test_前向釘樁_整頁逐格釘住`）。
+        block["_undet_count"] = shown_undet
     return block
 
 

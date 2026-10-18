@@ -52,6 +52,20 @@ def render_status_line(line: dict, *, tone_hex, settings_page=None) -> None:
     render_settings_link(settings_page)
 
 
+def render_attention(items, *, tone_hex, label_class: str) -> None:
+    """③需要注意（Phase 3 P1-④；`ui_v2/sections.py::attention_items` 的回傳）：段標籤＋逐項一行，預設展開（不是展開區）。
+    一項都沒有 → 整段不畫（之七其一第 2 條：沒有這類項目時不為了有內容而列）。"""
+    if not items:
+        return
+    st.markdown(f'<div class="{_esc(label_class)}">{_esc(plain.LABEL_ATTENTION)}</div>', unsafe_allow_html=True)
+    for item in items:
+        text = (item["symbol"] + " " + item["text"]).strip()
+        st.markdown(
+            f'<div class="v2-attention" style="color:{tone_hex(item["_tone"])}">{_esc(text)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def render_provenance(rows) -> None:
     """④「證據／來源」：核心卡上拿下來的來源與新鮮度徽章（`health.move_card_provenance` 的回傳），預設收合。
     一筆都沒有 → 不畫（沒有東西被拿下來，就沒有東西要換位置）。"""

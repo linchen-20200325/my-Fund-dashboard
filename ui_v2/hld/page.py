@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, symbols
+from .. import health, health_view, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -951,6 +951,7 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
+    counts_line = None
     if load_live is None:
         applied = _applied()
         scenario = _pick_scenario()
@@ -994,6 +995,10 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
         )
+        # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
+        # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
+        sections.mark_hld1_rows(model)
+        counts_line = sections.hld_counts(model)
     plain_mode = load_live is not None
 
     st.markdown(
@@ -1018,17 +1023,25 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
     )
     st.markdown(f'<div class="hld-layer-label">{label1}</div>', unsafe_allow_html=True)
     _render_lamp(logic.find_block(model, "HLD-0"), plain_mode=plain_mode)
+    if plain_mode and counts_line:
+        st.markdown(f'<div class="hld-lamp-text">{_esc(counts_line)}</div>', unsafe_allow_html=True)
 
     st.markdown(
         f'<div class="hld-layer-label hld-layer2">{label2}</div>',
         unsafe_allow_html=True,
     )
-    for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
+    # 正式模式：`HLD-1` 畫在 ③（結構上照舊屬層 2，44 第七節第三小節之八其一 (a-1) 第 2 條），② 只畫另兩張、第三欄空著。
+    layer2 = [code for code in logic.codes_in_layer(model, 2)
+              if not (plain_mode and code == sections.HLD_ATTENTION_CODE)]
+    for column, code in zip(st.columns(3), layer2):
         with column:
             _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
     if plain_mode:
-        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        # ③需要注意：`HLD-1` 整塊（偏離列基金名前加 ◆）；預設展開、不是展開區。
+        st.markdown(f'<div class="hld-layer-label">{plain.LABEL_ATTENTION}</div>', unsafe_allow_html=True)
+        _render_hld1(logic.find_block(model, sections.HLD_ATTENTION_CODE), plain_mode=True)
+        # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="hld-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
         f'<div class="hld-layer-label hld-layer3">{label3}</div>',

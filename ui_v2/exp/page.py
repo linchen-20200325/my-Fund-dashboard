@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, symbols
+from .. import health, health_view, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -1057,6 +1057,10 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     cards = logic.codes_in_layer(model, 2)
     provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
     status_line = health.status_line(model, failures, as_of=_as_of(model), stale=health.has_stale_marker(model, cards))
+    # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`EXP-2` 移到層 3、`EXP-3` 移到層 4（預設收合），② 只剩 `EXP-1`；
+    # 在上面的徽章搬移與資料狀態行之後才改層 —— 那兩步照舊以改層前的三張核心卡為對象，行為不變（`ui_v2/sections.py`）。
+    sections.relayer(model, "exp")
+    attention = sections.attention_items(model, "exp")
     noop = (None, ())
     exp1_clicks = {live.ACTION_ADD_ROW: (_on_add_rule, ())}
     exp4_click = exp5_click = noop
@@ -1081,18 +1085,25 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
             block = logic.find_block(model, code)
             if code == "EXP-1":
                 _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks, plain_mode=True)
-            elif code == "EXP-2":
-                _render_exp2(block, scenario=live.LIVE_SCENARIO, plain_mode=True)
             else:
                 _RENDERERS[code](block, plain_mode=True)
 
-    # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+    # ③需要注意：`EXP-0` 已算出的無法判定檔數；沒有就整段不畫。
+    health_view.render_attention(attention, tone_hex=theme.tone_hex, label_class="exp-layer-label")
+
+    # ④詳細資料（預設收合）。本頁例外：`EXP-2`（層 3）與 `EXP-3`（層 4）依 59 第 4.2 節合成一個「結果清單」框，
+    # 放在兩個小標之前（之八其一 (a-1) 第 3 條，總管讀法）；其餘塊照舊「操作」「證據／來源」兩個小標分開（護欄 6）。
     st.markdown(f'<div class="exp-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
+    exp2 = logic.find_block(model, "EXP-2")
+    with st.expander(f"{sections.EXP_RESULT_TITLE}　—　{exp2['summary_text']}", expanded=exp2["_default_open"]):
+        _render_exp2(exp2, scenario=live.LIVE_SCENARIO, plain_mode=True)
+        _render_exp3(logic.find_block(model, "EXP-3"), plain_mode=True)
     st.markdown(
         f'<div class="exp-layer-label exp-layer3">{plain.LABEL_LAYER3}</div>',
         unsafe_allow_html=True,
     )
-    for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
+    operations = [code for code in logic.codes_in_layer(model, 3) if code not in sections.EXP_RESULT_CODES]
+    for column, code in zip(st.columns(3), operations):
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-4":
@@ -1105,7 +1116,8 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
         f'<div class="exp-layer-label">{plain.LABEL_LAYER4}</div>', unsafe_allow_html=True
     )
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
+        if code not in sections.EXP_RESULT_CODES:
+            _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
     health_view.render_provenance(provenance)
 
     footer = "　".join(_esc(line) for line in model["footer_lines"])

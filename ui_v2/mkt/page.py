@@ -15,7 +15,7 @@ from datetime import date, datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, symbols
+from .. import health, health_view, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 # 層 2／層 3 的斷點直接由 logic 那支**已被測試釘住**的純函式推出來，
@@ -695,7 +695,12 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
             _render_card(logic.find_block(model, code), plain_mode=plain_mode)
 
     if plain_mode:
-        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        # ③需要注意（Phase 3 P1-④；44 第七節第三小節之八其一 (a-3)、(a-4)）：只列 `MKT-0` 從三張卡讀到的資料面例外，
+        # 沒有就整段不畫；不畫「變化大不大」、不寫「沒有例外」（`ui_v2/sections.py::mkt_attention`）。
+        health_view.render_attention(
+            sections.attention_items(model, "mkt"), tone_hex=theme.tone_hex, label_class="mkt-layer-label"
+        )
+        # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="mkt-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(
         f'<div class="mkt-layer-label mkt-layer3">{label3}</div>',

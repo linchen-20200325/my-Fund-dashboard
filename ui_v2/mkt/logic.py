@@ -326,8 +326,8 @@ def layer_columns(layer: int, width_px: int) -> int:
         return 1  # 單欄滿寬，逐塊上下堆疊
     if layer == 2:
         return columns_for_width(width_px)
-    # 層 3：`44` 逐字「五頁的層 3 各只有兩塊，兩塊並排同一列」——
-    # ≥1280 時第三欄空著，所以並排數上限是 2 而不是 3。
+    # 層 3：`44` 2.1 現行逐字「層 3 兩塊的頁兩塊並排同一列、第三欄空著」（舊字面「五頁的層 3 各只有兩塊」已於 P1-④ 劃線）。
+    # 本頁層 3 兩塊（MKT-4、MKT-5），≥1280 時第三欄空著，所以並排數上限是 2 而不是 3。
     return min(2, columns_for_width(width_px))
 
 
