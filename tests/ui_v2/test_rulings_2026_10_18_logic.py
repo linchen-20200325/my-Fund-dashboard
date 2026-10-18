@@ -75,7 +75,7 @@ def test_BL0373_MKT7取數失敗的鍵_改掛取數失敗_四格禁止號_不掛
     changed = sections.mark_mkt7_fetch_failed(model, failed)
     rows = {r["indicator_key"]: r for r in mkt_logic.find_block(model, "MKT-7")["_rows"]}
     hit = [k for k in failed if k in rows and not mkt_logic.rows_for_key(ds, k)]
-    assert hit and changed == len(hit)
+    assert hit and changed == 2 * len(hit)   # MKT-7 一列 ＋ MKT-5 一項
     for key in hit:
         row = rows[key]
         assert [b["text"] for b in row["badges"]] == ["取數失敗"]
@@ -124,16 +124,38 @@ def test_BL0373_MKT6每一個鍵都是取數失敗而表上沒有觀測_表尾�
     model = _mkt(ds)
     assert sections.MKT6_EMPTY_LINE in mkt_logic.find_block(model, "MKT-6")["detail_lines"]
     sections.mark_mkt7_fetch_failed(model, ds["errors"].keys())
+    assert sections.mark_mkt6_fetch_failed(model) == 1
     lines = mkt_logic.find_block(model, "MKT-6")["detail_lines"]
     assert sections.LINE_FETCH_FAILED in lines and sections.MKT6_EMPTY_LINE not in lines
 
 
-def test_BL0373_MKT6成因混合_有真正的資料未備_表尾照舊資料未備():
+def test_BL0373_MKT6成因混合_資料未備那一句照留_另加一行取數失敗列出失敗鍵():
     ds = dict(mkt_fixtures.dataset_mkt1_fetch_failed(), rows=[])   # 只有 vol_index 失敗，其餘鍵沒有失敗紀錄
     model = _mkt(ds)
     sections.mark_mkt7_fetch_failed(model, ds["errors"].keys())
+    assert sections.mark_mkt6_fetch_failed(model) == 1
     lines = mkt_logic.find_block(model, "MKT-6")["detail_lines"]
-    assert sections.MKT6_EMPTY_LINE in lines and sections.LINE_FETCH_FAILED not in lines
+    i = lines.index(sections.MKT6_EMPTY_LINE)
+    assert lines[i + 1] == f"{sections.LINE_FETCH_FAILED}：vol_index"
+    assert sum(line.startswith(sections.LINE_FETCH_FAILED) for line in lines) == 1
+
+
+def test_BL0373_MKT6沒有任何取數失敗_不動():
+    ds = dict(mkt_fixtures.dataset_all_ok(), rows=[], errors={})
+    model = _mkt(ds)
+    before = copy.deepcopy(model)
+    sections.mark_mkt7_fetch_failed(model, ())
+    assert sections.mark_mkt6_fetch_failed(model) == 0 and model == before
+
+
+def test_BL0373_MKT5取數失敗的鍵改掛取數失敗_資料未備的鍵照舊():
+    ds = _fetch_failed_no_rows()
+    model = _mkt(ds)
+    sections.mark_mkt7_fetch_failed(model, _failed_keys(ds))
+    items = {i["name"]: i for i in mkt_logic.find_block(model, "MKT-5")["_items"]}
+    assert [b["text"] for b in items["vol_index"]["badges"]] == ["取數失敗"]
+    missing = [n for n, i in items.items() if n not in _failed_keys(ds) and i["badges"]]
+    assert missing and all([b["text"] for b in items[n]["badges"]] == ["資料未備"] for n in missing)
 
 
 # ───────────────────────── BL-0373：持倉體檢（`strict_fetch_failure` 只有正式模式會開） ─────────────────────────
@@ -186,12 +208,44 @@ def test_BL0373_HLD2持倉表讀不到_正式模式取數失敗_示範照舊():
     assert strict["_state"] == hld_logic.STATE_ERROR and demo["_state"] == hld_logic.STATE_MISSING
 
 
+def test_BL0373_HLD5淨值取數失敗那一檔_折線區寫取數失敗_示範照舊():
+    def nav_fail(ds):
+        ds["nav"] = []
+        ds["errors"] = {"nav": "ConnectionError: 淨值讀取逾時（測試用原文）"}
+    msg = hld_logic.fetch_failed_text("ConnectionError: 淨值讀取逾時（測試用原文）")
+    strict = hld_logic.find_block(_hld("full", strict=True, mutate=nav_fail), "HLD-5")["_items"]
+    demo = hld_logic.find_block(_hld("full", strict=False, mutate=nav_fail), "HLD-5")["_items"]
+    assert strict and all(item["nav_plot_text"] == msg for item in strict)
+    assert all("資料未備" in item["nav_plot_text"] for item in demo)
+
+
+def test_BL0373_HLD5保單表讀不到_保單與發行單位兩格是取數失敗_不記資料未備():
+    def policy_fail(ds):
+        ds["policy"] = []
+        ds["errors"] = {"policy": "ConnectionError: 保單讀取逾時（測試用原文）"}
+    strict = hld_logic.find_block(_hld("full", strict=True, mutate=policy_fail), "HLD-5")["_items"]
+    demo = hld_logic.find_block(_hld("full", strict=False, mutate=policy_fail), "HLD-5")["_items"]
+    undirect = [i for i in strict if dict(i["_fields"])["發行單位"] != "—"]
+    assert undirect
+    for item in undirect:
+        assert dict(item["_fields"])["保單"] == "⛔" and dict(item["_fields"])["發行單位"] == "⛔"
+        assert item["_missing_fields"] == ()
+    assert any(i["_missing_fields"] for i in demo)
+
+
+def test_BL0373_HLD5保單表讀得到只是沒這一列_照舊資料未備():
+    def no_policy_row(ds):
+        ds["policy"] = []
+    items = hld_logic.find_block(_hld("full", strict=True, mutate=no_policy_row), "HLD-5")["_items"]
+    assert any(i["_missing_fields"] for i in items)
+
+
 def test_BL0373_持倉體檢示範模式全部情境_開關關著時與動手前逐位元組相同():
     """示範模式不開 `strict_fetch_failure`；同一組情境開與不開，只有上面三塊可能不同（其餘塊逐字相同）。"""
     for name in hld_fixtures.ALL_SCENARIO_NAMES:
         on, off = _hld(name, strict=True), _hld(name, strict=False)
         for a, b in zip(on["blocks"], off["blocks"]):
-            if a["code"] not in ("HLD-2", "HLD-6", "HLD-7"):
+            if a["code"] not in ("HLD-2", "HLD-5", "HLD-6", "HLD-7"):
                 assert a == b, (name, a["code"])
 
 

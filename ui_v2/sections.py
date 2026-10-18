@@ -28,7 +28,8 @@
 5. **客戶 2026-10-18 裁示**（`DEC-2026-10-18-01`；44 第七節第三小節之九）：
    - BL-0371：沒有異常時省略整體正常宣告 —— 正式與示範模式皆同，改在各頁 logic（`ui_v2/mkt/logic.py`、`ui_v2/set/logic.py`），
      本模組不經手。
-   - BL-0373：市場總覽 `MKT-7` 取數失敗的鍵不掛「資料未備」，改「取數失敗」、四格 `⛔`（`mark_mkt7_fetch_failed`）。
+   - BL-0373：市場總覽 `MKT-7` 取數失敗的鍵不掛「資料未備」，改「取數失敗」、四格 `⛔`；`MKT-5` 可選項目同一批鍵改掛「取數失敗」
+     （`mark_mkt7_fetch_failed`）；`MKT-6` 表尾那一句依成因改寫（`mark_mkt6_fetch_failed`）。
    - S1／C1：設定試算表未設定 → 第三句優先於由此衍生的讀取失敗；服務帳戶也未設定時維持 ⛔（`set_conclusion`）。
 
 **不做什麼（護欄 2）**：不改任何 `_state`、顏色、門檻、算法、資料來源與寫入；不新增按鈕；不改任何一格的文案字面
@@ -280,7 +281,7 @@ SET_REFETCH_CODE = "SET-5"
 MKT_BADGE_FETCH_FAILED = {"_kind": "狀態", "_tone": "黃", "text": "取數失敗"}
 MKT_BADGE_MISSING_TEXT = "資料未備"
 MKT7_CELLS = ("obs_text", "fetched_text", "tier_text", "delay_text")
-# `MKT-6` 一筆觀測也沒有時的那一句（真身 `ui_v2/mkt/logic.py::empty_source_text(["market_indicator"])`）與取代它的狀態族。
+# `MKT-6` 一筆觀測也沒有時的那一句（真身 `ui_v2/mkt/logic.py::empty_source_text(["market_indicator"])`；`plain` 之前的形狀）與取代它的狀態族。
 MKT6_EMPTY_LINE = "⬜ 資料未備：market_indicator 尚無資料"
 LINE_FETCH_FAILED = f"{SYMBOL_ERROR} 取數失敗"
 
@@ -350,11 +351,12 @@ def set_reshape(model: dict, *, sheet_configured: bool, service_account_configur
 
 def mark_mkt7_fetch_failed(model: dict, failed_keys) -> int:
     """`MKT-7` 取數失敗的鍵（`failed_keys`：資料層 `errors` 裡有失敗字串的鍵）那一列：徽章「資料未備」→「取數失敗」、
-    四格 `⬜` → `⛔`（就地改寫）。回改了幾列。
+    四格 `⬜` → `⛔`，並記 `_fetch_failed`；`MKT-5` 可選項目同一批鍵的「資料未備」徽章 →「取數失敗」（就地改寫）。
+    回改了幾處（列＋項目）。要在 `plain` 把鍵換成中文名之前呼叫（比對的是原鍵）。
 
     客戶 2026-10-18 裁示 BL-0373：取數失敗＝⛔、資料未備＝◇，不得把取數失敗判成資料未備。只動「這個鍵一筆觀測也沒有、
-    而且資料層回報了失敗」的那幾列（logic 已把它們與真正的資料未備分開：資料未備那幾列帶 `_missing_cells`）；
-    有觀測的列（取數失敗但沿用既有列）照舊。"""
+    而且資料層回報了失敗」的那幾處（logic 已把它們與真正的資料未備分開：資料未備那幾列帶 `_missing_cells`）；
+    有觀測的列（取數失敗但沿用既有列）照舊。`MKT-6` 那一句在 `plain`／`symbols` 之後由 `mark_mkt6_fetch_failed` 處理。"""
     failed = set(failed_keys or ())
     count = 0
     for row in _find(model, "MKT-7")["_rows"]:
@@ -367,25 +369,48 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys) -> int:
         for cell in MKT7_CELLS:
             if row[cell] == SYMBOL_UNDECIDABLE:
                 row[cell] = SYMBOL_ERROR
+        row["_fetch_failed"] = True
         count += 1
-    count += _mark_mkt6_fetch_failed(model)
+    for item in _find(model, "MKT-5").get("_items") or ():
+        if item.get("name") in failed and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in item["badges"]):
+            item["badges"] = [dict(MKT_BADGE_FETCH_FAILED) if b.get("text") == MKT_BADGE_MISSING_TEXT else b
+                              for b in item["badges"]]
+            count += 1
     return count
 
 
-def _mark_mkt6_fetch_failed(model: dict) -> int:
-    """`MKT-6` 一筆觀測也沒有、而 `MKT-7` 列出的每一個鍵都是取數失敗（上一步已改掛「取數失敗」）時，
-    `MKT-6` 那一句「資料未備：…尚無資料」改成狀態族「⛔ 取數失敗」（BL-0373）。有任何一個鍵是真正的資料未備
-    （例：公布日未接上而暫不寫入），成因不只取數失敗，照舊不動。回改了幾處（0 或 1）。"""
+def _is_mkt6_empty_line(line) -> bool:
+    """`MKT-6` 一筆觀測也沒有時那一句（logic `empty_source_text(["market_indicator"])`，經 `plain`／`symbols` 之後表名換中文、
+    符號換 ◇）。只認「資料未備：…尚無資料」這個形狀。"""
+    return (isinstance(line, str) and line.endswith("尚無資料")
+            and (line.startswith(f"{SYMBOL_MISSING} 資料未備：") or line.startswith(f"{SYMBOL_UNDECIDABLE} 資料未備：")))
+
+
+def mark_mkt6_fetch_failed(model: dict) -> int:
+    """`MKT-6` 一筆觀測也沒有時，表尾那一句依成因改寫（BL-0373；就地改寫，回改了幾處）。在 `plain`／`symbols` 之後呼叫，
+    讀 `MKT-7` 上一步記的 `_fetch_failed` 與畫面上的指標名：
+
+    - `MKT-7` 列出的每一個鍵都是取數失敗 → 那一句改成狀態族「⛔ 取數失敗」；
+    - 成因混合（有取數失敗、也有真正的資料未備）→ 資料未備那一句照留，下一行另加「⛔ 取數失敗：<失敗的指標名>」
+      （與持倉體檢同向：取數失敗另外說出來，不算進資料未備）；
+    - 沒有任何取數失敗 → 不動。"""
     mkt6, mkt7 = _find(model, "MKT-6"), _find(model, "MKT-7")
     rows7 = mkt7["_rows"]
-    if mkt6.get("_rows") or not rows7:
-        return 0
-    if not all(any(b.get("text") == MKT_BADGE_FETCH_FAILED["text"] for b in r["badges"]) for r in rows7):
-        return 0
     lines = mkt6["detail_lines"]
-    if MKT6_EMPTY_LINE not in lines:
+    if mkt6.get("_rows") or not rows7 or not any(_is_mkt6_empty_line(line) for line in lines):
         return 0
-    mkt6["detail_lines"] = [LINE_FETCH_FAILED if line == MKT6_EMPTY_LINE else line for line in lines]
+    failed = [r["indicator_key"] for r in rows7 if r.get("_fetch_failed")]
+    if not failed:
+        return 0
+    if len(failed) == len(rows7):
+        mkt6["detail_lines"] = [LINE_FETCH_FAILED if _is_mkt6_empty_line(line) else line for line in lines]
+        return 1
+    out = []
+    for line in lines:
+        out.append(line)
+        if _is_mkt6_empty_line(line):
+            out.append(f"{LINE_FETCH_FAILED}：" + "、".join(failed))
+    mkt6["detail_lines"] = out
     return 1
 
 

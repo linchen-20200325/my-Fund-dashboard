@@ -219,8 +219,11 @@ _HINT_SUFFIX = contextvars.ContextVar("hld_hint_suffix", default=HINT)
 # 客戶 2026-10-18 裁示 BL-0373（`docs/DECISIONS.md` `DEC-2026-10-18-01`；44 第七節第三小節之九）：取數失敗＝⛔、
 # 資料未備＝◇，不得把取數失敗判成資料未備。開關只有一個入口：`build_page_model(..., strict_fetch_failure=)`；
 # 正式模式（`ui_v2/hld/live.py`）傳 True，示範模式預設 False ⇒ 示範畫面逐位元組不變。
-# 受影響的三支：`HLD-2` 持倉表讀不到（`_build_core_card`）、`HLD-6` 來源讀不到而兩張表都沒有列、`HLD-7` 四塊沒有一塊出數而成因有取數失敗。
+# 受影響的：`HLD-2` 持倉表讀不到（`_build_core_card`）、`HLD-5` 保單表讀不到的格與淨值取數失敗那一檔的折線區、
+# `HLD-6` 來源讀不到而兩張表都沒有列、`HLD-7` 四塊沒有一塊出數而成因有取數失敗。
 _STRICT_FETCH = contextvars.ContextVar("hld_strict_fetch_failure", default=False)
+# 表格內單獨一格的取數失敗（BL-0373；比照市場總覽 `MKT-7` 那四格）。
+SYMBOL_FETCH_FAILED_CELL = "⛔"
 
 
 def _hint() -> str:
@@ -2181,6 +2184,12 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
                 settings_error=None, holding_error=None, holding_unknown=False, nav_not_ready_days=None):
     policies = {p["policy_id"]: p for p in dataset.get("policy", [])}
     holdings = {h["holding_id"]: h for h in dataset.get("holding", [])}
+    # BL-0373（客戶 2026-10-18 裁示，`DEC-2026-10-18-01`）：正式模式（`_STRICT_FETCH`）保單表讀不到、或該檔淨值取數失敗時，
+    # 那幾格是取數失敗（⛔），不畫資料未備。示範模式照舊。
+    strict = _STRICT_FETCH.get()
+    errors = dataset.get("errors") or {}
+    policy_error = errors.get("policy") if strict else None
+    nav_fund_errors = fund_errors(dataset).get("nav", {}) if strict else {}
     items = []
     for index, metric in enumerate(metrics):
         holding = holdings[metric["_holding_id"]]
@@ -2201,7 +2210,13 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
         missing_fields = () if is_direct else tuple(
             label for label, key in (("保單", "policy_name"), ("發行單位", "issuer")) if key not in (policy or {})
         )
+        if policy_error and missing_fields:
+            # 保單表讀不到：那幾格的成因是取數失敗，不是資料未備（BL-0373）。
+            fields = [(label, SYMBOL_FETCH_FAILED_CELL if label in missing_fields and value == "⬜" else value)
+                      for label, value in fields]
+            missing_fields = ()
         has_nav = bool(metric["nav_rows"])
+        nav_error = (errors.get("nav") or nav_fund_errors.get(metric["_fund_code"])) if strict and not has_nav else None
         items.append(
             {
                 "_fund_code": metric["_fund_code"],
@@ -2229,6 +2244,9 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
                     if window_unknown
                     else "〔淨值折線〕與〔配息長條〕共用同一條時間軸"
                     if has_nav
+                    # BL-0373（客戶 2026-10-18 裁示）：正式模式該檔淨值取數失敗 → 取數失敗原文，不寫「nav 尚無資料」。
+                    else fetch_failed_text(nav_error)
+                    if nav_error
                     # 總管 2026-10-13 裁決：淨值過期而資料未備 ≠ nav 尚無資料，寫準確的那一句。
                     else nav_not_ready_text(nav_not_ready_days)
                     if metric.get("nav_not_ready")

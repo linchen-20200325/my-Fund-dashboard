@@ -158,3 +158,25 @@ def test_上游錯誤字串沒帶型別名_照舊加前綴(env):
     with pytest.raises(R.SettingsSheetError) as err:
         R.load_user_settings(mask=mask)
     assert str(err.value) == "ConnectionError: reset by peer"
+
+
+# ─── 客戶 2026-10-18 裁示 C1／S1（`docs/DECISIONS.md` `DEC-2026-10-18-01`）：`service_account_status` ───
+
+
+@pytest.mark.parametrize("has_id", [True, False])
+@pytest.mark.parametrize("has_sa", [True, False])
+def test_服務帳戶狀態_只讀設定_不建client_不打上游(env, monkeypatch, has_id, has_sa):
+    """`service_account_status` 不建 client（`_make_client` 一被呼叫就炸）、不打開試算表；ID 沒設時照樣看得到服務帳戶缺不缺。"""
+    book, secrets = env
+    if not has_id:
+        secrets.pop("SETTINGS_SHEET_ID")
+    if not has_sa:
+        secrets.pop("google_service_account")
+
+    def _boom(creds):
+        raise AssertionError("service_account_status 不得建 client")
+
+    monkeypatch.setattr(R, "_make_client", _boom)
+    out = R.service_account_status(mask=mask)
+    assert out == {"configured": has_sa, "message": R.NO_SERVICE_ACCOUNT_MESSAGE}
+    assert book.calls == []

@@ -86,6 +86,46 @@ def test_BL0373_MKT7取數失敗而沒有觀測的鍵_寫取數失敗與禁止�
     assert "資料未備" not in row and "◇" not in row and "⬜" not in row, row
 
 
+_ERR = "HTTPSConnectionPool(host='example.invalid'): Max retries exceeded"
+_MKT6_MIXED = SCAN._mkt('dict(fixtures.dataset_mkt1_fetch_failed(), rows=[])', settings=SCAN._MKT_SAVED)
+_MKT6_ALL_FAILED = SCAN._mkt(
+    'dict(fixtures.dataset_mkt1_fetch_failed(), rows=[], errors={"vol_index": %r, "credit_spread_pct": %r})' % (_ERR, _ERR),
+    settings=SCAN._MKT_SAVED,
+)
+
+
+def test_BL0373_MKT5取數失敗與資料未備分兩行各帶符號():
+    at = _run(_MKT7_FAILED)
+    captions = [c.value for c in at.caption]
+    failed = [c for c in captions if c.startswith("⛔ 取數失敗：")]
+    missing = [c for c in captions if c.startswith("◇ 資料未備：")]
+    assert failed == ["⛔ 取數失敗：波動度指數"], captions
+    assert all("波動度指數" not in c for c in missing), captions
+    assert not [c for c in captions if c.startswith("資料未備：") or c.startswith("取數失敗：")], captions   # 都帶符號
+
+
+def test_BL0373_MKT5資料未備的鍵_沒有失敗紀錄_寫菱形資料未備():
+    script = SCAN._mkt(
+        '(lambda d: dict(d, errors={}, rows=[r for r in d["rows"] if r["indicator_key"] != "vol_index"]))'
+        "(fixtures.dataset_mkt1_fetch_failed())",
+        settings=SCAN._MKT_SAVED,
+    )
+    captions = [c.value for c in _run(script).caption]
+    assert "◇ 資料未備：波動度指數" in captions, captions
+    assert not [c for c in captions if c.startswith("⛔ 取數失敗：")], captions
+
+
+def test_BL0373_MKT6成因混合_資料未備那一句照留_另加一行取數失敗():
+    text = "\n".join(SCAN.screen_texts(_run(_MKT6_MIXED)))
+    assert "資料未備：市場指標 尚無資料" in text and "⛔ 取數失敗：波動度指數" in text, text[-800:]
+
+
+def test_BL0373_MKT6全部取數失敗_表尾只寫取數失敗():
+    text = "\n".join(SCAN.screen_texts(_run(_MKT6_ALL_FAILED)))
+    assert "資料未備：市場指標 尚無資料" not in text
+    assert "⛔ 取數失敗" in text
+
+
 # ───────────────────────── S1／C1 ─────────────────────────
 
 _BOTH_UNSET = SCAN._set(cfg={})
@@ -102,6 +142,16 @@ def test_C1_設定試算表與服務帳戶都缺_燈為禁止號_與只缺服務
     only_sa = _one(_md(_run(_ONLY_SA_MISSING)), 'class="set-lamp"')
     assert "⛔" in both and "狀態：取數失敗" in both and sections.SET_NO_SHEET_TEXT not in both, both
     assert both == only_sa
+
+
+def test_C1C3_兩者都未設定時_燈下導覽照舊顯示_落點那一枚重新取數停用():
+    """C3 未裁，現況照舊（不改行為）：兩者都未設定、燈為 ⛔ 時，燈下那一枚同頁導覽仍顯示。"""
+    at = _run(_BOTH_UNSET)
+    values = _md(at)
+    assert _one(values, f'href="#{sections.SET_NAV_ANCHOR}"')
+    assert _one(values, f'id="{sections.SET_NAV_ANCHOR}"')
+    refetch = [b for b in at.button if b.label == "重新取數"]
+    assert len(refetch) == 1 and refetch[0].disabled
 
 
 # ───────────────────────── C2 ─────────────────────────
