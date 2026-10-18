@@ -96,7 +96,7 @@ _TONE_BY_STATE = {
     STATE_ERROR: "紅",
 }
 # ⚠️ **`44` 對這四個狀態只排過一次序，而那一次把中間兩個並列同級。**
-# `44` :310（`MKT-0` 規則欄，全檔唯一明文排過卡片四狀態的地方）逐字：
+# `44` :310（`MKT-0` 規則欄，全檔唯一明文排過卡片四狀態的地方）逐字（2026-10-18 前的舊字面；客戶裁示 BL-0371 後「三張卡的資料齊」已劃線、燈上不寫文案，偏序本身未改）：
 #   「三塊狀態取最差者：三塊皆 `ok` → 燈為中性灰，文案「三張卡的資料齊」；
 #     任一塊為 `資料未備` 或 `業務例外` → 燈為黃，文案列出是哪一張卡；
 #     任一塊為 `系統錯誤` → 燈為紅，文案列出失敗的那一段」
@@ -214,6 +214,13 @@ HINT = "（示意）"
 #       `ContextVar` 每條執行緒各一份，`build_page_model` 結束時一定還原（`finally`）。
 #    預設值是 `HINT` ⇒ 不傳 `demo_hint` 的呼叫端（示範入口、既有測試）輸出逐字不變。
 _HINT_SUFFIX = contextvars.ContextVar("hld_hint_suffix", default=HINT)
+
+
+# 客戶 2026-10-18 裁示 BL-0373（`docs/DECISIONS.md` `DEC-2026-10-18-01`；44 第七節第三小節之九）：取數失敗＝⛔、
+# 資料未備＝◇，不得把取數失敗判成資料未備。開關只有一個入口：`build_page_model(..., strict_fetch_failure=)`；
+# 正式模式（`ui_v2/hld/live.py`）傳 True，示範模式預設 False ⇒ 示範畫面逐位元組不變。
+# 受影響的三支：`HLD-2` 持倉表讀不到（`_build_core_card`）、`HLD-6` 來源讀不到而兩張表都沒有列、`HLD-7` 四塊沒有一塊出數而成因有取數失敗。
+_STRICT_FETCH = contextvars.ContextVar("hld_strict_fetch_failure", default=False)
 
 
 def _hint() -> str:
@@ -1570,7 +1577,7 @@ def _build_hld1(
 
 def _build_core_card(
     code, metrics, labels, *, has_holdings, has_window, subtitle, moved_note,
-    fail_message=None, unsurfaced=None, window_unknown=False, holding_unknown=False,
+    fail_message=None, unsurfaced=None, window_unknown=False, holding_unknown=False, holding_error=None,
 ):
     groups = []
     for metric in metrics:
@@ -1658,6 +1665,12 @@ def _build_core_card(
         state = STATE_MISSING
         detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT]
         summary = ND_TEXT
+        if _STRICT_FETCH.get() and holding_error:
+            # BL-0373（客戶 2026-10-18 裁示）：持倉表讀不到是取數失敗，不是資料未備 ⇒ 正式模式走 `系統錯誤`（⛔）。
+            # 上面那一支（示範模式照舊）在寫下當時照本塊來源欄；被推翻的是「讀不到可以畫成資料未備」這個前提。
+            state = STATE_ERROR
+            detail_lines = [NA_NO_WINDOW if not has_window else subtitle, fetch_failed_text(holding_error), PRINT_AS_IS_LINE]
+            summary = fetch_failed_text(holding_error)
     elif not has_holdings:
         state = STATE_MISSING
         detail_lines = [NA_NO_WINDOW if not has_window else subtitle, ND_TEXT, TEXT_NO_HOLDING]
@@ -2272,6 +2285,20 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
 _DIV_KIND_TEXT = {"income": "收益", "principal": "本金", "unknown": "來源未區分"}
 
 
+def _hld6_failures(dataset) -> list:
+    """`HLD-6` 兩張表都沒有列時，來源那一側的取數失敗原文（表層級：持倉、淨值、配息；逐檔：淨值、配息），依序去重。"""
+    errors = dataset.get("errors") or {}
+    out = [errors[t] for t in ("holding", "nav", "dividend") if errors.get(t)]
+    for table, per_fund in fund_errors(dataset).items():
+        out += [f"{code}：{msg}" for code, msg in sorted(per_fund.items())]
+    seen, uniq = set(), []
+    for item in out:
+        if item not in seen:
+            seen.add(item)
+            uniq.append(item)
+    return uniq
+
+
 def _build_hld6(dataset, *, not_ready_line=None):
     nav_rows = []
     for row in sorted(
@@ -2326,6 +2353,13 @@ def _build_hld6(dataset, *, not_ready_line=None):
         # `44` :719 只寫「無列 → `來源缺`」。兩張表為空**不一定**等於沒有持倉
         # （取數失敗、區間外都可能），上一輪那句原因是假資料下碰巧成立，已撤。
         detail_lines = [empty_source_text(["nav", "dividend"])]
+        failures = _hld6_failures(dataset) if _STRICT_FETCH.get() else []
+        if failures:
+            # BL-0373（客戶 2026-10-18 裁示）：兩張表都沒有列、而來源有取數失敗 ⇒ 成因含取數失敗，正式模式走 `系統錯誤`（⛔），
+            # 不畫資料未備。示範模式照舊。
+            state = STATE_ERROR
+            summary = fetch_failed_text(failures[0])
+            detail_lines = [fetch_failed_text(f) for f in failures] + [PRINT_AS_IS_LINE]
     if not_ready_line:
         # 總管 2026-10-13 裁決（稽核 C2）：淨值過期而被拿掉的檔，本表看不出來 ⇒ 加一行中性說明（與 HLD-1 卡尾同一句）。
         detail_lines = detail_lines + [not_ready_line]
@@ -2501,7 +2535,7 @@ def _inputs_text(metric, indicator):
     )
 
 
-def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None):
+def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None, holding_error=None):
     rows = []
     for metric in metrics:
         for indicator, owner in INDICATOR_OWNER.items():
@@ -2543,7 +2577,19 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None):
         for indicator in INDICATOR_OWNER
     )
     state = STATE_OK if (has_holdings and rows and any_output) else STATE_MISSING
-    if state == STATE_MISSING:
+    failure = None
+    if state == STATE_MISSING and _STRICT_FETCH.get():
+        # BL-0373（客戶 2026-10-18 裁示）：四塊沒有一塊出數，而成因有取數失敗（持倉表讀不到、或任一值是取數失敗）
+        # ⇒ 正式模式走 `系統錯誤`（⛔），不畫資料未備。示範模式照舊。
+        failure = holding_error or next(
+            (metric[ind]["reason_text"] for metric in metrics for ind in INDICATOR_OWNER
+             if metric[ind]["_state"] == STATE_ERROR and metric[ind]["reason_text"]), None)
+    if failure:
+        state = STATE_ERROR
+        detail_lines = [fetch_failed_text(failure), PRINT_AS_IS_LINE,
+                        "四塊沒有一塊出數；下面各列的輸入筆數與不適用原因照列。"]
+        summary = fetch_failed_text(failure)
+    elif state == STATE_MISSING:
         detail_lines = [
             empty_source_text(["HLD-1", "HLD-2", "HLD-3", "HLD-8"]),
             "四塊沒有一塊出數；下面各列的輸入筆數與不適用原因照列。",
@@ -2600,6 +2646,7 @@ def build_page_model(
     applied_rules=None,
     nav_not_ready_codes=frozenset(),
     nav_not_ready_days=None,
+    strict_fetch_failure: bool = False,
 ) -> dict:
     """把假資料 ＋ 使用者輸入組成一份純資料模型。page.py 只負責把它畫出來。
 
@@ -2631,6 +2678,7 @@ def build_page_model(
     **這不是規格，是被迫挑的一邊；客戶裁哪一邊，改的只有這一行。**
     """
     token = _HINT_SUFFIX.set(HINT if demo_hint else "")
+    strict = _STRICT_FETCH.set(bool(strict_fetch_failure))   # BL-0373：正式模式 True（見 `_STRICT_FETCH`）
     try:
         return _build_page_model(
             dataset, fields=fields, viewport_width=viewport_width, open_fund=open_fund,
@@ -2638,6 +2686,7 @@ def build_page_model(
             nav_not_ready_codes=nav_not_ready_codes, nav_not_ready_days=nav_not_ready_days,
         )
     finally:
+        _STRICT_FETCH.reset(strict)
         _HINT_SUFFIX.reset(token)
 
 
@@ -2728,6 +2777,7 @@ def _build_page_model(
         unsurfaced=unsurfaced_source_error(dataset, "HLD-2"),
         window_unknown=window_unknown,
         holding_unknown=holding_unknown,
+        holding_error=holding_error,
         subtitle="兩個主值。各值以原幣計算，逐檔寫出幣別字面值；"
         "本卡沒有任何跨幣別的合計、平均或比值。",
         moved_note=HLD2_MOVED_NOTE,
@@ -2776,7 +2826,8 @@ def _build_page_model(
             nav_not_ready_days=nav_not_ready_days,
         ),
         _build_hld6(dataset, not_ready_line=not_ready_line),
-        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings, not_ready_line=hld7_not_ready_line),
+        _build_hld7(metrics, hld1["_rows"], has_holdings=has_holdings, not_ready_line=hld7_not_ready_line,
+                    holding_error=holding_error if holding_unknown else None),
         _build_hld8(
             metrics, has_holdings=has_holdings, has_window=has_window,
             window_unknown=window_unknown, settings_error=settings_error,

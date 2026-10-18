@@ -1382,7 +1382,8 @@ def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_
     📌 2026-10-05 改名（有意識的更正，不是漏刪；決策者：總管；稽核甲指出原名說得比斷言多）。原名
     ~~`test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_HLD5只加卡尾_每一句都是真話`~~。
     本條查的是：HLD-5 的狀態、摘要、說明區、卡尾；九塊都不印「尚未建立任何持倉」；卡尾那一句只在 HLD-5；
-    HLD-1／3／5／8 的說明區有原因；HLD-8 不掛鈕；HLD-2 是「⬜ 資料未備」。
+    HLD-1／3／5／8 的說明區有原因；HLD-8 不掛鈕；~~HLD-2 是「⬜ 資料未備」~~ → HLD-2 是取數失敗
+    （客戶 2026-10-18 裁示 BL-0373，`DEC-2026-10-18-01`：持倉表讀不到是取數失敗，不判成資料未備；正式模式）。
     HLD-0 的 lines、HLD-4、HLD-6、HLD-7 除了上面兩項掃描之外的字句，本條沒有逐句查。
     """
     mask = _wrapped_mask(_unique("標記"))
@@ -1410,7 +1411,8 @@ def test_讀取失敗不說空_持倉零列又有略過分頁又帶direct清單_
         assert failed in logic.find_block(model, code)["detail_lines"], code
     assert logic.find_block(model, "HLD-8")["buttons"] == []
     hld2 = logic.find_block(model, "HLD-2")
-    assert (hld2["_state"], hld2["summary_text"]) == (logic.STATE_MISSING, logic.ND_TEXT)
+    assert (hld2["_state"], hld2["summary_text"]) == (logic.STATE_ERROR, failed)   # BL-0373（2026-10-18）
+    assert failed in hld2["detail_lines"] and logic.ND_TEXT not in hld2["detail_lines"]
 
 
 def test_讀取失敗不說空_設定讀取失敗而且沒按過套用_全頁沒有未設定字句_原文照印():

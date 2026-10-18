@@ -99,45 +99,28 @@ def test_上限設0日_N等於3():
 
 @pytest.mark.parametrize("name, sf", _ALL)
 def test_非黃燈的燈一字不動(name, sf):
-    """黃燈（改類數句）與兩個計數皆為零那一支（客戶 2026-10-18 裁示 BL-0371：不寫整體正常宣告）之外，燈一字不動；
-    那兩支也只動 `text`。"""
     before = _b(_model(name, sf), "SET-0")
     after = _b(_reshaped(name, save_failed=sf), "SET-0")
-    if before["_state"] in (sections.SET_STATE_OVERDUE, sections.SET_STATE_ALL_CLEAR):
+    if before["_state"] == sections.SET_STATE_OVERDUE:
         assert after["text"] != before["text"]
         assert {k: v for k, v in after.items() if k != "text"} == {k: v for k, v in before.items() if k != "text"}
     else:
         assert after == before
 
 
-def test_BL0371_兩個計數皆為零_燈上不寫資料齊來源皆可達_只留狀態字():
-    """客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：沒有異常時省略整體正常宣告。燈色、圖示、狀態字照舊。
+def test_BL0371_兩個計數皆為零_燈上不寫文案_只留狀態字_示範與正式皆同():
+    """客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：移除「資料齊、來源皆可達」，不限正式模式（logic 本身不寫）。
     （舊測試 `test_資料齊那一句照舊不改` 在寫下當時為真 —— BL-0371 那時待客戶另裁；被推翻的是它的前提。）"""
-    before = _b(_model("ok"), "SET-0")
-    assert before["_state"] == sections.SET_STATE_ALL_CLEAR and before["text"] == set_logic.TEXT_ALL_OK
-    light = _b(_reshaped("ok"), "SET-0")
-    assert light["text"] == ""
-    assert light["state_word"] == "狀態：無逾期、無失敗來源" and light["_tone"] == "灰"
-    for word in ("資料齊", "來源皆可達", "正常"):
-        assert word not in json.dumps(light, ensure_ascii=False)
-
-
-def test_BL0371_齊那一支文案不是預期字面_當場炸():
-    model = _model("ok")
-    _b(model, "SET-0")["text"] = "別的字"
-    with pytest.raises(ValueError):
-        sections.set_reshape(model, sheet_configured=True)
+    for light in (_b(_model("ok"), "SET-0"), _b(_reshaped("ok"), "SET-0")):
+        assert light["_state"] == "齊" and light["text"] == ""
+        assert light["state_word"] == "狀態：無逾期、無失敗來源" and light["_tone"] == "灰"
 
 
 @pytest.mark.parametrize("name, sf", _ALL)
-def test_BL0371_全情境正式模式SET0燈不寫資料齊或來源皆可達(name, sf):
-    light = _b(_reshaped(name, save_failed=sf), "SET-0")
-    assert "資料齊" not in light["text"] and "來源皆可達" not in light["text"], (name, light["text"])
-
-
-def test_鏡像常數_齊與資料齊字面等於真身():
-    assert sections.SET_TEXT_ALL_CLEAR == set_logic.TEXT_ALL_OK
-    assert _b(_model("ok"), "SET-0")["_state"] == sections.SET_STATE_ALL_CLEAR
+def test_BL0371_全情境SET0燈不寫資料齊或來源皆可達_示範與正式皆同(name, sf):
+    for light in (_b(_model(name, sf), "SET-0"), _b(_reshaped(name, save_failed=sf), "SET-0")):
+        text = json.dumps(light, ensure_ascii=False)
+        assert "資料齊" not in text and "來源皆可達" not in text, (name, light["text"])
 
 
 @pytest.mark.parametrize("name", ["ok", "stale", "failed", "logfail", "nolimit", "first", "settingfail"])
@@ -300,8 +283,19 @@ def test_示範模型逐位元組不變():
     基準值於 c44e1551（P1-④ 稽核通過版）量得：17 情境 × 存檔失敗開關，共 34 個模型。"""
     models = {f"{n}|{sf}": _model(n, sf) for n, sf in _ALL}
     assert len(models) == 34
-    blob = json.dumps(models, ensure_ascii=False, sort_keys=True, default=repr).encode()
-    assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"
+    # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）：示範模式同樣不寫「資料齊、來源皆可達」。
+    # 證明「示範模型只差這一句」：把 `SET-0` 齊那一支的文案還原成舊字面，md5 必須回到舊基準值；其餘一格不動。
+    restored = copy.deepcopy(models)
+    changed = 0
+    for model in restored.values():
+        light = _b(model, "SET-0")
+        if light["_state"] == "齊":
+            assert light["text"] == ""
+            light["text"] = "資料齊、來源皆可達"
+            changed += 1
+    assert changed > 0
+    blob = json.dumps(restored, ensure_ascii=False, sort_keys=True, default=repr).encode()
+    assert hashlib.md5(blob).hexdigest() == "e5f44896d645c8b04e342ac1dd720ce0"   # 舊基準值（c44e1551）
 
 
 # ───────────────────────── 2026-10-18 獨立稽核回修（M1、S2、S6） ─────────────────────────

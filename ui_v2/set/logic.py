@@ -60,7 +60,7 @@ GAPS = {
     ),
     "SET-GAP-某類無列不入燈": (
         "某一類資料一列也沒有（SET-1 那一列三欄 ⬜）、或某一層級從無紀錄（SET-2 那一列三欄 ⬜）時，"
-        "它既不是逾期、也不是失敗來源；照 44 SET-0 規則欄字面，燈仍是灰「資料齊、來源皆可達」。本頁照字面，不自行把它算進燈。"
+        "它既不是逾期、也不是失敗來源；照 44 SET-0 規則欄字面，燈仍是灰、不寫文案（客戶 2026-10-18 裁示 BL-0371）。本頁照字面，不自行把它算進燈。"
     ),
     "SET-GAP-端點": (
         "端點由 44 SET-1 判準推得：「把上限設成 0 日，三列的比較欄皆為「外」且 SET-0 的 N 等於 3」—— "
@@ -298,7 +298,10 @@ NOT_RESPONSIBLE = (
 REDLINE_MARKS = ("G1†", "G3†")
 
 # ── 畫面文案（每一句都逐字取自 `44` 現行文字；`test_44逐字的文案常數每一句都在現行文字裡`） ──
-TEXT_ALL_OK = "資料齊、來源皆可達"
+# ~~TEXT_ALL_OK = "資料齊、來源皆可達"~~ → 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`；44 第七節第三小節之九）：
+# 兩個計數皆為零時燈上不寫文案（省略整體正常宣告），正式與示範模式皆同；狀態字「狀態：無逾期、無失敗來源」照舊。
+# 舊常數在寫下當時照 44 字面；被推翻的是那句字面本身。
+TEXT_ALL_CLEAR = ""
 TEXT_NO_LIMIT = "尚未設定新鮮度上限"
 TEXT_NO_RECORDS = "尚無取數紀錄"
 TEXT_OVERDUE_TAIL = "筆資料超過你設定的新鮮度上限"
@@ -335,7 +338,6 @@ TEXT_SET7_NO_INFERENCE = "本表不做推論，只列本檔各塊「來源」欄
 TEXT_LAMP_DATA_ONLY = "燈描述資料狀態，不描述市場或持倉"
 
 VERBATIM_TEXTS = {
-    "TEXT_ALL_OK": TEXT_ALL_OK,
     "TEXT_NO_LIMIT": TEXT_NO_LIMIT,
     "TEXT_NO_RECORDS": TEXT_NO_RECORDS,
     "TEXT_OVERDUE_TAIL": TEXT_OVERDUE_TAIL,
@@ -878,7 +880,7 @@ def conclusion_light(set1, set2) -> dict:
     if set1["_overdue"] > 0:
         return {"_tone": "黃", "text": overdue_text(set1["_overdue"]), "_state": "有逾期"}
     # SET-GAP-某類無列不入燈
-    return {"_tone": "灰", "text": TEXT_ALL_OK, "_state": "齊"}
+    return {"_tone": "灰", "text": TEXT_ALL_CLEAR, "_state": "齊"}   # BL-0371：不寫文案，只留狀態字
 
 
 def _build_set0(set1, set2) -> dict:

@@ -602,8 +602,7 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         # Phase 3 P1-⑥（44 第七節第三小節之八其二 (b-1)～(b-4)、其三 (c-1)）：`SET-2` → 層 4（④「證據／來源」）、
         # `SET-3` → 層 3（④「操作」）；`SET-0` 黃燈那一句與設定試算表未設定時的第三句；`SET-1`「外」前加 ◷；
         # ③ 由 `SET-1` 已算出的「外」那幾列撐起。判定、門檻、取數與寫入一個都不動（`ui_v2/sections.py`）。
-        # 客戶 2026-10-18 裁示（`DEC-2026-10-18-01`）：S1 第三句優先於由此衍生的讀取失敗；C1 服務帳戶也未設定時維持 ⛔；
-        # BL-0371 兩個計數皆為零時燈上不寫「資料齊、來源皆可達」。
+        # 客戶 2026-10-18 裁示（`DEC-2026-10-18-01`）：S1 第三句優先於由此衍生的讀取失敗；C1 服務帳戶也未設定時維持 ⛔。
         sections.set_reshape(model, sheet_configured=live.sheet_configured(live_input["notes"]),
                              service_account_configured=live.service_account_configured(live_input["notes"]))
         attention = sections.attention_items(model, "set")

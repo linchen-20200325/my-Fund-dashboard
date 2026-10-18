@@ -287,7 +287,7 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     assert fields["set_max_age_days"]["used_by_text"] == "改這個鍵會影響：SET-1"          # set_ 鍵維持原行
     # ★8 說明行
     assert _b(model, "SET-5")["detail_lines"][-1] == live.TEXT_SET5_NOTE
-    assert _b(model, "SET-0")["text"] == logic.TEXT_ALL_OK
+    assert _b(model, "SET-0")["text"] == logic.TEXT_ALL_CLEAR == ""   # 客戶 2026-10-18 裁示 BL-0371
     assert logic.scan_forbidden(logic.collect_ui_strings(model)) == {}
 
 

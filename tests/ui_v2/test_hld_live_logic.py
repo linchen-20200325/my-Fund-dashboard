@@ -212,8 +212,10 @@ def test_正式模式只差三件事_其餘逐字與示範模式相同(name, tod
     demo_args = copy.deepcopy(args)
     demo_args["dataset"], stale = _within_limit(demo_args["dataset"], today)
     # 總管 2026-10-13 裁決：過期那幾檔的字面（HLD-1 卡尾、HLD-5）另寫，天數 10 寫死在這裡當期望值（被測的是共用常數）。
+    # 2026-10-18 第五件（客戶裁示 BL-0373，`DEC-2026-10-18-01`）：正式模式取數失敗不判成資料未備
+    # （`logic._STRICT_FETCH`，`strict_fetch_failure=True`）；示範模型同樣開這個開關，其餘仍須逐字相同。
     demo = logic.build_page_model(**demo_args, open_fund=open_fund,
-                                  nav_not_ready_codes=stale, nav_not_ready_days=10)
+                                  nav_not_ready_codes=stale, nav_not_ready_days=10, strict_fetch_failure=True)
     fresh = live.nav_freshness(args["dataset"], _prov(args["dataset"]), today=today)
     expected = live._apply_freshness(live.apply_live_notes(_scrub(demo), today=today), fresh)
     got = _build(**args, open_fund=open_fund, today=today)

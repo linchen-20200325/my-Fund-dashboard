@@ -393,7 +393,10 @@ _BASELINE = {
     #    示範模式值 17 格一格不變（Python 3.11，與 CI 同版）。
     "nothr": ("c68b9f4e5146", "47b377ca9adc"),  # 正式模式舊值 ~~"ec14e7c0a09e"~~（2026-10-16 第 2 點）
     "empty": ("9fed2f3a1d0a", "449550161c02"),  # 正式模式舊值 ~~"de19a6aaee05"~~（2026-10-16 第 2 點）
-    "emptyfail": ("87d83bb69775", "2e66e55e29f0"),  # 正式模式舊值 ~~"3231755732ce"~~（2026-10-16 第 2 點）
+    # ⚠️ 2026-10-18（客戶裁示 BL-0373，`DEC-2026-10-18-01`）：emptyfail、twofail 兩格的正式模式值換新（有意識的更正，不是漏刪）；
+    #    換之前先證明：同一份正式模式輸入只把 `strict_fetch_failure` 關掉重算，差異只在 emptyfail 的 HLD-6、twofail 的 HLD-7
+    #    （`_state` 資料未備 → 系統錯誤、`_tone`、`summary_text`、`detail_lines`），其他 0 處；示範模式 17 格一格未動（Python 3.11）。
+    "emptyfail": ("87d83bb69775", "3e7974d12e29"),  # 正式模式舊值 ~~"3231755732ce"~~（2026-10-16 第 2 點）、~~"2e66e55e29f0"~~（2026-10-18 BL-0373）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"7a6b9977ea59"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
@@ -422,7 +425,7 @@ _BASELINE = {
     "tiedstate": ("d709a0a69eb0", "8a12f17ec5e3"),  # 正式模式舊值 ~~"a77ee9b3cb77"~~（2026-10-16 第 2 點）
     # ⚠️ 2026-10-09（客戶裁示：S6b-3 正式畫面拿掉「重新取數」）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"fdc3c45c05f8"~~。
     #    17 個情境中只有示範模式掛得出「重新取數」的 srcmiss、fetchfail、tiedstate、twofail 四格的正式模式值改變；示範模式值一格不變（3.11）。
-    "twofail": ("9d25e1774901", "c82712ae56a9"),  # 正式模式舊值 ~~"3a1a5c083b7a"~~（2026-10-16 第 2 點）
+    "twofail": ("9d25e1774901", "ea63fc5a4b58"),  # 正式模式舊值 ~~"3a1a5c083b7a"~~（2026-10-16 第 2 點）、~~"c82712ae56a9"~~（2026-10-18 BL-0373）
     # ⚠️ 2026-10-13（客戶裁示：淨值日距今 > 10 天 → 資料未備）：只換正式模式那一格（有意識的更正，不是漏刪）；舊值 ~~"6294a2551be9"~~。
     #    原因是本檔固定的 today 由 10-02 改 09-28（見 `_TODAY`），不是程式在 10 天以內那條路徑改了：
     #    以 `6e3f467`（裁示前）的程式在 today=09-28 重算，得到與本格逐字相同的值；在 today=10-02 重算，舊值原樣重現。
@@ -510,10 +513,15 @@ def test_T3正_持倉讀取失敗_全頁不說空_四塊印出原文_HLD8不掛�
     assert _block(model, "HLD-0")["_tone"] == "紅"
 
 
-def test_T3正_持倉讀取失敗_HLD2照自己的來源欄畫灰_資料未備():
+def test_T3正_持倉讀取失敗_HLD2_正式模式是取數失敗_示範模式照舊資料未備():
+    """客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：持倉表讀不到是取數失敗，不判成資料未備（正式模式）。
+    舊名「…HLD2照自己的來源欄畫灰_資料未備」在寫下當時照總管 2026-10-05 裁定；被推翻的是「讀不到可以畫成資料未備」。
+    示範模式（`strict_fetch_failure` 預設 False）照舊。"""
     hld2 = _block(_build(_s2()), "HLD-2")
-    assert (hld2["_state"], hld2["_tone"], hld2["summary_text"]) == (logic.STATE_MISSING, "灰", logic.ND_TEXT)
-    assert logic.ND_TEXT in hld2["detail_lines"]
+    assert (hld2["_state"], hld2["_tone"], hld2["summary_text"]) == (logic.STATE_ERROR, "紅", _FF_H)
+    assert _FF_H in hld2["detail_lines"] and logic.ND_TEXT not in hld2["detail_lines"]
+    demo = _block(logic.build_page_model(copy.deepcopy(_s2()), demo_hint=False), "HLD-2")
+    assert (demo["_state"], demo["_tone"], demo["summary_text"]) == (logic.STATE_MISSING, "灰", logic.ND_TEXT)
 
 
 def test_真的沒有持倉又設定讀取失敗_不說未設定_照說沒有持倉():

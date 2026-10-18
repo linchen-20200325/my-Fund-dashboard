@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """客戶 2026-10-18 裁示（`docs/DECISIONS.md` `DEC-2026-10-18-01`；44 第七節第三小節之九）的純函式守衛。
 
-- BL-0371：沒有異常時省略整體正常宣告（`MKT-0` 三塊皆 ok、`SET-0` 兩個計數皆為零）。
+- BL-0371：沒有異常時省略整體正常宣告（`MKT-0` 三塊皆 ok、`SET-0` 兩個計數皆為零；示範與正式模式皆同）。
 - BL-0373：取數失敗＝⛔、資料未備＝◇、不適用＝⬜（`MKT-7` 取數失敗的鍵、`SET-1` 只有失敗紀錄的那一類）。
 - S1／S4／C1 的燈判定見 `tests/ui_v2/test_set_reshape_logic.py`、`tests/ui_v2/test_set_live_logic.py`；C2 見本檔與
   `tests/ui_v2/test_rulings_2026_10_18_page.py`。**C3 未裁，本檔不碰**（`test_未設定_導覽照舊顯示_它指向的重新取數停用` 照舊）。
-只改正式模式；示範模式模型逐位元組不變（本檔最後一條）。不需要 streamlit（fast lane）。
+BL-0373 只改正式模式；示範模式模型除 BL-0371 那兩句外逐位元組不變（本檔最後一條）。不需要 streamlit（fast lane）。
 """
 
 from __future__ import annotations
@@ -31,45 +31,26 @@ def _mkt(ds):
 
 
 def test_鏡像常數逐字等於真身():
-    light = mkt_logic.find_block(_mkt(mkt_fixtures.dataset_all_ok()), "MKT-0")
-    assert light["text"] == sections.MKT_TEXT_ALL_OK
     assert mkt_logic._status_badge("取數失敗") == sections.MKT_BADGE_FETCH_FAILED
     assert mkt_logic._status_badge("資料未備")["text"] == sections.MKT_BADGE_MISSING_TEXT
     row = mkt_logic.find_block(_mkt(mkt_fixtures.dataset_all_ok()), "MKT-7")["_rows"][0]
     assert set(sections.MKT7_CELLS) <= set(row)
-    assert sections.SET_TEXT_ALL_CLEAR == set_logic.TEXT_ALL_OK
+    assert mkt_logic.empty_source_text(["market_indicator"]) == sections.MKT6_EMPTY_LINE
 
 
-# ───────────────────────── BL-0371：MKT-0 ─────────────────────────
+# ───────────────────────── BL-0371：MKT-0（示範與正式模式皆同，logic 本身不寫） ─────────────────────────
 
 
 @pytest.mark.parametrize("sign", [1, -1])
-def test_BL0371_MKT0三塊皆ok_燈上不寫資料齊_燈色照舊灰(sign):
-    model = _mkt(mkt_fixtures.dataset_all_ok(sign))
-    before = copy.deepcopy(mkt_logic.find_block(model, "MKT-0"))
-    assert sections.mkt_conclusion(model) is True
-    light = mkt_logic.find_block(model, "MKT-0")
-    assert light["text"] == "" and light["_tone"] == before["_tone"] == "灰"
-    assert {k: v for k, v in light.items() if k != "text"} == {k: v for k, v in before.items() if k != "text"}
+def test_BL0371_MKT0三塊皆ok_燈上不寫文案_燈色照舊灰(sign):
+    light = mkt_logic.find_block(_mkt(mkt_fixtures.dataset_all_ok(sign)), "MKT-0")
+    assert light["text"] == "" and light["_tone"] == "灰" and light["buttons"] == []
 
 
-@pytest.mark.parametrize("factory", [
-    mkt_fixtures.dataset_mkt1_one_key_missing, mkt_fixtures.dataset_mkt1_fetch_failed,
-    mkt_fixtures.dataset_mkt2_both_keys_missing, mkt_fixtures.dataset_mkt3_unit_mismatch,
-    mkt_fixtures.dataset_two_cards_tied, mkt_fixtures.dataset_all_empty,
-])
-def test_BL0371_MKT0有例外或三塊皆空_一字不動(factory):
-    model = _mkt(factory())
-    before = copy.deepcopy(model)
-    assert sections.mkt_conclusion(model) is False
-    assert model == before
-
-
-def test_BL0371_MKT0三塊皆ok而文案不是預期字面_當場炸():
-    model = _mkt(mkt_fixtures.dataset_all_ok())
-    mkt_logic.find_block(model, "MKT-0")["text"] = "別的字"
-    with pytest.raises(ValueError):
-        sections.mkt_conclusion(model)
+@pytest.mark.parametrize("name", sorted(n for n in vars(mkt_fixtures) if n.startswith("dataset_")))
+def test_BL0371_MKT0全固定資料集_燈不寫資料齊(name):
+    light = mkt_logic.find_block(_mkt(getattr(mkt_fixtures, name)()), "MKT-0")
+    assert "資料齊" not in light["text"] and "正常" not in light["text"], (name, light["text"])
 
 
 # ───────────────────────── BL-0373：MKT-7 ─────────────────────────
@@ -137,6 +118,83 @@ def test_BL0373_MKT7冪等():
     assert model == once
 
 
+def test_BL0373_MKT6每一個鍵都是取數失敗而表上沒有觀測_表尾寫取數失敗():
+    ds = dict(mkt_fixtures.dataset_mkt1_fetch_failed(), rows=[])
+    ds["errors"] = {k: "HTTPSConnectionPool(host='example.invalid'): Max retries exceeded" for k in mkt_logic.all_keys(ds)}
+    model = _mkt(ds)
+    assert sections.MKT6_EMPTY_LINE in mkt_logic.find_block(model, "MKT-6")["detail_lines"]
+    sections.mark_mkt7_fetch_failed(model, ds["errors"].keys())
+    lines = mkt_logic.find_block(model, "MKT-6")["detail_lines"]
+    assert sections.LINE_FETCH_FAILED in lines and sections.MKT6_EMPTY_LINE not in lines
+
+
+def test_BL0373_MKT6成因混合_有真正的資料未備_表尾照舊資料未備():
+    ds = dict(mkt_fixtures.dataset_mkt1_fetch_failed(), rows=[])   # 只有 vol_index 失敗，其餘鍵沒有失敗紀錄
+    model = _mkt(ds)
+    sections.mark_mkt7_fetch_failed(model, ds["errors"].keys())
+    lines = mkt_logic.find_block(model, "MKT-6")["detail_lines"]
+    assert sections.MKT6_EMPTY_LINE in lines and sections.LINE_FETCH_FAILED not in lines
+
+
+# ───────────────────────── BL-0373：持倉體檢（`strict_fetch_failure` 只有正式模式會開） ─────────────────────────
+
+from ui_v2.hld import fixtures as hld_fixtures  # noqa: E402
+from ui_v2.hld import logic as hld_logic  # noqa: E402
+
+
+def _hld(name, *, strict, mutate=None):
+    args = copy.deepcopy(hld_fixtures.scenario(name))
+    if mutate:
+        mutate(args["dataset"])
+    return hld_logic.build_page_model(**args, demo_hint=False, strict_fetch_failure=strict)
+
+
+def _no_series(ds):
+    ds["nav"], ds["dividend"] = [], []
+    ds["errors"] = {"nav": "ConnectionError: 淨值讀取逾時（測試用原文）"}
+
+
+def test_BL0373_HLD6兩張表都沒有列而來源取數失敗_正式模式取數失敗_示範照舊():
+    strict = hld_logic.find_block(_hld("full", strict=True, mutate=_no_series), "HLD-6")
+    demo = hld_logic.find_block(_hld("full", strict=False, mutate=_no_series), "HLD-6")
+    msg = hld_logic.fetch_failed_text("ConnectionError: 淨值讀取逾時（測試用原文）")
+    assert (strict["_state"], strict["summary_text"]) == (hld_logic.STATE_ERROR, msg)
+    assert msg in strict["detail_lines"] and not any("資料未備" in line for line in strict["detail_lines"])
+    assert demo["_state"] == hld_logic.STATE_MISSING
+
+
+def test_BL0373_HLD6兩張表都沒有列而沒有任何失敗_照舊資料未備():
+    def empty(ds):
+        ds["nav"], ds["dividend"] = [], []
+    assert hld_logic.find_block(_hld("full", strict=True, mutate=empty), "HLD-6")["_state"] == hld_logic.STATE_MISSING
+
+
+def test_BL0373_HLD7四塊沒有一塊出數而成因有取數失敗_正式模式取數失敗_示範照舊():
+    strict = hld_logic.find_block(_hld("twofail", strict=True), "HLD-7")
+    demo = hld_logic.find_block(_hld("twofail", strict=False), "HLD-7")
+    assert strict["_state"] == hld_logic.STATE_ERROR and strict["summary_text"].startswith("⛔ 取數失敗：")
+    assert strict["_rows"] == demo["_rows"]   # 輸入欄照列，列一格不動
+    assert demo["_state"] == hld_logic.STATE_MISSING
+
+
+def test_BL0373_HLD2持倉表讀不到_正式模式取數失敗_示範照舊():
+    def holding_fail(ds):
+        ds["holding"] = []
+        ds["errors"] = {"holding": "ConnectionError: 持倉讀取逾時（測試用原文）"}
+    strict = hld_logic.find_block(_hld("full", strict=True, mutate=holding_fail), "HLD-2")
+    demo = hld_logic.find_block(_hld("full", strict=False, mutate=holding_fail), "HLD-2")
+    assert strict["_state"] == hld_logic.STATE_ERROR and demo["_state"] == hld_logic.STATE_MISSING
+
+
+def test_BL0373_持倉體檢示範模式全部情境_開關關著時與動手前逐位元組相同():
+    """示範模式不開 `strict_fetch_failure`；同一組情境開與不開，只有上面三塊可能不同（其餘塊逐字相同）。"""
+    for name in hld_fixtures.ALL_SCENARIO_NAMES:
+        on, off = _hld(name, strict=True), _hld(name, strict=False)
+        for a, b in zip(on["blocks"], off["blocks"]):
+            if a["code"] not in ("HLD-2", "HLD-6", "HLD-7"):
+                assert a == b, (name, a["code"])
+
+
 # ───────────────────────── BL-0373：SET-1（`kind_time_from_log` 只有正式模式會給） ─────────────────────────
 
 
@@ -201,7 +259,7 @@ def test_BL0373_latest_failed_record_層級不在四個之內就炸():
 # ───────────────────────── 示範模式：模型逐位元組不變 ─────────────────────────
 
 
-def test_示範模式SET與MKT模型逐位元組不變():
+def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不變():
     """本批只改正式模式。示範模式模型（設定與診斷 17 情境 × 存檔失敗開關、市場總覽各固定資料集）取 md5，
     基準值於 2d98692a（本批動手前）量得；`kind_time_from_log` 只有正式模式會給，示範模式走不到 BL-0373 那一支。"""
     out = []
@@ -212,5 +270,24 @@ def test_示範模式SET與MKT模型逐位元組不變():
         out.append(["mkt", name, _mkt(getattr(mkt_fixtures, name)())])
     # 模型裡有 `set`（順序隨雜湊種子變），序列化前排序，md5 才可重現。
     default = lambda o: sorted(o, key=repr) if isinstance(o, (set, frozenset)) else repr(o)  # noqa: E731
-    digest = hashlib.md5(json.dumps(out, ensure_ascii=False, sort_keys=True, default=default).encode()).hexdigest()
+    # 客戶 2026-10-18 裁示 BL-0371（`DEC-2026-10-18-01`）不限正式模式：示範模式 `MKT-0` 三塊皆 ok、`SET-0` 兩個計數皆為零時
+    # 燈上不寫文案。證明「示範模型只差這兩句」：把那兩句還原成舊字面，md5 必須回到動手前（2d98692a）的基準值。
+    restored = copy.deepcopy(out)
+    changed = 0
+    for entry in restored:
+        model = entry[-1]
+        if entry[0] == "set":
+            light = set_logic.find_block(model, "SET-0")
+            if light["_state"] == "齊":
+                assert light["text"] == ""
+                light["text"] = "資料齊、來源皆可達"
+                changed += 1
+        else:
+            light = mkt_logic.find_block(model, "MKT-0")
+            if all(mkt_logic.find_block(model, c)["_state"] == "ok" for c in ("MKT-1", "MKT-2", "MKT-3")):
+                assert light["text"] == ""
+                light["text"] = "三張卡的資料齊"
+                changed += 1
+    assert changed > 0
+    digest = hashlib.md5(json.dumps(restored, ensure_ascii=False, sort_keys=True, default=default).encode()).hexdigest()
     assert digest == "e44fc6ade09b98d81979ff1ace6174c2", digest
