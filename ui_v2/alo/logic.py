@@ -1507,7 +1507,8 @@ def _build_alo6(dataset) -> dict:
         # ◆／◇ 小批（44 第七節第三小節之七其四第 2 條）：這一格的 ⬜ 出自資料未備那一支 → 記在 `_missing_cells`，正式模式畫 ◇（`ui_v2/symbols.py`）；判定不變。
         # 保單名查不到 ＝ 保單表沒有這一列；基準值缺而且基準已選 ＝ `basis_value` 的缺值那幾支（皆為資料未備）；
         # 基準未選 ＝ 不適用，照舊 ⬜。
-        missing_cells = [] if holding["policy_id"] in policy_name else ["policy_text"]
+        # 直接持有（`DIRECT`）不記，比照持倉體檢單檔展開（獨立稽核回修）。
+        missing_cells = [] if holding["policy_id"] in policy_name or holding["policy_id"] == "DIRECT" else ["policy_text"]
         if value is None and basis is not None:
             missing_cells.append("value_text")
         if missing_cells:

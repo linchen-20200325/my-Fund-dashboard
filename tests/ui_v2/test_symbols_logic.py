@@ -439,3 +439,59 @@ def test_symbols不import任何模組():
     src = (_ROOT / "ui_v2" / "symbols.py").read_text(encoding="utf-8")
     imports = [l for l in src.split("\n") if re.match(r"\s*(import|from)\s", l)]
     assert imports == ["from __future__ import annotations"], imports
+
+
+def test_狀態徽章資料未備的圖示改菱形_文字與其他徽章不動():
+    from ui_v2.set import logic as S
+
+    nodes = [S.status_badge("資料未備"), S.status_badge("不適用"), S.status_badge("取數失敗")]
+    before = copy.deepcopy(nodes)
+    symbols.mark_missing({"badges": nodes})
+    assert nodes[0] == {**before[0], "glyph": "◇"} and nodes[0]["text"] == "資料未備"
+    assert nodes[1:] == before[1:]
+
+
+def test_設定與診斷模型_資料未備徽章全數換成菱形():
+    hits = 0
+    for key, model in _all_models().items():
+        if key[1] != "set":
+            continue
+        after = _applied(model)
+        for _c, node in _cells(after):
+            if node.get("_kind") == "狀態" and node.get("text") == "資料未備" and "glyph" in node:
+                assert node["glyph"] == "◇", key
+                hits += 1
+    assert hits, "沒有帶圖示的資料未備徽章 —— 會變成空掃"
+
+
+def test_市場總覽_取數失敗而沒有觀測的鍵_四格照舊方塊():
+    from ui_v2.mkt import fixtures as MF
+    from ui_v2.mkt import logic as M
+
+    checked = 0
+    base = next(d for d in MF.all_datasets().values() if d.get("rows"))
+    built = copy.deepcopy(base)
+    built["rows"] = [r for r in built["rows"] if r["indicator_key"] != "vol_index"]
+    built["errors"] = {**(built.get("errors") or {}), "vol_index": "fetch_url returned None: ^VIX (kind=unreachable)"}
+    for dataset in [*MF.all_datasets().values(), built]:
+        errors = dataset.get("errors") or {}
+        for row in M.find_block(M.build_page_model(dataset), "MKT-7")["_rows"]:
+            if row["obs_text"] == "⬜" and row["indicator_key"] in errors:
+                assert "_missing_cells" not in row, row
+                after = {"blocks": [{"code": "MKT-7", "_rows": [copy.deepcopy(row)]}]}
+                symbols.apply(after)
+                cells = after["blocks"][0]["_rows"][0]
+                assert [cells[k] for k in ("obs_text", "fetched_text", "tier_text", "delay_text")] == ["⬜"] * 4
+                checked += 1
+    assert checked, "fixtures 裡沒有取數失敗而沒有觀測的鍵 —— 會變成空掃"
+
+
+def test_資產配置_直接持有不記保單格():
+    from ui_v2.alo import fixtures as AF
+    from ui_v2.alo import logic as A
+
+    dataset = AF.scenario("full")
+    dataset["policy"] = [p for p in dataset["policy"] if p["policy_id"] != "DIRECT"]
+    rows = A.find_block(A.build_page_model(dataset), "ALO-6")["_rows"]
+    direct = [r for r in rows if r["policy_text"] == "⬜"]
+    assert direct and all("policy_text" not in (r.get("_missing_cells") or ()) for r in direct), direct

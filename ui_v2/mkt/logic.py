@@ -1269,8 +1269,10 @@ def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothin
                     "tier_text": "⬜",
                     "delay_text": "⬜",
                     "badges": [_status_badge("資料未備")],
-                    # 這個鍵一筆觀測也沒有 ＝ 資料未備（其四第 2 條；正式模式畫 ◇）。
-                    "_missing_cells": ("obs_text", "fetched_text", "tier_text", "delay_text"),
+                    # 這個鍵一筆觀測也沒有、而且不是取數失敗 ＝ 資料未備（其四第 2 條；正式模式畫 ◇）。
+                    # 取數失敗的鍵成因是失敗、不是資料未備，四格照舊 ⬜（獨立稽核 M1；徽章字面是基底判讀，本批不動，BL-0373）。
+                    **({} if key in (dataset.get("errors") or {}) else
+                       {"_missing_cells": ("obs_text", "fetched_text", "tier_text", "delay_text")}),
                 }
             )
             continue

@@ -12,7 +12,8 @@
    偏離筆數怎麼算、容許帶內外怎麼判、門檻與容許帶由誰輸入，一個都不碰 —— 本模組只認 logic 已經交出的黃燈。
    持倉體檢那一行「黃燈說的是……」在這裡已經沒有黃燈，改寫成同義的一句（`HLD0_NOTE_FROM`／`HLD0_NOTE_TO`）。
 2. **◇ 資料未備**（其四）：畫面上的「`⬜ 資料未備`」（卡片 `資料未備` 主值、空狀態 `來源缺`、各塊寫資料未備的主值與列尾）
-   一律改成「`◇ 資料未備`」；空狀態 `來源缺` 的佔位圖示 `⬜` 改成 `◇`。顏色照舊（灰）。
+   一律改成「`◇ 資料未備`」；空狀態 `來源缺` 的佔位圖示 `⬜` 改成 `◇`；狀態徽章「資料未備」帶的圖示 `⬜` 改成 `◇`
+   （徽章文字不動）。顏色照舊（灰）。
 3. **表格內單獨一個 `⬜` 的缺值格**（其四第 2 條；總管 2026-10-17 裁定納入本批）：成因**不看字面、看 logic 裡產生那一格的分支** ——
    各頁 logic 在資料未備那幾支把格名記在 `_missing_cells`（列或值節點上）或 `_missing_fields`（持倉體檢單檔展開的欄名），
    本模組只把那幾格的 `⬜` 換成 `◇`；沒有記的格（不適用、未設定、取數失敗、成因分不清）照舊 `⬜`。
@@ -61,6 +62,10 @@ _EMPTY_KIND_SOURCE_MISSING = "來源缺"
 MISSING_CELLS_KEY = "_missing_cells"
 MISSING_FIELDS_KEY = "_missing_fields"
 FIELDS_KEY = "_fields"
+# 狀態徽章「資料未備」帶的圖示（設定與診斷頁的徽章帶 `glyph`，畫成「⬜ 資料未備」）：圖示換 ◇，徽章文字不動
+# （44 第五節第二小節七個字面值照舊；獨立稽核 M2）。
+_BADGE_KIND = "狀態"
+_BADGE_TEXT_MISSING = "資料未備"
 
 
 # ───────────────────────── ◆ 需要注意 ─────────────────────────
@@ -96,6 +101,10 @@ def _visit(node, own_key_private: bool) -> int:
     count = 0
     if isinstance(node, dict):
         if node.get("_empty_kind") == _EMPTY_KIND_SOURCE_MISSING and node.get("glyph") == SYMBOL_UNDECIDABLE:
+            node["glyph"] = SYMBOL_MISSING
+            count += 1
+        if (node.get("_kind") == _BADGE_KIND and node.get("text") == _BADGE_TEXT_MISSING
+                and node.get("glyph") == SYMBOL_UNDECIDABLE):
             node["glyph"] = SYMBOL_MISSING
             count += 1
         for cell in node.get(MISSING_CELLS_KEY) or ():

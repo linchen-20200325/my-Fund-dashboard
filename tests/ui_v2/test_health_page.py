@@ -365,3 +365,11 @@ def test_正式模式偏離的結論燈_不著色_以菱形需要注意呈現(pa
     raw = [m.value for m in at.main.markdown if f'data-block="{code}"' in m.value][0]
     assert HT.STATE_WARN not in raw and HT.TEXT_PRIMARY in raw, raw[:300]
     assert "黃燈" not in " ".join(P.markdown_text(m.value) for m in at.main.markdown)
+
+
+@pytest.mark.parametrize("name", sorted(P.SCRIPTS["set"]))
+def test_設定與診斷正式頁_畫面上沒有方塊資料未備(name):
+    """2026-10-17 ◆／◇ 小批獨立稽核 M2：狀態徽章「資料未備」帶的圖示改 ◇（`ui_v2/symbols.py`），文字不動。"""
+    at, _ = _run(P.SCRIPTS["set"][name])
+    text = " ".join(P.screen_texts(at))
+    assert "⬜ 資料未備" not in text, name

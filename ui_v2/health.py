@@ -278,6 +278,8 @@ def trim_light_echo(block: dict) -> bool:
       bizexc/21、noexceed/21、other_window/21、onenav/21、tiedstate/10、tiedstate/21、full_then_badrange/21）、
       持倉體檢「⬜ 不適用」2 個（bizexc/10、onenav/10）、資產配置 nobasis、nofx 兩個 ⬜，
       資產配置 holdfail、fxfail、settingfail 三個「⛔ 取數失敗」整句不畫，共 16 處。
+    → 2026-10-17 ◆／◇ 小批落地後（狀態更新，不是漏刪）：正式模式的「⬜ 資料未備」在本函式之前已改成「◇ 資料未備」，
+      上列持倉體檢「⬜ 資料未備」9 處自此不再觸發（燈仍是 ⬜、句首是 ◇）；其餘各處照舊。上列量測值在寫下當時為真。
 
     只動 `text` 這一個顯示字串：`glyph`、`state_word`、`_tone`、`_state` 與任何判定一個都不碰（護欄 2）；
     圖示不同（例：燈 ⬜、句首 ◇）不動；句首沒有圖示不動。
