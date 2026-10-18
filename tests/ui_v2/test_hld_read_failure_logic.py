@@ -301,8 +301,12 @@ def _digest(obj) -> str:
     """與 `test_hld_logic.py::_cell_digest` 同一套正規化：dict 鍵排序、set 轉排序後的 list、tuple 轉 list、
     非 JSON 型別取 `repr`。"""
     def scrub(value):
+        # ◆／◇ 小批（2026-10-17）：logic 新增的呈現標記鍵（`_missing_cells`、`_missing_fields`，只告訴正式模式哪幾格畫 ◇）
+        # 不算進摘要 —— 本守衛釘的是判定與既有字面，標記本身的對錯由 `tests/ui_v2/test_symbols_logic.py` 驗。
+        # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(value, dict):
-            return {k: scrub(v) for k, v in sorted(value.items())}
+            return {k: scrub(v) for k, v in sorted(value.items())
+                    if k not in ("_missing_cells", "_missing_fields")}
         if isinstance(value, (list, tuple)):
             return [scrub(v) for v in value]
         if isinstance(value, set):

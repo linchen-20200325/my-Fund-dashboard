@@ -1180,10 +1180,14 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=Non
     blank_notes = []
     for row in rows:
         cells = {column: row.get(column) for column in MKT6_COLUMNS}
+        missing_cells = []
         for column in MKT6_COLUMNS:
             if cells[column] is None or cells[column] == "":
                 cells[column] = "⬜"
+                missing_cells.append(column)   # 這一筆觀測沒有交出這一欄 ＝ 資料未備（其四第 2 條；正式模式畫 ◇）
                 blank_notes.append(f"{row.get('indicator_key')} / {row.get('obs_date')}")
+        if missing_cells:
+            cells["_missing_cells"] = tuple(missing_cells)
         cells["_row_badge"] = "修正過" if row.get("is_revised") else ""
         table_rows.append(cells)
 
@@ -1265,6 +1269,8 @@ def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothin
                     "tier_text": "⬜",
                     "delay_text": "⬜",
                     "badges": [_status_badge("資料未備")],
+                    # 這個鍵一筆觀測也沒有 ＝ 資料未備（其四第 2 條；正式模式畫 ◇）。
+                    "_missing_cells": ("obs_text", "fetched_text", "tier_text", "delay_text"),
                 }
             )
             continue
