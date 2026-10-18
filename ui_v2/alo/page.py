@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from .. import health, health_view, plain, symbols
+from .. import health, health_view, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 _log = logging.getLogger(__name__)
@@ -44,20 +44,26 @@ def _tone(value) -> str:
     return theme.tone_hex(value)
 
 
-def _breakpoint_edges(layer: int) -> list:
-    """掃出該層欄數改變的寬度邊界。數字只有一個真相源：logic 那支已被測試釘住的純函式。"""
+def _breakpoint_edges(layer: int, columns_of=None) -> list:
+    """掃出該層欄數改變的寬度邊界。數字只有一個真相源：logic 那支已被測試釘住的純函式。
+    `columns_of`：選填（寬度 → 欄數）；不傳時用 `logic.layer_columns(layer, …)`。"""
+    columns_of = columns_of or (lambda width: logic.layer_columns(layer, width))
     edges = []
-    previous = logic.layer_columns(layer, 1)
+    previous = columns_of(1)
     for width in range(2, _MAX_PROBE_WIDTH + 1):
-        current = logic.layer_columns(layer, width)
+        current = columns_of(width)
         if current != previous:
             edges.append((width, current))
             previous = current
     return edges
 
 
-def _grid_css() -> str:
-    """把 logic 的斷點翻成 CSS media query（`44` 2.1 量的是視窗寬度的 CSS 像素）。"""
+def _grid_css(layer3_three: bool = False) -> str:
+    """把 logic 的斷點翻成 CSS media query（`44` 2.1 量的是視窗寬度的 CSS 像素）。
+
+    `layer3_three`（Phase 3 P1-④，正式模式）：層 3 有三塊（`ALO-1` 移入），照 44 第二節第一小節斷點表
+    （→ 2026-10-17 第二輪那一句）三塊並排同一列、`769`～`1279` 第三塊換列 —— 欄數改用 `logic.columns_for_width`。
+    示範模式照舊兩塊（`logic.layer_columns`）。"""
     blocks = [
         """
         [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 12px; }
@@ -70,7 +76,8 @@ def _grid_css() -> str:
     # 層 2／層 3 各包在一個帶 key 的容器裡，Streamlit 會給它 `st-key-<key>` 這個 class，
     # media query 靠它只作用在該層那一排欄（其餘排法照上面那一段單欄）。
     for layer, marker in ((2, "st-key-alo_layer2"), (3, "st-key-alo_layer3")):
-        for width, columns in _breakpoint_edges(layer):
+        columns_of = logic.columns_for_width if (layer == 3 and layer3_three) else None
+        for width, columns in _breakpoint_edges(layer, columns_of):
             share = 100.0 / columns
             blocks.append(
                 f"""
@@ -605,7 +612,7 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         raise ValueError("settings_page 只給正式模式（要與 load_live 一起傳）")
     if load_live is None and mask_error is not None:
         raise ValueError("mask_error 要與 load_live 一起傳")
-    _html(f"<style>{_base_css()}{_grid_css()}</style>")
+    _html(f"<style>{_base_css()}{_grid_css(layer3_three=load_live is not None)}</style>")
 
     ctx = None
     if load_live is None:
@@ -665,6 +672,10 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date")
         )
+        # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
+        # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
+        sections.relayer(model, "alo")
+        attention = sections.attention_items(model, "alo")
         key = "live"
     plain_mode = load_live is not None
 
@@ -692,16 +703,30 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
     with st.container(key="alo_layer2"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+                if plain_mode and code == sections.ALO_SCENARIO_CODE:
+                    # 卡片本體屬層 2；預設只畫一枚 `展開` 類入口，按下後才顯示試算畫面（之八其一 (a-1) 第 4 條）。
+                    with st.expander(sections.ALO_SCENARIO_ENTRY, expanded=False):
+                        _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+                else:
+                    _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     if plain_mode:
-        # ④詳細資料：本批只換字、不重排（③需要注意與 ③④ 的版面屬 P1-④）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
+        # ③需要注意：`ALO-2` 已算出的帶外類別；沒有就整段不畫。
+        health_view.render_attention(attention, tone_hex=theme.tone_hex, label_class="alo-layer-label")
+        # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         _html(f'<div class="alo-layer-label">{plain.LABEL_DETAILS}</div>')
     _html(f'<div class="alo-layer-label">{label3}</div>')
     with st.container(key="alo_layer3"):
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 3)):
             with column:
-                _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+                if plain_mode and code == "ALO-1":
+                    # 移入 ④「操作」之後是一枚預設收合的展開區；摘要那一行只拼卡上已有的字（`sections.alo1_summary`）。
+                    block = logic.find_block(model, code)
+                    with st.expander(f"{block['title']}　—　{sections.alo1_summary(block)}",
+                                     expanded=block["_default_open"]):
+                        _RENDERERS[code](block, key, ctx, plain_mode=plain_mode)
+                else:
+                    _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     _html(f'<div class="alo-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):

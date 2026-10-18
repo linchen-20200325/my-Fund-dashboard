@@ -1927,7 +1927,8 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
         text = TEXT_NO_MATCH
     else:
         text = conclusion_text(count)
-    if undet_count and tone != "紅" and has_rules:
+    shown_undet = undet_count if (undet_count and tone != "紅" and has_rules) else 0
+    if shown_undet:
         text += undet_tail(undet_count)
 
     # `44` 空狀態欄逐字：「N 為零 → 文案「目前條件下沒有符合的基金」，並列出目前生效的條件列」。
@@ -1984,6 +1985,10 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
     #    這裡把 `_block()` 依四狀態算出來的 `_tone` 覆寫掉，讓這一塊只有**一個**顏色，
     #    **不留兩個會各說各話的欄位**給畫面層挑。
     block["_tone"] = tone
+    if shown_undet:
+        # Phase 3 P1-④：燈上「另有 M 檔無法判定」那個 M；正式模式 ③需要注意讀它（`ui_v2/sections.py`），不另算。
+        # 只在寫進燈時才放這個鍵 —— 示範模式 `undet_count` 恆為 0，模型因此逐位元組不變（`test_前向釘樁_整頁逐格釘住`）。
+        block["_undet_count"] = shown_undet
     return block
 
 

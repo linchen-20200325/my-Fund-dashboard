@@ -51,6 +51,8 @@ BLOCK_NAMES = {
 # 四段式的段名（44 第七節第三小節之七其一）。層 3、層 4 併入 ④，在其中各自一個小標。
 SECTION_CONCLUSION = "①結論"
 SECTION_KEY_NUMBERS = "②關鍵數字"
+# ③需要注意（不是層、不是塊；之七其一第 2 條）—— Phase 3 P1-④ 起正式模式畫出來（`ui_v2/sections.py`）。
+SECTION_ATTENTION = "③需要注意"
 SECTION_DETAILS = "④詳細資料"
 SUBSECTION_OPERATIONS = "操作"
 SUBSECTION_EVIDENCE = "證據／來源"
@@ -60,9 +62,10 @@ LAYER_WORDS = {
     "3": f"{SECTION_DETAILS}「{SUBSECTION_OPERATIONS}」",
     "4": f"{SECTION_DETAILS}「{SUBSECTION_EVIDENCE}」",
 }
-# 頁面上四個段標籤（取代 `層 1　結論` 等；本批不重排 ③④ —— 那是 P1-④）。
+# 頁面上四個段標籤（取代 `層 1　結論` 等）。~~本批不重排 ③④ —— 那是 P1-④~~ → P1-④ 起另有 ③（`LABEL_ATTENTION`）。
 LABEL_LAYER1 = SECTION_CONCLUSION
 LABEL_LAYER2 = SECTION_KEY_NUMBERS
+LABEL_ATTENTION = SECTION_ATTENTION
 LABEL_DETAILS = f"{SECTION_DETAILS}（預設收合）"
 LABEL_LAYER3 = SUBSECTION_OPERATIONS
 LABEL_LAYER4 = SUBSECTION_EVIDENCE
