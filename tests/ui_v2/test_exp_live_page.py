@@ -30,7 +30,7 @@ pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 st
 
 import _exp_live_stub as STUB  # noqa: E402
 import _exp_wired_fixture as WF  # noqa: E402
-from ui_v2 import plain  # noqa: E402
+from ui_v2 import plain, sections  # noqa: E402
 from ui_v2.exp import live, logic, page  # noqa: E402
 
 # Phase 3 P0-①（44 第七節第三小節之七其二）：正式模式一般畫面的欄位鍵改中文名、失敗原文移到跨頁的原始訊息、
@@ -428,7 +428,11 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
             with _ui_v2_chromium.streamlit_server(_wired_app(tmp_path)) as base:
                 tab = browser.new_page(viewport={"width": 1600, "height": 2200})
                 tab.goto(base + "/", wait_until="networkidle")
-                tab.wait_for_selector("table.exp-table", timeout=60000)
+                # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1) 第 3 條）：EXP-2／EXP-3 移進 ④ 預設收合的「結果清單」框
+                # （Streamlit 展開區 ＝ `details > summary`）。先點開那一枚，再等候選表可見；下面要驗的內容一條未減。
+                result_box = tab.locator("details", has=tab.locator("summary", has_text=sections.EXP_RESULT_TITLE)).first
+                result_box.locator("summary").first.click(timeout=60000)
+                result_box.locator("table.exp-table").first.wait_for(state="visible", timeout=60000)
                 tab.wait_for_timeout(1500)
                 dom = tab.evaluate(_EXP2_DOM_JS.replace("CODE_HEAD", repr(_CODE_HEAD)))
                 assert dom["tables"] == 1, dom                                   # EXP-2 那一張（帶代碼欄）
