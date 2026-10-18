@@ -115,7 +115,10 @@ HLD = {
     "取數失敗": _hld("fetchfail"),
     "局部失敗": _hld("twofail"),
     "stale": _hld("full", stale={"AAAA", "BBBB"}),
-    "超過10日": _hld("full", stale={"AAAA"}, today=(2026, 10, 9)),
+    # 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`）：預存又過期 ＝ 取數失敗（⛔），本情境驗的是純資料未備 ⇒
+    # ~~`stale={"AAAA"}`~~ → 不帶預存（有意識的更正，不是漏刪）；預存又過期那一種另立「退回預存過期」。
+    "超過10日": _hld("full", today=(2026, 10, 9)),
+    "退回預存過期": _hld("full", stale={"AAAA"}, today=(2026, 10, 9)),
     "整頁失敗": _hld("full", raise_message="ConnectionError: fetch_url returned None (kind=unreachable)"),
 }
 

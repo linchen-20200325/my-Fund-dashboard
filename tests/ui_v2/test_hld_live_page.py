@@ -160,9 +160,11 @@ def test_S5_徽章畫在HLD2_HLD3標頭旁_HLD8每一列_HLD6分組標頭(days, 
     md = _run_fresh(days)
     badge = _badge(text, tone)
     # HLD-2／HLD-3 每檔標頭旁（3 檔 × 2 塊）＋ HLD-8 每一列（3）＋ HLD-6 分組標頭（3，資料未備時 0）
-    assert md.count(badge) == (12 if days <= 10 else 9)
-    assert md.count(f'<div class="hld-fh">基金 A（示意） · 幣別 USD {badge}</div>') == 2   # HLD-2、HLD-3
-    assert md.count(f"<td>基金 A（示意） {badge}") == 1                                   # HLD-8 基金名那一格
+    # 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`；有意識的更正，不是漏刪）：11 天時預存的 AAAA ＝ 取數失敗後退回
+    # 又過期 → ⛔、不掛徽章；~~9 枚~~ → 只剩 BBBB／CCCC 的 6 枚，基金 A 一枚都不掛。
+    assert md.count(badge) == (12 if days <= 10 else 6)
+    assert md.count(f'<div class="hld-fh">基金 A（示意） · 幣別 USD {badge}</div>') == (2 if days <= 10 else 0)
+    assert md.count(f"<td>基金 A（示意） {badge}") == (1 if days <= 10 else 0)
     assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == (1 if days <= 10 else 0)
     assert _badge(f"延遲 {days} 日", "黃") not in md   # 徽章不再有黃色
 
@@ -181,7 +183,11 @@ def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, tex
     text = text.replace(day, f'<span style="white-space:nowrap">{day}</span>')
     note = f'style="color:{color}">{text}</div>'
     # HLD-2、HLD-3、HLD-8（儲存格內）、HLD-6（分組標頭下一列）各 1；HLD-5 該檔展開標頭下 1
-    assert md.count(note) == (5 if days <= 10 else 4)
+    # 客戶 2026-10-18 裁示 BL-0375（有意識的更正，不是漏刪）：11 天時那一檔改為 ⛔ 取數失敗並寫出日期，~~4 處副標~~ → 0 處。
+    if days > 10:
+        assert md.count(note) == 0 and "改用 2026-09-18 的預存淨值" in md and "⛔ 取數失敗" in md
+        return
+    assert md.count(note) == 5
     assert f'<div class="hld-line" style="color:{color}">{text}</div>' in md          # HLD-5
     hld6 = f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>'
     assert (hld6 in md) is (days <= 10)                                                # HLD-6

@@ -86,6 +86,13 @@ _STATE_ALT = "|".join(re.escape(s) for s in sorted(_ALL_STATES, key=len, reverse
 _FETCH_SUMMARY = re.compile(
     r"⛔ (?P<cls>[^\s：]+) 取數失敗：(?:(?P<fund>[A-Za-z0-9][A-Za-z0-9._-]{0,30}) 的)?(?P<state>" + _STATE_ALT + r")"
 )
+# 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`；44 第七節第三小節之十）：`plain` 照留的那一句
+# `⛔ 淨值 取數失敗：[<代碼>：]改用 <日期> 的預存淨值` —— 日期是裁示要留在畫面上的那一期，**不換成狀態族、不收成
+# 「此區塊暫時無法判定」**；只把資料類記進資料狀態行（與其他取數失敗同一個狀態族），並記為「畫面上看得到失敗摘要」的塊。
+_RETREAT_SUMMARY = re.compile(
+    r"⛔ (?P<cls>[^\s：]+) 取數失敗：(?:[A-Za-z0-9][A-Za-z0-9._-]{0,30}：)?"
+    + plain._NAV_RETREAT.pattern.lstrip("^").rstrip("$")
+)
 # 第二支：`⛔ 設定讀不到：{狀態句}`。
 _SETTINGS_SUMMARY = re.compile(re.escape(plain.SETTINGS_UNREADABLE_PREFIX) + r"(?P<state>" + _STATE_ALT + r")")
 
@@ -157,9 +164,21 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
     """一個字串裡的失敗摘要 → 狀態族（或該塊第一處的「此區塊暫時無法判定」）。沒有摘要 → 原樣。"""
     out, pos = [], 0
     for match in sorted(
-        [*_FETCH_SUMMARY.finditer(text), *_SETTINGS_SUMMARY.finditer(text)], key=lambda m: m.start()
+        [*_FETCH_SUMMARY.finditer(text), *_SETTINGS_SUMMARY.finditer(text), *_RETREAT_SUMMARY.finditer(text)],
+        key=lambda m: m.start(),
     ):
         if match.start() < pos:
+            continue
+        if match.re is _RETREAT_SUMMARY:
+            # BL-0375：日期句照留（原字不換），只把資料類記進資料狀態行、記為看得到失敗摘要的塊（見 `_RETREAT_SUMMARY`）；
+            # 同一字串裡的其他失敗摘要照常往下改寫（2026-10-18 獨立稽核回修：原本整串早退，會漏改其他摘要）。
+            if _shown(block, field):
+                ctx.note(match.group("cls"), None)
+                code = (block or {}).get("code")
+                if code is not None and code not in ctx.explained:
+                    ctx.explained.append(code)
+            out.append(text[pos:match.end()])
+            pos = match.end()
             continue
         groups = match.groupdict()
         cls, fund, state = groups.get("cls"), groups.get("fund"), groups["state"]

@@ -562,6 +562,26 @@ def in_ratio_window(day: date, nav_day: date) -> bool:
     return window_start(nav_day) < day <= nav_day
 
 
+# 客戶 2026-10-18 裁示 BL-0375（`docs/DECISIONS.md` `DEC-2026-10-18-02`；44 第七節第三小節之十）：淨值超過門檻、而且資料層已確認
+# 是即時取數失敗後退回的預存序列 → 三格寫 `⛔ 取數失敗：改用 <日期> 的預存淨值`（44 第五節第五小節模板；日期是畫面實際用的那一期），
+# 不寫資料未備。門檻、判定方向與「不參與任何計算」照舊（這幾檔一列都不交給 `logic`）。
+# 「已確認」只讀 L2 provenance 既有的兩個鍵（鏡像 `services/v2_tables/nav_dividend.py`，本檔不 import services，由測試對拍）：
+# `cache_fallback` 為真（L1 只在即時網址全敗時交出 `cache/nav` 預存序列），而且 `latest_from` 不是累積表
+# （累積表那一支 `cache_fallback` 也為真、但不是取數失敗；目前由 `NAV_HISTORY_PROVENANCE_VERIFIED` 關閉）。
+# ⚠️ 只在閘門關閉時成立：閘門打開後，即時一段都沒有、`latest_from` 為累積表的那一種實為取數失敗後退回，這裡會漏判成
+# 資料未備 —— 打開閘門前必須重審（`docs/BACKLOG.md` BL-0376；稽核建議改看 `live_error`）。
+NAV_LATEST_FROM_HISTORY = "nav_history"    # nav_dividend.LATEST_FROM_NAV_HISTORY
+NAV_RETREAT_FAILED_TEXT = "改用 {day} 的預存淨值"   # 與 `ui_v2/hld/live.py::NAV_RETREAT_FAILED_TEXT` 逐字相同（由測試比對）
+TIP_NAV_RETREAT = "即時取數失敗，淨值取自預存序列，不是本次取得"
+
+
+def nav_retreat_failed(prov) -> bool:
+    """L2 provenance 是否已確認「即時取數失敗後退回預存序列」（見上方常數註解）。形狀不對 → 不算（照舊資料未備，不猜）。"""
+    if not isinstance(prov, dict) or prov.get("cache_fallback") is not True:
+        return False
+    return prov.get("latest_from") != NAV_LATEST_FROM_HISTORY
+
+
 def nav_is_old(last: date, today: date) -> bool:
     """規則 11：台灣今天減最後一筆 `nav_date` **大於** `NAV_OLD_DAYS`（＝`thresholds.NAV_NOT_READY_DAYS`）→ 舊（剛好 10 天不算）。"""
     days = (today - last).days
@@ -689,6 +709,10 @@ def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, accum_codes, 
         latest = max(rows, key=lambda r: _as_date(r["nav_date"], f"{code} nav_date"))
         last = _as_date(latest["nav_date"], f"{code} nav_date")
         if nav_is_old(last, today):                                             # 規則 11
+            if nav_retreat_failed(prov):                                        # BL-0375（客戶 2026-10-18 裁示）
+                text = logic.fetch_failed_text(NAV_RETREAT_FAILED_TEXT.format(day=last.isoformat()))
+                notes[code] = _all_nav(text, logic.STATE_ERROR, tag, _nav_tip(prov, TIP_NAV_RETREAT))
+                continue
             text = NAV_NOT_READY_DATED_TEXT.format(day=last.isoformat(), days=NAV_OLD_DAYS)
             notes[code] = _all_nav(text, logic.STATE_MISSING, tag, _nav_tip(prov))
             continue

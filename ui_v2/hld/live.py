@@ -450,6 +450,64 @@ def withhold_not_ready_nav(dataset: dict, codes) -> dict:
     return out
 
 
+# ───────────────────────── 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`；44 第七節第三小節之十） ─────────────────────────
+# 淨值超過 10 日、而且**已確認**是即時取數失敗後退回的預存序列 → 主要成因是取數失敗：畫 ⛔，並寫出畫面實際用的那一期日期。
+# - 「已確認」只讀資料層既有的訊號，不新增取數訊號、不改取數路徑：L2 `provenance[代碼]["cache_fallback"]` 為真
+#   （L1 只在即時網址全敗時才交出 `cache/nav` 預存序列，`repositories/fund/nav_metrics.py::fetch_nav`；L2 據 `source` 前綴或
+#   `nav_quality` 判定），**而且** `latest_from` 不是累積表（`cache_fallback` 在累積表那一支也會為真、但那不是取數失敗；
+#   該支目前由 `NAV_HISTORY_PROVENANCE_VERIFIED` 關閉，這一條是防它打開後被誤讀）。
+#   ⚠️ 整個判定**只在閘門關閉時成立**：閘門打開後，即時一段都沒有（`live_out` 為 None）、`latest_from` 為累積表的那一種
+#   實為取數失敗後退回，本判定會漏判成資料未備 —— 打開閘門前必須重審（`docs/BACKLOG.md` BL-0376；稽核建議改看 `live_error`）。
+# - 不改 10 日門檻（`not_ready_codes` 照舊）、不改任何公式：那幾檔的淨值列照舊不交給 `logic`（`withhold_not_ready_nav`），
+#   不拿舊淨值算任何一個數、不補 0；改的只是成因 —— 改記成該檔的淨值取數失敗（`fund_errors["nav"]`），
+#   由 `logic` 既有的逐檔取數失敗路徑寫 `⛔ 取數失敗：<代碼>：改用 <日期> 的預存淨值`（44 第五節第五小節的模板）。
+# - 舊資料日期只出現在這一句裡，句首就是「取數失敗」，不寫成本次取得。
+# - 只在正式模式（本檔）生效；示範模式不經過本檔，逐位元組不變。
+# L2 `services/v2_tables/nav_dividend.py::LATEST_FROM_NAV_HISTORY` 的鏡像（本頁不得 import services，由測試對拍）。
+LATEST_FROM_NAV_HISTORY = "nav_history"
+NAV_RETREAT_FAILED_TEXT = "改用 {day} 的預存淨值"
+
+
+def retreat_failed_codes(dataset: dict, fresh: dict, nav_provenance) -> dict:
+    """淨值超過門檻、而且已確認是即時取數失敗後退回預存序列的**持倉**代碼 → 最後一筆淨值日（`date`）。
+
+    只讀 `nav_freshness` 的結果（`old`、`cache_fallback`、`last`）與 L2 provenance 的 `latest_from`；不猜：
+    `cache_fallback` 為假、或 `latest_from` 是累積表 → 不算（照舊資料未備）。持倉以外的代碼不算
+    （`logic.fund_errors` 對持倉以外的代碼會 raise；那種列本來就不上畫面，照舊資料未備）。
+    """
+    held = {h["fund_code"] for h in dataset.get("holding", [])}
+    out = {}
+    for code, entry in fresh.items():
+        if not (entry["old"] and entry["cache_fallback"]) or code not in held:
+            continue
+        prov = (nav_provenance or {}).get(code) or {}
+        if prov.get("latest_from") == LATEST_FROM_NAV_HISTORY:
+            continue
+        out[code] = entry["last"]
+    return out
+
+
+def mark_retreat_failed(dataset: dict, retreat: dict) -> dict:
+    """把 `retreat_failed_codes` 的那幾檔記成該檔的淨值取數失敗（`fund_errors["nav"]`）；回新的 dict，不改輸入。
+
+    訊息是 `NAV_RETREAT_FAILED_TEXT`（寫出畫面實際用的那一期日期）。那幾檔已經有逐檔淨值失敗 → raise
+    （`nav_freshness` 會略過取數失敗的檔，走到這裡表示上游組錯，不猜要信哪一邊）。
+    """
+    if not retreat:
+        return dataset
+    per_fund = dict(dataset.get("fund_errors") or {})
+    nav_errors = dict(per_fund.get("nav") or {})
+    clash = sorted(code for code in retreat if code in nav_errors)
+    if clash:
+        raise ValueError(f"{clash!r} 已有淨值取數失敗，卻又被判成退回預存序列")
+    for code, day in sorted(retreat.items()):
+        nav_errors[code] = NAV_RETREAT_FAILED_TEXT.format(day=day.isoformat())
+    per_fund["nav"] = nav_errors
+    out = dict(dataset)
+    out["fund_errors"] = per_fund
+    return out
+
+
 def _apply_freshness(model: dict, fresh: dict) -> dict:
     """把 `nav_freshness` 的結果掛到各塊（草稿 §D 1-A＋1-C「放在哪」）。各塊的 `_state`／`_tone`、按鈕、
     數值都不動：徽章與副標只說「多舊」「是不是預存的」，不改任何一個數（~~草稿 §D：數值照算、照印~~ →
@@ -884,7 +942,13 @@ def build_live_model(
     fresh = nav_freshness(dataset, nav_provenance, today=today)
     # 客戶 2026-10-13 裁示：淨值日距今超過門檻 → 資料未備，過期淨值不交給 `logic` 計算任何一個數。
     stale_codes = not_ready_codes(dataset, today=today)
+    # 客戶 2026-10-18 裁示 BL-0375：其中已確認是取數失敗後退回預存序列的那幾檔，改記成取數失敗（⛔），不再算資料未備；
+    # 淨值列照舊不交給 `logic`（門檻與「不拿過期淨值算數」不變）。新鮮度徽章與副標一併拿掉（同其他淨值取數失敗的檔）。
+    retreat = retreat_failed_codes(dataset, fresh, nav_provenance)
     dataset = withhold_not_ready_nav(dataset, stale_codes)
+    dataset = mark_retreat_failed(dataset, retreat)
+    fresh = {code: entry for code, entry in fresh.items() if code not in retreat}
+    stale_codes = stale_codes - frozenset(retreat)
     model = logic.build_page_model(
         dataset,
         fields=fields,

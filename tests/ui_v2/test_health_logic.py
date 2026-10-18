@@ -134,7 +134,9 @@ def test_去重後沒有任何失敗摘要_受影響塊數等於此區塊暫時�
         display, _raw, _status = plain.plain_model(model, page=key[1])
         after, summary = health.dedupe_failures(display)
         texts = list(_strings(after))
-        leftover = [t for t in texts if _SUMMARY.search(t)]
+        # 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`）：退回預存又過期的那一句帶著裁示要留的日期，照留（不是漏收）；
+        # 本條只把那一句的完整形狀排除，其他失敗摘要照舊一句都不得留下。
+        leftover = [t for t in texts if _SUMMARY.search(t) and not health._RETREAT_SUMMARY.fullmatch(t)]
         assert leftover == [], (key, leftover)
         sentence = sum(t.count(health.TEXT_BLOCK_UNDECIDABLE) for t in texts)
         assert sentence == len(summary["affected_blocks"]), (key, sentence, summary)

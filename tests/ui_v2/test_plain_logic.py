@@ -402,6 +402,9 @@ def _expected_class(raw: str) -> str:
     for message, name in known.items():
         if message in raw:
             return name
+    # 客戶 2026-10-18 裁示 BL-0375（`DEC-2026-10-18-02`）：本頁自己組的「改用 <日期> 的預存淨值」那一句 → 淨值（本檔獨立寫）。
+    if re.search(r"改用 \d{4}-\d{2}-\d{2} 的預存淨值$", raw):
+        return "淨值"
     return "資料"
 
 

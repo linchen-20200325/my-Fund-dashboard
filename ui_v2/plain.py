@@ -179,6 +179,14 @@ PRINT_AS_IS_LINE = "訊息原文照印，不改寫成安撫語句。"
 # 一句狀態描述的預設（沒有認出是哪一種已知訊息時）。字面為本組擬定（44 只定了「⛔ <中文資料類> 取數失敗」
 # 加一句影響範圍），只描述狀態、不指示動作（客戶 2026-10-03、2026-10-02 兩則裁示）。
 STATE_FETCH_DEFAULT = "相關數字暫時無法判定"
+# 客戶 2026-10-18 裁示 BL-0375（`docs/DECISIONS.md` `DEC-2026-10-18-02`；44 第七節第三小節之十）：淨值即時取數失敗、退回的預存序列
+# 又超過 10 日 → 各頁寫「⛔ 取數失敗：[<代碼>：]改用 <日期> 的預存淨值」。這一句是本頁自己組的（不是上游原文），
+# 而且日期是裁示要求留在畫面上的那一期 ⇒ 一般畫面照留，不換成狀態描述、不移到進階診斷（體例同下方存檔失敗那一族
+# 「本頁自己寫的那一句不是原文，照留」）；資料類寫「淨值」。鏡像 `ui_v2/hld/live.py`、`ui_v2/exp/live.py` 的
+# `NAV_RETREAT_FAILED_TEXT`（本檔不 import 它們，由測試逐字比對）。
+NAV_RETREAT_FAILED_TEXT = "改用 {day} 的預存淨值"
+_NAV_RETREAT = re.compile(
+    "^" + re.escape(NAV_RETREAT_FAILED_TEXT).replace(re.escape("{day}"), r"\d{4}-\d{2}-\d{2}") + "$")
 STATE_SETTINGS_DEFAULT = "已存的設定暫時讀不到"
 STATE_SAVE_DEFAULT = "這一次沒有存進去"
 STATE_PAGE_DEFAULT = "本頁暫時無法判定"
@@ -278,6 +286,10 @@ def _rewrite_failure(text: str, block, ctx: _Context):
         match = _FUND_HEAD.match(raw)
         if match and not re.search(r"(Error|Exception)$", match.group(1)) and match.group(1) not in KEY_NAMES:
             fund, raw = match.group(1), match.group(2)
+        if _NAV_RETREAT.match(raw):   # BL-0375：本頁自己組的日期句，照留（見 `NAV_RETREAT_FAILED_TEXT`）
+            ctx.fetch_failed.add(TABLE_NAMES["nav"])
+            ctx.keep(block, text)   # 進階診斷照舊收一份（同其他失敗句），一般畫面另照留日期
+            return f"{prefix}⛔ {TABLE_NAMES['nav']} 取數失敗：{fund + '：' if fund else ''}{raw}", True
         known = _known(raw)
         state = STATE_FETCH_DEFAULT
         if known:
