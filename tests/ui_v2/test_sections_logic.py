@@ -230,9 +230,32 @@ def _hld_formal(name, mutate=None, **extra):
 
 
 def _counts(model):
+    """(n, m, j)，三個都是不重複基金代碼數（總管 2026-10-18 裁定同一個單位）。"""
     light = hld_logic.find_block(model, "HLD-0")
-    return (len(hld_logic.find_block(model, "HLD-2")["fund_groups"]), light["_deviation_count"],
-            hld_logic.find_block(model, "HLD-1")["_unevaluated_count"])
+    codes = {group["_fund_code"] for group in hld_logic.find_block(model, "HLD-2")["fund_groups"]}
+    return (len(codes), light["_deviation_count"], hld_logic.find_block(model, "HLD-1")["_unevaluated_count"])
+
+
+def _second_policy(code):
+    """同一檔基金再放進第二張保單（另一筆持倉，`policy_id` 不同 ⇒ 不會被同鍵加總併掉）。"""
+    def mutate(dataset):
+        row = dict(next(h for h in dataset["holding"] if h["fund_code"] == code))
+        row["holding_id"] += "-2"
+        row["policy_id"] = f"{row['policy_id']}-2"
+        dataset["holding"].append(row)
+    return mutate
+
+
+def test_持倉體檢_同一檔分在兩張保單_n只算1_n減m減j等於已評估且未超門檻的檔數():
+    model = _hld_formal("full", _second_policy("CCCC"))
+    groups = hld_logic.find_block(model, "HLD-2")["fund_groups"]
+    assert len(groups) == 4                                   # 四筆持倉（CCCC 兩張保單）
+    deviated = {row["_fund_code"] for row in hld_logic.find_block(model, "HLD-1")["_rows"]}
+    assert deviated == {"AAAA", "BBBB"}
+    assert sections.hld_counts(model) == "持有 3 檔　◆ 需要注意 2 檔　⬜ 無法判定 0 檔"
+    n, m, j = _counts(model)
+    # 已評估且未超門檻：只有 CCCC（兩張保單各一筆，仍是一檔）。
+    assert n - m - j == len({g["_fund_code"] for g in groups} - deviated) == 1
 
 
 def _drop_nav(code):

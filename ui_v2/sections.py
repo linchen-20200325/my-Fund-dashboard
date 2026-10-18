@@ -20,7 +20,7 @@
    - 持倉體檢：③ 由 `HLD-1` 整塊撐起（`page.py` 直接畫那一塊）；本模組只在偏離列的基金名前加 `◆`（`mark_hld1_rows`）。
 3. **持倉體檢 ① 的三個計數**（`hld_counts`，(a-2) 選項 B）：持有 n 檔、`◆ 需要注意` m 檔、`⬜ 無法判定` j 檔 ——
    m ＝ `HLD-0` 的偏離檔數（`_deviation_count`，燈上「有 N 檔超出」的 N）、j ＝ `HLD-1` 已彙總的「沒有進入偏離評估」的
-   不重複檔數（`_unevaluated_count`，不論成因；2026-10-18 更正，見 44 之八其一 (a-2) 第 1 條）、n ＝ `HLD-2` 已讀到的持倉檔數（逐檔分組數）。不寫 `○`、不寫「正常」，不列持有減另兩數的差。
+   不重複檔數（`_unevaluated_count`，不論成因；2026-10-18 更正，見 44 之八其一 (a-2) 第 1 條）、n ＝ `HLD-2` 已讀到的不重複基金代碼數（三個數同一個單位；`fund_groups` 是逐筆持倉分組，同檔兩張保單只算 1）。不寫 `○`、不寫「正常」，不列持有減另兩數的差。
 
 **不做什麼（護欄 2）**：不改任何 `_state`、顏色、門檻、算法、資料來源與寫入；不新增按鈕；不改任何一格的文案字面
 （③ 的字句是本組依 59 線框擬的，見各函式）。**示範模式不經過本模組**（44 第七節第三小節之八開頭第 4 條）。
@@ -187,7 +187,9 @@ def hld_counts(model: dict):
     light, hld1, hld2 = _find(model, "HLD-0"), _find(model, "HLD-1"), _find(model, "HLD-2")
     if light["_tone"] == "紅" or light["text"] in (HLD_TEXT_NO_HOLDING, HLD_TEXT_NO_RULES):
         return None
-    n = len(hld2["fund_groups"])
+    # n、m、j 同一個單位：不重複基金代碼數（總管 2026-10-18 裁定）。`fund_groups` 是逐筆持倉（保單 × 基金代碼）分組，
+    # 同一檔分在兩張保單時有兩組 ⇒ 只數不重複的 `_fund_code`；HLD-2 顯示的內容一格不動。
+    n = len({group["_fund_code"] for group in hld2["fund_groups"]})
     if n == 0:
         return None
     m, j = light["_deviation_count"], hld1["_unevaluated_count"]
