@@ -385,15 +385,23 @@ def _relabel_error_placeholders(node, names) -> None:
 _BARE_NOT_CONFIGURED = re.compile(re.escape(LINE_NOT_CONFIGURED) + r"(?!：)")
 
 
-def _relabel_mixed(node, value_names: dict) -> None:
-    """同批稽核回修（BL-0250 批次 3-A；44 第七節第三小節之十二其二第 1 條、批次 1 的混合規則）：成因混合的塊（同一塊裡
-    既有尚未設定、又有真的取數失敗，不在 `unconfigured_only` 裡）不留光禿禿的狀態族「⛔ 尚未設定」（就地改寫）：
+def _relabel_mixed(block: dict, value_names: dict) -> None:
+    """同批稽核回修（BL-0250 批次 3-A；44 第七節第三小節之十二其十第 1 條）：成因混合的塊（同一塊裡既有尚未設定、又有
+    真的取數失敗，不在 `unconfigured_only` 裡）（就地改寫）：
 
-    - 值那一格自己的成因全部屬尚未設定（`unconfigured_value_nodes`）→「⛔ 尚未設定：<哪一項>」（客戶裁示第 2 點的格式；
-      同一塊別的值是真的取數失敗，只寫狀態族會讓人以為整塊同一種成因）；
-    - 其他位置（收合標題、摘要、說明行、混了兩種成因的值）→ 照混合規則寫「⛔ 取數失敗」。
+    - **代表整塊的收合標題／摘要**（`summary_text`）去重後只剩狀態族「⛔ 尚未設定」→ 照客戶核准推薦 (2)「混合的照寫取數失敗」
+      寫「⛔ 取數失敗」；
+    - 值那一格自己的成因全部屬尚未設定（`unconfigured_value_nodes`）→「⛔ 尚未設定：<哪一項>」（客戶裁示第 2 點的格式）；
+    - 其餘（塊內說明行、依各自成因去重出來的字）一字不動 —— 自身成因是尚未設定的那一行照舊寫「⛔ 尚未設定」。
+      ~~其他位置（收合標題、摘要、說明行、混了兩種成因的值）→ 照混合規則寫「⛔ 取數失敗」~~（同批第二次稽核：射程寫太寬，
+      總管派工單自身錯誤；有意識的更正，不是漏刪；決策者 AI 總管）。"""
+    if isinstance(block.get("summary_text"), str):
+        block["summary_text"] = _BARE_NOT_CONFIGURED.sub(LINE_FETCH_FAILED, block["summary_text"])
+    _relabel_mixed_values(block, value_names)
 
-    與 `_walk` 同一套走法：`_` 開頭鍵、受保護的鍵、存檔結果鍵、輸入欄當下值一律不碰。只換這一句；判定、符號、顏色照舊。"""
+
+def _relabel_mixed_values(node, value_names: dict) -> None:
+    """`_walk` 同一套走法（`_` 開頭鍵、受保護的鍵、存檔結果鍵、輸入欄當下值不碰），只換值節點那一格。"""
     if isinstance(node, dict):
         names = value_names.get(id(node))
         for key in list(node):
@@ -405,16 +413,11 @@ def _relabel_mixed(node, value_names: dict) -> None:
             if isinstance(value, str):
                 if names and key in _VALUE_FIELDS and value == LINE_NOT_CONFIGURED:
                     node[key] = f"{SYMBOL_ERROR} {not_configured_reason(*names)}"
-                else:
-                    node[key] = _BARE_NOT_CONFIGURED.sub(LINE_FETCH_FAILED, value)
             else:
-                _relabel_mixed(value, value_names)
+                _relabel_mixed_values(value, value_names)
     elif isinstance(node, list):
-        for index, value in enumerate(node):
-            if isinstance(value, str):
-                node[index] = _BARE_NOT_CONFIGURED.sub(LINE_FETCH_FAILED, value)
-            else:
-                _relabel_mixed(value, value_names)
+        for value in node:
+            _relabel_mixed_values(value, value_names)
 
 
 def unconfigured_only(display: dict, summary: dict) -> dict:

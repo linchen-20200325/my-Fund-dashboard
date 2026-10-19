@@ -521,7 +521,16 @@ def test_C1_混合成因_收合標題照混合規則寫取數失敗_不收進只
     only = health.relabel_unconfigured(after, summary)
     assert only == {}                                                         # M19：含真失敗的塊不收
     assert after["blocks"][0]["summary_text"] == "⛔ 取數失敗"
-    assert "⛔ 尚未設定" not in str({k: v for k, v in after["blocks"][0].items() if not k.startswith("_")})
+    # ~~整塊不得出現「⛔ 尚未設定」~~ → 同批第二次稽核（總管派工單射程寫太寬；有意識的更正，不是漏刪）：只鎖代表整塊的收合標題，
+    # 塊內依各自成因去重出來的字照舊（這一塊的說明行本來就是取數失敗那一句）。
+    assert after["blocks"][0]["detail_lines"] == ["⛔ 此區塊暫時無法判定"]
+
+
+def test_C1_混合成因_塊內自身成因是尚未設定的那一行照舊():
+    block = _mixed_block(detail_lines=[_FETCH_SUMMARY, "說明：" + _UNCONF_SUMMARY])
+    out = _run({"blocks": [block]})
+    assert out["blocks"][0]["summary_text"] == "⛔ 取數失敗"
+    assert out["blocks"][0]["detail_lines"] == ["⛔ 此區塊暫時無法判定", "說明：⛔ 尚未設定"]
 
 
 def test_C1_只屬尚未設定的塊_照舊狀態族():
@@ -548,7 +557,8 @@ def test_M2_同一值兩種成因並存_徽章保留_不寫尚未設定():
     out = _run({"blocks": [_badge_block(text)]})
     node = out["blocks"][0]["main_values"][0]
     assert "取數失敗" in [b["text"] for b in node["badges"]]
-    assert "⛔ 尚未設定" not in node["value_text"]
+    # 同批第二次稽核：值層只有「自己全屬尚未設定」才補哪一項；兩種成因並存的值照各自成因去重（批次 3-A 之前原樣）。
+    assert node["value_text"] == "⛔ 尚未設定；⛔ 取數失敗"
 
 
 def test_M1_值本身沒有失敗摘要_別欄尚未設定_徽章保留():
@@ -615,3 +625,59 @@ def test_M21_MKT5清單下方_尚未設定那一行與取數失敗那一行分�
         f"⛔ 取數失敗：{plain.key_name('vol_index')}",
         f"⛔ 尚未設定：資料來源的金鑰（{plain.key_name('credit_spread_pct')}、{plain.key_name('policy_rate_pct')}）"]
     assert mkt_page.mkt5_status_lines([items[2]]) == [f"⛔ 取數失敗：{plain.key_name('vol_index')}"]
+
+
+# ═══════════════════════ 同批第二次稽核：兩個反例與三條接線（AppTest，不標 slow，跑在 not-slow 線） ═══════════════════════
+
+_POOL_NOT_CLOUD = {"status": "pool_not_cloud", "codes": [],
+                   "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"}
+
+
+def _screen(script):
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    import _plain_scan as SCAN
+    at = AppTest.from_string(script, default_timeout=90)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return [" ".join(t.split()) for t in SCAN.screen_texts(at)]
+
+
+def _hld_mixed():
+    import _plain_scan as SCAN
+    return _screen(SCAN._hld("fetchfail", replace_errors={"user_setting": "未設定試算表 ID，暫停寫入"}))
+
+
+def _exp_mixed():
+    import _plain_scan as SCAN
+    return _screen(SCAN._exp(read_error="HTTPSConnectionPool(host='sheets.example'): Max retries exceeded (kind=unreachable)",
+                             pool=_POOL_NOT_CLOUD))
+
+
+def test_反例_持倉體檢淨值真失敗加設定未設定_配息與本金卡那一行照舊尚未設定():
+    texts = _hld_mixed()
+    card = [t for t in texts if t.startswith("配息與本金卡 ")]
+    assert len(card) == 1 and "⛔ 此區塊暫時無法判定 ⛔ 尚未設定 我在這段區間裡" in card[0], card
+
+
+def test_反例_標的探索設定真讀不到加選股池無雲端_候選清單卡那一行照舊尚未設定_標題照混合規則():
+    texts = _exp_mixed()
+    assert "候選清單卡 ⛔ 尚未設定" in texts
+    assert "結果清單 — ⛔ 取數失敗" in texts and "結果清單 — ⛔ 尚未設定" not in "\n".join(texts)
+
+
+def test_接線_持倉體檢混合頁_燈的點名句真的經過分段():
+    texts = _hld_mixed()
+    assert "偏離提示卡、績效與風險卡：尚未設定：設定試算表；配息與本金卡：取數失敗。" in texts
+    assert "偏離提示卡、績效與風險卡、配息與本金卡：取數失敗。" not in texts
+
+
+def test_接線_市場總覽頁_render標尚未設定的鍵_清單下方逐行畫出():
+    import _plain_scan as SCAN
+    texts = _screen(SCAN.SCRIPTS["mkt"]["未設定"])
+    line = "⛔ 尚未設定：資料來源的金鑰（高收益信用利差、政策利率、期限利差）"
+    assert texts.count(line) == 2                      # MKT-5 清單下方（`_render_mkt5_picks` 逐行）＋ MKT-6 表尾
+    assert texts.count("⛔ 取數失敗：波動度指數") == 2
+    table = [t for t in texts if t.startswith("指標 最近觀測日 ")]
+    assert "高收益信用利差 ⛔ 尚未設定：資料來源的金鑰" in table[0]           # `mark_fetch_failures` 有被 render 呼叫
