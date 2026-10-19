@@ -243,9 +243,13 @@ def _fresh_note_html(node, css="hld-note") -> str:
     return f'<div class="{css}" style="color:{_tone(note["_tone"])}">{body}</div>'
 
 
-def _buttons(block, prefix, on_click=None) -> None:
-    """`on_click`：{按鈕類別: 回呼}。沒列到的類別照舊不接任何動作（S6a 第三輪只接「套用」）。"""
+def _buttons(block, prefix, on_click=None, plain_mode: bool = False) -> None:
+    """`on_click`：{按鈕類別: 回呼}。沒列到的類別照舊不接任何動作（S6a 第三輪只接「套用」）。
+    `plain_mode`（BL-0250 批次 3-A U4）：正式模式不畫永遠停用的「套用」（`live.hidden_in_live`）；示範模式照舊全畫。
+    按鈕的 key 照舊用它在模型裡的序號，拿掉一枚不讓其他按鈕換 key。"""
     for index, button in enumerate(block.get("buttons", [])):
+        if plain_mode and live.hidden_in_live(button):
+            continue
         st.button(
             button["label"],
             key=f"{prefix}_btn_{index}",
@@ -570,7 +574,7 @@ def _render_hld4(block: dict, *, on_save=None, plain_mode: bool = False) -> None
         clicks = {"套用": _on_apply, "新增列": _on_add_row}
         if on_save is not None:   # 正式模式（客戶 2026-10-16 裁示第 2 點）；示範模式「存檔」照舊不接任何動作
             clicks["存檔"] = on_save
-        _buttons(block, "hld4", on_click=clicks)
+        _buttons(block, "hld4", on_click=clicks, plain_mode=plain_mode)
         _lines(block["notes"])
         st.markdown(
             f'<div class="hld-detail">{_badges_html(block["badges"])}'

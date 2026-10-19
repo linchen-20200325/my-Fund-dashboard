@@ -160,8 +160,11 @@ def _exp(*, wired=True, rules=None, sort=(), watch=(), read_error=None, pool=Non
 
 EXP = {
     "正常": _exp(sort=["ccy"]),
+    # BL-0250 批次 3-A（有意識的更正，不是漏刪）：選股池狀態 ~~`"not_configured"`~~ → `"pool_not_cloud"`。
+    # 舊值不是資料層的值域（`services/v2_tables/exp_universe.py` 只回 ok／pool_not_cloud／failed），畫面因此走了
+    # 「選股池這次讀不到」（真的讀取失敗）那一支；本情境要驗的是「選股池的雲端來源尚未設定」，改回資料層實際會回的值。
     "未設定": _exp(read_error="未設定試算表 ID，暫停寫入",
-                   pool={"status": "not_configured", "codes": [], "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"}),
+                   pool={"status": "pool_not_cloud", "codes": [], "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"}),
     "取數失敗": _exp(read_error="HTTPSConnectionPool(host='sheets.example'): Max retries exceeded (kind=unreachable)"),
     "局部失敗": _exp(wired=False),
     "stale": _exp(rules=[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1"}]),

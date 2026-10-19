@@ -466,7 +466,12 @@ ADVANCED_DIAG_NO_PAGE = "本次瀏覽還沒有開過其他頁。"
 _ADVANCED_DIAG_LABELS = ("頁", "記錄時間", "位置", "原文")
 
 
-def _render_advanced_diag() -> None:
+# BL-0250 批次 3-A（U7（b）（c）；44 第七節第三小節之十二）：取數紀錄的紀錄編號與結果原值不上一般畫面，改在這裡照列。
+ADVANCED_DIAG_LOG_TITLE = "取數紀錄的紀錄編號與結果原值"
+_ADVANCED_DIAG_LOG_LABELS = ("紀錄編號", f"開始（{logic.DISPLAY_TZ_LABEL}）", "結果原值")
+
+
+def _render_advanced_diag(raw_log=None) -> None:
     with st.expander(plain.ADVANCED_DIAG_TITLE, expanded=False):
         st.caption(ADVANCED_DIAG_NOTE)
         pages = plain.recorded_pages(st.session_state)
@@ -483,6 +488,9 @@ def _render_advanced_diag() -> None:
         _html(_table(("塊代號", "塊名"), [[_cell(code), _cell(name)] for code, name in plain.BLOCK_NAMES.items()]))
         _lines(["原始鍵名對照"], "set-line")
         _html(_table(("鍵名", "畫面上的名稱"), [[_cell(k), _cell(v)] for k, v in plain.KEY_NAMES.items()]))
+        if raw_log:
+            _lines([ADVANCED_DIAG_LOG_TITLE], "set-line")
+            _html(_table(_ADVANCED_DIAG_LOG_LABELS, [[_cell(c) for c in row] for row in raw_log]))
 
 
 # ── Phase 3 P1-⑥：正式模式 ④ 的搬入塊與 `SET-0` 燈旁的導覽（44 第七節第三小節之八其二；示範模式不經過這裡） ──
@@ -661,7 +669,7 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         else:
             _RENDERERS[code](logic.find_block(model, code), key, ctx)
     if plain_mode:
-        _render_advanced_diag()
+        _render_advanced_diag(logic.find_block(model, "SET-6").get("_raw_log"))
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

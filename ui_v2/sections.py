@@ -442,17 +442,27 @@ def set2_summary(block: dict) -> str:
         if placeholder.get("_empty_kind") == SET_EMPTY_KIND_NO_SOURCE:
             # 比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
             return f"缺 {SET_LOG_TABLE}：{_node_text(placeholder)}"
-        return _node_text(placeholder)
-    failed = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "failed"]
-    missing = [r["tier_text"] for r in block["_rows"] if r["result_text"] not in ("failed", "ok")]
-    ok = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "ok"]
+        # BL-0250 批次 3-A：讀取失敗的成因由 `ui_v2/set/live.py::_read_failure_title` 先寫好（尚未設定不寫成取數失敗）。
+        return block.get("_plain_summary") or _node_text(placeholder)
+    # BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示；44 第七節第三小節之十二）：結果欄改中文之後，分組改讀 `live` 記的 `_result`
+    # （沒有記的照舊讀結果欄的英文原值 —— 只有測試直接組的區塊會這樣）。全屬尚未設定的那一筆另成一組，不算進取數失敗。
+    def result(row):
+        return row.get("_result", row["result_text"])
+
+    failed = [r["tier_text"] for r in block["_rows"] if result(r) == "failed"]
+    unconfigured = [f"{SYMBOL_ERROR} 尚未設定：{'、'.join(r['_unconfigured_names'])}（{r['tier_text']}）"
+                    for r in block["_rows"] if result(r) == "unconfigured"]
+    missing = [r["tier_text"] for r in block["_rows"] if result(r) not in ("failed", "ok", "unconfigured")]
+    ok = [r["tier_text"] for r in block["_rows"] if result(r) == "ok"]
     parts = []
     if failed:
         parts.append(f"{SYMBOL_ERROR} 最近一次取數失敗：" + "、".join(failed))
+    parts.extend(unconfigured)
     if missing:
         parts.append(f"{SYMBOL_MISSING} 資料未備：" + "、".join(missing))
     if ok:
-        parts.append("最近一次 ok：" + "、".join(ok))
+        # ~~「最近一次 ok：」~~ → U7（b）：不寫英文原值（有意識的政策變更，不是漏刪；決策者：客戶 2026-10-19 批次 3 裁示）。
+        parts.append("最近一次取數完成：" + "、".join(ok))
     return "；".join(parts)
 
 

@@ -1299,4 +1299,31 @@ def build_live_model(live_input: dict, *, field_rules=None, field_columns=None, 
         if set(field_columns or ()) != set(settings.get(KEY_COLUMNS) or ()) \
                 or field_sort != settings.get(KEY_SORT):
             logic.find_block(model, "EXP-4")["detail_lines"].append(TEXT_UNSAVED_EXP4)
+    card_provenance_not_applicable(model)
     return apply_save_results(model, save_results)
+
+
+# ───────────── BL-0250 批次 3-A：三張核心卡的「來源／新鮮度」→ ⬜ 不適用（客戶 2026-10-19 批次 3 裁示第 1 點） ─────────────
+# 客戶原文：「採 ⬜ 不適用。理由：卡片本身沒有單一來源／單一新鮮度屬性，不是資料未備。不得擴張成其他缺資料情境也使用 ⬜。」
+# 44 第七節第三小節之十二。射程只有標的探索這三張卡（`EXP-1`／`EXP-2`／`EXP-3`）卡片層級那一組佔位徽章（`logic.placeholder_badge`，
+# 草稿 §H T-17「每卡掛一組，刻意畫成佔位」）；逐檔、逐格的來源與缺值照舊（缺資料照舊 ◇／⛔，不用 ⬜）。示範模式不經過本檔，照舊。
+# 字面的括號理由為實作組依裁示理由擬定（線框第六版的「各檔來源見每列展開」指的是 3-B 才做的列展開，本批還沒有，所以不寫），可推翻。
+CARD_PROVENANCE_CODES = ("EXP-1", "EXP-2", "EXP-3")
+TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"
+
+
+def card_provenance_not_applicable(model: dict) -> int:
+    """三張核心卡上那兩枚佔位徽章（〔來源層級〕〔新鮮度〕）→ 一枚「⬜ 不適用（…）」（就地改寫）。回改了幾張卡。
+    只認 `_placeholder` 為真的來源／新鮮度徽章；其他徽章一枚不動。"""
+    count = 0
+    for code in CARD_PROVENANCE_CODES:
+        block = logic.find_block(model, code)
+        badges = block.get("badges") or []
+        placeholders = [b for b in badges if b.get("_placeholder") and b.get("_kind") in ("來源", "新鮮度")]
+        if not placeholders:
+            continue
+        kept = [b for b in badges if b not in placeholders]
+        block["badges"] = kept + [{"_kind": "來源", "_tone": "中性", "_not_applicable": True,
+                                   "text": TEXT_CARD_PROVENANCE_NA}]
+        count += 1
+    return count

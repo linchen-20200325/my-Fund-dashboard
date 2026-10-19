@@ -191,7 +191,9 @@ def test_核心卡的來源與新鮮度徽章移到第四段(page):
     cards = [html.unescape(m.value) for m in at.main.markdown
              if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
     assert cards
-    word = "延遲 3 日" if page == "mkt" else "〔來源層級〕"
+    # ~~"〔來源層級〕"~~ → BL-0250 批次 3-A（`DEC-2026-10-19-05` 第 1 點；有意識的更正，不是漏刪）：標的探索三張卡卡片層級的
+    # 來源與新鮮度改寫一句「⬜ 不適用（…）」，照樣只在 ④ 那一枚展開區裡。
+    word = "延遲 3 日" if page == "mkt" else "⬜ 不適用（這張卡由多檔基金組成"
     assert not any(word in card for card in cards), page
     box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
     assert len(box) == 1 and box[0].proto.expanded is False
@@ -263,7 +265,8 @@ def test_市場總覽_黃色新鮮度徽章_卡上有時鐘_狀態行有時鐘(m
     from ui_v2.mkt import logic as L
 
     real = L._freshness_badge
-    monkeypatch.setattr(L, "_freshness_badge", lambda rows: dict(real(rows), _tone="黃"))
+    # BL-0250 批次 3-A：`_freshness_badge` 多一個延遲日數時區參數（正式模式台北日期），替身照收照轉。
+    monkeypatch.setattr(L, "_freshness_badge", lambda rows, *args: dict(real(rows, *args), _tone="黃"))
     at, _ = _run(P.SCRIPTS["mkt"]["正常"])
     cards = _cards(at, "mkt")
     assert cards and all(f"{health.SYMBOL_STALE} 延遲 " in card for card in cards), cards

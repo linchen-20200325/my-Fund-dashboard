@@ -411,6 +411,9 @@ def build_live_model(live_input: dict, *, field_window_days=None, field_baseline
         settings_error=notes.get("settings_error"),
         pair_consistent=settings.get("pair_consistent"),
         require_saved_selection=True,
+        # BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示第 4 點）：延遲日數以台北日期算，與畫面上顯示的取得時間同一個時區
+        # （`localize_detail_tables`）。只換「今天是哪一天」的參照時區，`obs_date`／`fetched_at` 一個字都不改。
+        delay_tz=DISPLAY_TZ,
     )
     model = apply_live_notes(model, notes, save_wired=save_wired)
     model = _mark_unsaved(model, settings, notes.get("settings_error"), field_window_days,
@@ -427,6 +430,8 @@ def build_live_model(live_input: dict, *, field_window_days=None, field_baseline
 #   `MKT-6` 的「取得時間」欄同一份資料（`fetched_at`），一併轉。
 # - 「是否修正」欄印布林原值 `True`／`False` → 「是」／「否」；表頭「指標鍵」→「指標」（列上的指標名本來就由 `plain` 換成中文名）。
 # - **不改的**：延遲日數照舊以 `fetched_at` 的日期減 `obs_date`（`logic.delay_days`，44 逐字的算法）；
+#   → BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示第 4 點；有意識的政策變更，不是漏刪）：「`fetched_at` 的日期」正式模式改取
+#   台北日期（`build_live_model` 傳 `delay_tz=DISPLAY_TZ`）；算法其餘照舊，`obs_date` 與 `fetched_at` 本身不改。
 #   單位欄照舊印 `value_unit` 字面值（44 `MKT-6` 規則欄逐字「單位直接印 `value_unit` 的字面值，不做換算」）；
 #   來源層級照舊印 `source_tier`（正式資料的值域是 44 4.5 的四個之一，`T1`／`T2` 只出現在示範資料）。
 # - 只在正式模式（本檔）；示範模式不經過本檔，一個字都不變。

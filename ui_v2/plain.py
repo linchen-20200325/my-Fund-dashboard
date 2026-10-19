@@ -160,14 +160,21 @@ MSG_POLICY_NOT_CONFIGURED = "未設定保單試算表 ID（POLICY_SHEET_ID），
 MSG_FRED_MISSING = "未設定 FRED_API_KEY"
 # `services/v2_tables/exp_universe.py::TEXT_NOT_CLOUD`
 MSG_POOL_NOT_CLOUD = "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"
+# `ui_v2/exp/live.py::TEXT_POOL_NOT_CLOUD` 去掉字首「⛔ 取數失敗：」那一段（`EXP-2` 收合摘要；同一件事的第二種寫法）。
+# BL-0250 批次 3-A（客戶 2026-10-19 裁示，批次 1 漏改的「EXP 燈句」「EXP 結果清單標題」）：舊表只認上一行那一句，
+# 這一句認不出來 → 落到「相關數字暫時無法判定」、算成真的取數失敗，整頁因此不算「全部屬尚未設定」。本檔不 import 它，由測試逐字比對。
+MSG_POOL_NOT_CLOUD_SUMMARY = "選股池未設定雲端來源（沒有服務帳戶憑證），候選清單不列任何一檔"
 
 # 已知訊息 → (資料類，None ＝ 沿用該塊的資料類；一句狀態描述)。比對用「訊息含這一串」。
 _KNOWN_MESSAGES = (
     (MSG_SETTINGS_NOT_CONFIGURED, "使用者設定", "設定試算表尚未設定"),
     (MSG_POLICY_NOT_CONFIGURED, "保單與持倉", "保單試算表尚未設定"),
-    (MSG_NO_SERVICE_ACCOUNT, None, "讀取用的服務帳戶尚未設定"),
+    # ~~"讀取用的服務帳戶尚未設定"~~ → 客戶 2026-10-19 裁示（批次 3 待裁示 (3)；有意識的政策變更，不是漏刪）：
+    # 缺 Google 服務帳戶各處統一「⛔ 尚未設定：Google 服務帳戶」。舊句的用意（讀取用的帳戶沒設）照舊；被權衡掉的是它沒說是 Google 的。
+    (MSG_NO_SERVICE_ACCOUNT, None, "Google 服務帳戶尚未設定"),
     (MSG_FRED_MISSING, "市場指標", "資料來源的金鑰尚未設定"),
     (MSG_POOL_NOT_CLOUD, "選股池", "選股池的雲端來源尚未設定"),
+    (MSG_POOL_NOT_CLOUD_SUMMARY, "選股池", "選股池的雲端來源尚未設定"),
 )
 
 # 各頁 `logic`／`live` 的失敗字首（ui_v2 內的常數；測試逐字比對各頁真身）。

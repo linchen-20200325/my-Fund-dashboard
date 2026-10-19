@@ -37,6 +37,7 @@ import _plain_scan as SCAN  # noqa: E402
 
 from ui_v2 import plain  # noqa: E402
 from ui_v2.set import spec  # noqa: E402
+from ui_v2.set import live as set_live  # noqa: E402
 
 _KEYS = {table for table, _ in spec.SPEC_TABLES}
 _KEYS |= {column for _, columns in spec.SPEC_TABLES for column in columns}
@@ -119,7 +120,8 @@ def test_一般畫面沒有工程字樣(page, name):
         assert len(texts) >= 3
         assert _hits(texts, PATTERNS) == []
         return
-    texts = SCAN.screen_texts(at, skip_expanders=(plain.ADVANCED_DIAG_TITLE, plain.BLOCK_NAMES["SET-7"]))
+    # BL-0250 批次 3-A U7（d）：`SET-7` 正式模式收合標題改「欄位對照（進階）」（`ui_v2/set/live.py::SET7_TITLE`），照舊排除。
+    texts = SCAN.screen_texts(at, skip_expanders=(plain.ADVANCED_DIAG_TITLE, plain.BLOCK_NAMES["SET-7"], set_live.SET7_TITLE))
     assert len(texts) >= 10
     assert _hits(texts, ("塊代號", "層字樣")) == []
     key_texts = _set_block_texts(at, ("SET-0", "SET-1"))

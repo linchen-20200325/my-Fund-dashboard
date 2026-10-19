@@ -1432,7 +1432,10 @@ def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
     for line in _HLD4_DROPPED + (logic.HLD4_SAVE_SCOPE_NOTE,):
         assert line in demo, line          # 正控：示範版照印
     # BL-0250 批次 1（`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：「欄位一律無預設值…」元件說明句正式模式也不印（`live.LIVE_TEXT_EDITS`）。
-    assert got == [line for line in demo if line not in _HLD4_DROPPED and live.LIVE_TEXT_EDITS.get(line, line) is not None]
+    # BL-0250 批次 3-A U4（`DEC-2026-10-19-05`；有意識的更正，不是漏刪）：正式模式不畫永遠停用的「套用」，
+    # 說明區最前面多一句 `live.TEXT_APPLY_NOT_SHOWN`（原本停用原因那一句的意思）；其餘照舊。
+    assert got[0] == live.TEXT_APPLY_NOT_SHOWN
+    assert got[1:] == [line for line in demo if line not in _HLD4_DROPPED and live.LIVE_TEXT_EDITS.get(line, line) is not None]
     assert logic.HLD4_SAVE_SCOPE_NOTE in got
 
 
