@@ -1153,6 +1153,7 @@ _NOT_A_44_QUOTE: dict = {}
 #    就是本輪被指出兩次的那個形狀（同一把尺只往外用、不往內用）。
 _QUOTE_SCAN_FILES = (
     "ui_v2/mkt/logic.py",
+    "ui_v2/mkt/live.py",        # BL-0250 批次 3-A 同批稽核建議：正式模式那一檔同樣有引 44 的註解，一起掃（加入時實測不紅）
     "ui_v2/mkt/fixtures.py",
     "ui_v2/hld/logic.py",
     "ui_v2/hld/fixtures.py",

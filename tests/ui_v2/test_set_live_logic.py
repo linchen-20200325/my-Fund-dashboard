@@ -162,9 +162,12 @@ def test_缺服務帳戶_存檔停用_同一件事只印一行_去重比對錯�
     set4 = _b(model, "SET-4")
     assert data["notes"]["table_errors"]["user_setting"]["code"] == "no_service_account"
     assert set4["top_lines"] == []                                  # 讀設定已因同一件事失敗：不再多印
-    assert [n["text"] for n in set4["fail_nodes"]] == ["⛔ 取數失敗：未設定 Google 服務帳戶"]  # BL-0250 批次 1（`DEC-2026-10-19-04`）：一般畫面不印鍵名
-    assert set4["buttons"][0]["disabled_reason"] == "未設定服務帳戶"
-    assert live.refetch_button("市場指標", data["notes"])["disabled_reason"] == "未設定服務帳戶"
+    # ~~["⛔ 取數失敗：未設定 Google 服務帳戶"]~~（BL-0250 批次 1）→ BL-0250 批次 3-A（`DEC-2026-10-19-05` 第 3 點；有意識的更正，不是漏刪）：
+    # 缺 Google 服務帳戶統一「⛔ 尚未設定：Google 服務帳戶」；停用原因 ~~「未設定服務帳戶」~~ → 存檔「…，暫停寫入」、取數「…，暫停取數」。
+    assert [n["text"] for n in set4["fail_nodes"]] == ["⛔ 尚未設定：Google 服務帳戶"]
+    assert set4["buttons"][0]["disabled_reason"] == "尚未設定 Google 服務帳戶，暫停寫入"
+    assert live.refetch_button("市場指標", data["notes"])["disabled_reason"] == "尚未設定 Google 服務帳戶，暫停取數"
+    assert set4["summary_text"] == "⛔ 尚未設定：Google 服務帳戶" and "user_setting" not in set4["summary_text"]
 
 
 # ═══════════════════════ 狀態二：讀取失敗且訊息被遮蔽 ═══════════════════════
@@ -259,7 +262,7 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     for tier in ("配息", "其他"):
         assert set2[tier]["note_lines"] == [live.TEXT_REASON_TIER_PENDING], tier
     assert set2["淨值"]["note_lines"] == [] and set2["淨值"]["result_text"] == "⬜"
-    assert set2["市場指標"]["result_text"] == "ok" and set2["市場指標"]["note_lines"] == []
+    assert set2["市場指標"]["result_text"] == "取數完成" and set2["市場指標"]["note_lines"] == []  # BL-0250 批次 3-A（`DEC-2026-10-19-05`）：結果欄不寫英文原值
     # ★10
     assert [n["text"] for n in _b(model, "SET-3")["head_lines"]] == ["設定試算表：客戶的設定本"]
     assert SHEET not in text
@@ -478,7 +481,7 @@ def test_取數失敗_遮蔽後與fetch_log_message逐字相同_畫面同一份(
     set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}["市場指標"]
     assert set2["message_text"] == stored and set2["message_note_lines"] == [live.MASKED_NOTE]
     row6 = _b(model, "SET-6")["_rows"][0]
-    assert row6["cells"][6] == stored and row6["cell_notes"] == {6: [live.MASKED_NOTE]}
+    assert row6["cells"][5] == stored and row6["cell_notes"] == {5: [live.MASKED_NOTE]}  # BL-0250 批次 3-A（`DEC-2026-10-19-05`）：紀錄編號欄只在進階診斷，訊息退到第 6 欄
     assert _b(model, "SET-0")["text"] == "失敗的來源層級：市場指標"
 
 
@@ -660,7 +663,7 @@ def test_alo_basis_正式模式型別為list_單行輸入欄(env):
     field = _field(model, "alo_basis")
     assert field["_kind"] == "list" and field["_multiline"] is False and field["label"] == "計算基礎"  # BL-0250 批次 1（`DEC-2026-10-19-04`）：標籤改中文設定名
     row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
-    assert row["kind_text"] == "list"
+    assert row["kind_text"] == "清單"  # BL-0250 批次 3-A（`DEC-2026-10-19-05`）：資料型態寫中文
 
 
 @pytest.mark.parametrize("value", ["成本", "市值"])
@@ -802,7 +805,7 @@ def test_淨值層_重新取數成功_結果行_SET1印本次時間與新句(env
     assert nav["at_text"] == "2026-09-25 10:00" and nav["days_text"] == "1"
     assert nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE] and nav["badges"] == []
     set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}["淨值"]
-    assert set2["result_text"] == "ok" and set2["note_lines"] == []
+    assert set2["result_text"] == "取數完成" and set2["note_lines"] == []  # BL-0250 批次 3-A（`DEC-2026-10-19-05`）：結果欄不寫英文原值
     assert live.TEXT_REASON_KIND_PENDING not in nav["note_lines"]
 
 
@@ -822,7 +825,7 @@ def test_淨值層_ok之後再失敗_SET1仍顯示ok那筆時間_SET2顯示失�
     assert nav["at_text"] == "2026-09-25 10:00"                      # ok 那筆；後來的失敗不覆蓋
     assert nav["note_lines"] == [live.TEXT_NAV_TIME_SCOPE]
     set2 = {r["_tier"]: r for r in _b(model, "SET-2")["_rows"]}["淨值"]
-    assert set2["result_text"] == "failed" and set2["time_text"] == "2026-09-25 13:00"
+    assert set2["result_text"] == "⛔ 取數失敗" and set2["time_text"] == "2026-09-25 13:00"  # BL-0250 批次 3-A（`DEC-2026-10-19-05`）：真的取數失敗照寫取數失敗
     assert set2["message_text"] == stored
     assert _b(model, "SET-0")["text"] == "失敗的來源層級：淨值"
 

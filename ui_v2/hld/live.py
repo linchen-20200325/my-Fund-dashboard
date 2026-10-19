@@ -70,6 +70,18 @@ _DISABLED_BY_KIND = {
     "套用": APPLY_DISABLED_REASON,
 }
 
+# BL-0250 批次 3-A U4（客戶 2026-10-19 批次 3 裁示；44 第七節第三小節之十二）：正式模式一般畫面不畫**永遠停用**的「套用」
+# （同市場總覽 `ui_v2/mkt/live.py::LIVE_HIDDEN_KINDS` 的前例，之七其二第 7 條）；模型照舊帶著它（停用＋原因），判定不變。
+# 原本停用原因那一句的意思（畫面結果只讀已存設定、存了下一次才生效）改寫成一句說明，畫在「存檔」下面（線框第六版 3.6）。
+# ⚠️ 只擋停用中的「套用」：依情況才停用的按鈕（例：設定讀不到時的「存檔」）照舊畫、照舊附原因。示範模式照舊畫「套用」。
+LIVE_HIDDEN_KINDS = ("套用",)
+TEXT_APPLY_NOT_SHOWN = "畫面上的結果只讀已存的設定；存檔後，下一次重新載入時生效。"
+
+
+def hidden_in_live(button: dict) -> bool:
+    """正式模式一般畫面不畫這一枚？只有停用中的「套用」回 True。"""
+    return button["_action_kind"] in LIVE_HIDDEN_KINDS and not button["_enabled"]
+
 # 裁示 4-C：欄名逐字。舊欄名是 `logic._build_hld5` 的字面。
 OLD_SYNC_LABEL = "最後對帳"
 SYNC_LABEL = "最後核對日（只記日期）"
@@ -879,6 +891,9 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
         if reason is not None:
             button["_enabled"] = False
             button["disabled_reason"] = reason
+    hld4 = logic.find_block(out, "HLD-4")
+    if any(hidden_in_live(b) for b in hld4["buttons"]):
+        hld4["notes"] = [TEXT_APPLY_NOT_SHOWN] + list(hld4.get("notes") or ())   # BL-0250 批次 3-A U4
     return out
 
 

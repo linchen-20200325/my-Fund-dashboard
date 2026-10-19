@@ -139,10 +139,14 @@ def _expected_model(probe, window):
 def test_第2點_正式模式_改欄位按套用_套用停用_六塊照已存值(probe):
     at = _run()
     before = _blobs(at)
-    apply_button = at.button(key=_button_key("套用"))
-    assert apply_button.disabled is True and apply_button.help == live.APPLY_DISABLED_REASON
-    at.text_input(key="hld4_window_start").input(_NEW_START)
-    at.button(key=_button_key("套用")).click().run()
+    # ~~畫面上那一枚「套用」停用、附 `APPLY_DISABLED_REASON`，按下去不動~~ → BL-0250 批次 3-A U4（`DEC-2026-10-19-05`；
+    # 有意識的更正，不是漏刪）：正式模式一般畫面不畫這一枚永遠停用的「套用」，原本停用原因的意思改成一句說明畫在「存檔」下面。
+    # 「改欄位、六塊照已存值」照舊驗；模型裡那一枚照舊停用＋原因（`tests/ui_v2/test_bl0250_batch3a_logic.py`）。
+    assert not [b for b in at.main.button if b.label == "套用"]
+    with pytest.raises(KeyError):
+        at.button(key=_button_key("套用"))
+    assert live.TEXT_APPLY_NOT_SHOWN in "\n".join(m.value for m in at.main.markdown)
+    at.text_input(key="hld4_window_start").input(_NEW_START).run()
     assert not at.exception
     assert _blobs(at) == before
     # 就算 session 裡留著一份套用值（例如預覽站從示範頁帶過來），正式模式也不讀它

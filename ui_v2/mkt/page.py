@@ -436,6 +436,37 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
 _MKT5_BADGE_GLYPH = {"取數失敗": "⛔", "資料未備": "◇"}
 
 
+def mark_fetch_failures(model: dict, dataset: dict) -> int:
+    """正式模式：`MKT-5`／`MKT-7` 依資料層 `errors` 標取數失敗（BL-0373），成因是設定沒設的鍵改標尚未設定（就地改寫）。
+    BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 2 點；44 第七節第三小節之十二其九第 1 條）：訊息屬 `plain` 已知訊息表
+    「尚未設定」那一族（例「未設定 FRED_API_KEY」）的鍵交給 `sections.mark_mkt7_fetch_failed` 的 `unconfigured`。
+    要在 `plain` 把指標鍵換成中文名之前呼叫（比對的是資料層 `errors` 的鍵）。回改了幾處。"""
+    errors = dataset.get("errors") or {}
+    unconfigured = {key: health.not_configured_name(state) for key, message in errors.items()
+                    if (state := plain.not_configured_state(message))}
+    return sections.mark_mkt7_fetch_failed(model, errors.keys(), unconfigured)
+
+
+def mkt5_status_lines(items) -> list:
+    """正式模式多選清單下方的狀態行（純函式）：同一種徽章一行、列出是哪幾項（字面取徽章本身，不另立文案）；
+    BL-0250 批次 3-A：成因是設定沒設的那幾項（`_unconfigured`）另一行「⛔ 尚未設定：<哪一項>（<哪幾項>）」，不算進取數失敗。"""
+    lines = []
+    by_badge: dict = {}
+    for item in items:
+        for badge in item["badges"]:
+            by_badge.setdefault(badge["text"], []).append(plain.key_name(item["name"]))
+    for text, names in by_badge.items():
+        glyph = _MKT5_BADGE_GLYPH.get(text)
+        lines.append(f"{glyph + ' ' if glyph else ''}{text}：{'、'.join(names)}")
+    by_reason: dict = {}
+    for item in items:
+        if item.get("_unconfigured"):
+            by_reason.setdefault(item["_unconfigured"], []).append(plain.key_name(item["name"]))
+    for reason, names in by_reason.items():
+        lines.append(f"⛔ 尚未設定：{reason}（{'、'.join(names)}）")
+    return lines
+
+
 def _render_mkt5_picks(block: dict) -> None:
     """正式模式：一份多選清單（44 第七節第三小節之七其二第 5 條）。可選母體、上限 6、排序照模型（`logic._build_mkt5`）；
     以中文指標名顯示（`plain.key_name`），底層值與存檔內容仍是原鍵。"""
@@ -461,13 +492,8 @@ def _render_mkt5_picks(block: dict) -> None:
     # 改成同一種徽章一行、列出是哪幾項（字面取徽章本身，不另立文案）。
     # 客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`）：取數失敗的鍵掛「取數失敗」（`sections.mark_mkt7_fetch_failed`），
     # 與資料未備分成兩行，各帶符號（⛔ 取數失敗、◇ 資料未備；之七其四）；取數失敗不算進資料未備。
-    by_badge: dict = {}
-    for item in items:
-        for badge in item["badges"]:
-            by_badge.setdefault(badge["text"], []).append(plain.key_name(item["name"]))
-    for text, names in by_badge.items():
-        glyph = _MKT5_BADGE_GLYPH.get(text)
-        st.caption(f"{glyph + ' ' if glyph else ''}{text}：{'、'.join(names)}")
+    for line in mkt5_status_lines(items):
+        st.caption(line)
 
 
 def _render_mkt5(block: dict, *, save_click, plain_mode: bool = False) -> None:
@@ -665,7 +691,9 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         # 只換字：模型的判定、狀態、顏色、塊數、列數一個都不動（`ui_v2/plain.py`）。示範模式不經過這一步（BL-0367）。
         # 客戶 2026-10-18 裁示 BL-0373（`DEC-2026-10-18-01`；44 第七節第三小節之九）：取數失敗而沒有任何觀測的鍵，`MKT-7` 那一列
         # 掛「取數失敗」、四格 ⛔，不掛「資料未備」。要在 `plain` 把指標鍵換成中文名之前做（比對的是資料層 `errors` 的鍵）。
-        sections.mark_mkt7_fetch_failed(model, (dataset.get("errors") or {}).keys())
+        # BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 2 點；44 第七節第三小節之十二其二第 4 條）：資料層記成某個鍵的失敗、
+        # 但成因是設定沒設（例「未設定 FRED_API_KEY」，`plain` 已知訊息表）的鍵，改說「⛔ 尚未設定：<哪一項>」、不掛「取數失敗」。
+        mark_fetch_failures(model, dataset)
         model, raw, _status = plain.plain_model(model, page="mkt")
         # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
         # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。

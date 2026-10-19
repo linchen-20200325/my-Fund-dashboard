@@ -108,10 +108,14 @@ def test_燈下一枚同頁導覽_落點在重新取數之前_不是按鈕(name)
 
 def test_有逾期_需要注意列出外那一列_SET1比較欄加時鐘():
     """這支腳本另有一個層級取數失敗，燈是紅（失敗來源優先，44 SET-0 規則欄照舊）；黃燈那一句的改寫由
-    `tests/ui_v2/test_set_reshape_logic.py` 驗。這裡驗 ③ 與 `SET-1` 在畫面上的樣子：③ 照樣列出「外」那一列。"""
+    `tests/ui_v2/test_set_reshape_logic.py` 驗。這裡驗 ③ 與 `SET-1` 在畫面上的樣子：③ 照樣列出「外」那一列。
+    ~~燈上寫「失敗的來源層級」~~ → BL-0250 批次 3-A（`DEC-2026-10-19-05` 第 2 點；有意識的更正，不是漏刪）：那一筆取數紀錄的
+    每一則訊息都是「未設定 FRED_API_KEY」⇒ 燈照舊紅（算一個失敗來源），字寫「尚未設定：資料來源的金鑰（市場指標）」。"""
     at = _run(SCAN.SCRIPTS["set"]["stale"])
     values = _md(at)
-    assert "失敗的來源層級" in _lamp(values)
+    lamp = _lamp(values)
+    assert "尚未設定：資料來源的金鑰（市場指標）" in lamp and "失敗的來源層級" not in lamp
+    assert "⛔" in lamp
     assert "筆資料超過你設定的新鮮度上限" not in "\n".join(values)
     assert "其餘正常" not in "\n".join(values)
     three = _label(values, plain.LABEL_ATTENTION)

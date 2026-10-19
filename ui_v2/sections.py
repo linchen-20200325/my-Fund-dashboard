@@ -297,6 +297,7 @@ MKT7_CELLS = ("obs_text", "fetched_text", "tier_text", "delay_text")
 # `MKT-6` 一筆觀測也沒有時的那一句（真身 `ui_v2/mkt/logic.py::empty_source_text(["market_indicator"])`；`plain` 之前的形狀）與取代它的狀態族。
 MKT6_EMPTY_LINE = "⬜ 資料未備：market_indicator 尚無資料"
 LINE_FETCH_FAILED = f"{SYMBOL_ERROR} 取數失敗"
+MKT_NOT_CONFIGURED = "尚未設定"   # BL-0250 批次 3-A：`MKT-5`／`MKT-6`／`MKT-7` 成因是設定沒設的那幾處（`ui_v2/health.py::TEXT_NOT_CONFIGURED` 同字，測試比對）
 
 
 def set_conclusion(model: dict, *, sheet_configured: bool, service_account_configured: bool = True) -> None:
@@ -362,17 +363,35 @@ def set_reshape(model: dict, *, sheet_configured: bool, service_account_configur
 # ───────────────────────── 市場總覽（客戶 2026-10-18 裁示 BL-0373；44 第七節第三小節之九） ─────────────────────────
 
 
-def mark_mkt7_fetch_failed(model: dict, failed_keys) -> int:
+def mark_mkt7_fetch_failed(model: dict, failed_keys, unconfigured=None) -> int:
     """`MKT-7` 取數失敗的鍵（`failed_keys`：資料層 `errors` 裡有失敗字串的鍵）那一列：徽章「資料未備」→「取數失敗」、
     四格 `⬜` → `⛔`，並記 `_fetch_failed`；`MKT-5` 可選項目同一批鍵的「資料未備」徽章 →「取數失敗」（就地改寫）。
     回改了幾處（列＋項目）。要在 `plain` 把鍵換成中文名之前呼叫（比對的是原鍵）。
 
     客戶 2026-10-18 裁示 BL-0373：取數失敗＝⛔、資料未備＝◇，不得把取數失敗判成資料未備。只動「這個鍵一筆觀測也沒有、
     而且資料層回報了失敗」的那幾處（logic 已把它們與真正的資料未備分開：資料未備那幾列帶 `_missing_cells`）；
-    有觀測的列（取數失敗但沿用既有列）照舊。`MKT-6` 那一句在 `plain`／`symbols` 之後由 `mark_mkt6_fetch_failed` 處理。"""
-    failed = set(failed_keys or ())
+    有觀測的列（取數失敗但沿用既有列）照舊。`MKT-6` 那一句在 `plain`／`symbols` 之後由 `mark_mkt6_fetch_failed` 處理。
+
+    `unconfigured`（BL-0250 批次 3-A，總管適用客戶 `DEC-2026-10-19-05` 第 2 點；44 第七節第三小節之十二其二第 4 條）：
+    {鍵: 尚未設定的對象}（例 `{"credit_spread_pct": "資料來源的金鑰"}`）—— 資料層記成那個鍵的失敗、但成因是設定沒設
+    （沒有執行取數）的那幾個鍵。那幾處不掛「取數失敗」，`MKT-7` 那一列最近觀測日格寫「⛔ 尚未設定：<哪一項>」、另三格 `⛔`、
+    不掛徽章（狀態徽章七個字面值不新增第八個），記 `_unconfigured`；`MKT-5` 可選項目拿掉「資料未備」、記 `_unconfigured`
+    （頁面另寫一行）。真的取數／連線失敗的鍵照舊。"""
+    unconfigured = dict(unconfigured or {})
+    failed = set(failed_keys or ()) - set(unconfigured)
     count = 0
     for row in _find(model, "MKT-7")["_rows"]:
+        name = unconfigured.get(row["indicator_key"])
+        if name is not None and not row.get("_missing_cells") \
+                and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in row["badges"]):
+            row["badges"] = [b for b in row["badges"] if b.get("text") != MKT_BADGE_MISSING_TEXT]
+            for cell in MKT7_CELLS:
+                if row[cell] == SYMBOL_UNDECIDABLE:
+                    row[cell] = SYMBOL_ERROR
+            row["obs_text"] = f"{SYMBOL_ERROR} {MKT_NOT_CONFIGURED}：{name}"
+            row["_unconfigured"] = name
+            count += 1
+            continue
         if row["indicator_key"] not in failed or row.get("_missing_cells"):
             continue
         if not any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in row["badges"]):
@@ -385,6 +404,12 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys) -> int:
         row["_fetch_failed"] = True
         count += 1
     for item in _find(model, "MKT-5").get("_items") or ():
+        name = unconfigured.get(item.get("name"))
+        if name is not None and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in item["badges"]):
+            item["badges"] = [b for b in item["badges"] if b.get("text") != MKT_BADGE_MISSING_TEXT]
+            item["_unconfigured"] = name
+            count += 1
+            continue
         if item.get("name") in failed and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in item["badges"]):
             item["badges"] = [dict(MKT_BADGE_FETCH_FAILED) if b.get("text") == MKT_BADGE_MISSING_TEXT else b
                               for b in item["badges"]]
@@ -406,23 +431,39 @@ def mark_mkt6_fetch_failed(model: dict) -> int:
     - `MKT-7` 列出的每一個鍵都是取數失敗 → 那一句改成狀態族「⛔ 取數失敗」；
     - 成因混合（有取數失敗、也有真正的資料未備）→ 資料未備那一句照留，下一行另加「⛔ 取數失敗：<失敗的指標名>」
       （與持倉體檢同向：取數失敗另外說出來，不算進資料未備）；
-    - 沒有任何取數失敗 → 不動。"""
+    - 沒有任何取數失敗 → 不動。
+
+    BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 2 點）：`MKT-7` 記了 `_unconfigured` 的鍵（成因是設定沒設）不算取數失敗，
+    另寫一行「⛔ 尚未設定：<哪一項>」；與別的成因（取數失敗、資料未備）並存時括號列出是哪幾個指標。列出的每一個鍵都屬
+    尚未設定時，那一句只寫「⛔ 尚未設定：<哪一項>」（同上「全部失敗只寫狀態族」的寫法）。"""
     mkt6, mkt7 = _find(model, "MKT-6"), _find(model, "MKT-7")
     rows7 = mkt7["_rows"]
     lines = mkt6["detail_lines"]
     if mkt6.get("_rows") or not rows7 or not any(_is_mkt6_empty_line(line) for line in lines):
         return 0
     failed = [r["indicator_key"] for r in rows7 if r.get("_fetch_failed")]
-    if not failed:
+    unconfigured: dict = {}
+    for r in rows7:
+        if r.get("_unconfigured"):
+            unconfigured.setdefault(r["_unconfigured"], []).append(r["indicator_key"])
+    if not failed and not unconfigured:
         return 0
-    if len(failed) == len(rows7):
-        mkt6["detail_lines"] = [LINE_FETCH_FAILED if _is_mkt6_empty_line(line) else line for line in lines]
-        return 1
+    n_unconfigured = sum(len(v) for v in unconfigured.values())
+    missing = len(rows7) - len(failed) - n_unconfigured
+    extra = []
+    if failed:
+        extra.append(LINE_FETCH_FAILED if not missing and not unconfigured else f"{LINE_FETCH_FAILED}：" + "、".join(failed))
+    for name, keys in unconfigured.items():
+        alone = not missing and not failed and len(unconfigured) == 1
+        extra.append(f"{SYMBOL_ERROR} {MKT_NOT_CONFIGURED}：{name}" + ("" if alone else "（" + "、".join(keys) + "）"))
     out = []
     for line in lines:
-        out.append(line)
         if _is_mkt6_empty_line(line):
-            out.append(f"{LINE_FETCH_FAILED}：" + "、".join(failed))
+            if missing:
+                out.append(line)       # 真正的資料未備那一句照留
+            out.extend(extra)
+        else:
+            out.append(line)
     mkt6["detail_lines"] = out
     return 1
 
@@ -442,17 +483,27 @@ def set2_summary(block: dict) -> str:
         if placeholder.get("_empty_kind") == SET_EMPTY_KIND_NO_SOURCE:
             # 比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
             return f"缺 {SET_LOG_TABLE}：{_node_text(placeholder)}"
-        return _node_text(placeholder)
-    failed = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "failed"]
-    missing = [r["tier_text"] for r in block["_rows"] if r["result_text"] not in ("failed", "ok")]
-    ok = [r["tier_text"] for r in block["_rows"] if r["result_text"] == "ok"]
+        # BL-0250 批次 3-A：讀取失敗的成因由 `ui_v2/set/live.py::_read_failure_title` 先寫好（尚未設定不寫成取數失敗）。
+        return block.get("_plain_summary") or _node_text(placeholder)
+    # BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示；44 第七節第三小節之十二）：結果欄改中文之後，分組改讀 `live` 記的 `_result`
+    # （沒有記的照舊讀結果欄的英文原值 —— 只有測試直接組的區塊會這樣）。全屬尚未設定的那一筆另成一組，不算進取數失敗。
+    def result(row):
+        return row.get("_result", row["result_text"])
+
+    failed = [r["tier_text"] for r in block["_rows"] if result(r) == "failed"]
+    unconfigured = [f"{SYMBOL_ERROR} 尚未設定：{'、'.join(r['_unconfigured_names'])}（{r['tier_text']}）"
+                    for r in block["_rows"] if result(r) == "unconfigured"]
+    missing = [r["tier_text"] for r in block["_rows"] if result(r) not in ("failed", "ok", "unconfigured")]
+    ok = [r["tier_text"] for r in block["_rows"] if result(r) == "ok"]
     parts = []
     if failed:
         parts.append(f"{SYMBOL_ERROR} 最近一次取數失敗：" + "、".join(failed))
+    parts.extend(unconfigured)
     if missing:
         parts.append(f"{SYMBOL_MISSING} 資料未備：" + "、".join(missing))
     if ok:
-        parts.append("最近一次 ok：" + "、".join(ok))
+        # ~~「最近一次 ok：」~~ → U7（b）：不寫英文原值（有意識的政策變更，不是漏刪；決策者：客戶 2026-10-19 批次 3 裁示）。
+        parts.append("最近一次取數完成：" + "、".join(ok))
     return "；".join(parts)
 
 

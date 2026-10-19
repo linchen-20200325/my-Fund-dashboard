@@ -109,10 +109,12 @@ def test_MKT6_取得時間台北時間_是否修正改是否_表頭指標():
 
 # ~~正式模式沒有佔位字、④ 寫「◇ 資料未備」~~ → 獨立稽核 M1 後撤回（總管裁定；有意識的更正，不是漏刪）：
 # EXP 核心卡來源層級缺值的符號（◇／⬜／其他）待客戶 Decision Gate；佔位字外漏維持現況。本條鎖住現況，客戶裁示後改。
+# → 客戶 2026-10-19 批次 3 裁示第 1 點已裁（`DEC-2026-10-19-05`；有意識的更正，不是漏刪）：採 `⬜ 不適用`，不是 ◇。
+#   上兩行在寫下當時為真（尚未裁示）；新行為的正反兩面守衛在 `tests/ui_v2/test_bl0250_batch3a_page.py`，本條改驗佔位字不再外漏。
 @pytest.mark.parametrize("name", list(SCAN.SCRIPTS["exp"]))
 def test_EXP_佔位字維持現況_待客戶裁示(name):
     provenance = [t for t in _texts("exp", name) if t.startswith("卡 項目 來源與新鮮度")]
-    assert provenance and "〔來源層級〕" in provenance[0] and "〔新鮮度〕" in provenance[0]
+    assert provenance and "〔來源層級〕" not in provenance[0] and "〔新鮮度〕" not in provenance[0]
     assert "◇ 資料未備" not in provenance[0]
 
 

@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事，不可混為一談：
 # 前者要退回已套用的那一組，後者是使用者把欄位清空了。
@@ -359,9 +359,21 @@ def partial_range_text(start: str, end: str) -> str:
 # ───────────────────────── 新鮮度 ─────────────────────────
 
 
-def delay_days(obs_date: str, fetched_at: str) -> int:
-    """`44` MKT-7 逐字：延遲日數 ＝ fetched_at 的日期減 obs_date，單位日曆日。"""
-    return (date.fromisoformat(fetched_at[:10]) - date.fromisoformat(obs_date)).days
+def delay_days(obs_date: str, fetched_at: str, *, tz=None) -> int:
+    """`44` MKT-7 逐字：延遲日數 ＝ fetched_at 的日期減 obs_date，單位日曆日。
+
+    `tz`（BL-0250 批次 3-A，客戶 2026-10-19 批次 3 裁示第 4 點；44 第七節第三小節之十二）：`fetched_at` 的「日期」在哪一個時區取。
+    None（示範模式，預設）＝ 照舊取字串前 10 碼（存放的世界協調時間日期），輸出一個字都不變；正式模式傳台北時區
+    （`ui_v2/mkt/live.py::DISPLAY_TZ`），日期與畫面上顯示的取得時間同一個時區。⚠️ 只換「取得時間是哪一天」的參照時區；
+    `obs_date` 與 `fetched_at` 本身一個字都不改，`obs_date` 照舊是資料自己的日期。`fetched_at` 沒有時區時照拋，不猜。"""
+    if tz is None:
+        fetched_day = date.fromisoformat(fetched_at[:10])
+    else:
+        moment = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            raise ValueError(f"取得時間沒有時區：{fetched_at!r}")
+        fetched_day = moment.astimezone(tz).date()
+    return (fetched_day - date.fromisoformat(obs_date)).days
 
 
 def freshness_badge_text(delay: int) -> str | None:
@@ -525,11 +537,11 @@ def _source_badge(tier: str) -> dict:
     return {"_kind": "來源", "_tone": "中性", "text": tier}
 
 
-def _freshness_badge(rows) -> dict:
+def _freshness_badge(rows, delay_tz=None) -> dict:
     if not rows:
         return _status_badge("未定義")
     latest = rows[-1]
-    delay = delay_days(latest["obs_date"], latest["fetched_at"])
+    delay = delay_days(latest["obs_date"], latest["fetched_at"], tz=delay_tz)
     text = freshness_badge_text(delay)
     if text is None:
         return _status_badge("未定義")
@@ -563,7 +575,7 @@ def _retry_button() -> dict:
 # ───────────────────────── 三張核心卡 ─────────────────────────
 
 
-def _build_card(code, dataset, *, window_days, baseline_date, settings_error=None, pair_consistent=None):
+def _build_card(code, dataset, *, window_days, baseline_date, settings_error=None, pair_consistent=None, delay_tz=None):
     specs = _CARD_SPECS[code]
     errors = dataset.get("errors", {})
     main_values = []
@@ -585,7 +597,7 @@ def _build_card(code, dataset, *, window_days, baseline_date, settings_error=Non
         if state == STATE_OK:
             value_text = format_value(rows[-1]["value_num"], decimals)
             value_badges.append(_source_badge(rows[-1]["source_tier"]))
-            value_badges.append(_freshness_badge(rows))
+            value_badges.append(_freshness_badge(rows, delay_tz))
         elif state == STATE_MISSING:
             value_text = "⬜ 資料未備"
             reason_text = source_key
@@ -1241,7 +1253,7 @@ def _detail_nothing_selected(code, text, extra) -> dict:
     return block
 
 
-def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothing_text=None):
+def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothing_text=None, delay_tz=None):
     """`44` MKT-7：一列一個 indicator_key，取各組最近一筆。
 
     客戶 2026-10-13 裁示 MKT-5：使用者取消勾選的鍵（`user_hidden`）不列；
@@ -1279,7 +1291,7 @@ def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothin
             )
             continue
         latest = rows[-1]
-        delay = delay_days(latest["obs_date"], latest["fetched_at"])
+        delay = delay_days(latest["obs_date"], latest["fetched_at"], tz=delay_tz)
         if delay < 0:
             delay_text = not_applicable_text("取得時間早於觀測日")
         else:
@@ -1339,6 +1351,7 @@ def build_page_model(
     settings_error=None,
     pair_consistent=None,
     require_saved_selection=False,
+    delay_tz=None,
 ) -> dict:
     """把資料 ＋ 使用者設定組成一份純資料模型。page.py 只負責把它畫出來。
 
@@ -1350,6 +1363,7 @@ def build_page_model(
     - `pair_consistent` ＝ 兩鍵與一致性憑證是否一致（正式模式；None ＝ 不檢查，示範模式）；
     - `require_saved_selection` ＝ 從未存過勾選時下方明細一個都不列（正式模式 True，總管 2026-10-13 裁定；
       示範模式 False，照舊全列）。
+    - `delay_tz` ＝ 延遲日數取「取得時間是哪一天」的時區（`delay_days`；正式模式台北時區，示範模式 None 照舊）。
     """
     cards = [
         _build_card(
@@ -1359,6 +1373,7 @@ def build_page_model(
             baseline_date=baseline_date,
             settings_error=settings_error,
             pair_consistent=pair_consistent,
+            delay_tz=delay_tz,
         )
         for code in ("MKT-1", "MKT-2", "MKT-3")
     ]
@@ -1387,7 +1402,7 @@ def build_page_model(
     blocks.append(_build_mkt6(dataset, selected_keys=shown, states=states, selection_state=selection,
                               nothing_text=nothing))
     blocks.append(_build_mkt7(dataset, keys=keys, states=states, selection_state=selection,
-                              nothing_text=nothing))
+                              nothing_text=nothing, delay_tz=delay_tz))
 
     return {
         "title": PAGE_TITLE,

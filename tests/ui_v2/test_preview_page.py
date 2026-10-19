@@ -633,10 +633,10 @@ def test_持倉體檢_套用後換頁再回來_輸入欄與核心卡用的是同
     assert fresh_field and fresh_field != _HLD_NEW_START, fresh_field
     # ~~按「套用」之後核心卡換成新區間、換頁回來兩者一致~~ → 客戶 2026-10-16 裁示第 2 點（有意識的更正，不是漏刪）：
     # 正式模式「套用」停用、核心卡只讀已存設定 —— 改欄位按套用，核心卡不動；換頁回來輸入欄回到已存值、核心卡照舊。
-    at.text_input(key="hld4_window_start").input(_HLD_NEW_START)
-    apply_button = next(b for b in at.main.button if b.label == "套用")
-    assert apply_button.disabled is True
-    at.button(key=apply_button.key).click().run()
+    # BL-0250 批次 3-A U4（`DEC-2026-10-19-05`；有意識的更正，不是漏刪）：正式模式不畫永遠停用的「套用」 ——
+    # ~~找到那一枚停用的「套用」按下去~~ → 畫面上沒有那一枚；改欄位之後照舊驗核心卡不動、換頁回來回到已存值。
+    assert not [b for b in at.main.button if b.label == "套用"]
+    at.text_input(key="hld4_window_start").input(_HLD_NEW_START).run()
     assert not at.exception, [e.value for e in at.exception]
     assert _hld_cards(at) == fresh_cards
     _go(at, "mkt")

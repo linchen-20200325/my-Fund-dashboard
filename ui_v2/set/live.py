@@ -58,6 +58,35 @@ SERVICE_ACCOUNT_WORDS = (
 TEXT_NO_SHEET_ID_READ = "尚未設定：試算表 ID"
 _RAW_TEXT_CODES = ("SET-2", "SET-6", "SET-7")
 
+# ───────────── BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示；44 第七節第三小節之十二） ─────────────
+# 第 3 點：缺 Google 服務帳戶各處統一「⛔ 尚未設定：Google 服務帳戶」。照印原文的 `SET-2`／`SET-6` 內文照印原文（只拿掉
+# 本頁加的「取數失敗：」字首，同「⛔ 未設定試算表 ID，暫停寫入」那一句的既有體例）；結論燈照舊（`DEC-2026-10-18-01` C1，
+# 待裁示 (3) 原本就只問燈以外各處）。停用原因照線框第六版待裁示 (3) 寫的那兩句。
+TEXT_SA_NOT_CONFIGURED = "尚未設定：Google 服務帳戶"
+TEXT_SA_SAVE_REASON = "尚未設定 Google 服務帳戶，暫停寫入"
+TEXT_SA_REFETCH_REASON = "尚未設定 Google 服務帳戶，暫停取數"
+_SA_RAW_LINE = f"{logic.FETCH_FAIL_GLYPH} {plain.MSG_NO_SERVICE_ACCOUNT}"   # `_fail_map` 給缺服務帳戶的那一句（中間形；`SET-2`／`SET-6` 換回原文，其餘換統一句）
+# 第 2 點：讀取情境的收合標題（`SET-4` 參數編輯、`SET-6` 取數紀錄）不再寫「取數失敗：user_setting／fetch_log」。
+# 成因是尚未設定 → 「⛔ 尚未設定：<哪一項>」；設定試算表冷卻中 → 卡上那一句暫停句；其餘真的讀取失敗 → 取數失敗（⛔）。
+TEXT_TITLE_FETCH_FAILED = f"{logic.FETCH_FAIL_GLYPH} {logic.TEXT_FETCH_FAILED}"
+# 第 2 點（set|stale 那一種）：一筆取數紀錄裡**每一則**訊息都是「尚未設定」那一族時，那一筆的結果寫「⛔ 尚未設定：<哪一項>」；
+# 只要混有任何一則別的訊息，照寫取數失敗（⛔）。訊息原文照印；`SET-0` 的燈色與「算一個失敗來源」的判定照舊（只改字）。
+# U7（b）（c）：`SET-2`／`SET-6` 的結果欄不寫英文原值（`ok`／`failed`），原值移到進階診斷。`ok` 的中文借本頁重新取數結果行
+# 已在用的「取數完成」（`TEXT_DONE`），不另造說法（實作組判讀，可推翻）。
+TEXT_RESULT_OK = "取數完成"
+TEXT_RESULT_FAILED = f"{logic.FETCH_FAIL_GLYPH} {logic.TEXT_FETCH_FAILED}"
+RESULT_OK, RESULT_FAILED, RESULT_UNCONFIGURED = "ok", "failed", "unconfigured"
+# U7（a）：`SET-3` 表頭與列上用中文；資料型態的中文（44 第四節第五小節六種 value_kind；線框第六版 6.4 (a)）。
+SET3_COLUMN_LABELS = ["設定項目", "目前值", "資料型態", f"最後修改時間（{logic.DISPLAY_TZ_LABEL}）"]
+KIND_NAMES = {"list": "清單", "rules": "條件", "date": "日期", "int": "數字", "float": "數字", "ratio": "數字"}
+TEXT_SET4_PER_KEY_PLAIN = "每個設定的輸入方式依它的資料型態決定。"
+# U7（c）：`SET-6` 不列紀錄編號欄（紀錄編號只在進階診斷）；排序說明不寫欄名。
+SET6_COLUMN_LABELS = ["來源層級", f"開始（{logic.DISPLAY_TZ_LABEL}）", "耗時（秒）", "結果", "取回列數", "訊息"]
+TEXT_SET6_ORDER_PLAIN = "由新到舊排列。"
+# U7（d）＋待裁示 (5a) 第一案（客戶 2026-10-19 裁示第 5 點第一項）：欄位對照表留在原位、改標題、預設收合。
+SET7_TITLE = "欄位對照（進階）"
+SET7_SUMMARY = "每一欄資料用在哪一塊"
+
 # ★6（草稿 6.1）
 TEXT_SAVED = "已存檔"  # 客戶 2026-09-26 定稿
 TEXT_SAVE_MAYBE_WRITTEN = "未存檔。這次可能其實已寫入，請先重新整理本頁確認，再決定要不要重存"
@@ -183,7 +212,9 @@ def gate_reason(gate):
     if state == "not_configured":
         return TEXT_NO_SHEET_ID
     if state == "no_service_account":
-        return TEXT_NO_SERVICE_ACCOUNT
+        # ~~`TEXT_NO_SERVICE_ACCOUNT`（「未設定服務帳戶」，`50` 第 8 節）~~ → BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示第 3 點；
+        # 有意識的政策變更，不是漏刪）。舊句的用意（缺服務帳戶所以暫停）照舊；被權衡掉的是它沒說是 Google 的、與其他處說法不一。
+        return TEXT_SA_SAVE_REASON
     if state == "cooling":
         return sheet_cooling_text(gate.get("remaining_sec"))
     raise ValueError(f"未知的寫入閘門狀態 {state!r}")
@@ -211,7 +242,9 @@ def refetch_button(picked, notes, *, running=False) -> dict:
     else:
         gate = notes["gate"]
         reason = None
-        if gate.get("state") in ("not_configured", "no_service_account"):
+        if gate.get("state") == "no_service_account":
+            reason = TEXT_SA_REFETCH_REASON   # BL-0250 批次 3-A：取數那一枚寫「暫停取數」
+        elif gate.get("state") == "not_configured":
             reason = gate_reason(gate)
         if reason is None and picked == _COOLDOWN_TIER:
             reason = cooldown_reason(notes.get("source_cooldowns"))
@@ -301,8 +334,11 @@ def _fail_map(dataset, notes) -> dict:
         info = notes["table_errors"].get(table, {})
         raw = logic.fetch_failed_text(message)
         extra = []
-        if info.get("code") == "not_configured":
-            shown = f"{logic.FETCH_FAIL_GLYPH} {message}"  # B11：非燈位置統一「⛔ 未設定試算表 ID，暫停寫入」
+        if info.get("code") in ("not_configured", "no_service_account"):
+            # B11：非燈位置統一「⛔ 未設定試算表 ID，暫停寫入」。BL-0250 批次 3-A：缺服務帳戶在 `SET-1`／`SET-3`／`SET-4` 先寫成
+            # 這一形（`_SA_RAW_LINE`），再由 `_plain_set_words` 換成「⛔ 尚未設定：Google 服務帳戶」；照印原文的 `SET-2`／`SET-6`
+            # 由 `_sa_raw_restore` 換回原文（客戶核准的待裁示 (3)「除來源健康卡與取數紀錄（照印原文）外」；同批稽核回修）。
+            shown = f"{logic.FETCH_FAIL_GLYPH} {message}"
         elif info.get("code") == "header_mismatch":
             shown = TEXT_HEADER_MISMATCH.format(tab=info["tab"])
             extra.append(_node(TEXT_HEADER_SPEC.format(columns="、".join(info["expected"])), "紅"))
@@ -463,6 +499,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         if _masked(row["message_text"], token):
             row["message_note_lines"].append(MASKED_NOTE)  # ★5
     set2["detail_lines"] = _strip_demo(set2["detail_lines"])  # ✂2（★3 只留在 SET-6，客戶 2026-10-19 裁示）
+    _plain_results(set2, dataset)
+    _relabel_unconfigured_lamp(set0, set2)
+    if set2["placeholder"]:
+        set2["_plain_summary"] = _read_failure_title(set2["placeholder"], dataset, notes, "fetch_log")
 
     # ── SET-3：★10 在卡頭下方第一行 ──
     set3 = logic.find_block(out, "SET-3")
@@ -475,20 +515,30 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     elif title["state"] == "cooling":
         # 草稿 B4：設定試算表冷卻是暫停、不是失敗，與 SET-3／SET-4 同一句黃色暫停句。
         head.append(_node(f"{logic.WARN_GLYPH} " + sheet_cooling_text(title.get("remaining_sec")), "黃"))
+    elif plain.MSG_NO_SERVICE_ACCOUNT in (title["text"] or ""):
+        # BL-0250 批次 3-A：缺服務帳戶讀不到名稱 → 同一句「⛔ 尚未設定：Google 服務帳戶」（`_plain_set_words` 換字），不寫「讀不到試算表名稱」。
+        head.append(_node(_SA_RAW_LINE, "紅"))
     else:
         head.append(_node(TEXT_TITLE_FAILED.format(message=title["text"]), "紅"))
         if _masked(title["text"], token):
             head.append(_node(MASKED_NOTE, "灰"))
     set3["head_lines"] = head
     placeholder = _decorate_placeholder(set3["placeholder"], fail_map, notes, "SET-3", dataset)
-    if placeholder and title["state"] == "not_configured" and placeholder["text"] == head[0]["text"]:
-        placeholder = None  # 草稿 7.1：同一句不重複印，★10 那一行即本塊的失敗行
+    sa_missing = title["state"] == "failed" and plain.MSG_NO_SERVICE_ACCOUNT in (title["text"] or "")
+    if placeholder and (title["state"] == "not_configured" or sa_missing) and placeholder["text"] == head[0]["text"]:
+        # 草稿 7.1：同一句不重複印，★10 那一行即本塊的失敗行（BL-0250 批次 3-A：缺服務帳戶同理；冷卻中照舊兩行）。
+        placeholder = None
     set3["placeholder"] = placeholder
     broken = set((notes.get("structure") or {}).get("user_setting", {}).get("broken_keys", ()))
+    set3["column_labels"] = list(SET3_COLUMN_LABELS)   # BL-0250 批次 3-A U7（a）
     for row in set3["_rows"]:
         if row["_key"] in broken:  # `50` 第 8 節：最新一列解析不了 → 錯誤狀態，不是 ⬜ 未設定
             row["value_text"] = TEXT_BAD_ROWS.format(n=1)
             row["raw_text"] = ""
+        # U7（a）：列上寫中文設定名（對照只維護 `ui_v2/plain.py` 一份，同 `SET-4` 輸入欄標籤）與資料型態的中文；
+        # 型別缺（`⬜`）照舊。底層鍵、`value_kind`、判定一個都不動；英文原名照舊在進階診斷「原始鍵名對照」。
+        row["key_text"] = plain.key_name(row["_key"])
+        row["kind_text"] = KIND_NAMES.get(row["kind_text"], row["kind_text"])
     set3["live_lines"] = _structure_lines(notes, "SET-3")
     set3["detail_lines"] = _strip_demo(set3["detail_lines"])  # ✂2
 
@@ -500,7 +550,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     setting_code = notes["table_errors"].get("user_setting", {}).get("code")
     if gate["state"] in ("not_configured", "no_service_account") and setting_code != gate["state"]:
         # 去重比對錯誤碼、不比對字串：讀設定已因同一個缺設定失敗時，本塊的失敗行就是這件事，不再多印一行。
-        top.append(_node(f"{logic.FETCH_FAIL_GLYPH} {gate_reason(gate)}", "紅"))
+        # BL-0250 批次 3-A：缺服務帳戶那一行寫「⛔ 尚未設定：Google 服務帳戶」（停用原因另寫在按鈕上）。
+        line = (f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}" if gate["state"] == "no_service_account"
+                else f"{logic.FETCH_FAIL_GLYPH} {gate_reason(gate)}")
+        top.append(_node(line, "紅"))
     set4["top_lines"] = top
     reading = set(notes["pages_reading_settings"])
     results = save_results or {}
@@ -540,7 +593,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         # 客戶 2026-10-19 裁示：輸入欄標籤 ~~`<鍵名>（<value_kind>）`~~（`logic` SET-GAP-輸入欄型態，示範模式照舊）→ 中文設定名
         # （對照只維護 `ui_v2/plain.py` 一份；找不到中文名的鍵照原字）。底層鍵、`value_kind`、存檔內容一個都不動。
         field["label"] = plain.key_name(field["name"])
-    if not set4["fail_nodes"]:
+    if set4["fail_nodes"]:
+        # BL-0250 批次 3-A：~~「取數失敗：user_setting」~~（`logic`，示範模式照舊）→ 依成因寫（`_read_failure_title`）。
+        set4["summary_text"] = _read_failure_title(set4["fail_nodes"][0], dataset, notes, "user_setting")
+    else:
         unset = sum(1 for field in set4["inputs"] if field["_value"] is None)
         n = len(set4["inputs"])
         set4["summary_text"] = (TEXT_SET4_SUMMARY.format(n=n, unset=unset) if unset
@@ -548,6 +604,9 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set4["buttons"] = [save_button(notes)]
     set4["live_lines"] = _structure_lines(notes, "SET-4")
     set4["detail_lines"] = _strip_demo(set4["detail_lines"])  # ✂3
+    # U7（a）：「逐鍵編輯，一鍵一個輸入欄，欄位型態依 value_kind 決定。」（`logic`，示範模式照舊）→ 一般用語。
+    per_key = logic.TEXT_SET4_PER_KEY.replace("`", "") + "。"
+    set4["detail_lines"] = [TEXT_SET4_PER_KEY_PLAIN if line == per_key else line for line in set4["detail_lines"]]
 
     # ── SET-5：說明行換成 ★8（✂4）；按鈕由 page 依當下單選呼叫 `refetch_button` ──
     set5 = logic.find_block(out, "SET-5")
@@ -557,8 +616,12 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     # ── SET-6 ──
     set6 = logic.find_block(out, "SET-6")
     set6["placeholder"] = _decorate_placeholder(set6["placeholder"], fail_map, notes, "SET-6")
+    if set6["placeholder"] and set6["placeholder"].get("_empty_kind") != "來源缺":
+        # BL-0250 批次 3-A：~~「取數失敗：fetch_log」~~（`logic`，示範模式照舊）→ 依成因寫（`_read_failure_title`）。
+        set6["summary_text"] = _read_failure_title(set6["placeholder"], dataset, notes, "fetch_log")
+    _plain_log_rows(set6, dataset)
     for row in set6["_rows"]:
-        row["cell_notes"] = {6: [MASKED_NOTE]} if _masked(row["cells"][6], token) else {}
+        row["cell_notes"] = {5: [MASKED_NOTE]} if _masked(row["cells"][5], token) else {}
     tail = []
     for line in set6["tail_lines"]:
         for raw, (shown, _extra, _t) in fail_map.items():
@@ -567,8 +630,150 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         tail.append(line)
     set6["tail_lines"] = tail
     set6["live_lines"] = _structure_lines(notes, "SET-6")
-    set6["detail_lines"] = _strip_demo(set6["detail_lines"]) + [TEXT_LOG_SCOPE]  # ✂2、★3
+    order = logic.TEXT_SET6_ORDER.replace("`", "") + "。"
+    set6["detail_lines"] = [TEXT_SET6_ORDER_PLAIN if line == order else line
+                            for line in _strip_demo(set6["detail_lines"])] + [TEXT_LOG_SCOPE]  # ✂2、★3；U7（c）
+
+    _sa_raw_restore((set2, set6))
+
+    # ── SET-7：U7（d）＋待裁示 (5a)：留在原位、改標題、預設收合（本來就收合；內容一字不改） ──
+    set7 = logic.find_block(out, "SET-7")
+    set7["title"] = SET7_TITLE
+    tail = set7["summary_text"].partition("，另有 ")[2]   # 未定義的欄位照舊在摘要說出來（44 第五節第四小節）
+    set7["summary_text"] = SET7_SUMMARY + (f"，另有 {tail}" if tail else "")
+    set7["_default_open"] = False
     return _plain_set_words(out)
+
+
+# ───────────────────────── BL-0250 批次 3-A 的幾支輔助 ─────────────────────────
+
+
+def record_unconfigured_names(record):
+    """一筆 `fetch_log` 紀錄（`outcome` 為 `failed`）的每一則訊息是不是都屬「尚未設定」那一族（`plain._KNOWN_MESSAGES`）。
+    是 → 回尚未設定的對象（例 `["資料來源的金鑰"]`，依出現順序、不重複）；否則（含沒有訊息、混有任何一則別的訊息）→ None。
+    訊息一則一行、形如「<鍵>: <訊息>」（`services/v2_tables/settings_store.py` 組的那一份）；沒有「: 」的行整行當一則。"""
+    if record.get("outcome") != "failed":
+        return None
+    message = record.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return None
+    names = []
+    for line in message.split("\n"):
+        if not line.strip():
+            continue
+        part = line.split(": ", 1)[1] if ": " in line else line
+        state = plain.not_configured_state(part)
+        if state is None:
+            return None
+        name = state[: -len("尚未設定")] if state.endswith("尚未設定") else state
+        if name not in names:
+            names.append(name)
+    return names or None
+
+
+def _result_text(record) -> tuple:
+    """(結果欄的字, 結果類別)。未知的 `outcome` 照拋（同 `logic._build_set2`，44 第四節第五小節值域只有 ok／failed）。"""
+    outcome = record.get("outcome")
+    if outcome == "ok":
+        return TEXT_RESULT_OK, RESULT_OK
+    if outcome == "failed":
+        names = record_unconfigured_names(record)
+        if names:
+            return f"{logic.FETCH_FAIL_GLYPH} {plain_not_configured(names)}", RESULT_UNCONFIGURED
+        return TEXT_RESULT_FAILED, RESULT_FAILED
+    raise ValueError(f"fetch_log.outcome {outcome!r} 不是 ok 或 failed")
+
+
+def plain_not_configured(names) -> str:
+    return "尚未設定：" + "、".join(names)
+
+
+def _plain_results(set2: dict, dataset: dict) -> None:
+    """`SET-2` 各列的結果欄改中文；全屬尚未設定的那一筆不掛「取數失敗」徽章（就地改寫）。
+    列上另記 `_result`（ok／failed／unconfigured）與 `_unconfigured_names`，給收合摘要與燈讀（不是判定，只是成因的記號）。"""
+    if not set2["_rows"]:
+        return
+    latest = logic.latest_per_tier(dataset.get("fetch_log") or ())
+    for row in set2["_rows"]:
+        record = latest.get(row["_tier"])
+        if record is None:
+            continue
+        text, kind = _result_text(record)
+        row["result_text"], row["_result"] = text, kind
+        if kind == RESULT_UNCONFIGURED:
+            row["_unconfigured_names"] = record_unconfigured_names(record)
+        # 結果欄已寫出取數失敗或尚未設定（都帶 ⛔），同一列的「取數失敗」徽章不再重複（尚未設定那一種更不得掛它）。
+        row["badges"] = [b for b in row["badges"] if b.get("text") != logic.TEXT_FETCH_FAILED]
+
+
+def _relabel_unconfigured_lamp(set0: dict, set2: dict) -> None:
+    """`SET-0` 紅燈「失敗的來源層級：…」：最近一次紀錄全屬尚未設定的層級改寫「尚未設定：<哪一項>（<層級>）」；
+    失敗的層級全是這一種時，狀態字「狀態：來源失敗」→「狀態：尚未設定」。燈色、圖示、`_state` 與失敗來源數照舊（只改字）。"""
+    if set0.get("_state") != "來源失敗":
+        return
+    rows = {row["_tier"]: row for row in set2["_rows"]}
+    real, unconfigured = [], []
+    for tier in set2["_failed_tiers"]:
+        row = rows.get(tier) or {}
+        if row.get("_result") == RESULT_UNCONFIGURED:
+            unconfigured.append(f"{plain_not_configured(row['_unconfigured_names'])}（{tier}）")
+        else:
+            real.append(tier)
+    if not unconfigured:
+        return
+    parts = (["失敗的來源層級：" + "、".join(real)] if real else []) + unconfigured
+    set0["text"] = "；".join(parts)
+    if not real:
+        set0["state_word"] = "狀態：尚未設定"
+
+
+def _plain_log_rows(set6: dict, dataset: dict) -> None:
+    """`SET-6`：不列紀錄編號欄（U7（c）；紀錄編號與結果原值移到進階診斷 `_raw_log`）、結果欄改中文（就地改寫）。"""
+    set6["column_labels"] = list(SET6_COLUMN_LABELS)
+    by_id = {r["log_id"]: r for r in dataset.get("fetch_log") or ()}
+    for row in set6["_rows"]:
+        record = by_id[row["_log_id"]]
+        cells = list(row["cells"][1:])          # 拿掉第一格（log_id）
+        cells[3] = _result_text(record)[0]       # 結果
+        row["cells"] = cells
+    # 同批稽核回修（E）：進階診斷只列一般表上那幾筆（同順序；超出保留筆數被移除的列不列，兩邊筆數一致）。
+    set6["_raw_log"] = [
+        (by_id[row["_log_id"]]["log_id"], logic.format_time(by_id[row["_log_id"]]["started_at"]), by_id[row["_log_id"]]["outcome"])
+        for row in set6["_rows"]
+    ]
+
+
+def _sa_raw_restore(blocks) -> None:
+    """`SET-2`（來源健康卡）／`SET-6`（取數紀錄）照印原文的那一格，缺 Google 服務帳戶時照舊印原文（`logic.fetch_failed_text`
+    包住 `plain.MSG_NO_SERVICE_ACCOUNT` 那一句；就地改寫；與批次 3-A 之前逐字相同）。
+    客戶核准的待裁示 (3) 原文：缺服務帳戶統一一句是「燈以外各處」「除來源健康卡與取數紀錄（照印原文）外」；那一格的
+    `google_service_account` 屬客戶核准的照印原文例外，不算工程名稱外漏（44 第七節第三小節之十二其三第 2 條）。
+    ~~一般畫面改寫統一句、原文移到進階診斷（同批總管裁定其九第 3 條）~~ → 同批稽核後撤回（有意識的更正，不是漏刪；決策者：AI 總管；
+    理由：超出 `DEC-2026-10-19-05` 核准的待裁示 (3) 射程）。"""
+    raw = logic.fetch_failed_text(plain.MSG_NO_SERVICE_ACCOUNT)
+    for block in blocks:
+        node = block.get("placeholder")
+        if node and node.get("text") == _SA_RAW_LINE:
+            node["text"] = raw
+        if block.get("tail_lines"):
+            block["tail_lines"] = [raw if line == _SA_RAW_LINE else line for line in block["tail_lines"]]
+
+
+def _read_failure_title(node: dict, dataset: dict, notes: dict, table: str) -> str:
+    """讀取失敗時那一塊收合標題的字（BL-0250 批次 3-A；不寫工程字樣、不把尚未設定寫成取數失敗）。"""
+    code = notes["table_errors"].get(table, {}).get("code")
+    if code == "not_configured":
+        return f"{logic.FETCH_FAIL_GLYPH} {TEXT_NO_SHEET_ID_READ}"
+    if code == "no_service_account":
+        return f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}"
+    if code == "cooling" and table == "user_setting":
+        return node["text"]          # 卡上那一句暫停句（黃，草稿 B4），不是取數失敗
+    if code == "cooling":
+        # 同批稽核回修：`SET-2`／`SET-6`（讀 `fetch_log`）冷卻中也寫同一句暫停句（44 之十二其二「冷卻中 → 卡上那一句暫停句」）；
+        # 這兩塊照印原文的那一格照舊印原文，只有收合標題寫暫停句。原本落到取數失敗，與規定不一致。
+        info = notes["table_errors"].get(table, {})
+        return f"{logic.WARN_GLYPH} " + sheet_cooling_text(info.get("remaining_sec"))
+    return TEXT_TITLE_FETCH_FAILED
 
 
 def _plain_set_words(model: dict) -> dict:
@@ -590,6 +795,8 @@ def _plain_set_words(model: dict) -> dict:
         if isinstance(node, str) and not (isinstance(key, str) and key.startswith("_")):
             if node == read_line:
                 node = f"{logic.FETCH_FAIL_GLYPH} {TEXT_NO_SHEET_ID_READ}"
+            elif node == _SA_RAW_LINE:   # BL-0250 批次 3-A：缺服務帳戶（讀取情境）同一句
+                node = f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}"
             for raw, shown in SERVICE_ACCOUNT_WORDS:
                 node = node.replace(raw, shown)
         return node

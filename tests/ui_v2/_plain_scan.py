@@ -160,8 +160,11 @@ def _exp(*, wired=True, rules=None, sort=(), watch=(), read_error=None, pool=Non
 
 EXP = {
     "正常": _exp(sort=["ccy"]),
+    # BL-0250 批次 3-A（有意識的更正，不是漏刪）：選股池狀態 ~~`"not_configured"`~~ → `"pool_not_cloud"`。
+    # 舊值不是資料層的值域（`services/v2_tables/exp_universe.py` 只回 ok／pool_not_cloud／failed），畫面因此走了
+    # 「選股池這次讀不到」（真的讀取失敗）那一支；本情境要驗的是「選股池的雲端來源尚未設定」，改回資料層實際會回的值。
     "未設定": _exp(read_error="未設定試算表 ID，暫停寫入",
-                   pool={"status": "not_configured", "codes": [], "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"}),
+                   pool={"status": "pool_not_cloud", "codes": [], "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"}),
     "取數失敗": _exp(read_error="HTTPSConnectionPool(host='sheets.example'): Max retries exceeded (kind=unreachable)"),
     "局部失敗": _exp(wired=False),
     "stale": _exp(rules=[{"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1"}]),
@@ -221,7 +224,18 @@ _cfg = dict(CFG)
 _mi = source.market_indicator
 # AppTest 與 pytest 同一個行程：換掉的東西一律在 finally 換回來，不汙染之後的測試。
 _saved = (R.get_secret, R._make_client, dict(R._TITLES), GR.time, source.st, _mi.source_cooldowns,
-          _mi.fetch_yf_close_with_error)
+          _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error)
+# hermetic（PR #1012 CI slow lane 回修）：重新取數讀 `[st.secrets, os.environ]` 的 FRED_API_KEY（`source.refetch`），
+# CI 環境有一把無效的金鑰 → 本情境真的打到 api.stlouisfed.org。腳本執行期間一律拿掉環境變數、FRED 換替身，
+# 金鑰只由 `FRED` 參數決定（None ＝ 沒有金鑰）。
+import os as _os
+_env_fred = _os.environ.pop("FRED_API_KEY", None)
+_fred_calls = []
+def _fred_stub(ticker, *a, **k):
+    _fred_calls.append(ticker)
+    if FRED is None:
+        raise AssertionError("沒有金鑰時不該呼叫 FRED")
+    return None, FRED
 try:
     R.get_secret = lambda key, default=None: _cfg.get(key, default)
     R._make_client = lambda creds: FakeClient(_book)
@@ -231,6 +245,9 @@ try:
     source.st = types.SimpleNamespace(secrets=_cfg, session_state={})
     _mi.source_cooldowns = lambda: []
     _mi.fetch_yf_close_with_error = lambda ticker, *a, **k: (None, FETCH_ERROR)
+    _mi.fetch_fred_vintages_with_error = _fred_stub
+    if FRED is not None:
+        _cfg["FRED_API_KEY"] = "dummy-invalid-key-for-test"
     if STALE:   # 新鮮度上限設 0 日 ⇒ 取回的每一列都在上限外（44 SET-1 判準）
         import pandas as pd
         _s = pd.Series([17.0, 18.5], index=pd.to_datetime(["2026-09-22", "2026-09-23"]), dtype=float, name="^VIX")
@@ -245,7 +262,9 @@ try:
     page.render(load_live=source.load_live, save_live=source.save_setting, refetch_live=source.refetch)
 finally:
     (R.get_secret, R._make_client, R._TITLES, GR.time, source.st, _mi.source_cooldowns,
-     _mi.fetch_yf_close_with_error) = _saved
+     _mi.fetch_yf_close_with_error, _mi.fetch_fred_vintages_with_error) = _saved
+    if _env_fred is not None:
+        _os.environ["FRED_API_KEY"] = _env_fred
     R.clear_cache()
 """
 
@@ -256,10 +275,11 @@ _SET_CFG = {"SETTINGS_SHEET_ID": "sheet-for-plain-scan",
 _SET_FETCH_ERROR = "HTTPSConnectionPool(host='127.0.0.1'): Max retries exceeded (kind=unreachable)"
 
 
-def _set(*, cfg=None, preset=None, refetch=False, stale=False) -> str:
+def _set(*, cfg=None, preset=None, refetch=False, stale=False, fred=None) -> str:
+    """`fred`：None ＝ 沒有 FRED 金鑰（預設；與環境變數無關）；字串 ＝ 有金鑰、FRED 替身回這一句錯誤原文。"""
     return _HEAD + (
         f"CFG = {dict(_SET_CFG if cfg is None else cfg)!r}\nPRESET = {dict(preset or {})!r}\n"
-        f"REFETCH = {refetch!r}\nSTALE = {stale!r}\nFETCH_ERROR = {_SET_FETCH_ERROR!r}\n"
+        f"REFETCH = {refetch!r}\nSTALE = {stale!r}\nFETCH_ERROR = {_SET_FETCH_ERROR!r}\nFRED = {fred!r}\n"
     ) + _SET_BODY
 
 
@@ -275,6 +295,11 @@ SET = {
     "取數紀錄": _set(refetch=True),
     "stale": _set(stale=True),
 }
+
+# PR #1012 回修：有金鑰但 FRED 回 400（CI 實際遇到的那一句）。不放進 `SET`（那張表的情境由別的守衛逐一掃），另給反面測試用。
+SET_FRED_400 = ("HTTPError: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations"
+                " (api_key is not registered)")
+SET_STALE_FRED_INVALID = _set(stale=True, fred=SET_FRED_400)
 
 SCRIPTS = {"mkt": MKT, "hld": HLD, "exp": EXP, "alo": ALO, "set": SET}
 

@@ -116,10 +116,23 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
              if any(f'data-block="{page.upper()}-0"' in m.value for _ in [0])}
     titles = {str(e.label) for e in at.main.expander}
     status = " ".join(_status_lines(at)[0].split())
-    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "⬜ 不適用（尚未設定：", "，暫無篩選軌跡")
+    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "⬜ 不適用（尚未設定：", "，暫無篩選軌跡",
+               )
+    # BL-0250 批次 3-A 同批總管裁定（決策者：AI 總管，總管適用客戶裁示第 2 點；44 第七節第三小節之十二其九第 1、4 條）：
+    # 持倉體檢偏離提示卡主值、市場總覽缺金鑰的指標（清單下方、明細表尾、新鮮度清單）寫「⛔ 尚未設定：〈哪一項〉」，是客戶裁示的格式，
+    # 不是外漏的失敗摘要；資料狀態行那一句照舊恰一次（下一條斷言）。
+    # ~~以子字串免檢（"偏離提示卡 ⛔ 尚未設定："、"⛔ 尚未設定：資料來源的金鑰"）~~ → 同批稽核回修：改成整句精確比對（有意識的更正，
+    # 不是漏刪；子字串免檢會連帶放過同一行裡別的外漏）。
+    exact = {
+        "mkt": {"⛔ 尚未設定：資料來源的金鑰（高收益信用利差、政策利率、期限利差）",
+                "指標 最近觀測日 最近取得時間（UTC+8） 來源層級 延遲日數 高收益信用利差 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ "
+                "政策利率 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ 期限利差 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ 波動度指數 取數失敗 ⛔ ⛔ ⛔ ⛔"},
+        "hld": {"偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定 本卡只描述現況與你設定的門檻差多少，不提供任何處置方向。 "
+                "哪幾檔現在超出了我自己寫下的那條線，超出多少"},
+    }.get(page, set())
     # ↑ BL-0250 批次 2（44 第七節第三小節之十一其六）：核心卡副標兩個冒號改括號，同一處、同一種說法（舊形保留在表裡不刪）。
     stray = [t for t in texts if f"{health.TEXT_NOT_CONFIGURED}：" in t and t != status and t not in lamps
-             and t not in titles and not any(a in t for a in allowed)]
+             and t not in titles and t not in exact and not any(a in t for a in allowed)]
     assert stray == [], (page, stray)
     assert texts.count(status) == 1, page
     assert f"{health.TEXT_NOT_CONFIGURED}：" in " ".join(_status_lines(at)[0].split())
@@ -191,7 +204,9 @@ def test_核心卡的來源與新鮮度徽章移到第四段(page):
     cards = [html.unescape(m.value) for m in at.main.markdown
              if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
     assert cards
-    word = "延遲 3 日" if page == "mkt" else "〔來源層級〕"
+    # ~~"〔來源層級〕"~~ → BL-0250 批次 3-A（`DEC-2026-10-19-05` 第 1 點；有意識的更正，不是漏刪）：標的探索三張卡卡片層級的
+    # 來源與新鮮度改寫一句「⬜ 不適用（…）」，照樣只在 ④ 那一枚展開區裡。
+    word = "延遲 3 日" if page == "mkt" else "⬜ 不適用（這張卡由多檔基金組成"
     assert not any(word in card for card in cards), page
     box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
     assert len(box) == 1 and box[0].proto.expanded is False
@@ -263,7 +278,8 @@ def test_市場總覽_黃色新鮮度徽章_卡上有時鐘_狀態行有時鐘(m
     from ui_v2.mkt import logic as L
 
     real = L._freshness_badge
-    monkeypatch.setattr(L, "_freshness_badge", lambda rows: dict(real(rows), _tone="黃"))
+    # BL-0250 批次 3-A：`_freshness_badge` 多一個延遲日數時區參數（正式模式台北日期），替身照收照轉。
+    monkeypatch.setattr(L, "_freshness_badge", lambda rows, *args: dict(real(rows, *args), _tone="黃"))
     at, _ = _run(P.SCRIPTS["mkt"]["正常"])
     cards = _cards(at, "mkt")
     assert cards and all(f"{health.SYMBOL_STALE} 延遲 " in card for card in cards), cards
