@@ -1327,3 +1327,135 @@ def card_provenance_not_applicable(model: dict) -> int:
                                    "text": TEXT_CARD_PROVENANCE_NA}]
         count += 1
     return count
+
+
+# ───────────── BL-0250 批次 3-B：「對照」「觀察清單」兩份多選清單、結果清單每列的來源展開（44 第七節第三小節之十三） ─────────────
+# 客戶 2026-10-19 批次 3 裁示（`DEC-2026-10-19-05`；線框第六版 4.5、4.4、待裁示 (5b) 推薦案）。只給正式模式（`page._render_exp2_live`）；
+# 示範模式不經過本段，照舊每列兩組勾選框。純函式：讀 `logic`／`plain`／`symbols`／`health` 已經改完字的模型，不改模型、不取數、不寫入。
+#
+# - 兩份多選清單取代每列兩組勾選框（之七其二第 5 條已授權）：選項＝目前結果清單的檔、順序同結果清單、不預先選任何一檔；
+#   兩份各自獨立；「對照」同時最多 3 檔（上限照 `logic.COMPARE_LIMIT`）；「觀察清單」不受上限拘束。勾選狀態照舊只存在
+#   `logic.checked_key` 那一份 session 狀態，存檔路徑（`exp5_save_entries`）一字未改。
+# - 每列展開只放來源資訊（客戶裁示第 5 點第三項：僅限來源資訊）：該列各格已畫出的來源標示與滑鼠提示，拆成
+#   「欄位｜來源｜取得時間（台北時間）｜資料日期｜備註」一張小表；格內的來源標示與滑鼠提示照舊（線框第 11 節：格內來源名先保留）。
+#   拆法只認本檔自己寫出滑鼠提示的那兩個段首（`_nav_tip` 的「取得時間：」與「資料日期：」），其餘段落原樣放進備註，不改寫、不刪。
+
+PICK_GROUPS = (logic.GROUP_COMPARE, logic.GROUP_WATCH)
+PICK_LABELS = {
+    logic.GROUP_COMPARE: f"要對照的基金（最多 {logic.COMPARE_LIMIT} 檔）",
+    logic.GROUP_WATCH: "要加入觀察清單的基金",
+}
+PICK_PLACEHOLDER = "選擇基金"
+PICK_CAPS = {logic.GROUP_COMPARE: logic.COMPARE_LIMIT, logic.GROUP_WATCH: None}
+TEXT_PICK_COUNT = "已選 {n}／{cap}"
+# 選滿時那一行沿用現行字（線框第六版 4.5 互動規則 4；字面與 `logic` 第 4 個勾選框的停用原因同一句）。
+TEXT_PICK_FULL = f"同時最多對照 {logic.COMPARE_LIMIT} 檔"
+TEXT_WATCHED_SUFFIX = f"（{logic.TEXT_ALREADY_WATCHED}）"
+PICK_NAME_SEP = "　"
+
+ROW_SOURCE_TITLE = "來源與取得時間"
+ROW_SOURCE_LABELS = ("欄位", "來源", "取得時間（台北時間）", "資料日期", "備註")
+ROW_SOURCE_NONE = "—"
+_TIP_SEP = "；"
+_TIP_FETCHED = "取得時間："
+_TIP_DATA_DATE = "資料日期："
+
+
+def pick_options(block: dict) -> list:
+    """多選清單的選項：`EXP-2` 目前畫出的每一列的基金代碼，順序同結果清單（不另外排序）。"""
+    return [row["_fund_code"] for row in block.get("_rows") or ()]
+
+
+def _row(block: dict, code: str):
+    return next((row for row in block.get("_rows") or () if row["_fund_code"] == code), None)
+
+
+def already_watched(block: dict, code: str) -> bool:
+    """該檔已在已存的觀察清單裡（`logic` 掛在「觀察清單」那一組的註記；本函式不另判）。"""
+    row = _row(block, code)
+    box = ((row or {}).get("_checkboxes") or {}).get(logic.GROUP_WATCH) or {}
+    return box.get("note") == logic.TEXT_ALREADY_WATCHED
+
+
+def pick_label(block: dict, code: str, group: str) -> str:
+    """選項文字「代碼　基金名」：基金名取結果清單上那一格（畫出來、而且是值的那一格）；那一格沒有值（缺、失敗、或欄被隱藏）
+    就只寫代碼，不猜名稱。「觀察清單」那一份，已在觀察清單的檔加註「（已在觀察清單）」。"""
+    row = _row(block, code) or {}
+    cell = (row.get("_cells") or {}).get("fund_name") or {}
+    name = cell.get("text") if cell.get("_state") == logic.STATE_OK else None
+    label = f"{code}{PICK_NAME_SEP}{name}" if name else code
+    if group == logic.GROUP_WATCH and already_watched(block, code):
+        label += TEXT_WATCHED_SUFFIX
+    return label
+
+
+def merge_picks(previous, visible, picked) -> tuple:
+    """多選清單改了之後的勾選狀態：清單上看得到的檔照多選清單；看不到的檔（例：條件改了、不在本次結果裡）原樣留著。
+    與每列勾選框一格一格切換的結果相同（`logic.toggle_checked` 只動被按的那一檔）。回排序過的 tuple。"""
+    visible = set(visible)
+    return tuple(sorted({code for code in previous or () if code not in visible} | set(picked or ())))
+
+
+def shown_picks(checked, options) -> list:
+    """畫多選清單時要先放進去的已選項：勾選狀態裡、而且在本次選項裡的檔，順序同選項。"""
+    checked = set(checked or ())
+    return [code for code in options if code in checked]
+
+
+def pick_captions(group: str, count: int) -> list:
+    """多選清單下方的說明行。「對照」：已選幾檔／上限；選滿時加一行沿用的上限句。「觀察清單」：沒有。"""
+    cap = PICK_CAPS[group]
+    if cap is None:
+        return []
+    lines = [TEXT_PICK_COUNT.format(n=count, cap=cap)]
+    if count >= cap:
+        lines.append(TEXT_PICK_FULL)
+    return lines
+
+
+def taipei_time_text(raw) -> str:
+    """取得時間（資料層原值，ISO 8601）→「YYYY-MM-DD HH:MM」台北時間。讀不懂、或沒有時區 → 原樣（不猜時區、不補值）。"""
+    text = str(raw)
+    try:
+        when = datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+    except ValueError:
+        return text
+    if when.tzinfo is None:
+        return text
+    return when.astimezone(TAIPEI).strftime("%Y-%m-%d %H:%M")
+
+
+def split_tip(tip) -> tuple:
+    """一格的滑鼠提示 → (取得時間原值或 None, 資料日期或 None, 備註)。只拿掉「取得時間：」「資料日期：」兩種段落
+    （各取第一段），其餘段落依原順序以「；」接回備註，一個字不改。"""
+    fetched = day = None
+    rest = []
+    for part in str(tip).split(_TIP_SEP) if tip else ():
+        if fetched is None and part.startswith(_TIP_FETCHED):
+            fetched = part[len(_TIP_FETCHED):]
+        elif day is None and part.startswith(_TIP_DATA_DATE):
+            day = part[len(_TIP_DATA_DATE):]
+        else:
+            rest.append(part)
+    return fetched, day, _TIP_SEP.join(rest)
+
+
+def source_rows(block: dict, row: dict) -> list:
+    """一列的來源展開：`[(欄位, 來源, 取得時間（台北時間）, 資料日期, 備註), ...]`，依結果清單的欄序。
+    只列有來源資訊（來源標示或滑鼠提示）的格；一格都沒有 → 空清單（那一列不畫展開）。缺的那一格寫「—」。"""
+    out = []
+    labels = dict(zip(block.get("column_keys") or (), block.get("column_labels") or ()))
+    for key in block.get("column_keys") or ():
+        cell = (row.get("_cells") or {}).get(key) or {}
+        tag, tip = cell.get("source_tag"), cell.get("source_tip")
+        if not tag and not tip:
+            continue
+        fetched, day, note = split_tip(tip)
+        out.append((
+            labels.get(key, key),
+            tag or ROW_SOURCE_NONE,
+            taipei_time_text(fetched) if fetched else ROW_SOURCE_NONE,
+            day or ROW_SOURCE_NONE,
+            note or ROW_SOURCE_NONE,
+        ))
+    return out

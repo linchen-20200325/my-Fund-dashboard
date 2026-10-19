@@ -186,7 +186,9 @@ def test_EXP5加入觀察清單_寫已存與勾起的聯集(monkeypatch):
                                                 ensure_ascii=False)
     STUB.STORE["exp_watchlist"] = '["Z09"]'
     at = _ok(_run(_SCRIPT_LIVE, monkeypatch))
-    at.checkbox(key="exp2_觀察清單_A01__live").check().run()
+    # ~~at.checkbox(key="exp2_觀察清單_A01__live").check().run()~~ → BL-0250 批次 3-B（44 第七節第三小節之十三；有意識的更正，
+    # 不是漏刪）：正式模式每列兩組勾選框改為兩份多選清單；本條驗的「寫已存與勾起的聯集」照舊，只換輸入元件。
+    at.multiselect(key="exp2live_pick_watch").select("A01").run()
     _ok(at)
     at.button(key="exp5live_btn_0").click().run()
     _ok(at)

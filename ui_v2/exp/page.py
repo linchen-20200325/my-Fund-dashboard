@@ -412,6 +412,93 @@ def _render_exp2(block: dict, *, scenario: str, plain_mode: bool = False) -> Non
     _card_close(block)
 
 
+# ── BL-0250 批次 3-B（44 第七節第三小節之十三；客戶 `DEC-2026-10-19-05`）：正式模式的結果清單 ──
+# 每列下方一行：已在觀察清單（若是）與一枚「來源與取得時間」列展開（HTML `<details>`，預設收合；只放來源資訊）；
+# 表格下方「對照」「觀察清單」兩份多選清單取代每列兩組勾選框。示範模式照舊走 `_render_exp2`，一字未改。
+# 樣式只寫在這幾枚元素的 style 屬性：共用 CSS 一字不改（示範模式畫面不變）。
+_PICK_KEYS = {logic.GROUP_COMPARE: "exp2live_pick_compare", logic.GROUP_WATCH: "exp2live_pick_watch"}
+
+
+def _on_pick(group: str, options: tuple) -> None:
+    """多選清單改了 → 寫回 `logic.checked_key` 那一份勾選狀態（存檔與 `EXP-3`／`EXP-5` 照舊只讀那一份）。"""
+    key = logic.checked_key(group, live.LIVE_SCENARIO)
+    st.session_state[key] = live.merge_picks(
+        st.session_state.get(key) or (), options, st.session_state.get(_PICK_KEYS[group]) or ())
+
+
+def _row_source_html(block: dict, row: dict, colspan: int) -> str:
+    """結果清單每列下方那一行（正式模式）；沒有要畫的就回空字串。"""
+    parts = []
+    if live.already_watched(block, row["_fund_code"]):
+        parts.append(
+            f'<div style="color:{theme.TEXT_SECOND};font-size:.74rem">{_esc(logic.TEXT_ALREADY_WATCHED)}</div>'
+        )
+    rows = live.source_rows(block, row)
+    if rows:
+        head = "".join(f'<th style="white-space:nowrap">{_esc(label)}</th>' for label in live.ROW_SOURCE_LABELS)
+        body = "".join("<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in line) + "</tr>" for line in rows)
+        parts.append(
+            f'<details class="exp-rowsrc"><summary style="color:{theme.TEAL_BRIGHT};font-size:.74rem;cursor:pointer">'
+            f"{_esc(live.ROW_SOURCE_TITLE)}</summary>"
+            f'<div style="overflow-x:auto"><table class="exp-table" style="font-size:.72rem">'
+            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div></details>"
+        )
+    if not parts:
+        return ""
+    return f'<tr><td colspan="{colspan}" style="padding:.1rem .45rem .35rem">{"".join(parts)}</td></tr>'
+
+
+def _render_picks(block: dict) -> None:
+    """表格下方兩份多選清單（`EXP-3`「對照」、`EXP-5`「觀察清單」；44 第七節第三小節之七其二第 5 條）。"""
+    options = tuple(live.pick_options(block))
+    for group in live.PICK_GROUPS:
+        key = _PICK_KEYS[group]
+        # 畫之前先把勾選狀態放進輸入欄（只放本次選項裡的檔）：換頁回來或條件改了之後，輸入欄與勾選狀態一致。
+        st.session_state[key] = live.shown_picks(
+            st.session_state.get(logic.checked_key(group, live.LIVE_SCENARIO)) or (), options)
+        st.multiselect(
+            live.PICK_LABELS[group],
+            options=list(options),
+            format_func=lambda code, group=group: live.pick_label(block, code, group),
+            key=key,
+            max_selections=live.PICK_CAPS[group],
+            placeholder=live.PICK_PLACEHOLDER,
+            on_change=_on_pick,
+            args=(group, options),
+        )
+        for line in live.pick_captions(group, len(st.session_state.get(key) or ())):
+            st.caption(line)
+
+
+def _render_exp2_live(block: dict) -> None:
+    _card_open(block, plain_mode=True)
+    st.caption(block["answers"])
+    _notes(block)
+    st.markdown(
+        f'<div class="exp-sortcap">{_esc(block["sort_caption"])}</div>',
+        unsafe_allow_html=True,
+    )
+    if block["_rows"]:
+        head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
+        body = ""
+        for row in block["_rows"]:
+            cells = "".join(
+                f'<td style="color:{_tone(row["_cells"][key]["_tone"])}"{_title_attr(row["_cells"][key])}>'
+                f'{_esc(row["_cells"][key]["text"])}{_src_html(row["_cells"][key])}</td>'
+                for key in block["column_keys"]
+            )
+            body += f"<tr>{cells}</tr>" + _row_source_html(block, row, len(block["column_keys"]))
+        st.markdown(
+            f'<div class="exp-scroll"><table class="exp-table">'
+            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>",
+            unsafe_allow_html=True,
+        )
+        _render_picks(block)
+    _fetch_fail_lines(block)
+    _lines(block["detail_lines"], css="exp-detail")
+    _card_close(block)
+
+
 def _render_exp3(block: dict, *, plain_mode: bool = False) -> None:
     _card_open(block, plain_mode=plain_mode)
     st.caption(block["answers"])
@@ -1099,7 +1186,8 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     st.markdown(f'<div class="exp-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     exp2 = logic.find_block(model, "EXP-2")
     with st.expander(f"{sections.EXP_RESULT_TITLE}　—　{exp2['summary_text']}", expanded=exp2["_default_open"]):
-        _render_exp2(exp2, scenario=live.LIVE_SCENARIO, plain_mode=True)
+        # BL-0250 批次 3-B：每列來源展開與兩份多選清單（44 第七節第三小節之十三）；示範模式照舊 `_render_exp2`。
+        _render_exp2_live(exp2)
         _render_exp3(logic.find_block(model, "EXP-3"), plain_mode=True)
     st.markdown(
         f'<div class="exp-layer-label exp-layer3">{plain.LABEL_LAYER3}</div>',
