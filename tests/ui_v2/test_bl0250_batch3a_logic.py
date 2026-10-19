@@ -135,6 +135,8 @@ def test_紀錄每一則訊息都屬尚未設定_回對象(message, expected):
     _rec(message=""),
     _rec(message=None),
     _rec(outcome="ok", message=f"credit_spread_pct: {_FRED}"),
+    # PR #1012 CI 回修：有金鑰但 FRED 回 400，是真的取數失敗
+    _rec(message="credit_spread_pct: HTTPError: 400 Client Error: Bad Request (api_key is not registered)"),
 ])
 def test_紀錄混有別的訊息或沒有訊息或不是失敗_回None(record):
     assert set_live.record_unconfigured_names(record) is None

@@ -91,6 +91,22 @@ def test_SET_stale_取數紀錄全屬尚未設定_燈與來源健康卡與兩表
     assert "失敗的來源層級：市場指標" not in joined and "最近一次取數失敗" not in joined
 
 
+def test_SET_stale_有金鑰但FRED回400_燈寫來源失敗_不寫尚未設定():
+    """PR #1012 CI 回修的反面：金鑰有值但無效、FRED 回 400（替身模擬，不打網路）→ 那一筆是真的取數失敗，
+    燈照規則寫來源失敗，取數紀錄與來源健康卡寫取數失敗；不得降級成尚未設定。"""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(SCAN.SET_STALE_FRED_INVALID, default_timeout=90)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    texts = _texts(at)
+    joined = "\n".join(texts)
+    assert "⛔ 狀態：來源失敗 失敗的來源層級：市場指標" in joined
+    assert "來源健康卡 — ⛔ 最近一次取數失敗：市場指標" in joined
+    assert "api_key is not registered" in joined                     # 訊息原文照印
+    assert "尚未設定：資料來源的金鑰" not in joined
+
+
 def test_SET_取數紀錄混有真的失敗_照寫取數失敗_燈判定照舊():
     joined = _joined("set", "取數紀錄")
     assert "⛔ 狀態：來源失敗 失敗的來源層級：市場指標" in joined
