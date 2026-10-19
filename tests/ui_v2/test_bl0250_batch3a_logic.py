@@ -209,7 +209,7 @@ def test_SET0燈_沒有尚未設定的層級_一個字都不動():
     ("no_service_account", "fetch_log", "⛔ 尚未設定：Google 服務帳戶"),
     ("api", "user_setting", "⛔ 取數失敗"),
     ("api", "fetch_log", "⛔ 取數失敗"),
-    ("cooling", "fetch_log", "⛔ 取數失敗"),
+    # ~~("cooling", "fetch_log", "⛔ 取數失敗")~~ → 同批稽核回修 C3（有意識的更正，不是漏刪）：冷卻中寫暫停句，見下方 C3 兩條。
 ])
 def test_讀取失敗的收合標題_依成因寫_不寫表名(code, table, expected):
     got = set_live._read_failure_title({"text": "卡上那一句"}, {}, {"table_errors": {table: {"code": code}}}, table)
@@ -287,7 +287,9 @@ def test_U7d_SET7留在原位_改標題_預設收合_內容不改(env):
     assert codes.index("SET-7") == [b["code"] for b in demo["blocks"]].index("SET-7")
     demo7 = set_logic.find_block(demo, "SET-7")
     assert demo7["title"] != "欄位對照（進階）"                                       # 示範模式照舊
-    assert set7["_rows"] == demo7["_rows"] or len(set7["_rows"]) == len(demo7["_rows"])
+    # 同批稽核回修：~~`… or len(…) == len(…)`~~（有意識的更正，不是漏刪）—— 內容一字不改要比對同一份資料的模型，不是比筆數。
+    same_data = set_logic.find_block(set_logic.build_page_model(_data["dataset"]), "SET-7")
+    assert set7["_rows"] == same_data["_rows"]
 
 
 def test_U7b_SET2結果不寫英文原值_訊息原文照印(env):
@@ -373,7 +375,7 @@ def test_不適用只限三張核心卡的佔位_其他塊與真的來源徽章�
     assert exp_live.card_provenance_not_applicable(again) == 0 and again == model     # 沒有佔位就不動
 
 
-# ═══════════════════════ 同批總管裁定（決策者：AI 總管，適用客戶 DEC-2026-10-19-05 第 2／3 點；44 之十二其九） ═══════════════════════
+# ═══════════════════════ 同批總管裁定（決策者：AI 總管，總管適用客戶裁示第 2 點；44 之十二其九第 1、4 條） ═══════════════════════
 
 
 def _mkt_model():
@@ -436,39 +438,180 @@ def test_裁定1_尚未設定字樣與health同字():
     assert sections.MKT_NOT_CONFIGURED == health.TEXT_NOT_CONFIGURED
 
 
-def test_裁定2_燈的成因全是缺服務帳戶_狀態字與文案改尚未設定_燈色判定不動(env):
+# ~~裁定 2（燈改尚未設定）、裁定 3（SET-2／SET-6 照印原文那一格改統一句、原文進進階診斷）~~ → 同批稽核後撤回（有意識的更正，
+# 不是漏刪；決策者 AI 總管；理由：超出 `DEC-2026-10-19-05` 核准推薦 (3) 射程且會改寫 `DEC-2026-10-18-01` C1；44 之十二其九第 2、3 條）。
+# 下面兩條改成鎖住撤回後的現況（C1 燈照舊、照印原文照舊）。
+
+
+def test_撤回_C1燈照舊_缺服務帳戶寫取數失敗(env):
     env.cfg.pop("google_service_account")
     _data, model = _page()
     set0 = _b(model, "SET-0")
-    assert (set0["state_word"], set0["text"]) == ("狀態：尚未設定", "尚未設定：Google 服務帳戶")
     assert (set0["_tone"], set0["_state"], set0["glyph"]) == ("紅", "讀取失敗", "⛔")
+    assert set0["state_word"] == "狀態：取數失敗"
+    assert set0["text"] == "⛔ 取數失敗：未設定 Google 服務帳戶"
 
 
-def test_裁定2_燈的成因是真的讀取失敗_照寫取數失敗(env, monkeypatch):
-    source = pytest.importorskip("ui_v2.set.source")
-
-    def broken(values):
-        raise R.SettingsSheetError("ConnectionError: refused", code="api")
-    monkeypatch.setattr(source.settings_store, "load_fetch_log", broken)
-    _data, model = _page()
-    set0 = _b(model, "SET-0")
-    assert set0["state_word"] == "狀態：取數失敗" and set0["text"] == "⛔ 取數失敗：ConnectionError: refused"
-
-
-def test_裁定3_SET2與SET6缺服務帳戶那一格寫統一句_原文進進階診斷(env):
+def test_撤回_SET2與SET6照印原文_其他塊照舊統一一句(env):
     env.cfg.pop("google_service_account")
     _data, model = _page()
+    raw = "⛔ 取數失敗：" + plain.MSG_NO_SERVICE_ACCOUNT          # 與批次 3-A 之前逐字相同（客戶核准的照印原文例外）
     for code in ("SET-2", "SET-6"):
-        assert _b(model, code)["placeholder"]["text"] == "⛔ 尚未設定：Google 服務帳戶"
-        shown = [_b(model, code)["placeholder"]["text"]] + list(_b(model, code).get("tail_lines") or ())
-        assert not any("google_service_account" in t for t in shown)       # 底線鍵 `_read_failure` 照舊帶原文（判定用，不上畫面）
-    raw = model[set_live.ADVANCED_RAW_KEY]
-    assert [r[0] for r in raw] == [_b(model, "SET-2")["title"], _b(model, "SET-6")["title"]]
-    assert all(r[1] == "⛔ 取數失敗：" + plain.MSG_NO_SERVICE_ACCOUNT for r in raw)
+        assert _b(model, code)["placeholder"]["text"] == raw
+    assert [n["text"] for n in _b(model, "SET-4")["fail_nodes"]] == ["⛔ 尚未設定：Google 服務帳戶"]
+    assert not hasattr(set_live, "ADVANCED_RAW_KEY")
 
 
-def test_裁定3_缺試算表ID那一格照舊_不進進階診斷(env):
+def test_缺試算表ID_SET2那一格照舊(env):
     env.cfg.pop("SETTINGS_SHEET_ID")
     _data, model = _page()
     assert _b(model, "SET-2")["placeholder"]["text"] == "⛔ 未設定試算表 ID，暫停寫入"
-    assert model[set_live.ADVANCED_RAW_KEY] == []
+
+
+# ═══════════════════════ 同批稽核回修 C3：SET-6／SET-2 冷卻中的收合標題寫暫停句 ═══════════════════════
+
+
+def test_C3_取數紀錄冷卻中_標題寫暫停句_不是取數失敗(env):
+    env.fail_next("open_by_key", ConnectionError("refused"), times=4)
+    data, model = _page()
+    assert data["notes"]["table_errors"]["fetch_log"]["code"] == "cooling"
+    remaining = data["notes"]["table_errors"]["fetch_log"]["remaining_sec"]
+    expected = f"{set_logic.WARN_GLYPH} " + set_live.sheet_cooling_text(remaining)
+    assert _b(model, "SET-6")["summary_text"] == expected
+    assert _b(model, "SET-2")["_plain_summary"] == expected
+    assert _b(model, "SET-4")["summary_text"] == "⛔ 取數失敗"           # 反面：設定表是真的讀取失敗（api），照寫取數失敗
+
+
+def test_C3_收合標題_冷卻以外的成因照舊():
+    notes = {"table_errors": {"fetch_log": {"code": "api"}}}
+    assert set_live._read_failure_title({"text": "x"}, {}, notes, "fetch_log") == "⛔ 取數失敗"
+
+
+# ═══════════════════════ 同批稽核建議 E：進階診斷只列一般表上的筆數 ═══════════════════════
+
+
+def test_E_進階診斷紀錄表只列一般表那幾筆_同順序():
+    logs = [_rec("ok", None, log_id="a", started_at="2026-10-19T01:00:00Z"),
+            _rec("failed", "x: boom", log_id="b", started_at="2026-10-19T02:00:00Z"),
+            _rec("ok", None, log_id="c", started_at="2026-10-19T03:00:00Z")]
+    set6 = {"_rows": [{"_log_id": "c", "cells": ["c", "市場指標", "t", "0.0", "ok", "1", ""]},
+                      {"_log_id": "b", "cells": ["b", "市場指標", "t", "0.0", "failed", "0", "x: boom"]}]}
+    set_live._plain_log_rows(set6, {"fetch_log": logs})
+    assert [r[0] for r in set6["_raw_log"]] == ["c", "b"] and [r[2] for r in set6["_raw_log"]] == ["ok", "failed"]
+
+
+# ═══════════════════════ 同批稽核回修 C1：混合成因的塊不留光禿禿的「⛔ 尚未設定」 ═══════════════════════
+
+_UNCONF_SUMMARY = "⛔ 選股池 取數失敗：選股池的雲端來源尚未設定"
+_FETCH_SUMMARY = "⛔ 使用者設定 取數失敗：相關數字暫時無法判定"
+
+
+def _mixed_block(**extra):
+    # 層 2：收合標題欄不畫在卡上（`health._shown`），去重那一步不換成「此區塊暫時無法判定」，好單獨看成因改寫。
+    block = {"code": "EXP-2", "title": plain.BLOCK_NAMES["EXP-2"], "_layer": 2, "_state": "系統錯誤",
+             "summary_text": _UNCONF_SUMMARY, "detail_lines": [_FETCH_SUMMARY]}
+    block.update(extra)
+    return block
+
+
+def test_C1_混合成因_收合標題照混合規則寫取數失敗_不收進只屬尚未設定():
+    display = {"blocks": [_mixed_block()]}
+    after, summary = health.dedupe_failures(display)
+    assert after["blocks"][0]["summary_text"] == "⛔ 尚未設定"                 # 去重那一步照舊（結構不變式）
+    only = health.relabel_unconfigured(after, summary)
+    assert only == {}                                                         # M19：含真失敗的塊不收
+    assert after["blocks"][0]["summary_text"] == "⛔ 取數失敗"
+    assert "⛔ 尚未設定" not in str({k: v for k, v in after["blocks"][0].items() if not k.startswith("_")})
+
+
+def test_C1_只屬尚未設定的塊_照舊狀態族():
+    display = {"blocks": [_mixed_block(detail_lines=["說明"])]}
+    after, summary = health.dedupe_failures(display)
+    only = health.relabel_unconfigured(after, summary)
+    assert only == {"EXP-2": ["選股池的雲端來源"]}
+    assert after["blocks"][0]["summary_text"].startswith("⛔ 尚未設定")
+
+
+def test_C1_混合成因_自己全屬尚未設定的值寫哪一項_徽章拿掉():
+    fetch_badge = {"_kind": "狀態", "_tone": "紅", "text": "取數失敗"}
+    block = {"code": "MKT-1", "title": plain.BLOCK_NAMES["MKT-1"], "_layer": 2, "_state": "系統錯誤", "main_values": [
+        {"label": "波動度指數", "value_text": "⛔ 市場指標 取數失敗：相關數字暫時無法判定", "badges": [dict(fetch_badge)]},
+        {"label": "高收益信用利差", "value_text": "⛔ 市場指標 取數失敗：資料來源的金鑰尚未設定", "badges": [dict(fetch_badge)]}]}
+    out = _run({"blocks": [block]})
+    vix, credit = out["blocks"][0]["main_values"]
+    assert credit["value_text"] == "⛔ 尚未設定：資料來源的金鑰" and credit["badges"] == []
+    assert [b["text"] for b in vix["badges"]] == ["取數失敗"] and "尚未設定" not in vix["value_text"]
+
+
+def test_M2_同一值兩種成因並存_徽章保留_不寫尚未設定():
+    text = "⛔ 市場指標 取數失敗：資料來源的金鑰尚未設定；⛔ 市場指標 取數失敗：相關數字暫時無法判定"
+    out = _run({"blocks": [_badge_block(text)]})
+    node = out["blocks"][0]["main_values"][0]
+    assert "取數失敗" in [b["text"] for b in node["badges"]]
+    assert "⛔ 尚未設定" not in node["value_text"]
+
+
+def test_M1_值本身沒有失敗摘要_別欄尚未設定_徽章保留():
+    block = _badge_block("3.45", extra={"disabled_reason": "⛔ 使用者設定 取數失敗：設定試算表尚未設定"})
+    out = _run({"blocks": [block]})
+    assert "取數失敗" in [b["text"] for b in out["blocks"][0]["main_values"][0]["badges"]]
+
+
+def test_M15_淨值退回預存句加尚未設定_徽章保留():
+    text = "⛔ 淨值 取數失敗：改用 2026-09-01 的預存淨值；⛔ 市場指標 取數失敗：資料來源的金鑰尚未設定"
+    out = _run({"blocks": [_badge_block(text)]})
+    node = out["blocks"][0]["main_values"][0]
+    assert "取數失敗" in [b["text"] for b in node["badges"]]
+    assert "改用 2026-09-01 的預存淨值" in node["value_text"]
+
+
+def test_M16_不是系統錯誤的節點_取數失敗不被改寫():
+    node = {"_state": "ok", "text": health.LINE_FETCH_FAILED, "badges": [{"_kind": "狀態", "text": "取數失敗"}]}
+    health._relabel_error_placeholders({"_x": node}, ["保單試算表"])
+    assert node["text"] == health.LINE_FETCH_FAILED and node["badges"] == [{"_kind": "狀態", "text": "取數失敗"}]
+
+
+def test_M4_佔位改寫整合_去重與改寫一起走():
+    hold = {"_state": "系統錯誤", "text": health.LINE_FETCH_FAILED, "badges": [{"_kind": "狀態", "text": "取數失敗"}]}
+    block = {"code": "HLD-1", "title": plain.BLOCK_NAMES["HLD-1"], "_layer": 2, "_state": "系統錯誤",
+             "_placeholder": hold, "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]}
+    out = _run({"blocks": [block]})
+    assert out["blocks"][0]["_placeholder"]["text"] == "⛔ 尚未設定：保單試算表"
+    assert out["blocks"][0]["_placeholder"]["badges"] == []
+
+
+# ═══════════════════════ 同批稽核回修 C2：燈的說明行一次點名多塊時依成因分開寫 ═══════════════════════
+
+
+def test_C2_燈的點名句_屬尚未設定的塊分開寫():
+    titles = {"偏離提示卡": ["保單試算表"], "配息與本金卡": ["保單試算表"]}
+    assert health._split_named_line("偏離提示卡、績效與風險卡、配息與本金卡：取數失敗。", titles) == (
+        "偏離提示卡：尚未設定：保單試算表；績效與風險卡：取數失敗；配息與本金卡：尚未設定：保單試算表。")
+    assert health._split_named_line("偏離提示卡、配息與本金卡：取數失敗。", titles) == "偏離提示卡、配息與本金卡：尚未設定：保單試算表。"
+    assert health._split_named_line("績效與風險卡：取數失敗。", titles) == "績效與風險卡：取數失敗。"     # 沒有一塊屬尚未設定：原樣
+    assert health._split_named_line("別的句子", titles) == "別的句子"
+
+
+# ═══════════════════════ M7／M21：市場總覽正式模式的兩支純函式 ═══════════════════════
+
+
+def test_M7_市場總覽標取數失敗時_尚未設定的鍵另外標():
+    mkt_page = pytest.importorskip("ui_v2.mkt.page")
+    model = _mkt_model()
+    dataset = {"errors": {"credit_spread_pct": plain.MSG_FRED_MISSING, "policy_rate_pct": plain.MSG_FRED_MISSING,
+                          "vol_index": "fetch_url returned None (kind=unreachable)"}}
+    mkt_page.mark_fetch_failures(model, dataset)
+    rows = {r["indicator_key"]: r for r in model["blocks"][2]["_rows"]}
+    assert rows["credit_spread_pct"]["_unconfigured"] == "資料來源的金鑰" and rows["credit_spread_pct"]["badges"] == []
+    assert rows["vol_index"].get("_fetch_failed") and [b["text"] for b in rows["vol_index"]["badges"]] == ["取數失敗"]
+
+
+def test_M21_MKT5清單下方_尚未設定那一行與取數失敗那一行分開():
+    mkt_page = pytest.importorskip("ui_v2.mkt.page")
+    items = [{"name": "credit_spread_pct", "badges": [], "_unconfigured": "資料來源的金鑰"},
+             {"name": "policy_rate_pct", "badges": [], "_unconfigured": "資料來源的金鑰"},
+             {"name": "vol_index", "badges": [{"_kind": "狀態", "text": "取數失敗"}]}]
+    assert mkt_page.mkt5_status_lines(items) == [
+        f"⛔ 取數失敗：{plain.key_name('vol_index')}",
+        f"⛔ 尚未設定：資料來源的金鑰（{plain.key_name('credit_spread_pct')}、{plain.key_name('policy_rate_pct')}）"]
+    assert mkt_page.mkt5_status_lines([items[2]]) == [f"⛔ 取數失敗：{plain.key_name('vol_index')}"]

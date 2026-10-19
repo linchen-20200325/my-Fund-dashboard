@@ -469,12 +469,9 @@ _ADVANCED_DIAG_LABELS = ("頁", "記錄時間", "位置", "原文")
 # BL-0250 批次 3-A（U7（b）（c）；44 第七節第三小節之十二）：取數紀錄的紀錄編號與結果原值不上一般畫面，改在這裡照列。
 ADVANCED_DIAG_LOG_TITLE = "取數紀錄的紀錄編號與結果原值"
 _ADVANCED_DIAG_LOG_LABELS = ("紀錄編號", f"開始（{logic.DISPLAY_TZ_LABEL}）", "結果原值")
-# BL-0250 批次 3-A（總管適用 `DEC-2026-10-19-05` 第 3 點）：`SET-2`／`SET-6` 缺服務帳戶那一句的原文移到這裡（`live._sa_raw_to_diag`）。
-ADVANCED_DIAG_RAW_TITLE = "讀取失敗的原文"
-_ADVANCED_DIAG_RAW_LABELS = ("塊", "原文")
 
 
-def _render_advanced_diag(raw_log=None, raw_reads=None) -> None:
+def _render_advanced_diag(raw_log=None) -> None:
     with st.expander(plain.ADVANCED_DIAG_TITLE, expanded=False):
         st.caption(ADVANCED_DIAG_NOTE)
         pages = plain.recorded_pages(st.session_state)
@@ -494,9 +491,6 @@ def _render_advanced_diag(raw_log=None, raw_reads=None) -> None:
         if raw_log:
             _lines([ADVANCED_DIAG_LOG_TITLE], "set-line")
             _html(_table(_ADVANCED_DIAG_LOG_LABELS, [[_cell(c) for c in row] for row in raw_log]))
-        if raw_reads:
-            _lines([ADVANCED_DIAG_RAW_TITLE], "set-line")
-            _html(_table(_ADVANCED_DIAG_RAW_LABELS, [[_cell(c) for c in row] for row in raw_reads]))
 
 
 # ── Phase 3 P1-⑥：正式模式 ④ 的搬入塊與 `SET-0` 燈旁的導覽（44 第七節第三小節之八其二；示範模式不經過這裡） ──
@@ -675,7 +669,7 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         else:
             _RENDERERS[code](logic.find_block(model, code), key, ctx)
     if plain_mode:
-        _render_advanced_diag(logic.find_block(model, "SET-6").get("_raw_log"), model.get(live.ADVANCED_RAW_KEY))
+        _render_advanced_diag(logic.find_block(model, "SET-6").get("_raw_log"))
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

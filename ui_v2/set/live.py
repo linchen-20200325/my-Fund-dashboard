@@ -65,7 +65,7 @@ _RAW_TEXT_CODES = ("SET-2", "SET-6", "SET-7")
 TEXT_SA_NOT_CONFIGURED = "尚未設定：Google 服務帳戶"
 TEXT_SA_SAVE_REASON = "尚未設定 Google 服務帳戶，暫停寫入"
 TEXT_SA_REFETCH_REASON = "尚未設定 Google 服務帳戶，暫停取數"
-_SA_RAW_LINE = f"{logic.FETCH_FAIL_GLYPH} {plain.MSG_NO_SERVICE_ACCOUNT}"   # `_fail_map` 給缺服務帳戶的那一句（照印原文）
+_SA_RAW_LINE = f"{logic.FETCH_FAIL_GLYPH} {plain.MSG_NO_SERVICE_ACCOUNT}"   # `_fail_map` 給缺服務帳戶的那一句（中間形；`SET-2`／`SET-6` 換回原文，其餘換統一句）
 # 第 2 點：讀取情境的收合標題（`SET-4` 參數編輯、`SET-6` 取數紀錄）不再寫「取數失敗：user_setting／fetch_log」。
 # 成因是尚未設定 → 「⛔ 尚未設定：<哪一項>」；設定試算表冷卻中 → 卡上那一句暫停句；其餘真的讀取失敗 → 取數失敗（⛔）。
 TEXT_TITLE_FETCH_FAILED = f"{logic.FETCH_FAIL_GLYPH} {logic.TEXT_FETCH_FAILED}"
@@ -335,8 +335,9 @@ def _fail_map(dataset, notes) -> dict:
         raw = logic.fetch_failed_text(message)
         extra = []
         if info.get("code") in ("not_configured", "no_service_account"):
-            # B11：非燈位置統一「⛔ 未設定試算表 ID，暫停寫入」。BL-0250 批次 3-A：缺服務帳戶同一種寫法（照印原文、不加「取數失敗：」），
-            # 照印原文的 `SET-2`／`SET-6` 就照這一句；其餘塊再由 `_plain_set_words` 換成「⛔ 尚未設定：Google 服務帳戶」。
+            # B11：非燈位置統一「⛔ 未設定試算表 ID，暫停寫入」。BL-0250 批次 3-A：缺服務帳戶在 `SET-1`／`SET-3`／`SET-4` 先寫成
+            # 這一形（`_SA_RAW_LINE`），再由 `_plain_set_words` 換成「⛔ 尚未設定：Google 服務帳戶」；照印原文的 `SET-2`／`SET-6`
+            # 由 `_sa_raw_restore` 換回原文（客戶核准的待裁示 (3)「除來源健康卡與取數紀錄（照印原文）外」；同批稽核回修）。
             shown = f"{logic.FETCH_FAIL_GLYPH} {message}"
         elif info.get("code") == "header_mismatch":
             shown = TEXT_HEADER_MISMATCH.format(tab=info["tab"])
@@ -457,14 +458,6 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         message = notes["service_account"]["message"]
         set0.update(_tone="紅", _state="讀取失敗", glyph=logic.FETCH_FAIL_GLYPH, state_word="狀態：取數失敗",
                     text=logic.fetch_failed_text(message))
-    if set0["_state"] == "讀取失敗" and set0["text"] == logic.fetch_failed_text(plain.MSG_NO_SERVICE_ACCOUNT):
-        # BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 3 點；44 第七節第三小節之九其三第 3 條劃線改寫、之十二其三）：
-        # 燈的成因全是缺 Google 服務帳戶（燈讀到的那一筆讀取失敗原文就是這一句，沒有別的成因）→ 狀態字「狀態：尚未設定」、
-        # 文案「尚未設定：Google 服務帳戶」，與本頁其他處同一句。燈色、圖示、`_state` 與判定照舊（只改字）；
-        # 讀取失敗原文是別的（真的連線或讀取失敗）照舊寫取數失敗。舊句（C1：「取數失敗：未設定服務帳戶…」）的用意
-        # 「缺服務帳戶是取數能力的缺口，燈要紅」照舊；被權衡掉的是它把沒設定說成取數失敗。
-        set0["state_word"] = "狀態：尚未設定"
-        set0["text"] = TEXT_SA_NOT_CONFIGURED
     set0["note_lines"] = [MASKED_NOTE] if _masked(set0["text"], token) else []
     # 客戶 2026-10-18 裁示 S4：說明行補明第三個輸入（設定試算表是否已設定）。示範模式不經過本檔，照舊。
     set0["detail_lines"] = [TEXT_SET0_INPUTS if line == TEXT_SET0_INPUTS_DEMO else line for line in set0["detail_lines"]]
@@ -641,7 +634,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set6["detail_lines"] = [TEXT_SET6_ORDER_PLAIN if line == order else line
                             for line in _strip_demo(set6["detail_lines"])] + [TEXT_LOG_SCOPE]  # ✂2、★3；U7（c）
 
-    _sa_raw_to_diag(out, (set2, set6))
+    _sa_raw_restore((set2, set6))
 
     # ── SET-7：U7（d）＋待裁示 (5a)：留在原位、改標題、預設收合（本來就收合；內容一字不改） ──
     set7 = logic.find_block(out, "SET-7")
@@ -743,35 +736,27 @@ def _plain_log_rows(set6: dict, dataset: dict) -> None:
         cells = list(row["cells"][1:])          # 拿掉第一格（log_id）
         cells[3] = _result_text(record)[0]       # 結果
         row["cells"] = cells
+    # 同批稽核回修（E）：進階診斷只列一般表上那幾筆（同順序；超出保留筆數被移除的列不列，兩邊筆數一致）。
     set6["_raw_log"] = [
-        (r["log_id"], logic.format_time(r["started_at"]), r["outcome"])
-        for r in sorted(dataset.get("fetch_log") or (), key=lambda r: r["started_at"], reverse=True)
+        (by_id[row["_log_id"]]["log_id"], logic.format_time(by_id[row["_log_id"]]["started_at"]), by_id[row["_log_id"]]["outcome"])
+        for row in set6["_rows"]
     ]
 
 
-ADVANCED_RAW_KEY = "_raw_read_failures"   # 進階診斷那一張「讀取失敗原文」表的列（`page._render_advanced_diag`）
-
-
-def _sa_raw_to_diag(model: dict, blocks) -> None:
-    """BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 3 點；44 第七節第三小節之十二其三）：`SET-2`／`SET-6` 照印原文的
-    那一格，缺 Google 服務帳戶時原本照印「⛔ 未設定服務帳戶（google_service_account）」，露出工程名稱。一般畫面改寫統一句
-    「⛔ 尚未設定：Google 服務帳戶」，原文（含本頁加的「取數失敗：」字首）照列在進階診斷（就地改寫）。只換這一句；
-    訊息欄（`fetch_log.message` 原文）與別的讀取失敗原文照舊照印。"""
-    shown = f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}"
+def _sa_raw_restore(blocks) -> None:
+    """`SET-2`（來源健康卡）／`SET-6`（取數紀錄）照印原文的那一格，缺 Google 服務帳戶時照舊印原文（`logic.fetch_failed_text`
+    包住 `plain.MSG_NO_SERVICE_ACCOUNT` 那一句；就地改寫；與批次 3-A 之前逐字相同）。
+    客戶核准的待裁示 (3) 原文：缺服務帳戶統一一句是「燈以外各處」「除來源健康卡與取數紀錄（照印原文）外」；那一格的
+    `google_service_account` 屬客戶核准的照印原文例外，不算工程名稱外漏（44 第七節第三小節之十二其三第 2 條）。
+    ~~一般畫面改寫統一句、原文移到進階診斷（同批總管裁定其九第 3 條）~~ → 同批稽核後撤回（有意識的更正，不是漏刪；決策者：AI 總管；
+    理由：超出 `DEC-2026-10-19-05` 核准的待裁示 (3) 射程）。"""
     raw = logic.fetch_failed_text(plain.MSG_NO_SERVICE_ACCOUNT)
-    rows = model.setdefault(ADVANCED_RAW_KEY, [])
     for block in blocks:
-        hit = False
         node = block.get("placeholder")
         if node and node.get("text") == _SA_RAW_LINE:
-            node["text"] = shown
-            hit = True
+            node["text"] = raw
         if block.get("tail_lines"):
-            tail = [shown if line == _SA_RAW_LINE else line for line in block["tail_lines"]]
-            hit = hit or tail != block["tail_lines"]
-            block["tail_lines"] = tail
-        if hit:
-            rows.append((block["title"], raw))
+            block["tail_lines"] = [raw if line == _SA_RAW_LINE else line for line in block["tail_lines"]]
 
 
 def _read_failure_title(node: dict, dataset: dict, notes: dict, table: str) -> str:
@@ -783,6 +768,11 @@ def _read_failure_title(node: dict, dataset: dict, notes: dict, table: str) -> s
         return f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}"
     if code == "cooling" and table == "user_setting":
         return node["text"]          # 卡上那一句暫停句（黃，草稿 B4），不是取數失敗
+    if code == "cooling":
+        # 同批稽核回修：`SET-2`／`SET-6`（讀 `fetch_log`）冷卻中也寫同一句暫停句（44 之十二其二「冷卻中 → 卡上那一句暫停句」）；
+        # 這兩塊照印原文的那一格照舊印原文，只有收合標題寫暫停句。原本落到取數失敗，與規定不一致。
+        info = notes["table_errors"].get(table, {})
+        return f"{logic.WARN_GLYPH} " + sheet_cooling_text(info.get("remaining_sec"))
     return TEXT_TITLE_FETCH_FAILED
 
 

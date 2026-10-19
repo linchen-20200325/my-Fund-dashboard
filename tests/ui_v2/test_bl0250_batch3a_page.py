@@ -107,7 +107,8 @@ def test_HLD_未設定_偏離提示卡主值寫尚未設定_真的取數失敗�
 
 def test_MKT_未設定_尚未設定的主值旁不掛取數失敗_真的取數失敗那一個照掛():
     joined = _joined("mkt", "未設定")
-    assert "高收益信用利差 ⛔ 尚未設定 ⬜ 不適用" in joined
+    # 同批稽核回修 C1：風險情緒卡是混合成因（波動度指數真的取數失敗），自己全屬尚未設定的那個值寫哪一項（不留光禿禿的狀態族）。
+    assert "高收益信用利差 ⛔ 尚未設定：資料來源的金鑰 ⬜ 不適用" in joined
     assert "政策利率 ⛔ 此區塊暫時無法判定 新臺幣對美元匯率" in joined
     assert "高收益信用利差 ⛔ 尚未設定 取數失敗" not in joined
     assert "波動度指數 ⛔ 此區塊暫時無法判定 取數失敗" in joined          # 反面：同一張卡真的取數失敗那一個照掛
@@ -129,15 +130,15 @@ def test_MKT_未設定_缺金鑰的指標_清單與明細表與新鮮度清單�
 # ═══════════════════════ 待裁示 (3)：缺 Google 服務帳戶 ═══════════════════════
 
 
-def test_SET_缺服務帳戶_各處統一一句_燈也改():
+def test_SET_缺服務帳戶_燈以外各處統一一句_燈照C1_照印原文照舊():
+    """~~同批總管裁定：燈也改、照印原文那一格改統一句~~ → 同批稽核後撤回（有意識的更正，不是漏刪；決策者 AI 總管；
+    理由：超出 `DEC-2026-10-19-05` 核准推薦 (3)「燈以外各處」「除來源健康卡與取數紀錄（照印原文）外」的射程，且會改寫
+    `DEC-2026-10-18-01` C1）。本條鎖住撤回後的現況。"""
     texts = _texts(_at("set", "取數失敗"))
     joined = "\n".join(texts)
-    # ~~C1 燈句照舊~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 3 點；有意識的更正，不是漏刪）：燈也寫同一句，燈色與判定照舊。
-    assert "⛔ 狀態：尚未設定 尚未設定：Google 服務帳戶" in joined
-    assert "取數失敗：未設定 Google 服務帳戶" not in joined and "google_service_account" not in "\n".join(
-        t for t in texts if not t.startswith("塊 原文") and "原始鍵名" not in t and not t.startswith("鍵名 畫面上的名稱"))
-    raw = [t for t in texts if t.startswith("塊 原文 ")]
-    assert len(raw) == 1 and raw[0].count("⛔ 取數失敗：未設定服務帳戶（google_service_account）") == 2   # 原文在進階診斷
+    assert "⛔ 狀態：取數失敗 ⛔ 取數失敗：未設定 Google 服務帳戶" in joined         # C1（DEC-2026-10-18-01）照舊
+    assert texts.count("⛔ 取數失敗：未設定服務帳戶（google_service_account）") == 2   # SET-2、SET-6 照印原文（客戶核准的例外）
+    assert "讀取失敗的原文" not in joined
     for title in ("規則參數卡", "參數編輯", "來源健康卡", "取數紀錄"):
         assert f"{title} — ⛔ 尚未設定：Google 服務帳戶" in joined, title
     assert "⛔ 讀不到試算表名稱：未設定 Google 服務帳戶" not in joined

@@ -1083,11 +1083,9 @@ def test_C1_只缺服務帳戶_燈維持紅_取數失敗_不改成第三句(env)
     data, model = _reshaped_page()
     assert data["notes"]["gate"]["state"] == "no_service_account"
     light = _b(model, "SET-0")
-    # ~~state_word「狀態：取數失敗」、文案「⛔ 取數失敗：未設定 Google 服務帳戶」（C1）~~ → 同批總管裁定（決策者：AI 總管，
-    # 適用客戶 `DEC-2026-10-19-05` 第 3 點；44 第七節第三小節之九其三第 3 條劃線改寫、之十二其九第 2 條；有意識的更正，不是漏刪）：
-    # 燈的成因全是缺 Google 服務帳戶 → 「狀態：尚未設定」「尚未設定：Google 服務帳戶」；紅燈、⛔、判定照舊。
-    assert light["_tone"] == "紅" and light["glyph"] == "⛔" and light["_state"] == "讀取失敗"
-    assert light["state_word"] == "狀態：尚未設定" and light["text"] == "尚未設定：Google 服務帳戶"
+    assert light["_tone"] == "紅" and light["glyph"] == "⛔" and light["state_word"] == "狀態：取數失敗"
+    # BL-0250 批次 1（`DEC-2026-10-19-04`）：一般畫面不印鍵名 `google_service_account`；C1 的 ⛔ 取數失敗語意照舊。
+    assert light["text"] == "⛔ 取數失敗：" + R.NO_SERVICE_ACCOUNT_MESSAGE.replace("服務帳戶（google_service_account）", " Google 服務帳戶")
     assert "尚未設定設定試算表" not in light["text"]
 
 

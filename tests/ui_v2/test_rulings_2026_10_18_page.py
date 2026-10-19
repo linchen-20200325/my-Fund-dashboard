@@ -140,10 +140,7 @@ def test_S1_只缺設定試算表_燈寫第三句():
 def test_C1_設定試算表與服務帳戶都缺_燈為禁止號_與只缺服務帳戶同一盞():
     both = _one(_md(_run(_BOTH_UNSET)), 'class="set-lamp"')
     only_sa = _one(_md(_run(_ONLY_SA_MISSING)), 'class="set-lamp"')
-    # ~~"狀態：取數失敗" in both~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 3 點；有意識的更正，不是漏刪）：
-    # 成因全是缺 Google 服務帳戶時燈字寫尚未設定；⛔ 紅燈與「與只缺服務帳戶同一盞」照舊。
-    assert "⛔" in both and "狀態：尚未設定" in both and "尚未設定：Google 服務帳戶" in both, both
-    assert sections.SET_NO_SHEET_TEXT not in both and "取數失敗" not in both, both
+    assert "⛔" in both and "狀態：取數失敗" in both and sections.SET_NO_SHEET_TEXT not in both, both
     assert both == only_sa
 
 

@@ -135,8 +135,10 @@ class _Dedupe:
         # 逐字串記成因（BL-0250 批次 3-A）：`_rewrite` 每認出一句失敗摘要就記一筆「unconfigured」或「fetch」，
         # 給 `_walk` 判斷「這一個值節點的失敗是不是全部屬尚未設定」（`_drop_fetch_badge`）。
         self.string_kinds: list = []
+        self.string_names: list = []      # 與 `string_kinds` 一一對應：尚未設定的對象（取數失敗那一筆是 None）
         # 值那一格的失敗全部屬尚未設定的值節點（`relabel_unconfigured` 拿掉它們的「取數失敗」徽章；本步驟不改結構）。
         self.unconfigured_values: list = []
+        self.unconfigured_value_names: list = []   # 與 `unconfigured_values` 一一對應：那一個值尚未設定的對象（依出現順序、不重複）
 
     def cause(self, code, *, fetch=False, name=None) -> None:
         if code is None:
@@ -197,6 +199,7 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
             # 同一字串裡的其他失敗摘要照常往下改寫（2026-10-18 獨立稽核回修：原本整串早退，會漏改其他摘要）。
             ctx.cause((block or {}).get("code"), fetch=True)
             ctx.string_kinds.append(_KIND_FETCH)
+            ctx.string_names.append(None)
             if _shown(block, field):
                 ctx.note(match.group("cls"), None)
                 code = (block or {}).get("code")
@@ -217,6 +220,7 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
         else:
             ctx.cause(code, fetch=True)
         ctx.string_kinds.append(_KIND_UNCONFIGURED if unconfigured else _KIND_FETCH)
+        ctx.string_names.append(not_configured_name(state) if unconfigured else None)
         if _shown(block, field) and code is not None and code not in ctx.explained:
             ctx.explained.append(code)
         whole = not text[: match.start()].strip() and not text[match.end():].strip()
@@ -262,7 +266,7 @@ def _walk(node, block, ctx: _Dedupe, *, private=False, in_rows=False, field=None
     if isinstance(node, dict):
         if isinstance(node.get("code"), str) and node.get("code") in plain.BLOCK_NAMES:
             block, in_rows = node, False
-        kinds = []   # 本節點自己的字串欄位認出的失敗摘要成因（BL-0250 批次 3-A）
+        kinds, names = [], []   # 本節點自己的字串欄位認出的失敗摘要成因與尚未設定的對象（BL-0250 批次 3-A）
         for key in list(node):
             value = node[key]
             if plain._protected(key) or key in _SAVE_RESULT_KEYS:
@@ -278,8 +282,10 @@ def _walk(node, block, ctx: _Dedupe, *, private=False, in_rows=False, field=None
             node[key] = _walk(value, block, ctx, in_rows=rows, field=key)
             if isinstance(value, str) and key in _VALUE_FIELDS:   # 只看「值」那一格（徽章掛在它旁邊）；停用原因等別的欄位不算
                 kinds.extend(ctx.string_kinds[before:])
+                names.extend(n for n in ctx.string_names[before:] if n and n not in names)
         if kinds and all(k == _KIND_UNCONFIGURED for k in kinds) and any(_is_fetch_badge(b) for b in node.get("badges") or ()):
             ctx.unconfigured_values.append(node)   # 去重這一步只記、不改結構（判定與結構的不變式）；拿掉徽章在 `relabel_unconfigured`
+            ctx.unconfigured_value_names.append(names)
         return node
     if isinstance(node, list):
         out = [_walk(item, block, ctx, private=private, in_rows=in_rows, field=field) for item in node]
@@ -311,6 +317,7 @@ def dedupe_failures(display: dict):
         "block_causes": {code: {"fetch": c["fetch"], "names": list(c["names"])} for code, c in ctx.block_causes.items()},
         # BL-0250 批次 3-A：值那一格的失敗全部屬尚未設定、旁邊卻掛著「取數失敗」徽章的值節點（物件本身，不是快照）。
         "unconfigured_value_nodes": list(ctx.unconfigured_values),
+        "unconfigured_value_names": [list(n) for n in ctx.unconfigured_value_names],
     }
 
 
@@ -375,6 +382,41 @@ def _relabel_error_placeholders(node, names) -> None:
             _relabel_error_placeholders(value, names)
 
 
+_BARE_NOT_CONFIGURED = re.compile(re.escape(LINE_NOT_CONFIGURED) + r"(?!：)")
+
+
+def _relabel_mixed(node, value_names: dict) -> None:
+    """同批稽核回修（BL-0250 批次 3-A；44 第七節第三小節之十二其二第 1 條、批次 1 的混合規則）：成因混合的塊（同一塊裡
+    既有尚未設定、又有真的取數失敗，不在 `unconfigured_only` 裡）不留光禿禿的狀態族「⛔ 尚未設定」（就地改寫）：
+
+    - 值那一格自己的成因全部屬尚未設定（`unconfigured_value_nodes`）→「⛔ 尚未設定：<哪一項>」（客戶裁示第 2 點的格式；
+      同一塊別的值是真的取數失敗，只寫狀態族會讓人以為整塊同一種成因）；
+    - 其他位置（收合標題、摘要、說明行、混了兩種成因的值）→ 照混合規則寫「⛔ 取數失敗」。
+
+    與 `_walk` 同一套走法：`_` 開頭鍵、受保護的鍵、存檔結果鍵、輸入欄當下值一律不碰。只換這一句；判定、符號、顏色照舊。"""
+    if isinstance(node, dict):
+        names = value_names.get(id(node))
+        for key in list(node):
+            value = node[key]
+            if plain._protected(key) or key in _SAVE_RESULT_KEYS or (isinstance(key, str) and key.startswith("_")):
+                continue
+            if key == "value_text" and plain._is_input_field(node):
+                continue
+            if isinstance(value, str):
+                if names and key in _VALUE_FIELDS and value == LINE_NOT_CONFIGURED:
+                    node[key] = f"{SYMBOL_ERROR} {not_configured_reason(*names)}"
+                else:
+                    node[key] = _BARE_NOT_CONFIGURED.sub(LINE_FETCH_FAILED, value)
+            else:
+                _relabel_mixed(value, value_names)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            if isinstance(value, str):
+                node[index] = _BARE_NOT_CONFIGURED.sub(LINE_FETCH_FAILED, value)
+            else:
+                _relabel_mixed(value, value_names)
+
+
 def unconfigured_only(display: dict, summary: dict) -> dict:
     """塊代號 → 尚未設定的對象（只收「失敗摘要全部屬尚未設定那一族、沒有任何真的取數失敗」的 `系統錯誤` 塊）。只讀已記的成因。"""
     out = {}
@@ -413,6 +455,14 @@ def relabel_unconfigured(display: dict, summary: dict) -> dict:
     only = unconfigured_only(display, summary)
     for node in summary.get("unconfigured_value_nodes") or ():   # BL-0250 批次 3-A：尚未設定的值旁不掛「取數失敗」徽章
         _drop_fetch_badge(node)
+    value_names = {id(node): names for node, names in zip(summary.get("unconfigured_value_nodes") or (),
+                                                           summary.get("unconfigured_value_names") or ())}
+    causes = summary.get("block_causes") or {}
+    for block in display.get("blocks") or ():
+        code = block.get("code")
+        cause = causes.get(code) or {}
+        if code not in only and cause.get("fetch") and cause.get("names"):
+            _relabel_mixed(block, value_names)   # 同批稽核回修：混合成因的塊不留光禿禿的「⛔ 尚未設定」
     titles = {}
     for block in display.get("blocks") or ():
         code = block.get("code")
@@ -454,7 +504,30 @@ def relabel_unconfigured(display: dict, summary: dict) -> dict:
                 if sep and rest == _FETCH_WORD and title in titles:
                     parts[index] = f"{title}：{not_configured_reason(*titles[title])}"
             block["text"] = "；".join(parts)
+        if titles and not page_only and isinstance(block.get("lines"), list):
+            # 同批稽核回修（G3 同一條規則套到燈的說明行）：「<塊名>、<塊名>：取數失敗。」那一句一次點名多塊，其中屬尚未設定的塊
+            # 分開寫「<塊名>：尚未設定：<哪一項>」，其餘照寫「取數失敗」（原本整句寫取數失敗，與卡上主值的成因不一致）。
+            block["lines"] = [_split_named_line(line, titles) for line in block["lines"]]
     return only
+
+
+def _split_named_line(line, titles: dict):
+    """「A、B、C：取數失敗。」→ 依成因分段（相鄰同一種成因合併）：例「A：尚未設定：X；B、C：取數失敗。」。不是這個形狀、
+    或沒有一塊屬尚未設定 → 原樣。"""
+    if not isinstance(line, str) or not line.endswith(f"：{_FETCH_WORD}。"):
+        return line
+    named = line[: -len(f"：{_FETCH_WORD}。")].split("、")
+    if not any(name in titles for name in named):
+        return line
+    groups: list = []
+    for name in named:
+        key = tuple(titles[name]) if name in titles else None
+        if groups and groups[-1][0] == key:
+            groups[-1][1].append(name)
+        else:
+            groups.append((key, [name]))
+    parts = [f"{'、'.join(names)}：{not_configured_reason(*key) if key else _FETCH_WORD}" for key, names in groups]
+    return "；".join(parts) + "。"
 
 
 # ───────────────────────── 結論燈：同一則訊息不印兩次（Phase 3 P1-④） ─────────────────────────
