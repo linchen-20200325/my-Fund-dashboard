@@ -351,9 +351,9 @@ def _drop_fetch_badge(node: dict) -> None:
 
 def _relabel_error_placeholders(node, names) -> None:
     """成因全部是尚未設定的塊（`unconfigured_only` 收的）：`_` 開頭鍵底下那幾個 `系統錯誤` 佔位主值（例：持倉體檢偏離提示卡
-    `_placeholder`），字面「⛔ 取數失敗」→ 狀態族「⛔ 尚未設定」，同一節點上的「取數失敗」狀態徽章拿掉（就地改寫）。
-    哪一項不寫在這裡：失敗摘要一頁只出現一次（44 第七節第三小節之七其二第 3 條，`_rewrite` 同一條），哪一項由頁首資料狀態行、
-    燈與收合標題交代；與其他塊主值位置的「⛔ 尚未設定」同一種寫法。`names` 只用來確認成因（不得為空）。
+    `_placeholder`），字面「⛔ 取數失敗」→「⛔ 尚未設定：<哪一項>」（`names`，不得為空），同一節點上的「取數失敗」狀態徽章拿掉
+    （就地改寫）。~~哪一項不寫在這裡（失敗摘要一頁只出現一次）~~ → 總管適用客戶 `DEC-2026-10-19-05` 第 2 點的格式補上哪一項
+    （有意識的更正，不是漏刪）；去重後的失敗摘要照舊一頁一次（之七其二第 3 條，`_rewrite` 那一條不動）。
     `_rewrite` 走不到 `_` 開頭鍵底下的字（那裡的字串照規則不碰），所以這一處由本函式補。只換那一句與那一枚，判定照舊。
     ⚠️ 只動那一個佔位節點：同一塊其他節點的徽章說的可能是別的事（例：`MKT-5` 可選項目上的「取數失敗」是那一個指標的取數狀態，
     成因不是本塊的「設定試算表尚未設定」），不得跟著拿掉。"""
@@ -363,7 +363,10 @@ def _relabel_error_placeholders(node, names) -> None:
                 if node.get(field) == LINE_FETCH_FAILED:
                     if not names:
                         raise ValueError("尚未設定的成因沒有對象，不改寫")
-                    node[field] = LINE_NOT_CONFIGURED
+                    # ~~`LINE_NOT_CONFIGURED`（只寫狀態族）~~ → 總管適用客戶 `DEC-2026-10-19-05` 第 2 點（格式「⛔ 尚未設定：〈哪一項〉」；
+                    # 有意識的更正，不是漏刪；44 第七節第三小節之十二其二）：補上哪一項。舊寫法的用意（哪一項一頁只交代一次，
+                    # 之七其二第 3 條）照舊適用於去重後的失敗摘要；被權衡掉的是主值位置不說是哪一項沒設。
+                    node[field] = f"{SYMBOL_ERROR} {not_configured_reason(*names)}"
             _drop_fetch_badge(node)
         for value in node.values():
             _relabel_error_placeholders(value, names)

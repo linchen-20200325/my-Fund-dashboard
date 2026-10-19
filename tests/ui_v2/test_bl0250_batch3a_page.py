@@ -99,7 +99,8 @@ def test_SET_取數紀錄混有真的失敗_照寫取數失敗_燈判定照舊()
 
 
 def test_HLD_未設定_偏離提示卡主值寫尚未設定_真的取數失敗情境照舊():
-    assert "偏離提示卡 ⛔ 尚未設定 ⛔ 此區塊暫時無法判定" in _joined("hld", "未設定")
+    # ~~"偏離提示卡 ⛔ 尚未設定 ⛔ 此區塊暫時無法判定"~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 2 點；有意識的更正，不是漏刪）：補上哪一項。
+    assert "偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定" in _joined("hld", "未設定")
     failed = _joined("hld", "取數失敗")
     assert "⛔ AAAA 取數失敗" in failed and "偏離提示卡 ⛔ 尚未設定" not in failed
 
@@ -113,13 +114,30 @@ def test_MKT_未設定_尚未設定的主值旁不掛取數失敗_真的取數�
     assert "波動度指數 ⛔ 此區塊暫時無法判定 取數失敗" in _joined("mkt", "取數失敗")
 
 
+def test_MKT_未設定_缺金鑰的指標_清單與明細表與新鮮度清單寫尚未設定_真的失敗照寫():
+    """同批總管裁定（適用 `DEC-2026-10-19-05` 第 2 點；44 第七節第三小節之十二其九第 1 條）。"""
+    texts = _texts(_at("mkt", "未設定"))
+    assert texts.count("⛔ 尚未設定：資料來源的金鑰（高收益信用利差、政策利率、期限利差）") == 2      # MKT-5 清單下方、MKT-6 表尾
+    assert texts.count("⛔ 取數失敗：波動度指數") == 2
+    table = [t for t in texts if t.startswith("指標 最近觀測日 ")]
+    assert len(table) == 1
+    assert "高收益信用利差 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ 政策利率" in table[0]
+    assert "波動度指數 取數失敗 ⛔ ⛔ ⛔ ⛔" in table[0] and "高收益信用利差 取數失敗" not in table[0]
+    assert "⛔ 取數失敗：高收益信用利差" not in "\n".join(texts)
+
+
 # ═══════════════════════ 待裁示 (3)：缺 Google 服務帳戶 ═══════════════════════
 
 
-def test_SET_缺服務帳戶_燈以外各處統一一句_燈照C1不動():
+def test_SET_缺服務帳戶_各處統一一句_燈也改():
     texts = _texts(_at("set", "取數失敗"))
     joined = "\n".join(texts)
-    assert "⛔ 狀態：取數失敗 ⛔ 取數失敗：未設定 Google 服務帳戶" in joined         # C1（DEC-2026-10-18-01）照舊
+    # ~~C1 燈句照舊~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 3 點；有意識的更正，不是漏刪）：燈也寫同一句，燈色與判定照舊。
+    assert "⛔ 狀態：尚未設定 尚未設定：Google 服務帳戶" in joined
+    assert "取數失敗：未設定 Google 服務帳戶" not in joined and "google_service_account" not in "\n".join(
+        t for t in texts if not t.startswith("塊 原文") and "原始鍵名" not in t and not t.startswith("鍵名 畫面上的名稱"))
+    raw = [t for t in texts if t.startswith("塊 原文 ")]
+    assert len(raw) == 1 and raw[0].count("⛔ 取數失敗：未設定服務帳戶（google_service_account）") == 2   # 原文在進階診斷
     for title in ("規則參數卡", "參數編輯", "來源健康卡", "取數紀錄"):
         assert f"{title} — ⛔ 尚未設定：Google 服務帳戶" in joined, title
     assert "⛔ 讀不到試算表名稱：未設定 Google 服務帳戶" not in joined

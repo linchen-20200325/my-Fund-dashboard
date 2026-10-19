@@ -116,7 +116,11 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
              if any(f'data-block="{page.upper()}-0"' in m.value for _ in [0])}
     titles = {str(e.label) for e in at.main.expander}
     status = " ".join(_status_lines(at)[0].split())
-    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "⬜ 不適用（尚未設定：", "，暫無篩選軌跡")
+    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "⬜ 不適用（尚未設定：", "，暫無篩選軌跡",
+               "偏離提示卡 ⛔ 尚未設定：", "⛔ 尚未設定：資料來源的金鑰")
+    # ↑ BL-0250 批次 3-A 同批總管裁定（決策者：AI 總管，適用客戶 `DEC-2026-10-19-05` 第 2 點；44 第七節第三小節之十二其九第 1、4 條）：
+    # 持倉體檢偏離提示卡主值、市場總覽缺金鑰的指標（清單下方、明細表尾、新鮮度清單）寫「⛔ 尚未設定：〈哪一項〉」，是客戶裁示的格式，
+    # 不是外漏的失敗摘要；資料狀態行那一句照舊恰一次（下一條斷言）。
     # ↑ BL-0250 批次 2（44 第七節第三小節之十一其六）：核心卡副標兩個冒號改括號，同一處、同一種說法（舊形保留在表裡不刪）。
     stray = [t for t in texts if f"{health.TEXT_NOT_CONFIGURED}：" in t and t != status and t not in lamps
              and t not in titles and not any(a in t for a in allowed)]

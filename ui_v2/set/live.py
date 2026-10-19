@@ -457,6 +457,14 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
         message = notes["service_account"]["message"]
         set0.update(_tone="紅", _state="讀取失敗", glyph=logic.FETCH_FAIL_GLYPH, state_word="狀態：取數失敗",
                     text=logic.fetch_failed_text(message))
+    if set0["_state"] == "讀取失敗" and set0["text"] == logic.fetch_failed_text(plain.MSG_NO_SERVICE_ACCOUNT):
+        # BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 3 點；44 第七節第三小節之九其三第 3 條劃線改寫、之十二其三）：
+        # 燈的成因全是缺 Google 服務帳戶（燈讀到的那一筆讀取失敗原文就是這一句，沒有別的成因）→ 狀態字「狀態：尚未設定」、
+        # 文案「尚未設定：Google 服務帳戶」，與本頁其他處同一句。燈色、圖示、`_state` 與判定照舊（只改字）；
+        # 讀取失敗原文是別的（真的連線或讀取失敗）照舊寫取數失敗。舊句（C1：「取數失敗：未設定服務帳戶…」）的用意
+        # 「缺服務帳戶是取數能力的缺口，燈要紅」照舊；被權衡掉的是它把沒設定說成取數失敗。
+        set0["state_word"] = "狀態：尚未設定"
+        set0["text"] = TEXT_SA_NOT_CONFIGURED
     set0["note_lines"] = [MASKED_NOTE] if _masked(set0["text"], token) else []
     # 客戶 2026-10-18 裁示 S4：說明行補明第三個輸入（設定試算表是否已設定）。示範模式不經過本檔，照舊。
     set0["detail_lines"] = [TEXT_SET0_INPUTS if line == TEXT_SET0_INPUTS_DEMO else line for line in set0["detail_lines"]]
@@ -633,6 +641,8 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set6["detail_lines"] = [TEXT_SET6_ORDER_PLAIN if line == order else line
                             for line in _strip_demo(set6["detail_lines"])] + [TEXT_LOG_SCOPE]  # ✂2、★3；U7（c）
 
+    _sa_raw_to_diag(out, (set2, set6))
+
     # ── SET-7：U7（d）＋待裁示 (5a)：留在原位、改標題、預設收合（本來就收合；內容一字不改） ──
     set7 = logic.find_block(out, "SET-7")
     set7["title"] = SET7_TITLE
@@ -737,6 +747,31 @@ def _plain_log_rows(set6: dict, dataset: dict) -> None:
         (r["log_id"], logic.format_time(r["started_at"]), r["outcome"])
         for r in sorted(dataset.get("fetch_log") or (), key=lambda r: r["started_at"], reverse=True)
     ]
+
+
+ADVANCED_RAW_KEY = "_raw_read_failures"   # 進階診斷那一張「讀取失敗原文」表的列（`page._render_advanced_diag`）
+
+
+def _sa_raw_to_diag(model: dict, blocks) -> None:
+    """BL-0250 批次 3-A（總管適用客戶 `DEC-2026-10-19-05` 第 3 點；44 第七節第三小節之十二其三）：`SET-2`／`SET-6` 照印原文的
+    那一格，缺 Google 服務帳戶時原本照印「⛔ 未設定服務帳戶（google_service_account）」，露出工程名稱。一般畫面改寫統一句
+    「⛔ 尚未設定：Google 服務帳戶」，原文（含本頁加的「取數失敗：」字首）照列在進階診斷（就地改寫）。只換這一句；
+    訊息欄（`fetch_log.message` 原文）與別的讀取失敗原文照舊照印。"""
+    shown = f"{logic.FETCH_FAIL_GLYPH} {TEXT_SA_NOT_CONFIGURED}"
+    raw = logic.fetch_failed_text(plain.MSG_NO_SERVICE_ACCOUNT)
+    rows = model.setdefault(ADVANCED_RAW_KEY, [])
+    for block in blocks:
+        hit = False
+        node = block.get("placeholder")
+        if node and node.get("text") == _SA_RAW_LINE:
+            node["text"] = shown
+            hit = True
+        if block.get("tail_lines"):
+            tail = [shown if line == _SA_RAW_LINE else line for line in block["tail_lines"]]
+            hit = hit or tail != block["tail_lines"]
+            block["tail_lines"] = tail
+        if hit:
+            rows.append((block["title"], raw))
 
 
 def _read_failure_title(node: dict, dataset: dict, notes: dict, table: str) -> str:

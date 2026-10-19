@@ -103,7 +103,8 @@ def test_尚未設定的系統錯誤佔位主值_取數失敗改尚未設定_同
     block = {"code": "HLD-1", "title": plain.BLOCK_NAMES["HLD-1"], "_layer": 2, "_state": "系統錯誤",
              "_placeholder": hold, "main_values": [other]}
     health._relabel_error_placeholders(block, ["保單試算表"])
-    assert hold["text"] == health.LINE_NOT_CONFIGURED and hold["badges"] == []
+    # ~~`health.LINE_NOT_CONFIGURED`（只寫狀態族）~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 2 點；有意識的更正，不是漏刪）：補上哪一項。
+    assert hold["text"] == "⛔ 尚未設定：保單試算表" and hold["badges"] == []
     assert other["badges"] == [{"_kind": "狀態", "text": "取數失敗"}]
     with pytest.raises(ValueError):
         health._relabel_error_placeholders({"_state": "系統錯誤", "text": health.LINE_FETCH_FAILED}, [])
@@ -242,7 +243,7 @@ def test_缺服務帳戶_一般畫面那一句換字_訊息原文的塊與底線
 
 # ═══════════════════════ U7：SET-3／SET-6／SET-7（走正式組裝，env 替身同 test_set_live_logic） ═══════════════════════
 
-from test_set_live_logic import _b, _page, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
+from test_set_live_logic import R, _b, _page, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
 
 
 def _demo():
@@ -370,3 +371,104 @@ def test_不適用只限三張核心卡的佔位_其他塊與真的來源徽章�
     assert "⬜ 不適用" not in str(model["blocks"][3:])
     again = copy.deepcopy(model)
     assert exp_live.card_provenance_not_applicable(again) == 0 and again == model     # 沒有佔位就不動
+
+
+# ═══════════════════════ 同批總管裁定（決策者：AI 總管，適用客戶 DEC-2026-10-19-05 第 2／3 點；44 之十二其九） ═══════════════════════
+
+
+def _mkt_model():
+    def row(key):
+        return {"indicator_key": key, "obs_text": "⬜", "fetched_text": "⬜", "tier_text": "⬜", "delay_text": "⬜",
+                "badges": [{"_kind": "狀態", "text": "資料未備"}]}
+    missing = dict(row("tw_fx"), _missing_cells=("obs_text",))
+    rows = [row("credit_spread_pct"), row("policy_rate_pct"), row("vol_index"), missing]
+    items = [{"name": k, "badges": [{"_kind": "狀態", "text": "資料未備"}]}
+             for k in ("credit_spread_pct", "policy_rate_pct", "vol_index", "tw_fx")]
+    return {"blocks": [{"code": "MKT-5", "_items": items}, {"code": "MKT-6", "_rows": [], "detail_lines": []},
+                       {"code": "MKT-7", "_rows": rows}]}
+
+
+_UNCONF = {"credit_spread_pct": "資料來源的金鑰", "policy_rate_pct": "資料來源的金鑰"}
+
+
+def test_裁定1_MKT7_缺金鑰的鍵寫尚未設定_不掛取數失敗_真的失敗照掛():
+    model = _mkt_model()
+    sections.mark_mkt7_fetch_failed(model, ["credit_spread_pct", "policy_rate_pct", "vol_index"], _UNCONF)
+    rows = {r["indicator_key"]: r for r in model["blocks"][2]["_rows"]}
+    for key in _UNCONF:
+        r = rows[key]
+        assert (r["obs_text"], r["fetched_text"], r["tier_text"], r["delay_text"]) == (
+            "⛔ 尚未設定：資料來源的金鑰", "⛔", "⛔", "⛔")
+        assert r["badges"] == [] and r["_unconfigured"] == "資料來源的金鑰" and not r.get("_fetch_failed")
+    assert [b["text"] for b in rows["vol_index"]["badges"]] == ["取數失敗"] and rows["vol_index"]["_fetch_failed"]
+    assert [b["text"] for b in rows["tw_fx"]["badges"]] == ["資料未備"]                  # 真正的資料未備照舊
+    items = {i["name"]: i for i in model["blocks"][0]["_items"]}
+    assert items["credit_spread_pct"]["badges"] == [] and items["credit_spread_pct"]["_unconfigured"] == "資料來源的金鑰"
+    assert [b["text"] for b in items["vol_index"]["badges"]] == ["取數失敗"]
+
+
+def test_裁定1_沒有傳尚未設定對照_行為與改動前相同():
+    a, b = _mkt_model(), _mkt_model()
+    sections.mark_mkt7_fetch_failed(a, ["credit_spread_pct", "vol_index"])
+    sections.mark_mkt7_fetch_failed(b, ["credit_spread_pct", "vol_index"], {})
+    assert a == b
+    assert [x["text"] for x in a["blocks"][2]["_rows"][0]["badges"]] == ["取數失敗"]
+
+
+@pytest.mark.parametrize("failed, unconf, missing, expected", [
+    ([], ["高收益信用利差", "政策利率"], False, ["⛔ 尚未設定：資料來源的金鑰"]),
+    (["波動度指數"], ["高收益信用利差"], False, ["⛔ 取數失敗：波動度指數", "⛔ 尚未設定：資料來源的金鑰（高收益信用利差）"]),
+    ([], ["高收益信用利差"], True, ["◇ 資料未備：市場指標尚無資料", "⛔ 尚未設定：資料來源的金鑰（高收益信用利差）"]),
+    (["波動度指數"], [], True, ["◇ 資料未備：市場指標尚無資料", "⛔ 取數失敗：波動度指數"]),   # 改動前的混合寫法照舊
+    (["波動度指數"], [], False, ["⛔ 取數失敗"]),                                              # 改動前的全部失敗寫法照舊
+])
+def test_裁定1_MKT6表尾_依成因分行(failed, unconf, missing, expected):
+    rows = [{"indicator_key": k, "_fetch_failed": True} for k in failed]
+    rows += [{"indicator_key": k, "_unconfigured": "資料來源的金鑰"} for k in unconf]
+    rows += [{"indicator_key": "新臺幣對美元匯率"}] if missing else []
+    model = {"blocks": [{"code": "MKT-6", "_rows": [], "detail_lines": ["◇ 資料未備：市場指標尚無資料", "說明"]},
+                        {"code": "MKT-7", "_rows": rows}]}
+    assert sections.mark_mkt6_fetch_failed(model) == 1
+    assert model["blocks"][0]["detail_lines"] == expected + ["說明"]
+
+
+def test_裁定1_尚未設定字樣與health同字():
+    assert sections.MKT_NOT_CONFIGURED == health.TEXT_NOT_CONFIGURED
+
+
+def test_裁定2_燈的成因全是缺服務帳戶_狀態字與文案改尚未設定_燈色判定不動(env):
+    env.cfg.pop("google_service_account")
+    _data, model = _page()
+    set0 = _b(model, "SET-0")
+    assert (set0["state_word"], set0["text"]) == ("狀態：尚未設定", "尚未設定：Google 服務帳戶")
+    assert (set0["_tone"], set0["_state"], set0["glyph"]) == ("紅", "讀取失敗", "⛔")
+
+
+def test_裁定2_燈的成因是真的讀取失敗_照寫取數失敗(env, monkeypatch):
+    source = pytest.importorskip("ui_v2.set.source")
+
+    def broken(values):
+        raise R.SettingsSheetError("ConnectionError: refused", code="api")
+    monkeypatch.setattr(source.settings_store, "load_fetch_log", broken)
+    _data, model = _page()
+    set0 = _b(model, "SET-0")
+    assert set0["state_word"] == "狀態：取數失敗" and set0["text"] == "⛔ 取數失敗：ConnectionError: refused"
+
+
+def test_裁定3_SET2與SET6缺服務帳戶那一格寫統一句_原文進進階診斷(env):
+    env.cfg.pop("google_service_account")
+    _data, model = _page()
+    for code in ("SET-2", "SET-6"):
+        assert _b(model, code)["placeholder"]["text"] == "⛔ 尚未設定：Google 服務帳戶"
+        shown = [_b(model, code)["placeholder"]["text"]] + list(_b(model, code).get("tail_lines") or ())
+        assert not any("google_service_account" in t for t in shown)       # 底線鍵 `_read_failure` 照舊帶原文（判定用，不上畫面）
+    raw = model[set_live.ADVANCED_RAW_KEY]
+    assert [r[0] for r in raw] == [_b(model, "SET-2")["title"], _b(model, "SET-6")["title"]]
+    assert all(r[1] == "⛔ 取數失敗：" + plain.MSG_NO_SERVICE_ACCOUNT for r in raw)
+
+
+def test_裁定3_缺試算表ID那一格照舊_不進進階診斷(env):
+    env.cfg.pop("SETTINGS_SHEET_ID")
+    _data, model = _page()
+    assert _b(model, "SET-2")["placeholder"]["text"] == "⛔ 未設定試算表 ID，暫停寫入"
+    assert model[set_live.ADVANCED_RAW_KEY] == []
