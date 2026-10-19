@@ -373,6 +373,21 @@
 
 - **現況**：BL-0374（含 C3）、BL-0375 皆已裁示並關閉；44 第四輪解凍已改完並重新凍結。
 
+### DEC-2026-10-18-03｜客戶裁示關閉四支舊 draft PR、刪除對應分支；舊「不動」指示取代
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-18 |
+| 決策內容摘要 | (1) 關閉舊 draft PR #791、#836、#837、#839（已執行）。(2) 刪除對應遠端分支 `claude/fund-three-open-decisions-wireframe`、`claude/w6-holdings-health-conclusion`、`docs/v2-constitution-governance`、`compliance/remove-action-advice`；本環境無刪除權限（推送刪除被靜默拒絕），四支待客戶手動刪除。(3) `docs/HANDOFF.md` 舊的「客戶指示不動」由本裁示取代；BL-0265、BL-0337、BL-0338 等仍有價值的未完成事項保留在 BACKLOG，移除「PR 完成前不得刪 branch」等已失效前提；不搬舊碼、不建 archive branch，未來需要時依當時 main／SSOT 重新設計。(4) `claude/fund-dashboard-b-ui-phase3-0hdhsy` 等本 session 結束再清。(5) 保留：main、data、push-assets、`probe/fx-obs-date-results`、`probe/fx-obs-date-trigger`、`probe/moneydj-basic-results`、`probe/moneydj-basic-trigger` |
+| 理由／背景 | `DEC-2026-10-17-06` 已允許刪除非依賴的歷史／WIP branch；四支舊 draft PR 原由客戶指示「不動」，本裁示將其收尾 |
+| evidence／source | 客戶 2026-10-18 對話中的裁示，經總管於派工單轉達；repo 內無逐字存檔 |
+| 影響範圍 | 治理層：`docs/HANDOFF.md` 第 2 節「舊 draft PR」列與第 3 節同步紀錄；`docs/BACKLOG.md` BL-0265、BL-0337、BL-0338。產品程式碼一行未改；本條登記本身未刪任何 branch |
+| 是否可逆 | 關閉 PR 可重開；刪除 branch 不可逆；裁示本身可由客戶另行變更 |
+| supersedes／superseded by | supersedes：交接中對 #791／#836／#837／#839「客戶指示不動」；BL-0265「舊 draft PR 不動、#837／#791 完成前不刪」與 BL-0337「之前 branch 照裁示不刪」的前提。**不 supersede**：`DEC-2026-10-17-06` 的不得刪範圍；BL-0217 的 `probe/fx-obs-date-trigger` 窗口限制。superseded by：無 |
+| provenance | **要點轉述**（客戶 2026-10-18 裁示，經總管於派工單轉達；本組未見客戶對話本身） |
+
+- **現況**：四支 PR 已關閉；四支遠端分支待客戶手動刪除。
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -476,5 +491,6 @@
 - 第四節 `DEC-2026-10-17-07`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身。「supersedes」欄的 44 條文範圍以 44 第七節第三小節之八其五為準，由文件實作組整理，未經第二組驗證。
 - 第四節 `DEC-2026-10-18-01`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身。「同時未設定取 ⛔」是總管指定讀法；其餘實作讀法見該筆 provenance 欄，未經第二組驗證。
 - 第四節 `DEC-2026-10-18-02`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身。實作讀法見該筆 provenance 欄，未經第二組驗證。
+- 第四節 `DEC-2026-10-18-03`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身。「PR 已關閉」「推送刪除被靜默拒絕」為總管回報，本組未實查。
 - 第五節的區塊範圍、點號與行號是本組以 `sed`／`awk` 在 `d5d391b` 實查；各區塊的 provenance 是照抄原處自陳，本組沒有回頭核對原始對話。
 - 第五節不宣稱窮舉：其他文件（例 `docs/v2/49_data_integration_plan.md`、`ACCEPTANCE.md`、各 PR 說明）裡也可能記有客戶裁示，本批未逐檔掃。
