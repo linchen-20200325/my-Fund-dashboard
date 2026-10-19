@@ -190,11 +190,8 @@ def test_核心卡的來源與新鮮度徽章移到第四段(page):
     cards = [html.unescape(m.value) for m in at.main.markdown
              if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
     assert cards
-    # ~~標的探索：「〔來源層級〕」~~ → BL-0250 批次 1（`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：正式模式不留佔位字，
-    # 那幾張卡沒有真的來源層級 ⇒ ④ 寫「◇ 資料未備」。卡上照舊不留（換位置）。
-    word = "延遲 3 日" if page == "mkt" else health.TEXT_PROVENANCE_MISSING
+    word = "延遲 3 日" if page == "mkt" else "〔來源層級〕"
     assert not any(word in card for card in cards), page
-    assert not any("〔來源層級〕" in card for card in cards), page
     box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
     assert len(box) == 1 and box[0].proto.expanded is False
     assert word in html.unescape(" ".join(m.value for m in box[0].markdown))

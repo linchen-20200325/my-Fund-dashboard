@@ -68,8 +68,6 @@ SETTINGS_ELSEWHERE_TEXT = "完整資料狀態在「設定與診斷」頁"
 
 # ④「證據／來源」裡承接核心卡徽章的那一枚展開區（預設收合）。
 PROVENANCE_TITLE = "核心卡的來源與新鮮度"
-# 卡上只有佔位徽章（沒有真的來源層級與新鮮度）時，④ 那一格寫這一句（44 第七節第三小節之七其四：資料未備 → ◇）。
-TEXT_PROVENANCE_MISSING = f"{SYMBOL_MISSING} {TEXT_MISSING}"
 
 # 兩鍵一起存、兩鍵都沒存進去時卡片層那一行（BL-0177；58 U-44 三態之一）。
 TEXT_SAVE_FAILED_BOTH = "儲存失敗"
@@ -589,17 +587,7 @@ def move_card_provenance(display: dict, codes) -> list:
     """
     def split(badges):
         keep, moved = [], []
-        placeholder_seen = False
         for badge in badges or ():
-            if _is_provenance(badge) and badge.get("_placeholder"):
-                # 佔位徽章（標的探索三張卡；`ui_v2/exp/logic.py::placeholder_badge`）：它的字（「〔來源層級〕」「〔新鮮度〕」）
-                # 是示範模式的佔位字，正式模式畫面上不得出現（BL-0250 批次 1，`DEC-2026-10-19-04`）。那幾張卡沒有真的
-                # 來源層級與取得時間可以印（來源是使用者設定與基金基本資料，`fund_profile` 沒有 `source_tier`）——
-                # 沒有真值 ⇒ 照既有規則寫一枚「◇ 資料未備」（一組佔位只寫一次），不留佔位字、不編一個值。
-                if not placeholder_seen:
-                    moved.append({**badge, "text": TEXT_PROVENANCE_MISSING})
-                    placeholder_seen = True
-                continue
             if _is_provenance(badge):
                 moved.append(badge)
                 if _is_stale_badge(badge):
