@@ -266,13 +266,16 @@ def test_SET2與SET3摘要不寫正常_不為空(name, sf):
 def test_SET3摘要_未設定與型別不符的鍵名寫出來():
     first = _b(_model("first"), "SET-3")
     unset = [r["key_text"] for r in first["_rows"] if r["value_text"] == set_logic.TEXT_UNSET]
-    assert unset and f"{len(unset)} 個未設定：" + "、".join(unset) in sections.set3_summary(first)
+    # BL-0250 批次 1（客戶 2026-10-19 裁示，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：摘要不再列原始鍵名，只寫個數。
+    assert unset and f"{len(unset)} 個未設定" in sections.set3_summary(first)
+    assert not any(key in sections.set3_summary(first) for key in unset)
     bad = _b(_model("badkind"), "SET-3")
     wrong = [r["key_text"] for r in bad["_rows"] if r["value_text"] == set_logic.TEXT_NA_BAD_KIND]
-    assert wrong and f"{len(wrong)} 個值與型別不符：" + "、".join(wrong) in sections.set3_summary(bad)
+    assert wrong and f"{len(wrong)} 個值與型別不符" in sections.set3_summary(bad)
+    assert not any(key in sections.set3_summary(bad) for key in wrong)
     assert sections.set3_summary(_b(_model("settingfail"), "SET-3")).startswith("⛔ 取數失敗：")
     ok = _b(_model("ok"), "SET-3")
-    assert sections.set3_summary(ok).startswith(f"{len(ok['_rows'])} 個鍵")
+    assert sections.set3_summary(ok).startswith(f"{len(ok['_rows'])} 個設定")
 
 
 # ───────────────────────── 示範模式 ─────────────────────────
@@ -312,7 +315,7 @@ def test_SET3摘要_沒有列而卡頭有紅字_寫紅字不寫0個鍵():
              "head_lines": [{"text": "⛔ 未設定試算表 ID，暫停寫入", "_tone": "紅"}], "live_lines": []}
     assert sections.set3_summary(block) == "⛔ 未設定試算表 ID，暫停寫入"
     block["head_lines"] = [{"text": "設定試算表：本", "_tone": "中性"}]
-    assert sections.set3_summary(block) == "0 個鍵"   # 沒有紅字時照舊寫鍵數
+    assert sections.set3_summary(block) == "0 個設定"   # 沒有紅字時照舊寫個數（BL-0250 批次 1：「個鍵」→「個設定」）
 
 
 def test_SET3摘要_壞列與結構檢查行帶進摘要_標點用逗號():
@@ -321,7 +324,8 @@ def test_SET3摘要_壞列與結構檢查行帶進摘要_標點用逗號():
                        {"key_text": "c", "value_text": "3"}],
              "head_lines": [{"text": "設定試算表：本", "_tone": "中性"}],
              "live_lines": [{"text": "⚠ 2 列格式不符，未採用", "_tone": "黃"}]}
-    assert sections.set3_summary(block) == "3 個鍵，1 個未設定：a，1 個格式不符未採用：b，⚠ 2 列格式不符，未採用"
+    # BL-0250 批次 1（客戶 2026-10-19 裁示，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：只寫個數、不列鍵名。
+    assert sections.set3_summary(block) == "3 個設定，1 個未設定，1 個格式不符未採用，⚠ 2 列格式不符，未採用"
 
 
 def test_SET2摘要_來源缺寫出缺的來源鍵():

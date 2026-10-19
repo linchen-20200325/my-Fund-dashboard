@@ -29,7 +29,7 @@ from __future__ import annotations
 import copy
 import json
 import math
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from . import logic
 
@@ -415,7 +415,68 @@ def build_live_model(live_input: dict, *, field_window_days=None, field_baseline
     model = apply_live_notes(model, notes, save_wired=save_wired)
     model = _mark_unsaved(model, settings, notes.get("settings_error"), field_window_days,
                           field_baseline_date, field_selected_keys)
+    model = localize_detail_tables(model)
     return apply_save_results(model, save_results)
+
+
+# ───────────────────────── MKT-6／MKT-7：時間轉台北時間、原始值換中文（BL-0250 批次 1） ─────────────────────────
+# 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`，BL-0250 實機驗收回修批次 1）：
+# - 44 `MKT-7` 規則欄逐字「時間一律以世界協調時間存放，顯示時轉當地時區並在表頭註明時區字面值」——
+#   舊畫面印 ISO 的世界協調時間、只在表尾加一句「時間以 UTC 顯示」，沒有轉。改成台北時間（UTC+8），
+#   時區字面值寫在表頭（同設定與診斷頁、資產配置頁既有寫法 `<欄名>（UTC+8）`、`YYYY-MM-DD HH:MM`）。
+#   `MKT-6` 的「取得時間」欄同一份資料（`fetched_at`），一併轉。
+# - 「是否修正」欄印布林原值 `True`／`False` → 「是」／「否」；表頭「指標鍵」→「指標」（列上的指標名本來就由 `plain` 換成中文名）。
+# - **不改的**：延遲日數照舊以 `fetched_at` 的日期減 `obs_date`（`logic.delay_days`，44 逐字的算法）；
+#   單位欄照舊印 `value_unit` 字面值（44 `MKT-6` 規則欄逐字「單位直接印 `value_unit` 的字面值，不做換算」）；
+#   來源層級照舊印 `source_tier`（正式資料的值域是 44 4.5 的四個之一，`T1`／`T2` 只出現在示範資料）。
+# - 只在正式模式（本檔）；示範模式不經過本檔，一個字都不變。
+DISPLAY_TZ = timezone(timedelta(hours=8))
+DISPLAY_TZ_LABEL = "UTC+8"
+TEXT_INDICATOR_COLUMN = "指標"
+REVISED_TEXT = {True: "是", False: "否"}
+_STORAGE_TZ_LINE = f"時間以 {logic.STORAGE_TIMEZONE} 顯示"
+_MKT7_KEY_WORD = "指標鍵"
+
+
+def local_time_text(utc_text):
+    """世界協調時間 ISO 字串 → 台北時間 `YYYY-MM-DD HH:MM`。不是時間的字（`⬜`、`◇`、`⛔` 那類空格）原樣交回。
+    是時間卻解析不了 → 照拋（資料契約保證 `fetched_at` 帶時區；不猜）。"""
+    if not isinstance(utc_text, str) or not utc_text[:1].isdigit():
+        return utc_text
+    moment = datetime.fromisoformat(utc_text.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        raise ValueError(f"取得時間沒有時區：{utc_text!r}")
+    return f"{moment.astimezone(DISPLAY_TZ):%Y-%m-%d %H:%M}"
+
+
+def _local_labels(labels) -> list:
+    out = []
+    for label in labels or ():
+        if label == logic.MKT6_COLUMN_LABELS["indicator_key"]:
+            label = TEXT_INDICATOR_COLUMN
+        elif label in (logic.MKT6_COLUMN_LABELS["fetched_at"], "最近取得時間"):
+            label = f"{label}（{DISPLAY_TZ_LABEL}）"
+        out.append(label)
+    return out
+
+
+def localize_detail_tables(model: dict) -> dict:
+    """`MKT-6`／`MKT-7` 的時間轉台北時間、表頭註明時區、布林改「是／否」、表頭「指標鍵」改「指標」（回複本）。"""
+    out = copy.deepcopy(model)
+    mkt6 = logic.find_block(out, "MKT-6")
+    mkt6["column_labels"] = _local_labels(mkt6.get("column_labels"))
+    for row in mkt6.get("_rows") or ():
+        row["fetched_at"] = local_time_text(row.get("fetched_at"))
+        if isinstance(row.get("is_revised"), bool):
+            row["is_revised"] = REVISED_TEXT[row["is_revised"]]
+    mkt7 = logic.find_block(out, "MKT-7")
+    mkt7["column_labels"] = _local_labels(mkt7.get("column_labels"))
+    for row in mkt7.get("_rows") or ():
+        row["fetched_text"] = local_time_text(row.get("fetched_text"))
+    mkt7["detail_lines"] = [line for line in mkt7.get("detail_lines") or () if line != _STORAGE_TZ_LINE]
+    if isinstance(mkt7.get("summary_text"), str):
+        mkt7["summary_text"] = mkt7["summary_text"].replace(_MKT7_KEY_WORD, TEXT_INDICATOR_COLUMN)
+    return out
 
 
 # N2（2026-10-13 稽核 G，總管裁定）：未存的欄位值只能出現在欄位本身與存檔區，另標「未存檔」。字面為本組擬定。
@@ -469,3 +530,40 @@ def apply_save_results(model: dict, results) -> dict:
         else:
             block["detail_lines"].append(TEXT_SAVED)
     return out
+
+
+# ───────────────────────── 設定試算表尚未設定：一件事只用一種說法（BL-0250 批次 1）─────────────────────────
+# 客戶 2026-10-19 裁示 G3（`docs/DECISIONS.md` `DEC-2026-10-19-04`）：同一件「設定試算表尚未設定」，本頁原本同時寫「⛔ 尚未設定」
+# （資料狀態行、失敗摘要去重後）與「設定讀不到」（`MKT-4`／`MKT-5` 標題、停用原因、明細區那一行、核心卡副標）兩種說法。
+# 已存設定**讀不到**的成因若是「尚未設定」那一族，那幾句改用同一種說法「尚未設定：<哪一項>」；真的讀取失敗（例：連線逾時）照舊「設定讀不到」。
+# ⬜ 照舊（核心卡副標是「不適用」那一族，之七其四第 1 條）；判定、停用與否一個都不動，只換字。
+_UNREADABLE_PHRASES = (
+    (logic.TEXT_SHOW_ALL_UNREADABLE, "{reason}，暫時列出全部指標"),
+    (logic.TEXT_SAVE_SETTINGS_UNREADABLE, "{reason}，暫不存檔"),
+    ("比較條件讀不到", "{reason}"),
+)
+
+
+def relabel_unconfigured_settings(model: dict, reason: str) -> dict:
+    """`reason`：「尚未設定：<哪一項>」。把本頁擬的「設定讀不到」那幾句換成 `reason`（就地改寫並回傳）。
+    `_` 開頭的鍵底下的字一律不碰。"""
+    def swap(text):
+        for old, new in _UNREADABLE_PHRASES:
+            text = text.replace(old, new.format(reason=reason))
+        return reason if text == logic.TEXT_SETTINGS_UNREADABLE else text
+
+    def visit(node, private=False):
+        if isinstance(node, dict):
+            for key in list(node):
+                under = private or (isinstance(key, str) and key.startswith("_"))
+                node[key] = visit(node[key], under)
+            return node
+        if isinstance(node, list):
+            return [visit(item, private) for item in node]
+        if isinstance(node, tuple):
+            return tuple(visit(item, private) for item in node)
+        if isinstance(node, str) and not private:
+            return swap(node)
+        return node
+
+    return visit(model)

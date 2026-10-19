@@ -131,15 +131,18 @@ def test_ID未設_燈照44外框_其餘位置統一一句_不重複印(env):
     data, model = _page()
     assert data["notes"]["gate"]["state"] == "not_configured"
     one = "⛔ 未設定試算表 ID，暫停寫入"
+    # ~~讀取情境各處同一句 `one`~~ → BL-0250 批次 1（客戶 2026-10-19 裁示，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：
+    # 讀取情境寫「⛔ 尚未設定：試算表 ID」；`SET-2`、`SET-6` 照印原文（44 SET-2）、存檔與重新取數的停用原因（寫入情境）照舊。
+    shown = "⛔ 尚未設定：試算表 ID"
     assert _b(model, "SET-0")["text"] == "⛔ 取數失敗：未設定試算表 ID，暫停寫入"      # `44` 5.5 外框不動
     set1 = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}
-    assert set1["市場指標"]["at_text"] == one
-    assert [n["text"] for n in _b(model, "SET-1")["fail_nodes"]] == [one]
+    assert set1["市場指標"]["at_text"] == shown
+    assert [n["text"] for n in _b(model, "SET-1")["fail_nodes"]] == [shown]
     assert _b(model, "SET-2")["placeholder"]["text"] == one
-    assert [n["text"] for n in _b(model, "SET-3")["head_lines"]] == [one]              # ★10
+    assert [n["text"] for n in _b(model, "SET-3")["head_lines"]] == [shown]            # ★10
     assert _b(model, "SET-3")["placeholder"] is None                                   # 同一句不重複印
     set4 = _b(model, "SET-4")
-    assert [n["text"] for n in set4["fail_nodes"]] == [one] and set4["top_lines"] == []
+    assert [n["text"] for n in set4["fail_nodes"]] == [shown] and set4["top_lines"] == []
     assert set4["buttons"][0]["_enabled"] is False
     assert set4["buttons"][0]["disabled_reason"] == "未設定試算表 ID，暫停寫入"
     assert _b(model, "SET-6")["placeholder"]["text"] == one
@@ -159,7 +162,7 @@ def test_缺服務帳戶_存檔停用_同一件事只印一行_去重比對錯�
     set4 = _b(model, "SET-4")
     assert data["notes"]["table_errors"]["user_setting"]["code"] == "no_service_account"
     assert set4["top_lines"] == []                                  # 讀設定已因同一件事失敗：不再多印
-    assert [n["text"] for n in set4["fail_nodes"]] == ["⛔ 取數失敗：未設定服務帳戶（google_service_account）"]
+    assert [n["text"] for n in set4["fail_nodes"]] == ["⛔ 取數失敗：未設定 Google 服務帳戶"]  # BL-0250 批次 1（`DEC-2026-10-19-04`）：一般畫面不印鍵名
     assert set4["buttons"][0]["disabled_reason"] == "未設定服務帳戶"
     assert live.refetch_button("市場指標", data["notes"])["disabled_reason"] == "未設定服務帳戶"
 
@@ -239,8 +242,9 @@ def test_正常_新文案都在_示範字樣都拿掉(env, monkeypatch):
     # → 2026-10-09 客戶裁示 Q1（不存 NAV、即時取得）＋ 53 §7 第 1 列核准：★1 換成 B 句（有意識的更正，不是漏刪）。
     assert live.TEXT_PENDING_DIVIDEND in _b(model, "SET-0")["detail_lines"]
     assert "淨值、配息尚未接取數來源" not in text
+    # ~~★3 在 SET-0、SET-2、SET-6 各印一次~~ → BL-0250 批次 1（`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：只留 SET-6。
     for code in ("SET-0", "SET-2", "SET-6"):
-        assert live.TEXT_LOG_SCOPE in _b(model, code)["detail_lines"], code
+        assert (live.TEXT_LOG_SCOPE in _b(model, code)["detail_lines"]) is (code == "SET-6"), code
     # ★2、★4
     set1 = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}
     for kind in ("淨值", "配息"):
@@ -654,7 +658,7 @@ def _field(model, key):
 def test_alo_basis_正式模式型別為list_單行輸入欄(env):
     _d, model = _page()
     field = _field(model, "alo_basis")
-    assert field["_kind"] == "list" and field["_multiline"] is False and field["label"] == "alo_basis（list）"
+    assert field["_kind"] == "list" and field["_multiline"] is False and field["label"] == "計算基礎"  # BL-0250 批次 1（`DEC-2026-10-19-04`）：標籤改中文設定名
     row = [r for r in _b(model, "SET-3")["_rows"] if r["_key"] == "alo_basis"][0]
     assert row["kind_text"] == "list"
 
@@ -774,7 +778,8 @@ def _clock(monkeypatch, text):
 
 def test_淨值文案逐字_客戶2026_10_09核准():
     assert live.TEXT_PENDING_DIVIDEND == "配息尚未接取數來源；淨值即時取得"
-    assert live.TEXT_NAV_TIME_SCOPE == "這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
+    # ~~「set 頁」~~ → 「本頁」（BL-0250 批次 1，`DEC-2026-10-19-04`；有意識的更正，不是漏刪；其餘字一字未改）。
+    assert live.TEXT_NAV_TIME_SCOPE == "這個時間是本頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
     assert live.TEXT_SET5_NOTE == ("目前市場指標與淨值可以重新取數。市場指標取回的列存進設定試算表，"
                                    "市場總覽頁不會因此重新整理；淨值只取持倉基金，除了記一筆取數紀錄，不寫入任何表。")
     assert not hasattr(live, "TEXT_PENDING_NAV_DIVIDEND")      # 舊句不再有任何地方印
@@ -841,7 +846,7 @@ def test_淨值層_fetch_log讀不到_SET1淨值列照讀取失敗_不說成資�
     env.cfg.pop("SETTINGS_SHEET_ID")
     _d, model = _page()
     nav = {r["_kind_label"]: r for r in _b(model, "SET-1")["_rows"]}["淨值"]
-    assert nav["_failed"] is True and nav["at_text"] == "⛔ 未設定試算表 ID，暫停寫入"
+    assert nav["_failed"] is True and nav["at_text"] == "⛔ 尚未設定：試算表 ID"  # BL-0250 批次 1（`DEC-2026-10-19-04`）
     assert nav["badges"] == [] and nav["note_lines"] == []
 
 
@@ -1076,7 +1081,8 @@ def test_C1_只缺服務帳戶_燈維持紅_取數失敗_不改成第三句(env)
     assert data["notes"]["gate"]["state"] == "no_service_account"
     light = _b(model, "SET-0")
     assert light["_tone"] == "紅" and light["glyph"] == "⛔" and light["state_word"] == "狀態：取數失敗"
-    assert light["text"] == "⛔ 取數失敗：" + R.NO_SERVICE_ACCOUNT_MESSAGE
+    # BL-0250 批次 1（`DEC-2026-10-19-04`）：一般畫面不印鍵名 `google_service_account`；C1 的 ⛔ 取數失敗語意照舊。
+    assert light["text"] == "⛔ 取數失敗：" + R.NO_SERVICE_ACCOUNT_MESSAGE.replace("服務帳戶（google_service_account）", " Google 服務帳戶")
     assert "尚未設定設定試算表" not in light["text"]
 
 

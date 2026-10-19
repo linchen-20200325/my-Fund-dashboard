@@ -163,7 +163,9 @@ def test_畫面上的方塊資料未備全數換成菱形_一處不多一處不�
         for (path, a), (_, b) in zip(old, new):
             if path[-1] == "glyph" or a == "⬜":
                 continue   # 圖示另驗（來源缺佔位那一條）；單獨一個 ⬜ 的缺值格另驗（第 3 節）
-            assert b == a.replace("⬜ 資料未備", "◇ 資料未備"), (key, path, a, b)
+            # BL-0250 批次 1（客戶 G5，`DEC-2026-10-19-04`）：持倉體檢「另有／其中 N 檔淨值超過 10 日未更新（資料未備）」句首也換 ◇。
+            expected = ("◇" + a[1:]) if symbols._is_nav_not_ready_line(a) else a
+            assert b == expected.replace("⬜ 資料未備", "◇ 資料未備"), (key, path, a, b)
             total += a.count("⬜ 資料未備")
         assert not any("⬜ 資料未備" in s for _, s in new), key
     assert total > 100, total   # 不是空掃（2026-10-17 實測數百處）

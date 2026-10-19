@@ -92,7 +92,31 @@ def mark_attention(display: dict) -> list:
 # ───────────────────────── ◇ 資料未備 ─────────────────────────
 
 
+# 客戶 2026-10-19 裁示 G5（`docs/DECISIONS.md` `DEC-2026-10-19-04`，BL-0250 批次 1）：單純淨值超過 10 日、沒有確認取數失敗
+# → `◇ 資料未備`。持倉體檢那兩句（`ui_v2/hld/logic.py::HLD1_NOT_READY_TAIL`／`HLD7_NOT_READY_NOTE`，`HLD-1` 卡尾、`HLD-6`
+# 表尾、`HLD-7` 說明）句首寫的是 `⬜`、括號裡寫的是「資料未備」—— 符號與成因不一致（之七其四：資料未備 → `◇`）。
+# 只換句首那一個符號；句子其餘字面、計數、天數一個都不動。確認是「取數失敗後退回預存序列」的那幾檔（BL-0375）
+# 不在這兩句的檔數裡、照舊 `⛔` 並帶日期 —— 兩者不合併。下面兩個片段是那兩句的鏡像（測試逐字比對真身）。
+NAV_NOT_READY_HEADS = ("另有 ", "其中 ")
+NAV_NOT_READY_MIDDLE = " 檔淨值超過 "
+NAV_NOT_READY_TAIL = " 日未更新（資料未備）"
+
+
+def _is_nav_not_ready_line(text: str) -> bool:
+    head = f"{SYMBOL_UNDECIDABLE} "
+    if not text.startswith(head):
+        return False
+    rest = text[len(head):]
+    return (rest.startswith(NAV_NOT_READY_HEADS) and NAV_NOT_READY_MIDDLE in rest and NAV_NOT_READY_TAIL in rest)
+
+
+def _needs_swap(text: str) -> bool:
+    return MISSING_OLD in text or _is_nav_not_ready_line(text)
+
+
 def _swap(text: str) -> str:
+    if _is_nav_not_ready_line(text):
+        text = SYMBOL_MISSING + text[len(SYMBOL_UNDECIDABLE):]
     return text.replace(MISSING_OLD, MISSING_NEW)
 
 
@@ -124,7 +148,7 @@ def _visit(node, own_key_private: bool) -> int:
             value = node[key]
             private = isinstance(key, str) and key.startswith("_")
             if isinstance(value, str):
-                if not private and MISSING_OLD in value:
+                if not private and _needs_swap(value):
                     node[key] = _swap(value)
                     count += 1
             else:
@@ -133,7 +157,7 @@ def _visit(node, own_key_private: bool) -> int:
     if isinstance(node, list):
         for index, item in enumerate(node):
             if isinstance(item, str):
-                if not own_key_private and MISSING_OLD in item:
+                if not own_key_private and _needs_swap(item):
                     node[index] = _swap(item)
                     count += 1
             else:

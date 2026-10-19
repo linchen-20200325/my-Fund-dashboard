@@ -441,7 +441,7 @@ def test_load_live的save_errors恆空_存檔只接ALO1與ALO4(wired):
     assert saves[("alo_target_weights", "alo_tolerance_pp")]["_enabled"]
     assert saves[("alo_basis", "alo_bucket_names")]["_enabled"]
     assert not saves[("alo_scenario_input",)]["_enabled"]
-    assert saves[("alo_scenario_input",)]["disabled_reason"] == live.SAVE_DISABLED_REASON
+    assert saves[("alo_scenario_input",)]["disabled_reason"] == live.SCENARIO_SAVE_DISABLED_REASON  # BL-0250 批次 1（`DEC-2026-10-19-04`）：ALO-3 試算存檔的停用原因改「試算存檔尚未開放」
 
 
 def test_notes交出各鍵的試算表原字串_讀失敗時為空(wired):

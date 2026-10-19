@@ -151,7 +151,9 @@ def test_存檔停用並寫出原因_匯出與導覽照舊(monkeypatch):
     at = _run(_SCRIPT_LIVE, monkeypatch)
     saves = [b for b in at.button if b.label == logic.TEXT_SAVE]
     assert len(saves) == 3                                    # ALO-1／ALO-3／ALO-4 各一枚
-    assert all(b.disabled and b.help == live.SAVE_DISABLED_REASON for b in saves)
+    assert all(b.disabled for b in saves)
+    # BL-0250 批次 1（`DEC-2026-10-19-04`）：ALO-3 那一枚原因改「試算存檔尚未開放」，ALO-1／ALO-4 照舊。
+    assert sorted(b.help for b in saves) == sorted([live.SAVE_DISABLED_REASON] * 2 + [live.SCENARIO_SAVE_DISABLED_REASON])
     goto = [b for b in at.button if b.label == logic.TEXT_GOTO_SHEETS]
     assert len(goto) == 1 and not goto[0].disabled            # 導覽鈕照掛、不停用（草稿 §F 第 16 題）
     add = [b for b in at.button if b.label == logic.TEXT_ADD_SCENARIO]
@@ -377,7 +379,7 @@ def test_有寫入函式時_ALO3存檔照舊停用_其餘兩枚可按(monkeypatc
     assert not at.button(key="live_alo1_btn_0").disabled
     assert not at.button(key="live_alo4_btn_1").disabled
     alo3 = [b for b in at.button if b.label == logic.TEXT_SAVE and b.key.startswith("live_alo3")]
-    assert len(alo3) == 1 and alo3[0].disabled and alo3[0].help == live.SAVE_DISABLED_REASON
+    assert len(alo3) == 1 and alo3[0].disabled and alo3[0].help == live.SCENARIO_SAVE_DISABLED_REASON  # BL-0250 批次 1（`DEC-2026-10-19-04`）：ALO-3 試算存檔的停用原因改「試算存檔尚未開放」
     assert probe.calls == []                                   # 沒按就沒寫
 
 

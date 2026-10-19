@@ -982,6 +982,47 @@ def _apply_cell_notes(code, cells, by_code):
 UNWIRED_FOR_TESTS = "unwired_for_tests"
 
 
+# ───────────────────────── 一般畫面字句（BL-0250 批次 1）─────────────────────────
+# 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`）：下列幾句是元件說明、開發沿革或工程字樣，正式模式改寫或拿掉；
+# 示範模式不經過本檔，照舊。整句相等才換（值為 None ＝ 整句拿掉）；判定、計數、寫入一個都不動。
+# ⛔ 不改的：排序那一句保留「幣別混排」的提醒（只拿掉「44 …」那半句）；`EXP-4` 那一句保留「取消勾基金名時清單上就沒有基金名」的提醒。
+TEXT_EXP6_NONE = "先在結果清單勾一檔「對照」"
+TEXT_EXP7_FAILED = "取數失敗，暫無篩選軌跡"
+TEXT_SORT_MIXED_CCY = "⚠ 目前依最近淨值（原幣）排序，不同幣別的數字因此被放在同一個順序裡比大小。"
+LIVE_TEXT_EDITS = {
+    # `EXP-0` 說明行：元件說明（燈讀哪幾塊），不是給使用者的資訊。
+    "本塊不自取數：只讀 EXP-2 的列數與 EXP-1 的條件列數。": None,
+    # `EXP-6` 說明行：沒有要顯示的基金時，寫使用者要做什麼才看得到。
+    "本塊目前沒有要顯示的基金。": TEXT_EXP6_NONE,
+    # `EXP-7` 空狀態：上游取數失敗時那一句。
+    "上游取數失敗，本塊不列出任何軌跡列。": TEXT_EXP7_FAILED,
+    # `EXP-2` 依最近淨值排序時那一句：拿掉「44 允許……」半句，留幣別混排的提醒。
+    TEXT_SORT_MIXED_CCY + "44 允許使用者自選排序欄位，也沒有一條規則擋這一種；就地寫出來，不自行拿掉這一項。":
+        TEXT_SORT_MIXED_CCY,
+    # `EXP-4`（兩鍵一成一敗）、`EXP-5`（停用不出失敗框）兩句條件式登記：開發沿革，整句拿掉。
+    "⚠ 這一枚按鈕同時寫兩鍵。兩鍵一成一敗時畫面長什麼樣，44 沒有寫，本頁不替它選；目前這個畫面演的是兩鍵都失敗。": None,
+    "⚠ 這一枚按鈕目前停用，所以不出存檔失敗框。按不到的按鈕會不會有失敗態，44 沒有寫，本頁取「停用就不出失敗框」這一邊。":
+        None,
+    # `EXP-4` 說明行（`logic.TEXT_EXP4_LIVE` 經 `_drop_dev_notes` 之後）：拿掉「正式模式的」。
+    logic.LIVE_DEV_NOTE_EDITS[logic.TEXT_EXP4_LIVE]:
+        logic.LIVE_DEV_NOTE_EDITS[logic.TEXT_EXP4_LIVE].replace("正式模式的候選清單", "候選清單"),
+}
+
+
+def _edit_exact(node, edits):
+    """整句相等 → 換成表裡的值；值為 None 就整句拿掉（就地改寫並回傳）。"""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _edit_exact(value, edits)
+        return node
+    if isinstance(node, (list, tuple)):
+        kept = [_edit_exact(v, edits) for v in node if not (isinstance(v, str) and v in edits and edits[v] is None)]
+        return type(node)(kept)
+    if isinstance(node, str) and node in edits and edits[node] is not None:
+        return edits[node]
+    return node
+
+
 def _drop_dev_notes(node):
     """BL-0345（2026-10-19）：把 `logic.LIVE_DEV_NOTE_EDITS` 列的純開發註記從正式模式拿掉（整棵模型走一遍）。
 
@@ -1008,7 +1049,7 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
     - `EXP-2` 說明行寫母體來源；`EXP-1` 說明行補比較方向可填哪些；
     - 「存檔」類按鈕：沒接上寫入函式 → 停用；已存設定讀不到 → 停用（存了會蓋掉讀不到的那一份）。
     """
-    out = _drop_dev_notes(copy.deepcopy(model))
+    out = _edit_exact(_drop_dev_notes(copy.deepcopy(model)), LIVE_TEXT_EDITS)
     by_code = notes.get("cells")
     exp6 = logic.find_block(out, "EXP-6")
     exp6_cells = dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"])) if exp6["_fields"] else {}

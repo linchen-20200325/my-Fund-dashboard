@@ -799,6 +799,50 @@ def _drop_live_lines(model: dict) -> None:
         block[field] = [item for item in block[field] if item != line]
 
 
+# ───────────────────────── 一般畫面字句（BL-0250 批次 1）─────────────────────────
+# 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`）：下列幾句是開發沿革或元件說明，正式模式拿掉或改寫成使用者語言；
+# 示範模式不經過本檔，照舊。整句相等才換（值為 None ＝ 整句拿掉；比對的是 `_DEV_TRIMS` 刪減之後的字串）；判定、計數、寫入一個都不動。
+# ⛔ 不改的：`HLD-1` 紅線註記「偏離提示只客觀描述現況與目標差距，不提供任何處置方向。」（44 第七節第三小節之六逐字）、
+#    頁尾「本頁不負責什麼」、所有 G1†／G2†／G3† 徽章、停用中的按鈕。
+TEXT_HLD1_ORDER = "依基金代碼排列（不代表優先順序）"
+TEXT_HLD6_WEEKEND = "週末與假日沒有資料屬正常。"
+TEXT_HLD3_UNKNOWN_KIND = "配息類別未知的列仍計入期間配息合計。"
+TEXT_HLD8_RATIO = "兩個值都是比率，逐檔仍寫出幣別字面值，本表沒有任何跨幣別的合計、平均或比值。"
+LIVE_TEXT_EDITS = {
+    # `HLD-2`、`HLD-3`、`HLD-8`：「第三個值移到哪一層」「這兩個值原本各是……」是版面沿革。
+    "第三個值「最大回撤」移到層 4 的 HLD-8。": None,
+    "第三個值「本金類配息佔比」移到層 4 的 HLD-8。" + TEXT_HLD3_UNKNOWN_KIND: TEXT_HLD3_UNKNOWN_KIND,
+    "這兩個值原本各是績效與風險卡、配息與本金卡的第三個值。" + TEXT_HLD8_RATIO: TEXT_HLD8_RATIO,
+    # `HLD-4`：元件說明（欄位沒有預設值是紅線 G3† 的事，說明區已有紅線註記）。
+    "欄位一律無預設值：首次開啟四個欄位全是空的。本塊不對門檻數值提出任何候選值。": None,
+    # `HLD-5`：展開區的元件行為說明。
+    "點一檔展開一檔，同時最多展開一檔；展開區不巢狀第二層。": None,
+    "展開中的那一檔，它的展開鈕停用；初次載入零檔展開。": None,
+    # `HLD-7`：計算軌跡表的實作說明。
+    ("輸出值與該列指標名所在那一塊上顯示的值逐字相同；算式以文字寫出，不寫任何實作語言的語法。"
+     "該塊把該指標判為不適用時，輸出欄顯示同一句不適用文案，輸入欄照列。"): None,
+    # `HLD-1`：排序那一句改使用者語言。
+    "依 fund_code 字面值排列，不排序成優先順序。": TEXT_HLD1_ORDER,
+    # `HLD-6`：只留「週末與假日沒有資料屬正常」的意思。
+    ("表不做任何補值，缺的日期不出現在表上；週末與假日沒有列屬正常。"
+     "可空的只有配息表的入帳日一欄，空的時候顯示 ⬜。"): TEXT_HLD6_WEEKEND,
+}
+
+
+def _edit_exact(node, edits):
+    """整句相等 → 換成表裡的值；值為 None 就整句拿掉（就地改寫並回傳）。"""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _edit_exact(value, edits)
+        return node
+    if isinstance(node, (list, tuple)):
+        kept = [_edit_exact(v, edits) for v in node if not (isinstance(v, str) and v in edits and edits[v] is None)]
+        return type(node)(kept)
+    if isinstance(node, str) and node in edits and edits[node] is not None:
+        return edits[node]
+    return node
+
+
 def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的四件事：
 
@@ -820,6 +864,7 @@ def apply_live_notes(model: dict, *, today: date | None = None) -> dict:
     out = copy.deepcopy(model)
     _strip_dev_lines(out)
     _drop_live_lines(out)
+    out = _edit_exact(out, LIVE_TEXT_EDITS)
     _relabel_sync_field(logic.find_block(out, "HLD-5"), today=taiwan_today() if today is None else today)
     for block in out["blocks"]:
         block["buttons"] = [b for b in block["buttons"] if b["_action_kind"] != "取數"]

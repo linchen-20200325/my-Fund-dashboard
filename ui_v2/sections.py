@@ -119,8 +119,20 @@ def _item(symbol: str, text: str, tone: str) -> dict:
     return {"symbol": symbol, "text": text, "_tone": tone}
 
 
+# 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`，BL-0250 批次 1）：該塊的失敗全部屬「尚未設定」那一族時（`health.relabel_unconfigured`
+# 在塊上記的 `_unconfigured`），③ 與入口標題寫「⛔ 尚未設定：<哪一項>」，不寫「⛔ 取數失敗」。⛔ 照舊（判定照舊是 `系統錯誤`）。
+UNCONFIGURED_KEY = "_unconfigured"   # 真身 `ui_v2/health.py::UNCONFIGURED_KEY`（測試比對）
+TEXT_NOT_CONFIGURED = "尚未設定"
+
+
+def _unconfigured_line(names) -> str:
+    return f"{SYMBOL_ERROR} {TEXT_NOT_CONFIGURED}：{'、'.join(names)}"
+
+
 def _mkt_words(card: dict) -> list:
     state = card["_state"]
+    if state == STATE_ERROR and card.get(UNCONFIGURED_KEY):
+        return [_unconfigured_line(card[UNCONFIGURED_KEY])]
     if state in _MKT_STATE_WORDS:
         return [_MKT_STATE_WORDS[state]]
     if state is None:
@@ -219,11 +231,12 @@ _FAMILY_FETCH_FAILED = f"{SYMBOL_ERROR} 取數失敗"
 _FAMILY_MISSING = f"{SYMBOL_MISSING} 資料未備"
 
 
-def _placeholder_family(placeholder: dict) -> str:
+def _placeholder_family(placeholder: dict, unconfigured=None) -> str:
     """佔位 → 摘要那一行的狀態族。`系統錯誤` 只留「⛔ 取數失敗」（「此區塊暫時無法判定」一塊只寫一次，已寫在卡上；
-    之七其二第 3 條）；其餘照佔位自己那一句（已經過 `symbols`，資料未備是 ◇）。只讀既有的 `_empty_kind`，不另判。"""
+    之七其二第 3 條）；該塊的失敗全部屬尚未設定（`unconfigured`）時寫「⛔ 尚未設定：<哪一項>」（客戶 G3）；
+    其餘照佔位自己那一句（已經過 `symbols`，資料未備是 ◇）。只讀既有的 `_empty_kind`，不另判。"""
     if placeholder["_empty_kind"] == STATE_ERROR:
-        return _FAMILY_FETCH_FAILED
+        return _unconfigured_line(unconfigured) if unconfigured else _FAMILY_FETCH_FAILED
     return placeholder["text"]
 
 
@@ -233,7 +246,7 @@ def alo1_summary(block: dict) -> str:
     → 加「◇ 資料未備」，再加容許帶那一句。"""
     placeholder = block["placeholder"]
     if placeholder:
-        return _placeholder_family(placeholder)
+        return _placeholder_family(placeholder, block.get(UNCONFIGURED_KEY))
     rows = block["_rows"]
     parts = [f"{len(rows)} 個類別"] if rows else list(block["unset_lines"])
     if any(row["_weight"] is None for row in rows):
@@ -249,7 +262,7 @@ def alo3_entry_title(block: dict) -> str:
     placeholder = block["placeholder"]
     if not placeholder:
         return ALO_SCENARIO_ENTRY
-    return f"{ALO_SCENARIO_ENTRY}　—　{_placeholder_family(placeholder)}"
+    return f"{ALO_SCENARIO_ENTRY}　—　{_placeholder_family(placeholder, block.get(UNCONFIGURED_KEY))}"
 
 
 # ───────────────────────── 設定與診斷（Phase 3 P1-⑥；之八其二 (b-1)～(b-4)、其三 (c-1)） ─────────────────────────
@@ -450,7 +463,8 @@ def set3_summary(block: dict) -> str:
     - 佔位 → 佔位那一句；
     - 卡頭紅字（正式模式 ★10，例：「⛔ 未設定試算表 ID，暫停寫入」）→ 先寫那一句；**沒有任何列時就只寫那一句**，
       不寫「0 個鍵」（2026-10-18 獨立稽核必修 M1：正式模式未設定時佔位已併入卡頭，舊寫法會報「0 個鍵」）；
-    - 否則鍵數，加上目前值為「⬜ 未設定」「⬜ 不適用：值與型別不符」「⚠ 1 列格式不符，未採用」（正式模式壞列）的鍵名；
+    - 否則設定數，加上目前值為「⬜ 未設定」「⬜ 不適用：值與型別不符」「⚠ 1 列格式不符，未採用」（正式模式壞列）的個數
+      （~~鍵名~~ → 客戶 2026-10-19 裁示只寫個數）；
     - 最後接上卡上的結構檢查行（正式模式 ★9 的 `live_lines`，例：格式不符未採用 N 列）。
     """
     placeholder = block["placeholder"]
@@ -460,15 +474,18 @@ def set3_summary(block: dict) -> str:
     red_heads = [node["text"] for node in block.get("head_lines") or () if node["_tone"] == "紅"]
     if not rows and red_heads:
         return "，".join(red_heads)
-    parts = red_heads + [f"{len(rows)} 個鍵"]
+    # ~~f"{len(rows)} 個鍵"、「N 個未設定：<鍵名、鍵名…>」~~ → 客戶 2026-10-19 裁示（`DEC-2026-10-19-04`，BL-0250 批次 1；
+    # 有意識的政策變更，不是漏刪）：摘要不再列原始鍵名（全部未設定時一行列十八個鍵名），只寫「N 個設定，M 個未設定」；
+    # 值與型別不符、格式不符未採用兩種同樣只寫個數。哪幾個鍵照舊在展開後的表上逐列看得到（換位置，不刪除）。
+    parts = red_heads + [f"{len(rows)} 個設定"]
     unset = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 未設定"]
     bad = [r["key_text"] for r in rows if r["value_text"] == f"{SET_EMPTY_GLYPH} 不適用：值與型別不符"]
     broken = [r["key_text"] for r in rows if r["value_text"] == SET_BAD_ROW_TEXT]
     if unset:
-        parts.append(f"{len(unset)} 個未設定：" + "、".join(unset))
+        parts.append(f"{len(unset)} 個未設定")
     if bad:
-        parts.append(f"{len(bad)} 個值與型別不符：" + "、".join(bad))
+        parts.append(f"{len(bad)} 個值與型別不符")
     if broken:
-        parts.append(f"{len(broken)} 個格式不符未採用：" + "、".join(broken))
+        parts.append(f"{len(broken)} 個格式不符未採用")
     parts += [node["text"] for node in block.get("live_lines") or () if node["_tone"] != "中性"]
     return "，".join(parts)

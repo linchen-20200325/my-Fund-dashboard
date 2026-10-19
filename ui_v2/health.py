@@ -100,6 +100,7 @@ _ERROR_STATE = "系統錯誤"
 # 「資料未備」那一族（`◇`）：卡片 `資料未備`、空狀態 `來源缺`、`部分缺`（44 第五節第一、五小節）。
 _MISSING_STATES = frozenset({"資料未備"})
 _MISSING_EMPTY_KINDS = frozenset({"來源缺", "部分缺"})
+_MISSING_LINE = f"{SYMBOL_MISSING} {TEXT_MISSING}"
 
 # 表格列與逐檔分組：這裡面的失敗是那一列／那一檔自己的內容，不寫「此區塊暫時無法判定」，只留狀態族。
 _ROW_KEYS = frozenset({"_rows", "_cells", "rows", "cells", "nav_rows", "nav_groups", "fund_groups",
@@ -109,6 +110,12 @@ _ROW_KEYS = frozenset({"_rows", "_cells", "rows", "cells", "nav_rows", "nav_grou
 # 按「存檔」那一次的逐鍵結果（資產配置一鍵失敗時畫在該鍵原位，字形借用取數失敗的模板）：那是寫入結果、不是讀取的
 # 失敗摘要，不去重、不進資料狀態行（否則會把寫入失敗說成取數失敗）。
 _SAVE_RESULT_KEYS = frozenset({"key_error_lines"})
+
+
+def not_configured_reason(*names) -> str:
+    """「尚未設定：<哪一項>」（客戶 2026-10-19 裁示 G3，`DEC-2026-10-19-04`：尚未設定與取數失敗是不同原因，原因文字不得合併；
+    原因寫「尚未設定：〈哪一項〉」）。多項以「、」連接。"""
+    return f"{TEXT_NOT_CONFIGURED}：{'、'.join(n for n in names if n)}"
 
 
 def not_configured_name(state: str) -> str:
@@ -123,6 +130,17 @@ class _Dedupe:
         self.not_configured: list = []    # 尚未設定的對象（「設定試算表」…）
         self.affected: list = []          # 寫了「此區塊暫時無法判定」的塊代號
         self.explained: list = []         # 畫面上看得到的位置有失敗摘要的塊代號（不論是取數失敗還是尚未設定）
+        # 逐塊記成因（BL-0250 批次 1，客戶 G3）：塊代號 → {"fetch": 有沒有真的取數失敗, "names": [尚未設定的對象…]}。
+        self.block_causes: dict = {}
+
+    def cause(self, code, *, fetch=False, name=None) -> None:
+        if code is None:
+            return
+        entry = self.block_causes.setdefault(code, {"fetch": False, "names": []})
+        if fetch:
+            entry["fetch"] = True
+        if name and name not in entry["names"]:
+            entry["names"].append(name)
 
     def note(self, cls, state) -> bool:
         """記一筆，回「是不是尚未設定那一族」。"""
@@ -172,6 +190,7 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
         if match.re is _RETREAT_SUMMARY:
             # BL-0375：日期句照留（原字不換），只把資料類記進資料狀態行、記為看得到失敗摘要的塊（見 `_RETREAT_SUMMARY`）；
             # 同一字串裡的其他失敗摘要照常往下改寫（2026-10-18 獨立稽核回修：原本整串早退，會漏改其他摘要）。
+            ctx.cause((block or {}).get("code"), fetch=True)
             if _shown(block, field):
                 ctx.note(match.group("cls"), None)
                 code = (block or {}).get("code")
@@ -187,6 +206,10 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
         # 畫面上不畫的位置不進資料狀態行（那一句使用者看不到，狀態行就不能替它說話）；照樣換成狀態族。
         unconfigured = ctx.note(cls, state) if _shown(block, field) else state in NOT_CONFIGURED_STATES
         code = (block or {}).get("code")
+        if unconfigured:
+            ctx.cause(code, name=not_configured_name(state))
+        else:
+            ctx.cause(code, fetch=True)
         if _shown(block, field) and code is not None and code not in ctx.explained:
             ctx.explained.append(code)
         whole = not text[: match.start()].strip() and not text[match.end():].strip()
@@ -197,6 +220,8 @@ def _rewrite(text: str, block, in_rows: bool, ctx: _Dedupe, field=None) -> str:
         elif fund:
             line = f"{SYMBOL_ERROR} {fund} {TEXT_NOT_CONFIGURED if unconfigured else TEXT_FETCH_FAILED}"
         elif unconfigured:
+            # 失敗摘要一頁只出現一次（之七其二第 3 條）：塊內這一處只留狀態族「⛔ 尚未設定」，哪一項寫在資料狀態行；
+            # 燈、展開區摘要、③ 另由 `relabel_unconfigured` 寫「尚未設定：<哪一項>」（客戶 G3 點名的位置）。
             line = LINE_NOT_CONFIGURED
         elif "cls" in groups:
             line = LINE_FETCH_FAILED
@@ -270,7 +295,100 @@ def dedupe_failures(display: dict):
         "not_configured": list(ctx.not_configured),
         "affected_blocks": list(ctx.affected),
         "explained_blocks": list(ctx.explained),
+        "block_causes": {code: {"fetch": c["fetch"], "names": list(c["names"])} for code, c in ctx.block_causes.items()},
     }
+
+
+# ───────────────────────── 尚未設定 ≠ 取數失敗（客戶 2026-10-19 裁示 G3） ─────────────────────────
+# 客戶 2026-10-19 裁示 G3（`docs/DECISIONS.md` `DEC-2026-10-19-04`，BL-0250 批次 1）：「尚未設定」與「已設定但取數失敗」是不同原因，
+# 即使兩者都畫 ⛔，原因文字也不得合併；不得把尚未設定偽裝成已取數後失敗。
+# 本段只改**本頁自己擬的**字（結論燈的狀態字與那一句、展開區摘要那一行）：該塊的失敗摘要**全部**屬「尚未設定」那一族、
+# 沒有任何真的取數失敗時，那幾處的「取數失敗」改寫成「尚未設定：<哪一項>」。
+# ⛔ 不改的（44 字面規定或 44 不能唯一決定，交回總管進 Decision Gate）：卡片 `系統錯誤` 主值「⛔ 取數失敗」（44 第五節第一小節模板）、
+#    狀態徽章「取數失敗」（44 第五節第二小節七個字面值的封閉集合）、「⛔ 此區塊暫時無法判定」（之七其二第 3 條逐字）、
+#    `MKT-5`／`MKT-6`／`MKT-7` 依 BL-0373 掛的「取數失敗」（之九其二：資料層回報失敗的鍵；未設定金鑰算不算，44 沒有分）。
+# 符號照舊：判定（`_state`、`_empty_kind`、`_tone`）一個都不動，紅燈照舊畫 ⛔（44：`系統錯誤` → ⛔）。
+_FETCH_WORD = TEXT_FETCH_FAILED
+UNCONFIGURED_KEY = "_unconfigured"
+
+
+def unconfigured_only(display: dict, summary: dict) -> dict:
+    """塊代號 → 尚未設定的對象（只收「失敗摘要全部屬尚未設定那一族、沒有任何真的取數失敗」的 `系統錯誤` 塊）。只讀已記的成因。"""
+    out = {}
+    for block in display.get("blocks") or ():
+        code = block.get("code")
+        cause = (summary.get("block_causes") or {}).get(code)
+        if not cause or cause["fetch"] or not cause["names"]:
+            continue
+        if block.get("_layer") == 1:
+            continue
+        out[code] = list(cause["names"])
+    return out
+
+
+def page_unconfigured_only(display: dict, summary: dict) -> bool:
+    """整頁的失敗是不是全部屬「尚未設定」那一族（沒有任何真的取數失敗、也沒有交代不到的 `系統錯誤`）。"""
+    return (bool(summary.get("not_configured")) and not summary.get("fetch_failed")
+            and not _unexplained_error(display, summary.get("explained_blocks", ()))
+            and not any(c["fetch"] for c in (summary.get("block_causes") or {}).values()))
+
+
+def _swap_fetch_word(text, names) -> str:
+    if not isinstance(text, str) or _FETCH_WORD not in text:
+        return text
+    return text.replace(_FETCH_WORD, not_configured_reason(*names))
+
+
+def relabel_unconfigured(display: dict, summary: dict) -> dict:
+    """客戶 G3：本頁自己擬的「取數失敗」字樣，成因全部是尚未設定時改寫成「尚未設定：<哪一項>」（就地改寫）。回改到的塊代號 → 對象。
+
+    - 層 2～4 的塊（`unconfigured_only` 收的）：展開區摘要那一行（`summary_text`）裡的「取數失敗」；並在塊上記
+      `_unconfigured`（給 `sections` 組 ③ 與入口標題時讀；不是判定，只是成因的記號）。
+    - 結論燈（層 1）：整頁的失敗全部屬尚未設定時，狀態字「狀態：取數失敗」→「狀態：尚未設定」，燈上那一句與說明行裡的
+      「取數失敗」→「尚未設定：<哪幾項>」；不是整頁都屬尚未設定時，只換以「<塊名>：取數失敗」形狀點名、而那一塊屬尚未設定的那一段。
+    """
+    only = unconfigured_only(display, summary)
+    titles = {}
+    for block in display.get("blocks") or ():
+        code = block.get("code")
+        if code in only:
+            block[UNCONFIGURED_KEY] = list(only[code])
+            summary_text = block.get("summary_text")
+            if summary_text == LINE_NOT_CONFIGURED:   # 去重後只剩狀態族的摘要：補上哪一項
+                summary_text = f"{SYMBOL_ERROR} {not_configured_reason(*only[code])}"
+            block["summary_text"] = _swap_fetch_word(summary_text, only[code])
+            # 說明行裡以「取數失敗」起頭的那一句（本頁擬的空狀態句，例：標的探索篩選軌跡「取數失敗，暫無篩選軌跡」）。
+            if isinstance(block.get("detail_lines"), list):
+                block["detail_lines"] = [
+                    _swap_fetch_word(line, only[code]) if isinstance(line, str) and line.startswith(_FETCH_WORD) else line
+                    for line in block["detail_lines"]
+                ]
+            titles[block.get("title")] = only[code]
+    page_only = page_unconfigured_only(display, summary)
+    names = list(summary.get("not_configured") or ())
+    for block in display.get("blocks") or ():
+        if block.get("_layer") != 1:
+            continue
+        if page_only:
+            word = block.get("state_word")
+            if isinstance(word, str) and word.endswith(_FETCH_WORD):
+                block["state_word"] = word[: -len(_FETCH_WORD)] + TEXT_NOT_CONFIGURED
+            for field in ("text", "summary_text"):
+                if block.get(field) in (TEXT_NOT_CONFIGURED, LINE_NOT_CONFIGURED):   # 只剩狀態族：補上哪幾項
+                    block[field] = not_configured_reason(*names)
+                block[field] = _swap_fetch_word(block.get(field), names)
+            for field in ("lines", "detail_lines"):
+                if isinstance(block.get(field), list):
+                    block[field] = [_swap_fetch_word(line, names) for line in block[field]]
+            trim_light_echo(block)
+        elif titles and isinstance(block.get("text"), str):
+            parts = block["text"].split("；")
+            for index, part in enumerate(parts):
+                title, sep, rest = part.partition("：")
+                if sep and rest == _FETCH_WORD and title in titles:
+                    parts[index] = f"{title}：{not_configured_reason(*titles[title])}"
+            block["text"] = "；".join(parts)
+    return only
 
 
 # ───────────────────────── 結論燈：同一則訊息不印兩次（Phase 3 P1-④） ─────────────────────────
@@ -329,6 +447,41 @@ def has_missing(node) -> bool:
     return False
 
 
+def has_missing_marker(node, private: bool = False) -> bool:
+    """模型裡有沒有畫成 `◇` 的資料未備：logic 記為資料未備的缺值格（`_missing_cells`／`_missing_fields` 列出的格，
+    經 `symbols` 換成 `◇`），或給人看的字串裡有「◇ 資料未備」。只讀既有判定與已畫出的符號，不新算。
+
+    給資產配置用（BL-0250 批次 1，`DEC-2026-10-19-04`）：資產配置的資料未備大多寫在表格格內與列尾
+    （例：`ALO-2` 某類別目標比重留空 → 「◇ 資料未備」、`ALO-6` 缺基準值的格 → `◇`），沒有 `_state`，
+    `has_missing` 讀不到，資料狀態行因此漏報 ◇（44 第七節第三小節之七其二第 4 條：四頁都要報）。"""
+    if isinstance(node, dict):
+        for cell in node.get("_missing_cells") or ():
+            if node.get(cell) == SYMBOL_MISSING:
+                return True
+        labels = set(node.get("_missing_fields") or ())
+        for field in node.get("_fields") or ():
+            if isinstance(field, tuple) and len(field) == 2 and field[0] in labels and field[1] == SYMBOL_MISSING:
+                return True
+        if node.get("_empty_kind") in _MISSING_EMPTY_KINDS:
+            return True
+        for key, value in node.items():
+            under = private or (isinstance(key, str) and key.startswith("_"))
+            if isinstance(value, str):
+                if not under and _MISSING_LINE in value:
+                    return True
+            elif has_missing_marker(value, under):
+                return True
+        return False
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            if isinstance(item, str):
+                if not private and _MISSING_LINE in item:
+                    return True
+            elif has_missing_marker(item, private):
+                return True
+    return False
+
+
 def has_error_state(node) -> bool:
     """模型裡有沒有 `系統錯誤`（`_state` 或 `_empty_kind`）。"""
     if isinstance(node, dict):
@@ -367,8 +520,10 @@ def latest_date(rows, key):
 # ───────────────────────── 資料狀態行 ─────────────────────────
 
 
-def status_line(display: dict, summary: dict, *, as_of, stale: bool = False) -> dict:
+def status_line(display: dict, summary: dict, *, as_of, stale: bool = False, missing: bool = False) -> dict:
     """資料狀態行的內容（給 `health_view.render_status_line` 畫）。
+
+    `missing`：呼叫端另外確認過的資料未備（資產配置傳 `has_missing_marker`；BL-0250 批次 1）。與 `has_missing` 取聯集。
 
     回 `{"items": [(符號或空字串, 文字, 色調), ...], "as_of": "YYYY-MM-DD" 或 "—", "text": 整行純文字}`。
     `items` 依 ◷ → ◇ → ⛔ → 尚未設定 排；同類只一筆。`items` 為空 ⇒ 只寫資料截至日（不寫「資料齊」「正常」）。
@@ -376,7 +531,7 @@ def status_line(display: dict, summary: dict, *, as_of, stale: bool = False) -> 
     items = []
     if stale:
         items.append((SYMBOL_STALE, TEXT_STALE, "中性"))
-    if has_missing(display):
+    if missing or has_missing(display):
         items.append((SYMBOL_MISSING, TEXT_MISSING, "灰"))
     # ⛔ 與「尚未設定」各自獨立判斷（不因為有尚未設定就省掉 ⛔）：有取數失敗的類別 → 列類別；
     # 沒有類別、但有 `系統錯誤` 的塊在畫面上沒有任何一句失敗摘要（取數失敗或尚未設定都沒有）→ 照樣報 ⛔ 取數失敗。

@@ -1295,6 +1295,11 @@ def test_S6a_正式模式_四處換成刪減版_其餘行照舊(name):
         expected = [
             _TRIMMED[code] if line == _ORIGINAL[code] else line.replace(logic.HINT, "") for line in before
         ]
+        # BL-0250 批次 1（客戶 2026-10-19 裁示，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：刪減版之後再走一次
+        # `live.LIVE_TEXT_EDITS`（「第三個值移到…」「這兩個值原本各是…」等版面沿革句整句拿掉或只留事實那半句）。
+        # 本條原本驗的「S6a 刪減版」照舊是中間那一步（`_strip_dev_lines`，見下一條子序列守衛）。
+        expected = [live.LIVE_TEXT_EDITS.get(line, line) for line in expected]
+        expected = [line for line in expected if line is not None]
         assert after == expected, (name, code)
 
 
@@ -1426,7 +1431,8 @@ def test_S6a1_正式版HLD4三句不印_示範版照印_其餘照舊(name):
     got = logic.find_block(_build(**_scenario_args(name), today=TODAY), "HLD-4")["notes"]
     for line in _HLD4_DROPPED + (logic.HLD4_SAVE_SCOPE_NOTE,):
         assert line in demo, line          # 正控：示範版照印
-    assert got == [line for line in demo if line not in _HLD4_DROPPED]
+    # BL-0250 批次 1（`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：「欄位一律無預設值…」元件說明句正式模式也不印（`live.LIVE_TEXT_EDITS`）。
+    assert got == [line for line in demo if line not in _HLD4_DROPPED and live.LIVE_TEXT_EDITS.get(line, line) is not None]
     assert logic.HLD4_SAVE_SCOPE_NOTE in got
 
 
