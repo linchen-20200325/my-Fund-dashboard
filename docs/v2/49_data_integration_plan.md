@@ -354,7 +354,7 @@ fixtures 以 `ui_v2/exp/fixtures.py::_universe` 程式生成 128 檔示意基金
 | 4 | 重新取數後端 | 無 | 經 L2 包一層清快取。兩個候選：`infra/cache.py::clear_all_caches` 清 `_CACHE_REGISTRY` 裡登記過的快取 —— **其中包括 `infra/source_backoff.py` 的冷卻狀態**（該模組以 `_BackoffRegistryProxy` 登記進同一張表），按一次就解除所有來源的冷卻；`global_refresh_all` 先做同一件事，再清 `_ST_CACHE_REGISTRY` 裡登記過的 `st.cache_data`（沒登記的不清，本組在 `repositories/pool_repository.py` 沒有看到 `_cached_pool_map` 登記）、清磁碟快取目錄與 `_FUND_SNAPSHOT`，**只有在傳入 `session_state` 時**才刪 `_GLOBAL_REFRESH_SESSION_KEYS` 列名且不在保留清單內的鍵；它明文不清 `data_cache/`。兩者清的都是**整個行程**的快取 | 否；選哪一個列技術題 T5 |
 | 5 | 情境機制 | `?scenario=`、各頁 `fixtures.ALL_SCENARIO_NAMES`／`SCENARIO_LABELS`（mkt 為 `all_datasets()` 的鍵），**畫面上印出「情境 …」標籤** | 正式入口移除；示範入口保留 | **是**：移除一段畫面上可見的文字。它是示範用的標籤、不在 `44` 裡，本組判為「回到 `44` 規格」，但依 §-1.5.4「分不清時從嚴」，列入草稿審 |
 | 6 | 示意字樣 | mkt 頁首「資料為假資料（示意值）」；hld、exp 頁首各有一行假資料說明，且兩頁的 `ui_v2/hld/logic.py::hinted`、`ui_v2/exp/logic.py::hinted` 在數字後加「（示意）」；alo 的 `ui_v2/alo/logic.py::PAGE_HINT_NOTE`／`HINT_NOTE`、set 的同類說明行 | 正式入口不帶示意字樣；需要在 `logic.py` 加一個開關（`logic.py` 因此要動） | **是**：`ui_v2/hld/logic.py` 註明「草稿逐字要求：螢幕上每一個數字後面都帶（示意）」，拿掉等於改動已拍板草稿的文字，須出草稿等客戶拍板 |
-| 7 | 新出現的文案 | 無 | 例如「來源冷卻中」「憑證已遮蔽」「舊資料」這類 `44` 沒有逐字訂的說明 | **是**：新文案一律先出草稿 |
+| 7 | 新出現的文案 | 無 | 例如「來源冷卻中」「憑證已遮蔽」「舊資料」這類 `44` 沒有逐字訂的說明 | ~~**是**：新文案一律先出草稿~~ → 純 UX 措辭（不改資料語意、投資語意、公式、門檻、來源、寫入範圍）內部自決，不需逐句送客戶核准；仍受 `docs/DECISIONS.md` `DEC-2026-10-19-01` 第 2 項七條限制約束（有意識的政策變更，不是漏刪；日期 2026-10-19；決策者：客戶）。舊句的用意（文案不能由組內隨意擬定）仍然成立，改由那七條限制承接；被權衡掉的是「逐句客戶核准」 |
 
 ### 3.5 隔離守衛：現況與改法
 
