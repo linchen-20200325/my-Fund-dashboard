@@ -15,8 +15,9 @@
 
 **不做什麼（判定照舊，護欄 2）**：不改 `_` 開頭鍵的純量值（狀態、顏色、啟用與否、輸入欄的值）、`code`、`name`、
 任何數值、選項清單（`options`／`sort_options`／`tier_options`／`basis_option_labels`）、塊數、列數；
-不新增也不刪除任何一列資料。唯一會讓串列變短的是持倉體檢的 `PRINT_AS_IS_LINE`（「訊息原文照印……」）——
-原文已不在一般畫面上，這句話留著就是假話。
+不新增也不刪除任何一列資料。會讓串列變短的只有：持倉體檢的 `PRINT_AS_IS_LINE`（「訊息原文照印……」）——
+原文已不在一般畫面上，這句話留著就是假話；以及 BL-0250 批次 2（44 第七節第三小節之十一）的紅線標記徽章、
+`EXP-7` 稽核等式那一行（`PLAIN_DROP_LINES`）與頁尾（整串換成 `PLAIN_FOOTERS` 那一句）。
 
 **示範模式不經過本模組**（BL-0367）；本模組只由各頁 `page.py` 的正式模式分支呼叫。
 
@@ -227,6 +228,59 @@ _SET_KEEP_CODES = frozenset({"SET-2", "SET-6", "SET-7"})
 _SET_KEY_BLOCKS = frozenset({"SET-0", "SET-1"})
 
 
+# ───────────────────────── 紅線標記與頁尾（BL-0250 批次 2）─────────────────────────
+# 客戶 2026-10-19 裁示 G1（`docs/DECISIONS.md` `DEC-2026-10-19-04`；44 第七節第三小節之十一，U1／U2／U3／U5／U6）：
+# 正式模式一般畫面不畫三條紅線的標記徽章、句中不寫標記；頁尾縮成一句指路句。**治理限制本身一條不動**：
+# 不排名、不給處置方向、不代填參數、沒有一鍵動作 —— 那些是各頁的行為（另有行為測試守著），這裡只換字。
+# 示範模式不經過本模組，照舊。
+REDLINE_BADGE_KIND = "紅線"
+# 頁尾一句（44 第三節第零小節「這個問題在 B 頁」的邊界執行方式照舊：在本頁指去 B 頁，不重畫 B 頁的卡；只改字面）。
+PLAIN_FOOTERS = {
+    "mkt": "這一頁只看市場環境，不談個別標的；手上的基金請到持倉體檢，挑標的請到標的探索，配置比重請到資產配置。",
+    "hld": "這一頁只呈現偏離，不提供調整方向；挑新標的請到標的探索，市場環境請到市場總覽。",
+    "exp": "這一頁只篩選與並排對照，不排名、不標最佳；自己的持倉請到持倉體檢，配置比重請到資產配置。",
+    "alo": "這一頁只對照目標與現況，不產生再平衡動作；挑標的請到標的探索，單檔績效請到持倉體檢。",
+    "set": "這一頁只檢查資料可不可信，不手動編輯任何一筆資料的值，也不下投資判斷；市場環境請到市場總覽。",
+}
+# 整句對整句（比對的是各頁 `logic`／`live` 交來、還沒換鍵名的原句）。沒列在這裡、只是句中帶標記的句子，
+# 由 `_strip_redline_marks` 拿掉標記本身（句意不變）。
+REDLINE_TEXT_EDITS = {
+    "hld": {
+        # `HLD-1` 說明區（44 第七節第三小節之四其四之一第 2 條）。
+        "偏離提示只客觀描述現況與目標差距，不提供任何處置方向。": "本卡只描述現況與你設定的門檻差多少，不提供任何處置方向。",
+        # `HLD-4` 說明區。
+        "所有試算參數均由使用者自行輸入，系統不代填。": "檢視區間與門檻都由使用者自行輸入，系統不代填。",
+    },
+    "exp": {
+        # `EXP-1` 說明區。
+        "G3†：條件列由使用者自行輸入，系統不代填；G1†：無一鍵套用。": "條件由使用者自行輸入，系統不代填，也沒有一鍵套用。",
+        # `EXP-3`（44 第七節第三小節之四其四之一第 1 條；原本徽章與句首各一個標記，畫面上重複兩次）。
+        "本塊採 G2† 三形式中的「客觀對照」：一欄一檔、一列一個指標，卡上不標示哪一欄比較好。":
+            "本塊是客觀對照：一欄一檔、一列一個指標，卡上不標示哪一欄比較好。",
+        "G2†：客觀對照，不提供具體處置方向。": "這裡只做客觀對照，不提供具體處置方向。",
+    },
+    "alo": {
+        # `ALO-1` 那一行（客戶 2026-09-22 裁的說明行）：「以下依序：目標 → 對照 → 試算」與正式模式的實際順序相反
+        # （對照與試算在 ②、目標輸入在 ④），改寫成與實際位置一致的一句（44 之十一 U6）。
+        "以下依序：目標 → 對照 → 試算": "目標在這裡輸入；對照與試算在上方「關鍵數字」。",
+        # `ALO-7` 第一欄欄名（44 之十一 U6）。
+        "鍵名": "項目",
+    },
+}
+# 正式模式不畫的說明行（整行拿掉）：`EXP-7` 的稽核等式（44 之十一 U5；等式改由測試守住）。
+PLAIN_DROP_LINES = {
+    "exp": re.compile(r"^最後一列的(?:符合|套用後)檔數與 EXP-0 的 N 相等："),
+}
+_REDLINE_PAREN = re.compile(r"（G[123]†(?:[、，]G[123]†)*）")
+_REDLINE_LEAD = re.compile(r"G[123]†：")
+_REDLINE_BARE = re.compile(r"G[123]†\s*")
+
+
+def _strip_redline_marks(text: str) -> str:
+    """句中的紅線標記拿掉（括號整個拿掉；「標記：」前綴拿掉；單獨的標記拿掉）。句子其餘一字不動。"""
+    return _REDLINE_BARE.sub("", _REDLINE_LEAD.sub("", _REDLINE_PAREN.sub("", text)))
+
+
 def _protected(key) -> bool:
     return isinstance(key, str) and (key in _PROTECTED_KEYS or key.endswith("_keys"))
 
@@ -349,6 +403,7 @@ def _plain_text(text: str, block, ctx: _Context) -> str:
     set_page = ctx.page == "set"
     if set_page and code in _SET_KEEP_CODES:
         return text
+    text = _strip_redline_marks(REDLINE_TEXT_EDITS.get(ctx.page, {}).get(text, text))   # BL-0250 批次 2
     if not set_page:
         text, _ = _rewrite_failure(text, block, ctx)
         for message, _data_class, state in _KNOWN_MESSAGES:
@@ -395,8 +450,14 @@ def _walk(node, block, ctx: _Context, private: bool = False):
         return node
     if isinstance(node, list):
         out = []
+        drop = PLAIN_DROP_LINES.get(ctx.page)
         for item in node:
             if not private and ctx.page == "hld" and item == PRINT_AS_IS_LINE:
+                continue
+            # BL-0250 批次 2：紅線標記徽章不上一般畫面；`EXP-7` 稽核等式那一行不上一般畫面。
+            if not private and isinstance(item, dict) and item.get("_kind") == REDLINE_BADGE_KIND:
+                continue
+            if not private and drop is not None and isinstance(item, str) and drop.match(item):
                 continue
             out.append(_walk(item, block, ctx, private))
         return out
@@ -418,6 +479,9 @@ def plain_model(model: dict, *, page: str):
         raise ValueError(f"不認得的頁：{page}")
     ctx = _Context(page)
     display = _walk(copy.deepcopy(model), None, ctx)
+    if "footer_lines" in display:   # BL-0250 批次 2：頁尾縮成一句指路句，不掛紅線標記徽章
+        display["footer_lines"] = [PLAIN_FOOTERS[page]]
+        display["footer_badges"] = []
     status = {
         "fetch_failed": sorted(ctx.fetch_failed),
         "not_configured": sorted(ctx.not_configured),

@@ -1123,9 +1123,5 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
             _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
     health_view.render_provenance(provenance)
 
-    footer = "　".join(_esc(line) for line in model["footer_lines"])
-    st.markdown(
-        f'<div class="exp-footer">本頁不負責什麼：{footer}<br/>'
-        f'{_badges_html(model["footer_badges"])}</div>',
-        unsafe_allow_html=True,
-    )
+    # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
+    st.markdown(f'<div class="exp-footer">{_esc(" ".join(model["footer_lines"]))}</div>', unsafe_allow_html=True)

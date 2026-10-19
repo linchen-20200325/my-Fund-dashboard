@@ -266,6 +266,13 @@ def _projection(node, page, private=False):
         return out
     if isinstance(node, (list, tuple)):
         items = [item for item in node if not (page == "hld" and item == plain.PRINT_AS_IS_LINE)]
+        # BL-0250 批次 2（44 第七節第三小節之十一；有意識的更正，不是漏刪）：紅線標記徽章與 `EXP-7` 稽核等式那一行
+        # 不上一般畫面，投影時兩邊一起扣掉（同上一行 `PRINT_AS_IS_LINE` 的體例）；其餘結構照舊逐項相等。
+        if not private:
+            drop = plain.PLAIN_DROP_LINES.get(page)
+            items = [item for item in items
+                     if not (isinstance(item, dict) and item.get("_kind") == plain.REDLINE_BADGE_KIND)
+                     and not (drop is not None and isinstance(item, str) and drop.match(item))]
         return [type(node).__name__] + [_projection(item, page, private) for item in items]
     if isinstance(node, str):
         return node if private else "<s>"
@@ -279,7 +286,10 @@ def test_不變式_判定與結構深度相等_輸入不被改動():
         before = copy.deepcopy(model)
         display, raw, status = plain.plain_model(model, page=page)
         assert model == before, key                         # 深拷貝：輸入一個字都沒動
-        assert _projection(display, page) == _projection(model, page), key
+        # BL-0250 批次 2：頁尾整串換成一句（`plain.PLAIN_FOOTERS`），頁尾兩鍵另驗、不進結構投影。
+        assert display["footer_lines"] == [plain.PLAIN_FOOTERS[page]] and display["footer_badges"] == [], key
+        strip = lambda m: {k: v for k, v in m.items() if k not in ("footer_lines", "footer_badges")}  # noqa: E731
+        assert _projection(strip(display), page) == _projection(strip(model), page), key
         assert len(display["blocks"]) == len(model["blocks"]), key
         assert isinstance(raw, list) and status["raw_count"] == len(raw)
         count[(key[0], page)] = count.get((key[0], page), 0) + 1
