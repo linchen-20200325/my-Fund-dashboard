@@ -177,19 +177,28 @@ def _settings(rules):
             exp_live.KEY_SORT: None, exp_live.KEY_WATCH: None}
 
 
-_RULE_SETS = (
-    ({"field": "fund_code", "op": "不等於", "value": "C03"},),
-    ({"field": "ccy", "op": "等於", "value": "USD"},),
-    ({"field": "fund_code", "op": "不等於", "value": "C03"}, {"field": "ccy", "op": "等於", "value": "USD"}),
-    ({"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1"},),
+# （規則, fund_profile 逐檔覆寫 {代碼: {欄: 值}}, 期望 N, 期望無法判定檔數）。
+# 同日獨立稽核建議（總管裁定一併做）：加一組 N > 0 而且含無法判定的；「沒有符合」綁 N ＝ 0。
+_CASES = (
+    (({"field": "fund_code", "op": "不等於", "value": "C03"},), {}, 2, 0),
+    (({"field": "ccy", "op": "等於", "value": "USD"},), {}, 0, 3),
+    (({"field": "fund_code", "op": "不等於", "value": "C03"}, {"field": "ccy", "op": "等於", "value": "USD"}), {}, 0, 2),
+    (({"field": "mgmt_fee_rate_pct", "op": "大於", "value": "1"},), {}, 0, 3),
+    # N > 0 而且含無法判定：B02 符合、A01 明確不符、C03 幣別缺 → 無法判定。
+    (({"field": "ccy", "op": "等於", "value": "USD"},), {"B02": {"ccy": "USD"}, "A01": {"ccy": "TWD"}}, 1, 1),
+    (({"field": "ccy", "op": "等於", "value": "USD"},),
+     {"B02": {"ccy": "USD"}, "A01": {"ccy": "USD"}, "C03": {"ccy": "EUR"}}, 2, 0),
 )
 
 
-@pytest.mark.parametrize("rules", _RULE_SETS, ids=[str(i) for i in range(len(_RULE_SETS))])
-def test_EXP7最後一列符合檔數_等於EXP0的N(rules):
+@pytest.mark.parametrize("rules,profile,expect_n,expect_undet", _CASES, ids=[str(i) for i in range(len(_CASES))])
+def test_EXP7最後一列符合檔數_等於EXP0的N(rules, profile, expect_n, expect_undet):
     pool = _pool(("B02", "A01", "C03"))
     settings = _settings(rules)
-    inputs = {"dataset": exp_live.build_dataset(pool, settings),
+    dataset = exp_live.build_dataset(pool, settings)
+    for row in dataset["fund_profile"]:
+        row.update(profile.get(row["fund_code"], {}))
+    inputs = {"dataset": dataset,
               "notes": {"pool": pool, "settings": settings, "settings_error": None,
                         exp_live.UNWIRED_FOR_TESTS: True}}
     model = exp_live.build_live_model(inputs, save_wired=True)
@@ -198,9 +207,15 @@ def test_EXP7最後一列符合檔數_等於EXP0的N(rules):
     undet = sum(1 for row in exp2["_rows"]
                 if str(row["_cells"].get(exp_logic.JUDGE_COLUMN, {}).get("text", "")).startswith("⬜ 無法判定"))
     n = len(exp2["_rows"]) - undet
+    assert (n, undet) == (expect_n, expect_undet), (rules, profile)
     assert exp7["_rows"], rules
     assert exp7["_rows"][-1]["_after"] == n
-    assert re.search(rf"(^|有 ){n} 檔|沒有符合", exp_logic.find_block(model, "EXP-0")["text"])
+    text = exp_logic.find_block(model, "EXP-0")["text"]
+    if n == 0:
+        assert "沒有符合" in text, text
+    else:
+        assert f"有 {n} 檔" in text and "沒有符合" not in text, text
+    assert (f"另有 {undet} 檔無法判定" in text) == (undet > 0), text
     # 正式模式畫面那一份不再寫這一行；等式本身由上面守。
     display, _raw, _status = plain.plain_model(model, page="exp")
     assert not any("N 相等" in s for s in _strings(exp_logic.find_block(display, "EXP-7")))
