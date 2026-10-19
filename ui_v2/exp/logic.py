@@ -518,11 +518,54 @@ TEXT_ONLY_CODE_JUDGE_AND_NAME = "目前只顯示 fund_code、篩選判定與基�
 # 〔已撤〕沿用 `TEXT_ONLY_CODE_AND_NAME` —— 有無法判定列時 `EXP-2` 多一欄，兩卡的「目前只顯示」互相矛盾。
 TEXT_EXP4_CODE_FIXED = "未勾選額外欄位：清單固定顯示 fund_code 與基金名；有無法判定的列時另加「篩選判定」欄"
 TEXT_WATCHLIST_UNREADABLE = "觀察清單目前讀不到（已存設定讀取失敗），不顯示成空的"
-TEXT_EXP4_LIVE = (
+_EXP4_LIVE_HEAD = (
     "欄位勾選與排序欄位改了要按「存檔」，下一次重新載入才生效：候選清單只吃已存的設定。"
-    "⚠ 取消勾基金名、其他欄仍勾著時，清單上就沒有基金名 —— 44 只保障「全部不勾」那一種，"
-    "這一種算不算可接受待裁決；正式模式的候選清單另有 fund_code 一欄可辨認每一列。"
+    "⚠ 取消勾基金名、其他欄仍勾著時，清單上就沒有基金名 —— "
 )
+_EXP4_LIVE_DEV = "44 只保障「全部不勾」那一種，這一種算不算可接受待裁決；"
+_EXP4_LIVE_TAIL = "正式模式的候選清單另有 fund_code 一欄可辨認每一列。"
+TEXT_EXP4_LIVE = _EXP4_LIVE_HEAD + _EXP4_LIVE_DEV + _EXP4_LIVE_TAIL
+
+# BL-0345（2026-10-19）：純開發註記。示範模式照印；正式模式由 `live.apply_live_notes` 拿掉（只刪不改寫）。
+DEV_NOTE_EXP3_ROWS = "⚠ 44 的來源欄只寫「對應欄」，沒有列出是哪幾個指標；上面四列沿用已拍板草稿擬的那一組。"
+DEV_NOTE_EXP3_DATE = "⚠ 44 規則欄寫「格內只放數字與單位」，而「最近淨值日」是日期；44 沒有處理這一點，照放並就地寫明。"
+DEV_NOTE_EXP4_ORDER = (
+    "⚠ 44 要求「欄位清單依欄位名字面值排列」，而上面五項裡有三項不是 fund_profile 的欄位名"
+    "（最近淨值日與最近淨值來自 nav，配息佔淨值比連欄位名都沒有）；"
+    "本頁照 44 自己寫下那五欄的順序排，不自行發明一套排法。"
+)
+DEV_NOTE_EXP5_LABEL = "按鈕標籤是「加入觀察清單」，action_kind 是「存檔」—— 那是 44 第五節按鈕那一類的兩個不同參數。"
+TEXT_EXP6_FOLLOW = "本塊跟著「對照」那一組勾起的第一檔。"
+DEV_NOTE_EXP6_WHICH = (
+    "⚠ 44 的來源欄沒有寫是哪一檔，"
+    "而它那一行判準又要一個輸入 fund_code 的位置；本塊在層 4，44 的層 4 不放使用者輸入。"
+    "本頁取最保守的一種，不新增 44 沒有宣告的輸入框。"
+)
+DEV_NOTE_EXP6_SOURCE = (
+    "⚠ 44 的來源欄取了 nav 最近 1 筆與 dividend 最近 12 個月，而規則欄列的六欄全部來自 "
+    "fund_profile；本塊只畫那六欄，不自行加 nav／dividend 的格。"
+)
+DEV_NOTE_EXP7_KIND = (
+    "⚠ 44 把「尚未設定條件」這個畫面掛上「來源缺」這個種類名，而那其實是使用者還沒輸入，"
+    "不是來源一筆資料也沒有；44 同一節又寫「本表的顏色與種類名各塊不得自訂」。"
+    "本頁照塊規則的文案畫、不自訂種類名，就地寫出這個落差。"
+)
+DEV_NOTE_EXP0_SCOPE = (
+    "⚠ 44 的來源欄只授權讀列數，而空狀態欄要求列出目前生效的條件列（那要讀條件的內容）；"
+    "兩格說法不同，本頁照空狀態欄做，就地寫出來。"
+)
+# 正式模式的替換表：整句等於鍵 → 換成值（None ＝ 整句拿掉）。
+LIVE_DEV_NOTE_EDITS = {
+    DEV_NOTE_EXP3_ROWS: None,
+    DEV_NOTE_EXP3_DATE: None,
+    DEV_NOTE_EXP4_ORDER: None,
+    DEV_NOTE_EXP5_LABEL: None,
+    TEXT_EXP6_FOLLOW + DEV_NOTE_EXP6_WHICH: TEXT_EXP6_FOLLOW,
+    DEV_NOTE_EXP6_SOURCE: None,
+    DEV_NOTE_EXP7_KIND: None,
+    DEV_NOTE_EXP0_SCOPE: None,
+    TEXT_EXP4_LIVE: _EXP4_LIVE_HEAD + _EXP4_LIVE_TAIL,
+}
 
 
 def conclusion_text(count: int) -> str:
@@ -1474,8 +1517,8 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
         "本塊採 G2† 三形式中的「客觀對照」：一欄一檔、一列一個指標，卡上不標示哪一欄比較好。",
         "跨欄不做合計，也不做差額排序；不同幣別的檔並排時幣別寫在欄頭。",
         # ⚠️ **登記（`E-16`）**：指標列是沿用已拍板草稿的四列，見 `COMPARE_ROWS` 的登記。
-        "⚠ 44 的來源欄只寫「對應欄」，沒有列出是哪幾個指標；上面四列沿用已拍板草稿擬的那一組。",
-        "⚠ 44 規則欄寫「格內只放數字與單位」，而「最近淨值日」是日期；44 沒有處理這一點，照放並就地寫明。",
+        DEV_NOTE_EXP3_ROWS,
+        DEV_NOTE_EXP3_DATE,
     ]
     if compare_stacks(viewport_width):
         # ⚠️ **登記（`E-15`）**：見 `compare_stacks()`。
@@ -1546,9 +1589,7 @@ def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, f
     detail_lines = [
         "本塊不提供推薦欄位組合；「存檔」只寫 user_setting，不寫入 holding、policy、nav、dividend（G1†）。",
         # ⚠️ **登記（`E-07`）**：見 `COLUMN_ORDER`。
-        "⚠ 44 要求「欄位清單依欄位名字面值排列」，而上面五項裡有三項不是 fund_profile 的欄位名"
-        "（最近淨值日與最近淨值來自 nav，配息佔淨值比連欄位名都沒有）；"
-        "本頁照 44 自己寫下那五欄的順序排，不自行發明一套排法。",
+        DEV_NOTE_EXP4_ORDER,
         # ⛔ **2026-09-24 第二輪稽核抓到：這一筆本來只活在註解裡。**
         #    `COLUMN_ORDER` 上方那段登記自己寫著「**這個事實必須讓客戶看得到**」，
         #    而唯一釘它的斷言是 `assert "不是客戶裁的" in source` —— **斷言的是 Python 原始碼**。
@@ -1653,7 +1694,7 @@ def _build_exp5(dataset, *, watch_checked, watchlist, save_failed_message, fail_
         else f"觀察清單目前有 {hinted(format_count(len(watchlist)))} 檔："
         + ("、".join(watchlist) if watchlist else "（空）"),
         "本塊只寫 user_setting 的 exp_watchlist，不寫入 holding，不產生任何交易意圖的紀錄（G1†）。",
-        "按鈕標籤是「加入觀察清單」，action_kind 是「存檔」—— 那是 44 第五節按鈕那一類的兩個不同參數。",
+        DEV_NOTE_EXP5_LABEL,
     ]
     already = [code for code in picked if code in watchlist]
     if already:
@@ -1749,13 +1790,10 @@ def _build_exp6(dataset, *, compare_checked):
 
     detail_lines = [
         f"本塊目前要顯示的是 {code}。" if code else "本塊目前沒有要顯示的基金。",
-        "本塊跟著「對照」那一組勾起的第一檔。⚠ 44 的來源欄沒有寫是哪一檔，"
-        "而它那一行判準又要一個輸入 fund_code 的位置；本塊在層 4，44 的層 4 不放使用者輸入。"
-        "本頁取最保守的一種，不新增 44 沒有宣告的輸入框。",
+        TEXT_EXP6_FOLLOW + DEV_NOTE_EXP6_WHICH,
         # ⚠️ **登記（`E-11`）**：來源欄取了 `nav` 最近 1 筆與 `dividend` 最近 12 個月，
         #    而規則欄列出要顯示的六欄**全部來自 `fund_profile`**。
-        "⚠ 44 的來源欄取了 nav 最近 1 筆與 dividend 最近 12 個月，而規則欄列的六欄全部來自 "
-        "fund_profile；本塊只畫那六欄，不自行加 nav／dividend 的格。",
+        DEV_NOTE_EXP6_SOURCE,
     ]
     empty_kind = None
     if failure_notes:
@@ -1844,9 +1882,7 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
         else ("上游取數失敗，本塊不列出任何軌跡列。" if failure_notes else "尚未套用任何條件。"),
         # ⚠️ **登記（`E-12` 還開著的那一半）**：`44` 把「尚未設定條件」這個畫面掛上 `來源缺`
         #    這個種類名，而那**不是**來源缺 —— 那是使用者還沒輸入。
-        "⚠ 44 把「尚未設定條件」這個畫面掛上「來源缺」這個種類名，而那其實是使用者還沒輸入，"
-        "不是來源一筆資料也沒有；44 同一節又寫「本表的顏色與種類名各塊不得自訂」。"
-        "本頁照塊規則的文案畫、不自訂種類名，就地寫出這個落差。",
+        DEV_NOTE_EXP7_KIND,
     ]
 
     state = (
@@ -1942,8 +1978,7 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
 
     detail_lines = [
         "本塊不自取數：只讀 EXP-2 的列數與 EXP-1 的條件列數。",
-        "⚠ 44 的來源欄只授權讀列數，而空狀態欄要求列出目前生效的條件列（那要讀條件的內容）；"
-        "兩格說法不同，本頁照空狀態欄做，就地寫出來。",
+        DEV_NOTE_EXP0_SCOPE,
         "燈色描述的是「這組條件下現在有沒有東西可看」，不描述任何一檔基金的好壞（G1†）。",
     ]
 

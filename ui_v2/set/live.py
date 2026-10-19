@@ -361,13 +361,32 @@ def _save_fail_lines(result, token) -> list:
     return lines
 
 
+def _drop_dev_notes(node):
+    """BL-0345（2026-10-19）：把 `logic.LIVE_DEV_NOTE_EDITS` 列的純開發註記從正式模式拿掉（整棵模型走一遍）。
+
+    只認整句相等：句子等於表裡的鍵 → 換成表裡的值；值為 None 就整句拿掉。**只刪、不新寫任何字。**
+    示範模式不經過本函式，輸出不變。
+    """
+    edits = logic.LIVE_DEV_NOTE_EDITS
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _drop_dev_notes(value)
+        return node
+    if isinstance(node, (list, tuple)):
+        kept = [_drop_dev_notes(v) for v in node if not (isinstance(v, str) and v in edits and edits[v] is None)]
+        return type(node)(kept)
+    if isinstance(node, str) and node in edits and edits[node] is not None:
+        return edits[node]
+    return node
+
+
 def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=None) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。
 
     `dataset`：交給 `logic.build_page_model` 的那一份（讀它的 `errors` 對出失敗字串）。
     `save_results`：上一次按「存檔」的結果 `{鍵: result}`（`source.save_setting` 的回傳），沒有就 None。
     """
-    out = copy.deepcopy(model)
+    out = _drop_dev_notes(copy.deepcopy(model))
     token = notes["mask_token"]
     fail_map = _fail_map(dataset, notes)
     pending_tables = set(notes["pending_tables"])

@@ -454,6 +454,20 @@ FETCH_FAIL_GLYPH = "⛔"
 SAVE_FAIL_GLYPH = FETCH_FAIL_GLYPH
 # 黃燈的圖示（客戶裁示黃燈仍用 ⚠）。
 WARN_GLYPH = "⚠"
+
+# BL-0345（2026-10-19）：純開發註記。示範模式照印；正式模式由 `live.apply_live_notes` 拿掉（只刪不改寫）。
+DEV_NOTE_ALO2 = "⚠ 44 沒有寫本卡吃的是當下值還是已存值；本頁讀已存值（目標取 ALO-1、基準取 ALO-4 最後一次存檔的內容）。"
+DEV_NOTE_ALO0 = "⚠ 44 沒有寫燈上的差距帶不帶正負號；本頁寫絕對值。"
+TEXT_ALO0_READS = "本燈只讀 ALO-2 算出的差距，不指出方向。"
+DEV_NOTE_ALO6 = "⚠ 44 兩塊的字面不同：本塊佔總體的分母只排除缺基準值的那幾檔，ALO-2 排除整個類別；本頁照各塊字面。"
+DEV_NOTE_ALO7 = "⚠ 44 已登記本塊與 ALO-1 回答同一件事、待客戶裁決；本頁兩塊都照畫。"
+# 正式模式的替換表：整句等於鍵 → 換成值（None ＝ 整句拿掉）。
+LIVE_DEV_NOTE_EDITS = {
+    DEV_NOTE_ALO2: None,
+    DEV_NOTE_ALO0 + TEXT_ALO0_READS: TEXT_ALO0_READS,
+    DEV_NOTE_ALO6: None,
+    DEV_NOTE_ALO7: None,
+}
 # ALO-GAP-燈圖示共用：已裁結案，取數失敗 ⛔、黃燈 ⚠，不再共用。
 _LAMP_LOOK = {
     "灰": ("⬜", "狀態：中性"),
@@ -982,7 +996,7 @@ def _build_alo2(dataset) -> dict:
         "tail_lines": tail_lines,
         "detail_lines": [
             # ALO-GAP-當下值或已存值（上畫面的體例同 ui_v2/exp：「⚠ 44 …；本頁…」）
-            "⚠ 44 沒有寫本卡吃的是當下值還是已存值；本頁讀已存值（目標取 ALO-1、基準取 ALO-4 最後一次存檔的內容）。",
+            DEV_NOTE_ALO2,
             HINT_NOTE,
         ],
         "buttons": [],
@@ -1047,7 +1061,7 @@ def _build_alo0(alo2) -> dict:
         "state_word": state_word,
         "text": light["text"],
         "detail_lines": [
-            "⚠ 44 沒有寫燈上的差距帶不帶正負號；本頁寫絕對值。本燈只讀 ALO-2 算出的差距，不指出方向。",
+            DEV_NOTE_ALO0 + TEXT_ALO0_READS,
             HINT_NOTE,
         ],
         "buttons": [],
@@ -1540,7 +1554,7 @@ def _build_alo6(dataset) -> dict:
     excluded = len(rows) - len(included)
     if excluded:
         footer.append(f"被排除 {excluded} 檔")
-    detail = [HINT_NOTE, "⚠ 44 兩塊的字面不同：本塊佔總體的分母只排除缺基準值的那幾檔，ALO-2 排除整個類別；本頁照各塊字面。"]
+    detail = [HINT_NOTE, DEV_NOTE_ALO6]
     if basis is None:
         detail.insert(0, TEXT_NA_NO_BASIS)
     return {
@@ -1588,7 +1602,7 @@ def _build_alo7(dataset) -> dict:
         "column_labels": labels,
         "detail_lines": [
             "本塊只有一個時間點，不依時間排序。",
-            "⚠ 44 已登記本塊與 ALO-1 回答同一件事、待客戶裁決；本頁兩塊都照畫。",
+            DEV_NOTE_ALO7,
             HINT_NOTE,
         ],
         "buttons": [],

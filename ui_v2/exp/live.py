@@ -982,6 +982,25 @@ def _apply_cell_notes(code, cells, by_code):
 UNWIRED_FOR_TESTS = "unwired_for_tests"
 
 
+def _drop_dev_notes(node):
+    """BL-0345（2026-10-19）：把 `logic.LIVE_DEV_NOTE_EDITS` 列的純開發註記從正式模式拿掉（整棵模型走一遍）。
+
+    只認整句相等：句子等於表裡的鍵 → 換成表裡的值；值為 None 就整句拿掉。**只刪、不新寫任何字。**
+    示範模式不經過本函式，輸出不變。
+    """
+    edits = logic.LIVE_DEV_NOTE_EDITS
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _drop_dev_notes(value)
+        return node
+    if isinstance(node, (list, tuple)):
+        kept = [_drop_dev_notes(v) for v in node if not (isinstance(v, str) and v in edits and edits[v] is None)]
+        return type(node)(kept)
+    if isinstance(node, str) and node in edits and edits[node] is not None:
+        return edits[node]
+    return node
+
+
 def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。
 
@@ -989,7 +1008,7 @@ def apply_live_notes(model: dict, notes: dict, *, save_wired: bool = False) -> d
     - `EXP-2` 說明行寫母體來源；`EXP-1` 說明行補比較方向可填哪些；
     - 「存檔」類按鈕：沒接上寫入函式 → 停用；已存設定讀不到 → 停用（存了會蓋掉讀不到的那一份）。
     """
-    out = copy.deepcopy(model)
+    out = _drop_dev_notes(copy.deepcopy(model))
     by_code = notes.get("cells")
     exp6 = logic.find_block(out, "EXP-6")
     exp6_cells = dict(zip((key for key, _label in logic.EXP6_FIELDS), exp6["_fields"])) if exp6["_fields"] else {}
