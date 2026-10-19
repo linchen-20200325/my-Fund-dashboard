@@ -188,6 +188,8 @@ _CASES = (
     (({"field": "ccy", "op": "等於", "value": "USD"},), {"B02": {"ccy": "USD"}, "A01": {"ccy": "TWD"}}, 1, 1),
     (({"field": "ccy", "op": "等於", "value": "USD"},),
      {"B02": {"ccy": "USD"}, "A01": {"ccy": "USD"}, "C03": {"ccy": "EUR"}}, 2, 0),
+    # N ≠ 無法判定檔數（同日第二次獨立稽核：N 與 M 相等時「多算」的突變分不出來）：B02、A01 符合，C03 無法判定。
+    (({"field": "ccy", "op": "等於", "value": "USD"},), {"B02": {"ccy": "USD"}, "A01": {"ccy": "USD"}}, 2, 1),
 )
 
 
@@ -214,7 +216,8 @@ def test_EXP7最後一列符合檔數_等於EXP0的N(rules, profile, expect_n, e
     if n == 0:
         assert "沒有符合" in text, text
     else:
-        assert f"有 {n} 檔" in text and "沒有符合" not in text, text
+        # 錨定在句首「目前條件下有 N 檔」——只寫「有 N 檔」會被尾句「另有 M 檔無法判定」命中（同日第二次獨立稽核指出）。
+        assert text.startswith(f"目前條件下有 {n} 檔") and "沒有符合" not in text, text
     assert (f"另有 {undet} 檔無法判定" in text) == (undet > 0), text
     # 正式模式畫面那一份不再寫這一行；等式本身由上面守。
     display, _raw, _status = plain.plain_model(model, page="exp")
