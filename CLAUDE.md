@@ -2236,7 +2236,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
   ⛔ **本更正只推翻「掛死 dataset ⇒ 恆無資料」這一件事,不宣稱這個 fetcher 是好的。**它目前**沒有任何 production 消費端**(見 §8.2.A.1 `EX-PASSTHRU-1` 該列 2026-09-01 更正),**但原因不是「掛死 dataset」** —— 換源之後它一直是可用的,只是消費它的總經面板不在線上。**兩件事分開讀,不得合併成「它壞了所以沒人用」或「沒人用所以不用管」。**
   ⚠️ **「0 caller」是取決於「有沒有漏看」的全稱句,本組單組實測、未經第二組驗證**(§-2 規則 5/6):實測全 repo 除定義處外無任何 `import` 或呼叫,唯二命中為`services/macro/_helpers.py::_TAB1_TTL_CACHE_NAMES` 內的**字串名**(快取清除清單,不是 import)與 `shared/schemas.py` 的註解。**該去留是待客戶裁決事項,見 §8.2.A.1 該列,本註不作處置建議。**
 - **TW 外資買賣超**:FinMind TaiwanStockTotalInstitutionalInvestors(evidence: hot_money.py:38)
-- **VIX**:Yahoo `^VIX` 主,FRED VIXCLS 備
+- **VIX**:~~Yahoo `^VIX` 主,FRED VIXCLS 備~~ → **現況:只有 Yahoo `^VIX` 一源,沒有已實作的 FRED `VIXCLS` 備援**(**有意識的更正,不是漏刪** · 日期 **2026-10-19** · 決策者:**客戶**(`docs/DECISIONS.md` `DEC-2026-10-19-02` 第 4 項))。實測(2026-10-19,`a50c328e`):`shared/fred_series.py` 無 VIX series;`git grep -n VIXCLS -- '*.py'` 只命中 `ui/tab6_manual.py`(舊站說明文字,程式內文字,本輪不改,只登記)與 `tests/test_data_registry_radar.py`(測試 fixture 的 meta 字串);取數路徑 `services/risk_radar.py`、`services/liquidity_engine.py`、`services/macro/us_indicators.py`、`services/v2_tables/market_indicator.py` 皆只打 Yahoo `^VIX`。**舊表述的用意仍然成立**(VIX 主源是 Yahoo),**被推翻的是「有 FRED 備援」這半句**。是否新增 `VIXCLS` 取數登記於 `docs/BACKLOG.md` BL-0380(Data Gap 階段評估),**本更正不構成動工授權**(§-1)。
 - **News**:5 個 RSS feed 並聯(MarketWatch / Yahoo Finance / CNBC Economy / CNBC Finance / BBC World;Reuters/FT/Investing/Bloomberg 已於 v19.293~297 下架移除),**不去重後平均**,以情緒詞典關鍵字命中為準(evidence: news_repository.py FEEDS)
 
 ### 2.2 Provenance — 血緣追蹤
@@ -2503,7 +2503,7 @@ assert (fx_df["rate_twd_per_usd"] < 50).all(), "USDTWD 不應 >50"
 
 ### 4.3 重算對帳(Reconciliation)
 
-**現況雙源備援**已在 §2.1 衝突裁決列明(NAV: FundClear/TDCC/MoneyDJ 三源,VIX: Yahoo/FRED)。**雙演算法**待落地:
+**現況雙源備援**已在 §2.1 衝突裁決列明(NAV: FundClear/TDCC/MoneyDJ 三源,~~VIX: Yahoo/FRED~~ → VIX 現況只有 Yahoo 一源、無 FRED 備援,見 §2.1 VIX 那一條 2026-10-19 更正(有意識的更正,不是漏刪;決策者:客戶,`DEC-2026-10-19-02` 第 4 項))。**雙演算法**待落地:
 - **基金 1Y 報酬**:`(nav[-1]/nav[-252])-1` vs MoneyDJ wb01 顯示值 對帳(~~evidence: services/cross_source_compare.py~~ → **2026-08-28 Phase 1.4 事實更正**:該檔 production 0 caller、已實體刪除,**且它原本就不是這條對帳的實作** ——1Y 報酬對帳的現行 evidence 是 `services/reconcile.py::reconcile_fund_annual_return`＋ `services/fund_service.py` 的 `ret_1y_reconcile` 注入。**本項對帳義務一字未改,只更正指錯的檔名**)
 - **Sharpe**:自算(`mean/std * sqrt(252)`)vs MoneyDJ wb07 對帳
 - **配息殖利率**:`sum(12M div)/current_nav` vs MoneyDJ 顯示值
