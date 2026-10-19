@@ -373,6 +373,11 @@ def _seed_live_fields(settings, keys, settings_error=None) -> None:
         st.session_state[_PICK_KEY] = initial
 
 
+# BL-0250 批次 2（44 第七節第三小節之十一 U1）：正式模式說明行去掉「紅線說明區：」，改一般用語；限制照舊。
+TEXT_MKT4_PLAIN_NOTE = "觀察窗與比較基準日由使用者自行輸入，系統不代填。"
+TEXT_MKT5_PLAIN_NOTE = "要看的指標由使用者自行選取，系統不代填。"
+
+
 def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> None:
     with st.expander(_expander_title(block, live_mode), expanded=block["_default_open"]):
         st.caption(block["answers"])
@@ -421,8 +426,11 @@ def _render_mkt4(block: dict, *, live_mode: bool = False, save_click=None) -> No
                 f"user_setting 已存檔，updated_at ＝ {store['updated_at']}"
                 f"（本輪的 user_setting 替身是一個 in-memory dict）"
             )
-        st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
-        st.caption("紅線說明區：所有試算參數均由使用者自行輸入。")
+        # BL-0250 批次 2（44 第七節第三小節之十一 U1）：正式模式不畫紅線標記徽章（一般畫面那一份已拿掉），
+        # 那一句去掉「紅線說明區：」改一般用語；限制本身（兩欄由使用者輸入、不代填）照舊。示範模式照舊。
+        if block["badges"]:
+            st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
+        st.caption(TEXT_MKT4_PLAIN_NOTE if live_mode else "紅線說明區：所有試算參數均由使用者自行輸入。")
 
 
 _MKT5_BADGE_GLYPH = {"取數失敗": "⛔", "資料未備": "◇"}
@@ -491,9 +499,10 @@ def _render_mkt5(block: dict, *, save_click, plain_mode: bool = False) -> None:
                 disabled=not button["_enabled"],
                 help=button["disabled_reason"] or None,
             )
-        st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
+        if block["badges"]:   # BL-0250 批次 2：正式模式那一份已不帶紅線標記徽章
+            st.markdown(_badges_html(block["badges"]), unsafe_allow_html=True)
         st.caption(
-            "紅線說明區：要看的指標由使用者自行選取，系統不代填。" if plain_mode
+            TEXT_MKT5_PLAIN_NOTE if plain_mode
             else "紅線說明區：勾選狀態由使用者自行輸入，系統不代填。"
         )
 
@@ -740,6 +749,10 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     if plain_mode:
         health_view.render_provenance(provenance)
 
+    # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
+    if plain_mode:
+        st.markdown(f'<div class="mkt-footer">{_esc(" ".join(model["footer_lines"]))}</div>', unsafe_allow_html=True)
+        return
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(
         f'<div class="mkt-footer">{footer}<br/>{_esc(model["footer_lines"][3])}　'

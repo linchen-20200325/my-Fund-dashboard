@@ -116,7 +116,8 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
              if any(f'data-block="{page.upper()}-0"' in m.value for _ in [0])}
     titles = {str(e.label) for e in at.main.expander}
     status = " ".join(_status_lines(at)[0].split())
-    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "，暫無篩選軌跡")
+    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "⬜ 不適用（尚未設定：", "，暫無篩選軌跡")
+    # ↑ BL-0250 批次 2（44 第七節第三小節之十一其六）：核心卡副標兩個冒號改括號，同一處、同一種說法（舊形保留在表裡不刪）。
     stray = [t for t in texts if f"{health.TEXT_NOT_CONFIGURED}：" in t and t != status and t not in lamps
              and t not in titles and not any(a in t for a in allowed)]
     assert stray == [], (page, stray)

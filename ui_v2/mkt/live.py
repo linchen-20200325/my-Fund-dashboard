@@ -538,6 +538,9 @@ def apply_save_results(model: dict, results) -> dict:
 # 已存設定**讀不到**的成因若是「尚未設定」那一族，那幾句改用同一種說法「尚未設定：<哪一項>」；真的讀取失敗（例：連線逾時）照舊「設定讀不到」。
 # ⬜ 照舊（核心卡副標是「不適用」那一族，之七其四第 1 條）；判定、停用與否一個都不動，只換字。
 _UNREADABLE_PHRASES = (
+    # BL-0250 批次 2（批次 1 稽核建議）：核心卡副標原本會換成「⬜ 不適用：尚未設定：設定試算表」（兩個冒號），
+    # 改把原因放進括號；⬜ 與「不適用」照舊，只修字句。須排在「比較條件讀不到」那一條前面。
+    (logic.not_applicable_text("比較條件讀不到"), "⬜ 不適用（{reason}）"),
     (logic.TEXT_SHOW_ALL_UNREADABLE, "{reason}，暫時列出全部指標"),
     (logic.TEXT_SAVE_SETTINGS_UNREADABLE, "{reason}，暫不存檔"),
     ("比較條件讀不到", "{reason}"),

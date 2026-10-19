@@ -663,6 +663,10 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
     if plain_mode:
         _render_advanced_diag()
 
+    # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
+    if plain_mode:
+        _html(f'<div class="set-footer">{_esc(" ".join(model["footer_lines"]))}</div>')
+        return
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(_badge(b) for b in model["footer_badges"])
     _html(f'<div class="set-footer">本頁不負責什麼：{footer}<br/>{badges}</div>')

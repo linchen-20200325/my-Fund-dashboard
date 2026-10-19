@@ -744,6 +744,10 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
     for code in logic.codes_in_layer(model, 4):
         _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
+    # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
+    if plain_mode:
+        _html(f'<div class="alo-footer">{_esc(" ".join(model["footer_lines"]))}</div>')
+        return
     footer = "　".join(_esc(line) for line in model["footer_lines"])
     badges = "".join(
         f'<span class="alo-badge" style="--alo-tone:{_tone(b["_tone"])}">{_esc(b["text"])}</span>'

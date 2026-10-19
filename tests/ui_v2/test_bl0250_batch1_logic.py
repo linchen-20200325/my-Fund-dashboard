@@ -271,7 +271,9 @@ def test_G3_設定讀不到_成因是尚未設定時改同一種說法():
     block = model["blocks"][0]
     assert block["summary_text"] == "尚未設定：設定試算表"
     assert block["buttons"][0]["disabled_reason"] == "尚未設定：設定試算表，暫不存檔"
-    assert block["detail_lines"] == ["尚未設定：設定試算表，暫時列出全部指標", "⬜ 不適用：尚未設定：設定試算表"]
+    # ~~"⬜ 不適用：尚未設定：設定試算表"~~ → BL-0250 批次 2（44 第七節第三小節之十一其六；有意識的更正，不是漏刪）：
+    # 兩個冒號改把原因放進括號；⬜ 與「不適用」照舊。
+    assert block["detail_lines"] == ["尚未設定：設定試算表，暫時列出全部指標", "⬜ 不適用（尚未設定：設定試算表）"]
     assert block["_raw"] == mkt_logic.TEXT_SETTINGS_UNREADABLE   # `_` 開頭的鍵不碰
 
 

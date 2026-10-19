@@ -1067,6 +1067,10 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
     if plain_mode:
         health_view.render_provenance(provenance)
 
+    # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
+    if plain_mode:
+        st.markdown(f'<div class="hld-footer">{_esc(" ".join(model["footer_lines"]))}</div>', unsafe_allow_html=True)
+        return
     footer = "　".join(_esc(line) for line in model["footer_lines"][:3])
     st.markdown(
         f'<div class="hld-footer">本頁不負責什麼：{footer}<br/>'
