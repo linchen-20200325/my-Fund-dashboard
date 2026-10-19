@@ -21,6 +21,21 @@
 3. 在該 app 的 Secrets 填下一節列的設定。
 4. 開啟後側欄有五頁，順序為：市場總覽 → 持倉體檢 → 標的探索 → 資產配置 → 設定與診斷（`ui_v2/app_preview.py::PAGES`）。
 
+## §1a 部署行為與實機驗收前置：先 Reboot（2026-10-19 補寫，`DEC-2026-10-19-03`）
+
+**部署行為**（兩組獨立重現，結論一致）：Streamlit Cloud 收到 push 時，若 `requirements.txt` 沒變，只換檔案、不重啟程序。主腳本 `ui_v2/app_preview.py` 每次 rerun 都從磁碟重讀（新版），但已 import 的模組（例 `ui_v2.mkt.source`）留在 `sys.modules`（舊版）。新主腳本配舊模組就會出錯。實例：`mask_error` 由 commit `c9c9f3a8`（2026-10-17）同時加進主腳本與 `ui_v2/mkt/source.py`，部署端在 `page_mkt` 丟出 `AttributeError: module 'ui_v2.mkt.source' has no attribute 'mask_error'`；從乾淨程序啟動 `0337abca` 正常。「客戶的 App 從 10-17 以前就沒重啟過」是判讀，不是查證結果。
+
+**CI 為什麼抓不到**：測試每次都在新程序裡、同一份 checkout 一次 import 完，結構上碰不到部署端「新主腳本配舊模組」的狀態。
+
+**驗收 SOP（客戶 2026-10-19 裁示，決策者：客戶）**：
+
+1. 合併涉及 B 線預覽入口或其載入模組的變更後，BL-0250 實機驗收前先 Reboot 預覽 App（Streamlit Cloud 的 Reboot app）。
+2. Reboot 後的實機結果才算驗收證據。
+3. 不把部署端的舊模組殘留誤判為目前 main 的程式錯誤。
+4. Reboot 後若仍重現錯誤，立即視為真正的 blocker，重新追查。
+
+不採的做法：不新增 `sys.modules`／`importlib` 自我修復，不放寬既有守衛，不改資料層、投資語意或其他功能（同一裁示）。
+
 ## §2 需要的密鑰（照 `ui_v2/app_preview.py` 檔頭實際列的）
 
 | 鍵 | 必填 | 用途（依檔頭原文整理） |
