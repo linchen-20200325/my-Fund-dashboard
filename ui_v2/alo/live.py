@@ -465,7 +465,7 @@ def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
     （停用原因顯示在按鈕的 tooltip）。
     """
     wired = frozenset(wired_keys)
-    out = _drop_dev_notes(_strip_hint(copy.deepcopy(model)))
+    out = _replace_exact(_drop_dev_notes(_strip_hint(copy.deepcopy(model))), LIVE_TEXT_EDITS)
     out["hint_note"] = ""
     for button in _walk_buttons(out["blocks"]):
         if not button["_writes"]:      # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting
@@ -474,7 +474,79 @@ def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
         if keys and keys <= wired:
             continue                   # 要寫的鍵全部接上了 ⇒ 照 logic 原樣（可按）
         button["_enabled"] = False
-        button["disabled_reason"] = SAVE_DISABLED_REASON
+        # 客戶 2026-10-19 裁示（BL-0250 批次 1）：`ALO-3` 試算的存檔（只寫 `alo_scenario_input`）停用原因改「試算存檔尚未開放」；
+        # 停用與附原因照舊（44 第五節第三小節「按鈕停用時不隱藏、附原因」）。其餘存檔鈕照舊。
+        button["disabled_reason"] = (SCENARIO_SAVE_DISABLED_REASON if keys == {SCENARIO_KEY}
+                                     else SAVE_DISABLED_REASON)
+    return out
+
+
+# ───────────────────────── 一般畫面字句（BL-0250 批次 1）─────────────────────────
+# 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`）：下列幾句是工程字樣或開發沿革，正式模式改寫成使用者語言；
+# 示範模式不經過本檔，照舊。整句相等才換（同 `_drop_dev_notes` 的比對方式）；判定、計數、寫入一個都不動。
+SCENARIO_KEY = "alo_scenario_input"
+SCENARIO_SAVE_DISABLED_REASON = "試算存檔尚未開放"
+TEXT_UNCLASSIFIED_NO_TARGET = f"「{logic.UNCLASSIFIED}」沒有目標比重，這一列不計算目標、差額與內外"
+TEXT_ALO7_BOTH_SET = "目標比重、容許帶皆已設定"
+TEXT_ALO4_SHEETS = "類別在 Sheets 維護；這裡的存檔只存比重基準與類別名稱"
+LIVE_TEXT_EDITS = {
+    # `ALO-2` 卡尾（`logic._build_alo2`）：「44 沒有寫」是開發沿革；保留「未分類這一列不算目標、差額、內外」的事實。
+    f"⚠ 44 沒有寫「{logic.UNCLASSIFIED}」的目標比重；本頁目標、差額、內外三格不算。": TEXT_UNCLASSIFIED_NO_TARGET,
+    # `ALO-7` 收合摘要：「兩鍵」是工程字樣。
+    "兩鍵皆有值": TEXT_ALO7_BOTH_SET,
+    # `ALO-4` 說明行：44 逐字的「持倉資料在 Sheets 維護，本儀表板唯讀」（`logic.TEXT_SHEETS_READONLY`）是另一行，照舊。
+    "每一檔的類別在 Sheets 維護，本塊唯讀呈現；本塊的存檔只寫比重基準與類別名稱兩鍵": TEXT_ALO4_SHEETS,
+}
+
+
+def _replace_exact(node, edits):
+    """整句相等 → 換成表裡的值（就地改寫並回傳）。"""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _replace_exact(value, edits)
+        return node
+    if isinstance(node, list):
+        return [_replace_exact(v, edits) for v in node]
+    if isinstance(node, tuple):
+        return tuple(_replace_exact(v, edits) for v in node)
+    if isinstance(node, str) and node in edits:
+        return edits[node]
+    return node
+
+
+# ───────────────────────── ALO-6 佔比改百分比（BL-0250 批次 1）─────────────────────────
+# 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`，BL-0250 實機驗收回修批次 1）：`ALO-6` 表尾合計原本印比率「1」，
+# 改成百分比「100.0%」，格式照本頁其他百分比（`logic.format_share`，小數 1 位，例 `ALO-2` 的「66.0%」）。
+# 同一張表的兩欄佔比（佔所屬類別、佔總體）原本也是比率（0.697），一併改百分比 —— 否則表身寫 0.697、表尾寫 100.0%，
+# 同一個量用兩種寫法（本組判讀，可被客戶或總管推翻）。
+# ⛔ 不改的：44 `ALO-6` 規則欄「各類別內的佔比合計為 1；總體佔比合計為 1」是**量的不變式**（比率 1 ＝ 100%），
+#    算法、被排除的檔、缺值格（`⬜`／`◇`）一個都不碰；只換顯示字串。示範模式不經過本檔，一個字都不變。
+_ALO6_SUBTOTAL = re.compile(r"^類別內佔比合計（(?P<bucket>.*)） \S+$")
+_ALO6_TOTAL = re.compile(r"^總體佔比合計 \S+$")
+
+
+def alo6_as_percent(model: dict) -> dict:
+    """`ALO-6` 兩欄佔比與表尾兩種合計 → 百分比字串（回複本）。只讀 logic 已算好的 `_in_bucket`／`_in_total`。"""
+    out = copy.deepcopy(model)
+    block = logic.find_block(out, "ALO-6")
+    rows = block.get("_rows") or ()
+    for row in rows:
+        if row.get("_in_bucket") is not None:
+            row["in_bucket_text"] = logic.format_share(row["_in_bucket"] * 100)
+        if row.get("_in_total") is not None:
+            row["in_total_text"] = logic.format_share(row["_in_total"] * 100)
+    footer = []
+    for line in block.get("footer_lines") or ():
+        sub = _ALO6_SUBTOTAL.match(line)
+        if sub:
+            bucket = sub.group("bucket")
+            value = sum(r["_in_bucket"] for r in rows if r.get("_bucket") == bucket and r.get("_in_bucket") is not None)
+            line = f"類別內佔比合計（{bucket}） {logic.format_share(value * 100)}"
+        elif _ALO6_TOTAL.match(line):
+            value = sum(r["_in_total"] for r in rows if r.get("_in_total") is not None)
+            line = f"總體佔比合計 {logic.format_share(value * 100)}"
+        footer.append(line)
+    block["footer_lines"] = footer
     return out
 
 

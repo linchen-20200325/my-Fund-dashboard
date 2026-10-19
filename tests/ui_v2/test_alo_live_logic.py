@@ -217,7 +217,7 @@ def test_只有尚未接上寫入的存檔停用並寫出原因_其餘不動():
     model = _live_model("full")
     disabled = [b for b in _buttons(model) if not b["_enabled"]]
     assert [b["_keys"] for b in disabled] == [("alo_scenario_input",)], disabled
-    assert disabled[0]["disabled_reason"] == live.SAVE_DISABLED_REASON
+    assert disabled[0]["disabled_reason"] == live.SCENARIO_SAVE_DISABLED_REASON  # BL-0250 批次 1（`DEC-2026-10-19-04`）：ALO-3 試算存檔的停用原因改「試算存檔尚未開放」
     for code in ("ALO-1", "ALO-4"):
         save = [b for b in logic.find_block(model, code)["buttons"] if b["_writes"]]
         assert len(save) == 1 and save[0]["_enabled"] is True, code
@@ -235,8 +235,10 @@ def test_沒有寫入函式時_三枚存檔照舊全部停用():
         model = live.apply_live_notes(logic.build_page_model(fixtures.scenario("full")), **kwargs)
         saves = [b for b in _buttons(model) if b["_writes"]]
         assert len(saves) == 3, kwargs
-        assert all(not b["_enabled"] and b["disabled_reason"] == live.SAVE_DISABLED_REASON
-                   for b in saves), kwargs
+        assert all(not b["_enabled"] for b in saves), kwargs
+        # BL-0250 批次 1（`DEC-2026-10-19-04`）：ALO-3（只寫 `alo_scenario_input`）原因改「試算存檔尚未開放」，其餘兩枚照舊。
+        assert all(b["disabled_reason"] == (live.SCENARIO_SAVE_DISABLED_REASON if b["_keys"] == ("alo_scenario_input",)
+                                            else live.SAVE_DISABLED_REASON) for b in saves), kwargs
 
 
 def test_停用判斷看按鈕的鍵_不看塊代碼():

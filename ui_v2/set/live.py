@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import math
 
+from .. import plain
 from . import logic
 
 # ───────────────────────── 草稿文案（逐字；出處見各行註解） ─────────────────────────
@@ -31,10 +32,31 @@ MASKED_NOTE = "已遮蔽憑證"  # ★5，ACCEPTANCE.md 7.4 逐字
 TEXT_PENDING_DIVIDEND = "配息尚未接取數來源；淨值即時取得"  # ★1（SET-0），配息仍待接就印、不再看 nav
 TEXT_REASON_KIND_PENDING = "原因：這一類的存放處尚未接上，暫無取得時間"  # ★2（SET-1）
 TEXT_REASON_TIER_PENDING = "原因：這一層級的取數尚未接上"  # ★2（SET-2）
-TEXT_LOG_SCOPE = "取數紀錄只記從 set 頁觸發的取數；市場總覽頁開頁時自己的取數不記在這裡。"  # ★3
-TEXT_MI_TIME_SCOPE = "這個時間是 set 頁最近一次取數存入的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
+# ~~TEXT_LOG_SCOPE = "取數紀錄只記從 set 頁觸發的取數；市場總覽頁開頁時自己的取數不記在這裡。"  # ★3~~
+# → 客戶 2026-10-19 裁示（`docs/DECISIONS.md` `DEC-2026-10-19-04`，BL-0250 批次 1；有意識的政策變更，不是漏刪）：
+#   舊句在 `SET-0`、`SET-2`、`SET-6` 各印一次（同一句全頁三次），且「set 頁」是工程字樣。只留 `SET-6`（取數紀錄那一塊）一處，
+#   改寫成下面這一句。舊句的用意（取數紀錄的射程只到本頁按的那幾次）完全保留；被權衡掉的是重複與工程字樣。
+TEXT_LOG_SCOPE = "這裡只記在本頁按「重新取數」的結果；其他頁開頁時的取數不在這裡"  # ★3（只在 SET-6）
+# ~~「set 頁」~~ → 「本頁」（同上裁示；只換這兩個字，句意不動）。
+TEXT_MI_TIME_SCOPE = "這個時間是本頁最近一次取數存入的時間，不是市場總覽頁畫面上那一份的時間"  # ★4
 # SET-1 淨值列有時間時才印（客戶 2026-10-09 核准，`docs/v2/53_nav_source_plan.md` §7 第 4 列）。
-TEXT_NAV_TIME_SCOPE = "這個時間是 set 頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
+TEXT_NAV_TIME_SCOPE = "這個時間是本頁最近一次重新取數淨值的時間，不是持倉頁畫面上那一份的時間"
+# 客戶 2026-10-19 裁示（同上）：`SET-4` 某鍵沒有任何畫面用到時那一行。~~「改這個鍵會影響：44 各塊的來源欄沒有宣告用它」~~
+# （`logic._used_by_text`，示範模式照舊）→ 正式模式寫這一句。
+TEXT_USED_BY_NONE = "目前沒有畫面用到這個設定"
+_USED_BY_NONE_DEMO = "改這個鍵會影響：44 各塊的來源欄沒有宣告用它"
+# 客戶 2026-10-19 裁示（同上）：`SET-3`／`SET-4` 收合摘要不再列原始鍵名，只寫「N 個設定，M 個未設定」。
+TEXT_SET4_SUMMARY = "{n} 個設定，{unset} 個未設定"
+TEXT_SET4_SUMMARY_ALL_SET = "{n} 個設定，皆已設定"
+# 客戶 2026-10-19 裁示（同上）：一般畫面上「服務帳戶（google_service_account）」寫成「Google 服務帳戶」；
+# 讀取情境的「⛔ 未設定試算表 ID，暫停寫入」寫成「⛔ 尚未設定：試算表 ID」（存檔按鈕的停用原因屬寫入情境，照舊）。
+# `SET-2`、`SET-6` 照印原文（44 `SET-2` 規則欄、第七節第三小節之七其二第 2 條），不換。
+SERVICE_ACCOUNT_WORDS = (
+    ("未設定服務帳戶（google_service_account）", "未設定 Google 服務帳戶"),
+    ("服務帳戶（google_service_account）", "Google 服務帳戶"),
+)
+TEXT_NO_SHEET_ID_READ = "尚未設定：試算表 ID"
+_RAW_TEXT_CODES = ("SET-2", "SET-6", "SET-7")
 
 # ★6（草稿 6.1）
 TEXT_SAVED = "已存檔"  # 客戶 2026-09-26 定稿
@@ -405,7 +427,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set0["detail_lines"] = [TEXT_SET0_INPUTS if line == TEXT_SET0_INPUTS_DEMO else line for line in set0["detail_lines"]]
     if "dividend" in pending_tables:
         set0["detail_lines"].append(TEXT_PENDING_DIVIDEND)
-    set0["detail_lines"].append(TEXT_LOG_SCOPE)
+    # ~~set0["detail_lines"].append(TEXT_LOG_SCOPE)~~ → 客戶 2026-10-19 裁示：取數紀錄的射程說明只留在 `SET-6`。
 
     # ── SET-1 ──
     set1 = logic.find_block(out, "SET-1")
@@ -425,6 +447,8 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set1["fail_nodes"] = [_decorate_placeholder(n, fail_map, notes, "SET-1") for n in set1["fail_nodes"]]
     set1["live_lines"] = _structure_lines(notes, "SET-1")
     set1["detail_lines"] = _strip_demo(set1["detail_lines"])  # ✂2
+    # 客戶 2026-10-19 裁示：新鮮度上限那一行不帶括號裡的鍵名（`（set_max_age_days）`，一般畫面換字後是「（新鮮度上限日數）」）。
+    set1["limit_lines"] = [line.replace(f"（{logic.MAX_AGE_KEY}）", "") for line in set1.get("limit_lines") or ()]
 
     # ── SET-2 ──
     set2 = logic.find_block(out, "SET-2")
@@ -438,7 +462,7 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
             row["note_lines"].append(TEXT_REASON_TIER_PENDING)  # ★2
         if _masked(row["message_text"], token):
             row["message_note_lines"].append(MASKED_NOTE)  # ★5
-    set2["detail_lines"] = _strip_demo(set2["detail_lines"]) + [TEXT_LOG_SCOPE]  # ✂2、★3
+    set2["detail_lines"] = _strip_demo(set2["detail_lines"])  # ✂2（★3 只留在 SET-6，客戶 2026-10-19 裁示）
 
     # ── SET-3：★10 在卡頭下方第一行 ──
     set3 = logic.find_block(out, "SET-3")
@@ -510,6 +534,17 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
             [line for line in _save_fail_lines(results[k], token) if line != logic.TEXT_KEEP_INPUT]
             for k in sorted(results) if results[k]["status"] == "failed"
         ]
+    for field in set4["inputs"]:
+        if field.get("used_by_text") == _USED_BY_NONE_DEMO:
+            field["used_by_text"] = TEXT_USED_BY_NONE
+        # 客戶 2026-10-19 裁示：輸入欄標籤 ~~`<鍵名>（<value_kind>）`~~（`logic` SET-GAP-輸入欄型態，示範模式照舊）→ 中文設定名
+        # （對照只維護 `ui_v2/plain.py` 一份；找不到中文名的鍵照原字）。底層鍵、`value_kind`、存檔內容一個都不動。
+        field["label"] = plain.key_name(field["name"])
+    if not set4["fail_nodes"]:
+        unset = sum(1 for field in set4["inputs"] if field["_value"] is None)
+        n = len(set4["inputs"])
+        set4["summary_text"] = (TEXT_SET4_SUMMARY.format(n=n, unset=unset) if unset
+                                else TEXT_SET4_SUMMARY_ALL_SET.format(n=n))
     set4["buttons"] = [save_button(notes)]
     set4["live_lines"] = _structure_lines(notes, "SET-4")
     set4["detail_lines"] = _strip_demo(set4["detail_lines"])  # ✂3
@@ -533,4 +568,34 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     set6["tail_lines"] = tail
     set6["live_lines"] = _structure_lines(notes, "SET-6")
     set6["detail_lines"] = _strip_demo(set6["detail_lines"]) + [TEXT_LOG_SCOPE]  # ✂2、★3
-    return out
+    return _plain_set_words(out)
+
+
+def _plain_set_words(model: dict) -> dict:
+    """客戶 2026-10-19 裁示（BL-0250 批次 1）：一般畫面的兩處字樣（就地改寫並回傳）。
+    `SET-2`、`SET-6`、`SET-7` 照印原文、不換；按鈕的停用原因（寫入情境）不換。"""
+    read_line = f"{logic.FETCH_FAIL_GLYPH} {TEXT_NO_SHEET_ID}"
+
+    def visit(node, key=None):
+        if isinstance(node, dict):
+            for name in list(node):
+                if name == "disabled_reason":
+                    continue
+                node[name] = visit(node[name], name)
+            return node
+        if isinstance(node, list):
+            return [visit(item, key) for item in node]
+        if isinstance(node, tuple):
+            return tuple(visit(item, key) for item in node)
+        if isinstance(node, str) and not (isinstance(key, str) and key.startswith("_")):
+            if node == read_line:
+                node = f"{logic.FETCH_FAIL_GLYPH} {TEXT_NO_SHEET_ID_READ}"
+            for raw, shown in SERVICE_ACCOUNT_WORDS:
+                node = node.replace(raw, shown)
+        return node
+
+    for block in model.get("blocks") or ():
+        if block.get("code") in _RAW_TEXT_CODES:
+            continue
+        visit(block)
+    return model

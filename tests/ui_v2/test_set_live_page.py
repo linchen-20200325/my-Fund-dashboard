@@ -187,7 +187,7 @@ def test_星1至星4星8星10_正常狀態都畫出來(real, monkeypatch):
                  live.TEXT_REASON_TIER_PENDING, live.TEXT_MI_TIME_SCOPE, live.TEXT_SET5_NOTE,
                  "設定試算表：客戶的設定本", "資料未備"):
         assert line in text, line
-    assert text.count(live.TEXT_LOG_SCOPE) == 3                     # ★3 三處
+    assert text.count(live.TEXT_LOG_SCOPE) == 1                     # ★3 ~~三處~~ → 只留 SET-6 一處（BL-0250 批次 1，`DEC-2026-10-19-04`）
     assert SHEET not in text and KEY not in text
 
 

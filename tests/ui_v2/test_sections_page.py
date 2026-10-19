@@ -157,11 +157,13 @@ def test_市場總覽_取數失敗時需要注意那一行是紅色():
     assert f'color:{theme.tone_hex("紅")}' in line
 
 
-@pytest.mark.parametrize("name", ["未設定", "取數失敗"])
-def test_資產配置_開始試算入口_取數失敗時標題帶出狀態族(name):
+# ~~「未設定」也畫「⛔ 取數失敗」~~ → BL-0250 批次 1（客戶 G3，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：
+# 成因全部是尚未設定時寫「⛔ 尚未設定：〈哪一項〉」；真的取數失敗照舊。
+@pytest.mark.parametrize(("name", "family"), [("未設定", "⛔ 尚未設定：設定試算表"), ("取數失敗", "⛔ 取數失敗")])
+def test_資產配置_開始試算入口_取數失敗時標題帶出狀態族(name, family):
     at = _run(SCAN.SCRIPTS["alo"][name])
     entry = _expander(at, sections.ALO_SCENARIO_ENTRY)
-    assert entry.label == f"{sections.ALO_SCENARIO_ENTRY}　—　⛔ 取數失敗"
+    assert entry.label == f"{sections.ALO_SCENARIO_ENTRY}　—　{family}"
     assert not entry.proto.expanded
 
 

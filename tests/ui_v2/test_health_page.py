@@ -108,7 +108,19 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
     at, _ = _run(P.SCRIPTS[page]["未設定"])
     texts = _visible(at)
     joined = "\n".join(texts)
-    assert joined.count(f"{health.TEXT_NOT_CONFIGURED}：") == 1, (page, [t for t in texts if "尚未設定：" in t])
+    # ~~`joined.count("尚未設定：") == 1`~~ → BL-0250 批次 1（客戶 2026-10-19 裁示 G3，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：
+    # 客戶點名的位置 —— 結論燈、展開區標題、③ —— 改寫「尚未設定：〈哪一項〉」（不得寫成取數失敗）；市場總覽「設定讀不到」
+    # 統一成同一種說法。資料狀態行那一句（類別句）照舊恰一次；塊內失敗摘要去重那一處照舊只留狀態族「⛔ 尚未設定」。
+    # 舊斷言的用意（塊內不重複摘要、狀態句不外漏）照留；被權衡掉的是「整頁只准一處寫哪一項」。
+    lamps = {" ".join(P.markdown_text(m.value).split()) for m in at.main.markdown
+             if any(f'data-block="{page.upper()}-0"' in m.value for _ in [0])}
+    titles = {str(e.label) for e in at.main.expander}
+    status = " ".join(_status_lines(at)[0].split())
+    allowed = ("資料面：", "卡：尚未設定：", "，暫不存檔", "，暫時列出全部指標", "⬜ 不適用：尚未設定：", "，暫無篩選軌跡")
+    stray = [t for t in texts if f"{health.TEXT_NOT_CONFIGURED}：" in t and t != status and t not in lamps
+             and t not in titles and not any(a in t for a in allowed)]
+    assert stray == [], (page, stray)
+    assert texts.count(status) == 1, page
     assert f"{health.TEXT_NOT_CONFIGURED}：" in " ".join(_status_lines(at)[0].split())
     for state in health.NOT_CONFIGURED_STATES:
         assert state not in joined, (page, state)
@@ -178,8 +190,11 @@ def test_核心卡的來源與新鮮度徽章移到第四段(page):
     cards = [html.unescape(m.value) for m in at.main.markdown
              if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
     assert cards
-    word = "延遲 3 日" if page == "mkt" else "〔來源層級〕"
+    # ~~標的探索：「〔來源層級〕」~~ → BL-0250 批次 1（`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：正式模式不留佔位字，
+    # 那幾張卡沒有真的來源層級 ⇒ ④ 寫「◇ 資料未備」。卡上照舊不留（換位置）。
+    word = "延遲 3 日" if page == "mkt" else health.TEXT_PROVENANCE_MISSING
     assert not any(word in card for card in cards), page
+    assert not any("〔來源層級〕" in card for card in cards), page
     box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
     assert len(box) == 1 and box[0].proto.expanded is False
     assert word in html.unescape(" ".join(m.value for m in box[0].markdown))
@@ -309,18 +324,20 @@ def _lamp_text(at, code):
     return lamps[0]
 
 
-@pytest.mark.parametrize(("name", "rest"), [
-    ("未設定", "狀態：取數失敗 尚未設定"),
-    ("未設定保單", "狀態：取數失敗 尚未設定"),
-    ("取數失敗", "狀態：取數失敗 我這一季"),
-    ("局部失敗", "狀態：取數失敗 我這一季"),
+# ~~("未設定", "狀態：取數失敗 尚未設定")、("未設定保單", …)~~ → BL-0250 批次 1（客戶 G3，`DEC-2026-10-19-04`；有意識的更正，
+# 不是漏刪）：失敗全部屬尚未設定時，燈的狀態字改「狀態：尚未設定」，那一句寫哪一項；⛔ 照舊只出現一次。
+@pytest.mark.parametrize(("name", "rest", "fetch_words"), [
+    ("未設定", "狀態：尚未設定 尚未設定：設定試算表", 0),
+    ("未設定保單", "狀態：尚未設定 尚未設定：保單試算表", 0),
+    ("取數失敗", "狀態：取數失敗 我這一季", 1),
+    ("局部失敗", "狀態：取數失敗 我這一季", 1),
 ])
-def test_資產配置結論燈_停止符號與取數失敗各只出現一次(name, rest):
+def test_資產配置結論燈_停止符號與取數失敗各只出現一次(name, rest, fetch_words):
     """改前畫面是「⛔ 狀態：取數失敗 ⛔ 尚未設定」「⛔ 狀態：取數失敗 ⛔ 取數失敗」（P0-② 稽核所見）。"""
     at, _ = _run(P.SCRIPTS["alo"][name])
     lamp = _lamp_text(at, "ALO-0")
     assert lamp.count(health.SYMBOL_ERROR) == 1, lamp
-    assert lamp.count(health.TEXT_FETCH_FAILED) == 1, lamp
+    assert lamp.count(health.TEXT_FETCH_FAILED) == fetch_words, lamp
     assert lamp.startswith(f"{health.SYMBOL_ERROR} {rest}"), lamp
 
 

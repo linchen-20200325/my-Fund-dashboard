@@ -654,6 +654,8 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
                 logic.build_page_model(dataset),
                 wired_keys=live.SAVE_WIRED_KEYS if ctx is not None else (),
             )
+            # BL-0250 批次 1：`ALO-6` 佔比與表尾合計改百分比（只換顯示字串；`live.alo6_as_percent`）。
+            model = live.alo6_as_percent(model)
         except ValueError as exc:
             _render_live_error(exc, mask_error, settings_page)
             return
@@ -669,8 +671,16 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
         # 同源錯誤只在頁首資料狀態行摘要一次（44 第七節第三小節之七其二第 3、4 條；`ui_v2/health.py`）。
         model, failures = health.dedupe_failures(model)
+        # 客戶 2026-10-19 裁示 G3（`DEC-2026-10-19-04`）：成因全部是「尚未設定」的塊，本頁自己擬的「取數失敗」字樣改寫成
+        # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
+        health.relabel_unconfigured(model, failures)
+        # BL-0250 批次 1（`DEC-2026-10-19-04`；44 第七節第三小節之七其二第 4 條「四頁都報 ◷／◇／⛔／尚未設定」）：
+        # 比照其他三頁把 `stale` 接上（本頁卡上的新鮮度徽章若畫成黃，同一支判讀）；資料未備另讀格內與列尾已畫出的 ◇
+        # （本頁的資料未備多半不帶 `_state`，`has_missing` 讀不到）。只讀既有判定，不新算。
+        cards = logic.codes_in_layer(model, 2)
         status_line = health.status_line(
-            model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date")
+            model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date"),
+            stale=health.has_stale_marker(model, cards), missing=health.has_missing_marker(model),
         )
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。

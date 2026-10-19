@@ -249,6 +249,14 @@ def _fx_name(match) -> str:
     return f"新臺幣對{match.group(1).upper()}匯率"
 
 
+def not_configured_state(raw):
+    """一句失敗原文若是「尚未設定」那一族（`_KNOWN_MESSAGES`），回那一句狀態描述（例「設定試算表尚未設定」）；否則 None。"""
+    if not isinstance(raw, str):
+        return None
+    known = _known(raw)
+    return known[1] if known else None
+
+
 def _known(raw: str):
     for message, data_class, state in _KNOWN_MESSAGES:
         if message in raw:
