@@ -432,6 +432,25 @@ def _strip_hint(node):
     return node
 
 
+def _drop_dev_notes(node):
+    """BL-0345（2026-10-19）：把 `logic.LIVE_DEV_NOTE_EDITS` 列的純開發註記從正式模式拿掉（整棵模型走一遍）。
+
+    只認整句相等：句子等於表裡的鍵 → 換成表裡的值；值為 None 就整句拿掉。**只刪、不新寫任何字。**
+    示範模式不經過本函式，輸出不變。
+    """
+    edits = logic.LIVE_DEV_NOTE_EDITS
+    if isinstance(node, dict):
+        for key, value in node.items():
+            node[key] = _drop_dev_notes(value)
+        return node
+    if isinstance(node, (list, tuple)):
+        kept = [_drop_dev_notes(v) for v in node if not (isinstance(v, str) and v in edits and edits[v] is None)]
+        return type(node)(kept)
+    if isinstance(node, str) and node in edits and edits[node] is not None:
+        return edits[node]
+    return node
+
+
 def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
     """回傳調整過的模型複本（不改呼叫端手上的那一份）。正式模式的三件事：
 
@@ -446,7 +465,7 @@ def apply_live_notes(model: dict, *, wired_keys=()) -> dict:
     （停用原因顯示在按鈕的 tooltip）。
     """
     wired = frozenset(wired_keys)
-    out = _strip_hint(copy.deepcopy(model))
+    out = _drop_dev_notes(_strip_hint(copy.deepcopy(model)))
     out["hint_note"] = ""
     for button in _walk_buttons(out["blocks"]):
         if not button["_writes"]:      # `logic._BUTTON_WRITES`：只有「存檔」會寫 user_setting

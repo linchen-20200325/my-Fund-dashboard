@@ -326,6 +326,20 @@ TEXT_SET1_JUDGE = "把上限設成 0 日，三列的比較欄皆為「外」且 
 TEXT_IN = "內"
 TEXT_OUT = "外"
 TEXT_RULE_SCOPE = "本表的母體只有「來源」欄"
+
+# BL-0345（2026-10-19）：純開發註記。示範模式照印；正式模式由 `live.apply_live_notes` 拿掉（只刪不改寫）。
+TEXT_SET1_OUTSIDE = "距今日數大於等於上限寫外"
+DEV_NOTE_SET1_JUDGE = f"，由 44 本塊判準推得：「{TEXT_SET1_JUDGE}」"
+DEV_NOTE_SET3 = "⚠ 44 沒有把鍵列成一張表；本卡的鍵是本頁從 44 掃出來的，數目不是 44 給的。"
+TEXT_SET3_SAVED = "本卡讀的是已存值。"
+TEXT_SET7_SCOPE_LINE = TEXT_RULE_SCOPE + "；規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，本表結構上抓不到"
+DEV_NOTE_SET7 = "（44 自己寫的射程限制）"
+# 正式模式的替換表：整句等於鍵 → 換成值（None ＝ 整句拿掉）。
+LIVE_DEV_NOTE_EDITS = {
+    TEXT_SET1_OUTSIDE + DEV_NOTE_SET1_JUDGE + "。": TEXT_SET1_OUTSIDE + "。",
+    DEV_NOTE_SET3 + TEXT_SET3_SAVED: TEXT_SET3_SAVED,
+    TEXT_SET7_SCOPE_LINE + DEV_NOTE_SET7 + "。": TEXT_SET7_SCOPE_LINE + "。",
+}
 TEXT_SET5_WRITES = "取數只寫入資料表與 `fetch_log`，不改寫任何 `user_setting`"
 TEXT_SET2_RAW = "訊息原文照印，不改寫成安撫語句"
 TEXT_SET2_NO_DIRECTION = "本卡不對失敗給出處置方向"
@@ -758,7 +772,7 @@ def _build_set1(dataset, known_keys) -> dict:
         "fail_nodes": fail_nodes,
         "limit_lines": [limit_line] if limit_line else [],
         "detail_lines": [
-            f"距今日數大於等於上限寫外，由 44 本塊判準推得：「{TEXT_SET1_JUDGE}」。",
+            TEXT_SET1_OUTSIDE + DEV_NOTE_SET1_JUDGE + "。",
             HINT_NOTE,
         ],
         "buttons": [],
@@ -934,7 +948,7 @@ def _build_set3(dataset, known_keys) -> dict:
         "detail_lines": [
             TEXT_SET3_NO_DEFAULT_COLUMN + "。",
             # SET-GAP-鍵清單／SET-GAP-當下值或已存值
-            "⚠ 44 沒有把鍵列成一張表；本卡的鍵是本頁從 44 掃出來的，數目不是 44 給的。本卡讀的是已存值。",
+            DEV_NOTE_SET3 + TEXT_SET3_SAVED,
             HINT_NOTE,
         ],
         "buttons": [],
@@ -1195,7 +1209,7 @@ def _build_set7(dataset) -> dict:
         "placeholder": None,
         "detail_lines": [
             TEXT_SET7_NO_INFERENCE + "。",
-            TEXT_RULE_SCOPE + "；規則欄或空狀態欄用到、卻沒有在來源欄宣告的欄位，本表結構上抓不到（44 自己寫的射程限制）。",
+            TEXT_SET7_SCOPE_LINE + DEV_NOTE_SET7 + "。",
         ],
         "buttons": [],
     }
