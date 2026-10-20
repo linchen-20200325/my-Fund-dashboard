@@ -36,6 +36,27 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import _exp_wired_fixture as WF  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _fixed_taipei_now(monkeypatch):
+    """把 `source.load_live` 的「台灣今天」固定成 fixture 設計日 `WF.TODAY`（2026-10-14）。
+
+    ⚠️ 測試隔離（2026-10-20/21 發現；不改產品碼、斷言與 10 日門檻）：`load_live` 以
+    `datetime.now(live.TAIPEI)` 取「今天」，而 `_exp_wired_fixture` 的淨值日期是照 `TODAY = 2026-10-14`
+    設計的（例：A01 最近淨值 2026-10-10 ＝ 4 天前、應為正常）。不固定時，真實日期一過 2026-10-20，
+    A01 就變成「⬜ 資料未備：最近一筆淨值 2026-10-10，已超過 10 日」，測試隨系統日期轉紅。
+    這裡只換掉 `source` 模組上的 `datetime` 名稱（`now(tz)` 回固定時刻，其餘行為同 `datetime`）。
+    守衛：`test_今天固定為fixture設計日_不依賴系統日期`。
+    """
+    from datetime import datetime as _dt
+
+    class _FixedDatetime(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt(WF.TODAY.year, WF.TODAY.month, WF.TODAY.day, 9, 0, tzinfo=tz)
+
+    monkeypatch.setattr(source, "datetime", _FixedDatetime)
+
+
 def _keys(codes):
     return {"results": [{"input": c, "ok": True, "full_key": c, "portal": "", "parsed_code": c, "error": None}
                         for c in codes]}
@@ -176,6 +197,13 @@ def test_基本資料與淨值吃同一個now_畫面的今天由它而來(monkey
     (kind1, now1), (kind2, now2) = l2_calls["now"]
     assert (kind1, kind2) == ("profile", "nav") and now1 is now2
     assert now1.tzinfo is not None and now1.utcoffset().total_seconds() == 8 * 3600
+
+
+def test_今天固定為fixture設計日_不依賴系統日期(monkeypatch, fake_st, l2_calls):
+    monkeypatch.setattr(source.exp_universe, "load_pool_codes", lambda values, oauth_client=None: dict(_POOL8))
+    monkeypatch.setattr(source.settings_store, "load_user_settings", lambda values: _settings_rows())
+    source.load_live()
+    assert [now.date() for _, now in l2_calls["now"]] == [WF.TODAY]
 
 
 def test_沒有條件_不取淨值(monkeypatch, fake_st, l2_calls):
