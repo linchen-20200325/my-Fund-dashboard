@@ -1093,11 +1093,11 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
     ):
         node = out[name]
         if node["_state"] == STATE_ERROR:
-            page_health.tag_fetch_class(node, message, page_health.DATA_CLASSES[table])
+            page_health.tag_fetch_class(node, message, page_health.class_of(page_health.DATA_CLASSES, table))
             if node.get("_fund_scoped_error"):
-                page_health.tag_fetch_class(node, f"{code}：{message}", page_health.DATA_CLASSES[table])
+                page_health.tag_fetch_class(node, f"{code}：{message}", page_health.class_of(page_health.DATA_CLASSES, table))
         elif node["_state"] == STATE_MISSING:
-            page_health.tag_missing(node, *(page_health.DATA_CLASSES[t] for t in missing_tables))
+            page_health.tag_missing(node, *(page_health.class_of(page_health.DATA_CLASSES, t) for t in missing_tables))
     return out
 
 
@@ -2464,7 +2464,7 @@ def _build_hld6(dataset, *, not_ready_line=None):
     # 在判定分支這裡記下（畫面字不變）。
     if state != STATE_OK:
         for message, table in (_hld6_failure_pairs(dataset) if _STRICT_FETCH.get() else ()):
-            page_health.tag_fetch_class(block, message, page_health.DATA_CLASSES[table])
+            page_health.tag_fetch_class(block, message, page_health.class_of(page_health.DATA_CLASSES, table))
         page_health.tag_missing(block, page_health.DATA_CLASSES["nav"], page_health.DATA_CLASSES["dividend"])
     return block
 
@@ -2761,7 +2761,7 @@ def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_e
 
     def tag(code, message, table):
         if message:
-            page_health.tag_fetch_class(by_code[code], message, cls[table])
+            page_health.tag_fetch_class(by_code[code], message, page_health.class_of(cls, table))
 
     def nodes(names):
         return [metric[name] for metric in metrics for name in names]
@@ -2779,6 +2779,22 @@ def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_e
         tag(code, settings_error, "user_setting")
     for code in ("HLD-2", "HLD-5", "HLD-7", "HLD-8"):
         tag(code, holding_error, "holding")
+    # 3-B 稽核回修第 5 條（根因：成因只記到部分卡）：空持倉時三張核心卡整塊 `系統錯誤`，畫面只印來源表裡**第一張**失敗的那一句
+    # （`source_error` 依 `BLOCK_SOURCE_TABLES` 的次序），排在後面、同樣失敗的來源表沒有畫出來，但它一樣讓這一塊讀不到 ——
+    # 記成「被蓋住的成因」。`HLD-2` 的來源表沒有持倉，但持倉表讀不到時它照樣整塊 `系統錯誤`（`_build_core_card` 那一支），
+    # 所以持倉一併記。只記、不上畫面；判定一格不動。
+    if not has_holdings:
+        holding_unknown = bool(holding_error) and not dataset.get("holding")
+        for code in ("HLD-1", "HLD-2", "HLD-3"):
+            drawn = _first_failed_table(dataset, code)
+            if by_code[code].get("_state") != STATE_ERROR or drawn is None:
+                continue
+            tables = BLOCK_SOURCE_TABLES[code]
+            for table in tables[tables.index(drawn) + 1:]:
+                if errors.get(table):
+                    page_health.tag_shadowed(by_code[code], errors[table], page_health.class_of(cls, table))
+            if "holding" not in tables and holding_unknown and _STRICT_FETCH.get():
+                page_health.tag_shadowed(by_code[code], holding_error, cls["holding"])
 
     # ◇：空持倉時各塊說的是持倉；有持倉時，核心卡與 `HLD-8` 的塊態取自各值（衍生），`HLD-1` 零列的資料未備是門檻所指的那幾個值。
     page_health.tag_derived(by_code["HLD-0"], page_health.DERIVED_LAMP)

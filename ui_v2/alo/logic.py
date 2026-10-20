@@ -636,7 +636,7 @@ def _failure_placeholder(dataset, tables) -> dict:
     table = _fetch_error_table(dataset, tables)
     message = dataset["errors"][table]
     return page_health.tag_fetch_class(_placeholder(fetch_failed_text(message), "系統錯誤"), message,
-                                       page_health.DATA_CLASSES[table])
+                                       page_health.class_of(page_health.DATA_CLASSES, table))
 
 
 # ───────────────────────── 斷點 ─────────────────────────
@@ -1709,7 +1709,7 @@ def _build_alo7(dataset) -> dict:
             time_text = TEXT_NEVER_SET if updated is None else format_time(updated)
         row = {"_key": key, "key_text": key, "value_text": value_text, "time_text": time_text}
         if time_text == TEXT_NEVER_SET:   # BL-0250 批次 3-B（總管第二輪裁定第 2 點；判讀第 7 點）：鍵寫這一個設定的中文名
-            page_health.tag_missing(row, _ALO7_KEY_NAMES[key])
+            page_health.tag_missing(row, page_health.class_of(_ALO7_KEY_NAMES, key))
         rows.append(row)
     return {
         **base,

@@ -91,15 +91,43 @@ def record_load_failure(slug: str, raw_line: str) -> None:
                            page_failure=plain.error_line_data_class(raw_line))
 
 
-def record_page_health(slug: str, display: dict, items, cards, normal, status_line) -> None:
+# 收集與記錄那兩步的錯誤邊界（3-B 稽核回修第 3 條）：接住這幾種，頁面照原樣畫完，這一頁的總表記錄改寫成「本頁狀態無法彙整」。
+# 其他例外照舊往上拋（不吞）。
+COLLECT_ERRORS = (health.MissingClassError, ValueError, KeyError)
+
+
+def collect_page_health(slug: str, display: dict, summary: dict, fetch_events, cards, *, normal_class=None) -> dict:
+    """收下這一頁已畫出的 ⛔／◇／尚未設定與「沒有異常」那幾列（`move_card_provenance` 之前；只讀、不改模型）。
+    回 `{"items", "normal"}`；收集出錯 → 寫一筆 log（頁名＋例外類別）並回 `{"error": <例外類別>}`，頁面照原樣畫。
+    認不出資料類的取數失敗（`collect_page_items` 的第二個回傳值）逐處寫 log，不再靜默丟掉。"""
+    try:
+        items, unresolved = health.collect_page_items(display, summary, fetch_events, cards)
+        normal = health.normal_entries(display, cards, data_class=normal_class)
+    except COLLECT_ERRORS as exc:
+        _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, type(exc).__name__)
+        return {"error": type(exc).__name__}
+    for where in unresolved:
+        _log.warning("ui_v2 %s 頁有一句取數失敗認不出資料類：%s %s", slug, where.get("code"), where.get("field"))
+    return {"items": items, "normal": normal}
+
+
+def record_page_health(slug: str, display: dict, collected: dict, cards, status_line) -> None:
     """記下這一頁這一次畫出來的資料狀態，給設定與診斷頁的各頁資料狀態總表（BL-0250 批次 3-B；`ui_v2/page_health.py::record`）。
-    `items`：`health.collect_page_items` 的原因項目、`normal`：`health.normal_entries` 的「沒有異常」那幾列（兩者都在
-    `move_card_provenance` 之前收）；◷ 在這裡補（`move_card_provenance` 之後才看得到）。只記、不取數、不寫入任何資料表；記錄時間取當下（台北時間由總表換算）。"""
-    page_health.record(
-        st.session_state, slug, list(items) + health.stale_items(display, cards),
-        as_of=status_line.get("as_of"), now=datetime.now(timezone.utc),
-        normal=normal,
-    )
+    `collected`：`collect_page_health` 的回傳；◷ 在這裡補（`move_card_provenance` 之後才看得到）。只記、不取數、不寫入任何資料表；
+    記錄時間取當下（台北時間由總表換算）。收集或記錄出錯 → 這一頁整格改寫成收集失敗（不留上一次的記錄）、寫 log，頁面不受影響。"""
+    now = datetime.now(timezone.utc)
+    error = collected.get("error")
+    if error is None:
+        try:
+            page_health.record(
+                st.session_state, slug, list(collected["items"]) + health.stale_items(display, cards),
+                as_of=status_line.get("as_of"), now=now, normal=collected["normal"],
+            )
+            return
+        except COLLECT_ERRORS as exc:
+            error = type(exc).__name__
+            _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, error)
+    page_health.record_collect_failure(st.session_state, slug, error, now=now)
 
 
 def render_load_failure(page: str, exc: BaseException, mask_error, *, fetch_failed_text, title: str, answers: str,

@@ -121,13 +121,32 @@ def test_上限句與既有第4個勾選框的停用原因同一句():
 # ═══════════════════════ 純函式：每列來源展開 ═══════════════════════
 
 
-def test_滑鼠提示拆段_只拿取得時間與資料日期_其餘原順序原字():
+def test_滑鼠提示拆段_只拿取得時間與資料日期_備註不收資料層原始紀錄():
     tip = "淨值來源：FundClear；取得時間：2026-10-14T01:00:00Z；資料日期：2026-10-10"
     assert live.split_tip(tip) == ("2026-10-14T01:00:00Z", "2026-10-10", "淨值來源：FundClear")
+    # 3-B 稽核回修第 10 條：~~其餘段落原順序原字放進備註~~ → 原因句照收（新設計 H 那一半）；
+    # 「配息依據：」（資料層逐來源取數回報，可能帶上游錯誤原文）與它之後的段落不收（有意識的更正，不是漏刪）。
     reason = "配息來源：合庫配息頁；配息資料未確認完整，配息比不計算；供列的來源（TCB：截斷 3；過濾 0）；配息依據：TCB"
-    assert live.split_tip(reason) == (None, None, reason)
+    assert live.split_tip(reason) == (None, None, reason.split("；配息依據：")[0])
     assert live.split_tip(None) == (None, None, "")
-    assert live.split_tip("取得時間：A；取得時間：B") == ("A", None, "取得時間：B")
+    assert live.split_tip("取得時間：A；取得時間：B") == ("A", None, "")
+
+
+def test_每列來源展開_備註不放算式數值與上游錯誤原文_格內提示一字不動():
+    formula = ("配息來源：MoneyDJ；除息日在 2025-10-10（不含）至 2026-10-10 之間的配息共 12 筆，合計 0.6 USD ÷ 最新淨值 10 USD × 100"
+               "；配息依據：MoneyDJ：HTTP 503 Service Unavailable")
+    assert live.split_tip(formula, ok=True) == (None, None, "配息來源：MoneyDJ")              # 值照出的格：只留來源段落
+    partial = "計價幣別出處（來源自報）：TDCC；取數失敗的來源：MoneyDJ；原因：部分來源取數失敗（MoneyDJ：HTTP 503）"
+    assert live.split_tip(partial, ok=True) == (None, None, "計價幣別出處（來源自報）：TDCC；取數失敗的來源：MoneyDJ")
+    declared = (f"{live.TIP_DIV_CCY_DECLARED}；{live.TIP_NAV_CCY}USD；{live.TIP_RATIO_WINDOW}除息日在 2025-10-10（不含）至 "
+                f"2026-10-10 之間；{live.TIP_CONFLICT_DAYS}2026-08-05；{live.TIP_L2_RECORD}HTTP 503；不改標籤")
+    assert live.split_tip(declared) == (None, None, live.TIP_DIV_CCY_DECLARED)                 # 數值、日期清單、資料層紀錄不收
+    row = _row("A01", cells={"div_ratio_pct": _cell("3.2%", tag="計算", tip=formula)})
+    block = _block([row], keys=("fund_code", "div_ratio_pct"), labels=("基金代碼", "近 12 個月配息佔淨值比"))
+    got = live.source_rows(block, row)
+    assert got == [("近 12 個月配息佔淨值比", "計算", "—", "—", "配息來源：MoneyDJ")]
+    assert row["_cells"]["div_ratio_pct"]["source_tip"] == formula                        # 格內的滑鼠提示照舊整句
+    assert not any(word in "".join(map(str, got)) for word in ("0.6", "÷", "HTTP 503"))
 
 
 def test_取得時間換台北時間_讀不懂或沒有時區原樣():

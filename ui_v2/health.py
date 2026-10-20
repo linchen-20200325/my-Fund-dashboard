@@ -928,10 +928,42 @@ def _walk_nodes(node, block, path, out, private=None):
             _walk_nodes(value, block, f"{path}[{index}]", out, private)
 
 
+def _label_map(node, out=None, prefix=""):
+    """明細表「項目」欄用的名字：`id(dict)` → 名字。一檔的列或群組（帶 `_fund_code` 的 dict）底下的每一格，名字前面接那一檔
+    （群組的標頭字，例「基金 B · 幣別 USD」；沒有標頭字就寫代碼，例「G07」），同一欄多檔出問題各成一列、不去重成一列
+    （3-B 稽核回修第 7 條）。不在任何一檔底下 → 照舊取節點自己的名字。"""
+    if out is None:
+        out = {}
+    if isinstance(node, dict):
+        own = _node_label(node)
+        if isinstance(node.get("_fund_code"), str) and node.get("_fund_code"):
+            prefix = own or node["_fund_code"]
+            out[id(node)] = prefix
+        else:
+            out[id(node)] = f"{prefix} {own}" if prefix and own and own != prefix else (own or prefix)
+        for value in node.values():
+            if isinstance(value, (dict, list, tuple)):
+                _label_map(value, out, prefix)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _label_map(value, out, prefix)
+    return out
+
+
+def _check_mapped(block, path, values) -> None:
+    for value in values:
+        if page_health.is_unmapped(value):
+            raise MissingClassError(f"{(block or {}).get('code')} {path}：資料類查表沒有收錄 {value[len(page_health.UNMAPPED_PREFIX):]!r}")
+
+
 def _unreadable(node, block) -> bool:
     target = node if isinstance(node, dict) else block
     return (target.get("_state") in _UNREADABLE_STATES or target.get("_empty_kind") in _UNREADABLE_EMPTY
             or (target is block and _block_is_error(block)))
+
+
+_ORDER_BLOCK = 10000
+_ORDER_SHADOWED = 5000
 
 
 def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tuple:
@@ -950,19 +982,29 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
     order = {block.get("code"): index for index, block in enumerate(blocks)}
     cards = set(cards)
     items, unresolved = [], []
+    labels = _label_map(display)
 
     def entry(block, node, *, data_class=None, unreadable=None):
         code = (block or {}).get("code")
         core = code in cards
         hit = _unreadable(node, block) if unreadable is None else unreadable
-        return page_health.affected((block or {}).get("title", ""), _node_label(node) if node is not block else "",
-                                    core=core, unreadable=core and hit, data_class=data_class)
+        # 3-B 稽核回修第 4 條：~~`unreadable=core and hit`~~ —— 讀不到照實記，不論是不是核心卡；件數只數核心卡
+        # （`page_health.main_unreadable_cards`）。第 7 條：一檔底下的格，名字前面接那一檔（`_label_map`）。
+        label = "" if node is block else labels.get(id(node), _node_label(node))
+        return page_health.affected((block or {}).get("title", ""), label, core=core, unreadable=hit,
+                                    data_class=data_class)
 
-    def add(kind, key, block, node, *, data_class=None, unreadable=None, retreat=None):
+    seq = {}
+
+    def add(kind, key, block, node, *, data_class=None, unreadable=None, retreat=None, shadowed=False):
+        # 該頁固定順序：塊序在前；同一塊之內（3-B 稽核回修第 5 條）畫面上寫出的成因依收下的先後（＝該塊畫出的次序），
+        # 被蓋住、沒畫出的成因一律排在畫出的之後（`_ORDER_SHADOWED`）。
+        code = (block or {}).get("code")
+        n = seq[code] = seq.get(code, -1) + 1
+        rank = order.get(code, len(blocks)) * _ORDER_BLOCK + (_ORDER_SHADOWED if shadowed else 0) + n
         items.append(page_health.make_item(
             kind, key, [entry(block, node, data_class=data_class, unreadable=unreadable)],
-            lamp=(block or {}).get("_layer") == 1, order=order.get((block or {}).get("code"), len(blocks)),
-            retreat=retreat))
+            lamp=(block or {}).get("_layer") == 1, order=rank, retreat=retreat))
 
     by_code = {block.get("code"): block for block in blocks}
     nodes = []
@@ -997,6 +1039,7 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
         container = event.get("container")
         node = container if isinstance(container, dict) else block
         classes = tuple(event.get("data_classes") or ())
+        _check_mapped(block, event.get("field"), classes)
         if not classes:
             unresolved.append({"code": event.get("code"), "field": event.get("field"), "raw": event.get("raw")})
             classes = (plain.DATA_CLASS_DEFAULT,)
@@ -1004,10 +1047,26 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
                    if event.get("retreat_day") else None)
         for data_class in classes:
             add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, retreat=retreat)
-    for node, block, _path, _private in nodes:
+    for node, block, path, _private in nodes:
         data_class = node.get(page_health.FETCH_CLASS_KEY)
         if isinstance(data_class, str) and data_class and block is not None:
+            _check_mapped(block, path, (data_class,))
             add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, unreadable=True)
+
+    # 被蓋住的成因（3-B 稽核回修第 5 條）：同一塊另一個成因的那一句畫在畫面上，這一個沒畫出來，但它一樣讓這一塊讀不到。
+    # 原文屬「尚未設定」那一族 → 尚未設定、鍵＝尚未設定的對象；否則 → 取數失敗、鍵＝產生處記的資料類。
+    for node, block, path, _private in nodes:
+        for message, data_class in node.get(page_health.SHADOWED_KEY) or ():
+            if block is None:
+                continue
+            _check_mapped(block, path, (data_class,))
+            state = plain.not_configured_state(message)
+            if state:
+                name = not_configured_name(state)
+                add(page_health.KIND_UNCONFIGURED, name, block, node,
+                    data_class=_UNCONFIGURED_CLASS.get(name), unreadable=True, shadowed=True)
+            else:
+                add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, unreadable=True, shadowed=True)
 
     # 資料未備
     for node, block, path, private in nodes:
@@ -1018,6 +1077,7 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
         keys = node.get(page_health.MISSING_KEYS_KEY)
         if not keys:
             raise MissingClassError(f"{block.get('code')} {path}：畫成 ◇，產生處沒有寫資料類，也沒有標為衍生")
+        _check_mapped(block, path, keys)
         for key in keys:
             data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key
             add(page_health.KIND_MISSING, key, block, node, data_class=data_class,
@@ -1053,19 +1113,39 @@ def stale_items(display: dict, cards) -> list:
                                   order=hit[0][0])]
 
 
-def normal_entries(display: dict, cards) -> list:
+_NOT_APPLICABLE_PREFIX = "⬜ "
+
+
+def _value_unreadable(value) -> bool:
+    """一個主值畫成 ⛔／◇ 沒有（讀狀態與畫出來的字；不另判）。"""
+    if not isinstance(value, dict):
+        return False
+    if value.get("_state") in _UNREADABLE_STATES:
+        return True
+    return any(str(value.get(key) or "").startswith((f"{SYMBOL_ERROR} ", f"{SYMBOL_MISSING} "))
+               for key in ("value_text", "text"))
+
+
+def normal_entries(display: dict, cards, data_class=None) -> list:
     """明細表裡「沒有異常的項目」那幾列（總管裁定 (b)：狀態欄寫「—」）：② 核心卡上每一個值與它的來源、新鮮度徽章
-    （`move_card_provenance` 之前讀；來源徽章 → 來源層級欄、新鮮度徽章 → 延遲天數欄），以及市場總覽 `MKT-7` 的每一列。
+    （`move_card_provenance` 之前讀；來源徽章 → 來源層級欄、新鮮度徽章 → 延遲天數欄、「⬜ 不適用」那一句 → 狀態欄），以及市場總覽 `MKT-7` 的每一列。
+    `data_class`：該頁這幾個值共同的資料類（市場總覽＝市場指標；其他頁不給，寫「—」，不猜）。每一筆另記這個值畫成 ⛔／◇ 沒有
+    （`unreadable`），給明細表判斷塊層成因涵蓋哪幾個值（3-B 稽核回修第 6 條）。
     只照抄畫面上已有的字，不另算；有異常的那幾項由 `page_health.detail_rows` 依原因項目列，這裡同一張卡同一個值的那一列會被略過。"""
     out = []
 
-    def entry(title, label, badges):
-        by_kind = {}
+    def entry(title, label, badges, *, unreadable=False):
+        by_kind, status = {}, []
         for badge in badges or ():
             if _is_provenance(badge):
-                by_kind.setdefault(badge["_kind"], []).append(str(badge.get("text", "")))
+                text = str(badge.get("text", ""))
+                if text.startswith(_NOT_APPLICABLE_PREFIX):   # 卡上「⬜ 不適用」那一句是狀態，不是來源或延遲（3-B 稽核回修第 7 條）
+                    status.append(text)
+                else:
+                    by_kind.setdefault(badge["_kind"], []).append(text)
         return page_health.affected(title, label, tier="、".join(by_kind.get("來源", ())) or None,
-                                    delay="、".join(by_kind.get("新鮮度", ())) or None)
+                                    delay="、".join(by_kind.get("新鮮度", ())) or None, data_class=data_class,
+                                    unreadable=unreadable, status="、".join(status) or None)
 
     for block in display.get("blocks") or ():
         if block.get("code") not in cards:
@@ -1074,9 +1154,10 @@ def normal_entries(display: dict, cards) -> list:
         if any(_is_provenance(b) for b in block.get("badges") or ()):
             out.append(entry(title, "", block.get("badges")))
         for value in block.get("main_values") or ():
-            out.append(entry(title, value.get("label", ""), value.get("badges")))
+            out.append(entry(title, value.get("label", ""), value.get("badges"), unreadable=_value_unreadable(value)))
         for group in block.get("fund_groups") or ():
-            out.append(entry(title, group.get("head_text", ""), [group.get("freshness_badge")]))
+            out.append(entry(title, group.get("head_text", ""), [group.get("freshness_badge")],
+                             unreadable=any(_value_unreadable(v) for v in group.get("main_values") or ())))
     for block in display.get("blocks") or ():
         if block.get("code") != "MKT-7":
             continue
@@ -1084,5 +1165,8 @@ def normal_entries(display: dict, cards) -> list:
             out.append(page_health.affected(
                 block.get("title", ""), str(row.get("indicator_key", "")),
                 data_class=plain.TABLE_NAMES["market_indicator"], obs=row.get("obs_text"), fetched=row.get("fetched_text"),
-                delay=row.get("delay_text"), tier=row.get("tier_text")))
+                delay=row.get("delay_text"), tier=row.get("tier_text"),
+                unreadable=any(isinstance(v, str) and (v in (SYMBOL_ERROR, SYMBOL_MISSING)
+                                                       or v.startswith((f"{SYMBOL_ERROR} ", f"{SYMBOL_MISSING} ")))
+                               for k, v in row.items() if not str(k).startswith("_"))))
     return out

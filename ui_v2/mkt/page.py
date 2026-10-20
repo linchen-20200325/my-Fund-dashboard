@@ -715,14 +715,16 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         cards = logic.codes_in_layer(model, 2)
         # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
         # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
-        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
-        health_normal = health.normal_entries(model, cards)
+        # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）；第 7 條：本頁「沒有異常」那幾列資料類寫市場指標。
+        health_cards = sections.health_cards(cards, "mkt")
+        collected = health_view.collect_page_health("mkt", model, failures, _status["fetch_events"], health_cards,
+                                                    normal_class=plain.TABLE_NAMES["market_indicator"])
         provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date"),
             stale=health.has_stale_marker(model, cards),
         )
-        health_view.record_page_health("mkt", model, health_items, cards, health_normal, status_line)
+        health_view.record_page_health("mkt", model, collected, health_cards, status_line)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)

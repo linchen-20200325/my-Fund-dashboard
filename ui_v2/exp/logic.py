@@ -646,6 +646,8 @@ COLUMN_DATA_CLASS = {
     "fund_name": page_health.DATA_CLASSES["fund_profile"], "ccy": page_health.DATA_CLASSES["fund_profile"],
     "inception_on": page_health.DATA_CLASSES["fund_profile"], "dividend_policy": page_health.DATA_CLASSES["fund_profile"],
     "mgmt_fee_rate_pct": page_health.DATA_CLASSES["fund_profile"],
+    # 3-B 稽核回修第 2 條：條件卡選得到的欄位（`FUND_PROFILE_FIELDS`）每一欄都要在表裡；`fetched_at` 是基本資料表的取得時間欄。
+    "fetched_at": page_health.DATA_CLASSES["fund_profile"],
     "nav_date": page_health.DATA_CLASSES["nav"], "nav_orig_ccy": page_health.DATA_CLASSES["nav"],
     "div_ratio_pct": page_health.DATA_CLASSES["dividend"],
 }
@@ -658,13 +660,33 @@ def _tag_missing_cells(cells, nav, ratio) -> None:
     """缺格那一支屬哪一類資料，在產生處記下（畫面字不變；BL-0250 批次 3-B，總管第二輪裁定第 1、3 點）。
     配息比那一格一格兩種成因（分母是淨值、分子是配息比）：缺哪邊記哪邊，兩邊都缺兩類都記。"""
     for column, cell in cells.items():
-        if cell["_state"] != STATE_MISSING or column not in COLUMN_DATA_CLASS:
+        # 3-B 稽核回修第 2 條：原本多一個條件「表裡沒有的欄靜默略過」，已拿掉 —— 改由 `class_of` 記「未收錄」，
+        # 收集那一步報錯、錯誤邊界接住（有意識的更正，不是漏刪；本檔不用刪除線記號，見 `test_exp_logic.py` 那一條守衛）。
+        if cell["_state"] != STATE_MISSING:
             continue
         if column == "div_ratio_pct":
-            page_health.tag_missing(cell, *(([COLUMN_DATA_CLASS["nav_date"]] if not nav else [])
-                                            + ([COLUMN_DATA_CLASS[column]] if ratio is None else [])))
+            page_health.tag_missing(cell, *(([page_health.class_of(COLUMN_DATA_CLASS, "nav_date")] if not nav else [])
+                                            + ([page_health.class_of(COLUMN_DATA_CLASS, column)] if ratio is None else [])))
         else:
-            page_health.tag_missing(cell, COLUMN_DATA_CLASS[column])
+            page_health.tag_missing(cell, page_health.class_of(COLUMN_DATA_CLASS, column))
+
+
+# `compare_tristate` 回的「欄位值缺」那一種原因字首（客戶 2026-10-13 裁示的那一支）。
+UNDET_WHY_MISSING = "資料未備"
+
+
+def judge_keys(reasons) -> tuple:
+    """「篩選判定」那一格無法判定的各原因 → 記在格上的鍵（依原因順序、不重複）。
+
+    - 「資料未備：<欄>」→ 那一欄的資料類（`COLUMN_DATA_CLASS`；表裡沒有 → 「未收錄」標記，見 `page_health.class_of`）；
+    - 「欄位值不是數值：<欄>」「條件數值「…」不是數值：<欄>」→ 鍵「篩選條件」（資料類「使用者設定」）——
+      數值比不出大小是條件與欄位對不上，不是那一欄的資料沒到（3-B 稽核回修第 8 條，比照資產配置使用者參數留空記設定名）。"""
+    keys = []
+    for reason in reasons:
+        why, field = reason.rsplit("：", 1)
+        keys.append(page_health.class_of(COLUMN_DATA_CLASS, field) if why == UNDET_WHY_MISSING
+                    else page_health.SETTING_FILTER_RULES)
+    return tuple(dict.fromkeys(keys))
 
 
 def undet_text(reasons) -> str:
@@ -722,7 +744,7 @@ def compare_tristate(left, op: str, right: str):
     if op not in KNOWN_OPERATORS:
         raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
     if is_missing(left):
-        return None, "資料未備"
+        return None, UNDET_WHY_MISSING
     if op in ("大於", "小於"):
         # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
         if not _finite_number(left):
@@ -1231,7 +1253,7 @@ def _build_exp2(
             cells[JUDGE_COLUMN] = (
                 # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：無法判定的成因是哪幾個欄位缺 → 那幾欄的資料類，在產生處記下。
                 page_health.tag_missing(_value(undet_text(undet[code]), state=STATE_MISSING, label=JUDGE_COLUMN),
-                                        *dict.fromkeys(COLUMN_DATA_CLASS[r.rsplit("：", 1)[1]] for r in undet[code]))
+                                        *judge_keys(undet[code]))
                 if code in undet
                 else _value("", label=JUDGE_COLUMN)
             )

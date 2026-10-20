@@ -74,6 +74,8 @@ TEXT_DETAIL_EMPTY = "這一頁本次尚未開過，沒有明細。"
 TEXT_DETAIL_NONE = "這一頁沒有可列的項目。"
 # 可信度結論燈的說明補一句（線框 6.3「與結論燈的關係」）：總表不影響燈。
 TEXT_LAMP_NOTE = "各頁資料狀態總表不計入本燈"
+# 收集那一步本身出錯（3-B 稽核回修第 3 條；頁面照原樣畫完，只有這一頁的總表記錄改寫成這一句）。總表「狀態」欄與明細都寫這一句。
+TEXT_COLLECT_FAILED = "⛔ 本頁狀態無法彙整（{cls}）"
 
 TAIPEI = timezone(timedelta(hours=8))
 # 跨頁留著的記錄（每頁每次渲染整格覆寫）。⛔ 不得列入 `ui_v2/app_preview.py::_PAGE_STATE_TO_DROP`（同 `plain.RAW_STATE`）。
@@ -104,7 +106,11 @@ DERIVED_REASON_KEY = "_derived_reason"
 # `_current_keys`（資產配置目標對照卡每一列：基準值缺那一邊的資料類）、`_missing_key`（資產配置各類別的缺值理由屬哪一類）、
 # `_data_key`（標的探索接線結果的每一格：產生處寫的資料類）是同一批的同一種標記。
 MARK_KEYS = ("_fetch_classes", "_fetch_class", "_missing_keys", "_derived", "_derived_reason",
-             "_current_keys", "_missing_key", "_data_key")
+             "_current_keys", "_missing_key", "_data_key", "_shadowed")
+
+# 同一塊被兩個成因擋住、畫面只寫得下其中一句時，另一個成因（3-B 稽核回修第 5 條：「成因只記到部分卡」的根因）：
+# `((<失敗原文>, <中文資料類>), ...)`。只記、不上畫面；收集那一步依原文判斷它是「尚未設定」那一族還是取數失敗。
+SHADOWED_KEY = "_shadowed"
 
 # 衍生理由（寫在產生處；字面為本組擬定，不上畫面）。
 DERIVED_LAMP = "結論燈不自己取數，狀態由同頁核心卡推出"
@@ -133,6 +139,24 @@ SETTING_SCENARIO_INPUT = "情境試算金額"
 SETTING_TOLERANCE = "容許帶"
 SETTING_FILTER_RULES = "篩選條件"
 SETTING_KEYS = (SETTING_TARGET_WEIGHTS, SETTING_SCENARIO_INPUT, SETTING_TOLERANCE, SETTING_FILTER_RULES)
+
+
+# 查表記資料類時遇到表裡沒有的鍵（3-B 稽核回修第 2 條）：不在產生處拋 `KeyError`（那會讓整頁崩潰），改記一個「未收錄」標記；
+# 收集那一步（`ui_v2/health.py::collect_page_items`）見到它就報 `MissingClassError`，由各頁的錯誤邊界接住（第 3 條）——
+# 頁面照原樣畫完，總表那一列寫「⛔ 本頁狀態無法彙整（‹例外類別›）」。不猜類別。
+UNMAPPED_PREFIX = "\0未收錄："
+
+
+def class_of(mapping, key) -> str:
+    """查 `mapping[key]`（表鍵 → 中文資料類）；表裡沒有 → 「未收錄」標記（見 `UNMAPPED_PREFIX`），不拋例外、不猜。"""
+    value = mapping.get(key) if isinstance(mapping, dict) else None
+    if isinstance(value, str) and value:
+        return value
+    return f"{UNMAPPED_PREFIX}{key}"
+
+
+def is_unmapped(value) -> bool:
+    return isinstance(value, str) and value.startswith(UNMAPPED_PREFIX)
 
 
 def tag_fetch_class(node, message, data_class: str):
@@ -165,6 +189,19 @@ def tag_missing(node, *keys):
     return node
 
 
+def tag_shadowed(node, message, data_class: str):
+    """在 `node` 上記「這一塊另有一個沒畫出來的成因 `message`（屬 `data_class`）」（就地；回 `node`）。`message` 為空 → 不記。"""
+    if not message or not isinstance(node, dict):
+        return node
+    if not isinstance(data_class, str) or not data_class:
+        raise ValueError("被蓋住的成因要寫資料類（不猜）")
+    pairs = list(node.get(SHADOWED_KEY) or ())
+    if (str(message), data_class) not in pairs:
+        pairs.append((str(message), data_class))
+    node[SHADOWED_KEY] = tuple(pairs)
+    return node
+
+
 def tag_derived(node, reason: str):
     """在 `node` 上記「這一處的狀態是衍生的」與理由（就地；回 `node`）。理由不得為空。"""
     if not isinstance(reason, str) or not reason:
@@ -179,11 +216,13 @@ def tag_derived(node, reason: str):
 
 
 def affected(card: str, item: str = "", *, core: bool = False, unreadable: bool = False, data_class=None,
-             obs=None, fetched=None, delay=None, tier=None) -> dict:
-    """受影響的一張卡或一個項目。`core`：是不是該頁的核心卡；`unreadable`：這一處的值讀不到（⛔ 或 ◇，不是只有比較值 ⬜）。
-    `data_class`：這一處資料的資料類（由產生處寫明；不知道就留 None，明細表寫「—」，不猜）。其餘四個是明細表的來源與延遲欄。"""
+             obs=None, fetched=None, delay=None, tier=None, status=None) -> dict:
+    """受影響的一張卡或一個項目。`core`：是不是該頁的核心卡；`unreadable`：這一處的值讀不到（⛔ 或 ◇，不是只有比較值 ⬜）——
+    不論是不是核心卡都照實記（3-B 稽核回修第 4 條：移到 ④ 的塊讀不到，仍是「有主值讀不到」；件數只數核心卡）。
+    `data_class`：這一處資料的資料類（由產生處寫明；不知道就留 None，明細表寫「—」，不猜）。其餘四個是明細表的來源與延遲欄。
+    `status`：只給「沒有異常的項目」用 —— 卡上畫出的「⬜ 不適用」那一句放狀態欄（3-B 稽核回修第 7 條），其餘留 None（寫「—」）。"""
     return {"card": card, "item": item, "core": bool(core), "unreadable": bool(unreadable), "data_class": data_class,
-            "obs": obs, "fetched": fetched, "delay": delay, "tier": tier}
+            "obs": obs, "fetched": fetched, "delay": delay, "tier": tier, "status": status}
 
 
 def make_item(kind: str, key: str, entries=(), *, lamp: bool = False, order: int = 0, retreat=None) -> dict:
@@ -211,8 +250,10 @@ def main_unreadable_cards(item: dict) -> list:
 
 
 def blocks_main(item: dict) -> bool:
-    """有沒有讓主值讀不到。"""
-    return bool(main_unreadable_cards(item))
+    """有沒有讓值讀不到（不限核心卡；3-B 稽核回修第 4 條）。~~`bool(main_unreadable_cards(item))`~~（只看核心卡）——
+    標的探索的結果清單、資產配置的目標輸入移到 ④ 之後不算卡，只看核心卡會把「讓結果清單讀不到的尚未設定」誤歸成
+    「只影響比較值」（有意識的更正，不是漏刪）。「（N 張卡有值讀不到）」的 N 照舊只數核心卡（`main_unreadable_cards`）。"""
+    return any(entry["unreadable"] for entry in item["affected"])
 
 
 def merge_items(items) -> list:
@@ -335,6 +376,23 @@ def _stamp(now) -> str:
     return str(now)
 
 
+def record_collect_failure(session_state, slug: str, error_class: str, *, now) -> None:
+    """收集那一步出錯時記這一頁（**整格覆寫**，不留上一次的記錄）：總表那一列寫 `TEXT_COLLECT_FAILED`，記錄時間照寫。"""
+    if slug not in PAGE_NAMES:
+        raise ValueError(f"不認得的頁：{slug}")
+    store = dict(session_state.get(STATE_KEY) or {})
+    store[slug] = {"at": _stamp(now), "items": [], "as_of": None, "page_failure": None, "normal": [],
+                   "collect_error": str(error_class)}
+    session_state[STATE_KEY] = store
+
+
+def collect_failure_text(entry):
+    """那一格是收集失敗 → 那一句（總表「狀態」欄、明細都寫它）；不是 → None。"""
+    if entry and entry.get("collect_error"):
+        return TEXT_COLLECT_FAILED.format(cls=entry["collect_error"])
+    return None
+
+
 def record(session_state, slug: str, items, *, as_of, now, page_failure=None, normal=()) -> None:
     """記下這一頁這一次渲染的資料狀態（**整格覆寫**）。`now`：記錄時間（帶時區的 `datetime` 或 ISO 字串），由呼叫端給。
     `normal`：明細表裡沒有異常的那幾項（`affected()` 的清單；總管裁定 (b)）。"""
@@ -366,7 +424,7 @@ def _band(entry) -> int:
     """總表排序（線框 6.3）：有尚未設定或 ⛔ → 只有 ◇ → 只有 ◷ → 沒有異常 → 本次尚未開過。"""
     if entry is None:
         return 4
-    if entry.get("page_failure") is not None:
+    if entry.get("page_failure") is not None or entry.get("collect_error"):
         return 0
     by_kind = counts(entry["items"])
     if by_kind.get(KIND_UNCONFIGURED) or by_kind.get(KIND_FETCH):
@@ -388,6 +446,11 @@ def summary_rows(store) -> list:
         if entry is None:
             rows.append(((4, index), {"slug": slug, "page": PAGE_NAMES[slug], "status": NO_VALUE,
                                       "main": TEXT_NOT_OPENED, "at": NO_VALUE}))
+            continue
+        failed = collect_failure_text(entry)
+        if failed:
+            rows.append(((0, index), {"slug": slug, "page": PAGE_NAMES[slug], "status": failed, "main": NO_VALUE,
+                                      "at": recorded_time_text(entry["at"])}))
             continue
         by_kind = counts(entry["items"])
         if entry.get("page_failure") is not None:
@@ -417,26 +480,63 @@ def _cell(value) -> str:
 
 def detail_rows(entry, normal=None) -> list:
     """「看哪一頁的明細」那一張表（總管裁定 (b)）：一列＝「一項 × 受影響的卡或項目」；沒有異常的項目（`normal`，`affected()` 的清單）
-    也列，狀態欄寫「—」（不寫「正常」）。欄序 `DETAIL_LABELS`。沒開過的頁 → 空清單。"""
-    if entry is None:
+    也列，狀態欄寫「—」（不寫「正常」；卡上畫出「⬜ 不適用」那一句的，狀態欄照抄那一句）。欄序 `DETAIL_LABELS`。
+    沒開過的頁、收集失敗的頁 → 空清單（收集失敗那一句由呼叫端照 `collect_failure_text` 寫）。
+
+    3-B 稽核回修第 6、7 條：
+    - 塊層的成因（項目欄為空的那一筆）涵蓋該卡底下**畫成 ⛔／◇、又沒有被別的項目點名**的各值：每一個值各列一列、狀態寫這個成因，
+      不另列一列空項目名；該卡底下一個這樣的值都沒有時，才照舊列空項目名那一列。
+    - 有異常的項目與「沒有異常」那幾列講的是同一個值（項目欄相同，或是那一檔底下的某一格）→ 不另列「沒有異常」那一列，
+      它的觀測日、取得時間、延遲、來源層級補進有異常的那幾列（只補空格），狀態欄與延遲欄不會一列寫「—」一列寫 ◇。"""
+    if entry is None or entry.get("collect_error"):
         return []
     if normal is None:
         normal = entry.get("normal") or ()
+    normal = [dict(e) for e in normal or ()]
     out = []
-    flagged = set()
     if entry.get("page_failure") is not None:   # 整頁載不出來：只有這一列（頁首也只寫這一句）
         out.append((_cell(entry["page_failure"]), TEXT_WHOLE_PAGE, f"{SYMBOL_ERROR} {KIND_FETCH}", NO_VALUE, NO_VALUE,
                     NO_VALUE, NO_VALUE))
+    named = [(e["card"], e["item"]) for item in entry["items"] for e in item["affected"] if e["item"]]
+
+    def same_value(card, label, other_card, other_label):
+        return card == other_card and (other_label == label or other_label.startswith(label + " "))
+
+    def owner(e):
+        """這一筆有異常的項目講的是哪一列「沒有異常」的值（同卡、項目相同或屬那一檔）；沒有 → None。"""
+        return next((n for n in normal if n["item"] and same_value(n["card"], n["item"], e["card"], e["item"])), None)
+
+    def named_elsewhere(n):
+        return any(same_value(n["card"], n["item"], card, label) for card, label in named)
+
+    covered = set()
+
+    def row(e, status, base=None):
+        def pick(key):
+            return e.get(key) if e.get(key) not in (None, "") else (base or {}).get(key)
+        return (_cell(e["data_class"]), _join(e), status, _cell(pick("obs")), _cell(pick("fetched")),
+                _cell(pick("delay")), _cell(pick("tier")))
+
     for item in entry["items"]:
+        status = _status_cell(item)
         for e in item["affected"]:
-            flagged.add((e["card"], e["item"]))
-            out.append((_cell(e["data_class"]), _join(e), _status_cell(item), _cell(e["obs"]), _cell(e["fetched"]),
-                        _cell(e["delay"]), _cell(e["tier"])))
-    for e in normal or ():
-        if (e["card"], e["item"]) in flagged:
+            if not e["item"]:
+                targets = [n for n in normal if n["card"] == e["card"] and n["item"] and n.get("unreadable")
+                           and not named_elsewhere(n)]
+                if targets:
+                    for n in targets:
+                        covered.add((n["card"], n["item"]))
+                        out.append(row(dict(n, data_class=e["data_class"]), status))
+                    continue
+            base = owner(e)
+            if base is not None:
+                covered.add((base["card"], base["item"]))
+            out.append(row(e, status, base))
+    flagged = {(e["card"], e["item"]) for item in entry["items"] for e in item["affected"]}
+    for e in normal:
+        if (e["card"], e["item"]) in flagged or (e["card"], e["item"]) in covered:
             continue
-        out.append((_cell(e["data_class"]), _join(e), NO_VALUE, _cell(e["obs"]), _cell(e["fetched"]),
-                    _cell(e["delay"]), _cell(e["tier"])))
+        out.append(row(e, _cell(e.get("status"))))
     return out
 
 

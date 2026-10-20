@@ -242,7 +242,8 @@ def test_同順位比到第三步_依塊序_由塊序產生():
     _d, _f, _s, items, _u = _pipeline(model, "mkt")
     orders = {(i["kind"], i["key"]): i["order"] for i in items}
     codes = [b["code"] for b in model["blocks"]]
-    assert orders[("取數失敗", "市場指標")] == codes.index("MKT-1")
+    # 3-B 稽核回修第 5 條：順序＝塊序 × `_ORDER_BLOCK` ＋ 同塊之內的先後（被蓋住的成因再加 `_ORDER_SHADOWED`）；塊序仍在最前。
+    assert orders[("取數失敗", "市場指標")] // health._ORDER_BLOCK == codes.index("MKT-1")
     a = page_health.make_item("資料未備", "甲", [page_health.affected("景氣位置卡", core=True, unreadable=True)],
                               order=codes.index("MKT-2"))
     b = page_health.make_item("資料未備", "乙", [page_health.affected("風險情緒卡", core=True, unreadable=True)],

@@ -117,6 +117,19 @@ def relayer(model: dict, page: str) -> list:
     return moved
 
 
+# 各頁資料狀態總表（`SET-8`）裡的「核心卡」：改層之後仍在層 2、而且在 ② 畫成一張卡的塊（3-B 稽核回修第 4 條）。
+# 改層前的三張核心卡照舊用於頁上的徽章搬移與資料狀態行（那兩步一字不動）；本表只給總表的件數與「（N 張卡有值讀不到）」用。
+# `ALO-3` 在 ② 只畫一枚「開始試算」入口、不是一張卡（線框第六版 5.2 那一例「持倉取數失敗（1 張卡有值讀不到）」）。
+HEALTH_ENTRY_ONLY = {"alo": (ALO_SCENARIO_CODE,)}
+
+
+def health_cards(codes, page: str) -> list:
+    """`codes`：改層前的層 2 塊代號（各頁 `logic.codes_in_layer(model, 2)`）→ 總表用的核心卡（順序不變；純函式，不改模型）。"""
+    moved = RELAYER.get(page, {})
+    entries = HEALTH_ENTRY_ONLY.get(page, ())
+    return [code for code in codes if moved.get(code, 2) == 2 and code not in entries]
+
+
 def _item(symbol: str, text: str, tone: str) -> dict:
     return {"symbol": symbol, "text": text, "_tone": tone}
 

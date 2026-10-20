@@ -245,7 +245,7 @@ def test_缺服務帳戶_一般畫面那一句換字_訊息原文的塊與底線
 
 # ═══════════════════════ U7：SET-3／SET-6／SET-7（走正式組裝，env 替身同 test_set_live_logic） ═══════════════════════
 
-from test_set_live_logic import R, _b, _page, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
+from test_set_live_logic import R, _b, _page, _stub_fetch, _vix, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
 
 
 def _demo():
@@ -264,8 +264,10 @@ def test_U7a_SET3表頭與列上用中文_示範模式照舊英文(env):
     assert any(r["kind_text"] in set_live.KIND_NAMES for r in demo["_rows"])        # 示範模式照舊英文 value_kind
 
 
-def test_U7c_SET6不列紀錄編號欄_結果中文_原值在進階診斷(env):
+def test_U7c_SET6不列紀錄編號欄_結果中文_原值在進階診斷(env, monkeypatch):
     source = pytest.importorskip("ui_v2.set.source")
+    # 3-B 稽核回修第 12 條：取數換成測試替身（同 `test_set_live_logic` 的 `_stub_fetch`），不再經 yfinance 真的連網；production 一行未動。
+    _stub_fetch(monkeypatch, series=_vix())
     source.refetch("市場指標")
     _data, model = _page()
     set6 = _b(model, "SET-6")
@@ -294,8 +296,10 @@ def test_U7d_SET7留在原位_改標題_預設收合_內容不改(env):
     assert set7["_rows"] == same_data["_rows"]
 
 
-def test_U7b_SET2結果不寫英文原值_訊息原文照印(env):
+def test_U7b_SET2結果不寫英文原值_訊息原文照印(env, monkeypatch):
     source = pytest.importorskip("ui_v2.set.source")
+    # 3-B 稽核回修第 12 條：取數換成測試替身，不再經 yfinance 真的連網（同上）。
+    _stub_fetch(monkeypatch, series=_vix())
     source.refetch("市場指標")
     _data, model = _page()
     for row in _b(model, "SET-2")["_rows"]:

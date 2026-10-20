@@ -1000,14 +1000,15 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         stale = health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)
         # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
         # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
-        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
-        health_normal = health.normal_entries(model, cards)
+        # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）。
+        health_cards = sections.health_cards(cards, "hld")
+        collected = health_view.collect_page_health("hld", model, failures, _status["fetch_events"], health_cards)
         provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
         stale = stale or health.has_stale_marker(model, cards)
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
         )
-        health_view.record_page_health("hld", model, health_items, cards, health_normal, status_line)
+        health_view.record_page_health("hld", model, collected, health_cards, status_line)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
         # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
         sections.mark_hld1_rows(model)

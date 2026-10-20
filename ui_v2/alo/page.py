@@ -681,12 +681,15 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         cards = logic.codes_in_layer(model, 2)
         # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
         # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。本頁沒有核心卡徽章搬移那一步。
-        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
+        # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）；第 4 條：總表的核心卡取改層之後、
+        # 在 ② 畫成卡的塊（`ALO-1` 移到 ④；`ALO-3` 在 ② 只是一枚入口）。頁上的資料狀態行照舊以改層前的層 2 為對象（一字不動）。
+        health_cards = sections.health_cards(cards, "alo")
+        collected = health_view.collect_page_health("alo", model, failures, _status["fetch_events"], health_cards)
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date"),
             stale=health.has_stale_marker(model, cards), missing=health.has_missing_marker(model),
         )
-        health_view.record_page_health("alo", model, health_items, cards, health.normal_entries(model, cards), status_line)
+        health_view.record_page_health("alo", model, collected, health_cards, status_line)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")

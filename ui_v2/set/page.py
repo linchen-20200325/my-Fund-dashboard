@@ -523,6 +523,10 @@ def _render_page_health(pages=None) -> None:
                 _lines([page_health.TEXT_DETAIL_EMPTY], "set-line")
                 return
             _lines([page_health.TEXT_RECORDED_AT.format(at=page_health.recorded_time_text(entry["at"]))], "set-line")
+            failed = page_health.collect_failure_text(entry)
+            if failed:   # 3-B 稽核回修第 3 條：收集失敗 → 明細寫同一句（總表那一列也是這一句）
+                _lines([failed], "set-line")
+                return
             detail = page_health.detail_rows(entry)
             if detail:
                 _html(_table(page_health.DETAIL_LABELS, [[_cell(c) for c in row] for row in detail]))

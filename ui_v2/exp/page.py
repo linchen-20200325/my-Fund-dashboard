@@ -419,11 +419,12 @@ def _render_exp2(block: dict, *, scenario: str, plain_mode: bool = False) -> Non
 _PICK_KEYS = {logic.GROUP_COMPARE: "exp2live_pick_compare", logic.GROUP_WATCH: "exp2live_pick_watch"}
 
 
-def _on_pick(group: str, options: tuple) -> None:
-    """多選清單改了 → 寫回 `logic.checked_key` 那一份勾選狀態（存檔與 `EXP-3`／`EXP-5` 照舊只讀那一份）。"""
+def _on_pick(group: str, shown: tuple) -> None:
+    """多選清單改了 → 寫回 `logic.checked_key` 那一份勾選狀態（存檔與 `EXP-3`／`EXP-5` 照舊只讀那一份）。
+    `shown`：這一次畫進清單的已選項；沒畫進清單的已選檔（看不到的、或超過上限沒放進去的）原樣留著（3-B 稽核回修第 1 條）。"""
     key = logic.checked_key(group, live.LIVE_SCENARIO)
     st.session_state[key] = live.merge_picks(
-        st.session_state.get(key) or (), options, st.session_state.get(_PICK_KEYS[group]) or ())
+        st.session_state.get(key) or (), shown, st.session_state.get(_PICK_KEYS[group]) or ())
 
 
 def _row_source_html(block: dict, row: dict, colspan: int) -> str:
@@ -454,8 +455,9 @@ def _render_picks(block: dict) -> None:
     for group in live.PICK_GROUPS:
         key = _PICK_KEYS[group]
         # 畫之前先把勾選狀態放進輸入欄（只放本次選項裡的檔）：換頁回來或條件改了之後，輸入欄與勾選狀態一致。
-        st.session_state[key] = live.shown_picks(
-            st.session_state.get(logic.checked_key(group, live.LIVE_SCENARIO)) or (), options)
+        shown = live.shown_picks(
+            st.session_state.get(logic.checked_key(group, live.LIVE_SCENARIO)) or (), options, live.PICK_CAPS[group])
+        st.session_state[key] = shown
         st.multiselect(
             live.PICK_LABELS[group],
             options=list(options),
@@ -464,7 +466,7 @@ def _render_picks(block: dict) -> None:
             max_selections=live.PICK_CAPS[group],
             placeholder=live.PICK_PLACEHOLDER,
             on_change=_on_pick,
-            args=(group, options),
+            args=(group, tuple(shown)),
         )
         for line in live.pick_captions(group, len(st.session_state.get(key) or ())):
             st.caption(line)
@@ -1147,11 +1149,13 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     cards = logic.codes_in_layer(model, 2)
     # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
     # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
-    health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
-    health_normal = health.normal_entries(model, cards)
+    # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）；第 4 條：總表的核心卡取改層之後的層 2
+    # （`EXP-2`、`EXP-3` 移到 ④，不算卡）。頁上的徽章搬移與資料狀態行照舊以改層前的三張卡為對象（一字不動）。
+    health_cards = sections.health_cards(cards, "exp")
+    collected = health_view.collect_page_health("exp", model, failures, _status["fetch_events"], health_cards)
     provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
     status_line = health.status_line(model, failures, as_of=_as_of(model), stale=health.has_stale_marker(model, cards))
-    health_view.record_page_health("exp", model, health_items, cards, health_normal, status_line)
+    health_view.record_page_health("exp", model, collected, health_cards, status_line)
     # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`EXP-2` 移到層 3、`EXP-3` 移到層 4（預設收合），② 只剩 `EXP-1`；
     # 在上面的徽章搬移與資料狀態行之後才改層 —— 那兩步照舊以改層前的三張核心卡為對象，行為不變（`ui_v2/sections.py`）。
     sections.relayer(model, "exp")
