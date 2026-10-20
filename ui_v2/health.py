@@ -1132,9 +1132,9 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, tra
             # 一格兩種成因（裁定第 3 點）只略過設定那一個鍵，基準值缺的那一類照算。
             if key in page_health.SETTING_KEYS:
                 continue
-            data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key
-            add(page_health.KIND_MISSING, key, block, node, data_class=data_class,
-                unreadable=True)
+            # ~~`data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key`~~：
+            # 設定鍵已在上一行略過，那一支成了死分支（同批獨立稽核可選 (c)；行為不變，有意識的更正，不是漏刪）。
+            add(page_health.KIND_MISSING, key, block, node, data_class=key, unreadable=True)
     return page_health.merge_items(items), unresolved
 
 
