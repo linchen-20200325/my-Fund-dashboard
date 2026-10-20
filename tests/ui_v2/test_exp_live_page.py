@@ -392,24 +392,42 @@ def _wired_app(tmp_path) -> pathlib.Path:
     return app
 
 
+# BL-0250 批次 3-B（44 第七節第三小節之十三其二；有意識的更正，不是漏刪）：正式模式結果清單每一列下方多一列
+# `<tr><td colspan=表頭數><details class="exp-rowsrc">…小表…</details></td></tr>`（「來源與取得時間」列展開，窄例外）。
+# ~~舊查法 `t.querySelectorAll('tbody tr')` 把列展開那一列與它裡面那張小表的每一列都當成資料列~~（取 `cells[1]` 就炸），
+# ~~`thead th`／`td table` 也會掃進小表~~。改為：只看外層表的「直接」表頭與 tbody 直接子列，逐列分成
+# 「資料列」與「列展開列」；任何兩者都不是的列計入 `odd_rows`（必須為 0）——新增欄位、第二種插入列都會在這裡轉紅。
+# 守的四件事照舊：代碼欄第一欄、title 已 escape、來源標示存在、沒有新增欄位。
 _EXP2_DOM_JS = """() => {
   const tables = [...document.querySelectorAll('table.exp-table')]
     .filter(t => t.querySelector('th') && t.querySelector('th').textContent === CODE_HEAD);
   const t = tables[0];
-  const rows = t ? [...t.querySelectorAll('tbody tr')] : [];
+  const heads = t && t.tHead ? [...t.tHead.rows[0].cells].map(e => e.textContent) : [];
+  const direct = t && t.tBodies[0] ? [...t.tBodies[0].rows] : [];
+  const isRowSrc = r => r.cells.length === 1 && r.cells[0].colSpan === heads.length
+    && [...r.cells[0].children].every(c => c.matches('details.exp-rowsrc') || (c.tagName === 'DIV' && c.textContent === WATCHED));
+  const rows = direct.filter(r => !isRowSrc(r) && r.cells.length === heads.length);
+  const rowsrc = direct.filter(isRowSrc);
+  const dataCells = rows.flatMap(r => [...r.cells]);
+  const rowsrcTables = t ? [...t.querySelectorAll('details.exp-rowsrc table')] : [];
   return {
     tables: tables.length,
-    heads: t ? [...t.querySelectorAll('thead th')].map(e => e.textContent) : [],
+    heads: heads,
     first: rows.map(r => r.cells[0].textContent),
     widths: rows.map(r => r.cells.length),
-    titles: t ? [...t.querySelectorAll('td[title]')].map(e => e.getAttribute('title')) : [],
+    odd_rows: direct.length - rows.length - rowsrc.length,
+    rowsrc_rows: rowsrc.length,
+    rowsrc_after_data: rowsrc.every(r => r.previousElementSibling && rows.includes(r.previousElementSibling)),
+    titles: dataCells.filter(e => e.hasAttribute('title')).map(e => e.getAttribute('title')),
     scripts: t ? t.querySelectorAll('script').length : -1,
     bold: t ? t.querySelectorAll('td b').length : -1,
-    src: t ? t.querySelectorAll('.exp-src').length : 0,
+    src: dataCells.reduce((n, e) => n + e.querySelectorAll('.exp-src').length, 0),
     names: rows.map(r => r.cells[1].textContent),
     injected_headings: [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
       .filter(h => h.textContent.includes('注入標題')).length,
-    tables_in_cells: t ? t.querySelectorAll('td table').length : -1,
+    tables_in_cells: t ? [...t.querySelectorAll('td table')].filter(x => !rowsrcTables.includes(x)).length : -1,
+    rowsrc_details: t ? t.querySelectorAll('details.exp-rowsrc').length : -1,
+    rowsrc_table_heads: rowsrcTables.map(x => x.tHead ? [...x.tHead.rows[0].cells].map(e => e.textContent) : []),
     scroll_width: t ? t.closest('.exp-scroll').scrollWidth : -1,
     client_width: t ? t.closest('.exp-scroll').clientWidth : -1,
     src_max_width: t ? Math.max(...[...t.querySelectorAll('.exp-src')].map(e => e.getBoundingClientRect().width)) : -1,
@@ -436,17 +454,24 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 result_box.locator("summary").first.click(timeout=60000)
                 result_box.locator("table.exp-table").first.wait_for(state="visible", timeout=60000)
                 tab.wait_for_timeout(1500)
-                dom = tab.evaluate(_EXP2_DOM_JS.replace("CODE_HEAD", repr(_CODE_HEAD)))
+                dom = tab.evaluate(_EXP2_DOM_JS.replace("CODE_HEAD", repr(_CODE_HEAD))
+                                   .replace("WATCHED", repr(logic.TEXT_ALREADY_WATCHED)))
                 assert dom["tables"] == 1, dom                                   # EXP-2 那一張（帶代碼欄）
                 assert dom["heads"] == [_CODE_HEAD] + [plain.key_name(logic.COLUMN_LABELS[c]) for c in logic.COLUMN_ORDER]
                 assert dom["first"] == sorted(WF.CODES)                          # 代碼欄是第一欄
                 assert dom["widths"] == [len(dom["heads"])] * len(WF.CODES)     # 每列格數＝表頭數，沒有新增欄
+                # 3-B：tbody 直接子列只准兩種 —— 資料列（格數＝表頭數）與緊跟在資料列後面的列展開列（一格、跨滿表頭數）。
+                assert dom["odd_rows"] == 0, dom
+                assert 1 <= dom["rowsrc_rows"] <= len(WF.CODES) and dom["rowsrc_after_data"], dom
                 assert any(t.startswith('淨值來源：Evil"Src<b>') for t in dom["titles"]), dom["titles"]
                 assert dom["scripts"] == 0 and dom["bold"] == 0                  # 字串沒有變成標籤
                 assert dom["src"] >= 8
                 assert any(n.startswith(WF.XSS_NAME) for n in dom["names"])
                 # Q M1：錯誤原文裡的 `## ` 不得變成標題、`|` 不得變成另一張表。
                 assert dom["injected_headings"] == 0 and dom["tables_in_cells"] == 0
+                # 3-B 窄例外：格內唯一允許的表是列展開裡那張小表 —— 每枚列展開恰好一張，表頭逐字是那五欄。
+                assert len(dom["rowsrc_table_heads"]) == dom["rowsrc_details"] == dom["rowsrc_rows"], dom
+                assert all(h == list(live.ROW_SOURCE_LABELS) for h in dom["rowsrc_table_heads"]), dom
                 # Q O1：1600 寬桌機，候選表不需要橫捲（`.exp-src` 限寬＋省略號，全文在 tooltip）。
                 assert dom["scroll_width"] <= dom["client_width"] + 1, (dom["scroll_width"], dom["client_width"])
                 assert dom["src_max_width"] <= dom["src_limit_px"] + 1
