@@ -1466,8 +1466,11 @@ def taipei_time_text(raw) -> str:
 #   （計價幣別未確定、幣別不同、截斷計數、算式、資料層紀錄、上游錯誤原文）一律不收；它們照舊在格內的滑鼠提示裡，資訊沒有遺失。
 # ~~第一輪回修的規則：值照出的格只收來源段落、其餘格的原因句照收、資料層紀錄與數值清單不收~~（有意識的更正，不是漏刪；
 # 決策者 AI 總管；第二輪稽核指出那一版仍放進了判定句與計數句，超出「僅限來源資訊」）。
+# 來源一致性句（3-B 複驗應修 2；線框第六版 4.4 與第 7 節第 10 列「來源一致性 → 每列展開」）：各來源各自宣告了什麼，算來源資訊。
+# 只有這一種：資料層 `exp_profile` 幣別不一致那一句（字面鏡像，測試比對真身）；「計價幣別未確定…不取數」這類判定句不算。
+SOURCE_CONSISTENCY_HEAD = "原因：各來源幣別不一致（"
 SOURCE_NOTE_PREFIXES = ("淨值來源：", "配息來源：", "出處：", "計價幣別出處（來源自報）：", "取數失敗的來源：",
-                        TIP_DIV_CCY_DECLARED)
+                        TIP_DIV_CCY_DECLARED, SOURCE_CONSISTENCY_HEAD)
 H_REASON_COLUMN = "div_ratio_pct"
 
 
@@ -1501,6 +1504,8 @@ def source_rows(block: dict, row: dict) -> list:
             continue
         reason = str(cell.get("text") or "") if key == H_REASON_COLUMN and cell.get("_state") != logic.STATE_OK else None
         fetched, day, note = split_tip(tip, reason_in=reason)
+        if not tag and not fetched and not day and not note:
+            continue   # 四項全空不列（`44` 之十三其二第 2 條：一格來源資訊都沒有的欄不列；3-B 複驗應修 1）
         out.append((
             labels.get(key, key),
             tag or ROW_SOURCE_NONE,

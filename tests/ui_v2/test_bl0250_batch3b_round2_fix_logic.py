@@ -107,7 +107,9 @@ def _box_ids(display):
         node = stack.pop()
         if isinstance(node, dict):
             texts = [v for k, v in node.items() if k in ("text", "value_text") and isinstance(v, str)]
-            if texts and all(t.startswith("⬜") for t in texts):
+            # 複驗可選 4：混合欄位也算（一欄 ⬜、另一欄不是 ◇／⛔ 起頭）；判斷在這裡另寫，不共用產品碼
+            if (texts and any(t[:1] == "⬜" for t in texts)
+                    and not any(t[:2] in ("◇ ", "⛔ ") for t in texts)):
                 out.add(id(node))
             stack.extend(v for v in node.values() if isinstance(v, (dict, list, tuple)))
         elif isinstance(node, (list, tuple)):
@@ -233,3 +235,65 @@ def test_可選5_排序照舊_沒開過的頁排最後():
                      "normal": []}}
     rows = PH.summary_rows(store)
     assert [r["slug"] for r in rows] == ["mkt", "hld", "exp", "alo"] and rows[1]["main"] == PH.TEXT_NOT_OPENED
+
+
+# ═══════════════════════ 複驗應修 1～3：每列來源展開 ═══════════════════════
+
+
+def _source_rows_by_code(monkeypatch, script):
+    from ui_v2.exp import live
+    seen = {}
+    orig = live.source_rows
+
+    def spy(block, row):
+        out = orig(block, row)
+        seen[row.get("_fund_code")] = out
+        return out
+
+    monkeypatch.setattr(live, "source_rows", spy)
+    _app(script)
+    return seen
+
+
+def test_複驗1_四項全空的欄不列_F06的計價幣別以外三欄不列(monkeypatch):
+    rows = _source_rows_by_code(monkeypatch, SCAN.EXP["正常"])["F06"]
+    fields = [r[0] for r in rows]
+    assert "最近淨值日" not in fields and "最近淨值（原幣）" not in fields      # 只有判定句、沒有來源資訊 → 不列
+    assert not any(r[1:] == ("—", "—", "—", "—") for r in rows)
+
+
+def test_複驗2_來源一致性句_收回列展開(monkeypatch):
+    rows = _source_rows_by_code(monkeypatch, SCAN.EXP["正常"])["F06"]
+    ccy = next(r for r in rows if r[0] == "計價幣別")
+    assert ccy[4].startswith("原因：各來源幣別不一致（") and "宣告" in ccy[4]
+
+
+def test_複驗2_來源一致性句的字面與資料層真身相同():
+    from ui_v2.exp import live
+    src = (_ROOT / "services" / "v2_tables" / "exp_profile.py").read_text(encoding="utf-8")
+    head = live.SOURCE_CONSISTENCY_HEAD
+    assert head.startswith("原因：") and f'reason=f"{head[len("原因："):]}' in src
+
+
+def test_複驗2與3_判定句在配息比以外不收_配息比格內原因句不論內容都收():
+    from ui_v2.exp import live
+    verdict = "淨值來源：MoneyDJ；計價幣別未確定（基本資料各來源幣別缺或不一致），淨值與配息比不取數"
+    assert live.split_tip(verdict) == (None, None, "淨值來源：MoneyDJ")
+    cell = "◇ 資料未備：計價幣別未確定（基本資料各來源幣別缺或不一致），淨值與配息比不取數"
+    assert live.split_tip(verdict, reason_in=cell) == (None, None, verdict)
+    partial = "出處：TDCC；原因：部分來源取數失敗，以其餘一致的來源為準（MoneyDJ：HTTP 503）"
+    assert live.split_tip(partial) == (None, None, "出處：TDCC")                   # 不是來源一致性句
+
+
+def test_複驗可選4_混合欄位_一欄方塊另一欄不是禁止或資料未備_不計數():
+    node = {"label": "篩選判定", "_state": "資料未備", "value_text": "⬜ 無法判定（資料未備：ccy）", "text": "A01",
+            PH.MISSING_KEYS_KEY: ("基金基本資料",)}
+    display = {"blocks": [{"code": "EXP-2", "title": "候選清單卡", "_layer": 2, "_rows": [node]}]}
+    items, _u = health.collect_page_items(display, {}, (), ["EXP-2"])
+    assert items == []
+    rows = health.boxed_entries(display)
+    assert [(r["card"], r["status"]) for r in rows] == [("候選清單卡", "⬜ 無法判定（資料未備：ccy）")]
+    mixed_missing = dict(node, text="◇ 資料未備")                                   # 另一欄是 ◇ → 照計
+    display["blocks"][0]["_rows"] = [mixed_missing]
+    items, _u = health.collect_page_items(display, {}, (), ["EXP-2"])
+    assert [i["kind"] for i in items] == [PH.KIND_MISSING]

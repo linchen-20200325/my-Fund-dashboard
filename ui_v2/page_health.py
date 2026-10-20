@@ -461,7 +461,8 @@ def recorded_time_text(stamp) -> str:
 
 def _band(entry) -> int:
     """總表排序（線框 6.3）：有尚未設定或 ⛔ → 只有 ◇ → 只有 ◷ → 沒有異常 → 本次尚未開過。"""
-    if entry.get("page_failure") is not None or entry.get("collect_error"):
+    # 收集失敗那一格在 `summary_rows` 先處理掉、不會走到這裡（3-B 複驗可選 3：拿掉那一支死碼）。
+    if entry.get("page_failure") is not None:
         return 0
     by_kind = counts(entry["items"])
     if by_kind.get(KIND_UNCONFIGURED) or by_kind.get(KIND_FETCH):
