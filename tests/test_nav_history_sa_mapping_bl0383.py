@@ -119,18 +119,27 @@ def real_st_secrets(monkeypatch, tmp_path):
 def test_real_secrets_loader_restores_os_environ(tmp_path):
     import os
 
-    guard_key = "BL0383_ENV_GUARD_FAKE"  # 專用 key：保證「原本不存在」這條路徑一定被走到
-    assert guard_key not in os.environ
-    env_before = dict(os.environ)
-    with pytest.MonkeyPatch.context() as mp:
-        _make_secrets_loader(mp, tmp_path)(f'{guard_key} = "FAKE"\n' + _TOML)
-        # 前提真的成立：Streamlit 解析確實把頂層字串寫進 os.environ（table 不會）
-        assert os.environ.get(guard_key) == "FAKE"
-        assert os.environ.get("FRED_API_KEY") == "FAKE"
-        assert "google_service_account" not in os.environ
-        mp.undo()
-        assert dict(os.environ) == env_before, "解析 secrets 寫進 os.environ 的 key 未還原"
-    assert dict(os.environ) == env_before
+    guard_key = "BL0383_ENV_GUARD_FAKE"      # 專用 key：保證「原本不存在」這條路徑一定被走到
+    preset_key = "BL0383_ENV_GUARD_PRESET"   # 專用 key：保證「原本存在 → 還原原值」這條路徑一定被走到
+    assert guard_key not in os.environ and preset_key not in os.environ
+    # 原值用 try/finally 設定與清除（不經守衛自己的 monkeypatch，否則 undo 會替還原邏輯代勞、守不到）
+    os.environ[preset_key] = "ORIG"
+    try:
+        env_before = dict(os.environ)
+        with pytest.MonkeyPatch.context() as mp:
+            _make_secrets_loader(mp, tmp_path)(f'{guard_key} = "FAKE"\n{preset_key} = "FAKE"\n' + _TOML)
+            # 前提真的成立：Streamlit 解析確實把頂層字串寫進 os.environ（table 不會），且會蓋掉原值
+            assert os.environ.get(guard_key) == "FAKE"
+            assert os.environ.get(preset_key) == "FAKE"
+            assert os.environ.get("FRED_API_KEY") == "FAKE"
+            assert "google_service_account" not in os.environ
+            mp.undo()
+            assert os.environ.get(preset_key) == "ORIG", "原本存在的 key 未還原成原值"
+            assert dict(os.environ) == env_before, "解析 secrets 寫進 os.environ 的 key 未還原"
+        assert dict(os.environ) == env_before
+    finally:
+        os.environ.pop(preset_key, None)
+    assert preset_key not in os.environ
 
 
 # ── 1. dict + client_email → 原樣（相容不變）──────────────────────────
