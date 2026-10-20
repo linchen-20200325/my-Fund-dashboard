@@ -187,6 +187,12 @@ def _sa_present() -> bool:
     在 runtime 回傳 `streamlit.runtime.secrets.AttrDict` —— 它繼承 `collections.abc.Mapping`、
     **不是** `dict` 子類;舊判斷 `isinstance(_sa, dict)` 因此恆 False,選股池誤判「雲端來源尚未設定」。
     改認 `Mapping`(dict 仍是 Mapping,相容不變)。
+
+    ⚠️ 與 `repositories/policy/_helpers.py::_coerce_sa_credentials` 的取捨相反:該處註解
+    刻意**不用** `isinstance(..., Mapping)`(AttrDict 是否為 Mapping 子類無公開契約),一律
+    `dict(...)`。此處仍採 Mapping,理由:requirements 釘 `streamlit<1.60`(1.59.2 實測
+    AttrDict 直接繼承 `collections.abc.Mapping`),且 `tests/test_pool_sa_present_mapping_bl0383.py`
+    斷言真 st.secrets 解析出的 AttrDict 是 Mapping 而非 dict —— 升版若改變此點,該測試會轉紅。
     """
     from collections.abc import Mapping
     from infra.config import get_secret
