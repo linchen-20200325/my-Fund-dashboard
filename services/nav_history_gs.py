@@ -124,10 +124,28 @@ class NavHistoryError(Exception):
 
 
 def _sa_to_dict(v: Any) -> dict:
-    """Service Account secret 正規化:dict 原樣;**JSON 字串 → dict**(NAS/cron 的
-    env fallback 只能給字串,v19.363 ③);解析失敗 / 其他型別 → {}(視同缺)。"""
+    """Service Account secret 正規化:dict 原樣;其他 Mapping → `dict(v)`;**JSON 字串 → dict**
+    (NAS/cron 的 env fallback 只能給字串,v19.363 ③);解析失敗 / 其他型別 → {}(視同缺)。
+
+    BL-0383(2026-10-20):Streamlit `st.secrets` 的 `[google_service_account]` TOML table
+    在 runtime 回傳 `streamlit.runtime.secrets.AttrDict` —— 它繼承 `collections.abc.Mapping`、
+    **不是** `dict` 子類;舊判斷只認 `dict`,AttrDict 落到「其他型別 → {}」,`status()` 因此回
+    `diag="unparseable"`(Tab5 顯示「JSON 解析失敗/引號貼歪」)且 `enabled=False`,
+    合法設定被誤判未啟用。改認 `Mapping` 並轉成 `dict`(dict 仍原樣回傳,相容不變);
+    真正 malformed 的 JSON 字串仍回 {} → 仍得 `unparseable` 診斷。
+
+    ⚠️ 與 `repositories/pool_repository.py::_sa_present`(BL-0383 同批前一修)同採 `Mapping`;
+    與 `repositories/policy/_helpers.py::_coerce_sa_credentials` 的取捨相反(該處刻意不用
+    `isinstance(..., Mapping)`,一律 `dict(...)`)。此處採 Mapping 理由同 `_sa_present`:
+    requirements 釘 `streamlit<1.60`(1.59.2 實測 AttrDict 直接繼承 `collections.abc.Mapping`),
+    且 `tests/test_nav_history_sa_mapping_bl0383.py` 斷言真 st.secrets 解析出的 AttrDict 是
+    Mapping 而非 dict —— 升版若改變此點,該測試會轉紅。
+    """
+    from collections.abc import Mapping
     if isinstance(v, dict):
         return v
+    if isinstance(v, Mapping):
+        return dict(v)
     if isinstance(v, str) and v.strip():
         import json
         try:
