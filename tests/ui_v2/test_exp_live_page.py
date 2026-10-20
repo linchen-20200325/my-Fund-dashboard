@@ -431,6 +431,12 @@ _EXP2_DOM_JS = """() => {
     thead_rows: t && t.tHead ? t.tHead.rows.length : -1,
     has_tfoot: t ? t.tFoot !== null : true,
     rowsrc_shape_bad: rowsrcDetails.filter(d => !detailsShapeOk(d)).length,
+    rowsrc_nodetails_bad: rowsrc.filter(r => {
+      const kids = [...r.cells[0].children];
+      if (kids.some(c => c.matches('details.exp-rowsrc'))) return false;
+      return !(kids.length === 1 && kids[0].tagName === 'DIV' && kids[0].children.length === 0
+               && kids[0].textContent === WATCHED);
+    }).length,
     rowsrc_controls: rowsrcDetails.reduce((n, d) => n + d.querySelectorAll('button,input,select,textarea,[role=button]').length, 0),
     rowsrc_after_data: rowsrc.every(r => r.previousElementSibling && rows.includes(r.previousElementSibling)),
     titles: dataCells.filter(e => e.hasAttribute('title')).map(e => e.getAttribute('title')),
@@ -489,7 +495,13 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 # Q M1：錯誤原文裡的 `## ` 不得變成標題、`|` 不得變成另一張表。
                 assert dom["injected_headings"] == 0 and dom["tables_in_cells"] == 0
                 # 3-B 窄例外：格內唯一允許的表是列展開裡那張小表 —— 每枚列展開恰好一張，表頭逐字是那五欄。
-                assert len(dom["rowsrc_table_heads"]) == dom["rowsrc_details"] == dom["rowsrc_rows"], dom
+                # ~~`len(rowsrc_table_heads) == rowsrc_details == rowsrc_rows`~~（複驗指出會誤殺合法畫面；有意識的更正，不是漏刪）：
+                # 某檔已在觀察清單、但一格來源資訊都沒有時，44 其二第 2 條不畫列展開、`EXP-5` 仍在該列下方畫「已在觀察清單」那一行，
+                # 於是列展開列多於 details。改為：每枚 details 恰好一張小表，details 不多於列展開列；
+                # 沒有 details 的列展開格，內容只能是「已在觀察清單」那一個 div（不得為空、不得有其他元素）。
+                assert len(dom["rowsrc_table_heads"]) == dom["rowsrc_details"], dom
+                assert dom["rowsrc_details"] <= dom["rowsrc_rows"], dom
+                assert dom["rowsrc_nodetails_bad"] == 0, dom
                 assert all(h == list(live.ROW_SOURCE_LABELS) for h in dom["rowsrc_table_heads"]), dom
                 # 44 其二第 3 條：列展開只放來源資訊 —— 子元素只有 summary 與包小表的容器，裡面沒有按鈕與輸入元件。
                 assert dom["rowsrc_shape_bad"] == 0 and dom["rowsrc_controls"] == 0, dom
