@@ -104,7 +104,9 @@ _OLD = {"text": "淨值取自預存序列，不是本次取得；最近一筆 20
         "_nowrap": ["2026-09-18"]}
 # 2026-10-13 新增：超過門檻、不是預存序列的那幾檔。
 _OLD_LIVE = {"text": "最近一筆淨值 2026-09-18，已超過 10 日", "_tone": "灰", "_nowrap": ["2026-09-18"]}
-_ND_BADGE = {"_kind": "新鮮度", "_tone": "灰", "text": "⬜ 資料未備"}
+# BL-0250 批次 3-B（總管 2026-10-19 第二輪裁定第 1 點）：這一枚 ◇ 在產生處記下資料類（淨值；`_missing_keys`，畫面不讀）。
+# 畫面上的三個鍵一字未改。
+_ND_BADGE = {"_kind": "新鮮度", "_tone": "灰", "text": "⬜ 資料未備", "_missing_keys": ("淨值",)}
 _FRESH = {"text": "淨值取自預存序列，不是本次取得；最近一筆 2026-09-18", "_tone": "中性", "_nowrap": ["2026-09-18"]}
 
 
@@ -156,6 +158,8 @@ def test_字面逐字照草稿():
 def test_邊界_0天_1天_10天_11天(days, text, tone):
     model = _model(today=_LAST + timedelta(days=days))
     want = {"_kind": "新鮮度", "_tone": tone, "text": text}
+    if days > 10:   # BL-0250 批次 3-B：這一枚 ◇ 在產生處記下資料類（畫面上的三個鍵一字未改）
+        want["_missing_keys"] = ("淨值",)
     for block in ("HLD-2", "HLD-3"):
         assert [g["freshness_badge"] for g in logic.find_block(model, block)["fund_groups"]] == [want] * 3
     assert [r["freshness_badge"] for r in logic.find_block(model, "HLD-8")["_rows"]] == [want] * 3

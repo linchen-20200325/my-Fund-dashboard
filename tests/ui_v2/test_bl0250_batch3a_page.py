@@ -27,7 +27,9 @@ pytestmark = pytest.mark.slow
 import _plain_scan as SCAN  # noqa: E402
 
 _ROOT = _HERE.parents[1]
-_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"
+# BL-0250 批次 3-B 總管裁定（2026-10-19；有意識的更正，不是漏刪）：括號由「沒有單一的來源與新鮮度」改為線框第六版待裁示 (1) 推薦原文；
+# 舊值在寫下當時為真（列展開還不存在）。44 第七節第三小節之十三其六。
+_NA = "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"
 _CASES = [(page, name) for page, scripts in SCAN.SCRIPTS.items() for name in scripts]
 
 

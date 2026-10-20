@@ -21,7 +21,7 @@ import re
 
 import streamlit as st
 
-from .. import health_view, plain, sections, symbols
+from .. import health_view, page_health, plain, sections, symbols
 from . import fixtures, live, logic, theme
 
 _MAX_PROBE_WIDTH = 2000
@@ -493,6 +493,47 @@ def _render_advanced_diag(raw_log=None) -> None:
             _html(_table(_ADVANCED_DIAG_LOG_LABELS, [[_cell(c) for c in row] for row in raw_log]))
 
 
+# ── BL-0250 批次 3-B：各頁資料狀態總表（44 第七節第三小節之十三其七；線框 6.3；只在正式模式畫） ──
+# 呈現層：不取數、不寫入，只讀其他頁本次瀏覽已經記下的狀態（`ui_v2/page_health.py::record`）。放在 ② 資料新鮮度卡下面，
+# 本身是一枚預設展開的收合區；逐頁明細用「看哪一頁的明細」選單切換、下面只出一張表（不巢狀）。選單的值不存進使用者設定。
+_HEALTH_PICK_KEY = "set_page_health_pick"
+
+
+def _render_page_health(pages=None) -> None:
+    store = st.session_state.get(page_health.STATE_KEY) or {}
+    rows = page_health.summary_rows(store)
+    with st.container(key="set_layer2_health"):
+        with st.expander(page_health.BLOCK_TITLE, expanded=True):
+            _html(_table(page_health.SUMMARY_LABELS,
+                         [[_cell(r["page"]), _cell(r["status"]), _cell(r["main"]), _cell(r["at"])] for r in rows]))
+            if pages:
+                # 每列的「前往該頁」：只換頁（`st.page_link`），不取數、不寫入。依上表的列序。
+                for row in rows:
+                    page = pages.get(row["slug"])
+                    if page is not None:
+                        st.page_link(page, label=page_health.TEXT_GOTO.format(page=row["page"]))
+            else:
+                _lines([page_health.TEXT_NO_NAV], "set-line")
+            _lines([page_health.TEXT_SCOPE], "set-line")
+            names = [r["page"] for r in rows]
+            slugs = {r["page"]: r["slug"] for r in rows}
+            picked = st.selectbox(page_health.TEXT_PICK_LABEL, names, index=0, key=_HEALTH_PICK_KEY)
+            entry = store.get(slugs[picked])
+            if entry is None:
+                _lines([page_health.TEXT_DETAIL_EMPTY], "set-line")
+                return
+            _lines([page_health.TEXT_RECORDED_AT.format(at=page_health.recorded_time_text(entry["at"]))], "set-line")
+            failed = page_health.collect_failure_text(entry)
+            if failed:   # 3-B 稽核回修第 3 條：收集失敗 → 明細寫同一句（總表那一列也是這一句）
+                _lines([failed], "set-line")
+                return
+            detail = page_health.detail_rows(entry)
+            if detail:
+                _html(_table(page_health.DETAIL_LABELS, [[_cell(c) for c in row] for row in detail]))
+            else:
+                _lines([page_health.TEXT_DETAIL_NONE], "set-line")
+
+
 # ── Phase 3 P1-⑥：正式模式 ④ 的搬入塊與 `SET-0` 燈旁的導覽（44 第七節第三小節之八其二；示範模式不經過這裡） ──
 
 _MOVED_SUMMARY = {"SET-2": sections.set2_summary, "SET-3": sections.set3_summary}
@@ -553,7 +594,7 @@ _RENDERERS = {
 }
 
 
-def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None) -> None:
+def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None, pages=None) -> None:
     """畫整頁。
 
     三個參數都不傳（None）時行為與加這些參數之前完全相同：照舊以 ?scenario= 挑 fixtures 情境。
@@ -567,6 +608,9 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
     （`ui_v2/health_view.py::render_load_failure`；本頁就是設定與診斷，不掛「前往設定與診斷」），
     型別與遮蔽後的訊息原文收進進階診斷、並在同一頁畫出那一枚進階診斷；不傳遮蔽函式時只收型別。
     示範模式傳了當場炸。
+
+    pages：選填 `{頁 slug: st.Page}`（BL-0250 批次 3-B；預覽入口 `ui_v2/app_preview.py` 傳四頁），給各頁資料狀態總表每列的
+    「前往該頁」（只換頁）。單頁入口不傳 → 總表照畫，只寫一句沒有換頁連結。示範模式傳了當場炸。
     """
     _html(f"<style>{_base_css()}{_grid_css()}</style>")
 
@@ -576,6 +620,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
             raise ValueError("save_live／refetch_live 要與 load_live 一起傳")
         if mask_error is not None:
             raise ValueError("mask_error 要與 load_live 一起傳")
+        if pages is not None:
+            raise ValueError("pages 要與 load_live 一起傳")
         scenario = _pick_scenario()
         save_failed = _pick_save_failed()
         model = logic.build_page_model(fixtures.scenario_with(scenario, save_failed=save_failed))
@@ -640,6 +686,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
     _html(f'<div class="set-layer-label">{label1}</div>')
     _render_set0(logic.find_block(model, "SET-0"), plain_mode=plain_mode)
     if plain_mode:
+        # BL-0250 批次 3-B（線框 6.3「與結論燈的關係」）：總表不影響燈，燈的說明補一句。燈的判定一個都不動。
+        _lines([page_health.TEXT_LAMP_NOTE])
         _render_set0_nav()
 
     _html(f'<div class="set-layer-label">{label2}</div>')
@@ -647,6 +695,8 @@ def render(*, load_live=None, save_live=None, refetch_live=None, mask_error=None
         for column, code in zip(st.columns(3), logic.codes_in_layer(model, 2)):
             with column:
                 _RENDERERS[code](logic.find_block(model, code), key, ctx)
+    if plain_mode:
+        _render_page_health(pages)   # ② 資料新鮮度卡下面（BL-0250 批次 3-B）
 
     if plain_mode:
         # ③需要注意：`SET-1` 已算出的「外」那幾列；沒有就整段不畫（Phase 3 P1-⑥，之八其二 (b-2) 第 4 條）。

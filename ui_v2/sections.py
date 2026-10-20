@@ -40,6 +40,8 @@
 
 from __future__ import annotations
 
+from . import page_health
+
 # ───────────────────────── 鏡像常數（真身在各頁 logic；測試逐字比對） ─────────────────────────
 
 STATE_OK = "ok"
@@ -113,6 +115,22 @@ def relayer(model: dict, page: str) -> list:
         block["_default_open"] = False
         moved.append(code)
     return moved
+
+
+# 各頁資料狀態總表（`SET-8`）裡的「核心卡」：改層之後仍在層 2、而且在 ② 畫成一張卡的塊（3-B 稽核回修第 4 條）。
+# 改層前的三張核心卡照舊用於頁上的徽章搬移與資料狀態行（那兩步一字不動）；本表只給總表的件數與「（N 張卡有值讀不到）」用。
+# `ALO-3` 在 ② 只畫一枚「開始試算」入口、不是一張卡（線框第六版 5.2 那一例「持倉取數失敗（1 張卡有值讀不到）」）。
+HEALTH_ENTRY_ONLY = {"alo": (ALO_SCENARIO_CODE,)}
+# 3-B 第二輪稽核回修 D（決策者：AI 總管）：標的探索的核心卡照客戶裁示原文「EXP 三張核心卡」，`EXP-1`～`EXP-3` 都算，
+# 改層不扣（客戶的字面優先於從 44 推導的定義）。其他頁照舊：`ALO-1` 移到 ④、`ALO-3` 只是入口，不算。
+HEALTH_KEEP_MOVED = ("exp",)
+
+
+def health_cards(codes, page: str) -> list:
+    """`codes`：改層前的層 2 塊代號（各頁 `logic.codes_in_layer(model, 2)`）→ 總表用的核心卡（順序不變；純函式，不改模型）。"""
+    moved = {} if page in HEALTH_KEEP_MOVED else RELAYER.get(page, {})
+    entries = HEALTH_ENTRY_ONLY.get(page, ())
+    return [code for code in codes if moved.get(code, 2) == 2 and code not in entries]
 
 
 def _item(symbol: str, text: str, tone: str) -> dict:
@@ -402,6 +420,8 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys, unconfigured=None) -> int:
             if row[cell] == SYMBOL_UNDECIDABLE:
                 row[cell] = SYMBOL_ERROR
         row["_fetch_failed"] = True
+        # BL-0250 批次 3-B（總管第二輪裁定第 4 點）：這一列的取數失敗屬哪一類資料，在產生處寫明（畫面字不變）。
+        row[page_health.FETCH_CLASS_KEY] = page_health.DATA_CLASSES["market_indicator"]
         count += 1
     for item in _find(model, "MKT-5").get("_items") or ():
         name = unconfigured.get(item.get("name"))
@@ -413,6 +433,7 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys, unconfigured=None) -> int:
         if item.get("name") in failed and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in item["badges"]):
             item["badges"] = [dict(MKT_BADGE_FETCH_FAILED) if b.get("text") == MKT_BADGE_MISSING_TEXT else b
                               for b in item["badges"]]
+            item[page_health.FETCH_CLASS_KEY] = page_health.DATA_CLASSES["market_indicator"]   # BL-0250 批次 3-B
             count += 1
     return count
 

@@ -46,7 +46,7 @@ import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from .. import thresholds
+from .. import page_health, thresholds
 from . import logic
 
 # ~~客戶 2026-10-02 裁示 A，逐字。⛔ 不准加字、不准補「請……」之類指示動作的句子。~~
@@ -413,7 +413,9 @@ def nav_freshness(dataset: dict, nav_provenance, *, today: date) -> dict:
             # ~~`"_tone": "黃" if old else "中性", "text": text`~~ → 客戶 2026-10-13 裁示（狀態更新，不是漏刪）：
             # 超過門檻 ⇒ 「⬜ 資料未備」、灰；不超過照舊（中性、`當日`／`延遲 N 日`）。徽章不再有黃色。
             "badge": (
-                {"_kind": "新鮮度", "_tone": NOT_READY_TONE, "text": NOT_READY_BADGE_TEXT}
+                # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：這一枚 ◇ 屬淨值，在產生處記下（畫面字不變）。
+                page_health.tag_missing({"_kind": "新鮮度", "_tone": NOT_READY_TONE, "text": NOT_READY_BADGE_TEXT},
+                                        page_health.DATA_CLASSES["nav"])
                 if old
                 else {"_kind": "新鮮度", "_tone": "中性", "text": text}
             ),

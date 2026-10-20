@@ -21,6 +21,8 @@ import io
 import math
 from datetime import date, datetime, timedelta, timezone
 
+from .. import page_health
+
 # ───────────────────────── 缺口與矛盾登記（`44` 沒寫或與線框不一致） ─────────────────────────
 #
 # ⛔ 每一筆都是**登記，不是動工授權**；本頁照每一筆寫的畫法做，不替 `44` 補規格。
@@ -619,6 +621,24 @@ def settings_failure(dataset):
     return fetch_error(dataset, ("user_setting",))
 
 
+def _fetch_error_table(dataset, tables):
+    """`fetch_error` 回的那一句訊息是哪一張表的（同一個「第一張取數失敗的表」；沒有 → None）。"""
+    errors = dataset.get("errors") or {}
+    for table in tables:
+        if errors.get(table):
+            return table
+    return None
+
+
+def _failure_placeholder(dataset, tables) -> dict:
+    """`系統錯誤` 佔位（`44` 5.5 通用模板），並在產生處記下這一句屬哪一類資料（BL-0250 批次 3-B，總管第二輪裁定第 4 點；
+    畫面字不變，見 `ui_v2/page_health.py::tag_fetch_class`）。呼叫端已確認 `fetch_error(dataset, tables)` 不是 None。"""
+    table = _fetch_error_table(dataset, tables)
+    message = dataset["errors"][table]
+    return page_health.tag_fetch_class(_placeholder(fetch_failed_text(message), "系統錯誤"), message,
+                                       page_health.class_of(page_health.DATA_CLASSES, table))
+
+
 # ───────────────────────── 斷點 ─────────────────────────
 
 
@@ -744,27 +764,44 @@ def fx_for_date(dataset, nav_date, key=FX_KEY):
 
 def basis_value(dataset, holding, basis):
     """回 (新臺幣值 或 None, 缺值原因字串 或 None)。"""
+    value, reason, _key = basis_value_with_key(dataset, holding, basis)
+    return value, reason
+
+
+def basis_value_with_key(dataset, holding, basis):
+    """同 `basis_value`，另回缺值那一支屬哪一類資料（淨值或市場指標；有值時 None）。BL-0250 批次 3-B（總管第二輪裁定第 1、3 點）：
+    資料未備的資料類在判定分支就地寫明（畫面字不變）。"""
     if basis == BASIS_COST:
-        return float(holding["cost_twd"]), None
+        return float(holding["cost_twd"]), None, None
     nav = latest_nav(dataset, holding["fund_code"])
     if nav is None:
         # 總管 2026-10-13 裁決：淨值過期而不納入的檔寫準確的那一句；真正缺淨值的照舊。
         codes, days, last = nav_not_ready(dataset)
         if holding["fund_code"] in codes:
             if last is None:   # 舊形狀（沒有 `last`）：照舊的無日期字面
-                return None, NAV_NOT_READY_TEXT.format(days=days)
+                return None, NAV_NOT_READY_TEXT.format(days=days), _CLASS_NAV
             # 客戶 2026-10-14 裁示：逐檔帶自己最後一筆淨值日。
-            return None, NAV_NOT_READY_DATED_TEXT.format(day=last[holding["fund_code"]], days=days)
-        return None, empty_source_text(["nav"])
+            return None, NAV_NOT_READY_DATED_TEXT.format(day=last[holding["fund_code"]], days=days), _CLASS_NAV
+        return None, empty_source_text(["nav"]), _CLASS_NAV
     value = holding["units_shares"] * nav["nav_orig_ccy"]
     if nav["ccy"] == "TWD":
-        return value, None
+        return value, None, None
     # ~~非美元 → raise（ALO-GAP-非美元幣別）~~ → 2026-10-13：照 Q9 換鍵，缺匯率照實寫資料未備（見該 GAP）。
     key = fx_key_for(nav["ccy"])
     rate = fx_for_date(dataset, nav["nav_date"], key)
     if rate is None:
-        return None, fx_missing_text(key)
-    return value * rate, None
+        return None, fx_missing_text(key), _CLASS_FX
+    return value * rate, None, None
+
+
+# BL-0250 批次 3-B（總管第二輪裁定第 1、2、3 點）：本頁 ◇ 的鍵。換算匯率住在市場指標表（`fx_twd_per_<幣別>`）。
+_CLASS_NAV = page_health.DATA_CLASSES["nav"]
+_CLASS_FX = page_health.DATA_CLASSES["market_indicator"]
+_CLASS_HOLDING = page_health.DATA_CLASSES["holding"]
+_KEY_TARGET = page_health.SETTING_TARGET_WEIGHTS
+_ALO7_KEY_NAMES = {"alo_target_weights": page_health.SETTING_TARGET_WEIGHTS,
+                   "alo_tolerance_pp": page_health.SETTING_TOLERANCE}
+_KEY_SCENARIO = page_health.SETTING_SCENARIO_INPUT
 
 
 def category_of(holding, bucket_names) -> str:
@@ -808,7 +845,7 @@ def _category_values(dataset, basis, bucket_names, stale_out=None):
         cat = category_of(holding, bucket_names)
         slot = values.setdefault(cat, {"value": 0.0, "reason": None, "count": 0})
         slot["count"] += 1
-        value, reason = basis_value(dataset, holding, basis)
+        value, reason, missing_key = basis_value_with_key(dataset, holding, basis)
         code = holding["fund_code"]
         is_stale = (value is None and last is not None and code in codes
                     and reason == NAV_NOT_READY_DATED_TEXT.format(day=last[code], days=days))
@@ -819,6 +856,7 @@ def _category_values(dataset, basis, bucket_names, stale_out=None):
             continue
         if value is None:
             slot["value"], slot["reason"] = None, reason
+            slot["_missing_key"] = missing_key   # BL-0250 批次 3-B：定案的那一種缺值理由屬哪一類資料（同一類別第一種定案）
             if is_stale:
                 stale[cat] = [(code, last[code])]
                 slot["reason"] = nav_not_ready_dated_text(stale[cat], days)
@@ -857,10 +895,10 @@ def _build_alo2(dataset) -> dict:
     # `44` 5.5：四種同時成立時取最嚴的一種，`系統錯誤` ＞ `來源缺` ＞ `算不出來`。
     if failure is not None:
         # ALO-GAP-取數失敗：通用模板，不畫重新取數。
-        placeholder = _placeholder(fetch_failed_text(failure), "系統錯誤")
+        placeholder = _failure_placeholder(dataset, _source_tables(basis))
     elif not holdings:
         # ALO-GAP-來源缺按鈕：本塊空狀態欄沒有寫那一枚「重新取數」，本頁不畫。
-        placeholder = _placeholder(empty_source_text(["holding"]), "來源缺")
+        placeholder = page_health.tag_missing(_placeholder(empty_source_text(["holding"]), "來源缺"), _CLASS_HOLDING)
     elif not targets:
         placeholder = _placeholder(TEXT_NA_NO_TARGET, "算不出來")
     elif basis is None:
@@ -885,10 +923,12 @@ def _build_alo2(dataset) -> dict:
                 order = [h["fund_code"] for h in aggregated_holdings(dataset)]
                 entries = dict(e for cat in values for e in stale_by_cat[cat])
                 merged = sorted(entries.items(), key=lambda e: order.index(e[0]))
-                placeholder = _placeholder(nav_not_ready_dated_text(merged, nav_not_ready(dataset)[1]), "來源缺")
+                placeholder = page_health.tag_missing(
+                    _placeholder(nav_not_ready_dated_text(merged, nav_not_ready(dataset)[1]), "來源缺"), _CLASS_NAV)
                 values = {}
             elif len(reasons) == 1 and None not in reasons:
-                placeholder = _placeholder(reasons.pop(), "來源缺")
+                placeholder = page_health.tag_missing(_placeholder(reasons.pop(), "來源缺"),
+                                                      *dict.fromkeys(v["_missing_key"] for v in values.values()))
                 values = {}
             elif None in reasons:
                 # 有值卻加起來不為正 —— `44` 沒有畫法，照舊炸掉。
@@ -915,8 +955,10 @@ def _build_alo2(dataset) -> dict:
             # 差額與內外兩格：有目標而缺的是資料（基準值或目標比重）→ 資料未備；沒有目標 → 不適用，照舊 ⬜；
             # 沒有目標而且基準值也缺 → 兩種成因並存，不記（照舊 ⬜）。
             missing_cells, current_missing, target_missing = [], False, False
+            current_keys = ()   # BL-0250 批次 3-B（總管第二輪裁定第 3 點）：基準值缺的那一邊屬哪一類資料
             if slot["value"] is None:
                 current_missing = True
+                current_keys = (slot["_missing_key"],)
                 uncovered.append(bucket)  # ALO-GAP-分母
                 row["_current_pct"] = None
                 row["current_text"] = slot["reason"]
@@ -926,6 +968,7 @@ def _build_alo2(dataset) -> dict:
                 row["_current_pct"] = None
                 row["current_text"] = "⬜"
                 current_missing = True
+                current_keys = tuple(dict.fromkeys(v["_missing_key"] for v in values.values() if v["value"] is None))
                 missing_cells.append("current_text")
             else:
                 # ALO-GAP-部分缺的內外判讀：部分缺時分母不完整，有目標、沒持倉的類別照算 0.0% 與內外。
@@ -957,6 +1000,13 @@ def _build_alo2(dataset) -> dict:
             row["_has_target"] = has_target
             if missing_cells:
                 row["_missing_cells"] = tuple(missing_cells)
+            # BL-0250 批次 3-B（總管第二輪裁定第 2、3 點）：一格兩種成因時兩邊各記一個鍵 —— 基準值缺記它的資料類，
+            # 目標比重留空記「目標比重」（使用者設定留空，畫面現況是 ◇；~~本批照頁面現況計數~~ → 客戶 2026-10-20 裁示 Q1
+            # `DEC-2026-10-20-01`：照舊記下，收集那一步不計數，見 `ui_v2/health.py::collect_page_items`）。只記、不改任何一格。
+            row["_current_keys"] = current_keys
+            keys = (current_keys if current_missing else ()) + ((_KEY_TARGET,) if target_missing else ())
+            if keys:
+                page_health.tag_missing(row, *keys)
             # 有目標、卻因缺基準值算不出差距的那一列，燈不得跳過它（ALO-GAP-燈讀不到差距）。
             # 目標比重留空的那一列不算：它不計入合計，與「未分類」同樣沒有可比的目標。
             row["_blocks_lamp"] = row["_current_pct"] is None and row["_target_pct"] is not None
@@ -1048,7 +1098,7 @@ def conclusion_light(alo2) -> dict:
 def _build_alo0(alo2) -> dict:
     light = conclusion_light(alo2)
     glyph, state_word = _LAMP_LOOK_FAILED if alo2["_failed"] else _LAMP_LOOK[light["_tone"]]
-    return {
+    block = {
         "code": "ALO-0",
         "title": BLOCK_TITLES["ALO-0"],
         "answers": ANSWERS["ALO-0"],
@@ -1067,6 +1117,10 @@ def _build_alo0(alo2) -> dict:
         "buttons": [],
         "badges": [],
     }
+    # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：燈照抄 ALO-2 那一格的失敗字串時，資料類一併照抄；燈的 ◇ 是衍生狀態。
+    if alo2["_failed"]:
+        page_health.copy_fetch_classes(block, alo2["placeholder"])
+    return page_health.tag_derived(block, page_health.DERIVED_LAMP)
 
 
 # ───────────────────────── ALO-1 ─────────────────────────
@@ -1118,6 +1172,8 @@ def _build_alo1(dataset) -> dict:
                 "bucket_text": target["bucket"],
                 "weight_text": "" if weight is None else format_number(weight),
                 "tail_text": TEXT_NOT_READY if weight is None else "",
+                # BL-0250 批次 3-B（總管第二輪裁定第 2 點）：目標比重留空，列尾畫 ◇；鍵寫這一個設定的中文名。
+                **({page_health.MISSING_KEYS_KEY: (_KEY_TARGET,)} if weight is None else {}),
             }
         )
     if failure is None:
@@ -1144,7 +1200,7 @@ def _build_alo1(dataset) -> dict:
         "_default_open": True,
         "_tone": "紅" if failure is not None else "中性",
         # ALO-GAP-設定取數失敗
-        "placeholder": _placeholder(fetch_failed_text(failure), "系統錯誤") if failure is not None else None,
+        "placeholder": _failure_placeholder(dataset, ("user_setting",)) if failure is not None else None,
         "intro_line": TEXT_INTRO,
         "inputs": inputs,
         "_rows": rows,
@@ -1186,7 +1242,8 @@ def _build_alo3(dataset, alo2) -> dict:
     elif alo2["_no_denominator"]:
         # ALO-GAP-多理由並列：ALO-2 沒有分母（每一類都缺值、理由不只一種）。不算試算總額 ——
         # 那不是「合計不為正」，是「沒有合計」；照 44 5.5「來源缺」畫列序最先的那一個理由（各理由嚴重度相同），不新編句子。
-        placeholder = _placeholder(alo2["_missing_reasons"][0], "來源缺")
+        first = next(r for r in alo2["_rows"] if r["_value"] is None)   # `_missing_reasons[0]` 那一列
+        placeholder = page_health.tag_missing(_placeholder(alo2["_missing_reasons"][0], "來源缺"), *first["_current_keys"])
 
     rows_by_bucket = {r["_bucket"]: r for r in alo2["_rows"]}
     accepted = {}
@@ -1197,8 +1254,10 @@ def _build_alo3(dataset, alo2) -> dict:
         # ALO-GAP-金額標籤
         inputs.append(_field(f"alo_scenario_{index}_amount", "金額 amount_twd", amount))
         tail, effective = "", False
+        missing_keys = ()   # BL-0250 批次 3-B（總管第二輪裁定第 2、3 點）：這一列 ◇ 的成因，在判定分支就地記下
         if amount is None:
             tail = TEXT_NOT_READY
+            missing_keys = (_KEY_SCENARIO,)
         elif placeholder is None:
             base = rows_by_bucket.get(item["bucket"])
             if base is None:
@@ -1206,6 +1265,7 @@ def _build_alo3(dataset, alo2) -> dict:
                 tail = TEXT_NA_UNKNOWN_BUCKET
             elif base["_value"] is None:
                 tail = base["current_text"]
+                missing_keys = base["_current_keys"]
             elif base["_value"] + accepted.get(item["bucket"], 0.0) + amount < 0:
                 tail = TEXT_NA_OVERFLOW
             else:
@@ -1219,6 +1279,7 @@ def _build_alo3(dataset, alo2) -> dict:
                 "_effective": effective,
                 # 金額留空 → 列尾照 44 寫資料未備，金額格同一個成因（其四第 2 條；正式模式畫 ◇）。
                 **({"_missing_cells": ("amount_text",)} if amount is None else {}),
+                **({page_health.MISSING_KEYS_KEY: tuple(missing_keys)} if missing_keys else {}),
             }
         )
 
@@ -1241,6 +1302,9 @@ def _build_alo3(dataset, alo2) -> dict:
                 row["_new_diff"], row["new_diff_text"] = None, "⬜"
                 if base["_has_target"]:   # 基準值缺 ＝ 資料未備（其四第 2 條）；沒有目標又缺基準值 ＝ 兩種成因並存，照舊 ⬜
                     row["_missing_cells"] = ("new_diff_text",)
+                # BL-0250 批次 3-B（總管第二輪裁定第 3 點）：試算後差額缺 —— 基準值缺那一邊必記；目標比重也留空時兩邊都記。
+                page_health.tag_missing(row, *base["_current_keys"],
+                                        *((_KEY_TARGET,) if base["_has_target"] and base["_target_pct"] is None else ()))
             else:
                 row["_share_pct"] = new_values[base["_bucket"]] / total * 100.0
                 row["share_text"] = format_share(row["_share_pct"])
@@ -1248,6 +1312,7 @@ def _build_alo3(dataset, alo2) -> dict:
                     row["_new_diff"], row["new_diff_text"] = None, "⬜"
                     if base["_has_target"]:   # 目標比重留空 ＝ 資料未備；沒有目標 ＝ 不適用，照舊 ⬜
                         row["_missing_cells"] = ("new_diff_text",)
+                        page_health.tag_missing(row, _KEY_TARGET)   # BL-0250 批次 3-B（裁定第 2、3 點）
                 else:
                     # ALO-GAP-ALO3目標：目標取 ALO-1 的已存值（經 ALO-2）。
                     row["_new_diff"] = row["_share_pct"] - base["_target_pct"]
@@ -1346,7 +1411,7 @@ def _build_alo4(dataset) -> dict:
 
     detail_lines = []
     failure = fetch_error(dataset, _source_tables(basis))
-    fail_nodes = [_placeholder(fetch_failed_text(failure), "系統錯誤")] if failure is not None else []
+    fail_nodes = [_failure_placeholder(dataset, _source_tables(basis))] if failure is not None else []
     fx_missing_keys = (
         _fx_missing_for_mv(dataset) if failure is None and basis == BASIS_MV and holdings else []
     )
@@ -1383,7 +1448,7 @@ def _build_alo4(dataset) -> dict:
     if failure is not None:
         summary += "；取數失敗"
     error_lines, key_error_lines = _save_error_parts(dataset, keys)
-    return {
+    block = {
         "code": "ALO-4",
         "title": BLOCK_TITLES["ALO-4"],
         "answers": ANSWERS["ALO-4"],
@@ -1407,6 +1472,9 @@ def _build_alo4(dataset) -> dict:
         "detail_lines": detail_lines,
         "badges": [],
     }
+    if fx_missing:   # BL-0250 批次 3-B（裁定第 1 點）：「缺換算匯率」那一句屬市場指標（畫面字不變）
+        page_health.tag_missing(block, _CLASS_FX)
+    return block
 
 
 # ───────────────────────── ALO-5 ─────────────────────────
@@ -1477,9 +1545,9 @@ def _build_alo6(dataset) -> dict:
         # 44 ALO-6 空狀態「無任何持倉 → `來源缺`」；ALO-GAP-來源缺按鈕：不畫重新取數。
         # 取數失敗照 44 5.5 系統錯誤通用模板（ALO-GAP-取數失敗）。
         node = (
-            _placeholder(fetch_failed_text(failure), "系統錯誤")
+            _failure_placeholder(dataset, _source_tables(basis) + ("policy",))
             if failure is not None
-            else _placeholder(empty_source_text(["holding"]), "來源缺")
+            else page_health.tag_missing(_placeholder(empty_source_text(["holding"]), "來源缺"), _CLASS_HOLDING)
         )
         return {
             "code": "ALO-6",
@@ -1501,10 +1569,11 @@ def _build_alo6(dataset) -> dict:
     rows = []
     for holding in holdings:
         cat = category_of(holding, bucket_names)
+        missing_key = None
         if basis is None:
             value, reason = None, TEXT_NA_NO_BASIS
         else:
-            value, reason = basis_value(dataset, holding, basis)
+            value, reason, missing_key = basis_value_with_key(dataset, holding, basis)
         rows.append(
             {
                 "_fund_code": holding["fund_code"],
@@ -1527,6 +1596,10 @@ def _build_alo6(dataset) -> dict:
             missing_cells.append("value_text")
         if missing_cells:
             rows[-1]["_missing_cells"] = tuple(missing_cells)
+            # BL-0250 批次 3-B（總管第二輪裁定第 1、3 點）：保單名那一格屬保單；基準值那幾格屬缺值那一支的資料類。
+            page_health.tag_missing(rows[-1], *(
+                ([page_health.DATA_CLASSES["policy"]] if "policy_text" in missing_cells else [])
+                + ([missing_key] if "value_text" in missing_cells else [])))
     included = [r for r in rows if r["_value"] is not None]
     total = sum(r["_value"] for r in included)
     by_bucket = {}
@@ -1611,7 +1684,7 @@ def _build_alo7(dataset) -> dict:
     failure = settings_failure(dataset)
     if failure is not None:
         # ALO-GAP-設定取數失敗
-        node = _placeholder(fetch_failed_text(failure), "系統錯誤")
+        node = _failure_placeholder(dataset, ("user_setting",))
         return {**base, "_tone": "紅", "summary_text": "取數失敗", "_rows": [], "placeholder": node}
     missing = [key for key in keys if values[key] in (None, [])]
     if len(missing) == len(keys):
@@ -1621,7 +1694,9 @@ def _build_alo7(dataset) -> dict:
             "_tone": "灰",
             "summary_text": "缺 " + "、".join(keys),
             "_rows": [],
-            "placeholder": {"text": TEXT_NO_TARGET, "glyph": "⬜", "_empty_kind": "來源缺", "_tone": "灰"},
+            # BL-0250 批次 3-B（總管第二輪裁定第 2 點）：「尚未設定目標」畫成 ◇；鍵寫「目標比重」（畫面那一句說的是目標）。
+            "placeholder": {"text": TEXT_NO_TARGET, "glyph": "⬜", "_empty_kind": "來源缺", "_tone": "灰",
+                            page_health.MISSING_KEYS_KEY: (_KEY_TARGET,)},
         }
     rows = []
     for key in keys:
@@ -1633,7 +1708,10 @@ def _build_alo7(dataset) -> dict:
         else:
             value_text = _setting_text(key, value)
             time_text = TEXT_NEVER_SET if updated is None else format_time(updated)
-        rows.append({"_key": key, "key_text": key, "value_text": value_text, "time_text": time_text})
+        row = {"_key": key, "key_text": key, "value_text": value_text, "time_text": time_text}
+        if time_text == TEXT_NEVER_SET:   # BL-0250 批次 3-B（總管第二輪裁定第 2 點；判讀第 7 點）：鍵寫這一個設定的中文名
+            page_health.tag_missing(row, page_health.class_of(_ALO7_KEY_NAMES, key))
+        rows.append(row)
     return {
         **base,
         "_tone": "灰" if missing else "中性",
@@ -1716,7 +1794,10 @@ def collect_ui_strings(model) -> list:
         if isinstance(node, str):
             out.append(node)
         elif isinstance(node, dict):
-            for value in node.values():
+            for key, value in node.items():
+                # BL-0250 批次 3-B：產生處的資料類標記（`page_health.MARK_KEYS`）是給各頁資料狀態總表讀的簿記，不會上畫面，不收。
+                if key in page_health.MARK_KEYS:
+                    continue
                 walk(value)
         elif isinstance(node, (list, tuple, set)):
             for value in node:

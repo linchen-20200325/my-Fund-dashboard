@@ -19,6 +19,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from ui_v2.mkt import fixtures, logic  # noqa: E402
+# BL-0250 批次 3-B：產生處新增的標記鍵（`ui_v2/page_health.py::MARK_KEYS`）與 `_missing_cells` 同一類，摘要時略過；
+# 期望值一個都沒改（拿掉標記之後逐格仍與改動前相同）。
+from ui_v2.page_health import MARK_KEYS as _BATCH3B_MARKS  # noqa: E402
 
 
 # ───────────────────────── 四狀態（逐主值） ─────────────────────────
@@ -1338,7 +1341,7 @@ def _cell_digest(block) -> str:
         # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(obj, dict):
             return {k: scrub(v) for k, v in sorted(obj.items())
-                    if k not in ("_missing_cells", "_missing_fields")}
+                    if k not in ("_missing_cells", "_missing_fields", *_BATCH3B_MARKS)}
         if isinstance(obj, (list, tuple)):
             return [scrub(v) for v in obj]
         if isinstance(obj, set):

@@ -279,6 +279,16 @@ def _projection(node, page, private=False):
     return node
 
 
+def _without_fetch_classes(node):
+    if isinstance(node, dict):
+        return {k: _without_fetch_classes(v) for k, v in node.items() if k != plain.FETCH_CLASSES_KEY}
+    if isinstance(node, list):
+        return [_without_fetch_classes(v) for v in node]
+    if isinstance(node, tuple):
+        return tuple(_without_fetch_classes(v) for v in node)
+    return node
+
+
 def test_不變式_判定與結構深度相等_輸入不被改動():
     count = {}
     for key, model in _all_models().items():
@@ -289,7 +299,8 @@ def test_不變式_判定與結構深度相等_輸入不被改動():
         # BL-0250 批次 2：頁尾整串換成一句（`plain.PLAIN_FOOTERS`），頁尾兩鍵另驗、不進結構投影。
         assert display["footer_lines"] == [plain.PLAIN_FOOTERS[page]] and display["footer_badges"] == [], key
         strip = lambda m: {k: v for k, v in m.items() if k not in ("footer_lines", "footer_badges")}  # noqa: E731
-        assert _projection(strip(display), page) == _projection(strip(model), page), key
+        # BL-0250 批次 3-B：產生處記的訊息原文（`_fetch_classes`）只給換字那一步讀、一般畫面模型裡拿掉（同其他原文），投影時兩邊一起扣掉。
+        assert _projection(strip(display), page) == _projection(_without_fetch_classes(strip(model)), page), key
         assert len(display["blocks"]) == len(model["blocks"]), key
         assert isinstance(raw, list) and status["raw_count"] == len(raw)
         count[(key[0], page)] = count.get((key[0], page), 0) + 1

@@ -102,7 +102,10 @@ def test_標的探索_結果清單框收合_EXP2與EXP3在框內_關鍵數字只
     assert _block_index(inside, "EXP-2") != -1 and _block_index(inside, "EXP-3") != -1
     assert _block_index(values, "EXP-2") > four and _block_index(values, "EXP-3") > four
     # 兩組勾選框跟著候選清單進了框（判定與鍵不變，只換位置）
-    assert box.checkbox
+    # ~~assert box.checkbox~~ → BL-0250 批次 3-B（44 第七節第三小節之十三；有意識的更正，不是漏刪）：正式模式兩組勾選框
+    # 改為兩份多選清單，照舊在框內；舊斷言在寫下當時為真，被推翻的是輸入元件的種類。
+    assert not box.checkbox
+    assert {m.key for m in box.multiselect} == {"exp2live_pick_compare", "exp2live_pick_watch"}
 
 
 def test_標的探索_有無法判定檔時_需要注意列出():

@@ -26,7 +26,7 @@ import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from .. import thresholds
+from .. import page_health, thresholds
 from . import logic
 
 # 正式模式 widget 鍵用的情境名（2026-10-14 由 `page._LIVE_SCENARIO` 移來；值不變，`page.py` 改讀這裡）。
@@ -267,6 +267,12 @@ TEXT_DIV_CCY_DIFFERS_OUTSIDE = "配息幣別與淨值幣別不同的紀錄只出
 TEXT_DIV_CCY_DIFFERS_UNKNOWN = "無法確認幣別不同的配息是否在近 12 個月內"
 TAG_DIV_CCY_DECLARED = "配息幣別宣告"
 TIP_DIV_CCY_DECLARED = "來源：配息資料（各筆幣別宣告）"
+# 滑鼠提示裡幾種段落的段首（字面不變，只是收成常數，給每列來源展開的「備註」辨認用；3-B 稽核回修第 10 條）。
+TIP_DIV_BASIS = "配息依據："            # 資料層逐來源的取數回報（可能帶上游錯誤原文），一定排在最後
+TIP_L2_RECORD = "資料層紀錄："          # 資料層 `skipped` 原文
+TIP_NAV_CCY = "淨值幣別 "
+TIP_RATIO_WINDOW = "配息比窗口："
+TIP_CONFLICT_DAYS = "配息宣告的幣別與淨值幣別不同的除息日："
 # 2026-10-15 #966 修正輪 2（稽核 P 必修）：資料層有被剔除的配息列時 tooltip 的揭露句（字面為本組擬定）。
 TIP_DIV_REJECTED = "另有 {n} 筆配息被資料層剔除（原因見資料層紀錄），無法確認是否為近 12 個月內幣別不同的配息"
 TIP_DIV_REJECTED_UNKNOWN = "資料層沒有交出被剔除的配息筆數，無法確認是否還有近 12 個月內幣別不同的配息"
@@ -413,9 +419,19 @@ def plain_reason(text: str) -> str:
     return out
 
 
-def _note(text, state, tag=None, tip=None) -> dict:
-    """一格的畫面調整：`text` 為 None ＝ 值照 `logic` 畫的（只掛來源標示）；否則覆寫該格文字與狀態。"""
-    return {"text": text, "state": state, "source_tag": tag or None, "source_tip": tip or None}
+def _note(text, state, tag=None, tip=None, key=None) -> dict:
+    """一格的畫面調整：`text` 為 None ＝ 值照 `logic` 畫的（只掛來源標示）；否則覆寫該格文字與狀態。
+    `key`（BL-0250 批次 3-B，總管第二輪裁定第 1、4 點）：這一格 ⛔／◇ 屬哪一類資料，在產生處寫明；只在給了時多一個 `_data_key`，
+    畫面不讀它（`_apply_cell_notes` 把它記到那一格上）。"""
+    note = {"text": text, "state": state, "source_tag": tag or None, "source_tip": tip or None}
+    if key is not None:
+        note["_data_key"] = key
+    return note
+
+
+_KEY_PROFILE = page_health.DATA_CLASSES["fund_profile"]
+_KEY_NAV = page_health.DATA_CLASSES["nav"]
+_KEY_DIVIDEND = page_health.DATA_CLASSES["dividend"]
 
 
 def _finish(note: dict, mask) -> dict:
@@ -471,9 +487,9 @@ def profile_cell_note(column: str, cell: dict) -> dict:
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError(f"{column}：狀態 {status!r} 卻沒有原因（{cell!r}）")
     if status in (PROFILE_STATUS_NOT_READY, PROFILE_STATUS_INCONSISTENT):
-        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag, tip)
+        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag, tip, _KEY_PROFILE)
     if status == PROFILE_STATUS_FAILED:
-        return _note(logic.fetch_failed_text(reason), logic.STATE_ERROR, tag, tip)
+        return _note(logic.fetch_failed_text(reason), logic.STATE_ERROR, tag, tip, _KEY_PROFILE)
     raise ValueError(f"{column}：未知的基本資料狀態 {status!r}")
 
 
@@ -660,7 +676,8 @@ def _nav_tip(prov: dict, extra=None) -> str:
 
 
 def _all_nav(text, state, tag=None, tip=None) -> dict:
-    return {column: _note(text, state, tag, tip) for column in NAV_COLUMNS}
+    """淨值那幾格同一句（含配息比那一格：它的分母是淨值，成因屬淨值）。"""
+    return {column: _note(text, state, tag, tip, _KEY_NAV) for column in NAV_COLUMNS}
 
 
 def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, accum_codes, today, withheld_texts,
@@ -735,7 +752,7 @@ def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, accum_codes, 
 def _div_basis(prov: dict) -> str:
     """配息那一格 tooltip 的「依據」：L2 實際交出的取數狀態（`outcome_detail`，逐來源回報），經白話化後上畫面。"""
     detail = prov.get("outcome_detail")
-    return f"配息依據：{str(detail).replace(chr(10), '；')}" if detail else ""
+    return f"{TIP_DIV_BASIS}{str(detail).replace(chr(10), '；')}" if detail else ""
 
 
 def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str, skipped: str) -> dict:
@@ -757,13 +774,13 @@ def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str, skipp
     raw = prov.get("conflict_ex_dates")
     missing = prov.get("conflict_ex_dates_missing")
     rejected = prov.get("conflict_rejected_rows")
-    l2_line = f"資料層紀錄：{skipped}" if skipped else ""
-    tip_parts = [TIP_DIV_CCY_DECLARED, f"淨值幣別 {nav_ccy}；配息比窗口：除息日在 {window_start(nav_day).isoformat()}"
+    l2_line = f"{TIP_L2_RECORD}{skipped}" if skipped else ""
+    tip_parts = [TIP_DIV_CCY_DECLARED, f"{TIP_NAV_CCY}{nav_ccy}；{TIP_RATIO_WINDOW}除息日在 {window_start(nav_day).isoformat()}"
                  f"（不含）至 {nav_day.isoformat()} 之間"]
     if not isinstance(raw, list) or not raw or not isinstance(missing, int) or missing or any(d is None for d in raw):
         tip = "；".join(p for p in [*tip_parts, "配息宣告的幣別與淨值幣別不同，但有衝突筆取不到除息日", l2_line, basis]
                        if p)
-        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
     days = [_as_date(d, "conflict_ex_dates") for d in raw]
     shown = "、".join(d.isoformat() for d in days)
     if not isinstance(rejected, int) or isinstance(rejected, bool) or rejected < 0:
@@ -772,15 +789,15 @@ def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str, skipp
         unsure = TIP_DIV_REJECTED.format(n=rejected)
     else:
         unsure = ""
-    tip = "；".join(p for p in [*tip_parts, f"配息宣告的幣別與淨值幣別不同的除息日：{shown}", unsure, l2_line, basis]
+    tip = "；".join(p for p in [*tip_parts, f"{TIP_CONFLICT_DAYS}{shown}", unsure, l2_line, basis]
                    if p)
     if any(in_ratio_window(d, nav_day) for d in days):
         return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, TAG_DIV_CCY_DECLARED, tip)
     if unsure:
-        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
     reason = (TEXT_DIV_CCY_DIFFERS_BEFORE if all(d <= window_start(nav_day) for d in days)
               else TEXT_DIV_CCY_DIFFERS_OUTSIDE)
-    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
 
 
 def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_conflict, div_ccy_differs) -> dict:
@@ -797,7 +814,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
         return "；".join(p for p in (f"配息來源：{tag_src}" if tag_src else "", *parts, basis) if p)
 
     if error:
-        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, tip_of())
+        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, tip_of(), _KEY_DIVIDEND)
     withheld = div_part["withheld"].get(code)
     if withheld == input_conflict:
         raise ValueError(f"{code!r}：配息輸入矛盾（{skipped}）")
@@ -805,7 +822,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
         return _ccy_differs_note(prov, latest["ccy"], last, basis, skipped)
     if withheld or div_part["pending"].get(code):
         reason = skipped or str(withheld or div_part["pending"].get(code))
-        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason))
+        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason), _KEY_DIVIDEND)
     rows = div_by.get(code) or []
     kind, ratio, detail = dividend_ratio(
         latest["nav_orig_ccy"], latest["ccy"], last, rows,
@@ -821,7 +838,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
     if kind == "ccy_differs":
         return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, tag, tip_of(detail))
     # 格內只寫本層的判定句；資料層的 `skipped` 原文（白話化後）放 tooltip。
-    return _note(f"{logic.ND_TEXT}：{detail}", logic.STATE_MISSING, tag, tip_of(detail, skipped))
+    return _note(f"{logic.ND_TEXT}：{detail}", logic.STATE_MISSING, tag, tip_of(detail, skipped), _KEY_DIVIDEND)
 
 
 def assemble_wired(profiles, codes, nav_out, *, unresolved, today, mask, withheld_texts, input_conflict,
@@ -970,6 +987,13 @@ def _apply_cell_notes(code, cells, by_code):
             cell["text"] = note["text"]
             cell["_state"] = note["state"]
             cell["_tone"] = logic.tone_for_state(note["state"])
+            # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：產生處（`_note`）寫的資料類記到這一格上（畫面字不變）；
+            # 這一格的成因以 note 為準（`logic` 畫缺格時記的那一類一併換掉，例：配息比那一格因淨值失敗而缺）。
+            cell.pop(page_health.MISSING_KEYS_KEY, None)
+            if note.get("_data_key") and note["state"] == logic.STATE_MISSING:
+                page_health.tag_missing(cell, note["_data_key"])
+            elif note.get("_data_key") and note["state"] == logic.STATE_ERROR:
+                page_health.tag_fetch_class(cell, note["text"][len(logic.fetch_failed_text("")):], note["_data_key"])
         elif is_missing_cell:
             raise ValueError(f"{code!r} 的「{column}」是缺格，原因紀錄卻說可用")
         if note["source_tag"]:
@@ -1309,7 +1333,11 @@ def build_live_model(live_input: dict, *, field_rules=None, field_columns=None, 
 # 草稿 §H T-17「每卡掛一組，刻意畫成佔位」）；逐檔、逐格的來源與缺值照舊（缺資料照舊 ◇／⛔，不用 ⬜）。示範模式不經過本檔，照舊。
 # 字面的括號理由為實作組依裁示理由擬定（線框第六版的「各檔來源見每列展開」指的是 3-B 才做的列展開，本批還沒有，所以不寫），可推翻。
 CARD_PROVENANCE_CODES = ("EXP-1", "EXP-2", "EXP-3")
-TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"
+# ~~TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"~~
+# → BL-0250 批次 3-B 總管裁定（2026-10-19，適用客戶 `DEC-2026-10-19-05` 第 1 點；有意識的更正，不是漏刪；44 第七節第三小節之十三其六）：
+#   列展開已有，括號改用線框第六版待裁示 (1) 客戶核准的推薦原文（`docs/v2/61_bl0250_batch3_wireframe.md` 第 8 節 (1)）。
+#   舊句在寫下當時為真（那時列展開還不存在）；被權衡掉的是它沒有指出各檔來源在哪裡看。
+TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"
 
 
 def card_provenance_not_applicable(model: dict) -> int:
@@ -1327,3 +1355,162 @@ def card_provenance_not_applicable(model: dict) -> int:
                                    "text": TEXT_CARD_PROVENANCE_NA}]
         count += 1
     return count
+
+
+# ───────────── BL-0250 批次 3-B：「對照」「觀察清單」兩份多選清單、結果清單每列的來源展開（44 第七節第三小節之十三） ─────────────
+# 客戶 2026-10-19 批次 3 裁示（`DEC-2026-10-19-05`；線框第六版 4.5、4.4、待裁示 (5b) 推薦案）。只給正式模式（`page._render_exp2_live`）；
+# 示範模式不經過本段，照舊每列兩組勾選框。純函式：讀 `logic`／`plain`／`symbols`／`health` 已經改完字的模型，不改模型、不取數、不寫入。
+#
+# - 兩份多選清單取代每列兩組勾選框（之七其二第 5 條已授權）：選項＝目前結果清單的檔、順序同結果清單、不預先選任何一檔；
+#   兩份各自獨立；「對照」同時最多 3 檔（上限照 `logic.COMPARE_LIMIT`）；「觀察清單」不受上限拘束。勾選狀態照舊只存在
+#   `logic.checked_key` 那一份 session 狀態，存檔路徑（`exp5_save_entries`）一字未改。
+# - 每列展開只放來源資訊（客戶裁示第 5 點第三項：僅限來源資訊）：該列各格已畫出的來源標示與滑鼠提示，拆成
+#   「欄位｜來源｜取得時間（台北時間）｜資料日期｜備註」一張小表；格內的來源標示與滑鼠提示照舊（線框第 11 節：格內來源名先保留）。
+#   拆法只認本檔自己寫出滑鼠提示的那兩個段首（`_nav_tip` 的「取得時間：」與「資料日期：」），~~其餘段落原樣放進備註，不改寫、不刪~~
+#   → 3-B 稽核回修（有意識的更正，不是漏刪）：備註只收來源段落，加上新設計 H 那一句配息比原因句（第二輪稽核回修 E；規則見
+#   `split_tip` 上方）；錯誤原文照舊進進階診斷；格內的滑鼠提示一個字不動。
+
+PICK_GROUPS = (logic.GROUP_COMPARE, logic.GROUP_WATCH)
+PICK_LABELS = {
+    logic.GROUP_COMPARE: f"要對照的基金（最多 {logic.COMPARE_LIMIT} 檔）",
+    logic.GROUP_WATCH: "要加入觀察清單的基金",
+}
+PICK_PLACEHOLDER = "選擇基金"
+PICK_CAPS = {logic.GROUP_COMPARE: logic.COMPARE_LIMIT, logic.GROUP_WATCH: None}
+TEXT_PICK_COUNT = "已選 {n}／{cap}"
+# 選滿時那一行沿用現行字（線框第六版 4.5 互動規則 4；字面與 `logic` 第 4 個勾選框的停用原因同一句）。
+TEXT_PICK_FULL = f"同時最多對照 {logic.COMPARE_LIMIT} 檔"
+TEXT_WATCHED_SUFFIX = f"（{logic.TEXT_ALREADY_WATCHED}）"
+PICK_NAME_SEP = "　"
+
+ROW_SOURCE_TITLE = "來源與取得時間"
+ROW_SOURCE_LABELS = ("欄位", "來源", "取得時間（台北時間）", "資料日期", "備註")
+ROW_SOURCE_NONE = "—"
+_TIP_SEP = "；"
+_TIP_FETCHED = "取得時間："
+_TIP_DATA_DATE = "資料日期："
+
+
+def pick_options(block: dict) -> list:
+    """多選清單的選項：`EXP-2` 目前畫出的每一列的基金代碼，順序同結果清單（不另外排序）。"""
+    return [row["_fund_code"] for row in block.get("_rows") or ()]
+
+
+def _row(block: dict, code: str):
+    return next((row for row in block.get("_rows") or () if row["_fund_code"] == code), None)
+
+
+def already_watched(block: dict, code: str) -> bool:
+    """該檔已在已存的觀察清單裡（`logic` 掛在「觀察清單」那一組的註記；本函式不另判）。"""
+    row = _row(block, code)
+    box = ((row or {}).get("_checkboxes") or {}).get(logic.GROUP_WATCH) or {}
+    return box.get("note") == logic.TEXT_ALREADY_WATCHED
+
+
+def pick_label(block: dict, code: str, group: str) -> str:
+    """選項文字「代碼　基金名」：基金名取結果清單上那一格（畫出來、而且是值的那一格）；那一格沒有值（缺、失敗、或欄被隱藏）
+    就只寫代碼，不猜名稱。「觀察清單」那一份，已在觀察清單的檔加註「（已在觀察清單）」。"""
+    row = _row(block, code) or {}
+    cell = (row.get("_cells") or {}).get("fund_name") or {}
+    name = cell.get("text") if cell.get("_state") == logic.STATE_OK else None
+    label = f"{code}{PICK_NAME_SEP}{name}" if name else code
+    if group == logic.GROUP_WATCH and already_watched(block, code):
+        label += TEXT_WATCHED_SUFFIX
+    return label
+
+
+def merge_picks(previous, visible, picked) -> tuple:
+    """多選清單改了之後的勾選狀態：清單上看得到的檔照多選清單；看不到的檔（例：條件改了、不在本次結果裡）原樣留著。
+    與每列勾選框一格一格切換的結果相同（`logic.toggle_checked` 只動被按的那一檔）。回排序過的 tuple。"""
+    visible = set(visible)
+    return tuple(sorted({code for code in previous or () if code not in visible} | set(picked or ())))
+
+
+def shown_picks(checked, options, cap=None) -> list:
+    """畫多選清單時要先放進去的已選項：勾選狀態裡、而且在本次選項裡的檔，順序同選項。
+
+    `cap`（「對照」那一份的上限）：勾選狀態裡看得到的檔超過上限時（例：選滿 3 檔、條件改成看不到其中一檔、再加選一檔、
+    條件改回來），只放勾選狀態順序（基金代碼排序，與並排對照卡取前 3 檔同一個順序）的前 `cap` 檔進清單 —— 多選清單
+    不接受超過上限的預設值，放進去頁面就崩潰（3-B 稽核回修第 1 條）。其餘的檔照舊留在勾選狀態裡，不靜默丟掉。"""
+    in_view = [code for code in (checked or ()) if code in set(options)]
+    keep = set(in_view if cap is None else in_view[:cap])
+    return [code for code in options if code in keep]
+
+
+def pick_captions(group: str, count: int) -> list:
+    """多選清單下方的說明行。「對照」：已選幾檔／上限；選滿時加一行沿用的上限句。「觀察清單」：沒有。"""
+    cap = PICK_CAPS[group]
+    if cap is None:
+        return []
+    lines = [TEXT_PICK_COUNT.format(n=count, cap=cap)]
+    if count >= cap:
+        lines.append(TEXT_PICK_FULL)
+    return lines
+
+
+def taipei_time_text(raw) -> str:
+    """取得時間（資料層原值，ISO 8601）→「YYYY-MM-DD HH:MM」台北時間。讀不懂、或沒有時區 → 原樣（不猜時區、不補值）。"""
+    text = str(raw)
+    try:
+        when = datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+    except ValueError:
+        return text
+    if when.tzinfo is None:
+        return text
+    return when.astimezone(TAIPEI).strftime("%Y-%m-%d %H:%M")
+
+
+# 每列來源展開「備註」欄：客戶原文「僅限來源資訊」（3-B 第二輪稽核回修 E；`44` 之十三其二第 3 條劃線更正）：
+# - 只收來源段落（`SOURCE_NOTE_PREFIXES`）；
+# - 另收新設計 H 那一句 —— 配息比那一格畫在格內的原因句（滑鼠提示裡與格內原因相同的那一段），其餘判定句、計數句
+#   （計價幣別未確定、幣別不同、截斷計數、算式、資料層紀錄、上游錯誤原文）一律不收；它們照舊在格內的滑鼠提示裡，資訊沒有遺失。
+# ~~第一輪回修的規則：值照出的格只收來源段落、其餘格的原因句照收、資料層紀錄與數值清單不收~~（有意識的更正，不是漏刪；
+# 決策者 AI 總管；第二輪稽核指出那一版仍放進了判定句與計數句，超出「僅限來源資訊」）。
+# 來源一致性句（3-B 複驗應修 2；線框第六版 4.4 與第 7 節第 10 列「來源一致性 → 每列展開」）：各來源各自宣告了什麼，算來源資訊。
+# 只有這一種：資料層 `exp_profile` 幣別不一致那一句（字面鏡像，測試比對真身）；「計價幣別未確定…不取數」這類判定句不算。
+SOURCE_CONSISTENCY_HEAD = "原因：各來源幣別不一致（"
+SOURCE_NOTE_PREFIXES = ("淨值來源：", "配息來源：", "出處：", "計價幣別出處（來源自報）：", "取數失敗的來源：",
+                        TIP_DIV_CCY_DECLARED, SOURCE_CONSISTENCY_HEAD)
+H_REASON_COLUMN = "div_ratio_pct"
+
+
+def split_tip(tip, *, reason_in=None) -> tuple:
+    """一格的滑鼠提示 → (取得時間原值或 None, 資料日期或 None, 備註)。「取得時間：」「資料日期：」兩種段落各取第一段；
+    備註只收來源段落，以及 `reason_in`（格內畫出的字）裡也寫著的那一段原因句（新設計 H；只有配息比那一格傳），
+    依原順序以「；」接回、一個字不改（3-B 第二輪稽核回修 E）。"""
+    fetched = day = None
+    rest = []
+    for part in str(tip).split(_TIP_SEP) if tip else ():
+        if fetched is None and part.startswith(_TIP_FETCHED):
+            fetched = part[len(_TIP_FETCHED):]
+        elif day is None and part.startswith(_TIP_DATA_DATE):
+            day = part[len(_TIP_DATA_DATE):]
+        elif part.startswith(SOURCE_NOTE_PREFIXES):
+            rest.append(part)
+        elif reason_in and part and part in reason_in and not part.startswith((_TIP_FETCHED, _TIP_DATA_DATE)):
+            rest.append(part)
+    return fetched, day, _TIP_SEP.join(rest)
+
+
+def source_rows(block: dict, row: dict) -> list:
+    """一列的來源展開：`[(欄位, 來源, 取得時間（台北時間）, 資料日期, 備註), ...]`，依結果清單的欄序。
+    只列有來源資訊（來源標示或滑鼠提示）的格；一格都沒有 → 空清單（那一列不畫展開）。缺的那一格寫「—」。"""
+    out = []
+    labels = dict(zip(block.get("column_keys") or (), block.get("column_labels") or ()))
+    for key in block.get("column_keys") or ():
+        cell = (row.get("_cells") or {}).get(key) or {}
+        tag, tip = cell.get("source_tag"), cell.get("source_tip")
+        if not tag and not tip:
+            continue
+        reason = str(cell.get("text") or "") if key == H_REASON_COLUMN and cell.get("_state") != logic.STATE_OK else None
+        fetched, day, note = split_tip(tip, reason_in=reason)
+        if not tag and not fetched and not day and not note:
+            continue   # 四項全空不列（`44` 之十三其二第 2 條：一格來源資訊都沒有的欄不列；3-B 複驗應修 1）
+        out.append((
+            labels.get(key, key),
+            tag or ROW_SOURCE_NONE,
+            taipei_time_text(fetched) if fetched else ROW_SOURCE_NONE,
+            day or ROW_SOURCE_NONE,
+            note or ROW_SOURCE_NONE,
+        ))
+    return out

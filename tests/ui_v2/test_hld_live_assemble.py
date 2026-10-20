@@ -443,7 +443,7 @@ def test_T1c_live_py的import恰為這八行_只多了共用門檻模組():
         "import math",
         "import re",
         "from datetime import date, datetime, timedelta, timezone",
-        "from .. import thresholds",
+        "from .. import page_health, thresholds",   # BL-0250 批次 3-B：產生處記資料類（純函式、只用標準庫）
         "from . import logic",
     ])
 

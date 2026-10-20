@@ -17,6 +17,8 @@ import math
 import re
 from datetime import date
 
+from .. import page_health
+
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事。
 _UNSET = object()
 
@@ -483,6 +485,7 @@ HLD1_NOT_READY_TAIL = "⬜ 另有 {n} 檔淨值超過 {days} 日未更新（資�
 # 總管 2026-10-13 裁決（稽核 C2 第二輪）：HLD-7 那幾檔**有列出**（輸入欄「0 筆」、輸出欄「⬜ 資料未備」），
 # 「未列入」與畫面事實不符 ⇒ HLD-7 用這一句；HLD-1、HLD-6 維持上面那句（那兩塊確實沒有列出）。
 HLD7_NOT_READY_NOTE = "⬜ 其中 {n} 檔淨值超過 {days} 日未更新（資料未備）"
+_NOT_READY_SUFFIX = " 日未更新（資料未備）"   # 上面兩句共同的那一段（3-B 第二輪稽核回修可選 2 在產生處認它記淨值）
 
 
 def nav_not_ready_text(days) -> str:
@@ -983,7 +986,7 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
         else None
     )
 
-    return {
+    out = {
         "_fund_code": code,
         # `HLD-5` 用它找回**這一筆**持倉、也用它當展開鍵。`44` 4.1：`holding` 的主鍵是
         # `holding_id`；同一檔基金可以掛在不同保單下（業務唯一鍵是（`policy_id`, `fund_code`）），
@@ -1076,6 +1079,27 @@ def fund_metrics(dataset, fund, window, *, window_error=None):
             table_wide=div_wide,
         ),
     }
+    # BL-0250 批次 3-B（總管第二輪裁定第 1、3、4 點）：在判定分支就地記下每一個值的 ⛔／◇ 屬哪一類資料（畫面字不變）。
+    # 取數失敗：哪一個訊息就是哪一張表（淨值、配息，或設定讀取失敗那一種）；資料未備：缺的是淨值還是配息。
+    # `配息佔淨值比` 一格兩種成因（分母是淨值、分子是配息）：缺哪一邊記哪一邊，兩邊都缺兩類都記。
+    nav_side = (nav_error, "nav") if nav_error else (window_error, "user_setting")
+    div_side = (div_error, "dividend") if div_error else (window_error, "user_setting")
+    yield_side = (yield_error, "dividend" if div_error else "nav") if yield_error else (window_error, "user_setting")
+    yield_missing = [k for k, hit in (("nav", nav_missing or (na_div is None and nav_last is None)),
+                                       ("dividend", div_missing)) if hit]
+    for name, (message, table), missing_tables in (
+        ("區間報酬率", nav_side, ["nav"]), ("期間波動", nav_side, ["nav"]), ("最大回撤", nav_side, ["nav"]),
+        ("期間配息合計", div_side, ["dividend"]), ("配息佔淨值比", yield_side, yield_missing),
+        ("本金類配息佔比", div_side, ["dividend"]),
+    ):
+        node = out[name]
+        if node["_state"] == STATE_ERROR:
+            page_health.tag_fetch_class(node, message, page_health.class_of(page_health.DATA_CLASSES, table))
+            if node.get("_fund_scoped_error"):
+                page_health.tag_fetch_class(node, f"{code}：{message}", page_health.class_of(page_health.DATA_CLASSES, table))
+        elif node["_state"] == STATE_MISSING:
+            page_health.tag_missing(node, *(page_health.class_of(page_health.DATA_CLASSES, t) for t in missing_tables))
+    return out
 
 
 def all_metrics(dataset, window, *, window_error=None):
@@ -2210,6 +2234,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
         missing_fields = () if is_direct else tuple(
             label for label, key in (("保單", "policy_name"), ("發行單位", "issuer")) if key not in (policy or {})
         )
+        policy_failed_cells = bool(policy_error and missing_fields)
         if policy_error and missing_fields:
             # 保單表讀不到：那幾格的成因是取數失敗，不是資料未備（BL-0373）。
             fields = [(label, SYMBOL_FETCH_FAILED_CELL if label in missing_fields and value == "⬜" else value)
@@ -2217,7 +2242,7 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
             missing_fields = ()
         has_nav = bool(metric["nav_rows"])
         nav_error = (errors.get("nav") or nav_fund_errors.get(metric["_fund_code"])) if strict and not has_nav else None
-        items.append(
+        item = (
             {
                 "_fund_code": metric["_fund_code"],
                 # 展開鍵（總管 2026-10-02 第 2 輪裁定）：`44` 4.1 畫面上一列＝一組
@@ -2256,6 +2281,19 @@ def _build_hld5(dataset, metrics, *, open_fund, has_window, window_unknown=False
                 "div_plot_text": "〔配息長條〕照畫 · 本輪以佔位框代替，不畫真圖",
             }
         )
+        # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：這一列的 ⛔／◇ 屬哪一類資料，在判定分支就地記下（畫面字不變）。
+        # 保單、發行單位兩格的 ◇ 是保單；淨值那一句的 ◇／⛔ 是淨值；區間讀不到那一句是使用者設定。
+        if window_unknown:
+            page_health.tag_fetch_class(item, settings_error, page_health.DATA_CLASSES["user_setting"])
+        elif not has_nav and nav_error:
+            page_health.tag_fetch_class(item, nav_error, page_health.DATA_CLASSES["nav"])
+        if policy_failed_cells:
+            item[page_health.FETCH_CLASS_KEY] = page_health.DATA_CLASSES["policy"]
+        keys = ([page_health.DATA_CLASSES["policy"]] if missing_fields else []) + (
+            [page_health.DATA_CLASSES["nav"]] if not window_unknown and not has_nav and not nav_error else [])
+        if keys:
+            page_health.tag_missing(item, *keys)
+        items.append(item)
 
     if not items and holding_unknown:
         # 📌 2026-10-05「讀取失敗不說空」：持倉表讀不到，不是沒有持倉 —— 不印「尚未建立任何持倉」，
@@ -2315,6 +2353,15 @@ def _hld6_failures(dataset) -> list:
             seen.add(item)
             uniq.append(item)
     return uniq
+
+
+def _hld6_failure_pairs(dataset) -> list:
+    """`_hld6_failures` 那一串原文各屬哪一張表：`[(原文, 表名), ...]`（同一套次序與去重；BL-0250 批次 3-B）。"""
+    errors = dataset.get("errors") or {}
+    out = [(errors[t], t) for t in ("holding", "nav", "dividend") if errors.get(t)]
+    for table, per_fund in fund_errors(dataset).items():
+        out += [(f"{code}：{msg}", table) for code, msg in sorted(per_fund.items())]
+    return out
 
 
 def _hld6_all_failed(dataset) -> bool:
@@ -2397,7 +2444,7 @@ def _build_hld6(dataset, *, not_ready_line=None):
         # 總管 2026-10-13 裁決（稽核 C2）：淨值過期而被拿掉的檔，本表看不出來 ⇒ 加一行中性說明（與 HLD-1 卡尾同一句）。
         detail_lines = detail_lines + [not_ready_line]
 
-    return {
+    block = {
         "code": "HLD-6",
         "title": BLOCK_TITLES["HLD-6"],
         "_layer": 4,
@@ -2414,6 +2461,13 @@ def _build_hld6(dataset, *, not_ready_line=None):
         "badges": [],
         "buttons": [],
     }
+    # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：本塊印出的失敗原文各屬哪一張表、「淨值 與 配息 尚無資料」那一句屬哪兩類，
+    # 在判定分支這裡記下（畫面字不變）。
+    if state != STATE_OK:
+        for message, table in (_hld6_failure_pairs(dataset) if _STRICT_FETCH.get() else ()):
+            page_health.tag_fetch_class(block, message, page_health.class_of(page_health.DATA_CLASSES, table))
+        page_health.tag_missing(block, page_health.DATA_CLASSES["nav"], page_health.DATA_CLASSES["dividend"])
+    return block
 
 
 # ───────────────────────── HLD-8 ─────────────────────────
@@ -2677,6 +2731,103 @@ def _build_hld7(metrics, hld1_rows, *, has_holdings, not_ready_line=None, holdin
 # ───────────────────────── 組裝 ─────────────────────────
 
 
+# ───────────────────────── 產生處的資料類標記（BL-0250 批次 3-B） ─────────────────────────
+# 總管 2026-10-19 第二輪裁定第 1、4 點：⛔／◇ 的資料類寫在產生處，不從塊的來源推；衍生的狀態另記理由、不另算一項。
+# 本頁的失敗訊息都由本層交給各塊（`source_error`／`unsurfaced_source_error` 那一張表、設定與持倉兩張表的原文、
+# 各值節點的 `reason_text`），所以在這裡逐塊記下「交給它的每一句訊息屬哪一張表」。各值節點自己的那一筆在 `fund_metrics` 記。
+_HLD_BLOCK_INDICATORS = {
+    "HLD-2": ("區間報酬率", "期間波動"),
+    "HLD-3": ("期間配息合計", "配息佔淨值比"),
+    "HLD-5": ("區間報酬率", "期間波動", "最大回撤", "期間配息合計", "配息佔淨值比", "本金類配息佔比"),
+    "HLD-7": ("區間報酬率", "期間波動", "最大回撤", "期間配息合計", "配息佔淨值比", "本金類配息佔比"),
+    "HLD-8": ("最大回撤", "本金類配息佔比"),
+}
+
+
+def _first_failed_table(dataset, code, *, skip=()):
+    """`source_error`（`skip` 空）／`unsurfaced_source_error`（`skip` ＝ `_SURFACED_PER_VALUE`）回的那一句是哪一張表的。"""
+    errors = dataset.get("errors", {})
+    for table in BLOCK_SOURCE_TABLES[code]:
+        if table in skip:
+            continue
+        if errors.get(table):
+            return table
+    return None
+
+
+def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_error, holding_error) -> None:
+    errors = dataset.get("errors", {})
+    by_code = {block["code"]: block for block in blocks}
+    cls = page_health.DATA_CLASSES
+
+    def tag(code, message, table):
+        if message:
+            page_health.tag_fetch_class(by_code[code], message, page_health.class_of(cls, table))
+
+    def nodes(names):
+        return [metric[name] for metric in metrics for name in names]
+
+    for code in ("HLD-1", "HLD-2", "HLD-3"):
+        for skip in ((), _SURFACED_PER_VALUE):
+            table = _first_failed_table(dataset, code, skip=skip)
+            if table:
+                tag(code, errors[table], table)
+    rule_names = tuple(dict.fromkeys(r["indicator"] for r in rules if r["indicator"] in RULE_INDICATOR_NAMES))
+    for code, names in (("HLD-1", rule_names), *_HLD_BLOCK_INDICATORS.items()):
+        for node in nodes(names):
+            page_health.copy_fetch_classes(by_code[code], node)
+    for code in ("HLD-1", "HLD-4", "HLD-5", "HLD-8"):
+        tag(code, settings_error, "user_setting")
+    for code in ("HLD-2", "HLD-5", "HLD-7", "HLD-8"):
+        tag(code, holding_error, "holding")
+    # 3-B 稽核回修第 5 條（根因：成因只記到部分卡）：空持倉時三張核心卡整塊 `系統錯誤`，畫面只印來源表裡**第一張**失敗的那一句
+    # （`source_error` 依 `BLOCK_SOURCE_TABLES` 的次序），排在後面、同樣失敗的來源表沒有畫出來，但它一樣讓這一塊讀不到 ——
+    # 記成「被蓋住的成因」。`HLD-2` 的來源表沒有持倉，但持倉表讀不到時它照樣整塊 `系統錯誤`（`_build_core_card` 那一支），
+    # 所以持倉一併記。只記、不上畫面；判定一格不動。
+    if not has_holdings:
+        holding_unknown = bool(holding_error) and not dataset.get("holding")
+        for code in ("HLD-1", "HLD-2", "HLD-3"):
+            drawn = _first_failed_table(dataset, code)
+            if by_code[code].get("_state") != STATE_ERROR or drawn is None:
+                continue
+            tables = BLOCK_SOURCE_TABLES[code]
+            for table in tables[tables.index(drawn) + 1:]:
+                if errors.get(table):
+                    page_health.tag_shadowed(by_code[code], errors[table], page_health.class_of(cls, table))
+            if "holding" not in tables and holding_unknown and _STRICT_FETCH.get():
+                page_health.tag_shadowed(by_code[code], holding_error, cls["holding"])
+
+    # 3-B 第二輪稽核回修可選 2：「另有 N 檔淨值超過 N 日未更新（資料未備）」那一句（`HLD-1` 卡尾、`HLD-6` 表尾；一般畫面換成 ◇ 起頭）
+    # 屬淨值，在產生處記下（畫面字不變）。`HLD-7` 說明那一句由同頁推出，塊已記為衍生。
+    for code, field in (("HLD-1", "tail_lines"), ("HLD-6", "detail_lines")):
+        if any(isinstance(line, str) and _NOT_READY_SUFFIX in line for line in by_code[code].get(field) or ()):
+            page_health.tag_missing(by_code[code], cls["nav"])
+    # ◇：空持倉時各塊說的是持倉；有持倉時，核心卡與 `HLD-8` 的塊態取自各值（衍生），`HLD-1` 零列的資料未備是門檻所指的那幾個值。
+    page_health.tag_derived(by_code["HLD-0"], page_health.DERIVED_LAMP)
+    page_health.tag_derived(by_code["HLD-7"], HLD7_DERIVED_REASON)
+    for row in by_code["HLD-7"].get("_rows") or ():   # 軌跡每一列的輸出欄逐字照抄值所在那一塊（44 :733）
+        page_health.tag_derived(row, HLD7_ROW_DERIVED_REASON)
+    for code in ("HLD-1", "HLD-2", "HLD-3", "HLD-5", "HLD-8"):
+        if not has_holdings:
+            page_health.tag_missing(by_code[code], cls["holding"])
+            for node in (by_code[code].get("_placeholder"),):
+                if isinstance(node, dict):
+                    page_health.tag_missing(node, cls["holding"])
+        elif code in ("HLD-2", "HLD-3", "HLD-8"):
+            page_health.tag_derived(by_code[code], page_health.DERIVED_BLOCK_STATE)
+    if has_holdings:
+        keys = [k for node in nodes(rule_names) if node["_state"] == STATE_MISSING for k in node.get(page_health.MISSING_KEYS_KEY, ())]
+        if keys:
+            page_health.tag_missing(by_code["HLD-1"], *dict.fromkeys(keys))
+            if isinstance(by_code["HLD-1"].get("_placeholder"), dict):
+                page_health.tag_missing(by_code["HLD-1"]["_placeholder"], *dict.fromkeys(keys))
+
+
+# `HLD-7` 的「⬜ 資料未備：四塊沒有一塊出數」由 `HLD-1`／`HLD-2`／`HLD-3`／`HLD-8` 的值推出（總管第二輪裁定第 1 點）。
+HLD7_DERIVED_REASON = "計算軌跡不自己取數；「四塊沒有一塊出數」由偏離提示卡、績效與風險卡、配息與本金卡、最大回撤表的值推出"
+HLD7_ROW_DERIVED_REASON = "計算軌跡這一列的輸出欄逐字照抄值所在那一塊，那一塊的值自己記了資料類"
+
+
 def build_page_model(
     dataset: dict,
     *,
@@ -2877,6 +3028,10 @@ def _build_page_model(
         ),
     ]
 
+    # BL-0250 批次 3-B（總管 2026-10-19 第二輪裁定第 1、4 點）：各塊的 ⛔／◇ 屬哪一類資料，在交出訊息與判定狀態的這一層寫明。
+    _tag_hld_blocks(dataset, blocks, metrics, rules, has_holdings=has_holdings,
+                    settings_error=settings_error, holding_error=holding_error)
+
     return {
         "title": PAGE_TITLE,
         "answers": PAGE_ANSWERS,
@@ -3051,7 +3206,10 @@ def collect_ui_strings(model: dict) -> list:
         if isinstance(node, str):
             out.append(node)
         elif isinstance(node, dict):
-            for value in node.values():
+            for key, value in node.items():
+                # BL-0250 批次 3-B：產生處的資料類標記（`page_health.MARK_KEYS`）是給各頁資料狀態總表讀的簿記，不會上畫面，不收。
+                if key in page_health.MARK_KEYS:
+                    continue
                 walk(value)
         elif isinstance(node, (list, tuple, set)):
             for value in node:

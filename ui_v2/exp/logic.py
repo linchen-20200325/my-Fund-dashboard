@@ -15,6 +15,8 @@ from __future__ import annotations
 import contextvars
 import decimal
 
+from .. import page_health
+
 # ───────────────────────── 常數（逐字引 `44`） ─────────────────────────
 
 # `44` 5.1 卡片四狀態。本檔沿用「逐主值判定」那個現行讀法，狀態不掛在整張卡。
@@ -638,6 +640,55 @@ def undet_tail(count: int) -> str:
     return f"；另有 {hinted(format_count(count))} 檔無法判定"
 
 
+# BL-0250 批次 3-B：候選清單各欄屬哪一類資料（給「篩選判定」那一格記成因；欄位與表的對應照 `44` 第四節）。
+COLUMN_DATA_CLASS = {
+    CODE_COLUMN: page_health.DATA_CLASS_POOL,
+    "fund_name": page_health.DATA_CLASSES["fund_profile"], "ccy": page_health.DATA_CLASSES["fund_profile"],
+    "inception_on": page_health.DATA_CLASSES["fund_profile"], "dividend_policy": page_health.DATA_CLASSES["fund_profile"],
+    "mgmt_fee_rate_pct": page_health.DATA_CLASSES["fund_profile"],
+    # 3-B 稽核回修第 2 條：條件卡選得到的欄位（`FUND_PROFILE_FIELDS`）每一欄都要在表裡；`fetched_at` 是基本資料表的取得時間欄。
+    "fetched_at": page_health.DATA_CLASSES["fund_profile"],
+    "nav_date": page_health.DATA_CLASSES["nav"], "nav_orig_ccy": page_health.DATA_CLASSES["nav"],
+    "div_ratio_pct": page_health.DATA_CLASSES["dividend"],
+}
+
+
+_EXP7_DERIVED_REASON = "篩選軌跡這一列的條件文字照抄條件輸入卡那一列"
+
+
+def _tag_missing_cells(cells, nav, ratio) -> None:
+    """缺格那一支屬哪一類資料，在產生處記下（畫面字不變；BL-0250 批次 3-B，總管第二輪裁定第 1、3 點）。
+    配息比那一格一格兩種成因（分母是淨值、分子是配息比）：缺哪邊記哪邊，兩邊都缺兩類都記。"""
+    for column, cell in cells.items():
+        # 3-B 稽核回修第 2 條：原本多一個條件「表裡沒有的欄靜默略過」，已拿掉 —— 改由 `class_of` 記「未收錄」，
+        # 收集那一步報錯、錯誤邊界接住（有意識的更正，不是漏刪；本檔不用刪除線記號，見 `test_exp_logic.py` 那一條守衛）。
+        if cell["_state"] != STATE_MISSING:
+            continue
+        if column == "div_ratio_pct":
+            page_health.tag_missing(cell, *(([page_health.class_of(COLUMN_DATA_CLASS, "nav_date")] if not nav else [])
+                                            + ([page_health.class_of(COLUMN_DATA_CLASS, column)] if ratio is None else [])))
+        else:
+            page_health.tag_missing(cell, page_health.class_of(COLUMN_DATA_CLASS, column))
+
+
+# `compare_tristate` 回的「欄位值缺」那一種原因字首（客戶 2026-10-13 裁示的那一支）。
+UNDET_WHY_MISSING = "資料未備"
+
+
+def judge_keys(reasons) -> tuple:
+    """「篩選判定」那一格無法判定的各原因 → 記在格上的鍵（依原因順序、不重複）。
+
+    - 「資料未備：<欄>」→ 那一欄的資料類（`COLUMN_DATA_CLASS`；表裡沒有 → 「未收錄」標記，見 `page_health.class_of`）；
+    - 「欄位值不是數值：<欄>」「條件數值「…」不是數值：<欄>」→ 鍵「篩選條件」（資料類「使用者設定」）——
+      數值比不出大小是條件與欄位對不上，不是那一欄的資料沒到（3-B 稽核回修第 8 條，比照資產配置使用者參數留空記設定名）。"""
+    keys = []
+    for reason in reasons:
+        why, field = reason.rsplit("：", 1)
+        keys.append(page_health.class_of(COLUMN_DATA_CLASS, field) if why == UNDET_WHY_MISSING
+                    else page_health.SETTING_FILTER_RULES)
+    return tuple(dict.fromkeys(keys))
+
+
 def undet_text(reasons) -> str:
     """候選清單「篩選判定」格裡無法判定那一句：`⬜ 無法判定（資料未備：ccy；…）`。"""
     return f"{UNDET_TEXT}（{'；'.join(reasons)}）"
@@ -693,7 +744,7 @@ def compare_tristate(left, op: str, right: str):
     if op not in KNOWN_OPERATORS:
         raise UnspecifiedComparison(f"沒有這個比較方向：{op!r}")
     if is_missing(left):
-        return None, "資料未備"
+        return None, UNDET_WHY_MISSING
     if op in ("大於", "小於"):
         # 總管 2026-10-13：nan、inf 這類 `float()` 吃得下、但比不出大小的值一律無法判定（與 `44` 檔尾「其五」射程句一致）。
         if not _finite_number(left):
@@ -1084,6 +1135,9 @@ def _build_exp1(dataset, *, draft_rules, save_failed_message, fail_lines=(), sav
                 "_button": _button(TEXT_CLEAR_ROW, "清除"),
                 "tail_text": "" if effective else TEXT_BLANK_VALUE,
                 "text": rule_text(rule),
+                # BL-0250 批次 3-B（總管第二輪裁定第 2 點的同一個做法）：數值留空時那一句畫成 ◇，鍵寫這一個設定的中文名。
+                **({page_health.MISSING_KEYS_KEY: (page_health.SETTING_FILTER_RULES,)}
+                   if str(rule.get("value", "")).strip() == "" else {}),
             }
         )
 
@@ -1197,7 +1251,9 @@ def _build_exp2(
             # 落地方式（總管 2026-10-13 決定）：這一欄只在至少一列無法判定時出現，明確符合的列留白；
             # 固定跟在代碼欄後面，不進 EXP-4 可選欄位、不是排序選項。
             cells[JUDGE_COLUMN] = (
-                _value(undet_text(undet[code]), state=STATE_MISSING, label=JUDGE_COLUMN)
+                # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：無法判定的成因是哪幾個欄位缺 → 那幾欄的資料類，在產生處記下。
+                page_health.tag_missing(_value(undet_text(undet[code]), state=STATE_MISSING, label=JUDGE_COLUMN),
+                                        *judge_keys(undet[code]))
                 if code in undet
                 else _value("", label=JUDGE_COLUMN)
             )
@@ -1244,6 +1300,7 @@ def _build_exp2(
                     if (nav and ratio is not None)
                     else _missing_value(COLUMN_LABELS[column])
                 )
+        _tag_missing_cells({c: cells[c] for c in shown}, nav, ratios.get(code))   # BL-0250 批次 3-B（裁定第 1、3 點）
         cell_states.extend(cell["_state"] for cell in cells.values())
         rows.append(
             {
@@ -1334,7 +1391,8 @@ def _build_exp2(
     state = STATE_ERROR if (fail_message or extra_fail_lines) else worst_state(cell_states)
     n_undet = sum(1 for row in rows if undet and row["_fund_code"] in undet)
     keys = ((CODE_COLUMN,) if code_column else ()) + ((JUDGE_COLUMN,) if show_judge else ()) + tuple(shown)
-    return _block(
+    # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：塊的 `_state` 取自各格（`worst_state`）＝衍生狀態；各格自己記資料類。
+    return page_health.tag_derived(_block(
         "EXP-2",
         state=state,
         states=cell_states,
@@ -1356,7 +1414,7 @@ def _build_exp2(
             placeholder_badge("新鮮度", "〔新鮮度〕"),
         ],
         redline_note="G1†：本卡不排名、不標最佳，也不預設排序欄位。",
-    )
+    ), page_health.DERIVED_BLOCK_STATE)
 
 
 def scenario_fallback_note(asked, used, label):
@@ -1494,6 +1552,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
                     if not is_missing(fee)   # NaN 不畫成「nan」（稽核 K 第七輪）
                     else _missing_value()
                 )
+        _tag_missing_cells(cells, nav, ratios.get(code))   # BL-0250 批次 3-B（裁定第 1、3 點）
         cell_states.extend(cell["_state"] for cell in cells.values())
         columns.append(
             {
@@ -1502,6 +1561,8 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
                 # `44` 規則欄逐字：「不同幣別的檔並排時，幣別寫在欄頭」。
                 "head_text": _compare_head(profile),
                 "_cells": cells,
+                # BL-0250 批次 3-B（裁定第 1 點）：欄頭缺基金名或幣別那一句屬基金基本資料（畫面字不變）。
+                page_health.MISSING_KEYS_KEY: (COLUMN_DATA_CLASS["fund_name"],),
             }
         )
 
@@ -1525,7 +1586,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
         detail_lines.append(
             "⚠ 目前寬度改成逐檔上下堆疊：44 禁橫向捲動，但沒有寫卡內表格怎麼塌，這一種塌法沿用已拍板草稿。"
         )
-    return _block(
+    return page_health.tag_derived(_block(   # 塊的 `_state` 取自各格（衍生；BL-0250 批次 3-B 裁定第 1 點）
         "EXP-3",
         state=STATE_ERROR if failure_notes else worst_state(cell_states),
         states=cell_states,
@@ -1544,7 +1605,7 @@ def _build_exp3(dataset, *, matched, compare_checked, viewport_width):
             _redline_badge("G2†"),
         ],
         redline_note="G2†：客觀對照，不提供具體處置方向。",
-    )
+    ), page_health.DERIVED_BLOCK_STATE)
 
 
 def _build_exp4(dataset, *, visible_columns, sort_column, save_failed_message, fail_lines=(),
@@ -1766,7 +1827,7 @@ def _build_exp6(dataset, *, compare_checked):
             raw = profile.get(key)
             if is_missing(raw):   # NaN 不畫成「nan」（稽核 K 第七輪）
                 # `44` 空狀態欄逐字：「某欄為空 → 顯示 `⬜`，不以零或字串『無』填。」
-                node = _missing_value(label)
+                node = page_health.tag_missing(_missing_value(label), COLUMN_DATA_CLASS["fund_name"])
             elif key == "mgmt_fee_rate_pct":
                 node = _value(hinted(format_fee(raw)), has_number=True,
                               ccy=profile["ccy"], label=label)
@@ -1805,7 +1866,9 @@ def _build_exp6(dataset, *, compare_checked):
         else STATE_MISSING if empty_kind
         else worst_state(cell_states)
     )
-    return _block(
+    tag = ((lambda b: page_health.tag_missing(b, COLUMN_DATA_CLASS["fund_name"])) if empty_kind == EMPTY_SOURCE
+           else (lambda b: page_health.tag_derived(b, page_health.DERIVED_BLOCK_STATE)))   # BL-0250 批次 3-B（裁定第 1 點）
+    return tag(_block(
         "EXP-6",
         state=state,
         states=cell_states,
@@ -1824,7 +1887,7 @@ def _build_exp6(dataset, *, compare_checked):
         detail_lines=detail_lines,
         badges=[],
         redline_note="本塊只顯示登記值原樣，不做任何加工。",
-    )
+    ))
 
 
 def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines=(), tristate=False):
@@ -1849,6 +1912,8 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
         rows.append(
             {
                 **extra,
+                # BL-0250 批次 3-B（裁定第 1 點）：軌跡這一列的條件文字照抄條件輸入卡那一列（衍生，不另算）。
+                page_health.DERIVED_KEY: True, page_health.DERIVED_REASON_KEY: _EXP7_DERIVED_REASON,
                 "condition_text": rule_text(rule),
                 "before_text": hinted(format_count(before)),
                 "after_text": hinted(format_count(after)),
@@ -1890,7 +1955,10 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
         else STATE_MISSING if empty_kind
         else STATE_OK
     )
-    return _block(
+    # BL-0250 批次 3-B（總管第二輪裁定第 2 點的同一個做法）：「尚未設定條件」畫成 ◇，鍵寫這一個設定的中文名。
+    tag = ((lambda b: page_health.tag_missing(b, page_health.SETTING_FILTER_RULES)) if empty_kind == EMPTY_SOURCE
+           else (lambda b: b))
+    return tag(_block(
         "EXP-7",
         state=state,
         states=(),
@@ -1916,7 +1984,7 @@ def _build_exp7(dataset, *, steps, has_rules, conclusion_count, extra_fail_lines
         detail_lines=detail_lines,
         badges=[],
         redline_note="本塊只記錄哪一條條件把檔數砍下來，不對結果加任何評語。",
-    )
+    ))
 
 
 def conclusion_light(*, count, has_rules, read_states):
@@ -2025,7 +2093,7 @@ def _build_exp0(dataset, *, count, has_rules, rules, read_states, extra_fail_lin
         # Phase 3 P1-④：燈上「另有 M 檔無法判定」那個 M（沒寫進燈就是 0）；正式模式 ③需要注意讀它（`ui_v2/sections.py`），不另算。
         # 只在正式模式（`demo_hint=False`）放這個鍵 —— 示範模式模型因此逐位元組不變（`test_前向釘樁_整頁逐格釘住`）。
         block["_undet_count"] = shown_undet
-    return block
+    return page_health.tag_derived(block, page_health.DERIVED_LAMP)   # BL-0250 批次 3-B（裁定第 1 點）
 
 
 # ───────────────────────── 整頁 ─────────────────────────

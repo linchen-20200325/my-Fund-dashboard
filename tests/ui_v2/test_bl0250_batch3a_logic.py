@@ -245,7 +245,7 @@ def test_缺服務帳戶_一般畫面那一句換字_訊息原文的塊與底線
 
 # ═══════════════════════ U7：SET-3／SET-6／SET-7（走正式組裝，env 替身同 test_set_live_logic） ═══════════════════════
 
-from test_set_live_logic import R, _b, _page, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
+from test_set_live_logic import R, _b, _page, _stub_fetch, _vix, env  # noqa: E402,F401  （fixture 由 pytest 依名稱取用）
 
 
 def _demo():
@@ -264,8 +264,10 @@ def test_U7a_SET3表頭與列上用中文_示範模式照舊英文(env):
     assert any(r["kind_text"] in set_live.KIND_NAMES for r in demo["_rows"])        # 示範模式照舊英文 value_kind
 
 
-def test_U7c_SET6不列紀錄編號欄_結果中文_原值在進階診斷(env):
+def test_U7c_SET6不列紀錄編號欄_結果中文_原值在進階診斷(env, monkeypatch):
     source = pytest.importorskip("ui_v2.set.source")
+    # 3-B 稽核回修第 12 條：取數換成測試替身（同 `test_set_live_logic` 的 `_stub_fetch`），不再經 yfinance 真的連網；production 一行未動。
+    _stub_fetch(monkeypatch, series=_vix())
     source.refetch("市場指標")
     _data, model = _page()
     set6 = _b(model, "SET-6")
@@ -294,8 +296,10 @@ def test_U7d_SET7留在原位_改標題_預設收合_內容不改(env):
     assert set7["_rows"] == same_data["_rows"]
 
 
-def test_U7b_SET2結果不寫英文原值_訊息原文照印(env):
+def test_U7b_SET2結果不寫英文原值_訊息原文照印(env, monkeypatch):
     source = pytest.importorskip("ui_v2.set.source")
+    # 3-B 稽核回修第 12 條：取數換成測試替身，不再經 yfinance 真的連網（同上）。
+    _stub_fetch(monkeypatch, series=_vix())
     source.refetch("市場指標")
     _data, model = _page()
     for row in _b(model, "SET-2")["_rows"]:
@@ -361,9 +365,10 @@ def test_三張核心卡的佔位徽章換成一枚不適用_其他徽章不動(
     exp_live = pytest.importorskip("ui_v2.exp.live")
     model, other = _exp_model()
     assert exp_live.card_provenance_not_applicable(model) == 3
+    # BL-0250 批次 3-B 總管裁定（有意識的更正，不是漏刪）：括號改為線框第六版待裁示 (1) 推薦原文（44 之十三其六）。
     for block in model["blocks"][:3]:
         assert block["badges"] == [other, {"_kind": "來源", "_tone": "中性", "_not_applicable": True,
-                                            "text": "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"}]
+                                            "text": "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"}]
 
 
 def test_不適用只限三張核心卡的佔位_其他塊與真的來源徽章不換():

@@ -270,6 +270,16 @@ def test_b_執行期_四頁傳入的物件與live入口傳的是同一批(no_sec
     # 多傳一個 `settings_page`（設定與診斷那一頁的 `st.Page`，只換頁）；拿掉它之後其餘照舊逐一相同、同一物件。
     preview_kwargs = dict(preview_kwargs)
     settings_page = preview_kwargs.pop("settings_page", None)
+    # BL-0250 批次 3-B（有意識的更正，不是漏刪）：設定與診斷頁另多傳 `pages`（四頁的 `st.Page`，給總表每列只換頁的連結）。
+    pages = preview_kwargs.pop("pages", None)
+    if slug == "set":
+        from streamlit.navigation.page import StreamlitPage
+
+        assert set(pages) == {"mkt", "hld", "exp", "alo"} and all(isinstance(p, StreamlitPage) for p in pages.values())
+        assert {s: p.url_path for s, p in pages.items()} == {s: s for s in pages}
+    else:
+        assert pages is None
+    assert "pages" not in live_kwargs
     if slug == "set":
         assert settings_page is None
     else:

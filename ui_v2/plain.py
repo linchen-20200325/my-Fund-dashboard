@@ -331,6 +331,13 @@ class _Context:
         self.raw: list = []
         self.fetch_failed: set = set()
         self.not_configured: set = set()
+        # BL-0250 批次 3-B（總管 2026-10-19 第二輪裁定第 4 點）：每認出一句取數失敗，記一筆「這一句的資料類是哪一類」——
+        # 取自失敗**產生處**寫在模型上的標記（`FETCH_CLASSES_KEY`），不從塊的來源推。只記、不改任何畫面字（畫面那一句照舊
+        # 寫可見的資料類，頁首一個字都不改）。給 `ui_v2/health.py::collect_page_items` 交給各頁資料狀態總表。
+        self.fetch_events: list = []
+        self.stack: list = []    # 走到這一句時，外面一層層的 dict（最內層在最後）
+        self.field = None        # 這一句所在的欄位名
+        self.fields: list = []   # 從頂層走到這一句經過的每一個鍵
 
     def where(self, block) -> str:
         if not block:
@@ -343,10 +350,41 @@ class _Context:
             self.raw.append(entry)
 
 
+# ───────────── 取數失敗的資料類：寫在失敗產生處（BL-0250 批次 3-B，總管 2026-10-19 第二輪裁定第 4 點） ─────────────
+# 各頁 `logic`／`live` 在**寫出**「⛔ 取數失敗：<訊息>」那一句的地方，同時在那個 dict（值節點、佔位、列、或塊本身）上
+# 記一筆 `(<訊息>, <中文資料類>)`（`ui_v2/page_health.py::tag_fetch_class`；鍵名由測試比對兩邊相同）。本模組認出那一句時，從這一句外面最近的一層往外找，找到訊息逐字
+# 相同的那一筆就用它的資料類；找不到 → 這一句的資料類記為 None（`collect_page_items` 不猜，逐處列出）。
+# ⛔ 只在 `_` 開頭的鍵底下，畫面不讀它；畫面上那一句的資料類照舊（頁首資料狀態行一個字都不改）。
+FETCH_CLASSES_KEY = "_fetch_classes"
+
+
+def _origin_classes(ctx: _Context, raws) -> tuple:
+    """從這一句外面最近一層「有記到這一句訊息」的 dict 取產生處記的資料類（訊息逐字相同；同一句訊息在同一層記了兩類時兩類都回，
+    例：兩張表回了同一句原文、塊上只畫一行）。找不到 → 空 tuple（不猜）。"""
+    for node in reversed(ctx.stack):
+        found = []
+        for message, data_class in node.get(FETCH_CLASSES_KEY) or ():
+            if message in raws and data_class not in found:
+                found.append(data_class)
+        if found:
+            return tuple(found)
+    return ()
+
+
+def _fetch_event(ctx: _Context, block, visible: str, raws, *, fund="", retreat_day=None) -> None:
+    origin = (visible,) if visible != DATA_CLASS_DEFAULT else _origin_classes(ctx, raws)
+    ctx.fetch_events.append({
+        "code": (block or {}).get("code"), "field": ctx.field, "fields": tuple(ctx.fields), "visible": visible,
+        "data_classes": origin, "fund": fund, "retreat_day": retreat_day,
+        "container": ctx.stack[-1] if ctx.stack else None, "raw": next(iter(raws)),
+    })
+
+
 def _rewrite_failure(text: str, block, ctx: _Context):
     """失敗原文那一族 → 一句狀態描述。回 (新字串, 是否改寫)。"""
     if FETCH_FAIL_PREFIX in text:
         prefix, raw = text.split(FETCH_FAIL_PREFIX, 1)
+        raw_whole = raw
         data_class = DATA_CLASS_DEFAULT
         table = _TABLE_PREFIX.search(prefix)
         if table:   # 標的探索的「<表鍵>：⛔ 取數失敗：…」：表鍵就是資料類，不再另寫一次
@@ -358,6 +396,8 @@ def _rewrite_failure(text: str, block, ctx: _Context):
         if _NAV_RETREAT.match(raw):   # BL-0375：本頁自己組的日期句，照留（見 `NAV_RETREAT_FAILED_TEXT`）
             ctx.fetch_failed.add(TABLE_NAMES["nav"])
             ctx.keep(block, text)   # 進階診斷照舊收一份（同其他失敗句），一般畫面另照留日期
+            _fetch_event(ctx, block, TABLE_NAMES["nav"], (raw_whole, raw), fund=fund,
+                         retreat_day=raw[len("改用 "):len("改用 ") + 10])
             return f"{prefix}⛔ {TABLE_NAMES['nav']} 取數失敗：{fund + '：' if fund else ''}{raw}", True
         known = _known(raw)
         state = STATE_FETCH_DEFAULT
@@ -366,6 +406,8 @@ def _rewrite_failure(text: str, block, ctx: _Context):
             ctx.not_configured.add(known[1])
         ctx.fetch_failed.add(data_class)
         ctx.keep(block, text)
+        if not known:   # 尚未設定那一族另由 `health` 的尚未設定項目數，不算取數失敗
+            _fetch_event(ctx, block, data_class, (raw_whole, raw), fund=fund)
         target = f"{fund} 的{state}" if fund else state
         return f"{prefix}⛔ {data_class} 取數失敗：{target}", True
     if text.startswith(SETTINGS_UNREADABLE_PREFIX):
@@ -441,19 +483,28 @@ def _walk(node, block, ctx: _Context, private: bool = False):
     if isinstance(node, dict):
         if isinstance(node.get("code"), str) and node.get("code") in BLOCK_NAMES:
             block = node
+        ctx.stack.append(node)
+        outer_field = ctx.field
         for key in list(node):
             value = node[key]
             if _protected(key):
                 continue
-            if isinstance(key, str) and key.startswith("_"):
-                if isinstance(value, (dict, list, tuple)):
-                    node[key] = _walk(value, block, ctx, private=True)
-                continue
-            if isinstance(value, str) and (key in _USER_DATA_KEYS or (private and key in _ROW_USER_DATA_KEYS)):
-                continue   # 使用者的資料（字串本身），不換字；同名鍵底下是一格值節點（例 EXP-2 的 `_cells`）時照常往下走
-            if key == "value_text" and _is_input_field(node):
-                continue   # 輸入欄的當下值是使用者的資料，不換字
-            node[key] = _walk(value, block, ctx)
+            ctx.field = key
+            ctx.fields.append(key)
+            try:
+                if isinstance(key, str) and key.startswith("_"):
+                    if isinstance(value, (dict, list, tuple)):
+                        node[key] = _walk(value, block, ctx, private=True)
+                    continue
+                if isinstance(value, str) and (key in _USER_DATA_KEYS or (private and key in _ROW_USER_DATA_KEYS)):
+                    continue   # 使用者的資料（字串本身），不換字；同名鍵底下是一格值節點（例 EXP-2 的 `_cells`）時照常往下走
+                if key == "value_text" and _is_input_field(node):
+                    continue   # 輸入欄的當下值是使用者的資料，不換字
+                node[key] = _walk(value, block, ctx)
+            finally:
+                ctx.fields.pop()
+        ctx.field = outer_field
+        ctx.stack.pop()
         return node
     if isinstance(node, list):
         out = []
@@ -475,6 +526,16 @@ def _walk(node, block, ctx: _Context, private: bool = False):
     return node
 
 
+def _drop_fetch_classes(node) -> None:
+    if isinstance(node, dict):
+        node.pop(FETCH_CLASSES_KEY, None)
+        for value in node.values():
+            _drop_fetch_classes(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _drop_fetch_classes(value)
+
+
 def plain_model(model: dict, *, page: str):
     """正式模式模型 → (一般畫面用的模型, 原始訊息清單, 狀態摘要)。輸入模型一個字都不改（先深拷貝）。
 
@@ -486,6 +547,7 @@ def plain_model(model: dict, *, page: str):
         raise ValueError(f"不認得的頁：{page}")
     ctx = _Context(page)
     display = _walk(copy.deepcopy(model), None, ctx)
+    _drop_fetch_classes(display)   # 產生處記的訊息原文只給這一步讀；一般畫面模型不留原文（與其他原文同一個原則）
     if "footer_lines" in display:   # BL-0250 批次 2：頁尾縮成一句指路句，不掛紅線標記徽章
         display["footer_lines"] = [PLAIN_FOOTERS[page]]
         display["footer_badges"] = []
@@ -493,6 +555,8 @@ def plain_model(model: dict, *, page: str):
         "fetch_failed": sorted(ctx.fetch_failed),
         "not_configured": sorted(ctx.not_configured),
         "raw_count": len(ctx.raw),
+        # BL-0250 批次 3-B：每一句取數失敗的資料類（取自產生處；見 `FETCH_CLASSES_KEY`）。`container` 是一般畫面模型裡的節點本身。
+        "fetch_events": list(ctx.fetch_events),
     }
     return display, list(ctx.raw), status
 
@@ -503,6 +567,12 @@ def plain_text(text: str, *, page: str, code=None) -> str:
         raise ValueError(f"不認得的頁：{page}")
     block = {"code": code, "title": BLOCK_NAMES.get(code, "")} if code else None
     return _plain_text(text, block, _Context(page))
+
+
+def error_line_data_class(raw_line: str) -> str:
+    """整頁錯誤畫面那一行的資料類（`plain_error_line` 寫在畫面上的那一類；BL-0250 批次 3-B 總表的主要原因順位 1 用同一類）。"""
+    known = _known(raw_line)
+    return (known[0] if known else None) or DATA_CLASS_DEFAULT
 
 
 def plain_error_line(raw_line: str, *, page: str):

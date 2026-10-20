@@ -2,7 +2,7 @@
 """四頁頁首「資料狀態行」與同源錯誤去重（Phase 3 P0-②；`docs/v2/44_fund_ui_ssot.md` 第七節第三小節之七其二第 3、4 條）。
 
 純函式模組：**不 import streamlit、不 import 舊樹**（`tests/ui_v2/test_ui_v2_live_import_guard.py`），
-只 import 同樹的 `ui_v2.plain`。畫法（`st.markdown`、`st.page_link`）住在 `ui_v2/health_view.py`。
+只 import 同樹的 `ui_v2.plain` 與 `ui_v2.page_health`（後者只用在檔尾「各頁資料狀態總表的原因項目」那一段）。畫法（`st.markdown`、`st.page_link`）住在 `ui_v2/health_view.py`。
 
 輸入一律是 `plain.plain_model` 交出來的**一般畫面用的模型**（已深拷貝、已換成使用者語言）。本模組只做三件事：
 
@@ -34,7 +34,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from . import plain
+from . import page_health, plain
 
 # ───────────────────────── 畫面字樣 ─────────────────────────
 # 字面為本組依 44 第七節第三小節之七其二第 3、4 條與 59 線框第 2.5、2.6 節擬定；只描述狀態、不指示動作
@@ -848,3 +848,378 @@ def both_keys_save_failed(display: dict, code: str, keys, save_errors, where: st
                 TEXT_SAVE_FAILED_BOTH if line.startswith(_ALO_SAVE_FAILED_PREFIX) else line for line in lines
             ]
     return [{"where": where, "text": f"{_ALO_SAVE_FAILED_PREFIX}{key}：{errors[key]}"} for key in keys]
+
+
+# ───────────────────────── 各頁資料狀態總表的原因項目（BL-0250 批次 3-B） ─────────────────────────
+# 總管 2026-10-19 裁定 (a)(b)(c) 與第二輪裁定第 1～5 點；44 第七節第三小節之十三。原則：**總表只彙整各頁已經畫出來的狀態，
+# 不重新判一次符號**。本段只讀：一般畫面模型上既有的狀態（`_state`／`_empty_kind`／缺格標記／「◇ 資料未備」字樣／「取數失敗」
+# 結構標記／尚未設定的成因）與產生處寫在同一個節點上的資料類標記（`ui_v2/page_health.py` 的 `FETCH_CLASSES_KEY` 等）。
+# 判定、符號、畫面字一個都不改。
+
+_UNREADABLE_STATES = frozenset({_ERROR_STATE, "資料未備"})
+_UNREADABLE_EMPTY = frozenset({_ERROR_STATE, "來源缺", "部分缺"})
+_LABEL_KEYS = ("label", "head_text", "indicator_key", "bucket_text", "fund_text", "fund_code", "key_text")
+_STATUS_MISSING_BADGE = "資料未備"
+
+
+# 尚未設定的對象 → 它擋住的是哪一類資料（`plain._KNOWN_MESSAGES` 那一張表本來就寫了；`None` ＝ 那一張表沒寫，明細表寫「—」不猜）。
+_UNCONFIGURED_CLASS = {not_configured_name(state): cls for _message, cls, state in plain._KNOWN_MESSAGES}
+
+
+class MissingClassError(ValueError):
+    """畫成 ◇ 的節點沒有在產生處寫資料類，也沒有標為衍生（總管第二輪裁定第 1 點：找不到類別就報錯，不靠略過）。"""
+
+
+def _node_label(node) -> str:
+    for key in _LABEL_KEYS:
+        value = node.get(key) if isinstance(node, dict) else None
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _own_missing_markers(node: dict, private: bool) -> bool:
+    """這一個 dict **自己**有沒有畫成 ◇ 的地方（不看子節點）。讀法與 `has_missing`／`has_missing_marker` 相同，
+    另加狀態徽章「資料未備」（例：市場總覽指標清單的可選項目）。"""
+    if node.get("_state") in _MISSING_STATES or node.get("_empty_kind") in _MISSING_EMPTY_KINDS:
+        return True
+    for cell in node.get("_missing_cells") or ():
+        if node.get(cell) == SYMBOL_MISSING:
+            return True
+    labels = set(node.get("_missing_fields") or ())
+    for field in node.get("_fields") or ():
+        if isinstance(field, tuple) and len(field) == 2 and field[0] in labels and field[1] == SYMBOL_MISSING:
+            return True
+    for badge in node.get("badges") or ():
+        if isinstance(badge, dict) and badge.get("_kind") == _STATUS_BADGE_KIND and badge.get("text") == _STATUS_MISSING_BADGE:
+            return True
+    # `private`：這一層在 `_` 開頭的鍵底下 —— 只有表格列與格（`_ROW_KEYS`）與佔位（`_placeholder`）那幾種會上畫面
+    # （例：資產配置目標修改紀錄那一列的「◇ 資料未備：尚未設定過」），其餘（例：`_values` 的計算中間值）不看。
+    if private and private not in _RENDERED_PRIVATE:
+        return False
+    for key, value in node.items():
+        if isinstance(key, str) and key.startswith("_"):
+            continue
+        if _missing_string(value):
+            return True
+        if isinstance(value, (list, tuple)) and any(_missing_string(v) for v in value):
+            return True
+    return False
+
+
+def _missing_string(value) -> bool:
+    """一句畫成 ◇ 的字：含「◇ 資料未備」，或以 ◇ 起頭（3-B 第二輪稽核回修可選 2：例「◇ 另有 N 檔淨值超過 10 日未更新…」，
+    畫在 `HLD-1` 的 `tail_lines`、`HLD-6` 的 `detail_lines` 等各種 lines 欄位）。"""
+    return isinstance(value, str) and (_MISSING_LINE in value or value.startswith(f"{SYMBOL_MISSING} "))
+
+
+_RENDERED_PRIVATE = _ROW_KEYS | {"_placeholder", "_columns", "_fields"}
+
+
+def _walk_nodes(node, block, path, out, private=None):
+    """一般畫面模型裡每一個 dict：`(dict, 所在的塊, 路徑, 最近一層 _ 開頭的鍵〔沒有 → None〕)`。"""
+    if isinstance(node, dict):
+        if isinstance(node.get("code"), str) and node.get("code") in plain.BLOCK_NAMES:
+            block = node
+        out.append((node, block, path, private))
+        for key, value in node.items():
+            if isinstance(value, (dict, list, tuple)):
+                under = private
+                # 進入 `_` 開頭的鍵：目前還在會上畫面的位置時，記下這一層的鍵；已經在不上畫面的位置底下就一直不上畫面。
+                if isinstance(key, str) and key.startswith("_") and (private is None or private in _RENDERED_PRIVATE):
+                    under = key
+                _walk_nodes(value, block, f"{path}.{key}", out, under)
+    elif isinstance(node, (list, tuple)):
+        for index, value in enumerate(node):
+            _walk_nodes(value, block, f"{path}[{index}]", out, private)
+
+
+def _label_map(node, out=None, prefix=""):
+    """明細表「項目」欄用的名字：`id(dict)` → 名字。一檔的列或群組（帶 `_fund_code` 的 dict）底下的每一格，名字前面接那一檔
+    （群組的標頭字，例「基金 B · 幣別 USD」；沒有標頭字就寫代碼，例「G07」），同一欄多檔出問題各成一列、不去重成一列
+    （3-B 稽核回修第 7 條）。不在任何一檔底下 → 照舊取節點自己的名字。"""
+    if out is None:
+        out = {}
+    if isinstance(node, dict):
+        own = _node_label(node)
+        if isinstance(node.get("_fund_code"), str) and node.get("_fund_code"):
+            prefix = own or node["_fund_code"]
+            out[id(node)] = prefix
+        else:
+            out[id(node)] = f"{prefix} {own}" if prefix and own and own != prefix else (own or prefix)
+        for value in node.values():
+            if isinstance(value, (dict, list, tuple)):
+                _label_map(value, out, prefix)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _label_map(value, out, prefix)
+    return out
+
+
+def _check_mapped(block, path, values) -> None:
+    for value in values:
+        if page_health.is_unmapped(value):
+            raise MissingClassError(f"{(block or {}).get('code')} {path}：資料類查表沒有收錄 {value[len(page_health.UNMAPPED_PREFIX):]!r}")
+
+
+_BOX = "⬜"
+
+
+def drawn_box(node) -> bool:
+    """這個節點在頁上畫的是 ⬜（值那一格的字以 ⬜ 起頭）。總表只彙整頁上已畫的狀態、不重判（之十三其五之四），⬜ 不計數
+    （3-B 第二輪稽核回修 B；客戶：不得重新定義 ⬜）。"""
+    if not isinstance(node, dict):
+        return False
+    texts = [node.get(k) for k in _VALUE_FIELDS if isinstance(node.get(k), str)]
+    return bool(texts) and any(t.startswith(_BOX) for t in texts) and not any(
+        t.startswith((f"{SYMBOL_MISSING} ", f"{SYMBOL_ERROR} ")) for t in texts)
+
+
+def boxed_entries(display: dict) -> list:
+    """明細表「沒有異常」那幾列之外，頁上畫成 ⬜、產生處卻記了資料未備的那幾處（例：標的探索篩選判定格「⬜ 無法判定（…）」）：
+    不計數，狀態欄照抄頁上那一句 ⬜（3-B 第二輪稽核回修 B）。資料類取自產生處記的鍵（使用者設定的鍵寫使用者設定）。"""
+    nodes = []
+    _walk_nodes(display, None, "", nodes)
+    labels = _label_map(display)
+    out = []
+    for node, block, _path, private in nodes:
+        if block is None or not drawn_box(node) or not _own_missing_markers(node, private) or node.get(page_health.DERIVED_KEY):
+            continue
+        keys = node.get(page_health.MISSING_KEYS_KEY) or ()
+        _check_mapped(block, _path, keys)   # 查表未收錄的鍵照樣報錯，由錯誤邊界接住（第一輪回修第 2 條）
+        classes = list(dict.fromkeys(plain.TABLE_NAMES["user_setting"] if k in page_health.SETTING_KEYS else k
+                                     for k in keys))
+        text = next(node.get(k) for k in _VALUE_FIELDS if isinstance(node.get(k), str) and node.get(k).startswith(_BOX))
+        out.append(page_health.affected(block.get("title", ""), labels.get(id(node), _node_label(node)),
+                                        data_class="、".join(classes) or None, status=text))
+    return out
+
+
+def _unreadable(node, block) -> bool:
+    target = node if isinstance(node, dict) else block
+    return (target.get("_state") in _UNREADABLE_STATES or target.get("_empty_kind") in _UNREADABLE_EMPTY
+            or (target is block and _block_is_error(block)))
+
+
+_ORDER_BLOCK = 10000
+_ORDER_SHADOWED = 5000
+
+
+def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, trace=None) -> tuple:
+    """一般畫面模型（`dedupe_failures` 與 `relabel_unconfigured` 之後、`move_card_provenance` 之前）→ `(原因項目, 認不出資料類的取數失敗)`。
+
+    - `fetch_events`：`plain.plain_model` 交出的每一句取數失敗與它產生處記的資料類；`cards`：本頁 ② 核心卡的塊代號。
+    - 尚未設定：`summary["block_causes"]` 與結構標記 `_unconfigured`；鍵＝尚未設定的對象。
+    - 取數失敗：`fetch_events` 與結構標記 `FETCH_CLASS_KEY`；鍵＝產生處記的資料類。認不出 → 鍵記 `plain.DATA_CLASS_DEFAULT`
+      並列進第二個回傳值（總管第二輪裁定第 4 點：逐處列出，不猜）。
+    - 資料未備：畫成 ◇ 的節點；鍵＝產生處記的 `MISSING_KEYS_KEY`；標為衍生的不計數；兩者都沒有 → `MissingClassError`。
+    - 同順位比到第三步時的「該頁固定順序」＝這個原因第一次出現的那一塊在本頁塊序（`display["blocks"]` 的順序，即 44 的塊序）裡的位置
+      （總管第二輪裁定第 5 點：由塊序產生，不手寫）。
+    不是最新（◷）不在這裡：它要在 `move_card_provenance` 之後才看得到，見 `stale_items`。
+    頁上畫成 ⬜ 的節點不計數（3-B 第二輪稽核回修 B），明細照抄那一句，見 `boxed_entries`。
+    `trace`：給守衛用 —— 傳一個 list 進來，每收下一處就記 `(id(節點), 種類, 鍵)`。
+    """
+    blocks = list(display.get("blocks") or ())
+    order = {block.get("code"): index for index, block in enumerate(blocks)}
+    cards = set(cards)
+    items, unresolved = [], []
+    labels = _label_map(display)
+
+    def entry(block, node, *, data_class=None, unreadable=None):
+        code = (block or {}).get("code")
+        core = code in cards
+        hit = _unreadable(node, block) if unreadable is None else unreadable
+        # 3-B 稽核回修第 4 條：~~`unreadable=core and hit`~~ —— 讀不到照實記，不論是不是核心卡；件數只數核心卡
+        # （`page_health.main_unreadable_cards`）。第 7 條：一檔底下的格，名字前面接那一檔（`_label_map`）。
+        label = "" if node is block else labels.get(id(node), _node_label(node))
+        return page_health.affected((block or {}).get("title", ""), label, core=core, unreadable=hit,
+                                    data_class=data_class)
+
+    seq = {}
+
+    def add(kind, key, block, node, *, data_class=None, unreadable=None, retreat=None, shadowed=False, no_retreat=()):
+        # 該頁固定順序：塊序在前；同一塊之內（3-B 稽核回修第 5 條）畫面上寫出的成因依收下的先後（＝該塊畫出的次序），
+        # 被蓋住、沒畫出的成因一律排在畫出的之後（`_ORDER_SHADOWED`）。
+        code = (block or {}).get("code")
+        n = seq[code] = seq.get(code, -1) + 1
+        rank = order.get(code, len(blocks)) * _ORDER_BLOCK + (_ORDER_SHADOWED if shadowed else 0) + n
+        if trace is not None:
+            trace.append((id(node), kind, key))
+        items.append(page_health.make_item(
+            kind, key, [entry(block, node, data_class=data_class, unreadable=unreadable)],
+            lamp=(block or {}).get("_layer") == 1, order=rank, retreat=retreat, no_retreat=no_retreat))
+
+    by_code = {block.get("code"): block for block in blocks}
+    nodes = []
+    _walk_nodes(display, None, "", nodes)
+
+    # 尚未設定
+    named_values = {}
+    for node, names in zip(summary.get("unconfigured_value_nodes") or (), summary.get("unconfigured_value_names") or ()):
+        for name in names:
+            named_values.setdefault(name, set()).add(id(node))
+    for code, cause in (summary.get("block_causes") or {}).items():
+        block = by_code.get(code)
+        if block is None:
+            continue
+        for name in cause["names"]:
+            ids = named_values.get(name, set())
+            value_hit = any(id(node) in ids for node, owner, _path, _private in nodes if owner is block)
+            add(page_health.KIND_UNCONFIGURED, name, block, block, data_class=_UNCONFIGURED_CLASS.get(name),
+                unreadable=value_hit or _block_is_error(block))
+    for node, block, _path, _private in nodes:
+        name = node.get(page_health.UNCONFIGURED_KEY)
+        if isinstance(name, str) and name and block is not None:
+            add(page_health.KIND_UNCONFIGURED, name, block, node, data_class=_UNCONFIGURED_CLASS.get(name), unreadable=True)
+
+    # 取數失敗
+    for event in fetch_events or ():
+        if any(f in _SAVE_RESULT_KEYS for f in event.get("fields") or ()):
+            continue   # 按「存檔」的逐鍵結果是寫入結果，不是讀取失敗（同 `_SAVE_RESULT_KEYS`）
+        block = by_code.get(event.get("code"))
+        if block is None or not _shown(block, event.get("field")):
+            continue
+        container = event.get("container")
+        node = container if isinstance(container, dict) else block
+        classes = tuple(event.get("data_classes") or ())
+        _check_mapped(block, event.get("field"), classes)
+        if not classes:
+            unresolved.append({"code": event.get("code"), "field": event.get("field"), "raw": event.get("raw")})
+            classes = (plain.DATA_CLASS_DEFAULT,)
+        retreat = ({"day": event["retreat_day"], "codes": [event["fund"]] if event.get("fund") else []}
+                   if event.get("retreat_day") else None)
+        # 3-B 第二輪稽核回修 A：逐檔的取數失敗沒有預存可退 → 記下代碼（同一類有退回預存時，主要原因句尾點名「沒有預存淨值」）。
+        no_retreat = (event["fund"],) if event.get("fund") and not event.get("retreat_day") else ()
+        for data_class in classes:
+            add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, retreat=retreat,
+                no_retreat=no_retreat)
+    for node, block, path, _private in nodes:
+        data_class = node.get(page_health.FETCH_CLASS_KEY)
+        if isinstance(data_class, str) and data_class and block is not None:
+            _check_mapped(block, path, (data_class,))
+            add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, unreadable=True)
+
+    # 被蓋住的成因（3-B 稽核回修第 5 條）：同一塊另一個成因的那一句畫在畫面上，這一個沒畫出來，但它一樣讓這一塊讀不到。
+    # 原文屬「尚未設定」那一族 → 尚未設定、鍵＝尚未設定的對象；否則 → 取數失敗、鍵＝產生處記的資料類。
+    for node, block, path, _private in nodes:
+        for message, data_class in node.get(page_health.SHADOWED_KEY) or ():
+            if block is None:
+                continue
+            _check_mapped(block, path, (data_class,))
+            state = plain.not_configured_state(message)
+            if state:
+                name = not_configured_name(state)
+                add(page_health.KIND_UNCONFIGURED, name, block, node,
+                    data_class=_UNCONFIGURED_CLASS.get(name), unreadable=True, shadowed=True)
+            else:
+                add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, unreadable=True, shadowed=True)
+
+    # 資料未備
+    for node, block, path, private in nodes:
+        if block is None or not _own_missing_markers(node, private):
+            continue
+        if node.get(page_health.DERIVED_KEY) or drawn_box(node):
+            continue
+        keys = node.get(page_health.MISSING_KEYS_KEY)
+        if not keys:
+            raise MissingClassError(f"{block.get('code')} {path}：畫成 ◇，產生處沒有寫資料類，也沒有標為衍生")
+        _check_mapped(block, path, keys)
+        for key in keys:
+            # 客戶 2026-10-20 裁示 Q1（`docs/DECISIONS.md` `DEC-2026-10-20-01`；44 第七節第三小節之十三其八第 23 條）：
+            # 使用者自己的參數留空（產生處記的鍵是設定的中文名：目標比重、情境試算金額、容許帶、篩選條件）不計入資料狀態件數、
+            # 不進主要原因、也不列進明細（資料健康 ≠ 使用者輸入）。~~計為 ◇ 資料未備、鍵用該設定的中文名~~（總管第二輪裁定第 2 點
+            # 「本批照頁面現況計數」，待客戶確認；有意識的政策變更，不是漏刪；決策者：客戶）。頁上那一格照舊畫 ◇，產生處的記號照舊。
+            # 一格兩種成因（裁定第 3 點）只略過設定那一個鍵，基準值缺的那一類照算。
+            if key in page_health.SETTING_KEYS:
+                continue
+            # ~~`data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key`~~：
+            # 設定鍵已在上一行略過，那一支成了死分支（同批獨立稽核可選 (c)；行為不變，有意識的更正，不是漏刪）。
+            add(page_health.KIND_MISSING, key, block, node, data_class=key, unreadable=True)
+    return page_health.merge_items(items), unresolved
+
+
+def _block_has_stale(block: dict) -> bool:
+    badges = list(block.get("badges") or ())
+    notes = []
+    for value in block.get("main_values") or ():
+        badges += list(value.get("badges") or ())
+    for group in block.get("fund_groups") or ():
+        badges.append(group.get("freshness_badge"))
+        notes.append(group.get("freshness_note"))
+    for row in block.get("_rows") or ():
+        if isinstance(row, dict):
+            badges.append(row.get("freshness_badge"))
+            notes.append(row.get("freshness_note"))
+    if any(_is_stale_badge(b) and str(b.get("text", "")).startswith(f"{SYMBOL_STALE} ") for b in badges):
+        return True
+    return any(isinstance(n, dict) and str(n.get("text", "")).startswith(f"{SYMBOL_STALE} ") for n in notes)
+
+
+def stale_items(display: dict, cards) -> list:
+    """不是最新（◷）：② 卡上留著 `◷` 記號的那幾張（`move_card_provenance`、`mark_last_valid` 之後）。整頁只算一項。"""
+    blocks = list(display.get("blocks") or ())
+    hit = [(index, block) for index, block in enumerate(blocks) if block.get("code") in cards and _block_has_stale(block)]
+    if not hit:
+        return []
+    return [page_health.make_item(page_health.KIND_STALE, page_health.STALE_KEY,
+                                  [page_health.affected(block.get("title", ""), core=True) for _i, block in hit],
+                                  order=hit[0][0])]
+
+
+_NOT_APPLICABLE_PREFIX = "⬜ "
+
+
+def _value_unreadable(value) -> bool:
+    """一個主值畫成 ⛔／◇ 沒有（讀狀態與畫出來的字；不另判）。"""
+    if not isinstance(value, dict):
+        return False
+    if value.get("_state") in _UNREADABLE_STATES:
+        return True
+    return any(str(value.get(key) or "").startswith((f"{SYMBOL_ERROR} ", f"{SYMBOL_MISSING} "))
+               for key in ("value_text", "text"))
+
+
+def normal_entries(display: dict, cards, data_class=None) -> list:
+    """明細表裡「沒有異常的項目」那幾列（總管裁定 (b)：狀態欄寫「—」）：② 核心卡上每一個值與它的來源、新鮮度徽章
+    （`move_card_provenance` 之前讀；來源徽章 → 來源層級欄、新鮮度徽章 → 延遲天數欄、「⬜ 不適用」那一句 → 狀態欄），以及市場總覽 `MKT-7` 的每一列。
+    `data_class`：該頁這幾個值共同的資料類（市場總覽＝市場指標；其他頁不給，寫「—」，不猜）。每一筆另記這個值畫成 ⛔／◇ 沒有
+    （`unreadable`），給明細表判斷塊層成因涵蓋哪幾個值（3-B 稽核回修第 6 條）。
+    只照抄畫面上已有的字，不另算；有異常的那幾項由 `page_health.detail_rows` 依原因項目列，這裡同一張卡同一個值的那一列會被略過。"""
+    out = []
+
+    def entry(title, label, badges, *, unreadable=False):
+        by_kind, status = {}, []
+        for badge in badges or ():
+            if _is_provenance(badge):
+                text = str(badge.get("text", ""))
+                if text.startswith(_NOT_APPLICABLE_PREFIX):   # 卡上「⬜ 不適用」那一句是狀態，不是來源或延遲（3-B 稽核回修第 7 條）
+                    status.append(text)
+                else:
+                    by_kind.setdefault(badge["_kind"], []).append(text)
+        return page_health.affected(title, label, tier="、".join(by_kind.get("來源", ())) or None,
+                                    delay="、".join(by_kind.get("新鮮度", ())) or None, data_class=data_class,
+                                    unreadable=unreadable, status="、".join(status) or None)
+
+    for block in display.get("blocks") or ():
+        if block.get("code") not in cards:
+            continue
+        title = block.get("title", "")
+        if any(_is_provenance(b) for b in block.get("badges") or ()):
+            out.append(entry(title, "", block.get("badges")))
+        for value in block.get("main_values") or ():
+            out.append(entry(title, value.get("label", ""), value.get("badges"), unreadable=_value_unreadable(value)))
+        for group in block.get("fund_groups") or ():
+            out.append(entry(title, group.get("head_text", ""), [group.get("freshness_badge")],
+                             unreadable=any(_value_unreadable(v) for v in group.get("main_values") or ())))
+    for block in display.get("blocks") or ():
+        if block.get("code") != "MKT-7":
+            continue
+        for row in block.get("_rows") or ():
+            out.append(page_health.affected(
+                block.get("title", ""), str(row.get("indicator_key", "")),
+                data_class=plain.TABLE_NAMES["market_indicator"], obs=row.get("obs_text"), fetched=row.get("fetched_text"),
+                delay=row.get("delay_text"), tier=row.get("tier_text"),
+                unreadable=any(isinstance(v, str) and (v in (SYMBOL_ERROR, SYMBOL_MISSING)
+                                                       or v.startswith((f"{SYMBOL_ERROR} ", f"{SYMBOL_MISSING} ")))
+                               for k, v in row.items() if not str(k).startswith("_"))))
+    return out
