@@ -181,10 +181,17 @@ def _pool_sheet_id() -> str:
 
 
 def _sa_present() -> bool:
-    """Service Account secret 是否具備 client_email(dict 直讀;JSON 字串則解析,支援 env fallback)。"""
+    """Service Account secret 是否具備 client_email(Mapping 直讀;JSON 字串則解析,支援 env fallback)。
+
+    BL-0383(2026-10-20):Streamlit `st.secrets` 的 `[google_service_account]` TOML table
+    在 runtime 回傳 `streamlit.runtime.secrets.AttrDict` —— 它繼承 `collections.abc.Mapping`、
+    **不是** `dict` 子類;舊判斷 `isinstance(_sa, dict)` 因此恆 False,選股池誤判「雲端來源尚未設定」。
+    改認 `Mapping`(dict 仍是 Mapping,相容不變)。
+    """
+    from collections.abc import Mapping
     from infra.config import get_secret
     _sa = get_secret("google_service_account")
-    if isinstance(_sa, dict):
+    if isinstance(_sa, Mapping):
         return bool(_sa.get("client_email"))
     if isinstance(_sa, str) and _sa.strip():
         try:
