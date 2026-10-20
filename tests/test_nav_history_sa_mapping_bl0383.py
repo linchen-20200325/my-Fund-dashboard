@@ -44,18 +44,41 @@ def _fake_get_secret(monkeypatch, mapping):
     monkeypatch.setattr(CFG, "get_secret", lambda k, default=None: mapping.get(k, default))
 
 
-@pytest.fixture
-def real_st_secrets(monkeypatch, tmp_path):
+def _register_toml_env_keys(monkeypatch, toml_text: str) -> None:
+    """把 TOML 頂層會被 Streamlit 寫進 `os.environ` 的 key 先登記給 monkeypatch，讓 teardown 還原。
+
+    `Secrets._parse()` 對頂層值型別 ∈ {str, int, float} 一律 `os.environ[k] = str(v)`（例：
+    `FRED_API_KEY = "FAKE"`），而 monkeypatch 只還原自己登記過的 key —— 不登記就會殘留到後面的
+    測試。已存在的 key：`setenv` 原值（登記原值）。不存在的 key：先 `setenv` 再 `delenv`
+    （登記「原本不存在」；⚠️ 直接 `delenv(raising=False)` 對不存在的 key **不會登記**，還原不了）。
+    """
+    import os
+    import tomllib
+
+    for k, v in tomllib.loads(toml_text).items():
+        if type(v) not in {str, int, float}:
+            continue
+        if k in os.environ:
+            monkeypatch.setenv(k, os.environ[k])
+        else:
+            monkeypatch.setenv(k, "")
+            monkeypatch.delenv(k)
+
+
+def _make_secrets_loader(monkeypatch, tmp_path):
     """用真的 `streamlit.runtime.secrets.Secrets` 解析一份暫時 secrets.toml，掛到 `st.secrets`。
 
     走的是正式路徑 `infra.config.get_secret` → `st.secrets.get(...)`，不替換 get_secret。
 
-    ⚠️ 隔離：`Secrets.load_if_toml_exists()` 第一次解析時會呼叫
+    ⚠️ 隔離 1（執行緒）：`Secrets.load_if_toml_exists()` 第一次解析時會呼叫
     `streamlit.watcher.path_watcher.watch_file／watch_dir` 裝 poll 型檔案監看，留下常駐的
     `ThreadPoolExecutor` 執行緒每 0.2 秒呼叫一次 `time.sleep`，測試結束也不會停。後面的測試
     （例：`tests/test_policy_supplement_repository.py` 的 `_five_minutes` 把全域 `time.sleep`
     換成推進假時鐘）會被這些背景執行緒在背後推進時鐘而轉紅。這裡用 monkeypatch 把兩個監看
     函式換成 no-op（測試結束自動還原），並斷言解析前後執行緒數不變。
+
+    ⚠️ 隔離 2（環境變數）：解析會把 TOML 頂層字串寫進 `os.environ`（`FRED_API_KEY="FAKE"`）；
+    見 `_register_toml_env_keys`。守衛：`test_real_secrets_loader_restores_os_environ`。
     """
     import threading
 
@@ -69,6 +92,7 @@ def real_st_secrets(monkeypatch, tmp_path):
 
     def _load(toml_text: str):
         threads_before = threading.active_count()
+        _register_toml_env_keys(monkeypatch, toml_text)
         path = tmp_path / "secrets.toml"
         path.write_text(toml_text, encoding="utf-8")
         old = st_config.get_option("secrets.files")
@@ -83,6 +107,30 @@ def real_st_secrets(monkeypatch, tmp_path):
         return sec
 
     return _load
+
+
+@pytest.fixture
+def real_st_secrets(monkeypatch, tmp_path):
+    """見 `_make_secrets_loader`。"""
+    return _make_secrets_loader(monkeypatch, tmp_path)
+
+
+# ── 0. 守衛：真 secrets 解析寫進 os.environ 的頂層 key，fixture 結束後必須還原 ──
+def test_real_secrets_loader_restores_os_environ(tmp_path):
+    import os
+
+    guard_key = "BL0383_ENV_GUARD_FAKE"  # 專用 key：保證「原本不存在」這條路徑一定被走到
+    assert guard_key not in os.environ
+    env_before = dict(os.environ)
+    with pytest.MonkeyPatch.context() as mp:
+        _make_secrets_loader(mp, tmp_path)(f'{guard_key} = "FAKE"\n' + _TOML)
+        # 前提真的成立：Streamlit 解析確實把頂層字串寫進 os.environ（table 不會）
+        assert os.environ.get(guard_key) == "FAKE"
+        assert os.environ.get("FRED_API_KEY") == "FAKE"
+        assert "google_service_account" not in os.environ
+        mp.undo()
+        assert dict(os.environ) == env_before, "解析 secrets 寫進 os.environ 的 key 未還原"
+    assert dict(os.environ) == env_before
 
 
 # ── 1. dict + client_email → 原樣（相容不變）──────────────────────────

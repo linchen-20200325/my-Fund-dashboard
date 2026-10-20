@@ -43,12 +43,28 @@ def real_st_secrets(monkeypatch, tmp_path):
     """用真的 `streamlit.runtime.secrets.Secrets` 解析一份暫時 secrets.toml，掛到 `st.secrets`。
 
     走的是正式路徑 `infra.config.get_secret` → `st.secrets.get(...)`，不替換 get_secret。
+
+    ⚠️ 隔離（同 `tests/test_nav_history_sa_mapping_bl0383.py` 的 `real_st_secrets`）：
+    `Secrets.load_if_toml_exists()` 第一次解析時會呼叫 `streamlit.watcher.path_watcher.watch_file／
+    watch_dir` 裝 poll 型檔案監看，留下常駐的 `ThreadPoolExecutor` 執行緒每 0.2 秒呼叫一次
+    `time.sleep`，測試結束也不會停。本檔排在 `tests/test_policy_supplement_repository.py` 前面跑時，
+    那支檔的 `_five_minutes` 把全域 `time.sleep` 換成推進假時鐘，會被這些背景執行緒在背後推進時鐘
+    而轉紅（2026-10-20 實測 3 次：7／6／6 failed；單獨跑全綠）。這裡用 monkeypatch 把兩個監看函式
+    換成 no-op（測試結束自動還原），並斷言解析前後執行緒數不變。
+    （環境變數：本檔 TOML 沒有頂層字串，Streamlit 不會寫 `os.environ`，故不需另做還原。）
     """
+    import threading
+
     import streamlit as st
+    import streamlit.watcher.path_watcher as _pw
     from streamlit import config as st_config
     from streamlit.runtime.secrets import Secrets
 
+    monkeypatch.setattr(_pw, "watch_file", lambda *a, **k: False)
+    monkeypatch.setattr(_pw, "watch_dir", lambda *a, **k: False)
+
     def _load(toml_text: str):
+        threads_before = threading.active_count()
         path = tmp_path / "secrets.toml"
         path.write_text(toml_text, encoding="utf-8")
         old = st_config.get_option("secrets.files")
@@ -58,6 +74,7 @@ def real_st_secrets(monkeypatch, tmp_path):
             sec.load_if_toml_exists()
         finally:
             st_config.set_option("secrets.files", old)
+        assert threading.active_count() == threads_before, "解析 secrets 不得留下背景執行緒"
         monkeypatch.setattr(st, "secrets", sec)
         return sec
 
