@@ -398,6 +398,9 @@ def _wired_app(tmp_path) -> pathlib.Path:
 # ~~`thead th`／`td table` 也會掃進小表~~。改為：只看外層表的「直接」表頭與 tbody 直接子列，逐列分成
 # 「資料列」與「列展開列」；任何兩者都不是的列計入 `odd_rows`（必須為 0）——新增欄位、第二種插入列都會在這裡轉紅。
 # 守的四件事照舊：代碼欄第一欄、title 已 escape、來源標示存在、沒有新增欄位。
+# 獨立稽核補強（2026-10-20）：外層表只准一個 thead（一列）、一個 tbody、沒有 tfoot（防另開 tbody 夾帶列）；
+# 列展開格至少要有一個子元素；`details.exp-rowsrc` 的直接子元素只准 `summary` 與一個只包小表的容器，
+# 整枚列展開內沒有按鈕與輸入元件（44 第七節第三小節之十三其二第 3 條：「不放數值、判定、按鈕、輸入元件或任何其他內容」）。
 _EXP2_DOM_JS = """() => {
   const tables = [...document.querySelectorAll('table.exp-table')]
     .filter(t => t.querySelector('th') && t.querySelector('th').textContent === CODE_HEAD);
@@ -405,11 +408,18 @@ _EXP2_DOM_JS = """() => {
   const heads = t && t.tHead ? [...t.tHead.rows[0].cells].map(e => e.textContent) : [];
   const direct = t && t.tBodies[0] ? [...t.tBodies[0].rows] : [];
   const isRowSrc = r => r.cells.length === 1 && r.cells[0].colSpan === heads.length
+    && r.cells[0].children.length >= 1
     && [...r.cells[0].children].every(c => c.matches('details.exp-rowsrc') || (c.tagName === 'DIV' && c.textContent === WATCHED));
   const rows = direct.filter(r => !isRowSrc(r) && r.cells.length === heads.length);
   const rowsrc = direct.filter(isRowSrc);
   const dataCells = rows.flatMap(r => [...r.cells]);
   const rowsrcTables = t ? [...t.querySelectorAll('details.exp-rowsrc table')] : [];
+  const rowsrcDetails = t ? [...t.querySelectorAll('details.exp-rowsrc')] : [];
+  const detailsShapeOk = d => {
+    const kids = [...d.children];
+    return kids.length === 2 && kids[0].tagName === 'SUMMARY' && kids[1].tagName === 'DIV'
+      && kids[1].children.length === 1 && kids[1].children[0].matches('table.exp-table');
+  };
   return {
     tables: tables.length,
     heads: heads,
@@ -417,6 +427,11 @@ _EXP2_DOM_JS = """() => {
     widths: rows.map(r => r.cells.length),
     odd_rows: direct.length - rows.length - rowsrc.length,
     rowsrc_rows: rowsrc.length,
+    tbodies: t ? t.tBodies.length : -1,
+    thead_rows: t && t.tHead ? t.tHead.rows.length : -1,
+    has_tfoot: t ? t.tFoot !== null : true,
+    rowsrc_shape_bad: rowsrcDetails.filter(d => !detailsShapeOk(d)).length,
+    rowsrc_controls: rowsrcDetails.reduce((n, d) => n + d.querySelectorAll('button,input,select,textarea,[role=button]').length, 0),
     rowsrc_after_data: rowsrc.every(r => r.previousElementSibling && rows.includes(r.previousElementSibling)),
     titles: dataCells.filter(e => e.hasAttribute('title')).map(e => e.getAttribute('title')),
     scripts: t ? t.querySelectorAll('script').length : -1,
@@ -459,9 +474,13 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 assert dom["tables"] == 1, dom                                   # EXP-2 那一張（帶代碼欄）
                 assert dom["heads"] == [_CODE_HEAD] + [plain.key_name(logic.COLUMN_LABELS[c]) for c in logic.COLUMN_ORDER]
                 assert dom["first"] == sorted(WF.CODES)                          # 代碼欄是第一欄
+                # 註（稽核指出）：`rows` 在 JS 端已先以「格數＝表頭數」過濾，下一行對格數本身是同義反覆；
+                # 「沒有新增欄」實際由 `odd_rows == 0`（格數不符的列都落在這裡）與上一行 `first` 的檔數承擔，本行只留作形狀紀錄。
                 assert dom["widths"] == [len(dom["heads"])] * len(WF.CODES)     # 每列格數＝表頭數，沒有新增欄
                 # 3-B：tbody 直接子列只准兩種 —— 資料列（格數＝表頭數）與緊跟在資料列後面的列展開列（一格、跨滿表頭數）。
                 assert dom["odd_rows"] == 0, dom
+                # 稽核補強：只有一個 tbody、一列表頭、沒有 tfoot（另開 tbody／tfoot 夾帶的列不會被上面的直接子列看到）。
+                assert dom["tbodies"] == 1 and dom["thead_rows"] == 1 and not dom["has_tfoot"], dom
                 assert 1 <= dom["rowsrc_rows"] <= len(WF.CODES) and dom["rowsrc_after_data"], dom
                 assert any(t.startswith('淨值來源：Evil"Src<b>') for t in dom["titles"]), dom["titles"]
                 assert dom["scripts"] == 0 and dom["bold"] == 0                  # 字串沒有變成標籤
@@ -472,6 +491,8 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 # 3-B 窄例外：格內唯一允許的表是列展開裡那張小表 —— 每枚列展開恰好一張，表頭逐字是那五欄。
                 assert len(dom["rowsrc_table_heads"]) == dom["rowsrc_details"] == dom["rowsrc_rows"], dom
                 assert all(h == list(live.ROW_SOURCE_LABELS) for h in dom["rowsrc_table_heads"]), dom
+                # 44 其二第 3 條：列展開只放來源資訊 —— 子元素只有 summary 與包小表的容器，裡面沒有按鈕與輸入元件。
+                assert dom["rowsrc_shape_bad"] == 0 and dom["rowsrc_controls"] == 0, dom
                 # Q O1：1600 寬桌機，候選表不需要橫捲（`.exp-src` 限寬＋省略號，全文在 tooltip）。
                 assert dom["scroll_width"] <= dom["client_width"] + 1, (dom["scroll_width"], dom["client_width"])
                 assert dom["src_max_width"] <= dom["src_limit_px"] + 1
