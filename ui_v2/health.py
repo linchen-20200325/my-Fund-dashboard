@@ -1125,6 +1125,13 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, tra
             raise MissingClassError(f"{block.get('code')} {path}：畫成 ◇，產生處沒有寫資料類，也沒有標為衍生")
         _check_mapped(block, path, keys)
         for key in keys:
+            # 客戶 2026-10-20 裁示 Q1（`docs/DECISIONS.md` `DEC-2026-10-20-01`；44 第七節第三小節之十三其八第 23 條）：
+            # 使用者自己的參數留空（產生處記的鍵是設定的中文名：目標比重、情境試算金額、容許帶、篩選條件）不計入資料狀態件數、
+            # 不進主要原因、也不列進明細（資料健康 ≠ 使用者輸入）。~~計為 ◇ 資料未備、鍵用該設定的中文名~~（總管第二輪裁定第 2 點
+            # 「本批照頁面現況計數」，待客戶確認；有意識的政策變更，不是漏刪；決策者：客戶）。頁上那一格照舊畫 ◇，產生處的記號照舊。
+            # 一格兩種成因（裁定第 3 點）只略過設定那一個鍵，基準值缺的那一類照算。
+            if key in page_health.SETTING_KEYS:
+                continue
             data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key
             add(page_health.KIND_MISSING, key, block, node, data_class=data_class,
                 unreadable=True)

@@ -125,13 +125,18 @@ def _alo_both_missing():
     return ds
 
 
-def test_一格兩種成因_兩類各算一項_而且記在判定分支():
+# 客戶 2026-10-20 3-B 驗收裁示第 1 題（`DEC-2026-10-20-01`；44 之十三其八第 23 條）：使用者自己的參數留空不計入資料狀態件數。
+# 下面三條原本驗「目標比重／情境試算金額照頁面現況計一項」（總管第二輪裁定第 2 點，待客戶確認）；裁示後改驗「產生處照舊兩邊都記、
+# 收集那一步只算資料那一邊」（有意識的政策變更，不是漏刪；決策者：客戶）。原斷言：~~("資料未備", "目標比重") in _keys(items)~~。
+
+
+def test_一格兩種成因_記在判定分支_只算資料那一類():
     model = AL.build_page_model(_alo_both_missing())
     row = next(r for r in AL.find_block(model, "ALO-2")["_rows"] if r["_bucket"] == "核心（示意）")
     assert row[page_health.MISSING_KEYS_KEY] == ("市場指標", "目標比重")
     _d, _f, _s, items, _u = _pipeline(model, "alo")
-    assert ("資料未備", "市場指標") in _keys(items) and ("資料未備", "目標比重") in _keys(items)
-    assert "目標對照卡" in _cards(items, "資料未備", "目標比重") and "目標對照卡" in _cards(items, "資料未備", "市場指標")
+    assert ("資料未備", "市場指標") in _keys(items) and ("資料未備", "目標比重") not in _keys(items)
+    assert "目標對照卡" in _cards(items, "資料未備", "市場指標")
 
 
 def test_情境試算後差額_兩邊都缺時兩類都記():
@@ -140,7 +145,8 @@ def test_情境試算後差額_兩邊都缺時兩類都記():
     assert rows["核心（示意）"][page_health.MISSING_KEYS_KEY] == ("市場指標", "目標比重")
     assert rows["衛星（示意）"][page_health.MISSING_KEYS_KEY] == ("市場指標",)
     _d, _f, _s, items, _u = _pipeline(model, "alo")
-    assert "情境試算卡" in _cards(items, "資料未備", "目標比重")
+    assert "情境試算卡" in _cards(items, "資料未備", "市場指標")
+    assert "目標比重" not in {key for _kind, key in _keys(items)}
 
 
 def test_一邊缺只算那一邊():
@@ -149,15 +155,15 @@ def test_一邊缺只算那一邊():
     assert _keys(items) == [("資料未備", "市場指標")]
 
 
-def test_使用者設定留空_鍵是設定的中文名_資料類寫使用者設定():
-    _d, _f, _s, items, _u = _pipeline(AL.build_page_model(AF.scenario("partial")), "alo")
-    keys = {key for _kind, key in _keys(items, page_health.KIND_MISSING)}
-    assert keys <= set(page_health.SETTING_KEYS) | {"市場指標", "淨值", "持倉"}
-    assert keys & set(page_health.SETTING_KEYS)
+def test_使用者設定留空_產生處鍵是設定的中文名_收集那一步不計數():
+    model = AL.build_page_model(AF.scenario("partial"))
+    marked = {k for b in model["blocks"] for r in list(b.get("_rows") or ()) + list(b.get("input_rows") or ())
+              if isinstance(r, dict) for k in r.get(page_health.MISSING_KEYS_KEY) or ()}
+    assert marked == {page_health.SETTING_TARGET_WEIGHTS, page_health.SETTING_SCENARIO_INPUT}   # 不是英文鍵名、不寫「使用者設定」
+    _d, _f, _s, items, _u = _pipeline(model, "alo")
+    assert not {key for _kind, key in _keys(items)} & set(page_health.SETTING_KEYS)
     for item in items:
         assert item["key"] not in ("使用者設定", "alo_target_weights", "alo_scenario_input")
-        if item["key"] in page_health.SETTING_KEYS:
-            assert {e["data_class"] for e in item["affected"]} == {"使用者設定"}
 
 
 def test_畫成方塊的不適用不計數():

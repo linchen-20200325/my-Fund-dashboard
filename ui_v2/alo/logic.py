@@ -1001,7 +1001,8 @@ def _build_alo2(dataset) -> dict:
             if missing_cells:
                 row["_missing_cells"] = tuple(missing_cells)
             # BL-0250 批次 3-B（總管第二輪裁定第 2、3 點）：一格兩種成因時兩邊各記一個鍵 —— 基準值缺記它的資料類，
-            # 目標比重留空記「目標比重」（使用者設定留空，畫面現況是 ◇，本批照頁面現況計數）。只記、不改任何一格。
+            # 目標比重留空記「目標比重」（使用者設定留空，畫面現況是 ◇；~~本批照頁面現況計數~~ → 客戶 2026-10-20 裁示 Q1
+            # `DEC-2026-10-20-01`：照舊記下，收集那一步不計數，見 `ui_v2/health.py::collect_page_items`）。只記、不改任何一格。
             row["_current_keys"] = current_keys
             keys = (current_keys if current_missing else ()) + ((_KEY_TARGET,) if target_missing else ())
             if keys:

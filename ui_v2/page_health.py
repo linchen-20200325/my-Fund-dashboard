@@ -99,6 +99,8 @@ FETCH_CLASS_KEY = "_fetch_class"
 # 尚未設定的結構標記（既有鍵，`ui_v2/health.py::UNCONFIGURED_KEY`；值是尚未設定的對象）。
 UNCONFIGURED_KEY = "_unconfigured"
 # 資料未備：`(<鍵>, ...)` —— 一般是中文資料類；使用者設定留空時是那一個設定的中文名（裁定第 2 點，例「目標比重」）。
+# ⚠️ 使用者設定留空的那幾個鍵（`SETTING_KEYS`）照舊在產生處記下，但自客戶 2026-10-20 裁示 Q1（`DEC-2026-10-20-01`）起
+# 收集那一步不計數、不進主要原因、不列明細（`ui_v2/health.py::collect_page_items`）；頁上那一格照舊畫 ◇。
 # 一格兩種成因（裁定第 3 點）在判定分支就地記兩個鍵，兩類各算一項。
 MISSING_KEYS_KEY = "_missing_keys"
 # 衍生的 ◇／⛔（裁定第 1 點）：由同頁別的塊或別的格推出來的狀態（例：結論燈、`HLD-7`「四塊沒有一塊出數」），不另算一項；
