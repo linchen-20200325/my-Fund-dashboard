@@ -181,10 +181,23 @@ def _pool_sheet_id() -> str:
 
 
 def _sa_present() -> bool:
-    """Service Account secret 是否具備 client_email(dict 直讀;JSON 字串則解析,支援 env fallback)。"""
+    """Service Account secret 是否具備 client_email(Mapping 直讀;JSON 字串則解析,支援 env fallback)。
+
+    BL-0383(2026-10-20):Streamlit `st.secrets` 的 `[google_service_account]` TOML table
+    在 runtime 回傳 `streamlit.runtime.secrets.AttrDict` —— 它繼承 `collections.abc.Mapping`、
+    **不是** `dict` 子類;舊判斷 `isinstance(_sa, dict)` 因此恆 False,選股池誤判「雲端來源尚未設定」。
+    改認 `Mapping`(dict 仍是 Mapping,相容不變)。
+
+    ⚠️ 與 `repositories/policy/_helpers.py::_coerce_sa_credentials` 的取捨相反:該處註解
+    刻意**不用** `isinstance(..., Mapping)`(AttrDict 是否為 Mapping 子類無公開契約),一律
+    `dict(...)`。此處仍採 Mapping,理由:requirements 釘 `streamlit<1.60`(1.59.2 實測
+    AttrDict 直接繼承 `collections.abc.Mapping`),且 `tests/test_pool_sa_present_mapping_bl0383.py`
+    斷言真 st.secrets 解析出的 AttrDict 是 Mapping 而非 dict —— 升版若改變此點,該測試會轉紅。
+    """
+    from collections.abc import Mapping
     from infra.config import get_secret
     _sa = get_secret("google_service_account")
-    if isinstance(_sa, dict):
+    if isinstance(_sa, Mapping):
         return bool(_sa.get("client_email"))
     if isinstance(_sa, str) and _sa.strip():
         try:
