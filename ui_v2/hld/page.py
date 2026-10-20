@@ -904,6 +904,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     # 照舊組好（不吞、不截斷），只移到設定與診斷頁的進階診斷。照印句跟著原文走，一般畫面不再印。
     plain_line, raw = plain.plain_error_line(error_line, page="hld")
     plain.record_raw(st.session_state, "hld", raw, datetime.now(timezone.utc))
+    health_view.record_load_failure("hld", error_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
     st.markdown(f'<div class="hld-title">{_esc(logic.PAGE_TITLE)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hld-sub">{_esc(logic.PAGE_ANSWERS)}</div>', unsafe_allow_html=True)
     red = _tone("紅")
@@ -997,11 +998,16 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         health.relabel_unconfigured(model, failures)
         cards = logic.codes_in_layer(model, 2)
         stale = health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)
+        # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+        # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
+        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
+        health_normal = health.normal_entries(model, cards)
         provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
         stale = stale or health.has_stale_marker(model, cards)
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
         )
+        health_view.record_page_health("hld", model, health_items, cards, health_normal, status_line)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
         # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
         sections.mark_hld1_rows(model)

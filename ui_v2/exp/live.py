@@ -26,7 +26,7 @@ import math
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from .. import thresholds
+from .. import page_health, thresholds
 from . import logic
 
 # 正式模式 widget 鍵用的情境名（2026-10-14 由 `page._LIVE_SCENARIO` 移來；值不變，`page.py` 改讀這裡）。
@@ -413,9 +413,19 @@ def plain_reason(text: str) -> str:
     return out
 
 
-def _note(text, state, tag=None, tip=None) -> dict:
-    """一格的畫面調整：`text` 為 None ＝ 值照 `logic` 畫的（只掛來源標示）；否則覆寫該格文字與狀態。"""
-    return {"text": text, "state": state, "source_tag": tag or None, "source_tip": tip or None}
+def _note(text, state, tag=None, tip=None, key=None) -> dict:
+    """一格的畫面調整：`text` 為 None ＝ 值照 `logic` 畫的（只掛來源標示）；否則覆寫該格文字與狀態。
+    `key`（BL-0250 批次 3-B，總管第二輪裁定第 1、4 點）：這一格 ⛔／◇ 屬哪一類資料，在產生處寫明；只在給了時多一個 `_data_key`，
+    畫面不讀它（`_apply_cell_notes` 把它記到那一格上）。"""
+    note = {"text": text, "state": state, "source_tag": tag or None, "source_tip": tip or None}
+    if key is not None:
+        note["_data_key"] = key
+    return note
+
+
+_KEY_PROFILE = page_health.DATA_CLASSES["fund_profile"]
+_KEY_NAV = page_health.DATA_CLASSES["nav"]
+_KEY_DIVIDEND = page_health.DATA_CLASSES["dividend"]
 
 
 def _finish(note: dict, mask) -> dict:
@@ -471,9 +481,9 @@ def profile_cell_note(column: str, cell: dict) -> dict:
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError(f"{column}：狀態 {status!r} 卻沒有原因（{cell!r}）")
     if status in (PROFILE_STATUS_NOT_READY, PROFILE_STATUS_INCONSISTENT):
-        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag, tip)
+        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag, tip, _KEY_PROFILE)
     if status == PROFILE_STATUS_FAILED:
-        return _note(logic.fetch_failed_text(reason), logic.STATE_ERROR, tag, tip)
+        return _note(logic.fetch_failed_text(reason), logic.STATE_ERROR, tag, tip, _KEY_PROFILE)
     raise ValueError(f"{column}：未知的基本資料狀態 {status!r}")
 
 
@@ -660,7 +670,8 @@ def _nav_tip(prov: dict, extra=None) -> str:
 
 
 def _all_nav(text, state, tag=None, tip=None) -> dict:
-    return {column: _note(text, state, tag, tip) for column in NAV_COLUMNS}
+    """淨值那幾格同一句（含配息比那一格：它的分母是淨值，成因屬淨值）。"""
+    return {column: _note(text, state, tag, tip, _KEY_NAV) for column in NAV_COLUMNS}
 
 
 def nav_notes_and_rows(codes, nav_out, *, unresolved, profile_ccy, accum_codes, today, withheld_texts,
@@ -763,7 +774,7 @@ def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str, skipp
     if not isinstance(raw, list) or not raw or not isinstance(missing, int) or missing or any(d is None for d in raw):
         tip = "；".join(p for p in [*tip_parts, "配息宣告的幣別與淨值幣別不同，但有衝突筆取不到除息日", l2_line, basis]
                        if p)
-        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
     days = [_as_date(d, "conflict_ex_dates") for d in raw]
     shown = "、".join(d.isoformat() for d in days)
     if not isinstance(rejected, int) or isinstance(rejected, bool) or rejected < 0:
@@ -777,10 +788,10 @@ def _ccy_differs_note(prov: dict, nav_ccy: str, nav_day: date, basis: str, skipp
     if any(in_ratio_window(d, nav_day) for d in days):
         return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, TAG_DIV_CCY_DECLARED, tip)
     if unsure:
-        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+        return _note(f"{logic.ND_TEXT}：{TEXT_DIV_CCY_DIFFERS_UNKNOWN}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
     reason = (TEXT_DIV_CCY_DIFFERS_BEFORE if all(d <= window_start(nav_day) for d in days)
               else TEXT_DIV_CCY_DIFFERS_OUTSIDE)
-    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip)
+    return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, TAG_DIV_CCY_DECLARED, tip, _KEY_DIVIDEND)
 
 
 def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_conflict, div_ccy_differs) -> dict:
@@ -797,7 +808,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
         return "；".join(p for p in (f"配息來源：{tag_src}" if tag_src else "", *parts, basis) if p)
 
     if error:
-        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, tip_of())
+        return _note(logic.fetch_failed_text(str(error)), logic.STATE_ERROR, tag_src, tip_of(), _KEY_DIVIDEND)
     withheld = div_part["withheld"].get(code)
     if withheld == input_conflict:
         raise ValueError(f"{code!r}：配息輸入矛盾（{skipped}）")
@@ -805,7 +816,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
         return _ccy_differs_note(prov, latest["ccy"], last, basis, skipped)
     if withheld or div_part["pending"].get(code):
         reason = skipped or str(withheld or div_part["pending"].get(code))
-        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason))
+        return _note(f"{logic.ND_TEXT}：{reason}", logic.STATE_MISSING, tag_src, tip_of(reason), _KEY_DIVIDEND)
     rows = div_by.get(code) or []
     kind, ratio, detail = dividend_ratio(
         latest["nav_orig_ccy"], latest["ccy"], last, rows,
@@ -821,7 +832,7 @@ def _ratio_note(code, latest, last, div_part, div_by, ratios, *, accum, input_co
     if kind == "ccy_differs":
         return _note(TEXT_DIV_CCY_DIFFERS_NA, logic.STATE_BIZ, tag, tip_of(detail))
     # 格內只寫本層的判定句；資料層的 `skipped` 原文（白話化後）放 tooltip。
-    return _note(f"{logic.ND_TEXT}：{detail}", logic.STATE_MISSING, tag, tip_of(detail, skipped))
+    return _note(f"{logic.ND_TEXT}：{detail}", logic.STATE_MISSING, tag, tip_of(detail, skipped), _KEY_DIVIDEND)
 
 
 def assemble_wired(profiles, codes, nav_out, *, unresolved, today, mask, withheld_texts, input_conflict,
@@ -970,6 +981,13 @@ def _apply_cell_notes(code, cells, by_code):
             cell["text"] = note["text"]
             cell["_state"] = note["state"]
             cell["_tone"] = logic.tone_for_state(note["state"])
+            # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：產生處（`_note`）寫的資料類記到這一格上（畫面字不變）；
+            # 這一格的成因以 note 為準（`logic` 畫缺格時記的那一類一併換掉，例：配息比那一格因淨值失敗而缺）。
+            cell.pop(page_health.MISSING_KEYS_KEY, None)
+            if note.get("_data_key") and note["state"] == logic.STATE_MISSING:
+                page_health.tag_missing(cell, note["_data_key"])
+            elif note.get("_data_key") and note["state"] == logic.STATE_ERROR:
+                page_health.tag_fetch_class(cell, note["text"][len(logic.fetch_failed_text("")):], note["_data_key"])
         elif is_missing_cell:
             raise ValueError(f"{code!r} 的「{column}」是缺格，原因紀錄卻說可用")
         if note["source_tag"]:

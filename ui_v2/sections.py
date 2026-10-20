@@ -40,6 +40,8 @@
 
 from __future__ import annotations
 
+from . import page_health
+
 # ───────────────────────── 鏡像常數（真身在各頁 logic；測試逐字比對） ─────────────────────────
 
 STATE_OK = "ok"
@@ -402,6 +404,8 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys, unconfigured=None) -> int:
             if row[cell] == SYMBOL_UNDECIDABLE:
                 row[cell] = SYMBOL_ERROR
         row["_fetch_failed"] = True
+        # BL-0250 批次 3-B（總管第二輪裁定第 4 點）：這一列的取數失敗屬哪一類資料，在產生處寫明（畫面字不變）。
+        row[page_health.FETCH_CLASS_KEY] = page_health.DATA_CLASSES["market_indicator"]
         count += 1
     for item in _find(model, "MKT-5").get("_items") or ():
         name = unconfigured.get(item.get("name"))
@@ -413,6 +417,7 @@ def mark_mkt7_fetch_failed(model: dict, failed_keys, unconfigured=None) -> int:
         if item.get("name") in failed and any(b.get("text") == MKT_BADGE_MISSING_TEXT for b in item["badges"]):
             item["badges"] = [dict(MKT_BADGE_FETCH_FAILED) if b.get("text") == MKT_BADGE_MISSING_TEXT else b
                               for b in item["badges"]]
+            item[page_health.FETCH_CLASS_KEY] = page_health.DATA_CLASSES["market_indicator"]   # BL-0250 批次 3-B
             count += 1
     return count
 

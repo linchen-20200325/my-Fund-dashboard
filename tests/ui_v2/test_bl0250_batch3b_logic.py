@@ -171,11 +171,14 @@ def test_44_之十三在檔尾_窄例外射程寫在本檔():
     assert len(rule) == 1 and "本句只有一個窄例外" in rule[0]
 
 
-def test_44_凍結不變量_塊數與判準行數照舊():
+def test_44_凍結不變量_塊數與判準行數只照授權變():
+    """總管裁定 (c) 的授權清單（44 之十三其五之一第 5 條）：以塊開頭的標題 41 → 42、標記塊判準的行 41 → 42（第二輪總表落字用掉）；
+    其餘照舊。"""
     lines = _D44.read_text(encoding="utf-8").split("\n")
     count = lambda prefix: sum(1 for line in lines if line.startswith(prefix))
     assert (count("#### 塊 "), count("**判準**"), count("**節判準**"), count("**表判準**"), count("**元件判準**")) == (
-        41, 41, 7, 8, 5)
+        42, 42, 7, 8, 5)
+    assert sum(1 for line in lines if line.startswith("#### 塊 SET-8｜各頁資料狀態總表")) == 1
 
 
 # ═══════════════════════ AppTest 接線（不標 slow，跑在 not-slow 線） ═══════════════════════

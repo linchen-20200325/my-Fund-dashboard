@@ -1145,8 +1145,13 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
     health.relabel_unconfigured(model, failures)
     cards = logic.codes_in_layer(model, 2)
+    # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+    # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
+    health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
+    health_normal = health.normal_entries(model, cards)
     provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
     status_line = health.status_line(model, failures, as_of=_as_of(model), stale=health.has_stale_marker(model, cards))
+    health_view.record_page_health("exp", model, health_items, cards, health_normal, status_line)
     # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`EXP-2` 移到層 3、`EXP-3` 移到層 4（預設收合），② 只剩 `EXP-1`；
     # 在上面的徽章搬移與資料狀態行之後才改層 —— 那兩步照舊以改層前的三張核心卡為對象，行為不變（`ui_v2/sections.py`）。
     sections.relayer(model, "exp")

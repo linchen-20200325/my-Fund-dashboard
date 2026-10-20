@@ -5,8 +5,10 @@
 純函式模組：**不 import streamlit、不 import 舊樹、不 import 任何同樹模組**（`tests/ui_v2/test_ui_v2_live_import_guard.py`），
 只用標準庫。不取數、不寫入、不讀時鐘（記錄時間由呼叫端給）。
 
-⚠️ **本批狀態：純函式已落地、尚未接線。** 四頁「在產生 ⛔／◇／◷／尚未設定的那個地方交出原因項目」那一步，有幾處 ◇ 不改資料
-語意就寫不出資料類（逐處見本批回報與 44 之十三其五），依總管裁定 (a) 的停止條件停下；接線、設定與診斷頁的總表塊等那幾處裁定後一起做。
+~~⚠️ **本批狀態：純函式已落地、尚未接線。** 四頁「在產生 ⛔／◇／◷／尚未設定的那個地方交出原因項目」那一步，有幾處 ◇ 不改資料
+語意就寫不出資料類（逐處見本批回報與 44 之十三其五），依總管裁定 (a) 的停止條件停下；接線、設定與診斷頁的總表塊等那幾處裁定後一起做。~~
+→ 2026-10-19 總管第二輪裁定後已接線（狀態更新，不是漏刪；44 之十三其五之四、其七）：四頁在產生處用本檔的 `tag_*` 記下資料類，
+`ui_v2/health.py::collect_page_items` 收集、`ui_v2/health_view.py::record_page_health` 記錄，設定與診斷頁 ② 畫總表。
 
 **一項＝一個原因**（線框 1.1）：
 - 尚未設定：鍵＝哪一個設定；取數失敗、資料未備：鍵＝哪一類資料；不是最新：整頁只算一項。
@@ -59,9 +61,118 @@ TEXT_CARDS_UNREADABLE = "（{n} 張卡有值讀不到）"
 DETAIL_LABELS = ("資料類", "項目", "狀態", "最近觀測日或資料日期", "最近取得時間（台北時間）", "延遲天數", "來源層級")
 SUMMARY_LABELS = ("頁", "狀態", "主要原因", "記錄時間")
 
+# 設定與診斷 ② 的那一塊（44 第七節第三小節之十三其七；線框 6.3）。字面照線框；塊代號 `SET-8` 只在 44 與本檔，不上一般畫面。
+BLOCK_CODE = "SET-8"
+BLOCK_TITLE = "各頁資料狀態總表"
+TEXT_SCOPE = "只收本次瀏覽開過的頁；每次開頁更新。"
+TEXT_RECORDED_AT = "記錄於 {at}"
+TEXT_PICK_LABEL = "看哪一頁的明細"
+TEXT_GOTO = "前往{page}"
+TEXT_NO_NAV = "這個入口只有這一頁，沒有換頁連結。"
+TEXT_WHOLE_PAGE = "整頁"
+TEXT_DETAIL_EMPTY = "這一頁本次尚未開過，沒有明細。"
+TEXT_DETAIL_NONE = "這一頁沒有可列的項目。"
+# 可信度結論燈的說明補一句（線框 6.3「與結論燈的關係」）：總表不影響燈。
+TEXT_LAMP_NOTE = "各頁資料狀態總表不計入本燈"
+
 TAIPEI = timezone(timedelta(hours=8))
 # 跨頁留著的記錄（每頁每次渲染整格覆寫）。⛔ 不得列入 `ui_v2/app_preview.py::_PAGE_STATE_TO_DROP`（同 `plain.RAW_STATE`）。
 STATE_KEY = "_ui_v2_page_health"
+
+
+# ───────────────────────── 產生處的標記（總管 2026-10-19 第二輪裁定第 1、2、3、4 點） ─────────────────────────
+# 各頁 `logic`／`live` 在**產生** ⛔／◇ 的那個地方，把「這是哪一類資料」寫在同一個 dict 上（`_` 開頭的鍵，畫面不讀，
+# 正式畫面與示範模式一個字都不變）。收集的那一步（`ui_v2/health.py::collect_page_items`）只讀這些標記，不從塊的來源推。
+
+# 取數失敗：`((<交給 fetch_failed_text 的那一段訊息>, <中文資料類>), ...)`。⛔ 鍵名與 `ui_v2/plain.py::FETCH_CLASSES_KEY` 相同（測試比對）。
+FETCH_CLASSES_KEY = "_fetch_classes"
+# 不以「⛔ 取數失敗：<訊息>」字串呈現、而以結構標記呈現的那一種（例：`MKT-7` 那一列四格 ⛔＋「取數失敗」徽章）：
+# 標記本身就是失敗，資料類直接寫在這個鍵（字串）。
+FETCH_CLASS_KEY = "_fetch_class"
+# 尚未設定的結構標記（既有鍵，`ui_v2/health.py::UNCONFIGURED_KEY`；值是尚未設定的對象）。
+UNCONFIGURED_KEY = "_unconfigured"
+# 資料未備：`(<鍵>, ...)` —— 一般是中文資料類；使用者設定留空時是那一個設定的中文名（裁定第 2 點，例「目標比重」）。
+# 一格兩種成因（裁定第 3 點）在判定分支就地記兩個鍵，兩類各算一項。
+MISSING_KEYS_KEY = "_missing_keys"
+# 衍生的 ◇／⛔（裁定第 1 點）：由同頁別的塊或別的格推出來的狀態（例：結論燈、`HLD-7`「四塊沒有一塊出數」），不另算一項；
+# 理由寫在 `DERIVED_REASON_KEY`。**只有**帶這個標記的節點（連同它底下）不計數 —— 找不到類別的 ◇ 照樣報錯，不靠略過。
+DERIVED_KEY = "_derived"
+DERIVED_REASON_KEY = "_derived_reason"
+
+# 本批在產生處新增的標記鍵（全在 `_` 開頭，畫面不讀）。既有的整頁逐格摘要守衛釘的是判定與字面，這幾個鍵與
+# `_missing_cells` 同一類（只是給下一步讀的標記），摘要時一併略過；標記本身的對錯由本批的測試驗。
+# `_current_keys`（資產配置目標對照卡每一列：基準值缺那一邊的資料類）、`_missing_key`（資產配置各類別的缺值理由屬哪一類）、
+# `_data_key`（標的探索接線結果的每一格：產生處寫的資料類）是同一批的同一種標記。
+MARK_KEYS = ("_fetch_classes", "_fetch_class", "_missing_keys", "_derived", "_derived_reason",
+             "_current_keys", "_missing_key", "_data_key")
+
+# 衍生理由（寫在產生處；字面為本組擬定，不上畫面）。
+DERIVED_LAMP = "結論燈不自己取數，狀態由同頁核心卡推出"
+DERIVED_BLOCK_STATE = "塊的狀態取自本塊各值的狀態"
+
+
+def copy_fetch_classes(target, source):
+    """`target` 照抄 `source` 的失敗字串時，一併照抄產生處記的資料類（就地；回 `target`）。"""
+    if isinstance(target, dict) and isinstance(source, dict):
+        for message, data_class in source.get(FETCH_CLASSES_KEY) or ():
+            tag_fetch_class(target, message, data_class)
+    return target
+
+
+# 表鍵 → 中文資料類（鏡像 `ui_v2/plain.py::TABLE_NAMES`；本模組不 import 它，由測試逐字比對）。
+DATA_CLASSES = {
+    "holding": "持倉", "nav": "淨值", "dividend": "配息", "policy": "保單",
+    "market_indicator": "市場指標", "user_setting": "使用者設定", "fetch_log": "取數紀錄",
+    "fund_profile": "基金基本資料",
+}
+# 選股池（標的探索的母體；鏡像 `ui_v2/plain.py::_KNOWN_MESSAGES` 選股池那兩列的資料類）。
+DATA_CLASS_POOL = "選股池"
+# 使用者設定留空時當鍵用的中文名（鏡像 `ui_v2/plain.py::SETTING_NAMES` 的值；測試比對是它的子集）。
+SETTING_TARGET_WEIGHTS = "目標比重"
+SETTING_SCENARIO_INPUT = "情境試算金額"
+SETTING_TOLERANCE = "容許帶"
+SETTING_FILTER_RULES = "篩選條件"
+SETTING_KEYS = (SETTING_TARGET_WEIGHTS, SETTING_SCENARIO_INPUT, SETTING_TOLERANCE, SETTING_FILTER_RULES)
+
+
+def tag_fetch_class(node, message, data_class: str):
+    """在 `node` 上記「這一句取數失敗的訊息是 `message`，屬 `data_class`」（就地；回 `node`）。只記，不改任何畫面字。
+    `message` 是交給 `fetch_failed_text` 的那一段（逐檔的那一種是「<代碼>：<訊息>」整段）。`message` 為空或 `node` 不是 dict → 不記。"""
+    if message is None or message == "" or not isinstance(node, dict):
+        return node
+    if not isinstance(data_class, str) or not data_class:
+        raise ValueError("取數失敗的資料類不得為空（不猜）")
+    pairs = list(node.get(FETCH_CLASSES_KEY) or ())
+    pair = (str(message), data_class)
+    if pair not in pairs:
+        pairs.append(pair)
+    node[FETCH_CLASSES_KEY] = tuple(pairs)
+    return node
+
+
+def tag_missing(node, *keys):
+    """在 `node` 上記「這一處的資料未備屬 `keys`」（就地；回 `node`；同鍵不重記）。`keys` 不得為空。"""
+    keys = tuple(k for k in keys if k)
+    if not keys:
+        raise ValueError("資料未備的鍵不得為空（不猜）")
+    if not isinstance(node, dict):
+        return node
+    have = list(node.get(MISSING_KEYS_KEY) or ())
+    for key in keys:
+        if key not in have:
+            have.append(key)
+    node[MISSING_KEYS_KEY] = tuple(have)
+    return node
+
+
+def tag_derived(node, reason: str):
+    """在 `node` 上記「這一處的狀態是衍生的」與理由（就地；回 `node`）。理由不得為空。"""
+    if not isinstance(reason, str) or not reason:
+        raise ValueError("衍生狀態要寫理由")
+    if isinstance(node, dict):
+        node[DERIVED_KEY] = True
+        node[DERIVED_REASON_KEY] = reason
+    return node
 
 
 # ───────────────────────── 原因項目 ─────────────────────────
@@ -224,13 +335,20 @@ def _stamp(now) -> str:
     return str(now)
 
 
-def record(session_state, slug: str, items, *, as_of, now, page_failure=None) -> None:
-    """記下這一頁這一次渲染的資料狀態（**整格覆寫**）。`now`：記錄時間（帶時區的 `datetime` 或 ISO 字串），由呼叫端給。"""
+def record(session_state, slug: str, items, *, as_of, now, page_failure=None, normal=()) -> None:
+    """記下這一頁這一次渲染的資料狀態（**整格覆寫**）。`now`：記錄時間（帶時區的 `datetime` 或 ISO 字串），由呼叫端給。
+    `normal`：明細表裡沒有異常的那幾項（`affected()` 的清單；總管裁定 (b)）。"""
     if slug not in PAGE_NAMES:
         raise ValueError(f"不認得的頁：{slug}")
     store = dict(session_state.get(STATE_KEY) or {})
-    store[slug] = {"at": _stamp(now), "items": merge_items(items), "as_of": as_of, "page_failure": page_failure}
+    store[slug] = {"at": _stamp(now), "items": merge_items(items), "as_of": as_of, "page_failure": page_failure,
+                   "normal": [dict(e) for e in normal or ()]}
     session_state[STATE_KEY] = store
+
+
+def recorded(session_state, slug: str):
+    """這一頁記下的那一格；沒開過 → None。"""
+    return (session_state.get(STATE_KEY) or {}).get(slug)
 
 
 def recorded_time_text(stamp) -> str:
@@ -297,13 +415,18 @@ def _cell(value) -> str:
     return NO_VALUE if value is None or value == "" else str(value)
 
 
-def detail_rows(entry, normal=()) -> list:
+def detail_rows(entry, normal=None) -> list:
     """「看哪一頁的明細」那一張表（總管裁定 (b)）：一列＝「一項 × 受影響的卡或項目」；沒有異常的項目（`normal`，`affected()` 的清單）
     也列，狀態欄寫「—」（不寫「正常」）。欄序 `DETAIL_LABELS`。沒開過的頁 → 空清單。"""
     if entry is None:
         return []
+    if normal is None:
+        normal = entry.get("normal") or ()
     out = []
     flagged = set()
+    if entry.get("page_failure") is not None:   # 整頁載不出來：只有這一列（頁首也只寫這一句）
+        out.append((_cell(entry["page_failure"]), TEXT_WHOLE_PAGE, f"{SYMBOL_ERROR} {KIND_FETCH}", NO_VALUE, NO_VALUE,
+                    NO_VALUE, NO_VALUE))
     for item in entry["items"]:
         for e in item["affected"]:
             flagged.add((e["card"], e["item"]))

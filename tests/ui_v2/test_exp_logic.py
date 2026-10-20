@@ -21,6 +21,9 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from ui_v2.exp import fixtures, logic, theme  # noqa: E402
+# BL-0250 批次 3-B：產生處新增的標記鍵（`ui_v2/page_health.py::MARK_KEYS`）與 `_missing_cells` 同一類，摘要時略過；
+# 期望值一個都沒改（拿掉標記之後逐格仍與改動前相同）。
+from ui_v2.page_health import MARK_KEYS as _BATCH3B_MARKS  # noqa: E402
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _D44 = _ROOT / "docs" / "v2" / "44_fund_ui_ssot.md"
@@ -133,8 +136,9 @@ def test_44還是凍結的那一份():
     # 同批第二次稽核回修（2026-10-19，決策者 AI 總管；總管派工單自身錯誤的就地更正）：之十二其十第 1 條射程收窄、其九第 3 條撤回理由更正、第五節第一小節那一句跟著改（行數不變）；上一個值 9a9727206827b57e88636dab0dc9e16e、4995 行（e606e6ec）。
     # BL-0250 批次 3-B（2026-10-19，客戶批次 3 裁示 `DEC-2026-10-19-05`；多選清單、結果清單每列來源展開）：前 4995 行只做行內擴寫（行數不變；十處行內指標，前文沒有劃線），檔尾新增第七節第三小節之十三（多 65 行）；上一個值 aaf306cf99fdc76cf711ecb148d88818、4995 行（23c351b9）。
     # BL-0250 批次 3-B 同批總管裁定（2026-10-19，決策者 AI 總管）：前 4995 行只做行內擴寫（行數不變；第五節第二小節 來源 那一列與之十二其一第 1 條各插一個指標），檔尾之十三新增其五之一～之三並補幾處行內更正（多 19 行）；上一個值 ffedfba54a082182aaa667a3053eecda、5060 行。
-    assert digest == "cc8655420e27446de46339569ac2e787", digest
-    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 5080  # 5079 行 ＋ 末尾換行（上一個值 5061，批次 3-B 總管裁定落字；再上一個 4996，批次 3-B 檔尾新增之十三；再上一個 4987，同批稽核回修；再上一個 4979，同批總管裁定其九；再上一個 4901，批次 3-A 檔尾新增之十二；再上一個 4900，同批稽核回修其三補一行；再上一個 4833，2026-10-19 批次 2 檔尾新增之十一）
+    # BL-0250 批次 3-B 總管第二輪裁定（2026-10-19，決策者 AI 總管）：前 4995 行只做行內擴寫（行數不變；第三節第五小節層表層 2 那一列、`SET-0` 來源欄、第七節第一小節計數表兩列各插一個指標），檔尾之十三新增其五之四、之五、其七（含新塊 `SET-8` 的標題、四件事與判準）並補幾處行內指標（多 35 行）；上一個值 cc8655420e27446de46339569ac2e787、5079 行（c1738ba2）。
+    assert digest == "aa3b11b92d9675179d078e04f7535511", digest
+    assert len(_D44.read_text(encoding="utf-8").split("\n")) == 5115  # 5114 行 ＋ 末尾換行（上一個值 5080，批次 3-B 總管第二輪裁定落字；再上一個 5061，批次 3-B 總管裁定落字；再上一個 4996，批次 3-B 檔尾新增之十三；再上一個 4987，同批稽核回修；再上一個 4979，同批總管裁定其九；再上一個 4901，批次 3-A 檔尾新增之十二；再上一個 4900，同批稽核回修其三補一行；再上一個 4833，2026-10-19 批次 2 檔尾新增之十一）
 
 
 # ═════════════════════ 二、逐字引文守衛 ═════════════════════
@@ -2120,7 +2124,7 @@ def _cell_digest(block) -> str:
         # 摘要期望值一個都沒改：拿掉標記之後逐格仍與改動前相同。
         if isinstance(obj, dict):
             return {k: scrub(v) for k, v in sorted(obj.items())
-                    if k not in ("_missing_cells", "_missing_fields")}
+                    if k not in ("_missing_cells", "_missing_fields", *_BATCH3B_MARKS)}
         if isinstance(obj, (list, tuple)):
             return [scrub(v) for v in obj]
         if isinstance(obj, set):

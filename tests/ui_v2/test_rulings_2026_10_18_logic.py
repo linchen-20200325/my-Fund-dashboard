@@ -339,6 +339,19 @@ def test_BL0373_latest_failed_record_層級不在四個之內就炸():
 # ───────────────────────── 示範模式：模型逐位元組不變 ─────────────────────────
 
 
+def _without_batch3b_marks(node):
+    """BL-0250 批次 3-B：產生處新增的資料類標記（`ui_v2/page_health.py::MARK_KEYS`，畫面不讀）不算進 md5；
+    基準值一個都沒改（拿掉標記之後逐位元組仍與動手前相同）。"""
+    from ui_v2.page_health import MARK_KEYS
+    if isinstance(node, dict):
+        return {k: _without_batch3b_marks(v) for k, v in node.items() if k not in MARK_KEYS}
+    if isinstance(node, list):
+        return [_without_batch3b_marks(v) for v in node]
+    if isinstance(node, tuple):
+        return tuple(_without_batch3b_marks(v) for v in node)
+    return node
+
+
 def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不變():
     """本批只改正式模式。示範模式模型（設定與診斷 17 情境 × 存檔失敗開關、市場總覽各固定資料集）取 md5，
     基準值於 2d98692a（本批動手前）量得；`kind_time_from_log` 只有正式模式會給，示範模式走不到 BL-0373 那一支。"""
@@ -369,5 +382,6 @@ def test_示範模式SET與MKT模型_只差BL0371那兩句_其餘逐位元組不
                 light["text"] = "三張卡的資料齊"
                 changed += 1
     assert changed > 0
-    digest = hashlib.md5(json.dumps(restored, ensure_ascii=False, sort_keys=True, default=default).encode()).hexdigest()
+    digest = hashlib.md5(json.dumps(_without_batch3b_marks(restored), ensure_ascii=False, sort_keys=True,
+                                    default=default).encode()).hexdigest()
     assert digest == "e44fc6ade09b98d81979ff1ace6174c2", digest

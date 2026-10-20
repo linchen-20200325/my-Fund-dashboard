@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+from .. import page_health
+
 # 「這個參數沒有被傳」與「這個參數被傳成 None」是兩件事，不可混為一談：
 # 前者要退回已套用的那一組，後者是使用者把欄位清空了。
 _UNSET = object()
@@ -626,6 +628,11 @@ def _build_card(code, dataset, *, window_days, baseline_date, settings_error=Non
         if source_key == "fx_twd_per_usd" and state == STATE_OK:
             # `44` MKT-3 逐字：單位固定寫成「新臺幣／美元」並在卡上明寫方向，不顯示倒數。
             main_value["direction_text"] = f"方向：1 美元 ＝ {value_text} 新臺幣"
+        # BL-0250 批次 3-B（總管第二輪裁定第 1、4 點）：在產生處記下這一個值的 ⛔／◇ 屬哪一類資料（市場指標；畫面字不變）。
+        if state == STATE_MISSING:
+            page_health.tag_missing(main_value, page_health.DATA_CLASSES["market_indicator"])
+        elif state not in (STATE_OK, STATE_BIZ):
+            page_health.tag_fetch_class(main_value, error, page_health.DATA_CLASSES["market_indicator"])
         main_values.append(main_value)
 
     states = [mv["_state"] for mv in main_values]
@@ -649,7 +656,7 @@ def _build_card(code, dataset, *, window_days, baseline_date, settings_error=Non
     if any(s in (STATE_MISSING, STATE_ERROR) for s in states):
         buttons.append(_retry_button())
 
-    return {
+    block = {
         "code": code,
         "title": BLOCK_TITLES[code],
         "_layer": BLOCK_LAYERS[code],
@@ -666,6 +673,8 @@ def _build_card(code, dataset, *, window_days, baseline_date, settings_error=Non
         "badges": badges,
         "buttons": buttons,
     }
+    # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：塊的 `_state` 取自本塊各值（`worst_state`），是衍生狀態；各值自己記了資料類。
+    return page_health.tag_derived(block, page_health.DERIVED_BLOCK_STATE)
 
 
 # 「回答什麼」逐字引 `44` 3.1 各塊那一格。
@@ -879,7 +888,7 @@ def _light_words(card) -> str:
 
 def _build_light(cards) -> dict:
     light = conclusion_light(cards)
-    return {
+    block = {
         "code": "MKT-0",
         "title": BLOCK_TITLES["MKT-0"],
         "_layer": 1,
@@ -893,6 +902,7 @@ def _build_light(cards) -> dict:
         "badges": [],
         "buttons": light["buttons"],
     }
+    return page_health.tag_derived(block, page_health.DERIVED_LAMP)   # BL-0250 批次 3-B（裁定第 1 點）
 
 
 # ───────────────────────── 層 3 ─────────────────────────
@@ -1089,6 +1099,8 @@ def _build_mkt5(dataset, selected_keys, *, available_keys=None, field_selected_k
             "disabled_reason": reason,
             "badges": [] if key in have_rows else [_status_badge("資料未備")],
         }
+        if key not in have_rows:   # BL-0250 批次 3-B（裁定第 1 點）：產生處記下資料類（畫面字不變）
+            page_health.tag_missing(item, page_health.DATA_CLASSES["market_indicator"])
         items.append(item)
 
     over_cap = len(field) > INDICATOR_PICK_CAP
@@ -1202,6 +1214,7 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=Non
                 blank_notes.append(f"{row.get('indicator_key')} / {row.get('obs_date')}")
         if missing_cells:
             cells["_missing_cells"] = tuple(missing_cells)
+            page_health.tag_missing(cells, page_health.DATA_CLASSES["market_indicator"])   # BL-0250 批次 3-B（裁定第 1 點）
         cells["_row_badge"] = "修正過" if row.get("is_revised") else ""
         table_rows.append(cells)
 
@@ -1217,7 +1230,7 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=Non
     latest = max((r["obs_date"] for r in rows), default=None)
     summary = "尚無任何觀測" if not rows else f"共 {len(rows)} 筆觀測，最近一筆 {latest}"
 
-    return {
+    block = {
         "code": "MKT-6",
         "title": BLOCK_TITLES["MKT-6"],
         "_layer": 4,
@@ -1232,6 +1245,9 @@ def _build_mkt6(dataset, *, selected_keys=None, states=None, selection_state=Non
         "badges": [],
         "buttons": [],
     }
+    if not rows:   # BL-0250 批次 3-B（裁定第 1 點）：「市場指標 尚無資料」那一句的資料類寫在產生處（畫面字不變）
+        page_health.tag_missing(block, page_health.DATA_CLASSES["market_indicator"])
+    return block
 
 
 def _detail_nothing_selected(code, text, extra) -> dict:
@@ -1286,7 +1302,9 @@ def _build_mkt7(dataset, *, keys=None, states=None, selection_state=None, nothin
                     # 這個鍵一筆觀測也沒有、而且不是取數失敗 ＝ 資料未備（其四第 2 條；正式模式畫 ◇）。
                     # 取數失敗的鍵成因是失敗、不是資料未備，四格照舊 ⬜（獨立稽核 M1；徽章字面是基底判讀，本批不動，BL-0373）。
                     **({} if key in (dataset.get("errors") or {}) else
-                       {"_missing_cells": ("obs_text", "fetched_text", "tier_text", "delay_text")}),
+                       {"_missing_cells": ("obs_text", "fetched_text", "tier_text", "delay_text"),
+                        # BL-0250 批次 3-B（總管第二輪裁定第 1 點）：產生處記下資料類（畫面字不變）。
+                        page_health.MISSING_KEYS_KEY: (page_health.DATA_CLASSES["market_indicator"],)}),
                 }
             )
             continue
@@ -1481,7 +1499,10 @@ def collect_ui_strings(model: dict) -> list:
         if isinstance(node, str):
             out.append(node)
         elif isinstance(node, dict):
-            for value in node.values():
+            for key, value in node.items():
+                # BL-0250 批次 3-B：產生處的資料類標記（`page_health.MARK_KEYS`）是給各頁資料狀態總表讀的簿記，不會上畫面，不收。
+                if key in page_health.MARK_KEYS:
+                    continue
                 walk(value)
         elif isinstance(node, (list, tuple, set)):
             for value in node:

@@ -226,11 +226,17 @@ def page_alo() -> None:
     )
 
 
+def _page_links() -> dict:
+    """四頁的 `st.Page`（BL-0250 批次 3-B：設定與診斷「各頁資料狀態總表」每列的「前往該頁」；只換頁）。
+    與 `main()` 註冊進 `st.navigation` 的是同一個函式、同一個 url_path、同一個頁名（同 `_settings_page`）。"""
+    return {slug: st.Page(func, title=title, url_path=slug) for slug, title, func in PAGES if slug != "set"}
+
+
 def page_set() -> None:
     _on_page("set")
     set_page.render(
         load_live=set_source.load_live, save_live=set_source.save_setting, refetch_live=set_source.refetch,
-        mask_error=set_source.mask_error,
+        mask_error=set_source.mask_error, pages=_page_links(),
     )
 
 

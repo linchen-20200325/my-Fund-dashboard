@@ -160,6 +160,8 @@ def _entry_injections(path: pathlib.Path, page: str) -> list[dict]:
 _SETTINGS_PAGE_KW = "settings_page"
 _SETTINGS_PAGE_VALUE = "<非source屬性：_settings_page()>"
 _SETTINGS_PAGE_PAGES = ("mkt", "hld", "exp", "alo")
+_PAGES_KW = "pages"
+_PAGES_VALUE = "<非source屬性：_page_links()>"
 
 
 @pytest.mark.parametrize("page", _LIVE_PAGES)
@@ -177,6 +179,11 @@ def test_b_四頁注入與live入口逐一相同(page):
     rest = dict(preview[0])
     if page in _SETTINGS_PAGE_PAGES:
         assert rest.pop(_SETTINGS_PAGE_KW) == _SETTINGS_PAGE_VALUE, (page, preview)
+    # BL-0250 批次 3-B（44 第七節第三小節之十三其七；有意識的更正，不是漏刪）：設定與診斷頁另多傳一個 `pages=_page_links()`
+    # （各頁資料狀態總表每列「前往<頁名>」，只換頁）；單頁入口不傳。拿掉它之後其餘照舊逐一相同。
+    if page == "set":
+        assert rest.pop(_PAGES_KW) == _PAGES_VALUE, (page, preview)
+        assert _PAGES_KW not in live[0], live
     assert [rest] == live, (page, preview, live)
 
 

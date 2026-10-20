@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from . import health, plain
+from . import health, page_health, plain
 
 _log = logging.getLogger(__name__)
 
@@ -83,6 +83,25 @@ def render_provenance(rows) -> None:
         )
 
 
+def record_load_failure(slug: str, raw_line: str) -> None:
+    """整頁載不出來時記一筆（各頁資料狀態總表主要原因順位 1；設定與診斷頁自己不在總表裡，不記）。
+    資料類取自那一行原文：認得出的已知訊息照它的資料類，認不出 → `plain.DATA_CLASS_DEFAULT`（與這一頁畫出來的那一句同一類）。"""
+    if slug in page_health.PAGE_NAMES:
+        page_health.record(st.session_state, slug, (), as_of=None, now=datetime.now(timezone.utc),
+                           page_failure=plain.error_line_data_class(raw_line))
+
+
+def record_page_health(slug: str, display: dict, items, cards, normal, status_line) -> None:
+    """記下這一頁這一次畫出來的資料狀態，給設定與診斷頁的各頁資料狀態總表（BL-0250 批次 3-B；`ui_v2/page_health.py::record`）。
+    `items`：`health.collect_page_items` 的原因項目、`normal`：`health.normal_entries` 的「沒有異常」那幾列（兩者都在
+    `move_card_provenance` 之前收）；◷ 在這裡補（`move_card_provenance` 之後才看得到）。只記、不取數、不寫入任何資料表；記錄時間取當下（台北時間由總表換算）。"""
+    page_health.record(
+        st.session_state, slug, list(items) + health.stale_items(display, cards),
+        as_of=status_line.get("as_of"), now=datetime.now(timezone.utc),
+        normal=normal,
+    )
+
+
 def render_load_failure(page: str, exc: BaseException, mask_error, *, fetch_failed_text, title: str, answers: str,
                         title_class: str, sub_class: str, tone_hex, settings_page=None, link: bool = True) -> None:
     """正式模式 `load_live()` 拋例外時的整頁畫面（BL-0362；Phase 3 P1-⑤）。體例照持倉體檢既有的
@@ -97,6 +116,7 @@ def render_load_failure(page: str, exc: BaseException, mask_error, *, fetch_fail
     raw_line = health.load_failure_line(exc, mask_error, fetch_failed_text)
     plain_line, raw = plain.plain_error_line(raw_line, page=page)
     plain.record_raw(st.session_state, page, raw, datetime.now(timezone.utc))
+    record_load_failure(page, raw_line)
     _log.warning("ui_v2 %s 正式頁載入失敗：%s", page, raw_line)
     st.markdown(f'<div class="{_esc(title_class)}">{_esc(title)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="{_esc(sub_class)}">{_esc(answers)}</div>', unsafe_allow_html=True)

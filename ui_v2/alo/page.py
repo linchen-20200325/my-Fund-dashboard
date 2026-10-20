@@ -564,6 +564,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     raw_line = _error_line(exc, mask_error)
     plain_line, raw = plain.plain_error_line(raw_line, page="alo")
     plain.record_raw(st.session_state, "alo", raw, datetime.now(timezone.utc))
+    health_view.record_load_failure("alo", raw_line)   # BL-0250 批次 3-B：各頁資料狀態總表的順位 1
     # `CLAUDE.md` 第三節第三小節：接住例外至少要 log（P1-⑤ 補；原文已經過 `mask_error`，沒傳時只有型別）。
     _log.warning("ui_v2 alo 正式頁載入或組模型失敗：%s", raw_line)
     _html(f'<div class="alo-title">{_esc(logic.PAGE_TITLE)}</div>')
@@ -678,10 +679,14 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # 比照其他三頁把 `stale` 接上（本頁卡上的新鮮度徽章若畫成黃，同一支判讀）；資料未備另讀格內與列尾已畫出的 ◇
         # （本頁的資料未備多半不帶 `_state`，`has_missing` 讀不到）。只讀既有判定，不新算。
         cards = logic.codes_in_layer(model, 2)
+        # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+        # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。本頁沒有核心卡徽章搬移那一步。
+        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date"),
             stale=health.has_stale_marker(model, cards), missing=health.has_missing_marker(model),
         )
+        health_view.record_page_health("alo", model, health_items, cards, health.normal_entries(model, cards), status_line)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")

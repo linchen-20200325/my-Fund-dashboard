@@ -713,11 +713,16 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
             live.relabel_unconfigured_settings(
                 model, health.not_configured_reason(health.not_configured_name(unconfigured)))
         cards = logic.codes_in_layer(model, 2)
+        # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
+        # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
+        health_items, _unresolved = health.collect_page_items(model, failures, _status["fetch_events"], cards)
+        health_normal = health.normal_entries(model, cards)
         provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
         status_line = health.status_line(
             model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date"),
             stale=health.has_stale_marker(model, cards),
         )
+        health_view.record_page_health("mkt", model, health_items, cards, health_normal, status_line)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)

@@ -218,6 +218,19 @@ def test_EXP_拿掉修正會轉紅(monkeypatch):
 # ───────────────────────── 示範模式逐位元組不變 ─────────────────────────
 
 
+def _without_batch3b_marks(node):
+    """BL-0250 批次 3-B：產生處新增的資料類標記（`ui_v2/page_health.py::MARK_KEYS`，畫面不讀）不算進 md5；
+    基準值一個都沒改（拿掉標記之後逐位元組仍與動手前相同）。"""
+    from ui_v2.page_health import MARK_KEYS
+    if isinstance(node, dict):
+        return {k: _without_batch3b_marks(v) for k, v in node.items() if k not in MARK_KEYS}
+    if isinstance(node, list):
+        return [_without_batch3b_marks(v) for v in node]
+    if isinstance(node, tuple):
+        return tuple(_without_batch3b_marks(v) for v in node)
+    return node
+
+
 def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前相同():
     """示範模式不經過 `live.py`。基準值於 `7114da08`（本批動手前）以同一支序列化量得。"""
     default = lambda o: sorted(o, key=repr) if isinstance(o, (set, frozenset)) else repr(o)  # noqa: E731
@@ -229,7 +242,8 @@ def test_示範模式_持倉體檢與標的探索全情境模型_md5與動手前
             params = dict(exp_fixtures.scenario_with(name, save_failed=save_failed))
             ds = params.pop("dataset")
             out.append(["exp", name, save_failed, exp_logic.build_page_model(ds, save_failed=save_failed, **params)])
-    digest = hashlib.md5(json.dumps(out, ensure_ascii=False, sort_keys=True, default=default).encode()).hexdigest()
+    digest = hashlib.md5(json.dumps(_without_batch3b_marks(out), ensure_ascii=False, sort_keys=True,
+                                    default=default).encode()).hexdigest()
     assert digest == "4f2cbd85a00bdcff4e4aa1ee5b9508a0", digest
 
 

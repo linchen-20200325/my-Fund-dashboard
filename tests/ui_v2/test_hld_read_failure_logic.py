@@ -26,6 +26,9 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from ui_v2.hld import fixtures, live, logic  # noqa: E402
+# BL-0250 批次 3-B：產生處新增的標記鍵（`ui_v2/page_health.py::MARK_KEYS`）與 `_missing_cells` 同一類，摘要時略過；
+# 期望值一個都沒改（拿掉標記之後逐格仍與改動前相同）。
+from ui_v2.page_health import MARK_KEYS as _BATCH3B_MARKS  # noqa: E402
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -308,7 +311,7 @@ def _digest(obj) -> str:
         # 它的值由 `tests/ui_v2/test_sections_logic.py` 逐情境驗。期望值一個都沒改。
         if isinstance(value, dict):
             return {k: scrub(v) for k, v in sorted(value.items())
-                    if k not in ("_missing_cells", "_missing_fields", "_unevaluated_count")}
+                    if k not in ("_missing_cells", "_missing_fields", "_unevaluated_count", *_BATCH3B_MARKS)}
         if isinstance(value, (list, tuple)):
             return [scrub(v) for v in value]
         if isinstance(value, set):
