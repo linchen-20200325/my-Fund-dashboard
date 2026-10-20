@@ -361,9 +361,10 @@ def test_三張核心卡的佔位徽章換成一枚不適用_其他徽章不動(
     exp_live = pytest.importorskip("ui_v2.exp.live")
     model, other = _exp_model()
     assert exp_live.card_provenance_not_applicable(model) == 3
+    # BL-0250 批次 3-B 總管裁定（有意識的更正，不是漏刪）：括號改為線框第六版待裁示 (1) 推薦原文（44 之十三其六）。
     for block in model["blocks"][:3]:
         assert block["badges"] == [other, {"_kind": "來源", "_tone": "中性", "_not_applicable": True,
-                                            "text": "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"}]
+                                            "text": "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"}]
 
 
 def test_不適用只限三張核心卡的佔位_其他塊與真的來源徽章不換():

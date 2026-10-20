@@ -337,3 +337,12 @@ def test_換頁回來_勾選狀態已在而輸入欄是新的_多選清單照勾
     # 不在本次清單上的 Z09 照舊留在勾選狀態裡（與每列勾選框的行為相同）
     _ok(at.multiselect(key="exp2live_pick_watch").unselect("C03").run())
     assert at.session_state[logic.checked_key(logic.GROUP_WATCH, live.LIVE_SCENARIO)] == ("A01", "Z09")
+
+
+def test_三張核心卡不適用那一句_逐字等於線框第六版待裁示1推薦原文():
+    """總管 2026-10-19 裁定（適用客戶 `DEC-2026-10-19-05` 第 1 點）：列展開已有，改用 61 第 8 節 (1) 的推薦原文。"""
+    d61 = (_ROOT / "docs" / "v2" / "61_bl0250_batch3_wireframe.md").read_text(encoding="utf-8")
+    line = [l for l in d61.split("\n") if l.startswith("- **推薦：`⬜ 不適用（")]
+    assert len(line) == 1
+    assert f"`{live.TEXT_CARD_PROVENANCE_NA}`" in line[0]
+    assert live.TEXT_CARD_PROVENANCE_NA == "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"

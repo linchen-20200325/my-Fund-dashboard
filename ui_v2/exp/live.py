@@ -1309,7 +1309,11 @@ def build_live_model(live_input: dict, *, field_rules=None, field_columns=None, 
 # 草稿 §H T-17「每卡掛一組，刻意畫成佔位」）；逐檔、逐格的來源與缺值照舊（缺資料照舊 ◇／⛔，不用 ⬜）。示範模式不經過本檔，照舊。
 # 字面的括號理由為實作組依裁示理由擬定（線框第六版的「各檔來源見每列展開」指的是 3-B 才做的列展開，本批還沒有，所以不寫），可推翻。
 CARD_PROVENANCE_CODES = ("EXP-1", "EXP-2", "EXP-3")
-TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"
+# ~~TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，沒有單一的來源與新鮮度）"~~
+# → BL-0250 批次 3-B 總管裁定（2026-10-19，適用客戶 `DEC-2026-10-19-05` 第 1 點；有意識的更正，不是漏刪；44 第七節第三小節之十三其六）：
+#   列展開已有，括號改用線框第六版待裁示 (1) 客戶核准的推薦原文（`docs/v2/61_bl0250_batch3_wireframe.md` 第 8 節 (1)）。
+#   舊句在寫下當時為真（那時列展開還不存在）；被權衡掉的是它沒有指出各檔來源在哪裡看。
+TEXT_CARD_PROVENANCE_NA = "⬜ 不適用（這張卡由多檔基金組成，各檔來源見每列展開）"
 
 
 def card_provenance_not_applicable(model: dict) -> int:
