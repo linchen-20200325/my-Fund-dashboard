@@ -133,8 +133,10 @@ def test_第2條_以取得時間篩選_大於小於等於_不崩潰_總表照常
     entry = _store(at)["exp"]
     assert not entry.get("collect_error")
     keys = {i["key"] for i in entry["items"] if i["kind"] == page_health.KIND_MISSING}
-    # 取得時間是字串：大於／小於比不出大小 ⇒ 無法判定，記成篩選條件（第 8 條）；等於照常比
-    assert (page_health.SETTING_FILTER_RULES in keys) == (op != "等於")
+    # 取得時間是字串：大於／小於比不出大小 ⇒ 篩選判定格畫「⬜ 無法判定（…）」—— 頁上是 ⬜，不計數（第二輪 B），明細照抄那一句
+    assert page_health.SETTING_FILTER_RULES not in keys
+    boxed = [r for r in page_health.detail_rows(entry) if r[1].endswith(" 篩選判定")]
+    assert bool(boxed) == (op != "等於") and all(r[2].startswith("⬜ 無法判定") and r[0] == "使用者設定" for r in boxed)
 
 
 @pytest.mark.parametrize("op", ["大於", "小於", "等於"])
@@ -212,7 +214,8 @@ def test_第3條_收集或記錄出錯_頁面照原樣_總表寫無法彙整_不
     assert entry["collect_error"] == cls and entry["items"] == [] and entry["normal"] == []   # 整格改寫，不留舊記錄
     assert entry["at"]                                                      # 記錄時間照寫
     row = next(r for r in page_health.summary_rows(_store(at)) if r["slug"] == page)
-    assert row["status"] == f"⛔ 本頁狀態無法彙整（{cls}）" and row["at"] != page_health.NO_VALUE
+    # 第二輪 C：一般畫面不露出例外類別名；類別只進 log（記錄裡留著，畫面不讀）
+    assert row["status"] == "⛔ 本頁狀態無法彙整" and cls not in row["status"] and row["at"] != page_health.NO_VALUE
     assert page_health.summary_rows(_store(at))[0]["slug"] == page        # 與 ⛔ 同一級，排最前
     assert any(page in r.getMessage() and cls in r.getMessage() for r in caplog.records)
 
@@ -223,7 +226,7 @@ def test_第3條_總表與明細都寫同一句():
     at.run()
     box = next(e for e in at.expander if e.label == page_health.BLOCK_TITLE)
     texts = " ".join(" ".join(SCAN.markdown_text(m.value).split()) for m in box.markdown)
-    assert texts.count("⛔ 本頁狀態無法彙整（MissingClassError）") == 2      # 總表那一列＋明細（選單預設第一列）
+    assert texts.count("⛔ 本頁狀態無法彙整") == 2 and "MissingClassError" not in texts   # 總表那一列＋明細；不露出類別名
     assert box.selectbox[0].value == "市場總覽"
 
 
@@ -247,7 +250,8 @@ def test_第3條_其他例外照舊往上拋_不吞(monkeypatch):
 
 
 def test_第4條_總表的核心卡取改層之後在二畫成卡的塊():
-    assert sections.health_cards(["EXP-1", "EXP-2", "EXP-3"], "exp") == ["EXP-1"]
+    # 第二輪 D：標的探索照客戶裁示原文「EXP 三張核心卡」，三張都算
+    assert sections.health_cards(["EXP-1", "EXP-2", "EXP-3"], "exp") == ["EXP-1", "EXP-2", "EXP-3"]
     assert sections.health_cards(["ALO-1", "ALO-2", "ALO-3"], "alo") == ["ALO-2"]
     assert sections.health_cards(["HLD-1", "HLD-2", "HLD-3"], "hld") == ["HLD-1", "HLD-2", "HLD-3"]
     assert sections.health_cards(["MKT-1", "MKT-2", "MKT-3"], "mkt") == ["MKT-1", "MKT-2", "MKT-3"]
@@ -276,20 +280,25 @@ def test_第5條_主要原因與線框例句逐字相同(page, script, main, oth
     assert _others(entry) == others
 
 
-def test_第5條_標的探索未設定_線框例句對不上_照現況並登記待裁示():
+def test_第5條_標的探索未設定_同順位比到頁序_設定試算表在前_待客戶裁示():
     # 線框第六版 4.2 寫「⛔ 主要原因：選股池的雲端來源尚未設定」（不帶件數）。條件輸入卡畫著「⛔ 尚未設定：設定試算表」，
     # 依新設計 A 同順位比 (a) 設定試算表讓 1 張核心卡讀不到、選股池讓 0 張 ⇒ 設定試算表在前。要對上線框，得改「有值讀不到」
     # 的語意（條件輸入卡不算）—— 不改，停下回報；同日總管裁定維持現況（`44` 之十三其八第 13 條：規則表優先於示意例句，
     # 3-B 驗收時向客戶揭露，可被客戶推翻）。本條釘的是現況，不是例句。
     entry = _entry(SCAN.EXP["未設定"], "exp")
-    assert _main(entry) == "⛔ 主要原因：設定試算表尚未設定（1 張卡有值讀不到）"
+    # 第二輪 D：三張核心卡都算 ⇒ 設定試算表（條件輸入卡、候選清單卡）與選股池（候選清單卡、並排對照卡）都 2 張、都影響燈；
+    # 比到 (c) 用總管訂的頁序（44 塊序；同塊畫出的先）⇒ 設定試算表在前。
+    assert _main(entry) == "⛔ 主要原因：設定試算表尚未設定（2 張卡有值讀不到）"
+    by_key = {i["key"]: i for i in entry["items"]}
+    assert len(page_health.main_unreadable_cards(by_key["設定試算表"])) == len(
+        page_health.main_unreadable_cards(by_key["選股池的雲端來源"])) == 2
     assert _others(entry) == "尚未設定 1 項"
 
 
 def test_第4條_只讓移到四的塊讀不到的尚未設定_不誤歸只影響比較值():
     script = SCAN._exp(pool={"status": "pool_not_cloud", "codes": [],
                              "message": "選股池未設定雲端來源（沒有服務帳戶憑證），不讀本機暫存檔當母體"})
-    assert _main(_entry(script, "exp")) == "⛔ 主要原因：選股池的雲端來源尚未設定"
+    assert _main(_entry(script, "exp")) == "⛔ 主要原因：選股池的雲端來源尚未設定（2 張卡有值讀不到）"
     settings_only = SCAN._mkt("fixtures.dataset_all_ok()", settings_error='"未設定試算表 ID，暫停寫入"')
     assert _main(_entry(settings_only, "mkt")) == "尚未設定：設定試算表（只影響比較值）"   # 線框 1.2 第 6 順位照舊
 
@@ -377,7 +386,8 @@ def test_第6條_純函式_塊層成因展開到該卡讀不到的值_被點名�
     rows = page_health.detail_rows(entry)
     assert rows == [
         ("淨值", "甲卡　基金 A", "⛔ 取數失敗", "—", "—", "延遲 1 日", "—"),
-        ("淨值", "甲卡　基金 B 區間報酬率", "⛔ 取數失敗", "—", "—", "◇ 資料未備", "—"),
+        # 第二輪可選 1：延遲欄那一格是狀態字（「◇ 資料未備」）時寫「—」，狀態只在狀態欄
+        ("淨值", "甲卡　基金 B 區間報酬率", "⛔ 取數失敗", "—", "—", "—", "—"),
         ("—", "甲卡　基金 C", "—", "—", "—", "延遲 0 日", "—"),
     ]
 
@@ -390,9 +400,11 @@ def test_第8條_欄位值或條件數值不是數值_鍵是篩選條件_資料�
     assert keys == (page_health.DATA_CLASSES["fund_profile"], page_health.SETTING_FILTER_RULES)
     assert EXG.judge_keys(["條件數值「a：b」不是數值：ccy"]) == (page_health.SETTING_FILTER_RULES,)
     entry = _entry(SCAN._exp(rules=[{"field": "fund_name", "op": "大於", "value": "1"}]), "exp")
-    keys = {i["key"]: i for i in entry["items"] if i["kind"] == page_health.KIND_MISSING}
-    assert page_health.SETTING_FILTER_RULES in keys
-    assert {e["data_class"] for e in keys[page_health.SETTING_FILTER_RULES]["affected"]} == {"使用者設定"}
+    # 第二輪 B：篩選判定格頁上畫 ⬜ ⇒ 不計數；明細照抄頁上那一句，資料類取自產生處記的鍵
+    assert page_health.SETTING_FILTER_RULES not in {i["key"] for i in entry["items"]}
+    boxed = [r for r in page_health.detail_rows(entry) if r[1].endswith(" 篩選判定")]
+    assert boxed and all(r[2].startswith("⬜ 無法判定（") for r in boxed)
+    assert all(r[0] == "使用者設定" for r in boxed if "不是數值" in r[2] and "資料未備" not in r[2])
 
 
 # ═══════════════════════ 第 11 條：記錄的三個入口 ═══════════════════════

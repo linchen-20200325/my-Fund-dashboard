@@ -900,11 +900,17 @@ def _own_missing_markers(node: dict, private: bool) -> bool:
     for key, value in node.items():
         if isinstance(key, str) and key.startswith("_"):
             continue
-        if isinstance(value, str) and _MISSING_LINE in value:
+        if _missing_string(value):
             return True
-        if isinstance(value, (list, tuple)) and any(isinstance(v, str) and _MISSING_LINE in v for v in value):
+        if isinstance(value, (list, tuple)) and any(_missing_string(v) for v in value):
             return True
     return False
+
+
+def _missing_string(value) -> bool:
+    """一句畫成 ◇ 的字：含「◇ 資料未備」，或以 ◇ 起頭（3-B 第二輪稽核回修可選 2：例「◇ 另有 N 檔淨值超過 10 日未更新…」，
+    畫在 `HLD-1` 的 `tail_lines`、`HLD-6` 的 `detail_lines` 等各種 lines 欄位）。"""
+    return isinstance(value, str) and (_MISSING_LINE in value or value.startswith(f"{SYMBOL_MISSING} "))
 
 
 _RENDERED_PRIVATE = _ROW_KEYS | {"_placeholder", "_columns", "_fields"}
@@ -956,6 +962,39 @@ def _check_mapped(block, path, values) -> None:
             raise MissingClassError(f"{(block or {}).get('code')} {path}：資料類查表沒有收錄 {value[len(page_health.UNMAPPED_PREFIX):]!r}")
 
 
+_BOX = "⬜"
+
+
+def drawn_box(node) -> bool:
+    """這個節點在頁上畫的是 ⬜（值那一格的字以 ⬜ 起頭）。總表只彙整頁上已畫的狀態、不重判（之十三其五之四），⬜ 不計數
+    （3-B 第二輪稽核回修 B；客戶：不得重新定義 ⬜）。"""
+    if not isinstance(node, dict):
+        return False
+    texts = [node.get(k) for k in _VALUE_FIELDS if isinstance(node.get(k), str)]
+    return bool(texts) and any(t.startswith(_BOX) for t in texts) and not any(
+        t.startswith((f"{SYMBOL_MISSING} ", f"{SYMBOL_ERROR} ")) for t in texts)
+
+
+def boxed_entries(display: dict) -> list:
+    """明細表「沒有異常」那幾列之外，頁上畫成 ⬜、產生處卻記了資料未備的那幾處（例：標的探索篩選判定格「⬜ 無法判定（…）」）：
+    不計數，狀態欄照抄頁上那一句 ⬜（3-B 第二輪稽核回修 B）。資料類取自產生處記的鍵（使用者設定的鍵寫使用者設定）。"""
+    nodes = []
+    _walk_nodes(display, None, "", nodes)
+    labels = _label_map(display)
+    out = []
+    for node, block, _path, private in nodes:
+        if block is None or not drawn_box(node) or not _own_missing_markers(node, private) or node.get(page_health.DERIVED_KEY):
+            continue
+        keys = node.get(page_health.MISSING_KEYS_KEY) or ()
+        _check_mapped(block, _path, keys)   # 查表未收錄的鍵照樣報錯，由錯誤邊界接住（第一輪回修第 2 條）
+        classes = list(dict.fromkeys(plain.TABLE_NAMES["user_setting"] if k in page_health.SETTING_KEYS else k
+                                     for k in keys))
+        text = next(node.get(k) for k in _VALUE_FIELDS if isinstance(node.get(k), str) and node.get(k).startswith(_BOX))
+        out.append(page_health.affected(block.get("title", ""), labels.get(id(node), _node_label(node)),
+                                        data_class="、".join(classes) or None, status=text))
+    return out
+
+
 def _unreadable(node, block) -> bool:
     target = node if isinstance(node, dict) else block
     return (target.get("_state") in _UNREADABLE_STATES or target.get("_empty_kind") in _UNREADABLE_EMPTY
@@ -966,7 +1005,7 @@ _ORDER_BLOCK = 10000
 _ORDER_SHADOWED = 5000
 
 
-def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tuple:
+def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, trace=None) -> tuple:
     """一般畫面模型（`dedupe_failures` 與 `relabel_unconfigured` 之後、`move_card_provenance` 之前）→ `(原因項目, 認不出資料類的取數失敗)`。
 
     - `fetch_events`：`plain.plain_model` 交出的每一句取數失敗與它產生處記的資料類；`cards`：本頁 ② 核心卡的塊代號。
@@ -977,6 +1016,8 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
     - 同順位比到第三步時的「該頁固定順序」＝這個原因第一次出現的那一塊在本頁塊序（`display["blocks"]` 的順序，即 44 的塊序）裡的位置
       （總管第二輪裁定第 5 點：由塊序產生，不手寫）。
     不是最新（◷）不在這裡：它要在 `move_card_provenance` 之後才看得到，見 `stale_items`。
+    頁上畫成 ⬜ 的節點不計數（3-B 第二輪稽核回修 B），明細照抄那一句，見 `boxed_entries`。
+    `trace`：給守衛用 —— 傳一個 list 進來，每收下一處就記 `(id(節點), 種類, 鍵)`。
     """
     blocks = list(display.get("blocks") or ())
     order = {block.get("code"): index for index, block in enumerate(blocks)}
@@ -996,15 +1037,17 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
 
     seq = {}
 
-    def add(kind, key, block, node, *, data_class=None, unreadable=None, retreat=None, shadowed=False):
+    def add(kind, key, block, node, *, data_class=None, unreadable=None, retreat=None, shadowed=False, no_retreat=()):
         # 該頁固定順序：塊序在前；同一塊之內（3-B 稽核回修第 5 條）畫面上寫出的成因依收下的先後（＝該塊畫出的次序），
         # 被蓋住、沒畫出的成因一律排在畫出的之後（`_ORDER_SHADOWED`）。
         code = (block or {}).get("code")
         n = seq[code] = seq.get(code, -1) + 1
         rank = order.get(code, len(blocks)) * _ORDER_BLOCK + (_ORDER_SHADOWED if shadowed else 0) + n
+        if trace is not None:
+            trace.append((id(node), kind, key))
         items.append(page_health.make_item(
             kind, key, [entry(block, node, data_class=data_class, unreadable=unreadable)],
-            lamp=(block or {}).get("_layer") == 1, order=rank, retreat=retreat))
+            lamp=(block or {}).get("_layer") == 1, order=rank, retreat=retreat, no_retreat=no_retreat))
 
     by_code = {block.get("code"): block for block in blocks}
     nodes = []
@@ -1045,8 +1088,11 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
             classes = (plain.DATA_CLASS_DEFAULT,)
         retreat = ({"day": event["retreat_day"], "codes": [event["fund"]] if event.get("fund") else []}
                    if event.get("retreat_day") else None)
+        # 3-B 第二輪稽核回修 A：逐檔的取數失敗沒有預存可退 → 記下代碼（同一類有退回預存時，主要原因句尾點名「沒有預存淨值」）。
+        no_retreat = (event["fund"],) if event.get("fund") and not event.get("retreat_day") else ()
         for data_class in classes:
-            add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, retreat=retreat)
+            add(page_health.KIND_FETCH, data_class, block, node, data_class=data_class, retreat=retreat,
+                no_retreat=no_retreat)
     for node, block, path, _private in nodes:
         data_class = node.get(page_health.FETCH_CLASS_KEY)
         if isinstance(data_class, str) and data_class and block is not None:
@@ -1072,7 +1118,7 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards) -> tup
     for node, block, path, private in nodes:
         if block is None or not _own_missing_markers(node, private):
             continue
-        if node.get(page_health.DERIVED_KEY):
+        if node.get(page_health.DERIVED_KEY) or drawn_box(node):
             continue
         keys = node.get(page_health.MISSING_KEYS_KEY)
         if not keys:

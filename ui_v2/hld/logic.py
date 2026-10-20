@@ -485,6 +485,7 @@ HLD1_NOT_READY_TAIL = "⬜ 另有 {n} 檔淨值超過 {days} 日未更新（資�
 # 總管 2026-10-13 裁決（稽核 C2 第二輪）：HLD-7 那幾檔**有列出**（輸入欄「0 筆」、輸出欄「⬜ 資料未備」），
 # 「未列入」與畫面事實不符 ⇒ HLD-7 用這一句；HLD-1、HLD-6 維持上面那句（那兩塊確實沒有列出）。
 HLD7_NOT_READY_NOTE = "⬜ 其中 {n} 檔淨值超過 {days} 日未更新（資料未備）"
+_NOT_READY_SUFFIX = " 日未更新（資料未備）"   # 上面兩句共同的那一段（3-B 第二輪稽核回修可選 2 在產生處認它記淨值）
 
 
 def nav_not_ready_text(days) -> str:
@@ -2796,6 +2797,11 @@ def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_e
             if "holding" not in tables and holding_unknown and _STRICT_FETCH.get():
                 page_health.tag_shadowed(by_code[code], holding_error, cls["holding"])
 
+    # 3-B 第二輪稽核回修可選 2：「另有 N 檔淨值超過 N 日未更新（資料未備）」那一句（`HLD-1` 卡尾、`HLD-6` 表尾；一般畫面換成 ◇ 起頭）
+    # 屬淨值，在產生處記下（畫面字不變）。`HLD-7` 說明那一句由同頁推出，塊已記為衍生。
+    for code, field in (("HLD-1", "tail_lines"), ("HLD-6", "detail_lines")):
+        if any(isinstance(line, str) and _NOT_READY_SUFFIX in line for line in by_code[code].get(field) or ()):
+            page_health.tag_missing(by_code[code], cls["nav"])
     # ◇：空持倉時各塊說的是持倉；有持倉時，核心卡與 `HLD-8` 的塊態取自各值（衍生），`HLD-1` 零列的資料未備是門檻所指的那幾個值。
     page_health.tag_derived(by_code["HLD-0"], page_health.DERIVED_LAMP)
     page_health.tag_derived(by_code["HLD-7"], HLD7_DERIVED_REASON)

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import functools
 import html
 import logging
 from datetime import datetime, timezone
@@ -102,7 +103,8 @@ def collect_page_health(slug: str, display: dict, summary: dict, fetch_events, c
     認不出資料類的取數失敗（`collect_page_items` 的第二個回傳值）逐處寫 log，不再靜默丟掉。"""
     try:
         items, unresolved = health.collect_page_items(display, summary, fetch_events, cards)
-        normal = health.normal_entries(display, cards, data_class=normal_class)
+        # 3-B 第二輪稽核回修 B：頁上畫成 ⬜ 的那幾處不計數，明細照抄頁上那一句（`health.boxed_entries`）。
+        normal = health.normal_entries(display, cards, data_class=normal_class) + health.boxed_entries(display)
     except COLLECT_ERRORS as exc:
         _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, type(exc).__name__)
         return {"error": type(exc).__name__}
@@ -128,6 +130,25 @@ def record_page_health(slug: str, display: dict, collected: dict, cards, status_
             error = type(exc).__name__
             _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, error)
     page_health.record_collect_failure(st.session_state, slug, error, now=now)
+
+
+def guard_page(slug: str):
+    """四頁 `render` 的外框（3-B 第二輪稽核回修可選 3）：正式模式（有傳 `load_live`）畫頁時拋出例外 —— 不論是記錄之後畫頁崩潰，
+    還是收集那一步拋出錯誤邊界以外的例外 —— 先把這一頁在總表的記錄整格改寫成收集失敗（總表不留上一筆正常記錄）、寫 log，
+    然後照舊往上拋，不吞。Streamlit 的停止與重跑（`BaseException` 那一族）不接。示範模式不經過這一步。"""
+    def decorate(render):
+        @functools.wraps(render)
+        def wrapped(*args, **kwargs):
+            try:
+                return render(*args, **kwargs)
+            except Exception as exc:
+                if kwargs.get("load_live") is not None and slug in page_health.PAGE_NAMES:
+                    _log.warning("ui_v2 %s 頁畫頁失敗，總表記錄改寫為無法彙整：%s", slug, type(exc).__name__)
+                    page_health.record_collect_failure(st.session_state, slug, type(exc).__name__,
+                                                       now=datetime.now(timezone.utc))
+                raise
+        return wrapped
+    return decorate
 
 
 def render_load_failure(page: str, exc: BaseException, mask_error, *, fetch_failed_text, title: str, answers: str,

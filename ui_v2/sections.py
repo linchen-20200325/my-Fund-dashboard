@@ -121,11 +121,14 @@ def relayer(model: dict, page: str) -> list:
 # 改層前的三張核心卡照舊用於頁上的徽章搬移與資料狀態行（那兩步一字不動）；本表只給總表的件數與「（N 張卡有值讀不到）」用。
 # `ALO-3` 在 ② 只畫一枚「開始試算」入口、不是一張卡（線框第六版 5.2 那一例「持倉取數失敗（1 張卡有值讀不到）」）。
 HEALTH_ENTRY_ONLY = {"alo": (ALO_SCENARIO_CODE,)}
+# 3-B 第二輪稽核回修 D（決策者：AI 總管）：標的探索的核心卡照客戶裁示原文「EXP 三張核心卡」，`EXP-1`～`EXP-3` 都算，
+# 改層不扣（客戶的字面優先於從 44 推導的定義）。其他頁照舊：`ALO-1` 移到 ④、`ALO-3` 只是入口，不算。
+HEALTH_KEEP_MOVED = ("exp",)
 
 
 def health_cards(codes, page: str) -> list:
     """`codes`：改層前的層 2 塊代號（各頁 `logic.codes_in_layer(model, 2)`）→ 總表用的核心卡（順序不變；純函式，不改模型）。"""
-    moved = RELAYER.get(page, {})
+    moved = {} if page in HEALTH_KEEP_MOVED else RELAYER.get(page, {})
     entries = HEALTH_ENTRY_ONLY.get(page, ())
     return [code for code in codes if moved.get(code, 2) == 2 and code not in entries]
 

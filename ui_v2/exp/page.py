@@ -983,6 +983,7 @@ _RENDERERS = {
 }
 
 
+@health_view.guard_page("exp")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄
 def render(*, load_live=None, save_live=None, settings_page=None, mask_error=None) -> None:
     """畫整頁。
 

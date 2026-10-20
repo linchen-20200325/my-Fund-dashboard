@@ -1367,8 +1367,8 @@ def card_provenance_not_applicable(model: dict) -> int:
 # - 每列展開只放來源資訊（客戶裁示第 5 點第三項：僅限來源資訊）：該列各格已畫出的來源標示與滑鼠提示，拆成
 #   「欄位｜來源｜取得時間（台北時間）｜資料日期｜備註」一張小表；格內的來源標示與滑鼠提示照舊（線框第 11 節：格內來源名先保留）。
 #   拆法只認本檔自己寫出滑鼠提示的那兩個段首（`_nav_tip` 的「取得時間：」與「資料日期：」），~~其餘段落原樣放進備註，不改寫、不刪~~
-#   → 3-B 稽核回修第 10 條（有意識的更正，不是漏刪）：備註不收算式與數值（例「合計 0.6 USD ÷ …」）、資料層原始紀錄與上游錯誤原文
-#   （例「HTTP 503 …」），只收來源段落與缺值那幾格的原因句（規則見 `split_tip` 上方）；錯誤原文照舊進進階診斷；格內的滑鼠提示一個字不動。
+#   → 3-B 稽核回修（有意識的更正，不是漏刪）：備註只收來源段落，加上新設計 H 那一句配息比原因句（第二輪稽核回修 E；規則見
+#   `split_tip` 上方）；錯誤原文照舊進進階診斷；格內的滑鼠提示一個字不動。
 
 PICK_GROUPS = (logic.GROUP_COMPARE, logic.GROUP_WATCH)
 PICK_LABELS = {
@@ -1460,23 +1460,21 @@ def taipei_time_text(raw) -> str:
     return when.astimezone(TAIPEI).strftime("%Y-%m-%d %H:%M")
 
 
-# 每列來源展開「備註」欄（3-B 稽核回修第 10 條；`44` 之十三其二第 3 條：只放來源、取得時間、資料日期，以及滑鼠提示原有的出處與
-# 原因說明，不放數值、判定）：
-# - 來源段落（`SOURCE_NOTE_PREFIXES`）一律收；
-# - 資料層的原始紀錄（`TIP_DIV_BASIS` 逐來源取數回報、`TIP_L2_RECORD`）與它們之後的段落不收 —— 那是上游原文（例「HTTP 503 …」），
-#   照舊在進階診斷與格內提示；
-# - 數值與日期清單（`TIP_NAV_CCY`、`TIP_RATIO_WINDOW`、`TIP_CONFLICT_DAYS`）不收；
-# - 值照出的格（`ok`）只收來源段落：它其餘的段落是算式（例「合計 0.6 USD ÷ 最新淨值 10 USD × 100」）或部分來源失敗的上游原文；
-# - 其餘（缺值、不適用、取數失敗那幾格的原因句，例「配息資料未確認完整，配息比不計算」—— 新設計 H 那一半）照原順序原字收。
+# 每列來源展開「備註」欄：客戶原文「僅限來源資訊」（3-B 第二輪稽核回修 E；`44` 之十三其二第 3 條劃線更正）：
+# - 只收來源段落（`SOURCE_NOTE_PREFIXES`）；
+# - 另收新設計 H 那一句 —— 配息比那一格畫在格內的原因句（滑鼠提示裡與格內原因相同的那一段），其餘判定句、計數句
+#   （計價幣別未確定、幣別不同、截斷計數、算式、資料層紀錄、上游錯誤原文）一律不收；它們照舊在格內的滑鼠提示裡，資訊沒有遺失。
+# ~~第一輪回修的規則：值照出的格只收來源段落、其餘格的原因句照收、資料層紀錄與數值清單不收~~（有意識的更正，不是漏刪；
+# 決策者 AI 總管；第二輪稽核指出那一版仍放進了判定句與計數句，超出「僅限來源資訊」）。
 SOURCE_NOTE_PREFIXES = ("淨值來源：", "配息來源：", "出處：", "計價幣別出處（來源自報）：", "取數失敗的來源：",
                         TIP_DIV_CCY_DECLARED)
-NOTE_STOP_PREFIXES = (TIP_DIV_BASIS, TIP_L2_RECORD)
-NOTE_DROP_PREFIXES = (TIP_NAV_CCY, TIP_RATIO_WINDOW, TIP_CONFLICT_DAYS)
+H_REASON_COLUMN = "div_ratio_pct"
 
 
-def split_tip(tip, *, ok: bool = False) -> tuple:
+def split_tip(tip, *, reason_in=None) -> tuple:
     """一格的滑鼠提示 → (取得時間原值或 None, 資料日期或 None, 備註)。「取得時間：」「資料日期：」兩種段落各取第一段；
-    備註依上方規則挑段落，依原順序以「；」接回、一個字不改（3-B 稽核回修第 10 條）。`ok`：這一格的值照出（`logic.STATE_OK`）。"""
+    備註只收來源段落，以及 `reason_in`（格內畫出的字）裡也寫著的那一段原因句（新設計 H；只有配息比那一格傳），
+    依原順序以「；」接回、一個字不改（3-B 第二輪稽核回修 E）。"""
     fetched = day = None
     rest = []
     for part in str(tip).split(_TIP_SEP) if tip else ():
@@ -1484,11 +1482,9 @@ def split_tip(tip, *, ok: bool = False) -> tuple:
             fetched = part[len(_TIP_FETCHED):]
         elif day is None and part.startswith(_TIP_DATA_DATE):
             day = part[len(_TIP_DATA_DATE):]
-        elif part.startswith(NOTE_STOP_PREFIXES):
-            break
         elif part.startswith(SOURCE_NOTE_PREFIXES):
             rest.append(part)
-        elif not ok and not part.startswith(NOTE_DROP_PREFIXES) and not part.startswith((_TIP_FETCHED, _TIP_DATA_DATE)):
+        elif reason_in and part and part in reason_in and not part.startswith((_TIP_FETCHED, _TIP_DATA_DATE)):
             rest.append(part)
     return fetched, day, _TIP_SEP.join(rest)
 
@@ -1503,7 +1499,8 @@ def source_rows(block: dict, row: dict) -> list:
         tag, tip = cell.get("source_tag"), cell.get("source_tip")
         if not tag and not tip:
             continue
-        fetched, day, note = split_tip(tip, ok=cell.get("_state") == logic.STATE_OK)
+        reason = str(cell.get("text") or "") if key == H_REASON_COLUMN and cell.get("_state") != logic.STATE_OK else None
+        fetched, day, note = split_tip(tip, reason_in=reason)
         out.append((
             labels.get(key, key),
             tag or ROW_SOURCE_NONE,

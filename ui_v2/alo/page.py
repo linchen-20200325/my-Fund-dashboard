@@ -588,6 +588,7 @@ def _both_keys_failed(model: dict, save_errors) -> list:
     return entries
 
 
+@health_view.guard_page("alo")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄
 def render(*, load_live=None, save_live=None, mask_error=None, settings_page=None) -> None:
     """畫整頁。
 

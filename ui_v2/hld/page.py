@@ -916,6 +916,7 @@ def _render_live_error(exc: BaseException, mask_error, settings_page=None) -> No
     health_view.render_settings_link(settings_page)
 
 
+@health_view.guard_page("hld")   # 3-B 第二輪稽核回修可選 3：畫頁崩潰時總表不留上一筆正常記錄
 def render(*, load_live=None, mask_error=None, save_live=None, settings_page=None) -> None:
     """畫整頁。
 

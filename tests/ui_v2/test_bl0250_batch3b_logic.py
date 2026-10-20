@@ -121,13 +121,15 @@ def test_上限句與既有第4個勾選框的停用原因同一句():
 # ═══════════════════════ 純函式：每列來源展開 ═══════════════════════
 
 
-def test_滑鼠提示拆段_只拿取得時間與資料日期_備註不收資料層原始紀錄():
+def test_滑鼠提示拆段_只拿取得時間與資料日期_備註只收來源與新設計H那一句():
     tip = "淨值來源：FundClear；取得時間：2026-10-14T01:00:00Z；資料日期：2026-10-10"
     assert live.split_tip(tip) == ("2026-10-14T01:00:00Z", "2026-10-10", "淨值來源：FundClear")
-    # 3-B 稽核回修第 10 條：~~其餘段落原順序原字放進備註~~ → 原因句照收（新設計 H 那一半）；
-    # 「配息依據：」（資料層逐來源取數回報，可能帶上游錯誤原文）與它之後的段落不收（有意識的更正，不是漏刪）。
+    # 3-B 第二輪稽核回修 E：~~其餘段落原順序原字放進備註~~ → 只收來源段落，加上格內也寫著的那一句配息比原因句（新設計 H）；
+    # 其他判定句、計數句、配息依據不收（有意識的更正，不是漏刪）。
     reason = "配息來源：合庫配息頁；配息資料未確認完整，配息比不計算；供列的來源（TCB：截斷 3；過濾 0）；配息依據：TCB"
-    assert live.split_tip(reason) == (None, None, reason.split("；配息依據：")[0])
+    assert live.split_tip(reason) == (None, None, "配息來源：合庫配息頁")
+    cell = "◇ 資料未備：配息資料未確認完整，配息比不計算"
+    assert live.split_tip(reason, reason_in=cell) == (None, None, "配息來源：合庫配息頁；配息資料未確認完整，配息比不計算")
     assert live.split_tip(None) == (None, None, "")
     assert live.split_tip("取得時間：A；取得時間：B") == ("A", None, "")
 
@@ -135,18 +137,24 @@ def test_滑鼠提示拆段_只拿取得時間與資料日期_備註不收資料
 def test_每列來源展開_備註不放算式數值與上游錯誤原文_格內提示一字不動():
     formula = ("配息來源：MoneyDJ；除息日在 2025-10-10（不含）至 2026-10-10 之間的配息共 12 筆，合計 0.6 USD ÷ 最新淨值 10 USD × 100"
                "；配息依據：MoneyDJ：HTTP 503 Service Unavailable")
-    assert live.split_tip(formula, ok=True) == (None, None, "配息來源：MoneyDJ")              # 值照出的格：只留來源段落
+    assert live.split_tip(formula) == (None, None, "配息來源：MoneyDJ")
     partial = "計價幣別出處（來源自報）：TDCC；取數失敗的來源：MoneyDJ；原因：部分來源取數失敗（MoneyDJ：HTTP 503）"
-    assert live.split_tip(partial, ok=True) == (None, None, "計價幣別出處（來源自報）：TDCC；取數失敗的來源：MoneyDJ")
+    assert live.split_tip(partial) == (None, None, "計價幣別出處（來源自報）：TDCC；取數失敗的來源：MoneyDJ")
+    unsure = "淨值來源：MoneyDJ；計價幣別未確定（基本資料各來源幣別缺或不一致），淨值與配息比不取數；淨值 30 筆全部不寫"
+    assert live.split_tip(unsure) == (None, None, "淨值來源：MoneyDJ")                    # 判定句、計數句不收
     declared = (f"{live.TIP_DIV_CCY_DECLARED}；{live.TIP_NAV_CCY}USD；{live.TIP_RATIO_WINDOW}除息日在 2025-10-10（不含）至 "
                 f"2026-10-10 之間；{live.TIP_CONFLICT_DAYS}2026-08-05；{live.TIP_L2_RECORD}HTTP 503；不改標籤")
-    assert live.split_tip(declared) == (None, None, live.TIP_DIV_CCY_DECLARED)                 # 數值、日期清單、資料層紀錄不收
+    assert live.split_tip(declared) == (None, None, live.TIP_DIV_CCY_DECLARED)
     row = _row("A01", cells={"div_ratio_pct": _cell("3.2%", tag="計算", tip=formula)})
     block = _block([row], keys=("fund_code", "div_ratio_pct"), labels=("基金代碼", "近 12 個月配息佔淨值比"))
     got = live.source_rows(block, row)
     assert got == [("近 12 個月配息佔淨值比", "計算", "—", "—", "配息來源：MoneyDJ")]
     assert row["_cells"]["div_ratio_pct"]["source_tip"] == formula                        # 格內的滑鼠提示照舊整句
     assert not any(word in "".join(map(str, got)) for word in ("0.6", "÷", "HTTP 503"))
+    # 新設計 H 只給配息比那一格：別的欄格內寫著同一句也不收
+    other = _row("A01", cells={"ccy": _cell("◇ 資料未備：甲", logic.STATE_MISSING, tag="X", tip="出處：X；甲")})
+    blk = _block([other], keys=("fund_code", "ccy"), labels=("基金代碼", "計價幣別"))
+    assert live.source_rows(blk, other) == [("計價幣別", "X", "—", "—", "出處：X")]
 
 
 def test_取得時間換台北時間_讀不懂或沒有時區原樣():

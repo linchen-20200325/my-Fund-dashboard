@@ -52,7 +52,10 @@ TEXT_COUNT = "{kind} {n} 項"
 TEXT_MAIN_PAGE_FAILED = "⛔ 本頁暫時無法判定：{cls}取數失敗"
 TEXT_MAIN_UNCONFIGURED = "⛔ 主要原因：{key}尚未設定"
 TEXT_MAIN_FETCH = "⛔ 主要原因：{key}取數失敗"
-TEXT_MAIN_RETREAT = "⛔ 主要原因：{key}取數失敗，改用 {day} 的預存淨值（{codes}）"
+TEXT_MAIN_RETREAT = "⛔ 主要原因：{key}取數失敗，改用 {day} 的預存淨值（{codes}）"   # 單一日期時，下面三段拼出的就是這一句
+TEXT_MAIN_RETREAT_HEAD = "⛔ 主要原因：{key}取數失敗，改用 {parts}"
+TEXT_RETREAT_PART = "{day} 的預存淨值（{codes}）"
+TEXT_NO_RETREAT = "；{codes} 沒有預存淨值"
 TEXT_MAIN_MISSING = "◇ 主要原因：{key}資料未備"
 TEXT_MAIN_STALE = "◷ 主要原因：部分只顯示最後有效資料"
 TEXT_MAIN_COMPARE_ONLY = "尚未設定：{keys}（只影響比較值）"
@@ -75,7 +78,9 @@ TEXT_DETAIL_NONE = "這一頁沒有可列的項目。"
 # 可信度結論燈的說明補一句（線框 6.3「與結論燈的關係」）：總表不影響燈。
 TEXT_LAMP_NOTE = "各頁資料狀態總表不計入本燈"
 # 收集那一步本身出錯（3-B 稽核回修第 3 條；頁面照原樣畫完，只有這一頁的總表記錄改寫成這一句）。總表「狀態」欄與明細都寫這一句。
-TEXT_COLLECT_FAILED = "⛔ 本頁狀態無法彙整（{cls}）"
+# 3-B 第二輪稽核回修 C：一般畫面不露出例外類別名（~~「⛔ 本頁狀態無法彙整（{cls}）」~~；有意識的更正，不是漏刪）。
+# 例外類別只寫進 log；進階診斷沒有放收集錯誤的位置，不新增。記錄裡照舊留著類別（`collect_error`），畫面不讀。
+TEXT_COLLECT_FAILED = "⛔ 本頁狀態無法彙整"
 
 TAIPEI = timezone(timedelta(hours=8))
 # 跨頁留著的記錄（每頁每次渲染整格覆寫）。⛔ 不得列入 `ui_v2/app_preview.py::_PAGE_STATE_TO_DROP`（同 `plain.RAW_STATE`）。
@@ -225,19 +230,43 @@ def affected(card: str, item: str = "", *, core: bool = False, unreadable: bool 
             "obs": obs, "fetched": fetched, "delay": delay, "tier": tier, "status": status}
 
 
-def make_item(kind: str, key: str, entries=(), *, lamp: bool = False, order: int = 0, retreat=None) -> dict:
+def _retreat_groups(retreat) -> list:
+    """改用預存淨值 → `[{"day": 日期, "codes": [代碼…]}, …]`。收單筆 `{"day", "codes"}` 或已分組的 `{"groups": [...]}`。"""
+    if retreat is None:
+        return []
+    if "groups" in retreat:
+        return [{"day": g["day"], "codes": list(g["codes"])} for g in retreat["groups"]]
+    return [{"day": retreat["day"], "codes": list(retreat["codes"])}]
+
+
+def _merge_groups(groups, more) -> list:
+    """依日期分組合併（3-B 第二輪稽核回修 A：同一類各檔退回預存的日期不同時，不能只留第一個日期）。"""
+    out = [{"day": g["day"], "codes": list(g["codes"])} for g in groups]
+    for g in more:
+        hit = next((x for x in out if x["day"] == g["day"]), None)
+        if hit is None:
+            out.append({"day": g["day"], "codes": list(g["codes"])})
+        else:
+            hit["codes"].extend(c for c in g["codes"] if c not in hit["codes"])
+    return out
+
+
+def make_item(kind: str, key: str, entries=(), *, lamp: bool = False, order: int = 0, retreat=None,
+              no_retreat=()) -> dict:
     """一個原因項目。`kind` 四種之一；`key` 尚未設定寫哪一個設定、取數失敗與資料未備寫哪一類資料、不是最新一律 `STALE_KEY`。
-    `lamp`：這個原因有沒有影響結論燈；`order`：該頁固定順序（產生處給）；`retreat`：改用預存淨值時 `{"day": 日期, "codes": [代碼…]}`。"""
+    `lamp`：這個原因有沒有影響結論燈；`order`：該頁固定順序（產生處給）；`retreat`：改用預存淨值時 `{"day": 日期, "codes": [代碼…]}`
+    （或已依日期分組的 `{"groups": [...]}`）；`no_retreat`：同一類裡沒有預存可退的那幾檔取數失敗的代碼。"""
     if kind not in KINDS:
         raise ValueError(f"不認得的種類：{kind!r}")
     if kind == KIND_STALE:
         key = STALE_KEY
     if not isinstance(key, str) or not key:
         raise ValueError(f"{kind} 的項目沒有鍵（不猜）")
-    if retreat is not None and kind != KIND_FETCH:
+    if (retreat is not None or no_retreat) and kind != KIND_FETCH:
         raise ValueError("改用預存淨值只屬取數失敗")
+    groups = _retreat_groups(retreat)
     return {"kind": kind, "key": key, "affected": [dict(e) for e in entries], "lamp": bool(lamp), "order": int(order),
-            "retreat": None if retreat is None else {"day": retreat["day"], "codes": list(retreat["codes"])}}
+            "retreat": {"groups": groups} if groups else None, "no_retreat": list(dict.fromkeys(no_retreat))}
 
 
 def main_unreadable_cards(item: dict) -> list:
@@ -264,7 +293,8 @@ def merge_items(items) -> list:
         key = (item["kind"], item["key"])
         if key not in merged:
             merged[key] = make_item(item["kind"], item["key"], (), lamp=item["lamp"], order=item["order"],
-                                    retreat=item["retreat"])
+                                    retreat=item["retreat"], no_retreat=item.get("no_retreat") or ())
+            item = dict(item, retreat=None, no_retreat=())   # 第一筆的預存與沒有預存已放進去，下面不再合併一次
         target = merged[key]
         seen = {(e["card"], e["item"]) for e in target["affected"]}
         for entry in item["affected"]:
@@ -273,13 +303,12 @@ def merge_items(items) -> list:
                 seen.add((entry["card"], entry["item"]))
         target["lamp"] = target["lamp"] or item["lamp"]
         target["order"] = min(target["order"], item["order"])
-        if item["retreat"] and target["retreat"] is not item["retreat"]:
-            if target["retreat"] is None:
-                target["retreat"] = {"day": item["retreat"]["day"], "codes": list(item["retreat"]["codes"])}
-            else:
-                for code in item["retreat"]["codes"]:
-                    if code not in target["retreat"]["codes"]:
-                        target["retreat"]["codes"].append(code)
+        if item["retreat"]:
+            groups = _merge_groups(_retreat_groups(target["retreat"]), _retreat_groups(item["retreat"]))
+            target["retreat"] = {"groups": groups}
+        for code in item.get("no_retreat") or ():
+            if code not in target["no_retreat"]:
+                target["no_retreat"].append(code)
     return list(merged.values())
 
 
@@ -345,12 +374,22 @@ def main_reason(items, *, page_failure=None):
         return TEXT_MAIN_UNCONFIGURED.format(key=item["key"]) + tail
     if item["kind"] == KIND_FETCH:
         if item["retreat"]:
-            return TEXT_MAIN_RETREAT.format(key=item["key"], day=item["retreat"]["day"],
-                                            codes="、".join(item["retreat"]["codes"]))
+            return retreat_text(item)
         return TEXT_MAIN_FETCH.format(key=item["key"]) + tail
     if item["kind"] == KIND_MISSING:
         return TEXT_MAIN_MISSING.format(key=item["key"]) + tail
     return TEXT_MAIN_STALE
+
+
+def retreat_text(item) -> str:
+    """改用預存淨值那一句（3-B 第二輪稽核回修 A）。只有一個日期 → 線框 3.2 原句型；多個日期 → 每一組「‹日期› 的預存淨值（‹代碼›）」
+    以「、」接，日期新的在前、同日期的代碼依代碼排序；同一類裡另有沒預存可退的取數失敗 → 句尾「；‹代碼› 沒有預存淨值」（依代碼排序）。"""
+    groups = sorted(_retreat_groups(item["retreat"]), key=lambda g: g["day"], reverse=True)
+    parts = "、".join(TEXT_RETREAT_PART.format(day=g["day"], codes="、".join(sorted(g["codes"]))) for g in groups)
+    text = TEXT_MAIN_RETREAT_HEAD.format(key=item["key"], parts=parts)
+    retreated = {c for g in groups for c in g["codes"]}
+    without = sorted(c for c in item.get("no_retreat") or () if c not in retreated)
+    return text + (TEXT_NO_RETREAT.format(codes="、".join(without)) if without else "")
 
 
 def other_counts(items, *, page_failure=None) -> dict:
@@ -389,7 +428,7 @@ def record_collect_failure(session_state, slug: str, error_class: str, *, now) -
 def collect_failure_text(entry):
     """那一格是收集失敗 → 那一句（總表「狀態」欄、明細都寫它）；不是 → None。"""
     if entry and entry.get("collect_error"):
-        return TEXT_COLLECT_FAILED.format(cls=entry["collect_error"])
+        return TEXT_COLLECT_FAILED
     return None
 
 
@@ -422,8 +461,6 @@ def recorded_time_text(stamp) -> str:
 
 def _band(entry) -> int:
     """總表排序（線框 6.3）：有尚未設定或 ⛔ → 只有 ◇ → 只有 ◷ → 沒有異常 → 本次尚未開過。"""
-    if entry is None:
-        return 4
     if entry.get("page_failure") is not None or entry.get("collect_error"):
         return 0
     by_kind = counts(entry["items"])
@@ -513,7 +550,12 @@ def detail_rows(entry, normal=None) -> list:
 
     def row(e, status, base=None):
         def pick(key):
-            return e.get(key) if e.get(key) not in (None, "") else (base or {}).get(key)
+            # 3-B 第二輪稽核回修可選 1：日期、時間、延遲、來源層級四欄只放值；畫面上那一格是狀態字（⛔／◇／⬜／◷ 起頭）時寫「—」，
+            # 狀態只在狀態欄。
+            for value in (e.get(key), (base or {}).get(key)):
+                if value not in (None, "") and not _is_status_text(value):
+                    return value
+            return None
         return (_cell(e["data_class"]), _join(e), status, _cell(pick("obs")), _cell(pick("fetched")),
                 _cell(pick("delay")), _cell(pick("tier")))
 
@@ -538,6 +580,14 @@ def detail_rows(entry, normal=None) -> list:
             continue
         out.append(row(e, _cell(e.get("status"))))
     return out
+
+
+_STATUS_SYMBOLS = (SYMBOL_ERROR, SYMBOL_MISSING, SYMBOL_STALE, "⬜")
+
+
+def _is_status_text(value) -> bool:
+    text = str(value)
+    return any(text == s or text.startswith(s + " ") for s in _STATUS_SYMBOLS)
 
 
 def _join(entry) -> str:
