@@ -966,6 +966,8 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, tra
     - 尚未設定：`summary["block_causes"]` 與結構標記 `_unconfigured`；鍵＝尚未設定的對象。
     - 取數失敗：`fetch_events` 與結構標記 `FETCH_CLASS_KEY`；鍵＝產生處記的資料類。認不出 → 鍵記 `plain.DATA_CLASS_DEFAULT`
       並列進第二個回傳值（總管第二輪裁定第 4 點：逐處列出，不猜）。
+    - 有一塊是 `系統錯誤`、卻沒有任何原因項目點到它（結論燈與記為衍生的除外）→ 同樣記一筆取數失敗、鍵記 `plain.DATA_CLASS_DEFAULT`，
+      列進第二個回傳值時帶 `unexplained: True`（3-C 總管裁定第 1 點：不整頁降級）。
     - 資料未備：畫成 ◇ 的節點；鍵＝產生處記的 `MISSING_KEYS_KEY`；標為衍生的不計數；兩者都沒有 → `MissingClassError`。
     - 同順位比到第三步時的「該頁固定順序」＝這個原因第一次出現的那一塊在本頁塊序（`display["blocks"]` 的順序，即 44 的塊序）裡的位置
       （總管第二輪裁定第 5 點：由塊序產生，不手寫）。
@@ -1091,13 +1093,19 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, tra
             add(page_health.KIND_MISSING, key, block, node, data_class=key, unreadable=True)
     # BL-0250 批次 3-C（U9）：~~資料狀態行的退路「有 `系統錯誤` 的塊卻沒有任何一句失敗摘要 → 照樣報 ⛔ 取數失敗」~~
     # （`status_line` 的 `_unexplained_error` 那一支）隨資料狀態行退場；頁首自此讀本函式的結果，同一個退路改寫在這裡：
-    # 有一塊（結論燈與記為衍生的除外）是 `系統錯誤`，卻沒有任何一個原因項目點到它 → 報錯，由錯誤邊界接住，頁首與總表都寫
-    # 「⛔ 本頁狀態無法彙整」—— 不讓一塊錯誤在頁首與總表都靜默消失（實作組判讀，可推翻；有意識的更正，不是漏刪）。
+    # 有一塊（結論燈與記為衍生的除外）是 `系統錯誤`，卻沒有任何一個原因項目點到它 →
+    # ~~報錯，由錯誤邊界接住，頁首與總表都寫「⛔ 本頁狀態無法彙整」~~（3-C 總管裁定第 1 點，2026-10-21；有意識的政策變更，
+    # 不是漏刪；決策者：AI 總管）：整頁降級會讓同頁其他真實原因一起看不到，比 base 的退路（只多報一句 ⛔ 取數失敗）更不可逆。
+    # 改為記一筆取數失敗、鍵用 base `ce6ffc32` 本函式「認不出資料類」那條退路已在用的 `plain.DATA_CLASS_DEFAULT`，
+    # 並列進第二個回傳值（帶 `unexplained`，由 `health_view.collect_page_health` 寫 warning log，含塊代號）；其他原因照常收集。
+    # 舊表述的用意仍然成立（不讓一塊錯誤在頁首與總表都靜默消失），被權衡掉的是「整頁降級」那個手段。
     named = {e["card"] for item in items for e in item["affected"]}
     for block in blocks:
         if (_block_is_error(block) and block.get("_layer") != 1 and not block.get(page_health.DERIVED_KEY)
                 and block.get("title", "") not in named):
-            raise MissingClassError(f"{block.get('code')}：系統錯誤，卻沒有任何一個原因項目點到這一塊")
+            add(page_health.KIND_FETCH, plain.DATA_CLASS_DEFAULT, block, block, data_class=plain.DATA_CLASS_DEFAULT,
+                unreadable=True)
+            unresolved.append({"code": block.get("code"), "field": None, "raw": None, "unexplained": True})
     return page_health.merge_items(items), unresolved
 
 

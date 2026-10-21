@@ -110,6 +110,10 @@ def collect_page_health(slug: str, display: dict, summary: dict, fetch_events, c
         _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, type(exc).__name__)
         return {"error": type(exc).__name__}
     for where in unresolved:
+        if where.get("unexplained"):
+            # 3-C 總管裁定第 1 點：系統錯誤的塊沒有任何原因項目點到 → 已記一筆取數失敗（鍵 `plain.DATA_CLASS_DEFAULT`），這裡寫 log。
+            _log.warning("ui_v2 %s 頁有一塊系統錯誤沒有任何原因項目點到，已記為取數失敗：%s", slug, where.get("code"))
+            continue
         _log.warning("ui_v2 %s 頁有一句取數失敗認不出資料類：%s %s", slug, where.get("code"), where.get("field"))
     return {"items": items, "normal": normal}
 

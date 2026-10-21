@@ -200,24 +200,58 @@ def test_沒有異常時只寫資料截至日_不寫資料齊或正常():
     assert page_health.header_view(_record([], as_of=None), as_of=None)["lines"] == [f"資料截至 {page_health.AS_OF_UNKNOWN}"]
 
 
+def _formal_items(key, model):
+    """與四頁正式模式同一串、走到收集為止（3-C 總管裁定第 3 點：補跑頁面在 `plain_model` 前後的正式步驟，不再用略過收尾）。
+    步驟逐一照抄各頁 `render` 正式分支：
+    - 市場總覽：`mark_fetch_failures`（同一份 dataset，`TPL.mkt_live_datasets`）→ 換字 → 換符號 → `mark_mkt6_fetch_failed`
+      → 去重 → 尚未設定改字 → 設定讀不到時 `relabel_unconfigured_settings`；
+    - 持倉體檢：換字 → 換符號 → 去重 → 尚未設定改字 → `mark_last_valid`；
+    - 資產配置：`alo6_as_percent` → 換字 → 換符號 → 去重 → 尚未設定改字；
+    - 標的探索：換字 → 換符號 → 去重 → 尚未設定改字。
+    核心卡一律 `logic.codes_in_layer(model, 2)` → `sections.health_cards`（同各頁）。"""
+    page = key[1]
+    model = copy.deepcopy(model)
+    if page == "mkt":
+        from ui_v2.mkt import live as mkt_live
+        from ui_v2.mkt import page as mkt_page
+
+        mkt_page.mark_fetch_failures(model, TPL.mkt_live_datasets()[key[2].split("/")[0]])
+    if page == "alo":
+        from ui_v2.alo import live as alo_live
+
+        model = alo_live.alo6_as_percent(model)
+    display, _raw, status = plain.plain_model(model, page=page)
+    symbols.apply(display)
+    if page == "mkt":
+        sections.mark_mkt6_fetch_failed(display)
+    after, summary = health.dedupe_failures(display)
+    health.relabel_unconfigured(after, summary)
+    if page == "mkt" and key[2].endswith("/settingfail"):
+        unconfigured = plain.not_configured_state(plain.MSG_SETTINGS_NOT_CONFIGURED)
+        mkt_live.relabel_unconfigured_settings(
+            after, health.not_configured_reason(health.not_configured_name(unconfigured)))
+    cards = [b["code"] for b in after["blocks"] if b.get("_layer") == 2]
+    if page == "hld":
+        from ui_v2.hld import page as hld_page
+
+        health.mark_last_valid(after, cards, hld_page._LAST_VALID_PREFIX)
+    items, unresolved = health.collect_page_items(after, summary, status["fetch_events"],
+                                                  sections.health_cards(cards, page))
+    return items, unresolved
+
+
 def test_四頁正式模型的頁首都不寫資料齊或正常():
+    # ~~`except MissingClassError: continue`（這一份模型少了頁面那一步，畫面測試另驗）~~ → 3-C 總管裁定第 3 點：
+    # 補跑正式步驟（`_formal_items`），全部模型逐一檢查，不再略過（有意識的更正，不是漏刪）。
     seen = 0
-    for key, model in _live():
-        display, _raw, status = plain.plain_model(model, page=key[1])
-        symbols.apply(display)
-        after, summary = health.dedupe_failures(display)
-        health.relabel_unconfigured(after, summary)
-        cards = [b["code"] for b in after["blocks"] if b.get("_layer") == 2]
-        try:
-            items, _u = health.collect_page_items(after, summary, status["fetch_events"],
-                                                  sections.health_cards(cards, key[1]))
-        except health.MissingClassError:
-            continue   # 這一份模型少了頁面那一步（例：市場總覽 `mark_fetch_failures`），畫面測試另驗
+    models = list(_live())
+    for key, model in models:
+        items, _u = _formal_items(key, model)
         seen += 1
         text = "\n".join(page_health.header_view(_record(items, page=key[1]), as_of="2026-10-01")["lines"])
         assert "資料齊" not in text and "正常" not in text, (key, text)
         assert text.endswith("資料截至 2026-10-01"), (key, text)
-    assert seen >= 10, seen
+    assert seen == len(models) == 88, (seen, len(models))
 
 
 def test_四種同類只列一次_順序固定_附資料截至日():
@@ -252,15 +286,21 @@ def test_資料未備的判定沿用模型既有狀態():
     assert not health.has_error_state({"a": {"text": "⛔ 取數失敗"}})
 
 
-def test_只有系統錯誤狀態而沒有任何原因項目時_收集報錯_頁首與總表寫無法彙整():
-    # ~~狀態行照樣寫「⛔ 取數失敗」（`_unexplained_error` 退路）~~ → 3-C：同一個退路改在收集那一步，頁首與總表都寫無法彙整。
+def test_只有系統錯誤狀態而沒有任何原因項目時_記一筆取數失敗_鍵用籠統資料類():
+    # ~~狀態行照樣寫「⛔ 取數失敗」（`_unexplained_error` 退路）~~ → 3-C：同一個退路改在收集那一步；
+    # ~~收集報錯，頁首與總表都寫無法彙整~~ → 3-C 總管裁定第 1 點：不整頁降級，記一筆取數失敗、鍵 `plain.DATA_CLASS_DEFAULT`
+    # （base `ce6ffc32` 本函式「認不出資料類」那條退路已在用的字樣），列進第二個回傳值帶 `unexplained`（有意識的更正，不是漏刪）。
     model = {"blocks": [{"code": "HLD-3", "title": "配息與本金卡", "_layer": 2, "_state": "系統錯誤"}]}
-    with pytest.raises(health.MissingClassError):
-        health.collect_page_items(model, {"fetch_failed": [], "not_configured": [], "affected_blocks": []}, (), ["HLD-3"])
+    items, unresolved = health.collect_page_items(
+        model, {"fetch_failed": [], "not_configured": [], "affected_blocks": []}, (), ["HLD-3"])
+    assert [(i["kind"], i["key"]) for i in items] == [(page_health.KIND_FETCH, plain.DATA_CLASS_DEFAULT)]
+    assert unresolved == [{"code": "HLD-3", "field": None, "raw": None, "unexplained": True}]
     store = {}
-    page_health.record_collect_failure(store, "hld", "MissingClassError", now="2026-10-21T00:00:00+00:00")
+    page_health.record(store, "hld", items, as_of=None, now="2026-10-21T00:00:00+00:00")
     view = page_health.header_view(page_health.recorded(store, "hld"), as_of=None)
-    assert view["lines"][0] == page_health.TEXT_COLLECT_FAILED == page_health.summary_rows(store[page_health.STATE_KEY])[0]["status"]
+    assert view["lines"][0] == "⛔ 主要原因：資料取數失敗（1 張卡有值讀不到）"
+    assert view["lines"][0] != page_health.TEXT_COLLECT_FAILED
+    assert page_health.summary_rows(store[page_health.STATE_KEY])[0]["status"] == "⛔ 取數失敗 1 項"
 
 
 def test_latest_date():
@@ -590,7 +630,9 @@ def test_三頁真身的新鮮度色調寫法_AST():
 # 結論燈不自己取數、不算沒交代（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
 
 
-def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊報錯():
+def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊記一筆取數失敗():
+    # ~~沒有交代的系統錯誤塊報錯（`pytest.raises(MissingClassError)`）~~ → 3-C 總管裁定第 1 點：記一筆取數失敗，
+    # 尚未設定那一筆照常收下（有意識的更正，不是漏刪）。
     display = {"blocks": [
         {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
          "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]},
@@ -599,8 +641,10 @@ def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊�
     ]}
     after, summary = health.dedupe_failures(display)
     assert summary["not_configured"] == ["保單試算表"] and summary["fetch_failed"] == []
-    with pytest.raises(health.MissingClassError):
-        health.collect_page_items(after, summary, (), ["HLD-1", "HLD-3"])
+    items, unresolved = health.collect_page_items(after, summary, (), ["HLD-1", "HLD-3"])
+    assert sorted((i["kind"], i["key"]) for i in items) == sorted(
+        [(page_health.KIND_UNCONFIGURED, "保單試算表"), (page_health.KIND_FETCH, plain.DATA_CLASS_DEFAULT)])
+    assert [u["code"] for u in unresolved if u.get("unexplained")] == ["HLD-3"]
 
 
 def test_每一塊的錯誤都被尚未設定交代到_就不另報():

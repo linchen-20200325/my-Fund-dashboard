@@ -206,12 +206,23 @@ def test_Q1_參數留空加同格真正缺口_那一類照算():
     display, failures = health.dedupe_failures(display)
     health.relabel_unconfigured(display, failures)
     cards = sections.health_cards([b["code"] for b in display["blocks"] if b.get("_layer") == 2], "alo")
-    items, _u = health.collect_page_items(display, failures, status["fetch_events"], cards)
+    trace = []
+    items, _u = health.collect_page_items(display, failures, status["fetch_events"], cards, trace=trace)
     store = {}
     PH.record(store, "alo", items, as_of="2026-09-23", now="2026-10-21T00:00:00+00:00")
     lines = PH.header_view(PH.recorded(store, "alo"), as_of="2026-09-23")["lines"]
     assert lines[0].startswith("◇ 主要原因：市場指標資料未備"), lines
     assert "目標比重" not in "".join(lines)
+    # 3-C 總管裁定第 2 點：那幾個「一格兩種成因」的節點本身仍被收下（資料類那一筆在），只略過設定那一個鍵 ——
+    # 「整個節點含設定鍵就略過」的過度略過，上面兩條斷言抓不到（同類別別的節點照樣撐起主要原因），這一條會轉紅。
+    nodes = []
+    health._walk_nodes(display, None, "", nodes)
+    dual = [node for node, _block, _path, _private in nodes
+            if set(node.get(PH.MISSING_KEYS_KEY) or ()) & set(PH.SETTING_KEYS)
+            and set(node.get(PH.MISSING_KEYS_KEY) or ()) - set(PH.SETTING_KEYS)]
+    assert len(dual) == 2, [n.get(PH.MISSING_KEYS_KEY) for n in dual]      # ALO-2、ALO-3 核心那一列
+    hits = [(kind, key) for node_id, kind, key in trace if node_id in {id(n) for n in dual}]
+    assert hits == [(PH.KIND_MISSING, "市場指標")] * 2, hits
 
 
 def test_Q1_標的探索參數留空加未接線真缺口_真缺口照算():
@@ -219,6 +230,51 @@ def test_Q1_標的探索參數留空加未接線真缺口_真缺口照算():
     entry = _store(at)["exp"]
     assert {i["kind"] for i in entry["items"]} >= {PH.KIND_MISSING} and "篩選條件" not in {i["key"] for i in entry["items"]}
     assert _header(at)[0].startswith("◇ 主要原因：")
+
+
+def _unexplained_display():
+    """一塊尚未設定（有交代）＋一塊系統錯誤卻沒有任何一句摘要交代（3-C 總管裁定第 1 點）。"""
+    display = {"blocks": [
+        {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
+         "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]},
+        {"code": "HLD-3", "title": "配息與本金卡", "_layer": 2, "_state": "系統錯誤", "detail_lines": ["⛔ 取數失敗"]},
+    ]}
+    return health.dedupe_failures(display)
+
+
+def test_系統錯誤塊沒有原因項目點到_不整頁降級_其他原因照列_多一筆取數失敗():
+    # 3-C 總管裁定第 1 點：~~收集報錯 → 頁首與總表都寫「⛔ 本頁狀態無法彙整」~~ → 記一筆取數失敗（鍵 `plain.DATA_CLASS_DEFAULT`，
+    # base `ce6ffc32` 本函式認不出資料類那條退路已在用的字樣），其他原因照常收集。突變（改回拋錯）→ 本條轉紅。
+    display, failures = _unexplained_display()
+    items, unresolved = health.collect_page_items(display, failures, (), ["HLD-1", "HLD-3"])
+    assert plain.DATA_CLASS_DEFAULT == "資料"
+    assert sorted((i["kind"], i["key"]) for i in items) == sorted(
+        [(PH.KIND_UNCONFIGURED, "保單試算表"), (PH.KIND_FETCH, plain.DATA_CLASS_DEFAULT)])
+    assert [u["code"] for u in unresolved if u.get("unexplained")] == ["HLD-3"]
+    store = {}
+    PH.record(store, "hld", items, as_of="2026-09-23", now="2026-10-21T00:00:00+00:00")
+    entry = PH.recorded(store, "hld")
+    lines = PH.header_view(entry, as_of="2026-09-23")["lines"]
+    assert lines == ["⛔ 主要原因：保單試算表尚未設定（1 張卡有值讀不到）", "另有：⛔ 取數失敗 1 項", "資料截至 2026-09-23"]
+    assert PH.TEXT_COLLECT_FAILED not in "".join(lines)
+    row = next(r for r in PH.summary_rows(store[PH.STATE_KEY]) if r["slug"] == "hld")
+    assert row["main"] == lines[0] and row["status"] == "尚未設定 1 項　⛔ 取數失敗 1 項"
+    assert [tuple(r) for r in PH.detail_rows(entry)] == [
+        ("保單與持倉", "偏離提示卡", "⛔ 尚未設定：保單試算表", "—", "—", "—", "—"),
+        ("資料", "配息與本金卡", "⛔ 取數失敗", "—", "—", "—", "—"),
+    ]
+
+
+def test_系統錯誤塊沒有原因項目點到_收集那一步寫warning_log_含塊代號(caplog):
+    from ui_v2 import health_view
+
+    display, failures = _unexplained_display()
+    with caplog.at_level("WARNING", logger="ui_v2.health_view"):
+        got = health_view.collect_page_health("hld", display, failures, (), ["HLD-1", "HLD-3"])
+    assert "error" not in got and len(got["items"]) == 2
+    messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("HLD-3" in m and "沒有任何原因項目點到" in m for m in messages), messages
+    assert not any("認不出資料類" in m for m in messages), messages
 
 
 # ═══════════════════════ 4. 四個符號的個數不變（頁首與被搬走的元素除外） ═══════════════════════
@@ -496,8 +552,8 @@ def test_Q4_SET2與SET6完全沒有取數紀錄_標題不露出表名_只此兩�
 def test_Q4_示範模式照舊():
     from ui_v2.set import fixtures as SF
 
-    model = SETL.build_page_model(SF.scenario("first")) if hasattr(SF, "scenario") else None
-    if model is None:
-        pytest.skip("示範模式情境入口不同")
+    # ~~`if hasattr(SF, "scenario") else None` → `pytest.skip(...)`~~：走不到的略過分支（`SF.scenario` 一直在），
+    # 3-C 總管裁定第 4 點拿掉（有意識的更正，不是漏刪）。
+    model = SETL.build_page_model(SF.scenario("first"))
     set6 = SETL.find_block(model, "SET-6")
     assert set6["summary_text"] == "缺 fetch_log：" + SETL.TEXT_NO_RECORDS

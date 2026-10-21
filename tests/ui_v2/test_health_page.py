@@ -343,8 +343,15 @@ def test_持倉體檢_中性延遲_徽章移到第四段_卡上與狀態行都�
     assert health.SYMBOL_STALE not in _status_lines(at)[0]
     # ~~在 ④「核心卡的來源與新鮮度」裡（兩張卡 × 三檔）~~ → 3-C：④ 不再畫，同一份在總表明細（有意識的政策變更，不是漏刪）
     assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
-    body = _detail_text(at, "hld")
-    assert body.count("延遲 10 日") >= 6, body                                     # 兩張卡 × 三檔（另有淨值表逐檔三列）
+    # ~~`body.count("延遲 10 日") >= 6`（兩張卡 × 三檔，另有淨值表逐檔三列）~~ → 3-C 總管裁定第 4 點：核心卡列與新增的
+    # 淨值明細列分開數、各自精確（不只放寬下限；有意識的更正，不是漏刪）。
+    rows = [row for row in page_health.detail_rows(at.session_state[page_health.STATE_KEY]["hld"])
+            if row[5] == "延遲 10 日"]
+    card_rows = [row for row in rows if row[1].startswith(("績效與風險卡", "配息與本金卡"))]
+    nav_rows = [row for row in rows if row[1].startswith("淨值與配息序列")]
+    assert len(card_rows) == 6, card_rows                                          # 兩張核心卡 × 三檔
+    assert len(nav_rows) == 3 and all(row[0] == row[6] == "淨值" for row in nav_rows), nav_rows   # 淨值表逐檔三列
+    assert len(rows) == len(card_rows) + len(nav_rows), rows                       # 沒有第三種列帶這個延遲
 
 
 # ───────────────────────── Phase 3 P1-④：結論燈同一則訊息不印兩次 ─────────────────────────
