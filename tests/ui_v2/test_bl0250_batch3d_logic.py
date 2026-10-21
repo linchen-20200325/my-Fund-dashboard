@@ -600,8 +600,13 @@ def _detail_block(**kw):
 def test_規則5_觸發與不觸發():
     one = _items((_FETCH, "持倉", "歸屬明細", ""))
     assert S.quiet_detail_view(_detail_block(), one, "alo")["line"] == {"text": "⛔ 取數失敗：持倉", "_tone": "紅"}
-    miss = _detail_block(placeholder={"text": "◇ 資料未備：x 尚無資料", "_empty_kind": "來源缺"})
-    assert S.quiet_detail_view(miss, _items((_MISS, "市場指標", "歸屬明細", "")), "alo")["line"]["text"] == "◇ 資料未備：市場指標"
+    # ~~miss = _detail_block(placeholder={"text": "◇ 資料未備：x 尚無資料", ...})~~ → 第二輪加固：空佔位的字也逐句檢查，只有狀態族句才忽略；
+    # 原夾具那句帶 ◇ 又不是狀態族句（本機各情境沒有這種塊），改用狀態族句，原句改驗「照現況」（有意識的更正，不是漏刪）。
+    miss = _detail_block(placeholder={"text": "◇ 資料未備", "_empty_kind": "來源缺"})
+    miss_items = _items((_MISS, "市場指標", "歸屬明細", ""))
+    assert S.quiet_detail_view(miss, miss_items, "alo")["line"]["text"] == "◇ 資料未備：市場指標"
+    assert S.quiet_detail_view(_detail_block(placeholder={"text": "◇ 資料未備：x 尚無資料", "_empty_kind": "來源缺"}),
+                               miss_items, "alo") is None
     # 兩種以上原因（同一種兩個鍵也算）→ 照現況
     two = _items((_FETCH, "持倉", "歸屬明細", ""), (_UNCONF, "K", "歸屬明細", ""))
     assert S.quiet_detail_view(_detail_block(), two, "alo") is None
@@ -626,6 +631,18 @@ def test_規則5_觸發與不觸發():
     assert S.quiet_detail_view(_detail_block(intro_line="說明"), one, "alo") is None
     assert S.quiet_detail_view(_detail_block(_columns=["A"]), one, "alo") is None
     assert S.quiet_detail_view(_detail_block(tolerance_lines=[], footer_lines=(), intro_line=""), one, "alo") is not None  # 空值不算內容
+    # 第二輪加固（2026-10-21）：摘要句、空佔位帶判讀證據、又不是被原因行取代的狀態族句 → 照現況
+    assert S.quiet_detail_view(_detail_block(summary_text="◇ 另有 2 檔淨值超過 10 日，未列入"), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(placeholder={"text": "⛔ 此區塊暫時無法判定（另有 3 檔改用預存淨值）",
+                                                          "_empty_kind": "系統錯誤"}), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(summary_text="⛔ 取數失敗"), one, "alo") is not None        # 狀態族句照舊可忽略
+    assert S.quiet_detail_view(_detail_block(summary_text="取數失敗"), one, "alo") is not None
+    # 獨立 ⬜（Q2 (a)）：④ 收合區凡帶 ⬜ 一律照現況（同一原因衍生判定沿用不了，改採更保守的寫法）
+    unconf = _items((_UNCONF, "設定試算表", "歸屬明細", ""))
+    assert S.quiet_detail_view(_detail_block(), unconf, "alo") is not None
+    assert S.quiet_detail_view(_detail_block(detail_lines=["⬜ 不適用：尚未設定觀察窗"]), unconf, "alo") is None
+    assert S.quiet_detail_view(_detail_block(detail_lines=["⬜ 不適用（取數失敗：別的資料）"]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(detail_lines=["⬜ 不適用（取數失敗：持倉）"]), one, "alo") is None   # 同一原因也照現況（保守）
     # 被原因行取代的狀態族句不算證據
     assert S.quiet_detail_view(_detail_block(detail_lines=["⛔ 取數失敗"]), one, "alo") is not None
     # 射程外的塊（核心卡、結果清單）不比照

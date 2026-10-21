@@ -939,7 +939,25 @@ def quiet_detail_view(block: dict, items, page: str):
         view = {"unconfigured": [], "fetch": False, "missing": True}
     else:
         return None
-    for text in _block_lines(block) + [n for n in block.get("notes") or () if isinstance(n, str)]:
+    # ~~for text in _block_lines(block) + notes: 只查說明句欄位~~ → 2026-10-21 第二輪加固（有意識的更正，不是漏刪；決策者：AI 總管
+    # 依稽核複驗反例）：摘要句（`summary_text`）與空佔位（`placeholder`／`_placeholder` 的字）也逐句檢查 —— 它們原本列在可忽略清單、
+    # 無條件忽略；只有是「被原因行取代的狀態族句」（`quiet_keep` 判為不畫）才忽略，帶 ⛔／◇ 又不是那種句子（例「◇ 另有 2 檔淨值
+    # 超過 10 日，未列入」「⛔ 此區塊暫時無法判定（另有 3 檔改用預存淨值）」）→ 照現況。
+    texts = _block_lines(block) + [n for n in block.get("notes") or () if isinstance(n, str)]
+    if isinstance(block.get("summary_text"), str):
+        texts.append(block["summary_text"])
+    for field in ("placeholder", "_placeholder"):
+        holder = block.get(field)
+        if isinstance(holder, dict) and isinstance(holder.get("text"), str):
+            texts.append(holder["text"])
+        elif isinstance(holder, str):
+            texts.append(holder)
+    for text in texts:
+        # 獨立 ⬜（客戶 Q2 (a)：原因不同的 ⬜ 照留）：④ 收合區打開只剩一行，留不住 ⬜。`quiet_keep` 的「同一原因衍生」判定在取數失敗、
+        # 資料未備兩種只看 ⬜ 句裡有沒有那個字樣、不看是哪一類資料（例「⬜ 不適用（取數失敗：別的資料）」會被判成同一原因），
+        # 沿用不了 → 依總管指示改採更保守的「凡 ⬜ 都不收」。本機比照的九個收合區沒有任何一句 ⬜，比照結果不變。
+        if SYMBOL_UNDECIDABLE in text:
+            return None
         if quiet_keep(view, text) and (SYMBOL_ERROR in text or SYMBOL_MISSING in text):
             return None          # 收合區內有判讀證據 → 照現況
     return {"code": code, "title": title, "line": line}
