@@ -218,17 +218,28 @@ def test_HLD_示範模式照舊畫套用():
 
 @pytest.mark.parametrize("name", list(SCAN.SCRIPTS["exp"]))
 def test_EXP_三張核心卡來源與新鮮度寫不適用(name):
-    joined = _joined("exp", name)
+    # ~~在 ④「核心卡的來源與新鮮度」裡寫「‹卡名› ⬜ 不適用（…）」~~ → BL-0250 批次 3-C（G2 第 11 列；`DEC-2026-10-21-01`；
+    # 有意識的政策變更，不是漏刪）：那一枚不再畫，那一句在設定與診斷頁總表明細的狀態欄。該卡另有塊層 ⛔ 時，總表依既有合併規則
+    # 以 ⛔ 那一句為狀態（之十三其八第 7 條，不改；總管派工判定）。
+    from ui_v2 import page_health
+
+    at = _at("exp", name)
+    joined = "\n".join(_texts(at))
+    assert _NA not in joined and "〔來源層級〕" not in joined and "〔新鮮度〕" not in joined
+    rows = page_health.detail_rows(at.session_state[page_health.STATE_KEY]["exp"])
     for card in ("條件輸入卡", "候選清單卡", "並排對照卡"):
-        assert f"{card} {_NA}" in joined, card
-    assert "〔來源層級〕" not in joined and "〔新鮮度〕" not in joined
+        mine = [r for r in rows if r[1] == card]
+        assert mine and all(r[2] == _NA or r[2].startswith("⛔ ") for r in mine), (card, mine)
+    if name in ("正常", "局部失敗", "stale"):
+        assert all(next(r for r in rows if r[1] == card)[2] == _NA for card in ("條件輸入卡", "候選清單卡", "並排對照卡"))
 
 
 @pytest.mark.parametrize("page,name", _CASES, ids=[f"{p}-{n}" for p, n in _CASES])
 def test_不適用那一句只在標的探索三張卡_其他缺資料情境不用(page, name):
     texts = _texts(_at(page, name))
     hits = sum(t.count(_NA) for t in texts)
-    assert hits == (3 if page == "exp" else 0)
+    # ~~`hits == (3 if page == "exp" else 0)`~~ → 3-C：標的探索那三句改在總表明細（上一條），一般畫面四頁都是 0（有意識的政策變更，不是漏刪）
+    assert hits == 0
     assert "多檔基金組成" not in "\n".join(t.replace(_NA, "") for t in texts)
 
 
