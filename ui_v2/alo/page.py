@@ -340,7 +340,33 @@ def _render_alo1(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
+def _quiet_head(block: dict, view: dict) -> None:
+    """正式模式、整張卡主值全部讀不到時的收起畫法（新設計 B；44 第七節第三小節之十五）：卡名＋「（暫時收起）」＋原因行
+    （⛔ 紅、◇ 灰，符號＋文字）。卡仍是一張卡（不刪、不隱藏）。"""
+    _html(
+        f'<div class="alo-card-head" style="--alo-tone:{_tone(block["_tone"])}"{_block_attr(block, True)}>'
+        f'<span class="alo-card-title">{_esc(block["title"])}</span>'
+        f'<span class="alo-quiet-mark" style="color:{_tone("灰")}">{_esc(view["mark"])}</span></div>'
+    )
+    # 原因行沿用本頁佔位那一格的樣式（`alo-empty`；收起前「⛔ 此區塊暫時無法判定」就是這樣畫），與卡頭之間的間距照舊。
+    for line in view["lines"]:
+        _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
+
+
+def _render_detail_quiet(view: dict) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（樣式同收起卡原因行）。"""
+    line = view["line"]
+    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+        _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
+
+
+def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, quiet=None) -> None:
+    if quiet is not None:
+        # 收起：不畫佔位（被原因行取代）與「這張卡回答什麼」那句；卡尾與說明句只拿掉重複句與同源衍生的 ⬜。
+        _quiet_head(block, quiet)
+        _lines([line for line in block["tail_lines"] if sections.quiet_keep(quiet, line)], "alo-line")
+        _lines([line for line in block["detail_lines"] if sections.quiet_keep(quiet, line)])
+        return
     _card_head(block, plain_mode)
     _placeholder(block)
     if block["_rows"]:
@@ -357,8 +383,11 @@ def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
     _lines([block["answers"]] + block["detail_lines"])
 
 
-def _render_alo3(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False) -> None:
-    _card_head(block, plain_mode)
+def _render_alo3(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, quiet=None) -> None:
+    if quiet is not None:
+        _quiet_head(block, quiet)
+    else:
+        _card_head(block, plain_mode)
     fields = block["inputs"]
     for index, row in enumerate(block["input_rows"]):
         left, right = st.columns(2)
@@ -368,6 +397,13 @@ def _render_alo3(block: dict, scenario: str, ctx=None, *, plain_mode: bool = Fal
             _text_input(fields[2 * index + 1], f"{scenario}_{fields[2 * index + 1]['name']}")
         if row["tail_text"]:
             _lines([row["tail_text"]], "alo-line")
+    if quiet is not None:
+        # 收起：試算輸入列、按鈕（含停用原因）與說明句照留；不畫佔位（被原因行取代）與「這張卡回答什麼」那句。
+        _lines([line for line in block["unset_lines"] if sections.quiet_keep(quiet, line)], "alo-line")
+        _error_lines(block)
+        _buttons(block, f"{scenario}_alo3")
+        _lines([line for line in block["detail_lines"] if sections.quiet_keep(quiet, line)])
+        return
     _lines(block["unset_lines"], "alo-line")
     _placeholder(block)
     if block["_rows"]:
@@ -617,6 +653,7 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
     _html(f"<style>{_base_css()}{_grid_css(layer3_three=load_live is not None)}</style>")
 
     ctx = None
+    quiet = details = {}   # 示範模式不收起、收合區不比照（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         if save_live is not None:
             raise ValueError("save_live 要與 load_live 一起傳")
@@ -692,6 +729,12 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`、`-02`）。
         as_of = health.latest_date(dataset.get("nav"), "nav_date")
         health_view.record_page_health("alo", model, collected, health_cards, as_of=as_of)
+        # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+        # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+        # `ALO-3` 的「開始試算」入口照留（標題照舊，總管判定；收合區規則 5 不做，見 `sections` 本段說明），收起的是入口裡那張卡。
+        quiet = health_view.quiet_cards("alo", model, collected)
+        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+        details = health_view.quiet_details("alo", model, collected)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")
@@ -728,7 +771,9 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
                     # 卡為空狀態或取數失敗時，入口標題帶出狀態族（44 第五節第四小節「不把空狀態藏進展開內容」）。
                     block = logic.find_block(model, code)
                     with st.expander(sections.alo3_entry_title(block), expanded=False):
-                        _RENDERERS[code](block, key, ctx, plain_mode=plain_mode)
+                        _RENDERERS[code](block, key, ctx, plain_mode=plain_mode, quiet=quiet.get(code))
+                elif plain_mode:
+                    _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=True, quiet=quiet.get(code))
                 else:
                     _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
@@ -747,12 +792,17 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
                     with st.expander(f"{block['title']}　—　{sections.alo1_summary(block)}",
                                      expanded=block["_default_open"]):
                         _RENDERERS[code](block, key, ctx, plain_mode=plain_mode)
+                elif code in details:
+                    _render_detail_quiet(details[code])
                 else:
                     _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     _html(f'<div class="alo-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+        if code in details:
+            _render_detail_quiet(details[code])
+        else:
+            _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from . import health, page_health, plain
+from . import health, page_health, plain, sections
 
 _log = logging.getLogger(__name__)
 
@@ -135,6 +135,18 @@ def record_page_health(slug: str, display: dict, collected: dict, cards, *, as_o
             error = type(exc).__name__
             _log.warning("ui_v2 %s 頁資料狀態無法彙整：%s", slug, error)
     page_health.record_collect_failure(st.session_state, slug, error, now=now)
+
+
+def quiet_cards(slug: str, display: dict, collected: dict) -> dict:
+    """BL-0250 批次 3-D（新設計 B）：本頁哪幾張卡收起（`sections.quiet_cards`），帶上本頁剛記下的那一格 —— 記錄那一步改寫成
+    收集失敗時一張都不收起（與頁首「⛔ 本頁狀態無法彙整」一致）。`record_page_health` 之後呼叫；只讀、不改模型。回 `{塊代號: view}`。"""
+    views, _holds = sections.quiet_cards(display, collected, slug, page_health.recorded(st.session_state, slug))
+    return views
+
+
+def quiet_details(slug: str, display: dict, collected: dict) -> dict:
+    """BL-0250 批次 3-D（線框 1.4 規則 5；客戶 Q5 (b)）：本頁 ④ 哪幾塊收合區比照（`sections.quiet_details`）。用法同 `quiet_cards`。"""
+    return sections.quiet_details(display, collected, slug, page_health.recorded(st.session_state, slug))
 
 
 def guard_page(slug: str):

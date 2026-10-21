@@ -764,8 +764,43 @@ def _field_select(field: dict, row: dict) -> None:
     )
 
 
-def _render_exp1_live(block: dict, rows: list, *, clicks: dict, plain_mode: bool = True) -> None:
+def _render_detail_quiet(view: dict) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（樣式同收起卡原因行）。"""
+    line = view["line"]
+    css = "exp-fetchfail" if line["_tone"] == "紅" else "exp-empty"
+    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+        st.markdown(f'<div class="{css} exp-quiet-line">{_esc(line["text"])}</div>', unsafe_allow_html=True)
+
+
+def _render_exp1_quiet(block: dict, view: dict, *, clicks: dict) -> None:
+    """正式模式、整張卡主值全部讀不到時的收起畫法（新設計 B；44 第七節第三小節之十五）：卡名＋「（暫時收起）」＋原因行，
+    不畫「這張卡回答什麼」那句、被原因行取代的重複 ⛔ 行與卡尾徽章；說明句、按鈕（含停用原因「暫不提供存檔」）、存檔失敗行與
+    紅線說明照留（總管判定）。讀不到時本來就沒有條件列可畫（`rows` 由呼叫端給空的）。"""
+    st.markdown(
+        f'<div class="exp-card" style="--exp-tone:{_tone(block["_tone"])}"{_block_attr(block, True)}>'
+        f'<div class="exp-card-head"><span class="exp-card-title">{_esc(block["title"])}</span>'
+        f'<span class="exp-quiet-mark" style="color:{_tone("灰")}">{_esc(view["mark"])}</span></div>',
+        unsafe_allow_html=True,
+    )
+    # 原因行沿用本頁失敗行與空狀態那兩格的樣式（⛔ `exp-fetchfail`、其餘 `exp-empty`；收起前「⛔ 此區塊暫時無法判定」就是畫在
+    # `exp-fetchfail` 裡），與卡頭之間的間距照舊。
+    for line in view["lines"]:
+        css = "exp-fetchfail" if line["_tone"] == "紅" else "exp-empty"
+        st.markdown(f'<div class="{css} exp-quiet-line">{_esc(line["text"])}</div>', unsafe_allow_html=True)
+    _lines([line for line in block.get("notes", ()) or () if sections.quiet_keep(view, line)], css="exp-empty")
+    _lines([line for line in block.get("fetch_fail_lines", ()) or () if sections.quiet_keep(view, line)],
+           css="exp-fetchfail")
+    _live_buttons(block, "exp1", clicks)
+    _error_lines(block)
+    _lines([line for line in block["detail_lines"] if sections.quiet_keep(view, line)], css="exp-detail")
+    st.markdown(f'<div class="exp-detail">{_esc(block["redline_note"])}</div></div>', unsafe_allow_html=True)
+
+
+def _render_exp1_live(block: dict, rows: list, *, clicks: dict, plain_mode: bool = True, quiet=None) -> None:
     """正式模式的 `EXP-1`：輸入列接上 session（`rows` 與 `block["_rows"]` 同序，帶 `_id`）。"""
+    if quiet is not None:
+        _render_exp1_quiet(block, quiet, clicks=clicks)
+        return
     _card_open(block, plain_mode=plain_mode)
     st.caption(block["answers"])
     _notes(block)
@@ -1169,6 +1204,11 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     # ~~`status_line = health.status_line(...)`~~（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
     as_of = _as_of(model)
     health_view.record_page_health("exp", model, collected, health_cards, as_of=as_of)
+    # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+    # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+    quiet = health_view.quiet_cards("exp", model, collected)
+    # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+    details = health_view.quiet_details("exp", model, collected)
     # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`EXP-2` 移到層 3、`EXP-3` 移到層 4（預設收合），② 只剩 `EXP-1`；
     # 在上面的徽章搬移與資料狀態行之後才改層 —— 那兩步照舊以改層前的三張核心卡為對象，行為不變（`ui_v2/sections.py`）。
     sections.relayer(model, "exp")
@@ -1196,7 +1236,8 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
         with column:
             block = logic.find_block(model, code)
             if code == "EXP-1":
-                _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks, plain_mode=True)
+                _render_exp1_live(block, rows if readable else [], clicks=exp1_clicks, plain_mode=True,
+                                  quiet=quiet.get(code))
             else:
                 _RENDERERS[code](block, plain_mode=True)
 
@@ -1219,7 +1260,9 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     for column, code in zip(st.columns(3), operations):
         with column:
             block = logic.find_block(model, code)
-            if code == "EXP-4":
+            if code in details:
+                _render_detail_quiet(details[code])
+            elif code == "EXP-4":
                 _render_exp4(block, scenario=live.LIVE_SCENARIO, save_click=exp4_click, editable=readable,
                              plain_mode=True)
             else:
@@ -1229,7 +1272,9 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
         f'<div class="exp-layer-label">{plain.LABEL_LAYER4}</div>', unsafe_allow_html=True
     )
     for code in logic.codes_in_layer(model, 4):
-        if code not in sections.EXP_RESULT_CODES:
+        if code in details:
+            _render_detail_quiet(details[code])
+        elif code not in sections.EXP_RESULT_CODES:
             _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
