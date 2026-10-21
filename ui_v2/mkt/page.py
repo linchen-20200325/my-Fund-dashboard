@@ -237,7 +237,42 @@ def _main_value_html(main_value: dict) -> str:
     return "".join(lines)
 
 
-def _render_card(block: dict, *, plain_mode: bool = False) -> None:
+def _quiet_lines_html(view: dict) -> str:
+    """收起的卡（新設計 B）：每種原因一行（符號＋文字；⛔ 紅、◇ 與原因句灰；`ui_v2/sections.py::quiet_view`）。"""
+    return "".join(
+        f'<div class="mkt-quiet-line" style="color:{theme.tone_hex(line["_tone"])}">{_esc(line["text"])}</div>'
+        for line in view["lines"]
+    )
+
+
+def _render_quiet_card(block: dict, view: dict) -> None:
+    """正式模式、整張卡主值全部讀不到時的收起畫法（新設計 B；44 第七節第三小節之十五）：卡名＋「（暫時收起）」＋原因行；
+    不畫主值（含其徽章、說明）、卡頭徽章、「這張卡回答什麼」那句；其餘說明行只拿掉被原因行取代的重複句與同源衍生的 ⬜
+    （`sections.quiet_keep`）。卡仍是一張卡（不刪、不隱藏）；按鈕照舊（`_render_buttons`）。"""
+    detail = "".join(
+        f'<div>{_esc(line)}</div>' for line in block["detail_lines"] if sections.quiet_keep(view, line)
+    )
+    detail_html = f'<div class="mkt-detail">{detail}</div>' if detail else ""
+    st.markdown(
+        _drop_blank_lines(f"""<div class="mkt-card"{_block_attr(block, True)}>
+          <div class="mkt-card-head">
+            <span class="mkt-card-title">{_esc(block["title"])}</span>
+            <span class="mkt-quiet-mark" style="color:{theme.tone_hex("灰")}">{_esc(view["mark"])}</span>
+          </div>
+          {_quiet_lines_html(view)}
+          {detail_html}
+        </div>"""),
+        unsafe_allow_html=True,
+    )
+    _render_buttons(block, True)
+
+
+def _render_card(block: dict, *, plain_mode: bool = False, quiet=None) -> None:
+    if quiet is not None:
+        if not plain_mode:
+            raise ValueError("收起只給正式模式")
+        _render_quiet_card(block, quiet)
+        return
     detail = "".join(
         f'<div>{_esc(line)}</div>' for line in block["detail_lines"]
     )
@@ -633,6 +668,7 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     live_input = None
+    quiet = {}   # 示範模式不收起（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         scenario_name, dataset = _pick_dataset()
     else:
@@ -729,6 +765,9 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         # ~~`status_line = health.status_line(...)`~~（之七其二第 4 條的資料狀態行；有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
         as_of = health.latest_date(dataset.get("rows"), "obs_date")
         health_view.record_page_health("mkt", model, collected, health_cards, as_of=as_of)
+        # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+        # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+        quiet = health_view.quiet_cards("mkt", model, collected)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
@@ -759,7 +798,7 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     columns = st.columns(3)
     for column, code in zip(columns, logic.codes_in_layer(model, 2)):
         with column:
-            _render_card(logic.find_block(model, code), plain_mode=plain_mode)
+            _render_card(logic.find_block(model, code), plain_mode=plain_mode, quiet=quiet.get(code))
 
     if plain_mode:
         # ③需要注意（Phase 3 P1-④；44 第七節第三小節之八其一 (a-3)、(a-4)）：只列 `MKT-0` 從三張卡讀到的資料面例外，

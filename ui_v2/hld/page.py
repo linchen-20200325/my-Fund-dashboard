@@ -320,7 +320,46 @@ def _card_shell(block: dict, body_html: str, *, plain_mode: bool = False) -> Non
     )
 
 
-def _render_hld1(block: dict, *, plain_mode: bool = False) -> None:
+def _quiet_shell(block: dict, view: dict, body_parts) -> None:
+    """正式模式、整張卡主值全部讀不到時的收起畫法（新設計 B；44 第七節第三小節之十五）：卡名＋「（暫時收起）」＋原因行，
+    其後接卡上照留的非主值內容（`body_parts`，已由呼叫端以 `sections.quiet_keep` 濾過）；不畫卡頭徽章與「這張卡回答什麼」那句。
+    卡仍是一張卡（不刪、不隱藏）；按鈕照舊由呼叫端畫。"""
+    reasons = "".join(
+        f'<div class="hld-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>'
+        for line in view["lines"]
+    )
+    st.markdown(
+        _one_line(f"""<div class="hld-card" style="--hld-tone:{_tone(block["_tone"])}"{_block_attr(block, True)}>
+          <div class="hld-card-head">
+            <span class="hld-card-title">{_esc(block["title"])}</span>
+            <span class="hld-quiet-mark" style="color:{_tone("灰")}">{_esc(view["mark"])}</span>
+          </div>
+          {reasons}{"".join(body_parts)}
+        </div>"""),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_hld1_quiet(block: dict, view: dict) -> None:
+    keep = [line for line in block["tail_lines"] if sections.quiet_keep(view, line)]
+    parts = [f'<div class="hld-note">{_esc(line)}</div>' for line in keep]
+    tail = block.get("freshness_tail")
+    if tail:
+        parts.append(f'<div class="hld-note" style="color:{_tone(tail["_tone"])}">{_esc(tail["text"])}</div>')
+    detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"] if sections.quiet_keep(view, line))
+    if detail:
+        parts.append(f'<div class="hld-detail">{detail}</div>')
+    parts.append(f'<div class="hld-detail">{_esc(block["redline_note"])}</div>')
+    _quiet_shell(block, view, parts)
+    _buttons(block, block["code"])
+
+
+def _render_hld1(block: dict, *, plain_mode: bool = False, quiet=None) -> None:
+    if quiet is not None:
+        if not plain_mode:
+            raise ValueError("收起只給正式模式")
+        _render_hld1_quiet(block, quiet)
+        return
     parts = []
     if block["_rows"]:
         head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
@@ -367,7 +406,14 @@ def _render_hld1(block: dict, *, plain_mode: bool = False) -> None:
     _buttons(block, block["code"])
 
 
-def _render_core_card(block: dict, *, plain_mode: bool = False) -> None:
+def _render_core_card(block: dict, *, plain_mode: bool = False, quiet=None) -> None:
+    if quiet is not None:
+        if not plain_mode:
+            raise ValueError("收起只給正式模式")
+        detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"] if sections.quiet_keep(quiet, line))
+        _quiet_shell(block, quiet, [f'<div class="hld-detail">{detail}</div>'] if detail else [])
+        _buttons(block, block["code"])
+        return
     parts = []
     for group in block["fund_groups"]:
         rows = "".join(
@@ -965,6 +1011,7 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     counts_line = None
+    quiet = {}   # 示範模式不收起（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         applied = _applied()
         scenario = _pick_scenario()
@@ -1029,6 +1076,9 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
         sections.mark_hld1_rows(model)
         counts_line = sections.hld_counts(model)
+        # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
+        # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
+        quiet = health_view.quiet_cards("hld", model, collected)
     plain_mode = load_live is not None
 
     st.markdown(
@@ -1065,12 +1115,16 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
               if not (plain_mode and code == sections.HLD_ATTENTION_CODE)]
     for column, code in zip(st.columns(3), layer2):
         with column:
-            _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
+            if plain_mode:
+                _RENDERERS[code](logic.find_block(model, code), plain_mode=True, quiet=quiet.get(code))
+            else:
+                _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
     if plain_mode:
         # ③需要注意：`HLD-1` 整塊（偏離列基金名前加 ◆）；預設展開、不是展開區。
         st.markdown(f'<div class="hld-layer-label">{plain.LABEL_ATTENTION}</div>', unsafe_allow_html=True)
-        _render_hld1(logic.find_block(model, sections.HLD_ATTENTION_CODE), plain_mode=True)
+        _render_hld1(logic.find_block(model, sections.HLD_ATTENTION_CODE), plain_mode=True,
+                     quiet=quiet.get(sections.HLD_ATTENTION_CODE))
         # ④詳細資料（預設收合）；④ 內「操作」與「證據／來源」兩個小標分開（護欄 6）。
         st.markdown(f'<div class="hld-layer-label">{plain.LABEL_DETAILS}</div>', unsafe_allow_html=True)
     st.markdown(

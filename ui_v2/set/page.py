@@ -293,7 +293,13 @@ def _render_set1(block: dict, key: str, ctx=None) -> None:
             ]
         )
     _html(_table(block["column_labels"], rows))
-    _placeholders(block["fail_nodes"])
+    if ctx is None:
+        _placeholders(block["fail_nodes"])
+    else:
+        # BL-0250 批次 3-D（新設計 B 的設定與診斷那一半；線框 6.2；44 第七節第三小節之十五）：正式模式表格照留三列，
+        # 只拿掉表格下面與表內某一列逐字重複的那一行失敗句（`sections.set1_duplicate_fail_nodes`）；卡不收起。示範模式照舊。
+        duplicates = [id(node) for node in sections.set1_duplicate_fail_nodes(block)]
+        _placeholders([node for node in block["fail_nodes"] if id(node) not in duplicates])
     _tone_lines(block.get("live_lines"))  # 正式模式才有（★9）
     _lines(block["limit_lines"], "set-line")
     _lines([block["answers"]] + block["detail_lines"])

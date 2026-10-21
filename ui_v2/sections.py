@@ -564,3 +564,250 @@ def set3_summary(block: dict) -> str:
         parts.append(f"{len(broken)} 個格式不符未採用")
     parts += [node["text"] for node in block.get("live_lines") or () if node["_tone"] != "中性"]
     return "，".join(parts)
+
+
+# ───────────────────────── 新設計 B：卡片安靜收起（BL-0250 批次 3-D） ─────────────────────────
+# 客戶 2026-10-19 核准新設計 B（`DEC-2026-10-19-05`），2026-10-21 核准進入 3-D 並裁示 Decision Gate Q1～Q4（`docs/DECISIONS.md`
+# `DEC-2026-10-21-03`、`-04`）；唯一正式定義：線框 `docs/v2/61_bl0250_batch3_wireframe.md` 1.4（規則 1～4；規則 5 見下方「不做」）；
+# 落字：44 第七節第三小節之十五。
+#
+# 本段只做**判定與組字**（純函式、不改模型）；畫法在各頁 `page.py` 的收起分支。呼叫點一律在 `health_view.collect_page_health`
+# 與 `record_page_health` **之後**、畫卡之前 —— 頁首主要原因與設定與診斷頁總表（`SET-8`）讀的是收集那一步記下的同一份記錄，
+# 收起與否不回頭影響它們。**示範模式不經過本段**（本模組本來就只給正式模式）。
+#
+# 判定（客戶 Q2 (a)、總管內部判定照列）：
+# - 卡上主值**全部**畫成 ⛔ 或 ◇ → 收起；只有部分讀不到 → 不收起（規則 3）；主值全部是 ⬜（業務例外／算不出來）→ 不收起
+#   （⬜ 不是讀不到，總管判定）；◷ 是讀得到的值，不收起。
+# - 收起之後：卡名＋「（暫時收起）」＋每種原因一行（規則 2：尚未設定一行、取數失敗一行、資料未備依原因句分行，不合併不同種）；
+#   不畫主值、主值身上的徽章與說明、卡頭徽章、「這張卡回答什麼」那句，以及被原因行取代的重複 ⛔／◇ 行（例「⛔ 此區塊暫時無法判定」）；
+#   `⬜ 不適用（…）` 只有**由同一原因衍生**的那幾句不畫，原因不同的照留（客戶 Q2 (a)）。其餘非主值的內容照留
+#   （說明句、判讀證據、按鈕與它的停用原因、輸入欄；總管判定：持倉體檢計算軌跡、標的探索「暫不提供存檔」、資產配置「開始試算」照留）。
+# - 原因行的字沿用 3-A／3-C 既有原因字（「⛔ 尚未設定：‹哪一項›」「⛔ 取數失敗：‹…›」「◇ 資料未備：‹…›」），不新造句型；
+#   ‹…› 在市場總覽寫值名（卡上每個主值都有一行值名；照 1.4 例子），其他頁寫收集那一步記下的資料類（同頁首、總表的字；
+#   卡上沒有值名那一行）；排序依值在卡上的順序（沒有值名的頁依收集那一步的順序）。
+# - **不收起、照現況畫**（保守退路，不是靜默）：收集那一步出錯；某一種讀不到在收集那一步找不到對應的原因項目（原因行寫不出來）；
+#   持倉體檢逐檔分組掛著判讀證據（逐檔「◇ 最近一筆淨值 ‹日期›，已超過 10 日」等新鮮度副標或徽章）—— 收起會把逐檔的判讀證據
+#   吃掉，而 1.4 沒有定那幾句收起後放哪裡（3-D 實作組停手項，登記待裁；見 `QUIET_HOLD_EVIDENCE`）。
+#
+# ⛔ 不做（客戶 Q3）：規則 5「詳細資料裡的收合區比照」—— 現有收合標題「標題　—　摘要」一格只承載一句摘要，一塊有兩種原因時
+#   寫不下兩行（規則 2），而「打開只有一行」會拿掉 ④ 裡的判讀證據（例「前往 Sheets 維護持倉」）；照 Q3「無法唯一承載原因 → 停手回報，
+#   不自創新文案」，3-D 不改任何收合區（停手項）。
+
+QUIET_MARK = "（暫時收起）"
+# 射程（線框附錄 2 P3 影響塊）。`SET-1` 不收卡，只拿掉表下重複那一行（線框 6.2；`set1_duplicate_fail_nodes`）。
+QUIET_CODES = {
+    "mkt": ("MKT-1", "MKT-2", "MKT-3"),
+    "hld": ("HLD-1", "HLD-2", "HLD-3"),
+    "exp": ("EXP-1",),
+    "alo": ("ALO-2", "ALO-3"),
+}
+# 卡上每個主值有一行值名的頁：原因行寫值名（1.4 例子「⛔ 取數失敗：波動度指數」）。
+QUIET_VALUE_NAMES = ("mkt",)
+QUIET_HOLD_EVIDENCE = "逐檔分組掛著判讀證據"
+QUIET_HOLD_NO_ITEM = "收集那一步找不到原因項目"
+QUIET_HOLD_COLLECT = "收集那一步出錯"
+
+# 鏡像常數（真身 `ui_v2/health.py`；`tests/ui_v2/test_bl0250_batch3d_logic.py` 逐字比對）。
+TEXT_FETCH_FAILED = "取數失敗"
+TEXT_MISSING = "資料未備"
+LINE_BLOCK_UNDECIDABLE = f"{SYMBOL_ERROR} 此區塊暫時無法判定"
+LINE_NOT_CONFIGURED = f"{SYMBOL_ERROR} {TEXT_NOT_CONFIGURED}"
+LINE_SETTINGS_UNREADABLE = f"{SYMBOL_ERROR} 設定讀不到"
+LINE_MISSING = f"{SYMBOL_MISSING} {TEXT_MISSING}"
+# 被原因行取代的那幾種重複 ⛔／◇ 行（狀態族，不帶「哪一項」）。
+_QUIET_DUPLICATES = frozenset({LINE_BLOCK_UNDECIDABLE, LINE_FETCH_FAILED, LINE_NOT_CONFIGURED, LINE_SETTINGS_UNREADABLE,
+                               LINE_MISSING})
+_UNREADABLE_STATES = frozenset({STATE_ERROR, STATE_MISSING})
+_UNREADABLE_EMPTY = frozenset({STATE_ERROR, "來源缺"})
+_KIND_ERROR, _KIND_MISSING = "⛔", "◇"
+
+
+def _value_text(node: dict) -> str:
+    for key in ("value_text", "text"):
+        value = node.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def quiet_value_kind(node: dict):
+    """一個主值畫成什麼：`"⛔"`、`"◇"`，讀得到（含 ⬜、◷）回 None。只讀既有的 `_state`／`_empty_kind` 與畫出來的字，不另判。"""
+    text = _value_text(node)
+    if text.startswith(f"{SYMBOL_UNDECIDABLE} "):
+        return None
+    if node.get("_state") == STATE_MISSING or node.get("_empty_kind") == "來源缺" or text.startswith(f"{SYMBOL_MISSING} "):
+        return _KIND_MISSING
+    if (node.get("_state") == STATE_ERROR or node.get("_empty_kind") == STATE_ERROR
+            or text.startswith(f"{SYMBOL_ERROR} ")):
+        return _KIND_ERROR
+    return None
+
+
+def _block_level(block: dict) -> list:
+    """沒有逐值節點的塊（整塊佔位）：以塊自己的狀態當唯一的主值。"""
+    state = block.get("_state")
+    return [{"_state": state}] if state in _UNREADABLE_STATES else [{"_state": state or STATE_OK, "text": "ok"}]
+
+
+def _quiet_values(block: dict, page: str):
+    """`(主值清單, 不收起的理由或 None)`。主值清單裡每一個是畫在卡上的值節點；讀得到的列（偏離列、條件列、對照列）一列就算一個
+    讀得到的主值（總管判定：有列 ＝ 部分讀得到，不收起）。"""
+    code = block.get("code")
+    if page == "mkt":
+        return list(block.get("main_values") or ()), None
+    if code == "HLD-1" or page == "alo":
+        if block.get("_rows"):
+            return [{"_state": STATE_OK, "text": "row"}], None
+        node = block.get("_placeholder") if code == "HLD-1" else block.get("placeholder")
+        return ([node] if node else _block_level(block)), None
+    if page == "hld":
+        groups = list(block.get("fund_groups") or ())
+        if not groups:
+            return _block_level(block), None
+        values = [value for group in groups for value in group.get("main_values") or ()]
+        if any(group.get("freshness_note") or group.get("freshness_badge") for group in groups):
+            return values, QUIET_HOLD_EVIDENCE
+        return values, None
+    if page == "exp":
+        if block.get("_rows"):
+            return [{"_state": STATE_OK, "text": "row"}], None
+        return _block_level(block), None
+    return [], None
+
+
+def _card_entries(items, title: str) -> list:
+    """收集那一步記下、點到這張卡而且「讀不到」的 `(種類, 鍵, 項目名)`，依收集順序。"""
+    out = []
+    for item in items or ():
+        for entry in item.get("affected") or ():
+            if entry.get("card") == title and entry.get("unreadable"):
+                out.append((item["kind"], item["key"], entry.get("item") or ""))
+    return out
+
+
+def _names(entries, kind) -> list:
+    return list(dict.fromkeys(key for k, key, _label in entries if k == kind))
+
+
+def quiet_view(block: dict, items, page: str):
+    """一張卡收不收起。回 `(view, hold)`：收起 → `view` 為 `{"code", "title", "mark", "lines": [{"text", "_tone"}, ...],
+    "unconfigured": [...], "fetch": bool, "missing": bool}`、`hold` 為 None；不收起 → `(None, 理由或 None)`
+    （理由 None ＝ 規則本來就不收起：讀得到、部分讀得到、全部 ⬜）。"""
+    values, hold = _quiet_values(block, page)
+    kinds = [quiet_value_kind(v) for v in values]
+    if not values or any(k is None for k in kinds):
+        return None, None
+    if hold:
+        return None, hold
+    title = block.get("title", "")
+    entries = _card_entries(items, title)
+    unconfigured = _names(entries, page_health.KIND_UNCONFIGURED)
+    fetch_keys = _names(entries, page_health.KIND_FETCH)
+    missing_keys = _names(entries, page_health.KIND_MISSING)
+    if (_KIND_ERROR in kinds and not (unconfigured or fetch_keys)) or (_KIND_MISSING in kinds and not missing_keys):
+        return None, QUIET_HOLD_NO_ITEM
+    value_names = page in QUIET_VALUE_NAMES
+    fetch_labels = [label for k, _key, label in entries if k == page_health.KIND_FETCH]
+    labelled = value_names and fetch_labels and all(fetch_labels)
+    groups = {}          # 原因 → {"text", "_tone", "notes", "names", "order"}
+
+    def put(key, text_head, tone, name, notes=(), order=0):
+        group = groups.setdefault(key, {"head": text_head, "_tone": tone, "names": [], "notes": [], "order": order})
+        if name and name not in group["names"]:
+            group["names"].append(name)
+        for note in notes:
+            if note not in group["notes"]:
+                group["notes"].append(note)
+
+    error_head = f"{SYMBOL_ERROR} {TEXT_FETCH_FAILED}："
+    missing_head = f"{SYMBOL_MISSING} {TEXT_MISSING}："
+    if value_names:
+        for index, (value, kind) in enumerate(zip(values, kinds)):
+            label = value.get("label", "")
+            notes = tuple(value.get("note_lines") or ())
+            if kind == _KIND_MISSING:
+                put(("missing", notes), missing_head, "灰", label, notes, index)
+            elif fetch_keys and (label in fetch_labels or not unconfigured):
+                put(("fetch",), error_head, "紅", label if labelled else None, notes, index)
+            else:
+                put(("unconfigured",), None, "紅", None, (), index)
+    else:
+        if _KIND_ERROR in kinds:
+            for index, (kind, _key, _label) in enumerate(entries):
+                if kind == page_health.KIND_UNCONFIGURED:
+                    put(("unconfigured",), None, "紅", None, (), index)
+                elif kind == page_health.KIND_FETCH:
+                    put(("fetch",), error_head, "紅", None, (), index)
+        if _KIND_MISSING in kinds:
+            first = next(i for i, (k, _key, _l) in enumerate(entries) if k == page_health.KIND_MISSING)
+            put(("missing", ()), missing_head, "灰", None, (), first)
+    if ("fetch",) in groups and not groups[("fetch",)]["names"]:
+        groups[("fetch",)]["names"] = list(fetch_keys)
+    if ("unconfigured",) in groups:
+        groups[("unconfigured",)]["names"] = list(unconfigured)
+        groups[("unconfigured",)]["head"] = f"{LINE_NOT_CONFIGURED}："
+    for key, group in groups.items():
+        if key[0] == "missing" and not group["names"]:
+            group["names"] = list(missing_keys)
+    lines = []
+    for _key, group in sorted(groups.items(), key=lambda kv: kv[1]["order"]):
+        lines.append({"text": group["head"] + "、".join(group["names"]), "_tone": group["_tone"]})
+        lines += [{"text": note, "_tone": "灰"} for note in group["notes"]]
+    view = {"code": block.get("code"), "title": title, "mark": QUIET_MARK, "lines": lines,
+            "unconfigured": unconfigured, "fetch": ("fetch",) in groups,
+            "missing": any(k[0] == "missing" for k in groups)}
+    return view, None
+
+
+def quiet_cards(display: dict, collected, page: str, recorded=None) -> tuple:
+    """本頁射程內每一張卡的收起判定 → `({塊代號: view}, {塊代號: 不收起的理由})`。
+    `collected`：`health_view.collect_page_health` 的回傳；`recorded`：本頁剛記下的那一格（`page_health.recorded`）。
+    收集出錯（`collected` 帶 `error`）或記錄那一步改寫成收集失敗（`recorded` 帶 `collect_error`，頁首寫「⛔ 本頁狀態無法彙整」）
+    → 一張都不收起（照 3-C 的畫法，與頁首那一句一致：原因寫不出來就不收）。"""
+    codes = QUIET_CODES.get(page, ())
+    if not codes:
+        return {}, {}
+    if (not isinstance(collected, dict) or "error" in collected
+            or (isinstance(recorded, dict) and recorded.get("collect_error"))):
+        return {}, {code: QUIET_HOLD_COLLECT for code in codes}
+    items = collected.get("items") or ()
+    views, holds = {}, {}
+    for block in display.get("blocks") or ():
+        if block.get("code") not in codes:
+            continue
+        view, hold = quiet_view(block, items, page)
+        if view is not None:
+            views[block["code"]] = view
+        elif hold:
+            holds[block["code"]] = hold
+    return views, holds
+
+
+def quiet_keep(view: dict, line) -> bool:
+    """收起的卡上，一句非主值的字照不照畫：被原因行取代的重複 ⛔／◇（狀態族、或「⛔ 尚未設定：‹這張卡已寫在原因行的那幾項›」）
+    與由同一原因衍生的 `⬜ 不適用（…）` 不畫；其餘照畫（客戶 Q2 (a)：原因不同的 ⬜ 照留）。`view` 為 None → 一律照畫。"""
+    if view is None or not isinstance(line, str):
+        return True
+    text = line.strip()
+    if text in _QUIET_DUPLICATES:
+        return False
+    names = set(view.get("unconfigured") or ())
+    head = f"{LINE_NOT_CONFIGURED}："
+    if text.startswith(head) and names and set(text[len(head):].split("、")) <= names:
+        return False
+    if text.startswith(f"{SYMBOL_UNDECIDABLE} "):
+        if any(f"{TEXT_NOT_CONFIGURED}：{name}" in text for name in names):
+            return False
+        if view.get("fetch") and TEXT_FETCH_FAILED in text:
+            return False
+        if view.get("missing") and TEXT_MISSING in text:
+            return False
+    return True
+
+
+def set1_duplicate_fail_nodes(block: dict) -> list:
+    """設定與診斷頁 `SET-1` 資料新鮮度卡表格下面的失敗行裡，與表格某一列「最近取得時間」格逐字相同的那幾行（線框 6.2：
+    尚未設定時淨值、市場指標兩列各寫「⛔ 尚未設定：試算表 ID」，表下又一行同一句 → 只拿掉表下重複的那一行；表格照留三列）。
+    回要拿掉的節點；不同字的失敗行照留。卡不收起。"""
+    cells = {row.get("at_text") for row in block.get("_rows") or ()}
+    return [node for node in block.get("fail_nodes") or () if node and node.get("text") in cells]
