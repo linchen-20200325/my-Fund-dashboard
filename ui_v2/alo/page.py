@@ -686,11 +686,12 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # 在 ② 畫成卡的塊（`ALO-1` 移到 ④；`ALO-3` 在 ② 只是一枚入口）。頁上的資料狀態行照舊以改層前的層 2 為對象（一字不動）。
         health_cards = sections.health_cards(cards, "alo")
         collected = health_view.collect_page_health("alo", model, failures, _status["fetch_events"], health_cards)
-        status_line = health.status_line(
-            model, failures, as_of=health.latest_date(dataset.get("nav"), "nav_date"),
-            stale=health.has_stale_marker(model, cards), missing=health.has_missing_marker(model),
-        )
-        health_view.record_page_health("alo", model, collected, health_cards, status_line)
+        # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）。
+        # 使用者自己的參數留空（目標比重、情境試算金額、目標修改紀錄）收集時已略過（客戶 2026-10-20 Q1），頁首因此也不計
+        # （客戶 2026-10-21 Q1）。~~`status_line = health.status_line(..., missing=health.has_missing_marker(model))`~~
+        # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`、`-02`）。
+        as_of = health.latest_date(dataset.get("nav"), "nav_date")
+        health_view.record_page_health("alo", model, collected, health_cards, as_of=as_of)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")
@@ -707,7 +708,7 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         )
     else:
         _html(f'<div class="alo-sub">{_esc(model["answers"])}</div>')
-        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
+        health_view.render_page_header("alo", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page)
     # ALO-GAP-灰字落點：照 ALO-1 規則欄現行字面「頁面頂端」。
     _lines(model["top_lines"], "alo-topline")
 

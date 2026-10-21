@@ -322,16 +322,22 @@ def counts(items) -> dict:
     return {kind: out[kind] for kind in KINDS if out.get(kind)}
 
 
-def count_text(by_kind: dict):
-    """件數那一串（總表「狀態」欄、頁首「另有」行共用）：「尚未設定 2 項　⛔ 取數失敗 1 項　◇ 資料未備 1 項」。
-    尚未設定不加符號。一項都沒有 → None（呼叫端改寫資料截至日，不寫「正常」）。"""
+def count_parts(by_kind: dict) -> list:
+    """件數那一串的每一段：`[(種類, 「⛔ 取數失敗 1 項」), ...]`，依 `KINDS` 的順序；尚未設定不加符號（線框 1.2 統一規則）。
+    總表「狀態」欄（`count_text`）與頁首「另有」行（`header_view`）都由這一支組字，兩邊逐字相同（BL-0250 批次 3-C）。"""
     parts = []
     for kind in KINDS:
         n = by_kind.get(kind)
         if n:
             symbol = COUNT_SYMBOLS[kind]
-            parts.append(((symbol + " ") if symbol else "") + TEXT_COUNT.format(kind=kind, n=n))
-    return "　".join(parts) or None
+            parts.append((kind, ((symbol + " ") if symbol else "") + TEXT_COUNT.format(kind=kind, n=n)))
+    return parts
+
+
+def count_text(by_kind: dict):
+    """件數那一串（總表「狀態」欄、頁首「另有」行共用）：「尚未設定 2 項　⛔ 取數失敗 1 項　◇ 資料未備 1 項」。
+    尚未設定不加符號。一項都沒有 → None（呼叫端改寫資料截至日，不寫「正常」）。"""
+    return "　".join(text for _kind, text in count_parts(by_kind)) or None
 
 
 # ───────────────────────── 主要原因（新設計 A） ─────────────────────────
@@ -345,10 +351,16 @@ def _rank(item: dict, only_compare_unconfigured: bool):
     return {KIND_FETCH: 3, KIND_MISSING: 4, KIND_STALE: 5}[item["kind"]]
 
 
+def only_compare_unconfigured(items) -> bool:
+    """順位 6：整頁只有「只影響比較值的尚未設定」這一種問題（`main_reason`、`other_counts`、`header_view` 共用這一個判斷）。"""
+    merged = merge_items(items)
+    return bool(merged) and all(i["kind"] == KIND_UNCONFIGURED and not blocks_main(i) for i in merged)
+
+
 def pick_main(items):
     """依新設計 A 的順位與同順位比法挑出唯一一項；沒有主要原因 → None。順位 6 那一種另由 `main_reason` 處理（它可能不只一項）。"""
     merged = merge_items(items)
-    only_compare = bool(merged) and all(i["kind"] == KIND_UNCONFIGURED and not blocks_main(i) for i in merged)
+    only_compare = only_compare_unconfigured(merged)
     ranked = [(r, i) for i in merged if (r := _rank(i, only_compare)) is not None and r != 6]
     if not ranked:
         return None
@@ -364,7 +376,7 @@ def main_reason(items, *, page_failure=None):
     if page_failure is not None:
         return TEXT_MAIN_PAGE_FAILED.format(cls=page_failure)
     merged = merge_items(items)
-    if merged and all(i["kind"] == KIND_UNCONFIGURED and not blocks_main(i) for i in merged):
+    if only_compare_unconfigured(merged):
         keys = sorted(merged, key=lambda i: i["order"])
         return TEXT_MAIN_COMPARE_ONLY.format(keys="、".join(i["key"] for i in keys))
     item = pick_main(merged)
@@ -399,11 +411,53 @@ def other_counts(items, *, page_failure=None) -> dict:
     merged = merge_items(items)
     if page_failure is not None:
         return counts(merged)
-    if merged and all(i["kind"] == KIND_UNCONFIGURED and not blocks_main(i) for i in merged):
+    if only_compare_unconfigured(merged):
         return {}
     main = pick_main(merged)
     skip = None if main is None else (main["kind"], main["key"])
     return counts([i for i in merged if (i["kind"], i["key"]) != skip])
+
+
+# ───────────────────────── 四頁頁首（U9；BL-0250 批次 3-C） ─────────────────────────
+# 線框第六版 1.2（客戶核准新設計 A、F）；44 第七節第三小節之十四。頁首的主要原因一行與總表「主要原因」欄是**同一支**
+# `main_reason`、讀**同一份**記錄（`record` 寫進跨頁記錄的那一格）；「另有」行與總表「狀態」欄是同一支 `count_parts`。
+# 本段不重新判一次符號、不另排順位（總管 2026-10-19 裁定 (c) 的約束：不另寫一份）。
+
+TEXT_OTHERS = "另有：{parts}"
+HEADER_SEP = "　"
+
+
+def header_view(entry, *, as_of) -> dict:
+    """四頁頁首的內容（給 `ui_v2/health_view.py::render_page_header` 畫）：`entry` 是本頁剛記下的那一格（`recorded(...)`）。
+
+    回 `{"main": 主要原因那一句或 None, "main_kind": 種類或 None, "others": [(種類, 件數字), ...], "as_of": "資料截至 ‹日期›",
+    "inline": 是否一行寫完, "lines": 純文字各行}`：
+    - 有主要原因（順位 1～5）→ 主要原因一行；「另有」（扣掉主要原因那一項）有東西才一行；最後一行資料截至日。
+    - 順位 6（只影響比較值的尚未設定）→ 一行「尚未設定：‹哪一項›（只影響比較值）　資料截至 ‹日期›」，不加符號。
+    - 都沒有 → 只寫「資料截至 ‹日期›」（不寫「正常」）。
+    - 收集那一步出錯（`collect_error`）→ 主要原因那一行寫總表同一句「⛔ 本頁狀態無法彙整」（總表的主要原因欄此時寫「—」，
+      頁首不寫「—」；實作組判讀，可推翻）。"""
+    if entry is None:
+        raise ValueError("頁首要讀本頁剛記下的那一格；沒有記錄（不猜）")
+    tail = f"{AS_OF_LABEL} {as_of or AS_OF_UNKNOWN}"
+    if entry.get("collect_error"):
+        main, kind, others, inline = TEXT_COLLECT_FAILED, KIND_FETCH, [], False
+    else:
+        items, failure = entry["items"], entry.get("page_failure")
+        main = main_reason(items, page_failure=failure)
+        others = count_parts(other_counts(items, page_failure=failure))
+        inline = main is None or (failure is None and only_compare_unconfigured(items))
+        if main is None or inline:
+            kind = None
+        elif failure is not None:
+            kind = KIND_FETCH
+        else:
+            kind = pick_main(items)["kind"]
+    if inline:
+        lines = [HEADER_SEP.join(part for part in (main, tail) if part)]
+    else:
+        lines = [main] + ([TEXT_OTHERS.format(parts=HEADER_SEP.join(t for _k, t in others))] if others else []) + [tail]
+    return {"main": main, "main_kind": kind, "others": others, "as_of": tail, "inline": inline, "lines": lines}
 
 
 # ───────────────────────── 跨頁記錄與總表 ─────────────────────────

@@ -1154,9 +1154,15 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     # （`EXP-2`、`EXP-3` 移到 ④，不算卡）。頁上的徽章搬移與資料狀態行照舊以改層前的三張卡為對象（一字不動）。
     health_cards = sections.health_cards(cards, "exp")
     collected = health_view.collect_page_health("exp", model, failures, _status["fetch_events"], health_cards)
-    provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
-    status_line = health.status_line(model, failures, as_of=_as_of(model), stale=health.has_stale_marker(model, cards))
-    health_view.record_page_health("exp", model, collected, health_cards, status_line)
+    # 核心卡的來源與新鮮度徽章拿下來（本頁三張卡那一格是「⬜ 不適用（…）」）。BL-0250 批次 3-C（G2；線框第六版第 7 節第 11 列）：
+    # 拿下來的那一份不再畫在 ④「核心卡的來源與新鮮度」—— 同一句已在總表明細的狀態欄（`normal_entries`，收集時讀）。
+    # ~~`provenance = health.move_card_provenance(...)` → `health_view.render_provenance(provenance)`~~（有意識的政策變更，
+    # 不是漏刪；`DEC-2026-10-21-01`）。
+    health.move_card_provenance(model, cards)
+    # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）。
+    # ~~`status_line = health.status_line(...)`~~（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+    as_of = _as_of(model)
+    health_view.record_page_health("exp", model, collected, health_cards, as_of=as_of)
     # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`EXP-2` 移到層 3、`EXP-3` 移到層 4（預設收合），② 只剩 `EXP-1`；
     # 在上面的徽章搬移與資料狀態行之後才改層 —— 那兩步照舊以改層前的三張核心卡為對象，行為不變（`ui_v2/sections.py`）。
     sections.relayer(model, "exp")
@@ -1171,7 +1177,7 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
 
     st.markdown(f'<div class="exp-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="exp-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
-    health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
+    health_view.render_page_header("exp", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     st.markdown(f'<div class="exp-layer-label">{plain.LABEL_LAYER1}</div>', unsafe_allow_html=True)
     _render_exp0(logic.find_block(model, "EXP-0"), plain_mode=True)
@@ -1219,7 +1225,6 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     for code in logic.codes_in_layer(model, 4):
         if code not in sections.EXP_RESULT_CODES:
             _RENDERERS[code](logic.find_block(model, code), plain_mode=True)
-    health_view.render_provenance(provenance)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     st.markdown(f'<div class="exp-footer">{_esc(" ".join(model["footer_lines"]))}</div>', unsafe_allow_html=True)

@@ -34,7 +34,7 @@ sys.path.insert(0, str(_HERE))
 
 import test_plain_logic as TPL  # noqa: E402  共用同一批正式模型（不另造一份）
 
-from ui_v2 import health, plain  # noqa: E402
+from ui_v2 import health, page_health, plain, sections, symbols  # noqa: E402
 
 _LIVE_PAGES = ("mkt", "hld", "exp", "alo")
 
@@ -157,7 +157,11 @@ def test_受影響的塊每一塊恰一次():
             assert n == (1 if code in summary["affected_blocks"] else 0), (key, code, n)
 
 
-def test_尚未設定那一族的狀態句在一般畫面模型裡0次_狀態行的類別句恰1次():
+# ~~狀態行的類別句恰 1 次（`health.status_line`）~~ → BL-0250 批次 3-C（U9；44 第七節第三小節之十四；客戶 `DEC-2026-10-21-01`；
+# 有意識的政策變更，不是漏刪）：資料狀態行退場，頁首改由 `page_health.header_view` 讀總表同一份記錄。下面兩條保留原本守的
+# 「尚未設定那一族的狀態句與寫入原文去重之後在一般畫面 0 次」，類別句那一半改由頁首與總表件數守
+# （`tests/ui_v2/test_bl0250_batch3c_logic.py`：頁首「另有」＋主要原因 ＝ 總表狀態欄）。
+def test_尚未設定那一族的狀態句在一般畫面模型裡0次():
     seen = 0
     for key, model in _live():
         display, _raw, _status = plain.plain_model(model, page=key[1])
@@ -165,83 +169,98 @@ def test_尚未設定那一族的狀態句在一般畫面模型裡0次_狀態行
         after, summary = health.dedupe_failures(display)
         for state in health.NOT_CONFIGURED_STATES:
             assert not any(state in t for t in _strings(after)), (key, state)
-        line = health.status_line(after, summary, as_of="2026-10-01")
         if had:
             seen += 1
-            assert line["text"].count(f"{health.TEXT_NOT_CONFIGURED}：") == 1, (key, line["text"])
-            for state in had:
-                assert health.not_configured_name(state) in line["text"], (key, state)
+            for state in had:   # 尚未設定的那一項照舊交給頁首與總表（摘要裡有它的名字）
+                assert health.not_configured_name(state) in summary["not_configured"], (key, state)
         # 寫入用的那一句原文（`NOT_CONFIGURED_MESSAGE`）本來就不在一般畫面（P0-①），去重之後也不會回來
         assert not any(plain.MSG_SETTINGS_NOT_CONFIGURED in t for t in _strings(after)), key
-    assert seen >= 4, seen
-
-
-def test_取數失敗的類別句在狀態行恰1次():
-    seen = 0
-    for key, model in _live():
-        display, _raw, _status = plain.plain_model(model, page=key[1])
-        after, summary = health.dedupe_failures(display)
-        line = health.status_line(after, summary, as_of=None)
-        if summary["fetch_failed"]:
-            seen += 1
-            assert line["text"].count(f"{health.SYMBOL_ERROR} {health.TEXT_FETCH_FAILED}：") == 1, key
     assert seen >= 4, seen
 
 
 # ───────────────────────── 3. 資料狀態行 ─────────────────────────
 
 
+# ~~下列五條原本驗 `health.status_line`（資料狀態行）~~ → BL-0250 批次 3-C（U9）：改驗頁首 `page_health.header_view`，
+# 守的是同一組規則（沒有異常只寫資料截至日、不寫「資料齊」「正常」；同類只列一次、順序固定、色調照舊）與 ◇ 判讀沿用模型既有狀態
+# （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+
+
+def _record(items, *, as_of="2026-09-21", page="mkt"):
+    store = {}
+    page_health.record(store, page, items, as_of=as_of, now="2026-10-21T00:00:00+00:00")
+    return page_health.recorded(store, page)
+
+
 def test_沒有異常時只寫資料截至日_不寫資料齊或正常():
-    empty = {"blocks": [{"code": "MKT-1", "title": "風險情緒卡", "_layer": 2, "_state": "ok"}]}
-    line = health.status_line(empty, {"fetch_failed": [], "not_configured": [], "affected_blocks": []},
-                              as_of="2026-09-21")
-    assert line["items"] == []
-    assert line["text"] == "資料截至 2026-09-21"
-    for word in ("資料齊", "正常", health.STATUS_LABEL):
-        assert word not in line["text"]
-    unknown = health.status_line(empty, {"fetch_failed": [], "not_configured": [], "affected_blocks": []},
-                                 as_of=None)
-    assert unknown["text"] == f"資料截至 {health.AS_OF_UNKNOWN}"
+    view = page_health.header_view(_record([]), as_of="2026-09-21")
+    assert view["lines"] == ["資料截至 2026-09-21"] and view["main"] is None and view["others"] == []
+    for word in ("資料齊", "正常", "資料狀態："):
+        assert word not in "".join(view["lines"])
+    assert page_health.header_view(_record([], as_of=None), as_of=None)["lines"] == [f"資料截至 {page_health.AS_OF_UNKNOWN}"]
 
 
-def test_四頁正式模型的狀態行都不寫資料齊或正常():
+def test_四頁正式模型的頁首都不寫資料齊或正常():
+    seen = 0
     for key, model in _live():
-        display, _raw, _status = plain.plain_model(model, page=key[1])
+        display, _raw, status = plain.plain_model(model, page=key[1])
+        symbols.apply(display)
         after, summary = health.dedupe_failures(display)
-        for stale in (False, True):
-            text = health.status_line(after, summary, as_of="2026-10-01", stale=stale)["text"]
-            assert "資料齊" not in text and "正常" not in text, (key, text)
-            assert text.endswith("資料截至 2026-10-01"), (key, text)
+        health.relabel_unconfigured(after, summary)
+        cards = [b["code"] for b in after["blocks"] if b.get("_layer") == 2]
+        try:
+            items, _u = health.collect_page_items(after, summary, status["fetch_events"],
+                                                  sections.health_cards(cards, key[1]))
+        except health.MissingClassError:
+            continue   # 這一份模型少了頁面那一步（例：市場總覽 `mark_fetch_failures`），畫面測試另驗
+        seen += 1
+        text = "\n".join(page_health.header_view(_record(items, page=key[1]), as_of="2026-10-01")["lines"])
+        assert "資料齊" not in text and "正常" not in text, (key, text)
+        assert text.endswith("資料截至 2026-10-01"), (key, text)
+    assert seen >= 10, seen
 
 
 def test_四種同類只列一次_順序固定_附資料截至日():
-    model = {"blocks": [
-        {"code": "MKT-1", "title": "風險情緒卡", "_layer": 2, "_state": "系統錯誤",
-         "main_values": [{"_state": "資料未備"}, {"_state": "資料未備"}]},
-        {"code": "MKT-2", "title": "景氣位置卡", "_layer": 2, "_state": "資料未備"},
-    ]}
-    summary = {"fetch_failed": ["市場指標", "使用者設定"], "not_configured": ["設定試算表"], "affected_blocks": []}
-    line = health.status_line(model, summary, as_of="2026-09-21", stale=True)
-    assert [symbol for symbol, _t, _tone in line["items"]] == ["◷", "◇", "⛔", ""]
-    assert line["text"] == ("資料狀態：◷ 不是最新：部分只顯示最後有效資料　◇ 資料未備　⛔ 取數失敗：市場指標、使用者設定"
-                            "　尚未設定：設定試算表　·　資料截至 2026-09-21")
-    assert [tone for _s, _t, tone in line["items"]] == ["中性", "灰", "紅", "中性"]
+    def item(kind, key, unreadable=True, order=0):
+        return page_health.make_item(kind, key, [page_health.affected("風險情緒卡", core=True, unreadable=unreadable)],
+                                     order=order)
+    items = [item(page_health.KIND_STALE, ""), item(page_health.KIND_MISSING, "市場指標", order=3),
+             item(page_health.KIND_FETCH, "市場指標", order=2), item(page_health.KIND_FETCH, "使用者設定", order=4),
+             item(page_health.KIND_UNCONFIGURED, "設定試算表", unreadable=False, order=5)]
+    view = page_health.header_view(_record(items), as_of="2026-09-21")
+    assert view["lines"] == ["⛔ 主要原因：市場指標取數失敗（1 張卡有值讀不到）",
+                             "另有：尚未設定 1 項　⛔ 取數失敗 1 項　◇ 資料未備 1 項　◷ 不是最新 1 項",
+                             "資料截至 2026-09-21"]
+    assert [kind for kind, _t in view["others"]] == list(page_health.KINDS)
+    assert [health_view_tone(kind) for kind, _t in view["others"]] == ["中性", "紅", "灰", "中性"]
+
+
+def health_view_tone(kind):
+    """`ui_v2/health_view.py::OTHER_TONES` 的鏡像（本檔不 import streamlit 那一支；`test_bl0250_batch3c_logic.py` 逐字比對）。"""
+    return {page_health.KIND_UNCONFIGURED: "中性", page_health.KIND_FETCH: "紅", page_health.KIND_MISSING: "灰",
+            page_health.KIND_STALE: "中性"}[kind]
 
 
 def test_資料未備的判定沿用模型既有狀態():
-    assert health.has_missing({"a": [{"_state": "資料未備"}]})
-    assert health.has_missing({"a": {"_empty_kind": "來源缺"}})
-    assert health.has_missing({"a": {"_empty_kind": "部分缺"}})
-    assert not health.has_missing({"a": {"_state": "業務例外", "_empty_kind": "算不出來"}})
-    assert not health.has_missing({"a": {"_state": "ok", "text": "資料未備"}})      # 字面不算，只看狀態
+    # ~~`health.has_missing`~~（3-C 同次刪除）→ 收集那一步讀同一批既有狀態（`_own_missing_markers`）。
+    assert health._own_missing_markers({"_state": "資料未備"}, None)
+    assert health._own_missing_markers({"_empty_kind": "來源缺"}, None)
+    assert health._own_missing_markers({"_empty_kind": "部分缺"}, None)
+    assert not health._own_missing_markers({"_state": "業務例外", "_empty_kind": "算不出來"}, None)
+    assert not health._own_missing_markers({"_state": "ok", "label": "資料未備"}, None)      # 字面不算（沒有 ◇），只看狀態
     assert health.has_error_state({"a": {"_empty_kind": "系統錯誤"}})
     assert not health.has_error_state({"a": {"text": "⛔ 取數失敗"}})
 
 
-def test_只有系統錯誤狀態而沒有摘要時_狀態行照樣寫取數失敗():
+def test_只有系統錯誤狀態而沒有任何原因項目時_收集報錯_頁首與總表寫無法彙整():
+    # ~~狀態行照樣寫「⛔ 取數失敗」（`_unexplained_error` 退路）~~ → 3-C：同一個退路改在收集那一步，頁首與總表都寫無法彙整。
     model = {"blocks": [{"code": "HLD-3", "title": "配息與本金卡", "_layer": 2, "_state": "系統錯誤"}]}
-    line = health.status_line(model, {"fetch_failed": [], "not_configured": [], "affected_blocks": []}, as_of=None)
-    assert line["items"] == [("⛔", "取數失敗", "紅")]
+    with pytest.raises(health.MissingClassError):
+        health.collect_page_items(model, {"fetch_failed": [], "not_configured": [], "affected_blocks": []}, (), ["HLD-3"])
+    store = {}
+    page_health.record_collect_failure(store, "hld", "MissingClassError", now="2026-10-21T00:00:00+00:00")
+    view = page_health.header_view(page_health.recorded(store, "hld"), as_of=None)
+    assert view["lines"][0] == page_health.TEXT_COLLECT_FAILED == page_health.summary_rows(store[page_health.STATE_KEY])[0]["status"]
 
 
 def test_latest_date():
@@ -425,13 +444,17 @@ def test_導覽函式本體只呼叫page_link_caption_markdown():
         assert bad not in names, bad
 
 
-def test_狀態行與徽章表的畫法也不碰讀寫():
-    for name in ("render_status_line", "render_provenance"):
+def test_頁首的畫法也不碰讀寫():
+    # ~~`("render_status_line", "render_provenance")`~~ → BL-0250 批次 3-C：兩支同次刪除，頁首改畫 `render_page_header`
+    # （它讀本頁剛記下的那一格總表記錄，只讀，不寫）。有意識的政策變更，不是漏刪。
+    for name in ("render_page_header",):
         fn = _function(_ROOT / "ui_v2" / "health_view.py", name)
         st_calls = {c for c in _calls(fn) if c.startswith("st.")}
         assert st_calls <= {"st.markdown", "st.expander"}, (name, st_calls)
         body = ast.get_source_segment((_ROOT / "ui_v2" / "health_view.py").read_text(encoding="utf-8"), fn)
-        for word in ("session_state", "save", "refetch", "load_live", "button", "rerun", "switch_page"):
+        # 唯一碰到 session 的地方是唯讀那一句 `page_health.recorded(st.session_state, slug)`（3-C；不寫入）。
+        assert body.count("session_state") == body.count("page_health.recorded(st.session_state, slug)") == 1, name
+        for word in ("save", "refetch", "load_live", "button", "rerun", "switch_page", "record("):
             assert word not in body, (name, word)
 
 
@@ -473,7 +496,7 @@ def _card(badge_tone, group_tone=None):
 _EMPTY_SUMMARY = {"fetch_failed": [], "not_configured": [], "affected_blocks": [], "explained_blocks": []}
 
 
-def test_畫成黃的新鮮度徽章_卡上留時鐘加原字面_同色調_第四段照列原字面_狀態行報時鐘():
+def test_畫成黃的新鮮度徽章_卡上留時鐘加原字面_同色調_原字面照交出_頁首報時鐘():
     display = _card("黃", group_tone="黃")
     rows = health.move_card_provenance(display, ("MKT-1",))
     value = display["blocks"][0]["main_values"][0]
@@ -482,21 +505,20 @@ def test_畫成黃的新鮮度徽章_卡上留時鐘加原字面_同色調_第�
         "_kind": "新鮮度", "_tone": "黃", "text": "◷ 延遲 15 日"}
     assert ("風險情緒卡", "波動度指數", ["T2", "延遲 12 日"]) in rows            # ④ 照列原字面（換位置，不刪除）
     assert ("風險情緒卡", "基金 A", ["延遲 15 日"]) in rows
-    assert health.has_stale_marker(display, ("MKT-1",)) is True
-    line = health.status_line(display, _EMPTY_SUMMARY, as_of="2026-10-01",
-                              stale=health.has_stale_marker(display, ("MKT-1",)))
-    assert line["items"][0][0] == health.SYMBOL_STALE
+    # ~~`health.has_stale_marker` → 狀態行報 ◷~~ → BL-0250 批次 3-C：◷ 由 `stale_items` 讀卡上留著的 ◷，頁首讀同一份記錄
+    # （有意識的政策變更，不是漏刪）。④ 那一份（`rows`）自 3-C 起不畫，改由總表明細承接（收集時讀）。
+    stale = health.stale_items(display, ("MKT-1",))
+    assert [i["kind"] for i in stale] == [page_health.KIND_STALE]
+    assert page_health.header_view(_record(stale), as_of="2026-10-01")["lines"][0] == page_health.TEXT_MAIN_STALE
 
 
 @pytest.mark.parametrize("tone", ["中性", "灰"])
-def test_中性與灰色的延遲_卡上與狀態行都沒有時鐘(tone):
+def test_中性與灰色的延遲_卡上與頁首都沒有時鐘(tone):
     display = _card(tone, group_tone=tone)
     health.move_card_provenance(display, ("MKT-1",))
     assert display["blocks"][0]["main_values"][0]["badges"] == []
     assert display["blocks"][0]["fund_groups"][0]["freshness_badge"] is None
-    assert health.has_stale_marker(display, ("MKT-1",)) is False
-    line = health.status_line(display, _EMPTY_SUMMARY, as_of="2026-10-01", stale=False)
-    assert health.SYMBOL_STALE not in line["text"]
+    assert health.stale_items(display, ("MKT-1",)) == []   # ~~has_stale_marker／status_line~~（3-C）
     assert not any(health.SYMBOL_STALE in t for t in _strings(display))
 
 
@@ -563,7 +585,12 @@ def test_三頁真身的新鮮度色調寫法_AST():
 # ───────────────────────── 7. 稽核可選 3：⛔ 與尚未設定各自獨立 ─────────────────────────
 
 
-def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊照樣報停止符號():
+# ~~下面兩條原本驗資料狀態行「⛔ 與尚未設定各自獨立」~~ → BL-0250 批次 3-C（U9）：頁首改讀收集那一步的原因項目；
+# 同一件事改驗收集：尚未設定與取數失敗各成一項（永遠分開數，線框 1.1），沒有交代的系統錯誤塊報錯（不靜默）；
+# 結論燈不自己取數、不算沒交代（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+
+
+def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊報錯():
     display = {"blocks": [
         {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
          "detail_lines": ["⛔ 保單與持倉 取數失敗：保單試算表尚未設定"]},
@@ -572,12 +599,11 @@ def test_有尚未設定也不省掉取數失敗_沒有交代的系統錯誤塊�
     ]}
     after, summary = health.dedupe_failures(display)
     assert summary["not_configured"] == ["保單試算表"] and summary["fetch_failed"] == []
-    line = health.status_line(after, summary, as_of=None)
-    assert [s for s, _t, _tone in line["items"]] == ["⛔", ""], line
-    assert "⛔ 取數失敗" in line["text"] and "尚未設定：保單試算表" in line["text"]
+    with pytest.raises(health.MissingClassError):
+        health.collect_page_items(after, summary, (), ["HLD-1", "HLD-3"])
 
 
-def test_每一塊的錯誤都被尚未設定交代到_就不另報停止符號():
+def test_每一塊的錯誤都被尚未設定交代到_就不另報():
     display = {"blocks": [
         {"code": "HLD-0", "title": "體檢結論燈", "_layer": 1, "_state": "系統錯誤", "text": "有一塊取數失敗"},
         {"code": "HLD-1", "title": "偏離提示卡", "_layer": 2, "_state": "系統錯誤",
@@ -585,8 +611,10 @@ def test_每一塊的錯誤都被尚未設定交代到_就不另報停止符號(
     ]}
     after, summary = health.dedupe_failures(display)
     assert summary["explained_blocks"] == ["HLD-1"]
-    line = health.status_line(after, summary, as_of=None)
-    assert [s for s, _t, _tone in line["items"]] == [""], line             # 結論燈不自己取數，不算沒交代
+    items, _u = health.collect_page_items(after, summary, (), ["HLD-1"])   # 結論燈不自己取數，不算沒交代
+    assert [(i["kind"], i["key"]) for i in items] == [(page_health.KIND_UNCONFIGURED, "保單試算表")]
+    assert page_health.header_view(_record(items, page="hld"), as_of=None)["lines"][0].startswith(
+        "⛔ 主要原因：保單試算表尚未設定")
 
 
 # ───────────────────────── 8. Phase 3 P1-④：結論燈同一則訊息不印兩次 ─────────────────────────

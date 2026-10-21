@@ -184,15 +184,16 @@ def test_可選2_lines欄位的禁止與資料未備句_沒有類別照樣報錯
 _CRASH = SCAN._HEAD + '''
 import streamlit as st
 from ui_v2 import health_view
-_saved = health_view.render_status_line
+# ~~`render_status_line`~~ → BL-0250 批次 3-C：頁首改畫 `render_page_header`（同樣是記錄之後才畫的那一步；有意識的更正，不是漏刪）。
+_saved = health_view.render_page_header
 if st.session_state.get("CRASH"):
     def _boom(*_a, **_k):
         raise RuntimeError("畫頁崩潰（測試注入）")
-    health_view.render_status_line = _boom
+    health_view.render_page_header = _boom
 try:
 ''' + "\n".join("    " + line for line in SCAN.MKT["未設定"].split("\n")) + '''
 finally:
-    health_view.render_status_line = _saved
+    health_view.render_page_header = _saved
 '''
 
 

@@ -208,7 +208,14 @@ def test_第3條_收集或記錄出錯_頁面照原樣_總表寫無法彙整_不
     with caplog.at_level(logging.WARNING, logger="ui_v2.health_view"):
         at.run()
     assert not at.exception, [e.value for e in at.exception]
-    assert _screen(at) == before                                           # 頁面照原樣逐字不變
+    # ~~`_screen(at) == before`（頁面照原樣逐字不變，含頁首資料狀態行）~~ → BL-0250 批次 3-C（U9；44 第七節第三小節之十四；
+    # 客戶 `DEC-2026-10-21-01`）：頁首自 3-C 起讀總表同一份記錄，收集出錯時頁首主要原因那一行寫總表同一句「⛔ 本頁狀態無法彙整」
+    # （有意識的政策變更，不是漏刪）；頁首以外照原樣逐字不變。
+    after = _screen(at)
+    head = [i for i, v in enumerate(after[0]) if 'class="v2-status-line"' in v]
+    assert len(head) == 1 and page_health.TEXT_COLLECT_FAILED in after[0][head[0]]
+    assert [v for i, v in enumerate(after[0]) if i not in head] == [
+        v for v in before[0] if 'class="v2-status-line"' not in v] and after[1:] == before[1:]
     entry = _store(at)[page]
     cls = "MissingClassError" if mode == "unmapped" else mode
     assert entry["collect_error"] == cls and entry["items"] == [] and entry["normal"] == []   # 整格改寫，不留舊記錄

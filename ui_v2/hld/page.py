@@ -998,18 +998,26 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         # 「尚未設定：<哪一項>」（燈、展開區摘要；`ui_v2/health.py::relabel_unconfigured`）。判定與符號照舊。
         health.relabel_unconfigured(model, failures)
         cards = logic.codes_in_layer(model, 2)
-        stale = health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)
+        health.mark_last_valid(model, cards, _LAST_VALID_PREFIX)   # 卡上「只顯示最後有效資料」的副標加 ◷（記錄那一步讀它）
         # BL-0250 批次 3-B（44 第七節第三小節之十三其七）：本頁已畫出的 ⛔／◇／尚未設定逐項收下，給設定與診斷頁的各頁資料狀態總表。
         # 只讀、不改：判定、符號、畫面字一個都不動（`ui_v2/health.py::collect_page_items`）。
         # 3-B 稽核回修第 3 條：收集與記錄包在錯誤邊界裡（`health_view.collect_page_health`）。
         health_cards = sections.health_cards(cards, "hld")
         collected = health_view.collect_page_health("hld", model, failures, _status["fetch_events"], health_cards)
-        provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
-        stale = stale or health.has_stale_marker(model, cards)
-        status_line = health.status_line(
-            model, failures, as_of=health.latest_date(loaded["dataset"].get("nav"), "nav_date"), stale=stale
-        )
-        health_view.record_page_health("hld", model, collected, health_cards, status_line)
+        # 核心卡的來源與新鮮度徽章拿下來；畫成黃的新鮮度徽章在卡上留「◷ <原字面>」。BL-0250 批次 3-C（G2；線框第六版第 7 節
+        # 第 2、7 列）：拿下來的那一份不再畫在 ④「核心卡的來源與新鮮度」—— 同一份已在總表明細（`normal_entries`，收集時讀）。
+        # ~~`provenance = health.move_card_provenance(...)` → `health_view.render_provenance(provenance)`~~（有意識的政策變更，
+        # 不是漏刪；`DEC-2026-10-21-01`）。
+        health.move_card_provenance(model, cards)
+        # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）；
+        # ◷ 由 `health.stale_items` 在記錄那一步補（讀的是 `mark_last_valid`／`move_card_provenance` 留在卡上的 ◷）。
+        # ~~`stale = stale or health.has_stale_marker(...)`、`status_line = health.status_line(...)`~~（有意識的政策變更，不是漏刪；
+        # `DEC-2026-10-21-01`）。
+        as_of = health.latest_date(loaded["dataset"].get("nav"), "nav_date")
+        health_view.record_page_health("hld", model, collected, health_cards, as_of=as_of)
+        # BL-0250 批次 3-C（G2；線框第六版第 7 節第 5、6 列）：淨值表逐檔分組標頭、最大回撤與本金類配息佔比表每一列的
+        # 「當日／延遲 N 日」拿掉（記錄總表之後；逐檔延遲已在總表明細）。◇ 那一種（超過 10 日）照留。
+        health.drop_delay_badges(model, ("HLD-6", "HLD-8"))
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)、(a-2)）：`HLD-1` 結構上照舊屬層 2，畫面上畫在 ③，偏離列加 ◆；
         # ① 另列三個計數（持有、◆ 需要注意、⬜ 無法判定）。只讀已算出的數，判定一個都不動（`ui_v2/sections.py`）。
         sections.mark_hld1_rows(model)
@@ -1030,7 +1038,7 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         )
     else:
         st.markdown(f'<div class="hld-sub">{_esc(model["answers"])}</div>', unsafe_allow_html=True)
-        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
+        health_view.render_page_header("hld", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     label1, label2, label3, label4 = (
         (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
@@ -1076,8 +1084,6 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
     )
     for code in logic.codes_in_layer(model, 4):
         _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
-    if plain_mode:
-        health_view.render_provenance(provenance)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

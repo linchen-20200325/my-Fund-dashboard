@@ -23,8 +23,13 @@
    `◷` 由呼叫端依該頁既有的標示交進來（目前只有持倉體檢有「淨值取自預存序列」這一種）。
    符號只是呈現；卡片內既有符號（`⬜` 等）本批不動（→ ◆／◇ 小批起，卡片內的「⬜ 資料未備」改 ◇、偏離黃燈改 ◆，住在 `ui_v2/symbols.py`，
    在本模組之前套用）。
+   → **BL-0250 批次 3-C（U9；44 第七節第三小節之十四；有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）**：上面這一條的
+   資料狀態行退場，頁首改畫主要原因＋另有（`ui_v2/page_health.py::header_view`，讀收集那一步記下的同一份記錄）；
+   `status_line` 與它專用的幾支判讀同次刪除。
 3. **核心卡的來源與新鮮度徽章移到 ④「證據／來源」**（其二第 4 條）：② 卡上 `_kind` 為 `來源`／`新鮮度` 的徽章
    拿下來、交給呼叫端畫在 ④；不刪除（來源、取得時間、資料截至日只能換位置，不能消失）。
+   → **BL-0250 批次 3-C（G2）**：拿下來的那一份~~畫在 ④~~改由設定與診斷頁的各頁資料狀態總表明細承接（收集那一步在拿下來之前
+   讀，`normal_entries`）；畫成黃的那一枚照舊在卡上留 `◷`。
 
 **示範模式不經過本模組**（BL-0367）。
 """
@@ -40,15 +45,15 @@ from . import page_health, plain
 # 字面為本組依 44 第七節第三小節之七其二第 3、4 條與 59 線框第 2.5、2.6 節擬定；只描述狀態、不指示動作
 # （客戶 2026-10-03、2026-10-02 兩則裁示）。
 
-STATUS_LABEL = "資料狀態："
-AS_OF_LABEL = "資料截至"
-AS_OF_UNKNOWN = "—"
+# ~~`STATUS_LABEL = "資料狀態："`、`AS_OF_LABEL`、`AS_OF_UNKNOWN`~~ → BL-0250 批次 3-C（U9）：頁首資料狀態行退場，頁首改由
+# `ui_v2/page_health.py::header_view` 組字（資料截至日的字面住在那裡）；這三個常數因此沒有人用，同次刪除
+# （`CLAUDE.md` §-1.5.1c 判定 3；有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
 
 SYMBOL_STALE = "◷"
 SYMBOL_MISSING = "◇"
 SYMBOL_ERROR = "⛔"
 
-TEXT_STALE = "不是最新：部分只顯示最後有效資料"
+# ~~`TEXT_STALE = "不是最新：部分只顯示最後有效資料"`~~（只給資料狀態行用；同上，3-C 同次刪除）
 TEXT_MISSING = "資料未備"
 TEXT_FETCH_FAILED = "取數失敗"
 TEXT_NOT_CONFIGURED = "尚未設定"
@@ -66,8 +71,8 @@ SETTINGS_LINK_LABEL = "前往設定與診斷"
 # 單頁入口（沒有 `st.navigation`，換不了頁）只寫這一行。
 SETTINGS_ELSEWHERE_TEXT = "完整資料狀態在「設定與診斷」頁"
 
-# ④「證據／來源」裡承接核心卡徽章的那一枚展開區（預設收合）。
-PROVENANCE_TITLE = "核心卡的來源與新鮮度"
+# ~~④「證據／來源」裡承接核心卡徽章的那一枚展開區（預設收合）：`PROVENANCE_TITLE = "核心卡的來源與新鮮度"`~~
+# → BL-0250 批次 3-C（G2）：四頁不再畫這一枚（同一份在總表明細），常數同次刪除（有意識的政策變更，不是漏刪）。
 
 # 兩鍵一起存、兩鍵都沒存進去時卡片層那一行（BL-0177；58 U-44 三態之一）。
 TEXT_SAVE_FAILED_BOTH = "儲存失敗"
@@ -578,50 +583,10 @@ def trim_light_echo(block: dict) -> bool:
 # ───────────────────────── 資料未備（◇）的判定：沿用模型既有的狀態 ─────────────────────────
 
 
-def has_missing(node) -> bool:
-    """模型裡有沒有 `資料未備`（`_state`）或 `來源缺`／`部分缺`（`_empty_kind`）。只讀既有判定，不新算。"""
-    if isinstance(node, dict):
-        if node.get("_state") in _MISSING_STATES or node.get("_empty_kind") in _MISSING_EMPTY_KINDS:
-            return True
-        return any(has_missing(v) for v in node.values())
-    if isinstance(node, (list, tuple)):
-        return any(has_missing(v) for v in node)
-    return False
-
-
-def has_missing_marker(node, private: bool = False) -> bool:
-    """模型裡有沒有畫成 `◇` 的資料未備：logic 記為資料未備的缺值格（`_missing_cells`／`_missing_fields` 列出的格，
-    經 `symbols` 換成 `◇`），或給人看的字串裡有「◇ 資料未備」。只讀既有判定與已畫出的符號，不新算。
-
-    給資產配置用（BL-0250 批次 1，`DEC-2026-10-19-04`）：資產配置的資料未備大多寫在表格格內與列尾
-    （例：`ALO-2` 某類別目標比重留空 → 「◇ 資料未備」、`ALO-6` 缺基準值的格 → `◇`），沒有 `_state`，
-    `has_missing` 讀不到，資料狀態行因此漏報 ◇（44 第七節第三小節之七其二第 4 條：四頁都要報）。"""
-    if isinstance(node, dict):
-        for cell in node.get("_missing_cells") or ():
-            if node.get(cell) == SYMBOL_MISSING:
-                return True
-        labels = set(node.get("_missing_fields") or ())
-        for field in node.get("_fields") or ():
-            if isinstance(field, tuple) and len(field) == 2 and field[0] in labels and field[1] == SYMBOL_MISSING:
-                return True
-        if node.get("_empty_kind") in _MISSING_EMPTY_KINDS:
-            return True
-        for key, value in node.items():
-            under = private or (isinstance(key, str) and key.startswith("_"))
-            if isinstance(value, str):
-                if not under and _MISSING_LINE in value:
-                    return True
-            elif has_missing_marker(value, under):
-                return True
-        return False
-    if isinstance(node, (list, tuple)):
-        for item in node:
-            if isinstance(item, str):
-                if not private and _MISSING_LINE in item:
-                    return True
-            elif has_missing_marker(item, private):
-                return True
-    return False
+# ~~`has_missing`、`has_missing_marker`~~（資料狀態行的 ◇ 判讀）→ BL-0250 批次 3-C（U9）：頁首改讀收集那一步的原因項目
+# （`collect_page_items`，讀的是同一批 ◇ 記號：`_state`／`_empty_kind`／缺格標記／「◇ 資料未備」字樣，見 `_own_missing_markers`），
+# 這兩支因此沒有人用，同次刪除（`CLAUDE.md` §-1.5.1c 判定 3；有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+# 舊做法的用意（四頁都要報 ◇）仍然成立；被權衡掉的是「另判一次」—— 頁首與總表自此讀同一份。
 
 
 def has_error_state(node) -> bool:
@@ -662,35 +627,9 @@ def latest_date(rows, key):
 # ───────────────────────── 資料狀態行 ─────────────────────────
 
 
-def status_line(display: dict, summary: dict, *, as_of, stale: bool = False, missing: bool = False) -> dict:
-    """資料狀態行的內容（給 `health_view.render_status_line` 畫）。
-
-    `missing`：呼叫端另外確認過的資料未備（資產配置傳 `has_missing_marker`；BL-0250 批次 1）。與 `has_missing` 取聯集。
-
-    回 `{"items": [(符號或空字串, 文字, 色調), ...], "as_of": "YYYY-MM-DD" 或 "—", "text": 整行純文字}`。
-    `items` 依 ◷ → ◇ → ⛔ → 尚未設定 排；同類只一筆。`items` 為空 ⇒ 只寫資料截至日（不寫「資料齊」「正常」）。
-    """
-    items = []
-    if stale:
-        items.append((SYMBOL_STALE, TEXT_STALE, "中性"))
-    if missing or has_missing(display):
-        items.append((SYMBOL_MISSING, TEXT_MISSING, "灰"))
-    # ⛔ 與「尚未設定」各自獨立判斷（不因為有尚未設定就省掉 ⛔）：有取數失敗的類別 → 列類別；
-    # 沒有類別、但有 `系統錯誤` 的塊在畫面上沒有任何一句失敗摘要（取數失敗或尚未設定都沒有）→ 照樣報 ⛔ 取數失敗。
-    if summary["fetch_failed"]:
-        items.append((SYMBOL_ERROR, f"{TEXT_FETCH_FAILED}：{'、'.join(summary['fetch_failed'])}", "紅"))
-    elif _unexplained_error(display, summary.get("explained_blocks", ())):
-        items.append((SYMBOL_ERROR, TEXT_FETCH_FAILED, "紅"))
-    if summary["not_configured"]:
-        items.append(("", f"{TEXT_NOT_CONFIGURED}：{'、'.join(summary['not_configured'])}", "中性"))
-    as_of_text = as_of or AS_OF_UNKNOWN
-    tail = f"{AS_OF_LABEL} {as_of_text}"
-    if items:
-        body = "　".join(f"{symbol} {text}".strip() for symbol, text, _tone in items)
-        text = f"{STATUS_LABEL}{body}　·　{tail}"
-    else:
-        text = tail
-    return {"items": items, "as_of": as_of_text, "text": text}
+# ~~`status_line`（資料狀態行：◷／◇／⛔／尚未設定四類同類列一次，附資料截至日）~~ → BL-0250 批次 3-C（U9；44 第七節第三小節之十四；
+# 客戶 `DEC-2026-10-21-01`）：四頁頁首改畫主要原因＋另有（`page_health.header_view`，與總表主要原因欄同一支 `main_reason`）；
+# 本函式沒有人用，同次刪除（`CLAUDE.md` §-1.5.1c 判定 3；有意識的政策變更，不是漏刪）。
 
 
 # ───────────────────────── 核心卡的來源與新鮮度徽章 → ④「證據／來源」 ─────────────────────────
@@ -760,19 +699,29 @@ def move_card_provenance(display: dict, codes) -> list:
     return rows
 
 
-def has_stale_marker(display: dict, codes) -> bool:
-    """`codes` 那幾塊（② 卡）上有沒有 `move_card_provenance` 留下的 `◷` 徽章（給資料狀態行的 `stale`）。"""
+# ~~`has_stale_marker`~~（資料狀態行的 ◷ 判讀）→ BL-0250 批次 3-C：◷ 由 `stale_items` 在記錄那一步讀卡上留著的 ◷，
+# 頁首讀同一份記錄；本函式沒有人用，同次刪除（`CLAUDE.md` §-1.5.1c 判定 3；有意識的政策變更，不是漏刪）。
+
+
+# BL-0250 批次 3-C（G2；線框第六版第 7 節第 5、6 列；44 第七節第三小節之十四）：持倉體檢淨值表的逐檔分組標頭與
+# 最大回撤與本金類配息佔比表的每一列，拿掉「當日／延遲 N 日」（新鮮度徽章中性色那一種；逐檔延遲已在總表 › 持倉體檢的明細，
+# 由核心卡同一枚徽章列出）。畫成 ◇ 的那一種（灰，超過 10 日）照留 —— 它是判讀證據（線框第 7 節最後一列），不是延遲字。
+_DELAY_TONE = "中性"
+
+
+def drop_delay_badges(display: dict, codes) -> list:
+    """`codes` 那幾塊的逐檔分組（`nav_groups`）與表列（`_rows`）上中性色的新鮮度徽章拿掉（就地改寫）。
+    回拿掉的 `[(塊名, 基金代碼, 徽章字), ...]`（給測試對照總表明細）。在記錄總表之後呼叫（總表的記錄一個字不變）。"""
+    removed = []
     for block in display.get("blocks") or ():
         if block.get("code") not in codes:
             continue
-        badges = list(block.get("badges") or ())
-        for value in block.get("main_values") or ():
-            badges += list(value.get("badges") or ())
-        for group in block.get("fund_groups") or ():
-            badges.append(group.get("freshness_badge"))
-        if any(_is_stale_badge(b) and str(b.get("text", "")).startswith(f"{SYMBOL_STALE} ") for b in badges):
-            return True
-    return False
+        for node in [*(block.get("nav_groups") or ()), *(block.get("_rows") or ())]:
+            badge = node.get("freshness_badge") if isinstance(node, dict) else None
+            if isinstance(badge, dict) and badge.get("_kind") == "新鮮度" and badge.get("_tone") == _DELAY_TONE:
+                removed.append((block.get("title", ""), node.get("fund_code") or node.get("_fund_code"), badge.get("text")))
+                node["freshness_badge"] = None
+    return removed
 
 
 def mark_last_valid(display: dict, codes, prefix: str) -> bool:
@@ -1135,6 +1084,15 @@ def collect_page_items(display: dict, summary: dict, fetch_events, cards, *, tra
             # ~~`data_class = plain.TABLE_NAMES["user_setting"] if key in page_health.SETTING_KEYS else key`~~：
             # 設定鍵已在上一行略過，那一支成了死分支（同批獨立稽核可選 (c)；行為不變，有意識的更正，不是漏刪）。
             add(page_health.KIND_MISSING, key, block, node, data_class=key, unreadable=True)
+    # BL-0250 批次 3-C（U9）：~~資料狀態行的退路「有 `系統錯誤` 的塊卻沒有任何一句失敗摘要 → 照樣報 ⛔ 取數失敗」~~
+    # （`status_line` 的 `_unexplained_error` 那一支）隨資料狀態行退場；頁首自此讀本函式的結果，同一個退路改寫在這裡：
+    # 有一塊（結論燈與記為衍生的除外）是 `系統錯誤`，卻沒有任何一個原因項目點到它 → 報錯，由錯誤邊界接住，頁首與總表都寫
+    # 「⛔ 本頁狀態無法彙整」—— 不讓一塊錯誤在頁首與總表都靜默消失（實作組判讀，可推翻；有意識的更正，不是漏刪）。
+    named = {e["card"] for item in items for e in item["affected"]}
+    for block in blocks:
+        if (_block_is_error(block) and block.get("_layer") != 1 and not block.get(page_health.DERIVED_KEY)
+                and block.get("title", "") not in named):
+            raise MissingClassError(f"{block.get('code')}：系統錯誤，卻沒有任何一個原因項目點到這一塊")
     return page_health.merge_items(items), unresolved
 
 
