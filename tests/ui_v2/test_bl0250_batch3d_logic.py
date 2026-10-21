@@ -337,12 +337,16 @@ def test_收起的卡仍是一張卡_卡數不變_原因行帶符號與文字_�
     for code, lines in _EXPECTED[(page, name)].items():
         joined = "".join(after[code])
         assert f'data-block="{code}"' in after[code][0]
-        found = re.findall(r'class="[a-z]+-quiet-line" style="color:(#[0-9A-Fa-f]{3,8})">([^<]*)</div>', joined)
-        assert [html.unescape(t) for _c, t in found] == lines
-        for color, text in found:
+        found = re.findall(r'<div class="([^"]*\b[a-z]+-quiet-line)"(?: style="([^"]*)")?>([^<]*)</div>', joined)
+        assert [html.unescape(t) for _c, _s, t in found] == lines
+        for css, style, text in found:
             text = html.unescape(text)
             if text.startswith("⛔ "):
-                assert color.lower() in _reds(page), (code, text, color)          # ⛔ 照舊紅
+                # ⛔ 照舊紅：市場總覽、持倉體檢、資產配置寫在樣式裡（該頁 theme 的紅）；標的探索沿用本頁失敗行那一格（`exp-fetchfail`，
+                # 收起前「⛔ 此區塊暫時無法判定」就畫在那裡，色票由該頁 theme 的錯誤訊息前景色撐起）
+                color = re.search(r"#[0-9A-Fa-f]{3,8}", style or "")
+                assert ("exp-fetchfail" in css) if page == "exp" else (color and color.group(0).lower() in _reds(page)), (
+                    code, text, css, style)
             assert text.split(" ", 1)[0] in ("⛔", "◇") or text.startswith("原因：")   # 符號＋文字，不只靠顏色
         assert S.QUIET_MARK in _visible(after[code][0])
 

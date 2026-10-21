@@ -348,8 +348,9 @@ def _quiet_head(block: dict, view: dict) -> None:
         f'<span class="alo-card-title">{_esc(block["title"])}</span>'
         f'<span class="alo-quiet-mark" style="color:{_tone("灰")}">{_esc(view["mark"])}</span></div>'
     )
+    # 原因行沿用本頁佔位那一格的樣式（`alo-empty`；收起前「⛔ 此區塊暫時無法判定」就是這樣畫），與卡頭之間的間距照舊。
     for line in view["lines"]:
-        _html(f'<div class="alo-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
+        _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
 
 
 def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, quiet=None) -> None:

@@ -774,9 +774,11 @@ def _render_exp1_quiet(block: dict, view: dict, *, clicks: dict) -> None:
         f'<span class="exp-quiet-mark" style="color:{_tone("灰")}">{_esc(view["mark"])}</span></div>',
         unsafe_allow_html=True,
     )
+    # 原因行沿用本頁失敗行與空狀態那兩格的樣式（⛔ `exp-fetchfail`、其餘 `exp-empty`；收起前「⛔ 此區塊暫時無法判定」就是畫在
+    # `exp-fetchfail` 裡），與卡頭之間的間距照舊。
     for line in view["lines"]:
-        st.markdown(f'<div class="exp-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>',
-                    unsafe_allow_html=True)
+        css = "exp-fetchfail" if line["_tone"] == "紅" else "exp-empty"
+        st.markdown(f'<div class="{css} exp-quiet-line">{_esc(line["text"])}</div>', unsafe_allow_html=True)
     _lines([line for line in block.get("notes", ()) or () if sections.quiet_keep(view, line)], css="exp-empty")
     _lines([line for line in block.get("fetch_fail_lines", ()) or () if sections.quiet_keep(view, line)],
            css="exp-fetchfail")
