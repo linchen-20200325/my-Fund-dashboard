@@ -64,6 +64,38 @@ def _run(script, monkeypatch=None):
     return at, summaries
 
 
+def _visible_tagged(at):
+    """同 `_visible`，另附每一句屬於哪一塊（`data-block`）的畫面範圍：遇到下一個 `data-block`、段標籤或 ③ 那一行就換塊／離開塊。
+    不在任何塊範圍裡的句子、以及 Markdown 以外的元素（說明、展開區標題、按鈕）塊代號一律為 None —— 原因行只畫在卡自己的
+    Markdown 裡，剝除不碰其他元素。只給「收起卡自己的原因行」剝除用（BL-0250 批次 3-D）。"""
+    import re
+
+    out, state = [], {"code": None}
+
+    def walk(node):
+        kind = type(node).__name__
+        if kind in ("Markdown", "Caption"):
+            value = node.value
+            if kind == "Markdown":
+                match = re.search(r'data-block="([^"]+)"', value)
+                if match:
+                    state["code"] = match.group(1)
+                elif "layer-label" in value or "v2-attention" in value:
+                    state["code"] = None
+            out.append((state["code"] if kind == "Markdown" else None, " ".join(P.markdown_text(value).split())))
+        elif kind == "Expander":
+            out.append((None, str(node.label)))
+        elif kind == "Button":
+            out.append((None, node.label))
+            if node.help:
+                out.append((None, node.help))
+        for child in getattr(node, "children", {}).values():
+            walk(child)
+
+    walk(at._tree)
+    return out
+
+
 def _quiet(page, script):
     """BL-0250 批次 3-D（新設計 B）：這一頁這一次收起了哪幾張卡、各寫了哪幾行原因（`sections.quiet_cards` 的回傳，只讀）。"""
     from ui_v2 import sections
@@ -132,18 +164,23 @@ def test_沒有任何異常時只寫資料截至日(page):
 @pytest.mark.parametrize("page", _PAGES)
 def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原文在一般畫面0次(page):
     at, quiet = _quiet(page, P.SCRIPTS[page]["未設定"])
-    texts = _visible(at)
     # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五、之七其二第 3 條指標；有意識的政策變更，不是漏刪；決策者：客戶
     # `DEC-2026-10-21-03`）：收起的卡上每種原因一行（「⛔ 尚未設定：‹哪一項›」），同源原因因此可能在幾張收起卡上各寫一行。
-    # 下面的 stray 比對先把這一頁收起卡的原因行拿掉再看 —— 收起卡上原因行以外的地方照舊不得出現（不放寬）。
-    reasons = sorted({line for lines in quiet.values() for line in lines}, key=len, reverse=True)
-
-    def _drop_reasons(t):
-        for line in reasons:
-            t = t.replace(line, "")
-        return t
-
-    texts = [_drop_reasons(t) for t in texts]
+    # 下面的 stray 比對只在**收起卡自己的畫面範圍**裡、把**那一張卡自己的**原因行各剝掉一次再看 —— 收起卡以外的任何位置、
+    # 以及收起卡上原因行以外的字照舊逐句比對，`exact` 白名單照舊有效（不放寬）。
+    # ~~從整頁每一句裡刪掉所有原因行~~（2026-10-21 3-D 獨立稽核必修 1；有意識的更正，不是漏刪：那樣會把收起卡以外同字面的外漏
+    # 一起刪掉，`exact` 白名單變成死碼；稽核突變：卡片後插一句同字面的 caption，舊寫法照樣通過）。
+    texts = []
+    left = {code: list(lines) for code, lines in quiet.items()}   # 每張收起卡的每一行原因只剝一次（＝卡上畫了一次）
+    for code, text in _visible_tagged(at):
+        if code in left:
+            for line in list(left[code]):
+                if line in text:
+                    text = text.replace(line, "", 1)
+                    left[code].remove(line)
+            text = " ".join(text.split())
+        texts.append(text)
+    assert all(not lines for lines in left.values()), (page, left)        # 每一行原因都真的畫在那張卡自己的範圍裡
     joined = "\n".join(texts)
     # ~~`joined.count("尚未設定：") == 1`~~ → BL-0250 批次 1（客戶 2026-10-19 裁示 G3，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：
     # 客戶點名的位置 —— 結論燈、展開區標題、③ —— 改寫「尚未設定：〈哪一項〉」（不得寫成取數失敗）；市場總覽「設定讀不到」
@@ -164,13 +201,16 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
         "mkt": {"⛔ 尚未設定：資料來源的金鑰（高收益信用利差、政策利率、期限利差）",
                 "指標 最近觀測日 最近取得時間（UTC+8） 來源層級 延遲日數 高收益信用利差 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ "
                 "政策利率 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ 期限利差 ⛔ 尚未設定：資料來源的金鑰 ⛔ ⛔ ⛔ 波動度指數 取數失敗 ⛔ ⛔ ⛔ ⛔"},
-        "hld": {"偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定 本卡只描述現況與你設定的門檻差多少，不提供任何處置方向。 "
-                "哪幾檔現在超出了我自己寫下的那條線，超出多少"},
+        # ~~"hld": {"偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定 本卡只描述現況與你設定的門檻差多少，不提供任何處置方向。
+        # 哪幾檔現在超出了我自己寫下的那條線，超出多少"}~~ → BL-0250 批次 3-D（有意識的更正，不是漏刪）：這一句是偏離提示卡收起前的
+        # 樣子；3-D 起這張卡在「未設定」情境收起，那一句不再出現（值位置寫法改在關掉收起的畫面驗，見
+        # `tests/ui_v2/test_bl0250_batch3a_page.py`）。白名單留著一句不會出現的字等於死碼，下一行另驗白名單每一句都真的在畫面上。
     }.get(page, set())
     # ↑ BL-0250 批次 2（44 第七節第三小節之十一其六）：核心卡副標兩個冒號改括號，同一處、同一種說法（舊形保留在表裡不刪）。
     stray = [t for t in texts if f"{health.TEXT_NOT_CONFIGURED}：" in t and t != status and t not in lamps
              and t not in titles and t not in exact and not any(a in t for a in allowed)]
     assert stray == [], (page, stray)
+    assert all(t in texts for t in exact), (page, [t for t in exact if t not in texts])   # 白名單不是死碼
     assert texts.count(status) == 1, page
     # ~~`f"{TEXT_NOT_CONFIGURED}：" in 狀態行`~~ → BL-0250 批次 3-C（U9）：頁首主要原因寫「‹哪一項›尚未設定」、「另有」寫「尚未設定 N 項」
     # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
