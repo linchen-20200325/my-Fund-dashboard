@@ -285,6 +285,7 @@ _CASES = [(page, name) for page in _PAGES for name in SCAN.SCRIPTS[page] if name
 _OFF = """
 from ui_v2 import sections as _S3D
 _S3D.quiet_cards = lambda *_a, **_k: ({}, {})
+_S3D.quiet_details = lambda *_a, **_k: {}
 """
 # 記下每一次收起判定的結果（不改行為）。
 _SPY = """
@@ -298,6 +299,13 @@ def _spy_quiet(display, collected, page, *rest):
     _st.session_state["_test_quiet_log"] = list(_QUIET_LOG)
     return out
 _S3D.quiet_cards = _spy_quiet
+_real_details = _S3D.quiet_details
+def _spy_details(display, collected, page, *rest):
+    out = _real_details(display, collected, page, *rest)
+    import streamlit as _st
+    _st.session_state["_test_detail_log"] = (page, out)
+    return out
+_S3D.quiet_details = _spy_details
 """
 
 
@@ -307,9 +315,9 @@ def _wrap(prefix: str, script: str) -> str:
         return SCAN._HEAD + script
     body = "\n".join("    " + line for line in script.split("\n"))
     return (SCAN._HEAD + "from ui_v2 import sections as _S3D_SAVE\n"
-            "_SAVED_3D = (_S3D_SAVE.quiet_cards, _S3D_SAVE.set1_duplicate_fail_nodes)\n" + prefix
+            "_SAVED_3D = (_S3D_SAVE.quiet_cards, _S3D_SAVE.set1_duplicate_fail_nodes, _S3D_SAVE.quiet_details)\n" + prefix
             + "try:\n" + body + "\nfinally:\n"
-            "    _S3D_SAVE.quiet_cards, _S3D_SAVE.set1_duplicate_fail_nodes = _SAVED_3D\n")
+            "    _S3D_SAVE.quiet_cards, _S3D_SAVE.set1_duplicate_fail_nodes, _S3D_SAVE.quiet_details = _SAVED_3D\n")
 
 
 def _run(script, prefix=""):
@@ -446,10 +454,13 @@ _DIFF = {
     "hld/退回預存過期": (0, 0, 0, 0),  # HLD-1：佔位 ⛔ → ⛔×1（卡尾 ⛔×2、◇×1 判讀證據照留）；HLD-2 依退路不收
     "exp/未設定": (0, 0, 0, 0),        # EXP-1：重複行 ⛔ → ⛔×1
     "exp/取數失敗": (0, 0, 0, 0),
-    "alo/未設定": (0, 0, 0, 0),        # ALO-2、ALO-3：佔位 ⛔ → ⛔×1（各一）
-    "alo/未設定保單": (0, 0, 0, 0),
-    "alo/取數失敗": (0, 0, 0, 0),
-    "alo/局部失敗": (0, 0, 0, 0),
+    # ALO-2、ALO-3：佔位 ⛔ → ⛔×1（各一）。另：④ 收合區比照規則 5（客戶 Q5 (b)）—— 歸屬明細、目標修改紀錄的標題由
+    # 「尚未設定：‹項›」／「取數失敗」改為與卡片原因行同一字型「⛔ 尚未設定：‹項›」／「⛔ 取數失敗：‹資料類›」，標題每塊多一個 ⛔
+    # （「原因行」那一類）；打開那一行 ⛔ 取代原本的佔位 ⛔（個數不變）。持倉體檢、標的探索比照的那幾塊標題本來就帶 ⛔，個數不變。
+    "alo/未設定": (2, 0, 0, 0),        # 歸屬明細、目標修改紀錄兩塊標題各 +⛔
+    "alo/未設定保單": (1, 0, 0, 0),    # 歸屬明細標題 +⛔
+    "alo/取數失敗": (1, 0, 0, 0),      # 同上
+    "alo/局部失敗": (1, 0, 0, 0),      # 同上
 }
 
 
@@ -500,6 +511,7 @@ from ui_v2 import sections as _S3D
 def _boom(*_a, **_k):
     raise AssertionError("示範模式不得經過收起判定")
 _S3D.quiet_cards = _boom
+_S3D.quiet_details = _boom
 """
 
 
@@ -540,3 +552,95 @@ def test_SET1示範模式照舊畫表下那一行():
     src = inspect.getsource(SP._render_set1)
     assert "if ctx is None:\n        _placeholders(block[\"fail_nodes\"])" in src
     assert isinstance(block["fail_nodes"], list)
+
+
+# ═══════════════════════ 8. 規則 5：④ 收合區比照（客戶 2026-10-21 Q5 (b)；`DEC-2026-10-21-05`） ═══════════════════════
+
+# 比照的收合區：標題「標題　—　一句原因」，打開只有那一行。不在表上的 ④ 收合區照現況。
+_DETAIL_EXPECTED = {
+    ("hld", "未設定"): {"HLD-5": "⛔ 尚未設定：保單試算表", "HLD-8": "⛔ 尚未設定：保單試算表"},
+    ("exp", "未設定"): {"EXP-6": "⛔ 尚未設定：選股池的雲端來源"},
+    ("exp", "取數失敗"): {"EXP-7": "⛔ 取數失敗：使用者設定"},
+    ("alo", "未設定"): {"ALO-6": "⛔ 尚未設定：設定試算表", "ALO-7": "⛔ 尚未設定：設定試算表"},
+    ("alo", "未設定保單"): {"ALO-6": "⛔ 尚未設定：保單試算表"},
+    ("alo", "取數失敗"): {"ALO-6": "⛔ 取數失敗：持倉"},
+    ("alo", "局部失敗"): {"ALO-6": "⛔ 取數失敗：市場指標"},
+}
+
+
+@pytest.mark.parametrize("page, name", _CASES)
+def test_規則5_比照的收合區逐字_標題一句原因_打開只有一行(runs, page, name):
+    at, off = runs(page, name)
+    log_page, views = at.session_state["_test_detail_log"]
+    assert log_page == page
+    expected = _DETAIL_EXPECTED.get((page, name), {})
+    assert {code: v["line"]["text"] for code, v in views.items()} == expected
+    by_label = {str(e.label): e for e in _walk(at._tree) if type(e).__name__ == "Expander"}
+    for code, line in expected.items():
+        title = views[code]["title"]
+        box = by_label[f"{title}　—　{line}"]                     # 標題：既有格式「標題　—　一句原因」
+        inner = [n for n in _walk(box) if n is not box and type(n).__name__ in
+                 ("Markdown", "Caption", "Button", "TextInput", "Selectbox", "Checkbox", "Multiselect")]
+        assert [_visible(n.value) for n in inner] == [line]             # 打開只有那一行（符號＋文字）
+    # 不比照的收合區：標題與內容與關掉收起（＝3-C）時逐字相同
+    off_labels = [str(e.label) for e in _walk(off._tree) if type(e).__name__ == "Expander"]
+    on_labels = [str(e.label) for e in _walk(at._tree) if type(e).__name__ == "Expander"]
+    changed = {(a, b) for a, b in zip(off_labels, on_labels) if a != b}
+    assert len(off_labels) == len(on_labels)
+    assert {b for _a, b in changed} <= {f"{views[c]['title']}　—　{l}" for c, l in expected.items()}
+
+
+def _detail_block(**kw):
+    block = {"code": "ALO-6", "title": "歸屬明細", "_rows": [], "buttons": [], "detail_lines": [],
+             "placeholder": {"text": "⛔ 此區塊暫時無法判定", "_empty_kind": "系統錯誤"}}
+    block.update(kw)
+    return block
+
+
+def test_規則5_觸發與不觸發():
+    one = _items((_FETCH, "持倉", "歸屬明細", ""))
+    assert S.quiet_detail_view(_detail_block(), one, "alo")["line"] == {"text": "⛔ 取數失敗：持倉", "_tone": "紅"}
+    miss = _detail_block(placeholder={"text": "◇ 資料未備：x 尚無資料", "_empty_kind": "來源缺"})
+    assert S.quiet_detail_view(miss, _items((_MISS, "市場指標", "歸屬明細", "")), "alo")["line"]["text"] == "◇ 資料未備：市場指標"
+    # 兩種以上原因（同一種兩個鍵也算）→ 照現況
+    two = _items((_FETCH, "持倉", "歸屬明細", ""), (_UNCONF, "K", "歸屬明細", ""))
+    assert S.quiet_detail_view(_detail_block(), two, "alo") is None
+    assert S.quiet_detail_view(_detail_block(), _items((_UNCONF, "A", "歸屬明細", ""), (_UNCONF, "B", "歸屬明細", "")), "alo") is None
+    # 有判讀證據 → 照現況（句子帶 ⛔／◇；或點名照留的那幾塊）
+    assert S.quiet_detail_view(_detail_block(detail_lines=["⛔ 淨值 取數失敗：AAAA：改用 2026-09-18 的預存淨值"]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(code="ALO-4", title="分組定義"), _items((_FETCH, "持倉", "分組定義", "")), "alo") is None
+    hld7 = {"code": "HLD-7", "title": "計算軌跡", "_rows": [], "_state": "系統錯誤", "buttons": []}
+    assert S.quiet_detail_view(hld7, _items((_UNCONF, "保單試算表", "計算軌跡", "")), "hld") is None
+    # 部分讀得到（有列）、有按鈕、讀得到 → 照現況
+    assert S.quiet_detail_view(_detail_block(_rows=[{"x": 1}]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(buttons=[{"label": "存檔"}]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(placeholder=None, _tone="中性"), one, "alo") is None
+    # 被原因行取代的狀態族句不算證據
+    assert S.quiet_detail_view(_detail_block(detail_lines=["⛔ 取數失敗"]), one, "alo") is not None
+    # 射程外的塊（核心卡、結果清單）不比照
+    assert S.quiet_detail_view(_detail_block(code="ALO-2"), one, "alo") is None
+    # 收集出錯 → 一塊都不比照
+    assert S.quiet_details({"blocks": [_detail_block()]}, {"error": "X"}, "alo") == {}
+
+
+# ═══════════════════════ 9. Q7：持倉體檢收起時分組標頭照留（客戶 2026-10-21 Q7 (a)） ═══════════════════════
+
+
+def test_Q7_分組標頭照留_每一檔一行_接在原因行下面(runs):
+    at, _off = runs("hld", "局部失敗")
+    for code in ("HLD-2", "HLD-3"):
+        joined = "".join(_card_markdowns(at)[code])
+        reason = joined.index('class="hld-quiet-line"')
+        heads = [(m.start(), html.unescape(m.group(1))) for m in re.finditer(r'<div class="hld-fh">([^<]*)</div>', joined)]
+        assert [h for _i, h in heads] == ["基金 A · 幣別 USD", "基金 B · 幣別 USD", "基金 C · 幣別 EUR"], code
+        assert all(i > reason for i, _h in heads), code                     # 接在原因行下面
+        assert 'class="hld-mv"' not in joined and 'class="hld-fgrp"' not in joined   # 主值照舊不畫（標頭只是一行字）
+
+
+def test_Q7_純函式_分組標頭來自既有字樣():
+    group = {"head_text": "基金 A · 幣別 USD", "freshness_note": None,
+             "main_values": [{"label": "區間報酬率", "text": "⛔ 取數失敗", "_state": "系統錯誤"}]}
+    block = {"code": "HLD-2", "title": "績效與風險卡", "fund_groups": [group]}
+    view, _ = S.quiet_view(block, _items((_FETCH, "淨值", "績效與風險卡", "")), "hld")
+    assert view["fund_heads"] == ["基金 A · 幣別 USD"]
+    assert S.quiet_view(_mkt_card(_mv("A", *_ERR)), _items((_FETCH, "市場指標", "風險情緒卡", "A")), "mkt")[0]["fund_heads"] == []

@@ -410,8 +410,10 @@ def _render_core_card(block: dict, *, plain_mode: bool = False, quiet=None) -> N
     if quiet is not None:
         if not plain_mode:
             raise ValueError("收起只給正式模式")
+        # 客戶 Q7 (a)：分組標頭照留，每一檔一行（既有標頭字樣與樣式），接在原因行下面。
+        heads = [f'<div class="hld-fh">{_esc(head)}</div>' for head in quiet.get("fund_heads") or ()]
         detail = "".join(f"<div>{_esc(line)}</div>" for line in block["detail_lines"] if sections.quiet_keep(quiet, line))
-        _quiet_shell(block, quiet, [f'<div class="hld-detail">{detail}</div>'] if detail else [])
+        _quiet_shell(block, quiet, heads + ([f'<div class="hld-detail">{detail}</div>'] if detail else []))
         _buttons(block, block["code"])
         return
     parts = []
@@ -437,6 +439,14 @@ def _render_core_card(block: dict, *, plain_mode: bool = False, quiet=None) -> N
 
 
 # ───────────────────────── 層 3 ─────────────────────────
+
+
+def _render_detail_quiet(view: dict) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（符號＋文字）。"""
+    line = view["line"]
+    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+        st.markdown(f'<div class="hld-quiet-line" style="color:{_tone(line["_tone"])}">{_esc(line["text"])}</div>',
+                    unsafe_allow_html=True)
 
 
 def _expander(block: dict, *, keep_open: bool = False, plain_mode: bool = False):
@@ -1011,7 +1021,7 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     counts_line = None
-    quiet = {}   # 示範模式不收起（BL-0250 批次 3-D：只改正式模式）
+    quiet = details = {}   # 示範模式不收起、收合區不比照（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         applied = _applied()
         scenario = _pick_scenario()
@@ -1079,6 +1089,8 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
         # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
         quiet = health_view.quiet_cards("hld", model, collected)
+        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+        details = health_view.quiet_details("hld", model, collected)
     plain_mode = load_live is not None
 
     st.markdown(
@@ -1137,6 +1149,8 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         with column:
             if code == "HLD-4":
                 _render_hld4(logic.find_block(model, code), on_save=on_save, plain_mode=plain_mode)
+            elif code in details:
+                _render_detail_quiet(details[code])
             else:
                 _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
@@ -1144,7 +1158,10 @@ def render(*, load_live=None, mask_error=None, save_live=None, settings_page=Non
         f'<div class="hld-layer-label">{label4}</div>', unsafe_allow_html=True
     )
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
+        if code in details:
+            _render_detail_quiet(details[code])
+        else:
+            _RENDERERS[code](logic.find_block(model, code), plain_mode=plain_mode)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

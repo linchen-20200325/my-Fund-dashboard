@@ -344,6 +344,7 @@ def _symbols(at):
 _QUIET_OFF = """
 from ui_v2 import sections as _S3D
 _S3D.quiet_cards = lambda *_a, **_k: ({}, {})
+_S3D.quiet_details = lambda *_a, **_k: {}   # 規則 5（Q5 (b)）也關掉
 """
 
 
@@ -351,8 +352,8 @@ _S3D.quiet_cards = lambda *_a, **_k: ({}, {})
 def test_四個符號在頁上的個數與動手前相同(key):
     page, name = key.split("/")
     body = "\n".join("    " + line for line in SCAN.SCRIPTS[page][name].split("\n"))
-    script = (SCAN._HEAD + "from ui_v2 import sections as _S3D_SAVE\n_SAVED_3D = _S3D_SAVE.quiet_cards\n" + _QUIET_OFF
-              + "try:\n" + body + "\nfinally:\n    _S3D_SAVE.quiet_cards = _SAVED_3D\n")   # 同一個行程：用完換回來
+    script = (SCAN._HEAD + "from ui_v2 import sections as _S3D_SAVE\n_SAVED_3D = (_S3D_SAVE.quiet_cards, _S3D_SAVE.quiet_details)\n" + _QUIET_OFF
+              + "try:\n" + body + "\nfinally:\n    _S3D_SAVE.quiet_cards, _S3D_SAVE.quiet_details = _SAVED_3D\n")   # 同一個行程：用完換回來
     assert _symbols(_app(script)) == _SYMBOLS_BEFORE[key]
 
 

@@ -353,6 +353,13 @@ def _quiet_head(block: dict, view: dict) -> None:
         _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
 
 
+def _render_detail_quiet(view: dict) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（樣式同收起卡原因行）。"""
+    line = view["line"]
+    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+        _html(f'<div class="alo-empty alo-quiet-line" style="--alo-tone:{_tone(line["_tone"])}">{_esc(line["text"])}</div>')
+
+
 def _render_alo2(block: dict, scenario: str, ctx=None, *, plain_mode: bool = False, quiet=None) -> None:
     if quiet is not None:
         # 收起：不畫佔位（被原因行取代）與「這張卡回答什麼」那句；卡尾與說明句只拿掉重複句與同源衍生的 ⬜。
@@ -646,7 +653,7 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
     _html(f"<style>{_base_css()}{_grid_css(layer3_three=load_live is not None)}</style>")
 
     ctx = None
-    quiet = {}   # 示範模式不收起（BL-0250 批次 3-D：只改正式模式）
+    quiet = details = {}   # 示範模式不收起、收合區不比照（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         if save_live is not None:
             raise ValueError("save_live 要與 load_live 一起傳")
@@ -726,6 +733,8 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
         # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
         # `ALO-3` 的「開始試算」入口照留（標題照舊，總管判定；收合區規則 5 不做，見 `sections` 本段說明），收起的是入口裡那張卡。
         quiet = health_view.quiet_cards("alo", model, collected)
+        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+        details = health_view.quiet_details("alo", model, collected)
         # Phase 3 P1-④（44 第七節第三小節之八其一 (a-1)）：`ALO-1` 移到層 3（④「操作」、預設收合）；`ALO-3` 留在 ②、
         # 預設只畫「開始試算」入口；③ 列 `ALO-2` 已算出的帶外類別。判定一個都不動（`ui_v2/sections.py`）。
         sections.relayer(model, "alo")
@@ -783,12 +792,17 @@ def render(*, load_live=None, save_live=None, mask_error=None, settings_page=Non
                     with st.expander(f"{block['title']}　—　{sections.alo1_summary(block)}",
                                      expanded=block["_default_open"]):
                         _RENDERERS[code](block, key, ctx, plain_mode=plain_mode)
+                elif code in details:
+                    _render_detail_quiet(details[code])
                 else:
                     _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     _html(f'<div class="alo-layer-label">{label4}</div>')
     for code in logic.codes_in_layer(model, 4):
-        _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
+        if code in details:
+            _render_detail_quiet(details[code])
+        else:
+            _RENDERERS[code](logic.find_block(model, code), key, ctx, plain_mode=plain_mode)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

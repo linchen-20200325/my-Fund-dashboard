@@ -800,7 +800,10 @@ def quiet_view(block: dict, items, page: str):
         lines += [{"text": note, "_tone": "灰"} for note in group["notes"]]
     view = {"code": block.get("code"), "title": title, "mark": QUIET_MARK, "lines": lines,
             "unconfigured": unconfigured, "fetch": ("fetch",) in groups,
-            "missing": any(k[0] == "missing" for k in groups)}
+            "missing": any(k[0] == "missing" for k in groups),
+            # 客戶 2026-10-21 Q7 (a)（`DEC-2026-10-21-05`）：持倉體檢逐檔分組的卡收起時，分組標頭（既有字樣，例「基金 A · 幣別 USD」）
+            # 照留，每一檔一行，接在原因行下面。
+            "fund_heads": [g.get("head_text") for g in block.get("fund_groups") or () if g.get("head_text")]}
     return view, None
 
 
@@ -863,3 +866,75 @@ def set1_duplicate_fail_nodes(block: dict) -> list:
     回要拿掉的節點；不同字的失敗行照留。卡不收起。"""
     cells = {row.get("at_text") for row in block.get("_rows") or ()}
     return [node for node in block.get("fail_nodes") or () if node and node.get("text") in cells]
+
+
+# ───────────────────────── 線框 1.4 規則 5：詳細資料裡的收合區比照（客戶 2026-10-21 Q5 (b)；`DEC-2026-10-21-05`） ─────────────────────────
+# 只套用於 ④ 詳細資料裡「主值全部讀不到（⛔／◇）、只有一種原因、收合區內沒有判讀證據」的收合區：標題用既有格式「標題　—　一句原因」，
+# 原因句與卡片原因行同一套既有字型；打開只有那一行。其他收合區（兩種以上原因、有判讀證據、部分讀得到）一律照現況。
+# 工程判定（3-D 實作組，可推翻）：
+# - 「只有一種原因」＝收集那一步點到這一塊、讀不到的原因項目恰好一項（一種、一個鍵）；同一種兩個鍵（例「尚未設定：A、B」）算兩種，照現況。
+# - 「部分讀得到」：塊上有任何列、逐檔項目、欄位或輸入（`_DETAIL_CONTENT_KEYS`）就算有內容，照現況；塊上有按鈕也照現況
+#   （第五節第三小節「停用時不隱藏」，打開只有一行會把按鈕拿掉）。
+# - 「判讀證據」：塊上照留的句子（拿掉被原因行取代的狀態族句之後）帶 ⛔／◇，或是線框與本檔點名照留的那幾塊
+#   （持倉體檢計算軌跡「四塊沒有一塊出數…」那一句，線框 3.3；資產配置分組定義的「前往 Sheets 維護持倉」，之十四其二第 7 條）。
+QUIET_DETAIL_CODES = {
+    "mkt": ("MKT-4", "MKT-5", "MKT-6", "MKT-7"),
+    "hld": ("HLD-4", "HLD-5", "HLD-6", "HLD-7", "HLD-8"),
+    "exp": ("EXP-4", "EXP-5", "EXP-6", "EXP-7"),    # 結果清單（EXP-2＋EXP-3 合成一框）不在射程：兩塊合一，不是一塊的收合區
+    "alo": ("ALO-1", "ALO-4", "ALO-5", "ALO-6", "ALO-7"),
+}
+QUIET_DETAIL_EVIDENCE = {"hld": ("HLD-7",), "alo": ("ALO-4",)}
+_DETAIL_CONTENT_KEYS = ("_rows", "_items", "nav_rows", "nav_groups", "_fields", "inputs", "_options", "main_values",
+                        "fund_groups", "input_rows")
+
+
+def _detail_unreadable(block: dict) -> bool:
+    placeholder = block.get("placeholder") or block.get("_placeholder")
+    if isinstance(placeholder, dict) and quiet_value_kind(placeholder):
+        return True
+    return block.get("_state") in _UNREADABLE_STATES or block.get("_empty_kind") in _UNREADABLE_EMPTY
+
+
+def quiet_detail_view(block: dict, items, page: str):
+    """④ 一塊收合區比不比照規則 5 → `{"code", "title", "line": {"text", "_tone"}}` 或 None（照現況）。"""
+    code = block.get("code")
+    if code not in QUIET_DETAIL_CODES.get(page, ()) or code in QUIET_DETAIL_EVIDENCE.get(page, ()):
+        return None
+    if block.get("buttons") or any(block.get(key) for key in _DETAIL_CONTENT_KEYS) or not _detail_unreadable(block):
+        return None
+    title = block.get("title", "")
+    entries = list(dict.fromkeys((kind, key) for kind, key, _label in _card_entries(items, title)))
+    if len(entries) != 1:
+        return None
+    kind, key = entries[0]
+    if kind == page_health.KIND_UNCONFIGURED:
+        line = {"text": f"{LINE_NOT_CONFIGURED}：{key}", "_tone": "紅"}
+        view = {"unconfigured": [key], "fetch": False, "missing": False}
+    elif kind == page_health.KIND_FETCH:
+        line = {"text": f"{SYMBOL_ERROR} {TEXT_FETCH_FAILED}：{key}", "_tone": "紅"}
+        view = {"unconfigured": [], "fetch": True, "missing": False}
+    elif kind == page_health.KIND_MISSING:
+        line = {"text": f"{SYMBOL_MISSING} {TEXT_MISSING}：{key}", "_tone": "灰"}
+        view = {"unconfigured": [], "fetch": False, "missing": True}
+    else:
+        return None
+    for text in _block_lines(block) + [n for n in block.get("notes") or () if isinstance(n, str)]:
+        if quiet_keep(view, text) and (SYMBOL_ERROR in text or SYMBOL_MISSING in text):
+            return None          # 收合區內有判讀證據 → 照現況
+    return {"code": code, "title": title, "line": line}
+
+
+def quiet_details(display: dict, collected, page: str, recorded=None) -> dict:
+    """本頁 ④ 哪幾塊收合區比照規則 5 → `{塊代號: view}`。收集或記錄出錯 → 一塊都不比照（同 `quiet_cards`）。"""
+    if not QUIET_DETAIL_CODES.get(page):
+        return {}
+    if (not isinstance(collected, dict) or "error" in collected
+            or (isinstance(recorded, dict) and recorded.get("collect_error"))):
+        return {}
+    items = collected.get("items") or ()
+    out = {}
+    for block in display.get("blocks") or ():
+        view = quiet_detail_view(block, items, page)
+        if view is not None:
+            out[view["code"]] = view
+    return out

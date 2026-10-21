@@ -267,6 +267,15 @@ def _render_quiet_card(block: dict, view: dict) -> None:
     _render_buttons(block, True)
 
 
+def _render_detail_quiet(view: dict) -> None:
+    """④ 收合區比照規則 5（客戶 Q5 (b)；44 第七節第三小節之十五）：標題「標題　—　一句原因」，打開只有那一行（符號＋文字）。
+    本頁操作那兩塊有輸入欄與按鈕，依判準照現況，只有證據那兩塊可能比照。"""
+    line = view["line"]
+    with st.expander(f"{view['title']}　—　{line['text']}", expanded=False):
+        st.markdown(f'<div class="mkt-quiet-line" style="color:{theme.tone_hex(line["_tone"])}">{_esc(line["text"])}</div>',
+                    unsafe_allow_html=True)
+
+
 def _render_card(block: dict, *, plain_mode: bool = False, quiet=None) -> None:
     if quiet is not None:
         if not plain_mode:
@@ -668,7 +677,7 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     st.markdown(f"<style>{_base_css()}{_grid_css()}</style>", unsafe_allow_html=True)
 
     live_input = None
-    quiet = {}   # 示範模式不收起（BL-0250 批次 3-D：只改正式模式）
+    quiet = details = {}   # 示範模式不收起、收合區不比照（BL-0250 批次 3-D：只改正式模式）
     if load_live is None:
         scenario_name, dataset = _pick_dataset()
     else:
@@ -768,6 +777,8 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：整張卡主值全部讀不到 → 收起（卡名＋原因行）。在收集與記錄之後判定，
         # 頁首與總表讀的那一份記錄不受影響；只決定怎麼畫，模型一個字都不動（`ui_v2/sections.py::quiet_cards`，經 `health_view.quiet_cards`）。
         quiet = health_view.quiet_cards("mkt", model, collected)
+        # 客戶 2026-10-21 Q5 (b)（線框 1.4 規則 5；`DEC-2026-10-21-05`）：④ 主值全部讀不到、只有一種原因、沒有判讀證據的收合區比照。
+        details = health_view.quiet_details("mkt", model, collected)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
@@ -822,8 +833,11 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     st.markdown(
         f'<div class="mkt-layer-label">{label4}</div>', unsafe_allow_html=True
     )
-    _render_mkt6(logic.find_block(model, "MKT-6"), plain_mode=plain_mode)
-    _render_mkt7(logic.find_block(model, "MKT-7"), plain_mode=plain_mode)
+    for code, renderer in (("MKT-6", _render_mkt6), ("MKT-7", _render_mkt7)):
+        if code in details:
+            _render_detail_quiet(details[code])
+        else:
+            renderer(logic.find_block(model, code), plain_mode=plain_mode)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

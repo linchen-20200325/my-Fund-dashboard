@@ -64,7 +64,7 @@ def _run(script, monkeypatch=None):
     return at, summaries
 
 
-def _visible_tagged(at):
+def _visible_tagged(at, boxes=None):
     """同 `_visible`，另附每一句屬於哪一塊（`data-block`）的畫面範圍：遇到下一個 `data-block`、段標籤或 ③ 那一行就換塊／離開塊。
     不在任何塊範圍裡的句子、以及 Markdown 以外的元素（說明、展開區標題、按鈕）塊代號一律為 None —— 原因行只畫在卡自己的
     Markdown 裡，剝除不碰其他元素。只給「收起卡自己的原因行」剝除用（BL-0250 批次 3-D）。"""
@@ -82,9 +82,18 @@ def _visible_tagged(at):
                     state["code"] = match.group(1)
                 elif "layer-label" in value or "v2-attention" in value:
                     state["code"] = None
-            out.append((state["code"] if kind == "Markdown" else None, " ".join(P.markdown_text(value).split())))
+            code = state["code"] if (kind == "Markdown" or str(state["code"]).startswith("④")) else None
+            out.append((code, " ".join(P.markdown_text(value).split())))
         elif kind == "Expander":
-            out.append((None, str(node.label)))
+            # ④ 比照規則 5 的收合區（客戶 Q5 (b)）：標題那一句與裡面那一行屬於那一塊自己（`boxes`：標題 → 塊鍵）。
+            key = (boxes or {}).get(str(node.label))
+            out.append((key, str(node.label)))
+            if key:
+                saved, state["code"] = state["code"], key
+                for child in getattr(node, "children", {}).values():
+                    walk(child)
+                state["code"] = saved
+                return
         elif kind == "Button":
             out.append((None, node.label))
             if node.help:
@@ -100,21 +109,34 @@ def _quiet(page, script):
     """BL-0250 批次 3-D（新設計 B）：這一頁這一次收起了哪幾張卡、各寫了哪幾行原因（`sections.quiet_cards` 的回傳，只讀）。"""
     from ui_v2 import sections
 
-    seen = []
-    real = sections.quiet_cards
+    seen, details = [], []
+    real, real_details = sections.quiet_cards, sections.quiet_details
 
     def spy(*args, **kwargs):
         out = real(*args, **kwargs)
         seen.append(out[0])
         return out
 
-    sections.quiet_cards = spy
+    def spy_details(*args, **kwargs):
+        out = real_details(*args, **kwargs)
+        details.append(out)
+        return out
+
+    sections.quiet_cards, sections.quiet_details = spy, spy_details
     try:
         at, _ = _run(script)
     finally:
-        sections.quiet_cards = real
+        sections.quiet_cards, sections.quiet_details = real, real_details
     views = seen[-1] if seen else {}
-    return at, {code: [line["text"] for line in view["lines"]] for code, view in views.items()}
+    out = {code: [line["text"] for line in view["lines"]] for code, view in views.items()}
+    # 客戶 2026-10-21 Q5 (b)（規則 5）：④ 比照的收合區也是「那一塊自己的一句原因」—— 標題一次、打開一次，同一張表、標上 `④`。
+    for code, view in (details[-1] if details else {}).items():
+        out[f"④{code}"] = [view["line"]["text"], view["line"]["text"]]
+        _detail_titles[f"④{code}"] = view["title"]
+    return at, out
+
+
+_detail_titles = {}   # ④ 比照那幾塊的標題（`_quiet` 填）
 
 
 def _status_lines(at):
@@ -172,7 +194,9 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
     # 一起刪掉，`exact` 白名單變成死碼；稽核突變：卡片後插一句同字面的 caption，舊寫法照樣通過）。
     texts = []
     left = {code: list(lines) for code, lines in quiet.items()}   # 每張收起卡的每一行原因只剝一次（＝卡上畫了一次）
-    for code, text in _visible_tagged(at):
+    boxes = {f"{title}　—　{lines[0]}": code for code, (title, lines) in
+             ((c, (_detail_titles.get(c), l)) for c, l in quiet.items() if c.startswith("④"))}
+    for code, text in _visible_tagged(at, boxes):
         if code in left:
             for line in list(left[code]):
                 if line in text:
@@ -240,7 +264,7 @@ def test_此區塊暫時無法判定的次數等於受影響塊數(page, name, m
     at, quiet = _quiet(page, P.SCRIPTS[page][name])
     assert len(summaries) == 1, summaries
     shown = sum(t.count(health.TEXT_BLOCK_UNDECIDABLE) for t in _visible(at))
-    kept = [code for code in summaries[0]["affected_blocks"] if code not in quiet]
+    kept = [code for code in summaries[0]["affected_blocks"] if code not in quiet and f"④{code}" not in quiet]
     assert shown == len(kept), (page, name, shown, kept, sorted(quiet))
     assert all(quiet[code] for code in quiet), quiet
 

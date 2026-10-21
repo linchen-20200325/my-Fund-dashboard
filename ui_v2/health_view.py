@@ -144,6 +144,11 @@ def quiet_cards(slug: str, display: dict, collected: dict) -> dict:
     return views
 
 
+def quiet_details(slug: str, display: dict, collected: dict) -> dict:
+    """BL-0250 批次 3-D（線框 1.4 規則 5；客戶 Q5 (b)）：本頁 ④ 哪幾塊收合區比照（`sections.quiet_details`）。用法同 `quiet_cards`。"""
+    return sections.quiet_details(display, collected, slug, page_health.recorded(st.session_state, slug))
+
+
 def guard_page(slug: str):
     """四頁 `render` 的外框（3-B 第二輪稽核回修可選 3）：正式模式（有傳 `load_live`）畫頁時拋出例外 —— 不論是記錄之後畫頁崩潰，
     還是收集那一步拋出錯誤邊界以外的例外 —— 先把這一頁在總表的記錄整格改寫成收集失敗（總表不留上一筆正常記錄）、寫 log，
