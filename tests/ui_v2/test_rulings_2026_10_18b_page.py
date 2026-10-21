@@ -11,6 +11,7 @@ C3 維持現狀：重新取數不能按時（設定試算表未設定、按鈕�
 
 from __future__ import annotations
 
+import html
 import pathlib
 import sys
 
@@ -87,4 +88,6 @@ def test_BL0375_持倉體檢_退回預存又過期畫禁止號與日期_非退�
     assert "淨值取自預存序列，不是本次取得；最近一筆" not in md      # 過期的那一份不再掛「⬜ 資料未備」那一類副標
     assert "資料未備" in md                                          # 不是預存的過期檔照舊資料未備
     status = next(v for v in at.markdown if "v2-status-line" in v.value).value
-    assert ("⛔ 取數失敗：淨值" in status) is retreat                # 資料狀態行記到淨值這一類
+    # ~~`("⛔ 取數失敗：淨值" in status) is retreat`（資料狀態行記到淨值這一類）~~ → BL-0250 批次 3-C（U9；`DEC-2026-10-21-01`；
+    # 有意識的政策變更，不是漏刪）：頁首改主要原因一行，退回預存那一句照多日期句型寫出日期與代碼，資料類照舊是淨值。
+    assert ("⛔ 主要原因：淨值取數失敗，改用 2026-09-18 的預存淨值（AAAA）" in html.unescape(status)) is retreat

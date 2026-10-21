@@ -219,7 +219,8 @@ def test_讀失敗那一輪_不建EXP4勾選框_新增條件與存檔都停用(m
     assert "讀設定失敗（測試注入）" in _raw_texts(at)
     # ~~assert "⛔ 使用者設定 取數失敗" in _text(at)~~ → 2026-10-17 Phase 3 P0-②（44 第七節第三小節之七其二第 3 條；
     # 有意識的更正，不是漏刪）：同源失敗摘要只在頁首資料狀態行出現一次；那一句換成「⛔ 取數失敗：使用者設定」。
-    assert "⛔ 取數失敗：使用者設定" in _text(at)
+    # ~~`"⛔ 取數失敗：使用者設定" in _text(at)`（頁首資料狀態行）~~ → 3-C U9：頁首改主要原因一行（BL-0250 批次 3-C；`DEC-2026-10-21-01`、`-02`；有意識的政策變更，不是漏刪）。
+    assert "⛔ 主要原因：使用者設定取數失敗" in _text(at)
     assert "⛔ 使用者設定 取數失敗" not in _text(at)
 
 
@@ -340,7 +341,8 @@ def test_C2接線_代碼欄第一欄_沒有新增欄位_舊淨值與無配息照
     assert ">2026-10-04<" in text                                                              # 10 天照用
     assert "⬜ 不適用：近 12 個月無配息" in text and "0.00%" not in text                       # 規則 13
     assert ">6.00%<" in text
-    assert text.count('class="exp-src"') >= 8                                                  # 規則 10
+    # ~~`text.count('class="exp-src"') >= 8`（規則 10：格內來源標示）~~ → 3-C：結果清單格內只留值，來源在每列展開（BL-0250 批次 3-C；`DEC-2026-10-21-01`、`-02`；有意識的政策變更，不是漏刪）。
+    assert text.count('class="exp-src"') == 0 and text.count('<details class="exp-rowsrc">') >= 8
     # 遮蔽：那一格的失敗原文移到跨頁的原始訊息（Phase 3 P0-①），遮蔽照舊在原文上做、秘密值哪裡都不出現。
     assert "‹已遮蔽›" in _raw_texts(at) and WF.SECRET not in text and WF.SECRET not in _raw_texts(at)
     assert "尚未接入" not in _text(at)
@@ -353,7 +355,8 @@ def test_C2接線_值與tooltip含腳本與引號_一律escape(monkeypatch):
     assert "<script>" not in table and 'Evil"Src' not in table
     # 2026-10-14 修正輪（Q M1）：`_esc` 比照 hld —— HTML 與 Markdown 字元一律改成數字字元參照。
     assert page._esc(WF.XSS_NAME) in table and "&#60;script&#62;alert&#40;&#34;x&#34;&#41;" in table
-    assert 'title="淨值來源：Evil&#34;Src&#60;b&#62;' in table
+    # ~~`'title="淨值來源：Evil&#34;Src&#60;b&#62;' in table`~~ → 3-C：那一段移到每列展開的備註，escape 照樣成立（BL-0250 批次 3-C；`DEC-2026-10-21-01`、`-02`；有意識的政策變更，不是漏刪）。
+    assert "<td>淨值來源：Evil&#34;Src&#60;b&#62;" in table and 'title="淨值來源：' not in table
     assert re.search(r'<td style="[^"]*" title="[^"]*">', table)
 
 
@@ -488,9 +491,11 @@ def test_C2接線_瀏覽器_代碼欄第一欄_title已escape_來源標示存在
                 # 稽核補強：只有一個 tbody、一列表頭、沒有 tfoot（另開 tbody／tfoot 夾帶的列不會被上面的直接子列看到）。
                 assert dom["tbodies"] == 1 and dom["thead_rows"] == 1 and not dom["has_tfoot"], dom
                 assert 1 <= dom["rowsrc_rows"] <= len(WF.CODES) and dom["rowsrc_after_data"], dom
-                assert any(t.startswith('淨值來源：Evil"Src<b>') for t in dom["titles"]), dom["titles"]
+                # ~~`any(t.startswith('淨值來源：Evil"Src<b>') ...)`、`dom["src"] >= 8`~~ → 3-C：格內滑鼠提示不再有來源段落、
+                # 格內不畫來源標示（來源在每列展開）（BL-0250 批次 3-C；`DEC-2026-10-21-01`、`-02`；有意識的政策變更，不是漏刪）；留下的提示是判定句與計數句。
+                assert dom["titles"] and not any(t.startswith(("淨值來源：", "出處：", "取得時間：")) for t in dom["titles"])
                 assert dom["scripts"] == 0 and dom["bold"] == 0                  # 字串沒有變成標籤
-                assert dom["src"] >= 8
+                assert dom["src"] == 0
                 assert any(n.startswith(WF.XSS_NAME) for n in dom["names"])
                 # Q M1：錯誤原文裡的 `## ` 不得變成標題、`|` 不得變成另一張表。
                 assert dom["injected_headings"] == 0 and dom["tables_in_cells"] == 0

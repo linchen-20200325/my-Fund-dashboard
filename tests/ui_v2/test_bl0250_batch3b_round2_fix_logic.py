@@ -172,9 +172,22 @@ def test_可選2_另有N檔淨值超過10日那一句_收集認得_明細在淨�
     assert any(r[1] == "淨值與配息序列" and r[2] == "◇ 資料未備" and r[0] == "淨值" for r in rows), rows
 
 
-def test_可選2_lines欄位的禁止與資料未備句_沒有類別照樣報錯():
+def test_可選2_lines欄位的禁止與資料未備句_產生處寫明欄位而沒有類別照樣報錯():
+    # ~~以 ◇ 起頭一律認（沒有寫明欄位也報錯）~~ → BL-0250 批次 3-C（44 之十三其八第 22 條、之十四）：產生處寫明是哪一個欄位
+    # （`page_health.MISSING_LINES_KEY`）才認；寫明了卻沒有類別 → 照樣報錯（有意識的更正，不是漏刪）。沒有寫明的見下一條。
     display = {"blocks": [{"code": "HLD-6", "title": "淨值與配息序列", "_layer": 4, "_state": "ok",
-                           "detail_lines": ["◇ 另有 2 檔淨值超過 10 日未更新（資料未備）"]}]}
+                           "detail_lines": ["◇ 另有 2 檔淨值超過 10 日未更新（資料未備）"],
+                           PH.MISSING_LINES_KEY: ("detail_lines",)}]}
+    with pytest.raises(health.MissingClassError):
+        health.collect_page_items(display, {}, (), [])
+
+
+def test_3C_沒有寫明欄位的菱形起頭句_不算_不靠字首():
+    """44 之十三其八第 22 條的例子：說明文字借用 ◇ 當項目符號 —— 不收進總表、也不報錯。含「◇ 資料未備」的狀態字照舊認。"""
+    display = {"blocks": [{"code": "HLD-6", "title": "淨值與配息序列", "_layer": 4, "_state": "ok",
+                           "detail_lines": ["◇ 說明：本表依代碼排列"]}]}
+    assert health.collect_page_items(display, {}, (), []) == ([], [])
+    display["blocks"][0]["detail_lines"] = ["本表 ◇ 資料未備"]
     with pytest.raises(health.MissingClassError):
         health.collect_page_items(display, {}, (), [])
 
@@ -184,15 +197,16 @@ def test_可選2_lines欄位的禁止與資料未備句_沒有類別照樣報錯
 _CRASH = SCAN._HEAD + '''
 import streamlit as st
 from ui_v2 import health_view
-_saved = health_view.render_status_line
+# ~~`render_status_line`~~ → BL-0250 批次 3-C：頁首改畫 `render_page_header`（同樣是記錄之後才畫的那一步；有意識的更正，不是漏刪）。
+_saved = health_view.render_page_header
 if st.session_state.get("CRASH"):
     def _boom(*_a, **_k):
         raise RuntimeError("畫頁崩潰（測試注入）")
-    health_view.render_status_line = _boom
+    health_view.render_page_header = _boom
 try:
 ''' + "\n".join("    " + line for line in SCAN.MKT["未設定"].split("\n")) + '''
 finally:
-    health_view.render_status_line = _saved
+    health_view.render_page_header = _saved
 '''
 
 

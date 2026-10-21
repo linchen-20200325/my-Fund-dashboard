@@ -33,7 +33,12 @@ pytest.importorskip("streamlit", reason="本環境系統 python3 匯入不到 st
 
 import _plain_scan as P  # noqa: E402
 
-from ui_v2 import health, plain  # noqa: E402
+from ui_v2 import health, page_health, plain  # noqa: E402
+
+# BL-0250 批次 3-C（U9）：資料狀態行退場，頁首改主要原因＋另有；下面幾個字面改讀頁首那一支（`page_health`），
+# 退場的兩個字樣只在本檔當作「不得出現」的字（有意識的更正，不是漏刪；`DEC-2026-10-21-01`）。
+_RETIRED_STATUS_LABEL = "資料狀態："
+_RETIRED_PROVENANCE_TITLE = "核心卡的來源與新鮮度"
 
 _PAGES = ("mkt", "hld", "exp", "alo")
 _STATUS_CLASS = 'class="v2-status-line"'
@@ -91,14 +96,14 @@ def test_每頁恰一行資料狀態行_不寫資料齊或正常_附資料截至
     assert len(lines) == 1, (page, name, lines)
     line = " ".join(lines[0].split())
     assert "資料齊" not in line and "正常" not in line, line
-    assert health.AS_OF_LABEL in line, line
+    assert page_health.AS_OF_LABEL in line, line
 
 
 @pytest.mark.parametrize("page", ["mkt", "hld", "alo"])
 def test_沒有任何異常時只寫資料截至日(page):
     at, _ = _run(P.SCRIPTS[page]["正常"])
     line = " ".join(_status_lines(at)[0].split())
-    assert line.startswith(health.AS_OF_LABEL) and health.STATUS_LABEL not in line, line
+    assert line.startswith(page_health.AS_OF_LABEL) and _RETIRED_STATUS_LABEL not in line, line
     for symbol in ("◷", "◇", "⛔"):
         assert symbol not in line, line
 
@@ -135,9 +140,14 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
              and t not in titles and t not in exact and not any(a in t for a in allowed)]
     assert stray == [], (page, stray)
     assert texts.count(status) == 1, page
-    assert f"{health.TEXT_NOT_CONFIGURED}：" in " ".join(_status_lines(at)[0].split())
+    # ~~`f"{TEXT_NOT_CONFIGURED}：" in 狀態行`~~ → BL-0250 批次 3-C（U9）：頁首主要原因寫「‹哪一項›尚未設定」、「另有」寫「尚未設定 N 項」
+    # （有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+    assert health.TEXT_NOT_CONFIGURED in " ".join(_status_lines(at)[0].split())
+    # 3-C：頁首主要原因「‹哪一項›尚未設定」與某幾句狀態句同字面（例「保單試算表尚未設定」），頁首是正當的那一處，比對時除外。
+    head = " ".join(_status_lines(at)[0].split())
+    rest = "\n".join(t for t in texts if t != head)
     for state in health.NOT_CONFIGURED_STATES:
-        assert state not in joined, (page, state)
+        assert state not in rest, (page, state)
     assert plain.MSG_SETTINGS_NOT_CONFIGURED not in joined, page        # 寫入用的原文
     assert plain.MSG_POLICY_NOT_CONFIGURED not in joined, page
 
@@ -160,18 +170,20 @@ def test_受影響塊數不是空掃(monkeypatch):
 
 
 @pytest.mark.parametrize("page", _PAGES)
-def test_同一類失敗摘要在一般畫面只出現在狀態行(page):
+def test_同一類失敗摘要在一般畫面只出現在頁首(page):
+    # ~~狀態行「⛔ 取數失敗：<資料類>」恰一次~~ → BL-0250 批次 3-C（U9）：頁首主要原因寫「⛔ 主要原因：<資料類>取數失敗」；
+    # 同源失敗摘要照舊不在頁面其餘位置重複（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
     at, _ = _run(P.SCRIPTS[page]["取數失敗"])
     line = " ".join(_status_lines(at)[0].split())
-    assert f"{health.SYMBOL_ERROR} {health.TEXT_FETCH_FAILED}" in line, line
-    joined = "\n".join(_visible(at))
-    assert joined.count(f"{health.TEXT_FETCH_FAILED}：") == 1, page   # 「取數失敗：<資料類>」只在狀態行
+    assert line.startswith(f"{health.SYMBOL_ERROR} 主要原因：") and health.TEXT_FETCH_FAILED in line, line
+    joined = "\n".join(t for t in _visible(at) if t != line)
+    assert joined.count(f"{health.TEXT_FETCH_FAILED}：") == 0, page
 
 
 def test_持倉體檢_stale_狀態行有時鐘記號與資料截至日_卡上副標也帶():
     at, _ = _run(P.SCRIPTS["hld"]["stale"])
     line = " ".join(_status_lines(at)[0].split())
-    assert health.SYMBOL_STALE in line and f"{health.AS_OF_LABEL} 2026-" in line, line
+    assert health.SYMBOL_STALE in line and f"{page_health.AS_OF_LABEL} 2026-" in line, line
     cards = [m.value for m in at.main.markdown if 'data-block="HLD-2"' in m.value or 'data-block="HLD-3"' in m.value]
     assert cards and all(f"{health.SYMBOL_STALE} 淨值取自預存序列" in html.unescape(v) for v in cards)
 
@@ -198,8 +210,15 @@ def test_整頁錯誤畫面_那一行加導覽_不另畫狀態行(page):
     assert not at.button
 
 
+def _detail_text(at, page):
+    """設定與診斷頁各頁資料狀態總表那一頁的明細（同一份記錄，`page_health.detail_rows`）攤成一串字。"""
+    return " ".join(" ".join(row) for row in page_health.detail_rows(at.session_state[page_health.STATE_KEY][page]))
+
+
+# ~~核心卡的來源與新鮮度徽章移到第四段（④ 那一枚展開區）~~ → BL-0250 批次 3-C（G2；線框第六版第 7 節第 2、11 列；
+# `DEC-2026-10-21-01`；有意識的政策變更，不是漏刪）：拿下來的那一份不再畫在 ④，改由設定與診斷頁總表明細承接。
 @pytest.mark.parametrize("page", ["mkt", "exp"])
-def test_核心卡的來源與新鮮度徽章移到第四段(page):
+def test_核心卡的來源與新鮮度徽章不在卡上_不再畫在第四段_在總表明細(page):
     at, _ = _run(P.SCRIPTS[page]["正常"])
     cards = [html.unescape(m.value) for m in at.main.markdown
              if any(f'data-block="{page.upper()}-{n}"' in m.value for n in (1, 2, 3))]
@@ -208,9 +227,8 @@ def test_核心卡的來源與新鮮度徽章移到第四段(page):
     # 來源與新鮮度改寫一句「⬜ 不適用（…）」，照樣只在 ④ 那一枚展開區裡。
     word = "延遲 3 日" if page == "mkt" else "⬜ 不適用（這張卡由多檔基金組成"
     assert not any(word in card for card in cards), page
-    box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
-    assert len(box) == 1 and box[0].proto.expanded is False
-    assert word in html.unescape(" ".join(m.value for m in box[0].markdown))
+    assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
+    assert word in _detail_text(at, page)
 
 
 @pytest.mark.parametrize("page", _PAGES)
@@ -223,7 +241,7 @@ def test_示範模式沒有資料狀態行(page):
     assert not at.exception, [e.value for e in at.exception]
     assert _status_lines(at) == []
     assert health.SETTINGS_ELSEWHERE_TEXT not in [c.value for c in at.main.caption]
-    assert not any(e.label == health.PROVENANCE_TITLE for e in at.main.expander)
+    assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
 
 
 @pytest.mark.parametrize("page", _PAGES)
@@ -284,9 +302,10 @@ def test_市場總覽_黃色新鮮度徽章_卡上有時鐘_狀態行有時鐘(m
     cards = _cards(at, "mkt")
     assert cards and all(f"{health.SYMBOL_STALE} 延遲 " in card for card in cards), cards
     line = " ".join(_status_lines(at)[0].split())
-    assert health.SYMBOL_STALE in line and f"{health.AS_OF_LABEL} 2026-" in line, line
-    box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
-    assert "延遲 3 日" in html.unescape(" ".join(m.value for m in box[0].markdown))   # ④ 照列原字面
+    assert health.SYMBOL_STALE in line and f"{page_health.AS_OF_LABEL} 2026-" in line, line
+    # ~~④ 照列原字面~~ → 3-C：原字面在總表明細（有意識的政策變更，不是漏刪）
+    assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
+    assert "延遲 3 日" in _detail_text(at, "mkt")
 
 
 def test_市場總覽_中性延遲_卡上與狀態行都沒有時鐘():
@@ -322,10 +341,17 @@ def test_持倉體檢_中性延遲_徽章移到第四段_卡上與狀態行都�
     cards = [c for c in _cards(at, "hld") if 'data-block="HLD-2"' in c or 'data-block="HLD-3"' in c]
     assert cards and not any("延遲 10 日" in card or health.SYMBOL_STALE in card for card in cards), cards
     assert health.SYMBOL_STALE not in _status_lines(at)[0]
-    box = [e for e in at.main.expander if e.label == health.PROVENANCE_TITLE]
-    assert len(box) == 1 and box[0].proto.expanded is False
-    body = html.unescape(" ".join(m.value for m in box[0].markdown))
-    assert body.count("延遲 10 日") >= 6, body                                     # 兩張卡 × 三檔
+    # ~~在 ④「核心卡的來源與新鮮度」裡（兩張卡 × 三檔）~~ → 3-C：④ 不再畫，同一份在總表明細（有意識的政策變更，不是漏刪）
+    assert not any(e.label == _RETIRED_PROVENANCE_TITLE for e in at.main.expander)
+    # ~~`body.count("延遲 10 日") >= 6`（兩張卡 × 三檔，另有淨值表逐檔三列）~~ → 3-C 總管裁定第 4 點：核心卡列與新增的
+    # 淨值明細列分開數、各自精確（不只放寬下限；有意識的更正，不是漏刪）。
+    rows = [row for row in page_health.detail_rows(at.session_state[page_health.STATE_KEY]["hld"])
+            if row[5] == "延遲 10 日"]
+    card_rows = [row for row in rows if row[1].startswith(("績效與風險卡", "配息與本金卡"))]
+    nav_rows = [row for row in rows if row[1].startswith("淨值與配息序列")]
+    assert len(card_rows) == 6, card_rows                                          # 兩張核心卡 × 三檔
+    assert len(nav_rows) == 3 and all(row[0] == row[6] == "淨值" for row in nav_rows), nav_rows   # 淨值表逐檔三列
+    assert len(rows) == len(card_rows) + len(nav_rows), rows                       # 沒有第三種列帶這個延遲
 
 
 # ───────────────────────── Phase 3 P1-④：結論燈同一則訊息不印兩次 ─────────────────────────

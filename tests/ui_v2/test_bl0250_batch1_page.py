@@ -113,17 +113,22 @@ def test_MKT6_取得時間台北時間_是否修正改是否_表頭指標():
 #   上兩行在寫下當時為真（尚未裁示）；新行為的正反兩面守衛在 `tests/ui_v2/test_bl0250_batch3a_page.py`，本條改驗佔位字不再外漏。
 @pytest.mark.parametrize("name", list(SCAN.SCRIPTS["exp"]))
 def test_EXP_佔位字維持現況_待客戶裁示(name):
-    provenance = [t for t in _texts("exp", name) if t.startswith("卡 項目 來源與新鮮度")]
-    assert provenance and "〔來源層級〕" not in provenance[0] and "〔新鮮度〕" not in provenance[0]
-    assert "◇ 資料未備" not in provenance[0]
+    # ~~在 ④「核心卡的來源與新鮮度」那一張表裡驗~~ → BL-0250 批次 3-C（G2 第 11 列；`DEC-2026-10-21-01`；有意識的政策變更，
+    # 不是漏刪）：那一張表不再畫（那一句「⬜ 不適用（…）」在總表明細，見 test_bl0250_batch3c_logic）；改驗整頁不外漏佔位字。
+    texts = _texts("exp", name)
+    assert not any(t.startswith("卡 項目 來源與新鮮度") for t in texts)
+    joined = "\n".join(texts)
+    assert "〔來源層級〕" not in joined and "〔新鮮度〕" not in joined
 
 
 # ───────────────────────── 3. 資產配置資料狀態行 ─────────────────────────
 
 
-def test_ALO_格內資料未備_狀態行報菱形():
+def test_ALO_格內資料未備_頁首不報_Q1():
+    # ~~頁首資料狀態行報「◇ 資料未備」~~ → BL-0250 批次 3-C（U9；客戶 2026-10-21 Q1，`DEC-2026-10-21-02`；有意識的政策變更，
+    # 不是漏刪）：`partial` 格內的 ◇ 是使用者自己的參數留空（不計件數、不成主要原因），頁首只寫資料截至日；格內 ◇ 照舊。
     assert "◇ 資料未備" in _joined("alo", "partial")
-    assert "◇ 資料未備" in _status_line("alo", "partial")
+    assert _status_line("alo", "partial") == "資料截至 2026-09-23"
 
 
 def test_ALO_正常_狀態行不報菱形():

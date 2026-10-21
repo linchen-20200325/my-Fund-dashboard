@@ -326,7 +326,7 @@ def _details_by_code(table: str) -> dict:
     return dict(zip(codes, blocks))
 
 
-def test_每列來源展開_預設收合_台北時間_配息比原因進備註_格內來源名照舊(stub):
+def test_每列來源展開_預設收合_台北時間_配息比原因進備註_格內只留值(stub):
     at = _run()
     table = html.unescape(_table_html(at))
     by_code = _details_by_code(table)
@@ -341,9 +341,13 @@ def test_每列來源展開_預設收合_台北時間_配息比原因進備註_�
     # 新設計 H 的展開那一半：D04 配息比的原因句進了該列展開的備註
     assert "配息資料未確認完整，配息比不計算" in by_code["D04"]
     assert "配息資料未確認完整，配息比不計算" not in a01
-    # 格內來源名先保留（線框第 11 節）：格內照舊有來源標示與滑鼠提示；格內原因句照舊（H 的另一半排在後段）
-    assert 'class="exp-src">FundClear<' in table and 'title="淨值來源：FundClear；取得時間：2026-10-14T01:00:00Z' in table
-    assert ">◇ 資料未備：配息資料未確認完整，配息比不計算<span" in table
+    # ~~格內來源名先保留（線框第 11 節）：格內照舊有來源標示與滑鼠提示；格內原因句照舊（H 的另一半排在後段）~~
+    # → BL-0250 批次 3-C（線框第六版第 7 節第 8、9 列、新設計 H；客戶 2026-10-21 Q3；`DEC-2026-10-21-01`、`-02`；
+    # 有意識的政策變更，不是漏刪）：格內不畫來源標示；滑鼠提示拿掉已在展開裡的來源、取得時間、資料日期，判定句照留；
+    # 配息比那一格只留 ◇（原因句在該列展開的備註，上面已驗）。
+    assert 'class="exp-src"' not in table and 'title="淨值來源：' not in table and "取得時間：2026-10-14T01:00:00Z" not in table
+    assert ">◇ 資料未備：配息資料未確認完整，配息比不計算<" not in table
+    assert 'title="配息資料未確認完整，配息比不計算；' in table and ">◇</td>" in table
 
 
 def test_沒有來源資訊的列_不畫列展開(stub):

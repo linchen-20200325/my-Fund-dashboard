@@ -720,12 +720,15 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
         health_cards = sections.health_cards(cards, "mkt")
         collected = health_view.collect_page_health("mkt", model, failures, _status["fetch_events"], health_cards,
                                                     normal_class=plain.TABLE_NAMES["market_indicator"])
-        provenance = health.move_card_provenance(model, cards)   # 畫成黃的新鮮度徽章在卡上留「◷ <原字面>」
-        status_line = health.status_line(
-            model, failures, as_of=health.latest_date(dataset.get("rows"), "obs_date"),
-            stale=health.has_stale_marker(model, cards),
-        )
-        health_view.record_page_health("mkt", model, collected, health_cards, status_line)
+        # 核心卡的來源與新鮮度徽章拿下來；畫成黃的新鮮度徽章在卡上留「◷ <原字面>」。BL-0250 批次 3-C（G2；線框第六版第 7 節
+        # 第 2、7 列）：拿下來的那一份不再畫在 ④「核心卡的來源與新鮮度」—— 同一份已在總表明細（`normal_entries`，收集時讀）。
+        # ~~`provenance = health.move_card_provenance(...)` → `health_view.render_provenance(provenance)`~~（有意識的政策變更，
+        # 不是漏刪；`DEC-2026-10-21-01`）。
+        health.move_card_provenance(model, cards)
+        # BL-0250 批次 3-C（U9；44 第七節第三小節之十四）：頁首改畫主要原因＋另有，讀本頁剛記下的那一格（與總表同一份）。
+        # ~~`status_line = health.status_line(...)`~~（之七其二第 4 條的資料狀態行；有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+        as_of = health.latest_date(dataset.get("rows"), "obs_date")
+        health_view.record_page_health("mkt", model, collected, health_cards, as_of=as_of)
     plain_mode = live_input is not None
 
     st.markdown(f'<div class="mkt-page-title">{_esc(model["title"])}</div>', unsafe_allow_html=True)
@@ -741,7 +744,7 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
             f'<div class="mkt-page-sub">{_esc(model["answers"])}</div>',
             unsafe_allow_html=True,
         )
-        health_view.render_status_line(status_line, tone_hex=theme.tone_hex, settings_page=settings_page)
+        health_view.render_page_header("mkt", as_of=as_of, tone_hex=theme.tone_hex, settings_page=settings_page)
 
     label1, label2, label3, label4 = (
         (plain.LABEL_LAYER1, plain.LABEL_LAYER2, plain.LABEL_LAYER3, plain.LABEL_LAYER4) if plain_mode
@@ -782,8 +785,6 @@ def render(*, load_live=None, save_live=None, settings_page=None, mask_error=Non
     )
     _render_mkt6(logic.find_block(model, "MKT-6"), plain_mode=plain_mode)
     _render_mkt7(logic.find_block(model, "MKT-7"), plain_mode=plain_mode)
-    if plain_mode:
-        health_view.render_provenance(provenance)
 
     # BL-0250 批次 2（44 第七節第三小節之十一 U1／U2）：正式模式頁尾只畫一句指路句，不加「本頁不負責什麼：」、不掛紅線標記徽章。
     if plain_mode:

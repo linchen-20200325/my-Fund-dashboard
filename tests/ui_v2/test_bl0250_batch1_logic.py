@@ -22,7 +22,7 @@ import pytest
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-from ui_v2 import health, plain, sections, symbols  # noqa: E402
+from ui_v2 import health, page_health, plain, sections, symbols  # noqa: E402
 from ui_v2.alo import live as alo_live  # noqa: E402
 from ui_v2.alo import logic as alo_logic  # noqa: E402
 from ui_v2.hld import logic as hld_logic  # noqa: E402
@@ -119,28 +119,53 @@ def _alo_display(scenario):
     display, _raw, _status = plain.plain_model(model, page="alo")
     symbols.apply(display)
     display, failures = health.dedupe_failures(display)
-    return display, failures
+    health.relabel_unconfigured(display, failures)
+    # 2026-10-21 BL-0250 批次 3-C：多回傳收集用的狀態摘要（`_status`），並補上正式頁同一串的「尚未設定改字」那一步。
+    return display, failures, _status
 
 
-def test_資產配置_格內的資料未備_資料狀態行要報():
-    display, failures = _alo_display("partial")
-    assert not health.has_missing(display)          # 舊判讀讀不到（這正是漏報的原因）
-    assert health.has_missing_marker(display)
-    line = health.status_line(display, failures, as_of="2026-09-23", missing=health.has_missing_marker(display))
-    assert "◇ 資料未備" in line["text"]
+def _strings(node):
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _strings(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            yield from _strings(value)
+    elif isinstance(node, str):
+        yield node
+
+
+# ~~資產配置格內的 ◇ 資料狀態行要報（`has_missing_marker` → `status_line`）~~ → BL-0250 批次 3-C（U9；客戶 2026-10-21 Q1，
+# `DEC-2026-10-21-02`；有意識的政策變更，不是漏刪）：頁首改讀收集那一步的原因項目；`partial` 情境格內的 ◇ 是使用者自己的參數留空
+# （目標比重、情境試算金額），收集時略過（客戶 2026-10-20 Q1），頁首因此只寫資料截至日。格內 ◇ 照舊（下面第一條仍驗它畫在格內）。
+
+
+def _alo_header(display, failures, status):
+    cards = [b["code"] for b in display["blocks"] if b.get("_layer") == 2]
+    items, _u = health.collect_page_items(display, failures, status["fetch_events"],
+                                          sections.health_cards(cards, "alo"))
+    store = {}
+    page_health.record(store, "alo", items, as_of="2026-09-23", now="2026-10-21T00:00:00+00:00")
+    return page_health.header_view(page_health.recorded(store, "alo"), as_of="2026-09-23")
+
+
+def test_資產配置_使用者參數留空_格內照畫菱形_頁首不報_Q1():
+    display, failures, status = _alo_display("partial")
+    assert health._own_missing_markers({"t": "◇ 資料未備"}, None)   # 格內那一種字樣，收集認得
+    assert any("◇" in t for t in _strings(display))                 # 格內照舊畫 ◇（格內符號維持現況）
+    assert _alo_header(display, failures, status)["lines"] == ["資料截至 2026-09-23"]
 
 
 def test_資產配置_沒有資料未備時不報():
-    display, failures = _alo_display("full")
-    assert not health.has_missing_marker(display)
-    line = health.status_line(display, failures, as_of="2026-09-23", missing=False)
-    assert "◇" not in line["text"]
+    display, failures, status = _alo_display("full")
+    assert "◇" not in "".join(_alo_header(display, failures, status)["lines"])
 
 
-def test_has_missing_marker_私有鍵底下的字不算():
-    assert not health.has_missing_marker({"_export_text": "◇ 資料未備"})
-    assert health.has_missing_marker({"rows": [{"cell": "◇", "_missing_cells": ("cell",)}]})
-    assert not health.has_missing_marker({"rows": [{"cell": "⬜", "_missing_cells": ("cell",)}]})
+def test_私有鍵底下的字不算():
+    # ~~`health.has_missing_marker`~~（3-C 同次刪除）→ 收集那一步的同一個讀法（`_own_missing_markers`）。
+    assert not health._own_missing_markers({"_export_text": "◇ 資料未備"}, None)
+    assert health._own_missing_markers({"cell": "◇", "_missing_cells": ("cell",)}, None)
+    assert not health._own_missing_markers({"cell": "⬜", "_missing_cells": ("cell",)}, None)
 
 
 # ───────────────────────── 4. ALO-6 百分比 ─────────────────────────

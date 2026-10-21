@@ -619,6 +619,10 @@ def apply_live_notes(model: dict, dataset: dict, notes: dict, *, save_results=No
     if set6["placeholder"] and set6["placeholder"].get("_empty_kind") != "來源缺":
         # BL-0250 批次 3-A：~~「取數失敗：fetch_log」~~（`logic`，示範模式照舊）→ 依成因寫（`_read_failure_title`）。
         set6["summary_text"] = _read_failure_title(set6["placeholder"], dataset, notes, "fetch_log")
+    elif set6["placeholder"]:
+        # BL-0250 批次 3-C（客戶 2026-10-21 Q4；`DEC-2026-10-21-02`）：完全沒有任何取數紀錄 → 收合標題只寫「尚無取數紀錄」，
+        # ~~「缺 fetch_log：尚無取數紀錄」~~（`logic` 那一句，示範模式照舊）。只限 `SET-2`／`SET-6` 這一種情形（有意識的政策變更，不是漏刪）。
+        set6["summary_text"] = logic.TEXT_NO_RECORDS
     _plain_log_rows(set6, dataset)
     for row in set6["_rows"]:
         row["cell_notes"] = {5: [MASKED_NOTE]} if _masked(row["cells"][5], token) else {}

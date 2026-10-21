@@ -165,7 +165,8 @@ def test_S5_徽章畫在HLD2_HLD3標頭旁_HLD8每一列_HLD6分組標頭(days, 
     assert md.count(badge) == (12 if days <= 10 else 6)
     assert md.count(f'<div class="hld-fh">基金 A（示意） · 幣別 USD {badge}</div>') == (2 if days <= 10 else 0)
     assert md.count(f"<td>基金 A（示意） {badge}") == (1 if days <= 10 else 0)
-    assert md.count(f'<tr><td colspan="6"><b>AAAA</b> {badge}</td></tr>') == (1 if days <= 10 else 0)
+    # ~~`colspan="6"`~~（BL-0250 批次 3-C：正式模式淨值表拿掉「來源層級」欄，分組標頭跨欄由 6 改 5；本檔直接呼叫各塊畫法、不經頁面那一串，表上逐檔延遲徽章的拿掉在頁面那一層，見 test_bl0250_batch3c_logic；有意識的更正，不是漏刪）
+    assert md.count(f'<tr><td colspan="5"><b>AAAA</b> {badge}</td></tr>') == (1 if days <= 10 else 0)
     assert _badge(f"延遲 {days} 日", "黃") not in md   # 徽章不再有黃色
 
 
@@ -189,7 +190,8 @@ def test_S5_副標畫在HLD2_HLD3_HLD8_HLD5_HLD6_只有預存那一檔(days, tex
         return
     assert md.count(note) == 5
     assert f'<div class="hld-line" style="color:{color}">{text}</div>' in md          # HLD-5
-    hld6 = f'<tr><td colspan="6"><div class="hld-note" style="color:{color}">{text}</div></td></tr>'
+    # ~~`colspan="6"`~~（BL-0250 批次 3-C：正式模式淨值表拿掉「來源層級」欄，分組標頭跨欄由 6 改 5；本檔直接呼叫各塊畫法、不經頁面那一串，表上逐檔延遲徽章的拿掉在頁面那一層，見 test_bl0250_batch3c_logic；有意識的更正，不是漏刪）
+    hld6 = f'<tr><td colspan="5"><div class="hld-note" style="color:{color}">{text}</div></td></tr>'
     assert (hld6 in md) is (days <= 10)                                                # HLD-6
     assert "⚠ 淨值取自預存序列" not in md
 

@@ -173,6 +173,28 @@ def test_key_name給下拉選單用_欄位鍵都有中文名_未知值原樣():
 # ───────────────────────── 3. 不變式 ─────────────────────────
 
 
+# 市場總覽正式模型用的 notes 與 dataset（BL-0250 批次 3-C 總管裁定第 3 點：抽成模組層，讓 `test_health_logic` 走正式那一串時
+# 補跑 `mkt/page.py::mark_fetch_failures` 拿得到同一份 dataset；內容一字未改）。
+MKT_LIVE_NOTES = {
+    "pending": {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
+                "fx_twd_per_usd": "fx_obs_date_rule"},
+    "masked_keys": [], "cooldowns": [],
+    "available_keys": ["vol_index", "credit_spread_pct", "term_spread_pct", "policy_rate_pct"],
+    "settings": {"window_days": 30, "baseline_date": "2026-08-01",
+                 "indicator_keys": ["vol_index", "credit_spread_pct"], "pair_consistent": True},
+    "settings_error": None,
+}
+
+
+def mkt_live_datasets():
+    from ui_v2.mkt import fixtures as MF
+
+    datasets = dict(MF.all_datasets())
+    datasets["unconf"] = {"rows": [], "errors": {"vol_index": "fetch_url returned None: ^VIX (kind=unreachable)",
+                                                  "credit_spread_pct": plain.MSG_FRED_MISSING}}
+    return datasets
+
+
 def _live_models():
     """可以不經 streamlit、不打網路組出的正式模型：{(頁, 情境): 模型}。"""
     from ui_v2.alo import fixtures as AF
@@ -180,22 +202,11 @@ def _live_models():
     from ui_v2.alo import logic as A
     from ui_v2.hld import fixtures as HF
     from ui_v2.hld import live as HL
-    from ui_v2.mkt import fixtures as MF
     from ui_v2.mkt import live as ML
 
     out = {}
-    notes = {
-        "pending": {"leading_index": "ndc_no_release_date", "coincident_index": "ndc_no_release_date",
-                    "fx_twd_per_usd": "fx_obs_date_rule"},
-        "masked_keys": [], "cooldowns": [],
-        "available_keys": ["vol_index", "credit_spread_pct", "term_spread_pct", "policy_rate_pct"],
-        "settings": {"window_days": 30, "baseline_date": "2026-08-01",
-                     "indicator_keys": ["vol_index", "credit_spread_pct"], "pair_consistent": True},
-        "settings_error": None,
-    }
-    datasets = dict(MF.all_datasets())
-    datasets["unconf"] = {"rows": [], "errors": {"vol_index": "fetch_url returned None: ^VIX (kind=unreachable)",
-                                                  "credit_spread_pct": plain.MSG_FRED_MISSING}}
+    notes = MKT_LIVE_NOTES
+    datasets = mkt_live_datasets()
     for name, dataset in datasets.items():
         out[("mkt", name)] = ML.build_live_model({"dataset": dataset, "notes": notes}, save_wired=True)
         broken = dict(notes, settings_error=plain.MSG_SETTINGS_NOT_CONFIGURED,
