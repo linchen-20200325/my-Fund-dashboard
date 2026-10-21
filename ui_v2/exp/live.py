@@ -1474,22 +1474,89 @@ SOURCE_NOTE_PREFIXES = ("淨值來源：", "配息來源：", "出處：", "計�
 H_REASON_COLUMN = "div_ratio_pct"
 
 
-def split_tip(tip, *, reason_in=None) -> tuple:
-    """一格的滑鼠提示 → (取得時間原值或 None, 資料日期或 None, 備註)。「取得時間：」「資料日期：」兩種段落各取第一段；
-    備註只收來源段落，以及 `reason_in`（格內畫出的字）裡也寫著的那一段原因句（新設計 H；只有配息比那一格傳），
-    依原順序以「；」接回、一個字不改（3-B 第二輪稽核回修 E）。"""
+def _classify_tip(tip, reason_in=None) -> tuple:
+    """一格的滑鼠提示逐段分類 → (取得時間原值或 None, 資料日期或 None, 收進每列展開備註的段落, 其餘段落)。
+    `split_tip`（每列展開）與 `result_cell_view`（格內滑鼠提示）共用這一份分法：收進展開的那幾段，就是格內拿掉的那幾段
+    （BL-0250 批次 3-C；客戶 2026-10-21 Q3）。"""
     fetched = day = None
-    rest = []
+    taken, rest = [], []
     for part in str(tip).split(_TIP_SEP) if tip else ():
         if fetched is None and part.startswith(_TIP_FETCHED):
             fetched = part[len(_TIP_FETCHED):]
         elif day is None and part.startswith(_TIP_DATA_DATE):
             day = part[len(_TIP_DATA_DATE):]
         elif part.startswith(SOURCE_NOTE_PREFIXES):
-            rest.append(part)
+            taken.append(part)
         elif reason_in and part and part in reason_in and not part.startswith((_TIP_FETCHED, _TIP_DATA_DATE)):
+            taken.append(part)
+            rest.append(part)   # 新設計 H 那一句是判定句：展開收一份，格內滑鼠提示照留（Q3）
+        else:
             rest.append(part)
-    return fetched, day, _TIP_SEP.join(rest)
+    return fetched, day, taken, rest
+
+
+def split_tip(tip, *, reason_in=None) -> tuple:
+    """一格的滑鼠提示 → (取得時間原值或 None, 資料日期或 None, 備註)。「取得時間：」「資料日期：」兩種段落各取第一段；
+    備註只收來源段落，以及 `reason_in`（格內畫出的字）裡也寫著的那一段原因句（新設計 H；只有配息比那一格傳），
+    依原順序以「；」接回、一個字不改（3-B 第二輪稽核回修 E）。"""
+    fetched, day, taken, _rest = _classify_tip(tip, reason_in)
+    return fetched, day, _TIP_SEP.join(taken)
+
+
+def _h_reason(key: str, cell: dict):
+    """新設計 H：配息比那一格不是值時，格內畫出的字（給 `split_tip` 認原因句）；其他格 → None。"""
+    return str(cell.get("text") or "") if key == H_REASON_COLUMN and cell.get("_state") != logic.STATE_OK else None
+
+
+# ───────────── BL-0250 批次 3-C：結果清單格內只留值（G2 第 8～10 列、新設計 H；44 第七節第三小節之十四） ─────────────
+# 客戶 2026-10-21 核准 3-C 範圍與 Q3（`DEC-2026-10-21-01`、`-02`）：
+# - 格內不畫來源標示 —— 同一枚在每列展開的「來源」欄（`source_rows`）；
+# - 格內滑鼠提示只拿掉來源段落、取得時間、資料日期（就是每列展開收走的那幾段，`_classify_tip`），「計價幣別未確定」
+#   「幣別不同」等直接解釋該格結果的判定句、計數句照留；
+# - 配息比那一格畫成 ◇ 時格內只留 ◇（新設計 H）—— 原因句在每列展開的備註；該列展開裡找不到那一句時格內照舊（不讓它消失）。
+# 示範模式不經過本段。只改正式模式結果清單（`EXP-2`）那一張表；並排對照卡、單檔基礎資料照舊。
+
+_MISSING_HEAD = page_health.SYMBOL_MISSING + " "
+
+
+def result_cell_view(key: str, cell: dict) -> dict:
+    """正式模式結果清單一格要畫的 `{"text": 格內字, "tip": 滑鼠提示或 None}`（不改模型）。"""
+    reason = _h_reason(key, cell)
+    _fetched, _day, taken, rest = _classify_tip(cell.get("source_tip"), reason)
+    text = str(cell.get("text") or "")
+    if reason is not None and cell.get("_state") == logic.STATE_MISSING and text.startswith(_MISSING_HEAD):
+        sentence = text[len(_MISSING_HEAD):].partition("：")[2]
+        if sentence and sentence in _TIP_SEP.join(taken):
+            text = page_health.SYMBOL_MISSING
+        # 否則（例：配息比因淨值超過 10 日而不算，原因句「最近一筆淨值 ‹日期›，已超過 10 日」不在這一格的滑鼠提示裡、
+        # 每列展開也就沒有收）→ 格內照舊。「格內只留 ◇」的前提是原因句已收進列展開；不讓它消失（實作組判讀，可推翻）。
+    if key == CCY_COLUMN and _ccy_sentence(cell):
+        # 線框第六版第 7 節第 10 列：計價幣別出處那一整句（出處、取數失敗的來源、原因）原句收進進階診斷（`ccy_tip_raw`），
+        # 出處與取數失敗的來源另在每列展開；格內滑鼠提示連「原因：…」一併拿掉（遮蔽後的原文在進階診斷，不消失）。
+        rest = [part for part in rest if not part.startswith(TIP_REASON_HEAD)]
+    return {"text": text, "tip": _TIP_SEP.join(rest) or None}
+
+
+CCY_COLUMN = "ccy"
+TIP_CCY_HEAD = "計價幣別出處（來源自報）："
+TIP_REASON_HEAD = "原因："
+
+
+def _ccy_sentence(cell: dict):
+    """「計價幣別」那一格的出處長句（滑鼠提示整句，含「計價幣別出處（來源自報）：」才算）；沒有 → None。"""
+    tip = (cell or {}).get("source_tip")
+    return tip if tip and TIP_CCY_HEAD in tip else None
+
+
+def ccy_tip_raw(block: dict) -> list:
+    """線框第六版第 7 節第 10 列：結果清單「計價幣別」那一格的滑鼠提示整句（格內拿掉之前畫的原字）→ 進階診斷的原始訊息。
+    `[{"where": "<塊代號> <塊名>", "text": "<代碼>：<整句>"}, ...]`，依結果清單的列序；那一格沒有這一句 → 不收。"""
+    out = []
+    for row in block.get("_rows") or ():
+        tip = _ccy_sentence((row.get("_cells") or {}).get(CCY_COLUMN))
+        if tip:
+            out.append({"where": f"{block.get('code')} {block.get('title')}", "text": f"{row['_fund_code']}：{tip}"})
+    return out
 
 
 def source_rows(block: dict, row: dict) -> list:
@@ -1502,8 +1569,7 @@ def source_rows(block: dict, row: dict) -> list:
         tag, tip = cell.get("source_tag"), cell.get("source_tip")
         if not tag and not tip:
             continue
-        reason = str(cell.get("text") or "") if key == H_REASON_COLUMN and cell.get("_state") != logic.STATE_OK else None
-        fetched, day, note = split_tip(tip, reason_in=reason)
+        fetched, day, note = split_tip(tip, reason_in=_h_reason(key, cell))
         if not tag and not fetched and not day and not note:
             continue   # 四項全空不列（`44` 之十三其二第 2 條：一格來源資訊都沒有的欄不列；3-B 複驗應修 1）
         out.append((

@@ -484,11 +484,15 @@ def _render_exp2_live(block: dict) -> None:
         head = "".join(f"<th>{_esc(label)}</th>" for label in block["column_labels"])
         body = ""
         for row in block["_rows"]:
-            cells = "".join(
-                f'<td style="color:{_tone(row["_cells"][key]["_tone"])}"{_title_attr(row["_cells"][key])}>'
-                f'{_esc(row["_cells"][key]["text"])}{_src_html(row["_cells"][key])}</td>'
-                for key in block["column_keys"]
-            )
+            # BL-0250 批次 3-C（G2 第 8～10 列、新設計 H；客戶 2026-10-21 Q3）：格內只留值 —— 來源標示與滑鼠提示裡的來源、
+            # 取得時間、資料日期只在每列展開；判定句、計數句照留在格內滑鼠提示；配息比那一格畫成 ◇ 時格內只留 ◇。
+            # ~~`{_title_attr(cell)}…{_esc(cell["text"])}{_src_html(cell)}`~~（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+            cells = ""
+            for key in block["column_keys"]:
+                view = live.result_cell_view(key, row["_cells"][key])
+                tip = f' title="{_esc(view["tip"])}"' if view["tip"] else ""
+                cells += (f'<td style="color:{_tone(row["_cells"][key]["_tone"])}"{tip}>'
+                          f'{_esc(view["text"])}</td>')
             body += f"<tr>{cells}</tr>" + _row_source_html(block, row, len(block["column_keys"]))
         st.markdown(
             f'<div class="exp-scroll"><table class="exp-table">'
@@ -1140,6 +1144,8 @@ def _render_live(load_live, save_live, settings_page=None, mask_error=None) -> N
     # Phase 3 ◆／◇ 小批（44 第七節第三小節之七其三、其四，之八其三 (c-2)）：偏離的黃燈改不著色 ◆、「⬜ 資料未備」改 ◇。
     # 只換符號、顏色與那一句說明；判定、門檻、算法一個都不動（`ui_v2/symbols.py`）。示範模式不經過這一步。
     symbols.apply(model)
+    # BL-0250 批次 3-C（線框第六版第 7 節第 10 列）：結果清單「計價幣別」那一格的出處長句格內拿掉，原句收進進階診斷。
+    raw = list(raw) + live.ccy_tip_raw(logic.find_block(model, "EXP-2"))
     plain.record_raw(st.session_state, "exp", raw, datetime.now(timezone.utc))
     # Phase 3 P0-②（44 第七節第三小節之七其二第 3、4 條）：同源錯誤只在頁首資料狀態行摘要一次；
     # 核心卡的來源與新鮮度徽章移到 ④「證據／來源」。只改呈現：判定、狀態、顏色一個都不動（`ui_v2/health.py`）。
