@@ -245,7 +245,15 @@ def test_EXP_字句():
     texts = _texts("exp", "正常")
     assert not any(t.startswith("本塊不自取數") for t in texts)
     assert "先在結果清單勾一檔「對照」" in texts
-    assert "取數失敗，暫無篩選軌跡" in _texts("exp", "取數失敗")
+    # ~~assert "取數失敗，暫無篩選軌跡" in _texts("exp", "取數失敗")~~ → BL-0250 批次 3-D 第二筆裁示 Q5 (b)（44 之十五其九；
+    # 有意識的更正，不是漏刪；決策者：客戶 2026-10-21）：EXP-7 主值全讀不到、單一原因、無判讀證據 → 收合區標題改「標題　—　一句原因」，
+    # 打開只剩那一句，故正式畫面不再印這句。原句未刪：關掉收合比照（3-C 畫法）時照舊逐字出現。
+    assert any(t.endswith("　—　⛔ 取數失敗：使用者設定") for t in _expander_titles("exp", "取數失敗"))
+    from streamlit.testing.v1 import AppTest
+    off = AppTest.from_string(SCAN.quiet_off(SCAN.SCRIPTS["exp"]["取數失敗"]), default_timeout=90)
+    off.run()
+    assert not off.exception, [e.value for e in off.exception]
+    assert "取數失敗，暫無篩選軌跡" in [" ".join(t.split()) for t in SCAN.screen_texts(off)]
     assert not any("正式模式" in t for t in texts)
 
 
