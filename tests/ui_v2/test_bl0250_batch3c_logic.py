@@ -338,10 +338,22 @@ def _symbols(at):
     return tuple(out)
 
 
+# BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五；客戶 `DEC-2026-10-21-04` Q1 授權依 3-D 新規格更新本守衛）：
+# ~~直接量現況畫面~~ → 量「把收起關掉」的畫面（＝3-C 的畫法），3-C 這一條守的「搬遷前後個數相同」照舊逐情境釘住同一張表；
+# 收起前後的差另由 `tests/ui_v2/test_bl0250_batch3d_logic.py` 逐情境釘住並逐一歸類（有意識的政策變更，不是漏刪）。
+_QUIET_OFF = """
+from ui_v2 import sections as _S3D
+_S3D.quiet_cards = lambda *_a, **_k: ({}, {})
+"""
+
+
 @pytest.mark.parametrize("key", sorted(_SYMBOLS_BEFORE))
 def test_四個符號在頁上的個數與動手前相同(key):
     page, name = key.split("/")
-    assert _symbols(_app(SCAN.SCRIPTS[page][name])) == _SYMBOLS_BEFORE[key]
+    body = "\n".join("    " + line for line in SCAN.SCRIPTS[page][name].split("\n"))
+    script = (SCAN._HEAD + "from ui_v2 import sections as _S3D_SAVE\n_SAVED_3D = _S3D_SAVE.quiet_cards\n" + _QUIET_OFF
+              + "try:\n" + body + "\nfinally:\n    _S3D_SAVE.quiet_cards = _SAVED_3D\n")   # 同一個行程：用完換回來
+    assert _symbols(_app(script)) == _SYMBOLS_BEFORE[key]
 
 
 # ═══════════════════════ 5. G2 搬遷：功能頁不再出現、目的地出現、判讀證據仍在 ═══════════════════════

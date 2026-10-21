@@ -161,10 +161,16 @@ def test_第2條_查表沒收錄的鍵_產生處不拋例外_收集報錯():
 
 _PATCH = '''
 import streamlit as st
-from ui_v2 import health, page_health
+from ui_v2 import health, page_health, sections as _S3D
 from ui_v2.exp import logic as _EXG
-_saved = (health.collect_page_items, health.normal_entries, page_health.record, dict(_EXG.COLUMN_DATA_CLASS))
+_saved = (health.collect_page_items, health.normal_entries, page_health.record, dict(_EXG.COLUMN_DATA_CLASS),
+          _S3D.quiet_cards)
 _mode = st.session_state.get("BREAK")
+# BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五）：收集出錯時卡片不收起、照 3-C 的畫法（原因行寫不出來的保守退路）。
+# 沒有注入錯誤的那一輪把收起關掉（＝3-C 畫法），下面「頁面照原樣」的比對因此驗的是「收集出錯 → 真程式退回 3-C 畫法、逐字相同」。
+# ~~兩輪都走真程式~~（有意識的更正，不是漏刪：3-D 之後沒出錯那一輪會收起，與出錯那一輪本來就不同；斷言強度不變）。
+if not _mode:
+    _S3D.quiet_cards = lambda *_a, **_k: ({}, {})
 def _boom(cls):
     def f(*_a, **_k):
         raise cls("測試注入")
@@ -183,6 +189,7 @@ _UNPATCH = '''
 finally:
     health.collect_page_items, health.normal_entries, page_health.record = _saved[:3]
     _EXG.COLUMN_DATA_CLASS.clear(); _EXG.COLUMN_DATA_CLASS.update(_saved[3])
+    _S3D.quiet_cards = _saved[4]
 '''
 
 
