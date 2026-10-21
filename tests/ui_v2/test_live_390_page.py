@@ -122,6 +122,15 @@ page.render(load_live=source.load_live, save_live=source.save_setting, refetch_l
 """,
 }
 
+# BL-0250 批次 3-D（新設計 B；客戶 2026-10-21 Q4：390px 實測、截圖、量測，只修畫面缺陷）：上面那五個情境資料都齊，
+# 從來沒有跑過「尚未設定」「取數失敗」—— 卡片安靜收起只在那兩種情境出現。補上五頁各兩種（腳本同一般畫面掃描那一份，
+# `tests/ui_v2/_plain_scan.py`；替身、不打網路），鍵寫成「頁/情境」，量法與上面五個一字不差。
+import _plain_scan as _SCAN  # noqa: E402
+
+for _page in ("mkt", "hld", "exp", "alo", "set"):
+    for _scenario in ("未設定", "取數失敗"):
+        _SCRIPTS[f"{_page}/{_scenario}"] = _SCAN.SCRIPTS[_page][_scenario]
+
 # 各頁 Data Health 燈（`*-0`）的外框 class：`ui_v2/<頁>/page.py` 的 `_render_light`／`_render_lamp`／`_render_*0`。
 _LAMP = {"mkt": ".mkt-light", "hld": ".hld-lamp", "exp": ".exp-lamp", "alo": ".alo-lamp", "set": ".set-lamp"}
 
@@ -131,6 +140,11 @@ _INNER_SCROLL = ".mkt-scroll, .hld-scroll, .exp-scroll"
 # 預設可見（不在 `<details>` 裡）、390 寬會在容器內橫捲的塊 —— 2026-10-16 實測登記。
 # exp：EXP-2 候選表（7 欄，容器 358 寬、內容 674 寬）。客戶 2026-10-16 先接受，Phase 3 實機再定（裁示第 10 點）。
 _DEFAULT_VISIBLE_INNER_SCROLL = {"mkt": set(), "hld": set(), "exp": {"EXP-2"}, "alo": set(), "set": set()}
+
+
+def _slug(name: str) -> str:
+    """「頁/情境」→ 頁（3-D 補的情境沿用該頁的燈與登記）。"""
+    return name.split("/", 1)[0]
 
 _PAGES = tuple(_SCRIPTS)
 
@@ -191,7 +205,8 @@ def browser():
 def live_page(request, browser, tmp_path_factory):
     """每一頁起一次 streamlit（同一頁的各條測試共用），回傳 (頁名, browser, base URL)。"""
     name = request.param
-    app = tmp_path_factory.mktemp(f"live390_{name}") / f"app_{name}_live390.py"
+    safe = name.replace("/", "_")   # 「頁/情境」不能直接當檔名
+    app = tmp_path_factory.mktemp(f"live390_{safe}") / f"app_{safe}_live390.py"
     app.write_text(_SCRIPTS[name], encoding="utf-8")
     with _ui_v2_chromium.streamlit_server(app) as base:
         yield name, browser, base
@@ -200,13 +215,13 @@ def live_page(request, browser, tmp_path_factory):
 def _open(browser, base, name):
     tab = browser.new_page(viewport=_VIEWPORT)
     tab.goto(base + "/", wait_until="networkidle")
-    tab.wait_for_selector(_LAMP[name], timeout=60000)
+    tab.wait_for_selector(_LAMP[_slug(name)], timeout=60000)
     tab.wait_for_timeout(1500)
     return tab
 
 
 def _measure(tab, name):
-    return tab.evaluate(_MEASURE_JS, [_LAMP[name], _INNER_SCROLL])
+    return tab.evaluate(_MEASURE_JS, [_LAMP[_slug(name)], _INNER_SCROLL])
 
 
 def _expand_all(tab):
@@ -230,7 +245,7 @@ def test_390寬_正式模式_渲染無例外_DataHealth燈在首屏(live_page):
     tab.close()
     assert m["vw"] == _VIEWPORT["width"] and m["vh"] == _VIEWPORT["height"], m
     assert m["exceptions"] == [], (name, m["exceptions"])
-    assert m["lamp"] is not None, (name, "找不到 Data Health 燈", _LAMP[name])
+    assert m["lamp"] is not None, (name, "找不到 Data Health 燈", _LAMP[_slug(name)])
     top, _bottom, height = m["lamp"]
     assert height > 0 and 0 <= top < m["vh"], (name, "Data Health 燈不在首屏", m["lamp"])
 
@@ -251,7 +266,7 @@ def test_390寬_正式模式_整頁不得水平捲動_收合與全部展開都�
         assert collapsed["exceptions"] == [], (name, collapsed["exceptions"])
         assert collapsed["codeBlocks"] == [], (name, "HTML 被當成程式碼區塊印出", collapsed["codeBlocks"])
         _assert_no_page_hscroll(name, "收合", collapsed)
-        assert set(collapsed["innerScroll"]) <= _DEFAULT_VISIBLE_INNER_SCROLL[name], (
+        assert set(collapsed["innerScroll"]) <= _DEFAULT_VISIBLE_INNER_SCROLL[_slug(name)], (
             name, "預設可見的容器內橫捲多了一塊（未登記）", collapsed["innerScroll"])
         _expand_all(tab)
         expanded = _measure(tab, name)
@@ -267,7 +282,8 @@ def test_390寬_正式模式_整頁不得水平捲動_收合與全部展開都�
 # 程式碼區塊，原始碼直接印上畫面、還把整頁推寬。示範與正式模式各一個情境；示範模式不帶 `?scenario=`，
 # 市場總覽的預設情境 `all_ok` 正是核心卡沒有徽章的那一種（2026-10-16 實測重現過）。
 
-_DEMO_APPS = {name: _ROOT / "ui_v2" / f"app_{name}.py" for name in _PAGES}
+_DEMO_PAGES = ("mkt", "hld", "exp", "alo", "set")   # 示範模式只跑五頁各一個（3-D 補的情境只有正式模式）
+_DEMO_APPS = {name: _ROOT / "ui_v2" / f"app_{name}.py" for name in _DEMO_PAGES}
 _WIDE = {"width": 1400, "height": 1200}
 
 
@@ -283,14 +299,14 @@ def test_沒有程式碼區塊外露_1400寬stMain不橫捲_正式模式(live_pa
     tab = browser.new_page(viewport=_WIDE)
     try:
         tab.goto(base + "/", wait_until="networkidle")
-        tab.wait_for_selector(_LAMP[name], timeout=60000)
+        tab.wait_for_selector(_LAMP[_slug(name)], timeout=60000)
         tab.wait_for_timeout(1500)
         _assert_no_code_block_and_no_hscroll(tab, name, "正式模式")
     finally:
         tab.close()
 
 
-@pytest.mark.parametrize("name", _PAGES)
+@pytest.mark.parametrize("name", _DEMO_PAGES)
 def test_沒有程式碼區塊外露_1400寬stMain不橫捲_示範模式(browser, name):
     with _ui_v2_chromium.streamlit_server(_DEMO_APPS[name]) as base:
         tab = browser.new_page(viewport=_WIDE)
