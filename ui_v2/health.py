@@ -1139,7 +1139,8 @@ def _value_unreadable(value) -> bool:
 
 def normal_entries(display: dict, cards, data_class=None) -> list:
     """明細表裡「沒有異常的項目」那幾列（總管裁定 (b)：狀態欄寫「—」）：② 核心卡上每一個值與它的來源、新鮮度徽章
-    （`move_card_provenance` 之前讀；來源徽章 → 來源層級欄、新鮮度徽章 → 延遲天數欄、「⬜ 不適用」那一句 → 狀態欄），以及市場總覽 `MKT-7` 的每一列。
+    （`move_card_provenance` 之前讀；來源徽章 → 來源層級欄、新鮮度徽章 → 延遲天數欄、「⬜ 不適用」那一句 → 狀態欄），以及市場總覽 `MKT-7` 的每一列、
+    持倉體檢淨值表的每一檔（BL-0250 批次 3-C）。
     `data_class`：該頁這幾個值共同的資料類（市場總覽＝市場指標；其他頁不給，寫「—」，不猜）。每一筆另記這個值畫成 ⛔／◇ 沒有
     （`unreadable`），給明細表判斷塊層成因涵蓋哪幾個值（3-B 稽核回修第 6 條）。
     只照抄畫面上已有的字，不另算；有異常的那幾項由 `page_health.detail_rows` 依原因項目列，這裡同一張卡同一個值的那一列會被略過。"""
@@ -1169,6 +1170,21 @@ def normal_entries(display: dict, cards, data_class=None) -> list:
         for group in block.get("fund_groups") or ():
             out.append(entry(title, group.get("head_text", ""), [group.get("freshness_badge")],
                              unreadable=any(_value_unreadable(v) for v in group.get("main_values") or ())))
+    # BL-0250 批次 3-C（G2；線框第六版第 7 節第 5 列「淨值表『來源層級』欄與每檔『延遲 10 日』→ 總表 › 持倉體檢 › 明細（逐檔）」；
+    # 44 第七節第三小節之十四）：持倉體檢淨值表的逐檔分組（正式模式才有 `nav_groups`）每一檔一列 —— 項目寫基金代碼（同淨值表），
+    # 來源層級欄寫該檔各列的來源層級（相異的值依出現順序以「、」接），延遲天數欄寫分組標頭那一枚新鮮度徽章。畫成 ◇ 的那一枚
+    # 記為讀不到，交給明細表由塊層的 ◇ 涵蓋（狀態欄不寫「—」）。比照下面 `MKT-7` 那一段：照抄畫面上已有的字，不另算。
+    for block in display.get("blocks") or ():
+        if block.get("code") != "HLD-6":
+            continue
+        for group in block.get("nav_groups") or ():
+            tiers = list(dict.fromkeys(str(r.get("source_tier")) for r in group.get("rows") or () if r.get("source_tier")))
+            badge = group.get("freshness_badge")
+            delay = str(badge.get("text", "")) if _is_provenance(badge) else None
+            out.append(page_health.affected(
+                block.get("title", ""), str(group.get("fund_code", "")), data_class=plain.TABLE_NAMES["nav"],
+                delay=delay or None, tier="、".join(tiers) or None,
+                unreadable=bool(delay) and delay.startswith(f"{SYMBOL_MISSING} ")))
     for block in display.get("blocks") or ():
         if block.get("code") != "MKT-7":
             continue

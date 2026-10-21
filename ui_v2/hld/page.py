@@ -674,6 +674,9 @@ def _table_html(labels, rows, cells) -> str:
     )
 
 
+_NAV_TIER_LABEL = "來源層級"   # 真身 `ui_v2/hld/logic.py` 的 `nav_labels`（測試比對）
+
+
 def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
     with _expander(block, plain_mode=plain_mode):
         st.caption(block["answers"])
@@ -693,8 +696,12 @@ def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
             # 正式模式（裁示 1-A＋1-C）：同一張表逐檔分組，分組標頭＝基金代碼＋新鮮度徽章，
             # 預存那幾檔的副標排在分組標頭下一列。欄位與每一列的內容與示範模式相同。
             st.caption("淨值表")
-            span = len(block["nav_labels"])
-            head = "".join(f"<th>{_esc(label)}</th>" for label in block["nav_labels"])
+            # BL-0250 批次 3-C（G2；線框第六版第 7 節第 5 列）：正式模式淨值表拿掉「來源層級」那一欄（逐檔的來源層級已在
+            # 設定與診斷頁的總表明細，`health.normal_entries`）；「推估」欄照留。~~全部 `nav_labels`~~（示範模式照舊全欄；
+            # 有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
+            keep = [i for i, label in enumerate(block["nav_labels"]) if label != _NAV_TIER_LABEL]
+            span = len(keep)
+            head = "".join(f"<th>{_esc(block['nav_labels'][i])}</th>" for i in keep)
             body = []
             for group in block["nav_groups"]:
                 body.append(
@@ -705,7 +712,7 @@ def _render_hld6(block: dict, *, plain_mode: bool = False) -> None:
                 if note:
                     body.append(f'<tr><td colspan="{span}">{note}</td></tr>')
                 body.extend(
-                    "<tr>" + "".join(f"<td>{cell}</td>" for cell in nav_cells(row)) + "</tr>"
+                    "<tr>" + "".join(f"<td>{nav_cells(row)[i]}</td>" for i in keep) + "</tr>"
                     for row in group["rows"]
                 )
             st.markdown(

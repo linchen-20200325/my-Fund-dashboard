@@ -356,7 +356,10 @@ def test_第6條_畫面上是禁止符號的值_不列成一槓():
         for fund in ("基金 A · 幣別 USD", "基金 B · 幣別 USD", "基金 C · 幣別 EUR"):
             row = next(r for r in hld if r[1] == f"{card}　{fund}")
             assert row[2] == "⛔ 取數失敗" and row[0] == cls
-    assert not any(r[2] == page_health.NO_VALUE for r in hld)
+    # ~~`not any(r[2] == NO_VALUE for r in hld)`~~ → BL-0250 批次 3-C：明細多了淨值表逐檔那幾列（來源層級與延遲，`normal_entries`）；
+    # 那一塊在本情境畫的是正常的淨值列（頁上沒有 ⛔），狀態欄寫「—」是照實。其餘各列照舊不得寫「—」（有意識的更正，不是漏刪）。
+    assert not any(r[2] == page_health.NO_VALUE for r in hld if not r[1].startswith("淨值與配息序列　"))
+    assert [r[2] for r in hld if r[1].startswith("淨值與配息序列　")] == [page_health.NO_VALUE] * 3
 
 
 def test_第7條_狀態欄與延遲欄不矛盾_不另列空項目名的資料未備():
