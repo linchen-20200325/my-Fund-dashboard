@@ -614,9 +614,6 @@ LINE_BLOCK_UNDECIDABLE = f"{SYMBOL_ERROR} 此區塊暫時無法判定"
 LINE_NOT_CONFIGURED = f"{SYMBOL_ERROR} {TEXT_NOT_CONFIGURED}"
 LINE_SETTINGS_UNREADABLE = f"{SYMBOL_ERROR} 設定讀不到"
 LINE_MISSING = f"{SYMBOL_MISSING} {TEXT_MISSING}"
-# 被原因行取代的那幾種重複 ⛔／◇ 行（狀態族，不帶「哪一項」）。
-_QUIET_DUPLICATES = frozenset({LINE_BLOCK_UNDECIDABLE, LINE_FETCH_FAILED, LINE_NOT_CONFIGURED, LINE_SETTINGS_UNREADABLE,
-                               LINE_MISSING})
 _UNREADABLE_STATES = frozenset({STATE_ERROR, STATE_MISSING})
 _UNREADABLE_EMPTY = frozenset({STATE_ERROR, "來源缺"})
 _KIND_ERROR, _KIND_MISSING = "⛔", "◇"
@@ -689,6 +686,39 @@ def _names(entries, kind) -> list:
     return list(dict.fromkeys(key for k, key, _label in entries if k == kind))
 
 
+def _error_is_fetch(label, fetch_keys, fetch_labels, labelled, unconfigured, unconf_labels) -> bool:
+    """市場總覽一個 ⛔ 主值算取數失敗還是尚未設定：收集那一步點名到這個值的那一種優先；兩種都有而取數失敗項目沒有值名時，
+    沒被尚未設定點名的 ⛔ 歸取數失敗；只有一種時就是那一種。"""
+    if fetch_keys and label in fetch_labels:
+        return True
+    if unconfigured and label in unconf_labels:
+        return False
+    if fetch_keys and not unconfigured:
+        return True
+    if unconfigured and not fetch_keys:
+        return False
+    return bool(fetch_keys) and not labelled
+
+
+# 卡上會畫出來的非主值文字欄位（各頁卡片的說明句、卡尾、失敗行、空狀態句）。
+_BLOCK_LINE_FIELDS = ("detail_lines", "tail_lines", "notes", "fetch_fail_lines", "error_lines", "unset_lines",
+                      "save_fail_notes", "redline_note")
+
+
+def _block_lines(block: dict) -> list:
+    out = []
+    for field in _BLOCK_LINE_FIELDS:
+        value = block.get(field)
+        if isinstance(value, str):
+            out.append(value)
+        elif isinstance(value, (list, tuple)):
+            out += [v for v in value if isinstance(v, str)]
+    tail = block.get("freshness_tail")
+    if isinstance(tail, dict) and isinstance(tail.get("text"), str):
+        out.append(tail["text"])
+    return out
+
+
 def quiet_view(block: dict, items, page: str):
     """一張卡收不收起。回 `(view, hold)`：收起 → `view` 為 `{"code", "title", "mark", "lines": [{"text", "_tone"}, ...],
     "unconfigured": [...], "fetch": bool, "missing": bool}`、`hold` 為 None；不收起 → `(None, 理由或 None)`
@@ -709,6 +739,7 @@ def quiet_view(block: dict, items, page: str):
     value_names = page in QUIET_VALUE_NAMES
     fetch_labels = [label for k, _key, label in entries if k == page_health.KIND_FETCH]
     labelled = value_names and fetch_labels and all(fetch_labels)
+    unconf_labels = [label for k, _key, label in entries if k == page_health.KIND_UNCONFIGURED and label]
     groups = {}          # 原因 → {"text", "_tone", "notes", "names", "order"}
 
     def put(key, text_head, tone, name, notes=(), order=0):
@@ -727,10 +758,17 @@ def quiet_view(block: dict, items, page: str):
             notes = tuple(value.get("note_lines") or ())
             if kind == _KIND_MISSING:
                 put(("missing", notes), missing_head, "灰", label, notes, index)
-            elif fetch_keys and (label in fetch_labels or not unconfigured):
+            elif _error_is_fetch(label, fetch_keys, fetch_labels, labelled, unconfigured, unconf_labels):
                 put(("fetch",), error_head, "紅", label if labelled else None, notes, index)
             else:
                 put(("unconfigured",), None, "紅", None, (), index)
+        # 安全網（2026-10-21 3-D 獨立稽核缺陷 2；有意識的更正，不是漏刪）：收集那一步記下、點到這張卡的取數失敗或尚未設定，
+        # 不論對不對得上卡上哪一個值，都要各有一行 —— ~~對不上值的那一種整行不寫~~（舊寫法在取數失敗項目沒有值名、同卡又有
+        # 尚未設定時，取數失敗那一行整行消失）。對不上值時排在最後、字用資料類（既有字型「⛔ 取數失敗：‹資料類›」）。
+        if _KIND_ERROR in kinds and fetch_keys and ("fetch",) not in groups:
+            put(("fetch",), error_head, "紅", None, (), len(values))
+        if _KIND_ERROR in kinds and unconfigured and ("unconfigured",) not in groups:
+            put(("unconfigured",), None, "紅", None, (), len(values))
     else:
         if _KIND_ERROR in kinds:
             for index, (kind, _key, _label) in enumerate(entries):
@@ -741,6 +779,13 @@ def quiet_view(block: dict, items, page: str):
         if _KIND_MISSING in kinds:
             first = next(i for i, (k, _key, _l) in enumerate(entries) if k == page_health.KIND_MISSING)
             put(("missing", ()), missing_head, "灰", None, (), first)
+    # 一張卡記了資料未備、主值卻全是 ⛔（例：持倉體檢偏離提示卡退回預存又過期，資料未備那幾檔寫在卡尾）：卡上照留的非主值句裡
+    # 已有 ◇（判讀證據）就不另寫；沒有 → 補一行「◇ 資料未備：‹資料類›」（既有字型），◇ 不因收起而消失（同批稽核建議 3）。
+    if missing_keys and _KIND_MISSING not in kinds and not any(k[0] == "missing" for k in groups):
+        probe = {"unconfigured": unconfigured, "fetch": ("fetch",) in groups, "missing": False}
+        if not any(SYMBOL_MISSING in line and quiet_keep(probe, line) for line in _block_lines(block)):
+            first = next(i for i, (k, _key, _l) in enumerate(entries) if k == page_health.KIND_MISSING)
+            put(("missing", ()), missing_head, "灰", None, (), len(values) + first)
     if ("fetch",) in groups and not groups[("fetch",)]["names"]:
         groups[("fetch",)]["names"] = list(fetch_keys)
     if ("unconfigured",) in groups:
@@ -789,9 +834,16 @@ def quiet_keep(view: dict, line) -> bool:
     if view is None or not isinstance(line, str):
         return True
     text = line.strip()
-    if text in _QUIET_DUPLICATES:
-        return False
     names = set(view.get("unconfigured") or ())
+    # 狀態族句只在這張卡已有同一種原因行時才省（同批稽核建議 3；~~一律不畫~~，有意識的更正，不是漏刪）：
+    # 「◇ 資料未備」要有資料未備那一行、「⛔ 取數失敗」要有取數失敗那一行、「⛔ 尚未設定」要有尚未設定那一行；
+    # 「⛔ 此區塊暫時無法判定」「⛔ 設定讀不到」屬 ⛔ 那一族，有任何一行 ⛔ 原因就省。
+    error_line = bool(view.get("fetch")) or bool(names)
+    family = {LINE_MISSING: bool(view.get("missing")), LINE_FETCH_FAILED: bool(view.get("fetch")),
+              LINE_NOT_CONFIGURED: bool(names), LINE_BLOCK_UNDECIDABLE: error_line,
+              LINE_SETTINGS_UNREADABLE: error_line}
+    if text in family:
+        return not family[text]
     head = f"{LINE_NOT_CONFIGURED}："
     if text.startswith(head) and names and set(text[len(head):].split("、")) <= names:
         return False

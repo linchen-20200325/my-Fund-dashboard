@@ -160,12 +160,53 @@ def test_同源衍生的方框與重複行不畫_其餘照畫():
     assert not S.quiet_keep(view, "⬜ 不適用：取數失敗，比較值不計算")
     assert S.quiet_keep(view, "⬜ 不適用：資料未備")                           # 這張卡沒有資料未備那一種原因
     for dup in (S.LINE_BLOCK_UNDECIDABLE, S.LINE_FETCH_FAILED, S.LINE_NOT_CONFIGURED, S.LINE_SETTINGS_UNREADABLE,
-                S.LINE_MISSING, "⛔ 尚未設定：資料來源的金鑰"):
+                "⛔ 尚未設定：資料來源的金鑰"):
         assert not S.quiet_keep(view, dup), dup
+    # 這張卡沒有資料未備那一行 → 單獨一句「◇ 資料未備」照畫（同批稽核建議 3：狀態族句只在已有同種原因行時才省）
+    assert S.quiet_keep(view, S.LINE_MISSING)
     for evidence in ("⛔ 另有 3 檔的門檻指標取數失敗，未列入", "⛔ AAAA 取數失敗", "⛔ 尚未設定：別的設定",
                      "⛔ 淨值 取數失敗：AAAA：改用 2026-09-18 的預存淨值", "最大回撤在下方「詳細資料」"):
         assert S.quiet_keep(view, evidence), evidence
     assert S.quiet_keep(None, S.LINE_BLOCK_UNDECIDABLE)                        # 沒收起 → 一律照畫
+
+
+def test_狀態族句只在這張卡已有同種原因行時才省():
+    only_missing = {"unconfigured": [], "fetch": False, "missing": True}
+    assert not S.quiet_keep(only_missing, S.LINE_MISSING)
+    for line in (S.LINE_FETCH_FAILED, S.LINE_NOT_CONFIGURED, S.LINE_BLOCK_UNDECIDABLE, S.LINE_SETTINGS_UNREADABLE):
+        assert S.quiet_keep(only_missing, line), line                       # 沒有任何 ⛔ 原因行 → ⛔ 那一族照畫
+    only_unconf = {"unconfigured": ["K"], "fetch": False, "missing": False}
+    assert S.quiet_keep(only_unconf, S.LINE_FETCH_FAILED) and not S.quiet_keep(only_unconf, S.LINE_NOT_CONFIGURED)
+    assert not S.quiet_keep(only_unconf, S.LINE_BLOCK_UNDECIDABLE)
+
+
+def test_取數失敗項目沒有值名_同卡又有尚未設定_取數失敗那一行不被吞():
+    """同批獨立稽核缺陷 2 的重現：舊寫法只輸出「⛔ 尚未設定：K」。"""
+    card = _mkt_card(_mv("A", *_ERR), _mv("B", "⛔ 尚未設定：K", "系統錯誤"))
+    items = _items((_FETCH, "資料", "風險情緒卡", ""), (_UNCONF, "K", "風險情緒卡", "B"))
+    view, _ = S.quiet_view(card, items, "mkt")
+    assert [l["text"] for l in view["lines"]] == ["⛔ 取數失敗：資料", "⛔ 尚未設定：K"]
+    # 兩種都是塊層（都沒有值名）：兩行都在
+    items = _items((_FETCH, "資料", "風險情緒卡", ""), (_UNCONF, "K", "風險情緒卡", ""))
+    texts = [l["text"] for l in S.quiet_view(card, items, "mkt")[0]["lines"]]
+    assert sorted(texts) == ["⛔ 取數失敗：資料", "⛔ 尚未設定：K"]
+
+
+def test_取數失敗點名的值不在卡上_照樣寫一行_排在最後():
+    """安全網：收集那一步點到這張卡的取數失敗，對不上卡上任何值，仍各有一行（字用資料類）。"""
+    card = _mkt_card(_mv("A", *_ERR))
+    items = _items((_UNCONF, "K", "風險情緒卡", "A"), (_FETCH, "資料", "風險情緒卡", "Z"))
+    assert [l["text"] for l in S.quiet_view(card, items, "mkt")[0]["lines"]] == ["⛔ 尚未設定：K", "⛔ 取數失敗：資料"]
+
+
+def test_主值全是禁止號而卡上記了資料未備_卡上照留的句子有菱形就不另寫_沒有就補一行():
+    base = {"code": "HLD-1", "title": "偏離提示卡", "_rows": [],
+            "_placeholder": {"text": "⛔ 取數失敗", "_state": "系統錯誤"}, "detail_lines": [], "redline_note": "說明。"}
+    items = _items((_FETCH, "淨值", "偏離提示卡", ""), (_MISS, "淨值", "偏離提示卡", ""))
+    with_evidence = dict(base, tail_lines=["◇ 另有 2 檔淨值超過 10 日未更新（資料未備），未列入"])
+    assert [l["text"] for l in S.quiet_view(with_evidence, items, "hld")[0]["lines"]] == ["⛔ 取數失敗：淨值"]
+    bare = dict(base, tail_lines=[])
+    assert [l["text"] for l in S.quiet_view(bare, items, "hld")[0]["lines"]] == ["⛔ 取數失敗：淨值", "◇ 資料未備：淨值"]
 
 
 def test_沒有值名的頁_原因行寫收集記下的資料類():
