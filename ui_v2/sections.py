@@ -782,7 +782,7 @@ def quiet_view(block: dict, items, page: str):
     # 一張卡記了資料未備、主值卻全是 ⛔（例：持倉體檢偏離提示卡退回預存又過期，資料未備那幾檔寫在卡尾）：卡上照留的非主值句裡
     # 已有 ◇（判讀證據）就不另寫；沒有 → 補一行「◇ 資料未備：‹資料類›」（既有字型），◇ 不因收起而消失（同批稽核建議 3）。
     if missing_keys and _KIND_MISSING not in kinds and not any(k[0] == "missing" for k in groups):
-        probe = {"unconfigured": unconfigured, "fetch": ("fetch",) in groups, "missing": False}
+        probe = {"unconfigured": unconfigured, "fetch": ("fetch",) in groups, "missing": False, "fetch_keys": list(fetch_keys)}
         if not any(SYMBOL_MISSING in line and quiet_keep(probe, line) for line in _block_lines(block)):
             first = next(i for i, (k, _key, _l) in enumerate(entries) if k == page_health.KIND_MISSING)
             put(("missing", ()), missing_head, "灰", None, (), len(values) + first)
@@ -801,6 +801,10 @@ def quiet_view(block: dict, items, page: str):
     view = {"code": block.get("code"), "title": title, "mark": QUIET_MARK, "lines": lines,
             "unconfigured": unconfigured, "fetch": ("fetch",) in groups,
             "missing": any(k[0] == "missing" for k in groups),
+            # 2026-10-21 3-D 第三輪（Q2 (a) 落地缺口；有意識的更正，不是漏刪；決策者：AI 總管依稽核確認）：帶出這張卡取數失敗與
+            # 資料未備的鍵（資料類），`quiet_keep` 判 ⬜ 句是不是同一原因衍生時要看到資料類，不再只看種類。
+            "fetch_keys": list(fetch_keys) if ("fetch",) in groups else [],
+            "missing_keys": list(missing_keys) if any(k[0] == "missing" for k in groups) else [],
             # 客戶 2026-10-21 Q7 (a)（`DEC-2026-10-21-05`）：持倉體檢逐檔分組的卡收起時，分組標頭（既有字樣，例「基金 A · 幣別 USD」）
             # 照留，每一檔一行，接在原因行下面。
             "fund_heads": [g.get("head_text") for g in block.get("fund_groups") or () if g.get("head_text")]}
@@ -853,9 +857,16 @@ def quiet_keep(view: dict, line) -> bool:
     if text.startswith(f"{SYMBOL_UNDECIDABLE} "):
         if any(f"{TEXT_NOT_CONFIGURED}：{name}" in text for name in names):
             return False
-        if view.get("fetch") and TEXT_FETCH_FAILED in text:
+        # ~~if view.get("fetch") and TEXT_FETCH_FAILED in text: return False~~
+        # ~~if view.get("missing") and TEXT_MISSING in text: return False~~
+        # → 2026-10-21 3-D 第三輪（有意識的更正，不是漏刪；決策者：AI 總管依稽核確認）：舊寫法只看種類，「⬜ 不適用（取數失敗：別的資料）」
+        # 會被當成同一原因而不畫，違反客戶 Q2 (a)（原因不同的 ⬜ 照留）。現行比照尚未設定那一支：句子裡要寫出這張卡的某一類資料
+        # （`fetch_keys`／`missing_keys`）才算同一原因、不畫；寫不出是哪一類的照留。舊寫法的用意（同源衍生不重複畫）照留。
+        fetch_keys = [k for k in view.get("fetch_keys") or () if k]
+        if view.get("fetch") and TEXT_FETCH_FAILED in text and any(k in text for k in fetch_keys):
             return False
-        if view.get("missing") and TEXT_MISSING in text:
+        missing_keys = [k for k in view.get("missing_keys") or () if k]
+        if view.get("missing") and TEXT_MISSING in text and any(k in text for k in missing_keys):
             return False
     return True
 
@@ -933,10 +944,10 @@ def quiet_detail_view(block: dict, items, page: str):
         view = {"unconfigured": [key], "fetch": False, "missing": False}
     elif kind == page_health.KIND_FETCH:
         line = {"text": f"{SYMBOL_ERROR} {TEXT_FETCH_FAILED}：{key}", "_tone": "紅"}
-        view = {"unconfigured": [], "fetch": True, "missing": False}
+        view = {"unconfigured": [], "fetch": True, "missing": False, "fetch_keys": [key]}
     elif kind == page_health.KIND_MISSING:
         line = {"text": f"{SYMBOL_MISSING} {TEXT_MISSING}：{key}", "_tone": "灰"}
-        view = {"unconfigured": [], "fetch": False, "missing": True}
+        view = {"unconfigured": [], "fetch": False, "missing": True, "missing_keys": [key]}
     else:
         return None
     # ~~for text in _block_lines(block) + notes: 只查說明句欄位~~ → 2026-10-21 第二輪加固（有意識的更正，不是漏刪；決策者：AI 總管

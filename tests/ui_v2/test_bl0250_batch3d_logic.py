@@ -155,9 +155,12 @@ def test_取數失敗加非同源方框_收起_方框照留一行():
 
 
 def test_同源衍生的方框與重複行不畫_其餘照畫():
-    view = {"unconfigured": ["資料來源的金鑰"], "fetch": True, "missing": False}
+    view = {"unconfigured": ["資料來源的金鑰"], "fetch": True, "missing": False, "fetch_keys": ["市場指標"]}
     assert not S.quiet_keep(view, "⬜ 不適用（尚未設定：資料來源的金鑰）")
-    assert not S.quiet_keep(view, "⬜ 不適用：取數失敗，比較值不計算")
+    # ~~assert not S.quiet_keep(view, "⬜ 不適用：取數失敗，比較值不計算")~~ → 3-D 第三輪（有意識的更正，不是漏刪；決策者：AI 總管）：
+    # 舊斷言只看種類（有取數失敗就不畫）；新規則要看資料類（客戶 Q2 (a)：原因不同的 ⬜ 照留），句子寫不出是哪一類就照留。
+    assert not S.quiet_keep(view, "⬜ 不適用（取數失敗：市場指標）")
+    assert S.quiet_keep(view, "⬜ 不適用：取數失敗，比較值不計算")             # 寫不出是哪一類 → 照留（從嚴）
     assert S.quiet_keep(view, "⬜ 不適用：資料未備")                           # 這張卡沒有資料未備那一種原因
     for dup in (S.LINE_BLOCK_UNDECIDABLE, S.LINE_FETCH_FAILED, S.LINE_NOT_CONFIGURED, S.LINE_SETTINGS_UNREADABLE,
                 "⛔ 尚未設定：資料來源的金鑰"):
@@ -168,6 +171,18 @@ def test_同源衍生的方框與重複行不畫_其餘照畫():
                      "⛔ 淨值 取數失敗：AAAA：改用 2026-09-18 的預存淨值", "最大回撤在下方「詳細資料」"):
         assert S.quiet_keep(view, evidence), evidence
     assert S.quiet_keep(None, S.LINE_BLOCK_UNDECIDABLE)                        # 沒收起 → 一律照畫
+
+
+def test_方框同源判定看資料類_不只看種類():
+    """3-D 第三輪（Q2 (a) 落地缺口）：同一張卡有取數失敗 A 時，「⬜ 不適用（取數失敗：B）」照留、「⬜ 不適用（取數失敗：A）」不畫；資料未備同理。"""
+    card = _mkt_card(_mv("A", *_ERR), detail=["⬜ 不適用（取數失敗：B）", "⬜ 不適用（取數失敗：A）"])
+    view, _ = S.quiet_view(card, _items((_FETCH, "A", "風險情緒卡", "A")), "mkt")
+    assert view["fetch_keys"] == ["A"]
+    assert S.quiet_keep(view, "⬜ 不適用（取數失敗：B）")
+    assert not S.quiet_keep(view, "⬜ 不適用（取數失敗：A）")
+    miss = {"unconfigured": [], "fetch": False, "missing": True, "missing_keys": ["淨值"]}
+    assert not S.quiet_keep(miss, "⬜ 不適用（資料未備：淨值）")
+    assert S.quiet_keep(miss, "⬜ 不適用（資料未備：配息）")
 
 
 def test_狀態族句只在這張卡已有同種原因行時才省():
