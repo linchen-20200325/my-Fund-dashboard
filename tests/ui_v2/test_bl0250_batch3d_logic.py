@@ -615,6 +615,17 @@ def test_規則5_觸發與不觸發():
     assert S.quiet_detail_view(_detail_block(_rows=[{"x": 1}]), one, "alo") is None
     assert S.quiet_detail_view(_detail_block(buttons=[{"label": "存檔"}]), one, "alo") is None
     assert S.quiet_detail_view(_detail_block(placeholder=None, _tone="中性"), one, "alo") is None
+    # 稽核複驗反例（2026-10-21）：清單外的欄位有內容 → 照現況（保守預設，不再靠內容欄位白名單）
+    assert S.quiet_detail_view(_detail_block(footer_lines=["◇ 資料未備：市場指標 尚無資料"]), one, "alo") is None
+    hld6 = {"code": "HLD-6", "title": "淨值與配息序列", "_state": "系統錯誤", "buttons": [],
+            "div_rows": [{"ex_date": "2026-01-15"}] * 14}
+    hld6_items = _items((_FETCH, "淨值", "淨值與配息序列", ""))
+    assert S.quiet_detail_view(hld6, hld6_items, "hld") is None
+    assert S.quiet_detail_view({k: v for k, v in hld6.items() if k != "div_rows"}, hld6_items, "hld") is not None   # 對照：同一塊沒有列才比照
+    assert S.quiet_detail_view(_detail_block(_missing_lines=["x"]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(intro_line="說明"), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(_columns=["A"]), one, "alo") is None
+    assert S.quiet_detail_view(_detail_block(tolerance_lines=[], footer_lines=(), intro_line=""), one, "alo") is not None  # 空值不算內容
     # 被原因行取代的狀態族句不算證據
     assert S.quiet_detail_view(_detail_block(detail_lines=["⛔ 取數失敗"]), one, "alo") is not None
     # 射程外的塊（核心卡、結果清單）不比照

@@ -873,8 +873,13 @@ def set1_duplicate_fail_nodes(block: dict) -> list:
 # 原因句與卡片原因行同一套既有字型；打開只有那一行。其他收合區（兩種以上原因、有判讀證據、部分讀得到）一律照現況。
 # 工程判定（3-D 實作組，可推翻）：
 # - 「只有一種原因」＝收集那一步點到這一塊、讀不到的原因項目恰好一項（一種、一個鍵）；同一種兩個鍵（例「尚未設定：A、B」）算兩種，照現況。
-# - 「部分讀得到」：塊上有任何列、逐檔項目、欄位或輸入（`_DETAIL_CONTENT_KEYS`）就算有內容，照現況；塊上有按鈕也照現況
-#   （第五節第三小節「停用時不隱藏」，打開只有一行會把按鈕拿掉）。
+# - ~~「部分讀得到」：塊上有任何列、逐檔項目、欄位或輸入（`_DETAIL_CONTENT_KEYS`）就算有內容，照現況；塊上有按鈕也照現況~~
+#   ~~（第五節第三小節「停用時不隱藏」，打開只有一行會把按鈕拿掉）。~~
+#   → 2026-10-21 稽核複驗加固（有意識的更正，不是漏刪；決策者：AI 總管依稽核指正）：舊寫法是「內容欄位白名單」，清單外的欄位
+#   （例 ALO-6 `footer_lines`、HLD-6 `div_rows`／`_missing_lines`、ALO-1 `intro_line`）不被檢查，收起時會被靜默拿掉。
+#   現行改保守預設：塊上只要有任何非空欄位不在 `_DETAIL_IGNORABLE`（已知的空佔位、塊的中繼資料、表頭、會被逐句檢查判讀證據的說明句欄位），
+#   就算有內容，照現況。按鈕（`buttons`）不在可忽略清單 → 有按鈕照舊不比照（第五節第三小節「停用時不隱藏」）。
+#   舊寫法的用意（有內容就不收）照留；被權衡掉的是「列舉內容欄位」這個做法 —— 漏列一個欄位就會把那一欄靜默拿掉。
 # - 「判讀證據」：塊上照留的句子（拿掉被原因行取代的狀態族句之後）帶 ⛔／◇，或是線框與本檔點名照留的那幾塊
 #   （持倉體檢計算軌跡「四塊沒有一塊出數…」那一句，線框 3.3；資產配置分組定義的「前往 Sheets 維護持倉」，之十四其二第 7 條）。
 QUIET_DETAIL_CODES = {
@@ -884,8 +889,24 @@ QUIET_DETAIL_CODES = {
     "alo": ("ALO-1", "ALO-4", "ALO-5", "ALO-6", "ALO-7"),
 }
 QUIET_DETAIL_EVIDENCE = {"hld": ("HLD-7",), "alo": ("ALO-4",)}
-_DETAIL_CONTENT_KEYS = ("_rows", "_items", "nav_rows", "nav_groups", "_fields", "inputs", "_options", "main_values",
-                        "fund_groups", "input_rows")
+# ~~_DETAIL_CONTENT_KEYS = ("_rows", "_items", "nav_rows", "nav_groups", "_fields", "inputs", "_options", "main_values",~~
+# ~~                        "fund_groups", "input_rows")~~  → 改為下方可忽略清單（保守預設，理由見上方工程判定第二條）。
+# 收起時可以忽略的欄位：塊的中繼資料（代號、標題、回答的問題、層、狀態、色調、衍生理由）、被原因行取代的空佔位與摘要句、
+# 讀不到的鍵、表頭（沒有列時只是欄名）；以及 `_block_lines` 會逐句檢查判讀證據的說明句欄位（帶 ⛔／◇ 就照現況）。
+_DETAIL_IGNORABLE = frozenset(("code", "title", "answers", "_layer", "_state", "_tone", "_derived", "_derived_reason",
+                               "summary_text", "placeholder", "_placeholder", "_empty_kind", "_unconfigured", "_missing_keys",
+                               "column_labels", "freshness_tail") + _BLOCK_LINE_FIELDS)
+
+
+def _detail_has_content(block: dict) -> bool:
+    """塊上有沒有任何「不在可忽略清單、且非空」的欄位（保守預設：清單外一律算有內容）。"""
+    for key, value in block.items():
+        if key in _DETAIL_IGNORABLE or value is None or value is False:
+            continue
+        if isinstance(value, (str, list, tuple, dict, set, frozenset)) and len(value) == 0:
+            continue
+        return True
+    return False
 
 
 def _detail_unreadable(block: dict) -> bool:
@@ -900,7 +921,7 @@ def quiet_detail_view(block: dict, items, page: str):
     code = block.get("code")
     if code not in QUIET_DETAIL_CODES.get(page, ()) or code in QUIET_DETAIL_EVIDENCE.get(page, ()):
         return None
-    if block.get("buttons") or any(block.get(key) for key in _DETAIL_CONTENT_KEYS) or not _detail_unreadable(block):
+    if _detail_has_content(block) or not _detail_unreadable(block):
         return None
     title = block.get("title", "")
     entries = list(dict.fromkeys((kind, key) for kind, key, _label in _card_entries(items, title)))
