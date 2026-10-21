@@ -306,7 +306,9 @@ def test_示範模型逐位元組不變():
 
 def test_壞列字面與來源缺字面逐字等於真身():
     assert sections.SET_BAD_ROW_TEXT == set_live.TEXT_BAD_ROWS.format(n=1)
-    assert sections.SET_LOG_TABLE in set_logic.FETCHABLE_TABLES
+    # ~~`sections.SET_LOG_TABLE in set_logic.FETCHABLE_TABLES`~~ → BL-0250 批次 3-C：`SET_LOG_TABLE` 只給「缺 fetch_log：」那一句用，
+    # 那一句拿掉之後同次刪除（`CLAUDE.md` §-1.5.1c 判定 3；有意識的政策變更，不是漏刪）。
+    assert not hasattr(sections, "SET_LOG_TABLE")
     assert set_logic._placeholder(set_logic.TEXT_NO_RECORDS, "來源缺")["_empty_kind"] == sections.SET_EMPTY_KIND_NO_SOURCE
 
 
@@ -328,9 +330,11 @@ def test_SET3摘要_壞列與結構檢查行帶進摘要_標點用逗號():
     assert sections.set3_summary(block) == "3 個設定，1 個未設定，1 個格式不符未採用，⚠ 2 列格式不符，未採用"
 
 
-def test_SET2摘要_來源缺寫出缺的來源鍵():
+def test_SET2摘要_來源缺_3C窄例外不露出表名():
     first = _b(_model("first"), "SET-2")
     assert first["placeholder"]["_empty_kind"] == "來源缺"
-    assert sections.set2_summary(first).startswith("缺 fetch_log：")
-    assert set_logic.TEXT_NO_RECORDS in sections.set2_summary(first)
+    # ~~`startswith("缺 fetch_log：")`~~ → BL-0250 批次 3-C（客戶 2026-10-21 Q4；`DEC-2026-10-21-02`；有意識的政策變更，不是漏刪）：
+    # 完全沒有任何取數紀錄時只寫佔位那一句，不露出表名（窄例外，只此一處與 `SET-6`）；符號照舊。
+    assert sections.set2_summary(first) == f"{first['placeholder']['glyph']} {set_logic.TEXT_NO_RECORDS}"
+    assert "fetch_log" not in sections.set2_summary(first)
     assert sections.set2_summary(_b(_model("logfail"), "SET-2")).startswith("⛔ 取數失敗：")   # 取數失敗不是來源缺

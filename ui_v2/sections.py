@@ -293,7 +293,7 @@ SET_EMPTY_GLYPH = "⬜"
 SET_STATE_WORD_EMPTY = "狀態：尚不足以判定"
 SYMBOL_STALE = "◷"
 SET_EMPTY_KIND_NO_SOURCE = "來源缺"
-SET_LOG_TABLE = "fetch_log"
+# ~~`SET_LOG_TABLE = "fetch_log"`~~（只給 `set2_summary`「缺 fetch_log：」那一句用；BL-0250 批次 3-C 那一句拿掉後同次刪除）
 # 正式模式 `SET-3` 壞列的目前值（真身 `ui_v2/set/live.py::TEXT_BAD_ROWS` 以 n=1 帶入）。
 SET_BAD_ROW_TEXT = "⚠ 1 列格式不符，未採用"
 
@@ -502,8 +502,11 @@ def set2_summary(block: dict) -> str:
     placeholder = block["placeholder"]
     if placeholder:
         if placeholder.get("_empty_kind") == SET_EMPTY_KIND_NO_SOURCE:
-            # 比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
-            return f"缺 {SET_LOG_TABLE}：{_node_text(placeholder)}"
+            # ~~比照 `SET-6` 收合摘要「缺 fetch_log：尚無取數紀錄」：寫出缺的來源鍵（44 第五節第四小節）。
+            # `return f"缺 fetch_log：{_node_text(placeholder)}"`~~ → BL-0250 批次 3-C（客戶 2026-10-21 Q4；`DEC-2026-10-21-02`；
+            # 44 第七節第三小節之十四）：完全沒有任何取數紀錄時，標題只寫佔位那一句（不露出表名；符號照舊）。
+            # 第五節第四小節元件判準只在 `SET-2`／`SET-6` 這一種情形開窄例外，其他塊同型摘要不動（有意識的政策變更，不是漏刪）。
+            return _node_text(placeholder)
         # BL-0250 批次 3-A：讀取失敗的成因由 `ui_v2/set/live.py::_read_failure_title` 先寫好（尚未設定不寫成取數失敗）。
         return block.get("_plain_summary") or _node_text(placeholder)
     # BL-0250 批次 3-A（客戶 2026-10-19 批次 3 裁示；44 第七節第三小節之十二）：結果欄改中文之後，分組改讀 `live` 記的 `_result`

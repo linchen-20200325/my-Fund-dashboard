@@ -846,20 +846,25 @@ def _own_missing_markers(node: dict, private: bool) -> bool:
     # （例：資產配置目標修改紀錄那一列的「◇ 資料未備：尚未設定過」），其餘（例：`_values` 的計算中間值）不看。
     if private and private not in _RENDERED_PRIVATE:
         return False
+    marked = set(node.get(page_health.MISSING_LINES_KEY) or ())
     for key, value in node.items():
         if isinstance(key, str) and key.startswith("_"):
             continue
-        if _missing_string(value):
+        if _missing_string(value, key in marked):
             return True
-        if isinstance(value, (list, tuple)) and any(_missing_string(v) for v in value):
+        if isinstance(value, (list, tuple)) and any(_missing_string(v, key in marked) for v in value):
             return True
     return False
 
 
-def _missing_string(value) -> bool:
-    """一句畫成 ◇ 的字：含「◇ 資料未備」，或以 ◇ 起頭（3-B 第二輪稽核回修可選 2：例「◇ 另有 N 檔淨值超過 10 日未更新…」，
-    畫在 `HLD-1` 的 `tail_lines`、`HLD-6` 的 `detail_lines` 等各種 lines 欄位）。"""
-    return isinstance(value, str) and (_MISSING_LINE in value or value.startswith(f"{SYMBOL_MISSING} "))
+def _missing_string(value, marked: bool = False) -> bool:
+    """一句畫成 ◇ 的字：含「◇ 資料未備」（狀態字）；或它所在的欄位由產生處寫明是 ◇ 的說明行（`page_health.MISSING_LINES_KEY`，
+    `marked`）而且這一句以 ◇ 起頭（例「◇ 另有 N 檔淨值超過 10 日未更新…」，`HLD-1` 的 `tail_lines`、`HLD-6` 的 `detail_lines`）。
+    ~~以 ◇ 起頭一律算~~（3-B 第二輪稽核回修可選 2）→ BL-0250 批次 3-C（44 之十三其八第 22 條、之十四）：沒有寫明的欄位裡以 ◇ 起頭的字
+    不算（例：說明文字借用 ◇ 當項目符號），不靠字首（有意識的更正，不是漏刪）。"""
+    if not isinstance(value, str):
+        return False
+    return _MISSING_LINE in value or (marked and value.startswith(f"{SYMBOL_MISSING} "))
 
 
 _RENDERED_PRIVATE = _ROW_KEYS | {"_placeholder", "_columns", "_fields"}

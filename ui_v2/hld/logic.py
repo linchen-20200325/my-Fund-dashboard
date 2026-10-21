@@ -2802,6 +2802,8 @@ def _tag_hld_blocks(dataset, blocks, metrics, rules, *, has_holdings, settings_e
     for code, field in (("HLD-1", "tail_lines"), ("HLD-6", "detail_lines")):
         if any(isinstance(line, str) and _NOT_READY_SUFFIX in line for line in by_code[code].get(field) or ()):
             page_health.tag_missing(by_code[code], cls["nav"])
+            # BL-0250 批次 3-C：同時寫明是哪一個欄位的說明行（收集那一步不再靠「◇ 」字首認，44 之十三其八第 22 條）。
+            page_health.tag_missing_lines(by_code[code], field)
     # ◇：空持倉時各塊說的是持倉；有持倉時，核心卡與 `HLD-8` 的塊態取自各值（衍生），`HLD-1` 零列的資料未備是門檻所指的那幾個值。
     page_health.tag_derived(by_code["HLD-0"], page_health.DERIVED_LAMP)
     page_health.tag_derived(by_code["HLD-7"], HLD7_DERIVED_REASON)

@@ -113,7 +113,13 @@ DERIVED_REASON_KEY = "_derived_reason"
 # `_current_keys`（資產配置目標對照卡每一列：基準值缺那一邊的資料類）、`_missing_key`（資產配置各類別的缺值理由屬哪一類）、
 # `_data_key`（標的探索接線結果的每一格：產生處寫的資料類）是同一批的同一種標記。
 MARK_KEYS = ("_fetch_classes", "_fetch_class", "_missing_keys", "_derived", "_derived_reason",
-             "_current_keys", "_missing_key", "_data_key", "_shadowed")
+             "_current_keys", "_missing_key", "_data_key", "_shadowed", "_missing_lines")
+
+# BL-0250 批次 3-C（44 第七節第三小節之十三其八第 22 條「3-C 搬遷時改成產生處明確標記，不靠字首」；之十四）：
+# 一串說明行（`tail_lines`、`detail_lines` 這類欄位）裡畫成 ◇ 的句子，由產生處在同一個節點上寫明是哪一個欄位
+# （`(<欄位名>, ...)`）；收集那一步只在被寫明的欄位裡認 ◇ 起頭的句子。~~以 ◇ 起頭的字串一律當成畫成 ◇ 的地方~~
+# （3-B 第二輪稽核回修可選 2 的做法；有意識的更正，不是漏刪）。含「◇ 資料未備」的字照舊認（那是狀態字，不是字首）。
+MISSING_LINES_KEY = "_missing_lines"
 
 # 同一塊被兩個成因擋住、畫面只寫得下其中一句時，另一個成因（3-B 稽核回修第 5 條：「成因只記到部分卡」的根因）：
 # `((<失敗原文>, <中文資料類>), ...)`。只記、不上畫面；收集那一步依原文判斷它是「尚未設定」那一族還是取數失敗。
@@ -193,6 +199,22 @@ def tag_missing(node, *keys):
         if key not in have:
             have.append(key)
     node[MISSING_KEYS_KEY] = tuple(have)
+    return node
+
+
+def tag_missing_lines(node, *fields):
+    """在 `node` 上記「這幾個欄位的說明行裡，◇ 起頭的那幾句是畫成 ◇ 的資料未備」（就地；回 `node`；同欄位不重記）。
+    資料類照舊用 `tag_missing` 另記。`fields` 不得為空。"""
+    fields = tuple(f for f in fields if f)
+    if not fields:
+        raise ValueError("說明行的欄位不得為空（不猜）")
+    if not isinstance(node, dict):
+        return node
+    have = list(node.get(MISSING_LINES_KEY) or ())
+    for field in fields:
+        if field not in have:
+            have.append(field)
+    node[MISSING_LINES_KEY] = tuple(have)
     return node
 
 
