@@ -303,6 +303,15 @@ SET_STALE_FRED_INVALID = _set(stale=True, fred=SET_FRED_400)
 
 SCRIPTS = {"mkt": MKT, "hld": HLD, "exp": EXP, "alo": ALO, "set": SET}
 
+
+def quiet_off(script: str) -> str:
+    """BL-0250 批次 3-D：同一份腳本、把卡片安靜收起關掉（＝3-C 的畫法）。給「收起之外的那幾件事照舊」的守衛用 ——
+    沒有收起的卡逐字相同、3-A／3-C 的值位置寫法照舊。AppTest 與 pytest 同一個行程：換掉的函式在 finally 換回來。"""
+    body = "\n".join("    " + line for line in script.split("\n"))
+    return (_HEAD + "from ui_v2 import sections as _S3D_OFF\n_S3D_SAVED = _S3D_OFF.quiet_cards\n"
+            "_S3D_OFF.quiet_cards = lambda *_a, **_k: ({}, {})\n"
+            "try:\n" + body + "\nfinally:\n    _S3D_OFF.quiet_cards = _S3D_SAVED\n")
+
 # ───────────────────────── 抽字器 ─────────────────────────
 
 _TAG = re.compile(r"<[^>]+>")

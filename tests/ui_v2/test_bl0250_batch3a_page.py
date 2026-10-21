@@ -116,21 +116,46 @@ def test_SET_取數紀錄混有真的失敗_照寫取數失敗_燈判定照舊()
     assert "⛔ 尚未設定：資料來源的金鑰" not in joined
 
 
+@functools.lru_cache(maxsize=None)
+def _at_off(page, name):
+    """BL-0250 批次 3-D：同情境把卡片安靜收起關掉（＝3-C 的畫法），驗 3-A 那幾處值位置的寫法照舊。"""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(SCAN.quiet_off(SCAN.SCRIPTS[page][name]), default_timeout=90)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def _joined_off(page, name):
+    return "\n".join(_texts(_at_off(page, name)))
+
+
 def test_HLD_未設定_偏離提示卡主值寫尚未設定_真的取數失敗情境照舊():
     # ~~"偏離提示卡 ⛔ 尚未設定 ⛔ 此區塊暫時無法判定"~~ → 同批總管裁定（適用 `DEC-2026-10-19-05` 第 2 點；有意識的更正，不是漏刪）：補上哪一項。
-    assert "偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定" in _joined("hld", "未設定")
+    # → BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五；有意識的政策變更，不是漏刪；決策者：客戶 `DEC-2026-10-21-03`）：
+    # ~~現況畫面直接驗~~ —— 這張卡主值全部讀不到 → 收起，畫面上改寫原因行；3-A 那一句值位置寫法改在「關掉收起」的畫面驗（照舊），
+    # 收起後的那一行另驗（兩項都寫出來、不寫成取數失敗）。
+    assert "偏離提示卡 ⛔ 尚未設定：保單試算表 ⛔ 此區塊暫時無法判定" in _joined_off("hld", "未設定")
+    assert "偏離提示卡 （暫時收起） ⛔ 尚未設定：保單試算表、設定試算表 " in _joined("hld", "未設定")
     failed = _joined("hld", "取數失敗")
     assert "⛔ AAAA 取數失敗" in failed and "偏離提示卡 ⛔ 尚未設定" not in failed
 
 
 def test_MKT_未設定_尚未設定的主值旁不掛取數失敗_真的取數失敗那一個照掛():
-    joined = _joined("mkt", "未設定")
+    # BL-0250 批次 3-D（同上一條）：「未設定」情境三張卡主值全部讀不到 → 收起；3-A 這幾句值位置寫法改在「關掉收起」的畫面驗（照舊）。
+    joined = _joined_off("mkt", "未設定")
     # 同批稽核回修 C1：風險情緒卡是混合成因（波動度指數真的取數失敗），自己全屬尚未設定的那個值寫哪一項（不留光禿禿的狀態族）。
     assert "高收益信用利差 ⛔ 尚未設定：資料來源的金鑰 ⬜ 不適用" in joined
     assert "政策利率 ⛔ 此區塊暫時無法判定 新臺幣對美元匯率" in joined
     assert "高收益信用利差 ⛔ 尚未設定 取數失敗" not in joined
     assert "波動度指數 ⛔ 此區塊暫時無法判定 取數失敗" in joined          # 反面：同一張卡真的取數失敗那一個照掛
-    assert "波動度指數 ⛔ 此區塊暫時無法判定 取數失敗" in _joined("mkt", "取數失敗")
+    assert "波動度指數 ⛔ 此區塊暫時無法判定 取數失敗" in _joined("mkt", "取數失敗")   # 部分讀不到：不收起，照舊
+    # 收起之後：兩種成因各一行，尚未設定那一行寫哪一項、不掛「取數失敗」
+    quiet = _joined("mkt", "未設定")
+    assert "風險情緒卡 （暫時收起） ⛔ 取數失敗：波動度指數 ⛔ 尚未設定：資料來源的金鑰 ⬜ 不適用（尚未設定：設定試算表）" in quiet
+    assert "資金與匯率卡 （暫時收起） ⛔ 尚未設定：資料來源的金鑰 ◇ 資料未備：新臺幣對美元匯率" in quiet
+    assert "取數失敗：高收益信用利差" not in quiet and "取數失敗：資料來源的金鑰" not in quiet
 
 
 def test_MKT_未設定_缺金鑰的指標_清單與明細表與新鮮度清單寫尚未設定_真的失敗照寫():

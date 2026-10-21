@@ -64,6 +64,27 @@ def _run(script, monkeypatch=None):
     return at, summaries
 
 
+def _quiet(page, script):
+    """BL-0250 批次 3-D（新設計 B）：這一頁這一次收起了哪幾張卡、各寫了哪幾行原因（`sections.quiet_cards` 的回傳，只讀）。"""
+    from ui_v2 import sections
+
+    seen = []
+    real = sections.quiet_cards
+
+    def spy(*args, **kwargs):
+        out = real(*args, **kwargs)
+        seen.append(out[0])
+        return out
+
+    sections.quiet_cards = spy
+    try:
+        at, _ = _run(script)
+    finally:
+        sections.quiet_cards = real
+    views = seen[-1] if seen else {}
+    return at, {code: [line["text"] for line in view["lines"]] for code, view in views.items()}
+
+
 def _status_lines(at):
     return [P.markdown_text(m.value) for m in at.main.markdown if _STATUS_CLASS in m.value]
 
@@ -110,8 +131,19 @@ def test_沒有任何異常時只寫資料截至日(page):
 
 @pytest.mark.parametrize("page", _PAGES)
 def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原文在一般畫面0次(page):
-    at, _ = _run(P.SCRIPTS[page]["未設定"])
+    at, quiet = _quiet(page, P.SCRIPTS[page]["未設定"])
     texts = _visible(at)
+    # BL-0250 批次 3-D（新設計 B；44 第七節第三小節之十五、之七其二第 3 條指標；有意識的政策變更，不是漏刪；決策者：客戶
+    # `DEC-2026-10-21-03`）：收起的卡上每種原因一行（「⛔ 尚未設定：‹哪一項›」），同源原因因此可能在幾張收起卡上各寫一行。
+    # 下面的 stray 比對先把這一頁收起卡的原因行拿掉再看 —— 收起卡上原因行以外的地方照舊不得出現（不放寬）。
+    reasons = sorted({line for lines in quiet.values() for line in lines}, key=len, reverse=True)
+
+    def _drop_reasons(t):
+        for line in reasons:
+            t = t.replace(line, "")
+        return t
+
+    texts = [_drop_reasons(t) for t in texts]
     joined = "\n".join(texts)
     # ~~`joined.count("尚未設定：") == 1`~~ → BL-0250 批次 1（客戶 2026-10-19 裁示 G3，`DEC-2026-10-19-04`；有意識的更正，不是漏刪）：
     # 客戶點名的位置 —— 結論燈、展開區標題、③ —— 改寫「尚未設定：〈哪一項〉」（不得寫成取數失敗）；市場總覽「設定讀不到」
@@ -154,10 +186,23 @@ def test_未設定情境_尚未設定的類別句恰一次_狀態句與寫入原
 
 @pytest.mark.parametrize("page, name", _CASES)
 def test_此區塊暫時無法判定的次數等於受影響塊數(page, name, monkeypatch):
-    at, summaries = _run(P.SCRIPTS[page][name], monkeypatch)
+    # BL-0250 批次 3-D（新設計 B；之七其二第 3 條指標；有意識的政策變更，不是漏刪；決策者：客戶 `DEC-2026-10-21-03`）：
+    # ~~畫面上的次數 ＝ 受影響塊數~~ → 收起的卡上那一句由原因行取代（不畫），其餘受影響的塊照舊一塊一次；收起的卡一定寫了原因行。
+    real = health.dedupe_failures
+    summaries = []
+
+    def _spy_dedupe(display):
+        out = real(display)
+        summaries.append(out[1])
+        return out
+
+    monkeypatch.setattr(health, "dedupe_failures", _spy_dedupe)
+    at, quiet = _quiet(page, P.SCRIPTS[page][name])
     assert len(summaries) == 1, summaries
     shown = sum(t.count(health.TEXT_BLOCK_UNDECIDABLE) for t in _visible(at))
-    assert shown == len(summaries[0]["affected_blocks"]), (page, name, shown, summaries[0])
+    kept = [code for code in summaries[0]["affected_blocks"] if code not in quiet]
+    assert shown == len(kept), (page, name, shown, kept, sorted(quiet))
+    assert all(quiet[code] for code in quiet), quiet
 
 
 def test_受影響塊數不是空掃(monkeypatch):
@@ -173,10 +218,16 @@ def test_受影響塊數不是空掃(monkeypatch):
 def test_同一類失敗摘要在一般畫面只出現在頁首(page):
     # ~~狀態行「⛔ 取數失敗：<資料類>」恰一次~~ → BL-0250 批次 3-C（U9）：頁首主要原因寫「⛔ 主要原因：<資料類>取數失敗」；
     # 同源失敗摘要照舊不在頁面其餘位置重複（有意識的政策變更，不是漏刪；`DEC-2026-10-21-01`）。
-    at, _ = _run(P.SCRIPTS[page]["取數失敗"])
+    at, quiet = _quiet(page, P.SCRIPTS[page]["取數失敗"])
     line = " ".join(_status_lines(at)[0].split())
     assert line.startswith(f"{health.SYMBOL_ERROR} 主要原因：") and health.TEXT_FETCH_FAILED in line, line
     joined = "\n".join(t for t in _visible(at) if t != line)
+    # BL-0250 批次 3-D（新設計 B；之七其二第 3 條指標；有意識的政策變更，不是漏刪；決策者：客戶 `DEC-2026-10-21-03`）：
+    # ~~頁首以外 0 次~~ → 收起的卡每張寫一行自己的原因（「⛔ 取數失敗：‹…›」），恰好那幾行；其餘位置照舊 0 次。
+    reasons = [r for lines in quiet.values() for r in lines if f"{health.TEXT_FETCH_FAILED}：" in r]
+    assert joined.count(f"{health.TEXT_FETCH_FAILED}：") == len(reasons), (page, reasons)
+    for reason in reasons:
+        joined = joined.replace(reason, "", 1)
     assert joined.count(f"{health.TEXT_FETCH_FAILED}：") == 0, page
 
 
