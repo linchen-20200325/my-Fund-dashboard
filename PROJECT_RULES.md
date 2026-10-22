@@ -267,6 +267,17 @@
 
 **既有錨點**：交接本 §0.1 五個觸發點（約 :11-19）、§0.5 第 2～5 條（約 :43-56；第 5 條「每完成一輪稽核就寫一次，容器隨時重啟」）；`PROCESS.md` §4「合併後驗證與存檔」（約 :186）。
 
+### 6.1 長期規則：Handoff／Save Gate（客戶 2026-10-22 裁示，`DEC-2026-10-22-03`）
+
+> **出處**：客戶 2026-10-22 指示，經總管於派工單轉達；repo 內無逐字存檔。以下為條文化要點，字句由文件組整理。
+> **位階與適用對象**：同第 3 節 3.1（受 `CLAUDE.md` `§-2`＋`§-1.5`＋`§-1` 管轄；適用 Claude、ChatGPT 與所有 agent 的未來對話）。與本節上方 Safe Checkpoint、第 11 節、第 12 節併讀，不取代它們。
+
+1. **觸發時機**（任一即是）：準備換新對話；context 偏高；客戶要求結束；階段到達安全停點。
+2. **停止前先存檔**：把跨對話必要狀態存進 GitHub 上的正式治理文件，依既有分工 —— 永久規則 → 本檔；客戶裁示 → `docs/DECISIONS.md`；未完成工作 → `docs/BACKLOG.md`；現況、阻擋、下一個安全點 → `docs/HANDOFF.md`。
+3. **完成前重新核對 GitHub 實況**：main SHA、Open／Draft PR、CI（逐條看 `conclusion`）與相關治理文件；與文件不一致時以 GitHub 實況為準，先改文件再停。
+4. **不得寫入任何 secret**：token、私鑰、OAuth 憑證、試算表 ID 等實際值一律不寫，只寫「已設定／未設定」。
+5. **不得另建第二套**：不得建立第二套 backlog、handoff 或 memory 文件（例：PROJECT_STATE 類新檔）；一律寫進上列四份。
+
 ## 第 7 節｜Definition of Done
 
 **完成的鏈**：implementation → relevant tests → regression → independent audit／red-team → required fixes → CI → merge → verify main → 更新 Backlog／Decisions／Handoff。
