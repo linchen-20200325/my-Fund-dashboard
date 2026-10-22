@@ -34,7 +34,14 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-22（第二次）現況（以本框為準；下方第一次框、表格與第 3 節的逐日同步行是歷史快照）**（查詢時間 2026-10-22 16:58 UTC，`date -u`；`git rev-parse origin/main`；GitHub REST 唯讀查 main check-runs 與 open PR；狀態更新，不是漏刪：第一次框整段保留於下方）
+> **⭐ 2026-10-22（第三次）現況（以本框為準；下方第二次框、第一次框、表格與第 3 節的逐日同步行是歷史快照）**（查詢時間 2026-10-22 20:08 UTC，`date -u`；`git rev-parse origin/main`；GitHub REST 唯讀查 main check-runs 與 open PR；狀態更新，不是漏刪：第二次框整段保留於下方）
+> - **main**：`b149873`（全長 `b14987348ea5dc28c4439a26f037452ee505e2ed`；PR #1020 合併）。main CI：Schema gate、Fast checks、Slow tests（informational）最新一組三條皆 `completed`／`success`（逐條看 `conclusion`；同一 SHA 另有一組較早、Fast checks 與 Slow tests 為 `cancelled` 的 check-run，屬被後一次重跑取代的舊跑次，不判定為紅）。**Open／Draft PR：0**。**本批 PR：#1021**（分支 `ccr-504fafce-fky1it`，開立於 2026-10-22；合併後 main SHA 另補）。
+> - **本批新增（交接防遺失保存批；只保存文件，不實作）**：`docs/v2/63_market_trend_research_baseline.md`（**Research Baseline ／ NOT APPROVED SPEC**；量測 SHA `b149873`；新版產品方向、市場趨勢研究三層原則、Repo 現有趨勢引擎盤點、舊 UI 唯讀架構稽核 durable summary 含 Decision Gates G-A～G-S）＋ `docs/BACKLOG.md` BL-0415～BL-0419 ＋ `docs/DECISIONS.md` `DEC-2026-10-22-05`（客戶確認新版產品方向與市場趨勢研究原則）。
+> - **唯一下一接手點**：「下一步不是實作新版 UI，也不是裁 G-A～G-S。先執行「客戶提供市場趨勢參考資料 × Repo 現有趨勢引擎」唯讀對齊稽核。完成後再回到 G-A～G-S Decision Gate。」（BL-0415；63 §6）
+> - **尚未裁示**：G-A～G-S（63 §4.4；**G-A／G-B／G-C 暫不得裁示**，待 BL-0415 完成）、BL-0411／BL-0413／BL-0414、G1 重驗（第二次框所列 G1 狀態未變）。
+> - **禁止事項**：不得直接進入 Phase 7／UI implementation；G8 未核准前不做 UI 改版；不得把 `docs/v2/63` 當 approved spec；不得把現有 regime 引擎（`calc_macro_phase`／`calculate_composite_score`／`risk_radar` 等）選成 SSOT；正式產品的名稱、卡片、Tooltip、通知、AI 文案不得出現客戶提供參考資料的作者或老師姓名；不得寫入任何 secret 值；不得另建第二套 backlog／handoff／memory（`PROJECT_RULES.md` 6.1）。第二次框的其餘禁止事項照舊。
+
+> **⭐ 2026-10-22（第二次）現況（已被上方 2026-10-22 第三次框取代；歷史快照）**（查詢時間 2026-10-22 16:58 UTC，`date -u`；`git rev-parse origin/main`；GitHub REST 唯讀查 main check-runs 與 open PR；狀態更新，不是漏刪：第一次框整段保留於下方）
 > - **main**：`d2cd3bbe`（全長 `d2cd3bbef12d48b6d51e00320a2060b968030323`；PR #1019 合併）。main CI：Schema gate、Fast checks、Slow tests（informational）三條皆 `completed`／`success`（逐條看 `conclusion`）。**Open／Draft PR：0**。本批文件 PR 尚未開（分支 `ccr-c06b0e3f-raaxai`，PR 號由總管開立後補）。
 > - **G1 正式環境接線（唯一優先，仍阻塞、未結案）**：四頁重驗實機結果（2026-10-22，客戶實機回報經總管轉達）：市場總覽三卡有值，兩項缺值為既知 BL-0310／BL-0217；持倉體檢與資產配置持倉為空，根因＝保單分頁有列但缺 `_持倉補充`＋幣別值為中文「美元／台幣」（B 版 v2 路徑無中文→ISO 轉碼）而整批略過；SET-4 日期起迄填反已由客戶修正（排序 bug 另登 BL-0412）；略過原因不上畫面（BL-0411）。**三項待客戶裁示**：BL-0411（略過原因上畫面＝產品語意）、BL-0413（幣別：改 Sheet 值 A1／加轉碼 A2 擇一）、BL-0414（級別 vs `_持倉補充.類別`）。
 > - **本輪新增（只盤點登記，不實作）**：舊 UI 功能盤點 Gap Matrix `docs/v2/62_old_ui_gap_matrix.md`（量測 SHA `d2cd3bb`；四組單組讀碼、未實跑 UI）＋ `docs/BACKLOG.md` BL-0397～BL-0414 ＋ `docs/DECISIONS.md` `DEC-2026-10-22-04`（客戶確認 B 版設計原則：舊 UI 為功能與已驗證投資邏輯的參考、舊畫面不直接移植、B 版 UI/UX 重新設計、舊版重要功能不得無故消失）。**Gap Matrix 的「建議」是總管建議，不是客戶核准；G8 未解除。**
@@ -102,6 +109,7 @@
    - **2026-10-17 Phase 3 執行提示語**（`docs/DECISIONS.md` `DEC-2026-10-17-02`，取代本小項上方預告的那一份；方向以上一行與 `DEC-2026-10-17-01` 為準）：文件已完成（58 草案、59 線框、`docs/evidence/phase3_uiux_audit_2026-10-17/`、BL-0362～BL-0366）。~~**下一步：等客戶裁示 `docs/v2/58_ui_ux_constitution.md` 第 13 節 8 題**（BL-0366；其中 (7) 決定核准線框後可否不等五頁截圖就開 P0 第一批）；裁示前不改 UI，上方建 App、收截圖的步驟照舊（狀態更新，不是漏刪）。~~ → 已裁示，下一步見上一小項（狀態更新，不是漏刪）。
    - **2026-10-22 同步**（狀態更新，不是漏刪；上方各行保留不改）：G1 進度、下一個接手點與禁止事項見第 2 節 ⭐ 框；裁示見 `DEC-2026-10-22-01`～`-03`。
    - **2026-10-22 同步（G1 重驗結果＋舊 UI 盤點）**（狀態更新，不是漏刪；上一行保留不改）：G1 四頁實機結果（客戶實機回報經總管轉達；repo 內無逐字存檔）——市場總覽三卡有值，兩項缺值為既知 BL-0310／BL-0217；持倉體檢與資產配置持倉為空，根因＝保單分頁有列但缺 `_持倉補充`＋幣別值為中文（「美元／台幣」，B 版 v2 路徑無中文→ISO 轉碼，整批略過）；SET-4 日期起迄填反已由客戶修正（排序 bug 登 BL-0412）；A1 略過原因不上畫面（BL-0411）。G1 **仍阻塞**，三項待客戶裁示 BL-0411／BL-0413／BL-0414。同輪完成舊 UI 功能盤點：四組單組讀碼（未實跑 UI、可達性為靜態 import）→ 總管彙整為 `docs/v2/62_old_ui_gap_matrix.md`（量測 SHA `d2cd3bb`；A 查一檔／B 多檔比較／C 找標的與池／D Google 與 Sheet／E 投資與持倉操作／F 其他，共 41 列）→ 登記 `docs/BACKLOG.md` BL-0397～BL-0414 與 `docs/DECISIONS.md` `DEC-2026-10-22-04`。本輪只盤點登記：不實作、不改 production code、不改 Sheet、不 migration、不解凍 44、不自行決定 layout、不開始 G2～G10；矩陣「建議」不是客戶核准。**下一個唯一 handoff point**：(1) 客戶就 BL-0413／BL-0414 裁示並補 `_持倉補充` 後重驗持倉體檢／資產配置，判定 G1；(2) 與此並行：客戶＋總管依 `docs/v2/62` Gap Matrix 重新設計 B 版 UI/UX（草稿先行；G8 未核准前不實作）。本批文件分支 `ccr-c06b0e3f-raaxai`（PR 號由總管開立後補）。
+   - **2026-10-22 同步（交接防遺失保存批）**（狀態更新，不是漏刪；上方各行保留不改）：本批落盤 `docs/v2/63`（Research Baseline、NOT APPROVED SPEC）、BL-0415～BL-0419、`DEC-2026-10-22-05`。**下一步**：先執行 BL-0415「客戶提供市場趨勢參考資料 × Repo 現有趨勢引擎」唯讀對齊稽核（不改 code、不選用引擎），完成後再回到 G-A～G-S Decision Gate；G-A／G-B／G-C 在此之前暫不得裁示；G1 重驗（BL-0411／BL-0413／BL-0414）照舊並行等客戶裁示。詳見第 2 節第三次 ⭐ 框。
 3. 有時間窗：FX 觀測日探測重跑窗口 2026-11-02～約 11-24（上限約 11-26），錯過要等明年 3 月；重跑方式與按鈕分支見 `docs/BACKLOG.md` BL-0217（按鈕分支窗口結束前不得刪，見 BL-0265）。
 4. 本項以外**不構成動工授權**（`CLAUDE.md` §-1）。
 
@@ -147,7 +155,7 @@
 
 1. `git fetch origin`，以 `git log -1 --format='%H %P' origin/main` 確認 main SHA，與本檔第 2 節比對；不一致 → 以 GitHub 為準，先更新本檔再動作。
 2. 查 open PR 與 main 最新 push 的三條 CI job（Schema gate、Fast checks、Slow tests）逐條 `conclusion`。
-3. 依第 1 節順序讀文件；待辦查 `docs/BACKLOG.md`，裁示查 `docs/DECISIONS.md`，舊脈絡查交接本（凍結，只讀）。
+3. 依第 1 節順序讀文件；待辦查 `docs/BACKLOG.md`，裁示查 `docs/DECISIONS.md`，舊脈絡查交接本（凍結，只讀）。（→ 2026-10-22 補：本階段另讀 `docs/v2/62_old_ui_gap_matrix.md` 與 `docs/v2/63_market_trend_research_baseline.md`，63 排在 62 之後；兩者皆為登記／研究基線，不是 approved spec。）
 4. 確認 working tree 乾淨、沒有遺留的未提交內容或殘留 worktree。
 5. 確認之後再接續第 3 節的下一步；有不一致或新發現，依 `PROJECT_RULES.md` 第 12 節（新發現落盤）寫進對應文件，不只留在聊天。
 
@@ -167,3 +175,4 @@
 - 2026-10-17 Phase 3 UI/UX 文件批：客戶提示語原文本組未見（總管轉述）；「先前那一份提示語已被取代」是總管轉述；#986 已合併（`a3b7e79`），本批已把它併入並去重。
 - 2026-10-22 Handoff／Save Gate 文件批：G1 實機結果與 G1～G10 裁示經總管派工單轉達，本組未見客戶對話本身、也無法從 repo 查證預覽 App 的 Secrets 與實機畫面；第 2 節 ⭐ 框的 main／CI／open PR 為本組 2026-10-22 12:17 UTC 實查（本批分支推送之前）。
 - 2026-10-22 舊 UI 盤點 Gap Matrix 文件批：本輪盤點為四組單組讀碼、未實跑任何 UI（可達性為靜態 import 追蹤）；G1 四頁重驗結果與客戶對 B 版設計原則的指示皆經總管派工單轉達，本組未見客戶對話本身、也無法從 repo 查證客戶的持倉 Sheet 內容（「25 筆全部略過」「幣別值為中文」為客戶實機回報）；`docs/v2/62` §1～§3 由總管單方彙整、本組照寫，落盤後另派獨立稽核；第 2 節第二次 ⭐ 框的 main／CI／open PR 為本組 2026-10-22 16:58 UTC 實查（本批分支推送之前）。
+- 2026-10-22 交接防遺失保存批：客戶 2026-10-22 指示（新版產品方向、市場趨勢研究原則、提供投資教學參考資料）經總管派工單轉達，repo 內無逐字存檔，本組未見客戶對話本身、也未見該參考資料；`docs/v2/63` 的稽核結論為當日對話內八組長報告的保存版，本組未重跑任何 grep、未重讀原始碼、未實跑 UI；第 2 節第三次 ⭐ 框的 main／CI／open PR 為本組 2026-10-22 20:08 UTC 實查（本批分支推送之前；check-run 的舊跑次 `cancelled` 一說是本組對同一 SHA 兩組 check-run 的讀法，未經第二組驗證）。
