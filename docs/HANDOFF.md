@@ -35,7 +35,7 @@
 ## 2. 現況 checkpoint
 
 > **⭐ 2026-10-22（第三次）現況（以本框為準；下方第二次框、第一次框、表格與第 3 節的逐日同步行是歷史快照）**（查詢時間 2026-10-22 20:08 UTC，`date -u`；`git rev-parse origin/main`；GitHub REST 唯讀查 main check-runs 與 open PR；狀態更新，不是漏刪：第二次框整段保留於下方）
-> - **main**：`b149873`（全長 `b14987348ea5dc28c4439a26f037452ee505e2ed`；PR #1020 合併）。main CI：Schema gate、Fast checks、Slow tests（informational）最新一組三條皆 `completed`／`success`（逐條看 `conclusion`；同一 SHA 另有一組較早、Fast checks 與 Slow tests 為 `cancelled` 的 check-run，屬被後一次重跑取代的舊跑次，不判定為紅）。**Open／Draft PR：0**。**本批 PR：待總管開立**（分支 `ccr-504fafce-fky1it`，PR 號由總管開立後補）。
+> - **main**：`b149873`（全長 `b14987348ea5dc28c4439a26f037452ee505e2ed`；PR #1020 合併）。main CI：Schema gate、Fast checks、Slow tests（informational）最新一組三條皆 `completed`／`success`（逐條看 `conclusion`；同一 SHA 另有一組較早、Fast checks 與 Slow tests 為 `cancelled` 的 check-run，屬被後一次重跑取代的舊跑次，不判定為紅）。**Open／Draft PR：0**。**本批 PR：#1021**（分支 `ccr-504fafce-fky1it`，開立於 2026-10-22；合併後 main SHA 另補）。
 > - **本批新增（交接防遺失保存批；只保存文件，不實作）**：`docs/v2/63_market_trend_research_baseline.md`（**Research Baseline ／ NOT APPROVED SPEC**；量測 SHA `b149873`；新版產品方向、市場趨勢研究三層原則、Repo 現有趨勢引擎盤點、舊 UI 唯讀架構稽核 durable summary 含 Decision Gates G-A～G-S）＋ `docs/BACKLOG.md` BL-0415～BL-0419 ＋ `docs/DECISIONS.md` `DEC-2026-10-22-05`（客戶確認新版產品方向與市場趨勢研究原則）。
 > - **唯一下一接手點**：「下一步不是實作新版 UI，也不是裁 G-A～G-S。先執行「客戶提供市場趨勢參考資料 × Repo 現有趨勢引擎」唯讀對齊稽核。完成後再回到 G-A～G-S Decision Gate。」（BL-0415；63 §6）
 > - **尚未裁示**：G-A～G-S（63 §4.4；**G-A／G-B／G-C 暫不得裁示**，待 BL-0415 完成）、BL-0411／BL-0413／BL-0414、G1 重驗（第二次框所列 G1 狀態未變）。
