@@ -621,10 +621,15 @@ def check_333_principle(years_since_inception: Optional[float],
 #   check_333_principle 的三態邏輯本就正確;bug 全在**餵進去的輸入**(成立年數 proxy、
 #   3Y 用純NAV)。這裡把輸入推導收成單一權威,三個消費端(fund_row / report verdict /
 #   compare 診斷)共用,parity 自動成立。
+#   2026-10-23 裁示 3A:3Y 輸入再收斂為**唯一算法**(配息還原淨值法 `metrics.ret_3y_ann_tr`,
+#   與 1Y 同口徑),見 `resolve_ann_3y_for_333_detail`;`fund_screening.check_333_fund` 自同日起
+#   停止作為判斷 SSOT。
 
 def _annualize_cum_pct(cum_pct, n_years: float):
     """累積報酬%(如 3 年 +33%)→ 年平均年化%。P3:cum ≤ −100% → None(全損 → 年化無定義,
-    避免 `(1+cum)^(1/n)` 落入複數 / NaN)。§4.1:輸入輸出皆為 **百分數**(非小數)。"""
+    避免 `(1+cum)^(1/n)` 落入複數 / NaN)。§4.1:輸入輸出皆為 **百分數**(非小數)。
+    裁示 3A 後本函式只剩**對帳**用途(wb01 官方 3Y 累積 → 年化,放 `official_3y_ann_pct`),
+    不再產出 3-3-3 的主值。"""
     if cum_pct is None:
         return None
     try:
@@ -673,28 +678,102 @@ def derive_years_for_333(inception_iso, nav_first_iso, *, today=None):
     return None, False
 
 
-def derive_ann_3y_for_333(fd: dict, metrics: Optional[dict] = None):
-    """3-3-3 的「3 年平均年化報酬」——**含息優先**(H4,§4.1)。回 (ann_pct|None, basis)。
+# ── 3-3-3「3 年含息年化」的 basis 字串(SSOT;UI / 健診表 / 測試一律 import,原樣印給使用者)──
+# 2026-10-23 裁示 3A 後只會產出下列四種:
+ANN3Y_BASIS_RESTORED = "含息(還原淨值)"        # 唯一有值的來源:`metrics.ret_3y_ann_tr`
+ANN3Y_LABEL_DIV_MISSING = "⬜ 配息資料未備"     # 配息型但 3Y 窗內 0 筆被還原的配息 → 不判
+ANN3Y_LABEL_HISTORY_SHORT = "⬜ 歷史不足 3 年"  # 有淨值序列但 < 3 × 252 筆 → 不判
+ANN3Y_LABEL_NO_VALUE = "⬜ 3 年含息年化不可得"  # 序列夠長但還原端點非正 / 值壞 → 不判
+ANN3Y_LABEL_NONE = "—"                          # 連淨值序列都沒有
 
-    老師 3-3-3 的「報酬 > 7%」語意是**含息總報酬**(定存替代品)。純 NAV 年化會漏掉配息、
-    對配息型基金系統性偏低 → 假 ❌。優先序:
-      1. 含息:MoneyDJ wb01 `perf["3Y"]` 累積(含配息再投資)→ 年化 → basis="含息(wb01)"
-      2. 純NAV fallback:`metrics.ret_3y_ann` / `ret_3y_cum`(標 basis="純NAV(偏低)")
-      3. 皆缺 → (None, "—")→ check_333 回 ⬜(§1 不硬判)
-    P3 複數保護走 `_annualize_cum_pct`(cum ≤ −100% → None)。
+
+def resolve_ann_3y_for_333_detail(fd: dict, metrics: Optional[dict] = None) -> dict:
+    """3-3-3「3 年平均年化報酬」SSOT 解析(2026-10-23 裁示 3A,**唯一算法 = 配息還原淨值法**)。
+
+    與 1Y(`fund_total_return.resolve_1y_total_return`)**同口徑**:值只來自
+    `metrics.ret_3y_ann_tr`(`fund_service.calc_metrics` 以同一條還原序列、最近 3 × 252 筆窗
+    端點年化;**就是 Calmar 的分子**),再過配息閘門。**不再**讀 MoneyDJ wb01 `perf["3Y"]`
+    當值(官方值只放 `official_3y_ann_pct` 供對帳,§4.3)、**不再**退 `ret_3y_ann` / `ret_3y_cum`
+    純淨值(對配息型系統性偏低 → 假 ❌;對純淨值上漲的基金則可能假 ✅)。
+
+    Returns
+    -------
+    {
+      "value_pct": float | None,            # round(…, 2);僅 status=="ok" 有值
+      "status": "ok" | "unavailable",
+      "reason": None | "dividend_data_missing" | "history_short" | "no_restored_value" | "no_series",
+      "window_days": int | None,            # metrics.ret_3y_window_days
+      "div_count": int | None,              # metrics.ret_3y_div_count
+      "official_3y_ann_pct": float | None,  # wb01 perf["3Y"] 累積 → 年化;僅 perf_source=="wb01";對帳用
+      "label": str,                         # basis 字串(ANN3Y_* 常數之一)
+    }
+
+    規則(依序):
+      1. v = metrics.ret_3y_ann_tr 有值 → 配息閘門:`is_dividend_fund(fd)` 且
+         metrics.ret_3y_div_count == 0 → unavailable `dividend_data_missing`
+         (配息基金的還原序列一筆配息都沒加回 ≡ 純淨值,拿去比 7% 必然假 ❌);
+         否則 ok,label = ANN3Y_BASIS_RESTORED。
+      2. v 缺:無淨值序列 → `no_series`(「—」);有序列但 < 3 × 252 筆 → `history_short`
+         (「⬜ 歷史不足 3 年」);序列夠長仍無值(端點非正 / 值壞)→ `no_restored_value`。
+    缺資料一律 value_pct=None → `check_333_principle` 回 passed=None(⬜),**絕不**折成 False。
     """
-    _m = metrics if metrics is not None else (fd.get("metrics") or {})
-    _mj = fd.get("moneydj_raw") or fd
-    # 1) 含息優先(wb01 三年期累積 → 年化)
-    _perf = fd.get("perf") or _mj.get("perf") or {}
-    _ann_tr = _annualize_cum_pct(_safe_float(_perf.get("3Y")), 3)
-    if _ann_tr is not None:
-        return round(_ann_tr, 2), "含息(wb01)"
-    # 2) 純NAV fallback(偏低,標註)
-    _price_ann = _safe_float(_m.get("ret_3y_ann"))
-    if _price_ann is not None:
-        return round(_price_ann, 2), "純NAV(偏低)"
-    _ann_price = _annualize_cum_pct(_safe_float(_m.get("ret_3y_cum") or _m.get("ret_3y")), 3)
-    if _ann_price is not None:
-        return round(_ann_price, 2), "純NAV(偏低)"
-    return None, "—"
+    from services.fund_total_return import _normalize_shape, is_dividend_fund
+    from shared.signal_thresholds import TRADING_DAYS_PER_YEAR
+
+    _fd = _normalize_shape(fd) if isinstance(fd, dict) else {}
+    _m = metrics if metrics is not None else (_fd.get("metrics") or {})
+    _mj = _fd.get("moneydj_raw") or {}
+
+    # 官方值只做對帳,不進主值(同 1Y:只認 perf_source == "wb01")
+    _ps = str(_fd.get("perf_source") or _mj.get("perf_source") or "").lower()
+    _official = None
+    if _ps == "wb01":
+        _official = _annualize_cum_pct(_safe_float((_mj.get("perf") or {}).get("3Y")), 3)
+        if _official is not None:
+            _official = round(_official, 2)
+
+    _wd = _m.get("ret_3y_window_days")
+    try:
+        _wd_i = int(_wd) if _wd is not None else None
+    except (TypeError, ValueError):
+        _wd_i = None
+    _div_count = _m.get("ret_3y_div_count")
+
+    def _unavail(reason: str, label: str) -> dict:
+        return {"value_pct": None, "status": "unavailable", "reason": reason,
+                "window_days": _wd_i, "div_count": _div_count,
+                "official_3y_ann_pct": _official, "label": label}
+
+    _v = _safe_float(_m.get("ret_3y_ann_tr"))
+    if _v is not None:
+        if is_dividend_fund(_fd) and _div_count == 0:
+            return _unavail("dividend_data_missing", ANN3Y_LABEL_DIV_MISSING)
+        return {"value_pct": round(_v, 2), "status": "ok", "reason": None,
+                "window_days": _wd_i, "div_count": _div_count,
+                "official_3y_ann_pct": _official, "label": ANN3Y_BASIS_RESTORED}
+
+    _s = _fd.get("series")
+    if _s is None:
+        _s = _mj.get("series")
+    try:
+        _n = len(_s) if _s is not None else 0
+    except TypeError:
+        _n = 0
+    if _n <= 0:
+        return _unavail("no_series", ANN3Y_LABEL_NONE)
+    if _n < 3 * TRADING_DAYS_PER_YEAR:
+        return _unavail("history_short", ANN3Y_LABEL_HISTORY_SHORT)
+    return _unavail("no_restored_value", ANN3Y_LABEL_NO_VALUE)
+
+
+def derive_ann_3y_for_333(fd: dict, metrics: Optional[dict] = None):
+    """3-3-3 的「3 年平均年化報酬」—— `resolve_ann_3y_for_333_detail` 的薄包裝。
+
+    簽名不變(多 caller:fund_row / report / replacement / scripts):回 (ann_pct|None, basis)。
+    2026-10-23 裁示 3A:**唯一算法 = 配息還原淨值法** `metrics.ret_3y_ann_tr`(與 1Y 同口徑),
+    缺 → (None, "⬜ …") → `check_333_principle` 回 ⬜(§1 不硬判、不折成 ❌)。
+    舊的「wb01 perf["3Y"] 優先 → 純NAV 退回」兩層已退役:兩層口徑不同(官方複利 / 不含息),
+    同一檔在不同分頁會因走到不同層而出現不同燈號(§2.1 SSOT)。
+    """
+    _r = resolve_ann_3y_for_333_detail(fd, metrics)
+    return (_r["value_pct"] if _r["status"] == "ok" else None), _r["label"]

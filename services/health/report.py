@@ -279,16 +279,14 @@ def build_health_analysis_row(
         _cum3 = _safe_float(m.get("ret_3y_cum") or m.get("ret_3y"))
         if _cum3 is not None:
             ret_3y_ann = ((1.0 + _cum3 / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0
-    # v19.298 FIX: 最終 fallback — MoneyDJ wb01 perf["3Y"] 累計 → 年化
-    # NAV 序列 < 756 筆時（保險子網域封鎖或短窗口），wb01 三年期總報酬為唯一替代來源。
-    if ret_3y_ann is None:
-        _perf_report = (fd.get("perf") or (fd.get("moneydj_raw") or {}).get("perf") or {})
-        _wb01_3y = _safe_float(_perf_report.get("3Y"))
-        if _wb01_3y is not None:
-            try:
-                ret_3y_ann = round(((1.0 + _wb01_3y / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
-            except (ValueError, ZeroDivisionError, OverflowError):
-                pass
+    # 2026-10-23 裁示 3A:**移除** v19.298 的 wb01 `perf["3Y"]` 回填(有意識的移除,不是漏刪)。
+    #   舊理由「NAV < 756 筆時 wb01 三年期總報酬為唯一替代來源」在寫下當時成立;被權衡掉的是
+    #   口徑 —— 顯示欄「3Y 年化 %」是**純淨值**年化,把官方**含息複利**值填進同一格,同一欄
+    #   會混兩種口徑而且看不出來(§2.1 / §4.1)。含息 3Y 現在有自己的欄「3Y 含息年化 %」
+    #   (`metrics.ret_3y_ann_tr`,與 3-3-3 verdict 同源);NAV 不足 756 筆 → 兩欄誠實留白。
+    # ⚠️ 欄名「3Y 年化 %」鍵名**不改**(ui/helpers/fund_grp_health/{columns,unified}.py 與 Tab2
+    #   metric 卡以此鍵消費,改鍵名要連動 ui/helpers,不在本輪射程);語意 = 純淨值,見下方註。
+    ret_3y_ann_tr = _safe_float(m.get("ret_3y_ann_tr"))
     if ret_5y_ann is None:
         _cum5 = _safe_float(m.get("ret_5y_cum") or m.get("ret_5y"))
         if _cum5 is not None:
@@ -306,9 +304,12 @@ def build_health_analysis_row(
                 pass
 
     # ─── 3-3-3 篩(成立年數 + 3Y 年化含息)SSOT ─────────────
-    # v19.485 H4:verdict 用**含息優先**的 3Y 年化(derive_ann_3y_for_333),與顯示欄
+    # v19.485 H4:verdict 用含息的 3Y 年化(derive_ann_3y_for_333),與顯示欄
     #   「3Y 年化 %」(ret_3y_ann,純NAV chain)**刻意分開** —— 顯示維持純NAV 不動,
     #   verdict 改含息(配息型不再假 ❌)。斷開 display/verdict 耦合(上次 cascade 根因)。
+    # 2026-10-23 裁示 3A:verdict 的含息值**唯一**來自 `metrics.ret_3y_ann_tr`(配息還原淨值法,
+    #   與 1Y 同口徑),不再讀 wb01、不再退純淨值;同一值另以「3Y 含息年化 %」欄顯示 → 表上看到的
+    #   數字就是 verdict 用的數字。
     years_inception = holding_years if holding_years is not None else _compute_holding_years(fd)
     _ann_3y_333, _basis_3y_333 = derive_ann_3y_for_333(fd, m)
     try:
@@ -359,7 +360,8 @@ def build_health_analysis_row(
         "Alpha %": alpha_v,
         "費用率 %": expense_v,
         "Max DD %": max_dd,
-        "3Y 年化 %": ret_3y_ann,
+        "3Y 年化 %": ret_3y_ann,              # 純淨值年化(鍵名不改,理由見上方 3A 註)
+        "3Y 含息年化 %": ret_3y_ann_tr,       # 裁示 3A:配息還原淨值法,= 3-3-3 verdict 用的同一值
         "5Y 年化 %": ret_5y_ann,
         " 3-3-3": f"{_333_emoji} {_333_msg}".strip(),
     }
@@ -497,7 +499,7 @@ HEALTH_COLUMNS = [
     "評分覆蓋",          # Layer 3-C:這個等第是靠幾維撐起來的(2/5 的 A ≠ 5/5 的 A)
     "4D Grade", "4D Score",
     "Sharpe 1Y", "Sortino", "Calmar", "Alpha %", "費用率 %",
-    "Max DD %", "3Y 年化 %", "5Y 年化 %",
+    "Max DD %", "3Y 年化 %", "3Y 含息年化 %", "5Y 年化 %",
     " 3-3-3",
 ]
 

@@ -51,6 +51,7 @@ from services.health.dividend import (
     compute_1y_total_return_mk_simple,
     derive_ann_3y_for_333,
     derive_years_for_333,
+    resolve_ann_3y_for_333_detail,
 )
 
 # ── replacement(替換建議) ──────────────────────────────────
@@ -79,6 +80,7 @@ __all__ = [
     "compute_1y_total_return_mk_simple",
     "derive_ann_3y_for_333",
     "derive_years_for_333",
+    "resolve_ann_3y_for_333_detail",
     # replacement
     "check_replacement_recommendation",
     # report

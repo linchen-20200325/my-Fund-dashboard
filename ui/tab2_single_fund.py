@@ -107,16 +107,31 @@ def _render_333_fund_expander(
     nav_series: "pd.Series",
     metrics: dict,
     display_name: str,
+    fd: "dict | None" = None,
 ) -> None:
     """ 3-3-3 原則評估區塊（Tab2 單一基金）。
 
-    C1 成立>3年 / C2 三年年化>7% / C3 同儕排名前1/3
-    資料來源：nav_series (DatetimeIndex) + metrics.ret_3y_ann (MoneyDJ)。
-    C3 目前顯示說明文字（無 portfolio peer 傳入時）。
-    """
-    from services.fund_screening import check_333_fund  # EX-PASSTHRU L3→L2 直呼 service
+    2026-10-23 客戶裁示 3A：**唯一 SSOT** = `services.health.dividend.check_333_principle`
+    （成立 ≥ 3 年、3 年年化 > 7%），兩個輸入走 `derive_years_for_333`（成立日 meta 優先，
+    缺則 NAV 首日 proxy 下界）＋ `derive_ann_3y_for_333`（配息還原淨值法
+    `metrics.ret_3y_ann_tr`，與 1Y 含息同口徑）。缺資料 → ⬜（`passed=None`），不折成 ❌。
+    舊的 `check_333_fund`（純淨值 C2 + 同儕 C3）自同日起停止作為判斷 SSOT；
+    「同儕前 1/3」不屬正式規格，不再顯示。
 
-    # 摺疊處置(原則 1):本區塊輸出的是**結論資料**(C1/C2/C3 三條判定)而非教學文。
+    `fd`：同頁組裝的 fund dict（moneydj_raw / metrics / series / dividends / perf_source），
+    配息閘門用它辨識配息型基金；缺 → 以 metrics + nav_series 組最小形狀（無法證明是配息
+    基金 → 不擋，與 SSOT 既有契約一致）。版面（標題 / 判定卡 / 說明）位置不動，只改
+    內容來源與欄位文字。
+    """
+    from services.health.dividend import (  # EX-PASSTHRU L3→L2 直呼 service
+        THREE_THREE_THREE_MIN_ANN_RETURN_PCT,
+        THREE_THREE_THREE_MIN_YEARS,
+        check_333_principle,
+        derive_ann_3y_for_333,
+        derive_years_for_333,
+    )
+
+    # 摺疊處置(原則 1):本區塊輸出的是**結論資料**(兩條判定)而非教學文。
     # 原本外面包一層「永遠展開」的摺疊殼 —— 那層殼不承載任何資訊,只多一圈邊框
     # 與一個「可以收起來」的假暗示;真正的成本是使用者得先辨認出它是空殼。
     # 改成純標題 + container,判定結果直接攤在版面上。
@@ -124,74 +139,76 @@ def _render_333_fund_expander(
     with st.container():
         st.caption(
             "**老師核心篩選原則** — "
-            "①成立 >3年（歷經牛熊）｜"
-            "②3年年化報酬 >7%（真正定存替代品）｜"
-            "③晨星3顆星 / 同儕前1/3（中前段班有潛力）"
+            "①成立 ≥3年（歷經牛熊）｜"
+            "②3年含息年化報酬 >7%（真正定存替代品；配息還原淨值法，與 1Y 含息同口徑）"
         )
 
-        r = check_333_fund(nav_series, metrics)
+        _metrics = metrics or {}
+        _fd = fd if isinstance(fd, dict) else {}
+        _mj = _fd.get("moneydj_raw") or {}
+        if not _fd:
+            _fd = {"metrics": _metrics, "series": nav_series}
+        # 成立日來源順序與健診表 / 批次表一致：metrics（fetcher 已複製）→ fd 頂層 → moneydj_raw
+        _inception = (_metrics.get("inception_date") or _fd.get("inception_date")
+                      or _mj.get("inception_date") or "")
+        _nav_first = None
+        try:
+            if nav_series is not None and len(nav_series) > 0:
+                _nav_first = str(pd.Timestamp(nav_series.dropna().sort_index().index[0]).date())
+        except Exception:
+            _nav_first = None   # 解析不到就不猜(§1);下游 derive_years 會回 None → ⬜
+        years, _ = derive_years_for_333(_inception, _nav_first)
+        ann, basis = derive_ann_3y_for_333(_fd, _metrics)
+        r = check_333_principle(years, ann)
 
         def _icon(b) -> str:
             if b is True:  return '✅'
             if b is False: return '❌'
-            return '❓'
+            return '⬜'
 
-        age   = r.get('c1_age_years')
-        ret3y = r.get('c2_return_3y')
-        # 2026-08-11 user 拍板刪除「（來源：…）」註記。原本直接印 c2_source 原字串，
-        # 也就是「（來源：metrics(MoneyDJ)）」—— 那是**錯的**：該值的底層
-        # `ret_3y_ann` 由 `services/fund_service.py` 從 NAV 序列自算（需 756 點），
-        # 既非 MoneyDJ 提供、也不含息（§2.2 血緣錯標）。
-        # `c2_source` 欄位本身保留（`scripts/diagnose_ret_3y_fallback.py` 仍讀它做診斷），
-        # 只是不再顯示給使用者。要恢復顯示請先讓它講的是實話。
-
-        age_str = f'{age:.1f} 年' if age is not None else 'N/A'
-        if ret3y is not None:
-            ret_str = f'{ret3y * 100:.1f}%'
-            ret_note = ''
+        age_str = f'{years:.1f} 年' if years is not None else '⬜ 資料不足'
+        if ann is not None:
+            ret_str = f'{ann:.1f}%'
+            ret_note = f'（{basis}）'
         else:
-            ret_str  = 'N/A'
-            ret_note = '（需 2.5 年以上 NAV 資料）'
+            ret_str  = basis          # ⬜ 配息資料未備 / ⬜ 歷史不足 3 年 / —
+            ret_note = ''
 
-        overall = r.get('overall_pass')
-        if overall is True:
+        passed = r.get('passed')
+        _msg = r.get('message') or ''
+        if passed is True:
             bcolor  = '#16a085'
-            verdict = '🏆 C1+C2 全過！符合  3-3-3 初步篩選標準'
-        elif overall is False:
+            verdict = f'🏆 {_msg}'
+        elif passed is False:
             bcolor  = '#c0392b'
-            verdict = '⚠️ 未達標 — 至少一項條件不符'
+            verdict = f'⚠️ 未達標 — {_msg}'
         else:
             bcolor  = '#586069'
-            verdict = '📊 評估完成（C3 需人工核對晨星評級）'
+            verdict = f'⬜ 無法判定 — {_msg}'
 
         st.markdown(
             f'<div style="border-left:4px solid {bcolor};padding:14px 18px;'
             f'border-radius:6px;margin:10px 0;background:rgba(0,0,0,0.10);">'
             f'<div style="font-size:1.05em;font-weight:bold;margin-bottom:10px;">{verdict}</div>'
             '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">'
-            f'<tr><td style="padding:5px 0;color:#8b949e;width:55%">① 成立時間 &gt; 3 年</td>'
-            f'<td>{_icon(r.get("c1_pass"))} &nbsp;<b>{age_str}</b></td></tr>'
-            f'<tr><td style="padding:5px 0;color:#8b949e;">② 3 年年化報酬 &gt; 7%</td>'
-            f'<td>{_icon(r.get("c2_pass"))} &nbsp;<b>{ret_str}</b>'
+            f'<tr><td style="padding:5px 0;color:#8b949e;width:55%">① 成立時間 &ge; 3 年</td>'
+            f'<td>{_icon(r.get("years_ok"))} &nbsp;<b>{age_str}</b></td></tr>'
+            f'<tr><td style="padding:5px 0;color:#8b949e;">② 3 年含息年化報酬 &gt; 7%</td>'
+            f'<td>{_icon(r.get("return_ok"))} &nbsp;<b>{ret_str}</b>'
             f'<span style="font-size:0.85em;color:#8b949e;"> {ret_note}</span></td></tr>'
-            '<tr><td style="padding:5px 0;color:#8b949e;">③ 晨星評級 / 同儕前 1/3</td>'
-            '<td>❓ &nbsp;<span style="font-size:0.85em;color:#8b949e;">'
-            '請至 <a href="https://www.morningstar.com.tw" target="_blank">Morningstar.com.tw</a>'
-            ' 查詢同類評級</span></td></tr>'
             '</table></div>',
             unsafe_allow_html=True,
         )
 
-        # 輔助提示
-        if age is not None and not r.get('c1_pass'):
-            remain = 3.0 - age
-            st.caption(f'⏳ 距離 3 年門檻還需 {remain:.1f} 年（{int(remain * 12)} 個月）')
-        if ret3y is not None and not r.get('c2_pass'):
-            gap = 0.07 - ret3y
-            st.caption(f'❗ 年化報酬距 7% 目標差 {gap * 100:.1f} 個百分點')
-        if r.get('c2_pass') is True and r.get('c1_pass') is True:
-            st.caption('💡 C1+C2 通過後，請至晨星確認 C3（同類前 40 名 ≈ 3 顆星以上）'
-                       '，三項全過才是 定義的「基優生」。')
+        # 輔助提示(門檻一律讀 SSOT 常數,不寫死 3 / 7)
+        if years is not None and r.get('years_ok') is False:
+            remain = float(THREE_THREE_THREE_MIN_YEARS) - years
+            st.caption(f'⏳ 距離 {THREE_THREE_THREE_MIN_YEARS} 年門檻還需 {remain:.1f} 年'
+                       f'（{int(remain * 12)} 個月）')
+        if ann is not None and r.get('return_ok') is False:
+            gap = float(THREE_THREE_THREE_MIN_ANN_RETURN_PCT) - ann
+            st.caption(f'❗ 3 年含息年化距 {THREE_THREE_THREE_MIN_ANN_RETURN_PCT:g}% 目標差 '
+                       f'{gap:.1f} 個百分點')
 
         # ⚠️ 這裡**不可以**開摺疊容器。兩個理由,拿掉外層殼之後第二個仍然成立:
         # (1) 說明文本來就不該闔上(原則 1),直接平鋪;
@@ -200,13 +217,12 @@ def _render_333_fund_expander(
         #     整段消失、卻沒有任何錯誤提示」。守門測試見 tests/test_app_smoke.py。
         st.markdown('###### 📖 3-3-3 原則說明')
         st.markdown(
-            '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
+            '**①成立 ≥3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
             '可透過歷史驗證抗跌能力。\n\n'
-            '**②3 年年化報酬 >7%** — 核心目標：找「7% 以上的定存替代品」。'
-            '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。\n\n'
-            '**③晨星 3 顆星 / 同儕前 1/3** — 晨星 3 顆星 = 同類前 40 名。'
-            '選中前段班而非頂尖，因為資優生落差大；中前段班費率、風控和績效已達標，'
-            '更有持續往上的空間。'
+            '**②3 年含息年化報酬 >7%** — 核心目標：找「7% 以上的定存替代品」。'
+            '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。'
+            '口徑 = 配息還原淨值法（與 1Y 含息同一把尺）；淨值歷史不足 3 年或配息資料未備時'
+            '誠實顯示 ⬜，不以純淨值或官方績效表頂替。'
         )
 
 
@@ -2483,9 +2499,15 @@ def render_single_fund_tab() -> None:
                     else:
                         st.info("⚠️ 此基金 NAV 未取得，無法試算單位數。請先確認基本資料區是否成功抓取淨值。")
 
-                # ──  3-3-3 原則評估（v19.295）─────────────────────────────
+                # ──  3-3-3 原則評估（v19.295；2026-10-23 裁示 3A 改走唯一 SSOT）────
                 try:
-                    _render_333_fund_expander(s, m, name or fk)
+                    # fd 形狀與同頁其他 SSOT 呼叫一致(配息閘門需 dividends / moneydj_div_yield)
+                    _fd_333 = {
+                        "moneydj_raw": mj_raw, "metrics": m, "series": s, "dividends": divs,
+                        "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                        "inception_date": fd.get("inception_date") or mj_raw.get("inception_date"),
+                    }
+                    _render_333_fund_expander(s, m, name or fk, fd=_fd_333)
                 except Exception as _e333:
                     import sys as _sys333
                     print(f'[tab2/333] render error: {_e333}', file=_sys333.stderr)

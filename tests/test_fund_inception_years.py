@@ -5,6 +5,12 @@ user 2026-07-04：Streamlit Cloud IP 被 MoneyDJ 擋 → 只抓到近 1 月 NAV 
 頁面現成的成立日期」優先，序列僅當 fallback。本檔鎖住:
 1. `fund_inception_years` 純函式：成立日優先 / 序列 fallback / 短序列不硬報。
 2. `check_333_fund` 的 C1 改讀 `metrics["inception_date"]`（免依賴本地長歷史）。
+
+⚠️ 2026-10-23 客戶裁示 3A：`check_333_fund` **已退役**（停止作為 3-3-3 判斷 SSOT，
+production 0 caller；本體保留、待 legacy deletion gate 處置）。下方
+`TestCheck333ReadsInception` 保留為「退役本體未被改壞」的最小存在性測試 ——
+它守的是 C1 讀成立日那段沒被 revert，**不**代表 production 仍走這條路；
+production 的 3-3-3 見 `tests/test_ssot_3a_333.py`。
 """
 from __future__ import annotations
 

@@ -471,17 +471,21 @@ def render_portfolio_tab() -> None:
                 f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
                 f"border-left:4px solid {MD_GREEN_A200};border-radius:8px;padding:10px 14px;margin:8px 0'>"
                 f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢  3-3-3 原則批次篩選</span>"
-                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立>3年 ／ 3年年化>7% ／ 晨星3星(手動確認)</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立≥3年 ／ 3年含息年化>7%（配息還原淨值法，與 1Y 同口徑）</span>"
                 "</div>",
                 unsafe_allow_html=True)
             try:
+                # 2026-10-23 裁示 3A:`batch_333_funds` 改走唯一 SSOT(check_333_principle),
+                # 移除 C3 / 同儕欄;dividends / moneydj_raw 透傳供配息閘門辨識配息型基金。
                 from services.fund_screening import batch_333_funds as _batch_333
                 _funds_333 = [
                     {
-                        "code":    f.get("code", ""),
-                        "name":    f.get("name") or f.get("code") or "",
-                        "series":  f.get("series"),
-                        "metrics": f.get("metrics") or {},
+                        "code":        f.get("code", ""),
+                        "name":        f.get("name") or f.get("code") or "",
+                        "series":      f.get("series"),
+                        "metrics":     f.get("metrics") or {},
+                        "dividends":   f.get("dividends"),
+                        "moneydj_raw": f.get("moneydj_raw") or {},
                     }
                     for f in _pf_for_warroom
                     if f.get("series") is not None
@@ -499,14 +503,14 @@ def render_portfolio_tab() -> None:
                                 hide_index=True,
                             )
                             st.caption(
-                                "✅=通過 ❌=未通過 ❓=資料不足　"
-                                "②來源空=MoneyDJ 含息報酬；②來源*=NAV 未含配息(保守估計)　"
-                                "③晨星評級請至 [Morningstar](https://www.morningstar.com.tw/) 手動查閱"
+                                "✅=通過 ❌=未通過（有明確反證） ⬜=資料不足／無法判定（不是未通過）　"
+                                "「基準」欄說明 3Y 含息年化的來源：含息(還原淨值)＝本地配息還原淨值法；"
+                                "⬜ 配息資料未備／歷史不足 3 年＝不判，不以純淨值或官方績效表頂替"
                             )
-                            # 整體通過統計
+                            # 整體通過統計(⬜ = 三態的 None,與 SSOT `passed=None` 對齊)
                             _pass_cnt = (_df_333["整體"] == "✅").sum()
                             _fail_cnt = (_df_333["整體"] == "❌").sum()
-                            _unk_cnt  = (_df_333["整體"] == "❓").sum()
+                            _unk_cnt  = (_df_333["整體"] == "⬜").sum()
                             _total    = len(_df_333)
                             # 2026-08-05 稽核 🔴 必修 2(同型延伸):原寫死「由 Tab2 個別查詢」
                             # —— 個基深掘早已不是第 2 個分頁,序號寫死 = 與 :292 同一顆地雷。
@@ -521,14 +525,12 @@ def render_portfolio_tab() -> None:
                             # 改用 `where_to_find('fund')`:回「③ 🔍 基金研究 → 🔍 單檔深掘」,
                             # 站號與分頁名都由 `_TAB_LABELS` 的順序推導。
                             # 「分頁」二字一併拿掉 —— 目的地是分頁裡的一個模式,不是一個分頁。
-                            from ui.helpers.story_nav import (  # noqa: PLC0415
-                                where_to_find as _where_to_find_333,
-                            )
+                            # 2026-10-23 裁示 3A:「③同儕排名」不屬正式規格,整句指路移除;
+                            # 上面關於 `where_to_find` SSOT 指路的註解仍為真,只是本段已無需指路。
                             st.info(
                                 f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
-                                f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
-                                f"（③同儕排名請至「{_where_to_find_333('fund')}」個別查詢，"
-                                f"組合批次僅評 ①②）",
+                                f"❌ 未通過 {_fail_cnt} 檔　⬜ 資料不足 {_unk_cnt} 檔　"
+                                f"（與個基深掘 / 健診表的 3-3-3 同一個 SSOT）",
                                 icon="📊",
                             )
                         else:
