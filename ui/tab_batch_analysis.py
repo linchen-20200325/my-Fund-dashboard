@@ -125,7 +125,10 @@ def _rows_compatible(rows: dict) -> bool:
 # 在畫面上長得一模一樣,而新欄的 help 又教使用者把空白讀成後者(§1)。
 # ⚠️ 只登記在 `_render_stale_schema_notice` 掃得到的地方沒有用 —— 加欄時
 #    請同時更新這個 tuple,否則新欄會靜靜地留白(2026-08-14 稽核 🟠-8 的成因)。
-_LATE_ADDED_COLUMNS: tuple = ("淨值新鮮度", "淨值樣本")
+# 「3Y 年化 %（純淨值）」:2026-10-23 PR2(裁示 3A)由舊鍵「3Y 年化 %」**改名**而來(非增欄);
+# 改名前存的 checkpoint 只有舊鍵 → 新欄骨架下會留白,故同樣登記。舊鍵的值曾混入 wb01 官方
+# 含息回填(3A 已移除),刻意**不**把舊鍵值搬進新鍵 —— 那會把含息值標成「純淨值」(§2.2)。
+_LATE_ADDED_COLUMNS: tuple = ("淨值新鮮度", "淨值樣本", "3Y 年化 %（純淨值）")
 
 
 def _rows_missing_late_columns(rows: dict) -> dict:

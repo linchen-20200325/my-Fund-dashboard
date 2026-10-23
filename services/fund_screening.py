@@ -10,6 +10,20 @@
   C1: 成立 > 3 年（以最早 NAV 日期推算，老標的歷經牛熊考驗）
   C2: 過去 3 年平均年化報酬率 > 7%（定存替代品，含息總報酬）
   C3: 晨星評級 3 顆星以上 / 同儕排名前 1/3（中前段班，有上升潛力）
+
+⚠️ 2026-10-23 客戶裁示 3A（有意識的政策變更，不是漏刪；決策者：客戶）：
+  - 3-3-3 **只保留一個判斷 SSOT**：`services.health.dividend.check_333_principle`
+    （成立 ≥ 3 年、3 年年化 > 7%），報酬口徑與 1Y 一致 = 配息還原淨值法
+    `metrics.ret_3y_ann_tr`（輸入推導 `derive_years_for_333` / `derive_ann_3y_for_333`）。
+  - 上列 C3「晨星 / 同儕前 1/3」**不屬正式規格**：不新增同儕資料來源、不參與任何判定。
+    上面三行保留為老師原話的紀錄，不是本模組的現行規格。`batch_333_funds` 的 ③ 欄
+    依客戶 UI/Layout Decision Gate（`DEC-2026-10-23-04`）**保留欄位**、欄名加註「參考，
+    不計入 3-3-3 判定」，內容不判定（見 `COL_333_PEER_RANK` 註）。
+  - `check_333_fund` **停止作為判斷 SSOT**（production 0 caller；本體保留、不實體刪除，
+    待 BL-0422 / BL-0292 legacy deletion gate 處置），`batch_333_funds` 不得再呼叫它。
+  舊設計的理由仍然成立（三條件是老師原話）；被權衡掉的是「本模組自己再算一套」——
+  它用純淨值（`ret_3y_ann` / NAV 時間切法）判 C2、與健診表 / Tab2 的 verdict 不同源，
+  同一檔在不同分頁會得到不同燈號（§2.1 SSOT）。
 """
 from __future__ import annotations
 
@@ -68,6 +82,15 @@ def check_333_fund(
     peer_top_pct: float = 1 / 3,
 ) -> dict:
     """ 3-3-3 原則評估（基金版）。
+
+    ⛔ **RETIRED — 2026-10-23 客戶裁示 3A：停止作為 3-3-3 判斷 SSOT。**
+    production 0 caller（`batch_333_funds` / Tab2 `_render_333_fund_expander` 已改走
+    `services.health.dividend.check_333_principle` + `derive_years_for_333` /
+    `derive_ann_3y_for_333`；僅 `scripts/diagnose_ret_3y_fallback.py` 的離線診斷仍 import）。
+    本體**保留、不實體刪除**，待 BL-0422 / BL-0292 legacy deletion gate 處置；
+    **不得**再被接回任何燈號 / 篩選判定。
+    退役理由：C2 用純淨值（`ret_3y_ann` / NAV 時間切法）判「> 7%」，與 SSOT 的
+    配息還原淨值法口徑不同；C3 同儕排名不屬正式規格。
 
     Parameters
     ----------
@@ -224,30 +247,120 @@ def check_333_fund(
     return result
 
 
-def batch_333_funds(
-    fund_list: list[dict],
-    *,
-    min_years: float = 3.0,
-    target_annualized: float = 0.07,
-) -> "pd.DataFrame":
-    """批次評估多檔基金的 3-3-3 通過狀況（用於 Tab3 組合）。
+def _nav_first_iso(series) -> "str | None":
+    """NAV 序列最早一筆日期（ISO 字串）；無序列 / 空序列 / 解析失敗 → None（不猜）。"""
+    if series is None:
+        return None
+    try:
+        s = series.dropna().sort_index() if hasattr(series, "dropna") else series
+        if len(s) == 0:
+            return None
+        return str(pd.Timestamp(s.index[0]).date())
+    except Exception:
+        return None
+
+
+def evaluate_333_for_fund(f: dict) -> dict:
+    """單檔 3-3-3（2026-10-23 客戶裁示 3A）—— **唯一** SSOT 判定的單檔入口，本模組不自己算門檻。
+
+    `batch_333_funds`（Tab3 批次表）與 `ui/components/mk_dashboard`（Tab3 戰情室「3-3-3 篩選器」）
+    共用本函式，保證同一檔在兩處得到同一個結果（§2.1 SSOT）。
+
+    輸入：Tab3 `portfolio_funds` 的單檔 dict（或其子集）：code / series / metrics，
+    選填 dividends / moneydj_raw / inception_date / perf_source（皆為既有欄位，不新增資料來源）。
+
+    步驟：
+      ① `derive_years_for_333`：成立日 meta 優先（metrics → 頂層 → moneydj_raw，與 fund_row /
+         report 同順序），缺則 NAV 首日 proxy（proxy < 3 年 → None，不反證）；
+      ② `derive_ann_3y_for_333`：配息還原淨值法 `metrics.ret_3y_ann_tr` ＋ 配息閘門；
+      判定 `check_333_principle(years, ann)` → passed 三態（True / False / None=⬜）。
+
+    Returns
+    -------
+    {"years": float|None, "ann_pct": float|None, "basis": str,
+     "years_ok": bool|None, "return_ok": bool|None, "passed": bool|None, "message": str}
+    """
+    from services.health.dividend import (
+        check_333_principle,
+        derive_ann_3y_for_333,
+        derive_years_for_333,
+    )
+
+    f = f if isinstance(f, dict) else {}
+    series  = f.get('series')
+    metrics = f.get('metrics') or {}
+    _mj     = f.get('moneydj_raw') or {}
+    # 成立日來源順序與 fund_row / Tab2 一致：metrics（fetcher 已複製）→ 頂層 → moneydj_raw
+    _inception = (metrics.get('inception_date') or f.get('inception_date')
+                  or _mj.get('inception_date') or '')
+    years, _ = derive_years_for_333(_inception, _nav_first_iso(series))
+    # fd 形狀對齊 SSOT（nested）；dividends / moneydj_div_yield 供配息閘門辨識配息型
+    _fd = {
+        'moneydj_raw': _mj,
+        'metrics': metrics,
+        'series': series,
+        'dividends': f.get('dividends') if f.get('dividends') is not None else _mj.get('dividends'),
+        'perf_source': f.get('perf_source') or _mj.get('perf_source'),
+    }
+    ann, basis = derive_ann_3y_for_333(_fd, metrics)
+    r = check_333_principle(years, ann)
+    return {"years": years, "ann_pct": ann, "basis": basis,
+            "years_ok": r.get("years_ok"), "return_ok": r.get("return_ok"),
+            "passed": r.get("passed"), "message": r.get("message", "")}
+
+
+# ③ 欄（同儕排名）—— 2026-10-23 客戶 UI/Layout Decision Gate（`DEC-2026-10-23-04`）：
+# 欄位**不得移除**（欄位增減屬版面變更，留到新版 UI/UX Blueprint），但它**不屬**正式 3-3-3
+# （裁示 3A：正式規則只有 ① 成立 ≥ 3 年、② 3 年年化 > 7%），故只改欄名加註、內容不判定。
+# 欄名住這裡（L2 產出欄名的同一處），Tab3 caption / 測試一律 import，不各自手抄。
+COL_333_PEER_RANK = "③同儕排名（參考，不計入 3-3-3 判定）"
+COL_333_PEER_PASS = "③通過（參考，不計入 3-3-3 判定）"
+
+
+def batch_333_funds(fund_list: list[dict]) -> "pd.DataFrame":
+    """批次評估多檔基金的 3-3-3 通過狀況（用於 Tab3 組合）—— 走唯一 SSOT。
+
+    2026-10-23 客戶裁示 3A：每檔一律以 `services.health.dividend` 的
+    `derive_years_for_333`（成立日 meta 優先、缺則 NAV 首日 proxy 下界）＋
+    `derive_ann_3y_for_333`（配息還原淨值法 `metrics.ret_3y_ann_tr`，與 1Y 同口徑）＋
+    `check_333_principle`（成立 ≥ 3 年、3 年年化 > 7%，三態）算出結果；
+    **不再**呼叫 `check_333_fund`。
+    舊簽名的 `min_years` / `target_annualized` 旋鈕一併移除：門檻只住在 SSOT 常數
+    （`THREE_THREE_THREE_MIN_YEARS` / `THREE_THREE_THREE_MIN_ANN_RETURN_PCT`），
+    留一個會被靜默忽略的參數等於留一個假開關（全 repo 實測無呼叫端傳這兩個 kwargs）。
 
     Parameters
     ----------
     fund_list : list of dict，每個 dict 需含：
-                  code (str), name (str),
-                  series (pd.Series), metrics (dict)
+                  code (str), name (str), series (pd.Series), metrics (dict)；
+                選填（配息閘門用，缺 → 無法證明是配息基金 → 不擋）：
+                  dividends (list), moneydj_raw (dict), inception_date (str)
 
     Returns
     -------
-    pd.DataFrame  欄位：代碼 / 名稱 / C1成立年 / C2三年年化 / C2來源 / 整體通過
+    pd.DataFrame  欄位（**欄數與欄序與 3A 之前相同**，客戶 UI/Layout Gate `DEC-2026-10-23-04`）：
+      代碼 / 名稱 / ①成立年 / ①通過 / ②3年年化 / ②通過 /
+      `COL_333_PEER_RANK` / `COL_333_PEER_PASS` / 整體
+      - ①通過 / ②通過 / 整體：`check_333_principle` 的 years_ok / return_ok / passed
+        → ✅ 通過 / ❌ 未通過（有明確反證）/ ⬜ 資料不足（**不是** ❌）
+      - ②3年年化：有值 → 「x.x%」（含息，配息還原淨值法）；缺 → `derive_ann_3y_for_333`
+        的 basis 字串原樣（⬜ 配息資料未備 / ⬜ 歷史不足 3 年 / ⬜ 3 年含息年化不可得 / —）
+      - ③ 兩欄：**不參與任何判定**，不出現 ✅ / ❌。值維持 3A 之前的同一個來源 ——
+        舊版取自 `check_333_fund(...)["c3_peer_rank_pct"]`，而本函式**從未**傳
+        `peer_series_map`，該值恆為 None、畫面恆為「—」（2026-10-23 以 main 版實跑確認）。
+        不新增同儕資料來源（裁示 3A），故兩欄一律「—」。
 
     v19.306：以 code 去重（一檔一列，保留首次出現順序）。3-3-3 評估的是基金
-    內在屬性（成立年 / 3 年年化 / 同儕排名），同一基金若跨多張保單在
+    內在屬性（成立年 / 3 年年化），同一基金若跨多張保單在
     portfolio_funds 重複，會產生完全相同的重複列 + 灌水「共 N 檔」統計。此處
     收斂為 SSOT 一檔一列。注意：僅基金內在分析去重；組合層投入金額 / 配置需保留
     跨保單重複，故不在 portfolio_funds 源頭去重。
     """
+    def _icon(b) -> str:
+        if b is True:   return '✅'
+        if b is False:  return '❌'
+        return '⬜'
+
     rows = []
     _seen_codes: set = set()  # v19.306 SSOT 去重（見 docstring）：同 code 只評一次
     for f in fund_list:
@@ -256,39 +369,23 @@ def batch_333_funds(
             continue  # 同基金已評過，跳過重複列
         if code:
             _seen_codes.add(code)
-        name    = f.get('name', '')
-        series  = f.get('series')
-        metrics = f.get('metrics', {})
-
-        r = check_333_fund(series, metrics, min_years=min_years,
-                           target_annualized=target_annualized)
-
-        def _pct(v) -> str:
-            return f'{v * 100:.1f}%' if v is not None else '—'
-
-        def _icon(b) -> str:
-            if b is True:   return '✅'
-            if b is False:  return '❌'
-            return '❓'
+        name    = f.get('name', '') or ''
+        # 單檔判定一律走 `evaluate_333_for_fund`（= derive_years / derive_ann_3y / check_333_principle）
+        r = evaluate_333_for_fund(f)
+        years, ann, basis = r["years"], r["ann_pct"], r["basis"]
 
         rows.append({
-            '代碼':       code,
-            '名稱':       name[:18],
-            '①成立年':   f'{r["c1_age_years"]:.1f}年' if r['c1_age_years'] else '—',
-            '①通過':     _icon(r['c1_pass']),
-            '②3年年化':  _pct(r['c2_return_3y']),
-            # 2026-08-11 user 拍板刪除「②來源」欄。原本顯示的是
-            #   r['c2_source'].replace('(MoneyDJ)','').replace('（NAV，不含息）','*')
-            # → 畫面上是 `metrics` / `nav_series*` / `—`，內部代號 + 沒解釋的星號。
-            # 更嚴重的是它**標錯來源**：`metrics` 那支的底層 `ret_3y_ann` 是
-            # `services/fund_service.py` 從 NAV 序列自算的（需 756 點），既不是
-            # MoneyDJ 給的、也不含息 —— 兩個分支其實都是自算純 NAV，
-            # 這一欄卻宣稱其中一個是官方值（§2.2 血緣錯標）。
-            # 刪掉不損失真實資訊；要恢復請先讓 c2_source 講的是實話。
-            '②通過':     _icon(r['c2_pass']),
-            '③同儕排名': f'前{r["c3_peer_rank_pct"]*100:.0f}%' if r['c3_peer_rank_pct'] is not None else '—',
-            '③通過':     _icon(r['c3_pass']),
-            '整體':       _icon(r['overall_pass']),
+            '代碼':     code,
+            '名稱':     name[:18],
+            '①成立年': f'{years:.1f}年' if years is not None else '—',
+            '①通過':   _icon(r.get('years_ok')),
+            # 缺值時印 basis 原因（⬜ 配息資料未備 / ⬜ 歷史不足 3 年 …），不以純淨值或官方值頂替
+            '②3年年化': f'{ann:.1f}%' if ann is not None else basis,
+            '②通過':   _icon(r.get('return_ok')),
+            # ③ 不參與判定、不出 ✅/❌；來源同 3A 之前（恆無值 → 「—」），見 docstring
+            COL_333_PEER_RANK: '—',
+            COL_333_PEER_PASS: '—',
+            '整體':     _icon(r.get('passed')),
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()

@@ -13,7 +13,9 @@ from services.fund_screening import batch_333_funds
 
 
 def _mk_fund(code: str, name: "str | None" = None) -> dict:
-    # series=None → check_333_fund 安全回傳空結果(不需真實 NAV);去重測試只看 code。
+    # series=None / metrics={} → SSOT(derive_years_for_333 / derive_ann_3y_for_333)皆回 None
+    # → check_333_principle 回 ⬜(不需真實 NAV);去重測試只看 code。
+    # (2026-10-23 裁示 3A:batch_333_funds 不再呼叫 check_333_fund)
     return {"code": code, "name": name or code, "series": None, "metrics": {}}
 
 

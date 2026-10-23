@@ -183,7 +183,7 @@ def process_one_fund(
             _inc_meta = (fd.get("inception_date") or _mj_raw_333.get("inception_date") or "")
             _first_iso = sorted(nav_dict.keys())[0] if nav_dict else None
             _yrs_inc, _ = derive_years_for_333(_inc_meta, _first_iso)   # H3:proxy<3年→None
-            _ann_3y, _ = derive_ann_3y_for_333(fd, _metrics)           # H4 含息優先 + P3
+            _ann_3y, _ = derive_ann_3y_for_333(fd, _metrics)           # 3A:唯一口徑 = 配息還原淨值法
             _333_r = check_333_principle(_yrs_inc, _ann_3y)
             if _333_r.get("passed") is True:
                 _333_emoji = "✅"

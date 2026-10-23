@@ -53,7 +53,7 @@ _UNIFIED_FRONT: list = [
     ("Sharpe 1Y", "health"), ("Sharpe 來源", "extra"),   # 來源/期間揭露(§2.2;緊貼數值欄)
     ("Sortino", "health"), ("Calmar", "health"),
     ("Alpha %", "health"), ("費用率 %", "health"), ("Max DD %", "health"),
-    ("3Y 年化 %", "health"), ("5Y 年化 %", "health"),
+    ("3Y 年化 %（純淨值）", "health"), ("5Y 年化 %", "health"),
     # ② 配息 official(wb01/wb05)+ 每月配息
     ("1Y 含息 %", "div"), ("1Y 來源", "div"), ("年化配息率 %", "div"),
     ("每月配息 (TWD)", "div"), ("每月配息單位數", "div"), ("配息來源", "div"),
@@ -240,7 +240,7 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
 # ①② 併入後需轉 numeric 的欄(extra σ/欄為預格式化字串,保持字串不轉)
 _UNIFIED_NUMERIC: list = [
     "4D Score", "Sharpe 1Y", "Sortino", "Calmar", "Alpha %", "費用率 %",
-    "Max DD %", "3Y 年化 %", "5Y 年化 %",
+    "Max DD %", "3Y 年化 %（純淨值）", "5Y 年化 %",
     "1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數",
     "上檔捕捉%", "下檔捕捉%", "操盤評分",   # v19.414 經理人操作能力
     "vs 大盤%",                            # v19.420 近1Y純價格報酬差

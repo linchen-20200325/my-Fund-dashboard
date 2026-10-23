@@ -132,14 +132,24 @@ class TestRuleC_333:
     """規則 (c):3-3-3 未通過且持有 ≥ 3 年 → hard trigger。"""
 
     def test_low_3y_long_hold_triggers(self):
-        # 持有 4 年 + 3 年年化 3%(< 7% 不通過)
+        # 持有 4 年 + 3 年**含息**年化 3%(< 7% 不通過)
+        # 2026-10-23 裁示 3A:3-3-3 的 3 年年化唯一來源 = `metrics.ret_3y_ann_tr`(配息還原淨值法),
+        # 不再退純淨值 `ret_3y_ann` —— 本 fixture 原本只給 `ret_3y_ann` 3.0,3A 後那條會是 ⬜
+        # (無法判定,不觸發 (c)),故改餵 SSOT 的輸入鍵;規則 (c) 本身的語意未改。
+        # 純淨值-only 不再觸發 (c) 的反向案例見 test_nav_only_3y_no_longer_triggers_c。
         fd = {"metrics": {
-            "ret_3y_ann": 3.0,
+            "ret_3y_ann_tr": 3.0,
             "sharpe": 0.5,  # 避免 unknown
         }}
         r = check_replacement_recommendation(fd, holding_years=4)
         assert r["verdict"] == "replace"
         assert any("(c)" in t for t in r["triggered_rules"])
+
+    def test_nav_only_3y_no_longer_triggers_c(self):
+        """3A:只有純淨值 `ret_3y_ann`(無含息 `ret_3y_ann_tr`)→ 3-3-3 ⬜ → 不得觸發 (c)(§1 缺 ≠ 不通過)。"""
+        fd = {"metrics": {"ret_3y_ann": 3.0, "sharpe": 0.5}}
+        r = check_replacement_recommendation(fd, holding_years=4)
+        assert not any(t.startswith("(c)") for t in r["triggered_rules"])
 
     def test_low_3y_short_hold_observes_only(self):
         fd = {"metrics": {

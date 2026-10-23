@@ -38,7 +38,12 @@ NEW_SERIES_ATTRS = frozenset({"nav_history_dates", "nav_history_recorded_at", "n
 # 這幾個鍵的新語意由 `tests/test_ssot_1b_total_return_adr_eating.py` 正面釘住，不在這裡重產。
 CHANGED_METRICS_KEYS_1B = frozenset({"annual_div", "monthly_div", "annual_div_rate",
                                      "annual_div_rate_div_count", "annual_div_rate_window_end",
-                                     "ret_1y_div_count", "ret_1y_reconcile", "div_yield_reconcile"})
+                                     "ret_1y_div_count", "ret_1y_reconcile", "div_yield_reconcile",
+                                     # 2026-10-23 客戶裁示 3A（3-3-3 唯一 SSOT）：`calc_metrics` 新增三個一級鍵
+                                     # （3Y 含息年化 = Calmar 分子同值、3Y 窗天數、3Y 窗內配息筆數）。黃金檔是
+                                     # 3A 前錄的、沒有這些鍵，**不得重產**；兩邊同時拿掉。新鍵語意由
+                                     # `tests/test_ssot_3a_333.py` 正面釘住。
+                                     "ret_3y_ann_tr", "ret_3y_window_days", "ret_3y_div_count"})
 
 
 def _strip(value, keys: frozenset):

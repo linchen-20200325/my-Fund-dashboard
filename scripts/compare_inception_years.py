@@ -225,9 +225,10 @@ def diagnose(fd: dict, code: str, today_local=None) -> dict:
 
     row_a = variant_a_row(fd, code)
     status_a = row_a.get(" 3-3-3") or ""
-    # v19.485 PR-2:3-3-3 的 verdict 3 年年化改由 SSOT `derive_ann_3y_for_333`(含息優先)
+    # v19.485 PR-2:3-3-3 的 verdict 3 年年化改由 SSOT `derive_ann_3y_for_333`
+    #   (2026-10-23 裁示 3A 起唯一口徑 = 配息還原淨值法 `metrics.ret_3y_ann_tr`,不再讀 wb01、不退純NAV)
     #   單一來源供 A(report verdict)/ B(fund_row verdict)共用 → 兩邊必然相同(不再分歧)。
-    #   ⚠️ 與顯示欄「3Y 年化 %」(row_a,純NAV chain)**刻意分開**:此處比的是 verdict 口徑,
+    #   ⚠️ 與顯示欄「3Y 年化 %（純淨值）」(row_a,純NAV chain)**刻意分開**:此處比的是 verdict 口徑,
     #   拿顯示欄(純NAV)去比 B 的含息會製造假分歧(H4 decouple 後)。
     from services.health.dividend import derive_ann_3y_for_333
     ann_a, _ = derive_ann_3y_for_333(fd, fd.get("metrics") or {})   # report verdict 口徑
@@ -315,7 +316,15 @@ def fd_to_snapshot(fd: dict) -> dict:
         "metrics": {k: _m.get(k) for k in
                     ("inception_date", "ret_3y_ann", "ret_3y_cum", "ret_3y",
                      "sharpe", "std_1y", "max_drawdown", "ret_5y_ann",
-                     "ret_5y_cum", "ret_5y", "nav")},
+                     "ret_5y_cum", "ret_5y", "nav",
+                     # 2026-10-23 裁示 3A:3-3-3 SSOT `derive_ann_3y_for_333` 的唯一輸入
+                     # (含息 3Y + 配息閘門計數)。不存的話離線重跑 verdict 恆 ⬜ —— 那是快照
+                     # 把輸入丟掉,不是基金沒資料(§1)。舊快照缺這三鍵 → 照吃、值為 None。
+                     "ret_3y_ann_tr", "ret_3y_window_days", "ret_3y_div_count")},
+        # 3A 配息閘門辨識配息型用(wb05 官方年化配息率;`is_dividend_fund` 讀 top-level 亦可)
+        "moneydj_div_yield": (fd.get("moneydj_div_yield")
+                              if fd.get("moneydj_div_yield") is not None
+                              else (fd.get("moneydj_raw") or {}).get("moneydj_div_yield")),
         "perf": dict(fd.get("perf") or {}),
         "perf_source": fd.get("perf_source"),
         "fund_name": fd.get("fund_name"),
@@ -336,6 +345,7 @@ def snapshot_to_fd(snap: dict) -> dict:
         "metrics": dict(snap.get("metrics") or {}),
         "perf": dict(snap.get("perf") or {}),
         "perf_source": snap.get("perf_source"),
+        "moneydj_div_yield": snap.get("moneydj_div_yield"),   # 舊快照無此鍵 → None(閘門不擋)
         "fund_name": snap.get("fund_name"),
         "category": snap.get("category"),
         "series": series,
