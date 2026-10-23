@@ -30,10 +30,16 @@ class TestPerfChartKeys:
         # 新版走 _pick_comparison_basis(ok_rows)：全檔皆年化 → 年化;任一短歷史 → 全期實際。
         src = _src(_GRP)
         assert "_pick_comparison_basis(ok_rows)" in src, "圖表應改走自適應基準 helper"
-        # f-string 組鍵，兩套欄名都可能被讀到
-        assert 'f"配息率% ({_basis})"' in src
-        assert 'f"含息% ({_basis})"' in src
-        assert 'f"淨值% ({_basis})"' in src
+        # 2026-10-23(PR1b 稽核 M1):持有期年化欄改名後,f-string 組鍵在 basis=="年化" 時會
+        # 組出舊鍵 → 整排 None(本條原本釘住的就是那個 f-string)。改釘對映表 helper。
+        assert "_comparison_keys_for_basis(_basis)" in src
+        assert 'f"配息率% ({_basis})"' not in src
+        assert 'f"含息% ({_basis})"' not in src
+        from ui.tab_fund_grp_health import _comparison_keys_for_basis
+        assert _comparison_keys_for_basis("年化") == (
+            "持有期配息率% (相對買入成本・年化)", "持有期含息% (相對買入成本・年化)", "淨值% (年化)")
+        assert _comparison_keys_for_basis("全期實際") == (
+            "配息率% (全期實際)", "含息% (全期實際)", "淨值% (全期實際)")
 
     def test_old_renamed_keys_gone(self):
         """v19.148 改名前的舊鍵不得殘留（否則又會讀到 None → 0）。"""

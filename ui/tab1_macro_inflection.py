@@ -30,6 +30,42 @@ def _tier_badge(_pf: dict) -> str:
 
 
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None,不再 `or 0`
+
+
+def _eating_light_parts(fund: dict) -> dict:
+    """🚦 持倉紅綠燈的「吃本金」那一段 —— 純函式,只翻譯 SSOT 結果,不自己判(可單元測試)。
+
+    2026-10-23 裁示 1B(稽核 M2):走唯一判定 `check_eating_principal_1y_mk`。
+    回 {"red": bool, "grey": bool, "reason": str}:
+      · red   = SSOT `eating_principal is True`(含 2pp 黃燈帶,與舊 `tr < adr` 同語意)
+      · grey  = SSOT 回灰色 dict(資料未備／無法判定)→ 中性色 + SSOT status 與白話原因
+      · 兩者皆 False = SSOT 回 None(非配息基金,不適用)或綠燈 → 不改預設 🟢
+    ⛔ 缺配息率 / 缺 1Y 含息**不得**變成 🔴 —— 舊寫法 `annual_div_rate or 0` + 純淨值 `ret_1y`
+    會把「配息率未備 + 淨值小跌」做成假本金侵蝕。判定失敗也當 grey,不冒充綠。
+    """
+    from services.health.dividend import check_eating_principal_1y_mk
+    try:
+        _eat = check_eating_principal_1y_mk(fund)
+    except Exception as _e:  # noqa: BLE001 — 單檔判定炸掉 → 灰 + 留痕
+        import sys as _sys
+        print(f"[tab1_macro_inflection] {fund.get('code', '?')} 吃本金判定失敗:"
+              f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+        return {"red": False, "grey": True, "reason": "⬜ 吃本金判定失敗，無法判定"}
+    if not isinstance(_eat, dict):
+        return {"red": False, "grey": False, "reason": ""}
+    if _eat.get("alert_level") == "grey":
+        _msg = str(_eat.get("message") or "").replace("**", "")
+        return {"red": False, "grey": True,
+                "reason": f"{_eat.get('status', '⬜ 資料未備／無法判定')}：{_msg}"[:160]}
+    if _eat.get("eating_principal") is True:
+        _adr = _eat.get("_adr_pct")
+        _tr = safe_num(_eat.get("gap_pct"))
+        _adr_f = safe_num(_adr)
+        _tr_txt = (f"{_adr_f - _tr:.1f}%" if (_adr_f is not None and _tr is not None) else "—")
+        _adr_txt = f"{_adr_f:.1f}%" if _adr_f is not None else "—"
+        return {"red": True, "grey": False,
+                "reason": f"吃本金警示：{_eat.get('status', '')}（含息報酬 {_tr_txt} < 配息率 {_adr_txt}）"}
+    return {"red": False, "grey": False, "reason": ""}
 from services.macro import (
     backtest_turning_points,
     detect_turning_points,
@@ -231,8 +267,11 @@ def render_inflection_alert_section(
             _pf_s1    = float(_pf_m.get("sell1") or 0)  # 中樞+1σ
             _pf_bbd   = float(_pf_m.get("bb_lower") or 0)
             _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
-            _pf_ret1y = safe_num(_pf_m.get("ret_1y"))  # v19.396 §1:缺不捏造 0(否則假觸發吃本金紅燈)
-            _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
+            # 2026-10-23 裁示 1B(稽核 M2):吃本金只走唯一判定 `check_eating_principal_1y_mk`
+            # (1Y 含息 = 本地配息還原淨值法、配息率 = 近 12 個月實配 ÷ 最新淨值)。原本讀
+            # 純淨值 `ret_1y` 當含息、`annual_div_rate or 0`、UI 自己 `tr < adr` → 配息率缺(→0)
+            # + 淨值小跌 = 假 🔴。現在 🔴 只在 SSOT `eating_principal is True`;灰 / None 不紅。
+            _pf_eat = _eating_light_parts(_pf)
             _pf_core  = _tier_badge(_pf)
             # 燈號判定（v18.6: σ + 布林雙確認 升級）
             _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", BG_DARK_GREEN_2, MATERIAL_GREEN, "淨值穩定，含息報酬正常"
@@ -241,9 +280,9 @@ def render_inflection_alert_section(
                            and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
             _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
                             and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
-            if _pf_adr > 0 and _pf_ret1y is not None and _pf_ret1y < _pf_adr:
+            if _pf_eat["red"]:
                 _tl_icon, _tl_bg, _tl_bc = "🔴", BG_DARK_RED_2, MATERIAL_RED
-                _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
+                _tl_reason = _pf_eat["reason"]
             elif _double_buy:
                 _tl_icon, _tl_bg, _tl_bc = "🟢🟢", BG_DARK_GREEN_3, MD_GREEN_A400
                 _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
@@ -256,10 +295,11 @@ def render_inflection_alert_section(
             elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
                 _tl_icon, _tl_bg, _tl_bc = "🟡", BG_DARK_AMBER_3, MATERIAL_ORANGE
                 _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
-            elif _pf_adr > 0 and _pf_ret1y is None:
-                # v19.396 §1:配息>0 但缺 1Y 含息報酬 → 誠實「資料不足」,不捏造 0% 假吃本金
+            elif _pf_eat["grey"]:
+                # v19.396 §1 → 2026-10-23:SSOT 回灰色(資料未備／無法判定)→ 中性色 + SSOT 的
+                # status / 白話原因原文,不捏造 0% 假吃本金、也不自己編「資料不足」
                 _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, GRAY_55
-                _tl_reason = f"1Y 含息報酬資料不足，無法判定吃本金（配息率 {_pf_adr:.1f}%）"
+                _tl_reason = _pf_eat["reason"]
             elif not _pf_m:
                 _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, GRAY_55
                 _tl_reason = "資料尚未載入"

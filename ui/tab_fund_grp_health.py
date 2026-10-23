@@ -55,6 +55,33 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
     return "年化" if _all_annual else "全期實際"
 
 
+#: 多基金績效比較圖:基準 → (配息率鍵, 含息鍵, 淨值鍵)。
+#: 2026-10-23 客戶裁示:持有期相對買入成本的年化欄已改名為
+#: 「持有期配息率% (相對買入成本・年化)」「持有期含息% (相對買入成本・年化)」(services/fund_row.py),
+#: 原本用 f-string 把基準字串拼進「配息率% (…)」「含息% (…)」當鍵,basis=="年化" 時會組出**舊鍵** → `r.get()` 全 None →
+#: 全檔都有年化值時兩條柱整排空(獨立稽核 M1 重現;v19.304「多檔比較全 0」的反向回歸)。
+#: 鍵一律走這張表,不再用字串拼。全期實際三鍵未改名、原樣。
+_COMPARISON_KEYS_BY_BASIS: dict[str, tuple[str, str, str]] = {
+    "年化": ("持有期配息率% (相對買入成本・年化)",
+            "持有期含息% (相對買入成本・年化)",
+            "淨值% (年化)"),
+    "全期實際": ("配息率% (全期實際)", "含息% (全期實際)", "淨值% (全期實際)"),
+}
+#: 圖例 / 標題用的基準白話(年化那組要講清楚是「持有期・相對買入成本」,不是基金層 1Y)
+_COMPARISON_BASIS_LABEL: dict[str, str] = {
+    "年化": "持有期年化・相對買入成本",
+    "全期實際": "全期實際",
+}
+
+
+def _comparison_keys_for_basis(basis: str) -> tuple[str, str, str]:
+    """`_pick_comparison_basis` 的基準字串 → row dict 的三個鍵(純函式,可單元測試)。"""
+    try:
+        return _COMPARISON_KEYS_BY_BASIS[basis]
+    except KeyError as _e:
+        raise KeyError(f"未知的比較基準 {basis!r};合法值 {sorted(_COMPARISON_KEYS_BY_BASIS)}") from _e
+
+
 _SHARPE_SRC_COL = "Sharpe 來源"
 
 
@@ -1329,22 +1356,23 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                 #   基準統一避免同圖混基準,並在標題 / 圖例 / caption 明示當前基準。
                 _basis = _pick_comparison_basis(ok_rows)
                 _all_annual = _basis == "年化"
-                _div_key = f"配息率% ({_basis})"
-                _ret_key = f"含息% ({_basis})"
-                _nav_key = f"淨值% ({_basis})"
+                # 2026-10-23:鍵走 `_comparison_keys_for_basis` 對映表,不再字串拼
+                # (年化欄已改名「持有期…(相對買入成本・年化)」,拼舊名會整排 None;稽核 M1)。
+                _div_key, _ret_key, _nav_key = _comparison_keys_for_basis(_basis)
+                _basis_lbl = _COMPARISON_BASIS_LABEL.get(_basis, _basis)
                 # v19.387 V1 §1:缺值保留 None → Plotly 該柱留缺口(誠實),不再 `or 0` 畫成
                 # 與「真實 0%」無法區分的假柱。基準切換(v19.304)已解全 0,此處補單檔 None。
                 _div_r  = [safe_num(r.get(_div_key)) for r in ok_rows]
                 _ret_r  = [safe_num(r.get(_ret_key)) for r in ok_rows]
                 _nav_r  = [safe_num(r.get(_nav_key)) for r in ok_rows]
                 _fig = _go.Figure()
-                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name=f"配息率%({_basis})🧮", marker_color="#f0883e"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name=f"含息%({_basis})🧮",  marker_color=TRAFFIC_GREEN))
-                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name=f"淨值%({_basis})🧮",  marker_color=INFO_BLUE))
+                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name=f"配息率%({_basis_lbl})🧮", marker_color="#f0883e"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name=f"含息%({_basis_lbl})🧮",  marker_color=TRAFFIC_GREEN))
+                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name=f"淨值%({_basis_lbl})🧮",  marker_color=INFO_BLUE))
                 _fig.add_hline(y=0, line_dash="dot", line_color=GRAY_55)
                 _fig.update_layout(
                     barmode="group",
-                    title=f"📊 多基金績效比較 🧮（{_basis}:配息率 / 含息報酬 / 淨值漲跌）",
+                    title=f"📊 多基金績效比較 🧮（{_basis_lbl}:配息率 / 含息報酬 / 淨值漲跌）",
                     height=360,
                     paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
                     font=dict(color=GH_FG_SECONDARY),

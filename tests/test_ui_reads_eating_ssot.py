@@ -9,9 +9,18 @@
      年化配息率唯一算法 = 近 12 個月實際配息合計 ÷ 最新淨值(`_resolve_adr_with_fallback` /
      `metrics.annual_div_rate`,同值);官方值只作對帳 / 診斷。
      允許的例外必須在**同一行或上一行**標 `# ssot-reconcile-only`(白名單標記),
-     逐處可被 grep 稽核;純註解行不算命中。
+     逐處可被 grep 稽核;純註解行與 docstring / 獨立字串常數(AST `Expr(Constant[str])`)不算命中。
   3. 突變驗證(由人手跑,不在本檔自動化):在任一 ui 檔加回
      `from services.portfolio_service import dividend_safety` → 本檔第 1 條必須轉紅。
+
+⚠️ **射程(據實寫明,不要把本檔讀成「UI 已全面 SSOT 化」的證明)**:
+  · 擋的是 **import 名**(第 1 條)與 **wb05 鍵字串**(第 2 條)。
+  · **不擋**直讀 `metrics.annual_div_rate` / `metrics.ret_1y` / `perf["1Y"]` 當值,
+    也**不擋** UI 自己 inline `tr < adr` 判吃本金 —— 那些要靠逐檔讀碼(2026-10-23 稽核 M2
+    就是這樣在 `tab1_macro_inflection` / `tab1_macro_longterm` 抓到的,本守衛當時全綠)。
+    `annual_div_rate` 與 SSOT 同值、`ret_1y` 另有純淨值用途,字串掃描分不出「當配息率 / 當含息」
+    與「當純淨值變化」,硬擋會誤殺;要擋得先把那兩個鍵的讀法分流,屬另案。
+  · 動態 `getattr` / 字串組名不在射程。
 
 為什麼要有這張守衛:2026-10-23 之前 UI 共有 7 處自己餵 tr1y / adr 進 `dividend_safety`、
 10+ 處直接拿 wb05 當配息率 —— 同一檔基金在不同分頁拿到不同燈號(§2.1 SSOT)。
@@ -63,18 +72,34 @@ def _banned_imports(path: Path) -> list[tuple[int, str]]:
     return hits
 
 
+def _docstring_lines(src: str, path: Path) -> set[int]:
+    """docstring / 獨立字串常數(`Expr(Constant[str])`)佔的行號(1-based),掃描時跳過。"""
+    out: set[int] = set()
+    try:
+        tree = ast.parse(src, filename=str(path))
+    except SyntaxError:
+        return out
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            out.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return out
+
+
 def _raw_key_hits(path: Path) -> list[tuple[int, str]]:
     """回未標白名單的 `moneydj_div_yield` 命中 [(lineno, line)]。
 
-    純註解行不算;同一行或上一行帶 `# ssot-reconcile-only` 的放行。
+    純註解行與 docstring 行不算;同一行或上一行帶 `# ssot-reconcile-only` 的放行。
     """
-    lines = path.read_text(encoding="utf-8").splitlines()
+    src = path.read_text(encoding="utf-8")
+    lines = src.splitlines()
+    skip = _docstring_lines(src, path)
     hits: list[tuple[int, str]] = []
     for i, line in enumerate(lines):
         if _RAW_KEY not in line:
             continue
         stripped = line.strip()
-        if stripped.startswith("#"):
+        if stripped.startswith("#") or (i + 1) in skip:
             continue
         prev = lines[i - 1] if i > 0 else ""
         if _WHITELIST_MARK in line or _WHITELIST_MARK in prev:
@@ -133,10 +158,15 @@ def test_guard_catches_banned_import(tmp_path: Path):
 def test_guard_catches_unmarked_raw_key_but_allows_marked(tmp_path: Path):
     f = tmp_path / "y.py"
     f.write_text(
+        '"""模組 docstring 提到 moneydj_div_yield → 不算\n'
+        '第二行也提到 moneydj_div_yield\n"""\n'
         "a = mj.get('moneydj_div_yield')\n"
         "# moneydj_div_yield 只在註解裡 → 不算\n"
         "b = mj.get('moneydj_div_yield')  # ssot-reconcile-only\n"
         "# ssot-reconcile-only\n"
-        "c = mj.get('moneydj_div_yield')\n",
+        "c = mj.get('moneydj_div_yield')\n"
+        "def g():\n"
+        '    """函式 docstring 的 moneydj_div_yield 也不算"""\n'
+        "    return mj.get('moneydj_div_yield')\n",
         encoding="utf-8")
-    assert [h[0] for h in _raw_key_hits(f)] == [1]
+    assert [h[0] for h in _raw_key_hits(f)] == [4, 11]
