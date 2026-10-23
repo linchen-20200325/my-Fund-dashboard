@@ -437,9 +437,16 @@ def render_long_term_section(
             try:
                 _eroded = [(r["name"], r["tr1y"], r["adr"]) for r in _def_rows
                            if r["eating"] is True and r["tr1y"] is not None and r["adr"] is not None]
+                # 2026-10-23(稽核 N1):把「判得動 / 判不動 / 不適用」三種檔數一起帶出去,
+                # 否則消費端(tab1_macro_ai)在 n_eroded==0 時會把全灰 / 全非配息的組合講成
+                # 「全部配息有保障」—— Missing 變成安全(§1)。
                 st.session_state["_macro_capital_line"] = {
                     "n_funds": len(_def_names),
                     "n_eroded": len(_eroded),
+                    "n_judged": sum(1 for r in _def_rows if r["eating"] in (True, False)),
+                    "n_grey": sum(1 for r in _def_rows
+                                  if r["eating"] is None and r["label"] != "— 非配息基金"),
+                    "n_na": sum(1 for r in _def_rows if r["label"] == "— 非配息基金"),
                     "eroded_funds": [{"name": n[:20], "tr1y": float(tr),
                                       "adr": float(adr)} for n, tr, adr in _eroded[:5]],
                 }

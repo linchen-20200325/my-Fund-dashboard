@@ -42,7 +42,10 @@ def test_m1_comparison_keys_exist_in_fund_row_output():
 
 
 def test_m1_annual_basis_bars_are_not_all_none():
-    """**修正前必紅**:年化基準下用舊鍵 `r.get("配息率% (年化)")` → 全 None。"""
+    """鎖的是 helper `_comparison_keys_for_basis` 回的鍵能在 fund_row 形狀的列上取到值
+    (純函式層);圖表區真的有改走這支 helper、沒再用 f-string 拼鍵,由下面的源碼鎖
+    `test_m1_chart_block_does_not_build_keys_by_string_formatting` 守,本條不渲染圖表。
+    修正前的病(舊鍵 `r.get("配息率% (年化)")` 全 None)在本條末尾留一行反向對照。"""
     from ui.tab_fund_grp_health import _comparison_keys_for_basis, _pick_comparison_basis
     rows = [_row_from_fund_row_keys(), _row_from_fund_row_keys(**{
         "持有期配息率% (相對買入成本・年化)": 11.0, "持有期含息% (相對買入成本・年化)": 12.6})]
@@ -147,3 +150,77 @@ def test_m2_source_no_longer_reads_pure_nav_or_or_zero():
         assert 'annual_div_rate") or 0' not in src, rel
         assert 'get("ret_1y"))' not in src, rel
         assert "check_eating_principal_1y_mk" in src, rel
+
+
+# ══════════════════════════════════════════════════════════════════
+# N1(2026-10-23 delta 複核):Missing 不得變「全部配息有保障」
+# ══════════════════════════════════════════════════════════════════
+def _snapshot_with_capital_line(monkeypatch, cap: dict) -> str:
+    import sys
+    sys.path.insert(0, str(ROOT / "tests"))
+    from test_tab1_macro import _mock_streamlit  # noqa: E402 — 沿用既有 session_state 替身
+    import fund_fetcher  # noqa: F401
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
+    _mock_streamlit(monkeypatch, {"_macro_capital_line": cap})
+    snap, _, _ = _build_macro_ai_snapshot({}, {}, {}, {}, [])
+    return snap
+
+
+def test_n1_longterm_stash_carries_judged_grey_na_counts():
+    """stash 必須把三種檔數帶出去,消費端才分得出「0 檔侵蝕」是全綠還是全灰。"""
+    from ui.tab1_macro_longterm import _capital_line_rows
+    rows = _capital_line_rows([
+        _fund(tr=2.0, adr=8.0, code="EAT"), _fund(tr=12.0, adr=8.0, code="OK"),
+        _fund(adr=5.0, code="GREY"),
+        {"code": "N", "fund_name": "N 基金", "metrics": {"ret_1y_total": 1.0}, "moneydj_raw": {}},
+    ])
+    n_judged = sum(1 for r in rows if r["eating"] in (True, False))
+    n_grey = sum(1 for r in rows if r["eating"] is None and r["label"] != "— 非配息基金")
+    n_na = sum(1 for r in rows if r["label"] == "— 非配息基金")
+    assert (n_judged, n_grey, n_na) == (2, 1, 1)
+    # 源碼鎖:stash 真的寫了這三個鍵
+    src = (ROOT / "ui" / "tab1_macro_longterm.py").read_text(encoding="utf-8")
+    for _k in ('"n_judged"', '"n_grey"', '"n_na"'):
+        assert _k in src, f"stash 缺 {_k}"
+
+
+def test_n1_all_grey_portfolio_is_not_called_all_safe(monkeypatch):
+    """**修正前必紅**:n_eroded==0 → 「5 檔基金全部 TR1Y ≥ 配息率（配息有保障）」。"""
+    snap = _snapshot_with_capital_line(monkeypatch, {
+        "n_funds": 5, "n_eroded": 0, "n_judged": 0, "n_grey": 5, "n_na": 0, "eroded_funds": []})
+    assert "資本防線" in snap
+    assert not ("全部" in snap and "配息有保障" in snap), snap
+    assert "5 檔⬜ 未判定" in snap and "請勿推測" in snap, snap
+
+
+def test_n1_all_non_dividend_portfolio_is_not_called_all_safe(monkeypatch):
+    snap = _snapshot_with_capital_line(monkeypatch, {
+        "n_funds": 3, "n_eroded": 0, "n_judged": 0, "n_grey": 0, "n_na": 3, "eroded_funds": []})
+    assert not ("全部" in snap and "配息有保障" in snap), snap
+    assert "3 檔非配息基金" in snap, snap
+
+
+def test_n1_fully_judged_zero_eroded_still_says_all_safe(monkeypatch):
+    """回歸鎖:每一檔都判得動且 0 侵蝕 → 原句保留。"""
+    snap = _snapshot_with_capital_line(monkeypatch, {
+        "n_funds": 4, "n_eroded": 0, "n_judged": 4, "n_grey": 0, "n_na": 0, "eroded_funds": []})
+    assert "4 檔基金全部 TR1Y ≥ 配息率（配息有保障）" in snap, snap
+
+
+def test_n1_mixed_counts_are_correct(monkeypatch):
+    snap = _snapshot_with_capital_line(monkeypatch, {
+        "n_funds": 6, "n_eroded": 1, "n_judged": 3, "n_grey": 2, "n_na": 1,
+        "eroded_funds": [{"name": "高收益債 A", "tr1y": 2.0, "adr": 8.0}]})
+    assert "⚠️ 1/6 檔本金侵蝕" in snap and "2 檔有保障" in snap, snap
+    assert "2 檔⬜ 未判定" in snap and "1 檔非配息基金" in snap, snap
+    assert "高收益債 A" in snap
+    # 0 侵蝕但有未判定 → 講明有保障幾檔、未判定幾檔,不講「全部」
+    snap2 = _snapshot_with_capital_line(monkeypatch, {
+        "n_funds": 6, "n_eroded": 0, "n_judged": 3, "n_grey": 2, "n_na": 1, "eroded_funds": []})
+    assert "3 檔 TR1Y ≥ 配息率（配息有保障）" in snap2 and "全部" not in snap2.split("資本防線")[1].split("\n")[0], snap2
+
+
+def test_n1_old_stash_without_counts_is_not_called_all_safe(monkeypatch):
+    """舊版 stash(沒有 n_judged)→ 當 0 檔判得動,不得說「全部」。"""
+    snap = _snapshot_with_capital_line(monkeypatch, {"n_funds": 2, "n_eroded": 0, "eroded_funds": []})
+    assert not ("全部" in snap and "配息有保障" in snap), snap
