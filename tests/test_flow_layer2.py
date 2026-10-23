@@ -283,7 +283,10 @@ def test_no_series_at_all_still_returns_none():
     """反向護欄:連序列都沒有時,必須維持既有契約回 None(不可被上一條帶壞)。"""
     from services.health.dividend import check_eating_principal_1y_mk
 
-    assert check_eating_principal_1y_mk({"moneydj_div_yield": 5.0}) is None
+    # 裁示 1B:有配息跡象(wb05 > 0)但連序列 / 配息紀錄都沒有 → 灰 dict(不是 None、不是 False)
+    _r = check_eating_principal_1y_mk({"moneydj_div_yield": 5.0})
+    assert _r is not None and _r["alert_level"] == "grey" and _r["eating_principal"] is None
+    # 完全無配息跡象 → 維持既有契約回 None
     assert check_eating_principal_1y_mk({}) is None
 
 
@@ -299,26 +302,26 @@ def test_short_window_no_longer_extrapolated():
     """
     from services.fund_total_return import compute_1y_total_return
 
-    fd = {"metrics": {}, "moneydj_raw": {}, "series": _series(40, 60, 10.0, 11.7)}
+    # 裁示 1B:SSOT 不再自己從 series 推值;短窗的事實由 calc_metrics 的 window_days 帶出
+    fd = {"metrics": {"ret_1y_total": 17.0, "ret_1y_window_days": 60}, "moneydj_raw": {},
+          "series": _series(40, 60, 10.0, 11.7)}
     val, src = compute_1y_total_return(fd)
-    assert val is None, f"60 天資料仍被外推成 {val} —— 那不是量出來的一年報酬(稽核 E1)"
-    assert "60" in src and "不足以推算一年" in src, f"來源欄未說明為什麼留白:{src!r}"
+    assert val is None, f"60 天資料仍被當成一年報酬 {val} —— 那不是量出來的一年報酬(稽核 E1)"
+    assert "60" in src and "不足一年" in src, f"來源欄未說明為什麼留白:{src!r}"
 
 
-def test_long_window_still_annualized_but_capped():
-    """跨度夠長仍要給值,且放大倍數受 SSOT 上限約束(不可回到 ×12)。"""
-    from shared.signal_thresholds import RET_1Y_EXTRAPOLATE_MAX_SCALE
+def test_long_window_is_never_annualized_anymore():
+    """2026-10-23 裁示 1B:**連 ≥ 半年的跨度也不再外推年化** —— 沒有還原值就留白。
+
+    舊契約是「跨度夠長仍要給值、倍數受 cap 約束」;現在外推層整個退役,
+    乘出來的數字不論倍數多小都不是量出來的一年報酬。改回舊行為必紅。
+    """
     from services.fund_total_return import compute_1y_total_return
 
     fd = {"metrics": {}, "moneydj_raw": {}, "series": _series(200, 200, 10.0, 11.0)}
     val, src = compute_1y_total_return(fd)
-    assert val is not None, "跨度 200 天(> 半年)不該留白"
-    _raw = (11.0 / 10.0 - 1.0) * 100.0
-    # 精確驗算(不只驗「沒超過上限」—— 那條由建構保證,是恆真斷言)
-    _expect = _raw * min(365.0 / 200.0, RET_1Y_EXTRAPOLATE_MAX_SCALE)
-    assert val == pytest.approx(_expect, rel=1e-6), (
-        f"外推公式漂移:raw={_raw:.4f} 期望 {_expect:.4f} 實得 {val:.4f}")
-    assert "外推年化" in src and "200" in src
+    assert val is None, f"跨度 200 天仍被外推成 {val} —— 外推層已退役(裁示 1B)"
+    assert "外推年化" not in src and "資料未備" in src
 
 
 def test_extrapolation_floor_comes_from_ssot():
@@ -349,7 +352,8 @@ def test_implausible_1y_is_flagged_in_source_label(bad):
     )
 
     assert is_implausible_1y(bad)
-    fd = {"metrics": {}, "perf": {"1Y": bad}, "perf_source": "wb01"}
+    # 裁示 1B:離譜值從本地還原值進來(官方 perf 不再當值)
+    fd = {"metrics": {"ret_1y_total": bad, "ret_1y_window_days": 365}, "moneydj_raw": {}}
     val, src = compute_1y_total_return(fd)
     assert val == pytest.approx(bad), "閘只做標記,不得偷改值或丟值"
     assert SRC_IMPLAUSIBLE_SUFFIX in src, f"離譜值未被標記:{src!r}"

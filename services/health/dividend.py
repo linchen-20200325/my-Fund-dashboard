@@ -137,19 +137,22 @@ def classify_eating_principal(
 
 
 # ════════════════════════════════════════════════════════════════
-# v19.148 → v19.149 — 老師 1Y 吃本金檢查 SSOT 入口
+# v19.148 → v19.149 — 老師 1Y 吃本金檢查(歷史:嚴格單利版)
 #   方法論:近一年含息報酬率 vs 年化配息率(老師體檢邏輯)
-#   v19.149 升級:含息報酬從業界複利(wb01)改為 嚴格單利
-#     含息_1Y = NAV 漲跌幅% + 累計配息率%
-#   wb01/ret_1y_total/ret_1y 變成 fallback,當 fund 內 raw series + dividends
-#   不可用時才使用。caller 可由 `_tr1y_method` 欄位看出實際用哪條路。
+#   v19.149 曾把含息報酬改為嚴格單利(NAV 漲跌幅% + 累計配息率%);
+#   2026-10-23 裁示 1B 後唯一算法改為配息還原淨值法(見 check_eating_principal_1y_mk)。
 # ════════════════════════════════════════════════════════════════
 def compute_1y_total_return_mk_simple(
     nav_series: Any,
     dividends: Any,
     as_of_date: Optional[str] = None,
 ) -> tuple[Optional[float], dict]:
-    """v19.149 — 老師嚴格單利 1Y 含息報酬率 SSOT 計算。
+    """v19.149 — 老師嚴格單利 1Y 含息報酬率計算。
+
+    ⚠️ **2026-10-23 起無 production caller**(裁示 1B:1Y 含息唯一算法 = 配息還原淨值法
+    `fund_service.calc_metrics.ret_1y_total`;本函式的「對照欄」與短窗替補路徑已自
+    `check_eating_principal_1y_mk` 移除)。函式本體保留供 BL-0422 退休流程,**不得**
+    再被接回燈號判定。
 
     公式(老師體檢邏輯):
         含息_1Y = NAV 漲跌幅% + 累計配息率%
@@ -308,242 +311,240 @@ def compute_1y_total_return_mk_simple(
     return round(ret_pct, 4), meta
 
 
-def _resolve_adr_with_fallback(fund: dict) -> tuple[Optional[float], str]:
-    """年化配息率(adr)3 層 fallback chain SSOT(v19.177)。
+# ── 年化配息率(adr)SSOT ─────────────────────────────────────────────────────
+ADR_SRC_DIVS_12M = "divs_12m_sum"            # 唯一有值的來源:近 12 個月實際配息合計 ÷ 最新淨值
+ADR_LABEL_DATA_MISSING = "⬜ 配息資料未備"    # 有配息跡象但窗內 0 筆 / 缺淨值 → 不判
+ADR_LABEL_NO_DIVIDEND = "—"                  # 完全無配息跡象(非配息基金)
 
-    將原本散在 `check_eating_principal_1y_mk`(2 層)與 `tab2_single_fund.py`
-    KPI banner(3 層)的 adr 取數邏輯合一,確保跨 Tab 同檔基金顯示同一 adr 值。
 
-    precedence(最權威 → 次選):
-        1. **MoneyDJ wb05 官方** `moneydj_div_yield`(支援 nested moneydj_raw 與 flat shape)
-        2. **本地自算** `metrics.annual_div_rate`
-        3. **歷史推算** `divs[]` 12 個月累積配息 / `metrics.nav`(或 `moneydj_raw.nav_latest`)
+def resolve_dividend_rate_12m(fund: dict) -> dict:
+    """年化配息率 SSOT 解析(2026-10-23 裁示 1B,**唯一算法**)。
 
-    Args
-    ----
-    fund : dict
-        支援兩種 shape:
-        - Nested: `{moneydj_raw: {moneydj_div_yield, dividends, nav_latest}, metrics: {...}}`
-        - Flat: `{moneydj_div_yield: ..., dividends: ..., metrics: {...}}`
+    公式:近 12 個月**實際**配息合計 ÷ 最新淨值 × 100;窗口 (anchor − 365 天, anchor],
+    anchor = 最後一筆 NAV 日(有 series),否則今天。
+
+    取數順序(同一公式的兩個住址,不是兩種算法):
+      1. `metrics.annual_div_rate`(`calc_metrics` 已以同公式產出;鍵存在即採用,
+         值 None 表示窗內無紀錄)
+      2. metrics **無此鍵**時,以 `dividends` + `metrics.nav` / `moneydj_raw.nav_latest` 現算
+    **不再**讀 `moneydj_div_yield`(wb05 官方)當值 —— 它只放 `official_wb05_pct` 供對帳。
 
     Returns
     -------
-    (adr_pct, source_label)
-        adr_pct: float (%) 或 None(全 fallback 皆失敗)
-        source_label: 'moneydj_wb05' / 'metrics_annual_div_rate' / 'divs_12m_sum' / '—'
+    {
+      "value_pct": float | None,
+      "status": "ok" | "unavailable",
+      "reason": None | "dividend_data_missing" | "nav_missing" | "no_dividend",
+      "div_count": int | None,          # 12M 窗內配息筆數
+      "window_end": str | None,         # anchor ISO 日期
+      "official_wb05_pct": float | None,
+      "label": ADR_SRC_DIVS_12M | ADR_LABEL_DATA_MISSING | ADR_LABEL_NO_DIVIDEND,
+    }
+    `dividend_data_missing`:`moneydj_div_yield > 0` 或有歷史配息紀錄,但 12M 窗內 0 筆
+    (停配 / 紀錄缺)→ 不能當 0% 也不能拿官方值頂 → 誠實不判。
+    `no_dividend`:完全無配息跡象 → 非配息基金,吃本金概念不適用(既有契約)。
     """
-    # 解析兩種 shape
+    import datetime as _dt
     if "moneydj_raw" in fund:
         _mj = fund.get("moneydj_raw") or {}
     else:
         _mj = fund
     _metrics = fund.get("metrics") or {}
+    _official = _safe_float(_mj.get("moneydj_div_yield"))
+    if _official is None and _mj is not fund:
+        _official = _safe_float(fund.get("moneydj_div_yield"))
+    _divs = fund.get("dividends")
+    if _divs is None:
+        _divs = _mj.get("dividends")
+    _divs = _divs or []
 
-    # Layer 1: MoneyDJ wb05 官方
-    _mj_dy = _safe_float(_mj.get("moneydj_div_yield"))
-    if _mj_dy and _mj_dy > 0:
-        return _mj_dy, "moneydj_wb05"
+    def _has_any_dividend_record() -> bool:
+        for _dd in _divs:
+            if isinstance(_dd, dict):
+                _a = _safe_float(_dd.get("amount") if _dd.get("amount") is not None
+                                 else _dd.get("div_per_unit"))
+            elif isinstance(_dd, (tuple, list)) and len(_dd) >= 2:
+                _a = _safe_float(_dd[1])
+            else:
+                continue
+            if _a is not None and _a > 0:
+                return True
+        return False
 
-    # Layer 2: metrics.annual_div_rate(本地自算 N×freq/NAV)
-    _local = _safe_float(_metrics.get("annual_div_rate"))
-    if _local and _local > 0:
-        return _local, "metrics_annual_div_rate"
+    def _unavail(reason: str, *, div_count=None, window_end=None) -> dict:
+        _lbl = (ADR_LABEL_NO_DIVIDEND if reason == "no_dividend"
+                else ADR_LABEL_DATA_MISSING)
+        return {"value_pct": None, "status": "unavailable", "reason": reason,
+                "div_count": div_count, "window_end": window_end,
+                "official_wb05_pct": _official, "label": _lbl}
 
-    # Layer 3: divs[] 12 個月累積 / 現價(歷史推算 fallback)
-    _divs = fund.get("dividends") or _mj.get("dividends")
-    if _divs:
+    _has_signal = (_official is not None and _official > 0) or _has_any_dividend_record()
+
+    # 1) metrics 已算好(同公式)
+    if "annual_div_rate" in _metrics:
+        _v = _safe_float(_metrics.get("annual_div_rate"))
+        _cnt = _metrics.get("annual_div_rate_div_count")
+        _wend = _metrics.get("annual_div_rate_window_end")
+        if _v is not None and _v > 0:
+            return {"value_pct": _v, "status": "ok", "reason": None,
+                    "div_count": _cnt, "window_end": _wend,
+                    "official_wb05_pct": _official, "label": ADR_SRC_DIVS_12M}
+        # 值 None / 0 → 窗內無紀錄;有配息跡象 → 資料未備,否則非配息基金
+        return _unavail("dividend_data_missing" if _has_signal else "no_dividend",
+                        div_count=_cnt, window_end=_wend)
+
+    # 2) metrics 無此鍵 → 以 dividends + nav 現算
+    _anchor = None
+    _series = fund.get("series")
+    if _series is None:
+        _series = _mj.get("series")
+    try:
+        if _series is not None and hasattr(_series, "index") and len(_series) > 0:
+            _last = _series.index[-1]
+            _anchor = _dt.datetime.strptime(str(_last)[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        _anchor = None
+    if _anchor is None:
+        _anchor = _dt.datetime.now()
+    _window_end = _anchor.date().isoformat()
+    _cutoff = _anchor - _dt.timedelta(days=365)
+    _sum = 0.0
+    _cnt = 0
+    for _dd in _divs:
+        if isinstance(_dd, dict):
+            _dt_raw = _dd.get("date") or _dd.get("ex_date") or ""
+            _a = _dd.get("amount") if _dd.get("amount") is not None else _dd.get("div_per_unit")
+        elif isinstance(_dd, (tuple, list)) and len(_dd) >= 2:
+            _dt_raw, _a = _dd[0], _dd[1]
+        else:
+            continue
+        _dt_str = str(_dt_raw or "").replace("/", "-")
         try:
-            import datetime as _dt
-            _cutoff = _dt.datetime.now() - _dt.timedelta(days=365)
-            _sum = 0.0
-            for _dd in _divs:
-                if not isinstance(_dd, dict):
-                    continue
-                _dt_str = (_dd.get("date") or "").replace("/", "-")
-                try:
-                    _dt_p = _dt.datetime.strptime(_dt_str[:10], "%Y-%m-%d")
-                except (ValueError, TypeError):
-                    continue
-                if _dt_p >= _cutoff:
-                    try:
-                        _sum += float(_dd.get("amount", 0) or 0)
-                    except (TypeError, ValueError):
-                        continue
-            _nav = _safe_float(_metrics.get("nav")) or _safe_float(_mj.get("nav_latest"))
-            if _sum > 0 and _nav and _nav > 0:
-                return (_sum / _nav) * 100.0, "divs_12m_sum"
-        except Exception as _e:
-            # §1 Fail Loud(降級):log + 走 None,不偽造
-            import sys as _sys
-            print(f'[_resolve_adr_with_fallback] divs 12M fallback fail: '
-                  f'{type(_e).__name__}: {_e}', file=_sys.stderr)
-
-    return None, "—"
+            _dt_p = _dt.datetime.strptime(_dt_str[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            continue
+        _af = _safe_float(_a)
+        if _af is None or _af <= 0:
+            continue
+        if _cutoff < _dt_p <= _anchor:
+            _sum += _af
+            _cnt += 1
+    if _cnt == 0:
+        return _unavail("dividend_data_missing" if _has_signal else "no_dividend",
+                        div_count=0, window_end=_window_end)
+    _nav = _safe_float(_metrics.get("nav"))
+    if _nav is None or _nav <= 0:
+        _nav = _safe_float(_mj.get("nav_latest"))
+    if _nav is None or _nav <= 0:
+        return _unavail("nav_missing", div_count=_cnt, window_end=_window_end)
+    return {"value_pct": (_sum / _nav) * 100.0, "status": "ok", "reason": None,
+            "div_count": _cnt, "window_end": _window_end,
+            "official_wb05_pct": _official, "label": ADR_SRC_DIVS_12M}
 
 
-# v19.480 稽核 2b:吃本金「還原含息」替補的最短窗口(天)。低於此 → 拒判 ⚪,不拿短窗
-# 累積含息去比年化配息率(期間不對齊)。具名常數(§3.3 不 inline);300 天 ≈ 10 個月,
-# 已足以讓還原含息的期間偏差 < ~18%,且比 RET_1Y_EXTRAPOLATE_MIN_DAYS(180)嚴。
+def _resolve_adr_with_fallback(fund: dict) -> tuple[Optional[float], str]:
+    """年化配息率(adr)SSOT 入口 —— `resolve_dividend_rate_12m` 的薄包裝(簽名不變)。
+
+    2026-10-23 裁示 1B:原 3 層 fallback(wb05 官方 → metrics.annual_div_rate → divs 12M)
+    收斂為**單一方法**「近 12 個月實際配息合計 ÷ 最新淨值 × 100」;wb05 官方值不再當值。
+
+    Returns
+    -------
+    (adr_pct, source_label)
+        ok          → (float, "divs_12m_sum")
+        資料未備    → (None, "⬜ 配息資料未備")  — 有配息跡象但窗內 0 筆 / 缺淨值
+        非配息基金  → (None, "—")
+    """
+    _r = resolve_dividend_rate_12m(fund)
+    return (_r["value_pct"] if _r["status"] == "ok" else None), _r["label"]
+
+
+# v19.480 稽核 2b 的「還原含息替補」最短窗口。2026-10-23 裁示 1B 後替補邏輯已移除
+# (窗口門檻統一走 `shared.signal_thresholds.RET_1Y_RESTORED_MIN_WINDOW_DAYS`),
+# 本常數**無 production caller**,只為相容保留(BL-0422 退休流程一併處理)。
 _EATING_RESTORE_MIN_WINDOW_DAYS = 300
+
+EATING_STATUS_UNAVAILABLE = "⬜ 資料未備／無法判定"
+
+_EATING_GREY_MESSAGE = {
+    "dividend_data_missing": ("這檔有配息跡象,但近一年窗口內沒有任何配息紀錄 —— "
+                              "**不是它不吃本金,是我們沒有足夠的配息資料去判斷**。"
+                              "請先補齊配息紀錄,或改看基金官方績效頁"),
+    "window_short": ("這檔的淨值歷史不足一年,無法算出可靠的一年含息報酬 —— "
+                     "**不是它沒有配息或不吃本金,是我們還沒有足夠的資料去判斷**。"
+                     "請改看基金官方績效頁的含息報酬"),
+    "no_series": "這檔沒有淨值序列,無法還原一年含息報酬 —— 無法判定",
+    "no_restored_value": ("這檔有淨值序列但無法還原出一年含息報酬(筆數不足或資料異常)—— "
+                          "無法判定,不拿別的數字頂替"),
+}
+
+
+def _eating_grey(reason: str, *, tr1y_label=None, adr_source=None, adr_pct=None,
+                 window_days=None) -> dict:
+    """吃本金「資料未備／無法判定」灰色結果。`eating_principal` 一律 None(missing ≠ False)。"""
+    return {
+        "status": EATING_STATUS_UNAVAILABLE, "alert_level": "grey",
+        "reason": reason,
+        "message": _EATING_GREY_MESSAGE.get(reason, "資料未備,無法判定"),
+        "coverage": None, "gap_pct": None, "eating_principal": None,
+        "_tr1y_method": tr1y_label, "_adr_source": adr_source,
+        "_adr_pct": adr_pct,
+        "_tr1y_meta": None, "_tr1y_window_days": window_days,
+    }
 
 
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
-    """老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
+    """老師 1Y 吃本金檢查 SSOT 入口(2026-10-23 裁示 1B:唯一判定)。
 
     依老師體檢邏輯:
-        近一年含息總報酬率 < 年化配息率 → 🔴 吃本金
-
-    老師核心精神是「善用免費理財網站直接查找數據,不要自己算複雜的數學」,
-    系統應以 MoneyDJ wb01 官方數字為絕對優先(SSOT),只在抓不到時才自算 fallback,
-    與使用者上網查到的數字一致,避免信任危機。
+        近一年含息總報酬率 < 年化配息率 → 🔴 吃本金(2pp 黃燈帶走 `dividend_safety`)
 
     支援兩種 fund dict shape:
     - **Nested**(tab3_portfolio / fund_checkup):`{moneydj_raw: {...}, metrics: {...}}`
     - **Flat**(`_auto_fetch_moneydj` 直回):`{moneydj_div_yield: ..., metrics: {...}}`
 
-    含息報酬(tr1y) precedence(v19.175 — 對齊 Tab2/Tab3 SSOT):
-        統一委派 `services.fund_total_return.compute_1y_total_return()`:
-            1. perf["1Y"] (wb01 MoneyDJ 官方,業界複利)— 最權威
-            2. ret_1y_total (本地含息計算)
-            3. ret_1y (純 NAV,不含息)
-            4. NAV 序列年化外推 (跨度須 ≥ RET_1Y_EXTRAPOLATE_MIN_DAYS,倍數走 SSOT cap;
-               2026-08-14 稽核 E1 前是「≥30d、cap 12x」—— 30 天 ×12 會印出 +201% 的假一年報酬)
-
-        v19.149 的 嚴格簡單單利路徑改為「對照欄」備援(`_tr1y_mk_simple_meta`),
-        不再參與燈號判定 — 避免 Tab2(wb01)/ 健診總表(mk_simple)同檔結論相反。
-
-    年化配息率(adr)precedence:
-        moneydj_div_yield(MoneyDJ wb05 官方,優先)→ metrics.annual_div_rate(fallback)
+    兩個輸入各只有一個來源(§2.1):
+      - adr  = `_resolve_adr_with_fallback`(近 12 個月實際配息合計 ÷ 最新淨值)
+      - tr1y = `resolve_1y_total_return`(本地配息還原淨值法,窗口 ≥ 350 天)
+    任一缺 → 回灰色 dict(`status="⬜ 資料未備／無法判定"`、`reason`、`eating_principal=None`),
+    **不**退回官方 wb01 / wb05、**不**外推、**不**拿純淨值。
+    `nav_change` 傳 `metrics.ret_1y`(純淨值 1Y 變化)供 `dividend_safety` 的淨值下跌交叉警語。
 
     Returns
     -------
-    dividend_safety 3 色結果 dict + v19.175 欄位:
-      - `_tr1y_method`: tr1y 來源(從 compute_1y_total_return 取得 source label)
-      - `_tr1y_window_days`: 仍保留欄位(對齊舊 caller),compute_1y_total_return 路徑為 None
-      - `_tr1y_meta`: 仍保留欄位,內含 嚴格單利對照值(若可算)便於 UI「業界 vs 」對照顯示
-    或 None(資料不足:adr 缺/tr1y 缺/adr ≤ 0)
+    dividend_safety 3 色結果 dict + 欄位:
+      - `_tr1y_method`:tr1y 來源標籤(resolve 的 label)
+      - `_tr1y_window_days`:還原窗口天數
+      - `_tr1y_meta`:保留欄位,恆 None(mk_simple 對照路徑已移除)
+      - `_adr_source` / `_adr_pct`:adr 來源標籤與值
+    或 None(非配息基金:adr 來源為「—」,既有契約:不判)
     """
-    # adr v19.177:統一走 SSOT _resolve_adr_with_fallback(3 層 chain)
-    # 與 tab2_single_fund.py KPI banner 同源,免「Tab2 算得出但健診表回 None」散落
+    from services.fund_total_return import resolve_1y_total_return
+
     adr, _adr_source = _resolve_adr_with_fallback(fund)
-    if adr is None or adr <= 0:
+    if adr is None:
+        if _adr_source == ADR_LABEL_NO_DIVIDEND:
+            return None
+        return _eating_grey("dividend_data_missing", adr_source=_adr_source, adr_pct=None)
+    if adr <= 0:
         return None
 
-    # tr1y v19.175:統一走 SSOT compute_1y_total_return(wb01 業界複利優先)
-    from services.fund_total_return import (
-        compute_1y_total_return,
-        is_extrapolated_1y_source,
-        is_nav_only_1y_source,
-        is_partial_window_1y_source,
-        is_too_short_1y_source,
-    )
-    tr1y, _tr1y_method = compute_1y_total_return(fund)
-    if tr1y is None:
-        # ── 稽核 E1 + 🟠-3：兩種「沒有 tr1y」必須分開 ──────────────────────────
-        # E1 把「跨度 < 半年 → ×12 外推」改成「跨度 < 半年 → 不給值」,原本走
-        # 下方 `is_extrapolated_1y_source` 拒判分支(**會回 grey dict、會帶 adr**)
-        # 的那一整批基金,全部改道到這裡的 `return None`。
-        # 後果:`replacement.py` 拿不到 `_adr_pct` → 4D 少一維 → 規則 (b) 失效,
-        # 且 `eat_status` 由「⚪ 資料不足」變成空字串 → `_has_any_signal` 翻 False
-        # → 換標的建議從 🟢 保留掉成 ⬜ 資料不足。等於修一個洞開一個洞。
-        #
-        # 分法:
-        #   連 NAV 序列都沒有 → 維持回 None(既有契約,`test_data_missing_returns_none` 守著)
-        #   有序列、只是太短   → 與外推拒判同一種處境,回 grey dict 並帶 adr
-        if not is_too_short_1y_source(_tr1y_method):
-            return None
-        return {
-            "status": "⚪ 資料不足", "alert_level": "grey",
-            "message": ("這檔的淨值歷史不足半年,無法算出可靠的一年含息報酬 —— "
-                        "**不是它沒有配息或不吃本金,是我們還沒有足夠的資料去判斷**。"
-                        "請改看基金官方績效頁的含息報酬"),
-            "coverage": None, "gap_pct": None, "eating_principal": False,
-            "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
-            "_adr_pct": adr,
-            "_tr1y_meta": None, "_tr1y_window_days": None,
-        }
-
-    # 對照欄:嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
-    # 但 不再 參與燈號判定。
-    # v19.181 Bug 4 fix: pd.Series 的 `or` 會觸發 ambiguous truth value ValueError —
-    # 改用顯式 None 檢查(`fund.get("series")` 可能回傳 pd.Series 物件)
-    _tr1y_meta: Optional[dict] = None
-    _series = fund.get("series")
-    if _series is None:
-        _series = (fund.get("moneydj_raw") or {}).get("series")
-    _divs = fund.get("dividends")
-    if _divs is None:
-        _divs = (fund.get("moneydj_raw") or {}).get("dividends")
-    if _series is not None and _divs is not None:
-        try:
-            _mk_v, _mk_meta = compute_1y_total_return_mk_simple(_series, _divs)
-            if _mk_v is not None and isinstance(_mk_meta, dict):
-                _tr1y_meta = {**_mk_meta, "mk_simple_value": _mk_v}
-        except Exception as _e_mk:
-            # F-MED v19.170: silent pass → stderr log;對照欄缺失不影響燈號
-            import sys as _sys_mk
-            print(f'[fund_dividend_health] mk_simple compare-only calc fail: '
-                  f'{type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
-
-    # v19.448 + v19.480 稽核守門(§1 Fail Loud):tr1y 若來自**不可信基準**,先嘗試用
-    # 「還原含息(NAV+配息)」且窗口 ≥ 300 天替補;否則**拒判**顯示 ⚪ 資料不足,絕不拿它報紅燈。
-    # 三種不可信基準(全部與「年化配息率」比會系統性報假 🔴,重災區 = 境內短歷史檔):
-    #   ① 短窗外推年化(is_extrapolated,ACTI71 −38% bug,v19.448)
-    #   ② 短窗**累積**含息(is_partial_window,B1:N 天累積 vs 年化配息率,期間不對齊 §4.1)
-    #   ③ 純 NAV 不含配息(is_nav_only,B2:被除息扣掉、配息沒加回 → 低估 → 假 🔴)
-    if (is_extrapolated_1y_source(_tr1y_method)
-            or is_partial_window_1y_source(_tr1y_method)
-            or is_nav_only_1y_source(_tr1y_method)):
-        _mkv = (_tr1y_meta or {}).get("mk_simple_value")
-        _win = (_tr1y_meta or {}).get("window_days")
-        # v19.480 稽核 2a:只有 window_days 夠長**不足以**信任還原值 —— 若 dividends 是空 list
-        # 或全落在窗外,mk_simple 只是純 NAV(div_count=0),relabel 成「還原含息」等於把 B2
-        # 洗白後放行報 🔴。必須確認**真的把配息加回來了**(div_count>0)才採用,否則落 ⚪。
-        _divc = (_tr1y_meta or {}).get("div_count") or 0
-        if (_mkv is not None and _win is not None
-                and _win >= _EATING_RESTORE_MIN_WINDOW_DAYS and _divc > 0):
-            tr1y, _tr1y_method = float(_mkv), "自算含息（還原 NAV+配息）"
-        else:
-            return {
-                "status": "⚪ 資料不足", "alert_level": "grey",
-                "message": ("只取得「淨值報酬(未含配息)」或「不足一年的含息報酬」,拿去跟"
-                            "年化配息率比會期間不對齊、系統性誤報吃本金 —— 故**不判定**;"
-                            "請改看基金官方績效頁的一年含息報酬(或補足一年以上淨值)"),
-                "coverage": None, "gap_pct": None, "eating_principal": False,
-                "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
-                "_adr_pct": adr,   # 稽核 C4:早退路徑也要帶 adr 值(見下方主 return)
-                "_tr1y_meta": _tr1y_meta, "_tr1y_window_days": _win,
-            }
+    _r = resolve_1y_total_return(fund)
+    if _r["status"] != "ok":
+        return _eating_grey(_r["reason"], tr1y_label=_r["label"], adr_source=_adr_source,
+                            adr_pct=adr, window_days=_r["window_days"])
+    tr1y, _tr1y_method = _r["value_pct"], _r["label"]
 
     from services.portfolio_service import dividend_safety
-    # ── 稽核 E3：nav_change 傳錯值（2026-08-14 修）────────────────────────────
-    # 原本是 `nav_change=tr1y` —— 把**含息報酬**當成**淨值變化**傳進去。
-    # `dividend_safety` 只用這個參數驅動一個獨立警語：
-    #     if nav_change < NAV_DROP_WARNING_PCT: "⚠️ 淨值下跌 X%,配息源頭值得確認"
-    # 傳含息報酬的後果與該警語的設計目的**完全相反**：
-    #     NAV −6%、配息 8% → tr1y = +2% → `+2 < −5` 為 False → **不觸發**
-    #     （正確應傳 −6.0 → 觸發）
-    # 也就是「配息愈高，淨值崩跌的警示愈不可能出現」——而這正是它要抓的情境。
-    # 而且警語文案寫的是「淨值下跌 X%」，X 卻印含息報酬，數字本身也是錯的。
-    # 正確值 `nav_change_pct` 就在同函式 local scope 的 `_tr1y_meta` 裡。
-    # 取不到時傳 None（= 不做這項交叉驗證），不拿別的數字頂替（§1）。
-    _nav_chg = (_tr1y_meta or {}).get("nav_change_pct")
+    # nav_change = 純淨值 1Y 變化(metrics.ret_1y),只驅動「淨值下跌 X%」交叉警語;缺 → None
+    _nav_chg = _safe_float((fund.get("metrics") or {}).get("ret_1y"))
     out = dividend_safety(total_return=tr1y, dividend_yield=adr,
                           nav_change=_nav_chg)
     if isinstance(out, dict):
         out["_tr1y_method"] = _tr1y_method
-        out["_tr1y_window_days"] = (_tr1y_meta.get("window_days")
-                                    if _tr1y_meta else None)
-        out["_tr1y_meta"] = _tr1y_meta
-        out["_adr_source"] = _adr_source  # v19.177 — adr 來源 SSOT 標記
-        # 稽核 C4（2026-08-14）：把 adr **值**也帶出去。
-        # 本函式內部早就用 `_resolve_adr_with_fallback` 算好 adr（3 層 chain SSOT），
-        # 卻只回傳了「來源標記」沒回傳「值」。於是
-        # `services/health/replacement.py:125` 用 `.get("annual_div_rate_pct")`
-        # 撈一個**不存在的 key** → adr 恆 None → `compute_4d_health` 少了「配息
-        # 健康度」這一維 → 換標建議規則 (b) 用的 4D 與健診大表顯示的 4D **不同源**，
-        # 且無 Sharpe 的檔會直接落到 grade `—`、規則 (b) 完全失效。
-        # 讓呼叫端重算一次 adr 會產生第二條 chain（§3.3），所以修在源頭。
+        out["_tr1y_window_days"] = _r["window_days"]
+        out["_tr1y_meta"] = None
+        out["_adr_source"] = _adr_source
         out["_adr_pct"] = adr
     return out
 

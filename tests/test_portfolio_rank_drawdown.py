@@ -143,7 +143,10 @@ class TestRankWithinPortfolio:
         if mgmt_fee is not None:
             f["moneydj_raw"]["mgmt_fee"] = mgmt_fee
         if ret1y is not None:
-            f["moneydj_raw"]["perf"] = {"1Y": ret1y}
+            # 2026-10-23 裁示 1B:組內報酬排名讀 SSOT 本地還原值(ret_1y_total,窗口 ≥ 350 天),
+            # 不再讀 perf["1Y"];官方值同時放著,證明排名沒有偷讀它。
+            f["moneydj_raw"]["perf"] = {"1Y": ret1y * 10}
+            f["metrics"].update({"ret_1y_total": ret1y, "ret_1y_window_days": 365})
         if peer_rank is not None:
             f["moneydj_raw"]["risk_metrics"] = {
                 "peer_compare": {"本基金": {"同類排名": peer_rank}}

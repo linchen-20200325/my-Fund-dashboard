@@ -142,15 +142,21 @@ BASIS_ESTIMATE: str = "estimate"
 # 兩邊若各自寫死字面值，上游改字時**畫面會靜靜地退回講官方話**。
 # 它們與上游必須一致這件事由
 # `tests/test_wf03_research_invest_calc.py::test_the_payout_rate_source_labels_match_the_resolver` 釘住。
-#: MoneyDJ wb05 **官方掛牌**值 —— 三層裡**唯一**真的是「掛牌的」那一層。
+# ⚠️ 2026-10-23 裁示 1B:`_resolve_adr_with_fallback` 收斂為**單一方法**（近 12 個月實際配息
+# 合計 ÷ 最新淨值），有值時 source **只會是** :data:`ADR_FROM_RECORDS`；
+# :data:`ADR_OFFICIAL` 與 :data:`ADR_LOCAL_RATE` **不再由上游產出**，只為相容保留
+# （UI 的來源文案對照表仍 import 它們；缺值時 source 為 :data:`ADR_DATA_MISSING` 或 `"—"`）。
+#: MoneyDJ wb05 **官方掛牌**值 —— 相容保留；裁示 1B 後官方值只作對帳，不再當 adr 來源。
 ADR_OFFICIAL: str = "moneydj_wb05"
-#: 上游 `metrics.annual_div_rate` —— **本地自算**（`calc_metrics` 拿配息紀錄推的），
-#: 不是掛牌值。`services/fund_service.py` 就地自陳「本算 fallback；主源 moneydj_div_yield wb05」。
+#: 上游 `metrics.annual_div_rate` 的舊來源標籤 —— 相容保留；裁示 1B 後 metrics 與現算
+#: 走同一公式，統一標 :data:`ADR_FROM_RECORDS`。
 ADR_LOCAL_RATE: str = "metrics_annual_div_rate"
-#: 把**同一批**逐筆配息近 12 個月加總 ÷ 淨值回推 —— **本地自算，而且與月配同源**。
+#: 近 12 個月逐筆配息加總 ÷ 最新淨值 —— **裁示 1B 後唯一有值的來源**（與月配同源）。
 #: ⚠️ 它有一個**畫面上看不出來的**失效模式：配息紀錄不滿一年時，
 #: 分母是 12 個月、分子只有實際有紀錄的那幾個月 ⇒ 這個率**系統性偏低**。
 ADR_FROM_RECORDS: str = "divs_12m_sum"
+#: 有配息跡象（wb05 > 0 或有歷史配息）但近 12 個月窗內 0 筆 → 不判（缺值標籤）。
+ADR_DATA_MISSING: str = "⬜ 配息資料未備"
 
 #: 試算金額的預設值。**走 `dividend_calc.DEFAULT_PRINCIPAL_TWD` 這個既有 SSOT**，
 #: 不另寫一個 100 萬 —— 全站「預設本金」只准有一個真相源（§2.1）。

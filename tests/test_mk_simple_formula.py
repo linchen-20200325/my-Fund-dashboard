@@ -239,70 +239,57 @@ class TestEdgeCases:
 #   - mk_simple 退居「對照欄」(_tr1y_meta 內保留 mk_simple_value 供 UI 顯示)
 # 詳 services/fund_dividend_health.check_eating_principal_1y_mk docstring。
 class TestCheckEatingV19175WbCompoundFirst:
-    """v19.175 契約:tr1y 主源走 wb01 業界複利優先(對齊 Tab2/Tab3 SSOT)。"""
+    """2026-10-23 裁示 1B 契約:tr1y 唯一來源 = 本地還原淨值法(`metrics.ret_1y_total`);
+    mk_simple 嚴格單利路徑**不再參與**判定、也不再當替補(無 production caller)。"""
 
     def test_metrics_ret_1y_only_refuses_verdict_v19480(self):
-        """v19.480 稽核 B2:fund 只有 metrics.ret_1y(純 NAV、不含配息,且無 series 可還原)
-        → 吃本金端**拒判 ⚪**,絕不拿不含配息的數字報 🔴(純 NAV 被除息扣掉、配息沒加回,
-        對配息型基金系統性低估 → 假吃本金)。source 仍偵測為 SRC_SELF_NAV_ONLY。
-        """
+        """fund 只有 metrics.ret_1y(純 NAV、不含配息)→ 吃本金端**不判**(灰),
+        絕不拿不含配息的數字報 🔴;`eating_principal` 為 None(missing ≠ False)。"""
         fund = {
             "moneydj_div_yield": 7.0,
-            "metrics": {"ret_1y": 4.0},
+            "metrics": {"ret_1y": 4.0, "annual_div_rate": 7.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert r["alert_level"] == "grey" and not r["eating_principal"], (
-            f"純 NAV 不含配息 → 應拒判 ⚪ 資料不足,實際 {r['status']}"
+        assert r["alert_level"] == "grey" and r["eating_principal"] is None, (
+            f"純 NAV 不含配息 → 應不判(灰),實際 {r['status']}"
         )
-        from services.fund_total_return import SRC_SELF_NAV_ONLY
-        assert r["_tr1y_method"] == SRC_SELF_NAV_ONLY, (
-            f"source 仍應偵測為純淨值(不含配息),實際 {r['_tr1y_method']}"
-        )
+        from services.fund_total_return import SRC_UNAVAILABLE_PREFIX
+        assert r["_tr1y_method"].startswith(SRC_UNAVAILABLE_PREFIX) and r["reason"] == "no_series"
 
-    def test_nav_only_with_long_series_uses_restored_total_return_v19480(self):
-        """v19.480 稽核 B2:純 NAV 基準命中 gate,但有 **≥300 天 series** → 改用「還原含息」
-        (mk_simple=13,NAV+配息)替補,而非純 NAV 的 99 → 健康(13 > 5)。這比原本直接
-        用不含息的 99 更正確(含息 vs 不含息),且仍非拒判(有可信含息可替補)。
-        """
+    def test_long_series_without_restored_metric_is_not_replaced_by_mk_simple(self):
+        """有 ≥ 300 天 series + dividends 但 metrics 無 `ret_1y_total` → **不再**用 mk_simple
+        替補(裁示 1B 移除替補路徑)→ 灰、reason no_restored_value、`_tr1y_meta` 恆 None。"""
         fund = {
             "moneydj_div_yield": 5.0,
-            "metrics": {"ret_1y": 99.0},  # 純 NAV 源(不含配息)→ 觸發 gate
-            "series": {"2025-06-26": 100.0, "2026-06-26": 110.0},  # 365 天 ≥300 → 可還原
+            "metrics": {"ret_1y": 99.0, "annual_div_rate": 5.0},
+            "series": {"2025-06-26": 100.0, "2026-06-26": 110.0},
             "dividends": [{"date": "2026-01-01", "amount": 3.0}],
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert r["_tr1y_method"] == "自算含息（還原 NAV+配息）", (
-            f"應改用還原含息替補純 NAV,實際 {r['_tr1y_method']}"
-        )
-        # 含息 13, adr 5 → gap=-8 → 🟢 健康
-        assert "健康" in r["status"], f"含息 13 > 配息 5 → 健康,實際 {r['status']}"
-        assert r["_tr1y_meta"] is not None
-        assert math.isclose(r["_tr1y_meta"]["mk_simple_value"], 13.0, abs_tol=0.01), (
-            f"還原含息應算出 13%(10 + 3),實際 {r['_tr1y_meta']['mk_simple_value']}"
-        )
+        assert r["alert_level"] == "grey" and r["reason"] == "no_restored_value", r
+        assert r["_tr1y_meta"] is None and r["eating_principal"] is None
 
-    def test_nested_shape_with_perf_1y_wins(self):
-        """Nested shape + perf['1Y']=15% → perf 為最高優先級,SSOT wb01。"""
+    def test_nested_shape_restored_value_wins_over_perf_1y(self):
+        """Nested shape:官方 perf['1Y']=15% **不再**是最高優先;判定讀本地還原值 ret_1y_total。"""
         fund = {
             "moneydj_raw": {
                 "moneydj_div_yield": 7.0,
-                "perf": {"1Y": 15.0},  # wb01 模本
+                "perf": {"1Y": 15.0},  # 官方值只對帳
                 "perf_source": "wb01",
                 "series": {"2025-06-26": 100.0, "2026-06-26": 102.0},
                 "dividends": [{"date": "2026-03-01", "amount": 2.0}],
             },
-            "metrics": {"ret_1y": 99.0},  # 誘餌:perf 應勝出
+            "metrics": {"ret_1y": 99.0, "ret_1y_total": 4.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 1, "annual_div_rate": 7.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        # perf['1Y']=15 為最高優先 → tr1y=15, adr=7 → gap=-8 → 🟢 健康
-        from services.fund_total_return import SRC_OFFICIAL
-        assert r["_tr1y_method"] == SRC_OFFICIAL, (
-            f"v19.175 應走官方績效表(perf['1Y'])最權威,實際 {r['_tr1y_method']}"
-        )
-        assert "健康" in r["status"]
+        # 還原值 4 vs adr 7 → gap=3pp → 🔴(若誤走 perf 15 會是 🟢)
+        from services.fund_total_return import SRC_SELF_RESTORED
+        assert r["_tr1y_method"] == SRC_SELF_RESTORED, r["_tr1y_method"]
+        assert "吃本金" in r["status"] and r["gap_pct"] == 3.0
 
     def test_v19148_helper_signature_unchanged(self):
         """v19.148 既有 caller 介面 100% 相容(僅 fund dict input,return dict)。"""

@@ -169,7 +169,9 @@ def test_row_builder_source_records():
 def test_row_builder_estimate_fallback_when_no_records():
     """無逐筆記錄但有年化配息率 → 估算 fallback + 配息來源=估算。"""
     from services.health.report import build_dividend_summary_row
-    fd = {"fund_name": "X", "metrics": {"nav": 10.0},
+    # 2026-10-23 裁示 1B:adr 唯一來源是 metrics.annual_div_rate(近 12 個月實配 ÷ 淨值);
+    # wb05 `moneydj_div_yield` 只對帳、不當值 → 估算 fallback 要有 metrics 的配息率才走得到。
+    fd = {"fund_name": "X", "metrics": {"nav": 10.0, "annual_div_rate": 6.0},
           "moneydj_div_yield": 6.0}          # 有 adr,無 dividends
     row = build_dividend_summary_row(fd, "X", principal_twd=1_000_000, fx=1.0)
     assert row["配息來源"] == "估算"

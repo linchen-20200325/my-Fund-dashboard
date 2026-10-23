@@ -384,7 +384,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
       **禁止**靜默回 0 或硬算(§1)。
     - 全部年化用 `TRADING_DAYS_PER_YEAR`(252 交易日,**非** 365 日曆日,§4.1)。
     - `ret_1y` / ret_3y / ret_5y  純 NAV 報酬(不含息;1Y 含息走 fund_total_return)
-    - `annual_div_rate`      年化配息率(本算 fallback;主源 moneydj_div_yield wb05)
+    - `annual_div_rate`      年化配息率 SSOT(近 12 個月實際配息合計 ÷ 最新淨值;
+                             窗內無紀錄 → None。裁示 1B 後為**唯一**年化配息率算法,
+                             wb05 `moneydj_div_yield` 只作對帳)
     - `div_freq_n`           配息頻率(12/4/2/1 次/年,由 div 間隔 auto-detect)
     - `buy1` / buy2 / buy3 / sell1 / sell2 / sell3   1-2-3 加碼點
 
@@ -774,6 +776,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # 短窗口（< 252 天）仍不年化，回累積實值 + window_days 欄位，UI 標「N 天累積」。
     _ret_1y_total = None
     _ret_1y_window_days = None
+    # 2026-10-23 裁示 1B:還原窗口 [window_start, 最後 NAV 日] 內 amount>0 的配息筆數。
+    # 配息型基金若窗內一筆都沒有,還原序列 ≡ 純淨值 → SSOT 端視為「配息資料未備」不判
+    # (v19.480 稽核 B2 的假 🔴 來源)。窗口無法建立時維持 None(不是 0,§1)。
+    _ret_1y_div_count = None
     if len(s) >= 20 and now > 0:
         # 防禦性算 days_span — pd.to_datetime 強制轉換，失敗則 len(s)×1.4 估算
         _days_span = 0
@@ -835,6 +841,16 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
                 # 取窗口起點 Adj_NAV — 用日期對齊（s.index[-252] 或 s.index[0]）
                 _start_dt_norm = pd.to_datetime(s.index[_window_start_idx])
                 _mask = _tr["Date"] >= _start_dt_norm
+                # 窗內配息筆數(含起訖日;無配息 → 0)。**從還原表 `_tr` 數**,而不是從原始
+                # divs 數:`calculate_fund_total_return` 以日期 left-join,落在非淨值日的配息
+                # 不會被加回還原序列 —— 那種配息「在窗內」卻「沒被還原」,數進去會讓配息閘門
+                # 放行一條其實等於純淨值的序列(v19.480 稽核 B2 的病)。
+                # 獨立 try:計數失敗只讓計數留 None,不連帶把 ret_1y_total 砍掉。
+                try:
+                    _ret_1y_div_count = int((_tr.loc[_mask, "Dividend"] > 0).sum())
+                except Exception as _e_dc:  # noqa: BLE001
+                    print(f"[calc_metrics] ⚠️ ret_1y_div_count 計數失敗：{_e_dc}")
+                    _ret_1y_div_count = None
                 if _mask.any():
                     _adj_start = float(_tr.loc[_mask, "Adj_NAV"].iloc[0])
                     _adj_end = float(_tr["Adj_NAV"].iloc[-1])
@@ -846,8 +862,23 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             except Exception as _e_tr:
                 print(f"[calc_metrics] ⚠️ ret_1y_total 計算失敗：{_e_tr}")
                 _ret_1y_total = None
+                _ret_1y_div_count = None
 
-    annual_div=monthly_div=div_rate=0; div_stability=None; div_trend=0; div_freq_n=12
+    # 2026-10-23 裁示 1B:年化配息率 SSOT 公式 = 近 12 個月**實際**配息合計 ÷ 最新淨值 × 100。
+    # 窗口 = (anchor − 365 天, anchor],anchor = 最後一筆 NAV 日期。窗內**無配息紀錄 → None**
+    # (不是 0:0 是「這檔不配息」的真實值,None 是「沒有資料可算」,§1 兩者要分得開)。
+    # `annual_div` = 該 12M 合計、`monthly_div` = annual_div / 12,同樣無紀錄 → None。
+    # 舊公式「平均單次配息 × 偵測頻率 ÷ 淨值」已退役 —— 它把 3 個月的紀錄乘成一整年,
+    # 與吃本金判定用的「近一年含息報酬」期間不對齊(§4.1)。
+    # `div_stability` / `div_trend` / `div_freq_n` 是不同概念,不動。
+    annual_div=monthly_div=div_rate=None; div_stability=None; div_trend=0; div_freq_n=12
+    _adr_div_count = 0
+    _adr_window_end = None
+    try:
+        _adr_anchor = pd.to_datetime(s.index[-1])
+        _adr_window_end = _adr_anchor.date().isoformat()
+    except Exception:  # noqa: BLE001 — 日期軸異常 → 窗口無法建立,配息率誠實留 None
+        _adr_anchor = None
     if divs:
         # v19.449 稽核 HIGH:非 MoneyDJ 來源(FundClear/Cnyes/TCB)配息可能「舊→新」排列,
         # 下方 divs[:n] / recent12 全假設 index0=最新;不排序會取到最舊筆 → 年化配息率算錯、
@@ -878,13 +909,37 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
                 elif avg_gap <= 200: div_freq_n = 2   # 半年配
                 else:                div_freq_n = 1   # 年配
         # ── 計算配息年化率（配息年化率 ≠ 含息報酬率！）──────
-        # 配息年化率 = 平均單次配息 × 年配次數 / 淨值
-        # 含息報酬率 = (淨值漲跌 + 累積配息) / 期初淨值 → 需從 MoneyDJ 取得
+        # 配息年化率 = 近 12 個月實際配息合計 / 最新淨值(裁示 1B SSOT 公式)
+        # 含息報酬率 = 還原淨值法(ret_1y_total),另走 fund_total_return SSOT
+        if _adr_anchor is not None and now > 0:
+            _adr_window_start = _adr_anchor - pd.Timedelta(days=365)
+            _adr_sum = 0.0
+            for _d in divs:
+                try:
+                    _amt = float(_d.get("amount", 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+                if _amt <= 0:
+                    continue
+                _ddt = _div_dt(_d)
+                if _ddt == pd.Timestamp.min:
+                    continue
+                try:
+                    _in_win = (_adr_window_start < _ddt <= _adr_anchor)
+                except TypeError:
+                    # tz-aware vs naive 混用 → 兩邊都退成 naive 再比,不靜默丟筆
+                    _in_win = (_adr_window_start.tz_localize(None) if _adr_window_start.tzinfo else _adr_window_start) \
+                        < (_ddt.tz_localize(None) if _ddt.tzinfo else _ddt) \
+                        <= (_adr_anchor.tz_localize(None) if _adr_anchor.tzinfo else _adr_anchor)
+                if _in_win:
+                    _adr_sum += _amt
+                    _adr_div_count += 1
+            if _adr_div_count > 0:
+                annual_div = _adr_sum
+                monthly_div = annual_div / 12
+                div_rate = round(annual_div/now*100, 2)
+        # 穩定度仍看「最近一個配息週期」的逐筆變異(與年化率不同概念,不動)
         recent=[d["amount"] for d in divs[:div_freq_n]]
-        avg_single_div = sum(recent)/len(recent) if recent else 0
-        annual_div = avg_single_div * div_freq_n
-        monthly_div = annual_div / 12
-        div_rate = round(annual_div/now*100, 2) if now>0 else 0
         if len(recent)>=2:
             import statistics
             mn=statistics.mean(recent)
@@ -924,7 +979,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
     # 混期警告:官方 Sharpe(1Y/6M)× 本地短窗報酬並列 = 使用者看不見的期間錯配。
     _mixed_period_warning = None
-    if _sharpe_src in ("wb07_1y", "wb07_6m") and _ret_1y_window_days and _ret_1y_window_days < 350:
+    from shared.signal_thresholds import RET_1Y_RESTORED_MIN_WINDOW_DAYS as _RET_1Y_MIN_WIN
+    if (_sharpe_src in ("wb07_1y", "wb07_6m") and _ret_1y_window_days
+            and _ret_1y_window_days < _RET_1Y_MIN_WIN):
         _mixed_period_warning = (
             f"期間不一致:Sharpe 來自「{_sharpe_period_label}」,但同列 1Y 含息報酬"
             f"只用了本地 {_ret_1y_window_days} 天序列 → 兩者非同一期間,不可交叉推論。")
@@ -1035,10 +1092,15 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         # v19.177 #2A:NY 雙欄 SSOT。ret_3y / ret_5y 保留 = _cum 向後相容(deprecated)
         ret_3y=_ret_3y_cum, ret_3y_cum=_ret_3y_cum, ret_3y_ann=_ret_3y_ann,
         ret_5y_cum=_ret_5y_cum, ret_5y_ann=_ret_5y_ann,
-        ret_1y_total=_ret_1y_total,   # v18.53 含息：NAV 變化 + 累積配息率
+        ret_1y_total=_ret_1y_total,   # v18.71 含息：配息還原淨值法(唯一 1Y 含息算法,裁示 1B)
         ret_1y_window_days=_ret_1y_window_days,  # v18.65: 計算窗口天數（None / 30~365 / >=365）
-        annual_div=round(annual_div,4),monthly_div=round(monthly_div,4),
+        ret_1y_div_count=_ret_1y_div_count,      # 裁示 1B:還原窗口內 amount>0 配息筆數(None=窗口未建)
+        # 裁示 1B:近 12 個月實際配息合計 / ÷12 / ÷最新淨值;窗內無紀錄 → None(不是 0)
+        annual_div=(round(annual_div,4) if annual_div is not None else None),
+        monthly_div=(round(monthly_div,4) if monthly_div is not None else None),
         annual_div_rate=div_rate,div_stability=div_stability,div_trend=div_trend,
+        annual_div_rate_div_count=_adr_div_count,   # 12M 窗內配息筆數
+        annual_div_rate_window_end=_adr_window_end,  # anchor(最後 NAV 日)ISO 字串
     )
 
 
@@ -1199,7 +1261,8 @@ def finalize_fund_metrics(result: dict, oauth_client=None) -> dict:
     year_low_nav / moneydj_div_yield / fund_code / data_source / source_trace),enrich:
     - result["metrics"] = calc_metrics(s, divs, risk_override=combined_override)
     - source_trace append calc_metrics 成功 / 失敗
-    - perf["1Y"] 從本地計算注入(v18.65 window >= 350 才視為真 1Y)
+    - ~~perf["1Y"] 從本地計算注入~~ 2026-10-23 裁示 1B 移除:perf 只放官方值,
+      1Y 含息一律走 `services.fund_total_return.resolve_1y_total_return`
     - F-RECON-1 phase 4 ret_1y_reconcile
     - F-RECON-1 phase 5 div_yield_reconcile
 
@@ -1314,25 +1377,24 @@ def finalize_fund_metrics(result: dict, oauth_client=None) -> dict:
         if result.get("inception_date") and isinstance(result.get("metrics"), dict):
             result["metrics"]["inception_date"] = result["inception_date"]
 
-        # v18.53 + v18.65: 境內缺 wb01 perf["1Y"] 改用本地計算,window >= 350 才視為真 1Y
+        # 2026-10-23 裁示 1B:**不再**把本地還原值注入 perf["1Y"]、不再寫 perf_source="local_calc"。
+        # perf 只放 MoneyDJ 官方值;1Y 含息主值一律由 `resolve_1y_total_return` 從
+        # metrics.ret_1y_total 解析(同一個數字只准有一個住址,§2.1)。
         if not isinstance(result.get("perf"), dict):
             result["perf"] = {}
-        if result["perf"].get("1Y") is None:
-            _m_local = result.get("metrics") or {}
-            _local_1y = _m_local.get("ret_1y_total")
-            _local_window = _m_local.get("ret_1y_window_days") or 0
-            if _local_1y is not None and _local_window >= 350:
-                result["perf"]["1Y"] = _local_1y
-                result["perf_source"] = result.get("perf_source") or "local_calc"
-                print(f"[metrics] 🧮 {code} perf['1Y'] 用本地計算補:{_local_1y}%")
 
         # F-RECON-1 phase 4 v19.89 — 1Y 報酬雙演算法對帳(self-calc vs MoneyDJ wb01)
+        # self = 還原值(窗口 ≥ RET_1Y_RESTORED_MIN_WINDOW_DAYS 才算一年);mj = wb01 官方值
         try:
+            from shared.signal_thresholds import RET_1Y_RESTORED_MIN_WINDOW_DAYS
             _m_local = result.get("metrics") or {}
             _self_calc_1y = _m_local.get("ret_1y_total")
+            _self_window = _m_local.get("ret_1y_window_days") or 0
+            if _self_calc_1y is not None and _self_window < RET_1Y_RESTORED_MIN_WINDOW_DAYS:
+                _self_calc_1y = None
             _wb01_1y = result.get("perf", {}).get("1Y")
-            _perf_source = result.get("perf_source") or ""
-            _is_wb01 = (_wb01_1y is not None and _perf_source != "local_calc")
+            _perf_source = str(result.get("perf_source") or "").lower()
+            _is_wb01 = (_wb01_1y is not None and _perf_source == "wb01")
             if _self_calc_1y is not None or _is_wb01:
                 _sc = float(_self_calc_1y) / 100.0 if _self_calc_1y is not None else None
                 _mj = float(_wb01_1y) / 100.0 if _is_wb01 else None

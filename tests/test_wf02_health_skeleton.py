@@ -413,6 +413,10 @@ def _fund(code: str, *, div: float | None = 8.0, ret: float | None = 2.0,
 
     ⚠️ **`div=8.0, ret=2.0` 會被判成 🔴 吃本金**（含息 2% 低於配息 8%，缺口 6pp
     > `NEAR_DIVIDEND_WARNING_PCT`）—— 這不是隨手挑的數字，是本檔「有壞消息」情境的來源。
+
+    2026-10-23 裁示 1B：判定讀的是**本地還原值** `metrics.ret_1y_total`（窗口 ≥ 350 天、
+    窗內有配息）與**近 12 個月實際配息率** `metrics.annual_div_rate`；官方 `perf["1Y"]` /
+    `moneydj_div_yield` 只作對帳。fixture 兩邊都放，證明畫面讀的是前者。
     """
     return {
         "code": code, "name": f"{code} 基金", "currency": ccy,
@@ -423,7 +427,10 @@ def _fund(code: str, *, div: float | None = 8.0, ret: float | None = 2.0,
             "holdings": {"top_holdings": holdings if holdings is not None else _H_A,
                          "sector_alloc": []},
         },
-        "metrics": {"sharpe": sharpe, "max_drawdown": max_dd},
+        "metrics": {"sharpe": sharpe, "max_drawdown": max_dd,
+                    "ret_1y_total": ret, "ret_1y_window_days": 365,
+                    "ret_1y_div_count": 12 if (div or 0) > 0 else 0,
+                    "annual_div_rate": div},
     }
 
 
@@ -1107,6 +1114,14 @@ def test_a_row_we_know_nothing_about_is_blank_in_every_computed_column():
     _computed = ("近 1 年", "Sharpe", "最大回撤", "配息覆蓋", "五桶評等")
     for _r in _rows:
         for _col in _computed:
+            # 「近 1 年」那一格由 SSOT 給白話原因（本頁刻意印 SSOT 的理由而非光一個 ⬜，
+            # 見 `_table_rows` 內註解）；2026-10-23 裁示 1B 後那句理由固定以 ⬜ 開頭
+            # （「⬜ 資料未備／無法判定（…）」），仍是灰態、仍不是一個觀測值。
+            if _col == "近 1 年":
+                assert _r[_col].startswith(NOT_READY_MARK) and "%" not in _r[_col], (
+                    f"「{_col}」算不出來卻印了 {_r[_col]!r} —— "
+                    "那會被讀成一個真實的觀測值（§1）。\n" + str(_r))
+                continue
             assert _r[_col] == NOT_READY_MARK, (
                 f"「{_col}」算不出來卻印了 {_r[_col]!r} —— "
                 "那會被讀成一個真實的觀測值（§1）。\n" + str(_r))

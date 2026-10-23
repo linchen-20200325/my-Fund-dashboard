@@ -226,6 +226,13 @@ RET_1Y_EXTRAPOLATE_MIN_DAYS: int = 180
 RET_1Y_EXTRAPOLATE_MAX_SCALE: float = 2.0
 RET_1Y_PLAUSIBLE_MAX_PCT: float = 150.0
 RET_1Y_PLAUSIBLE_MIN_PCT: float = -95.0
+# ── 1Y 含息報酬「還原淨值法」最短窗口(天)──────────────────────────────────
+# 2026-10-23 裁示 1B:本地還原含息值的窗口未達此天數 → 不當一年報酬用,誠實回
+# 「資料未備／無法判定」(不年化、不外推、不拿短窗累積去比年化配息率)。
+# 值 350 自 `services/fund_service.py`(finalize_fund_metrics 原 perf["1Y"] 注入 gate
+# 與 calc_metrics 混期警告)及 `services/fund_total_return.py`(短窗標籤)既有 inline
+# 350 搬入 SSOT,**值未改**。
+RET_1Y_RESTORED_MIN_WINDOW_DAYS: int = 350
 
 # ── Composite 對帳:不加權方向投票中性帶(macro composite_score,v19.367 6/8)──
 # F-RECON-1 最後一項:健康度雙演算法對帳。第二演算法 = 不加權多空投票

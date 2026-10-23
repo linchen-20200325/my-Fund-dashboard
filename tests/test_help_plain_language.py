@@ -434,21 +434,22 @@ def _sharpe_source_values() -> list[str]:
 
 
 def _one_year_source_values() -> list[str]:
-    """「1Y 來源」欄全部 fallback 分支的實際產出值(含 NAV 序列外推那條)。"""
+    """「1Y 來源」欄全部分支的實際產出值(2026-10-23 裁示 1B:一層有值 + 四種 unavailable 原因)。"""
     from services.fund_total_return import compute_1y_total_return
 
     _idx = pd.date_range("2024-01-01", "2025-01-01", freq="D")
     _series = pd.Series([100.0] * (len(_idx) - 1) + [110.0], index=_idx)
     _cases = [
-        {"moneydj_raw": {"perf": {"1Y": 9.0}}, "perf_source": "wb01"},
-        {"moneydj_raw": {"perf": {"1Y": 9.0}}, "perf_source": "local_calc"},
-        {"moneydj_raw": {"perf": {"1Y": 9.0}}},                 # 來源未標註
-        {"moneydj_raw": {}, "metrics": {"ret_1y_total": 5.0}},  # 自算含息(足年)
         {"moneydj_raw": {}, "metrics": {"ret_1y_total": 5.0,
-                                        "ret_1y_window_days": 90}},   # 短窗
-        {"moneydj_raw": {}, "metrics": {"ret_1y": 3.0}},        # 純淨值
-        {"moneydj_raw": {}, "metrics": {}, "series": _series},  # 外推年化
-        {"moneydj_raw": {}, "metrics": {}},                     # 全缺
+                                        "ret_1y_window_days": 365}},  # 自算(還原含息淨值)
+        {"moneydj_raw": {}, "metrics": {"ret_1y_total": 5.0,
+                                        "ret_1y_window_days": 90}},   # window_short
+        {"moneydj_raw": {"moneydj_div_yield": 5.0},
+         "metrics": {"ret_1y_total": 5.0, "ret_1y_window_days": 365,
+                     "ret_1y_div_count": 0}},                           # dividend_data_missing
+        {"moneydj_raw": {}, "metrics": {}, "series": _series},         # no_restored_value
+        {"moneydj_raw": {"perf": {"1Y": 9.0}}, "perf_source": "wb01"},  # 只有官方值 → no_series
+        {"moneydj_raw": {}, "metrics": {}},                             # 全缺 → no_series
     ]
     return [compute_1y_total_return(_c)[1] for _c in _cases]
 
@@ -461,8 +462,9 @@ def test_source_column_values_are_plain_language():
     """
     _vals = _sharpe_source_values() + _one_year_source_values()
     # liveness(PROCESS §4):值真的產出來了才算掃過,否則本條會變成掃空集的假綠
-    assert len(set(_vals)) >= 10, (
-        f"只產出 {len(set(_vals))} 種來源值 —— fallback 分支可能沒被走到,本條會空轉:{_vals}")
+    # (Sharpe 4 種 + 1Y 一層有值與四種 unavailable 原因 = 9 種)
+    assert len(set(_vals)) >= 9, (
+        f"只產出 {len(set(_vals))} 種來源值 —— 分支可能沒被走到,本條會空轉:{_vals}")
 
     _bad = [f"「{_v}」含「{_term}」({_why})"
             for _v in _vals
@@ -483,17 +485,22 @@ def test_source_column_values_still_separate_official_from_self_calc():
     _official = [_v for _v in _vals if "官方" in _v]
     _self = [_v for _v in _vals if "自算" in _v]
 
-    assert len(_official) >= 3, f"官方來源值不足(Sharpe 1Y/6M + 1Y 官方):{_vals}"
-    assert len(_self) >= 4, f"自算來源值不足:{_vals}"
+    # 裁示 1B:1Y 來源不再有「官方」那一層(官方值只對帳);官方值只剩 Sharpe 1Y/6M 兩種
+    assert len(_official) >= 2, f"官方來源值不足(Sharpe 1Y/6M):{_vals}"
+    assert len(_self) >= 2, f"自算來源值不足(Sharpe 自算 + 1Y 還原含息):{_vals}"
     assert not (set(_official) & set(_self)), (
         f"同一個值同時自稱官方與自算,使用者無從判斷:{set(_official) & set(_self)}")
+    _one_year = _one_year_source_values()
+    assert not any("官方" in _v for _v in _one_year), (
+        f"1Y 來源不得再自稱官方(官方 perf 只對帳,不當值):{_one_year}")
 
     # 六個月那條的期間警告不可弄丟(它是跨檔比大小的陷阱)
     _six = [_v for _v in _sharpe_source_values() if "6 個月" in _v]
     assert len(_six) == 1 and "⚠️" in _six[0] and "非 1 年" in _six[0], (
         f"六個月來源必須帶警告記號並明講不是一年:{_six}")
 
-    # 有數字但來源不明時,必須誠實說「不知道」,不得歸進官方(§1)
-    from services.fund_total_return import SRC_PERF_UNLABELED
-    assert SRC_PERF_UNLABELED in _vals
-    assert "官方" not in SRC_PERF_UNLABELED and "未標註" in SRC_PERF_UNLABELED
+    # 算不出來時必須誠實說「資料未備／無法判定」+ 白話原因,不得歸進官方或自算(§1)
+    from services.fund_total_return import SRC_UNAVAILABLE_PREFIX
+    _unavail = [_v for _v in _one_year if _v.startswith(SRC_UNAVAILABLE_PREFIX)]
+    assert len(set(_unavail)) >= 4, f"四種 unavailable 原因應各自有白話說明:{_one_year}"
+    assert all("官方" not in _v and "自算" not in _v for _v in _unavail)

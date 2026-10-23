@@ -97,19 +97,23 @@ def test_compute_health_kpis_no_hardcoded_target_comparison():
 
 def test_compute_health_kpis_cashflow_eat_principal():
     """吃本金邏輯：含息 < 配息 且配息 > 0 → n_eat++。"""
+    # 2026-10-23 裁示 1B:1Y 含息走本地還原值 metrics.ret_1y_total(窗口 ≥ 350 天),
+    # 官方 perf["1Y"] 只對帳;fixture 兩邊都放,證明讀的是還原值。
+    def _m(tr, div_count=12):
+        return {"ret_1y_total": tr, "ret_1y_window_days": 365, "ret_1y_div_count": div_count}
     funds = [
         # 含息 3% < 配息 5% → 吃本金
         {"code": "EAT1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 3.0}},
-         "metrics": {}, "series": [100, 101, 102, 103]},
+         "metrics": _m(3.0), "series": [100, 101, 102, 103]},
         # 含息 10% > 配息 5% → 健康
         {"code": "OK1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},
-         "metrics": {}, "series": [100, 105, 108, 110]},
+         "metrics": _m(10.0), "series": [100, 105, 108, 110]},
         # 無配息（div=0）→ 健康
         {"code": "NODIV", "loaded": True,
          "moneydj_raw": {"perf": {"1Y": 2.0}},
-         "metrics": {}, "series": [100, 101, 102]},
+         "metrics": _m(2.0, div_count=0), "series": [100, 101, 102]},
     ]
     out = compute_health_kpis(funds, None)
     assert out["n_funds"] == 3
@@ -138,7 +142,9 @@ def test_compute_health_kpis_no_mk_df_only_cashflow():
     funds = [
         {"code": "F1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},
-         "metrics": {}, "series": [100, 105]},
+         "metrics": {"ret_1y_total": 10.0, "ret_1y_window_days": 365,
+                     "ret_1y_div_count": 12},    # 裁示 1B:1Y 含息走本地還原值
+         "series": [100, 105]},
     ]
     out = compute_health_kpis(funds, None)
     assert out["n_funds"] == 1

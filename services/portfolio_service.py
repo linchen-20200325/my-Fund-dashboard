@@ -38,6 +38,23 @@ _HY_PORTFOLIO_RISK = _HY_THR["portfolio_advisor"]["risk_above"]
 # 一、Fund Factor Model — 六因子評分模型
 # ══════════════════════════════════════════════════════════════════════════
 
+def _ssot_view(fund_data: Dict, m: Dict, pf: Dict) -> Dict:
+    """Alpha 因子用:把 caller 的 {metrics, perf, moneydj_raw, series, dividends, perf_source}
+    組成 SSOT 解析函式看得懂的 nested shape(perf 只供 official 對帳,不當值)。"""
+    _mj = dict(fund_data.get("moneydj_raw") or {})
+    if "perf" not in _mj and pf:
+        _mj["perf"] = pf
+    if "perf_source" not in _mj and fund_data.get("perf_source") is not None:
+        _mj["perf_source"] = fund_data.get("perf_source")
+    return {
+        "metrics": m, "moneydj_raw": _mj,
+        "series": fund_data.get("series"),
+        "dividends": (fund_data.get("dividends") if fund_data.get("dividends") is not None
+                      else _mj.get("dividends")),
+        "perf_source": fund_data.get("perf_source") or _mj.get("perf_source"),
+    }
+
+
 def calc_fund_factor_score(fund_data: Dict,
                            risk_table: Optional[Dict] = None,
                            expense_ratio: Optional[float] = None) -> Dict:
@@ -135,9 +152,15 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 5. Alpha（超額報酬，權重 20）───────────────────────────────────
-    tr1y = pf.get("1Y")
-    adr  = m.get("annual_div_rate", 0) or 0
-    if tr1y is not None:
+    # 2026-10-23 裁示 1B:1Y 含息改走 SSOT `resolve_1y_total_return`(本地還原淨值法),
+    # 不再讀 perf["1Y"];配息率走 `_resolve_adr_with_fallback`(近 12 個月實際配息 ÷ 淨值)。
+    # 任一 unavailable → 該因子誠實跳過(既有 availability 機制),不填 0。
+    from services.fund_total_return import resolve_1y_total_return
+    from services.health.dividend import _resolve_adr_with_fallback
+    _tr_r = resolve_1y_total_return(_ssot_view(fund_data, m, pf))
+    tr1y = _tr_r["value_pct"] if _tr_r["status"] == "ok" else None
+    adr, _ = _resolve_adr_with_fallback(_ssot_view(fund_data, m, pf))
+    if tr1y is not None and adr is not None:
         try:
             alpha = float(tr1y) - float(adr)   # 真實收益 = 含息報酬 - 配息率
             s = min(max((alpha + 10) / 20 * 100, 0), 100)  # -10%~+10% → 0~100
@@ -272,10 +295,14 @@ def get_factor_availability(fund_data: Dict,
         except (TypeError, ValueError):
             pass
 
-    # ── Alpha(對齊 line 135-144)── adr 預設 0 → 只需 tr1y 可解析
-    tr1y = pf.get("1Y")
-    adr = m.get("annual_div_rate", 0) or 0
-    if tr1y is not None:
+    # ── Alpha(對齊 calc_fund_factor_score Alpha 區塊)── 裁示 1B:tr1y 與 adr 皆走 SSOT,
+    # 任一 unavailable → False(不再 `adr 預設 0`)
+    from services.fund_total_return import resolve_1y_total_return
+    from services.health.dividend import _resolve_adr_with_fallback
+    _tr_r = resolve_1y_total_return(_ssot_view(fund_data, m, pf))
+    tr1y = _tr_r["value_pct"] if _tr_r["status"] == "ok" else None
+    adr, _ = _resolve_adr_with_fallback(_ssot_view(fund_data, m, pf))
+    if tr1y is not None and adr is not None:
         try:
             float(tr1y) - float(adr)
             avail["Alpha"] = True
@@ -320,6 +347,11 @@ def dividend_safety(total_return: Optional[float],
         nav_change    : 淨值變化率 % (可選，用於交叉驗證)
     回傳：
         {status, coverage, gap_pct, eating_principal, alert_level, message}
+
+    ⚠️ **唯一合法 caller:`services.health.dividend.check_eating_principal_1y_mk`**
+    (2026-10-23 裁示 1B)。他處**不得**自行餵 tr/adr —— 兩個輸入各只有一個 SSOT
+    來源(`resolve_1y_total_return` / `_resolve_adr_with_fallback`),繞過入口自組輸入
+    就會讓同一檔基金在不同分頁得到不同燈號。本體(2pp 黃燈帶 SSOT)不動。
 
     v19.119:核心判定委派 services.health.dividend.classify_eating_principal。
     v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 老師「化繁為簡」),
@@ -849,7 +881,7 @@ def rank_funds_within_portfolio(funds_data: list) -> "dict":
     ----
     funds_data: [{"code","name","moneydj_raw":{mgmt_fee, risk_metrics:{peer_compare}},
                   "metrics":{...}}, ...]
-                報酬取值與 fund_checkup 同源(MoneyDJ perf 1Y → metrics fallback)。
+                報酬取值走 `resolve_1y_total_return` SSOT(本地還原淨值法,裁示 1B)。
 
     Returns
     -------
@@ -868,16 +900,11 @@ def rank_funds_within_portfolio(funds_data: list) -> "dict":
         return _safe_num_ps((f.get("moneydj_raw") or {}).get("mgmt_fee"))
 
     def _ret1y(f):
-        mj = f.get("moneydj_raw") or {}
-        v = _safe_num_ps((mj.get("perf") or {}).get("1Y"))
-        if v is not None:
-            return v
-        m = f.get("metrics") or {}
-        for k in ("ret_1y_total", "ret_1y"):
-            v = _safe_num_ps(m.get(k))
-            if v is not None:
-                return v
-        return None
+        # 2026-10-23 裁示 1B:走 SSOT `resolve_1y_total_return`(本地還原淨值法);
+        # 不再讀 perf["1Y"] / 純淨值 ret_1y。unavailable → None(不參與排名)。
+        from services.fund_total_return import resolve_1y_total_return
+        _r = resolve_1y_total_return(f)
+        return _safe_num_ps(_r["value_pct"]) if _r["status"] == "ok" else None
 
     # A. 組內排名(只在「有該指標」的子集合內排名,缺值不參與)
     _exp_pairs = [(f["code"], _expense(f)) for f in funds]

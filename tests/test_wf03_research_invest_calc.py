@@ -79,6 +79,7 @@ import services.fund_invest_calc as CALC  # noqa: E402
 import ui.views.page_03_research as _PAGE_MOD  # noqa: E402
 from services.currency import CCY_NORMALIZE, _CCY_YF_OVERRIDES, normalize_ccy  # noqa: E402
 from services.fund_invest_calc import (  # noqa: E402
+    ADR_DATA_MISSING,
     ADR_FROM_RECORDS,
     ADR_LOCAL_RATE,
     ADR_OFFICIAL,
@@ -161,7 +162,14 @@ SENT_FX: float = 37.25
 
 
 def _FUND(**over) -> dict:
-    """一份「什麼都有」的 L2 回傳（flat shape）。`over` 用來逐項挖掉東西做突變。"""
+    """一份「什麼都有」的 L2 回傳（flat shape）。`over` 用來逐項挖掉東西做突變。
+
+    2026-10-23 裁示 1B：年化配息率**唯一**來源是「近 12 個月實際配息合計 ÷ 最新淨值」
+    （`metrics.annual_div_rate`，由 `calc_metrics` 產出），wb05 `moneydj_div_yield` 只作對帳。
+    fixture 把 `moneydj_div_yield` 當作「這一檔的配息率」**鏡射進 `metrics.annual_div_rate`**
+    （None → 兩邊都沒有；0 → 宣告為 0），讓既有的突變（挖掉配息率 / 改成 3 倍）語意不變；
+    明示傳 `metrics=` 時以傳入的為準、不鏡射。
+    """
     _f = {
         "currency": "USD",
         "metrics": {"nav": SENT_NAV},
@@ -173,6 +181,10 @@ def _FUND(**over) -> dict:
         ],
     }
     _f.update(over)
+    if "metrics" not in over:
+        _f["metrics"] = dict(_f["metrics"])
+        if _f.get("moneydj_div_yield") is not None:
+            _f["metrics"]["annual_div_rate"] = _f["moneydj_div_yield"]
     return _f
 
 
@@ -215,9 +227,9 @@ def test_a_real_amount_turns_into_units_and_a_monthly_number():
     # 這筆錢實際拿到的年化 % —— 本例刻意設計成與掛牌配息率一致。
     assert math.isclose(_f["implied_annual_pct"], SENT_ADR, rel_tol=1e-6)
     assert _f["income_basis"] == BASIS_RECORDS
-    assert _f["adr_source"] == "moneydj_wb05", (
-        "年化配息率沒有走 `_resolve_adr_with_fallback` 的第一層 —— "
-        "`adr_source` 是它回傳的血緣標記，不對代表換了一條路。")
+    assert _f["adr_source"] == ADR_FROM_RECORDS, (
+        "年化配息率沒有走 `_resolve_adr_with_fallback`（裁示 1B 後唯一方法：近 12 個月實配 ÷ 淨值）"
+        "—— `adr_source` 是它回傳的血緣標記，不對代表換了一條路。")
 
 
 def test_the_default_amount_is_the_repo_wide_one_not_a_second_hundred_thousand():
@@ -434,7 +446,7 @@ def test_the_agreement_verdict_uses_the_repo_wide_reconciler():
     _agree = estimate_monthly_income(_FUND(), SENT_AMOUNT, fx_lookup=_fx)
     assert _agree["income_reconcile"]["agree"] is True, _agree["income_reconcile"]
     _off = estimate_monthly_income(
-        _FUND(moneydj_div_yield=SENT_ADR * 3), SENT_AMOUNT, fx_lookup=_fx)
+        _FUND(moneydj_div_yield=SENT_ADR * 3), SENT_AMOUNT, fx_lookup=_fx)   # 鏡射進 metrics
     assert _off["income_reconcile"]["agree"] is False, _off["income_reconcile"]
 
 
@@ -464,6 +476,12 @@ def _RICH_WITH_NAV(**over) -> dict:
     _r["moneydj_div_yield"] = SENT_ADR
     _r["dividends"] = [{"date": "2026/08/15", "amount": SENT_DIV, "currency": "USD"}]
     _r.update(over)
+    # 裁示 1B：配息率走 metrics.annual_div_rate（同 `_FUND` 的鏡射規則）
+    if "metrics" not in over:
+        if _r.get("moneydj_div_yield") is not None:
+            _r["metrics"]["annual_div_rate"] = _r["moneydj_div_yield"]
+        else:
+            _r["metrics"].pop("annual_div_rate", None)
     return _r
 
 
@@ -961,8 +979,10 @@ def _recent_divs(n: int, amount: float = SENT_DIV) -> list[dict]:
 
 
 @pytest.mark.parametrize("fund, want", [
-    ({"moneydj_div_yield": SENT_ADR, "metrics": {"nav": SENT_NAV}}, ADR_OFFICIAL),
-    ({"metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR}}, ADR_LOCAL_RATE),
+    # 裁示 1B：只有 wb05 官方值、無實配紀錄 → 「配息資料未備」（官方值不再當值）
+    ({"moneydj_div_yield": SENT_ADR, "metrics": {"nav": SENT_NAV}}, ADR_DATA_MISSING),
+    # metrics.annual_div_rate 與現算走同一公式 → 統一標 divs_12m_sum
+    ({"metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR}}, ADR_FROM_RECORDS),
     ({"metrics": {"nav": SENT_NAV}, "dividends": _recent_divs(3)}, ADR_FROM_RECORDS),
 ])
 def test_the_payout_rate_source_labels_match_the_resolver(fund, want):
@@ -1136,7 +1156,7 @@ def test_the_reconciler_is_fed_decimals_not_percentage_points():
     """
     _f = estimate_monthly_income(
         _FUND(currency="TWD", moneydj_div_yield=_LOW_ADR_PCT,
-              metrics={"nav": SENT_NAV},
+              metrics={"nav": SENT_NAV, "annual_div_rate": _LOW_ADR_PCT},
               dividends=[{"date": "2026/08/15", "amount": _LOW_DIV,
                           "currency": "TWD"}]),
         SENT_AMOUNT, fx_lookup=_explodes)
@@ -1516,6 +1536,7 @@ def test_a_fund_with_truly_no_dividend_records_still_says_so():
     _res["metrics"]["nav"] = SENT_NAV
     _res["nav_latest"] = SENT_NAV
     _res["moneydj_div_yield"] = SENT_ADR
+    _res["metrics"]["annual_div_rate"] = SENT_ADR    # 裁示 1B：配息率走 metrics
     _res["dividends"] = []
     _parts = _render(applied=FAKE_QUERY, selected=SELECTED_CODE, result=_res, fx=SENT_FX)
     _invest = "\n".join(_segments(_parts).get(DEEP_DIVE_INVEST, []))
@@ -1531,7 +1552,7 @@ def test_each_trigger_is_diagnosed_as_its_own_cause_not_one_blanket_excuse(
     驗兩件事：(a) 判定拿到的是**它自己那一個** `GAP_*`；
     (b) 那句話**指名**了卡住的是金額還是日期 —— 只說「算不出來」不算數。
     """
-    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR},
             "moneydj_div_yield": SENT_ADR, "dividends": divs}
     _gap, _n = _income_basis_gap(_res)
     assert _gap == expect_gap, f"{label}：判定成 {_gap!r}，應為 {expect_gap!r}"
@@ -1552,7 +1573,7 @@ def test_the_three_causes_do_not_share_one_sentence():
     """⛔ 三種成因的那句話**必須兩兩不同** —— 一樣就是「一句蓋住三個」。"""
     _notes = {}
     for label, _gap, divs in _GAP_TRIGGERS:
-        _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+        _res = {"currency": "USD", "metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR},
                 "moneydj_div_yield": SENT_ADR, "dividends": divs}
         _notes[label] = _invest_basis_note(
             estimate_monthly_income(_res, SENT_AMOUNT, fx_lookup=_fx), _res)
@@ -1594,7 +1615,7 @@ def test_the_count_in_the_note_comes_from_the_same_rows_the_table_draws():
         {"amount": SENT_DIV, "currency": "USD"},                     # ← 有金額、無日期
         {"amount": SENT_DIV, "currency": "USD"},
     ]
-    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV},
+    _res = {"currency": "USD", "metrics": {"nav": SENT_NAV, "annual_div_rate": SENT_ADR},
             "moneydj_div_yield": SENT_ADR, "dividends": _divs}
     _shown = len(_dividend_rows(_res))
     assert _shown == 2 and len(_divs) == 3, (
