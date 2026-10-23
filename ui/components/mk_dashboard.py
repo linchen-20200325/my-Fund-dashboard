@@ -73,13 +73,15 @@ def tag_health_check(fund: dict) -> str:
       其他                                  → Healthy
     缺欄 → N/A，避免 crash。
 
-    v19.402 §1:B 條改吃「含息總報酬」(compute_1y_total_return SSOT)+
-    classify_eating_principal,不再用 m["ret_1y"](純 NAV 不含息)→ 與全站
-    dividend_safety 同源,消除假吃本金警示(見 STATE v19.402)。
+    v19.402 §1:B 條改吃「含息總報酬」,不再用 m["ret_1y"](純 NAV 不含息)。
+    2026-10-23 裁示 1B:B 條整個改走唯一吃本金判定
+    `services.health.dividend.check_eating_principal_1y_mk`(1Y 含息 = 本地配息還原
+    淨值法、年化配息率 = 近 12 個月實配 ÷ 最新淨值),本檔不再自組輸入、不再自己比大小。
+    SSOT 回 None(非配息基金)或灰色 dict(資料未備／無法判定)→ 一律 N/A,
+    **缺料不得變成 Healthy**(§1)。
     """
     m = fund.get("metrics") or {}
     sharpe = m.get("sharpe")
-    div_rate = m.get("annual_div_rate")
     nav = m.get("nav")
     ma60 = m.get("ma60")
     ma20 = m.get("ma20")
@@ -91,15 +93,21 @@ def tag_health_check(fund: dict) -> str:
         except (TypeError, ValueError):
             pass
 
-    # v19.402 §1:吃本金判定改吃含息總報酬(module-level compute_1y_total_return SSOT),
-    # 對齊 Tab2 警示框 / 健診矩陣。classify_eating_principal 為 L2 pure core。
-    from services.health.dividend import classify_eating_principal
-    _tr1y, _ = compute_1y_total_return(fund)
-    if _tr1y is None or div_rate is None or nav is None or ma60 is None:
+    from services.health.dividend import check_eating_principal_1y_mk
+    try:
+        _eat = check_eating_principal_1y_mk(fund)
+    except Exception as _e_eat:  # noqa: BLE001 — 單檔判定炸掉 → N/A + 留痕,不冒充 Healthy
+        import sys as _sys_eat
+        print(f"[mk_dashboard] {fund.get('code', '?')} 吃本金判定失敗:"
+              f"{type(_e_eat).__name__}: {_e_eat}", file=_sys_eat.stderr)
+        return "N/A"
+    if (not isinstance(_eat, dict) or _eat.get("alert_level") == "grey"
+            or nav is None or ma60 is None):
         return "N/A"
 
     try:
-        if classify_eating_principal(float(_tr1y), float(div_rate)).is_eating:
+        # eating_principal = 含息 < 配息率(含 2pp 黃燈帶),與舊 is_eating 語意相同
+        if _eat.get("eating_principal") is True:
             return "Warning"
         if ma20 is not None and float(nav) < float(ma60) and float(ma20) < float(ma60):
             return "Weak"
@@ -259,10 +267,11 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
         if not f.get("loaded") or f.get("load_error"):
             continue
         m = f.get("metrics") or {}
-        # v19.345: 含息總報酬(1Y%) 改走全 app 一致的 SSOT fallback
-        # (compute_1y_total_return: perf['1Y'] wb01 → ret_1y_total 含息 → ret_1y →
-        # NAV 序列年化)，不再直接讀 strict-252 的 m['ret_1y']——後者對 <252 交易日 NAV
-        # 的基金恆 None(user 回報 5 檔全 None)，且語意錯(ret_1y 為「不含息」純 NAV)。
+        # v19.345: 含息總報酬(1Y%) 改走全 app 一致的 SSOT compute_1y_total_return,
+        # 不再直接讀 m['ret_1y'](語意錯:ret_1y 為「不含息」純 NAV)。
+        # 2026-10-23 裁示 1B:SSOT 唯一算法 = 本地配息還原淨值法(窗口 ≥ 350 天),
+        # 舊的 perf['1Y'] → ret_1y_total → ret_1y → 外推年化四層 fallback 已退役;
+        # 算不出來 → None(表格留空),不拿官方值或純淨值頂替。
         _tr1y_val, _ = compute_1y_total_return(f)
         mk_class = tag_mk_class(f)
         health = tag_health_check(f)

@@ -717,18 +717,37 @@ def render_t7_section() -> None:
                     return f" ⚠️ Sheets 例外：{str(_e_w)[:60]}"
 
             def _get_dy_t7(_fund: dict) -> float:
-                """取得基金年化配息率 (%)，fallback：moneydj_div_yield → metrics.annual_div_rate → 0。"""
-                _mj = _fund.get("moneydj_raw", {}) or {}
+                """取得基金年化配息率 (%)，只讀 SSOT `_resolve_adr_with_fallback`
+                （近 12 個月實際配息合計 ÷ 最新淨值；2026-10-23 裁示 1B 後不再讀 wb05 官方值當值）。
+
+                ⚠️ 無值 → 回 0.0 是**本區「預估年配息」加總的既有契約**（6 處消費端以
+                `_dy_lookup_t7.get(pk, 0.0)` 乘進金額），語意是「配息率未備的那檔**不計入**估算」，
+                不是「這檔配息率是 0%」；要改成 None 需連動全部消費端，本批不動。
+                """
                 try:
-                    _v = (_mj.get("moneydj_div_yield")
-                          or _fund.get("metrics", {}).get("annual_div_rate", 0)
-                          or 0)
-                    return float(_v)
+                    from services.health.dividend import _resolve_adr_with_fallback
+                    _v, _ = _resolve_adr_with_fallback(_fund)
+                    return float(_v) if (_v is not None and _v > 0) else 0.0
                 except Exception:
                     return 0.0
 
+            def _dy_is_na_t7(_fund: dict) -> bool:
+                """配息率是否「未備」(有配息跡象但近 12 個月窗內無紀錄 / 缺淨值)。
+                與 `_get_dy_t7` 回 0.0 的另一種情況「非配息基金」分開 —— 前者要揭露,後者不用。"""
+                try:
+                    from services.health.dividend import (
+                        ADR_LABEL_DATA_MISSING,
+                        _resolve_adr_with_fallback,
+                    )
+                    _v, _lbl = _resolve_adr_with_fallback(_fund)
+                    return _v is None and _lbl == ADR_LABEL_DATA_MISSING
+                except Exception:
+                    return True   # 判不出來 = 未備,寧可多揭露
+
             # P2: 字典以 pk_str 為鍵，避免跨保單同代碼覆蓋
             _dy_lookup_t7 = {fund_pk_str(f): _get_dy_t7(f) for f in _pf_t7}
+            # 2026-10-23(稽核 S2):配息率「未備」的 pk 另記一份,KPI 卡要講「N 檔未計入」
+            _dy_na_t7: set = {fund_pk_str(f) for f in _pf_t7 if _dy_is_na_t7(f)}
             _name_lookup_t7 = {fund_pk_str(f): (f.get("name") or f.get("code", "?"))
                                for f in _pf_t7}
 
@@ -1470,6 +1489,8 @@ def render_t7_section() -> None:
                                 _new_pf["name"] or _new_code_clean
                             )
                             _dy_lookup_t7[_new_pk] = _get_dy_t7(_new_pf)
+                            if _dy_is_na_t7(_new_pf):
+                                _dy_na_t7.add(_new_pk)
                             _apk = _new_pk
                             _acode = _new_code_clean
                         except T7InputAbort:
@@ -2244,6 +2265,8 @@ def render_t7_section() -> None:
                                 # v18.247: 不再 hard-code 0；走 _get_dy_t7
                                 # 抓 metrics / moneydj_raw，缺則 fallback 0
                                 _dy_lookup_t7[_cpk] = _get_dy_t7(_cf)
+                                if _dy_is_na_t7(_cf):
+                                    _dy_na_t7.add(_cpk)
                             if _cpk not in _c_all_pks_pid:
                                 _c_all_pks_pid.append(_cpk)
 
@@ -3238,6 +3261,21 @@ def render_t7_section() -> None:
                     # 稽核 A8:有持倉、但今天抓不到淨值或匯率的那些 —— 它們的市值
                     # 不是 0 也不是成本,是**不知道**。上面已從 KPI 與總計中排除,
                     # 這裡把「為什麼總金額看起來少了一塊」講出來(§1 不靜默)。
+                    # 2026-10-23(稽核 S2):配息率「未備」的持倉,上方年配息 / 月現金流**不計入**
+                    # (不是當 0% 配息)—— 純文字揭露缺幾檔,與 Tab3「預估月配息」卡同款。
+                    _dy_na_counted = [
+                        _f.get("code", "?") for _f in _pf_t7
+                        if fund_pk_str(_f) in _dy_na_t7
+                        and (st.session_state.t7_ledgers.get(fund_pk_str(_f)) is not None)
+                        and st.session_state.t7_ledgers.get(fund_pk_str(_f)).position.units > 0
+                    ]
+                    if _dy_na_counted:
+                        st.caption(
+                            f"⬜ {len(_dy_na_counted)} 檔配息率未備（{', '.join(_dy_na_counted[:5])}"
+                            f"{'…' if len(_dy_na_counted) > 5 else ''}），"
+                            "其年配息 / 月現金流**未計入**上方 KPI —— 不是這幾檔不配息，"
+                            "是近 12 個月窗口內沒有配息紀錄或缺淨值，算不出配息率。"
+                        )
                     if _unpriced_funds:
                         st.warning(
                             f"⚠️ 有 **{len(_unpriced_funds)} 檔**今天抓不到最新淨值或匯率"

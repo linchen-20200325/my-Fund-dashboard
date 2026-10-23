@@ -284,14 +284,32 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
         if isinstance(_cap, dict) and _cap:
             _n_ero = _cap.get("n_eroded", 0)
             _n_total_funds = _cap.get("n_funds", 0)
+            # 2026-10-23(稽核 N1):只有「每一檔都判得動且 0 檔侵蝕」才准說「全部…有保障」;
+            # stash 缺 n_judged(舊版)→ 當 0 檔判得動,寧可少說也不把 Missing 講成安全(§1)。
+            _n_judged = int(_cap.get("n_judged", 0) or 0)
+            _n_grey = int(_cap.get("n_grey", 0) or 0)
+            _n_na = int(_cap.get("n_na", 0) or 0)
+            _n_safe = max(_n_judged - _n_ero, 0)
+            _unjudged_bits = []
+            if _n_grey:
+                _unjudged_bits.append(f"{_n_grey} 檔⬜ 未判定（資料未備）")
+            if _n_na:
+                _unjudged_bits.append(f"{_n_na} 檔非配息基金（不適用）")
+            _unjudged_txt = ("，" + "、".join(_unjudged_bits)) if _unjudged_bits else ""
             if _n_total_funds > 0:
-                if _n_ero == 0:
+                if _n_ero == 0 and _n_judged == _n_total_funds:
                     lines.append(
                         f"- 資本防線：{_n_total_funds} 檔基金全部 TR1Y ≥ 配息率（配息有保障）")
+                elif _n_ero == 0:
+                    lines.append(
+                        f"- 資本防線：{_n_safe} 檔 TR1Y ≥ 配息率（配息有保障）{_unjudged_txt}；"
+                        "未判定的檔**不代表**有保障，請勿推測")
                 else:
                     lines.append(
                         f"- 資本防線：⚠️ {_n_ero}/{_n_total_funds} 檔本金侵蝕"
                         f"（TR1Y < 配息率，配息來自本金）"
+                        + (f"；{_n_safe} 檔有保障" if _n_safe else "")
+                        + _unjudged_txt
                     )
                     if _cap.get("eroded_funds"):
                         _ef = "、".join(

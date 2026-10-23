@@ -147,9 +147,11 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
                           or _code)
     out["currency"] = str(_r.get("currency") or "").strip().upper()
     out["dividends"] = list(_r.get("dividends") or [])
-    # v18.246: 帶 metrics + moneydj_raw 給 _get_dy_t7（沒這兩個 key → dy = 0）
+    # v18.246: 帶 metrics + moneydj_raw 給 _get_dy_t7（沒這兩個 key → dy 未備）
+    # 2026-10-23 裁示 1B:這裡只是把 wb05 官方值**原樣搬進 meta** 供對帳,不把它當配息率的值
+    # (配息率唯一算法在 services.health.dividend.resolve_dividend_rate_12m)。
     out["metrics"] = dict(_r.get("metrics") or {})
-    _mj = (_r.get("moneydj_raw")
+    _mj = (_r.get("moneydj_raw")  # ssot-reconcile-only — 資料搬運,不當值
            or {"moneydj_div_yield": _r.get("moneydj_div_yield")})
     out["moneydj_raw"] = dict(_mj or {})
 

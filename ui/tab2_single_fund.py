@@ -72,7 +72,6 @@ BASE_LABELS_FROM_MERGED_TABLE: dict = {
     "mid": "⚪ 中性", "unknown": "⬜ 資料不足",
 }
 
-from services.portfolio_service import dividend_safety as div_safety_check
 from services.precision_service import (
     calc_hwm_sigma_levels,
 )
@@ -279,13 +278,20 @@ _RECON_STATUS_ZH = {
 _RECON_EMOJI = {"agree": "✅", "disagree": "⚠️", "a_missing": "⬜", "b_missing": "⬜"}
 _RECON_VALID = tuple(_RECON_STATUS_ZH)
 
-# 年化配息率三層 fallback chain(services.health.dividend SSOT)的中文說明。
-# 畫面上每一個年化配息率數字都要說得出自己是哪一層來的(§2.2 provenance),
-# 不可以固定寫「官方值」——實際命中第二/三層時那句話就是在說謊。
+# 年化配息率 SSOT(services.health.dividend)來源標籤的中文說明。
+# 畫面上每一個年化配息率數字都要說得出自己是哪裡來的(§2.2 provenance)。
+# 2026-10-23 裁示 1B:SSOT 收斂為**單一方法**(近 12 個月實際配息合計 ÷ 最新淨值),
+# 舊的「MoneyDJ wb05 官方」「本地自算(配息 × 頻率)」兩層不再產出 —— wb05 官方值只在
+# 對帳 chip 顯示,不當值。鍵一律 import SSOT 常數,不在本檔寫死字面值(§3.3)。
+from services.health.dividend import (  # noqa: E402
+    ADR_LABEL_DATA_MISSING as _ADR_LABEL_DATA_MISSING,
+    ADR_LABEL_NO_DIVIDEND as _ADR_LABEL_NO_DIVIDEND,
+    ADR_SRC_DIVS_12M as _ADR_SRC_DIVS_12M,
+)
 _ADR_SRC_ZH = {
-    "moneydj_wb05": "MoneyDJ wb05 官方年化配息率",
-    "metrics_annual_div_rate": "本地自算（近期配息 × 配息頻率 ÷ 淨值）",
-    "divs_12m_sum": "本地推算（近 12 個月配息合計 ÷ 現值淨值）",
+    _ADR_SRC_DIVS_12M: "近 12 個月實際配息合計 ÷ 最新淨值",
+    _ADR_LABEL_DATA_MISSING: "⬜ 配息資料未備（有配息跡象，但近 12 個月窗口內無配息紀錄或缺淨值）",
+    _ADR_LABEL_NO_DIVIDEND: "— 無配息跡象（非配息基金）",
 }
 
 
@@ -1226,43 +1232,35 @@ def render_single_fund_tab() -> None:
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
                 # 無配息資料時顯示 ⬜ 不適用（累積型基金等）。
                 try:
-                    # v19.177:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain,
-                    # 與健診總表 check_eating_principal_1y_mk 同源,免散落。
-                    from services.health.dividend import _resolve_adr_with_fallback
-                    _kpi_adr, _kpi_adr_src = _resolve_adr_with_fallback({
-                        "moneydj_raw": mj_raw,
+                    # 2026-10-23 裁示 1B:吃本金結論只走唯一判定 `check_eating_principal_1y_mk`
+                    # (與健診總表 / Tab3 / 戰情室同一個入口;它內部用的就是下面同兩個 SSOT)。
+                    # 本檔不再自組 tr1y / adr 餵 dividend_safety,也不再自己判「短窗 / 純淨值」。
+                    # 另外讀兩個 SSOT 只為了把數值印在卡上 —— 同一份 payload,值與結論必然同源。
+                    from services.health.dividend import (
+                        _resolve_adr_with_fallback,
+                        check_eating_principal_1y_mk,
+                    )
+                    from services.fund_total_return import compute_1y_total_return
+                    _kpi_payload = {
                         "metrics": m,
+                        "moneydj_raw": mj_raw,
+                        "series": s,
                         "dividends": divs,
-                    })
-                    # v18.134: 改用 compute_1y_total_return 共用 helper
-                    # 修使用者反饋「Tab2 跟 Tab3 對同一基金顯示不同 1Y 報酬」
-                    # 統一順序：perf["1Y"] > ret_1y_total > ret_1y > NAV
-                    from ui.helpers.macro_helpers import compute_1y_total_return
+                        "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                    }
+                    _kpi_adr, _kpi_adr_src = _resolve_adr_with_fallback(_kpi_payload)
+                    # 1Y 含息唯一算法 = 本地配息還原淨值法(窗口 ≥ 350 天);窗口不足 / 配息
+                    # 資料缺 / 無序列 → 值 None + 白話原因標籤。**不再**退回 perf["1Y"]
+                    # (官方,只作對帳)/ 純淨值 / 外推年化,也**不再**把短窗值改標成「N 天含息
+                    # 報酬」再顯示 —— SSOT 根本不會產出短窗值,舊的改標邏輯已成死碼,整段移除。
                     _kpi_tr1y, _kpi_tr1y_src = compute_1y_total_return({
                         "metrics": m,
                         "moneydj_raw": mj_raw,
                         "series": s,
                         "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
                     })
-                    # 必修 2:欄位標籤說實話 —— 線上實測「1Y 含息 = −2.71%」其實只用了
-                    # 本地 42 天序列(calc_metrics.ret_1y_window_days),硬掛「1Y」讓 user
-                    # 無從察覺它與同畫面 Sharpe(wb07 官方一年)不是同一期間(§1)。
-                    # 只在「值確實來自本地短窗」時改標;官方 wb01 真 1Y 不動。
-                    # 2026-08-10:判定片語改吃 SSOT（來源標籤已白話化，原本比對的
-                    # 「本地」「NAV 序列」字樣不再出現）。涵蓋範圍不變 —— 常數的
-                    # docstring 明列哪三條會改標、哪一條刻意不改。
-                    from services.fund_total_return import (  # noqa: PLC0415
-                        LOCAL_WINDOW_SENSITIVE_HINTS as _LOCAL_WIN_HINTS,
-                        is_extrapolated_1y_source as _is_extrap_src,
-                        is_nav_only_1y_source as _is_navonly_src,
-                        is_partial_window_1y_source as _is_partwin_src,
-                    )
-                    _kpi_tr_label = "1Y 含息報酬"
-                    _kpi_win_d = (m or {}).get("ret_1y_window_days")
-                    if (isinstance(_kpi_win_d, (int, float)) and _kpi_win_d < 350
-                            and any(_t in str(_kpi_tr1y_src or "")
-                                    for _t in _LOCAL_WIN_HINTS)):
-                        _kpi_tr_label = f"{int(_kpi_win_d)} 天含息報酬(非 1Y)"
+                    _kpi_tr_label = "1Y 含息報酬（還原淨值）"
+                    _kpi_ds = check_eating_principal_1y_mk(_kpi_payload)
 
                     # `nav_warning`（1Y 淨值跌破 NAV_DROP_WARNING_PCT 的獨立早期警訊）
                     # 原本只印在下方配息區的警示框裡；那個框與本橫幅同源同輸入、
@@ -1270,39 +1268,25 @@ def render_single_fund_tab() -> None:
                     # 已移除以免同頁講兩次；但它獨有的這一句必須留下來，
                     # 否則就變成「去重把揭露一起刪掉」。
                     _kpi_nav_warn = ""
-                    if _kpi_adr is None or _kpi_adr <= 0:
+                    if _kpi_ds is None:
+                        # SSOT 契約:None = 無配息跡象(非配息基金),吃本金概念不適用
                         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
                         _kpi_title = "吃本金檢查 — ⬜ 不適用"
-                        _kpi_msg = "本基金無年化配息率資料（可能為累積型 / 不配息基金）"
+                        _kpi_msg = "本基金無配息跡象（可能為累積型 / 不配息基金），吃本金概念不適用"
                         _kpi_cov_txt = "—"
-                    elif _kpi_tr1y is None:
+                    elif _kpi_ds.get("alert_level") == "grey":
+                        # SSOT 的灰色結果:印它自己的 status(⬜ 資料未備／無法判定)與白話原因,
+                        # 不另編「資料不足」四個字;1Y 來源標籤本身就含原因,一併帶出(§2.2)。
                         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
-                        _kpi_title = "吃本金檢查 — ⬜ 資料不足"
-                        _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
-                        _kpi_cov_txt = "—"
-                    elif (_is_navonly_src(_kpi_tr1y_src)
-                          or _is_partwin_src(_kpi_tr1y_src)
-                          or _is_extrap_src(_kpi_tr1y_src)):
-                        # v19.480 稽核 3a:與健診表 SSOT gate 一致 —— 純NAV(不含配息)/短窗
-                        # 累積/外推年化拿去比年化配息率會誤判,拒判 ⚪(否則同檔 Tab2 🔴 vs
-                        # 健診表 ⚪ 分歧,PHASE1_AUDIT_DELTA 列為真 bug)。
-                        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
-                        _kpi_title = "吃本金檢查 — ⚪ 資料不足"
-                        _kpi_msg = ("只取得「純淨值(未含配息)」或「不足一年的含息報酬」,"
-                                    f"拿去比年化配息率會期間不對齊、誤報吃本金 —— 故不判定"
-                                    f"（1Y 來源:{_kpi_tr1y_src}）;請改看基金官方績效頁的一年含息報酬")
+                        _kpi_title = f"吃本金檢查 — {_kpi_ds.get('status', '')}"
+                        # SSOT 的 message 是 markdown(含 **粗體**),本卡以 HTML 印 → 去掉標記
+                        _kpi_msg = str(_kpi_ds.get("message", "")).replace("**", "")
+                        if _kpi_tr1y is None and _kpi_tr1y_src:
+                            _kpi_msg = f"{_kpi_msg}　〔1Y 來源:{_kpi_tr1y_src}〕"
                         _kpi_cov_txt = "—"
                     else:
-                        # v19.480 稽核 H2:原本 `nav_change=_kpi_tr1y` 把**含息報酬**當
-                        # **淨值變化**傳 → 淨值下跌警語(nav_change < 門檻)在「高配息掩蓋
-                        # 淨值下跌」時反而不觸發(正該示警的情境),且警語印的數字也是錯的。
-                        # 真正的 nav_change_pct 不在此 scope → 傳 None(不做該交叉驗證,§1),
-                        # 與 SSOT `check_eating_principal_1y_mk`(dividend.py:511)一致。
-                        _kpi_ds = div_safety_check(
-                            total_return=_kpi_tr1y,
-                            dividend_yield=_kpi_adr,
-                            nav_change=None,
-                        )
+                        # 淨值交叉警語(nav_change)由 SSOT 自己拿 metrics.ret_1y(純淨值 1Y 變化)
+                        # 餵進去;本檔不再傳含息報酬當淨值變化(v19.480 稽核 H2 的病)。
                         _kpi_al = _kpi_ds.get("alert_level", "grey")
                         _kpi_cov = _kpi_ds.get("coverage")
                         _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
@@ -1742,12 +1726,13 @@ def render_single_fund_tab() -> None:
                         else:
                             st.metric(
                                 "年化配息率", "—",
-                                help="三層來源（MoneyDJ 官方值 / 本地自算 / 近 12 個月推算）皆無可用值")
+                                help=f"{_adr_src_zh}：近 12 個月實際配息合計 ÷ 最新淨值 無可用值"
+                                     "（MoneyDJ wb05 官方值只作對帳，不當值）")
                             st.caption(
-                                "⬜ **年化配息率無法計算** —— 本檔有配息記錄，但 MoneyDJ 官方欄位、"
-                                "本地自算、近 12 個月推算三條路都取不到數字（常見原因：配息紀錄缺"
-                                "金額欄、或現值淨值未取得，除不出殖利率）。此處顯示破折號而非 0%，"
-                                "0% 會被誤讀成「這檔不配息」。"
+                                "⬜ **年化配息率無法計算** —— 本檔有配息記錄，但「近 12 個月實際配息"
+                                "合計 ÷ 最新淨值」取不到數字（常見原因：近 12 個月窗口內沒有配息紀錄、"
+                                "配息紀錄缺金額欄、或最新淨值未取得，除不出殖利率）。此處顯示破折號而非 0%，"
+                                "0% 會被誤讀成「這檔不配息」；也不拿 MoneyDJ 官方值頂替（它只在對帳 chip 顯示）。"
                             )
                         # F-RECON-1 phase 6 v19.91 — 配息殖利率對帳 chip(self-calc vs MoneyDJ)
                         _dy_rec = (m or {}).get("div_yield_reconcile")
@@ -1769,10 +1754,9 @@ def render_single_fund_tab() -> None:
                         # ── 📖 配息覆蓋率講義卡（老師《以息養股》）──
                         # 這裡原本先印一個「🚨 吃本金警示」框（status + message +
                         # nav_warning），再印下面這張講義卡。那個警示框與本頁上方
-                        # 「吃本金檢查」KPI 橫幅**逐字同源**：adr 同一個
-                        # `_resolve_adr_with_fallback`、1Y 同一個 `compute_1y_total_return`
-                        # 同一份 payload → `div_safety_check` 的回傳必然一模一樣，
-                        # 等於同一個結論在同一頁印兩次。
+                        # 「吃本金檢查」KPI 橫幅**逐字同源**：同一份 payload 餵同一個
+                        # `check_eating_principal_1y_mk`(2026-10-23 裁示 1B 後的唯一判定)
+                        # → 回傳必然一模一樣，等於同一個結論在同一頁印兩次。
                         #
                         # 留上方 KPI 橫幅、砍這一份，理由：
                         #   (1) 這份被關在 `if divs and len(divs) >= 1:` 內，累積型 /
@@ -1792,14 +1776,21 @@ def render_single_fund_tab() -> None:
                             "series": s,
                             "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
                         })
-                        # `_adr` 現在可能是 None(SSOT 三層全失敗)→ 顯式判空,
-                        # 不能沿用舊的 `_adr > 0`(None 直接 TypeError)。
-                        if _tr1y is not None and _adr is not None and _adr > 0:
-                            _ds = div_safety_check(
-                                total_return=float(_tr1y),
-                                dividend_yield=float(_adr),
-                                nav_change=float(_tr1y),
-                            )
+                        # 2026-10-23 裁示 1B:色 / Coverage 改讀唯一判定 `check_eating_principal_1y_mk`
+                        # (同一份 payload,與上方橫幅必然同結論),不再自組輸入餵 dividend_safety。
+                        # `_adr` 可能是 None(資料未備)→ 顯式判空,不能沿用舊的 `_adr > 0`。
+                        from services.health.dividend import (
+                            check_eating_principal_1y_mk as _check_eat_ep,
+                        )
+                        _ds = _check_eat_ep({
+                            "metrics": m,
+                            "moneydj_raw": mj_raw,
+                            "series": s,
+                            "dividends": divs,
+                            "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                        })
+                        if (_tr1y is not None and _adr is not None and _adr > 0
+                                and isinstance(_ds, dict) and _ds.get("alert_level") != "grey"):
                             _al = _ds.get("alert_level","grey")
                             _cov = _ds.get("coverage")
                             _cov_txt = f"{_cov:.2f}" if isinstance(_cov, (int, float)) else "—"
@@ -2567,14 +2558,18 @@ def render_single_fund_tab() -> None:
                             f"，近期 {len(divs)} 筆"
                         )
                         if _tr1y_ai is None:
-                            _div_line += "｜吃本金：無法判定（缺 1Y 含息總報酬，禁止推測）"
+                            _div_line += (f"｜吃本金：無法判定（缺 1Y 含息總報酬，禁止推測；"
+                                          f"1Y 來源 {_tr1y_ai_src or '—'}）")
                         else:
-                            try:  # 吃本金檢查（含息總報酬 vs 配息率）— Core Protocol Ch.3.2
-                                _ds_ai = div_safety_check(
-                                    total_return=_tr1y_ai,
-                                    dividend_yield=_adr_ai,
-                                    nav_change=_tr1y_ai,
+                            try:  # 吃本金檢查 — 2026-10-23 裁示 1B:只走唯一判定 SSOT 入口
+                                from services.health.dividend import (
+                                    check_eating_principal_1y_mk as _check_eat_ai,
                                 )
+                                _ds_ai = _check_eat_ai({
+                                    "metrics": m, "moneydj_raw": mj_raw, "series": s,
+                                    "dividends": divs,
+                                    "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                                }) or {}
                                 _cov_ai = _ds_ai.get("coverage")
                                 _div_line += (
                                     f"｜1Y 含息總報酬={_tr1y_ai:.2f}%"
@@ -2587,6 +2582,9 @@ def render_single_fund_tab() -> None:
                                         f"{_ds_ai.get('status','')}）"
                                         "｜此結論與畫面上「吃本金檢查」橫幅同源，請勿另行推翻"
                                     )
+                                elif _ds_ai.get("status"):
+                                    _div_line += (f"｜吃本金：{_ds_ai.get('status')}"
+                                                  "（與畫面「吃本金檢查」橫幅同源，禁止推測）")
                             except Exception as _e_dsafe:
                                 # v19.346 §3.3:原靜默吞 — AI 快照少掉吃本金線索,留痕
                                 import sys as _sys_ds

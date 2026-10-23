@@ -85,12 +85,12 @@ def test_b1_renamed_headers_locked():
     from ui.helpers.fund_grp_health import columns
     from ui.helpers.fund_grp_health.columns import base_column_config
 
-    # 語意鎖:含息欄的顯示 label 已改「全期年化」,而 dict key「含息% (年化)」不變
-    assert base_column_config()["含息% (年化)"]["label"] == "含息% (全期年化)"
+    # 語意鎖:含息欄的顯示 label 已改「全期年化」,而 dict key「持有期含息% (相對買入成本・年化)」不變
+    assert base_column_config()["持有期含息% (相對買入成本・年化)"]["label"] == "持有期含息% (相對買入成本・年化)"
 
     # 源碼鎖:兩個新 header 都在;兩個 load-bearing dict key 保留(防未來誤改回舊名 / 誤改 key)
     _src = inspect.getsource(columns)
-    assert '"含息% (全期年化)"' in _src
+    assert '"持有期含息% (相對買入成本・年化)"' in _src
     assert '"年化配息率 %(對現值)"' in _src
-    assert '"含息% (年化)": cc.NumberColumn(' in _src        # dict key 保留(資料流不斷)
+    assert '"持有期含息% (相對買入成本・年化)": cc.NumberColumn(' in _src        # dict key 保留(資料流不斷)
     assert '"年化配息率 %": cc.NumberColumn(' in _src
