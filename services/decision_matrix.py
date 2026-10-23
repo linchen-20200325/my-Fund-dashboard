@@ -22,6 +22,12 @@
 (配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
 不補 0、不當中性)。`sigma_info` 由呼叫端傳入 SSOT 輸出(unavailable 帶 `error`、`sigma_rank=None` → 略過 σ 覆寫)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
 σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
+
+⛔ **2026-10-23 客戶裁示 BL-0428 DG-3 C ＋ DG-1 A(`DEC-2026-10-23-11`)**:
+- DG-3 C:**退休 σ 覆寫**(~~σ ≤ −2 深跌 → 分批承接／加碼~~、~~σ > +1 過熱 → 分批停利／出場~~)——
+  動作只由 verdict × 級別預設與吃本金 bump 決定;σ 不再影響 action、也不再產生行動 tag。
+- DG-1 A:位置 ⬜ 不得與「σ 可判定」輸出逐字相同 —— 有帶 `sigma_info` 且 ⬜ 時,
+  reason 加 tag「⬜ 基金位置無法判定」(只揭露,不改動作;不新增動作語意)。
 """
 from __future__ import annotations
 
@@ -39,6 +45,9 @@ ACTION_REDUCE = "減倉"
 ACTION_EXIT   = "全撤"
 
 ACTIONS = (ACTION_HOLD, ACTION_ADD, ACTION_REDUCE, ACTION_EXIT)
+
+#: DG-1 A(2026-10-23):位置 ⬜ 時 reason 的揭露 tag(沿用既有「無法判定」用字;不是動作)。
+POSITION_UNKNOWN_TAG = "⬜ 基金位置無法判定"
 
 # Action → 顏色（與 policy_advisor 同色系）
 _ACTION_COLOR = {
@@ -85,7 +94,11 @@ def _action_after_individual_signals(
     level: str,
     tier: Optional[str],
 ) -> tuple[str, list[str]]:
-    """個股訊號覆寫：σ 極端 + 配息吃本金。回 (覆寫後 action, 原因 tag list)"""
+    """個股訊號覆寫：~~σ 極端 +~~ 配息吃本金。回 (覆寫後 action, 原因 tag list)
+
+    2026-10-23 DG-3 C:σ 覆寫退休 —— `sigma_rank` 參數保留(呼叫端相容),**本函式不讀它**
+    (`tests/test_bl0428_dg_rulings.py` 以 AST 鎖住)。
+    """
     tags: list[str] = []
     action = base_action
     # 未設定級別 fail-closed：不論 σ／配息，一律不給調整建議（維持持有）；reason 仍標「未設定」
@@ -94,27 +107,10 @@ def _action_after_individual_signals(
     # 衛星專屬分支只在 tier == satellite 成立；未設定不當衛星（客戶 2026-10-12 裁示）
     is_sat = tier == SATELLITE_TIER
 
-    # σ ≤ -2 深度超跌
-    if sigma_rank is not None and sigma_rank <= -2.0:
-        if level in ("極度樂觀", "樂觀"):
-            tags.append(f"σ {sigma_rank:+.1f}σ 深跌+多頭=分批承接")
-            action = ACTION_ADD
-        elif level == "中性":
-            tags.append(f"σ {sigma_rank:+.1f}σ 深跌參考區")
-            if action == ACTION_HOLD:
-                action = ACTION_ADD
-        elif level in ("悲觀", "極度悲觀"):
-            tags.append(f"σ {sigma_rank:+.1f}σ 深跌但風險未消 → 觀望勿接刀")
-            # 悲觀情境深跌不加碼，沿用 verdict 預設（衛星仍是 REDUCE/EXIT）
-
-    # σ > +1 過熱
-    elif sigma_rank is not None and sigma_rank > 1.0:
-        if level in ("樂觀", "極度樂觀") and is_sat:
-            tags.append(f"σ {sigma_rank:+.2f}σ 過熱 → 分批停利")
-            action = ACTION_REDUCE
-        elif level in ("悲觀", "極度悲觀"):
-            tags.append(f"σ {sigma_rank:+.2f}σ 過熱+風險升 → 出場")
-            action = ACTION_EXIT
+    # ~~σ ≤ -2 深度超跌 → 多頭「分批承接」加碼 / 中性「深跌參考區」加碼 / 悲觀「觀望勿接刀」~~
+    # ~~σ > +1 過熱 → 衛星樂觀「分批停利」減倉 / 悲觀「出場」全撤~~
+    # 2026-10-23 客戶裁示 BL-0428 DG-3 C:退休(HWM σ 不再產生行動;門檻未校準,
+    # 且 σ rank 結構上 ≤ 0,過熱分支本來就到不了)。
 
     # 配息吃本金（alert == "red"）→ 動作往保守方向 bump 一級
     if div_alert == "red":
@@ -158,7 +154,8 @@ def verdict_to_actions(
         順序對齊輸入；空 funds → 空 list；未知 verdict_level → 全部 HOLD 並標 reason。
 
     邊界：
-        - sigma_info.error 存在 / sigma_rank 非數值 → 略過 σ 覆寫
+        - ~~sigma_info.error 存在 / sigma_rank 非數值 → 略過 σ 覆寫~~(2026-10-23 DG-3 C:σ 覆寫已退休)
+        - 有帶 sigma_info 鍵且 None / error / sigma_rank 非數值 → reason 加「⬜ 基金位置無法判定」(DG-1 A)
         - dividend_info 無 alert_level → 略過 cov 覆寫
         - 級別缺失／None／非布林 → 未設定（tier None）：一律持有，不當衛星
     """
@@ -175,12 +172,16 @@ def verdict_to_actions(
         name = str(f.get("name", "") or "")
         tier = resolve_tier(f)
 
-        sig = f.get("sigma_info") or {}
-        sigma_rank: Optional[float] = None
-        if isinstance(sig, dict) and "error" not in sig:
-            _r = sig.get("sigma_rank")
-            if isinstance(_r, (int, float)):
-                sigma_rank = float(_r)
+        # 2026-10-23 DG-3 C:σ 不再進動作規則(只傳 None 給保留的參數)。
+        # DG-1 A:有帶 sigma_info 鍵且位置 ⬜(None / error / 非數值)→ reason 揭露,不改動作。
+        _pos_unknown = False
+        if "sigma_info" in f:
+            _sig = f.get("sigma_info")
+            if not isinstance(_sig, dict) or "error" in _sig:
+                _pos_unknown = True
+            else:
+                _r = _sig.get("sigma_rank")
+                _pos_unknown = isinstance(_r, bool) or not isinstance(_r, (int, float))
 
         div = f.get("dividend_info") or {}
         div_alert: Optional[str] = None
@@ -192,8 +193,10 @@ def verdict_to_actions(
         if is_known_level:
             base = _verdict_default_action(verdict_level, tier)
             action, tags = _action_after_individual_signals(
-                base, sigma_rank, div_alert, verdict_level, tier
+                base, None, div_alert, verdict_level, tier
             )
+            if _pos_unknown:
+                tags = [*tags, POSITION_UNKNOWN_TAG]
         else:
             action = ACTION_HOLD
             tags = [f"未知 verdict level: {verdict_level!r} → 預設持有"]
@@ -279,6 +282,7 @@ __all__ = [
     "VERDICT_LEVELS",
     "ACTION_HOLD", "ACTION_ADD", "ACTION_REDUCE", "ACTION_EXIT",
     "ACTIONS",
+    "POSITION_UNKNOWN_TAG",
     "verdict_to_actions",
     "summarize_actions",
 ]

@@ -289,9 +289,12 @@ def test_x9_classified_without_money_is_also_not_judged():
 
 
 def test_t5_unset_funds_still_count_for_deep_drop():
+    # 2026-10-23 客戶裁示 BL-0428 DG-3 C:~~未設定基金照樣計入 P3 深跌 → POLICY_RISK_HEAVY_DROP~~
+    # → P3(σ 深跌「可分批加碼」)退休;全部未設定 → 走既有「未判斷配置」灰色句。
     r = _rec([{"invest_twd": 100, "sigma_info": {"sigma_rank": -2.5}},
               {"invest_twd": 100, "sigma_info": {"sigma_rank": -2.1}}])
-    assert r["code"] == "POLICY_RISK_HEAVY_DROP"
+    assert r["code"] != "POLICY_RISK_HEAVY_DROP"
+    assert r["code"] == "POLICY_TIER_UNSET" and r["color"] == "grey"
 
 
 def test_all_classified_policy_keeps_the_old_sentence():

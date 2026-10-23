@@ -23,7 +23,7 @@
 ⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
 本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
 (配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
-不補 0、不當中性)。換股顧問讀列內「σ rank」(同上,健診大表經 SSOT 產生)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+不補 0、不當中性)。換股顧問讀列內 σ(同上,健診大表經 SSOT 產生;2026-10-23 BL-0428 §9.8 起判定讀正式數值 `sigma_rank`,不解析兩位小數「σ rank」字串)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
 σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
@@ -93,11 +93,18 @@ def _best_candidate(held_code: str, pool_rows: list, *, held_ccy: str = "") -> "
     held_ccy:持倉計價幣別(選填)—— 與候選幣別不同 → 回傳 cross_ccy=True(換股含匯差,§4.1)。
     """
     from services.fund_type_classifier import RANGE, classify_fund_type
-    from services.rotation import _sigma, classify_base, is_healthy_buy, revert_upside_pct
+    from services.rotation import (
+        classify_base,
+        display_sigma,
+        is_healthy_buy,
+        revert_upside_pct,
+        row_sigma_rank,
+    )
 
+    # BL-0428 §9.8(2026-10-23):判定讀正式數值 `sigma_rank`(SSOT 原值),不解析兩位小數字串。
     cands = [b for b in (pool_rows or [])
              if str(_row_get(b, "code", default="")) != held_code
-             and classify_base(_row_get(b, "σ rank", "sigma_rank")) == "low"
+             and classify_base(row_sigma_rank(b)) == "low"
              and is_healthy_buy(b)]
     if not cands:
         return None
@@ -108,12 +115,12 @@ def _best_candidate(held_code: str, pool_rows: list, *, held_ccy: str = "") -> "
                                   override=_row_get(b, "type_override", default="")).get("type")
 
     _range_first = [b for b in cands if _btype(b) == RANGE] or cands
-    _range_first.sort(key=lambda b: (_sigma(_row_get(b, "σ rank", "sigma_rank"))
-                                     if _sigma(_row_get(b, "σ rank", "sigma_rank")) is not None else 0.0))
+    _range_first.sort(key=lambda b: (row_sigma_rank(b)
+                                     if row_sigma_rank(b) is not None else 0.0))
     b = _range_first[0]
     _cand_ccy = _norm_ccy(_row_get(b, "currency", "ccy", "幣別", default=""))
     return {"code": _row_get(b, "code", default=""), "name": _name(b), "type": _btype(b),
-            "buy_sigma": _sigma(_row_get(b, "σ rank", "sigma_rank")),
+            "buy_sigma": display_sigma(row_sigma_rank(b)),
             "ccy": _cand_ccy or None,
             "cross_ccy": bool(held_ccy and _cand_ccy and held_ccy != _cand_ccy),
             "potential_pct": revert_upside_pct(_row_get(b, "距 HWM %", "dist_hwm_pct"))}
@@ -208,7 +215,7 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
     """
     from services.fund_type_classifier import RANGE, classify_fund_type
     from services.nav_fx_switch import nav_fx_signal
-    from services.rotation import classify_base
+    from services.rotation import classify_base, row_sigma_rank
 
     _code = str(_row_get(held_row, "code", default=""))
     _nav = _row_get(held_row, "nav_series")
@@ -228,7 +235,7 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
     if _ftype is None:
         _out.update(action=INSUFFICIENT, action_zh=_ACTION_ZH[INSUFFICIENT], reason=_tinfo["rationale"])
     elif _ftype == RANGE:
-        _nav_level = classify_base(_row_get(held_row, "σ rank", "sigma_rank"))
+        _nav_level = classify_base(row_sigma_rank(held_row))   # BL-0428 §9.8:讀正式數值
         _fx = nav_fx_signal(_nav_level, fx_label)
         _out["signals"].update(nav_level=_nav_level, fx_label=fx_label)
         if _nav_level == "high":

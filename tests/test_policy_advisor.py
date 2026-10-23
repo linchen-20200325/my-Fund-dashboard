@@ -16,6 +16,7 @@ from services.policy_advisor_service import (
     NEAR_HWM_GREEN_HOLD,
     ABOVE_HWM_TAKE_PROFIT,
     DEFAULT_HOLD,
+    POSITION_EVIDENCE_ONLY,
     POLICY_EMPTY,
     POLICY_CORE_OVER,
     POLICY_CORE_UNDER,
@@ -46,158 +47,63 @@ def test_insufficient_when_sigma_rank_missing():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 規則 1：深度超跌 + 恐慌
+# ~~規則 1～9:σ 驅動的行動文字(跌了就買 / 汰弱換強 / 加碼參考區 / 留意加碼點 / 勿接刀 /
+# 停利檢視 / 健康持有 / 創新高停利 / 標準持有)~~
+# 2026-10-23 客戶裁示 BL-0428 DG-3 C(DEC-2026-10-23-11):全部退休。
+# σ 可判定 → 只回中性位置證據(POSITION_EVIDENCE_ONLY,灰);舊規則的每一個觸發條件
+# (含邊界 −2.0 / +0.5、VIX 恐慌、吃本金、60MA 上/下)都改斷言「不再產生行動文字」。
 # ──────────────────────────────────────────────────────────────────────
-def test_deep_drop_vix_buy_triggers_when_vix_ge_30():
-    r = advise_fund({"sigma_rank": -2.3}, {"alert_level": "green"}, vix=32.0)
-    assert r["code"] == DEEP_DROP_VIX_BUY
-    assert "跌了就買" in r["text"]
-    assert "VIX 32" in r["text"]
+_ACTION_WORDS = ("加碼", "跌了就買", "汰弱換強", "承接", "停利", "健康持有", "標準持有",
+                 "勿接刀", "創新高", "攤平", "買", "賣")
+
+_OLD_RULE_TRIGGERS = [
+    ({"sigma_rank": -2.3}, {"alert_level": "green"}, None, 32.0),     # 舊規則 1
+    ({"sigma_rank": -2.5}, {"alert_level": "red"}, None, 35.0),       # 舊規則 1 優先於 2
+    ({"sigma_rank": -2.4}, {"alert_level": "red", "coverage": 0.45}, None, 15.0),  # 舊規則 2
+    ({"sigma_rank": -2.1}, {"alert_level": "green"}, None, None),     # 舊規則 3
+    ({"sigma_rank": -2.0}, {"alert_level": "green"}, None, None),     # 舊邊界 −2.0
+    ({"sigma_rank": -1.3}, {"alert_level": "green"}, "up", None),     # 舊規則 4
+    ({"sigma_rank": -1.7}, {"alert_level": "green"}, "down", None),   # 舊規則 5
+    ({"sigma_rank": -0.2}, {"alert_level": "red", "coverage": 0.8}, None, None),  # 舊規則 6
+    ({"sigma_rank": 0.1}, {"alert_level": "green", "coverage": 1.5}, None, None),  # 舊規則 7
+    ({"sigma_rank": 0.5}, {"alert_level": "green"}, None, None),      # 舊邊界 +0.5
+    ({"sigma_rank": 1.2}, {"alert_level": "green"}, None, None),      # 舊規則 8
+    ({"sigma_rank": -0.8}, {"alert_level": "green"}, None, None),     # 舊規則 9
+    ({"sigma_rank": -1.5}, None, "up", None),                         # dividend_info None
+    ({"sigma_rank": -2.5}, {"alert_level": "red"}, None, None),       # 無 coverage
+]
 
 
-def test_deep_drop_vix_buy_priority_over_red():
-    # rank ≤ -2 + red + VIX≥30 → 規則 1 短路勝出（不被規則 2 蓋）
-    r = advise_fund({"sigma_rank": -2.5}, {"alert_level": "red"}, vix=35.0)
-    assert r["code"] == DEEP_DROP_VIX_BUY
+def test_dg3_old_sigma_rules_no_longer_produce_action_text():
+    _retired = {DEEP_DROP_VIX_BUY, DEEP_DROP_RED_SWITCH, DEEP_DROP_NEUTRAL, MID_DROP_MA_UP,
+                MID_DROP_MA_DOWN, NEAR_HWM_RED_TP_CHECK, NEAR_HWM_GREEN_HOLD,
+                ABOVE_HWM_TAKE_PROFIT, DEFAULT_HOLD}
+    for _sig, _div, _ma, _vix in _OLD_RULE_TRIGGERS:
+        r = advise_fund(_sig, _div, ma60_trend=_ma, vix=_vix)
+        assert r["code"] == POSITION_EVIDENCE_ONLY, (_sig, r)
+        assert r["code"] not in _retired
+        assert r["color"] == "grey"
+        assert "不是買賣建議" in r["text"]
+        _body = r["text"].replace("不是買賣建議", "")
+        for _w in _ACTION_WORDS:
+            assert _w not in _body, (_sig, _w, r["text"])
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 規則 2：深度超跌 + 配息吃本金
-# ──────────────────────────────────────────────────────────────────────
-def test_deep_drop_red_switch():
-    r = advise_fund(
-        {"sigma_rank": -2.4},
-        {"alert_level": "red", "coverage": 0.45},
-        vix=15.0,
-    )
-    assert r["code"] == DEEP_DROP_RED_SWITCH
-    assert "汰弱換強" in r["text"]
-    assert "0.45" in r["text"]
+def test_dg3_position_text_uses_ssot_three_state_label():
+    # 有 SSOT label → 原樣使用;沒有 → 由 hwm_position_from_rank 對映(同一把尺)
+    r = advise_fund({"sigma_rank": -0.9, "label": "中段（−1.5σ ～ −0.5σ）"}, None)
+    assert "中段" in r["text"]
+    assert "遠離高點" in advise_fund({"sigma_rank": -1.6}, None)["text"]
+    assert "接近高點" in advise_fund({"sigma_rank": -0.1}, None)["text"]
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 規則 3：深度超跌 + 其他 → 加碼區
-# ──────────────────────────────────────────────────────────────────────
-def test_deep_drop_neutral_green():
-    r = advise_fund({"sigma_rank": -2.1}, {"alert_level": "green"})
-    assert r["code"] == DEEP_DROP_NEUTRAL
-    assert "加碼" in r["text"]
-
-
-def test_deep_drop_neutral_no_vix_no_red():
-    r = advise_fund({"sigma_rank": -2.5}, {"alert_level": "yellow"}, vix=18.0)
-    assert r["code"] == DEEP_DROP_NEUTRAL
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 4：中度跌 + 60MA 上升
-# ──────────────────────────────────────────────────────────────────────
-def test_mid_drop_ma_up():
-    r = advise_fund(
-        {"sigma_rank": -1.3},
-        {"alert_level": "green"},
-        ma60_trend="up",
-    )
-    assert r["code"] == MID_DROP_MA_UP
-    assert "60MA 上升" in r["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 5：中度跌 + 60MA 下行
-# ──────────────────────────────────────────────────────────────────────
-def test_mid_drop_ma_down():
-    r = advise_fund(
-        {"sigma_rank": -1.7},
-        {"alert_level": "green"},
-        ma60_trend="down",
-    )
-    assert r["code"] == MID_DROP_MA_DOWN
-    assert "60MA 下行" in r["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 6：接近 HWM + 紅燈 → 停利檢視
-# ──────────────────────────────────────────────────────────────────────
-def test_near_hwm_red_take_profit_check():
-    r = advise_fund(
-        {"sigma_rank": -0.2},
-        {"alert_level": "red", "coverage": 0.8},
-    )
-    assert r["code"] == NEAR_HWM_RED_TP_CHECK
-    assert "停利檢視" in r["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 7：接近 HWM + 綠燈 → 健康持有
-# ──────────────────────────────────────────────────────────────────────
-def test_near_hwm_green_hold():
-    r = advise_fund(
-        {"sigma_rank": 0.1},
-        {"alert_level": "green", "coverage": 1.5},
-    )
-    assert r["code"] == NEAR_HWM_GREEN_HOLD
-    assert r["color"] == "green"
-    assert "健康持有" in r["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 8：超越 HWM → 過熱停利
-# ──────────────────────────────────────────────────────────────────────
-def test_above_hwm_take_profit():
-    r = advise_fund({"sigma_rank": 1.2}, {"alert_level": "green"})
-    assert r["code"] == ABOVE_HWM_TAKE_PROFIT
-    assert "創新高" in r["text"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 規則 9：其他 → 標準持有
-# ──────────────────────────────────────────────────────────────────────
-def test_default_hold_mid_drop_no_ma_trend():
-    # -2 < rank ≤ -1 但無 ma60_trend → 落到 default
-    r = advise_fund({"sigma_rank": -1.5}, {"alert_level": "green"})
-    assert r["code"] == DEFAULT_HOLD
-
-
-def test_default_hold_between_minus1_and_minus0_5():
-    # rank 在 (-1, -0.5] 區間，無特別規則 → default
-    r = advise_fund({"sigma_rank": -0.8}, {"alert_level": "green"})
-    assert r["code"] == DEFAULT_HOLD
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 邊界 / 容錯
-# ──────────────────────────────────────────────────────────────────────
-def test_boundary_exact_minus_2():
-    # rank == -2.0 應落到深度超跌規則
-    r = advise_fund({"sigma_rank": -2.0}, {"alert_level": "green"})
-    assert r["code"] == DEEP_DROP_NEUTRAL
-
-
-def test_boundary_exact_plus_0_5():
-    # rank == 0.5 邊界，依規則 7 (接近 HWM) — 因為 -0.5 < 0.5 ≤ 0.5
-    r = advise_fund({"sigma_rank": 0.5}, {"alert_level": "green"})
-    assert r["code"] == NEAR_HWM_GREEN_HOLD
-
-
-def test_dividend_info_none_does_not_crash():
-    # dividend_info=None → 走 alert='grey' 路徑，不應 raise
-    r = advise_fund({"sigma_rank": -1.5}, None, ma60_trend="up")
-    # alert='grey' → 規則 4 不滿足（要 ma60_trend up 即可，alert 任意），所以匹配 MID_DROP_MA_UP
-    assert r["code"] == MID_DROP_MA_UP
-
-
-def test_coverage_none_does_not_crash():
-    r = advise_fund(
-        {"sigma_rank": -2.5},
-        {"alert_level": "red"},   # 故意不放 coverage
-    )
-    assert r["code"] == DEEP_DROP_RED_SWITCH
-    assert "N/A" in r["text"]
-
-
-def test_vix_below_30_does_not_trigger_buy():
-    r = advise_fund({"sigma_rank": -2.3}, {"alert_level": "green"}, vix=25.0)
-    assert r["code"] == DEEP_DROP_NEUTRAL  # 不是 DEEP_DROP_VIX_BUY
+def test_dg3_dividend_ma_vix_do_not_change_output():
+    """dividend / 60MA / VIX 原本只在與 σ 組合時才用;σ 規則退休後它們不得單獨產生建議。"""
+    _base = advise_fund({"sigma_rank": -2.3}, None)
+    for _div in (None, {"alert_level": "red"}, {"alert_level": "green", "coverage": 2.0}):
+        for _ma in (None, "up", "down"):
+            for _vix in (None, 10.0, 99.0):
+                assert advise_fund({"sigma_rank": -2.3}, _div, _ma, _vix) == _base
 
 
 def test_return_shape_always_has_three_keys():
@@ -241,14 +147,16 @@ def test_recommend_policy_core_under():
     assert r["code"] == POLICY_CORE_UNDER
 
 
-def test_recommend_policy_risk_heavy_drop():
-    # 核心比 75% 達標、但 2 檔 σ ≤ -2 → 系統性風險警示
+def test_recommend_policy_risk_heavy_drop_retired_dg3():
+    """~~核心比 75% 達標、但 2 檔 σ ≤ -2 → 系統性風險警示「可分批加碼」~~
+    2026-10-23 DG-3 C:P3 退休 —— 深跌不再產生加碼文字;位置可判定 → 照常走 P5。"""
     r = recommend_policy([
         _fund(750_000, is_core=True,  sigma_rank=-2.3),
         _fund(250_000, is_core=False, sigma_rank=-2.1),
     ], target_core_pct=75.0)
-    assert r["code"] == POLICY_RISK_HEAVY_DROP
-    assert "2" in r["text"]
+    assert r["code"] != POLICY_RISK_HEAVY_DROP
+    assert r["code"] == POLICY_HEALTHY
+    assert "加碼" not in r["text"] and "超跌" not in r["text"]
 
 
 def test_recommend_policy_risk_heavy_red():
@@ -270,15 +178,15 @@ def test_recommend_policy_healthy():
     assert r["color"] == "green"
 
 
-def test_recommend_policy_drop_priority_over_red():
-    """同時觸發 P3 + P4 → P3 短路勝出（更嚴重）。"""
+def test_recommend_policy_red_still_fires_when_deep_drop_retired():
+    """~~同時觸發 P3 + P4 → P3 短路勝出~~ → DG-3 C 後 P3 不存在,P4(吃本金,非 σ 規則)照常。"""
     r = recommend_policy([
         _fund(500_000, is_core=True,
               sigma_rank=-2.5, alert_level="red"),
         _fund(500_000, is_core=False,
               sigma_rank=-2.2, alert_level="red"),
     ], target_core_pct=50.0)  # 偏差 0%，不觸發 P1/P2
-    assert r["code"] == POLICY_RISK_HEAVY_DROP
+    assert r["code"] == POLICY_RISK_HEAVY_RED
 
 
 def test_recommend_policy_return_shape():

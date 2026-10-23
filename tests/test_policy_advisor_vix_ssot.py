@@ -78,26 +78,19 @@ def test_advisor_imports_vix_ssot():
 
 
 def test_vix_rule_compares_against_a_name_not_a_literal():
-    """規則 1 的 `vix >= ?` 右手邊必須是具名常數，不能是數字字面值。
+    """~~規則 1 的 `vix >= ?` 右手邊必須是具名常數~~
 
-    只掃 `advise_fund` 內、左手邊是 vix 參數的比較 —— 其餘 σ 位階切點不在本檔守備範圍。
+    2026-10-23 客戶裁示 BL-0428 DG-3 C:規則 1(σ 深跌 + VIX 恐慌 → 分批加碼)已退休,
+    `advise_fund` 內**不得再有任何 vix 比較式**(防 σ×VIX 加碼規則被悄悄復活);
+    若日後有人又寫了比較式,右手邊仍必須是具名常數(原守衛的用意保留)。
     """
     fn = _func(_tree(_ADVISOR), "advise_fund")
-    checked = 0
     for node in ast.walk(fn):
         if not isinstance(node, ast.Compare):
             continue
         if not (isinstance(node.left, ast.Name) and node.left.id == "vix"):
             continue
-        for op, comparator in zip(node.ops, node.comparators):
-            if not isinstance(op, (ast.GtE, ast.Gt)):
-                continue
-            checked += 1
-            assert isinstance(comparator, ast.Name), (
-                "VIX 恐慌門檻不得為 inline magic number，應比對具名常數"
-            )
-            assert comparator.id == _ADVISOR_CONST
-    assert checked >= 1, "沒掃到任何 VIX 門檻比較式 —— 規則被改名或刪掉了？"
+        raise AssertionError("advise_fund 出現 vix 比較式 —— DG-3 C 已退休 VIX 加碼規則")
 
 
 # ── 2. 值：具名常數 == SSOT ──────────────────────────────────────────
@@ -111,20 +104,16 @@ def _sigma_deep() -> dict:
     return {"sigma_rank": -2.5}
 
 
-def test_rule_fires_at_threshold():
-    r = advise_fund(_sigma_deep(), {"alert_level": "green"},
-                    vix=VIX_PANIC_THRESHOLD)
-    assert r["code"] == DEEP_DROP_VIX_BUY
-
-
-def test_rule_does_not_fire_just_below_threshold():
-    r = advise_fund(_sigma_deep(), {"alert_level": "green"},
-                    vix=VIX_PANIC_THRESHOLD - 0.01)
-    assert r["code"] != DEEP_DROP_VIX_BUY
+def test_rule_no_longer_fires_at_threshold_dg3():
+    """~~門檻上觸發 DEEP_DROP_VIX_BUY~~ → 2026-10-23 DG-3 C:VIX 恐慌再高也不產生加碼建議。"""
+    for _v in (VIX_PANIC_THRESHOLD - 0.01, VIX_PANIC_THRESHOLD, VIX_PANIC_THRESHOLD + 10):
+        r = advise_fund(_sigma_deep(), {"alert_level": "green"}, vix=_v)
+        assert r["code"] != DEEP_DROP_VIX_BUY
+        assert "加碼" not in r["text"] and "跌了就買" not in r["text"]
 
 
 def test_rule_still_needs_deep_sigma():
-    """VIX 再高，σ 沒到深跌區也不該叫人加碼（門檻換寫法不得放寬其他條件）。"""
+    """VIX 再高，σ 沒到深跌區也不該叫人加碼（DG-3 C 後任何 σ 都不給加碼）。"""
     r = advise_fund({"sigma_rank": -1.0}, {"alert_level": "green"},
                     vix=VIX_PANIC_THRESHOLD + 10)
     assert r["code"] != DEEP_DROP_VIX_BUY

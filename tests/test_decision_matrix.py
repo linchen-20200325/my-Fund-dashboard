@@ -88,11 +88,12 @@ def test_v19_15_extreme_bear_core_reduce_satellite_exit():
 # 個股訊號覆寫
 # ════════════════════════════════════════════════
 def test_v19_15_deep_oversold_in_bull_promotes_to_add():
-    """σ ≤ -2 + 多頭 → 即使核心也升級為加碼（跌了就買）"""
+    """~~σ ≤ -2 + 多頭 → 即使核心也升級為加碼（跌了就買）~~
+    2026-10-23 DG-3 C:σ 覆寫退休 → 維持 verdict 預設(核心樂觀 = 持有),reason 不提 σ 深跌。"""
     funds = [_mk_fund("C1", is_core=True, sigma_rank=-2.5)]
     out = verdict_to_actions("樂觀", 7.0, funds)
-    assert out[0]["action"] == ACTION_ADD
-    assert "深跌" in out[0]["reason"]
+    assert out[0]["action"] == ACTION_HOLD
+    assert "深跌" not in out[0]["reason"] and "σ" not in out[0]["reason"]
 
 
 def test_v19_15_deep_oversold_in_extreme_bear_stays_observation():
@@ -100,15 +101,16 @@ def test_v19_15_deep_oversold_in_extreme_bear_stays_observation():
     funds = [_mk_fund("S1", is_core=False, sigma_rank=-3.0)]
     out = verdict_to_actions("極度悲觀", -12.0, funds)
     assert out[0]["action"] == ACTION_EXIT
-    assert "觀望勿接刀" in out[0]["reason"]
+    # 2026-10-23 DG-3 C:~~reason 含「觀望勿接刀」~~ → σ 不再產生 tag
+    assert "觀望勿接刀" not in out[0]["reason"]
 
 
 def test_v19_15_overheated_in_bull_satellite_take_profit():
-    """σ > +1 + 樂觀 + 衛星 → 分批停利 (REDUCE)"""
+    """~~σ > +1 + 樂觀 + 衛星 → 分批停利 (REDUCE)~~ → 2026-10-23 DG-3 C 退休:維持預設持有。"""
     funds = [_mk_fund("S1", is_core=False, sigma_rank=1.5)]
     out = verdict_to_actions("樂觀", 7.0, funds)
-    assert out[0]["action"] == ACTION_REDUCE
-    assert "過熱" in out[0]["reason"]
+    assert out[0]["action"] == ACTION_HOLD
+    assert "過熱" not in out[0]["reason"]
 
 
 def test_v19_15_dividend_eating_principal_bumps_one_tier_conservative():
@@ -128,9 +130,10 @@ def test_v19_15_dividend_red_blocks_add_in_extreme_bull():
 
 
 def test_v19_15_deep_oversold_in_neutral_promotes_hold_to_add():
+    # 2026-10-23 DG-3 C:~~中性 + σ ≤ -2 → 加碼~~ → σ 不再覆寫,維持持有
     funds = [_mk_fund("S1", is_core=False, sigma_rank=-2.5)]
     out = verdict_to_actions("中性", 0.0, funds)
-    assert out[0]["action"] == ACTION_ADD
+    assert out[0]["action"] == ACTION_HOLD
 
 
 # ════════════════════════════════════════════════
@@ -287,10 +290,10 @@ def test_policy_tier_beats_is_core():
 
 
 def test_unset_skips_satellite_only_branches():
-    # 樂觀 + σ>1：衛星 → 停利 REDUCE；未設定不吃
+    # ~~樂觀 + σ>1：衛星 → 停利 REDUCE；未設定不吃~~ → 2026-10-23 DG-3 C:σ 覆寫退休,兩者皆持有
     sig = {"sigma_rank": 1.5}
     out = verdict_to_actions("樂觀", 0.0, [{**_SAT, "sigma_info": sig}, {**_UNSET, "sigma_info": sig}])
-    assert out[0]["action"] == ACTION_REDUCE and out[1]["action"] == ACTION_HOLD
+    assert out[0]["action"] == ACTION_HOLD and out[1]["action"] == ACTION_HOLD
     # div red：衛星 HOLD→REDUCE；未設定仍 HOLD
     div = {"alert_level": "red"}
     out = verdict_to_actions("中性", 0.0, [{**_SAT, "dividend_info": div}, {**_UNSET, "dividend_info": div}])
@@ -350,9 +353,11 @@ def test_unset_ignores_dividend_red():
 
 
 def test_core_satellite_sigma_behaviour_unchanged():
-    sig = {"sigma_rank": -2.5}
-    assert verdict_to_actions("中性", 0.0, [{**_CORE, "sigma_info": sig}])[0]["action"] == ACTION_ADD
-    assert verdict_to_actions("樂觀", 0.0, [{**_SAT, "sigma_info": sig}])[0]["action"] == ACTION_ADD
-    hot = {"sigma_rank": 1.5}
-    assert verdict_to_actions("悲觀", 0.0, [{**_CORE, "sigma_info": hot}])[0]["action"] == ACTION_EXIT
-    assert verdict_to_actions("極度悲觀", 0.0, [{**_SAT, "sigma_info": hot}])[0]["action"] == ACTION_EXIT
+    """2026-10-23 DG-3 C:~~σ 深跌 → 加碼 / σ 過熱 → 全撤~~ → σ 不再影響動作:
+    帶任何 σ 的輸出動作與「不帶 σ」的 verdict 預設逐一相同。"""
+    for _lv in VERDICT_LEVELS:
+        for _base in (_CORE, _SAT):
+            _plain = verdict_to_actions(_lv, 0.0, [dict(_base)])[0]["action"]
+            for _r in (-3.0, -2.5, -2.0, -1.6, -1.0, -0.5, 0.0, 1.5):
+                _got = verdict_to_actions(_lv, 0.0, [{**_base, "sigma_info": {"sigma_rank": _r}}])[0]
+                assert _got["action"] == _plain, (_lv, _base, _r)

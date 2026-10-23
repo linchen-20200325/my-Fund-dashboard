@@ -83,11 +83,13 @@ def _render_oversold_badges(funds: list) -> None:
         return
 
     _oversold = []
+    _n_unknown = 0          # BL-0428 DG-1 A:⬜(位置無法判定)檔數,另列、不當成「不在遠離高點區」
     for _f in funds:
         _code = _f.get("code", "?")
         _name = (_f.get("name") or _code)[:24]
         _r = compute_fund_position(_f)
         if _r.get("status") != "ok":
+            _n_unknown += 1
             continue
         if _r.get("position") == "far_from_high":
             _oversold.append({
@@ -98,13 +100,23 @@ def _render_oversold_badges(funds: list) -> None:
                 "hwm": _r.get("hwm_tr"),
             })
 
+    # BL-0428 DG-1 A(2026-10-23):有 ⬜ 時不得用綠色成功框說「目前無基金位於遠離高點區」——
+    # ⬜ 的基金不是「不在遠離高點區」,是「不知道」。改灰色說明 + 另列 ⬜ 檔數(沿用既有用字)。
+    _unk_note = (f"⬜ 另有 {_n_unknown} 檔位置無法判定(資料不足／無法判定),未列入本清單。"
+                 if _n_unknown else "")
     if not _oversold:
-        st.success("目前無基金位於遠離高點區")
+        if _n_unknown >= len(funds):
+            st.caption(f"⬜ 全部 {_n_unknown} 檔位置無法判定(資料不足／無法判定),"
+                       "無法列出遠離高點清單。")
+        elif _n_unknown:
+            st.caption("可判定的基金中,目前無基金位於遠離高點區。" + _unk_note)
+        else:
+            st.success("目前無基金位於遠離高點區")
         return
 
     st.caption(f"偵測到 **{len(_oversold)} 檔基金** 位於遠離高點區"
                f"(σ rank ≤ −1.5,以配息還原淨值計算;切點 −0.5σ／−1.5σ 為研究候選、未校準,"
-               f"非正式投資門檻)")
+               f"非正式投資門檻)" + (f"。{_unk_note}" if _unk_note else ""))
     for _o in _oversold:
         st.markdown(
             f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"

@@ -759,6 +759,19 @@
 | supersedes／superseded by | supersedes：無（重申；與既有出處的差異見理由欄，未裁決）。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。差異清單為**文件組判讀**（agent 推論），只作參考。本列由文件組單組寫成，未經第二組驗證 |
 
+### DEC-2026-10-23-11｜客戶裁示 BL-0428 Decision Gate：DG-1 A／DG-2 A／DG-3 C／DG-4 C／DG-5 A
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | 客戶就 `docs/v2/64_v2_ssot_convergence.md` §9.7 五題裁示（皆＝總管推薦方案）：**DG-1 A** —— 行動類 consumer 遇基金位置 ⬜ 一律沿用既有「資料不足／無法判定」措辭，不給綠燈、不給動作，另列 ⬜ 檔數；不新增狀態。**DG-2 A** —— 配置回測權重與回測數字不變，只在清單與權重表把 ⬜ 與「觀望」分開列示並統計檔數。**DG-3 C** —— 退休由 HWM σ 直接產生的行動文字（`recommend_policy`、`advise_fund`、`decision_matrix` 的 σ 規則），位置只作中性證據顯示；不把 −0.5／−1.5 升格為行動門檻；行動規則待日後校準另案。**DG-4 C** —— `calc_metrics` 買賣點、Tab2 布林卡、`ladder235` 本批不處理，併入 BL-0438 另案裁示。**DG-5 A** —— 不新增低波動數值門檻，維持只用 σ≈0 與貨幣市場判 ⬜ |
+| 理由／背景 | （文件組背景說明，不是客戶原話）BL-0428 唯讀盤點（64 §9）發現 `recommend_policy` 在全 ⬜ 時亮綠燈、`decision_matrix` ⬜ 與 σ＝−1.0 輸出逐字相同、LINE `--notify-empty` 把 ⬜ 說成續抱等 Missing→中性落點，以及 HWM σ 寫死門檻（−2.0／−1.0／±0.5／+1.0）直接產生加碼／停利文字；DG-3 C 對齊 `DEC-2026-10-23-02` 2C「不得再由 HWM evidence 產生可買／可賣」。**範圍註記（總管轉達的範圍，非客戶逐字）**：DG-3 本批只涵蓋上述三個模組；輪動配對、換股顧問、淨值×匯率、LINE 週報的 σ 驅動換股規則本身**不在 DG-3 範圍**，只套 DG-1 的 Missing 修正，規則照舊待裁（BL-0428 第 (4) 題）；64 §9.8 的四捨五入字串重新分類屬已確認 bug、單一安全修法，隨本批一併修 |
+| evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。落地：本批 commit（main `027078e2` 之上，尚未推送／開 PR）—— `services/policy_advisor_service.py`、`services/decision_matrix.py`、`services/switch_notify.py`、`services/allocation_backtest.py`、`services/rotation.py`、`services/switch_advisor.py`、`services/fund_grp_health/{risk,unified}.py`、`scripts/weekly_switch_notify.py`、`ui/helpers/fund_grp_health/{risk,ai,rotation,unified,backtest_section}.py`、`ui/tab3_portfolio.py`；守衛 `tests/test_bl0428_dg_rulings.py` |
+| 影響範圍 | 舊站 Tab④ 保單卡「🎯」「💡」、群組健診遠離高點清單／AI 快照／輪動配對空態、配置回測清單與權重表、LINE 週報；決策矩陣（推論 DEAD，見 64 §9.5）。不動 `ui_v2/`、不改版面、不新增元件；不新增門檻、公式、資料源 |
+| 是否可逆 | 可逆（客戶可另行裁示；回退走正常 PR） |
+| supersedes／superseded by | supersedes：無（`DEC-2026-10-23-08`「三處 legacy 先合併、交 BL-0428」的後續裁示，不是取代）。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管轉達；實作組未見客戶對話本身）。範圍註記為總管派工單所載範圍。本列由實作組單組寫成，未經第二組驗證 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。

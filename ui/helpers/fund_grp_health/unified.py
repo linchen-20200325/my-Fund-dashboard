@@ -152,7 +152,7 @@ def compute_nav_fx_column(row: dict, fx_map: dict) -> dict:
     """
     from services.currency import normalize_ccy
     from services.nav_fx_switch import nav_fx_signal
-    from services.rotation import classify_base
+    from services.rotation import classify_base, row_sigma_rank
     from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
 
     _ccy = normalize_ccy(row.get("ccy"), default="")
@@ -164,8 +164,19 @@ def compute_nav_fx_column(row: dict, fx_map: dict) -> dict:
     _lbl = {"strong_twd": "台幣強", "neutral": "中性", "weak_twd": "台幣弱"}[_fx["regime"]]
     if not _fx.get("robust"):
         _lbl += "*"                                    # 樣本較短 → 參考(表註明)
-    _nav = classify_base(row.get("σ rank"), ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)
+    # BL-0428 §9.8(2026-10-23):row 帶 `sigma_rank`(SSOT 原值)時讀它;~~row.get("σ rank")~~
+    # (兩位小數顯示字串)只在沒有數值可讀時才退回(見 services.rotation.row_sigma_rank)。
+    _nav = classify_base(row_sigma_rank(row), ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)
     return {"匯率位階": _lbl, "淨值×匯率": nav_fx_signal(_nav, _fx["regime"])["signal"]}
+
+
+def _with_sigma_num(rec: dict, extra_by_code: dict) -> dict:
+    """計算用 row 補上 SSOT σ 原始數值(`sigma_rank`);extra 沒有該檔 / 沒有私有鍵 → 原樣回傳。"""
+    from services.fund_grp_health.unified import SIGMA_RANK_KEY
+    _slot = (extra_by_code or {}).get(str(rec.get("code"))) or {}
+    if SIGMA_RANK_KEY not in _slot:
+        return rec
+    return {**rec, "sigma_rank": _slot[SIGMA_RANK_KEY]}
 
 
 def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
@@ -231,7 +242,9 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
         # v19.426 — 淨值×匯率二維買賣切換(fetch-once USDTWD;台幣計價 → ➖)
         from services.fx_regime_service import fx_regime_by_ccy
         _fxm = fx_regime_by_ccy()
-        _nf = [compute_nav_fx_column(_rec, _fxm) for _rec in _recs]
+        # BL-0428 §9.8:把 SSOT σ 原始數值(extra 私有鍵,不是表格欄)帶進計算用 row,
+        # 「淨值×匯率」不再解析兩位小數的「σ rank」字串。extra 沒供(Tab3)→ 不帶,行為不變。
+        _nf = [compute_nav_fx_column(_with_sigma_num(_rec, _src["extra"]), _fxm) for _rec in _recs]
         df["匯率位階"] = [x["匯率位階"] for x in _nf]
         df["淨值×匯率"] = [x["淨值×匯率"] for x in _nf]
     return df
@@ -400,7 +413,8 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
         _row.update(compute_regime_fit_column(_row, phase))
         # v19.426 — 淨值×匯率二維切換(module cache 去重,400 檔只抓一次 USDTWD)
         from services.fx_regime_service import fx_regime_by_ccy
-        _row.update(compute_nav_fx_column(_row, fx_regime_by_ccy()))
+        # BL-0428 §9.8:計算讀 SSOT σ 原始數值(extra 私有鍵);輸出欄與欄序不變
+        _row.update(compute_nav_fx_column(_with_sigma_num(_row, {code: _extra}), fx_regime_by_ccy()))
     except Exception as _e_post:  # noqa: BLE001
         _degraded.append("④ 策略燈號/景氣適配/匯率位階")
         print(f"[batch] {code} post-merge 欄組失敗: "

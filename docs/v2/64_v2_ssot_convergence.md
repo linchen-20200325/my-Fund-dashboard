@@ -208,6 +208,8 @@ Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation
   - C：交研究另案。
   - **總管推薦 A**：客戶「不新增任何 threshold」原則；無校準資料。
 
+> ✅ **2026-10-23 狀態指標（狀態更新，不是漏刪；上列題目與推薦一字未改）**：客戶裁示 **DG-1 A／DG-2 A／DG-3 C／DG-4 C／DG-5 A**（＝五題皆總管推薦），見 `docs/DECISIONS.md` `DEC-2026-10-23-11`；實作落地與未修殘留（批次大表 df 路徑仍解析 σ 字串）見 `docs/BACKLOG.md` BL-0428 列尾、`docs/HANDOFF.md` 第 2 節第九次框；守衛 `tests/test_bl0428_dg_rulings.py`。本節 §9.2～§9.6 為裁示前 `365cfb1d` 的盤點快照，不隨實作改寫。
+
 > 本批 DG-1～DG-5 未單獨出題、仍屬 BL-0428 的項目（照舊待裁）：R6／R7／R8 換股與輪動規則本身、R9／R10 的「進場點／高基期／低基期」用字與色、R16 輪動滑桿（BL-0428 第 (4) 題）；BL-0428 第 (1)～(3)、(6) 題。
 
 ### §9.8 內部可自決、不需裁示（裁示後隨實作處理）
