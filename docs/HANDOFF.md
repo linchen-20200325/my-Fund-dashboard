@@ -34,7 +34,15 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第二次）現況（以本框為準；下方 2026-10-23 第一次框、2026-10-22 三個框、表格與第 3 節的逐日同步行是歷史快照）**（Save／Handoff Gate 交接存檔批；查詢方式：本組於 docs 工作樹 `git fetch` 後 `git log origin/main`、`git log origin/pr1b-ui-ssot-audited`、`git log origin/pr2-333-ssot-wip`、`git diff --name-only 4134e6d e504ba1` 實查；CI 三條 conclusion 與「Open PR：無」為總管 2026-10-23 05:00 UTC 以 GitHub 實查、本組轉述；狀態更新，不是漏刪：第一次框整段保留於下方）
+> **⭐ 2026-10-23（第三次）現況（以本框為準；下方 2026-10-23 第二次框、第一次框、2026-10-22 三個框、表格與第 3 節的逐日同步行是歷史快照）**（BL-0424 結案批；main 與 merge commit 為本組於 docs 工作樹以 `git log origin/main` 確認；CI、review threads、合併前 delta 驗證為總管 2026-10-23 實查、本組轉述；狀態更新，不是漏刪：第二次框整段保留於下方）
+> - **main**：`6024236`（全長 `60242363`…，PR #1025 的 merge commit；PR head `e504ba1`＝稽核 SHA）。CI：`e504ba1` 的 Fast checks、Schema gate、Slow tests 三條 check-run `conclusion` 皆 `success`；review threads 0。**Open PR：無。**
+> - **1B 已全部進 main**：L2 ＋ services consumer（PR #1023，`4134e6d`）＋ UI consumer（PR #1025，`6024236`）。合併前 delta 驗證（總管）：main 自 `4134e6d` 起只動 4 個 docs 檔、與 PR1b 檔案 0 重疊、merge-tree 乾淨；`ui/` 內 0 處 import 平行計算函式；`moneydj_div_yield` 只剩 2 處對帳白名單；舊欄名只在測試反向對照；services 唯一變更為 `services/fund_row.py` 兩個 key 改名。`docs/BACKLOG.md` BL-0424 已 closed。
+> - **分支**：`origin/pr1b-ui-ssot-audited` 已合併（保留不刪）；`origin/pr2-333-ssot-wip`（`683d093`）狀態不變：**未驗證、未稽核**，base 早於本 main。
+> - **下一個唯一工作點**：**BL-0425 PR2（裁示 3A，3-3-3 唯一 SSOT）續做** —— 從 `pr2-333-ssot-wip` 先把 main（`6024236`）合入 → 完整重跑全套 fast lane ＋ 5 個檔案 hook → 1 組真正獨立稽核 → 開 PR。PR2 已做／未做清單見下方第二次框與 BL-0425。**仍待判定**：Tab2 判定卡移除「③ 晨星／同儕」整列是否屬版面變更（屬則先出草稿請客戶裁示，未裁示前不得合併該部分）。之後才接 PR3（2C，BL-0426）。
+> - **建議模型能力與 Minimum Sufficient Effort（總管建議，`PROJECT_RULES.md` 5.1）**：PR2 ＝ 高能力模型、High（核心金融計算）。
+> - **Stop Gate、新版 UI 邊界、本機環境事實、禁止事項**：照第二次框，未變。
+
+> **⭐ ~~2026-10-23（第二次）現況（以本框為準；下方 2026-10-23 第一次框、2026-10-22 三個框、表格與第 3 節的逐日同步行是歷史快照）~~ → 2026-10-23（第二次）現況（已被上方 2026-10-23 第三次框取代；歷史快照；狀態更新，不是漏刪）**（Save／Handoff Gate 交接存檔批；查詢方式：本組於 docs 工作樹 `git fetch` 後 `git log origin/main`、`git log origin/pr1b-ui-ssot-audited`、`git log origin/pr2-333-ssot-wip`、`git diff --name-only 4134e6d e504ba1` 實查；CI 三條 conclusion 與「Open PR：無」為總管 2026-10-23 05:00 UTC 以 GitHub 實查、本組轉述；狀態更新，不是漏刪：第一次框整段保留於下方）
 > - **main**：`4134e6d`（全長 `4134e6d8`…，PR #1023 的 merge commit；含 `bb9021b` PR1a L2 SSOT ＋ `5bc0e76` 稽核回修）。CI：`5bc0e76` 的 Schema gate、Fast checks、Slow tests（informational）三條 check-run 皆 `success`（總管實查；逐條看 `conclusion`）。**Open／Draft PR：無**（#1023 已 merge）。
 > - **保留分支（兩支，皆未合併）**：
 >   - `origin/pr1b-ui-ssot-audited` ＝ `e504ba1`（＝ main `4134e6d` ＋ 3 個 PR1b commit `6798c65`／`1e2a0fb`／`e504ba1`，cherry-pick 0 衝突）：**UI consumer 改讀 1B SSOT**。狀態：**1 組獨立稽核三輪通過**（第一輪必修 M1／M2 ＋ 第二輪必修 N1 皆已修；突變轉紅；邊界與識別碼乾淨）；實作組本機全套只剩基線 5 條；**總管於主工作樹對 `e504ba1` 獨立重跑 fast lane（2026-10-23 04:44→04:59 UTC）：`5 failed, 15828 passed, 40 skipped, 864 deselected`，5 條＝基線 ui_v2 digest；5 個檔案 hook 全 Passed**。**尚未開 PR、未跑 CI、未合併 —— 不得寫成已完成／已合併。** 只差開 PR → CI → 合併前核對 → merge，不必重寫、不必重稽核（除非 CI 出現非基線的真錯誤）。
@@ -42,7 +50,7 @@
 > - **本輪已完成且已進 main（PR #1023，`4134e6d`；裁示 1B，`docs/DECISIONS.md` `DEC-2026-10-23-02`）**：1Y 含息報酬基金層唯一 SSOT `services/fund_total_return.py::resolve_1y_total_return`（350 天窗口、配息閘門、`window_unknown`；不退純淨值、不外推、不讀 `perf["1Y"]` 當值）；配息率 SSOT `services/fund_service.py::calc_metrics` 的 `annual_div_rate` ＝ 近 12 個月實際配息合計 ÷ 最新淨值，`services/health/dividend.py::resolve_dividend_rate_12m`，wb05 只對帳；吃本金唯一判定 `check_eating_principal_1y_mk`（灰 dict `eating_principal=None`）；services 層已收斂的 consumer：`portfolio_service` Alpha／rank、`ai_service`、`health/report`、`fund_invest_calc`、`health/replacement`（灰 dict 不算訊號）、`fund_grp_health/quality` 配息因子、`health/dividend_calc` 持有期燈號退休；`finalize_fund_metrics` 不再注入 `perf["1Y"]`。
 > - **已完成但未進 main（PR1b，`e504ba1`）**：逐檔清單＝`git diff --name-only 4134e6d e504ba1`（本組實查 28 檔：`services/fund_row.py`；`ui/components/mk_dashboard.py`、`ui/helpers/d_mode.py`、`ui/helpers/fund/checkup.py`、`ui/helpers/fund_grp_health/{ai,columns,dividend,investment,unified}.py`、`ui/helpers/portfolio/health.py`、`ui/tab1_macro.py`、`ui/tab1_macro_ai.py`、`ui/tab1_macro_inflection.py`、`ui/tab1_macro_longterm.py`、`ui/tab2_single_fund.py`、`ui/tab3_portfolio.py`、`ui/tab3_t7_ledger.py`、`ui/tab5_data_guard.py`、`ui/tab_fund_grp_health.py`、`ui/views/page_03_research.py`；tests 9 檔含新守衛 `tests/test_ui_reads_eating_ssot.py`、`tests/test_tab1_eating_lights_ssot.py`）。內容：UI 內 `dividend_safety`／`classify_eating_principal` 0 import、`moneydj_div_yield` 只剩對帳白名單 2 處、欄名改「持有期配息率% (相對買入成本・年化)」等（實作組與稽核組回報，本組未重跑 grep）。
 > - **進行中**：PR2 WIP（3A，見上）。**未開始**：PR3（HWM σ 基金位置，裁示 2C；只有總管派工單規格，摘要見 `docs/BACKLOG.md` BL-0426）。
-> - **下一個唯一工作點**：(1) 對 `pr1b-ui-ssot-audited`（`e504ba1`）開 PR → CI 三條 `success` → 合併前四項核對（head ＝ 稽核 SHA `e504ba1`／三條 `conclusion`／識別碼掃描／檔案邊界）→ merge；(2) 之後才接 PR2（從 `pr2-333-ssot-wip` 續做，完整重驗＋獨立稽核）；(3) 再接 PR3（2C）；(4) docs 同步。**不能重做**：PR1a 已合併內容；PR1b 三輪稽核結論（只需 CI ＋ 合併核對）。
+> - ~~**下一個唯一工作點**~~ **（歷史；已被第三次框取代，(1) 已於 #1025 完成；狀態更新，不是漏刪）**：(1) 對 `pr1b-ui-ssot-audited`（`e504ba1`）開 PR → CI 三條 `success` → 合併前四項核對（head ＝ 稽核 SHA `e504ba1`／三條 `conclusion`／識別碼掃描／檔案邊界）→ merge；(2) 之後才接 PR2（從 `pr2-333-ssot-wip` 續做，完整重驗＋獨立稽核）；(3) 再接 PR3（2C）；(4) docs 同步。**不能重做**：PR1a 已合併內容；PR1b 三輪稽核結論（只需 CI ＋ 合併核對）。
 > - **仍需 Decision Gate（本輪已發現、客戶未裁示；登記於 `docs/BACKLOG.md` BL-0427／BL-0428）**：配息部分落在非淨值日的還原低估（偏假 🔴，公式層）；adr 窗（anchor−365 日曆日）與還原窗（最後 252 筆）不同窗；日曆日頻序列 `window_days≈251` 恆 unavailable（窗口定義）；`_get_dy_t7` 無值回 0.0 的 6 處加總契約；page_02 將 SSOT None 讀成「資料不足」；`ui/helpers/portfolio/health.py` 非配息基金計入「含息 ≥ 配息」；`rotation`／`switch_advisor`／`policy_advisor_service` 仍以 `sigma_rank` 產生買賣語意；「σ 過小」無數值下限；`fund_inception_years` 與 `derive_years_for_333` 兩套成立年數。
 > - **Stop Gate（客戶 2026-10-23 原文九項，經總管轉達）**：需要新金融公式；新資料來源；新增／改變投資動作語意；schema／Sheet 變更；新版 UI layout 決策；HWM 配息還原無法可靠用既有資料完成；既有裁示互相衝突；不可逆大規模刪除；CI 真錯誤且無既定修復路徑 —— 任一命中即停下請客戶裁示（附總管推薦方案）。
 > - **新版 UI 邊界（客戶原話要點，`DEC-2026-10-23-03`）**：目前仍是底層計算／SSOT 收斂階段；新版 UI／UX 尚未正式開始設計；路徑＝底層邏輯收斂 → UI/UX Blueprint → 客戶確認 → 新版實作；不是把舊 UI 原封不動搬到 `ui_v2`；舊 UI 只作功能盤點、已驗證計算邏輯參考、可重用能力來源；畫面、layout、資訊架構與操作流程仍需重新設計。
@@ -135,6 +143,7 @@
    - **2026-10-22 同步（交接防遺失保存批）**（狀態更新，不是漏刪；上方各行保留不改）：本批落盤 `docs/v2/63`（Research Baseline、NOT APPROVED SPEC）、BL-0415～BL-0419、`DEC-2026-10-22-05`。**下一步**：先執行 BL-0415「客戶提供市場趨勢參考資料 × Repo 現有趨勢引擎」唯讀對齊稽核（不改 code、不選用引擎），完成後再回到 G-A～G-S Decision Gate；G-A／G-B／G-C 在此之前暫不得裁示；G1 重驗（BL-0411／BL-0413／BL-0414）照舊並行等客戶裁示。詳見第 2 節第三次 ⭐ 框。
    - **2026-10-23 同步（SSOT 收斂方向批）**（狀態更新，不是漏刪；上方各行保留不改）：BL-0415 唯讀稽核已完成；落盤 `docs/v2/64`、BL-0420～BL-0423、`DEC-2026-10-23-01`。**下一步**：64 §7（逐項提出 SSOT 規格裁示請求，附總管推薦方案；裁示前不進 production 實作）。詳見第 2 節 2026-10-23 ⭐ 框。
    - **2026-10-23 同步（裁示 1B／2C／3A 實作批 Save／Handoff Gate）**（狀態更新，不是漏刪；上一行保留不改）：客戶 2026-10-23 正式裁示 1B／2C／3A（`docs/DECISIONS.md` `DEC-2026-10-23-02`），結束 64 §7「裁示前不進 production 實作」的等待；PR1a（1B 的 L2 ＋ services consumer）已經 PR #1023 合併進 main `4134e6d`；PR1b（UI consumer）在 `origin/pr1b-ui-ssot-audited`（`e504ba1`）稽核三輪通過、未開 PR；PR2（3A）WIP 在 `origin/pr2-333-ssot-wip`（`683d093`）未驗證未稽核；PR3（2C）未開始；客戶收尾指令：本批只做交接存檔，完成後停止（`DEC-2026-10-23-03`）；治理待辦「Project AI 工作規範補強」登記於 `docs/BACKLOG.md` BL-0434（只登記，不展開）。**下一步：PR1b 開 PR → CI → 合併核對 → merge；之後 PR2 續做（重驗＋獨立稽核）→ PR3 → docs 同步**；細節以第 2 節 2026-10-23 第二次框為準。
+   - **2026-10-23 同步（BL-0424 結案）**（狀態更新，不是漏刪；上一行保留不改）：PR1b 已以 PR #1025 合併，main `6024236`，CI 三條 `success`（總管實查）；1B 全部進 main；BL-0424 closed。**下一步：BL-0425 PR2 續做（先合入 main → 全套 fast lane ＋ 5 hook → 獨立稽核 → 開 PR；Tab2「③ 晨星／同儕」整列移除是否屬版面變更待判定）→ 之後 PR3（BL-0426）**；細節以第 2 節 2026-10-23 第三次框為準。
 3. 有時間窗：FX 觀測日探測重跑窗口 2026-11-02～約 11-24（上限約 11-26），錯過要等明年 3 月；重跑方式與按鈕分支見 `docs/BACKLOG.md` BL-0217（按鈕分支窗口結束前不得刪，見 BL-0265）。
 4. 本項以外**不構成動工授權**（`CLAUDE.md` §-1）。
 
@@ -175,6 +184,7 @@
 - 遠端分支數：~~19（量測時間 2026-10-16 13:18 UTC；2026-10-16 更新，main `ab30239`，`git ls-remote --heads origin | wc -l`，本批 PR 開立之前；本批 PR head 推送後與合併自動刪除後都會變，引用前重查）~~ → ~~19（量測時間 2026-10-16 14:38 UTC，main `cbf24b5`，`git ls-remote --heads origin | wc -l`；#980 合併之後、本交接同步分支推送之前；推送後會變，引用前重查）~~ → ~~20（量測時間 2026-10-16 17:23 UTC，main `37ae00f`；#982 合併之後、本交接同步分支推送之前）~~ → ~~20（量測時間 2026-10-17 00:37 UTC，main `c395148`，`git ls-remote --heads origin | wc -l`；#984 合併之後、本交接同步分支推送之前；推送後會變，引用前重查；狀態更新，不是漏刪）~~ → ~~21（量測時間 2026-10-17 02:21 UTC，main `57f03c9`，同一指令；本批分支推送之前；會變，引用前重查；狀態更新，不是漏刪）~~ → ~~20（量測時間 2026-10-17 02:47 UTC，main `a3b7e79`，同一指令；#986 合併之後、本批分支推送之前；會變，引用前重查；狀態更新，不是漏刪）~~ → ~~21（量測時間 2026-10-17 03:10 UTC，main `a3b7e79`，同一指令；本批分支已推送為 #987；會變，引用前重查；狀態更新，不是漏刪）~~ → 20（量測時間 2026-10-17 04:22 UTC，main `10db810`，同一指令；#987 合併、head 自動刪除之後，本批分支推送之前；會變，引用前重查；狀態更新，不是漏刪）。
 
 - **2026-10-23 保留分支（本批未刪、未建 tag）**：`origin/pr1b-ui-ssot-audited`（`e504ba1`，PR1b 待開 PR）與 `origin/pr2-333-ssot-wip`（`683d093`，PR2 WIP）是現行工作分支，合併前不得刪；兩支狀態見第 2 節 2026-10-23 第二次框。本批 docs 分支 `docs-handoff-wip` 由總管開 PR。遠端分支數本批未重查。
+  （→ 2026-10-23 BL-0424 結案批補：`origin/pr1b-ui-ssot-audited` 已經 PR #1025 合併，保留不刪；`origin/pr2-333-ssot-wip` 仍是 `683d093`、未合併。狀態更新，不是漏刪。）
 
 ## 5. 新對話 takeover
 
@@ -183,7 +193,7 @@
 1. `git fetch origin`，以 `git log -1 --format='%H %P' origin/main` 確認 main SHA，與本檔第 2 節比對；不一致 → 以 GitHub 為準，先更新本檔再動作。
 2. 查 open PR 與 main 最新 push 的三條 CI job（Schema gate、Fast checks、Slow tests）逐條 `conclusion`。
 3. 依第 1 節順序讀文件；待辦查 `docs/BACKLOG.md`，裁示查 `docs/DECISIONS.md`，舊脈絡查交接本（凍結，只讀）。（→ 2026-10-22 補：本階段另讀 `docs/v2/62_old_ui_gap_matrix.md` 與 `docs/v2/63_market_trend_research_baseline.md`，63 排在 62 之後；兩者皆為登記／研究基線，不是 approved spec。）（→ 2026-10-23 補：再讀 `docs/v2/64_v2_ssot_convergence.md`，排在 63 之後；64 是客戶確認方向，不是實作規格。）
-4. 確認 working tree 乾淨、沒有遺留的未提交內容或殘留 worktree。（→ 2026-10-23 補：接手 PR1b／PR2 時先 `git fetch`，確認 `origin/pr1b-ui-ssot-audited` 仍是 `e504ba1`、`origin/pr2-333-ssot-wip` 仍是 `683d093`；跑測試用 venv 直跑 pytest，不要信 `pytest-smoke` hook 的紅燈；5 條 ui_v2 digest 在非 3.11 直譯器上是基線，見第 2 節 2026-10-23 第二次框「本機環境事實」。）
+4. 確認 working tree 乾淨、沒有遺留的未提交內容或殘留 worktree。（→ 2026-10-23 補：接手 PR1b／PR2 時先 `git fetch`，確認 ~~`origin/pr1b-ui-ssot-audited` 仍是 `e504ba1`~~（已於 #1025 合併，不必再確認）、`origin/pr2-333-ssot-wip` 仍是 `683d093`；跑測試用 venv 直跑 pytest，不要信 `pytest-smoke` hook 的紅燈；5 條 ui_v2 digest 在非 3.11 直譯器上是基線，見第 2 節 2026-10-23 第二次框「本機環境事實」。）
 5. 確認之後再接續第 3 節的下一步；有不一致或新發現，依 `PROJECT_RULES.md` 第 12 節（新發現落盤）寫進對應文件，不只留在聊天。
 
 ## 6. 本檔沒查證的部分
@@ -205,3 +215,4 @@
 - 2026-10-22 交接防遺失保存批：客戶 2026-10-22 指示（新版產品方向、市場趨勢研究原則、提供投資教學參考資料）經總管派工單轉達，repo 內無逐字存檔，本組未見客戶對話本身、也未見該參考資料；`docs/v2/63` 的稽核結論為當日對話內八組長報告的保存版，本組未重跑任何 grep、未重讀原始碼、未實跑 UI；第 2 節第三次 ⭐ 框的 main／CI／open PR 為本組 2026-10-22 20:08 UTC 實查（本批分支推送之前；check-run 的舊跑次 `cancelled` 一說是本組對同一 SHA 兩組 check-run 的讀法，未經第二組驗證）。
 - 2026-10-23 SSOT 收斂方向批：客戶裁示經總管派工單轉達，repo 內無逐字存檔；第 2 節 2026-10-23 框的 main SHA 為派工單所給並經本分支 `git log -1` 對照，CI 與 open PR 本組未重查；64 的稽核結論本組未重跑。
 - 2026-10-23 裁示 1B／2C／3A 實作批 Save／Handoff Gate：客戶裁示（1B／2C／3A、Stop Gate 九項、新版 UI 邊界、收尾指令、治理待辦十項）經總管派工單轉達，repo 內無逐字存檔，本組未見客戶對話本身；第 2 節第二次框的 main SHA、兩支分支 SHA 與 PR1b 逐檔清單為本組於 docs 工作樹 `git fetch` 後實查，CI 三條 `success`、「Open PR：無」、總管對 `e504ba1` 的 fast lane 結果與 5 個 hook 結果、PR2 WIP 的已做／未做清單、稽核三輪結論、各處 grep 證明與測試數字皆為總管／實作組／稽核組回報，本組未重跑任何測試或 grep、未讀 PR1b／PR2 的 diff 內容；「仍需 Decision Gate」各項與 Stop Gate 九項為總管彙整，本組照寫。本檔本批由架構與文件組單組產出，未經第二組驗證。
+- 2026-10-23 BL-0424 結案批：第 2 節第三次框的 main SHA 與 merge commit 為本組以 `git log origin/main` 確認；CI 三條 `conclusion`、review threads 0、「Open PR：無」、合併前 delta 驗證為總管實查、本組轉述，未重跑；「Tab2 ③ 晨星／同儕整列是否屬版面變更」仍待判定，本組未判。本檔本批由架構與文件組單組產出，未經第二組驗證。
