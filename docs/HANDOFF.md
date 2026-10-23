@@ -34,7 +34,14 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第六次）現況（以本框為準；下方第五次框起皆為歷史快照）**（Final Save／Handoff 批；main 與 PR #1030 狀態為總管 2026-10-23 15:07Z GitHub 實查、本組轉述；PR head `7569e663`（單一 commit，parent `f2539a7d`）與 head 分支 `ccr-504fafce-fky1it` 為本組 `git fetch`／`git ls-remote` 實查；狀態更新，不是漏刪：第五次框整段保留於下方）
+> **⭐ 2026-10-23（第七次）現況（以本框為準；下方第六次框起皆為歷史快照）**（BL-0426 結案 docs 回填；合併 SHA、PR head、CI 結果為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第六次框整段保留於下方）
+> - **最新 main**：`b35e2620`（PR #1030 已合併；head `fef048ae`，CI Fast checks／Schema gate／Slow tests 三條皆 success；code `7569e663` 獨立稽核有條件通過）。
+> - **Open PR**：本項工作沒有 open PR（本 docs 回填 commit 待總管推送）。
+> - **已完成**：BL-0426、BL-0421 改 closed（`docs/BACKLOG.md`）；`DEC-2026-10-23-06`／`-07` evidence 回填合併。
+> - **下一個唯一工作點**：**等客戶裁示**，不主動開工（§-1）。
+> - **建議下一項**：BL-0428 唯讀規則盤點（**Medium**），先於 Decision Gate；客戶說開始後才做 BL-0435 Blueprint（**高能力模型＋High**），草稿須送客戶確認。
+
+> **2026-10-23（第六次）現況（~~以本框為準；下方第五次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第七次框；狀態更新，不是漏刪）**（Final Save／Handoff 批；main 與 PR #1030 狀態為總管 2026-10-23 15:07Z GitHub 實查、本組轉述；PR head `7569e663`（單一 commit，parent `f2539a7d`）與 head 分支 `ccr-504fafce-fky1it` 為本組 `git fetch`／`git ls-remote` 實查；狀態更新，不是漏刪：第五次框整段保留於下方）
 > - **最新 main**：`f2539a7d`（PR #1029 合併；**PR #1030 尚未合併**）。
 > - **Open／Draft PR**：**#1030 open**（BL-0426 PR3，裁示 2C）。head ＝ 本 docs commit（疊在 `7569e663` 之上，由總管推送；SHA 以 GitHub 實查為準）。code 部分已稽核的 SHA ＝ `7569e663`；本 docs delta（只動 `docs/BACKLOG.md`、`docs/DECISIONS.md`、`docs/HANDOFF.md`）由總管自驗。
 > - **CI**：#1030 推送本 docs commit 後 CI 重跑；**請以 GitHub 實查為準**（Fast checks／Schema gate／Slow tests 三條逐條看 `conclusion`）。
