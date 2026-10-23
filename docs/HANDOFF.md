@@ -34,7 +34,16 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第三次）現況（以本框為準；下方 2026-10-23 第二次框、第一次框、2026-10-22 三個框、表格與第 3 節的逐日同步行是歷史快照）**（BL-0424 結案批；main 與 merge commit 為本組於 docs 工作樹以 `git log origin/main` 確認；CI、review threads、合併前 delta 驗證為總管 2026-10-23 實查、本組轉述；狀態更新，不是漏刪：第二次框整段保留於下方）
+> **⭐ 2026-10-23（第四次）現況（以本框為準；下方第三次框起皆為歷史快照）**（BL-0434 治理批；main 為本組 `git fetch` 後 `git rev-parse origin/main` 實查；狀態更新，不是漏刪：第三次框整段保留於下方）
+> - **main**：`581617ac`。**Open PR**：本 PR（BL-0434 治理文件，合併前以 GitHub 實查為準）。
+> - **已完成**：BL-0434 —— 客戶 2026-10-23 工作規範補強寫入 `PROJECT_RULES.md`（第 3 節限定第 5 條、3.1 第 6 點、5.1 第 9 點、6.1 第 6 點），`DEC-2026-10-23-04`。
+> - **未完成／暫停**：BL-0425（PR2，裁示 3A）**客戶指示暫停**，狀態維持 open、不是取消；`origin/pr2-333-ssot-wip`（`683d093`）仍未驗證、未稽核。BL-0426（PR3）未開始。
+> - **Decision Gate**：Tab2「③ 晨星／同儕」是否移除屬 UI/Layout Decision Gate（客戶裁示），**PR2 不得移除**，留到新版 UI/UX Blueprint 階段。
+> - **Stop Gate**（九項，`DEC-2026-10-23-03`，未變）：需要新金融公式；新資料來源；新增／改變投資動作語意；schema／Sheet 變更；新版 UI layout 決策；HWM 配息還原無法可靠用既有資料完成；既有裁示互相衝突；不可逆大規模刪除；CI 真錯誤且無既定修復路徑。另：資料可能被寫壞、GitHub 實況重大不一致屬 Stop Gate 主動回報（`PROJECT_RULES.md` 3.1 第 6 點）。
+> - **下一個唯一工作點**：**BL-0425（PR2／3A）續做 —— 須等客戶下指令開工**；續做時先把 main 合入再重驗，且不得移除 Tab2 ③列。
+> - **下一批建議模型與 Minimum Sufficient Effort**：高能力模型、High（核心投資計算 SSOT 收斂）。
+
+> **⭐ ~~2026-10-23（第三次）現況（以本框為準；~~ → 2026-10-23（第三次）現況（已被上方第四次框取代；歷史快照；狀態更新，不是漏刪）（原文：以本框為準；下方 2026-10-23 第二次框、第一次框、2026-10-22 三個框、表格與第 3 節的逐日同步行是歷史快照）**（BL-0424 結案批；main 與 merge commit 為本組於 docs 工作樹以 `git log origin/main` 確認；CI、review threads、合併前 delta 驗證為總管 2026-10-23 實查、本組轉述；狀態更新，不是漏刪：第二次框整段保留於下方）
 > - **main**：`6024236`（全長 `60242363`…，PR #1025 的 merge commit；PR head `e504ba1`＝稽核 SHA）。CI：`e504ba1` 的 Fast checks、Schema gate、Slow tests 三條 check-run `conclusion` 皆 `success`；review threads 0。**Open PR：無。**
 > - **1B 已全部進 main**：L2 ＋ services consumer（PR #1023，`4134e6d`）＋ UI consumer（PR #1025，`6024236`）。合併前 delta 驗證（總管）：main 自 `4134e6d` 起只動 4 個 docs 檔、與 PR1b 檔案 0 重疊、merge-tree 乾淨；`ui/` 內 0 處 import 平行計算函式；`moneydj_div_yield` 只剩 2 處對帳白名單；舊欄名只在測試反向對照；services 唯一變更為 `services/fund_row.py` 兩個 key 改名。`docs/BACKLOG.md` BL-0424 已 closed。
 > - **分支**：`origin/pr1b-ui-ssot-audited` 已合併（保留不刪）；`origin/pr2-333-ssot-wip`（`683d093`）狀態不變：**未驗證、未稽核**，base 早於本 main。
