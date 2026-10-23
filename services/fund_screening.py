@@ -402,9 +402,12 @@ def batch_333_funds(fund_list: list[dict]) -> "pd.DataFrame":
 # 在大表標「⚪ 中性」，使用者照這裡買進，回頭卻看到系統自己說不是低基期。
 #
 # 統一後的口徑（§4.1 σ sign convention：**一律負數，愈負愈低基期**）：
-#   σ rank = (現價 − 期間 HWM) / σ_abs      ← services/precision_service.calc_hwm_sigma_levels
+#   σ rank = (現價 − 期間 HWM) / σ_abs      ← services/fund_position.compute_fund_position
+#            （2026-10-23 裁示 2C：配息還原序列、fail closed；數學核心仍是
+#             services/precision_service.calc_hwm_sigma_levels）
 #   低基期 ⇔ σ rank ≤ ROTATION_BUY_SIGMA    ← services/rotation.classify_base
 # 兩邊呼叫同一組函式 + 同一組 shared/signal_thresholds 常數，**不可能再分歧**。
+# ⚠️ 「低基期／進場點」是 legacy 行動語意（規則、門檻、用字未改），待 BL-0428 重新裁示。
 LOW_BASE_LOOKBACK_DEFAULT = 252   # 回看窗（交易日，1Y ≈ 252，非 365 日曆日）
 # ⚠️ 必須等於 `calc_hwm_sigma_levels` 的 lookback 預設值 —— 大表走預設、本模組顯式
 # 傳入，兩者不同就會讓同一檔在兩處算出不同的 σ rank（σ_abs 隨 √n 縮放）。
@@ -421,7 +424,7 @@ _BASE_NOTE = {
 
 
 def compute_base_state(
-    nav_series: "pd.Series | None",
+    fund: dict,
     *,
     lookback: int = LOW_BASE_LOOKBACK_DEFAULT,
     min_points: int = LOW_BASE_MIN_POINTS,
@@ -430,42 +433,42 @@ def compute_base_state(
 ) -> dict:
     """基期定位（純計算）—— **與健診大表「基期」欄同一把尺**。
 
+    ⚠️ 2026-10-23 裁示 2C ＋ Stop Gate「選項 1」（BL-0426）：σ rank 一律取自唯一 SSOT
+    `services.fund_position.compute_fund_position`（**配息還原序列**、fail closed）。
+    本函式的低基期 / 高基期規則、門檻、`buy_threshold_nav` 語意與用字**一字未改**
+    —— legacy 行動語意，待 BL-0428 重新裁示。
+
+    輸入：**一律 fund dict**（`series` / `dividends` / `moneydj_raw`（category、moneydj_div_yield）；
+    與 `compute_fund_position` 同一套讀法）。~~也接受裸 NAV 序列~~（2026-10-23 稽核必修 A 移除：
+    裸序列等於沒有任何配息資訊，配息基金會被當非配息基金拿原始 NAV 去判 —— 那是一條
+    繞過 2C 的 raw 入口）。傳非 dict → `TypeError`（§1 Fail Loud）。
+
     數學式（σ sign convention 見 §4.1：**負值愈深愈低基期**）:
-        s        = nav_series 最後 lookback 筆（升序、去 NaN）
-        HWM      = s.max()
-        σ_abs    = HWM × std(日報酬率) × √len(s)
-        σ rank   = (現價 − HWM) / σ_abs          ≤ 0（現價必在窗內高點之下）
+        σ rank   = compute_fund_position(...)["sigma_rank"]   ≤ 0
         低基期  ⇔ σ rank ≤ buy_sigma（預設 ROTATION_BUY_SIGMA = −1.5）
         高基期  ⇔ σ rank ≥ sell_sigma（預設 ROTATION_SELL_SIGMA = −0.5）
+    分類走 `services.rotation.classify_base` + `shared.signal_thresholds` 常數（§3.3）。
 
-    σ rank 與分類皆**不自行實作**：值走 `services.precision_service.calc_hwm_sigma_levels`
-    （大表同一支），切點走 `services.rotation.classify_base` + `shared.signal_thresholds`
-    常數（§3.3 不 inline magic）。本函式只負責 NAV 前處理 + 樣本數揭露 + 打包。
+    `buy_threshold_nav`（σ rank 剛好等於 buy_sigma 的 NAV 價位）：還原基準的 HWM / σ_abs
+    已由 SSOT 以「最新原始淨值」為錨換回原幣淨值單位（`current_nav_tr == current_nav`），
+    所以 `hwm + buy_sigma × σ_abs` 仍是**可以和原始現價直接比較**的價位，語意不變。
 
-    §1 Fail Loud 邊界（**停售 / 清算基金絕不可被推薦**）:
-      - NAV 不足 30 筆 / 報酬率序列不足 / **σ_abs ≈ 0（NAV 完全不動）**
-        → `calc_hwm_sigma_levels` 回 `{"error": ...}` → 本函式回
-        `base="unknown"` / `is_low_base=None` / `sigma_rank=None`，
-        原因原字轉載到 `note`。停售基金 NAV 長期不動正是 σ≈0 的典型，
-        絕不會落進 "low" → `screen_funds(only_low_base=True)` 一定濾掉它。
-      - len(s) < min_points → reliable=False（仍給值但標「可信度低」）
-
-    Parameters
-    ----------
-    nav_series : pd.Series  NAV 序列，index=DatetimeIndex，values=float（>0）
-    lookback   : int        回看窗（交易日數）；**必須與大表一致**，見常數註解
-    min_points : int        可信度門檻樣本數
-    buy_sigma / sell_sigma  : float | None  None → 走 shared/signal_thresholds SSOT
+    §1 Fail Closed 邊界（**停售 / 清算 / 無法判定的基金絕不可被推薦**）:
+      - SSOT 回 unavailable（歷史不足 / 報酬不足 / σ≈0 / 配息資料未備 / 貨幣市場型 /
+        還原失敗）→ `base="unknown"` / `is_low_base=None` / `sigma_rank=None`，
+        ⬜ 白話原因原字轉載到 `note`。`screen_funds(only_low_base=True)` 一定濾掉它。
+      - 窗口樣本數 < min_points → reliable=False（仍給值但標「可信度低」）
 
     Returns
     -------
     dict:
-        sigma_rank        : float | None  現價在 HWM 下方第幾個 σ（**負數**）
+        sigma_rank        : float | None  現價在 HWM 下方第幾個 σ（**負數**；配息還原基準）
         base              : "low" / "mid" / "high" / "unknown"
         is_low_base       : bool | None   (None = 無法定位階)
         hwm / current / dist_to_hwm_pct : float | None
+                            （hwm = 還原基準、以最新原始淨值為錨；current = 原始最新淨值）
         buy_threshold_nav : float | None  σ rank 剛好等於 buy_sigma 的 NAV 價位
-        hwm_label         : str           precision_service 的 4 級位階標籤
+        hwm_label         : str           SSOT 的中性位置標籤（或 ⬜ 原因）
         n_points          : int           實際採用的樣本數
         reliable          : bool          n_points ≥ min_points
         note              : str           狀態說明（供 UI 顯示）
@@ -482,6 +485,15 @@ def compute_base_state(
         "n_points": 0, "reliable": False, "note": "",
         "buy_sigma": _buy, "sell_sigma": _sell,
     }
+
+    if not isinstance(fund, dict):
+        raise TypeError(
+            f"compute_base_state 需要 fund dict(series + dividends + moneydj_raw),"
+            f"收到 {type(fund).__name__} —— 裸 NAV 序列沒有配息資訊,不得繞過 2C SSOT")
+    nav_series = fund.get("series")
+    if nav_series is None:
+        nav_series = (fund.get("moneydj_raw") or {}).get("series") \
+            if isinstance(fund.get("moneydj_raw"), dict) else None
 
     if nav_series is None:
         out["note"] = "無 NAV"
@@ -505,16 +517,17 @@ def compute_base_state(
     out["n_points"] = n
     out["reliable"] = n >= int(min_points)
 
-    from services.precision_service import calc_hwm_sigma_levels
+    from services.fund_position import compute_fund_position
     from services.rotation import classify_base
 
-    _r = calc_hwm_sigma_levels(s, lookback=int(lookback))
-    if _r.get("error"):
-        # 停售 / 剛成立 / NAV 不動 → 誠實不判定（§1），note 保留上游原因字樣
-        out["note"] = str(_r["error"])
+    _r = compute_fund_position(fund, lookback=int(lookback))
+    if _r.get("status") != "ok":
+        # 停售 / 剛成立 / NAV 不動 / 配息資料未備 / 貨幣市場型 → 誠實不判定（§1）
+        out["hwm_label"] = _r.get("label") or "—"
+        out["note"] = str(_r.get("label") or _r.get("error") or "")
         return out
 
-    _hwm = _r.get("hwm")
+    _hwm = _r.get("hwm_tr")
     _sigma_abs = _r.get("sigma_abs")
     out["sigma_rank"] = _r.get("sigma_rank")
     out["hwm"] = _hwm
@@ -556,6 +569,7 @@ def screen_funds(
         code (str), name (str), series (pd.Series NAV),
         currency (str), category (str),
         eats_principal (bool | None)   # True=吃本金 / False=不吃 / None=未知
+        dividends (list) / moneydj_raw (dict)   # 2C:σ 位置 SSOT 配息還原與配息閘門用
     lookback / min_points / buy_sigma / sell_sigma : 傳入 compute_base_state
     only_low_base : True → 僅保留 `base == "low"`（**無法定位階者一併排除** ——
                     停售 / NAV 不動的基金 σ rank 為 None，不得混進進場候選，§1）
@@ -590,8 +604,9 @@ def screen_funds(
         if only_no_eat and eats is not False:  # 僅保留「明確不吃本金」
             continue
 
+        # 2C:整個 item 原樣傳入(series + dividends + moneydj_raw)→ SSOT 配息還原
         lb = compute_base_state(
-            it.get("series"), lookback=lookback, min_points=min_points,
+            it, lookback=lookback, min_points=min_points,
             buy_sigma=buy_sigma, sell_sigma=sell_sigma,
         )
         if only_low_base and lb.get("base") != "low":

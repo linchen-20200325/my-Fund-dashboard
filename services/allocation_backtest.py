@@ -4,7 +4,10 @@
 排名效益最高者,並由勝出策略的**當前訊號**產出三種建議(動作清單 / 賣→買配對 / 目標權重%)。
 
 反 lookahead(§2.3)是本引擎的生死線:每個再平衡日 t 只用「截至 t 為止」的 FX 窗與 NAV 算訊號,
-**絕不**用全期均值;`fx_regime` / `calc_hwm_sigma_levels` 皆餵截止序列。成本內含(換手 × 申贖+換匯點差)
+**絕不**用全期均值;`fx_regime` / σ 位置 SSOT `compute_fund_position(as_of=t)` 皆餵截止序列
+(2026-10-23 裁示 2C:σ 改用配息還原序列、fail closed;策略規則為 legacy 行動語意,待 BL-0428。
+⚠️ σ 的 PIT 範圍據實:序列與還原用的配息截到 ≤ t;「是否為配息基金」用的是**現在的資訊**,
+方向 fail closed —— 可能讓 t 時點本來可判的基金變成 unknown,見 `_sigma_rank_at`)。成本內含(換手 × 申贖+換匯點差)
 避免切換策略被高估(§1 誠實)。缺料 / 短史 / 非 USD/TWD / σ=0 → 誠實排除或 None,**絕不**捏造。
 
 §4.1 單位:原幣 NAV × USDTWD(rate_twd_per_usd, TWD/USD)→ 台幣序列;台幣計價基金原樣。
@@ -197,16 +200,34 @@ def _flip_fx(label):
     return {"strong_twd": "weak_twd", "weak_twd": "strong_twd"}.get(label, label)
 
 
-def _sigma_rank_at(orig_series, t) -> "float | None":
-    """原幣序列截至 t → σ rank(現價在 HWM 下方第幾 σ)。PIT-safe(只用 ≤ t 的資料)。
+def _sigma_rank_at(fund: "dict | None", t) -> "float | None":
+    """截至 t → σ rank(現價在 HWM 下方第幾 σ)。序列與還原用的配息只用 ≤ t 的資料(PIT 範圍見下)。
 
-    §1 誠實:短史 / 報酬不足(委派 calc_hwm_sigma_levels 內部下限,不重複 magic number)/
-    **σ_abs=0(NAV 走平・停售清算)→ sigma_rank 為未定義的 0.0** → 一律 None,
-    **絕不**把 0.0 當「高基期」餵給 classify_base 產出假 SELL(稽核 v19.427 HIGH)。
+    2026-10-23 裁示 2C ＋ Stop Gate「選項 1」(BL-0426):σ 一律取自唯一 SSOT
+    `services.fund_position.compute_fund_position(fund, as_of=t)` —— **配息還原序列**、
+    fail closed。歷史不足 / 報酬不足 / σ≈0 / 配息資料未備或對不上 / 貨幣市場型 /
+    還原失敗 → None(→ "unknown" → watch),**絕不**退回原始 NAV、**絕不**把 0.0 當
+    「高基期」餵給 classify_base 產出假 SELL(稽核 v19.427 HIGH)。
+
+    PIT 範圍(據實):**序列與還原用的配息**截到 ≤ t;「是否為配息基金」的判定用的是
+    **現在的資訊**(完整配息清單、現在的 moneydj_div_yield),方向是 fail closed —— 可能讓
+    t 時點本來可判的基金變成 unknown(例:t 之後才開始配息),不會反向放行。
+
+    `fund`:**必須是 fund dict**(`series` 原幣 NAV + `dividends` + `moneydj_raw` 等,
+    見 `backtest_allocations(meta_by_code=...)`);`None`(呼叫端沒有這檔的配息資訊)→ None。
+    ~~亦接受裸序列~~(2026-10-23 稽核必修 A 移除:裸序列 = 沒有配息資訊 = raw 入口)。
     """
-    from services.precision_service import calc_hwm_sigma_levels
-    _lv = calc_hwm_sigma_levels(orig_series.loc[:t])
-    if not isinstance(_lv, dict) or "error" in _lv:
+    from services.fund_position import compute_fund_position
+    if fund is None:
+        return None
+    if not isinstance(fund, dict):
+        raise TypeError(f"_sigma_rank_at 需要 fund dict,收到 {type(fund).__name__}")
+    return _sigma_from_position(compute_fund_position(fund, as_of=t))
+
+
+def _sigma_from_position(_lv) -> "float | None":
+    """SSOT 結果 → σ rank(或 None)。單點與批次預算共用。"""
+    if not isinstance(_lv, dict) or _lv.get("status") != "ok":
         return None
     _sr, _sa = _lv.get("sigma_rank"), _lv.get("sigma_abs")
     if _sr is None or _sa is None or _sa <= 0:      # σ_abs≤0 → 統計退化,誠實回 None(不捏造)
@@ -214,11 +235,49 @@ def _sigma_rank_at(orig_series, t) -> "float | None":
     return float(_sr)
 
 
+def _fund_at(c, orig_by_code: dict, meta_by_code: "dict | None") -> "dict | None":
+    """回測用 fund dict:原幣序列(對齊前的 full 序列)+ 呼叫端提供的配息 / 類別資訊。
+
+    `meta_by_code` 沒傳、或沒有這檔 → **None**(不知道它配不配息 → σ 不判,fail closed);
+    呼叫端明確給 `{}` / `{"dividends": []}` = 宣告「沒有配息資訊要提供」,才照非配息判。
+    """
+    if not isinstance(meta_by_code, dict) or c not in meta_by_code:
+        return None
+    _meta = meta_by_code.get(c) or {}
+    return {**_meta, "series": orig_by_code[c]}
+
+
+def _preparse_meta(meta_by_code: "dict | None") -> "dict | None":
+    """效能(結果不變):每檔配息紀錄只解析一次 → (Timestamp, amount) tuple,
+    交給 SSOT 時免在每個再平衡日重解析日期字串。解析失敗的檔**原樣保留**
+    (讓 SSOT 照舊判 restore_failed,不在這裡吞掉)。`is_dividend_fund` 判定不受影響
+    (只濾掉金額 ≤ 0 / 不可解析的紀錄,它們本來就不算配息)。"""
+    if not meta_by_code:
+        return meta_by_code
+    from services.total_return_series import parse_dividend_events
+    out: dict = {}
+    for _c, _m in meta_by_code.items():
+        _m = dict(_m or {})
+        _d = _m.get("dividends")
+        if _d:
+            _ev, _err = parse_dividend_events(_d)
+            if not _err:
+                _m["dividends"] = _ev
+        out[_c] = _m
+    return out
+
+
 def strategy_weights_at(strategy_id: str, t, orig_by_code: dict, twd_df, fx_series,
-                        s4_ctx: "dict | None" = None) -> tuple:
+                        s4_ctx: "dict | None" = None, *,
+                        meta_by_code: "dict | None" = None,
+                        sigma_cache: "dict | None" = None) -> tuple:
     """在再平衡日 t 用 PIT 資料算某策略目標權重。→ (weights dict Σ=1, signals dict)。
 
     S0/S4 不需訊號(等權 / 前緣靜態);S1/S2/S3 逐檔算 nav_level(σ rank)+(S1/S2)匯率位階。
+
+    σ rank 來源 = SSOT `compute_fund_position`(2C;`meta_by_code` 提供配息 / 類別);
+    S1/S2/S3 的 tier 規則(低→買 / 高→賣 / 2D 表)為 **legacy 行動語意,一字未改**,
+    待 BL-0428 重新裁示。`sigma_cache`:同一 (code, t) 在 S1/S2/S3 只算一次(純快取,結果不變)。
     """
     from services.nav_fx_switch import fx_regime, nav_fx_signal
     from services.rotation import classify_base
@@ -246,7 +305,14 @@ def strategy_weights_at(strategy_id: str, t, orig_by_code: dict, twd_df, fx_seri
     tiers: dict = {}
     signals: dict = {}
     for c in codes:
-        _sr = _sigma_rank_at(orig_by_code[c], t) if c in orig_by_code else None
+        if c not in orig_by_code:
+            _sr = None
+        elif sigma_cache is not None and (c, t) in sigma_cache:
+            _sr = sigma_cache[(c, t)]
+        else:
+            _sr = _sigma_rank_at(_fund_at(c, orig_by_code, meta_by_code), t)
+            if sigma_cache is not None:
+                sigma_cache[(c, t)] = _sr
         _nav_level = classify_base(_sr) if _sr is not None else "unknown"
         if strategy_id == "S3":
             _tier = {"low": "buy", "high": "sell"}.get(_nav_level, "watch")
@@ -274,7 +340,9 @@ def run_strategy(strategy_id: str, orig_by_code: dict, twd_df, fx_series, *,
                  fx_spread_bps: float = BACKTEST_FX_SPREAD_BPS,
                  foreign_codes: "set | None" = None,
                  s4_ctx: "dict | None" = None,
-                 rf_annual: float = FRONTIER_RF_ANNUAL) -> dict:
+                 rf_annual: float = FRONTIER_RF_ANNUAL,
+                 meta_by_code: "dict | None" = None,
+                 sigma_cache: "dict | None" = None) -> dict:
     """單一策略月頻再平衡回測 → {metrics, equity_curve, daily_returns, final_weights,
     final_signals, weight_path}。§2.3:day d 的報酬用「d 之前最後一次再平衡」的權重(不吃未來)。"""
     from services.portfolio_performance import metrics_from_return_series
@@ -291,7 +359,8 @@ def run_strategy(strategy_id: str, orig_by_code: dict, twd_df, fx_series, *,
     wmap: dict = {}
     smap: dict = {}
     for t in rdates:
-        _w, _sig = strategy_weights_at(strategy_id, t, orig_by_code, twd_df, fx_series, s4_ctx)
+        _w, _sig = strategy_weights_at(strategy_id, t, orig_by_code, twd_df, fx_series, s4_ctx,
+                                       meta_by_code=meta_by_code, sigma_cache=sigma_cache)
         wmap[t] = _w
         smap[t] = _sig
 
@@ -418,11 +487,19 @@ def backtest_allocations(nav_by_code: dict, ccy_by_code: dict, fx_series=None, *
                          freq: str = BACKTEST_REBALANCE_FREQ,
                          cost_bps: float = BACKTEST_COST_BPS,
                          fx_spread_bps: float = BACKTEST_FX_SPREAD_BPS,
-                         rf_annual: float = FRONTIER_RF_ANNUAL) -> dict:
+                         rf_annual: float = FRONTIER_RF_ANNUAL,
+                         meta_by_code: "dict | None" = None) -> dict:
     """一站式:對齊 → 跑 S0..S4 → 排名 → 挑 winner → S1/S2 匯率方向裁決 → 由 winner 現況產三輸出。
 
     → {ok, reason, results{sid:...}, ranking[sid], winner, verdict_s1_vs_s2, actions,
        included, excluded, window, flags, caveat}。§1 全程誠實;缺料/短史 → ok False。
+
+    `meta_by_code`(2026-10-23 裁示 2C):{code: {dividends, moneydj_raw, category, ...}} ——
+    σ 位置 SSOT 的配息還原與配息閘門要用;**沒傳、或缺某檔 → 該檔 σ 一律 None**
+    (不知道它配不配息,fail closed;S1/S2/S3 對它只會給 watch)。production 呼叫端
+    `ui/helpers/fund_grp_health/backtest_section.py` 一律提供。
+    配息基金若截至某再平衡日窗口內沒有配息被還原、或有配息紀錄對不上淨值日 → 該日 σ = None。
+    PIT 範圍:序列與還原用的配息截到 ≤ t;「是否為配息基金」用現在的資訊(fail closed)。
     """
     _fx = _clean_fx(fx_series)
     orig_by_code, twd_df, included, excluded, flags, foreign = build_aligned_matrices(
@@ -438,11 +515,28 @@ def backtest_allocations(nav_by_code: dict, ccy_by_code: dict, fx_series=None, *
 
     _s4 = _s4_train(twd_df, rf_annual)
     results: dict = {}
+    _sigma_cache: dict = {}
+    meta_by_code = _preparse_meta(meta_by_code)
+    # 效能(結果逐位元相同,測試鎖住):每檔只還原一次,再按各再平衡日切片
+    # (`compute_fund_positions_at`);預先填滿 sigma_cache,策略迴圈直接讀。
+    from services.fund_position import compute_fund_positions_at
+    _rdates = rebalance_dates(twd_df.index, freq)
+    for _c in twd_df.columns:
+        if _c not in orig_by_code:
+            continue
+        _fund = _fund_at(_c, orig_by_code, meta_by_code)
+        if _fund is None:
+            for _t in _rdates:
+                _sigma_cache[(_c, _t)] = None
+            continue
+        for _t, _pos in compute_fund_positions_at(_fund, _rdates).items():
+            _sigma_cache[(_c, _t)] = _sigma_from_position(_pos)
     for _sid in STRATEGY_IDS:
         results[_sid] = run_strategy(
             _sid, orig_by_code, twd_df, _fx, freq=freq, cost_bps=cost_bps,
             fx_spread_bps=fx_spread_bps, foreign_codes=foreign,
-            s4_ctx=(_s4 if _sid == "S4" else None), rf_annual=rf_annual)
+            s4_ctx=(_s4 if _sid == "S4" else None), rf_annual=rf_annual,
+            meta_by_code=meta_by_code, sigma_cache=_sigma_cache)
 
     ranking = sorted(STRATEGY_IDS, key=lambda s: _rank_key(results[s]), reverse=True)
     winner = ranking[0]

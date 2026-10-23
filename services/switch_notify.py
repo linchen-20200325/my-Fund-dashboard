@@ -7,6 +7,12 @@
 - action ∈ {SWITCH(換股), SELL_CASH(賣轉現金)},或
 - 表現差(underperformance.is_underperforming;跑輸大盤或絕對虧損)。
 單純 WARN(成長看衰未跌破)/ HOLD / 資料不足 **不觸發通知**(避免每週噪音)。§1:誠實,不硬報。
+
+⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
+本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
+不補 0、不當中性)。通知內容來自 `switch_advisor` 的結果(σ 經 SSOT)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
 

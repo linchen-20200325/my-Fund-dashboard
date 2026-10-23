@@ -96,7 +96,12 @@ def render_allocation_backtest_section(funds: list) -> None:
         system_error("USDTWD 匯率抓取失敗,美元計價基金將被排除", _e,
                      hint="下方回測結果僅涵蓋台幣計價基金,不是完整組合。")
 
-    _res = backtest_allocations(_nav, _ccy, fx_series=_fx)
+    # 2026-10-23 裁示 2C(BL-0426):σ 位置 SSOT 要配息紀錄 + 原始抓取 dict(配息率 / 類別)
+    # 才能做配息還原與配息閘門;不傳 = 該檔被當成沒有任何配息資訊。
+    _meta = {f.get("code"): {"dividends": f.get("dividends"),
+                             "moneydj_raw": f.get("moneydj_raw")}
+             for f in (funds or []) if f.get("code")}
+    _res = backtest_allocations(_nav, _ccy, fx_series=_fx, meta_by_code=_meta)
     if not _res.get("ok"):
         st.info(_res.get("reason") or "配置回測資料不足。")
         if _res.get("excluded"):
@@ -193,10 +198,11 @@ def render_allocation_backtest_section(funds: list) -> None:
                 "賣出": _cc.TextColumn("賣出", width="medium",
                     help="勝出策略在**最後一次再平衡日**判定要減碼/換出的檔。"),
                 "賣σ": _cc.TextColumn("賣σ", width="small",
-                    help="該檔當時的 σ rank(愈接近 0 = 愈貼近高點);'—' = 算不出(含 NAV 走平)。"),
+                    help="該檔當時的 σ rank(配息還原基準;愈接近 0 = 愈貼近高點);"
+                         "'—' = 算不出(含 NAV 走平、配息資料未備、貨幣市場型)。"),
                 "→ 買進": _cc.TextColumn("→ 買進", width="medium",
                     help="配對的進場標的;無合適者誠實留「無合適標的」。"),
-                "買σ": _cc.TextColumn("買σ", width="small", help="買方當時的 σ rank(愈負 = 跌愈深)。"),
+                "買σ": _cc.TextColumn("買σ", width="small", help="買方當時的 σ rank(配息還原基準;愈負 = 跌愈深)。"),
             },
         )
 

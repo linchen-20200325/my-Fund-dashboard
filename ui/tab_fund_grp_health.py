@@ -618,6 +618,10 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
             "currency": (fd.get("currency") or _r.get("ccy") or "").strip().upper(),
             "category": (_mj.get("category") or fd.get("category") or "").strip(),
             "eats_principal": _eats_principal_flag(fd),
+            # 2026-10-23 裁示 2C(BL-0426):σ 位置走 SSOT 配息還原序列 + 配息閘門,
+            # 需要配息紀錄與原始抓取 dict(moneydj_div_yield / category);非顯示欄位。
+            "dividends": fd.get("dividends"),
+            "moneydj_raw": (_mj or fd),
         })
 
     from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
@@ -697,11 +701,14 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
         _df, use_container_width=True, hide_index=True,
         column_config={
             "現價": _cc.NumberColumn(format="%.2f"),
-            "期間高點(HWM)": _cc.NumberColumn(format="%.2f"),
-            "距 HWM %": _cc.NumberColumn(format="%+.2f%%"),
+            "期間高點(HWM)": _cc.NumberColumn(
+                format="%.2f",
+                help="配息還原（含息）淨值的近一年最高點，以最新淨值為錨換回原幣單位。"),
+            "距 HWM %": _cc.NumberColumn(
+                format="%+.2f%%", help="配息還原基準。"),
             "σ rank": _cc.NumberColumn(
                 format="%+.2f σ",
-                help="負數；愈負 = 現價離期間高點愈深 = 基期愈低。"),
+                help="負數；愈負 = 現價離期間高點愈深 = 基期愈低。以配息還原淨值計算。"),
             f"買點門檻({ROTATION_BUY_SIGMA:+.1f}σ)": _cc.NumberColumn(format="%.2f"),
         },
     )

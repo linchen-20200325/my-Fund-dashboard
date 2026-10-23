@@ -16,6 +16,12 @@
 - 級別三態 core／satellite／None（未設定）由 shared.policy_tier.resolve_tier 判定（policy_tier 優先，其次嚴格布林 is_core）。
   「未設定 ≠ 衛星」：未設定 fail-closed 一律 HOLD（不吃核心也不吃衛星分支），reason 標「未設定」
 - sigma_info / dividend_info 結構同 policy_advisor_service.advise_fund 第 1/2 參數
+
+⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
+本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
+不補 0、不當中性)。`sigma_info` 由呼叫端傳入 SSOT 輸出(unavailable 帶 `error`、`sigma_rank=None` → 略過 σ 覆寫)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
 

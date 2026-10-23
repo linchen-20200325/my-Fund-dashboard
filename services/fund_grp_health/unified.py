@@ -9,6 +9,12 @@
 
 資料來源仍是各表的單一 data 函式(`risk.hwm_sigma_by_code` / `risk.risk_compare_by_code` /
 `signals.mk_signal_by_code`)—— 不重算、不偽造(§1);缺值由來源填 '—'。
+
+⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
+本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
+不補 0、不當中性)。「基期」欄 / 「淨值×匯率」欄以 `rotation.classify_base(σ rank 字串)` 分類,σ rank 字串由 `risk.hwm_sigma_by_code` 經 SSOT 產生。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
 

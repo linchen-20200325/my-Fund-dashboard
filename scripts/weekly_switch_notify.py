@@ -35,6 +35,12 @@ L1/L2 primitive;**不 import** `ui/helpers/.../switch_advisor_section.py`(那層
              單檔抓失敗 → 顯式 skip + 計數(不偽造);LINE 送失敗 → exit 1(cron 信可見)。
 成長型賣出訊號需總經 composite;headless 預設 macro=None(誠實降級,成長型不觸發賣出,
 §1 缺料不臆測)——若要成長型賣出通知,加 --with-macro(會多打 ~28 FRED series,需 FRED_API_KEY)。
+
+⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
+本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
+不補 0、不當中性)。LINE 週報經 `build_merged_extra_columns` → `hwm_sigma_by_code` 取 σ rank(經 SSOT)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
 
@@ -196,6 +202,7 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
             "基金類別": _h.get("基金類別") or (getattr(_pe, "category", None) if _pe else None),
             "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
+            "HWM 位階": _e.get("HWM 位階"),   # 2C:σ 無法判定時讓 advisor 寫出 ⬜ 白話原因
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
             "nav_series": _f.get("series"),
             "type_override": (getattr(_pe, "type_override", "") if _pe else "") or "",

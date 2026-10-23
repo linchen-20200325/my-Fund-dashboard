@@ -94,6 +94,25 @@ def _calc_data_health(indicators=None):
 _VIX_NOTE_FLAG = "_t3_vix_advice_note_shown"
 
 
+def _hwm_sigma_info_for(_f: dict) -> "dict | None":
+    """保單卡 / 保單級建議 / 主清單建議共用的 σ 位置(2026-10-23 裁示 2C,BL-0426)。
+
+    整個 fund dict(series + dividends + moneydj_raw)交給唯一 SSOT
+    `services.fund_position.compute_fund_position`;**不得只拿 series**(那等於丟掉配息資訊、
+    退回原始 NAV)—— 行為由 `tests/test_ssot_2c_fund_position.py` 的 consumer 測試鎖住。
+    NAV 不足 30 點 → None(advise_fund 既有「資料不足」分支);計算例外 → {"error": ...}。
+    """
+    _series = _f.get("series") if isinstance(_f, dict) else None
+    if _series is None or len(_series.dropna()) < 30:
+        return None
+    try:
+        from services.fund_position import compute_fund_position as _hwm_fn2
+        _sigma_info = _hwm_fn2(_f, lookback=252)
+    except Exception as _se:  # noqa: BLE001 — 單檔炸掉 → error dict,advisor 走資料不足
+        _sigma_info = {"error": str(_se)[:60]}
+    return _sigma_info
+
+
 def _vix_for_advice(*, note: bool = True) -> float | None:
     """取當前 VIX 餵給 `services.policy_advisor_service.advise_fund`。
 
@@ -895,13 +914,9 @@ def render_portfolio_tab() -> None:
                             _s = _f.get("series")
                             _m = _f.get("metrics", {}) or {}
                             _mj_e = _f.get("moneydj_raw", {}) or {}
-                            _sig_e = None
-                            if _s is not None and len(_s.dropna()) >= 30:
-                                try:
-                                    from services.precision_service import calc_hwm_sigma_levels as _hwm_e
-                                    _sig_e = _hwm_e(_s, lookback=252)
-                                except Exception:
-                                    _sig_e = None  # smoke-allow-pass
+                            # 2C(BL-0426):σ 經唯一 SSOT(見 _hwm_sigma_info_for);
+                            # unavailable 帶 "error" + sigma_rank=None → recommend_policy 不計入。
+                            _sig_e = _hwm_sigma_info_for(_f)
                             _div_e = None
                             try:
                                 # 2026-10-23 裁示 1B：吃本金只走唯一判定 SSOT 入口(1Y 含息 = 本地配息
@@ -942,13 +957,10 @@ def render_portfolio_tab() -> None:
                         _mj      = _f.get("moneydj_raw", {}) or {}
 
                         # σ 位階
-                        _sigma_info = None
-                        if _series is not None and len(_series.dropna()) >= 30:
-                            try:
-                                from services.precision_service import calc_hwm_sigma_levels as _hwm_fn2
-                                _sigma_info = _hwm_fn2(_series, lookback=252)
-                            except Exception as _se:
-                                _sigma_info = {"error": str(_se)[:60]}
+                        # 2C(BL-0426):σ 經唯一 SSOT(見 _hwm_sigma_info_for)。
+                        # unavailable → 帶 "error" + sigma_rank=None → advise_fund 走既有
+                        # 「資料不足」分支(不給 0);卡片顯示 SSOT 的中性 label / ⬜ 原因。
+                        _sigma_info = _hwm_sigma_info_for(_f)
 
                         # 配息覆蓋率 / 吃本金
                         _div_info = None
@@ -988,7 +1000,8 @@ def render_portfolio_tab() -> None:
                             f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
                             f"<span style='color:{GH_FG_PRIMARY};font-weight:700;font-size:13px'>{_name}</span>"
                             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
-                            f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px'>"
+                            f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px' "
+                            f"title='σ 以配息還原淨值計算；切點 −0.5σ／−1.5σ 為研究候選、未校準，非正式投資門檻'>"
                             f"σ {_sig_str} · {_sig_lbl}</span>"
                             f"<span style='color:{GRAY_CC};font-size:11px'>{_div_icon} {_div_alert}</span>"
                             f"<span style='color:{GRAY_AA};font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
@@ -1687,13 +1700,9 @@ def render_portfolio_tab() -> None:
                     _s_local = _pf_item.get("series")
                     _m_local = _pf_item.get("metrics", {}) or {}
                     _mj_local = _pf_item.get("moneydj_raw", {}) or {}
-                    _sigma = None
-                    if _s_local is not None and len(_s_local.dropna()) >= 30:
-                        try:
-                            from services.precision_service import calc_hwm_sigma_levels as _hwm_fn3
-                            _sigma = _hwm_fn3(_s_local, lookback=252)
-                        except Exception as _e_s:
-                            _sigma = {"error": str(_e_s)[:60]}
+                    # 2C(BL-0426):σ 經唯一 SSOT(見 _hwm_sigma_info_for);
+                    # unavailable → advise_fund 既有「資料不足」分支。
+                    _sigma = _hwm_sigma_info_for(_pf_item)
                     _div = None
                     try:
                         # 2026-10-23 裁示 1B：吃本金只走唯一判定 SSOT 入口(1Y 含息 = 本地配息

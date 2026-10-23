@@ -28,6 +28,7 @@ screener 與大表各有一套低基期演算法：
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from services.fund_screening import (
     LOW_BASE_LOOKBACK_DEFAULT,
@@ -72,9 +73,21 @@ def test_lookback_matches_the_big_table_default():
         f"大表用 {_default} 天、screener 用 {LOW_BASE_LOOKBACK_DEFAULT} 天 → 兩把尺")
 
 
+def _f(series):
+    """2026-10-23 稽核必修 A:`compute_base_state` 只收 fund dict(裸序列入口已移除)。
+    這裡的合成序列都是非配息基金 → 只帶 series、不帶配息資訊。"""
+    return {"series": series}
+
+
+def test_bare_series_input_is_rejected():
+    """裸 NAV 序列沒有配息資訊 = 繞過 2C 的 raw 入口 → 一律 TypeError(§1 Fail Loud)。"""
+    with pytest.raises(TypeError):
+        compute_base_state(_series(_DEEP_DROP), min_points=5)
+
+
 def test_thresholds_come_from_shared_ssot():
     """預設門檻必須是 `shared/signal_thresholds` 那兩個常數，且都是負數。"""
-    r = compute_base_state(_series(_DEEP_DROP), min_points=5)
+    r = compute_base_state(_f(_series(_DEEP_DROP)), min_points=5)
     assert r["buy_sigma"] == ROTATION_BUY_SIGMA
     assert r["sell_sigma"] == ROTATION_SELL_SIGMA
     assert ROTATION_BUY_SIGMA < 0 and ROTATION_SELL_SIGMA < 0, (
@@ -95,7 +108,7 @@ def test_old_positive_sigma_algorithm_is_deleted():
 # 2. compute_base_state 數學與符號
 # ══════════════════════════════════════════════════════════════
 def test_deep_drop_is_low_base_with_negative_sigma():
-    r = compute_base_state(_series(_DEEP_DROP), min_points=5)
+    r = compute_base_state(_f(_series(_DEEP_DROP)), min_points=5)
     assert r["base"] == "low" and r["is_low_base"] is True
     assert r["sigma_rank"] is not None and r["sigma_rank"] <= ROTATION_BUY_SIGMA
     assert r["sigma_rank"] < 0, "σ rank 必須是負數（不得回到正數深度）"
@@ -110,20 +123,20 @@ def test_volatile_fund_near_high_is_not_low_base():
     新口徑：這檔自己的日波動就有 ±20%，σ_abs 遠大於 20 元的跌幅 → σ rank ≈ −0.11σ
     → 其實貼著高點（高基期）。使用者若照舊 screener 買進，大表會說它是 🔴 高基期。
     """
-    r = compute_base_state(_series(_VOLATILE_NEAR_HIGH), min_points=5)
+    r = compute_base_state(_f(_series(_VOLATILE_NEAR_HIGH)), min_points=5)
     assert r["base"] == "high", f"σ rank={r['sigma_rank']} 竟被判成 {r['base']}"
     assert r["is_low_base"] is False
     assert r["sigma_rank"] >= ROTATION_SELL_SIGMA
 
 
 def test_at_period_high_is_high_base():
-    r = compute_base_state(_series(_AT_HIGH), min_points=5)
+    r = compute_base_state(_f(_series(_AT_HIGH)), min_points=5)
     assert r["base"] == "high" and r["sigma_rank"] == 0.0
 
 
 def test_buy_threshold_nav_uses_signed_addition():
     """買點門檻價 = HWM + buy_sigma×σ_abs（buy_sigma 為負 → 價位低於 HWM）。"""
-    r = compute_base_state(_series(_DEEP_DROP), min_points=5)
+    r = compute_base_state(_f(_series(_DEEP_DROP)), min_points=5)
     assert r["buy_threshold_nav"] is not None
     assert r["buy_threshold_nav"] < r["hwm"]
     # 現價已跌破買點門檻，正是它被判低基期的原因
@@ -133,9 +146,9 @@ def test_buy_threshold_nav_uses_signed_addition():
 def test_custom_thresholds_are_plumbed_through():
     """門檻若沒真的傳到 `classify_base`，同一條 σ rank 不會換結論 → 本條紅。"""
     _s = _series(_DEEP_DROP)
-    assert compute_base_state(_s, min_points=5, buy_sigma=-10.0)["base"] == "mid"
+    assert compute_base_state(_f(_s), min_points=5, buy_sigma=-10.0)["base"] == "mid"
     assert compute_base_state(
-        _s, min_points=5, buy_sigma=-10.0, sell_sigma=-5.0)["base"] == "high"
+        _f(_s), min_points=5, buy_sigma=-10.0, sell_sigma=-5.0)["base"] == "high"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -143,7 +156,7 @@ def test_custom_thresholds_are_plumbed_through():
 # ══════════════════════════════════════════════════════════════
 def test_frozen_nav_is_undetermined_not_low_base():
     """§1：NAV 完全不動（停售 / 清算）→ 無法定位階，不得誤判成低基期。"""
-    r = compute_base_state(_series(_FROZEN))
+    r = compute_base_state(_f(_series(_FROZEN)))
     assert r["base"] == "unknown"
     assert r["is_low_base"] is None and r["sigma_rank"] is None
     assert "σ" in r["note"] or "波動" in r["note"], "沒說清楚為什麼判不出來"
@@ -164,28 +177,28 @@ def test_frozen_fund_is_excluded_from_recommendations():
 
 def test_short_series_cannot_be_positioned():
     """NAV 不足 30 筆 → 上游回 error → unknown（不硬算）。"""
-    r = compute_base_state(_series([100.0] * 10 + [50.0]), min_points=5)
+    r = compute_base_state(_f(_series([100.0] * 10 + [50.0])), min_points=5)
     assert r["base"] == "unknown" and r["sigma_rank"] is None
 
 
 def test_reliability_flag_tracks_sample_size():
-    r_small = compute_base_state(_series(_DEEP_DROP), min_points=LOW_BASE_MIN_POINTS + 10)
+    r_small = compute_base_state(_f(_series(_DEEP_DROP)), min_points=LOW_BASE_MIN_POINTS + 10)
     assert r_small["reliable"] is False and "可信度低" in r_small["note"]
-    r_ok = compute_base_state(_series(_DEEP_DROP), min_points=5)
+    r_ok = compute_base_state(_f(_series(_DEEP_DROP)), min_points=5)
     assert r_ok["reliable"] is True and r_ok["n_points"] == len(_DEEP_DROP)
 
 
 def test_empty_and_none_and_bad_type():
-    assert compute_base_state(None)["note"] == "無 NAV"
-    empty = compute_base_state(pd.Series(dtype=float))
+    assert compute_base_state(_f(None))["note"] == "無 NAV"
+    empty = compute_base_state(_f(pd.Series(dtype=float)))
     assert empty["base"] == "unknown" and empty["note"] == "NAV 全空"
-    assert compute_base_state(123)["note"] == "NAV 型別非序列"
+    assert compute_base_state(_f(123))["note"] == "NAV 型別非序列"
 
 
 def test_dataframe_input_squeezed():
     df = pd.DataFrame({"nav": _DEEP_DROP},
                       index=pd.date_range("2024-01-01", periods=len(_DEEP_DROP)))
-    r = compute_base_state(df, min_points=5)
+    r = compute_base_state(_f(df), min_points=5)
     assert r["base"] == "low" and r["current"] == 60.0
 
 

@@ -193,13 +193,8 @@ def is_dividend_fund(fund_obj: dict) -> bool:
     if _divs:
         try:
             for _d in _divs:
-                if isinstance(_d, dict):
-                    _amt = _d.get("amount")
-                    if _amt is None:
-                        _amt = _d.get("div_per_unit")
-                elif isinstance(_d, (tuple, list)) and len(_d) >= 2:
-                    _amt = _d[1]
-                else:
+                _ok, _amt = dividend_record_amount(_d)
+                if not _ok:
                     continue
                 _f = _safe_float_or_none(_amt)
                 if _f is not None and _f > 0:
@@ -207,6 +202,36 @@ def is_dividend_fund(fund_obj: dict) -> bool:
         except TypeError:
             return False
     return False
+
+
+# ── 配息紀錄格式解析 SSOT(2026-10-23 裁示 2C;BL-0426)──────────────────────────
+# `is_dividend_fund` 與 `services/total_return_series.restore_total_return_series`
+# 共用同一份「怎麼從一筆配息紀錄讀出金額 / 除息日」:
+#   dict  → 金額 `amount`(為 None 才退 `div_per_unit`);日期 `date`(缺才退 `ex_date`)
+#   tuple / list(長度 ≥ 2)→ (日期, 金額)
+# 其餘型別 → 不是配息紀錄(略過)。抽出來之前 `is_dividend_fund` 的行為一字未改。
+def dividend_record_amount(rec) -> "tuple[bool, Any]":
+    """→ (是否為可辨識的配息紀錄, 原始金額值)。金額不轉型、不判正負(由呼叫端決定)。"""
+    if isinstance(rec, dict):
+        _amt = rec.get("amount")
+        if _amt is None:
+            _amt = rec.get("div_per_unit")
+        return True, _amt
+    if isinstance(rec, (tuple, list)) and len(rec) >= 2:
+        return True, rec[1]
+    return False, None
+
+
+def dividend_record_date(rec):
+    """→ 原始除息日值(未解析);非可辨識紀錄回 None。"""
+    if isinstance(rec, dict):
+        _d = rec.get("date")
+        if _d is None or _d == "":
+            _d = rec.get("ex_date")
+        return _d
+    if isinstance(rec, (tuple, list)) and len(rec) >= 2:
+        return rec[0]
+    return None
 
 
 def _unavailable(reason: str, *, source_label_days=None, official=None,
