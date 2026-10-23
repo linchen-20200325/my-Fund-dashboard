@@ -34,7 +34,15 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第七次）現況（以本框為準；下方第六次框起皆為歷史快照）**（BL-0426 結案 docs 回填；合併 SHA、PR head、CI 結果為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第六次框整段保留於下方）
+> **⭐ 2026-10-23（第八次）現況（以本框為準；下方第七次框起皆為歷史快照）**（BL-0428 唯讀盤點 docs 批；main 為本組 `git rev-parse` 確認；狀態更新，不是漏刪：第七次框整段保留於下方）
+> - **最新 main**：`365cfb1d`。
+> - **Open PR**：本項工作沒有 open PR（本 docs commit 待總管推送）。
+> - **已完成**：BL-0428 行動類規則唯讀盤點（兩組獨立調查，合併表記於 `docs/v2/64_v2_ssot_convergence.md` §9；`docs/BACKLOG.md` BL-0428、BL-0438 列尾補記）。未改任何程式；未新增 DEC（尚無裁示）。
+> - **待客戶裁示**：Decision Gate DG-1～DG-5（64 §9.7）—— DG-1 行動類 consumer 遇 σ ⬜ 的處理（推薦 A）、DG-2 配置回測 ⬜ 權重（推薦 A）、DG-3 HWM σ 驅動的行動文字（推薦 C）、DG-4 原始 NAV 買賣訊號（推薦 C＝併 BL-0438）、DG-5 低波動數值門檻（推薦 A）。
+> - **下一個唯一工作點**：**等客戶裁示 DG-1～DG-5**，不主動開工（§-1）。
+> - **實作建議 Model／Effort（裁示後）**：DG-1／DG-2／DG-5 若選推薦 → 目前模型 **Medium**；DG-3 選 C → 目前模型 **Medium**（多 consumer 文字退休＋測試，需 1 組獨立稽核）；若任一題選 A／B 而涉及門檻 → **High**。
+
+> **2026-10-23（第七次）現況（~~以本框為準；下方第六次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第八次框；狀態更新，不是漏刪）**（BL-0426 結案 docs 回填；合併 SHA、PR head、CI 結果為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第六次框整段保留於下方）
 > - **最新 main**：`b35e2620`（PR #1030 已合併；head `fef048ae`，CI Fast checks／Schema gate／Slow tests 三條皆 success；code `7569e663` 獨立稽核有條件通過）。
 > - **Open PR**：本項工作沒有 open PR（本 docs 回填 commit 待總管推送）。
 > - **已完成**：BL-0426、BL-0421 改 closed（`docs/BACKLOG.md`）；`DEC-2026-10-23-06`／`-07` evidence 回填合併。
