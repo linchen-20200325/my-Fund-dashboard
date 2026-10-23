@@ -7,6 +7,12 @@
 - **客戶指示的出處**：客戶 2026-10-22 指示（查一檔只要直接輸入代碼、明確需要多檔比較、搜尋偏好簡單、投資語意保留、舊 T7 畫面不搬）經總管派工單轉達；**repo 內無逐字存檔**；文件組未見客戶對話本身。
 - **體例**：舊條文不刪、狀態更新加「狀態更新，不是漏刪」；會漂移的數字附量測日與 SHA；不寫任何 secret 值；程式位置寫「檔案＋符號」，不寫行號（行號在重構後失效）。
 
+- **2026-10-23 狀態更新（不是漏刪；量測 SHA `bde2468`；出處 `docs/v2/64_v2_ssot_convergence.md`、`DEC-2026-10-23-01`；唯讀稽核結論，單組實測＋總管抽驗，未經第二組逐條驗證）**：
+  - **B2**：`services/fund_batch*` 不存在（Phase 1.4 已刪）；批次續跑判定在 `ui/tab_batch_analysis.py`，L1 只有 `repositories/batch_checkpoint.py`。
+  - **`_Ledgers` 不是純 append-only**：`repositories/ledger_repository.py::replace_ledgers_for_policy` 在編輯持倉時整段重寫該保單的帳本。E1 列「`_Ledgers` append」只描述新投入那一條路徑。
+  - **XIRR 與 `GhostPortfolio`**：XIRR 實際在 `services/ledger_service.py::calculate_xirr`；兩者 production caller 為 0（本檔 §4 末段原寫「未全 repo 驗證」，此為 2026-10-23 稽核補驗結果）。
+  - **基期定義的舊說明已過期**：`ui/helpers/fund_grp_health/columns.py` 基期欄 help 文字「與篩選器不是同一套定義」已過期（2026-08-07 已統一）；`services/fund_screening.py::compute_base_state` docstring 仍寫 √len(s)，實碼為 √252。兩處屬程式註解，本批不改（→ BL-0423）。
+
 ---
 
 ## §0 三層 UI 的事實（量測 SHA `d2cd3bb`，2026-10-22）
@@ -39,7 +45,7 @@ Gap 類型標籤：`[舊有B無]` `[縮水]` `[找不到入口]` `[過時/重複
 | # | 舊功能 | 舊邏輯／用途 | 資料來源 | B 版目前狀態 | Gap | 建議 | 需客戶裁示 |
 |---|---|---|---|---|---|---|---|
 | B1 | ② 持倉體檢：text_area 多檔代號＋本金 → 健診寬表（識別／health／div／extra／base 五段，70+ 欄，含 Sharpe 1Y、Max DD、3Y/5Y 年化、年化配息率、上/下檔捕捉、σ rank、基期、策略燈號…） | `services.fund_row.process_one_fund`（4 並行）；`services/health/report.build_health_analysis_row／build_dividend_summary_row`；`services/fund_grp_health/unified.build_merged_extra_columns`；`ui/helpers/fund_grp_health/unified.py::BATCH_UNIFIED_COLUMNS` | 同 A1 取數鏈 | EXP-3 並排對照**最多 3 檔、只有 4 列**（最近淨值日、最近淨值、近 12 個月配息比、經理費率恆 ⬜） | [縮水] | 保留 `process_one_fund` 與欄位 SSOT；B 版比較表需重新設計欄位集合（客戶明確要多檔比較），不照抄 70 欄 | 是（欄位取捨） |
-| B2 | ③ 批次掃描：貼多代碼／上傳 CSV → 序列抓取＋磁碟 checkpoint＋續跑／重試＋CSV 下載 | `ui/tab_batch_analysis._parse_codes`；L1 `repositories/batch_checkpoint`；`build_batch_unified_row` | 同上；`data_cache/batch/` | 無批次輸入（EXP-1 多列 AND 條件） | [舊有B無] | 保留 checkpoint／續跑邏輯；入口形式待設計 | 是（UI） |
+| B2 | ③ 批次掃描：貼多代碼／上傳 CSV → 序列抓取＋磁碟 checkpoint＋續跑／重試＋CSV 下載 | `ui/tab_batch_analysis._parse_codes`；L1 `repositories/batch_checkpoint`；`build_batch_unified_row`（2026-10-23 補註，狀態更新，不是漏刪：`services/fund_batch*` 不存在，續跑判定在 `ui/tab_batch_analysis.py`，見檔頭 2026-10-23 狀態更新） | 同上；`data_cache/batch/` | 無批次輸入（EXP-1 多列 AND 條件） | [舊有B無] | 保留 checkpoint／續跑邏輯；入口形式待設計 | 是（UI） |
 | B3 | 🩺 基金體檢表 PK（近1M/3M/6M/1Y 含息、同類平均、超額 pp、夏普、年化波動、可申購單位、每月配息、體檢判定） | `ui/helpers/fund/checkup.build_checkup_dataframe`；peer 來自 MoneyDJ `risk_metrics.peer_compare` | MoneyDJ 績效評比頁（約三成抓不到） | 無 | [舊有B無] | 1M/3M/6M 短期績效與同類比較是 B 版完全沒有的維度；納入候選 | 是 |
 | B4 | 進階區：真實收益 vs 配息率矩陣、相關性／持股重疊矩陣、−2σ 超跌、輪動配對、Bollinger 詳圖、AI 跨檔評論、互補配對探索、換標決策 | `services.portfolio_service.calc_holdings_overlap／calc_correlation_matrix`、`services.rotation.suggest_rotation_pairs`、`services.switch_strategy.*`、`services.homogeneity` | 大表 df | 無 | [舊有B無]；輪動配對／換標決策／互補配對屬 [投資語意] | 相關性／重疊度為描述性可保留；配對建議類受方向性輸出限制 | 是（方向性部分） |
 | B5 | 期間：舊版全固定（1Y／252 lookback；本金固定 100 萬或可改） | — | — | B 版亦無期間選擇（hld 區間只管持倉） | [兩版皆無] | 客戶問「比較哪些期間」——登記為待設計需求，不是舊功能回填 | 是 |
