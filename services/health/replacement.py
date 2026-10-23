@@ -180,8 +180,14 @@ def check_replacement_recommendation(
 
     # ─── 綜合 verdict ────────────────────────────────────────
     # unknown 判定:所有關鍵指標都拿不到時不下 verdict(避免假綠燈)
+    # 2026-10-23 裁示 1B 稽核必修 1:吃本金的灰色 dict(`status="⬜ 資料未備／無法判定"`、
+    # `alert_level="grey"`、`eating_principal=None`)**不是訊號** —— 它的意思是「判不動」,
+    # 若把它那個非空的 status 字串當訊號,無其他指標的基金會被判成 🟢 保留(Missing → HOLD,§1)。
+    _eat_signal = (isinstance(eat_result, dict)
+                   and eat_result.get("alert_level") != "grey"
+                   and eat_result.get("eating_principal") is not None)
     _has_any_signal = (
-        eat_status or grade not in (None, "—")
+        _eat_signal or grade not in (None, "—")
         or sharpe_v is not None or max_dd_v is not None
         or _ret_3y_ann is not None
     )

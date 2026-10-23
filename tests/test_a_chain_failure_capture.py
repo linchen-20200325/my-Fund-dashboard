@@ -31,6 +31,23 @@ NEW_RESULT_KEYS = frozenset({"nav_source_failures", "nav_page_type_attempts", "c
 NEW_SERIES_ATTRS = frozenset({"nav_history_dates", "nav_history_recorded_at", "nav_history_source",
                               "nav_history_dates_error", "nav_history_currency", "nav_history_live_currency",
                               "secid_origin", "currency_id_origin"})
+# 2026-10-23 客戶裁示 1B（docs/v2/64 §4 #1/#4/#5；BL-0420）：`calc_metrics` / `finalize_fund_metrics` 的
+# 年化配息率改為「近 12 個月實際配息 ÷ 最新淨值」（無紀錄 → None，不再是 0）、新增配息筆數鍵、
+# 不再把本地還原值注入 perf["1Y"]、對帳 self 只在窗口 ≥ 350 天時算。這些鍵在黃金檔裡是 1B 前的語意，
+# **黃金檔不得以改動後程式重產**，故比對時兩邊同時拿掉這幾個鍵；其餘每一欄（含 perf / perf_source）照舊逐欄相同。
+# 這幾個鍵的新語意由 `tests/test_ssot_1b_total_return_adr_eating.py` 正面釘住，不在這裡重產。
+CHANGED_METRICS_KEYS_1B = frozenset({"annual_div", "monthly_div", "annual_div_rate",
+                                     "annual_div_rate_div_count", "annual_div_rate_window_end",
+                                     "ret_1y_div_count", "ret_1y_reconcile", "div_yield_reconcile"})
+
+
+def _strip(value, keys: frozenset):
+    """遞迴拿掉指定鍵（只用在 metrics 層的 1B 鍵；黃金檔已是 normalize 後的 JSON）。"""
+    if isinstance(value, dict):
+        return {k: _strip(v, keys) for k, v in value.items() if k not in keys}
+    if isinstance(value, list):
+        return [_strip(v, keys) for v in value]
+    return value
 
 
 def _run(monkeypatch, code, scenario):
@@ -59,8 +76,13 @@ def test_除新增鍵外_改動前後逐欄相同_呼叫順序相同(monkeypatch
     assert page_type == golden["page_type"]
     assert [list(c) for c in auto_calls] == golden["auto_calls"]
     assert [list(c) for c in l1_calls] == golden["l1_calls"]
-    assert H.normalize(res, drop=drop) == golden["auto"]
-    assert H.normalize(raw, drop=drop) == golden["l1"]
+    assert _strip(H.normalize(res, drop=drop), CHANGED_METRICS_KEYS_1B) == _strip(golden["auto"], CHANGED_METRICS_KEYS_1B)
+    assert _strip(H.normalize(raw, drop=drop), CHANGED_METRICS_KEYS_1B) == _strip(golden["l1"], CHANGED_METRICS_KEYS_1B)
+    # 裁示 1B 的鍵只在 metrics 層；黃金檔裡 perf["1Y"] / perf_source 一欄未動（上面已逐欄比過）。
+    _m = (res.get("metrics") or {}) if isinstance(res, dict) else {}
+    if _m:
+        assert "ret_1y_div_count" in _m and "annual_div_rate_div_count" in _m
+        assert _m.get("annual_div_rate") != 0, "無配息紀錄的年化配息率必須是 None，不是 0（裁示 1B）"
 
 
 def test_黃金檔七個情境都在_防空掃():

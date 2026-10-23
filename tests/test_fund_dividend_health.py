@@ -332,17 +332,19 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
     """
 
     def _build_fund(self, series_obj, divs_obj):
+        # 2026-10-23 裁示 1B:判定讀本地還原值(ret_1y_total + 窗口 + 窗內配息筆數)與
+        # 近 12 個月實際配息率(metrics.annual_div_rate);wb05 只對帳。
         return {
             "series": series_obj,
             "dividends": divs_obj,
             "moneydj_raw": {"moneydj_div_yield": 7.49},
-            "metrics": {"ret_1y_total": 14.5},
+            "metrics": {"ret_1y_total": 14.5, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 1, "annual_div_rate": 7.49},
         }
 
     def test_pd_series_nav_no_value_error(self):
-        # v19.175 後主源改 compute_1y_total_return(業界複利優先,perf['1Y'] >
-        # ret_1y_total > ret_1y > NAV 外推),Bug 4 fix 核心 assertion 仍守
-        # 「pd.Series 進去不 raise」+ 回 dict;_tr1y_method 期待業界路徑。
+        # Bug 4 fix 核心 assertion:「pd.Series 進去不 raise」+ 回 dict;
+        # 裁示 1B 後 _tr1y_method 期待本地還原路徑,mk_simple 對照欄已移除(_tr1y_meta 恆 None)。
         import pandas as pd
         from services.health.dividend import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
@@ -352,13 +354,10 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         fund = self._build_fund(s, divs)
         out = check_eating_principal_1y_mk(fund)  # 不可 raise(Bug 4 核心)
         assert isinstance(out, dict)
-        # v19.175:走業界「本站自算含息」路徑;mk_simple 退居對照欄(_tr1y_meta)
-        # 2026-08-10:來源標籤改白話,斷言改比對 SSOT 常數(等值比對比原子字串更嚴)
-        from services.fund_total_return import SRC_SELF_TOTAL
-        assert (out.get("_tr1y_method") or "").startswith(SRC_SELF_TOTAL)
-        # 對照欄仍可算出 mk_simple_value
-        assert out.get("_tr1y_meta") is not None
-        assert "mk_simple_value" in out["_tr1y_meta"]
+        from services.fund_total_return import SRC_SELF_RESTORED
+        assert out.get("_tr1y_method") == SRC_SELF_RESTORED
+        assert out.get("_tr1y_meta") is None
+        assert out.get("alert_level") == "green"
 
     def test_dict_nav_still_works(self):
         """confirm refactor 不破壞 dict 入口."""
@@ -369,9 +368,8 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         fund = self._build_fund(nav, divs)
         out = check_eating_principal_1y_mk(fund)
         assert isinstance(out, dict)
-        # v19.175 業界路徑(metrics.ret_1y_total = 14.5 走本站自算含息)
-        from services.fund_total_return import SRC_SELF_TOTAL
-        assert (out.get("_tr1y_method") or "").startswith(SRC_SELF_TOTAL)
+        from services.fund_total_return import SRC_SELF_RESTORED
+        assert out.get("_tr1y_method") == SRC_SELF_RESTORED
 
     def test_falls_back_to_moneydj_series_when_top_none(self):
         """top-level None → 走 moneydj_raw["series"] fallback。
@@ -392,13 +390,14 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
                 "series": s,
                 "dividends": [{"date": "2024-12-15", "amount": 0.05}],
             },
-            "metrics": {"ret_1y_total": 14.5},
+            "metrics": {"ret_1y_total": 14.5, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 1, "annual_div_rate": 7.49},
         }
         out = check_eating_principal_1y_mk(fund)
         assert isinstance(out, dict)
-        # mk_simple 對照欄仍能從 moneydj_raw.series + dividends fallback 算出
-        assert out.get("_tr1y_meta") is not None
-        assert "mk_simple_value" in out["_tr1y_meta"]
+        # 裁示 1B:mk_simple 對照欄已移除,欄位保留為 None;判定不受 series 來源位置影響
+        assert out.get("_tr1y_meta") is None
+        assert out.get("alert_level") == "green"
 
 
 # ════════════════════════════════════════════════════════════════
@@ -426,17 +425,12 @@ class TestTotalReturnSourceGuard:
         assert is_extrapolated_1y_source("") is False
 
     def test_refuses_verdict_on_annualized_extrapolation(self):
-        """短窗下跌序列 + 無官方含息 → tr1y 走外推年化 → 應拒判(灰),不報 🔴。
+        """短窗下跌序列 + 無官方含息 → 舊碼走外推年化;裁示 1B 後**外推層退役**,
+        SSOT 不給值 → 拒判(灰),不報 🔴。
 
         這正是 ACTI71 −38% 的成因:淨值近一年其實上漲,但抓不到官方含息 →
         退到外推年化把短期回檔 ×放大成大負數 → 舊碼誤判嚴重吃本金。
-
-        ⚠️ 2026-08-14 稽核 E1 後 fixture 從 40 天改為 200 天:
-        外推門檻由 30 天提高到 `RET_1Y_EXTRAPOLATE_MIN_DAYS`(180),40 天現在
-        **根本拿不到值**(回 None + `SRC_TOO_SHORT`),已經走不到「外推年化」這條路。
-        本條要守的是「**走得到外推年化時仍須拒判**」,所以窗口改成剛好落在
-        [門檻, 365) 這個仍會外推的區間 —— 拒判護欄本身完全沒有放寬。
-        40 天那個情境改由下一條 `test_too_short_window_returns_nothing` 接手。
+        現在連「走得到外推」這件事都不存在:200 天跨度、無還原值 → no_restored_value。
         """
         import pandas as pd
 
@@ -454,11 +448,12 @@ class TestTotalReturnSourceGuard:
             "moneydj_raw": {},
         }
         _tr, _method = compute_1y_total_return(fd)
-        assert is_extrapolated_1y_source(_method)       # 確認仍走到外推年化(源#4)
+        assert _tr is None and not is_extrapolated_1y_source(_method)   # 外推層已退役
         res = check_eating_principal_1y_mk(fd)
         assert res is not None
         assert res["alert_level"] == "grey"             # 拒判,不冒充紅燈
-        assert res["eating_principal"] is False
+        assert res["eating_principal"] is None          # missing ≠ False
+        assert res["reason"] == "no_restored_value"
 
     def test_too_short_window_returns_nothing_and_still_refuses(self):
         """稽核 E1 —— 40 天(ACTI71 原始情境)現在連值都不該給,且仍須拒判。
@@ -481,23 +476,29 @@ class TestTotalReturnSourceGuard:
         }
         _tr, _method = compute_1y_total_return(fd)
         assert _tr is None, f"39 天資料仍被外推成 {_tr} —— 那是乘出來的不是量出來的"
-        assert "不足以推算一年" in _method
+        assert "資料未備" in _method
         res = check_eating_principal_1y_mk(fd)
         assert res is not None
         assert res["alert_level"] == "grey"
-        assert res["eating_principal"] is False
+        assert res["eating_principal"] is None
         # 稽核 🟠-3:tr1y 缺席時 adr 明明算得出來,不可連它一起丟掉
         assert res.get("_adr_pct") is not None, (
             "tr1y 早退路徑漏傳 _adr_pct → 換標建議規則 (b) 對這批基金恆失效")
 
-    def test_official_incl_div_still_judged_normally(self):
-        """有官方 wb01 含息報酬(+17% > 配息 9%)→ 正常判定 🟢,守門不誤傷。"""
+    def test_restored_incl_div_still_judged_normally(self):
+        """有本地還原含息(+17% > 配息 9%)→ 正常判定 🟢,守門不誤傷。
+        (裁示 1B:官方 wb01 `perf['1Y']` 只對帳;只有官方值 → 不判。)"""
         from services.health.dividend import check_eating_principal_1y_mk
         fd = {
             "moneydj_raw": {"perf": {"1Y": 17.0}, "moneydj_div_yield": 9.0},
             "perf_source": "wb01",
-            "metrics": {},
+            "metrics": {"ret_1y_total": 17.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 9.0},
         }
         res = check_eating_principal_1y_mk(fd)
         assert res is not None
         assert res["alert_level"] == "green"            # gap = 9 − 17 < 0 → 健康
+        fd_official_only = {**fd, "metrics": {}}
+        res2 = check_eating_principal_1y_mk(fd_official_only)
+        assert res2 is not None and res2["alert_level"] == "grey"
+        assert res2["eating_principal"] is None

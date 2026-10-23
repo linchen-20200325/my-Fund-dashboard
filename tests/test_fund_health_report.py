@@ -67,23 +67,36 @@ class TestHealthAnalysisRow:
         本測試鎖住:`perf["1Y"]` 缺、但 `metrics.ret_1y_total` 有值時,
         Alpha 仍應該算出來(用 ret_1y_total 當 tr1y,而非停在 None)。
         """
+        # 2026-10-23 裁示 1B:perf["1Y"] 根本不再是來源;Alpha 直接讀本地還原值
+        # (窗口須 ≥ 350 天;46 天短窗 → unavailable → Alpha 誠實 None,見下一條)。
         fd = {
             "moneydj_raw": {"perf": {}, "moneydj_div_yield": 9.49},
             "metrics": {
                 "sharpe": 0.32,
-                "ret_1y_total": 2.11,      # 短窗口本地含息計算(46 天)
-                "ret_1y_window_days": 46,
+                "ret_1y_total": 2.11,
+                "ret_1y_window_days": 365,
+                "ret_1y_div_count": 12,
                 "annual_div_rate": 9.49,
             },
         }
         r = build_health_analysis_row(fd, "SHORT1")
         assert r["Alpha %"] is not None, (
-            "perf['1Y'] 缺但 ret_1y_total 有值時,Alpha 仍應 fallback 算出來"
+            "perf['1Y'] 缺但 ret_1y_total 有值時,Alpha 應由 SSOT 還原值算出來"
             "(不應該永遠停在 None)"
         )
         assert abs(r["Alpha %"] - (2.11 - 9.49)) < 0.05, (
             f"Alpha 應等於 tr1y(ret_1y_total) - 配息率,實際 {r['Alpha %']}"
         )
+
+    def test_alpha_is_blank_when_window_too_short(self):
+        """短窗(46 天)還原值 → SSOT unavailable → Alpha None,不拿短窗累積充當一年。"""
+        fd = {
+            "moneydj_raw": {"perf": {}, "moneydj_div_yield": 9.49},
+            "metrics": {"sharpe": 0.32, "ret_1y_total": 2.11, "ret_1y_window_days": 46,
+                        "annual_div_rate": 9.49},
+        }
+        r = build_health_analysis_row(fd, "SHORT2")
+        assert r["Alpha %"] is None
 
 
 class TestDividendSummaryRow:
@@ -97,18 +110,29 @@ class TestDividendSummaryRow:
 
     def test_eat_principal_marked(self):
         """高 adr + 低 tr1y → 應顯示 🔴 吃本金。"""
+        # 2026-10-23 裁示 1B:官方 perf/wb05 只對帳;判定讀本地還原值 + 近 12 個月實際配息率
         fd = {
             "moneydj_raw": {
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
             },
-            "metrics": {},
+            "metrics": {"ret_1y_total": 2.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 10.0},
         }
         r = build_dividend_summary_row(fd, "EAT1", principal_twd=1_000_000,
                                        holding_years=2)
         assert "吃本金" in r["吃本金燈號 (1Y·)"]
         assert r["年化配息率 %"] == 10.0
         assert r["1Y 含息 %"] == 2.0
+
+    def test_official_only_is_unavailable_not_judged(self):
+        """只有官方 perf['1Y'] / wb05、沒有本地還原值 → 灰(⬜ 資料未備),不是 🔴 也不是 🟢。"""
+        fd = {"moneydj_raw": {"perf": {"1Y": 2.0}, "moneydj_div_yield": 10.0},
+              "perf_source": "wb01", "metrics": {}}
+        r = build_dividend_summary_row(fd, "OFF1", principal_twd=1_000_000, holding_years=2)
+        assert r["吃本金燈號 (1Y·)"].startswith("⬜")
+        assert r["1Y 含息 %"] is None and r["年化配息率 %"] is None
+        assert r["1Y 來源"].startswith("⬜ 資料未備")
 
     def test_replacement_verdict_threaded(self):
         """換標的建議欄位應透過 SSOT 串接,不直接寫死。"""

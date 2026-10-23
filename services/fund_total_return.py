@@ -1,46 +1,63 @@
-"""v19.175 — 1Y 含息報酬率統一 fallback chain(L2 純函式,zero-IO)。
+"""1Y 含息報酬率 SSOT(L2 純函式,zero-IO)。
 
 從 `ui/helpers/macro_helpers.py` 搬入,理由:
 - 函式無 streamlit 依賴,本就是純函式
-- L2 service(`services/fund_dividend_health.py`)需要呼叫它做吃本金燈號判定
+- L2 service(`services/health/dividend.py`)需要呼叫它做吃本金燈號判定
   → §8.2 規定 L2 不得 import L3 → 搬到 L2 才能合法 SSOT 化
 
 caller:
 - `ui/helpers/macro_helpers.py` shim re-export 保持向後相容
-- `services/fund_dividend_health.check_eating_principal_1y_mk()` 直接呼叫
+- `services/health/dividend.check_eating_principal_1y_mk()` 直接呼叫
+- `services/portfolio_service` / `services/ai_service` / `services/health/report` 讀值
 
-precedence(最權威 → 次選):
-  1. perf["1Y"]      wb01 真 1Y / 本地還原淨值法注入(v18.65/v18.71)
-  2. ret_1y_total    本地含息計算(可能短窗口年化)
-  3. ret_1y          純 NAV 變化率(不含息)
-  4. NAV 序列年化    最後手段(跨度須 ≥ `RET_1Y_EXTRAPOLATE_MIN_DAYS`,scale cap 2x)
+precedence(2026-10-23 客戶裁示 1B 後**只有一層**):
+  唯一算法 = 本地「配息還原淨值法」`metrics.ret_1y_total`
+             (`fund_service.calc_metrics` 以 `calculate_fund_total_return` 產出)
+  且窗口須 ≥ `RET_1Y_RESTORED_MIN_WINDOW_DAYS`(SSOT,350 天);
+  配息型基金的還原窗口內若**一筆配息都沒有**,視為配息資料未備 → 不判。
+  其餘情況一律回「⬜ 資料未備／無法判定」+ 白話原因,**不**外推年化、**不**退回
+  純淨值報酬、**不**拿 MoneyDJ wb01 `perf["1Y"]` 當值(官方值只放 `official_1y_pct`
+  供對帳,§4.3)。
 
-2026-08-14 稽核 E1:第 4 層原本 30 天就敢 ×12 外推,大表因此印出 +201% 的台幣基金。
-現在跨度不足半年直接回 `(None, SRC_TOO_SHORT)`;四層出口另加合理性帶標記
-(`is_implausible_1y`),離譜值不改不丟、但來源標籤會自己講話。門檻全走
-`shared/signal_thresholds.py` SSOT。
+舊的四層 fallback(perf["1Y"] → ret_1y_total → ret_1y → NAV 序列年化)已退役:
+每一層的口徑都不一樣(官方複利 / 短窗累積 / 不含息 / 外推),同一檔基金在不同
+分頁會因為走到不同層而出現不同數字與不同燈號(§2.1 SSOT)。
+2026-08-14 稽核 E1 / v19.480 稽核 B1、B2 抓到的假 🔴 全部出自第 2~4 層。
 """
 from __future__ import annotations
 
+from typing import Any
+
 # ── 「1Y 來源」欄 / Tab2 KPI 卡的顯示值(SSOT;呼叫端與測試一律 import)────────
 # 2026-08-10 user 拍板:這些字串會**原樣印給使用者看**,不能是內部代號。
-# 原本印的是外站網頁代號、內部欄位名與內部版號,使用者完全無從判斷這個報酬率
-# 到底是「官方公布的」還是「本站自己推算的」—— 而那正是本欄唯一的用途(§2.2)。
 #
-# 規則同「Sharpe 來源」欄:官方值以「MoneyDJ 官方」開頭、自算值以「自算」開頭,
-# 括號裡補上口徑差異(含不含配息 / 樣本只有幾天)。可靠度由高到低即宣告順序。
-SRC_OFFICIAL = "MoneyDJ 官方"                      # 官方績效表現成數字,最可信
-SRC_SELF_RESTORED = "自算（還原含息淨值）"          # 官方沒給 → 用淨值 + 配息記錄還原
-SRC_PERF_UNLABELED = "績效表（來源未標註）"         # 有績效值但沒標來源 → 誠實說不知道(§1)
-SRC_SELF_TOTAL = "自算含息"                        # 短窗時 → f"{SRC_SELF_TOTAL}（僅 N 天窗口）"
-SRC_SELF_NAV_ONLY = "自算（僅淨值，不含配息）"
-SRC_SELF_ANNUALIZED = "自算（{days} 天資料外推年化）"   # 最不可靠的一層
-SRC_NONE = "—"
-# 稽核 E1(2026-08-14):跨度不足以外推 → 誠實留白,並把「為什麼是空的」寫在來源欄。
-# 舊行為是拿 30 天漲幅 ×12 印一個 +201% 的數字出來(§1 禁止的「估一個合理值」)。
-SRC_TOO_SHORT = "—（僅 {days} 天資料，不足以推算一年）"
+# 2026-10-23 裁示 1B 後,SSOT 只會產出下列兩種:
+#   - `SRC_SELF_RESTORED`          有值(本地還原含息,窗口 ≥ 350 天)
+#   - `SRC_UNAVAILABLE_PREFIX`(…)  無值(資料未備／無法判定 + 白話原因)
+SRC_SELF_RESTORED = "自算（還原含息淨值）"          # 唯一有值的來源
+SRC_UNAVAILABLE_PREFIX = "⬜ 資料未備／無法判定"     # 無值時的標籤前綴(括號補白話原因)
+SRC_NONE = "—"                                      # resolve 結果 dict 的 `source` 欄(無值時)
+
+# ── 以下常數 2026-10-23 裁示 1B 後**不再由 SSOT 產出**;只為相容保留(避免 import 斷)──
+SRC_OFFICIAL = "MoneyDJ 官方"                      # 相容保留:官方值改放 official_1y_pct,不當主值
+SRC_PERF_UNLABELED = "績效表（來源未標註）"         # 相容保留:perf 不再被讀成值
+SRC_SELF_TOTAL = "自算含息"                        # 相容保留:短窗累積不再給值
+SRC_SELF_NAV_ONLY = "自算（僅淨值，不含配息）"      # 相容保留:純淨值不再當含息報酬
+SRC_SELF_ANNUALIZED = "自算（{days} 天資料外推年化）"   # 相容保留:外推年化已退役
+SRC_TOO_SHORT = "—（僅 {days} 天資料，不足以推算一年）"  # 相容保留:短窗改走 window_short
 # 值落在合理帶外時,**附加**在來源標籤後面(不改值、不丟值,只讓它自己講話)
 SRC_IMPLAUSIBLE_SUFFIX = "　⚠️ 數值異常大，請先核對幣別與除息"
+
+# unavailable 的白話原因(放進標籤括號;吃本金 / 健診表 / AI prompt 一律印這個)
+UNAVAILABLE_REASON_TEXT = {
+    "no_series": "無淨值序列",
+    "no_restored_value": "淨值序列不足以還原一年含息報酬",
+    "window_short": "淨值僅 {days} 天，不足一年",
+    "window_unknown": "還原窗口天數未知",
+    "dividend_data_missing": "配息基金但近一年窗口內無配息紀錄",
+    # 有配息紀錄(12M 窗內筆數 > 0)、但還原表以日期 left-join 後一筆都沒對齊到淨值日
+    "dividend_data_missing_unaligned": "有配息紀錄但無一筆對齊到淨值日，無法還原",
+}
 
 
 def is_implausible_1y(value) -> bool:
@@ -66,181 +83,252 @@ def is_implausible_1y(value) -> bool:
 
 
 def _flag_if_implausible(value, source_label: str) -> tuple[float, str]:
-    """統一出口:值離譜就把警語黏在來源標籤上。所有 4 條 fallback 共用。
+    """統一出口:值離譜就把警語黏在來源標籤上。
 
-    ⚠️ `float(value)` 對無法轉數字的值會拋 ValueError/TypeError,而三條 caller
-    外面各有一個 `except (TypeError, ValueError): pass` —— 也就是說壞值會**沉默地**
-    降級到下一層 fallback。行為結果沒錯(下一層本來就該接手),但沉默不合 §3.3,
-    故在這裡先攔下來記一筆 stderr,讓「這個源給了垃圾」留得下痕跡。
+    `float(value)` 對無法轉數字的值會拋 ValueError/TypeError;caller 須自行決定
+    降級路徑。這裡先記一筆 stderr,讓「這個源給了垃圾」留得下痕跡(§3.3)。
     """
     try:
         v = float(value)
     except (TypeError, ValueError):
         import sys as _sys
         print(f"[fund_total_return] 來源 {source_label!r} 給出無法轉數字的值 "
-              f"{value!r} → 降級到下一層 fallback", file=_sys.stderr)
+              f"{value!r}", file=_sys.stderr)
         raise
     if is_implausible_1y(v):
         return v, f"{source_label}{SRC_IMPLAUSIBLE_SUFFIX}"
     return v, source_label
 
 # Tab2 吃本金 KPI 卡用:命中任一片語 = 「這個 1Y 是本站算的,且可能不足一整年」,
-# 該卡會把欄名從「1Y 含息報酬」改標成實際天數。涵蓋範圍**刻意**與改文案前一致:
-# 還原淨值法 / 自算含息 / 外推年化 三條會改標;SRC_SELF_NAV_ONLY 本身就是完整
-# 一年的淨值變化,不在此列(改文案不順手改行為)。
+# 該卡會把欄名從「1Y 含息報酬」改標成實際天數。保留既有字表(改文案不順手改行為);
+# 裁示 1B 後 SSOT 只會產出「還原含息淨值」這一種,後兩個片語不會再出現。
 LOCAL_WINDOW_SENSITIVE_HINTS = ("還原含息淨值", "自算含息", "外推年化")
 
 
 def is_extrapolated_1y_source(source_label: str) -> bool:
     """該 tr1y 是否為『短窗淨值 ×最多12 外推年化』(`SRC_SELF_ANNUALIZED`)。
 
-    v19.448 稽核修:這是 4 層 fallback 中**最不可靠**的一層 —— 拿短窗淨值算個跌幅
-    再放大年化,(a) 不含配息、(b) 短窗外推會爆掉,且**根本不是真實一年報酬**。
-    ACTI71 顯示的 −38.18% 就是這條:近一年淨值其實上漲,卻被外推成大負數 → 假 🔴 嚴重。
-    吃本金判定端命中此來源時應**拒判**(⚪ 資料不足),不可拿它報紅燈(§1 Fail Loud)。
-
-    2026-08-14 稽核 E1 後,外推門檻與倍數上限改走 `shared/signal_thresholds` SSOT
-    (原本寫死 ≥30 天 / cap 12x)。跨度未達門檻者根本拿不到值,改由
-    `is_too_short_1y_source()` 辨識 —— 本函式**不**涵蓋那一種。
-
-    註:`SRC_SELF_NAV_ONLY`(純淨值不含配息,源#3)的「重複扣配息」是另一個較廣的議題
-    (影響多檔 + SSOT 測試),待 user 核准範圍後另行處理,本函式**不**涵蓋。
+    2026-10-23 裁示 1B 後 SSOT **不再產出**此類來源(外推年化層已退役),
+    對 SSOT 產出的標籤恆回 False;保留供舊標籤 / UI 既有分支相容。
     """
     return "外推年化" in str(source_label or "")
 
 
 def is_too_short_1y_source(source_label: str) -> bool:
-    """該 tr1y 之所以是 None,是不是因為「有淨值序列、但跨度不足以推算一年」?
+    """該 tr1y 之所以是 None,是不是「有淨值序列但不足一年」或「連序列都沒有」?
 
-    稽核 E1 後多出來的第五種狀態,必須與「**連序列都沒有**」分得開:
-      - 沒有序列        → 這檔根本無從判定,維持既有契約回 None
-      - 有序列但太短    → 這是「⚪ 資料不足」,消費端仍應顯示、仍拿得到年化配息率
-
-    兩者混成同一個 None,會讓短窗那批基金的「換標的建議」從 🟢 保留掉成
-    ⬜ 資料不足,而且 4D 的配息維度連帶失效(§1:兩種狀態要分得開)。
+    2026-10-23 裁示 1B 後對應 `resolve_1y_total_return` 的 `window_short` / `no_series`
+    兩種 unavailable 標籤回 True(供 `check_eating_principal_1y_mk` 既有分支與 UI 判讀);
+    舊的 `SRC_TOO_SHORT` 字樣亦保留辨識。`no_restored_value` / `dividend_data_missing`
+    不在此列 —— 那兩種不是「太短」,是「有長度但還原不出來 / 配息資料缺」。
     """
-    return "不足以推算一年" in str(source_label or "")
+    _s = str(source_label or "")
+    return ("不足以推算一年" in _s
+            or UNAVAILABLE_REASON_TEXT["no_series"] in _s
+            or "，不足一年" in _s)
 
 
 def is_partial_window_1y_source(source_label: str) -> bool:
     """該 tr1y 是不是「自算含息、但只有 N 天窗口(< 一年)」的**累積**值?
 
-    v19.480 稽核 B1:source #2(`SRC_SELF_TOTAL`)在窗口 < 350 天時回的是「N 天**累積**
-    含息報酬」——**不是年化**。吃本金判定拿它跟「**年化**配息率」比 = 期間不對齊(§4.1),
-    對境內短歷史檔系統性報假 🔴。命中此源 → 吃本金端應**拒判**(⚪),與外推年化同處置。
-    (label 形如「自算含息（僅 200 天窗口）」;`SRC_TOO_SHORT` 那種回 None、不在此列。)
+    2026-10-23 裁示 1B 後 SSOT **不再產出**此類來源(窗口不足改回 unavailable
+    `window_short`,不給值),對 SSOT 產出的標籤恆回 False;保留供相容。
     """
     _s = str(source_label or "")
     return "天窗口" in _s
 
 
 def is_nav_only_1y_source(source_label: str) -> bool:
-    """該 tr1y 是不是「純淨值變化、**不含配息**」(source #3 `SRC_SELF_NAV_ONLY`)?
+    """該 tr1y 是不是「純淨值變化、**不含配息**」(`SRC_SELF_NAV_ONLY`)?
 
-    v19.480 稽核 B2:純 NAV 被除息日的下跳「扣掉」配息、卻從未把配息加回,對配息型基金
-    系統性低估 → 幾乎必然 < 年化配息率 → 假 🔴(甚至「嚴重吃本金(報酬為負)」)。吃本金端
-    命中此源 → 拒判(⚪),不拿不含息的數字報紅燈(§1)。
+    2026-10-23 裁示 1B 後 SSOT **不再產出**此類來源(純淨值層已退役),
+    對 SSOT 產出的標籤恆回 False;保留供相容。
     """
     return "不含配息" in str(source_label or "")
 
 
-def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
-    """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤。
-
-    Args:
-        fund_obj: 支援 **3 種 shape**:
-          - **Nested**(Tab2 / Tab3):`{metrics, moneydj_raw: {perf, ...}, series, perf_source}`
-          - **Flat**(健診表 v19.178+ via `_auto_fetch_moneydj()` 直接結果):
-            `{perf, series, metrics, dividends, perf_source, ...}` — 整包就是 MoneyDJ raw
-          - **Hybrid**(legacy):mixed
-        v19.178 入口加 shape detect:flat → 自動 wrap 成 nested,避免拿不到 perf['1Y'] 走錯 fallback。
-
-    Returns:
-        (value, source_label)
-        value=None 表示所有來源均無資料
-    """
-    # v19.178 shape normalize:flat fd(top-level 有 perf 但無 moneydj_raw)
-    # → 把整包當 moneydj_raw,後續 mj.get("perf") 路徑能命中。
-    # 修「健診表 _auto_fetch_moneydj 平坦 fd 強迫走 NAV 序列年化 fallback,
-    # 跟 Tab2 nested 拿 wb01 perf['1Y'] 結論不同(🟢 vs 🔴)」。
+def _normalize_shape(fund_obj: dict) -> dict:
+    """flat fd(top-level 有 perf 但無 moneydj_raw)→ wrap 成 nested(v19.178 既有規則)。"""
+    if not isinstance(fund_obj, dict):
+        return {}
     if "moneydj_raw" not in fund_obj and "perf" in fund_obj:
-        fund_obj = {
+        return {
             "moneydj_raw": fund_obj,
             "metrics": fund_obj.get("metrics") or {},
             "series": fund_obj.get("series"),
             "perf_source": fund_obj.get("perf_source"),
+            "dividends": fund_obj.get("dividends"),
         }
+    return fund_obj
 
+
+def _safe_float_or_none(v: Any):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f:
+        return None
+    return f
+
+
+def is_dividend_fund(fund_obj: dict) -> bool:
+    """這檔是不是配息型基金?**只用既有資料,不猜**。
+
+    True 若任一成立:
+      (a) `moneydj_div_yield`(wb05 官方年化配息率;nested / flat 皆支援)可轉 float 且 > 0;
+      (b) `dividends` list(nested 或 flat)非空且含任一 amount > 0。
+    其餘一律 False(含資料缺 → 無法證明它配息,就不把它當配息基金去擋)。
+    """
+    fund_obj = _normalize_shape(fund_obj)
+    mj = fund_obj.get("moneydj_raw") or {}
+    _dy = _safe_float_or_none(mj.get("moneydj_div_yield")
+                              if mj.get("moneydj_div_yield") is not None
+                              else fund_obj.get("moneydj_div_yield"))
+    if _dy is not None and _dy > 0:
+        return True
+    _divs = fund_obj.get("dividends")
+    if _divs is None:
+        _divs = mj.get("dividends")
+    if _divs:
+        try:
+            for _d in _divs:
+                if isinstance(_d, dict):
+                    _amt = _d.get("amount")
+                    if _amt is None:
+                        _amt = _d.get("div_per_unit")
+                elif isinstance(_d, (tuple, list)) and len(_d) >= 2:
+                    _amt = _d[1]
+                else:
+                    continue
+                _f = _safe_float_or_none(_amt)
+                if _f is not None and _f > 0:
+                    return True
+        except TypeError:
+            return False
+    return False
+
+
+def _unavailable(reason: str, *, source_label_days=None, official=None,
+                 window_days=None, div_count=None, text_key=None) -> dict:
+    _txt = UNAVAILABLE_REASON_TEXT[text_key or reason]
+    if reason == "window_short":
+        _txt = _txt.format(days=source_label_days)
+    return {
+        "value_pct": None,
+        "status": "unavailable",
+        "reason": reason,
+        "source": SRC_NONE,
+        "window_days": window_days,
+        "div_count_in_window": div_count,
+        "official_1y_pct": official,
+        "label": f"{SRC_UNAVAILABLE_PREFIX}（{_txt}）",
+    }
+
+
+def resolve_1y_total_return(fund_obj: dict) -> dict:
+    """1Y 含息報酬 SSOT 解析(2026-10-23 裁示 1B,**唯一算法 = 本地還原淨值法**)。
+
+    Returns
+    -------
+    {
+      "value_pct": float | None,
+      "status": "ok" | "unavailable",
+      "reason": None | "no_series" | "no_restored_value" | "window_short"
+                | "window_unknown" | "dividend_data_missing",
+      "source": SRC_SELF_RESTORED(ok)或 SRC_NONE(unavailable),
+      "window_days": int | None,            # 還原窗口實際天數
+      "div_count_in_window": int | None,    # 窗內配息筆數(calc_metrics.ret_1y_div_count)
+      "official_1y_pct": float | None,      # MoneyDJ wb01 perf["1Y"],僅 perf_source=="wb01";
+                                            # **對帳用,不是主值**(§4.3)
+      "label": str,                         # ok → SRC_SELF_RESTORED(離譜值附警語);
+                                            # unavailable → "⬜ 資料未備／無法判定（白話原因）"
+    }
+
+    規則(依序):
+      1. shape normalize(flat → nested)。
+      2. v = metrics.ret_1y_total;wd = metrics.ret_1y_window_days。
+      3. wd 有值且 < RET_1Y_RESTORED_MIN_WINDOW_DAYS → unavailable `window_short`;
+         v 有值但 wd 缺(沒有窗口證據)→ unavailable `window_unknown`(不讓無窗口的值冒充一年)。
+      4. 配息閘門:`is_dividend_fund` 且 metrics.ret_1y_div_count == 0
+         → unavailable `dividend_data_missing`(配息基金的還原序列一筆配息都沒加回,
+           等於純淨值,拿去比年化配息率必然假 🔴,v19.480 稽核 B2)。
+      5. v 缺:有 series → `no_restored_value`;無 series → `no_series`。
+      6. 其餘 → ok;合理帶警語照舊黏在 label。
+    **絕不**讀 perf["1Y"] 當值、**絕不**用 ret_1y(純淨值)、**絕不**外推年化。
+    """
+    from shared.signal_thresholds import RET_1Y_RESTORED_MIN_WINDOW_DAYS
+
+    fund_obj = _normalize_shape(fund_obj)
     m = fund_obj.get("metrics") or {}
     mj = fund_obj.get("moneydj_raw") or {}
-    pf = mj.get("perf") or {}
 
-    # 1. perf["1Y"] (wb01 / local_calc 注入) — 最權威
+    # 官方值只做對帳,不進主值
+    _ps = str(fund_obj.get("perf_source") or mj.get("perf_source") or "").lower()
+    official = None
+    if _ps == "wb01":
+        official = _safe_float_or_none((mj.get("perf") or {}).get("1Y"))
+
+    v = m.get("ret_1y_total")
+    wd = m.get("ret_1y_window_days")
     try:
-        v = pf.get("1Y")
-        if v is not None:
-            _ps = str(fund_obj.get("perf_source") or mj.get("perf_source") or "").lower()
-            src = (SRC_OFFICIAL if _ps == "wb01"
-                   else SRC_SELF_RESTORED if _ps == "local_calc"
-                   else SRC_PERF_UNLABELED)
-            # 稽核 E1:官方值也過閘 —— 抓錯欄 / 幣別搞混時 MoneyDJ 也會給出離譜數字
-            return _flag_if_implausible(v, src)
+        wd_i = int(wd) if wd is not None else None
     except (TypeError, ValueError):
-        pass
+        wd_i = None
+    div_count = m.get("ret_1y_div_count")
 
-    # 2. ret_1y_total (本地含息計算)
+    if wd_i is not None and wd_i < RET_1Y_RESTORED_MIN_WINDOW_DAYS:
+        return _unavailable("window_short", source_label_days=wd_i, official=official,
+                            window_days=wd_i, div_count=div_count)
+    if v is not None and wd_i is None:
+        return _unavailable("window_unknown", official=official,
+                            window_days=None, div_count=div_count)
+
+    if is_dividend_fund(fund_obj) and div_count == 0:
+        # 文字分兩種(公式與對齊方式不變,只改白話原因):12M 窗內其實有配息紀錄、但還原表
+        # 一筆都沒對齊到淨值日 → 說「無一筆對齊」,不說「無配息紀錄」(§1 不誤導)
+        _adr_cnt = m.get("annual_div_rate_div_count")
+        _unaligned = isinstance(_adr_cnt, (int, float)) and not isinstance(_adr_cnt, bool) and _adr_cnt > 0
+        return _unavailable("dividend_data_missing", official=official,
+                            window_days=wd_i, div_count=div_count,
+                            text_key="dividend_data_missing_unaligned" if _unaligned else None)
+
+    if v is None:
+        _s = fund_obj.get("series")
+        if _s is None:
+            _s = mj.get("series")
+        # dict / list / pd.Series 皆算「有序列」(舊 mk_simple 路徑接受 dict),只看有無內容
+        try:
+            _has_series = _s is not None and len(_s) > 0
+        except TypeError:
+            _has_series = False
+        return _unavailable("no_restored_value" if _has_series else "no_series",
+                            official=official, window_days=wd_i, div_count=div_count)
+
     try:
-        v = m.get("ret_1y_total")
-        if v is not None:
-            _wd = m.get("ret_1y_window_days") or 365
-            src = (f"{SRC_SELF_TOTAL}（僅 {_wd} 天窗口）" if _wd < 350
-                   else SRC_SELF_TOTAL)
-            return _flag_if_implausible(v, src)
+        val, label = _flag_if_implausible(v, SRC_SELF_RESTORED)
     except (TypeError, ValueError):
-        pass
+        # 壞值不當成「有值」:誠實回無法還原(§1),stderr 已由 _flag_if_implausible 記錄
+        return _unavailable("no_restored_value", official=official,
+                            window_days=wd_i, div_count=div_count)
+    return {
+        "value_pct": val,
+        "status": "ok",
+        "reason": None,
+        "source": SRC_SELF_RESTORED,
+        "window_days": wd_i,
+        "div_count_in_window": div_count,
+        "official_1y_pct": official,
+        "label": label,
+    }
 
-    # 3. ret_1y (純 NAV 變化)
-    try:
-        v = m.get("ret_1y")
-        if v is not None:
-            return _flag_if_implausible(v, SRC_SELF_NAV_ONLY)
-    except (TypeError, ValueError):
-        pass
 
-    # 4. NAV 序列年化 fallback
-    try:
-        import pandas as _pd
-        s = fund_obj.get("series")
-        if s is not None and hasattr(s, "dropna"):
-            ss = s.dropna()
-            if len(ss) >= 3:
-                t_now = ss.index[-1]
-                t_tgt = t_now - _pd.Timedelta(days=365)
-                ix = ss.index.get_indexer([t_tgt], method="nearest")[0]
-                if 0 <= ix < len(ss) - 1:
-                    d_actual = (t_now - ss.index[ix]).days
-                    # ── 稽核 E1:外推門檻 30 → RET_1Y_EXTRAPOLATE_MIN_DAYS ──────
-                    # 舊碼:30 天窗 × min(365/30, 12) = ×12。一檔 30 天漲 17% 的基金
-                    # 會在大表印出「1Y 含息報酬 +201%」,而且因為數值大而排到最前面。
-                    # 那不是量出來的一年報酬,是把一個月的運氣乘了十二次(§1 禁止)。
-                    # 未達半年 → 誠實回 None,並在來源欄寫清楚只有幾天資料。
-                    from shared.signal_thresholds import (
-                        RET_1Y_EXTRAPOLATE_MAX_SCALE,
-                        RET_1Y_EXTRAPOLATE_MIN_DAYS,
-                    )
-                    if d_actual < RET_1Y_EXTRAPOLATE_MIN_DAYS:
-                        return None, SRC_TOO_SHORT.format(days=d_actual)
-                    v_now = float(ss.iloc[-1])
-                    v_old = float(ss.iloc[ix])
-                    if v_old > 0:
-                        ret = (v_now / v_old - 1.0) * 100.0
-                        # 跨度 ≥ 半年後 scale 自然 ≤ 365/180 ≈ 2.03;cap 取 2.0 收口
-                        scale = min(365.0 / d_actual, RET_1Y_EXTRAPOLATE_MAX_SCALE)
-                        return _flag_if_implausible(
-                            ret * scale, SRC_SELF_ANNUALIZED.format(days=d_actual))
-    except Exception as _e:
-        import sys as _sys
-        print(f'[fund_total_return] nav annualize fallback fail: '
-              f'{type(_e).__name__}: {_e}', file=_sys.stderr)
+def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
+    """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤(`resolve_1y_total_return` 薄包裝)。
 
-    return None, SRC_NONE
+    簽名不變(多 caller):
+        value        = resolve 的 value_pct(僅 status=="ok" 時有值)
+        source_label = resolve 的 label(ok → SRC_SELF_RESTORED;unavailable → ⬜ 標籤)
+    """
+    r = resolve_1y_total_return(fund_obj)
+    return (r["value_pct"] if r["status"] == "ok" else None), r["label"]

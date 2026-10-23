@@ -16,16 +16,20 @@ def _fund(*, perf_1y=None, ret_1y_total=None, ret_1y=None, div=6.0,
           sharpe=1.0, nav=10.0, ma60=9.0, ma20=9.5):
     """建 fund fixture。
 
-    perf_1y 走 moneydj_raw.perf['1Y'](wb01 含息,compute_1y_total_return 最權威層)。
-    ret_1y 為純 NAV(不含息),用來證明「吃本金」判定不再讀它。
+    2026-10-23 裁示 1B:1Y 含息唯一算法 = 本地還原淨值法(`metrics.ret_1y_total`,窗口 ≥ 350 天)。
+    `perf_1y` 參數名保留(舊 caller 相容),**值改餵進 `metrics.ret_1y_total`**(同時仍放
+    官方 perf['1Y'] 供對帳),證明判定讀的是還原值而非官方 perf / 純 NAV `ret_1y`。
     """
     mj = {}
+    _tr = ret_1y_total if ret_1y_total is not None else perf_1y
     if perf_1y is not None:
         mj = {"perf": {"1Y": perf_1y}, "perf_source": "wb01"}
     return {
         "moneydj_raw": mj,
         "metrics": {
-            "ret_1y_total": ret_1y_total,
+            "ret_1y_total": _tr,
+            "ret_1y_window_days": 365 if _tr is not None else None,
+            "ret_1y_div_count": 12 if _tr is not None else None,
             "ret_1y": ret_1y,
             "annual_div_rate": div,
             "sharpe": sharpe,
@@ -36,14 +40,14 @@ def _fund(*, perf_1y=None, ret_1y_total=None, ret_1y=None, div=6.0,
 
 
 def test_health_check_uses_total_return_not_pure_nav_v19402():
-    """純 NAV(ret_1y=3%)< 配息率 6%,但**含息總報酬**(perf 1Y=9%)> 配息率
+    """純 NAV(ret_1y=3%)< 配息率 6%,但**含息總報酬**(還原值 9%)> 配息率
     → 不該標 Warning(吃本金)。修前 bug:讀 ret_1y=3 → 假 Warning 🔴。"""
     f = _fund(perf_1y=9.0, ret_1y=3.0, div=6.0)
     assert tag_health_check(f) == "Healthy"
 
 
 def test_health_check_genuine_eating_warning_v19402():
-    """含息總報酬(perf 1Y=2%)< 配息率 6% → 真吃本金 → Warning(正確 🔴)。"""
+    """含息總報酬(還原值 2%)< 配息率 6% → 真吃本金 → Warning(正確 🔴)。"""
     f = _fund(perf_1y=2.0, ret_1y=3.0, div=6.0)
     assert tag_health_check(f) == "Warning"
 

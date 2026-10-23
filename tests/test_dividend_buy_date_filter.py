@@ -263,15 +263,15 @@ class TestGoldenACCP138:
             0.847, abs=0.001)
 
     def test_short_holding_annual_fields_are_none(self):
-        """持有 42 天(0.115 年)< 0.5 年 → 年化欄誠實 None + ⬜ 歷史不足(§1)。"""
+        """持有 42 天(0.115 年)< 0.5 年 → 年化欄誠實 None(§1);燈號欄 2026-10-23 裁示 1B 後退休,恆 None。"""
         r = self._run()
         s = r["summary"]
         assert s["holding_years_🧮"] < 0.5
         assert s["annual_div_rate_pct_🧮"] is None
         assert s["annual_nav_return_pct_🧮"] is None
         assert s["ret_1y_total_pct_🧮"] is None
-        assert s["div_health_light_🧮"] == "歷史不足"
-        assert s["div_health_emoji_🧮"] == "⬜"
+        assert s["div_health_light_🧮"] is None
+        assert s["div_health_emoji_🧮"] is None
 
     def test_cumulative_rates_use_single_surviving_event(self):
         """全期實際配息率 = 單筆配息(原幣)/ 原幣本金 —— 不含被濾掉的 5 筆。"""

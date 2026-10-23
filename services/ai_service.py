@@ -123,6 +123,9 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
     subcycle_lights: backtest_sub_cycle_lights() 輸出（Phase 3-B）— 7 子領域燈號歷史回測
                     （v18.110 新增：把剛修好的 Phase 4 / Phase 3-B 量化結論餵 AI，建議更有實證根據）
     """
+    from services.fund_total_return import resolve_1y_total_return
+    from services.health.dividend import _resolve_adr_with_fallback
+
     pi = phase_info or {}
     phase = pi.get("phase", "未知")
     score = pi.get("score", "?")
@@ -158,26 +161,23 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
     for (_c, _tier_k), _agg in list(_by_code.items())[:20]:   # cap 20 unique (code, 級別)
         f = _agg["fund"]
         m = f.get("metrics") or {}
-        mj = f.get("moneydj_raw") or {}
-        perf = mj.get("perf") or {}
         nm = (f.get("name") or _c)[:16]
         # ~~ccy = f.get("currency", "USD")~~ —— 2026-10-10 客戶裁示二 A:缺幣別不得在
         # AI 提示寫成「(USD)」;未知沿用本檔既有缺值寫法 'N/A'。
         ccy = str(f.get("currency") or "").strip() or "N/A"
         inv = _agg["total_inv"]
         pct = round(inv / tot_inv_twd * 100, 1) if tot_inv_twd > 0 else 0
-        adr = m.get("annual_div_rate") or mj.get("moneydj_div_yield") or 0
-        tr1y = perf.get("1Y")
-        try:
-            tr1y_f = float(tr1y) if tr1y is not None else None
-            adr_f = float(adr) if adr else 0.0
-        except (ValueError, TypeError) as _e_tr1y:
-            # F-MED v19.170: narrow exception + stderr log;不變 fallback
-            import sys as _sys_tr
-            print(f'[ai_service/single_fund_summary] tr1y/adr parse fail: {type(_e_tr1y).__name__}: {_e_tr1y}', file=_sys_tr.stderr)
-            tr1y_f, adr_f = None, 0.0
+        # 2026-10-23 裁示 1B:1Y 含息與配息率一律走 SSOT(本地還原淨值法 / 近 12 個月實際配息),
+        # 不再讀 perf["1Y"] / moneydj_div_yield 當值;unavailable → None + 標籤進 prompt,**不填 0**。
+        _tr_r = resolve_1y_total_return(f)
+        tr1y_f = _tr_r["value_pct"] if _tr_r["status"] == "ok" else None
+        _tr1y_txt = (f"{tr1y_f:.2f}%" if tr1y_f is not None
+                     else f"N/A({_tr_r['label']})")
+        adr_f, _adr_lbl = _resolve_adr_with_fallback(f)
+        _adr_txt = (f"{adr_f:.1f}%" if adr_f is not None
+                    else f"N/A({_adr_lbl})")
         eating = ""
-        if tr1y_f is not None and adr_f > 0 and tr1y_f < adr_f:
+        if tr1y_f is not None and adr_f is not None and adr_f > 0 and tr1y_f < adr_f:
             eating = f" ⚠️吃本金({adr_f-tr1y_f:.1f}pp)"
         sharpe = m.get("sharpe", "—")
         # ~~`"核心" if f.get("is_core") else "衛星"`~~（只讀 is_core：未設定與 v1 明示核心都成了「衛星」）
@@ -187,7 +187,7 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
         _lines.append(
             f"- [{is_core}] `{_c}` {nm} ({ccy})"
             f"｜投入 NT${inv:,} ({pct}%){_pol_tag}"
-            f"｜配息率 {adr_f:.1f}% / 1Y含息 {tr1y if tr1y is not None else 'N/A'}%"
+            f"｜配息率 {_adr_txt} / 1Y含息 {_tr1y_txt}"
             f"{eating}｜Sharpe {sharpe}"
         )
     pf_snap = "\n".join(_lines) if _lines else "(尚未載入任何基金)"

@@ -41,6 +41,8 @@ def _pct_from_rank(rank_i: Optional[int], n: int) -> Optional[float]:
 
 def _assemble_factor_pcts(funds: list, capture_map: Optional[dict]) -> "tuple[dict, int]":
     """funds → ({code: {因子名: percentile 0最佳~1最差 | None}}, 本組檔數)。共用給 by_code / detail。"""
+    from services.fund_total_return import resolve_1y_total_return
+    from services.health.dividend import _resolve_adr_with_fallback
     from services.peer_rank import quartile_rank
     from services.portfolio_service import rank_funds_within_portfolio
 
@@ -65,10 +67,14 @@ def _assemble_factor_pcts(funds: list, capture_map: Optional[dict]) -> "tuple[di
         _sk = (_cap.get(c) or {}).get("操盤評分")
         if isinstance(_sk, (int, float)) and not isinstance(_sk, bool):
             _skill[c] = float(_sk)
-        _tr = _mval(f, "ret_1y_total")
-        _adr = _mval(f, "annual_div_rate")
-        if _tr is not None and _adr is not None and _adr > 0:
-            _cover[c] = max(0.0, min(_tr / _adr, 2.0))
+        # 2026-10-23 裁示 1B 稽核必修 2:配息覆蓋的兩個輸入走 SSOT(本地還原值須過 350 天窗口與
+        # 配息閘門;配息率 = 近 12 個月實配 ÷ 淨值),不再直讀 metrics 繞過閘門。
+        # 任一 unavailable → 該檔退出「配息」因子的分母(§1 不填 0)。funds item 是
+        # `_utils.build_fund_obj` 的 nested shape({metrics, series, dividends, moneydj_raw}),可直接餵。
+        _tr_r = resolve_1y_total_return(f)
+        _adr, _ = _resolve_adr_with_fallback(f)
+        if _tr_r["status"] == "ok" and _adr is not None and _adr > 0:
+            _cover[c] = max(0.0, min(float(_tr_r["value_pct"]) / _adr, 2.0))
 
     def _pct_small(code, vmap):
         return quartile_rank(code, vmap).get("percentile")

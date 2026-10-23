@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from services.fund_service import calc_metrics
@@ -29,11 +31,19 @@ def test_annual_div_rate_uses_newest_dividends_when_list_oldest_first():
         _amt = 0.60 if _m < 12 else 0.30                  # 前 12 月 0.60、後 12 月 0.30
         divs.append({"date": _dt.strftime("%Y-%m-%d"), "amount": _amt})
 
+    # 2026-10-23 裁示 1B:年化配息率 = 近 12 個月**實際**配息合計 ÷ 最新淨值(不再「平均單次 × 頻率」)。
+    # 序列 2024-01-01 起 400 天 → anchor 2025-02-03;窗內 (2024-02-03, 2025-02-03] 的實配為
+    # 2024-02-15~2024-12-15 共 11 筆 0.60 ＋ 2025-01-15 一筆 0.30 = 6.90 → 69%。
+    # 排序問題在這條公式下**結構上不存在**(加總與順序無關):舊→新與新→舊必須得到同一個值,
+    # 且**絕不是** 72%(最舊 12 筆 × 頻率)也**不是** 36%(最新 12 筆 × 頻率)—— 兩者都是推估,不是實配。
     m = calc_metrics(_flat_nav_series(), divs)
     adr = m.get("annual_div_rate")
     assert adr is not None
-    # 關鍵:應接近 36(近期),絕不可是 72(最舊)
-    assert 30 <= adr <= 42, f"年化配息率應反映近期 0.30 配息(~36%),實際 {adr}(疑取到最舊筆)"
+    assert math.isclose(adr, 69.0, abs_tol=0.01), f"年化配息率應為近 12 個月實配 6.90/10 = 69%,實際 {adr}"
+    assert m.get("annual_div_rate_div_count") == 12
+    assert m.get("annual_div_rate_window_end") == "2025-02-03"
+    m_rev = calc_metrics(_flat_nav_series(), list(reversed(divs)))
+    assert m_rev.get("annual_div_rate") == adr, "實配合計與輸入順序無關"
 
 
 # ── H2:總經 z-pct 反向指標 key 對不上 → 失業率/初領飆高被當偏多 ──

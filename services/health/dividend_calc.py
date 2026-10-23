@@ -234,6 +234,9 @@ def compute_dividend_twd_series(
 ) -> dict:
     """主算式：以 N 元 TWD 為基準，逐次配息折算 TWD 金額 + 吃本金判定。
 
+    ⚠️ 2026-10-23 裁示 1B:吃本金唯一判定 = `services.health.dividend.check_eating_principal_1y_mk`;
+    本函式只產「持有期相對買入成本」的數字,**不再**產三色燈(`div_health_light_🧮` / `div_health_emoji_🧮` 恆 None)。
+
     Args:
         nav_series: ``{date_iso: NAV(原幣)}`` —— 至少含買進日 / 末日。
             key 接受 ``YYYY-MM-DD`` 或 ``YYYY/MM/DD``,內部一律過 ``_norm_date`` 正規化;
@@ -354,12 +357,18 @@ def compute_dividend_twd_series(
 
     # v19.175:短歷史 guard — < 0.5 年不年化,顯示「—」/「⬜ 歷史不足」
     # (避免「2 個月配息 × 6 倍 = 30% 高配息率」幻象,§1 Fail Loud)
+    # 2026-10-23 裁示 1B(稽核必修 3):吃本金**唯一判定** = `services.health.dividend.
+    # check_eating_principal_1y_mk`(本地還原淨值法 vs 近 12 個月實配率)。本函式原本拿持有期單利年化
+    # (`ret_1y_total_pct = annual_nav_return_pct + annual_div_rate_pct`)餵 `div_health_light_for_pair`
+    # 出第二套三色燈 —— 燈號部分退休:`light` / `light_emoji` 一律 None(鍵保留,相容 caller)。
+    # 數字本身保留:它們是「持有期相對**買入成本**」的年化(不是近一年、不是相對最新淨值),
+    # 與 SSOT 的 1Y 含息 / 年化配息率**不是同一個口徑**,不得拿來判吃本金。
+    light = None
+    light_emoji = None
     if years < MIN_YEARS_FOR_ANNUALIZE:
         annual_nav_return_pct = None
         annual_div_rate_pct = None
         ret_1y_total_pct = None
-        light = "歷史不足"
-        light_emoji = _LIGHT_EMOJI["歷史不足"]
     else:
         safe_years = years
         annual_nav_return_pct = nav_return_pct / safe_years
@@ -368,9 +377,6 @@ def compute_dividend_twd_series(
             if principal_ccy > 0 else 0.0
         )
         ret_1y_total_pct = annual_nav_return_pct + annual_div_rate_pct
-        light, light_emoji = div_health_light_for_pair(
-            ret_1y_total_pct, annual_div_rate_pct, warn_gap=warn_gap_pct
-        )
 
     return {
         "ok": True,
@@ -395,12 +401,17 @@ def compute_dividend_twd_series(
             "cum_nav_return_pct_🧮": round(cum_nav_return_pct, 2),
             "cum_total_return_pct_🧮": round(cum_total_return_pct, 2),
             # v19.175:年化 3 軸 — 短歷史(< 0.5 年)時 None;caller / UI 顯示「—」
+            # ⚠️ 語意(裁示 1B):三軸都是「**持有期**相對**買入成本**的單利年化」
+            #   (配息 ÷ 本金 ÷ 持有年數;淨值漲跌 ÷ 買入淨值 ÷ 持有年數),
+            #   **不是** SSOT 的「近一年還原含息」與「近 12 個月實配 ÷ 最新淨值」;
+            #   鍵名沿用(`services/fund_row.py` 與 UI 欄名綁同名 key,改名由 PR1b 連 UI 一起改)。
             "annual_nav_return_pct_🧮": (round(annual_nav_return_pct, 2)
                                          if annual_nav_return_pct is not None else None),
             "annual_div_rate_pct_🧮": (round(annual_div_rate_pct, 2)
                                        if annual_div_rate_pct is not None else None),
             "ret_1y_total_pct_🧮": (round(ret_1y_total_pct, 2)
                                     if ret_1y_total_pct is not None else None),
+            # 裁示 1B:燈號退休,恆 None(吃本金唯一判定 = check_eating_principal_1y_mk)
             "div_health_light_🧮": light,
             "div_health_emoji_🧮": light_emoji,
         },

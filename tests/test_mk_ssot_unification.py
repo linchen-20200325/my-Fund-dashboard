@@ -26,10 +26,12 @@ class TestCheckEatingPrincipal1yMk:
     def test_nested_shape_eating(self):
         """Nested {moneydj_raw, metrics} 形 →  fund_checkup 路徑。"""
         fund = {
-            # v19.480:吃本金判定改拒收純 NAV(不含配息)基準 → 含息須由可信源(wb01)給。
+            # 2026-10-23 裁示 1B:含息 = 本地還原淨值法(ret_1y_total + 足夠窗口 + 窗內有配息);
+            # 配息率 = 近 12 個月實際配息 ÷ 淨值(metrics.annual_div_rate)。官方 wb01/wb05 只對帳。
             "moneydj_raw": {"moneydj_div_yield": 8.0,
                             "perf": {"1Y": 5.0}, "perf_source": "wb01"},
-            "metrics": {"ret_1y": 5.0},
+            "metrics": {"ret_1y": 5.0, "ret_1y_total": 5.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 8.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
@@ -39,8 +41,9 @@ class TestCheckEatingPrincipal1yMk:
         """Flat {moneydj_div_yield, metrics} 形(_auto_fetch_moneydj 直回)。"""
         fund = {
             "moneydj_div_yield": 8.0,
-            "perf": {"1Y": 5.0}, "perf_source": "wb01",   # v19.480:含息走可信源
-            "metrics": {"ret_1y": 5.0},
+            "perf": {"1Y": 5.0}, "perf_source": "wb01",   # 官方值只對帳,不當主值
+            "metrics": {"ret_1y": 5.0, "ret_1y_total": 5.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 8.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
@@ -48,10 +51,10 @@ class TestCheckEatingPrincipal1yMk:
 
     def test_nested_and_flat_same_verdict(self):
         """**SSOT 鐵則**:同 input(adr / tr1y)兩種 shape 必須給出同 verdict。"""
-        nested = {"moneydj_raw": {"moneydj_div_yield": 7.0},
-                  "metrics": {"ret_1y": 4.0}}
-        flat = {"moneydj_div_yield": 7.0,
-                "metrics": {"ret_1y": 4.0}}
+        _m = {"ret_1y": 4.0, "ret_1y_total": 4.0, "ret_1y_window_days": 365,
+              "ret_1y_div_count": 12, "annual_div_rate": 7.0}
+        nested = {"moneydj_raw": {"moneydj_div_yield": 7.0}, "metrics": dict(_m)}
+        flat = {"moneydj_div_yield": 7.0, "metrics": dict(_m)}
         r_n = check_eating_principal_1y_mk(nested)
         r_f = check_eating_principal_1y_mk(flat)
         assert r_n["status"] == r_f["status"], \
@@ -59,46 +62,48 @@ class TestCheckEatingPrincipal1yMk:
         assert r_n["alert_level"] == r_f["alert_level"]
 
     def test_metrics_fallback_when_moneydj_missing(self):
-        """moneydj_div_yield 缺 → metrics.annual_div_rate fallback。"""
-        # v19.480:含息走可信源(wb01);adr 仍測 metrics.annual_div_rate fallback。
+        """moneydj_div_yield 缺 → adr 走 metrics.annual_div_rate(裁示 1B 後這就是唯一來源)。"""
         fund = {"perf": {"1Y": 10.0}, "perf_source": "wb01",
-                "metrics": {"annual_div_rate": 5.0}}
+                "metrics": {"annual_div_rate": 5.0, "ret_1y_total": 10.0,
+                            "ret_1y_window_days": 365, "ret_1y_div_count": 12}}
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
         assert "健康" in r["status"], f"含息 10 > 配息 5 → 應健康,實際 {r['status']}"
 
-    def test_moneydj_takes_precedence_over_metrics(self):
-        """moneydj_div_yield 有值 → 不應走 metrics.annual_div_rate fallback。
+    def test_metrics_takes_precedence_over_moneydj(self):
+        """2026-10-23 裁示 1B:**方向反轉** —— adr 唯一來源是近 12 個月實際配息 ÷ 淨值
+        (`metrics.annual_div_rate`);官方 wb05 `moneydj_div_yield` **不再當值**。
 
-        v19.175 3 色制改用 gap_pct 門檻:
-        - 用 mj=8 → tr=5, gap=8-5=3pp > 2pp → 🔴 吃本金
-        - 若誤用 metrics=3 → tr=5, gap=-2pp → 🟢 健康
-        測試確保走 mj 主源(若答案是吃本金 → 證明用對 mj)。
+        - 用 metrics=8 → tr=5, gap=8-5=3pp > 2pp → 🔴 吃本金
+        - 若誤用 mj=3 → tr=5, gap=-2pp → 🟢 健康
+        測試確保走 metrics(若答案是吃本金 → 證明沒有偷讀官方值)。
         """
         fund = {
-            "moneydj_raw": {"moneydj_div_yield": 8.0,
-                            "perf": {"1Y": 5.0}, "perf_source": "wb01"},  # v19.480 可信含息
-            "metrics": {"ret_1y": 5.0, "annual_div_rate": 3.0},  # metrics=3 是誤導陷阱
+            "moneydj_raw": {"moneydj_div_yield": 3.0,            # 官方值是誤導陷阱
+                            "perf": {"1Y": 5.0}, "perf_source": "wb01"},
+            "metrics": {"ret_1y": 5.0, "ret_1y_total": 5.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 8.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
         assert "吃本金" in r["status"] or r["alert_level"] == "red", (
-            f"應以 moneydj_div_yield=8 為準(gap=3pp 紅),"
-            f"若走 metrics=3 會誤判健康。實際 {r}"
+            f"應以 metrics.annual_div_rate=8 為準(gap=3pp 紅),"
+            f"若走 moneydj_div_yield=3 會誤判健康。實際 {r}"
         )
         assert r["gap_pct"] == 3.0, (
             f"v19.175 應提供 gap_pct 欄位 = 8-5 = 3.0,實際 {r.get('gap_pct')}"
         )
+        assert r["_adr_source"] == "divs_12m_sum"
 
-    def test_data_missing_returns_none(self):
-        """ret_1y 缺或 adr 缺 → 回 None(§1 不偽造)。"""
+    def test_data_missing_returns_none_or_grey(self):
+        """無配息跡象 → None(既有契約);有配息跡象但資料缺 → 灰 dict、eating_principal None。"""
         assert check_eating_principal_1y_mk({}) is None
         assert check_eating_principal_1y_mk(
-            {"moneydj_div_yield": 5.0}  # 缺 ret_1y
+            {"metrics": {"ret_1y": 5.0}}  # 無配息跡象 → 非配息基金 → None
         ) is None
-        assert check_eating_principal_1y_mk(
-            {"metrics": {"ret_1y": 5.0}}  # 缺 adr
-        ) is None
+        r = check_eating_principal_1y_mk({"moneydj_div_yield": 5.0})  # 有配息跡象、無資料
+        assert r is not None and r["alert_level"] == "grey"
+        assert r["eating_principal"] is None and r["reason"] == "dividend_data_missing"
 
     def test_zero_or_negative_div_yield_returns_none(self):
         """adr ≤ 0(無配息 / 累積型基金)→ 回 None(吃本金概念不適用)。"""
@@ -112,8 +117,10 @@ class TestCheckEatingPrincipal1yMk:
     def test_uses_canonical_classify_eating_principal(self):
         """SSOT 守:本 helper 結論必須與 canonical classify_eating_principal 一致。
         防有人未來繞過 canonical 自己另算。"""
-        # v19.480:含息走可信源(wb01);純 NAV 基準已改由 gate 拒判,不能拿來測 canonical 一致。
-        fund = {"moneydj_div_yield": 7.0, "perf": {"1Y": 4.0}, "perf_source": "wb01"}
+        # 裁示 1B:含息走本地還原值;adr 走近 12 個月實際配息 ÷ 淨值。
+        fund = {"moneydj_div_yield": 7.0, "perf": {"1Y": 4.0}, "perf_source": "wb01",
+                "metrics": {"ret_1y_total": 4.0, "ret_1y_window_days": 365,
+                            "ret_1y_div_count": 12, "annual_div_rate": 7.0}}
         r = check_eating_principal_1y_mk(fund)
         core = classify_eating_principal(4.0, 7.0)
         assert core.is_eating is True

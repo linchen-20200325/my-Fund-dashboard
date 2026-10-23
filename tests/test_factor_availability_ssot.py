@@ -69,24 +69,36 @@ class TestExpenseRatioEdgeCasesV193:
 
 
 class TestAlphaEdgeCasesV193:
-    def test_alpha_with_adr_none_only_needs_tr1y(self):
-        """adr=None 但 tr1y 合法 → adr 預設 0,factor 應納入(歷史 UI ❌ 漂移)。"""
+    def test_alpha_needs_both_tr1y_and_adr_from_ssot(self):
+        """2026-10-23 裁示 1B:tr1y 與 adr 皆走 SSOT;adr=None(配息資料未備)→ Alpha **不納入**
+        (不再 `adr 預設 0`);官方 perf['1Y'] 也不再是 tr1y 來源。"""
         fd = {
             "perf": {"1Y": 5.2},
-            "metrics": {"annual_div_rate": None},
-            "moneydj_raw": {},
+            "metrics": {"annual_div_rate": None, "ret_1y_total": 5.2,
+                        "ret_1y_window_days": 365, "ret_1y_div_count": 12},
+            "moneydj_raw": {"moneydj_div_yield": 4.0},   # 有配息跡象但窗內無紀錄 → adr None
         }
         avail = get_factor_availability(fd)
-        assert avail["Alpha"] is True, (
-            "Alpha SSOT 只需 tr1y 可解析,adr 預設 0;UI 不應強求 annual_div_rate"
-        )
-        assert _factor_in_score(fd, "Alpha") is True
+        assert avail["Alpha"] is False, "adr 缺 → Alpha 不得用 0 頂替"
+        assert _factor_in_score(fd, "Alpha") is False
+        # 只有官方 perf、沒有本地還原值 → tr1y 缺 → 不納入
+        fd2 = {"perf": {"1Y": 5.2}, "perf_source": "wb01",
+               "metrics": {"annual_div_rate": 3.0}, "moneydj_raw": {}}
+        assert get_factor_availability(fd2)["Alpha"] is False
+        assert _factor_in_score(fd2, "Alpha") is False
+        # 兩者皆有 → 納入,Alpha = tr1y − adr
+        fd3 = {"perf": {}, "metrics": {"annual_div_rate": 3.0, "ret_1y_total": 5.2,
+                                       "ret_1y_window_days": 365, "ret_1y_div_count": 12},
+               "moneydj_raw": {}}
+        assert get_factor_availability(fd3)["Alpha"] is True
+        assert _factor_in_score(fd3, "Alpha") is True
 
     def test_alpha_with_non_numeric_tr1y(self):
         """tr1y='abc' 不可解析 → factor 不應納入(歷史 UI ✅ 漂移)。"""
         fd = {
             "perf": {"1Y": "abc"},
-            "metrics": {"annual_div_rate": 3.0},
+            "metrics": {"annual_div_rate": 3.0, "ret_1y_total": "abc",
+                        "ret_1y_window_days": 365},
             "moneydj_raw": {},
         }
         avail = get_factor_availability(fd)

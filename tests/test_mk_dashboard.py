@@ -61,14 +61,13 @@ def _short_nav(days_back: int = 120, n: int = 60) -> pd.Series:
     return pd.Series([10.0 + i * 0.02 for i in range(n)], index=idx)
 
 
-def test_total_return_1y_uses_perf_when_local_ret_1y_none():
-    """<252 日 NAV → m['ret_1y']=None，但 MoneyDJ perf['1Y'] 有值 → 顯示 perf（非 None）。
-
-    這正是 user 回報「5 檔全 None」的場景：舊碼直讀 m['ret_1y'] 恆 None。
-    """
+def test_total_return_1y_uses_restored_value_not_perf():
+    """2026-10-23 裁示 1B:含息總報酬(1Y%) 讀本地還原值 `metrics.ret_1y_total`(窗口 ≥ 350 天),
+    **不再**讀 MoneyDJ perf['1Y'](官方值只對帳)。"""
     f = {
         "loaded": True, "code": "TEST1", "name": "測試多重收益B配息",
         "metrics": {"nav": 10.0, "ret_1y": None, "annual_div_rate": 8.0,
+                    "ret_1y_total": 6.0, "ret_1y_window_days": 365, "ret_1y_div_count": 12,
                     "sharpe": 0.5, "std_1y": 5.0},
         "moneydj_raw": {"perf": {"1Y": 7.5}},
         "series": _short_nav(),
@@ -76,18 +75,26 @@ def test_total_return_1y_uses_perf_when_local_ret_1y_none():
     }
     df = build_mk_dataframe([f])
     assert len(df) == 1
-    assert df.iloc[0]["含息總報酬(1Y%)"] == 7.5   # 舊行為=None；新行為取 perf['1Y']
+    assert df.iloc[0]["含息總報酬(1Y%)"] == 6.0   # 還原值,不是 perf['1Y'] 的 7.5
 
 
-def test_total_return_1y_annualizes_when_short_history_no_perf():
-    """無 perf + ret_1y=None + 序列跨度達外推門檻 → 走 NAV 年化 fallback，非 None。
+def test_total_return_1y_blank_when_only_perf_available():
+    """只有官方 perf['1Y']、沒有本地還原值 → 誠實留白(None),不拿官方值頂替。"""
+    f = {
+        "loaded": True, "code": "TEST1B", "name": "只有官方值",
+        "metrics": {"nav": 10.0, "ret_1y": None, "annual_div_rate": 8.0},
+        "moneydj_raw": {"perf": {"1Y": 7.5}},
+        "series": _short_nav(),
+        "perf_source": "wb01",
+    }
+    df = build_mk_dataframe([f])
+    assert len(df) == 1
+    assert df.iloc[0]["含息總報酬(1Y%)"] is None
 
-    ⚠️ 2026-08-14 稽核 E1:外推門檻由 30 天提高到
-    `RET_1Y_EXTRAPOLATE_MIN_DAYS`(180),fixture 由 150 天改為 300 天。
-    理由:150 天 ×2.4 外推出來的「一年報酬」不是量出來的,是乘出來的 ——
-    大表上 +201% 的台幣基金就是這條路。本條要守的是「**跨度夠時仍要給值**」,
-    所以窗口移到門檻之上;門檻以下改由
-    `test_total_return_1y_blank_when_history_too_short` 守。
+
+def test_total_return_1y_never_annualizes_from_series():
+    """無 perf + ret_1y=None + 序列跨度達舊外推門檻 → 裁示 1B 後**不再**走 NAV 年化外推,
+    沒有還原值就誠實 None(乘出來的「一年報酬」不是量出來的,大表 +201% 就是這條路)。
     """
     from shared.signal_thresholds import RET_1Y_EXTRAPOLATE_MIN_DAYS
     # ⚠️ `_short_nav` 的**跨度由 n(營業日)決定**,days_back 只是起點位置。
@@ -103,7 +110,7 @@ def test_total_return_1y_annualizes_when_short_history_no_perf():
         f"fixture 自檢失敗:跨度只有 {_span} 天,測不到要測的分支")
     df = build_mk_dataframe([f])
     assert len(df) == 1
-    assert pd.notna(df.iloc[0]["含息總報酬(1Y%)"])   # 年化 fallback → 有值
+    assert df.iloc[0]["含息總報酬(1Y%)"] is None      # 外推層已退役 → 留白
 
 
 def test_total_return_1y_blank_when_history_too_short():

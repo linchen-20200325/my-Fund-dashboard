@@ -62,12 +62,14 @@ class TestRuleA_EatPrincipal:
     def test_eat_principal_long_hold_triggers(self):
         # 構造會被 check_eating_principal_1y_mk 判吃本金的 fd:
         # adr 高(10%)、tr1y 低(2%)
+        # 2026-10-23 裁示 1B:判定讀本地還原值 + 近 12 個月實際配息率(官方值只對帳)
         fd = {
             "moneydj_raw": {
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
             },
-            "metrics": {},
+            "metrics": {"ret_1y_total": 2.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 10.0},
         }
         r = check_replacement_recommendation(fd, holding_years=2)
         assert r["verdict"] == "replace"
@@ -79,7 +81,8 @@ class TestRuleA_EatPrincipal:
                 "perf": {"1Y": 2.0},
                 "moneydj_div_yield": 10.0,
             },
-            "metrics": {},
+            "metrics": {"ret_1y_total": 2.0, "ret_1y_window_days": 365,
+                        "ret_1y_div_count": 12, "annual_div_rate": 10.0},
         }
         r = check_replacement_recommendation(fd, holding_years=0.5)
         # 持有 < 1 年 → 不下 hard trigger,但計觀察分
