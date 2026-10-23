@@ -47,8 +47,8 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
     確保同一張圖各檔基準一致（不混基準）。
     """
     _all_annual = all(
-        r.get("配息率% (年化)") is not None
-        and r.get("含息% (年化)") is not None
+        r.get("持有期配息率% (相對買入成本・年化)") is not None
+        and r.get("持有期含息% (相對買入成本・年化)") is not None
         and r.get("淨值% (年化)") is not None
         for r in rows
     )
@@ -541,8 +541,9 @@ def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
 def _eats_principal_flag(fd: dict) -> "bool | None":
     """v19.347：從 吃本金 verdict 取乾淨布林（True=吃本金 / False=不吃 / None=未知）。
 
-    走 `dividend_safety` 的 `alert_level`（red/yellow/green/grey）語意欄位,
-    不解析 emoji：red→吃本金；green/yellow→不吃（黃=margin 薄但未吃）；其餘→未知。
+    走 SSOT `check_eating_principal_1y_mk` 回傳的 `alert_level`（red/yellow/green/grey）
+    語意欄位,不解析 emoji / 不比對「資料不足」字串：red→吃本金；green/yellow→不吃
+    （黃=margin 薄但未吃）；grey（⬜ 資料未備／無法判定）/ None（非配息基金）→未知。
     """
     try:
         from services.health.dividend import check_eating_principal_1y_mk

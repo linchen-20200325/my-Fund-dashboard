@@ -26,12 +26,13 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     from services.currency import normalize_ccy as _norm_ccy
     _ccy = _norm_ccy(fund_currency_for_calc(fund), default="", mode="yf")
     # §1:`a or b` 會把**合法的 0.0** 當成缺值往下一層退(0 是 falsy)。
-    # NAV 不可能是 0(§3.2 NAV > 0),但 annual_div_rate 為 0 是「不配息」的真實值,
-    # 用 `or` 會退成 metrics 版甚至變 None,把「確定不配息」講成「不知道」。
+    # NAV 不可能是 0(§3.2 NAV > 0)。
     _nav = _safe_num(_m.get("nav") if _m.get("nav") is not None else _mj.get("nav_latest"))
-    _adr = _safe_num(_mj.get("moneydj_div_yield")
-                     if _mj.get("moneydj_div_yield") is not None
-                     else _m.get("annual_div_rate"))
+    # 2026-10-23 裁示 1B:年化配息率只讀 SSOT(近 12 個月實際配息合計 ÷ 最新淨值),
+    # 不再優先拿 wb05 官方值當值(只作對帳)。無值 → None → 下方印「—」,不冒充 0%。
+    from services.health.dividend import _resolve_adr_with_fallback
+    _adr, _ = _resolve_adr_with_fallback(fund)
+    _adr = _safe_num(_adr)
 
     _fx = None
     if not _ccy:

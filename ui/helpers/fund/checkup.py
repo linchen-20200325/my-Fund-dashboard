@@ -17,9 +17,9 @@ import streamlit as st
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL, WHITE
 
-# v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
-# 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
-# 為 dead import 0 caller。
+# v19.245 R13:吃本金判定走 SSOT `check_eating_principal_1y_mk`(`_compute_fund_health_kpis`
+# 內動態 import);2026-10-23 裁示 1B 後 1Y 含息 / 年化配息率亦各只讀一個 SSOT
+# (`compute_1y_total_return` / `_resolve_adr_with_fallback`),本檔不再自選來源。
 from ui.components.mk_dashboard import tag_price_zone
 
 # TER 對照表已移除（原為 11 筆「類別 → 費率」寫死表，自稱台灣基金市場常見估值）。
@@ -93,25 +93,15 @@ def _period_ret(fund: dict, perf_key: str, metric_key: str):
 
 
 def _ret_1y_total(fund: dict):
-    """近 1Y 含息報酬：沿用全 app 一致的 compute_1y_total_return；缺則退 perf/metrics。"""
-    try:
-        from ui.helpers.macro_helpers import compute_1y_total_return
-        _v, _ = compute_1y_total_return(fund)
-        v = _safe_num(_v)
-        if v is not None:
-            return v
-    except ImportError:
-        pass
-    mj = fund.get("moneydj_raw") or {}
-    v = _safe_num((mj.get("perf") or {}).get("1Y"))
-    if v is not None:
-        return v
-    m = fund.get("metrics") or {}
-    for k in ("ret_1y_total", "ret_1y"):
-        v = _safe_num(m.get(k))
-        if v is not None:
-            return v
-    return None
+    """近 1Y 含息報酬：只讀全 app 一致的 `compute_1y_total_return` SSOT。
+
+    2026-10-23 裁示 1B:SSOT 唯一算法 = 本地配息還原淨值法(窗口 ≥ 350 天);
+    算不出來 → None。**不再**退回 `perf["1Y"]`(官方,只作對帳)/ `ret_1y`(純淨值,不含息)
+    —— 舊的退回鏈讓同一檔在本表與健診大表拿到不同口徑的「1Y 含息」(§2.1)。
+    """
+    from services.fund_total_return import compute_1y_total_return
+    _v, _ = compute_1y_total_return(fund)
+    return _safe_num(_v)
 
 
 def _extract_peer_1y(fund: dict):
@@ -158,35 +148,29 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
     純函式，不碰 st，便於後續單測。
     """
     mj = fund.get("moneydj_raw") or {}
-    m = fund.get("metrics") or {}
 
     # v19.150:吃本金檢查改走 check_eating_principal_1y_mk SSOT 入口
     # (與 tab_fund_grp_health 同源,未來 公式變更只改一處)。
     # _adr / _tr1y 仍 expose 給其他 KPI(月配息/Coverage 顯示)使用。
-    from services.health.dividend import check_eating_principal_1y_mk
+    from services.health.dividend import (
+        _resolve_adr_with_fallback,
+        check_eating_principal_1y_mk,
+    )
 
-    # 1) 年化配息率:MoneyDJ wb05 官方值優先,缺則退本地估算(展示用)
-    _mj_dy = _safe_num(mj.get("moneydj_div_yield"))
-    _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
+    # 1) 年化配息率:只讀 SSOT(近 12 個月實際配息合計 ÷ 最新淨值)。
+    #    2026-10-23 裁示 1B:**不再**拿 MoneyDJ wb05 官方值當值(只作對帳);
+    #    有配息跡象但窗內無紀錄 → None + 「⬜ 配息資料未備」,不冒充 0% 也不拿官方值頂。
+    _adr, _adr_label = _resolve_adr_with_fallback(fund)
+    _adr = _safe_num(_adr)
     if _adr is not None and _adr <= 0:
         _adr = None
 
-    # 2) 吃本金檢查 + tr1y 經由 SSOT 入口
-    # check_eating_principal_1y_mk 內部用 嚴格單利優先(有 series + dividends 時)
+    # 2) 吃本金檢查(SSOT 內部即用上面同一個 adr 與下面同一個 tr1y;None = 非配息基金,
+    #    灰色 dict = 資料未備／無法判定)
     _ds = check_eating_principal_1y_mk(fund)
 
-    # 3) tr1y 給其他 KPI 顯示用(月配息 / Coverage 計算)
-    # SSOT 一致:若 _ds 走 mk_simple,_tr1y 應從 _ds["_tr1y_meta"] 取(避免顯示與
-    # verdict 不同數字);若 fallback metrics,則用 _ret_1y_total。
-    _tr1y = None
-    if _ds and _ds.get("_tr1y_method") == "mk_simple":
-        _meta = _ds.get("_tr1y_meta") or {}
-        _nc = _meta.get("nav_change_pct")
-        _dt = _meta.get("div_total_pct")
-        if _nc is not None and _dt is not None:
-            _tr1y = _nc + _dt
-    if _tr1y is None:
-        _tr1y = _ret_1y_total(fund)
+    # 3) tr1y 給其他 KPI 顯示用(月配息 / Coverage 計算);與 verdict 讀同一個 SSOT
+    _tr1y = _ret_1y_total(fund)
 
     # 4) 月配息（TWD）= invest_twd × 年化配息率 ÷ 12（沿用 single-fund 試算邏輯）
     _inv_twd = _safe_num(fund.get("invest_twd")) or 0.0
@@ -198,6 +182,7 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
 
     return {
         "adr": _adr,
+        "adr_label": _adr_label,
         "ret_1y": _tr1y,
         "safety": _ds,
         "invest_twd": _inv_twd if _inv_twd > 0 else None,
@@ -216,15 +201,23 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
     _ds = k["safety"]
     _adr = k["adr"]
     _tr1y = k["ret_1y"]
-    if _adr is None:
+    if isinstance(_ds, dict) and _ds.get("alert_level") == "grey":
+        # 2026-10-23 裁示 1B:SSOT 的灰色結果(資料未備／無法判定)→ 印它自己的
+        # status / message 原文(含白話原因),不另編「資料不足」(§1 缺料要說清楚缺什麼)。
+        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
+        _kpi_title = f"吃本金檢查 — {_ds.get('status', '')}"
+        # SSOT 的 message 是 markdown(含 **粗體**),本卡以 HTML 印 → 去掉標記
+        _kpi_msg = str(_ds.get("message", "")).replace("**", "")
+        _kpi_cov_txt = "—"
+    elif _adr is None:
         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
         _kpi_title = "吃本金檢查 — ⬜ 不適用"
-        _kpi_msg = "本基金無年化配息率資料（可能為累積型 / 不配息基金）"
+        _kpi_msg = "本基金無配息跡象（可能為累積型 / 不配息基金），吃本金概念不適用"
         _kpi_cov_txt = "—"
     elif _tr1y is None or _ds is None:
         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
-        _kpi_title = "吃本金檢查 — ⬜ 資料不足"
-        _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
+        _kpi_title = "吃本金檢查 — ⬜ 資料未備／無法判定"
+        _kpi_msg = "缺一年含息總報酬（還原淨值），無法計算 Coverage"
         _kpi_cov_txt = "—"
     else:
         _al = _ds.get("alert_level", "grey")
@@ -318,9 +311,11 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
         excess, verdict = _grade(ret_1y, peer_1y)
         mj = f.get("moneydj_raw") or {}
         # v19.58：每月每100萬配息（TWD）= 1,000,000 × adr% / 100 / 12 = 10000 × adr / 12
-        # 沿用 _compute_fund_health_kpis 同源 adr 推導路徑（MoneyDJ wb05 優先 → metrics fallback）
-        _mj_dy = _safe_num(mj.get("moneydj_div_yield"))
-        _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
+        # 沿用 _compute_fund_health_kpis 同源 adr(SSOT `_resolve_adr_with_fallback`:
+        # 近 12 個月實際配息合計 ÷ 最新淨值;2026-10-23 裁示 1B 後不再讀 wb05 官方值當值)
+        from services.health.dividend import _resolve_adr_with_fallback
+        _adr, _ = _resolve_adr_with_fallback(f)
+        _adr = _safe_num(_adr)
         _mdiv_1m = (10000.0 * _adr / 12.0) if (_adr and _adr > 0) else None
         # v19.59：從 fund_grp_health_extras._render_investment_calc L194-283 上抽同源欄位到比較表
         # ~~_ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()~~
@@ -433,8 +428,9 @@ _CHECKUP_COL_CONFIG = {
         help="若月配息全部再投入可換的單位數；公式：(月配息原幣) ÷ NAV"),
     "每月100萬配息(TWD)": st.column_config.NumberColumn(
         "每月100萬配息(TWD)", format="%,.2f",
-        help="假設投入 100 萬 TWD，按 MoneyDJ wb05 年化配息率推估的單月配息現金流；"
-             "公式：1,000,000 × 年化配息率 / 12。無配息資料的基金顯示 —"),
+        help="假設投入 100 萬 TWD，按年化配息率（近 12 個月實際配息合計 ÷ 最新淨值）"
+             "推估的單月配息現金流；公式：1,000,000 × 年化配息率 / 12。"
+             "無配息資料的基金顯示 —"),
     # v19.60：投資試算同源 SSOT — 對應 sidebar invest_twd 實際本金（沒填顯示 —）
     "原幣本金🧮(本金)": st.column_config.NumberColumn(
         "原幣本金🧮(本金)", format="%,.2f",

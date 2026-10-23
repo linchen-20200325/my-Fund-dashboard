@@ -48,8 +48,8 @@ class TestPerfChartKeys:
         v19.413:process_one_fund 已下沉 L2 → 讀 services/fund_row.py。
         """
         src = _src(_FROW)
-        assert '"配息率% (年化)": s[' in src
-        assert '"含息% (年化)": s[' in src
+        assert '"持有期配息率% (相對買入成本・年化)": s[' in src
+        assert '"持有期含息% (相對買入成本・年化)": s[' in src
         assert '"淨值% (年化)": s[' in src
         assert '"配息率% (全期實際)": s[' in src
         assert '"含息% (全期實際)": s[' in src
@@ -62,8 +62,8 @@ class TestComparisonBasisPicker:
     def test_all_annual_present_picks_annual(self):
         from ui.tab_fund_grp_health import _pick_comparison_basis
         rows = [
-            {"配息率% (年化)": 9.09, "含息% (年化)": 10.8, "淨值% (年化)": 1.7},
-            {"配息率% (年化)": 11.0, "含息% (年化)": 12.6, "淨值% (年化)": 1.6},
+            {"持有期配息率% (相對買入成本・年化)": 9.09, "持有期含息% (相對買入成本・年化)": 10.8, "淨值% (年化)": 1.7},
+            {"持有期配息率% (相對買入成本・年化)": 11.0, "持有期含息% (相對買入成本・年化)": 12.6, "淨值% (年化)": 1.6},
         ]
         assert _pick_comparison_basis(rows) == "年化"
 
@@ -71,10 +71,10 @@ class TestComparisonBasisPicker:
         """任一檔年化為 None（持有 < 0.5 年）→ 全圖退全期實際，避免全 0 空圖。"""
         from ui.tab_fund_grp_health import _pick_comparison_basis
         rows = [
-            {"配息率% (年化)": 9.09, "含息% (年化)": 10.8, "淨值% (年化)": 1.7,
+            {"持有期配息率% (相對買入成本・年化)": 9.09, "持有期含息% (相對買入成本・年化)": 10.8, "淨值% (年化)": 1.7,
              "配息率% (全期實際)": 4.62, "含息% (全期實際)": 6.3, "淨值% (全期實際)": 1.7},
             # 短歷史檔:年化三軸皆 None,只有全期實際有值(截圖 TLZF9/JFZN3/ACTI71 情境)
-            {"配息率% (年化)": None, "含息% (年化)": None, "淨值% (年化)": None,
+            {"持有期配息率% (相對買入成本・年化)": None, "持有期含息% (相對買入成本・年化)": None, "淨值% (年化)": None,
              "配息率% (全期實際)": 5.53, "含息% (全期實際)": 7.2, "淨值% (全期實際)": 1.64},
         ]
         assert _pick_comparison_basis(rows) == "全期實際"
@@ -83,7 +83,7 @@ class TestComparisonBasisPicker:
         """單檔只有部分年化欄 None 也算不完整 → 退全期實際（基準統一）。"""
         from ui.tab_fund_grp_health import _pick_comparison_basis
         rows = [
-            {"配息率% (年化)": 9.09, "含息% (年化)": None, "淨值% (年化)": 1.7},
+            {"持有期配息率% (相對買入成本・年化)": 9.09, "持有期含息% (相對買入成本・年化)": None, "淨值% (年化)": 1.7},
         ]
         assert _pick_comparison_basis(rows) == "全期實際"
 

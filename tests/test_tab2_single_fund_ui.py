@@ -447,14 +447,26 @@ def test_risk_rows_missing_table_renders_dashes(tab2_mod) -> None:
 
 
 def test_annual_dividend_source_labels_cover_ssot_chain(tab2_mod) -> None:
-    """漂移鎖：來源說明表必須涵蓋 SSOT resolver 會回傳的每一個層級標籤。
+    """漂移鎖：來源說明表必須涵蓋 SSOT resolver 會回傳的每一個標籤。
 
     修正前：紅（ImportError 紅）—— 這張對照表當時不存在，畫面用寫死字串。
+    2026-10-23 裁示 1B（PR1b）：resolver 收斂為單一方法，只會回
+    `ADR_SRC_DIVS_12M` / `ADR_LABEL_DATA_MISSING` / `ADR_LABEL_NO_DIVIDEND` 三種；
+    舊的 `moneydj_wb05` / `metrics_annual_div_rate` 上游不再產出，對照表**不得**再列
+    （列了等於畫面可能替一個不存在的來源講官方話）。期望值 import SSOT 常數，不寫死字面值。
     """
+    from services.health.dividend import (
+        ADR_LABEL_DATA_MISSING,
+        ADR_LABEL_NO_DIVIDEND,
+        ADR_SRC_DIVS_12M,
+    )
     labels = tab2_mod._ADR_SRC_ZH
-    expected = {"moneydj_wb05", "metrics_annual_div_rate", "divs_12m_sum"}
+    expected = {ADR_SRC_DIVS_12M, ADR_LABEL_DATA_MISSING, ADR_LABEL_NO_DIVIDEND}
     assert expected <= set(labels), (
         f"年化配息率來源說明缺少：{sorted(expected - set(labels))}；"
-        "缺哪一層，那一層命中時畫面就說不出自己的來源。"
+        "缺哪一個，那一個命中時畫面就說不出自己的來源。"
     )
+    for _stale in ("moneydj_wb05", "metrics_annual_div_rate"):
+        assert _stale not in labels, f"{_stale} 已不再由 SSOT 產出，對照表不得保留舊來源"
     assert all(v.strip() for v in labels.values())
+    assert "近 12 個月" in labels[ADR_SRC_DIVS_12M] and "淨值" in labels[ADR_SRC_DIVS_12M]

@@ -24,11 +24,17 @@ def _render_dividend_matrix(funds: list) -> None:
     st.caption("長條高度 < 紅虛線 → 含息報酬不足以支撐配息 → 吃本金警示。"
                "**抓不到的值一律留缺口**(柱子不畫、紅點斷線),與「真的是 0%」分得出來。")
 
-    # v19.177 SSOT:年化配息率走 `_resolve_adr_with_fallback`(wb05 → metrics → 12M 推算),
-    # 取代本檔原本自己抄一份的 12M fallback(第 3 份 inline 實作,且用 `except: pass` 吞錯)。
-    from services.health.dividend import _resolve_adr_with_fallback
+    # v19.177 SSOT:年化配息率走 `_resolve_adr_with_fallback`,取代本檔原本自己抄一份的
+    # 12M fallback(第 3 份 inline 實作,且用 `except: pass` 吞錯)。
+    # 2026-10-23 裁示 1B:燈號改走唯一吃本金判定 `check_eating_principal_1y_mk`
+    # (它內部就是用同兩個 SSOT 取 1Y 含息 / 年化配息率),本檔不再自組輸入餵
+    # `dividend_safety`;這裡另外讀兩個 SSOT 只為了畫柱高 / 紅虛線,值與燈號必然同源。
+    from services.health.dividend import (
+        _resolve_adr_with_fallback,
+        check_eating_principal_1y_mk,
+    )
 
-    _rc_names, _rc_ret, _rc_div, _rc_real, _rc_src = [], [], [], [], []
+    _rc_names, _rc_ret, _rc_div, _rc_real, _rc_src, _rc_levels = [], [], [], [], [], []
     for _f in funds:
         _name = (_f.get("name") or _f.get("code", "?"))[:18]
         _ret_v, _src_label = compute_1y_total_return(_f)
@@ -40,6 +46,13 @@ def _render_dividend_matrix(funds: list) -> None:
             print(f"[grp_health/dividend] {_f.get('code', '?')} adr 解析失敗:"
                   f"{type(_e_adr).__name__}: {_e_adr}", file=_sys_adr.stderr)
             _div = None
+        try:
+            _eat = check_eating_principal_1y_mk(_f)
+        except Exception as _e_eat:  # noqa: BLE001 — 單檔判定炸掉 → 灰 + log,不冒充綠
+            import sys as _sys_eat
+            print(f"[grp_health/dividend] {_f.get('code', '?')} 吃本金判定失敗:"
+                  f"{type(_e_eat).__name__}: {_e_eat}", file=_sys_eat.stderr)
+            _eat = None
         _rc_names.append(_name)
         # §1:抓不到 ≠ 0%。原本 `_ret_v or 0.0` 讓「1Y 抓不到」畫成 0 高柱並在柱上印
         # 「0.0%」,與真的持平 0% 完全同形;配息率同理(0 會讓整條紅虛線消失,
@@ -47,27 +60,16 @@ def _render_dividend_matrix(funds: list) -> None:
         _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else None)
         _rc_div.append(round(_div, 2) if _div is not None else None)
         _rc_real.append(_is_real)
-        _rc_src.append(_src_label if _is_real else "資料不足")
+        # 來源欄印 SSOT 自己給的標籤:無值時就是「⬜ 資料未備／無法判定（白話原因）」
+        _rc_src.append(_src_label or "—")
+        # None(非配息基金)/ 灰色 dict(資料未備)→ grey;其餘直接吃 SSOT 的 alert_level
+        _rc_levels.append(_eat.get("alert_level", "grey") if isinstance(_eat, dict) else "grey")
 
     if not _rc_names:
         return
 
-    # v19.402 §1:改走 SSOT dividend_safety(gap 判定),取代 inline 1.2× coverage
-    # 門檻 → 與 tab3_portfolio canonical 版 + 全站一致(L3→L2,修 §8.2 inline 分類)。
-    from services.fund_total_return import is_extrapolated_1y_source
-    from services.portfolio_service import dividend_safety
     _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                   "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
-    _rc_levels = []
-    for _r, _d, _real, _src in zip(_rc_ret, _rc_div, _rc_real, _rc_src):
-        # v19.448 稽核:缺含息報酬 **或** 缺配息率 **或** 含息報酬走「短窗外推年化」
-        # (最不可靠、外推爆掉,ACTI71 −38% bug)→ 一律無法判定,灰。
-        # 不拿外推數字報紅燈(§1)。純淨值(源#3)雙扣議題待 user 核准另處理。
-        if not _real or _d is None or is_extrapolated_1y_source(_src):
-            _rc_levels.append("grey")
-        else:
-            _rc_levels.append(
-                dividend_safety(_r, _d).get("alert_level", "grey"))
     _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
 
     fig_rc = go.Figure()

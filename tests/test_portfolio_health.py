@@ -98,9 +98,13 @@ def test_compute_health_kpis_no_hardcoded_target_comparison():
 def test_compute_health_kpis_cashflow_eat_principal():
     """吃本金邏輯：含息 < 配息 且配息 > 0 → n_eat++。"""
     # 2026-10-23 裁示 1B:1Y 含息走本地還原值 metrics.ret_1y_total(窗口 ≥ 350 天),
-    # 官方 perf["1Y"] 只對帳;fixture 兩邊都放,證明讀的是還原值。
-    def _m(tr, div_count=12):
-        return {"ret_1y_total": tr, "ret_1y_window_days": 365, "ret_1y_div_count": div_count}
+    # 年化配息率走 metrics.annual_div_rate(近 12 個月實配 ÷ 最新淨值);官方 perf["1Y"] /
+    # moneydj_div_yield 只對帳 —— fixture 兩邊都放,證明讀的是還原值 / 12M 實配率。
+    # PR1b:本 helper 改走 `check_eating_principal_1y_mk`,wb05 不再是 adr 的值 →
+    # 只給 moneydj_div_yield、不給 metrics.annual_div_rate 的檔會落「⬜ 配息資料未備」(n_na)。
+    def _m(tr, div_count=12, adr=5.0):
+        return {"ret_1y_total": tr, "ret_1y_window_days": 365, "ret_1y_div_count": div_count,
+                "annual_div_rate": adr, "annual_div_rate_div_count": div_count}
     funds = [
         # 含息 3% < 配息 5% → 吃本金
         {"code": "EAT1", "loaded": True,
@@ -110,10 +114,10 @@ def test_compute_health_kpis_cashflow_eat_principal():
         {"code": "OK1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},
          "metrics": _m(10.0), "series": [100, 105, 108, 110]},
-        # 無配息（div=0）→ 健康
+        # 無配息跡象(非配息基金)→ SSOT 回 None → 1Y 含息算得出來 → 健康
         {"code": "NODIV", "loaded": True,
          "moneydj_raw": {"perf": {"1Y": 2.0}},
-         "metrics": _m(2.0, div_count=0), "series": [100, 101, 102]},
+         "metrics": _m(2.0, div_count=0, adr=None), "series": [100, 101, 102]},
     ]
     out = compute_health_kpis(funds, None)
     assert out["n_funds"] == 3
@@ -143,7 +147,8 @@ def test_compute_health_kpis_no_mk_df_only_cashflow():
         {"code": "F1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},
          "metrics": {"ret_1y_total": 10.0, "ret_1y_window_days": 365,
-                     "ret_1y_div_count": 12},    # 裁示 1B:1Y 含息走本地還原值
+                     "ret_1y_div_count": 12,      # 裁示 1B:1Y 含息走本地還原值
+                     "annual_div_rate": 5.0},     # 裁示 1B:配息率走 12M 實配 ÷ 淨值(非 wb05)
          "series": [100, 105]},
     ]
     out = compute_health_kpis(funds, None)

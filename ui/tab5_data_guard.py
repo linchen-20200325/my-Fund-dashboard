@@ -1380,24 +1380,27 @@ def render_data_guard_tab() -> None:
                          _d5_adr if not _d5_is_accum else "N/A",
                          ok_cond=(_d5_is_accum or (_safe_float(_d5_adr) or 0) > 0),
                          fmt=lambda v: f"{float(v):.2f}%")
-                # v18.55: 1Y含息報酬 fallback 鏈 — 救已快取 session_state（pre-v18.53）
-                # perf["1Y"] (wb01 / local_calc 注入) → metrics.ret_1y_total (本地計算原值)
+                # v18.55: 1Y 報酬資料來源診斷 — 救已快取 session_state（pre-v18.53）
+                # perf["1Y"] (wb01 / local_calc 注入) → metrics.ret_1y_total (本地還原淨值原值)
                 # v18.57: 加來源標籤，讓使用者一眼看出資料來自哪邊
+                # 2026-10-23 裁示 1B:這一格診斷的是「資料來源有沒有抓到」,不是顯示基金的
+                # 1Y 含息報酬 —— 官方 perf["1Y"] 只作對帳、不再是 1Y 含息的值,欄名改為誠實的
+                # 「wb01 官方 1Y（對帳）」;只有 metrics.ret_1y_total 才稱「1Y含息報酬（還原淨值）」。
                 _d5_perf_1y = _d5_perf.get("1Y")
                 _d5_perf_src_raw = str(_d5_mj.get("perf_source", "") or "").lower()
-                _d5_perf_label = "1Y含息報酬"
+                _d5_perf_label = "官方 1Y（對帳）"
                 if _d5_perf_1y is not None:
                     # perf["1Y"] 已有值 — 來自 wb01（境外）或 local_calc（境內 v18.53+）
                     _d5_perf_label = (
-                        "1Y含息報酬 [wb01]" if _d5_perf_src_raw == "wb01"
-                        else ("1Y含息報酬 [本地]" if _d5_perf_src_raw == "local_calc"
-                              else "1Y含息報酬")
+                        "wb01 官方 1Y（對帳）" if _d5_perf_src_raw == "wb01"
+                        else ("perf 1Y [本地]（對帳）" if _d5_perf_src_raw == "local_calc"
+                              else "官方 1Y（對帳）")
                     )
                 else:
                     # perf["1Y"] 缺 → 看 metrics.ret_1y_total（v18.55 cache 救援路徑）
                     _d5_perf_1y = _d5_m.get("ret_1y_total")
                     if _d5_perf_1y is not None:
-                        _d5_perf_label = "1Y含息報酬 [本地·cache]"
+                        _d5_perf_label = "1Y含息報酬（還原淨值）[本地·cache]"
                 _d5_cell(_r1[2], _d5_perf_label,    _d5_perf_1y,
                          ok_cond=(_d5_perf_1y is not None),
                          fmt=lambda v: f"{v:.2f}%")
