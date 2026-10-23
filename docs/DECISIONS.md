@@ -642,6 +642,32 @@
 | supersedes／superseded by | supersedes：`DEC-2026-10-22-05` 第 (5) 項中性名清單的「台股趨勢」「籌碼狀態」與第 (6)、(7) 項的台股層／EPS × PE 部分（其餘項目不變）。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管轉達；文件組未見客戶對話本身）。64 §3～§5 的稽核事實為稽核組結論，單組實測＋總管抽驗，未經第二組逐條驗證 |
 
+### DEC-2026-10-23-02｜客戶正式裁示 SSOT 收斂 1B（1Y 含息／配息率／吃本金）、2C（HWM σ 基金位置）、3A（3-3-3）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | **1B（1Y 含息報酬／配息率／吃本金）**：1Y 含息報酬的基金層唯一 SSOT ＝ 既有配息還原淨值法；MoneyDJ 官方值只作對帳；純 NAV／外推不得掛「含息」名；資料不足 → ⬜ 資料未備／無法判定，不得 fallback 成純 NAV、0、中性或估算值；配息率 ＝ 近 12 個月實際配息合計 ÷ 最新淨值，wb05 只對帳；「持有期間年化／相對買入成本」屬 💼 我的持股，不得稱基金層 1Y 含息或基金配息率；吃本金只保留一套 deterministic SSOT（2pp 黃燈帶、窗口不足拒判），其他平行判定一律改讀 SSOT。<br>**2C（HWM σ）**：HWM σ ＝ 基金相對自身近一年高點的位置 evidence，不是投資動作；輸入改用既有配息還原／Total Return 序列；fail-closed（歷史不足／配息型但配息資料不足／貨幣型或波動過低 → unavailable／not applicable，不得偷偷 fallback raw NAV）；既有 consumer 中可買／可賣／加碼參考／超跌／買點／賣點不得再由 HWM evidence 產生；中性概念統一為接近高點／中段／遠離高點／⬜ 無法判定／不適用；−0.5／−1.5 僅既有相容／研究候選門檻、未校準、不代表客戶認可；不得 backfit 或建新 threshold；若改舊 UI 文字造成大規模 UI 變更，先收斂 deterministic output 與 consumer contract。<br>**3A（3-3-3）**：只保留一個 SSOT，依 `SPEC.md`：成立 ≥ 3 年、3 年年化 > 7%；報酬用與 1B 一致的含息口徑；缺資料 ⬜ 不得當 ❌；「同儕前 1/3」非正式規格、不新增同儕資料源；`services/fund_screening.py::check_333_fund` 停止作為判斷 SSOT，實體刪除仍遵守 legacy／deletion Gate（BL-0292／BL-0422）。<br>**共通**：資料流 Raw → Validated／Normalized → Deterministic → Evidence → AI Explanation → Portfolio Impact；UI 不得自建第二套金融公式；Missing 永不得變 0／False／中性／正常／安全／HOLD／未觸發；本批不是新版 UI 設計批。 |
+| 理由／背景 | （總管背景說明，不是客戶原話）承 `DEC-2026-10-23-01` 的 12 項收斂清單（BL-0420）與 HWM σ Blocking Issue（BL-0421）：客戶先就其中三項（1Y Total Return＋dividend yield／ADR＋吃本金、HWM／低基期、3-3-3）裁示唯一 SSOT 與邊界，其餘 9 項仍待裁示 |
+| evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。**落地狀態（2026-10-23，本組 `git fetch` 實查 SHA）**：1B 的 L2 ＋ services consumer 已於 PR #1023（main `4134e6d`；`bb9021b` ＋ 稽核回修 `5bc0e76`）落地：`services/fund_total_return.py::resolve_1y_total_return`、`services/fund_service.py::calc_metrics` 的 `annual_div_rate`、`services/health/dividend.py::resolve_dividend_rate_12m`、`check_eating_principal_1y_mk`；UI consumer 在 `origin/pr1b-ui-ssot-audited`（`e504ba1`）待合併（BL-0424）；3A 為 WIP `origin/pr2-333-ssot-wip`（`683d093`，未驗證未稽核；BL-0425）；2C 未落地（BL-0426）。本批已發現、客戶未裁示的公式層與契約語意題登記於 BL-0427／BL-0428 |
+| 影響範圍 | BL-0420（三項已裁，列尾補記）、BL-0421（改 open、待實作）、BL-0422（`check_333_fund` 退休候選）；`services/`、`ui/` 舊站 consumer；不解凍 `docs/v2/44`、不改 `ui_v2/`；HWM σ 在 2C 落地前仍不得成為 production investment judgment |
+| 是否可逆 | 可逆（客戶可另行裁示）；已合併的 PR #1023 回退須走正常 PR |
+| supersedes／superseded by | supersedes：`DEC-2026-10-23-01` 中「HWM σ 待客戶裁示四題」與「12 項逐項裁示」裡對應 1B／2C／3A 的待裁狀態（方向與 Information Ownership Matrix 不變）。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。落地狀態的 SHA 為本組實查；稽核結論、測試結果為實作組／稽核組／總管回報，本組未重跑。本列由架構與文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-03｜客戶收尾指令：本批只做 Save／Handoff Gate 交接存檔、新版 UI 邊界、治理待辦登記
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | (1) **本批只做交接存檔**（Save／Handoff Gate，`PROJECT_RULES.md` 6.1）：把狀態、裁示、待辦與下一步寫入 GitHub 正式文件；**完成後停止，不開始下一批**。(2) **新版 UI 邊界**（客戶原話要點）：目前仍是底層計算／SSOT 收斂階段；新版 UI／UX 尚未正式開始設計；路徑 ＝ 底層邏輯收斂 → UI/UX Blueprint → 客戶確認 → 新版實作；不是把舊 UI 原封不動搬到 `ui_v2`；舊 UI 只作功能盤點、已驗證計算邏輯參考、可重用能力來源；畫面、layout、資訊架構與操作流程仍需重新設計。(3) **治理待辦登記**：「Project AI 工作規範補強」十項（繁體中文回報、靜默巡航、禁止流水帳、重複狀態不再報、Batch 前評估模型能力與 Minimum Sufficient Effort、不因投資專案固定 High、升級須停下通知客戶、低風險階段主動建議降級、換對話前 Save／Handoff Gate、GitHub 正式文件才是 durable state）只登記於 `docs/BACKLOG.md` BL-0434，待下一個治理批正式寫入 `PROJECT_RULES.md`。(4) **Stop Gate 九項**（需要新金融公式；新資料來源；新增／改變投資動作語意；schema／Sheet 變更；新版 UI layout 決策；HWM 配息還原無法可靠用既有資料完成；既有裁示互相衝突；不可逆大規模刪除；CI 真錯誤且無既定修復路徑）適用於 PR1b／PR2／PR3 後續工作，任一命中即停下請示 |
+| 理由／背景 | （總管背景說明，不是客戶原話）1B 已合併、PR1b 已稽核未合併、PR2 WIP、PR3 未開始，對話即將結束；依 `DEC-2026-10-22-03` 必須先存檔再停 |
+| evidence／source | 客戶 2026-10-23 指示，經總管派工單轉達；repo 內無逐字存檔。落地：`docs/HANDOFF.md` 第 2 節 2026-10-23 第二次框與第 3 節同步行、`docs/BACKLOG.md` BL-0424～BL-0434、本檔 `DEC-2026-10-23-02`、`docs/v2/64` 狀態指標 |
+| 影響範圍 | 本批 docs 分支；下一對話的起點（`docs/HANDOFF.md` 第 2 節 2026-10-23 第二次框「下一個唯一工作點」）；與 `DEC-2026-10-22-04`（B 版 UI/UX 重新設計）同向、不取代 |
+| 是否可逆 | 可逆（客戶可另行指示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由架構與文件組單組寫成，未經第二組驗證 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
@@ -759,3 +785,4 @@
 - 第四節 `DEC-2026-10-22-01`～`-03`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身；實機結果（SET-4、SET-5、Reboot 後接通）本組無法從 repo 查證。
 - 第四節 `DEC-2026-10-22-05`：客戶原文 repo 內沒有逐字存檔；內容依總管派工單轉達的要點，本組未見客戶對話本身、也未見客戶提供的投資教學參考資料；「已確認」七項與「不構成核准」清單的切分是總管派工單的切分，文件組照寫；`docs/v2/63` §3～§5 為總管讀法，本組未重跑任何掃描指令。
 - 第四節 `DEC-2026-10-23-01`：客戶裁示經總管派工單轉達，repo 內無逐字存檔；「不構成核准」清單與 supersedes 範圍由文件組依總管規格寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-23-02`、`DEC-2026-10-23-03`：客戶裁示（1B／2C／3A、收尾指令、新版 UI 邊界、治理待辦十項、Stop Gate 九項）經總管派工單轉達，repo 內無逐字存檔；落地狀態的 SHA 為文件組 `git fetch` 後實查，稽核結論與測試結果為實作組／稽核組／總管回報的轉述；兩列由架構與文件組單組寫成，未經第二組驗證。
