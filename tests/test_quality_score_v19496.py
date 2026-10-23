@@ -123,8 +123,9 @@ def _fund(code, sharpe, sigma, tr1y, adr, fee, ret1y, peer_rank=None):
     if peer_rank:
         _mj["risk_metrics"] = {"peer_compare": {"本基金": {"報酬排名": peer_rank}}}
     return {"code": code,
+            # 2026-10-23 裁示 1B:「配息」因子走 SSOT,還原值須帶 ≥ 350 天窗口證據才算
             "metrics": {"sharpe": sharpe, "std_1y": sigma, "ret_1y_total": tr1y,
-                        "annual_div_rate": adr, "ret_1y": ret1y},
+                        "ret_1y_window_days": 365, "annual_div_rate": adr, "ret_1y": ret1y},
             "moneydj_raw": _mj, "series": None}
 
 

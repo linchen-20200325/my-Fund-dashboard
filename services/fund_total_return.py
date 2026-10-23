@@ -53,7 +53,10 @@ UNAVAILABLE_REASON_TEXT = {
     "no_series": "無淨值序列",
     "no_restored_value": "淨值序列不足以還原一年含息報酬",
     "window_short": "淨值僅 {days} 天，不足一年",
+    "window_unknown": "還原窗口天數未知",
     "dividend_data_missing": "配息基金但近一年窗口內無配息紀錄",
+    # 有配息紀錄(12M 窗內筆數 > 0)、但還原表以日期 left-join 後一筆都沒對齊到淨值日
+    "dividend_data_missing_unaligned": "有配息紀錄但無一筆對齊到淨值日，無法還原",
 }
 
 
@@ -207,8 +210,8 @@ def is_dividend_fund(fund_obj: dict) -> bool:
 
 
 def _unavailable(reason: str, *, source_label_days=None, official=None,
-                 window_days=None, div_count=None) -> dict:
-    _txt = UNAVAILABLE_REASON_TEXT[reason]
+                 window_days=None, div_count=None, text_key=None) -> dict:
+    _txt = UNAVAILABLE_REASON_TEXT[text_key or reason]
     if reason == "window_short":
         _txt = _txt.format(days=source_label_days)
     return {
@@ -232,7 +235,7 @@ def resolve_1y_total_return(fund_obj: dict) -> dict:
       "value_pct": float | None,
       "status": "ok" | "unavailable",
       "reason": None | "no_series" | "no_restored_value" | "window_short"
-                | "dividend_data_missing",
+                | "window_unknown" | "dividend_data_missing",
       "source": SRC_SELF_RESTORED(ok)或 SRC_NONE(unavailable),
       "window_days": int | None,            # 還原窗口實際天數
       "div_count_in_window": int | None,    # 窗內配息筆數(calc_metrics.ret_1y_div_count)
@@ -245,7 +248,8 @@ def resolve_1y_total_return(fund_obj: dict) -> dict:
     規則(依序):
       1. shape normalize(flat → nested)。
       2. v = metrics.ret_1y_total;wd = metrics.ret_1y_window_days。
-      3. wd 有值且 < RET_1Y_RESTORED_MIN_WINDOW_DAYS → unavailable `window_short`。
+      3. wd 有值且 < RET_1Y_RESTORED_MIN_WINDOW_DAYS → unavailable `window_short`;
+         v 有值但 wd 缺(沒有窗口證據)→ unavailable `window_unknown`(不讓無窗口的值冒充一年)。
       4. 配息閘門:`is_dividend_fund` 且 metrics.ret_1y_div_count == 0
          → unavailable `dividend_data_missing`(配息基金的還原序列一筆配息都沒加回,
            等於純淨值,拿去比年化配息率必然假 🔴,v19.480 稽核 B2)。
@@ -276,10 +280,18 @@ def resolve_1y_total_return(fund_obj: dict) -> dict:
     if wd_i is not None and wd_i < RET_1Y_RESTORED_MIN_WINDOW_DAYS:
         return _unavailable("window_short", source_label_days=wd_i, official=official,
                             window_days=wd_i, div_count=div_count)
+    if v is not None and wd_i is None:
+        return _unavailable("window_unknown", official=official,
+                            window_days=None, div_count=div_count)
 
     if is_dividend_fund(fund_obj) and div_count == 0:
+        # 文字分兩種(公式與對齊方式不變,只改白話原因):12M 窗內其實有配息紀錄、但還原表
+        # 一筆都沒對齊到淨值日 → 說「無一筆對齊」,不說「無配息紀錄」(§1 不誤導)
+        _adr_cnt = m.get("annual_div_rate_div_count")
+        _unaligned = isinstance(_adr_cnt, (int, float)) and not isinstance(_adr_cnt, bool) and _adr_cnt > 0
         return _unavailable("dividend_data_missing", official=official,
-                            window_days=wd_i, div_count=div_count)
+                            window_days=wd_i, div_count=div_count,
+                            text_key="dividend_data_missing_unaligned" if _unaligned else None)
 
     if v is None:
         _s = fund_obj.get("series")

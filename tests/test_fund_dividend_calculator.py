@@ -119,7 +119,9 @@ class TestComputeDividendHappyPath:
         assert r["ok"] is True
         assert r["n_events"] == 0
         assert r["events"] == []
-        assert r["summary"]["div_health_light_🧮"] == "健康"
+        # 2026-10-23 裁示 1B:吃本金唯一判定 = check_eating_principal_1y_mk;本函式燈號退休 → None
+        assert r["summary"]["div_health_light_🧮"] is None
+        assert r["summary"]["div_health_emoji_🧮"] is None
 
     def test_principal_ccy_conversion(self):
         # 100 萬 TWD / FX 30 = 3.33 萬 USD
@@ -241,9 +243,11 @@ class TestEatingPrincipalDetection:
             ],
             fx_rate_default=30.0,
         )
-        # 年化 NAV return = -10%, annual div rate ≈ 10%, sum ≈ 0%
-        # gap = 10 - 0 = 10 > warn_gap(2) → 吃本金
-        assert r["summary"]["div_health_light_🧮"] == "吃本金"
+        # 年化 NAV return = -10%, annual div rate ≈ 10%, sum ≈ 0%(持有期相對買入成本的數字保留)
+        # 2026-10-23 裁示 1B:吃本金唯一判定 = check_eating_principal_1y_mk;本函式燈號退休 → None
+        assert r["summary"]["div_health_light_🧮"] is None
+        assert abs(r["summary"]["annual_nav_return_pct_🧮"] - (-10.0)) < 0.2
+        assert abs(r["summary"]["annual_div_rate_pct_🧮"] - 10.0) < 0.2
 
     def test_balanced_growth_offsetting_div_healthy(self):
         # NAV 10 → 11（+10%）+ 配息 5% → ret_total ≈ 15% > div 5% → 健康
@@ -252,7 +256,9 @@ class TestEatingPrincipalDetection:
             dividend_events=[{"date": "2024-12-31", "amount": 0.5}],
             fx_rate_default=30.0,
         )
-        assert r["summary"]["div_health_light_🧮"] == "健康"
+        # 2026-10-23 裁示 1B:吃本金唯一判定 = check_eating_principal_1y_mk;本函式燈號退休 → None
+        assert r["summary"]["div_health_light_🧮"] is None
+        assert r["summary"]["ret_1y_total_pct_🧮"] > r["summary"]["annual_div_rate_pct_🧮"]
 
     def test_warn_zone_yellow(self):
         # NAV slight decline + moderate div → 警示區
@@ -262,8 +268,10 @@ class TestEatingPrincipalDetection:
             fx_rate_default=30.0,
             warn_gap_pct=2.0,
         )
-        # nav_ret -0.5%, div ≈ 5%, ret_total ≈ 4.5%, gap = div-ret_total = 0.5 ≤ 2
-        assert r["summary"]["div_health_light_🧮"] == "警示"
+        # nav_ret -0.5%, div ≈ 5%, ret_total ≈ 4.5%(數字保留;燈號不再由本函式產)
+        # 2026-10-23 裁示 1B:吃本金唯一判定 = check_eating_principal_1y_mk;本函式燈號退休 → None
+        assert r["summary"]["div_health_light_🧮"] is None
+        assert abs(r["summary"]["annual_nav_return_pct_🧮"] - (-0.5)) < 0.1
 
 
 # ════════════════════════════════════════════════════════════════

@@ -76,6 +76,7 @@ class TestBuildSnapshot:
                 "metrics": {
                     "annual_div_rate": 5.0,
                     "ret_1y_total": 7.0,
+                    "ret_1y_window_days": 365,   # 裁示 1B:還原值須帶窗口證據
                 },
                 "moneydj_raw": {
                     "holdings": {
@@ -102,6 +103,7 @@ class TestBuildSnapshot:
                 "metrics": {
                     "annual_div_rate": 10.0,
                     "ret_1y_total": 5.0,
+                    "ret_1y_window_days": 365,   # 裁示 1B:還原值須帶窗口證據
                 },
                 "moneydj_raw": {},
             },
@@ -172,7 +174,7 @@ class TestAiCrossFundEvaluation:
             from ui.helpers.fund_grp_health_extras import _render_ai_cross_fund_evaluation
             _render_ai_cross_fund_evaluation([
                 {"code": "A001", "name": "Fund A",
-                 "metrics": {"annual_div_rate": 5.0, "ret_1y_total": 7.0}},
+                 "metrics": {"annual_div_rate": 5.0, "ret_1y_total": 7.0, "ret_1y_window_days": 365}},
             ])
             assert _called["count"] == 1
             assert _called["tab_key"] == "tab5_grp"

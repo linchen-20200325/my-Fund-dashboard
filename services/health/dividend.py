@@ -473,6 +473,9 @@ _EATING_GREY_MESSAGE = {
     "window_short": ("這檔的淨值歷史不足一年,無法算出可靠的一年含息報酬 —— "
                      "**不是它沒有配息或不吃本金,是我們還沒有足夠的資料去判斷**。"
                      "請改看基金官方績效頁的含息報酬"),
+    "window_unknown": ("這檔的還原含息值沒有窗口天數證據,無法確認它涵蓋一年 —— 無法判定,"
+                       "不拿它冒充一年報酬"),
+    "nav_missing": "這檔近一年有配息紀錄,但抓不到最新淨值,算不出年化配息率 —— 無法判定",
     "no_series": "這檔沒有淨值序列,無法還原一年含息報酬 —— 無法判定",
     "no_restored_value": ("這檔有淨值序列但無法還原出一年含息報酬(筆數不足或資料異常)—— "
                           "無法判定,不拿別的數字頂替"),
@@ -521,11 +524,13 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     """
     from services.fund_total_return import resolve_1y_total_return
 
-    adr, _adr_source = _resolve_adr_with_fallback(fund)
+    _ar = resolve_dividend_rate_12m(fund)
+    adr, _adr_source = (_ar["value_pct"] if _ar["status"] == "ok" else None), _ar["label"]
     if adr is None:
-        if _adr_source == ADR_LABEL_NO_DIVIDEND:
+        if _ar["reason"] == "no_dividend":
             return None
-        return _eating_grey("dividend_data_missing", adr_source=_adr_source, adr_pct=None)
+        # 透傳 resolve 的 reason(dividend_data_missing / nav_missing),不寫死
+        return _eating_grey(_ar["reason"], adr_source=_adr_source, adr_pct=None)
     if adr <= 0:
         return None
 
