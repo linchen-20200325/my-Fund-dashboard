@@ -2443,6 +2443,7 @@ _MD_DOCS: tuple[str, ...] = (
     "docs/v2/61_bl0250_batch3_wireframe.md",   # 2026-10-19 BL-0250 批次 3-A：客戶已審線框第六版照存＋客戶裁示逐字
     "docs/v2/62_old_ui_gap_matrix.md",
     "docs/v2/63_market_trend_research_baseline.md",
+    "docs/v2/64_v2_ssot_convergence.md",
     "docs/v2/CONSTITUTION.md",
     "docs/v2/README_DRAFT_PACK.md",
 )
