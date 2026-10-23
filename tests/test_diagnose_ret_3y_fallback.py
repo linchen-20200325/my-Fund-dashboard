@@ -137,12 +137,28 @@ _ATTRIB_CASES = {
 }
 
 
-@pytest.mark.parametrize("case", sorted(_ATTRIB_CASES))
+# 2026-10-23 客戶裁示 3A:production SSOT `derive_ann_3y_for_333` 不再讀 wb01 perf / 純NAV
+# (唯一來源 = `metrics.ret_3y_ann_tr`),故診斷器的三步鏈自此是**退役鏈** —— 凡「預期命中某步」
+# 的案例,`attribution_ok` 必然為 False(production 鏈值已是 None)。
+# `scripts/diagnose_ret_3y_fallback.py` 不在 3A 那一輪的檔案邊界內(只動 services / shared /
+# tests / 兩處 UI),故這裡先以 **strict xfail** 釘住事實:等 scripts 同步到 3A 後,這幾條會
+# XPASS → 轉紅,逼人回來清掉本標記(不讓過期的 xfail 永遠睡著)。
+_RETIRED_CHAIN_REASON = ("2026-10-23 裁示 3A:診斷器三步鏈(wb01 → ret_3y_ann → cum)已退役,"
+                         "production 鏈值恆 None;scripts/ 待另案同步")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [pytest.param(_c, marks=pytest.mark.xfail(strict=True, reason=_RETIRED_CHAIN_REASON))
+     if _ATTRIB_CASES[_c][2] is not None else _c
+     for _c in sorted(_ATTRIB_CASES)],
+)
 def test_attribution_matches_locked_production_chain(case):
     """命中步驟的歸因 → 值必須等於 production 等價鏈值。
 
     三步的數字刻意互不相同(9 / 20 / 90),取值順序一寫反,`attribution_ok`
     就會是 False,而且 `hit_step` 也會對不上預期。
+    ⚠️ 3A 後見上方 `_RETIRED_CHAIN_REASON`:預期命中的案例為 strict xfail。
     """
     _m, _p, _expect_step = _ATTRIB_CASES[case]
     fd = _fd(_nav(30, "B"), metrics=_m, perf=_p)

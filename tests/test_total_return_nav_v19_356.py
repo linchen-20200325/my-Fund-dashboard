@@ -196,7 +196,9 @@ class TestWiringPinned:
         from pathlib import Path
         src = (Path(__file__).resolve().parent.parent
                / "services/fund_service.py").read_text(encoding="utf-8")
-        assert "s_tr = _total_return_nav(s, divs)" in src
+        # 2026-10-23 裁示 3A:呼叫多帶 `_info=` 出參(收還原表配息日,供 3Y 配息閘門計數),
+        # 還原序列本身不變 → 釘住新呼叫式。
+        assert "s_tr = _total_return_nav(s, divs, _info=_tr_info)" in src
         assert "np.log(s_tr / s_tr.shift(1))" in src
         # 舊的原始 NAV log_ret 不應殘留在 calc_metrics 主計算路徑
         assert "log_ret = np.log(s / s.shift(1))" not in src

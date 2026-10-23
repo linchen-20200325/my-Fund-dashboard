@@ -150,7 +150,8 @@ def check_replacement_recommendation(
     # ─── 規則 (c) — 3-3-3 未通過且持有 ≥ 3 年 ────────────────
     rule_c_eligible = (holding_y is not None
                        and holding_y >= REPLACE_RULE_C_MIN_HOLD_YEARS)
-    # v19.485 PR-2:3 年年化改走 SSOT `derive_ann_3y_for_333`(含息優先 + P3),與健診大表 /
+    # v19.485 PR-2:3 年年化改走 SSOT `derive_ann_3y_for_333`(2026-10-23 裁示 3A 起唯一口徑 =
+    #   配息還原淨值法 `metrics.ret_3y_ann_tr`;缺 → None → 3-3-3 ⬜ → 不觸發 (c)),與健診大表 /
     #   Tab2 的 3-3-3 verdict **同源** —— 否則同一檔在替換判定與健診表會得到不同 3-3-3 結果
     #   (§2.1 SSOT)。years 這裡用 **holding_y(持有年數)**,是規則 (c) 的既定語意(非成立年數)。
     _ret_3y_ann, _ = derive_ann_3y_for_333(fd, m)

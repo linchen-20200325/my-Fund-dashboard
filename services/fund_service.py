@@ -275,7 +275,7 @@ def calculate_fund_total_return(nav_df: pd.DataFrame, div_df: pd.DataFrame) -> p
     return df
 
 
-def _total_return_nav(s: pd.Series, divs: list) -> pd.Series:
+def _total_return_nav(s: pd.Series, divs: list, *, _info: "dict | None" = None) -> pd.Series:
     """把配息「再投資複利」還原進 NAV 序列,供風險指標(σ / Sharpe / Sortino /
     max_drawdown)計算,消除除息日 NAV 跳空造成的**假**波動與**假**回撤。
 
@@ -294,12 +294,20 @@ def _total_return_nav(s: pd.Series, divs: list) -> pd.Series:
     pd.Series
         與 `s` **同 index、同長度** 的還原後序列(Adj_NAV)。
 
+    `_info`(選填,2026-10-23 裁示 3A):傳入 dict 時寫入
+    `restored_div_dates` = 還原表中 Dividend > 0 的淨值日(`pd.Timestamp` list)。
+    還原成功才有內容;無配息事件 / 還原失敗回退原始 `s` 時為 `[]` ——
+    讓 caller(3Y 含息年化的配息閘門)只數**真的被加回序列**的配息,與 1Y 路徑
+    「從還原表 `_tr` 數」同一語意(落在非淨值日、沒被 left-join 到的配息不算)。
+
     降級(§1 Fail Loud → 顯式回退,不偽造):
       - `divs` 空 / 全部 amount<=0 / 日期不可解析 → 無配息事件 → **逐點等於 `s`**
         (純累積型基金天然一致,非掩蓋;純累積型行為零變化)。
       - 還原序列長度/正值不變量不符(如同一除息日重複配息使 left-merge 膨脹)→
         stderr log + **回退原始 `s`**(寧可用未還原序列,不可回傳錯位序列污染指標)。
     """
+    if _info is not None:
+        _info["restored_div_dates"] = []
     if s is None or s.empty:
         return s
     # divs(list[dict{date,amount}]) → div_df:複用 ret_1y_total 路徑的轉換規則
@@ -333,6 +341,8 @@ def _total_return_nav(s: pd.Series, divs: list) -> pd.Series:
         s_tr = pd.Series(_tr["Adj_NAV"].to_numpy(), index=s.index)
         if not bool((s_tr > 0).all()):
             raise ValueError("還原後序列含非正值")
+        if _info is not None:
+            _info["restored_div_dates"] = list(_tr.loc[_tr["Dividend"] > 0, "Date"])
         return s_tr
     except Exception as _e:
         import sys as _sys_tr
@@ -412,7 +422,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # 同基準(詳見 _total_return_nav docstring)。**顯示值 `now`、買賣點(_sig_win)、
     # 高低點(_hl)、純 NAV 報酬(_ret / ret_1y_total)一律仍用原始 `s`。**
     # 無配息基金 s_tr 逐點等於 s → log_ret 與舊版位元相同,行為零變化。
-    s_tr = _total_return_nav(s, divs)
+    _tr_info: dict = {}            # 裁示 3A:收還原表中「真的被加回」的配息日,供 3Y 配息閘門計數
+    s_tr = _total_return_nav(s, divs, _info=_tr_info)
     log_ret = np.log(s_tr / s_tr.shift(1)).dropna()
 
     # ── 年化標準差（各期間）─────────────────────────────
@@ -769,6 +780,32 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             _calmar_reason = "3Y 期間最大回撤 = 0 → Calmar 未定義(不回 inf)"
         else:
             calmar = round(_ret3_tr_raw / abs(_dd3_raw), 2)
+    # ── 2026-10-23 裁示 3A:3Y 含息年化提升為一級鍵(3-3-3 唯一 SSOT 的輸入)────────
+    # `ret_3y_ann_tr` **就是上面 Calmar 的分子** `_calmar_ret_3y_ann_tr`(同一條 s_tr 還原序列、
+    # 同一個 756 筆窗、同一個端點年化式),不是第二個公式;meta `ret_3y_ann_tr_pct` 照舊保留供對帳。
+    # 口徑與 1Y `ret_1y_total` 一致 = 配息還原淨值法(§2.1 同一事實只准一個真相源)。
+    # len(s) < 756 / 端點非正 → None(§1 不以短窗充數、不退純淨值 `ret_3y_ann`)。
+    _ret_3y_ann_tr = _calmar_ret_3y_ann_tr
+    _ret_3y_window_days = None     # 窗口實際日曆天數(3Y 窗首筆淨值日 → 最後淨值日)
+    _ret_3y_div_count = None       # 窗內**被還原進序列**的配息筆數(amount>0);窗口未建 → None(不是 0)
+    if _ret_3y_ann_tr is not None:
+        try:
+            _w3_start = pd.to_datetime(_c3.index[0])
+            _w3_end = pd.to_datetime(s.index[-1])
+            _ret_3y_window_days = int((_w3_end - _w3_start).days)
+        except Exception as _e_w3:  # noqa: BLE001
+            print(f"[calc_metrics] ⚠️ ret_3y_window_days 計算失敗：{_e_w3}")
+            _ret_3y_window_days = None
+        try:
+            # 與 1Y 同語意:從還原表數(落在非淨值日、沒被 left-join 到的配息不算),
+            # 否則配息閘門會放行一條其實等於純淨值的序列(v19.480 稽核 B2 的病)。
+            _w3_start_ts = pd.to_datetime(_c3.index[0])
+            _ret_3y_div_count = int(sum(
+                1 for _dd in (_tr_info.get("restored_div_dates") or [])
+                if pd.to_datetime(_dd) >= _w3_start_ts))
+        except Exception as _e_dc3:  # noqa: BLE001
+            print(f"[calc_metrics] ⚠️ ret_3y_div_count 計數失敗：{_e_dc3}")
+            _ret_3y_div_count = None
     # v18.53/v18.55/v18.60/v18.61/v18.65/v18.71: 境內基金 MoneyDJ wb01 不存在 → 本地計算含息
     # v18.71: 改用「還原淨值法（配息再投資複利）」— 透過 calculate_fund_total_return()
     #         比舊版「NAV 變化 + 累積配息率」（單利加總）更接近 MoneyDJ wb01 含息官方值，
@@ -1091,6 +1128,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         ret_6m=_ret(130),ret_1y=_ret(TRADING_DAYS_PER_YEAR),
         # v19.177 #2A:NY 雙欄 SSOT。ret_3y / ret_5y 保留 = _cum 向後相容(deprecated)
         ret_3y=_ret_3y_cum, ret_3y_cum=_ret_3y_cum, ret_3y_ann=_ret_3y_ann,
+        # 裁示 3A:3Y **含息**年化(配息還原淨值法,= Calmar 分子同一值),3-3-3 唯一輸入;
+        # `ret_3y_ann`(純淨值)鍵名與值不動(多 caller 顯示用)
+        ret_3y_ann_tr=_ret_3y_ann_tr,
+        ret_3y_window_days=_ret_3y_window_days,  # 3Y 窗實際日曆天數(None=不足 756 筆)
+        ret_3y_div_count=_ret_3y_div_count,      # 3Y 窗內被還原進序列的配息筆數(None=窗口未建)
         ret_5y_cum=_ret_5y_cum, ret_5y_ann=_ret_5y_ann,
         ret_1y_total=_ret_1y_total,   # v18.71 含息：配息還原淨值法(唯一 1Y 含息算法,裁示 1B)
         ret_1y_window_days=_ret_1y_window_days,  # v18.65: 計算窗口天數（None / 30~365 / >=365）

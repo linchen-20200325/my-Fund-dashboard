@@ -273,6 +273,10 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
         # 舊的 perf['1Y'] → ret_1y_total → ret_1y → 外推年化四層 fallback 已退役;
         # 算不出來 → None(表格留空),不拿官方值或純淨值頂替。
         _tr1y_val, _ = compute_1y_total_return(f)
+        # 2026-10-23 裁示 3A:3-3-3 一律走 L2 單檔 SSOT(與 Tab3 批次表 `batch_333_funds` 同一函式),
+        # 本檔不再自己用 `_age_years >= 3` / 「含息總報酬(1Y%) > 7」判定。
+        from services.fund_screening import evaluate_333_for_fund
+        _r333 = evaluate_333_for_fund(f)
         mk_class = tag_mk_class(f)
         health = tag_health_check(f)
         momentum = tag_momentum(f)
@@ -305,11 +309,16 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
             # 隱藏欄（給篩選用）
             "_std_1y": _safe_float(m.get("std_1y")),
             "_ret_3y": _safe_float(m.get("ret_3y")),
-            "_age_years": _fund_age_years(  # v18.158 → v19.308 帶 MoneyDJ 成立日
-                f.get("series"),
-                (m.get("inception_date")
-                 or (f.get("moneydj_raw") or {}).get("inception_date")),
-            ),
+            # ~~"_age_years": _fund_age_years(series, inception_date)~~ —— 唯一 consumer 是舊
+            # `_render_333_tab` 的 `fillna(0) >= 3.0`;3A 改走下列 `_333_*` 後 0 consumer,移除
+            # (有意識的移除,不是漏刪;`_fund_age_years` 函式本體保留,仍有既有測試)。
+            # 3-3-3(3A SSOT)隱藏欄:底線前綴,不進 `_333_COLS` 等任何顯示欄。
+            "_333_years": _r333["years"],
+            "_333_ann": _r333["ann_pct"],
+            "_333_basis": _r333["basis"],
+            "_333_years_ok": _r333["years_ok"],
+            "_333_return_ok": _r333["return_ok"],
+            "_333_passed": _r333["passed"],
         })
     return pd.DataFrame(rows)
 
@@ -639,53 +648,78 @@ def _render_benchmark_chart(sat_df: pd.DataFrame, portfolio_funds: list,
 def _render_333_tab(df: pd.DataFrame) -> None:
     """Sub-Tab 3：3-3-3 篩選器。
 
-    原規格：成立>3年、年化>7%、同類前 1/3。
-    變通：第三項改為「組合內 std_1y < 中位」（既有資料無同類排名 API）。
-
-    v18.158：① 改用 NAV index[0] 推算實際成立年資（取代脆弱的 ret_3y 存在性近似）；
-    ② 三層計數改 cascade（① → ①∩② → ①∩②∩③），讓 user 一眼看出卡哪層。
+    2026-10-23 客戶裁示 3A:正式 3-3-3 只有兩條 —— ① 成立 ≥ 3 年、② 3 年含息年化 > 7%
+    (配息還原淨值法,與 1Y 同口徑)。判定**唯一**走 L2 `services.fund_screening.evaluate_333_for_fund`
+    (= `derive_years_for_333` / `derive_ann_3y_for_333` / `check_333_principle`),由
+    `build_mk_dataframe` 的 `_333_*` 隱藏欄帶進來;本函式只計數與呈現,不自己算門檻。
+    ~~舊版:① `_age_years.fillna(0) >= 3.0`、② `含息總報酬(1Y%).fillna(-999) > 7.0`、③ 組合內波動
+    < 中位,三層 cascade 才進候選~~(有意識的政策變更,不是漏刪;決策者:客戶,裁示 3A)。
+    舊設計的理由(新基金 / 缺值不該進候選)仍然成立;被權衡掉的是:用 1Y 報酬冒充 3 年年化、
+    把缺值折成「不符合」(§1)、以及 ③ 波動當篩選條件(③ 不屬正式 3-3-3)。
+    版面不動(客戶 UI/Layout Gate `DEC-2026-10-23-04`):三張 metric 卡、候選清單表格、`_333_COLS` 保留;
+    卡 3 改為參考值,不篩選。⬜ 資料未備檔數寫在既有的候選標題 / warning 文字裡,不新增元件。
     """
     with st.expander("💡 策略3 白話文：3-3-3 換股這頁怎麼看？", expanded=False):
         st.markdown(
             "**舊標的變差想換股？依 3-3-3 法則挑：**\n\n"
-            "1. **成立 ≥ 3 年**：以 NAV 起始日推算實際年資（v18.158 起改正：原以 ret_3y 存在性近似，低頻 NAV 會誤判）。\n"
-            "2. **年化報酬 > 7%**：以近一年含息總報酬替代。\n"
-            "3. **同類排名前 1/3**：暫以「組合內波動率優於中位」變通（待 Lipper / Morningstar API 接通後正式啟用）。\n\n"
-            "三層採 cascade（過 ① 才看 ②，過 ② 才看 ③），同時符合者列為 **候選清單**。"
+            "1. **成立 ≥ 3 年**：優先用基金成立日；查不到才以 NAV 起始日推算"
+            "（推算不足 3 年時無法反證，顯示 ⬜ 資料未備，不算不符合）。\n"
+            "2. **近 3 年含息（配息還原）年化 > 7%**：與 1Y 含息同一把尺；"
+            "淨值不足 3 年或配息資料未備 → ⬜ 資料未備，不以 1Y 報酬或純淨值頂替。\n"
+            "3. **波動優於中位（參考，不計入 3-3-3 判定）**：組合內年化波動低於中位的檔數，僅供參考，不篩選。\n\n"
+            "①② 皆通過者列為 **候選清單**；資料未備（⬜）的基金不列入候選，但**不算未通過**。"
         )
     if df.empty:
         st.info("尚無資料可篩選。")
         return
 
-    # W5-6 §1 註明:此 fillna 為「篩選器」非「資料計算」— 缺值對應「新基金/年齡不明」應被過濾掉,
-    # fillna(0)→fail age_pass、fillna(-999)→fail ret_pass,語意正確(非掩蓋)
-    age_pass = df["_age_years"].fillna(0) >= 3.0
-    ret_pass = df["含息總報酬(1Y%)"].fillna(-999) > 7.0
-    # std 中位數取「全部有 std」的 pool，不卡 cascade（讓基準穩定）
+    def _tri(v):
+        """三態正規化:None / NaN → None;其餘 → bool(含 numpy.bool_)。不把缺值折成 False。"""
+        if v is None or (isinstance(v, float) and v != v):
+            return None
+        return bool(v)
+
+    def _is(col: str, val) -> pd.Series:
+        """三態欄逐格比對(True / False / None 各自分開,不 fillna 折算)。"""
+        if col not in df.columns:
+            return pd.Series([False] * len(df), index=df.index)
+        return df[col].map(lambda v: _tri(v) is val)
+
+    age_ok = _is("_333_years_ok", True)
+    passed = _is("_333_passed", True)
+    failed = _is("_333_passed", False)
+    grey = _is("_333_passed", None)
+    # ③ 參考:std 中位數取「全部有 std」的 pool(讓基準穩定);只計數,不篩選
     std_pool = df["_std_1y"].dropna()
     std_median = float(std_pool.median()) if not std_pool.empty else None
-    std_pass = (df["_std_1y"].fillna(99999) < std_median) if std_median is not None \
-               else pd.Series([False] * len(df), index=df.index)
+    low_vol = (df["_std_1y"].map(lambda v: v is not None and v == v and v < std_median)
+               if std_median is not None else pd.Series([False] * len(df), index=df.index))
 
-    n_age = int(age_pass.sum())
-    n_ret_in_age = int((age_pass & ret_pass).sum())
-    n_all = int((age_pass & ret_pass & std_pass).sum())
+    n_age = int(age_ok.sum())
+    n_pass = int(passed.sum())
+    n_fail_in_age = int((age_ok & failed).sum())
+    n_grey = int(grey.sum())
+    n_ref_lowvol = int((passed & low_vol).sum())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("① 成立 ≥ 3 年", f"{n_age} 檔")
-    c2.metric("② ① + 年化 > 7%", f"{n_ret_in_age} 檔",
-              delta=f"−{n_age - n_ret_in_age} 卡關" if n_age > n_ret_in_age else None,
+    c2.metric("② ① + 3 年含息年化 > 7%", f"{n_pass} 檔",
+              delta=f"−{n_fail_in_age} 未達" if n_fail_in_age else None,
               delta_color="off")
-    c3.metric("③ ② + 波動優於中位", f"{n_all} 檔",
-              delta=f"−{n_ret_in_age - n_all} 卡關" if n_ret_in_age > n_all else None,
-              delta_color="off")
+    c3.metric("③ 波動優於中位（參考，不計入 3-3-3 判定）", f"{n_ref_lowvol} 檔")
 
-    cand = df[age_pass & ret_pass & std_pass].copy()
+    _grey_note = (f"⬜ 資料未備 {n_grey} 檔（成立年數或 3 年含息年化缺，無法判定，不算未通過）"
+                  if n_grey else "")
+    cand = df[passed].copy()
     if cand.empty:
-        st.warning("目前組合內無同時符合三條件的標的。可考慮加入更多候選後再篩選。")
+        st.warning("目前組合內無通過 3-3-3（① 成立 ≥ 3 年 且 ② 3 年含息年化 > 7%）的標的。"
+                   + (_grey_note + "。" if _grey_note else "")
+                   + "可考慮加入更多候選後再篩選。")
         return
 
-    st.markdown(f"**🎯 候選清單（{len(cand)} 檔）**")
+    st.markdown(f"**🎯 候選清單（{len(cand)} 檔）**"
+                + (f"　<span style='font-size:12px'>{_grey_note}</span>" if _grey_note else ""),
+                unsafe_allow_html=bool(_grey_note))
     st.dataframe(
         cand[_333_COLS], column_config=_COL_CONFIG,
         hide_index=True, use_container_width=True,

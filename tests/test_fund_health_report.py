@@ -37,7 +37,7 @@ class TestHealthAnalysisRow:
         assert r["code"] == "X1234"
         assert r["Sharpe 1Y"] == 1.2
         assert r["Max DD %"] == -15.0
-        assert r["3Y 年化 %"] == 8.5
+        assert r["3Y 年化 %（純淨值）"] == 8.5
         assert r["5Y 年化 %"] == 7.0
         # 4D Grade 應該被算出來(雖具體值取決於 compute_4d_health 邏輯)
         assert r["4D Grade"] not in (None,)
@@ -221,7 +221,7 @@ class TestColumnsConstants:
     def test_health_columns_has_required(self):
         required = {"code", "基金名", "4D Grade", "Sharpe 1Y", "Sortino",
                     "Calmar", "Alpha %", "費用率 %", "Max DD %",
-                    "3Y 年化 %", "5Y 年化 %", " 3-3-3"}
+                    "3Y 年化 %（純淨值）", "5Y 年化 %", " 3-3-3"}
         assert required <= set(HEALTH_COLUMNS)
 
     def test_dividend_columns_has_required(self):
