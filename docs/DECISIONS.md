@@ -668,6 +668,19 @@
 | supersedes／superseded by | supersedes：無。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由架構與文件組單組寫成，未經第二組驗證 |
 
+### DEC-2026-10-23-04｜客戶 BL-0434 工作規範補強（語言、靜默巡航、Model／Effort 自評、升降級、Save／Handoff）＋ Tab2 ③列屬 UI/Layout Decision Gate
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | A. 客戶可見回報預設繁體中文（程式碼、識別名稱、GitHub／CI 原始名稱、必要技術術語除外）。B. 完全靜默自主巡航：只在需要客戶裁示、觸發 Stop Gate、模型／Effort 必須提高需客戶切換、整個 Batch 完成時主動回報；明列禁止的流水帳訊息。C. 每個完整 Batch 前自評模型能力與 Minimum Sufficient Effort（Low／Medium／High 分級），不得因投資專案預設 High。D. 途中發現不足須立即停止、精簡回報、等客戶確認，不得自行提高或硬做（靜默巡航正式例外）。E. High 完成後下一批屬低風險時主動標示可降級。F. Save／Handoff Gate 觸發時機與必寫欄位（main SHA、Open PR、已完成、未完成、Decision Gate、Stop Gate、下一個唯一工作點、下一批建議模型與 Effort）；GitHub 正式文件才是 durable state。G. GitHub Verification Gate 維持不變。另：Tab2「③ 晨星／同儕」是否移除屬 UI/Layout Decision Gate，PR2 不得自行移除，留到新版 UI/UX Blueprint 階段；BL-0425／PR2 本批暫停（不是取消） |
+| 理由／背景 | （總管背景說明，不是客戶原話）把 `DEC-2026-10-23-03` 登記的 BL-0434 十項正式寫入 `PROJECT_RULES.md`，與既有 3.1、5.1、6.1、第 2 節去重併讀 |
+| evidence／source | 客戶 2026-10-23 指示，經總管派工單轉達；repo 內無逐字存檔。落地：`PROJECT_RULES.md` 第 3 節限定第 5 條、3.1 第 6 點、5.1 第 9 點、6.1 第 6 點；`docs/BACKLOG.md` BL-0434、BL-0425；`docs/HANDOFF.md` 第 2 節 2026-10-23 第四次框 |
+| 影響範圍 | 所有未來對話與 agent 的回報、Effort 管理與交接；BL-0425 的 Tab2 判定卡範圍 |
+| 是否可逆 | 可逆（客戶可另行指示） |
+| supersedes／superseded by | supersedes：`PROJECT_RULES.md` 5.1 第 8 點中「調低也須停工等回覆」（已劃線）；BL-0425「待總管判定：Tab2 ③列」（改為客戶裁示）。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由架構與文件組單組寫成，未經第二組驗證 |
+
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
 > 本節只指位置、說明射程與 ID 組法，**不複製原文**；要讀內容請回原處。
