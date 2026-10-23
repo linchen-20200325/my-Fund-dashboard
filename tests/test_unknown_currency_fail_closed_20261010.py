@@ -861,7 +861,7 @@ def test_backtest_section_conflict_blank_ccy(monkeypatch):
     import ui.helpers.fund_grp_health.backtest_section as BS
     seen = {}
 
-    def _bt(nav, ccy, fx_series=None):
+    def _bt(nav, ccy, fx_series=None, **_kw):   # 2026-10-23 2C:多傳 meta_by_code(配息資訊)
         seen.update(ccy)
         raise _Stop
 

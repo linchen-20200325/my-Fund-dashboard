@@ -72,9 +72,9 @@ BASE_LABELS_FROM_MERGED_TABLE: dict = {
     "mid": "⚪ 中性", "unknown": "⬜ 資料不足",
 }
 
-from services.precision_service import (
-    calc_hwm_sigma_levels,
-)
+# 2026-10-23 裁示 2C(BL-0426):HWM σ 一律經唯一 SSOT `compute_fund_position`
+# (配息還原序列、fail closed、中性三態);本檔不再直接拿原始 NAV 呼叫 calc_hwm_sigma_levels。
+from services.fund_position import compute_fund_position
 from ui.helpers.macro_helpers import (
     mk_fund_signal,
     quartile_check as _quartile_check,
@@ -93,6 +93,32 @@ from fund_fetcher import (
 )
 # v19.76 K3：MoneyDJ 自動偵測 SSOT（tab2 + tab5 共用）
 from services.moneydj_fetcher import auto_fetch_moneydj
+
+
+def _tab2_hwm_position(fd) -> "dict | None":
+    """HWM σ 卡 / AI 快照共用:整個 fund_data(series + dividends + moneydj_raw)交給 SSOT。
+
+    2026-10-23 裁示 2C(BL-0426):不得只拿 `series` 去算(那等於丟掉配息資訊、退回原始 NAV);
+    行為由 `tests/test_ssot_2c_fund_position.py` 的 consumer 測試鎖住。無序列 → None。
+    """
+    s = fd.get("series") if isinstance(fd, dict) else None
+    if s is None:
+        return None
+    _hwm = compute_fund_position(fd, lookback=252)
+    return _hwm
+
+
+def _tab2_hwm_ai_line(fd) -> "str | None":
+    """AI 解盤快照的 σ 位置那一行(ok → 中性 label + 數值;unavailable → ⬜ 原因)。"""
+    _hwm_ai = _tab2_hwm_position(fd)
+    if not isinstance(_hwm_ai, dict):
+        return None
+    if _hwm_ai.get("status") == "ok":
+        return (f"- σ絕對位階（配息還原基準，位置證據非買賣建議）："
+                f"{_hwm_ai.get('label','')}"
+                f"｜距HWM={_hwm_ai.get('dist_to_hwm_pct','')}%"
+                f"｜σ_rank={_hwm_ai.get('sigma_rank','')}")
+    return f"- σ絕對位階：{_hwm_ai.get('label','')}（不得推測）"
 
 
 def _calc_data_health(indicators=None):
@@ -1100,15 +1126,15 @@ def render_single_fund_tab() -> None:
                         f"</div>", unsafe_allow_html=True)
 
                 # ── T5: HWM σ 絕對位階卡 ─────────────────────────────────
+                # 2C:經 SSOT(配息還原序列);fd 帶 series / dividends / moneydj_raw。
                 if s is not None and len(s) >= 30:
                     try:
-                        from services.precision_service import calc_hwm_sigma_levels as _hwm_fn
-                        _hwm = _hwm_fn(s, lookback=252)
-                        if "error" not in _hwm:
+                        _hwm = _tab2_hwm_position(fd)
+                        if isinstance(_hwm, dict) and _hwm.get("status") == "ok":
                             _hc = _hwm["color"]
                             _hl = _hwm["label"]
                             _nav_h = _hwm["current_nav"]
-                            _hwm_v = _hwm["hwm"]
+                            _hwm_v = _hwm["hwm_tr"]
                             _sig   = _hwm["sigma_abs"]
                             _sr    = _hwm["sigma_rank"]
                             _dist  = _hwm["dist_to_hwm_pct"]
@@ -1129,7 +1155,7 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{_hc};font-size:13px;font-weight:800;margin-bottom:10px'>"
                                 f"📐 HWM σ 絕對位階 — {_hl}</div>"
                                 f"<div style='display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px'>"
-                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>歷史最高(HWM)（原幣{_ccy_sfx}）</div>"
+                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>歷史最高(HWM，配息還原)（原幣{_ccy_sfx}）</div>"
                                 f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_hwm_v:.4f}{_ccy_sfx}</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV（原幣{_ccy_sfx}）</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_nav_h:.4f}{_ccy_sfx}</div></div>"
@@ -1147,13 +1173,14 @@ def render_single_fund_tab() -> None:
                                 f"<span style='color:{MATERIAL_RED}'>HWM-3σ: {_l3:.4f}{_ccy_sfx}</span>"
                                 f"</div>"
                                 f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
-                                f"σ = HWM × 年化日報酬標準差（{len(s)} 筆淨值計算）</div>"
+                                f"σ = HWM × 年化日報酬標準差（配息還原淨值，{len(s)} 筆淨值計算）</div>"
                                 f"</div>", unsafe_allow_html=True)
                             # v19.404 Phase 3:補讀法(對齊 risk.py:19-20 group 版,消單一基金缺口)
                             st.caption(
-                                "💡 **怎麼看**:σ 位階 ≤ −2σ = 距歷史高點深跌,基本面若健康可分批"
-                                "承接;≥ +1σ = 接近前高偏過熱。此為「絕對位階」(對歷史高點),"
-                                "與上方買賣線的「相對中樞」互補。"
+                                "💡 **怎麼看**:σ 位階以配息還原(含息)淨值計算,分三段 —— "
+                                "接近高點 / 中段 / 遠離高點;切點 −0.5σ／−1.5σ 為研究候選、未校準,"
+                                "非正式投資門檻。這只是相對自身近一年高點的位置證據,不是買賣建議。"
+                                "此為「絕對位階」(對歷史高點),與上方買賣線的「相對中樞」互補。"
                             )
                             # D3：說清楚「基期」不是這張卡自己發明的第二套判定。
                             # ⚠️ **刻意另起一個 `st.caption`，不併進上面那一句**
@@ -2645,15 +2672,12 @@ def render_single_fund_tab() -> None:
                            if m.get(_k) not in (None, "")]
                     if _bs:
                         _snap.append("- 買賣點/技術：" + "｜".join(_bs))
-                    # σ 絕對位階（HWM）— 由淨值序列重算，AI 才知「現價 vs 歷史高點」
+                    # σ 絕對位階（HWM）— 經 SSOT（配息還原序列），AI 才知「現價 vs 歷史高點」
                     if s is not None:
                         try:
-                            _hwm_ai = calc_hwm_sigma_levels(s, lookback=252)
-                            if isinstance(_hwm_ai, dict) and "error" not in _hwm_ai:
-                                _snap.append(
-                                    f"- σ絕對位階：{_hwm_ai.get('label','')}"
-                                    f"｜距HWM={_hwm_ai.get('dist_to_hwm_pct','')}%"
-                                    f"｜σ_rank={_hwm_ai.get('sigma_rank','')}")
+                            _hwm_line = _tab2_hwm_ai_line(fd)
+                            if _hwm_line:
+                                _snap.append(_hwm_line)
                         except Exception as _e_hwm:
                             # v19.346 §3.3:原靜默吞 — AI 快照少 σ 位階線索,留痕
                             import sys as _sys_hw

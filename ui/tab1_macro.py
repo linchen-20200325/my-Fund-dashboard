@@ -1565,8 +1565,11 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     _series = _f.get("series")
     if _series is not None and hasattr(_series, "dropna") and len(_series.dropna()) >= 30:
         try:
-            from services.precision_service import calc_hwm_sigma_levels as _hwm_fn
-            sigma_info = _hwm_fn(_series, lookback=252)
+            # 2026-10-23 裁示 2C(BL-0426):σ 經唯一 SSOT(配息還原序列、fail closed);
+            # unavailable 帶 "error" + sigma_rank=None → decision_matrix 略過 σ 覆寫(既有分支)。
+            # decision_matrix 的 σ 規則為 legacy 行動語意、未改,待 BL-0428。
+            from services.fund_position import compute_fund_position as _hwm_fn
+            sigma_info = _hwm_fn(_f, lookback=252)
         except Exception as _se:  # noqa: BLE001
             sigma_info = {"error": str(_se)[:60]}
 

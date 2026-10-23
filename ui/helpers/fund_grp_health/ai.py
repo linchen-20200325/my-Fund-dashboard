@@ -25,8 +25,12 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     """組裝 N 檔基金的跨檔 snapshot 字串給 AI 解讀。
 
     內容:
-      - 整組概況(檔數 / 平均覆蓋率 / 平均 σ rank / 超跌統計)
+      - 整組概況(檔數 / 平均覆蓋率 / 平均 σ rank / 遠離高點計數)
       - 逐檔簡表(代號 / 名稱 / 配息率 / 覆蓋率燈號 / σ rank / 操作建議)
+
+    2026-10-23 裁示 2C(BL-0426):σ 位置一律取自 `services/fund_position.compute_fund_position`
+    (配息還原序列、fail closed、中性三態);「遠離高點」計數依 `position == "far_from_high"`,
+    只陳述位置,不是買賣建議。
       - 跨檔影子基金清單(若有)
 
     回傳:(snapshot_str, n_funds_with_data)
@@ -40,16 +44,16 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     # (非 metrics.ret_1y 純 NAV),吃本金燈號走 check_eating_principal_1y_mk(見下方逐檔迴圈註解)。
     from services.fund_total_return import compute_1y_total_return
     try:
-        from services.precision_service import calc_hwm_sigma_levels
+        from services.fund_position import compute_fund_position
     except Exception as _e_ps:  # noqa: BLE001
         import sys as _sys_ps
-        print(f"[grp_health/ai] precision_service 載入失敗,snapshot 無 σ 位階:"
+        print(f"[grp_health/ai] fund_position 載入失敗,snapshot 無 σ 位階:"
               f"{type(_e_ps).__name__}: {_e_ps}", file=_sys_ps.stderr)
-        calc_hwm_sigma_levels = None
+        compute_fund_position = None
 
     _per_fund = []
     _eating_count = 0
-    _oversold_count = 0
+    _far_count = 0
     _sigma_ranks = []
     for _f in funds:
         _code = _f.get("code", "?")
@@ -111,18 +115,17 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
             # 灰色:印 SSOT 的 status 原文(⬜ 資料未備／無法判定),不自己另編一句
             _div_status = str(_eat.get("status") or "資料不足")
 
-        # σ 位階
+        # σ 位置(SSOT;配息還原序列)
         _sigma_label = "—"
         _sigma_rank = None
-        _series = _f.get("series")
-        if calc_hwm_sigma_levels and _series is not None and len(_series) >= 30:
+        if compute_fund_position is not None:
             try:
-                _hwm = calc_hwm_sigma_levels(_series)
-                if not _hwm.get("error"):
-                    _sigma_rank = _hwm.get("sigma_rank")
-                    _sigma_label = _hwm.get("label", "—")
-                    if _sigma_rank is not None and _sigma_rank <= -2.0:
-                        _oversold_count += 1
+                _pos = compute_fund_position(_f)
+                _sigma_label = _pos.get("label") or "—"     # ok → 中性三態;否則 ⬜ 白話原因
+                if _pos.get("status") == "ok":
+                    _sigma_rank = _pos.get("sigma_rank")
+                    if _pos.get("position") == "far_from_high":
+                        _far_count += 1
                     if _sigma_rank is not None:
                         _sigma_ranks.append(_sigma_rank)
             except Exception as _e_sg:  # noqa: BLE001
@@ -153,10 +156,10 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     _lines.append("### 整組概況")
     _lines.append(f"- 基金數:{len(funds)} 檔")
     _lines.append(f"- 🔴 吃本金:{_eating_count} 檔 / {len(funds)}")
-    _lines.append(f"- 🩸 深度超跌(σ ≤ -2):{_oversold_count} 檔 / {len(funds)}")
+    _lines.append(f"- 📍 遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):{_far_count} 檔 / {len(funds)}")
     if _avg_sigma is not None:
         _lines.append(f"- 平均 σ rank:{_avg_sigma:+.2f}σ "
-                      f"(負 = 整組偏離歷史高點下方)")
+                      f"(負 = 整組位於近一年高點下方;以配息還原淨值計算,只是位置證據、非買賣建議)")
 
     # 逐檔簡表
     _lines.append("")
@@ -171,7 +174,9 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
             _bits.append(f"覆蓋率 {_p['coverage']:.2f}")
         _bits.append(_p["div_status"])
         if _p["sigma_rank"] is not None:
-            _bits.append(f"σ {_p['sigma_rank']:+.2f}")
+            _bits.append(f"σ {_p['sigma_rank']:+.2f}({_p['sigma_label']})")
+        elif _p["sigma_label"] not in (None, "—"):
+            _bits.append(f"σ 位置:{_p['sigma_label']}")
         if _p["sharpe"] is not None:
             _bits.append(f"Sharpe {_p['sharpe']:.2f}")
         _lines.append(f"- {' ｜ '.join(_bits)}")
@@ -253,7 +258,7 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
             sections=[
                 "整組概況",
                 "配息健康總覽",
-                "風險位階 / 超跌警示",
+                "風險位階 / 遠離高點",
                 "跨檔重疊度 / 影子基金",
                 "換手與調整建議",
             ],

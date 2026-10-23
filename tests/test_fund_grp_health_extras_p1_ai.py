@@ -133,8 +133,13 @@ class TestBuildSnapshot:
              "series": pd.Series(_vals, index=_idx, dtype=float)},
         ]
         _snap, _n = _build_cross_fund_snapshot(_funds)
-        # 不強制 sigma_rank ≤ -2(視 sigma 估計變動),但確認 snapshot 含「超跌」統計欄
-        assert "深度超跌" in _snap
+        # 2026-10-23 裁示 2C(BL-0426):~~「深度超跌(σ ≤ -2)」統計~~ → 中性「遠離高點」計數
+        # (依 SSOT position == far_from_high,切點 −1.5、未校準);行動用字移除。
+        assert "遠離高點" in _snap
+        assert "深度超跌" not in _snap
+        # 計數真的被算到:暴跌序列 σ rank 遠低於 −1.5 → 1 檔 / 1(非配息基金,raw ≡ TR)
+        assert "遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):1 檔 / 1" in _snap
+        assert "Crashed" in _snap and "遠離高點（≤ −1.5σ）" in _snap
 
 
 # ════════════════════════════════════════════════════════════════

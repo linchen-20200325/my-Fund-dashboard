@@ -59,7 +59,10 @@ def test_missing_series_gets_dash():
     f = _fund("B002", series=False)
     cols, combined = build_merged_extra_columns([f], phase="擴張", score=6.0)
     assert combined["B002"]["現價"] == "—"
-    assert "NAV 不足" in combined["B002"]["HWM 位階"]
+    # 2026-10-23 裁示 2C(BL-0426):σ 位置改走 SSOT compute_fund_position,
+    # ⬜ 原因字串由 SSOT 產生 —— ~~"NAV 不足"~~ → 「⬜ 無法判定／不適用（無淨值序列）」
+    assert combined["B002"]["HWM 位階"].startswith("⬜")
+    assert "無淨值序列" in combined["B002"]["HWM 位階"]
 
 
 def test_build_unified_health_df_join_dedup_order():

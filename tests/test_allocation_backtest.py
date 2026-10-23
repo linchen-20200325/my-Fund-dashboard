@@ -101,6 +101,12 @@ def test_metrics_short_series_blank():
     assert m["cagr_pct"] is None and m["sharpe"] is None and m["n_days"] == 1
 
 
+def _nodiv(codes):
+    """2026-10-23 稽核必修 A:σ 位置 SSOT 需要每檔的配息資訊;沒傳 → 該檔 σ 一律 None。
+    本檔合成序列都是非配息基金 → 明確宣告 `{"dividends": []}`。"""
+    return {c: {"dividends": []} for c in codes}
+
+
 # ── ⑤ 最兇輸入 1:不重疊歷史 ──────────────────────────────
 def test_nonoverlapping_histories_not_ok():
     a = pd.Series(_gbm(0.0003, 0.01, 200, 11), index=pd.date_range("2021-01-04", periods=200, freq="B"))
@@ -118,7 +124,8 @@ def test_halted_fund_no_crash_finite():
     halted = _series(0.0004, 0.012, seed=22, n=400).copy()
     halted.iloc[200:] = float(halted.iloc[200])            # 後半走平(停更)
     fx = _fx(n=400)
-    res = backtest_allocations({"L": live, "H": halted}, {"L": "USD", "H": "USD"}, fx_series=fx)
+    res = backtest_allocations({"L": live, "H": halted}, {"L": "USD", "H": "USD"}, fx_series=fx,
+                               meta_by_code=_nodiv(["L", "H"]))
     assert res["ok"] is True
     for sid in res["ranking"]:
         m = res["results"][sid]["metrics"]
@@ -128,9 +135,10 @@ def test_halted_fund_no_crash_finite():
 # ── ⑤ 最兇輸入 2b:σ=0 走平基金 → 誠實 None,不捏造 SELL(稽核 v19.427 HIGH)──
 def test_sigma_zero_flat_fund_not_fabricated_sell():
     flat = pd.Series([50.0] * 300, index=_D[:300])       # 完全走平(停售/清算)→ σ_abs=0
-    assert _sigma_rank_at(flat, _D[299]) is None          # §1:σ=0 → None,不回未定義的 0.0
+    assert _sigma_rank_at({"series": flat}, _D[299]) is None   # §1:σ=0 → None,不回未定義的 0.0
     twd_df = pd.DataFrame({"F": flat})
-    _, sig = strategy_weights_at("S3", _D[299], {"F": flat}, twd_df, None)
+    _, sig = strategy_weights_at("S3", _D[299], {"F": flat}, twd_df, None,
+                                 meta_by_code=_nodiv(["F"]))
     assert sig["F"]["nav_level"] == "unknown" and sig["F"]["tier"] == "watch"   # 不得判 sell
 
 
@@ -143,8 +151,8 @@ def test_s1_s2_polarity_is_true_flip():
     orig = {"L": L, "H": H}
     twd_df = pd.DataFrame({"L": L, "H": H})                 # 僅用 .columns
     t = _D[319]
-    _, s1 = strategy_weights_at("S1", t, orig, twd_df, fx)
-    _, s2 = strategy_weights_at("S2", t, orig, twd_df, fx)
+    _, s1 = strategy_weights_at("S1", t, orig, twd_df, fx, meta_by_code=_nodiv(orig))
+    _, s2 = strategy_weights_at("S2", t, orig, twd_df, fx, meta_by_code=_nodiv(orig))
     # 匯率位階:S1 = strong_twd,S2 = 反向 weak_twd(真翻轉)
     assert s1["L"]["fx_label"] == "strong_twd"
     assert s2["L"]["fx_label"] == "weak_twd"
@@ -160,8 +168,11 @@ def test_pit_future_data_does_not_change_past_weight():
     t = _D[250]                                            # 過去某再平衡日
     twd_df = pd.DataFrame({"X": full})
     # 只餵到 t 的序列 vs 餵完整序列(含 t 之後)—— 同一 t 的權重/訊號須相同
-    _, sig_short = strategy_weights_at("S1", t, {"X": full.loc[:t]}, twd_df, fx_full.loc[:t])
-    _, sig_long = strategy_weights_at("S1", t, {"X": full}, twd_df, fx_full)
+    _, sig_short = strategy_weights_at("S1", t, {"X": full.loc[:t]}, twd_df, fx_full.loc[:t],
+                                       meta_by_code=_nodiv(["X"]))
+    _, sig_long = strategy_weights_at("S1", t, {"X": full}, twd_df, fx_full,
+                                      meta_by_code=_nodiv(["X"]))
+    assert sig_long["X"]["sigma_rank"] is not None          # 有 meta → 真的算出 σ(非兩邊都 None)
     assert sig_short["X"]["sigma_rank"] == sig_long["X"]["sigma_rank"]
     assert sig_short["X"]["fx_label"] == sig_long["X"]["fx_label"]
     assert sig_short["X"]["tier"] == sig_long["X"]["tier"]
@@ -178,7 +189,7 @@ def test_property_strategy_weights_sum_to_one():
         twd_df = pd.DataFrame({c: orig[c] for c in codes})
         fx = _fx(drift=rng.normal(0, 0.01), seed=seed + 100, n=360)
         for sid in ("S0", "S1", "S2", "S3"):
-            w, _ = strategy_weights_at(sid, _D[359], orig, twd_df, fx)
+            w, _ = strategy_weights_at(sid, _D[359], orig, twd_df, fx, meta_by_code=_nodiv(orig))
             assert abs(sum(w.values()) - 1.0) < 1e-9
             assert all(v >= 0 for v in w.values())
 
@@ -189,8 +200,10 @@ def test_property_cost_monotonic():
            for i, c in enumerate(["A", "B", "C", "D"])}
     ccy = {"A": "USD", "B": "USD", "C": "USD", "D": "TWD"}
     fx = _fx(n=460)
-    cheap = backtest_allocations(nav, ccy, fx_series=fx, cost_bps=0.0, fx_spread_bps=0.0)
-    dear = backtest_allocations(nav, ccy, fx_series=fx, cost_bps=200.0, fx_spread_bps=200.0)
+    cheap = backtest_allocations(nav, ccy, fx_series=fx, cost_bps=0.0, fx_spread_bps=0.0,
+                                 meta_by_code=_nodiv(nav))
+    dear = backtest_allocations(nav, ccy, fx_series=fx, cost_bps=200.0, fx_spread_bps=200.0,
+                                meta_by_code=_nodiv(nav))
     for sid in ("S1", "S2", "S3"):                          # 切換策略:成本高 → CAGR ≤(不增)
         c0 = cheap["results"][sid]["metrics"]["cagr_pct"]
         c1 = dear["results"][sid]["metrics"]["cagr_pct"]
@@ -221,7 +234,7 @@ def test_build_matrices_excludes_non_usd_twd_loudly():
 def test_full_backtest_actions_and_verdict_shape():
     nav = {c: _series(0.0003, 0.011, seed=70 + i, n=440) for i, c in enumerate(["A", "B", "C", "D"])}
     ccy = {"A": "USD", "B": "USD", "C": "美元", "D": "TWD"}
-    res = backtest_allocations(nav, ccy, fx_series=_fx(n=440))
+    res = backtest_allocations(nav, ccy, fx_series=_fx(n=440), meta_by_code=_nodiv(nav))
     assert res["ok"] and set(res["ranking"]) == {"S0", "S1", "S2", "S3", "S4"}
     assert res["winner"] == res["ranking"][0]
     assert abs(sum(res["actions"]["target_weights_pct"].values()) - 100.0) < 0.1
@@ -240,7 +253,7 @@ def test_full_backtest_has_no_orphan_signal_snapshot_field():
     """
     nav = {c: _series(0.0003, 0.011, seed=70 + i, n=440) for i, c in enumerate(["A", "B", "C", "D"])}
     ccy = {"A": "USD", "B": "USD", "C": "美元", "D": "TWD"}
-    res = backtest_allocations(nav, ccy, fx_series=_fx(n=440))
+    res = backtest_allocations(nav, ccy, fx_series=_fx(n=440), meta_by_code=_nodiv(nav))
     assert res["ok"]
     _orphan = [k for k in res if "signal_snapshot" in k]
     assert not _orphan, f"回測結果仍帶 0-consumer 訊號快照欄位:{_orphan}"

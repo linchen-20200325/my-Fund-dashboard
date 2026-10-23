@@ -1,4 +1,8 @@
-"""v19.198 P1-6:⑦ HWM σ + ⑧ 風險對比 + ⑨ -2σ 警示(從 fund_grp_health_extras 主檔抽出)。"""
+"""v19.198 P1-6:⑦ HWM σ + ⑧ 風險對比 + ⑨ 遠離高點清單(從 fund_grp_health_extras 主檔抽出)。
+
+2026-10-23 裁示 2C(BL-0426):HWM σ 一律取自 `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed、中性三態);本檔只渲染,不自己算 σ。
+"""
 from __future__ import annotations
 
 import streamlit as st
@@ -23,8 +27,9 @@ def _render_hwm_sigma_table(funds: list) -> None:
     """⑦ HWM σ 位階表(獨立版,保留供直接呼叫 / 測試;主流程已併入健診總表)。"""
     st.divider()
     st.markdown("### 📐 HWM σ 位階")
-    st.caption("HWM = 過去 252 天歷史最高 NAV;σ_rank = 現價在 HWM 下方第幾個 σ(負值)。"
-               "**-2σ 以下 = 深度超跌**(若基本面健康可能是機會),**+1σ 以上 = 過熱**。")
+    st.caption("HWM = 過去 252 天配息還原(含息)淨值的最高點;σ_rank = 現價在 HWM 下方第幾個 σ(負值),"
+               "以配息還原淨值計算。位階分三段:接近高點 / 中段 / 遠離高點(切點為研究候選、未校準);"
+               "這是相對自身近一年高點的位置證據,不是買賣建議。開頭 ⬜ = 無法判定或不適用。")
     _data = hwm_sigma_by_code(funds)
     _rows = [
         {"基金": f"{(_f.get('name') or _f.get('code', '?'))[:24]} ({_f.get('code', '?')})",
@@ -61,16 +66,18 @@ def _render_risk_compare_table(funds: list) -> None:
 
 
 def _render_oversold_badges(funds: list) -> None:
-    """⑨ -2σ 超跌警示 badges(深度超跌基金一覽)。
+    """⑨ 遠離高點清單(σ rank ≤ −1.5,配息還原基準)。
 
-    依 HWM σ rank 篩 σ ≤ -2.0 的基金。
-    深度超跌 + 基本面健康 = 抄底機會;若基本面也差 = 真實衰退,不要接刀。
+    2026-10-23 裁示 2C(BL-0426):~~依 HWM σ rank 篩 σ ≤ -2.0~~ → 依 SSOT
+    `compute_fund_position` 的 `position == "far_from_high"` 篩(客戶同意改用既有的 −1.5 切點;
+    研究候選門檻、未校準)。只陳述位置,**不給任何買賣建議**;無法判定的基金不列入。
+    (函式名沿用舊名,避免呼叫端改動;元件與排版不變,只改條件與文字。)
     """
     st.divider()
-    st.markdown("### 🩸 -2σ 超跌警示")
+    st.markdown("### 📍 遠離高點清單（≤ −1.5σ，研究候選門檻、未校準）")
 
     try:
-        from services.precision_service import calc_hwm_sigma_levels
+        from services.fund_position import compute_fund_position
     except Exception as e:
         system_error("σ 模組載入失敗", e)
         return
@@ -79,40 +86,38 @@ def _render_oversold_badges(funds: list) -> None:
     for _f in funds:
         _code = _f.get("code", "?")
         _name = (_f.get("name") or _code)[:24]
-        _series = _f.get("series")
-        if _series is None or len(_series) < 30:
+        _r = compute_fund_position(_f)
+        if _r.get("status") != "ok":
             continue
-        _r = calc_hwm_sigma_levels(_series)
-        if _r.get("error"):
-            continue
-        _sigma_rank = _r.get("sigma_rank")
-        if _sigma_rank is not None and _sigma_rank <= -2.0:
+        if _r.get("position") == "far_from_high":
             _oversold.append({
                 "code": _code, "name": _name,
-                "sigma_rank": _sigma_rank,
-                "dist_pct": _r.get("dist_to_hwm_pct", 0),
+                "sigma_rank": _r.get("sigma_rank"),
+                "dist_pct": _r.get("dist_to_hwm_pct"),
                 "current": _r.get("current_nav"),
-                "hwm": _r.get("hwm"),
+                "hwm": _r.get("hwm_tr"),
             })
 
     if not _oversold:
-        st.success("✅ 目前無基金落入 -2σ 深度超跌區")
+        st.success("目前無基金位於遠離高點區")
         return
 
-    st.caption(f"⚠️ 偵測到 **{len(_oversold)} 檔基金** σ ≤ -2.0(歷史高點下方 2 個標準差以上)")
+    st.caption(f"偵測到 **{len(_oversold)} 檔基金** 位於遠離高點區"
+               f"(σ rank ≤ −1.5,以配息還原淨值計算;切點 −0.5σ／−1.5σ 為研究候選、未校準,"
+               f"非正式投資門檻)")
     for _o in _oversold:
         st.markdown(
             f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"
             f"padding:8px 14px;margin:6px 0;border-radius:6px;'>"
-            f"<b style='color:#ff6b6b'>🩸 {_o['name']} ({_o['code']})</b><br>"
+            f"<b style='color:#ff6b6b'>📍 {_o['name']} ({_o['code']})</b><br>"
             f"<span style='color:{GRAY_CC};font-size:12px'>"
-            f"現價 {_o['current']:.2f} ｜ HWM {_o['hwm']:.2f} ｜ "
+            f"現價 {_o['current']:.2f} ｜ HWM(配息還原) {_o['hwm']:.2f} ｜ "
             f"距高點 <b style='color:{MATERIAL_RED}'>{_o['dist_pct']:+.2f}%</b> ｜ "
             f"σ rank <b style='color:{MATERIAL_RED}'>{_o['sigma_rank']:+.2f}σ</b>"
             f"</span><br>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>"
-            f"💡 深度超跌:若基本面(評分/吃本金/Sharpe)仍健康 → 可考慮抄底;"
-            f"基本面也轉差 → 不要接刀</span>"
+            f"📍 相對自身近一年高點的位置證據,不是買賣建議;"
+            f"切點 −1.5σ 為研究候選門檻、未校準</span>"
             f"</div>",
             unsafe_allow_html=True,
         )

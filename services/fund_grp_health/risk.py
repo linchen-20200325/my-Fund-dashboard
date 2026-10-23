@@ -14,16 +14,24 @@ from services.fund_grp_health._utils import _safe_num
 def hwm_sigma_by_code(funds: list) -> dict:
     """⑦ HWM σ 逐檔欄位(keyed by code)。供「健診總表」合併 + 標準表共用(單一資料源)。
 
-    SSOT:services/precision_service.py calc_hwm_sigma_levels。缺資料 → '—'(§1 不偽造)。
+    SSOT:`services/fund_position.compute_fund_position`(2026-10-23 裁示 2C,BL-0426)——
+    σ 位置在**配息還原(Total Return)序列**上計算,fail closed;本函式只格式化。
+    欄位 key / 欄序不變。HWM / 距 HWM % / σ rank 為配息還原基準(HWM 以最新淨值為錨換回
+    原幣單位);「現價」維持原始最新淨值。無法判定 → HWM / 距 HWM % / σ rank 為 '—'、
+    「HWM 位階」印 ⬜ 白話原因(§1 不偽造、不補 0);「現價」只要有序列就照實顯示。
+
+    ⚠️ 下游「σ rank」字串的消費者(健診大表「基期」欄 / 「淨值×匯率」欄、輪動配對、
+    換股建議、LINE 每週換檔推播等行動類功能)沿用 legacy 行動語意,
+    **規則與用字未改,只換了 σ 的來源**;待 BL-0428 重新裁示。
     """
     out: dict = {}
     try:
-        from services.precision_service import calc_hwm_sigma_levels
+        from services.fund_position import compute_fund_position
     except Exception as _e_imp:  # noqa: BLE001 — 模組載入失敗 → 全檔缺值,不炸
         # 原本靜默:整組 σ/HWM 5 欄一起消失,user 只看到大表少了一整區,以為功能壞了。
         # 補 log + 讓「HWM 位階」欄自己說出是**載入失敗**,不是這些基金沒資料(§1)。
         import sys as _sys_imp
-        print(f"[grp_health/risk] precision_service 載入失敗,σ/HWM 欄全缺:"
+        print(f"[grp_health/risk] fund_position 載入失敗,σ/HWM 欄全缺:"
               f"{type(_e_imp).__name__}: {_e_imp}", file=_sys_imp.stderr)
         _err = f"⬜ σ 模組載入失敗({type(_e_imp).__name__})"
         return {(_f.get("code") or "?"): {
@@ -31,18 +39,19 @@ def hwm_sigma_by_code(funds: list) -> dict:
         } for _f in funds}
     for _f in funds:
         _code = _f.get("code", "?")
-        _series = _f.get("series")
         _blank = {"現價": "—", "HWM": "—", "距 HWM %": "—", "σ rank": "—"}
-        if _series is None or len(_series) < 30:
-            out[_code] = {**_blank, "HWM 位階": "⬜ NAV 不足 30 天"}
-            continue
-        _r = calc_hwm_sigma_levels(_series)
-        if _r.get("error"):
-            out[_code] = {**_blank, "HWM 位階": f"⬜ {_r['error']}"}
+        _r = compute_fund_position(_f)
+        if _r.get("status") != "ok":
+            # 現價是已知事實(原始最新淨值),位置判不出來不影響它 → 照實顯示;
+            # HWM / 距 HWM / σ rank 維持 '—',位階印 ⬜ 原因(2026-10-23 稽核建議項)。
+            _cur = _r.get("current_nav")
+            out[_code] = {**_blank,
+                          "現價": f"{_cur:.2f}" if isinstance(_cur, (int, float)) else "—",
+                          "HWM 位階": f"{_r.get('label') or '⬜ 無法判定'}"}
             continue
         out[_code] = {
             "現價": f"{_r['current_nav']:.2f}",
-            "HWM": f"{_r['hwm']:.2f}",
+            "HWM": f"{_r['hwm_tr']:.2f}",
             "距 HWM %": f"{_r['dist_to_hwm_pct']:+.2f}%",
             "σ rank": f"{_r['sigma_rank']:+.2f}σ",
             "HWM 位階": f"{_r.get('label', '—')}",

@@ -19,6 +19,12 @@
 ⚠️ 匯率誠實範圍:USDTWD 單一值 → 同幣別 A→B 換股 FX 近中性;匯率真正影響「成長型賣出轉台幣現金」
 與「從現金新進場」等跨台幣動作。FX 位階以資訊呈現,不假裝決定每筆同幣別換股。
 常數走 shared.signal_thresholds SSOT(§3.3)。
+
+⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
+本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
+(配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
+不補 0、不當中性)。換股顧問讀列內「σ rank」(同上,健診大表經 SSOT 產生)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
 
@@ -235,6 +241,15 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
             else:
                 _out.update(action=HOLD, action_zh=_ACTION_ZH[HOLD],
                             reason="震盪型 + 高基期,但池中無『低基期且健康』標的可換 → 建議持有或轉現金(不硬湊,§1)。")
+        elif _nav_level == "unknown":
+            # 2026-10-23 客戶裁示(BL-0426 回修,選項 1):基金位置無法判定(HWM σ ⬜)
+            # ~~→ 「基期未知(未貼近高點)→ 續抱」~~ —— 那句把「不知道」說成「未貼近高點」,
+            # 改走既有 INSUFFICIENT(資料不足／無法判定)。不新增狀態、門檻或公式。
+            _why = _row_get(held_row, "HWM 位階", default="")
+            _why = str(_why).strip() if isinstance(_why, str) and str(_why).strip().startswith("⬜") else ""
+            _out.update(action=INSUFFICIENT, action_zh=_ACTION_ZH[INSUFFICIENT],
+                        reason=(f"震盪型 + 基金位置無法判定{f'（{_why}）' if _why else ''}"
+                                f" → 暫不評估換股。"))
         else:
             _nav_zh = {"low": "低基期", "mid": "中性", "unknown": "基期未知"}.get(_nav_level, _nav_level)
             _out.update(reason=f"震盪型 + {_nav_zh}(未貼近高點)→ 續抱,等接近高基期再評估換出。")
