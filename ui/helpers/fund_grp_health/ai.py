@@ -55,6 +55,7 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     _eating_count = 0
     _far_count = 0
     _sigma_ranks = []
+    _sigma_unknown = 0      # BL-0428 DG-1 A:位置無法判定(⬜)檔數,另列
     for _f in funds:
         _code = _f.get("code", "?")
         _name = (_f.get("name") or _code)[:20]
@@ -118,10 +119,14 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
         # σ 位置(SSOT;配息還原序列)
         _sigma_label = "—"
         _sigma_rank = None
+        if compute_fund_position is None:
+            _sigma_unknown += 1              # 模組載入失敗 → 每檔都無法判定(⬜),不是「不在遠離高點」
         if compute_fund_position is not None:
             try:
                 _pos = compute_fund_position(_f)
                 _sigma_label = _pos.get("label") or "—"     # ok → 中性三態;否則 ⬜ 白話原因
+                if _pos.get("status") != "ok":
+                    _sigma_unknown += 1      # BL-0428 DG-1 A:⬜ 另計,不進「遠離高點」分母
                 if _pos.get("status") == "ok":
                     _sigma_rank = _pos.get("sigma_rank")
                     if _pos.get("position") == "far_from_high":
@@ -131,6 +136,7 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
             except Exception as _e_sg:  # noqa: BLE001
                 # §1:原本靜默 → 這檔悄悄退出 `_sigma_ranks`,「平均 σ rank」的**分母
                 # 縮小**而 AI 讀到的整組概況不知道少算了誰。補 log,值仍誠實留 None。
+                _sigma_unknown += 1          # BL-0428 DG-1 A:算不出 = 位置無法判定(⬜)
                 import sys as _sys_sg
                 print(f"[grp_health/ai] {_code} σ 位階計算失敗,未計入整組平均:"
                       f"{type(_e_sg).__name__}: {_e_sg}", file=_sys_sg.stderr)
@@ -156,9 +162,15 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     _lines.append("### 整組概況")
     _lines.append(f"- 基金數:{len(funds)} 檔")
     _lines.append(f"- 🔴 吃本金:{_eating_count} 檔 / {len(funds)}")
-    _lines.append(f"- 📍 遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):{_far_count} 檔 / {len(funds)}")
+    # BL-0428 DG-1 A(2026-10-23):~~{_far_count} 檔 / {len(funds)}~~(分母含 ⬜,等於把「不知道」
+    # 算成「不在遠離高點」)→ 分母只算位置可判定的檔,⬜ 檔數另列;平均 σ rank 標明樣本數。
+    _n_pos_ok = len(_sigma_ranks)
+    _lines.append(f"- 📍 遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):{_far_count} 檔 / "
+                  f"{_n_pos_ok} 檔可判定")
+    _lines.append(f"- ⬜ 位置無法判定(資料不足／無法判定):{_sigma_unknown} 檔"
+                  f"(不計入上一行分母,也不計入平均)")
     if _avg_sigma is not None:
-        _lines.append(f"- 平均 σ rank:{_avg_sigma:+.2f}σ "
+        _lines.append(f"- 平均 σ rank(可判定 {_n_pos_ok} 檔):{_avg_sigma:+.2f}σ "
                       f"(負 = 整組位於近一年高點下方;以配息還原淨值計算,只是位置證據、非買賣建議)")
 
     # 逐檔簡表

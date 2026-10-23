@@ -14,6 +14,21 @@ from services.fund_grp_health._utils import _safe_num
 def hwm_sigma_by_code(funds: list) -> dict:
     """⑦ HWM σ 逐檔欄位(keyed by code)。供「健診總表」合併 + 標準表共用(單一資料源)。
 
+    (2026-10-23 BL-0428 §9.8:實作移到 `hwm_sigma_with_numeric`,本函式只回顯示欄,
+    輸出逐字不變;行動類 consumer 改讀數值版,不再解析兩位小數字串。)
+    """
+    return hwm_sigma_with_numeric(funds)[0]
+
+
+def hwm_sigma_with_numeric(funds: list) -> tuple:
+    """→ (顯示欄 {code: {欄: 字串}}, 正式數值 {code: SSOT sigma_rank | None})。
+
+    2026-10-23 BL-0428 §9.8(已確認 bug、只有一個安全修法):「σ rank」顯示字串四捨五入到
+    兩位小數,下游若拿它重新分類,切點兩側 0.005σ 內會與 SSOT `position` 不同
+    (例:數值 −0.503 → SSOT 中段;字串「-0.50σ」→ 解析成 −0.50 → 判成接近高點)。
+    第二個回傳值是 SSOT 原始數值(⬜ → None),供「基期」/「淨值×匯率」/輪動 / 換股 / LINE
+    直接讀;顯示字串一字不變。
+
     SSOT:`services/fund_position.compute_fund_position`(2026-10-23 裁示 2C,BL-0426)——
     σ 位置在**配息還原(Total Return)序列**上計算,fail closed;本函式只格式化。
     欄位 key / 欄序不變。HWM / 距 HWM % / σ rank 為配息還原基準(HWM 以最新淨值為錨換回
@@ -25,6 +40,7 @@ def hwm_sigma_by_code(funds: list) -> dict:
     **規則與用字未改,只換了 σ 的來源**;待 BL-0428 重新裁示。
     """
     out: dict = {}
+    num: dict = {}
     try:
         from services.fund_position import compute_fund_position
     except Exception as _e_imp:  # noqa: BLE001 — 模組載入失敗 → 全檔缺值,不炸
@@ -34,13 +50,14 @@ def hwm_sigma_by_code(funds: list) -> dict:
         print(f"[grp_health/risk] fund_position 載入失敗,σ/HWM 欄全缺:"
               f"{type(_e_imp).__name__}: {_e_imp}", file=_sys_imp.stderr)
         _err = f"⬜ σ 模組載入失敗({type(_e_imp).__name__})"
-        return {(_f.get("code") or "?"): {
+        return ({(_f.get("code") or "?"): {
             "現價": "—", "HWM": "—", "距 HWM %": "—", "σ rank": "—", "HWM 位階": _err,
-        } for _f in funds}
+        } for _f in funds}, {(_f.get("code") or "?"): None for _f in funds})
     for _f in funds:
         _code = _f.get("code", "?")
         _blank = {"現價": "—", "HWM": "—", "距 HWM %": "—", "σ rank": "—"}
         _r = compute_fund_position(_f)
+        num[_code] = _r.get("sigma_rank") if _r.get("status") == "ok" else None
         if _r.get("status") != "ok":
             # 現價是已知事實(原始最新淨值),位置判不出來不影響它 → 照實顯示;
             # HWM / 距 HWM / σ rank 維持 '—',位階印 ⬜ 原因(2026-10-23 稽核建議項)。
@@ -56,7 +73,7 @@ def hwm_sigma_by_code(funds: list) -> dict:
             "σ rank": f"{_r['sigma_rank']:+.2f}σ",
             "HWM 位階": f"{_r.get('label', '—')}",
         }
-    return out
+    return out, num
 
 
 # v19.181 Bug 3 fix: MoneyDJ wb07 risk_metrics 是 **nested** 結構

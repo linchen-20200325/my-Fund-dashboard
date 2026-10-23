@@ -177,7 +177,7 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
     + 加 nav_series / type_override / 類別 fallback)。streamlit-free。"""
     from services.health.dividend import check_eating_principal_1y_mk
     from services.health.report import build_health_analysis_row
-    from services.fund_grp_health.unified import build_merged_extra_columns
+    from services.fund_grp_health.unified import SIGMA_RANK_KEY, build_merged_extra_columns
 
     _extra = build_merged_extra_columns(funds, "", None)[1]     # σ rank / 距 HWM % / 操盤評分
     rows = []
@@ -202,6 +202,8 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
             "基金類別": _h.get("基金類別") or (getattr(_pe, "category", None) if _pe else None),
             "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
+            # BL-0428 §9.8:正式數值(SSOT 原值;⬜ → None),判定一律讀它,不解析上一行的顯示字串
+            "sigma_rank": _e.get(SIGMA_RANK_KEY),
             "HWM 位階": _e.get("HWM 位階"),   # 2C:σ 無法判定時讓 advisor 寫出 ⬜ 白話原因
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
             "nav_series": _f.get("series"),

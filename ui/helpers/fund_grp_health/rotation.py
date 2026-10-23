@@ -21,6 +21,7 @@ from ui.helpers.render_state import system_error
 
 def _assemble_rows(funds: list) -> list:
     """每檔組成 suggest_rotation_pairs 需要的欄位 dict。"""
+    from services.fund_grp_health.unified import SIGMA_RANK_KEY as _SIGMA_RANK_KEY
     from services.health.report import build_health_analysis_row
     from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
 
@@ -55,6 +56,8 @@ def _assemble_rows(funds: list) -> list:
             "code": _code, "name": _f.get("name") or _code,
             "基金類別": _h.get("基金類別"), "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
+            # BL-0428 §9.8:正式數值(SSOT 原值;⬜ → None),判定一律讀它,不解析上一行的顯示字串
+            "sigma_rank": _e.get(_SIGMA_RANK_KEY),
             "HWM 位階": _e.get("HWM 位階"),   # 2C:σ 無法判定時讓 advisor 寫出 ⬜ 白話原因
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
             # ~~"currency": _f.get("currency"),~~   # v19.484:跨幣別換股標註(§4.1)用
@@ -135,7 +138,7 @@ def _render_pairs_body(rows: list, _pairs: list, _sell: float, _buy: float, *,
 
     if not _pairs:
         # 誠實揭露「為何無配對」+ 每檔目前基期,讓使用者知道現況、可調滑桿(§1)
-        from services.rotation import classify_base
+        from services.rotation import classify_base, row_sigma_rank
         # 2026-09-02 T29:用字走 SSOT。`BASE_LABELS_ROTATION` 是由 `BASE_LABELS`
         # **衍生**出來的(加「可賣 / 可買」行動提示、把「資料不足」指明成「σ 資料不足」),
         # 不是第四份手抄 —— 改 `BASE_LABELS` 這裡會跟著動。
@@ -144,15 +147,24 @@ def _render_pairs_body(rows: list, _pairs: list, _sell: float, _buy: float, *,
         )
         _status = [
             f"{r.get('name') or r.get('code')} {r.get('σ rank') or '—'}"
-            f"({_lbl.get(classify_base(r.get('σ rank'), _sell, _buy), '?')})"
+            f"({_lbl.get(classify_base(row_sigma_rank(r), _sell, _buy), '?')})"
             for r in rows
         ]
         if len(rows) < 2:
             st.info("輪動配對需要**至少 2 檔**基金(要有可賣的高基期 + 可買的別類低基期);"
                     "目前這組不足 2 檔。")
+        elif _insuff_names and len(_insuff_names) >= len(rows):
+            # BL-0428 DG-1 A(2026-10-23):全部 ⬜ → 不得說成「沒有貼近高點」(那是把不知道說成安全)
+            st.info(f"目前 {len(_insuff_names)} 檔基金的位置都**無法判定**(⬜ σ 資料不足)"
+                    " → 無法評估輪動(位置未知,不代表安全或不需調整)。")
         else:
-            st.info("目前**沒有貼近高點的「高基期」持有基金** → 沒有需要輪動賣出的標的。"
-                    "可把上方「高基期門檻」滑桿**往左放寬**(納入更多賣方候選);"
+            # BL-0428 DG-1 A:有 ⬜ 時講明「可判定的基金中」,並列出 ⬜ 檔數(不併入「沒有貼近高點」)
+            _unk_txt = (f"另有 **{len(_insuff_names)} 檔位置無法判定**(⬜ σ 資料不足),"
+                        "不在此判斷內。" if _insuff_names else "")
+            st.info(("目前**可判定的基金中沒有貼近高點的「高基期」持有基金**" if _insuff_names
+                     else "目前**沒有貼近高點的「高基期」持有基金**")
+                    + " → 沒有需要輪動賣出的標的。" + _unk_txt
+                    + "可把上方「高基期門檻」滑桿**往左放寬**(納入更多賣方候選);"
                     "若仍無,代表現在沒有適合換出的標的(這是正常的誠實結果)。")
         st.caption("目前各檔基期:" + "　·　".join(_status))
         _render_insufficient_note()

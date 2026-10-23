@@ -341,6 +341,11 @@ def test_downstream_advisor_takes_insufficient_branch():
     rec = recommend_policy([{"invest_twd": 100, "is_core": True, "sigma_info": r}
                             for _ in range(3)], target_core_pct=100.0)
     assert "深度" not in rec["text"]          # unavailable 不計入 P3 深跌計數
+    # 2026-10-23 BL-0428 DG-1 A:~~只斷言不含「深度」(全 ⬜ 時綠燈「配置健康」照樣通過)~~
+    # → 全 ⬜ 不得亮綠燈,走既有 INSUFFICIENT_DATA 灰色並列出 ⬜ 檔數。
+    assert rec["color"] != "green" and "配置健康" not in rec["text"]
+    assert rec["code"] == INSUFFICIENT_DATA and rec["color"] == "grey"
+    assert "3 檔基金位置無法判定" in rec["text"]
 
 
 def test_downstream_decision_matrix_skips_sigma_override():
@@ -607,7 +612,10 @@ def test_consumer_far_from_high_list(monkeypatch):
     monkeypatch.setattr(R, "st", fake)
     R._render_oversold_badges([_div_fund_no_records()])
     names = [n for n, _ in fake.calls]
-    assert "success" in names
+    # 2026-10-23 BL-0428 DG-1 A:~~全 ⬜ 時綠色 success「目前無基金位於遠離高點區」~~
+    # → 灰色 caption 揭露 ⬜ 檔數,不得用綠色成功框
+    assert "success" not in names
+    assert any(n == "caption" and "位置無法判定" in str(a) for n, a in fake.calls)
     assert not any("DivNoRecords" in str(a) for n, a in fake.calls if n == "markdown")
 
 
@@ -637,7 +645,9 @@ def test_consumer_tab1_enrich():
 def test_consumer_ai_cross_fund_snapshot():
     from ui.helpers.fund_grp_health.ai import _build_cross_fund_snapshot
     snap, _ = _build_cross_fund_snapshot([_div_fund_no_records()])
-    assert "遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):0 檔 / 1" in snap
+    # 2026-10-23 BL-0428 DG-1 A:~~「0 檔 / 1」(分母含 ⬜)~~ → 分母只算可判定,⬜ 另列
+    assert "遠離高點(σ rank ≤ −1.5,研究候選門檻、未校準):0 檔 / 0 檔可判定" in snap
+    assert "⬜ 位置無法判定(資料不足／無法判定):1 檔" in snap
     assert "σ 位置:⬜" in snap
     assert "平均 σ rank" not in snap
 

@@ -446,11 +446,22 @@ def current_actions_from_signals(final_signals: dict, final_weights: dict) -> di
     """勝出策略當前訊號 → {action_lists(buy/switch/watch), sell_buy_pairs, target_weights_pct}。
 
     賣→買配對:每個 sell-tier 配一檔最便宜(σ rank 最負)的 buy-tier(round-robin);無 buy → None(誠實)。
+
+    2026-10-23 客戶裁示 BL-0428 DG-2 A(`DEC-2026-10-23-11`):**權重與回測數字一律不變**
+    (tier → 權重的對映 `tiers_to_weights` 一字未改;⬜ 仍是基準權重 1.0),只在**清單**把
+    ⬜(基金位置無法判定:S3 因 unknown 落 watch、S1/S2 的 na)與真正的「⚪ 觀望」分開:
+    `action_lists["unknown"]` 另列,`watch` 不再含它們;另回 `counts`(各清單檔數)。
+    ~~watch = tier ∈ (watch, na, hold, None)~~(⬜ 與觀望同一清單,看不出差別)。
     """
     _sig = final_signals or {}
     buy = [c for c, s in _sig.items() if s.get("tier") == "buy"]
     sell = [c for c, s in _sig.items() if s.get("tier") == "sell"]
-    watch = [c for c, s in _sig.items() if s.get("tier") in ("watch", "na", "hold", None)]
+    # ⬜ = 位置無法判定(nav_level unknown)或 2D 判不出(tier na)。只改分類呈現,不改 tier / 權重。
+    unknown = [c for c, s in _sig.items()
+               if s.get("nav_level") == "unknown" or s.get("tier") == "na"]
+    _unknown_set = set(unknown)
+    watch = [c for c, s in _sig.items()
+             if s.get("tier") in ("watch", "na", "hold", None) and c not in _unknown_set]
 
     _buy_sorted = sorted(buy, key=lambda c: (_sig[c].get("sigma_rank")
                                              if _sig[c].get("sigma_rank") is not None else 0.0))
@@ -467,7 +478,9 @@ def current_actions_from_signals(final_signals: dict, final_weights: dict) -> di
     _w = final_weights or {}
     weights_pct = {c: round(float(v) * 100.0, 2) for c, v in _w.items()}
     return {
-        "action_lists": {"buy": buy, "switch": sell, "watch": watch},
+        "action_lists": {"buy": buy, "switch": sell, "watch": watch, "unknown": unknown},
+        "counts": {"buy": len(buy), "switch": len(sell), "watch": len(watch),
+                   "unknown": len(unknown)},
         "sell_buy_pairs": pairs,
         "target_weights_pct": weights_pct,
     }

@@ -13,7 +13,7 @@
 ⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
 本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
 (配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
-不補 0、不當中性)。「基期」欄 / 「淨值×匯率」欄以 `rotation.classify_base(σ rank 字串)` 分類,σ rank 字串由 `risk.hwm_sigma_by_code` 經 SSOT 產生。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+不補 0、不當中性)。「基期」欄 / 「淨值×匯率」欄以 `rotation.classify_base(σ rank)` 分類 —— 2026-10-23 BL-0428 §9.8 起讀 SSOT 原始數值(`SIGMA_RANK_KEY`),不再解析兩位小數顯示字串。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
 σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
@@ -72,6 +72,10 @@ def sharpe_provenance_by_code(funds: list) -> dict:
     return out
 
 
+#: BL-0428 §9.8:合併欄 slot 內的「SSOT σ rank 正式數值」私有鍵(底線開頭、不進 col_order,
+#: 不是表格欄)。行動類 consumer 一律讀它,不解析「σ rank」兩位小數顯示字串。
+SIGMA_RANK_KEY = "_sigma_rank"
+
 _RECONCILE_KEYS = ("sharpe_reconcile", "ret_1y_reconcile", "div_yield_reconcile")
 
 
@@ -126,7 +130,7 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None, *,
     """
     from services.fund_grp_health.capture import capture_by_code
     from services.fund_grp_health.quality import quality_score_by_code
-    from services.fund_grp_health.risk import hwm_sigma_by_code, risk_compare_by_code
+    from services.fund_grp_health.risk import hwm_sigma_with_numeric, risk_compare_by_code
     from services.fund_grp_health.signals import mk_signal_by_code as _svc_mk_signal_by_code
 
     # 2026-10-13:舊 UI 注入它自己那版(會解析讀 session_state 的 `mk_fund_signal`);
@@ -135,8 +139,10 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None, *,
 
     # v19.496:capture 算一次,同時餵「捕捉率欄」與「相對品質分」的操盤因子(不重算、不重抓基準)
     _capture = capture_by_code(funds)
+    # BL-0428 §9.8(2026-10-23):同一次 SSOT 計算同時拿顯示字串與正式數值(不重算)。
+    _hwm_disp, _hwm_num = hwm_sigma_with_numeric(funds)
     maps = [
-        hwm_sigma_by_code(funds),
+        _hwm_disp,
         risk_compare_by_code(funds),
         mk_signal_by_code(funds, phase, score),
         _capture,                    # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
@@ -164,9 +170,14 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None, *,
     # 2026-09-02 T29:用字走 `_utils.BASE_LABELS` SSOT(原為本函式內的區域變數,
     # 全 repo 三份手抄、彼此 import 不到)。
     from services.fund_grp_health._utils import BASE_LABELS as _BASE_LBL
-    for _slot in combined.values():
+    # BL-0428 §9.8(2026-10-23):~~classify_base(_slot.get("σ rank"), ...)~~(解析兩位小數顯示字串,
+    # 切點兩側 0.005σ 內會與 SSOT 不同)→ 改讀 SSOT 原始數值。數值放在私有鍵 `SIGMA_RANK_KEY`,
+    # **不進 col_order**(不新增任何表格欄);下游行動類 consumer(輪動 / 換股 / LINE /
+    # 淨值×匯率)也讀這個鍵。⬜ → None → unknown(⬜ 資料不足),與原本一致。
+    for _code, _slot in combined.items():
+        _slot[SIGMA_RANK_KEY] = _hwm_num.get(_code)
         _slot["基期"] = _BASE_LBL[
-            classify_base(_slot.get("σ rank"), ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)]
+            classify_base(_slot[SIGMA_RANK_KEY], ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)]
     if "基期" not in col_order:
         col_order.append("基期")
     return col_order, combined

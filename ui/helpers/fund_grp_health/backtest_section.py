@@ -175,11 +175,18 @@ def render_allocation_backtest_section(funds: list) -> None:
     _act = _res["actions"]
     st.markdown(f"#### 📋 勝出策略「{STRATEGY_LABELS[_res['winner']]}」建議")
     _al = _act["action_lists"]
+    # BL-0428 DG-2 A(2026-10-23):⬜(位置無法判定)與「⚪ 觀望」分開列示並計檔數;
+    # 權重 / 回測數字不變(⬜ 仍是基準權重)。只改既有欄位內的文字,不新增元件。
+    _unk = list(_al.get("unknown") or [])
+    _unk_names = "、".join(_name.get(c, c) for c in _unk)
     if _al["buy"] or _al["switch"]:
         _c1, _c2, _c3 = st.columns(3)
         _c1.markdown("**🟢 進場**\n\n" + ("、".join(_name.get(c, c) for c in _al["buy"]) or "—"))
         _c2.markdown("**🔴 轉出**\n\n" + ("、".join(_name.get(c, c) for c in _al["switch"]) or "—"))
-        _c3.markdown("**⚪ 觀望**\n\n" + ("、".join(_name.get(c, c) for c in _al["watch"]) or "—"))
+        _c3.markdown(f"**⚪ 觀望（{len(_al['watch'])} 檔）**\n\n"
+                     + ("、".join(_name.get(c, c) for c in _al["watch"]) or "—")
+                     + (f"\n\n**⬜ 無法判定（{len(_unk)} 檔，不是觀望；維持基準權重）**"
+                        f"\n\n{_unk_names}" if _unk else ""))
     else:
         st.caption("本策略不擇時(等權/靜態最佳)→ 無買賣切換動作;下方為目標配置權重。"
                    "（想看**當前**買/賣訊號 → 見上方健診大表的「淨值×匯率」/「策略燈號」欄，"
@@ -206,9 +213,12 @@ def render_allocation_backtest_section(funds: list) -> None:
             },
         )
 
-    _wrows = [{"基金": _name.get(c, c), "目標權重%": v}
+    _unk_set = set(_unk)
+    _wrows = [{"基金": _name.get(c, c) + ("（⬜ 無法判定・基準權重）" if c in _unk_set else ""),
+               "目標權重%": v}
               for c, v in sorted(_act["target_weights_pct"].items(), key=lambda kv: -kv[1])]
-    st.markdown("**⚖️ 建議配置權重**")
+    st.markdown("**⚖️ 建議配置權重**"
+                + (f"（⬜ 無法判定 {len(_unk)} 檔：維持基準權重，不是觀望）" if _unk else ""))
     st.dataframe(
         pd.DataFrame(_wrows), use_container_width=True, hide_index=True,
         column_config={

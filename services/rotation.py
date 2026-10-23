@@ -13,7 +13,7 @@
 ⚠️ **legacy 行動語意,待 BL-0428 重新裁示**(2026-10-23 裁示 2C ＋ Stop Gate「選項 1」,BL-0426):
 本模組讀到的 σ rank 一律來自唯一 SSOT `services/fund_position.compute_fund_position`
 (配息還原序列、fail closed —— 無法判定時 σ rank 缺值,走既有的「資料不足 / unknown」分支,
-不補 0、不當中性)。輪動配對讀健診大表的「σ rank」欄(由 `services/fund_grp_health/risk.hwm_sigma_by_code` 經 SSOT 產生)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
+不補 0、不當中性)。輪動配對讀健診大表的 σ(由 `services/fund_grp_health/risk.hwm_sigma_with_numeric` 經 SSOT 產生;2026-10-23 BL-0428 §9.8 起判定讀正式數值 `sigma_rank`,見 `row_sigma_rank`)。本模組的買賣 / 加碼 / 換股規則、門檻、決策結構與文字**一字未改**;
 σ 位置本身只是「相對自身近一年高點的位置證據」,不是交易建議。
 """
 from __future__ import annotations
@@ -51,6 +51,32 @@ def _sigma(v):
     if v is None:
         return None
     return _num(str(v).replace("σ", "").strip())
+
+
+def row_sigma_rank(row):
+    """列 → σ rank **正式數值**(BL-0428 §9.8,2026-10-23)。
+
+    列帶有 `sigma_rank` 鍵(由 `services/fund_grp_health/risk.hwm_sigma_with_numeric`
+    的 SSOT 原始數值組進來;⬜ 時為 None)→ **一律以它為準**,不再解析「σ rank」顯示字串
+    (顯示字串四捨五入到兩位小數,切點兩側 0.005σ 內會判錯;已確認 bug)。
+    列沒有 `sigma_rank` 鍵(例:批次大表 df / checkpoint 只存顯示字串)→ 才退回解析字串
+    (該路徑沒有數值可讀;見 `rows_from_batch_df`)。
+    """
+    if not isinstance(row, dict):
+        return None
+    if "sigma_rank" in row:
+        _v = row.get("sigma_rank")
+        if isinstance(_v, bool) or not isinstance(_v, (int, float)):
+            return None
+        _f = float(_v)
+        return _f if _f == _f and _f not in (float("inf"), float("-inf")) else None
+    return _sigma(row.get("σ rank"))
+
+
+def display_sigma(v):
+    """σ 數值 → 與「σ rank」顯示字串同精度的數值(兩位小數),只供配對表 / 通知呈現。
+    判定一律用未四捨五入的 `row_sigma_rank`;呈現維持舊有兩位小數(顯示不變)。"""
+    return round(float(v), 2) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
 def classify_base(sigma_rank, sell_sigma: float = ROTATION_SELL_SIGMA,
@@ -104,7 +130,7 @@ def insufficient_sigma_names(rows: list, sell_sigma: float = ROTATION_SELL_SIGMA
     """
     return [str(r.get("name") or r.get("code"))
             for r in rows
-            if classify_base(r.get("σ rank"), sell_sigma, buy_sigma) == "unknown"]
+            if classify_base(row_sigma_rank(r), sell_sigma, buy_sigma) == "unknown"]
 
 
 def _cell(row, col):
@@ -130,6 +156,11 @@ def rows_from_batch_df(df) -> list:
     本檔的 _sigma / _num 會自行剝除單位。
     (2026-08-31 自 ui/helpers/fund_grp_health/rotation.py 逐字下沉 —— 批次 df → 配對核心的
     輸入契約對映與配對演算法同住一檔,全站單一份;邏輯一字未改。)
+
+    ⚠️ BL-0428 §9.8(2026-10-23)**已知殘留**:批次大表 df / checkpoint 只存兩位小數的
+    「σ rank」顯示字串、沒有 SSOT 原始數值欄,本路徑的 rows 因此沒有 `sigma_rank` 鍵,
+    `row_sigma_rank` 只能退回解析字串(切點兩側 0.005σ 內仍可能與 SSOT 不同)。
+    要修需在批次 df 增加數值欄(表格欄增減屬 UI 變更),本批未做,登記於 BL-0428。
     """
     rows = []
     for _, r in df.iterrows():
@@ -158,9 +189,9 @@ def suggest_rotation_pairs(fund_rows, sell_sigma: float = ROTATION_SELL_SIGMA,
     吃本金燈號 / 操盤評分 / 距 HWM %。無「不同類」健康買方 → buy_* 為 None(誠實)。
     """
     rows = [r for r in (fund_rows or []) if isinstance(r, dict) and r.get("code")]
-    sells = [r for r in rows if classify_base(r.get("σ rank"), sell_sigma, buy_sigma) == "high"]
+    sells = [r for r in rows if classify_base(row_sigma_rank(r), sell_sigma, buy_sigma) == "high"]
     buys = [r for r in rows
-            if classify_base(r.get("σ rank"), sell_sigma, buy_sigma) == "low"
+            if classify_base(row_sigma_rank(r), sell_sigma, buy_sigma) == "low"
             and is_healthy_buy(r, min_score)]
 
     out = []
@@ -170,19 +201,19 @@ def suggest_rotation_pairs(fund_rows, sell_sigma: float = ROTATION_SELL_SIGMA,
         cands = [b for b in buys if b["code"] != s["code"]
                  and str(b.get("基金類別") or "").strip()
                  and str(b.get("基金類別") or "").strip() != _cat]
-        cands.sort(key=lambda b: (_sigma(b.get("σ rank")) if _sigma(b.get("σ rank")) is not None else 0.0))
+        cands.sort(key=lambda b: (row_sigma_rank(b) if row_sigma_rank(b) is not None else 0.0))
         best = cands[0] if cands else None       # σ rank 最負(跌最深 = 差價空間大)
         _sell_ccy = _ccy(s)
         _buy_ccy = _ccy(best) if best else ""
         out.append({
             "sell_code": s["code"],
             "sell_name": s.get("name") or s.get("基金名") or s["code"],
-            "sell_sigma": _sigma(s.get("σ rank")),
+            "sell_sigma": display_sigma(row_sigma_rank(s)),
             "sell_cat": _cat,
             "sell_ccy": _sell_ccy or None,
             "buy_code": best["code"] if best else None,
             "buy_name": (best.get("name") or best.get("基金名") or best["code"]) if best else None,
-            "buy_sigma": _sigma(best.get("σ rank")) if best else None,
+            "buy_sigma": display_sigma(row_sigma_rank(best)) if best else None,
             "buy_cat": str(best.get("基金類別") or "").strip() if best else None,
             "buy_ccy": (_buy_ccy or None) if best else None,
             "buy_grade": best.get("4D Grade") if best else None,

@@ -116,6 +116,9 @@ def _hwm_sigma_info_for(_f: dict) -> "dict | None":
 def _vix_for_advice(*, note: bool = True) -> float | None:
     """取當前 VIX 餵給 `services.policy_advisor_service.advise_fund`。
 
+    ⚠️ 2026-10-23 客戶裁示 BL-0428 DG-3 C:`advise_fund` 的 σ 規則(含 VIX 恐慌那條)已退休,
+    目前**不使用** vix 參數;本 helper 的取數與「缺值不捏造」原則照舊,caption 改為據實說明。
+
     **來源**：`st.session_state["indicators"]["VIX"]["value"]` —— 由市場定調分頁
     「📡 載入總經資料」寫入的同一份 dict（唯一 writer 在 `ui/tab1_macro.py`），
     值由 `services/macro/us_indicators.py` 產生。
@@ -133,17 +136,16 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
     ⚠️ 指路文案裡的分頁名走 `story_nav.tab_label` SSOT，**不得**寫死「Tab①」——
     頁內編號已於 WP-D 全數取消（線框 §04），寫死站號會變成第二個真相源。
     """
-    from ui.helpers.story_nav import (  # noqa: PLC0415 — 分頁名 SSOT，見 docstring
-        tab_label as _tab_label_vix,
-    )
     _raw = ((st.session_state.get("indicators") or {}).get("VIX") or {}).get("value")
     _msg = ""
     if _raw is None:
+        # 2026-10-23 客戶裁示 BL-0428 DG-3 C:advise_fund 的 σ 規則(含「σ 深跌且 VIX 恐慌 →
+        # 分批加碼」)全部退休 → ~~「這條規則本次不參與判斷…想補上：先到市場定調分頁載入」~~
+        # (那句等於還在推薦一條已退休的加碼規則)。只改既有 caption 的文字。
         _msg = (
-            f"⬜ 尚未載入 VIX —— 「σ 深跌 **且** VIX ≥ {_ADVISOR_VIX_PANIC:.0f}"
-            "（恐慌區）→ 分批加碼」這條規則"
-            "本次不參與下方建議的判斷（其餘規則照常）。"
-            f"想補上：先到「{_tab_label_vix('macro')}」按「📡 載入總經資料」，再回本頁。"
+            f"⬜ 尚未載入 VIX —— 不影響下方 💡：原「σ 深跌且 VIX ≥ {_ADVISOR_VIX_PANIC:.0f}"
+            "（恐慌區）」那條規則已於 2026-10-23 依客戶裁示退休，"
+            "💡 只陳述基金位置（不是買賣建議）。"
         )
     else:
         try:
@@ -153,7 +155,7 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
             print(f"[tab3 advise VIX] indicators['VIX']['value']={_raw!r} 無法轉 float："
                   f"[{type(_e_vix).__name__}] {_e_vix}")
             _msg = (
-                f"⬜ VIX 值無法解析（{_raw!r}）—— 恐慌加碼那條規則本次不參與判斷。"
+                f"⬜ VIX 值無法解析（{_raw!r}）—— 不影響下方 💡（VIX 相關規則已於 2026-10-23 退休）。"
             )
     if note and not st.session_state.get(_VIX_NOTE_FLAG):
         st.session_state[_VIX_NOTE_FLAG] = True
@@ -915,7 +917,9 @@ def render_portfolio_tab() -> None:
                             _m = _f.get("metrics", {}) or {}
                             _mj_e = _f.get("moneydj_raw", {}) or {}
                             # 2C(BL-0426):σ 經唯一 SSOT(見 _hwm_sigma_info_for);
-                            # unavailable 帶 "error" + sigma_rank=None → recommend_policy 不計入。
+                            # ~~unavailable 帶 "error" + sigma_rank=None → recommend_policy 不計入。~~
+                            # 2026-10-23 BL-0428 DG-1 A:⬜(None / error)→ recommend_policy 不給綠燈
+                            # 「配置健康」、列出 ⬜ 檔數;DG-3 C:σ 不再產生加碼文字。
                             _sig_e = _hwm_sigma_info_for(_f)
                             _div_e = None
                             try:
@@ -960,6 +964,8 @@ def render_portfolio_tab() -> None:
                         # 2C(BL-0426):σ 經唯一 SSOT(見 _hwm_sigma_info_for)。
                         # unavailable → 帶 "error" + sigma_rank=None → advise_fund 走既有
                         # 「資料不足」分支(不給 0);卡片顯示 SSOT 的中性 label / ⬜ 原因。
+                        # 2026-10-23 BL-0428 DG-3 C:advise_fund 不再產生 σ 行動文字,
+                        # σ 可判定時 💡 只陳述中性位置證據。
                         _sigma_info = _hwm_sigma_info_for(_f)
 
                         # 配息覆蓋率 / 吃本金
