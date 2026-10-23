@@ -34,7 +34,17 @@
 
 ## 2. 現況 checkpoint
 
-> **⭐ 2026-10-23（第九次）現況（以本框為準；下方第八次框起皆為歷史快照）**（BL-0428 DG 裁示實作批；base＝main `027078e2`（本組 `git rev-parse` 確認）；狀態更新，不是漏刪：第八次框整段保留於下方）
+> **⭐ 2026-10-23（第十次）現況（以本框為準；下方第九次框起皆為歷史快照）**（BL-0428 DG 合併回填；合併 SHA、head、CI、稽核結論為總管回報，main 位置為本組 `git fetch` 確認；狀態更新，不是漏刪：第九次框整段保留於下方）
+> - **最新 main**：`ea06b130`（PR #1033 已合併；head `3cd30731`，CI Fast checks／Schema gate／Slow tests 三條皆 success；獨立稽核 `6df4e9c5` 有條件通過 → `c9ef3af9` delta 通過；`3cd30731` 只放寬 S4 golden 測試容差（SLSQP 跨環境浮點抖動約 1e-9 → `rel_tol=1e-6`），總管自驗）。
+> - **Open PR**：本項工作沒有 open PR（本 docs 回填 commit 待總管推送）。
+> - **已完成**：BL-0428 的 DG-1～DG-5 落地合併（`DEC-2026-10-23-11`）；BL-0428 狀態仍為待客戶裁示。
+> - **下一個唯一工作點**：**等客戶指示**，不主動開工（§-1）。
+> - **BL-0428 尚未裁示**：第 (4) 題輪動／換股規則本身與用字、基期用字與顏色（R9／R10）、輪動門檻滑桿；第 (1)～(3)、(6) 題；批次分頁 `rows_from_batch_df` 殘留（需新增數值欄，UI／schema 變更）。
+> - **稽核後續（只登記，不構成動工授權）**：LINE `advices=[]` 且 skipped=0 的邊界；配置回測 S3 else 分支「本策略不擇時」用字；`ui/tab1_macro.py` 過時的 σ 規則說明文字（死碼）；docstring 寫「一字未改」的處所；換股候選與 `insufficient_sigma_names` 的行為測試；週報腳本 docstring 的 `hwm_sigma_by_code`。
+> - **等客戶說開始**：BL-0438（DG-4）研究、BL-0435 Blueprint。
+> - **建議 Model／Effort**：BL-0438 研究 → 目前模型 **Medium**；BL-0435 → 高能力模型 **High**。
+
+> **2026-10-23（第九次）現況（~~以本框為準；下方第八次框起皆為歷史快照~~ → 已成歷史快照，現況見上方第十次框；狀態更新，不是漏刪）**（BL-0428 DG 裁示實作批；base＝main `027078e2`（本組 `git rev-parse` 確認）；狀態更新，不是漏刪：第八次框整段保留於下方）
 > - **最新 main**：`027078e2`（PR #1032 合併後；本批尚未推送、尚未開 PR）。
 > - **客戶裁示**：DG-1 A／DG-2 A／DG-3 C／DG-4 C／DG-5 A（`DEC-2026-10-23-11`，經總管轉達）。
 > - **已完成（本地 commit，待總管推送／開 PR／獨立稽核）**：DG-1 A —— `recommend_policy` 任一檔位置 ⬜ 不給綠燈「配置健康」、改既有 `INSUFFICIENT_DATA` 灰色並列 ⬜ 檔數；`decision_matrix` ⬜ 時 reason 揭露「⬜ 基金位置無法判定」；LINE 週報（`services/switch_notify.py`）⬜ 不併入「所有標的續抱」、摘要多「資料不足 N」；遠離高點清單有 ⬜ 時不用綠色成功框；AI 快照分母排除 ⬜ 並另列；輪動配對空態揭露 ⬜。DG-2 A —— 配置回測權重與數字不變（golden 測試），清單與權重表把 ⬜ 與「觀望」分開並計檔數。DG-3 C —— `advise_fund` 規則 1～9、`recommend_policy` P3、`decision_matrix` σ 覆寫退休，σ 可判定時只陳述中性位置。§9.8 —— 「基期」／「淨值×匯率」／輪動／換股／LINE 改讀 SSOT 原始數值（顯示字串不變）。**已知殘留**：批次分頁「基期」「淨值×匯率」欄已改讀數值，但同頁互補配對 `rotation.rows_from_batch_df` 仍解析兩位小數字串，切點 ±0.005σ 內同頁可能不一致；修正需在批次 df／checkpoint 新增數值欄（UI／schema 變更），待後續（BL-0428 列尾）。decision_matrix 遇 ⬜ 維持預設動作＋⬜ tag ＝ 總管讀法，可被客戶推翻（DG-3 C 後動作不讀位置；推論死碼）。守衛 `tests/test_bl0428_dg_rulings.py`。
