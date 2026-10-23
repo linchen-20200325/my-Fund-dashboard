@@ -652,7 +652,7 @@
 | evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。**落地狀態（2026-10-23，本組 `git fetch` 實查 SHA）**：1B 的 L2 ＋ services consumer 已於 PR #1023（main `4134e6d`；`bb9021b` ＋ 稽核回修 `5bc0e76`）落地：`services/fund_total_return.py::resolve_1y_total_return`、`services/fund_service.py::calc_metrics` 的 `annual_div_rate`、`services/health/dividend.py::resolve_dividend_rate_12m`、`check_eating_principal_1y_mk`；UI consumer 在 `origin/pr1b-ui-ssot-audited`（`e504ba1`）待合併（BL-0424）；3A 為 WIP `origin/pr2-333-ssot-wip`（`683d093`，未驗證未稽核；BL-0425）；2C 未落地（BL-0426）。本批已發現、客戶未裁示的公式層與契約語意題登記於 BL-0427／BL-0428 |
 | 影響範圍 | BL-0420（三項已裁，列尾補記）、BL-0421（改 open、待實作）、BL-0422（`check_333_fund` 退休候選）；`services/`、`ui/` 舊站 consumer；不解凍 `docs/v2/44`、不改 `ui_v2/`；HWM σ 在 2C 落地前仍不得成為 production investment judgment |
 | 是否可逆 | 可逆（客戶可另行裁示）；已合併的 PR #1023 回退須走正常 PR |
-| supersedes／superseded by | supersedes：`DEC-2026-10-23-01` 中「HWM σ 待客戶裁示四題」與「12 項逐項裁示」裡對應 1B／2C／3A 的待裁狀態（方向與 Information Ownership Matrix 不變）。superseded by：無 |
+| supersedes／superseded by | supersedes：`DEC-2026-10-23-01` 中「HWM σ 待客戶裁示四題」與「12 項逐項裁示」裡對應 1B／2C／3A 的待裁狀態（方向與 Information Ownership Matrix 不變）。superseded by：~~無~~ → 無；2C 的 consumer 執行範圍另有後續裁示 `DEC-2026-10-23-06`～`-08`（行動類 consumer 改讀 SSOT 並標 legacy 行動語意、換股顧問 ⬜、三處 legacy fallback 交 BL-0428；與本筆 2C「不得再由 HWM evidence 產生」一句的關係見 `-06` 理由欄；狀態更新，不是漏刪） |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。落地狀態的 SHA 為本組實查；稽核結論、測試結果為實作組／稽核組／總管回報，本組未重跑。本列由架構與文件組單組寫成，未經第二組驗證 |
 
 ### DEC-2026-10-23-03｜客戶收尾指令：本批只做 Save／Handoff Gate 交接存檔、新版 UI 邊界、治理待辦登記
@@ -693,6 +693,71 @@
 | 是否可逆 | 可逆（客戶可另行指示） |
 | supersedes／superseded by | supersedes：`DEC-2026-10-23-04` 中「BL-0425／PR2 本批暫停（不是取消）」一句（該筆其餘不變）。superseded by：無 |
 | provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-06｜客戶 Stop Gate 裁示「選項 1」：所有 HWM σ consumer 統一改讀唯一 SSOT（配息還原序列），行動類規則標 legacy、交 BL-0428
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | **客戶裁示（Stop Gate 選項 1）**：(1) 所有 HWM σ consumer 統一改讀唯一 SSOT（配息還原 Total Return 序列，落地為 `services/fund_position.py::compute_fund_position`），**不准**為行動類功能保留第二套 raw σ。(2) 本批只修 HWM σ 的資料基礎與 SSOT；既有買／賣／加碼／換股規則、門檻、決策結構不重新設計 —— 仍用 HWM σ 者改讀 SSOT，並明確標為 legacy 行動語意。(3) 輸入修正造成的輸出翻轉，屬修正「假低基期」的必然結果，不為維持舊結果保留錯誤算法。(4) 行動類規則統一交給 BL-0428 重新裁示。(5) 不新增 threshold、買賣公式或投資語意。(6) 若某 consumer 無法在不改行動規則的前提下安全切換，再進 Stop Gate。<br>**低波動數值門檻（不是本次裁示，如實登記）**：客戶未單獨回覆此題，依其「不新增任何 threshold」原則處理 —— 本批只用 σ≈0（`_SIGMA_ABS_EPS`）與既有貨幣市場分類判 ⬜，不訂數值門檻；低波動數值門檻另列待裁（`docs/BACKLOG.md` BL-0428 第 (5) 題）。<br>**總管讀法（不是客戶裁示，可被客戶推翻）—— 錨定**：還原序列以最新原始淨值為錨換算回原幣（回溯調整價縮放）；σ rank、距 HWM %、三態不受影響；畫面上的 HWM 從此不是曾經出現過的淨值，每逢除息會變動 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）PR3（BL-0426）實作時，除顯示類 consumer 外，`services/rotation.py`、`switch_advisor`、`policy_advisor_service.py`、`decision_matrix`、`allocation_backtest` 策略等行動類模組也以 HWM σ 產生買賣語意；要不要一併切到 SSOT 牽涉投資動作語意，送 Stop Gate，客戶選總管推薦的選項 1。⚠️ **與 `DEC-2026-10-23-02` 2C 一句的關係（文件組讀法，未經客戶確認）**：該筆寫「既有 consumer 中可買／可賣／加碼參考／超跌／買點／賣點不得再由 HWM evidence 產生」；本筆讓行動類模組在 BL-0428 重新裁示前以 legacy 行動語意保留既有規則、只把 σ 來源換成 SSOT。文件組讀作「客戶對該句在行動類模組上的過渡安排」，不讀作撤銷；是否構成 supersede，客戶未明示 |
+| evidence／source | 客戶 2026-10-23 回覆 Stop Gate，經總管派工單轉達；repo 內無逐字存檔。落地：PR #1030（head `7569e663`；**open、尚未合併**，main 仍為 `f2539a7d`，總管 2026-10-23 15:07Z GitHub 實查）；legacy 標記（本組以 `git diff f2539a7d 7569e663` 逐檔找新增「legacy 行動語意」字樣的檔：`scripts/weekly_switch_notify.py`、`services/allocation_backtest.py`、`services/decision_matrix.py`、`services/fund_grp_health/risk.py`、`services/fund_grp_health/unified.py`、`services/fund_position.py`、`services/fund_screening.py`、`services/nav_fx_switch.py`、`services/policy_advisor_service.py`、`services/rotation.py`、`services/switch_advisor.py`、`services/switch_notify.py`、`ui/tab1_macro.py`，共 13 檔；字樣比對，不宣稱每一處都是規則標記）；`docs/BACKLOG.md` BL-0426、BL-0428 |
+| 影響範圍 | 所有 HWM σ consumer（`ui/` 舊站顯示類與 `services/` 行動類）；行動類規則待 BL-0428；不改 `ui_v2/`、不解凍 `docs/v2/44` |
+| 是否可逆 | 可逆（客戶可另行裁示）；PR #1030 合併後回退須走正常 PR |
+| supersedes／superseded by | supersedes：無明示（與 `DEC-2026-10-23-02` 2C 的關係見理由欄）。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。低波動門檻那一段的處理方式＝**總管處置**（客戶未單獨回覆，依其原則推導）；錨定＝**總管讀法，可被客戶推翻**。本列由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-07｜客戶裁示換股顧問 ⬜（選項 1）：震盪型基金 HWM σ 無法判定時不得解讀成續抱，改走既有「資料不足／無法判定」
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | 震盪型基金的 HWM σ 為 ⬜ 時，不得解讀成續抱，改走既有的「資料不足／無法判定」，暫不評估換股。原則：Missing ≠ 中性、續抱、HOLD、未觸發。不新增狀態、threshold、公式、策略；高基期、低基期、中段、成長型規則不動；LINE 週報沿用既有「無法判定」處理；理由文字必須忠實寫出「位置無法判定」。其他 consumer 有同類 fallback 的，可在 BL-0426 範圍內一併修；涉及新策略語意者，進 Stop Gate（→ 該 Stop Gate 的結果見 `DEC-2026-10-23-08`） |
+| 理由／背景 | （文件組背景說明，不是客戶原話）PR #1030 第 1 輪獨立稽核（`3f21aeab`）必修項之一：`services/switch_advisor.py` 在位置 unknown 時輸出 HOLD／「基期未知(未貼近高點)→ 續抱」，把「不知道」說成「未貼近高點」 |
+| evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。落地：PR #1030（head `7569e663`）`services/switch_advisor.py` 的 `_nav_level == "unknown"` 分支改走 `INSUFFICIENT`，理由「震盪型 + 基金位置無法判定（⬜ 原因）→ 暫不評估換股」（本組讀 diff 確認）；`tests/test_switch_advisor_unknown_insufficient.py`；PR #1030 open、尚未合併 |
+| 影響範圍 | 換股顧問與 LINE 週報（`scripts/weekly_switch_notify.py` 沿用 `INSUFFICIENT` 既有處理，不觸發通知）；high／low／mid 輸出與 `f2539a7d` 逐字相同（實作組回報，有迴歸測試） |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。「high／low／mid 逐字相同」為實作組回報、本組未重跑。本列由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-08｜客戶裁示三處 legacy fallback「先合併，交 BL-0428」，BL-0428 列為優先、`recommend_policy` 排第一
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | 三處 legacy 在 σ 無法判定時的既有落點 —— 保單整體建議 `services/policy_advisor_service.py::recommend_policy` 落成「配置健康」綠燈、決策矩陣（`services/decision_matrix.py`）沿用預設動作、配置回測（`services/allocation_backtest.py` 策略）維持基準權重 —— 本批不改，**PR #1030 先合併**；三處交 BL-0428，BL-0428 列為優先處理，其中 `recommend_policy` 排第一 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）依 `DEC-2026-10-23-07` 末句，同類 fallback 若涉及新策略語意須進 Stop Gate；這三處要改落點都牽涉行動規則（`DEC-2026-10-23-06` (4) 已交 BL-0428），故請示 |
+| evidence／source | 客戶 2026-10-23 裁示，經總管派工單轉達；repo 內無逐字存檔。三處的既有落點為稽核／實作回報、總管轉述（本組在 head `7569e663` 讀到 `recommend_policy` 的「→ 配置健康」字串與 `decision_matrix` 的「`sigma_rank=None` → 略過 σ 覆寫」docstring，與轉述相符；未實跑）；`docs/BACKLOG.md` BL-0428 第 (7) 題 |
+| 影響範圍 | BL-0428（優先）；PR #1030 合併不等這三處 |
+| 是否可逆 | 可逆（客戶可另行裁示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-09｜客戶指示「BL-0426 完成後先停」；預定下一大階段為 BL-0435 新版 UI/UX Blueprint 及其整合要求
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | (1) BL-0426 完成後先停，等客戶指示。(2) 預定下一大階段是 BL-0435 新版 UI/UX Blueprint，該階段必須整合：新版邏輯、舊 UI 已驗證且值得保留的能力、五頁唯一資訊歸屬、去除重複功能與重複計算、重新設計位置與顯示方式、不原樣搬舊 UI、Blueprint 先由客戶確認再實作 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）與 `DEC-2026-10-23-03` (2) 的路徑（底層邏輯收斂 → UI/UX Blueprint → 客戶確認 → 新版實作）、`DEC-2026-10-23-05` (2)（BL-0435 主工作項）、`DEC-2026-10-22-04`（舊畫面不直接移植）同向；本筆把 BL-0435 的開工時點交回客戶，並補上該階段必須整合的七點 |
+| evidence／source | 客戶 2026-10-23 指示，經總管派工單轉達；repo 內無逐字存檔。落地：`docs/HANDOFF.md` 第 2 節 2026-10-23 第六次框「下一個唯一工作點」；`docs/BACKLOG.md` BL-0435 |
+| 影響範圍 | 下一對話的起點；BL-0435 的開工時點與內容要求；不構成 production／UI 動工授權，`DEC-2026-10-22-02` G8 未解除 |
+| 是否可逆 | 可逆（客戶可另行指示） |
+| supersedes／superseded by | supersedes：無。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。本列由文件組單組寫成，未經第二組驗證 |
+
+### DEC-2026-10-23-10｜客戶 2026-10-23 Final Save 指令重申新版方向七項（交叉引用既有出處；差異照實列出）
+
+| 欄位 | 內容 |
+|---|---|
+| 日期 | 2026-10-23 |
+| 決策內容摘要 | 客戶以 Final Save 指令重申七項方向（要點）：(1) **新版 UI 不是搬舊 UI** —— 舊 UI 是功能與已驗證邏輯的參考來源，不是畫面模板；流程：盤點 → 保留／重構／退休 → 合併重複 → 唯一歸屬頁 → 新顯示形式 → Blueprint → 客戶確認 → 實作。(2) **BL-0435 Blueprint 必須處理**：新邏輯、舊 UI 有價值的功能、去重、計算收斂到 SSOT、唯一歸屬頁、摘要與詳細層級、drill-down、mobile 約 390px、graceful degradation、Missing 狀態、cross-page hand-off；盤點表要能回答唯一歸屬頁、是否重複、應合併到哪個 SSOT、保留／重構／退休、新版顯示形式。(3) **新五頁 IA 方向**：🌍 市場與趨勢／⚖️ 資產配置／💼 我的持股／🔍 找基金／⚙️ 設定；「🏠 今天」不在目前方向內；此為 Blueprint 的輸入，未核准前不得大改 layout。(4) **市場趨勢主軸**：全球／國際 12～24 個月，全球景氣 → 美國／Fed → 利率／信用／流動性 → 企業獲利／估值 → 長期產業資本循環 → 資產環境 → 基金組合影響；台股不得作為獨立趨勢或研究軸；不把台灣融資、外資籌碼、週 KD、台灣 EPS×PE 建成全球市場 SSOT；台灣曝險仍可作為地區、類別、持倉資料存在。(5) **資料 ≠ AI 推理**：Missing 不補 0、不當中性、不當 HOLD、不當未觸發；真 0 與缺資料要分開；UI 不得只靠顏色表達；名稱不得作為唯一分類依據。(6) **治理規則**：GitHub Verification Gate、Silent Autonomous Cruise（繁體中文、禁止流水帳、只有四種情況可打斷靜默）、Model／Effort Self-Assessment Gate（升級要停下請示、降級是義務；Low／Medium／High 定義）、Stop Gate 清單。(7) **防程式碼膨脹**：一個計算只能有一個 SSOT；UI 不得重算 domain logic；不為相容舊輸出保留錯誤算法；不順手新增 abstraction、平行規格、重複 helper／wrapper；舊 code 退休先過 retirement gate；稽核要檢查 scope creep、重複計算、dead wrapper。逐項出處見 `docs/HANDOFF.md` 第 2 節 2026-10-23 第六次框〈方向 → 出處〉表 |
+| 理由／背景 | （文件組背景說明，不是客戶原話）客戶要求新 AI 只讀 GitHub 就找得到這七項；本筆只登記「重申」這件事並指回既有出處，不重寫既有條文。**與既有出處的差異（文件組 grep 查找結果，不自行裁決，不宣稱窮舉）**：(4) 既有出處 `docs/v2/64` §2 列有同一組成分（全球景氣、Fed／貨幣政策、利率／信用／流動性、企業獲利／估值、長期產業資本循環、資產環境），但**沒有寫成這個先後鏈、也沒有「12～24 個月」期間**；「台灣融資」「週 KD」在 64／63／DECISIONS 未找到明文（「籌碼狀態」與台股 EPS×PE 已由 `DEC-2026-10-23-01` 移除）——本次重申是首次明列。(5)「真 0 與缺資料要分開」「名稱不得作為唯一分類依據」未找到一般性明文（相近者：`PROJECT_RULES.md` 第 13 節護欄第 2 條 missing ≠ 0；`CLAUDE.md` §3.1 `policy_tier` 註「不猜級別」只限核心／衛星級別）；「UI 不得只靠顏色」出自 `docs/v2/63` §1 永久資料原則 (5)，該處自陳尚未單獨登記為 DEC。(7)「稽核要檢查 scope creep、重複計算、dead wrapper」未找到稽核清單明文（相近者：交接本 2026-10-08〈四、防程式碼膨脹〉六條 Gate、`PROJECT_RULES.md` 第 9 節）。(1) 八步流程與 64 §1、`DEC-2026-10-23-03` (2) 同向，但逐步列出是本次首見。(2) 的盤點五問未見於 BL-0435 原文，本批補進該列 |
+| evidence／source | 客戶 2026-10-23 Final Save 指令，經總管派工單轉達；repo 內無逐字存檔。既有出處見 `docs/HANDOFF.md` 第 2 節第六次框對照表；本批補寫處：`docs/BACKLOG.md` BL-0435 列尾 |
+| 影響範圍 | BL-0435 的內容要求；下一對話的讀取入口；**不構成**新公式、新門檻、layout 或 production 動工授權；`DEC-2026-10-22-02` G8 未解除 |
+| 是否可逆 | 可逆（客戶可另行指示） |
+| supersedes／superseded by | supersedes：無（重申；與既有出處的差異見理由欄，未裁決）。superseded by：無 |
+| provenance | **要點轉述**（決策者：客戶 2026-10-23，經總管派工單轉達；文件組未見客戶對話本身）。差異清單為**文件組判讀**（agent 推論），只作參考。本列由文件組單組寫成，未經第二組驗證 |
 
 ## 五、歷史索引（2026-10-16 以前，以及不屬客戶裁示的決策登記）
 
@@ -813,3 +878,4 @@
 - 第四節 `DEC-2026-10-23-01`：客戶裁示經總管派工單轉達，repo 內無逐字存檔；「不構成核准」清單與 supersedes 範圍由文件組依總管規格寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-23-02`、`DEC-2026-10-23-03`：客戶裁示（1B／2C／3A、收尾指令、新版 UI 邊界、治理待辦十項、Stop Gate 九項）經總管派工單轉達，repo 內無逐字存檔；落地狀態的 SHA 為文件組 `git fetch` 後實查，稽核結論與測試結果為實作組／稽核組／總管回報的轉述；兩列由架構與文件組單組寫成，未經第二組驗證。
 - 第四節 `DEC-2026-10-23-05`：客戶指示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；main `875b80be` 為文件組 `git fetch` 實查，CI 三條結果與 review threads 為總管實查、文件組轉述；由文件組單組寫成，未經第二組驗證。
+- 第四節 `DEC-2026-10-23-06`～`-10`：客戶裁示與指示經總管派工單轉達，repo 內無逐字存檔，文件組未見客戶對話本身；PR #1030 head `7569e663`（parent `f2539a7d`）為文件組 `git fetch` 實查，各筆所引符號與字串為文件組在該 head 讀 diff 確認；寫入時 PR #1030 仍 open、尚未合併（main `f2539a7d`，總管 2026-10-23 15:07Z GitHub 實查），合併後由下一批 docs 回填；稽核兩輪結論、突變數、「high／low／mid 逐字相同」為總管／實作組回報、文件組轉述，未重跑；`-06` 與 `DEC-2026-10-23-02` 2C 一句的關係是文件組讀法；`-10` 的「方向 → 出處」對照與差異為文件組以 grep 逐條查找的結果，不宣稱窮舉；五筆由文件組單組寫成，未經第二組驗證。
